@@ -85,7 +85,7 @@ src/
 ├── diff/                          # 差异引擎模块
 │   ├── structural-diff.ts         # CodeSkeleton 结构对比
 │   ├── semantic-diff.ts           # LLM 语义变更评估
-│   ├── noise-filter.ts            # 格式/注释/import 噪音过滤
+│   ├── noise-filter.ts            # 格式/注释/import 噪声过滤
 │   └── drift-orchestrator.ts      # 漂移检测编排 (/reverse-spec-diff 入口)
 ├── generator/                     # Spec 生成与输出
 │   ├── spec-renderer.ts           # Handlebars 9 段式模板渲染

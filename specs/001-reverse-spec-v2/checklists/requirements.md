@@ -1,39 +1,39 @@
-# Specification Quality Checklist: Reverse-Spec Skill System v2.0
+# 规格说明质量检查清单：Reverse-Spec Skill 系统 v2.0
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-02-10
-**Feature**: [spec.md](../spec.md)
+**用途**: 在进入规划阶段前，验证规格说明的完整性和质量
+**创建日期**: 2026-02-10
+**功能**: [spec.md](../spec.md)
 
-## Content Quality
+## 内容质量
 
-- [x] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [x] 不包含实现细节（语言、框架、API）
+- [x] 聚焦于用户价值和业务需求
+- [x] 面向非技术干系人编写
+- [x] 所有必填章节已完成
 
-## Requirement Completeness
+## 需求完整性
 
-- [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic (no implementation details)
-- [x] All acceptance scenarios are defined
-- [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
+- [x] 不存在 [NEEDS CLARIFICATION] 标记
+- [x] 需求可测试且无歧义
+- [x] 成功标准可量化
+- [x] 成功标准与技术无关（不含实现细节）
+- [x] 所有验收场景已定义
+- [x] 边界情况已识别
+- [x] 范围边界已明确
+- [x] 依赖关系和前提假设已识别
 
-## Feature Readiness
+## 功能就绪性
 
-- [x] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
-- [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] 所有功能需求均具有明确的验收标准
+- [x] 用户场景覆盖主要流程
+- [x] 功能满足成功标准中定义的可量化目标
+- [x] 规格说明中未泄露实现细节
 
-## Notes
+## 备注
 
-- 7 user stories cover the complete project: 3 user-facing commands + 3 internal toolchain components + 1 output format system
-- 23 functional requirements organized by subsystem (Core Pipeline, Spec Generation, Batch Processing, Drift Detection, Cross-Cutting)
-- 6 key entities defined at conceptual level
-- 9 measurable success criteria including self-hosting test
-- 8 edge cases with clear expected behaviors
-- Zero [NEEDS CLARIFICATION] markers — all ambiguities resolved from existing spec.md and SKILL.md context
+- 7 个用户故事覆盖完整项目：3 个面向用户的命令 + 3 个内部工具链组件 + 1 个输出格式系统
+- 23 个功能需求按子系统组织（核心流水线、Spec 生成、批处理、漂移检测、横切关注点）
+- 6 个关键实体在概念层面定义
+- 9 个可量化的成功标准，包括自举测试
+- 8 个边界情况，均有明确的预期行为
+- 零个 [NEEDS CLARIFICATION] 标记 — 所有歧义已根据现有 spec.md 和 SKILL.md 上下文解决

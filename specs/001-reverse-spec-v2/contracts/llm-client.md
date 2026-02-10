@@ -1,12 +1,12 @@
-# API Contract: LLM Client
+# API 契约：LLM 客户端
 
-**Module**: `src/core/`
-**File**: `src/core/llm-client.ts`
-**Covers**: FR-002 (Generation stage), FR-008 (uncertainty markers), FR-016 (retry/degradation), FR-020 (semantic diff)
+**模块**：`src/core/`
+**文件**：`src/core/llm-client.ts`
+**覆盖**：FR-002（生成阶段）、FR-008（不确定性标记）、FR-016（重试/降级）、FR-020（语义差异）
 
 ---
 
-## Configuration
+## 配置
 
 ### `LLMConfig`
 
@@ -20,12 +20,12 @@ interface LLMConfig {
 }
 ```
 
-**Model Selection**:
+**模型选择**：
 
-- Default model: `claude-opus-4-6` (Opus) for all operations
-- User-configurable via `LLMConfig.model` parameter or `REVERSE_SPEC_MODEL` environment variable
-- Priority: function parameter > environment variable > default
-- Any valid Anthropic model ID is accepted (e.g., `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`)
+- 默认模型：`claude-opus-4-6`（Opus），用于所有操作
+- 用户可通过 `LLMConfig.model` 参数或 `REVERSE_SPEC_MODEL` 环境变量进行配置
+- 优先级：函数参数 > 环境变量 > 默认值
+- 接受任何有效的 Anthropic 模型 ID（如 `claude-sonnet-4-5-20250929`、`claude-haiku-4-5-20251001`）
 
 ---
 
@@ -33,38 +33,38 @@ interface LLMConfig {
 
 ### `callLLM(context: AssembledContext, config?: Partial<LLMConfig>): Promise<LLMResponse>`
 
-Sends the assembled context to the Claude API and returns the raw response.
+将组装好的上下文发送至 Claude API 并返回原始响应。
 
-**Parameters**:
+**参数**：
 
-- `context` — Output from `assembleContext()` (prompt string + token metadata)
-- `config` — Optional overrides for model, timeout, temperature
+- `context` — `assembleContext()` 的输出（提示词字符串 + token 元数据）
+- `config` — 可选的模型、超时时间、温度覆盖配置
 
-**Returns**:
+**返回**：
 
 ```typescript
 interface LLMResponse {
-  content: string;            // Raw text response from LLM
-  model: string;              // Actual model used
-  inputTokens: number;        // Tokens sent
-  outputTokens: number;       // Tokens received
-  duration: number;           // Request time in ms
+  content: string;            // LLM 的原始文本响应
+  model: string;              // 实际使用的模型
+  inputTokens: number;        // 发送的 token 数
+  outputTokens: number;       // 接收的 token 数
+  duration: number;           // 请求耗时（毫秒）
 }
 ```
 
-**Retry Logic** (FR-016):
+**重试逻辑**（FR-016）：
 
-- On transient failure (rate limit, timeout, 5xx): exponential backoff with base delay 2s, factor 2x, max delay 30s
-- Max 3 attempts total
-- On persistent failure after 3 attempts: throw `LLMUnavailableError`
-- Caller (orchestrator) decides degradation strategy (AST-only output)
+- 遇到瞬态失败（速率限制、超时、5xx）时：指数退避，基础延迟 2 秒，倍数 2x，最大延迟 30 秒
+- 最多共 3 次尝试
+- 3 次尝试后仍然失败：抛出 `LLMUnavailableError`
+- 由调用方（编排器）决定降级策略（仅 AST 输出）
 
-**Error Types**:
+**错误类型**：
 
-- `LLMUnavailableError` — API unreachable after retries
-- `LLMRateLimitError` — Rate limit hit (triggers backoff)
-- `LLMResponseError` — Non-2xx status from API
-- `LLMTimeoutError` — Request exceeded timeout
+- `LLMUnavailableError` — 重试后仍无法访问 API
+- `LLMRateLimitError` — 触发速率限制（触发退避）
+- `LLMResponseError` — API 返回非 2xx 状态码
+- `LLMTimeoutError` — 请求超过超时时间
 
 ---
 
@@ -72,37 +72,37 @@ interface LLMResponse {
 
 ### `parseLLMResponse(raw: string): ParsedSpecSections`
 
-Parses the raw LLM response into structured spec sections.
+将 LLM 的原始响应解析为结构化的规格章节。
 
-**Returns**:
+**返回**：
 
 ```typescript
 interface ParsedSpecSections {
-  sections: SpecSections;                // 9-section content (Chinese prose)
-  uncertaintyMarkers: UncertaintyMarker[];  // Extracted [推断]/[不明确] markers
-  parseWarnings: string[];               // Non-fatal parsing issues
+  sections: SpecSections;                // 9 个章节内容（中文散文）
+  uncertaintyMarkers: UncertaintyMarker[];  // 提取的 [推断]/[不明确] 标记
+  parseWarnings: string[];               // 非致命的解析问题
 }
 
 interface UncertaintyMarker {
   type: '推断' | '不明确' | 'SYNTAX ERROR';
-  section: string;            // Which of the 9 sections
-  rationale: string;          // Why this was marked uncertain
+  section: string;            // 所属的 9 个章节之一
+  rationale: string;          // 标记为不确定的原因
 }
 ```
 
-**Behavior**:
+**行为**：
 
-1. Extract 9 named sections from LLM response (match by Chinese heading patterns: `## 1. 意图`, `## 2. 接口定义`, etc.)
-2. Validate all 9 sections present — if missing, fill with `[LLM 未生成此段落]` placeholder
-3. Extract and catalog all `[推断]`/`[不明确]`/`[SYNTAX ERROR]` markers with rationale (FR-008)
-4. **Critical**: Verify `接口定义` section does NOT contain signatures absent from the AST skeleton — if detected, strip fabricated entries and add warning (Constitution I enforcement)
-5. Validate via Zod `SpecSections` schema
+1. 从 LLM 响应中提取 9 个命名章节（按中文标题模式匹配：`## 1. 意图`、`## 2. 接口定义` 等）
+2. 验证 9 个章节是否全部存在 — 如缺失，用 `[LLM 未生成此段落]` 占位符填充
+3. 提取并编目所有 `[推断]`/`[不明确]`/`[SYNTAX ERROR]` 标记及其原因（FR-008）
+4. **关键**：验证 `接口定义` 章节不包含 AST 骨架中不存在的签名 — 如检测到，剥离捏造条目并添加警告（Constitution I 强制执行）
+5. 通过 Zod `SpecSections` 模式验证
 
-**Guarantees**:
+**保证**：
 
-- Always returns valid `SpecSections` (never throws for malformed LLM output — degrades gracefully)
-- Constitution I: Interface section is post-validated against AST skeleton; any LLM-fabricated signatures are removed
-- Constitution III: All uncertainty markers preserved with rationale
+- 始终返回有效的 `SpecSections`（对格式不正确的 LLM 输出不会抛出异常 — 优雅降级）
+- Constitution I：接口章节针对 AST 骨架进行后验证；任何 LLM 捏造的签名都会被移除
+- Constitution III：所有不确定性标记及其原因都被保留
 
 ---
 
@@ -110,15 +110,15 @@ interface UncertaintyMarker {
 
 ### `buildSystemPrompt(mode: 'spec-generation' | 'semantic-diff'): string`
 
-Returns the system prompt template for the given operation mode.
+返回给定操作模式的系统提示词模板。
 
-**Modes**:
+**模式**：
 
-- `spec-generation` — Instructs LLM to fill 9 Chinese sections from skeleton + context, mark uncertain content with `[推断]`, never fabricate interfaces
-- `semantic-diff` — Instructs LLM to compare old/new function bodies against spec intent, return structured drift assessment
+- `spec-generation` — 指示 LLM 根据骨架 + 上下文填充 9 个中文章节，对不确定内容标记 `[推断]`，绝不捏造接口
+- `semantic-diff` — 指示 LLM 将新旧函数体与规格意图进行比较，返回结构化的漂移评估
 
-**Guarantees**:
+**保证**：
 
-- System prompt explicitly instructs LLM to never invent or modify interface signatures
-- System prompt requires `[推断]` markers on all inferred content
-- System prompt specifies Chinese prose output with English code identifiers
+- 系统提示词明确指示 LLM 绝不发明或修改接口签名
+- 系统提示词要求对所有推断内容添加 `[推断]` 标记
+- 系统提示词指定中文散文输出配合英文代码标识符

@@ -1,83 +1,83 @@
-# API Contract: Graph Module
+# API 契约：图模块
 
-**Module**: `src/graph/`
-**Covers**: FR-010, FR-011, FR-013, FR-014
+**模块**：`src/graph/`
+**覆盖**：FR-010、FR-011、FR-013、FR-014
 
 ---
 
 ## dependency-graph
 
-**File**: `src/graph/dependency-graph.ts`
+**文件**：`src/graph/dependency-graph.ts`
 
 ### `buildGraph(projectRoot: string, options?: GraphOptions): Promise<DependencyGraph>`
 
-Uses dependency-cruiser to build a project-wide dependency graph.
+使用 dependency-cruiser 构建项目级依赖关系图。
 
-**Parameters**:
-- `projectRoot` — Project root directory path
-- `options.includeOnly` — Glob pattern to filter analyzed files (default: `'^src/'`)
-- `options.excludePatterns` — Patterns to exclude (default: test files, build outputs)
-- `options.tsConfigPath` — Path to tsconfig.json (default: auto-detect)
+**参数**：
+- `projectRoot` — 项目根目录路径
+- `options.includeOnly` — 用于过滤分析文件的 Glob 模式（默认：`'^src/'`）
+- `options.excludePatterns` — 排除模式（默认：测试文件、构建产物）
+- `options.tsConfigPath` — tsconfig.json 路径（默认：自动检测）
 
-**Returns**: `DependencyGraph` (see [data-model.md](../data-model.md#2-dependencygraph))
+**返回**：`DependencyGraph`（参见 [data-model.md](../data-model.md#2-dependencygraph)）
 
-**Errors**:
-- `ProjectNotFoundError` — projectRoot does not exist
-- `NoDependencyCruiserError` — dependency-cruiser not installed
-- `TsConfigNotFoundError` — tsconfig.json not found
+**错误**：
+- `ProjectNotFoundError` — projectRoot 不存在
+- `NoDependencyCruiserError` — dependency-cruiser 未安装
+- `TsConfigNotFoundError` — tsconfig.json 未找到
 
-**Performance**: 200+ modules in 2-5 seconds
+**性能**：200+ 模块在 2-5 秒内完成
 
 ---
 
 ## topological-sort
 
-**File**: `src/graph/topological-sort.ts`
+**文件**：`src/graph/topological-sort.ts`
 
 ### `topologicalSort(graph: DependencyGraph): TopologicalResult`
 
-Computes processing order using Kahn's algorithm or DFS.
+使用 Kahn 算法或 DFS 计算处理顺序。
 
-**Returns**:
+**返回**：
 ```typescript
 interface TopologicalResult {
-  order: string[];         // File paths in dependency order (leaves first)
-  levels: Map<string, number>;  // Module → topological level
+  order: string[];         // 按依赖顺序排列的文件路径（叶子节点优先）
+  levels: Map<string, number>;  // 模块 → 拓扑层级
   hasCycles: boolean;
-  cycleGroups: string[][];  // SCCs with size > 1
+  cycleGroups: string[][];  // 大小 > 1 的 SCC
 }
 ```
 
-**Guarantees**:
-- If `hasCycles === false`, `order` is a valid topological sort
-- If `hasCycles === true`, cycles are collapsed into SCCs and treated as units (FR-011)
+**保证**：
+- 若 `hasCycles === false`，则 `order` 是有效的拓扑排序
+- 若 `hasCycles === true`，循环依赖将被折叠为 SCC 并作为整体处理（FR-011）
 
 ---
 
 ### `detectSCCs(graph: DependencyGraph): SCC[]`
 
-Tarjan's algorithm for strongly connected component detection.
+基于 Tarjan 算法的强连通分量检测。
 
-**Returns**: `SCC[]` — All SCCs. Single-module SCCs have `modules.length === 1`.
+**返回**：`SCC[]` — 所有 SCC。单模块 SCC 的 `modules.length === 1`。
 
 ---
 
 ## mermaid-renderer
 
-**File**: `src/graph/mermaid-renderer.ts`
+**文件**：`src/graph/mermaid-renderer.ts`
 
 ### `renderDependencyGraph(graph: DependencyGraph, options?: RenderOptions): string`
 
-Generates Mermaid source code for the dependency diagram.
+为依赖关系图生成 Mermaid 源代码。
 
-**Parameters**:
-- `graph` — DependencyGraph to render
-- `options.collapseDirectories` — Group by directory (default: `true` for >20 modules)
-- `options.highlightCycles` — Red highlight for circular dependencies (default: `true`)
-- `options.maxNodes` — Limit visible nodes (default: `50`, uses clustering)
+**参数**：
+- `graph` — 待渲染的 DependencyGraph
+- `options.collapseDirectories` — 按目录分组（默认：模块数 > 20 时为 `true`）
+- `options.highlightCycles` — 高亮循环依赖为红色（默认：`true`）
+- `options.maxNodes` — 限制可见节点数量（默认：`50`，使用聚类处理）
 
-**Returns**: Valid Mermaid `graph TD` source code string
+**返回**：有效的 Mermaid `graph TD` 源代码字符串
 
-**Constraints**:
-- Output must be renderable by any Mermaid-compatible viewer (FR-007)
-- Circular dependencies highlighted with distinct styling
+**约束**：
+- 输出必须可被任何 Mermaid 兼容的查看器渲染（FR-007）
+- 循环依赖以醒目样式高亮显示
