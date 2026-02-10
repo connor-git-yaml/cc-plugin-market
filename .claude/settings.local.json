@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(brew list:*)",
+      "Bash(specify --help:*)",
+      "Bash(specify:*)",
+      "Bash(uv tool:*)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh release view:*)"
+    ]
+  }
+}
