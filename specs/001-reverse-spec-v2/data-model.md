@@ -265,7 +265,7 @@ erDiagram
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | `string` | Yes | 唯一标识 (auto-generated) |
-| `severity` | `'HIGH' \| 'MEDIUM' \| 'LOW'` | Yes | 严重度 |
+| `severity` | `'HIGH' \| 'MEDIUM' \| 'LOW'` | Yes | 严重级别 |
 | `category` | `'Interface' \| 'Behavior' \| 'Constraint'` | Yes | 变更类别 |
 | `changeType` | `'addition' \| 'removal' \| 'modification'` | Yes | 变更类型 |
 | `location` | `string` | Yes | 源码位置 (file:line) |
@@ -298,7 +298,7 @@ erDiagram
 | `specVersion` | `string` | Yes | 对比的 Spec 版本号 |
 | `summary` | `DriftSummary` | Yes | 摘要统计 |
 | `items` | `DriftItem[]` | Yes | 所有漂移项 |
-| `filteredNoise` | `number` | Yes | 过滤掉的噪音变更数 |
+| `filteredNoise` | `number` | Yes | 过滤掉的噪声变更数 |
 | `recommendation` | `string` | Yes | 操作建议 (中文) |
 | `outputPath` | `string` | Yes | 输出路径 (drift-logs/*.md) |
 
