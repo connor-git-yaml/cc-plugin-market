@@ -1,6 +1,3 @@
-好的，为你生成 `reverse-spec-skill-v2-meta-spec.md` 文件。你可以直接下载使用。
-
-```markdown
 # Reverse-Spec Skill System (v2.0) 规格文档
 
 > **文档类型**: Meta-Spec (元规格说明书)
