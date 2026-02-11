@@ -46,12 +46,14 @@
 - [ ] T005 [P] 在 `src/models/code-skeleton.ts` 中实现 CodeSkeleton、ExportSymbol、ImportReference 和 ParseError 的 Zod schema，按 data-model.md 实体定义
 - [ ] T006 [P] 在 `src/models/dependency-graph.ts` 中实现 DependencyGraph、GraphNode、DependencyEdge 和 SCC 的 Zod schema，按 data-model.md 实体定义
 - [ ] T007 [P] 在 `src/models/drift-item.ts` 中实现 DriftItem 和 DriftSummary 的 Zod schema，按 data-model.md 实体定义
-- [ ] T008 [P] 在 `src/models/module-spec.ts` 中实现 ModuleSpec、SpecFrontmatter、SpecSections、MermaidDiagram、FileEntry、ArchitectureIndex、ModuleMapEntry、DriftReport、BatchState、CompletedModule、FailedModule 和 RedactionResult 的 Zod schema，按 data-model.md 实体定义
+- [ ] T008 [P] 在 `src/models/module-spec.ts` 中实现 ModuleSpec、SpecFrontmatter、SpecSections、MermaidDiagram、FileEntry、ArchitectureIndex、IndexFrontmatter、TechStackEntry、ModuleMapEntry、DriftReport、BatchState、CompletedModule、FailedModule 和 RedactionResult 的 Zod schema，按 data-model.md 实体定义
 
 ### 共享工具
 
 - [ ] T009 [P] 在 `src/utils/file-scanner.ts` 中实现文件发现与 `.gitignore` 过滤（FR-026）：扫描目录中的 `.ts/.tsx/.js/.jsx` 文件，遵循 `.gitignore` 规则，返回排序后的文件路径
+- [ ] T009a [P] 在 `tests/unit/file-scanner.test.ts` 中编写 file-scanner 单元测试：验证 `.ts/.tsx/.js/.jsx` 文件发现、`.gitignore` 规则遵循、嵌套目录递归扫描、空目录处理、符号链接忽略（FR-026）
 - [ ] T010 [P] 在 `src/utils/chunk-splitter.ts` 中实现超过 5k LOC 文件的分块摘要策略（FR-005）：按函数边界分割，返回带元数据的分块数组
+- [ ] T010a [P] 在 `tests/unit/chunk-splitter.test.ts` 中编写 chunk-splitter 单元测试：验证 5k LOC 阈值触发分块、函数边界正确切割、分块元数据完整性、小文件不分块（FR-005）
 
 ### 核心 流水线（US4）
 
@@ -73,6 +75,7 @@
 - [ ] T020 在 `src/generator/spec-renderer.ts` 中实现 Handlebars spec 渲染器：`initRenderer()`（编译模板、注册 helpers/partials）、`renderSpec()`（ModuleSpec → Markdown）、自定义 helpers（`formatSignature`、`hasContent`、`specLink`、`mermaidClass`），按 contracts/generator.md
 - [ ] T021 在 `src/generator/frontmatter.ts` 中实现 YAML frontmatter 生成器（含版本自增）：`generateFrontmatter()` 支持自动递增（v1→v2→v3）、置信度级别、时间戳，按 contracts/generator.md
 - [ ] T022 在 `src/generator/mermaid-class-diagram.ts` 中实现 Mermaid 类图生成器：`generateClassDiagram()` 从 CodeSkeleton exports 生成、`<<interface>>` 构造型、继承/组合边，按 contracts/generator.md
+- [ ] T022a [P] 在 `tests/unit/mermaid-class-diagram.test.ts` 中编写 Mermaid 类图生成器单元测试：验证类/接口渲染、`<<interface>>` 构造型、继承边 `--|>`、组合边 `*--`、空 exports 处理、生成的 Mermaid 语法有效性（FR-007）
 
 **检查点**：基础设施就绪 — 三阶段 流水线 组件和模板系统已可运行。可以开始用户故事的实现。
 
@@ -89,13 +92,15 @@
 - [ ] T023 [P] [US1] 在 `tests/unit/ast-analyzer.test.ts` 中编写 ast-analyzer 单元测试：验证正确提取 functions、classes、interfaces、type aliases、enums、JSDoc；验证 6 个 export 的文件恰好产生 6 个 ExportSymbol；验证骨架中不泄露实现细节
 - [ ] T024 [P] [US1] 在 `tests/unit/secret-redactor.test.ts` 中编写 secret-redactor 单元测试：验证 AWS 密钥检测/脱敏、JWT 检测、私钥处理、测试文件的误报过滤、占位符模式
 - [ ] T025 [P] [US1] 在 `tests/unit/token-counter.test.ts` 中编写 token-counter 单元测试：验证快速估算与精确计数偏差在 ±15% 以内、CJK 字符处理、带安全边际的预算检查、缓存命中行为
+- [ ] T025a [P] [US1] 在 `tests/unit/context-assembler.test.ts` 中编写 context-assembler 单元测试：验证 100k token 预算强制执行、裁剪优先级（代码片段 → 依赖 → 骨架）、截断标记、空依赖处理、预算刚好在边界时的行为（FR-003）
+- [ ] T025b [P] [US1] 在 `tests/unit/llm-client.test.ts` 中编写 llm-client 单元测试：验证指数退避重试逻辑（基础 2s、倍率 2x、最大 30s、3 次尝试）、`parseLLMResponse()` 对 9 个中文章节的正确提取、缺失章节的占位符填充、接口章节与 AST 骨架的后验证（Constitution I 捏造签名剥离）、不确定性标记归集（FR-008、FR-016）
 
 ### US1 实现
 
 - [ ] T026 [US1] 在 `src/core/single-spec-orchestrator.ts` 中实现单模块 spec 生成 流水线：`generateSpec()` 串联 `analyzeFiles()` → `redact()` → `assembleContext()` → `callLLM()` → `parseLLMResponse()` → `renderSpec()`（基线骨架序列化为 HTML 注释）→ 写入 `specs/*.spec.md`，按 contracts/core-pipeline.md
 - [ ] T027 [US1] 实现 `[推断]`/`[不明确]`/`[SYNTAX ERROR]` 标记注入（FR-008）：确保 LLM 响应包含带理由的不确定性标记，渲染前在后处理中验证
 - [ ] T028 [US1] 在 `skills/reverse-spec/SKILL.md` 中更新 `/reverse-spec` skill 脚本以调用单模块 流水线：解析目标路径、处理 `--deep` 标志（包含函数体）、写入输出、报告完成状态
-- [ ] T029 [US1] 在 `tests/integration/pipeline.test.ts` 中编写三阶段 流水线 端到端集成测试：将已知 TS 模块输入所有阶段，验证骨架准确性、上下文在预算内、输出中无捏造的接口（SC-002）
+- [ ] T029 [US1] 在 `tests/integration/pipeline.test.ts` 中编写三阶段 流水线 端到端集成测试：将已知 TS 模块输入所有阶段，验证骨架准确性、上下文在预算内、输出中无捏造的接口（SC-002）；**显式断言只读安全性**：记录源文件 hash 快照，流水线完成后验证所有源文件未被修改/创建/删除（FR-023），输出仅写入 `specs/`（FR-024）
 
 **检查点**：`/reverse-spec` 完全可用 — 单模块 spec 生成独立运行。
 
@@ -134,7 +139,7 @@
 - [ ] T036 [US2] 在 `src/batch/batch-orchestrator.ts` 中实现批量编排器：`runBatch()` 按拓扑顺序处理、O(1) 上下文策略（读取依赖 spec 而非源码 — FR-014）、指数退避重试（最多 3 次 — FR-016）、AST-only 降级、每个模块后保存检查点、支持 `--force` 标志，按 contracts/batch-module.md
 - [ ] T037 [US2] 在 `src/generator/index-generator.ts` 中实现架构索引生成器：`generateIndex()` 从所有 ModuleSpec + DependencyGraph 生成，使用 `templates/index-spec.hbs` 渲染，输出到 `specs/_index.spec.md`，按 contracts/generator.md（FR-013）
 - [ ] T038 [US2] 在 `skills/reverse-spec-batch/SKILL.md` 中更新 `/reverse-spec-batch` skill 脚本以调用批量编排器：解析 `--force` 标志、显示进度、优雅处理中断
-- [ ] T039 [US2] 在 `tests/integration/batch-processing.test.ts` 中编写批量处理集成测试：验证拓扑顺序（A→B→C 按 C,B,A 处理）、SCC 分组、模拟中断后的检查点恢复、索引生成
+- [ ] T039 [US2] 在 `tests/integration/batch-processing.test.ts` 中编写批量处理集成测试：验证拓扑顺序（A→B→C 按 C,B,A 处理）、SCC 分组、模拟中断后的检查点恢复、索引生成；**显式断言只读安全性**：批处理完成后验证所有源文件未被修改（FR-023），所有写入仅发生在 `specs/` 目录（FR-024）
 
 **检查点**：`/reverse-spec-batch` 完全可用 — 具备依赖排序、断点恢复和索引生成的批量处理已就绪。
 
@@ -166,6 +171,10 @@
 
 **独立测试**：生成一个 spec，进行已知的代码修改（添加函数、修改签名、删除 export），验证漂移报告正确识别全部三项变更并标注适当的严重级别。
 
+### US3 测试
+
+- [ ] T043a [P] [US3] 在 `tests/unit/drift-orchestrator.test.ts` 中编写 `loadBaselineSkeleton()` 单元测试：验证从 HTML 注释 `<!-- baseline-skeleton: ... -->` 正确反序列化 CodeSkeleton、对无基线的旧版 spec 降级为 Markdown 重建并标记 `parserUsed: 'reconstructed'`、损坏 JSON 的错误处理、Zod 验证通过
+
 ### US3 实现
 
 - [ ] T044 [US3] 在 `src/diff/drift-orchestrator.ts` 中实现漂移检测编排器：`detectDrift()` 串联 `loadBaselineSkeleton()`（从 spec 的 HTML 注释 `<!-- baseline-skeleton: ... -->` 反序列化基线骨架，对旧版 spec 降级为基于 Markdown 的尽力重建）→ 当前代码 AST 分析 → `compareSkeletons()` → `filterNoise()` → `evaluateBehaviorChange()` → 组装 DriftReport，按 contracts/diff-engine.md
@@ -182,7 +191,7 @@
 **目的**：质量保证、性能验证和自举验证
 
 - [ ] T048 [P] 在 `tests/golden-master/fixtures/` 中创建 Golden Master 测试固件：已知的 TypeScript 代码样本（redux 子集或类似项目）及预期输出 spec
-- [ ] T049 在 `tests/golden-master/golden-master.test.ts` 中实现 Golden Master 测试：从固件生成 spec，与预先验证的期望输出比对，结构相似度达到 90% 以上（SC-004）
+- [ ] T049 在 `tests/golden-master/golden-master.test.ts` 中实现 Golden Master 测试：从固件生成 spec，与预先验证的期望输出比对，结构相似度达到 90% 以上（SC-004）。**结构相似度度量方法**：(1) 9 个章节存在性检查（9 分）；(2) 接口定义章节中导出符号名称集合的 Jaccard 相似系数（权重 40%）；(3) frontmatter 字段完整性（权重 10%）；(4) Mermaid 图表存在性（权重 10%）；(5) 各章节非空内容覆盖率（权重 30%）；(6) 文件清单完整性 — 实际文件 vs 期望文件的交集/并集比（权重 10%）。加权总分 ≥ 0.9 即通过
 - [ ] T050 在 `tests/self-hosting/self-host.test.ts` 中实现自举测试：对 reverse-spec 项目自身运行 `/reverse-spec-batch`，验证为所有源码模块生成有效且连贯的 spec（SC-009）
 - [ ] T051 性能优化：用 500 文件测试集对 ast-analyzer 进行性能分析，验证 ≤10s 目标（SC-003），在 `src/core/ast-analyzer.ts` 中调优批量大小和 `file.forget()` 策略
 - [ ] T052 运行 quickstart.md 验证：执行 `specs/001-reverse-spec-v2/quickstart.md` 中的所有验证步骤，确认全部检查通过
@@ -229,11 +238,12 @@ graph TD
 ### 并行机会
 
 - **Phase 1**：T003 和 T004 可并行
-- **Phase 2**：T005–T008（所有 Zod schema）可并行；T009–T010（工具）可并行；T018–T019（模板）可并行
-- **Phase 3**：T023–T025（所有 US1 测试）可并行
+- **Phase 2**：T005–T008（所有 Zod schema）可并行；T009–T010 + T009a–T010a（工具及其测试）可并行；T018–T019（模板）可并行；T022a 可与 T022 并行
+- **Phase 3**：T023–T025b（所有 US1 测试，含 T025a context-assembler 和 T025b llm-client）可并行
 - **Phase 4**：US5 可与 US1 并行（基础设施完成后）
 - **Phase 5**：T034–T035 可在 T036 之前开始
 - **Phase 6**：US6 可与 US1/US5 并行（基础设施完成后）；T040 测试可与 US1 测试并行
+- **Phase 7**：T043a（loadBaselineSkeleton 测试）可与 US6 测试并行
 - **Phase 8**：T048 和 T049 可在 T050 之前开始
 
 ---
@@ -263,6 +273,8 @@ Task: "T019 drift-report.hbs in templates/drift-report.hbs"
 Task: "T023 ast-analyzer tests in tests/unit/ast-analyzer.test.ts"
 Task: "T024 secret-redactor tests in tests/unit/secret-redactor.test.ts"
 Task: "T025 token-counter tests in tests/unit/token-counter.test.ts"
+Task: "T025a context-assembler tests in tests/unit/context-assembler.test.ts"
+Task: "T025b llm-client tests in tests/unit/llm-client.test.ts"
 ```
 
 ---
