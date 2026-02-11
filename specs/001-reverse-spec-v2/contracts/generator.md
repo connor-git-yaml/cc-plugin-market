@@ -53,7 +53,8 @@ interface FrontmatterInput {
   sourceTarget: string;
   relatedFiles: string[];
   confidence: 'high' | 'medium' | 'low';
-  existingVersion?: string;  // e.g., 'v3' — will produce 'v4'
+  skeletonHash: string;       // baseline CodeSkeleton 的 SHA-256 哈希
+  existingVersion?: string;   // e.g., 'v3' — will produce 'v4'
 }
 ```
 

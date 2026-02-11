@@ -173,7 +173,17 @@ interface GenerateSpecResult {
 6. 解析 + 验证 LLM 响应 → `ModuleSpec`
 7. 注入不确定性标记（`[推断]`/`[不明确]`/`[SYNTAX ERROR]`）
 8. 通过 Handlebars 渲染（`spec-renderer`）→ 写入 `specs/*.spec.md`
-9. 将基线骨架序列化至规格中（用于漂移检测 — 参见 U3）
+9. 将基线骨架序列化至规格中（用于漂移检测 — 参见 US3）
+
+**置信度计算规则**：
+
+`confidence` 由流水线执行结果自动推导，规则如下：
+
+| 条件 | 级别 |
+|------|------|
+| 零 `parseErrors` 且零 `[推断]`/`[不明确]` 标记且 LLM 正常返回 | `high` |
+| 存在 `parseErrors` 或 `[推断]`/`[不明确]` 标记数 > 0 但 ≤ 3，或上下文被截断 | `medium` |
+| `parseErrors` 涉及 > 30% 的文件，或 `[推断]`/`[不明确]` 标记数 > 3，或 LLM 降级为 AST-only | `low` |
 
 **约束**：
 
