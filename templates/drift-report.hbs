@@ -1,0 +1,53 @@
+---
+type: drift-report
+specPath: {{specPath}}
+sourcePath: {{sourcePath}}
+generatedAt: {{generatedAt}}
+specVersion: {{specVersion}}
+---
+
+# 漂移检测报告
+
+**Spec**: `{{specPath}}` ({{specVersion}})
+**源码**: `{{sourcePath}}`
+**生成时间**: {{generatedAt}}
+
+## 汇总统计
+
+| 指标 | 数值 |
+|------|------|
+| 实质性变更 | {{summary.totalChanges}} |
+| HIGH (Breaking) | {{summary.high}} |
+| MEDIUM (行为变化) | {{summary.medium}} |
+| LOW (新增/优化) | {{summary.low}} |
+| 新增 | {{summary.additions}} |
+| 删除 | {{summary.removals}} |
+| 修改 | {{summary.modifications}} |
+| 噪声过滤 | {{filteredNoise}} |
+
+{{#if items.length}}
+## 漂移详情
+
+{{#each items}}
+### {{severity}} — {{description}}
+
+- **ID**: `{{id}}`
+- **类别**: {{category}}
+- **变更类型**: {{changeType}}
+- **位置**: `{{location}}`
+{{#if symbolName}}- **符号**: `{{symbolName}}`{{/if}}
+{{#if oldValue}}- **旧值**: `{{oldValue}}`{{/if}}
+{{#if newValue}}- **新值**: `{{newValue}}`{{/if}}
+- **检测方式**: {{detectedBy}}
+- **建议更新**: {{proposedUpdate}}
+
+{{/each}}
+{{else}}
+## 漂移详情
+
+未检测到实质性变更。
+{{/if}}
+
+## 建议
+
+{{{recommendation}}}

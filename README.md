@@ -1,6 +1,11 @@
 # Reverse-Spec
 
-> 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言（Java、C++、Python 等）通过纯 LLM 模式提供降级支持。
+![Version](https://img.shields.io/badge/version-2.0.0-green)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
+![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
+![Tests](https://img.shields.io/badge/tests-148%20passed-brightgreen)
+
+> 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言通过纯 LLM 模式提供降级支持。
 
 ## 功能特性
 
@@ -22,7 +27,7 @@
 | 数据验证 | Zod |
 | 图表生成 | Mermaid（嵌入 Markdown） |
 | AI 模型 | Claude 4.5/4.6 Sonnet/Opus（通过 Anthropic API） |
-| 测试框架 | Vitest |
+| 测试框架 | Vitest（单元/集成/Golden Master/自举） |
 
 ## 快速开始
 
@@ -35,7 +40,7 @@
 ### 安装
 
 ```bash
-git clone https://github.com/connor-git-yaml/reverse-spec.git
+git clone <repo-url>
 cd reverse-spec
 npm install
 ```
@@ -55,40 +60,85 @@ npm install
 /reverse-spec-diff specs/auth.spec.md src/auth/
 ```
 
+### 开发命令
+
+```bash
+# 编译
+npm run build
+
+# 运行全部测试
+npm test
+
+# 监听模式测试
+npm run test:watch
+
+# 覆盖率报告
+npm run test:coverage
+
+# 仅单元测试
+npm run test:unit
+
+# 仅集成测试
+npm run test:integration
+
+# 类型检查
+npm run lint
+```
+
 ## 项目结构
 
 ```text
-specs/                             # SDD 设计文档
-└── 001-reverse-spec-v2/
-    ├── spec.md                    # 功能规格（27 FR + 9 SC + 7 US）
-    ├── plan.md                    # 实现计划
-    ├── data-model.md              # 数据模型（8 实体 + Zod Schema）
-    ├── tasks.md                   # 任务清单（59 任务 × 8 阶段）
-    ├── research.md                # 技术调研
-    ├── quickstart.md              # 快速验证指南
-    ├── contracts/                 # 模块间 API 契约（6 文件）
-    └── checklists/                # 质量检查清单
+src/
+├── core/                          # 核心分析流水线
+│   ├── ast-analyzer.ts            # ts-morph AST → CodeSkeleton
+│   ├── tree-sitter-fallback.ts    # AST 容错降级
+│   ├── context-assembler.ts       # Skeleton + 依赖 → LLM prompt
+│   ├── llm-client.ts              # Claude API 客户端（重试、解析）
+│   ├── single-spec-orchestrator.ts # 单模块生成编排
+│   ├── secret-redactor.ts         # 敏感信息脱敏
+│   └── token-counter.ts           # Token 预算管理
+├── graph/                         # 依赖图谱
+│   ├── dependency-graph.ts        # dependency-cruiser 封装
+│   ├── topological-sort.ts        # 拓扑排序 + Tarjan SCC
+│   └── mermaid-renderer.ts        # Mermaid 依赖图生成
+├── diff/                          # 差异引擎
+│   ├── structural-diff.ts         # CodeSkeleton 结构比对
+│   ├── semantic-diff.ts           # LLM 行为变更评估
+│   ├── noise-filter.ts            # 空白/注释噪声过滤
+│   └── drift-orchestrator.ts      # 漂移检测编排
+├── generator/                     # Spec 生成与输出
+│   ├── spec-renderer.ts           # Handlebars 九段式渲染
+│   ├── frontmatter.ts             # YAML frontmatter + 版本管理
+│   ├── mermaid-class-diagram.ts   # Mermaid 类图生成
+│   └── index-generator.ts         # _index.spec.md 生成
+├── batch/                         # 批处理编排
+│   ├── batch-orchestrator.ts      # 批量 Spec 生成
+│   ├── progress-reporter.ts       # 终端进度显示
+│   └── checkpoint.ts              # 断点续传状态
+├── models/                        # Zod Schema 类型定义
+│   ├── code-skeleton.ts           # CodeSkeleton
+│   ├── drift-item.ts              # DriftItem + DriftSummary
+│   ├── dependency-graph.ts        # DependencyGraph + SCC
+│   └── module-spec.ts             # ModuleSpec + DriftReport + BatchState
+└── utils/                         # 工具函数
+    ├── file-scanner.ts            # 文件发现 + .gitignore 过滤
+    └── chunk-splitter.ts          # >5k LOC 分块策略
+
+templates/                         # Handlebars 输出模板
+├── module-spec.hbs                # 九段式 Spec 模板
+├── index-spec.hbs                 # 架构索引模板
+└── drift-report.hbs               # 漂移报告模板
 
 skills/                            # Claude Code Skill 入口
 ├── reverse-spec/SKILL.md          # /reverse-spec 命令
 ├── reverse-spec-batch/SKILL.md    # /reverse-spec-batch 命令
 └── reverse-spec-diff/SKILL.md     # /reverse-spec-diff 命令
-```
 
-实现阶段将创建以下源码目录：
-
-```text
-src/
-├── core/          # 核心分析流水线（AST、上下文组装、LLM 客户端）
-├── graph/         # 依赖图谱（拓扑排序、SCC 检测、Mermaid 渲染）
-├── diff/          # 差异引擎（结构化 Diff、语义 Diff、噪声过滤）
-├── generator/     # Spec 生成与输出（Handlebars 渲染、Frontmatter）
-├── batch/         # 批处理编排（进度报告、断点恢复）
-├── models/        # Zod Schema 类型定义
-└── utils/         # 文件扫描、分块策略
-
-templates/         # Handlebars 输出模板
-tests/             # Vitest 测试（单元/集成/Golden Master/自举）
+tests/                             # 测试套件（148 用例）
+├── unit/                          # 12 个单元测试文件
+├── integration/                   # 2 个集成测试文件
+├── golden-master/                 # Golden Master 结构相似度测试
+└── self-hosting/                  # 自举测试（分析自身）
 ```
 
 ## 架构概览
@@ -105,17 +155,29 @@ LLM Prompt
 ModuleSpec → specs/*.spec.md
 ```
 
+## 测试
+
+项目包含 4 级测试体系，共 148 个测试用例：
+
+| 层级 | 文件数 | 用例数 | 覆盖范围 |
+|------|--------|--------|----------|
+| 单元测试 | 12 | 122 | 各模块独立功能 |
+| 集成测试 | 2 | 15 | 端到端流水线 + 漂移检测 |
+| Golden Master | 1 | 9 | AST 提取精度 ≥ 90% 结构相似度 |
+| 自举测试 | 1 | 5 | 项目分析自身的完整性验证 |
+
 ## 设计文档
 
-项目采用 Spec 驱动开发（SDD）方法论，设计阶段已完成：
+项目采用 Spec 驱动开发（SDD）方法论：
 
 | 文档 | 内容 |
 |------|------|
 | [spec.md](specs/001-reverse-spec-v2/spec.md) | 功能规格：7 个用户故事、27 条功能需求、9 条成功标准 |
 | [plan.md](specs/001-reverse-spec-v2/plan.md) | 实现计划：项目结构、Constitution 合规检查 |
 | [data-model.md](specs/001-reverse-spec-v2/data-model.md) | 数据模型：8 个核心实体、ER 图、状态转换、数据流 |
-| [tasks.md](specs/001-reverse-spec-v2/tasks.md) | 任务清单：59 个任务、8 个阶段、依赖关系图 |
+| [tasks.md](specs/001-reverse-spec-v2/tasks.md) | 任务清单：52 个任务、8 个阶段、依赖关系图 |
 | [contracts/](specs/001-reverse-spec-v2/contracts/) | API 契约：6 个模块的完整接口定义 |
+| [quickstart.md](specs/001-reverse-spec-v2/quickstart.md) | 快速验证指南：5 项验证步骤 |
 
 ## Constitution 原则
 
@@ -127,22 +189,3 @@ ModuleSpec → specs/*.spec.md
 4. **只读安全性** — 所有命令严格只读，写入仅限 `specs/` 和 `drift-logs/`
 5. **纯 Node.js 生态** — 所有依赖限于 npm 包，不引入非 Node.js 运行时
 6. **双语文档规范** — 中文散文 + 英文代码标识符
-
-## 开发状态
-
-> **当前状态：设计完成，待实现**
-
-设计阶段产出物已通过跨制品一致性分析（`/speckit.analyze`），所有 CRITICAL/MAJOR/MODERATE/LOW 问题已修复。
-
-实现路线：
-
-```text
-Phase 1: 初始化 ─────────────────────────────────────────┐
-Phase 2: 基础设施（US4 流水线 + US7 模板）───────────────┤
-Phase 3: US1 单模块 Spec 生成 🎯 MVP ───────────────────┤
-Phase 4: US5 依赖图（可与 US1 并行）────────────────────┤
-Phase 5: US2 批量处理（依赖 US1 + US5）─────────────────┤
-Phase 6: US6 Diff 引擎（可与 US1/US5 并行）─────────────┤
-Phase 7: US3 漂移检测（依赖 US1 + US6）─────────────────┤
-Phase 8: 收尾（Golden Master、自举、性能验证）───────────┘
-```
