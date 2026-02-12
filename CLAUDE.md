@@ -5,6 +5,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 ## Active Technologies
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph, tree-sitter, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（均为现有依赖，无新增运行时依赖） (002-cli-global-distribution)
 - 文件系统（specs/、drift-logs/ 目录写入） (002-cli-global-distribution)
+- TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增运行时依赖。仅使用 Node.js 内置模块（`fs`, `path`, `os`, `url`） (003-skill-init)
+- 文件系统写入（`.claude/skills/` 项目级, `~/.claude/skills/` 全局级） (003-skill-init)
 
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
 
@@ -24,6 +26,7 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+- 003-skill-init: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增运行时依赖。仅使用 Node.js 内置模块（`fs`, `path`, `os`, `url`）
 - 002-cli-global-distribution: Added TypeScript 5.x, Node.js LTS (20.x+) + s-morph, tree-sitter, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（均为现有依赖，无新增运行时依赖）
 
 - 001-reverse-spec-v2: Added TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM)

@@ -3,7 +3,7 @@
 ![Version](https://img.shields.io/badge/version-2.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
-![Tests](https://img.shields.io/badge/tests-175%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-212%20passed-brightgreen)
 
 > 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言通过纯 LLM 模式提供降级支持。
 
@@ -11,6 +11,7 @@
 
 - **CLI 全局分发** — `npm install -g` 后提供 `reverse-spec` 全局命令，支持 `generate`/`batch`/`diff` 三个子命令
 - **Skill 自动注册** — 全局安装后自动将 `/reverse-spec` 系列 skill 注册到 Claude Code，卸载时自动清理
+- **项目级 Skill 安装** (`reverse-spec init`) — 一键安装 skill 到当前项目 `.claude/skills/`，支持 `--global` 全局安装和 `--remove` 清理
 - **单模块 Spec 生成** (`/reverse-spec`) — 对任意模块生成完整的 9 段式规格文档；TS/JS 项目接口定义 100% 来自 AST 提取，其他语言通过 LLM 降级分析
 - **批量项目处理** (`/reverse-spec-batch`) — 基于依赖拓扑排序的全项目批量 Spec 生成，支持断点恢复和架构索引
 - **Spec 漂移检测** (`/reverse-spec-diff`) — AST 结构化 Diff + LLM 语义评估，三级严重级别分类，噪声自动过滤
@@ -73,6 +74,15 @@ reverse-spec diff specs/auth.spec.md src/auth/
 
 # 自定义输出目录
 reverse-spec generate src/auth/ --output-dir out/
+
+# 安装 skill 到当前项目
+reverse-spec init
+
+# 安装 skill 到全局 ~/.claude/skills/
+reverse-spec init --global
+
+# 移除已安装的 skill
+reverse-spec init --remove
 
 # 查看版本
 reverse-spec --version
@@ -159,12 +169,16 @@ src/
 ├── utils/                         # 工具函数
 │   ├── file-scanner.ts            # 文件发现 + .gitignore 过滤
 │   └── chunk-splitter.ts          # >5k LOC 分块策略
+├── installer/                     # Skill 安装/卸载模块
+│   ├── skill-installer.ts         # 安装/卸载核心逻辑
+│   └── skill-templates.ts         # 3 个 SKILL.md 模板定义
 ├── cli/                           # CLI 全局命令入口
 │   ├── index.ts                   # bin 入口（#!/usr/bin/env node）
 │   ├── commands/
 │   │   ├── generate.ts            # generate 子命令
 │   │   ├── batch.ts               # batch 子命令
-│   │   └── diff.ts                # diff 子命令
+│   │   ├── diff.ts                # diff 子命令
+│   │   └── init.ts                # init 子命令（skill 安装/卸载）
 │   └── utils/
 │       ├── parse-args.ts          # 参数解析
 │       └── error-handler.ts       # 错误处理
@@ -186,9 +200,9 @@ skills/                            # 本地版 Skill（使用 npx tsx 调用）
 ├── reverse-spec-batch/SKILL.md    # /reverse-spec-batch 命令
 └── reverse-spec-diff/SKILL.md     # /reverse-spec-diff 命令
 
-tests/                             # 测试套件（175 用例）
-├── unit/                          # 14 个单元测试文件
-├── integration/                   # 3 个集成测试文件
+tests/                             # 测试套件（212 用例）
+├── unit/                          # 16 个单元测试文件
+├── integration/                   # 4 个集成测试文件
 ├── golden-master/                 # Golden Master 结构相似度测试
 └── self-hosting/                  # 自举测试（分析自身）
 ```
@@ -209,12 +223,12 @@ ModuleSpec → specs/*.spec.md
 
 ## 测试
 
-项目包含 4 级测试体系，共 175 个测试用例：
+项目包含 4 级测试体系，共 212 个测试用例：
 
 | 层级 | 文件数 | 用例数 | 覆盖范围 |
 |------|--------|--------|----------|
-| 单元测试 | 14 | 138 | 各模块独立功能（含 CLI 解析、Skill 注册） |
-| 集成测试 | 3 | 23 | 端到端流水线 + 漂移检测 + CLI e2e |
+| 单元测试 | 16 | 168 | 各模块独立功能（含 CLI 解析、Skill 安装器、init 命令） |
+| 集成测试 | 4 | 30 | 端到端流水线 + 漂移检测 + CLI e2e + init e2e |
 | Golden Master | 1 | 9 | AST 提取精度 ≥ 90% 结构相似度 |
 | 自举测试 | 1 | 5 | 项目分析自身的完整性验证 |
 
@@ -231,6 +245,8 @@ ModuleSpec → specs/*.spec.md
 | [contracts/](specs/001-reverse-spec-v2/contracts/) | API 契约：6 个模块的完整接口定义 |
 | [002 spec.md](specs/002-cli-global-distribution/spec.md) | CLI 全局分发：4 个用户故事、12 条功能需求 |
 | [002 tasks.md](specs/002-cli-global-distribution/tasks.md) | CLI 任务清单：24 个任务、7 个阶段 |
+| [003 spec.md](specs/003-skill-init/spec.md) | Skill Init：项目级/全局 skill 安装、5 个用户故事 |
+| [003 tasks.md](specs/003-skill-init/tasks.md) | Skill Init 任务清单：20 个任务、7 个阶段 |
 
 ## Constitution 原则
 
