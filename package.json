@@ -4,6 +4,15 @@
   "description": "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "reverse-spec": "dist/cli/index.js"
+  },
+  "files": [
+    "dist/",
+    "src/skills-global/",
+    "templates/",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -11,7 +20,9 @@
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "postinstall": "node dist/scripts/postinstall.js",
+    "preuninstall": "node dist/scripts/preuninstall.js"
   },
   "dependencies": {
     "ts-morph": "^24.0.0",

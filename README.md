@@ -3,12 +3,14 @@
 ![Version](https://img.shields.io/badge/version-2.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
-![Tests](https://img.shields.io/badge/tests-148%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-175%20passed-brightgreen)
 
 > 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言通过纯 LLM 模式提供降级支持。
 
 ## 功能特性
 
+- **CLI 全局分发** — `npm install -g` 后提供 `reverse-spec` 全局命令，支持 `generate`/`batch`/`diff` 三个子命令
+- **Skill 自动注册** — 全局安装后自动将 `/reverse-spec` 系列 skill 注册到 Claude Code，卸载时自动清理
 - **单模块 Spec 生成** (`/reverse-spec`) — 对任意模块生成完整的 9 段式规格文档；TS/JS 项目接口定义 100% 来自 AST 提取，其他语言通过 LLM 降级分析
 - **批量项目处理** (`/reverse-spec-batch`) — 基于依赖拓扑排序的全项目批量 Spec 生成，支持断点恢复和架构索引
 - **Spec 漂移检测** (`/reverse-spec-diff`) — AST 结构化 Diff + LLM 语义评估，三级严重级别分类，噪声自动过滤
@@ -37,7 +39,19 @@
 - Claude Code CLI
 - Anthropic API Key（设置 `ANTHROPIC_API_KEY` 环境变量）
 
-### 安装
+### 全局安装（推荐）
+
+```bash
+npm install -g reverse-spec
+```
+
+全局安装后：
+
+- `reverse-spec` CLI 可在任意项目中使用
+- `/reverse-spec` 系列 skill 自动注册到 Claude Code
+- 卸载时自动清理已注册的 skill
+
+### 本地开发安装
 
 ```bash
 git clone <repo-url>
@@ -45,7 +59,29 @@ cd reverse-spec
 npm install
 ```
 
-### 使用
+### CLI 使用
+
+```bash
+# 单模块 Spec 生成
+reverse-spec generate src/auth/ --deep
+
+# 全项目批量生成
+reverse-spec batch --force
+
+# Spec 漂移检测
+reverse-spec diff specs/auth.spec.md src/auth/
+
+# 自定义输出目录
+reverse-spec generate src/auth/ --output-dir out/
+
+# 查看版本
+reverse-spec --version
+
+# 查看帮助
+reverse-spec --help
+```
+
+### Claude Code Skill 使用
 
 在 Claude Code 中执行以下命令：
 
@@ -120,23 +156,39 @@ src/
 │   ├── drift-item.ts              # DriftItem + DriftSummary
 │   ├── dependency-graph.ts        # DependencyGraph + SCC
 │   └── module-spec.ts             # ModuleSpec + DriftReport + BatchState
-└── utils/                         # 工具函数
-    ├── file-scanner.ts            # 文件发现 + .gitignore 过滤
-    └── chunk-splitter.ts          # >5k LOC 分块策略
+├── utils/                         # 工具函数
+│   ├── file-scanner.ts            # 文件发现 + .gitignore 过滤
+│   └── chunk-splitter.ts          # >5k LOC 分块策略
+├── cli/                           # CLI 全局命令入口
+│   ├── index.ts                   # bin 入口（#!/usr/bin/env node）
+│   ├── commands/
+│   │   ├── generate.ts            # generate 子命令
+│   │   ├── batch.ts               # batch 子命令
+│   │   └── diff.ts                # diff 子命令
+│   └── utils/
+│       ├── parse-args.ts          # 参数解析
+│       └── error-handler.ts       # 错误处理
+├── scripts/                       # npm lifecycle 脚本
+│   ├── postinstall.ts             # 全局安装后注册 skill
+│   └── preuninstall.ts            # 卸载前清理 skill
+└── skills-global/                 # 全局版 Skill（使用 CLI 调用）
+    ├── reverse-spec/SKILL.md
+    ├── reverse-spec-batch/SKILL.md
+    └── reverse-spec-diff/SKILL.md
 
 templates/                         # Handlebars 输出模板
 ├── module-spec.hbs                # 九段式 Spec 模板
 ├── index-spec.hbs                 # 架构索引模板
 └── drift-report.hbs               # 漂移报告模板
 
-skills/                            # Claude Code Skill 入口
+skills/                            # 本地版 Skill（使用 npx tsx 调用）
 ├── reverse-spec/SKILL.md          # /reverse-spec 命令
 ├── reverse-spec-batch/SKILL.md    # /reverse-spec-batch 命令
 └── reverse-spec-diff/SKILL.md     # /reverse-spec-diff 命令
 
-tests/                             # 测试套件（148 用例）
-├── unit/                          # 12 个单元测试文件
-├── integration/                   # 2 个集成测试文件
+tests/                             # 测试套件（175 用例）
+├── unit/                          # 14 个单元测试文件
+├── integration/                   # 3 个集成测试文件
 ├── golden-master/                 # Golden Master 结构相似度测试
 └── self-hosting/                  # 自举测试（分析自身）
 ```
@@ -157,12 +209,12 @@ ModuleSpec → specs/*.spec.md
 
 ## 测试
 
-项目包含 4 级测试体系，共 148 个测试用例：
+项目包含 4 级测试体系，共 175 个测试用例：
 
 | 层级 | 文件数 | 用例数 | 覆盖范围 |
 |------|--------|--------|----------|
-| 单元测试 | 12 | 122 | 各模块独立功能 |
-| 集成测试 | 2 | 15 | 端到端流水线 + 漂移检测 |
+| 单元测试 | 14 | 138 | 各模块独立功能（含 CLI 解析、Skill 注册） |
+| 集成测试 | 3 | 23 | 端到端流水线 + 漂移检测 + CLI e2e |
 | Golden Master | 1 | 9 | AST 提取精度 ≥ 90% 结构相似度 |
 | 自举测试 | 1 | 5 | 项目分析自身的完整性验证 |
 
@@ -177,7 +229,8 @@ ModuleSpec → specs/*.spec.md
 | [data-model.md](specs/001-reverse-spec-v2/data-model.md) | 数据模型：8 个核心实体、ER 图、状态转换、数据流 |
 | [tasks.md](specs/001-reverse-spec-v2/tasks.md) | 任务清单：52 个任务、8 个阶段、依赖关系图 |
 | [contracts/](specs/001-reverse-spec-v2/contracts/) | API 契约：6 个模块的完整接口定义 |
-| [quickstart.md](specs/001-reverse-spec-v2/quickstart.md) | 快速验证指南：5 项验证步骤 |
+| [002 spec.md](specs/002-cli-global-distribution/spec.md) | CLI 全局分发：4 个用户故事、12 条功能需求 |
+| [002 tasks.md](specs/002-cli-global-distribution/tasks.md) | CLI 任务清单：24 个任务、7 个阶段 |
 
 ## Constitution 原则
 
