@@ -1,233 +1,233 @@
-# Feature Specification: Reverse-Spec Skill System v2.0
+# 功能规格说明：Reverse-Spec Skill System v2.0
 
-**Feature Branch**: `001-reverse-spec-v2`
-**Created**: 2026-02-10
-**Status**: Draft
-**Input**: Build a complete Claude Code AI Agent Skill suite that reverse-engineers legacy source code into structured, machine-readable Spec documents via a hybrid AST static analysis + LLM pipeline, covering single-module generation, batch project processing, and spec drift detection.
+**功能分支**：`001-reverse-spec-v2`
+**创建日期**：2026-02-10
+**状态**：草稿
+**输入**：构建一套完整的 Claude Code AI Agent Skill 套件，通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化、机器可读的 Spec 文档，涵盖单模块生成、批量项目处理和 Spec 漂移检测。
 
-## User Scenarios & Testing *(mandatory)*
+## 用户场景与测试 *（必填）*
 
-### User Story 1 - Single Module Spec Generation (Priority: P1)
+### User Story 1 - 单模块 Spec 生成（优先级：P1）
 
-A developer working with an unfamiliar codebase runs `/reverse-spec src/auth/` in Claude Code. The system scans all TypeScript files in that directory, extracts interface signatures and function skeletons via AST parsing, assembles a focused context for the LLM, and produces a structured `specs/auth.spec.md` document that accurately captures the module's intent, public APIs, business logic, constraints, edge cases, and technical debt — all written in Chinese with English code identifiers preserved. The output follows the mandatory 9-section structure and includes embedded Mermaid class diagrams.
+一位开发者面对不熟悉的代码库，在 Claude Code 中运行 `/reverse-spec src/auth/`。系统扫描该目录下所有 TypeScript 文件，通过 AST 解析提取接口签名和函数骨架，为 LLM 组装聚焦的上下文，并生成结构化的 `specs/auth.spec.md` 文档，准确捕捉模块的意图、公共 API、业务逻辑、约束条件、边界情况和技术债务——全部以中文撰写，英文代码标识符保持原样。输出遵循强制的 9 节结构，并包含嵌入的 Mermaid 类图。
 
-**Why this priority**: This is the foundational capability of the entire project. Without reliable single-module spec generation, batch processing and drift detection cannot function. It delivers immediate standalone value to any developer facing an undocumented codebase.
+**为何此优先级**：这是整个项目的基础能力。没有可靠的单模块 Spec 生成，批量处理和漂移检测都无法运作。它能为任何面对无文档代码库的开发者提供即时的独立价值。
 
-**Independent Test**: Run `/reverse-spec` against a known TypeScript module (e.g., a subset of `redux` or `lodash`) and verify the output spec matches a pre-validated golden master.
+**独立测试**：对一个已知的 TypeScript 模块（如 `redux` 或 `lodash` 的子集）运行 `/reverse-spec`，验证输出的 Spec 与预先验证的 Golden Master 匹配。
 
-**Acceptance Scenarios**:
+**验收场景**：
 
-1. **Given** a TypeScript directory with 10 files totaling 800 LOC, **When** the user runs `/reverse-spec src/auth/`, **Then** the system produces `specs/auth.spec.md` containing all 9 mandatory sections with every public interface accurately documented from AST extraction (zero LLM-fabricated signatures).
-2. **Given** a file containing ambiguous business logic with no comments, **When** the system generates a spec, **Then** inferred intent paragraphs are marked with `[推断]` and a brief rationale.
-3. **Given** a source file with syntax errors, **When** the system encounters a parse failure, **Then** it falls back to error-tolerant parsing, extracts as much skeleton as possible, and marks the affected sections with `[SYNTAX ERROR]`.
-4. **Given** a target module, **When** spec generation completes, **Then** no source files in the target directory have been modified, created, or deleted (read-only guarantee).
-5. **Given** a module with complex class hierarchies, **When** spec generation completes, **Then** the output contains an accurate Mermaid class diagram reflecting the actual inheritance and composition relationships.
-
----
-
-### User Story 2 - Batch Project Spec Generation (Priority: P2)
-
-A tech lead facing a large monorepo (200+ modules) runs `/reverse-spec-batch` to systematically document the entire codebase. The system constructs a dependency graph via `dependency-cruiser`, determines processing order via topological sort (foundation libraries first, business layers last), generates a `specs/_index.spec.md` architecture overview, and iterates through modules — reading previously generated specs' interface definitions as context instead of re-reading source code — producing a complete set of individual module specs.
-
-**Why this priority**: Batch processing is essential for large-scale adoption but depends on single-module generation (US1) being reliable. It introduces the dependency graph and topological sort capabilities that differentiate v2 from v1, and enables the O(1) context complexity strategy.
-
-**Independent Test**: Run `/reverse-spec-batch` against a multi-module open-source project and verify the generated index correctly maps all modules, the processing order follows dependency topology, and each module spec references its dependencies' interface definitions rather than their source code.
-
-**Acceptance Scenarios**:
-
-1. **Given** a monorepo with modules A (depends on nothing), B (depends on A), and C (depends on A and B), **When** the user runs `/reverse-spec-batch`, **Then** modules are processed in order A → B → C, and module C's spec references interface definitions from A's and B's already-generated specs (not their source code).
-2. **Given** a project with modules X and Y in a circular dependency, **When** the batch processor encounters this cycle, **Then** it treats X and Y as a single strongly connected component (SCC) and processes them together.
-3. **Given** a batch run that was previously interrupted after completing 5 of 12 modules, **When** the user reruns `/reverse-spec-batch`, **Then** the system detects the 5 existing specs and resumes from module 6 (no redundant regeneration unless `--force` is specified).
-4. **Given** batch processing is underway, **When** a module completes, **Then** the system displays real-time progress (e.g., `[3/50] Processing src/auth...`). The user may interrupt via Ctrl+C at any time; the system persists a checkpoint so the next run resumes from the last completed module (no interactive confirmation between modules — SC-005 autonomous guarantee).
-5. **Given** a completed batch run, **When** the user opens `specs/_index.spec.md`, **Then** it contains a system purpose summary, architecture pattern description, module map with links to each spec, cross-cutting concerns, and technology stack overview.
+1. **Given** 一个包含 10 个文件、共 800 行代码的 TypeScript 目录，**When** 用户运行 `/reverse-spec src/auth/`，**Then** 系统生成 `specs/auth.spec.md`，包含全部 9 个必填章节，且每个公共接口均准确来源于 AST 提取（零 LLM 捏造签名）。
+2. **Given** 一个包含无注释的模糊业务逻辑的文件，**When** 系统生成 Spec，**Then** 推断的意图段落标注 `[推断]` 并附带简要理由。
+3. **Given** 一个包含语法错误的源文件，**When** 系统遇到解析失败，**Then** 回退到容错解析模式，尽可能提取骨架，并将受影响的部分标注 `[SYNTAX ERROR]`。
+4. **Given** 一个目标模块，**When** Spec 生成完成，**Then** 目标目录中没有任何源文件被修改、创建或删除（只读保证）。
+5. **Given** 一个具有复杂类层次结构的模块，**When** Spec 生成完成，**Then** 输出包含准确的 Mermaid 类图，反映实际的继承和组合关系。
 
 ---
 
-### User Story 3 - Spec Drift Detection (Priority: P3)
+### User Story 2 - 批量项目 Spec 生成（优先级：P2）
 
-After a sprint of code changes, a developer runs `/reverse-spec-diff specs/auth.spec.md src/auth/` to check whether the specification still reflects reality. The system re-analyzes the current code via AST, performs a structural diff on exported symbols (added/removed/modified), and for behavioral changes (function body logic) asks the LLM whether the code change violates the spec's stated intent. It produces a categorized drift report and offers to update the spec — but only after explicit user confirmation.
+一位技术负责人面对大型 monorepo（200+ 模块），运行 `/reverse-spec-batch` 来系统性地文档化整个代码库。系统通过 `dependency-cruiser` 构建依赖图，通过拓扑排序确定处理顺序（基础库优先、业务层在后），生成 `specs/_index.spec.md` 架构概览，然后遍历各模块——读取已生成 Spec 的接口定义作为上下文，而非重新读取源代码——生成完整的单模块 Spec 集合。
 
-**Why this priority**: Drift detection completes the Spec-Driven Development (SDD) lifecycle by closing the feedback loop between code and documentation. It requires both the AST analyzer and a reliable baseline spec, making it naturally the last user-facing feature to build.
+**为何此优先级**：批量处理对于大规模采用至关重要，但依赖于单模块生成（US1）的可靠性。它引入了依赖图和拓扑排序能力，这是 v2 区别于 v1 的核心特性，并实现了 O(1) 上下文复杂度策略。
 
-**Independent Test**: Generate a spec for a module, make known code modifications (add a function, change a signature, remove an export), and verify the drift report correctly identifies all three change types with appropriate severity levels.
+**独立测试**：对一个多模块开源项目运行 `/reverse-spec-batch`，验证生成的索引正确映射所有模块，处理顺序遵循依赖拓扑，且每个模块 Spec 引用其依赖的接口定义而非源代码。
 
-**Acceptance Scenarios**:
+**验收场景**：
 
-1. **Given** a spec documenting function `login(email: string, password: string)` and the code now shows `login(email: string, password: string, rememberMe?: boolean)`, **When** drift detection runs, **Then** the report lists this as a MEDIUM severity modification with the exact signature change.
-2. **Given** a spec documenting 5 exported functions and the code now has 6, **When** drift detection runs, **Then** the report lists the new export as a LOW severity addition with its location.
-3. **Given** a spec with business rule "passwords must be at least 8 characters" and the code now validates for 12 characters, **When** the LLM semantic diff evaluates this, **Then** it flags a MEDIUM severity behavioral drift in the constraints section.
-4. **Given** only whitespace, comment, and import order changes in the code, **When** drift detection runs, **Then** these are filtered as noise and the report shows zero substantive drift.
-5. **Given** a completed drift report, **When** the user has not explicitly confirmed an update, **Then** no spec files are modified (read-only until confirmed).
-
----
-
-### User Story 4 - Hybrid Analysis Pipeline (Priority: P1)
-
-The core engine that powers all three slash commands. When any command triggers code analysis, the system follows a strict three-stage pipeline: (1) **Pre-processing** — use `ts-morph` to parse AST and extract a Skeleton Code containing only exported signatures, no implementation details; (2) **Context Assembly** — compose the LLM prompt from Skeleton + dependency data + core logic snippets (only for complex functions), keeping total context under 100k tokens; (3) **Generation & Enrichment** — LLM fills natural-language descriptions while the toolchain injects Mermaid diagrams. This pipeline ensures structural accuracy (from AST) while leveraging LLM for semantic understanding.
-
-**Why this priority**: This is the technical foundation that every user-facing command depends on. The three-stage pipeline is what distinguishes v2 from v1's pure-LLM approach and enforces Constitution Principle I (AST Accuracy First) and Principle II (Hybrid Pipeline).
-
-**Independent Test**: Feed a known TypeScript module through each pipeline stage independently, verify the skeleton extraction is 100% accurate, the context assembly stays within token budget, and the final enriched output contains no fabricated interfaces.
-
-**Acceptance Scenarios**:
-
-1. **Given** a TypeScript file exporting 3 functions, 2 interfaces, and 1 class, **When** the pre-processing stage runs, **Then** the extracted CodeSkeleton contains exactly 6 exports with correct name, kind, signature, and JSDoc fields — and zero implementation details.
-2. **Given** 500 TypeScript files, **When** the pre-processing stage processes all of them, **Then** AST parsing and skeleton extraction completes within 10 seconds.
-3. **Given** a module with 50 functions where 5 contain complex business logic, **When** the context assembly stage runs, **Then** the assembled prompt includes skeleton for all 50 but full code snippets only for the 5 complex functions, and total tokens stay under 100k.
-4. **Given** an assembled context, **When** the generation stage runs, **Then** all interface definitions in the output exactly match the AST-extracted skeleton (no LLM modifications to signatures), and Mermaid diagrams accurately reflect class relationships.
-5. **Given** a file with syntax errors that prevent full `ts-morph` parsing, **When** the pre-processing stage encounters the failure, **Then** it falls back to `tree-sitter` error-tolerant mode and returns a partial skeleton with affected symbols marked `[SYNTAX ERROR]`.
+1. **Given** 一个 monorepo，其中模块 A（无依赖）、B（依赖 A）、C（依赖 A 和 B），**When** 用户运行 `/reverse-spec-batch`，**Then** 模块按 A → B → C 顺序处理，且模块 C 的 Spec 引用 A 和 B 已生成 Spec 的接口定义（而非其源代码）。
+2. **Given** 项目中模块 X 和 Y 存在循环依赖，**When** 批量处理器遇到此循环，**Then** 将 X 和 Y 视为单个强连通分量（SCC）并一起处理。
+3. **Given** 一次之前中断的批量运行（已完成 12 个模块中的 5 个），**When** 用户重新运行 `/reverse-spec-batch`，**Then** 系统检测到 5 个已有 Spec 并从模块 6 恢复（除非指定 `--force`，否则不重复生成）。
+4. **Given** 批量处理正在进行中，**When** 一个模块完成，**Then** 系统显示实时进度（如 `[3/50] Processing src/auth...`）。用户可随时通过 Ctrl+C 中断；系统持久化检查点，下次运行从最后完成的模块恢复（模块间无交互确认——SC-005 自主保证）。
+5. **Given** 批量运行完成，**When** 用户打开 `specs/_index.spec.md`，**Then** 其中包含系统用途摘要、架构模式描述、带各 Spec 链接的模块地图、横切关注点和技术栈概览。
 
 ---
 
-### User Story 5 - Dependency Graph & Topological Processing (Priority: P2)
+### User Story 3 - Spec 漂移检测（优先级：P3）
 
-The system constructs a project-wide module dependency graph by scanning all import statements. It uses `dependency-cruiser` to build a directed graph, identifies strongly connected components (circular dependencies), computes a topological sort order for processing, and generates both a JSON structure for programmatic use and Mermaid diagram source for documentation. This graph drives the batch processing order and enables the O(1) context strategy where higher-level modules read lower-level specs instead of source code.
+一个迭代的代码变更之后，开发者运行 `/reverse-spec-diff specs/auth.spec.md src/auth/` 来检查规格说明是否仍然反映现实。系统通过 AST 重新分析当前代码，对导出符号执行结构化差异比较（新增/删除/修改），并对行为变更（函数体逻辑）询问 LLM 代码变更是否违反 Spec 声明的意图。它生成分类的漂移报告，并提供更新 Spec 的选项——但仅在用户明确确认后执行。
 
-**Why this priority**: The dependency graph is required for batch processing (US2) and provides valuable architectural visualization. It's independent of the AST content analyzer but must be ready before batch mode can function correctly.
+**为何此优先级**：漂移检测通过闭合代码与文档之间的反馈环路来完善 Spec 驱动开发（SDD）生命周期。它需要 AST 分析器和可靠的基线 Spec，因此自然是最后构建的面向用户的功能。
 
-**Independent Test**: Run the dependency graph generator against a project with known dependency relationships and verify the JSON structure, topological order, SCC detection, and Mermaid output all match expectations.
+**独立测试**：为一个模块生成 Spec，进行已知的代码修改（添加函数、更改签名、删除导出），验证漂移报告能正确识别所有三种变更类型及其对应的严重级别。
 
-**Acceptance Scenarios**:
+**验收场景**：
 
-1. **Given** a project where module A imports from B, and B imports from C, **When** the dependency graph generator runs, **Then** the returned JSON shows edges A→B and B→C, and the topological order is [C, B, A].
-2. **Given** modules X and Y that import each other (circular), **When** the generator detects this, **Then** it groups them into an SCC and the returned structure marks them as a combined processing unit.
-3. **Given** any project root, **When** the generator completes, **Then** it produces valid Mermaid source code that renders as a dependency diagram.
-4. **Given** a monorepo with 200+ modules, **When** the generator runs, **Then** it completes graph construction and topological sort without exceeding reasonable time and memory limits.
-
----
-
-### User Story 6 - Structured Diff Engine (Priority: P3)
-
-The diff engine compares two CodeSkeleton snapshots (old vs new) representing the same module at different points in time. It performs structural comparison on exported symbols: identifies additions (new exports), removals (deleted exports — breaking changes), and modifications (changed signatures). Each difference is categorized by severity (HIGH for breaking, MEDIUM for logic, LOW for addition) and by category (Interface, Behavior, or Constraint). The engine filters noise (renames, formatting) and returns a structured report. For behavioral changes (function body logic), it delegates to the LLM for semantic evaluation.
-
-**Why this priority**: The diff engine powers drift detection (US3) and is the last piece of the toolchain. It depends on the AST analyzer being stable and on the CodeSkeleton format being finalized.
-
-**Independent Test**: Create two known CodeSkeleton objects with deliberate differences and assert the diff report contains the correct items with correct severities and categories.
-
-**Acceptance Scenarios**:
-
-1. **Given** an old skeleton with function `foo(a: string)` and a new skeleton with `foo(a: string, b: number)`, **When** the diff engine compares, **Then** it returns a modification entry with severity MEDIUM categorized as Interface.
-2. **Given** an old skeleton with 5 exports and a new skeleton missing one of them, **When** the engine compares, **Then** it returns a removal entry with severity HIGH categorized as Interface (breaking change).
-3. **Given** two identical skeletons, **When** the engine compares, **Then** it returns an empty diff with zero items.
-4. **Given** a function body change where the logic differs but the signature is unchanged, **When** the engine detects this, **Then** it delegates to the LLM semantic diff to assess whether the spec's intent is violated.
+1. **Given** Spec 记录了函数 `login(email: string, password: string)`，而代码现在显示为 `login(email: string, password: string, rememberMe?: boolean)`，**When** 运行漂移检测，**Then** 报告将此列为 MEDIUM 严重级别的修改，并附带准确的签名变更。
+2. **Given** Spec 记录了 5 个导出函数，而代码现在有 6 个，**When** 运行漂移检测，**Then** 报告将新导出列为 LOW 严重级别的新增，并附带其位置。
+3. **Given** Spec 中有业务规则"密码至少 8 个字符"，而代码现在验证 12 个字符，**When** LLM 语义差异评估此变更，**Then** 在约束条件部分标记为 MEDIUM 严重级别的行为漂移。
+4. **Given** 代码中仅有空白、注释和 import 顺序的变更，**When** 运行漂移检测，**Then** 这些被作为噪声过滤，报告显示零实质性漂移。
+5. **Given** 漂移报告已完成，**When** 用户未明确确认更新，**Then** 不修改任何 Spec 文件（确认前只读）。
 
 ---
 
-### User Story 7 - Spec Output Format & Template System (Priority: P1)
+### User Story 4 - 混合分析流水线（优先级：P1）
 
-Every generated spec document follows a standardized format: YAML frontmatter (type, version, generator, source target, related files, confidence level), followed by the 9 mandatory sections in Chinese (意图, 接口定义, 业务逻辑, 数据结构, 约束条件, 边界条件, 技术债务, 测试覆盖, 依赖关系), with embedded Mermaid diagrams and a file inventory appendix. The template system uses `handlebars` or `ejs` to render consistent output from the analysis data, ensuring every spec is machine-readable, cross-referenced, and compatible with the SDD workflow.
+驱动所有三个斜杠命令的核心引擎。当任何命令触发代码分析时，系统遵循严格的三阶段流水线：（1）**预处理** — 使用 `ts-morph` 解析 AST 并提取仅包含导出签名、不含实现细节的骨架代码；（2）**上下文组装** — 从骨架 + 依赖数据 + 核心逻辑片段（仅针对复杂函数）组合 LLM 提示，将总上下文控制在 100k token 以内；（3）**生成与增强** — LLM 填充自然语言描述，同时工具链注入 Mermaid 图表。此流水线确保结构准确性（来自 AST），同时利用 LLM 进行语义理解。
 
-**Why this priority**: A consistent, well-structured output format is essential from day one. All three commands produce spec-like documents, and the template system ensures uniformity across single-module, batch, and drift-update outputs.
+**为何此优先级**：这是每个面向用户的命令所依赖的技术基础。三阶段流水线是 v2 区别于 v1 纯 LLM 方案的核心所在，并贯彻了宪法原则 I（AST 准确性优先）和原则 II（混合流水线）。
 
-**Independent Test**: Render the template with known analysis data and verify the output contains correct frontmatter, all 9 sections populated, valid Mermaid blocks, and accurate file inventory.
+**独立测试**：将一个已知的 TypeScript 模块逐一送入流水线的各阶段，验证骨架提取 100% 准确、上下文组装不超出 token 预算、最终增强输出不包含捏造的接口。
 
-**Acceptance Scenarios**:
+**验收场景**：
 
-1. **Given** a completed analysis of a module, **When** the template renders the spec, **Then** the output YAML frontmatter contains accurate `type`, `version`, `generated_by`, `source_target`, `related_files`, `last_updated`, and `confidence` fields.
-2. **Given** analysis data for a module, **When** the template renders, **Then** all 9 sections appear in order with Chinese headings, and no section is empty (at minimum a "no items found" note).
-3. **Given** a module with class hierarchies and dependencies, **When** the template renders, **Then** the spec includes valid Mermaid class diagram and dependency graph blocks that can be rendered by any Mermaid-compatible viewer.
-4. **Given** analysis of 15 source files, **When** the template renders the appendix, **Then** the file inventory table lists all 15 files with their LOC counts and primary purposes.
+1. **Given** 一个导出 3 个函数、2 个接口和 1 个类的 TypeScript 文件，**When** 预处理阶段运行，**Then** 提取的 CodeSkeleton 恰好包含 6 个导出，具有正确的 name、kind、signature 和 JSDoc 字段——且零实现细节。
+2. **Given** 500 个 TypeScript 文件，**When** 预处理阶段处理全部文件，**Then** AST 解析和骨架提取在 10 秒内完成。
+3. **Given** 一个包含 50 个函数且其中 5 个含有复杂业务逻辑的模块，**When** 上下文组装阶段运行，**Then** 组装的提示包含全部 50 个函数的骨架但仅包含 5 个复杂函数的完整代码片段，且总 token 数保持在 100k 以内。
+4. **Given** 已组装的上下文，**When** 生成阶段运行，**Then** 输出中的所有接口定义与 AST 提取的骨架完全匹配（LLM 不修改签名），且 Mermaid 图表准确反映类关系。
+5. **Given** 一个包含语法错误导致 `ts-morph` 无法完整解析的文件，**When** 预处理阶段遇到失败，**Then** 回退到 `tree-sitter` 容错模式，返回部分骨架并将受影响的符号标注 `[SYNTAX ERROR]`。
 
 ---
 
-### Edge Cases
+### User Story 5 - 依赖图与拓扑处理（优先级：P2）
 
-- What happens when the target path does not exist? The system reports an error with suggested alternatives based on the project structure.
-- What happens when a non-TS/JS file is encountered? AST-enhanced mode is used for TS/JS; all other languages degrade to pure-text LLM analysis mode without introducing non-Node.js runtimes.
-- What happens when a single file exceeds 5,000 LOC? The chunk-summary strategy activates: split by function, generate micro-specs per chunk, then merge into a single module spec.
-- What happens when the `specs/` output directory doesn't exist? The system creates it automatically.
-- What happens when a spec already exists for a target? Single-mode (`/reverse-spec`) overwrites by default; batch mode skips unless `--force` is specified.
-- What happens when the user provides no arguments to `/reverse-spec`? The system warns about full-project scope and asks for confirmation before proceeding.
-- What happens when `dependency-cruiser` encounters unsupported import patterns? The system logs a warning and treats the unresolved import as an external dependency.
-- What happens when the Anthropic API is unavailable during the LLM enrichment stage? The system outputs the AST-extracted structural data (skeleton, interfaces) as-is and marks all natural-language sections as `[LLM UNAVAILABLE — pending enrichment]`.
-- What happens when the LLM API hits rate limits during batch processing? The system retries with exponential backoff (max 3 attempts, short intervals). If still failing, it degrades the current module to AST-only output and continues. Users can pause and resume from the breakpoint after resolving the issue.
+系统通过扫描所有 import 语句构建项目级模块依赖图。使用 `dependency-cruiser` 构建有向图，识别强连通分量（循环依赖），计算拓扑排序处理顺序，并生成 JSON 结构（用于程序化使用）和 Mermaid 图表源码（用于文档）。此图驱动批量处理顺序，并实现 O(1) 上下文策略——高层模块读取低层 Spec 而非源代码。
 
-### Out of Scope (v2.0)
+**为何此优先级**：依赖图是批量处理（US2）的必要条件，并提供有价值的架构可视化。它独立于 AST 内容分析器，但必须在批量模式正常运作前就绪。
 
-- **Code generation or modification**: The system is strictly read-only and analytical; it does not generate, refactor, or modify source code
-- **IDE real-time integration**: Live spec drift display in VS Code or other IDEs is deferred to v2.2 roadmap
-- **Non-Node.js language AST support**: AST-enhanced analysis is limited to TypeScript/JavaScript; other languages receive degraded pure-LLM analysis only — no Python, Rust, Go, or Java AST parsers
-- **Automated test case generation**: The system documents existing code but does not generate test cases, test stubs, or validation code (deferred to v2.1 roadmap)
+**独立测试**：对一个具有已知依赖关系的项目运行依赖图生成器，验证 JSON 结构、拓扑顺序、SCC 检测和 Mermaid 输出均符合预期。
 
-## Clarifications
+**验收场景**：
 
-### Session 2026-02-10
+1. **Given** 项目中模块 A 导入 B，B 导入 C，**When** 依赖图生成器运行，**Then** 返回的 JSON 显示边 A→B 和 B→C，拓扑顺序为 [C, B, A]。
+2. **Given** 模块 X 和 Y 互相导入（循环依赖），**When** 生成器检测到此情况，**Then** 将它们归入一个 SCC，返回的结构将其标记为组合处理单元。
+3. **Given** 任意项目根目录，**When** 生成器完成，**Then** 产出有效的 Mermaid 源码，可渲染为依赖关系图。
+4. **Given** 一个包含 200+ 模块的 monorepo，**When** 生成器运行，**Then** 图构建和拓扑排序在合理的时间和内存限制内完成。
 
-- Q: How should the system handle sensitive information (API keys, credentials, tokens) found in source code before sending to LLM? → A: Auto-detect and redact common secret patterns (API keys, tokens, credentials) before LLM context assembly
-- Q: How are spec document versions managed when regenerated or updated via drift detection? → A: Simple incremental counter (v1, v2, v3...), rely on Git history for detailed change tracking
-- Q: How should batch processing report progress and handle observability? → A: Real-time terminal progress output + generate a batch summary log after completion (with success/failure/skipped module list)
-- Q: What capabilities are explicitly out-of-scope for v2.0? → A: All excluded: code generation/modification, IDE real-time integration, non-Node.js language AST support, automated test case generation
-- Q: How should the system handle LLM API rate limits and per-module failures during batch processing? → A: Exponential backoff retry (max 3 attempts, short intervals), then degrade to AST-only spec and skip; support breakpoint resume so users can fix LLM issues and continue from current progress
+---
 
-## Requirements *(mandatory)*
+### User Story 6 - 结构化差异引擎（优先级：P3）
 
-### Functional Requirements
+差异引擎比较同一模块在不同时间点的两个 CodeSkeleton 快照（旧 vs 新）。它对导出符号执行结构化比较：识别新增（新导出）、删除（已删除导出——破坏性变更）和修改（签名变更）。每个差异按严重级别分类（HIGH 为破坏性、MEDIUM 为逻辑变更、LOW 为新增），并按类别分类（Interface、Behavior 或 Constraint）。引擎过滤噪声（重命名、格式化），返回结构化报告。对于行为变更（函数体逻辑），委托 LLM 进行语义评估。
 
-**Core Pipeline**
-- **FR-001**: System MUST extract all exported interfaces, types, classes, and function signatures from TypeScript/JavaScript files using AST parsing (never LLM inference)
-- **FR-002**: System MUST follow the three-stage hybrid pipeline (Pre-processing → Context Assembly → Generation & Enrichment) for all code analysis
-- **FR-003**: System MUST keep per-file analysis context within 100k tokens by using skeleton code instead of full source
-- **FR-004**: System MUST fall back to error-tolerant parsing when the primary parser encounters syntax errors
-- **FR-005**: System MUST trigger chunk-summary strategy for files exceeding 5,000 LOC
+**为何此优先级**：差异引擎驱动漂移检测（US3），是工具链的最后一块拼图。它依赖于 AST 分析器的稳定性和 CodeSkeleton 格式的最终确定。
 
-**Spec Generation (/reverse-spec)**
-- **FR-006**: System MUST produce spec documents following the 9-section structure (意图, 接口定义, 业务逻辑, 数据结构, 约束条件, 边界条件, 技术债务, 测试覆盖, 依赖关系)
-- **FR-007**: System MUST generate Mermaid class diagrams and dependency graphs and embed them in spec documents
-- **FR-008**: System MUST mark uncertain or inferred content with `[推断]`, `[不明确]`, or `[SYNTAX ERROR]` markers with accompanying rationale
-- **FR-009**: System MUST include YAML frontmatter with type, version (incremental counter, e.g. v1, v2), generator, source target, related files, confidence level, and last updated date — version increments on each regeneration or drift-confirmed update, with Git history as the authoritative change log
+**独立测试**：创建两个具有已知差异的 CodeSkeleton 对象，断言差异报告包含正确的条目及对应的严重级别和类别。
 
-**Batch Processing (/reverse-spec-batch)**
-- **FR-010**: System MUST construct a project-wide dependency graph and process modules in topological order (foundation first)
-- **FR-011**: System MUST detect circular dependencies and treat strongly connected components as single processing units
-- **FR-012**: System MUST support resumable batch processing (skip already-generated specs unless `--force`)
-- **FR-013**: System MUST generate an architecture index (`specs/_index.spec.md`) with system purpose, module map, cross-cutting concerns, and technology stack
-- **FR-014**: System MUST read previously generated specs' interface definitions (not source code) when processing higher-level modules (O(1) context strategy)
-- **FR-015**: System MUST display real-time terminal progress during batch processing (e.g., `[3/50] Processing src/auth...`) and generate a batch summary log upon completion listing all modules with their status (success/failure/skipped)
-- **FR-016**: System MUST retry failed LLM API calls with exponential backoff (max 3 attempts, short intervals), then degrade to AST-only spec output and continue processing remaining modules
-- **FR-017**: System MUST support breakpoint resume for batch processing — when interrupted or paused due to LLM failures, users can resolve the issue and resume from the last completed module
+**验收场景**：
 
-**Drift Detection (/reverse-spec-diff)**
-- **FR-018**: System MUST produce drift reports categorizing differences as HIGH (breaking), MEDIUM (logic), or LOW (addition) severity
-- **FR-019**: System MUST perform structural diff on exported symbols (added/removed/modified signatures)
-- **FR-020**: System MUST delegate behavioral change assessment (function body logic) to LLM semantic evaluation
-- **FR-021**: System MUST filter noise (whitespace, comments, import reordering) from drift reports
-- **FR-022**: System MUST NOT update specs from drift reports without explicit user confirmation
+1. **Given** 旧骨架包含函数 `foo(a: string)`，新骨架为 `foo(a: string, b: number)`，**When** 差异引擎比较，**Then** 返回一个 MEDIUM 严重级别、分类为 Interface 的修改条目。
+2. **Given** 旧骨架有 5 个导出，新骨架缺少其中一个，**When** 引擎比较，**Then** 返回一个 HIGH 严重级别、分类为 Interface 的删除条目（破坏性变更）。
+3. **Given** 两个完全相同的骨架，**When** 引擎比较，**Then** 返回空差异，零条目。
+4. **Given** 一个函数体变更（逻辑不同但签名不变），**When** 引擎检测到此情况，**Then** 委托 LLM 语义差异评估 Spec 意图是否被违反。
 
-**Cross-Cutting**
-- **FR-023**: System MUST NOT modify, create, or delete any source code files in the target directory (read-only guarantee)
-- **FR-024**: System MUST write output only to `specs/` and `drift-logs/` directories
-- **FR-025**: System MUST write all spec prose in Chinese while preserving English for code identifiers, file paths, and type signatures
-- **FR-026**: System MUST respect `.gitignore` rules and not analyze ignored files unless explicitly overridden by the user
-- **FR-027**: System MUST auto-detect and redact common secret patterns (API keys, tokens, database credentials, private keys) from source code before including it in LLM context assembly
+---
 
-### Key Entities
+### User Story 7 - Spec 输出格式与模板系统（优先级：P1）
 
-- **CodeSkeleton**: The AST-extracted structure of a source file — file path, exported symbols (name, kind, signature, JSDoc), and dependency references. This is the core intermediate representation that flows between pipeline stages.
-- **DriftItem**: A single difference between a spec and current code — severity level (HIGH/MEDIUM/LOW), category (Interface/Behavior/Constraint), source location, human-readable description, and proposed spec update text.
-- **DependencyGraph**: The project-wide module import relationship map — directed edges between modules, topological sort order, identified strongly connected components (circular dependencies), and Mermaid diagram source.
-- **ModuleSpec**: The generated specification document for a single module — YAML frontmatter, 9 mandatory Chinese-language sections, embedded Mermaid diagrams, and a file inventory appendix.
-- **ArchitectureIndex**: The project-level overview document — system purpose, architecture pattern, module map with links to individual specs, cross-cutting concerns (auth, error handling, logging, config), and technology stack summary.
-- **DriftReport**: The output of `/reverse-spec-diff` — summary statistics, additions table, removals table, modifications table, and a recommendation section. Written to `drift-logs/`.
+每个生成的 Spec 文档遵循标准化格式：YAML frontmatter（type、version、generator、source target、related files、confidence level），后接 9 个中文必填章节（意图、接口定义、业务逻辑、数据结构、约束条件、边界条件、技术债务、测试覆盖、依赖关系），嵌入 Mermaid 图表和文件清单附录。模板系统使用 `handlebars` 或 `ejs` 从分析数据渲染一致的输出，确保每个 Spec 都是机器可读的、交叉引用的，且与 SDD 工作流兼容。
 
-## Success Criteria *(mandatory)*
+**为何此优先级**：一致、结构良好的输出格式从第一天起就至关重要。所有三个命令都生成类 Spec 文档，模板系统确保单模块、批量和漂移更新输出的一致性。
 
-### Measurable Outcomes
+**独立测试**：使用已知分析数据渲染模板，验证输出包含正确的frontmatter、全部 9 个章节有内容、有效的 Mermaid 块和准确的文件清单。
 
-- **SC-001**: Users can generate a complete, 9-section structured spec from any TypeScript module in a single `/reverse-spec` command invocation
-- **SC-002**: 100% of interface definitions in generated specs match source code exactly (zero fabricated signatures verified against AST)
-- **SC-003**: 500 files can be preprocessed (AST parsed and skeleton extracted) within 10 seconds
-- **SC-004**: Generated specs for a known open-source project (e.g., `redux` subset) match a pre-validated golden master at 90%+ structural similarity
-- **SC-005**: Batch processing of a 50-module project completes end-to-end without manual intervention (beyond initial confirmation)
-- **SC-006**: Drift detection correctly identifies 95%+ of signature-level changes (additions, removals, modifications) between spec and code
-- **SC-007**: All noise (whitespace, comment-only, import reordering changes) is filtered from drift reports with zero false positives
-- **SC-008**: The generated `_index.spec.md` accurately reflects the project's module structure and dependency relationships
-- **SC-009**: Self-hosting test passes: running `/reverse-spec-batch` on the reverse-spec project itself produces a valid, coherent set of specs
+**验收场景**：
 
-### Assumptions
+1. **Given** 一个模块的已完成分析，**When** 模板渲染 Spec，**Then** 输出的 YAML frontmatter包含准确的 `type`、`version`、`generated_by`、`source_target`、`related_files`、`last_updated` 和 `confidence` 字段。
+2. **Given** 一个模块的分析数据，**When** 模板渲染，**Then** 全部 9 个章节按顺序出现并带中文标题，且无空章节（至少包含"未发现相关项"说明）。
+3. **Given** 一个具有类层次结构和依赖的模块，**When** 模板渲染，**Then** Spec 包含有效的 Mermaid 类图和依赖图块，可由任何兼容 Mermaid 的查看器渲染。
+4. **Given** 15 个源文件的分析结果，**When** 模板渲染附录，**Then** 文件清单表格列出全部 15 个文件及其代码行数和主要用途。
 
-- Target codebases are primarily TypeScript/JavaScript; non-TS/JS languages receive degraded (pure-LLM) analysis without AST enhancement
-- Node.js LTS is available in the execution environment (Claude Code sandbox or local machine)
-- The primary AST parser (`ts-morph`) provides sufficient capability for the vast majority of TS/JS codebases; `tree-sitter` is only needed for syntactically broken files
-- Users interact with the system through Claude Code slash commands and expect Chinese-language output with English code identifiers
-- The Anthropic Claude API (Sonnet/Opus) is available for LLM enrichment steps
-- The npm packages `ts-morph`, `dependency-cruiser`, `handlebars`/`ejs`, and `zod` are installable in the target environment
+---
+
+### 边界情况
+
+- 目标路径不存在怎么办？系统报告错误并根据项目结构给出建议的替代路径。
+- 遇到非 TS/JS 文件怎么办？TS/JS 使用 AST 增强模式；其他所有语言降级为纯文本 LLM 分析模式，不引入非 Node.js 运行时。
+- 单个文件超过 5,000 行怎么办？激活分块摘要策略：按函数拆分，为每个分块生成微 Spec，然后合并为单个模块 Spec。
+- `specs/` 输出目录不存在怎么办？系统自动创建。
+- 目标已存在 Spec 怎么办？单模块模式（`/reverse-spec`）默认覆盖；批量模式跳过，除非指定 `--force`。
+- 用户未向 `/reverse-spec` 提供参数怎么办？系统警告全项目范围并在继续前请求确认。
+- `dependency-cruiser` 遇到不支持的 import 模式怎么办？系统记录警告并将未解析的导入视为外部依赖。
+- LLM 增强阶段 Anthropic API 不可用怎么办？系统按原样输出 AST 提取的结构化数据（骨架、接口），并将所有自然语言章节标注为 `[LLM UNAVAILABLE — pending enrichment]`。
+- 批量处理中 LLM API 遇到速率限制怎么办？系统以指数退避重试（最多 3 次，短间隔）。若仍失败，将当前模块降级为 AST-only 输出并继续。用户可在解决问题后从断点暂停和恢复。
+
+### 超出范围（v2.0）
+
+- **代码生成或修改**：系统严格只读和分析；不生成、重构或修改源代码
+- **IDE 实时集成**：VS Code 或其他 IDE 中的实时 Spec 漂移显示推迟到 v2.2 路线图
+- **非 Node.js 语言 AST 支持**：AST 增强分析仅限于 TypeScript/JavaScript；其他语言仅接受降级的纯 LLM 分析——不支持 Python、Rust、Go 或 Java AST 解析器
+- **自动化测试用例生成**：系统文档化已有代码但不生成测试用例、测试桩或验证代码（推迟到 v2.1 路线图）
+
+## 澄清
+
+### 会话 2026-02-10
+
+- 问：系统应如何处理在源代码中发现的敏感信息（API 密钥、凭据、令牌）后再发送给 LLM？→ 答：在 LLM 上下文组装前自动检测并脱敏常见的密钥模式（API 密钥、令牌、凭据）
+- 问：通过漂移检测重新生成或更新时如何管理 Spec 文档版本？→ 答：简单递增计数器（v1、v2、v3...），依赖 Git 历史进行详细变更追踪
+- 问：批量处理应如何报告进度和处理可观测性？→ 答：实时终端进度输出 + 完成后生成批量摘要日志（包含成功/失败/跳过模块列表）
+- 问：v2.0 明确排除了哪些能力？→ 答：全部排除：代码生成/修改、IDE 实时集成、非 Node.js 语言 AST 支持、自动化测试用例生成
+- 问：批量处理期间系统应如何处理 LLM API 速率限制和单模块失败？→ 答：指数退避重试（最多 3 次，短间隔），然后降级为 AST-only Spec 并跳过；支持断点恢复，用户可修复 LLM 问题后从当前进度继续
+
+## 需求 *（必填）*
+
+### 功能需求
+
+**核心流水线**
+- **FR-001**：系统必须使用 AST 解析（而非 LLM 推断）从 TypeScript/JavaScript 文件中提取所有导出的接口、类型、类和函数签名
+- **FR-002**：系统必须对所有代码分析遵循三阶段混合流水线（预处理 → 上下文组装 → 生成与增强）
+- **FR-003**：系统必须通过使用骨架代码而非完整源码，将每个文件的分析上下文控制在 100k token 以内
+- **FR-004**：系统必须在主解析器遇到语法错误时回退到容错解析
+- **FR-005**：系统必须对超过 5,000 行的文件触发分块摘要策略
+
+**Spec 生成（/reverse-spec）**
+- **FR-006**：系统必须按 9 节结构生成 Spec 文档（意图、接口定义、业务逻辑、数据结构、约束条件、边界条件、技术债务、测试覆盖、依赖关系）
+- **FR-007**：系统必须生成 Mermaid 类图和依赖图并嵌入 Spec 文档
+- **FR-008**：系统必须将不确定或推断的内容标注 `[推断]`、`[不明确]` 或 `[SYNTAX ERROR]` 标记并附带理由
+- **FR-009**：系统必须包含 YAML frontmatter，含 type、version（递增计数器，如 v1、v2）、generator、source target、related files、confidence level 和 last updated date——每次重新生成或漂移确认更新时版本递增，Git 历史作为权威变更日志
+
+**批量处理（/reverse-spec-batch）**
+- **FR-010**：系统必须构建项目级依赖图并按拓扑顺序处理模块（基础模块优先）
+- **FR-011**：系统必须检测循环依赖并将强连通分量视为单一处理单元
+- **FR-012**：系统必须支持可恢复的批量处理（跳过已生成的 Spec，除非指定 `--force`）
+- **FR-013**：系统必须生成架构索引（`specs/_index.spec.md`），包含系统用途、模块地图、横切关注点和技术栈
+- **FR-014**：系统在处理高层模块时必须读取已生成 Spec 的接口定义（而非源代码）（O(1) 上下文策略）
+- **FR-015**：系统必须在批量处理期间显示实时终端进度（如 `[3/50] Processing src/auth...`），并在完成后生成批量摘要日志，列出所有模块及其状态（成功/失败/跳过）
+- **FR-016**：系统必须以指数退避重试失败的 LLM API 调用（最多 3 次，短间隔），然后降级为 AST-only Spec 输出并继续处理剩余模块
+- **FR-017**：系统必须支持批量处理的断点恢复——当因 LLM 失败而中断或暂停时，用户可解决问题后从最后完成的模块恢复
+
+**漂移检测（/reverse-spec-diff）**
+- **FR-018**：系统必须生成漂移报告，将差异按严重级别分类为 HIGH（破坏性）、MEDIUM（逻辑变更）或 LOW（新增）
+- **FR-019**：系统必须对导出符号执行结构化差异比较（新增/删除/修改签名）
+- **FR-020**：系统必须将行为变更评估（函数体逻辑）委托给 LLM 语义评估
+- **FR-021**：系统必须从漂移报告中过滤噪声（空白、注释、import 重新排序）
+- **FR-022**：系统在没有用户明确确认的情况下不得根据漂移报告更新 Spec
+
+**横切关注点**
+- **FR-023**：系统不得修改、创建或删除目标目录中的任何源代码文件（只读保证）
+- **FR-024**：系统必须仅向 `specs/` 和 `drift-logs/` 目录写入输出
+- **FR-025**：系统必须以中文撰写所有 Spec 正文，同时保留英文的代码标识符、文件路径和类型签名
+- **FR-026**：系统必须遵循 `.gitignore` 规则，不分析被忽略的文件，除非用户明确覆盖
+- **FR-027**：系统必须在将源代码纳入 LLM 上下文组装之前，自动检测并脱敏常见的密钥模式（API 密钥、令牌、数据库凭据、私钥）
+
+### 关键实体
+
+- **CodeSkeleton**：源文件的 AST 提取结构——文件路径、导出符号（name、kind、signature、JSDoc）和依赖引用。这是在流水线各阶段之间流转的核心中间表示。
+- **DriftItem**：Spec 与当前代码之间的单个差异——严重级别（HIGH/MEDIUM/LOW）、类别（Interface/Behavior/Constraint）、源位置、人类可读描述和建议的 Spec 更新文本。
+- **DependencyGraph**：项目级模块导入关系映射——模块间有向边、拓扑排序顺序、已识别的强连通分量（循环依赖）和 Mermaid 图表源码。
+- **ModuleSpec**：单个模块的生成规格文档——YAML frontmatter、9 个中文必填章节、嵌入的 Mermaid 图表和文件清单附录。
+- **ArchitectureIndex**：项目级概览文档——系统用途、架构模式、带各 Spec 链接的模块地图、横切关注点（认证、错误处理、日志、配置）和技术栈摘要。
+- **DriftReport**：`/reverse-spec-diff` 的输出——摘要统计、新增表、删除表、修改表和建议章节。写入 `drift-logs/`。
+
+## 成功标准 *（必填）*
+
+### 可度量结果
+
+- **SC-001**：用户可通过单次 `/reverse-spec` 命令调用，从任何 TypeScript 模块生成完整的 9 节结构化 Spec
+- **SC-002**：生成 Spec 中 100% 的接口定义与源代码精确匹配（零捏造签名，通过 AST 验证）
+- **SC-003**：500 个文件可在 10 秒内完成预处理（AST 解析和骨架提取）
+- **SC-004**：已知开源项目（如 `redux` 子集）生成的 Spec 与预先验证的 Golden Master 达到 90% 以上的结构相似度
+- **SC-005**：50 个模块的项目批量处理可端到端完成，无需人工干预（初始确认除外）
+- **SC-006**：漂移检测正确识别 95% 以上的签名级变更（新增、删除、修改）
+- **SC-007**：所有噪声（空白、纯注释、import 重新排序变更）均从漂移报告中过滤，零误报
+- **SC-008**：生成的 `_index.spec.md` 准确反映项目的模块结构和依赖关系
+- **SC-009**：自举测试通过：对 reverse-spec 项目本身运行 `/reverse-spec-batch` 生成有效、连贯的 Spec 集合
+
+### 假设条件
+
+- 目标代码库主要为 TypeScript/JavaScript；非 TS/JS 语言接受降级的（纯 LLM）分析，无 AST 增强
+- 执行环境中可用 Node.js LTS（Claude Code 沙箱或本地机器）
+- 主 AST 解析器（`ts-morph`）为绝大多数 TS/JS 代码库提供足够能力；`tree-sitter` 仅在语法损坏的文件中使用
+- 用户通过 Claude Code 斜杠命令与系统交互，期望中文输出并保留英文代码标识符
+- Anthropic Claude API（Sonnet/Opus）可用于 LLM 增强步骤
+- npm 包 `ts-morph`、`dependency-cruiser`、`handlebars`/`ejs` 和 `zod` 可在目标环境中安装

@@ -41,7 +41,7 @@
 | # | Principle | Status | Design Artifact Evidence |
 |---|-----------|--------|--------------------------|
 | I | AST Accuracy First (NON-NEGOTIABLE) | PASS | data-model: CodeSkeleton.exports 全部来自 AST; contracts/core-pipeline: `analyzeFile()` 保证 `ExportSymbol.signature` 100% AST 提取; research R1: ts-morph 单 Project 实例 + skeleton 从 AST 重建 |
-| II | Hybrid Analysis Pipeline | PASS | contracts/core-pipeline: `assembleContext()` 强制三阶段; data-model: 数据流 CodeSkeleton → RedactedSkeleton → LLM Prompt → ModuleSpec; research R5: Token 预算管理确保 ≤100k |
+| II | Hybrid Analysis Pipeline | PASS | contracts/core-pipeline: `assembleContext()` 强制三阶段; data-model: 数据流 CodeSkeleton → context-assembler(secret-redactor 脱敏) → LLM Prompt → ModuleSpec; research R5: Token 预算管理确保 ≤100k |
 | III | Honest Uncertainty Marking | PASS | contracts/generator: `renderSpec()` 保留 `[推断]`/`[不明确]`/`[SYNTAX ERROR]` 标记; data-model: ParseError 实体捕获降级信息; contracts/core-pipeline: tree-sitter-fallback 标记受影响符号 |
 | IV | Read-Only Safety | PASS | contracts/batch-module: `runBatch()` 仅写 specs/; contracts/diff-engine: `filterNoise()` 和 `compareSkeletons()` 纯计算无副作用; data-model: DriftReport.outputPath 限定 drift-logs/ |
 | V | Pure Node.js Ecosystem | PASS | research R1: SWC(Rust) 明确 Rejected; research R3: Handlebars(npm) 选定; research R4: 自建扫描器无外部依赖; 所有 contracts API 均为 Node.js 模块 |
@@ -85,7 +85,7 @@ src/
 ├── diff/                          # 差异引擎模块
 │   ├── structural-diff.ts         # CodeSkeleton 结构对比
 │   ├── semantic-diff.ts           # LLM 语义变更评估
-│   ├── noise-filter.ts            # 格式/注释/import 噪音过滤
+│   ├── noise-filter.ts            # 格式/注释/import 噪声过滤
 │   └── drift-orchestrator.ts      # 漂移检测编排 (/reverse-spec-diff 入口)
 ├── generator/                     # Spec 生成与输出
 │   ├── spec-renderer.ts           # Handlebars 9 段式模板渲染
@@ -118,11 +118,17 @@ templates/                         # Spec 输出模板
 tests/
 ├── unit/                          # 单元测试
 │   ├── ast-analyzer.test.ts
-│   ├── structural-diff.test.ts
+│   ├── chunk-splitter.test.ts
+│   ├── context-assembler.test.ts
+│   ├── drift-orchestrator.test.ts
+│   ├── file-scanner.test.ts
+│   ├── llm-client.test.ts
+│   ├── mermaid-class-diagram.test.ts
 │   ├── noise-filter.test.ts
 │   ├── secret-redactor.test.ts
-│   ├── topological-sort.test.ts
-│   └── token-counter.test.ts
+│   ├── structural-diff.test.ts
+│   ├── token-counter.test.ts
+│   └── topological-sort.test.ts
 ├── integration/                   # 集成测试
 │   ├── pipeline.test.ts           # 三阶段流水线端到端
 │   ├── batch-processing.test.ts

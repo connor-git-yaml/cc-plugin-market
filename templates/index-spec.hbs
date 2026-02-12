@@ -1,0 +1,46 @@
+---
+type: {{frontmatter.type}}
+version: {{frontmatter.version}}
+generatedBy: {{frontmatter.generatedBy}}
+projectRoot: {{frontmatter.projectRoot}}
+totalModules: {{frontmatter.totalModules}}
+lastUpdated: {{frontmatter.lastUpdated}}
+---
+
+# 架构索引
+
+## 系统目的
+
+{{{systemPurpose}}}
+
+## 架构模式
+
+{{{architecturePattern}}}
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+{{#each moduleMap}}
+| [{{name}}]({{specPath}}) | {{description}} | {{level}} | {{#each dependencies}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
+{{/each}}
+
+## 依赖关系图
+
+```mermaid
+{{{dependencyDiagram}}}
+```
+
+## 横切关注点
+
+{{#each crossCuttingConcerns}}
+- {{this}}
+{{/each}}
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+{{#each technologyStack}}
+| {{category}} | {{name}} | {{#if version}}{{version}}{{else}}-{{/if}} | {{purpose}} |
+{{/each}}

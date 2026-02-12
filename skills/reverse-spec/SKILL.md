@@ -20,7 +20,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Purpose
 
-Analyze existing source code and generate a structured specification document (.spec.md) that captures intent, interfaces, business logic, constraints, edge cases, and technical debt. The generated spec is compatible with spec-kit's spec-driven development workflow, enabling future forward-engineering iterations.
+通过 AST 静态分析 + LLM 混合三阶段流水线，将源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，接口定义 100% 来自 AST 提取。
 
 ## Execution Flow
 
@@ -29,268 +29,95 @@ Analyze existing source code and generate a structured specification document (.
 Interpret `$ARGUMENTS` to determine the analysis target:
 
 - **Single file**: e.g., `src/auth/login.ts`
-- **Directory**: e.g., `src/auth/` — analyze all source files recursively
-- **Module/pattern**: e.g., `src/auth/**/*.ts` or a logical module name
-- **No argument**: Analyze the entire project (warn user about scope, ask for confirmation)
+- **Directory**: e.g., `src/auth/` — analyze all TS/JS source files recursively
+- **`--deep` flag**: Include function bodies in LLM context for deeper analysis
+- **No argument**: Ask user to specify a target path
 
 If the target doesn't exist, ERROR with suggestions based on project structure.
 
-### 2. Determine Output Location
+### 2. Run Pipeline
 
-- Default: `specs/<target-name>.spec.md` (relative to project root)
-- If `--out <path>` is specified in arguments, use that path
-- If target is a directory, output to `specs/<dirname>.spec.md`
-- If target is a file, output to `specs/<filename-without-ext>.spec.md`
-- Create the `specs/` directory if it doesn't exist
+Execute the three-stage hybrid analysis pipeline by running the following TypeScript code via bash:
 
-### 3. Scan & Inventory
+```bash
+npx tsx -e "
+import { generateSpec } from './src/core/single-spec-orchestrator.js';
 
-For the target scope, build an inventory:
+const result = await generateSpec('$TARGET_PATH', {
+  deep: $DEEP_FLAG,
+  outputDir: 'specs',
+  projectRoot: '.'
+});
 
-1. **List all source files** in scope (skip binary, node_modules, vendor, build artifacts)
-2. **Detect language(s)** and framework(s) in use
-3. **Identify entry points**: exports, main functions, route handlers, class constructors
-4. **Map dependencies**: imports, injections, inherited classes, external packages
-5. **Estimate complexity**: file count, total LOC, cyclomatic complexity (rough estimate)
-
-If scope exceeds ~50 files or ~5000 LOC, switch to **incremental mode** (see Section 8).
-
-### 4. Extract Architectural Overview
-
-Analyze code structure to determine:
-
-- **Component type**: library, service, CLI tool, UI component, middleware, data model, etc.
-- **Architectural pattern**: MVC, event-driven, pipeline, repository pattern, etc.
-- **Key abstractions**: primary classes/interfaces/types and their relationships
-- **Data flow**: how data enters, transforms, and exits the component
-
-### 5. Deep Analysis — Extract Spec Sections
-
-For each major unit (class, module, significant function), extract:
-
-#### 5a. Intent (意图)
-- What problem does this code solve?
-- Infer from: function/class names, comments, docstrings, README references, test descriptions
-- If unclear, state the inferred intent and mark with `[INFERRED]`
-
-#### 5b. Interface (接口定义)
-- Public API: exported functions, class methods, REST/GraphQL endpoints, CLI commands
-- Input types and parameters (with defaults if present)
-- Return types and output shapes
-- Events emitted or consumed
-- Configuration options / environment variables read
-
-#### 5c. Business Logic (业务逻辑)
-- Core algorithms and decision trees
-- State machines or workflow steps
-- Validation rules (input validation, business rule validation)
-- Transformation pipelines
-- Conditional branches with business significance
-
-#### 5d. Data Structures (数据结构)
-- Type definitions, interfaces, schemas
-- Database models/migrations if present
-- API request/response shapes
-- Internal state shapes
-
-#### 5e. Constraints (约束)
-- Performance characteristics (timeouts, rate limits, batch sizes)
-- Security measures (auth checks, sanitization, encryption)
-- Resource limits (memory, connections, file size)
-- Platform/environment requirements
-- Invariants maintained by the code
-
-#### 5f. Edge Cases (边界条件)
-- Error handling patterns (try/catch, Result types, error codes)
-- Null/undefined/empty handling
-- Boundary conditions in loops, pagination, recursion
-- Race conditions or concurrency handling
-- Graceful degradation / fallback behavior
-- Identified from: catch blocks, guard clauses, default cases, test edge cases
-
-#### 5g. Technical Debt (技术债务)
-- TODO/FIXME/HACK/XXX comments
-- Suppressed linting rules (eslint-disable, @ts-ignore, noinspection)
-- Dead code (unreachable branches, unused exports)
-- Copy-pasted logic (near-duplicate blocks)
-- Missing error handling (bare catches, swallowed errors)
-- Outdated dependencies or deprecated API usage
-- Missing tests for critical paths
-- Hardcoded values that should be configurable
-- Overly complex functions (high cyclomatic complexity)
-
-### 6. Cross-Reference with Tests
-
-If test files exist for the target:
-
-1. Map test cases to spec sections (which behaviors are tested?)
-2. Identify **untested paths** — business logic without corresponding tests
-3. Extract **implicit requirements** from test assertions that aren't obvious in source
-4. Note test quality: are tests unit/integration/e2e? Mock-heavy? Brittle?
-
-### 7. Generate .spec.md
-
-Write the spec file using this template:
-
-```markdown
----
-type: component-spec
-version: 1.0
-generated_by: reverse-spec
-source_target: <target path>
-related_files:
-  - <list of analyzed files>
-last_updated: <current date YYYY-MM-DD>
-confidence: <high|medium|low — based on code clarity and documentation>
----
-
-# <组件名称> 规格文档
-
-> 由 reverse-spec 从现有代码自动生成。
-> 请在用于正向开发之前审查和完善。
-
-## 1. 意图
-
-<该组件的功能和存在的原因>
-
-## 2. 接口定义
-
-### 公开 API
-
-<导出的函数、方法、端点及其签名>
-
-### 配置项
-
-<环境变量、配置选项>
-
-### 事件 / 信号
-
-<发出或消费的事件>
-
-## 3. 业务逻辑
-
-<核心算法、决策树、工作流>
-
-### 关键规则
-
-<从代码中提取的业务规则编号列表>
-
-## 4. 数据结构
-
-<类型定义、接口、Schema>
-
-## 5. 约束条件
-
-### 性能
-<超时、限制、批量大小>
-
-### 安全
-<认证、输入清理、加密>
-
-### 平台
-<环境要求、依赖>
-
-## 6. 边界条件
-
-<错误处理模式、边界条件、降级策略>
-
-| 条件 | 处理方式 | 位置 |
-|------|----------|------|
-| <边界条件> | <处理方式> | <file:line> |
-
-## 7. 技术债务
-
-| 项目 | 严重程度 | 位置 | 描述 |
-|------|----------|------|------|
-| <债务项> | 高/中/低 | <file:line> | <描述> |
-
-## 8. 测试覆盖
-
-- **已测试**：<已测试的行为列表>
-- **未测试**：<已识别的覆盖缺口>
-- **测试质量备注**：<观察结果>
-
-## 9. 依赖关系
-
-### 内部依赖
-<该模块依赖的其他项目模块>
-
-### 外部依赖
-<第三方包及版本>
-
-## 附录：文件清单
-
-| 文件 | 代码行数 | 主要用途 |
-|------|----------|----------|
-| <file> | <loc> | <用途> |
+console.log(JSON.stringify(result, null, 2));
+"
 ```
 
-### 8. Incremental Mode (Large Codebases)
+**Pipeline stages**:
+1. **预处理**: 扫描 TS/JS 文件 → ts-morph AST 分析 → CodeSkeleton 提取 → 敏感信息脱敏
+2. **上下文组装**: 骨架 + 依赖 spec + 代码片段 → ≤100k token 预算的 LLM prompt
+3. **生成增强**: Claude API 生成 9 段式中文 Spec → 解析验证 → Handlebars 渲染 → 写入 `specs/*.spec.md`
 
-When scope exceeds thresholds (~50 files or ~5000 LOC):
+### 3. Handle Results
 
-1. **Generate index spec first**: `specs/_index.spec.md` with high-level architecture overview
-2. **Break into sub-specs**: One .spec.md per major directory or module
-3. **Report progress**: After each sub-spec, report what's done and what remains
-4. **Cross-reference**: Each sub-spec links to related sub-specs
-5. **Ask user**: "Generated spec for `src/auth/`. Continue with `src/api/`?" (proceed unless stopped)
-
-### 9. Quality Self-Check
-
-Before finalizing, validate:
-
-- [ ] All public interfaces documented
-- [ ] No `[INFERRED]` markers without justification
-- [ ] Technical debt items have severity ratings
-- [ ] Edge cases table is populated (not empty)
-- [ ] File inventory matches actual analyzed files
-- [ ] Frontmatter `related_files` is accurate
-
-Report any items that couldn't be fully analyzed with reasons.
-
-### 10. Completion Report
-
-Output a summary:
+If pipeline succeeds, report:
 
 ```
-✅ Reverse spec generated: specs/<name>.spec.md
+✅ Spec 生成完成: specs/<name>.spec.md
 
-📊 Analysis Summary:
-- Files analyzed: N
-- Total LOC: N
-- Public APIs found: N
-- Business rules extracted: N
-- Edge cases identified: N
-- Technical debt items: N
-- Test coverage gaps: N
-- Confidence: high|medium|low
+📊 分析摘要:
+- 文件数: N
+- 总行数: N LOC
+- 导出 API: N 个
+- Token 消耗: N
+- 置信度: high|medium|low
+- 警告: <warnings list>
 
-💡 Next steps:
-- Review and refine the generated spec
-- Use /speckit.plan to create implementation plan from spec
-- Use /speckit.tasks to break down into tasks
+💡 后续步骤:
+- 审查生成的 Spec 文档
+- 使用 /reverse-spec-batch 批量生成全项目 Spec
+- 使用 /reverse-spec-diff 检测 Spec 漂移
 ```
+
+If pipeline fails, fall back to manual analysis following the sections below.
+
+### 4. Fallback: Manual Analysis
+
+If the TypeScript pipeline is unavailable (e.g., dependencies not installed), perform manual analysis:
+
+1. **Scan & inventory** all source files in scope
+2. **Read and analyze** each file's exports, imports, types, and logic
+3. **Generate spec** following the 9-section structure defined below
+4. **Write** to `specs/<target-name>.spec.md`
+
+### 5. 9-Section Spec Structure
+
+Each generated spec must contain these 9 sections in Chinese:
+
+1. **意图** — 模块目的和存在理由
+2. **接口定义** — 所有导出 API（签名必须精确，不可捏造）
+3. **业务逻辑** — 核心算法、决策树、工作流
+4. **数据结构** — 类型定义、接口、Schema
+5. **约束条件** — 性能、安全、平台约束
+6. **边界条件** — 错误处理、边界条件、降级策略
+7. **技术债务** — TODO/FIXME、缺失测试、硬编码值
+8. **测试覆盖** — 已测试行为、覆盖缺口
+9. **依赖关系** — 内部/外部依赖
+
+## Constitution Rules (不可违反)
+
+1. **AST 精确性优先**: 接口定义 100% 来自 AST/代码，绝不由 LLM 捏造
+2. **混合分析流水线**: 强制三阶段（预处理 → 上下文组装 → 生成增强）
+3. **诚实标注不确定性**: 推断内容用 `[推断: 理由]`，模糊代码用 `[不明确: 理由]`
+4. **只读安全性**: 仅向 `specs/` 写入输出，绝不修改源代码
+5. **纯 Node.js 生态**: 所有依赖限于 npm 包
+6. **双语文档**: 中文散文 + 英文代码标识符
 
 ## 语言规范
 
 **所有 spec 文档的正文内容必须使用中文撰写。** 具体规则：
 
-- **用中文**：所有描述、说明、分析、总结、表格内容、注释
-- **保留英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块内容
+- **用中文**：所有描述、说明、分析、总结、表格内容
+- **保留英文**：代码标识符、文件路径、类型签名、代码块内容
 - **章节标题**：使用中文，例如 `## 1. 意图`、`## 2. 接口定义`
-- **表格表头**：使用中文，例如 `| 条件 | 处理方式 | 位置 |`
 - **Frontmatter**：保留英文（YAML 键名）
-
-示例：
-- 正确：`该模块负责管理 AI Agent 的完整生命周期`
-- 正确：`通过 \`runEmbeddedPiAgent()\` 函数启动 Agent 运行`
-- 错误：`This module manages the AI Agent lifecycle`
-
-## Guidelines
-
-- **诚实标注不确定性**：用 `[推断]` 标记猜测的意图，用 `[不明确]` 标记模糊代码
-- **保留开发者上下文**：在 spec 中包含相关代码注释
-- **避免过度抽象**：保持 spec 具体且可追溯到实际代码
-- **语言无关输出**：spec 格式适用于任何源代码语言
-- **遵守 .gitignore**：除非明确指定，不分析被忽略的文件
-- **只读操作**：此命令不会修改源代码

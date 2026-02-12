@@ -1,0 +1,53 @@
+{
+  "description": "Golden Master 预期输出定义 — 用于结构相似度比对",
+  "expectedExports": [
+    "UserRole",
+    "User",
+    "AuthToken",
+    "AuthConfig",
+    "LoginRequest",
+    "LoginResponse",
+    "hashPassword",
+    "registerUser",
+    "login",
+    "validateToken",
+    "hasPermission"
+  ],
+  "expectedSections": [
+    "意图",
+    "接口定义",
+    "业务逻辑",
+    "数据结构",
+    "约束条件",
+    "边界条件",
+    "技术债务",
+    "测试覆盖",
+    "依赖关系"
+  ],
+  "expectedFrontmatterFields": [
+    "type",
+    "version",
+    "generatedBy",
+    "sourceTarget",
+    "relatedFiles",
+    "lastUpdated",
+    "confidence",
+    "skeletonHash"
+  ],
+  "expectedImports": [
+    "node:crypto"
+  ],
+  "expectedKinds": {
+    "UserRole": "enum",
+    "User": "interface",
+    "AuthToken": "interface",
+    "AuthConfig": "interface",
+    "LoginRequest": "interface",
+    "LoginResponse": "interface",
+    "hashPassword": "function",
+    "registerUser": "function",
+    "login": "function",
+    "validateToken": "function",
+    "hasPermission": "function"
+  }
+}

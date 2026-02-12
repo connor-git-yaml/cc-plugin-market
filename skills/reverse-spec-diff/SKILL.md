@@ -33,75 +33,51 @@ Expected format: `<spec-file> [source-target]`
 
 If spec file doesn't exist, suggest running `/reverse-spec` first.
 
-### 2. Load & Parse Spec
+### 2. Run TypeScript Drift Detection Pipeline
 
-Read the .spec.md and extract:
-- All documented interfaces (function signatures, endpoints, types)
-- All documented business rules
-- All documented edge cases
-- All documented constraints
-- Technical debt items
-- File inventory from appendix
+**优先使用 TypeScript 流水线**。通过 `npx tsx` 执行 `detectDrift()`：
 
-### 3. Analyze Current Code
-
-Re-scan the source target using the same analysis as `/reverse-spec` but keep results in memory (don't write).
-
-### 4. Compute Diff
-
-Compare spec vs current code:
-
-#### Added in Code (not in spec)
-- New public APIs / exports
-- New business logic branches
-- New error handling
-- New dependencies
-- New files not in inventory
-
-#### Removed from Code (still in spec)
-- APIs documented but no longer exported
-- Business rules documented but logic removed
-- Files in inventory but deleted
-
-#### Modified
-- Signature changes (parameters added/removed/renamed)
-- Logic changes (different branching, new conditions)
-- Constraint changes (different limits, new validations)
-
-### 5. Output Drift Report
-
-```markdown
-# Spec Drift Report: <component name>
-
-**Spec**: <spec-file path>
-**Source**: <source path>
-**Analyzed**: <current date>
-
-## Summary
-- Additions (code → spec needed): N
-- Removals (spec → code deleted): N
-- Modifications: N
-- Drift severity: LOW | MEDIUM | HIGH
-
-## Additions (in code, missing from spec)
-| Item | Type | Location | Description |
-|------|------|----------|-------------|
-
-## Removals (in spec, missing from code)
-| Item | Spec Section | Description |
-|------|-------------|-------------|
-
-## Modifications (changed since spec)
-| Item | Spec Says | Code Shows | Location |
-|------|-----------|------------|----------|
-
-## Recommendation
-<Whether to update spec, update code, or both>
+```bash
+npx tsx -e "
+import { detectDrift } from './src/diff/drift-orchestrator.js';
+const report = await detectDrift('<spec-file>', '<source-target>', { skipSemantic: false });
+console.log(JSON.stringify(report, null, 2));
+"
 ```
 
-### 6. Offer Update
+流水线自动执行以下步骤：
+1. 从 spec HTML 注释加载基线 `CodeSkeleton`
+2. 对当前源代码进行 AST 分析
+3. 结构差异比较（`compareSkeletons`）
+4. 噪声过滤（空白/注释/import 重排序）
+5. 语义差异评估（LLM，可选）
+6. 组装 `DriftReport` 并写入 `drift-logs/`
 
-Ask: "Would you like me to update the spec to match current code? This will run `/reverse-spec` with the existing spec as a baseline."
+### 3. Fallback: Manual Analysis
+
+如果 TypeScript 流水线不可用（依赖未安装、编译错误等），手动执行：
+
+1. 读取 spec 文件，提取接口定义章节
+2. 对源代码进行 AST 分析
+3. 对比 spec 中的导出符号与当前代码
+4. 按严重级别分类差异：
+   - **HIGH**: 删除的导出（Breaking Change）
+   - **MEDIUM**: 签名修改、行为变更
+   - **LOW**: 新增导出
+
+### 4. Output Drift Report
+
+报告自动写入 `drift-logs/{module}-drift-{date}.md`，包含：
+- YAML frontmatter（spec 路径、源码路径、版本）
+- 汇总统计表（按严重级别和变更类型）
+- 逐项漂移详情（ID、类别、位置、旧/新值、建议更新）
+- 综合建议
+
+### 5. Offer Update (FR-022)
+
+**在任何 spec 更新前必须提示用户确认。**
+
+Ask: "是否需要更新 spec 以匹配当前代码？这将运行 `/reverse-spec` 并使用现有 spec 作为基线。"
 
 Do NOT auto-update. Wait for user confirmation.
 

@@ -1,14 +1,14 @@
-# Data Model: Reverse-Spec Skill System v2.0
+# 数据模型：Reverse-Spec Skill System v2.0
 
-**Date**: 2026-02-10 | **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md)
+**日期**：2026-02-10 | **Spec**：[spec.md](spec.md) | **Plan**：[plan.md](plan.md)
 
-## Overview
+## 概述
 
 本文档定义 Reverse-Spec v2.0 的核心数据实体、字段、关系和验证规则。所有实体使用 Zod Schema 定义，运行时验证确保数据完整性。实体按流水线阶段组织：AST 提取 → 依赖分析 → Spec 生成 → 漂移检测。
 
 ---
 
-## Entity Relationship Diagram
+## 实体关系图
 
 ```mermaid
 erDiagram
@@ -28,7 +28,7 @@ erDiagram
 
 ---
 
-## Entities
+## 实体定义
 
 ### 1. CodeSkeleton
 
@@ -46,9 +46,9 @@ erDiagram
 | `parseErrors` | `ParseError[]` | No | 解析错误列表 (tree-sitter 降级时) |
 | `hash` | `string` | Yes | 文件内容 SHA-256 哈希 (用于缓存/变更检测) |
 | `analyzedAt` | `string` (ISO 8601) | Yes | 分析时间戳 |
-| `parserUsed` | `'ts-morph' \| 'tree-sitter'` | Yes | 使用的解析器 |
+| `parserUsed` | `'ts-morph' \| 'tree-sitter' \| 'baseline' \| 'reconstructed'` | Yes | 使用的解析器（`baseline`/`reconstructed` 用于漂移检测基线加载） |
 
-**Validation Rules**:
+**验证规则**：
 - `filePath` 必须以 `.ts`, `.tsx`, `.js`, `.jsx` 结尾
 - `exports` 中每个 `name` 在同一文件内唯一
 - `hash` 为 64 字符十六进制字符串
@@ -154,7 +154,7 @@ erDiagram
 | `id` | `number` | Yes | SCC 编号 |
 | `modules` | `string[]` | Yes | 组内模块路径列表 (size > 1 = 循环) |
 
-**Validation Rules**:
+**验证规则**：
 - `topologicalOrder` 必须包含所有 `modules` 中的 `source` 值
 - `sccs` 中所有 `modules` 的并集 = 所有模块的集合
 - 每条 `edge` 的 `from` 和 `to` 必须在 `modules` 中存在
@@ -220,7 +220,7 @@ erDiagram
 | `loc` | `number` | Yes | 行数 |
 | `purpose` | `string` | Yes | 主要用途 (LLM 生成) |
 
-**Validation Rules**:
+**验证规则**：
 - `frontmatter.version` 匹配 `v\d+` 格式
 - `sections` 的所有 9 个字段不可为空字符串
 - `interfaceDefinition` 中的签名必须 100% 来自 AST (禁止 LLM 插入)
@@ -244,6 +244,17 @@ erDiagram
 | `dependencyDiagram` | `string` | Yes | Mermaid 全局依赖图 |
 | `outputPath` | `string` | Yes | 固定为 `specs/_index.spec.md` |
 
+**IndexFrontmatter**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `'architecture-index'` | Yes | 文档类型 |
+| `version` | `string` | Yes | 版本号 (v1, v2, ...) |
+| `generatedBy` | `string` | Yes | 生成器标识 (`reverse-spec v2.0`) |
+| `projectRoot` | `string` | Yes | 项目根路径 |
+| `totalModules` | `number` | Yes | 索引包含的模块总数 |
+| `lastUpdated` | `string` (ISO 8601) | Yes | 最后更新时间 |
+
 **ModuleMapEntry**:
 
 | Field | Type | Required | Description |
@@ -253,6 +264,15 @@ erDiagram
 | `description` | `string` | Yes | 一句话描述 |
 | `level` | `number` | Yes | 拓扑层级 |
 | `dependencies` | `string[]` | Yes | 依赖模块列表 |
+
+**TechStackEntry**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | `string` | Yes | 技术类别 (如 `语言`、`框架`、`数据库`) |
+| `name` | `string` | Yes | 技术名称 |
+| `version` | `string \| null` | No | 版本号 |
+| `purpose` | `string` | Yes | 在项目中的用途 |
 
 ---
 
@@ -265,7 +285,7 @@ erDiagram
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `id` | `string` | Yes | 唯一标识 (auto-generated) |
-| `severity` | `'HIGH' \| 'MEDIUM' \| 'LOW'` | Yes | 严重度 |
+| `severity` | `'HIGH' \| 'MEDIUM' \| 'LOW'` | Yes | 严重级别 |
 | `category` | `'Interface' \| 'Behavior' \| 'Constraint'` | Yes | 变更类别 |
 | `changeType` | `'addition' \| 'removal' \| 'modification'` | Yes | 变更类型 |
 | `location` | `string` | Yes | 源码位置 (file:line) |
@@ -276,7 +296,7 @@ erDiagram
 | `proposedUpdate` | `string` | Yes | 建议的 Spec 更新内容 |
 | `detectedBy` | `'structural' \| 'semantic'` | Yes | 检测方式 |
 
-**Validation Rules**:
+**验证规则**：
 - `severity === 'HIGH'` 仅当 `changeType === 'removal'` (Breaking Change)
 - `category === 'Interface'` 当变更涉及签名 (structural)
 - `category === 'Behavior'` 当变更涉及函数体逻辑 (semantic)
@@ -298,7 +318,7 @@ erDiagram
 | `specVersion` | `string` | Yes | 对比的 Spec 版本号 |
 | `summary` | `DriftSummary` | Yes | 摘要统计 |
 | `items` | `DriftItem[]` | Yes | 所有漂移项 |
-| `filteredNoise` | `number` | Yes | 过滤掉的噪音变更数 |
+| `filteredNoise` | `number` | Yes | 过滤掉的噪声变更数 |
 | `recommendation` | `string` | Yes | 操作建议 (中文) |
 | `outputPath` | `string` | Yes | 输出路径 (drift-logs/*.md) |
 
@@ -354,7 +374,7 @@ erDiagram
 | `retryCount` | `number` | Yes | 重试次数 |
 | `degradedToAstOnly` | `boolean` | Yes | 是否降级为 AST-only |
 
-**Validation Rules**:
+**验证规则**：
 - `completedModules` + `failedModules` 的 path 并集 ⊆ `processingOrder`
 - `totalModules` === `processingOrder.length`
 - 如果 `currentModule` 非 null，则它不在 completed 或 failed 中
@@ -385,9 +405,9 @@ erDiagram
 
 ---
 
-## State Transitions
+## 状态转换
 
-### BatchState Lifecycle
+### BatchState 生命周期
 
 ```mermaid
 stateDiagram-v2
@@ -403,7 +423,7 @@ stateDiagram-v2
     PartialComplete --> [*]
 ```
 
-### DriftItem Severity Rules
+### DriftItem 严重级别规则
 
 ```mermaid
 flowchart TD
@@ -419,19 +439,18 @@ flowchart TD
 
 ---
 
-## Data Flow Summary
+## 数据流概览
 
-```
+```text
 SourceFile(s)
     ↓ [ast-analyzer.ts]
 CodeSkeleton
-    ↓ [secret-redactor.ts]
-RedactedCodeSkeleton
-    ↓ [context-assembler.ts + token-counter.ts]
+    ↓ [context-assembler.ts + secret-redactor.ts + token-counter.ts]
+    │  (骨架保持不变；代码片段字符串经 redact() 脱敏后组装)
 LLM Prompt (≤100k tokens)
-    ↓ [Claude API]
+    ↓ [llm-client.ts → Claude API]
 Raw LLM Response
-    ↓ [spec-renderer.ts + Handlebars]
+    ↓ [llm-client.ts parseLLMResponse() + spec-renderer.ts + Handlebars]
 ModuleSpec → specs/*.spec.md
 
 SourceFile(s)

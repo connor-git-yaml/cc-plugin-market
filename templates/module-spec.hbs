@@ -1,0 +1,74 @@
+---
+type: {{frontmatter.type}}
+version: {{frontmatter.version}}
+generatedBy: {{frontmatter.generatedBy}}
+sourceTarget: {{frontmatter.sourceTarget}}
+relatedFiles:
+{{#each frontmatter.relatedFiles}}
+  - {{this}}
+{{/each}}
+lastUpdated: {{frontmatter.lastUpdated}}
+confidence: {{frontmatter.confidence}}
+skeletonHash: {{frontmatter.skeletonHash}}
+---
+
+# {{frontmatter.sourceTarget}}
+
+## 1. 意图
+
+{{{sections.intent}}}
+
+## 2. 接口定义
+
+{{{sections.interfaceDefinition}}}
+
+{{#if mermaidDiagrams}}
+{{#each mermaidDiagrams}}
+{{#if title}}
+### {{title}}
+
+{{/if}}
+```mermaid
+{{{source}}}
+```
+
+{{/each}}
+{{/if}}
+
+## 3. 业务逻辑
+
+{{{sections.businessLogic}}}
+
+## 4. 数据结构
+
+{{{sections.dataStructures}}}
+
+## 5. 约束条件
+
+{{{sections.constraints}}}
+
+## 6. 边界条件
+
+{{{sections.edgeCases}}}
+
+## 7. 技术债务
+
+{{{sections.technicalDebt}}}
+
+## 8. 测试覆盖
+
+{{{sections.testCoverage}}}
+
+## 9. 依赖关系
+
+{{{sections.dependencies}}}
+
+---
+
+## 附录：文件清单
+
+| 文件 | 行数 | 主要用途 |
+|------|------|----------|
+{{#each fileInventory}}
+| `{{path}}` | {{loc}} | {{purpose}} |
+{{/each}}

@@ -7,7 +7,21 @@
       "Bash(specify:*)",
       "Bash(uv tool:*)",
       "WebFetch(domain:api.github.com)",
-      "Bash(gh release view:*)"
+      "Bash(gh release view:*)",
+      "Bash(git fetch:*)",
+      "Bash(ls:*)",
+      "Bash(bash .specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(bash:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(git remote add:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: complete SDD design phase for reverse-spec v2.0\n\nFull spec-driven development artifacts for the AST-enhanced reverse-spec\nskill system:\n\n- Constitution v1.0.0: 6 core principles \\(AST accuracy, hybrid pipeline,\n  uncertainty marking, read-only safety, Node.js ecosystem, bilingual docs\\)\n- Feature spec: 27 FRs, 9 SCs, 7 user stories with acceptance scenarios\n- Research: ts-morph, dependency-cruiser, Handlebars, secret detection,\n  token counting strategies\n- Data model: 8 entities with Zod schemas, ER diagram, state transitions\n- API contracts: 6 modules \\(core-pipeline, graph, diff-engine, generator,\n  batch, llm-client\\) with full function signatures and guarantees\n- Implementation plan: project structure, constitution checks \\(pre/post\\)\n- Tasks: 55 tasks across 8 phases, dependency graph, parallel strategy\n- Quickstart guide with verification steps\n\nIncludes analyze-phase fixes:\n- C1: checkpoint path moved to specs/ \\(Constitution IV compliance\\)\n- I1: US2.4 revised to autonomous progress \\(aligns with SC-005\\)\n- U1: new llm-client contract \\(default Opus, user-configurable model\\)\n- U2: orchestrator files added to plan + contracts\n- U3: baseline skeleton serialization for lossless drift detection\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

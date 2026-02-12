@@ -1,155 +1,132 @@
 <!--
-  Sync Impact Report
+  同步影响报告
   ==================
-  Version change: N/A → 1.0.0 (initial ratification)
-  Modified principles: N/A (first version)
-  Added sections:
-    - Core Principles (6 principles, expanded from 5-slot template)
-    - Technology Stack Constraints (new section)
-    - Quality Standards (new section)
-    - Governance
-  Removed sections: N/A
-  Templates requiring updates:
-    - .specify/templates/plan-template.md ✅ no update needed (generic Constitution Check gate)
-    - .specify/templates/spec-template.md ✅ no update needed (generic structure)
-    - .specify/templates/tasks-template.md ✅ no update needed (generic phases)
-    - .specify/templates/checklist-template.md ✅ no update needed (generic)
-    - .specify/templates/agent-file-template.md ✅ no update needed (generic)
-  Follow-up TODOs: None
+  版本变更：N/A → 1.0.0（初次批准）
+  修改的原则：N/A（首个版本）
+  新增章节：
+    - 核心原则（6 条原则，从 5 槽模板扩展）
+    - 技术栈约束（新章节）
+    - 质量标准（新章节）
+    - 治理规则
+  移除章节：N/A
+  需要更新的模板：
+    - .specify/templates/plan-template.md ✅ 无需更新（通用 Constitution Check 门控）
+    - .specify/templates/spec-template.md ✅ 无需更新（通用结构）
+    - .specify/templates/tasks-template.md ✅ 无需更新（通用阶段）
+    - .specify/templates/checklist-template.md ✅ 无需更新（通用）
+    - .specify/templates/agent-file-template.md ✅ 无需更新（通用）
+  后续 TODO：无
 -->
 
-# Reverse-Spec Skill System Constitution
+# Reverse-Spec 技能系统 Constitution
 
-## Core Principles
+## 核心原则
 
-### I. AST Accuracy First (NON-NEGOTIABLE)
+### I. AST 精确性优先（不可妥协）
 
-All structural data (interface signatures, type definitions, exported symbols,
-dependency relationships) MUST originate from static analysis (AST parsing).
-LLM inference MUST NOT produce or fabricate structural data.
+所有结构化数据（接口签名、类型定义、导出符号、依赖关系）必须来源于静态分析（AST 解析）。
+LLM 推理不得产生或捏造结构化数据。
 
-- Interface definitions MUST match source code at 100% fidelity, extracted by
-  `ts-morph` or an equivalent AST tool
-- Function signatures, class structures, and type aliases MUST be read directly
-  from syntax tree nodes
-- LLM is ONLY responsible for filling natural-language paragraphs such as
-  "intent description" and "business logic interpretation"
-- Any output violating this principle is treated as a defect and MUST be
-  corrected before release
+- 接口定义必须与源代码保持 100% 一致，由 `ts-morph` 或等效 AST 工具提取
+- 函数签名、类结构和类型别名必须直接从语法树节点读取
+- LLM 仅负责填充自然语言段落，如"意图描述"和"业务逻辑解读"
+- 任何违反此原则的输出视为缺陷，必须在发布前修正
 
-### II. Hybrid Analysis Pipeline
+### II. 混合分析流水线
 
-All code analysis MUST follow a three-stage pipeline:
-Pre-processing → Context Assembly → Generation & Enrichment.
-Raw source code MUST NOT be fed directly to the LLM.
+所有代码分析必须遵循三阶段流水线：
+预处理 → 上下文组装 → 生成与增强。
+原始源代码不得直接输入给 LLM。
 
-- **Pre-processing**: AST scan extracts Skeleton Code (signatures only, no
-  implementation details)
-- **Context Assembly**: Prompt = Skeleton + dependency data + core logic
-  snippets (complex functions only)
-- **Generation & Enrichment**: LLM fills textual descriptions; toolchain
-  injects Mermaid diagrams
-- Per-file analysis context MUST NOT exceed 100k tokens
+- **预处理**：AST 扫描提取 Skeleton Code（仅签名，不含实现细节）
+- **上下文组装**：Prompt = Skeleton + 依赖数据 + 核心逻辑片段（仅限复杂函数）
+- **生成与增强**：LLM 填充文本描述；工具链注入 Mermaid 图表
+- 单文件分析上下文不得超过 100k tokens
 
-### III. Honest Uncertainty Marking
+### III. 诚实标注不确定性
 
-Information that cannot be deterministically extracted from code MUST be
-explicitly marked. Inferred content MUST NOT be presented with certainty.
+无法从代码中确定性提取的信息必须显式标注。推断内容不得以确定性口吻呈现。
 
-- Speculated intent MUST carry the `[推断]` or `[INFERRED]` marker
-- Ambiguous or unreadable code MUST carry the `[不明确]` marker
-- Syntactically broken code MUST carry the `[SYNTAX ERROR]` marker and trigger
-  error-tolerant parsing mode
-- Every marker MUST include a brief rationale
+- 推测性意图必须带有 `[推断]` 或 `[INFERRED]` 标记
+- 模糊或不可读代码必须带有 `[不明确]` 标记
+- 语法错误的代码必须带有 `[SYNTAX ERROR]` 标记，并触发容错解析模式
+- 每个标记必须附带简要理由说明
 
-### IV. Read-Only Safety
+### IV. 只读安全性
 
-All reverse-spec tools (`/reverse-spec`, `/reverse-spec-batch`,
-`/reverse-spec-diff`) MUST be purely read-only operations.
-Target source code MUST NOT be modified.
+所有 reverse-spec 工具（`/reverse-spec`、`/reverse-spec-batch`、
+`/reverse-spec-diff`）必须是纯只读操作。
+不得修改目标源代码。
 
-- Analysis MUST NOT write, delete, or rename source files
-- Write operations are ONLY permitted to `specs/` and `drift-logs/` directories
-- Drift reports MUST require explicit user confirmation before triggering any
-  spec update
-- `.gitignore` rules MUST be respected; ignored files MUST NOT be analyzed
-  unless the user explicitly overrides
+- 分析过程不得写入、删除或重命名源文件
+- 写操作仅允许作用于 `specs/` 和 `drift-logs/` 目录
+- 漂移报告必须在用户明确确认后才能触发任何 Spec 更新
+- 必须遵守 `.gitignore` 规则；被忽略的文件不得被分析，除非用户明确覆盖
 
-### V. Pure Node.js Ecosystem
+### V. 纯 Node.js 生态
 
-All runtime dependencies MUST belong to the npm ecosystem.
-Python, Rust, or other non-Node.js runtimes MUST NOT be introduced.
+所有运行时依赖必须属于 npm 生态。
+不得引入 Python、Rust 或其他非 Node.js 运行时。
 
-- Core libraries are limited to: `ts-morph` (AST), `dependency-cruiser`
-  (dependency graph), `handlebars`/`ejs` (templating), `zod` (validation)
-- MUST run in Claude Code sandbox or local Node.js environment without
-  additional setup
-- For non-TS/JS target projects, degrade gracefully to pure-text LLM analysis
-  mode without introducing other language runtimes
-- AST parsing of 500 files MUST complete within 10 seconds
+- 核心库限定为：`ts-morph`（AST）、`dependency-cruiser`（依赖图）、
+  `handlebars`/`ejs`（模板引擎）、`zod`（数据验证）
+- 必须能在 Claude Code 沙箱或本地 Node.js 环境中无需额外配置即可运行
+- 对于非 TS/JS 目标项目，优雅降级为纯文本 LLM 分析模式，不引入其他语言运行时
+- 500 个文件的 AST 解析必须在 10 秒内完成
 
-### VI. Bilingual Documentation Standard
+### VI. 双语文档规范
 
-All generated Spec documents MUST use Chinese for prose content and MUST
-preserve English for code identifiers.
+所有生成的 Spec 文档必须使用中文撰写散文内容，并保留英文代码标识符。
 
-- **Chinese**: all descriptions, explanations, analyses, summaries, table
-  content, comments
-- **English**: code identifiers (function names, class names, variable names),
-  file paths, type signatures, code blocks
-- **Section headings**: Chinese (e.g., `## 1. 意图`, `## 2. 接口定义`)
-- **Frontmatter**: English YAML key names
-- All Specs MUST follow the 9-section structure: 意图, 接口定义, 业务逻辑,
-  数据结构, 约束条件, 边界条件, 技术债务, 测试覆盖, 依赖关系
+- **中文**：所有描述、解释、分析、摘要、表格内容、注释
+- **英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块
+- **章节标题**：中文（如 `## 1. 意图`、`## 2. 接口定义`）
+- **Frontmatter**：英文 YAML key 名称
+- 所有 Spec 必须遵循 9 节结构：意图、接口定义、业务逻辑、
+  数据结构、约束条件、边界条件、技术债务、测试覆盖、依赖关系
 
-## Technology Stack Constraints
+## 技术栈约束
 
-| Category | Constraint |
-|----------|-----------|
-| **Runtime** | Node.js (LTS) |
-| **AST Engine** | `ts-morph` (primary), `tree-sitter` (error-tolerant fallback) |
-| **Dependency Analysis** | `dependency-cruiser` |
-| **Template Engine** | `handlebars` or `ejs` |
-| **Data Validation** | `zod` |
-| **Diagram Generation** | Mermaid (embedded in Markdown) |
-| **AI Model** | Claude 4.5/4.6 Sonnet/Opus (via Anthropic API) |
-| **Target Code** | TS/JS preferred (AST-enhanced); other languages degrade to pure LLM mode |
+| 类别 | 约束 |
+|------|------|
+| **运行时** | Node.js (LTS) |
+| **AST 引擎** | `ts-morph`（主力），`tree-sitter`（容错降级） |
+| **依赖分析** | `dependency-cruiser` |
+| **模板引擎** | `handlebars` 或 `ejs` |
+| **数据验证** | `zod` |
+| **图表生成** | Mermaid（嵌入 Markdown） |
+| **AI 模型** | Claude 4.5/4.6 Sonnet/Opus（通过 Anthropic API） |
+| **目标代码** | 优先 TS/JS（AST 增强）；其他语言降级为纯 LLM 模式 |
 
-## Quality Standards
+## 质量标准
 
-### Output Quality Gates
+### 输出质量门控
 
-Every generated Spec MUST pass the following self-checks before release:
+每份生成的 Spec 在发布前必须通过以下自检项：
 
-- [ ] All public interfaces are documented
-- [ ] No `[推断]` marker exists without an accompanying rationale
-- [ ] All technical debt items have a severity rating
-- [ ] Edge case table is non-empty
-- [ ] File inventory matches the set of actually analyzed files
-- [ ] Frontmatter `related_files` field is accurate
+- [ ] 所有公开接口已文档化
+- [ ] 没有缺少理由说明的 `[推断]` 标记
+- [ ] 所有技术债务项已标注严重程度
+- [ ] 边界条件表非空
+- [ ] 文件清单与实际分析的文件集合一致
+- [ ] Frontmatter 的 `related_files` 字段准确
 
-### Large-Scale Codebase Handling
+### 大规模代码库处理
 
-- Targets exceeding 50 files or 5,000 LOC MUST enable incremental mode
-- Batch processing MUST use dependency-topological ordering
-  (Level 0 foundation → Level N business layer)
-- When processing Level N modules, read Level 0 Spec interface definitions
-  instead of source code (O(1) context complexity)
-- Circular dependencies MUST be treated as strongly connected components (SCC)
-  and processed as a single module
-- Files exceeding 5,000 LOC MUST trigger the chunk-summary strategy
+- 超过 50 个文件或 5,000 行代码的目标必须启用增量模式
+- 批量处理必须按依赖拓扑排序
+  （Level 0 基础层 → Level N 业务层）
+- 处理 Level N 模块时，读取 Level 0 Spec 的接口定义而非源代码（O(1) 上下文复杂度）
+- 循环依赖必须作为强连通分量（SCC）处理，视为单一模块
+- 超过 5,000 行代码的文件必须触发分块摘要策略
 
-## Governance
+## 治理规则
 
-- This constitution is the supreme authority governing all reverse-spec tool
-  development and output
-- Any modification to core principles MUST be documented, version-bumped, and
-  accompanied by an impact assessment
-- Version numbering follows Semantic Versioning: MAJOR (principle removal or
-  redefinition), MINOR (new principle or expansion), PATCH (wording or
-  clarification)
-- All PRs and code reviews MUST verify compliance with this constitution
-- Complexity deviations MUST be justified in the plan document's Complexity
-  Tracking section
+- 本 Constitution 是治理所有 reverse-spec 工具开发和输出的最高权威
+- 对核心原则的任何修改必须记录在案、升级版本号，并附带影响评估
+- 版本号遵循语义化版本：MAJOR（原则移除或重新定义）、MINOR（新增原则或扩展）、
+  PATCH（措辞或澄清）
+- 所有 PR 和代码审查必须验证是否符合本 Constitution
+- 复杂度偏差必须在计划文档的复杂度追踪章节中给出理由
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-10 | **Last Amended**: 2026-02-10
+**版本**：1.0.0 | **批准日期**：2026-02-10 | **最后修订**：2026-02-10

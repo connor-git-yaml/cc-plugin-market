@@ -1,104 +1,105 @@
-# API Contract: Generator Module
+# API 契约：生成器模块
 
-**Module**: `src/generator/`
-**Covers**: FR-006, FR-007, FR-008, FR-009
+**模块**：`src/generator/`
+**覆盖**：FR-006、FR-007、FR-008、FR-009
 
 ---
 
 ## spec-renderer
 
-**File**: `src/generator/spec-renderer.ts`
+**文件**：`src/generator/spec-renderer.ts`
 
 ### `renderSpec(moduleSpec: ModuleSpec): string`
 
-Renders a ModuleSpec into final Markdown using Handlebars templates.
+使用 Handlebars 模板将 ModuleSpec 渲染为最终的 Markdown。
 
-**Parameters**:
-- `moduleSpec` — Complete ModuleSpec data (see [data-model.md](../data-model.md#3-modulespec))
+**参数**：
+- `moduleSpec` — 完整的 ModuleSpec 数据（参见 [data-model.md](../data-model.md#3-modulespec)）
 
-**Returns**: Complete Markdown string with YAML frontmatter + 9 sections + Mermaid diagrams
+**返回**：包含 YAML frontmatter + 9 个章节 + Mermaid 图表的完整 Markdown 字符串
 
-**Template**: `templates/module-spec.hbs`
+**模板**：`templates/module-spec.hbs`
 
-**Guarantees**:
+**保证**：
 
-- All 9 sections present in order (FR-006)
-- YAML frontmatter contains all required fields including `skeletonHash` (FR-009)
-- Mermaid diagrams embedded as fenced code blocks (FR-007)
-- Uncertainty markers preserved: `[推断]`, `[不明确]`, `[SYNTAX ERROR]` (FR-008)
-- Prose in Chinese, code identifiers in English (Constitution VI)
-- **Baseline skeleton serialized** as HTML comment block at end of spec: `<!-- baseline-skeleton: {JSON} -->`. This enables lossless drift detection without reverse-parsing Markdown. The JSON is the full `CodeSkeleton` serialized via `JSON.stringify()`. Invisible to Markdown renderers.
+- 9 个章节按序全部存在（FR-006）
+- YAML frontmatter 包含所有必填字段，包括 `skeletonHash`（FR-009）
+- Mermaid 图表以围栏代码块形式嵌入（FR-007）
+- 保留不确定性标记：`[推断]`、`[不明确]`、`[SYNTAX ERROR]`（FR-008）
+- 散文使用中文，代码标识符使用英文（Constitution VI）
+- **基线骨架被序列化**为规格末尾的 HTML 注释块：`<!-- baseline-skeleton: {JSON} -->`。这使得无需反向解析 Markdown 即可实现无损漂移检测。JSON 是通过 `JSON.stringify()` 序列化的完整 `CodeSkeleton`。对 Markdown 渲染器不可见。
 
 ---
 
 ### `initRenderer(): void`
 
-One-time initialization: compile templates, register helpers, register partials.
+一次性初始化：编译模板、注册辅助函数、注册局部模板。
 
-Must be called before first `renderSpec()`.
+必须在首次调用 `renderSpec()` 之前执行。
 
 ---
 
 ## frontmatter
 
-**File**: `src/generator/frontmatter.ts`
+**文件**：`src/generator/frontmatter.ts`
 
 ### `generateFrontmatter(data: FrontmatterInput): SpecFrontmatter`
 
-Produces YAML frontmatter data with automatic version increment.
+生成 YAML frontmatter 数据，支持自动版本递增。
 
-**Parameters**:
+**参数**：
 ```typescript
 interface FrontmatterInput {
   sourceTarget: string;
   relatedFiles: string[];
   confidence: 'high' | 'medium' | 'low';
-  existingVersion?: string;  // e.g., 'v3' — will produce 'v4'
+  skeletonHash: string;       // baseline CodeSkeleton 的 SHA-256 哈希
+  existingVersion?: string;   // e.g., 'v3' — will produce 'v4'
 }
 ```
 
-**Returns**: `SpecFrontmatter` with:
-- `version`: `v1` for new specs, or incremented from `existingVersion`
-- `generatedBy`: `'reverse-spec v2.0'`
-- `lastUpdated`: Current ISO 8601 timestamp
-- `type`: `'module-spec'`
+**返回**：`SpecFrontmatter`，包含：
+- `version`：新规格为 `v1`，或在 `existingVersion` 基础上递增
+- `generatedBy`：`'reverse-spec v2.0'`
+- `lastUpdated`：当前 ISO 8601 时间戳
+- `type`：`'module-spec'`
 
 ---
 
 ## mermaid-class-diagram
 
-**File**: `src/generator/mermaid-class-diagram.ts`
+**文件**：`src/generator/mermaid-class-diagram.ts`
 
 ### `generateClassDiagram(skeleton: CodeSkeleton): string`
 
-Generates Mermaid classDiagram source from a CodeSkeleton.
+从 CodeSkeleton 生成 Mermaid classDiagram 源代码。
 
-**Returns**: Valid Mermaid `classDiagram` source code
+**返回**：有效的 Mermaid `classDiagram` 源代码
 
-**Rules**:
-- Classes show public methods and properties only
-- Inheritance (`--|>`) and composition (`*--`) relationships from AST
-- Interfaces rendered with `<<interface>>` stereotype
+**规则**：
+- 类仅显示公共方法和属性
+- 继承（`--|>`）和组合（`*--`）关系来自 AST
+- 接口以 `<<interface>>` 构造型渲染
 
 ---
 
 ## index-generator
 
-**File**: `src/generator/index-generator.ts`
+**文件**：`src/generator/index-generator.ts`
 
 ### `generateIndex(specs: ModuleSpec[], graph: DependencyGraph): ArchitectureIndex`
 
-Produces the project-level architecture index.
+生成项目级架构索引。
 
-**Parameters**:
-- `specs` — All generated ModuleSpec objects
-- `graph` — Project DependencyGraph
+**参数**：
+- `specs` — 所有已生成的 ModuleSpec 对象
+- `graph` — 项目 DependencyGraph
 
-**Returns**: `ArchitectureIndex` (see [data-model.md](../data-model.md#4-architectureindex))
+**返回**：`ArchitectureIndex`（参见 [data-model.md](../data-model.md#4-architectureindex)）
 
-**Template**: `templates/index-spec.hbs`
+**模板**：`templates/index-spec.hbs`
 
-**Guarantees**:
-- Module map contains all specs with links (FR-013)
-- Dependency diagram is the full project Mermaid graph
-- Cross-cutting concerns identified from shared dependencies
+**保证**：
+- 模块映射包含所有规格及其链接（FR-013）
+- 依赖图表为完整的项目 Mermaid 图
+- 横切关注点通过共享依赖识别

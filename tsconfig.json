@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    // 语言与目标
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+
+    // 严格模式
+    "strict": true,
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": true,
+
+    // 输出
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // 路径别名
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@graph/*": ["src/graph/*"],
+      "@diff/*": ["src/diff/*"],
+      "@generator/*": ["src/generator/*"],
+      "@batch/*": ["src/batch/*"],
+      "@models/*": ["src/models/*"],
+      "@utils/*": ["src/utils/*"]
+    },
+
+    // 互操作性
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests", "templates"]
+}
