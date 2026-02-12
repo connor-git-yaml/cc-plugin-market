@@ -16,82 +16,33 @@ description: |
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding (if not empty).
-
-## Purpose
-
-Detect specification drift between a .spec.md and its corresponding source code. Useful after code changes to keep specs current, or before refactoring to understand what's changed.
-
 ## Execution Flow
 
 ### 1. Parse Arguments
 
-Expected format: `<spec-file> [source-target]`
+格式: `<spec-file> [source-target]`。spec 不存在时建议先运行 /reverse-spec。
 
-- `<spec-file>`: Path to existing .spec.md (required)
-- `[source-target]`: Path to source code (optional — inferred from spec's `related_files` frontmatter)
+### 2. 漂移检测
 
-If spec file doesn't exist, suggest running `/reverse-spec` first.
-
-### 2. Run TypeScript Drift Detection Pipeline
-
-**优先使用 TypeScript 流水线**。通过 `npx tsx` 执行 `detectDrift()`：
+优先使用 CLI：
 
 ```bash
-npx tsx -e "
-import { detectDrift } from './src/diff/drift-orchestrator.js';
-const report = await detectDrift('<spec-file>', '<source-target>', { skipSemantic: false });
-console.log(JSON.stringify(report, null, 2));
-"
+if command -v reverse-spec >/dev/null 2>&1; then
+  reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
+elif command -v npx >/dev/null 2>&1; then
+  npm_config_yes=true npx reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
+fi
 ```
 
-流水线自动执行以下步骤：
-1. 从 spec HTML 注释加载基线 `CodeSkeleton`
-2. 对当前源代码进行 AST 分析
-3. 结构差异比较（`compareSkeletons`）
-4. 噪声过滤（空白/注释/import 重排序）
-5. 语义差异评估（LLM，可选）
-6. 组装 `DriftReport` 并写入 `drift-logs/`
+CLI 不可用时手动分析：读取 spec 接口定义，对比当前源码导出符号，按严重级别分类（HIGH=删除导出, MEDIUM=签名变更, LOW=新增导出）。
 
-### 3. Fallback: Manual Analysis
+### 3. 输出报告
 
-如果 TypeScript 流水线不可用（依赖未安装、编译错误等），手动执行：
+写入 `drift-logs/{module}-drift-{date}.md`，包含汇总统计和逐项差异详情。
 
-1. 读取 spec 文件，提取接口定义章节
-2. 对源代码进行 AST 分析
-3. 对比 spec 中的导出符号与当前代码
-4. 按严重级别分类差异：
-   - **HIGH**: 删除的导出（Breaking Change）
-   - **MEDIUM**: 签名修改、行为变更
-   - **LOW**: 新增导出
+### 4. 确认更新
 
-### 4. Output Drift Report
+**必须提示用户确认**后才能更新 spec。不可自动更新。
 
-报告自动写入 `drift-logs/{module}-drift-{date}.md`，包含：
-- YAML frontmatter（spec 路径、源码路径、版本）
-- 汇总统计表（按严重级别和变更类型）
-- 逐项漂移详情（ID、类别、位置、旧/新值、建议更新）
-- 综合建议
-
-### 5. Offer Update (FR-022)
-
-**在任何 spec 更新前必须提示用户确认。**
-
-Ask: "是否需要更新 spec 以匹配当前代码？这将运行 `/reverse-spec` 并使用现有 spec 作为基线。"
-
-Do NOT auto-update. Wait for user confirmation.
-
-## 语言规范
-
-**所有漂移报告的正文内容必须使用中文撰写。** 具体规则：
-
-- **用中文**：所有描述、说明、分析、总结、表格内容、建议
-- **保留英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块内容
-- **表格表头**：使用中文，例如 `| 项目 | 类型 | 位置 | 描述 |`
-
-## Guidelines
-
-- 这是**只读分析**——未经用户同意不修改任何文件
-- 关注**语义**差异，而非格式/风格变化
-- 忽略空白、纯注释变更和 import 重排序
-- **突出标记破坏性变更**（删除/修改的公开 API）
+**语言**: 中文正文 + 英文代码标识符/路径/代码块
+**规则**: 只读分析；关注语义差异；忽略空白/注释变更；突出破坏性变更
