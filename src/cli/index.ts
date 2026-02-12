@@ -12,6 +12,7 @@ import { printError } from './utils/error-handler.js';
 import { runGenerate } from './commands/generate.js';
 import { runBatchCommand } from './commands/batch.js';
 import { runDiff } from './commands/diff.js';
+import { runInit } from './commands/init.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,20 +27,23 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   reverse-spec generate <target> [--deep] [--output-dir <dir>]
   reverse-spec batch [--force] [--output-dir <dir>]
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
-  reverse-spec --version
-  reverse-spec --help
+  reverse-spec init [--global] [--remove]
+  reverse-spec --version / --help
 
-命令:
-  generate   对指定文件或目录生成 Spec
-  batch      批量生成当前项目所有模块的 Spec
-  diff       检测 Spec 与源代码之间的漂移
+子命令:
+  generate    对指定文件或目录生成 Spec
+  batch       批量生成当前项目所有模块的 Spec
+  diff        检测 Spec 与源代码之间的漂移
+  init        安装 Claude Code skills 到项目或全局目录
 
 选项:
-  --deep         深度分析（包含函数体）
-  --force        强制重新生成所有 spec
+  --global, -g   安装到全局 ~/.claude/skills/（仅 init）
+  --remove       移除已安装的 skills（仅 init）
+  --deep         包含函数体进行深度分析（仅 generate）
+  --force        强制重新生成所有 Spec（仅 batch）
   --output-dir   自定义输出目录
-  -v, --version  显示版本号
-  -h, --help     显示帮助信息`;
+  --version, -v  显示版本号
+  --help, -h     显示帮助信息`;
 
 async function main(): Promise<void> {
   const result = parseArgs(process.argv.slice(2));
@@ -73,6 +77,9 @@ async function main(): Promise<void> {
       break;
     case 'diff':
       await runDiff(command, version);
+      break;
+    case 'init':
+      runInit(command);
       break;
   }
 }

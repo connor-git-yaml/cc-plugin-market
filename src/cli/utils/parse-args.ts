@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -13,11 +13,15 @@ export interface CLICommand {
   outputDir?: string;
   version: boolean;
   help: boolean;
+  /** --global 选项（仅 init 子命令） */
+  global: boolean;
+  /** --remove 选项（仅 init 子命令） */
+  remove: boolean;
 }
 
 /** 解析错误 */
 export interface ParseError {
-  type: 'invalid_subcommand' | 'missing_target' | 'missing_args';
+  type: 'invalid_subcommand' | 'missing_target' | 'missing_args' | 'invalid_option';
   message: string;
 }
 
@@ -41,6 +45,8 @@ export function parseArgs(argv: string[]): ParseResult {
         force: false,
         version: true,
         help: false,
+        global: false,
+        remove: false,
       },
     };
   }
@@ -54,11 +60,65 @@ export function parseArgs(argv: string[]): ParseResult {
         force: false,
         version: false,
         help: true,
+        global: false,
+        remove: false,
       },
     };
   }
 
   const sub = argv[0];
+
+  // init 子命令
+  if (sub === 'init') {
+    const hasGlobal = argv.includes('--global') || argv.includes('-g');
+    const hasRemove = argv.includes('--remove');
+
+    // init 不接受位置参数
+    const positional = extractPositionalArgs(argv.slice(1));
+    if (positional.length > 0) {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_option',
+          message: 'init 命令不接受位置参数，用法: reverse-spec init [--global] [--remove]',
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      command: {
+        subcommand: 'init',
+        deep: false,
+        force: false,
+        version: false,
+        help: false,
+        global: hasGlobal,
+        remove: hasRemove,
+      },
+    };
+  }
+
+  // --global 和 --remove 仅在 init 子命令下有效
+  if (argv.includes('--global') || argv.includes('-g')) {
+    return {
+      ok: false,
+      error: {
+        type: 'invalid_option',
+        message: '--global 选项仅在 init 子命令下有效',
+      },
+    };
+  }
+  if (argv.includes('--remove')) {
+    return {
+      ok: false,
+      error: {
+        type: 'invalid_option',
+        message: '--remove 选项仅在 init 子命令下有效',
+      },
+    };
+  }
+
   if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff') {
     return {
       ok: false,
@@ -98,6 +158,8 @@ export function parseArgs(argv: string[]): ParseResult {
         outputDir,
         version: false,
         help: false,
+        global: false,
+        remove: false,
       },
     };
   }
@@ -112,6 +174,8 @@ export function parseArgs(argv: string[]): ParseResult {
         outputDir,
         version: false,
         help: false,
+        global: false,
+        remove: false,
       },
     };
   }
@@ -137,12 +201,14 @@ export function parseArgs(argv: string[]): ParseResult {
       outputDir,
       version: false,
       help: false,
+      global: false,
+      remove: false,
     },
   };
 }
 
 /**
- * 从参数数组中提取位置参数（排除以 -- 开头的选项和选项值）
+ * 从参数数组中提取位置参数（排除以 -- 开头的选项和选项值及 -g 缩写）
  */
 function extractPositionalArgs(args: string[]): string[] {
   const result: string[] = [];
@@ -152,6 +218,9 @@ function extractPositionalArgs(args: string[]): string[] {
       if (args[i] === '--output-dir') {
         i++; // 跳过选项值
       }
+      continue;
+    }
+    if (args[i] === '-g') {
       continue;
     }
     result.push(args[i]!);
