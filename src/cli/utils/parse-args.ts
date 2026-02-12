@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -119,7 +119,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare') {
     return {
       ok: false,
       error: {
@@ -138,20 +138,20 @@ export function parseArgs(argv: string[]): ParseResult {
   // 提取位置参数（排除选项和选项值）
   const positional = extractPositionalArgs(argv.slice(1));
 
-  if (sub === 'generate') {
+  if (sub === 'generate' || sub === 'prepare') {
     if (positional.length === 0) {
       return {
         ok: false,
         error: {
           type: 'missing_target',
-          message: 'generate 命令需要指定目标路径，例如: reverse-spec generate src/',
+          message: `${sub} 命令需要指定目标路径，例如: reverse-spec ${sub} src/`,
         },
       };
     }
     return {
       ok: true,
       command: {
-        subcommand: 'generate',
+        subcommand: sub,
         target: positional[0],
         deep,
         force: false,

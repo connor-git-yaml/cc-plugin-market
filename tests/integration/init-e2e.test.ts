@@ -72,7 +72,7 @@ describe('init 端到端测试', () => {
     ).toBe(true);
   });
 
-  it('init 安装的 SKILL.md 包含降级逻辑', () => {
+  it('init 安装的 SKILL.md 包含 CLI 调用逻辑', () => {
     runCLI(['init'], { cwd: tempDir });
 
     const content = readFileSync(
@@ -80,10 +80,10 @@ describe('init 端到端测试', () => {
       'utf-8',
     );
 
-    // 验证内联降级逻辑
+    // 验证 CLI 调用逻辑（Claude Code 原生模式使用 prepare）
     expect(content).toContain('command -v reverse-spec');
     expect(content).toContain('npm_config_yes=true npx reverse-spec');
-    expect(content).toContain('npm install -g reverse-spec');
+    expect(content).toContain('reverse-spec prepare');
   });
 
   it('init --remove 清理已安装 skill', () => {

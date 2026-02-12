@@ -46,6 +46,20 @@ export interface GenerateSpecResult {
   warnings: string[];
 }
 
+/** prepare 子命令的返回结果（阶段 1-2，不含 LLM 调用） */
+export interface PrepareResult {
+  /** 各文件的 CodeSkeleton */
+  skeletons: CodeSkeleton[];
+  /** 合并后的代表性骨架 */
+  mergedSkeleton: CodeSkeleton;
+  /** 组装后的 LLM 上下文 */
+  context: AssembledContext;
+  /** 脱敏后的代码片段（仅 deep 模式） */
+  codeSnippets: string[];
+  /** 扫描到的文件路径 */
+  filePaths: string[];
+}
+
 // ============================================================
 // 置信度计算
 // ============================================================
@@ -116,36 +130,19 @@ function mergeSkeletons(skeletons: CodeSkeleton[]): CodeSkeleton {
 // ============================================================
 
 /**
- * 单模块 Spec 生成端到端编排
- *
- * 流水线步骤：
- * 1. 扫描目标路径中的 TS/JS 文件
- * 2. AST 分析 → CodeSkeleton[]
- * 3. 脱敏敏感信息
- * 4. 在 token 预算内组装 LLM 上下文
- * 5. 调用 Claude API
- * 6. 解析 + 验证 LLM 响应
- * 7. 注入不确定性标记
- * 8. Handlebars 渲染 → specs/*.spec.md
- * 9. 基线骨架序列化
+ * 预处理 + 上下文组装（阶段 1-2）
+ * 不调用 LLM，不需要 API key。
+ * 供 prepare 子命令和 generateSpec 共用。
  *
  * @param targetPath - 待分析的目录或文件路径
  * @param options - 生成选项
- * @returns 生成结果
+ * @returns 预处理结果
  */
-export async function generateSpec(
+export async function prepareContext(
   targetPath: string,
   options: GenerateSpecOptions = {},
-): Promise<GenerateSpecResult> {
-  const {
-    deep = false,
-    outputDir = 'specs',
-    existingVersion,
-    projectRoot,
-  } = options;
-  const warnings: string[] = [];
-  let tokenUsage = 0;
-  let llmDegraded = false;
+): Promise<PrepareResult> {
+  const { deep = false, projectRoot } = options;
 
   // --- 阶段 1：预处理 ---
 
@@ -173,13 +170,11 @@ export async function generateSpec(
   // 步骤 3：脱敏
   const codeSnippets: string[] = [];
   if (deep) {
-    // deep 模式：读取源代码作为代码片段
     for (const filePath of filePaths) {
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
 
       if (lines.length > CHUNK_THRESHOLD) {
-        // 大文件分块
         const chunks = splitIntoChunks(content);
         for (const chunk of chunks) {
           const { redactedContent } = redact(chunk.content, filePath);
@@ -194,12 +189,41 @@ export async function generateSpec(
 
   // --- 阶段 2：上下文组装 ---
 
-  // 步骤 4：组装 LLM 上下文
   const systemPrompt = buildSystemPrompt('spec-generation');
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
     templateInstructions: systemPrompt,
   });
+
+  return { skeletons, mergedSkeleton, context, codeSnippets, filePaths };
+}
+
+/**
+ * 单模块 Spec 生成端到端编排
+ *
+ * 流水线步骤：
+ * 1-4. prepareContext()（预处理 + 上下文组装）
+ * 5. 调用 Claude API
+ * 6. 解析 + 验证 LLM 响应
+ * 7. 注入不确定性标记
+ * 8. Handlebars 渲染 → specs/*.spec.md
+ * 9. 基线骨架序列化
+ *
+ * @param targetPath - 待分析的目录或文件路径
+ * @param options - 生成选项
+ * @returns 生成结果
+ */
+export async function generateSpec(
+  targetPath: string,
+  options: GenerateSpecOptions = {},
+): Promise<GenerateSpecResult> {
+  const { outputDir = 'specs', existingVersion } = options;
+  const warnings: string[] = [];
+  let tokenUsage = 0;
+  let llmDegraded = false;
+
+  // 阶段 1-2：预处理 + 上下文组装
+  const { skeletons, mergedSkeleton, context, filePaths } = await prepareContext(targetPath, options);
 
   // --- 阶段 3：生成增强 ---
 
