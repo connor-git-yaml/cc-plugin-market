@@ -1,11 +1,14 @@
 /**
  * LLM 客户端
  * Claude API 封装：callLLM、parseLLMResponse、buildSystemPrompt
+ * 支持两种调用策略：SDK 直接调用（API Key）和 CLI 代理（订阅用户）
  * 参见 contracts/llm-client.md
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { SpecSections } from '../models/module-spec.js';
 import type { AssembledContext } from './context-assembler.js';
+import { detectAuth } from '../auth/auth-detector.js';
+import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 
 // ============================================================
 // 配置类型
@@ -144,6 +147,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * 将组装好的上下文发送至 Claude API
  *
+ * 策略模式：根据认证检测结果自动选择调用方式
+ * - API Key 可用 → 通过 Anthropic SDK 直接调用
+ * - CLI 代理可用 → 通过 spawn Claude CLI 子进程间接调用
+ *
  * @param context - assembleContext() 的输出
  * @param config - 可选的配置覆盖
  * @returns LLM 响应
@@ -154,6 +161,29 @@ export async function callLLM(
   config?: Partial<LLMConfig>,
 ): Promise<LLMResponse> {
   const cfg = mergeConfig(config);
+  const authResult = detectAuth();
+
+  if (!authResult.preferred) {
+    throw new LLMUnavailableError(
+      '未找到可用的认证方式。请设置 ANTHROPIC_API_KEY 或登录 Claude Code (claude auth login)',
+    );
+  }
+
+  if (authResult.preferred.type === 'api-key') {
+    return callLLMviaSdk(context, cfg);
+  }
+
+  // cli-proxy 策略
+  return callLLMviaCliProxy(context, cfg);
+}
+
+/**
+ * 通过 Anthropic SDK 直接调用 LLM（API Key 方式）
+ */
+async function callLLMviaSdk(
+  context: AssembledContext,
+  cfg: LLMConfig,
+): Promise<LLMResponse> {
   const systemPrompt = buildSystemPrompt('spec-generation');
 
   const client = new Anthropic({
@@ -221,6 +251,42 @@ export async function callLLM(
   throw new LLMUnavailableError(
     `${maxAttempts} 次尝试后仍无法访问 API: ${lastError?.message}`,
   );
+}
+
+/**
+ * 通过 Claude CLI 子进程调用 LLM（订阅用户 CLI 代理方式）
+ */
+async function callLLMviaCliProxy(
+  context: AssembledContext,
+  cfg: LLMConfig,
+): Promise<LLMResponse> {
+  const systemPrompt = buildSystemPrompt('spec-generation');
+  // 将系统提示和用户内容组合为完整 prompt
+  const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
+
+  const maxAttempts = 3;
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(getRetryDelay(attempt - 1));
+    }
+
+    try {
+      return await cliProxyCall(fullPrompt, {
+        model: cfg.model,
+        timeout: cfg.timeout,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
+        break;
+      }
+    }
+  }
+
+  throw lastError ?? new LLMUnavailableError('CLI 代理调用失败');
 }
 
 // ============================================================

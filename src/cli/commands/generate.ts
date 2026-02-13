@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { generateSpec } from '../../core/single-spec-orchestrator.js';
 import {
   validateTargetPath,
-  checkApiKey,
+  checkAuth,
   handleError,
   EXIT_CODES,
 } from '../utils/error-handler.js';
@@ -28,7 +28,7 @@ export async function runGenerate(command: CLICommand, version: string): Promise
     return;
   }
 
-  if (!checkApiKey()) {
+  if (!checkAuth()) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }

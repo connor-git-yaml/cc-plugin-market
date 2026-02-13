@@ -5,6 +5,7 @@
 
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { detectAuth } from '../../auth/auth-detector.js';
 
 /** 退出码定义 */
 export const EXIT_CODES = {
@@ -28,6 +29,7 @@ export function validateTargetPath(target: string): boolean {
 
 /**
  * 检查 ANTHROPIC_API_KEY 环境变量
+ * @deprecated 使用 checkAuth() 替代，支持 API Key 和 CLI 代理两种认证方式
  * @returns 如果缺失则输出错误信息并返回 false
  */
 export function checkApiKey(): boolean {
@@ -39,6 +41,23 @@ export function checkApiKey(): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * 检查是否有可用的认证方式（API Key 或 Claude CLI）
+ * @returns 如果无可用方式则输出错误信息并返回 false
+ */
+export function checkAuth(): boolean {
+  const result = detectAuth();
+  if (result.preferred) {
+    return true;
+  }
+  printError(
+    '未找到可用的认证方式。请选择以下方式之一：\n' +
+    '  1. 设置环境变量: export ANTHROPIC_API_KEY=your-key-here\n' +
+    '  2. 安装并登录 Claude Code: claude auth login',
+  );
+  return false;
 }
 
 /**
