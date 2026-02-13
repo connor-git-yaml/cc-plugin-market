@@ -1,12 +1,11 @@
 /**
  * 批量编排器
- * 按拓扑顺序编排全项目 Spec 生成（FR-012/FR-014/FR-015/FR-016/FR-017）
+ * 按模块级拓扑顺序编排全项目 Spec 生成（FR-012/FR-014/FR-015/FR-016/FR-017）
  * 参见 contracts/batch-module.md
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { buildGraph } from '../graph/dependency-graph.js';
-import { topologicalSort } from '../graph/topological-sort.js';
 import { generateSpec, type GenerateSpecOptions } from '../core/single-spec-orchestrator.js';
 import { generateIndex } from '../generator/index-generator.js';
 import { renderIndex, initRenderer } from '../generator/spec-renderer.js';
@@ -17,8 +16,8 @@ import {
   DEFAULT_CHECKPOINT_PATH,
 } from './checkpoint.js';
 import { createReporter, writeSummaryLog } from './progress-reporter.js';
-import type { BatchState, CompletedModule, FailedModule } from '../models/module-spec.js';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
+import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
 
 // ============================================================
 // 类型定义
@@ -33,6 +32,8 @@ export interface BatchOptions {
   maxRetries?: number;
   /** 检查点文件路径 */
   checkpointPath?: string;
+  /** 模块分组选项 */
+  grouping?: GroupingOptions;
 }
 
 export interface BatchResult {
@@ -51,7 +52,7 @@ export interface BatchResult {
 // ============================================================
 
 /**
- * 按拓扑顺序编排全项目 Spec 生成
+ * 按模块级拓扑顺序编排全项目 Spec 生成
  *
  * @param projectRoot - 项目根目录
  * @param options - 批量选项
@@ -70,12 +71,18 @@ export async function runBatch(
   const startTime = Date.now();
   const resolvedRoot = path.resolve(projectRoot);
 
-  // 步骤 1：构建依赖图 + 拓扑排序
+  // 步骤 1：构建依赖图
   const graph = await buildGraph(resolvedRoot);
-  const sortResult = topologicalSort(graph);
-  const processingOrder = sortResult.order;
 
-  // 步骤 2：检查是否存在检查点
+  // 步骤 2：文件→模块聚合 + 模块级拓扑排序
+  const groupResult = groupFilesToModules(graph, options.grouping);
+  const processingOrder = groupResult.moduleOrder;
+  const moduleGroups = new Map(groupResult.groups.map((g) => [g.name, g]));
+  const rootModuleName = options.grouping?.rootModuleName ?? 'root';
+
+  console.log(`发现 ${graph.modules.length} 个文件，聚合为 ${processingOrder.length} 个模块`);
+
+  // 步骤 3：检查是否存在检查点
   let state: BatchState | null = loadCheckpoint(checkpointPath);
   const isResume = state !== null;
 
@@ -98,29 +105,33 @@ export async function runBatch(
     console.log(`恢复断点: 已完成 ${state.completedModules.length}/${state.totalModules} 模块`);
   }
 
-  // 步骤 3：按拓扑顺序处理
+  // 步骤 4：按模块级拓扑顺序处理
   const reporter = createReporter(processingOrder.length);
   const successful: string[] = [];
   const failed: FailedModule[] = [];
   const skipped: string[] = [];
   const degraded: string[] = [];
+  const collectedModuleSpecs: ModuleSpec[] = [];
 
   const completedPaths = new Set(state.completedModules.map((m) => m.path));
 
-  for (const modulePath of processingOrder) {
+  for (const moduleName of processingOrder) {
+    const group = moduleGroups.get(moduleName);
+    if (!group) continue;
+
     // 跳过已完成的模块（断点恢复）
-    if (completedPaths.has(modulePath)) {
+    if (completedPaths.has(moduleName)) {
       continue;
     }
 
-    reporter.start(modulePath);
-    state.currentModule = modulePath;
+    reporter.start(moduleName);
+    state.currentModule = moduleName;
 
     // 检查 spec 是否已存在
-    const specPath = path.join('specs', `${path.basename(modulePath).replace(/\.[^.]+$/, '')}.spec.md`);
+    const specPath = path.join('specs', `${moduleName}.spec.md`);
     if (!force && fs.existsSync(specPath)) {
-      skipped.push(modulePath);
-      reporter.complete(modulePath, 'skipped');
+      skipped.push(moduleName);
+      reporter.complete(moduleName, 'skipped');
       continue;
     }
 
@@ -130,35 +141,57 @@ export async function runBatch(
 
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
-        const fullPath = path.join(resolvedRoot, modulePath);
         const genOptions: GenerateSpecOptions = {
           outputDir: 'specs',
           projectRoot: resolvedRoot,
         };
 
-        const result = await generateSpec(fullPath, genOptions);
-
-        if (result.confidence === 'low' && result.warnings.some((w) => w.includes('降级'))) {
-          degraded.push(modulePath);
-          reporter.complete(modulePath, 'degraded');
+        if (moduleName === rootModuleName) {
+          // root 模块：散文件逐个处理
+          for (const file of group.files) {
+            const fullPath = path.join(resolvedRoot, file);
+            const result = await generateSpec(fullPath, genOptions);
+            collectedModuleSpecs.push(result.moduleSpec);
+          }
         } else {
-          successful.push(modulePath);
-          reporter.complete(modulePath, 'success');
+          // 正常模块：传入目录路径
+          const fullDirPath = path.join(resolvedRoot, group.dirPath);
+          const result = await generateSpec(fullDirPath, genOptions);
+          collectedModuleSpecs.push(result.moduleSpec);
+
+          if (result.confidence === 'low' && result.warnings.some((w) => w.includes('降级'))) {
+            degraded.push(moduleName);
+            reporter.complete(moduleName, 'degraded');
+          } else {
+            successful.push(moduleName);
+            reporter.complete(moduleName, 'success');
+          }
+
+          state.completedModules.push({
+            path: moduleName,
+            specPath: result.specPath,
+            completedAt: new Date().toISOString(),
+            tokenUsage: result.tokenUsage,
+          });
         }
 
-        state.completedModules.push({
-          path: modulePath,
-          specPath: result.specPath,
-          completedAt: new Date().toISOString(),
-          tokenUsage: result.tokenUsage,
-        });
+        // root 模块整体记录
+        if (moduleName === rootModuleName) {
+          successful.push(moduleName);
+          reporter.complete(moduleName, 'success');
+          state.completedModules.push({
+            path: moduleName,
+            specPath: `specs/${rootModuleName}`,
+            completedAt: new Date().toISOString(),
+          });
+        }
 
         moduleSuccess = true;
       } catch (error: any) {
         retryCount++;
         if (retryCount >= maxRetries) {
           const failedModule: FailedModule = {
-            path: modulePath,
+            path: moduleName,
             error: error.message ?? String(error),
             failedAt: new Date().toISOString(),
             retryCount,
@@ -166,7 +199,7 @@ export async function runBatch(
           };
           failed.push(failedModule);
           state.failedModules.push(failedModule);
-          reporter.complete(modulePath, 'failed');
+          reporter.complete(moduleName, 'failed');
         }
       }
     }
@@ -182,11 +215,11 @@ export async function runBatch(
     );
   }
 
-  // 步骤 4：生成架构索引
+  // 步骤 5：生成架构索引（使用收集的 ModuleSpec）
   let indexGenerated = false;
   try {
     initRenderer();
-    const index = generateIndex([], graph);
+    const index = generateIndex(collectedModuleSpecs, graph);
     const indexMarkdown = renderIndex(index as any);
     const indexPath = path.join('specs', '_index.spec.md');
     fs.mkdirSync(path.dirname(indexPath), { recursive: true });
@@ -196,12 +229,12 @@ export async function runBatch(
     console.warn('架构索引生成失败');
   }
 
-  // 步骤 5：写入摘要日志
+  // 步骤 6：写入摘要日志
   const summary = reporter.finish();
   const summaryLogPath = path.join('specs', `batch-summary-${Date.now()}.md`);
   writeSummaryLog(summary, summaryLogPath);
 
-  // 步骤 6：成功后清理检查点
+  // 步骤 7：成功后清理检查点
   if (failed.length === 0) {
     clearCheckpoint(checkpointPath);
   }

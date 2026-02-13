@@ -44,6 +44,8 @@ export interface GenerateSpecResult {
   confidence: 'high' | 'medium' | 'low';
   /** 非致命警告 */
   warnings: string[];
+  /** 完整的 ModuleSpec 对象（用于索引生成） */
+  moduleSpec: ModuleSpec;
 }
 
 /** prepare 子命令的返回结果（阶段 1-2，不含 LLM 调用） */
@@ -311,6 +313,7 @@ export async function generateSpec(
     tokenUsage,
     confidence,
     warnings,
+    moduleSpec,
   };
 }
 
