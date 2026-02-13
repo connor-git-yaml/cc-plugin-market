@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { detectDrift } from '../../diff/drift-orchestrator.js';
 import {
   validateTargetPath,
-  checkApiKey,
+  checkAuth,
   handleError,
   EXIT_CODES,
 } from '../utils/error-handler.js';
@@ -34,7 +34,7 @@ export async function runDiff(command: CLICommand, version: string): Promise<voi
     return;
   }
 
-  if (!checkApiKey()) {
+  if (!checkAuth()) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }

@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -17,6 +17,8 @@ export interface CLICommand {
   global: boolean;
   /** --remove 选项（仅 init 子命令） */
   remove: boolean;
+  /** --verify 选项（仅 auth-status 子命令） */
+  verify?: boolean;
 }
 
 /** 解析错误 */
@@ -99,6 +101,24 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // auth-status 子命令
+  if (sub === 'auth-status') {
+    const hasVerify = argv.includes('--verify');
+    return {
+      ok: true,
+      command: {
+        subcommand: 'auth-status',
+        deep: false,
+        force: false,
+        version: false,
+        help: false,
+        global: false,
+        remove: false,
+        verify: hasVerify,
+      },
+    };
+  }
+
   // --global 和 --remove 仅在 init 子命令下有效
   if (argv.includes('--global') || argv.includes('-g')) {
     return {
@@ -119,7 +139,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status') {
     return {
       ok: false,
       error: {

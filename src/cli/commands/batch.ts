@@ -4,7 +4,7 @@
  */
 
 import { runBatch } from '../../batch/batch-orchestrator.js';
-import { checkApiKey, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import type { CLICommand } from '../utils/parse-args.js';
 
 /**
@@ -13,7 +13,7 @@ import type { CLICommand } from '../utils/parse-args.js';
 export async function runBatchCommand(command: CLICommand, version: string): Promise<void> {
   console.log(`reverse-spec v${version} — 批量生成`);
 
-  if (!checkApiKey()) {
+  if (!checkAuth()) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }

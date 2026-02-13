@@ -14,6 +14,7 @@ import { runBatchCommand } from './commands/batch.js';
 import { runDiff } from './commands/diff.js';
 import { runInit } from './commands/init.js';
 import { runPrepare } from './commands/prepare.js';
+import { runAuthStatus } from './commands/auth-status.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,18 +31,26 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   reverse-spec batch [--force] [--output-dir <dir>]
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
   reverse-spec init [--global] [--remove]
+  reverse-spec auth-status [--verify]
   reverse-spec --version / --help
 
 子命令:
-  generate    对指定文件或目录生成 Spec（需要 ANTHROPIC_API_KEY）
-  prepare     AST 预处理 + 上下文组装，输出到 stdout（无需 API key）
-  batch       批量生成当前项目所有模块的 Spec
-  diff        检测 Spec 与源代码之间的漂移
-  init        安装 Claude Code skills 到项目或全局目录
+  generate      对指定文件或目录生成 Spec（需要认证）
+  prepare       AST 预处理 + 上下文组装，输出到 stdout（无需认证）
+  batch         批量生成当前项目所有模块的 Spec
+  diff          检测 Spec 与源代码之间的漂移
+  init          安装 Claude Code skills 到项目或全局目录
+  auth-status   查看当前认证状态（API Key / Claude CLI）
+
+认证:
+  支持两种认证方式（自动检测，优先级: API Key > CLI 代理）:
+  1. ANTHROPIC_API_KEY 环境变量（直接 SDK 调用）
+  2. Claude Code CLI 订阅登录（spawn CLI 子进程代理）
 
 选项:
   --global, -g   安装到全局 ~/.claude/skills/（仅 init）
   --remove       移除已安装的 skills（仅 init）
+  --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
   --force        强制重新生成所有 Spec（仅 batch）
   --output-dir   自定义输出目录
@@ -86,6 +95,9 @@ async function main(): Promise<void> {
       break;
     case 'prepare':
       await runPrepare(command, version);
+      break;
+    case 'auth-status':
+      await runAuthStatus(command);
       break;
   }
 }
