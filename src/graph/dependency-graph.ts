@@ -109,10 +109,24 @@ export async function buildGraph(
     throw error;
   }
 
-  const output = cruiseResult.output;
+  const output = cruiseResult?.output;
+  if (!output) {
+    // dependency-cruiser 未返回有效结果（项目可能缺少可分析的源文件）
+    return {
+      projectRoot: resolvedRoot,
+      modules: [],
+      edges: [],
+      topologicalOrder: [],
+      sccs: [],
+      totalModules: 0,
+      totalEdges: 0,
+      analyzedAt: new Date().toISOString(),
+      mermaidSource: '',
+    };
+  }
   const modules = typeof output === 'string' ? JSON.parse(output) : output;
   const moduleList: Array<{ source: string; dependencies: any[] }> =
-    modules.modules ?? [];
+    modules?.modules ?? [];
 
   // 构建节点和边
   const nodeMap = new Map<string, GraphNode>();
