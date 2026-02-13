@@ -76,37 +76,45 @@ export async function buildGraph(
       : undefined);
 
   // 调用 dependency-cruiser
+  // 注意：cruise() 需要在目标项目目录下执行，且 v16.x 返回 Promise
   let cruiseResult: any;
+  const originalCwd = process.cwd();
   try {
+    process.chdir(resolvedRoot);
+
     const srcDir = path.join(resolvedRoot, 'src');
+    const cruiseOptions: any = {
+      outputType: 'json',
+      doNotFollow: {
+        dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'core'],
+      },
+      exclude: { path: excludePatterns.join('|') },
+      tsPreCompilationDeps: true,
+      ...(tsConfigPath ? { tsConfig: { fileName: tsConfigPath } } : {}),
+    };
+
+    let cruisePromise: any;
     if (!fs.existsSync(srcDir)) {
       // 没有 src/ 目录，扫描项目根目录
-      cruiseResult = cruise([resolvedRoot], {
-        outputType: 'json',
-        doNotFollow: {
-          dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'core'],
-        },
-        exclude: { path: excludePatterns.join('|') },
-        tsPreCompilationDeps: true,
-        ...(tsConfigPath ? { tsConfig: { fileName: tsConfigPath } } : {}),
-      });
+      cruisePromise = cruise(['.'], cruiseOptions);
     } else {
-      cruiseResult = cruise(['src'], {
-        outputType: 'json',
-        doNotFollow: {
-          dependencyTypes: ['npm', 'npm-dev', 'npm-optional', 'core'],
-        },
+      cruisePromise = cruise(['src'], {
+        ...cruiseOptions,
         includeOnly,
-        exclude: { path: excludePatterns.join('|') },
-        tsPreCompilationDeps: true,
-        ...(tsConfigPath ? { tsConfig: { fileName: tsConfigPath } } : {}),
       });
     }
+
+    // cruise() 在 v16.x 返回 Promise
+    cruiseResult = cruisePromise instanceof Promise
+      ? await cruisePromise
+      : cruisePromise;
   } catch (error: any) {
     if (error.message?.includes('dependency-cruiser')) {
       throw new NoDependencyCruiserError();
     }
     throw error;
+  } finally {
+    process.chdir(originalCwd);
   }
 
   const output = cruiseResult?.output;
