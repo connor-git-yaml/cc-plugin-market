@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 - 文件系统写入（`.claude/skills/` 项目级, `~/.claude/skills/` 全局级） (003-skill-init)
 - TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置，新增使用） (004-claude-sub-auth)
 - N/A（无新增存储需求） (004-claude-sub-auth)
+- TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph（AST）、dependency-cruiser（依赖图）、handlebars（模板）、zod（验证）、@anthropic-ai/sdk（LLM）——均为现有依赖，无新增运行时依赖 (005-batch-quality-fixes)
+- 文件系统（specs/ 目录写入） (005-batch-quality-fixes)
 
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
 
@@ -28,9 +30,10 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+
+- 005-batch-quality-fixes: 追溯同步 001 contracts——batch 模块级聚合（module-grouper）、dependency-cruiser v16.x 异步兼容、LLM 章节匹配容错、系统提示词增强、Mermaid 依赖图生成器
 - 004-claude-sub-auth: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置，新增使用）
 - 003-skill-init: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增运行时依赖。仅使用 Node.js 内置模块（`fs`, `path`, `os`, `url`）
-- 002-cli-global-distribution: Added TypeScript 5.x, Node.js LTS (20.x+) + s-morph, tree-sitter, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（均为现有依赖，无新增运行时依赖）
 
 
 <!-- MANUAL ADDITIONS START -->
@@ -42,5 +45,6 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 代码标识符（变量名、函数名、类型名）使用英文
 - 代码注释使用中文
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
+- 使用 SpecKit 的方式执行需求变更和问题修复不允许直接修改源代码。
 
 <!-- MANUAL ADDITIONS END -->
