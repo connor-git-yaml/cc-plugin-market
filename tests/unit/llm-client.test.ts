@@ -63,7 +63,7 @@ JWT 过期时间默认 24 小时
 
       // 应有 7 个缺失章节的警告
       expect(result.parseWarnings.length).toBeGreaterThan(0);
-      expect(result.sections.businessLogic).toBe('[LLM 未生成此段落]');
+      expect(result.sections.businessLogic).toContain('此章节待补充');
     });
 
     it('应提取不确定性标记', () => {
@@ -112,7 +112,7 @@ JWT 过期时间默认 24 小时
 
       // 所有 9 个章节都应该有占位符
       expect(result.parseWarnings.length).toBe(9);
-      expect(result.sections.intent).toBe('[LLM 未生成此段落]');
+      expect(result.sections.intent).toContain('此章节待补充');
     });
 
     it('应处理非标准标题格式', () => {

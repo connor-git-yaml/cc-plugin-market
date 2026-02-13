@@ -144,6 +144,7 @@ export async function runBatch(
         const genOptions: GenerateSpecOptions = {
           outputDir: 'specs',
           projectRoot: resolvedRoot,
+          deep: true,
         };
 
         if (moduleName === rootModuleName) {

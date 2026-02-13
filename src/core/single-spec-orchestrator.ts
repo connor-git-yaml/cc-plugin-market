@@ -16,6 +16,7 @@ import { callLLM, parseLLMResponse, buildSystemPrompt, type LLMResponse, LLMUnav
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
 import { generateClassDiagram } from '../generator/mermaid-class-diagram.js';
+import { generateDependencyDiagram } from '../generator/mermaid-dependency-graph.js';
 import { splitIntoChunks, CHUNK_THRESHOLD } from '../utils/chunk-splitter.js';
 
 // ============================================================
@@ -264,8 +265,9 @@ export async function generateSpec(
   // 步骤 8：渲染 Spec
   initRenderer();
 
-  // 生成 Mermaid 类图
+  // 生成 Mermaid 图表（类图 + 依赖图）
   const classDiagram = generateClassDiagram(mergedSkeleton);
+  const depDiagram = generateDependencyDiagram(mergedSkeleton, skeletons);
 
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
@@ -276,9 +278,10 @@ export async function generateSpec(
     existingVersion,
   });
 
-  // 构建 fileInventory
+  // 构建 fileInventory（使用相对路径）
+  const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
   const fileInventory = skeletons.map((s) => ({
-    path: s.filePath,
+    path: path.relative(baseDir, s.filePath),
     loc: s.loc,
     purpose: s.exports.length > 0
       ? `导出 ${s.exports.map((e) => e.name).join(', ')}`
@@ -289,12 +292,19 @@ export async function generateSpec(
   const specName = path.basename(targetPath).replace(/\.[^.]+$/, '');
   const outputPath = path.join(outputDir, `${specName}.spec.md`);
 
+  // 收集所有 Mermaid 图表
+  const diagrams: Array<{ type: 'classDiagram' | 'flowchart' | 'graph'; source: string; title: string }> = [];
+  if (classDiagram) {
+    diagrams.push({ type: 'classDiagram', source: classDiagram, title: '模块类图' });
+  }
+  if (depDiagram) {
+    diagrams.push({ type: 'graph', source: depDiagram, title: '依赖关系图' });
+  }
+
   const moduleSpec: ModuleSpec = {
     frontmatter,
     sections: parsed.sections,
-    mermaidDiagrams: classDiagram
-      ? [{ type: 'classDiagram', source: classDiagram, title: '模块类图' }]
-      : undefined,
+    mermaidDiagrams: diagrams.length > 0 ? diagrams : undefined,
     fileInventory,
     baselineSkeleton: mergedSkeleton,
     outputPath,
