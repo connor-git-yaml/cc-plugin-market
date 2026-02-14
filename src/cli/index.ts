@@ -15,6 +15,7 @@ import { runDiff } from './commands/diff.js';
 import { runInit } from './commands/init.js';
 import { runPrepare } from './commands/prepare.js';
 import { runAuthStatus } from './commands/auth-status.js';
+import { runMcpServer } from './commands/mcp-server.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,6 +33,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
   reverse-spec init [--global] [--remove]
   reverse-spec auth-status [--verify]
+  reverse-spec mcp-server
   reverse-spec --version / --help
 
 子命令:
@@ -41,6 +43,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   diff          检测 Spec 与源代码之间的漂移
   init          安装 Claude Code skills 到项目或全局目录
   auth-status   查看当前认证状态（API Key / Claude CLI）
+  mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
   支持两种认证方式（自动检测，优先级: API Key > CLI 代理）:
@@ -98,6 +101,9 @@ async function main(): Promise<void> {
       break;
     case 'auth-status':
       await runAuthStatus(command);
+      break;
+    case 'mcp-server':
+      await runMcpServer();
       break;
   }
 }
