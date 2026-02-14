@@ -1,0 +1,21 @@
+{
+  "name": "cc-plugin-market",
+  "owner": {
+    "name": "Connor Lu"
+  },
+  "metadata": {
+    "description": "Claude Code Plugin Marketplace — 多 plugin 集合仓库",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "reverse-spec",
+      "source": "./plugins/reverse-spec",
+      "description": "通过 AST 静态分析 + LLM 混合流水线逆向生成 Spec 文档",
+      "version": "2.0.0",
+      "category": "documentation",
+      "tags": ["spec", "ast", "reverse-engineering", "documentation"]
+    }
+  ]
+}
