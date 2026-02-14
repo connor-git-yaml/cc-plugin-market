@@ -5,7 +5,7 @@
 
 **Tests**: 不新增测试文件，仅在 Polish 阶段验证全量测试通过。
 
-**Organization**: 仅 1 个 User Story（P1），任务按修改步骤线性排列。
+**Organization**: 仅 1 个 User Story（P1），分两轮实施。
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -17,17 +17,24 @@
 
 ## Phase 1: User Story 1 - Spec 中的路径对所有用户可读 (Priority: P1)
 
-**Goal**: 将 `sourceTarget` 从绝对路径转换为相对于项目根目录的相对路径，同时统一 `relatedFiles` 的基准路径
+**Goal**: 将所有 spec 输出中的绝对路径转换为相对路径，并将输出目录改为 `.specs`
 
-**Independent Test**: 在任意项目中运行 `reverse-spec generate src/some-module`，检查生成的 spec 文件中标题和 frontmatter 的 `sourceTarget` 字段是否为相对路径
+**Independent Test**: 在任意项目中运行 `reverse-spec generate src/some-module`，检查生成的 spec 文件中所有路径均为相对路径
 
-### Implementation for User Story 1
+### Round 1: frontmatter 和标题（已完成）
 
-- [x] T001 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：将行 327 的 `const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd()` 提前到行 317（frontmatter 生成之前），删除原行 327 的重复定义
-- [x] T002 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：将行 319 的 `sourceTarget: targetPath` 改为 `sourceTarget: path.relative(baseDir, path.resolve(targetPath))`，将行 320 的 `relatedFiles: filePaths.map((f) => path.relative(process.cwd(), f))` 改为 `relatedFiles: filePaths.map((f) => path.relative(baseDir, f))`
-- [x] T003 [US1] 验证 `src/generator/index-generator.ts` 中 `buildModuleMap()` 的 `sourceTarget.includes(n.source)` 和 `sourceTarget.split('/')[0]` 匹配逻辑在相对路径下仍正确工作（无需修改，仅确认）
+- [x] T001 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：将行 327 的 `const baseDir` 提前到行 317（frontmatter 生成之前），删除原行 327 的重复定义
+- [x] T002 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：将 `sourceTarget: targetPath` 改为 `sourceTarget: path.relative(baseDir, path.resolve(targetPath))`，将 `relatedFiles` 基准从 `process.cwd()` 改为 `baseDir`
+- [x] T003 [US1] 验证 `src/generator/index-generator.ts` 中 `buildModuleMap()` 的匹配逻辑在相对路径下仍正确工作（无需修改，仅确认）
 
-**Checkpoint**: `sourceTarget` 和标题输出相对路径，`relatedFiles` 基准统一为 `baseDir`
+### Round 2: Mermaid 图、baseline skeleton、输出目录
+
+- [x] T007 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：在调用 `generateDependencyDiagram()` 之前，将 `mergedSkeleton.filePath` 转换为相对于 `baseDir` 的相对路径，确保 Mermaid 图节点使用相对路径
+- [x] T008 [US1] 修改 `src/core/single-spec-orchestrator.ts` 中 `generateSpec()` 函数：在构建 `moduleSpec` 时，将 `baselineSkeleton` 的 `filePath` 转换为相对于 `baseDir` 的相对路径，确保 HTML 注释中序列化的 skeleton 不含绝对路径
+- [x] T009 [P] [US1] 修改 `src/core/single-spec-orchestrator.ts` 中默认 `outputDir` 从 `'specs'` 改为 `'.specs'`（行 244）
+- [x] T010 [P] [US1] 修改 `src/batch/batch-orchestrator.ts` 中所有硬编码的 `'specs'` 目录引用为 `'.specs'`（行 131、145、233、243 共 4 处）
+
+**Checkpoint**: Mermaid 图、baseline skeleton、输出目录全部使用相对路径或正确目录名
 
 ---
 
@@ -38,6 +45,9 @@
 - [x] T004 运行 `npm test` 确认全部测试通过，修复任何因路径变更导致的测试失败
 - [x] T005 运行 `npm run lint` 确认无 lint 错误
 - [x] T006 运行 `npm run build` 确认 TypeScript 编译通过
+- [x] T011 运行 `npm test` 确认 Round 2 改动后全部测试通过
+- [x] T012 运行 `npm run lint` 确认无 lint 错误
+- [x] T013 运行 `npm run build` 确认 TypeScript 编译通过
 
 ---
 
@@ -45,39 +55,19 @@
 
 ### Phase Dependencies
 
-- **US1 (Phase 1)**: 无依赖，可立即开始
+- **US1 Round 1 (Phase 1)**: 已完成
+- **US1 Round 2 (Phase 1)**: T007 和 T008 依赖 Round 1 的 baseDir；T009 和 T010 独立
 - **Polish (Phase 2)**: 依赖 US1 全部完成
-
-### Within User Story 1
-
-- T001 必须在 T002 之前执行（T002 依赖 T001 定义的 `baseDir` 变量）
-- T003 独立于 T001/T002（仅验证性任务）
 
 ### Parallel Opportunities
 
-- T004、T005、T006 彼此独立可并行验证
-
----
-
-## Implementation Strategy
-
-### MVP (US1)
-
-1. 完成 T001：提前 `baseDir` 定义
-2. 完成 T002：修改 `sourceTarget` 和 `relatedFiles`
-3. 完成 T003：确认索引生成器兼容
-4. **验证**：`npm test` 通过即可确认修复生效
-
-### Full Delivery
-
-1. T001-T003 → 路径修复
-2. T004-T006 → 全量验证
+- T009 和 T010 可并行（修改不同文件）
+- T011、T012、T013 可并行
 
 ---
 
 ## Notes
 
-- 总计 6 个任务，仅涉及 1 个源文件的代码修改
-- T003 是验证性任务（确认不需要修改），非编码任务
-- 预计总改动量 <10 行代码
-- 索引生成器的 `includes()` 匹配在相对路径下更准确（dependency-cruiser 返回的 `n.source` 也是相对路径）
+- 总计 13 个任务（Round 1: 3 已完成 + Round 2: 4 新增 + Polish: 3 已完成 + 3 新增）
+- Round 2 涉及 2 个源文件：`single-spec-orchestrator.ts`、`batch-orchestrator.ts`
+- baseline skeleton 的 filePath Zod schema 要求以 `.ts/.js` 结尾——相对路径同样满足此约束

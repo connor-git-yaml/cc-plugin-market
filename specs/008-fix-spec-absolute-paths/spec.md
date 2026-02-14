@@ -37,6 +37,9 @@
 - **FR-002**: 系统 MUST 在 spec 文件标题（`#` 标题行）中使用相对于项目根目录的路径，而非绝对路径
 - **FR-003**: 系统 MUST 在 batch 模式和单文件 generate 模式下均输出相对路径
 - **FR-004**: 系统 MUST 保持 frontmatter 中 `relatedFiles` 字段使用相对路径（当前已为相对路径，确保不退化）
+- **FR-005**: 系统 MUST 在 Mermaid 依赖关系图的节点标签中使用相对路径，而非绝对路径
+- **FR-006**: 系统 MUST 在 baseline skeleton（HTML 注释块）中使用相对路径的 `filePath`，而非绝对路径
+- **FR-007**: 系统 MUST 将默认输出目录从 `specs` 改为 `.specs`（点前缀隐藏目录）
 
 ## Success Criteria *(mandatory)*
 
@@ -58,6 +61,9 @@
 
 - 修复 frontmatter `sourceTarget` 的绝对路径问题
 - 修复 spec 标题（`#` 标题行）的绝对路径问题
+- 修复 Mermaid 依赖图中模块节点的绝对路径问题
+- 修复 baseline skeleton HTML 注释中的绝对路径问题
+- 将默认输出目录从 `specs` 改为 `.specs`
 - batch 和 generate 两种模式的路径处理
 
 ### Out of Scope
