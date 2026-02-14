@@ -1,0 +1,15 @@
+{
+  "name": "reverse-spec",
+  "version": "2.0.0",
+  "description": "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档",
+  "author": {
+    "name": "Connor Lu",
+    "url": "https://github.com/connor-git-yaml"
+  },
+  "homepage": "https://github.com/connor-git-yaml/cc-plugin-market",
+  "repository": "https://github.com/connor-git-yaml/cc-plugin-market",
+  "license": "MIT",
+  "keywords": ["reverse-engineering", "spec", "ast", "documentation", "claude-code"],
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json"
+}

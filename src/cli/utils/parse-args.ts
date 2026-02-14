@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -119,6 +119,22 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // mcp-server 子命令（无额外参数）
+  if (sub === 'mcp-server') {
+    return {
+      ok: true,
+      command: {
+        subcommand: 'mcp-server',
+        deep: false,
+        force: false,
+        version: false,
+        help: false,
+        global: false,
+        remove: false,
+      },
+    };
+  }
+
   // --global 和 --remove 仅在 init 子命令下有效
   if (argv.includes('--global') || argv.includes('-g')) {
     return {
@@ -139,7 +155,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server') {
     return {
       ok: false,
       error: {

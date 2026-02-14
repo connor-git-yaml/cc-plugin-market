@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "reverse-spec": {
+      "command": "npx",
+      "args": ["reverse-spec", "mcp-server"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+    }
+  }
+}
