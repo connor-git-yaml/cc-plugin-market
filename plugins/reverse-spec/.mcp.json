@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "reverse-spec": {
-      "command": "npx",
-      "args": ["reverse-spec", "mcp-server"],
-      "cwd": "${CLAUDE_PLUGIN_ROOT}"
+      "command": "node",
+      "args": ["/Users/connorlu/Desktop/.workspace2.nosync/reverse-spec/dist/cli/index.js", "mcp-server"]
     }
   }
 }
