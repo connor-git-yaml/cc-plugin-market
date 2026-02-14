@@ -242,7 +242,7 @@ erDiagram
 | `crossCuttingConcerns` | `string[]` | Yes | 横切关注点列表 |
 | `technologyStack` | `TechStackEntry[]` | Yes | 技术栈概览 |
 | `dependencyDiagram` | `string` | Yes | Mermaid 全局依赖图 |
-| `outputPath` | `string` | Yes | 固定为 `specs/_index.spec.md` |
+| `outputPath` | `string` | Yes | 固定为 `.specs/_index.spec.md` |
 
 **IndexFrontmatter**:
 
