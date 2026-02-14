@@ -4,7 +4,7 @@
  */
 
 import { runBatch } from '../../batch/batch-orchestrator.js';
-import { checkApiKey, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import type { CLICommand } from '../utils/parse-args.js';
 
 /**
@@ -13,7 +13,7 @@ import type { CLICommand } from '../utils/parse-args.js';
 export async function runBatchCommand(command: CLICommand, version: string): Promise<void> {
   console.log(`reverse-spec v${version} — 批量生成`);
 
-  if (!checkApiKey()) {
+  if (!checkAuth()) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }
@@ -30,7 +30,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
 
     // 换行（进度条之后）
     console.log();
-    console.log(`  成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length}`);
+    console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
     if (result.indexGenerated) {
       console.log(`✓ specs/_index.spec.md 已生成`);

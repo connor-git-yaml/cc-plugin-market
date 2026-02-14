@@ -4,6 +4,7 @@
  * 参见 contracts/batch-module.md
  */
 import * as fs from 'node:fs';
+import type { StageProgress } from '../models/module-spec.js';
 
 export interface BatchSummary {
   totalModules: number;
@@ -22,6 +23,8 @@ export interface BatchSummary {
 export interface ProgressReporter {
   /** 开始处理某模块 */
   start(modulePath: string): void;
+  /** 报告模块内阶段进度 */
+  stage(modulePath: string, progress: StageProgress): void;
   /** 完成某模块处理 */
   complete(
     modulePath: string,
@@ -48,6 +51,16 @@ export function createReporter(total: number): ProgressReporter {
       completed++;
       moduleStartTimes.set(modulePath, Date.now());
       console.log(`[${completed}/${total}] 正在处理 ${modulePath}...`);
+    },
+
+    stage(_modulePath: string, progress: StageProgress): void {
+      if (progress.duration === undefined) {
+        // 阶段开始
+        console.log(`  → ${progress.message}`);
+      } else {
+        // 阶段完成
+        console.log(`  ✓ ${progress.stage}完成 (${progress.duration}ms)`);
+      }
     },
 
     complete(

@@ -188,3 +188,23 @@ export const RedactionResultSchema = z.object({
   falsePositivesFiltered: z.number().int().nonnegative(),
 });
 export type RedactionResult = z.infer<typeof RedactionResultSchema>;
+
+// ============================================================
+// 阶段进度相关
+// ============================================================
+
+/** 处理阶段标识符 */
+export type StageId = 'scan' | 'ast' | 'context' | 'llm' | 'parse' | 'render';
+
+/** 阶段进度事件 */
+export interface StageProgress {
+  /** 阶段标识符 */
+  stage: StageId;
+  /** 阶段中文描述 */
+  message: string;
+  /** 阶段耗时（毫秒，仅完成时有值） */
+  duration?: number;
+}
+
+/** 阶段进度回调 */
+export type StageProgressCallback = (progress: StageProgress) => void;

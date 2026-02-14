@@ -160,6 +160,7 @@ interface GenerateSpecResult {
   tokenUsage: number;         // 消耗的 LLM token 数
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];         // 遇到的非致命问题
+  moduleSpec: ModuleSpec;     // 完整的 ModuleSpec 对象，供 batch 的 generateIndex() 使用
 }
 ```
 
@@ -172,7 +173,14 @@ interface GenerateSpecResult {
 5. 调用 Claude API（`llm-client`）→ 原始章节
 6. 解析 + 验证 LLM 响应 → `ModuleSpec`
 7. 注入不确定性标记（`[推断]`/`[不明确]`/`[SYNTAX ERROR]`）
-8. 通过 Handlebars 渲染（`spec-renderer`）→ 写入 `specs/*.spec.md`
+8. 渲染 Spec：
+   1. 生成 Mermaid 类图（`mermaid-class-diagram`）
+   2. 调用 `generateDependencyDiagram(mergedSkeleton, skeletons)` 生成依赖关系图（`mermaid-dependency-graph`）
+   3. 生成 frontmatter
+   4. `fileInventory` 中的路径使用 `path.relative(baseDir, filePath)` 生成相对路径（而非绝对路径）
+   5. `mermaidDiagrams` 数组包含类图和依赖图（如有）
+   6. 构建 `ModuleSpec` 并通过 Handlebars 渲染（`spec-renderer`）→ 写入 `specs/*.spec.md`
+   7. 在返回的 `GenerateSpecResult` 中包含 `moduleSpec` 字段
 9. 将基线骨架序列化至规格中（用于漂移检测 — 参见 US3）
 
 **置信度计算规则**：

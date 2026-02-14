@@ -21,10 +21,40 @@
 
 **返回**：`DependencyGraph`（参见 [data-model.md](../data-model.md#2-dependencygraph)）
 
+**行为**：
+
+1. 解析 `projectRoot` 为绝对路径
+2. **chdir 管理**：调用 `cruise()` 前执行 `process.chdir(resolvedRoot)`，在 `finally` 块中恢复 `process.chdir(originalCwd)`。即使 cruise 抛出异常也保证恢复 cwd。
+3. **异步 API 兼容**：`cruiseResult = cruisePromise instanceof Promise ? await cruisePromise : cruisePromise`，兼容 dependency-cruiser v15.x（同步）和 v16.x（异步）
+4. **空结果防护**：当 `cruiseResult?.output` 为 falsy 时，返回空的 DependencyGraph：
+
+```typescript
+{
+  projectRoot: resolvedRoot,
+  modules: [],
+  edges: [],
+  topologicalOrder: [],
+  sccs: [],
+  totalModules: 0,
+  totalEdges: 0,
+  analyzedAt: new Date().toISOString(),
+  mermaidSource: '',
+}
+```
+
+5\. 相对路径传入：无 `src/` 目录时传入 `['.']` 而非 `[resolvedRoot]`
+6\. 构建 DependencyGraph（解析 cruise 输出、生成边、拓扑排序、SCC 检测）
+
 **错误**：
 - `ProjectNotFoundError` — projectRoot 不存在
 - `NoDependencyCruiserError` — dependency-cruiser 未安装
 - `TsConfigNotFoundError` — tsconfig.json 未找到
+- cruise 返回空 output — 返回空 DependencyGraph（不抛出异常）
+
+**保证**：
+
+- 无论成功或失败，`process.cwd()` 在函数返回后与调用前一致
+- 兼容 dependency-cruiser v15.x（同步）和 v16.x（异步）
 
 **性能**：200+ 模块在 2-5 秒内完成
 

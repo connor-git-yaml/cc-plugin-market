@@ -1,18 +1,21 @@
 /**
  * LLM 客户端
  * Claude API 封装：callLLM、parseLLMResponse、buildSystemPrompt
+ * 支持两种调用策略：SDK 直接调用（API Key）和 CLI 代理（订阅用户）
  * 参见 contracts/llm-client.md
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { SpecSections } from '../models/module-spec.js';
 import type { AssembledContext } from './context-assembler.js';
+import { detectAuth } from '../auth/auth-detector.js';
+import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 
 // ============================================================
 // 配置类型
 // ============================================================
 
 export interface LLMConfig {
-  /** 模型 ID（默认 'claude-opus-4-6'） */
+  /** 模型 ID（默认 'claude-sonnet-4-5-20250929'，可通过 REVERSE_SPEC_MODEL 环境变量覆盖） */
   model: string;
   /** API Key（默认从 ANTHROPIC_API_KEY 环境变量获取） */
   apiKey?: string;
@@ -20,7 +23,7 @@ export interface LLMConfig {
   maxTokensResponse: number;
   /** 温度（默认 0.3，低温用于事实性提取） */
   temperature: number;
-  /** 超时时间（毫秒，默认 120_000） */
+  /** 超时时间（毫秒，默认根据模型动态计算：Sonnet 120s, Opus 300s, Haiku 60s） */
   timeout: number;
 }
 
@@ -86,16 +89,57 @@ export class LLMTimeoutError extends Error {
 }
 
 // ============================================================
+// 重试事件类型
+// ============================================================
+
+/** LLM 重试事件 */
+export interface RetryEvent {
+  /** 当前尝试次数（从 1 开始） */
+  attempt: number;
+  /** 最大尝试次数 */
+  maxAttempts: number;
+  /** 触发重试的错误类型 */
+  errorType: 'timeout' | 'rate-limit' | 'server-error';
+  /** 下一次尝试前的等待时间（毫秒） */
+  delay: number;
+}
+
+/** 重试事件回调 */
+export type RetryCallback = (event: RetryEvent) => void;
+
+// ============================================================
+// 模型超时策略
+// ============================================================
+
+/**
+ * 根据模型名称返回合理的超时时间
+ *
+ * 基于实测数据：
+ * - Opus: spec 生成通常 >120s，需要更长超时
+ * - Sonnet: spec 生成通常 ~90s
+ * - Haiku: 响应极快
+ * - 未知模型: 保守默认值
+ */
+export function getTimeoutForModel(model: string): number {
+  const lowerModel = model.toLowerCase();
+  if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
+  if (lowerModel.includes('sonnet')) return 120_000;  // 2 分钟
+  if (lowerModel.includes('haiku')) return 60_000;    // 1 分钟
+  return 180_000;                                      // 3 分钟（保守默认）
+}
+
+// ============================================================
 // 默认配置
 // ============================================================
 
 function getDefaultConfig(): LLMConfig {
+  const model = process.env['REVERSE_SPEC_MODEL'] ?? 'claude-sonnet-4-5-20250929';
   return {
-    model: process.env['REVERSE_SPEC_MODEL'] ?? 'claude-opus-4-6',
+    model,
     apiKey: process.env['ANTHROPIC_API_KEY'],
     maxTokensResponse: 8192,
     temperature: 0.3,
-    timeout: 120_000,
+    timeout: getTimeoutForModel(model),
   };
 }
 
@@ -144,16 +188,46 @@ function sleep(ms: number): Promise<void> {
 /**
  * 将组装好的上下文发送至 Claude API
  *
+ * 策略模式：根据认证检测结果自动选择调用方式
+ * - API Key 可用 → 通过 Anthropic SDK 直接调用
+ * - CLI 代理可用 → 通过 spawn Claude CLI 子进程间接调用
+ *
  * @param context - assembleContext() 的输出
  * @param config - 可选的配置覆盖
+ * @param onRetry - 可选的重试事件回调
  * @returns LLM 响应
  * @throws LLMUnavailableError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
  */
 export async function callLLM(
   context: AssembledContext,
   config?: Partial<LLMConfig>,
+  onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
   const cfg = mergeConfig(config);
+  const authResult = detectAuth();
+
+  if (!authResult.preferred) {
+    throw new LLMUnavailableError(
+      '未找到可用的认证方式。请设置 ANTHROPIC_API_KEY 或登录 Claude Code (claude auth login)',
+    );
+  }
+
+  if (authResult.preferred.type === 'api-key') {
+    return callLLMviaSdk(context, cfg, onRetry);
+  }
+
+  // cli-proxy 策略
+  return callLLMviaCliProxy(context, cfg, onRetry);
+}
+
+/**
+ * 通过 Anthropic SDK 直接调用 LLM（API Key 方式）
+ */
+async function callLLMviaSdk(
+  context: AssembledContext,
+  cfg: LLMConfig,
+  onRetry?: RetryCallback,
+): Promise<LLMResponse> {
   const systemPrompt = buildSystemPrompt('spec-generation');
 
   const client = new Anthropic({
@@ -212,9 +286,25 @@ export async function callLLM(
         );
       }
 
+      // 超时错误：最多 2 次尝试（attempt >= 1 时跳出）
+      if (lastError instanceof LLMTimeoutError && attempt >= 1) {
+        break;
+      }
+
       if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
         break;
       }
+
+      // 即将重试，触发回调
+      const delay = getRetryDelay(attempt);
+      onRetry?.({
+        attempt: attempt + 1,
+        maxAttempts,
+        errorType: lastError instanceof LLMTimeoutError ? 'timeout'
+          : lastError instanceof LLMRateLimitError ? 'rate-limit'
+          : 'server-error',
+        delay,
+      });
     }
   }
 
@@ -223,21 +313,76 @@ export async function callLLM(
   );
 }
 
+/**
+ * 通过 Claude CLI 子进程调用 LLM（订阅用户 CLI 代理方式）
+ */
+async function callLLMviaCliProxy(
+  context: AssembledContext,
+  cfg: LLMConfig,
+  onRetry?: RetryCallback,
+): Promise<LLMResponse> {
+  const systemPrompt = buildSystemPrompt('spec-generation');
+  // 将系统提示和用户内容组合为完整 prompt
+  const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
+
+  const maxAttempts = 3;
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(getRetryDelay(attempt - 1));
+    }
+
+    try {
+      return await cliProxyCall(fullPrompt, {
+        model: cfg.model,
+        timeout: cfg.timeout,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // 超时错误：最多 2 次尝试（attempt >= 1 时跳出）
+      if (lastError instanceof LLMTimeoutError && attempt >= 1) {
+        break;
+      }
+
+      if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
+        break;
+      }
+
+      // 即将重试，触发回调
+      const delay = getRetryDelay(attempt);
+      onRetry?.({
+        attempt: attempt + 1,
+        maxAttempts,
+        errorType: lastError instanceof LLMTimeoutError ? 'timeout'
+          : lastError instanceof LLMRateLimitError ? 'rate-limit'
+          : 'server-error',
+        delay,
+      });
+    }
+  }
+
+  throw new LLMUnavailableError(
+    `${maxAttempts} 次尝试后仍无法访问 CLI 代理: ${lastError?.message}`,
+  );
+}
+
 // ============================================================
 // 响应解析
 // ============================================================
 
-/** 9 个章节的中文标题映射 */
+/** 9 个章节的中文/英文标题映射（含常见变体，提高匹配容错性） */
 const SECTION_TITLES: Array<[keyof SpecSections, string[]]> = [
-  ['intent', ['意图']],
-  ['interfaceDefinition', ['接口定义']],
-  ['businessLogic', ['业务逻辑']],
-  ['dataStructures', ['数据结构']],
-  ['constraints', ['约束条件']],
-  ['edgeCases', ['边界条件']],
-  ['technicalDebt', ['技术债务']],
-  ['testCoverage', ['测试覆盖']],
-  ['dependencies', ['依赖关系']],
+  ['intent', ['意图', 'Intent', 'Purpose', '目的', '概述']],
+  ['interfaceDefinition', ['接口定义', 'Interface', 'API', '接口', '导出接口', '公共接口']],
+  ['businessLogic', ['业务逻辑', 'Business Logic', '核心逻辑', '实现逻辑', '逻辑']],
+  ['dataStructures', ['数据结构', 'Data Structure', '类型定义', '数据模型', '类型']],
+  ['constraints', ['约束条件', 'Constraint', '约束', '限制条件', '限制']],
+  ['edgeCases', ['边界条件', 'Edge Case', '边界', '异常处理', '错误处理']],
+  ['technicalDebt', ['技术债务', 'Technical Debt', '技术债', '改进空间', '待改进']],
+  ['testCoverage', ['测试覆盖', 'Test Coverage', '测试', '测试策略', '测试建议']],
+  ['dependencies', ['依赖关系', 'Dependenc', '依赖', '模块依赖', '外部依赖']],
 ];
 
 /**
@@ -270,19 +415,23 @@ export function parseLLMResponse(raw: string): ParsedSpecSections {
       .replace(/^#{1,3}\s*(?:\d+\.\s*)?.*$/m, '') // 移除标题行
       .trim();
 
-    // 匹配到对应章节
+    // 匹配到对应章节（容错：忽略大小写、标点、空格）
+    const normalizedTitle = current.title.toLowerCase().replace(/[.、：:，,\s]/g, '');
     for (const [key, titles] of SECTION_TITLES) {
-      if (titles.some((t) => current.title.includes(t))) {
+      if (titles.some((t) => {
+        const normalized = t.toLowerCase().replace(/[.、：:，,\s]/g, '');
+        return normalizedTitle.includes(normalized) || normalized.includes(normalizedTitle);
+      })) {
         sections[key] = content;
         break;
       }
     }
   }
 
-  // 填充缺失章节
+  // 填充缺失章节（提供有意义的降级内容而非空占位符）
   for (const [key, titles] of SECTION_TITLES) {
     if (!sections[key] || !sections[key]!.trim()) {
-      sections[key] = '[LLM 未生成此段落]';
+      sections[key] = `> 此章节待补充。可通过 \`reverse-spec generate --deep\` 提供更多上下文以改善生成质量。`;
       parseWarnings.push(`章节 "${titles[0]}" 未在 LLM 响应中找到`);
     }
   }
@@ -328,21 +477,83 @@ export function parseLLMResponse(raw: string): ParsedSpecSections {
  */
 export function buildSystemPrompt(mode: 'spec-generation' | 'semantic-diff'): string {
   if (mode === 'spec-generation') {
-    return `你是一个代码分析专家，负责将源代码结构信息逆向工程为详细的规格文档。
+    return `你是一个资深代码架构分析专家，负责将源代码结构信息逆向工程为**详尽且实用**的规格文档。
 
 ## 输出要求
 
 1. 使用中文撰写所有散文描述，代码标识符保持英文
-2. 输出必须包含以下 9 个章节（按编号顺序）：
-   1. 意图 — 模块存在的目的和理由
-   2. 接口定义 — 所有导出 API（100% 来自提供的 AST 数据，绝不自行捏造）
-   3. 业务逻辑 — 核心逻辑描述
-   4. 数据结构 — 类型/接口/枚举定义
-   5. 约束条件 — 性能/环境/准确性约束
-   6. 边界条件 — 异常路径和边界处理
-   7. 技术债务 — 已知问题和改进空间
-   8. 测试覆盖 — 测试策略和覆盖状态
-   9. 依赖关系 — 模块依赖关系描述
+2. **必须**输出以下 9 个章节，标题**严格**使用以下格式（包括编号）：
+
+## 1. 意图
+## 2. 接口定义
+## 3. 业务逻辑
+## 4. 数据结构
+## 5. 约束条件
+## 6. 边界条件
+## 7. 技术债务
+## 8. 测试覆盖
+## 9. 依赖关系
+
+3. 每个章节必须有实质性内容（至少 3-5 行），**绝不允许留空或写"无"**
+
+## 各章节详细要求
+
+### 1. 意图
+- 列出 3-5 个核心职责（用编号列表）
+- 说明该模块在系统中的定位
+
+### 2. 接口定义
+- 列出所有导出函数/类/类型的**完整签名**（必须来自 AST 数据）
+- 用表格格式：| 名称 | 类型 | 签名 | 说明 |
+
+### 3. 业务逻辑
+- 描述核心处理流程
+- **必须**包含一个 Mermaid 流程图（flowchart TD）展示主要处理路径：
+\`\`\`mermaid
+flowchart TD
+  A[输入] --> B{判断}
+  B -->|条件1| C[处理1]
+  B -->|条件2| D[处理2]
+\`\`\`
+- 如果涉及多个子系统/函数间调用，**必须**包含一个 Mermaid 时序图：
+\`\`\`mermaid
+sequenceDiagram
+  participant A as 调用方
+  participant B as 被调方
+  A->>B: 调用方法
+  B-->>A: 返回结果
+\`\`\`
+- 关键子系统用表格列出：| 子系统 | 文件 | 功能 |
+
+### 4. 数据结构
+- 列出核心类型定义（TypeScript 代码块）
+- 用表格描述关键字段：| 字段 | 类型 | 说明 |
+
+### 5. 约束条件
+- 列出硬编码常量、超时限制、大小限制等
+- 格式：| 约束 | 值 | 说明 |
+
+### 6. 边界条件
+- 列出异常路径、空值处理、并发问题等
+- 每条用 \`- **场景**: 处理方式\` 格式
+
+### 7. 技术债务
+- 已知问题和改进空间
+- 格式：| 项目 | 严重程度 | 描述 |
+
+### 8. 测试覆盖
+- 建议的测试用例和覆盖策略
+- 如已有测试文件，说明覆盖情况
+
+### 9. 依赖关系
+- 内部依赖用 Mermaid graph 或列表展示
+- 外部依赖（npm 包）列出
+- **必须**包含一个依赖关系 Mermaid 图：
+\`\`\`mermaid
+graph LR
+  当前模块 --> 依赖模块A
+  当前模块 --> 依赖模块B
+\`\`\`
 
 ## 关键规则
 
@@ -352,10 +563,11 @@ export function buildSystemPrompt(mode: 'spec-generation' | 'semantic-diff'): st
   - 对模糊代码使用 \`[不明确: 理由]\` 标记
   - 对语法错误区域使用 \`[SYNTAX ERROR: 描述]\` 标记
 - 每个标记必须附带理由说明
+- **不要偷懒**：即使某些信息在 AST 中不明显，也要根据代码结构进行合理推断并标注
 
 ## 格式
 
-每个章节使用二级标题（## N. 章节名）分隔。`;
+每个章节使用二级标题（## N. 章节名）分隔，标题必须完全匹配上述格式。`;
   }
 
   // semantic-diff 模式

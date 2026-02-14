@@ -1,6 +1,6 @@
 /**
  * SKILL.md 模板内容常量
- * 每个模板包含 frontmatter + 指令 + 内联三级降级 bash 逻辑
+ * 精简版：Claude Code 原生模式优先，使用 prepare 子命令获取 AST 数据
  */
 
 import type { SkillDefinition } from './skill-installer.js';
@@ -23,129 +23,51 @@ description: |
 
 ## User Input
 
-\`\`\`text
+\\\`\\\`\\\`text
 $ARGUMENTS
-\`\`\`
-
-You **MUST** consider the user input before proceeding (if not empty).
-
-## Purpose
-
-通过 AST 静态分析 + LLM 混合三阶段流水线，将源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，接口定义 100% 来自 AST 提取。
+\\\`\\\`\\\`
 
 ## Execution Flow
 
 ### 1. Parse Target
 
-Interpret \`$ARGUMENTS\` to determine the analysis target:
+从 \\\`$ARGUMENTS\\\` 确定分析目标（文件或目录）。无参数时询问用户。支持 \\\`--deep\\\` 标志。
 
-- **Single file**: e.g., \`src/auth/login.ts\`
-- **Directory**: e.g., \`src/auth/\` — analyze all TS/JS source files recursively
-- **\`--deep\` flag**: Include function bodies in LLM context for deeper analysis
-- **No argument**: Ask user to specify a target path
+### 2. AST 预分析（可选，推荐）
 
-If the target doesn't exist, ERROR with suggestions based on project structure.
+尝试运行 CLI 获取精确的 AST 骨架（导出签名、导入、类型）：
 
-### 2. Run Pipeline
-
-Execute the analysis pipeline, automatically detecting the best available execution method:
-
-\`\`\`bash
+\\\`\\\`\\\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec generate $TARGET_PATH --deep
+  reverse-spec prepare $TARGET_PATH --deep
 elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec generate $TARGET_PATH --deep
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
+  npm_config_yes=true npx reverse-spec prepare $TARGET_PATH --deep
 fi
-\`\`\`
+\\\`\\\`\\\`
 
-如果需要自定义输出目录：
+如果 CLI 不可用，跳过此步——直接读取源文件分析。
 
-\`\`\`bash
-if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec generate $TARGET_PATH --deep --output-dir specs/
-elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec generate $TARGET_PATH --deep --output-dir specs/
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
-fi
-\`\`\`
+### 3. 生成 Spec
 
-**Pipeline stages**:
-1. **预处理**: 扫描 TS/JS 文件 → ts-morph AST 分析 → CodeSkeleton 提取 → 敏感信息脱敏
-2. **上下文组装**: 骨架 + 依赖 spec + 代码片段 → ≤100k token 预算的 LLM prompt
-3. **生成增强**: Claude API 生成 9 段式中文 Spec → 解析验证 → Handlebars 渲染 → 写入 \`specs/*.spec.md\`
-
-### 3. Handle Results
-
-If pipeline succeeds, report:
-
-\`\`\`
-Spec 生成完成: specs/<name>.spec.md
-
-分析摘要:
-- 文件数: N
-- 总行数: N LOC
-- 导出 API: N 个
-- Token 消耗: N
-- 置信度: high|medium|low
-- 警告: <warnings list>
-
-后续步骤:
-- 审查生成的 Spec 文档
-- 使用 /reverse-spec-batch 批量生成全项目 Spec
-- 使用 /reverse-spec-diff 检测 Spec 漂移
-\`\`\`
-
-If pipeline fails, fall back to manual analysis following the sections below.
-
-### 4. Fallback: Manual Analysis
-
-If the CLI pipeline is unavailable, perform manual analysis:
-
-1. **Scan & inventory** all source files in scope
-2. **Read and analyze** each file's exports, imports, types, and logic
-3. **Generate spec** following the 9-section structure defined below
-4. **Write** to \`specs/<target-name>.spec.md\`
-
-### 5. 9-Section Spec Structure
-
-Each generated spec must contain these 9 sections in Chinese:
+基于 AST 输出（如有）和源代码，生成 9 段式中文 Spec 文档：
 
 1. **意图** — 模块目的和存在理由
-2. **接口定义** — 所有导出 API（签名必须精确，不可捏造）
-3. **业务逻辑** — 核心算法、决策树、工作流
-4. **数据结构** — 类型定义、接口、Schema
+2. **接口定义** — 所有导出 API（签名必须来自代码，不可捏造）
+3. **业务逻辑** — 核心算法和工作流
+4. **数据结构** — 类型、接口、枚举
 5. **约束条件** — 性能、安全、平台约束
-6. **边界条件** — 错误处理、边界条件、降级策略
-7. **技术债务** — TODO/FIXME、缺失测试、硬编码值
+6. **边界条件** — 错误处理、降级策略
+7. **技术债务** — TODO/FIXME、改进空间
 8. **测试覆盖** — 已测试行为、覆盖缺口
 9. **依赖关系** — 内部/外部依赖
 
-## Constitution Rules (不可违反)
+不确定的内容用 \\\`[推断: 理由]\\\` 标注。
 
-1. **AST 精确性优先**: 接口定义 100% 来自 AST/代码，绝不由 LLM 捏造
-2. **混合分析流水线**: 强制三阶段（预处理 → 上下文组装 → 生成增强）
-3. **诚实标注不确定性**: 推断内容用 \`[推断: 理由]\`，模糊代码用 \`[不明确: 理由]\`
-4. **只读安全性**: 仅向 \`specs/\` 写入输出，绝不修改源代码
-5. **纯 Node.js 生态**: 所有依赖限于 npm 包
-6. **双语文档**: 中文散文 + 英文代码标识符
+### 4. 写入
 
-## 语言规范
+写入 \\\`specs/<name>.spec.md\\\`。仅写入 specs/ 目录，不修改源代码。
 
-**所有 spec 文档的正文内容必须使用中文撰写。** 具体规则：
-
-- **用中文**：所有描述、说明、分析、总结、表格内容
-- **保留英文**：代码标识符、文件路径、类型签名、代码块内容
-- **章节标题**：使用中文，例如 \`## 1. 意图\`、\`## 2. 接口定义\`
-- **Frontmatter**：保留英文（YAML 键名）
+**语言**: 中文正文 + 英文代码标识符/路径/代码块
 `;
 
 // ============================================================
@@ -165,139 +87,40 @@ description: |
 
 ## User Input
 
-\`\`\`text
+\\\`\\\`\\\`text
 $ARGUMENTS
-\`\`\`
-
-You **MUST** consider the user input before proceeding (if not empty).
-
-## Purpose
-
-Systematically reverse-engineer specs for an entire codebase. Generates an index spec with architecture overview, then iterates through modules producing individual .spec.md files.
+\\\`\\\`\\\`
 
 ## Execution Flow
 
-### 1. Project Survey
+### 1. 项目扫描
 
-Scan the project root to understand structure:
+扫描项目结构，识别顶层模块（src/ 子目录、monorepo 包等），检查 specs/ 中已有的 spec。
 
-1. **Detect project type**: monorepo, single app, library, CLI, etc.
-2. **Identify top-level modules**: \`src/\` subdirectories, packages in monorepo, major feature folders
-3. **Estimate total scope**: file count, LOC per module
-4. **Detect existing specs**: Check \`specs/\` directory for already-generated specs
+### 2. 展示计划并确认
 
-### 2. Generate Batch Plan
+列出待分析模块（按依赖顺序），显示文件数和 LOC，等待用户确认后再执行。
 
-Present the analysis plan to the user:
+### 3. 逐模块生成
 
-\`\`\`markdown
-## Reverse-Spec Batch Plan
+对每个模块执行 \\\`/reverse-spec\\\`。跳过已存在的 spec（除非用户指定 --force）。
 
-**Project**: <name>
-**Type**: <project type>
-**Total scope**: N files, ~N LOC
+CLI 批量模式（如可用）：
 
-### Modules to analyze (in dependency order):
-
-| # | Module | Files | LOC | Existing Spec? | Priority |
-|---|--------|-------|-----|----------------|----------|
-| 1 | core/utils | 5 | 320 | No | Foundation |
-| 2 | models/ | 8 | 890 | No | Data layer |
-| 3 | auth/ | 12 | 1450 | Yes (outdated) | Critical |
-| ... | | | | | |
-
-**Estimated effort**: ~N minutes with AI analysis
-
-Proceed with all? Or select specific modules (e.g., "1,3,5" or "auth/ models/")
-\`\`\`
-
-Wait for user confirmation before proceeding.
-
-### 3. Run Batch Pipeline
-
-Execute the batch pipeline, automatically detecting the best available execution method:
-
-\`\`\`bash
+\\\`\\\`\\\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec batch
+  reverse-spec batch [--force] [--output-dir specs/]
 elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec batch
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
+  npm_config_yes=true npx reverse-spec batch [--force] [--output-dir specs/]
 fi
-\`\`\`
+\\\`\\\`\\\`
 
-如果需要强制重新生成所有 spec：
+### 4. 汇总报告
 
-\`\`\`bash
-if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec batch --force
-elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec batch --force
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
-fi
-\`\`\`
+报告生成结果：成功/跳过/失败模块、跨模块观察。
 
-如果需要自定义输出目录：
-
-\`\`\`bash
-if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec batch --output-dir specs/
-elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec batch --output-dir specs/
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
-fi
-\`\`\`
-
-### 4. Final Summary
-
-After batch completes:
-
-\`\`\`markdown
-## Batch Reverse-Spec Complete
-
-**Generated**: N/M specs
-**Index**: specs/_index.spec.md
-**Total time**: ~N minutes
-
-### Generated Specs:
-- specs/auth.spec.md (high confidence)
-- specs/models.spec.md (medium confidence)
-- specs/api.spec.md (skipped by user)
-
-### Project-Wide Observations:
-- <Cross-module patterns noticed>
-- <Shared technical debt themes>
-- <Architecture recommendations>
-\`\`\`
-
-## 语言规范
-
-**所有 spec 文档的正文内容必须使用中文撰写。** 具体规则：
-
-- **用中文**：所有描述、说明、分析、总结、表格内容、注释
-- **保留英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块内容
-- **章节标题**：使用中文，例如 \`## 1. 意图\`、\`## 2. 接口定义\`
-- **表格表头**：使用中文，例如 \`| 模块 | 规格 | 用途 | 依赖 |\`
-- **Frontmatter**：保留英文（YAML 键名）
-
-## Guidelines
-
-- 按**依赖顺序**处理模块（基础模块优先）
-- **可恢复**：如果中断，检查已有 specs 并跳过已完成的模块
-- **不重复生成**已存在的 spec，除非用户指定 \`--force\`
-- 每个模块的 spec 保持**自包含**，但通过索引交叉引用
+**语言**: 中文正文 + 英文代码标识符/路径/代码块
+**规则**: 按依赖顺序处理；可恢复（中断后跳过已完成）；不重复已有 spec
 `;
 
 // ============================================================
@@ -318,109 +141,40 @@ description: |
 
 ## User Input
 
-\`\`\`text
+\\\`\\\`\\\`text
 $ARGUMENTS
-\`\`\`
-
-You **MUST** consider the user input before proceeding (if not empty).
-
-## Purpose
-
-Detect specification drift between a .spec.md and its corresponding source code. Useful after code changes to keep specs current, or before refactoring to understand what's changed.
+\\\`\\\`\\\`
 
 ## Execution Flow
 
 ### 1. Parse Arguments
 
-Expected format: \`<spec-file> [source-target]\`
+格式: \\\`<spec-file> [source-target]\\\`。spec 不存在时建议先运行 /reverse-spec。
 
-- \`<spec-file>\`: Path to existing .spec.md (required)
-- \`[source-target]\`: Path to source code (optional — inferred from spec's \`related_files\` frontmatter)
+### 2. 漂移检测
 
-If spec file doesn't exist, suggest running \`/reverse-spec\` first.
+优先使用 CLI：
 
-### 2. Run Drift Detection Pipeline
-
-Execute the drift detection, automatically detecting the best available execution method:
-
-\`\`\`bash
+\\\`\\\`\\\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec diff $SPEC_FILE $SOURCE_TARGET
+  reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
 elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec diff $SPEC_FILE $SOURCE_TARGET
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
+  npm_config_yes=true npx reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
 fi
-\`\`\`
+\\\`\\\`\\\`
 
-如果需要自定义输出目录：
+CLI 不可用时手动分析：读取 spec 接口定义，对比当前源码导出符号，按严重级别分类（HIGH=删除导出, MEDIUM=签名变更, LOW=新增导出）。
 
-\`\`\`bash
-if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec diff $SPEC_FILE $SOURCE_TARGET --output-dir drift-logs/
-elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec diff $SPEC_FILE $SOURCE_TARGET --output-dir drift-logs/
-else
-  echo "无法找到 reverse-spec 命令" >&2
-  echo "请安装: npm install -g reverse-spec" >&2
-  echo "或确保 Node.js >=20.x 已安装（提供 npx）" >&2
-  exit 1
-fi
-\`\`\`
+### 3. 输出报告
 
-流水线自动执行以下步骤：
-1. 从 spec HTML 注释加载基线 \`CodeSkeleton\`
-2. 对当前源代码进行 AST 分析
-3. 结构差异比较（\`compareSkeletons\`）
-4. 噪声过滤（空白/注释/import 重排序）
-5. 语义差异评估（LLM，可选）
-6. 组装 \`DriftReport\` 并写入 \`drift-logs/\`
+写入 \\\`drift-logs/{module}-drift-{date}.md\\\`，包含汇总统计和逐项差异详情。
 
-### 3. Fallback: Manual Analysis
+### 4. 确认更新
 
-如果 CLI 流水线不可用（依赖未安装、编译错误等），手动执行：
+**必须提示用户确认**后才能更新 spec。不可自动更新。
 
-1. 读取 spec 文件，提取接口定义章节
-2. 对源代码进行 AST 分析
-3. 对比 spec 中的导出符号与当前代码
-4. 按严重级别分类差异：
-   - **HIGH**: 删除的导出（Breaking Change）
-   - **MEDIUM**: 签名修改、行为变更
-   - **LOW**: 新增导出
-
-### 4. Output Drift Report
-
-报告自动写入 \`drift-logs/{module}-drift-{date}.md\`，包含：
-- YAML frontmatter（spec 路径、源码路径、版本）
-- 汇总统计表（按严重级别和变更类型）
-- 逐项漂移详情（ID、类别、位置、旧/新值、建议更新）
-- 综合建议
-
-### 5. Offer Update
-
-**在任何 spec 更新前必须提示用户确认。**
-
-Ask: "是否需要更新 spec 以匹配当前代码？这将运行 \`/reverse-spec\` 并使用现有 spec 作为基线。"
-
-Do NOT auto-update. Wait for user confirmation.
-
-## 语言规范
-
-**所有漂移报告的正文内容必须使用中文撰写。** 具体规则：
-
-- **用中文**：所有描述、说明、分析、总结、表格内容、建议
-- **保留英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块内容
-- **表格表头**：使用中文，例如 \`| 项目 | 类型 | 位置 | 描述 |\`
-
-## Guidelines
-
-- 这是**只读分析**——未经用户同意不修改任何文件
-- 关注**语义**差异，而非格式/风格变化
-- 忽略空白、纯注释变更和 import 重排序
-- **突出标记破坏性变更**（删除/修改的公开 API）
+**语言**: 中文正文 + 英文代码标识符/路径/代码块
+**规则**: 只读分析；关注语义差异；忽略空白/注释变更；突出破坏性变更
 `;
 
 // ============================================================

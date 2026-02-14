@@ -7,15 +7,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
-import type { ModuleSpec, SpecSections } from '../models/module-spec.js';
+import type { ModuleSpec, SpecSections, StageProgressCallback } from '../models/module-spec.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
-import { callLLM, parseLLMResponse, buildSystemPrompt, type LLMResponse, LLMUnavailableError } from './llm-client.js';
+import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
 import { generateClassDiagram } from '../generator/mermaid-class-diagram.js';
+import { generateDependencyDiagram } from '../generator/mermaid-dependency-graph.js';
 import { splitIntoChunks, CHUNK_THRESHOLD } from '../utils/chunk-splitter.js';
 
 // ============================================================
@@ -31,6 +32,8 @@ export interface GenerateSpecOptions {
   existingVersion?: string;
   /** 项目根目录（用于文件扫描） */
   projectRoot?: string;
+  /** 阶段进度回调（可选） */
+  onStageProgress?: StageProgressCallback;
 }
 
 export interface GenerateSpecResult {
@@ -44,6 +47,22 @@ export interface GenerateSpecResult {
   confidence: 'high' | 'medium' | 'low';
   /** 非致命警告 */
   warnings: string[];
+  /** 完整的 ModuleSpec 对象（用于索引生成） */
+  moduleSpec: ModuleSpec;
+}
+
+/** prepare 子命令的返回结果（阶段 1-2，不含 LLM 调用） */
+export interface PrepareResult {
+  /** 各文件的 CodeSkeleton */
+  skeletons: CodeSkeleton[];
+  /** 合并后的代表性骨架 */
+  mergedSkeleton: CodeSkeleton;
+  /** 组装后的 LLM 上下文 */
+  context: AssembledContext;
+  /** 脱敏后的代码片段（仅 deep 模式） */
+  codeSnippets: string[];
+  /** 扫描到的文件路径 */
+  filePaths: string[];
 }
 
 // ============================================================
@@ -116,36 +135,19 @@ function mergeSkeletons(skeletons: CodeSkeleton[]): CodeSkeleton {
 // ============================================================
 
 /**
- * 单模块 Spec 生成端到端编排
- *
- * 流水线步骤：
- * 1. 扫描目标路径中的 TS/JS 文件
- * 2. AST 分析 → CodeSkeleton[]
- * 3. 脱敏敏感信息
- * 4. 在 token 预算内组装 LLM 上下文
- * 5. 调用 Claude API
- * 6. 解析 + 验证 LLM 响应
- * 7. 注入不确定性标记
- * 8. Handlebars 渲染 → specs/*.spec.md
- * 9. 基线骨架序列化
+ * 预处理 + 上下文组装（阶段 1-2）
+ * 不调用 LLM，不需要 API key。
+ * 供 prepare 子命令和 generateSpec 共用。
  *
  * @param targetPath - 待分析的目录或文件路径
  * @param options - 生成选项
- * @returns 生成结果
+ * @returns 预处理结果
  */
-export async function generateSpec(
+export async function prepareContext(
   targetPath: string,
   options: GenerateSpecOptions = {},
-): Promise<GenerateSpecResult> {
-  const {
-    deep = false,
-    outputDir = 'specs',
-    existingVersion,
-    projectRoot,
-  } = options;
-  const warnings: string[] = [];
-  let tokenUsage = 0;
-  let llmDegraded = false;
+): Promise<PrepareResult> {
+  const { deep = false, projectRoot, onStageProgress } = options;
 
   // --- 阶段 1：预处理 ---
 
@@ -157,15 +159,26 @@ export async function generateSpec(
   if (stat.isFile()) {
     filePaths = [resolvedTarget];
   } else {
+    // 单文件时跳过 scan 阶段的独立进度行
+    const scanStart = Date.now();
+    onStageProgress?.({ stage: 'scan', message: '文件扫描中...' });
+
     const scanResult = scanFiles(resolvedTarget, { projectRoot });
     filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
     if (filePaths.length === 0) {
       throw new Error(`目标路径中未找到 TS/JS 文件: ${targetPath}`);
     }
+
+    onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });
   }
 
   // 步骤 2：AST 分析
+  const astStart = Date.now();
+  onStageProgress?.({ stage: 'ast', message: `AST 分析中 (${filePaths.length} 个文件)...` });
+
   const skeletons = await analyzeFiles(filePaths);
+
+  onStageProgress?.({ stage: 'ast', message: 'AST 分析完成', duration: Date.now() - astStart });
 
   // 合并为代表性骨架
   const mergedSkeleton = mergeSkeletons(skeletons);
@@ -173,13 +186,11 @@ export async function generateSpec(
   // 步骤 3：脱敏
   const codeSnippets: string[] = [];
   if (deep) {
-    // deep 模式：读取源代码作为代码片段
     for (const filePath of filePaths) {
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
 
       if (lines.length > CHUNK_THRESHOLD) {
-        // 大文件分块
         const chunks = splitIntoChunks(content);
         for (const chunk of chunks) {
           const { redactedContent } = redact(chunk.content, filePath);
@@ -194,19 +205,69 @@ export async function generateSpec(
 
   // --- 阶段 2：上下文组装 ---
 
-  // 步骤 4：组装 LLM 上下文
-  const systemPrompt = buildSystemPrompt('spec-generation');
+  const contextStart = Date.now();
+  onStageProgress?.({ stage: 'context', message: '上下文组装中...' });
+
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
-    templateInstructions: systemPrompt,
   });
+
+  // token 数警告（FR-007：当 token 超过 80,000——即 100,000 预算的 80%）
+  if (context.tokenCount > 80_000) {
+    onStageProgress?.({ stage: 'context', message: `⚠ 上下文 token 数较大 (${context.tokenCount.toLocaleString()})，可能影响质量` });
+  }
+
+  onStageProgress?.({ stage: 'context', message: '上下文组装完成', duration: Date.now() - contextStart });
+
+  return { skeletons, mergedSkeleton, context, codeSnippets, filePaths };
+}
+
+/**
+ * 单模块 Spec 生成端到端编排
+ *
+ * 流水线步骤：
+ * 1-4. prepareContext()（预处理 + 上下文组装）
+ * 5. 调用 Claude API
+ * 6. 解析 + 验证 LLM 响应
+ * 7. 注入不确定性标记
+ * 8. Handlebars 渲染 → specs/*.spec.md
+ * 9. 基线骨架序列化
+ *
+ * @param targetPath - 待分析的目录或文件路径
+ * @param options - 生成选项
+ * @returns 生成结果
+ */
+export async function generateSpec(
+  targetPath: string,
+  options: GenerateSpecOptions = {},
+): Promise<GenerateSpecResult> {
+  const { outputDir = 'specs', existingVersion, onStageProgress } = options;
+  const warnings: string[] = [];
+  let tokenUsage = 0;
+  let llmDegraded = false;
+
+  // 阶段 1-2：预处理 + 上下文组装
+  const { skeletons, mergedSkeleton, context, filePaths } = await prepareContext(targetPath, options);
 
   // --- 阶段 3：生成增强 ---
 
   // 步骤 5：调用 LLM
+  const llmStart = Date.now();
+  onStageProgress?.({ stage: 'llm', message: 'LLM 调用中...' });
+
+  // 将 onRetry 回调转换为阶段进度格式
+  const onRetry: RetryCallback | undefined = onStageProgress
+    ? (event) => {
+        const typeLabel = event.errorType === 'timeout' ? '超时'
+          : event.errorType === 'rate-limit' ? '速率限制'
+          : '服务器错误';
+        onStageProgress({ stage: 'llm', message: `↻ 重试 ${event.attempt}/${event.maxAttempts} (${typeLabel})...` });
+      }
+    : undefined;
+
   let llmContent: string;
   try {
-    const llmResponse: LLMResponse = await callLLM(context);
+    const llmResponse: LLMResponse = await callLLM(context, undefined, onRetry);
     llmContent = llmResponse.content;
     tokenUsage = llmResponse.inputTokens + llmResponse.outputTokens;
   } catch (error) {
@@ -214,15 +275,23 @@ export async function generateSpec(
       // LLM 不可用，降级为 AST-only 输出
       llmDegraded = true;
       warnings.push('LLM 不可用，已降级为 AST-only Spec');
+      onStageProgress?.({ stage: 'llm', message: '⚠ LLM 不可用，降级为 AST-only' });
       llmContent = generateAstOnlyContent(mergedSkeleton);
     } else {
       throw error;
     }
   }
 
+  onStageProgress?.({ stage: 'llm', message: 'LLM 调用完成', duration: Date.now() - llmStart });
+
   // 步骤 6：解析 LLM 响应
+  const parseStart = Date.now();
+  onStageProgress?.({ stage: 'parse', message: '响应解析中...' });
+
   const parsed = parseLLMResponse(llmContent);
   warnings.push(...parsed.parseWarnings);
+
+  onStageProgress?.({ stage: 'parse', message: '响应解析完成', duration: Date.now() - parseStart });
 
   // 步骤 7：不确定性标记已在 parseLLMResponse 中提取
   const uncertaintyCount = parsed.uncertaintyMarkers.length;
@@ -236,23 +305,30 @@ export async function generateSpec(
   );
 
   // 步骤 8：渲染 Spec
+  const renderStart = Date.now();
+  onStageProgress?.({ stage: 'render', message: '渲染写入中...' });
+
   initRenderer();
 
-  // 生成 Mermaid 类图
+  // 生成 Mermaid 图表（类图 + 依赖图）
   const classDiagram = generateClassDiagram(mergedSkeleton);
+  const depDiagram = generateDependencyDiagram(mergedSkeleton, skeletons);
+
+  // 统一基准路径（供 sourceTarget、relatedFiles、fileInventory 共用）
+  const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
 
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
-    sourceTarget: targetPath,
-    relatedFiles: filePaths.map((f) => path.relative(process.cwd(), f)),
+    sourceTarget: path.relative(baseDir, path.resolve(targetPath)),
+    relatedFiles: filePaths.map((f) => path.relative(baseDir, f)),
     confidence,
     skeletonHash: mergedSkeleton.hash,
     existingVersion,
   });
 
-  // 构建 fileInventory
+  // 构建 fileInventory（使用相对路径）
   const fileInventory = skeletons.map((s) => ({
-    path: s.filePath,
+    path: path.relative(baseDir, s.filePath),
     loc: s.loc,
     purpose: s.exports.length > 0
       ? `导出 ${s.exports.map((e) => e.name).join(', ')}`
@@ -263,12 +339,19 @@ export async function generateSpec(
   const specName = path.basename(targetPath).replace(/\.[^.]+$/, '');
   const outputPath = path.join(outputDir, `${specName}.spec.md`);
 
+  // 收集所有 Mermaid 图表
+  const diagrams: Array<{ type: 'classDiagram' | 'flowchart' | 'graph'; source: string; title: string }> = [];
+  if (classDiagram) {
+    diagrams.push({ type: 'classDiagram', source: classDiagram, title: '模块类图' });
+  }
+  if (depDiagram) {
+    diagrams.push({ type: 'graph', source: depDiagram, title: '依赖关系图' });
+  }
+
   const moduleSpec: ModuleSpec = {
     frontmatter,
     sections: parsed.sections,
-    mermaidDiagrams: classDiagram
-      ? [{ type: 'classDiagram', source: classDiagram, title: '模块类图' }]
-      : undefined,
+    mermaidDiagrams: diagrams.length > 0 ? diagrams : undefined,
     fileInventory,
     baselineSkeleton: mergedSkeleton,
     outputPath,
@@ -281,12 +364,15 @@ export async function generateSpec(
   fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
   fs.writeFileSync(resolvedOutput, markdown, 'utf-8');
 
+  onStageProgress?.({ stage: 'render', message: '渲染写入完成', duration: Date.now() - renderStart });
+
   return {
     specPath: outputPath,
     skeleton: mergedSkeleton,
     tokenUsage,
     confidence,
     warnings,
+    moduleSpec,
   };
 }
 

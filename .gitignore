@@ -34,3 +34,4 @@ drift-logs/
 
 # Checkpoint files
 specs/.reverse-spec-checkpoint.json
+.claude/settings.local.json
