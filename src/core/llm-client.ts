@@ -15,7 +15,7 @@ import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 // ============================================================
 
 export interface LLMConfig {
-  /** 模型 ID（默认 'claude-opus-4-6'） */
+  /** 模型 ID（默认 'claude-sonnet-4-5-20250929'，可通过 REVERSE_SPEC_MODEL 环境变量覆盖） */
   model: string;
   /** API Key（默认从 ANTHROPIC_API_KEY 环境变量获取） */
   apiKey?: string;
@@ -23,7 +23,7 @@ export interface LLMConfig {
   maxTokensResponse: number;
   /** 温度（默认 0.3，低温用于事实性提取） */
   temperature: number;
-  /** 超时时间（毫秒，默认 120_000） */
+  /** 超时时间（毫秒，默认根据模型动态计算：Sonnet 120s, Opus 300s, Haiku 60s） */
   timeout: number;
 }
 
@@ -108,16 +108,38 @@ export interface RetryEvent {
 export type RetryCallback = (event: RetryEvent) => void;
 
 // ============================================================
+// 模型超时策略
+// ============================================================
+
+/**
+ * 根据模型名称返回合理的超时时间
+ *
+ * 基于实测数据：
+ * - Opus: spec 生成通常 >120s，需要更长超时
+ * - Sonnet: spec 生成通常 ~90s
+ * - Haiku: 响应极快
+ * - 未知模型: 保守默认值
+ */
+export function getTimeoutForModel(model: string): number {
+  const lowerModel = model.toLowerCase();
+  if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
+  if (lowerModel.includes('sonnet')) return 120_000;  // 2 分钟
+  if (lowerModel.includes('haiku')) return 60_000;    // 1 分钟
+  return 180_000;                                      // 3 分钟（保守默认）
+}
+
+// ============================================================
 // 默认配置
 // ============================================================
 
 function getDefaultConfig(): LLMConfig {
+  const model = process.env['REVERSE_SPEC_MODEL'] ?? 'claude-sonnet-4-5-20250929';
   return {
-    model: process.env['REVERSE_SPEC_MODEL'] ?? 'claude-opus-4-6',
+    model,
     apiKey: process.env['ANTHROPIC_API_KEY'],
     maxTokensResponse: 8192,
     temperature: 0.3,
-    timeout: 120_000,
+    timeout: getTimeoutForModel(model),
   };
 }
 

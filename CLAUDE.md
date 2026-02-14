@@ -11,6 +11,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 - N/A（无新增存储需求） (004-claude-sub-auth)
 - TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph（AST）、dependency-cruiser（依赖图）、handlebars（模板）、zod（验证）、@anthropic-ai/sdk（LLM）——均为现有依赖，无新增运行时依赖 (005-batch-quality-fixes)
 - 文件系统（specs/ 目录写入） (005-batch-quality-fixes)
+- TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置）——均为现有依赖，无新增 (007-fix-batch-llm-defaults)
+- TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖，仅使用 Node.js 内置 `path` 模块（已存在） (008-fix-spec-absolute-paths)
 
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
 
@@ -30,10 +32,10 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+- 008-fix-spec-absolute-paths: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖，仅使用 Node.js 内置 `path` 模块（已存在）
+- 007-fix-batch-llm-defaults: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置）——均为现有依赖，无新增
 - 006-batch-progress-timeout: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph（AST）、dependency-cruiser（依赖图）、handlebars（模板）、zod（验证）、@anthropic-ai/sdk（LLM）——均为现有依赖，无新增运行时依赖
 
-- 005-batch-quality-fixes: 追溯同步 001 contracts——batch 模块级聚合（module-grouper）、dependency-cruiser v16.x 异步兼容、LLM 章节匹配容错、系统提示词增强、Mermaid 依赖图生成器
-- 004-claude-sub-auth: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置，新增使用）
 
 
 <!-- MANUAL ADDITIONS START -->

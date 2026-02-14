@@ -12,7 +12,7 @@ import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
-import { callLLM, parseLLMResponse, buildSystemPrompt, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
+import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
 import { generateClassDiagram } from '../generator/mermaid-class-diagram.js';
@@ -208,10 +208,8 @@ export async function prepareContext(
   const contextStart = Date.now();
   onStageProgress?.({ stage: 'context', message: '上下文组装中...' });
 
-  const systemPrompt = buildSystemPrompt('spec-generation');
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
-    templateInstructions: systemPrompt,
   });
 
   // token 数警告（FR-007：当 token 超过 80,000——即 100,000 预算的 80%）
@@ -316,17 +314,19 @@ export async function generateSpec(
   const classDiagram = generateClassDiagram(mergedSkeleton);
   const depDiagram = generateDependencyDiagram(mergedSkeleton, skeletons);
 
+  // 统一基准路径（供 sourceTarget、relatedFiles、fileInventory 共用）
+  const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
+
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
-    sourceTarget: targetPath,
-    relatedFiles: filePaths.map((f) => path.relative(process.cwd(), f)),
+    sourceTarget: path.relative(baseDir, path.resolve(targetPath)),
+    relatedFiles: filePaths.map((f) => path.relative(baseDir, f)),
     confidence,
     skeletonHash: mergedSkeleton.hash,
     existingVersion,
   });
 
   // 构建 fileInventory（使用相对路径）
-  const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
   const fileInventory = skeletons.map((s) => ({
     path: path.relative(baseDir, s.filePath),
     loc: s.loc,

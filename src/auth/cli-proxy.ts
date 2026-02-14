@@ -10,6 +10,7 @@ import {
   LLMTimeoutError,
   LLMResponseError,
   LLMUnavailableError,
+  getTimeoutForModel,
 } from '../core/llm-client.js';
 
 // ============================================================
@@ -57,9 +58,10 @@ interface StreamMessage {
 
 /** 获取默认 CLI 代理配置 */
 export function getDefaultCLIProxyConfig(): CLIProxyConfig {
+  const model = process.env['REVERSE_SPEC_MODEL'] ?? 'claude-sonnet-4-5-20250929';
   return {
-    model: process.env['REVERSE_SPEC_MODEL'] ?? 'claude-opus-4-6',
-    timeout: 120_000,
+    model,
+    timeout: getTimeoutForModel(model),
     maxConcurrency: 3,
   };
 }
