@@ -46,20 +46,20 @@ reverse-spec generate $TARGET_PATH --deep
 如果需要自定义输出目录：
 
 ```bash
-reverse-spec generate $TARGET_PATH --deep --output-dir specs/
+reverse-spec generate $TARGET_PATH --deep --output-dir .specs
 ```
 
 **Pipeline stages**:
 1. **预处理**: 扫描 TS/JS 文件 → ts-morph AST 分析 → CodeSkeleton 提取 → 敏感信息脱敏
 2. **上下文组装**: 骨架 + 依赖 spec + 代码片段 → ≤100k token 预算的 LLM prompt
-3. **生成增强**: Claude API 生成 9 段式中文 Spec → 解析验证 → Handlebars 渲染 → 写入 `specs/*.spec.md`
+3. **生成增强**: Claude API 生成 9 段式中文 Spec → 解析验证 → Handlebars 渲染 → 写入 `.specs/*.spec.md`
 
 ### 3. Handle Results
 
 If pipeline succeeds, report:
 
 ```
-Spec 生成完成: specs/<name>.spec.md
+Spec 生成完成: .specs/<name>.spec.md
 
 分析摘要:
 - 文件数: N
@@ -84,7 +84,7 @@ If the CLI pipeline is unavailable, perform manual analysis:
 1. **Scan & inventory** all source files in scope
 2. **Read and analyze** each file's exports, imports, types, and logic
 3. **Generate spec** following the 9-section structure defined below
-4. **Write** to `specs/<target-name>.spec.md`
+4. **Write** to `.specs/<target-name>.spec.md`
 
 ### 5. 9-Section Spec Structure
 
@@ -105,7 +105,7 @@ Each generated spec must contain these 9 sections in Chinese:
 1. **AST 精确性优先**: 接口定义 100% 来自 AST/代码，绝不由 LLM 捏造
 2. **混合分析流水线**: 强制三阶段（预处理 → 上下文组装 → 生成增强）
 3. **诚实标注不确定性**: 推断内容用 `[推断: 理由]`，模糊代码用 `[不明确: 理由]`
-4. **只读安全性**: 仅向 `specs/` 写入输出，绝不修改源代码
+4. **只读安全性**: 仅向 `.specs/` 写入输出，绝不修改源代码
 5. **纯 Node.js 生态**: 所有依赖限于 npm 包
 6. **双语文档**: 中文散文 + 英文代码标识符
 

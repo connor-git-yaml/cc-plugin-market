@@ -33,7 +33,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
     if (result.indexGenerated) {
-      console.log(`✓ specs/_index.spec.md 已生成`);
+      console.log(`✓ .specs/_index.spec.md 已生成`);
     }
     console.log(`✓ 日志: ${result.summaryLogPath}`);
 

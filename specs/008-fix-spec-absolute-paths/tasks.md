@@ -5,7 +5,7 @@
 
 **Tests**: 不新增测试文件，仅在 Polish 阶段验证全量测试通过。
 
-**Organization**: 仅 1 个 User Story（P1），分三轮实施。
+**Organization**: 仅 1 个 User Story（P1），分四轮实施。
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -43,6 +43,16 @@
 
 **Checkpoint**: 断点恢复检查点默认路径与输出目录 `.specs` 一致
 
+### Round 4: CLI 输出消息、Skill 模板/文档、历史设计文档同步
+
+- [x] T019 [US1] 修改 `src/cli/commands/batch.ts` 中输出消息 `specs/_index.spec.md` 改为 `.specs/_index.spec.md`（行 36）
+- [x] T020 [P] [US1] 修改 `src/installer/skill-templates.ts` 中所有 `specs/` 引用为 `.specs/`（行 68、98、112、114 共 4 处）
+- [x] T021 [P] [US1] 修改 `src/skills-global/reverse-spec-batch/SKILL.md` 中所有 `specs/` 引用为 `.specs/`
+- [x] T022 [P] [US1] 修改 `src/skills-global/reverse-spec/SKILL.md` 中所有 `specs/` 引用为 `.specs/`
+- [x] T023 [P] [US1] 同步历史设计文档中过时的 `specs/` 引用为 `.specs/`：`specs/001-reverse-spec-v2/contracts/batch-module.md`、`specs/001-reverse-spec-v2/contracts/core-pipeline.md`、`specs/001-reverse-spec-v2/data-model.md`、`specs/001-reverse-spec-v2/quickstart.md`、`specs/002-cli-global-distribution/contracts/cli-interface.md`、`specs/002-cli-global-distribution/quickstart.md`
+
+**Checkpoint**: 所有用户可见的输出消息和文档中的目录引用与实际输出目录 `.specs` 一致
+
 ---
 
 ## Phase 2: Polish & Validation
@@ -58,6 +68,9 @@
 - [x] T016 运行 `npm test` 确认 Round 3 改动后全部测试通过
 - [x] T017 运行 `npm run lint` 确认无 lint 错误
 - [x] T018 运行 `npm run build` 确认 TypeScript 编译通过
+- [x] T024 运行 `npm test` 确认 Round 4 改动后全部测试通过
+- [x] T025 运行 `npm run lint` 确认无 lint 错误
+- [x] T026 运行 `npm run build` 确认 TypeScript 编译通过
 
 ---
 
@@ -68,6 +81,7 @@
 - **US1 Round 1 (Phase 1)**: 已完成
 - **US1 Round 2 (Phase 1)**: T007 和 T008 依赖 Round 1 的 baseDir；T009 和 T010 独立
 - **US1 Round 3 (Phase 1)**: T014 和 T015 独立，与 Round 2 无依赖
+- **US1 Round 4 (Phase 1)**: T019-T023 均独立，可全部并行
 - **Polish (Phase 2)**: 依赖 US1 全部完成
 
 ### Parallel Opportunities
@@ -76,11 +90,13 @@
 - T014 和 T015 可并行（修改不同文件）
 - T011、T012、T013 可并行
 - T016、T017、T018 可并行
+- T019、T020、T021、T022、T023 可并行（修改不同文件）
+- T024、T025、T026 可并行
 
 ---
 
 ## Notes
 
-- 总计 18 个任务（Round 1: 3 + Round 2: 4 + Round 3: 2 + Polish: 9）
-- Round 3 涉及 2 个文件：`checkpoint.ts`、`.gitignore`
+- 总计 26 个任务（Round 1: 3 + Round 2: 4 + Round 3: 2 + Round 4: 5 + Polish: 12）
+- Round 4 涉及源码 3 文件 + Skill 文档 2 文件 + 历史设计文档 6 文件
 - baseline skeleton 的 filePath Zod schema 要求以 `.ts/.js` 结尾——相对路径同样满足此约束

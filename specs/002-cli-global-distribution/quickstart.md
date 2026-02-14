@@ -84,7 +84,7 @@ cd /tmp && mkdir test-project && cd test-project
 npm init -y && echo '{}' > tsconfig.json
 echo 'export function hello(): string { return "hello"; }' > index.ts
 reverse-spec generate index.ts
-# 预期: specs/index.spec.md 生成
+# 预期: .specs/index.spec.md 生成
 
 # 清理
 cd - && rm -rf /tmp/test-project

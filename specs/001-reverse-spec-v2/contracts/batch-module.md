@@ -72,7 +72,7 @@ interface GroupingOptions {
 - `options.force` — 即使规格已存在也重新生成（默认：`false`）
 - `options.onProgress` — 进度回调
 - `options.maxRetries` — 每个模块的 LLM 最大重试次数（默认：`3`）
-- `options.checkpointPath` — 检查点状态文件路径（默认：`specs/.reverse-spec-checkpoint.json`；Constitution IV：必须位于 `specs/` 或 `drift-logs/` 内）
+- `options.checkpointPath` — 检查点状态文件路径（默认：`.specs/.reverse-spec-checkpoint.json`；Constitution IV：必须位于 `.specs/` 或 `drift-logs/` 内）
 - `options.grouping` — 模块分组选项（`GroupingOptions`，传递给 `groupFilesToModules()`）
 
 **返回**：
@@ -86,7 +86,7 @@ interface BatchResult {
   degraded: string[];       // 降级为仅 AST 模式
   duration: number;         // 总耗时（毫秒）
   indexGenerated: boolean;
-  summaryLogPath: string;   // 写入 specs/（Constitution IV）
+  summaryLogPath: string;   // 写入 .specs/（Constitution IV）
 }
 ```
 
@@ -108,7 +108,7 @@ interface BatchResult {
 
 **约束**：
 
-- Constitution IV：仅写入 `specs/` 和 `drift-logs/`
+- Constitution IV：仅写入 `.specs/` 和 `drift-logs/`
 - 进度显示：`[N/Total] Processing src/module...`（FR-015）
 - checkpoint 中模块的 `path` 字段使用模块名（如 `'auth'`）而非文件路径
 
