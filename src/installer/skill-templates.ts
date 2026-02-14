@@ -65,7 +65,7 @@ fi
 
 ### 4. 写入
 
-写入 \\\`.specs/<name>.spec.md\\\`。仅写入 .specs/ 目录，不修改源代码。
+写入 \\\`specs/<name>.spec.md\\\`。仅写入 specs/ 目录，不修改源代码。
 
 **语言**: 中文正文 + 英文代码标识符/路径/代码块
 `;
@@ -95,7 +95,7 @@ $ARGUMENTS
 
 ### 1. 项目扫描
 
-扫描项目结构，识别顶层模块（src/ 子目录、monorepo 包等），检查 .specs/ 中已有的 spec。
+扫描项目结构，识别顶层模块（src/ 子目录、monorepo 包等），检查 specs/ 中已有的 spec。
 
 ### 2. 展示计划并确认
 
@@ -109,9 +109,9 @@ CLI 批量模式（如可用）：
 
 \\\`\\\`\\\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec batch [--force] [--output-dir .specs]
+  reverse-spec batch [--force] [--output-dir specs]
 elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec batch [--force] [--output-dir .specs]
+  npm_config_yes=true npx reverse-spec batch [--force] [--output-dir specs]
 fi
 \\\`\\\`\\\`
 

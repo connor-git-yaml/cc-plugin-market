@@ -52,7 +52,7 @@ npm install -g reverse-spec
 ```bash
 reverse-spec generate src/auth/ --deep
 reverse-spec batch --force
-reverse-spec diff .specs/auth.spec.md src/auth/
+reverse-spec diff specs/auth.spec.md src/auth/
 reverse-spec mcp-server  # 启动 MCP stdio server
 ```
 
@@ -91,7 +91,7 @@ Plugin 安装后，`.mcp.json` 自动配置 MCP server：
 /reverse-spec-batch
 
 # 漂移检测
-/reverse-spec-diff .specs/auth.spec.md src/auth/
+/reverse-spec-diff specs/auth.spec.md src/auth/
 ```
 
 ## 许可证

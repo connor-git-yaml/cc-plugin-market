@@ -30,7 +30,7 @@ Scan the project root to understand structure:
 1. **Detect project type**: monorepo, single app, library, CLI, etc.
 2. **Identify top-level modules**: `src/` subdirectories, packages in monorepo, major feature folders
 3. **Estimate total scope**: file count, LOC per module
-4. **Detect existing specs**: Check `.specs/` directory for already-generated specs
+4. **Detect existing specs**: Check `specs/` directory for already-generated specs
 
 ### 2. Generate Batch Plan
 
@@ -76,7 +76,7 @@ reverse-spec batch --force
 如果需要自定义输出目录：
 
 ```bash
-reverse-spec batch --output-dir .specs
+reverse-spec batch --output-dir specs
 ```
 
 ### 4. Final Summary
@@ -87,13 +87,13 @@ After batch completes:
 ## Batch Reverse-Spec Complete
 
 **Generated**: N/M specs
-**Index**: .specs/_index.spec.md
+**Index**: specs/_index.spec.md
 **Total time**: ~N minutes
 
 ### Generated Specs:
-- .specs/auth.spec.md (high confidence)
-- .specs/models.spec.md (medium confidence)
-- .specs/api.spec.md (skipped by user)
+- specs/auth.spec.md (high confidence)
+- specs/models.spec.md (medium confidence)
+- specs/api.spec.md (skipped by user)
 
 ### Project-Wide Observations:
 - <Cross-module patterns noticed>

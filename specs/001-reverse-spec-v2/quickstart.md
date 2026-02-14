@@ -46,7 +46,7 @@ ls skills/reverse-spec-diff/SKILL.md
 # 深度分析（包含函数体）
 /reverse-spec src/auth/ --deep
 
-# 输出：.specs/auth.spec.md
+# 输出：specs/auth.spec.md
 ```
 
 ### 批量项目处理
@@ -58,14 +58,14 @@ ls skills/reverse-spec-diff/SKILL.md
 # 强制重新生成所有 spec
 /reverse-spec-batch --force
 
-# 输出：.specs/*.spec.md + .specs/_index.spec.md
+# 输出：specs/*.spec.md + specs/_index.spec.md
 ```
 
 ### Spec 漂移检测
 
 ```bash
 # 在 Claude Code 中
-/reverse-spec-diff .specs/auth.spec.md src/auth/
+/reverse-spec-diff specs/auth.spec.md src/auth/
 
 # 输出：drift-logs/auth-drift-2026-02-10.md
 ```
@@ -181,6 +181,6 @@ reverse-spec/
 │   ├── integration/
 │   ├── golden-master/
 │   └── self-hosting/
-├── .specs/                        # 生成输出
+├── specs/                        # 生成输出
 └── drift-logs/                    # 漂移报告
 ```
