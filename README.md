@@ -3,18 +3,21 @@
 ![Version](https://img.shields.io/badge/version-2.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
-![Tests](https://img.shields.io/badge/tests-212%20passed-brightgreen)
+![Tests](https://img.shields.io/badge/tests-231%20passed-brightgreen)
 
 > 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言通过纯 LLM 模式提供降级支持。
 
 ## 功能特性
 
-- **CLI 全局分发** — `npm install -g` 后提供 `reverse-spec` 全局命令，支持 `generate`/`batch`/`diff` 三个子命令
+- **双认证模式** — 支持 API Key 直连和 Claude CLI 订阅代理两种认证方式，自动检测优先级（API Key > CLI 代理），Claude Max/Pro 订阅用户无需单独设置 API Key
+- **CLI 全局分发** — `npm install -g` 后提供 `reverse-spec` 全局命令，支持 `generate`/`batch`/`diff`/`prepare`/`init`/`auth-status` 六个子命令
 - **Skill 自动注册** — 全局安装后自动将 `/reverse-spec` 系列 skill 注册到 Claude Code，卸载时自动清理
 - **项目级 Skill 安装** (`reverse-spec init`) — 一键安装 skill 到当前项目 `.claude/skills/`，支持 `--global` 全局安装和 `--remove` 清理
 - **单模块 Spec 生成** (`/reverse-spec`) — 对任意模块生成完整的 9 段式规格文档；TS/JS 项目接口定义 100% 来自 AST 提取，其他语言通过 LLM 降级分析
+- **AST 预处理** (`reverse-spec prepare`) — 仅执行 AST 分析 + 上下文组装，不调用 LLM，无需认证，可供 Claude Code 原生生成使用
 - **批量项目处理** (`/reverse-spec-batch`) — 基于依赖拓扑排序的全项目批量 Spec 生成，支持断点恢复和架构索引
 - **Spec 漂移检测** (`/reverse-spec-diff`) — AST 结构化 Diff + LLM 语义评估，三级严重级别分类，噪声自动过滤
+- **认证状态查看** (`reverse-spec auth-status`) — 检测并显示当前认证状态，支持 `--verify` 在线验证
 - **混合分析流水线** — 三阶段引擎（预处理 → 上下文组装 → 生成增强），原始源码不直接输入 LLM
 - **诚实标注不确定性** — 推断内容标记 `[推断]`，模糊代码标记 `[不明确]`，语法错误标记 `[SYNTAX ERROR]`
 - **只读安全保证** — 所有命令严格只读，仅向 `specs/` 和 `drift-logs/` 写入输出
@@ -29,7 +32,7 @@
 | 模板引擎 | Handlebars |
 | 数据验证 | Zod |
 | 图表生成 | Mermaid（嵌入 Markdown） |
-| AI 模型 | Claude 4.5/4.6 Sonnet/Opus（通过 Anthropic API） |
+| AI 模型 | Claude 4.5/4.6 Sonnet/Opus（通过 Anthropic API 或 Claude CLI 代理） |
 | 测试框架 | Vitest（单元/集成/Golden Master/自举） |
 
 ## 快速开始
@@ -37,8 +40,9 @@
 ### 环境要求
 
 - Node.js 20.x+
-- Claude Code CLI
-- Anthropic API Key（设置 `ANTHROPIC_API_KEY` 环境变量）
+- 认证方式（二选一，自动检测）：
+  - **API Key**：设置 `ANTHROPIC_API_KEY` 环境变量（SDK 直连，优先使用）
+  - **Claude CLI 订阅**：安装并登录 Claude Code（`claude auth login`，适用于 Claude Max/Pro 用户）
 
 ### 全局安装（推荐）
 
@@ -66,6 +70,9 @@ npm install
 # 单模块 Spec 生成
 reverse-spec generate src/auth/ --deep
 
+# AST 预处理（不调用 LLM，无需认证）
+reverse-spec prepare src/auth/ --deep
+
 # 全项目批量生成
 reverse-spec batch --force
 
@@ -74,6 +81,12 @@ reverse-spec diff specs/auth.spec.md src/auth/
 
 # 自定义输出目录
 reverse-spec generate src/auth/ --output-dir out/
+
+# 查看认证状态
+reverse-spec auth-status
+
+# 在线验证认证凭证
+reverse-spec auth-status --verify
 
 # 安装 skill 到当前项目
 reverse-spec init
@@ -172,16 +185,21 @@ src/
 ├── installer/                     # Skill 安装/卸载模块
 │   ├── skill-installer.ts         # 安装/卸载核心逻辑
 │   └── skill-templates.ts         # 3 个 SKILL.md 模板定义
+├── auth/                          # 认证检测与代理
+│   ├── auth-detector.ts           # 认证方式检测（API Key / CLI 代理）
+│   └── cli-proxy.ts               # Claude CLI 子进程代理（订阅用户）
 ├── cli/                           # CLI 全局命令入口
 │   ├── index.ts                   # bin 入口（#!/usr/bin/env node）
 │   ├── commands/
 │   │   ├── generate.ts            # generate 子命令
+│   │   ├── prepare.ts             # prepare 子命令（AST 预处理，无需 LLM）
 │   │   ├── batch.ts               # batch 子命令
 │   │   ├── diff.ts                # diff 子命令
-│   │   └── init.ts                # init 子命令（skill 安装/卸载）
+│   │   ├── init.ts                # init 子命令（skill 安装/卸载）
+│   │   └── auth-status.ts         # auth-status 子命令
 │   └── utils/
 │       ├── parse-args.ts          # 参数解析
-│       └── error-handler.ts       # 错误处理
+│       └── error-handler.ts       # 错误处理 + 双认证检测
 ├── scripts/                       # npm lifecycle 脚本
 │   ├── postinstall.ts             # 全局安装后注册 skill
 │   └── preuninstall.ts            # 卸载前清理 skill
@@ -200,8 +218,8 @@ skills/                            # 本地版 Skill（使用 npx tsx 调用）
 ├── reverse-spec-batch/SKILL.md    # /reverse-spec-batch 命令
 └── reverse-spec-diff/SKILL.md     # /reverse-spec-diff 命令
 
-tests/                             # 测试套件（212 用例）
-├── unit/                          # 16 个单元测试文件
+tests/                             # 测试套件（231 用例）
+├── unit/                          # 19 个单元测试文件
 ├── integration/                   # 4 个集成测试文件
 ├── golden-master/                 # Golden Master 结构相似度测试
 └── self-hosting/                  # 自举测试（分析自身）
@@ -211,23 +229,28 @@ tests/                             # 测试套件（212 用例）
 
 ```text
 SourceFile(s)
-    ↓ [ast-analyzer.ts]              ← 阶段 1：预处理
+    ↓ [ast-analyzer.ts]                          ← 阶段 1：预处理
 CodeSkeleton
-    ↓ [context-assembler.ts]         ← 阶段 2：上下文组装
+    ↓ [context-assembler.ts]                     ← 阶段 2：上下文组装
     │  + secret-redactor.ts（脱敏）
     │  + token-counter.ts（≤100k 预算）
+    │
+    ├─── prepare 模式 → stdout（无需认证）
+    │
 LLM Prompt
-    ↓ [llm-client.ts → Claude API]   ← 阶段 3：生成增强
+    ↓ [llm-client.ts → auth-detector.ts]         ← 阶段 3：生成增强
+    │  ├── API Key → @anthropic-ai/sdk 直连
+    │  └── CLI 代理 → spawn claude（订阅用户）
 ModuleSpec → specs/*.spec.md
 ```
 
 ## 测试
 
-项目包含 4 级测试体系，共 212 个测试用例：
+项目包含 4 级测试体系，共 231 个测试用例：
 
 | 层级 | 文件数 | 用例数 | 覆盖范围 |
 |------|--------|--------|----------|
-| 单元测试 | 16 | 168 | 各模块独立功能（含 CLI 解析、Skill 安装器、init 命令） |
+| 单元测试 | 19 | 187 | 各模块独立功能（含 CLI 解析、Skill 安装器、init 命令、认证检测、CLI 代理） |
 | 集成测试 | 4 | 30 | 端到端流水线 + 漂移检测 + CLI e2e + init e2e |
 | Golden Master | 1 | 9 | AST 提取精度 ≥ 90% 结构相似度 |
 | 自举测试 | 1 | 5 | 项目分析自身的完整性验证 |
@@ -247,6 +270,8 @@ ModuleSpec → specs/*.spec.md
 | [002 tasks.md](specs/002-cli-global-distribution/tasks.md) | CLI 任务清单：24 个任务、7 个阶段 |
 | [003 spec.md](specs/003-skill-init/spec.md) | Skill Init：项目级/全局 skill 安装、5 个用户故事 |
 | [003 tasks.md](specs/003-skill-init/tasks.md) | Skill Init 任务清单：20 个任务、7 个阶段 |
+| [004 spec.md](specs/004-claude-sub-auth/spec.md) | Claude 订阅认证：双认证策略、CLI 代理、auth-status 命令 |
+| [004 tasks.md](specs/004-claude-sub-auth/tasks.md) | 订阅认证任务清单：17 个任务、5 个阶段 |
 
 ## Constitution 原则
 

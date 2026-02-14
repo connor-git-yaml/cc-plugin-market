@@ -128,14 +128,15 @@ describe('init 命令集成流程', () => {
     expect(output).toContain('安装完成');
     expect(output).toContain('/reverse-spec');
 
-    // 验证文件内容包含降级逻辑
+    // 验证文件内容包含 CLI 调用逻辑
     const skillContent = readFileSync(
       join(targetDir, 'reverse-spec', 'SKILL.md'),
       'utf-8',
     );
     expect(skillContent).toContain('command -v reverse-spec');
     expect(skillContent).toContain('npm_config_yes=true npx reverse-spec');
-    expect(skillContent).toContain('npm install -g reverse-spec');
+    // 新模板使用 prepare 子命令（Claude Code 原生模式）
+    expect(skillContent).toContain('reverse-spec prepare');
   });
 
   it('--global 正确传递 mode=global', () => {
