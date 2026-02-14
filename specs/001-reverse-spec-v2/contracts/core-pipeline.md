@@ -148,7 +148,7 @@ interface AssembledContext {
 
 - `targetPath` — 待分析的目录或文件路径
 - `options.deep` — 在上下文组装中包含函数体（默认：`false`）
-- `options.outputDir` — 输出目录（默认：`.specs`）
+- `options.outputDir` — 输出目录（默认：`specs`）
 - `options.existingVersion` — 用于增量更新的上一版本规格（如规格已存在则自动检测）
 
 **返回**：
@@ -179,7 +179,7 @@ interface GenerateSpecResult {
    3. 生成 frontmatter
    4. `fileInventory` 中的路径使用 `path.relative(baseDir, filePath)` 生成相对路径（而非绝对路径）
    5. `mermaidDiagrams` 数组包含类图和依赖图（如有）
-   6. 构建 `ModuleSpec` 并通过 Handlebars 渲染（`spec-renderer`）→ 写入 `.specs/*.spec.md`
+   6. 构建 `ModuleSpec` 并通过 Handlebars 渲染（`spec-renderer`）→ 写入 `specs/*.spec.md`
    7. 在返回的 `GenerateSpecResult` 中包含 `moduleSpec` 字段
 9. 将基线骨架序列化至规格中（用于漂移检测 — 参见 US3）
 
@@ -196,5 +196,5 @@ interface GenerateSpecResult {
 **约束**：
 
 - Constitution I：所有接口数据来自 AST，绝不由 LLM 生成
-- Constitution IV：仅写入 `.specs/` 目录
+- Constitution IV：仅写入 `specs/` 目录
 - Constitution II：必须遵循三阶段流水线

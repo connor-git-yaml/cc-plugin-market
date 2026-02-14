@@ -20,7 +20,7 @@ reverse-spec <subcommand> [options]
 | --------- | ---- | ---- | ------ | ---- |
 | `<target>` | string | 是 | - | 目标文件或目录路径 |
 | `--deep` | boolean | 否 | `false` | 深度分析（包含函数体） |
-| `--output-dir` | string | 否 | `.specs` | 自定义输出目录 |
+| `--output-dir` | string | 否 | `specs` | 自定义输出目录 |
 
 **调用映射**:
 ```typescript
@@ -40,7 +40,7 @@ reverse-spec v2.0.0
   AST 解析: 5 文件, 1,234 LOC
   上下文组装: 12,456 tokens
   LLM 生成: 完成
-✓ .specs/auth.spec.md 已生成 (置信度: high)
+✓ specs/auth.spec.md 已生成 (置信度: high)
 ```
 
 ---
@@ -52,7 +52,7 @@ reverse-spec v2.0.0
 | 参数/选项 | 类型 | 必需 | 默认值 | 说明 |
 | --------- | ---- | ---- | ------ | ---- |
 | `--force` | boolean | 否 | `false` | 强制重新生成所有 spec |
-| `--output-dir` | string | 否 | `.specs` | 自定义输出目录 |
+| `--output-dir` | string | 否 | `specs` | 自定义输出目录 |
 
 **调用映射**:
 ```typescript
@@ -71,8 +71,8 @@ reverse-spec v2.0.0 — 批量生成
 扫描项目: 15 模块, 4,567 LOC
 [====================] 15/15 完成
   成功: 13 | 降级: 1 | 失败: 1
-✓ .specs/_index.spec.md 已生成
-✓ 日志: .specs/batch-summary-2026-02-12.md
+✓ specs/_index.spec.md 已生成
+✓ 日志: specs/batch-summary-2026-02-12.md
 ```
 
 ---
@@ -101,7 +101,7 @@ await detectDrift(resolve(specFile), resolve(source), { outputDir });
 **stdout 输出**:
 ```
 reverse-spec v2.0.0 — 漂移检测
-Spec: .specs/auth.spec.md
+Spec: specs/auth.spec.md
 Source: src/auth/
   结构差异: 3 项 (HIGH: 1, MEDIUM: 1, LOW: 1)
   噪声过滤: 移除 2 项
