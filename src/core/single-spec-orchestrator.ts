@@ -7,12 +7,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
-import type { ModuleSpec, SpecSections } from '../models/module-spec.js';
+import type { ModuleSpec, SpecSections, StageProgressCallback } from '../models/module-spec.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
-import { callLLM, parseLLMResponse, buildSystemPrompt, type LLMResponse, LLMUnavailableError } from './llm-client.js';
+import { callLLM, parseLLMResponse, buildSystemPrompt, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
 import { generateClassDiagram } from '../generator/mermaid-class-diagram.js';
@@ -32,6 +32,8 @@ export interface GenerateSpecOptions {
   existingVersion?: string;
   /** 项目根目录（用于文件扫描） */
   projectRoot?: string;
+  /** 阶段进度回调（可选） */
+  onStageProgress?: StageProgressCallback;
 }
 
 export interface GenerateSpecResult {
@@ -145,7 +147,7 @@ export async function prepareContext(
   targetPath: string,
   options: GenerateSpecOptions = {},
 ): Promise<PrepareResult> {
-  const { deep = false, projectRoot } = options;
+  const { deep = false, projectRoot, onStageProgress } = options;
 
   // --- 阶段 1：预处理 ---
 
@@ -157,15 +159,26 @@ export async function prepareContext(
   if (stat.isFile()) {
     filePaths = [resolvedTarget];
   } else {
+    // 单文件时跳过 scan 阶段的独立进度行
+    const scanStart = Date.now();
+    onStageProgress?.({ stage: 'scan', message: '文件扫描中...' });
+
     const scanResult = scanFiles(resolvedTarget, { projectRoot });
     filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
     if (filePaths.length === 0) {
       throw new Error(`目标路径中未找到 TS/JS 文件: ${targetPath}`);
     }
+
+    onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });
   }
 
   // 步骤 2：AST 分析
+  const astStart = Date.now();
+  onStageProgress?.({ stage: 'ast', message: `AST 分析中 (${filePaths.length} 个文件)...` });
+
   const skeletons = await analyzeFiles(filePaths);
+
+  onStageProgress?.({ stage: 'ast', message: 'AST 分析完成', duration: Date.now() - astStart });
 
   // 合并为代表性骨架
   const mergedSkeleton = mergeSkeletons(skeletons);
@@ -192,11 +205,21 @@ export async function prepareContext(
 
   // --- 阶段 2：上下文组装 ---
 
+  const contextStart = Date.now();
+  onStageProgress?.({ stage: 'context', message: '上下文组装中...' });
+
   const systemPrompt = buildSystemPrompt('spec-generation');
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
     templateInstructions: systemPrompt,
   });
+
+  // token 数警告（FR-007：当 token 超过 80,000——即 100,000 预算的 80%）
+  if (context.tokenCount > 80_000) {
+    onStageProgress?.({ stage: 'context', message: `⚠ 上下文 token 数较大 (${context.tokenCount.toLocaleString()})，可能影响质量` });
+  }
+
+  onStageProgress?.({ stage: 'context', message: '上下文组装完成', duration: Date.now() - contextStart });
 
   return { skeletons, mergedSkeleton, context, codeSnippets, filePaths };
 }
@@ -220,7 +243,7 @@ export async function generateSpec(
   targetPath: string,
   options: GenerateSpecOptions = {},
 ): Promise<GenerateSpecResult> {
-  const { outputDir = 'specs', existingVersion } = options;
+  const { outputDir = 'specs', existingVersion, onStageProgress } = options;
   const warnings: string[] = [];
   let tokenUsage = 0;
   let llmDegraded = false;
@@ -231,9 +254,22 @@ export async function generateSpec(
   // --- 阶段 3：生成增强 ---
 
   // 步骤 5：调用 LLM
+  const llmStart = Date.now();
+  onStageProgress?.({ stage: 'llm', message: 'LLM 调用中...' });
+
+  // 将 onRetry 回调转换为阶段进度格式
+  const onRetry: RetryCallback | undefined = onStageProgress
+    ? (event) => {
+        const typeLabel = event.errorType === 'timeout' ? '超时'
+          : event.errorType === 'rate-limit' ? '速率限制'
+          : '服务器错误';
+        onStageProgress({ stage: 'llm', message: `↻ 重试 ${event.attempt}/${event.maxAttempts} (${typeLabel})...` });
+      }
+    : undefined;
+
   let llmContent: string;
   try {
-    const llmResponse: LLMResponse = await callLLM(context);
+    const llmResponse: LLMResponse = await callLLM(context, undefined, onRetry);
     llmContent = llmResponse.content;
     tokenUsage = llmResponse.inputTokens + llmResponse.outputTokens;
   } catch (error) {
@@ -241,15 +277,23 @@ export async function generateSpec(
       // LLM 不可用，降级为 AST-only 输出
       llmDegraded = true;
       warnings.push('LLM 不可用，已降级为 AST-only Spec');
+      onStageProgress?.({ stage: 'llm', message: '⚠ LLM 不可用，降级为 AST-only' });
       llmContent = generateAstOnlyContent(mergedSkeleton);
     } else {
       throw error;
     }
   }
 
+  onStageProgress?.({ stage: 'llm', message: 'LLM 调用完成', duration: Date.now() - llmStart });
+
   // 步骤 6：解析 LLM 响应
+  const parseStart = Date.now();
+  onStageProgress?.({ stage: 'parse', message: '响应解析中...' });
+
   const parsed = parseLLMResponse(llmContent);
   warnings.push(...parsed.parseWarnings);
+
+  onStageProgress?.({ stage: 'parse', message: '响应解析完成', duration: Date.now() - parseStart });
 
   // 步骤 7：不确定性标记已在 parseLLMResponse 中提取
   const uncertaintyCount = parsed.uncertaintyMarkers.length;
@@ -263,6 +307,9 @@ export async function generateSpec(
   );
 
   // 步骤 8：渲染 Spec
+  const renderStart = Date.now();
+  onStageProgress?.({ stage: 'render', message: '渲染写入中...' });
+
   initRenderer();
 
   // 生成 Mermaid 图表（类图 + 依赖图）
@@ -316,6 +363,8 @@ export async function generateSpec(
   const resolvedOutput = path.resolve(outputPath);
   fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
   fs.writeFileSync(resolvedOutput, markdown, 'utf-8');
+
+  onStageProgress?.({ stage: 'render', message: '渲染写入完成', duration: Date.now() - renderStart });
 
   return {
     specPath: outputPath,

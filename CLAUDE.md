@@ -30,10 +30,10 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+- 006-batch-progress-timeout: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph（AST）、dependency-cruiser（依赖图）、handlebars（模板）、zod（验证）、@anthropic-ai/sdk（LLM）——均为现有依赖，无新增运行时依赖
 
 - 005-batch-quality-fixes: 追溯同步 001 contracts——batch 模块级聚合（module-grouper）、dependency-cruiser v16.x 异步兼容、LLM 章节匹配容错、系统提示词增强、Mermaid 依赖图生成器
 - 004-claude-sub-auth: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置，新增使用）
-- 003-skill-init: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增运行时依赖。仅使用 Node.js 内置模块（`fs`, `path`, `os`, `url`）
 
 
 <!-- MANUAL ADDITIONS START -->

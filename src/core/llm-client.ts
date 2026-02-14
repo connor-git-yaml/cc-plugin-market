@@ -89,6 +89,25 @@ export class LLMTimeoutError extends Error {
 }
 
 // ============================================================
+// 重试事件类型
+// ============================================================
+
+/** LLM 重试事件 */
+export interface RetryEvent {
+  /** 当前尝试次数（从 1 开始） */
+  attempt: number;
+  /** 最大尝试次数 */
+  maxAttempts: number;
+  /** 触发重试的错误类型 */
+  errorType: 'timeout' | 'rate-limit' | 'server-error';
+  /** 下一次尝试前的等待时间（毫秒） */
+  delay: number;
+}
+
+/** 重试事件回调 */
+export type RetryCallback = (event: RetryEvent) => void;
+
+// ============================================================
 // 默认配置
 // ============================================================
 
@@ -153,12 +172,14 @@ function sleep(ms: number): Promise<void> {
  *
  * @param context - assembleContext() 的输出
  * @param config - 可选的配置覆盖
+ * @param onRetry - 可选的重试事件回调
  * @returns LLM 响应
  * @throws LLMUnavailableError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
  */
 export async function callLLM(
   context: AssembledContext,
   config?: Partial<LLMConfig>,
+  onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
   const cfg = mergeConfig(config);
   const authResult = detectAuth();
@@ -170,11 +191,11 @@ export async function callLLM(
   }
 
   if (authResult.preferred.type === 'api-key') {
-    return callLLMviaSdk(context, cfg);
+    return callLLMviaSdk(context, cfg, onRetry);
   }
 
   // cli-proxy 策略
-  return callLLMviaCliProxy(context, cfg);
+  return callLLMviaCliProxy(context, cfg, onRetry);
 }
 
 /**
@@ -183,6 +204,7 @@ export async function callLLM(
 async function callLLMviaSdk(
   context: AssembledContext,
   cfg: LLMConfig,
+  onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
   const systemPrompt = buildSystemPrompt('spec-generation');
 
@@ -242,9 +264,25 @@ async function callLLMviaSdk(
         );
       }
 
+      // 超时错误：最多 2 次尝试（attempt >= 1 时跳出）
+      if (lastError instanceof LLMTimeoutError && attempt >= 1) {
+        break;
+      }
+
       if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
         break;
       }
+
+      // 即将重试，触发回调
+      const delay = getRetryDelay(attempt);
+      onRetry?.({
+        attempt: attempt + 1,
+        maxAttempts,
+        errorType: lastError instanceof LLMTimeoutError ? 'timeout'
+          : lastError instanceof LLMRateLimitError ? 'rate-limit'
+          : 'server-error',
+        delay,
+      });
     }
   }
 
@@ -259,6 +297,7 @@ async function callLLMviaSdk(
 async function callLLMviaCliProxy(
   context: AssembledContext,
   cfg: LLMConfig,
+  onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
   const systemPrompt = buildSystemPrompt('spec-generation');
   // 将系统提示和用户内容组合为完整 prompt
@@ -280,13 +319,31 @@ async function callLLMviaCliProxy(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // 超时错误：最多 2 次尝试（attempt >= 1 时跳出）
+      if (lastError instanceof LLMTimeoutError && attempt >= 1) {
+        break;
+      }
+
       if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
         break;
       }
+
+      // 即将重试，触发回调
+      const delay = getRetryDelay(attempt);
+      onRetry?.({
+        attempt: attempt + 1,
+        maxAttempts,
+        errorType: lastError instanceof LLMTimeoutError ? 'timeout'
+          : lastError instanceof LLMRateLimitError ? 'rate-limit'
+          : 'server-error',
+        delay,
+      });
     }
   }
 
-  throw lastError ?? new LLMUnavailableError('CLI 代理调用失败');
+  throw new LLMUnavailableError(
+    `${maxAttempts} 次尝试后仍无法访问 CLI 代理: ${lastError?.message}`,
+  );
 }
 
 // ============================================================

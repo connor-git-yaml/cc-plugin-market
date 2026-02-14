@@ -145,6 +145,14 @@ export async function runBatch(
           outputDir: 'specs',
           projectRoot: resolvedRoot,
           deep: true,
+          onStageProgress: (progress) => {
+            reporter.stage(moduleName, progress);
+            // context 阶段完成时触发进度条半步更新（US3）
+            if (progress.stage === 'context' && progress.duration !== undefined) {
+              const currentCompleted = state!.completedModules.length + failed.length + skipped.length;
+              options.onProgress?.(currentCompleted + 0.5, processingOrder.length);
+            }
+          },
         };
 
         if (moduleName === rootModuleName) {
