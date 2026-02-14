@@ -128,7 +128,7 @@ export async function runBatch(
     state.currentModule = moduleName;
 
     // 检查 spec 是否已存在
-    const specPath = path.join('.specs', `${moduleName}.spec.md`);
+    const specPath = path.join('specs', `${moduleName}.spec.md`);
     if (!force && fs.existsSync(specPath)) {
       skipped.push(moduleName);
       reporter.complete(moduleName, 'skipped');
@@ -142,7 +142,7 @@ export async function runBatch(
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
         const genOptions: GenerateSpecOptions = {
-          outputDir: '.specs',
+          outputDir: 'specs',
           projectRoot: resolvedRoot,
           deep: true,
           onStageProgress: (progress) => {
@@ -230,7 +230,7 @@ export async function runBatch(
     initRenderer();
     const index = generateIndex(collectedModuleSpecs, graph);
     const indexMarkdown = renderIndex(index as any);
-    const indexPath = path.join('.specs', '_index.spec.md');
+    const indexPath = path.join('specs', '_index.spec.md');
     fs.mkdirSync(path.dirname(indexPath), { recursive: true });
     fs.writeFileSync(indexPath, indexMarkdown, 'utf-8');
     indexGenerated = true;
@@ -240,7 +240,7 @@ export async function runBatch(
 
   // 步骤 6：写入摘要日志
   const summary = reporter.finish();
-  const summaryLogPath = path.join('.specs', `batch-summary-${Date.now()}.md`);
+  const summaryLogPath = path.join('specs', `batch-summary-${Date.now()}.md`);
   writeSummaryLog(summary, summaryLogPath);
 
   // 步骤 7：成功后清理检查点

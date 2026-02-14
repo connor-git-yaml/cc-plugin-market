@@ -64,7 +64,7 @@ export function createMcpServer(): McpServer {
     {
       targetPath: z.string().describe('目标文件或目录路径'),
       deep: z.boolean().default(false).describe('深度分析模式'),
-      outputDir: z.string().default('.specs').describe('输出目录'),
+      outputDir: z.string().default('specs').describe('输出目录'),
     },
     async ({ targetPath, deep, outputDir }) => {
       try {

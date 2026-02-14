@@ -11,7 +11,7 @@
 
 **Language/Version**: TypeScript 5.7.3, Node.js LTS (≥20.x)
 **Primary Dependencies**: ts-morph, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（现有）+ @modelcontextprotocol/sdk（新增）
-**Storage**: 文件系统（`.specs/`、`drift-logs/`、`plugins/` 目录写入）
+**Storage**: 文件系统（`specs/`、`drift-logs/`、`plugins/` 目录写入）
 **Testing**: vitest（现有，无新增测试框架）
 **Target Platform**: Claude Code Plugin 生态 + npm CLI
 **Project Type**: single（CLI + Plugin 混合）
@@ -28,7 +28,7 @@
 | I. AST 精确性优先 | ✅ 通过 | 核心 AST 分析逻辑不变，MCP server 仅透传调用 |
 | II. 混合分析流水线 | ✅ 通过 | 三阶段流水线保持不变，MCP 工具映射到现有函数 |
 | III. 诚实标注不确定性 | ✅ 通过 | 不涉及变更 |
-| IV. 只读安全性 | ✅ 通过 | 新增的 plugin 目录是静态资产，MCP server 调用现有写入逻辑（仅 `.specs/`、`drift-logs/`） |
+| IV. 只读安全性 | ✅ 通过 | 新增的 plugin 目录是静态资产，MCP server 调用现有写入逻辑（仅 `specs/`、`drift-logs/`） |
 | V. 纯 Node.js 生态 | ⚠️ 偏差 | 新增 `@modelcontextprotocol/sdk` 依赖——见 Complexity Tracking |
 | VI. 双语文档规范 | ✅ 通过 | SKILL.md 和 plugin 文档遵循中文正文 + 英文标识符规范 |
 

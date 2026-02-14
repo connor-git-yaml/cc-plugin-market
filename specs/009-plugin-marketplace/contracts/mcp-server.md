@@ -88,7 +88,7 @@
     "outputDir": {
       "type": "string",
       "description": "输出目录",
-      "default": ".specs"
+      "default": "specs"
     }
   },
   "required": ["targetPath"]

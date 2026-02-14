@@ -241,7 +241,7 @@ export async function generateSpec(
   targetPath: string,
   options: GenerateSpecOptions = {},
 ): Promise<GenerateSpecResult> {
-  const { outputDir = '.specs', existingVersion, onStageProgress } = options;
+  const { outputDir = 'specs', existingVersion, onStageProgress } = options;
   const warnings: string[] = [];
   let tokenUsage = 0;
   let llmDegraded = false;

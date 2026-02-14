@@ -7,8 +7,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BatchStateSchema, type BatchState } from '../models/module-spec.js';
 
-/** 默认检查点路径（Constitution IV：位于 .specs/ 内） */
-export const DEFAULT_CHECKPOINT_PATH = '.specs/.reverse-spec-checkpoint.json';
+/** 默认检查点路径（Constitution IV：位于 specs/ 内） */
+export const DEFAULT_CHECKPOINT_PATH = 'specs/.reverse-spec-checkpoint.json';
 
 /**
  * 加载已有检查点以恢复执行
