@@ -241,7 +241,7 @@ export async function generateSpec(
   targetPath: string,
   options: GenerateSpecOptions = {},
 ): Promise<GenerateSpecResult> {
-  const { outputDir = 'specs', existingVersion, onStageProgress } = options;
+  const { outputDir = '.specs', existingVersion, onStageProgress } = options;
   const warnings: string[] = [];
   let tokenUsage = 0;
   let llmDegraded = false;
@@ -310,12 +310,16 @@ export async function generateSpec(
 
   initRenderer();
 
-  // 生成 Mermaid 图表（类图 + 依赖图）
-  const classDiagram = generateClassDiagram(mergedSkeleton);
-  const depDiagram = generateDependencyDiagram(mergedSkeleton, skeletons);
-
-  // 统一基准路径（供 sourceTarget、relatedFiles、fileInventory 共用）
+  // 统一基准路径（供 sourceTarget、relatedFiles、fileInventory、Mermaid、baseline 共用）
   const baseDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
+
+  // 将 skeleton 的 filePath 转换为相对路径（供 Mermaid 图和 baseline 使用）
+  const relMerged = { ...mergedSkeleton, filePath: path.relative(baseDir, mergedSkeleton.filePath) };
+  const relSkeletons = skeletons.map((s) => ({ ...s, filePath: path.relative(baseDir, s.filePath) }));
+
+  // 生成 Mermaid 图表（类图 + 依赖图）
+  const classDiagram = generateClassDiagram(relMerged);
+  const depDiagram = generateDependencyDiagram(relMerged, relSkeletons);
 
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
@@ -353,7 +357,7 @@ export async function generateSpec(
     sections: parsed.sections,
     mermaidDiagrams: diagrams.length > 0 ? diagrams : undefined,
     fileInventory,
-    baselineSkeleton: mergedSkeleton,
+    baselineSkeleton: relMerged,
     outputPath,
   };
 
