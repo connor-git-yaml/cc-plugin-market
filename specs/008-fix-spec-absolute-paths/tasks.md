@@ -5,7 +5,7 @@
 
 **Tests**: 不新增测试文件，仅在 Polish 阶段验证全量测试通过。
 
-**Organization**: 仅 1 个 User Story（P1），分两轮实施。
+**Organization**: 仅 1 个 User Story（P1），分三轮实施。
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -36,6 +36,13 @@
 
 **Checkpoint**: Mermaid 图、baseline skeleton、输出目录全部使用相对路径或正确目录名
 
+### Round 3: checkpoint 文件路径
+
+- [x] T014 [P] [US1] 修改 `src/batch/checkpoint.ts` 中 `DEFAULT_CHECKPOINT_PATH` 从 `'specs/.reverse-spec-checkpoint.json'` 改为 `'.specs/.reverse-spec-checkpoint.json'`（行 11），同步更新注释
+- [x] T015 [P] [US1] 修改 `.gitignore` 中 checkpoint 路径从 `specs/.reverse-spec-checkpoint.json` 改为 `.specs/.reverse-spec-checkpoint.json`（行 36）
+
+**Checkpoint**: 断点恢复检查点默认路径与输出目录 `.specs` 一致
+
 ---
 
 ## Phase 2: Polish & Validation
@@ -48,6 +55,9 @@
 - [x] T011 运行 `npm test` 确认 Round 2 改动后全部测试通过
 - [x] T012 运行 `npm run lint` 确认无 lint 错误
 - [x] T013 运行 `npm run build` 确认 TypeScript 编译通过
+- [x] T016 运行 `npm test` 确认 Round 3 改动后全部测试通过
+- [x] T017 运行 `npm run lint` 确认无 lint 错误
+- [x] T018 运行 `npm run build` 确认 TypeScript 编译通过
 
 ---
 
@@ -57,17 +67,20 @@
 
 - **US1 Round 1 (Phase 1)**: 已完成
 - **US1 Round 2 (Phase 1)**: T007 和 T008 依赖 Round 1 的 baseDir；T009 和 T010 独立
+- **US1 Round 3 (Phase 1)**: T014 和 T015 独立，与 Round 2 无依赖
 - **Polish (Phase 2)**: 依赖 US1 全部完成
 
 ### Parallel Opportunities
 
 - T009 和 T010 可并行（修改不同文件）
+- T014 和 T015 可并行（修改不同文件）
 - T011、T012、T013 可并行
+- T016、T017、T018 可并行
 
 ---
 
 ## Notes
 
-- 总计 13 个任务（Round 1: 3 已完成 + Round 2: 4 新增 + Polish: 3 已完成 + 3 新增）
-- Round 2 涉及 2 个源文件：`single-spec-orchestrator.ts`、`batch-orchestrator.ts`
+- 总计 18 个任务（Round 1: 3 + Round 2: 4 + Round 3: 2 + Polish: 9）
+- Round 3 涉及 2 个文件：`checkpoint.ts`、`.gitignore`
 - baseline skeleton 的 filePath Zod schema 要求以 `.ts/.js` 结尾——相对路径同样满足此约束
