@@ -18,10 +18,10 @@
       "tags": ["spec", "ast", "reverse-engineering", "documentation"]
     },
     {
-      "name": "speckit-driver-pro",
-      "source": "./plugins/speckit-driver-pro",
-      "description": "自治研发编排器——主编排器 + 12 子代理架构自动执行 Spec-Driven Development 全流程",
-      "version": "1.1.0",
+      "name": "speckitdriver",
+      "source": "./plugins/speckitdriver",
+      "description": "自治研发编排器——支持 run/story/fix/resume/sync 五种模式自动执行 Spec-Driven Development 全流程",
+      "version": "2.0.0",
       "category": "orchestration",
       "tags": ["orchestrator", "spec-driven", "autonomous", "speckit"]
     }
