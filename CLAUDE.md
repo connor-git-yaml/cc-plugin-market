@@ -52,6 +52,6 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 代码标识符（变量名、函数名、类型名）使用英文
 - 代码注释使用中文
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
-- 使用 speckit-driver-pro 的方式执行需求变更和问题修复不允许直接修改源代码。
+- 使用 speckitdriver 的方式执行需求变更和问题修复不允许直接修改源代码。
 
 <!-- MANUAL ADDITIONS END -->

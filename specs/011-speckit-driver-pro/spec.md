@@ -2,8 +2,10 @@
 
 **Feature Branch**: `011-speckit-driver-pro`
 **Created**: 2026-02-15
+**Updated**: 2026-02-15
 **Status**: Draft
 **Input**: 设计并开发 Speckit Driver Pro — 一个自治研发编排器 Claude Code Plugin
+**Plugin Name**: `speckitdriver`（命令格式：`/speckitdriver:run`、`/speckitdriver:story`、`/speckitdriver:fix`、`/speckitdriver:resume`、`/speckitdriver:sync`）
 
 ## User Scenarios & Testing
 
@@ -90,6 +92,40 @@
 
 ---
 
+### User Story 6 - 快速需求实现（story 模式） (Priority: P1)
+
+开发者有一个明确的需求变更（如"给用户列表添加分页功能"），不需要深度的市场调研和竞品分析，希望跳过调研阶段直接进入规范-规划-实现的快速通道。系统通过分析现有 spec 文档和代码库，直接生成增量规范和实现方案。
+
+**Why this priority**: 大部分日常开发任务（功能迭代、需求变更）不需要完整调研，完整 10 阶段流程过于繁重。提供快速通道可将常见场景的耗时减少 60%+，是提高实际使用率的关键。
+
+**Independent Test**: 用户输入需求描述后，Driver Pro 跳过调研阶段，直接分析代码库和现有 spec，生成增量 spec → plan → tasks → 实现 → 验证。可通过检查 specs/[feature]/ 目录下 **没有** research/ 子目录来验证跳过了调研。
+
+**Acceptance Scenarios**:
+
+1. **Given** 项目已初始化, **When** 用户输入 `/speckitdriver:story <需求描述>`, **Then** 系统跳过调研阶段（Phase 1a/1b/1c），直接从需求分析和 spec 生成开始，5 阶段完成全流程
+2. **Given** story 模式执行中, **When** 进入规范阶段, **Then** 系统自动读取现有代码和相关 spec 文档作为上下文，生成针对性的增量规范
+3. **Given** story 模式执行中, **When** 人工介入, **Then** 最多 2 次关键决策（任务确认 + 验证确认），比完整流程的 4 次更少
+4. **Given** story 模式完成后, **When** 用户运行 `/speckitdriver:sync`, **Then** 新生成的 spec 能正确聚合到产品活文档中
+
+---
+
+### User Story 7 - 快速问题修复（fix 模式） (Priority: P1)
+
+开发者发现一个 bug 或需要修复一个已知问题（如"登录页面在移动端布局错位"），希望 Driver Pro 快速定位问题根因、生成修复方案并实现。系统通过分析现有 spec、问题描述和代码库直接进入诊断-修复-验证的最短路径。
+
+**Why this priority**: Bug 修复是最频繁的开发活动之一，需要最快速的响应。完整流程甚至 story 模式都不够精简，fix 模式将流程压缩到 4 阶段，实现"描述问题→自动修复"的极速体验。
+
+**Independent Test**: 用户描述问题后，Driver Pro 分析代码和 spec 定位根因，生成修复方案并实现。可通过检查 specs/[feature]/ 目录下存在 `fix-report.md`（问题诊断 + 修复方案）来验证走的是 fix 流程。
+
+**Acceptance Scenarios**:
+
+1. **Given** 项目已初始化, **When** 用户输入 `/speckitdriver:fix <问题描述>`, **Then** 系统进入 4 阶段快速修复流程：问题诊断 → 修复规划 → 代码修复 → 验证闭环
+2. **Given** fix 模式执行中, **When** 进入问题诊断阶段, **Then** 系统自动读取相关 spec 和代码文件，输出根因分析报告（root cause、影响范围、修复策略）
+3. **Given** fix 模式执行中, **When** 人工介入, **Then** 最多 1 次关键决策（验证确认），实现近乎全自动修复
+4. **Given** fix 完成后, **When** 修复涉及 spec 变更, **Then** 系统自动更新受影响的 spec 文件，保持 spec-code 同步
+
+---
+
 ### Edge Cases
 
 - 当用户中途中断流程（如关闭终端）后重新启动时，Driver Pro 通过检查已生成的制品文件判断进度，从上次完成的阶段继续，不重复执行已完成的步骤
@@ -98,6 +134,8 @@
 - 当 Monorepo 中某个子项目的验证失败时，不阻断其他子项目的验证，独立报告每个子项目的结果
 - 当用户在调研确认阶段要求补充调研时，系统能追加调研而非重新执行全部调研
 - 当子代理执行失败或返回异常时，主编排器自动重试最多 2 次（默认），仍失败则暂停并向用户展示错误上下文、失败原因和操作选项（重试/跳过/中止）
+- 当 story/fix 模式检测到需求范围过大（涉及 > 5 个模块或 > 20 个文件变更时），系统建议用户切换到完整 run 模式以获得调研支持
+- 当 fix 模式无法通过代码和 spec 分析定位根因时，系统自动建议切换到 story 模式或补充调试信息
 
 ## Requirements
 
@@ -126,6 +164,15 @@
 - **FR-023**: 主编排器 MUST 在每个阶段开始时输出阶段级进度提示（格式如"[3/10] 正在执行技术规划..."），阶段完成时输出该阶段关键产出的简要摘要（如"技术规划完成：选定 PostgreSQL + Redis，生成 3 个 API 契约"）
 - **FR-022**: 子代理执行失败时，主编排器 MUST 自动重试最多 2 次（无固定超时，依赖 Claude Code Task tool 内置超时），2 次重试仍失败则暂停交用户决策（重试/跳过/中止）
 - **FR-021**: 系统 MUST 支持选择性重跑：用户可指定重新执行某个阶段（如"重跑调研"或"重跑规划"），系统重新执行该阶段并将后续阶段的已有制品标记为过期（在文件头添加 `[STALE: 上游阶段已重跑]` 标记），提示用户是否级联重跑后续阶段
+- **FR-024**: 系统 MUST 提供 story 快速模式（`/speckitdriver:story`），跳过调研阶段（Phase 1a/1b/1c），直接从 spec 生成开始，5 阶段完成：Constitution 检查 → 需求规范（基于代码+现有 spec 分析）→ 规划+任务 → 实现 → 验证
+- **FR-025**: story 模式 MUST 在规范阶段自动读取项目现有代码结构和相关 spec 文档作为上下文，替代调研报告作为规范输入
+- **FR-026**: story 模式 MUST 将人工介入控制在 ≤ 2 次：任务确认 + 验证确认
+- **FR-027**: 系统 MUST 提供 fix 快速模式（`/speckitdriver:fix`），4 阶段完成：问题诊断（根因定位）→ 修复规划 → 代码修复 → 验证闭环
+- **FR-028**: fix 模式 MUST 在诊断阶段自动分析相关 spec 和代码文件，输出 fix-report.md 包含根因分析、影响范围和修复策略
+- **FR-029**: fix 模式 MUST 将人工介入控制在 ≤ 1 次：仅验证确认
+- **FR-030**: fix 模式 MUST 在修复完成后自动检查是否需要更新受影响的 spec 文件，保持 spec-code 同步
+- **FR-031**: story/fix 模式 SHOULD 在检测到需求范围过大时（涉及 > 5 个模块或 > 20 个文件），建议用户切换到完整 run 模式
+- **FR-032**: Plugin 命令名称 MUST 统一为 `speckitdriver:xxx` 格式（run/story/fix/resume/sync），取代旧的 `speckit-driver-pro:xxx` 格式
 
 ### Key Entities
 
@@ -145,6 +192,8 @@
 - **SC-004**: 流程中断后重新启动时，系统能基于已有制品判断进度并从正确位置恢复
 - **SC-005**: 使用 cost-efficient 预设时，Opus 调用次数 ≤ 总子代理调用次数的 30%
 - **SC-006**: 使用 Driver Pro 后，单次功能开发的手动 skill 调用次数从 ≥ 9 次降至 1 次（仅触发 Driver Pro）
+- **SC-007**: story 模式完成一次常规需求变更的阶段数为 5（对比 run 模式的 10），人工介入 ≤ 2 次
+- **SC-008**: fix 模式完成一次 bug 修复的阶段数为 4，人工介入 ≤ 1 次
 
 ## Clarifications
 

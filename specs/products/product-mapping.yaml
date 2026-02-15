@@ -1,5 +1,5 @@
 # 产品→功能 spec 映射
-# 由 Speckit Driver Pro sync 子代理自动生成，可手动编辑覆盖
+# 由 Speckitdriver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
 # 最后更新: 2026-02-15
@@ -39,8 +39,8 @@ products:
         type: FIX
         summary: "统一 spec 输出目录引用 .specs → specs"
 
-  speckit-driver-pro:
-    description: "自治研发编排器 Claude Code Plugin — 主编排器 + 11 子代理架构"
+  speckitdriver:
+    description: "自治研发编排器 Claude Code Plugin — 支持 run/story/fix/resume/sync 五种模式"
     specs:
       - id: "011-speckit-driver-pro"
         type: FEATURE

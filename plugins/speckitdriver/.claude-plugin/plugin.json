@@ -1,0 +1,17 @@
+{
+  "name": "speckitdriver",
+  "version": "2.0.0",
+  "description": "自治研发编排器——支持 run/story/fix/resume/sync 五种模式自动执行 Spec-Driven Development 全流程",
+  "author": {
+    "name": "Connor Lu"
+  },
+  "license": "MIT",
+  "keywords": [
+    "orchestrator",
+    "spec-driven",
+    "autonomous",
+    "claude-code",
+    "speckit"
+  ],
+  "hooks": "./hooks/hooks.json"
+}
