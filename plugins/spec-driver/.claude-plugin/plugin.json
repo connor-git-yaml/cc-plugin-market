@@ -1,7 +1,7 @@
 {
   "name": "spec-driver",
-  "version": "3.0.0",
-  "description": "自治研发编排器——支持 run/story/fix/resume/sync 五种模式自动执行 Spec-Driven Development 全流程",
+  "version": "3.1.0",
+  "description": "自治研发编排器——支持 run/story/fix/resume/sync/doc 六种模式自动执行 Spec-Driven Development 全流程",
   "author": {
     "name": "Connor Lu"
   },

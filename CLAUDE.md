@@ -18,6 +18,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 - 文件系统（`specs/`、`drift-logs/` 目录写入） (010-fix-dotspecs-to-specs)
 - Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中 (011-speckit-driver-pro)
 - 文件系统（specs/[feature]/ 目录树，driver-config.yaml 配置文件） (011-speckit-driver-pro)
+- Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中 (015-speckit-doc-command)
+- 文件系统（项目根目录写入 README.md、LICENSE 等；`plugins/spec-driver/` 目录下新增 Skill 文件） (015-speckit-doc-command)
 
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
 
@@ -37,9 +39,9 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+- 015-speckit-doc-command: Added Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中
 - 011-speckit-driver-pro: Added Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中
 - 010-fix-dotspecs-to-specs: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖
-- 009-plugin-marketplace: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（现有）+ @modelcontextprotocol/sdk（新增）
 
 
 
