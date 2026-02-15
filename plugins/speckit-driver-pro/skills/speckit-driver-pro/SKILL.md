@@ -9,6 +9,7 @@
 /speckit-driver-pro --resume
 /speckit-driver-pro --rerun <phase>
 /speckit-driver-pro --preset <balanced|quality-first|cost-efficient>
+/speckit-driver-pro --sync
 ```
 
 ## 输入解析
@@ -21,12 +22,14 @@
 | `--resume` | flag | 恢复模式：扫描已有制品，从上次中断处继续 |
 | `--rerun <phase>` | string | 选择性重跑指定阶段（constitution/research/specify/clarify/plan/tasks/analyze/implement/verify） |
 | `--preset <name>` | string | 临时覆盖模型预设（不修改 driver-config.yaml） |
+| `--sync` | flag | 聚合模式：将增量功能 spec 合并为产品级活文档 |
 
 **解析规则**:
 - 如果 $ARGUMENTS 以 `--` 开头，解析为 flag/option
 - 其余部分视为需求描述
-- `--resume` 和 `--rerun` 不需要需求描述
-- 无参数且非 resume/rerun → 提示用户输入需求描述
+- `--resume`、`--rerun`、`--sync` 不需要需求描述
+- `--sync` 进入独立的聚合流程（见下文"产品规范聚合模式"）
+- 无参数且非 resume/rerun/sync → 提示用户输入需求描述
 
 ---
 
@@ -483,6 +486,93 @@ Task(
 
 建议下一步: git add && git commit
 ══════════════════════════════════════════
+```
+
+---
+
+## 产品规范聚合模式（--sync）
+
+当 `--sync` 参数存在时，跳过标准 10 阶段工作流，进入独立的聚合流程。
+
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档。
+
+**适用场景**：
+
+- 实现完成后同步产品全景文档
+- 定期批量合并多个迭代的 spec
+- 新成员 onboarding 前生成产品现状文档
+
+### 执行步骤
+
+```text
+[1/3] 正在扫描功能规范...
+```
+
+1. 扫描 `specs/` 下所有 `NNN-*` 功能目录
+2. 读取 `prompt_source[sync]`（始终使用 Plugin 内置版本）
+
+```text
+[2/3] 正在聚合产品规范...
+```
+
+3. 通过 Task tool 委派 sync 子代理：
+
+```text
+Task(
+  description: "聚合产品规范",
+  prompt: "{sync 子代理 prompt}" + "{上下文注入: specs 目录列表、每个 spec.md 的完整内容}",
+  subagent_type: "general-purpose",
+  model: "opus"  // 聚合分析始终用 opus
+)
+```
+
+**上下文注入块**（追加到 sync 子代理 prompt 末尾）：
+
+```markdown
+---
+## 运行时上下文（由主编排器注入）
+
+**specs 目录**: {project_root}/specs/
+**功能目录列表**: {NNN-xxx 目录名列表}
+**产品映射文件**: {project_root}/specs/products/product-mapping.yaml（如存在）
+**产品模板**: plugins/speckit-driver-pro/templates/product-spec-template.md
+**已有产品文档**: {specs/products/ 下已有的产品目录列表（如有）}
+---
+```
+
+```text
+[3/3] 正在生成产品活文档...
+```
+
+1. 解析 sync 子代理返回：
+   - 生成的产品数量和文件路径
+   - 每个产品的聚合统计
+   - 未分类 spec 列表（如有）
+
+2. 输出聚合完成报告：
+
+```text
+══════════════════════════════════════════
+  Speckit Driver Pro - 产品规范聚合完成
+══════════════════════════════════════════
+
+扫描 spec 数: {总数}
+产品数: {产品数}
+
+聚合结果:
+  ✅ {产品 A}: {N} 个 spec → specs/products/{产品 A}/current-spec.md
+     功能: {M} 个活跃 FR, {K} 个已废弃
+  ✅ {产品 B}: {N} 个 spec → specs/products/{产品 B}/current-spec.md
+     功能: {M} 个活跃 FR
+
+产品映射: specs/products/product-mapping.yaml
+══════════════════════════════════════════
+```
+
+### Prompt 来源
+
+```text
+prompt_source[sync] = "plugins/speckit-driver-pro/agents/sync.md"  // 始终使用内置版本
 ```
 
 ---
