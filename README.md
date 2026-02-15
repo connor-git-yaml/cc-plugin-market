@@ -1,285 +1,506 @@
-# Reverse-Spec
+# CC Plugin Market
 
+<!-- speckit:section:badges -->
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![npm version](https://img.shields.io/npm/v/reverse-spec.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
-![Tests](https://img.shields.io/badge/tests-231%20passed-brightgreen)
+<!-- speckit:section:badges:end -->
 
-> 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化的 9 段式中文 Spec 文档。TypeScript/JavaScript 项目享有 AST 增强的精确分析，其他语言通过纯 LLM 模式提供降级支持。
+<!-- speckit:section:description -->
+A curated collection of Claude Code plugins for Spec-Driven Development. This repository ships two complementary products that cover the full software development lifecycle — from reverse-engineering existing code into specifications, to orchestrating new feature development through structured workflows.
+<!-- speckit:section:description:end -->
 
-## 功能特性
+<!-- speckit:section:plugins-overview -->
+## Plugins
 
-- **双认证模式** — 支持 API Key 直连和 Claude CLI 订阅代理两种认证方式，自动检测优先级（API Key > CLI 代理），Claude Max/Pro 订阅用户无需单独设置 API Key
-- **CLI 全局分发** — `npm install -g` 后提供 `reverse-spec` 全局命令，支持 `generate`/`batch`/`diff`/`prepare`/`init`/`auth-status` 六个子命令
-- **Skill 自动注册** — 全局安装后自动将 `/reverse-spec` 系列 skill 注册到 Claude Code，卸载时自动清理
-- **项目级 Skill 安装** (`reverse-spec init`) — 一键安装 skill 到当前项目 `.claude/skills/`，支持 `--global` 全局安装和 `--remove` 清理
-- **单模块 Spec 生成** (`/reverse-spec`) — 对任意模块生成完整的 9 段式规格文档；TS/JS 项目接口定义 100% 来自 AST 提取，其他语言通过 LLM 降级分析
-- **AST 预处理** (`reverse-spec prepare`) — 仅执行 AST 分析 + 上下文组装，不调用 LLM，无需认证，可供 Claude Code 原生生成使用
-- **批量项目处理** (`/reverse-spec-batch`) — 基于依赖拓扑排序的全项目批量 Spec 生成，支持断点恢复和架构索引
-- **Spec 漂移检测** (`/reverse-spec-diff`) — AST 结构化 Diff + LLM 语义评估，三级严重级别分类，噪声自动过滤
-- **认证状态查看** (`reverse-spec auth-status`) — 检测并显示当前认证状态，支持 `--verify` 在线验证
-- **混合分析流水线** — 三阶段引擎（预处理 → 上下文组装 → 生成增强），原始源码不直接输入 LLM
-- **诚实标注不确定性** — 推断内容标记 `[推断]`，模糊代码标记 `[不明确]`，语法错误标记 `[SYNTAX ERROR]`
-- **只读安全保证** — 所有命令严格只读，仅向 `specs/` 和 `drift-logs/` 写入输出
+| Plugin | Type | Description |
+| ------ | ---- | ----------- |
+| **[reverse-spec](#reverse-spec)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
+| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 12 sub-agents and 6 execution modes |
 
-## 技术栈
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                       CC Plugin Market                          │
+│                                                                 │
+│  ┌──────────────────────┐     ┌──────────────────────────────┐  │
+│  │    reverse-spec       │     │        Spec Driver           │  │
+│  │  (Reverse Engineer)   │     │  (Forward Orchestrator)      │  │
+│  │                       │     │                              │  │
+│  │  Code → AST → Spec    │     │  Idea → Spec → Plan → Code  │  │
+│  │                       │     │                              │  │
+│  │  • generate / batch   │     │  • speckit-feature           │  │
+│  │  • diff / prepare     │     │  • speckit-story             │  │
+│  │  • MCP server         │     │  • speckit-fix               │  │
+│  │  • CLI + Skills       │     │  • speckit-resume/sync/doc   │  │
+│  └──────────────────────┘     └──────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+<!-- speckit:section:plugins-overview:end -->
 
-| 类别 | 技术 |
-|------|------|
-| 语言/运行时 | TypeScript 5.x, Node.js LTS (20.x+) |
-| AST 引擎 | ts-morph（主力），tree-sitter + tree-sitter-typescript（容错降级） |
-| 依赖分析 | dependency-cruiser |
-| 模板引擎 | Handlebars |
-| 数据验证 | Zod |
-| 图表生成 | Mermaid（嵌入 Markdown） |
-| AI 模型 | Claude 4.5/4.6 Sonnet/Opus（通过 Anthropic API 或 Claude CLI 代理） |
-| 测试框架 | Vitest（单元/集成/Golden Master/自举） |
+---
 
-## 快速开始
+<!-- speckit:section:reverse-spec -->
+## reverse-spec
 
-### 环境要求
+A hybrid AST + LLM pipeline that reverse-engineers legacy source code into structured, nine-section Spec documents. TypeScript/JavaScript projects benefit from AST-enhanced precise analysis, while other languages are supported via LLM-only fallback mode.
 
-- Node.js 20.x+
-- 认证方式（二选一，自动检测）：
-  - **API Key**：设置 `ANTHROPIC_API_KEY` 环境变量（SDK 直连，优先使用）
-  - **Claude CLI 订阅**：安装并登录 Claude Code（`claude auth login`，适用于 Claude Max/Pro 用户）
+### Features
 
-### 全局安装（推荐）
+- **Single Module Spec Generation** (`generate`) — Complete nine-section spec documents; TS/JS interface definitions 100% AST-extracted
+- **Batch Project Processing** (`batch`) — Dependency-topology-ordered generation with checkpoint recovery and architecture index
+- **Spec Drift Detection** (`diff`) — AST structural diff + LLM semantic evaluation, three severity levels, automatic noise filtering
+- **AST Preprocessing** (`prepare`) — AST analysis + context assembly without LLM calls, no auth required
+- **MCP Server** — Model Context Protocol server for IDE integration
+- **Dual Authentication** — API Key direct connection and Claude CLI subscription proxy, auto-detected
+- **Hybrid Pipeline** — Three-phase engine (preprocessing → context assembly → generation); raw source code never directly sent to LLM
+- **Honest Uncertainty Labeling** — Inferred content marked `[inferred]`, ambiguous code marked `[unclear]`
+- **Read-Only Safety** — All commands strictly read-only; writes limited to `specs/` and `drift-logs/`
+
+### Getting Started
+
+**Prerequisites:** Node.js 20.x+, and one of:
+
+- **API Key**: Set `ANTHROPIC_API_KEY` environment variable (takes priority)
+- **Claude CLI**: Install and log in to Claude Code (`claude auth login`)
+
+**Install globally (recommended):**
 
 ```bash
 npm install -g reverse-spec
 ```
 
-全局安装后：
+After installation, `reverse-spec` CLI is available globally, and `/reverse-spec` skills are auto-registered in Claude Code.
 
-- `reverse-spec` CLI 可在任意项目中使用
-- `/reverse-spec` 系列 skill 自动注册到 Claude Code
-- 卸载时自动清理已注册的 skill
-
-### 本地开发安装
+**Or from source:**
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/connor-git-yaml/cc-plugin-market.git
 cd reverse-spec
-npm install
+npm install && npm run build
 ```
 
-### CLI 使用
+### CLI Usage
 
 ```bash
-# 单模块 Spec 生成
+# Single module spec generation
 reverse-spec generate src/auth/ --deep
 
-# AST 预处理（不调用 LLM，无需认证）
+# AST preprocessing only (no LLM, no auth required)
 reverse-spec prepare src/auth/ --deep
 
-# 全项目批量生成
+# Batch spec generation for entire project
 reverse-spec batch --force
 
-# Spec 漂移检测
+# Spec drift detection
 reverse-spec diff specs/auth.spec.md src/auth/
 
-# 自定义输出目录
+# Custom output directory
 reverse-spec generate src/auth/ --output-dir out/
 
-# 查看认证状态
-reverse-spec auth-status
-
-# 在线验证认证凭证
+# Check authentication status
 reverse-spec auth-status --verify
 
-# 安装 skill 到当前项目
-reverse-spec init
+# Install skills to current project / globally
+reverse-spec init [--global]
 
-# 安装 skill 到全局 ~/.claude/skills/
-reverse-spec init --global
-
-# 移除已安装的 skill
+# Remove installed skills
 reverse-spec init --remove
-
-# 查看版本
-reverse-spec --version
-
-# 查看帮助
-reverse-spec --help
 ```
 
-### Claude Code Skill 使用
-
-在 Claude Code 中执行以下命令：
+### Claude Code Skills
 
 ```bash
-# 单模块 Spec 生成
-/reverse-spec src/auth/
-
-# 全项目批量生成
-/reverse-spec-batch
-
-# Spec 漂移检测
-/reverse-spec-diff specs/auth.spec.md src/auth/
+/reverse-spec src/auth/                          # Single module spec
+/reverse-spec-batch                              # Full project batch
+/reverse-spec-diff specs/auth.spec.md src/auth/  # Drift detection
 ```
 
-### 开发命令
-
-```bash
-# 编译
-npm run build
-
-# 运行全部测试
-npm test
-
-# 监听模式测试
-npm run test:watch
-
-# 覆盖率报告
-npm run test:coverage
-
-# 仅单元测试
-npm run test:unit
-
-# 仅集成测试
-npm run test:integration
-
-# 类型检查
-npm run lint
-```
-
-## 项目结构
-
-```text
-src/
-├── core/                          # 核心分析流水线
-│   ├── ast-analyzer.ts            # ts-morph AST → CodeSkeleton
-│   ├── tree-sitter-fallback.ts    # AST 容错降级
-│   ├── context-assembler.ts       # Skeleton + 依赖 → LLM prompt
-│   ├── llm-client.ts              # Claude API 客户端（重试、解析）
-│   ├── single-spec-orchestrator.ts # 单模块生成编排
-│   ├── secret-redactor.ts         # 敏感信息脱敏
-│   └── token-counter.ts           # Token 预算管理
-├── graph/                         # 依赖图谱
-│   ├── dependency-graph.ts        # dependency-cruiser 封装
-│   ├── topological-sort.ts        # 拓扑排序 + Tarjan SCC
-│   └── mermaid-renderer.ts        # Mermaid 依赖图生成
-├── diff/                          # 差异引擎
-│   ├── structural-diff.ts         # CodeSkeleton 结构比对
-│   ├── semantic-diff.ts           # LLM 行为变更评估
-│   ├── noise-filter.ts            # 空白/注释噪声过滤
-│   └── drift-orchestrator.ts      # 漂移检测编排
-├── generator/                     # Spec 生成与输出
-│   ├── spec-renderer.ts           # Handlebars 九段式渲染
-│   ├── frontmatter.ts             # YAML frontmatter + 版本管理
-│   ├── mermaid-class-diagram.ts   # Mermaid 类图生成
-│   └── index-generator.ts         # _index.spec.md 生成
-├── batch/                         # 批处理编排
-│   ├── batch-orchestrator.ts      # 批量 Spec 生成
-│   ├── progress-reporter.ts       # 终端进度显示
-│   └── checkpoint.ts              # 断点续传状态
-├── models/                        # Zod Schema 类型定义
-│   ├── code-skeleton.ts           # CodeSkeleton
-│   ├── drift-item.ts              # DriftItem + DriftSummary
-│   ├── dependency-graph.ts        # DependencyGraph + SCC
-│   └── module-spec.ts             # ModuleSpec + DriftReport + BatchState
-├── utils/                         # 工具函数
-│   ├── file-scanner.ts            # 文件发现 + .gitignore 过滤
-│   └── chunk-splitter.ts          # >5k LOC 分块策略
-├── installer/                     # Skill 安装/卸载模块
-│   ├── skill-installer.ts         # 安装/卸载核心逻辑
-│   └── skill-templates.ts         # 3 个 SKILL.md 模板定义
-├── auth/                          # 认证检测与代理
-│   ├── auth-detector.ts           # 认证方式检测（API Key / CLI 代理）
-│   └── cli-proxy.ts               # Claude CLI 子进程代理（订阅用户）
-├── cli/                           # CLI 全局命令入口
-│   ├── index.ts                   # bin 入口（#!/usr/bin/env node）
-│   ├── commands/
-│   │   ├── generate.ts            # generate 子命令
-│   │   ├── prepare.ts             # prepare 子命令（AST 预处理，无需 LLM）
-│   │   ├── batch.ts               # batch 子命令
-│   │   ├── diff.ts                # diff 子命令
-│   │   ├── init.ts                # init 子命令（skill 安装/卸载）
-│   │   └── auth-status.ts         # auth-status 子命令
-│   └── utils/
-│       ├── parse-args.ts          # 参数解析
-│       └── error-handler.ts       # 错误处理 + 双认证检测
-├── scripts/                       # npm lifecycle 脚本
-│   ├── postinstall.ts             # 全局安装后注册 skill
-│   └── preuninstall.ts            # 卸载前清理 skill
-└── skills-global/                 # 全局版 Skill（使用 CLI 调用）
-    ├── reverse-spec/SKILL.md
-    ├── reverse-spec-batch/SKILL.md
-    └── reverse-spec-diff/SKILL.md
-
-templates/                         # Handlebars 输出模板
-├── module-spec.hbs                # 九段式 Spec 模板
-├── index-spec.hbs                 # 架构索引模板
-└── drift-report.hbs               # 漂移报告模板
-
-skills/                            # 本地版 Skill（使用 npx tsx 调用）
-├── reverse-spec/SKILL.md          # /reverse-spec 命令
-├── reverse-spec-batch/SKILL.md    # /reverse-spec-batch 命令
-└── reverse-spec-diff/SKILL.md     # /reverse-spec-diff 命令
-
-tests/                             # 测试套件（231 用例）
-├── unit/                          # 19 个单元测试文件
-├── integration/                   # 4 个集成测试文件
-├── golden-master/                 # Golden Master 结构相似度测试
-└── self-hosting/                  # 自举测试（分析自身）
-```
-
-## 架构概览
+### Architecture
 
 ```text
 SourceFile(s)
-    ↓ [ast-analyzer.ts]                          ← 阶段 1：预处理
+    ↓  [ast-analyzer]                     ← Phase 1: Preprocessing
 CodeSkeleton
-    ↓ [context-assembler.ts]                     ← 阶段 2：上下文组装
-    │  + secret-redactor.ts（脱敏）
-    │  + token-counter.ts（≤100k 预算）
+    ↓  [context-assembler]                ← Phase 2: Context Assembly
+    │   + secret-redactor (redaction)
+    │   + token-counter (≤100k budget)
     │
-    ├─── prepare 模式 → stdout（无需认证）
+    ├── prepare mode → stdout (no auth)
     │
 LLM Prompt
-    ↓ [llm-client.ts → auth-detector.ts]         ← 阶段 3：生成增强
-    │  ├── API Key → @anthropic-ai/sdk 直连
-    │  └── CLI 代理 → spawn claude（订阅用户）
+    ↓  [llm-client → auth-detector]       ← Phase 3: Generation
+    │   ├── API Key → @anthropic-ai/sdk
+    │   └── CLI proxy → spawn claude
 ModuleSpec → specs/*.spec.md
 ```
+<!-- speckit:section:reverse-spec:end -->
 
-## 测试
+---
 
-项目包含 4 级测试体系，共 231 个测试用例：
+<!-- speckit:section:spec-driver -->
+## Spec Driver
 
-| 层级 | 文件数 | 用例数 | 覆盖范围 |
-|------|--------|--------|----------|
-| 单元测试 | 19 | 187 | 各模块独立功能（含 CLI 解析、Skill 安装器、init 命令、认证检测、CLI 代理） |
-| 集成测试 | 4 | 30 | 端到端流水线 + 漂移检测 + CLI e2e + init e2e |
-| Golden Master | 1 | 9 | AST 提取精度 ≥ 90% 结构相似度 |
-| 自举测试 | 1 | 5 | 项目分析自身的完整性验证 |
+**Spec Driver** (v3.1.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 12 specialized sub-agents, 4 quality gates, and 6 execution modes.
 
-## 设计文档
+### How It Works
 
-项目采用 Spec 驱动开发（SDD）方法论：
+```text
+Constitution → Research → Specify → Clarify → Plan → Tasks → Implement → Verify
+  (Phase 0)   (Phase 1)  (Phase 2) (Phase 3) (Phase 4) (Phase 5) (Phase 6) (Phase 7)
+```
 
-| 文档 | 内容 |
-|------|------|
-| [spec.md](specs/001-reverse-spec-v2/spec.md) | 功能规格：7 个用户故事、27 条功能需求、9 条成功标准 |
-| [plan.md](specs/001-reverse-spec-v2/plan.md) | 实现计划：项目结构、Constitution 合规检查 |
-| [data-model.md](specs/001-reverse-spec-v2/data-model.md) | 数据模型：8 个核心实体、ER 图、状态转换、数据流 |
-| [tasks.md](specs/001-reverse-spec-v2/tasks.md) | 任务清单：52 个任务、8 个阶段、依赖关系图 |
-| [contracts/](specs/001-reverse-spec-v2/contracts/) | API 契约：6 个模块的完整接口定义 |
-| [002 spec.md](specs/002-cli-global-distribution/spec.md) | CLI 全局分发：4 个用户故事、12 条功能需求 |
-| [002 tasks.md](specs/002-cli-global-distribution/tasks.md) | CLI 任务清单：24 个任务、7 个阶段 |
-| [003 spec.md](specs/003-skill-init/spec.md) | Skill Init：项目级/全局 skill 安装、5 个用户故事 |
-| [003 tasks.md](specs/003-skill-init/tasks.md) | Skill Init 任务清单：20 个任务、7 个阶段 |
-| [004 spec.md](specs/004-claude-sub-auth/spec.md) | Claude 订阅认证：双认证策略、CLI 代理、auth-status 命令 |
-| [004 tasks.md](specs/004-claude-sub-auth/tasks.md) | 订阅认证任务清单：17 个任务、5 个阶段 |
+Each phase is handled by a dedicated sub-agent with scoped permissions. The orchestrator manages context passing, quality gates, and failure recovery automatically.
 
-## Constitution 原则
+### Setup
 
-本项目遵循 6 条不可妥协的 Constitution 原则：
+Spec Driver is distributed as a Claude Code plugin. It is included in this repository under `plugins/spec-driver/` and is registered automatically when the project is opened in Claude Code.
 
-1. **AST 精确性优先** — 所有结构化数据来自 AST，LLM 不得捏造接口
-2. **混合分析流水线** — 强制三阶段流水线，原始源码不直接输入 LLM
-3. **诚实标注不确定性** — 推断内容必须显式标记并附带理由
-4. **只读安全性** — 所有命令严格只读，写入仅限 `specs/` 和 `drift-logs/`
-5. **纯 Node.js 生态** — 所有依赖限于 npm 包，不引入非 Node.js 运行时
-6. **双语文档规范** — 中文散文 + 英文代码标识符
+To initialize Spec Driver in a new project:
+
+```bash
+# Creates .specify/ directory, constitution.md, and driver-config.yaml
+/spec-driver:speckit-feature "your feature description"
+# The first run will auto-initialize the project structure
+```
+
+### Orchestration Modes
+
+Choose the right mode based on your scenario:
+
+| Scenario | Command | Phases | Human Interaction |
+| -------- | ------- | ------ | ----------------- |
+| New feature, major requirement | `/spec-driver:speckit-feature <desc>` | 10 | ≤4 |
+| Feature iteration, requirement change | `/spec-driver:speckit-story <desc>` | 5 | ≤2 |
+| Bug fix, issue resolution | `/spec-driver:speckit-fix <desc>` | 4 | ≤1 |
+| Resume interrupted workflow | `/spec-driver:speckit-resume` | Variable | 0 |
+| Aggregate product specification | `/spec-driver:speckit-sync` | 3 | 0 |
+| Generate open-source docs | `/spec-driver:speckit-doc` | 6 | 2-3 |
+
+#### Feature Mode — Full 10-Phase Orchestration
+
+```bash
+/spec-driver:speckit-feature "Add user authentication with OAuth2"
+```
+
+1. **Constitution** — Validate against project principles
+2. **Product Research** — Market needs, competitor analysis
+3. **Tech Research** — Architecture options, technology evaluation
+4. **Research Synthesis** — Product × Technology decision matrix
+5. **Specify** — Generate structured requirement specification
+6. **Clarify + Checklist** — Resolve ambiguities, quality check
+7. **Plan** — Technical architecture and implementation design
+8. **Tasks + Analyze** — Dependency-ordered task breakdown, cross-artifact consistency analysis
+9. **Implement** — Execute tasks with code generation
+10. **Verify** — Build, lint, and test validation
+
+#### Story Mode — Quick 5-Phase
+
+```bash
+/spec-driver:speckit-story "Add dark mode toggle to settings page"
+```
+
+Skips research phases — analyzes existing code context instead. Ideal for iterative changes and requirement updates.
+
+#### Fix Mode — Rapid 4-Phase
+
+```bash
+/spec-driver:speckit-fix "Login fails when email contains '+' character"
+```
+
+Rapid diagnosis → root cause analysis → targeted fix → verification. Auto-syncs specs after fix.
+
+#### Resume Mode — Interrupted Workflow Recovery
+
+```bash
+/spec-driver:speckit-resume
+```
+
+No arguments needed. Automatically scans existing artifacts, detects the breakpoint, and continues from where the workflow was interrupted.
+
+#### Sync Mode — Product Spec Aggregation
+
+```bash
+/spec-driver:speckit-sync
+```
+
+Aggregates individual feature specs from `specs/` into a unified product-level `current-spec.md`. Fully automatic, zero human interaction.
+
+#### Doc Mode — Open-Source Documentation
+
+```bash
+/spec-driver:speckit-doc
+```
+
+Interactive generation of README.md, LICENSE, CONTRIBUTING.md, and CODE_OF_CONDUCT.md with conflict detection and backup.
+
+### Individual Phase Commands
+
+Each phase can also be run independently for fine-grained control:
+
+```bash
+# Create or update project constitution
+/speckit.constitution
+
+# Generate requirement specification from description
+/speckit.specify
+
+# Clarify ambiguities in the current spec
+/speckit.clarify
+
+# Generate quality checklist
+/speckit.checklist
+
+# Create implementation plan
+/speckit.plan
+
+# Generate dependency-ordered tasks
+/speckit.tasks
+
+# Run cross-artifact consistency analysis
+/speckit.analyze
+
+# Execute implementation plan
+/speckit.implement
+```
+
+### Sub-Agents
+
+| Agent | Phase | Responsibility | Permissions |
+| ----- | ----- | -------------- | ----------- |
+| constitution | 0 | Project principle validation | Read |
+| product-research | 1a | Market needs, competitor analysis | WebSearch, Read, Glob, Grep |
+| tech-research | 1b | Architecture options, technology evaluation | WebSearch, Read, Glob, Grep |
+| specify | 2 | Structured requirement specification | Read, Write, Bash |
+| clarify | 3 | Ambiguity detection and resolution | Read, Bash |
+| checklist | 3.5 | Specification quality checklist | Read, Bash |
+| plan | 4 | Technical architecture and design | Read, Write, Bash |
+| tasks | 5 | Task decomposition and dependency ordering | Read, Write, Bash |
+| analyze | 5.5 | Cross-artifact consistency analysis | Read, Bash |
+| implement | 6 | Code generation per task list | Read, Write, Bash, WebFetch |
+| verify | 7 | Build, lint, and test validation | Bash, Read, Write |
+| sync | — | Product specification aggregation | Read, Write, Bash, Glob |
+
+### Generated Artifacts
+
+All artifacts are written to `specs/<feature-id>/`:
+
+| Artifact | Description |
+| -------- | ----------- |
+| `spec.md` | Structured requirement specification |
+| `plan.md` | Technical architecture and implementation plan |
+| `tasks.md` | Dependency-ordered task breakdown |
+| `research-synthesis.md` | Product × Technology research summary |
+| `verification-report.md` | Build/lint/test verification results |
+| `current-spec.md` | Aggregated product-level specification (via sync) |
+
+### Configuration
+
+Customize behavior via `driver-config.yaml` in the project root:
+
+```yaml
+# Model presets: balanced (default) | quality-first | cost-efficient
+preset: balanced
+
+# Override model per agent
+agents:
+  specify:
+    model: opus
+  implement:
+    model: sonnet
+
+# Quality gates
+quality_gates:
+  auto_continue_on_warning: true
+  pause_on_critical: true
+
+# Retry policy
+retry:
+  max_attempts: 2
+
+# Verification commands (auto-detected if omitted)
+verification:
+  commands:
+    build: "npm run build"
+    lint: "npm run lint"
+    test: "npm test"
+```
+
+**Model presets:**
+
+| Preset | Research/Specify/Plan/Analyze | Clarify/Checklist/Tasks/Implement/Verify |
+| ------ | ----------------------------- | ---------------------------------------- |
+| `balanced` (default) | Opus | Sonnet |
+| `quality-first` | Opus | Opus |
+| `cost-efficient` | Sonnet | Sonnet |
+
+### Supported Verification Languages
+
+JS/TS (npm/pnpm/yarn/bun), Rust (Cargo), Go, Python (pip/poetry/uv), Java (Maven/Gradle), Kotlin, Swift (SPM), C/C++ (CMake/Make), C# (.NET), Elixir (Mix), Ruby (Bundler)
+<!-- speckit:section:spec-driver:end -->
+
+---
+
+<!-- speckit:section:project-structure -->
+## Project Structure
+
+```text
+src/                               # reverse-spec TypeScript source
+├── core/                          # Core analysis pipeline
+│   ├── ast-analyzer.ts            # ts-morph AST → CodeSkeleton
+│   ├── tree-sitter-fallback.ts    # AST fault-tolerant fallback
+│   ├── context-assembler.ts       # Skeleton + deps → LLM prompt
+│   ├── llm-client.ts              # Claude API client (retry, parsing)
+│   ├── single-spec-orchestrator.ts # Single module generation orchestrator
+│   ├── secret-redactor.ts         # Sensitive info redaction
+│   └── token-counter.ts           # Token budget management
+├── graph/                         # Dependency graph
+│   ├── dependency-graph.ts        # dependency-cruiser wrapper
+│   ├── topological-sort.ts        # Topological sort + Tarjan SCC
+│   └── mermaid-renderer.ts        # Mermaid dependency graph generation
+├── diff/                          # Diff engine
+│   ├── structural-diff.ts         # CodeSkeleton structural comparison
+│   ├── semantic-diff.ts           # LLM behavioral change assessment
+│   ├── noise-filter.ts            # Whitespace/comment noise filtering
+│   └── drift-orchestrator.ts      # Drift detection orchestrator
+├── generator/                     # Spec generation & output
+│   ├── spec-renderer.ts           # Handlebars nine-section renderer
+│   ├── frontmatter.ts             # YAML frontmatter + versioning
+│   ├── mermaid-class-diagram.ts   # Mermaid class diagram generation
+│   └── index-generator.ts         # _index.spec.md generation
+├── batch/                         # Batch processing
+│   ├── batch-orchestrator.ts      # Batch spec generation
+│   ├── progress-reporter.ts       # Terminal progress display
+│   └── checkpoint.ts              # Checkpoint recovery state
+├── models/                        # Zod schema type definitions
+├── utils/                         # Utility functions
+├── installer/                     # Skill installer/uninstaller
+├── auth/                          # Auth detection & proxy
+├── mcp/                           # MCP Server
+├── cli/                           # CLI entry & subcommands
+└── scripts/                       # npm lifecycle scripts
+
+plugins/                           # Claude Code plugins
+├── reverse-spec/                  # reverse-spec MCP plugin
+└── spec-driver/                   # Spec Driver orchestrator (v3.1.0)
+    ├── .claude-plugin/plugin.json # Plugin metadata
+    ├── agents/                    # 12 specialized sub-agent prompts
+    │   ├── constitution.md        # Phase 0: Principle validation
+    │   ├── product-research.md    # Phase 1a: Market research
+    │   ├── tech-research.md       # Phase 1b: Technology evaluation
+    │   ├── specify.md             # Phase 2: Requirement specification
+    │   ├── clarify.md             # Phase 3: Ambiguity resolution
+    │   ├── checklist.md           # Phase 3.5: Quality checklist
+    │   ├── plan.md                # Phase 4: Technical planning
+    │   ├── tasks.md               # Phase 5: Task decomposition
+    │   ├── analyze.md             # Phase 5.5: Consistency analysis
+    │   ├── implement.md           # Phase 6: Code implementation
+    │   ├── verify.md              # Phase 7: Build/lint/test verification
+    │   └── sync.md                # Product spec aggregation
+    ├── skills/                    # 6 execution mode definitions
+    │   ├── speckit-feature/       # Full 10-phase orchestration
+    │   ├── speckit-story/         # Quick 5-phase iteration
+    │   ├── speckit-fix/           # Rapid 4-phase bug fix
+    │   ├── speckit-resume/        # Interrupted workflow recovery
+    │   ├── speckit-sync/          # Product spec aggregation
+    │   └── speckit-doc/           # Open-source doc generation
+    ├── templates/                 # Report and config templates
+    └── scripts/                   # Initialization and scanning scripts
+
+templates/                         # Handlebars output templates
+├── module-spec.hbs                # Nine-section spec template
+├── index-spec.hbs                 # Architecture index template
+└── drift-report.hbs               # Drift report template
+
+skills/                            # Local skills (via npx tsx)
+├── reverse-spec/SKILL.md
+├── reverse-spec-batch/SKILL.md
+└── reverse-spec-diff/SKILL.md
+
+tests/                             # Test suite (231 cases)
+├── unit/                          # 19 unit test files
+├── integration/                   # 4 integration test files
+├── golden-master/                 # Golden Master structural similarity tests
+└── self-hosting/                  # Self-hosting tests (analyze itself)
+```
+<!-- speckit:section:project-structure:end -->
+
+<!-- speckit:section:tech-stack -->
+## Tech Stack
+
+### reverse-spec Stack
+
+| Category | Technology |
+| -------- | --------- |
+| Language / Runtime | TypeScript 5.x, Node.js LTS (20.x+) |
+| AST Engine | [ts-morph](https://github.com/dsherret/ts-morph) (primary), [tree-sitter](https://tree-sitter.github.io/) + tree-sitter-typescript (fallback) |
+| Dependency Analysis | [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) |
+| Template Engine | [Handlebars](https://handlebarsjs.com/) |
+| Data Validation | [Zod](https://zod.dev/) |
+| Diagram Generation | Mermaid (embedded in Markdown) |
+| AI Model | Claude 4.5/4.6 Sonnet/Opus (via Anthropic API or Claude CLI proxy) |
+| MCP Integration | [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) |
+| Testing | [Vitest](https://vitest.dev/) (unit / integration / golden master / self-hosting) |
+
+### Spec Driver Stack
+
+| Category | Technology |
+| -------- | --------- |
+| Plugin Format | Markdown prompts + Bash scripts + YAML configuration |
+| Runtime | Claude Code sandbox (no external runtime dependencies) |
+| Agent System | 12 specialized sub-agents with scoped tool permissions |
+| Configuration | YAML (`driver-config.yaml`) with 3 model presets |
+| Templates | Markdown templates for research reports, specs, and verification |
+<!-- speckit:section:tech-stack:end -->
+
+<!-- speckit:section:testing -->
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+
+# Unit tests only
+npm run test:unit
+
+# Integration tests only
+npm run test:integration
+
+# Type checking
+npm run lint
+```
+
+The project includes a 4-tier testing system with 231 test cases:
+
+| Tier | Files | Cases | Coverage |
+| ---- | ----- | ----- | -------- |
+| Unit | 19 | 187 | Individual module functionality |
+| Integration | 4 | 30 | End-to-end pipeline + drift detection + CLI e2e |
+| Golden Master | 1 | 9 | AST extraction precision ≥ 90% structural similarity |
+| Self-Hosting | 1 | 5 | Project analyzes itself for completeness |
+<!-- speckit:section:testing:end -->
+
+<!-- speckit:section:contributing -->
+## Contributing
+
+Bug reports and pull requests are welcome. Please open an issue first to discuss what you would like to change.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+<!-- speckit:section:contributing:end -->
+
+<!-- speckit:section:license -->
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+<!-- speckit:section:license:end -->
