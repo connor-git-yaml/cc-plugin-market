@@ -1,6 +1,6 @@
 {
   "enabledPlugins": {
     "reverse-spec@cc-plugin-market": true,
-    "speckitdriver@cc-plugin-market": true
+    "spec-driver@cc-plugin-market": true
   }
 }
