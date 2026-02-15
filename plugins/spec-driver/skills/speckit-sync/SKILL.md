@@ -125,6 +125,11 @@ Task(
   ✅ {产品 B}: {N} 个 spec → specs/products/{产品 B}/current-spec.md
      功能: {M} 个活跃 FR
 
+文档质量:
+  {产品 A}: {完整章节数}/14 章节完整
+    待补充: {待补充章节名列表}
+  {产品 B}: {完整章节数}/14 章节完整
+
 产品映射: specs/products/product-mapping.yaml
 ══════════════════════════════════════════
 ```
