@@ -39,6 +39,69 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 ```
 <!-- speckit:section:plugins-overview:end -->
 
+<!-- speckit:section:plugin-installation -->
+## Plugin Installation
+
+### Prerequisites
+
+- [Claude Code](https://claude.com/claude-code) CLI installed and authenticated
+
+### Add the Marketplace
+
+```bash
+claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yaml/cc-plugin-market.git
+```
+
+### Install Plugins
+
+```bash
+# Install to current project (recommended — scoped to this project only)
+claude plugin install spec-driver@cc-plugin-market --scope project
+claude plugin install reverse-spec@cc-plugin-market --scope project
+
+# Or install globally (available across all projects)
+claude plugin install spec-driver@cc-plugin-market --scope global
+claude plugin install reverse-spec@cc-plugin-market --scope global
+```
+
+### Update Plugins
+
+```bash
+# Refresh marketplace cache to get latest versions
+claude plugin marketplace update cc-plugin-market
+
+# Then reinstall to upgrade
+claude plugin install spec-driver@cc-plugin-market --scope project
+```
+
+### Uninstall Plugins
+
+```bash
+# Remove from current project
+claude plugin remove spec-driver --scope project
+claude plugin remove reverse-spec --scope project
+
+# Remove from global scope
+claude plugin remove spec-driver --scope global
+claude plugin remove reverse-spec --scope global
+```
+
+### Verify Installation
+
+After installation, the plugin skills become available in Claude Code:
+
+```bash
+# List installed plugins
+claude plugin list
+
+# Test spec-driver skills
+/spec-driver:speckit-doc
+
+# Test reverse-spec skills
+/reverse-spec src/
+```
+<!-- speckit:section:plugin-installation:end -->
+
 ---
 
 <!-- speckit:section:reverse-spec -->
