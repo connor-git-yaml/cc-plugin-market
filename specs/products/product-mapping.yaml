@@ -1,0 +1,47 @@
+# 产品→功能 spec 映射
+# 由 Speckit Driver Pro sync 子代理自动生成，可手动编辑覆盖
+# 手动添加的条目在重跑 sync 时不会被覆盖
+#
+# 最后更新: 2026-02-15
+
+products:
+  reverse-spec:
+    description: "源代码逆向工程为结构化 Spec 文档的 Claude Code Plugin"
+    specs:
+      - id: "001-reverse-spec-v2"
+        type: INITIAL
+        summary: "核心能力：AST + LLM 混合流水线，单模块/批量 Spec 生成 + 漂移检测"
+      - id: "002-cli-global-distribution"
+        type: FEATURE
+        summary: "CLI 全局分发与 npm install -g 支持"
+      - id: "003-skill-init"
+        type: FEATURE
+        summary: "项目级 Skill 初始化与自包含架构"
+      - id: "004-claude-sub-auth"
+        type: FEATURE
+        summary: "Claude 订阅账号认证，支持 Max/Pro 用户无 API Key 使用"
+      - id: "005-batch-quality-fixes"
+        type: FIX
+        summary: "Batch 模块级聚合重构与生成质量修复"
+      - id: "006-batch-progress-timeout"
+        type: ENHANCEMENT
+        summary: "批量生成细粒度进度报告与超时优化"
+      - id: "007-fix-batch-llm-defaults"
+        type: FIX
+        summary: "修复 Batch LLM 默认模型/提示词/超时配置"
+      - id: "008-fix-spec-absolute-paths"
+        type: FIX
+        summary: "修复 Spec 输出中绝对路径为相对路径"
+      - id: "009-plugin-marketplace"
+        type: REFACTOR
+        summary: "重构为 Claude Code Plugin Marketplace 架构"
+      - id: "010-fix-dotspecs-to-specs"
+        type: FIX
+        summary: "统一 spec 输出目录引用 .specs → specs"
+
+  speckit-driver-pro:
+    description: "自治研发编排器 Claude Code Plugin — 主编排器 + 11 子代理架构"
+    specs:
+      - id: "011-speckit-driver-pro"
+        type: FEATURE
+        summary: "完整自治编排器：10 阶段工作流、4 质量门、resume/rerun/sync 机制"
