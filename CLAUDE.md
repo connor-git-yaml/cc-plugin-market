@@ -16,6 +16,8 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 - TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（现有）+ @modelcontextprotocol/sdk（新增） (009-plugin-marketplace)
 - 文件系统（`specs/`、`drift-logs/`、`plugins/` 目录写入） (009-plugin-marketplace)
 - 文件系统（`specs/`、`drift-logs/` 目录写入） (010-fix-dotspecs-to-specs)
+- Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中 (011-speckit-driver-pro)
+- 文件系统（specs/[feature]/ 目录树，driver-config.yaml 配置文件） (011-speckit-driver-pro)
 
 - TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
 
@@ -35,9 +37,9 @@ npm test && npm run lint
 TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 ## Recent Changes
+- 011-speckit-driver-pro: Added Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中
 - 010-fix-dotspecs-to-specs: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖
 - 009-plugin-marketplace: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（现有）+ @modelcontextprotocol/sdk（新增）
-- 008-fix-spec-absolute-paths: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖，仅使用 Node.js 内置 `path` 模块（已存在）
 
 
 

@@ -1,0 +1,13 @@
+{
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "commands": [
+        {
+          "type": "shell",
+          "command": "./scripts/postinstall.sh"
+        }
+      ]
+    }
+  ]
+}
