@@ -22,6 +22,8 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "lint": "tsc --noEmit",
+    "hooks:install": "bash scripts/install-hooks.sh",
+    "hooks:check": "bash scripts/check-plugin-sync.sh",
     "postinstall": "node dist/scripts/postinstall.js",
     "preuninstall": "node dist/scripts/preuninstall.js"
   },
