@@ -1,7 +1,7 @@
 {
   "name": "speckit-driver-pro",
-  "version": "1.0.0",
-  "description": "自治研发编排器——通过主编排器 + 10 子代理架构自动执行 Spec-Driven Development 全流程",
+  "version": "1.1.0",
+  "description": "自治研发编排器——通过主编排器 + 11 子代理架构自动执行 Spec-Driven Development 全流程，含产品规范聚合",
   "author": {
     "name": "Connor Lu"
   },
