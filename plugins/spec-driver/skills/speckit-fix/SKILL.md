@@ -40,7 +40,9 @@ disable-model-invocation: true
 
 ### 3. 特性目录准备
 
-从问题描述生成特性短名（格式：`fix-<简述>`），创建特性分支和目录。
+从问题描述生成特性短名（格式：`fix-<简述>`），检查现有分支和 specs 目录确定下一个可用编号，创建特性分支和目录（利用 `.specify/scripts/bash/create-new-feature.sh`）。
+
+**重要**: 特性目录必须遵循 `specs/NNN-fix-<short-name>/` 格式（如 `specs/017-fix-login-error/`），禁止使用 `specs/features/` 子目录。
 
 ### 4. 问题上下文扫描
 

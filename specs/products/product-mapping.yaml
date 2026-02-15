@@ -54,3 +54,9 @@ products:
       - id: "014-rename-spec-driver"
         type: REFACTOR
         summary: "重命名 speckitdriver → spec-driver v3.0.0，技能统一 speckit-* 前缀"
+      - id: "015-speckit-doc-command"
+        type: FEATURE
+        summary: "新增 speckit-doc 命令——开源文档一键生成（README/LICENSE/CONTRIBUTING/CODE_OF_CONDUCT）"
+      - id: "016-optimize-sync-product-doc"
+        type: ENHANCEMENT
+        summary: "优化 sync 产品文档——模板扩展至 14 章节，新增推断规则与质量门控"

@@ -58,7 +58,9 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 ### 5. 特性目录准备
 
-从需求描述生成特性短名，创建特性分支和目录。
+从需求描述生成特性短名（2-4 个单词，action-noun 格式），检查现有分支和 specs 目录确定下一个可用编号，创建特性分支和目录（利用 `.specify/scripts/bash/create-new-feature.sh`）。
+
+**重要**: 特性目录必须遵循 `specs/NNN-<short-name>/` 格式（如 `specs/016-add-dark-mode/`），禁止使用 `specs/features/` 子目录。
 
 ### 6. 代码库上下文扫描
 
