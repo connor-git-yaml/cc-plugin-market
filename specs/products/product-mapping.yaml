@@ -44,4 +44,7 @@ products:
     specs:
       - id: "011-speckit-driver-pro"
         type: FEATURE
-        summary: "完整自治编排器：10 阶段工作流、4 质量门、resume/rerun/sync 机制"
+        summary: "完整自治编排器：10 阶段工作流、4 质量门、resume/rerun 机制"
+      - id: "012-product-spec-sync"
+        type: FEATURE
+        summary: "产品规范聚合（--sync）：增量 spec 智能合并为产品级活文档"
