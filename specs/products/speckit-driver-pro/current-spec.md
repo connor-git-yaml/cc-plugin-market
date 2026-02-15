@@ -1,8 +1,8 @@
 # Speckit Driver Pro — 产品级活规范
 
 **最后更新**: 2026-02-15
-**聚合来源**: 1 个增量功能规范
-**当前版本**: 基于 specs/011-speckit-driver-pro 为止的全部已实现功能
+**聚合来源**: 2 个增量功能规范
+**当前版本**: 基于 specs/012-product-spec-sync 为止的全部已实现功能
 
 > 本文档由 Speckit Driver Pro 的 sync 子代理自动生成，反映产品的当前完整状态。
 > 增量功能规范保留在 `specs/NNN-xxx/` 目录中作为决策历史记录。
@@ -37,6 +37,7 @@ Speckit Driver Pro 是一个**自治研发编排器 Claude Code Plugin**，将 S
 | F-010 | 阶段级进度反馈 | 011-speckit-driver-pro | ✅ 活跃 | 每阶段开始/完成时报告进度和关键产出摘要 |
 | F-011 | 子代理失败自动重试 | 011-speckit-driver-pro | ✅ 活跃 | 自动重试 2 次，仍失败则暂停交用户决策 |
 | F-012 | 高信心歧义自动解决 | 011-speckit-driver-pro | ✅ 活跃 | <= 2 处歧义且有明确推荐时自动选择，标注 [AUTO-RESOLVED] |
+| F-013 | 产品规范聚合（--sync） | 012-product-spec-sync | ✅ 活跃 | 增量 spec 智能合并为产品级活文档，双层规范架构 |
 
 ### 详细功能描述
 
@@ -269,6 +270,33 @@ Plugin 自包含全部 10 个子代理 prompt（agents/ 目录），开箱即用
 
 ---
 
+#### F-013: 产品规范聚合（--sync）
+
+**来源**: specs/012-product-spec-sync/spec.md (User Story 1, User Story 2, FR-024 ~ FR-034)
+**状态**: ✅ 活跃
+
+将增量功能规范（`specs/NNN-xxx/`）智能合并为产品级活文档（`specs/products/{product}/current-spec.md`），解决"有增量记录但无全景视图"的规范管理缺口。采用行业最佳实践的"双层规范架构"：增量 spec 作为历史记录（类 RFC），产品级活文档反映当前状态（类 Reference）。
+
+**当前行为**:
+
+- 通过 `--sync` 参数触发独立聚合流程，不执行标准 10 阶段工作流
+- 扫描 specs/ 下所有 NNN-xxx 功能目录，自动判定产品归属
+- 按时间顺序和类型规则（INITIAL/FEATURE/FIX/REFACTOR/ENHANCEMENT）智能合并
+- 为每个产品生成 `specs/products/{product}/current-spec.md`
+- 产品映射持久化到 specs/products/product-mapping.yaml，支持手动编辑覆盖
+- 不修改任何增量 spec 原始文件（只读操作）
+- 聚合结果幂等——相同输入重复运行产生相同输出
+- sync 子代理始终使用 Opus 模型（聚合分析需要深度推理）
+
+**验收标准**:
+
+- 每个已识别产品的 current-spec.md 包含该产品所有活跃功能的合并描述，覆盖率 100%
+- product-mapping.yaml 的产品归属准确率 >= 95%
+- FIX 不新增功能、REFACTOR 替换旧架构、被取代功能标记为废弃
+- 重复运行（增量 spec 无变化时）产出内容一致
+
+---
+
 ## 当前技术架构
 
 > 纯声明式 Plugin 架构，无运行时依赖。
@@ -294,14 +322,14 @@ speckit-driver-pro/
     implement.md           # 实现子代理
     verify.md              # 验证子代理
   scripts/                 # 初始化和辅助脚本
-  templates/               # 制品模板
+  templates/               # 制品模板（含产品活文档模板）
   driver-config.yaml       # 驱动配置（模型预设、自定义命令等）
 ```
 
-**核心架构模式**: 主编排器 + 11 子代理
+**核心架构模式**: 主编排器 + 12 子代理
 
-- **主编排器**（SKILL.md）：定义"研发总监"角色，负责全局决策、质量把控、人机交互管理，包含完整的 10 阶段工作流定义和决策框架
-- **11 个子代理**（agents/ 目录）：constitution、research-product、research-tech、specify、clarify、checklist、plan、tasks、analyze、implement、verify，每个子代理有独立的工具权限和模型配置
+- **主编排器**（SKILL.md）：定义"研发总监"角色，负责全局决策、质量把控、人机交互管理，包含完整的 10 阶段工作流定义、决策框架和 --sync 聚合模式
+- **12 个子代理**（agents/ 目录）：constitution、research-product、research-tech、specify、clarify、checklist、plan、tasks、analyze、implement、verify、sync，每个子代理有独立的工具权限和模型配置
 - **委派机制**：通过 Claude Code 的 Task tool 委派子代理执行
 
 **10 阶段工作流**:
@@ -359,13 +387,15 @@ speckit-driver-pro/
 ## 变更历史
 
 | 编号 | 功能 spec | 类型 | 日期 | 摘要 |
-|------|----------|------|------|------|
+| ------ | ---------- | ------ | ------ | ------ |
 | 001 | 011-speckit-driver-pro | INITIAL | 2026-02-15 | Speckit Driver Pro 产品初始版本：自治研发编排器 Claude Code Plugin，主编排器 + 11 子代理架构，10 阶段工作流 + 4 质量门，支持 12+ 语言验证、模型分级配置、制品持久化与流程恢复 |
+| 002 | 012-product-spec-sync | FEATURE | 2026-02-15 | 新增产品规范聚合功能（--sync）：增量 spec 智能合并为产品级活文档，双层规范架构，自动产品归属判定，幂等聚合 |
 
 ---
 
 ## 附录：增量 spec 索引
 
 | spec | 标题 | 类型 | 关键变更 |
-|------|------|------|---------|
+| ------ | ------ | ------ | --------- |
 | [011-speckit-driver-pro](../../011-speckit-driver-pro/spec.md) | Speckit Driver Pro | INITIAL | 产品初始版本：一键研发编排、串行调研、多语言验证闭环、模型分级配置、Plugin 安装初始化、子代理自包含、4 质量门、制品持久化、选择性重跑、进度反馈、失败重试、高信心歧义自动解决 |
+| [012-product-spec-sync](../../012-product-spec-sync/spec.md) | 产品规范聚合（--sync） | FEATURE | 新增 --sync 模式、sync 子代理、产品活文档模板，双层规范架构（增量 spec + 产品级活文档） |
