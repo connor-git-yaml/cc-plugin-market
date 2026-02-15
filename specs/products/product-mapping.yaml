@@ -1,5 +1,5 @@
 # 产品→功能 spec 映射
-# 由 Speckitdriver sync 子代理自动生成，可手动编辑覆盖
+# 由 Spec Driver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
 # 最后更新: 2026-02-15
@@ -39,12 +39,18 @@ products:
         type: FIX
         summary: "统一 spec 输出目录引用 .specs → specs"
 
-  speckitdriver:
-    description: "自治研发编排器 Claude Code Plugin — 支持 run/story/fix/resume/sync 五种模式"
+  spec-driver:
+    description: "Spec Driver v3.0.0 — 自治研发编排器 Claude Code Plugin，支持 run/story/fix/resume/sync 五种模式"
     specs:
       - id: "011-speckit-driver-pro"
-        type: FEATURE
-        summary: "完整自治编排器：10 阶段工作流、4 质量门、resume/rerun 机制"
+        type: INITIAL
+        summary: "完整自治编排器：10 阶段工作流、4 质量门、resume/rerun 机制、story/fix 快速模式"
       - id: "012-product-spec-sync"
         type: FEATURE
         summary: "产品规范聚合（--sync）：增量 spec 智能合并为产品级活文档"
+      - id: "013-split-skill-commands"
+        type: REFACTOR
+        summary: "拆分单体技能为 run/resume/sync 三个独立命令，优化上下文预算"
+      - id: "014-rename-spec-driver"
+        type: REFACTOR
+        summary: "重命名 speckitdriver → spec-driver v3.0.0，技能统一 speckit-* 前缀"
