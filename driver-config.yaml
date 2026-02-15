@@ -1,0 +1,42 @@
+# Speckit Driver Pro - 驱动配置文件
+# 预设: quality-first（所有阶段均使用 Opus）
+
+preset: quality-first
+
+agents:
+  product-research:
+    model: opus
+  tech-research:
+    model: opus
+  specify:
+    model: opus
+  plan:
+    model: opus
+  analyze:
+    model: opus
+  clarify:
+    model: opus
+  checklist:
+    model: opus
+  tasks:
+    model: opus
+  implement:
+    model: opus
+  verify:
+    model: opus
+
+verification:
+  commands: {}
+  monorepo:
+    enabled: true
+
+quality_gates:
+  auto_continue_on_warning: true
+  pause_on_critical: true
+
+retry:
+  max_attempts: 2
+
+progress:
+  show_stage_progress: true
+  show_stage_summary: true

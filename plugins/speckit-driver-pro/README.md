@@ -31,29 +31,45 @@ claude plugin install speckit-driver-pro
 
 ## 使用方法
 
-### 基本用法
+Plugin 提供三个独立命令，分别对应不同的使用场景：
+
+### 启动完整研发流程（run）
 
 ```bash
-/speckit-driver-pro 给项目添加用户认证功能，支持 OAuth2 和 JWT
+/speckit-driver-pro:run 给项目添加用户认证功能，支持 OAuth2 和 JWT
 ```
 
-### 恢复中断的流程
+### 恢复中断的流程（resume）
 
 ```bash
-/speckit-driver-pro --resume
+/speckit-driver-pro:resume
+```
+
+### 产品规范聚合（sync）
+
+```bash
+/speckit-driver-pro:sync
 ```
 
 ### 选择性重跑
 
 ```bash
-/speckit-driver-pro --rerun plan
+/speckit-driver-pro:run --rerun plan
 ```
 
 ### 临时切换模型预设
 
 ```bash
-/speckit-driver-pro --preset quality-first "添加支付系统"
+/speckit-driver-pro:run --preset quality-first "添加支付系统"
 ```
+
+### 命令速查
+
+| 命令 | 用途 | 自动触发 |
+| ---- | ---- | -------- |
+| `/speckit-driver-pro:run` | 执行完整 10 阶段编排流程 | 否 |
+| `/speckit-driver-pro:resume` | 从断点恢复中断的流程 | 否 |
+| `/speckit-driver-pro:sync` | 聚合功能规范为产品级活文档 | 是 |
 
 ## 模型配置
 
@@ -97,13 +113,26 @@ JS/TS (npm/pnpm/yarn/bun)、Rust (Cargo)、Go、Python (pip/poetry/uv)、Java (M
 plugins/speckit-driver-pro/
 ├── .claude-plugin/plugin.json    # Plugin 元数据
 ├── hooks/hooks.json              # SessionStart hook
-├── skills/speckit-driver-pro/
-│   └── SKILL.md                  # 主编排器（研发总监）
-├── agents/                       # 11 个子代理 prompt
-├── templates/                    # 5 个模板
+├── skills/
+│   ├── run/SKILL.md              # 主编排技能（10 阶段完整流程）
+│   ├── resume/SKILL.md           # 中断恢复技能（制品扫描 + 断点恢复）
+│   └── sync/SKILL.md             # 产品规范聚合技能（specs/ → current-spec.md）
+├── agents/                       # 12 个子代理 prompt
+├── templates/                    # 6 个模板
 ├── scripts/                      # 初始化脚本
 └── README.md                     # 本文件
 ```
+
+### 迁移说明
+
+自 v0.3.0 起，原单体技能 `skills/speckit-driver-pro/SKILL.md`（706 行）已拆分为三个独立技能。旧命令 `/speckit-driver-pro` 不再可用，请使用以下新命令：
+
+| 旧命令 | 新命令 |
+| ------ | ------ |
+| `/speckit-driver-pro <需求>` | `/speckit-driver-pro:run <需求>` |
+| `/speckit-driver-pro --resume` | `/speckit-driver-pro:resume` |
+| `/speckit-driver-pro --sync` | `/speckit-driver-pro:sync` |
+| `/speckit-driver-pro --rerun <phase>` | `/speckit-driver-pro:run --rerun <phase>` |
 
 ## 许可证
 
