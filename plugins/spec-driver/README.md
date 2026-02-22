@@ -1,6 +1,6 @@
 # Spec Driver
 
-**自治研发编排器** — 支持 5 种模式（run/story/fix/resume/sync），一键触发 Spec-Driven Development 全流程。
+**自治研发编排器** — 支持 6 种模式（feature/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程。
 
 ## 功能概述
 
@@ -13,6 +13,7 @@ Spec Driver 根据场景选择最优流程，将手动 speckit 命令统一为�
 | **fix** | `/spec-driver:speckit-fix` | 4 | ≤ 1 次 | Bug 修复、问题定位 |
 | **resume** | `/spec-driver:speckit-resume` | - | - | 恢复中断的流程 |
 | **sync** | `/spec-driver:speckit-sync` | 3 | 0 次 | 聚合 spec 为产品活文档 |
+| **doc** | `/spec-driver:speckit-doc` | 6 | 2-3 次 | 生成开源标准文档（README 等） |
 
 ## 安装
 
@@ -57,6 +58,14 @@ claude plugin install spec-driver
 ```bash
 /spec-driver:speckit-sync
 ```
+
+### 开源文档生成（doc）
+
+```bash
+/spec-driver:speckit-doc
+```
+
+交互式生成 README.md、LICENSE、CONTRIBUTING.md 等开源标准文档，支持冲突检测和备份。
 
 ### 选择性重跑
 
@@ -117,7 +126,8 @@ plugins/spec-driver/
 │   ├── speckit-story/SKILL.md    # 快速 5 阶段需求实现
 │   ├── speckit-fix/SKILL.md      # 快速 4 阶段问题修复
 │   ├── speckit-resume/SKILL.md   # 中断恢复
-│   └── speckit-sync/SKILL.md     # 产品规范聚合
+│   ├── speckit-sync/SKILL.md     # 产品规范聚合
+│   └── speckit-doc/SKILL.md      # 开源文档生成
 ├── agents/                       # 12 个子代理 prompt
 ├── templates/                    # 6 个模板
 ├── scripts/                      # 初始化脚本

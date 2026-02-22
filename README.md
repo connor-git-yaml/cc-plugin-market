@@ -59,9 +59,9 @@ claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yam
 claude plugin install spec-driver@cc-plugin-market --scope project
 claude plugin install reverse-spec@cc-plugin-market --scope project
 
-# Or install globally (available across all projects)
-claude plugin install spec-driver@cc-plugin-market --scope global
-claude plugin install reverse-spec@cc-plugin-market --scope global
+# Or install for current user (available across all projects)
+claude plugin install spec-driver@cc-plugin-market --scope user
+claude plugin install reverse-spec@cc-plugin-market --scope user
 ```
 
 ### Update Plugins
@@ -81,9 +81,9 @@ claude plugin install spec-driver@cc-plugin-market --scope project
 claude plugin remove spec-driver --scope project
 claude plugin remove reverse-spec --scope project
 
-# Remove from global scope
-claude plugin remove spec-driver --scope global
-claude plugin remove reverse-spec --scope global
+# Remove from user scope
+claude plugin remove spec-driver --scope user
+claude plugin remove reverse-spec --scope user
 ```
 
 ### Verify Installation
