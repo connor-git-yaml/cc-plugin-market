@@ -38,13 +38,43 @@ disable-model-invocation: true
 
 读取 driver-config.yaml（如不存在则使用 balanced 默认值，不引导创建，保持快速）。
 
-### 3. 特性目录准备
+### 3. 门禁配置加载
+
+读取 driver-config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+
+```text
+1. 读取 gate_policy 字段（默认 balanced）
+   - 如果值无法识别，输出警告并回退到 balanced
+
+2. 读取 gates 字段（默认空）
+   - 如果包含无法识别的门禁名称，输出警告但不阻断
+
+3. Fix 模式门禁子集: GATE_DESIGN, GATE_VERIFY（2 个，无 GATE_RESEARCH/GATE_ANALYSIS/GATE_TASKS）
+
+4. 构建行为表:
+   for GATE in [GATE_DESIGN, GATE_VERIFY]:
+     if gates.{GATE}.pause 有配置:
+       behavior[GATE] = gates.{GATE}.pause
+     else:
+       根据 gate_policy 应用默认行为
+
+balanced 默认值表:
+  | 门禁         | 默认行为 | 分类       |
+  | ------------ | -------- | ---------- |
+  | GATE_DESIGN  | always   | 关键       |
+  | GATE_VERIFY  | always   | 关键       |
+
+strict 默认值: 全部 always
+autonomous 默认值: 全部 on_failure
+```
+
+### 4. 特性目录准备
 
 从问题描述生成特性短名（格式：`fix-<简述>`），检查现有分支和 specs 目录确定下一个可用编号，创建特性分支和目录（利用 `.specify/scripts/bash/create-new-feature.sh`）。
 
 **重要**: 特性目录必须遵循 `specs/NNN-fix-<short-name>/` 格式（如 `specs/017-fix-login-error/`），禁止使用 `specs/features/` 子目录。
 
-### 4. 问题上下文扫描
+### 5. 问题上下文扫描
 
 **此步骤是 fix 模式的核心加速点。**
 
@@ -144,6 +174,25 @@ disable-model-invocation: true
 
 ---
 
+### Phase 2.5: 设计门禁 [GATE_DESIGN]
+
+**此阶段由编排器亲自执行，不委派子代理。**
+
+```text
+1. 检查 gates.GATE_DESIGN.pause 配置:
+   - 如果为 "always" → 暂停（展示修复规划摘要 + 等待用户选择）
+   - 否则 → 自动继续（fix 模式默认豁免）
+
+2. 如果决策为暂停:
+   展示 plan.md 和 tasks.md 摘要（修复方案、影响范围、任务数）
+   等待用户选择：A) 批准继续 | B) 调整方案 | C) 中止
+
+3. 输出门禁决策日志:
+   [GATE] GATE_DESIGN | mode=fix | policy={gate_policy} | decision={PAUSE|AUTO_CONTINUE} | reason={配置覆盖|fix 模式默认豁免}
+```
+
+---
+
 ### Phase 3: 代码修复 [3/4]
 
 `[3/4] 正在执行代码修复...`
@@ -162,9 +211,32 @@ disable-model-invocation: true
 
 `[4/4] 正在执行验证闭环...`
 
-读取 `prompt_source[verify]`，调用 Task(description: "执行验证闭环", prompt: "{verify prompt}" + "{上下文注入 + fix-report.md + tasks.md + config.verification}", model: "{config.agents.verify.model}")。
+#### Phase 4a: Spec 合规审查
 
-**质量门（GATE_VERIFY）**: 构建/测试失败 → 暂停（A: 修复重验 / B: 接受结果）；全部通过 → 自动完成。
+读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + fix-report.md + tasks.md 路径}", model: "{config.agents.verify.model}")。
+
+#### Phase 4b: 代码质量审查
+
+读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + fix-report.md + plan.md 路径}", model: "{config.agents.verify.model}")。
+
+注：Phase 4a 和 4b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时。
+
+#### Phase 4c: 工具链验证 + 验证证据核查
+
+读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + fix-report.md + tasks.md + 4a/4b 报告路径 + config.verification}", model: "{config.agents.verify.model}")。
+
+#### 质量门（GATE_VERIFY）
+
+合并 4a/4b/4c 三份报告的结果：
+
+```text
+1. 获取 behavior[GATE_VERIFY]
+2. 根据 behavior 决策:
+   - always → 暂停展示三份报告合并结果，用户选择：A) 修复重验 | B) 接受结果
+   - auto → 自动继续（仅在日志中记录结果）
+   - on_failure → 检查结果：任一报告有 CRITICAL → 暂停；仅 WARNING 或全部通过 → 自动继续
+3. 输出: [GATE] GATE_VERIFY | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 

@@ -45,6 +45,7 @@ PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 INIT_RESULTS=()
 NEEDS_CONSTITUTION=false
 NEEDS_CONFIG=false
+HAS_GATE_POLICY=false
 HAS_SPECKIT_SKILLS=false
 SKILL_MAP=""
 
@@ -97,7 +98,32 @@ check_config() {
   INIT_RESULTS+=("config:missing")
 }
 
-# 步骤 4: 检测已有 speckit skills
+# 步骤 4: 检查 gate_policy 配置
+check_gate_policy() {
+  local config_path=""
+  if [[ -f "$CONFIG_FILE" ]]; then
+    config_path="$CONFIG_FILE"
+  elif [[ -f "$ALT_CONFIG_FILE" ]]; then
+    config_path="$ALT_CONFIG_FILE"
+  fi
+
+  if [[ -z "$config_path" ]]; then
+    # 配置文件不存在，跳过检查
+    HAS_GATE_POLICY=false
+    INIT_RESULTS+=("gate_policy:no_config")
+    return 0
+  fi
+
+  if grep -q "^gate_policy:" "$config_path" 2>/dev/null; then
+    HAS_GATE_POLICY=true
+    INIT_RESULTS+=("gate_policy:exists")
+  else
+    HAS_GATE_POLICY=false
+    INIT_RESULTS+=("gate_policy:missing")
+  fi
+}
+
+# 步骤 5: 检测已有 speckit skills
 detect_speckit_skills() {
   local skills_dir="${PROJECT_ROOT}/.claude/commands"
   local found_skills=()
@@ -142,6 +168,7 @@ output_results() {
   "SPECIFY_DIR": "${SPECIFY_DIR}",
   "NEEDS_CONSTITUTION": ${NEEDS_CONSTITUTION},
   "NEEDS_CONFIG": ${NEEDS_CONFIG},
+  "HAS_GATE_POLICY": ${HAS_GATE_POLICY},
   "HAS_SPECKIT_SKILLS": ${HAS_SPECKIT_SKILLS},
   "SKILL_MAP": "${SKILL_MAP}",
   "RESULTS": ${results_json}
@@ -179,6 +206,15 @@ EOF
             echo -e "     → 将在首次运行时引导选择模型预设"
           fi
           ;;
+        gate_policy)
+          if [[ "$value" == "exists" ]]; then
+            echo -e "  ✅ gate_policy 配置已存在"
+          elif [[ "$value" == "no_config" ]]; then
+            echo -e "  ℹ️  配置文件不存在，gate_policy 将在创建配置时设置"
+          else
+            echo -e "  ℹ️  ${YELLOW}未配置门禁策略，使用默认值 balanced${NC}"
+          fi
+          ;;
         speckit_skills)
           if [[ "$value" == "none" ]]; then
             echo -e "  ℹ️  未检测到项目已有 speckit skills，使用 Plugin 内置版本"
@@ -200,6 +236,7 @@ main() {
   init_specify_dir
   check_constitution
   check_config
+  check_gate_policy
   detect_speckit_skills
   output_results
 }

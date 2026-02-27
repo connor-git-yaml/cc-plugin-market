@@ -34,6 +34,25 @@ quality_gates:
   auto_continue_on_warning: true
   pause_on_critical: true
 
+# 门禁策略: strict | balanced | autonomous
+# 注：GATE_DESIGN 在 feature 模式下始终暂停（硬门禁），不受此配置影响
+gate_policy: balanced
+
+# 门禁级配置（高级，可选）
+# 对每个门禁独立配置，优先于 gate_policy
+# 可选值: always | auto | on_failure
+# gates:
+#   GATE_RESEARCH:
+#     pause: auto
+#   GATE_DESIGN:
+#     pause: always
+#   GATE_ANALYSIS:
+#     pause: auto
+#   GATE_TASKS:
+#     pause: always
+#   GATE_VERIFY:
+#     pause: always
+
 retry:
   max_attempts: 2
 

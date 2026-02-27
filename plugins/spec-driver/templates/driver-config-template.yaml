@@ -84,6 +84,36 @@ quality_gates:
   pause_on_critical: true
 
 # ═══════════════════════════════════════
+# 门禁策略
+# ═══════════════════════════════════════
+# 控制质量门（Quality Gate）在流程中的暂停行为
+#
+# strict:     所有门禁暂停等待确认（最高人工控制权）
+# balanced:   关键门禁暂停，非关键自动继续（默认，推荐）
+# autonomous: 仅失败或 CRITICAL 问题时暂停（最低中断）
+#
+# 注：GATE_DESIGN 在 feature 模式下始终暂停（硬门禁），不受此配置影响
+gate_policy: balanced
+
+# ═══════════════════════════════════════
+# 门禁级配置（高级，可选）
+# ═══════════════════════════════════════
+# 对每个门禁独立配置，优先于 gate_policy
+# 可选值: always（始终暂停）| auto（始终自动继续）| on_failure（仅失败时暂停）
+#
+# gates:
+#   GATE_RESEARCH:
+#     pause: auto
+#   GATE_DESIGN:
+#     pause: always
+#   GATE_ANALYSIS:
+#     pause: auto
+#   GATE_TASKS:
+#     pause: always
+#   GATE_VERIFY:
+#     pause: always
+
+# ═══════════════════════════════════════
 # 子代理重试策略
 # ═══════════════════════════════════════
 retry:
