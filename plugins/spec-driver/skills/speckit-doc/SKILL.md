@@ -47,17 +47,20 @@ bash plugins/spec-driver/scripts/scan-project.sh --json
 - `description`: 项目描述
 - `license`: 已声明的协议
 - `author`: 作者信息（name, email）
-- `scripts`: npm scripts
-- `dependencies` / `devDependencies`: 依赖
+- `scripts`: npm scripts（非 Node.js 项目为空对象）
+- `dependencies` / `devDependencies`: 依赖（非 Node.js 项目为空对象）
 - `repository`: 仓库 URL
 - `main` / `bin`: 入口文件 / CLI 命令
 - `git`: git 用户信息和远程地址
 - `directoryTree`: 目录结构树
-- `projectType`: 项目类型（cli / library / web-app / unknown）
+- `projectType`: 项目类型（cli / library / web-app / rust / go / python-lib / python-app / java / node / unknown）
 - `existingFiles`: 已有文档文件检测
 - `missingFields`: 缺失字段列表
+- `ecosystem`: 技术生态标识符（node / python / rust / go / java / unknown），用于后续命令映射
 
 ### 1.2 可选：AST 分析增强
+
+**仅当 `ecosystem == "node"` 时执行**。非 Node.js 项目跳过此步骤。
 
 如果项目包含 TypeScript 或 JavaScript 源代码，**尝试**通过以下命令获取 AST 分析数据：
 
@@ -66,8 +69,10 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 ```
 
 **降级规则**：
-- 命令不存在 → 跳过，使用 package.json 描述
-- 超时（60s）→ 跳过，使用 package.json 描述
+
+- `ecosystem` 不为 `node` → 跳过
+- 命令不存在 → 跳过，使用项目配置文件描述
+- 超时（60s）→ 跳过，使用项目配置文件描述
 - 非 TS/JS 项目 → 跳过
 
 ### 1.3 展示项目概要
@@ -80,6 +85,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
   版本: {version}
   描述: {description}
   类型: {projectType}
+  生态: {ecosystem}
   已有协议: {license || "未声明"}
   已有文档: {列出存在的文档文件}
 ```
@@ -185,7 +191,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 # {项目名称}
 
 <!-- speckit:section:description -->
-{项目描述 — 从 package.json description 或 AST 分析结果提取}
+{项目描述 — 从项目配置文件 description 或 AST 分析结果提取}
 <!-- speckit:section:description:end -->
 
 <!-- speckit:section:features -->
@@ -193,7 +199,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 {功能特性列表:
   - 如果有 AST 分析结果: 列出实际导出的核心模块和功能
-  - 如果无 AST 分析: 基于 package.json description 和 dependencies 推断}
+  - 如果无 AST 分析: 基于项目 description 和 dependencies 推断}
 <!-- speckit:section:features:end -->
 
 <!-- speckit:section:getting-started -->
@@ -201,14 +207,32 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ### Prerequisites
 
-{运行环境要求 — 从 engines 字段提取，如 Node.js >= 20}
+{运行环境要求 — 根据 ecosystem 映射：
+
+| ecosystem | 运行时要求 |
+|-----------|-----------|
+| `node` | Node.js >= {engines.node 或 20} |
+| `python` | Python 3.x |
+| `rust` | Rust (stable) |
+| `go` | Go 1.x |
+| `java` | Java 11+ |
+| `unknown` | `[待补充]` |
+}
 
 ### Installation
 
-{安装命令:
-  - 如果有 bin 字段: 全局安装 `npm install -g {name}`
-  - 如果是 library: `npm install {name}`
-  - 如果有 repository: 也提供 clone + install 方式}
+{安装命令 — 根据 ecosystem 和 projectType 查表：
+
+| ecosystem | CLI/App 安装命令 | Library 安装命令 |
+|-----------|-----------------|-----------------|
+| `node` | `npm install -g {name}` | `npm install {name}` |
+| `python` | `pip install {name}` | `pip install {name}` |
+| `rust` | `cargo install {name}` | 在 Cargo.toml 中添加 `{name} = "{version}"` |
+| `go` | `go install {module}@latest` | `go get {module}` |
+| `java` | `mvn dependency:resolve` | Maven/Gradle 依赖声明 |
+| `unknown` | `[待补充]` | `[待补充]` |
+
+如果有 repository: 也提供 clone + install 方式}
 <!-- speckit:section:getting-started:end -->
 
 <!-- speckit:section:usage -->
@@ -217,7 +241,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 {使用示例:
   - CLI 工具（有 bin）: 展示 1-2 个命令行示例
   - Library（有 main）: 展示 import/require 和基本调用示例
-  - 基于 package.json scripts 中的常用命令}
+  - 基于项目配置中的脚本/命令定义}
 <!-- speckit:section:usage:end -->
 
 <!-- speckit:section:project-structure -->
@@ -238,7 +262,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 ## Testing
 
 {测试命令:
-  - 从 scripts 中查找 test/lint/check 等命令
+  - 从项目配置中查找 test/lint/check 等命令
   - 如无测试脚本: 标注 [待补充]}
 <!-- speckit:section:testing:end -->
 
@@ -259,19 +283,26 @@ This project is licensed under the {LICENSE_ID} License - see the [LICENSE](LICE
 
 #### Badge 生成规则
 
-根据可用信息生成 shields.io Badge：
+**License badge**（始终生成，不受 ecosystem 影响）: `![License](https://img.shields.io/badge/license-{LICENSE_ID}-blue.svg)`
 
-- **License badge**（始终生成）: `![License](https://img.shields.io/badge/license-{LICENSE_ID}-blue.svg)`
-- **npm version**（有 name 且有 repository）: `![npm version](https://img.shields.io/npm/v/{name}.svg)`
-- **Node.js version**（有 engines.node）: `![node](https://img.shields.io/node/v/{name}.svg)`
+根据 `ecosystem` 字段选择 Version Badge 和 Runtime Badge：
+
+| ecosystem | Version Badge | Runtime Badge |
+| ----------- | --------------- | --------------- |
+| `node` | `![npm version](https://img.shields.io/npm/v/{name}.svg)` | `![node](https://img.shields.io/node/v/{name}.svg)` |
+| `python` | `![PyPI version](https://img.shields.io/pypi/v/{name}.svg)` | `![Python](https://img.shields.io/pypi/pyversions/{name}.svg)` |
+| `rust` | `![crates.io](https://img.shields.io/crates/v/{name}.svg)` | 无 |
+| `go` | `[![Go Reference](https://pkg.go.dev/badge/{module}.svg)](https://pkg.go.dev/{module})` | 无 |
+| `java` | 无（Maven Central badge 需具体 groupId） | 无 |
+| `unknown` | 无 | 无 |
 
 如果 `git.remoteUrl` 为 null，跳过需要仓库 URL 的 Badge。
 
 #### 降级处理
 
-- **无 package.json**: 项目名从目录名推断，安装/使用/脚本章节标注 `[待补充]`
+- **无项目配置文件**: 项目名从目录名推断，安装/使用/脚本章节标注 `[待补充]`
 - **无 git**: Badge 和链接使用占位符，作者信息标注 `[待补充]`
-- **无 AST 数据**: Features 章节基于 package.json description 生成通用描述
+- **无 AST 数据**: Features 章节基于项目 description 生成通用描述
 - **无远程仓库 URL**: 仓库相关 Badge 和链接跳过
 
 ### 4.3 生成 CONTRIBUTING.md（仅完整模式）
@@ -285,18 +316,35 @@ Thank you for considering contributing to {项目名称}! ...
 
 ## Development Setup
 
-{从 scripts 提取开发环境搭建步骤:
+{从项目配置提取开发环境搭建步骤，根据 ecosystem 映射命令:
+
   1. Clone the repo: `git clone {repository.url}`
-  2. Install dependencies: `npm install`
-  3. 如有 build script: `npm run build`
-  4. 如有 dev script: `npm run dev`}
+  2. Install dependencies — 根据 ecosystem 查表:
+
+  | ecosystem | 安装依赖 | 构建 | 开发模式 |
+  |-----------|---------|------|---------|
+  | `node` | `npm install` | `npm run build` | `npm run dev` |
+  | `python` | `pip install -e ".[dev]"` | N/A 或 `python -m build` | N/A |
+  | `rust` | `cargo build` | `cargo build --release` | `cargo watch` |
+  | `go` | `go mod download` | `go build ./...` | N/A |
+  | `java` | `mvn install` | `mvn package` | N/A |
+  | `unknown` | `[待补充]` | `[待补充]` | `[待补充]` |
+
+  当项目配置文件中存在可提取的脚本/命令定义时（如 scripts 字段、pyproject.toml 的 `[tool.pytest]`、Cargo.toml 的 `[[bin]]`），优先使用实际命令。}
 
 ## Code Style
 
-{从 devDependencies 检测 linter:
-  - 有 eslint: "This project uses ESLint. Run `npm run lint` to check."
-  - 有 prettier: "Code formatting is handled by Prettier."
-  - 无 linter: 通用的代码风格建议}
+{根据 ecosystem 字段生成对应的 linter/formatter 信息:
+
+  | ecosystem | Linter/Formatter 检测与建议 |
+  |-----------|---------------------------|
+  | `node` | 从 devDependencies 检测：有 eslint → "This project uses ESLint. Run `npm run lint` to check."；有 prettier → "Code formatting is handled by Prettier." |
+  | `python` | 从 pyproject.toml `[tool.*]` 检测：有 ruff → "This project uses Ruff. Run `ruff check .`"；有 black → "Code formatting is handled by Black."；否则通用建议 |
+  | `rust` | `cargo fmt`（格式化）和 `cargo clippy`（lint）—— Rust 内置工具 |
+  | `go` | `gofmt`（格式化）和 `golangci-lint run`（lint）—— Go 内置/常用工具 |
+  | `java` | 从 pom.xml plugins 检测 Checkstyle / SpotBugs；否则通用代码风格建议 |
+  | `unknown` | 通用代码风格建议（一致的缩进、有意义的命名等） |
+}
 
 ## Commit Convention
 
@@ -310,9 +358,21 @@ Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`
 
 1. Fork the repository and create your branch from `{defaultBranch}`.
 2. If you've added code, add tests.
-3. Ensure the test suite passes: `{test script || "npm test"}`.
-4. Make sure your code lints: `{lint script || "npm run lint"}`.
+3. Ensure the test suite passes: `{test script || 根据 ecosystem 查表的回退值}`.
+4. Make sure your code lints: `{lint script || 根据 ecosystem 查表的回退值}`.
 5. Submit your pull request.
+
+{测试和 Lint 命令回退值映射:
+
+  | ecosystem | 测试命令回退值 | Lint 命令回退值 |
+  |-----------|-------------|---------------|
+  | `node` | `npm test` | `npm run lint` |
+  | `python` | `pytest` | `ruff check .` |
+  | `rust` | `cargo test` | `cargo clippy` |
+  | `go` | `go test ./...` | `golangci-lint run` |
+  | `java` | `mvn test` | `mvn checkstyle:check` |
+  | `unknown` | `[待补充]` | `[待补充]` |
+}
 
 ## Reporting Issues
 
@@ -320,7 +380,18 @@ Use GitHub Issues to report bugs. Include:
 - A clear description of the issue
 - Steps to reproduce
 - Expected vs actual behavior
-- Your environment (OS, Node.js version)
+- Your environment (OS, {runtime} version)
+
+{runtime 根据 ecosystem 映射:
+  | ecosystem | runtime 显示值 |
+  |-----------|---------------|
+  | `node` | Node.js |
+  | `python` | Python |
+  | `rust` | Rust |
+  | `go` | Go |
+  | `java` | Java |
+  | `unknown` | Runtime |
+}
 
 ## License
 
@@ -406,25 +477,25 @@ speckit-doc 文档生成完成!
 
 ### 完全空项目
 
-如果 `scan-project.sh` 返回 `hasPackageJson == false` 且 `hasGitRepo == false`：
+如果 `scan-project.sh` 返回无任何已知项目配置文件且 `hasGitRepo == false`：
 
 ```text
-[终止] 当前目录看起来是一个空项目（无 package.json 且无 git 仓库）。
+[终止] 当前目录看起来是一个空项目（未检测到项目配置文件且无 git 仓库）。
 
 建议先执行:
-  git init
-  npm init -y
+  1. git init                          — 初始化版本控制
+  2. 创建项目配置文件（如 package.json、pyproject.toml、Cargo.toml 等）
 
 然后重新运行 speckit-doc。
 ```
 
-### package.json 解析失败
+### 项目配置文件解析失败
 
-如果 `hasPackageJson == true` 但字段大量缺失：降级为基于目录名和 git 信息的最小生成，受影响章节标注 `[待补充]`。
+如果项目配置文件存在但字段大量缺失：降级为基于目录名和 git 信息的最小生成，受影响章节标注 `[待补充]`。
 
 ### AST 分析失败
 
-静默降级，Features 章节基于 package.json 描述生成。不展示错误信息。
+静默降级，Features 章节基于项目 description 生成。不展示错误信息。
 
 ---
 
