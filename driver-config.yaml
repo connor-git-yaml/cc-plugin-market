@@ -25,6 +25,29 @@ agents:
   verify:
     model: opus
 
+# ═══════════════════════════════════════
+# 调研阶段配置（Feature 模式）
+# ═══════════════════════════════════════
+# 控制 Feature 模式中调研阶段的行为
+# Story 模式和 Fix 模式不受此配置影响
+#
+# default_mode 可选值:
+#   auto          — 由编排器根据需求特征智能推荐（默认）
+#   full          — 完整调研（产品+技术+汇总），与当前版本行为一致
+#   tech-only     — 仅技术调研（跳过产品调研和汇总）
+#   product-only  — 仅产品调研（跳过技术调研和汇总）
+#   codebase-scan — 代码库上下文扫描（与 Story 模式相同）
+#   skip          — 跳过调研（不执行任何调研步骤）
+#   custom        — 自定义步骤组合（需配置 custom_steps）
+#
+research:
+  default_mode: auto
+
+  # 自定义步骤（仅当 default_mode: custom 时生效）
+  # 可选步骤: product-research, tech-research, codebase-scan, synthesis
+  # 注意: synthesis 依赖 product-research 和 tech-research 的输出
+  custom_steps: []
+
 verification:
   commands: {}
   monorepo:
