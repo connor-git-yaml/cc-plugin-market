@@ -105,6 +105,22 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 ---
 
+## 并行执行策略
+
+本编排流程在以下阶段使用并行调度以缩短总耗时：
+
+| 并行组         | 子代理                                | 汇合点      | 适用条件 |
+| -------------- | ------------------------------------- | ----------- | -------- |
+| VERIFY_GROUP   | spec-review + quality-review → verify | GATE_VERIFY | 始终     |
+
+**并行调度方式**: 在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。
+
+**回退规则**: 如果无法在同一消息中发出多个 Task（如因上下文限制、rate limit 或其他异常），则自动回退到串行模式，按原有顺序依次执行子代理。回退时输出: `[并行回退] {并行组名} 无法并行调度，切换到串行模式`
+
+**完成报告标注**: 并行执行的阶段在完成报告中标注 `[并行]`，回退到串行的阶段标注 `[回退:串行]`。
+
+---
+
 ## 工作流定义
 
 ### 5 阶段快速编排流程
@@ -210,19 +226,22 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 `[5/5] 正在执行验证闭环...`
 
-#### Phase 5a: Spec 合规审查
+#### Phase 5a+5b: Spec 合规审查 + 代码质量审查（并行）
 
-读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")。
+**并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
-#### Phase 5b: 代码质量审查
+1. 读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
 
-读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")。
+等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 
-注：Phase 5a 和 5b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时。
+**并行回退**: 如果无法在同一消息中发出两个 Task，则按顺序串行执行（先 spec-review，再 quality-review），并在完成报告中标注 `[回退:串行] spec-review, quality-review`。
 
 #### Phase 5c: 工具链验证 + 验证证据核查
 
 读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 5a/5b 报告路径 + config.verification}", model: "{config.agents.verify.model}")。
+
+注：Phase 5c 在 5a+5b 完成后串行执行，因其需要读取 5a/5b 的报告路径作为输入。
 
 #### 质量门（GATE_VERIFY）
 
@@ -256,6 +275,10 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
   ✅ plan.md
   ✅ tasks.md
   ✅ verification/verification-report.md
+
+执行模式:
+  Phase 5a+5b: {[并行] 或 [回退:串行]} spec-review + quality-review
+  Phase 5c:    [串行] verify（依赖 5a/5b 报告）
 
 验证结果:
   构建: {状态}

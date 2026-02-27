@@ -109,6 +109,24 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 ---
 
+## 并行执行策略
+
+本编排流程在以下阶段使用并行调度以缩短总耗时：
+
+| 并行组              | 子代理                                 | 汇合点            | 适用条件                      |
+| ------------------- | -------------------------------------- | ----------------- | ----------------------------- |
+| RESEARCH_GROUP      | product-research + tech-research       | Phase 1c 产研汇总 | `research_mode` 为 `full` 时  |
+| DESIGN_PREP_GROUP   | clarify + checklist                    | GATE_DESIGN       | 始终                          |
+| VERIFY_GROUP        | spec-review + quality-review → verify  | GATE_VERIFY       | 始终                          |
+
+**并行调度方式**: 在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。
+
+**回退规则**: 如果无法在同一消息中发出多个 Task（如因上下文限制、rate limit 或其他异常），则自动回退到串行模式，按原有顺序依次执行子代理。回退时输出: `[并行回退] {并行组名} 无法并行调度，切换到串行模式`
+
+**完成报告标注**: 并行执行的阶段在完成报告中标注 `[并行]`，回退到串行的阶段标注 `[回退:串行]`。
+
+---
+
 ## 工作流定义
 
 ### 10 阶段编排流程
@@ -290,28 +308,52 @@ custom            → [根据 config.research.custom_steps 映射，详见 custo
   输出: "[{对应编号}/10] {阶段名} [已跳过 - 调研模式: {research_mode}]"
 ```
 
-#### Phase 1a: 产品调研 [2/10]
+#### Phase 1a+1b: 产品调研 + 技术调研 [2-3/10]
 
-**执行条件**: `research_mode` 为 `full`、`product-only`，或 `custom` 且 `custom_steps` 包含 `product-research`
+##### `full` 模式 — 并行执行（RESEARCH_GROUP）
+
+**执行条件**: `research_mode` 为 `full`
+
+`[2-3/10] 正在并行执行产品调研和技术调研...`
+
+确保 `{feature_dir}/research/` 目录存在。
+
+**并行调度（RESEARCH_GROUP）**: 在同一消息中同时发出以下两个 Task 调用：
+
+1. 读取 `prompt_source[product-research]`，调用 Task(description: "执行产品调研", prompt: "{product-research prompt}" + "{上下文注入}", model: "{config.agents.product-research.model}")
+2. 读取 `prompt_source[tech-research]`，调用 Task(description: "执行技术调研", prompt: "{tech-research prompt}" + "{上下文注入}", model: "{config.agents.tech-research.model}")
+   注意: 并行模式下 tech-research 以独立模式运行，不传入 product-research.md 路径（与 tech-only 模式行为一致）
+
+等待两个 Task 均返回结果后继续。验证 `product-research.md` 和 `tech-research.md` 均已生成。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
+
+**并行回退**: 如果无法在同一消息中发出两个 Task，则按顺序串行执行：先 product-research，完成后 tech-research（串行模式下可选择传入 product-research.md 路径），并在完成报告中标注 `[回退:串行] product-research, tech-research`。
+
+##### `product-only` 模式 — 仅产品调研
+
+**执行条件**: `research_mode` 为 `product-only`，或 `custom` 且 `custom_steps` 包含 `product-research`
 
 `[2/10] 正在执行产品调研...`
 
 读取 `prompt_source[product-research]`，确保 `{feature_dir}/research/` 目录存在。调用 Task(description: "执行产品调研", prompt: "{product-research prompt}" + "{上下文注入}", model: "{config.agents.product-research.model}")。验证 `{feature_dir}/research/product-research.md` 已生成。
 
-**跳过时**: `[2/10] 产品调研 [已跳过 - 调研模式: {research_mode}]`
+`[3/10] 技术调研 [已跳过 - 调研模式: {research_mode}]`
 
-#### Phase 1b: 技术调研 [3/10]
+##### `tech-only` 或 `custom`（无 product-research）模式 — 仅技术调研
 
-**执行条件**: `research_mode` 为 `full`、`tech-only`，或 `custom` 且 `custom_steps` 包含 `tech-research`
+**执行条件**: `research_mode` 为 `tech-only`，或 `custom` 且 `custom_steps` 包含 `tech-research`
+
+`[2/10] 产品调研 [已跳过 - 调研模式: {research_mode}]`
 
 `[3/10] 正在执行技术调研...`
 
-- **`full` 模式下**：串行依赖，必须在产品调研完成后执行。读取 `prompt_source[tech-research]`，调用 Task(description: "执行技术调研", prompt: "{tech-research prompt}" + "{上下文注入 + product-research.md 路径}", model: "{config.agents.tech-research.model}")。
-- **`tech-only` 或 `custom`（无 product-research）模式下**：独立执行，不传入 product-research.md 路径。技术调研子代理将自动进入独立模式，基于需求描述和代码上下文执行。
+读取 `prompt_source[tech-research]`，独立执行，不传入 product-research.md 路径。调用 Task(description: "执行技术调研", prompt: "{tech-research prompt}" + "{上下文注入}", model: "{config.agents.tech-research.model}")。验证 `{feature_dir}/research/tech-research.md` 已生成。
 
-验证 `{feature_dir}/research/tech-research.md` 已生成。
+##### 两者均跳过
 
-**跳过时**: `[3/10] 技术调研 [已跳过 - 调研模式: {research_mode}]`
+**执行条件**: `research_mode` 为 `codebase-scan` 或 `skip`，或 `custom` 且 `custom_steps` 不包含 `product-research` 和 `tech-research`
+
+`[2/10] 产品调研 [已跳过 - 调研模式: {research_mode}]`
+`[3/10] 技术调研 [已跳过 - 调研模式: {research_mode}]`
 
 #### Phase 1c: 产研汇总 [4/10]
 
@@ -419,13 +461,24 @@ elif research_mode == "custom":
 
 ---
 
-### Phase 3: 需求澄清 [6/10]
+### Phase 3: 需求澄清 + 质量检查表（并行） [6/10]
 
-`[6/10] 正在执行需求澄清...`
+`[6/10] 正在并行执行需求澄清和质量检查...`
 
-读取 `prompt_source[clarify]`，调用 Task(description: "执行需求澄清", prompt: "{clarify prompt}" + "{上下文注入}", model: "{config.agents.clarify.model}")。如有 CRITICAL 问题 → 展示给用户决策后重新调用 clarify；无 CRITICAL → 自动继续。
+**并行调度（DESIGN_PREP_GROUP）**: 在同一消息中同时发出以下两个 Task 调用：
 
-**Phase 3.5: 质量检查表**（共享 [6/10]）: 调用 Task(description: "生成质量检查表", prompt: "{checklist prompt}" + "{上下文注入}", model: "{config.agents.checklist.model}")。检查项未通过 → 回到 specify/clarify 修复；全部通过 → 继续。
+1. 读取 `prompt_source[clarify]`，调用 Task(description: "执行需求澄清", prompt: "{clarify prompt}" + "{上下文注入}", model: "{config.agents.clarify.model}")
+2. 读取 `prompt_source[checklist]`，调用 Task(description: "生成质量检查表", prompt: "{checklist prompt}" + "{上下文注入}", model: "{config.agents.checklist.model}")
+
+等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
+
+**汇合处理**:
+
+- 如 clarify 有 CRITICAL 问题 → 同时展示 clarify 结果和 checklist 结果给用户决策，用户决策后重新调用 clarify
+- 如 checklist 有未通过项 → 回到 specify/clarify 修复
+- 如两者均正常 → 继续进入 GATE_DESIGN
+
+**并行回退**: 如果无法在同一消息中发出两个 Task，则按顺序串行执行（先 clarify，再 checklist），并在完成报告中标注 `[回退:串行] clarify, checklist`。
 
 ---
 
@@ -527,19 +580,22 @@ elif research_mode == "custom":
 
 `[10/10] 正在执行验证闭环...`
 
-#### Phase 7a: Spec 合规审查
+#### Phase 7a+7b: Spec 合规审查 + 代码质量审查（并行）
 
-读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")。
+**并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
-#### Phase 7b: 代码质量审查
+1. 读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
 
-读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")。
+等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 
-注：Phase 7a 和 7b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时。
+**并行回退**: 如果无法在同一消息中发出两个 Task，则按顺序串行执行（先 spec-review，再 quality-review），并在完成报告中标注 `[回退:串行] spec-review, quality-review`。
 
 #### Phase 7c: 工具链验证 + 验证证据核查
 
 读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 7a/7b 报告路径 + config.verification}", model: "{config.agents.verify.model}")。验证 `{feature_dir}/verification/verification-report.md` 已生成。
+
+注：Phase 7c 在 7a+7b 完成后串行执行，因其需要读取 7a/7b 的报告路径作为输入。
 
 #### 质量门 4（GATE_VERIFY）
 
@@ -605,6 +661,12 @@ elif research_mode == "custom":
   ✅ checklists/requirements.md
   ✅ verification/verification-report.md
 
+执行模式:
+  Phase 1a+1b: {[并行] 或 [回退:串行] 或 [已跳过]} product-research + tech-research
+  Phase 3+3.5: {[并行] 或 [回退:串行]} clarify + checklist
+  Phase 7a+7b: {[并行] 或 [回退:串行]} spec-review + quality-review
+  Phase 7c:    [串行] verify（依赖 7a/7b 报告）
+
 验证结果:
   构建: {状态}
   Lint:  {状态}
@@ -657,6 +719,8 @@ if 仍然失败:
 5. 提示用户：`[重跑] {phase} 阶段已重新执行。以下制品已标记为过期 [STALE]: {过期制品列表}。是否级联重跑后续阶段？(Y/n)`
 6. 用户确认 → 按顺序重跑所有 STALE 阶段
 7. 用户拒绝 → 停止，保留 STALE 标记
+
+**`--rerun` 与并行组交互**: `--rerun` 重跑以子代理为最小单元。如指定 `--rerun spec-review`，仅重跑 spec-review，不触发并行组中的 quality-review。并行组概念对 `--rerun` 逻辑透明
 
 ---
 
