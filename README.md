@@ -205,16 +205,23 @@ ModuleSpec → specs/*.spec.md
 <!-- speckit:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.1.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 12 specialized sub-agents, 4 quality gates, and 6 execution modes.
+**Spec Driver** (v3.3.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 12 specialized sub-agents, 5 quality gates, 6 execution modes, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
 ```text
 Constitution → Research → Specify → Clarify → Plan → Tasks → Implement → Verify
   (Phase 0)   (Phase 1)  (Phase 2) (Phase 3) (Phase 4) (Phase 5) (Phase 6) (Phase 7)
+                 ║                    ║                                        ║
+            [RESEARCH_GROUP]   [DESIGN_PREP_GROUP]                      [VERIFY_GROUP]
+            product-research   clarify + checklist                     spec-review
+                  +                (parallel)                        + quality-review
+            tech-research                                              (parallel)
+              (parallel)                                                  ↓
+                                                                       verify
 ```
 
-Each phase is handled by a dedicated sub-agent with scoped permissions. The orchestrator manages context passing, quality gates, and failure recovery automatically.
+Each phase is handled by a dedicated sub-agent with scoped permissions. The orchestrator manages context passing, quality gates, parallel dispatch, and failure recovery automatically. Independent sub-agents within a phase are dispatched in parallel to reduce total execution time, with automatic serial fallback if parallel dispatch fails.
 
 ### Setup
 
@@ -234,7 +241,7 @@ Choose the right mode based on your scenario:
 
 | Scenario | Command | Phases | Human Interaction |
 | -------- | ------- | ------ | ----------------- |
-| New feature, major requirement | `/spec-driver:speckit-feature <desc>` | 10 | ≤4 |
+| New feature, major requirement | `/spec-driver:speckit-feature <desc>` | 10 | ≤5 |
 | Feature iteration, requirement change | `/spec-driver:speckit-story <desc>` | 5 | ≤2 |
 | Bug fix, issue resolution | `/spec-driver:speckit-fix <desc>` | 4 | ≤1 |
 | Resume interrupted workflow | `/spec-driver:speckit-resume` | Variable | 0 |
@@ -245,17 +252,20 @@ Choose the right mode based on your scenario:
 
 ```bash
 /spec-driver:speckit-feature "Add user authentication with OAuth2"
+/spec-driver:speckit-feature --research tech-only "Migrate from Express to Fastify"
 ```
 
+Supports 6 research modes (`full`, `tech-only`, `product-only`, `codebase-scan`, `skip`, `custom`) with smart recommendation based on requirement analysis.
+
 1. **Constitution** — Validate against project principles
-2. **Product Research** — Market needs, competitor analysis
-3. **Tech Research** — Architecture options, technology evaluation
-4. **Research Synthesis** — Product × Technology decision matrix
-5. **Specify** — Generate structured requirement specification
-6. **Clarify + Checklist** — Resolve ambiguities, quality check
-7. **Plan** — Technical architecture and implementation design
-8. **Tasks + Analyze** — Dependency-ordered task breakdown, cross-artifact consistency analysis
-9. **Implement** — Execute tasks with code generation
+2. **Product Research + Tech Research** — Parallel dispatch in `full` mode (RESEARCH_GROUP)
+3. **Research Synthesis** — Product × Technology decision matrix
+4. **Specify** — Generate structured requirement specification
+5. **Clarify + Checklist** — Parallel dispatch (DESIGN_PREP_GROUP), resolve ambiguities + quality check
+6. **Plan** — Technical architecture and implementation design
+7. **Tasks + Analyze** — Dependency-ordered task breakdown, cross-artifact consistency analysis
+8. **Implement** — Execute tasks with code generation
+9. **Spec Review + Quality Review** — Parallel dispatch (VERIFY_GROUP)
 10. **Verify** — Build, lint, and test validation
 
 #### Story Mode — Quick 5-Phase
@@ -330,20 +340,22 @@ Each phase can also be run independently for fine-grained control:
 
 ### Sub-Agents
 
-| Agent | Phase | Responsibility | Permissions |
-| ----- | ----- | -------------- | ----------- |
-| constitution | 0 | Project principle validation | Read |
-| product-research | 1a | Market needs, competitor analysis | WebSearch, Read, Glob, Grep |
-| tech-research | 1b | Architecture options, technology evaluation | WebSearch, Read, Glob, Grep |
-| specify | 2 | Structured requirement specification | Read, Write, Bash |
-| clarify | 3 | Ambiguity detection and resolution | Read, Bash |
-| checklist | 3.5 | Specification quality checklist | Read, Bash |
-| plan | 4 | Technical architecture and design | Read, Write, Bash |
-| tasks | 5 | Task decomposition and dependency ordering | Read, Write, Bash |
-| analyze | 5.5 | Cross-artifact consistency analysis | Read, Bash |
-| implement | 6 | Code generation per task list | Read, Write, Bash, WebFetch |
-| verify | 7 | Build, lint, and test validation | Bash, Read, Write |
-| sync | — | Product specification aggregation | Read, Write, Bash, Glob |
+| Agent | Phase | Responsibility | Dispatch | Permissions |
+| ----- | ----- | -------------- | -------- | ----------- |
+| constitution | 0 | Project principle validation | Serial | Read |
+| product-research | 1a | Market needs, competitor analysis | Parallel (RESEARCH_GROUP) | WebSearch, Read, Glob, Grep |
+| tech-research | 1b | Architecture options, technology evaluation | Parallel (RESEARCH_GROUP) | WebSearch, Read, Glob, Grep |
+| specify | 2 | Structured requirement specification | Serial | Read, Write, Bash |
+| clarify | 3 | Ambiguity detection and resolution | Parallel (DESIGN_PREP_GROUP) | Read, Bash |
+| checklist | 3.5 | Specification quality checklist | Parallel (DESIGN_PREP_GROUP) | Read, Bash |
+| plan | 4 | Technical architecture and design | Serial | Read, Write, Bash |
+| tasks | 5 | Task decomposition and dependency ordering | Serial | Read, Write, Bash |
+| analyze | 5.5 | Cross-artifact consistency analysis | Serial | Read, Bash |
+| implement | 6 | Code generation per task list | Serial | Read, Write, Bash, WebFetch |
+| spec-review | 7a | Spec compliance review | Parallel (VERIFY_GROUP) | Read, Glob, Grep |
+| quality-review | 7b | Code quality review | Parallel (VERIFY_GROUP) | Read, Glob, Grep |
+| verify | 7c | Build, lint, and test validation | Serial (after 7a+7b) | Bash, Read, Write |
+| sync | — | Product specification aggregation | Serial | Read, Write, Bash, Glob |
 
 ### Generated Artifacts
 
@@ -373,10 +385,12 @@ agents:
   implement:
     model: sonnet
 
-# Quality gates
-quality_gates:
-  auto_continue_on_warning: true
-  pause_on_critical: true
+# Gate policy: strict | balanced | autonomous
+gate_policy: balanced
+
+# Research mode: auto | full | tech-only | product-only | codebase-scan | skip
+research:
+  default_mode: auto
 
 # Retry policy
 retry:
@@ -446,9 +460,9 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.1.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.3.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
-    ├── agents/                    # 12 specialized sub-agent prompts
+    ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation
     │   ├── product-research.md    # Phase 1a: Market research
     │   ├── tech-research.md       # Phase 1b: Technology evaluation
@@ -459,7 +473,9 @@ plugins/                           # Claude Code plugins
     │   ├── tasks.md               # Phase 5: Task decomposition
     │   ├── analyze.md             # Phase 5.5: Consistency analysis
     │   ├── implement.md           # Phase 6: Code implementation
-    │   ├── verify.md              # Phase 7: Build/lint/test verification
+    │   ├── spec-review.md         # Phase 7a: Spec compliance review
+    │   ├── quality-review.md      # Phase 7b: Code quality review
+    │   ├── verify.md              # Phase 7c: Build/lint/test verification
     │   └── sync.md                # Product spec aggregation
     ├── skills/                    # 6 execution mode definitions
     │   ├── speckit-feature/       # Full 10-phase orchestration
@@ -481,7 +497,7 @@ skills/                            # Local skills (via npx tsx)
 ├── reverse-spec-batch/SKILL.md
 └── reverse-spec-diff/SKILL.md
 
-tests/                             # Test suite (231 cases)
+tests/                             # Test suite (242 cases)
 ├── unit/                          # 19 unit test files
 ├── integration/                   # 4 integration test files
 ├── golden-master/                 # Golden Master structural similarity tests
@@ -540,7 +556,7 @@ npm run test:integration
 npm run lint
 ```
 
-The project includes a 4-tier testing system with 231 test cases:
+The project includes a 4-tier testing system with 242 test cases:
 
 | Tier | Files | Cases | Coverage |
 | ---- | ----- | ----- | -------- |

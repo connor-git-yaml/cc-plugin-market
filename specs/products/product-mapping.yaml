@@ -2,7 +2,7 @@
 # 由 Spec Driver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
-# 最后更新: 2026-02-15
+# 最后更新: 2026-02-28
 
 products:
   reverse-spec:
@@ -40,7 +40,7 @@ products:
         summary: "统一 spec 输出目录引用 .specs → specs"
 
   spec-driver:
-    description: "Spec Driver v3.0.0 — 自治研发编排器 Claude Code Plugin，支持 run/story/fix/resume/sync 五种模式"
+    description: "Spec Driver v3.3.0 — 自治研发编排器 Claude Code Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，含验证铁律、三级门禁策略、灵活调研路由、并行子代理加速"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -60,3 +60,12 @@ products:
       - id: "016-optimize-sync-product-doc"
         type: ENHANCEMENT
         summary: "优化 sync 产品文档——模板扩展至 14 章节，新增推断规则与质量门控"
+      - id: "017-adopt-superpowers-patterns"
+        type: ENHANCEMENT
+        summary: "借鉴 Superpowers 行为约束模式——验证铁律、三级门禁策略、双阶段代码审查、设计硬门禁"
+      - id: "018-flexible-research-routing"
+        type: ENHANCEMENT
+        summary: "Feature 模式灵活调研路由——6 种调研模式预设、智能推荐、命令行参数覆盖"
+      - id: "019-parallel-subagent-speedup"
+        type: ENHANCEMENT
+        summary: "并行子代理加速——验证闭环三并行、调研并行、clarify+checklist 并行、串行回退安全网"
