@@ -43,7 +43,38 @@ disable-model-invocation: true
 - 读取 driver-config.yaml（如不存在则引导创建）
 - `--preset` 参数临时覆盖
 
-### 4. Prompt 来源映射
+### 4. 门禁配置加载
+
+读取 driver-config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+
+```text
+1. 读取 gate_policy 字段（默认 balanced）
+   - 如果值无法识别，输出警告并回退到 balanced
+
+2. 读取 gates 字段（默认空）
+   - 如果包含无法识别的门禁名称，输出警告但不阻断
+
+3. Story 模式门禁子集: GATE_DESIGN, GATE_TASKS, GATE_VERIFY（3 个，无 GATE_RESEARCH/GATE_ANALYSIS）
+
+4. 构建行为表:
+   for GATE in [GATE_DESIGN, GATE_TASKS, GATE_VERIFY]:
+     if gates.{GATE}.pause 有配置:
+       behavior[GATE] = gates.{GATE}.pause
+     else:
+       根据 gate_policy 应用默认行为
+
+balanced 默认值表:
+  | 门禁         | 默认行为 | 分类       |
+  | ------------ | -------- | ---------- |
+  | GATE_DESIGN  | always   | 关键       |
+  | GATE_TASKS   | always   | 关键       |
+  | GATE_VERIFY  | always   | 关键       |
+
+strict 默认值: 全部 always
+autonomous 默认值: 全部 on_failure
+```
+
+### 5. Prompt 来源映射
 
 ```text
 对于 phase ∈ [specify, clarify, plan, tasks, analyze, implement]:
@@ -56,13 +87,13 @@ prompt_source[constitution] = "plugins/spec-driver/agents/constitution.md"
 prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 ```
 
-### 5. 特性目录准备
+### 6. 特性目录准备
 
 从需求描述生成特性短名（2-4 个单词，action-noun 格式），检查现有分支和 specs 目录确定下一个可用编号，创建特性分支和目录（利用 `.specify/scripts/bash/create-new-feature.sh`）。
 
 **重要**: 特性目录必须遵循 `specs/NNN-<short-name>/` 格式（如 `specs/016-add-dark-mode/`），禁止使用 `specs/features/` 子目录。
 
-### 6. 代码库上下文扫描
+### 7. 代码库上下文扫描
 
 **此步骤替代调研阶段，是 story 模式的核心加速点。**
 
@@ -124,6 +155,25 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 ---
 
+### Phase 2.5: 设计门禁 [GATE_DESIGN]
+
+**此阶段由编排器亲自执行，不委派子代理。**
+
+```text
+1. 检查 gates.GATE_DESIGN.pause 配置:
+   - 如果为 "always" → 暂停（展示 spec 摘要 + 等待用户选择）
+   - 否则 → 自动继续（story 模式默认豁免）
+
+2. 如果决策为暂停:
+   展示 spec.md 关键摘要（User Stories 数量、FR 数量）
+   等待用户选择：A) 批准继续 | B) 修改需求 | C) 中止
+
+3. 输出门禁决策日志:
+   [GATE] GATE_DESIGN | mode=story | policy={gate_policy} | decision={PAUSE|AUTO_CONTINUE} | reason={配置覆盖|story 模式默认豁免}
+```
+
+---
+
 ### Phase 3: 技术规划 + 任务分解 [3/5]
 
 `[3/5] 正在生成规划和任务...`
@@ -135,7 +185,16 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 3. 调用 Task(description: "生成任务分解", prompt: "{tasks prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.tasks.model}")
 4. 验证 tasks.md 已生成
 
-**质量门（GATE_TASKS）**: 展示 tasks.md 摘要，用户选择：A) 确认开始实现 | B) 调整任务。
+**质量门（GATE_TASKS）**:
+
+```text
+1. 获取 behavior[GATE_TASKS]
+2. 根据 behavior 决策:
+   - always → 暂停展示 tasks.md 摘要，用户选择：A) 确认开始实现 | B) 调整任务
+   - auto → 自动继续（仅在日志中记录摘要）
+   - on_failure → 检查任务分解是否有明显问题：有 → 暂停；无 → 自动继续
+3. 输出: [GATE] GATE_TASKS | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 
@@ -151,9 +210,32 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 `[5/5] 正在执行验证闭环...`
 
-读取 `prompt_source[verify]`，调用 Task(description: "执行验证闭环", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md 路径 + config.verification}", model: "{config.agents.verify.model}")。
+#### Phase 5a: Spec 合规审查
 
-**质量门（GATE_VERIFY）**: 构建/测试失败 → 暂停（A: 修复重验 / B: 接受结果）；仅 Lint 警告 → 记录自动完成；全部通过 → 自动完成。
+读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")。
+
+#### Phase 5b: 代码质量审查
+
+读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")。
+
+注：Phase 5a 和 5b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时。
+
+#### Phase 5c: 工具链验证 + 验证证据核查
+
+读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 5a/5b 报告路径 + config.verification}", model: "{config.agents.verify.model}")。
+
+#### 质量门（GATE_VERIFY）
+
+合并 5a/5b/5c 三份报告的结果：
+
+```text
+1. 获取 behavior[GATE_VERIFY]
+2. 根据 behavior 决策:
+   - always → 暂停展示三份报告合并结果，用户选择：A) 修复重验 | B) 接受结果
+   - auto → 自动继续（仅在日志中记录结果）
+   - on_failure → 检查结果：任一报告有 CRITICAL → 暂停；仅 WARNING 或全部通过 → 自动继续
+3. 输出: [GATE] GATE_VERIFY | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 

@@ -48,7 +48,42 @@ disable-model-invocation: true
 - 如果配置已存在：读取并解析 driver-config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 
-### 4. Prompt 来源映射
+### 4. 门禁配置加载
+
+读取 driver-config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+
+```text
+1. 读取 gate_policy 字段（默认 balanced）
+   - 如果值无法识别（非 strict/balanced/autonomous），输出警告并回退到 balanced
+
+2. 读取 gates 字段（默认空）
+   - 如果包含无法识别的门禁名称，输出警告但不阻断
+
+3. Feature 模式门禁子集: GATE_RESEARCH, GATE_DESIGN, GATE_ANALYSIS, GATE_TASKS, GATE_VERIFY（全部 5 个）
+
+4. 构建行为表:
+   for GATE in [GATE_RESEARCH, GATE_DESIGN, GATE_ANALYSIS, GATE_TASKS, GATE_VERIFY]:
+     if gates.{GATE}.pause 有配置:
+       behavior[GATE] = gates.{GATE}.pause  // always | auto | on_failure
+     else:
+       根据 gate_policy 应用默认行为（见下表）
+
+balanced 默认值表:
+  | 门禁           | 默认行为   | 分类                     |
+  | -------------- | ---------- | ------------------------ |
+  | GATE_RESEARCH  | auto       | 非关键                   |
+  | GATE_ANALYSIS  | on_failure | 非关键（CRITICAL 时暂停）|
+  | GATE_DESIGN    | always     | 关键（且硬门禁）         |
+  | GATE_TASKS     | always     | 关键                     |
+  | GATE_VERIFY    | always     | 关键                     |
+
+strict 默认值: 全部 always
+autonomous 默认值: 全部 on_failure
+
+注: GATE_DESIGN 在 feature 模式下为硬门禁，gates 配置中对 GATE_DESIGN 的覆盖在 feature 模式下亦不生效
+```
+
+### 5. Prompt 来源映射
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
@@ -64,7 +99,7 @@ prompt_source[tech-research] = "plugins/spec-driver/agents/tech-research.md"
 prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 ```
 
-### 5. 特性目录准备
+### 6. 特性目录准备
 
 从需求描述生成特性短名（2-4 个单词，action-noun 格式），检查现有分支和 specs 目录确定下一个可用编号，创建特性分支和目录（利用 `.specify/scripts/bash/create-new-feature.sh`）。
 
@@ -121,7 +156,16 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 **此阶段由编排器亲自执行，不委派子代理。** 读取 product-research.md + tech-research.md + `plugins/spec-driver/templates/research-synthesis-template.md`，生成交叉分析（产品x技术矩阵、可行性评估、风险矩阵、推荐方案、MVP 范围），写入 `{feature_dir}/research/research-synthesis.md`。
 
-**质量门 1（GATE_RESEARCH）**: 展示 research-synthesis.md 关键摘要，用户选择：A) 确认继续 | B) 补充调研 | C) 调整 MVP 范围。
+**质量门 1（GATE_RESEARCH）**:
+
+```text
+1. 获取 behavior[GATE_RESEARCH]
+2. 根据 behavior 决策:
+   - always → 暂停展示 research-synthesis.md 关键摘要，用户选择：A) 确认继续 | B) 补充调研 | C) 调整 MVP 范围
+   - auto → 自动继续（仅在日志中记录摘要）
+   - on_failure → 检查汇总结果是否有 CRITICAL 风险：有 → 暂停；无 → 自动继续
+3. 输出: [GATE] GATE_RESEARCH | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 
@@ -143,6 +187,32 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 ---
 
+### Phase 3.5: 设计门禁 [GATE_DESIGN]
+
+**此阶段由编排器亲自执行，不委派子代理。**
+
+```text
+1. 检查运行模式:
+   - feature 模式 → GATE_DESIGN 强制暂停（不检查配置，硬门禁）
+
+2. 暂停时展示 spec.md 关键摘要:
+   - User Stories 数量
+   - FR（功能需求）数量
+   - 成功标准摘要
+
+3. 等待用户选择:
+   A) 批准继续 → 进入 Phase 4（技术规划）
+   B) 修改需求 → 重跑 Phase 2/3（需求规范/澄清）
+   C) 中止流程
+
+4. 输出门禁决策日志:
+   [GATE] GATE_DESIGN | mode=feature | policy={gate_policy} | decision=PAUSE | reason=硬门禁，feature 模式不可跳过
+
+注: gates 配置中对 GATE_DESIGN 的覆盖在 feature 模式下亦不生效
+```
+
+---
+
 ### Phase 4: 技术规划 [7/10]
 
 `[7/10] 正在执行技术规划...`
@@ -159,9 +229,27 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 **Phase 5.5: 一致性分析**（共享 [8/10]）: 调用 Task(description: "执行一致性分析", prompt: "{analyze prompt}" + "{上下文注入 + spec.md + plan.md + tasks.md 路径}", model: "{config.agents.analyze.model}")。
 
-**质量门 2（GATE_ANALYSIS）**: CRITICAL > 0 → 暂停，展示发现和修复建议（A: 修复重跑 / B: 忽略继续 / C: 中止）；仅 WARNING → 记录自动继续；零发现 → 自动继续。
+**质量门 2（GATE_ANALYSIS）**:
 
-**质量门 3（GATE_TASKS）**: 展示 tasks.md 摘要（任务数、User Story 分布、并行机会、MVP 范围），用户选择：A) 确认开始实现 | B) 调整任务 | C) 重跑规划。
+```text
+1. 获取 behavior[GATE_ANALYSIS]
+2. 根据 behavior 决策:
+   - always → 暂停展示发现和修复建议（A: 修复重跑 / B: 忽略继续 / C: 中止）
+   - auto → 自动继续（仅在日志中记录发现数量）
+   - on_failure → 检查是否有 CRITICAL 发现：有 → 暂停；仅 WARNING 或零发现 → 自动继续
+3. 输出: [GATE] GATE_ANALYSIS | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
+
+**质量门 3（GATE_TASKS）**:
+
+```text
+1. 获取 behavior[GATE_TASKS]
+2. 根据 behavior 决策:
+   - always → 暂停展示 tasks.md 摘要（任务数、User Story 分布、并行机会、MVP 范围），用户选择：A) 确认开始实现 | B) 调整任务 | C) 重跑规划
+   - auto → 自动继续（仅在日志中记录摘要）
+   - on_failure → 检查任务分解是否有明显问题：有 → 暂停；无 → 自动继续
+3. 输出: [GATE] GATE_TASKS | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 
@@ -177,9 +265,32 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 `[10/10] 正在执行验证闭环...`
 
-读取 `prompt_source[verify]`，调用 Task(description: "执行验证闭环", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md 路径 + config.verification}", model: "{config.agents.verify.model}")。验证 `{feature_dir}/verification/verification-report.md` 已生成。
+#### Phase 7a: Spec 合规审查
 
-**质量门 4（GATE_VERIFY）**: 构建/测试失败 → 暂停（A: 修复重验 / B: 接受结果）；仅 Lint 警告 → 记录自动完成；全部通过 → 自动完成。
+读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")。
+
+#### Phase 7b: 代码质量审查
+
+读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")。
+
+注：Phase 7a 和 7b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时。
+
+#### Phase 7c: 工具链验证 + 验证证据核查
+
+读取 `prompt_source[verify]`，调用 Task(description: "工具链验证 + 验证证据核查", prompt: "{verify prompt}" + "{上下文注入 + spec.md + tasks.md + 7a/7b 报告路径 + config.verification}", model: "{config.agents.verify.model}")。验证 `{feature_dir}/verification/verification-report.md` 已生成。
+
+#### 质量门 4（GATE_VERIFY）
+
+合并 7a/7b/7c 三份报告的结果：
+
+```text
+1. 获取 behavior[GATE_VERIFY]
+2. 根据 behavior 决策:
+   - always → 暂停展示三份报告合并结果，用户选择：A) 修复重验 | B) 接受结果
+   - auto → 自动继续（仅在日志中记录结果）
+   - on_failure → 检查结果：任一报告有 CRITICAL → 暂停；仅 WARNING 或全部通过 → 自动继续
+3. 输出: [GATE] GATE_VERIFY | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
 
 ---
 

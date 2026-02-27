@@ -32,6 +32,29 @@
    - 对关键 FR，通过 Glob/Read 检查对应文件是否存在且内容合理
    - 输出对齐结果：✅ 已实现 | ❌ 未实现 | ⚠️ 部分实现
 
+   **注**: Layer 1 提供精简版 FR 覆盖率统计（checkbox 级）。逐条 FR 的详细状态检查已移至 spec-review.md 子代理，由编排器在 Phase 7a 独立调用。
+
+### Layer 1.5: 验证证据检查
+
+3. **检查验证铁律合规**
+   - 检查 implement 子代理返回消息中是否包含**实际运行**的验证命令输出文本（非引用性描述）
+   - 有效证据特征：包含具体命令名称（如 `npm test`、`cargo build`）+ 退出码 + 输出摘要
+   - 无效证据特征：仅包含描述性文字，无具体命令执行记录
+
+4. **推测性表述扫描**
+   - 检测以下推测性表述模式（触发 EVIDENCE_MISSING 标记）：
+     - "should pass" / "should work"
+     - "looks correct" / "looks good"
+     - "tests will likely pass"
+     - "代码看起来没问题" / "应该能正常工作"
+     - 其他缺乏具体命令输出的完成声明
+
+5. **输出验证铁律合规状态**
+   - **COMPLIANT**: implement 返回中包含有效验证证据（命令 + 退出码 + 输出）
+   - **EVIDENCE_MISSING**: 缺少验证命令输出，或检测到推测性表述
+   - **PARTIAL**: 部分验证类型有证据，部分缺失（如有构建证据但无测试证据）
+   - 列出缺失的验证类型（构建/测试/Lint）和检测到的推测性表述
+
 ### Layer 2: 原生工具链验证
 
 3. **语言/构建系统检测**
@@ -78,7 +101,7 @@
 7. **生成验证报告**
    - 确保 `{feature_dir}/verification/` 目录存在
    - 按模板写入 `{feature_dir}/verification/verification-report.md`
-   - 报告结构：Layer 1 对齐表 + Layer 2 各语言结果 + 总体摘要
+   - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 2 各语言结果 + 总体摘要
 
 8. **触发质量门**
    - 构建失败或测试失败 → GATE_VERIFY 触发暂停
@@ -103,6 +126,11 @@
 
 ### Layer 1: Spec-Code 对齐
 - 覆盖率: {N}% ({M}/{K} FR 已实现)
+
+### Layer 1.5: 验证铁律合规
+- 状态: {COMPLIANT / EVIDENCE_MISSING / PARTIAL}
+- 缺失验证类型: {构建/测试/Lint，或"无"}
+- 检测到的推测性表述: {列表，或"无"}
 
 ### Layer 2: 原生工具链
 | 语言 | 构建 | Lint | 测试 |
