@@ -58,6 +58,13 @@ describe('Spec Driver Codex skills script', () => {
       existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-doc', 'SKILL.md')),
     ).toBe(true);
 
+    const storyWrapper = readFileSync(
+      join(tempDir, '.codex', 'skills', 'spec-driver-story', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(storyWrapper).toContain('model_compat.defaults.codex');
+    expect(storyWrapper).toContain('opus/sonnet');
+
     const remove = runScript(['remove'], { cwd: tempDir });
     expect(remove.exitCode).toBe(0);
     expect(remove.stdout).toContain('已移除');

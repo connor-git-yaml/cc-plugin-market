@@ -37,6 +37,7 @@ disable-model-invocation: true
 ### 2. 配置加载
 
 读取 driver-config.yaml（如不存在则使用 balanced 默认值，不引导创建，保持快速）。
+解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射。
 
 ### 3. 门禁配置加载
 
@@ -319,7 +320,7 @@ if fix-report.md 中受影响文件 > 10 个 或 涉及 > 3 个模块:
 
 ## 模型选择
 
-与 run 模式共享同一套模型配置逻辑。fix 模式下诊断阶段始终使用 opus，其他阶段遵循 preset 配置。
+与 run 模式共享同一套模型配置逻辑与运行时兼容归一化。fix 模式下诊断阶段使用高质量推理模型（逻辑名 `opus`），在 Codex 运行时会按 `model_compat` 自动映射到对应模型；其他阶段遵循 preset + `agents.{agent_id}.model` 配置。
 
 ---
 

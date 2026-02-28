@@ -456,6 +456,20 @@ agents:
   implement:
     model: sonnet
 
+# Cross-runtime model compatibility (Claude / Codex)
+model_compat:
+  runtime: auto  # auto | claude | codex
+  aliases:
+    codex:
+      opus: gpt-5
+      sonnet: gpt-5-mini
+    claude:
+      gpt-5: opus
+      gpt-5-mini: sonnet
+  defaults:
+    codex: gpt-5
+    claude: sonnet
+
 # Gate policy: strict | balanced | autonomous
 gate_policy: balanced
 
@@ -482,6 +496,8 @@ verification:
 | `balanced` (default) | Opus | Sonnet |
 | `quality-first` | Opus | Opus |
 | `cost-efficient` | Sonnet | Sonnet |
+
+When running in Codex, model names are normalized via `model_compat` before each Task dispatch, so existing `opus/sonnet` configs remain compatible.
 
 ### Supported Verification Languages
 

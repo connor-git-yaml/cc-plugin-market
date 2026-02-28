@@ -42,6 +42,7 @@ disable-model-invocation: true
 
 - 读取 driver-config.yaml（如不存在则引导创建）
 - `--preset` 参数临时覆盖
+- 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
 
 ### 4. 门禁配置加载
 
@@ -312,7 +313,12 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
 
 ## 模型选择
 
-与 run 模式共享同一套模型配置逻辑和 preset 默认表。
+与 run 模式共享同一套模型配置逻辑和 preset 默认表，并执行同一套运行时兼容归一化：
+
+- 优先级：`--preset` → `agents.{agent_id}.model` → preset 默认值
+- 兼容归一化：按 `model_compat.runtime` 解析当前运行时（auto/claude/codex）
+- Codex 下默认将 `opus/sonnet` 映射到可用模型（默认 `gpt-5/gpt-5-mini`）
+- 若映射后模型不可用，回退到 `model_compat.defaults.codex` 并记录 `[模型回退]`
 
 ---
 

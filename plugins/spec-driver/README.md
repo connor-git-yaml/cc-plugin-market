@@ -108,6 +108,21 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 | **quality-first** | Opus | Opus | 关键功能 |
 | **cost-efficient** | Sonnet | Sonnet | 探索性需求 |
 
+为兼容 Codex 运行时，建议在 `driver-config.yaml` 增加模型兼容映射（保留 `opus/sonnet` 语义）：
+
+```yaml
+model_compat:
+  runtime: auto  # auto | claude | codex
+  aliases:
+    codex:
+      opus: gpt-5
+      sonnet: gpt-5-mini
+  defaults:
+    codex: gpt-5
+```
+
+说明：在 Codex 执行时，`opus/sonnet` 会先映射到 Codex 可用模型，再发起任务调用。
+
 ## 子代理列表
 
 | 子代理 | 阶段 | 职责 |

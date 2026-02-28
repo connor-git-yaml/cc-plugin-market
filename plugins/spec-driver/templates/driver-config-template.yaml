@@ -23,7 +23,9 @@ preset: balanced
 # 子代理模型配置（覆盖预设）
 # ═══════════════════════════════════════
 # 每个子代理可独立配置 model 字段
-# 可选值: opus | sonnet
+# 可选值:
+# - Claude 逻辑名: opus | sonnet（推荐，跨端可移植）
+# - 运行时原生模型名: 例如 gpt-5 / gpt-5-mini / o3（按运行时支持情况）
 # 取消注释并修改以覆盖预设中的默认值
 #
 agents:
@@ -50,6 +52,39 @@ agents:
     model: sonnet
   verify:
     model: sonnet
+
+# ═══════════════════════════════════════
+# 模型运行时兼容（Claude / Codex）
+# ═══════════════════════════════════════
+# 目的: 保留现有 preset/agents 语义，同时允许在不同运行时自动映射模型名。
+#
+# runtime:
+#   auto   - 自动识别运行时（检测到 Codex 环境则按 codex 映射）
+#   claude - 强制按 Claude 映射
+#   codex  - 强制按 Codex 映射
+#
+# aliases:
+#   codex  - 当配置写的是 Claude 逻辑名（opus/sonnet）时，映射到 Codex 可用模型
+#   claude - 当配置写的是 Codex 原生模型名时，映射回 Claude 逻辑名
+#
+# defaults:
+#   当映射后的模型在当前运行时不可用时，回退到对应默认模型
+#
+model_compat:
+  runtime: auto
+  aliases:
+    codex:
+      opus: gpt-5
+      sonnet: gpt-5-mini
+      haiku: gpt-5-mini
+    claude:
+      gpt-5: opus
+      gpt-5-mini: sonnet
+      o3: opus
+      o4-mini: sonnet
+  defaults:
+    codex: gpt-5
+    claude: sonnet
 
 # ═══════════════════════════════════════
 # 调研阶段配置（Feature 模式）

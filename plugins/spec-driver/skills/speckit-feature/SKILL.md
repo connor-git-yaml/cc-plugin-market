@@ -51,6 +51,7 @@ disable-model-invocation: true
 - 如果配置已存在：读取并解析 driver-config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
+- 解析 `model_compat` 配置段（可选，向后兼容）：如果缺失则使用内置默认映射（Codex: `opus->gpt-5`, `sonnet->gpt-5-mini`）
 
 ### 4. 门禁配置加载
 
@@ -742,6 +743,43 @@ if 仍然失败:
 | analyze | opus | opus | sonnet |
 | implement | sonnet | opus | sonnet |
 | verify | sonnet | opus | sonnet |
+
+### 模型运行时兼容归一化（Claude / Codex）
+
+为避免 `driver-config.yaml` 中的模型名与当前运行时不匹配，在每次 `Task(...)` 调用前执行一次归一化：
+
+```text
+输入: candidate_model（由优先级规则选出的模型名）, agent_id
+
+1. 读取 driver-config.yaml 中 model_compat.runtime（auto|claude|codex，默认 auto）
+
+2. 解析 runtime:
+   - runtime=claude/codex -> 直接使用
+   - runtime=auto -> 自动识别:
+       a) 若当前由 Codex 包装技能触发（如 $spec-driver-*）或环境显式为 Codex -> codex
+       b) 其他情况 -> claude
+
+3. 读取映射表（若未配置，使用默认）:
+   codex 默认映射: opus->gpt-5, sonnet->gpt-5-mini, haiku->gpt-5-mini
+   claude 默认映射: gpt-5->opus, gpt-5-mini->sonnet, o3->opus, o4-mini->sonnet
+
+4. 归一化:
+   if candidate_model 在 runtime 对应 aliases 中:
+     resolved_model = aliases[runtime][candidate_model]
+   else:
+     resolved_model = candidate_model  // 非别名值按原样透传
+
+5. 可用性回退（仅调度层，不改变业务流程）:
+   if resolved_model 在当前运行时不可用:
+     resolved_model = model_compat.defaults.{runtime}
+     输出: [模型回退] agent={agent_id} source={candidate_model} resolved={resolved_model}
+   else if resolved_model != candidate_model:
+     输出: [模型映射] agent={agent_id} source={candidate_model} resolved={resolved_model}
+
+6. Task 调用使用 resolved_model
+```
+
+说明：该归一化仅处理“模型名调度差异”，不改变阶段顺序、质量门、产物路径或门禁语义。
 
 ---
 
