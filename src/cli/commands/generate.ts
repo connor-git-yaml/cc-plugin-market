@@ -5,6 +5,7 @@
 
 import { resolve } from 'node:path';
 import { generateSpec } from '../../core/single-spec-orchestrator.js';
+import { ensureSpecifyTemplates } from '../../utils/specify-template-sync.js';
 import {
   validateTargetPath,
   checkAuth,
@@ -19,6 +20,13 @@ import type { CLICommand } from '../utils/parse-args.js';
 export async function runGenerate(command: CLICommand, version: string): Promise<void> {
   const target = command.target!;
   const targetPath = resolve(target);
+
+  // 首次运行自动补齐 .specify/templates（不阻塞主流程）
+  try {
+    ensureSpecifyTemplates(process.cwd());
+  } catch {
+    // 忽略模板同步失败，避免影响 generate 主流程
+  }
 
   console.log(`reverse-spec v${version}`);
   console.log(`正在分析 ${target} ...`);

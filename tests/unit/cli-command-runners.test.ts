@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   detectDrift: vi.fn(),
   prepareContext: vi.fn(),
   startMcpServer: vi.fn(),
+  ensureSpecifyTemplates: vi.fn(),
   validateTargetPath: vi.fn(),
   checkAuth: vi.fn(),
   handleError: vi.fn(),
@@ -32,6 +33,10 @@ vi.mock('../../src/diff/drift-orchestrator.js', () => ({
 
 vi.mock('../../src/mcp/index.js', () => ({
   startMcpServer: mocks.startMcpServer,
+}));
+
+vi.mock('../../src/utils/specify-template-sync.js', () => ({
+  ensureSpecifyTemplates: mocks.ensureSpecifyTemplates,
 }));
 
 vi.mock('../../src/cli/utils/error-handler.js', () => ({
@@ -84,6 +89,7 @@ describe('CLI 命令执行器', () => {
     mocks.validateTargetPath.mockReturnValue(true);
     mocks.checkAuth.mockReturnValue(true);
     mocks.handleError.mockReturnValue(2);
+    mocks.ensureSpecifyTemplates.mockReturnValue({ copied: [], missing: [] });
   });
 
   afterEach(() => {
@@ -121,6 +127,7 @@ describe('CLI 命令执行器', () => {
         projectRoot: process.cwd(),
       }),
     );
+    expect(mocks.ensureSpecifyTemplates).toHaveBeenCalledWith(process.cwd());
     expect(process.exitCode).toBe(0);
   });
 
@@ -256,6 +263,7 @@ describe('CLI 命令执行器', () => {
         projectRoot: process.cwd(),
       }),
     );
+    expect(mocks.ensureSpecifyTemplates).toHaveBeenCalledWith(process.cwd());
     expect(process.exitCode).toBe(0);
   });
 

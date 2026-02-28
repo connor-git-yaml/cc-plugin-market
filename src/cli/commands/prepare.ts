@@ -7,6 +7,7 @@
 
 import { resolve, relative } from 'node:path';
 import { prepareContext } from '../../core/single-spec-orchestrator.js';
+import { ensureSpecifyTemplates } from '../../utils/specify-template-sync.js';
 import {
   validateTargetPath,
   handleError,
@@ -23,6 +24,13 @@ import type { AssembledContext } from '../../core/context-assembler.js';
 export async function runPrepare(command: CLICommand, version: string): Promise<void> {
   const target = command.target!;
   const targetPath = resolve(target);
+
+  // 首次运行自动补齐 .specify/templates（不阻塞主流程）
+  try {
+    ensureSpecifyTemplates(process.cwd());
+  } catch {
+    // 忽略模板同步失败，避免影响 prepare 主流程
+  }
 
   // 进度信息 → stderr（不污染 stdout）
   console.error(`reverse-spec prepare v${version}`);
