@@ -567,6 +567,35 @@ elif research_mode == "custom":
 3. 输出: [GATE] GATE_TASKS | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
 ```
 
+**可控性增强检查点（IMPLEMENT_AUTH，实施授权）**（共享 [8/10]）:
+
+```text
+目标: 在进入代码实现前增加一次“范围锁定 + 风险接受”确认，提升最终实施可控性。
+
+1. 编排器汇总实施风险信号:
+   - analyze 发现包含 CRITICAL
+   - tasks.md 预计变更 > 20 文件 或 涉及 > 5 模块
+   - plan.md 涉及高影响域（权限/鉴权、支付/计费、数据迁移、公共契约变更）
+
+2. 计算风险级别:
+   - 命中任一信号 → risk_level=HIGH
+   - 否则 → risk_level=NORMAL
+
+3. 根据 gate_policy 决策:
+   - strict → 始终暂停（PAUSE）
+   - balanced → 仅 risk_level=HIGH 时暂停；否则自动继续
+   - autonomous → 自动继续（仅记录日志）
+
+4. 暂停时展示:
+   - 预计变更文件/模块范围
+   - 高风险触发原因
+   - 验证必跑项（build/lint/test）
+   用户选择：A) 授权进入实现 | B) 缩减范围并重跑 tasks/analyze | C) 中止流程
+
+5. 输出日志:
+   [CONTROL] IMPLEMENT_AUTH | policy={gate_policy} | risk={risk_level} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
+
 ---
 
 ### Phase 6: 代码实现 [9/10]
@@ -796,7 +825,7 @@ if 仍然失败:
 | 5/10 | Phase 2 | 需求规范 | （始终执行） |
 | 6/10 | Phase 3 + 3.5 | 需求澄清 + 质量检查表 | （始终执行） |
 | 7/10 | Phase 4 | 技术规划 | （始终执行） |
-| 8/10 | Phase 5 + 5.5 | 任务分解 + 一致性分析 + 质量门 2 + 质量门 3 | （始终执行） |
+| 8/10 | Phase 5 + 5.5 + IMPLEMENT_AUTH | 任务分解 + 一致性分析 + 质量门 2 + 质量门 3 + 实施授权检查点 | （始终执行） |
 | 9/10 | Phase 6 | 代码实现 | （始终执行） |
 | 10/10 | Phase 7 | 验证闭环 + 质量门 4 | （始终执行） |
 

@@ -177,16 +177,18 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 **此阶段由编排器亲自执行，不委派子代理。**
 
 ```text
-1. 检查 gates.GATE_DESIGN.pause 配置:
-   - 如果为 "always" → 暂停（展示 spec 摘要 + 等待用户选择）
-   - 否则 → 自动继续（story 模式默认豁免）
+1. 获取 behavior[GATE_DESIGN]
+2. 根据 behavior 决策:
+   - always → 暂停（展示 spec 摘要 + 等待用户选择）
+   - auto → 自动继续
+   - on_failure → 检查 spec.md 是否存在 CRITICAL 歧义/冲突：有 → 暂停；无 → 自动继续
 
-2. 如果决策为暂停:
+3. 如果决策为暂停:
    展示 spec.md 关键摘要（User Stories 数量、FR 数量）
    等待用户选择：A) 批准继续 | B) 修改需求 | C) 中止
 
-3. 输出门禁决策日志:
-   [GATE] GATE_DESIGN | mode=story | policy={gate_policy} | decision={PAUSE|AUTO_CONTINUE} | reason={配置覆盖|story 模式默认豁免}
+4. 输出门禁决策日志:
+   [GATE] GATE_DESIGN | mode=story | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
 ```
 
 ---
@@ -211,6 +213,33 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
    - auto → 自动继续（仅在日志中记录摘要）
    - on_failure → 检查任务分解是否有明显问题：有 → 暂停；无 → 自动继续
 3. 输出: [GATE] GATE_TASKS | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+```
+
+**可控性增强检查点（IMPLEMENT_AUTH，实施授权）**（共享 [3/5]）:
+
+```text
+目标: Story 模式在保持速度的同时，补充一次“实施前授权”，避免快速路径下范围失控。
+
+1. 编排器汇总风险信号:
+   - tasks.md 涉及 > 5 模块 或 预计变更 > 20 文件
+   - plan.md 涉及高影响域（权限/鉴权、支付/计费、数据迁移、公共契约变更）
+
+2. 计算风险级别:
+   - 命中任一信号 → risk_level=HIGH
+   - 否则 → risk_level=NORMAL
+
+3. 根据 gate_policy 决策:
+   - strict → 始终暂停
+   - balanced → 仅 risk_level=HIGH 时暂停；否则自动继续
+   - autonomous → 自动继续（记录日志）
+
+4. 暂停时展示:
+   - 变更范围摘要（模块/文件）
+   - 高风险触发原因
+   用户选择：A) 授权进入实现 | B) 调整任务后重跑 Phase 3 | C) 中止
+
+5. 输出日志:
+   [CONTROL] IMPLEMENT_AUTH | policy={gate_policy} | risk={risk_level} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
 ```
 
 ---
