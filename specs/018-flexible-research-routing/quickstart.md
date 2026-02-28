@@ -14,8 +14,8 @@
 |------|----------|-----------|
 | `plugins/spec-driver/skills/speckit-feature/SKILL.md` | 重构 | +120 行 |
 | `plugins/spec-driver/agents/tech-research.md` | 修改 | ~10 行 |
-| `plugins/spec-driver/templates/driver-config-template.yaml` | 新增段落 | +18 行 |
-| `driver-config.yaml` | 新增段落 | +3 行 |
+| `plugins/spec-driver/templates/spec-driver.config-template.yaml` | 新增段落 | +18 行 |
+| `spec-driver.config.yaml` | 新增段落 | +3 行 |
 
 ---
 
@@ -23,7 +23,7 @@
 
 ### Step 1: 配置文件（5 分钟）
 
-在 `plugins/spec-driver/templates/driver-config-template.yaml` 的 `agents:` 段之后、`verification:` 段之前新增 `research:` 配置段：
+在 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 的 `agents:` 段之后、`verification:` 段之前新增 `research:` 配置段：
 
 ```yaml
 research:
@@ -31,7 +31,7 @@ research:
   custom_steps: []
 ```
 
-在 `driver-config.yaml` 中同步新增相同配置段。
+在 `spec-driver.config.yaml` 中同步新增相同配置段。
 
 ### Step 2: tech-research.md 软依赖降级（10 分钟）
 

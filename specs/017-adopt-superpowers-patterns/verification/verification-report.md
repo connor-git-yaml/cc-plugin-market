@@ -37,7 +37,7 @@
 | FR-008 | 两项审查各自输出独立结构化报告（CRITICAL/WARNING/INFO） | 已实现 | T003, T004 | `spec-review.md` 第 86-93 行定义问题分级（CRITICAL: FR 未实现, WARNING: 部分实现, INFO: 过度实现）；`quality-review.md` 第 112-116 行定义问题分级（CRITICAL: 安全漏洞, WARNING: 性能隐患, INFO: 命名建议） |
 | FR-009 | 支持两项审查并行执行 | 已实现 | T007 | `speckit-feature/SKILL.md` 第 286 行: "Phase 7a 和 7b 可串行或并行执行。balanced/autonomous 模式建议并行以缩短总耗时"；story/fix 模式有相同注释 |
 | FR-010 | 三级门禁策略 strict/balanced/autonomous | 已实现 | T001, T010-T013 | `speckit-feature/SKILL.md` 第 51-82 行包含完整的门禁配置加载逻辑（5 个门禁的行为表）；`speckit-story/SKILL.md` 第 46-73 行（3 个门禁）；`speckit-fix/SKILL.md` 第 43-67 行（2 个门禁）；balanced 默认值表中 GATE_ANALYSIS = on_failure 符合要求 |
-| FR-011 | balanced 作为默认策略，向后兼容 | 已实现 | T001, T002, T010 | `driver-config-template.yaml` 第 96 行: `gate_policy: balanced`；`driver-config.yaml` 第 96 行: `gate_policy: balanced`；三个 SKILL.md 均在门禁配置加载中默认 `balanced` |
+| FR-011 | balanced 作为默认策略，向后兼容 | 已实现 | T001, T002, T010 | `spec-driver.config-template.yaml` 第 96 行: `gate_policy: balanced`；`spec-driver.config.yaml` 第 96 行: `gate_policy: balanced`；三个 SKILL.md 均在门禁配置加载中默认 `balanced` |
 | FR-012 | 每个门禁独立配置，门禁级优先于全局策略 | 已实现 | T001, T010, T011 | `speckit-feature/SKILL.md` 第 62-64 行: "if gates.\{GATE\}.pause 有配置: behavior[GATE] = gates.\{GATE\}.pause"（门禁级优先）；第 82 行: GATE_DESIGN 在 feature 模式下为硬门禁，覆盖被忽略；配置模板第 98-114 行包含完整 gates 示例 |
 | FR-013 | 门禁决策格式化日志 | 已实现 | T011-T014 | 所有质量门均包含格式化决策日志: `[GATE] GATE_X \| policy=\{gate_policy\} \| override=\{有/无\} \| decision=\{PAUSE\|AUTO_CONTINUE\} \| reason=\{理由\}`。见 feature SKILL.md 第 167, 209, 242, 255, 303 行等 |
 | FR-014 | spec.md 后设计门禁暂停点 | 已实现 | T014 | `speckit-feature/SKILL.md` 第 190-213 行: "Phase 3.5: 设计门禁 [GATE_DESIGN]"——位于 Phase 3（需求澄清+质量检查表）之后、Phase 4（技术规划）之前，确保审批的是已澄清的完整 spec |
@@ -74,8 +74,8 @@
 
 | 文件 | 结果 | 说明 |
 |------|------|------|
-| `driver-config.yaml` | PASS | Python yaml.safe_load 解析成功 |
-| `plugins/spec-driver/templates/driver-config-template.yaml` | PASS | Python yaml.safe_load 解析成功 |
+| `spec-driver.config.yaml` | PASS | Python yaml.safe_load 解析成功 |
+| `plugins/spec-driver/templates/spec-driver.config-template.yaml` | PASS | Python yaml.safe_load 解析成功 |
 
 ### 2.2 Shell 脚本语法验证
 
@@ -105,8 +105,8 @@
 | `speckit-feature/SKILL.md` | 门禁配置加载 + GATE_DESIGN + 策略条件分支 + Phase 7 拆分 | 所有质量门含完整的策略条件分支和决策日志 | PASS |
 | `speckit-story/SKILL.md` | 门禁配置加载 + GATE_DESIGN + 策略条件分支 + Phase 5 拆分 | 3 个门禁行为表 + 完整决策逻辑 | PASS |
 | `speckit-fix/SKILL.md` | 门禁配置加载 + GATE_DESIGN + 策略条件分支 + Phase 4 拆分 | 2 个门禁行为表 + 完整决策逻辑 | PASS |
-| `driver-config-template.yaml` | gate_policy + gates 配置段 | 含注释说明、示例、默认值 | PASS |
-| `driver-config.yaml` | gate_policy + gates 注释示例 | 与模板一致 | PASS |
+| `spec-driver.config-template.yaml` | gate_policy + gates 配置段 | 含注释说明、示例、默认值 | PASS |
+| `spec-driver.config.yaml` | gate_policy + gates 注释示例 | 与模板一致 | PASS |
 
 ---
 

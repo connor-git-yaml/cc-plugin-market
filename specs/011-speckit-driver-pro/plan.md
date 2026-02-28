@@ -5,13 +5,13 @@
 
 ## Summary
 
-设计并开发 Speckit Driver Pro——一个自治研发编排器 Claude Code Plugin。通过主编排器（SKILL.md）+ 10 个子代理（agents/*.md）架构，将 Spec Kit 的完整研发流程自动化为单一命令触发。核心技术方案：纯 Markdown prompt + YAML 配置 + Bash 脚本（无运行时依赖），通过 Claude Code 的 Task tool 实现子代理委派，通过 driver-config.yaml 实现模型分级配置。
+设计并开发 Speckit Driver Pro——一个自治研发编排器 Claude Code Plugin。通过主编排器（SKILL.md）+ 10 个子代理（agents/*.md）架构，将 Spec Kit 的完整研发流程自动化为单一命令触发。核心技术方案：纯 Markdown prompt + YAML 配置 + Bash 脚本（无运行时依赖），通过 Claude Code 的 Task tool 实现子代理委派，通过 spec-driver.config.yaml 实现模型分级配置。
 
 ## Technical Context
 
 **Language/Version**: Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置）
 **Primary Dependencies**: 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中
-**Storage**: 文件系统（specs/[feature]/ 目录树，driver-config.yaml 配置文件）
+**Storage**: 文件系统（specs/[feature]/ 目录树，spec-driver.config.yaml 配置文件）
 **Testing**: 端到端验收测试（通过真实项目运行完整流程验证制品生成）；单元级验证通过 Bash 脚本的 `--dry-run` 模式
 **Target Platform**: Claude Code CLI / VS Code 扩展（跨平台：macOS、Linux、Windows WSL）
 **Project Type**: Claude Code Plugin（单项目，纯声明式）
@@ -82,7 +82,7 @@ plugins/speckit-driver-pro/
 │   ├── tech-research-template.md          # 技术调研报告模板
 │   ├── research-synthesis-template.md     # 产研汇总模板
 │   ├── verification-report-template.md    # 验证报告模板
-│   └── driver-config-template.yaml        # 驱动配置模板
+│   └── spec-driver.config-template.yaml        # 驱动配置模板
 └── README.md                              # Plugin 说明文档
 ```
 

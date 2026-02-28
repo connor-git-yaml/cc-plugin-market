@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Spec Driver - 项目级初始化脚本
 # 首次在项目中触发 Spec Driver 时由主编排器调用
-# 职责：检查/创建 .specify/ 目录、constitution、driver-config.yaml
+# 职责：检查/创建 .specify/ 目录、constitution、spec-driver.config.yaml
 
 set -euo pipefail
 
@@ -35,8 +35,8 @@ PROJECT_ROOT="$(pwd)"
 SPECIFY_DIR="${PROJECT_ROOT}/.specify"
 SPECIFY_TEMPLATES_DIR="${SPECIFY_DIR}/templates"
 CONSTITUTION_FILE="${SPECIFY_DIR}/memory/constitution.md"
-CONFIG_FILE="${PROJECT_ROOT}/driver-config.yaml"
-ALT_CONFIG_FILE="${SPECIFY_DIR}/driver-config.yaml"
+CONFIG_FILE="${PROJECT_ROOT}/spec-driver.config.yaml"
+ALT_CONFIG_FILE="${SPECIFY_DIR}/spec-driver.config.yaml"
 
 # 获取 Plugin 目录（相对于脚本位置）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -123,7 +123,7 @@ check_constitution() {
   INIT_RESULTS+=("constitution:missing")
 }
 
-# 步骤 3: 检查 driver-config.yaml
+# 步骤 3: 检查 spec-driver.config.yaml
 check_config() {
   if [[ -f "$CONFIG_FILE" ]] || [[ -f "$ALT_CONFIG_FILE" ]]; then
     INIT_RESULTS+=("config:exists")
@@ -236,9 +236,9 @@ EOF
           ;;
         config)
           if [[ "$value" == "exists" ]]; then
-            echo -e "  ✅ driver-config.yaml 已存在"
+            echo -e "  ✅ spec-driver.config.yaml 已存在"
           else
-            echo -e "  ⚠️  ${YELLOW}未找到 driver-config.yaml${NC}"
+            echo -e "  ⚠️  ${YELLOW}未找到 spec-driver.config.yaml${NC}"
             echo -e "     → 将在首次运行时引导选择模型预设"
           fi
           ;;

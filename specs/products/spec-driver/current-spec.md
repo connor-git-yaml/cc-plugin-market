@@ -183,7 +183,7 @@ Spec Driver 是一个 **自治研发编排器 Claude Code Plugin**（v3.3.0）�
 | FR-R-002 | 每种模式定义明确的输出制品集合（full 输出 3 份，tech-only 输出 1 份，skip 无输出等） | 018 | 活跃 |
 | FR-R-003 | 编排器基于需求描述文本特征（关键词+启发式规则）智能推荐调研模式，展示推荐理由 | 018 | 活跃 |
 | FR-R-004 | 展示推荐模式 + 所有可选模式列表，等待用户确认或选择替代 | 018 | 活跃 |
-| FR-R-005 | driver-config.yaml 支持 `research.default_mode` 和 `research.custom_steps` 配置 | 018 | 活跃 |
+| FR-R-005 | spec-driver.config.yaml 支持 `research.default_mode` 和 `research.custom_steps` 配置 | 018 | 活跃 |
 | FR-R-006 | `--research <mode>` 命令行参数直接指定调研模式，跳过推荐和交互 | 018 | 活跃 |
 | FR-R-007 | 编排器根据实际调研模式动态调整后续阶段的上下文注入内容 | 018 | 活跃 |
 | FR-R-008 | tech-research 子代理支持在无 product-research.md 输入时独立执行 | 018 | 活跃 |
@@ -259,14 +259,14 @@ Spec Driver 是一个 **自治研发编排器 Claude Code Plugin**（v3.3.0）�
 | FR-010 | Monorepo 支持：每个子项目独立验证并汇总报告 | 011 | 活跃 |
 | FR-016 | 两层验证：Layer 1 Spec-Code 对齐 + Layer 2 项目原生工具链 | 011 | 已更新（017 将 Layer 1 演化为 spec-review + quality-review 双阶段） |
 | FR-017 | 验证工具未安装时优雅降级（跳过 + 标记"未安装"） | 011 | 活跃 |
-| FR-018 | 用户可通过 driver-config.yaml 自定义构建/Lint/测试命令 | 011 | 活跃 |
+| FR-018 | 用户可通过 spec-driver.config.yaml 自定义构建/Lint/测试命令 | 011 | 活跃 |
 
 ### FR-GROUP-9: 模型分级配置
 
 | ID | 功能描述 | 来源 | 状态 |
 |----|----------|------|------|
 | FR-011 | 三种预设：balanced、quality-first、cost-efficient | 011 | 活跃 |
-| FR-012 | driver-config.yaml 自定义每个子代理模型 | 011 | 活跃 |
+| FR-012 | spec-driver.config.yaml 自定义每个子代理模型 | 011 | 活跃 |
 | FR-019 | 高信心歧义自动选择推荐项（≤ 2 处、有明确推荐时），标注 `[AUTO-RESOLVED]` | 011 | 活跃 |
 
 ### FR-GROUP-10: Plugin 架构与初始化
@@ -412,7 +412,7 @@ Spec Driver 是一个 **自治研发编排器 Claude Code Plugin**（v3.3.0）�
 
 - **Bash 5.x** — 安装脚本（postinstall.sh、init-project.sh）
 - **Markdown** — 主编排器 prompt（SKILL.md x6）、子代理 prompt（agents/*.md x14）
-- **YAML** — 配置文件（driver-config.yaml、plugin.json）
+- **YAML** — 配置文件（spec-driver.config.yaml、plugin.json）
 - **无运行时依赖**：Plugin 完全由 Markdown prompt + Bash 脚本 + YAML 配置构成，运行在 Claude Code 沙箱中
 
 ### 项目结构
@@ -454,7 +454,7 @@ plugins/spec-driver/                    # Plugin 根目录（014 从 speckitdriv
 │   ├── research-synthesis-template.md  # 产研汇总模板
 │   ├── verification-report-template.md # 验证报告模板
 │   ├── product-spec-template.md        # 产品活文档模板（14 章节，016 扩展）
-│   └── driver-config-template.yaml     # 驱动配置模板（含 gate_policy、gates、research 段）
+│   └── spec-driver.config-template.yaml     # 驱动配置模板（含 gate_policy、gates、research 段）
 └── README.md                           # Plugin 说明（含迁移指引）
 ```
 
@@ -488,7 +488,7 @@ plugins/spec-driver/                    # Plugin 根目录（014 从 speckitdriv
 | **quality-first** | Opus | Opus |
 | **cost-efficient** | Sonnet | Sonnet |
 
-### driver-config.yaml 配置结构（v3.3.0）
+### spec-driver.config.yaml 配置结构（v3.3.0）
 
 ```yaml
 # 模型预设
@@ -703,7 +703,7 @@ Spec Driver 作为正向研发编排器，与 reverse-spec（逆向分析工具�
 | **并行组 (Parallel Group)** | 一组可同时启动的子代理 Task，共享一个汇合点。3 个并行组：VERIFY_GROUP（spec-review + quality-review）、RESEARCH_GROUP（product-research + tech-research）、DESIGN_PREP_GROUP（clarify + checklist）（019） |
 | **汇合点 (Join Point)** | 并行组中所有子代理完成后的检查点，通常对应质量门禁或编排器亲自执行的步骤（019） |
 | **串行回退 (Serial Fallback)** | 并行调度失败时自动切换到串行执行模式的安全机制（019） |
-| **驱动配置 (Driver Config)** | driver-config.yaml 文件，存储模型预设、门禁策略、调研路由、自定义命令等用户偏好 |
+| **驱动配置 (Driver Config)** | spec-driver.config.yaml 文件，存储模型预设、门禁策略、调研路由、自定义命令等用户偏好 |
 | **产品映射 (Product Mapping)** | product-mapping.yaml 文件，记录每个增量 spec 的产品归属，支持手动覆盖 |
 | **产品活文档 (Product Living Spec)** | specs/products/<product>/current-spec.md，通过聚合增量 spec 反映产品完整现状的 14 章节活文档 |
 | **speckit-feature** | 完整 10 阶段研发编排命令，支持灵活调研路由和并行子代理 |

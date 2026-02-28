@@ -76,7 +76,7 @@ plugins/speckit-driver-pro/
 │   ├── init-project.sh
 │   └── postinstall.sh
 ├── templates/                    # 文档模板（不变）
-│   ├── driver-config-template.yaml
+│   ├── spec-driver.config-template.yaml
 │   ├── product-research-template.md
 │   ├── product-spec-template.md
 │   ├── research-synthesis-template.md
@@ -92,7 +92,7 @@ plugins/speckit-driver-pro/
 │   └── sync/                     # [新建] 产品规范聚合技能
 │       └── SKILL.md              #   ~120 行
 ├── README.md                     # Plugin 说明（不变）
-└── driver-config.yaml            # 运行时配置模板（不变）
+└── spec-driver.config.yaml            # 运行时配置模板（不变）
 ```
 
 **Structure Decision**: 变更范围严格限制在 `skills/` 目录内。`agents/`、`hooks/`、`scripts/`、`templates/`、`.claude-plugin/` 均不受影响。Claude Code 通过自动发现 `skills/*/SKILL.md` 注册技能，无需修改 `plugin.json`。
@@ -151,7 +151,7 @@ graph TD
 | 失败重试 | L580-L609 | run | 完整保留 |
 | 中断恢复机制 | L610-L638 | resume | 完整保留（核心恢复逻辑） |
 | 选择性重跑 | L642-L663 | run | 完整保留 |
-| 模型选择逻辑 | L666-L689 | run（完整）+ resume（配置加载） | resume 仅保留读取 driver-config.yaml 的部分 |
+| 模型选择逻辑 | L666-L689 | run（完整）+ resume（配置加载） | resume 仅保留读取 spec-driver.config.yaml 的部分 |
 | 阶段进度编号映射 | L692-L706 | run | 完整保留 |
 
 ### Frontmatter 配置
@@ -260,7 +260,7 @@ flowchart LR
 | 子代理 prompt | `plugins/speckit-driver-pro/agents/{phase}.md` | run, resume |
 | 文档模板 | `plugins/speckit-driver-pro/templates/{template}.md` | run, sync |
 | 初始化脚本 | `plugins/speckit-driver-pro/scripts/init-project.sh` | run, resume |
-| 配置模板 | `plugins/speckit-driver-pro/templates/driver-config-template.yaml` | run, resume |
+| 配置模板 | `plugins/speckit-driver-pro/templates/spec-driver.config-template.yaml` | run, resume |
 
 ### 行数预算
 

@@ -18,9 +18,9 @@
 | `plugins/spec-driver/skills/speckit-feature/SKILL.md` | 编排器新增 gate_policy 条件分支 + GATE_DESIGN 暂停点 | MVP 第一批 |
 | `plugins/spec-driver/skills/speckit-story/SKILL.md` | 编排器新增 gate_policy 条件分支 + GATE_DESIGN 豁免逻辑 | MVP 第一批 |
 | `plugins/spec-driver/skills/speckit-fix/SKILL.md` | 编排器新增 gate_policy 条件分支 + GATE_DESIGN 豁免逻辑 | MVP 第一批 |
-| `plugins/spec-driver/templates/driver-config-template.yaml` | 新增 gate_policy + gates 配置段 | MVP 第一批 |
+| `plugins/spec-driver/templates/spec-driver.config-template.yaml` | 新增 gate_policy + gates 配置段 | MVP 第一批 |
 | `plugins/spec-driver/scripts/init-project.sh` | 支持新配置字段初始化引导 | MVP 第一批 |
-| `driver-config.yaml`（项目级示例） | 同步新增配置字段 | MVP 第一批 |
+| `spec-driver.config.yaml`（项目级示例） | 同步新增配置字段 | MVP 第一批 |
 
 ### 新增文件
 
@@ -57,7 +57,7 @@ implement.md 子代理在声称任务完成前，**必须**在当前执行上下
 
 ### 2. 三级门禁策略
 
-在 `driver-config.yaml` 中配置 `gate_policy`:
+在 `spec-driver.config.yaml` 中配置 `gate_policy`:
 
 ```yaml
 gate_policy: balanced  # 默认值，向后兼容
@@ -105,7 +105,7 @@ Phase 7: 验证闭环
 
 ## 开发顺序建议
 
-1. **先改配置**：driver-config-template.yaml 新增 gate_policy + gates
+1. **先改配置**：spec-driver.config-template.yaml 新增 gate_policy + gates
 2. **再建子代理**：创建 spec-review.md 和 quality-review.md
 3. **改编排器**：SKILL.md 中增加门禁决策逻辑和 GATE_DESIGN 暂停点
 4. **改子代理**：implement.md 植入铁律 + verify.md 增加证据检查

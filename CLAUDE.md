@@ -17,7 +17,7 @@ Auto-generated from all feature plans. Last updated: 2026-02-10
 - 文件系统（`specs/`、`drift-logs/`、`plugins/` 目录写入） (009-plugin-marketplace)
 - 文件系统（`specs/`、`drift-logs/` 目录写入） (010-fix-dotspecs-to-specs)
 - Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中 (011-speckit-driver-pro)
-- 文件系统（specs/[feature]/ 目录树，driver-config.yaml 配置文件） (011-speckit-driver-pro)
+- 文件系统（specs/[feature]/ 目录树，spec-driver.config.yaml 配置文件） (011-speckit-driver-pro)
 - Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中 (015-speckit-doc-command)
 - 文件系统（项目根目录写入 README.md、LICENSE 等；`plugins/spec-driver/` 目录下新增 Skill 文件） (015-speckit-doc-command)
 

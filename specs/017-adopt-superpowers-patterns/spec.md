@@ -142,7 +142,7 @@
 
 - **FR-010**: 系统 MUST 支持三级门禁策略配置：strict（所有门禁暂停等待确认）、balanced（关键门禁暂停，非关键按风险决策）、autonomous（仅失败或 CRITICAL 问题时暂停）。balanced 模式下关键门禁为 GATE_DESIGN、GATE_TASKS、GATE_VERIFY（暂停等待确认）；GATE_ANALYSIS 为非关键但 CRITICAL 时暂停（on_failure）；GATE_RESEARCH 为非关键自动继续（auto）。**注意**: Story 模式仅包含 GATE_DESIGN/GATE_TASKS/GATE_VERIFY（3 个门禁），Fix 模式仅包含 GATE_DESIGN/GATE_VERIFY（2 个门禁），门禁策略仅作用于当前模式实际存在的门禁 [AUTO-CLARIFIED: GATE_DESIGN/TASKS/VERIFY 为关键门禁；GATE_ANALYSIS 保留 CRITICAL 暂停能力以保持与现有行为一致] (→ US-2)
 - **FR-011**: 系统 MUST 提供 balanced 作为默认门禁策略，确保未配置新字段时行为与当前版本一致（向后兼容） (→ US-2, US-6)
-- **FR-012**: 系统 MUST 支持对每个门禁进行独立配置，门禁级配置优先于全局策略。配置结构为 driver-config.yaml 新增 `gate_policy` 顶层字段（取值 strict/balanced/autonomous，默认 balanced）和 `gates` 顶层字段（map 结构，键为门禁标识如 GATE_DESIGN/GATE_RESEARCH/GATE_ANALYSIS/GATE_TASKS/GATE_VERIFY，值为 `{pause: always|auto|on_failure}`），门禁级配置优先于 gate_policy。**例外**：在 feature 模式下，GATE_DESIGN 的门禁级配置被忽略（硬门禁始终暂停），此约束仅可通过 FR-017 定义的模式级豁免（story/fix）解除 [AUTO-CLARIFIED: 2 个新增顶层配置项满足 SC-008 约束（上限 3 个），结构清晰且向后兼容] (→ US-2)
+- **FR-012**: 系统 MUST 支持对每个门禁进行独立配置，门禁级配置优先于全局策略。配置结构为 spec-driver.config.yaml 新增 `gate_policy` 顶层字段（取值 strict/balanced/autonomous，默认 balanced）和 `gates` 顶层字段（map 结构，键为门禁标识如 GATE_DESIGN/GATE_RESEARCH/GATE_ANALYSIS/GATE_TASKS/GATE_VERIFY，值为 `{pause: always|auto|on_failure}`），门禁级配置优先于 gate_policy。**例外**：在 feature 模式下，GATE_DESIGN 的门禁级配置被忽略（硬门禁始终暂停），此约束仅可通过 FR-017 定义的模式级豁免（story/fix）解除 [AUTO-CLARIFIED: 2 个新增顶层配置项满足 SC-008 约束（上限 3 个），结构清晰且向后兼容] (→ US-2)
 - **FR-013**: 系统 MUST 在每次门禁决策时输出格式化的决策日志，包含门禁名称、当前策略、决策结果和原因 (→ US-2)
 
 #### 设计硬门禁

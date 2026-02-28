@@ -30,7 +30,7 @@
 4. hooks 脚本依赖的 `jq` 是系统工具（macOS/Linux 预装或 Claude Code 环境已含），不计入运行时依赖
 
 **Alternatives**:
-- 引入 `ajv` 或 `zod` 做 driver-config.yaml 的 schema 验证：增加可靠性但违背零依赖原则。通过编排器 prompt 中的"忽略无效配置 + 输出警告"策略替代
+- 引入 `ajv` 或 `zod` 做 spec-driver.config.yaml 的 schema 验证：增加可靠性但违背零依赖原则。通过编排器 prompt 中的"忽略无效配置 + 输出警告"策略替代
 - 引入 `yaml` npm 包解析配置：Claude Code 编排器已具备 YAML 读取能力，无需额外依赖
 
 ## 决策 3: MVP 分批交付策略

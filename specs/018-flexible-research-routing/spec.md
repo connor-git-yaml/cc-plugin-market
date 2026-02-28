@@ -55,21 +55,21 @@
 
 ### User Story 3 - 配置文件支持调研模式默认值 (Priority: P2)
 
-作为一名项目维护者，我希望能在 driver-config.yaml 中配置默认的调研模式，这样团队中的所有成员使用 Feature 模式时都会遵循统一的调研策略，不需要每次手动选择。
+作为一名项目维护者，我希望能在 spec-driver.config.yaml 中配置默认的调研模式，这样团队中的所有成员使用 Feature 模式时都会遵循统一的调研策略，不需要每次手动选择。
 
 **Why this priority**: 配置化是团队协作的基础。一个团队可能长期开发内部工具（适合 `tech-only`），配置默认值避免每次都要手动选择。但它的价值建立在 US1 和 US2 之上——先有推荐和预设，才有配置默认值的意义。
 
-**Independent Test**: 在 driver-config.yaml 中设置 `research.default_mode: tech-only`，然后执行 Feature 模式，验证编排器推荐的默认模式变为 `tech-only`（而非智能推荐的结果），但用户仍可在交互时选择其他模式覆盖。
+**Independent Test**: 在 spec-driver.config.yaml 中设置 `research.default_mode: tech-only`，然后执行 Feature 模式，验证编排器推荐的默认模式变为 `tech-only`（而非智能推荐的结果），但用户仍可在交互时选择其他模式覆盖。
 
 **Acceptance Scenarios**:
 
-1. **Given** driver-config.yaml 中配置了 `research.default_mode: tech-only`，**When** 用户执行 Feature 模式，**Then** 编排器展示的推荐模式为 `tech-only`（配置优先于智能推荐），同时仍展示完整的可选模式列表。
+1. **Given** spec-driver.config.yaml 中配置了 `research.default_mode: tech-only`，**When** 用户执行 Feature 模式，**Then** 编排器展示的推荐模式为 `tech-only`（配置优先于智能推荐），同时仍展示完整的可选模式列表。
 
-2. **Given** driver-config.yaml 中未配置 `research.default_mode` 字段（或字段不存在），**When** 用户执行 Feature 模式，**Then** 编排器回退到智能推荐逻辑，行为与当前默认完全一致（即推荐 `full` 或基于需求特征推荐）。
+2. **Given** spec-driver.config.yaml 中未配置 `research.default_mode` 字段（或字段不存在），**When** 用户执行 Feature 模式，**Then** 编排器回退到智能推荐逻辑，行为与当前默认完全一致（即推荐 `full` 或基于需求特征推荐）。
 
-3. **Given** driver-config.yaml 中配置了 `research.default_mode: auto`，**When** 用户执行 Feature 模式，**Then** 编排器执行智能推荐逻辑（`auto` 等同于未配置，表示由编排器根据需求特征自动判断）。
+3. **Given** spec-driver.config.yaml 中配置了 `research.default_mode: auto`，**When** 用户执行 Feature 模式，**Then** 编排器执行智能推荐逻辑（`auto` 等同于未配置，表示由编排器根据需求特征自动判断）。
 
-4. **Given** driver-config.yaml 中配置了无效的 `research.default_mode` 值（如 `research.default_mode: foobar`），**When** 用户执行 Feature 模式，**Then** 编排器忽略无效值，回退到智能推荐逻辑，并输出一条警告："driver-config.yaml 中 research.default_mode 值 'foobar' 无效，已回退到 auto 模式。有效值: full, tech-only, product-only, codebase-scan, skip, auto"。
+4. **Given** spec-driver.config.yaml 中配置了无效的 `research.default_mode` 值（如 `research.default_mode: foobar`），**When** 用户执行 Feature 模式，**Then** 编排器忽略无效值，回退到智能推荐逻辑，并输出一条警告："spec-driver.config.yaml 中 research.default_mode 值 'foobar' 无效，已回退到 auto 模式。有效值: full, tech-only, product-only, codebase-scan, skip, auto"。
 
 ---
 
@@ -101,7 +101,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** driver-config.yaml 中配置了自定义调研步骤：`research.custom_steps: [product-research, codebase-scan]`，**When** 调研模式为 `custom`，**Then** 编排器依次执行产品调研和代码库扫描两个步骤，跳过技术调研和产研汇总。
+1. **Given** spec-driver.config.yaml 中配置了自定义调研步骤：`research.custom_steps: [product-research, codebase-scan]`，**When** 调研模式为 `custom`，**Then** 编排器依次执行产品调研和代码库扫描两个步骤，跳过技术调研和产研汇总。
 
 2. **Given** 自定义步骤中包含 `tech-research` 但不包含 `product-research`，**When** 编排器执行自定义步骤，**Then** 技术调研子代理在无 product-research.md 输入时，直接基于需求描述和代码上下文执行（与 `tech-only` 模式行为一致）。
 
@@ -121,7 +121,7 @@
 
 - **进度编号连续性**: 不同调研模式下实际执行的步骤数不同（`full` 为 10 步，`skip` 可能仅 7 步），进度显示需保持用户体验一致。被跳过的步骤应显示为 "[已跳过]" 而非直接删除编号，避免用户困惑。 [关联 FR-009]
 
-- **向后兼容——未升级的 driver-config.yaml**: 如果用户的 driver-config.yaml 版本较旧，不含 `research` 配置段，系统应默认行为与当前版本完全一致（即 `full` 模式），不报错。 [关联 FR-005, FR-010]
+- **向后兼容——未升级的 spec-driver.config.yaml**: 如果用户的 spec-driver.config.yaml 版本较旧，不含 `research` 配置段，系统应默认行为与当前版本完全一致（即 `full` 模式），不报错。 [关联 FR-005, FR-010]
 
 - **Constitution 检查与调研跳过的交互**: Constitution 检查始终在调研之前执行。如果 Constitution 对调研有特殊要求（如"所有新产品方向必须经过产品调研"），`skip` 模式可能触发 Constitution VIOLATION。编排器应在 Constitution 检查时将用户选择的调研模式作为上下文传入。 [关联 FR-011]
 
@@ -155,9 +155,9 @@
 
 #### 向后兼容与配置
 
-- **FR-005**: 当 driver-config.yaml 中不存在 `research` 配置段时，系统 MUST 默认行为与当前版本完全一致——即执行完整的产品调研+技术调研+产研汇总流水线（等同于 `full` 模式）。 [关联 US-3]
+- **FR-005**: 当 spec-driver.config.yaml 中不存在 `research` 配置段时，系统 MUST 默认行为与当前版本完全一致——即执行完整的产品调研+技术调研+产研汇总流水线（等同于 `full` 模式）。 [关联 US-3]
 
-- **FR-006**: driver-config.yaml SHOULD 支持新增 `research` 配置段，包含以下字段：
+- **FR-006**: spec-driver.config.yaml SHOULD 支持新增 `research` 配置段，包含以下字段：
   - `research.default_mode`: 默认调研模式（可选值: `auto`, `full`, `tech-only`, `product-only`, `codebase-scan`, `skip`；默认值: `auto`）
   - `research.custom_steps`: 自定义步骤列表（仅当 `default_mode: custom` 时生效；可选步骤: `product-research`, `tech-research`, `codebase-scan`, `synthesis`）
   [关联 US-3, US-5]
@@ -191,7 +191,7 @@
 
 #### 命令行参数
 
-- **FR-011**: Feature 模式 MUST 支持新增 `--research <mode>` 命令行参数，用于直接指定调研模式（跳过推荐和交互选择环节）。该参数优先级高于 driver-config.yaml 中的 `research.default_mode`。 [关联 US-4]
+- **FR-011**: Feature 模式 MUST 支持新增 `--research <mode>` 命令行参数，用于直接指定调研模式（跳过推荐和交互选择环节）。该参数优先级高于 spec-driver.config.yaml 中的 `research.default_mode`。 [关联 US-4]
 
 #### 安全与决策记录
 
@@ -247,6 +247,6 @@
 
 - **SC-004**: 编排器对 3 种典型需求描述（新产品方向、技术重构、小型增量功能）的智能推荐结果合理（分别推荐 `full`/`tech-only`/`codebase-scan` 或 `skip`），且推荐理由对用户有实际参考价值。
 
-- **SC-005**: 在 driver-config.yaml 中不存在 `research` 配置段的项目上执行 Feature 模式，行为与升级前完全一致，无错误、无警告、无额外交互。
+- **SC-005**: 在 spec-driver.config.yaml 中不存在 `research` 配置段的项目上执行 Feature 模式，行为与升级前完全一致，无错误、无警告、无额外交互。
 
 - **SC-006**: 命令行参数 `--research <mode>` 能正确覆盖配置文件和智能推荐，直接以指定模式执行，无需用户确认。

@@ -73,7 +73,7 @@ plugins/spec-driver/                          # plugin 根目录（已重命名�
 │   ├── postinstall.sh                        # [FR-007, FR-008]
 │   └── init-project.sh                       # [FR-009]
 ├── templates/
-│   ├── driver-config-template.yaml           # [FR-014]
+│   ├── spec-driver.config-template.yaml           # [FR-014]
 │   └── product-spec-template.md              # [FR-015]
 
 .claude/settings.json                         # [FR-012] enabledPlugins key
@@ -239,7 +239,7 @@ graph TD
 
 对 Phase 1-7 中可能遗漏的零散 `speckitdriver`（小写）引用执行最终扫描和替换：
 - `init-project.sh` 中的注释引用（R26）
-- `driver-config-template.yaml` 中的注释引用（R14 覆盖）
+- `spec-driver.config-template.yaml` 中的注释引用（R14 覆盖）
 - `product-spec-template.md` 中的引用（R14 覆盖）
 
 #### Phase 9: 全量验证
@@ -281,7 +281,7 @@ graph TD
 | 19 | `plugins/spec-driver/agents/constitution.md` | 1 | R14 |
 | 20 | `plugins/spec-driver/agents/analyze.md` | 1 | R14 |
 | 21 | `plugins/spec-driver/.claude-plugin/plugin.json` | 1 | R01, R02 |
-| 22 | `plugins/spec-driver/templates/driver-config-template.yaml` | 1 | R14 |
+| 22 | `plugins/spec-driver/templates/spec-driver.config-template.yaml` | 1 | R14 |
 | 23 | `plugins/spec-driver/templates/product-spec-template.md` | 1 | R14 |
 | 24 | `.claude/settings.json` | 1 | R06 |
 | 25 | `CLAUDE.md` | 1 | R22 |

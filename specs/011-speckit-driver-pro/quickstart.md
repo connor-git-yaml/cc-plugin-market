@@ -95,7 +95,7 @@ claude plugin install speckit-driver-pro
 
 ### 自定义配置
 
-编辑 `driver-config.yaml`：
+编辑 `spec-driver.config.yaml`：
 
 ```yaml
 # 切换到全 Opus 模式

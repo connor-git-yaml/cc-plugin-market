@@ -96,7 +96,7 @@ plugins/speckit-driver-pro/
 - [x] T022 [US3] 编写 resume/SKILL.md 的触发方式段落，仅包含 resume 相关命令：`/speckit-driver-pro:resume`、`/speckit-driver-pro:resume --preset <name>`
 - [x] T023 [US3] 从旧 SKILL.md（L36-L88）提取精简的初始化逻辑（环境检查 + Constitution 处理 + 配置加载 + prompt 来源映射，共 4 步），写入 resume/SKILL.md。注意：不包含"特性目录准备"步骤（L90-L97）
 - [x] T024 [US3] 从旧 SKILL.md（L610-L638）提取完整的中断恢复机制（制品扫描、恢复点确定、恢复执行流程），写入 resume/SKILL.md
-- [x] T025 [US3] 在 resume/SKILL.md 中添加模型选择的配置加载部分（仅读取 driver-config.yaml 中的模型配置），不复制 run 中的完整 preset 决策表
+- [x] T025 [US3] 在 resume/SKILL.md 中添加模型选择的配置加载部分（仅读取 spec-driver.config.yaml 中的模型配置），不复制 run 中的完整 preset 决策表
 - [x] T026 [US3] 在 resume/SKILL.md 中添加无可恢复制品时的错误提示逻辑（检测到无制品时，给出明确提示并建议使用 `/speckit-driver-pro:run` 启动新流程）
 - [x] T027 [US3] 验证 resume/SKILL.md 中所有路径引用（子代理 prompt、脚本、配置模板）与拆分前一致
 - [x] T028 [US3] 验证 resume/SKILL.md 总行数控制在 ~150 行（NFR-001），且不包含选择性重跑逻辑、产品规范聚合模式或特性目录准备步骤（FR-005、FR-010 自包含验证）
@@ -118,7 +118,7 @@ plugins/speckit-driver-pro/
 
 ### 删除旧技能目录
 
-- [x] T031 [US5] 再次检查 Plugin 所有组件文件（`agents/`、`hooks/hooks.json`、`scripts/init-project.sh`、`scripts/postinstall.sh`、`templates/`、`.claude-plugin/plugin.json`、`README.md`、`driver-config.yaml`）中无对 `skills/speckit-driver-pro/` 的引用
+- [x] T031 [US5] 再次检查 Plugin 所有组件文件（`agents/`、`hooks/hooks.json`、`scripts/init-project.sh`、`scripts/postinstall.sh`、`templates/`、`.claude-plugin/plugin.json`、`README.md`、`spec-driver.config.yaml`）中无对 `skills/speckit-driver-pro/` 的引用
 - [x] T032 [US5] 删除旧技能目录 `plugins/speckit-driver-pro/skills/speckit-driver-pro/`（含其下的 SKILL.md）
 - [x] T033 [US5] 验证删除后 `agents/`、`hooks/`、`scripts/`、`templates/`、`.claude-plugin/` 目录及其内容不受影响
 

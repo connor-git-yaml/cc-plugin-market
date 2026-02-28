@@ -12,7 +12,7 @@
 - Claude Code 子代理 API（Task tool）对"每任务新鲜子代理"的支持度如何？
 - PreToolUse/PostToolUse hooks 实现验证铁律的可行性和成熟度
 - EnterWorktree 原生支持与 spec-driver 集成路径
-- driver-config.yaml 的 gate_policy 扩展方案设计
+- spec-driver.config.yaml 的 gate_policy 扩展方案设计
 - 门禁粒度增强（strict/balanced/autonomous）的技术实现路径
 
 **产品 MVP 范围（来自产品调研）**:
@@ -30,7 +30,7 @@
 **实现路径**:
 1. **验证铁律**: 在 implement.md 和 verify.md 的 prompt 中植入铁律规则段落（类似 Superpowers 的 `verification-before-completion/SKILL.md` 中的约束文本），要求子代理在声称完成前必须展示当前 message 内运行的验证命令输出
 2. **双阶段审查**: 将现有 verify.md 拆分为 `spec-review.md`（Spec Compliance Review 子代理）和 `quality-review.md`（Code Quality Review 子代理），编排器在 Phase 7 依次调用两个 Task
-3. **门禁策略**: 在编排器 SKILL.md 中增加条件分支逻辑，根据 driver-config.yaml 的 `gate_policy` 字段决定每个质量门是暂停还是自动继续
+3. **门禁策略**: 在编排器 SKILL.md 中增加条件分支逻辑，根据 spec-driver.config.yaml 的 `gate_policy` 字段决定每个质量门是暂停还是自动继续
 4. **设计硬门禁**: 在 specify.md 的 prompt 中植入 `<HARD-GATE>` 标记，编排器在 Phase 2 完成后强制暂停等待用户确认
 
 **优势**:
@@ -61,7 +61,7 @@
 
 3. **gate_policy 配置扩展**:
    ```yaml
-   # driver-config.yaml 新增字段
+   # spec-driver.config.yaml 新增字段
    gate_policy: balanced  # strict | balanced | autonomous
 
    gates:
@@ -91,7 +91,7 @@
 - 双层防线：Prompt 引导 + Hooks 执法，显著降低 LLM 忽略约束的风险
 - 利用 Claude Code 原生机制，不引入额外运行时依赖
 - Hooks 可渐进式引入——先实现 Prompt 层，效果不足再叠加 Hooks
-- gate_policy 配置向后兼容——不影响现有 driver-config.yaml 用户
+- gate_policy 配置向后兼容——不影响现有 spec-driver.config.yaml 用户
 
 **劣势**:
 - Hooks 配置需要用户在 `.claude/settings.json` 中手动启用（或由 init-project.sh 自动注入）
@@ -145,7 +145,7 @@
 1. **最佳投入产出比**: 在方案 A 的基础上仅增加约 2-4 天工作量，即可获得运行时执法能力，显著提升约束执行可靠性
 2. **渐进式引入**: 可先交付方案 A 的 Prompt 增强部分（2-3 天），再叠加 Hooks 层（2-4 天），降低单次变更风险
 3. **利用原生能力**: Claude Code 的 hooks 机制已稳定（2025 年 Q4 发布，2026 年 Q1 持续迭代），是平台鼓励的扩展方式
-4. **向后兼容**: 不修改现有 driver-config.yaml 结构（仅新增字段），不修改现有子代理的核心逻辑（仅增强 prompt）
+4. **向后兼容**: 不修改现有 spec-driver.config.yaml 结构（仅新增字段），不修改现有子代理的核心逻辑（仅增强 prompt）
 5. **为方案 C 铺路**: 方案 B 的 gate_policy 机制和双阶段审查可在未来无缝演进到方案 C 的每任务子代理模式
 
 **不推荐方案 C 的原因**: 虽然方案 C 是 Superpowers 的核心架构模式，但对 Spec Driver 而言属于过度工程。Spec Driver 的价值在于"调研驱动 + 流程编排"，而非 Superpowers 的"行为约束"。方案 B 已能吸收 Superpowers 的核心质量理念，无需复制其架构。
@@ -160,7 +160,7 @@
 |---------|---------|------|---------|------|
 | 验证铁律 prompt | Markdown 模板修改 | 无 | 否 | N/A |
 | 双阶段审查 | 新增 2 个子代理 Markdown | 无 | 否 | N/A |
-| 门禁策略配置 | driver-config.yaml 扩展 | YAML 解析（编排器内置） | 否 | N/A |
+| 门禁策略配置 | spec-driver.config.yaml 扩展 | YAML 解析（编排器内置） | 否 | N/A |
 | PreToolUse hook | Shell 脚本 + jq | jq（系统工具） | 否（macOS/Linux 预装或 Claude Code 环境已含） | N/A |
 | PostToolUse hook | Shell 脚本 + jq | jq（系统工具） | 否 | N/A |
 | Worktree 集成 | Claude Code EnterWorktree 原生工具 | 无 | 否 | N/A |
@@ -255,7 +255,7 @@ gate_policy: autonomous
 ```markdown
 ## 质量门决策逻辑
 
-读取 driver-config.yaml 的 gate_policy 值。
+读取 spec-driver.config.yaml 的 gate_policy 值。
 
 对于每个质量门 {GATE_NAME}:
   1. 检查 gates.{GATE_NAME}.pause 配置
@@ -329,7 +329,7 @@ Layer 4: GATE_VERIFY 暂停（编排器强制暂停，要求人工确认）
 |---|---------|------|------|---------|
 | 1 | **Prompt 遵从性不可靠**: LLM 在复杂上下文中可能忽略验证铁律约束，尤其在长时间运行的 implement 阶段 | 中 | 高 | 方案 B 的多层防线（Prompt + Hooks + verify 子代理）；铁律文本使用大写强调和明确的禁止/允许列表；参考 Superpowers 的 "excuse vs reality" 对照表格式 |
 | 2 | **Hooks 机制向后兼容性**: Claude Code hooks API 尚处于迭代期（2025 Q4 发布），未来版本可能变更配置格式或行为 | 低 | 中 | Hooks 作为增强层而非核心依赖——即使 hooks 失效，Prompt 层仍能提供基本保障；hooks 脚本保持简单、无状态，降低维护成本 |
-| 3 | **配置复杂度膨胀**: gate_policy + gates 独立配置 + verification commands 叠加，driver-config.yaml 变得难以理解 | 中 | 中 | 提供合理的默认值（balanced + 内置门禁策略），用户只需修改 gate_policy 一个字段即可切换；init-project.sh 提供交互式配置引导；gate 配置使用约定优于配置原则 |
+| 3 | **配置复杂度膨胀**: gate_policy + gates 独立配置 + verification commands 叠加，spec-driver.config.yaml 变得难以理解 | 中 | 中 | 提供合理的默认值（balanced + 内置门禁策略），用户只需修改 gate_policy 一个字段即可切换；init-project.sh 提供交互式配置引导；gate 配置使用约定优于配置原则 |
 | 4 | **双阶段审查延长流程时间**: 新增 Spec Compliance Review 子代理约增加 1-2 分钟，整体流程拉长 | 中 | 低 | autonomous 模式下可选跳过 Spec Compliance Review（仅保留 Code Quality Review）；balanced 模式下两个 Review 可并行执行（使用并行 Task 调用） |
 | 5 | **Worktree 集成的非 git 降级**: 在非 git 仓库或 CI/CD 环境中 EnterWorktree 不可用 | 低 | 低 | Worktree 定位为"增强"而非"必须"，二期实现；非 git 环境使用普通特性分支回退 |
 | 6 | **hooks 脚本跨平台兼容性**: Shell 脚本在 Windows（非 WSL）环境下无法执行；jq 在部分环境未预装 | 低 | 中 | hooks 脚本标注系统要求（macOS/Linux）；提供 PowerShell 替代脚本 [推断]；jq 缺失时 hooks 优雅降级（输出警告而非阻断） |
@@ -344,7 +344,7 @@ Layer 4: GATE_VERIFY 暂停（编排器强制暂停，要求人工确认）
 |---------|-------------|--------|------|
 | Must-have 1: 验证铁律机制 | 完全覆盖 | Prompt 层: implement.md/verify.md 铁律文本 + Hooks 层: PreToolUse 拦截 + verify 子代理证据检查 | 三层防线，可靠性高。Prompt 层借鉴 Superpowers verification-before-completion 的 "excuse vs reality" 对照表 |
 | Must-have 2: 双阶段代码审查 | 完全覆盖 | 新增 spec-review.md + quality-review.md 两个子代理 Markdown；编排器 Phase 7 拆分为 7a（Spec Review）和 7b（Quality Review） | 参考 Superpowers 的 subagent-driven-development 双审查模式。两个审查可并行执行以缩短时间 |
-| Must-have 3: 门禁粒度增强 | 完全覆盖 | driver-config.yaml 新增 gate_policy + gates 配置；编排器 prompt 增加条件分支逻辑（Strategy Pattern） | 三级策略 strict/balanced/autonomous + 每门禁独立配置。balanced 为默认值，保持向后兼容 |
+| Must-have 3: 门禁粒度增强 | 完全覆盖 | spec-driver.config.yaml 新增 gate_policy + gates 配置；编排器 prompt 增加条件分支逻辑（Strategy Pattern） | 三级策略 strict/balanced/autonomous + 每门禁独立配置。balanced 为默认值，保持向后兼容 |
 | Must-have 4: 设计硬门禁 | 完全覆盖 | 编排器在 Phase 2（需求规范）完成后新增 GATE_DESIGN 暂停点；specify.md 增加 `<HARD-GATE>` 标记 | 硬门禁在所有模式（含 autonomous）下均暂停，不可跳过 |
 
 ### 扩展性评估
@@ -386,4 +386,4 @@ Layer 4: GATE_VERIFY 暂停（编排器强制暂停，要求人工确认）
 - **交叉分析重点 1**: 方案 B 的渐进式交付（Prompt 先行，Hooks 后补）需要产品侧确认分批交付是否可接受——第一批（纯 Prompt）能否独立发布？
 - **交叉分析重点 2**: 验证铁律的"证据检查"依赖 LLM 遵从性 + Hooks 双层保障，但仍非 100% 可靠。产品侧需确认对可靠性的预期——是"尽力而为"还是"必须保证"？如果是后者，可能需要评估方案 C。
 - **交叉分析重点 3**: 设计硬门禁（GATE_DESIGN）将改变 Story 模式的快速流程——Story 模式当前跳过调研直接生成规范，如果增加设计硬门禁，Story 模式的 Phase 2 也将暂停。产品侧需确认 Story 模式是否也需要设计硬门禁，或仅在 Feature 模式中启用。
-- **风险评估重点**: 配置复杂度膨胀是本特性最显著的产品风险——gate_policy、gates 配置、tdd_mode（二期）叠加后，driver-config.yaml 的认知负担可能影响新用户上手。建议产品侧考虑 "零配置默认值 + 高级用户自定义" 的两级体验设计。
+- **风险评估重点**: 配置复杂度膨胀是本特性最显著的产品风险——gate_policy、gates 配置、tdd_mode（二期）叠加后，spec-driver.config.yaml 的认知负担可能影响新用户上手。建议产品侧考虑 "零配置默认值 + 高级用户自定义" 的两级体验设计。

@@ -52,7 +52,7 @@
 | 引用路径 | 引用位置 | 文件是否存在 | 状态 |
 |---------|---------|-------------|------|
 | `plugins/speckit-driver-pro/scripts/init-project.sh` | run L39, resume L28 | 存在 | ✅ |
-| `plugins/speckit-driver-pro/templates/driver-config-template.yaml` | run L47, resume L36, L154 | 存在 | ✅ |
+| `plugins/speckit-driver-pro/templates/spec-driver.config-template.yaml` | run L47, resume L36, L154 | 存在 | ✅ |
 | `plugins/speckit-driver-pro/templates/research-synthesis-template.md` | run L122 | 存在 | ✅ |
 | `plugins/speckit-driver-pro/templates/product-spec-template.md` | sync L98 | 存在 | ✅ |
 | `plugins/speckit-driver-pro/agents/{phase}.md` (通用映射) | run L58, resume L47 | 12 个 agent 文件全部存在 | ✅ |

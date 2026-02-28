@@ -108,7 +108,7 @@
   - Layer 2 原生工具链验证：18 种语言/构建系统的特征文件检测算法（plan.md 多语言验证矩阵）
   - Monorepo 支持：检测 workspace 配置，递归扫描子项目
   - 工具未安装时优雅降级：标记"工具未安装"不阻断（FR-017）
-  - driver-config.yaml 自定义命令覆盖（FR-018）
+  - spec-driver.config.yaml 自定义命令覆盖（FR-018）
   - 触发 GATE_VERIFY 质量门
   - 参考 sub-agent-contract.md verify 契约 + plan.md Detection Algorithm
 - [x] T019 [P] [US3] Create `plugins/speckit-driver-pro/templates/verification-report-template.md` — 验证报告模板：Layer 1 Spec-Code 对齐表、Layer 2 各语言构建/Lint/测试结果、Monorepo 子项目独立报告、总体摘要（sub-agent-contract.md 验证报告结构）
@@ -125,9 +125,9 @@
 
 ### Implementation for User Story 4
 
-- [x] T020 [US4] Create `plugins/speckit-driver-pro/templates/driver-config-template.yaml` — 驱动配置模板（FR-011, FR-012）：三级结构 preset→agents→verification，含 balanced/quality-first/cost-efficient 三套完整预设配置，质量门配置，重试策略配置，进度输出配置。参考 contracts/config-schema.yaml + plan.md 模型分级配置表
+- [x] T020 [US4] Create `plugins/speckit-driver-pro/templates/spec-driver.config-template.yaml` — 驱动配置模板（FR-011, FR-012）：三级结构 preset→agents→verification，含 balanced/quality-first/cost-efficient 三套完整预设配置，质量门配置，重试策略配置，进度输出配置。参考 contracts/config-schema.yaml + plan.md 模型分级配置表
 
-**Checkpoint**: 配置系统就绪——首次使用时交互式引导选择预设，后续可在 driver-config.yaml 中精细调整
+**Checkpoint**: 配置系统就绪——首次使用时交互式引导选择预设，后续可在 spec-driver.config.yaml 中精细调整
 
 ---
 
@@ -140,7 +140,7 @@
 ### Implementation for User Story 5
 
 - [x] T021 [P] [US5] Create `plugins/speckit-driver-pro/scripts/postinstall.sh` — 安装后脚本（FR-013）：检查 Claude Code 版本兼容性，输出安装成功消息和使用提示。参考 research.md 决策 8 postinstall.sh 职责
-- [x] T022 [P] [US5] Create `plugins/speckit-driver-pro/scripts/init-project.sh` — 项目初始化脚本（FR-014, FR-015）：检查 .specify/ 目录（不存在则创建）、检查 constitution.md（不存在则引导创建）、检查 driver-config.yaml（不存在则交互式引导选择预设）、检测已有 speckit skills（生成 prompt 来源映射）。参考 research.md 决策 8 init-project.sh 职责
+- [x] T022 [P] [US5] Create `plugins/speckit-driver-pro/scripts/init-project.sh` — 项目初始化脚本（FR-014, FR-015）：检查 .specify/ 目录（不存在则创建）、检查 constitution.md（不存在则引导创建）、检查 spec-driver.config.yaml（不存在则交互式引导选择预设）、检测已有 speckit skills（生成 prompt 来源映射）。参考 research.md 决策 8 init-project.sh 职责
 
 **Checkpoint**: 安装和初始化流程就绪——Plugin 可从 marketplace 安装并在任意项目中首次使用
 
@@ -151,7 +151,7 @@
 **Purpose**: 文档完善和全局验证
 
 - [x] T023 Create `plugins/speckit-driver-pro/README.md` — Plugin 说明文档：功能概述、安装方法、使用说明（quickstart 摘要）、配置说明、子代理列表、与 speckit skills 的关系、与 reverse-spec 的互补关系
-- [x] T024 Validate cross-references: 确认 SKILL.md 中引用的所有 agents/*.md 文件路径正确、driver-config-template.yaml 中的 agent ID 与 agents/ 目录一致、templates/ 中的占位符与 sub-agent 输出格式匹配、hooks.json 中的脚本路径正确
+- [x] T024 Validate cross-references: 确认 SKILL.md 中引用的所有 agents/*.md 文件路径正确、spec-driver.config-template.yaml 中的 agent ID 与 agents/ 目录一致、templates/ 中的占位符与 sub-agent 输出格式匹配、hooks.json 中的脚本路径正确
 - [x] T025 Validate FR coverage: 逐条检查 spec.md 中 23 条 FR 是否全部在 SKILL.md + agents/ + templates/ + scripts/ 中有对应实现，标记任何遗漏
 
 ---

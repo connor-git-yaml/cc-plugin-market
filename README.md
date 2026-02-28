@@ -301,7 +301,7 @@ Spec Driver keeps a single workflow source under `plugins/spec-driver/skills/*/S
 To initialize Spec Driver in a new project (Claude Code):
 
 ```bash
-# Creates .specify/ directory, constitution.md, and driver-config.yaml
+# Creates .specify/ directory, constitution.md, and spec-driver.config.yaml
 /spec-driver:speckit-feature "your feature description"
 # The first run will auto-initialize the project structure
 ```
@@ -443,7 +443,7 @@ All artifacts are written to `specs/<feature-id>/`:
 
 ### Configuration
 
-Customize behavior via `driver-config.yaml` in the project root:
+Customize behavior via `spec-driver.config.yaml` in the project root:
 
 ```yaml
 # Model presets: balanced (default) | quality-first | cost-efficient
@@ -498,6 +498,11 @@ verification:
 | `cost-efficient` | Sonnet | Sonnet |
 
 When running in Codex, model names are normalized via `model_compat` before each Task dispatch, so existing `opus/sonnet` configs remain compatible.
+
+`reverse-spec` CLI (`generate` / `batch` / `diff`) now follows the same model config source:
+
+- Priority: `REVERSE_SPEC_MODEL` > `spec-driver.config.yaml agents.specify.model` > `spec-driver.config.yaml preset` > built-in default
+- Config discovery: current directory upward search for `spec-driver.config.yaml`, then `.specify/spec-driver.config.yaml`
 
 ### Supported Verification Languages
 
@@ -616,7 +621,7 @@ tests/                             # Test suite (313 cases)
 | Plugin Format | Markdown prompts + Bash scripts + YAML configuration |
 | Runtime | Claude Code sandbox (no external runtime dependencies) |
 | Agent System | 14 specialized sub-agent prompts with scoped tool permissions |
-| Configuration | YAML (`driver-config.yaml`) with 3 model presets |
+| Configuration | YAML (`spec-driver.config.yaml`) with 3 model presets |
 | Templates | Markdown templates for research reports, specs, and verification |
 <!-- speckit:section:tech-stack:end -->
 

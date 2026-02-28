@@ -26,7 +26,7 @@ disable-model-invocation: true
 |------|------|------|
 | 需求描述 | string | 用户输入的自然语言需求（首个非 flag 参数） |
 | `--rerun <phase>` | string | 选择性重跑指定阶段（constitution/research/specify/clarify/plan/tasks/analyze/implement/verify） |
-| `--preset <name>` | string | 临时覆盖模型预设（不修改 driver-config.yaml） |
+| `--preset <name>` | string | 临时覆盖模型预设（不修改 spec-driver.config.yaml） |
 | `--research <mode>` | string | 指定调研模式，跳过推荐和交互选择（有效值: full, tech-only, product-only, codebase-scan, skip, custom） |
 
 **解析规则**: 如果 $ARGUMENTS 以 `--` 开头，解析为 flag/option；其余部分视为需求描述。`--rerun` 不需要需求描述。无参数且非 rerun → 提示用户输入需求描述。`--research` 值为无效模式名时，输出错误提示（"无效的调研模式 '{值}'。有效值: full, tech-only, product-only, codebase-scan, skip, custom"）并回退到推荐交互流程。
@@ -47,15 +47,15 @@ disable-model-invocation: true
 
 ### 3. 配置加载
 
-- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/driver-config-template.yaml` 复制模板到项目根目录，应用选择的预设
-- 如果配置已存在：读取并解析 driver-config.yaml
+- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
+- 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
 - 解析 `model_compat` 配置段（可选，向后兼容）：如果缺失则使用内置默认映射（Codex: `opus->gpt-5`, `sonnet->gpt-5-mini`）
 
 ### 4. 门禁配置加载
 
-读取 driver-config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
 
 ```text
 1. 读取 gate_policy 字段（默认 balanced）
@@ -161,7 +161,7 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 在 Constitution 检查通过后、调研阶段开始前，确定本次执行的调研模式。
 
-**确定优先级**: (1) `--research` 命令行参数（最高） → (2) `driver-config.yaml` 中 `research.default_mode`（非 `auto` 时） → (3) 智能推荐
+**确定优先级**: (1) `--research` 命令行参数（最高） → (2) `spec-driver.config.yaml` 中 `research.default_mode`（非 `auto` 时） → (3) 智能推荐
 
 **有效模式值**: `full`, `tech-only`, `product-only`, `codebase-scan`, `skip`, `custom`
 
@@ -173,10 +173,10 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
    - 无效值 → 输出错误提示（含有效值列表），回退到步骤 3
    - 未提供 → 继续步骤 2
 
-2. 读取 driver-config.yaml 中 research.default_mode:
+2. 读取 spec-driver.config.yaml 中 research.default_mode:
    - 有效非 auto 值 → 作为推荐默认值（优先于智能推荐），进入步骤 4 交互确认
    - auto 或未配置或 research 段不存在 → 继续步骤 3
-   - 无效值 → 输出警告（"driver-config.yaml 中 research.default_mode 值 '{值}' 无效，已回退到 auto 模式。有效值: auto, full, tech-only, product-only, codebase-scan, skip, custom"），继续步骤 3
+   - 无效值 → 输出警告（"spec-driver.config.yaml 中 research.default_mode 值 '{值}' 无效，已回退到 auto 模式。有效值: auto, full, tech-only, product-only, codebase-scan, skip, custom"），继续步骤 3
 
 3. 智能推荐（详见下方推荐逻辑）:
    - 分析需求描述文本特征，生成推荐模式和推荐理由
@@ -243,7 +243,7 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
   3. product-only — 仅产品调研，适合需要市场验证的需求
   4. codebase-scan — 代码库扫描（与 Story 模式相同），适合中等规模增量功能
   5. skip         — 跳过调研，适合简单修复和微小功能
-  6. custom       — 自定义步骤组合（需在 driver-config.yaml 中配置 custom_steps）
+  6. custom       — 自定义步骤组合（需在 spec-driver.config.yaml 中配置 custom_steps）
 
 请输入编号（1-6）确认，或直接回车使用推荐模式 [{推荐模式}]:
 ```
@@ -262,7 +262,7 @@ research_mode: skip
 research_skip_reason: "{跳过原因}"
 # 跳过原因取决于确定来源:
 #   - "命令行参数指定" （来自 --research skip）
-#   - "配置文件默认值" （来自 driver-config.yaml research.default_mode: skip）
+#   - "配置文件默认值" （来自 spec-driver.config.yaml research.default_mode: skip）
 #   - "用户交互选择"   （来自推荐交互中用户选择 skip）
 ```
 
@@ -727,7 +727,7 @@ if 仍然失败:
 
 ## 模型选择逻辑
 
-为每个子代理确定模型的优先级：(1) `--preset` 命令行参数（临时覆盖，最高优先级）→ (2) driver-config.yaml 中的 `agents.{agent_id}.model`（仅当该子代理显式配置时生效）→ (3) 当前 preset 的默认配置。
+为每个子代理确定模型的优先级：(1) `--preset` 命令行参数（临时覆盖，最高优先级）→ (2) spec-driver.config.yaml 中的 `agents.{agent_id}.model`（仅当该子代理显式配置时生效）→ (3) 当前 preset 的默认配置。
 
 **preset 默认配置表**:
 
@@ -746,12 +746,12 @@ if 仍然失败:
 
 ### 模型运行时兼容归一化（Claude / Codex）
 
-为避免 `driver-config.yaml` 中的模型名与当前运行时不匹配，在每次 `Task(...)` 调用前执行一次归一化：
+为避免 `spec-driver.config.yaml` 中的模型名与当前运行时不匹配，在每次 `Task(...)` 调用前执行一次归一化：
 
 ```text
 输入: candidate_model（由优先级规则选出的模型名）, agent_id
 
-1. 读取 driver-config.yaml 中 model_compat.runtime（auto|claude|codex，默认 auto）
+1. 读取 spec-driver.config.yaml 中 model_compat.runtime（auto|claude|codex，默认 auto）
 
 2. 解析 runtime:
    - runtime=claude/codex -> 直接使用

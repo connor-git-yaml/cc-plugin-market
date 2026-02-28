@@ -158,7 +158,7 @@ PAUSE_CRITICAL  # 暂停，CRITICAL 问题需处理
 
 ### 5. DriverConfig（驱动配置）
 
-用户的 driver-config.yaml 解析后的配置实体。
+用户的 spec-driver.config.yaml 解析后的配置实体。
 
 | 属性 | 类型 | 说明 |
 | ---- | ---- | ---- |

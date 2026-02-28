@@ -84,7 +84,7 @@
 
 - [x] T027 [P] [US1] 替换 README.md 中的 `# Speckitdriver` 标题 -> `# Spec Driver` 以及正文中其他 `Speckitdriver` -> `Spec Driver` — `plugins/spec-driver/README.md` (R13, R14)
 - [x] T028 [P] [US1] 替换 init-project.sh 头注释中的 `Speckitdriver` -> `Spec Driver` 以及 `# Speckitdriver - ` -> `# Spec Driver - ` — `plugins/spec-driver/scripts/init-project.sh` (R14, R26)
-- [x] T029 [P] [US1] 替换 driver-config-template.yaml 注释中的 `Speckitdriver` -> `Spec Driver` — `plugins/spec-driver/templates/driver-config-template.yaml` (R14)
+- [x] T029 [P] [US1] 替换 spec-driver.config-template.yaml 注释中的 `Speckitdriver` -> `Spec Driver` — `plugins/spec-driver/templates/spec-driver.config-template.yaml` (R14)
 - [x] T030 [P] [US1] 替换 product-spec-template.md 中的 `Speckitdriver` -> `Spec Driver`（如有） — `plugins/spec-driver/templates/product-spec-template.md` (R14)
 
 **Checkpoint**: 所有文件中 `Speckit Driver Pro` 和 `Speckitdriver` 品牌名已替换为 `Spec Driver`
@@ -212,7 +212,7 @@
 | FR-011 | README.md v3.0.0 迁移说明 | T050 |
 | FR-012 | settings.json plugin key | T003 |
 | FR-013 | CLAUDE.md 功能性引用 | T048 |
-| FR-014 | driver-config-template.yaml 产品名 | T029 |
+| FR-014 | spec-driver.config-template.yaml 产品名 | T029 |
 | FR-015 | product-spec-template.md 引用 | T030 |
 | FR-016 | SKILL.md 路径引用 | T042-T046 |
 | FR-017 | speckit-sync/SKILL.md 品牌名 | T009 |

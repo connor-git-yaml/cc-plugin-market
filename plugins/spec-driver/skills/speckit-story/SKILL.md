@@ -22,7 +22,7 @@ disable-model-invocation: true
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | 需求描述 | string | 用户输入的自然语言需求（首个非 flag 参数） |
-| `--preset <name>` | string | 临时覆盖模型预设（不修改 driver-config.yaml） |
+| `--preset <name>` | string | 临时覆盖模型预设（不修改 spec-driver.config.yaml） |
 
 **解析规则**: 无参数 → 提示用户输入需求描述。
 
@@ -40,13 +40,13 @@ disable-model-invocation: true
 
 ### 3. 配置加载
 
-- 读取 driver-config.yaml（如不存在则引导创建）
+- 读取 spec-driver.config.yaml（如不存在则引导创建）
 - `--preset` 参数临时覆盖
 - 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
 
 ### 4. 门禁配置加载
 
-读取 driver-config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
 
 ```text
 1. 读取 gate_policy 字段（默认 balanced）

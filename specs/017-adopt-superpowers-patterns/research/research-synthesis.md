@@ -108,7 +108,7 @@
 |------|------|------|
 | 约束植入 | Markdown prompt 模板 | 与现有架构一致，零侵入性 |
 | 运行时执法 | Claude Code Hooks (Shell + jq) | 原生支持，无新增依赖 |
-| 配置扩展 | YAML (driver-config.yaml) | 现有配置格式，向后兼容 |
+| 配置扩展 | YAML (spec-driver.config.yaml) | 现有配置格式，向后兼容 |
 | 审查子代理 | Markdown prompt (spec-review.md, quality-review.md) | 复用现有子代理委派机制 |
 | 工作区隔离 | Claude Code EnterWorktree | 原生支持，二期集成 |
 
@@ -143,7 +143,7 @@
 - 双阶段审查能独立捕获 Spec 偏差和代码质量问题
 - gate_policy 三级策略切换正常工作，每门禁独立配置生效
 - 设计硬门禁在所有模式（含 autonomous）下均暂停等待用户确认
-- driver-config.yaml 变更向后兼容——未配置新字段时行为与当前一致
+- spec-driver.config.yaml 变更向后兼容——未配置新字段时行为与当前一致
 - 新增子代理 prompt 不超过 300 行/文件，维护复杂度可控
 
 ## 6. 结论

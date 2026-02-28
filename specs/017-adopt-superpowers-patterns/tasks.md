@@ -19,8 +19,8 @@
 
 **Purpose**: 扩展配置文件结构，为所有 User Story 提供共享的配置基础
 
-- [x] T001 在 `plugins/spec-driver/templates/driver-config-template.yaml` 的 `quality_gates` 章节之后新增 `gate_policy` 配置段（含注释说明三级策略 strict/balanced/autonomous，默认 balanced）和 `gates` 配置段（含注释示例展示每个门禁的 pause 可选值 always/auto/on_failure），参考 plan.md "8. driver-config-template.yaml" 章节的完整 YAML 内容
-- [x] T002 在 `driver-config.yaml`（项目根目录实例）的 `quality_gates` 章节之后同步新增 `gate_policy: balanced` 和 `gates` 注释示例，保持与模板一致
+- [x] T001 在 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 的 `quality_gates` 章节之后新增 `gate_policy` 配置段（含注释说明三级策略 strict/balanced/autonomous，默认 balanced）和 `gates` 配置段（含注释示例展示每个门禁的 pause 可选值 always/auto/on_failure），参考 plan.md "8. spec-driver.config-template.yaml" 章节的完整 YAML 内容
+- [x] T002 在 `spec-driver.config.yaml`（项目根目录实例）的 `quality_gates` 章节之后同步新增 `gate_policy: balanced` 和 `gates` 注释示例，保持与模板一致
 
 **Checkpoint**: 配置结构就绪，编排器和子代理可读取新配置字段
 

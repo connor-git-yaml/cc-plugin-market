@@ -1,6 +1,6 @@
 # Speckit Driver Pro - Configuration Schema
-# 文件: driver-config.yaml
-# 位置: 项目根目录 或 .specify/driver-config.yaml
+# 文件: spec-driver.config.yaml
+# 位置: 项目根目录 或 .specify/spec-driver.config.yaml
 
 # 模型预设
 # 可选值: balanced | quality-first | cost-efficient

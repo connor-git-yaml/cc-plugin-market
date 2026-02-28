@@ -81,7 +81,7 @@
 - **代码块内的旧引用**: SKILL.md 和 agents/*.md 中的代码块（如 ````text` 和 ````markdown` 块）内的路径和命令引用也需要更新，不能只更新正文文本
 - **正则替换的边界**: `speckitdriver` 出现在复合词中（如 `.speckitdriver-installed`）时，替换逻辑需精确匹配完整的旧值-新值对，避免部分替换导致损坏
 - **历史 spec 编号保留**: `CLAUDE.md` 中 `011-speckit-driver-pro` 等历史特性编号不应被修改，它们是已完成特性的永久标识
-- **driver-config-template.yaml 中的注释**: 模板文件注释中如包含旧产品名 `Speckit Driver Pro`，也需更新为 `Spec Driver`
+- **spec-driver.config-template.yaml 中的注释**: 模板文件注释中如包含旧产品名 `Speckit Driver Pro`，也需更新为 `Spec Driver`
 
 ## Requirements *(mandatory)*
 
@@ -100,7 +100,7 @@
 - **FR-011**: 系统 MUST 在 `README.md` 中新增 v3.0.0 迁移说明，包含完整的旧命令到新命令映射表 — *关联: US3*
 - **FR-012**: 系统 MUST 将 `.claude/settings.json` 中的 `"speckitdriver@cc-plugin-market"` 更新为 `"spec-driver@cc-plugin-market"` — *关联: US2*
 - **FR-013**: 系统 MUST 将 `CLAUDE.md` 中功能性引用（如"使用 speckitdriver 的方式"）更新为新名称，同时保留历史特性编号引用不变 — *关联: US2*
-- **FR-014**: 系统 MUST 将 `driver-config-template.yaml` 中的旧产品名引用更新为新名称 — *关联: US1*
+- **FR-014**: 系统 MUST 将 `spec-driver.config-template.yaml` 中的旧产品名引用更新为新名称 — *关联: US1*
 - **FR-015**: 系统 MUST 将 `product-spec-template.md` 中的旧引用（如有）更新为新名称 — *关联: US1*
 - **FR-016**: 系统 SHOULD 在所有 SKILL.md 中将旧路径引用 `plugins/speckitdriver/scripts/init-project.sh` 更新为 `plugins/spec-driver/scripts/init-project.sh` — *关联: US1, US4*
 - **FR-017**: 系统 SHOULD 在 `sync.md` 的 SKILL.md 中将旧品牌名 `Speckit Driver Pro` 的完成报告标题更新为 `Spec Driver` — *关联: US1*

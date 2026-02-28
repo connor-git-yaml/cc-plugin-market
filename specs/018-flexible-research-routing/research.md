@@ -155,7 +155,7 @@ signals:
 
 ### 背景
 
-需要在 `driver-config.yaml` 中支持调研模式默认值和自定义步骤配置。
+需要在 `spec-driver.config.yaml` 中支持调研模式默认值和自定义步骤配置。
 
 ### 方案 A: 新增顶级 `research` 配置段（推荐）
 
@@ -278,7 +278,7 @@ agents:
 | `--research <mode>` | string | 指定调研模式，跳过推荐和交互选择（可选值: full, tech-only, product-only, codebase-scan, skip） |
 ```
 
-解析优先级：`--research` > `driver-config.yaml research.default_mode` > 智能推荐。
+解析优先级：`--research` > `spec-driver.config.yaml research.default_mode` > 智能推荐。
 
 无效值处理：输出错误提示 + 回退到推荐交互流程（符合 Constitution XII 向后兼容原则）。
 

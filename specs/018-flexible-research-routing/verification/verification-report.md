@@ -18,7 +18,7 @@
 | FR-003 | 智能推荐逻辑 | PASS | T015 | SKILL.md 第 172-208 行实现了完整的关键词-模式推荐规则：产品信号词（15 个）、技术信号词（12 个）、市场信号词（6 个），6 条规则按优先级排列，默认回退到 `full`。覆盖了 spec.md 中列出的所有信号类型 |
 | FR-004 | 推荐展示与交互确认 | PASS | T016 | SKILL.md 第 211-235 行定义了交互展示格式：推荐模式 + 推荐理由 + 6 种模式编号列表（含一行说明），支持直接回车确认、编号选择、无效输入重试 |
 | FR-005 | 向后兼容（无 research 配置段时默认 full） | PASS | T018, T001, T002 | SKILL.md 第 53 行明确说明：research 段不存在时默认 `{default_mode: "auto", custom_steps: []}`，auto 模式等同智能推荐，无产品/技术/市场信号时回退到 `full`（规则 6），行为与升级前一致 |
-| FR-006 | driver-config.yaml 新增 research 配置段 | PASS | T001, T002, T017 | driver-config.yaml 第 43-49 行和 driver-config-template.yaml 第 69-75 行均包含 `research:` 顶级段，含 `default_mode: auto` 和 `custom_steps: []` 字段，注释列出全部 7 个有效 default_mode 值 |
+| FR-006 | spec-driver.config.yaml 新增 research 配置段 | PASS | T001, T002, T017 | spec-driver.config.yaml 第 43-49 行和 spec-driver.config-template.yaml 第 69-75 行均包含 `research:` 顶级段，含 `default_mode: auto` 和 `custom_steps: []` 字段，注释列出全部 7 个有效 default_mode 值 |
 | FR-007 | 后续阶段上下文注入适配 | PASS | T012 | SKILL.md Phase 2（第 400-414 行）和 Phase 4（第 465-478 行）均实现了 6 种模式的条件上下文注入逻辑，非 `full` 模式追加模式提示引导子代理适配 |
 | FR-008 | tech-research 软依赖降级 | PASS | T003-T007 | tech-research.md 角色描述改为"基于产品调研结论（如有）或需求描述"（第 5 行）；输入定义标注 product-research.md 为可选（第 10 行）；步骤 1 包含 if/else 分支（第 22-27 行）；约束和失败处理均已更新（第 76 行、第 90 行）；步骤 6 降级为"需求-技术对齐度评估"（第 51-53 行） |
 | FR-009 | GATE_RESEARCH 模式感知分级门禁 | PASS | T011 | SKILL.md 第 347-391 行实现了完整的 5 分支门禁逻辑：`full`（现有行为）、`tech-only`/`product-only`（单份报告摘要 + 切换 full 选项）、`codebase-scan`（扫描摘要 + 切换选项）、`skip`（跳过门禁）、`custom`（实际制品摘要）。每个分支含 always/auto/on_failure 三种 behavior 处理 |
@@ -93,7 +93,7 @@ FR 覆盖映射表确认 15 条 FR 均有对应 Task 覆盖，无遗漏。
 
 对 6 种模式名在所有修改文件中的拼写进行全文检索：
 
-| 模式名 | SKILL.md | tech-research.md | driver-config.yaml | template.yaml | 一致性 |
+| 模式名 | SKILL.md | tech-research.md | spec-driver.config.yaml | template.yaml | 一致性 |
 |--------|----------|-------------------|-------------------|---------------|--------|
 | `full` | 出现于映射表、条件分支、完成报告、进度表 | N/A（不直接引用模式名） | 注释中列出 | 注释中列出 | PASS |
 | `tech-only` | 出现于映射表、条件分支、完成报告、进度表、示例 | N/A | 注释中列出 | 注释中列出 | PASS |
@@ -161,7 +161,7 @@ FR 覆盖映射表确认 15 条 FR 均有对应 Task 覆盖，无遗漏。
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
-| 行为变更通过 Prompt 实现 | PASS | 本特性修改了 4 个文件：SKILL.md（主编排 Prompt）、tech-research.md（子代理 Prompt）、driver-config.yaml（YAML 配置）、driver-config-template.yaml（YAML 模板），均为 Markdown/YAML 文件 |
+| 行为变更通过 Prompt 实现 | PASS | 本特性修改了 4 个文件：SKILL.md（主编排 Prompt）、tech-research.md（子代理 Prompt）、spec-driver.config.yaml（YAML 配置）、spec-driver.config-template.yaml（YAML 模板），均为 Markdown/YAML 文件 |
 | 未引入运行时代码 | PASS | tasks.md 确认"不新增文件"，全部变更为现有 Prompt 和配置的修改 |
 | 模板与逻辑分离 | PASS | 配置模板仅定义字段和注释，编排逻辑在 SKILL.md 中定义 |
 

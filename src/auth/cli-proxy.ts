@@ -12,6 +12,7 @@ import {
   LLMUnavailableError,
   getTimeoutForModel,
 } from '../core/llm-client.js';
+import { resolveReverseSpecModel } from '../core/model-selection.js';
 
 // ============================================================
 // 类型定义
@@ -58,7 +59,7 @@ interface StreamMessage {
 
 /** 获取默认 CLI 代理配置 */
 export function getDefaultCLIProxyConfig(): CLIProxyConfig {
-  const model = process.env['REVERSE_SPEC_MODEL'] ?? 'claude-sonnet-4-5-20250929';
+  const { model } = resolveReverseSpecModel();
   return {
     model,
     timeout: getTimeoutForModel(model),

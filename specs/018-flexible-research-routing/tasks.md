@@ -24,9 +24,9 @@ plugins/spec-driver/
 ├── agents/
 │   └── tech-research.md                  # 技术调研子代理
 └── templates/
-    └── driver-config-template.yaml       # 配置模板
+    └── spec-driver.config-template.yaml       # 配置模板
 
-driver-config.yaml                         # 项目实例配置
+spec-driver.config.yaml                         # 项目实例配置
 ```
 
 ---
@@ -35,13 +35,13 @@ driver-config.yaml                         # 项目实例配置
 
 **Purpose**: 为调研模式路由提供配置支撑，不改变任何运行时行为
 
-- [x] T001 [P] 在 `plugins/spec-driver/templates/driver-config-template.yaml` 的 `agents:` 段之后、`verification:` 段之前新增 `research:` 配置段，包含 `default_mode: auto` 和 `custom_steps: []` 字段及完整注释说明（~15 行）
-  - **文件**: `plugins/spec-driver/templates/driver-config-template.yaml`
+- [x] T001 [P] 在 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 的 `agents:` 段之后、`verification:` 段之前新增 `research:` 配置段，包含 `default_mode: auto` 和 `custom_steps: []` 字段及完整注释说明（~15 行）
+  - **文件**: `plugins/spec-driver/templates/spec-driver.config-template.yaml`
   - **验收**: 配置模板中存在 `research:` 顶级段，`default_mode` 默认值为 `auto`，注释列出所有有效模式值（auto, full, tech-only, product-only, codebase-scan, skip, custom）
   - **复杂度**: 低
 
-- [x] T002 [P] 在 `driver-config.yaml` 的 `agents:` 段之后、`verification:` 段之前同步新增 `research:` 配置段（`default_mode: auto`、`custom_steps: []`）
-  - **文件**: `driver-config.yaml`
+- [x] T002 [P] 在 `spec-driver.config.yaml` 的 `agents:` 段之后、`verification:` 段之前同步新增 `research:` 配置段（`default_mode: auto`、`custom_steps: []`）
+  - **文件**: `spec-driver.config.yaml`
   - **验收**: 项目实例配置中存在 `research:` 段，字段与模板一致
   - **复杂度**: 低
 
@@ -171,13 +171,13 @@ driver-config.yaml                         # 项目实例配置
 
 ## Phase 5: User Story 3 — 配置文件支持调研模式默认值 (Priority: P2)
 
-**Goal**: 团队可在 driver-config.yaml 中配置默认调研模式，统一调研策略
+**Goal**: 团队可在 spec-driver.config.yaml 中配置默认调研模式，统一调研策略
 
-**Independent Test**: 在 driver-config.yaml 中设置 `research.default_mode: tech-only`，执行 Feature 模式，验证编排器推荐的默认模式为 `tech-only` 而非智能推荐结果
+**Independent Test**: 在 spec-driver.config.yaml 中设置 `research.default_mode: tech-only`，执行 Feature 模式，验证编排器推荐的默认模式为 `tech-only` 而非智能推荐结果
 
 ### Implementation for User Story 3
 
-- [x] T017 [US3] 在 SKILL.md "调研模式确定（Phase 0.5）" 段落中实现配置文件读取逻辑：从已加载的 driver-config.yaml 中读取 `research.default_mode`，当值为非 `auto` 的有效模式时作为默认模式（优先于智能推荐但低于 CLI 参数）
+- [x] T017 [US3] 在 SKILL.md "调研模式确定（Phase 0.5）" 段落中实现配置文件读取逻辑：从已加载的 spec-driver.config.yaml 中读取 `research.default_mode`，当值为非 `auto` 的有效模式时作为默认模式（优先于智能推荐但低于 CLI 参数）
   - **文件**: `plugins/spec-driver/skills/speckit-feature/SKILL.md`
   - **变更位置**: Phase 0.5 "调研模式确定" 段落中的配置优先级部分
   - **验收**: 配置读取逻辑正确处理三种情况——(1) 有效非 auto 值：使用配置值 (2) `auto` 或未配置：回退到智能推荐 (3) 无效值：输出警告并回退到 `auto`，警告文本包含有效值列表
@@ -227,7 +227,7 @@ driver-config.yaml                         # 项目实例配置
 
 **Goal**: 高级用户可通过 `custom` 模式自定义调研步骤组合
 
-**Independent Test**: 在 driver-config.yaml 中配置 `research.default_mode: custom` + `research.custom_steps: [product-research, codebase-scan]`，执行 Feature 模式，验证仅执行产品调研和代码扫描
+**Independent Test**: 在 spec-driver.config.yaml 中配置 `research.default_mode: custom` + `research.custom_steps: [product-research, codebase-scan]`，执行 Feature 模式，验证仅执行产品调研和代码扫描
 
 ### Implementation for User Story 5
 
@@ -290,7 +290,7 @@ driver-config.yaml                         # 项目实例配置
 | FR-003 | 智能推荐逻辑 | T015 |
 | FR-004 | 推荐展示与交互确认 | T016 |
 | FR-005 | 向后兼容（无 research 配置段时默认 full） | T018, T001, T002 |
-| FR-006 | driver-config.yaml 新增 research 配置段 | T001, T002, T017 |
+| FR-006 | spec-driver.config.yaml 新增 research 配置段 | T001, T002, T017 |
 | FR-007 | 后续阶段上下文注入适配 | T012 |
 | FR-008 | tech-research 软依赖降级 | T003, T004, T005, T006, T007 |
 | FR-009 | GATE_RESEARCH 模式感知分级门禁 | T011 |

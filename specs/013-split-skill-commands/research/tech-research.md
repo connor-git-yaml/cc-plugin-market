@@ -77,7 +77,7 @@
 | `hooks/hooks.json` | 完全兼容 | SessionStart hook 引用 `./scripts/postinstall.sh`，不涉及 skills 目录 |
 | `templates/*.md` | 完全兼容 | 模板文件通过 SKILL.md 中的路径引用，拆分后每个 SKILL.md 使用相同路径（`plugins/speckit-driver-pro/templates/...`） |
 | `.claude-plugin/plugin.json` | 完全兼容 | Plugin manifest 不包含 skills 列表，Claude Code 自动发现 `skills/*/SKILL.md` |
-| `driver-config.yaml`（配置模板） | 完全兼容 | 配置文件由 SKILL.md 中的逻辑读取，拆分后 run 和 resume 各自独立读取同一配置文件 |
+| `spec-driver.config.yaml`（配置模板） | 完全兼容 | 配置文件由 SKILL.md 中的逻辑读取，拆分后 run 和 resume 各自独立读取同一配置文件 |
 
 ## 4. 设计模式推荐
 

@@ -13,7 +13,7 @@
 - Claude Code 的 Task tool 支持 `prompt`、`subagent_type`、`model`、`description` 等参数
 - 现有项目使用 `handoffs` YAML frontmatter 实现命令间跳转，但 Driver Pro 需要更灵活的运行时委派（传递上下文、控制模型）
 - Task tool 的 `prompt` 参数可以动态注入：子代理 prompt 模板 + 当前阶段的上下文信息（如产品调研结论）
-- `model` 参数直接对应 driver-config.yaml 中的模型配置，无需额外适配层
+- `model` 参数直接对应 spec-driver.config.yaml 中的模型配置，无需额外适配层
 
 ### Alternatives Considered
 
@@ -44,7 +44,7 @@
 
 ---
 
-## 决策 3: 配置文件格式——driver-config.yaml 的结构设计
+## 决策 3: 配置文件格式——spec-driver.config.yaml 的结构设计
 
 ### Decision
 
@@ -67,7 +67,7 @@
 ### Configuration Schema
 
 ```yaml
-# driver-config.yaml 完整结构
+# spec-driver.config.yaml 完整结构
 preset: balanced  # balanced | quality-first | cost-efficient
 
 agents:
@@ -114,13 +114,13 @@ retry:
 
 ### Decision
 
-采用特征文件自动检测为主、driver-config.yaml 声明为辅的混合策略。verify 子代理扫描项目根目录和子目录的特征文件（package.json、Cargo.toml、go.mod 等），自动识别语言和构建系统。用户可在 driver-config.yaml 中覆盖自动检测结果。
+采用特征文件自动检测为主、spec-driver.config.yaml 声明为辅的混合策略。verify 子代理扫描项目根目录和子目录的特征文件（package.json、Cargo.toml、go.mod 等），自动识别语言和构建系统。用户可在 spec-driver.config.yaml 中覆盖自动检测结果。
 
 ### Rationale
 
 - 特征文件检测是业界标准做法（GitHub Linguist、Dependabot 等均使用类似策略）
 - 自动检测覆盖 90%+ 的常见项目结构，减少配置负担
-- driver-config.yaml 覆盖机制处理非标准项目结构
+- spec-driver.config.yaml 覆盖机制处理非标准项目结构
 - Monorepo 检测：扫描子目录的特征文件，每个子项目独立验证
 
 ### Alternatives Considered
@@ -140,7 +140,7 @@ retry:
 3. 如果检测到 workspace/workspaces 配置（package.json workspaces、Cargo workspace）：
    a. 标记为 Monorepo
    b. 递归扫描每个子项目
-4. 合并 driver-config.yaml 中的覆盖配置
+4. 合并 spec-driver.config.yaml 中的覆盖配置
 5. 输出验证计划（待执行的命令列表）
 ```
 
@@ -225,7 +225,7 @@ retry:
 ### Rationale
 
 - 安装时（postinstall.sh）只做最小化操作：验证 Claude Code 版本、输出安装成功信息
-- 项目初始化（init-project.sh）需要检查 .specify/ 目录、constitution 是否存在、driver-config.yaml 是否存在
+- 项目初始化（init-project.sh）需要检查 .specify/ 目录、constitution 是否存在、spec-driver.config.yaml 是否存在
 - 分离的好处：安装不依赖项目上下文，初始化可根据项目状态自适应
 
 ### Script Responsibilities
@@ -242,7 +242,7 @@ init-project.sh（首次触发时）:
   2. 检查 constitution.md 是否存在
      - 不存在 → 提示用户创建（暂停）
      - 存在 → 继续
-  3. 检查 driver-config.yaml 是否存在
+  3. 检查 spec-driver.config.yaml 是否存在
      - 不存在 → 交互式引导创建（选择预设）
      - 存在 → 读取配置
   4. 检测项目已有 speckit skills（prompt 来源映射）

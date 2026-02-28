@@ -9,13 +9,14 @@ import type { SpecSections } from '../models/module-spec.js';
 import type { AssembledContext } from './context-assembler.js';
 import { detectAuth } from '../auth/auth-detector.js';
 import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
+import { resolveReverseSpecModel } from './model-selection.js';
 
 // ============================================================
 // 配置类型
 // ============================================================
 
 export interface LLMConfig {
-  /** 模型 ID（默认 'claude-sonnet-4-5-20250929'，可通过 REVERSE_SPEC_MODEL 环境变量覆盖） */
+  /** 模型 ID（优先级: REVERSE_SPEC_MODEL > spec-driver.config.yaml > 默认值） */
   model: string;
   /** API Key（默认从 ANTHROPIC_API_KEY 环境变量获取） */
   apiKey?: string;
@@ -133,7 +134,7 @@ export function getTimeoutForModel(model: string): number {
 // ============================================================
 
 function getDefaultConfig(): LLMConfig {
-  const model = process.env['REVERSE_SPEC_MODEL'] ?? 'claude-sonnet-4-5-20250929';
+  const { model } = resolveReverseSpecModel();
   return {
     model,
     apiKey: process.env['ANTHROPIC_API_KEY'],

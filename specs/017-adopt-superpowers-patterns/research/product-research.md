@@ -241,7 +241,7 @@ Brainstorming → Git Worktree → Writing Plans → Subagent/Execute → TDD �
    - 预估工作量: 中（新增子代理 prompt + 编排逻辑调整）
 
 3. **门禁粒度增强（风险分级）**
-   - 在 driver-config.yaml 中新增 `gate_policy` 配置
+   - 在 spec-driver.config.yaml 中新增 `gate_policy` 配置
    - 支持三个级别: `strict`（所有门禁暂停）、`balanced`（默认，关键门禁暂停）、`autonomous`（仅失败时暂停）
    - 每个质量门可独立配置 `auto_continue: true/false`
    - 预估工作量: 中（配置扩展 + 编排逻辑条件化）
@@ -322,7 +322,7 @@ Must-have 的 4 个特性选择基于以下原则：
 - **调研 Claude Code 子代理 API**: 评估当前 Task tool 是否支持"每任务新鲜子代理"模式，以及并行 Task 调用的稳定性
 - **调研 Claude Code Hooks 机制**: 评估 PreToolUse/PostToolUse hooks 是否可用于实现验证铁律（拦截未验证的完成声明）
 - **调研 Claude Code Worktree 原生支持**: 评估 EnterWorktree 工具的成熟度和 spec-driver 集成路径
-- **调研 driver-config.yaml 扩展方案**: 设计 gate_policy 配置结构，确保向后兼容
+- **调研 spec-driver.config.yaml 扩展方案**: 设计 gate_policy 配置结构，确保向后兼容
 - **评估 prompt 注入的 TDD 模式**: 在不增加新运行时依赖的前提下，仅通过 prompt 工程实现 TDD 强制执行
 
 ### 风险与不确定性

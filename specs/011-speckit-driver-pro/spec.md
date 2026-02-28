@@ -56,13 +56,13 @@
 1. **Given** 实现阶段完成, **When** 进入验证阶段, **Then** 系统通过特征文件（package.json、Cargo.toml、go.mod、pom.xml 等）自动检测项目使用的语言和构建系统
 2. **Given** 检测到项目语言, **When** 执行验证, **Then** 对每种语言分别执行构建、Lint 和测试命令，并输出独立的验证结果
 3. **Given** 某个验证工具未安装（如 golangci-lint）, **When** 尝试执行, **Then** 优雅跳过并标记为"工具未安装"，不阻断整体验证流程
-4. **Given** 用户在 driver-config.yaml 中自定义了构建命令, **When** 执行验证, **Then** 使用用户自定义命令而非自动检测的默认命令
+4. **Given** 用户在 spec-driver.config.yaml 中自定义了构建命令, **When** 执行验证, **Then** 使用用户自定义命令而非自动检测的默认命令
 
 ---
 
 ### User Story 4 - 模型分级配置 (Priority: P2)
 
-开发者可根据项目预算和质量要求，选择不同的模型配置预设（balanced、quality-first、cost-efficient），或在 driver-config.yaml 中精细配置每个子代理使用的模型。重分析任务（调研、规范、规划、分析）默认使用 Opus，执行任务（澄清、清单、任务分解、实现、验证）默认使用 Sonnet。
+开发者可根据项目预算和质量要求，选择不同的模型配置预设（balanced、quality-first、cost-efficient），或在 spec-driver.config.yaml 中精细配置每个子代理使用的模型。重分析任务（调研、规范、规划、分析）默认使用 Opus，执行任务（澄清、清单、任务分解、实现、验证）默认使用 Sonnet。
 
 **Why this priority**: 模型选择直接影响输出质量和 API 成本。架构设计和调研需要深度推理用 Opus，而模板填充和代码生成用 Sonnet 足够。灵活配置让用户在质量和成本间找到最佳平衡。
 
@@ -70,9 +70,9 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 首次使用 Driver Pro, **When** 没有 driver-config.yaml, **Then** 提示用户选择预设（balanced/quality-first/cost-efficient）并创建配置文件
+1. **Given** 首次使用 Driver Pro, **When** 没有 spec-driver.config.yaml, **Then** 提示用户选择预设（balanced/quality-first/cost-efficient）并创建配置文件
 2. **Given** 用户选择 balanced 预设, **When** 执行流程, **Then** 主编排器/调研/规范/规划/分析使用 Opus，其余使用 Sonnet
-3. **Given** 用户在 driver-config.yaml 中单独配置了某个子代理的模型, **When** 执行该子代理, **Then** 使用用户配置的模型而非预设默认值
+3. **Given** 用户在 spec-driver.config.yaml 中单独配置了某个子代理的模型, **When** 执行该子代理, **Then** 使用用户配置的模型而非预设默认值
 
 ---
 
@@ -152,13 +152,13 @@
 - **FR-009**: 验证子代理 MUST 支持以下语言/构建系统：JavaScript/TypeScript（npm/pnpm/yarn/bun）、Java（Maven/Gradle）、Kotlin（Gradle）、Swift（SPM/Xcode）、C/C++（CMake/Make）、Rust（Cargo）、Go（go mod）、Python（pip/poetry/uv）、C#（.NET）、Elixir（Mix）、Ruby（Bundler）
 - **FR-010**: 验证子代理 MUST 支持 Monorepo 项目，对每个子项目独立执行验证并汇总报告
 - **FR-011**: 系统 MUST 提供模型分级配置，支持 balanced、quality-first、cost-efficient 三个预设
-- **FR-012**: 系统 MUST 允许用户通过 driver-config.yaml 自定义每个子代理使用的模型
+- **FR-012**: 系统 MUST 允许用户通过 spec-driver.config.yaml 自定义每个子代理使用的模型
 - **FR-013**: 系统 MUST 作为标准 Claude Code Plugin 发布，包含 plugin.json、SKILL.md、agents/、scripts/、templates/ 等标准结构
 - **FR-014**: 系统 MUST 在首次使用时自动初始化项目的 .specify/ 目录结构
 - **FR-015**: Plugin MUST 自包含全部子代理 prompt（agents/ 目录），开箱即用无需额外安装 speckit skills。同时在初始化阶段检测项目中是否已有 .claude/commands/speckit.*.md，若存在则优先使用项目已有版本（尊重用户定制），若不存在则使用 Plugin 内置版本
 - **FR-016**: 系统 MUST 在验证阶段执行两层验证：Layer 1 Spec-Code 对齐验证（语言无关）+ Layer 2 项目原生工具链验证（语言相关）
 - **FR-017**: 系统 MUST 在验证工具未安装时优雅降级（跳过该工具，标记为"未安装"），不阻断验证流程
-- **FR-018**: 系统 MUST 允许用户在 driver-config.yaml 中自定义构建/Lint/测试命令，覆盖自动检测结果
+- **FR-018**: 系统 MUST 允许用户在 spec-driver.config.yaml 中自定义构建/Lint/测试命令，覆盖自动检测结果
 - **FR-019**: 系统 MUST 对高信心歧义自动选择推荐项（≤ 2 处且有明确推荐时），在 spec 中标注 [AUTO-RESOLVED]，减少不必要的人工介入
 - **FR-020**: 系统 MUST 在每个阶段完成后将制品持久化到文件系统，支持中断后基于已有制品恢复流程
 - **FR-023**: 主编排器 MUST 在每个阶段开始时输出阶段级进度提示（格式如"[3/10] 正在执行技术规划..."），阶段完成时输出该阶段关键产出的简要摘要（如"技术规划完成：选定 PostgreSQL + Redis，生成 3 个 API 契约"）
@@ -180,7 +180,7 @@
 - **子代理 (Sub-Agent)**: 10 个专门化的子代理，分别负责 constitution、research（产品/技术调研）、specify、clarify、checklist、plan、tasks、analyze、implement、verify。每个子代理有独立的工具权限和模型配置
 - **研发制品 (Artifact)**: 流程中产出的结构化文档，包括 product-research.md、tech-research.md、research-synthesis.md、spec.md、plan.md、tasks.md、checklists/、verification-report.md 等
 - **质量门 (Quality Gate)**: 4 道自动化质量检查点——澄清门、宪法门、分析门、验证门。每个门有明确的通过/阻断标准
-- **驱动配置 (Driver Config)**: driver-config.yaml 文件，存储模型预设、自定义命令、验证配置等用户偏好
+- **驱动配置 (Driver Config)**: spec-driver.config.yaml 文件，存储模型预设、自定义命令、验证配置等用户偏好
 
 ## Success Criteria
 

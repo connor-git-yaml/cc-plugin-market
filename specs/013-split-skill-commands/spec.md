@@ -101,14 +101,14 @@
 ### Functional Requirements
 
 - **FR-001**: 系统 MUST 在 `skills/run/` 目录下创建独立的 `SKILL.md` 文件，包含完整的 10 阶段编排流程、初始化逻辑、子代理失败重试、选择性重跑（`--rerun`）、模型选择逻辑和阶段进度编号映射（关联 US-2）
-- **FR-002**: 系统 MUST 在 `skills/resume/` 目录下创建独立的 `SKILL.md` 文件，包含精简的初始化逻辑（环境检查、配置加载、prompt 来源映射）和完整的中断恢复机制（制品扫描、恢复点确定、恢复执行）。resume 的初始化 MUST 不包含"特性目录准备"步骤（因目录已存在），但 MUST 包含额外的制品扫描逻辑。resume 技能 MUST 包含模型选择逻辑的配置加载部分（读取 driver-config.yaml 中的模型配置），以便恢复执行时使用正确的模型设置，但 MUST NOT 重复完整的模型选择决策表（该表仅在 run 技能中维护） [AUTO-CLARIFIED: resume 需配置加载而非完整决策表 -- 技术调研 L238-239 指出 resume 仅需"配置加载"，run 才需要"完整表"]（关联 US-3）
+- **FR-002**: 系统 MUST 在 `skills/resume/` 目录下创建独立的 `SKILL.md` 文件，包含精简的初始化逻辑（环境检查、配置加载、prompt 来源映射）和完整的中断恢复机制（制品扫描、恢复点确定、恢复执行）。resume 的初始化 MUST 不包含"特性目录准备"步骤（因目录已存在），但 MUST 包含额外的制品扫描逻辑。resume 技能 MUST 包含模型选择逻辑的配置加载部分（读取 spec-driver.config.yaml 中的模型配置），以便恢复执行时使用正确的模型设置，但 MUST NOT 重复完整的模型选择决策表（该表仅在 run 技能中维护） [AUTO-CLARIFIED: resume 需配置加载而非完整决策表 -- 技术调研 L238-239 指出 resume 仅需"配置加载"，run 才需要"完整表"]（关联 US-3）
 - **FR-003**: 系统 MUST 在 `skills/sync/` 目录下创建独立的 `SKILL.md` 文件，包含产品规范聚合模式的完整流程（扫描 specs/ 目录、合并增量 spec、生成 current-spec.md 活文档）。sync 技能 MUST 不包含编排流程或恢复逻辑，职责单一（关联 US-1）
 - **FR-004**: 每个 SKILL.md MUST 配置正确的 frontmatter 字段：`name`（分别为 run、resume、sync）、`description`（使用具体动作词和技术术语的语义描述）、`disable-model-invocation`（run 和 resume 设为 true，sync 设为 false）（关联 US-1、US-2、US-3、US-4）
 - **FR-005**: run 技能 MUST 包含 `--rerun <phase>` 选择性重跑功能。resume 技能 MUST NOT 包含重跑逻辑 [AUTO-RESOLVED: 产研汇总已明确决策 `--rerun` 归入 run 技能，因为 rerun 需要完整的编排流程上下文（10 阶段定义、质量门）]（关联 US-2）
 - **FR-006**: resume 技能 MUST 在无可恢复制品时给出明确提示，建议用户使用 `/speckit-driver-pro:run` 启动新流程（关联 Edge Case: 制品目录不存在）
 - **FR-007**: sync 技能 MUST 在 specs/ 目录为空或不存在时给出明确提示，而非静默失败（关联 Edge Case: specs/ 目录为空）
 - **FR-008**: 系统 MUST 删除旧的 `skills/speckit-driver-pro/` 目录及其内容，确保旧的 `/speckit-driver-pro:speckit-driver-pro` 命令不再可用（关联 US-5）
-- **FR-009**: 删除旧技能目录 MUST NOT 影响 Plugin 的其他组件目录：`agents/`、`hooks/`、`scripts/`、`templates/`、`.claude-plugin/`、`driver-config.yaml`（关联 US-5）
+- **FR-009**: 删除旧技能目录 MUST NOT 影响 Plugin 的其他组件目录：`agents/`、`hooks/`、`scripts/`、`templates/`、`.claude-plugin/`、`spec-driver.config.yaml`（关联 US-5）
 - **FR-010**: 三个新技能 MUST 各自自包含（完全独立拆分），不依赖其他技能文件或共享引用文件 [AUTO-RESOLVED: 产研汇总一致推荐方案 A（完全独立拆分），共享模块 `_shared/` 明确归入二期]（关联 US-1、US-2、US-3）
 - **FR-011**: 三个技能文件中引用的模板路径和子代理 prompt 路径 MUST 使用与拆分前相同的路径格式（如 `plugins/speckit-driver-pro/templates/...`、`plugins/speckit-driver-pro/agents/...`），确保 Claude Code 能正确定位外部资源（关联 US-2、US-3）
 - **FR-012**: 迁移过程 SHOULD 采用 Strangler Fig 模式：先创建三个新技能并验证可用，再删除旧技能目录，以降低回滚风险（关联 US-5）
@@ -143,5 +143,5 @@
 | # | 问题 | 自动选择 | 理由 | 关联需求 |
 | --- | ------ | --------- | ------ | --------- |
 | 1 | Strangler Fig 共存期间（新旧技能并存时），四个技能同时出现在补全菜单中的行为是否需要特殊处理？ | 无需特殊处理，共存仅为短暂过渡态 | 技术调研推荐 Strangler Fig 模式的核心目的是降低回滚风险。Claude Code 自动发现机制天然支持新旧技能共存。共存期间仅用于功能验证，验证通过后立即删除旧技能目录 | FR-012, US-5, Edge Cases |
-| 2 | resume 技能中应包含模型选择逻辑的哪些部分？完整的模型选择决策表还是仅配置加载？ | 仅包含配置加载部分，不重复完整决策表 | 技术调研内容归属表（L238-239）明确指出 run 需要"完整表"，resume 仅需"配置加载"。resume 从 driver-config.yaml 读取模型配置即可恢复执行，不需要重复 run 中的模型选择决策逻辑 | FR-002 |
+| 2 | resume 技能中应包含模型选择逻辑的哪些部分？完整的模型选择决策表还是仅配置加载？ | 仅包含配置加载部分，不重复完整决策表 | 技术调研内容归属表（L238-239）明确指出 run 需要"完整表"，resume 仅需"配置加载"。resume 从 spec-driver.config.yaml 读取模型配置即可恢复执行，不需要重复 run 中的模型选择决策逻辑 | FR-002 |
 | 3 | SKILL.md 文件行数是否需要设置明确的上限约束？ | 是，添加 NFR-001 明确行数建议范围 | Claude Code 官方文档建议 SKILL.md 控制在 1,500-2,000 words（约 200-300 行）。技术调研预估三个技能分别为 350/150/120 行，均在合理范围内。将此建议转化为 SHOULD 级别约束（而非 MUST），保留实现灵活性 | NFR-001 |

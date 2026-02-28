@@ -33,8 +33,8 @@ disable-model-invocation: true
 
 ### 3. 配置加载
 
-- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/driver-config-template.yaml` 复制模板到项目根目录，应用选择的预设
-- 如果配置已存在：读取并解析 driver-config.yaml
+- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
+- 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
 
@@ -144,11 +144,11 @@ product/tech-research.md 存在  → 从对应阶段恢复
 
 ## 模型选择
 
-从 driver-config.yaml 读取模型配置：
+从 spec-driver.config.yaml 读取模型配置：
 
 ```text
 1. --preset 命令行参数（临时覆盖，最高优先级）
-2. driver-config.yaml 中的 agents.{agent_id}.model（仅当该子代理显式配置时生效）
+2. spec-driver.config.yaml 中的 agents.{agent_id}.model（仅当该子代理显式配置时生效）
 3. 当前 preset 的默认配置
 ```
 
@@ -157,4 +157,4 @@ product/tech-research.md 存在  → 从对应阶段恢复
 - Codex 下允许直接使用 `gpt-5/o3/...`，也支持把 `opus/sonnet` 自动映射为 Codex 模型
 - 若映射后模型不可用，回退到 `model_compat.defaults.{runtime}` 并记录 `[模型回退]`
 
-配置文件路径: `plugins/spec-driver/templates/driver-config-template.yaml`（模板）或项目根目录 `driver-config.yaml`（用户配置）。
+配置文件路径: `plugins/spec-driver/templates/spec-driver.config-template.yaml`（模板）或项目根目录 `spec-driver.config.yaml`（用户配置）。

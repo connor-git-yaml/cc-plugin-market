@@ -15,7 +15,7 @@ Task(
   description: "{阶段简述}",
   prompt: "{子代理 prompt 内容} + {上下文注入}",
   subagent_type: "general-purpose",
-  model: "{根据 driver-config.yaml 确定}"
+  model: "{根据 spec-driver.config.yaml 确定}"
 )
 ```
 

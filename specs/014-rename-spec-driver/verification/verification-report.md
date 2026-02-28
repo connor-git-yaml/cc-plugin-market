@@ -26,7 +26,7 @@
 | FR-011 | README.md v3.0.0 迁移说明 | T050 | [x] 已实现 |
 | FR-012 | settings.json plugin key 更新 | T003 | [x] 已实现 |
 | FR-013 | CLAUDE.md 功能性引用更新 | T048 | [x] 已实现 |
-| FR-014 | driver-config-template.yaml 产品名更新 | T029 | [x] 已实现 |
+| FR-014 | spec-driver.config-template.yaml 产品名更新 | T029 | [x] 已实现 |
 | FR-015 | product-spec-template.md 引用更新 | T030 | [x] 已实现 |
 | FR-016 | SKILL.md 路径引用更新 | T042-T046 | [x] 已实现 |
 | FR-017 | speckit-sync/SKILL.md 品牌名更新 | T009 | [x] 已实现 |
@@ -156,7 +156,7 @@
 - README.md（标题 + 正文）
 - postinstall.sh（PLUGIN_NAME 变量 + 脚本头注释）
 - init-project.sh（脚本头注释）
-- driver-config-template.yaml（文件头注释）
+- spec-driver.config-template.yaml（文件头注释）
 - product-spec-template.md（生成说明）
 
 #### `/spec-driver:speckit-*` 命令格式

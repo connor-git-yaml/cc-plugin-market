@@ -87,7 +87,7 @@ plugins/spec-driver/
 │   └── speckit-doc/
 │       └── SKILL.md          # [不变]
 ├── templates/
-│   └── driver-config-template.yaml  # [修改] 新增 gate_policy + gates 配置段
+│   └── spec-driver.config-template.yaml  # [修改] 新增 gate_policy + gates 配置段
 ├── scripts/
 │   └── init-project.sh       # [修改] 支持新配置字段初始化引导
 └── hooks/                     # [新增目录, MVP 第二批]
@@ -95,7 +95,7 @@ plugins/spec-driver/
     └── post-verify-collect.sh # [MVP 第二批] PostToolUse hook
 
 # 项目根目录
-driver-config.yaml             # [修改] 同步新增配置字段（项目级示例）
+spec-driver.config.yaml             # [修改] 同步新增配置字段（项目级示例）
 ```
 
 **Structure Decision**: 本特性完全在 `plugins/spec-driver/` Plugin 目录内操作，不涉及 `src/` 或 `tests/` 目录。所有变更通过 Markdown prompt 修改和 YAML 配置扩展实现，保持"纯 Markdown plugin"架构。
@@ -107,7 +107,7 @@ driver-config.yaml             # [修改] 同步新增配置字段（项目级�
 ```mermaid
 graph TB
     subgraph "Spec Driver 编排器"
-        CONFIG[driver-config.yaml<br/>gate_policy + gates]
+        CONFIG[spec-driver.config.yaml<br/>gate_policy + gates]
 
         subgraph "门禁策略引擎"
             GP[gate_policy<br/>strict/balanced/autonomous]
@@ -461,7 +461,7 @@ balanced 默认值表:
 - Fix 模式只有 4 个阶段（诊断-规划-修复-验证），门禁点较少
 - GATE_VERIFY 行为与 feature/story 模式一致
 
-### 8. driver-config-template.yaml — 配置扩展
+### 8. spec-driver.config-template.yaml — 配置扩展
 
 在现有 `quality_gates` 章节之后新增：
 
@@ -506,7 +506,7 @@ gate_policy: balanced
   - `strict` — 适合关键业务代码，所有门禁暂停
   - `balanced`（默认）— 推荐，关键门禁暂停
   - `autonomous` — 适合快速原型，仅失败暂停
-- 根据选择写入 `gate_policy` 字段到 driver-config.yaml
+- 根据选择写入 `gate_policy` 字段到 spec-driver.config.yaml
 - gates 配置不在引导中展示（高级选项，文档引导）
 
 ## Complexity Tracking

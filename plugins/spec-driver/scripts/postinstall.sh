@@ -54,7 +54,7 @@ main() {
   echo -e "    /spec-driver:speckit-sync                    # 聚合产品规范"
   echo -e "    /spec-driver:speckit-feature --rerun plan         # 重跑指定阶段"
   echo ""
-  echo -e "  ${BOLD}配置文件:${NC} driver-config.yaml（首次使用时自动引导创建）"
+  echo -e "  ${BOLD}配置文件:${NC} spec-driver.config.yaml（首次使用时自动引导创建）"
   echo ""
 
   # 创建安装标记

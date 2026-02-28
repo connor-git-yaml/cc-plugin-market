@@ -100,7 +100,7 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 
 ## 模型配置
 
-三种预设模式，通过 `driver-config.yaml` 配置：
+三种预设模式，通过 `spec-driver.config.yaml` 配置：
 
 | 预设 | 重分析任务 | 执行任务 | 适用场景 |
 |------|-----------|---------|---------|
@@ -110,7 +110,7 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 
 默认建议只配置 `preset`，保持所有子代理按预设自动选模；仅在确有需要时再单独开启 `agents.<agent>.model` 覆盖。
 
-为兼容 Codex 运行时，建议在 `driver-config.yaml` 增加模型兼容映射（保留 `opus/sonnet` 语义）：
+为兼容 Codex 运行时，建议在 `spec-driver.config.yaml` 增加模型兼容映射（保留 `opus/sonnet` 语义）：
 
 ```yaml
 model_compat:

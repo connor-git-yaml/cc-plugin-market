@@ -83,7 +83,7 @@ plugins/spec-driver/
 │   ├── postinstall.sh               # 现有脚本
 │   └── scan-project.sh              # *** 新增 *** 项目元信息收集脚本
 └── templates/
-    ├── driver-config-template.yaml  # 现有模板
+    ├── spec-driver.config-template.yaml  # 现有模板
     ├── product-research-template.md # 现有模板
     └── licenses/                    # *** 新增 *** LICENSE 模板目录
         ├── MIT.txt

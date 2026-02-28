@@ -14,7 +14,7 @@
 | 需求描述 | string | 是 | 用户输入的自然语言需求描述（`$ARGUMENTS`） |
 | --resume | flag | 否 | 恢复模式：从上次中断的阶段继续 |
 | --rerun \<phase\> | string | 否 | 选择性重跑：指定要重新执行的阶段名 |
-| --preset \<name\> | string | 否 | 临时覆盖模型预设（不修改 driver-config.yaml） |
+| --preset \<name\> | string | 否 | 临时覆盖模型预设（不修改 spec-driver.config.yaml） |
 
 ## 输出契约
 

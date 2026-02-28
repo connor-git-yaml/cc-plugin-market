@@ -1,5 +1,5 @@
 # Spec Driver - 驱动配置文件
-# 文件位置: 项目根目录/driver-config.yaml 或 .specify/driver-config.yaml
+# 文件位置: 项目根目录/spec-driver.config.yaml 或 .specify/spec-driver.config.yaml
 # 首次使用时由 init-project.sh 交互式引导创建
 
 # ═══════════════════════════════════════

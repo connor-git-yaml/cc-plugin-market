@@ -10,7 +10,7 @@
   - `{feature_dir}/spec.md`（需求规范——必须）
   - `{feature_dir}/tasks.md`（任务清单——必须）
   - 项目源代码（通过 Glob/Read 访问）
-- 配置：driver-config.yaml 中的 verification 节（自定义命令覆盖）
+- 配置：spec-driver.config.yaml 中的 verification 节（自定义命令覆盖）
 - 使用模板：`plugins/spec-driver/templates/verification-report-template.md`
 
 ## 工具权限
@@ -87,7 +87,7 @@
    - 每个子项目独立执行验证
 
 5. **自定义命令覆盖**
-   - 如果运行时上下文中提供了 driver-config.yaml 的 verification.commands，使用自定义命令覆盖默认命令
+   - 如果运行时上下文中提供了 spec-driver.config.yaml 的 verification.commands，使用自定义命令覆盖默认命令
 
 6. **执行验证**
    - 对每种检测到的语言/构建系统：
@@ -145,7 +145,7 @@
 - **不修改源代码**：验证是只读操作（Bash 命令仅为构建/测试，不含写操作）
 - **工具未安装不阻断**：优雅降级，标记"⏭️ 工具未安装"
 - **Monorepo 子项目独立报告**：某个子项目失败不阻断其他子项目
-- **遵循 driver-config.yaml 覆盖**：用户自定义命令优先于自动检测
+- **遵循 spec-driver.config.yaml 覆盖**：用户自定义命令优先于自动检测
 
 ## 失败处理
 

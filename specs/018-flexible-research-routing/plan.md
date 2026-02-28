@@ -7,19 +7,19 @@
 
 将 Feature 模式的调研阶段从固定三阶段流水线（产品调研 → 技术调研 → 产研汇总）重构为支持 6 种调研模式的灵活路由机制。通过修改编排器 Prompt（SKILL.md）中的调研阶段编排逻辑，新增模式推荐、配置默认值和命令行覆盖三层确定机制，同时适配技术调研子代理的软依赖降级和后续阶段的上下文注入调整。
 
-技术方案：在现有 `speckit-feature/SKILL.md` 中通过 Prompt 内条件分支实现模式路由（research.md Decision 1），使用关键词 + 启发式规则实现智能推荐（Decision 2），修改 `tech-research.md` 将 product-research.md 硬依赖改为软依赖（Decision 3），在 `driver-config.yaml` 模板中新增顶级 `research` 配置段（Decision 4）。
+技术方案：在现有 `speckit-feature/SKILL.md` 中通过 Prompt 内条件分支实现模式路由（research.md Decision 1），使用关键词 + 启发式规则实现智能推荐（Decision 2），修改 `tech-research.md` 将 product-research.md 硬依赖改为软依赖（Decision 3），在 `spec-driver.config.yaml` 模板中新增顶级 `research` 配置段（Decision 4）。
 
 ## Technical Context
 
 **Language/Version**: Markdown（Prompt）、YAML（配置）、Bash 5.x（辅助脚本）
 **Primary Dependencies**: 无运行时依赖。全部由 Markdown Prompt + YAML 配置构成，运行在 Claude Code 沙箱中
-**Storage**: 文件系统（`specs/[feature]/` 目录树，`driver-config.yaml` 配置文件）
+**Storage**: 文件系统（`specs/[feature]/` 目录树，`spec-driver.config.yaml` 配置文件）
 **Testing**: 手动端到端测试——分别以 6 种调研模式执行 Feature 流程，验证行为正确性
 **Target Platform**: Claude Code 沙箱
 **Project Type**: Plugin（Markdown Prompt 工程）
 **Performance Goals**: N/A（Prompt 工程无运行时性能指标）
 **Constraints**: 零运行时依赖、向后兼容、所有行为通过 Prompt 文本定义
-**Scale/Scope**: 修改 4 个文件（SKILL.md、tech-research.md、driver-config-template.yaml、driver-config.yaml），不新增文件
+**Scale/Scope**: 修改 4 个文件（SKILL.md、tech-research.md、spec-driver.config-template.yaml、spec-driver.config.yaml），不新增文件
 
 ## Constitution Check
 
@@ -64,7 +64,7 @@
 flowchart TD
     A[用户输入需求描述] --> B{--research 参数?}
     B -->|有| C[使用命令行指定模式]
-    B -->|无| D{driver-config.yaml<br/>research.default_mode?}
+    B -->|无| D{spec-driver.config.yaml<br/>research.default_mode?}
     D -->|非 auto 且有效| E[使用配置文件默认模式]
     D -->|auto 或未配置| F[智能推荐引擎]
 
@@ -162,9 +162,9 @@ plugins/spec-driver/
 ├── agents/
 │   └── tech-research.md                  # [修改] 技术调研子代理——product-research 硬依赖改软依赖
 └── templates/
-    └── driver-config-template.yaml       # [修改] 配置模板——新增 research 配置段
+    └── spec-driver.config-template.yaml       # [修改] 配置模板——新增 research 配置段
 
-driver-config.yaml                         # [修改] 项目实例配置——同步新增 research 配置段
+spec-driver.config.yaml                         # [修改] 项目实例配置——同步新增 research 配置段
 ```
 
 **Structure Decision**: 本特性不新增任何文件，全部通过修改 4 个现有文件实现。这符合 Constitution VIII（行为变更通过修改 Prompt 文本实现）和 IX（不增加运行时依赖）的要求。
@@ -197,7 +197,7 @@ driver-config.yaml                         # [修改] 项目实例配置——�
 
 在 Constitution 检查通过后、调研阶段开始前，确定本次执行的调研模式。
 
-**确定优先级**: (1) `--research` 命令行参数（最高） → (2) `driver-config.yaml` 中 `research.default_mode`（非 `auto` 时） → (3) 智能推荐
+**确定优先级**: (1) `--research` 命令行参数（最高） → (2) `spec-driver.config.yaml` 中 `research.default_mode`（非 `auto` 时） → (3) 智能推荐
 
 **智能推荐逻辑**（当无命令行参数且配置为 `auto` 或未配置时）:
 
@@ -224,7 +224,7 @@ driver-config.yaml                         # [修改] 项目实例配置——�
   3. product-only — 仅产品调研，适合需要市场验证的需求
   4. codebase-scan — 代码库扫描（与 Story 模式相同），适合中等规模增量功能
   5. skip       — 跳过调研，适合简单修复和微小功能
-  6. custom     — 自定义步骤组合（需在 driver-config.yaml 中配置 custom_steps）
+  6. custom     — 自定义步骤组合（需在 spec-driver.config.yaml 中配置 custom_steps）
 
   请输入编号（1-6）确认，或直接回车使用推荐模式 [{推荐模式}]:
 ```
@@ -409,9 +409,9 @@ elif research_mode == "custom":
 
 ---
 
-### Change 3: driver-config-template.yaml — 新增 research 配置段
+### Change 3: spec-driver.config-template.yaml — 新增 research 配置段
 
-**文件**: `plugins/spec-driver/templates/driver-config-template.yaml`
+**文件**: `plugins/spec-driver/templates/spec-driver.config-template.yaml`
 **变更位置**: 在 `agents:` 配置段之后、`verification:` 配置段之前
 
 新增内容：
@@ -443,9 +443,9 @@ research:
 
 ---
 
-### Change 4: driver-config.yaml — 同步新增 research 配置段
+### Change 4: spec-driver.config.yaml — 同步新增 research 配置段
 
-**文件**: `driver-config.yaml`（项目根目录）
+**文件**: `spec-driver.config.yaml`（项目根目录）
 **变更**: 在 `agents:` 段之后、`verification:` 段之前新增与模板相同的 `research:` 配置段
 
 ```yaml
