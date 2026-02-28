@@ -461,14 +461,23 @@ model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5
-      sonnet: gpt-5-mini
+      opus: gpt-5.3-codex
+      sonnet: gpt-5.3-codex
     claude:
+      gpt-5.3-codex: sonnet
       gpt-5: opus
       gpt-5-mini: sonnet
   defaults:
-    codex: gpt-5
+    codex: gpt-5.3-codex
     claude: sonnet
+
+# Codex thinking level (use one model + adjust effort)
+codex_thinking:
+  default_level: medium  # low | medium | high
+  level_map:
+    opus: high
+    sonnet: medium
+    haiku: low
 
 # Gate policy: strict | balanced | autonomous
 gate_policy: balanced
@@ -497,7 +506,7 @@ verification:
 | `quality-first` | Opus | Opus |
 | `cost-efficient` | Sonnet | Sonnet |
 
-When running in Codex, model names are normalized via `model_compat` before each Task dispatch, so existing `opus/sonnet` configs remain compatible.
+When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both to `gpt-5.3-codex`; depth is controlled by `codex_thinking` levels.
 
 `reverse-spec` CLI (`generate` / `batch` / `diff`) now follows the same model config source:
 

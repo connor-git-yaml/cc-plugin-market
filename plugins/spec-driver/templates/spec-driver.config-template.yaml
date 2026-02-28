@@ -1,33 +1,43 @@
 # Spec Driver - 驱动配置文件
 # 文件位置: 项目根目录/spec-driver.config.yaml 或 .specify/spec-driver.config.yaml
 # 首次使用时由 init-project.sh 交互式引导创建
+#
+# 快速填写指南（建议按顺序）:
+# 1) 新手只改 `preset`，其余保持默认即可运行
+# 2) 需要精细调参时再打开 `agents.<agent>.model` 覆盖
+# 3) Codex 运行时推荐固定模型为 `gpt-5.3-codex`，通过 `codex_thinking` 调整思考等级
 
 # ═══════════════════════════════════════
-# 模型预设
+# 模型预设（第一优先）
 # ═══════════════════════════════════════
 # 可选值: balanced | quality-first | cost-efficient
 #
 # balanced（默认）:
-#   重分析任务（调研、规范、规划、分析）使用 Opus
-#   执行任务（澄清、检查表、任务分解、实现、验证）使用 Sonnet
+#   - 重分析任务（调研、规范、规划、分析）使用 Opus 语义
+#   - 执行任务（澄清、检查表、任务分解、实现、验证）使用 Sonnet 语义
 #
 # quality-first:
-#   所有阶段均使用 Opus（最高质量，成本较高）
+#   - 所有阶段都按 Opus 语义执行（质量优先，成本较高）
 #
 # cost-efficient:
-#   所有阶段均使用 Sonnet（成本最低，适合探索性需求）
+#   - 所有阶段都按 Sonnet 语义执行（成本优先，适合探索）
 #
 preset: balanced
 
 # ═══════════════════════════════════════
-# 子代理模型配置（覆盖预设）
+# 子代理模型覆盖（第二优先）
 # ═══════════════════════════════════════
-# 每个子代理可独立配置 model 字段
+# 使用方式:
+# - 不配置: 全部跟随 preset
+# - 按需取消注释某个 agent: 仅覆盖该阶段
+#
 # 可选值:
-# - Claude 逻辑名: opus | sonnet（推荐，跨端可移植）
-# - 运行时原生模型名: 例如 gpt-5 / gpt-5-mini / o3（按运行时支持情况）
-# 默认不配置（全部跟随 preset）
-# 仅当某个子代理需要单独模型时，取消注释对应条目
+# - Claude 逻辑名（推荐，跨端可移植）: opus | sonnet | haiku
+# - 运行时原生模型名（高级）: 例如 gpt-5.3-codex
+#
+# 常见示例:
+# - plan/verify 想更稳: 改为 opus
+# - tasks/implement 想省成本: 改为 sonnet
 #
 agents:
   # --- 重分析任务（balanced 预设下默认 opus）---
@@ -57,35 +67,66 @@ agents:
 # ═══════════════════════════════════════
 # 模型运行时兼容（Claude / Codex）
 # ═══════════════════════════════════════
-# 目的: 保留现有 preset/agents 语义，同时允许在不同运行时自动映射模型名。
+# 目的:
+# - 保留 preset/agents 的语义（opus/sonnet/haiku）
+# - 在不同运行时自动映射成可用模型名
 #
 # runtime:
-#   auto   - 自动识别运行时（检测到 Codex 环境则按 codex 映射）
+#   auto   - 自动识别运行时（推荐）
 #   claude - 强制按 Claude 映射
 #   codex  - 强制按 Codex 映射
 #
 # aliases:
-#   codex  - 当配置写的是 Claude 逻辑名（opus/sonnet）时，映射到 Codex 可用模型
-#   claude - 当配置写的是 Codex 原生模型名时，映射回 Claude 逻辑名
+#   codex  - Claude 逻辑名 -> Codex 模型名
+#   claude - Codex 模型名 -> Claude 逻辑名（用于反向兼容）
 #
 # defaults:
-#   当映射后的模型在当前运行时不可用时，回退到对应默认模型
+#   当映射后的模型不可用时，回退到该运行时默认模型
+#
+# 说明:
+# - Codex 默认统一映射到 `gpt-5.3-codex`
+# - 思考深度不靠“切模型”，而是由下方 `codex_thinking` 控制
 #
 model_compat:
   runtime: auto
   aliases:
     codex:
-      opus: gpt-5
-      sonnet: gpt-5-mini
-      haiku: gpt-5-mini
+      opus: gpt-5.3-codex
+      sonnet: gpt-5.3-codex
+      haiku: gpt-5.3-codex
     claude:
+      gpt-5.3-codex: sonnet
       gpt-5: opus
       gpt-5-mini: sonnet
       o3: opus
       o4-mini: sonnet
   defaults:
-    codex: gpt-5
+    codex: gpt-5.3-codex
     claude: sonnet
+
+# ═══════════════════════════════════════
+# Codex Thinking 等级（Codex 专用）
+# ═══════════════════════════════════════
+# 适用场景:
+# - runtime=codex 或 auto 且识别为 Codex
+#
+# level 可选值: low | medium | high
+#
+# 建议:
+# - 默认使用 medium
+# - 复杂设计/关键验证用 high
+# - 简单改动或高并发批处理可用 low
+#
+# level_map 的作用:
+# - 当上游语义模型是 opus/sonnet/haiku 时，映射到对应 thinking level
+# - 未命中时使用 default_level
+#
+codex_thinking:
+  default_level: medium
+  level_map:
+    opus: high
+    sonnet: medium
+    haiku: low
 
 # ═══════════════════════════════════════
 # 调研阶段配置（Feature 模式）

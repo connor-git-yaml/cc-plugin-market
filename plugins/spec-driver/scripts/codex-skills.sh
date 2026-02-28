@@ -113,7 +113,7 @@ $input_rule
 5. 所有写入路径必须与 source skill 约定一致，不得越界写入。
 6. 读取 \`spec-driver.config.yaml\` 的模型配置时，先执行运行时兼容归一化：
    - 优先级保持 \`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\`
-   - 当 runtime=codex（或自动识别为 Codex）时，默认将 \`opus/sonnet\` 映射为 \`gpt-5/gpt-5-mini\`
+   - 当 runtime=codex（或自动识别为 Codex）时，默认将 \`opus/sonnet\` 映射为 \`gpt-5.3-codex\`，并通过 \`codex_thinking.level_map\` 选择思考等级
    - 若映射后模型不可用，回退到 \`model_compat.defaults.codex\` 并标注 \`[模型回退]\`
 EOF_SKILL
 }

@@ -117,13 +117,20 @@ model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5
-      sonnet: gpt-5-mini
+      opus: gpt-5.3-codex
+      sonnet: gpt-5.3-codex
   defaults:
-    codex: gpt-5
+    codex: gpt-5.3-codex
+
+codex_thinking:
+  default_level: medium  # low | medium | high
+  level_map:
+    opus: high
+    sonnet: medium
+    haiku: low
 ```
 
-说明：在 Codex 执行时，`opus/sonnet` 会先映射到 Codex 可用模型，再发起任务调用。
+说明：在 Codex 执行时，`opus/sonnet` 语义会先映射到 `gpt-5.3-codex`，再通过 `codex_thinking` 选择思考等级（而非切换模型）。
 
 ## 子代理列表
 

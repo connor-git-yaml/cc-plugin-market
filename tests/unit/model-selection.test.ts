@@ -68,6 +68,23 @@ model_compat:
     expect(result.model).toBe(OPUS_MODEL);
   });
 
+  it('支持将 gpt-5.3-codex thinking 别名映射回 Claude 逻辑模型', () => {
+    writeConfig(
+      tempDir,
+      `
+preset: balanced
+agents:
+  specify:
+    model: gpt-5.3-codex-thinking-high
+`,
+    );
+
+    const result = resolveReverseSpecModel({ cwd: tempDir, env: process.env });
+
+    expect(result.source).toBe('driver-config-agent');
+    expect(result.model).toBe(OPUS_MODEL);
+  });
+
   it('无 agent 覆盖时按 preset 选模', () => {
     writeConfig(
       tempDir,
@@ -106,4 +123,3 @@ function writeConfig(dir: string, content: string, fileName = 'spec-driver.confi
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, fileName), content.trimStart(), 'utf-8');
 }
-

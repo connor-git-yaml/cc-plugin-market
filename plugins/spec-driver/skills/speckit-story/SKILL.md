@@ -346,7 +346,7 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
 
 - 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值
 - 兼容归一化：按 `model_compat.runtime` 解析当前运行时（auto/claude/codex）
-- Codex 下默认将 `opus/sonnet` 映射到可用模型（默认 `gpt-5/gpt-5-mini`）
+- Codex 下默认将 `opus/sonnet/haiku` 映射到 `gpt-5.3-codex`，并通过 `codex_thinking.level_map` 选择 `low|medium|high` 思考等级
 - 若映射后模型不可用，回退到 `model_compat.defaults.codex` 并记录 `[模型回退]`
 
 ---

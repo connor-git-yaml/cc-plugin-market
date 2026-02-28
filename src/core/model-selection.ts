@@ -18,6 +18,10 @@ const PRESET_MODEL_MAP: Record<string, string> = {
 };
 
 const DEFAULT_CLAUDE_ALIASES: Record<string, string> = {
+  'gpt-5.3-codex': 'sonnet',
+  'gpt-5.3-codex-thinking-high': 'opus',
+  'gpt-5.3-codex-thinking-medium': 'sonnet',
+  'gpt-5.3-codex-thinking-low': 'haiku',
   'gpt-5': 'opus',
   'gpt-5-mini': 'sonnet',
   o3: 'opus',

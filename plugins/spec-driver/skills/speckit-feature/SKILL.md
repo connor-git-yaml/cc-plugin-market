@@ -51,7 +51,7 @@ disable-model-invocation: true
 - 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
-- 解析 `model_compat` 配置段（可选，向后兼容）：如果缺失则使用内置默认映射（Codex: `opus->gpt-5`, `sonnet->gpt-5-mini`）
+- 解析 `model_compat` 和 `codex_thinking` 配置段（可选，向后兼容）：如果缺失则使用内置默认值（Codex: `opus/sonnet/haiku -> gpt-5.3-codex`；thinking level: `opus->high`, `sonnet->medium`, `haiku->low`）
 
 ### 4. 门禁配置加载
 
@@ -789,8 +789,8 @@ if 仍然失败:
        b) 其他情况 -> claude
 
 3. 读取映射表（若未配置，使用默认）:
-   codex 默认映射: opus->gpt-5, sonnet->gpt-5-mini, haiku->gpt-5-mini
-   claude 默认映射: gpt-5->opus, gpt-5-mini->sonnet, o3->opus, o4-mini->sonnet
+   codex 默认映射: opus->gpt-5.3-codex, sonnet->gpt-5.3-codex, haiku->gpt-5.3-codex
+   claude 默认映射: gpt-5.3-codex->sonnet, gpt-5->opus, gpt-5-mini->sonnet, o3->opus, o4-mini->sonnet
 
 4. 归一化:
    if candidate_model 在 runtime 对应 aliases 中:
@@ -805,7 +805,13 @@ if 仍然失败:
    else if resolved_model != candidate_model:
      输出: [模型映射] agent={agent_id} source={candidate_model} resolved={resolved_model}
 
-6. Task 调用使用 resolved_model
+6. Codex Thinking 等级（仅 runtime=codex 生效）:
+   - 读取 codex_thinking.level_map（默认 opus->high, sonnet->medium, haiku->low）
+   - 按 candidate_model 的逻辑语义取 thinking_level；未命中则用 codex_thinking.default_level（默认 medium）
+   - 输出: [思考等级] agent={agent_id} level={thinking_level}
+   - 注意: 思考等级用于控制推理深度，不改变 resolved_model
+
+7. Task 调用使用 resolved_model（及 thinking_level）
 ```
 
 说明：该归一化仅处理“模型名调度差异”，不改变阶段顺序、质量门、产物路径或门禁语义。
