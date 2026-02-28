@@ -46,6 +46,9 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 
 - [Claude Code](https://claude.com/claude-code) CLI installed and authenticated
 
+> Note: Plugin Marketplace commands above are Claude Code specific.  
+> For Codex, use the CLI + skill installation flow in the **Codex Support** section below.
+
 ### Add the Marketplace
 
 ```bash
@@ -102,6 +105,62 @@ claude plugin list
 ```
 <!-- speckit:section:plugin-installation:end -->
 
+### Codex Support
+
+For Codex, install `reverse-spec` CLI and register reverse-spec skills into `.codex/skills`:
+
+```bash
+# Install CLI
+npm install -g reverse-spec
+
+# Project-level Codex skills
+reverse-spec init --target codex
+
+# Or global Codex skills
+reverse-spec init --global --target codex
+```
+
+Install both Claude + Codex skills in one command:
+
+```bash
+reverse-spec init --global --target both
+```
+
+Optional: control npm postinstall target with environment variable:
+
+```bash
+REVERSE_SPEC_SKILL_TARGET=codex npm install -g reverse-spec
+# values: claude | codex | both
+```
+
+Spec Driver uses an independent Codex entrypoint (parallel to reverse-spec):
+
+```bash
+# Run from repository root
+
+# Install Spec Driver Codex wrapper skills (project-level)
+npm run codex:spec-driver:install
+
+# Install globally
+npm run codex:spec-driver:install:global
+
+# Remove
+npm run codex:spec-driver:remove
+```
+
+Equivalent low-level script commands:
+
+```bash
+bash plugins/spec-driver/scripts/codex-skills.sh install
+bash plugins/spec-driver/scripts/codex-skills.sh install --global
+bash plugins/spec-driver/scripts/codex-skills.sh remove
+bash plugins/spec-driver/scripts/codex-skills.sh remove --global
+```
+
+Notes:
+- Project mode installs to the current git repository root (or current directory when not in a git repo).
+- Global mode writes wrappers with absolute source paths. If this repository path changes, rerun `install`.
+
 ---
 
 <!-- speckit:section:reverse-spec -->
@@ -134,7 +193,8 @@ A hybrid AST + LLM pipeline that reverse-engineers legacy source code into struc
 npm install -g reverse-spec
 ```
 
-After installation, `reverse-spec` CLI is available globally, and `/reverse-spec` skills are auto-registered in Claude Code.
+After installation, `reverse-spec` CLI is available globally, and skills are auto-registered to Claude Code by default.  
+If Codex is detected (`~/.codex` exists), Codex skill registration is also attempted automatically.
 
 **Or from source:**
 
@@ -166,10 +226,10 @@ reverse-spec generate src/auth/ --output-dir out/
 reverse-spec auth-status --verify
 
 # Install skills to current project / globally
-reverse-spec init [--global]
+reverse-spec init [--global] [--target claude|codex|both]
 
 # Remove installed skills
-reverse-spec init --remove
+reverse-spec init --remove [--target claude|codex|both]
 ```
 
 ### Claude Code Skills
@@ -179,6 +239,14 @@ reverse-spec init --remove
 /reverse-spec-batch                              # Full project batch
 /reverse-spec-diff specs/auth.spec.md src/auth/  # Drift detection
 ```
+
+### Codex Skills
+
+In Codex, after `reverse-spec init --target codex`, these skills are available:
+
+- `reverse-spec`
+- `reverse-spec-batch`
+- `reverse-spec-diff`
 
 ### Architecture
 
@@ -225,9 +293,12 @@ Each phase is handled by a dedicated sub-agent with scoped permissions. The orch
 
 ### Setup
 
-Spec Driver is distributed as a Claude Code plugin. It is included in this repository under `plugins/spec-driver/` and is registered automatically when the project is opened in Claude Code.
+Spec Driver keeps a single workflow source under `plugins/spec-driver/skills/*/SKILL.md`, with parallel installation entrypoints:
 
-To initialize Spec Driver in a new project:
+- Claude Code: distributed as a plugin and auto-registered when the project is opened in Claude Code
+- Codex: install wrapper skills from repository root via `npm run codex:spec-driver:install` (or `npm run codex:spec-driver:install:global`)
+
+To initialize Spec Driver in a new project (Claude Code):
 
 ```bash
 # Creates .specify/ directory, constitution.md, and driver-config.yaml

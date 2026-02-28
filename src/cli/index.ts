@@ -31,7 +31,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   reverse-spec prepare <target> [--deep]
   reverse-spec batch [--force] [--output-dir <dir>]
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
-  reverse-spec init [--global] [--remove]
+  reverse-spec init [--global] [--remove] [--target <claude|codex|both>]
   reverse-spec auth-status [--verify]
   reverse-spec mcp-server
   reverse-spec --version / --help
@@ -41,7 +41,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   prepare       AST 预处理 + 上下文组装，输出到 stdout（无需认证）
   batch         批量生成当前项目所有模块的 Spec
   diff          检测 Spec 与源代码之间的漂移
-  init          安装 Claude Code skills 到项目或全局目录
+  init          安装 skills 到 Claude Code / Codex 的项目或全局目录
   auth-status   查看当前认证状态（API Key / Claude CLI）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
@@ -51,8 +51,9 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   2. Claude Code CLI 订阅登录（spawn CLI 子进程代理）
 
 选项:
-  --global, -g   安装到全局 ~/.claude/skills/（仅 init）
+  --global, -g   安装到全局 ~/.claude/skills/ 或 ~/.codex/skills/（由 --target 决定，仅 init）
   --remove       移除已安装的 skills（仅 init）
+  --target       目标平台: claude | codex | both（仅 init，默认 claude）
   --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
   --force        强制重新生成所有 Spec（仅 batch）

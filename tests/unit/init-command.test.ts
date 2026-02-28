@@ -22,6 +22,7 @@ describe('parse-args: init 子命令', () => {
       expect(result.command.subcommand).toBe('init');
       expect(result.command.global).toBe(false);
       expect(result.command.remove).toBe(false);
+      expect(result.command.skillTarget).toBe('claude');
     }
   });
 
@@ -61,6 +62,41 @@ describe('parse-args: init 子命令', () => {
       expect(result.command.subcommand).toBe('init');
       expect(result.command.remove).toBe(true);
       expect(result.command.global).toBe(true);
+      expect(result.command.skillTarget).toBe('claude');
+    }
+  });
+
+  it('解析 init --target codex', () => {
+    const result = parseArgs(['init', '--target', 'codex']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.skillTarget).toBe('codex');
+    }
+  });
+
+  it('解析 init --target both', () => {
+    const result = parseArgs(['init', '--target', 'both']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.skillTarget).toBe('both');
+    }
+  });
+
+  it('init --target 缺少值时报错', () => {
+    const result = parseArgs(['init', '--target']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('--target');
+    }
+  });
+
+  it('init --target 无效值时报错', () => {
+    const result = parseArgs(['init', '--target', 'foo']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('取值无效');
     }
   });
 
@@ -83,12 +119,22 @@ describe('parse-args: init 子命令', () => {
     }
   });
 
+  it('非 init 命令使用 --target 报错', () => {
+    const result = parseArgs(['generate', 'src/', '--target', 'codex']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('--target');
+    }
+  });
+
   it('init 带位置参数报错', () => {
     const result = parseArgs(['init', 'src/']);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.type).toBe('invalid_option');
       expect(result.error.message).toContain('不接受位置参数');
+      expect(result.error.message).toContain('--target');
     }
   });
 
@@ -115,7 +161,7 @@ describe('init 命令集成流程', () => {
 
   it('项目级安装完整流程', () => {
     const targetDir = join(tempDir, '.claude', 'skills');
-    const summary = installSkills({ targetDir, mode: 'project' });
+    const summary = installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
     // 验证 3 个 skill 安装成功
     expect(summary.results).toHaveLength(3);
@@ -141,7 +187,7 @@ describe('init 命令集成流程', () => {
 
   it('--global 正确传递 mode=global', () => {
     const targetDir = join(tempDir, 'global-skills');
-    const summary = installSkills({ targetDir, mode: 'global' });
+    const summary = installSkills({ targetDir, mode: 'global', platform: 'claude' });
     expect(summary.mode).toBe('global');
 
     const output = formatSummary(summary);
@@ -153,10 +199,10 @@ describe('init 命令集成流程', () => {
     const targetDir = join(tempDir, '.claude', 'skills');
 
     // 先安装
-    installSkills({ targetDir, mode: 'project' });
+    installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
     // 再移除
-    const summary = removeSkills({ targetDir, mode: 'project' });
+    const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
     expect(summary.action).toBe('remove');
     for (const result of summary.results) {
       expect(result.status).toBe('removed');
@@ -168,7 +214,7 @@ describe('init 命令集成流程', () => {
 
   it('--remove 无已安装 skill 时输出无需清理', () => {
     const targetDir = join(tempDir, 'empty', '.claude', 'skills');
-    const summary = removeSkills({ targetDir, mode: 'project' });
+    const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
 
     const output = formatSummary(summary);
     expect(output).toBe('未检测到已安装的 reverse-spec skills，无需清理');
@@ -178,10 +224,10 @@ describe('init 命令集成流程', () => {
     const targetDir = join(tempDir, 'global-skills');
 
     // 先安装
-    installSkills({ targetDir, mode: 'global' });
+    installSkills({ targetDir, mode: 'global', platform: 'claude' });
 
     // 再移除
-    const summary = removeSkills({ targetDir, mode: 'global' });
+    const summary = removeSkills({ targetDir, mode: 'global', platform: 'claude' });
     expect(summary.mode).toBe('global');
     for (const result of summary.results) {
       expect(result.status).toBe('removed');

@@ -24,6 +24,10 @@
     "lint": "tsc --noEmit",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:check": "bash scripts/check-plugin-sync.sh",
+    "codex:spec-driver:install": "bash plugins/spec-driver/scripts/codex-skills.sh install",
+    "codex:spec-driver:install:global": "bash plugins/spec-driver/scripts/codex-skills.sh install --global",
+    "codex:spec-driver:remove": "bash plugins/spec-driver/scripts/codex-skills.sh remove",
+    "codex:spec-driver:remove:global": "bash plugins/spec-driver/scripts/codex-skills.sh remove --global",
     "postinstall": "node dist/scripts/postinstall.js",
     "preuninstall": "node dist/scripts/preuninstall.js"
   },

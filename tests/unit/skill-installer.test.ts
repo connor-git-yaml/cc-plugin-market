@@ -19,7 +19,10 @@ import {
   resolveTargetDir,
   formatSummary,
 } from '../../src/installer/skill-installer.js';
-import { SKILL_DEFINITIONS } from '../../src/installer/skill-templates.js';
+import {
+  SKILL_DEFINITIONS,
+  getSkillDefinitionsForPlatform,
+} from '../../src/installer/skill-templates.js';
 
 describe('skill-installer', () => {
   let tempDir: string;
@@ -35,7 +38,7 @@ describe('skill-installer', () => {
   describe('installSkills', () => {
     it('项目级安装 3 个 skill', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
-      const summary = installSkills({ targetDir, mode: 'project' });
+      const summary = installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       expect(summary.mode).toBe('project');
       expect(summary.action).toBe('install');
@@ -57,7 +60,7 @@ describe('skill-installer', () => {
 
     it('全局级安装', () => {
       const targetDir = join(tempDir, 'global-skills');
-      const summary = installSkills({ targetDir, mode: 'global' });
+      const summary = installSkills({ targetDir, mode: 'global', platform: 'claude' });
 
       expect(summary.mode).toBe('global');
       expect(summary.results).toHaveLength(3);
@@ -70,7 +73,7 @@ describe('skill-installer', () => {
       const targetDir = join(tempDir, 'deep', 'nested', '.claude', 'skills');
       expect(existsSync(targetDir)).toBe(false);
 
-      installSkills({ targetDir, mode: 'project' });
+      installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       expect(existsSync(targetDir)).toBe(true);
       expect(
@@ -82,13 +85,13 @@ describe('skill-installer', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
       // 首次安装
-      const first = installSkills({ targetDir, mode: 'project' });
+      const first = installSkills({ targetDir, mode: 'project', platform: 'claude' });
       for (const r of first.results) {
         expect(r.status).toBe('installed');
       }
 
       // 二次安装
-      const second = installSkills({ targetDir, mode: 'project' });
+      const second = installSkills({ targetDir, mode: 'project', platform: 'claude' });
       for (const r of second.results) {
         expect(r.status).toBe('updated');
       }
@@ -105,7 +108,7 @@ describe('skill-installer', () => {
       const batchFile = join(batchDir, 'SKILL.md');
       mkdirSync(batchFile, { recursive: true }); // 创建为目录而非文件
 
-      const summary = installSkills({ targetDir, mode: 'project' });
+      const summary = installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       // 应有 3 个结果
       expect(summary.results).toHaveLength(3);
@@ -128,6 +131,25 @@ describe('skill-installer', () => {
       expect(batchResult?.status).toBe('failed');
       expect(batchResult?.error).toBeDefined();
     });
+
+    it('codex 平台安装仅包含 reverse-spec 三件套', () => {
+      const targetDir = join(tempDir, '.codex', 'skills');
+      const summary = installSkills({ targetDir, mode: 'project', platform: 'codex' });
+      const expected = getSkillDefinitionsForPlatform('codex');
+
+      expect(summary.results).toHaveLength(expected.length);
+      const installedSkillNames = summary.results.map((r) => r.skillName);
+      expect(installedSkillNames).toContain('reverse-spec');
+      expect(installedSkillNames).toContain('reverse-spec-batch');
+      expect(installedSkillNames).toContain('reverse-spec-diff');
+      expect(installedSkillNames).not.toContain('spec-driver-feature');
+      expect(
+        existsSync(join(targetDir, 'reverse-spec', 'SKILL.md')),
+      ).toBe(true);
+      expect(
+        existsSync(join(targetDir, 'reverse-spec-batch', 'SKILL.md')),
+      ).toBe(true);
+    });
   });
 
   describe('removeSkills', () => {
@@ -135,10 +157,10 @@ describe('skill-installer', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
       // 先安装
-      installSkills({ targetDir, mode: 'project' });
+      installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       // 再移除
-      const summary = removeSkills({ targetDir, mode: 'project' });
+      const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       expect(summary.action).toBe('remove');
       expect(summary.results).toHaveLength(3);
@@ -154,7 +176,7 @@ describe('skill-installer', () => {
 
     it('目录不存在时返回 skipped', () => {
       const targetDir = join(tempDir, 'nonexistent', '.claude', 'skills');
-      const summary = removeSkills({ targetDir, mode: 'project' });
+      const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       expect(summary.results).toHaveLength(3);
       for (const result of summary.results) {
@@ -166,7 +188,7 @@ describe('skill-installer', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
       // 安装 reverse-spec skills
-      installSkills({ targetDir, mode: 'project' });
+      installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       // 创建一个"其他" skill
       const otherDir = join(targetDir, 'other-skill');
@@ -174,7 +196,7 @@ describe('skill-installer', () => {
       writeFileSync(join(otherDir, 'SKILL.md'), '# Other skill');
 
       // 移除
-      removeSkills({ targetDir, mode: 'project' });
+      removeSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       // 其他 skill 仍然存在
       expect(existsSync(join(otherDir, 'SKILL.md'))).toBe(true);
@@ -184,13 +206,23 @@ describe('skill-installer', () => {
 
   describe('resolveTargetDir', () => {
     it('project 模式返回 cwd/.claude/skills', () => {
-      const result = resolveTargetDir('project');
+      const result = resolveTargetDir('project', 'claude');
       expect(result).toBe(join(process.cwd(), '.claude', 'skills'));
     });
 
     it('global 模式返回 ~/.claude/skills', () => {
-      const result = resolveTargetDir('global');
+      const result = resolveTargetDir('global', 'claude');
       expect(result).toBe(join(homedir(), '.claude', 'skills'));
+    });
+
+    it('project + codex 返回 cwd/.codex/skills', () => {
+      const result = resolveTargetDir('project', 'codex');
+      expect(result).toBe(join(process.cwd(), '.codex', 'skills'));
+    });
+
+    it('global + codex 返回 ~/.codex/skills', () => {
+      const result = resolveTargetDir('global', 'codex');
+      expect(result).toBe(join(homedir(), '.codex', 'skills'));
     });
   });
 
@@ -199,6 +231,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'project',
         action: 'install',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -228,6 +261,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'project',
         action: 'install',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -256,6 +290,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'global',
         action: 'install',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -285,6 +320,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'project',
         action: 'remove',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -313,6 +349,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'project',
         action: 'remove',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -340,6 +377,7 @@ describe('skill-installer', () => {
       const output = formatSummary({
         mode: 'project',
         action: 'install',
+        platform: 'claude',
         results: [
           {
             skillName: 'reverse-spec',
@@ -364,6 +402,26 @@ describe('skill-installer', () => {
       expect(output).toContain('部分失败');
       expect(output).toContain('⚠ 失败');
       expect(output).toContain('权限不足');
+    });
+
+    it('codex 平台输出包含 .codex 路径和 Codex 提示', () => {
+      const output = formatSummary({
+        mode: 'project',
+        action: 'install',
+        platform: 'codex',
+        results: [
+          {
+            skillName: 'reverse-spec',
+            status: 'installed',
+            targetPath: '.codex/skills/reverse-spec/SKILL.md',
+          },
+        ],
+        targetBasePath: '.codex/skills',
+      });
+
+      expect(output).toContain('Codex');
+      expect(output).toContain('.codex/skills/reverse-spec/SKILL.md');
+      expect(output).toContain('$reverse-spec');
     });
   });
 });
