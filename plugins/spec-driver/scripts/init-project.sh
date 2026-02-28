@@ -33,6 +33,7 @@ done
 # 项目根目录（假定从项目根运行）
 PROJECT_ROOT="$(pwd)"
 SPECIFY_DIR="${PROJECT_ROOT}/.specify"
+SPECIFY_TEMPLATES_DIR="${SPECIFY_DIR}/templates"
 CONSTITUTION_FILE="${SPECIFY_DIR}/memory/constitution.md"
 CONFIG_FILE="${PROJECT_ROOT}/driver-config.yaml"
 ALT_CONFIG_FILE="${SPECIFY_DIR}/driver-config.yaml"
@@ -40,6 +41,16 @@ ALT_CONFIG_FILE="${SPECIFY_DIR}/driver-config.yaml"
 # 获取 Plugin 目录（相对于脚本位置）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
+SPECIFY_BASE_TEMPLATES_DIR="${PLUGIN_DIR}/templates/specify-base"
+FALLBACK_SPECIFY_TEMPLATES_DIR="${PLUGIN_DIR}/../../.specify/templates"
+REQUIRED_SPECIFY_TEMPLATES=(
+  "plan-template.md"
+  "spec-template.md"
+  "tasks-template.md"
+  "checklist-template.md"
+  "constitution-template.md"
+  "agent-file-template.md"
+)
 
 # 初始化结果
 INIT_RESULTS=()
@@ -53,27 +64,52 @@ SKILL_MAP=""
 init_specify_dir() {
   if [[ -d "$SPECIFY_DIR" ]]; then
     INIT_RESULTS+=("specify_dir:exists")
-    return 0
+  else
+    INIT_RESULTS+=("specify_dir:created")
   fi
 
-  # 创建目录结构
+  # 目录结构确保存在（幂等）
   mkdir -p "${SPECIFY_DIR}/memory"
   mkdir -p "${SPECIFY_DIR}/templates"
   mkdir -p "${SPECIFY_DIR}/scripts/bash"
+}
 
-  # 复制模板（如果 Plugin 中有的话）
-  if [[ -d "${PLUGIN_DIR}/templates" ]]; then
-    # 不覆盖已有文件
-    for template in "${PLUGIN_DIR}/templates/"*; do
-      local basename
-      basename="$(basename "$template")"
-      if [[ ! -f "${SPECIFY_DIR}/templates/${basename}" ]]; then
-        cp "$template" "${SPECIFY_DIR}/templates/"
-      fi
-    done
+sync_specify_templates() {
+  local copied_count=0
+  local missing_templates=()
+
+  for template_name in "${REQUIRED_SPECIFY_TEMPLATES[@]}"; do
+    local target_path="${SPECIFY_TEMPLATES_DIR}/${template_name}"
+    if [[ -f "$target_path" ]]; then
+      continue
+    fi
+
+    local source_path=""
+    if [[ -f "${SPECIFY_BASE_TEMPLATES_DIR}/${template_name}" ]]; then
+      source_path="${SPECIFY_BASE_TEMPLATES_DIR}/${template_name}"
+    elif [[ -f "${FALLBACK_SPECIFY_TEMPLATES_DIR}/${template_name}" ]]; then
+      source_path="${FALLBACK_SPECIFY_TEMPLATES_DIR}/${template_name}"
+    fi
+
+    if [[ -n "$source_path" ]]; then
+      cp "$source_path" "$target_path"
+      copied_count=$((copied_count + 1))
+    else
+      missing_templates+=("$template_name")
+    fi
+  done
+
+  if [[ $copied_count -gt 0 ]]; then
+    INIT_RESULTS+=("specify_templates:copied:${copied_count}")
   fi
 
-  INIT_RESULTS+=("specify_dir:created")
+  if [[ ${#missing_templates[@]} -eq 0 ]]; then
+    INIT_RESULTS+=("specify_templates:ready")
+  else
+    local missing_csv
+    missing_csv="$(IFS=','; echo "${missing_templates[*]}")"
+    INIT_RESULTS+=("specify_templates:missing:${missing_csv}")
+  fi
 }
 
 # 步骤 2: 检查 constitution.md
@@ -224,6 +260,17 @@ EOF
             echo -e "     → 将优先使用项目已有版本"
           fi
           ;;
+        specify_templates)
+          if [[ "$value" == ready ]]; then
+            echo -e "  ✅ .specify/templates 基础模板已就绪"
+          elif [[ "$value" == copied:* ]]; then
+            local count="${value#copied:}"
+            echo -e "  ✅ 已自动导入 .specify/templates 基础模板: ${count} 个"
+          elif [[ "$value" == missing:* ]]; then
+            local missing="${value#missing:}"
+            echo -e "  ⚠️  ${YELLOW}.specify/templates 仍缺少模板: ${missing}${NC}"
+          fi
+          ;;
       esac
     done
 
@@ -234,6 +281,7 @@ EOF
 # 主流程
 main() {
   init_specify_dir
+  sync_specify_templates
   check_constitution
   check_config
   check_gate_policy
