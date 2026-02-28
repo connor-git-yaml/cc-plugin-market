@@ -26,32 +26,33 @@ preset: balanced
 # 可选值:
 # - Claude 逻辑名: opus | sonnet（推荐，跨端可移植）
 # - 运行时原生模型名: 例如 gpt-5 / gpt-5-mini / o3（按运行时支持情况）
-# 取消注释并修改以覆盖预设中的默认值
+# 默认不配置（全部跟随 preset）
+# 仅当某个子代理需要单独模型时，取消注释对应条目
 #
 agents:
   # --- 重分析任务（balanced 预设下默认 opus）---
-  product-research:
-    model: opus
-  tech-research:
-    model: opus
-  specify:
-    model: opus
-  plan:
-    model: opus
-  analyze:
-    model: opus
+  # product-research:
+  #   model: opus
+  # tech-research:
+  #   model: opus
+  # specify:
+  #   model: opus
+  # plan:
+  #   model: opus
+  # analyze:
+  #   model: opus
 
   # --- 执行任务（balanced 预设下默认 sonnet）---
-  clarify:
-    model: sonnet
-  checklist:
-    model: sonnet
-  tasks:
-    model: sonnet
-  implement:
-    model: sonnet
-  verify:
-    model: sonnet
+  # clarify:
+  #   model: sonnet
+  # checklist:
+  #   model: sonnet
+  # tasks:
+  #   model: sonnet
+  # implement:
+  #   model: sonnet
+  # verify:
+  #   model: sonnet
 
 # ═══════════════════════════════════════
 # 模型运行时兼容（Claude / Codex）

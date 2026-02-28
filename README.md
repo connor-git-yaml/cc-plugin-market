@@ -449,12 +449,12 @@ Customize behavior via `driver-config.yaml` in the project root:
 # Model presets: balanced (default) | quality-first | cost-efficient
 preset: balanced
 
-# Override model per agent
+# Optional: override model per agent (keep commented to follow preset by default)
 agents:
-  specify:
-    model: opus
-  implement:
-    model: sonnet
+  # specify:
+  #   model: opus
+  # implement:
+  #   model: sonnet
 
 # Cross-runtime model compatibility (Claude / Codex)
 model_compat:

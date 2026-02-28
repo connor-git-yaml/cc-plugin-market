@@ -148,7 +148,7 @@ product/tech-research.md 存在  → 从对应阶段恢复
 
 ```text
 1. --preset 命令行参数（临时覆盖，最高优先级）
-2. driver-config.yaml 中的 agents.{agent_id}.model（用户自定义）
+2. driver-config.yaml 中的 agents.{agent_id}.model（仅当该子代理显式配置时生效）
 3. 当前 preset 的默认配置
 ```
 

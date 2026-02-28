@@ -315,7 +315,7 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
 
 与 run 模式共享同一套模型配置逻辑和 preset 默认表，并执行同一套运行时兼容归一化：
 
-- 优先级：`--preset` → `agents.{agent_id}.model` → preset 默认值
+- 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值
 - 兼容归一化：按 `model_compat.runtime` 解析当前运行时（auto/claude/codex）
 - Codex 下默认将 `opus/sonnet` 映射到可用模型（默认 `gpt-5/gpt-5-mini`）
 - 若映射后模型不可用，回退到 `model_compat.defaults.codex` 并记录 `[模型回退]`

@@ -108,6 +108,8 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 | **quality-first** | Opus | Opus | 关键功能 |
 | **cost-efficient** | Sonnet | Sonnet | 探索性需求 |
 
+默认建议只配置 `preset`，保持所有子代理按预设自动选模；仅在确有需要时再单独开启 `agents.<agent>.model` 覆盖。
+
 为兼容 Codex 运行时，建议在 `driver-config.yaml` 增加模型兼容映射（保留 `opus/sonnet` 语义）：
 
 ```yaml

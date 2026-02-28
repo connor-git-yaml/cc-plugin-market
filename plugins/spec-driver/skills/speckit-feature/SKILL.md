@@ -727,7 +727,7 @@ if 仍然失败:
 
 ## 模型选择逻辑
 
-为每个子代理确定模型的优先级：(1) `--preset` 命令行参数（临时覆盖，最高优先级）→ (2) driver-config.yaml 中的 `agents.{agent_id}.model`（用户自定义）→ (3) 当前 preset 的默认配置。
+为每个子代理确定模型的优先级：(1) `--preset` 命令行参数（临时覆盖，最高优先级）→ (2) driver-config.yaml 中的 `agents.{agent_id}.model`（仅当该子代理显式配置时生效）→ (3) 当前 preset 的默认配置。
 
 **preset 默认配置表**:
 
