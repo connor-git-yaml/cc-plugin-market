@@ -30,7 +30,7 @@
 1. 将本仓库添加为 Claude Code Plugin Marketplace：
 
    ```bash
-   claude plugin marketplace add <repo-url-or-local-path>
+   claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yaml/cc-plugin-market.git
    ```
 
 2. 安装 reverse-spec plugin：

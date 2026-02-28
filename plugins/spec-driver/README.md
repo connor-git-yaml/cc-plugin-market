@@ -122,7 +122,10 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 | tasks | Phase 5 | 任务分解和依赖排序 |
 | analyze | Phase 5.5 | 跨制品一致性分析 |
 | implement | Phase 6 | 按任务清单实现代码 |
+| spec-review | Phase 7a | Spec 合规审查 |
+| quality-review | Phase 7b | 代码质量审查 |
 | verify | Phase 7 | 多语言构建/Lint/测试验证 |
+| sync | 聚合模式 | 产品规范聚合 |
 
 ## 验证支持的语言
 
@@ -147,7 +150,7 @@ plugins/spec-driver/
 │   ├── speckit-resume/SKILL.md   # 中断恢复
 │   ├── speckit-sync/SKILL.md     # 产品规范聚合
 │   └── speckit-doc/SKILL.md      # 开源文档生成
-├── agents/                       # 12 个子代理 prompt
+├── agents/                       # 14 个子代理 prompt
 ├── templates/                    # 6 个模板
 ├── scripts/                      # 初始化脚本
 └── README.md

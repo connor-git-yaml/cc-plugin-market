@@ -18,7 +18,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 | Plugin | Type | Description |
 | ------ | ---- | ----------- |
 | **[reverse-spec](#reverse-spec)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
-| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 12 sub-agents and 6 execution modes |
+| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 14 specialized sub-agent prompts and 6 execution modes |
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- speckit:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.3.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 12 specialized sub-agents, 5 quality gates, 6 execution modes, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.1.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 6 execution modes, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -531,7 +531,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.3.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.1.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation
@@ -599,7 +599,7 @@ tests/                             # Test suite (308 cases)
 | -------- | --------- |
 | Plugin Format | Markdown prompts + Bash scripts + YAML configuration |
 | Runtime | Claude Code sandbox (no external runtime dependencies) |
-| Agent System | 12 specialized sub-agents with scoped tool permissions |
+| Agent System | 14 specialized sub-agent prompts with scoped tool permissions |
 | Configuration | YAML (`driver-config.yaml`) with 3 model presets |
 | Templates | Markdown templates for research reports, specs, and verification |
 <!-- speckit:section:tech-stack:end -->
