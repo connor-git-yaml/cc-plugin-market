@@ -568,9 +568,9 @@ skills/                            # Local skills (via npx tsx)
 ├── reverse-spec-batch/SKILL.md
 └── reverse-spec-diff/SKILL.md
 
-tests/                             # Test suite (242 cases)
-├── unit/                          # 19 unit test files
-├── integration/                   # 4 integration test files
+tests/                             # Test suite (308 cases)
+├── unit/                          # 29 unit test files
+├── integration/                   # 6 integration test files
 ├── golden-master/                 # Golden Master structural similarity tests
 └── self-hosting/                  # Self-hosting tests (analyze itself)
 ```
@@ -627,12 +627,12 @@ npm run test:integration
 npm run lint
 ```
 
-The project includes a 4-tier testing system with 242 test cases:
+The project includes a 4-tier testing system with 308 test cases:
 
 | Tier | Files | Cases | Coverage |
 | ---- | ----- | ----- | -------- |
-| Unit | 19 | 187 | Individual module functionality |
-| Integration | 4 | 30 | End-to-end pipeline + drift detection + CLI e2e |
+| Unit | 29 | 256 | Individual module functionality |
+| Integration | 6 | 38 | End-to-end pipeline + drift detection + CLI e2e |
 | Golden Master | 1 | 9 | AST extraction precision ≥ 90% structural similarity |
 | Self-Hosting | 1 | 5 | Project analyzes itself for completeness |
 <!-- speckit:section:testing:end -->
