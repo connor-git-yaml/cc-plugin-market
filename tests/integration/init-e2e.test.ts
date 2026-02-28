@@ -72,6 +72,41 @@ describe('init 端到端测试', () => {
     ).toBe(true);
   });
 
+  it('init --target codex 安装到当前目录的 .codex/skills/', () => {
+    const result = runCLI(['init', '--target', 'codex'], { cwd: tempDir });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Codex');
+
+    expect(
+      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(tempDir, '.codex', 'skills', 'reverse-spec-batch', 'SKILL.md'),
+      ),
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(tempDir, '.codex', 'skills', 'reverse-spec-diff', 'SKILL.md'),
+      ),
+    ).toBe(true);
+  });
+
+  it('init --target both 同时安装到 .claude 和 .codex', () => {
+    const result = runCLI(['init', '--target', 'both'], { cwd: tempDir });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Claude Code');
+    expect(result.stdout).toContain('Codex');
+    expect(
+      existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
+    ).toBe(true);
+  });
+
   it('init 安装的 SKILL.md 包含 CLI 调用逻辑', () => {
     runCLI(['init'], { cwd: tempDir });
 
@@ -116,6 +151,7 @@ describe('init 端到端测试', () => {
     expect(result.stdout).toContain('init');
     expect(result.stdout).toContain('--global');
     expect(result.stdout).toContain('--remove');
+    expect(result.stdout).toContain('--target');
   });
 
   it('--version 正常工作', () => {

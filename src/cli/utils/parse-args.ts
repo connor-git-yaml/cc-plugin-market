@@ -17,6 +17,8 @@ export interface CLICommand {
   global: boolean;
   /** --remove 选项（仅 init 子命令） */
   remove: boolean;
+  /** init 目标平台（仅 init 子命令） */
+  skillTarget: 'claude' | 'codex' | 'both';
   /** --verify 选项（仅 auth-status 子命令） */
   verify?: boolean;
 }
@@ -49,6 +51,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
+        skillTarget: 'claude',
       },
     };
   }
@@ -64,6 +67,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: true,
         global: false,
         remove: false,
+        skillTarget: 'claude',
       },
     };
   }
@@ -74,6 +78,16 @@ export function parseArgs(argv: string[]): ParseResult {
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
     const hasRemove = argv.includes('--remove');
+    const target = parseInitTarget(argv);
+    if (target.error) {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_option',
+          message: target.error,
+        },
+      };
+    }
 
     // init 不接受位置参数
     const positional = extractPositionalArgs(argv.slice(1));
@@ -82,7 +96,8 @@ export function parseArgs(argv: string[]): ParseResult {
         ok: false,
         error: {
           type: 'invalid_option',
-          message: 'init 命令不接受位置参数，用法: reverse-spec init [--global] [--remove]',
+          message:
+            'init 命令不接受位置参数，用法: reverse-spec init [--global] [--remove] [--target <claude|codex|both>]',
         },
       };
     }
@@ -97,6 +112,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: hasGlobal,
         remove: hasRemove,
+        skillTarget: target.value,
       },
     };
   }
@@ -114,6 +130,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
+        skillTarget: 'claude',
         verify: hasVerify,
       },
     };
@@ -131,11 +148,12 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
+        skillTarget: 'claude',
       },
     };
   }
 
-  // --global 和 --remove 仅在 init 子命令下有效
+  // --global/--remove/--target 仅在 init 子命令下有效
   if (argv.includes('--global') || argv.includes('-g')) {
     return {
       ok: false,
@@ -151,6 +169,15 @@ export function parseArgs(argv: string[]): ParseResult {
       error: {
         type: 'invalid_option',
         message: '--remove 选项仅在 init 子命令下有效',
+      },
+    };
+  }
+  if (argv.includes('--target')) {
+    return {
+      ok: false,
+      error: {
+        type: 'invalid_option',
+        message: '--target 选项仅在 init 子命令下有效',
       },
     };
   }
@@ -196,6 +223,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
+        skillTarget: 'claude',
       },
     };
   }
@@ -212,6 +240,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
+        skillTarget: 'claude',
       },
     };
   }
@@ -239,6 +268,7 @@ export function parseArgs(argv: string[]): ParseResult {
       help: false,
       global: false,
       remove: false,
+      skillTarget: 'claude',
     },
   };
 }
@@ -250,8 +280,8 @@ function extractPositionalArgs(args: string[]): string[] {
   const result: string[] = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
-      // 跳过带值的选项（如 --output-dir <dir>）
-      if (args[i] === '--output-dir') {
+      // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
+      if (args[i] === '--output-dir' || args[i] === '--target') {
         i++; // 跳过选项值
       }
       continue;
@@ -262,4 +292,32 @@ function extractPositionalArgs(args: string[]): string[] {
     result.push(args[i]!);
   }
   return result;
+}
+
+/** 解析 init 的 --target 选项 */
+function parseInitTarget(argv: string[]): {
+  value: 'claude' | 'codex' | 'both';
+  error?: string;
+} {
+  const idx = argv.indexOf('--target');
+  if (idx === -1) {
+    return { value: 'claude' };
+  }
+
+  const raw = argv[idx + 1];
+  if (!raw || raw.startsWith('-')) {
+    return {
+      value: 'claude',
+      error: '--target 需要值，可选: claude | codex | both',
+    };
+  }
+
+  if (raw !== 'claude' && raw !== 'codex' && raw !== 'both') {
+    return {
+      value: 'claude',
+      error: `--target 取值无效: ${raw}（可选: claude | codex | both）`,
+    };
+  }
+
+  return { value: raw };
 }

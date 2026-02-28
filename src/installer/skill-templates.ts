@@ -3,7 +3,10 @@
  * 精简版：Claude Code 原生模式优先，使用 prepare 子命令获取 AST 数据
  */
 
-import type { SkillDefinition } from './skill-installer.js';
+import type {
+  SkillDefinition,
+  SkillTargetPlatform,
+} from './skill-installer.js';
 
 // ============================================================
 // reverse-spec（单模块 spec 生成）
@@ -23,27 +26,27 @@ description: |
 
 ## User Input
 
-\\\`\\\`\\\`text
+\`\`\`text
 $ARGUMENTS
-\\\`\\\`\\\`
+\`\`\`
 
 ## Execution Flow
 
 ### 1. Parse Target
 
-从 \\\`$ARGUMENTS\\\` 确定分析目标（文件或目录）。无参数时询问用户。支持 \\\`--deep\\\` 标志。
+从 \`$ARGUMENTS\` 确定分析目标（文件或目录）。无参数时询问用户。支持 \`--deep\` 标志。
 
 ### 2. AST 预分析（可选，推荐）
 
 尝试运行 CLI 获取精确的 AST 骨架（导出签名、导入、类型）：
 
-\\\`\\\`\\\`bash
+\`\`\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
   reverse-spec prepare $TARGET_PATH --deep
 elif command -v npx >/dev/null 2>&1; then
   npm_config_yes=true npx reverse-spec prepare $TARGET_PATH --deep
 fi
-\\\`\\\`\\\`
+\`\`\`
 
 如果 CLI 不可用，跳过此步——直接读取源文件分析。
 
@@ -61,11 +64,11 @@ fi
 8. **测试覆盖** — 已测试行为、覆盖缺口
 9. **依赖关系** — 内部/外部依赖
 
-不确定的内容用 \\\`[推断: 理由]\\\` 标注。
+不确定的内容用 \`[推断: 理由]\` 标注。
 
 ### 4. 写入
 
-写入 \\\`specs/<name>.spec.md\\\`。仅写入 specs/ 目录，不修改源代码。
+写入 \`specs/<name>.spec.md\`。仅写入 specs/ 目录，不修改源代码。
 
 **语言**: 中文正文 + 英文代码标识符/路径/代码块
 `;
@@ -87,9 +90,9 @@ description: |
 
 ## User Input
 
-\\\`\\\`\\\`text
+\`\`\`text
 $ARGUMENTS
-\\\`\\\`\\\`
+\`\`\`
 
 ## Execution Flow
 
@@ -103,17 +106,17 @@ $ARGUMENTS
 
 ### 3. 逐模块生成
 
-对每个模块执行 \\\`/reverse-spec\\\`。跳过已存在的 spec（除非用户指定 --force）。
+对每个模块执行 \`/reverse-spec\`。跳过已存在的 spec（除非用户指定 --force）。
 
 CLI 批量模式（如可用）：
 
-\\\`\\\`\\\`bash
+\`\`\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
   reverse-spec batch [--force] [--output-dir specs]
 elif command -v npx >/dev/null 2>&1; then
   npm_config_yes=true npx reverse-spec batch [--force] [--output-dir specs]
 fi
-\\\`\\\`\\\`
+\`\`\`
 
 ### 4. 汇总报告
 
@@ -141,33 +144,33 @@ description: |
 
 ## User Input
 
-\\\`\\\`\\\`text
+\`\`\`text
 $ARGUMENTS
-\\\`\\\`\\\`
+\`\`\`
 
 ## Execution Flow
 
 ### 1. Parse Arguments
 
-格式: \\\`<spec-file> [source-target]\\\`。spec 不存在时建议先运行 /reverse-spec。
+格式: \`<spec-file> [source-target]\`。spec 不存在时建议先运行 /reverse-spec。
 
 ### 2. 漂移检测
 
 优先使用 CLI：
 
-\\\`\\\`\\\`bash
+\`\`\`bash
 if command -v reverse-spec >/dev/null 2>&1; then
   reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
 elif command -v npx >/dev/null 2>&1; then
   npm_config_yes=true npx reverse-spec diff $SPEC_FILE $SOURCE_TARGET [--output-dir drift-logs/]
 fi
-\\\`\\\`\\\`
+\`\`\`
 
 CLI 不可用时手动分析：读取 spec 接口定义，对比当前源码导出符号，按严重级别分类（HIGH=删除导出, MEDIUM=签名变更, LOW=新增导出）。
 
 ### 3. 输出报告
 
-写入 \\\`drift-logs/{module}-drift-{date}.md\\\`，包含汇总统计和逐项差异详情。
+写入 \`drift-logs/{module}-drift-{date}.md\`，包含汇总统计和逐项差异详情。
 
 ### 4. 确认更新
 
@@ -186,3 +189,14 @@ export const SKILL_DEFINITIONS: readonly SkillDefinition[] = [
   { name: 'reverse-spec-batch', content: REVERSE_SPEC_BATCH_CONTENT },
   { name: 'reverse-spec-diff', content: REVERSE_SPEC_DIFF_CONTENT },
 ] as const;
+
+/**
+ * 获取指定平台的 Skill 定义集合
+ * 当前保持 reverse-spec 与 spec-driver 的安装边界隔离：
+ * - reverse-spec init 仅安装 reverse-spec 三件套
+ */
+export function getSkillDefinitionsForPlatform(
+  _platform: SkillTargetPlatform,
+): readonly SkillDefinition[] {
+  return SKILL_DEFINITIONS;
+}

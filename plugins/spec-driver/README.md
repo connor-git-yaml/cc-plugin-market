@@ -21,6 +21,25 @@ Spec Driver 根据场景选择最优流程，将手动 speckit 命令统一为�
 claude plugin install spec-driver
 ```
 
+### Codex 包装技能（独立入口）
+
+在仓库根目录执行：
+
+```bash
+npm run codex:spec-driver:install
+npm run codex:spec-driver:install:global
+npm run codex:spec-driver:remove
+```
+
+等价底层脚本命令：
+
+```bash
+bash plugins/spec-driver/scripts/codex-skills.sh install
+bash plugins/spec-driver/scripts/codex-skills.sh install --global
+bash plugins/spec-driver/scripts/codex-skills.sh remove
+bash plugins/spec-driver/scripts/codex-skills.sh remove --global
+```
+
 ## 使用方法
 
 ### 完整研发流程（run）

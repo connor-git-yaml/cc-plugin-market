@@ -26,7 +26,11 @@ describe('Skill 注册器', () => {
   });
 
   it('全局安装时注册 3 个 skill', () => {
-    const summary = installSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    const summary = installSkills({
+      targetDir: skillsTargetDir,
+      mode: 'global',
+      platform: 'claude',
+    });
 
     expect(summary.results).toHaveLength(3);
     for (const result of summary.results) {
@@ -48,7 +52,7 @@ describe('Skill 注册器', () => {
   it('目标目录不存在时自动创建', () => {
     expect(existsSync(skillsTargetDir)).toBe(false);
 
-    installSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     expect(existsSync(skillsTargetDir)).toBe(true);
     expect(existsSync(join(skillsTargetDir, 'reverse-spec', 'SKILL.md'))).toBe(true);
@@ -60,7 +64,11 @@ describe('Skill 注册器', () => {
     mkdirSync(batchDir, { recursive: true });
     mkdirSync(join(batchDir, 'SKILL.md'), { recursive: true }); // 创建为目录而非文件
 
-    const summary = installSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    const summary = installSkills({
+      targetDir: skillsTargetDir,
+      mode: 'global',
+      platform: 'claude',
+    });
 
     // reverse-spec 和 reverse-spec-diff 应成功
     const rsResult = summary.results.find((r) => r.skillName === 'reverse-spec');
@@ -76,11 +84,15 @@ describe('Skill 注册器', () => {
 
   it('卸载时清理 3 个 skill 目录', () => {
     // 先注册
-    installSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
     expect(existsSync(join(skillsTargetDir, 'reverse-spec'))).toBe(true);
 
     // 然后卸载
-    const summary = removeSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    const summary = removeSkills({
+      targetDir: skillsTargetDir,
+      mode: 'global',
+      platform: 'claude',
+    });
 
     expect(summary.results).toHaveLength(3);
     for (const result of summary.results) {
@@ -93,7 +105,7 @@ describe('Skill 注册器', () => {
 
   it('卸载时其他 skill 不受影响', () => {
     // 注册 reverse-spec skills
-    installSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     // 创建一个"其他" skill
     const otherSkillDir = join(skillsTargetDir, 'other-skill');
@@ -101,7 +113,7 @@ describe('Skill 注册器', () => {
     writeFileSync(join(otherSkillDir, 'SKILL.md'), '# Other skill');
 
     // 卸载 reverse-spec skills
-    removeSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    removeSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     // 其他 skill 仍然存在
     expect(existsSync(join(otherSkillDir, 'SKILL.md'))).toBe(true);
@@ -112,7 +124,11 @@ describe('Skill 注册器', () => {
 
   it('目录不存在时卸载不报错', () => {
     // 不注册，直接卸载
-    const summary = removeSkills({ targetDir: skillsTargetDir, mode: 'global' });
+    const summary = removeSkills({
+      targetDir: skillsTargetDir,
+      mode: 'global',
+      platform: 'claude',
+    });
     expect(summary.results).toHaveLength(3);
     for (const result of summary.results) {
       expect(result.status).toBe('skipped');

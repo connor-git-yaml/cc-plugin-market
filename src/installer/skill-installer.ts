@@ -6,7 +6,7 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { SKILL_DEFINITIONS } from './skill-templates.js';
+import { getSkillDefinitionsForPlatform } from './skill-templates.js';
 
 // ============================================================
 // 数据模型接口（按 data-model.md 和 contracts/installer-api.md）
@@ -18,12 +18,17 @@ export interface SkillDefinition {
   readonly content: string;
 }
 
+/** Skill 目标平台 */
+export type SkillTargetPlatform = 'claude' | 'codex';
+
 /** 安装选项 */
 export interface InstallOptions {
   /** 安装目标基础路径（如 /path/to/project/.claude/skills/） */
   targetDir: string;
   /** 安装模式标记（影响日志输出） */
   mode: 'project' | 'global';
+  /** 目标平台（Claude Code / Codex） */
+  platform: SkillTargetPlatform;
 }
 
 /** 移除选项 */
@@ -32,6 +37,8 @@ export interface RemoveOptions {
   targetDir: string;
   /** 移除模式标记 */
   mode: 'project' | 'global';
+  /** 目标平台（Claude Code / Codex） */
+  platform: SkillTargetPlatform;
 }
 
 /** 单个 skill 的安装/移除结果 */
@@ -46,6 +53,7 @@ export interface InstallResult {
 export interface InstallSummary {
   mode: 'project' | 'global';
   action: 'install' | 'remove';
+  platform: SkillTargetPlatform;
   results: InstallResult[];
   targetBasePath: string;
 }
@@ -59,10 +67,11 @@ export interface InstallSummary {
  * 单个 skill 失败不中断其他 skill 的安装
  */
 export function installSkills(options: InstallOptions): InstallSummary {
-  const { targetDir, mode } = options;
+  const { targetDir, mode, platform } = options;
   const results: InstallResult[] = [];
+  const skillDefinitions = getSkillDefinitionsForPlatform(platform);
 
-  for (const skill of SKILL_DEFINITIONS) {
+  for (const skill of skillDefinitions) {
     const skillDir = join(targetDir, skill.name);
     const targetFile = join(skillDir, 'SKILL.md');
 
@@ -95,6 +104,7 @@ export function installSkills(options: InstallOptions): InstallSummary {
   return {
     mode,
     action: 'install',
+    platform,
     results,
     targetBasePath: targetDir,
   };
@@ -105,10 +115,11 @@ export function installSkills(options: InstallOptions): InstallSummary {
  * 单个 skill 删除失败不中断其他
  */
 export function removeSkills(options: RemoveOptions): InstallSummary {
-  const { targetDir, mode } = options;
+  const { targetDir, mode, platform } = options;
   const results: InstallResult[] = [];
+  const skillDefinitions = getSkillDefinitionsForPlatform(platform);
 
-  for (const skill of SKILL_DEFINITIONS) {
+  for (const skill of skillDefinitions) {
     const skillDir = join(targetDir, skill.name);
 
     try {
@@ -140,6 +151,7 @@ export function removeSkills(options: RemoveOptions): InstallSummary {
   return {
     mode,
     action: 'remove',
+    platform,
     results,
     targetBasePath: targetDir,
   };
@@ -148,19 +160,25 @@ export function removeSkills(options: RemoveOptions): InstallSummary {
 /**
  * 解析安装目标目录的绝对路径
  */
-export function resolveTargetDir(mode: 'project' | 'global'): string {
+export function resolveTargetDir(
+  mode: 'project' | 'global',
+  platform: SkillTargetPlatform,
+): string {
+  const rootDir = platform === 'codex' ? '.codex' : '.claude';
   if (mode === 'global') {
-    return join(homedir(), '.claude', 'skills');
+    return join(homedir(), rootDir, 'skills');
   }
-  return join(process.cwd(), '.claude', 'skills');
+  return join(process.cwd(), rootDir, 'skills');
 }
 
 /**
  * 格式化安装/移除结果为用户友好的中文输出
  */
 export function formatSummary(summary: InstallSummary): string {
-  const { action, results, mode } = summary;
+  const { action, results, mode, platform } = summary;
   const lines: string[] = [];
+  const platformLabel = platform === 'codex' ? 'Codex' : 'Claude Code';
+  const platformSuffix = platform === 'codex' ? `（${platformLabel}）` : '';
 
   // 判断是否全部为同一状态
   const allSkipped = results.every((r) => r.status === 'skipped');
@@ -179,16 +197,20 @@ export function formatSummary(summary: InstallSummary): string {
     );
     const hasAnyUpdated = results.some((r) => r.status === 'updated');
     if (hasFailure && !allFailed) {
-      lines.push('reverse-spec skills 安装完成（部分失败）:');
+      if (platform === 'codex') {
+        lines.push('reverse-spec skills 安装完成（Codex，部分失败）:');
+      } else {
+        lines.push('reverse-spec skills 安装完成（部分失败）:');
+      }
     } else if (hasAnyUpdated && allUpdated && !hasFailure) {
-      lines.push('reverse-spec skills 已更新:');
+      lines.push(`reverse-spec skills 已更新${platformSuffix}:`);
     } else if (mode === 'global') {
-      lines.push('reverse-spec skills 已安装到全局目录:');
+      lines.push(`reverse-spec skills 已安装到全局目录${platformSuffix}:`);
     } else {
-      lines.push('reverse-spec skills 安装完成:');
+      lines.push(`reverse-spec skills 安装完成${platformSuffix}:`);
     }
   } else {
-    lines.push('reverse-spec skills 已移除:');
+    lines.push(`reverse-spec skills 已移除${platformSuffix}:`);
   }
 
   // 逐项状态
@@ -220,6 +242,8 @@ export function formatSummary(summary: InstallSummary): string {
     lines.push('');
     if (mode === 'global') {
       lines.push('注意: 全局 skill 优先级高于项目级 skill');
+    } else if (platform === 'codex') {
+      lines.push('提示: 在 Codex 中可通过提及 $reverse-spec 触发 skill');
     } else {
       lines.push('提示: 在 Claude Code 中使用 /reverse-spec 即可调用');
     }
@@ -233,10 +257,11 @@ function formatDisplayPath(
   result: InstallResult,
   summary: InstallSummary,
 ): string {
+  const rootDir = summary.platform === 'codex' ? '.codex' : '.claude';
   if (summary.mode === 'global') {
-    return `~/.claude/skills/${result.skillName}/SKILL.md`;
+    return `~/${rootDir}/skills/${result.skillName}/SKILL.md`;
   }
-  return `.claude/skills/${result.skillName}/SKILL.md`;
+  return `${rootDir}/skills/${result.skillName}/SKILL.md`;
 }
 
 /** 格式化显示路径（目录） */
@@ -244,8 +269,9 @@ function formatDisplayDir(
   result: InstallResult,
   summary: InstallSummary,
 ): string {
+  const rootDir = summary.platform === 'codex' ? '.codex' : '.claude';
   if (summary.mode === 'global') {
-    return `~/.claude/skills/${result.skillName}/`;
+    return `~/${rootDir}/skills/${result.skillName}/`;
   }
-  return `.claude/skills/${result.skillName}/`;
+  return `${rootDir}/skills/${result.skillName}/`;
 }
