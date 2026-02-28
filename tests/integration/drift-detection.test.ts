@@ -258,6 +258,45 @@ export function add(a: number, b: number): number {
     expect(report.outputPath).toContain('drift-logs');
   });
 
+  it('目录输入：应使用目录内文件执行漂移检测', async () => {
+    const sourceDir = path.join(tmpDir, 'dir-source');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    const sourceFile = path.join(sourceDir, 'module.ts');
+    fs.writeFileSync(sourceFile, `
+export function greet(name: string): string {
+  return \`Hello, \${name}\`;
+}
+
+export function extra(flag: boolean): string {
+  return flag ? 'Y' : 'N';
+}
+`);
+
+    const oldSkeleton: CodeSkeleton = {
+      filePath: sourceFile,
+      language: 'typescript',
+      loc: 8,
+      exports: [
+        { name: 'greet', kind: 'function', signature: '(name: string) => string', startLine: 2, endLine: 4, isDefault: false },
+      ],
+      imports: [],
+      hash: '2'.repeat(64),
+      analyzedAt: '2025-01-01T00:00:00.000Z',
+      parserUsed: 'ts-morph',
+    };
+
+    const specPath = createSpecWithBaseline(oldSkeleton);
+    const report = await detectDrift(specPath, sourceDir, {
+      skipSemantic: true,
+      outputDir: path.join(tmpDir, 'drift-logs-dir'),
+    });
+
+    const extraItem = report.items.find((i) => i.symbolName === 'extra');
+    expect(extraItem).toBeDefined();
+    expect(extraItem!.changeType).toBe('addition');
+    expect(extraItem!.severity).toBe('LOW');
+  });
+
   it('spec 未修改（只读安全性）', async () => {
     const sourceFile = createSourceFile('readonly-test.ts', `
 export function hello(): string {

@@ -26,6 +26,8 @@ import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec
 export interface BatchOptions {
   /** 即使 spec 已存在也重新生成 */
   force?: boolean;
+  /** 输出目录（默认 'specs'，相对路径基于 projectRoot） */
+  outputDir?: string;
   /** 进度回调 */
   onProgress?: (completed: number, total: number) => void;
   /** 每个模块的 LLM 最大重试次数（默认 3） */
@@ -65,11 +67,24 @@ export async function runBatch(
   const {
     force = false,
     maxRetries = 3,
-    checkpointPath = DEFAULT_CHECKPOINT_PATH,
+    outputDir = 'specs',
   } = options;
 
   const startTime = Date.now();
   const resolvedRoot = path.resolve(projectRoot);
+  const resolvedOutputDir = path.isAbsolute(outputDir)
+    ? outputDir
+    : path.join(resolvedRoot, outputDir);
+  const checkpointPath = options.checkpointPath
+    ? (path.isAbsolute(options.checkpointPath)
+      ? options.checkpointPath
+      : path.join(resolvedRoot, options.checkpointPath))
+    : path.join(resolvedOutputDir, path.basename(DEFAULT_CHECKPOINT_PATH));
+
+  const toProjectPath = (absPath: string): string => {
+    const rel = path.relative(resolvedRoot, absPath);
+    return rel.startsWith('..') ? absPath : rel;
+  };
 
   // 步骤 1：构建依赖图
   const graph = await buildGraph(resolvedRoot);
@@ -128,7 +143,7 @@ export async function runBatch(
     state.currentModule = moduleName;
 
     // 检查 spec 是否已存在
-    const specPath = path.join('specs', `${moduleName}.spec.md`);
+    const specPath = path.join(resolvedOutputDir, `${moduleName}.spec.md`);
     if (!force && fs.existsSync(specPath)) {
       skipped.push(moduleName);
       reporter.complete(moduleName, 'skipped');
@@ -142,7 +157,7 @@ export async function runBatch(
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
         const genOptions: GenerateSpecOptions = {
-          outputDir: 'specs',
+          outputDir: resolvedOutputDir,
           projectRoot: resolvedRoot,
           deep: true,
           onStageProgress: (progress) => {
@@ -178,7 +193,7 @@ export async function runBatch(
 
           state.completedModules.push({
             path: moduleName,
-            specPath: result.specPath,
+            specPath: toProjectPath(path.resolve(result.specPath)),
             completedAt: new Date().toISOString(),
             tokenUsage: result.tokenUsage,
           });
@@ -190,7 +205,7 @@ export async function runBatch(
           reporter.complete(moduleName, 'success');
           state.completedModules.push({
             path: moduleName,
-            specPath: `specs/${rootModuleName}`,
+            specPath: toProjectPath(path.join(resolvedOutputDir, `${rootModuleName}.spec.md`)),
             completedAt: new Date().toISOString(),
           });
         }
@@ -230,7 +245,7 @@ export async function runBatch(
     initRenderer();
     const index = generateIndex(collectedModuleSpecs, graph);
     const indexMarkdown = renderIndex(index as any);
-    const indexPath = path.join('specs', '_index.spec.md');
+    const indexPath = path.join(resolvedOutputDir, '_index.spec.md');
     fs.mkdirSync(path.dirname(indexPath), { recursive: true });
     fs.writeFileSync(indexPath, indexMarkdown, 'utf-8');
     indexGenerated = true;
@@ -240,8 +255,9 @@ export async function runBatch(
 
   // 步骤 6：写入摘要日志
   const summary = reporter.finish();
-  const summaryLogPath = path.join('specs', `batch-summary-${Date.now()}.md`);
-  writeSummaryLog(summary, summaryLogPath);
+  const summaryLogPathAbs = path.join(resolvedOutputDir, `batch-summary-${Date.now()}.md`);
+  fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
+  writeSummaryLog(summary, summaryLogPathAbs);
 
   // 步骤 7：成功后清理检查点
   if (failed.length === 0) {
@@ -256,6 +272,6 @@ export async function runBatch(
     degraded,
     duration: Date.now() - startTime,
     indexGenerated,
-    summaryLogPath,
+    summaryLogPath: toProjectPath(summaryLogPathAbs),
   };
 }

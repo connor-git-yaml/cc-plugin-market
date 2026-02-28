@@ -24,6 +24,15 @@ describe('parseArgs', () => {
     }
   });
 
+  it('解析 batch --output-dir', () => {
+    const result = parseArgs(['batch', '--output-dir', 'custom-specs']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('batch');
+      expect(result.command.outputDir).toBe('custom-specs');
+    }
+  });
+
   it('解析 diff 子命令', () => {
     const result = parseArgs(['diff', 'a.md', 'src/']);
     expect(result.ok).toBe(true);

@@ -248,7 +248,8 @@ async function buildCurrentSkeleton(sourcePath: string): Promise<CodeSkeleton> {
     };
   }
 
-  const skeletons = await analyzeFiles(files);
+  const absoluteFiles = files.map((f) => path.join(sourcePath, f));
+  const skeletons = await analyzeFiles(absoluteFiles);
 
   // 合并所有骨架的导出和导入
   const mergedExports = skeletons.flatMap((s) => s.exports);
@@ -256,7 +257,7 @@ async function buildCurrentSkeleton(sourcePath: string): Promise<CodeSkeleton> {
   const totalLoc = skeletons.reduce((sum, s) => sum + s.loc, 0);
 
   return {
-    filePath: files[0]!,
+    filePath: absoluteFiles[0]!,
     language: 'typescript',
     loc: totalLoc,
     exports: mergedExports,

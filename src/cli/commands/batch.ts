@@ -21,6 +21,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
   try {
     const result = await runBatch(process.cwd(), {
       force: command.force,
+      outputDir: command.outputDir,
       onProgress: (completed, total) => {
         // 简易进度输出
         const bar = '='.repeat(Math.floor((completed / total) * 20)).padEnd(20, ' ');
