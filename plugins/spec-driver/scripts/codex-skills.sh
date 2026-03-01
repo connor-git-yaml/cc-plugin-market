@@ -117,7 +117,7 @@ $input_rule
    - 若映射后模型不可用，回退到 \`model_compat.defaults.codex\` 并标注 \`[模型回退]\`
 7. 若项目根目录存在 \`.specify/project-context.yaml\` 或 \`.specify/project-context.md\`：
    - 在进入阶段执行前先读取该文件，并将“项目参考路径注入块”追加到运行时上下文
-   - 注入块至少应包含 \`docs/blueprint.md\`、\`.specify/memory/constitution.md\`、\`_references/opensource/*\` 的有效路径
+   - 注入块应包含 project-context 中声明且实际存在的文档/参考路径（不要求固定目录或文件名）
    - 若存在无效路径，标注 \`[参考路径缺失]\`，流程继续但需在阶段总结与最终报告中列为风险项
 EOF_SKILL
 }
