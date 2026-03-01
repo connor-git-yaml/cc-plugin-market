@@ -22,11 +22,12 @@ disable-model-invocation: false
 
 ```text
 Step 1: 项目元信息自动提取（无交互）
-Step 2: 文档组织模式选择（交互）
-Step 3: 开源协议选择（交互）
-Step 4: 批量文件生成（无交互）
-Step 5: 逐文件冲突检测与写入（条件交互）
-Step 6: 完成报告
+Step 2: 项目上下文注入（可选，无交互）
+Step 3: 文档组织模式选择（交互）
+Step 4: 开源协议选择（交互）
+Step 5: 批量文件生成（无交互）
+Step 6: 逐文件冲突检测与写入（条件交互）
+Step 7: 完成报告
 ```
 
 ---
@@ -92,7 +93,20 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ---
 
-## Step 2: 文档组织模式选择
+## Step 2: 项目上下文注入（project-context，可选）
+
+在进入文档生成交互前执行以下检查：
+
+- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，先读取该文件
+- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
+- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在最终报告列为风险项
+- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+
+在后续 README/CONTRIBUTING 生成阶段，将 `project_context_block` 作为附加上下文输入（仅提供路径与摘要，不复制大段原文）。
+
+---
+
+## Step 3: 文档组织模式选择
 
 向用户展示以下选项：
 
@@ -117,7 +131,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ---
 
-## Step 3: 开源协议选择
+## Step 4: 开源协议选择
 
 向用户展示 8 种协议列表。如果 `scan-project.sh` 检测到 `license` 字段且匹配其中一种，在该项前加 `[推荐]` 标记。
 
@@ -158,9 +172,9 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ---
 
-## Step 4: 批量文件生成
+## Step 5: 批量文件生成
 
-根据 Step 2-3 的选择，确定要生成的文件清单：
+根据 Step 3-4 的选择，确定要生成的文件清单：
 
 ```text
 精简模式: [README.md, LICENSE]
@@ -409,15 +423,15 @@ By contributing, you agree that your contributions will be licensed under the pr
 
 ---
 
-## Step 5: 逐文件冲突检测与写入
+## Step 6: 逐文件冲突检测与写入
 
 对每个目标文件（按生成顺序: LICENSE → README.md → CONTRIBUTING.md → CODE_OF_CONDUCT.md），执行以下流程：
 
-### 5.1 文件不存在 → 直接写入
+### 6.1 文件不存在 → 直接写入
 
 使用 Write tool 写入文件，记录为"新建"。
 
-### 5.2 文件已存在 → 冲突处理
+### 6.2 文件已存在 → 冲突处理
 
 展示给用户：
 
@@ -446,7 +460,7 @@ By contributing, you agree that your contributions will be licensed under the pr
 
 ---
 
-## Step 6: 完成报告
+## Step 7: 完成报告
 
 所有文件处理完成后，输出报告：
 

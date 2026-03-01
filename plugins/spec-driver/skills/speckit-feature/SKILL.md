@@ -53,6 +53,14 @@ disable-model-invocation: true
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
 - 解析 `model_compat` 和 `codex_thinking` 配置段（可选，向后兼容）：如果缺失则使用内置默认值（Codex: `opus/sonnet/haiku -> gpt-5.3-codex`；thinking level: `opus->high`, `sonnet->medium`, `haiku->low`）
 
+### 3.5 项目上下文注入（project-context，可选）
+
+- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，在进入后续阶段前读取该文件
+- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
+- 将 `project_context_block` 追加到各阶段运行时上下文注入块
+- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
+- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+
 ### 4. 门禁配置加载
 
 读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
@@ -144,6 +152,7 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 **特性分支**: {branch_name}
 **前序制品**: {已完成阶段的制品路径列表}
 **配置**: {相关配置片段}
+**项目上下文**: {project_context_block}
 ---
 ```
 

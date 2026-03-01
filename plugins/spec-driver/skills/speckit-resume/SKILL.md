@@ -21,7 +21,7 @@ disable-model-invocation: true
 
 ## 初始化阶段
 
-在进入恢复流程之前，执行以下精简初始化（4 步）：
+在进入恢复流程之前，执行以下精简初始化（5 步）：
 
 ### 1. 项目环境检查
 
@@ -38,7 +38,15 @@ disable-model-invocation: true
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
 
-### 4. Prompt 来源映射
+### 4. 项目上下文注入（project-context，可选）
+
+- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，在进入后续阶段前读取该文件
+- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
+- 将 `project_context_block` 追加到各阶段运行时上下文注入块
+- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
+- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+
+### 5. Prompt 来源映射
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
@@ -54,7 +62,7 @@ prompt_source[tech-research] = "plugins/spec-driver/agents/tech-research.md"
 prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 ```
 
-**注意**: resume 不执行"特性目录准备"步骤（步骤 5），因为目录已存在是恢复的前提条件。
+**注意**: resume 不执行"特性目录准备"步骤，因为目录已存在是恢复的前提条件。
 
 ---
 
@@ -135,6 +143,7 @@ product/tech-research.md 存在  → 从对应阶段恢复
 **前序制品**: {已完成阶段的制品路径列表}
 **配置**: {相关配置片段}
 **恢复模式**: 从 Phase {N} 恢复
+**项目上下文**: {project_context_block}
 ---
 ```
 
