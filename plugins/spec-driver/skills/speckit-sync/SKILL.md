@@ -18,6 +18,18 @@ disable-model-invocation: false
 
 ---
 
+## 项目上下文注入（project-context，可选）
+
+在执行聚合前执行以下检查：
+
+- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，先读取该文件
+- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
+- 将 `project_context_block` 追加到 sync 子代理的运行时上下文注入块
+- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在聚合报告中列为风险项
+- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+
+---
+
 ## 前置检查
 
 在执行聚合之前，检查 `specs/` 目录状态：
@@ -97,6 +109,7 @@ Task(
 **产品映射文件**: {project_root}/specs/products/product-mapping.yaml（如存在）
 **产品模板**: plugins/spec-driver/templates/product-spec-template.md
 **已有产品文档**: {specs/products/ 下已有的产品目录列表（如有）}
+**项目上下文**: {project_context_block}
 ---
 ```
 
