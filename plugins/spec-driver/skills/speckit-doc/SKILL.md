@@ -181,7 +181,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 完整模式: [README.md, LICENSE, CONTRIBUTING.md, CODE_OF_CONDUCT.md]
 ```
 
-### 4.1 生成 LICENSE
+### 5.1 生成 LICENSE
 
 **重要: LICENSE 文本禁止 LLM 生成，必须使用静态模板文件。**
 
@@ -191,7 +191,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
    - `[fullname]` → 版权持有者（优先级：package.json author.name > git config user.name > `[COPYRIGHT HOLDER]`）
 3. 将替换后的内容准备好待写入
 
-### 4.2 生成 README.md
+### 5.2 生成 README.md
 
 使用以下章节结构生成 README.md。每个章节用 HTML 注释标记包裹（为二期 `--update` 功能预留）：
 
@@ -319,7 +319,7 @@ This project is licensed under the {LICENSE_ID} License - see the [LICENSE](LICE
 - **无 AST 数据**: Features 章节基于项目 description 生成通用描述
 - **无远程仓库 URL**: 仓库相关 Badge 和链接跳过
 
-### 4.3 生成 CONTRIBUTING.md（仅完整模式）
+### 5.3 生成 CONTRIBUTING.md（仅完整模式）
 
 生成包含以下章节的 CONTRIBUTING.md：
 
@@ -412,7 +412,7 @@ Use GitHub Issues to report bugs. Include:
 By contributing, you agree that your contributions will be licensed under the project's {LICENSE_ID} License.
 ```
 
-### 4.4 生成 CODE_OF_CONDUCT.md（仅完整模式）
+### 5.4 生成 CODE_OF_CONDUCT.md（仅完整模式）
 
 1. 使用 Read tool 读取模板：`plugins/spec-driver/templates/code-of-conduct-v2.1.md`
 2. 将 `[INSERT CONTACT METHOD]` 替换为作者联系方式：

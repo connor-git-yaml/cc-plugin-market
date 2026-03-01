@@ -317,7 +317,7 @@ Choose the right mode based on your scenario:
 | Bug fix, issue resolution | `/spec-driver:speckit-fix <desc>` | 4 | ≤1 |
 | Resume interrupted workflow | `/spec-driver:speckit-resume` | Variable | 0 |
 | Aggregate product specification | `/spec-driver:speckit-sync` | 3 | 0 |
-| Generate open-source docs | `/spec-driver:speckit-doc` | 6 | 2-3 |
+| Generate open-source docs | `/spec-driver:speckit-doc` | 7 | 2-3 |
 
 #### Feature Mode — Full 10-Phase Orchestration
 
