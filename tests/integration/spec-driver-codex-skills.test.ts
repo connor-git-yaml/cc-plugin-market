@@ -64,6 +64,8 @@ describe('Spec Driver Codex skills script', () => {
     );
     expect(storyWrapper).toContain('model_compat.defaults.codex');
     expect(storyWrapper).toContain('opus/sonnet');
+    expect(storyWrapper).toContain('.specify/project-context.yaml');
+    expect(storyWrapper).toContain('[参考路径缺失]');
 
     const remove = runScript(['remove'], { cwd: tempDir });
     expect(remove.exitCode).toBe(0);

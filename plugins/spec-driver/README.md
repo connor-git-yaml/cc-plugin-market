@@ -40,6 +40,13 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove
 bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 ```
 
+Codex 包装技能会自动检测项目级上下文文件：
+
+- `.specify/project-context.yaml`
+- `.specify/project-context.md`
+
+若存在，将把 Blueprint/Constitution/参考源码路径注入运行时上下文；路径失效时会标注 `[参考路径缺失]` 并在最终报告提示风险。
+
 ## 使用方法
 
 ### 完整研发流程（run）
