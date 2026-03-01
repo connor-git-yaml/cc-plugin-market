@@ -13,7 +13,7 @@ Spec Driver 根据场景选择最优流程，将手动 speckit 命令统一为�
 | **fix** | `/spec-driver:speckit-fix` | 4 | ≤ 1 次 | Bug 修复、问题定位 |
 | **resume** | `/spec-driver:speckit-resume` | - | - | 恢复中断的流程 |
 | **sync** | `/spec-driver:speckit-sync` | 3 | 0 次 | 聚合 spec 为产品活文档 |
-| **doc** | `/spec-driver:speckit-doc` | 6 | 2-3 次 | 生成开源标准文档（README 等） |
+| **doc** | `/spec-driver:speckit-doc` | 7 | 2-3 次 | 生成开源标准文档（README 等） |
 
 ## 安装
 

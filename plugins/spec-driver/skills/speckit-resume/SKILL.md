@@ -36,7 +36,7 @@ disable-model-invocation: true
 - 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
 - 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
-- 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
+- 解析 `model_compat` 和 `codex_thinking` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射与思考等级映射
 
 ### 4. 项目上下文注入（project-context，可选）
 

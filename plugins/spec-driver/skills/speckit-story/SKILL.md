@@ -42,7 +42,7 @@ disable-model-invocation: true
 
 - 读取 spec-driver.config.yaml（如不存在则引导创建）
 - `--preset` 参数临时覆盖
-- 解析 `model_compat` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射
+- 解析 `model_compat` 和 `codex_thinking` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射与思考等级映射
 
 ### 3.5 项目上下文注入（project-context，可选）
 
