@@ -8,7 +8,7 @@
 
 - 从主编排器接收：用户的需求描述文本、Constitution 约束摘要
 - 读取制品：`{feature_dir}/research/product-research.md`（产品调研结论——如存在则读取，不存在则基于需求描述执行）
-- 使用模板：`plugins/spec-driver/templates/tech-research-template.md`
+- 使用模板：优先读取 `.specify/templates/tech-research-template.md`（项目级），若不存在则回退到 `$PLUGIN_DIR/templates/tech-research-template.md`（plugin 内置）
 
 ## 工具权限
 
@@ -52,6 +52,11 @@
    - **有产品调研时**: 检查技术方案是否完整覆盖产品 MVP 范围，标记技术方案可能限制产品扩展的地方
    - **独立模式时**: 检查技术方案是否完整覆盖需求描述中的功能范围，标记技术方案可能限制需求扩展的地方
    - 确认技术选型不违反 Constitution 约束
+
+6.5 **加载报告模板**
+   - 检查 `.specify/templates/tech-research-template.md` 是否存在
+   - 如存在，读取项目级模板作为报告结构模板
+   - 如不存在，读取 `$PLUGIN_DIR/templates/tech-research-template.md` 作为报告结构模板
 
 7. **生成报告**
    - 按模板结构写入 `{feature_dir}/research/tech-research.md`

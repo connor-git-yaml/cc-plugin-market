@@ -7,7 +7,7 @@
 ## 输入
 
 - 从主编排器接收：用户的需求描述文本、Constitution 约束摘要
-- 使用模板：`plugins/spec-driver/templates/product-research-template.md`
+- 使用模板：优先读取 `.specify/templates/product-research-template.md`（项目级），若不存在则回退到 `$PLUGIN_DIR/templates/product-research-template.md`（plugin 内置）
 
 ## 工具权限
 
@@ -44,6 +44,11 @@
    - 基于竞品分析和用户场景，建议 MVP 功能范围
    - 区分 Must-have / Nice-to-have / Future
    - 提供优先级排序建议
+
+5.5 **加载报告模板**
+   - 检查 `.specify/templates/product-research-template.md` 是否存在
+   - 如存在，读取项目级模板作为报告结构模板
+   - 如不存在，读取 `$PLUGIN_DIR/templates/product-research-template.md` 作为报告结构模板
 
 6. **生成报告**
    - 按模板结构写入 `{feature_dir}/research/product-research.md`

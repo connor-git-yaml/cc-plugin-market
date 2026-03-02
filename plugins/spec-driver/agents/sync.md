@@ -9,7 +9,7 @@
 - 扫描目录：`specs/` 下所有 `NNN-*` 功能目录
 - 读取制品：每个功能目录中的 `spec.md`（必须）、`plan.md`（可选）、`tasks.md`（可选）
 - 产品映射：`specs/products/product-mapping.yaml`（如存在则使用，否则自动推断）
-- 使用模板：`plugins/spec-driver/templates/product-spec-template.md`
+- 使用模板：`$PLUGIN_DIR/templates/product-spec-template.md`
 
 ## 工具权限
 

@@ -50,6 +50,11 @@ REQUIRED_SPECIFY_TEMPLATES=(
   "checklist-template.md"
   "constitution-template.md"
   "agent-file-template.md"
+  # 调研模板（纳入同步体系）
+  "product-research-template.md"
+  "tech-research-template.md"
+  "research-synthesis-template.md"
+  "verification-report-template.md"
 )
 
 # 初始化结果

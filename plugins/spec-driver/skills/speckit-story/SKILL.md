@@ -30,9 +30,23 @@ disable-model-invocation: true
 
 ## 初始化阶段
 
+### 0. 插件路径发现
+
+在执行任何脚本或读取插件文件前，确定插件根目录：
+
+```bash
+if [ -f .specify/.spec-driver-path ]; then
+  PLUGIN_DIR=$(cat .specify/.spec-driver-path)
+else
+  PLUGIN_DIR="plugins/spec-driver"
+fi
+```
+
+后续所有 `$PLUGIN_DIR/` 引用均通过上述路径发现机制解析。
+
 ### 1. 项目环境检查
 
-运行 `bash plugins/spec-driver/scripts/init-project.sh --json`，解析 JSON 输出。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出。
 
 ### 2. Constitution 处理
 
@@ -90,10 +104,10 @@ autonomous 默认值: 全部 on_failure
   if .claude/commands/speckit.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
   else:
-    prompt_source[phase] = "plugins/spec-driver/agents/{phase}.md"
+    prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
-prompt_source[constitution] = "plugins/spec-driver/agents/constitution.md"
-prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
+prompt_source[constitution] = "$PLUGIN_DIR/agents/constitution.md"
+prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 ```
 
 ### 6. 特性目录准备
@@ -269,8 +283,8 @@ prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
 
 **并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
-1. 读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
-2. 读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
 
 等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 

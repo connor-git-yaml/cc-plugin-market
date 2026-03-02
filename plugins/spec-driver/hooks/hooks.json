@@ -1,13 +1,15 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "commands": [
-        {
-          "type": "shell",
-          "command": "./scripts/postinstall.sh"
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/postinstall.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

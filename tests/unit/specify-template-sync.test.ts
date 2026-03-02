@@ -32,6 +32,11 @@ describe('ensureSpecifyTemplates', () => {
       'checklist-template.md',
       'constitution-template.md',
       'agent-file-template.md',
+      // 调研模板（FR-001: 纳入同步体系）
+      'product-research-template.md',
+      'tech-research-template.md',
+      'research-synthesis-template.md',
+      'verification-report-template.md',
     ];
     for (const name of templates) {
       fs.writeFileSync(path.join(sourceDir, name), `# ${name}\n`, 'utf-8');
@@ -42,7 +47,7 @@ describe('ensureSpecifyTemplates', () => {
     });
 
     expect(result.missing).toHaveLength(0);
-    expect(result.copied).toHaveLength(6);
+    expect(result.copied).toHaveLength(10);
     expect(
       fs.existsSync(path.join(projectDir, '.specify', 'templates', 'plan-template.md')),
     ).toBe(true);

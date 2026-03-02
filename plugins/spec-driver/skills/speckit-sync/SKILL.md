@@ -18,6 +18,22 @@ disable-model-invocation: false
 
 ---
 
+## 插件路径发现
+
+在执行任何脚本或读取插件文件前，确定插件根目录：
+
+```bash
+if [ -f .specify/.spec-driver-path ]; then
+  PLUGIN_DIR=$(cat .specify/.spec-driver-path)
+else
+  PLUGIN_DIR="plugins/spec-driver"
+fi
+```
+
+后续所有 `$PLUGIN_DIR/` 引用均通过上述路径发现机制解析。
+
+---
+
 ## 项目上下文注入（project-context，可选）
 
 在执行聚合前执行以下检查：
@@ -107,7 +123,7 @@ Task(
 **specs 目录**: {project_root}/specs/
 **功能目录列表**: {NNN-xxx 目录名列表}
 **产品映射文件**: {project_root}/specs/products/product-mapping.yaml（如存在）
-**产品模板**: plugins/spec-driver/templates/product-spec-template.md
+**产品模板**: $PLUGIN_DIR/templates/product-spec-template.md
 **已有产品文档**: {specs/products/ 下已有的产品目录列表（如有）}
 **项目上下文**: {project_context_block}
 ---
@@ -150,5 +166,5 @@ Task(
 ### Prompt 来源
 
 ```text
-prompt_source[sync] = "plugins/spec-driver/agents/sync.md"  // 始终使用内置版本
+prompt_source[sync] = "$PLUGIN_DIR/agents/sync.md"  // 始终使用内置版本
 ```

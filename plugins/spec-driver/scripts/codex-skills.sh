@@ -6,13 +6,13 @@ set -euo pipefail
 MODE="project"
 ACTION="install"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
   cat <<'USAGE'
 用法:
-  bash plugins/spec-driver/scripts/codex-skills.sh install [--global]
-  bash plugins/spec-driver/scripts/codex-skills.sh remove [--global]
+  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" install [--global]
+  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" remove [--global]
 
 说明:
   install   安装 Spec Driver 的 Codex 包装技能到 .codex/skills
@@ -105,7 +105,7 @@ $input_rule
 
 1. 按 source skill 的阶段顺序执行，不改变门禁与产物路径。
 2. 将 source skill 中每次 \`Task(...)\` 调用改为“当前会话内联子代理执行”：
-   - 读取对应 \`plugins/spec-driver/agents/*.md\` prompt
+   - 读取对应 \`\$PLUGIN_DIR/agents/*.md\` prompt
    - 追加 source skill 定义的运行时上下文注入块
    - 在当前会话完成该阶段并写入相同文件
 3. 原并行组若受环境限制无法并行，必须回退串行并显式标注 \`[回退:串行]\`。
@@ -131,12 +131,12 @@ ensure_source_exists() {
 }
 
 install_all() {
-  local source_feature="$REPO_ROOT/plugins/spec-driver/skills/speckit-feature/SKILL.md"
-  local source_story="$REPO_ROOT/plugins/spec-driver/skills/speckit-story/SKILL.md"
-  local source_fix="$REPO_ROOT/plugins/spec-driver/skills/speckit-fix/SKILL.md"
-  local source_resume="$REPO_ROOT/plugins/spec-driver/skills/speckit-resume/SKILL.md"
-  local source_sync="$REPO_ROOT/plugins/spec-driver/skills/speckit-sync/SKILL.md"
-  local source_doc="$REPO_ROOT/plugins/spec-driver/skills/speckit-doc/SKILL.md"
+  local source_feature="$PLUGIN_DIR/skills/speckit-feature/SKILL.md"
+  local source_story="$PLUGIN_DIR/skills/speckit-story/SKILL.md"
+  local source_fix="$PLUGIN_DIR/skills/speckit-fix/SKILL.md"
+  local source_resume="$PLUGIN_DIR/skills/speckit-resume/SKILL.md"
+  local source_sync="$PLUGIN_DIR/skills/speckit-sync/SKILL.md"
+  local source_doc="$PLUGIN_DIR/skills/speckit-doc/SKILL.md"
 
   ensure_source_exists "$source_feature"
   ensure_source_exists "$source_story"
