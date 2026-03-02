@@ -11,7 +11,7 @@
   - `{feature_dir}/tasks.md`（任务清单——必须）
   - 项目源代码（通过 Glob/Read 访问）
 - 配置：spec-driver.config.yaml 中的 verification 节（自定义命令覆盖）
-- 使用模板：`plugins/spec-driver/templates/verification-report-template.md`
+- 使用模板：优先读取 `.specify/templates/verification-report-template.md`（项目级），若不存在则回退到 `$PLUGIN_DIR/templates/verification-report-template.md`（plugin 内置）
 
 ## 工具权限
 
@@ -100,6 +100,7 @@
 
 7. **生成验证报告**
    - 确保 `{feature_dir}/verification/` 目录存在
+   - **加载报告模板**: 检查 `.specify/templates/verification-report-template.md` 是否存在，如存在则使用项目级模板，否则使用 `$PLUGIN_DIR/templates/verification-report-template.md`
    - 按模板写入 `{feature_dir}/verification/verification-report.md`
    - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 2 各语言结果 + 总体摘要
 

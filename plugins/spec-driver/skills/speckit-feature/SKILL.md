@@ -37,9 +37,23 @@ disable-model-invocation: true
 
 在进入工作流之前，执行以下初始化：
 
+### 0. 插件路径发现
+
+在执行任何脚本或读取插件文件前，确定插件根目录：
+
+```bash
+if [ -f .specify/.spec-driver-path ]; then
+  PLUGIN_DIR=$(cat .specify/.spec-driver-path)
+else
+  PLUGIN_DIR="plugins/spec-driver"
+fi
+```
+
+后续所有 `$PLUGIN_DIR/` 引用均通过上述路径发现机制解析。
+
 ### 1. 项目环境检查
 
-运行 `bash plugins/spec-driver/scripts/init-project.sh --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
 
 ### 2. Constitution 处理
 
@@ -47,7 +61,7 @@ disable-model-invocation: true
 
 ### 3. 配置加载
 
-- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
+- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `$PLUGIN_DIR/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
 - 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
@@ -103,13 +117,13 @@ autonomous 默认值: 全部 on_failure
   if .claude/commands/speckit.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
   else:
-    prompt_source[phase] = "plugins/spec-driver/agents/{phase}.md"
+    prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
 # 以下阶段始终使用 Plugin 内置版本：
-prompt_source[constitution] = "plugins/spec-driver/agents/constitution.md"
-prompt_source[product-research] = "plugins/spec-driver/agents/product-research.md"
-prompt_source[tech-research] = "plugins/spec-driver/agents/tech-research.md"
-prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
+prompt_source[constitution] = "$PLUGIN_DIR/agents/constitution.md"
+prompt_source[product-research] = "$PLUGIN_DIR/agents/product-research.md"
+prompt_source[tech-research] = "$PLUGIN_DIR/agents/tech-research.md"
+prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 ```
 
 ### 6. 特性目录准备
@@ -371,7 +385,7 @@ custom            → [根据 config.research.custom_steps 映射，详见 custo
 
 `[4/10] 正在生成产研汇总...`
 
-**此阶段由编排器亲自执行，不委派子代理。** 读取 product-research.md + tech-research.md + `plugins/spec-driver/templates/research-synthesis-template.md`，生成交叉分析（产品x技术矩阵、可行性评估、风险矩阵、推荐方案、MVP 范围），写入 `{feature_dir}/research/research-synthesis.md`。
+**此阶段由编排器亲自执行，不委派子代理。** 读取 product-research.md + tech-research.md，加载产研汇总模板（优先读取 `.specify/templates/research-synthesis-template.md`，若不存在则回退到 `$PLUGIN_DIR/templates/research-synthesis-template.md`），生成交叉分析（产品x技术矩阵、可行性评估、风险矩阵、推荐方案、MVP 范围），写入 `{feature_dir}/research/research-synthesis.md`。
 
 **`custom` 模式 synthesis 依赖检查**: 如果 `custom_steps` 包含 `synthesis` 但 product-research.md 或 tech-research.md 不存在（即 `custom_steps` 中未包含对应的前置步骤），输出警告 "[警告] synthesis 步骤依赖 product-research 和 tech-research 的输出，但当前 custom_steps 中缺少前置步骤，已跳过 synthesis"，跳过此步骤。
 
@@ -623,8 +637,8 @@ elif research_mode == "custom":
 
 **并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
-1. 读取 `plugins/spec-driver/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
-2. 读取 `plugins/spec-driver/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
 
 等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 

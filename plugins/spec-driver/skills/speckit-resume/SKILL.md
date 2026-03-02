@@ -23,9 +23,23 @@ disable-model-invocation: true
 
 在进入恢复流程之前，执行以下精简初始化（5 步）：
 
+### 0. 插件路径发现
+
+在执行任何脚本或读取插件文件前，确定插件根目录：
+
+```bash
+if [ -f .specify/.spec-driver-path ]; then
+  PLUGIN_DIR=$(cat .specify/.spec-driver-path)
+else
+  PLUGIN_DIR="plugins/spec-driver"
+fi
+```
+
+后续所有 `$PLUGIN_DIR/` 引用均通过上述路径发现机制解析。
+
 ### 1. 项目环境检查
 
-运行 `bash plugins/spec-driver/scripts/init-project.sh --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
 
 ### 2. Constitution 处理
 
@@ -33,7 +47,7 @@ disable-model-invocation: true
 
 ### 3. 配置加载
 
-- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `plugins/spec-driver/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
+- 如果 `NEEDS_CONFIG = true`：交互式引导用户选择预设（balanced/quality-first/cost-efficient），从 `$PLUGIN_DIR/templates/spec-driver.config-template.yaml` 复制模板到项目根目录，应用选择的预设
 - 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `model_compat` 和 `codex_thinking` 配置（可选）；缺失时使用 run 模式定义的默认跨运行时映射与思考等级映射
@@ -53,13 +67,13 @@ disable-model-invocation: true
   if .claude/commands/speckit.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
   else:
-    prompt_source[phase] = "plugins/spec-driver/agents/{phase}.md"
+    prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
 # 以下阶段始终使用 Plugin 内置版本：
-prompt_source[constitution] = "plugins/spec-driver/agents/constitution.md"
-prompt_source[product-research] = "plugins/spec-driver/agents/product-research.md"
-prompt_source[tech-research] = "plugins/spec-driver/agents/tech-research.md"
-prompt_source[verify] = "plugins/spec-driver/agents/verify.md"
+prompt_source[constitution] = "$PLUGIN_DIR/agents/constitution.md"
+prompt_source[product-research] = "$PLUGIN_DIR/agents/product-research.md"
+prompt_source[tech-research] = "$PLUGIN_DIR/agents/tech-research.md"
+prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 ```
 
 **注意**: resume 不执行"特性目录准备"步骤，因为目录已存在是恢复的前提条件。
@@ -166,4 +180,4 @@ product/tech-research.md 存在  → 从对应阶段恢复
 - Codex 下默认把 `opus/sonnet/haiku` 映射到 `gpt-5.3-codex`，并使用 `codex_thinking` 选择思考等级（`low|medium|high`）
 - 若映射后模型不可用，回退到 `model_compat.defaults.{runtime}` 并记录 `[模型回退]`
 
-配置文件路径: `plugins/spec-driver/templates/spec-driver.config-template.yaml`（模板）或项目根目录 `spec-driver.config.yaml`（用户配置）。
+配置文件路径: `$PLUGIN_DIR/templates/spec-driver.config-template.yaml`（模板）或项目根目录 `spec-driver.config.yaml`（用户配置）。

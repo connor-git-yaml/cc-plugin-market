@@ -31,13 +31,13 @@ npm run codex:spec-driver:install:global
 npm run codex:spec-driver:remove
 ```
 
-等价底层脚本命令：
+等价底层脚本命令（`$PLUGIN_DIR` 由 `.specify/.spec-driver-path` 解析或回退为 `plugins/spec-driver`）：
 
 ```bash
-bash plugins/spec-driver/scripts/codex-skills.sh install
-bash plugins/spec-driver/scripts/codex-skills.sh install --global
-bash plugins/spec-driver/scripts/codex-skills.sh remove
-bash plugins/spec-driver/scripts/codex-skills.sh remove --global
+bash "$PLUGIN_DIR/scripts/codex-skills.sh" install
+bash "$PLUGIN_DIR/scripts/codex-skills.sh" install --global
+bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove
+bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 ```
 
 Codex 包装技能会自动检测项目级上下文文件：

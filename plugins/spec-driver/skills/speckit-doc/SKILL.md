@@ -32,6 +32,22 @@ Step 7: 完成报告
 
 ---
 
+## Step 0: 插件路径发现
+
+在执行任何脚本或读取插件文件前，确定插件根目录：
+
+```bash
+if [ -f .specify/.spec-driver-path ]; then
+  PLUGIN_DIR=$(cat .specify/.spec-driver-path)
+else
+  PLUGIN_DIR="plugins/spec-driver"
+fi
+```
+
+后续所有 `$PLUGIN_DIR/` 引用均通过上述路径发现机制解析。
+
+---
+
 ## Step 1: 项目元信息自动提取
 
 ### 1.1 收集项目元数据
@@ -39,7 +55,7 @@ Step 7: 完成报告
 执行以下 Bash 命令收集项目信息：
 
 ```bash
-bash plugins/spec-driver/scripts/scan-project.sh --json
+bash "$PLUGIN_DIR/scripts/scan-project.sh" --json
 ```
 
 解析 JSON 输出，提取：
@@ -185,7 +201,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 **重要: LICENSE 文本禁止 LLM 生成，必须使用静态模板文件。**
 
-1. 使用 Read tool 读取模板文件：`plugins/spec-driver/templates/licenses/{LICENSE_ID}.txt`
+1. 使用 Read tool 读取模板文件：`$PLUGIN_DIR/templates/licenses/{LICENSE_ID}.txt`
 2. 替换占位符：
    - `[year]` → 当前年份（如 `2026`）
    - `[fullname]` → 版权持有者（优先级：package.json author.name > git config user.name > `[COPYRIGHT HOLDER]`）
@@ -414,7 +430,7 @@ By contributing, you agree that your contributions will be licensed under the pr
 
 ### 5.4 生成 CODE_OF_CONDUCT.md（仅完整模式）
 
-1. 使用 Read tool 读取模板：`plugins/spec-driver/templates/code-of-conduct-v2.1.md`
+1. 使用 Read tool 读取模板：`$PLUGIN_DIR/templates/code-of-conduct-v2.1.md`
 2. 将 `[INSERT CONTACT METHOD]` 替换为作者联系方式：
    - 优先: package.json author.email
    - 其次: git config user.email
