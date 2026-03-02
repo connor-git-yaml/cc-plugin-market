@@ -53,12 +53,12 @@
    - **独立模式时**: 检查技术方案是否完整覆盖需求描述中的功能范围，标记技术方案可能限制需求扩展的地方
    - 确认技术选型不违反 Constitution 约束
 
-6.5 **加载报告模板**
+7. **加载报告模板**
    - 检查 `.specify/templates/tech-research-template.md` 是否存在
    - 如存在，读取项目级模板作为报告结构模板
    - 如不存在，读取 `$PLUGIN_DIR/templates/tech-research-template.md` 作为报告结构模板
 
-7. **生成报告**
+8. **生成报告**
    - 按模板结构写入 `{feature_dir}/research/tech-research.md`
 
 ## 输出
