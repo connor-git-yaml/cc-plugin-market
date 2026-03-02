@@ -45,12 +45,12 @@
    - 区分 Must-have / Nice-to-have / Future
    - 提供优先级排序建议
 
-5.5 **加载报告模板**
+6. **加载报告模板**
    - 检查 `.specify/templates/product-research-template.md` 是否存在
    - 如存在，读取项目级模板作为报告结构模板
    - 如不存在，读取 `$PLUGIN_DIR/templates/product-research-template.md` 作为报告结构模板
 
-6. **生成报告**
+7. **生成报告**
    - 按模板结构写入 `{feature_dir}/research/product-research.md`
    - 确保 research/ 目录存在
 
