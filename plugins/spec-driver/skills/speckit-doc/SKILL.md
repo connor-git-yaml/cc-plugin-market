@@ -122,6 +122,57 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ---
 
+## Step 2.5: 在线调研策略解析（project-context 扩展）
+
+为降低“仅基于本地元信息生成文档，遗漏外部事实/最佳实践”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
+---
+
+## Step 2.6: 在线调研补充与硬门禁
+
+**执行条件**: `online_research_required = true`
+
+1. 编排器亲自执行在线调研（不委派子代理），执行 `0..online_research_max_points` 个调研点
+2. 写入 `.specify/research/doc-online-research.md`（目录不存在则先创建）
+3. 文件必须包含以下结构化字段（可用 YAML Front Matter 或等价键值区块）：
+   - `required: true`
+   - `mode: doc`
+   - `points_count: {N}`
+   - `tools: [..]`
+   - `queries: [..]`
+   - `findings: [..]`
+   - `impacts_on_docs: [..]`
+   - `skip_reason: "{原因}"`（仅当 `points_count = 0` 时必填）
+4. 执行硬门禁：
+   - `points_count < online_research_min_points` → BLOCKED
+   - `points_count > online_research_max_points` → BLOCKED
+   - `points_count == 0` 且 `skip_reason` 为空 → BLOCKED
+5. BLOCKED 时暂停并提示：`A) 补齐 doc-online-research.md 后继续 | B) 关闭在线调研要求后重试`
+
+**执行条件（未要求在线调研）**: `online_research_required = false`
+- 输出: `[doc] 在线调研补充 [已跳过 - 项目未要求在线调研]`
+
+---
+
 ## Step 3: 文档组织模式选择
 
 向用户展示以下选项：
@@ -484,6 +535,8 @@ By contributing, you agree that your contributions will be licensed under the pr
 speckit-doc 文档生成完成!
 
 生成文件:
+  {if online_research_required: "✓ .specify/research/doc-online-research.md — 在线调研证据"}
+  {if not online_research_required: "○ .specify/research/doc-online-research.md — 跳过（项目未要求）"}
   + {fileName} — 新建
   ~ {fileName} — 覆盖（已备份为 .bak）
   - {fileName} — 跳过（保留已有文件）

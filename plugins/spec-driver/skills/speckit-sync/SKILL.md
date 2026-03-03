@@ -46,6 +46,57 @@ fi
 
 ---
 
+## 在线调研策略解析（project-context 扩展）
+
+为降低“仅依赖本地 spec 聚合，遗漏外部标准/竞品变化”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
+---
+
+## 在线调研补充与硬门禁
+
+**执行条件**: `online_research_required = true`
+
+1. 编排器亲自执行在线调研（不委派子代理），执行 `0..online_research_max_points` 个调研点
+2. 写入 `.specify/research/sync-online-research.md`（目录不存在则先创建）
+3. 文件必须包含以下结构化字段（可用 YAML Front Matter 或等价键值区块）：
+   - `required: true`
+   - `mode: sync`
+   - `points_count: {N}`
+   - `tools: [..]`
+   - `queries: [..]`
+   - `findings: [..]`
+   - `impacts_on_product_spec: [..]`
+   - `skip_reason: "{原因}"`（仅当 `points_count = 0` 时必填）
+4. 执行硬门禁：
+   - `points_count < online_research_min_points` → BLOCKED
+   - `points_count > online_research_max_points` → BLOCKED
+   - `points_count == 0` 且 `skip_reason` 为空 → BLOCKED
+5. BLOCKED 时暂停并提示：`A) 补齐 sync-online-research.md 后继续 | B) 关闭在线调研要求后重试`
+
+**执行条件（未要求在线调研）**: `online_research_required = false`
+- 输出: `[sync] 在线调研补充 [已跳过 - 项目未要求在线调研]`
+
+---
+
 ## 前置检查
 
 在执行聚合之前，检查 `specs/` 目录状态：
@@ -160,6 +211,7 @@ Task(
   {产品 B}: {完整章节数}/14 章节完整
 
 产品映射: specs/products/product-mapping.yaml
+在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```
 
