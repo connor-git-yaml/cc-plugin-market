@@ -60,6 +60,29 @@ fi
 - 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
 - 若无 project-context 文件，设置 `project_context_block = "未配置"`
 
+### 4.5 在线调研策略解析（project-context 扩展）
+
+为降低“恢复执行时越过在线调研证据门禁”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
 ### 5. Prompt 来源映射
 
 ```text
@@ -114,6 +137,25 @@ if 特性目录存在但无任何制品文件:
 
 ---
 
+## 在线调研证据恢复检查（前置硬门禁）
+
+在确定 `feature_dir` 后、恢复点判定前执行：
+
+```text
+if online_research_required:
+  1. 检查 {feature_dir}/research/online-research.md 是否存在
+  2. 若存在，解析 points_count / skip_reason：
+     - points_count < online_research_min_points → BLOCKED
+     - points_count > online_research_max_points → BLOCKED
+     - points_count == 0 且 skip_reason 为空 → BLOCKED
+  3. 若文件不存在或校验失败:
+     - 记录 [恢复修正] online-research 缺失/无效
+     - 强制恢复点不高于 Phase 1d（在线调研补充）
+     - 不允许直接进入 Phase 2 及之后阶段
+```
+
+---
+
 ## 中断恢复机制
 
 扫描 `{feature_dir}` 下的制品文件，从后向前确定恢复点：
@@ -126,6 +168,7 @@ plan.md 存在                   → 从 tasks (Phase 5) 恢复
 spec.md 存在且有 Clarifications → 从 checklist (Phase 3.5) 恢复
 spec.md 存在                   → 从 clarify (Phase 3) 恢复
 research-synthesis.md 存在     → 从 specify (Phase 2) 恢复
+online-research.md 缺失/无效且 online_research_required=true → 从在线调研补充（Phase 1d）恢复
 product/tech-research.md 存在  → 从对应阶段恢复
 无制品                         → 从头开始
 ```
@@ -162,6 +205,8 @@ product/tech-research.md 存在  → 从对应阶段恢复
 ```
 
 各阶段的详细编排逻辑（子代理调用、质量门触发、完成报告）与 `/spec-driver:speckit-feature` 一致，请参考 run 技能的工作流定义。
+
+恢复模式下同样必须执行 feature 模式定义的 `GATE_RESEARCH` 在线调研硬门禁，不得因“已有部分制品”跳过。
 
 ---
 

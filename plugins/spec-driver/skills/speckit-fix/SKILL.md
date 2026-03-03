@@ -61,6 +61,31 @@ fi
 - 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
 - 若无 project-context 文件，设置 `project_context_block = "未配置"`
 
+### 2.6 在线调研策略解析（project-context 扩展）
+
+为降低“只做本地排障而遗漏外部已知问题/修复实践”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
+说明：`online_research_min_points=0` 允许“本次不做在线调研点”，但必须记录 `skip_reason`（见 Step 5.5 产物格式与 GATE_DESIGN 前置硬门禁）。
+
 ### 3. 门禁配置加载
 
 读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
@@ -106,6 +131,26 @@ autonomous 默认值: 全部 on_failure
 - 读取相关模块的现有 spec（如存在于 specs/ 下）
 - 分析 git log 中最近的相关变更（可能引入 bug 的 commit）
 - 汇总为**问题上下文报告**
+
+### 5.5 在线调研补充（可选）
+
+**执行条件**: `online_research_required = true`
+
+- 编排器亲自执行（不委派子代理）
+- 使用在线调研工具（perplexity / sonar-pro-search 或等效工具）执行 `0..online_research_max_points` 个调研点
+- 写入 `{feature_dir}/research/online-research.md`
+- 文件必须包含以下结构化字段（可用 YAML Front Matter 或等价键值区块）：
+  - `required: true`
+  - `mode: fix`
+  - `points_count: {N}`
+  - `tools: [..]`
+  - `queries: [..]`
+  - `findings: [..]`
+  - `impacts_on_fix: [..]`
+  - `skip_reason: "{原因}"`（仅当 `points_count = 0` 时必填）
+
+**执行条件（未要求在线调研）**: `online_research_required = false`
+- 输出: `[fix] 在线调研补充 [已跳过 - 项目未要求在线调研]`
 
 ---
 
@@ -219,6 +264,20 @@ autonomous 默认值: 全部 on_failure
 **此阶段由编排器亲自执行，不委派子代理。**
 
 ```text
+# 先执行在线调研硬门禁（优先于行为决策）
+if online_research_required:
+  1. 检查 {feature_dir}/research/online-research.md 是否存在
+     - 不存在 → BLOCKED（必须暂停）
+  2. 解析 points_count / skip_reason
+     - points_count < online_research_min_points → BLOCKED
+     - points_count > online_research_max_points → BLOCKED
+     - points_count == 0 且 skip_reason 为空 → BLOCKED
+  3. 输出:
+     [GATE] ONLINE_RESEARCH | mode=fix | required=true | decision={BLOCKED|PASS} | points={N} | reason={理由}
+  4. 若 BLOCKED：
+     - 暂停并提示：A) 补齐 online-research.md 后继续 | B) 升级到 feature 模式重跑
+     - 不允许进入后续 GATE_DESIGN 决策
+
 1. 检查 gates.GATE_DESIGN.pause 配置:
    - 如果为 "always" → 暂停（展示修复规划摘要 + 等待用户选择）
    - 否则 → 自动继续（fix 模式默认豁免）
@@ -299,6 +358,8 @@ autonomous 默认值: 全部 on_failure
 根因: {根因简述}
 
 生成的制品:
+  {if online_research_required: "✅ research/online-research.md（在线调研证据）"}
+  {if not online_research_required: "⏭️ research/online-research.md [项目未要求]"}
   ✅ fix-report.md（诊断报告）
   ✅ plan.md（修复规划）
   ✅ tasks.md（修复任务）

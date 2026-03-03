@@ -75,6 +75,31 @@ fi
 - 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
 - 若无 project-context 文件，设置 `project_context_block = "未配置"`
 
+### 3.6 在线调研策略解析（project-context 扩展）
+
+为降低“已做本地调研但遗漏在线调研证据”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
+说明：`online_research_min_points=0` 允许“本 Feature 不做在线调研点”，但必须记录 `skip_reason`（见 Phase 1d 产物格式与 GATE_RESEARCH 硬门禁）。
+
 ### 4. 门禁配置加载
 
 读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
@@ -408,6 +433,28 @@ custom            → [根据 config.research.custom_steps 映射，详见 custo
 - `[3/10] 技术调研 [已跳过 - 调研模式: {research_mode}]`
 - `[4/10] 产研汇总 [已跳过 - 调研模式: {research_mode}]`
 
+#### Phase 1d: 在线调研补充（共享 [4/10]）
+
+**执行条件**: `online_research_required = true`（与 `research_mode` 解耦，skip 模式也要产出审计记录）
+
+`[4/10] 正在生成在线调研证据...`
+
+编排器亲自执行（不委派子代理）：
+- 使用在线调研工具（perplexity / sonar-pro-search 或等效工具）执行 `0..online_research_max_points` 个调研点
+- 将证据写入 `{feature_dir}/research/online-research.md`
+- 文件必须包含以下结构化字段（可用 YAML Front Matter 或等价键值区块）：
+  - `required: true`
+  - `mode: {research_mode}`
+  - `points_count: {N}`
+  - `tools: [..]`
+  - `queries: [..]`
+  - `findings: [..]`
+  - `impacts_on_design: [..]`
+  - `skip_reason: "{原因}"`（仅当 `points_count = 0` 时必填）
+
+**执行条件（未要求在线调研）**: `online_research_required = false`
+- 输出: `[4/10] 在线调研补充 [已跳过 - 项目未要求在线调研]`
+
 ---
 
 ### 质量门 1（GATE_RESEARCH）
@@ -415,6 +462,20 @@ custom            → [根据 config.research.custom_steps 映射，详见 custo
 **模式感知分级门禁**: GATE_RESEARCH 的行为根据 `research_mode` 动态调整。
 
 ```text
+# 先执行在线调研硬门禁（优先于所有 mode 分支）
+if online_research_required:
+  1. 检查 {feature_dir}/research/online-research.md 是否存在
+     - 不存在 → BLOCKED（必须暂停）
+  2. 解析 points_count / skip_reason
+     - points_count < online_research_min_points → BLOCKED
+     - points_count > online_research_max_points → BLOCKED
+     - points_count == 0 且 skip_reason 为空 → BLOCKED
+  3. 输出:
+     [GATE] GATE_RESEARCH | online_required=true | decision={BLOCKED|PASS} | points={N} | reason={理由}
+  4. 若 BLOCKED：
+     - 暂停并提示：A) 补齐 online-research.md 后继续 | B) 切换 research_mode 重跑
+     - 不允许进入后续 Phase 2
+
 if research_mode == "full":
   # 现有行为，完全保留
   1. 获取 behavior[GATE_RESEARCH]
@@ -443,8 +504,9 @@ elif research_mode == "codebase-scan":
   3. 输出: [GATE] GATE_RESEARCH | policy={gate_policy} | mode=codebase-scan | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
 
 elif research_mode == "skip":
-  跳过 GATE_RESEARCH，直接进入 Phase 2
-  输出: [GATE] GATE_RESEARCH | mode=skip | decision=SKIPPED | reason=调研模式为 skip，无调研产出
+  # 若 online_research_required=true，仍需先通过在线调研硬门禁
+  跳过模式感知摘要门禁，直接进入 Phase 2
+  输出: [GATE] GATE_RESEARCH | mode=skip | decision=SKIPPED | reason=调研模式为 skip，无离线调研产出
 
 elif research_mode == "custom":
   1. 获取 behavior[GATE_RESEARCH]
@@ -706,6 +768,12 @@ elif research_mode == "custom":
     ⏭️ research/research-synthesis.md [已跳过]
   elif research_mode == "custom":
     # 根据 custom_steps 中实际执行的步骤标记 ✅，未执行的标记 ⏭️ [已跳过]
+
+  # 在线调研证据（根据 online_research_required 展示）:
+  if online_research_required:
+    ✅ research/online-research.md (points={points_count})
+  else:
+    ⏭️ research/online-research.md [项目未要求]
 
   # 非调研制品——始终列出:
   ✅ spec.md

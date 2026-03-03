@@ -66,6 +66,31 @@ fi
 - 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
 - 若无 project-context 文件，设置 `project_context_block = "未配置"`
 
+### 3.6 在线调研策略解析（project-context 扩展）
+
+为降低“已做本地扫描但遗漏在线调研证据”的风险，读取 project-context 后追加在线调研策略解析：
+
+```text
+输入: .specify/project-context.yaml/.md 内容（如存在）
+
+1. 是否要求在线调研
+   - 若检测到以下任一关键词，设置 online_research_required=true：
+     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
+   - 否则 online_research_required=false
+
+2. 调研点数量约束
+   - online_research_max_points=5（默认）
+   - online_research_min_points=0（默认）
+   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
+
+3. 运行时变量
+   - online_research_required: bool
+   - online_research_min_points: int
+   - online_research_max_points: int
+```
+
+说明：`online_research_min_points=0` 允许“本次不做在线调研点”，但必须记录 `skip_reason`（见 Step 7.5 产物格式与 GATE_DESIGN 前置硬门禁）。
+
 ### 4. 门禁配置加载
 
 读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
@@ -125,6 +150,26 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 - 扫描与需求相关的源代码文件（通过 Grep/Glob 定位关键模块）
 - 读取 `specs/products/` 下的产品活文档（如存在）作为现有规范上下文
 - 汇总为**代码上下文摘要**（替代 research-synthesis.md 的角色）
+
+### 7.5 在线调研补充（可选）
+
+**执行条件**: `online_research_required = true`
+
+- 编排器亲自执行（不委派子代理）
+- 使用在线调研工具（perplexity / sonar-pro-search 或等效工具）执行 `0..online_research_max_points` 个调研点
+- 写入 `{feature_dir}/research/online-research.md`
+- 文件必须包含以下结构化字段（可用 YAML Front Matter 或等价键值区块）：
+  - `required: true`
+  - `mode: story`
+  - `points_count: {N}`
+  - `tools: [..]`
+  - `queries: [..]`
+  - `findings: [..]`
+  - `impacts_on_design: [..]`
+  - `skip_reason: "{原因}"`（仅当 `points_count = 0` 时必填）
+
+**执行条件（未要求在线调研）**: `online_research_required = false`
+- 输出: `[story] 在线调研补充 [已跳过 - 项目未要求在线调研]`
 
 ---
 
@@ -200,8 +245,22 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 **此阶段由编排器亲自执行，不委派子代理。**
 
 ```text
+# 先执行在线调研硬门禁（优先于行为决策）
+if online_research_required:
+  1. 检查 {feature_dir}/research/online-research.md 是否存在
+     - 不存在 → BLOCKED（必须暂停）
+  2. 解析 points_count / skip_reason
+     - points_count < online_research_min_points → BLOCKED
+     - points_count > online_research_max_points → BLOCKED
+     - points_count == 0 且 skip_reason 为空 → BLOCKED
+  3. 输出:
+     [GATE] ONLINE_RESEARCH | mode=story | required=true | decision={BLOCKED|PASS} | points={N} | reason={理由}
+  4. 若 BLOCKED：
+     - 暂停并提示：A) 补齐 online-research.md 后继续 | B) 放弃 story 模式改走 feature 全流程
+     - 不允许进入后续 GATE_DESIGN 决策
+
 1. 获取 behavior[GATE_DESIGN]
-2. 根据 behavior 决策:
+2. 根据 behavior[GATE_DESIGN] 决策:
    - always → 暂停（展示 spec 摘要 + 等待用户选择）
    - auto → 自动继续
    - on_failure → 检查 spec.md 是否存在 CRITICAL 歧义/冲突：有 → 暂停；无 → 自动继续
@@ -324,6 +383,8 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 人工介入: {N} 次
 
 生成的制品:
+  {if online_research_required: "✅ research/online-research.md（在线调研证据）"}
+  {if not online_research_required: "⏭️ research/online-research.md [项目未要求]"}
   ✅ spec.md
   ✅ plan.md
   ✅ tasks.md
