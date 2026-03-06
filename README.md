@@ -159,7 +159,7 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 
 Notes:
 - Project mode installs to the current git repository root (or current directory when not in a git repo).
-- Global mode writes wrappers with absolute source paths. If this repository path changes, rerun `install`.
+- Codex skills are generated from the current `speckit-*` source skills with a small Codex runtime adapter block; rerun `install` after upgrading Spec Driver to refresh them.
 
 ---
 

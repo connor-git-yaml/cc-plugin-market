@@ -40,6 +40,8 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove
 bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 ```
 
+安装时会同步当前 `speckit-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
+
 Codex 包装技能会自动检测项目级上下文文件：
 
 - `.specify/project-context.yaml`
