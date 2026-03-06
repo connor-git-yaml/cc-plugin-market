@@ -66,62 +66,6 @@ SKILLS=(
   "spec-driver-doc"
 )
 
-write_wrapper() {
-  local skill_name="$1"
-  local source_skill_path="$2"
-  local input_rule="$3"
-  local examples="$4"
-  local target_file="$TARGET_DIR/$skill_name/SKILL.md"
-
-  mkdir -p "$(dirname "$target_file")"
-
-  cat > "$target_file" <<EOF_SKILL
----
-name: $skill_name
-description: |
-  Codex native wrapper for Spec Driver mode.
-  Use this skill when user wants to run this Spec Driver mode in Codex and keep the same artifacts/gates as the original plugin workflow.
----
-
-## User Input
-
-\`\`\`text
-\$ARGUMENTS
-\`\`\`
-
-## Trigger Examples
-
-$examples
-
-## Input Rule
-
-$input_rule
-
-## Source of Truth
-
-流程定义必须以 \`$source_skill_path\` 为准。
-
-## Codex Execution Rules
-
-1. 按 source skill 的阶段顺序执行，不改变门禁与产物路径。
-2. 将 source skill 中每次 \`Task(...)\` 调用改为“当前会话内联子代理执行”：
-   - 读取对应 \`\$PLUGIN_DIR/agents/*.md\` prompt
-   - 追加 source skill 定义的运行时上下文注入块
-   - 在当前会话完成该阶段并写入相同文件
-3. 原并行组若受环境限制无法并行，必须回退串行并显式标注 \`[回退:串行]\`。
-4. 硬门禁（如 \`GATE_DESIGN\`）不可弱化或跳过。
-5. 所有写入路径必须与 source skill 约定一致，不得越界写入。
-6. 读取 \`spec-driver.config.yaml\` 的模型配置时，先执行运行时兼容归一化：
-   - 优先级保持 \`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\`
-   - 当 runtime=codex（或自动识别为 Codex）时，默认将 \`opus/sonnet/haiku\` 映射为 \`gpt-5.3-codex\`，并通过 \`codex_thinking.level_map\` 选择思考等级
-   - 若映射后模型不可用，回退到 \`model_compat.defaults.codex\` 并标注 \`[模型回退]\`
-7. 若项目根目录存在 \`.specify/project-context.yaml\` 或 \`.specify/project-context.md\`：
-   - 在进入阶段执行前先读取该文件，并将“项目参考路径注入块”追加到运行时上下文
-   - 注入块应包含 project-context 中声明且实际存在的文档/参考路径（不要求固定目录或文件名）
-   - 若存在无效路径，标注 \`[参考路径缺失]\`，流程继续但需在阶段总结与最终报告中列为风险项
-EOF_SKILL
-}
-
 ensure_source_exists() {
   local source_skill_path="$1"
   if [[ ! -f "$source_skill_path" ]]; then
@@ -130,56 +74,105 @@ ensure_source_exists() {
   fi
 }
 
+rewrite_codex_runtime_text() {
+  sed \
+    -e 's|/spec-driver:speckit-feature|$spec-driver-feature|g' \
+    -e 's|/spec-driver:speckit-story|$spec-driver-story|g' \
+    -e 's|/spec-driver:speckit-fix|$spec-driver-fix|g' \
+    -e 's|/spec-driver:speckit-resume|$spec-driver-resume|g' \
+    -e 's|/spec-driver:speckit-sync|$spec-driver-sync|g' \
+    -e 's|/spec-driver:speckit-doc|$spec-driver-doc|g' \
+    -e 's|Claude Code 的 Task tool|Task tool（Codex 下按内联子代理执行）|g' \
+    -e 's|在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。|若当前环境支持并行工具调用，则在同一消息中并行执行；否则按本 Skill 的回退规则串行执行。|g'
+}
+
+write_frontmatter() {
+  local skill_name="$1"
+  local source_skill_path="$2"
+
+  awk -v skill_name="$skill_name" '
+    NR == 1 && $0 == "---" {
+      in_frontmatter = 1
+      print
+      next
+    }
+    in_frontmatter {
+      if ($0 ~ /^name:[[:space:]]/) {
+        print "name: " skill_name
+        next
+      }
+      print
+      if ($0 == "---") {
+        exit
+      }
+    }
+  ' "$source_skill_path"
+}
+
+write_codex_adapter() {
+  local skill_name="$1"
+  local source_skill_name="$2"
+
+  cat <<EOF_ADAPTER
+## Codex Runtime Adapter
+
+此 Skill 在安装时直接同步自 \`\$PLUGIN_DIR/skills/$source_skill_name/SKILL.md\` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+
+- 命令别名：正文中的 \`/spec-driver:$source_skill_name\` 在 Codex 中等价于 \`\$$skill_name\`
+- 子代理执行：正文中的 \`Task(...)\` / \`Task tool\` 在 Codex 中视为当前会话内联子代理执行
+- 并行回退：原并行组若当前环境无法并行，必须显式标注 \`[回退:串行]\`
+- 模型兼容：保持 \`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\` 优先级；runtime=codex 时先做 \`model_compat\` 归一化，不可用时标注 \`[模型回退]\`
+- 质量门与产物：所有质量门、制品路径、写入边界与 source skill 完全一致，不得弱化或越界
+
+---
+EOF_ADAPTER
+}
+
+write_skill_body() {
+  local source_skill_path="$1"
+
+  awk '
+    NR == 1 && $0 == "---" {
+      in_frontmatter = 1
+      next
+    }
+    in_frontmatter {
+      if ($0 == "---") {
+        in_frontmatter = 0
+      }
+      next
+    }
+    {
+      print
+    }
+  ' "$source_skill_path" | rewrite_codex_runtime_text
+}
+
+write_wrapper() {
+  local skill_name="$1"
+  local source_skill_name="$2"
+  local source_skill_path="$PLUGIN_DIR/skills/$source_skill_name/SKILL.md"
+  local target_file="$TARGET_DIR/$skill_name/SKILL.md"
+
+  ensure_source_exists "$source_skill_path"
+  mkdir -p "$(dirname "$target_file")"
+
+  {
+    write_frontmatter "$skill_name" "$source_skill_path"
+    printf '\n'
+    write_codex_adapter "$skill_name" "$source_skill_name"
+    printf '\n'
+    write_skill_body "$source_skill_path"
+  } > "$target_file"
+}
+
 install_all() {
-  local source_feature="$PLUGIN_DIR/skills/speckit-feature/SKILL.md"
-  local source_story="$PLUGIN_DIR/skills/speckit-story/SKILL.md"
-  local source_fix="$PLUGIN_DIR/skills/speckit-fix/SKILL.md"
-  local source_resume="$PLUGIN_DIR/skills/speckit-resume/SKILL.md"
-  local source_sync="$PLUGIN_DIR/skills/speckit-sync/SKILL.md"
-  local source_doc="$PLUGIN_DIR/skills/speckit-doc/SKILL.md"
-
-  ensure_source_exists "$source_feature"
-  ensure_source_exists "$source_story"
-  ensure_source_exists "$source_fix"
-  ensure_source_exists "$source_resume"
-  ensure_source_exists "$source_sync"
-  ensure_source_exists "$source_doc"
-
-  write_wrapper \
-    "spec-driver-feature" \
-    "$source_feature" \
-    "参数解析与 speckit-feature 保持一致（支持 --research、--preset、--rerun）。" \
-    $'- $spec-driver-feature "实现多租户访问控制"\n- $spec-driver-feature --research tech-only "将 ORM 从 Prisma 迁移到 Drizzle"'
-
-  write_wrapper \
-    "spec-driver-story" \
-    "$source_story" \
-    "参数解析与 speckit-story 保持一致（支持需求描述和 --preset）。" \
-    $'- $spec-driver-story "给设置页增加暗色模式开关"\n- $spec-driver-story --preset cost-efficient "增加导出 CSV 按钮"'
-
-  write_wrapper \
-    "spec-driver-fix" \
-    "$source_fix" \
-    "参数解析与 speckit-fix 保持一致（支持问题描述和 --preset）。" \
-    $'- $spec-driver-fix "登录在邮箱包含 + 时失败"\n- $spec-driver-fix --preset balanced "批量任务在高并发下偶发死锁"'
-
-  write_wrapper \
-    "spec-driver-resume" \
-    "$source_resume" \
-    "该模式默认无需求描述，按 speckit-resume 规则扫描断点并继续。" \
-    $'- $spec-driver-resume\n- $spec-driver-resume --preset quality-first'
-
-  write_wrapper \
-    "spec-driver-sync" \
-    "$source_sync" \
-    "该模式无参数，聚合 specs/NNN-* 到产品级 current-spec.md。" \
-    $'- $spec-driver-sync'
-
-  write_wrapper \
-    "spec-driver-doc" \
-    "$source_doc" \
-    "该模式无参数，按 speckit-doc 流程交互生成开源文档套件。" \
-    $'- $spec-driver-doc'
+  write_wrapper "spec-driver-feature" "speckit-feature"
+  write_wrapper "spec-driver-story" "speckit-story"
+  write_wrapper "spec-driver-fix" "speckit-fix"
+  write_wrapper "spec-driver-resume" "speckit-resume"
+  write_wrapper "spec-driver-sync" "speckit-sync"
+  write_wrapper "spec-driver-doc" "speckit-doc"
 
   echo "Spec Driver Codex skills 安装完成: $TARGET_DIR"
 }

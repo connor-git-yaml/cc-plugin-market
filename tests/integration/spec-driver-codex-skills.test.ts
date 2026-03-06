@@ -62,6 +62,9 @@ describe('Spec Driver Codex skills script', () => {
       join(tempDir, '.codex', 'skills', 'spec-driver-story', 'SKILL.md'),
       'utf-8',
     );
+    expect(storyWrapper).toContain('description: "快速需求实现');
+    expect(storyWrapper).toContain('## Codex Runtime Adapter');
+    expect(storyWrapper).toContain('$spec-driver-story <需求描述>');
     expect(storyWrapper).toContain('model_compat.defaults.codex');
     expect(storyWrapper).toContain('opus/sonnet');
     expect(storyWrapper).toContain('.specify/project-context.yaml');
@@ -91,7 +94,12 @@ describe('Spec Driver Codex skills script', () => {
       join(fakeHome, '.codex', 'skills', 'spec-driver-feature', 'SKILL.md'),
       'utf-8',
     );
-    expect(wrapperContent).toContain(
+    expect(wrapperContent).toContain('description: "执行 Spec-Driven Development 完整研发流程');
+    expect(wrapperContent).toContain('## Codex Runtime Adapter');
+    expect(wrapperContent).toContain('$PLUGIN_DIR/skills/speckit-feature/SKILL.md');
+    expect(wrapperContent).toContain('$spec-driver-feature <需求描述>');
+    expect(wrapperContent).toContain('# Spec Driver — 自治研发编排器');
+    expect(wrapperContent).not.toContain(
       resolve('plugins/spec-driver/skills/speckit-feature/SKILL.md'),
     );
   });
