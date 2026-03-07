@@ -2,7 +2,7 @@
 # speckit-doc — 项目元信息收集脚本
 # 从项目配置文件（package.json、pyproject.toml、Cargo.toml、go.mod、pom.xml、build.gradle）、
 # git config、目录结构中收集项目元数据
-# 输出符合 contracts/scan-project-output.md 定义的 JSON Schema
+# 输出符合 plugins/spec-driver/contracts/scan-project-output.md 定义的 JSON Schema
 #
 # 用法: bash scan-project.sh [--json]
 #   --json  输出 JSON 格式（默认输出人类可读文本）

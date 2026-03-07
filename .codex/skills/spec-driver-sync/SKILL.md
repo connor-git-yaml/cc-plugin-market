@@ -1,6 +1,6 @@
 ---
 name: spec-driver-sync
-description: "聚合功能规范为产品级活文档 — 将 specs/ 下的增量 spec 合并为 current-spec.md"
+description: "聚合功能规范为产品级活文档与 doc 上游事实源 — 将 specs/ 下的增量 spec 合并为 current-spec.md"
 disable-model-invocation: false
 ---
 
@@ -19,7 +19,7 @@ disable-model-invocation: false
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的唯一职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `speckit-doc` 生成对外文档时可复用的上游事实源。
 
 ## 触发方式
 
@@ -146,13 +146,14 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `speckit-doc` 消费的“对外文档摘要”。
 
 **适用场景**：
 
 - 实现完成后同步产品全景文档
 - 定期批量合并多个迭代的 spec
 - 新成员 onboarding 前生成产品现状文档
+- 为 `speckit-doc` 生成 README / 使用文档提供单一事实源
 
 ### 执行步骤
 
@@ -219,11 +220,14 @@ Task(
      功能: {M} 个活跃 FR
 
 文档质量:
-  {产品 A}: {完整章节数}/14 章节完整
+  {产品 A}: {完整章节数}/14 主章节完整
     待补充: {待补充章节名列表}
-  {产品 B}: {完整章节数}/14 章节完整
+    对外文档摘要: {完整/部分/待补充}
+  {产品 B}: {完整章节数}/14 主章节完整
+    对外文档摘要: {完整/部分/待补充}
 
 产品映射: specs/products/product-mapping.yaml
+doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 speckit-doc 使用）”区块
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```
