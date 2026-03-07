@@ -12,6 +12,5 @@
     "autonomous",
     "claude-code",
     "speckit"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }

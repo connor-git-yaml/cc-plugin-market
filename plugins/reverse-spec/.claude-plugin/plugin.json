@@ -10,6 +10,5 @@
   "repository": "https://github.com/connor-git-yaml/cc-plugin-market",
   "license": "MIT",
   "keywords": ["reverse-engineering", "spec", "ast", "documentation", "claude-code"],
-  "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json"
+  "mcpServers": "./.mcp.json"
 }
