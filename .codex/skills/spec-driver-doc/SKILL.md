@@ -34,7 +34,7 @@ $spec-driver-doc
 ## 执行流程概览
 
 ```text
-Step 1: 项目元信息自动提取（无交互）
+Step 1: 项目元信息与产品文档语义提取（无交互）
 Step 2: 项目上下文注入（可选，无交互）
 Step 3: 文档组织模式选择（交互）
 Step 4: 开源协议选择（交互）
@@ -61,7 +61,7 @@ fi
 
 ---
 
-## Step 1: 项目元信息自动提取
+## Step 1: 项目元信息与产品文档语义提取
 
 ### 1.1 收集项目元数据
 
@@ -119,6 +119,93 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
   已有协议: {license || "未声明"}
   已有文档: {列出存在的文档文件}
 ```
+
+### 1.4 产品活文档发现（高优先级产品语义源）
+
+在项目元信息提取后，检查是否存在由 `speckit-sync` 生成的产品活文档：
+
+```text
+扫描路径: specs/products/*/current-spec.md
+
+预处理（适用于所有候选）:
+  - 为每个 current-spec 提取:
+    1. 产品目录名（`specs/products/<product>/`）
+    2. 文档标题中的产品名
+    3. `> **产品**:` 字段（如存在）
+  - 生成 normalized_product_keys:
+    - 小写化
+    - 去掉空格 / `-` / `_`
+    - 将 `@scope/pkg` 归一为 `pkg`
+  - 对 `scan-project.sh` 返回的 `name` 与项目目录名执行相同归一化，得到 `project_identity_keys`
+
+if 未找到:
+  product_doc_context = "未配置"
+  product_doc_summary = "未配置"
+
+if 找到 1 个:
+  先校验该候选是否与 `project_identity_keys` 建立可信匹配
+  if 匹配:
+    读取该 current-spec.md
+    优先提取 "## 对外文档摘要（供 speckit-doc 使用）" 区块
+    若该区块不存在，再回退读取以下章节:
+      - 产品概述
+      - 用户画像与场景
+      - 当前功能全集
+      - 范围与边界
+  if 不匹配:
+    product_doc_context = "检测到 1 个 current-spec，但与当前项目未建立可信匹配"
+    product_doc_summary = "待用户确认"
+    pending_product_doc_candidates = [{产品目录名 / 标题 / 路径}]
+    输出风险提示 `[doc] 检测到单个产品活文档，但其产品标识与当前项目不匹配，暂停自动采用`
+
+if 找到多个:
+  先按以下顺序尝试自动匹配:
+    1. `project_identity_keys` 与产品目录名完全匹配
+    2. current-spec 标题或 `> **产品**:` 字段与 `project_identity_keys` 匹配
+    3. 若仅存在 `@scope/pkg`、大小写、空格、`-` / `_` 差异，按 normalized match 视为同一产品
+  若仍无法确定:
+    product_doc_context = "存在多个 current-spec，待用户消歧"
+    product_doc_summary = "待用户确认"
+    pending_product_doc_candidates = [{产品目录名 / 标题 / 路径}...]
+    输出风险提示 `[doc] 检测到多个产品活文档且无法自动判定，需要用户选择或显式回退`
+```
+
+**语义源优先级**：
+
+1. `current-spec.md` 中的“对外文档摘要（供 speckit-doc 使用）”区块
+2. `current-spec.md` 的产品概述 / 用户画像与场景 / 当前功能全集 / 范围与边界
+3. `scan-project.sh` 的项目元信息结果
+4. AST 分析结果（仅用于校验和补充，不直接替代产品语义）
+
+**使用原则**：
+
+- `current-spec.md` 提供**产品语义**：产品定位、核心价值、主要用户、关键工作流、对外边界
+- `scan-project.sh` 提供**分发元信息**：版本号、license、scripts、入口命令、仓库地址、目录结构
+- AST 分析提供**实现证据**：已导出的模块、命令入口、主要代码结构
+- 若三者冲突，必须显式提示冲突来源；README 优先采用产品语义 + 分发元信息的组合，而不是静默覆盖
+
+### 1.5 产品活文档消歧（条件交互）
+
+**执行条件**: `pending_product_doc_candidates` 非空
+
+向用户展示候选列表并请求选择：
+
+```text
+检测到以下产品活文档候选，当前无法安全自动选定：
+
+1. {产品 A} — {标题}（{路径}）
+2. {产品 B} — {标题}（{路径}）
+...
+N. 不使用 current-spec，回退到项目元信息扫描
+
+请回复编号：
+```
+
+**输入解析**：
+
+- 选择某个候选 → 读取对应 `current-spec.md`，按 Step 1.4 的提取规则处理
+- 选择回退项 → `product_doc_context = "用户选择跳过 current-spec"`，`product_doc_summary = "未配置"`
+- 无效输入 → 提示重试，最多 2 次；仍无效则回退到项目元信息扫描，并输出 `[doc] 产品活文档消歧失败，已回退到项目元信息扫描结果`
 
 ---
 
@@ -275,6 +362,13 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 使用以下章节结构生成 README.md。每个章节用 HTML 注释标记包裹（为二期 `--update` 功能预留）：
 
+#### README 内容源优先级
+
+- `description` / `features` / `usage` 优先使用 `current-spec.md` 的“对外文档摘要”与相关章节
+- `getting-started` / `installation` / `testing` / `license` 使用 `scan-project.sh` 的实际元信息
+- AST 分析仅用于校验 README 中声称的功能是否与当前代码结构一致，避免把原始导出列表直接堆到 README
+- 若 `current-spec.md` 与项目元信息冲突：产品定位取 `current-spec.md`，版本/入口/脚本/协议取项目元信息
+
 #### README 章节结构
 
 ```markdown
@@ -285,15 +379,16 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 # {项目名称}
 
 <!-- speckit:section:description -->
-{项目描述 — 从项目配置文件 description 或 AST 分析结果提取}
+{项目描述 — 优先使用 current-spec 的对外文档摘要 / 产品概述；若未配置则回退到项目配置文件 description 或 AST 分析结果}
 <!-- speckit:section:description:end -->
 
 <!-- speckit:section:features -->
 ## Features
 
 {功能特性列表:
-  - 如果有 AST 分析结果: 列出实际导出的核心模块和功能
-  - 如果无 AST 分析: 基于项目 description 和 dependencies 推断}
+  - 优先基于 current-spec 的当前功能全集与主要工作流提炼面向用户的能力点
+  - AST 结果只用于核验与补充，不直接输出原始导出清单
+  - 如果无 current-spec 与 AST 分析: 基于项目 description 和 dependencies 推断}
 <!-- speckit:section:features:end -->
 
 <!-- speckit:section:getting-started -->
@@ -333,6 +428,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 ## Usage
 
 {使用示例:
+  - 优先基于 current-spec 的主要用户与工作流生成示例
   - CLI 工具（有 bin）: 展示 1-2 个命令行示例
   - Library（有 main）: 展示 import/require 和基本调用示例
   - 基于项目配置中的脚本/命令定义}
@@ -558,6 +654,11 @@ speckit-doc 文档生成完成!
 {如有缺失字段}
 注意: 以下信息未能自动提取，请在生成的文件中手动补充标记为 [待补充] 的内容:
   - {缺失字段列表}
+
+语义来源:
+  - 产品语义: {current-spec / 项目元信息扫描}
+  - 分发元信息: scan-project.sh
+  - 代码校验: {AST 分析 / 未使用}
 
 提示: 请检查生成的文件，确认内容准确后提交到版本控制。
 ```
