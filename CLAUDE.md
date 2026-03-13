@@ -56,4 +56,16 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
 - 使用 spec-driver 的方式执行需求变更和问题修复不允许直接修改源代码。
 
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-branch-sync-policy.md` 同步，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: branch-sync-policy -->
+## 分支同步约定
+
+- `feature/*`、`fix/*` 等开发分支在提交前，必须先同步最新 `master`
+- 同步方式统一使用 `git rebase master`，不要把 `master` 直接 merge 回开发分支
+- 推荐流程：`git checkout master` → `git pull --ff-only` → `git checkout <feature-or-fix-branch>` → `git rebase master`
+- rebase 后先解决冲突并完成必要验证，再执行 commit / push
+- 如果分支已经推送到远端，rebase 改写历史后使用 `git push --force-with-lease`
+<!-- END SHARED SECTION: branch-sync-policy -->
+
 <!-- MANUAL ADDITIONS END -->

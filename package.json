@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    "scripts/lifecycle-runner.cjs",
     "src/skills-global/",
     "plugins/",
     "templates/",
@@ -22,14 +23,15 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "lint": "tsc --noEmit",
+    "docs:sync:agents": "node scripts/sync-agent-docs.mjs",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:check": "bash scripts/check-plugin-sync.sh",
     "codex:spec-driver:install": "bash plugins/spec-driver/scripts/codex-skills.sh install",
     "codex:spec-driver:install:global": "bash plugins/spec-driver/scripts/codex-skills.sh install --global",
     "codex:spec-driver:remove": "bash plugins/spec-driver/scripts/codex-skills.sh remove",
     "codex:spec-driver:remove:global": "bash plugins/spec-driver/scripts/codex-skills.sh remove --global",
-    "postinstall": "node dist/scripts/postinstall.js",
-    "preuninstall": "node dist/scripts/preuninstall.js"
+    "postinstall": "node scripts/lifecycle-runner.cjs postinstall",
+    "preuninstall": "node scripts/lifecycle-runner.cjs preuninstall"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
