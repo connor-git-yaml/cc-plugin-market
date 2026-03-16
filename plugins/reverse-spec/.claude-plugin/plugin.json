@@ -1,6 +1,6 @@
 {
   "name": "reverse-spec",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档",
   "author": {
     "name": "Connor Lu",
