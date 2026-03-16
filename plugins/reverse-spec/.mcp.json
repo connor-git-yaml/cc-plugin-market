@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "reverse-spec": {
-      "command": "npx",
-      "args": ["reverse-spec", "mcp-server"]
+      "command": "reverse-spec",
+      "args": ["mcp-server"]
     }
   }
 }
