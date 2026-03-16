@@ -33,7 +33,17 @@
 - 质量门（如 `GATE_DESIGN`、`GATE_VERIFY`）语义不得弱化
 - 任何写操作仅限流程定义允许的产物路径，不得越界修改
 
-## 4. 优先级规则
+## 4. 版本号规范
+
+插件版本号采用语义化版本（SemVer），每次变更时按以下规则 bump：
+
+- **x.x.+1**（patch）：bug fix、配置修复等
+- **x.+1.0**（minor）：新功能、功能增强
+- **+1.0.0**（major）：不兼容的重大版本升级
+
+适用于 reverse-spec、spec-driver 等所有插件的 `plugin.json` 版本字段。
+
+## 5. 优先级规则
 
 1. 优先遵循 `plugins/spec-driver/skills/*/SKILL.md` 的阶段定义
 2. 需要实现细节时读取对应 `agents/*.md` 和 `templates/*`
