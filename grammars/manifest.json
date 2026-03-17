@@ -1,0 +1,28 @@
+{
+  "abiVersion": 14,
+  "webTreeSitterVersion": "0.24.7",
+  "wasmsPackageVersion": "0.1.13",
+  "generatedAt": "2026-03-17T09:56:48Z",
+  "grammars": {
+    "python": {
+      "wasmFile": "tree-sitter-python.wasm",
+      "sha256": "9056d0fb0c337810d019fae350e8167786119da98f0f282aceae7ab89ee8253b"
+    },
+    "go": {
+      "wasmFile": "tree-sitter-go.wasm",
+      "sha256": "9963ca89b616eaf04b08a43bc1fb0f07b85395bec313330851f1f1ead2f755b6"
+    },
+    "java": {
+      "wasmFile": "tree-sitter-java.wasm",
+      "sha256": "637aac4415fb39a211a4f4292d63c66b5ce9c32fa2cd35464af4f681d91b9a1f"
+    },
+    "typescript": {
+      "wasmFile": "tree-sitter-typescript.wasm",
+      "sha256": "8515404dceed38e1ed86aa34b09fcf3379fff1b4ff9dd3967bcd6d1eb5ac3d8f"
+    },
+    "javascript": {
+      "wasmFile": "tree-sitter-javascript.wasm",
+      "sha256": "63812b9e275d26851264734868d27a1656bd44a2ef6eb3e85e6b03728c595ab5"
+    }
+  }
+}

@@ -1,9 +1,14 @@
 /**
- * tree-sitter 容错降级
- * 针对 ts-morph 解析失败的文件进行容错解析
- * 生成部分骨架，parseErrors 字段被填充
+ * tree-sitter 容错降级（三级降级链）
+ *
+ * 降级链: ts-morph → tree-sitter → regex
+ *
+ * 当 ts-morph 解析失败时:
+ * 1. 优先使用 TreeSitterAnalyzer 进行真正的 tree-sitter AST 解析
+ * 2. 若 tree-sitter 也失败（如 WASM 加载错误），降级到正则提取
  */
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type {
   CodeSkeleton,
@@ -12,10 +17,13 @@ import type {
   ParseError,
   Language,
 } from '../models/code-skeleton.js';
+import { TreeSitterAnalyzer } from './tree-sitter-analyzer.js';
+
+// ════════════════════════ 正则降级（最终兜底） ════════════════════════
 
 /**
- * 基于正则的简易导出提取（tree-sitter 降级模式）
- * 当 ts-morph 无法解析时，使用正则提取基本结构
+ * 基于正则的简易导出提取（最终降级模式）
+ * 当 tree-sitter 也无法使用时，使用正则提取基本结构
  */
 function extractExportsFromText(content: string): ExportSymbol[] {
   const exports: ExportSymbol[] = [];
@@ -23,19 +31,12 @@ function extractExportsFromText(content: string): ExportSymbol[] {
   const seen = new Set<string>();
 
   const exportPatterns = [
-    // export function name
     /^export\s+(?:async\s+)?function\s+(\w+)/,
-    // export class name
     /^export\s+(?:abstract\s+)?class\s+(\w+)/,
-    // export interface name
     /^export\s+interface\s+(\w+)/,
-    // export type name
     /^export\s+type\s+(\w+)/,
-    // export enum name
     /^export\s+enum\s+(\w+)/,
-    // export const/let/var name
     /^export\s+(?:const|let|var)\s+(\w+)/,
-    // export default function/class
     /^export\s+default\s+(?:async\s+)?(?:function|class)\s+(\w+)/,
   ];
 
@@ -58,7 +59,6 @@ function extractExportsFromText(content: string): ExportSymbol[] {
       if (match?.[1] && !seen.has(match[1])) {
         seen.add(match[1]);
 
-        // 推断 kind
         let kind: ExportSymbol['kind'] = 'variable';
         for (const [keyword, k] of Object.entries(kindMap)) {
           if (line.includes(keyword)) {
@@ -74,7 +74,7 @@ function extractExportsFromText(content: string): ExportSymbol[] {
           jsDoc: null,
           isDefault: line.includes('default'),
           startLine: i + 1,
-          endLine: i + 1, // 无法精确确定结束行
+          endLine: i + 1,
         });
         break;
       }
@@ -122,24 +122,60 @@ function extractImportsFromText(content: string): ImportReference[] {
   return imports;
 }
 
+// ════════════════════════ 语言检测 ════════════════════════
+
 /**
- * 检测文件语言
+ * 从文件扩展名检测语言（扩展支持多语言）
  */
 function getLanguage(filePath: string): Language {
-  if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-    return 'typescript';
+  const ext = path.extname(filePath).toLowerCase();
+  const langMap: Record<string, Language> = {
+    '.ts': 'typescript',
+    '.tsx': 'typescript',
+    '.js': 'javascript',
+    '.jsx': 'javascript',
+    '.py': 'python',
+    '.pyi': 'python',
+    '.go': 'go',
+    '.java': 'java',
+  };
+  return langMap[ext] ?? 'javascript';
+}
+
+// ════════════════════════ 降级入口 ════════════════════════
+
+/**
+ * 容错解析文件（三级降级链）
+ *
+ * 1. 尝试 TreeSitterAnalyzer 真正的 AST 解析
+ * 2. tree-sitter 失败时降级到正则提取
+ *
+ * 函数签名保持与重写前完全一致，不影响调用方。
+ *
+ * @param filePath - 文件路径
+ * @returns CodeSkeleton，parserUsed 为 'tree-sitter'（AST）或 'tree-sitter'（正则降级亦标记为 tree-sitter，保持兼容）
+ */
+export async function analyzeFallback(filePath: string): Promise<CodeSkeleton> {
+  const language = getLanguage(filePath);
+
+  // 第一级降级：尝试 tree-sitter AST 解析
+  try {
+    const analyzer = TreeSitterAnalyzer.getInstance();
+    if (analyzer.isLanguageSupported(language)) {
+      return await analyzer.analyze(filePath, language);
+    }
+  } catch {
+    // tree-sitter 解析失败，继续降级到正则
   }
-  return 'javascript';
+
+  // 第二级降级：正则提取（最终兜底）
+  return regexFallback(filePath, language);
 }
 
 /**
- * 容错解析文件
- * 使用正则模式提取基本结构信息
- *
- * @param filePath - 文件路径
- * @returns 部分填充的 CodeSkeleton，parserUsed 为 'tree-sitter'
+ * 正则降级分析（内部方法，可用于测试对比）
  */
-export async function analyzeFallback(filePath: string): Promise<CodeSkeleton> {
+function regexFallback(filePath: string, language: Language): CodeSkeleton {
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
@@ -150,12 +186,10 @@ export async function analyzeFallback(filePath: string): Promise<CodeSkeleton> {
   const hash = createHash('sha256').update(content).digest('hex');
   const lines = content.split('\n');
   const loc = lines.length;
-  const language = getLanguage(filePath);
 
   const exports = extractExportsFromText(content);
   const imports = extractImportsFromText(content);
 
-  // 记录解析错误
   const parseErrors: ParseError[] = [
     {
       line: 1,
