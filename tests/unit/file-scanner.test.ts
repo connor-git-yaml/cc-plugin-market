@@ -162,7 +162,7 @@ describe('file-scanner', () => {
   // Phase 5: 混合语言目录测试（T034）
   // ============================================================
 
-  it('混合目录：.py 文件被跳过，unsupportedExtensions 计数正确', () => {
+  it('混合目录：.py 文件被 PythonLanguageAdapter 支持', () => {
     createFile(tmpDir, 'app.ts', 'export const x = 1;');
     createFile(tmpDir, 'main.py', 'print("hello")');
     createFile(tmpDir, 'lib.py', 'def foo(): pass');
@@ -170,14 +170,13 @@ describe('file-scanner', () => {
 
     const result = scanFiles(tmpDir);
 
-    // .py 被跳过，仅保留 .ts 和 .js
-    expect(result.files).toEqual(['app.ts', 'util.js']);
-    // unsupportedExtensions 应包含 .py 统计
-    expect(result.unsupportedExtensions).toBeDefined();
-    expect(result.unsupportedExtensions!.get('.py')).toBe(2);
+    // .py 现在被 PythonLanguageAdapter 支持，包含在 files 中
+    expect(result.files).toEqual(['app.ts', 'lib.py', 'main.py', 'util.js']);
+    // .py 不再出现在 unsupportedExtensions 中
+    expect(result.unsupportedExtensions?.get('.py')).toBeUndefined();
   });
 
-  it('混合目录：ScanResult.files 仅含支持的文件类型', () => {
+  it('混合目录：ScanResult.files 包含 TS/JS 和 Python 文件', () => {
     createFile(tmpDir, 'src/index.ts', 'export {}');
     createFile(tmpDir, 'src/utils.tsx', 'export {}');
     createFile(tmpDir, 'src/helper.py', 'pass');
@@ -186,17 +185,16 @@ describe('file-scanner', () => {
 
     const result = scanFiles(tmpDir);
 
-    // files 仅含 TS/JS 文件
-    expect(result.files).toEqual(['src/index.ts', 'src/utils.tsx']);
-    // 不支持的扩展名统计
+    // .py 现在被支持，.go 和 .css 仍不支持
+    expect(result.files).toEqual(['src/helper.py', 'src/index.ts', 'src/utils.tsx']);
+    // .py 不再在 unsupported 中
+    expect(result.unsupportedExtensions?.get('.py')).toBeUndefined();
     expect(result.unsupportedExtensions).toBeDefined();
-    expect(result.unsupportedExtensions!.get('.py')).toBe(1);
     expect(result.unsupportedExtensions!.get('.go')).toBe(1);
     expect(result.unsupportedExtensions!.get('.css')).toBe(1);
   });
 
-  it('仅含不支持语言文件的目录：files 为空', () => {
-    createFile(tmpDir, 'main.py', 'print("hello")');
+  it('仅含不支持语言文件的目录（不含 Python）：files 为空', () => {
     createFile(tmpDir, 'app.rb', 'puts "hello"');
     createFile(tmpDir, 'lib/util.go', 'package lib');
 
@@ -204,7 +202,6 @@ describe('file-scanner', () => {
 
     expect(result.files).toEqual([]);
     expect(result.unsupportedExtensions).toBeDefined();
-    expect(result.unsupportedExtensions!.get('.py')).toBe(1);
     expect(result.unsupportedExtensions!.get('.rb')).toBe(1);
     expect(result.unsupportedExtensions!.get('.go')).toBe(1);
   });

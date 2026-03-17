@@ -161,7 +161,8 @@ export const x = 1;
     });
 
     it('应对不支持的文件类型抛出错误', async () => {
-      await expect(analyzeFile('test.py')).rejects.toThrow(UnsupportedFileError);
+      // .py 现在被 PythonLanguageAdapter 支持，使用 .rb 测试
+      await expect(analyzeFile('test.rb')).rejects.toThrow(UnsupportedFileError);
     });
 
     it('应对不存在的文件抛出错误', async () => {

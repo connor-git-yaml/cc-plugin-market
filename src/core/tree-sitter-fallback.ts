@@ -122,6 +122,92 @@ function extractImportsFromText(content: string): ImportReference[] {
   return imports;
 }
 
+// ════════════════════════ Python 正则降级 ════════════════════════
+
+/**
+ * 基于正则的 Python 导出提取
+ * 识别顶层 def、async def、class 定义
+ */
+function extractPythonExportsFromText(content: string): ExportSymbol[] {
+  const exports: ExportSymbol[] = [];
+  const lines = content.split('\n');
+  const seen = new Set<string>();
+
+  const patterns: Array<{ re: RegExp; kind: ExportSymbol['kind'] }> = [
+    { re: /^(?:async\s+)?def\s+(\w+)\s*\(/, kind: 'function' },
+    { re: /^class\s+(\w+)/, kind: 'class' },
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // 仅匹配顶层定义（无缩进）
+    if (line.startsWith(' ') || line.startsWith('\t')) continue;
+
+    for (const { re, kind } of patterns) {
+      const match = re.exec(line);
+      if (match?.[1] && !seen.has(match[1]) && !match[1].startsWith('_')) {
+        seen.add(match[1]);
+        const isAsync = line.trimStart().startsWith('async');
+        exports.push({
+          name: match[1],
+          kind,
+          signature: `[REGEX] ${isAsync ? 'async ' : ''}${line.trim().slice(0, 200)}`,
+          jsDoc: null,
+          isDefault: false,
+          startLine: i + 1,
+          endLine: i + 1,
+        });
+        break;
+      }
+    }
+  }
+
+  return exports;
+}
+
+/**
+ * 基于正则的 Python 导入提取
+ * 识别 import 和 from...import 语句
+ */
+function extractPythonImportsFromText(content: string): ImportReference[] {
+  const imports: ImportReference[] = [];
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // from <module> import <names>
+    const fromMatch = /^from\s+(\S+)\s+import\s+(.+)$/.exec(trimmed);
+    if (fromMatch) {
+      const mod = fromMatch[1]!;
+      const namesStr = fromMatch[2]!.split('#')[0]!.trim(); // 去掉行内注释
+      const namedImports = namesStr.split(',').map((s) => s.trim().split(/\s+as\s+/)[0]!).filter(Boolean);
+      imports.push({
+        moduleSpecifier: mod,
+        isRelative: mod.startsWith('.'),
+        resolvedPath: null,
+        namedImports: namedImports.length > 0 ? namedImports : undefined,
+        isTypeOnly: false,
+      });
+      continue;
+    }
+
+    // import <module>
+    const importMatch = /^import\s+(\S+)/.exec(trimmed);
+    if (importMatch) {
+      const mod = importMatch[1]!.replace(/,\s*$/, '');
+      imports.push({
+        moduleSpecifier: mod,
+        isRelative: false,
+        resolvedPath: null,
+        isTypeOnly: false,
+      });
+    }
+  }
+
+  return imports;
+}
+
 // ════════════════════════ 语言检测 ════════════════════════
 
 /**
@@ -187,8 +273,13 @@ function regexFallback(filePath: string, language: Language): CodeSkeleton {
   const lines = content.split('\n');
   const loc = lines.length;
 
-  const exports = extractExportsFromText(content);
-  const imports = extractImportsFromText(content);
+  // 根据语言选择对应的正则提取器
+  const exports = language === 'python'
+    ? extractPythonExportsFromText(content)
+    : extractExportsFromText(content);
+  const imports = language === 'python'
+    ? extractPythonImportsFromText(content)
+    : extractImportsFromText(content);
 
   const parseErrors: ParseError[] = [
     {
