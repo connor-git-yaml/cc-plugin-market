@@ -208,6 +208,97 @@ function extractPythonImportsFromText(content: string): ImportReference[] {
   return imports;
 }
 
+// ════════════════════════ Go 正则降级 ════════════════════════
+
+/**
+ * 基于正则的 Go 导出提取
+ * 识别顶层 func、type（struct/interface）、const、var 定义
+ * Go 的可见性规则：首字母大写 = 导出
+ */
+function extractGoExportsFromText(content: string): ExportSymbol[] {
+  const exports: ExportSymbol[] = [];
+  const lines = content.split('\n');
+  const seen = new Set<string>();
+
+  const patterns: Array<{ re: RegExp; kind: ExportSymbol['kind'] }> = [
+    { re: /^func\s+(\w+)\s*\(/, kind: 'function' },
+    { re: /^func\s+\([^)]+\)\s+(\w+)\s*\(/, kind: 'function' }, // method
+    { re: /^type\s+(\w+)\s+struct\b/, kind: 'struct' },
+    { re: /^type\s+(\w+)\s+interface\b/, kind: 'interface' },
+    { re: /^type\s+(\w+)\s+/, kind: 'type' },
+    { re: /^const\s+(\w+)/, kind: 'const' },
+    { re: /^var\s+(\w+)/, kind: 'variable' },
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // 仅匹配顶层定义（无缩进）
+    if (line.startsWith(' ') || line.startsWith('\t')) continue;
+
+    for (const { re, kind } of patterns) {
+      const match = re.exec(line);
+      // Go: 首字母大写 = 导出
+      if (match?.[1] && !seen.has(match[1]) && /^[A-Z]/.test(match[1])) {
+        seen.add(match[1]);
+        exports.push({
+          name: match[1],
+          kind,
+          signature: `[REGEX] ${line.trim().slice(0, 200)}`,
+          jsDoc: null,
+          isDefault: false,
+          startLine: i + 1,
+          endLine: i + 1,
+        });
+        break;
+      }
+    }
+  }
+
+  return exports;
+}
+
+/**
+ * 基于正则的 Go 导入提取
+ * 识别单行 import 和分组 import
+ */
+function extractGoImportsFromText(content: string): ImportReference[] {
+  const imports: ImportReference[] = [];
+
+  // 分组 import: import ( "pkg1" \n "pkg2" )
+  const groupRe = /import\s*\(([\s\S]*?)\)/g;
+  let groupMatch: RegExpExecArray | null;
+  while ((groupMatch = groupRe.exec(content)) !== null) {
+    const block = groupMatch[1]!;
+    const lineRe = /^\s*(?:\w+\s+)?"([^"]+)"/gm;
+    let lineMatch: RegExpExecArray | null;
+    while ((lineMatch = lineRe.exec(block)) !== null) {
+      imports.push({
+        moduleSpecifier: lineMatch[1]!,
+        isRelative: false,
+        resolvedPath: null,
+        isTypeOnly: false,
+      });
+    }
+  }
+
+  // 单行 import: import "pkg"
+  const singleRe = /^import\s+(?:\w+\s+)?"([^"]+)"/gm;
+  let singleMatch: RegExpExecArray | null;
+  while ((singleMatch = singleRe.exec(content)) !== null) {
+    // 避免重复（如果已在分组中匹配）
+    if (!imports.some((i) => i.moduleSpecifier === singleMatch![1])) {
+      imports.push({
+        moduleSpecifier: singleMatch[1]!,
+        isRelative: false,
+        resolvedPath: null,
+        isTypeOnly: false,
+      });
+    }
+  }
+
+  return imports;
+}
+
 // ════════════════════════ 语言检测 ════════════════════════
 
 /**
@@ -276,10 +367,14 @@ function regexFallback(filePath: string, language: Language): CodeSkeleton {
   // 根据语言选择对应的正则提取器
   const exports = language === 'python'
     ? extractPythonExportsFromText(content)
-    : extractExportsFromText(content);
+    : language === 'go'
+      ? extractGoExportsFromText(content)
+      : extractExportsFromText(content);
   const imports = language === 'python'
     ? extractPythonImportsFromText(content)
-    : extractImportsFromText(content);
+    : language === 'go'
+      ? extractGoImportsFromText(content)
+      : extractImportsFromText(content);
 
   const parseErrors: ParseError[] = [
     {

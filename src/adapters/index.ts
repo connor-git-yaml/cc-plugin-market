@@ -16,6 +16,7 @@ export { LanguageAdapterRegistry } from './language-adapter-registry.js';
 // 具体适配器
 export { TsJsLanguageAdapter } from './ts-js-adapter.js';
 export { PythonLanguageAdapter } from './python-adapter.js';
+export { GoLanguageAdapter } from './go-adapter.js';
 
 // ============================================================
 // 启动注册
@@ -24,6 +25,7 @@ export { PythonLanguageAdapter } from './python-adapter.js';
 import { LanguageAdapterRegistry } from './language-adapter-registry.js';
 import { TsJsLanguageAdapter } from './ts-js-adapter.js';
 import { PythonLanguageAdapter } from './python-adapter.js';
+import { GoLanguageAdapter } from './go-adapter.js';
 
 /**
  * 启动适配器注册
@@ -40,7 +42,8 @@ export function bootstrapAdapters(): void {
 
   registry.register(new TsJsLanguageAdapter());
   registry.register(new PythonLanguageAdapter());
+  registry.register(new GoLanguageAdapter());
 
   // 未来扩展点：
-  // registry.register(new GoLanguageAdapter());
+  // registry.register(new JavaLanguageAdapter());
 }
