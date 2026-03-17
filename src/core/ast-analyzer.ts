@@ -15,17 +15,15 @@ import type {
   Visibility,
 } from '../models/code-skeleton.js';
 import { analyzeFallback } from './tree-sitter-fallback.js';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
+import type { AnalyzeFileOptions } from '../adapters/language-adapter.js';
 
 // ============================================================
-// 选项类型
+// 选项类型（统一使用 adapters 层定义的 AnalyzeFileOptions）
 // ============================================================
 
-export interface AnalyzeOptions {
-  /** 包含非导出符号（默认 false） */
-  includePrivate?: boolean;
-  /** 类继承层级最大解析深度（默认 5） */
-  maxDepth?: number;
-}
+/** @deprecated 使用 AnalyzeFileOptions 代替 */
+export type AnalyzeOptions = AnalyzeFileOptions;
 
 export interface BatchAnalyzeOptions extends AnalyzeOptions {
   /** 最大并发数（默认 50） */
@@ -86,22 +84,14 @@ export function resetProject(): void {
 }
 
 // ============================================================
-// 文件语言检测
+// 文件语言检测（TS/JS 内部使用）
 // ============================================================
-
-const SUPPORTED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
 
 function getLanguage(filePath: string): Language {
   if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
     return 'typescript';
   }
   return 'javascript';
-}
-
-function isSupportedFile(filePath: string): boolean {
-  return SUPPORTED_EXTENSIONS.has(
-    filePath.slice(filePath.lastIndexOf('.')),
-  );
 }
 
 // ============================================================
@@ -398,22 +388,19 @@ function extractImports(sourceFile: SourceFile): ImportReference[] {
 // ============================================================
 
 /**
- * 解析单个 TypeScript/JavaScript 文件并返回 CodeSkeleton
+ * TS/JS 专用的 AST 分析内部实现
+ * 被 TsJsLanguageAdapter 委托调用，不做文件类型检查。
  *
  * @param filePath - 源文件路径
  * @param options - 分析选项
  * @returns CodeSkeleton
- * @throws FileNotFoundError, UnsupportedFileError
+ * @throws FileNotFoundError
+ * @internal 仅供 TsJsLanguageAdapter 和 analyzeFile 使用
  */
-export async function analyzeFile(
+export async function analyzeFileInternal(
   filePath: string,
   options: AnalyzeOptions = {},
 ): Promise<CodeSkeleton> {
-  // 验证文件类型
-  if (!isSupportedFile(filePath)) {
-    throw new UnsupportedFileError(filePath);
-  }
-
   const project = getProject();
   let sourceFile: SourceFile;
 
@@ -461,6 +448,29 @@ export async function analyzeFile(
       // 忽略清理错误
     }
   }
+}
+
+/**
+ * 解析单个源文件并返回 CodeSkeleton
+ * 通过 Registry 路由到对应的语言适配器。
+ *
+ * @param filePath - 源文件路径
+ * @param options - 分析选项
+ * @returns CodeSkeleton
+ * @throws FileNotFoundError, UnsupportedFileError
+ */
+export async function analyzeFile(
+  filePath: string,
+  options: AnalyzeOptions = {},
+): Promise<CodeSkeleton> {
+  // 通过 Registry 路由到对应的语言适配器
+  const adapter = LanguageAdapterRegistry.getInstance().getAdapter(filePath);
+  if (adapter) {
+    return adapter.analyzeFile(filePath, options);
+  }
+
+  // Registry 无匹配适配器，抛出不支持的文件类型错误
+  throw new UnsupportedFileError(filePath);
 }
 
 /**

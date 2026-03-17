@@ -14,6 +14,12 @@ export const ExportKindSchema = z.enum([
   'enum',
   'const',
   'variable',
+  // 多语言扩展（前向兼容）
+  'struct',
+  'trait',
+  'protocol',
+  'data_class',
+  'module',
 ]);
 export type ExportKind = z.infer<typeof ExportKindSchema>;
 
@@ -23,6 +29,10 @@ export const MemberKindSchema = z.enum([
   'getter',
   'setter',
   'constructor',
+  // 多语言扩展（前向兼容）
+  'classmethod',
+  'staticmethod',
+  'associated_function',
 ]);
 export type MemberKind = z.infer<typeof MemberKindSchema>;
 
@@ -37,7 +47,19 @@ export const ParserUsedSchema = z.enum([
 ]);
 export type ParserUsed = z.infer<typeof ParserUsedSchema>;
 
-export const LanguageSchema = z.enum(['typescript', 'javascript']);
+export const LanguageSchema = z.enum([
+  'typescript',
+  'javascript',
+  // 多语言扩展（前向兼容）
+  'python',
+  'go',
+  'java',
+  'rust',
+  'kotlin',
+  'cpp',
+  'ruby',
+  'swift',
+]);
 export type Language = z.infer<typeof LanguageSchema>;
 
 // --- 嵌套实体 ---
@@ -92,7 +114,7 @@ export type ParseError = z.infer<typeof ParseErrorSchema>;
 
 /** AST 提取的文件结构中间表示 */
 export const CodeSkeletonSchema = z.object({
-  filePath: z.string().regex(/\.(ts|tsx|js|jsx)$/),
+  filePath: z.string().regex(/\.(ts|tsx|js|jsx|py|pyi|go|java|kt|kts|rs|cpp|cc|cxx|c|h|hpp|rb|swift)$/),
   language: LanguageSchema,
   loc: z.number().int().positive(),
   exports: z.array(ExportSymbolSchema),

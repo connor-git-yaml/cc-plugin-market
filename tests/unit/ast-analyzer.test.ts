@@ -2,7 +2,7 @@
  * ast-analyzer 单元测试
  * 验证 ts-morph AST 提取、导出/导入识别、成员提取、降级处理
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -13,6 +13,8 @@ import {
   FileNotFoundError,
   UnsupportedFileError,
 } from '../../src/core/ast-analyzer.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 
 /** 创建临时 TS 文件 */
 function createTempFile(content: string, ext = '.ts'): string {
@@ -29,8 +31,15 @@ function cleanup(filePath: string): void {
 }
 
 describe('ast-analyzer', () => {
+  beforeEach(() => {
+    // 确保 Registry 已注册适配器（analyzeFile 通过 Registry 路由）
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+  });
+
   afterEach(() => {
     resetProject();
+    LanguageAdapterRegistry.resetInstance();
   });
 
   describe('analyzeFile', () => {

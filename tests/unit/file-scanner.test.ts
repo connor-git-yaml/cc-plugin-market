@@ -8,6 +8,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { scanFiles } from '../../src/utils/file-scanner.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 
 /** 创建临时测试目录 */
 function createTempDir(): string {
@@ -25,11 +27,15 @@ describe('file-scanner', () => {
   let tmpDir: string;
 
   beforeEach(() => {
+    // 确保 Registry 已注册适配器
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
     tmpDir = createTempDir();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    LanguageAdapterRegistry.resetInstance();
   });
 
   it('应发现 .ts/.tsx/.js/.jsx 文件', () => {
@@ -150,5 +156,56 @@ describe('file-scanner', () => {
     expect(result.files.length).toBe(2);
     // totalScanned 包含所有读取到的文件
     expect(result.totalScanned).toBeGreaterThanOrEqual(2);
+  });
+
+  // ============================================================
+  // Phase 5: 混合语言目录测试（T034）
+  // ============================================================
+
+  it('混合目录：.py 文件被跳过，unsupportedExtensions 计数正确', () => {
+    createFile(tmpDir, 'app.ts', 'export const x = 1;');
+    createFile(tmpDir, 'main.py', 'print("hello")');
+    createFile(tmpDir, 'lib.py', 'def foo(): pass');
+    createFile(tmpDir, 'util.js', 'module.exports = {}');
+
+    const result = scanFiles(tmpDir);
+
+    // .py 被跳过，仅保留 .ts 和 .js
+    expect(result.files).toEqual(['app.ts', 'util.js']);
+    // unsupportedExtensions 应包含 .py 统计
+    expect(result.unsupportedExtensions).toBeDefined();
+    expect(result.unsupportedExtensions!.get('.py')).toBe(2);
+  });
+
+  it('混合目录：ScanResult.files 仅含支持的文件类型', () => {
+    createFile(tmpDir, 'src/index.ts', 'export {}');
+    createFile(tmpDir, 'src/utils.tsx', 'export {}');
+    createFile(tmpDir, 'src/helper.py', 'pass');
+    createFile(tmpDir, 'src/main.go', 'package main');
+    createFile(tmpDir, 'src/style.css', 'body{}');
+
+    const result = scanFiles(tmpDir);
+
+    // files 仅含 TS/JS 文件
+    expect(result.files).toEqual(['src/index.ts', 'src/utils.tsx']);
+    // 不支持的扩展名统计
+    expect(result.unsupportedExtensions).toBeDefined();
+    expect(result.unsupportedExtensions!.get('.py')).toBe(1);
+    expect(result.unsupportedExtensions!.get('.go')).toBe(1);
+    expect(result.unsupportedExtensions!.get('.css')).toBe(1);
+  });
+
+  it('仅含不支持语言文件的目录：files 为空', () => {
+    createFile(tmpDir, 'main.py', 'print("hello")');
+    createFile(tmpDir, 'app.rb', 'puts "hello"');
+    createFile(tmpDir, 'lib/util.go', 'package lib');
+
+    const result = scanFiles(tmpDir);
+
+    expect(result.files).toEqual([]);
+    expect(result.unsupportedExtensions).toBeDefined();
+    expect(result.unsupportedExtensions!.get('.py')).toBe(1);
+    expect(result.unsupportedExtensions!.get('.rb')).toBe(1);
+    expect(result.unsupportedExtensions!.get('.go')).toBe(1);
   });
 });

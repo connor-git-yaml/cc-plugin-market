@@ -5,6 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { RedactionResult, SecretDetection } from '../models/module-spec.js';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 // ============================================================
 // 检测模式定义
@@ -130,9 +131,29 @@ function isPlaceholder(value: string): boolean {
 
 /**
  * 判断是否在测试文件中
+ * 从 Registry 聚合所有适配器的测试文件匹配模式
  */
 function isTestFile(filePath?: string): boolean {
   if (!filePath) return false;
+
+  // 从 Registry 获取所有适配器的测试模式
+  const registry = LanguageAdapterRegistry.getInstance();
+  const adapters = registry.getAllAdapters();
+
+  if (adapters.length > 0) {
+    for (const adapter of adapters) {
+      const patterns = adapter.getTestPatterns();
+      // 文件名模式匹配（如 .test.ts、.spec.jsx）
+      if (patterns.filePattern.test(filePath)) return true;
+      // 测试目录匹配（如 __tests__、tests、test）
+      for (const dir of patterns.testDirs) {
+        if (filePath.includes(`/${dir}/`)) return true;
+      }
+    }
+    return false;
+  }
+
+  // 回退：Registry 为空时使用硬编码模式
   return /\.(test|spec)\.(ts|tsx|js|jsx)$/.test(filePath) ||
     filePath.includes('__tests__') ||
     filePath.includes('/test/') ||

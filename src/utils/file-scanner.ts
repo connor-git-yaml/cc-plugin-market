@@ -1,29 +1,40 @@
 /**
  * 文件发现与 .gitignore 过滤
- * 扫描目录中的 .ts/.tsx/.js/.jsx 文件，遵循 .gitignore 规则（FR-026）
+ * 扫描目录中支持的源文件，遵循 .gitignore 规则（FR-026）
+ * 支持的扩展名从 LanguageAdapterRegistry 动态获取
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
-/** 支持的文件扩展名 */
-const SUPPORTED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
+/** 通用忽略目录（与语言无关，始终忽略） */
+const UNIVERSAL_IGNORE_DIRS = new Set(['.git', 'coverage']);
 
-/** 默认忽略的目录 */
-const DEFAULT_IGNORE_DIRS = new Set([
-  'node_modules',
-  '.git',
-  'dist',
-  'build',
-  'coverage',
-  '.next',
-  '.nuxt',
-]);
+/**
+ * 获取当前有效的忽略目录集合
+ * 合并通用忽略目录与 Registry 聚合的适配器忽略目录
+ */
+function getIgnoreDirs(): Set<string> {
+  const registryDirs = LanguageAdapterRegistry.getInstance().getDefaultIgnoreDirs();
+  return new Set([...UNIVERSAL_IGNORE_DIRS, ...registryDirs]);
+}
+
+/**
+ * 获取当前有效的支持扩展名集合
+ * 优先使用调用方显式传入的扩展名，否则从 Registry 动态获取
+ */
+function getSupportedExtensions(options?: ScanOptions): Set<string> {
+  if (options?.extensions) return options.extensions;
+  return LanguageAdapterRegistry.getInstance().getSupportedExtensions();
+}
 
 export interface ScanOptions {
   /** 项目根目录（用于查找 .gitignore） */
   projectRoot?: string;
   /** 额外的忽略模式 */
   extraIgnorePatterns?: string[];
+  /** 显式指定支持的扩展名，覆盖 Registry 默认值 */
+  extensions?: Set<string>;
 }
 
 export interface ScanResult {
@@ -33,6 +44,8 @@ export interface ScanResult {
   totalScanned: number;
   /** 被忽略的文件数 */
   ignored: number;
+  /** 不支持的文件扩展名统计 */
+  unsupportedExtensions?: Map<string, number>;
 }
 
 /**
@@ -137,8 +150,11 @@ function walkDir(
   dir: string,
   baseDir: string,
   isIgnored: (relativePath: string) => boolean,
+  supportedExtensions: Set<string>,
+  ignoreDirs: Set<string>,
   results: string[],
   stats: { totalScanned: number; ignored: number },
+  unsupported: Map<string, number>,
 ): void {
   let entries: fs.Dirent[];
   try {
@@ -152,8 +168,8 @@ function walkDir(
     const fullPath = path.join(dir, entry.name);
     const relativePath = path.relative(baseDir, fullPath);
 
-    // 跳过默认忽略目录
-    if (entry.isDirectory() && DEFAULT_IGNORE_DIRS.has(entry.name)) {
+    // 跳过忽略目录（通用 + Registry 聚合）
+    if (entry.isDirectory() && ignoreDirs.has(entry.name)) {
       continue;
     }
 
@@ -169,21 +185,25 @@ function walkDir(
     }
 
     if (entry.isDirectory()) {
-      walkDir(fullPath, baseDir, isIgnored, results, stats);
+      walkDir(fullPath, baseDir, isIgnored, supportedExtensions, ignoreDirs, results, stats, unsupported);
     } else if (entry.isFile()) {
       stats.totalScanned++;
-      const ext = path.extname(entry.name);
-      if (SUPPORTED_EXTENSIONS.has(ext)) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (supportedExtensions.has(ext)) {
         results.push(relativePath);
       } else {
         stats.ignored++;
+        // 收集不支持的扩展名统计（仅统计有扩展名的文件）
+        if (ext) {
+          unsupported.set(ext, (unsupported.get(ext) ?? 0) + 1);
+        }
       }
     }
   }
 }
 
 /**
- * 扫描目录中的 TS/JS 文件
+ * 扫描目录中支持的源文件
  *
  * @param targetDir - 扫描的目标目录
  * @param options - 扫描选项
@@ -199,6 +219,19 @@ export function scanFiles(targetDir: string, options?: ScanOptions): ScanResult 
   if (!fs.statSync(resolvedDir).isDirectory()) {
     throw new Error(`路径不是目录: ${resolvedDir}`);
   }
+
+  // FR-034: Registry 未初始化时给出明确提示
+  const registry = LanguageAdapterRegistry.getInstance();
+  if (registry.isEmpty() && !options?.extensions) {
+    throw new Error(
+      'LanguageAdapterRegistry 未注册任何适配器。' +
+      '请在使用前调用 bootstrapAdapters() 完成初始化。',
+    );
+  }
+
+  // 获取当前有效的支持扩展名和忽略目录
+  const supportedExtensions = getSupportedExtensions(options);
+  const ignoreDirs = getIgnoreDirs();
 
   // 解析 .gitignore
   const projectRoot = options?.projectRoot ?? resolvedDir;
@@ -218,15 +251,26 @@ export function scanFiles(targetDir: string, options?: ScanOptions): ScanResult 
 
   const files: string[] = [];
   const stats = { totalScanned: 0, ignored: 0 };
+  const unsupportedExtensions = new Map<string, number>();
 
-  walkDir(resolvedDir, resolvedDir, isIgnored, files, stats);
+  walkDir(resolvedDir, resolvedDir, isIgnored, supportedExtensions, ignoreDirs, files, stats, unsupportedExtensions);
 
   // 按字母排序
   files.sort();
+
+  // 输出不支持文件的 warn 级聚合提示到 stderr
+  if (unsupportedExtensions.size > 0) {
+    const parts: string[] = [];
+    for (const [ext, count] of unsupportedExtensions) {
+      parts.push(`${count} 个 ${ext} 文件`);
+    }
+    console.warn(`\u26A0 跳过 ${parts.join(', ')}（不支持的语言）`);
+  }
 
   return {
     files,
     totalScanned: stats.totalScanned,
     ignored: stats.ignored,
+    unsupportedExtensions: unsupportedExtensions.size > 0 ? unsupportedExtensions : undefined,
   };
 }

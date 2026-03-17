@@ -236,7 +236,7 @@ describe('single-spec-orchestrator', () => {
       ignored: 0,
     });
 
-    await expect(prepareContext(tempDir)).rejects.toThrow('未找到 TS/JS 文件');
+    await expect(prepareContext(tempDir)).rejects.toThrow('未找到支持的源文件');
   });
 
   it('generateSpec: 正常路径返回 high 置信度并写入文件', async () => {

@@ -9,17 +9,22 @@ import * as os from 'node:os';
 import { loadBaselineSkeleton, detectDrift } from '../../src/diff/drift-orchestrator.js';
 import { compareSkeletons } from '../../src/diff/structural-diff.js';
 import { filterNoise } from '../../src/diff/noise-filter.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
 
 // 测试临时目录
 let tmpDir: string;
 
 beforeAll(() => {
+  LanguageAdapterRegistry.resetInstance();
+  bootstrapAdapters();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drift-test-'));
 });
 
 afterAll(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
+  LanguageAdapterRegistry.resetInstance();
 });
 
 /**

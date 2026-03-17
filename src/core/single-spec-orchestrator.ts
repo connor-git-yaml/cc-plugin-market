@@ -166,7 +166,7 @@ export async function prepareContext(
     const scanResult = scanFiles(resolvedTarget, { projectRoot });
     filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
     if (filePaths.length === 0) {
-      throw new Error(`目标路径中未找到 TS/JS 文件: ${targetPath}`);
+      throw new Error(`目标路径中未找到支持的源文件: ${targetPath}`);
     }
 
     onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });

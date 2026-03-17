@@ -5,10 +5,12 @@
  * 注：完整的 /reverse-spec-batch（含 LLM）需要 API 密钥，
  *     本测试仅验证 AST 阶段 + 模板渲染的自举能力
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as path from 'node:path';
 import { scanFiles } from '../../src/utils/file-scanner.js';
 import { analyzeFiles } from '../../src/core/ast-analyzer.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { renderSpec, initRenderer } from '../../src/generator/spec-renderer.js';
 import { generateClassDiagram } from '../../src/generator/mermaid-class-diagram.js';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
@@ -16,6 +18,15 @@ import type { ModuleSpec } from '../../src/models/module-spec.js';
 const PROJECT_SRC = path.resolve(__dirname, '../../src');
 
 describe('自举测试：reverse-spec 分析自身', () => {
+  beforeAll(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+  });
+
+  afterAll(() => {
+    LanguageAdapterRegistry.resetInstance();
+  });
+
   it('扫描项目 src/ 目录应发现所有模块', async () => {
     const { files } = await scanFiles(PROJECT_SRC);
 
