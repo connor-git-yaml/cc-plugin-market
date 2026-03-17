@@ -6,6 +6,7 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { SpecSections } from '../models/module-spec.js';
+import type { LanguageTerminology } from '../adapters/language-adapter.js';
 import type { AssembledContext } from './context-assembler.js';
 import { detectAuth } from '../auth/auth-detector.js';
 import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
@@ -26,6 +27,8 @@ export interface LLMConfig {
   temperature: number;
   /** 超时时间（毫秒，默认根据模型动态计算：Sonnet 120s, Opus 300s, Haiku 60s） */
   timeout: number;
+  /** 目标语言术语（可选，用于参数化 LLM prompt） */
+  languageTerminology?: LanguageTerminology;
 }
 
 export interface LLMResponse {
@@ -229,7 +232,7 @@ async function callLLMviaSdk(
   cfg: LLMConfig,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
-  const systemPrompt = buildSystemPrompt('spec-generation');
+  const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
 
   const client = new Anthropic({
     apiKey: cfg.apiKey,
@@ -322,7 +325,7 @@ async function callLLMviaCliProxy(
   cfg: LLMConfig,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
-  const systemPrompt = buildSystemPrompt('spec-generation');
+  const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
   // 将系统提示和用户内容组合为完整 prompt
   const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
 
@@ -474,9 +477,23 @@ export function parseLLMResponse(raw: string): ParsedSpecSections {
  * 返回给定操作模式的系统提示词
  *
  * @param mode - 操作模式
+ * @param terminology - 可选的语言术语映射，用于参数化 prompt
  * @returns 系统提示词文本
  */
-export function buildSystemPrompt(mode: 'spec-generation' | 'semantic-diff'): string {
+export function buildSystemPrompt(
+  mode: 'spec-generation' | 'semantic-diff',
+  terminology?: LanguageTerminology,
+): string {
+  // 默认使用 TypeScript 术语（向后兼容）
+  const lang = terminology ?? {
+    codeBlockLanguage: 'typescript',
+    exportConcept: 'export 导出的函数/类/类型',
+    importConcept: 'import 导入',
+    typeSystemDescription: '静态类型系统 + interface/type 别名',
+    interfaceConcept: 'interface 接口',
+    moduleSystem: 'ES Modules / CommonJS',
+  };
+
   if (mode === 'spec-generation') {
     return `你是一个资深代码架构分析专家，负责将源代码结构信息逆向工程为**详尽且实用**的规格文档。
 
@@ -504,7 +521,7 @@ export function buildSystemPrompt(mode: 'spec-generation' | 'semantic-diff'): st
 - 说明该模块在系统中的定位
 
 ### 2. 接口定义
-- 列出所有导出函数/类/类型的**完整签名**（必须来自 AST 数据）
+- 列出所有${lang.exportConcept}的**完整签名**（必须来自 AST 数据）
 - 用表格格式：| 名称 | 类型 | 签名 | 说明 |
 
 ### 3. 业务逻辑
@@ -527,7 +544,7 @@ sequenceDiagram
 - 关键子系统用表格列出：| 子系统 | 文件 | 功能 |
 
 ### 4. 数据结构
-- 列出核心类型定义（TypeScript 代码块）
+- 列出核心类型定义（${lang.codeBlockLanguage} 代码块）
 - 用表格描述关键字段：| 字段 | 类型 | 说明 |
 
 ### 5. 约束条件
@@ -548,13 +565,21 @@ sequenceDiagram
 
 ### 9. 依赖关系
 - 内部依赖用 Mermaid graph 或列表展示
-- 外部依赖（npm 包）列出
+- 外部依赖（${lang.moduleSystem} 模块）列出
 - **必须**包含一个依赖关系 Mermaid 图：
 \`\`\`mermaid
 graph LR
   当前模块 --> 依赖模块A
   当前模块 --> 依赖模块B
 \`\`\`
+
+## 语言上下文
+
+- 目标代码语言：**${lang.codeBlockLanguage}**
+- 模块系统：${lang.moduleSystem}
+- 导入方式：${lang.importConcept}
+- 类型系统：${lang.typeSystemDescription}
+- 接口/协议概念：${lang.interfaceConcept}
 
 ## 关键规则
 

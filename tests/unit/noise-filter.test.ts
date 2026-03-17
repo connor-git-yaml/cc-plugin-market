@@ -189,4 +189,126 @@ describe('filterNoise', () => {
     expect(result.substantive).toHaveLength(0);
     expect(result.filtered).toBe(1);
   });
+
+  // ================================================================
+  // 多语言支持测试（FR-026）
+  // ================================================================
+
+  describe('Python 语言支持', () => {
+    it('过滤 Python # 注释变更', () => {
+      const items = [
+        makeDriftItem({
+          id: 'py-comment',
+          oldValue: 'x = 1  # old comment',
+          newValue: 'x = 1  # new comment',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'python');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+
+    it('过滤 Python import 重排序', () => {
+      const items = [
+        makeDriftItem({
+          id: 'py-import-reorder',
+          oldValue: 'import os\nfrom pathlib import Path',
+          newValue: 'from pathlib import Path\nimport os',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'python');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+
+    it('不过滤 Python import 增删', () => {
+      const items = [
+        makeDriftItem({
+          id: 'py-import-add',
+          oldValue: 'import os',
+          newValue: 'import os\nimport sys',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'python');
+      expect(result.substantive).toHaveLength(1);
+    });
+
+    it('Python 不移除分号（非 ASI 语言）', () => {
+      const items = [
+        makeDriftItem({
+          id: 'py-no-asi',
+          oldValue: 'x = 1',
+          newValue: 'x = 2',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'python');
+      expect(result.substantive).toHaveLength(1);
+    });
+  });
+
+  describe('Go 语言支持', () => {
+    it('过滤 Go // 注释变更', () => {
+      const items = [
+        makeDriftItem({
+          id: 'go-comment',
+          oldValue: 'x := 1 // old',
+          newValue: 'x := 1 // new',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'go');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+
+    it('过滤 Go import 重排序', () => {
+      const items = [
+        makeDriftItem({
+          id: 'go-import-reorder',
+          oldValue: 'import "fmt"\nimport "os"',
+          newValue: 'import "os"\nimport "fmt"',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'go');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+  });
+
+  describe('Java 语言支持', () => {
+    it('过滤 Java import 重排序', () => {
+      const items = [
+        makeDriftItem({
+          id: 'java-import-reorder',
+          oldValue: 'import java.util.List;\nimport java.io.File;',
+          newValue: 'import java.io.File;\nimport java.util.List;',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '', 'java');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+  });
+
+  describe('language 参数向后兼容', () => {
+    it('不传 language 时行为与原来一致（JS/TS 默认）', () => {
+      const items = [
+        makeDriftItem({
+          id: 'compat-comment',
+          oldValue: 'const x = 1; // old',
+          newValue: 'const x = 1; // new',
+        }),
+      ];
+
+      const result = filterNoise(items, '', '');
+      expect(result.substantive).toHaveLength(0);
+      expect(result.filtered).toBe(1);
+    });
+  });
 });
