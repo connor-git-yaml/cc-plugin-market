@@ -176,19 +176,21 @@ describe('file-scanner', () => {
     expect(result.unsupportedExtensions?.get('.py')).toBeUndefined();
   });
 
-  it('混合目录：ScanResult.files 包含 TS/JS、Python 和 Go 文件', () => {
+  it('混合目录：ScanResult.files 包含 TS/JS、Python、Go 和 Java 文件', () => {
     createFile(tmpDir, 'src/index.ts', 'export {}');
     createFile(tmpDir, 'src/utils.tsx', 'export {}');
     createFile(tmpDir, 'src/helper.py', 'pass');
     createFile(tmpDir, 'src/main.go', 'package main');
+    createFile(tmpDir, 'src/App.java', 'public class App {}');
     createFile(tmpDir, 'src/style.css', 'body{}');
 
     const result = scanFiles(tmpDir);
 
-    // .py 和 .go 现在都被支持，.css 仍不支持
-    expect(result.files).toEqual(['src/helper.py', 'src/index.ts', 'src/main.go', 'src/utils.tsx']);
+    // .py, .go, .java 现在都被支持，.css 仍不支持
+    expect(result.files).toEqual(['src/App.java', 'src/helper.py', 'src/index.ts', 'src/main.go', 'src/utils.tsx']);
     expect(result.unsupportedExtensions?.get('.py')).toBeUndefined();
     expect(result.unsupportedExtensions?.get('.go')).toBeUndefined();
+    expect(result.unsupportedExtensions?.get('.java')).toBeUndefined();
     expect(result.unsupportedExtensions).toBeDefined();
     expect(result.unsupportedExtensions!.get('.css')).toBe(1);
   });

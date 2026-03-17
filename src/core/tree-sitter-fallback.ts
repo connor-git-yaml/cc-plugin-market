@@ -299,6 +299,87 @@ function extractGoImportsFromText(content: string): ImportReference[] {
   return imports;
 }
 
+// ════════════════════════ Java 正则降级 ════════════════════════
+
+/**
+ * 基于正则的 Java 导出提取
+ * 识别顶层 public class、interface、enum 定义
+ */
+function extractJavaExportsFromText(content: string): ExportSymbol[] {
+  const exports: ExportSymbol[] = [];
+  const lines = content.split('\n');
+  const seen = new Set<string>();
+
+  const patterns: Array<{ re: RegExp; kind: ExportSymbol['kind'] }> = [
+    { re: /^public\s+(?:abstract\s+)?class\s+(\w+)/, kind: 'class' },
+    { re: /^public\s+interface\s+(\w+)/, kind: 'interface' },
+    { re: /^public\s+enum\s+(\w+)/, kind: 'enum' },
+    { re: /^public\s+(?:final\s+)?class\s+(\w+)/, kind: 'class' },
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim();
+
+    for (const { re, kind } of patterns) {
+      const match = re.exec(line);
+      if (match?.[1] && !seen.has(match[1])) {
+        seen.add(match[1]);
+        exports.push({
+          name: match[1],
+          kind,
+          signature: `[REGEX] ${line.slice(0, 200)}`,
+          jsDoc: null,
+          isDefault: false,
+          startLine: i + 1,
+          endLine: i + 1,
+        });
+        break;
+      }
+    }
+  }
+
+  return exports;
+}
+
+/**
+ * 基于正则的 Java 导入提取
+ * 识别 import 和 import static 语句
+ */
+function extractJavaImportsFromText(content: string): ImportReference[] {
+  const imports: ImportReference[] = [];
+  const lines = content.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // import static java.util.Collections.sort;
+    const staticMatch = /^import\s+static\s+([\w.]+(?:\.\*)?)\s*;/.exec(trimmed);
+    if (staticMatch) {
+      imports.push({
+        moduleSpecifier: staticMatch[1]!,
+        isRelative: false,
+        resolvedPath: null,
+        isTypeOnly: false,
+      });
+      continue;
+    }
+
+    // import java.util.List;
+    // import java.util.*;
+    const importMatch = /^import\s+([\w.]+(?:\.\*)?)\s*;/.exec(trimmed);
+    if (importMatch) {
+      imports.push({
+        moduleSpecifier: importMatch[1]!,
+        isRelative: false,
+        resolvedPath: null,
+        isTypeOnly: false,
+      });
+    }
+  }
+
+  return imports;
+}
+
 // ════════════════════════ 语言检测 ════════════════════════
 
 /**
@@ -369,12 +450,16 @@ function regexFallback(filePath: string, language: Language): CodeSkeleton {
     ? extractPythonExportsFromText(content)
     : language === 'go'
       ? extractGoExportsFromText(content)
-      : extractExportsFromText(content);
+      : language === 'java'
+        ? extractJavaExportsFromText(content)
+        : extractExportsFromText(content);
   const imports = language === 'python'
     ? extractPythonImportsFromText(content)
     : language === 'go'
       ? extractGoImportsFromText(content)
-      : extractImportsFromText(content);
+      : language === 'java'
+        ? extractJavaImportsFromText(content)
+        : extractImportsFromText(content);
 
   const parseErrors: ParseError[] = [
     {
