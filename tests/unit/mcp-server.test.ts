@@ -157,6 +157,38 @@ describe('createMcpServer', () => {
     expect(result.content[0]!.text).toContain('batch 失败');
   });
 
+  // ────────────────────────────────────────────────────────────
+  // T091: batch 工具接受 languages 参数并正确传递给 runBatch()
+  // ────────────────────────────────────────────────────────────
+  it('T091: batch handler 接受 languages 参数并传递给 runBatch', async () => {
+    const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 2,
+      successful: ['api'],
+      failed: [],
+      skipped: [],
+      degraded: [],
+      duration: 100,
+      indexGenerated: true,
+      summaryLogPath: 'specs/summary.md',
+      detectedLanguages: ['ts-js', 'python'],
+    });
+    const tool = findTool(server, 'batch');
+
+    await tool.handler({
+      projectRoot: '/tmp/p',
+      force: false,
+      languages: ['ts-js', 'python'],
+    });
+
+    // 验证 runBatch 被调用时传入了 languages 参数
+    expect(mocks.runBatch).toHaveBeenCalledTimes(1);
+    const callArgs = mocks.runBatch.mock.calls[0]!;
+    expect(callArgs[1]).toEqual(
+      expect.objectContaining({ languages: ['ts-js', 'python'] }),
+    );
+  });
+
   it('diff handler 会解析绝对路径并返回结果', async () => {
     const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
     mocks.detectDrift.mockResolvedValue({ outputPath: 'drift/a.md' });

@@ -12,6 +12,7 @@ import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.j
 import { runBatch } from '../batch/batch-orchestrator.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
 import { bootstrapAdapters } from '../adapters/index.js';
+import { scanFiles } from '../utils/file-scanner.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -44,8 +45,28 @@ export function createMcpServer(): McpServer {
           deep,
           projectRoot: process.cwd(),
         });
+
+        // 提取 detectedLanguages（Feature 031）
+        let detectedLanguages: string[] | undefined;
+        try {
+          const resolvedTarget = require('node:path').resolve(targetPath);
+          const fs = require('node:fs');
+          if (fs.statSync(resolvedTarget).isDirectory()) {
+            const sr = scanFiles(resolvedTarget, { projectRoot: process.cwd() });
+            if (sr.languageStats && sr.languageStats.size > 0) {
+              detectedLanguages = Array.from(sr.languageStats.keys());
+            }
+          }
+        } catch {
+          // 语言检测失败不影响主流程
+        }
+
+        const responseData = detectedLanguages
+          ? { ...result, detectedLanguages }
+          : result;
+
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(responseData) }],
         };
       } catch (err) {
         return {
@@ -114,11 +135,15 @@ export function createMcpServer(): McpServer {
         .optional()
         .describe('项目根目录（默认为当前工作目录）'),
       force: z.boolean().default(false).describe('强制重新生成所有 spec'),
+      languages: z
+        .array(z.string())
+        .optional()
+        .describe('仅处理指定语言（如 ["typescript", "python"]）'),
     },
-    async ({ projectRoot, force }) => {
+    async ({ projectRoot, force, languages }) => {
       try {
         const root = projectRoot ?? process.cwd();
-        const result = await runBatch(root, { force });
+        const result = await runBatch(root, { force, languages });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         };

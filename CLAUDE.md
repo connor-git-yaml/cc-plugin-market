@@ -41,7 +41,6 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 ## Recent Changes
 - 015-speckit-doc-command: Added Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中
 - 011-speckit-driver-pro: Added Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中
-- 010-fix-dotspecs-to-specs: Added TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖
 
 
 

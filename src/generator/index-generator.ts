@@ -1,6 +1,7 @@
 /**
  * 架构索引生成器
  * 生成 specs/_index.spec.md（FR-013）
+ * 支持多语言项目的语言分布展示（Feature 031）
  * 参见 contracts/generator.md
  */
 import type {
@@ -8,9 +9,11 @@ import type {
   ModuleMapEntry,
   TechStackEntry,
   IndexFrontmatter,
+  LanguageDistribution,
 } from '../models/module-spec.js';
 import type { ModuleSpec } from '../models/module-spec.js';
 import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { LanguageFileStat } from '../utils/file-scanner.js';
 
 /**
  * 从依赖图识别横切关注点（被多个模块依赖的共享模块）
@@ -56,15 +59,72 @@ function buildModuleMap(
 }
 
 /**
+ * 构建语言分布信息
+ *
+ * @param languageStats - 完整扫描的语言统计
+ * @param specs - 所有已生成的 ModuleSpec
+ * @param processedLanguages - 本次实际处理的语言 ID 列表
+ * @returns LanguageDistribution 数组（按文件数降序），或 undefined（单语言）
+ */
+function buildLanguageDistribution(
+  languageStats: Map<string, LanguageFileStat>,
+  specs: ModuleSpec[],
+  processedLanguages?: string[],
+): LanguageDistribution[] | undefined {
+  // 单语言项目不展示语言分布（FR-008）
+  if (languageStats.size <= 1) {
+    return undefined;
+  }
+
+  const totalFiles = Array.from(languageStats.values())
+    .reduce((sum, s) => sum + s.fileCount, 0);
+
+  const distribution = Array.from(languageStats.entries()).map(([adapterId, stat]) => {
+    // 模块数：统计 specs 中 frontmatter.language === adapterId 的数量
+    const moduleCount = specs.filter(
+      (s) => (s.frontmatter as any).language === adapterId,
+    ).length;
+
+    // 占比：该语言文件数 / 总文件数 * 100，保留一位小数
+    const percentage = totalFiles > 0
+      ? Math.round(stat.fileCount / totalFiles * 1000) / 10
+      : 0;
+
+    // 是否本次处理
+    const processed = processedLanguages
+      ? processedLanguages.includes(adapterId)
+      : true;
+
+    return {
+      language: adapterId,
+      adapterId,
+      fileCount: stat.fileCount,
+      moduleCount,
+      percentage,
+      processed,
+    };
+  });
+
+  // 按文件数降序排列
+  distribution.sort((a, b) => b.fileCount - a.fileCount);
+
+  return distribution;
+}
+
+/**
  * 生成项目级架构索引
  *
  * @param specs - 所有已生成的 ModuleSpec
- * @param graph - 项目 DependencyGraph
+ * @param graph - 项目 DependencyGraph（或合并后的图）
+ * @param languageStats - 完整扫描的语言统计（可选）
+ * @param processedLanguages - 本次实际处理的语言列表（可选）
  * @returns ArchitectureIndex
  */
 export function generateIndex(
   specs: ModuleSpec[],
   graph: DependencyGraph,
+  languageStats?: Map<string, LanguageFileStat>,
+  processedLanguages?: string[],
 ): ArchitectureIndex {
   const frontmatter: IndexFrontmatter = {
     type: 'architecture-index',
@@ -92,6 +152,11 @@ export function generateIndex(
   // 从 package.json 推断技术栈（此处用空数组，实际使用时由调用方填充）
   const technologyStack: TechStackEntry[] = [];
 
+  // 构建语言分布信息（多语言项目时填充）
+  const languageDistribution = languageStats
+    ? buildLanguageDistribution(languageStats, specs, processedLanguages)
+    : undefined;
+
   return {
     frontmatter,
     systemPurpose,
@@ -101,5 +166,6 @@ export function generateIndex(
     technologyStack,
     dependencyDiagram: graph.mermaidSource,
     outputPath: 'specs/_index.spec.md',
+    languageDistribution,
   };
 }

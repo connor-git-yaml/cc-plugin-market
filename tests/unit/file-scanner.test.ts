@@ -3,7 +3,7 @@
  * 验证 .ts/.tsx/.js/.jsx 文件发现、.gitignore 规则遵循、
  * 嵌套目录递归扫描、空目录处理、符号链接忽略（FR-026）
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -205,5 +205,107 @@ describe('file-scanner', () => {
     expect(result.unsupportedExtensions).toBeDefined();
     expect(result.unsupportedExtensions!.get('.rb')).toBe(1);
     expect(result.unsupportedExtensions!.get('.rs')).toBe(1);
+  });
+
+  // ============================================================
+  // Phase 2: languageStats 多语言统计测试（T012-T017）
+  // ============================================================
+
+  it('T012: 多语言项目扫描后 languageStats 包含正确的语言条目', () => {
+    createFile(tmpDir, 'src/index.ts', 'export {}');
+    createFile(tmpDir, 'src/util.tsx', 'export {}');
+    createFile(tmpDir, 'src/helper.py', 'pass');
+    createFile(tmpDir, 'src/main.go', 'package main');
+
+    const result = scanFiles(tmpDir);
+
+    expect(result.languageStats).toBeDefined();
+    // ts-js 适配器应包含 .ts 和 .tsx
+    const tsJs = result.languageStats!.get('ts-js');
+    expect(tsJs).toBeDefined();
+    expect(tsJs!.fileCount).toBe(2);
+    expect(tsJs!.extensions).toContain('.ts');
+    expect(tsJs!.extensions).toContain('.tsx');
+
+    // python 适配器
+    const python = result.languageStats!.get('python');
+    expect(python).toBeDefined();
+    expect(python!.fileCount).toBe(1);
+    expect(python!.extensions).toContain('.py');
+
+    // go 适配器
+    const go = result.languageStats!.get('go');
+    expect(go).toBeDefined();
+    expect(go!.fileCount).toBe(1);
+    expect(go!.extensions).toContain('.go');
+  });
+
+  it('T013: 纯单语言项目扫描后 languageStats 仅包含一个条目', () => {
+    createFile(tmpDir, 'src/a.ts', 'export const a = 1;');
+    createFile(tmpDir, 'src/b.ts', 'export const b = 2;');
+    createFile(tmpDir, 'src/c.tsx', 'export {}');
+
+    const result = scanFiles(tmpDir);
+
+    expect(result.languageStats).toBeDefined();
+    expect(result.languageStats!.size).toBe(1);
+    expect(result.languageStats!.has('ts-js')).toBe(true);
+    expect(result.languageStats!.get('ts-js')!.fileCount).toBe(3);
+  });
+
+  it('T014: 包含 .rs 和 .cpp 文件时，警告信息包含语言名称', () => {
+    createFile(tmpDir, 'src/app.ts', 'export {}');
+    createFile(tmpDir, 'lib.rs', 'fn main() {}');
+    createFile(tmpDir, 'main.cpp', 'int main() {}');
+    createFile(tmpDir, 'helper.rs', 'fn helper() {}');
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    scanFiles(tmpDir);
+
+    expect(warnSpy).toHaveBeenCalled();
+    const warnMsg = warnSpy.mock.calls[0]![0] as string;
+    expect(warnMsg).toContain('Rust');
+    expect(warnMsg).toContain('C++');
+    warnSpy.mockRestore();
+  });
+
+  it('T015: 所有文件均为已支持语言时，不输出跳过警告', () => {
+    createFile(tmpDir, 'src/a.ts', 'export {}');
+    createFile(tmpDir, 'src/b.py', 'pass');
+    createFile(tmpDir, 'src/c.go', 'package main');
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    scanFiles(tmpDir);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('T016: 无扩展名文件和非代码文件不纳入 languageStats', () => {
+    createFile(tmpDir, 'src/index.ts', 'export {}');
+    createFile(tmpDir, 'Makefile', 'all:');
+    createFile(tmpDir, 'Dockerfile', 'FROM node');
+    createFile(tmpDir, 'config.yaml', 'key: value');
+    createFile(tmpDir, 'data.json', '{}');
+
+    const result = scanFiles(tmpDir);
+
+    expect(result.languageStats).toBeDefined();
+    // 仅 ts-js 在 languageStats 中
+    expect(result.languageStats!.size).toBe(1);
+    expect(result.languageStats!.has('ts-js')).toBe(true);
+  });
+
+  it('T017: 仅有极少量文件的语言仍被检测并纳入 languageStats', () => {
+    createFile(tmpDir, 'src/a.ts', 'export {}');
+    createFile(tmpDir, 'src/b.ts', 'export {}');
+    createFile(tmpDir, 'src/c.ts', 'export {}');
+    createFile(tmpDir, 'scripts/deploy.go', 'package main');
+
+    const result = scanFiles(tmpDir);
+
+    expect(result.languageStats).toBeDefined();
+    expect(result.languageStats!.has('go')).toBe(true);
+    expect(result.languageStats!.get('go')!.fileCount).toBe(1);
   });
 });

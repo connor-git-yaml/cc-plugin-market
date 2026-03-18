@@ -2,9 +2,11 @@
  * module-grouper 单元测试
  * 验证文件→模块分组、模块级拓扑排序、边界情况处理
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { groupFilesToModules } from '../../src/batch/module-grouper.js';
 import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
 
 /** 创建测试用 DependencyGraph */
 function createGraph(
@@ -216,6 +218,153 @@ describe('module-grouper', () => {
       const rootGroup = result.groups.find((g) => g.name === '_entry');
       expect(rootGroup).toBeDefined();
       expect(rootGroup!.files).toEqual(['src/entry.ts']);
+    });
+  });
+
+  // ============================================================
+  // Phase 4: 语言感知分组测试（T038-T045）
+  // ============================================================
+
+  describe('语言感知分组（languageAware）', () => {
+    beforeEach(() => {
+      LanguageAdapterRegistry.resetInstance();
+      bootstrapAdapters();
+    });
+
+    afterEach(() => {
+      LanguageAdapterRegistry.resetInstance();
+    });
+
+    it('T038: 同目录下 .ts + .py 文件拆分为两个双连字符子模块', () => {
+      const graph = createGraph([
+        'src/services/auth.ts',
+        'src/services/middleware.ts',
+        'src/services/auth.py',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      const names = result.groups.map((g) => g.name).sort();
+      expect(names).toContain('services--ts-js');
+      expect(names).toContain('services--python');
+
+      const tsGroup = result.groups.find((g) => g.name === 'services--ts-js')!;
+      expect(tsGroup.files).toHaveLength(2);
+      expect(tsGroup.language).toBe('ts-js');
+
+      const pyGroup = result.groups.find((g) => g.name === 'services--python')!;
+      expect(pyGroup.files).toHaveLength(1);
+      expect(pyGroup.language).toBe('python');
+    });
+
+    it('T039: 同目录下三种语言文件正确拆分为三个双连字符子模块', () => {
+      const graph = createGraph([
+        'src/services/auth.ts',
+        'src/services/auth.py',
+        'src/services/handler.go',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      const names = result.groups.map((g) => g.name).sort();
+      expect(names).toContain('services--go');
+      expect(names).toContain('services--python');
+      expect(names).toContain('services--ts-js');
+    });
+
+    it('T040: 纯单语言目录不追加语言后缀', () => {
+      const graph = createGraph([
+        'src/services/auth.ts',
+        'src/services/middleware.ts',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0]!.name).toBe('services');
+      expect(result.groups[0]!.language).toBe('ts-js');
+    });
+
+    it('T041: languageAware=false 时行为与现有逻辑完全一致（回归）', () => {
+      const graph = createGraph([
+        'src/services/auth.ts',
+        'src/services/auth.py',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: false });
+
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0]!.name).toBe('services');
+      expect(result.groups[0]!.language).toBeUndefined();
+    });
+
+    it('T042: root 模块在多语言场景下正确拆分', () => {
+      const graph = createGraph([
+        'src/entry.ts',
+        'src/main.py',
+        'src/agents/foo.ts',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      const rootNames = result.groups
+        .filter((g) => g.name.startsWith('root'))
+        .map((g) => g.name)
+        .sort();
+      expect(rootNames).toContain('root--ts-js');
+      expect(rootNames).toContain('root--python');
+    });
+
+    it('T043: 已包含连字符的模块名追加语言后缀', () => {
+      const graph = createGraph([
+        'src/auth-service/handler.ts',
+        'src/auth-service/helper.py',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      const names = result.groups.map((g) => g.name).sort();
+      expect(names).toContain('auth-service--ts-js');
+      expect(names).toContain('auth-service--python');
+    });
+
+    it('T044: 每个 ModuleGroup 的 language 字段正确设置', () => {
+      const graph = createGraph([
+        'src/api/routes.ts',
+        'src/api/handler.go',
+      ]);
+
+      const result = groupFilesToModules(graph, { languageAware: true });
+
+      for (const group of result.groups) {
+        expect(group.language).toBeDefined();
+        if (group.name.includes('ts-js')) {
+          expect(group.language).toBe('ts-js');
+        }
+        if (group.name.includes('go')) {
+          expect(group.language).toBe('go');
+        }
+      }
+    });
+
+    it('T045: 不同深度的目录分组与语言感知同时启用时正确交互', () => {
+      const graph = createGraph([
+        'src/agents/core/runner.ts',
+        'src/agents/core/helper.py',
+        'src/agents/ext/plugin.ts',
+      ]);
+
+      const result = groupFilesToModules(graph, {
+        depth: 2,
+        languageAware: true,
+      });
+
+      const names = result.groups.map((g) => g.name).sort();
+      // agents/core 有两种语言，应拆分
+      expect(names).toContain('agents/core--ts-js');
+      expect(names).toContain('agents/core--python');
+      // agents/ext 仅一种语言，不拆分
+      expect(names).toContain('agents/ext');
     });
   });
 });
