@@ -13,6 +13,7 @@ import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
 import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
 import { generateClassDiagram } from '../generator/mermaid-class-diagram.js';
@@ -166,7 +167,7 @@ export async function prepareContext(
     const scanResult = scanFiles(resolvedTarget, { projectRoot });
     filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
     if (filePaths.length === 0) {
-      throw new Error(`目标路径中未找到 TS/JS 文件: ${targetPath}`);
+      throw new Error(`目标路径中未找到支持的源文件: ${targetPath}`);
     }
 
     onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });
@@ -265,9 +266,13 @@ export async function generateSpec(
       }
     : undefined;
 
+  // 从 Registry 获取目标语言的术语映射
+  const adapter = LanguageAdapterRegistry.getInstance().getAdapter(mergedSkeleton.filePath);
+  const languageTerminology = adapter?.getTerminology();
+
   let llmContent: string;
   try {
-    const llmResponse: LLMResponse = await callLLM(context, undefined, onRetry);
+    const llmResponse: LLMResponse = await callLLM(context, { languageTerminology }, onRetry);
     llmContent = llmResponse.content;
     tokenUsage = llmResponse.inputTokens + llmResponse.outputTokens;
   } catch (error) {

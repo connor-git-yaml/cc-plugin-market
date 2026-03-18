@@ -7,6 +7,27 @@ import { CodeSkeletonSchema } from './code-skeleton.js';
 import { DriftItemSchema, DriftSummarySchema } from './drift-item.js';
 
 // ============================================================
+// 多语言支持：语言分布 Schema（Feature 031）
+// ============================================================
+
+/** 架构索引中展示的语言分布汇总信息 */
+export const LanguageDistributionSchema = z.object({
+  /** 语言显示名称（如 'TypeScript'） */
+  language: z.string().min(1),
+  /** 适配器 ID（如 'ts-js'） */
+  adapterId: z.string().min(1),
+  /** 文件数 */
+  fileCount: z.number().int().nonnegative(),
+  /** 模块数 */
+  moduleCount: z.number().int().nonnegative(),
+  /** 文件占比（%，保留一位小数） */
+  percentage: z.number().nonnegative(),
+  /** 本次批量生成是否处理了该语言 */
+  processed: z.boolean(),
+});
+export type LanguageDistribution = z.infer<typeof LanguageDistributionSchema>;
+
+// ============================================================
 // ModuleSpec 相关
 // ============================================================
 
@@ -20,6 +41,10 @@ export const SpecFrontmatterSchema = z.object({
   lastUpdated: z.string().datetime(),
   confidence: z.enum(['high', 'medium', 'low']),
   skeletonHash: z.string().regex(/^[0-9a-f]{64}$/),
+  /** 模块主要编程语言（多语言项目时设置） */
+  language: z.string().optional(),
+  /** 跨语言引用（如 ['go:services/auth', 'python:scripts/deploy']） */
+  crossLanguageRefs: z.array(z.string()).optional(),
 });
 export type SpecFrontmatter = z.infer<typeof SpecFrontmatterSchema>;
 
@@ -108,6 +133,8 @@ export const ArchitectureIndexSchema = z.object({
   technologyStack: z.array(TechStackEntrySchema),
   dependencyDiagram: z.string().min(1),
   outputPath: z.string().min(1),
+  /** 语言分布（多语言项目时填充，单语言或 undefined） */
+  languageDistribution: z.array(LanguageDistributionSchema).optional(),
 });
 export type ArchitectureIndex = z.infer<typeof ArchitectureIndexSchema>;
 
@@ -164,6 +191,10 @@ export const BatchStateSchema = z.object({
   failedModules: z.array(FailedModuleSchema),
   currentModule: z.string().nullable().optional(),
   forceRegenerate: z.boolean(),
+  /** 语言分组信息（key: adapterId, value: 文件路径列表） */
+  languageGroups: z.record(z.string(), z.array(z.string())).optional(),
+  /** 过滤语言列表（用于断点恢复时还原过滤条件） */
+  filterLanguages: z.array(z.string()).optional(),
 });
 export type BatchState = z.infer<typeof BatchStateSchema>;
 
@@ -194,7 +225,9 @@ export type RedactionResult = z.infer<typeof RedactionResultSchema>;
 // ============================================================
 
 /** 处理阶段标识符 */
-export type StageId = 'scan' | 'ast' | 'context' | 'llm' | 'parse' | 'render';
+export type StageId = 'scan' | 'ast' | 'context' | 'llm' | 'parse' | 'render'
+  | 'lang-detect'   // 语言检测阶段（scanFiles 后的语言统计分析）
+  | 'lang-graph';   // 语言级依赖图构建阶段
 
 /** 阶段进度事件 */
 export interface StageProgress {

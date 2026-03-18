@@ -10,6 +10,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { analyzeFile, resetProject } from '../../src/core/ast-analyzer.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { redact } from '../../src/core/secret-redactor.js';
 import { assembleContext } from '../../src/core/context-assembler.js';
 import { parseLLMResponse, buildSystemPrompt } from '../../src/core/llm-client.js';
@@ -113,6 +115,8 @@ export const config = {
 
 describe('三阶段流水线集成测试', () => {
   beforeAll(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
     fixtureDir = setupFixtures();
   });
 
@@ -120,6 +124,7 @@ describe('三阶段流水线集成测试', () => {
     fs.rmSync(fixtureDir, { recursive: true, force: true });
     resetProject();
     resetRenderer();
+    LanguageAdapterRegistry.resetInstance();
   });
 
   it('阶段 1：AST 分析应正确提取 CodeSkeleton', async () => {

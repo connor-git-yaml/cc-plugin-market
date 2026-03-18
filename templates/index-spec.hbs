@@ -25,6 +25,17 @@ lastUpdated: {{frontmatter.lastUpdated}}
 | [{{name}}]({{specPath}}) | {{description}} | {{level}} | {{#each dependencies}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
 {{/each}}
 
+{{#if languageDistribution}}
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+{{#each languageDistribution}}
+| {{language}} | {{fileCount}} | {{moduleCount}} | {{percentage}}% | {{#if processed}}是{{else}}否{{/if}} |
+{{/each}}
+
+{{/if}}
 ## 依赖关系图
 
 ```mermaid

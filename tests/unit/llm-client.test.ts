@@ -155,5 +155,64 @@ JWT 过期时间默认 24 小时
 
       expect(specPrompt).not.toBe(diffPrompt);
     });
+
+    it('无 terminology 时应默认使用 TypeScript 术语', () => {
+      const prompt = buildSystemPrompt('spec-generation');
+
+      expect(prompt).toContain('typescript');
+      expect(prompt).toContain('ES Modules');
+    });
+
+    it('传入 Python terminology 时应使用 Python 术语', () => {
+      const pythonTerms = {
+        codeBlockLanguage: 'python',
+        exportConcept: '公开函数/类（__all__ 中列出的符号）',
+        importConcept: 'import / from...import 导入',
+        typeSystemDescription: '动态类型 + 可选类型注解（PEP 484）',
+        interfaceConcept: 'Protocol (PEP 544) / ABC 抽象基类',
+        moduleSystem: 'Python 包和模块系统',
+      };
+      const prompt = buildSystemPrompt('spec-generation', pythonTerms);
+
+      expect(prompt).toContain('python');
+      expect(prompt).toContain('公开函数/类');
+      expect(prompt).toContain('Python 包和模块系统');
+      expect(prompt).toContain('Protocol (PEP 544)');
+      // 不应包含 TypeScript 默认术语
+      expect(prompt).not.toContain('ES Modules / CommonJS');
+    });
+
+    it('传入 Go terminology 时应使用 Go 术语', () => {
+      const goTerms = {
+        codeBlockLanguage: 'go',
+        exportConcept: '导出标识符（首字母大写的函数/类型/常量）',
+        importConcept: 'import 导入',
+        typeSystemDescription: '静态类型系统 + 结构化类型（structural typing）',
+        interfaceConcept: 'interface 接口（隐式实现）',
+        moduleSystem: 'Go Modules',
+      };
+      const prompt = buildSystemPrompt('spec-generation', goTerms);
+
+      expect(prompt).toContain('go');
+      expect(prompt).toContain('导出标识符（首字母大写');
+      expect(prompt).toContain('Go Modules');
+    });
+
+    it('terminology 应影响语言上下文章节', () => {
+      const terms = {
+        codeBlockLanguage: 'rust',
+        exportConcept: 'pub 标记的函数/结构体/枚举/trait',
+        importConcept: 'use 导入',
+        typeSystemDescription: '所有权系统 + 生命周期 + 泛型',
+        interfaceConcept: 'trait',
+        moduleSystem: 'Cargo crates 和 mod 模块',
+      };
+      const prompt = buildSystemPrompt('spec-generation', terms);
+
+      expect(prompt).toContain('目标代码语言：**rust**');
+      expect(prompt).toContain('所有权系统');
+      expect(prompt).toContain('trait');
+      expect(prompt).toContain('Cargo crates');
+    });
   });
 });

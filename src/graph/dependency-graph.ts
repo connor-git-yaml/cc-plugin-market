@@ -13,6 +13,7 @@ import type {
 } from '../models/dependency-graph.js';
 import { detectSCCs, topologicalSort } from './topological-sort.js';
 import { renderDependencyGraph } from './mermaid-renderer.js';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 // ============================================================
 // 选项与错误类型
@@ -63,11 +64,27 @@ export async function buildGraph(
   }
 
   const includeOnly = options.includeOnly ?? '^src/';
-  const excludePatterns = options.excludePatterns ?? [
-    '\\.(spec|test)\\.(js|ts|tsx|jsx)$',
-    '__tests__',
-    '__mocks__',
-  ];
+
+  // 从 Registry 聚合所有适配器的测试文件排除模式（替换硬编码的 TS/JS 正则）
+  const defaultExcludePatterns: string[] = [];
+  const registry = LanguageAdapterRegistry.getInstance();
+  for (const adapter of registry.getAllAdapters()) {
+    const testPatterns = adapter.getTestPatterns();
+    // 将 RegExp 转换为字符串模式供 dependency-cruiser 使用
+    defaultExcludePatterns.push(testPatterns.filePattern.source);
+    for (const dir of testPatterns.testDirs) {
+      defaultExcludePatterns.push(dir);
+    }
+  }
+  // 如果 Registry 为空，回退到默认模式
+  if (defaultExcludePatterns.length === 0) {
+    defaultExcludePatterns.push(
+      '\\.(spec|test)\\.(js|ts|tsx|jsx)$',
+      '__tests__',
+      '__mocks__',
+    );
+  }
+  const excludePatterns = options.excludePatterns ?? defaultExcludePatterns;
 
   // 查找 tsconfig.json
   const tsConfigPath = options.tsConfigPath

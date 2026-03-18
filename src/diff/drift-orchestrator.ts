@@ -147,7 +147,7 @@ export async function detectDrift(
   // 步骤 4：噪声过滤
   const oldContent = serializeSkeleton(baselineSkeleton);
   const newContent = serializeSkeleton(currentSkeleton);
-  const { substantive, filtered: filteredNoise } = filterNoise(rawItems, oldContent, newContent);
+  const { substantive, filtered: filteredNoise } = filterNoise(rawItems, oldContent, newContent, currentSkeleton.language);
 
   // 步骤 5：语义差异（可选）
   let allItems: DriftItem[] = [...substantive];
@@ -163,6 +163,7 @@ export async function detectDrift(
             oldExp.signature,
             exp.signature,
             specDescription,
+            currentSkeleton.language,
           );
           if (semanticResult) {
             allItems.push(semanticResult);

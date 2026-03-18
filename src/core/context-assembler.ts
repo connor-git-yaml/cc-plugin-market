@@ -73,7 +73,7 @@ function formatSkeleton(skeleton: CodeSkeleton): string {
     parts.push(`## 导出符号`);
     for (const exp of skeleton.exports) {
       parts.push(`### ${exp.kind}: ${exp.name}`);
-      parts.push('```typescript');
+      parts.push(`\`\`\`${skeleton.language}`);
       parts.push(exp.signature);
       parts.push('```');
       if (exp.jsDoc) {
@@ -113,11 +113,13 @@ function formatDependencies(deps: string[]): string {
 
 /**
  * 格式化代码片段
+ * @param snippets - 代码片段列表
+ * @param language - 代码块标记语言（默认 'typescript'）
  */
-function formatSnippets(snippets: string[]): string {
+function formatSnippets(snippets: string[], language = 'typescript'): string {
   if (snippets.length === 0) return '';
   const parts = snippets.map(
-    (s, i) => `### 代码片段 ${i + 1}\n\`\`\`typescript\n${s}\n\`\`\``,
+    (s, i) => `### 代码片段 ${i + 1}\n\`\`\`${language}\n${s}\n\`\`\``,
   );
   return `## 关键代码片段\n\n${parts.join('\n\n')}`;
 }
@@ -143,8 +145,9 @@ export async function assembleContext(
   // 准备各部分内容
   const instructionsText = options.templateInstructions ?? '';
   const skeletonText = formatSkeleton(skeleton);
+  const codeBlockLanguage = skeleton.language;
   let dependenciesText = formatDependencies(options.dependencySpecs ?? []);
-  let snippetsText = formatSnippets(options.codeSnippets ?? []);
+  let snippetsText = formatSnippets(options.codeSnippets ?? [], codeBlockLanguage);
 
   // 估算各部分 token
   let instructionsTokens = estimateFast(instructionsText);
@@ -166,13 +169,13 @@ export async function assembleContext(
       // 逐个移除片段直到符合预算
       const snippets = options.codeSnippets ?? [];
       let kept = snippets.length;
-      while (kept > 0 && estimateFast(formatSnippets(snippets.slice(0, kept))) > available) {
+      while (kept > 0 && estimateFast(formatSnippets(snippets.slice(0, kept), codeBlockLanguage)) > available) {
         kept--;
       }
       if (kept < snippets.length) {
         truncatedParts.push('codeSnippets');
       }
-      snippetsText = formatSnippets(snippets.slice(0, kept));
+      snippetsText = formatSnippets(snippets.slice(0, kept), codeBlockLanguage);
       snippetsTokens = estimateFast(snippetsText);
     }
     total = instructionsTokens + skeletonTokens + dependenciesTokens + snippetsTokens;

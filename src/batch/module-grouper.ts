@@ -1,8 +1,11 @@
 /**
  * 文件→模块分组与模块级拓扑排序
  * 将 dependency-cruiser 的文件级 DependencyGraph 聚合为目录级模块
+ * 支持语言感知分组：同目录多语言文件拆分为带语言后缀的子模块（Feature 031）
  */
+import * as path from 'node:path';
 import type { DependencyGraph } from '../models/dependency-graph.js';
+import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 // ============================================================
 // 类型定义
@@ -16,6 +19,8 @@ export interface ModuleGroup {
   dirPath: string;
   /** 模块内包含的文件路径 */
   files: string[];
+  /** 该模块的主要语言（仅语言感知分组模式下设置） */
+  language?: string;
 }
 
 /** 分组结果 */
@@ -36,6 +41,8 @@ export interface GroupingOptions {
   depth?: number;
   /** 根目录散文件的模块名（默认 'root'） */
   rootModuleName?: string;
+  /** 启用语言感知分组（同目录不同语言拆分为子模块） */
+  languageAware?: boolean;
 }
 
 // ============================================================
@@ -57,6 +64,7 @@ export function groupFilesToModules(
   const {
     depth = 1,
     rootModuleName = 'root',
+    languageAware = false,
   } = options;
 
   // 自动检测 basePrefix
@@ -73,13 +81,57 @@ export function groupFilesToModules(
     moduleMap.get(moduleName)!.push(node.source);
   }
 
-  // 步骤 2：构建 ModuleGroup 列表
+  // 步骤 2：构建 ModuleGroup 列表（语言感知模式下可能拆分）
   const groups: ModuleGroup[] = [];
-  for (const [name, files] of moduleMap) {
-    const dirPath = name === rootModuleName
-      ? basePrefix.replace(/\/$/, '') || '.'
-      : basePrefix ? `${basePrefix}${name}` : name;
-    groups.push({ name, dirPath, files: files.sort() });
+
+  if (languageAware) {
+    const registry = LanguageAdapterRegistry.getInstance();
+
+    for (const [name, files] of moduleMap) {
+      const dirPath = name === rootModuleName
+        ? basePrefix.replace(/\/$/, '') || '.'
+        : basePrefix ? `${basePrefix}${name}` : name;
+
+      // 按语言分组
+      const langGroups = new Map<string, string[]>();
+      for (const file of files) {
+        const adapter = registry.getAdapter(file);
+        const langId = adapter?.id ?? 'unknown';
+        if (!langGroups.has(langId)) {
+          langGroups.set(langId, []);
+        }
+        langGroups.get(langId)!.push(file);
+      }
+
+      if (langGroups.size <= 1) {
+        // 单语言目录：保持原名（向后兼容）
+        const langId = langGroups.keys().next().value as string | undefined;
+        groups.push({
+          name,
+          dirPath,
+          files: files.sort(),
+          language: langId,
+        });
+      } else {
+        // 多语言目录：拆分为带语言后缀的子模块
+        for (const [langId, langFiles] of langGroups) {
+          const subName = `${name}--${langId}`;
+          groups.push({
+            name: subName,
+            dirPath,
+            files: langFiles.sort(),
+            language: langId,
+          });
+        }
+      }
+    }
+  } else {
+    for (const [name, files] of moduleMap) {
+      const dirPath = name === rootModuleName
+        ? basePrefix.replace(/\/$/, '') || '.'
+        : basePrefix ? `${basePrefix}${name}` : name;
+      groups.push({ name, dirPath, files: files.sort() });
+    }
   }
 
   // 步骤 3：构建模块间依赖关系

@@ -38,7 +38,8 @@ export default function run() {}
     expect(skeleton.parserUsed).toBe('tree-sitter');
     expect(skeleton.language).toBe('typescript');
     expect(skeleton.hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(skeleton.parseErrors?.[0]?.message).toContain('降级');
+    // tree-sitter 重写后，成功解析时 parseErrors 为 undefined 或空
+    // （只有正则降级时才会有"降级"消息）
     expect(skeleton.exports.some((e) => e.name === 'IUser')).toBe(true);
     expect(skeleton.exports.some((e) => e.name === 'answer')).toBe(true);
     expect(skeleton.imports.some((i) => i.moduleSpecifier === './types')).toBe(true);

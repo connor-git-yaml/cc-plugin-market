@@ -1,6 +1,6 @@
 {
   "name": "reverse-spec",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档",
   "type": "module",
   "main": "dist/index.js",
@@ -9,6 +9,8 @@
   },
   "files": [
     "dist/",
+    "grammars/",
+    "queries/",
     "scripts/lifecycle-runner.cjs",
     "src/skills-global/",
     "plugins/",
@@ -38,9 +40,8 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "dependency-cruiser": "^16.8.0",
     "handlebars": "^4.7.8",
-    "tree-sitter": "^0.21.1",
-    "tree-sitter-typescript": "^0.23.2",
     "ts-morph": "^24.0.0",
+    "web-tree-sitter": "^0.24.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {

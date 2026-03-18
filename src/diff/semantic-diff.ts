@@ -14,22 +14,24 @@ import type { CodeSkeleton } from '../models/code-skeleton.js';
  * @param oldCode - 之前的函数体
  * @param newCode - 当前的函数体
  * @param specDescription - 规格中的相关描述
+ * @param language - 代码语言（默认 'typescript'）
  * @returns DriftItem（如检测到漂移），否则 null
  */
 export async function evaluateBehaviorChange(
   oldCode: string,
   newCode: string,
   specDescription: string,
+  language = 'typescript',
 ): Promise<DriftItem | null> {
   const prompt = `请评估以下代码变更是否导致了行为漂移。
 
 ## 旧代码
-\`\`\`typescript
+\`\`\`${language}
 ${oldCode}
 \`\`\`
 
 ## 新代码
-\`\`\`typescript
+\`\`\`${language}
 ${newCode}
 \`\`\`
 
@@ -57,7 +59,7 @@ ${specDescription}
   // 构建一个简单的骨架用于 assembleContext
   const skeleton: CodeSkeleton = {
     filePath: 'semantic-diff-context',
-    language: 'typescript',
+    language: language as CodeSkeleton['language'],
     loc: prompt.split('\n').length,
     exports: [],
     imports: [],

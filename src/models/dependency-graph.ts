@@ -18,6 +18,8 @@ export const GraphNodeSchema = z.object({
   inDegree: z.number().int().nonnegative(),
   outDegree: z.number().int().nonnegative(),
   level: z.number().int().nonnegative(),
+  /** 节点所属的编程语言（多语言图合并时使用） */
+  language: z.string().optional(),
 });
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 

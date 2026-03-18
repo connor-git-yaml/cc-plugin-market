@@ -15,6 +15,10 @@ export interface FrontmatterInput {
   skeletonHash: string;
   /** 已有版本号（如 'v3'），用于自动递增 */
   existingVersion?: string;
+  /** 模块主要编程语言（多语言项目时设置） */
+  language?: string;
+  /** 跨语言引用（如 ['go:services/auth', 'python:scripts/deploy']） */
+  crossLanguageRefs?: string[];
 }
 
 /**
@@ -36,7 +40,7 @@ function incrementVersion(existing?: string): string {
  * @returns SpecFrontmatter
  */
 export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
-  return {
+  const frontmatter: SpecFrontmatter = {
     type: 'module-spec',
     version: incrementVersion(data.existingVersion),
     generatedBy: 'reverse-spec v2.0',
@@ -46,4 +50,14 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
     confidence: data.confidence,
     skeletonHash: data.skeletonHash,
   };
+
+  // 多语言项目扩展字段（仅设置时填充）
+  if (data.language) {
+    frontmatter.language = data.language;
+  }
+  if (data.crossLanguageRefs && data.crossLanguageRefs.length > 0) {
+    frontmatter.crossLanguageRefs = data.crossLanguageRefs;
+  }
+
+  return frontmatter;
 }

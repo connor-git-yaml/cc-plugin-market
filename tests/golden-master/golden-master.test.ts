@@ -10,10 +10,12 @@
  * 5. 各章节非空内容覆盖率（权重 30%）
  * 6. 文件清单完整性（权重 10%）
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { analyzeFile } from '../../src/core/ast-analyzer.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { renderSpec, initRenderer } from '../../src/generator/spec-renderer.js';
 import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
@@ -36,7 +38,15 @@ let expectedSpec: ExpectedSpec;
 let renderedMarkdown: string;
 let moduleSpec: ModuleSpec;
 
+afterAll(() => {
+  LanguageAdapterRegistry.resetInstance();
+});
+
 beforeAll(async () => {
+  // 确保 Registry 已注册适配器
+  LanguageAdapterRegistry.resetInstance();
+  bootstrapAdapters();
+
   // 加载预期输出
   const expectedPath = path.join(FIXTURES_DIR, 'expected-spec.json');
   expectedSpec = JSON.parse(fs.readFileSync(expectedPath, 'utf-8'));

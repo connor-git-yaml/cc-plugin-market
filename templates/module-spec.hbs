@@ -10,7 +10,12 @@ relatedFiles:
 lastUpdated: {{frontmatter.lastUpdated}}
 confidence: {{frontmatter.confidence}}
 skeletonHash: {{frontmatter.skeletonHash}}
----
+{{#if frontmatter.language}}language: {{frontmatter.language}}
+{{/if}}{{#if frontmatter.crossLanguageRefs}}crossLanguageRefs:
+{{#each frontmatter.crossLanguageRefs}}
+  - {{this}}
+{{/each}}
+{{/if}}---
 
 # {{frontmatter.sourceTarget}}
 

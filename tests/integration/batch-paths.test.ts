@@ -9,6 +9,8 @@ import * as os from 'node:os';
 import { runBatch } from '../../src/batch/batch-orchestrator.js';
 import { buildGraph } from '../../src/graph/dependency-graph.js';
 import { groupFilesToModules } from '../../src/batch/module-grouper.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 
 describe('runBatch 路径基准', () => {
   let projectRoot: string;
@@ -16,6 +18,8 @@ describe('runBatch 路径基准', () => {
   let previousCwd: string;
 
   beforeEach(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
     previousCwd = process.cwd();
     projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-path-project-'));
     isolatedCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-path-cwd-'));
@@ -50,6 +54,7 @@ export function greet(name: string): string {
     process.chdir(previousCwd);
     fs.rmSync(projectRoot, { recursive: true, force: true });
     fs.rmSync(isolatedCwd, { recursive: true, force: true });
+    LanguageAdapterRegistry.resetInstance();
   });
 
   it('cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs', async () => {
