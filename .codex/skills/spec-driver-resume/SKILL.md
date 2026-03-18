@@ -1,14 +1,14 @@
 ---
 name: spec-driver-resume
-description: "恢复中断的 Speckit 研发流程 — 扫描已有制品并从断点继续编排"
+description: "恢复中断的 Spec-driver 研发流程 — 扫描已有制品并从断点继续编排"
 disable-model-invocation: true
 ---
 
 ## Codex Runtime Adapter
 
-此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/speckit-resume/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-resume/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 `/spec-driver:speckit-resume` 在 Codex 中等价于 `$spec-driver-resume`
+- 命令别名：正文中的 `/spec-driver:spec-driver-resume` 在 Codex 中等价于 `$spec-driver-resume`
 - 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
 - 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`
@@ -52,11 +52,11 @@ fi
 
 ### 1. 项目环境检查
 
-运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPEC_DRIVER_SKILLS`（是否存在已有 spec-driver skills）、`SKILL_MAP`（已有 skill 列表）。
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/speckit.constitution` 创建项目宪法。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution` 创建项目宪法。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 
@@ -100,8 +100,8 @@ fi
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if .claude/commands/speckit.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
+  if .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 

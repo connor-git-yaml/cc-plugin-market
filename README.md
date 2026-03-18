@@ -1,18 +1,18 @@
 # CC Plugin Market
 
-<!-- speckit:section:badges -->
+<!-- spec-driver:section:badges -->
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![npm version](https://img.shields.io/npm/v/reverse-spec.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
-<!-- speckit:section:badges:end -->
+<!-- spec-driver:section:badges:end -->
 
-<!-- speckit:section:description -->
+<!-- spec-driver:section:description -->
 A curated collection of Claude Code plugins for Spec-Driven Development. This repository ships two complementary products that cover the full software development lifecycle — from reverse-engineering existing code into specifications, to orchestrating new feature development through structured workflows.
-<!-- speckit:section:description:end -->
+<!-- spec-driver:section:description:end -->
 
-<!-- speckit:section:plugins-overview -->
+<!-- spec-driver:section:plugins-overview -->
 ## Plugins
 
 | Plugin | Type | Description |
@@ -30,16 +30,16 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 │  │                       │     │                              │  │
 │  │  Code → AST → Spec    │     │  Idea → Spec → Plan → Code  │  │
 │  │                       │     │                              │  │
-│  │  • generate / batch   │     │  • speckit-feature           │  │
-│  │  • diff / prepare     │     │  • speckit-story             │  │
-│  │  • MCP server         │     │  • speckit-fix               │  │
-│  │  • CLI + Skills       │     │  • speckit-resume/sync/doc   │  │
+│  │  • generate / batch   │     │  • spec-driver-feature           │  │
+│  │  • diff / prepare     │     │  • spec-driver-story             │  │
+│  │  • MCP server         │     │  • spec-driver-fix               │  │
+│  │  • CLI + Skills       │     │  • spec-driver-resume/sync/doc   │  │
 │  └──────────────────────┘     └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
-<!-- speckit:section:plugins-overview:end -->
+<!-- spec-driver:section:plugins-overview:end -->
 
-<!-- speckit:section:plugin-installation -->
+<!-- spec-driver:section:plugin-installation -->
 ## Plugin Installation
 
 ### Prerequisites
@@ -98,12 +98,12 @@ After installation, the plugin skills become available in Claude Code:
 claude plugin list
 
 # Test spec-driver skills
-/spec-driver:speckit-doc
+/spec-driver:spec-driver-doc
 
 # Test reverse-spec skills
 /reverse-spec src/
 ```
-<!-- speckit:section:plugin-installation:end -->
+<!-- spec-driver:section:plugin-installation:end -->
 
 ### Codex Support
 
@@ -159,11 +159,11 @@ bash plugins/spec-driver/scripts/codex-skills.sh remove --global
 
 Notes:
 - Project mode installs to the current git repository root (or current directory when not in a git repo).
-- Codex skills are generated from the current `speckit-*` source skills with a small Codex runtime adapter block; rerun `install` after upgrading Spec Driver to refresh them.
+- Codex skills are generated from the current `spec-driver-*` source skills with a small Codex runtime adapter block; rerun `install` after upgrading Spec Driver to refresh them.
 
 ---
 
-<!-- speckit:section:reverse-spec -->
+<!-- spec-driver:section:reverse-spec -->
 ## reverse-spec
 
 A hybrid AST + LLM pipeline that reverse-engineers legacy source code into structured, nine-section Spec documents. TypeScript/JavaScript projects benefit from AST-enhanced precise analysis, while other languages are supported via LLM-only fallback mode.
@@ -266,11 +266,11 @@ LLM Prompt
     │   └── CLI proxy → spawn claude
 ModuleSpec → specs/*.spec.md
 ```
-<!-- speckit:section:reverse-spec:end -->
+<!-- spec-driver:section:reverse-spec:end -->
 
 ---
 
-<!-- speckit:section:spec-driver -->
+<!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
 **Spec Driver** (v3.1.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 6 execution modes, and parallel sub-agent dispatch for accelerated execution.
@@ -302,7 +302,7 @@ To initialize Spec Driver in a new project (Claude Code):
 
 ```bash
 # Creates .specify/ directory, constitution.md, and spec-driver.config.yaml
-/spec-driver:speckit-feature "your feature description"
+/spec-driver:spec-driver-feature "your feature description"
 # The first run will auto-initialize the project structure
 ```
 
@@ -312,18 +312,18 @@ Choose the right mode based on your scenario:
 
 | Scenario | Command | Phases | Human Interaction |
 | -------- | ------- | ------ | ----------------- |
-| New feature, major requirement | `/spec-driver:speckit-feature <desc>` | 10 | ≤5 |
-| Feature iteration, requirement change | `/spec-driver:speckit-story <desc>` | 5 | ≤2 |
-| Bug fix, issue resolution | `/spec-driver:speckit-fix <desc>` | 4 | ≤1 |
-| Resume interrupted workflow | `/spec-driver:speckit-resume` | Variable | 0 |
-| Aggregate product specification | `/spec-driver:speckit-sync` | 3 | 0 |
-| Generate open-source docs | `/spec-driver:speckit-doc` | 7 | 2-3 |
+| New feature, major requirement | `/spec-driver:spec-driver-feature <desc>` | 10 | ≤5 |
+| Feature iteration, requirement change | `/spec-driver:spec-driver-story <desc>` | 5 | ≤2 |
+| Bug fix, issue resolution | `/spec-driver:spec-driver-fix <desc>` | 4 | ≤1 |
+| Resume interrupted workflow | `/spec-driver:spec-driver-resume` | Variable | 0 |
+| Aggregate product specification | `/spec-driver:spec-driver-sync` | 3 | 0 |
+| Generate open-source docs | `/spec-driver:spec-driver-doc` | 7 | 2-3 |
 
 #### Feature Mode — Full 10-Phase Orchestration
 
 ```bash
-/spec-driver:speckit-feature "Add user authentication with OAuth2"
-/spec-driver:speckit-feature --research tech-only "Migrate from Express to Fastify"
+/spec-driver:spec-driver-feature "Add user authentication with OAuth2"
+/spec-driver:spec-driver-feature --research tech-only "Migrate from Express to Fastify"
 ```
 
 Supports 6 research modes (`full`, `tech-only`, `product-only`, `codebase-scan`, `skip`, `custom`) with smart recommendation based on requirement analysis.
@@ -342,7 +342,7 @@ Supports 6 research modes (`full`, `tech-only`, `product-only`, `codebase-scan`,
 #### Story Mode — Quick 5-Phase
 
 ```bash
-/spec-driver:speckit-story "Add dark mode toggle to settings page"
+/spec-driver:spec-driver-story "Add dark mode toggle to settings page"
 ```
 
 Skips research phases — analyzes existing code context instead. Ideal for iterative changes and requirement updates.
@@ -350,7 +350,7 @@ Skips research phases — analyzes existing code context instead. Ideal for iter
 #### Fix Mode — Rapid 4-Phase
 
 ```bash
-/spec-driver:speckit-fix "Login fails when email contains '+' character"
+/spec-driver:spec-driver-fix "Login fails when email contains '+' character"
 ```
 
 Rapid diagnosis → root cause analysis → targeted fix → verification. Auto-syncs specs after fix.
@@ -358,7 +358,7 @@ Rapid diagnosis → root cause analysis → targeted fix → verification. Auto-
 #### Resume Mode — Interrupted Workflow Recovery
 
 ```bash
-/spec-driver:speckit-resume
+/spec-driver:spec-driver-resume
 ```
 
 No arguments needed. Automatically scans existing artifacts, detects the breakpoint, and continues from where the workflow was interrupted.
@@ -366,7 +366,7 @@ No arguments needed. Automatically scans existing artifacts, detects the breakpo
 #### Sync Mode — Product Spec Aggregation
 
 ```bash
-/spec-driver:speckit-sync
+/spec-driver:spec-driver-sync
 ```
 
 Aggregates individual feature specs from `specs/` into a unified product-level `current-spec.md`. Fully automatic, zero human interaction.
@@ -374,7 +374,7 @@ Aggregates individual feature specs from `specs/` into a unified product-level `
 #### Doc Mode — Open-Source Documentation
 
 ```bash
-/spec-driver:speckit-doc
+/spec-driver:spec-driver-doc
 ```
 
 Interactive generation of README.md, LICENSE, CONTRIBUTING.md, and CODE_OF_CONDUCT.md with conflict detection and backup.
@@ -385,28 +385,28 @@ Each phase can also be run independently for fine-grained control:
 
 ```bash
 # Create or update project constitution
-/speckit.constitution
+/spec-driver.constitution
 
 # Generate requirement specification from description
-/speckit.specify
+/spec-driver.specify
 
 # Clarify ambiguities in the current spec
-/speckit.clarify
+/spec-driver.clarify
 
 # Generate quality checklist
-/speckit.checklist
+/spec-driver.checklist
 
 # Create implementation plan
-/speckit.plan
+/spec-driver.plan
 
 # Generate dependency-ordered tasks
-/speckit.tasks
+/spec-driver.tasks
 
 # Run cross-artifact consistency analysis
-/speckit.analyze
+/spec-driver.analyze
 
 # Execute implementation plan
-/speckit.implement
+/spec-driver.implement
 ```
 
 ### Sub-Agents
@@ -516,11 +516,11 @@ When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both t
 ### Supported Verification Languages
 
 JS/TS (npm/pnpm/yarn/bun), Rust (Cargo), Go, Python (pip/poetry/uv), Java (Maven/Gradle), Kotlin, Swift (SPM), C/C++ (CMake/Make), C# (.NET), Elixir (Mix), Ruby (Bundler)
-<!-- speckit:section:spec-driver:end -->
+<!-- spec-driver:section:spec-driver:end -->
 
 ---
 
-<!-- speckit:section:project-structure -->
+<!-- spec-driver:section:project-structure -->
 ## Project Structure
 
 ```text
@@ -579,12 +579,12 @@ plugins/                           # Claude Code plugins
     │   ├── verify.md              # Phase 7c: Build/lint/test verification
     │   └── sync.md                # Product spec aggregation
     ├── skills/                    # 6 execution mode definitions
-    │   ├── speckit-feature/       # Full 10-phase orchestration
-    │   ├── speckit-story/         # Quick 5-phase iteration
-    │   ├── speckit-fix/           # Rapid 4-phase bug fix
-    │   ├── speckit-resume/        # Interrupted workflow recovery
-    │   ├── speckit-sync/          # Product spec aggregation
-    │   └── speckit-doc/           # Open-source doc generation
+    │   ├── spec-driver-feature/       # Full 10-phase orchestration
+    │   ├── spec-driver-story/         # Quick 5-phase iteration
+    │   ├── spec-driver-fix/           # Rapid 4-phase bug fix
+    │   ├── spec-driver-resume/        # Interrupted workflow recovery
+    │   ├── spec-driver-sync/          # Product spec aggregation
+    │   └── spec-driver-doc/           # Open-source doc generation
     ├── templates/                 # Report and config templates
     └── scripts/                   # Initialization and scanning scripts
 
@@ -604,9 +604,9 @@ tests/                             # Test suite (313 cases)
 ├── golden-master/                 # Golden Master structural similarity tests
 └── self-hosting/                  # Self-hosting tests (analyze itself)
 ```
-<!-- speckit:section:project-structure:end -->
+<!-- spec-driver:section:project-structure:end -->
 
-<!-- speckit:section:tech-stack -->
+<!-- spec-driver:section:tech-stack -->
 ## Tech Stack
 
 ### reverse-spec Stack
@@ -632,9 +632,9 @@ tests/                             # Test suite (313 cases)
 | Agent System | 14 specialized sub-agent prompts with scoped tool permissions |
 | Configuration | YAML (`spec-driver.config.yaml`) with 3 model presets |
 | Templates | Markdown templates for research reports, specs, and verification |
-<!-- speckit:section:tech-stack:end -->
+<!-- spec-driver:section:tech-stack:end -->
 
-<!-- speckit:section:testing -->
+<!-- spec-driver:section:testing -->
 ## Testing
 
 ```bash
@@ -665,9 +665,9 @@ The project includes a 4-tier testing system with 313 test cases:
 | Integration | 7 | 40 | End-to-end pipeline + drift detection + CLI e2e |
 | Golden Master | 1 | 9 | AST extraction precision ≥ 90% structural similarity |
 | Self-Hosting | 1 | 5 | Project analyzes itself for completeness |
-<!-- speckit:section:testing:end -->
+<!-- spec-driver:section:testing:end -->
 
-<!-- speckit:section:contributing -->
+<!-- spec-driver:section:contributing -->
 ## Contributing
 
 Bug reports and pull requests are welcome. Please open an issue first to discuss what you would like to change.
@@ -677,10 +677,10 @@ Bug reports and pull requests are welcome. Please open an issue first to discuss
 3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
-<!-- speckit:section:contributing:end -->
+<!-- spec-driver:section:contributing:end -->
 
-<!-- speckit:section:license -->
+<!-- spec-driver:section:license -->
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-<!-- speckit:section:license:end -->
+<!-- spec-driver:section:license:end -->

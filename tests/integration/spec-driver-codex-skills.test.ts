@@ -96,11 +96,11 @@ describe('Spec Driver Codex skills script', () => {
     );
     expect(wrapperContent).toContain('description: "执行 Spec-Driven Development 完整研发流程');
     expect(wrapperContent).toContain('## Codex Runtime Adapter');
-    expect(wrapperContent).toContain('$PLUGIN_DIR/skills/speckit-feature/SKILL.md');
+    expect(wrapperContent).toContain('$PLUGIN_DIR/skills/spec-driver-feature/SKILL.md');
     expect(wrapperContent).toContain('$spec-driver-feature <需求描述>');
     expect(wrapperContent).toContain('# Spec Driver — 自治研发编排器');
     expect(wrapperContent).not.toContain(
-      resolve('plugins/spec-driver/skills/speckit-feature/SKILL.md'),
+      resolve('plugins/spec-driver/skills/spec-driver-feature/SKILL.md'),
     );
   });
 

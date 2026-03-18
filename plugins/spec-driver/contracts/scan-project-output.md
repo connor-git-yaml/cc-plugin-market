@@ -3,7 +3,7 @@
 **文件**: `plugins/spec-driver/scripts/scan-project.sh`  
 **输出模式**: `bash "$PLUGIN_DIR/scripts/scan-project.sh" --json`
 
-本文档定义 `scan-project.sh` 的 JSON 输出字段，供 `speckit-doc` 和后续模板 / agent / skill 引用。新增字段应保持向后兼容；删除或重命名字段属于破坏性变更。
+本文档定义 `scan-project.sh` 的 JSON 输出字段，供 `spec-driver-doc` 和后续模板 / agent / skill 引用。新增字段应保持向后兼容；删除或重命名字段属于破坏性变更。
 
 ## 顶层字段
 
@@ -64,7 +64,7 @@
 
 ## 使用规则
 
-1. `speckit-doc` 将此输出视为**分发元信息层**，而不是产品语义层。
+1. `spec-driver-doc` 将此输出视为**分发元信息层**，而不是产品语义层。
 2. 当项目存在 `specs/products/*/current-spec.md` 时，README 的产品定位、核心价值、主要工作流应优先来自 `current-spec.md`，而不是本契约中的 `description`。
 3. 当字段缺失时，消费方必须使用 `[待补充]` 或降级逻辑，而不是假设该字段存在。
 4. 若后续需要新增字段，应在此文档追加说明，并保持旧字段兼容。

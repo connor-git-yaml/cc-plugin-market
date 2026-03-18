@@ -6,9 +6,9 @@ disable-model-invocation: true
 
 ## Codex Runtime Adapter
 
-此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/speckit-fix/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-fix/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 `/spec-driver:speckit-fix` 在 Codex 中等价于 `$spec-driver-fix`
+- 命令别名：正文中的 `/spec-driver:spec-driver-fix` 在 Codex 中等价于 `$spec-driver-fix`
 - 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
 - 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`

@@ -6,9 +6,9 @@ disable-model-invocation: false
 
 ## Codex Runtime Adapter
 
-此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/speckit-sync/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-sync/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 `/spec-driver:speckit-sync` 在 Codex 中等价于 `$spec-driver-sync`
+- 命令别名：正文中的 `/spec-driver:spec-driver-sync` 在 Codex 中等价于 `$spec-driver-sync`
 - 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
 - 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`
@@ -19,7 +19,7 @@ disable-model-invocation: false
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `speckit-doc` 生成对外文档时可复用的上游事实源。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `spec-driver-doc` 生成对外文档时可复用的上游事实源。
 
 ## 触发方式
 
@@ -146,14 +146,14 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `speckit-doc` 消费的“对外文档摘要”。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”。
 
 **适用场景**：
 
 - 实现完成后同步产品全景文档
 - 定期批量合并多个迭代的 spec
 - 新成员 onboarding 前生成产品现状文档
-- 为 `speckit-doc` 生成 README / 使用文档提供单一事实源
+- 为 `spec-driver-doc` 生成 README / 使用文档提供单一事实源
 
 ### 执行步骤
 
@@ -227,7 +227,7 @@ Task(
     对外文档摘要: {完整/部分/待补充}
 
 产品映射: specs/products/product-mapping.yaml
-doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 speckit-doc 使用）”区块
+doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 spec-driver-doc 使用）”区块
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```

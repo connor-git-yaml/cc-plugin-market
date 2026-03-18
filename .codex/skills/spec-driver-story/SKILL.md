@@ -6,9 +6,9 @@ disable-model-invocation: true
 
 ## Codex Runtime Adapter
 
-此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/speckit-story/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-story/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 `/spec-driver:speckit-story` 在 Codex 中等价于 `$spec-driver-story`
+- 命令别名：正文中的 `/spec-driver:spec-driver-story` 在 Codex 中等价于 `$spec-driver-story`
 - 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
 - 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`
@@ -63,7 +63,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/speckit.constitution`。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution`。
 
 ### 3. 配置加载
 
@@ -139,8 +139,8 @@ autonomous 默认值: 全部 on_failure
 
 ```text
 对于 phase ∈ [specify, clarify, plan, tasks, analyze, implement]:
-  if .claude/commands/speckit.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
+  if .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 

@@ -76,5 +76,5 @@
 
 ## 失败处理
 
-- constitution.md 不存在 → 返回 VIOLATION，建议先运行 `/speckit.constitution` 创建项目宪法
+- constitution.md 不存在 → 返回 VIOLATION，建议先运行 `/spec-driver.constitution` 创建项目宪法
 - constitution.md 格式异常 → 返回 WARNING，附带解析失败的具体位置，建议人工检查

@@ -6,9 +6,9 @@ disable-model-invocation: false
 
 ## Codex Runtime Adapter
 
-此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/speckit-doc/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
+此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-doc/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 `/spec-driver:speckit-doc` 在 Codex 中等价于 `$spec-driver-doc`
+- 命令别名：正文中的 `/spec-driver:spec-driver-doc` 在 Codex 中等价于 `$spec-driver-doc`
 - 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
 - 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`
@@ -122,7 +122,7 @@ timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
 
 ### 1.4 产品活文档发现（高优先级产品语义源）
 
-在项目元信息提取后，检查是否存在由 `speckit-sync` 生成的产品活文档：
+在项目元信息提取后，检查是否存在由 `spec-driver-sync` 生成的产品活文档：
 
 ```text
 扫描路径: specs/products/*/current-spec.md
@@ -146,7 +146,7 @@ if 找到 1 个:
   先校验该候选是否与 `project_identity_keys` 建立可信匹配
   if 匹配:
     读取该 current-spec.md
-    优先提取 "## 对外文档摘要（供 speckit-doc 使用）" 区块
+    优先提取 "## 对外文档摘要（供 spec-driver-doc 使用）" 区块
     若该区块不存在，再回退读取以下章节:
       - 产品概述
       - 用户画像与场景
@@ -172,7 +172,7 @@ if 找到多个:
 
 **语义源优先级**：
 
-1. `current-spec.md` 中的“对外文档摘要（供 speckit-doc 使用）”区块
+1. `current-spec.md` 中的“对外文档摘要（供 spec-driver-doc 使用）”区块
 2. `current-spec.md` 的产品概述 / 用户画像与场景 / 当前功能全集 / 范围与边界
 3. `scan-project.sh` 的项目元信息结果
 4. AST 分析结果（仅用于校验和补充，不直接替代产品语义）
@@ -372,26 +372,26 @@ N. 不使用 current-spec，回退到项目元信息扫描
 #### README 章节结构
 
 ```markdown
-<!-- speckit:section:badges -->
+<!-- spec-driver:section:badges -->
 {Badges — 根据项目信息生成 shields.io 徽章}
-<!-- speckit:section:badges:end -->
+<!-- spec-driver:section:badges:end -->
 
 # {项目名称}
 
-<!-- speckit:section:description -->
+<!-- spec-driver:section:description -->
 {项目描述 — 优先使用 current-spec 的对外文档摘要 / 产品概述；若未配置则回退到项目配置文件 description 或 AST 分析结果}
-<!-- speckit:section:description:end -->
+<!-- spec-driver:section:description:end -->
 
-<!-- speckit:section:features -->
+<!-- spec-driver:section:features -->
 ## Features
 
 {功能特性列表:
   - 优先基于 current-spec 的当前功能全集与主要工作流提炼面向用户的能力点
   - AST 结果只用于核验与补充，不直接输出原始导出清单
   - 如果无 current-spec 与 AST 分析: 基于项目 description 和 dependencies 推断}
-<!-- speckit:section:features:end -->
+<!-- spec-driver:section:features:end -->
 
-<!-- speckit:section:getting-started -->
+<!-- spec-driver:section:getting-started -->
 ## Getting Started
 
 ### Prerequisites
@@ -422,9 +422,9 @@ N. 不使用 current-spec，回退到项目元信息扫描
 | `unknown` | `[待补充]` | `[待补充]` |
 
 如果有 repository: 也提供 clone + install 方式}
-<!-- speckit:section:getting-started:end -->
+<!-- spec-driver:section:getting-started:end -->
 
-<!-- speckit:section:usage -->
+<!-- spec-driver:section:usage -->
 ## Usage
 
 {使用示例:
@@ -432,43 +432,43 @@ N. 不使用 current-spec，回退到项目元信息扫描
   - CLI 工具（有 bin）: 展示 1-2 个命令行示例
   - Library（有 main）: 展示 import/require 和基本调用示例
   - 基于项目配置中的脚本/命令定义}
-<!-- speckit:section:usage:end -->
+<!-- spec-driver:section:usage:end -->
 
-<!-- speckit:section:project-structure -->
+<!-- spec-driver:section:project-structure -->
 ## Project Structure
 
 ```
 {directoryTree 的内容}
 ```
-<!-- speckit:section:project-structure:end -->
+<!-- spec-driver:section:project-structure:end -->
 
-<!-- speckit:section:tech-stack -->
+<!-- spec-driver:section:tech-stack -->
 ## Tech Stack
 
 {从 dependencies 和 devDependencies 中提取主要技术栈，分类列出}
-<!-- speckit:section:tech-stack:end -->
+<!-- spec-driver:section:tech-stack:end -->
 
-<!-- speckit:section:testing -->
+<!-- spec-driver:section:testing -->
 ## Testing
 
 {测试命令:
   - 从项目配置中查找 test/lint/check 等命令
   - 如无测试脚本: 标注 [待补充]}
-<!-- speckit:section:testing:end -->
+<!-- spec-driver:section:testing:end -->
 
-<!-- speckit:section:contributing -->
+<!-- spec-driver:section:contributing -->
 ## Contributing
 
 {贡献说明:
   - 完整模式: "Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests."
   - 精简模式: 直接内联简化指引 — "Bug reports and pull requests are welcome. Please open an issue first to discuss what you would like to change."}
-<!-- speckit:section:contributing:end -->
+<!-- spec-driver:section:contributing:end -->
 
-<!-- speckit:section:license -->
+<!-- spec-driver:section:license -->
 ## License
 
 This project is licensed under the {LICENSE_ID} License - see the [LICENSE](LICENSE) file for details.
-<!-- speckit:section:license:end -->
+<!-- spec-driver:section:license:end -->
 ```
 
 #### Badge 生成规则
@@ -641,7 +641,7 @@ By contributing, you agree that your contributions will be licensed under the pr
 所有文件处理完成后，输出报告：
 
 ```text
-speckit-doc 文档生成完成!
+spec-driver-doc 文档生成完成!
 
 生成文件:
   {if online_research_required: "✓ .specify/research/doc-online-research.md — 在线调研证据"}
@@ -683,7 +683,7 @@ speckit-doc 文档生成完成!
   1. git init                          — 初始化版本控制
   2. 创建项目配置文件（如 package.json、pyproject.toml、Cargo.toml 等）
 
-然后重新运行 speckit-doc。
+然后重新运行 spec-driver-doc。
 ```
 
 ### 项目配置文件解析失败

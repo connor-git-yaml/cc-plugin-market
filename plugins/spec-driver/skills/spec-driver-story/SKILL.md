@@ -1,5 +1,5 @@
 ---
-name: speckit-story
+name: spec-driver-story
 description: "快速需求实现 — 跳过调研，5 阶段完成：规范-规划-任务-实现-验证"
 disable-model-invocation: true
 ---
@@ -11,8 +11,8 @@ disable-model-invocation: true
 ## 触发方式
 
 ```text
-/spec-driver:speckit-story <需求描述>
-/spec-driver:speckit-story --preset <balanced|quality-first|cost-efficient>
+/spec-driver:spec-driver-story <需求描述>
+/spec-driver:spec-driver-story --preset <balanced|quality-first|cost-efficient>
 ```
 
 ## 输入解析
@@ -50,7 +50,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/speckit.constitution`。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution`。
 
 ### 3. 配置加载
 
@@ -126,8 +126,8 @@ autonomous 默认值: 全部 on_failure
 
 ```text
 对于 phase ∈ [specify, clarify, plan, tasks, analyze, implement]:
-  if .claude/commands/speckit.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
+  if .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
@@ -414,7 +414,7 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
   输出建议:
   """
   [提示] 检测到需求范围较大（{N} 个模块/{M} 个文件），建议切换到完整模式：
-  /spec-driver:speckit-feature <需求描述>
+  /spec-driver:spec-driver-feature <需求描述>
 
   完整模式包含产品调研和技术调研，适合大型需求变更。
 

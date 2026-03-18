@@ -1,6 +1,6 @@
 ---
-name: speckit-resume
-description: "恢复中断的 Speckit 研发流程 — 扫描已有制品并从断点继续编排"
+name: spec-driver-resume
+description: "恢复中断的 Spec-driver 研发流程 — 扫描已有制品并从断点继续编排"
 disable-model-invocation: true
 ---
 
@@ -11,11 +11,11 @@ disable-model-invocation: true
 ## 触发方式
 
 ```text
-/spec-driver:speckit-resume
-/spec-driver:speckit-resume --preset <balanced|quality-first|cost-efficient>
+/spec-driver:spec-driver-resume
+/spec-driver:spec-driver-resume --preset <balanced|quality-first|cost-efficient>
 ```
 
-**说明**: 此命令无需需求描述参数，自动扫描当前特性目录的已有制品。不接受 `--rerun` 和 `--sync` 参数。如需选择性重跑某个阶段，请使用 `/spec-driver:speckit-feature --rerun <phase>`。
+**说明**: 此命令无需需求描述参数，自动扫描当前特性目录的已有制品。不接受 `--rerun` 和 `--sync` 参数。如需选择性重跑某个阶段，请使用 `/spec-driver:spec-driver-feature --rerun <phase>`。
 
 ---
 
@@ -39,11 +39,11 @@ fi
 
 ### 1. 项目环境检查
 
-运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPEC_DRIVER_SKILLS`（是否存在已有 spec-driver skills）、`SKILL_MAP`（已有 skill 列表）。
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/speckit.constitution` 创建项目宪法。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution` 创建项目宪法。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 
@@ -87,8 +87,8 @@ fi
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if .claude/commands/speckit.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
+  if .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
@@ -116,7 +116,7 @@ if 当前项目 specs/ 下无任何特性目录（NNN-xxx 格式）:
   恢复命令需要一个已有的特性目录（specs/NNN-xxx/），其中包含至少一个编排制品文件。
 
   建议：
-  - 使用 /spec-driver:speckit-feature <需求描述> 启动新的研发流程
+  - 使用 /spec-driver:spec-driver-feature <需求描述> 启动新的研发流程
   """
   终止流程
 
@@ -128,7 +128,7 @@ if 特性目录存在但无任何制品文件:
   恢复需要至少一个已生成的制品文件（如 spec.md、plan.md 等）。
 
   建议：
-  - 使用 /spec-driver:speckit-feature <需求描述> 启动新的研发流程
+  - 使用 /spec-driver:spec-driver-feature <需求描述> 启动新的研发流程
   """
   终止流程
 ```
@@ -204,7 +204,7 @@ product/tech-research.md 存在  → 从对应阶段恢复
 ---
 ```
 
-各阶段的详细编排逻辑（子代理调用、质量门触发、完成报告）与 `/spec-driver:speckit-feature` 一致，请参考 run 技能的工作流定义。
+各阶段的详细编排逻辑（子代理调用、质量门触发、完成报告）与 `/spec-driver:spec-driver-feature` 一致，请参考 run 技能的工作流定义。
 
 恢复模式下同样必须执行 feature 模式定义的 `GATE_RESEARCH` 在线调研硬门禁，不得因“已有部分制品”跳过。
 
