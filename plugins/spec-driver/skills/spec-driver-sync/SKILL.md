@@ -1,17 +1,17 @@
 ---
-name: speckit-sync
+name: spec-driver-sync
 description: "聚合功能规范为产品级活文档与 doc 上游事实源 — 将 specs/ 下的增量 spec 合并为 current-spec.md"
 disable-model-invocation: false
 ---
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `speckit-doc` 生成对外文档时可复用的上游事实源。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `spec-driver-doc` 生成对外文档时可复用的上游事实源。
 
 ## 触发方式
 
 ```text
-/spec-driver:speckit-sync
+/spec-driver:spec-driver-sync
 ```
 
 **说明**: 此命令无需参数，直接执行聚合流程。不接受 `--resume`、`--rerun`、`--preset` 等参数。
@@ -110,7 +110,7 @@ if specs/ 目录不存在:
   产品规范聚合需要 specs/ 目录下存在至少一个功能规范目录（如 specs/001-xxx/spec.md）。
 
   建议：
-  - 使用 /spec-driver:speckit-feature <需求描述> 启动研发流程，生成首个功能规范
+  - 使用 /spec-driver:spec-driver-feature <需求描述> 启动研发流程，生成首个功能规范
   - 或手动创建 specs/ 目录结构
   """
   终止流程
@@ -123,7 +123,7 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
   聚合需要至少一个 specs/NNN-xxx/spec.md 文件。
 
   建议：
-  - 使用 /spec-driver:speckit-feature <需求描述> 生成功能规范
+  - 使用 /spec-driver:spec-driver-feature <需求描述> 生成功能规范
   - 确认 spec 文件位于 specs/{编号}-{名称}/spec.md 路径下
   """
   终止流程
@@ -133,14 +133,14 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `speckit-doc` 消费的“对外文档摘要”。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”。
 
 **适用场景**：
 
 - 实现完成后同步产品全景文档
 - 定期批量合并多个迭代的 spec
 - 新成员 onboarding 前生成产品现状文档
-- 为 `speckit-doc` 生成 README / 使用文档提供单一事实源
+- 为 `spec-driver-doc` 生成 README / 使用文档提供单一事实源
 
 ### 执行步骤
 
@@ -214,7 +214,7 @@ Task(
     对外文档摘要: {完整/部分/待补充}
 
 产品映射: specs/products/product-mapping.yaml
-doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 speckit-doc 使用）”区块
+doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 spec-driver-doc 使用）”区块
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```

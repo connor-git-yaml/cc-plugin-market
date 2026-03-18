@@ -1,5 +1,5 @@
 ---
-name: speckit-fix
+name: spec-driver-fix
 description: "快速问题修复 — 4 阶段完成：诊断-规划-修复-验证"
 disable-model-invocation: true
 ---
@@ -11,8 +11,8 @@ disable-model-invocation: true
 ## 触发方式
 
 ```text
-/spec-driver:speckit-fix <问题描述>
-/spec-driver:speckit-fix --preset <balanced|quality-first|cost-efficient>
+/spec-driver:spec-driver-fix <问题描述>
+/spec-driver:spec-driver-fix --preset <balanced|quality-first|cost-efficient>
 ```
 
 ## 输入解析
@@ -395,8 +395,8 @@ if fix-report.md 中受影响文件 > 10 个 或 涉及 > 3 个模块:
 
   建议选择：
   A) 继续 fix 模式（最小化修复）
-  B) 切换到 /spec-driver:speckit-story（包含完整规范流程）
-  C) 切换到 /spec-driver:speckit-feature（包含调研和完整流程）
+  B) 切换到 /spec-driver:spec-driver-story（包含完整规范流程）
+  C) 切换到 /spec-driver:spec-driver-feature（包含调研和完整流程）
   """
 ```
 

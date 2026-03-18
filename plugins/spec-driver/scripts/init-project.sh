@@ -62,7 +62,7 @@ INIT_RESULTS=()
 NEEDS_CONSTITUTION=false
 NEEDS_CONFIG=false
 HAS_GATE_POLICY=false
-HAS_SPECKIT_SKILLS=false
+HAS_SPEC_DRIVER_SKILLS=false
 SKILL_MAP=""
 
 # 步骤 1: 检查/创建 .specify/ 目录
@@ -164,27 +164,27 @@ check_gate_policy() {
   fi
 }
 
-# 步骤 5: 检测已有 speckit skills
-detect_speckit_skills() {
+# 步骤 5: 检测已有 spec-driver skills
+detect_spec_driver_skills() {
   local skills_dir="${PROJECT_ROOT}/.claude/commands"
   local found_skills=()
 
   if [[ -d "$skills_dir" ]]; then
-    for skill_file in "$skills_dir"/speckit.*.md; do
+    for skill_file in "$skills_dir"/spec-driver.*.md; do
       if [[ -f "$skill_file" ]]; then
         local phase
-        phase="$(basename "$skill_file" .md | sed 's/speckit\.//')"
+        phase="$(basename "$skill_file" .md | sed 's/spec-driver\.//')"
         found_skills+=("$phase")
       fi
     done
   fi
 
   if [[ ${#found_skills[@]} -gt 0 ]]; then
-    HAS_SPECKIT_SKILLS=true
+    HAS_SPEC_DRIVER_SKILLS=true
     SKILL_MAP=$(printf '%s,' "${found_skills[@]}" | sed 's/,$//')
-    INIT_RESULTS+=("speckit_skills:found:${SKILL_MAP}")
+    INIT_RESULTS+=("spec_driver_skills:found:${SKILL_MAP}")
   else
-    INIT_RESULTS+=("speckit_skills:none")
+    INIT_RESULTS+=("spec_driver_skills:none")
   fi
 }
 
@@ -210,7 +210,7 @@ output_results() {
   "NEEDS_CONSTITUTION": ${NEEDS_CONSTITUTION},
   "NEEDS_CONFIG": ${NEEDS_CONFIG},
   "HAS_GATE_POLICY": ${HAS_GATE_POLICY},
-  "HAS_SPECKIT_SKILLS": ${HAS_SPECKIT_SKILLS},
+  "HAS_SPEC_DRIVER_SKILLS": ${HAS_SPEC_DRIVER_SKILLS},
   "SKILL_MAP": "${SKILL_MAP}",
   "RESULTS": ${results_json}
 }
@@ -236,7 +236,7 @@ EOF
             echo -e "  ✅ constitution.md 已存在"
           else
             echo -e "  ⚠️  ${YELLOW}未找到 constitution.md${NC}"
-            echo -e "     → 建议先运行 /speckit.constitution 创建项目宪法"
+            echo -e "     → 建议先运行 /spec-driver.constitution 创建项目宪法"
           fi
           ;;
         config)
@@ -256,12 +256,12 @@ EOF
             echo -e "  ℹ️  ${YELLOW}未配置门禁策略，使用默认值 balanced${NC}"
           fi
           ;;
-        speckit_skills)
+        spec_driver_skills)
           if [[ "$value" == "none" ]]; then
-            echo -e "  ℹ️  未检测到项目已有 speckit skills，使用 Plugin 内置版本"
+            echo -e "  ℹ️  未检测到项目已有 spec-driver skills，使用 Plugin 内置版本"
           else
             local skills="${value#found:}"
-            echo -e "  ✅ 检测到项目已有 speckit skills: ${GREEN}${skills}${NC}"
+            echo -e "  ✅ 检测到项目已有 spec-driver skills: ${GREEN}${skills}${NC}"
             echo -e "     → 将优先使用项目已有版本"
           fi
           ;;
@@ -290,7 +290,7 @@ main() {
   check_constitution
   check_config
   check_gate_policy
-  detect_speckit_skills
+  detect_spec_driver_skills
   output_results
 }
 

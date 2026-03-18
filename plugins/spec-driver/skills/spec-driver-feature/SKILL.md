@@ -1,5 +1,5 @@
 ---
-name: speckit-feature
+name: spec-driver-feature
 description: "执行 Spec-Driven Development 完整研发流程（10 阶段编排：调研-规范-规划-实现-验证）"
 disable-model-invocation: true
 ---
@@ -11,11 +11,11 @@ disable-model-invocation: true
 ## 触发方式
 
 ```text
-/spec-driver:speckit-feature <需求描述>
-/spec-driver:speckit-feature --rerun <phase>
-/spec-driver:speckit-feature --preset <balanced|quality-first|cost-efficient>
-/spec-driver:speckit-feature --research <full|tech-only|product-only|codebase-scan|skip|custom> <需求描述>
-/spec-driver:speckit-feature --research skip --preset cost-efficient "给 CLI 增加 --verbose 参数"
+/spec-driver:spec-driver-feature <需求描述>
+/spec-driver:spec-driver-feature --rerun <phase>
+/spec-driver:spec-driver-feature --preset <balanced|quality-first|cost-efficient>
+/spec-driver:spec-driver-feature --research <full|tech-only|product-only|codebase-scan|skip|custom> <需求描述>
+/spec-driver:spec-driver-feature --research skip --preset cost-efficient "给 CLI 增加 --verbose 参数"
 ```
 
 ## 输入解析
@@ -53,11 +53,11 @@ fi
 
 ### 1. 项目环境检查
 
-运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPECKIT_SKILLS`（是否存在已有 speckit skills）、`SKILL_MAP`（已有 skill 列表）。
+运行 `bash "$PLUGIN_DIR/scripts/init-project.sh" --json`，解析 JSON 输出获取：`NEEDS_CONSTITUTION`（是否需要创建项目宪法）、`NEEDS_CONFIG`（是否需要创建配置文件）、`HAS_SPEC_DRIVER_SKILLS`（是否存在已有 spec-driver skills）、`SKILL_MAP`（已有 skill 列表）。
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/speckit.constitution` 创建项目宪法。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution` 创建项目宪法。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 
@@ -139,8 +139,8 @@ autonomous 默认值: 全部 on_failure
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if .claude/commands/speckit.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/speckit.{phase}.md"
+  if .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 

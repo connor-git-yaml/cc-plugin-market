@@ -76,12 +76,12 @@ ensure_source_exists() {
 
 rewrite_codex_runtime_text() {
   sed \
-    -e 's|/spec-driver:speckit-feature|$spec-driver-feature|g' \
-    -e 's|/spec-driver:speckit-story|$spec-driver-story|g' \
-    -e 's|/spec-driver:speckit-fix|$spec-driver-fix|g' \
-    -e 's|/spec-driver:speckit-resume|$spec-driver-resume|g' \
-    -e 's|/spec-driver:speckit-sync|$spec-driver-sync|g' \
-    -e 's|/spec-driver:speckit-doc|$spec-driver-doc|g' \
+    -e 's|/spec-driver:spec-driver-feature|$spec-driver-feature|g' \
+    -e 's|/spec-driver:spec-driver-story|$spec-driver-story|g' \
+    -e 's|/spec-driver:spec-driver-fix|$spec-driver-fix|g' \
+    -e 's|/spec-driver:spec-driver-resume|$spec-driver-resume|g' \
+    -e 's|/spec-driver:spec-driver-sync|$spec-driver-sync|g' \
+    -e 's|/spec-driver:spec-driver-doc|$spec-driver-doc|g' \
     -e 's|Claude Code 的 Task tool|Task tool（Codex 下按内联子代理执行）|g' \
     -e 's|在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。|若当前环境支持并行工具调用，则在同一消息中并行执行；否则按本 Skill 的回退规则串行执行。|g'
 }
@@ -167,12 +167,12 @@ write_wrapper() {
 }
 
 install_all() {
-  write_wrapper "spec-driver-feature" "speckit-feature"
-  write_wrapper "spec-driver-story" "speckit-story"
-  write_wrapper "spec-driver-fix" "speckit-fix"
-  write_wrapper "spec-driver-resume" "speckit-resume"
-  write_wrapper "spec-driver-sync" "speckit-sync"
-  write_wrapper "spec-driver-doc" "speckit-doc"
+  write_wrapper "spec-driver-feature" "spec-driver-feature"
+  write_wrapper "spec-driver-story" "spec-driver-story"
+  write_wrapper "spec-driver-fix" "spec-driver-fix"
+  write_wrapper "spec-driver-resume" "spec-driver-resume"
+  write_wrapper "spec-driver-sync" "spec-driver-sync"
+  write_wrapper "spec-driver-doc" "spec-driver-doc"
 
   echo "Spec Driver Codex skills 安装完成: $TARGET_DIR"
 }

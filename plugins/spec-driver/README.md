@@ -4,16 +4,16 @@
 
 ## 功能概述
 
-Spec Driver 根据场景选择最优流程，将手动 speckit 命令统一为一次触发：
+Spec Driver 根据场景选择最优流程，将手动 spec-driver 命令统一为一次触发：
 
 | 模式 | 命令 | 阶段数 | 人工介入 | 适用场景 |
 |------|------|--------|----------|---------|
-| **run** | `/spec-driver:speckit-feature` | 10 | ≤ 4 次 | 全新功能、大型需求（含调研） |
-| **story** | `/spec-driver:speckit-story` | 5 | ≤ 2 次 | 常规需求变更、功能迭代 |
-| **fix** | `/spec-driver:speckit-fix` | 4 | ≤ 1 次 | Bug 修复、问题定位 |
-| **resume** | `/spec-driver:speckit-resume` | - | - | 恢复中断的流程 |
-| **sync** | `/spec-driver:speckit-sync` | 3 | 0 次 | 聚合 spec 为产品活文档 |
-| **doc** | `/spec-driver:speckit-doc` | 7 | 2-3 次 | 生成开源标准文档（README 等） |
+| **run** | `/spec-driver:spec-driver-feature` | 10 | ≤ 4 次 | 全新功能、大型需求（含调研） |
+| **story** | `/spec-driver:spec-driver-story` | 5 | ≤ 2 次 | 常规需求变更、功能迭代 |
+| **fix** | `/spec-driver:spec-driver-fix` | 4 | ≤ 1 次 | Bug 修复、问题定位 |
+| **resume** | `/spec-driver:spec-driver-resume` | - | - | 恢复中断的流程 |
+| **sync** | `/spec-driver:spec-driver-sync` | 3 | 0 次 | 聚合 spec 为产品活文档 |
+| **doc** | `/spec-driver:spec-driver-doc` | 7 | 2-3 次 | 生成开源标准文档（README 等） |
 
 ## 安装
 
@@ -40,7 +40,7 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove
 bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 ```
 
-安装时会同步当前 `speckit-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
+安装时会同步当前 `spec-driver-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
 
 Codex 包装技能会自动检测项目级上下文文件：
 
@@ -54,7 +54,7 @@ Codex 包装技能会自动检测项目级上下文文件：
 ### 完整研发流程（run）
 
 ```bash
-/spec-driver:speckit-feature 给项目添加用户认证功能，支持 OAuth2 和 JWT
+/spec-driver:spec-driver-feature 给项目添加用户认证功能，支持 OAuth2 和 JWT
 ```
 
 10 阶段编排：Constitution → 产品调研 → 技术调研 → 产研汇总 → 规范 → 澄清 → 规划 → 任务 → 实现 → 验证
@@ -62,7 +62,7 @@ Codex 包装技能会自动检测项目级上下文文件：
 ### 快速需求实现（story）
 
 ```bash
-/spec-driver:speckit-story 给用户列表添加分页功能
+/spec-driver:spec-driver-story 给用户列表添加分页功能
 ```
 
 5 阶段快速通道：Constitution → 规范（基于代码分析）→ 规划+任务 → 实现 → 验证。**跳过调研阶段**，直接分析现有代码和 spec 文档。
@@ -70,7 +70,7 @@ Codex 包装技能会自动检测项目级上下文文件：
 ### 快速问题修复（fix）
 
 ```bash
-/spec-driver:speckit-fix 登录页面在移动端布局错位
+/spec-driver:spec-driver-fix 登录页面在移动端布局错位
 ```
 
 4 阶段极速修复：诊断（根因定位）→ 修复规划 → 代码修复 → 验证。自动分析代码和 spec 定位根因，修复后自动同步 spec。
@@ -78,19 +78,19 @@ Codex 包装技能会自动检测项目级上下文文件：
 ### 恢复中断的流程（resume）
 
 ```bash
-/spec-driver:speckit-resume
+/spec-driver:spec-driver-resume
 ```
 
 ### 产品规范聚合（sync）
 
 ```bash
-/spec-driver:speckit-sync
+/spec-driver:spec-driver-sync
 ```
 
 ### 开源文档生成（doc）
 
 ```bash
-/spec-driver:speckit-doc
+/spec-driver:spec-driver-doc
 ```
 
 交互式生成 README.md、LICENSE、CONTRIBUTING.md 等开源标准文档，支持冲突检测和备份。
@@ -98,13 +98,13 @@ Codex 包装技能会自动检测项目级上下文文件：
 ### 选择性重跑
 
 ```bash
-/spec-driver:speckit-feature --rerun plan
+/spec-driver:spec-driver-feature --rerun plan
 ```
 
 ### 临时切换模型预设
 
 ```bash
-/spec-driver:speckit-feature --preset quality-first "添加支付系统"
+/spec-driver:spec-driver-feature --preset quality-first "添加支付系统"
 ```
 
 ## 模型配置
@@ -168,7 +168,7 @@ JS/TS (npm/pnpm/yarn/bun)、Rust (Cargo)、Go、Python (pip/poetry/uv)、Java (M
 
 - **独立于 reverse-spec plugin**：Spec Driver 是正向研发工具，reverse-spec 是逆向分析工具，互补关系
 - **共享 `.specify/memory/constitution.md`**：复用项目宪法
-- **兼容已有 speckit skills**：检测到项目已有定制版 speckit skills 时优先使用
+- **兼容已有 spec-driver skills**：检测到项目已有定制版 spec-driver skills 时优先使用
 
 ## 目录结构
 
@@ -177,12 +177,12 @@ plugins/spec-driver/
 ├── .claude-plugin/plugin.json    # Plugin 元数据
 ├── hooks/hooks.json              # SessionStart hook
 ├── skills/
-│   ├── speckit-feature/SKILL.md  # 完整 10 阶段编排
-│   ├── speckit-story/SKILL.md    # 快速 5 阶段需求实现
-│   ├── speckit-fix/SKILL.md      # 快速 4 阶段问题修复
-│   ├── speckit-resume/SKILL.md   # 中断恢复
-│   ├── speckit-sync/SKILL.md     # 产品规范聚合
-│   └── speckit-doc/SKILL.md      # 开源文档生成
+│   ├── spec-driver-feature/SKILL.md  # 完整 10 阶段编排
+│   ├── spec-driver-story/SKILL.md    # 快速 5 阶段需求实现
+│   ├── spec-driver-fix/SKILL.md      # 快速 4 阶段问题修复
+│   ├── spec-driver-resume/SKILL.md   # 中断恢复
+│   ├── spec-driver-sync/SKILL.md     # 产品规范聚合
+│   └── spec-driver-doc/SKILL.md      # 开源文档生成
 ├── agents/                       # 14 个子代理 prompt
 ├── templates/                    # 6 个模板
 ├── scripts/                      # 初始化脚本
@@ -212,6 +212,30 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 | `/speckitdriver:fix <问题>` | `/spec-driver:speckit-fix <问题>` |
 | `/speckitdriver:resume` | `/spec-driver:speckit-resume` |
 | `/speckitdriver:sync` | `/spec-driver:speckit-sync` |
+
+### 迁移说明（v3.4.0）
+
+技能名和命令文件前缀从 `speckit-*` 统一为 `spec-driver-*`，命令文件从 `speckit.*` 统一为 `spec-driver.*`：
+
+| 旧命令 (v3.0.0-v3.3.x) | 新命令 (v3.4.0+) |
+| ------ | ------ |
+| `/spec-driver:speckit-feature <需求>` | `/spec-driver:spec-driver-feature <需求>` |
+| `/spec-driver:speckit-story <需求>` | `/spec-driver:spec-driver-story <需求>` |
+| `/spec-driver:speckit-fix <问题>` | `/spec-driver:spec-driver-fix <问题>` |
+| `/spec-driver:speckit-resume` | `/spec-driver:spec-driver-resume` |
+| `/spec-driver:speckit-sync` | `/spec-driver:spec-driver-sync` |
+| `/spec-driver:speckit-doc` | `/spec-driver:spec-driver-doc` |
+| `/speckit.specify` | `/spec-driver.specify` |
+| `/speckit.plan` | `/spec-driver.plan` |
+| `/speckit.tasks` | `/spec-driver.tasks` |
+| `/speckit.implement` | `/spec-driver.implement` |
+| `/speckit.analyze` | `/spec-driver.analyze` |
+| `/speckit.checklist` | `/spec-driver.checklist` |
+| `/speckit.clarify` | `/spec-driver.clarify` |
+| `/speckit.constitution` | `/spec-driver.constitution` |
+| `/speckit.taskstoissues` | `/spec-driver.taskstoissues` |
+
+如果您在 `.claude/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
 
 ## 许可证
 
