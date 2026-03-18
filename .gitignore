@@ -35,3 +35,7 @@ drift-logs/
 # Checkpoint files
 specs/.reverse-spec-checkpoint.json
 .claude/settings.local.json
+
+# Spec Driver 本地缓存
+.specify/.spec-driver-path
+.agents/
