@@ -18,6 +18,7 @@ import { runAuthStatus } from './commands/auth-status.js';
 import { runMcpServer } from './commands/mcp-server.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
+import { bootstrapParsers } from '../panoramic/parser-registry.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,8 @@ async function main(): Promise<void> {
   bootstrapAdapters();
   // 注册所有文档生成器
   bootstrapGenerators();
+  // 注册所有制品解析器
+  bootstrapParsers();
 
   const result = parseArgs(process.argv.slice(2));
 

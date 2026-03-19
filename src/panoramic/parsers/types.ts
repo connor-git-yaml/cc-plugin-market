@@ -1,10 +1,11 @@
 /**
  * 非代码制品解析器输出类型定义 + Zod Schema
  *
- * 三组类型对应三个 Parser：
+ * 类型分组：
  * - SkillMdInfo / SkillMdSection: SkillMdParser 的输出
  * - BehaviorInfo / BehaviorState: BehaviorYamlParser 的输出
  * - DockerfileInfo / DockerfileStage / DockerfileInstruction: DockerfileParser 的输出
+ * - ConfigEntry / ConfigEntries: YamlConfigParser / EnvConfigParser / TomlConfigParser 的输出
  *
  * 每个类型均有对应的 Zod Schema，用于运行时验证解析结果的结构正确性。
  */
@@ -104,3 +105,58 @@ export const DockerfileInfoSchema = z.object({
 
 /** DockerfileParser 的解析输出类型 */
 export type DockerfileInfo = z.infer<typeof DockerfileInfoSchema>;
+
+// ============================================================
+// ConfigEntry / ConfigEntries — 配置文件 Parser 的输出类型
+// ============================================================
+
+/**
+ * 单个配置项的结构化表示 Zod Schema
+ * 从 YAML/TOML/.env 文件解析出的统一配置项格式
+ */
+export const ConfigEntrySchema = z.object({
+  /** 点号分隔的配置项路径（如 database.host） */
+  keyPath: z.string(),
+  /** 推断的值类型（string/number/boolean/null/array/object） */
+  type: z.string(),
+  /** 当前值的字符串表示 */
+  defaultValue: z.string(),
+  /** 从注释提取的说明文本 */
+  description: z.string(),
+});
+
+/** 单个配置项的结构化表示 */
+export type ConfigEntry = z.infer<typeof ConfigEntrySchema>;
+
+/**
+ * 配置 Parser 的解析输出 Zod Schema
+ * 包含从单个配置文件中解析出的所有配置项
+ */
+export const ConfigEntriesSchema = z.object({
+  /** 配置项数组 */
+  entries: z.array(ConfigEntrySchema),
+});
+
+/** 配置 Parser 的解析输出类型 */
+export type ConfigEntries = z.infer<typeof ConfigEntriesSchema>;
+
+// ============================================================
+// 配置解析辅助函数
+// ============================================================
+
+/**
+ * 从字符串值推断类型
+ * 供 YamlConfigParser、EnvConfigParser、TomlConfigParser 共用
+ */
+export function inferType(value: string): string {
+  const trimmed = value.trim();
+
+  if (trimmed === '' || trimmed === 'null' || trimmed === '~') return 'null';
+  if (trimmed === 'true' || trimmed === 'false') return 'boolean';
+  if (/^-?\d+$/.test(trimmed)) return 'number';
+  if (/^-?\d+\.\d+$/.test(trimmed)) return 'number';
+  if (trimmed.startsWith('[')) return 'array';
+  if (trimmed.startsWith('{')) return 'object';
+
+  return 'string';
+}
