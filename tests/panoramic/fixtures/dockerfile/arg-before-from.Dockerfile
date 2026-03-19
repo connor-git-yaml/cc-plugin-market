@@ -1,0 +1,12 @@
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.18
+
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION}
+
+WORKDIR /app
+
+COPY . .
+
+RUN npm install
+
+CMD ["npm", "start"]

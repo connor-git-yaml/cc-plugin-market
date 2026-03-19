@@ -1,0 +1,19 @@
+idle:
+  description: Waiting for user input
+  actions:
+    - listen
+    - display_prompt
+
+processing:
+  description: Handling a request
+  actions:
+    - parse_input
+    - validate_data
+    - execute_command
+
+error:
+  description: Error recovery state
+  actions:
+    - log_error
+    - notify_user
+    - retry
