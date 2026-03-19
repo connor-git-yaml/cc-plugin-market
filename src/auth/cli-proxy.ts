@@ -172,14 +172,23 @@ export function callLLMviaCli(
       }
 
       if (code !== 0) {
-        const errorMsg = stderrData.trim() || `退出码 ${code}`;
-        reject(
-          new LLMResponseError(
-            `Claude CLI 错误 (exit ${code}): ${errorMsg}`,
-            code ?? undefined,
-          ),
+        // 检查 stderr 是否仅包含 WARN 信息（如 Agent SDK 环境下的 Fast mode 警告）
+        // 如果 stdout 有有效输出内容，忽略 WARN 级别的 stderr
+        const isWarnOnly = stderrData.trim().split('\n').every(
+          (line) => line.trim() === '' || /^\[WARN\]/.test(line.trim()),
         );
-        return;
+        if (isWarnOnly && stdoutData.trim().length > 0) {
+          // 忽略纯 WARN stderr，继续解析 stdout
+        } else {
+          const errorMsg = stderrData.trim() || `退出码 ${code}`;
+          reject(
+            new LLMResponseError(
+              `Claude CLI 错误 (exit ${code}): ${errorMsg}`,
+              code ?? undefined,
+            ),
+          );
+          return;
+        }
       }
 
       // 解析 stream-json 输出

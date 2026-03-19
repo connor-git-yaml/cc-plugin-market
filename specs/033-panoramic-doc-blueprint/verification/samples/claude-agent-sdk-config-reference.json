@@ -11,253 +11,253 @@
           "keyPath": "build-system.requires",
           "type": "array",
           "defaultValue": "[\"hatchling\"]",
-          "description": ""
+          "description": "[AI] 构建系统所需的工具包，此处使用 hatchling 作为构建后端"
         },
         {
           "keyPath": "build-system.build-backend",
           "type": "string",
           "defaultValue": "hatchling.build",
-          "description": ""
+          "description": "[AI] 指定 hatchling 作为 Python 包的构建后端"
         },
         {
           "keyPath": "project.name",
           "type": "string",
           "defaultValue": "claude-agent-sdk",
-          "description": ""
+          "description": "[AI] Python 包的名称，发布到 PyPI 时使用此名称"
         },
         {
           "keyPath": "project.version",
           "type": "string",
           "defaultValue": "0.1.48",
-          "description": ""
+          "description": "[AI] 当前包的版本号，遵循语义化版本规范"
         },
         {
           "keyPath": "project.description",
           "type": "string",
           "defaultValue": "Python SDK for Claude Code",
-          "description": ""
+          "description": "[AI] 包的简短描述，说明这是用于 Claude Code 的 Python SDK"
         },
         {
           "keyPath": "project.readme",
           "type": "string",
           "defaultValue": "README.md",
-          "description": ""
+          "description": "[AI] 指定 README.md 作为包的详细说明文档"
         },
         {
           "keyPath": "project.requires-python",
           "type": "string",
           "defaultValue": ">=3.10",
-          "description": ""
+          "description": "[AI] 限制 Python 最低版本要求为 3.10"
         },
         {
           "keyPath": "project.license",
           "type": "object",
           "defaultValue": "{text = \"MIT\"}",
-          "description": ""
+          "description": "[AI] 声明项目使用 MIT 开源许可证"
         },
         {
           "keyPath": "project.authors",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 列出项目作者信息（姓名和邮箱）"
         },
         {
           "keyPath": "project.classifiers",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] PyPI 分类标签，用于在包仓库中分类和检索此包"
         },
         {
           "keyPath": "project.keywords",
           "type": "array",
           "defaultValue": "[\"claude\", \"ai\", \"sdk\", \"anthropic\"]",
-          "description": ""
+          "description": "[AI] 包的关键词，便于用户在 PyPI 搜索发现此包"
         },
         {
           "keyPath": "project.dependencies",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 运行时必须安装的第三方依赖包列表"
         },
         {
           "keyPath": "project.optional-dependencies.dev",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 开发环境额外依赖，包含测试和代码质量工具"
         },
         {
           "keyPath": "project.urls.Homepage",
           "type": "string",
           "defaultValue": "https://github.com/anthropics/claude-agent-sdk-python",
-          "description": ""
+          "description": "[AI] 项目 GitHub 主页地址"
         },
         {
           "keyPath": "project.urls.Documentation",
           "type": "string",
           "defaultValue": "https://docs.anthropic.com/en/docs/claude-code/sdk",
-          "description": ""
+          "description": "[AI] 项目官方文档地址，指向 Anthropic 文档站点"
         },
         {
           "keyPath": "project.urls.Issues",
           "type": "string",
           "defaultValue": "https://github.com/anthropics/claude-agent-sdk-python/issues",
-          "description": ""
+          "description": "[AI] GitHub Issues 地址，用于提交 Bug 和功能请求"
         },
         {
           "keyPath": "tool.hatch.build.targets.wheel.packages",
           "type": "array",
           "defaultValue": "[\"src/claude_agent_sdk\"]",
-          "description": ""
+          "description": "[AI] 打包为 wheel 时包含的源码包路径"
         },
         {
           "keyPath": "tool.hatch.build.targets.wheel.only-include",
           "type": "array",
           "defaultValue": "[\"src/claude_agent_sdk\"]",
-          "description": ""
+          "description": "[AI] wheel 构建时仅包含指定目录，排除无关文件"
         },
         {
           "keyPath": "tool.hatch.build.targets.sdist.include",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 源码发行包（sdist）中包含的文件或目录列表"
         },
         {
           "keyPath": "tool.pytest.ini_options.testpaths",
           "type": "array",
           "defaultValue": "[\"tests\"]",
-          "description": ""
+          "description": "[AI] pytest 扫描测试文件的根目录"
         },
         {
           "keyPath": "tool.pytest.ini_options.pythonpath",
           "type": "array",
           "defaultValue": "[\"src\"]",
-          "description": ""
+          "description": "[AI] 运行测试时添加到 Python 路径的目录，使 src 下的包可导入"
         },
         {
           "keyPath": "tool.pytest.ini_options.addopts",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] pytest 默认附加的命令行参数，如覆盖率报告等"
         },
         {
           "keyPath": "tool.pytest-asyncio.asyncio_mode",
           "type": "string",
           "defaultValue": "auto",
-          "description": ""
+          "description": "[AI] 设置异步测试模式为自动，无需手动标记 async 测试函数"
         },
         {
           "keyPath": "tool.mypy.python_version",
           "type": "number",
           "defaultValue": "3.10",
-          "description": ""
+          "description": "[AI] mypy 类型检查的目标 Python 版本"
         },
         {
           "keyPath": "tool.mypy.strict",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 启用 mypy 严格模式，开启全部类型检查规则"
         },
         {
           "keyPath": "tool.mypy.warn_return_any",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 当函数返回 Any 类型时发出警告"
         },
         {
           "keyPath": "tool.mypy.warn_unused_configs",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 当 mypy 配置项未被使用时发出警告"
         },
         {
           "keyPath": "tool.mypy.disallow_untyped_defs",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 禁止定义缺少类型注解的函数"
         },
         {
           "keyPath": "tool.mypy.disallow_incomplete_defs",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 禁止参数或返回值类型注解不完整的函数定义"
         },
         {
           "keyPath": "tool.mypy.check_untyped_defs",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 对没有类型注解的函数体也执行类型检查"
         },
         {
           "keyPath": "tool.mypy.disallow_untyped_decorators",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 禁止使用无类型注解的装饰器修饰已注解的函数"
         },
         {
           "keyPath": "tool.mypy.no_implicit_optional",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 禁止将默认值为 None 的参数隐式推断为 Optional 类型"
         },
         {
           "keyPath": "tool.mypy.warn_redundant_casts",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 当类型转换操作多余时发出警告"
         },
         {
           "keyPath": "tool.mypy.warn_unused_ignores",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 当 # type: ignore 注释实际无效时发出警告"
         },
         {
           "keyPath": "tool.mypy.warn_no_return",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 当函数缺少 return 语句时发出警告"
         },
         {
           "keyPath": "tool.mypy.warn_unreachable",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 检测并警告永远不会执行的不可达代码"
         },
         {
           "keyPath": "tool.mypy.strict_equality",
           "type": "boolean",
           "defaultValue": "true",
-          "description": ""
+          "description": "[AI] 对不同类型间的相等比较进行严格检查"
         },
         {
           "keyPath": "tool.ruff.target-version",
           "type": "string",
           "defaultValue": "py310",
-          "description": ""
+          "description": "[AI] ruff 代码检查的目标 Python 版本，对应 Python 3.10"
         },
         {
           "keyPath": "tool.ruff.line-length",
           "type": "number",
           "defaultValue": "88",
-          "description": ""
+          "description": "[AI] 代码行最大长度限制为 88 个字符"
         },
         {
           "keyPath": "tool.ruff.lint.select",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 启用的 ruff lint 规则集列表"
         },
         {
           "keyPath": "tool.ruff.lint.ignore",
           "type": "array",
           "defaultValue": "[",
-          "description": ""
+          "description": "[AI] 忽略的 ruff lint 规则列表，避免与项目风格冲突"
         },
         {
           "keyPath": "tool.ruff.lint.isort.known-first-party",
           "type": "array",
           "defaultValue": "[\"claude_agent_sdk\"]",
-          "description": ""
+          "description": "[AI] 声明为第一方的包名，isort 排序时与第三方包区分处理"
         }
       ]
     }

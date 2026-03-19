@@ -41,8 +41,8 @@ const AI_PREFIX = '[AI] ';
 // 默认模型配置
 // ============================================================
 
-/** 默认 LLM 模型（低成本 Haiku） */
-const DEFAULT_MODEL = 'claude-3-5-haiku-20241022';
+/** 默认 LLM 模型（使用 sonnet 确保 Agent SDK 环境兼容） */
+const DEFAULT_MODEL = 'sonnet';
 
 /** LLM 调用超时（毫秒） */
 const LLM_TIMEOUT = 60_000;
