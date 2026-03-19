@@ -42,6 +42,16 @@ export { MockReadmeGenerator } from './mock-readme-generator.js';
 export { ConfigReferenceGenerator } from './config-reference-generator.js';
 export { DataModelGenerator } from './data-model-generator.js';
 export {
+  ApiSurfaceGenerator,
+  type ApiSource,
+  type ApiParameterLocation,
+  type ApiParameter,
+  type ApiResponse,
+  type ApiEndpoint,
+  type ApiSurfaceInput,
+  type ApiSurfaceOutput,
+} from './api-surface-generator.js';
+export {
   WorkspaceIndexGenerator,
   extractWorkspaceData,
   type WorkspacePackageInfo,

@@ -1,0 +1,40 @@
+---
+type: api-surface-reference
+generatedBy: api-surface
+generatedAt: {{generatedAt}}
+source: {{source}}
+---
+# API Surface Reference: {{projectName}}
+
+> 自动生成于 {{generatedAt}} | source: `{{source}}`
+
+## 摘要
+
+- 端点总数: **{{totalEndpoints}}**
+- 参数总数: **{{totalParameters}}**
+- 来源文件数: **{{sourceFiles.length}}**
+{{#if tags.length}}
+- 标签: {{#each tags}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
+
+{{#if sourceFiles.length}}
+## 来源文件
+
+{{#each sourceFiles}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+{{#if endpoints.length}}
+## Endpoints
+
+| Method | Path | Parameters | Response | Auth | Tags | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+{{#each endpoints}}
+| `{{method}}` | `{{path}}` | {{#if parameters.length}}{{#each parameters}}`{{in}}:{{name}}:{{type}}{{#if required}}*{{/if}}`{{#unless @last}}<br>{{/unless}}{{/each}}{{else}}-{{/if}} | {{responseType}} | {{#if auth.length}}{{#each auth}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}-{{/if}} | {{#if tags.length}}{{#each tags}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}-{{/if}} | `{{source}}` |
+{{/each}}
+{{else}}
+## Endpoints
+
+未发现可静态提取的 API 端点。
+{{/if}}
