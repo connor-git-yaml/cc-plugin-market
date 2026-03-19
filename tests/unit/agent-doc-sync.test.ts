@@ -4,10 +4,19 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const rootDir = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
-const sourcePath = resolve(rootDir, 'docs/shared/agent-branch-sync-policy.md');
 const targetPaths = [
   resolve(rootDir, 'AGENTS.md'),
   resolve(rootDir, 'CLAUDE.md'),
+];
+const sections = [
+  {
+    key: 'branch-sync-policy',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-branch-sync-policy.md'),
+  },
+  {
+    key: 'mainline-focus',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-mainline-focus.md'),
+  },
 ];
 
 function readSyncedSection(filePath: string, key: string): string {
@@ -24,11 +33,13 @@ function readSyncedSection(filePath: string, key: string): string {
 }
 
 describe('agent doc sync', () => {
-  it('keeps AGENTS.md and CLAUDE.md aligned with the shared branch policy source', () => {
-    const expected = readFileSync(sourcePath, 'utf8').trim();
+  it('keeps AGENTS.md and CLAUDE.md aligned with all shared agent guidance sources', () => {
+    for (const section of sections) {
+      const expected = readFileSync(section.sourcePath, 'utf8').trim();
 
-    for (const targetPath of targetPaths) {
-      expect(readSyncedSection(targetPath, 'branch-sync-policy')).toBe(expected);
+      for (const targetPath of targetPaths) {
+        expect(readSyncedSection(targetPath, section.key)).toBe(expected);
+      }
     }
   });
 });

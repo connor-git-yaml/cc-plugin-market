@@ -12,6 +12,14 @@ const sectionConfigs = [
       resolve(rootDir, 'CLAUDE.md'),
     ],
   },
+  {
+    key: 'mainline-focus',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-mainline-focus.md'),
+    targets: [
+      resolve(rootDir, 'AGENTS.md'),
+      resolve(rootDir, 'CLAUDE.md'),
+    ],
+  },
 ];
 
 function syncSection(targetContent, key, sourceContent) {
@@ -42,4 +50,4 @@ for (const section of sectionConfigs) {
   }
 }
 
-console.log('Synced shared agent guidance into AGENTS.md and CLAUDE.md');
+console.log('Synced shared agent guidance sections into AGENTS.md and CLAUDE.md');
