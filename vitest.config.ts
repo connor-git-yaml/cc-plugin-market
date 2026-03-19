@@ -38,7 +38,7 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['tests/unit/**/*.test.ts', 'tests/adapters/**/*.test.ts', 'tests/models/**/*.test.ts'],
+          include: ['tests/unit/**/*.test.ts', 'tests/adapters/**/*.test.ts', 'tests/models/**/*.test.ts', 'tests/panoramic/**/*.test.ts'],
         },
       },
       {
