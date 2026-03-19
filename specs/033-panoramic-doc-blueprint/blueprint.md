@@ -605,6 +605,7 @@ graph TD
 | 9 | 单个 Feature 工作量远超预估（超出 2 倍以上），导致 Phase 整体延期 | 中 | 高 | Feature 拆分策略：将超预估 Feature 拆为 A/B 两个子 Feature，A 为核心功能（纳入当前 Phase），B 为增强功能（推迟到下一 Phase）；降级策略：优先实现可用的最小功能集 | Phase 0-3 |
 | 10 | Phase 0 接口设计在 Phase 1 实施中发现不合适，需要破坏性变更 | 低 | 高 | 接口迭代兼容性策略：Phase 0 接口在 Phase 1 完成前视为"Beta"，允许破坏性变更（Breaking Change）；Phase 1 完成后接口进入"稳定"状态，后续仅允许向后兼容的扩展（新增可选方法/属性），不允许修改已有方法签名 | Feature 034, Phase 0-1 |
 | 11 | OctoAgent 项目结构在验证期间发生变化（新增/移除子包或制品类型），导致验证计划失效 | 低 | 中 | 验证计划定位为"基于特征的快照"——以 OctoAgent 当前已知的项目特征（Monorepo 结构、Python + TS 多语言、SKILL.md 制品）为基准设计验证；如项目结构变化则重新执行 ProjectContext 构建，验证新增/移除的特征是否被正确处理 | Phase 0-3 |
+| 12 | **[Phase 1 验证发现] batch-orchestrator 单语言 Python/Go/Java 项目 spec 生成失败** | 已确认 | 高 | `runBatch()` 步骤 1 使用 `buildGraph()`（dependency-cruiser，仅支持 TS/JS）构建依赖图。单语言非 TS/JS 项目得到空图，`groupFilesToModules` 返回 0 个模块。**多语言项目不受影响**（走 `isMultiLang` 分支，各语言适配器独立构建图）。**修复方案**: 在 `runBatch` 中增加单语言路径——当 `detectedLanguages` 仅包含非 TS/JS 语言时，直接使用该语言适配器的 `buildDependencyGraph()` 构建图，跳过 dependency-cruiser。此修复应在 Phase 2 启动前完成，否则 Feature 042（API 端点文档）和 Feature 045（反向架构概览）等依赖 batch 流程的 Feature 将对纯 Python 项目失效。**验证证据**: 2026-03-19 对 claude-agent-sdk-python（纯 Python，62 .py 文件）运行 `runBatch` 返回 0 模块，而 `scanFiles` 正确发现 62 个文件、panoramic Generator（DataModel/ConfigReference）正常工作 | batch-orchestrator.ts, Phase 2 前置修复 |
 
 ---
 
