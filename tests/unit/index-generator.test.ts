@@ -290,4 +290,80 @@ describe('module-spec.hbs 模板渲染', () => {
     // 不含 language
     expect(markdown).not.toContain('language:');
   });
+
+  it('T094: 渲染交叉引用区块、稳定锚点和自动标记', () => {
+    initRenderer();
+
+    const spec: ModuleSpec = {
+      frontmatter: {
+        type: 'module-spec',
+        version: 'v1',
+        generatedBy: 'reverse-spec v2.0',
+        sourceTarget: 'src/api',
+        relatedFiles: ['src/api/routes.ts'],
+        lastUpdated: new Date().toISOString(),
+        confidence: 'high',
+        skeletonHash: 'c'.repeat(64),
+      },
+      sections: {
+        intent: '测试意图',
+        interfaceDefinition: '测试接口',
+        businessLogic: '测试逻辑',
+        dataStructures: '测试数据',
+        constraints: '测试约束',
+        edgeCases: '测试边界',
+        technicalDebt: '测试债务',
+        testCoverage: '测试覆盖',
+        dependencies: '测试依赖',
+      },
+      crossReferenceIndex: {
+        generatedAt: '2026-03-20T00:00:00.000Z',
+        sameModule: [
+          {
+            label: '当前模块内部关联',
+            href: '#module-spec',
+            targetSpecPath: 'specs/api.spec.md',
+            targetSourceTarget: 'src/api',
+            kind: 'same-module',
+            direction: 'internal',
+            evidenceCount: 1,
+            summary: '1 条文件级引用；示例：src/api/routes.ts -> src/api/controller.ts',
+          },
+        ],
+        crossModule: [
+          {
+            label: 'src/auth',
+            href: 'auth.spec.md#module-spec',
+            targetSpecPath: 'specs/auth.spec.md',
+            targetSourceTarget: 'src/auth',
+            kind: 'cross-module',
+            direction: 'outbound',
+            evidenceCount: 2,
+            summary: '出站 2，入站 0；示例：src/api/routes.ts -> src/auth/service.ts',
+          },
+        ],
+      },
+      fileInventory: [{ path: 'src/api/routes.ts', loc: 100, purpose: '路由' }],
+      baselineSkeleton: {
+        filePath: 'src/api/routes.ts',
+        language: 'typescript',
+        loc: 100,
+        exports: [],
+        imports: [],
+        hash: 'c'.repeat(64),
+        analyzedAt: new Date().toISOString(),
+        parserUsed: 'ts-morph',
+      },
+      outputPath: 'specs/src/api.spec.md',
+    };
+
+    const markdown = renderSpec(spec);
+
+    expect(markdown).toContain('<a id="module-spec"></a>');
+    expect(markdown).toContain('## 相关 Spec');
+    expect(markdown).toContain('### 同模块关联');
+    expect(markdown).toContain('### 跨模块关联');
+    expect(markdown).toContain('[src/auth](auth.spec.md#module-spec)');
+    expect(markdown).toContain('<!-- cross-reference-index: auto');
+  });
 });

@@ -24,6 +24,9 @@ import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { DependencyGraph, GraphNode, DependencyEdge } from '../models/dependency-graph.js';
 import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
+import { buildDocGraph, scanExistingSpecDocuments } from '../panoramic/doc-graph-builder.js';
+import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js';
+import { renderSpec } from '../generator/spec-renderer.js';
 
 // ============================================================
 // 类型定义
@@ -59,6 +62,8 @@ export interface BatchResult {
   detectedLanguages?: string[];
   /** 语言统计信息 */
   languageStats?: Map<string, LanguageFileStat>;
+  /** 044 输出的文档图谱调试文件 */
+  docGraphPath?: string;
 }
 
 // ============================================================
@@ -423,6 +428,33 @@ export async function runBatch(
   }
 
   // 步骤 5：生成架构索引（使用收集的 ModuleSpec）
+  let docGraphPath: string | undefined;
+  try {
+    const existingSpecs = scanExistingSpecDocuments(resolvedOutputDir, resolvedRoot);
+    const docGraph = buildDocGraph({
+      projectRoot: resolvedRoot,
+      dependencyGraph: mergedGraph,
+      moduleSpecs: collectedModuleSpecs,
+      existingSpecs,
+    });
+
+    for (const moduleSpec of collectedModuleSpecs) {
+      moduleSpec.crossReferenceIndex = buildCrossReferenceIndex(moduleSpec, docGraph);
+      const specOutputPath = path.isAbsolute(moduleSpec.outputPath)
+        ? moduleSpec.outputPath
+        : path.join(resolvedRoot, moduleSpec.outputPath);
+      fs.writeFileSync(specOutputPath, renderSpec(moduleSpec), 'utf-8');
+    }
+
+    const docGraphPathAbs = path.join(resolvedOutputDir, '_doc-graph.json');
+    fs.mkdirSync(path.dirname(docGraphPathAbs), { recursive: true });
+    fs.writeFileSync(docGraphPathAbs, JSON.stringify(docGraph, null, 2), 'utf-8');
+    docGraphPath = toProjectPath(docGraphPathAbs);
+  } catch {
+    console.warn('文档图谱生成失败');
+  }
+
+  // 步骤 6：生成架构索引（使用收集的 ModuleSpec）
   let indexGenerated = false;
   try {
     initRenderer();
@@ -463,6 +495,7 @@ export async function runBatch(
     summaryLogPath: toProjectPath(summaryLogPathAbs),
     detectedLanguages: isMultiLang ? processedLanguages : undefined,
     languageStats,
+    docGraphPath,
   };
 }
 

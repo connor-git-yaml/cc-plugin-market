@@ -17,7 +17,38 @@ skeletonHash: {{frontmatter.skeletonHash}}
 {{/each}}
 {{/if}}---
 
+<a id="module-spec"></a>
+
 # {{frontmatter.sourceTarget}}
+
+{{#if crossReferenceIndex}}
+<!-- cross-reference-index: auto generatedAt={{crossReferenceIndex.generatedAt}} same={{crossReferenceIndex.sameModule.length}} cross={{crossReferenceIndex.crossModule.length}} -->
+
+## 相关 Spec
+
+{{#if (hasContent crossReferenceIndex.sameModule)}}
+### 同模块关联
+
+{{#each crossReferenceIndex.sameModule}}
+- [{{label}}]({{href}}) - {{summary}}
+{{/each}}
+
+{{/if}}
+{{#if (hasContent crossReferenceIndex.crossModule)}}
+### 跨模块关联
+
+{{#each crossReferenceIndex.crossModule}}
+- [{{label}}]({{href}}) - {{summary}}
+{{/each}}
+
+{{/if}}
+{{#unless (hasContent crossReferenceIndex.sameModule)}}
+{{#unless (hasContent crossReferenceIndex.crossModule)}}
+当前模块暂无可自动归档的相关 Spec 链接。
+
+{{/unless}}
+{{/unless}}
+{{/if}}
 
 ## 1. 意图
 

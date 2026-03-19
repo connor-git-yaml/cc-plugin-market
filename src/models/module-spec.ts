@@ -78,12 +78,34 @@ export const FileEntrySchema = z.object({
 });
 export type FileEntry = z.infer<typeof FileEntrySchema>;
 
+/** 交叉引用链接 */
+export const CrossReferenceLinkSchema = z.object({
+  label: z.string().min(1),
+  href: z.string().min(1),
+  targetSpecPath: z.string().min(1),
+  targetSourceTarget: z.string().min(1),
+  kind: z.enum(['same-module', 'cross-module']),
+  direction: z.enum(['internal', 'outbound', 'inbound', 'bidirectional']),
+  evidenceCount: z.number().int().positive(),
+  summary: z.string().min(1),
+});
+export type CrossReferenceLink = z.infer<typeof CrossReferenceLinkSchema>;
+
+/** 当前模块的交叉引用索引 */
+export const ModuleCrossReferenceIndexSchema = z.object({
+  generatedAt: z.string().datetime(),
+  sameModule: z.array(CrossReferenceLinkSchema),
+  crossModule: z.array(CrossReferenceLinkSchema),
+});
+export type ModuleCrossReferenceIndex = z.infer<typeof ModuleCrossReferenceIndexSchema>;
+
 /** 单模块 Spec 文档结构化表示 */
 export const ModuleSpecSchema = z.object({
   frontmatter: SpecFrontmatterSchema,
   sections: SpecSectionsSchema,
   mermaidDiagrams: z.array(MermaidDiagramSchema).optional(),
   fileInventory: z.array(FileEntrySchema),
+  crossReferenceIndex: ModuleCrossReferenceIndexSchema.optional(),
   baselineSkeleton: CodeSkeletonSchema,
   outputPath: z.string().min(1),
 });
