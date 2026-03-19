@@ -50,23 +50,70 @@ export const GenerateOptionsSchema = z.object({
 export type GenerateOptions = z.infer<typeof GenerateOptionsSchema>;
 
 // ============================================================
-// ProjectContext（最小占位版本）
+// PackageManager 枚举
 // ============================================================
 
 /**
- * 项目上下文 Schema（最小占位版本）
- * Feature 035 将通过 extends 扩展为完整实现
- * - projectRoot: 项目根目录绝对路径
- * - configFiles: 已识别的配置文件映射（文件名 -> 绝对路径）
+ * 包管理器枚举 Schema
+ * 10 个枚举值：npm/yarn/pnpm/pip/uv/go/maven/gradle/pipenv/unknown
+ * pip 为预留值（无自动检测规则），unknown 为无法识别时的默认值
  */
-export const ProjectContextSchema = z.object({
+export const PackageManagerSchema = z.enum([
+  'npm', 'yarn', 'pnpm', 'pip', 'uv',
+  'go', 'maven', 'gradle', 'pipenv', 'unknown',
+]);
+
+/** 包管理器类型 */
+export type PackageManager = z.infer<typeof PackageManagerSchema>;
+
+// ============================================================
+// WorkspaceType 枚举
+// ============================================================
+
+/**
+ * Workspace 类型枚举 Schema
+ * single: 单包项目; monorepo: 多包/工作区项目
+ */
+export const WorkspaceTypeSchema = z.enum(['single', 'monorepo']);
+
+/** Workspace 类型 */
+export type WorkspaceType = z.infer<typeof WorkspaceTypeSchema>;
+
+// ============================================================
+// ProjectContext（完整版本）
+// ============================================================
+
+/**
+ * 项目上下文基础 Schema（Feature 034 原始定义）
+ * 保留为内部常量，对外导出扩展后的完整版本
+ */
+const BaseProjectContextSchema = z.object({
   /** 项目根目录绝对路径 */
   projectRoot: z.string().min(1),
   /** 已识别的配置文件映射（文件名 -> 绝对路径） */
   configFiles: z.map(z.string(), z.string()),
 });
 
-/** 项目上下文类型（最小占位版本） */
+/**
+ * 项目上下文 Schema（完整版本）
+ * 在基础版上扩展四个新属性，全部提供 .default() 值以保持向后兼容
+ * - packageManager: 检测到的包管理器类型（默认 'unknown'）
+ * - workspaceType: 项目类型（默认 'single'）
+ * - detectedLanguages: 检测到的编程语言列表（默认 []）
+ * - existingSpecs: 已有 spec 文件绝对路径列表（默认 []）
+ */
+export const ProjectContextSchema = BaseProjectContextSchema.extend({
+  /** 检测到的包管理器类型 */
+  packageManager: PackageManagerSchema.default('unknown'),
+  /** 项目类型——单包或 Monorepo */
+  workspaceType: WorkspaceTypeSchema.default('single'),
+  /** 检测到的编程语言适配器 ID 列表 */
+  detectedLanguages: z.array(z.string()).default([]),
+  /** 已有 spec 文件的绝对路径列表 */
+  existingSpecs: z.array(z.string()).default([]),
+});
+
+/** 项目上下文类型（完整版本） */
 export type ProjectContext = z.infer<typeof ProjectContextSchema>;
 
 // ============================================================
