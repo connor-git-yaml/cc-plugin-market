@@ -49,6 +49,15 @@ export {
   type WorkspaceGroup,
 } from './workspace-index-generator.js';
 
+export {
+  CrossPackageAnalyzer,
+  type CrossPackageInput,
+  type CrossPackageOutput,
+  type TopologyLevel,
+  type CycleGroup,
+  type DependencyStats,
+} from './cross-package-analyzer.js';
+
 // Parser 实现 + 类型
 export * from './parsers/index.js';
 
