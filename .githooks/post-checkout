@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+IS_BRANCH_CHECKOUT="${3:-0}"
+
+if [[ "$IS_BRANCH_CHECKOUT" == "1" ]]; then
+  bash "$REPO_ROOT/scripts/sync-worktree-local-state.sh" --quiet || {
+    echo "[post-checkout] 警告: worktree 本地态同步失败" >&2
+  }
+fi

@@ -6,9 +6,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-HOOK_TARGET="$REPO_ROOT/.git/hooks/pre-commit"
+HOOKS_DIR="$REPO_ROOT/.githooks"
 
-cp "$SCRIPT_DIR/check-plugin-sync.sh" "$HOOK_TARGET"
-chmod +x "$HOOK_TARGET"
+chmod +x "$HOOKS_DIR/pre-commit" "$HOOKS_DIR/post-checkout"
+git config core.hooksPath .githooks
 
-echo "✓ 已安装 pre-commit hook: check-plugin-sync → .git/hooks/pre-commit"
+echo "✓ 已启用版本化 hooks: core.hooksPath=.githooks"
+echo "  - pre-commit    -> scripts/check-plugin-sync.sh"
+echo "  - post-checkout -> scripts/sync-worktree-local-state.sh"

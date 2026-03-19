@@ -38,4 +38,5 @@ specs/.reverse-spec-checkpoint.json
 
 # Spec Driver 本地缓存
 .specify/.spec-driver-path
+.agents
 .agents/
