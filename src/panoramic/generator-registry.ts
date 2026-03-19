@@ -22,6 +22,7 @@ import { MockReadmeGenerator } from './mock-readme-generator.js';
 import { ConfigReferenceGenerator } from './config-reference-generator.js';
 import { DataModelGenerator } from './data-model-generator.js';
 import { WorkspaceIndexGenerator } from './workspace-index-generator.js';
+import { CrossPackageAnalyzer } from './cross-package-analyzer.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -250,4 +251,5 @@ export function bootstrapGenerators(): void {
   registry.register(new ConfigReferenceGenerator());
   registry.register(new DataModelGenerator());
   registry.register(new WorkspaceIndexGenerator());
+  registry.register(new CrossPackageAnalyzer());
 }

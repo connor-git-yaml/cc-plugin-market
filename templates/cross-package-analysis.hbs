@@ -1,0 +1,43 @@
+---
+type: cross-package-analysis
+generatedBy: cross-package-deps
+generatedAt: {{generatedAt}}
+---
+# 跨包依赖分析: {{projectName}}
+
+> 自动生成于 {{generatedAt}} | workspace 类型: {{workspaceType}}
+
+## 依赖拓扑图
+
+```mermaid
+{{{mermaidDiagram}}}
+```
+
+## 循环依赖检测
+
+{{#if hasCycles}}
+> [!WARNING] 检测到循环依赖
+
+{{#each cycleGroups}}
+- **循环 {{@index}}**: {{{cyclePath}}}
+{{/each}}
+{{else}}
+未检测到循环依赖。
+{{/if}}
+
+## 拓扑排序 & 层级
+
+| 层级 | 子包 |
+|------|------|
+{{#each levels}}
+| Level {{level}} | {{#each packages}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
+{{/each}}
+
+## 统计摘要
+
+| 指标 | 值 |
+|------|------|
+| 子包总数 | {{stats.totalPackages}} |
+| 依赖边总数 | {{stats.totalEdges}} |
+| Root 包（无入度） | {{#each stats.rootPackages}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
+| Leaf 包（无出度） | {{#each stats.leafPackages}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
