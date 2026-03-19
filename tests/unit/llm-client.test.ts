@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   parseLLMResponse,
   buildSystemPrompt,
+  getTimeoutForModel,
 } from '../../src/core/llm-client.js';
 
 describe('llm-client', () => {
@@ -213,6 +214,18 @@ JWT 过期时间默认 24 小时
       expect(prompt).toContain('所有权系统');
       expect(prompt).toContain('trait');
       expect(prompt).toContain('Cargo crates');
+    });
+  });
+
+  describe('getTimeoutForModel', () => {
+    it('Codex 模型应使用 5 分钟超时窗口', () => {
+      expect(getTimeoutForModel('gpt-5.3-codex')).toBe(300_000);
+      expect(getTimeoutForModel('gpt-5.3-codex-thinking-high')).toBe(300_000);
+      expect(getTimeoutForModel('gpt-5.4')).toBe(300_000);
+    });
+
+    it('未知模型仍回退到保守默认值', () => {
+      expect(getTimeoutForModel('custom-model')).toBe(180_000);
     });
   });
 });

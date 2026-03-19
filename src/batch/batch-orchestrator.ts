@@ -186,64 +186,49 @@ export async function runBatch(
     return rel.startsWith('..') ? absPath : rel;
   };
 
-  // 步骤 1：构建依赖图（TS/JS 用 dependency-cruiser）
-  const graph = await buildGraph(resolvedRoot);
-
-  // 步骤 1.5：扫描文件获取 languageStats
+  // 步骤 1：扫描文件获取 languageStats
   const scanResult = scanFiles(resolvedRoot, { projectRoot: resolvedRoot });
   const languageStats = scanResult.languageStats;
   const detectedLanguages = languageStats
     ? Array.from(languageStats.keys())
     : [];
-  const isMultiLang = detectedLanguages.length >= 2;
 
-  // 步骤 1.6：语言分组 + 按语言构建依赖图
-  let mergedGraph = graph;
-  let languageGroupsList: LanguageGroup[] = [];
-  let processedLanguages: string[] = detectedLanguages;
+  // 步骤 1.5：语言分组 + 过滤告警
+  const langGroupResult = groupFilesByLanguage(
+    scanResult.files,
+    options.languages,
+  );
+  const languageGroupsList = langGroupResult.groups;
+  let processedLanguages = langGroupResult.groups.map((g) => g.adapterId);
 
+  for (const warning of langGroupResult.warnings) {
+    console.warn(`\u26A0 ${warning}`);
+  }
+
+  if (processedLanguages.length === 0 && !options.languages?.length) {
+    processedLanguages = detectedLanguages;
+  }
+
+  const isMultiLang = processedLanguages.length >= 2;
+  const isSingleNonTsJs = processedLanguages.length === 1 && processedLanguages[0] !== 'ts-js';
+
+  // 步骤 1.6：根据语言组合选择主依赖图
+  let mergedGraph: DependencyGraph;
   if (isMultiLang) {
-    const langGroupResult = groupFilesByLanguage(
-      scanResult.files,
-      options.languages,
-    );
-    languageGroupsList = langGroupResult.groups;
-    processedLanguages = langGroupResult.groups.map((g) => g.adapterId);
-
-    // 输出过滤警告
-    for (const warning of langGroupResult.warnings) {
-      console.warn(`\u26A0 ${warning}`);
-    }
-
-    // 为每个语言组构建依赖图
-    const registry = LanguageAdapterRegistry.getInstance();
     const perLangGraphs: DependencyGraph[] = [];
-
     for (const langGroup of languageGroupsList) {
-      const adapter = registry.getAllAdapters().find((a) => a.id === langGroup.adapterId);
-      if (adapter?.buildDependencyGraph) {
-        // 适配器有 buildDependencyGraph（如 ts-js）
-        try {
-          const langGraph = await adapter.buildDependencyGraph(resolvedRoot);
-          // 为节点标记语言
-          for (const node of langGraph.modules) {
-            node.language = langGroup.adapterId;
-          }
-          perLangGraphs.push(langGraph);
-        } catch {
-          // buildDependencyGraph 失败，使用 buildDirectoryGraph 兜底
-          perLangGraphs.push(await buildFallbackGraph(langGroup, resolvedRoot));
-        }
-      } else {
-        // 使用 buildDirectoryGraph 兜底
-        perLangGraphs.push(await buildFallbackGraph(langGroup, resolvedRoot));
-      }
+      perLangGraphs.push(await buildGraphForLanguageGroup(langGroup, resolvedRoot));
     }
 
     // 步骤 1.7：合并拓扑排序
-    if (perLangGraphs.length > 0) {
-      mergedGraph = mergeGraphsForTopologicalSort(perLangGraphs, resolvedRoot);
-    }
+    mergedGraph = perLangGraphs.length > 0
+      ? mergeGraphsForTopologicalSort(perLangGraphs, resolvedRoot)
+      : await buildGraph(resolvedRoot);
+  } else if (isSingleNonTsJs && languageGroupsList[0]) {
+    mergedGraph = await buildGraphForLanguageGroup(languageGroupsList[0], resolvedRoot);
+  } else {
+    // 纯 TS/JS 或未识别受支持语言：保持 dependency-cruiser 现有路径
+    mergedGraph = await buildGraph(resolvedRoot);
   }
 
   // 步骤 2：文件→模块聚合 + 模块级拓扑排序
@@ -258,7 +243,7 @@ export async function runBatch(
 
   console.log(`发现 ${mergedGraph.modules.length} 个文件，聚合为 ${processingOrder.length} 个模块`);
   if (isMultiLang) {
-    console.log(`检测到 ${detectedLanguages.length} 种语言: ${detectedLanguages.join(', ')}`);
+    console.log(`检测到 ${processedLanguages.length} 种语言: ${processedLanguages.join(', ')}`);
   }
 
   // 步骤 3：检查是否存在检查点
@@ -299,7 +284,7 @@ export async function runBatch(
 
   // 预计算跨语言提示文本（多语言项目）
   const crossLangHint = isMultiLang
-    ? generateCrossLanguageHint(detectedLanguages)
+    ? generateCrossLanguageHint(processedLanguages)
     : '';
 
   const completedPaths = new Set(state.completedModules.map((m) => m.path));
@@ -476,9 +461,31 @@ export async function runBatch(
     duration: Date.now() - startTime,
     indexGenerated,
     summaryLogPath: toProjectPath(summaryLogPathAbs),
-    detectedLanguages: isMultiLang ? detectedLanguages : undefined,
+    detectedLanguages: isMultiLang ? processedLanguages : undefined,
     languageStats,
   };
+}
+
+async function buildGraphForLanguageGroup(
+  langGroup: LanguageGroup,
+  projectRoot: string,
+): Promise<DependencyGraph> {
+  const registry = LanguageAdapterRegistry.getInstance();
+  const adapter = registry.getAllAdapters().find((item) => item.id === langGroup.adapterId);
+
+  if (adapter?.buildDependencyGraph) {
+    try {
+      const langGraph = await adapter.buildDependencyGraph(projectRoot);
+      for (const node of langGraph.modules) {
+        node.language = langGroup.adapterId;
+      }
+      return langGraph;
+    } catch {
+      // 语言专属图失败后回落到目录图，保持 batch 宽容语义。
+    }
+  }
+
+  return buildFallbackGraph(langGroup, projectRoot);
 }
 
 /**

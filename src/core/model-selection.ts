@@ -3,12 +3,19 @@ import * as path from 'node:path';
 
 type PlainObject = Record<string, unknown>;
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
 
-const LOGICAL_MODEL_MAP: Record<string, string> = {
+const LOGICAL_CLAUDE_MODEL_MAP: Record<string, string> = {
   opus: 'claude-opus-4-1-20250805',
-  sonnet: DEFAULT_MODEL,
+  sonnet: DEFAULT_CLAUDE_MODEL,
   haiku: 'claude-haiku-4-5-20251001',
+};
+
+const LOGICAL_CODEX_MODEL_MAP: Record<string, string> = {
+  opus: DEFAULT_CODEX_MODEL,
+  sonnet: DEFAULT_CODEX_MODEL,
+  haiku: DEFAULT_CODEX_MODEL,
 };
 
 const PRESET_MODEL_MAP: Record<string, string> = {
@@ -28,17 +35,49 @@ const DEFAULT_CLAUDE_ALIASES: Record<string, string> = {
   'o4-mini': 'sonnet',
 };
 
+const DEFAULT_CODEX_ALIASES: Record<string, string> = {
+  opus: DEFAULT_CODEX_MODEL,
+  sonnet: DEFAULT_CODEX_MODEL,
+  haiku: DEFAULT_CODEX_MODEL,
+  'claude-opus-4-1-20250805': DEFAULT_CODEX_MODEL,
+  'claude-opus-4-6': DEFAULT_CODEX_MODEL,
+  'claude-sonnet-4-5-20250929': DEFAULT_CODEX_MODEL,
+  'claude-haiku-4-5-20251001': DEFAULT_CODEX_MODEL,
+};
+
+export type ReverseSpecRuntime = 'claude' | 'codex';
+
 export type ReverseSpecModelSource =
   | 'env'
   | 'driver-config-agent'
   | 'driver-config-preset'
   | 'default';
 
+export type ReverseSpecRuntimeSource =
+  | 'env'
+  | 'config'
+  | 'default';
+
+export interface ResolvedReverseSpecRuntime {
+  runtime: ReverseSpecRuntime;
+  source: ReverseSpecRuntimeSource;
+  configPath?: string;
+}
+
 export interface ResolvedReverseSpecModel {
   model: string;
   source: ReverseSpecModelSource;
   configPath?: string;
   rawModel?: string;
+  runtime: ReverseSpecRuntime;
+  runtimeSource: ReverseSpecRuntimeSource;
+}
+
+export interface ResolvedCodexExecutionConfig {
+  model: string;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  serviceTier?: string;
+  configPath?: string;
 }
 
 interface ParsedDriverConfig {
@@ -46,82 +85,167 @@ interface ParsedDriverConfig {
   data: PlainObject;
 }
 
+export function resolveReverseSpecRuntime(options: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+} = {}): ResolvedReverseSpecRuntime {
+  const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+  const env = options.env ?? process.env;
+  const config = loadDriverConfig(cwd);
+  const resolved = resolveRuntime(config?.data, env);
+
+  return {
+    runtime: resolved.runtime,
+    source: resolved.source,
+    configPath: config?.configPath,
+  };
+}
+
 export function resolveReverseSpecModel(options: {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   agentId?: string;
+  provider?: ReverseSpecRuntime;
 } = {}): ResolvedReverseSpecModel {
   const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
   const env = options.env ?? process.env;
   const agentId = options.agentId ?? 'specify';
 
   const config = loadDriverConfig(cwd);
-  const claudeAliases = {
-    ...DEFAULT_CLAUDE_ALIASES,
-    ...(config ? readClaudeAliases(config.data) : {}),
+  const runtimeResolution = resolveRuntime(config?.data, env);
+  const runtime = options.provider ?? runtimeResolution.runtime;
+  const aliases = {
+    ...(runtime === 'codex' ? DEFAULT_CODEX_ALIASES : DEFAULT_CLAUDE_ALIASES),
+    ...(config ? readRuntimeAliases(config.data, runtime) : {}),
   };
-  const claudeFallback = config
-    ? normalizeModelName(readClaudeDefault(config.data), claudeAliases)
+  const runtimeFallback = config
+    ? normalizeModelName(readRuntimeDefault(config.data, runtime), aliases)
     : undefined;
 
-  const envModel = normalizeModelName(env['REVERSE_SPEC_MODEL'], claudeAliases);
+  const envModel = normalizeModelName(env['REVERSE_SPEC_MODEL'], aliases);
   if (envModel) {
     return {
-      model: toAnthropicModelId(envModel, claudeFallback),
+      model: toRuntimeModelId(envModel, runtime, runtimeFallback),
       source: 'env',
       configPath: config?.configPath,
       rawModel: env['REVERSE_SPEC_MODEL'],
+      runtime,
+      runtimeSource: runtimeResolution.source,
     };
   }
 
   if (config) {
     const agentModel = normalizeModelName(
       readAgentModel(config.data, agentId),
-      claudeAliases,
+      aliases,
     );
     if (agentModel) {
       return {
-        model: toAnthropicModelId(agentModel, claudeFallback),
+        model: toRuntimeModelId(agentModel, runtime, runtimeFallback),
         source: 'driver-config-agent',
         configPath: config.configPath,
         rawModel: agentModel,
+        runtime,
+        runtimeSource: runtimeResolution.source,
       };
     }
 
     const preset = readPreset(config.data);
     const logicalModel = PRESET_MODEL_MAP[preset] ?? PRESET_MODEL_MAP.balanced ?? 'opus';
     return {
-      model: toAnthropicModelId(logicalModel, claudeFallback),
+      model: toRuntimeModelId(logicalModel, runtime, runtimeFallback),
       source: 'driver-config-preset',
       configPath: config.configPath,
       rawModel: logicalModel,
+      runtime,
+      runtimeSource: runtimeResolution.source,
     };
   }
 
   return {
-    model: DEFAULT_MODEL,
+    model: runtime === 'codex' ? DEFAULT_CODEX_MODEL : DEFAULT_CLAUDE_MODEL,
     source: 'default',
+    runtime,
+    runtimeSource: runtimeResolution.source,
   };
 }
 
-function toAnthropicModelId(model: string, claudeFallback?: string): string {
+export function resolveCodexExecutionConfig(options: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  agentId?: string;
+} = {}): ResolvedCodexExecutionConfig {
+  const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+  const config = loadDriverConfig(cwd);
+  const modelResolution = resolveReverseSpecModel({
+    cwd,
+    env: options.env,
+    agentId: options.agentId,
+    provider: 'codex',
+  });
+
+  return {
+    model: modelResolution.model,
+    reasoningEffort: config ? readCodexReasoningEffort(config.data) : undefined,
+    serviceTier: config ? readCodexServiceTier(config.data) : undefined,
+    configPath: config?.configPath,
+  };
+}
+
+function toRuntimeModelId(
+  model: string,
+  runtime: ReverseSpecRuntime,
+  runtimeFallback?: string,
+): string {
+  return runtime === 'codex'
+    ? toCodexModelId(model, runtimeFallback)
+    : toClaudeModelId(model, runtimeFallback);
+}
+
+function toClaudeModelId(model: string, claudeFallback?: string): string {
   const normalized = model.trim().toLowerCase();
-  if (LOGICAL_MODEL_MAP[normalized]) {
-    return LOGICAL_MODEL_MAP[normalized];
+  if (LOGICAL_CLAUDE_MODEL_MAP[normalized]) {
+    return LOGICAL_CLAUDE_MODEL_MAP[normalized];
   }
   if (normalized.startsWith('claude-')) {
     return model.trim();
   }
   if (claudeFallback) {
     const fallback = claudeFallback.trim().toLowerCase();
-    if (LOGICAL_MODEL_MAP[fallback]) {
-      return LOGICAL_MODEL_MAP[fallback];
+    if (LOGICAL_CLAUDE_MODEL_MAP[fallback]) {
+      return LOGICAL_CLAUDE_MODEL_MAP[fallback];
     }
     if (fallback.startsWith('claude-')) {
       return claudeFallback.trim();
     }
   }
-  return model.trim() || DEFAULT_MODEL;
+  return model.trim() || DEFAULT_CLAUDE_MODEL;
+}
+
+function toCodexModelId(model: string, codexFallback?: string): string {
+  const normalized = model.trim().toLowerCase();
+  if (LOGICAL_CODEX_MODEL_MAP[normalized]) {
+    if (codexFallback) {
+      const fallback = codexFallback.trim().toLowerCase();
+      if (isNativeCodexModel(fallback)) {
+        return codexFallback.trim();
+      }
+    }
+    return LOGICAL_CODEX_MODEL_MAP[normalized];
+  }
+  if (isNativeCodexModel(normalized)) {
+    return model.trim();
+  }
+  if (codexFallback) {
+    const fallback = codexFallback.trim().toLowerCase();
+    if (LOGICAL_CODEX_MODEL_MAP[fallback]) {
+      return LOGICAL_CODEX_MODEL_MAP[fallback];
+    }
+    if (isNativeCodexModel(fallback)) {
+      return codexFallback.trim();
+    }
+  }
+  return model.trim() || DEFAULT_CODEX_MODEL;
 }
 
 function normalizeModelName(
@@ -165,22 +289,28 @@ function readPreset(config: PlainObject): string {
   return preset;
 }
 
-function readClaudeDefault(config: PlainObject): string | undefined {
+function readRuntimeDefault(
+  config: PlainObject,
+  runtime: ReverseSpecRuntime,
+): string | undefined {
   const modelCompat = asRecord(config.model_compat);
   const defaults = asRecord(modelCompat?.defaults);
-  return asString(defaults?.claude);
+  return asString(defaults?.[runtime]);
 }
 
-function readClaudeAliases(config: PlainObject): Record<string, string> {
+function readRuntimeAliases(
+  config: PlainObject,
+  runtime: ReverseSpecRuntime,
+): Record<string, string> {
   const modelCompat = asRecord(config.model_compat);
   const aliases = asRecord(modelCompat?.aliases);
-  const claude = asRecord(aliases?.claude);
-  if (!claude) {
+  const runtimeAliases = asRecord(aliases?.[runtime]);
+  if (!runtimeAliases) {
     return {};
   }
 
   const mapped: Record<string, string> = {};
-  for (const [key, value] of Object.entries(claude)) {
+  for (const [key, value] of Object.entries(runtimeAliases)) {
     const k = key.trim().toLowerCase();
     const v = asString(value)?.trim();
     if (k && v) {
@@ -188,6 +318,62 @@ function readClaudeAliases(config: PlainObject): Record<string, string> {
     }
   }
   return mapped;
+}
+
+function readCodexReasoningEffort(
+  config: PlainObject,
+): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
+  const codexThinking = asRecord(config.codex_thinking);
+  const level = asString(codexThinking?.default_level)?.trim().toLowerCase();
+  if (level === 'low' || level === 'medium' || level === 'high' || level === 'xhigh') {
+    return level;
+  }
+  return undefined;
+}
+
+function readCodexServiceTier(config: PlainObject): string | undefined {
+  const codex = asRecord(config.codex);
+  const serviceTier = asString(codex?.service_tier)?.trim().toLowerCase();
+  return serviceTier || undefined;
+}
+
+function resolveRuntime(
+  config: PlainObject | undefined,
+  env: NodeJS.ProcessEnv,
+): { runtime: ReverseSpecRuntime; source: ReverseSpecRuntimeSource } {
+  const configuredRuntime = readRuntime(config);
+  if (configuredRuntime) {
+    return { runtime: configuredRuntime, source: 'config' };
+  }
+
+  if (isCodexRuntimeEnv(env)) {
+    return { runtime: 'codex', source: 'env' };
+  }
+
+  return { runtime: 'claude', source: 'default' };
+}
+
+function readRuntime(config: PlainObject | undefined): ReverseSpecRuntime | undefined {
+  if (!config) return undefined;
+
+  const modelCompat = asRecord(config.model_compat);
+  const runtime = asString(modelCompat?.runtime)?.trim().toLowerCase();
+  if (runtime === 'claude' || runtime === 'codex') {
+    return runtime;
+  }
+  return undefined;
+}
+
+function isCodexRuntimeEnv(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    env['CODEX_THREAD_ID'] ||
+    env['CODEX_SHELL'] ||
+    env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'],
+  );
+}
+
+function isNativeCodexModel(model: string): boolean {
+  return model.startsWith('gpt-') || model === 'o3' || model === 'o4-mini';
 }
 
 function loadDriverConfig(startDir: string): ParsedDriverConfig | null {

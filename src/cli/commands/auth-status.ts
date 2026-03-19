@@ -26,12 +26,12 @@ export async function runAuthStatus(command: CLICommand): Promise<void> {
   console.log();
 
   if (result.preferred) {
-    console.log(`  优先级: API Key > CLI 代理`);
-    console.log(`  当前使用: ${result.preferred.type === 'api-key' ? 'API Key (SDK 直连)' : 'CLI 代理 (子进程)'}`);
+    console.log(`  当前使用: ${getCurrentMethodLabel(result.preferred)}`);
   } else {
     console.log('  未找到可用的认证方式。请配置以下方式之一：');
     console.log('    1. 设置环境变量: export ANTHROPIC_API_KEY=your-key-here');
     console.log('    2. 安装并登录 Claude Code: claude auth login');
+    console.log('    3. 安装并登录 Codex CLI: codex login');
   }
 }
 
@@ -43,8 +43,17 @@ function getMethodLabel(method: AuthMethod): string {
     case 'api-key':
       return 'ANTHROPIC_API_KEY';
     case 'cli-proxy':
-      return 'Claude CLI';
+      return method.provider === 'codex' ? 'Codex CLI' : 'Claude CLI';
     default:
       return method.type;
   }
+}
+
+function getCurrentMethodLabel(method: AuthMethod): string {
+  if (method.type === 'api-key') {
+    return 'API Key (Anthropic SDK 直连)';
+  }
+  return method.provider === 'codex'
+    ? 'Codex CLI (子进程)'
+    : 'Claude CLI (子进程)';
 }

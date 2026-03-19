@@ -6,6 +6,7 @@
 import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveReverseSpecRuntime } from '../core/model-selection.js';
 
 // ============================================================
 // 类型定义
@@ -15,6 +16,8 @@ import { join } from 'node:path';
 export interface AuthMethod {
   /** 认证类型 */
   type: 'api-key' | 'cli-proxy';
+  /** 底层提供方 */
+  provider?: 'anthropic' | 'claude' | 'codex';
   /** 是否可用 */
   available: boolean;
   /** 描述信息（如 API Key 前缀、CLI 版本） */
@@ -46,9 +49,9 @@ function maskApiKey(key: string): string {
 /**
  * 检测 claude CLI 是否在 PATH 中
  */
-function findCliPath(): string | null {
+function findCliPath(command: 'claude' | 'codex'): string | null {
   try {
-    const result = execSync('which claude', {
+    const result = execSync(`which ${command}`, {
       encoding: 'utf-8',
       timeout: 5_000,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -75,6 +78,10 @@ function getCliVersion(cliPath: string): string | null {
   }
 }
 
+function getHomeDir(): string {
+  return process.env['HOME'] || process.env['USERPROFILE'] || '';
+}
+
 /**
  * 检测 claude CLI 是否已登录
  *
@@ -98,7 +105,7 @@ function isCliAuthenticated(): boolean {
     }
 
     // Linux / Windows：检查常见凭证存储路径
-    const home = process.env['HOME'] || process.env['USERPROFILE'] || '';
+    const home = getHomeDir();
     if (home) {
       const credPaths = [
         join(home, '.claude', 'credentials.json'),
@@ -111,6 +118,33 @@ function isCliAuthenticated(): boolean {
   } catch {
     return false;
   }
+}
+
+function isCodexAuthenticated(): boolean {
+  const home = getHomeDir();
+  if (!home) return false;
+  return existsSync(join(home, '.codex', 'auth.json'));
+}
+
+function getPriorityOrder(): Array<'api-key' | 'claude-cli' | 'codex-cli'> {
+  const runtime = resolveReverseSpecRuntime().runtime;
+  if (runtime === 'codex') {
+    return ['codex-cli', 'api-key', 'claude-cli'];
+  }
+  return ['api-key', 'claude-cli', 'codex-cli'];
+}
+
+function getPriorityLabel(order: Array<'api-key' | 'claude-cli' | 'codex-cli'>): string {
+  return order.map((item) => {
+    switch (item) {
+      case 'api-key':
+        return 'API Key';
+      case 'claude-cli':
+        return 'Claude CLI';
+      case 'codex-cli':
+        return 'Codex CLI';
+    }
+  }).join(' > ');
 }
 
 // ============================================================
@@ -133,6 +167,7 @@ export function detectAuth(): AuthDetectionResult {
   if (apiKey && apiKey.trim()) {
     methods.push({
       type: 'api-key',
+      provider: 'anthropic',
       available: true,
       details: `已设置 (${maskApiKey(apiKey)})`,
     });
@@ -140,30 +175,64 @@ export function detectAuth(): AuthDetectionResult {
   } else {
     methods.push({
       type: 'api-key',
+      provider: 'anthropic',
       available: false,
       details: '未设置',
     });
     diagnostics.push('ANTHROPIC_API_KEY: 未设置');
   }
 
-  // 2. 检查 claude CLI
-  const cliPath = findCliPath();
-  if (!cliPath) {
+  // 2. 检查 Codex CLI
+  const codexPath = findCliPath('codex');
+  if (!codexPath) {
     methods.push({
       type: 'cli-proxy',
+      provider: 'codex',
+      available: false,
+      details: '未安装',
+    });
+    diagnostics.push('Codex CLI: 未安装');
+  } else {
+    const version = getCliVersion(codexPath);
+    const versionStr = version ? ` (${version})` : '';
+    const authenticated = isCodexAuthenticated();
+    if (authenticated) {
+      methods.push({
+        type: 'cli-proxy',
+        provider: 'codex',
+        available: true,
+        details: `已安装${versionStr}, 已登录`,
+      });
+      diagnostics.push(`Codex CLI: 已安装${versionStr}, 已登录`);
+    } else {
+      methods.push({
+        type: 'cli-proxy',
+        provider: 'codex',
+        available: false,
+        details: `已安装${versionStr}, 未登录`,
+      });
+      diagnostics.push(`Codex CLI: 已安装${versionStr}, 未登录`);
+    }
+  }
+
+  // 3. 检查 Claude CLI
+  const claudePath = findCliPath('claude');
+  if (!claudePath) {
+    methods.push({
+      type: 'cli-proxy',
+      provider: 'claude',
       available: false,
       details: '未安装',
     });
     diagnostics.push('Claude CLI: 未安装');
   } else {
-    const version = getCliVersion(cliPath);
+    const version = getCliVersion(claudePath);
     const versionStr = version ? ` (${version})` : '';
-
-    // 3. 检查 CLI 登录状态
     const authenticated = isCliAuthenticated();
     if (authenticated) {
       methods.push({
         type: 'cli-proxy',
+        provider: 'claude',
         available: true,
         details: `已安装${versionStr}, 已登录`,
       });
@@ -171,6 +240,7 @@ export function detectAuth(): AuthDetectionResult {
     } else {
       methods.push({
         type: 'cli-proxy',
+        provider: 'claude',
         available: false,
         details: `已安装${versionStr}, 未登录`,
       });
@@ -178,13 +248,20 @@ export function detectAuth(): AuthDetectionResult {
     }
   }
 
-  // 确定首选方式（按优先级：api-key > cli-proxy）
-  const preferred = methods.find((m) => m.available) ?? null;
+  // 确定首选方式（根据当前运行时动态排序）
+  const priorityOrder = getPriorityOrder();
+  const preferred = priorityOrder
+    .map((key) => methods.find((method) =>
+      key === 'api-key'
+        ? method.type === 'api-key'
+        : method.type === 'cli-proxy' && method.provider === (key === 'codex-cli' ? 'codex' : 'claude'),
+    ))
+    .find((method) => method?.available) ?? null;
 
   if (!preferred) {
     diagnostics.push('未找到可用的认证方式');
   } else {
-    diagnostics.push(`优先级: API Key > CLI 代理`);
+    diagnostics.push(`优先级: ${getPriorityLabel(priorityOrder)}`);
   }
 
   return { methods, preferred, diagnostics };
@@ -206,7 +283,7 @@ export async function verifyAuth(): Promise<AuthDetectionResult> {
       verifiedDiagnostics.push(
         method.type === 'api-key'
           ? `ANTHROPIC_API_KEY: ${method.details}`
-          : `Claude CLI: ${method.details}`,
+          : `${method.provider === 'codex' ? 'Codex CLI' : 'Claude CLI'}: ${method.details}`,
       );
       continue;
     }
@@ -232,7 +309,7 @@ export async function verifyAuth(): Promise<AuthDetectionResult> {
         method.details = `已设置, 验证失败: ${msg}`;
         verifiedDiagnostics.push(`ANTHROPIC_API_KEY: 已设置, 验证失败: ${msg}`);
       }
-    } else if (method.type === 'cli-proxy') {
+    } else if (method.type === 'cli-proxy' && method.provider === 'claude') {
       // 验证 CLI：执行一个简单的 --print 调用
       try {
         execSync('claude --print "ping"', {
@@ -248,14 +325,39 @@ export async function verifyAuth(): Promise<AuthDetectionResult> {
         method.details = `${method.details}, 验证失败: ${msg}`;
         verifiedDiagnostics.push(`Claude CLI: ${method.details}`);
       }
+    } else if (method.type === 'cli-proxy' && method.provider === 'codex') {
+      try {
+        execSync(
+          `printf 'Reply with exactly: pong' | codex exec --json --ephemeral --skip-git-repo-check --sandbox read-only --color never -C /tmp -`,
+          {
+            encoding: 'utf-8',
+            timeout: 30_000,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          },
+        );
+        method.details = `${method.details}, 已验证可用`;
+        verifiedDiagnostics.push(`Codex CLI: ${method.details}`);
+      } catch (err) {
+        method.available = false;
+        const msg = err instanceof Error ? err.message : String(err);
+        method.details = `${method.details}, 验证失败: ${msg}`;
+        verifiedDiagnostics.push(`Codex CLI: ${method.details}`);
+      }
     }
   }
 
   // 重新确定首选
-  const preferred = result.methods.find((m) => m.available) ?? null;
+  const priorityOrder = getPriorityOrder();
+  const preferred = priorityOrder
+    .map((key) => result.methods.find((method) =>
+      key === 'api-key'
+        ? method.type === 'api-key'
+        : method.type === 'cli-proxy' && method.provider === (key === 'codex-cli' ? 'codex' : 'claude'),
+    ))
+    .find((method) => method?.available) ?? null;
   verifiedDiagnostics.push(
     preferred
-      ? `优先级: API Key > CLI 代理`
+      ? `优先级: ${getPriorityLabel(priorityOrder)}`
       : '未找到可用的认证方式',
   );
 

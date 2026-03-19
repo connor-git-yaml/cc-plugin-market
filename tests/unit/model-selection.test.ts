@@ -2,10 +2,15 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { resolveReverseSpecModel } from '../../src/core/model-selection.js';
+import {
+  resolveCodexExecutionConfig,
+  resolveReverseSpecModel,
+  resolveReverseSpecRuntime,
+} from '../../src/core/model-selection.js';
 
 const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
 const OPUS_MODEL = 'claude-opus-4-1-20250805';
+const CODEX_MODEL = 'gpt-5.3-codex';
 
 describe('model-selection', () => {
   const originalEnv = process.env;
@@ -15,6 +20,9 @@ describe('model-selection', () => {
     tempDir = mkdtempSync(join(tmpdir(), 'reverse-spec-model-'));
     process.env = { ...originalEnv };
     delete process.env['REVERSE_SPEC_MODEL'];
+    delete process.env['CODEX_THREAD_ID'];
+    delete process.env['CODEX_SHELL'];
+    delete process.env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'];
   });
 
   afterEach(() => {
@@ -27,6 +35,7 @@ describe('model-selection', () => {
 
     expect(result.source).toBe('default');
     expect(result.model).toBe(SONNET_MODEL);
+    expect(result.runtime).toBe('claude');
   });
 
   it('REVERSE_SPEC_MODEL 优先级最高', () => {
@@ -116,6 +125,70 @@ preset: quality-first
     expect(result.source).toBe('driver-config-preset');
     expect(result.model).toBe(OPUS_MODEL);
     expect(result.configPath).toBe(join(workspace, '.specify', 'spec-driver.config.yaml'));
+  });
+
+  it('Codex 运行时默认映射到 Codex 模型', () => {
+    process.env['CODEX_THREAD_ID'] = 'thread-1';
+
+    const result = resolveReverseSpecModel({ cwd: tempDir, env: process.env });
+
+    expect(result.runtime).toBe('codex');
+    expect(result.runtimeSource).toBe('env');
+    expect(result.model).toBe(CODEX_MODEL);
+  });
+
+  it('Codex 运行时将逻辑模型映射到 Codex 模型', () => {
+    process.env['CODEX_THREAD_ID'] = 'thread-1';
+    process.env['REVERSE_SPEC_MODEL'] = 'opus';
+
+    const result = resolveReverseSpecModel({ cwd: tempDir, env: process.env });
+
+    expect(result.runtime).toBe('codex');
+    expect(result.model).toBe(CODEX_MODEL);
+  });
+
+  it('config 中 runtime=claude 时覆盖 Codex 环境自动识别', () => {
+    process.env['CODEX_THREAD_ID'] = 'thread-1';
+    writeConfig(
+      tempDir,
+      `
+model_compat:
+  runtime: claude
+`,
+    );
+
+    const runtime = resolveReverseSpecRuntime({ cwd: tempDir, env: process.env });
+    const result = resolveReverseSpecModel({ cwd: tempDir, env: process.env });
+
+    expect(runtime.runtime).toBe('claude');
+    expect(runtime.source).toBe('config');
+    expect(result.model).toBe(OPUS_MODEL);
+  });
+
+  it('读取 Codex execution 配置', () => {
+    process.env['CODEX_THREAD_ID'] = 'thread-1';
+    writeConfig(
+      tempDir,
+      `
+preset: quality-first
+model_compat:
+  defaults:
+    codex: gpt-5.4
+  aliases:
+    codex:
+      opus: gpt-5.4
+codex:
+  service_tier: fast
+codex_thinking:
+  default_level: xhigh
+`,
+    );
+
+    const result = resolveCodexExecutionConfig({ cwd: tempDir, env: process.env });
+
+    expect(result.model).toBe('gpt-5.4');
+    expect(result.reasoningEffort).toBe('xhigh');
+    expect(result.serviceTier).toBe('fast');
   });
 });
 

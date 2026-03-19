@@ -14,10 +14,12 @@ import type { ConfigFileResult } from '../../../src/panoramic/config-reference-g
 vi.mock('../../../src/auth/auth-detector.js');
 vi.mock('@anthropic-ai/sdk');
 vi.mock('../../../src/auth/cli-proxy.js');
+vi.mock('../../../src/auth/codex-proxy.js');
 
 // 在 vi.mock 之后 import，这些是已被 mock 的模块
 import { detectAuth } from '../../../src/auth/auth-detector.js';
 import Anthropic from '@anthropic-ai/sdk';
+import { callLLMviaCodex } from '../../../src/auth/codex-proxy.js';
 import {
   enrichFieldDescriptions,
   enrichConfigDescriptions,
@@ -25,6 +27,7 @@ import {
 
 // 获取 mock 引用
 const mockDetectAuth = vi.mocked(detectAuth);
+const mockCallLLMviaCodex = vi.mocked(callLLMviaCodex);
 
 // 用于控制 Anthropic SDK mock 的 messages.create
 let mockMessagesCreate: ReturnType<typeof vi.fn>;
@@ -123,10 +126,18 @@ function setupAuthUnavailable(): void {
   mockDetectAuth.mockReturnValue({
     methods: [
       { type: 'api-key', available: false, details: '未设置' },
-      { type: 'cli-proxy', available: false, details: '未安装' },
+      { type: 'cli-proxy', provider: 'claude', available: false, details: '未安装' },
     ],
     preferred: null,
     diagnostics: ['未找到可用的认证方式'],
+  });
+}
+
+function setupCodexAuthAvailable(): void {
+  mockDetectAuth.mockReturnValue({
+    methods: [{ type: 'cli-proxy', provider: 'codex', available: true, details: '已登录' }],
+    preferred: { type: 'cli-proxy', provider: 'codex', available: true, details: '已登录' },
+    diagnostics: [],
   });
 }
 
@@ -151,6 +162,7 @@ beforeEach(() => {
   vi.mocked(Anthropic).mockImplementation(() => ({
     messages: { create: mockMessagesCreate },
   }) as any);
+  mockCallLLMviaCodex.mockReset();
 });
 
 // ============================================================
@@ -175,6 +187,35 @@ describe('enrichFieldDescriptions', () => {
     expect(fields[0]!.description).toBe('[AI] 用户的显示名称');
     expect(fields[1]!.description).toBe('[AI] 用户年龄');
     expect(fields[2]!.description).toBe('[AI] 用户的电子邮箱地址');
+  });
+
+  it('Codex CLI 可用时走 codex-proxy', async () => {
+    setupCodexAuthAvailable();
+    mockCallLLMviaCodex.mockResolvedValueOnce({
+      content: JSON.stringify([{ name: 'name', description: '用户名称' }]),
+      model: 'gpt-5.3-codex',
+      inputTokens: 10,
+      outputTokens: 5,
+      duration: 100,
+    });
+
+    const models: DataModel[] = [{
+      name: 'User',
+      filePath: 'a.py',
+      language: 'python',
+      kind: 'dataclass',
+      fields: [
+        { name: 'name', typeStr: 'str', optional: false, defaultValue: null, description: null },
+      ],
+      bases: [],
+      description: null,
+    }];
+
+    const result = await enrichFieldDescriptions(models);
+
+    expect(mockCallLLMviaCodex).toHaveBeenCalledTimes(1);
+    expect(result[0]!.fields[0]!.description).toBe('[AI] 用户名称');
+    expect(mockMessagesCreate).not.toHaveBeenCalled();
   });
 
   // T007: 保留人工注释

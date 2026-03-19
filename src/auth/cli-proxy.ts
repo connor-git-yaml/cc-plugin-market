@@ -59,7 +59,7 @@ interface StreamMessage {
 
 /** 获取默认 CLI 代理配置 */
 export function getDefaultCLIProxyConfig(): CLIProxyConfig {
-  const { model } = resolveReverseSpecModel();
+  const { model } = resolveReverseSpecModel({ provider: 'claude' });
   return {
     model,
     timeout: getTimeoutForModel(model),

@@ -87,9 +87,9 @@ describe('auth-status', () => {
       const mockResult: AuthDetectionResult = {
         methods: [
           { type: 'api-key', available: false, details: '未设置' },
-          { type: 'cli-proxy', available: true, details: '已安装 (v2.1.0), 已登录' },
+          { type: 'cli-proxy', provider: 'claude', available: true, details: '已安装 (v2.1.0), 已登录' },
         ],
-        preferred: { type: 'cli-proxy', available: true, details: '已安装 (v2.1.0), 已登录' },
+        preferred: { type: 'cli-proxy', provider: 'claude', available: true, details: '已安装 (v2.1.0), 已登录' },
         diagnostics: [
           'ANTHROPIC_API_KEY: 未设置',
           'Claude CLI: 已安装 (v2.1.0), 已登录',
@@ -115,6 +115,37 @@ describe('auth-status', () => {
       expect(output).toMatch(/✓.*Claude CLI/);
       // API Key 不可用
       expect(output).toMatch(/✗.*ANTHROPIC_API_KEY/);
+    });
+
+    it('Codex CLI 可用时显示 Codex 标签', async () => {
+      const mockResult: AuthDetectionResult = {
+        methods: [
+          { type: 'api-key', available: false, details: '未设置' },
+          { type: 'cli-proxy', provider: 'codex', available: true, details: '已安装 (v0.116.0), 已登录' },
+        ],
+        preferred: { type: 'cli-proxy', provider: 'codex', available: true, details: '已安装 (v0.116.0), 已登录' },
+        diagnostics: [
+          'ANTHROPIC_API_KEY: 未设置',
+          'Codex CLI: 已安装 (v0.116.0), 已登录',
+          '优先级: Codex CLI > API Key > Claude CLI',
+        ],
+      };
+      mockedDetectAuth.mockReturnValue(mockResult);
+
+      const { runAuthStatus } = await import('../../src/cli/commands/auth-status.js');
+      await runAuthStatus({
+        subcommand: 'auth-status',
+        deep: false,
+        force: false,
+        version: false,
+        help: false,
+        global: false,
+        remove: false,
+      });
+
+      const output = consoleLogSpy.mock.calls.map((c) => c[0]).join('\n');
+      expect(output).toContain('Codex CLI');
+      expect(output).toContain('当前使用: Codex CLI (子进程)');
     });
 
     it('无任何可用方式时显示配置建议', async () => {
@@ -147,6 +178,7 @@ describe('auth-status', () => {
       expect(output).toContain('未找到可用的认证方式');
       expect(output).toContain('ANTHROPIC_API_KEY');
       expect(output).toContain('claude auth login');
+      expect(output).toContain('codex login');
     });
   });
 });

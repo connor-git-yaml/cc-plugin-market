@@ -17,6 +17,8 @@ import type { DataModel } from '../data-model-generator.js';
 import type { ConfigFileResult } from '../config-reference-generator.js';
 import { detectAuth } from '../../auth/auth-detector.js';
 import { callLLMviaCli } from '../../auth/cli-proxy.js';
+import { callLLMviaCodex } from '../../auth/codex-proxy.js';
+import { resolveReverseSpecModel } from '../../core/model-selection.js';
 
 // ============================================================
 // Zod Schema（LLM 返回值验证）
@@ -42,9 +44,6 @@ const AI_PREFIX = '[AI] ';
 // 默认模型配置
 // ============================================================
 
-/** 默认 LLM 模型（使用 sonnet 确保 Agent SDK 环境兼容） */
-const DEFAULT_MODEL = 'sonnet';
-
 /** LLM 调用超时（毫秒） */
 const LLM_TIMEOUT = 60_000;
 
@@ -61,7 +60,8 @@ const LLM_TEMPERATURE = 0.3;
  *
  * 使用 detectAuth() 获取认证方式：
  * - API Key 可用时直接使用 Anthropic SDK
- * - CLI 代理可用时调用 callLLMviaCli
+ * - Claude CLI 可用时调用 callLLMviaCli
+ * - Codex CLI 可用时调用 callLLMviaCodex
  * - 均不可用时返回 null（调用方负责降级）
  *
  * @param systemPrompt - 系统提示词
@@ -79,7 +79,12 @@ async function callLLMSimple(
     return null;
   }
 
-  const model = process.env['PANORAMIC_LLM_MODEL'] ?? DEFAULT_MODEL;
+  const providerRuntime = authResult.preferred.type === 'cli-proxy' && authResult.preferred.provider === 'codex'
+    ? 'codex'
+    : 'claude';
+  const model = process.env['PANORAMIC_LLM_MODEL'] ?? resolveReverseSpecModel({
+    provider: providerRuntime,
+  }).model;
 
   if (authResult.preferred.type === 'api-key') {
     // SDK 直接调用
@@ -106,10 +111,15 @@ async function callLLMSimple(
 
   // CLI 代理调用
   const fullPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-  const cliResponse = await callLLMviaCli(fullPrompt, {
-    model,
-    timeout: LLM_TIMEOUT,
-  });
+  const cliResponse = authResult.preferred.provider === 'codex'
+    ? await callLLMviaCodex(fullPrompt, {
+      model,
+      timeout: LLM_TIMEOUT,
+    })
+    : await callLLMviaCli(fullPrompt, {
+      model,
+      timeout: LLM_TIMEOUT,
+    });
 
   return cliResponse.content || null;
 }

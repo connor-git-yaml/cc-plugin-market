@@ -25,30 +25,34 @@ agents:
   verify:
     model: opus
 
-# Codex 运行时默认统一到 gpt-5.3-codex，思考深度通过 codex_thinking 控制
+# Codex 运行时默认统一到 GPT-5.4，思考深度和 service tier 通过下方配置控制
 model_compat:
   runtime: auto
   aliases:
     codex:
-      opus: gpt-5.3-codex
-      sonnet: gpt-5.3-codex
-      haiku: gpt-5.3-codex
+      opus: gpt-5.4
+      sonnet: gpt-5.4
+      haiku: gpt-5.4
     claude:
       gpt-5.3-codex: sonnet
+      gpt-5.4: opus
       gpt-5: opus
       gpt-5-mini: sonnet
       o3: opus
       o4-mini: sonnet
   defaults:
-    codex: gpt-5.3-codex
+    codex: gpt-5.4
     claude: sonnet
 
+codex:
+  service_tier: fast
+
 codex_thinking:
-  default_level: medium
+  default_level: xhigh
   level_map:
-    opus: high
-    sonnet: medium
-    haiku: low
+    opus: xhigh
+    sonnet: high
+    haiku: medium
 
 # ═══════════════════════════════════════
 # 调研阶段配置（Feature 模式）

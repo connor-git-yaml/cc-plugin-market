@@ -55,7 +55,8 @@ export function checkAuth(): boolean {
   printError(
     '未找到可用的认证方式。请选择以下方式之一：\n' +
     '  1. 设置环境变量: export ANTHROPIC_API_KEY=your-key-here\n' +
-    '  2. 安装并登录 Claude Code: claude auth login',
+    '  2. 安装并登录 Claude Code: claude auth login\n' +
+    '  3. 安装并登录 Codex CLI: codex login',
   );
   return false;
 }

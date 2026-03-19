@@ -1,7 +1,7 @@
 /**
  * LLM 客户端
- * Claude API 封装：callLLM、parseLLMResponse、buildSystemPrompt
- * 支持两种调用策略：SDK 直接调用（API Key）和 CLI 代理（订阅用户）
+ * LLM API 封装：callLLM、parseLLMResponse、buildSystemPrompt
+ * 支持三种调用策略：Anthropic SDK、Claude CLI 代理、Codex CLI 代理
  * 参见 contracts/llm-client.md
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -10,7 +10,8 @@ import type { LanguageTerminology } from '../adapters/language-adapter.js';
 import type { AssembledContext } from './context-assembler.js';
 import { detectAuth } from '../auth/auth-detector.js';
 import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
-import { resolveReverseSpecModel } from './model-selection.js';
+import { callLLMviaCodex as codexProxyCall } from '../auth/codex-proxy.js';
+import { resolveCodexExecutionConfig, resolveReverseSpecModel } from './model-selection.js';
 
 // ============================================================
 // 配置类型
@@ -27,6 +28,10 @@ export interface LLMConfig {
   temperature: number;
   /** 超时时间（毫秒，默认根据模型动态计算：Sonnet 120s, Opus 300s, Haiku 60s） */
   timeout: number;
+  /** Codex 推理强度（仅 Codex CLI provider 使用） */
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
+  /** Codex 服务层级（仅 Codex CLI provider 使用） */
+  serviceTier?: string;
   /** 目标语言术语（可选，用于参数化 LLM prompt） */
   languageTerminology?: LanguageTerminology;
 }
@@ -120,6 +125,7 @@ export type RetryCallback = (event: RetryEvent) => void;
  *
  * 基于实测数据：
  * - Opus: spec 生成通常 >120s，需要更长超时
+ * - GPT-5 / Codex: 中大型模块 spec 生成实测可超过 180s
  * - Sonnet: spec 生成通常 ~90s
  * - Haiku: 响应极快
  * - 未知模型: 保守默认值
@@ -127,6 +133,8 @@ export type RetryCallback = (event: RetryEvent) => void;
 export function getTimeoutForModel(model: string): number {
   const lowerModel = model.toLowerCase();
   if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
+  if (lowerModel.startsWith('gpt-5')) return 300_000; // 5 分钟
+  if (lowerModel.includes('codex')) return 300_000;  // 5 分钟
   if (lowerModel.includes('sonnet')) return 120_000;  // 2 分钟
   if (lowerModel.includes('haiku')) return 60_000;    // 1 分钟
   return 180_000;                                      // 3 分钟（保守默认）
@@ -194,7 +202,8 @@ function sleep(ms: number): Promise<void> {
  *
  * 策略模式：根据认证检测结果自动选择调用方式
  * - API Key 可用 → 通过 Anthropic SDK 直接调用
- * - CLI 代理可用 → 通过 spawn Claude CLI 子进程间接调用
+ * - Claude CLI 可用 → 通过 spawn Claude CLI 子进程间接调用
+ * - Codex CLI 可用 → 通过 spawn Codex CLI 子进程间接调用
  *
  * @param context - assembleContext() 的输出
  * @param config - 可选的配置覆盖
@@ -207,20 +216,39 @@ export async function callLLM(
   config?: Partial<LLMConfig>,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
-  const cfg = mergeConfig(config);
   const authResult = detectAuth();
 
   if (!authResult.preferred) {
     throw new LLMUnavailableError(
-      '未找到可用的认证方式。请设置 ANTHROPIC_API_KEY 或登录 Claude Code (claude auth login)',
+      '未找到可用的认证方式。请设置 ANTHROPIC_API_KEY，或登录 Claude Code / Codex CLI。',
     );
   }
+
+  const providerRuntime = authResult.preferred.type === 'cli-proxy' && authResult.preferred.provider === 'codex'
+    ? 'codex'
+    : 'claude';
+  const resolvedProviderModel = resolveReverseSpecModel({ provider: providerRuntime }).model;
+  const codexExecution = providerRuntime === 'codex'
+    ? resolveCodexExecutionConfig()
+    : undefined;
+  const effectiveModel = config?.model ?? codexExecution?.model ?? resolvedProviderModel;
+  const cfg = mergeConfig({
+    ...config,
+    model: effectiveModel,
+    timeout: config?.timeout ?? getTimeoutForModel(effectiveModel),
+    reasoningEffort: config?.reasoningEffort ?? codexExecution?.reasoningEffort,
+    serviceTier: config?.serviceTier ?? codexExecution?.serviceTier,
+  });
 
   if (authResult.preferred.type === 'api-key') {
     return callLLMviaSdk(context, cfg, onRetry);
   }
 
-  // cli-proxy 策略
+  if (authResult.preferred.provider === 'codex') {
+    return callLLMviaCodexProxy(context, cfg, onRetry);
+  }
+
+  // Claude CLI proxy 策略
   return callLLMviaCliProxy(context, cfg, onRetry);
 }
 
@@ -369,6 +397,60 @@ async function callLLMviaCliProxy(
 
   throw new LLMUnavailableError(
     `${maxAttempts} 次尝试后仍无法访问 CLI 代理: ${lastError?.message}`,
+  );
+}
+
+/**
+ * 通过 Codex CLI 子进程调用 LLM（Codex 运行时代理方式）
+ */
+async function callLLMviaCodexProxy(
+  context: AssembledContext,
+  cfg: LLMConfig,
+  onRetry?: RetryCallback,
+): Promise<LLMResponse> {
+  const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
+  const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
+
+  const maxAttempts = 3;
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(getRetryDelay(attempt - 1));
+    }
+
+    try {
+      return await codexProxyCall(fullPrompt, {
+        model: cfg.model,
+        timeout: cfg.timeout,
+        reasoningEffort: cfg.reasoningEffort,
+        serviceTier: cfg.serviceTier,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (lastError instanceof LLMTimeoutError && attempt >= 1) {
+        break;
+      }
+
+      if (!isRetryableError(lastError) || attempt === maxAttempts - 1) {
+        break;
+      }
+
+      const delay = getRetryDelay(attempt);
+      onRetry?.({
+        attempt: attempt + 1,
+        maxAttempts,
+        errorType: lastError instanceof LLMTimeoutError ? 'timeout'
+          : lastError instanceof LLMRateLimitError ? 'rate-limit'
+          : 'server-error',
+        delay,
+      });
+    }
+  }
+
+  throw new LLMUnavailableError(
+    `${maxAttempts} 次尝试后仍无法访问 Codex CLI 代理: ${lastError?.message}`,
   );
 }
 
