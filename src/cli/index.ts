@@ -17,6 +17,7 @@ import { runPrepare } from './commands/prepare.js';
 import { runAuthStatus } from './commands/auth-status.js';
 import { runMcpServer } from './commands/mcp-server.js';
 import { bootstrapAdapters } from '../adapters/index.js';
+import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +66,8 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
 async function main(): Promise<void> {
   // 注册所有语言适配器（在命令调度前执行）
   bootstrapAdapters();
+  // 注册所有文档生成器
+  bootstrapGenerators();
 
   const result = parseArgs(process.argv.slice(2));
 

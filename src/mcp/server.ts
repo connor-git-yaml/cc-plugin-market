@@ -12,6 +12,7 @@ import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.j
 import { runBatch } from '../batch/batch-orchestrator.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
 import { bootstrapAdapters } from '../adapters/index.js';
+import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { scanFiles } from '../utils/file-scanner.js';
 
 // 读取 package.json 版本号
@@ -25,6 +26,8 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
 export function createMcpServer(): McpServer {
   // 注册所有语言适配器
   bootstrapAdapters();
+  // 注册所有文档生成器
+  bootstrapGenerators();
 
   const server = new McpServer({
     name: 'reverse-spec',
