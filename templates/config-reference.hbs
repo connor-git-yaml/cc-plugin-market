@@ -5,6 +5,10 @@
 {{#each files}}
 ## {{filePath}} (`{{format}}`)
 
+{{#if description}}
+> {{{description}}}
+
+{{/if}}
 {{#if entries.length}}
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|

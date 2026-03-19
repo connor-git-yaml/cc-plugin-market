@@ -37,6 +37,8 @@ export interface ConfigFileResult {
   format: ConfigFormat;
   /** 该文件中的所有配置项 */
   entries: ConfigEntry[];
+  /** 文件级描述（说明该配置文件在项目中的整体作用） */
+  description?: string;
 }
 
 /**

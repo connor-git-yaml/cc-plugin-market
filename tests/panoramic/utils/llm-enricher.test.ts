@@ -271,6 +271,11 @@ describe('enrichConfigDescriptions', () => {
   // T013: 正常增强
   it('正常增强——mock LLM 返回 JSON，验证 [AI] 前缀和配置项匹配', async () => {
     setupAuthAvailable();
+    // 第一次调用：文件级描述增强
+    setupLLMResponse([
+      { name: 'config.yaml', description: '应用主配置文件' },
+    ]);
+    // 第二次调用：配置项级描述增强
     setupLLMResponse([
       { name: 'app.name', description: '应用程序名称' },
       { name: 'app.port', description: '服务监听端口号' },
@@ -281,6 +286,9 @@ describe('enrichConfigDescriptions', () => {
     const result = await enrichConfigDescriptions(files);
 
     expect(result).toHaveLength(1);
+    // 验证文件级描述
+    expect(result[0]!.description).toBe('[AI] 应用主配置文件');
+    // 验证配置项级描述
     const entries = result[0]!.entries;
     expect(entries[0]!.description).toBe('[AI] 应用程序名称');
     expect(entries[1]!.description).toBe('[AI] 服务监听端口号');
@@ -290,6 +298,11 @@ describe('enrichConfigDescriptions', () => {
   // T014: 保留已有 description
   it('保留已有 description——非空的配置项不被覆盖', async () => {
     setupAuthAvailable();
+    // 第一次调用：文件级描述增强
+    setupLLMResponse([
+      { name: 'pyproject.toml', description: 'Python 项目配置' },
+    ]);
+    // 第二次调用：配置项级描述增强
     setupLLMResponse([
       { name: 'project.version', description: '项目版本号' },
       { name: 'tool.uv.dev', description: '是否启用开发模式依赖' },
@@ -319,6 +332,11 @@ describe('enrichConfigDescriptions', () => {
   // 不修改原数组
   it('不修改原数组——返回深拷贝', async () => {
     setupAuthAvailable();
+    // 第一次调用：文件级描述增强
+    setupLLMResponse([
+      { name: 'config.yaml', description: '应用配置' },
+    ]);
+    // 第二次调用：配置项级描述增强
     setupLLMResponse([
       { name: 'app.name', description: '应用名称' },
       { name: 'app.port', description: '端口' },
@@ -330,17 +348,20 @@ describe('enrichConfigDescriptions', () => {
 
     // 原始数据未被修改
     expect(original[0]!.entries[0]!.description).toBe('');
+    expect(original[0]!.description).toBeUndefined();
     // 返回值被增强
     expect(result[0]!.entries[0]!.description).toBe('[AI] 应用名称');
+    expect(result[0]!.description).toBe('[AI] 应用配置');
   });
 
-  // 所有配置项都有 description 时不调用 LLM
-  it('所有配置项都有 description 时不调用 LLM', async () => {
+  // 所有配置项和文件都有 description 时不调用 LLM
+  it('所有配置项和文件都有 description 时不调用 LLM', async () => {
     setupAuthAvailable();
 
     const files: ConfigFileResult[] = [{
       filePath: 'full.yaml',
       format: 'yaml',
+      description: '已有文件说明',
       entries: [
         { keyPath: 'key1', type: 'string', defaultValue: 'val', description: '已有说明' },
       ],
@@ -348,6 +369,7 @@ describe('enrichConfigDescriptions', () => {
 
     const result = await enrichConfigDescriptions(files);
     expect(result[0]!.entries[0]!.description).toBe('已有说明');
+    expect(result[0]!.description).toBe('已有文件说明');
     expect(mockMessagesCreate).not.toHaveBeenCalled();
   });
 });
@@ -447,6 +469,9 @@ describe('enrichConfigDescriptions 降级', () => {
   // LLM 调用抛出异常时静默降级
   it('LLM 调用抛出异常时静默降级', async () => {
     setupAuthAvailable();
+    // 文件级增强也会失败
+    mockMessagesCreate.mockRejectedValueOnce(new Error('网络错误'));
+    // 配置项级增强也会失败
     mockMessagesCreate.mockRejectedValueOnce(new Error('网络错误'));
 
     const files = [createConfigFileWithEmptyDesc()];
@@ -454,6 +479,7 @@ describe('enrichConfigDescriptions 降级', () => {
 
     // 不抛异常，空 description 保持不变
     expect(result[0]!.entries[0]!.description).toBe('');
+    expect(result[0]!.description).toBeUndefined();
   });
 });
 

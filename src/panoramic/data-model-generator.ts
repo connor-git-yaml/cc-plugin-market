@@ -23,7 +23,7 @@ import { scanFiles } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { sanitizeMermaidId } from './utils/mermaid-helpers.js';
 import { loadTemplate } from './utils/template-loader.js';
-import { enrichFieldDescriptions } from './utils/llm-enricher.js';
+import { enrichFieldDescriptions, enrichModelDescriptions } from './utils/llm-enricher.js';
 
 // ============================================================
 // Zod Schema + TypeScript 类型
@@ -619,6 +619,9 @@ export class DataModelGenerator
 
     // LLM 语义增强（仅在 useLLM=true 时启用）
     if (options?.useLLM) {
+      // 实体级描述增强（类似 API Reference 的 class description）
+      sortedModels = await enrichModelDescriptions(sortedModels);
+      // 字段级描述增强
       sortedModels = await enrichFieldDescriptions(sortedModels);
     }
 

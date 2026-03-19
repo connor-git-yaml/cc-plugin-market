@@ -5,8 +5,9 @@
  * 所有 LLM 推断的 description 以 [AI] 前缀标注，与人工注释明确区分。
  *
  * 导出函数：
+ * - enrichModelDescriptions: 数据模型实体级描述增强（类似 API Reference class description）
  * - enrichFieldDescriptions: 数据模型字段语义增强
- * - enrichConfigDescriptions: 配置项语义增强
+ * - enrichConfigDescriptions: 配置项语义增强（含文件级 + 配置项级）
  *
  * 降级策略：LLM 不可用时静默降级，不抛异常，返回原始数据。
  */
@@ -127,6 +128,29 @@ const FIELD_SYSTEM_PROMPT = `你是一个代码分析专家。根据提供的数
 3. 不确定时使用保守的描述
 
 严格输出 JSON 数组，每个元素包含 name 和 description 字段。不要输出任何其他内容。`;
+
+/** 数据模型实体级增强的 system prompt */
+const MODEL_SYSTEM_PROMPT = `你是一个 API Reference 文档专家。根据提供的数据模型信息（模型名、所属语言、类型、字段列表、继承关系、源文件路径），
+为每个数据模型生成一段简洁的中文描述（20-60 字），类似 API Reference 中 class/interface 顶部的 description。
+
+要求：
+1. 描述应说明该模型的**业务角色和职责**（例如"表示一次 API 调用的请求参数，封装了模型选择、消息列表和采样配置"）
+2. 参考模型名称、字段组合、继承关系推断语义
+3. 不要简单重复模型名称或字段列表，要概括模型的整体用途
+4. 不确定时使用保守但有信息量的描述
+
+严格输出 JSON 数组，每个元素包含 name 和 description 字段。不要输出任何其他内容。`;
+
+/** 配置文件级增强的 system prompt */
+const CONFIG_FILE_SYSTEM_PROMPT = `你是一个项目配置文件分析专家。根据提供的配置文件信息（文件名、格式、包含的配置项键名列表），
+为每个配置文件生成一段简洁的中文描述（15-40 字），说明该文件在项目中的作用。
+
+要求：
+1. 描述应说明该配置文件**管理什么方面的配置**（例如"Python 项目元数据与构建配置，定义依赖、脚本和工具链选项"）
+2. 基于文件名和配置项键名推断文件的整体职责
+3. 不要简单重复文件名
+
+严格输出 JSON 数组，每个元素包含 name（文件路径）和 description 字段。不要输出任何其他内容。`;
 
 /** 配置项增强的 system prompt */
 const CONFIG_SYSTEM_PROMPT = `你是一个配置文件分析专家。根据提供的配置项信息（键路径、当前值、类型、所属配置文件），
@@ -258,13 +282,86 @@ export async function enrichFieldDescriptions(
 }
 
 // ============================================================
+// 公开 API：enrichModelDescriptions
+// ============================================================
+
+/**
+ * 批量为空 description 的数据模型实体调用 LLM 推断描述
+ * 类似 API Reference 中 class/interface 顶部的描述说明。
+ *
+ * @param models - DataModel 数组
+ * @returns 增强后的 DataModel 数组（深拷贝，不修改原数组）
+ */
+export async function enrichModelDescriptions(
+  models: DataModel[],
+): Promise<DataModel[]> {
+  // 深拷贝，不修改原数组
+  const enriched: DataModel[] = JSON.parse(JSON.stringify(models));
+
+  // 收集 description 为空的模型
+  const modelsNeedingDesc = enriched.filter(
+    (m) => m.description === null || m.description === '',
+  );
+
+  if (modelsNeedingDesc.length === 0) {
+    return enriched;
+  }
+
+  // 检查 LLM 可用性
+  const authResult = detectAuth();
+  if (!authResult.preferred) {
+    return enriched;
+  }
+
+  // 分批处理，每批最多 8 个模型（避免 prompt 过长导致超时或截断）
+  const BATCH_SIZE = 8;
+  for (let i = 0; i < modelsNeedingDesc.length; i += BATCH_SIZE) {
+    const batch = modelsNeedingDesc.slice(i, i + BATCH_SIZE);
+    try {
+      const userPrompt = JSON.stringify(
+        batch.map((m) => ({
+          name: m.name,
+          language: m.language,
+          kind: m.kind,
+          file: m.filePath,
+          bases: m.bases,
+          fields: m.fields.map((f) => `${f.name}: ${f.typeStr}`),
+        })),
+      );
+
+      const response = await callLLMSimple(MODEL_SYSTEM_PROMPT, userPrompt);
+      if (!response) continue;
+
+      const rawParsed = extractJsonArray(response);
+      const parsed = EnrichBatchResultSchema.safeParse(rawParsed);
+      if (!parsed.success) continue;
+
+      // 匹配回模型并添加 [AI] 前缀
+      for (const result of parsed.data) {
+        const model = enriched.find((m) => m.name === result.name);
+        if (model && (model.description === null || model.description === '')) {
+          model.description = `${AI_PREFIX}${result.description}`;
+        }
+      }
+    } catch {
+      // 单批次失败时静默跳过，不中断其他批次
+      continue;
+    }
+  }
+
+  return enriched;
+}
+
+// ============================================================
 // 公开 API：enrichConfigDescriptions
 // ============================================================
 
 /**
- * 批量为空 description 的配置项调用 LLM 推断说明
+ * 批量为空 description 的配置项和配置文件调用 LLM 推断说明
  *
- * 处理逻辑与 enrichFieldDescriptions 类似，按配置文件分组。
+ * 处理两个层级：
+ * 1. 文件级描述：每个配置文件的整体作用说明
+ * 2. 配置项级描述：每个配置项的作用说明
  *
  * @param files - ConfigFileResult 数组
  * @returns 增强后的 ConfigFileResult 数组（深拷贝）
@@ -275,35 +372,60 @@ export async function enrichConfigDescriptions(
   // 深拷贝，不修改原数组
   const enriched: ConfigFileResult[] = JSON.parse(JSON.stringify(files));
 
-  // 收集需要增强的文件（包含 description 为空字符串的配置项）
-  const filesWithEmptyDesc = enriched.filter((file) =>
-    file.entries.some(
-      (e) => e.description === '' && !e.description.startsWith(AI_PREFIX),
-    ),
-  );
-
-  // 无空 description，直接返回
-  if (filesWithEmptyDesc.length === 0) {
-    return enriched;
-  }
-
-  // 检查 LLM 可用性
+  // 检查 LLM 可用性（提前返回避免后续两层调用）
   const authResult = detectAuth();
   if (!authResult.preferred) {
     return enriched;
   }
 
-  // 按文件逐个调用 LLM
-  for (const file of filesWithEmptyDesc) {
+  // ---- 第一层：文件级描述增强 ----
+  const filesNeedingDesc = enriched.filter(
+    (f) => !f.description || f.description === '',
+  );
+
+  if (filesNeedingDesc.length > 0) {
     try {
-      // 收集该文件中需要增强的配置项
+      const filePrompt = JSON.stringify(
+        filesNeedingDesc.map((f) => ({
+          name: f.filePath,
+          format: f.format,
+          topKeys: f.entries.slice(0, 10).map((e) => e.keyPath),
+        })),
+      );
+
+      const fileResponse = await callLLMSimple(CONFIG_FILE_SYSTEM_PROMPT, filePrompt);
+      if (fileResponse) {
+        const rawParsed = extractJsonArray(fileResponse);
+        const parsed = EnrichBatchResultSchema.safeParse(rawParsed);
+        if (parsed.success) {
+          for (const result of parsed.data) {
+            const file = enriched.find((f) => f.filePath === result.name);
+            if (file && (!file.description || file.description === '')) {
+              file.description = `${AI_PREFIX}${result.description}`;
+            }
+          }
+        }
+      }
+    } catch {
+      // 文件级增强失败不阻断配置项级增强
+    }
+  }
+
+  // ---- 第二层：配置项级描述增强 ----
+  const filesWithEmptyEntries = enriched.filter((file) =>
+    file.entries.some(
+      (e) => e.description === '' && !e.description.startsWith(AI_PREFIX),
+    ),
+  );
+
+  for (const file of filesWithEmptyEntries) {
+    try {
       const emptyEntries = file.entries.filter(
         (e) => e.description === '' && !e.description.startsWith(AI_PREFIX),
       );
 
       if (emptyEntries.length === 0) continue;
 
-      // 构造 user prompt
       const userPrompt = JSON.stringify({
         file: file.filePath,
         format: file.format,
@@ -317,12 +439,10 @@ export async function enrichConfigDescriptions(
       const response = await callLLMSimple(CONFIG_SYSTEM_PROMPT, userPrompt);
       if (!response) continue;
 
-      // 解析并验证响应
       const rawParsed = extractJsonArray(response);
       const parsed = EnrichBatchResultSchema.safeParse(rawParsed);
       if (!parsed.success) continue;
 
-      // 匹配回配置项并添加 [AI] 前缀
       for (const result of parsed.data) {
         const entry = file.entries.find((e) => e.keyPath === result.name);
         if (entry && entry.description === '') {
@@ -330,7 +450,6 @@ export async function enrichConfigDescriptions(
         }
       }
     } catch {
-      // 单个文件失败时静默跳过
       continue;
     }
   }
