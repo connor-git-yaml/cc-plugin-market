@@ -4,9 +4,11 @@
  * 导出内容：
  * - 全部输出类型和 Zod Schema（types.ts）
  * - AbstractArtifactParser 抽象基类
+ * - AbstractConfigParser 配置解析器抽象基类
+ * - CommentTracker 注释累积跟踪器
  * - SkillMdParser / BehaviorYamlParser / DockerfileParser 具体实现
  * - YamlConfigParser / EnvConfigParser / TomlConfigParser 配置解析器
- * - inferType 辅助函数
+ * - inferType / stripQuotes 辅助函数
  */
 
 // 类型和 Schema
@@ -20,6 +22,7 @@ export type {
   DockerfileInfo,
   ConfigEntry,
   ConfigEntries,
+  ConfigValueType,
 } from './types.js';
 
 export {
@@ -33,10 +36,13 @@ export {
   ConfigEntrySchema,
   ConfigEntriesSchema,
   inferType,
+  stripQuotes,
 } from './types.js';
 
 // 抽象基类
 export { AbstractArtifactParser } from './abstract-artifact-parser.js';
+export { AbstractConfigParser } from './abstract-config-parser.js';
+export { CommentTracker } from './comment-tracker.js';
 
 // 具体 Parser 实现
 export { SkillMdParser } from './skill-md-parser.js';

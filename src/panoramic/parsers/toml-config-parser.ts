@@ -14,36 +14,25 @@
  *
  * 容错降级：解析失败返回 { entries: [] }
  */
-import { AbstractArtifactParser } from './abstract-artifact-parser.js';
-import { inferType } from './types.js';
-import type { ConfigEntries } from './types.js';
+import { AbstractConfigParser } from './abstract-config-parser.js';
+import { inferType, stripQuotes } from './types.js';
+import { CommentTracker } from './comment-tracker.js';
+import type { ConfigEntry } from './types.js';
 
 /**
  * TOML 配置文件解析器
- * 实现 ArtifactParser<ConfigEntries> 接口
+ * 继承 AbstractConfigParser，只需实现 parseContent()
  */
-export class TomlConfigParser extends AbstractArtifactParser<ConfigEntries> {
+export class TomlConfigParser extends AbstractConfigParser {
   readonly id = 'toml-config' as const;
   readonly name = 'TOML Config Parser' as const;
   readonly filePatterns = ['**/*.toml'] as const;
 
   /**
-   * 从 TOML 配置文件内容解析为结构化数据
+   * 从 TOML 配置文件内容解析为 ConfigEntry 数组
    */
-  protected doParse(content: string, _filePath: string): ConfigEntries {
-    // 空内容直接返回降级结果
-    if (!content.trim()) {
-      return this.createFallback();
-    }
-
-    return { entries: parseTomlContent(content) };
-  }
-
-  /**
-   * 降级结果
-   */
-  protected createFallback(): ConfigEntries {
-    return { entries: [] };
+  protected parseContent(content: string): ConfigEntry[] {
+    return parseTomlContent(content);
   }
 }
 
@@ -53,29 +42,25 @@ export class TomlConfigParser extends AbstractArtifactParser<ConfigEntries> {
  * @param content - TOML 文件的文本内容
  * @returns ConfigEntry 数组
  */
-export function parseTomlContent(content: string): ConfigEntries['entries'] {
-  const entries: ConfigEntries['entries'] = [];
+export function parseTomlContent(content: string): ConfigEntry[] {
+  const entries: ConfigEntry[] = [];
   const lines = content.split('\n');
   let currentSection = '';
-  let pendingComment = '';
+  const tracker = new CommentTracker();
 
   for (const line of lines) {
     const trimmed = line.trim();
 
     // 空行重置 pending comment
     if (trimmed === '') {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
     // 注释行
     if (trimmed.startsWith('#')) {
       const commentText = trimmed.replace(/^#\s*/, '');
-      if (pendingComment) {
-        pendingComment += ' ' + commentText;
-      } else {
-        pendingComment = commentText;
-      }
+      tracker.append(commentText);
       continue;
     }
 
@@ -83,14 +68,14 @@ export function parseTomlContent(content: string): ConfigEntries['entries'] {
     const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
     if (sectionMatch) {
       currentSection = sectionMatch[1]!.trim();
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
     // key = value 匹配
     const kvMatch = trimmed.match(/^([\w][\w.-]*)\s*=\s*(.+)$/);
     if (!kvMatch) {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
@@ -109,14 +94,10 @@ export function parseTomlContent(content: string): ConfigEntries['entries'] {
     }
 
     // 去除引号
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
+    value = stripQuotes(value);
 
     const keyPath = currentSection ? `${currentSection}.${key}` : key;
+    const pendingComment = tracker.consume();
     const description = pendingComment || inlineComment;
 
     entries.push({
@@ -125,8 +106,6 @@ export function parseTomlContent(content: string): ConfigEntries['entries'] {
       defaultValue: value,
       description,
     });
-
-    pendingComment = '';
   }
 
   return entries;

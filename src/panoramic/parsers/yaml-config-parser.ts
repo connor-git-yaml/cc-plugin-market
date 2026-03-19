@@ -13,36 +13,25 @@
  *
  * 容错降级：解析失败返回 { entries: [] }
  */
-import { AbstractArtifactParser } from './abstract-artifact-parser.js';
-import { inferType } from './types.js';
-import type { ConfigEntries } from './types.js';
+import { AbstractConfigParser } from './abstract-config-parser.js';
+import { inferType, stripQuotes } from './types.js';
+import { CommentTracker } from './comment-tracker.js';
+import type { ConfigEntry } from './types.js';
 
 /**
  * YAML 配置文件解析器
- * 实现 ArtifactParser<ConfigEntries> 接口
+ * 继承 AbstractConfigParser，只需实现 parseContent()
  */
-export class YamlConfigParser extends AbstractArtifactParser<ConfigEntries> {
+export class YamlConfigParser extends AbstractConfigParser {
   readonly id = 'yaml-config' as const;
   readonly name = 'YAML Config Parser' as const;
   readonly filePatterns = ['**/*.yaml', '**/*.yml'] as const;
 
   /**
-   * 从 YAML 配置文件内容解析为结构化数据
+   * 从 YAML 配置文件内容解析为 ConfigEntry 数组
    */
-  protected doParse(content: string, _filePath: string): ConfigEntries {
-    // 空内容直接返回降级结果
-    if (!content.trim()) {
-      return this.createFallback();
-    }
-
-    return { entries: parseYamlContent(content) };
-  }
-
-  /**
-   * 降级结果
-   */
-  protected createFallback(): ConfigEntries {
-    return { entries: [] };
+  protected parseContent(content: string): ConfigEntry[] {
+    return parseYamlContent(content);
   }
 }
 
@@ -53,38 +42,34 @@ export class YamlConfigParser extends AbstractArtifactParser<ConfigEntries> {
  * @param content - YAML 文件的文本内容
  * @returns ConfigEntry 数组
  */
-export function parseYamlContent(content: string): ConfigEntries['entries'] {
-  const entries: ConfigEntries['entries'] = [];
+export function parseYamlContent(content: string): ConfigEntry[] {
+  const entries: ConfigEntry[] = [];
   const lines = content.split('\n');
 
   // 用缩进堆栈跟踪当前路径
   const pathStack: Array<{ indent: number; key: string }> = [];
-  let pendingComment = '';
+  const tracker = new CommentTracker();
 
   for (const line of lines) {
     const trimmed = line.trimEnd();
 
     // 空行重置 pending comment
     if (trimmed.trim() === '') {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
     // 纯注释行
     if (/^\s*#/.test(trimmed)) {
       const commentText = trimmed.replace(/^\s*#\s*/, '');
-      if (pendingComment) {
-        pendingComment += ' ' + commentText;
-      } else {
-        pendingComment = commentText;
-      }
+      tracker.append(commentText);
       continue;
     }
 
     // 匹配 key: value 或 key: (纯嵌套头)
     const match = trimmed.match(/^(\s*)([\w][\w.-]*)\s*:\s*(.*?)$/);
     if (!match) {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
@@ -111,15 +96,8 @@ export function parseYamlContent(content: string): ConfigEntries['entries'] {
 
     // 有值 -> 叶节点
     if (rawValue !== '') {
-      // 去除引号
-      let cleanValue = rawValue;
-      if (
-        (cleanValue.startsWith('"') && cleanValue.endsWith('"')) ||
-        (cleanValue.startsWith("'") && cleanValue.endsWith("'"))
-      ) {
-        cleanValue = cleanValue.slice(1, -1);
-      }
-
+      const cleanValue = stripQuotes(rawValue);
+      const pendingComment = tracker.consume();
       const description = pendingComment || inlineComment;
       entries.push({
         keyPath,
@@ -127,10 +105,10 @@ export function parseYamlContent(content: string): ConfigEntries['entries'] {
         defaultValue: cleanValue,
         description,
       });
+    } else {
+      // 无值 -> 父节点（不作为 entry，但保留在堆栈中）
+      tracker.consume(); // 消费注释但不使用
     }
-    // 无值 -> 父节点（不作为 entry，但保留在堆栈中）
-
-    pendingComment = '';
   }
 
   return entries;

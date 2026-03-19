@@ -10,11 +10,11 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Handlebars from 'handlebars';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from './interfaces.js';
 import type { ConfigEntry } from './parsers/types.js';
 import { ArtifactParserRegistry } from './parser-registry.js';
 import type { ConfigEntries } from './parsers/types.js';
+import { loadTemplate } from './utils/template-loader.js';
 
 // ============================================================
 // 类型定义
@@ -114,9 +114,6 @@ export class ConfigReferenceGenerator
   readonly name = '配置参考手册生成器' as const;
   readonly description = '从 YAML/TOML/.env 配置文件生成配置参考手册，包含每个配置项的名称、类型、默认值、说明';
 
-  /** 缓存编译后的 Handlebars 模板 */
-  private compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
-
   /**
    * 判断当前项目是否包含支持的配置文件
    */
@@ -196,7 +193,7 @@ export class ConfigReferenceGenerator
    * 使用 Handlebars 模板渲染为 Markdown
    */
   render(output: ConfigReferenceOutput): string {
-    const template = this.getCompiledTemplate();
+    const template = loadTemplate('config-reference.hbs', import.meta.url);
     return template(output);
   }
 
@@ -280,39 +277,4 @@ export class ConfigReferenceGenerator
     }
   }
 
-  /**
-   * 获取编译后的 Handlebars 模板（带缓存）
-   */
-  private getCompiledTemplate(): ReturnType<typeof Handlebars.compile> {
-    if (this.compiledTemplate) return this.compiledTemplate;
-
-    // 查找模板文件：从 src/panoramic/ 向上查找到项目根目录的 templates/
-    const templatePath = this.findTemplatePath();
-    const templateSource = fs.readFileSync(templatePath, 'utf-8');
-    this.compiledTemplate = Handlebars.compile(templateSource);
-    return this.compiledTemplate;
-  }
-
-  /**
-   * 查找 config-reference.hbs 模板文件路径
-   */
-  private findTemplatePath(): string {
-    // 从当前文件位置向上查找 templates/ 目录
-    let dir = path.dirname(new URL(import.meta.url).pathname);
-    for (let i = 0; i < 5; i++) {
-      const candidate = path.join(dir, 'templates', 'config-reference.hbs');
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-      dir = path.dirname(dir);
-    }
-
-    // 降级：尝试相对于 __dirname 的常见路径
-    const fallback = path.join(process.cwd(), 'templates', 'config-reference.hbs');
-    if (fs.existsSync(fallback)) {
-      return fallback;
-    }
-
-    throw new Error('无法找到 config-reference.hbs 模板文件');
-  }
 }

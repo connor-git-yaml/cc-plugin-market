@@ -23,8 +23,8 @@ const KV_LINE_RE = /^(\w[\w-]*):\s*(.*)$/;
 /** 一级标题匹配正则 */
 const H1_RE = /^#\s+(.+)$/m;
 
-/** 二级标题匹配正则（全局，用于分割） */
-const H2_RE = /^##\s+(.+)$/gm;
+/** 二级标题匹配正则（非全局，matchAll 时动态创建全局版本） */
+const H2_RE = /^##\s+(.+)$/m;
 
 /**
  * SKILL.md 文件解析器
@@ -94,17 +94,15 @@ export class SkillMdParser extends AbstractArtifactParser<SkillMdInfo> {
 
   /**
    * 按 ## 二级标题分割 body，提取每个分段的 heading 和 content
+   * 使用 matchAll + 新建全局正则，避免共享全局正则的 lastIndex 状态污染
    */
   private extractSections(body: string): SkillMdSection[] {
     const sections: SkillMdSection[] = [];
 
-    // 找到所有 ## 标题的位置
+    // 找到所有 ## 标题的位置（使用 matchAll 避免全局正则状态问题）
     const matches: Array<{ heading: string; index: number }> = [];
-    // 重置正则状态
-    H2_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = H2_RE.exec(body)) !== null) {
-      matches.push({ heading: m[1]!.trim(), index: m.index });
+    for (const m of body.matchAll(new RegExp(H2_RE.source, 'gm'))) {
+      matches.push({ heading: m[1]!.trim(), index: m.index! });
     }
 
     if (matches.length === 0) return sections;

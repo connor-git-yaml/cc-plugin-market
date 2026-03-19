@@ -12,36 +12,25 @@
  *
  * 容错降级：解析失败返回 { entries: [] }
  */
-import { AbstractArtifactParser } from './abstract-artifact-parser.js';
-import { inferType } from './types.js';
-import type { ConfigEntries } from './types.js';
+import { AbstractConfigParser } from './abstract-config-parser.js';
+import { inferType, stripQuotes } from './types.js';
+import { CommentTracker } from './comment-tracker.js';
+import type { ConfigEntry } from './types.js';
 
 /**
  * .env 配置文件解析器
- * 实现 ArtifactParser<ConfigEntries> 接口
+ * 继承 AbstractConfigParser，只需实现 parseContent()
  */
-export class EnvConfigParser extends AbstractArtifactParser<ConfigEntries> {
+export class EnvConfigParser extends AbstractConfigParser {
   readonly id = 'env-config' as const;
   readonly name = '.env Config Parser' as const;
   readonly filePatterns = ['**/.env', '**/.env.*'] as const;
 
   /**
-   * 从 .env 文件内容解析为结构化数据
+   * 从 .env 文件内容解析为 ConfigEntry 数组
    */
-  protected doParse(content: string, _filePath: string): ConfigEntries {
-    // 空内容直接返回降级结果
-    if (!content.trim()) {
-      return this.createFallback();
-    }
-
-    return { entries: parseEnvContent(content) };
-  }
-
-  /**
-   * 降级结果
-   */
-  protected createFallback(): ConfigEntries {
-    return { entries: [] };
+  protected parseContent(content: string): ConfigEntry[] {
+    return parseEnvContent(content);
   }
 }
 
@@ -51,57 +40,43 @@ export class EnvConfigParser extends AbstractArtifactParser<ConfigEntries> {
  * @param content - .env 文件的文本内容
  * @returns ConfigEntry 数组
  */
-export function parseEnvContent(content: string): ConfigEntries['entries'] {
-  const entries: ConfigEntries['entries'] = [];
+export function parseEnvContent(content: string): ConfigEntry[] {
+  const entries: ConfigEntry[] = [];
   const lines = content.split('\n');
-  let pendingComment = '';
+  const tracker = new CommentTracker();
 
   for (const line of lines) {
     const trimmed = line.trim();
 
     // 空行重置 pending comment
     if (trimmed === '') {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
     // 注释行
     if (trimmed.startsWith('#')) {
       const commentText = trimmed.replace(/^#\s*/, '');
-      if (pendingComment) {
-        pendingComment += ' ' + commentText;
-      } else {
-        pendingComment = commentText;
-      }
+      tracker.append(commentText);
       continue;
     }
 
     // KEY=VALUE 匹配
     const match = trimmed.match(/^([A-Za-z_][\w.]*)\s*=\s*(.*)$/);
     if (!match) {
-      pendingComment = '';
+      tracker.reset();
       continue;
     }
 
     const key = match[1]!;
-    let value = match[2]!;
-
-    // 去除引号
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
+    const value = stripQuotes(match[2]!);
 
     entries.push({
       keyPath: key,
       type: inferType(value),
       defaultValue: value,
-      description: pendingComment,
+      description: tracker.consume(),
     });
-
-    pendingComment = '';
   }
 
   return entries;

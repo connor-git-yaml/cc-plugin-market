@@ -118,7 +118,7 @@ export const ConfigEntrySchema = z.object({
   /** 点号分隔的配置项路径（如 database.host） */
   keyPath: z.string(),
   /** 推断的值类型（string/number/boolean/null/array/object） */
-  type: z.string(),
+  type: z.enum(['string', 'number', 'boolean', 'null', 'array', 'object']),
   /** 当前值的字符串表示 */
   defaultValue: z.string(),
   /** 从注释提取的说明文本 */
@@ -141,6 +141,13 @@ export const ConfigEntriesSchema = z.object({
 export type ConfigEntries = z.infer<typeof ConfigEntriesSchema>;
 
 // ============================================================
+// ConfigValueType 枚举
+// ============================================================
+
+/** 配置值类型枚举 */
+export type ConfigValueType = 'string' | 'number' | 'boolean' | 'null' | 'array' | 'object';
+
+// ============================================================
 // 配置解析辅助函数
 // ============================================================
 
@@ -148,7 +155,7 @@ export type ConfigEntries = z.infer<typeof ConfigEntriesSchema>;
  * 从字符串值推断类型
  * 供 YamlConfigParser、EnvConfigParser、TomlConfigParser 共用
  */
-export function inferType(value: string): string {
+export function inferType(value: string): ConfigValueType {
   const trimmed = value.trim();
 
   if (trimmed === '' || trimmed === 'null' || trimmed === '~') return 'null';
@@ -159,4 +166,18 @@ export function inferType(value: string): string {
   if (trimmed.startsWith('{')) return 'object';
 
   return 'string';
+}
+
+/**
+ * 去除首尾匹配的引号（双引号或单引号）
+ * 仅当首尾引号类型相同时才去除
+ */
+export function stripQuotes(value: string): string {
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
 }

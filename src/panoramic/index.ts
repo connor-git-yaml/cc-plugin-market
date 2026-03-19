@@ -43,6 +43,7 @@ export { ConfigReferenceGenerator } from './config-reference-generator.js';
 export { DataModelGenerator } from './data-model-generator.js';
 export {
   WorkspaceIndexGenerator,
+  extractWorkspaceData,
   type WorkspacePackageInfo,
   type WorkspaceInput,
   type WorkspaceOutput,
@@ -63,3 +64,8 @@ export * from './parsers/index.js';
 
 // ProjectContext 构建
 export { buildProjectContext } from './project-context.js';
+
+// 基类和工具
+export { AbstractRegistry } from './abstract-registry.js';
+export { loadTemplate, resetTemplateCache } from './utils/template-loader.js';
+export { sanitizeMermaidId } from './utils/mermaid-helpers.js';

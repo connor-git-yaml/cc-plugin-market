@@ -15,14 +15,14 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import Handlebars from 'handlebars';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from './interfaces.js';
 import type { CodeSkeleton, ExportSymbol } from '../models/code-skeleton.js';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
+import { sanitizeMermaidId } from './utils/mermaid-helpers.js';
+import { loadTemplate } from './utils/template-loader.js';
 
 // ============================================================
 // Zod Schema + TypeScript 类型
@@ -419,19 +419,26 @@ export function buildModelRelations(models: DataModel[]): ModelRelation[] {
   return relations;
 }
 
+/** 按 targetName 缓存已编译的集合类型匹配正则数组 */
+const collectionRegexCache = new Map<string, RegExp[]>();
+
 /**
  * 判断字段类型是否为集合引用
+ * 正则按 targetName 缓存，避免每次调用重新 new RegExp()
  */
 function isCollectionType(typeStr: string, targetName: string): boolean {
-  // Python: List[Model], Set[Model], Sequence[Model]
-  // TypeScript: Model[], Array<Model>
-  const patterns = [
-    new RegExp(`List\\[.*${escapeRegex(targetName)}`),
-    new RegExp(`Set\\[.*${escapeRegex(targetName)}`),
-    new RegExp(`Sequence\\[.*${escapeRegex(targetName)}`),
-    new RegExp(`${escapeRegex(targetName)}\\[\\]`),
-    new RegExp(`Array<.*${escapeRegex(targetName)}`),
-  ];
+  let patterns = collectionRegexCache.get(targetName);
+  if (!patterns) {
+    const escaped = escapeRegex(targetName);
+    patterns = [
+      new RegExp(`List\\[.*${escaped}`),
+      new RegExp(`Set\\[.*${escaped}`),
+      new RegExp(`Sequence\\[.*${escaped}`),
+      new RegExp(`${escaped}\\[\\]`),
+      new RegExp(`Array<.*${escaped}`),
+    ];
+    collectionRegexCache.set(targetName, patterns);
+  }
   return patterns.some(p => p.test(typeStr));
 }
 
@@ -491,13 +498,6 @@ export function generateMermaidErDiagram(
 }
 
 /**
- * 清理 Mermaid 标识符（移除不允许的字符）
- */
-function sanitizeMermaidId(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_');
-}
-
-/**
  * 将复杂类型字符串转换为 Mermaid 友好格式
  */
 function sanitizeMermaidType(typeStr: string): string {
@@ -510,23 +510,6 @@ function sanitizeMermaidType(typeStr: string): string {
     .replace(/\|/g, '_')
     .replace(/\s/g, '')
     .replace(/[^a-zA-Z0-9_?]/g, '');
-}
-
-// ============================================================
-// Handlebars 模板
-// ============================================================
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_PATH = path.join(__dirname, '..', '..', 'templates', 'data-model.hbs');
-
-let compiledTemplate: Handlebars.TemplateDelegate | null = null;
-
-function getTemplate(): Handlebars.TemplateDelegate {
-  if (compiledTemplate) return compiledTemplate;
-
-  const templateSrc = fs.readFileSync(TEMPLATE_PATH, 'utf-8');
-  compiledTemplate = Handlebars.compile(templateSrc, { noEscape: true });
-  return compiledTemplate;
 }
 
 // ============================================================
@@ -673,7 +656,7 @@ export class DataModelGenerator
       ].join('\n');
     }
 
-    const template = getTemplate();
+    const template = loadTemplate('data-model.hbs', import.meta.url);
 
     // 按语言分组
     const pythonModels = output.models.filter(m => m.language === 'python');

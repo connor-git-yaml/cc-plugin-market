@@ -8,6 +8,7 @@
  * - 管理 Generator 的启用/禁用状态
  *
  * 设计决策：
+ * - 继承 AbstractRegistry<DocumentGenerator, GeneratorEntry> 复用通用逻辑
  * - 单例模式参考 LanguageAdapterRegistry，保证全局唯一性
  * - 启用/禁用状态由 Registry 拥有（独立 Map），不修改外部 Generator 实例
  * - filterByContext 使用 Promise.resolve() 统一包装同步/异步 isApplicable
@@ -16,8 +17,10 @@
  * 生命周期：进程级单例，CLI 和 MCP 入口各自在启动时通过 bootstrapGenerators() 完成注册。
  */
 
+import type { z } from 'zod';
 import type { DocumentGenerator, ProjectContext } from './interfaces.js';
 import { GeneratorMetadataSchema } from './interfaces.js';
+import { AbstractRegistry } from './abstract-registry.js';
 import { MockReadmeGenerator } from './mock-readme-generator.js';
 import { ConfigReferenceGenerator } from './config-reference-generator.js';
 import { DataModelGenerator } from './data-model-generator.js';
@@ -48,23 +51,12 @@ export interface GeneratorEntry {
  * 维护 id 到 DocumentGenerator 实例的映射以及每个 Generator 的启用/禁用状态。
  * 进程级单例，全局唯一。
  */
-export class GeneratorRegistry {
+export class GeneratorRegistry extends AbstractRegistry<DocumentGenerator<any, any>, GeneratorEntry> {
   /** 单例实例 */
   private static instance: GeneratorRegistry | null = null;
 
-  /** id -> Generator 实例映射 */
-  private generators: Map<string, DocumentGenerator<any, any>>;
-
-  /** id -> 启用/禁用状态映射 */
-  private enabledState: Map<string, boolean>;
-
-  /** 按注册顺序维护的有序列表 */
-  private generatorOrder: DocumentGenerator<any, any>[];
-
   private constructor() {
-    this.generators = new Map();
-    this.enabledState = new Map();
-    this.generatorOrder = [];
+    super();
   }
 
   /**
@@ -85,68 +77,44 @@ export class GeneratorRegistry {
     GeneratorRegistry.instance = null;
   }
 
-  /**
-   * 注册 DocumentGenerator 实例
-   *
-   * 两阶段验证：
-   * 1. Phase A — 使用 GeneratorMetadataSchema 验证 id/name/description 格式
-   * 2. Phase B — 检查 id 冲突，已存在时抛出错误
-   * 任一阶段失败均不修改内部状态。
-   *
-   * @param generator - DocumentGenerator 实例
-   * @throws Error id 格式不符合 kebab-case 或已存在冲突时
-   */
-  register(generator: DocumentGenerator<any, any>): void {
-    // Phase A: 使用 Zod Schema 验证元数据格式
-    const parseResult = GeneratorMetadataSchema.safeParse({
-      id: generator.id,
-      name: generator.name,
-      description: generator.description,
-    });
+  // ============================================================
+  // AbstractRegistry 抽象方法实现
+  // ============================================================
 
-    if (!parseResult.success) {
-      throw new Error(
-        `Generator id 格式错误: '${generator.id}' 不符合 kebab-case 格式（要求匹配 /^[a-z][a-z0-9-]*$/）`,
-      );
+  protected getMetadataSchema(): z.ZodSchema {
+    return GeneratorMetadataSchema;
+  }
+
+  protected extractMetadata(item: DocumentGenerator<any, any>): { id: string; name: string; description: string } {
+    return {
+      id: item.id,
+      name: item.name,
+      description: item.description,
+    };
+  }
+
+  protected buildEntry(item: DocumentGenerator<any, any>, enabled: boolean): GeneratorEntry {
+    return { generator: item, enabled };
+  }
+
+  // ============================================================
+  // 重写方法（保持向后兼容的错误消息）
+  // ============================================================
+
+  /**
+   * 切换 Generator 的启用/禁用状态
+   * 重写基类方法以保持向后兼容的错误消息前缀
+   */
+  setEnabled(id: string, enabled: boolean): void {
+    if (!this.items.has(id)) {
+      throw new Error(`Generator '${id}' not found in registry`);
     }
-
-    // Phase B: 检查 id 冲突
-    const existing = this.generators.get(generator.id);
-    if (existing) {
-      throw new Error(
-        `Generator id 冲突: '${generator.id}'（name: '${existing.name}'）已注册，` +
-        `无法再注册 '${generator.id}'（name: '${generator.name}'）`,
-      );
-    }
-
-    // 提交：同时写入三个数据结构
-    this.generators.set(generator.id, generator);
-    this.enabledState.set(generator.id, true);
-    this.generatorOrder.push(generator);
+    this.enabledState.set(id, enabled);
   }
 
-  /**
-   * 按 id 查询单个已注册的 Generator 实例
-   *
-   * @param id - Generator 唯一标识符
-   * @returns 匹配的 Generator 实例，未命中返回 undefined
-   */
-  get(id: string): DocumentGenerator<any, any> | undefined {
-    return this.generators.get(id);
-  }
-
-  /**
-   * 全量列出所有已注册 Generator 及其启用/禁用状态
-   * 返回新数组（防御性拷贝），按注册顺序排列
-   *
-   * @returns GeneratorEntry 数组
-   */
-  list(): GeneratorEntry[] {
-    return this.generatorOrder.map((generator) => ({
-      generator,
-      enabled: this.enabledState.get(generator.id) ?? true,
-    }));
-  }
+  // ============================================================
+  // 领域特有方法
+  // ============================================================
 
   /**
    * 按项目上下文过滤适用的 Generator
@@ -166,7 +134,7 @@ export class GeneratorRegistry {
     const enabledGenerators: DocumentGenerator<any, any>[] = [];
     const applicableChecks: Promise<boolean>[] = [];
 
-    for (const generator of this.generatorOrder) {
+    for (const generator of this.itemOrder) {
       if (this.enabledState.get(generator.id) === false) {
         continue;
       }
@@ -205,28 +173,6 @@ export class GeneratorRegistry {
     }
 
     return applicable;
-  }
-
-  /**
-   * 切换 Generator 的启用/禁用状态
-   *
-   * @param id - Generator 唯一标识符
-   * @param enabled - 目标状态（true: 启用, false: 禁用）
-   * @throws Error 指定 id 不存在时
-   */
-  setEnabled(id: string, enabled: boolean): void {
-    if (!this.generators.has(id)) {
-      throw new Error(`Generator '${id}' not found in registry`);
-    }
-    this.enabledState.set(id, enabled);
-  }
-
-  /**
-   * 检查 Registry 是否为空（无任何已注册 Generator）
-   * 用于区分"未初始化"和"无适用 Generator"两种状态。
-   */
-  isEmpty(): boolean {
-    return this.generatorOrder.length === 0;
   }
 }
 

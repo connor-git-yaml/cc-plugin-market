@@ -17,14 +17,14 @@
  *
  * @module panoramic/cross-package-analyzer
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Handlebars from 'handlebars';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from './interfaces.js';
 import type { WorkspacePackageInfo } from './workspace-index-generator.js';
-import { WorkspaceIndexGenerator, _sanitizeMermaidId } from './workspace-index-generator.js';
+import { extractWorkspaceData } from './workspace-index-generator.js';
 import type { DependencyGraph, GraphNode, DependencyEdge } from '../models/dependency-graph.js';
 import { detectSCCs, topologicalSort } from '../graph/topological-sort.js';
+import { sanitizeMermaidId } from './utils/mermaid-helpers.js';
+import { loadTemplate } from './utils/template-loader.js';
 
 // ============================================================
 // 类型定义（T004-T006）
@@ -144,7 +144,7 @@ function buildCrossPackageMermaid(
 
   // 添加所有节点
   for (const node of graph.modules) {
-    const nodeId = _sanitizeMermaidId(node.source);
+    const nodeId = sanitizeMermaidId(node.source);
     if (sccNodeSet.has(node.source)) {
       // SCC 内部节点添加 cycle 样式类
       lines.push(`    ${nodeId}["${node.source}"]:::cycle`);
@@ -160,8 +160,8 @@ function buildCrossPackageMermaid(
   let edgeIndex = 0;
 
   for (const edge of graph.edges) {
-    const sourceId = _sanitizeMermaidId(edge.from);
-    const targetId = _sanitizeMermaidId(edge.to);
+    const sourceId = sanitizeMermaidId(edge.from);
+    const targetId = sanitizeMermaidId(edge.to);
     const edgeKey = `${edge.from}->${edge.to}`;
 
     if (sccEdgeSet.has(edgeKey)) {
@@ -212,9 +212,6 @@ export class CrossPackageAnalyzer
   readonly name = '跨包依赖分析器' as const;
   readonly description = '分析 Monorepo 子包间的依赖关系，检测循环依赖并生成拓扑图';
 
-  /** 缓存编译后的 Handlebars 模板 */
-  private compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
-
   /**
    * 判断当前项目是否适用此 Generator（T014）
    * 仅当 workspaceType === 'monorepo' 时返回 true
@@ -230,9 +227,8 @@ export class CrossPackageAnalyzer
    * 2. 将 WorkspacePackageInfo[] 转换为 DependencyGraph
    */
   async extract(context: ProjectContext): Promise<CrossPackageInput> {
-    // 复用 040 的 extract() 获取子包列表
-    const wig = new WorkspaceIndexGenerator();
-    const workspaceInput = await wig.extract(context);
+    // 复用独立函数获取子包列表（不创建 Generator 实例）
+    const workspaceInput = extractWorkspaceData(context);
 
     const { packages, projectName, workspaceType } = workspaceInput;
 
@@ -418,46 +414,7 @@ export class CrossPackageAnalyzer
    * 使用 Handlebars 模板渲染为 Markdown（T018）
    */
   render(output: CrossPackageOutput): string {
-    const template = this.getCompiledTemplate();
+    const template = loadTemplate('cross-package-analysis.hbs', import.meta.url);
     return template(output);
-  }
-
-  // ============================================================
-  // 私有方法
-  // ============================================================
-
-  /**
-   * 获取编译后的 Handlebars 模板（带缓存）
-   */
-  private getCompiledTemplate(): ReturnType<typeof Handlebars.compile> {
-    if (this.compiledTemplate) return this.compiledTemplate;
-
-    const templatePath = this.findTemplatePath();
-    const templateSource = fs.readFileSync(templatePath, 'utf-8');
-    this.compiledTemplate = Handlebars.compile(templateSource);
-    return this.compiledTemplate;
-  }
-
-  /**
-   * 查找 cross-package-analysis.hbs 模板文件路径
-   */
-  private findTemplatePath(): string {
-    // 从当前文件位置向上查找 templates/ 目录
-    let dir = path.dirname(new URL(import.meta.url).pathname);
-    for (let i = 0; i < 5; i++) {
-      const candidate = path.join(dir, 'templates', 'cross-package-analysis.hbs');
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-      dir = path.dirname(dir);
-    }
-
-    // 降级：尝试相对于 cwd 的路径
-    const fallback = path.join(process.cwd(), 'templates', 'cross-package-analysis.hbs');
-    if (fs.existsSync(fallback)) {
-      return fallback;
-    }
-
-    throw new Error('无法找到 cross-package-analysis.hbs 模板文件');
   }
 }

@@ -19,8 +19,9 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import Handlebars from 'handlebars';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from './interfaces.js';
+import { loadTemplate } from './utils/template-loader.js';
+import { sanitizeMermaidId } from './utils/mermaid-helpers.js';
 
 // ============================================================
 // 类型定义（T001）
@@ -257,17 +258,6 @@ function detectLanguage(packageDir: string): string {
 }
 
 /**
- * 将包名转义为合法的 Mermaid 节点 ID（T008）
- * 替换 @、/、-、. 等特殊字符为 _
- *
- * @param name - 原始包名
- * @returns 合法的 Mermaid 节点 ID
- */
-function sanitizeMermaidId(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, '_');
-}
-
-/**
  * 从子包 pyproject.toml 提取元信息（T021）
  *
  * @param packageDir - 子包目录绝对路径
@@ -364,6 +354,203 @@ function buildMermaidDiagram(packages: WorkspacePackageInfo[]): string {
 }
 
 // ============================================================
+// extractWorkspaceData 独立函数（供 WorkspaceIndexGenerator 和 CrossPackageAnalyzer 复用）
+// ============================================================
+
+/**
+ * 从项目中提取 workspace 信息（T012-T014, T020-T022）
+ * 检测 workspace 管理器类型，解析 members 列表，读取子包元信息
+ *
+ * 此函数为纯函数（不依赖 this），供 WorkspaceIndexGenerator.extract()
+ * 和 CrossPackageAnalyzer.extract() 直接调用，避免重复实例化 Generator。
+ *
+ * @param context - 项目上下文
+ * @returns workspace 信息（项目名、管理器类型、子包列表）
+ */
+export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
+  const projectRoot = context.projectRoot;
+
+  // 尝试获取项目名称
+  let projectName = path.basename(projectRoot);
+
+  // 步骤 1: 检测 workspace 管理器类型并解析 members（T012）
+  let workspaceType: 'npm' | 'pnpm' | 'uv' = 'npm';
+  let memberPatterns: string[] = [];
+
+  // 优先检查 pnpm-workspace.yaml
+  const pnpmWorkspacePath = path.join(projectRoot, 'pnpm-workspace.yaml');
+  if (fs.existsSync(pnpmWorkspacePath)) {
+    try {
+      const content = fs.readFileSync(pnpmWorkspacePath, 'utf-8');
+      memberPatterns = parsePnpmWorkspaceYaml(content);
+      workspaceType = 'pnpm';
+    } catch {
+      console.warn('无法读取 pnpm-workspace.yaml，尝试其他检测方式');
+      memberPatterns = [];
+    }
+  }
+
+  // 其次检查 package.json workspaces
+  if (memberPatterns.length === 0) {
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        const content = fs.readFileSync(packageJsonPath, 'utf-8');
+        const pkg = JSON.parse(content);
+
+        if (pkg.name && typeof pkg.name === 'string') {
+          projectName = pkg.name;
+        }
+
+        if (Array.isArray(pkg.workspaces)) {
+          memberPatterns = pkg.workspaces;
+          workspaceType = 'npm';
+        } else if (pkg.workspaces && Array.isArray(pkg.workspaces.packages)) {
+          memberPatterns = pkg.workspaces.packages;
+          workspaceType = 'npm';
+        }
+      } catch {
+        console.warn('无法解析 package.json');
+      }
+    }
+  }
+
+  // 最后检查 pyproject.toml [tool.uv.workspace]（T020）
+  if (memberPatterns.length === 0) {
+    const pyprojectPath = path.join(projectRoot, 'pyproject.toml');
+    if (fs.existsSync(pyprojectPath)) {
+      try {
+        const content = fs.readFileSync(pyprojectPath, 'utf-8');
+
+        // 提取项目名称
+        const nameMatch = content.match(/\[project\][\s\S]*?^name\s*=\s*["']([^"']+)["']/m);
+        if (nameMatch) {
+          projectName = nameMatch[1]!;
+        }
+
+        if (/\[tool\.uv\.workspace\]/m.test(content)) {
+          memberPatterns = parseUvWorkspaceToml(content);
+          workspaceType = 'uv';
+        }
+      } catch {
+        console.warn('无法解析 pyproject.toml');
+      }
+    }
+  }
+
+  // 也尝试从 pnpm 场景下读取 package.json 获取项目名
+  if (workspaceType === 'pnpm') {
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    try {
+      if (fs.existsSync(packageJsonPath)) {
+        const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+        if (pkg.name && typeof pkg.name === 'string') {
+          projectName = pkg.name;
+        }
+      }
+    } catch {
+      // 使用默认名称
+    }
+  }
+
+  // 步骤 2: glob 展开获取子包目录列表（T013）
+  const packageDirs = expandGlobPatterns(projectRoot, memberPatterns);
+
+  // 步骤 3: 读取子包元信息
+  const packages: WorkspacePackageInfo[] = [];
+
+  if (workspaceType === 'uv') {
+    // uv workspace: 两遍扫描
+    // 第一遍：收集所有子包名称
+    const allNames = new Set<string>();
+    const tempInfos: Array<{ dir: string; relPath: string }> = [];
+
+    for (const dir of packageDirs) {
+      const relPath = path.relative(projectRoot, dir);
+      const pyprojectPath = path.join(dir, 'pyproject.toml');
+      if (!fs.existsSync(pyprojectPath)) continue;
+
+      try {
+        const content = fs.readFileSync(pyprojectPath, 'utf-8');
+        const nameMatch = content.match(/\[project\][\s\S]*?^name\s*=\s*["']([^"']+)["']/m);
+        if (nameMatch) {
+          allNames.add(nameMatch[1]!);
+        }
+      } catch {
+        // 忽略
+      }
+      tempInfos.push({ dir, relPath });
+    }
+
+    // 第二遍：提取完整元信息（T022）
+    for (const { dir, relPath } of tempInfos) {
+      const info = extractPyprojectInfo(dir, allNames);
+      if (info) {
+        info.path = relPath;
+        packages.push(info);
+      }
+    }
+  } else {
+    // npm/pnpm workspace: 读取 package.json
+    // 第一遍：收集所有子包名称
+    const allNames = new Set<string>();
+    const validDirs: Array<{ dir: string; relPath: string; pkg: any }> = [];
+
+    for (const dir of packageDirs) {
+      const relPath = path.relative(projectRoot, dir);
+      const pkgJsonPath = path.join(dir, 'package.json');
+
+      if (!fs.existsSync(pkgJsonPath)) continue;
+
+      try {
+        const content = fs.readFileSync(pkgJsonPath, 'utf-8');
+        const pkg = JSON.parse(content);
+        const name = typeof pkg.name === 'string' ? pkg.name : path.basename(dir);
+        allNames.add(name);
+        validDirs.push({ dir, relPath, pkg });
+      } catch {
+        // JSON 解析失败时记录警告并跳过（T014）
+        console.warn(`无法解析 ${pkgJsonPath}，跳过该子包`);
+      }
+    }
+
+    // 第二遍：提取完整元信息并匹配内部依赖
+    for (const { dir, relPath, pkg } of validDirs) {
+      const name = typeof pkg.name === 'string' ? pkg.name : path.basename(dir);
+      const description = typeof pkg.description === 'string' ? pkg.description : '';
+      const language = detectLanguage(dir);
+
+      // 提取 workspace 内部依赖
+      const dependencies: string[] = [];
+      const allDeps = {
+        ...pkg.dependencies,
+        ...pkg.devDependencies,
+      };
+
+      for (const depName of Object.keys(allDeps)) {
+        if (allNames.has(depName)) {
+          dependencies.push(depName);
+        }
+      }
+
+      packages.push({
+        name,
+        path: relPath,
+        description,
+        language,
+        dependencies,
+      });
+    }
+  }
+
+  return {
+    projectName,
+    workspaceType,
+    packages,
+  };
+}
+
+// ============================================================
 // WorkspaceIndexGenerator 实现（T003）
 // ============================================================
 
@@ -379,9 +566,6 @@ export class WorkspaceIndexGenerator
   readonly name = 'Monorepo 层级架构索引生成器' as const;
   readonly description = '为 Monorepo 项目生成 packages/apps 层级索引文档，包含子包列表和 Mermaid 包级依赖拓扑图';
 
-  /** 缓存编译后的 Handlebars 模板 */
-  private compiledTemplate: ReturnType<typeof Handlebars.compile> | null = null;
-
   /**
    * 判断当前项目是否适用此 Generator（T025）
    * 仅当 workspaceType === 'monorepo' 时返回 true
@@ -392,189 +576,10 @@ export class WorkspaceIndexGenerator
 
   /**
    * 从项目中提取 workspace 信息（T012-T014, T020-T022）
-   * 检测 workspace 管理器类型，解析 members 列表，读取子包元信息
+   * 委托给独立函数 extractWorkspaceData()，便于跨 Generator 复用
    */
   async extract(context: ProjectContext): Promise<WorkspaceInput> {
-    const projectRoot = context.projectRoot;
-
-    // 尝试获取项目名称
-    let projectName = path.basename(projectRoot);
-
-    // 步骤 1: 检测 workspace 管理器类型并解析 members（T012）
-    let workspaceType: 'npm' | 'pnpm' | 'uv' = 'npm';
-    let memberPatterns: string[] = [];
-
-    // 优先检查 pnpm-workspace.yaml
-    const pnpmWorkspacePath = path.join(projectRoot, 'pnpm-workspace.yaml');
-    if (fs.existsSync(pnpmWorkspacePath)) {
-      try {
-        const content = fs.readFileSync(pnpmWorkspacePath, 'utf-8');
-        memberPatterns = parsePnpmWorkspaceYaml(content);
-        workspaceType = 'pnpm';
-      } catch {
-        console.warn('无法读取 pnpm-workspace.yaml，尝试其他检测方式');
-        memberPatterns = [];
-      }
-    }
-
-    // 其次检查 package.json workspaces
-    if (memberPatterns.length === 0) {
-      const packageJsonPath = path.join(projectRoot, 'package.json');
-      if (fs.existsSync(packageJsonPath)) {
-        try {
-          const content = fs.readFileSync(packageJsonPath, 'utf-8');
-          const pkg = JSON.parse(content);
-
-          if (pkg.name && typeof pkg.name === 'string') {
-            projectName = pkg.name;
-          }
-
-          if (Array.isArray(pkg.workspaces)) {
-            memberPatterns = pkg.workspaces;
-            workspaceType = 'npm';
-          } else if (pkg.workspaces && Array.isArray(pkg.workspaces.packages)) {
-            memberPatterns = pkg.workspaces.packages;
-            workspaceType = 'npm';
-          }
-        } catch {
-          console.warn('无法解析 package.json');
-        }
-      }
-    }
-
-    // 最后检查 pyproject.toml [tool.uv.workspace]（T020）
-    if (memberPatterns.length === 0) {
-      const pyprojectPath = path.join(projectRoot, 'pyproject.toml');
-      if (fs.existsSync(pyprojectPath)) {
-        try {
-          const content = fs.readFileSync(pyprojectPath, 'utf-8');
-
-          // 提取项目名称
-          const nameMatch = content.match(/\[project\][\s\S]*?^name\s*=\s*["']([^"']+)["']/m);
-          if (nameMatch) {
-            projectName = nameMatch[1]!;
-          }
-
-          if (/\[tool\.uv\.workspace\]/m.test(content)) {
-            memberPatterns = parseUvWorkspaceToml(content);
-            workspaceType = 'uv';
-          }
-        } catch {
-          console.warn('无法解析 pyproject.toml');
-        }
-      }
-    }
-
-    // 也尝试从 pnpm 场景下读取 package.json 获取项目名
-    if (workspaceType === 'pnpm') {
-      const packageJsonPath = path.join(projectRoot, 'package.json');
-      try {
-        if (fs.existsSync(packageJsonPath)) {
-          const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-          if (pkg.name && typeof pkg.name === 'string') {
-            projectName = pkg.name;
-          }
-        }
-      } catch {
-        // 使用默认名称
-      }
-    }
-
-    // 步骤 2: glob 展开获取子包目录列表（T013）
-    const packageDirs = expandGlobPatterns(projectRoot, memberPatterns);
-
-    // 步骤 3: 读取子包元信息
-    const packages: WorkspacePackageInfo[] = [];
-
-    if (workspaceType === 'uv') {
-      // uv workspace: 两遍扫描
-      // 第一遍：收集所有子包名称
-      const allNames = new Set<string>();
-      const tempInfos: Array<{ dir: string; relPath: string }> = [];
-
-      for (const dir of packageDirs) {
-        const relPath = path.relative(projectRoot, dir);
-        const pyprojectPath = path.join(dir, 'pyproject.toml');
-        if (!fs.existsSync(pyprojectPath)) continue;
-
-        try {
-          const content = fs.readFileSync(pyprojectPath, 'utf-8');
-          const nameMatch = content.match(/\[project\][\s\S]*?^name\s*=\s*["']([^"']+)["']/m);
-          if (nameMatch) {
-            allNames.add(nameMatch[1]!);
-          }
-        } catch {
-          // 忽略
-        }
-        tempInfos.push({ dir, relPath });
-      }
-
-      // 第二遍：提取完整元信息（T022）
-      for (const { dir, relPath } of tempInfos) {
-        const info = extractPyprojectInfo(dir, allNames);
-        if (info) {
-          info.path = relPath;
-          packages.push(info);
-        }
-      }
-    } else {
-      // npm/pnpm workspace: 读取 package.json
-      // 第一遍：收集所有子包名称
-      const allNames = new Set<string>();
-      const validDirs: Array<{ dir: string; relPath: string; pkg: any }> = [];
-
-      for (const dir of packageDirs) {
-        const relPath = path.relative(projectRoot, dir);
-        const pkgJsonPath = path.join(dir, 'package.json');
-
-        if (!fs.existsSync(pkgJsonPath)) continue;
-
-        try {
-          const content = fs.readFileSync(pkgJsonPath, 'utf-8');
-          const pkg = JSON.parse(content);
-          const name = typeof pkg.name === 'string' ? pkg.name : path.basename(dir);
-          allNames.add(name);
-          validDirs.push({ dir, relPath, pkg });
-        } catch {
-          // JSON 解析失败时记录警告并跳过（T014）
-          console.warn(`无法解析 ${pkgJsonPath}，跳过该子包`);
-        }
-      }
-
-      // 第二遍：提取完整元信息并匹配内部依赖
-      for (const { dir, relPath, pkg } of validDirs) {
-        const name = typeof pkg.name === 'string' ? pkg.name : path.basename(dir);
-        const description = typeof pkg.description === 'string' ? pkg.description : '';
-        const language = detectLanguage(dir);
-
-        // 提取 workspace 内部依赖
-        const dependencies: string[] = [];
-        const allDeps = {
-          ...pkg.dependencies,
-          ...pkg.devDependencies,
-        };
-
-        for (const depName of Object.keys(allDeps)) {
-          if (allNames.has(depName)) {
-            dependencies.push(depName);
-          }
-        }
-
-        packages.push({
-          name,
-          path: relPath,
-          description,
-          language,
-          dependencies,
-        });
-      }
-    }
-
-    return {
-      projectName,
-      workspaceType,
-      packages,
-    };
+    return extractWorkspaceData(context);
   }
 
   /**
@@ -623,49 +628,13 @@ export class WorkspaceIndexGenerator
    * 使用 Handlebars 模板渲染为 Markdown（T016, T035）
    */
   render(output: WorkspaceOutput): string {
-    const template = this.getCompiledTemplate();
+    const template = loadTemplate('workspace-index.hbs', import.meta.url);
     return template(output);
   }
-
-  // ============================================================
-  // 私有方法
-  // ============================================================
-
-  /**
-   * 获取编译后的 Handlebars 模板（带缓存）
-   */
-  private getCompiledTemplate(): ReturnType<typeof Handlebars.compile> {
-    if (this.compiledTemplate) return this.compiledTemplate;
-
-    const templatePath = this.findTemplatePath();
-    const templateSource = fs.readFileSync(templatePath, 'utf-8');
-    this.compiledTemplate = Handlebars.compile(templateSource);
-    return this.compiledTemplate;
-  }
-
-  /**
-   * 查找 workspace-index.hbs 模板文件路径
-   */
-  private findTemplatePath(): string {
-    // 从当前文件位置向上查找 templates/ 目录
-    let dir = path.dirname(new URL(import.meta.url).pathname);
-    for (let i = 0; i < 5; i++) {
-      const candidate = path.join(dir, 'templates', 'workspace-index.hbs');
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-      dir = path.dirname(dir);
-    }
-
-    // 降级：尝试相对于 cwd 的路径
-    const fallback = path.join(process.cwd(), 'templates', 'workspace-index.hbs');
-    if (fs.existsSync(fallback)) {
-      return fallback;
-    }
-
-    throw new Error('无法找到 workspace-index.hbs 模板文件');
-  }
 }
+
+// 从共享模块重导出 sanitizeMermaidId，保持向后兼容
+export { sanitizeMermaidId as _sanitizeMermaidId } from './utils/mermaid-helpers.js';
 
 // 导出辅助函数供测试使用
 export {
@@ -673,7 +642,6 @@ export {
   parsePnpmWorkspaceYaml as _parsePnpmWorkspaceYaml,
   parseUvWorkspaceToml as _parseUvWorkspaceToml,
   detectLanguage as _detectLanguage,
-  sanitizeMermaidId as _sanitizeMermaidId,
   buildMermaidDiagram as _buildMermaidDiagram,
   extractPyprojectInfo as _extractPyprojectInfo,
 };

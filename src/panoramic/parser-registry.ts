@@ -8,6 +8,7 @@
  * - 管理 Parser 的启用/禁用状态
  *
  * 设计决策：
+ * - 继承 AbstractRegistry<ArtifactParser, ParserEntry> 复用通用逻辑
  * - 单例模式镜像 GeneratorRegistry，保证全局唯一性
  * - 启用/禁用状态由 Registry 拥有（独立 Map），不修改外部 Parser 实例
  * - getByFilePattern 使用简单的扩展名/文件名匹配（无外部依赖）
@@ -15,8 +16,10 @@
  * 生命周期：进程级单例，CLI 和 MCP 入口各自在启动时通过 bootstrapParsers() 完成注册。
  */
 
+import type { z } from 'zod';
 import type { ArtifactParser } from './interfaces.js';
 import { ArtifactParserMetadataSchema } from './interfaces.js';
+import { AbstractRegistry } from './abstract-registry.js';
 import { SkillMdParser } from './parsers/skill-md-parser.js';
 import { BehaviorYamlParser } from './parsers/behavior-yaml-parser.js';
 import { DockerfileParser } from './parsers/dockerfile-parser.js';
@@ -49,23 +52,12 @@ export interface ParserEntry {
  * 维护 id 到 ArtifactParser 实例的映射以及每个 Parser 的启用/禁用状态。
  * 进程级单例，全局唯一。
  */
-export class ArtifactParserRegistry {
+export class ArtifactParserRegistry extends AbstractRegistry<ArtifactParser<any>, ParserEntry> {
   /** 单例实例 */
   private static instance: ArtifactParserRegistry | null = null;
 
-  /** id -> Parser 实例映射 */
-  private parsers: Map<string, ArtifactParser<any>>;
-
-  /** id -> 启用/禁用状态映射 */
-  private enabledState: Map<string, boolean>;
-
-  /** 按注册顺序维护的有序列表 */
-  private parserOrder: ArtifactParser<any>[];
-
   private constructor() {
-    this.parsers = new Map();
-    this.enabledState = new Map();
-    this.parserOrder = [];
+    super();
   }
 
   /**
@@ -86,68 +78,44 @@ export class ArtifactParserRegistry {
     ArtifactParserRegistry.instance = null;
   }
 
-  /**
-   * 注册 ArtifactParser 实例
-   *
-   * 两阶段验证：
-   * 1. Phase A — 使用 ArtifactParserMetadataSchema 验证 id/name/filePatterns 格式
-   * 2. Phase B — 检查 id 冲突，已存在时抛出错误
-   * 任一阶段失败均不修改内部状态。
-   *
-   * @param parser - ArtifactParser 实例
-   * @throws Error id 格式不符合 kebab-case 或已存在冲突时
-   */
-  register(parser: ArtifactParser<any>): void {
-    // Phase A: 使用 Zod Schema 验证元数据格式
-    const parseResult = ArtifactParserMetadataSchema.safeParse({
-      id: parser.id,
-      name: parser.name,
-      filePatterns: [...parser.filePatterns],
-    });
+  // ============================================================
+  // AbstractRegistry 抽象方法实现
+  // ============================================================
 
-    if (!parseResult.success) {
-      throw new Error(
-        `Parser id 格式错误: '${parser.id}' 不符合 kebab-case 格式（要求匹配 /^[a-z][a-z0-9-]*$/）`,
-      );
+  protected getMetadataSchema(): z.ZodSchema {
+    return ArtifactParserMetadataSchema;
+  }
+
+  protected extractMetadata(item: ArtifactParser<any>): { id: string; name: string; filePatterns: string[] } {
+    return {
+      id: item.id,
+      name: item.name,
+      filePatterns: [...item.filePatterns],
+    };
+  }
+
+  protected buildEntry(item: ArtifactParser<any>, enabled: boolean): ParserEntry {
+    return { parser: item, enabled };
+  }
+
+  // ============================================================
+  // 重写方法（保持向后兼容的错误消息）
+  // ============================================================
+
+  /**
+   * 切换 Parser 的启用/禁用状态
+   * 重写基类方法以保持向后兼容的错误消息前缀
+   */
+  setEnabled(id: string, enabled: boolean): void {
+    if (!this.items.has(id)) {
+      throw new Error(`Parser '${id}' not found in registry`);
     }
-
-    // Phase B: 检查 id 冲突
-    const existing = this.parsers.get(parser.id);
-    if (existing) {
-      throw new Error(
-        `Parser id 冲突: '${parser.id}'（name: '${existing.name}'）已注册，` +
-        `无法再注册 '${parser.id}'（name: '${parser.name}'）`,
-      );
-    }
-
-    // 提交：同时写入三个数据结构
-    this.parsers.set(parser.id, parser);
-    this.enabledState.set(parser.id, true);
-    this.parserOrder.push(parser);
+    this.enabledState.set(id, enabled);
   }
 
-  /**
-   * 按 id 查询单个已注册的 Parser 实例
-   *
-   * @param id - Parser 唯一标识符
-   * @returns 匹配的 Parser 实例，未命中返回 undefined
-   */
-  get(id: string): ArtifactParser<any> | undefined {
-    return this.parsers.get(id);
-  }
-
-  /**
-   * 全量列出所有已注册 Parser 及其启用/禁用状态
-   * 返回新数组（防御性拷贝），按注册顺序排列
-   *
-   * @returns ParserEntry 数组
-   */
-  list(): ParserEntry[] {
-    return this.parserOrder.map((parser) => ({
-      parser,
-      enabled: this.enabledState.get(parser.id) ?? true,
-    }));
-  }
+  // ============================================================
+  // 领域特有方法
+  // ============================================================
 
   /**
    * 根据文件路径匹配适用的 Parser 列表
@@ -169,7 +137,7 @@ export class ArtifactParserRegistry {
     const ext = path.extname(filePath).toLowerCase();
     const result: ArtifactParser<any>[] = [];
 
-    for (const parser of this.parserOrder) {
+    for (const parser of this.itemOrder) {
       if (this.enabledState.get(parser.id) === false) {
         continue;
       }
@@ -183,28 +151,6 @@ export class ArtifactParserRegistry {
     }
 
     return result;
-  }
-
-  /**
-   * 切换 Parser 的启用/禁用状态
-   *
-   * @param id - Parser 唯一标识符
-   * @param enabled - 目标状态（true: 启用, false: 禁用）
-   * @throws Error 指定 id 不存在时
-   */
-  setEnabled(id: string, enabled: boolean): void {
-    if (!this.parsers.has(id)) {
-      throw new Error(`Parser '${id}' not found in registry`);
-    }
-    this.enabledState.set(id, enabled);
-  }
-
-  /**
-   * 检查 Registry 是否为空（无任何已注册 Parser）
-   * 用于区分"未初始化"和"无适用 Parser"两种状态。
-   */
-  isEmpty(): boolean {
-    return this.parserOrder.length === 0;
   }
 
   /**
