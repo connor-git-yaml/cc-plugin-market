@@ -41,6 +41,13 @@ export { ArtifactParserRegistry, bootstrapParsers, type ParserEntry } from './pa
 export { MockReadmeGenerator } from './mock-readme-generator.js';
 export { ConfigReferenceGenerator } from './config-reference-generator.js';
 export { DataModelGenerator } from './data-model-generator.js';
+export {
+  WorkspaceIndexGenerator,
+  type WorkspacePackageInfo,
+  type WorkspaceInput,
+  type WorkspaceOutput,
+  type WorkspaceGroup,
+} from './workspace-index-generator.js';
 
 // Parser 实现 + 类型
 export * from './parsers/index.js';

@@ -21,6 +21,7 @@ import { GeneratorMetadataSchema } from './interfaces.js';
 import { MockReadmeGenerator } from './mock-readme-generator.js';
 import { ConfigReferenceGenerator } from './config-reference-generator.js';
 import { DataModelGenerator } from './data-model-generator.js';
+import { WorkspaceIndexGenerator } from './workspace-index-generator.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -248,4 +249,5 @@ export function bootstrapGenerators(): void {
   registry.register(new MockReadmeGenerator());
   registry.register(new ConfigReferenceGenerator());
   registry.register(new DataModelGenerator());
+  registry.register(new WorkspaceIndexGenerator());
 }

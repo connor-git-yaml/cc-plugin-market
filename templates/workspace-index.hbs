@@ -1,0 +1,26 @@
+---
+type: workspace-index
+generatedBy: workspace-index-generator
+generatedAt: {{generatedAt}}
+totalPackages: {{totalPackages}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}} | 共 {{totalPackages}} 个子包
+
+{{#each groups}}
+## {{name}}
+
+| 名称 | 路径 | 描述 | 语言 |
+|------|------|------|------|
+{{#each packages}}
+| {{name}} | `{{path}}` | {{#if description}}{{description}}{{else}}--{{/if}} | {{language}} |
+{{/each}}
+
+{{/each}}
+## 包级依赖关系图
+
+```mermaid
+{{{dependencyDiagram}}}
+```
