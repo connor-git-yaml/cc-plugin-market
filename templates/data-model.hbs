@@ -1,0 +1,72 @@
+# 数据模型文档
+
+## 概览
+
+| 指标 | 值 |
+|------|-----|
+| 模型总数 | {{summary.totalModels}} |
+| 字段总数 | {{summary.totalFields}} |
+{{#each summary.byLanguage}}
+| {{@key}} 模型数 | {{this}} |
+{{/each}}
+{{#each summary.byKind}}
+| {{@key}} 数量 | {{this}} |
+{{/each}}
+
+---
+
+{{#if pythonModels}}
+## Python 数据模型
+
+{{#each pythonModels}}
+### {{name}}
+
+**文件**: `{{filePath}}`
+**类型**: {{kind}}
+{{#if bases.length}}
+**继承**: {{#each bases}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
+{{#if description}}
+
+{{{description}}}
+{{/if}}
+
+| 字段名 | 类型 | 可选 | 默认值 | 描述 |
+|--------|------|------|--------|------|
+{{#each fields}}
+| `{{name}}` | `{{typeStr}}` | {{#if optional}}是{{else}}否{{/if}} | {{#if defaultValue}}`{{defaultValue}}`{{else}}—{{/if}} | {{#if description}}{{description}}{{else}}—{{/if}} |
+{{/each}}
+
+{{/each}}
+{{/if}}
+{{#if tsModels}}
+## TypeScript 数据模型
+
+{{#each tsModels}}
+### {{name}}
+
+**文件**: `{{filePath}}`
+**类型**: {{kind}}
+{{#if bases.length}}
+**扩展**: {{#each bases}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}
+{{/if}}
+{{#if description}}
+
+{{{description}}}
+{{/if}}
+
+| 属性名 | 类型 | 可选 | 描述 |
+|--------|------|------|------|
+{{#each fields}}
+| `{{name}}` | `{{typeStr}}` | {{#if optional}}是{{else}}否{{/if}} | {{#if description}}{{description}}{{else}}—{{/if}} |
+{{/each}}
+
+{{/each}}
+{{/if}}
+{{#if erDiagram}}
+## 实体关系图
+
+```mermaid
+{{{erDiagram}}}
+```
+{{/if}}
