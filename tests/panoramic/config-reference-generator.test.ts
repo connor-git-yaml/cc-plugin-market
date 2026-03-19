@@ -7,14 +7,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import {
-  ConfigReferenceGenerator,
-  parseYamlContent,
-  parseEnvContent,
-  parseTomlContent,
-  inferType,
-} from '../../src/panoramic/config-reference-generator.js';
+import { ConfigReferenceGenerator } from '../../src/panoramic/config-reference-generator.js';
+import { parseYamlContent } from '../../src/panoramic/parsers/yaml-config-parser.js';
+import { parseEnvContent } from '../../src/panoramic/parsers/env-config-parser.js';
+import { parseTomlContent } from '../../src/panoramic/parsers/toml-config-parser.js';
+import { inferType } from '../../src/panoramic/parsers/types.js';
 import { GeneratorRegistry } from '../../src/panoramic/generator-registry.js';
+import { ArtifactParserRegistry, bootstrapParsers } from '../../src/panoramic/parser-registry.js';
 
 // ============================================================
 // 辅助函数
@@ -341,10 +340,14 @@ describe('ConfigReferenceGenerator.isApplicable', () => {
 
   beforeEach(() => {
     tempDir = createTempDir();
+    // 确保 ParserRegistry 已初始化（ConfigReferenceGenerator 依赖 ParserRegistry）
+    ArtifactParserRegistry.resetInstance();
+    bootstrapParsers();
   });
 
   afterEach(() => {
     cleanupDir(tempDir);
+    ArtifactParserRegistry.resetInstance();
   });
 
   it('项目包含 .yaml 文件时返回 true', () => {
@@ -387,6 +390,9 @@ describe('ConfigReferenceGenerator 全生命周期 e2e', () => {
 
   beforeEach(() => {
     tempDir = createTempDir();
+    // 确保 ParserRegistry 已初始化
+    ArtifactParserRegistry.resetInstance();
+    bootstrapParsers();
     // 复制模板文件到 tempDir/templates/
     const srcTemplateDir = path.join(process.cwd(), 'templates');
     const destTemplateDir = path.join(tempDir, 'templates');
@@ -399,6 +405,7 @@ describe('ConfigReferenceGenerator 全生命周期 e2e', () => {
 
   afterEach(() => {
     cleanupDir(tempDir);
+    ArtifactParserRegistry.resetInstance();
   });
 
   it('YAML 文件: extract → generate → render 完整链路', async () => {
@@ -543,10 +550,13 @@ describe('ConfigReferenceGenerator 只读属性', () => {
 describe('ConfigReferenceGenerator — GeneratorRegistry 集成', () => {
   beforeEach(() => {
     GeneratorRegistry.resetInstance();
+    ArtifactParserRegistry.resetInstance();
+    bootstrapParsers();
   });
 
   afterEach(() => {
     GeneratorRegistry.resetInstance();
+    ArtifactParserRegistry.resetInstance();
   });
 
   it('可通过 Registry 按 id 查询', () => {

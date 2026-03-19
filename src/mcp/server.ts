@@ -13,6 +13,7 @@ import { runBatch } from '../batch/batch-orchestrator.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
+import { bootstrapParsers } from '../panoramic/parser-registry.js';
 import { scanFiles } from '../utils/file-scanner.js';
 
 // 读取 package.json 版本号
@@ -28,6 +29,8 @@ export function createMcpServer(): McpServer {
   bootstrapAdapters();
   // 注册所有文档生成器
   bootstrapGenerators();
+  // 注册所有制品解析器
+  bootstrapParsers();
 
   const server = new McpServer({
     name: 'reverse-spec',
