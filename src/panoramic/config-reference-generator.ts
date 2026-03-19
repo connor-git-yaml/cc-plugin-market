@@ -15,6 +15,7 @@ import type { ConfigEntry } from './parsers/types.js';
 import { ArtifactParserRegistry } from './parser-registry.js';
 import type { ConfigEntries } from './parsers/types.js';
 import { loadTemplate } from './utils/template-loader.js';
+import { enrichConfigDescriptions } from './utils/llm-enricher.js';
 
 // ============================================================
 // 类型定义
@@ -168,12 +169,17 @@ export class ConfigReferenceGenerator
    */
   async generate(
     input: ConfigReferenceInput,
-    _options?: GenerateOptions,
+    options?: GenerateOptions,
   ): Promise<ConfigReferenceOutput> {
     // 按文件路径排序
-    const sortedFiles = [...input.files].sort((a, b) =>
+    let sortedFiles = [...input.files].sort((a, b) =>
       a.filePath.localeCompare(b.filePath),
     );
+
+    // LLM 语义增强（仅在 useLLM=true 时启用）
+    if (options?.useLLM) {
+      sortedFiles = await enrichConfigDescriptions(sortedFiles);
+    }
 
     const totalEntries = sortedFiles.reduce(
       (sum, f) => sum + f.entries.length,

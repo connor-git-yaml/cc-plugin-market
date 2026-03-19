@@ -20,9 +20,9 @@ import { z } from 'zod';
 
 /**
  * 输出格式枚举 Schema
- * 当前仅支持 markdown，预留未来扩展（如 html、json）
+ * 支持 markdown（默认）、json（结构化数据）、all（markdown + json + mermaid）
  */
-export const OutputFormatSchema = z.enum(['markdown']);
+export const OutputFormatSchema = z.enum(['markdown', 'json', 'all']);
 
 /** 输出格式类型 */
 export type OutputFormat = z.infer<typeof OutputFormatSchema>;
@@ -42,7 +42,7 @@ export const GenerateOptionsSchema = z.object({
   useLLM: z.boolean().optional().default(false),
   /** 自定义 Handlebars 模板路径。未指定时使用内置模板 */
   templateOverride: z.string().optional(),
-  /** 输出格式。当前仅支持 markdown，预留未来扩展 */
+  /** 输出格式。支持 'markdown'（默认）、'json'（结构化数据）、'all'（全格式输出） */
   outputFormat: OutputFormatSchema.optional().default('markdown'),
 });
 

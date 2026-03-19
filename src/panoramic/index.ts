@@ -69,3 +69,5 @@ export { buildProjectContext } from './project-context.js';
 export { AbstractRegistry } from './abstract-registry.js';
 export { loadTemplate, resetTemplateCache } from './utils/template-loader.js';
 export { sanitizeMermaidId } from './utils/mermaid-helpers.js';
+export { enrichFieldDescriptions, enrichConfigDescriptions } from './utils/llm-enricher.js';
+export { writeMultiFormat, type WriteMultiFormatOptions } from './utils/multi-format-writer.js';
