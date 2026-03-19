@@ -69,6 +69,36 @@ export {
   type DependencyStats,
 } from './cross-package-analyzer.js';
 
+export {
+  RuntimeTopologyGenerator,
+  type RuntimeTopologyInput,
+  type RuntimeTopologyOutput,
+} from './runtime-topology-generator.js';
+
+export {
+  buildSyntheticImageName,
+  mergeEnvironmentVariables,
+  normalizeCommandValue,
+  collectRuntimeConfigHints,
+  extractRuntimeBuildStages,
+  summarizeRuntimeTopology,
+  type RuntimeSourceKind,
+  type RuntimeStageRole,
+  type RuntimeConfigFormat,
+  type RuntimeConfigCategory,
+  type RuntimeEnvironmentVariable,
+  type RuntimePortBinding,
+  type RuntimeVolumeMount,
+  type RuntimeDependency,
+  type RuntimeBuildStage,
+  type RuntimeImage,
+  type RuntimeContainer,
+  type RuntimeService,
+  type RuntimeConfigHint,
+  type RuntimeTopology,
+  type RuntimeTopologyStats,
+} from './runtime-topology-model.js';
+
 // Parser 实现 + 类型
 export * from './parsers/index.js';
 

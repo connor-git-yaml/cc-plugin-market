@@ -27,6 +27,7 @@ import { DataModelGenerator } from './data-model-generator.js';
 import { WorkspaceIndexGenerator } from './workspace-index-generator.js';
 import { CrossPackageAnalyzer } from './cross-package-analyzer.js';
 import { ApiSurfaceGenerator } from './api-surface-generator.js';
+import { RuntimeTopologyGenerator } from './runtime-topology-generator.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -200,4 +201,5 @@ export function bootstrapGenerators(): void {
   registry.register(new WorkspaceIndexGenerator());
   registry.register(new CrossPackageAnalyzer());
   registry.register(new ApiSurfaceGenerator());
+  registry.register(new RuntimeTopologyGenerator());
 }

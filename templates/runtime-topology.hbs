@@ -1,0 +1,128 @@
+---
+type: runtime-topology
+generatedBy: runtime-topology
+generatedAt: {{generatedAt}}
+totalServices: {{stats.totalServices}}
+totalImages: {{stats.totalImages}}
+totalContainers: {{stats.totalContainers}}
+totalStages: {{stats.totalStages}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}}
+
+## 摘要
+
+| 指标 | 值 |
+|------|------|
+| 服务数 | {{stats.totalServices}} |
+| 镜像数 | {{stats.totalImages}} |
+| 容器数 | {{stats.totalContainers}} |
+| 构建阶段数 | {{stats.totalStages}} |
+| 依赖关系数 | {{stats.totalDependencies}} |
+| 运行时配置提示数 | {{stats.totalConfigHints}} |
+
+## 服务
+
+| 服务 | 容器 | 镜像 | 构建上下文 | Dockerfile | Target Stage | 启动命令 | 依赖 |
+|------|------|------|------------|------------|--------------|----------|------|
+{{#each topology.services}}
+| {{name}} | `{{containerName}}` | {{#if image}}`{{image}}`{{else}}--{{/if}} | {{#if buildContext}}`{{buildContext}}`{{else}}--{{/if}} | {{#if dockerfilePath}}`{{dockerfilePath}}`{{else}}--{{/if}} | {{#if targetStage}}`{{targetStage}}`{{else}}--{{/if}} | {{#if command}}`{{command}}`{{else}}--{{/if}} | {{#if dependsOn.length}}{{#each dependsOn}}`{{service}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+
+{{#each topology.services}}
+### 服务: {{name}}
+
+- 来源文件: `{{sourceFile}}`
+- 容器实例: `{{containerName}}`
+- 入口命令: {{#if entrypoint}}`{{entrypoint}}`{{else}}--{{/if}}
+- `env_file`: {{#if envFiles.length}}{{#each envFiles}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}}
+
+#### 环境变量
+
+| 变量 | 值 | 来源 |
+|------|----|------|
+{{#if environment.length}}
+{{#each environment}}
+| `{{name}}` | {{#if value}}`{{value}}`{{else}}--{{/if}} | `{{sourceFile}}` |
+{{/each}}
+{{else}}
+| -- | -- | -- |
+{{/if}}
+
+#### 端口映射
+
+| Published | Target | 协议 | 原始声明 |
+|-----------|--------|------|----------|
+{{#if ports.length}}
+{{#each ports}}
+| {{#if published}}`{{published}}`{{else}}--{{/if}} | `{{target}}` | `{{protocol}}` | `{{raw}}` |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- |
+{{/if}}
+
+#### 卷挂载
+
+| Source | Target | 类型 | 只读 | 原始声明 |
+|--------|--------|------|------|----------|
+{{#if volumes.length}}
+{{#each volumes}}
+| {{#if source}}`{{source}}`{{else}}--{{/if}} | `{{target}}` | `{{type}}` | {{#if readOnly}}yes{{else}}no{{/if}} | `{{raw}}` |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- |
+{{/if}}
+
+{{/each}}
+
+## 容器实例
+
+| 容器 | 服务 | 镜像 | 启动命令 | 依赖服务 |
+|------|------|------|----------|----------|
+{{#each topology.containers}}
+| `{{name}}` | `{{service}}` | {{#if image}}`{{image}}`{{else}}--{{/if}} | {{#if command}}`{{command}}`{{else}}--{{/if}} | {{#if dependsOn.length}}{{#each dependsOn}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+
+## 镜像与构建阶段
+
+| 镜像 | 显式镜像名 | 构建上下文 | Dockerfile | Target Stage | Stages |
+|------|------------|------------|------------|--------------|--------|
+{{#each topology.images}}
+| `{{name}}` | {{#if explicitImage}}`{{explicitImage}}`{{else}}--{{/if}} | {{#if buildContext}}`{{buildContext}}`{{else}}--{{/if}} | {{#if dockerfilePath}}`{{dockerfilePath}}`{{else}}--{{/if}} | {{#if targetStage}}`{{targetStage}}`{{else}}--{{/if}} | {{#if stageNames.length}}{{#each stageNames}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+
+### Docker Build Stages
+
+| Stage | 角色 | 基础镜像 | 来源 Dockerfile | WORKDIR | CMD | ENTRYPOINT | 复制来源 |
+|-------|------|----------|-----------------|---------|-----|------------|----------|
+{{#each topology.stages}}
+| `{{name}}` | `{{role}}` | `{{baseImage}}` | `{{sourceFile}}` | {{#if workdir}}`{{workdir}}`{{else}}--{{/if}} | {{#if command}}`{{command}}`{{else}}--{{/if}} | {{#if entrypoint}}`{{entrypoint}}`{{else}}--{{/if}} | {{#if copiesFrom.length}}{{#each copiesFrom}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+
+## 运行时配置提示
+
+| 来源 | 格式 | 类别 | Key | Value |
+|------|------|------|-----|-------|
+{{#if topology.configHints.length}}
+{{#each topology.configHints}}
+| `{{sourceFile}}` | `{{format}}` | `{{category}}` | `{{keyPath}}` | {{#if value}}`{{value}}`{{else}}--{{/if}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- |
+{{/if}}
+
+## Source Files
+
+{{#each topology.sourceFiles}}
+- `{{this}}`
+{{/each}}
+
+{{#if warnings.length}}
+## Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}

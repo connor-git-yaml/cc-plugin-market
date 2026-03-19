@@ -50,6 +50,7 @@ export { BehaviorYamlParser } from './behavior-yaml-parser.js';
 export { DockerfileParser } from './dockerfile-parser.js';
 
 // 配置文件 Parser 实现
-export { YamlConfigParser, parseYamlContent } from './yaml-config-parser.js';
+export type { YamlScalar, YamlValue, YamlObject, YamlArray } from './yaml-config-parser.js';
+export { YamlConfigParser, parseYamlContent, parseYamlDocument } from './yaml-config-parser.js';
 export { EnvConfigParser, parseEnvContent } from './env-config-parser.js';
 export { TomlConfigParser, parseTomlContent } from './toml-config-parser.js';
