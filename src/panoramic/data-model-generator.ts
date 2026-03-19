@@ -23,6 +23,7 @@ import { scanFiles } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { sanitizeMermaidId } from './utils/mermaid-helpers.js';
 import { loadTemplate } from './utils/template-loader.js';
+import { enrichFieldDescriptions } from './utils/llm-enricher.js';
 
 // ============================================================
 // Zod Schema + TypeScript 类型
@@ -607,14 +608,19 @@ export class DataModelGenerator
    */
   async generate(
     input: DataModelInput,
-    _options?: GenerateOptions,
+    options?: GenerateOptions,
   ): Promise<DataModelOutput> {
     // 按语言和文件路径排序
-    const sortedModels = [...input.models].sort((a, b) => {
+    let sortedModels = [...input.models].sort((a, b) => {
       if (a.language !== b.language) return a.language.localeCompare(b.language);
       if (a.filePath !== b.filePath) return a.filePath.localeCompare(b.filePath);
       return a.name.localeCompare(b.name);
     });
+
+    // LLM 语义增强（仅在 useLLM=true 时启用）
+    if (options?.useLLM) {
+      sortedModels = await enrichFieldDescriptions(sortedModels);
+    }
 
     // 构建统计摘要
     const byLanguage: Record<string, number> = {};

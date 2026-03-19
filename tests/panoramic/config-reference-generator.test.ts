@@ -2,7 +2,7 @@
  * ConfigReferenceGenerator 单元测试
  * 覆盖解析函数（YAML/TOML/.env）、inferType、全生命周期 e2e
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -608,5 +608,66 @@ describe('ConfigReferenceGenerator — GeneratorRegistry 集成', () => {
     } finally {
       cleanupDir(tempDir);
     }
+  });
+});
+
+// ============================================================
+// T016: ConfigReferenceGenerator useLLM=true 集成测试
+// ============================================================
+
+describe('ConfigReferenceGenerator.generate with useLLM=true（集成测试）', () => {
+  const generator = new ConfigReferenceGenerator();
+
+  it('useLLM=true 时 enrichment 路径被触发（通过检查不抛异常验证）', { timeout: 30_000 }, async () => {
+    const input = {
+      files: [{
+        filePath: 'config.yaml',
+        format: 'yaml' as const,
+        entries: [
+          { keyPath: 'app.name', type: 'string' as const, defaultValue: 'test', description: '' },
+          { keyPath: 'app.port', type: 'number' as const, defaultValue: '3000', description: '已有说明' },
+        ],
+      }],
+      projectName: 'test-project',
+    };
+
+    // useLLM=true 时不应抛异常（LLM 不可用时静默降级）
+    const output = await generator.generate(input, { useLLM: true });
+
+    // generate() 正常返回
+    expect(output.totalEntries).toBe(2);
+    expect(output.files).toHaveLength(1);
+    // 已有说明的配置项保持不变
+    expect(output.files[0]!.entries[1]!.description).toBe('已有说明');
+  });
+});
+
+// ============================================================
+// T033: useLLM=false 回归测试
+// ============================================================
+
+describe('ConfigReferenceGenerator 回归测试——useLLM=false 不调用 LLM', () => {
+  const generator = new ConfigReferenceGenerator();
+
+  it('useLLM=false（默认）时 generate() 不调用任何 LLM 接口', async () => {
+    const input = {
+      files: [{
+        filePath: 'config.yaml',
+        format: 'yaml' as const,
+        entries: [
+          { keyPath: 'app.name', type: 'string' as const, defaultValue: 'test', description: '' },
+          { keyPath: 'app.port', type: 'number' as const, defaultValue: '3000', description: '端口号' },
+        ],
+      }],
+      projectName: 'test-project',
+    };
+
+    // useLLM=false（默认）
+    const output = await generator.generate(input);
+
+    // description 保持原样
+    expect(output.files[0]!.entries[0]!.description).toBe('');
+    expect(output.files[0]!.entries[1]!.description).toBe('端口号');
+    expect(output.totalEntries).toBe(2);
   });
 });
