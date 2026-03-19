@@ -1,0 +1,208 @@
+erDiagram
+    SdkMcpTool {
+        str name
+        str description
+        type_T__dict_strAny_ input_schema
+        Callable__T_Awaitable_dict_strAny___ handler
+        ToolAnnotations_None annotations
+    }
+    AgentDefinition {
+        str description
+        str prompt
+        list_str__None tools
+        Literal_sonnetopushaikuinherit__None model
+        list_str__None skills
+        Literal_userprojectlocal__None memory
+        list_str_dict_strAny___None mcpServers
+    }
+    AssistantMessage {
+        list_ContentBlock_ content
+        str model
+        str_None parent_tool_use_id
+        AssistantMessageError_None error
+        dict_strAny__None usage
+    }
+    ClaudeAgentOptions {
+        list_str__ToolsPreset_None tools
+        list_str_ allowed_tools
+        str_SystemPromptPreset_None system_prompt
+        dict_strMcpServerConfig__str_Path mcp_servers
+        PermissionMode_None permission_mode
+        bool continue_conversation
+        str_None resume
+        int_None max_turns
+        float_None max_budget_usd
+        list_str_ disallowed_tools
+        str_None model
+        str_None fallback_model
+        list_SdkBeta_ betas
+        str_None permission_prompt_tool_name
+        str_Path_None cwd
+        str_Path_None cli_path
+        str_None settings
+        list_str_Path_ add_dirs
+        dict_strstr_ env
+        dict_strstr_None_ extra_args
+        int_None max_buffer_size
+        Any debug_stderr
+        Callable__str_None__None stderr
+        CanUseTool_None can_use_tool
+        dict_HookEventlist_HookMatcher___None hooks
+        str_None user
+        bool include_partial_messages
+        bool fork_session
+        dict_strAgentDefinition__None agents
+        list_SettingSource__None setting_sources
+        SandboxSettings_None sandbox
+        list_SdkPluginConfig_ plugins
+        int_None max_thinking_tokens
+        ThinkingConfig_None thinking
+        Literal_lowmediumhighmax__None effort
+        dict_strAny__None output_format
+        bool enable_file_checkpointing
+    }
+    HookMatcher {
+        str_None matcher
+        list_HookCallback_ hooks
+        float_None timeout
+    }
+    PermissionResultAllow {
+        Literal_allow_ behavior
+        dict_strAny__None updated_input
+        list_PermissionUpdate__None updated_permissions
+    }
+    PermissionResultDeny {
+        Literal_deny_ behavior
+        str message
+        bool interrupt
+    }
+    PermissionRuleValue {
+        str tool_name
+        str_None rule_content
+    }
+    PermissionUpdate {
+        Literal_ type
+        list_PermissionRuleValue__None rules
+        PermissionBehavior_None behavior
+        PermissionMode_None mode
+        list_str__None directories
+        PermissionUpdateDestination_None destination
+    }
+    RateLimitEvent {
+        RateLimitInfo rate_limit_info
+        str uuid
+        str session_id
+    }
+    RateLimitInfo {
+        RateLimitStatus status
+        int_None resets_at
+        RateLimitType_None rate_limit_type
+        float_None utilization
+        RateLimitStatus_None overage_status
+        int_None overage_resets_at
+        str_None overage_disabled_reason
+        dict_strAny_ raw
+    }
+    ResultMessage {
+        str subtype
+        int duration_ms
+        int duration_api_ms
+        bool is_error
+        int num_turns
+        str session_id
+        str_None stop_reason
+        float_None total_cost_usd
+        dict_strAny__None usage
+        str_None result
+        Any structured_output
+    }
+    SDKSessionInfo {
+        str session_id
+        str summary
+        int last_modified
+        int file_size
+        str_None custom_title
+        str_None first_prompt
+        str_None git_branch
+        str_None cwd
+    }
+    SessionMessage {
+        Literal_userassistant_ type
+        str uuid
+        str session_id
+        Any message
+        None parent_tool_use_id
+    }
+    StreamEvent {
+        str uuid
+        str session_id
+        dict_strAny_TherawAnthropicAPIstreamevent event
+        str_None parent_tool_use_id
+    }
+    SystemMessage {
+        str subtype
+        dict_strAny_ data
+    }
+    TaskNotificationMessage {
+        str task_id
+        TaskNotificationStatus status
+        str output_file
+        str summary
+        str uuid
+        str session_id
+        str_None tool_use_id
+        TaskUsage_None usage
+    }
+    TaskProgressMessage {
+        str task_id
+        str description
+        TaskUsage usage
+        str uuid
+        str session_id
+        str_None tool_use_id
+        str_None last_tool_name
+    }
+    TaskStartedMessage {
+        str task_id
+        str description
+        str uuid
+        str session_id
+        str_None tool_use_id
+        str_None task_type
+    }
+    TextBlock {
+        str text
+    }
+    ThinkingBlock {
+        str thinking
+        str signature
+    }
+    ToolPermissionContext {
+        Any_None signal
+        list_PermissionUpdate_ suggestions
+    }
+    ToolResultBlock {
+        str tool_use_id
+        str_list_dict_strAny___None content
+        bool_None is_error
+    }
+    ToolUseBlock {
+        str id
+        str name
+        dict_strAny_ input
+    }
+    UserMessage {
+        str_list_ContentBlock_ content
+        str_None uuid
+        str_None parent_tool_use_id
+        dict_strAny__None tool_use_result
+    }
+    PermissionUpdate ||--o| PermissionRuleValue : "has"
+    ToolPermissionContext ||--o| PermissionUpdate : "has"
+    PermissionResultAllow ||--o| PermissionUpdate : "has"
+    SystemMessage ||--o{ TaskStartedMessage : "inherits"
+    SystemMessage ||--o{ TaskProgressMessage : "inherits"
+    SystemMessage ||--o{ TaskNotificationMessage : "inherits"
+    RateLimitEvent ||--o| RateLimitInfo : "has"
+    ClaudeAgentOptions ||--o| HookMatcher : "has"
+    ClaudeAgentOptions ||--o| AgentDefinition : "has"

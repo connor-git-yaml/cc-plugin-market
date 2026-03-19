@@ -1,0 +1,1356 @@
+{
+  "models": [
+    {
+      "name": "SdkMcpTool",
+      "filePath": "src/claude_agent_sdk/__init__.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "name",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "description",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "input_schema",
+          "typeStr": "type[T] | dict[str, Any]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "handler",
+          "typeStr": "Callable[[T], Awaitable[dict[str, Any]]]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "annotations",
+          "typeStr": "ToolAnnotations | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [
+        "Generic[T]"
+      ],
+      "description": null
+    },
+    {
+      "name": "AgentDefinition",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "description",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "prompt",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "tools",
+          "typeStr": "list[str] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "model",
+          "typeStr": "Literal[\"sonnet\", \"opus\", \"haiku\", \"inherit\"] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "skills",
+          "typeStr": "list[str] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "memory",
+          "typeStr": "Literal[\"user\", \"project\", \"local\"] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "mcpServers",
+          "typeStr": "list[str | dict[str, Any]] | None",
+          "optional": true,
+          "defaultValue": "None  # noqa: N815",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "AssistantMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "content",
+          "typeStr": "list[ContentBlock]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "model",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "parent_tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "error",
+          "typeStr": "AssistantMessageError | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "usage",
+          "typeStr": "dict[str, Any] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ClaudeAgentOptions",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "tools",
+          "typeStr": "list[str] | ToolsPreset | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "allowed_tools",
+          "typeStr": "list[str]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "system_prompt",
+          "typeStr": "str | SystemPromptPreset | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "mcp_servers",
+          "typeStr": "dict[str, McpServerConfig] | str | Path",
+          "optional": false,
+          "defaultValue": "dict()",
+          "description": null
+        },
+        {
+          "name": "permission_mode",
+          "typeStr": "PermissionMode | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "continue_conversation",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": "False",
+          "description": null
+        },
+        {
+          "name": "resume",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "max_turns",
+          "typeStr": "int | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "max_budget_usd",
+          "typeStr": "float | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "disallowed_tools",
+          "typeStr": "list[str]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "model",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "fallback_model",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "betas",
+          "typeStr": "list[SdkBeta]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "permission_prompt_tool_name",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "cwd",
+          "typeStr": "str | Path | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "cli_path",
+          "typeStr": "str | Path | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "settings",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "add_dirs",
+          "typeStr": "list[str | Path]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "env",
+          "typeStr": "dict[str, str]",
+          "optional": false,
+          "defaultValue": "dict()",
+          "description": null
+        },
+        {
+          "name": "extra_args",
+          "typeStr": "dict[str, str | None]",
+          "optional": true,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "max_buffer_size",
+          "typeStr": "int | None",
+          "optional": true,
+          "defaultValue": "None  # Max bytes when buffering CLI stdout",
+          "description": null
+        },
+        {
+          "name": "debug_stderr",
+          "typeStr": "Any",
+          "optional": false,
+          "defaultValue": "(",
+          "description": null
+        },
+        {
+          "name": "stderr",
+          "typeStr": "Callable[[str], None] | None",
+          "optional": true,
+          "defaultValue": "None  # Callback for stderr output from CLI",
+          "description": null
+        },
+        {
+          "name": "can_use_tool",
+          "typeStr": "CanUseTool | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "hooks",
+          "typeStr": "dict[HookEvent, list[HookMatcher]] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "user",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "include_partial_messages",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": "False",
+          "description": null
+        },
+        {
+          "name": "fork_session",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": "False",
+          "description": null
+        },
+        {
+          "name": "agents",
+          "typeStr": "dict[str, AgentDefinition] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "setting_sources",
+          "typeStr": "list[SettingSource] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "sandbox",
+          "typeStr": "SandboxSettings | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "plugins",
+          "typeStr": "list[SdkPluginConfig]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "max_thinking_tokens",
+          "typeStr": "int | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "thinking",
+          "typeStr": "ThinkingConfig | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "effort",
+          "typeStr": "Literal[\"low\", \"medium\", \"high\", \"max\"] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "output_format",
+          "typeStr": "dict[str, Any] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "enable_file_checkpointing",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": "False",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "HookMatcher",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "matcher",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "hooks",
+          "typeStr": "list[HookCallback]",
+          "optional": false,
+          "defaultValue": "list()",
+          "description": null
+        },
+        {
+          "name": "timeout",
+          "typeStr": "float | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "PermissionResultAllow",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "behavior",
+          "typeStr": "Literal[\"allow\"]",
+          "optional": false,
+          "defaultValue": "\"allow\"",
+          "description": null
+        },
+        {
+          "name": "updated_input",
+          "typeStr": "dict[str, Any] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "updated_permissions",
+          "typeStr": "list[PermissionUpdate] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "PermissionResultDeny",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "behavior",
+          "typeStr": "Literal[\"deny\"]",
+          "optional": false,
+          "defaultValue": "\"deny\"",
+          "description": null
+        },
+        {
+          "name": "message",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": "\"\"",
+          "description": null
+        },
+        {
+          "name": "interrupt",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": "False",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "PermissionRuleValue",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "tool_name",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "rule_content",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "PermissionUpdate",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "type",
+          "typeStr": "Literal[",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "rules",
+          "typeStr": "list[PermissionRuleValue] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "behavior",
+          "typeStr": "PermissionBehavior | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "mode",
+          "typeStr": "PermissionMode | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "directories",
+          "typeStr": "list[str] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "destination",
+          "typeStr": "PermissionUpdateDestination | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "RateLimitEvent",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "rate_limit_info",
+          "typeStr": "RateLimitInfo",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "RateLimitInfo",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "status",
+          "typeStr": "RateLimitStatus",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "resets_at",
+          "typeStr": "int | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "rate_limit_type",
+          "typeStr": "RateLimitType | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "utilization",
+          "typeStr": "float | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "overage_status",
+          "typeStr": "RateLimitStatus | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "overage_resets_at",
+          "typeStr": "int | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "overage_disabled_reason",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "raw",
+          "typeStr": "dict[str, Any]",
+          "optional": false,
+          "defaultValue": "dict()",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ResultMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "subtype",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "duration_ms",
+          "typeStr": "int",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "duration_api_ms",
+          "typeStr": "int",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "is_error",
+          "typeStr": "bool",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "num_turns",
+          "typeStr": "int",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "stop_reason",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "total_cost_usd",
+          "typeStr": "float | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "usage",
+          "typeStr": "dict[str, Any] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "result",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "structured_output",
+          "typeStr": "Any",
+          "optional": false,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "SDKSessionInfo",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "summary",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "last_modified",
+          "typeStr": "int",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "file_size",
+          "typeStr": "int",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "custom_title",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "first_prompt",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "git_branch",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "cwd",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "SessionMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "type",
+          "typeStr": "Literal[\"user\", \"assistant\"]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "message",
+          "typeStr": "Any",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "parent_tool_use_id",
+          "typeStr": "None",
+          "optional": false,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "StreamEvent",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "event",
+          "typeStr": "dict[str, Any]  # The raw Anthropic API stream event",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "parent_tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "SystemMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "subtype",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "data",
+          "typeStr": "dict[str, Any]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "TaskNotificationMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "task_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "status",
+          "typeStr": "TaskNotificationStatus",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "output_file",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "summary",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "usage",
+          "typeStr": "TaskUsage | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [
+        "SystemMessage"
+      ],
+      "description": null
+    },
+    {
+      "name": "TaskProgressMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "task_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "description",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "usage",
+          "typeStr": "TaskUsage",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "last_tool_name",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [
+        "SystemMessage"
+      ],
+      "description": null
+    },
+    {
+      "name": "TaskStartedMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "task_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "description",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "session_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "task_type",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [
+        "SystemMessage"
+      ],
+      "description": null
+    },
+    {
+      "name": "TextBlock",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "text",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ThinkingBlock",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "thinking",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "signature",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ToolPermissionContext",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "signal",
+          "typeStr": "Any | None",
+          "optional": true,
+          "defaultValue": "None  # Future: abort signal support",
+          "description": null
+        },
+        {
+          "name": "suggestions",
+          "typeStr": "list[PermissionUpdate]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ToolResultBlock",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "tool_use_id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "content",
+          "typeStr": "str | list[dict[str, Any]] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "is_error",
+          "typeStr": "bool | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "ToolUseBlock",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "id",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "name",
+          "typeStr": "str",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "input",
+          "typeStr": "dict[str, Any]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    },
+    {
+      "name": "UserMessage",
+      "filePath": "src/claude_agent_sdk/types.py",
+      "language": "python",
+      "kind": "dataclass",
+      "fields": [
+        {
+          "name": "content",
+          "typeStr": "str | list[ContentBlock]",
+          "optional": false,
+          "defaultValue": null,
+          "description": null
+        },
+        {
+          "name": "uuid",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "parent_tool_use_id",
+          "typeStr": "str | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        },
+        {
+          "name": "tool_use_result",
+          "typeStr": "dict[str, Any] | None",
+          "optional": true,
+          "defaultValue": "None",
+          "description": null
+        }
+      ],
+      "bases": [],
+      "description": null
+    }
+  ],
+  "relations": [
+    {
+      "source": "PermissionUpdate",
+      "target": "PermissionRuleValue",
+      "type": "has"
+    },
+    {
+      "source": "ToolPermissionContext",
+      "target": "PermissionUpdate",
+      "type": "has"
+    },
+    {
+      "source": "PermissionResultAllow",
+      "target": "PermissionUpdate",
+      "type": "has"
+    },
+    {
+      "source": "TaskStartedMessage",
+      "target": "SystemMessage",
+      "type": "inherits"
+    },
+    {
+      "source": "TaskProgressMessage",
+      "target": "SystemMessage",
+      "type": "inherits"
+    },
+    {
+      "source": "TaskNotificationMessage",
+      "target": "SystemMessage",
+      "type": "inherits"
+    },
+    {
+      "source": "RateLimitEvent",
+      "target": "RateLimitInfo",
+      "type": "has"
+    },
+    {
+      "source": "ClaudeAgentOptions",
+      "target": "HookMatcher",
+      "type": "has"
+    },
+    {
+      "source": "ClaudeAgentOptions",
+      "target": "AgentDefinition",
+      "type": "has"
+    }
+  ],
+  "erDiagram": "erDiagram\n    SdkMcpTool {\n        str name\n        str description\n        type_T__dict_strAny_ input_schema\n        Callable__T_Awaitable_dict_strAny___ handler\n        ToolAnnotations_None annotations\n    }\n    AgentDefinition {\n        str description\n        str prompt\n        list_str__None tools\n        Literal_sonnetopushaikuinherit__None model\n        list_str__None skills\n        Literal_userprojectlocal__None memory\n        list_str_dict_strAny___None mcpServers\n    }\n    AssistantMessage {\n        list_ContentBlock_ content\n        str model\n        str_None parent_tool_use_id\n        AssistantMessageError_None error\n        dict_strAny__None usage\n    }\n    ClaudeAgentOptions {\n        list_str__ToolsPreset_None tools\n        list_str_ allowed_tools\n        str_SystemPromptPreset_None system_prompt\n        dict_strMcpServerConfig__str_Path mcp_servers\n        PermissionMode_None permission_mode\n        bool continue_conversation\n        str_None resume\n        int_None max_turns\n        float_None max_budget_usd\n        list_str_ disallowed_tools\n        str_None model\n        str_None fallback_model\n        list_SdkBeta_ betas\n        str_None permission_prompt_tool_name\n        str_Path_None cwd\n        str_Path_None cli_path\n        str_None settings\n        list_str_Path_ add_dirs\n        dict_strstr_ env\n        dict_strstr_None_ extra_args\n        int_None max_buffer_size\n        Any debug_stderr\n        Callable__str_None__None stderr\n        CanUseTool_None can_use_tool\n        dict_HookEventlist_HookMatcher___None hooks\n        str_None user\n        bool include_partial_messages\n        bool fork_session\n        dict_strAgentDefinition__None agents\n        list_SettingSource__None setting_sources\n        SandboxSettings_None sandbox\n        list_SdkPluginConfig_ plugins\n        int_None max_thinking_tokens\n        ThinkingConfig_None thinking\n        Literal_lowmediumhighmax__None effort\n        dict_strAny__None output_format\n        bool enable_file_checkpointing\n    }\n    HookMatcher {\n        str_None matcher\n        list_HookCallback_ hooks\n        float_None timeout\n    }\n    PermissionResultAllow {\n        Literal_allow_ behavior\n        dict_strAny__None updated_input\n        list_PermissionUpdate__None updated_permissions\n    }\n    PermissionResultDeny {\n        Literal_deny_ behavior\n        str message\n        bool interrupt\n    }\n    PermissionRuleValue {\n        str tool_name\n        str_None rule_content\n    }\n    PermissionUpdate {\n        Literal_ type\n        list_PermissionRuleValue__None rules\n        PermissionBehavior_None behavior\n        PermissionMode_None mode\n        list_str__None directories\n        PermissionUpdateDestination_None destination\n    }\n    RateLimitEvent {\n        RateLimitInfo rate_limit_info\n        str uuid\n        str session_id\n    }\n    RateLimitInfo {\n        RateLimitStatus status\n        int_None resets_at\n        RateLimitType_None rate_limit_type\n        float_None utilization\n        RateLimitStatus_None overage_status\n        int_None overage_resets_at\n        str_None overage_disabled_reason\n        dict_strAny_ raw\n    }\n    ResultMessage {\n        str subtype\n        int duration_ms\n        int duration_api_ms\n        bool is_error\n        int num_turns\n        str session_id\n        str_None stop_reason\n        float_None total_cost_usd\n        dict_strAny__None usage\n        str_None result\n        Any structured_output\n    }\n    SDKSessionInfo {\n        str session_id\n        str summary\n        int last_modified\n        int file_size\n        str_None custom_title\n        str_None first_prompt\n        str_None git_branch\n        str_None cwd\n    }\n    SessionMessage {\n        Literal_userassistant_ type\n        str uuid\n        str session_id\n        Any message\n        None parent_tool_use_id\n    }\n    StreamEvent {\n        str uuid\n        str session_id\n        dict_strAny_TherawAnthropicAPIstreamevent event\n        str_None parent_tool_use_id\n    }\n    SystemMessage {\n        str subtype\n        dict_strAny_ data\n    }\n    TaskNotificationMessage {\n        str task_id\n        TaskNotificationStatus status\n        str output_file\n        str summary\n        str uuid\n        str session_id\n        str_None tool_use_id\n        TaskUsage_None usage\n    }\n    TaskProgressMessage {\n        str task_id\n        str description\n        TaskUsage usage\n        str uuid\n        str session_id\n        str_None tool_use_id\n        str_None last_tool_name\n    }\n    TaskStartedMessage {\n        str task_id\n        str description\n        str uuid\n        str session_id\n        str_None tool_use_id\n        str_None task_type\n    }\n    TextBlock {\n        str text\n    }\n    ThinkingBlock {\n        str thinking\n        str signature\n    }\n    ToolPermissionContext {\n        Any_None signal\n        list_PermissionUpdate_ suggestions\n    }\n    ToolResultBlock {\n        str tool_use_id\n        str_list_dict_strAny___None content\n        bool_None is_error\n    }\n    ToolUseBlock {\n        str id\n        str name\n        dict_strAny_ input\n    }\n    UserMessage {\n        str_list_ContentBlock_ content\n        str_None uuid\n        str_None parent_tool_use_id\n        dict_strAny__None tool_use_result\n    }\n    PermissionUpdate ||--o| PermissionRuleValue : \"has\"\n    ToolPermissionContext ||--o| PermissionUpdate : \"has\"\n    PermissionResultAllow ||--o| PermissionUpdate : \"has\"\n    SystemMessage ||--o{ TaskStartedMessage : \"inherits\"\n    SystemMessage ||--o{ TaskProgressMessage : \"inherits\"\n    SystemMessage ||--o{ TaskNotificationMessage : \"inherits\"\n    RateLimitEvent ||--o| RateLimitInfo : \"has\"\n    ClaudeAgentOptions ||--o| HookMatcher : \"has\"\n    ClaudeAgentOptions ||--o| AgentDefinition : \"has\"",
+  "summary": {
+    "totalModels": 25,
+    "totalFields": 148,
+    "byLanguage": {
+      "python": 25
+    },
+    "byKind": {
+      "dataclass": 25
+    }
+  }
+}

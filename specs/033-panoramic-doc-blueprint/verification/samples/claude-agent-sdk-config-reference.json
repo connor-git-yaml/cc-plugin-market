@@ -1,0 +1,266 @@
+{
+  "title": "配置参考手册: claude-agent-sdk-python",
+  "projectName": "claude-agent-sdk-python",
+  "generatedAt": "2026-03-19",
+  "files": [
+    {
+      "filePath": "pyproject.toml",
+      "format": "toml",
+      "entries": [
+        {
+          "keyPath": "build-system.requires",
+          "type": "array",
+          "defaultValue": "[\"hatchling\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "build-system.build-backend",
+          "type": "string",
+          "defaultValue": "hatchling.build",
+          "description": ""
+        },
+        {
+          "keyPath": "project.name",
+          "type": "string",
+          "defaultValue": "claude-agent-sdk",
+          "description": ""
+        },
+        {
+          "keyPath": "project.version",
+          "type": "string",
+          "defaultValue": "0.1.48",
+          "description": ""
+        },
+        {
+          "keyPath": "project.description",
+          "type": "string",
+          "defaultValue": "Python SDK for Claude Code",
+          "description": ""
+        },
+        {
+          "keyPath": "project.readme",
+          "type": "string",
+          "defaultValue": "README.md",
+          "description": ""
+        },
+        {
+          "keyPath": "project.requires-python",
+          "type": "string",
+          "defaultValue": ">=3.10",
+          "description": ""
+        },
+        {
+          "keyPath": "project.license",
+          "type": "object",
+          "defaultValue": "{text = \"MIT\"}",
+          "description": ""
+        },
+        {
+          "keyPath": "project.authors",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "project.classifiers",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "project.keywords",
+          "type": "array",
+          "defaultValue": "[\"claude\", \"ai\", \"sdk\", \"anthropic\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "project.dependencies",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "project.optional-dependencies.dev",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "project.urls.Homepage",
+          "type": "string",
+          "defaultValue": "https://github.com/anthropics/claude-agent-sdk-python",
+          "description": ""
+        },
+        {
+          "keyPath": "project.urls.Documentation",
+          "type": "string",
+          "defaultValue": "https://docs.anthropic.com/en/docs/claude-code/sdk",
+          "description": ""
+        },
+        {
+          "keyPath": "project.urls.Issues",
+          "type": "string",
+          "defaultValue": "https://github.com/anthropics/claude-agent-sdk-python/issues",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.hatch.build.targets.wheel.packages",
+          "type": "array",
+          "defaultValue": "[\"src/claude_agent_sdk\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.hatch.build.targets.wheel.only-include",
+          "type": "array",
+          "defaultValue": "[\"src/claude_agent_sdk\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.hatch.build.targets.sdist.include",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.pytest.ini_options.testpaths",
+          "type": "array",
+          "defaultValue": "[\"tests\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.pytest.ini_options.pythonpath",
+          "type": "array",
+          "defaultValue": "[\"src\"]",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.pytest.ini_options.addopts",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.pytest-asyncio.asyncio_mode",
+          "type": "string",
+          "defaultValue": "auto",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.python_version",
+          "type": "number",
+          "defaultValue": "3.10",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.strict",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_return_any",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_unused_configs",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.disallow_untyped_defs",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.disallow_incomplete_defs",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.check_untyped_defs",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.disallow_untyped_decorators",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.no_implicit_optional",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_redundant_casts",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_unused_ignores",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_no_return",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.warn_unreachable",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.mypy.strict_equality",
+          "type": "boolean",
+          "defaultValue": "true",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.ruff.target-version",
+          "type": "string",
+          "defaultValue": "py310",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.ruff.line-length",
+          "type": "number",
+          "defaultValue": "88",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.ruff.lint.select",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.ruff.lint.ignore",
+          "type": "array",
+          "defaultValue": "[",
+          "description": ""
+        },
+        {
+          "keyPath": "tool.ruff.lint.isort.known-first-party",
+          "type": "array",
+          "defaultValue": "[\"claude_agent_sdk\"]",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "totalEntries": 42
+}
