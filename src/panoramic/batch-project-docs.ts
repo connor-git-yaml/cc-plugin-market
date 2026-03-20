@@ -15,12 +15,18 @@ import {
   type BatchGeneratedDocSummary,
 } from './architecture-narrative.js';
 import { generateBatchAdrDocs } from './adr-decision-pipeline.js';
+import { buildComponentView, renderComponentView } from './component-view-builder.js';
+import { buildDynamicScenarios, renderDynamicScenarios } from './dynamic-scenarios-builder.js';
 import {
   getBatchProjectOutputBaseName,
   isBatchProjectGeneratorId,
 } from './output-filenames.js';
 import type { ArchitectureOverviewOutput } from './architecture-overview-generator.js';
+import type { ArchitectureIROutput } from './architecture-ir-generator.js';
+import type { EventSurfaceOutput } from './event-surface-generator.js';
 import type { PatternHintsOutput } from './pattern-hints-model.js';
+import type { RuntimeTopologyOutput } from './runtime-topology-generator.js';
+import { loadStoredModuleSpecs } from './stored-module-specs.js';
 
 export interface BatchProjectDocsResult {
   projectContext: ProjectContext;
@@ -93,6 +99,80 @@ export async function generateBatchProjectDocs(
     writtenFiles: narrativeWrittenFiles,
     warnings: [],
   });
+
+  const architectureIR = structuredOutputs.get('architecture-ir') as ArchitectureIROutput | undefined;
+  const runtimeTopology = structuredOutputs.get('runtime-topology') as RuntimeTopologyOutput | undefined;
+  const eventSurface = structuredOutputs.get('event-surface') as EventSurfaceOutput | undefined;
+
+  if (architectureIR) {
+    const storedModules = loadStoredModuleSpecs(options.outputDir, options.projectRoot);
+
+    try {
+      const componentView = buildComponentView({
+        architectureIR: architectureIR.ir,
+        storedModules,
+        architectureNarrative,
+        runtime: runtimeTopology,
+        eventSurface,
+      });
+      const componentWrittenFiles = writeMultiFormat({
+        outputDir: options.outputDir,
+        baseName: 'component-view',
+        outputFormat: 'all',
+        markdown: renderComponentView(componentView),
+        structuredData: componentView,
+        mermaidSource: componentView.mermaidDiagram,
+      });
+      generatedDocs.push({
+        generatorId: 'component-view',
+        writtenFiles: componentWrittenFiles,
+        warnings: componentView.warnings,
+      });
+      structuredOutputs.set('component-view', componentView);
+
+      const dynamicScenarios = buildDynamicScenarios({
+        componentView: componentView.model,
+        storedModules,
+        runtime: runtimeTopology,
+        eventSurface,
+      });
+      const scenarioWrittenFiles = writeMultiFormat({
+        outputDir: options.outputDir,
+        baseName: 'dynamic-scenarios',
+        outputFormat: 'all',
+        markdown: renderDynamicScenarios(dynamicScenarios),
+        structuredData: dynamicScenarios,
+      });
+      generatedDocs.push({
+        generatorId: 'dynamic-scenarios',
+        writtenFiles: scenarioWrittenFiles,
+        warnings: dynamicScenarios.warnings,
+      });
+      structuredOutputs.set('dynamic-scenarios', dynamicScenarios);
+    } catch (error) {
+      generatedDocs.push({
+        generatorId: 'component-view',
+        writtenFiles: [],
+        warnings: [`组件视图生成失败: ${String(error)}`],
+      });
+      generatedDocs.push({
+        generatorId: 'dynamic-scenarios',
+        writtenFiles: [],
+        warnings: ['动态链路生成跳过：依赖的 component-view 生成失败'],
+      });
+    }
+  } else {
+    generatedDocs.push({
+      generatorId: 'component-view',
+      writtenFiles: [],
+      warnings: ['组件视图生成跳过：缺少 architecture-ir 输出'],
+    });
+    generatedDocs.push({
+      generatorId: 'dynamic-scenarios',
+      writtenFiles: [],
+      warnings: ['动态链路生成跳过：缺少 architecture-ir 输出'],
+    });
+  }
 
   try {
     const adrDocs = generateBatchAdrDocs({

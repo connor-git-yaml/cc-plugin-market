@@ -1,0 +1,46 @@
+# 动态链路: {{model.projectName}}
+
+- 生成时间: `{{generatedAt}}`
+- 场景数: `{{model.stats.totalScenarios}}`
+- 总步骤数: `{{model.stats.totalSteps}}`
+- 高置信场景数: `{{model.stats.highConfidenceScenarios}}`
+
+{{#if warnings.length}}
+## 1. Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 2. 场景列表
+
+{{#each model.scenarios}}
+### {{title}}
+
+- 分类: `{{category}}`
+- Trigger: `{{trigger}}`
+- 置信度: `{{confidence}}`
+- 推断: `{{inferred}}`
+- 参与者: {{#each participants}}`{{this}}` {{/each}}
+- 摘要: {{summary}}
+{{#if outcome}}
+- 结果: {{outcome}}
+{{/if}}
+
+#### Steps
+
+{{#each steps}}
+{{index}}. `{{actor}}`{{#if target}} -> `{{target}}`{{/if}}: {{action}}
+   {{detail}}
+   证据: {{#each evidence}}`{{sourceType}}:{{ref}}` {{/each}}
+{{/each}}
+
+{{#if evidence.length}}
+#### Evidence
+
+{{#each evidence}}
+- `{{sourceType}}:{{ref}}`{{#if note}} - {{note}}{{/if}}
+{{/each}}
+{{/if}}
+{{/each}}

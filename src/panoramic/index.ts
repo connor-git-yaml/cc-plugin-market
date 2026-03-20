@@ -125,6 +125,18 @@ export {
 } from './architecture-ir-generator.js';
 
 export {
+  buildComponentView,
+  renderComponentView,
+  type BuildComponentViewOptions,
+} from './component-view-builder.js';
+
+export {
+  buildDynamicScenarios,
+  renderDynamicScenarios,
+  type BuildDynamicScenariosOptions,
+} from './dynamic-scenarios-builder.js';
+
+export {
   PatternHintsGenerator,
   type PatternHintsGeneratorDependencies,
   type PatternHintsLLMEnhancer,
@@ -201,6 +213,46 @@ export {
   type ArchitectureIRMermaidExport,
   type ArchitectureIRExportBundle,
 } from './architecture-ir-model.js';
+
+export {
+  summarizeComponentView,
+  summarizeDynamicScenarios,
+  compareConfidence,
+  maxConfidence,
+  minConfidence,
+  dedupeComponentEvidence,
+  type ComponentConfidence,
+  type ComponentEvidenceSourceType,
+  type ComponentCategory,
+  type ComponentMethodKind,
+  type ComponentRelationshipKind,
+  type DynamicScenarioCategory,
+  type ComponentEvidenceRef,
+  type ComponentMethodRef,
+  type ComponentDescriptor,
+  type ComponentRelationship,
+  type ComponentGroup,
+  type ComponentViewStats,
+  type ComponentViewModel,
+  type ComponentViewOutput,
+  type DynamicScenarioStep,
+  type DynamicScenario,
+  type DynamicScenarioStats,
+  type DynamicScenarioModel,
+  type DynamicScenariosOutput,
+} from './component-view-model.js';
+
+export {
+  loadStoredModuleSpecs,
+  parseStoredModuleSpec,
+  extractStoredSpecFrontmatter,
+  extractStoredSpecSectionSummary,
+  summarizeStoredMarkdown,
+  extractStoredBaselineSkeleton,
+  normalizeStoredProjectPath,
+  stripYamlScalar,
+  type StoredModuleSpecRecord,
+} from './stored-module-specs.js';
 
 export { buildArchitectureIR, type BuildArchitectureIROptions } from './architecture-ir-builder.js';
 export { exportArchitectureIRJson, exportArchitectureIRStructurizrDsl } from './architecture-ir-exporters.js';

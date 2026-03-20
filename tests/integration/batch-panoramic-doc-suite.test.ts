@@ -186,8 +186,10 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
         'specs/docs/adr/index.md',
         'specs/architecture-narrative.md',
         'specs/architecture-overview.md',
+        'specs/component-view.md',
         'specs/config-reference.md',
         'specs/data-model.md',
+        'specs/dynamic-scenarios.md',
         'specs/event-surface.md',
         'specs/pattern-hints.md',
         'specs/runtime-topology.md',
@@ -202,7 +204,10 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-narrative.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'component-view.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'component-view.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'data-model.mmd'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'dynamic-scenarios.json'))).toBe(true);
     const adrFiles = fs.readdirSync(path.join(projectRoot, 'specs', 'docs', 'adr'))
       .filter((fileName) => /^adr-\d{4}-.+\.md$/i.test(fileName));
     expect(adrFiles.length).toBeGreaterThanOrEqual(2);
@@ -214,6 +219,18 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(narrativeMarkdown).toContain('## 3. 关键模块');
     expect(narrativeMarkdown).toContain('## 5. 关键方法 / 函数');
     expect(narrativeMarkdown).toContain('UserService');
+
+    const componentViewMarkdown = fs.readFileSync(
+      path.join(projectRoot, 'specs', 'component-view.md'),
+      'utf-8',
+    );
+    expect(componentViewMarkdown).toContain('## 4. 关键组件');
+
+    const dynamicScenariosMarkdown = fs.readFileSync(
+      path.join(projectRoot, 'specs', 'dynamic-scenarios.md'),
+      'utf-8',
+    );
+    expect(dynamicScenariosMarkdown).toContain('## 2. 场景列表');
 
     const adrIndexMarkdown = fs.readFileSync(
       path.join(projectRoot, 'specs', 'docs', 'adr', 'index.md'),

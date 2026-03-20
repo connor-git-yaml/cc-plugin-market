@@ -1,0 +1,87 @@
+# 组件视图: {{model.projectName}}
+
+- 生成时间: `{{generatedAt}}`
+- 关键组件数: `{{model.stats.totalComponents}}`
+- 关键关系数: `{{model.stats.totalRelationships}}`
+- 高置信组件数: `{{model.stats.highConfidenceComponents}}`
+
+## 1. 摘要
+
+{{#each model.summary}}
+- {{this}}
+{{/each}}
+
+{{#if warnings.length}}
+## 2. Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 3. 组件分组
+
+{{#each model.groups}}
+### {{name}}
+
+- 组件数: `{{componentIds.length}}`
+{{#if summary}}
+- 摘要: {{summary}}
+{{/if}}
+{{/each}}
+
+## 4. 关键组件
+
+{{#each model.components}}
+### {{name}}
+
+- 分类: `{{category}}`
+- 子系统: `{{subsystem}}`
+- 置信度: `{{confidence}}`
+- 推断: `{{inferred}}`
+- 摘要: {{summary}}
+{{#if responsibilities.length}}
+- 职责:
+{{#each responsibilities}}
+  - {{this}}
+{{/each}}
+{{/if}}
+{{#if relatedFiles.length}}
+- 关联文件:
+{{#each relatedFiles}}
+  - `{{this}}`
+{{/each}}
+{{/if}}
+{{#if keyMethods.length}}
+- 关键方法:
+{{#each keyMethods}}
+  - `{{name}}`{{#if ownerName}} (owner=`{{ownerName}}`){{/if}}{{#if signature}} -> `{{signature}}`{{/if}} [`{{kind}}`]
+{{/each}}
+{{/if}}
+{{#if downstreamIds.length}}
+- 下游组件: `{{downstreamIds.length}}`
+{{/if}}
+{{#if upstreamIds.length}}
+- 上游组件: `{{upstreamIds.length}}`
+{{/if}}
+{{#if evidence.length}}
+- Evidence:
+{{#each evidence}}
+  - `{{sourceType}}:{{ref}}`{{#if note}} - {{note}}{{/if}}
+{{/each}}
+{{/if}}
+{{/each}}
+
+## 5. 关键关系
+
+{{#each model.relationships}}
+- `{{fromId}}` -> `{{toId}}` [`{{kind}}`, `{{confidence}}`]: {{label}}
+{{/each}}
+
+{{#if model.mermaidDiagram}}
+## 6. Mermaid
+
+```mermaid
+{{model.mermaidDiagram}}
+```
+{{/if}}

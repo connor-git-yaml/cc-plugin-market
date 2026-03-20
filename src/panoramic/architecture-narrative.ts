@@ -5,11 +5,15 @@
  * 而是聚合 module spec、baseline skeleton 与 architecture overview 的事实，
  * 生成“先说结论 / 关键模块 / 关键类 / 关键方法”的叙事文档。
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { CodeSkeleton, ExportSymbol, MemberInfo } from '../models/code-skeleton.js';
+import type { ExportSymbol, MemberInfo } from '../models/code-skeleton.js';
 import type { ProjectContext } from './interfaces.js';
 import type { ArchitectureOverviewOutput } from './architecture-overview-generator.js';
+import {
+  loadStoredModuleSpecs,
+  summarizeStoredMarkdown,
+  type StoredModuleSpecRecord,
+} from './stored-module-specs.js';
 import { loadTemplate } from './utils/template-loader.js';
 
 export interface BatchGeneratedDocSummary {
@@ -71,15 +75,7 @@ export interface ArchitectureNarrativeOutput {
   supportingDocs: SupportingDocLink[];
 }
 
-interface StoredNarrativeModule {
-  sourceTarget: string;
-  relatedFiles: string[];
-  confidence: 'high' | 'medium' | 'low';
-  intentSummary: string;
-  businessSummary: string;
-  dependencySummary: string;
-  baselineSkeleton?: CodeSkeleton;
-}
+type StoredNarrativeModule = StoredModuleSpecRecord;
 
 export interface BuildArchitectureNarrativeOptions {
   projectRoot: string;
@@ -144,164 +140,7 @@ export function loadStoredNarrativeModules(
   outputDir: string,
   projectRoot: string,
 ): StoredNarrativeModule[] {
-  if (!fs.existsSync(outputDir)) {
-    return [];
-  }
-
-  const markdownSpecFiles: string[] = [];
-  walkSpecFiles(outputDir, markdownSpecFiles);
-
-  return markdownSpecFiles
-    .map((filePath) => parseStoredNarrativeModule(filePath, projectRoot))
-    .filter((item): item is StoredNarrativeModule => item !== null)
-    .sort((left, right) => left.sourceTarget.localeCompare(right.sourceTarget));
-}
-
-function walkSpecFiles(dir: string, results: string[]): void {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      walkSpecFiles(fullPath, results);
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith('.spec.md') && !entry.name.startsWith('_')) {
-      results.push(fullPath);
-    }
-  }
-}
-
-function parseStoredNarrativeModule(
-  filePath: string,
-  projectRoot: string,
-): StoredNarrativeModule | null {
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const frontmatter = extractFrontmatter(content);
-  if (!frontmatter || frontmatter.type !== 'module-spec' || !frontmatter.sourceTarget) {
-    return null;
-  }
-
-  const baselineSkeleton = extractBaselineSkeleton(content);
-
-  return {
-    sourceTarget: normalizeProjectPath(frontmatter.sourceTarget, projectRoot),
-    relatedFiles: frontmatter.relatedFiles.map((item) => normalizeProjectPath(item, projectRoot)),
-    confidence: frontmatter.confidence ?? 'medium',
-    intentSummary: extractSectionSummary(content, 1, frontmatter.sourceTarget),
-    businessSummary: extractSectionSummary(content, 3, `${frontmatter.sourceTarget} 的业务逻辑以模块职责为中心组织`),
-    dependencySummary: extractSectionSummary(content, 9, `${frontmatter.sourceTarget} 的依赖关系未在既有 spec 中显式描述`),
-    baselineSkeleton,
-  };
-}
-
-function extractFrontmatter(content: string): {
-  type?: string;
-  sourceTarget?: string;
-  confidence?: 'high' | 'medium' | 'low';
-  relatedFiles: string[];
-} | null {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
-  if (!match?.[1]) {
-    return null;
-  }
-
-  const lines = match[1].split(/\r?\n/);
-  let type: string | undefined;
-  let sourceTarget: string | undefined;
-  let confidence: 'high' | 'medium' | 'low' | undefined;
-  const relatedFiles: string[] = [];
-  let inRelatedFiles = false;
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
-
-    if (line.startsWith('type:')) {
-      type = stripYamlScalar(line.slice('type:'.length).trim());
-      inRelatedFiles = false;
-      continue;
-    }
-
-    if (line.startsWith('sourceTarget:')) {
-      sourceTarget = stripYamlScalar(line.slice('sourceTarget:'.length).trim());
-      inRelatedFiles = false;
-      continue;
-    }
-
-    if (line.startsWith('confidence:')) {
-      const parsed = stripYamlScalar(line.slice('confidence:'.length).trim());
-      if (parsed === 'high' || parsed === 'medium' || parsed === 'low') {
-        confidence = parsed;
-      }
-      inRelatedFiles = false;
-      continue;
-    }
-
-    if (line === 'relatedFiles:') {
-      inRelatedFiles = true;
-      continue;
-    }
-
-    if (inRelatedFiles) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('- ')) {
-        relatedFiles.push(stripYamlScalar(trimmed.slice(2).trim()));
-        continue;
-      }
-      inRelatedFiles = false;
-    }
-  }
-
-  return { type, sourceTarget, confidence, relatedFiles };
-}
-
-function extractSectionSummary(content: string, sectionNumber: number, fallback: string): string {
-  const headingRe = new RegExp(String.raw`^##\s+${sectionNumber}\.\s+[^\r\n]+\r?\n`, 'm');
-  const headingMatch = headingRe.exec(content);
-  if (!headingMatch?.[0]) {
-    return fallback;
-  }
-
-  const start = headingMatch.index + headingMatch[0].length;
-  const remainder = content.slice(start);
-  const boundaries = [
-    remainder.search(/^[ \t]*##\s+\d+\.\s+[^\r\n]+/m),
-    remainder.search(/^[ \t]*---\s*$/m),
-    remainder.search(/<!-- baseline-skeleton:/m),
-  ].filter((index) => index >= 0);
-  const end = boundaries.length > 0 ? Math.min(...boundaries) : remainder.length;
-
-  return summarizeMarkdown(remainder.slice(0, end), fallback);
-}
-
-function summarizeMarkdown(content: string, fallback: string): string {
-  const line = content
-    .split(/\r?\n/)
-    .map((item) => item
-      .replace(/^[-*]\s+/, '')
-      .replace(/^\d+\.\s+/, '')
-      .trim())
-    .find((item) =>
-      item.length > 0
-      && !item.startsWith('```')
-      && !item.startsWith('|')
-      && !/^<a\s+/i.test(item),
-    );
-  return line ?? fallback;
-}
-
-function extractBaselineSkeleton(content: string): CodeSkeleton | undefined {
-  const match = /<!-- baseline-skeleton: ([\s\S]*?) -->/.exec(content);
-  if (!match?.[1]) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(match[1]) as CodeSkeleton;
-  } catch {
-    return undefined;
-  }
+  return loadStoredModuleSpecs(outputDir, projectRoot);
 }
 
 function toNarrativeModuleInsight(module: StoredNarrativeModule): NarrativeModuleInsight {
@@ -617,14 +456,14 @@ function collectPrioritizedNarrativeItems<T>(
 
 function summarizeSymbolNote(symbol: ExportSymbol, fallback: string): string {
   if (symbol.jsDoc?.trim()) {
-    return summarizeMarkdown(symbol.jsDoc, fallback);
+    return summarizeStoredMarkdown(symbol.jsDoc, fallback);
   }
   return fallback;
 }
 
 function summarizeMemberNote(member: MemberInfo, ownerName: string, fallback: string): string {
   if (member.jsDoc?.trim()) {
-    return summarizeMarkdown(member.jsDoc, fallback);
+    return summarizeStoredMarkdown(member.jsDoc, fallback);
   }
   return `${ownerName} 的核心成员；${fallback}`;
 }
@@ -722,24 +561,6 @@ function isLowSignalNarrativeMethod(
   return name.startsWith('test_')
     || name.startsWith('test')
     || ownerName?.startsWith('Test') === true;
-}
-
-function stripYamlScalar(value: string): string {
-  if (
-    (value.startsWith('"') && value.endsWith('"'))
-    || (value.startsWith('\'') && value.endsWith('\''))
-  ) {
-    return value.slice(1, -1);
-  }
-  return value;
-}
-
-function normalizeProjectPath(inputPath: string, projectRoot: string): string {
-  const absolutePath = path.isAbsolute(inputPath)
-    ? inputPath
-    : path.join(projectRoot, inputPath);
-  const rel = path.relative(projectRoot, absolutePath);
-  return rel.startsWith('..') ? inputPath.split(path.sep).join('/') : rel.split(path.sep).join('/');
 }
 
 function dedupeNarrativeItems<T>(items: T[], getKey: (item: T) => string): T[] {
