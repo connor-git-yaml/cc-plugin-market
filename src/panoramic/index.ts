@@ -113,6 +113,12 @@ export {
 } from './coverage-auditor.js';
 
 export {
+  ArchitectureOverviewGenerator,
+  type ArchitectureOverviewInput,
+  type ArchitectureOverviewOutput,
+} from './architecture-overview-generator.js';
+
+export {
   buildSyntheticImageName,
   mergeEnvironmentVariables,
   normalizeCommandValue,
@@ -135,6 +141,25 @@ export {
   type RuntimeTopology,
   type RuntimeTopologyStats,
 } from './runtime-topology-model.js';
+
+export {
+  createArchitectureEvidence,
+  inferModuleResponsibility,
+  summarizeArchitectureOverview,
+  getArchitectureSection,
+  type ArchitectureSourceKind,
+  type ArchitectureSectionKind,
+  type ArchitectureNodeKind,
+  type ArchitectureRelationKind,
+  type ArchitectureEvidence,
+  type ArchitectureViewNode,
+  type ArchitectureViewEdge,
+  type ArchitectureViewSection,
+  type ArchitectureModuleSummary,
+  type DeploymentUnitSummary,
+  type ArchitectureOverviewStats,
+  type ArchitectureOverviewModel,
+} from './architecture-overview-model.js';
 
 // Parser 实现 + 类型
 export * from './parsers/index.js';

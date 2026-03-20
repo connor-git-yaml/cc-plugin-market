@@ -1,0 +1,103 @@
+---
+type: architecture-overview
+generatedBy: architecture-overview
+generatedAt: {{generatedAt}}
+availableSections: {{model.stats.availableSections}}
+totalWarnings: {{model.stats.totalWarnings}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}}
+
+## 摘要
+
+| 指标 | 值 |
+|------|------|
+| 总视图版块数 | {{model.stats.totalSections}} |
+| 可用版块数 | {{model.stats.availableSections}} |
+| 节点总数 | {{model.stats.totalNodes}} |
+| 关系边总数 | {{model.stats.totalEdges}} |
+| 模块职责条目数 | {{model.stats.totalModules}} |
+| 部署单元数 | {{model.stats.totalDeploymentUnits}} |
+| Warnings 数 | {{model.stats.totalWarnings}} |
+
+{{#if warnings.length}}
+## Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 系统上下文视图
+
+{{#if systemContext.available}}
+{{#if systemContext.description}}
+{{systemContext.description}}
+{{/if}}
+
+```mermaid
+{{{systemContext.mermaidDiagram}}}
+```
+{{else}}
+> [!NOTE] 当前版块不可用
+>
+> {{systemContext.missingReason}}
+{{/if}}
+
+## 部署视图
+
+{{#if deploymentView.available}}
+{{#if deploymentView.description}}
+{{deploymentView.description}}
+{{/if}}
+
+```mermaid
+{{{deploymentView.mermaidDiagram}}}
+```
+{{else}}
+> [!NOTE] 当前版块不可用
+>
+> {{deploymentView.missingReason}}
+{{/if}}
+
+## 分层视图
+
+{{#if layeredView.available}}
+{{#if layeredView.description}}
+{{layeredView.description}}
+{{/if}}
+
+```mermaid
+{{{layeredView.mermaidDiagram}}}
+```
+{{else}}
+> [!NOTE] 当前版块不可用
+>
+> {{layeredView.missingReason}}
+{{/if}}
+
+## 部署单元摘要
+
+| 服务 | 容器 | 镜像 | Target Stage | 依赖 | 端口 | 卷 |
+|------|------|------|--------------|------|------|----|
+{{#if model.deploymentUnits.length}}
+{{#each model.deploymentUnits}}
+| `{{serviceName}}` | {{#if containerName}}`{{containerName}}`{{else}}--{{/if}} | {{#if imageName}}`{{imageName}}`{{else}}--{{/if}} | {{#if targetStage}}`{{targetStage}}`{{else}}--{{/if}} | {{#if dependsOn.length}}{{#each dependsOn}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} | {{#if ports.length}}{{#each ports}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} | {{#if volumes.length}}{{#each volumes}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- | -- | -- |
+{{/if}}
+
+## 模块职责摘要
+
+| 分组 | 包 | 路径 | 语言 | 职责 | 依赖 |
+|------|----|------|------|------|------|
+{{#if model.moduleSummaries.length}}
+{{#each model.moduleSummaries}}
+| `{{groupName}}` | `{{packageName}}` | `{{path}}` | `{{language}}` | {{responsibility}} | {{#if dependencies.length}}{{#each dependencies}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- | -- |
+{{/if}}

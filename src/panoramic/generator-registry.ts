@@ -30,6 +30,7 @@ import { ApiSurfaceGenerator } from './api-surface-generator.js';
 import { RuntimeTopologyGenerator } from './runtime-topology-generator.js';
 import { EventSurfaceGenerator } from './event-surface-generator.js';
 import { TroubleshootingGenerator } from './troubleshooting-generator.js';
+import { ArchitectureOverviewGenerator } from './architecture-overview-generator.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -204,6 +205,9 @@ export function bootstrapGenerators(): void {
   registry.register(new CrossPackageAnalyzer());
   registry.register(new ApiSurfaceGenerator());
   registry.register(new RuntimeTopologyGenerator());
+  registry.register(new EventSurfaceGenerator());
+  registry.register(new TroubleshootingGenerator());
+  registry.register(new ArchitectureOverviewGenerator());
   registry.register(new EventSurfaceGenerator());
   registry.register(new TroubleshootingGenerator());
 }

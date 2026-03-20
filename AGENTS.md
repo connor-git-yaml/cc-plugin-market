@@ -71,3 +71,10 @@
 - 处理 panoramic 相关任务时，优先沿用现有抽象：`ProjectContext`、`GeneratorRegistry`、`ParserRegistry`、`AbstractRegistry`、`AbstractConfigParser`
 - 当前输出合同已覆盖 Markdown + JSON + Mermaid `.mmd`；涉及 LLM 增强时要保留 AST-only 的静默降级路径
 <!-- END SHARED SECTION: mainline-focus -->
+
+## Active Technologies
+- TypeScript 5.7.3, Node.js >= 20 + 现有 panoramic generators、`handlebars`、`zod`、Node.js built-ins (045-architecture-overview-system-context)
+- 文件系统（`specs/` 文档、`templates/`、`tests/`） (045-architecture-overview-system-context)
+
+## Recent Changes
+- 045-architecture-overview-system-context: Added TypeScript 5.7.3, Node.js >= 20 + 现有 panoramic generators、`handlebars`、`zod`、Node.js built-ins
