@@ -34,6 +34,7 @@ import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js'
 import { renderSpec } from '../generator/spec-renderer.js';
 import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
 import { buildProjectContext } from '../panoramic/project-context.js';
+import { generateBatchProjectDocs } from '../panoramic/batch-project-docs.js';
 
 // ============================================================
 // 类型定义
@@ -77,6 +78,8 @@ export interface BatchResult {
   coverageReportPath?: string;
   /** 049 输出的差量分析 Markdown */
   deltaReportPath?: string;
+  /** 053 输出的项目级文档 Markdown 列表 */
+  projectDocs?: string[];
 }
 
 // ============================================================
@@ -525,6 +528,7 @@ export async function runBatch(
   let deltaReportPath: string | undefined;
   let docGraphPath: string | undefined;
   let coverageReportPath: string | undefined;
+  let projectDocs: string[] | undefined;
   const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
   try {
     const docGraph = buildDocGraph({
@@ -561,9 +565,24 @@ export async function runBatch(
       }
     }
 
+    let projectContext = await buildProjectContext(resolvedRoot);
+    try {
+      const projectDocsResult = await generateBatchProjectDocs({
+        projectRoot: resolvedRoot,
+        outputDir: resolvedOutputDir,
+      });
+      projectContext = projectDocsResult.projectContext;
+      projectDocs = projectDocsResult.generatedDocs
+        .flatMap((doc) => doc.writtenFiles)
+        .filter((filePath) => filePath.endsWith('.md'))
+        .map(toProjectPath)
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      console.warn('项目级 panoramic 文档生成失败');
+    }
+
     try {
       const coverageAuditor = new CoverageAuditor();
-      const projectContext = await buildProjectContext(resolvedRoot);
       const coverageAudit = await coverageAuditor.audit({
         projectRoot: resolvedRoot,
         outputDir: resolvedOutputDir,
@@ -628,6 +647,7 @@ export async function runBatch(
     docGraphPath,
     coverageReportPath,
     deltaReportPath,
+    projectDocs,
   };
 }
 

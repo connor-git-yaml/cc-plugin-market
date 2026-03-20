@@ -1,0 +1,106 @@
+---
+type: architecture-narrative
+generatedBy: architecture-narrative
+generatedAt: {{generatedAt}}
+projectName: {{projectName}}
+keyModuleCount: {{keyModules.length}}
+keySymbolCount: {{keySymbols.length}}
+keyMethodCount: {{keyMethods.length}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}}
+
+## 1. 先说结论
+
+{{#each executiveSummary}}
+- {{this}}
+{{/each}}
+
+## 2. 仓库结构总览
+
+| 目录/域 | 类型 | 模块数 | 文件数 | 说明 |
+|------|------|------:|------:|------|
+{{#if repositoryMap.length}}
+{{#each repositoryMap}}
+| `{{path}}` | {{category}} | {{moduleCount}} | {{fileCount}} | {{summary}} |
+{{/each}}
+{{else}}
+| -- | -- | 0 | 0 | 当前未提取到可归档的模块结构 |
+{{/if}}
+
+## 3. 关键模块
+
+{{#if keyModules.length}}
+{{#each keyModules}}
+### `{{sourceTarget}}`
+
+- **职责**: {{intentSummary}}
+- **实现重点**: {{businessSummary}}
+- **依赖线索**: {{dependencySummary}}
+- **置信度**: `{{confidence}}`{{#if inferred}} / [推断]{{/if}}
+- **相关文件**: {{#if relatedFiles.length}}{{#each relatedFiles}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}}
+
+{{#if keySymbols.length}}
+关键类 / 类型:
+{{#each keySymbols}}
+- `{{name}}` ({{kind}}) — {{note}}
+{{/each}}
+{{/if}}
+
+{{#if keyMethods.length}}
+关键方法 / 函数:
+{{#each keyMethods}}
+- {{#if ownerName}}`{{ownerName}}.{{name}}`{{else}}`{{name}}`{{/if}} — {{note}}
+{{/each}}
+{{/if}}
+
+{{/each}}
+{{else}}
+当前批次未提取到可用于叙事的关键模块。
+{{/if}}
+
+## 4. 关键类 / 类型
+
+| 名称 | 所属模块 | 类型 | 签名 | 说明 |
+|------|----------|------|------|------|
+{{#if keySymbols.length}}
+{{#each keySymbols}}
+| `{{name}}` | `{{moduleName}}` | `{{kind}}` | `{{signature}}` | {{note}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | 当前未提取到代表性类型/类 |
+{{/if}}
+
+## 5. 关键方法 / 函数
+
+| 名称 | 所属模块 | 宿主 | 类型 | 签名 | 说明 |
+|------|----------|------|------|------|------|
+{{#if keyMethods.length}}
+{{#each keyMethods}}
+| `{{name}}` | `{{moduleName}}` | {{#if ownerName}}`{{ownerName}}`{{else}}模块级{{/if}} | `{{kind}}` | `{{signature}}` | {{note}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- | 当前未提取到代表性方法/函数 |
+{{/if}}
+
+## 6. 相关结构化文档
+
+{{#if supportingDocs.length}}
+{{#each supportingDocs}}
+- [{{title}}]({{path}})
+{{/each}}
+{{else}}
+- 当前批次没有额外的项目级结构化文档可交叉阅读。
+{{/if}}
+
+## 7. 架构观察
+
+{{#if observations.length}}
+{{#each observations}}
+- {{this}}
+{{/each}}
+{{else}}
+- 当前没有额外架构观察。
+{{/if}}

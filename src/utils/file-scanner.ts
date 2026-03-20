@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 /** 通用忽略目录（与语言无关，始终忽略） */
-const UNIVERSAL_IGNORE_DIRS = new Set(['.git', 'coverage']);
+const UNIVERSAL_IGNORE_DIRS = new Set(['.git', 'coverage', 'specs']);
 
 /**
  * 已知扩展名到语言名称的映射表

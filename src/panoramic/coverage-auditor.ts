@@ -16,6 +16,10 @@ import {
   type DocGraphSpecNode,
 } from './doc-graph-builder.js';
 import { loadTemplate } from './utils/template-loader.js';
+import {
+  getBatchProjectOutputFileName,
+  isBatchProjectGeneratorId,
+} from './output-filenames.js';
 
 export type CoverageIssue =
   | 'missing-doc'
@@ -121,16 +125,6 @@ export interface CoverageAuditorOptions {
 
 const ROOT_MODULE_RE = /^root(?:--.+)?$/;
 const SPEC_LINK_RE = /\[[^\]]+\]\(([^)]+?\.spec\.md(?:#[^)]+)?)\)/g;
-const GENERATOR_OUTPUT_MAP: Record<string, string> = {
-  'mock-readme': 'README.md',
-  'config-reference': 'config-reference.md',
-  'data-model': 'data-model.md',
-  'workspace-index': 'workspace-index.md',
-  'cross-package-deps': 'cross-package-analysis.md',
-  'api-surface': 'api-surface.md',
-  'runtime-topology': 'runtime-topology.md',
-};
-
 export class CoverageAuditor {
   async audit(options: CoverageAuditorOptions): Promise<CoverageAudit> {
     const coverageTargets = expandCoverageTargets(options.moduleGroups);
@@ -273,10 +267,11 @@ export class CoverageAuditor {
         .map((entry) => entry.moduleName),
     };
 
-    const applicableGenerators = await registry.filterByContext(projectContext);
+    const applicableGenerators = (await registry.filterByContext(projectContext))
+      .filter((generator) => isBatchProjectGeneratorId(generator.id));
 
     const projectEntries = applicableGenerators.map((generator) => {
-      const expectedFile = GENERATOR_OUTPUT_MAP[generator.id] ?? `${generator.id}.md`;
+      const expectedFile = getBatchProjectOutputFileName(generator.id);
       const expectedOutputs = [expectedFile];
       const existingOutputs = expectedOutputs.filter((fileName) =>
         fs.existsSync(path.join(outputDir, fileName)),

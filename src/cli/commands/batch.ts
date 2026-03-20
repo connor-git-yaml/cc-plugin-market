@@ -46,6 +46,11 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     if (result.deltaReportPath) {
       console.log(`✓ 差量报告: ${result.deltaReportPath}`);
     }
+    if (result.projectDocs && result.projectDocs.length > 0) {
+      const preview = result.projectDocs.slice(0, 6).join(', ');
+      const suffix = result.projectDocs.length > 6 ? ` ... 共 ${result.projectDocs.length} 个` : '';
+      console.log(`✓ 项目级文档: ${preview}${suffix}`);
+    }
     console.log(`✓ 日志: ${result.summaryLogPath}`);
 
     process.exitCode = result.failed.length > 0 ? EXIT_CODES.TARGET_ERROR : EXIT_CODES.SUCCESS;

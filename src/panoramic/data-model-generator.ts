@@ -532,11 +532,12 @@ export class DataModelGenerator
 
   /**
    * 判断当前项目是否适用此 Generator
-   * 检查 detectedLanguages 是否包含 Python 或 TypeScript
+   * 检查 detectedLanguages 是否包含 Python 或 TypeScript/TS-JS adapter
    */
   isApplicable(context: ProjectContext): boolean {
     return context.detectedLanguages.includes('python') ||
-           context.detectedLanguages.includes('typescript');
+           context.detectedLanguages.includes('typescript') ||
+           context.detectedLanguages.includes('ts-js');
   }
 
   /**
@@ -581,7 +582,10 @@ export class DataModelGenerator
     }
 
     // TypeScript 文件处理
-    if (context.detectedLanguages.includes('typescript')) {
+    if (
+      context.detectedLanguages.includes('typescript')
+      || context.detectedLanguages.includes('ts-js')
+    ) {
       const tsFiles = filePaths.filter(f =>
         (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.endsWith('.d.ts'),
       );
