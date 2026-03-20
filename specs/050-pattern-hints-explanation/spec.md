@@ -2,7 +2,7 @@
 
 **Feature Branch**: `050-pattern-hints-explanation`  
 **Created**: 2026-03-20  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: User description: "推进 050，落地 `PatternHintsGenerator`，以 045 的架构概览为主载体输出架构模式提示、证据链和替代方案。"
 
 ---

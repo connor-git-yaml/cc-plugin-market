@@ -2,7 +2,7 @@
 
 **Feature Branch**: `045-architecture-overview-system-context`  
 **Created**: 2026-03-20  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: User description: "推进 Feature 045，落地 ArchitectureOverviewGenerator，直接消费 043 的共享运行时模型以及 040/041 的结构化输出，生成系统上下文、部署视图和模块职责总览。"
 
 ---

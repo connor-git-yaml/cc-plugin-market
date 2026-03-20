@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feature/043-runtime-topology-ops`
 **Created**: 2026-03-20
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "落地 Feature 043 RuntimeTopologyGenerator，从 Dockerfile、docker-compose 和环境配置抽取统一运行时拓扑模型，并为 Feature 045 复用同一份中间模型。"
 
 ---

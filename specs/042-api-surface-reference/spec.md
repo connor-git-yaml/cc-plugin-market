@@ -2,7 +2,7 @@
 
 **Feature Branch**: `codex/042-api-surface-reference`
 **Created**: 2026-03-20
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "落地 Feature 042 API Surface Reference，固定使用编号 042，按 schema -> introspection -> ast 顺序生成 API Surface 文档"
 
 ---
