@@ -110,9 +110,48 @@ export function authorize(value: string): string {
     expect(json.summary.totalModules).toBe(2);
     expect(json.generatorCoverage.some((entry) => entry.generatorId === 'module-spec')).toBe(true);
   });
+
+  it('low-confidence 模块仍计入已文档化覆盖率', async () => {
+    mocks.generateSpec.mockImplementation(async (targetPath: string, options: { outputDir?: string }) => {
+      const moduleName = path.basename(targetPath);
+      const specPath = path.join(options.outputDir ?? path.join(projectRoot, 'specs'), `${moduleName}.spec.md`);
+      fs.mkdirSync(path.dirname(specPath), { recursive: true });
+      fs.writeFileSync(specPath, `# ${moduleName}\n`, 'utf-8');
+
+      const moduleSpec = createModuleSpec(specPath, moduleName, 'low');
+      return {
+        specPath,
+        skeleton: moduleSpec.baselineSkeleton,
+        tokenUsage: 0,
+        confidence: 'low' as const,
+        warnings: [],
+        moduleSpec,
+      };
+    });
+
+    await runBatch(projectRoot, {
+      force: true,
+      maxRetries: 1,
+    });
+
+    const json = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.json'), 'utf-8'),
+    ) as {
+      summary: { documentedModules: number; moduleCoveragePct: number };
+      attentionModules: Array<{ moduleName: string }>;
+    };
+
+    expect(json.summary.documentedModules).toBe(2);
+    expect(json.summary.moduleCoveragePct).toBe(100);
+    expect(json.attentionModules).toHaveLength(2);
+  });
 });
 
-function createModuleSpec(outputPath: string, moduleName: string): ModuleSpec {
+function createModuleSpec(
+  outputPath: string,
+  moduleName: string,
+  confidence: 'high' | 'medium' | 'low' = 'high',
+): ModuleSpec {
   const relatedFiles = moduleName === 'api'
     ? ['src/api/routes.ts']
     : ['src/auth/service.ts'];
@@ -125,7 +164,7 @@ function createModuleSpec(outputPath: string, moduleName: string): ModuleSpec {
       sourceTarget: moduleName === 'api' ? 'src/api' : 'src/auth',
       relatedFiles,
       lastUpdated: '2026-03-20T00:00:00.000Z',
-      confidence: 'high',
+      confidence,
       skeletonHash: 'a'.repeat(64),
     },
     sections: {

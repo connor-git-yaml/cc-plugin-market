@@ -194,7 +194,7 @@ export class CoverageAuditor {
     );
 
     const levelCoverage = summarizeLevelCoverage(moduleCoverage);
-    const documentedModules = moduleCoverage.filter((entry) => entry.status === 'documented').length;
+    const documentedModules = moduleCoverage.filter((entry) => !entry.issues.includes('missing-doc')).length;
     const missingDocCount = moduleCoverage.filter((entry) => entry.issues.includes('missing-doc')).length;
     const missingLinkCount = moduleCoverage.filter((entry) => entry.issues.includes('missing-links')).length;
     const moduleGenerator = generatorCoverage.find((entry) => entry.generatorId === 'module-spec');

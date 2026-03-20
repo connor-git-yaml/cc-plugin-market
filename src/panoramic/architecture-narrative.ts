@@ -18,6 +18,8 @@ export interface BatchGeneratedDocSummary {
   warnings: string[];
 }
 
+type NarrativeModuleRole = 'core' | 'support' | 'validation';
+
 export interface NarrativeSymbolInsight {
   moduleName: string;
   ownerName?: string;
@@ -31,6 +33,7 @@ export interface NarrativeSymbolInsight {
 export interface NarrativeModuleInsight {
   sourceTarget: string;
   displayName: string;
+  role: NarrativeModuleRole;
   relatedFiles: string[];
   confidence: 'high' | 'medium' | 'low';
   intentSummary: string;
@@ -254,23 +257,37 @@ function extractFrontmatter(content: string): {
 }
 
 function extractSectionSummary(content: string, sectionNumber: number, fallback: string): string {
-  const sectionRe = new RegExp(
-    String.raw`^##\s+${sectionNumber}\.\s+[^\r\n]+\r?\n([\s\S]*?)(?=^##\s+\d+\.|^---\s*$|<!-- baseline-skeleton:|\s*$)`,
-    'm',
-  );
-  const match = sectionRe.exec(content);
-  if (!match?.[1]) {
+  const headingRe = new RegExp(String.raw`^##\s+${sectionNumber}\.\s+[^\r\n]+\r?\n`, 'm');
+  const headingMatch = headingRe.exec(content);
+  if (!headingMatch?.[0]) {
     return fallback;
   }
 
-  return summarizeMarkdown(match[1], fallback);
+  const start = headingMatch.index + headingMatch[0].length;
+  const remainder = content.slice(start);
+  const boundaries = [
+    remainder.search(/^[ \t]*##\s+\d+\.\s+[^\r\n]+/m),
+    remainder.search(/^[ \t]*---\s*$/m),
+    remainder.search(/<!-- baseline-skeleton:/m),
+  ].filter((index) => index >= 0);
+  const end = boundaries.length > 0 ? Math.min(...boundaries) : remainder.length;
+
+  return summarizeMarkdown(remainder.slice(0, end), fallback);
 }
 
 function summarizeMarkdown(content: string, fallback: string): string {
   const line = content
     .split(/\r?\n/)
-    .map((item) => item.replace(/^[-*]\s+/, '').trim())
-    .find((item) => item.length > 0 && !item.startsWith('```'));
+    .map((item) => item
+      .replace(/^[-*]\s+/, '')
+      .replace(/^\d+\.\s+/, '')
+      .trim())
+    .find((item) =>
+      item.length > 0
+      && !item.startsWith('```')
+      && !item.startsWith('|')
+      && !/^<a\s+/i.test(item),
+    );
   return line ?? fallback;
 }
 
@@ -288,13 +305,15 @@ function extractBaselineSkeleton(content: string): CodeSkeleton | undefined {
 }
 
 function toNarrativeModuleInsight(module: StoredNarrativeModule): NarrativeModuleInsight {
-  const keySymbols = collectModuleSymbols(module).slice(0, 4);
-  const keyMethods = collectModuleMethods(module).slice(0, 5);
+  const role = classifyModuleRole(module.sourceTarget);
+  const keySymbols = collectModuleSymbols(module).slice(0, symbolLimitForRole(role));
+  const keyMethods = collectModuleMethods(module).slice(0, methodLimitForRole(role));
   const inferred = module.confidence === 'low' || !module.baselineSkeleton;
 
   return {
     sourceTarget: module.sourceTarget,
     displayName: path.posix.basename(module.sourceTarget),
+    role,
     relatedFiles: module.relatedFiles,
     confidence: module.confidence,
     intentSummary: module.intentSummary,
@@ -325,9 +344,10 @@ function collectModuleSymbols(module: StoredNarrativeModule): NarrativeSymbolIns
 function collectModuleMethods(module: StoredNarrativeModule): NarrativeSymbolInsight[] {
   const exports = module.baselineSkeleton?.exports ?? [];
   const methods: NarrativeSymbolInsight[] = [];
+  const role = classifyModuleRole(module.sourceTarget);
 
   for (const symbol of exports) {
-    if (symbol.kind === 'function') {
+    if (symbol.kind === 'function' && !isLowSignalNarrativeMethod(symbol.name, undefined, role)) {
       methods.push({
         moduleName: module.sourceTarget,
         ownerName: undefined,
@@ -341,6 +361,9 @@ function collectModuleMethods(module: StoredNarrativeModule): NarrativeSymbolIns
 
     for (const member of symbol.members ?? []) {
       if (!isNarrativeMethodKind(member.kind)) {
+        continue;
+      }
+      if (isLowSignalNarrativeMethod(member.name, symbol.name, role)) {
         continue;
       }
       methods.push({
@@ -359,17 +382,23 @@ function collectModuleMethods(module: StoredNarrativeModule): NarrativeSymbolIns
 }
 
 function collectKeySymbols(modules: NarrativeModuleInsight[]): NarrativeSymbolInsight[] {
-  return dedupeNarrativeItems(
-    modules.flatMap((module) => module.keySymbols),
+  return collectPrioritizedNarrativeItems(
+    modules,
+    (module) => module.keySymbols,
     (item) => `${item.moduleName}:${item.kind}:${item.name}`,
-  ).sort((left, right) => compareSymbolInsights(left, right));
+    compareSymbolInsights,
+    10,
+  );
 }
 
 function collectKeyMethods(modules: NarrativeModuleInsight[]): NarrativeSymbolInsight[] {
-  return dedupeNarrativeItems(
-    modules.flatMap((module) => module.keyMethods),
+  return collectPrioritizedNarrativeItems(
+    modules,
+    (module) => module.keyMethods,
     (item) => `${item.moduleName}:${item.ownerName ?? 'module'}:${item.kind}:${item.name}`,
-  ).sort((left, right) => compareMethodInsights(left, right));
+    compareMethodInsights,
+    12,
+  );
 }
 
 function buildRepositoryMap(
@@ -501,10 +530,11 @@ function compareModuleInsights(left: NarrativeModuleInsight, right: NarrativeMod
 
 function scoreModuleInsight(module: NarrativeModuleInsight): number {
   let score = module.relatedFiles.length * 2 + module.keySymbols.length * 3 + module.keyMethods.length * 2;
-  if (module.sourceTarget.startsWith('src')) score += 5;
-  if (module.sourceTarget.includes('core')) score += 3;
-  if (module.sourceTarget.includes('test')) score -= 2;
-  if (module.sourceTarget.includes('example')) score -= 1;
+  if (module.role === 'core') score += 10;
+  if (module.sourceTarget.includes('core')) score += 4;
+  if (module.sourceTarget.includes('internal')) score += 2;
+  if (module.role === 'support') score -= 2;
+  if (module.role === 'validation') score -= 8;
   if (module.confidence === 'low') score -= 2;
   return score;
 }
@@ -522,7 +552,8 @@ function scoreSymbolInsight(item: NarrativeSymbolInsight): number {
   if (/(Client|Service|Manager|Parser|Session|Transport|Query|Config|Model|SDK|Server)/.test(item.name)) score += 5;
   if (/(class|data_class|struct|protocol|interface)/.test(item.kind)) score += 4;
   score += Math.min(item.signature.length / 40, 4);
-  if (item.moduleName.startsWith('src')) score += 2;
+  if (classifyModuleRole(item.moduleName) === 'core') score += 3;
+  if (classifyModuleRole(item.moduleName) === 'validation') score -= 4;
   if (item.inferred) score -= 1;
   return score;
 }
@@ -543,10 +574,45 @@ function scoreMethodInsight(item: NarrativeSymbolInsight): number {
     score += 6;
   }
   if (item.ownerName) score += 2;
-  if (item.moduleName.startsWith('src')) score += 2;
+  if (classifyModuleRole(item.moduleName) === 'core') score += 4;
+  if (classifyModuleRole(item.moduleName) === 'support') score -= 1;
+  if (classifyModuleRole(item.moduleName) === 'validation') score -= 6;
   score += Math.min(item.signature.length / 50, 4);
   if (item.inferred) score -= 1;
   return score;
+}
+
+function collectPrioritizedNarrativeItems<T>(
+  modules: NarrativeModuleInsight[],
+  pick: (module: NarrativeModuleInsight) => T[],
+  keyOf: (item: T) => string,
+  compare: (left: T, right: T) => number,
+  limit: number,
+): T[] {
+  const orderedRoles: NarrativeModuleRole[] = ['core', 'support', 'validation'];
+  const results: T[] = [];
+  const seen = new Set<string>();
+
+  for (const role of orderedRoles) {
+    const ranked = modules
+      .filter((module) => module.role === role)
+      .flatMap((module) => pick(module))
+      .sort(compare);
+
+    for (const item of ranked) {
+      const key = keyOf(item);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      results.push(item);
+      if (results.length >= limit) {
+        return results;
+      }
+    }
+  }
+
+  return results;
 }
 
 function summarizeSymbolNote(symbol: ExportSymbol, fallback: string): string {
@@ -598,6 +664,64 @@ function categorizePath(segment: string): string {
   if (segment === 'examples') return '示例与对外使用目录';
   if (segment === 'scripts') return '脚本与运维辅助目录';
   return '项目子域目录';
+}
+
+function classifyModuleRole(sourceTarget: string): NarrativeModuleRole {
+  if (
+    sourceTarget === 'tests'
+    || sourceTarget.startsWith('tests/')
+    || sourceTarget === 'e2e-tests'
+    || sourceTarget.startsWith('e2e-tests/')
+  ) {
+    return 'validation';
+  }
+
+  if (
+    sourceTarget === 'examples'
+    || sourceTarget.startsWith('examples/')
+    || sourceTarget === 'scripts'
+    || sourceTarget.startsWith('scripts/')
+  ) {
+    return 'support';
+  }
+
+  return 'core';
+}
+
+function symbolLimitForRole(role: NarrativeModuleRole): number {
+  switch (role) {
+    case 'core':
+      return 6;
+    case 'support':
+      return 3;
+    case 'validation':
+      return 2;
+  }
+}
+
+function methodLimitForRole(role: NarrativeModuleRole): number {
+  switch (role) {
+    case 'core':
+      return 10;
+    case 'support':
+      return 4;
+    case 'validation':
+      return 2;
+  }
+}
+
+function isLowSignalNarrativeMethod(
+  name: string,
+  ownerName: string | undefined,
+  role: NarrativeModuleRole,
+): boolean {
+  if (role !== 'validation') {
+    return false;
+  }
+
+  return name.startsWith('test_')
+    || name.startsWith('test')
+    || ownerName?.startsWith('Test') === true;
 }
 
 function stripYamlScalar(value: string): string {
