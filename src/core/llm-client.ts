@@ -140,6 +140,27 @@ export function getTimeoutForModel(model: string): number {
   return 180_000;                                      // 3 分钟（保守默认）
 }
 
+/**
+ * 为 spec 生成按上下文体积扩展超时窗口。
+ *
+ * 质量优先策略：
+ * - 小上下文保持原模型默认超时，避免日常请求变慢
+ * - 超过 40k token 后，每额外 15k token 增加 2 分钟窗口
+ * - 上限控制在 15 分钟，避免无限等待
+ */
+export function getTimeoutForSpecGeneration(model: string, contextTokenCount: number): number {
+  const baseTimeout = getTimeoutForModel(model);
+
+  if (contextTokenCount <= 40_000) {
+    return baseTimeout;
+  }
+
+  const extraWindows = Math.ceil((contextTokenCount - 40_000) / 15_000);
+  const expandedTimeout = baseTimeout + extraWindows * 120_000;
+
+  return Math.min(Math.max(baseTimeout, expandedTimeout), 900_000);
+}
+
 // ============================================================
 // 默认配置
 // ============================================================
@@ -235,7 +256,7 @@ export async function callLLM(
   const cfg = mergeConfig({
     ...config,
     model: effectiveModel,
-    timeout: config?.timeout ?? getTimeoutForModel(effectiveModel),
+    timeout: config?.timeout ?? getTimeoutForSpecGeneration(effectiveModel, context.tokenCount),
     reasoningEffort: config?.reasoningEffort ?? codexExecution?.reasoningEffort,
     serviceTier: config?.serviceTier ?? codexExecution?.serviceTier,
   });

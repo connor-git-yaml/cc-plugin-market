@@ -7,6 +7,7 @@ import {
   parseLLMResponse,
   buildSystemPrompt,
   getTimeoutForModel,
+  getTimeoutForSpecGeneration,
 } from '../../src/core/llm-client.js';
 
 describe('llm-client', () => {
@@ -226,6 +227,23 @@ JWT 过期时间默认 24 小时
 
     it('未知模型仍回退到保守默认值', () => {
       expect(getTimeoutForModel('custom-model')).toBe(180_000);
+    });
+  });
+
+  describe('getTimeoutForSpecGeneration', () => {
+    it('小上下文保持模型默认超时', () => {
+      expect(getTimeoutForSpecGeneration('gpt-5.4', 39_999)).toBe(300_000);
+      expect(getTimeoutForSpecGeneration('custom-model', 10_000)).toBe(180_000);
+    });
+
+    it('大上下文按 token 体积扩展超时窗口', () => {
+      expect(getTimeoutForSpecGeneration('gpt-5.4', 55_000)).toBe(420_000);
+      expect(getTimeoutForSpecGeneration('gpt-5.4', 83_207)).toBe(660_000);
+      expect(getTimeoutForSpecGeneration('gpt-5.4', 94_266)).toBe(780_000);
+    });
+
+    it('扩展超时窗口最多封顶到 15 分钟', () => {
+      expect(getTimeoutForSpecGeneration('gpt-5.4', 200_000)).toBe(900_000);
     });
   });
 });
