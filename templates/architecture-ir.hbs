@@ -1,0 +1,49 @@
+# {{title}}
+
+> Generated: {{generatedAt}}
+
+## 概览
+
+- 项目：`{{ir.projectName}}`
+- 来源数：`{{ir.stats.sourceCount}}`
+- 元素数：`{{ir.stats.totalElements}}`
+- 关系数：`{{ir.stats.totalRelationships}}`
+- 可用视图：`{{ir.stats.availableViews}} / {{ir.stats.totalViews}}`
+
+## 视图状态
+
+| 视图 | 可用 | 元素 | 关系 | Mermaid Section |
+|------|------|------|------|-----------------|
+{{#each ir.views}}
+| {{title}} | {{#if available}}Yes{{else}}No{{/if}} | {{elementIds.length}} | {{relationshipIds.length}} | `{{mermaidSection}}` |
+{{/each}}
+
+## 元素清单
+
+| ID | 名称 | Kind | Technology | Sources |
+|----|------|------|------------|---------|
+{{#each ir.elements}}
+| `{{id}}` | `{{name}}` | `{{kind}}` | {{#if technology}}`{{technology}}`{{else}}-{{/if}} | {{#each sourceTags}}`{{this}}` {{/each}} |
+{{/each}}
+
+## Structurizr DSL
+
+```text
+{{exports.structurizrDsl}}
+```
+
+{{#if exports.mermaid.combinedDiagram}}
+## Mermaid 互通输出
+
+```mermaid
+{{exports.mermaid.combinedDiagram}}
+```
+{{/if}}
+
+{{#if warnings.length}}
+## Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}

@@ -119,6 +119,12 @@ export {
 } from './architecture-overview-generator.js';
 
 export {
+  ArchitectureIRGenerator,
+  type ArchitectureIRInput,
+  type ArchitectureIROutput,
+} from './architecture-ir-generator.js';
+
+export {
   PatternHintsGenerator,
   type PatternHintsGeneratorDependencies,
   type PatternHintsLLMEnhancer,
@@ -168,6 +174,29 @@ export {
 } from './architecture-overview-model.js';
 
 export {
+  summarizeArchitectureIR,
+  getArchitectureIRView,
+  type ArchitectureIRSourceTag,
+  type ArchitectureIRElementKind,
+  type ArchitectureIRRelationshipKind,
+  type ArchitectureIRViewKind,
+  type ArchitectureIRMermaidSectionKind,
+  type ArchitectureIREvidence,
+  type ArchitectureIRElement,
+  type ArchitectureIRRelationship,
+  type ArchitectureIRView,
+  type ArchitectureIRStats,
+  type ArchitectureIR,
+  type ArchitectureIRMermaidSection,
+  type ArchitectureIRMermaidExport,
+  type ArchitectureIRExportBundle,
+} from './architecture-ir-model.js';
+
+export { buildArchitectureIR, type BuildArchitectureIROptions } from './architecture-ir-builder.js';
+export { exportArchitectureIRJson, exportArchitectureIRStructurizrDsl } from './architecture-ir-exporters.js';
+export { buildArchitectureIRMermaidExport } from './architecture-ir-mermaid-adapter.js';
+
+export {
   MINIMUM_PATTERN_CONFIDENCE,
   DEFAULT_PATTERN_KNOWLEDGE_BASE,
   evaluatePatternHints,
@@ -206,4 +235,8 @@ export { AbstractRegistry } from './abstract-registry.js';
 export { loadTemplate, resetTemplateCache } from './utils/template-loader.js';
 export { sanitizeMermaidId } from './utils/mermaid-helpers.js';
 export { enrichFieldDescriptions, enrichConfigDescriptions } from './utils/llm-enricher.js';
-export { writeMultiFormat, type WriteMultiFormatOptions } from './utils/multi-format-writer.js';
+export {
+  writeMultiFormat,
+  type WriteMultiFormatOptions,
+  type AdditionalOutputFile,
+} from './utils/multi-format-writer.js';

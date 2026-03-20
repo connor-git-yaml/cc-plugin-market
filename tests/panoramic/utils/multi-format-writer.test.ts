@@ -212,6 +212,46 @@ describe('writeMultiFormat', () => {
     expect(fs.existsSync(path.join(outputDir, 'data-model.mmd'))).toBe(false);
   });
 
+  it('all 格式支持额外导出文件，例如 Structurizr DSL', () => {
+    tempDir = createTempDir();
+    const outputDir = path.join(tempDir, 'output');
+
+    const result = writeMultiFormat({
+      outputDir,
+      baseName: 'architecture-ir',
+      outputFormat: 'all',
+      markdown: SAMPLE_MARKDOWN,
+      structuredData: SAMPLE_STRUCTURED_DATA,
+      extraFiles: [{
+        extension: 'dsl',
+        content: 'workspace "test" { }',
+      }],
+    });
+
+    expect(result).toContain(path.join(outputDir, 'architecture-ir.dsl'));
+    expect(fs.readFileSync(path.join(outputDir, 'architecture-ir.dsl'), 'utf-8')).toBe('workspace "test" { }');
+  });
+
+  it('非 all 格式不会写出额外文件', () => {
+    tempDir = createTempDir();
+    const outputDir = path.join(tempDir, 'output');
+
+    const result = writeMultiFormat({
+      outputDir,
+      baseName: 'architecture-ir',
+      outputFormat: 'json',
+      markdown: SAMPLE_MARKDOWN,
+      structuredData: SAMPLE_STRUCTURED_DATA,
+      extraFiles: [{
+        extension: 'dsl',
+        content: 'workspace "test" { }',
+      }],
+    });
+
+    expect(result).toEqual([path.join(outputDir, 'architecture-ir.json')]);
+    expect(fs.existsSync(path.join(outputDir, 'architecture-ir.dsl'))).toBe(false);
+  });
+
   // T023: JSON 特殊字符
   it('JSON 特殊字符——包含 Unicode、反斜杠的数据正确序列化', () => {
     tempDir = createTempDir();

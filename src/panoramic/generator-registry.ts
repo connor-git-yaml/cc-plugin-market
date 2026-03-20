@@ -31,6 +31,7 @@ import { RuntimeTopologyGenerator } from './runtime-topology-generator.js';
 import { EventSurfaceGenerator } from './event-surface-generator.js';
 import { TroubleshootingGenerator } from './troubleshooting-generator.js';
 import { ArchitectureOverviewGenerator } from './architecture-overview-generator.js';
+import { ArchitectureIRGenerator } from './architecture-ir-generator.js';
 import { PatternHintsGenerator } from './pattern-hints-generator.js';
 
 // ============================================================
@@ -207,6 +208,7 @@ export function bootstrapGenerators(): void {
   registry.register(new ApiSurfaceGenerator());
   registry.register(new RuntimeTopologyGenerator());
   registry.register(new ArchitectureOverviewGenerator());
+  registry.register(new ArchitectureIRGenerator());
   registry.register(new PatternHintsGenerator());
   registry.register(new EventSurfaceGenerator());
   registry.register(new TroubleshootingGenerator());

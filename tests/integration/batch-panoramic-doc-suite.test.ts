@@ -182,6 +182,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(result.projectDocs).toEqual(
       expect.arrayContaining([
         'specs/api-surface.md',
+        'specs/architecture-ir.md',
         'specs/architecture-narrative.md',
         'specs/architecture-overview.md',
         'specs/config-reference.md',
@@ -193,6 +194,9 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     );
 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'api-surface.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.mmd'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.dsl'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-narrative.json'))).toBe(true);
@@ -212,6 +216,9 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
       generatorCoverage: Array<{ generatorId: string; generatedCount: number }>;
     };
 
+    expect(
+      coverageJson.generatorCoverage.find((entry) => entry.generatorId === 'architecture-ir')?.generatedCount,
+    ).toBe(1);
     expect(
       coverageJson.generatorCoverage.find((entry) => entry.generatorId === 'architecture-overview')?.generatedCount,
     ).toBe(1);

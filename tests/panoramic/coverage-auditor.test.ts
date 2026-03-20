@@ -109,8 +109,8 @@ describe('CoverageAuditor', () => {
     });
 
     expect(audit.summary.totalModules).toBe(4);
-    expect(audit.summary.documentedModules).toBe(1);
-    expect(audit.summary.moduleCoveragePct).toBe(25);
+    expect(audit.summary.documentedModules).toBe(3);
+    expect(audit.summary.moduleCoveragePct).toBe(75);
     expect(audit.summary.missingDocCount).toBe(1);
     expect(audit.summary.missingLinkCount).toBe(1);
     expect(audit.summary.danglingLinkCount).toBe(1);

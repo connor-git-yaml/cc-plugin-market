@@ -116,6 +116,7 @@ async function runProjectGenerator(
     markdown,
     structuredData,
     mermaidSource: extractMermaidSource(generator.id, structuredData),
+    extraFiles: extractAdditionalFiles(generator.id, structuredData, getBatchProjectOutputBaseName(generator.id)),
   });
 
   return {
@@ -157,6 +158,8 @@ function extractMermaidSource(generatorId: string, structuredData: unknown): str
         deploymentView?: { mermaidDiagram?: string };
         layeredView?: { mermaidDiagram?: string };
       });
+    case 'architecture-ir':
+      return getNestedStringField(structuredData, ['exports', 'mermaid', 'combinedDiagram']);
     case 'pattern-hints':
       return joinMermaidSections((structuredData as {
         architectureOverview?: {
@@ -195,4 +198,37 @@ function joinMermaidSections(input: {
   ].filter((item): item is string => item !== null && item.trim().length > 0);
 
   return sections.length > 0 ? sections.join('\n\n%% ----\n\n') : undefined;
+}
+
+function extractAdditionalFiles(
+  generatorId: string,
+  structuredData: unknown,
+  baseName: string,
+): Array<{ fileName?: string; extension?: string; content: string }> | undefined {
+  if (generatorId !== 'architecture-ir') {
+    return undefined;
+  }
+
+  const structurizrDsl = getNestedStringField(structuredData, ['exports', 'structurizrDsl']);
+  if (!structurizrDsl) {
+    return undefined;
+  }
+
+  return [{
+    fileName: `${baseName}.dsl`,
+    content: structurizrDsl,
+  }];
+}
+
+function getNestedStringField(target: unknown, pathSegments: string[]): string | undefined {
+  let current: unknown = target;
+
+  for (const segment of pathSegments) {
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return typeof current === 'string' && current.trim().length > 0 ? current : undefined;
 }

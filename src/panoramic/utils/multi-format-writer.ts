@@ -28,6 +28,17 @@ export interface WriteMultiFormatOptions {
   structuredData: unknown;
   /** 可选的 Mermaid 图源码 */
   mermaidSource?: string;
+  /** 可选的额外文件（仅在 all 模式写出） */
+  extraFiles?: AdditionalOutputFile[];
+}
+
+export interface AdditionalOutputFile {
+  /** 自定义文件名（优先级高于 extension） */
+  fileName?: string;
+  /** 基于 baseName 的扩展名，如 dsl -> {baseName}.dsl */
+  extension?: string;
+  /** 文件内容 */
+  content: string;
 }
 
 /**
@@ -44,7 +55,15 @@ export interface WriteMultiFormatOptions {
  * @returns 实际写出的文件绝对路径列表
  */
 export function writeMultiFormat(options: WriteMultiFormatOptions): string[] {
-  const { outputDir, baseName, outputFormat, markdown, structuredData, mermaidSource } = options;
+  const {
+    outputDir,
+    baseName,
+    outputFormat,
+    markdown,
+    structuredData,
+    mermaidSource,
+    extraFiles = [],
+  } = options;
   const writtenFiles: string[] = [];
 
   // 确保输出目录存在
@@ -78,6 +97,22 @@ export function writeMultiFormat(options: WriteMultiFormatOptions): string[] {
     if (mermaidSource && mermaidSource.trim().length > 0) {
       fs.writeFileSync(mmdPath, mermaidSource, 'utf-8');
       writtenFiles.push(mmdPath);
+    }
+
+    for (const extraFile of extraFiles) {
+      if (extraFile.content.trim().length === 0) {
+        continue;
+      }
+
+      const targetFileName = extraFile.fileName
+        ?? (extraFile.extension ? `${baseName}.${extraFile.extension}` : undefined);
+      if (!targetFileName) {
+        continue;
+      }
+
+      const targetPath = path.join(outputDir, targetFileName);
+      fs.writeFileSync(targetPath, extraFile.content, 'utf-8');
+      writtenFiles.push(targetPath);
     }
   }
 

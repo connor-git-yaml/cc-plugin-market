@@ -13,6 +13,7 @@ const BATCH_PROJECT_OUTPUT_BASE_NAMES: Record<string, string> = {
   'api-surface': 'api-surface',
   'runtime-topology': 'runtime-topology',
   'architecture-overview': 'architecture-overview',
+  'architecture-ir': 'architecture-ir',
   'pattern-hints': 'pattern-hints',
   'event-surface': 'event-surface',
   'troubleshooting': 'troubleshooting',
