@@ -1,0 +1,86 @@
+---
+type: troubleshooting
+generatedAt: {{generatedAt}}
+projectName: {{projectName}}
+totalEntries: {{totalEntries}}
+---
+
+# 故障排查 / 原理说明: {{projectName}}
+
+## 总览
+
+- Troubleshooting entries: `{{totalEntries}}`
+- Explanation notes: `{{explanations.length}}`
+
+{{#if warnings.length}}
+## Warning
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## Troubleshooting Inventory
+
+| Title | Kind | Confidence | Config Keys | Locations |
+| --- | --- | --- | --- | --- |
+{{#each entries}}
+| {{title}} | `{{kind}}` | `{{confidence}}` | {{#if configKeys.length}}`{{configKeys}}`{{else}}-{{/if}} | {{relatedLocations.length}} |
+{{/each}}
+
+{{#each entries}}
+## {{title}}
+
+- Kind: `{{kind}}`
+- Confidence: `{{confidence}}`
+
+**Symptom**
+
+{{symptom}}
+
+**Possible causes**
+{{#each possibleCauses}}
+- {{this}}
+{{/each}}
+
+**Recovery steps**
+{{#each recoverySteps}}
+- {{this}}
+{{/each}}
+
+**Related locations**
+{{#each relatedLocations}}
+- `{{sourceFile}}:{{line}}` (`{{symbolName}}`){{#if excerpt}}: `{{excerpt}}`{{/if}}
+{{/each}}
+
+{{#if configKeys.length}}
+**Config keys**
+{{#each configKeys}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+**Evidence**
+{{#each evidence}}
+- `{{this}}`
+{{/each}}
+
+{{/each}}
+
+{{#if explanations.length}}
+## Explanation
+
+{{#each explanations}}
+### {{title}}
+
+{{summary}}
+
+{{#if evidence.length}}
+Evidence:
+{{#each evidence}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{/each}}
+{{/if}}

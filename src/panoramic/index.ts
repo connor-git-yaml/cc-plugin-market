@@ -87,6 +87,17 @@ export {
 } from './event-surface-generator.js';
 
 export {
+  TroubleshootingGenerator,
+  type TroubleshootingEntryKind,
+  type TroubleshootingConfidence,
+  type TroubleshootingLocation,
+  type TroubleshootingEntry,
+  type TroubleshootingExplanation,
+  type TroubleshootingInput,
+  type TroubleshootingOutput,
+} from './troubleshooting-generator.js';
+
+export {
   CoverageAuditor,
   type CoverageAudit,
   type CoverageSummary,
