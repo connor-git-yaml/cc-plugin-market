@@ -4,7 +4,7 @@ import * as path from 'node:path';
 type PlainObject = Record<string, unknown>;
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
-const DEFAULT_CODEX_MODEL = 'gpt-5.3-codex';
+const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
 const LOGICAL_CLAUDE_MODEL_MAP: Record<string, string> = {
   opus: 'claude-opus-4-1-20250805',
@@ -25,6 +25,7 @@ const PRESET_MODEL_MAP: Record<string, string> = {
 };
 
 const DEFAULT_CLAUDE_ALIASES: Record<string, string> = {
+  'gpt-5.4': 'sonnet',
   'gpt-5.3-codex': 'sonnet',
   'gpt-5.3-codex-thinking-high': 'opus',
   'gpt-5.3-codex-thinking-medium': 'sonnet',

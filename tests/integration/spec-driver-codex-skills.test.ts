@@ -57,6 +57,11 @@ describe('Spec Driver Codex skills script', () => {
     expect(
       existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-doc', 'SKILL.md')),
     ).toBe(true);
+    expect(
+      existsSync(
+        join(tempDir, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
+      ),
+    ).toBe(true);
 
     const storyWrapper = readFileSync(
       join(tempDir, '.codex', 'skills', 'spec-driver-story', 'SKILL.md'),
@@ -69,6 +74,13 @@ describe('Spec Driver Codex skills script', () => {
     expect(storyWrapper).toContain('opus/sonnet');
     expect(storyWrapper).toContain('.specify/project-context.yaml');
     expect(storyWrapper).toContain('[参考路径缺失]');
+
+    const constitutionWrapper = readFileSync(
+      join(tempDir, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(constitutionWrapper).toContain('$spec-driver-constitution [原则更新说明]');
+    expect(constitutionWrapper).toContain('.specify/memory/constitution.md');
 
     const remove = runScript(['remove'], { cwd: tempDir });
     expect(remove.exitCode).toBe(0);
@@ -88,6 +100,11 @@ describe('Spec Driver Codex skills script', () => {
     expect(result.exitCode).toBe(0);
     expect(
       existsSync(join(fakeHome, '.codex', 'skills', 'spec-driver-sync', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(
+        join(fakeHome, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
+      ),
     ).toBe(true);
 
     const wrapperContent = readFileSync(

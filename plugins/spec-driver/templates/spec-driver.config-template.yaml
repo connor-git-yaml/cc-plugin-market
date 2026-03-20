@@ -5,7 +5,7 @@
 # 快速填写指南（建议按顺序）:
 # 1) 新手只改 `preset`，其余保持默认即可运行
 # 2) 需要精细调参时再打开 `agents.<agent>.model` 覆盖
-# 3) Codex 运行时推荐固定模型为 `gpt-5.3-codex`，通过 `codex_thinking` 调整思考等级
+# 3) Codex 运行时推荐固定模型为 `gpt-5.4`，通过 `codex_thinking` 调整思考等级
 
 # ═══════════════════════════════════════
 # 模型预设（第一优先）
@@ -33,7 +33,7 @@ preset: balanced
 #
 # 可选值:
 # - Claude 逻辑名（推荐，跨端可移植）: opus | sonnet | haiku
-# - 运行时原生模型名（高级）: 例如 gpt-5.3-codex
+# - 运行时原生模型名（高级）: 例如 gpt-5.4
 #
 # 常见示例:
 # - plan/verify 想更稳: 改为 opus
@@ -84,25 +84,29 @@ agents:
 #   当映射后的模型不可用时，回退到该运行时默认模型
 #
 # 说明:
-# - Codex 默认统一映射到 `gpt-5.3-codex`
-# - 思考深度不靠“切模型”，而是由下方 `codex_thinking` 控制
+# - Codex 默认统一映射到 `gpt-5.4`
+# - 思考深度不靠“切模型”，而是由下方 `codex_thinking` 和 `service_tier` 控制
 #
 model_compat:
   runtime: auto
   aliases:
     codex:
-      opus: gpt-5.3-codex
-      sonnet: gpt-5.3-codex
-      haiku: gpt-5.3-codex
+      opus: gpt-5.4
+      sonnet: gpt-5.4
+      haiku: gpt-5.4
     claude:
+      gpt-5.4: sonnet
       gpt-5.3-codex: sonnet
       gpt-5: opus
       gpt-5-mini: sonnet
       o3: opus
       o4-mini: sonnet
   defaults:
-    codex: gpt-5.3-codex
+    codex: gpt-5.4
     claude: sonnet
+
+codex:
+  service_tier: fast
 
 # ═══════════════════════════════════════
 # Codex Thinking 等级（Codex 专用）
@@ -110,23 +114,24 @@ model_compat:
 # 适用场景:
 # - runtime=codex 或 auto 且识别为 Codex
 #
-# level 可选值: low | medium | high
+# level 可选值: low | medium | high | xhigh
 #
 # 建议:
-# - 默认使用 medium
-# - 复杂设计/关键验证用 high
-# - 简单改动或高并发批处理可用 low
+# - 默认使用 xhigh（质量优先）
+# - 复杂设计/关键验证推荐 xhigh
+# - 常规实现可用 high
+# - 简单改动或高并发批处理可用 medium/low
 #
 # level_map 的作用:
 # - 当上游语义模型是 opus/sonnet/haiku 时，映射到对应 thinking level
 # - 未命中时使用 default_level
 #
 codex_thinking:
-  default_level: medium
+  default_level: xhigh
   level_map:
-    opus: high
-    sonnet: medium
-    haiku: low
+    opus: xhigh
+    sonnet: high
+    haiku: medium
 
 # ═══════════════════════════════════════
 # 调研阶段配置（Feature 模式）

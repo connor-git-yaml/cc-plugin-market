@@ -12,6 +12,8 @@ const SCRIPT_PATH = resolve('plugins/spec-driver/scripts/init-project.sh');
 function runInitScript(cwd: string): {
   NEEDS_CONSTITUTION: boolean;
   NEEDS_CONFIG: boolean;
+  HAS_SPEC_DRIVER_SKILLS: boolean;
+  SKILL_MAP: string;
   RESULTS: string[];
 } {
   const stdout = execFileSync('bash', [SCRIPT_PATH, '--json'], {
@@ -21,6 +23,8 @@ function runInitScript(cwd: string): {
   return JSON.parse(stdout) as {
     NEEDS_CONSTITUTION: boolean;
     NEEDS_CONFIG: boolean;
+    HAS_SPEC_DRIVER_SKILLS: boolean;
+    SKILL_MAP: string;
     RESULTS: string[];
   };
 }
@@ -61,5 +65,25 @@ describe('init-project.sh', () => {
     expect(existsSync(join(projectDir, '.specify', 'templates', 'constitution-template.md'))).toBe(true);
     expect(result.RESULTS.some((r) => r.startsWith('specify_templates:copied:'))).toBe(true);
   });
-});
 
+  it('同时识别 .claude/commands 和 .codex/commands 下的 spec-driver 覆盖', () => {
+    mkdirSync(join(projectDir, '.claude', 'commands'), { recursive: true });
+    mkdirSync(join(projectDir, '.codex', 'commands'), { recursive: true });
+    writeFileSync(
+      join(projectDir, '.claude', 'commands', 'spec-driver.plan.md'),
+      '# plan\n',
+      'utf-8',
+    );
+    writeFileSync(
+      join(projectDir, '.codex', 'commands', 'spec-driver.tasks.md'),
+      '# tasks\n',
+      'utf-8',
+    );
+
+    const result = runInitScript(projectDir);
+
+    expect(result.HAS_SPEC_DRIVER_SKILLS).toBe(true);
+    expect(result.SKILL_MAP).toContain('plan');
+    expect(result.SKILL_MAP).toContain('tasks');
+  });
+});

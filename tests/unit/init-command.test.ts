@@ -15,6 +15,19 @@ import {
 } from '../../src/installer/skill-installer.js';
 
 describe('parse-args: init 子命令', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env['CODEX_THREAD_ID'];
+    delete process.env['CODEX_SHELL'];
+    delete process.env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'];
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
   it('解析 init', () => {
     const result = parseArgs(['init']);
     expect(result.ok).toBe(true);
@@ -23,6 +36,17 @@ describe('parse-args: init 子命令', () => {
       expect(result.command.global).toBe(false);
       expect(result.command.remove).toBe(false);
       expect(result.command.skillTarget).toBe('claude');
+    }
+  });
+
+  it('Codex 运行时默认使用 codex target', () => {
+    process.env['CODEX_THREAD_ID'] = 'thread-1';
+
+    const result = parseArgs(['init']);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.skillTarget).toBe('codex');
     }
   });
 

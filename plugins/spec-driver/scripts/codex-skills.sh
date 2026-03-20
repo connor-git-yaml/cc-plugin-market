@@ -58,6 +58,7 @@ else
 fi
 
 SKILLS=(
+  "spec-driver-constitution"
   "spec-driver-feature"
   "spec-driver-story"
   "spec-driver-fix"
@@ -112,13 +113,18 @@ write_frontmatter() {
 write_codex_adapter() {
   local skill_name="$1"
   local source_skill_name="$2"
+  local source_command="/spec-driver:$source_skill_name"
+
+  if [[ "$source_skill_name" == "spec-driver-constitution" ]]; then
+    source_command="/spec-driver.constitution"
+  fi
 
   cat <<EOF_ADAPTER
 ## Codex Runtime Adapter
 
 此 Skill 在安装时直接同步自 \`\$PLUGIN_DIR/skills/$source_skill_name/SKILL.md\` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
-- 命令别名：正文中的 \`/spec-driver:$source_skill_name\` 在 Codex 中等价于 \`\$$skill_name\`
+- 命令别名：正文中的 \`$source_command\` 在 Codex 中等价于 \`\$$skill_name\`
 - 子代理执行：正文中的 \`Task(...)\` / \`Task tool\` 在 Codex 中视为当前会话内联子代理执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 \`[回退:串行]\`
 - 模型兼容：保持 \`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\` 优先级；runtime=codex 时先做 \`model_compat\` 归一化，不可用时标注 \`[模型回退]\`
@@ -167,6 +173,7 @@ write_wrapper() {
 }
 
 install_all() {
+  write_wrapper "spec-driver-constitution" "spec-driver-constitution"
   write_wrapper "spec-driver-feature" "spec-driver-feature"
   write_wrapper "spec-driver-story" "spec-driver-story"
   write_wrapper "spec-driver-fix" "spec-driver-fix"

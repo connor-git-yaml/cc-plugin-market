@@ -56,7 +56,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution` 创建项目宪法。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行项目宪法入口创建项目宪法（Claude: `/spec-driver.constitution`；Codex: `$spec-driver-constitution`）。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 
@@ -100,7 +100,13 @@ fi
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if .claude/commands/spec-driver.{phase}.md 存在:
+  if 当前运行时为 Codex 且 .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if 当前运行时为 Claude 且 .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
+  else if .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if .claude/commands/spec-driver.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
@@ -235,7 +241,7 @@ product/tech-research.md 存在  → 从对应阶段恢复
 
 模型名在 Task 调度前按 run 模式的“运行时兼容归一化”执行一次转换：
 - `model_compat.runtime` 决定按 `claude` 或 `codex` 映射（`auto` 为默认）
-- Codex 下默认把 `opus/sonnet/haiku` 映射到 `gpt-5.3-codex`，并使用 `codex_thinking` 选择思考等级（`low|medium|high`）
+- Codex 下默认把 `opus/sonnet/haiku` 映射到 `gpt-5.4`，并使用 `codex_thinking` 选择思考等级（`medium|high|xhigh`）
 - 若映射后模型不可用，回退到 `model_compat.defaults.{runtime}` 并记录 `[模型回退]`
 
 配置文件路径: `$PLUGIN_DIR/templates/spec-driver.config-template.yaml`（模板）或项目根目录 `spec-driver.config.yaml`（用户配置）。

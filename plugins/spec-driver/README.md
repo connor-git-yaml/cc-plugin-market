@@ -42,6 +42,14 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 
 安装时会同步当前 `spec-driver-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
 
+除 6 个主流程 Skill 外，Codex 安装包还会附带一个 bootstrap helper：
+
+```text
+$spec-driver-constitution [原则更新说明]
+```
+
+用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver.constitution`。
+
 Codex 包装技能会自动检测项目级上下文文件：
 
 - `.specify/project-context.yaml`
@@ -126,20 +134,24 @@ model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5.3-codex
-      sonnet: gpt-5.3-codex
+      opus: gpt-5.4
+      sonnet: gpt-5.4
+      haiku: gpt-5.4
   defaults:
-    codex: gpt-5.3-codex
+    codex: gpt-5.4
+
+codex:
+  service_tier: fast
 
 codex_thinking:
-  default_level: medium  # low | medium | high
+  default_level: xhigh  # low | medium | high | xhigh
   level_map:
-    opus: high
-    sonnet: medium
-    haiku: low
+    opus: xhigh
+    sonnet: high
+    haiku: medium
 ```
 
-说明：在 Codex 执行时，`opus/sonnet` 语义会先映射到 `gpt-5.3-codex`，再通过 `codex_thinking` 选择思考等级（而非切换模型）。
+说明：在 Codex 执行时，`opus/sonnet/haiku` 语义会先映射到 `gpt-5.4`，再通过 `codex_thinking` 选择思考等级，`codex.service_tier` 用于控制服务层级。
 
 ## 子代理列表
 
@@ -169,6 +181,7 @@ JS/TS (npm/pnpm/yarn/bun)、Rust (Cargo)、Go、Python (pip/poetry/uv)、Java (M
 - **独立于 reverse-spec plugin**：Spec Driver 是正向研发工具，reverse-spec 是逆向分析工具，互补关系
 - **共享 `.specify/memory/constitution.md`**：复用项目宪法
 - **兼容已有 spec-driver skills**：检测到项目已有定制版 spec-driver skills 时优先使用
+- **命令覆盖双端兼容**：阶段 prompt 覆盖同时支持 `.claude/commands/spec-driver.{phase}.md` 与 `.codex/commands/spec-driver.{phase}.md`
 
 ## 目录结构
 
@@ -182,7 +195,8 @@ plugins/spec-driver/
 │   ├── spec-driver-fix/SKILL.md      # 快速 4 阶段问题修复
 │   ├── spec-driver-resume/SKILL.md   # 中断恢复
 │   ├── spec-driver-sync/SKILL.md     # 产品规范聚合
-│   └── spec-driver-doc/SKILL.md      # 开源文档生成
+│   ├── spec-driver-doc/SKILL.md      # 开源文档生成
+│   └── spec-driver-constitution/     # Codex bootstrap helper 源 Skill
 ├── agents/                       # 14 个子代理 prompt
 ├── templates/                    # 6 个模板
 ├── scripts/                      # 初始化脚本
@@ -235,7 +249,7 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 | `/speckit.constitution` | `/spec-driver.constitution` |
 | `/speckit.taskstoissues` | `/spec-driver.taskstoissues` |
 
-如果您在 `.claude/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
+如果您在 `.claude/commands/` 或 `.codex/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
 
 ## 许可证
 

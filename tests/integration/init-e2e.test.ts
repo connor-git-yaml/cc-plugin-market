@@ -12,14 +12,18 @@ const CLI_PATH = resolve('dist/cli/index.js');
 
 function runCLI(
   args: string[],
-  options?: { cwd?: string },
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): { stdout: string; exitCode: number } {
   try {
     const stdout = execFileSync('node', [CLI_PATH, ...args], {
       encoding: 'utf-8',
       timeout: 10_000,
       cwd: options?.cwd ?? process.cwd(),
-      env: { ...process.env, ANTHROPIC_API_KEY: undefined },
+      env: {
+        ...process.env,
+        ...options?.env,
+        ANTHROPIC_API_KEY: undefined,
+      },
     });
     return { stdout, exitCode: 0 };
   } catch (err: unknown) {
@@ -51,7 +55,14 @@ describe('init 端到端测试', () => {
   });
 
   it('init 默认安装到当前目录的 .claude/skills/', () => {
-    const result = runCLI(['init'], { cwd: tempDir });
+    const result = runCLI(['init'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('安装完成');
@@ -69,6 +80,19 @@ describe('init 端到端测试', () => {
       existsSync(
         join(tempDir, '.claude', 'skills', 'reverse-spec-diff', 'SKILL.md'),
       ),
+    ).toBe(true);
+  });
+
+  it('Codex 运行时默认安装到当前目录的 .codex/skills/', () => {
+    const result = runCLI(['init'], {
+      cwd: tempDir,
+      env: { CODEX_THREAD_ID: 'thread-1' },
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Codex');
+    expect(
+      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
     ).toBe(true);
   });
 
@@ -108,7 +132,14 @@ describe('init 端到端测试', () => {
   });
 
   it('init 安装的 SKILL.md 包含 CLI 调用逻辑', () => {
-    runCLI(['init'], { cwd: tempDir });
+    runCLI(['init'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
 
     const content = readFileSync(
       join(tempDir, '.claude', 'skills', 'reverse-spec', 'SKILL.md'),
@@ -123,13 +154,27 @@ describe('init 端到端测试', () => {
 
   it('init --remove 清理已安装 skill', () => {
     // 先安装
-    runCLI(['init'], { cwd: tempDir });
+    runCLI(['init'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
     expect(
       existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec')),
     ).toBe(true);
 
     // 再移除
-    const result = runCLI(['init', '--remove'], { cwd: tempDir });
+    const result = runCLI(['init', '--remove'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('已移除');
 
@@ -162,10 +207,24 @@ describe('init 端到端测试', () => {
 
   it('init 重复执行显示 已更新', () => {
     // 首次安装
-    runCLI(['init'], { cwd: tempDir });
+    runCLI(['init'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
 
     // 二次安装
-    const result = runCLI(['init'], { cwd: tempDir });
+    const result = runCLI(['init'], {
+      cwd: tempDir,
+      env: {
+        CODEX_THREAD_ID: undefined,
+        CODEX_SHELL: undefined,
+        CODEX_INTERNAL_ORIGINATOR_OVERRIDE: undefined,
+      },
+    });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('已更新');
   });

@@ -166,18 +166,26 @@ check_gate_policy() {
 
 # 步骤 5: 检测已有 spec-driver skills
 detect_spec_driver_skills() {
-  local skills_dir="${PROJECT_ROOT}/.claude/commands"
   local found_skills=()
+  local commands_dirs=(
+    "${PROJECT_ROOT}/.claude/commands"
+    "${PROJECT_ROOT}/.codex/commands"
+  )
+  local skills_dir
 
-  if [[ -d "$skills_dir" ]]; then
-    for skill_file in "$skills_dir"/spec-driver.*.md; do
-      if [[ -f "$skill_file" ]]; then
-        local phase
-        phase="$(basename "$skill_file" .md | sed 's/spec-driver\.//')"
-        found_skills+=("$phase")
-      fi
-    done
-  fi
+  for skills_dir in "${commands_dirs[@]}"; do
+    if [[ -d "$skills_dir" ]]; then
+      for skill_file in "$skills_dir"/spec-driver.*.md; do
+        if [[ -f "$skill_file" ]]; then
+          local phase
+          phase="$(basename "$skill_file" .md | sed 's/spec-driver\.//')"
+          if [[ ! " ${found_skills[*]} " =~ " ${phase} " ]]; then
+            found_skills+=("$phase")
+          fi
+        fi
+      done
+    fi
+  done
 
   if [[ ${#found_skills[@]} -gt 0 ]]; then
     HAS_SPEC_DRIVER_SKILLS=true
@@ -236,7 +244,7 @@ EOF
             echo -e "  ✅ constitution.md 已存在"
           else
             echo -e "  ⚠️  ${YELLOW}未找到 constitution.md${NC}"
-            echo -e "     → 建议先运行 /spec-driver.constitution 创建项目宪法"
+            echo -e "     → 建议先运行 /spec-driver.constitution（Claude）或 \$spec-driver-constitution（Codex）创建项目宪法"
           fi
           ;;
         config)

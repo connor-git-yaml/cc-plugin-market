@@ -35,6 +35,10 @@ export type ParseResult =
   | { ok: true; command: CLICommand }
   | { ok: false; error: ParseError };
 
+function defaultSkillTarget(env: NodeJS.ProcessEnv = process.env): 'claude' | 'codex' {
+  return isCodexRuntimeEnv(env) ? 'codex' : 'claude';
+}
+
 /**
  * 解析 CLI 参数
  * @param argv process.argv.slice(2) 后的参数数组
@@ -52,7 +56,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
       },
     };
   }
@@ -68,7 +72,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: true,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
       },
     };
   }
@@ -131,7 +135,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
         verify: hasVerify,
       },
     };
@@ -149,7 +153,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
       },
     };
   }
@@ -225,7 +229,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
       },
     };
   }
@@ -243,7 +247,7 @@ export function parseArgs(argv: string[]): ParseResult {
         help: false,
         global: false,
         remove: false,
-        skillTarget: 'claude',
+        skillTarget: defaultSkillTarget(),
       },
     };
   }
@@ -271,7 +275,7 @@ export function parseArgs(argv: string[]): ParseResult {
       help: false,
       global: false,
       remove: false,
-      skillTarget: 'claude',
+      skillTarget: defaultSkillTarget(),
     },
   };
 }
@@ -302,25 +306,34 @@ function parseInitTarget(argv: string[]): {
   value: 'claude' | 'codex' | 'both';
   error?: string;
 } {
+  const fallbackTarget = defaultSkillTarget();
   const idx = argv.indexOf('--target');
   if (idx === -1) {
-    return { value: 'claude' };
+    return { value: fallbackTarget };
   }
 
   const raw = argv[idx + 1];
   if (!raw || raw.startsWith('-')) {
     return {
-      value: 'claude',
+      value: fallbackTarget,
       error: '--target 需要值，可选: claude | codex | both',
     };
   }
 
   if (raw !== 'claude' && raw !== 'codex' && raw !== 'both') {
     return {
-      value: 'claude',
+      value: fallbackTarget,
       error: `--target 取值无效: ${raw}（可选: claude | codex | both）`,
     };
   }
 
   return { value: raw };
+}
+
+function isCodexRuntimeEnv(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(
+    env['CODEX_THREAD_ID'] ||
+    env['CODEX_SHELL'] ||
+    env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'],
+  );
 }

@@ -70,7 +70,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution` 创建项目宪法。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行项目宪法入口创建项目宪法（Claude: `/spec-driver.constitution`；Codex: `$spec-driver-constitution`）。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 
@@ -78,7 +78,7 @@ fi
 - 如果配置已存在：读取并解析 spec-driver.config.yaml
 - 如果 `--preset` 参数存在：临时覆盖预设
 - 解析 `research` 配置段（可选，向后兼容）：如果 `research` 段不存在，默认使用 `{default_mode: "auto", custom_steps: []}`。该默认值等同于智能推荐模式，行为与升级前完全一致
-- 解析 `model_compat` 和 `codex_thinking` 配置段（可选，向后兼容）：如果缺失则使用内置默认值（Codex: `opus/sonnet/haiku -> gpt-5.3-codex`；thinking level: `opus->high`, `sonnet->medium`, `haiku->low`）
+- 解析 `model_compat` 和 `codex_thinking` 配置段（可选，向后兼容）：如果缺失则使用内置默认值（Codex: `opus/sonnet/haiku -> gpt-5.4`；thinking level: `opus->xhigh`, `sonnet->high`, `haiku->medium`）
 
 ### 3.5 项目上下文注入（project-context，可选）
 
@@ -152,7 +152,13 @@ autonomous 默认值: 全部 on_failure
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if .claude/commands/spec-driver.{phase}.md 存在:
+  if 当前运行时为 Codex 且 .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if 当前运行时为 Claude 且 .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
+  else if .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if .claude/commands/spec-driver.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
@@ -893,8 +899,8 @@ if 仍然失败:
        b) 其他情况 -> claude
 
 3. 读取映射表（若未配置，使用默认）:
-   codex 默认映射: opus->gpt-5.3-codex, sonnet->gpt-5.3-codex, haiku->gpt-5.3-codex
-   claude 默认映射: gpt-5.3-codex->sonnet, gpt-5->opus, gpt-5-mini->sonnet, o3->opus, o4-mini->sonnet
+   codex 默认映射: opus->gpt-5.4, sonnet->gpt-5.4, haiku->gpt-5.4
+   claude 默认映射: gpt-5.4->sonnet, gpt-5.3-codex->sonnet, gpt-5->opus, gpt-5-mini->sonnet, o3->opus, o4-mini->sonnet
 
 4. 归一化:
    if candidate_model 在 runtime 对应 aliases 中:
@@ -910,8 +916,8 @@ if 仍然失败:
      输出: [模型映射] agent={agent_id} source={candidate_model} resolved={resolved_model}
 
 6. Codex Thinking 等级（仅 runtime=codex 生效）:
-   - 读取 codex_thinking.level_map（默认 opus->high, sonnet->medium, haiku->low）
-   - 按 candidate_model 的逻辑语义取 thinking_level；未命中则用 codex_thinking.default_level（默认 medium）
+   - 读取 codex_thinking.level_map（默认 opus->xhigh, sonnet->high, haiku->medium）
+   - 按 candidate_model 的逻辑语义取 thinking_level；未命中则用 codex_thinking.default_level（默认 xhigh）
    - 输出: [思考等级] agent={agent_id} level={thinking_level}
    - 注意: 思考等级用于控制推理深度，不改变 resolved_model
 

@@ -10,7 +10,7 @@ import {
 
 const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
 const OPUS_MODEL = 'claude-opus-4-1-20250805';
-const CODEX_MODEL = 'gpt-5.3-codex';
+const CODEX_MODEL = 'gpt-5.4';
 
 describe('model-selection', () => {
   const originalEnv = process.env;

@@ -63,7 +63,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行 `/spec-driver.constitution`。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行项目宪法入口（Claude: `/spec-driver.constitution`；Codex: `$spec-driver-constitution`）。
 
 ### 3. 配置加载
 
@@ -139,7 +139,13 @@ autonomous 默认值: 全部 on_failure
 
 ```text
 对于 phase ∈ [specify, clarify, plan, tasks, analyze, implement]:
-  if .claude/commands/spec-driver.{phase}.md 存在:
+  if 当前运行时为 Codex 且 .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if 当前运行时为 Claude 且 .claude/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
+  else if .codex/commands/spec-driver.{phase}.md 存在:
+    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
+  else if .claude/commands/spec-driver.{phase}.md 存在:
     prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
   else:
     prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
@@ -443,7 +449,7 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
 
 - 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值
 - 兼容归一化：按 `model_compat.runtime` 解析当前运行时（auto/claude/codex）
-- Codex 下默认将 `opus/sonnet/haiku` 映射到 `gpt-5.3-codex`，并通过 `codex_thinking.level_map` 选择 `low|medium|high` 思考等级
+- Codex 下默认将 `opus/sonnet/haiku` 映射到 `gpt-5.4`，并通过 `codex_thinking.level_map` 选择 `medium|high|xhigh` 思考等级
 - 若映射后模型不可用，回退到 `model_compat.defaults.codex` 并记录 `[模型回退]`
 
 ---

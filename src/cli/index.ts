@@ -45,18 +45,19 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   batch         批量生成当前项目所有模块的 Spec
   diff          检测 Spec 与源代码之间的漂移
   init          安装 skills 到 Claude Code / Codex 的项目或全局目录
-  auth-status   查看当前认证状态（API Key / Claude CLI）
+  auth-status   查看当前认证状态（API Key / Claude CLI / Codex CLI）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
-  支持两种认证方式（自动检测，优先级: API Key > CLI 代理）:
+  支持三种认证方式（自动检测，优先级按当前运行时动态排序）:
   1. ANTHROPIC_API_KEY 环境变量（直接 SDK 调用）
   2. Claude Code CLI 订阅登录（spawn CLI 子进程代理）
+  3. Codex CLI 登录态（spawn CLI 子进程代理）
 
 选项:
   --global, -g   安装到全局 ~/.claude/skills/ 或 ~/.codex/skills/（由 --target 决定，仅 init）
   --remove       移除已安装的 skills（仅 init）
-  --target       目标平台: claude | codex | both（仅 init，默认 claude）
+  --target       目标平台: claude | codex | both（仅 init，默认按当前运行时自动选择）
   --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
   --force        强制重新生成所有 Spec（仅 batch）
