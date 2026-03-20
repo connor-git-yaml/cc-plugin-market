@@ -119,6 +119,12 @@ export {
 } from './architecture-overview-generator.js';
 
 export {
+  PatternHintsGenerator,
+  type PatternHintsGeneratorDependencies,
+  type PatternHintsLLMEnhancer,
+} from './pattern-hints-generator.js';
+
+export {
   buildSyntheticImageName,
   mergeEnvironmentVariables,
   normalizeCommandValue,
@@ -160,6 +166,34 @@ export {
   type ArchitectureOverviewStats,
   type ArchitectureOverviewModel,
 } from './architecture-overview-model.js';
+
+export {
+  MINIMUM_PATTERN_CONFIDENCE,
+  DEFAULT_PATTERN_KNOWLEDGE_BASE,
+  evaluatePatternHints,
+  buildPatternExplanation,
+  type PatternEvaluationResult,
+} from './pattern-knowledge-base.js';
+
+export {
+  createPatternEvidenceRef,
+  determinePatternMatchLevel,
+  summarizePatternHints,
+  getHighConfidencePatternHints,
+  dedupePatternEvidence,
+  clampConfidence,
+  type PatternEvidenceSource,
+  type PatternMatchLevel,
+  type PatternEvidenceRef,
+  type PatternAlternative,
+  type PatternHint,
+  type PatternHintStats,
+  type PatternHintsModel,
+  type PatternHintsInput,
+  type PatternHintsOutput,
+  type PatternSignalRule,
+  type PatternKnowledgeBaseEntry,
+} from './pattern-hints-model.js';
 
 // Parser 实现 + 类型
 export * from './parsers/index.js';

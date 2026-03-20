@@ -7,6 +7,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
+import type * as LlmEnricher from '../../src/panoramic/utils/llm-enricher.js';
+
+vi.mock('../../src/panoramic/utils/llm-enricher.js', async () => {
+  const actual = await vi.importActual<typeof LlmEnricher>(
+    '../../src/panoramic/utils/llm-enricher.js',
+  );
+
+  return {
+    ...actual,
+    enrichConfigDescriptions: vi.fn(async (files: unknown[]) =>
+      JSON.parse(JSON.stringify(files))),
+  };
+});
+
 import { ConfigReferenceGenerator } from '../../src/panoramic/config-reference-generator.js';
 import { parseYamlContent } from '../../src/panoramic/parsers/yaml-config-parser.js';
 import { parseEnvContent } from '../../src/panoramic/parsers/env-config-parser.js';
@@ -14,6 +28,9 @@ import { parseTomlContent } from '../../src/panoramic/parsers/toml-config-parser
 import { inferType } from '../../src/panoramic/parsers/types.js';
 import { GeneratorRegistry } from '../../src/panoramic/generator-registry.js';
 import { ArtifactParserRegistry, bootstrapParsers } from '../../src/panoramic/parser-registry.js';
+import { enrichConfigDescriptions } from '../../src/panoramic/utils/llm-enricher.js';
+
+const mockEnrichConfigDescriptions = vi.mocked(enrichConfigDescriptions);
 
 // ============================================================
 // 辅助函数
@@ -618,7 +635,11 @@ describe('ConfigReferenceGenerator — GeneratorRegistry 集成', () => {
 describe('ConfigReferenceGenerator.generate with useLLM=true（集成测试）', () => {
   const generator = new ConfigReferenceGenerator();
 
-  it('useLLM=true 时 enrichment 路径被触发（通过检查不抛异常验证）', { timeout: 30_000 }, async () => {
+  beforeEach(() => {
+    mockEnrichConfigDescriptions.mockClear();
+  });
+
+  it('useLLM=true 时触发 llm-enricher 路径且不依赖真实外部模型', async () => {
     const input = {
       files: [{
         filePath: 'config.yaml',
@@ -631,13 +652,11 @@ describe('ConfigReferenceGenerator.generate with useLLM=true（集成测试）',
       projectName: 'test-project',
     };
 
-    // useLLM=true 时不应抛异常（LLM 不可用时静默降级）
     const output = await generator.generate(input, { useLLM: true });
 
-    // generate() 正常返回
+    expect(mockEnrichConfigDescriptions).toHaveBeenCalledTimes(1);
     expect(output.totalEntries).toBe(2);
     expect(output.files).toHaveLength(1);
-    // 已有说明的配置项保持不变
     expect(output.files[0]!.entries[1]!.description).toBe('已有说明');
   });
 });
@@ -650,6 +669,8 @@ describe('ConfigReferenceGenerator 回归测试——useLLM=false 不调用 LLM'
   const generator = new ConfigReferenceGenerator();
 
   it('useLLM=false（默认）时 generate() 不调用任何 LLM 接口', async () => {
+    mockEnrichConfigDescriptions.mockClear();
+
     const input = {
       files: [{
         filePath: 'config.yaml',
@@ -666,6 +687,7 @@ describe('ConfigReferenceGenerator 回归测试——useLLM=false 不调用 LLM'
     const output = await generator.generate(input);
 
     // description 保持原样
+    expect(mockEnrichConfigDescriptions).not.toHaveBeenCalled();
     expect(output.files[0]!.entries[0]!.description).toBe('');
     expect(output.files[0]!.entries[1]!.description).toBe('端口号');
     expect(output.totalEntries).toBe(2);

@@ -1,0 +1,85 @@
+## 架构模式提示
+
+> 基于 045 的共享架构概览模型自动生成
+
+| 指标 | 值 |
+|------|------|
+| 评估模式数 | {{model.stats.totalPatternsEvaluated}} |
+| 命中模式数 | {{model.stats.matchedPatterns}} |
+| 高置信度模式数 | {{model.stats.highConfidencePatterns}} |
+| Warnings 数 | {{model.stats.warningCount}} |
+
+{{#if warnings.length}}
+### Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if model.noHighConfidenceMatch}}
+### 结果摘要
+
+> [!NOTE] 未识别到高置信度模式
+>
+> 当前规则没有发现超过阈值的架构模式，以下候选模式可作为人工复核参考。
+
+{{#if model.alternatives.length}}
+| 候选模式 | 原因 | 阈值差距 |
+|----------|------|----------|
+{{#each model.alternatives}}
+| `{{patternName}}` | {{reason}} | {{#if confidenceGap}}{{confidenceGap}}{{else}}--{{/if}} |
+{{/each}}
+{{/if}}
+{{else}}
+### 已识别模式
+
+{{#each model.matchedPatterns}}
+#### {{patternName}}（{{matchLevel}} / confidence={{confidence}}）
+
+{{summary}}
+
+{{explanation}}
+
+**命中信号**
+
+{{#if matchedSignals.length}}
+{{#each matchedSignals}}
+- {{this}}
+{{/each}}
+{{else}}
+- -- 
+{{/if}}
+
+**缺失信号**
+
+{{#if missingSignals.length}}
+{{#each missingSignals}}
+- {{this}}
+{{/each}}
+{{else}}
+- 无
+{{/if}}
+
+**证据链**
+
+{{#if evidence.length}}
+{{#each evidence}}
+- `{{source}}` → `{{ref}}`{{#if sectionKind}}（{{sectionKind}}）{{/if}}{{#if note}}: {{note}}{{/if}}{{#if inferred}} `[推断]`{{/if}}
+{{/each}}
+{{else}}
+- 无
+{{/if}}
+
+**候选替代模式**
+
+{{#if competingAlternatives.length}}
+{{#each competingAlternatives}}
+- `{{patternName}}`: {{reason}}{{#if confidenceGap}}（差距 {{confidenceGap}}）{{/if}}
+{{/each}}
+{{else}}
+- 无
+{{/if}}
+
+{{/each}}
+{{/if}}

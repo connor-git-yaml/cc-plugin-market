@@ -75,6 +75,7 @@
 ## Active Technologies
 - TypeScript 5.7.3, Node.js >= 20 + 现有 panoramic generators、`handlebars`、`zod`、Node.js built-ins (045-architecture-overview-system-context)
 - 文件系统（`specs/` 文档、`templates/`、`tests/`） (045-architecture-overview-system-context)
+- TypeScript 5.7.3, Node.js >= 20 + 现有 panoramic generators、`handlebars`、`zod`、Node.js built-ins、现有 optional LLM auth/proxy helpers (050-pattern-hints-explanation)
 
 ## Recent Changes
 - 045-architecture-overview-system-context: Added TypeScript 5.7.3, Node.js >= 20 + 现有 panoramic generators、`handlebars`、`zod`、Node.js built-ins

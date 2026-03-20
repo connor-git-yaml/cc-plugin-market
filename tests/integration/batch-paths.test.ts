@@ -2,13 +2,24 @@
  * batch 编排路径基准集成测试
  * 验证 runBatch(projectRoot) 在 cwd 不同场景下仍写入到 projectRoot 下的输出目录
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+
+vi.mock('../../src/auth/auth-detector.js', () => ({
+  detectAuth: vi.fn(() => ({
+    methods: [
+      { type: 'api-key', provider: 'anthropic', available: false, details: '未设置' },
+      { type: 'cli-proxy', provider: 'codex', available: false, details: '测试中禁用' },
+      { type: 'cli-proxy', provider: 'claude', available: false, details: '测试中禁用' },
+    ],
+    preferred: null,
+    diagnostics: ['integration test forces AST-only fallback'],
+  })),
+}));
+
 import { runBatch } from '../../src/batch/batch-orchestrator.js';
-import { buildGraph } from '../../src/graph/dependency-graph.js';
-import { groupFilesToModules } from '../../src/batch/module-grouper.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 
@@ -58,26 +69,14 @@ export function greet(name: string): string {
   });
 
   it('cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs', async () => {
-    const graph = await buildGraph(projectRoot);
-    const grouped = groupFilesToModules(graph);
-    const outputDir = path.join(projectRoot, 'specs');
-    fs.mkdirSync(outputDir, { recursive: true });
-
-    // 预创建每个模块的 spec，确保 runBatch 走 skip 分支（不触发 LLM 调用）
-    for (const moduleName of grouped.moduleOrder) {
-      fs.writeFileSync(
-        path.join(outputDir, `${moduleName}.spec.md`),
-        `# prebuilt ${moduleName}\n`,
-        'utf-8',
-      );
-    }
-
     process.chdir(isolatedCwd);
     const result = await runBatch(projectRoot, { force: false });
 
     expect(result.totalModules).toBeGreaterThan(0);
     expect(result.failed).toHaveLength(0);
-    expect(result.skipped).toHaveLength(result.totalModules);
+    expect(
+      result.successful.length + result.degraded.length + result.skipped.length,
+    ).toBe(result.totalModules);
 
     // 摘要与索引都应位于 projectRoot 下，而非当前 cwd
     expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
@@ -87,19 +86,6 @@ export function greet(name: string): string {
   });
 
   it('outputDir 为相对路径时，基准应仍然是 projectRoot', async () => {
-    const graph = await buildGraph(projectRoot);
-    const grouped = groupFilesToModules(graph);
-    const customOutDir = path.join(projectRoot, 'custom-specs');
-    fs.mkdirSync(customOutDir, { recursive: true });
-
-    for (const moduleName of grouped.moduleOrder) {
-      fs.writeFileSync(
-        path.join(customOutDir, `${moduleName}.spec.md`),
-        `# prebuilt ${moduleName}\n`,
-        'utf-8',
-      );
-    }
-
     process.chdir(isolatedCwd);
     const result = await runBatch(projectRoot, {
       force: false,
@@ -107,7 +93,9 @@ export function greet(name: string): string {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.skipped).toHaveLength(result.totalModules);
+    expect(
+      result.successful.length + result.degraded.length + result.skipped.length,
+    ).toBe(result.totalModules);
     expect(result.summaryLogPath.startsWith('custom-specs/')).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'custom-specs', '_index.spec.md'))).toBe(true);

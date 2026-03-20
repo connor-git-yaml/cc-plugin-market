@@ -2,10 +2,23 @@
  * 单语言非 TS/JS batch 集成测试
  * 验证 runBatch() 不再对纯 Python/Go/Java 项目返回 0 个模块。
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+
+vi.mock('../../src/auth/auth-detector.js', () => ({
+  detectAuth: vi.fn(() => ({
+    methods: [
+      { type: 'api-key', provider: 'anthropic', available: false, details: '未设置' },
+      { type: 'cli-proxy', provider: 'codex', available: false, details: '测试中禁用' },
+      { type: 'cli-proxy', provider: 'claude', available: false, details: '测试中禁用' },
+    ],
+    preferred: null,
+    diagnostics: ['integration test forces AST-only fallback'],
+  })),
+}));
+
 import { runBatch } from '../../src/batch/batch-orchestrator.js';
 import { groupFilesByLanguage } from '../../src/batch/language-grouper.js';
 import { groupFilesToModules } from '../../src/batch/module-grouper.js';
@@ -50,21 +63,14 @@ describe('runBatch 单语言非 TS/JS 路径', () => {
 
         expect(expectedModules.length).toBeGreaterThan(0);
 
-        const outputDir = path.join(projectRoot, 'specs');
-        fs.mkdirSync(outputDir, { recursive: true });
-        for (const moduleName of expectedModules) {
-          fs.writeFileSync(
-            path.join(outputDir, `${moduleName}.spec.md`),
-            `# prebuilt ${moduleName}\n`,
-            'utf-8',
-          );
-        }
-
         const result = await runBatch(projectRoot, { force: false });
 
         expect(result.totalModules).toBe(expectedModules.length);
         expect(result.failed).toHaveLength(0);
-        expect(result.skipped).toHaveLength(expectedModules.length);
+        expect(
+          result.successful.length + result.degraded.length + result.skipped.length,
+        ).toBe(expectedModules.length);
+        expect(result.successful.length + result.degraded.length).toBeGreaterThan(0);
         expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
         expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
       } finally {

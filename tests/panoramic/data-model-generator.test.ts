@@ -6,6 +6,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import type { CodeSkeleton, ExportSymbol } from '../../src/models/code-skeleton.js';
+import type * as LlmEnricher from '../../src/panoramic/utils/llm-enricher.js';
+
+vi.mock('../../src/panoramic/utils/llm-enricher.js', async () => {
+  const actual = await vi.importActual<typeof LlmEnricher>(
+    '../../src/panoramic/utils/llm-enricher.js',
+  );
+
+  return {
+    ...actual,
+    enrichModelDescriptions: vi.fn(async (models: unknown[]) =>
+      JSON.parse(JSON.stringify(models))),
+    enrichFieldDescriptions: vi.fn(async (models: unknown[]) =>
+      JSON.parse(JSON.stringify(models))),
+  };
+});
+
 import {
   DataModelGenerator,
   extractPythonFieldsFromLines,
@@ -20,6 +36,13 @@ import {
   type ModelRelation,
 } from '../../src/panoramic/data-model-generator.js';
 import { GeneratorRegistry } from '../../src/panoramic/generator-registry.js';
+import {
+  enrichFieldDescriptions,
+  enrichModelDescriptions,
+} from '../../src/panoramic/utils/llm-enricher.js';
+
+const mockEnrichFieldDescriptions = vi.mocked(enrichFieldDescriptions);
+const mockEnrichModelDescriptions = vi.mocked(enrichModelDescriptions);
 
 // ============================================================
 // 辅助函数
@@ -898,10 +921,12 @@ describe('DataModelGenerator 全链路 e2e（mock 数据）', () => {
 describe('DataModelGenerator.generate with useLLM=true（集成测试）', () => {
   const generator = new DataModelGenerator();
 
-  it('useLLM=true 时 enrichment 路径被触发（通过检查 detectAuth 调用验证）', { timeout: 30_000 }, async () => {
-    // 由于 ESM 模块导出不可修改，我们通过验证 generate 代码路径来测试集成。
-    // enrichFieldDescriptions 内部调用 detectAuth，如果 detectAuth 不可用则静默降级。
-    // 这里验证 useLLM=true 时 generate() 正确执行且不抛异常。
+  beforeEach(() => {
+    mockEnrichModelDescriptions.mockClear();
+    mockEnrichFieldDescriptions.mockClear();
+  });
+
+  it('useLLM=true 时触发 llm-enricher 路径且不依赖真实外部模型', async () => {
     const input: DataModelInput = {
       models: [{
         name: 'TestModel',
@@ -919,13 +944,12 @@ describe('DataModelGenerator.generate with useLLM=true（集成测试）', () =>
       sourceFiles: ['test.py'],
     };
 
-    // useLLM=true 时不应抛异常（LLM 不可用时静默降级）
     const output = await generator.generate(input, { useLLM: true });
 
-    // generate() 正常返回
+    expect(mockEnrichModelDescriptions).toHaveBeenCalledTimes(1);
+    expect(mockEnrichFieldDescriptions).toHaveBeenCalledTimes(1);
     expect(output.summary.totalModels).toBe(1);
     expect(output.summary.totalFields).toBe(2);
-    // 已有说明的字段保持不变
     expect(output.models[0]!.fields[1]!.description).toBe('已有说明');
   });
 });
@@ -939,6 +963,9 @@ describe('DataModelGenerator 回归测试——useLLM=false 不调用 LLM', () =
 
   // T032: useLLM=false（默认）时不调用任何 LLM 接口
   it('useLLM=false（默认）时 generate() 不调用任何 LLM 接口', async () => {
+    mockEnrichModelDescriptions.mockClear();
+    mockEnrichFieldDescriptions.mockClear();
+
     const input: DataModelInput = {
       models: [{
         name: 'User',
@@ -959,12 +986,17 @@ describe('DataModelGenerator 回归测试——useLLM=false 不调用 LLM', () =
     const output = await generator.generate(input);
 
     // description 保持为 null（未被 LLM 增强）
+    expect(mockEnrichModelDescriptions).not.toHaveBeenCalled();
+    expect(mockEnrichFieldDescriptions).not.toHaveBeenCalled();
     expect(output.models[0]!.fields[0]!.description).toBeNull();
     expect(output.summary.totalModels).toBe(1);
   });
 
   // T034: useLLM 参数未传递时默认为 false
   it('useLLM 参数未传递时默认为 false，行为与变更前一致', async () => {
+    mockEnrichModelDescriptions.mockClear();
+    mockEnrichFieldDescriptions.mockClear();
+
     const input: DataModelInput = {
       models: [{
         name: 'Config',
@@ -986,6 +1018,8 @@ describe('DataModelGenerator 回归测试——useLLM=false 不调用 LLM', () =
     const output = await generator.generate(input);
 
     // description 保持原样
+    expect(mockEnrichModelDescriptions).not.toHaveBeenCalled();
+    expect(mockEnrichFieldDescriptions).not.toHaveBeenCalled();
     expect(output.models[0]!.fields[0]!.description).toBeNull();
     expect(output.models[0]!.fields[1]!.description).toBe('端口号');
     expect(output.erDiagram).toContain('Config');
