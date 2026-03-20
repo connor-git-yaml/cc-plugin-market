@@ -76,6 +76,21 @@ export {
 } from './runtime-topology-generator.js';
 
 export {
+  CoverageAuditor,
+  type CoverageAudit,
+  type CoverageSummary,
+  type ModuleCoverageEntry,
+  type GeneratorCoverageEntry,
+  type DanglingLinkEntry,
+  type MissingLinkEntry,
+  type LowConfidenceSpecEntry,
+  type LevelCoverageEntry,
+  type CoverageAuditorOptions,
+  type CoverageIssue,
+  type ModuleCoverageStatus,
+} from './coverage-auditor.js';
+
+export {
   buildSyntheticImageName,
   mergeEnvironmentVariables,
   normalizeCommandValue,

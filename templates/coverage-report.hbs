@@ -1,0 +1,84 @@
+# 文档覆盖率审计报告
+
+生成时间: {{generatedAt}}
+
+## 总览
+
+| 指标 | 数值 |
+|------|------|
+| 应文档化模块数 | {{summary.totalModules}} |
+| 已文档化模块数 | {{summary.documentedModules}} |
+| 模块覆盖率 | {{summary.moduleCoveragePct}}% |
+| 缺少文档模块 | {{summary.missingDocCount}} |
+| 缺少交叉引用 | {{summary.missingLinkCount}} |
+| 断链条目 | {{summary.danglingLinkCount}} |
+| 低置信度文档 | {{summary.lowConfidenceCount}} |
+| 适用 generators | {{summary.applicableGenerators}} |
+| 已生成 project docs | {{summary.generatedGeneratorDocs}} |
+
+## Generator Coverage
+
+| Generator | Scope | Expected | Generated | Missing | Coverage |
+|-----------|-------|----------|-----------|---------|----------|
+{{#each generatorCoverage}}
+| `{{generatorId}}` | {{scope}} | {{expectedCount}} | {{generatedCount}} | {{missingCount}} | {{coveragePct}}% |
+{{/each}}
+
+## 模块层级分布
+
+| Level | Total | Documented | Attention | Missing Doc |
+|-------|-------|------------|-----------|-------------|
+{{#each levelCoverage}}
+| {{level}} | {{total}} | {{documented}} | {{attention}} | {{missingDoc}} |
+{{/each}}
+
+## 缺失文档模块
+
+{{#if missingDocModules.length}}
+{{#each missingDocModules}}
+- `{{moduleName}}`
+{{/each}}
+{{else}}
+无。
+{{/if}}
+
+## 需要关注的模块
+
+{{#if attentionModules.length}}
+{{#each attentionModules}}
+- `{{moduleName}}`:
+  状态 `{{status}}`，问题 {{issues}}
+{{/each}}
+{{else}}
+无。
+{{/if}}
+
+## 断链
+
+{{#if danglingLinks.length}}
+{{#each danglingLinks}}
+- `{{specPath}}` -> `{{href}}`（{{reason}}）
+{{/each}}
+{{else}}
+无。
+{{/if}}
+
+## 缺少交叉引用
+
+{{#if missingLinks.length}}
+{{#each missingLinks}}
+- `{{specPath}}`（{{sourceTarget}}）
+{{/each}}
+{{else}}
+无。
+{{/if}}
+
+## 低置信度文档
+
+{{#if lowConfidenceSpecs.length}}
+{{#each lowConfidenceSpecs}}
+- `{{specPath}}`（{{sourceTarget}}）
+{{/each}}
+{{else}}
+无。
+{{/if}}

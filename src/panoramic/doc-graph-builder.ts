@@ -16,6 +16,7 @@ export interface ExistingSpecDocument {
   sourceTarget: string;
   relatedFiles: string[];
   linked: boolean;
+  confidence?: 'high' | 'medium' | 'low';
 }
 
 export interface DocGraphSpecNode {
@@ -23,6 +24,7 @@ export interface DocGraphSpecNode {
   sourceTarget: string;
   relatedFiles: string[];
   linked: boolean;
+  confidence?: 'high' | 'medium' | 'low';
   currentRun: boolean;
 }
 
@@ -90,21 +92,22 @@ export function scanExistingSpecDocuments(
   walkSpecFiles(specsDir, specFiles);
 
   return specFiles
-    .map((filePath) => {
+    .flatMap((filePath) => {
       const content = fs.readFileSync(filePath, 'utf-8');
       const metadata = extractModuleSpecMetadata(content);
       if (!metadata) {
-        return null;
+        return [];
       }
 
-      return {
+      const document: ExistingSpecDocument = {
         specPath: normalizeProjectPath(filePath, projectRoot),
         sourceTarget: normalizeProjectPath(metadata.sourceTarget, projectRoot),
         relatedFiles: metadata.relatedFiles.map((item) => normalizeProjectPath(item, projectRoot)),
         linked: content.includes(CROSS_REFERENCE_MARKER_PREFIX),
-      } satisfies ExistingSpecDocument;
+        confidence: metadata.confidence,
+      };
+      return [document];
     })
-    .filter((item): item is ExistingSpecDocument => item !== null)
     .sort((a, b) => a.specPath.localeCompare(b.specPath));
 }
 
@@ -120,6 +123,7 @@ export function buildDocGraph(options: BuildDocGraphOptions): DocGraph {
       moduleSpec.frontmatter.relatedFiles.map((item) => normalizeProjectPath(item, projectRoot)),
     ),
     linked: true,
+    confidence: moduleSpec.frontmatter.confidence,
     currentRun: true,
   } satisfies DocGraphSpecNode));
 
@@ -256,7 +260,7 @@ function buildMissingSpecList(
     }));
 }
 
-function resolveSpecForSource(
+export function resolveSpecForSource(
   sourcePath: string,
   specs: DocGraphSpecNode[],
 ): DocGraphSpecNode | undefined {
@@ -308,6 +312,7 @@ function pushSourceToSpec(
 function extractModuleSpecMetadata(content: string): {
   sourceTarget: string;
   relatedFiles: string[];
+  confidence?: 'high' | 'medium' | 'low';
 } | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
   if (!match?.[1]) {
@@ -317,6 +322,7 @@ function extractModuleSpecMetadata(content: string): {
   const lines = match[1].split(/\r?\n/);
   let typeValue: string | undefined;
   let sourceTarget: string | undefined;
+  let confidence: 'high' | 'medium' | 'low' | undefined;
   const relatedFiles: string[] = [];
   let inRelatedFiles = false;
 
@@ -330,6 +336,15 @@ function extractModuleSpecMetadata(content: string): {
 
     if (line.startsWith('sourceTarget:')) {
       sourceTarget = stripYamlScalar(line.slice('sourceTarget:'.length).trim());
+      inRelatedFiles = false;
+      continue;
+    }
+
+    if (line.startsWith('confidence:')) {
+      const parsed = stripYamlScalar(line.slice('confidence:'.length).trim());
+      if (parsed === 'high' || parsed === 'medium' || parsed === 'low') {
+        confidence = parsed;
+      }
       inRelatedFiles = false;
       continue;
     }
@@ -356,6 +371,7 @@ function extractModuleSpecMetadata(content: string): {
   return {
     sourceTarget,
     relatedFiles,
+    confidence,
   };
 }
 

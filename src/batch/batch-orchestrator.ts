@@ -27,6 +27,8 @@ import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec
 import { buildDocGraph, scanExistingSpecDocuments } from '../panoramic/doc-graph-builder.js';
 import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js';
 import { renderSpec } from '../generator/spec-renderer.js';
+import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
+import { buildProjectContext } from '../panoramic/project-context.js';
 
 // ============================================================
 // 类型定义
@@ -64,6 +66,8 @@ export interface BatchResult {
   languageStats?: Map<string, LanguageFileStat>;
   /** 044 输出的文档图谱调试文件 */
   docGraphPath?: string;
+  /** 046 输出的覆盖率审计 Markdown */
+  coverageReportPath?: string;
 }
 
 // ============================================================
@@ -429,6 +433,7 @@ export async function runBatch(
 
   // 步骤 5：生成架构索引（使用收集的 ModuleSpec）
   let docGraphPath: string | undefined;
+  let coverageReportPath: string | undefined;
   try {
     const existingSpecs = scanExistingSpecDocuments(resolvedOutputDir, resolvedRoot);
     const docGraph = buildDocGraph({
@@ -450,6 +455,26 @@ export async function runBatch(
     fs.mkdirSync(path.dirname(docGraphPathAbs), { recursive: true });
     fs.writeFileSync(docGraphPathAbs, JSON.stringify(docGraph, null, 2), 'utf-8');
     docGraphPath = toProjectPath(docGraphPathAbs);
+
+    try {
+      const coverageAuditor = new CoverageAuditor();
+      const projectContext = await buildProjectContext(resolvedRoot);
+      const coverageAudit = await coverageAuditor.audit({
+        projectRoot: resolvedRoot,
+        outputDir: resolvedOutputDir,
+        projectContext,
+        docGraph,
+        moduleGroups: groupResult.groups,
+      });
+      const coverageMarkdown = coverageAuditor.render(coverageAudit);
+      const coverageMarkdownPathAbs = path.join(resolvedOutputDir, '_coverage-report.md');
+      const coverageJsonPathAbs = path.join(resolvedOutputDir, '_coverage-report.json');
+      fs.writeFileSync(coverageMarkdownPathAbs, coverageMarkdown, 'utf-8');
+      fs.writeFileSync(coverageJsonPathAbs, JSON.stringify(coverageAudit, null, 2), 'utf-8');
+      coverageReportPath = toProjectPath(coverageMarkdownPathAbs);
+    } catch {
+      console.warn('覆盖率审计生成失败');
+    }
   } catch {
     console.warn('文档图谱生成失败');
   }
@@ -496,6 +521,7 @@ export async function runBatch(
     detectedLanguages: isMultiLang ? processedLanguages : undefined,
     languageStats,
     docGraphPath,
+    coverageReportPath,
   };
 }
 

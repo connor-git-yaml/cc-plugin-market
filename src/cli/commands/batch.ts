@@ -36,6 +36,12 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     if (result.indexGenerated) {
       console.log(`✓ specs/_index.spec.md 已生成`);
     }
+    if (result.docGraphPath) {
+      console.log(`✓ 文档图谱: ${result.docGraphPath}`);
+    }
+    if (result.coverageReportPath) {
+      console.log(`✓ 覆盖率审计: ${result.coverageReportPath}`);
+    }
     console.log(`✓ 日志: ${result.summaryLogPath}`);
 
     process.exitCode = result.failed.length > 0 ? EXIT_CODES.TARGET_ERROR : EXIT_CODES.SUCCESS;
