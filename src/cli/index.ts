@@ -32,7 +32,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
 用法:
   reverse-spec generate <target> [--deep] [--output-dir <dir>]
   reverse-spec prepare <target> [--deep]
-  reverse-spec batch [--force] [--output-dir <dir>]
+  reverse-spec batch [--force] [--incremental] [--output-dir <dir>]
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
   reverse-spec init [--global] [--remove] [--target <claude|codex|both>]
   reverse-spec auth-status [--verify]
@@ -60,6 +60,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
   --force        强制重新生成所有 Spec（仅 batch）
+  --incremental  仅重生成受影响的 Spec（仅 batch）
   --output-dir   自定义输出目录
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;

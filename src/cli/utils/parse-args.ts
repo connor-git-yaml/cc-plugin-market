@@ -10,6 +10,7 @@ export interface CLICommand {
   specFile?: string;
   deep: boolean;
   force: boolean;
+  incremental?: boolean;
   outputDir?: string;
   version: boolean;
   help: boolean;
@@ -195,6 +196,7 @@ export function parseArgs(argv: string[]): ParseResult {
   // 提取选项
   const deep = argv.includes('--deep');
   const force = argv.includes('--force');
+  const incremental = argv.includes('--incremental');
   const outputDirIdx = argv.indexOf('--output-dir');
   const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
 
@@ -235,6 +237,7 @@ export function parseArgs(argv: string[]): ParseResult {
         subcommand: 'batch',
         deep: false,
         force,
+        incremental,
         outputDir,
         version: false,
         help: false,

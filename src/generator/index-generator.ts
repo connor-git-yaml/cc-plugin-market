@@ -11,9 +11,16 @@ import type {
   IndexFrontmatter,
   LanguageDistribution,
 } from '../models/module-spec.js';
-import type { ModuleSpec } from '../models/module-spec.js';
+import type { ModuleSpec, SpecFrontmatter, SpecSections } from '../models/module-spec.js';
 import type { DependencyGraph } from '../models/dependency-graph.js';
 import type { LanguageFileStat } from '../utils/file-scanner.js';
+
+export interface IndexableModuleSpec {
+  frontmatter: SpecFrontmatter;
+  outputPath: string;
+  sections?: Pick<SpecSections, 'intent'>;
+  intentSummary?: string;
+}
 
 /**
  * 从依赖图识别横切关注点（被多个模块依赖的共享模块）
@@ -35,7 +42,7 @@ function identifyCrossCuttingConcerns(graph: DependencyGraph): string[] {
  * 从 ModuleSpec 列表构建模块映射表
  */
 function buildModuleMap(
-  specs: ModuleSpec[],
+  specs: IndexableModuleSpec[],
   graph: DependencyGraph,
 ): ModuleMapEntry[] {
   return specs.map((spec) => {
@@ -51,7 +58,7 @@ function buildModuleMap(
     return {
       name: spec.frontmatter.sourceTarget,
       specPath: spec.outputPath,
-      description: spec.sections.intent.split('\n')[0]?.slice(0, 100) ?? '',
+      description: resolveIntentSummary(spec).slice(0, 100),
       level: node?.level ?? 0,
       dependencies: edges.map((e) => e.to),
     };
@@ -68,7 +75,7 @@ function buildModuleMap(
  */
 function buildLanguageDistribution(
   languageStats: Map<string, LanguageFileStat>,
-  specs: ModuleSpec[],
+  specs: IndexableModuleSpec[],
   processedLanguages?: string[],
 ): LanguageDistribution[] | undefined {
   // 单语言项目不展示语言分布（FR-008）
@@ -121,7 +128,7 @@ function buildLanguageDistribution(
  * @returns ArchitectureIndex
  */
 export function generateIndex(
-  specs: ModuleSpec[],
+  specs: IndexableModuleSpec[],
   graph: DependencyGraph,
   languageStats?: Map<string, LanguageFileStat>,
   processedLanguages?: string[],
@@ -168,4 +175,21 @@ export function generateIndex(
     outputPath: 'specs/_index.spec.md',
     languageDistribution,
   };
+}
+
+function resolveIntentSummary(spec: IndexableModuleSpec): string {
+  const summary = spec.sections?.intent
+    ?.split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  if (summary) {
+    return summary;
+  }
+
+  if (spec.intentSummary?.trim()) {
+    return spec.intentSummary.trim();
+  }
+
+  return spec.frontmatter.sourceTarget;
 }

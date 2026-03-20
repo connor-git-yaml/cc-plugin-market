@@ -1,0 +1,53 @@
+---
+type: delta-report
+generatedAt: {{generatedAt}}
+mode: {{mode}}
+projectRoot: {{projectRoot}}
+totalTargets: {{totalTargets}}
+---
+
+# Delta Regeneration Report
+
+## Summary
+
+- Mode: `{{mode}}`
+- Total targets: `{{totalTargets}}`
+- Regenerate: `{{regenerateTargets.length}}`
+- Unchanged: `{{unchangedTargets.length}}`
+{{#if fallbackReason}}
+- Fallback reason: `{{fallbackReason}}`
+{{/if}}
+
+## Direct Changes
+
+{{#if directChanges.length}}
+| Source Target | Reason | Previous Hash | Current Hash |
+| --- | --- | --- | --- |
+{{#each directChanges}}
+| `{{sourceTarget}}` | `{{reason}}` | `{{#if previousHash}}{{previousHash}}{{else}}-{{/if}}` | `{{#if currentHash}}{{currentHash}}{{else}}-{{/if}}` |
+{{/each}}
+{{else}}
+No direct changes.
+{{/if}}
+
+## Propagated Changes
+
+{{#if propagatedChanges.length}}
+| Source Target | Impacted By |
+| --- | --- |
+{{#each propagatedChanges}}
+| `{{sourceTarget}}` | {{#if impactedBy.length}}{{#each impactedBy}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}-{{/if}} |
+{{/each}}
+{{else}}
+No propagated changes.
+{{/if}}
+
+## Unchanged Targets
+
+{{#if unchangedTargets.length}}
+{{#each unchangedTargets}}
+- `{{this}}`
+{{/each}}
+{{else}}
+No unchanged targets.
+{{/if}}

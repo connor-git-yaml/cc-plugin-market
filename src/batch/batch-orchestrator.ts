@@ -17,6 +17,7 @@ import {
   clearCheckpoint,
   DEFAULT_CHECKPOINT_PATH,
 } from './checkpoint.js';
+import { DeltaRegenerator, type DeltaReport } from './delta-regenerator.js';
 import { createReporter, writeSummaryLog } from './progress-reporter.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
@@ -24,7 +25,11 @@ import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { DependencyGraph, GraphNode, DependencyEdge } from '../models/dependency-graph.js';
 import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
-import { buildDocGraph, scanExistingSpecDocuments } from '../panoramic/doc-graph-builder.js';
+import {
+  buildDocGraph,
+  scanStoredModuleSpecs,
+  type StoredModuleSpecSummary,
+} from '../panoramic/doc-graph-builder.js';
 import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js';
 import { renderSpec } from '../generator/spec-renderer.js';
 import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
@@ -37,6 +42,8 @@ import { buildProjectContext } from '../panoramic/project-context.js';
 export interface BatchOptions {
   /** 即使 spec 已存在也重新生成 */
   force?: boolean;
+  /** 仅重生成受影响的 spec */
+  incremental?: boolean;
   /** 输出目录（默认 'specs'，相对路径基于 projectRoot） */
   outputDir?: string;
   /** 进度回调 */
@@ -68,6 +75,8 @@ export interface BatchResult {
   docGraphPath?: string;
   /** 046 输出的覆盖率审计 Markdown */
   coverageReportPath?: string;
+  /** 049 输出的差量分析 Markdown */
+  deltaReportPath?: string;
 }
 
 // ============================================================
@@ -175,6 +184,7 @@ export async function runBatch(
 ): Promise<BatchResult> {
   const {
     force = false,
+    incremental = false,
     maxRetries = 3,
     outputDir = 'specs',
   } = options;
@@ -194,6 +204,7 @@ export async function runBatch(
     const rel = path.relative(resolvedRoot, absPath);
     return rel.startsWith('..') ? absPath : rel;
   };
+  const normalizeProjectPath = (inputPath: string): string => inputPath.split(path.sep).join('/');
 
   // 步骤 1：扫描文件获取 languageStats
   const scanResult = scanFiles(resolvedRoot, { projectRoot: resolvedRoot });
@@ -249,6 +260,41 @@ export async function runBatch(
   const processingOrder = groupResult.moduleOrder;
   const moduleGroups = new Map(groupResult.groups.map((g) => [g.name, g]));
   const rootModuleName = options.grouping?.rootModuleName ?? 'root';
+  const existingStoredSpecs = scanStoredModuleSpecs(resolvedOutputDir, resolvedRoot);
+  const storedSpecByTarget = new Map(existingStoredSpecs.map((spec) => [spec.sourceTarget, spec]));
+
+  let deltaReport: DeltaReport | undefined;
+  if (incremental) {
+    if (force) {
+      deltaReport = {
+        title: 'Delta Regeneration Report',
+        generatedAt: new Date().toISOString(),
+        projectRoot: resolvedRoot,
+        mode: 'full',
+        totalTargets: groupResult.groups.reduce((sum, group) => {
+          const isRootGroup = group.name === rootModuleName || group.name.startsWith(`${rootModuleName}--`);
+          return sum + (isRootGroup ? group.files.length : 1);
+        }, 0),
+        regenerateTargets: [],
+        directChanges: [],
+        propagatedChanges: [],
+        unchangedTargets: [],
+        fallbackReason: 'force-enabled',
+      };
+    } else {
+      const deltaRegenerator = new DeltaRegenerator();
+      deltaReport = await deltaRegenerator.plan({
+        projectRoot: resolvedRoot,
+        dependencyGraph: mergedGraph,
+        moduleGroups: groupResult.groups,
+        storedSpecs: existingStoredSpecs,
+      });
+    }
+  }
+
+  const regenerateTargets = new Set(deltaReport?.regenerateTargets ?? []);
+  const forceFullRegeneration = force || (incremental && deltaReport?.mode === 'full');
+  const shouldUseIncrementalPlan = incremental && !force && deltaReport?.mode === 'incremental';
 
   console.log(`发现 ${mergedGraph.modules.length} 个文件，聚合为 ${processingOrder.length} 个模块`);
   if (isMultiLang) {
@@ -313,12 +359,39 @@ export async function runBatch(
     reporter.start(moduleName);
     state.currentModule = moduleName;
 
-    // 检查 spec 是否已存在
     const specPath = path.join(resolvedOutputDir, `${moduleName}.spec.md`);
-    if (!force && fs.existsSync(specPath)) {
-      skipped.push(moduleName);
-      reporter.complete(moduleName, 'skipped');
-      continue;
+    const moduleSourceTarget = normalizeProjectPath(group.dirPath);
+    const rootTargetsToGenerate = isRoot
+      ? group.files
+        .map((filePath) => normalizeProjectPath(filePath))
+        .filter((sourceTarget) => {
+          if (forceFullRegeneration) {
+            return true;
+          }
+          if (shouldUseIncrementalPlan) {
+            return regenerateTargets.has(sourceTarget);
+          }
+          const storedSpec = storedSpecByTarget.get(sourceTarget);
+          return !storedSpec || !fs.existsSync(path.join(resolvedRoot, storedSpec.outputPath));
+        })
+      : [];
+
+    if (isRoot) {
+      if (rootTargetsToGenerate.length === 0) {
+        skipped.push(moduleName);
+        reporter.complete(moduleName, 'skipped');
+        continue;
+      }
+    } else {
+      const shouldGenerate = forceFullRegeneration
+        || (shouldUseIncrementalPlan
+          ? regenerateTargets.has(moduleSourceTarget)
+          : !fs.existsSync(specPath));
+      if (!shouldGenerate) {
+        skipped.push(moduleName);
+        reporter.complete(moduleName, 'skipped');
+        continue;
+      }
     }
 
     // 处理模块
@@ -343,15 +416,43 @@ export async function runBatch(
 
         if (isRoot) {
           // root 模块：散文件逐个处理
+          const generatedRootSpecs: string[] = [];
           for (const file of group.files) {
+            const sourceTarget = normalizeProjectPath(file);
+            if (!rootTargetsToGenerate.includes(sourceTarget)) {
+              continue;
+            }
             const fullPath = path.join(resolvedRoot, file);
-            const result = await generateSpec(fullPath, genOptions);
+            const storedSpec = storedSpecByTarget.get(sourceTarget);
+            const result = await generateSpec(fullPath, {
+              ...genOptions,
+              existingVersion: storedSpec?.version,
+            });
             collectedModuleSpecs.push(result.moduleSpec);
+            generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
           }
+
+          if (generatedRootSpecs.length === 0) {
+            skipped.push(moduleName);
+            reporter.complete(moduleName, 'skipped');
+            moduleSuccess = true;
+            continue;
+          }
+
+          successful.push(moduleName);
+          reporter.complete(moduleName, 'success');
+          state.completedModules.push({
+            path: moduleName,
+            specPath: generatedRootSpecs[0]!,
+            completedAt: new Date().toISOString(),
+          });
         } else {
           // 正常模块：传入目录路径
           const fullDirPath = path.join(resolvedRoot, group.dirPath);
-          const result = await generateSpec(fullDirPath, genOptions);
+          const result = await generateSpec(fullDirPath, {
+            ...genOptions,
+            existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
+          });
 
           // 多语言项目：注入 language 到 frontmatter + 跨语言提示到 constraints
           if (isMultiLang && group.language) {
@@ -391,17 +492,6 @@ export async function runBatch(
           });
         }
 
-        // root 模块整体记录
-        if (isRoot) {
-          successful.push(moduleName);
-          reporter.complete(moduleName, 'success');
-          state.completedModules.push({
-            path: moduleName,
-            specPath: toProjectPath(path.join(resolvedOutputDir, `${moduleName}.spec.md`)),
-            completedAt: new Date().toISOString(),
-          });
-        }
-
         moduleSuccess = true;
       } catch (error: any) {
         retryCount++;
@@ -432,15 +522,16 @@ export async function runBatch(
   }
 
   // 步骤 5：生成架构索引（使用收集的 ModuleSpec）
+  let deltaReportPath: string | undefined;
   let docGraphPath: string | undefined;
   let coverageReportPath: string | undefined;
+  const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
   try {
-    const existingSpecs = scanExistingSpecDocuments(resolvedOutputDir, resolvedRoot);
     const docGraph = buildDocGraph({
       projectRoot: resolvedRoot,
       dependencyGraph: mergedGraph,
       moduleSpecs: collectedModuleSpecs,
-      existingSpecs,
+      existingSpecs: existingStoredSpecs,
     });
 
     for (const moduleSpec of collectedModuleSpecs) {
@@ -455,6 +546,20 @@ export async function runBatch(
     fs.mkdirSync(path.dirname(docGraphPathAbs), { recursive: true });
     fs.writeFileSync(docGraphPathAbs, JSON.stringify(docGraph, null, 2), 'utf-8');
     docGraphPath = toProjectPath(docGraphPathAbs);
+
+    if (deltaReport) {
+      try {
+        const deltaRegenerator = new DeltaRegenerator();
+        const deltaMarkdown = deltaRegenerator.render(deltaReport);
+        const deltaMarkdownPathAbs = path.join(resolvedOutputDir, '_delta-report.md');
+        const deltaJsonPathAbs = path.join(resolvedOutputDir, '_delta-report.json');
+        fs.writeFileSync(deltaMarkdownPathAbs, deltaMarkdown, 'utf-8');
+        fs.writeFileSync(deltaJsonPathAbs, JSON.stringify(deltaReport, null, 2), 'utf-8');
+        deltaReportPath = toProjectPath(deltaMarkdownPathAbs);
+      } catch {
+        console.warn('差量报告生成失败');
+      }
+    }
 
     try {
       const coverageAuditor = new CoverageAuditor();
@@ -484,7 +589,7 @@ export async function runBatch(
   try {
     initRenderer();
     const index = generateIndex(
-      collectedModuleSpecs,
+      allIndexSpecs,
       mergedGraph,
       languageStats,
       processedLanguages,
@@ -522,6 +627,7 @@ export async function runBatch(
     languageStats,
     docGraphPath,
     coverageReportPath,
+    deltaReportPath,
   };
 }
 
@@ -568,4 +674,60 @@ async function buildFallbackGraph(
     parserUsed: 'tree-sitter',
   }));
   return buildDirectoryGraph(langGroup.files, projectRoot, emptySkeletons);
+}
+
+function mergeIndexSpecs(
+  currentSpecs: ModuleSpec[],
+  storedSpecs: StoredModuleSpecSummary[],
+  toProjectPath: (absPath: string) => string,
+): Array<{
+  frontmatter: ModuleSpec['frontmatter'];
+  outputPath: string;
+  sections?: Pick<ModuleSpec['sections'], 'intent'>;
+  intentSummary?: string;
+}> {
+  const merged = new Map<string, {
+    frontmatter: ModuleSpec['frontmatter'];
+    outputPath: string;
+    sections?: Pick<ModuleSpec['sections'], 'intent'>;
+    intentSummary?: string;
+  }>();
+
+  for (const storedSpec of storedSpecs) {
+    if (!storedSpec.skeletonHash) {
+      continue;
+    }
+
+    merged.set(storedSpec.outputPath, {
+      frontmatter: {
+        type: 'module-spec',
+        version: storedSpec.version ?? 'v1',
+        generatedBy: 'reverse-spec v2.0',
+        sourceTarget: storedSpec.sourceTarget,
+        relatedFiles: storedSpec.relatedFiles,
+        lastUpdated: new Date().toISOString(),
+        confidence: storedSpec.confidence ?? 'medium',
+        skeletonHash: storedSpec.skeletonHash,
+        language: storedSpec.language,
+        crossLanguageRefs: storedSpec.crossLanguageRefs,
+      },
+      outputPath: storedSpec.outputPath,
+      intentSummary: storedSpec.intentSummary,
+    });
+  }
+
+  for (const currentSpec of currentSpecs) {
+    const normalizedOutputPath = path.isAbsolute(currentSpec.outputPath)
+      ? toProjectPath(path.resolve(currentSpec.outputPath))
+      : currentSpec.outputPath;
+    merged.set(normalizedOutputPath, {
+      frontmatter: currentSpec.frontmatter,
+      outputPath: normalizedOutputPath,
+      sections: {
+        intent: currentSpec.sections.intent,
+      },
+    });
+  }
+
+  return [...merged.values()].sort((a, b) => a.outputPath.localeCompare(b.outputPath));
 }

@@ -19,6 +19,15 @@ export interface ExistingSpecDocument {
   confidence?: 'high' | 'medium' | 'low';
 }
 
+export interface StoredModuleSpecSummary extends ExistingSpecDocument {
+  version?: string;
+  skeletonHash?: string;
+  language?: string;
+  crossLanguageRefs?: string[];
+  intentSummary: string;
+  outputPath: string;
+}
+
 export interface DocGraphSpecNode {
   specPath: string;
   sourceTarget: string;
@@ -84,6 +93,21 @@ export function scanExistingSpecDocuments(
   specsDir: string,
   projectRoot: string,
 ): ExistingSpecDocument[] {
+  return scanStoredModuleSpecs(specsDir, projectRoot)
+    .map((summary) => ({
+      specPath: summary.specPath,
+      sourceTarget: summary.sourceTarget,
+      relatedFiles: summary.relatedFiles,
+      linked: summary.linked,
+      confidence: summary.confidence,
+    }))
+    .sort((a, b) => a.specPath.localeCompare(b.specPath));
+}
+
+export function scanStoredModuleSpecs(
+  specsDir: string,
+  projectRoot: string,
+): StoredModuleSpecSummary[] {
   if (!fs.existsSync(specsDir)) {
     return [];
   }
@@ -94,17 +118,25 @@ export function scanExistingSpecDocuments(
   return specFiles
     .flatMap((filePath) => {
       const content = fs.readFileSync(filePath, 'utf-8');
-      const metadata = extractModuleSpecMetadata(content);
+      const metadata = extractStoredModuleSpecSummary(content);
       if (!metadata) {
         return [];
       }
 
-      const document: ExistingSpecDocument = {
+      const document: StoredModuleSpecSummary = {
         specPath: normalizeProjectPath(filePath, projectRoot),
         sourceTarget: normalizeProjectPath(metadata.sourceTarget, projectRoot),
         relatedFiles: metadata.relatedFiles.map((item) => normalizeProjectPath(item, projectRoot)),
         linked: content.includes(CROSS_REFERENCE_MARKER_PREFIX),
         confidence: metadata.confidence,
+        version: metadata.version,
+        skeletonHash: metadata.skeletonHash,
+        language: metadata.language,
+        crossLanguageRefs: metadata.crossLanguageRefs?.map(
+          (item) => normalizeProjectPath(item, projectRoot),
+        ),
+        intentSummary: metadata.intentSummary,
+        outputPath: normalizeProjectPath(filePath, projectRoot),
       };
       return [document];
     })
@@ -314,6 +346,28 @@ function extractModuleSpecMetadata(content: string): {
   relatedFiles: string[];
   confidence?: 'high' | 'medium' | 'low';
 } | null {
+  const summary = extractStoredModuleSpecSummary(content);
+  if (!summary) {
+    return null;
+  }
+
+  return {
+    sourceTarget: summary.sourceTarget,
+    relatedFiles: summary.relatedFiles,
+    confidence: summary.confidence,
+  };
+}
+
+function extractStoredModuleSpecSummary(content: string): {
+  sourceTarget: string;
+  relatedFiles: string[];
+  confidence?: 'high' | 'medium' | 'low';
+  version?: string;
+  skeletonHash?: string;
+  language?: string;
+  crossLanguageRefs?: string[];
+  intentSummary: string;
+} | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
   if (!match?.[1]) {
     return null;
@@ -322,21 +376,35 @@ function extractModuleSpecMetadata(content: string): {
   const lines = match[1].split(/\r?\n/);
   let typeValue: string | undefined;
   let sourceTarget: string | undefined;
+  let version: string | undefined;
   let confidence: 'high' | 'medium' | 'low' | undefined;
+  let skeletonHash: string | undefined;
+  let language: string | undefined;
   const relatedFiles: string[] = [];
+  const crossLanguageRefs: string[] = [];
   let inRelatedFiles = false;
+  let inCrossLanguageRefs = false;
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
     if (line.startsWith('type:')) {
       typeValue = stripYamlScalar(line.slice('type:'.length).trim());
       inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line.startsWith('version:')) {
+      version = stripYamlScalar(line.slice('version:'.length).trim());
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
       continue;
     }
 
     if (line.startsWith('sourceTarget:')) {
       sourceTarget = stripYamlScalar(line.slice('sourceTarget:'.length).trim());
       inRelatedFiles = false;
+      inCrossLanguageRefs = false;
       continue;
     }
 
@@ -346,11 +414,33 @@ function extractModuleSpecMetadata(content: string): {
         confidence = parsed;
       }
       inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line.startsWith('skeletonHash:')) {
+      skeletonHash = stripYamlScalar(line.slice('skeletonHash:'.length).trim());
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line.startsWith('language:')) {
+      language = stripYamlScalar(line.slice('language:'.length).trim());
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
       continue;
     }
 
     if (line === 'relatedFiles:') {
       inRelatedFiles = true;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line === 'crossLanguageRefs:') {
+      inCrossLanguageRefs = true;
+      inRelatedFiles = false;
       continue;
     }
 
@@ -362,17 +452,47 @@ function extractModuleSpecMetadata(content: string): {
       }
       inRelatedFiles = false;
     }
+
+    if (inCrossLanguageRefs) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('- ')) {
+        crossLanguageRefs.push(stripYamlScalar(trimmed.slice(2).trim()));
+        continue;
+      }
+      inCrossLanguageRefs = false;
+    }
   }
 
   if (typeValue !== 'module-spec' || !sourceTarget) {
     return null;
   }
 
+  const intentSummary = extractIntentSummary(content, sourceTarget);
+
   return {
     sourceTarget,
     relatedFiles,
     confidence,
+    version,
+    skeletonHash,
+    language,
+    crossLanguageRefs: crossLanguageRefs.length > 0 ? crossLanguageRefs : undefined,
+    intentSummary,
   };
+}
+
+function extractIntentSummary(content: string, sourceTarget: string): string {
+  const match = /^##\s+1\.\s+意图\r?\n([\s\S]*?)(?=^##\s+\d+\.|\s*$)/m.exec(content);
+  if (!match?.[1]) {
+    return sourceTarget;
+  }
+
+  const firstMeaningfulLine = match[1]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  return firstMeaningfulLine ?? sourceTarget;
 }
 
 function stripYamlScalar(value: string): string {

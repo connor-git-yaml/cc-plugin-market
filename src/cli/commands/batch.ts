@@ -21,6 +21,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
   try {
     const result = await runBatch(process.cwd(), {
       force: command.force,
+      incremental: command.incremental,
       outputDir: command.outputDir,
       onProgress: (completed, total) => {
         // 简易进度输出
@@ -41,6 +42,9 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     }
     if (result.coverageReportPath) {
       console.log(`✓ 覆盖率审计: ${result.coverageReportPath}`);
+    }
+    if (result.deltaReportPath) {
+      console.log(`✓ 差量报告: ${result.deltaReportPath}`);
     }
     console.log(`✓ 日志: ${result.summaryLogPath}`);
 

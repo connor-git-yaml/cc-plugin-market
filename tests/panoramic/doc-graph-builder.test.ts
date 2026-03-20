@@ -7,6 +7,7 @@ import type { ModuleSpec } from '../../src/models/module-spec.js';
 import {
   buildDocGraph,
   scanExistingSpecDocuments,
+  scanStoredModuleSpecs,
 } from '../../src/panoramic/doc-graph-builder.js';
 
 describe('DocGraphBuilder', () => {
@@ -49,6 +50,7 @@ lastUpdated: 2026-03-20T00:00:00.000Z
     );
 
     const existingSpecs = scanExistingSpecDocuments(specsDir, tmpDir);
+    const storedSpecs = scanStoredModuleSpecs(specsDir, tmpDir);
     const docGraph = buildDocGraph({
       projectRoot: tmpDir,
       dependencyGraph: createGraph(tmpDir),
@@ -63,6 +65,15 @@ lastUpdated: 2026-03-20T00:00:00.000Z
     });
 
     expect(existingSpecs).toHaveLength(2);
+    expect(storedSpecs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          specPath: 'specs/auth.spec.md',
+          skeletonHash: 'a'.repeat(64),
+          intentSummary: 'src/auth intent',
+        }),
+      ]),
+    );
     expect(docGraph.specs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -224,6 +235,8 @@ skeletonHash: ${'a'.repeat(64)}
 ---
 
 # ${options.sourceTarget}
+## 1. 意图
+${options.sourceTarget} intent
 ${marker}
 `,
     'utf-8',

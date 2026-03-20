@@ -61,6 +61,7 @@ function makeCommand(overrides: Partial<CLICommand> = {}): CLICommand {
     subcommand: 'generate',
     deep: false,
     force: false,
+    incremental: false,
     version: false,
     help: false,
     global: false,
@@ -174,6 +175,37 @@ describe('CLI 命令执行器', () => {
         outputDir: 'custom-specs',
       }),
     );
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('runBatchCommand 透传 incremental 并输出 delta report 路径', async () => {
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 3,
+      successful: ['auth', 'api'],
+      failed: [],
+      skipped: ['jobs'],
+      degraded: [],
+      duration: 100,
+      indexGenerated: true,
+      summaryLogPath: 'specs/batch-summary.md',
+      deltaReportPath: 'specs/_delta-report.md',
+    });
+
+    await runBatchCommand(
+      makeCommand({
+        subcommand: 'batch',
+        incremental: true,
+      }),
+      '2.0.0',
+    );
+
+    expect(mocks.runBatch).toHaveBeenCalledWith(
+      process.cwd(),
+      expect.objectContaining({
+        incremental: true,
+      }),
+    );
+    expect(logSpy).toHaveBeenCalledWith('✓ 差量报告: specs/_delta-report.md');
     expect(process.exitCode).toBe(0);
   });
 

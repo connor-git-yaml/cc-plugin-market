@@ -33,6 +33,15 @@ describe('parseArgs', () => {
     }
   });
 
+  it('解析 batch --incremental', () => {
+    const result = parseArgs(['batch', '--incremental']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('batch');
+      expect(result.command.incremental).toBe(true);
+    }
+  });
+
   it('解析 diff 子命令', () => {
     const result = parseArgs(['diff', 'a.md', 'src/']);
     expect(result.ok).toBe(true);
