@@ -76,6 +76,17 @@ export {
 } from './runtime-topology-generator.js';
 
 export {
+  EventSurfaceGenerator,
+  type EventRole,
+  type EventChannelKind,
+  type EventEvidence,
+  type EventOccurrence,
+  type EventChannel,
+  type EventSurfaceInput,
+  type EventSurfaceOutput,
+} from './event-surface-generator.js';
+
+export {
   CoverageAuditor,
   type CoverageAudit,
   type CoverageSummary,

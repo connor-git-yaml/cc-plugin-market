@@ -1,0 +1,90 @@
+---
+type: event-surface
+generatedAt: {{generatedAt}}
+projectName: {{projectName}}
+totalChannels: {{totalChannels}}
+---
+
+# 事件面文档: {{projectName}}
+
+## 总览
+
+- Channels: `{{totalChannels}}`
+- Publishers: `{{totalPublishers}}`
+- Subscribers: `{{totalSubscribers}}`
+
+{{#if warnings.length}}
+## Warning
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## Channel Inventory
+
+| Channel | Kind | Publishers | Subscribers | Message Fields |
+| --- | --- | --- | --- | --- |
+{{#each channels}}
+| `{{channelName}}` | `{{kind}}` | `{{publishers.length}}` | `{{subscribers.length}}` | {{#if messageFields.length}}`{{messageFields}}`{{else}}-{{/if}} |
+{{/each}}
+
+{{#each channels}}
+## {{channelName}}
+
+- Kind: `{{kind}}`
+- Publishers: `{{publishers.length}}`
+- Subscribers: `{{subscribers.length}}`
+
+{{#if messageFields.length}}
+**Message fields**
+{{#each messageFields}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+{{#if payloadSamples.length}}
+**Payload samples**
+{{#each payloadSamples}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+**Publishers**
+{{#if publishers.length}}
+{{#each publishers}}
+- `{{symbolName}}` @ `{{sourceFile}}` via `{{methodName}}`
+{{#if payloadSummary}}: `{{payloadSummary}}`{{/if}}
+{{/each}}
+{{else}}
+- None
+{{/if}}
+
+**Subscribers**
+{{#if subscribers.length}}
+{{#each subscribers}}
+- `{{symbolName}}` @ `{{sourceFile}}` via `{{methodName}}`
+{{/each}}
+{{else}}
+- None
+{{/if}}
+
+{{/each}}
+
+{{#if eventFlowMermaid}}
+## Event Flow
+
+```mermaid
+{{eventFlowMermaid}}
+```
+{{/if}}
+
+{{#if stateAppendixMermaid}}
+## 状态附录 [推断]
+
+置信度: `{{stateAppendixConfidence}}`
+
+```mermaid
+{{stateAppendixMermaid}}
+```
+{{/if}}
