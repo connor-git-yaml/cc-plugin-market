@@ -131,6 +131,16 @@ export {
 } from './pattern-hints-generator.js';
 
 export {
+  generateBatchAdrDocs,
+  type AdrSourceType,
+  type AdrEvidenceRef,
+  type AdrDraft,
+  type AdrIndexOutput,
+  type GenerateBatchAdrDocsOptions,
+  type GenerateBatchAdrDocsResult,
+} from './adr-decision-pipeline.js';
+
+export {
   buildSyntheticImageName,
   mergeEnvironmentVariables,
   normalizeCommandValue,

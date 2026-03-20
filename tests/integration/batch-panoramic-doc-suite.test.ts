@@ -183,6 +183,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
       expect.arrayContaining([
         'specs/api-surface.md',
         'specs/architecture-ir.md',
+        'specs/docs/adr/index.md',
         'specs/architecture-narrative.md',
         'specs/architecture-overview.md',
         'specs/config-reference.md',
@@ -197,10 +198,14 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.dsl'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'docs', 'adr', 'index.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-narrative.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'data-model.mmd'))).toBe(true);
+    const adrFiles = fs.readdirSync(path.join(projectRoot, 'specs', 'docs', 'adr'))
+      .filter((fileName) => /^adr-\d{4}-.+\.md$/i.test(fileName));
+    expect(adrFiles.length).toBeGreaterThanOrEqual(2);
 
     const narrativeMarkdown = fs.readFileSync(
       path.join(projectRoot, 'specs', 'architecture-narrative.md'),
@@ -209,6 +214,12 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(narrativeMarkdown).toContain('## 3. 关键模块');
     expect(narrativeMarkdown).toContain('## 5. 关键方法 / 函数');
     expect(narrativeMarkdown).toContain('UserService');
+
+    const adrIndexMarkdown = fs.readFileSync(
+      path.join(projectRoot, 'specs', 'docs', 'adr', 'index.md'),
+      'utf-8',
+    );
+    expect(adrIndexMarkdown).toContain('## ADR 草稿列表');
 
     const coverageJson = JSON.parse(
       fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.json'), 'utf-8'),

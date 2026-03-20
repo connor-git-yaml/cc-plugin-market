@@ -1,0 +1,51 @@
+---
+type: adr
+status: {{status}}
+decisionId: {{decisionId}}
+category: {{category}}
+confidence: {{confidence}}
+generatedBy: reverse-spec adr-pipeline
+sourceTypes:
+{{#each sourceTypes}}
+  - {{this}}
+{{/each}}
+---
+
+# {{decisionId}} {{title}}
+
+## 摘要
+
+{{summary}}
+
+## Decision
+
+{{decision}}
+
+## Context
+
+{{#each context}}
+- {{this}}
+{{/each}}
+
+## Consequences
+
+{{#each consequences}}
+- {{this}}
+{{/each}}
+
+## Alternatives
+
+{{#each alternatives}}
+- {{this}}
+{{/each}}
+
+## Evidence
+
+{{#each evidence}}
+- [{{sourceType}}] {{label}}{{#if path}} ({{path}}){{/if}}: {{excerpt}}
+{{/each}}
+
+## Notes
+
+- 本草稿为候选 ADR，默认状态为 `proposed`
+- {{#if inferred}}部分结论为基于现有事实的推断，请在合并前人工确认{{else}}主要结论已由现有结构化事实直接支撑{{/if}}

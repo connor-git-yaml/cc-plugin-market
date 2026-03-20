@@ -14,11 +14,13 @@ import {
   type ArchitectureNarrativeOutput,
   type BatchGeneratedDocSummary,
 } from './architecture-narrative.js';
+import { generateBatchAdrDocs } from './adr-decision-pipeline.js';
 import {
   getBatchProjectOutputBaseName,
   isBatchProjectGeneratorId,
 } from './output-filenames.js';
 import type { ArchitectureOverviewOutput } from './architecture-overview-generator.js';
+import type { PatternHintsOutput } from './pattern-hints-model.js';
 
 export interface BatchProjectDocsResult {
   projectContext: ProjectContext;
@@ -71,6 +73,7 @@ export async function generateBatchProjectDocs(
   }
 
   const architectureOverview = structuredOutputs.get('architecture-overview') as ArchitectureOverviewOutput | undefined;
+  const patternHints = structuredOutputs.get('pattern-hints') as PatternHintsOutput | undefined;
   const architectureNarrative = buildArchitectureNarrative({
     projectRoot: options.projectRoot,
     outputDir: options.outputDir,
@@ -90,6 +93,29 @@ export async function generateBatchProjectDocs(
     writtenFiles: narrativeWrittenFiles,
     warnings: [],
   });
+
+  try {
+    const adrDocs = generateBatchAdrDocs({
+      projectRoot: options.projectRoot,
+      outputDir: options.outputDir,
+      projectContext,
+      generatedDocs,
+      architectureNarrative,
+      architectureOverview,
+      patternHints,
+    });
+    generatedDocs.push({
+      generatorId: 'adr-pipeline',
+      writtenFiles: adrDocs.writtenFiles,
+      warnings: adrDocs.warnings,
+    });
+  } catch (error) {
+    generatedDocs.push({
+      generatorId: 'adr-pipeline',
+      writtenFiles: [],
+      warnings: [`ADR 草稿生成失败: ${String(error)}`],
+    });
+  }
 
   return {
     projectContext,

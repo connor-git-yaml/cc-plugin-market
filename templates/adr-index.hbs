@@ -1,0 +1,25 @@
+# {{title}}
+
+生成时间: {{generatedAt}}
+
+## 摘要
+
+{{#each summary}}
+- {{this}}
+{{/each}}
+
+## ADR 草稿列表
+
+| ID | 标题 | 分类 | 置信度 | 来源类型 |
+| --- | --- | --- | --- | --- |
+{{#each drafts}}
+| {{decisionId}} | [{{title}}]({{decisionId}}-{{slug}}.md) | {{category}} | {{confidence}} | {{sourceTypes}} |
+{{/each}}
+
+{{#if warnings.length}}
+## Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
