@@ -51,6 +51,15 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       const suffix = result.projectDocs.length > 6 ? ` ... 共 ${result.projectDocs.length} 个` : '';
       console.log(`✓ 项目级文档: ${preview}${suffix}`);
     }
+    if (result.docsBundleManifestPath) {
+      console.log(`✓ 文档 Bundle: ${result.docsBundleManifestPath}`);
+    }
+    if (result.docsBundleProfiles && result.docsBundleProfiles.length > 0) {
+      const preview = result.docsBundleProfiles
+        .map((profile) => `${profile.id}(${profile.documentCount})`)
+        .join(', ');
+      console.log(`✓ Bundle Profiles: ${preview}`);
+    }
     console.log(`✓ 日志: ${result.summaryLogPath}`);
 
     process.exitCode = result.failed.length > 0 ? EXIT_CODES.TARGET_ERROR : EXIT_CODES.SUCCESS;

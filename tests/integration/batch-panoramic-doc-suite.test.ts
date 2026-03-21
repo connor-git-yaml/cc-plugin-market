@@ -196,6 +196,13 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
         'specs/runtime-topology.md',
       ]),
     );
+    expect(result.docsBundleManifestPath).toBe('specs/docs-bundle.yaml');
+    expect(result.docsBundleProfiles?.map((profile) => profile.id)).toEqual([
+      'developer-onboarding',
+      'architecture-review',
+      'api-consumer',
+      'ops-handover',
+    ]);
 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'api-surface.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-ir.json'))).toBe(true);
@@ -213,6 +220,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     const adrFiles = fs.readdirSync(path.join(projectRoot, 'specs', 'docs', 'adr'))
       .filter((fileName) => /^adr-\d{4}-.+\.md$/i.test(fileName));
     expect(adrFiles.length).toBeGreaterThanOrEqual(2);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'docs-bundle.yaml'))).toBe(true);
 
     const narrativeMarkdown = fs.readFileSync(
       path.join(projectRoot, 'specs', 'architecture-narrative.md'),
@@ -294,6 +302,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(result.projectDocs).not.toContain('specs/architecture-overview.md');
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-narrative.md'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'quality-report.md'))).toBe(true);
+    expect(result.docsBundleManifestPath).toBe('specs/docs-bundle.yaml');
   });
 });
 

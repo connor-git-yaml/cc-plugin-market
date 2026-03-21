@@ -1,0 +1,322 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { analyzeFiles } from '../../src/core/ast-analyzer.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
+import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
+import type { ModuleSpec } from '../../src/models/module-spec.js';
+import { renderSpec } from '../../src/generator/spec-renderer.js';
+import { parseYamlDocument } from '../../src/panoramic/parsers/yaml-config-parser.js';
+
+const mocks = vi.hoisted(() => ({
+  generateSpec: vi.fn(),
+}));
+
+vi.mock('../../src/core/single-spec-orchestrator.js', () => ({
+  generateSpec: mocks.generateSpec,
+}));
+
+import { runBatch } from '../../src/batch/batch-orchestrator.js';
+
+describe('runBatch docs bundle orchestration', () => {
+  let projectRoot: string;
+
+  beforeEach(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-doc-bundle-'));
+
+    fs.mkdirSync(path.join(projectRoot, 'src', 'api'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'src', 'models'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'src', 'events'), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(projectRoot, 'package.json'),
+      JSON.stringify({
+        name: 'bundle-app',
+        version: '1.0.0',
+        dependencies: {
+          express: '^4.0.0',
+        },
+      }, null, 2),
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, '.env.example'),
+      'DATABASE_URL=postgres://localhost/app\nPORT=3000\n',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'Dockerfile'),
+      [
+        'FROM node:20 AS build',
+        'WORKDIR /app',
+        'COPY package.json .',
+        'RUN npm install',
+        'COPY . .',
+        'RUN npm run build',
+        '',
+        'FROM node:20-slim AS runtime',
+        'WORKDIR /app',
+        'COPY --from=build /app/dist ./dist',
+        'CMD ["node", "dist/server.js"]',
+      ].join('\n'),
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'docker-compose.yml'),
+      [
+        'services:',
+        '  api:',
+        '    build:',
+        '      context: .',
+        '      dockerfile: Dockerfile',
+        '      target: runtime',
+        '    environment:',
+        '      DATABASE_URL: postgres://postgres/app',
+        '    ports:',
+        '      - "3000:3000"',
+      ].join('\n'),
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'src', 'models', 'user.ts'),
+      [
+        'export interface User {',
+        '  id: string;',
+        '  email: string;',
+        '}',
+        '',
+        'export class UserService {',
+        '  findById(id: string): User {',
+        '    return { id, email: "user@example.com" };',
+        '  }',
+        '}',
+      ].join('\n'),
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'src', 'api', 'routes.ts'),
+      [
+        'import express from "express";',
+        'import { UserService } from "../models/user";',
+        '',
+        'const router = express.Router();',
+        'const service = new UserService();',
+        '',
+        'router.get("/users/:id", (req, res) => {',
+        '  res.json(service.findById(req.params.id));',
+        '});',
+        '',
+        'export default router;',
+      ].join('\n'),
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'src', 'events', 'bus.ts'),
+      [
+        'import { EventEmitter } from "node:events";',
+        '',
+        'const bus = new EventEmitter();',
+        '',
+        'export function publishUserCreated(payload: { id: string; email: string }): void {',
+        '  bus.emit("user.created", payload);',
+        '}',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    mocks.generateSpec.mockImplementation(async (
+      targetPath: string,
+      options: { outputDir?: string; projectRoot?: string; existingVersion?: string },
+    ) => {
+      const moduleSpec = await buildMockModuleSpec(
+        options.projectRoot ?? projectRoot,
+        targetPath,
+        options.outputDir ?? path.join(projectRoot, 'specs'),
+        options.existingVersion,
+      );
+      fs.mkdirSync(path.dirname(moduleSpec.outputPath), { recursive: true });
+      fs.writeFileSync(moduleSpec.outputPath, renderSpec(moduleSpec), 'utf-8');
+
+      return {
+        specPath: moduleSpec.outputPath,
+        skeleton: moduleSpec.baselineSkeleton,
+        tokenUsage: 0,
+        confidence: 'high' as const,
+        warnings: [],
+        moduleSpec,
+      };
+    });
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+    LanguageAdapterRegistry.resetInstance();
+    vi.clearAllMocks();
+  });
+
+  it('batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航', async () => {
+    const result = await runBatch(projectRoot, {
+      force: true,
+      maxRetries: 1,
+    });
+
+    expect(result.failed).toHaveLength(0);
+    expect(result.docsBundleManifestPath).toBe('specs/docs-bundle.yaml');
+    expect(result.docsBundleProfiles?.map((profile) => profile.id)).toEqual([
+      'developer-onboarding',
+      'architecture-review',
+      'api-consumer',
+      'ops-handover',
+    ]);
+
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'docs-bundle.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'mkdocs.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'index.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'runtime-topology.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'modules', 'api.spec.md'))).toBe(true);
+
+    const developerMkdocs = parseYamlDocument(
+      fs.readFileSync(
+        path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'mkdocs.yml'),
+        'utf-8',
+      ),
+    ) as {
+      nav?: Array<Record<string, unknown>>;
+    };
+    const developerNav = developerMkdocs.nav?.map((item) => Object.values(item)[0]) ?? [];
+    expect(developerNav.slice(0, 5)).toEqual([
+      'index.md',
+      'architecture-narrative.md',
+      'architecture-overview.md',
+      'runtime-topology.md',
+      'config-reference.md',
+    ]);
+    expect(Array.isArray(developerNav[5])).toBe(true);
+
+    const landingPage = fs.readFileSync(
+      path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'index.md'),
+      'utf-8',
+    );
+    expect(landingPage).toContain('[Architecture Narrative](architecture-narrative.md)');
+    expect(landingPage).toContain('[Architecture Overview](architecture-overview.md)');
+    expect(landingPage).toContain('[Runtime Topology](runtime-topology.md)');
+
+    expect(result.projectDocs).toEqual(
+      expect.arrayContaining([
+        'specs/architecture-overview.md',
+        'specs/architecture-narrative.md',
+        'specs/runtime-topology.md',
+      ]),
+    );
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
+  });
+});
+
+async function buildMockModuleSpec(
+  projectRoot: string,
+  targetPath: string,
+  outputDir: string,
+  existingVersion?: string,
+): Promise<ModuleSpec> {
+  const resolvedTarget = path.resolve(targetPath);
+  const stat = fs.statSync(resolvedTarget);
+  const relatedFiles = stat.isDirectory()
+    ? collectFiles(projectRoot, resolvedTarget)
+    : [path.relative(projectRoot, resolvedTarget).split(path.sep).join('/')];
+  const analyzed = await analyzeFiles(relatedFiles.map((filePath) => path.join(projectRoot, filePath)));
+  const skeleton = mergeSkeletons(analyzed);
+  const sourceTarget = path.relative(projectRoot, resolvedTarget).split(path.sep).join('/');
+  const specName = path.basename(resolvedTarget).replace(/\.[^.]+$/, '');
+  const outputPath = path.join(outputDir, `${specName}.spec.md`);
+  const version = incrementVersion(existingVersion);
+
+  return {
+    frontmatter: {
+      type: 'module-spec',
+      version,
+      generatedBy: 'reverse-spec v2.1.0',
+      sourceTarget,
+      confidence: 'high',
+      relatedFiles,
+      lastUpdated: new Date().toISOString(),
+      skeletonHash: skeleton.hash,
+    },
+    sections: {
+      intent: `${sourceTarget} 负责模块对外职责与边界`,
+      interfaceDefinition: `${sourceTarget} interface`,
+      businessLogic: `${sourceTarget} 封装主要业务逻辑与控制流`,
+      dataStructures: `${sourceTarget} data`,
+      constraints: `${sourceTarget} constraints`,
+      edgeCases: `${sourceTarget} edge`,
+      technicalDebt: `${sourceTarget} debt`,
+      testCoverage: `${sourceTarget} coverage`,
+      dependencies: `${sourceTarget} deps`,
+    },
+    fileInventory: relatedFiles.map((filePath) => ({
+      path: filePath,
+      loc: 10,
+      purpose: `${sourceTarget} file`,
+    })),
+    baselineSkeleton: skeleton,
+    outputPath,
+  };
+}
+
+function collectFiles(projectRoot: string, dir: string): string[] {
+  const results: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectFiles(projectRoot, fullPath));
+      continue;
+    }
+    results.push(path.relative(projectRoot, fullPath).split(path.sep).join('/'));
+  }
+  return results.sort((left, right) => left.localeCompare(right));
+}
+
+function mergeSkeletons(skeletons: CodeSkeleton[]): CodeSkeleton {
+  if (skeletons.length === 1) {
+    return skeletons[0]!;
+  }
+
+  const hash = createHash('sha256')
+    .update(
+      skeletons
+        .slice()
+        .sort((left, right) => left.filePath.localeCompare(right.filePath))
+        .map((skeleton) => skeleton.hash)
+        .join(''),
+    )
+    .digest('hex');
+
+  return {
+    filePath: skeletons[0]!.filePath,
+    language: skeletons[0]!.language,
+    loc: skeletons.reduce((total, skeleton) => total + skeleton.loc, 0),
+    exports: skeletons.flatMap((skeleton) => skeleton.exports),
+    imports: skeletons.flatMap((skeleton) => skeleton.imports),
+    parseErrors: skeletons.flatMap((skeleton) => skeleton.parseErrors ?? []),
+    hash,
+    analyzedAt: new Date().toISOString(),
+    parserUsed: skeletons[0]!.parserUsed,
+  };
+}
+
+function incrementVersion(existingVersion?: string): string {
+  if (!existingVersion) {
+    return 'v1';
+  }
+
+  const matched = /^v(\d+)$/.exec(existingVersion);
+  if (!matched?.[1]) {
+    return 'v1';
+  }
+  return `v${parseInt(matched[1], 10) + 1}`;
+}

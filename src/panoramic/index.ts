@@ -330,6 +330,35 @@ export {
   type PatternKnowledgeBaseEntry,
 } from './pattern-hints-model.js';
 
+export {
+  orchestrateDocsBundle,
+  buildDocsBundleInput,
+} from './docs-bundle-orchestrator.js';
+
+export {
+  getDocsBundleProfile,
+  listDocsBundleProfiles,
+} from './docs-bundle-profiles.js';
+
+export {
+  DOCS_BUNDLE_VERSION,
+  DOCS_BUNDLE_MANIFEST_FILE,
+  DOCS_BUNDLE_ROOT_DIR,
+  type SourceDocumentKind,
+  type BundleDocumentKind,
+  type BundleProfileId,
+  type SourceDocument,
+  type ModuleSpecDocument,
+  type DocsBundleInput,
+  type BundleProfileDefinition,
+  type BundleDocument,
+  type BundleNavItem,
+  type BundleProfileManifest,
+  type DocsBundleManifest,
+  type DocsBundleProfileSummary,
+  type DocsBundleResult,
+} from './docs-bundle-types.js';
+
 // Parser 实现 + 类型
 export * from './parsers/index.js';
 

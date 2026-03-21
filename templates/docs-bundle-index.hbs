@@ -1,0 +1,41 @@
+---
+type: docs-bundle-index
+profileId: {{profileId}}
+generatedAt: {{generatedAt}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}}
+
+{{description}}
+
+## 1. Recommended Reading Path
+
+{{#if readingPath.length}}
+{{#each readingPath}}
+- [{{title}}]({{navPath}}){{#if description}} — {{description}}{{/if}}
+{{/each}}
+{{else}}
+当前 profile 没有可纳入的项目级文档。
+{{/if}}
+
+## 2. Module Specs
+
+{{#if moduleDocs.length}}
+{{#each moduleDocs}}
+- [{{title}}]({{navPath}})
+{{/each}}
+{{else}}
+- 当前 profile 不包含 module spec，或本批次未生成可用 module spec。
+{{/if}}
+
+## 3. Warnings
+
+{{#if warnings.length}}
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{else}}
+- 无额外 warning。
+{{/if}}

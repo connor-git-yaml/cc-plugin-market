@@ -35,6 +35,8 @@ import { renderSpec } from '../generator/spec-renderer.js';
 import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
 import { buildProjectContext } from '../panoramic/project-context.js';
 import { generateBatchProjectDocs } from '../panoramic/batch-project-docs.js';
+import { orchestrateDocsBundle } from '../panoramic/docs-bundle-orchestrator.js';
+import type { DocsBundleProfileSummary } from '../panoramic/docs-bundle-types.js';
 
 // ============================================================
 // 类型定义
@@ -80,6 +82,10 @@ export interface BatchResult {
   deltaReportPath?: string;
   /** 053 输出的项目级文档 Markdown 列表 */
   projectDocs?: string[];
+  /** 055 输出的 bundle manifest 路径 */
+  docsBundleManifestPath?: string;
+  /** 055 输出的 profile 摘要 */
+  docsBundleProfiles?: DocsBundleProfileSummary[];
 }
 
 // ============================================================
@@ -529,6 +535,8 @@ export async function runBatch(
   let docGraphPath: string | undefined;
   let coverageReportPath: string | undefined;
   let projectDocs: string[] | undefined;
+  let docsBundleManifestPath: string | undefined;
+  let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
   const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
   try {
     const docGraph = buildDocGraph({
@@ -622,6 +630,17 @@ export async function runBatch(
     console.warn('架构索引生成失败');
   }
 
+  try {
+    const docsBundleResult = orchestrateDocsBundle({
+      projectRoot: resolvedRoot,
+      outputDir: resolvedOutputDir,
+    });
+    docsBundleManifestPath = docsBundleResult.manifestPath;
+    docsBundleProfiles = docsBundleResult.profiles;
+  } catch {
+    console.warn('文档 bundle 编排失败');
+  }
+
   // 步骤 6：写入摘要日志
   const summary = reporter.finish();
   const summaryLogPathAbs = path.join(resolvedOutputDir, `batch-summary-${Date.now()}.md`);
@@ -648,6 +667,8 @@ export async function runBatch(
     coverageReportPath,
     deltaReportPath,
     projectDocs,
+    docsBundleManifestPath,
+    docsBundleProfiles,
   };
 }
 

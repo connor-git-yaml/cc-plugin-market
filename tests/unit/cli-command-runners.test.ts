@@ -209,6 +209,49 @@ describe('CLI 命令执行器', () => {
     expect(process.exitCode).toBe(0);
   });
 
+  it('runBatchCommand 输出 docs bundle 摘要', async () => {
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 3,
+      successful: ['auth', 'api'],
+      failed: [],
+      skipped: [],
+      degraded: [],
+      duration: 100,
+      indexGenerated: true,
+      summaryLogPath: 'specs/batch-summary.md',
+      docsBundleManifestPath: 'specs/docs-bundle.yaml',
+      docsBundleProfiles: [
+        {
+          id: 'developer-onboarding',
+          title: 'Developer Onboarding',
+          rootDir: 'specs/bundles/developer-onboarding',
+          documentCount: 8,
+          warningCount: 0,
+        },
+        {
+          id: 'api-consumer',
+          title: 'API Consumer',
+          rootDir: 'specs/bundles/api-consumer',
+          documentCount: 6,
+          warningCount: 1,
+        },
+      ],
+    });
+
+    await runBatchCommand(
+      makeCommand({
+        subcommand: 'batch',
+      }),
+      '2.0.0',
+    );
+
+    expect(logSpy).toHaveBeenCalledWith('✓ 文档 Bundle: specs/docs-bundle.yaml');
+    expect(logSpy).toHaveBeenCalledWith(
+      '✓ Bundle Profiles: developer-onboarding(8), api-consumer(6)',
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
   it('runDiff 成功时按 low 风险退出 0', async () => {
     mocks.detectDrift.mockResolvedValue({
       specPath: '/tmp/a.spec.md',
