@@ -1,0 +1,44 @@
+# {{title}}
+
+> 生成时间: `{{generatedAt}}`
+> 置信度: `{{confidence}}`
+
+{{#if warnings.length}}
+## 注意事项
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 1. 总览
+
+{{#each summary}}
+- {{this}}
+{{/each}}
+
+## 2. 用户旅程
+
+{{#if journeys.length}}
+{{#each journeys}}
+### {{title}}
+
+- 角色: {{actor}}
+- 目标: {{goal}}
+- 结果: {{outcome}}
+- 置信度: `{{confidence}}`
+- 是否推断: `{{#if inferred}}是{{else}}否{{/if}}`
+
+#### 关键步骤
+{{#each steps}}
+1. **{{title}}**: {{detail}}{{#if inferred}} `（推断）`{{/if}}
+{{/each}}
+
+#### 证据
+{{#each evidence}}
+- `{{sourceType}}` {{label}}{{#if path}} — `{{path}}`{{/if}}: {{excerpt}}
+{{/each}}
+
+{{/each}}
+{{else}}
+未生成稳定的用户旅程。
+{{/if}}

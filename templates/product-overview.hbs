@@ -1,0 +1,65 @@
+# {{title}}
+
+> 生成时间: `{{generatedAt}}`
+> 置信度: `{{confidence}}`
+{{#if inferred}}> 说明: `仅基于代码与现有规格推断`
+{{/if}}
+
+{{#if warnings.length}}
+## 注意事项
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 1. 产品定位
+
+{{#each summary}}
+{{this}}
+
+{{/each}}
+
+## 2. 目标用户
+
+{{#if targetUsers.length}}
+{{#each targetUsers}}
+### {{name}}
+
+- 描述: {{description}}
+- 主要场景: {{#if primaryScenarios.length}}{{primaryScenarios.[0]}}{{#if primaryScenarios.[1]}}；{{primaryScenarios.[1]}}{{/if}}{{#if primaryScenarios.[2]}}；{{primaryScenarios.[2]}}{{/if}}{{else}}未明确{{/if}}
+- 置信度: `{{confidence}}`
+{{/each}}
+{{else}}
+未识别到稳定的目标用户画像。
+{{/if}}
+
+## 3. 核心场景
+
+{{#if coreScenarios.length}}
+{{#each coreScenarios}}
+### {{title}}
+
+- 摘要: {{summary}}
+- 参与者: {{#if actors.length}}{{actors.[0]}}{{#if actors.[1]}}、{{actors.[1]}}{{/if}}{{#if actors.[2]}}、{{actors.[2]}}{{/if}}{{else}}未明确{{/if}}
+- 置信度: `{{confidence}}`
+- 是否推断: `{{#if inferred}}是{{else}}否{{/if}}`
+{{/each}}
+{{else}}
+未识别到稳定的核心场景列表。
+{{/if}}
+
+## 4. 关键任务流
+
+{{#if keyTaskFlows.length}}
+{{#each keyTaskFlows}}
+1. {{this}}
+{{/each}}
+{{else}}
+未识别到稳定的关键任务流。
+{{/if}}
+
+## 5. 事实来源
+
+{{#each evidence}}
+- `{{sourceType}}` {{label}}{{#if path}} — `{{path}}`{{/if}}: {{excerpt}}
+{{/each}}

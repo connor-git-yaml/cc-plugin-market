@@ -1,0 +1,27 @@
+# {{title}}
+
+> 生成时间: `{{generatedAt}}`
+> 置信度: `{{confidence}}`
+
+{{#if warnings.length}}
+## 注意事项
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## 1. 总览
+
+{{#each summary}}
+- {{this}}
+{{/each}}
+
+## 2. Feature Brief 列表
+
+{{#if briefs.length}}
+{{#each briefs}}
+- [{{title}}]({{fileName}}.md) — `{{status}}` / `{{confidence}}`
+{{/each}}
+{{else}}
+当前未生成 feature brief。
+{{/if}}

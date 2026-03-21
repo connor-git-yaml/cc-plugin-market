@@ -13,6 +13,11 @@ import type { PatternHintsOutput } from './pattern-hints-model.js';
 import type { ComponentViewOutput, DynamicScenariosOutput } from './component-view-model.js';
 import type { RuntimeTopologyOutput } from './runtime-topology-generator.js';
 import type { AdrDraft, AdrIndexOutput } from './adr-decision-pipeline.js';
+import type {
+  FeatureBriefIndexOutput,
+  ProductOverviewOutput,
+  UserJourneysOutput,
+} from './product-ux-docs.js';
 import { loadTemplate } from './utils/template-loader.js';
 import { adaptArchitectureNarrativeProvenance } from './narrative-provenance-adapter.js';
 import type { DocsBundleManifestReference } from './docs-bundle-manifest-reader.js';
@@ -45,6 +50,9 @@ export interface EvaluateDocsQualityOptions {
   dynamicScenarios?: DynamicScenariosOutput;
   runtimeTopology?: RuntimeTopologyOutput;
   adrIndex?: AdrIndexOutput;
+  productOverview?: ProductOverviewOutput;
+  userJourneys?: UserJourneysOutput;
+  featureBriefIndex?: FeatureBriefIndexOutput;
   docsBundleManifest?: DocsBundleManifestReference;
   dependencyWarnings?: string[];
 }
@@ -74,6 +82,18 @@ interface TopicClaim {
 type TopicPattern = Record<ConflictRecord['topic'], Array<{ value: string; patterns: RegExp[] }>>;
 
 const DOC_METADATA: Record<string, { title: string; relativePath: string }> = {
+  'product-overview': {
+    title: 'Product Overview',
+    relativePath: 'product-overview.md',
+  },
+  'user-journeys': {
+    title: 'User Journeys',
+    relativePath: 'user-journeys.md',
+  },
+  'feature-briefs/index': {
+    title: 'Feature Briefs',
+    relativePath: 'feature-briefs/index.md',
+  },
   'architecture-narrative': {
     title: 'Architecture Narrative',
     relativePath: 'architecture-narrative.md',
@@ -125,6 +145,24 @@ const DOC_METADATA: Record<string, { title: string; relativePath: string }> = {
 };
 
 const REQUIRED_DOC_RULES: ReadonlyArray<RequiredDocRule> = [
+  {
+    docId: 'product-overview',
+    title: DOC_METADATA['product-overview']!.title,
+    requiredBy: ['product-managed'],
+    reason: '产品事实已被纳入编排时，必须有产品概览作为统一入口。',
+  },
+  {
+    docId: 'user-journeys',
+    title: DOC_METADATA['user-journeys']!.title,
+    requiredBy: ['product-managed'],
+    reason: '产品 / UX 文档至少需要一份用户旅程，说明用户目标与关键任务流。',
+  },
+  {
+    docId: 'feature-briefs/index',
+    title: DOC_METADATA['feature-briefs/index']!.title,
+    requiredBy: ['product-managed'],
+    reason: '产品事实接入后应沉淀 feature brief 索引，连接 issue/PR 与产品叙事。',
+  },
   {
     docId: 'architecture-narrative',
     title: DOC_METADATA['architecture-narrative']!.title,
@@ -310,7 +348,22 @@ function buildProvenanceRecords(
     options.adrIndex
       ? buildAdrProvenance(options.adrIndex, presentDocs.get('docs/adr/index')?.path)
       : createMissingRecord('docs/adr/index', 'ADR Index', '当前批次未生成 ADR 索引。'),
-  ];
+    options.productOverview
+      ? buildProductOverviewProvenance(options.productOverview, presentDocs.get('product-overview')?.path)
+      : (hasCurrentSpec(options.projectRoot)
+        ? createMissingRecord('product-overview', 'Product Overview', '检测到 current-spec，但当前批次未生成 product-overview。')
+        : null),
+    options.userJourneys
+      ? buildUserJourneysProvenance(options.userJourneys, presentDocs.get('user-journeys')?.path)
+      : (hasCurrentSpec(options.projectRoot)
+        ? createMissingRecord('user-journeys', 'User Journeys', '检测到 current-spec，但当前批次未生成 user-journeys。')
+        : null),
+    options.featureBriefIndex
+      ? buildFeatureBriefIndexProvenance(options.featureBriefIndex, presentDocs.get('feature-briefs/index')?.path)
+      : (hasCurrentSpec(options.projectRoot)
+        ? createMissingRecord('feature-briefs/index', 'Feature Briefs', '检测到 current-spec，但当前批次未生成 feature briefs 索引。')
+        : null),
+  ].filter((record): record is DocumentProvenanceRecord => record !== null);
 }
 
 function buildComponentViewProvenance(
@@ -428,6 +481,95 @@ function buildAdrProvenance(
   });
 }
 
+function buildProductOverviewProvenance(
+  output: ProductOverviewOutput,
+  sourcePath?: string,
+): DocumentProvenanceRecord {
+  return summarizeProvenanceRecord({
+    documentId: 'product-overview',
+    title: output.title,
+    sourcePath,
+    available: true,
+    warnings: output.warnings,
+    sections: [
+      summarizeProvenanceSection({
+        id: 'summary',
+        title: 'Summary',
+        summary: `摘要段落: ${output.summary.length}`,
+        entries: output.evidence.map((evidence) => toProductProvenanceEntry('overview', evidence, output.confidence)),
+      }),
+      summarizeProvenanceSection({
+        id: 'target-users',
+        title: 'Target Users',
+        summary: `用户段数: ${output.targetUsers.length}`,
+        entries: output.targetUsers.flatMap((user) =>
+          user.evidence.map((evidence) => toProductProvenanceEntry(`user:${user.name}`, evidence, user.confidence))),
+      }),
+      summarizeProvenanceSection({
+        id: 'core-scenarios',
+        title: 'Core Scenarios',
+        summary: `核心场景数: ${output.coreScenarios.length}`,
+        entries: output.coreScenarios.flatMap((scenario) =>
+          scenario.evidence.map((evidence) => toProductProvenanceEntry(`scenario:${scenario.title}`, evidence, scenario.confidence))),
+      }),
+    ],
+  });
+}
+
+function buildUserJourneysProvenance(
+  output: UserJourneysOutput,
+  sourcePath?: string,
+): DocumentProvenanceRecord {
+  return summarizeProvenanceRecord({
+    documentId: 'user-journeys',
+    title: output.title,
+    sourcePath,
+    available: true,
+    warnings: output.warnings,
+    sections: output.journeys.map((journey) => summarizeProvenanceSection({
+      id: journey.id,
+      title: journey.title,
+      summary: `${journey.actor} -> ${journey.goal}`,
+      entries: journey.evidence.map((evidence) => toProductProvenanceEntry(journey.id, evidence, journey.confidence)),
+    })),
+  });
+}
+
+function buildFeatureBriefIndexProvenance(
+  output: FeatureBriefIndexOutput,
+  sourcePath?: string,
+): DocumentProvenanceRecord {
+  return summarizeProvenanceRecord({
+    documentId: 'feature-briefs/index',
+    title: output.title,
+    sourcePath,
+    available: true,
+    warnings: output.warnings,
+    sections: output.briefs.map((brief) => summarizeProvenanceSection({
+      id: brief.id.toLowerCase(),
+      title: brief.title,
+      summary: brief.summary,
+      entries: brief.evidence.map((evidence) => toProductProvenanceEntry(brief.id, evidence, brief.confidence)),
+    })),
+  });
+}
+
+function toProductProvenanceEntry(
+  ref: string,
+  evidence: ProductOverviewOutput['evidence'][number],
+  confidence: 'high' | 'medium' | 'low',
+): ProvenanceEntry {
+  return {
+    sourceType: mapProductSourceType(evidence.sourceType),
+    originType: evidence.sourceType,
+    ref: `${ref}:${evidence.label}`,
+    path: evidence.path,
+    excerpt: evidence.excerpt,
+    confidence: normalizeConfidence(confidence),
+    inferred: evidence.inferred,
+  };
+}
+
 function toAdrProvenanceEntry(draft: AdrDraft, evidence: AdrDraft['evidence'][number]): ProvenanceEntry {
   return {
     sourceType: mapAdrSourceType(evidence.sourceType),
@@ -528,6 +670,12 @@ function inferProjectKinds(
       || options.patternHints
       || options.adrIndex,
   );
+  const isProductManaged = Boolean(
+    hasCurrentSpec(options.projectRoot)
+      || presentDocs.has('product-overview')
+      || presentDocs.has('user-journeys')
+      || presentDocs.has('feature-briefs/index'),
+  );
 
   if (hasRuntime) {
     projectKinds.add('runtime-project');
@@ -540,6 +688,9 @@ function inferProjectKinds(
   }
   if (isArchitectureHeavy) {
     projectKinds.add('architecture-heavy');
+  }
+  if (isProductManaged) {
+    projectKinds.add('product-managed');
   }
 
   return projectKinds;
@@ -863,6 +1014,27 @@ function mapAdrSourceType(sourceType: string): ProvenanceSourceType {
     case 'architecture-overview':
     case 'architecture-narrative':
     case 'pattern-hints':
+    default:
+      return 'generated-doc';
+  }
+}
+
+function mapProductSourceType(sourceType: string): ProvenanceSourceType {
+  switch (sourceType) {
+    case 'current-spec':
+      return 'current-spec';
+    case 'readme':
+      return 'readme';
+    case 'design-doc':
+      return 'design-doc';
+    case 'issue':
+      return 'issue';
+    case 'pull-request':
+      return 'pull-request';
+    case 'commit':
+      return 'commit';
+    case 'inference':
+      return 'inference';
     default:
       return 'generated-doc';
   }

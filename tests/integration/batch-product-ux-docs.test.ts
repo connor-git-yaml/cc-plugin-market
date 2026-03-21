@@ -21,22 +21,22 @@ vi.mock('../../src/core/single-spec-orchestrator.js', () => ({
 
 import { runBatch } from '../../src/batch/batch-orchestrator.js';
 
-describe('runBatch docs bundle orchestration', () => {
+describe('runBatch product UX docs integration', () => {
   let projectRoot: string;
 
   beforeEach(() => {
     LanguageAdapterRegistry.resetInstance();
     bootstrapAdapters();
-    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-doc-bundle-'));
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-product-ux-docs-'));
 
     fs.mkdirSync(path.join(projectRoot, 'src', 'api'), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, 'src', 'models'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'src', 'events'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'specs', 'products', 'demo'), { recursive: true });
 
     fs.writeFileSync(
       path.join(projectRoot, 'package.json'),
       JSON.stringify({
-        name: 'bundle-app',
+        name: 'product-doc-app',
         version: '1.0.0',
         dependencies: {
           express: '^4.0.0',
@@ -45,87 +45,54 @@ describe('runBatch docs bundle orchestration', () => {
       'utf-8',
     );
     fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      '# Product Doc App\n\nProduct Doc App 将架构文档与产品事实放在同一批量输出链路中。\n',
+      'utf-8',
+    );
+    fs.writeFileSync(
       path.join(projectRoot, '.env.example'),
-      'DATABASE_URL=postgres://localhost/app\nPORT=3000\n',
+      'PORT=3000\n',
       'utf-8',
     );
     fs.writeFileSync(
       path.join(projectRoot, 'Dockerfile'),
-      [
-        'FROM node:20 AS build',
-        'WORKDIR /app',
-        'COPY package.json .',
-        'RUN npm install',
-        'COPY . .',
-        'RUN npm run build',
-        '',
-        'FROM node:20-slim AS runtime',
-        'WORKDIR /app',
-        'COPY --from=build /app/dist ./dist',
-        'CMD ["node", "dist/server.js"]',
-      ].join('\n'),
+      'FROM node:20\nWORKDIR /app\nCOPY . .\nCMD ["node", "dist/server.js"]\n',
       'utf-8',
     );
     fs.writeFileSync(
       path.join(projectRoot, 'docker-compose.yml'),
+      'services:\n  api:\n    build: .\n    ports:\n      - "3000:3000"\n',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'),
       [
-        'services:',
-        '  api:',
-        '    build:',
-        '      context: .',
-        '      dockerfile: Dockerfile',
-        '      target: runtime',
-        '    environment:',
-        '      DATABASE_URL: postgres://postgres/app',
-        '    ports:',
-        '      - "3000:3000"',
+        '# Product Doc App — 产品规范活文档',
+        '',
+        '## 1. 产品概述',
+        '',
+        'Product Doc App 让团队把产品概览、用户旅程与技术文档打包交付。',
+        '',
+        '## 3. 用户画像与场景',
+        '',
+        '| 角色 | 描述 | 主要使用场景 |',
+        '| --- | --- | --- |',
+        '| 架构师 | 关注系统结构与交付路径 | 评审 bundle、阅读架构概览 |',
+        '| 产品经理 | 关注定位与场景 | 校对产品概览、阅读用户旅程 |',
+        '',
+        '1. 交付文档包：为不同受众生成可导航的文档 bundle',
+        '2. 审阅用户旅程：确认关键任务流与受众是否合理',
       ].join('\n'),
       'utf-8',
     );
     fs.writeFileSync(
       path.join(projectRoot, 'src', 'models', 'user.ts'),
-      [
-        'export interface User {',
-        '  id: string;',
-        '  email: string;',
-        '}',
-        '',
-        'export class UserService {',
-        '  findById(id: string): User {',
-        '    return { id, email: "user@example.com" };',
-        '  }',
-        '}',
-      ].join('\n'),
+      'export interface User { id: string; }\n',
       'utf-8',
     );
     fs.writeFileSync(
       path.join(projectRoot, 'src', 'api', 'routes.ts'),
-      [
-        'import express from "express";',
-        'import { UserService } from "../models/user";',
-        '',
-        'const router = express.Router();',
-        'const service = new UserService();',
-        '',
-        'router.get("/users/:id", (req, res) => {',
-        '  res.json(service.findById(req.params.id));',
-        '});',
-        '',
-        'export default router;',
-      ].join('\n'),
-      'utf-8',
-    );
-    fs.writeFileSync(
-      path.join(projectRoot, 'src', 'events', 'bus.ts'),
-      [
-        'import { EventEmitter } from "node:events";',
-        '',
-        'const bus = new EventEmitter();',
-        '',
-        'export function publishUserCreated(payload: { id: string; email: string }): void {',
-        '  bus.emit("user.created", payload);',
-        '}',
-      ].join('\n'),
+      'import express from "express"; const router = express.Router(); router.get("/users", (_req, res) => res.json([])); export default router;\n',
       'utf-8',
     );
 
@@ -159,66 +126,45 @@ describe('runBatch docs bundle orchestration', () => {
     vi.clearAllMocks();
   });
 
-  it('batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航', async () => {
+  it('在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report', async () => {
     const result = await runBatch(projectRoot, {
       force: true,
       maxRetries: 1,
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.docsBundleManifestPath).toBe('specs/docs-bundle.yaml');
-    expect(result.docsBundleProfiles?.map((profile) => profile.id)).toEqual([
-      'developer-onboarding',
-      'architecture-review',
-      'api-consumer',
-      'ops-handover',
-    ]);
-
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'docs-bundle.yaml'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'mkdocs.yml'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'index.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'runtime-topology.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'modules', 'api.spec.md'))).toBe(true);
-
-    const developerMkdocs = parseYamlDocument(
-      fs.readFileSync(
-        path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'mkdocs.yml'),
-        'utf-8',
-      ),
-    ) as {
-      nav?: Array<Record<string, unknown>>;
-    };
-    const developerNav = developerMkdocs.nav?.map((item) => Object.values(item)[0]) ?? [];
-    expect(developerNav.slice(0, 5)).toEqual([
-      'index.md',
-      'product-overview.md',
-      'user-journeys.md',
-      'architecture-narrative.md',
-      'architecture-overview.md',
-    ]);
-    expect(developerNav).toContain('runtime-topology.md');
-    expect(developerNav).toContain('config-reference.md');
-    expect(developerNav.some((entry) => Array.isArray(entry))).toBe(true);
-
-    const landingPage = fs.readFileSync(
-      path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'index.md'),
-      'utf-8',
-    );
-    expect(landingPage).toContain('[Product Overview](product-overview.md)');
-    expect(landingPage).toContain('[User Journeys](user-journeys.md)');
-    expect(landingPage).toContain('[Architecture Narrative](architecture-narrative.md)');
-    expect(landingPage).toContain('[Architecture Overview](architecture-overview.md)');
-    expect(landingPage).toContain('[Runtime Topology](runtime-topology.md)');
-
     expect(result.projectDocs).toEqual(
       expect.arrayContaining([
-        'specs/architecture-overview.md',
-        'specs/architecture-narrative.md',
-        'specs/runtime-topology.md',
+        'specs/product-overview.md',
+        'specs/user-journeys.md',
+        'specs/feature-briefs/index.md',
       ]),
     );
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'product-overview.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'user-journeys.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'feature-briefs', 'index.md'))).toBe(true);
+
+    const bundleManifest = parseYamlDocument(
+      fs.readFileSync(path.join(projectRoot, 'specs', 'docs-bundle.yaml'), 'utf-8'),
+    ) as {
+      profiles?: Array<{ id: string; documents?: Array<{ sourceId?: string }> }>;
+    };
+    const onboardingProfile = bundleManifest.profiles?.find((profile) => profile.id === 'developer-onboarding');
+    expect(onboardingProfile?.documents?.map((document) => document.sourceId)).toEqual(
+      expect.arrayContaining(['product-overview', 'user-journeys', 'feature-briefs/index']),
+    );
+
+    const qualityReport = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, 'specs', 'quality-report.json'), 'utf-8'),
+    ) as {
+      requiredDocs: Array<{ docId: string; coverage: string }>;
+      provenance: Array<{ documentId: string }>;
+    };
+    expect(qualityReport.requiredDocs.find((doc) => doc.docId === 'product-overview')?.coverage).toBe('covered');
+    expect(qualityReport.requiredDocs.find((doc) => doc.docId === 'user-journeys')?.coverage).toBe('covered');
+    expect(qualityReport.provenance.map((record) => record.documentId)).toEqual(
+      expect.arrayContaining(['product-overview', 'user-journeys', 'feature-briefs/index']),
+    );
   });
 });
 
@@ -244,11 +190,11 @@ async function buildMockModuleSpec(
     frontmatter: {
       type: 'module-spec',
       version,
-      generatedBy: 'reverse-spec v2.1.0',
+      generatedBy: 'reverse-spec v2.2.0',
       sourceTarget,
-      confidence: 'high',
       relatedFiles,
       lastUpdated: new Date().toISOString(),
+      confidence: 'high',
       skeletonHash: skeleton.hash,
     },
     sections: {
@@ -274,15 +220,18 @@ async function buildMockModuleSpec(
 
 function collectFiles(projectRoot: string, dir: string): string[] {
   const results: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...collectFiles(projectRoot, fullPath));
       continue;
     }
-    results.push(path.relative(projectRoot, fullPath).split(path.sep).join('/'));
+    if (entry.isFile()) {
+      results.push(path.relative(projectRoot, fullPath).split(path.sep).join('/'));
+    }
   }
-  return results.sort((left, right) => left.localeCompare(right));
+  return results.sort((a, b) => a.localeCompare(b));
 }
 
 function mergeSkeletons(skeletons: CodeSkeleton[]): CodeSkeleton {
@@ -303,7 +252,7 @@ function mergeSkeletons(skeletons: CodeSkeleton[]): CodeSkeleton {
   return {
     filePath: skeletons[0]!.filePath,
     language: skeletons[0]!.language,
-    loc: skeletons.reduce((total, skeleton) => total + skeleton.loc, 0),
+    loc: skeletons.reduce((sum, skeleton) => sum + skeleton.loc, 0),
     exports: skeletons.flatMap((skeleton) => skeleton.exports),
     imports: skeletons.flatMap((skeleton) => skeleton.imports),
     parseErrors: skeletons.flatMap((skeleton) => skeleton.parseErrors ?? []),
@@ -317,7 +266,6 @@ function incrementVersion(existingVersion?: string): string {
   if (!existingVersion) {
     return 'v1';
   }
-
   const matched = /^v(\d+)$/.exec(existingVersion);
   if (!matched?.[1]) {
     return 'v1';

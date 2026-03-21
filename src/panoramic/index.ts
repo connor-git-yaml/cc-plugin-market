@@ -153,6 +153,21 @@ export {
 } from './adr-decision-pipeline.js';
 
 export {
+  generateProductUxDocs,
+  type FeatureBrief,
+  type FeatureBriefIndexOutput,
+  type GenerateProductUxDocsOptions,
+  type GenerateProductUxDocsResult,
+  type ProductEvidenceRef,
+  type ProductFactSourceType,
+  type ProductOverviewOutput,
+  type ProductScenario,
+  type ProductUserSegment,
+  type UserJourney,
+  type UserJourneysOutput,
+} from './product-ux-docs.js';
+
+export {
   evaluateDocsQuality,
   renderDocsQualityReport,
   type EvaluateDocsQualityOptions,

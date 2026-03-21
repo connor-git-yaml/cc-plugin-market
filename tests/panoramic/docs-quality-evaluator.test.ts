@@ -7,6 +7,7 @@ import type { ArchitectureNarrativeOutput, BatchGeneratedDocSummary } from '../.
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import type { ComponentViewOutput, DynamicScenariosOutput } from '../../src/panoramic/component-view-model.js';
 import type { AdrIndexOutput } from '../../src/panoramic/adr-decision-pipeline.js';
+import type { FeatureBriefIndexOutput, ProductOverviewOutput, UserJourneysOutput } from '../../src/panoramic/product-ux-docs.js';
 import type { RuntimeTopologyOutput } from '../../src/panoramic/runtime-topology-generator.js';
 
 const tempDirs: string[] = [];
@@ -129,6 +130,53 @@ describe('evaluateDocsQuality', () => {
     expect(report.requiredDocs.find((doc) => doc.docId === 'workspace-index')?.coverage).toBe('partial');
     expect(report.requiredDocs.some((doc) => doc.docId === 'runtime-topology')).toBe(false);
   });
+
+  it('当存在 current-spec 与产品文档时，将 product docs 纳入 provenance 和 required-doc', () => {
+    const projectRoot = createTempProjectRoot('quality-product-docs-');
+    const outputDir = path.join(projectRoot, 'specs');
+    fs.mkdirSync(path.join(projectRoot, 'specs', 'products', 'demo'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'),
+      '# Current Spec\nProduct overview and journeys are required.\n',
+      'utf-8',
+    );
+
+    const report = evaluateDocsQuality({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot, 'single'),
+      generatedDocs: createGeneratedDocs(outputDir, [
+        'architecture-narrative',
+        'product-overview',
+        'user-journeys',
+        'feature-briefs/index',
+      ]),
+      architectureNarrative: createArchitectureNarrative(),
+      productOverview: createProductOverviewOutput(),
+      userJourneys: createUserJourneysOutput(),
+      featureBriefIndex: createFeatureBriefIndexOutput(),
+      docsBundleManifest: {
+        sourcePath: 'specs/docs-bundle.yaml',
+        version: 1,
+        generatedAt: '2026-03-22T10:00:00.000Z',
+        profiles: [
+          {
+            id: 'developer-onboarding',
+            title: 'Developer Onboarding',
+            documentIds: ['product-overview', 'user-journeys', 'feature-briefs/index', 'architecture-narrative'],
+            navigation: [],
+          },
+        ],
+      },
+    });
+
+    expect(report.provenance.map((record) => record.documentId)).toEqual(
+      expect.arrayContaining(['product-overview', 'user-journeys', 'feature-briefs/index']),
+    );
+    expect(report.requiredDocs.find((doc) => doc.docId === 'product-overview')?.coverage).toBe('covered');
+    expect(report.requiredDocs.find((doc) => doc.docId === 'user-journeys')?.coverage).toBe('covered');
+    expect(report.requiredDocs.find((doc) => doc.docId === 'feature-briefs/index')?.coverage).toBe('covered');
+  });
 });
 
 function createTempProjectRoot(prefix: string): string {
@@ -162,6 +210,9 @@ function createGeneratedDocs(outputDir: string, docIds: string[]): BatchGenerate
 function relativeOutputPath(docId: string): string {
   if (docId === 'docs/adr/index') {
     return path.join('docs', 'adr', 'index.md');
+  }
+  if (docId === 'feature-briefs/index') {
+    return path.join('feature-briefs', 'index.md');
   }
   return `${docId}.md`;
 }
@@ -358,6 +409,128 @@ function createAdrIndexOutput(): AdrIndexOutput {
         ],
       },
     ],
+  };
+}
+
+function createProductOverviewOutput(): ProductOverviewOutput {
+  return {
+    title: '产品概览: sample-app',
+    generatedAt: '2026-03-22',
+    projectName: 'sample-app',
+    summary: ['sample-app 为开发团队提供结构化文档与产品事实聚合能力。'],
+    targetUsers: [
+      {
+        name: '平台工程师',
+        description: '负责维护平台交付路径。',
+        primaryScenarios: ['维护 bundle'],
+        evidence: [{
+          sourceType: 'current-spec',
+          label: 'current-spec.md',
+          path: 'specs/products/demo/current-spec.md',
+          excerpt: '平台工程师 | 维护 bundle',
+          confidence: 'high',
+          inferred: false,
+        }],
+        confidence: 'high',
+      },
+    ],
+    coreScenarios: [
+      {
+        id: 'scenario-1',
+        title: '交付文档包',
+        summary: '为不同受众输出 bundle。',
+        actors: ['平台工程师'],
+        evidence: [{
+          sourceType: 'current-spec',
+          label: 'current-spec.md',
+          path: 'specs/products/demo/current-spec.md',
+          excerpt: '交付文档包',
+          confidence: 'high',
+          inferred: false,
+        }],
+        confidence: 'high',
+        inferred: false,
+      },
+    ],
+    keyTaskFlows: ['交付文档包'],
+    warnings: [],
+    confidence: 'high',
+    inferred: false,
+    evidence: [{
+      sourceType: 'current-spec',
+      label: 'current-spec.md',
+      path: 'specs/products/demo/current-spec.md',
+      excerpt: 'sample-app 为开发团队提供结构化文档与产品事实聚合能力。',
+      confidence: 'high',
+      inferred: false,
+    }],
+  };
+}
+
+function createUserJourneysOutput(): UserJourneysOutput {
+  return {
+    title: '用户旅程: sample-app',
+    generatedAt: '2026-03-22',
+    projectName: 'sample-app',
+    summary: ['基于 current-spec 组织用户旅程。'],
+    journeys: [
+      {
+        id: 'journey-01',
+        title: '交付文档包',
+        actor: '平台工程师',
+        goal: '生成 bundle',
+        outcome: '完成交付',
+        steps: [
+          { title: '选择 profile', detail: '选择目标受众', inferred: true },
+        ],
+        evidence: [{
+          sourceType: 'current-spec',
+          label: 'current-spec.md',
+          path: 'specs/products/demo/current-spec.md',
+          excerpt: '交付文档包',
+          confidence: 'high',
+          inferred: false,
+        }],
+        confidence: 'high',
+        inferred: true,
+      },
+    ],
+    warnings: [],
+    confidence: 'high',
+  };
+}
+
+function createFeatureBriefIndexOutput(): FeatureBriefIndexOutput {
+  return {
+    title: 'Feature Briefs: sample-app',
+    generatedAt: '2026-03-22',
+    projectName: 'sample-app',
+    summary: ['围绕产品事实组织 feature brief。'],
+    briefs: [
+      {
+        id: 'ISSUE-12',
+        slug: 'bundle-onboarding',
+        fileName: 'issue-12-bundle-onboarding',
+        title: 'Improve bundle onboarding',
+        summary: 'Improve landing page and onboarding bundle.',
+        problem: 'Onboarding path is not explicit enough.',
+        proposedSolution: 'Add clearer product overview and bundle landing page.',
+        audience: '平台工程师',
+        status: 'candidate',
+        evidence: [{
+          sourceType: 'issue',
+          label: 'issue #12',
+          path: 'https://github.com/example/demo/issues/12',
+          excerpt: 'Improve bundle onboarding',
+          confidence: 'high',
+          inferred: false,
+        }],
+        confidence: 'high',
+        inferred: false,
+      },
+    ],
+    warnings: [],
+    confidence: 'high',
   };
 }
 

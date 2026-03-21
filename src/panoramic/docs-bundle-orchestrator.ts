@@ -30,54 +30,81 @@ const INDEX_SPEC_FILE = '_index.spec.md';
 const ARCHITECTURE_NARRATIVE_ID = 'architecture-narrative';
 const BUNDLE_NAV_HOME_TITLE = 'Home';
 
-const PROJECT_DOC_METADATA: Record<string, { title: string; description: string }> = {
+const PROJECT_DOC_METADATA: Record<string, { title: string; description: string; relativePath?: string }> = {
+  'product-overview': {
+    title: 'Product Overview',
+    description: '产品定位、目标用户、核心场景与关键任务流摘要。',
+    relativePath: 'product-overview.md',
+  },
+  'user-journeys': {
+    title: 'User Journeys',
+    description: '从用户目标到关键步骤的旅程说明。',
+    relativePath: 'user-journeys.md',
+  },
+  'feature-briefs/index': {
+    title: 'Feature Briefs',
+    description: '围绕 issue/PR 或 current-spec 派生的 feature brief 集合。',
+    relativePath: 'feature-briefs/index.md',
+  },
   'api-surface': {
     title: 'API Surface',
     description: '接口入口、路径、请求/响应与参数摘要。',
+    relativePath: 'api-surface.md',
   },
   'architecture-narrative': {
     title: 'Architecture Narrative',
     description: '面向人类阅读的系统叙事与关键模块说明。',
+    relativePath: 'architecture-narrative.md',
   },
   'architecture-overview': {
     title: 'Architecture Overview',
     description: 'system context / deployment / layered 结构总览。',
+    relativePath: 'architecture-overview.md',
   },
   'config-reference': {
     title: 'Config Reference',
     description: '配置项、环境变量与默认值参考。',
+    relativePath: 'config-reference.md',
   },
   'cross-package-analysis': {
     title: 'Cross-Package Analysis',
     description: '跨包依赖拓扑、关键包关系与循环提示。',
+    relativePath: 'cross-package-analysis.md',
   },
   'data-model': {
     title: 'Data Model',
     description: '关键实体、字段与数据结构摘要。',
+    relativePath: 'data-model.md',
   },
   'event-surface': {
     title: 'Event Surface',
     description: '事件、通道、状态附录与消息流摘要。',
+    relativePath: 'event-surface.md',
   },
   'pattern-hints': {
     title: 'Pattern Hints',
     description: '架构模式提示、证据链与替代方案。',
+    relativePath: 'pattern-hints.md',
   },
   'runtime-topology': {
     title: 'Runtime Topology',
     description: '服务、镜像、容器、端口、卷与运行时依赖。',
+    relativePath: 'runtime-topology.md',
   },
   'troubleshooting': {
     title: 'Troubleshooting',
     description: '运行与集成问题排查入口。',
+    relativePath: 'troubleshooting.md',
   },
   'workspace-index': {
     title: 'Workspace Index',
     description: 'workspace / package 结构与依赖视图。',
+    relativePath: 'workspace-index.md',
   },
   [INDEX_SPEC_ID]: {
     title: 'Architecture Index',
     description: '模块级 spec 的全局索引入口。',
+    relativePath: INDEX_SPEC_FILE,
   },
 };
 
@@ -206,6 +233,27 @@ function collectProjectDocs(paths: OrchestratorPaths): SourceDocument[] {
       relativePath: toProjectPath(paths.projectRoot, architectureNarrativeAbs),
       description: metadata.description,
     });
+  }
+
+  for (const [docId, metadata] of Object.entries(PROJECT_DOC_METADATA)) {
+    if (seen.has(docId) || docId === INDEX_SPEC_ID || docId === ARCHITECTURE_NARRATIVE_ID) {
+      continue;
+    }
+    const relativePath = metadata.relativePath ?? `${docId}.md`;
+    const sourcePathAbs = path.join(paths.outputDir, relativePath);
+    if (!fs.existsSync(sourcePathAbs)) {
+      continue;
+    }
+    docs.push({
+      id: docId,
+      title: metadata.title,
+      kind: 'project-doc',
+      generatorId: docId,
+      sourcePath: toProjectPath(paths.projectRoot, sourcePathAbs),
+      relativePath: toProjectPath(paths.projectRoot, sourcePathAbs),
+      description: metadata.description,
+    });
+    seen.add(docId);
   }
 
   return docs.sort((left, right) => left.id.localeCompare(right.id));
@@ -362,20 +410,28 @@ function toBundleDocument(
   paths: OrchestratorPaths,
   order: number,
 ): BundleDocument {
-  const navFileName = path.basename(source.relativePath);
-  const outputPathAbs = path.join(paths.outputDir, DOCS_BUNDLE_ROOT_DIR, definition.id, 'docs', navFileName);
+  const navPath = toBundleProjectDocNavPath(source, paths);
+  const outputPathAbs = path.join(paths.outputDir, DOCS_BUNDLE_ROOT_DIR, definition.id, 'docs', navPath);
 
   return {
     sourceId: source.id,
     title: source.title,
     sourcePath: source.sourcePath,
     outputPath: toProjectPath(paths.projectRoot, outputPathAbs),
-    navPath: navFileName,
+    navPath,
     order,
     kind: source.kind,
     optional: true,
     description: source.description,
   };
+}
+
+function toBundleProjectDocNavPath(source: SourceDocument, paths: OrchestratorPaths): string {
+  const relativeToOutput = path.posix.relative(paths.outputDirRelative, source.relativePath);
+  if (!relativeToOutput || relativeToOutput.startsWith('..')) {
+    return path.posix.basename(source.relativePath);
+  }
+  return relativeToOutput;
 }
 
 function toIndexSpecBundleDocument(

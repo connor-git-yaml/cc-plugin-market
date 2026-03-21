@@ -12,6 +12,9 @@ export type ProvenanceSourceType =
   | 'spec'
   | 'current-spec'
   | 'readme'
+  | 'design-doc'
+  | 'issue'
+  | 'pull-request'
   | 'commit'
   | 'generated-doc'
   | 'inference';

@@ -20,6 +20,10 @@ import { buildDynamicScenarios, renderDynamicScenarios } from './dynamic-scenari
 import { evaluateDocsQuality, renderDocsQualityReport } from './docs-quality-evaluator.js';
 import { readDocsBundleManifest } from './docs-bundle-manifest-reader.js';
 import {
+  generateProductUxDocs,
+  type GenerateProductUxDocsResult,
+} from './product-ux-docs.js';
+import {
   getBatchProjectOutputBaseName,
   isBatchProjectGeneratorId,
 } from './output-filenames.js';
@@ -105,6 +109,7 @@ export async function generateBatchProjectDocs(
   const architectureIR = structuredOutputs.get('architecture-ir') as ArchitectureIROutput | undefined;
   const runtimeTopology = structuredOutputs.get('runtime-topology') as RuntimeTopologyOutput | undefined;
   const eventSurface = structuredOutputs.get('event-surface') as EventSurfaceOutput | undefined;
+  let productUxDocs: GenerateProductUxDocsResult | undefined;
 
   if (architectureIR) {
     const storedModules = loadStoredModuleSpecs(options.outputDir, options.projectRoot);
@@ -201,6 +206,29 @@ export async function generateBatchProjectDocs(
   }
 
   try {
+    productUxDocs = generateProductUxDocs({
+      projectRoot: options.projectRoot,
+      outputDir: options.outputDir,
+      projectContext,
+      generatedDocs,
+    });
+    generatedDocs.push({
+      generatorId: 'product-ux-docs',
+      writtenFiles: productUxDocs.writtenFiles,
+      warnings: productUxDocs.warnings,
+    });
+    structuredOutputs.set('product-overview', productUxDocs.overview);
+    structuredOutputs.set('user-journeys', productUxDocs.journeys);
+    structuredOutputs.set('feature-briefs/index', productUxDocs.featureBriefIndex);
+  } catch (error) {
+    generatedDocs.push({
+      generatorId: 'product-ux-docs',
+      writtenFiles: [],
+      warnings: [`产品 / UX 文档生成失败: ${String(error)}`],
+    });
+  }
+
+  try {
     const manifestRead = readDocsBundleManifest(options.outputDir, options.projectRoot);
     const qualityReport = evaluateDocsQuality({
       projectRoot: options.projectRoot,
@@ -214,6 +242,9 @@ export async function generateBatchProjectDocs(
       dynamicScenarios: structuredOutputs.get('dynamic-scenarios') as ReturnType<typeof buildDynamicScenarios> | undefined,
       runtimeTopology,
       adrIndex: structuredOutputs.get('adr-index') as AdrIndexOutput | undefined,
+      productOverview: productUxDocs?.overview,
+      userJourneys: productUxDocs?.journeys,
+      featureBriefIndex: productUxDocs?.featureBriefIndex,
       docsBundleManifest: manifestRead.manifest,
       dependencyWarnings: manifestRead.warnings,
     });

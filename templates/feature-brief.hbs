@@ -1,0 +1,28 @@
+# {{title}}
+
+> Brief ID: `{{id}}`
+> 状态: `{{status}}`
+> 置信度: `{{confidence}}`
+> 是否推断: `{{#if inferred}}是{{else}}否{{/if}}`
+
+## 1. 摘要
+
+{{summary}}
+
+## 2. 问题
+
+{{problem}}
+
+## 3. 方案
+
+{{proposedSolution}}
+
+## 4. 目标受众
+
+{{audience}}
+
+## 5. 证据
+
+{{#each evidence}}
+- `{{sourceType}}` {{label}}{{#if path}} — `{{path}}`{{/if}}: {{excerpt}}
+{{/each}}
