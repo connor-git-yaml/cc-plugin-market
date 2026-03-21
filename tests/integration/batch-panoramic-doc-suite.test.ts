@@ -192,6 +192,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
         'specs/dynamic-scenarios.md',
         'specs/event-surface.md',
         'specs/pattern-hints.md',
+        'specs/quality-report.md',
         'specs/runtime-topology.md',
       ]),
     );
@@ -208,6 +209,7 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'component-view.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'data-model.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'dynamic-scenarios.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'quality-report.json'))).toBe(true);
     const adrFiles = fs.readdirSync(path.join(projectRoot, 'specs', 'docs', 'adr'))
       .filter((fileName) => /^adr-\d{4}-.+\.md$/i.test(fileName));
     expect(adrFiles.length).toBeGreaterThanOrEqual(2);
@@ -238,6 +240,28 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     );
     expect(adrIndexMarkdown).toContain('## ADR 草稿列表');
 
+    const qualityReportJson = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, 'specs', 'quality-report.json'), 'utf-8'),
+    ) as {
+      status: string;
+      bundleCoverage: string;
+      dependencyWarnings: string[];
+      provenance: Array<{ documentId: string }>;
+    };
+    expect(qualityReportJson.bundleCoverage).toBe('partial');
+    expect(qualityReportJson.status).toBe('partial');
+    expect(qualityReportJson.dependencyWarnings).toEqual(
+      expect.arrayContaining(['缺少 docs-bundle manifest，发布覆盖度只能按 partial 模式估算。']),
+    );
+    expect(qualityReportJson.provenance.map((record) => record.documentId)).toEqual(
+      expect.arrayContaining([
+        'architecture-narrative',
+        'component-view',
+        'dynamic-scenarios',
+        'docs/adr/index',
+      ]),
+    );
+
     const coverageJson = JSON.parse(
       fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.json'), 'utf-8'),
     ) as {
@@ -266,8 +290,10 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
 
     expect(result.failed).toHaveLength(0);
     expect(result.projectDocs).toContain('specs/architecture-narrative.md');
+    expect(result.projectDocs).toContain('specs/quality-report.md');
     expect(result.projectDocs).not.toContain('specs/architecture-overview.md');
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-narrative.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'quality-report.md'))).toBe(true);
   });
 });
 

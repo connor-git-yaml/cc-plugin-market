@@ -1,0 +1,130 @@
+---
+type: quality-report
+generatedBy: docs-quality-evaluator
+generatedAt: {{generatedAt}}
+status: {{status}}
+score: {{stats.score}}
+bundleCoverage: {{bundleCoverage}}
+---
+
+# {{title}}
+
+> 自动生成于 {{generatedAt}}
+
+## 摘要
+
+| 指标 | 值 |
+|------|------|
+| 总体状态 | `{{status}}` |
+| 质量分数 | `{{stats.score}}` |
+| Provenance 文档数 | `{{stats.availableProvenanceDocs}} / {{stats.totalProvenanceDocs}}` |
+| 高覆盖文档数 | `{{stats.highCoverageDocs}}` |
+| 冲突数 | `{{stats.totalConflicts}}` |
+| 高严重冲突数 | `{{stats.highSeverityConflicts}}` |
+| Required docs 覆盖数 | `{{stats.coveredRequiredDocs}} / {{stats.totalRequiredDocs}}` |
+| Required docs 缺失数 | `{{stats.missingRequiredDocs}}` |
+| Dependency warnings | `{{stats.dependencyWarningCount}}` |
+| General warnings | `{{stats.warningCount}}` |
+
+{{#if summary.length}}
+### 结果摘要
+
+{{#each summary}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if dependencyWarnings.length}}
+## Dependency Warnings
+
+{{#each dependencyWarnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if warnings.length}}
+## General Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+## Provenance Coverage
+
+{{#each provenance}}
+### {{title}}
+
+- Document ID: `{{documentId}}`
+- Available: `{{available}}`
+- Coverage: `{{coverage}}`
+- Confidence: `{{confidence}}`
+- Sections: `{{sectionCount}}`
+- Entries: `{{entryCount}}`
+{{#if sourcePath}}
+- Source Path: `{{sourcePath}}`
+{{/if}}
+{{#if missingReason}}
+- Missing Reason: {{missingReason}}
+{{/if}}
+
+{{#if sourceTypes.length}}
+**Source Types**
+
+{{#each sourceTypes}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+{{#if warnings.length}}
+**Warnings**
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if sections.length}}
+**Sections**
+
+{{#each sections}}
+- `{{id}}` / {{title}} / coverage=`{{coverage}}`
+  {{#if summary}}{{summary}}{{/if}}
+  {{#if entries.length}}
+  {{#each entries}}
+  - `{{sourceType}}` → `{{ref}}`{{#if originType}} (`{{originType}}`){{/if}}{{#if path}} @ `{{path}}`{{/if}}{{#if note}}: {{note}}{{/if}}{{#if inferred}} `[inferred]`{{/if}}
+  {{/each}}
+  {{else}}
+  - 无 provenance entry
+  {{/if}}
+{{/each}}
+{{/if}}
+{{/each}}
+
+## Conflict Records
+
+{{#if conflicts.length}}
+{{#each conflicts}}
+### {{topic}} / severity=`{{severity}}`
+
+{{summary}}
+
+{{#each sources}}
+- `{{sourceType}}` / {{label}} / `{{canonicalValue}}`{{#if path}} @ `{{path}}`{{/if}}{{#if excerpt}}: {{excerpt}}{{/if}}
+{{/each}}
+{{/each}}
+{{else}}
+- 未检测到显式 conflict record。
+{{/if}}
+
+## Required Docs
+
+| Doc | Coverage | Present | Required By | Included Bundles | Notes |
+|-----|----------|---------|-------------|------------------|-------|
+{{#if requiredDocs.length}}
+{{#each requiredDocs}}
+| `{{docId}}` | `{{coverage}}` | `{{present}}` | {{#if requiredBy.length}}{{#each requiredBy}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} | {{#if includedInBundles.length}}{{#each includedInBundles}}`{{this}}`{{#unless @last}}, {{/unless}}{{/each}}{{else}}--{{/if}} | {{#if notes.length}}{{#each notes}}{{this}}{{#unless @last}} / {{/unless}}{{/each}}{{else}}--{{/if}} |
+{{/each}}
+{{else}}
+| -- | -- | -- | -- | -- | -- |
+{{/if}}

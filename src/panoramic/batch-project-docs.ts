@@ -14,9 +14,11 @@ import {
   type ArchitectureNarrativeOutput,
   type BatchGeneratedDocSummary,
 } from './architecture-narrative.js';
-import { generateBatchAdrDocs } from './adr-decision-pipeline.js';
+import { generateBatchAdrDocs, type AdrIndexOutput } from './adr-decision-pipeline.js';
 import { buildComponentView, renderComponentView } from './component-view-builder.js';
 import { buildDynamicScenarios, renderDynamicScenarios } from './dynamic-scenarios-builder.js';
+import { evaluateDocsQuality, renderDocsQualityReport } from './docs-quality-evaluator.js';
+import { readDocsBundleManifest } from './docs-bundle-manifest-reader.js';
 import {
   getBatchProjectOutputBaseName,
   isBatchProjectGeneratorId,
@@ -189,11 +191,49 @@ export async function generateBatchProjectDocs(
       writtenFiles: adrDocs.writtenFiles,
       warnings: adrDocs.warnings,
     });
+    structuredOutputs.set('adr-index', adrDocs.index);
   } catch (error) {
     generatedDocs.push({
       generatorId: 'adr-pipeline',
       writtenFiles: [],
       warnings: [`ADR 草稿生成失败: ${String(error)}`],
+    });
+  }
+
+  try {
+    const manifestRead = readDocsBundleManifest(options.outputDir, options.projectRoot);
+    const qualityReport = evaluateDocsQuality({
+      projectRoot: options.projectRoot,
+      outputDir: options.outputDir,
+      projectContext,
+      generatedDocs,
+      architectureNarrative,
+      architectureOverview,
+      patternHints,
+      componentView: structuredOutputs.get('component-view') as ReturnType<typeof buildComponentView> | undefined,
+      dynamicScenarios: structuredOutputs.get('dynamic-scenarios') as ReturnType<typeof buildDynamicScenarios> | undefined,
+      runtimeTopology,
+      adrIndex: structuredOutputs.get('adr-index') as AdrIndexOutput | undefined,
+      docsBundleManifest: manifestRead.manifest,
+      dependencyWarnings: manifestRead.warnings,
+    });
+    const qualityWrittenFiles = writeMultiFormat({
+      outputDir: options.outputDir,
+      baseName: 'quality-report',
+      outputFormat: 'all',
+      markdown: renderDocsQualityReport(qualityReport),
+      structuredData: qualityReport,
+    });
+    generatedDocs.push({
+      generatorId: 'quality-report',
+      writtenFiles: qualityWrittenFiles,
+      warnings: [...qualityReport.dependencyWarnings, ...qualityReport.warnings],
+    });
+  } catch (error) {
+    generatedDocs.push({
+      generatorId: 'quality-report',
+      writtenFiles: [],
+      warnings: [`文档质量报告生成失败: ${String(error)}`],
     });
   }
 

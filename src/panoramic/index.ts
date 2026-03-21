@@ -153,6 +153,25 @@ export {
 } from './adr-decision-pipeline.js';
 
 export {
+  evaluateDocsQuality,
+  renderDocsQualityReport,
+  type EvaluateDocsQualityOptions,
+} from './docs-quality-evaluator.js';
+
+export {
+  adaptArchitectureNarrativeProvenance,
+  type AdaptNarrativeProvenanceOptions,
+} from './narrative-provenance-adapter.js';
+
+export {
+  readDocsBundleManifest,
+  type BundleNavigationReference,
+  type BundleProfileReference,
+  type DocsBundleManifestReference,
+  type ReadDocsBundleManifestResult,
+} from './docs-bundle-manifest-reader.js';
+
+export {
   buildSyntheticImageName,
   mergeEnvironmentVariables,
   normalizeCommandValue,
@@ -241,6 +260,31 @@ export {
   type DynamicScenarioModel,
   type DynamicScenariosOutput,
 } from './component-view-model.js';
+
+export {
+  determineDocsQualityStatus,
+  dedupeProvenanceEntries,
+  normalizeConfidence,
+  summarizeDocsQualityStats,
+  summarizeProvenanceRecord,
+  summarizeProvenanceSection,
+  type BundleCoverageStatus,
+  type ConflictRecord,
+  type ConflictSeverity,
+  type ConflictSourceRef,
+  type DocsQualityReport,
+  type DocsQualityStats,
+  type DocsQualityStatus,
+  type DocumentProvenanceRecord,
+  type DocumentProvenanceSection,
+  type ProvenanceEntry,
+  type ProvenanceSourceType,
+  type QualityConfidence,
+  type QualityCoverage,
+  type RequiredDocCoverage,
+  type RequiredDocRule,
+  type RequiredDocStatus,
+} from './docs-quality-model.js';
 
 export {
   loadStoredModuleSpecs,
