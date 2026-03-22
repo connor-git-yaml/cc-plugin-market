@@ -539,7 +539,10 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
     const relative = normalizeProjectPath(fullPath, root);
 
     if (entry.isDirectory()) {
-      if (['node_modules', '.git', 'specs', 'dist', 'coverage', 'bundles'].includes(entry.name)) {
+      if (
+        ['node_modules', '.git', 'specs', 'dist', 'coverage', 'bundles'].includes(entry.name)
+        || entry.name.startsWith('.reverse-spec')
+      ) {
         continue;
       }
       walkMarkdownDocs(root, fullPath, results);
@@ -552,9 +555,12 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
 
     const lower = relative.toLowerCase();
     const isRootReadme = lower === 'readme.md';
+    const isGeneratedOutput = /(^|\/)\.reverse-spec[^/]*\//i.test(lower)
+      || /(^|\/)docs\/adr\//i.test(lower)
+      || /(^|\/)feature-briefs\//i.test(lower);
     const isDesignLike = /(design|product|roadmap|journey|ux|persona|brief)/i.test(entry.name)
-      || /(docs\/|design\/|product\/)/i.test(lower);
-    if (!isDesignLike || isRootReadme) {
+      || /(^|\/)(design|product|roadmap|journey|ux|persona|brief)s?\//i.test(lower);
+    if (!isDesignLike || isRootReadme || isGeneratedOutput) {
       continue;
     }
 

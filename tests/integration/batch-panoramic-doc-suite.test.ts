@@ -255,12 +255,17 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
       bundleCoverage: string;
       dependencyWarnings: string[];
       provenance: Array<{ documentId: string }>;
+      requiredDocs: Array<{ docId: string; coverage: string; includedInBundles: string[] }>;
     };
-    expect(qualityReportJson.bundleCoverage).toBe('partial');
-    expect(qualityReportJson.status).toBe('partial');
-    expect(qualityReportJson.dependencyWarnings).toEqual(
+    expect(qualityReportJson.dependencyWarnings).not.toEqual(
       expect.arrayContaining(['缺少 docs-bundle manifest，发布覆盖度只能按 partial 模式估算。']),
     );
+    expect(qualityReportJson.requiredDocs.find((doc) => doc.docId === 'component-view')?.includedInBundles)
+      .toEqual(expect.arrayContaining(['architecture-review']));
+    expect(qualityReportJson.requiredDocs.find((doc) => doc.docId === 'dynamic-scenarios')?.includedInBundles)
+      .toEqual(expect.arrayContaining(['architecture-review']));
+    expect(qualityReportJson.requiredDocs.find((doc) => doc.docId === 'docs/adr/index')?.includedInBundles)
+      .toEqual(expect.arrayContaining(['architecture-review']));
     expect(qualityReportJson.provenance.map((record) => record.documentId)).toEqual(
       expect.arrayContaining([
         'architecture-narrative',

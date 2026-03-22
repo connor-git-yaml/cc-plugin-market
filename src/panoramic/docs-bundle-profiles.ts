@@ -27,7 +27,10 @@ const PROFILE_DEFINITIONS: Record<BundleProfileId, BundleProfileDefinition> = {
     description: '优先呈现结构视图、模式判断和依赖链路，适合架构评审或设计复盘。',
     coreDocumentIds: [
       'architecture-overview',
+      'component-view',
+      'dynamic-scenarios',
       'pattern-hints',
+      'docs/adr/index',
       'architecture-narrative',
       'cross-package-analysis',
       'runtime-topology',

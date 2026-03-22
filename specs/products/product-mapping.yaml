@@ -2,12 +2,12 @@
 # 由 Spec Driver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
-# 最后更新: 2026-03-20
+# 最后更新: 2026-03-22
 # 未纳入正式映射: 023-fix-mcp-hardcoded-path（spec.md 仍为模板占位，待补齐后再纳入聚合）
 
 products:
   reverse-spec:
-    description: "reverse-spec v2.1.0 — 面向多语言代码与工程制品的结构化 Spec / 全景文档生成工具，支持 CLI、Plugin 与 MCP Server 三种入口"
+    description: "reverse-spec v2.2.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口"
     specs:
       - id: "001-reverse-spec-v2"
         type: INITIAL
@@ -123,6 +123,30 @@ products:
       - id: "052-batch-singlelang-graph"
         type: FIX
         summary: "修复 Batch 单语言非 TS/JS 依赖图选择"
+      - id: "053-panoramic-batch-doc-suite"
+        type: FEATURE
+        summary: "Batch 自动产出 panoramic 项目级文档套件与架构叙事"
+      - id: "054-multi-source-doc-system-blueprint"
+        type: ENHANCEMENT
+        summary: "多源文档系统蓝图，定义 055-060 的交付、IR、ADR、治理与产品事实路线"
+      - id: "055-doc-bundle-publish-orchestration"
+        type: FEATURE
+        summary: "文档 bundle、阅读路径导航与 MkDocs/TechDocs 兼容发布编排"
+      - id: "056-architecture-ir-export"
+        type: FEATURE
+        summary: "架构中间表示导出，统一 JSON / Mermaid / Structurizr DSL"
+      - id: "057-component-view-dynamic-scenarios"
+        type: FEATURE
+        summary: "组件视图与动态链路文档"
+      - id: "058-adr-decision-pipeline"
+        type: FEATURE
+        summary: "ADR 决策流水线，输出 docs/adr 候选草稿与索引"
+      - id: "059-provenance-quality-gates"
+        type: FEATURE
+        summary: "文档 provenance、required-doc 规则与质量门"
+      - id: "060-product-ux-fact-ingestion"
+        type: FEATURE
+        summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
     description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并以 product current-spec 作为文档事实源"

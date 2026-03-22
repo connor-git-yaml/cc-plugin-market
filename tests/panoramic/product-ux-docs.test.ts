@@ -131,6 +131,22 @@ describe('generateProductUxDocs', () => {
   });
 
   it('从 current-spec、README 与 GitHub issue/PR 生成产品概览、旅程和 feature brief', () => {
+    fs.mkdirSync(path.join(projectRoot, '.reverse-spec-preview', 'docs', 'adr'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.reverse-spec-preview', 'docs', 'adr', 'adr-0001-runtime.md'),
+      [
+        '---',
+        'type: adr',
+        'status: proposed',
+        '---',
+        '',
+        '# ADR',
+        '',
+        'This should not be treated as a product design document.',
+      ].join('\n'),
+      'utf-8',
+    );
+
     const result = generateProductUxDocs({
       projectRoot,
       outputDir,
@@ -148,6 +164,8 @@ describe('generateProductUxDocs', () => {
     expect(result.featureBriefIndex.briefs.map((brief) => brief.id)).toEqual(
       expect.arrayContaining(['ISSUE-12', 'PR-34']),
     );
+    expect(result.overview.summary.join('\n')).not.toContain('type: adr');
+    expect(result.overview.evidence.some((entry) => entry.path?.includes('.reverse-spec-preview'))).toBe(false);
     expect(fs.existsSync(path.join(outputDir, 'product-overview.md'))).toBe(true);
     expect(fs.existsSync(path.join(outputDir, 'user-journeys.md'))).toBe(true);
     expect(fs.existsSync(path.join(outputDir, 'feature-briefs', 'index.md'))).toBe(true);

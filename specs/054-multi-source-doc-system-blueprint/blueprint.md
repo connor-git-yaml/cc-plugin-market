@@ -1,9 +1,9 @@
 # 多源文档系统 Milestone 蓝图
 
-**版本**: 0.1.0
+**版本**: 1.0.0
 **创建日期**: 2026-03-20
-**最后更新**: 2026-03-20
-**状态**: Draft
+**最后更新**: 2026-03-22
+**状态**: Implemented
 
 ---
 
@@ -306,7 +306,35 @@
 
 ---
 
-## 10. 维护说明
+## 10. 结案验证
+
+### 已完成项
+
+- **055**: 文档 bundle 与发布编排已接入 batch，输出 `docs-bundle.yaml`、4 个 profile、landing page 和 MkDocs 兼容骨架
+- **056**: `ArchitectureIR` 已落地，支持 JSON / Mermaid / Structurizr DSL 导出
+- **057**: 组件视图与动态链路文档已接入项目级文档套件
+- **058**: ADR 决策流水线已接入 `docs/adr/*.md`
+- **059**: provenance、quality report、required-doc rule set 与冲突检测已落地
+- **060**: 产品 / UX 事实接入已落地，支持 `current-spec.md`、README、本地设计 Markdown、GitHub issue/PR 的第一版聚合
+
+### 真实验证结论
+
+- `claude-agent-sdk-python` 已验证：
+  - project docs suite 可完整生成
+  - component / dynamic / ADR / narrative / quality 可共同工作
+- 当前仓库 `cc-plugin-market` 已验证：
+  - 060 可直接从 `current-spec.md`、README、PR 历史生成 `product-overview`、`user-journeys` 和 `feature-briefs`
+- docs bundle、Architecture IR、quality gate 和产品文档层已能同时进入 batch 主链路
+
+### 已知边界
+
+- 第一版 060 仍只覆盖 `current-spec.md` + GitHub issue/PR + 本地 Markdown 设计说明，不包含 Figma / analytics / support ticket 等外部事实源
+- 开源站点与发布层仍采用“兼容输出合同”策略，未在仓库内直接嵌入 TechDocs / Backstage runtime
+- narrative / component / dynamic 质量已达可用，但对超大仓库的细粒度类/方法级讲解仍有继续优化空间
+
+---
+
+## 11. 维护说明
 
 1. 本蓝图默认不替换 `033` 全景文档化蓝图，而是建立在 `034-053` 已落地能力之上的下一阶段蓝图
 2. 后续每完成一个 Phase，更新本蓝图版本号的 minor 号
@@ -315,7 +343,7 @@
 
 ---
 
-## 11. 参考与借鉴来源
+## 12. 参考与借鉴来源
 
 - Diataxis: https://diataxis.fr/start-here/
 - Backstage TechDocs: https://backstage.io/docs/features/techdocs/

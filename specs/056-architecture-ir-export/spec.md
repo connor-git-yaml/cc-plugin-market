@@ -2,7 +2,7 @@
 
 **Feature Branch**: `056-architecture-ir-export`  
 **Created**: 2026-03-20  
-**Status**: In Progress  
+**Status**: Implemented  
 **Input**: User description: "落地 Feature 056 `架构中间表示（Architecture IR）导出`，按 Spec Driver 完整流程端到端完成"
 
 ---

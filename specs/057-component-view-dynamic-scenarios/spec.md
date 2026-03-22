@@ -2,7 +2,7 @@
 
 **Feature Branch**: `057-component-view-dynamic-scenarios`  
 **Created**: 2026-03-21  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: User description: "推进任务 57"
 
 ---

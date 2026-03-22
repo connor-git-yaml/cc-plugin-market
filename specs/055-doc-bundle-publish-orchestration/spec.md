@@ -2,7 +2,7 @@
 
 **Feature Branch**: `055-doc-bundle-publish-orchestration`  
 **Created**: 2026-03-20  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: User description: "落地 Feature 055 文档 Bundle 与发布编排，基于现有 batch/panoramic 输出新增 docs bundle 编排，输出 4 个 bundle profile、manifest、landing page 和 MkDocs/TechDocs 兼容骨架"
 
 ## User Scenarios & Testing

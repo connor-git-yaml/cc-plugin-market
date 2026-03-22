@@ -2,7 +2,7 @@
 
 **Feature Branch**: `059-provenance-quality-gates`  
 **Created**: 2026-03-21  
-**Status**: Draft  
+**Status**: Implemented  
 **Input**: User description: "推进 059"
 
 ## User Scenarios & Testing

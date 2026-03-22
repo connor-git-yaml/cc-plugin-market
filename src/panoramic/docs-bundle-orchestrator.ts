@@ -61,6 +61,11 @@ const PROJECT_DOC_METADATA: Record<string, { title: string; description: string;
     description: 'system context / deployment / layered 结构总览。',
     relativePath: 'architecture-overview.md',
   },
+  'component-view': {
+    title: 'Component View',
+    description: '关键组件、边界、职责与核心关系视图。',
+    relativePath: 'component-view.md',
+  },
   'config-reference': {
     title: 'Config Reference',
     description: '配置项、环境变量与默认值参考。',
@@ -75,6 +80,16 @@ const PROJECT_DOC_METADATA: Record<string, { title: string; description: string;
     title: 'Data Model',
     description: '关键实体、字段与数据结构摘要。',
     relativePath: 'data-model.md',
+  },
+  'docs/adr/index': {
+    title: 'ADR Index',
+    description: '架构决策草稿与索引入口。',
+    relativePath: 'docs/adr/index.md',
+  },
+  'dynamic-scenarios': {
+    title: 'Dynamic Scenarios',
+    description: '关键运行时场景、参与者与步骤链路。',
+    relativePath: 'dynamic-scenarios.md',
   },
   'event-surface': {
     title: 'Event Surface',

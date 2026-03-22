@@ -34,7 +34,11 @@ import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js'
 import { renderSpec } from '../generator/spec-renderer.js';
 import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
 import { buildProjectContext } from '../panoramic/project-context.js';
-import { generateBatchProjectDocs } from '../panoramic/batch-project-docs.js';
+import {
+  generateBatchProjectDocs,
+  generateDocsQualityReport,
+  type BatchProjectDocsResult,
+} from '../panoramic/batch-project-docs.js';
 import { orchestrateDocsBundle } from '../panoramic/docs-bundle-orchestrator.js';
 import type { DocsBundleProfileSummary } from '../panoramic/docs-bundle-types.js';
 
@@ -535,6 +539,7 @@ export async function runBatch(
   let docGraphPath: string | undefined;
   let coverageReportPath: string | undefined;
   let projectDocs: string[] | undefined;
+  let projectDocsResult: BatchProjectDocsResult | undefined;
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
   const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
@@ -575,7 +580,7 @@ export async function runBatch(
 
     let projectContext = await buildProjectContext(resolvedRoot);
     try {
-      const projectDocsResult = await generateBatchProjectDocs({
+      projectDocsResult = await generateBatchProjectDocs({
         projectRoot: resolvedRoot,
         outputDir: resolvedOutputDir,
       });
@@ -639,6 +644,20 @@ export async function runBatch(
     docsBundleProfiles = docsBundleResult.profiles;
   } catch {
     console.warn('文档 bundle 编排失败');
+  }
+
+  if (projectDocsResult) {
+    try {
+      const qualityDoc = generateDocsQualityReport(projectDocsResult.qualityInputs);
+      projectDocs = Array.from(new Set([
+        ...(projectDocs ?? []),
+        ...qualityDoc.writtenFiles
+          .filter((filePath) => filePath.endsWith('.md'))
+          .map(toProjectPath),
+      ])).sort((a, b) => a.localeCompare(b));
+    } catch {
+      console.warn('文档质量报告生成失败');
+    }
   }
 
   // 步骤 6：写入摘要日志

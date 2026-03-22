@@ -38,10 +38,28 @@ export interface BatchProjectDocsResult {
   projectContext: ProjectContext;
   generatedDocs: BatchGeneratedDocSummary[];
   architectureNarrative: ArchitectureNarrativeOutput;
+  qualityInputs: BatchDocsQualityInputs;
 }
 
 interface GeneratedProjectDocResult extends BatchGeneratedDocSummary {
   structuredData: unknown;
+}
+
+export interface BatchDocsQualityInputs {
+  projectRoot: string;
+  outputDir: string;
+  projectContext: ProjectContext;
+  generatedDocs: BatchGeneratedDocSummary[];
+  architectureNarrative: ArchitectureNarrativeOutput;
+  architectureOverview?: ArchitectureOverviewOutput;
+  patternHints?: PatternHintsOutput;
+  componentView?: ReturnType<typeof buildComponentView>;
+  dynamicScenarios?: ReturnType<typeof buildDynamicScenarios>;
+  runtimeTopology?: RuntimeTopologyOutput;
+  adrIndex?: AdrIndexOutput;
+  productOverview?: GenerateProductUxDocsResult['overview'];
+  userJourneys?: GenerateProductUxDocsResult['journeys'];
+  featureBriefIndex?: GenerateProductUxDocsResult['featureBriefIndex'];
 }
 
 export interface GenerateBatchProjectDocsOptions {
@@ -228,9 +246,11 @@ export async function generateBatchProjectDocs(
     });
   }
 
-  try {
-    const manifestRead = readDocsBundleManifest(options.outputDir, options.projectRoot);
-    const qualityReport = evaluateDocsQuality({
+  return {
+    projectContext,
+    generatedDocs,
+    architectureNarrative,
+    qualityInputs: {
       projectRoot: options.projectRoot,
       outputDir: options.outputDir,
       projectContext,
@@ -245,33 +265,44 @@ export async function generateBatchProjectDocs(
       productOverview: productUxDocs?.overview,
       userJourneys: productUxDocs?.journeys,
       featureBriefIndex: productUxDocs?.featureBriefIndex,
-      docsBundleManifest: manifestRead.manifest,
-      dependencyWarnings: manifestRead.warnings,
-    });
-    const qualityWrittenFiles = writeMultiFormat({
-      outputDir: options.outputDir,
-      baseName: 'quality-report',
-      outputFormat: 'all',
-      markdown: renderDocsQualityReport(qualityReport),
-      structuredData: qualityReport,
-    });
-    generatedDocs.push({
-      generatorId: 'quality-report',
-      writtenFiles: qualityWrittenFiles,
-      warnings: [...qualityReport.dependencyWarnings, ...qualityReport.warnings],
-    });
-  } catch (error) {
-    generatedDocs.push({
-      generatorId: 'quality-report',
-      writtenFiles: [],
-      warnings: [`文档质量报告生成失败: ${String(error)}`],
-    });
-  }
+    },
+  };
+}
+
+export function generateDocsQualityReport(
+  options: BatchDocsQualityInputs,
+): BatchGeneratedDocSummary {
+  const manifestRead = readDocsBundleManifest(options.outputDir, options.projectRoot);
+  const qualityReport = evaluateDocsQuality({
+    projectRoot: options.projectRoot,
+    outputDir: options.outputDir,
+    projectContext: options.projectContext,
+    generatedDocs: options.generatedDocs,
+    architectureNarrative: options.architectureNarrative,
+    architectureOverview: options.architectureOverview,
+    patternHints: options.patternHints,
+    componentView: options.componentView,
+    dynamicScenarios: options.dynamicScenarios,
+    runtimeTopology: options.runtimeTopology,
+    adrIndex: options.adrIndex,
+    productOverview: options.productOverview,
+    userJourneys: options.userJourneys,
+    featureBriefIndex: options.featureBriefIndex,
+    docsBundleManifest: manifestRead.manifest,
+    dependencyWarnings: manifestRead.warnings,
+  });
+  const qualityWrittenFiles = writeMultiFormat({
+    outputDir: options.outputDir,
+    baseName: 'quality-report',
+    outputFormat: 'all',
+    markdown: renderDocsQualityReport(qualityReport),
+    structuredData: qualityReport,
+  });
 
   return {
-    projectContext,
-    generatedDocs,
-    architectureNarrative,
+    generatorId: 'quality-report',
+    writtenFiles: qualityWrittenFiles,
+    warnings: [...qualityReport.dependencyWarnings, ...qualityReport.warnings],
   };
 }
 
