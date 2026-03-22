@@ -1,0 +1,87 @@
+---
+type: interface-surface
+generatedBy: interface-surface
+generatedAt: {{generatedAt}}
+---
+# Interface Surface: {{projectName}}
+
+> 自动生成于 {{generatedAt}}
+
+## 1. 摘要
+
+- 模块数: `{{totalModules}}`
+- 入口模块数: `{{entryModules.length}}`
+- 公开符号数: `{{totalSymbols}}`
+- 关键方法数: `{{totalMethods}}`
+
+{{#each summary}}
+- {{this}}
+{{/each}}
+
+{{#if warnings.length}}
+## 2. Warnings
+
+{{#each warnings}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if entryModules.length}}
+## 3. 入口模块
+
+{{#each entryModules}}
+### `{{sourceTarget}}`
+
+- 角色: `{{role}}`
+- 置信度: `{{confidence}}`
+- 摘要: {{summary}}
+{{#if relatedFiles.length}}
+- 关联文件:
+{{#each relatedFiles}}
+  - `{{this}}`
+{{/each}}
+{{/if}}
+{{/each}}
+{{/if}}
+
+## 4. 模块接口清单
+
+{{#each modules}}
+### `{{sourceTarget}}`
+
+- 角色: `{{role}}`
+- 置信度: `{{confidence}}`
+- 摘要: {{summary}}
+{{#if exportedSymbols.length}}
+- 公开符号:
+{{#each exportedSymbols}}
+  - `{{name}}` [`{{kind}}`]{{#if signature}} -> `{{signature}}`{{/if}}{{#if note}}: {{note}}{{/if}}
+{{/each}}
+{{/if}}
+{{#if publicMethods.length}}
+- 关键方法:
+{{#each publicMethods}}
+  - `{{name}}`{{#if ownerName}} (owner=`{{ownerName}}`){{/if}} [`{{kind}}`]{{#if signature}} -> `{{signature}}`{{/if}}{{#if note}}: {{note}}{{/if}}
+{{/each}}
+{{/if}}
+{{/each}}
+
+## 5. 关键公开符号
+
+{{#if keySymbols.length}}
+{{#each keySymbols}}
+- `{{name}}` [`{{kind}}`] in `{{moduleName}}`{{#if signature}} -> `{{signature}}`{{/if}}{{#if note}}: {{note}}{{/if}}
+{{/each}}
+{{else}}
+未识别出高置信公开符号。
+{{/if}}
+
+## 6. 关键方法 / 函数
+
+{{#if keyMethods.length}}
+{{#each keyMethods}}
+- `{{name}}`{{#if ownerName}} (owner=`{{ownerName}}`){{/if}} in `{{moduleName}}` [`{{kind}}`]{{#if signature}} -> `{{signature}}`{{/if}}{{#if note}}: {{note}}{{/if}}
+{{/each}}
+{{else}}
+未识别出高置信关键方法。
+{{/if}}

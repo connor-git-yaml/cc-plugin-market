@@ -11,6 +11,7 @@ const BATCH_PROJECT_OUTPUT_BASE_NAMES: Record<string, string> = {
   'workspace-index': 'workspace-index',
   'cross-package-deps': 'cross-package-analysis',
   'api-surface': 'api-surface',
+  'interface-surface': 'interface-surface',
   'runtime-topology': 'runtime-topology',
   'architecture-overview': 'architecture-overview',
   'architecture-ir': 'architecture-ir',

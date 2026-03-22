@@ -51,6 +51,11 @@ const PROJECT_DOC_METADATA: Record<string, { title: string; description: string;
     description: '接口入口、路径、请求/响应与参数摘要。',
     relativePath: 'api-surface.md',
   },
+  'interface-surface': {
+    title: 'Interface Surface',
+    description: '公开入口、关键类、公开函数与关键方法摘要。',
+    relativePath: 'interface-surface.md',
+  },
   'architecture-narrative': {
     title: 'Architecture Narrative',
     description: '面向人类阅读的系统叙事与关键模块说明。',

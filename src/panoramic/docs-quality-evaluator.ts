@@ -122,6 +122,10 @@ const DOC_METADATA: Record<string, { title: string; relativePath: string }> = {
     title: 'API Surface',
     relativePath: 'api-surface.md',
   },
+  'interface-surface': {
+    title: 'Interface Surface',
+    relativePath: 'interface-surface.md',
+  },
   'data-model': {
     title: 'Data Model',
     relativePath: 'data-model.md',
@@ -206,10 +210,16 @@ const REQUIRED_DOC_RULES: ReadonlyArray<RequiredDocRule> = [
     reason: '动态链路文档用于说明主链路、参与者和 hand-off。',
   },
   {
+    docId: 'interface-surface',
+    title: DOC_METADATA['interface-surface']!.title,
+    requiredBy: ['library-sdk'],
+    reason: 'SDK / library 项目需要一份聚焦公开入口、关键类型与关键方法的接口摘要。',
+  },
+  {
     docId: 'api-surface',
     title: DOC_METADATA['api-surface']!.title,
-    requiredBy: ['library-sdk'],
-    reason: 'SDK / library 项目需要稳定的接口入口摘要。',
+    requiredBy: ['http-api'],
+    reason: 'HTTP API 项目需要稳定的 REST / RPC / endpoint 接口入口摘要。',
   },
   {
     docId: 'data-model',
@@ -661,9 +671,11 @@ function inferProjectKinds(
       || presentDocs.has('workspace-index')
       || presentDocs.has('cross-package-analysis'),
   );
+  const isHttpApi = presentDocs.has('api-surface');
   const isLibrarySdk = Boolean(
-    presentDocs.has('api-surface')
-      || presentDocs.has('data-model'),
+    looksLikeLibrarySdkProject(options.projectRoot)
+      || presentDocs.has('interface-surface')
+      || (presentDocs.has('data-model') && !hasRuntime && !presentDocs.has('api-surface')),
   );
   const isArchitectureHeavy = Boolean(
     options.architectureOverview
@@ -686,6 +698,9 @@ function inferProjectKinds(
   if (isLibrarySdk) {
     projectKinds.add('library-sdk');
   }
+  if (isHttpApi) {
+    projectKinds.add('http-api');
+  }
   if (isArchitectureHeavy) {
     projectKinds.add('architecture-heavy');
   }
@@ -694,6 +709,44 @@ function inferProjectKinds(
   }
 
   return projectKinds;
+}
+
+function looksLikeLibrarySdkProject(projectRoot: string): boolean {
+  return looksLikeNodeLibrary(projectRoot) || looksLikePythonLibrary(projectRoot);
+}
+
+function looksLikeNodeLibrary(projectRoot: string): boolean {
+  const packageJsonPath = path.join(projectRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    return false;
+  }
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as Record<string, unknown>;
+    if (pkg.exports || pkg.main || pkg.module || pkg.types || pkg.typings) {
+      return true;
+    }
+    const keywords = Array.isArray(pkg.keywords)
+      ? pkg.keywords.filter((item): item is string => typeof item === 'string')
+      : [];
+    return keywords.some((keyword) => /(sdk|library|client|plugin|toolkit|api-client)/i.test(keyword));
+  } catch {
+    return false;
+  }
+}
+
+function looksLikePythonLibrary(projectRoot: string): boolean {
+  const pyprojectPath = path.join(projectRoot, 'pyproject.toml');
+  if (!fs.existsSync(pyprojectPath)) {
+    return false;
+  }
+
+  try {
+    const content = fs.readFileSync(pyprojectPath, 'utf-8');
+    return /^\[project\]/m.test(content) || /^\[tool\.poetry\]/m.test(content);
+  } catch {
+    return false;
+  }
 }
 
 function determineBundleCoverage(

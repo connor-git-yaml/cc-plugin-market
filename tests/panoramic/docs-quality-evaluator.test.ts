@@ -122,13 +122,13 @@ describe('evaluateDocsQuality', () => {
       'pattern-hints',
       'docs/adr/index',
       'api-surface',
-      'data-model',
       'workspace-index',
       'cross-package-analysis',
     ]));
     expect(report.requiredDocs.find((doc) => doc.docId === 'pattern-hints')?.coverage).toBe('partial');
     expect(report.requiredDocs.find((doc) => doc.docId === 'workspace-index')?.coverage).toBe('partial');
     expect(report.requiredDocs.some((doc) => doc.docId === 'runtime-topology')).toBe(false);
+    expect(report.requiredDocs.some((doc) => doc.docId === 'interface-surface')).toBe(false);
   });
 
   it('当存在 current-spec 与产品文档时，将 product docs 纳入 provenance 和 required-doc', () => {
@@ -177,6 +177,49 @@ describe('evaluateDocsQuality', () => {
     expect(report.requiredDocs.find((doc) => doc.docId === 'user-journeys')?.coverage).toBe('covered');
     expect(report.requiredDocs.find((doc) => doc.docId === 'feature-briefs/index')?.coverage).toBe('covered');
   });
+
+  it('library / sdk 项目以 interface-surface 作为 required doc，而不是 api-surface', () => {
+    const projectRoot = createTempProjectRoot('quality-interface-surface-');
+    const outputDir = path.join(projectRoot, 'specs');
+    fs.writeFileSync(
+      path.join(projectRoot, 'pyproject.toml'),
+      [
+        '[project]',
+        'name = "sample-sdk"',
+        'version = "0.1.0"',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const report = evaluateDocsQuality({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot, 'single'),
+      generatedDocs: createGeneratedDocs(outputDir, [
+        'architecture-narrative',
+        'interface-surface',
+        'data-model',
+      ]),
+      architectureNarrative: createArchitectureNarrative(),
+      docsBundleManifest: {
+        sourcePath: 'specs/docs-bundle.yaml',
+        version: 1,
+        generatedAt: '2026-03-22T10:00:00.000Z',
+        profiles: [
+          {
+            id: 'api-consumer',
+            title: 'API Consumer',
+            documentIds: ['architecture-narrative', 'interface-surface', 'data-model'],
+            navigation: [],
+          },
+        ],
+      },
+    });
+
+    expect(report.requiredDocs.find((doc) => doc.docId === 'interface-surface')?.coverage).toBe('covered');
+    expect(report.requiredDocs.find((doc) => doc.docId === 'data-model')?.coverage).toBe('covered');
+    expect(report.requiredDocs.some((doc) => doc.docId === 'api-surface')).toBe(false);
+  });
 });
 
 function createTempProjectRoot(prefix: string): string {
@@ -189,7 +232,11 @@ function createTempProjectRoot(prefix: string): string {
 function createProjectContext(projectRoot: string, workspaceType: ProjectContext['workspaceType']): ProjectContext {
   return {
     projectRoot,
-    configFiles: new Map(),
+    configFiles: new Map(
+      fs.existsSync(path.join(projectRoot, 'pyproject.toml'))
+        ? [['pyproject.toml', path.join(projectRoot, 'pyproject.toml')]]
+        : [],
+    ),
     packageManager: 'npm',
     workspaceType,
     detectedLanguages: ['ts-js'],

@@ -27,6 +27,7 @@ import { DataModelGenerator } from './data-model-generator.js';
 import { WorkspaceIndexGenerator } from './workspace-index-generator.js';
 import { CrossPackageAnalyzer } from './cross-package-analyzer.js';
 import { ApiSurfaceGenerator } from './api-surface-generator.js';
+import { InterfaceSurfaceGenerator } from './interface-surface-generator.js';
 import { RuntimeTopologyGenerator } from './runtime-topology-generator.js';
 import { EventSurfaceGenerator } from './event-surface-generator.js';
 import { TroubleshootingGenerator } from './troubleshooting-generator.js';
@@ -206,6 +207,7 @@ export function bootstrapGenerators(): void {
   registry.register(new WorkspaceIndexGenerator());
   registry.register(new CrossPackageAnalyzer());
   registry.register(new ApiSurfaceGenerator());
+  registry.register(new InterfaceSurfaceGenerator());
   registry.register(new RuntimeTopologyGenerator());
   registry.register(new ArchitectureOverviewGenerator());
   registry.register(new ArchitectureIRGenerator());

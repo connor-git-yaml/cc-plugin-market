@@ -26,6 +26,7 @@ describe('docs-bundle-orchestrator', () => {
     writeDoc('config-reference.md', '# config-reference');
     writeDoc('pattern-hints.md', '# pattern-hints');
     writeDoc('cross-package-analysis.md', '# cross-package-analysis');
+    writeDoc('interface-surface.md', '# interface-surface');
     writeDoc('api-surface.md', '# api-surface');
     writeDoc('data-model.md', '# data-model');
     writeDoc('event-surface.md', '# event-surface');
@@ -74,6 +75,7 @@ describe('docs-bundle-orchestrator', () => {
     const opsHandover = result.manifest.profiles.find((profile) => profile.id === 'ops-handover');
     expect(apiConsumer?.navigation.map((item) => item.path ?? item.title)).toEqual([
       'index.md',
+      'interface-surface.md',
       'api-surface.md',
       'config-reference.md',
       'data-model.md',

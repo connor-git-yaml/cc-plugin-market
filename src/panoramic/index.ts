@@ -52,6 +52,14 @@ export {
   type ApiSurfaceOutput,
 } from './api-surface-generator.js';
 export {
+  InterfaceSurfaceGenerator,
+  type InterfaceSurfaceRole,
+  type InterfaceSurfaceSymbol,
+  type InterfaceSurfaceModule,
+  type InterfaceSurfaceInput,
+  type InterfaceSurfaceOutput,
+} from './interface-surface-generator.js';
+export {
   WorkspaceIndexGenerator,
   extractWorkspaceData,
   type WorkspacePackageInfo,

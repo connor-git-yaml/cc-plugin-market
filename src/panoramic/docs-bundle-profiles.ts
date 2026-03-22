@@ -45,6 +45,7 @@ const PROFILE_DEFINITIONS: Record<BundleProfileId, BundleProfileDefinition> = {
     description: '面向接口使用者的接口、配置与数据模型阅读路径。',
     coreDocumentIds: [
       'product-overview',
+      'interface-surface',
       'api-surface',
       'config-reference',
       'data-model',
