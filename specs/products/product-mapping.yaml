@@ -2,7 +2,7 @@
 # 由 Spec Driver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
-# 最后更新: 2026-03-22
+# 最后更新: 2026-04-05
 # 未纳入正式映射: 023-fix-mcp-hardcoded-path（spec.md 仍为模板占位，待补齐后再纳入聚合）
 
 products:
@@ -149,7 +149,7 @@ products:
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
-    description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并以 product current-spec 作为文档事实源"
+    description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并补齐 Catalog、Workflow Registry、Scorecards 与 Adoption Feedback 四层产品事实"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -190,3 +190,18 @@ products:
       - id: "032-rename-speckit-to-spec-driver"
         type: REFACTOR
         summary: "清理残留 speckit 命名，统一到 spec-driver 前缀"
+      - id: "062-catalog-driven-spec-driver-blueprint"
+        type: ENHANCEMENT
+        summary: "Catalog-Driven Spec Driver 蓝图，定义 063-066 的 Catalog、Golden Path、Scorecards 与 Adoption 路线"
+      - id: "063-product-entity-catalog"
+        type: FEATURE
+        summary: "产品实体目录与 Catalog 生成，输出 entity.yaml 与 catalog-index"
+      - id: "064-workflow-registry-golden-paths"
+        type: FEATURE
+        summary: "Workflow Registry 与 Golden Paths，输出 workflow-index 与推荐路径"
+      - id: "065-scorecards-continuous-governance"
+        type: FEATURE
+        summary: "持续治理 scorecards、规则 DSL 与 scorecard-report / scorecard-index"
+      - id: "066-adoption-friction-insights"
+        type: FEATURE
+        summary: "本地运行事件、adoption-report 与 friction hotspots 反馈闭环"

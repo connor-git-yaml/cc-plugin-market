@@ -2,7 +2,7 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-04T16:07:54.728Z
+> **Generated**: 2026-04-04T17:14:30.165Z
 > **Status**: FAIL
 > **Score**: 68/100
 
@@ -17,7 +17,7 @@
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | FAIL | 28 | 20 | totalFeatures=13, fresh=9, stale=0 |
+| Verification 新鲜度 | FAIL | 29 | 20 | totalFeatures=18, fresh=13, stale=0 |
 | 文档覆盖率 | WARN | 50 | 20 | [无] |
 | 文档冲突 | WARN | 50 | 15 | [无] |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 13 个增量 spec。
+- current-spec 覆盖了全部 18 个增量 spec。
 
 ```json
 {
@@ -44,13 +44,13 @@
 
 - Evaluator: `verification-freshness`
 - Status: FAIL
-- Score: 28 / 100
+- Score: 29 / 100
 - Weight: 20
-- verification 覆盖率仅 69%，缺失 4 个、过期 0 个、失败 0 个。
+- verification 覆盖率仅 72%，缺失 5 个、过期 0 个、失败 0 个。
 
 ```json
 {
-  "totalFeatures": 13,
+  "totalFeatures": 18,
   "fresh": [
     "013-split-skill-commands",
     "014-rename-spec-driver",
@@ -60,17 +60,22 @@
     "018-flexible-research-routing",
     "019-parallel-subagent-speedup",
     "020-fix-plugin-script-path",
-    "021-add-research-templates"
+    "021-add-research-templates",
+    "063-product-entity-catalog",
+    "064-workflow-registry-golden-paths",
+    "065-scorecards-continuous-governance",
+    "066-adoption-friction-insights"
   ],
   "stale": [],
   "missing": [
     "011-speckit-driver-pro",
     "012-product-spec-sync",
     "022-sync-doc-redesign",
-    "032-rename-speckit-to-spec-driver"
+    "032-rename-speckit-to-spec-driver",
+    "062-catalog-driven-spec-driver-blueprint"
   ],
   "failed": [],
-  "coverageRatio": 0.6923076923076923
+  "coverageRatio": 0.7222222222222222
 }
 ```
 

@@ -1,8 +1,8 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **版本**: 聚合自 13 个增量 spec（011–022, 032）
-> **最后聚合**: 2026-03-22
+> **版本**: 聚合自 18 个增量 spec / blueprint（011–022, 032, 062–066）
+> **最后聚合**: 2026-04-05
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
 
@@ -36,6 +36,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - **研发编排层**：将需求从调研、规范、规划、实现推进到验证闭环
 - **质量控制层**：通过门禁策略、验证铁律、双阶段审查与并行汇合点控制风险
 - **知识聚合层**：通过 `spec-driver-sync` 将增量 spec 合并为产品级 `current-spec.md`，再为对外文档生成提供上游事实源
+- **运营反馈层**：通过 Catalog、workflow registry、scorecards 与 adoption report 形成可持续运营的产品事实层
 
 **核心价值**：
 
@@ -65,6 +66,10 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | 模板可定制性 | 项目级 `.specify/templates/` 可覆盖调研模板 | 021 |
 | 全局安装可用性 | 新项目中脚本路径发现不依赖仓库源码布局 | 020 |
 | 命名一致性 | 对外命令、技能目录、元数据统一使用 `spec-driver-*` | 014, 032 |
+| 产品实体目录 | 生成 `entity.yaml` 与 `catalog-index.yaml` 作为机器可读 Catalog | 063 |
+| Workflow Library | 六个入口拥有 machine-readable workflow definition 与 golden paths | 064 |
+| 持续治理 | 生成 `scorecard-report` 与 `scorecard-index`，解释产品 readiness | 065 |
+| Adoption / Friction | 生成本地 `adoption-report`，识别 rerun、gate pause 与 verification 热点 | 066 |
 
 ---
 
@@ -99,6 +104,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - 灵活调研路由、调研模板同步和项目级模板覆盖
 - 并行子代理编排与串行回退
 - 产品活文档聚合、product mapping 与对外文档摘要
+- 产品实体目录、workflow registry、scorecards 与 adoption report
 - 项目级 `.specify/` 初始化与脚本路径发现
 - 命名规范统一与技能元数据对齐
 
@@ -168,6 +174,15 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | FR-023 | `skills/spec-driver-*/SKILL.md` 与 `.codex/skills/` 名称保持一致 | 032 | 活跃 |
 | FR-024 | `spec-driver` 作为产品显示名与插件注册名 | 014, 032 | 活跃 |
 
+### FR-GROUP-7: Catalog、治理与反馈闭环
+
+| ID | 功能描述 | 来源 | 状态 |
+|----|----------|------|------|
+| FR-025 | `spec-driver-sync` 可生成 `entity.yaml` 与 `catalog-index.yaml` 作为产品实体目录 | 063 | 活跃 |
+| FR-026 | 六个入口拥有 workflow definition、workflow-index 与 3 条 golden paths | 064 | 活跃 |
+| FR-027 | 生成 `scorecard-report.md/.json` 与 `scorecard-index.yaml`，以持续规则解释产品健康度 | 065 | 活跃 |
+| FR-028 | 生成本地 `adoption-report.md/.json`，基于 `.specify/runs/*.jsonl` 聚合 adoption / friction 热点 | 066 | 活跃 |
+
 ---
 
 ## 6. 非功能需求
@@ -212,6 +227,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - Bash 脚本（初始化、安装、扫描）
 - YAML / JSON 配置
 - `.specify/` 作为项目级持久化目录
+- `entity.yaml` / `workflow-index` / `scorecard-report` / `adoption-report` 作为产品级运营事实
 
 ### 项目结构
 
@@ -253,6 +269,7 @@ plugins/spec-driver/
 - agents 目录承载阶段级子代理 prompt
 - `sync` 与 `doc` 的契约从“松散关系”提升为“产品事实源 → 对外派生”
 - `.specify/templates/` 允许项目级覆盖内置模板
+- `entity.yaml`、workflow registry、scorecards 和 adoption report 构成最小的 Catalog-driven 运营层
 
 ---
 
@@ -265,6 +282,7 @@ plugins/spec-driver/
 | 门禁显式化 | 让暂停、放行、失败都可追踪，不做隐式决策 | 017 |
 | 并行可回退 | 并行是加速手段，不得改变业务语义 | 019 |
 | 产品事实源单一化 | README / 使用文档不应再次发明产品语义 | 012, 016, 022 |
+| Catalog 只做机器可读壳层 | `current-spec.md` 仍是正文事实层，`entity.yaml` / workflow / scorecards / adoption 只做索引与治理 | 062–066 |
 
 ---
 
@@ -278,6 +296,7 @@ plugins/spec-driver/
 | 018 | 调研质量 | 调研模式越轻，产出的上下文完备性越弱 | 设计约束 |
 | 022 | 文档聚合 | current-spec 质量取决于上游增量 spec 的质量 | 设计约束 |
 | 020 | 路径发现 | 全局安装可用性已修复，但仍依赖插件缓存和脚本可执行权限 | 中风险 |
+| 066 | adoption 数据 | adoption 目前仅基于本地 `.specify/runs/*.jsonl`，尚不具备团队级聚合能力 | 设计约束 |
 
 ### 技术债
 
@@ -286,6 +305,7 @@ plugins/spec-driver/
 | 021 | 项目级模板同步面继续扩大时，需要更明确的模板版本兼容策略 | 中 |
 | 022 | sync / doc 的事实层契约已确立，但自动验证其一致性的门禁仍偏轻量 | 中 |
 | 032 | 仓库外部历史材料可能仍残留 `speckit-*` 旧命名 | 低 |
+| 065 | 当前 scorecard 仍暴露真实治理缺口，verification / quality 事实仍需继续补齐 | 中 |
 
 ---
 
@@ -339,6 +359,11 @@ plugins/spec-driver/
 | 11 | [021-add-research-templates](../../021-add-research-templates/spec.md) | FEATURE | 2026-03-02 | 将调研模板纳入项目级模板同步体系 |
 | 12 | [022-sync-doc-redesign](../../022-sync-doc-redesign/spec.md) | ENHANCEMENT | 2026-03-07 | 明确 sync / doc 的事实源契约与文档架构 |
 | 13 | [032-rename-speckit-to-spec-driver](../../032-rename-speckit-to-spec-driver/spec.md) | REFACTOR | 2026-03-18 | 清理残留 speckit 命名并统一到 spec-driver 前缀 |
+| 14 | [062-catalog-driven-spec-driver-blueprint](../../062-catalog-driven-spec-driver-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-04 | 定义 Catalog、Workflow、Scorecards 与 Adoption 四层里程碑蓝图 |
+| 15 | [063-product-entity-catalog](../../063-product-entity-catalog/spec.md) | FEATURE | 2026-04-04 | 生成产品实体目录与 `catalog-index.yaml` |
+| 16 | [064-workflow-registry-golden-paths](../../064-workflow-registry-golden-paths/spec.md) | FEATURE | 2026-04-04 | 建立 workflow registry 与 3 条 golden paths |
+| 17 | [065-scorecards-continuous-governance](../../065-scorecards-continuous-governance/spec.md) | FEATURE | 2026-04-04 | 生成持续治理 scorecards 与 scorecard 索引 |
+| 18 | [066-adoption-friction-insights](../../066-adoption-friction-insights/spec.md) | FEATURE | 2026-04-05 | 生成本地 adoption / friction 报告与 run events 合同 |
 
 ---
 
@@ -376,6 +401,11 @@ plugins/spec-driver/
 | 11 | 021-add-research-templates | FEATURE | [specs/021-add-research-templates/spec.md](../../021-add-research-templates/spec.md) |
 | 12 | 022-sync-doc-redesign | ENHANCEMENT | [specs/022-sync-doc-redesign/spec.md](../../022-sync-doc-redesign/spec.md) |
 | 13 | 032-rename-speckit-to-spec-driver | REFACTOR | [specs/032-rename-speckit-to-spec-driver/spec.md](../../032-rename-speckit-to-spec-driver/spec.md) |
+| 14 | 062-catalog-driven-spec-driver-blueprint | ENHANCEMENT | [specs/062-catalog-driven-spec-driver-blueprint/blueprint.md](../../062-catalog-driven-spec-driver-blueprint/blueprint.md) |
+| 15 | 063-product-entity-catalog | FEATURE | [specs/063-product-entity-catalog/spec.md](../../063-product-entity-catalog/spec.md) |
+| 16 | 064-workflow-registry-golden-paths | FEATURE | [specs/064-workflow-registry-golden-paths/spec.md](../../064-workflow-registry-golden-paths/spec.md) |
+| 17 | 065-scorecards-continuous-governance | FEATURE | [specs/065-scorecards-continuous-governance/spec.md](../../065-scorecards-continuous-governance/spec.md) |
+| 18 | 066-adoption-friction-insights | FEATURE | [specs/066-adoption-friction-insights/spec.md](../../066-adoption-friction-insights/spec.md) |
 
 ---
 

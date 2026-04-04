@@ -1,9 +1,9 @@
 # Catalog-Driven Spec Driver Milestone 蓝图
 
-**版本**: 0.1.0
+**版本**: 1.0.0
 **创建日期**: 2026-04-04
-**最后更新**: 2026-04-04
-**状态**: Draft
+**最后更新**: 2026-04-05
+**状态**: Implemented
 
 ---
 
@@ -444,3 +444,28 @@ flowchart TD
 - scoped approvals / workflow RBAC
 - portal UI
 - 外部平台同步与 team-level rollup
+
+---
+
+## 14. 结案验证
+
+### 已完成项
+
+- **063**: 产品实体目录与 Catalog 生成已落地，输出 `entity.yaml` 与 `catalog-index.yaml`
+- **064**: Workflow Registry 与 Golden Paths 已落地，输出 `workflow-index.md/.json`
+- **065**: Scorecards 与持续治理报告已落地，输出 `scorecard-report.md/.json` 与 `scorecard-index.yaml`
+- **066**: Adoption / Friction Insights 已落地，输出本地 `.specify/runs/*.jsonl` 合同与 `adoption-report.md/.json`
+
+### 当前仓库验证结论
+
+- `cc-plugin-market` 已验证：
+  - 双产品 Catalog 可稳定生成
+  - 六个 workflow definition 与 3 条 golden paths 可稳定生成
+  - scorecard 与 adoption report 均可生成，并能回写产品级事实索引
+- 066 当前采用本地 run summary 模式，已经能对 `feature` 与 `sync` 运行样本输出 adoption / friction 报告
+
+### 已知边界
+
+- 066 的 adoption 数据当前仅依赖 repo 本地 `.specify/runs/*.jsonl`，不做远程 telemetry、团队级 rollup 或外部平台同步
+- scorecards 仍维持 report-first，不会自动阻断流程，也尚未引入 OPA / Rego
+- `spec-driver` 当前 scorecard 仍为 `fail`，反映的是真实治理缺口（verification / quality 事实不足），不是链路 bug
