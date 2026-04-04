@@ -1,0 +1,29 @@
+id: spec-driver-feature
+title: "新功能研发"
+persona: "功能开发者"
+useCases:
+  - "全新功能"
+  - "大型需求"
+  - "需要完整调研与质量门"
+entryCommand:
+  claude: "/spec-driver:spec-driver-feature <需求描述>"
+  codex: "$spec-driver-feature <需求描述>"
+requiredInputs:
+  - "需求描述"
+  - "项目宪法"
+keyGates:
+  - "GATE_RESEARCH"
+  - "GATE_DESIGN"
+  - "GATE_ANALYSIS"
+  - "GATE_TASKS"
+  - "GATE_VERIFY"
+artifacts:
+  - "specs/<feature>/research/"
+  - "specs/<feature>/spec.md"
+  - "specs/<feature>/plan.md"
+  - "specs/<feature>/tasks.md"
+  - "specs/<feature>/verification/verification-report.md"
+recommendedWhen:
+  - "需求范围较大"
+  - "需要完整调研、规划和验证闭环"
+templateVersion: "1.0.0"

@@ -1,0 +1,23 @@
+id: spec-driver-sync
+title: "产品事实聚合"
+persona: "产品文档负责人"
+useCases:
+  - "聚合增量 spec"
+  - "更新 current-spec 与产品 Catalog"
+entryCommand:
+  claude: "/spec-driver:spec-driver-sync"
+  codex: "$spec-driver-sync"
+requiredInputs:
+  - "specs/NNN-xxx/spec.md"
+  - "产品映射或可推断产品归属"
+keyGates:
+  - "GATE_RESEARCH"
+artifacts:
+  - "specs/products/product-mapping.yaml"
+  - "specs/products/<product>/current-spec.md"
+  - "specs/products/<product>/entity.yaml"
+  - "specs/products/catalog-index.yaml"
+recommendedWhen:
+  - "需要刷新产品事实源"
+  - "为 doc/scorecard 提供上游事实"
+templateVersion: "1.0.0"

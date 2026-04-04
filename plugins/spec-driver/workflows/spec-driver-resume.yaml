@@ -1,0 +1,20 @@
+id: spec-driver-resume
+title: "恢复中断流程"
+persona: "流程恢复者"
+useCases:
+  - "上次 feature/story/fix 流程中断"
+  - "从已有产物断点继续"
+entryCommand:
+  claude: "/spec-driver:spec-driver-resume"
+  codex: "$spec-driver-resume"
+requiredInputs:
+  - "已存在的 specs/<feature>/ 制品"
+keyGates:
+  - "GATE_VERIFY"
+artifacts:
+  - "复用既有特性目录"
+  - "补齐缺失阶段制品"
+recommendedWhen:
+  - "不想重跑完整流程"
+  - "需要在已有产物上继续推进"
+templateVersion: "1.0.0"

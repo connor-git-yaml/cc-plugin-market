@@ -20,7 +20,6 @@ const WORKFLOW_REFS_BY_PRODUCT = {
     'reverse-spec.auth-status',
   ],
   'spec-driver': [
-    'spec-driver-constitution',
     'spec-driver-feature',
     'spec-driver-story',
     'spec-driver-fix',
@@ -394,7 +393,21 @@ function inferLifecycle(rawStatus) {
 }
 
 function inferWorkflowRefs(productId) {
-  return WORKFLOW_REFS_BY_PRODUCT[productId] ? [...WORKFLOW_REFS_BY_PRODUCT[productId]] : [];
+  if (productId !== 'spec-driver') {
+    return WORKFLOW_REFS_BY_PRODUCT[productId] ? [...WORKFLOW_REFS_BY_PRODUCT[productId]] : [];
+  }
+
+  const workflowDir = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'workflows');
+  if (!fs.existsSync(workflowDir)) {
+    return [...WORKFLOW_REFS_BY_PRODUCT['spec-driver']];
+  }
+
+  const refs = fs.readdirSync(workflowDir)
+    .filter((fileName) => fileName.endsWith('.yaml') && fileName !== 'golden-paths.yaml')
+    .map((fileName) => path.basename(fileName, '.yaml'))
+    .sort((left, right) => left.localeCompare(right));
+
+  return refs.length > 0 ? refs : [...WORKFLOW_REFS_BY_PRODUCT['spec-driver']];
 }
 
 function detectRepoMetadata(projectRoot) {

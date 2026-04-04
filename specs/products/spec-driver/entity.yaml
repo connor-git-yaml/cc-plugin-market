@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-04T14:55:26.211Z"
+generatedAt: "2026-04-04T15:25:25.616Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
@@ -33,13 +33,12 @@ quality:
     path: null
     status: "unavailable"
 workflowRefs:
-  - "spec-driver-constitution"
+  - "spec-driver-doc"
   - "spec-driver-feature"
-  - "spec-driver-story"
   - "spec-driver-fix"
   - "spec-driver-resume"
+  - "spec-driver-story"
   - "spec-driver-sync"
-  - "spec-driver-doc"
 sourceRefs:
   - kind: "product-mapping"
     path: "specs/products/product-mapping.yaml"

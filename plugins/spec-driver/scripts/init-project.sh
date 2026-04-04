@@ -76,6 +76,7 @@ init_specify_dir() {
   # 目录结构确保存在（幂等）
   mkdir -p "${SPECIFY_DIR}/memory"
   mkdir -p "${SPECIFY_DIR}/templates"
+  mkdir -p "${SPECIFY_DIR}/workflows"
   mkdir -p "${SPECIFY_DIR}/scripts/bash"
 }
 

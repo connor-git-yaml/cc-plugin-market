@@ -1,0 +1,24 @@
+id: spec-driver-story
+title: "快速需求实现"
+persona: "迭代开发者"
+useCases:
+  - "中等规模增量需求"
+  - "已有上下文的功能迭代"
+entryCommand:
+  claude: "/spec-driver:spec-driver-story <需求描述>"
+  codex: "$spec-driver-story <需求描述>"
+requiredInputs:
+  - "需求描述"
+  - "现有代码上下文"
+keyGates:
+  - "GATE_DESIGN"
+  - "GATE_VERIFY"
+artifacts:
+  - "specs/<feature>/spec.md"
+  - "specs/<feature>/plan.md"
+  - "specs/<feature>/tasks.md"
+  - "specs/<feature>/verification/verification-report.md"
+recommendedWhen:
+  - "不需要完整市场或技术调研"
+  - "目标是快速交付增量能力"
+templateVersion: "1.0.0"

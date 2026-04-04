@@ -48,6 +48,7 @@ describe('init-project.sh', () => {
     expect(existsSync(join(projectDir, '.specify', 'templates', 'plan-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'spec-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'tasks-template.md'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'workflows'))).toBe(true);
     expect(result.RESULTS.some((r) => r.startsWith('specify_templates:'))).toBe(true);
   });
 

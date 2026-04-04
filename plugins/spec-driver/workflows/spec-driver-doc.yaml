@@ -1,0 +1,24 @@
+id: spec-driver-doc
+title: "开源文档生成"
+persona: "开源维护者"
+useCases:
+  - "README 生成"
+  - "文档套件补齐"
+  - "对外文档整理"
+entryCommand:
+  claude: "/spec-driver:spec-driver-doc"
+  codex: "$spec-driver-doc"
+requiredInputs:
+  - "项目元信息"
+  - "current-spec 或其他产品事实源"
+keyGates:
+  - "GATE_VERIFY"
+artifacts:
+  - "README.md"
+  - "CONTRIBUTING.md"
+  - "LICENSE"
+  - "docs/ 或其他开源文档"
+recommendedWhen:
+  - "需要对外文档交付"
+  - "准备开源发布或 onboarding"
+templateVersion: "1.0.0"

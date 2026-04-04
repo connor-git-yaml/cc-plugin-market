@@ -184,6 +184,28 @@ if 找到多个:
 - AST 分析提供**实现证据**：已导出的模块、命令入口、主要代码结构
 - 若三者冲突，必须显式提示冲突来源；README 优先采用产品语义 + 分发元信息的组合，而不是静默覆盖
 
+### 1.4b Workflow Registry 发现（可选，高价值补充源）
+
+当 Step 1.4 选定了某个 `current-spec.md` 后，继续检查其同级目录下是否存在：
+
+- `workflow-index.md`
+- `workflow-index.json`
+
+若存在：
+
+- 将其视为“如何选择技能 / golden paths / workflow definitions”的补充事实源
+- 优先提取：
+  - workflow 标题与 persona
+  - use cases
+  - golden paths
+  - command 入口映射
+- 该信息可用于 README / USAGE / onboarding 文档中的“如何选择技能”章节
+
+边界：
+
+- workflow-index 只补充工作流选择与推荐路径，不覆盖 `current-spec.md` 的产品定位和范围边界
+- 若 workflow-index 缺失，静默跳过，不影响 doc 主流程
+
 ### 1.5 产品活文档消歧（条件交互）
 
 **执行条件**: `pending_product_doc_candidates` 非空

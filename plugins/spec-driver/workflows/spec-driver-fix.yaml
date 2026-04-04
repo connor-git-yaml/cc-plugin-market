@@ -1,0 +1,21 @@
+id: spec-driver-fix
+title: "快速问题修复"
+persona: "修复者"
+useCases:
+  - "Bug 修复"
+  - "定位与修复回归问题"
+entryCommand:
+  claude: "/spec-driver:spec-driver-fix <问题描述>"
+  codex: "$spec-driver-fix <问题描述>"
+requiredInputs:
+  - "问题描述"
+keyGates:
+  - "GATE_VERIFY"
+artifacts:
+  - "specs/<feature>/spec.md"
+  - "specs/<feature>/tasks.md"
+  - "specs/<feature>/verification/verification-report.md"
+recommendedWhen:
+  - "问题范围明确"
+  - "需要最短修复闭环"
+templateVersion: "1.0.0"

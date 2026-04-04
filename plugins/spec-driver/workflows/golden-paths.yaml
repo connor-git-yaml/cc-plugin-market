@@ -1,0 +1,29 @@
+goldenPaths:
+  - id: "new-feature-delivery"
+    title: "新功能研发"
+    persona: "功能开发者"
+    workflows:
+      - "spec-driver-feature"
+      - "spec-driver-sync"
+      - "spec-driver-doc"
+    recommendedWhen:
+      - "从需求到实现再到文档闭环"
+      - "需要完整 spec / product fact / doc 更新链路"
+  - id: "rapid-fix-delivery"
+    title: "快速修复"
+    persona: "修复者"
+    workflows:
+      - "spec-driver-fix"
+      - "spec-driver-sync"
+    recommendedWhen:
+      - "修复问题后同步产品事实"
+      - "需要最短闭环但仍保留文档更新"
+  - id: "product-facts-refresh"
+    title: "产品事实与文档更新"
+    persona: "产品文档负责人"
+    workflows:
+      - "spec-driver-sync"
+      - "spec-driver-doc"
+    recommendedWhen:
+      - "增量 spec 已完成，需要刷新 current-spec 和对外文档"
+      - "适合 release 前或 onboarding 前的文档收口"
