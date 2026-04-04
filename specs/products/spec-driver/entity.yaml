@@ -1,0 +1,50 @@
+schemaVersion: 1
+generatedAt: "2026-04-04T14:55:26.211Z"
+id: "spec-driver"
+name: "Spec Driver"
+kind: "plugin"
+description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并以 product current-spec 作为文档事实源"
+owner:
+  value: "unknown"
+  source: "unknown"
+lifecycle:
+  value: "active"
+  source: "inferred:current-spec.status"
+repo:
+  path: "."
+  remote: "https://github.com/connor-git-yaml/cc-plugin-market.git"
+  defaultBranch: "master"
+  packageName: "reverse-spec"
+docs:
+  - id: "current-spec"
+    kind: "fact"
+    path: "specs/products/spec-driver/current-spec.md"
+    available: true
+  - id: "readme"
+    kind: "readme"
+    path: "README.md"
+    available: true
+quality:
+  currentSpec:
+    version: "聚合自 13 个增量 spec（011–022, 032）"
+    lastAggregated: "2026-03-22"
+    status: "活跃"
+  report:
+    path: null
+    status: "unavailable"
+workflowRefs:
+  - "spec-driver-constitution"
+  - "spec-driver-feature"
+  - "spec-driver-story"
+  - "spec-driver-fix"
+  - "spec-driver-resume"
+  - "spec-driver-sync"
+  - "spec-driver-doc"
+sourceRefs:
+  - kind: "product-mapping"
+    path: "specs/products/product-mapping.yaml"
+  - kind: "current-spec"
+    path: "specs/products/spec-driver/current-spec.md"
+    available: true
+  - kind: "readme"
+    path: "README.md"

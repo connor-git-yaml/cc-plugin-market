@@ -1,12 +1,12 @@
 ---
 name: spec-driver-sync
-description: "聚合功能规范为产品级活文档与 doc 上游事实源 — 将 specs/ 下的增量 spec 合并为 current-spec.md"
+description: "聚合功能规范为产品级活文档与 doc 上游事实源 — 将 specs/ 下的增量 spec 合并为 current-spec.md，并生成最小产品 Catalog"
 disable-model-invocation: false
 ---
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并将其维护为后续 `spec-driver-doc` 生成对外文档时可复用的上游事实源。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并生成配套的 `entity.yaml` / `catalog-index.yaml`，让产品事实层同时具备人读正文与机器可读目录两种形态。
 
 ## 触发方式
 
@@ -133,7 +133,7 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml` 与 `specs/products/catalog-index.yaml`。
 
 **适用场景**：
 
@@ -145,14 +145,14 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 ### 执行步骤
 
 ```text
-[1/3] 正在扫描功能规范...
+[1/4] 正在扫描功能规范...
 ```
 
 1. 扫描 `specs/` 下所有 `NNN-*` 功能目录
 2. 读取 `prompt_source[sync]`（始终使用 Plugin 内置版本）
 
 ```text
-[2/3] 正在聚合产品规范...
+[2/4] 正在聚合产品规范...
 ```
 
 3. 通过 Task tool 委派 sync 子代理：
@@ -182,13 +182,28 @@ Task(
 ```
 
 ```text
-[3/3] 正在生成产品活文档...
+[3/4] 正在生成产品活文档...
 ```
 
 1. 解析 sync 子代理返回：
    - 生成的产品数量和文件路径
    - 每个产品的聚合统计
    - 未分类 spec 列表（如有）
+
+```text
+[4/4] 正在生成产品实体目录...
+```
+
+2. 执行确定性 helper 生成 Catalog：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-product-entity-catalog.mjs" --project-root "{project_root}" --json
+```
+
+3. 解析 helper 返回：
+   - `specs/products/<product>/entity.yaml`
+   - `specs/products/catalog-index.yaml`
+   - 缺失 `current-spec.md` / quality report 时的 warning
 
 2. 输出聚合完成报告：
 
@@ -215,6 +230,10 @@ Task(
 
 产品映射: specs/products/product-mapping.yaml
 doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 spec-driver-doc 使用）”区块
+实体目录:
+  ✅ {产品 A}: specs/products/{产品 A}/entity.yaml
+  ✅ {产品 B}: specs/products/{产品 B}/entity.yaml
+Catalog 索引: specs/products/catalog-index.yaml
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```

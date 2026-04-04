@@ -1,0 +1,24 @@
+schemaVersion: 1
+generatedAt: "2026-04-04T14:55:26.211Z"
+productCount: 2
+products:
+  - id: "reverse-spec"
+    name: "Reverse-Spec"
+    kind: "library-tooling"
+    lifecycle: "active"
+    owner: "unknown"
+    entityPath: "specs/products/reverse-spec/entity.yaml"
+    currentSpecPath: "specs/products/reverse-spec/current-spec.md"
+    workflowRefCount: 6
+    qualityStatus: "unavailable"
+    specCount: 46
+  - id: "spec-driver"
+    name: "Spec Driver"
+    kind: "plugin"
+    lifecycle: "active"
+    owner: "unknown"
+    entityPath: "specs/products/spec-driver/entity.yaml"
+    currentSpecPath: "specs/products/spec-driver/current-spec.md"
+    workflowRefCount: 7
+    qualityStatus: "unavailable"
+    specCount: 13

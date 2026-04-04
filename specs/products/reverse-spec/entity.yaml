@@ -1,0 +1,49 @@
+schemaVersion: 1
+generatedAt: "2026-04-04T14:55:26.211Z"
+id: "reverse-spec"
+name: "Reverse-Spec"
+kind: "library-tooling"
+description: "reverse-spec v2.2.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口"
+owner:
+  value: "unknown"
+  source: "unknown"
+lifecycle:
+  value: "active"
+  source: "inferred:current-spec.status"
+repo:
+  path: "."
+  remote: "https://github.com/connor-git-yaml/cc-plugin-market.git"
+  defaultBranch: "master"
+  packageName: "reverse-spec"
+docs:
+  - id: "current-spec"
+    kind: "fact"
+    path: "specs/products/reverse-spec/current-spec.md"
+    available: true
+  - id: "readme"
+    kind: "readme"
+    path: "README.md"
+    available: true
+quality:
+  currentSpec:
+    version: "聚合自 46 个增量 spec / blueprint（001–010, 024–031, 033–060）"
+    lastAggregated: "2026-03-22"
+    status: "活跃"
+  report:
+    path: null
+    status: "unavailable"
+workflowRefs:
+  - "reverse-spec.init"
+  - "reverse-spec.generate"
+  - "reverse-spec.batch"
+  - "reverse-spec.diff"
+  - "reverse-spec.mcp-server"
+  - "reverse-spec.auth-status"
+sourceRefs:
+  - kind: "product-mapping"
+    path: "specs/products/product-mapping.yaml"
+  - kind: "current-spec"
+    path: "specs/products/reverse-spec/current-spec.md"
+    available: true
+  - kind: "readme"
+    path: "README.md"
