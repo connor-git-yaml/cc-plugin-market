@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-04-04T16:07:54.728Z",
+  "rulesetId": "default-governance",
+  "rulesetTitle": "默认持续治理评分",
+  "productId": "spec-driver",
+  "productName": "Spec Driver",
+  "kind": "plugin",
+  "status": "fail",
+  "score": 68,
+  "summary": [
+    "Spec Driver 当前治理评分为 68/100，整体状态 FAIL.",
+    "存在 1 条 fail 级规则，需要优先处理。",
+    "另有 2 条 warn 级规则，建议在下一次 sync / release 前收口。"
+  ],
+  "stats": {
+    "ruleCount": 6,
+    "passCount": 3,
+    "warnCount": 2,
+    "failCount": 1,
+    "maxWeightedScore": 100
+  },
+  "rules": [
+    {
+      "id": "spec-freshness",
+      "title": "Current Spec 新鲜度",
+      "evaluator": "spec-freshness",
+      "weight": 20,
+      "status": "pass",
+      "score": 100,
+      "summary": [
+        "current-spec 覆盖了全部 13 个增量 spec。"
+      ],
+      "evidence": {
+        "laggingSpecs": [],
+        "lagDays": 0
+      },
+      "warnings": []
+    },
+    {
+      "id": "verification-freshness",
+      "title": "Verification 新鲜度",
+      "evaluator": "verification-freshness",
+      "weight": 20,
+      "status": "fail",
+      "score": 28,
+      "summary": [
+        "verification 覆盖率仅 69%，缺失 4 个、过期 0 个、失败 0 个。"
+      ],
+      "evidence": {
+        "totalFeatures": 13,
+        "fresh": [
+          "013-split-skill-commands",
+          "014-rename-spec-driver",
+          "015-speckit-doc-command",
+          "016-optimize-sync-product-doc",
+          "017-adopt-superpowers-patterns",
+          "018-flexible-research-routing",
+          "019-parallel-subagent-speedup",
+          "020-fix-plugin-script-path",
+          "021-add-research-templates"
+        ],
+        "stale": [],
+        "missing": [
+          "011-speckit-driver-pro",
+          "012-product-spec-sync",
+          "022-sync-doc-redesign",
+          "032-rename-speckit-to-spec-driver"
+        ],
+        "failed": [],
+        "coverageRatio": 0.6923076923076923
+      },
+      "warnings": []
+    },
+    {
+      "id": "docs-coverage",
+      "title": "文档覆盖率",
+      "evaluator": "docs-coverage",
+      "weight": 20,
+      "status": "warn",
+      "score": 50,
+      "summary": [
+        "缺少 quality-report.json，暂时无法复用文档质量门的 required docs 统计。"
+      ],
+      "evidence": {
+        "qualityReportPath": null
+      },
+      "warnings": []
+    },
+    {
+      "id": "docs-conflicts",
+      "title": "文档冲突",
+      "evaluator": "docs-conflicts",
+      "weight": 15,
+      "status": "warn",
+      "score": 50,
+      "summary": [
+        "缺少 quality-report.json，冲突治理暂时只能降级为人工检查。"
+      ],
+      "evidence": {
+        "qualityReportPath": null
+      },
+      "warnings": []
+    },
+    {
+      "id": "branch-hygiene",
+      "title": "分支规范卫生",
+      "evaluator": "branch-hygiene",
+      "weight": 10,
+      "status": "pass",
+      "score": 100,
+      "summary": [
+        "默认分支、远端和分支同步约定都已显式声明。"
+      ],
+      "evidence": {
+        "hasRemote": true,
+        "hasDefaultBranch": true,
+        "hasPolicyFile": true,
+        "agentsDocumented": true,
+        "claudeDocumented": true
+      },
+      "warnings": []
+    },
+    {
+      "id": "workflow-readiness",
+      "title": "Workflow 就绪度",
+      "evaluator": "workflow-readiness",
+      "weight": 15,
+      "status": "pass",
+      "score": 100,
+      "summary": [
+        "workflow registry 覆盖了全部 6 个 workflowRefs，并提供 3 条 golden paths。"
+      ],
+      "evidence": {
+        "workflowRefs": [
+          "spec-driver-doc",
+          "spec-driver-feature",
+          "spec-driver-fix",
+          "spec-driver-resume",
+          "spec-driver-story",
+          "spec-driver-sync"
+        ],
+        "missing": [],
+        "goldenPathCount": 3
+      },
+      "warnings": []
+    }
+  ],
+  "warnings": []
+}

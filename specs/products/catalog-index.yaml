@@ -12,6 +12,8 @@ products:
     workflowRefCount: 6
     qualityStatus: "unavailable"
     specCount: 46
+    scorecardStatus: "fail"
+    scorecardScore: 65
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
@@ -22,3 +24,5 @@ products:
     workflowRefCount: 6
     qualityStatus: "unavailable"
     specCount: 13
+    scorecardStatus: "fail"
+    scorecardScore: 68

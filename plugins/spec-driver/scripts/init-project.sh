@@ -34,6 +34,7 @@ done
 PROJECT_ROOT="$(pwd)"
 SPECIFY_DIR="${PROJECT_ROOT}/.specify"
 SPECIFY_TEMPLATES_DIR="${SPECIFY_DIR}/templates"
+SPECIFY_SCORECARDS_DIR="${SPECIFY_DIR}/scorecards"
 CONSTITUTION_FILE="${SPECIFY_DIR}/memory/constitution.md"
 CONFIG_FILE="${PROJECT_ROOT}/spec-driver.config.yaml"
 ALT_CONFIG_FILE="${SPECIFY_DIR}/spec-driver.config.yaml"
@@ -43,6 +44,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 SPECIFY_BASE_TEMPLATES_DIR="${PLUGIN_DIR}/templates/specify-base"
 FALLBACK_SPECIFY_TEMPLATES_DIR="${PLUGIN_DIR}/../../.specify/templates"
+DEFAULT_SCORECARD_DIR="${PLUGIN_DIR}/scorecards"
 REQUIRED_SPECIFY_TEMPLATES=(
   "plan-template.md"
   "spec-template.md"
@@ -77,6 +79,7 @@ init_specify_dir() {
   mkdir -p "${SPECIFY_DIR}/memory"
   mkdir -p "${SPECIFY_DIR}/templates"
   mkdir -p "${SPECIFY_DIR}/workflows"
+  mkdir -p "${SPECIFY_DIR}/scorecards"
   mkdir -p "${SPECIFY_DIR}/scripts/bash"
 }
 
@@ -116,6 +119,35 @@ sync_specify_templates() {
     missing_csv="$(IFS=','; echo "${missing_templates[*]}")"
     INIT_RESULTS+=("specify_templates:missing:${missing_csv}")
   fi
+}
+
+sync_scorecard_defaults() {
+  local copied_count=0
+
+  if [[ ! -d "$DEFAULT_SCORECARD_DIR" ]]; then
+    INIT_RESULTS+=("scorecards:missing_defaults")
+    return 0
+  fi
+
+  local source_file
+  for source_file in "$DEFAULT_SCORECARD_DIR"/*.yaml; do
+    if [[ ! -f "$source_file" ]]; then
+      continue
+    fi
+
+    local target_path="${SPECIFY_SCORECARDS_DIR}/$(basename "$source_file")"
+    if [[ -f "$target_path" ]]; then
+      continue
+    fi
+
+    cp "$source_file" "$target_path"
+    copied_count=$((copied_count + 1))
+  done
+
+  if [[ $copied_count -gt 0 ]]; then
+    INIT_RESULTS+=("scorecards:copied:${copied_count}")
+  fi
+  INIT_RESULTS+=("scorecards:ready")
 }
 
 # 步骤 2: 检查 constitution.md
@@ -294,11 +326,12 @@ EOF
 
 # 主流程
 main() {
-  init_specify_dir
-  sync_specify_templates
-  check_constitution
-  check_config
-  check_gate_policy
+init_specify_dir
+sync_specify_templates
+sync_scorecard_defaults
+check_constitution
+check_config
+check_gate_policy
   detect_spec_driver_skills
   output_results
 }

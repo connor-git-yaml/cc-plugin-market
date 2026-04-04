@@ -32,6 +32,11 @@ quality:
   report:
     path: null
     status: "unavailable"
+  scorecard:
+    path: "specs/products/reverse-spec/scorecard-report.json"
+    status: "fail"
+    score: 65
+    generatedAt: "2026-04-04T16:07:54.728Z"
 workflowRefs:
   - "reverse-spec.init"
   - "reverse-spec.generate"
@@ -47,3 +52,5 @@ sourceRefs:
     available: true
   - kind: "readme"
     path: "README.md"
+  - kind: "scorecard-report"
+    path: "specs/products/reverse-spec/scorecard-report.json"

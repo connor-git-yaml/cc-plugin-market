@@ -49,7 +49,10 @@ describe('init-project.sh', () => {
     expect(existsSync(join(projectDir, '.specify', 'templates', 'spec-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'tasks-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'workflows'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'scorecards'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'scorecards', 'default-governance.yaml'))).toBe(true);
     expect(result.RESULTS.some((r) => r.startsWith('specify_templates:'))).toBe(true);
+    expect(result.RESULTS).toContain('scorecards:ready');
   });
 
   it('当 .specify 已存在但模板缺失时，会补齐缺失模板', () => {

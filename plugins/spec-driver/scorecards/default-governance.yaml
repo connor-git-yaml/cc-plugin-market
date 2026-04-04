@@ -1,0 +1,63 @@
+schemaVersion: 1
+ruleset:
+  id: "default-governance"
+  title: "默认持续治理评分"
+  description: "基于 current-spec、verification、quality-report、Catalog 与 workflow registry 的最小持续治理评分。"
+rules:
+  - id: "spec-freshness"
+    title: "Current Spec 新鲜度"
+    evaluator: "spec-freshness"
+    weight: 20
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"
+    thresholds:
+      warnLagDays: 7
+      failLagDays: 30
+      maxLaggingSpecsWarn: 2
+  - id: "verification-freshness"
+    title: "Verification 新鲜度"
+    evaluator: "verification-freshness"
+    weight: 20
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"
+    thresholds:
+      warnCoverageRatio: 0.8
+  - id: "docs-coverage"
+    title: "文档覆盖率"
+    evaluator: "docs-coverage"
+    weight: 20
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"
+    thresholds:
+      passCoverageRatio: 1
+      warnCoverageRatio: 0.75
+  - id: "docs-conflicts"
+    title: "文档冲突"
+    evaluator: "docs-conflicts"
+    weight: 15
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"
+  - id: "branch-hygiene"
+    title: "分支规范卫生"
+    evaluator: "branch-hygiene"
+    weight: 10
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"
+  - id: "workflow-readiness"
+    title: "Workflow 就绪度"
+    evaluator: "workflow-readiness"
+    weight: 15
+    appliesTo:
+      kinds:
+        - "library-tooling"
+        - "plugin"

@@ -56,9 +56,17 @@ describe('generate-workflow-registry.mjs', () => {
     expect(payload.markdownPath).toBe('specs/products/spec-driver/workflow-index.md');
 
     const storyWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-story');
+    const syncWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-sync') as
+      | { artifacts?: string[] }
+      | undefined;
     expect(storyWorkflow?.persona).toBe('项目级迭代开发者');
     expect(storyWorkflow?.recommendedWhen).toEqual(['团队内部的常规迭代需求']);
     expect(storyWorkflow?.entryCommand.claude).toBe('/spec-driver:spec-driver-story <需求描述>');
+    expect(syncWorkflow?.artifacts).toEqual(expect.arrayContaining([
+      'specs/products/<product>/scorecard-report.md',
+      'specs/products/<product>/scorecard-report.json',
+      'specs/products/scorecard-index.yaml',
+    ]));
     expect(payload.warnings).toEqual(expect.arrayContaining([
       'workflow override 忽略非 metadata 字段: spec-driver-story.entryCommand',
     ]));
@@ -66,8 +74,16 @@ describe('generate-workflow-registry.mjs', () => {
     const jsonIndex = JSON.parse(
       readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'), 'utf-8'),
     ) as {
+      workflows: Array<{ id: string; artifacts: string[] }>;
       goldenPaths: Array<{ id: string; workflows: string[] }>;
     };
+    expect(jsonIndex.workflows.find((workflow) => workflow.id === 'spec-driver-sync')?.artifacts).toEqual(
+      expect.arrayContaining([
+        'specs/products/<product>/scorecard-report.md',
+        'specs/products/<product>/scorecard-report.json',
+        'specs/products/scorecard-index.yaml',
+      ]),
+    );
     expect(jsonIndex.goldenPaths).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'new-feature-delivery',
@@ -92,5 +108,6 @@ describe('generate-workflow-registry.mjs', () => {
     expect(markdownIndex).toContain('### 新功能研发');
     expect(markdownIndex).toContain('### 快速修复');
     expect(markdownIndex).toContain('### 产品事实与文档更新');
+    expect(markdownIndex).toContain('scorecard-report.md');
   });
 });

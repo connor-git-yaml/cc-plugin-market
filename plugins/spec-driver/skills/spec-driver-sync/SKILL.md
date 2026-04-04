@@ -6,7 +6,7 @@ disable-model-invocation: false
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并生成配套的 `entity.yaml` / `catalog-index.yaml`，让产品事实层同时具备人读正文与机器可读目录两种形态。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并生成配套的 `entity.yaml` / `catalog-index.yaml` / `scorecard-report`，让产品事实层同时具备人读正文、机器可读目录和持续治理报告三种形态。
 
 ## 触发方式
 
@@ -133,7 +133,7 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml` 与 `specs/products/catalog-index.yaml`。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml`、`specs/products/catalog-index.yaml`、`specs/products/<product>/scorecard-report.md/.json` 与 `specs/products/scorecard-index.yaml`。
 
 **适用场景**：
 
@@ -191,7 +191,7 @@ Task(
    - 未分类 spec 列表（如有）
 
 ```text
-[4/4] 正在生成产品实体目录...
+[4/4] 正在生成产品治理事实...
 ```
 
 2. 执行确定性 helper 生成 Catalog：
@@ -204,6 +204,24 @@ node "$PLUGIN_DIR/scripts/generate-product-entity-catalog.mjs" --project-root "{
    - `specs/products/<product>/entity.yaml`
    - `specs/products/catalog-index.yaml`
    - 缺失 `current-spec.md` / quality report 时的 warning
+
+4. 执行 workflow registry helper（若当前产品包含 `spec-driver`）：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-workflow-registry.mjs" --project-root "{project_root}" --json
+```
+
+5. 执行 scorecard helper 生成持续治理报告：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-product-scorecards.mjs" --project-root "{project_root}" --json
+```
+
+6. 解析 helper 返回：
+   - `specs/products/<product>/scorecard-report.md`
+   - `specs/products/<product>/scorecard-report.json`
+   - `specs/products/scorecard-index.yaml`
+   - 基于 quality-report / verification-report 的 warning
 
 2. 输出聚合完成报告：
 
@@ -234,6 +252,10 @@ doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 spec-
   ✅ {产品 A}: specs/products/{产品 A}/entity.yaml
   ✅ {产品 B}: specs/products/{产品 B}/entity.yaml
 Catalog 索引: specs/products/catalog-index.yaml
+持续治理:
+  ✅ {产品 A}: specs/products/{产品 A}/scorecard-report.md
+  ✅ {产品 B}: specs/products/{产品 B}/scorecard-report.md
+Scorecard 索引: specs/products/scorecard-index.yaml
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```

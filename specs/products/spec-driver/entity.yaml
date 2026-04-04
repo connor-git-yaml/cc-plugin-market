@@ -32,6 +32,11 @@ quality:
   report:
     path: null
     status: "unavailable"
+  scorecard:
+    path: "specs/products/spec-driver/scorecard-report.json"
+    status: "fail"
+    score: 68
+    generatedAt: "2026-04-04T16:07:54.728Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"
@@ -47,3 +52,5 @@ sourceRefs:
     available: true
   - kind: "readme"
     path: "README.md"
+  - kind: "scorecard-report"
+    path: "specs/products/spec-driver/scorecard-report.json"

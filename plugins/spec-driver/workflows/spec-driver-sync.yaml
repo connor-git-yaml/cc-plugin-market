@@ -17,7 +17,11 @@ artifacts:
   - "specs/products/<product>/current-spec.md"
   - "specs/products/<product>/entity.yaml"
   - "specs/products/catalog-index.yaml"
+  - "specs/products/<product>/scorecard-report.md"
+  - "specs/products/<product>/scorecard-report.json"
+  - "specs/products/scorecard-index.yaml"
 recommendedWhen:
   - "需要刷新产品事实源"
   - "为 doc/scorecard 提供上游事实"
+  - "需要刷新持续治理视图"
 templateVersion: "1.0.0"
