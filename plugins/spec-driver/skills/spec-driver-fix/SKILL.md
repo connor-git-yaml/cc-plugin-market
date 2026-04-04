@@ -381,6 +381,24 @@ Spec 同步:
 ══════════════════════════════════════════
 ```
 
+### 运行事件记录（066）
+
+在输出最终报告后，追加一条本地 run summary：
+
+```bash
+node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root}" \
+  --workflow-id "spec-driver-fix" \
+  --run-id "{branch_name}" \
+  --result "{success|partial|paused|failed}" \
+  --completed-phases "diagnose,plan,implement,verify" \
+  --artifact "{feature_dir}/fix-report.md" \
+  --artifact "{feature_dir}/plan.md" \
+  --artifact "{feature_dir}/tasks.md" \
+  --artifact "{feature_dir}/verification/verification-report.md"
+```
+
+若发生验证失败或 gate 暂停，补充 `--verification-failure` / `--gate-pause`；不得记录完整 prompt 正文。
+
 ---
 
 ## 范围过大检测

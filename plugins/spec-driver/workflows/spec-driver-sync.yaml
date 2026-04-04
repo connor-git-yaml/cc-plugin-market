@@ -20,8 +20,10 @@ artifacts:
   - "specs/products/<product>/scorecard-report.md"
   - "specs/products/<product>/scorecard-report.json"
   - "specs/products/scorecard-index.yaml"
+  - "specs/products/spec-driver/adoption-report.md"
+  - "specs/products/spec-driver/adoption-report.json"
 recommendedWhen:
   - "需要刷新产品事实源"
-  - "为 doc/scorecard 提供上游事实"
-  - "需要刷新持续治理视图"
+  - "为 doc/scorecard/adoption 提供上游事实"
+  - "需要刷新持续治理与反馈视图"
 templateVersion: "1.0.0"

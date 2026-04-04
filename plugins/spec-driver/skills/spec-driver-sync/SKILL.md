@@ -6,7 +6,7 @@ disable-model-invocation: false
 
 # Spec Driver — 产品规范聚合
 
-你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并生成配套的 `entity.yaml` / `catalog-index.yaml` / `scorecard-report`，让产品事实层同时具备人读正文、机器可读目录和持续治理报告三种形态。
+你是 **Spec Driver** 的产品规范聚合器。你的职责是将 `specs/` 下的增量功能规范智能合并为产品级活文档 `current-spec.md`，并生成配套的 `entity.yaml` / `catalog-index.yaml` / `scorecard-report` / `adoption-report`，让产品事实层同时具备人读正文、机器可读目录、持续治理报告和本地 adoption 反馈四种形态。
 
 ## 触发方式
 
@@ -133,7 +133,7 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml`、`specs/products/catalog-index.yaml`、`specs/products/<product>/scorecard-report.md/.json` 与 `specs/products/scorecard-index.yaml`。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml`、`specs/products/catalog-index.yaml`、`specs/products/<product>/scorecard-report.md/.json`、`specs/products/scorecard-index.yaml` 以及 `specs/products/spec-driver/adoption-report.md/.json`。
 
 **适用场景**：
 
@@ -217,10 +217,18 @@ node "$PLUGIN_DIR/scripts/generate-workflow-registry.mjs" --project-root "{proje
 node "$PLUGIN_DIR/scripts/generate-product-scorecards.mjs" --project-root "{project_root}" --json
 ```
 
-6. 解析 helper 返回：
+6. 执行 adoption helper 生成本地使用与卡点分析：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{project_root}" --json
+```
+
+7. 解析 helper 返回：
    - `specs/products/<product>/scorecard-report.md`
    - `specs/products/<product>/scorecard-report.json`
    - `specs/products/scorecard-index.yaml`
+   - `specs/products/spec-driver/adoption-report.md`
+   - `specs/products/spec-driver/adoption-report.json`
    - 基于 quality-report / verification-report 的 warning
 
 2. 输出聚合完成报告：
@@ -256,6 +264,9 @@ Catalog 索引: specs/products/catalog-index.yaml
   ✅ {产品 A}: specs/products/{产品 A}/scorecard-report.md
   ✅ {产品 B}: specs/products/{产品 B}/scorecard-report.md
 Scorecard 索引: specs/products/scorecard-index.yaml
+本地反馈:
+  ✅ spec-driver: specs/products/spec-driver/adoption-report.md
+  数据源: .specify/runs/*.jsonl（本地，不默认提交）
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════
 ```

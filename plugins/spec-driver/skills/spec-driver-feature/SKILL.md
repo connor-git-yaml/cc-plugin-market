@@ -803,6 +803,24 @@ elif research_mode == "custom":
 ══════════════════════════════════════════
 ```
 
+### 运行事件记录（066）
+
+在输出最终报告后，追加一条本地 run summary（默认写入 `.specify/runs/*.jsonl`，不记录完整 prompt 正文）：
+
+```bash
+node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root}" \
+  --workflow-id "spec-driver-feature" \
+  --run-id "{branch_name}" \
+  --result "{success|partial|paused|failed}" \
+  --completed-phases "constitution,research,specify,clarify,checklist,plan,tasks,analyze,implement,verify" \
+  --artifact "{feature_dir}/spec.md" \
+  --artifact "{feature_dir}/plan.md" \
+  --artifact "{feature_dir}/tasks.md" \
+  --artifact "{feature_dir}/verification/verification-report.md"
+```
+
+若本次为 `--rerun`，补充 `--rerun --rerun-phase "{phase}"`；若发生 gate 暂停或验证失败，补充 `--gate-pause` / `--verification-failure`。如无法精确统计耗时，可省略 `--duration-ms`。
+
 ---
 
 ## 子代理失败重试

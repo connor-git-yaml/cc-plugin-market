@@ -214,6 +214,21 @@ product/tech-research.md 存在  → 从对应阶段恢复
 
 恢复模式下同样必须执行 feature 模式定义的 `GATE_RESEARCH` 在线调研硬门禁，不得因“已有部分制品”跳过。
 
+### 运行事件记录（066）
+
+恢复模式完成或暂停后，追加一条本地 run summary：
+
+```bash
+node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root}" \
+  --workflow-id "spec-driver-resume" \
+  --run-id "{branch_name}" \
+  --result "{success|partial|paused|failed}" \
+  --rerun \
+  --artifact "{feature_dir}/spec.md"
+```
+
+如能确定恢复起点或卡点，补充 `--rerun-phase "{phase}"` 与 `--gate-pause`；不得记录完整 prompt 正文。
+
 ---
 
 ## 模型选择

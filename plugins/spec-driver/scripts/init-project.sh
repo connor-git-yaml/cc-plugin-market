@@ -35,6 +35,7 @@ PROJECT_ROOT="$(pwd)"
 SPECIFY_DIR="${PROJECT_ROOT}/.specify"
 SPECIFY_TEMPLATES_DIR="${SPECIFY_DIR}/templates"
 SPECIFY_SCORECARDS_DIR="${SPECIFY_DIR}/scorecards"
+SPECIFY_RUNS_DIR="${SPECIFY_DIR}/runs"
 CONSTITUTION_FILE="${SPECIFY_DIR}/memory/constitution.md"
 CONFIG_FILE="${PROJECT_ROOT}/spec-driver.config.yaml"
 ALT_CONFIG_FILE="${SPECIFY_DIR}/spec-driver.config.yaml"
@@ -80,6 +81,7 @@ init_specify_dir() {
   mkdir -p "${SPECIFY_DIR}/templates"
   mkdir -p "${SPECIFY_DIR}/workflows"
   mkdir -p "${SPECIFY_DIR}/scorecards"
+  mkdir -p "${SPECIFY_DIR}/runs"
   mkdir -p "${SPECIFY_DIR}/scripts/bash"
 }
 

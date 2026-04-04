@@ -1,6 +1,6 @@
 # Spec Driver Workflow Registry
 
-- Generated At: 2026-04-04T16:07:54.723Z
+- Generated At: 2026-04-04T16:55:22.700Z
 - Source Dir: plugins/spec-driver/workflows
 - Override Dir: .specify/workflows
 - Workflows: 6
@@ -121,7 +121,7 @@
 - Use Cases: 聚合增量 spec / 更新 current-spec 与产品 Catalog
 - Required Inputs: specs/NNN-xxx/spec.md / 产品映射或可推断产品归属
 - Key Gates: GATE_RESEARCH
-- Artifacts: specs/products/product-mapping.yaml / specs/products/<product>/current-spec.md / specs/products/<product>/entity.yaml / specs/products/catalog-index.yaml / specs/products/<product>/scorecard-report.md / specs/products/<product>/scorecard-report.json / specs/products/scorecard-index.yaml
-- Recommended When: 需要刷新产品事实源 / 为 doc/scorecard 提供上游事实 / 需要刷新持续治理视图
+- Artifacts: specs/products/product-mapping.yaml / specs/products/<product>/current-spec.md / specs/products/<product>/entity.yaml / specs/products/catalog-index.yaml / specs/products/<product>/scorecard-report.md / specs/products/<product>/scorecard-report.json / specs/products/scorecard-index.yaml / specs/products/spec-driver/adoption-report.md / specs/products/spec-driver/adoption-report.json
+- Recommended When: 需要刷新产品事实源 / 为 doc/scorecard/adoption 提供上游事实 / 需要刷新持续治理与反馈视图
 - Claude Entry: `/spec-driver:spec-driver-sync`
 - Codex Entry: `$spec-driver-sync`

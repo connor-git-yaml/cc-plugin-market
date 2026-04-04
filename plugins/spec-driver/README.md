@@ -1,6 +1,6 @@
 # Spec Driver
 
-**自治研发编排器** — 支持 6 种模式（feature/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程。
+**自治研发编排器** — 支持 6 种模式（feature/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程，并通过本地 run events 生成 adoption / friction insights。
 
 ## 功能概述
 
@@ -56,6 +56,8 @@ Codex 包装技能会自动检测项目级上下文文件：
 - `.specify/project-context.md`
 
 若存在，将把 `project-context` 中声明且有效的路径注入运行时上下文；路径失效时会标注 `[参考路径缺失]` 并在最终报告提示风险。
+
+此外，项目初始化会预创建 `.specify/runs/`，供 `record-workflow-run.mjs` 记录最小运行摘要；这些日志默认只保留本地，不需要提交到 Git。
 
 ## 使用方法
 

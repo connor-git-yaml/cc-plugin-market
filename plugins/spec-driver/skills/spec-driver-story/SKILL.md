@@ -409,6 +409,24 @@ if online_research_required:
 ══════════════════════════════════════════
 ```
 
+### 运行事件记录（066）
+
+在输出最终报告后，追加一条本地 run summary：
+
+```bash
+node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root}" \
+  --workflow-id "spec-driver-story" \
+  --run-id "{branch_name}" \
+  --result "{success|partial|paused|failed}" \
+  --completed-phases "specify,clarify,plan,tasks,implement,verify" \
+  --artifact "{feature_dir}/spec.md" \
+  --artifact "{feature_dir}/plan.md" \
+  --artifact "{feature_dir}/tasks.md" \
+  --artifact "{feature_dir}/verification/verification-report.md"
+```
+
+若发生 rerun、gate 暂停或验证失败，补充 `--rerun` / `--gate-pause` / `--verification-failure`。不得记录完整 prompt 正文。
+
 ---
 
 ## 范围过大检测

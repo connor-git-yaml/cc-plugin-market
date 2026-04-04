@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-04T16:07:54.723Z",
+  "generatedAt": "2026-04-04T16:55:22.700Z",
   "sourceDir": "plugins/spec-driver/workflows",
   "overrideDir": ".specify/workflows",
   "workflowCount": 6,
@@ -189,12 +189,14 @@
         "specs/products/catalog-index.yaml",
         "specs/products/<product>/scorecard-report.md",
         "specs/products/<product>/scorecard-report.json",
-        "specs/products/scorecard-index.yaml"
+        "specs/products/scorecard-index.yaml",
+        "specs/products/spec-driver/adoption-report.md",
+        "specs/products/spec-driver/adoption-report.json"
       ],
       "recommendedWhen": [
         "需要刷新产品事实源",
-        "为 doc/scorecard 提供上游事实",
-        "需要刷新持续治理视图"
+        "为 doc/scorecard/adoption 提供上游事实",
+        "需要刷新持续治理与反馈视图"
       ],
       "templateVersion": "1.0.0"
     }

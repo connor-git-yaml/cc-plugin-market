@@ -66,6 +66,8 @@ describe('generate-workflow-registry.mjs', () => {
       'specs/products/<product>/scorecard-report.md',
       'specs/products/<product>/scorecard-report.json',
       'specs/products/scorecard-index.yaml',
+      'specs/products/spec-driver/adoption-report.md',
+      'specs/products/spec-driver/adoption-report.json',
     ]));
     expect(payload.warnings).toEqual(expect.arrayContaining([
       'workflow override 忽略非 metadata 字段: spec-driver-story.entryCommand',
@@ -82,6 +84,8 @@ describe('generate-workflow-registry.mjs', () => {
         'specs/products/<product>/scorecard-report.md',
         'specs/products/<product>/scorecard-report.json',
         'specs/products/scorecard-index.yaml',
+        'specs/products/spec-driver/adoption-report.md',
+        'specs/products/spec-driver/adoption-report.json',
       ]),
     );
     expect(jsonIndex.goldenPaths).toEqual(expect.arrayContaining([
@@ -109,5 +113,6 @@ describe('generate-workflow-registry.mjs', () => {
     expect(markdownIndex).toContain('### 快速修复');
     expect(markdownIndex).toContain('### 产品事实与文档更新');
     expect(markdownIndex).toContain('scorecard-report.md');
+    expect(markdownIndex).toContain('adoption-report.md');
   });
 });

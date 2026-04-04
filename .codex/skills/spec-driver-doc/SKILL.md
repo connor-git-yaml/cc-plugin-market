@@ -690,6 +690,21 @@ spec-driver-doc 文档生成完成!
 - `~` 覆盖（已备份）
 - `-` 跳过
 
+### 运行事件记录（066）
+
+在输出完成报告后，追加一条本地 run summary：
+
+```bash
+node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root}" \
+  --workflow-id "spec-driver-doc" \
+  --run-id "spec-driver-doc-{timestamp}" \
+  --result "{success|partial|paused|failed}" \
+  --completed-phases "scan,design,generate,verify" \
+  --artifact "README.md"
+```
+
+如本次生成了其他文档，可继续补充 `--artifact`；若发生验证失败，补充 `--verification-failure`。不得记录完整 prompt 正文。
+
 ---
 
 ## 降级与错误处理
