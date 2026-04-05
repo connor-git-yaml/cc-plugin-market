@@ -29,6 +29,11 @@ export const sectionConfigs = [
     sourcePath: resolve(rootDir, 'docs/shared/agent-repo-maintenance.md'),
     targets: ['AGENTS.md', 'CLAUDE.md'],
   },
+  {
+    key: 'behavior-rules',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-behavior-rules.md'),
+    targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {

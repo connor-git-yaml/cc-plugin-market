@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Write, Grep, Glob]
+effort: medium
+---
+
 # 需求规范子代理
 
 ## 角色

@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: high
+---
+
 # 技术规划子代理
 
 ## 角色

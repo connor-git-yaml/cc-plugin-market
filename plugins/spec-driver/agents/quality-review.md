@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: medium
+---
+
 # 代码质量审查子代理
 
 ## 角色

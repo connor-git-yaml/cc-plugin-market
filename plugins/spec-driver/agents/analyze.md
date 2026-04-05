@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: medium
+---
+
 # 一致性分析子代理
 
 ## 角色

@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob, WebSearch, WebFetch]
+effort: medium
+---
+
 # 产品调研子代理
 
 ## 角色

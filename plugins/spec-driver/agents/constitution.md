@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Write, Grep, Glob]
+effort: medium
+---
+
 # Constitution 检查子代理
 
 ## 角色

@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Bash, Grep, Glob]
+effort: medium
+---
+
 # 验证闭环子代理
 
 ## 角色

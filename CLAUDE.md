@@ -1,77 +1,33 @@
-# reverse-spec Development Guidelines
+# reverse-spec / spec-driver — Claude Code 运行时规则
 
-Auto-generated from all feature plans. Last updated: 2026-02-10
+TypeScript 5.x + Node.js 20.x+ 项目，详见 package.json。跨任务稳定的仓库级执行规则以 [AGENTS.md](AGENTS.md) 为准。
 
-## Active Technologies
-- TypeScript 5.x, Node.js LTS (20.x+) + s-morph, tree-sitter, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（均为现有依赖，无新增运行时依赖） (002-cli-global-distribution)
-- 文件系统（specs/、drift-logs/ 目录写入） (002-cli-global-distribution)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增运行时依赖。仅使用 Node.js 内置模块（`fs`, `path`, `os`, `url`） (003-skill-init)
-- 文件系统写入（`.claude/skills/` 项目级, `~/.claude/skills/` 全局级） (003-skill-init)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置，新增使用） (004-claude-sub-auth)
-- N/A（无新增存储需求） (004-claude-sub-auth)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph（AST）、dependency-cruiser（依赖图）、handlebars（模板）、zod（验证）、@anthropic-ai/sdk（LLM）——均为现有依赖，无新增运行时依赖 (005-batch-quality-fixes)
-- 文件系统（specs/ 目录写入） (005-batch-quality-fixes)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + @anthropic-ai/sdk（现有）, Node.js child_process（内置）——均为现有依赖，无新增 (007-fix-batch-llm-defaults)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + 无新增依赖，仅使用 Node.js 内置 `path` 模块（已存在） (008-fix-spec-absolute-paths)
-- TypeScript 5.7.3, Node.js LTS (≥20.x) + s-morph, dependency-cruiser, handlebars, zod, @anthropic-ai/sdk（现有）+ @modelcontextprotocol/sdk（新增） (009-plugin-marketplace)
-- 文件系统（`specs/`、`drift-logs/`、`plugins/` 目录写入） (009-plugin-marketplace)
-- 文件系统（`specs/`、`drift-logs/` 目录写入） (010-fix-dotspecs-to-specs)
-- Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中 (011-speckit-driver-pro)
-- 文件系统（specs/[feature]/ 目录树，spec-driver.config.yaml 配置文件） (011-speckit-driver-pro)
-- Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中 (015-speckit-doc-command)
-- 文件系统（项目根目录写入 README.md、LICENSE 等；`plugins/spec-driver/` 目录下新增 Skill 文件） (015-speckit-doc-command)
-
-- TypeScript 5.x, Node.js LTS (20.x+) + s-morph (AST), tree-sitter + tree-sitter-typescript (容错降级), dependency-cruiser (依赖图), handlebars 或 ejs (模板), zod (验证), Anthropic Claude API Sonnet/Opus (LLM) (001-reverse-spec-v2)
-
-## Project Structure
-
-```text
-src/
-tests/
-```
-
-## Commands
-
-npm test && npm run lint
-
-## Code Style
-
-TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
-
-## Recent Changes
-- 015-speckit-doc-command: Added Bash 5.x（脚本）、Markdown（Skill prompt 和模板） + 无新增运行时依赖。Skill 完全由 Markdown prompt、Bash 脚本和静态文本文件构成，运行在 Claude Code 沙箱中
-- 011-speckit-driver-pro: Added Bash 5.x（脚本）、Markdown（prompt 和模板）、YAML（配置） + 无运行时依赖。Plugin 完全由 Markdown prompt、Bash 脚本和 YAML 配置构成，运行在 Claude Code 沙箱中
-
-
-
-<!-- MANUAL ADDITIONS START -->
-
-## Manual Rules
-
-- 跨任务稳定的仓库级执行规则以 [AGENTS.md](AGENTS.md) 为准；本文件只保留 Claude 侧需要默认带入上下文的摘要。
-
-### Language Convention
+## Language Convention
 
 - **所有文档、注释、commit message、PR 描述默认使用中文**
 - 英文专有名词（如 AST、CodeSkeleton、Handlebars、Zod）保持原文，不翻译
 - 代码标识符（变量名、函数名、类型名）使用英文
 - 代码注释使用中文
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
-- 使用 spec-driver 的方式执行需求变更和问题修复不允许直接修改源代码。
+- 使用 spec-driver 的方式执行需求变更和问题修复不允许直接修改源代码
 
-### Behavior & Interaction
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-behavior-rules.md` 同步，请勿手动编辑区块内容。
 
-- 不要自行添加未要求的优化、功能、清理或重构；原因：spec、gate 和生成合同会放大任何额外改动的验证面。
-- 不要猜测需求、实现或上下文；原因：猜测会污染事实源。查不到就明确说“不知道”。
-- 不要在没完整看过目标文件前直接动代码；原因：本仓库存在 source-of-truth 和包装层同步链路，盲改风险高。
-- 不要把审查理解成“证明它能跑”；原因：review 和验证默认先找漏洞、异常分支、回归和合同漂移。
-- 不要把核心判断交给子代理；原因：执行可分发，但关键取舍和最终结论必须在主线程收口。
-- 不要把一次授权当成长期授权；原因：执行脚本、rebase、push 等都只对当次任务生效。
-- 不要一次性抛出全部背景和工具说明；原因：上下文按需供给，避免噪声。
-- 不要混用不同场景规则；原因：feature、fix、review、doc 的门禁和产物不同，按对应 skill / phase 加载。
-- 不要擅自改字段名、层级或标点格式；原因：Markdown/YAML/JSON 合同和脚本解析依赖精确字面值。
-- 不要把 prompt 或规范写成无结构长段；原因：目标、约束、验证要模块化。
-- 不要优先用通用工具；原因：先用仓内脚本、skill、contract 和 shared helper，再退回 shell。
+<!-- BEGIN SHARED SECTION: behavior-rules -->
+## 行为与交互约定
+
+- 不要自行添加未要求的优化、功能、清理或重构；原因：spec、gate 和生成合同会放大任何额外改动的验证面
+- 不要猜测需求、实现或上下文；原因：猜测会污染事实源。查不到就明确说"不知道"
+- 不要在没完整看过目标文件前直接动代码；原因：本仓库存在 source-of-truth 和包装层同步链路，盲改风险高
+- 不要把审查理解成"证明它能跑"；原因：review 和验证默认先找漏洞、异常分支、回归和合同漂移
+- 不要把核心判断交给子代理；原因：执行可分发，但关键取舍和最终结论必须在主线程收口
+- 不要把一次授权当成长期授权；原因：执行脚本、rebase、push 等都只对当次任务生效
+- 不要一次性抛出全部背景和工具说明；原因：上下文按需供给，避免噪声
+- 不要混用不同场景规则；原因：feature、fix、review、doc 的门禁和产物不同，按对应 skill / phase 加载
+- 不要擅自改字段名、层级或标点格式；原因：Markdown/YAML/JSON 合同和脚本解析依赖精确字面值
+- 不要把 prompt 或规范写成无结构长段；原因：目标、约束、验证要模块化
+- 不要优先用通用工具；原因：先用仓内脚本、skill、contract 和 shared helper，再退回 shell
+<!-- END SHARED SECTION: behavior-rules -->
 
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-context-layering.md` 同步，请勿手动编辑区块内容。
 
@@ -126,5 +82,3 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 处理 panoramic 相关任务时，优先沿用现有抽象：`ProjectContext`、`GeneratorRegistry`、`ParserRegistry`、`AbstractRegistry`、`AbstractConfigParser`
 - 当前输出合同已覆盖 Markdown + JSON + Mermaid `.mmd`；涉及 LLM 增强时要保留 AST-only 的静默降级路径
 <!-- END SHARED SECTION: mainline-focus -->
-
-<!-- MANUAL ADDITIONS END -->

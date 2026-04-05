@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Write, Edit, Bash, Grep, Glob, Agent]
+effort: high
+---
+
 # 实现子代理
 
 ## 角色

@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: medium
+---
+
 # Spec 合规审查子代理
 
 ## 角色

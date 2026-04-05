@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: low
+---
+
 # 质量检查表子代理
 
 ## 角色

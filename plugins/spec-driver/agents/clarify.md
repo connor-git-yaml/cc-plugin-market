@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep]
+effort: low
+---
+
 # 需求澄清子代理
 
 ## 角色

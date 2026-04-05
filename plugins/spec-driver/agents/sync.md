@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Write, Edit, Grep, Glob]
+effort: medium
+---
+
 # 产品规范聚合子代理
 
 ## 角色

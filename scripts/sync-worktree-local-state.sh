@@ -98,8 +98,21 @@ link_path() {
   fi
 
   if [[ -e "$target_path" ]]; then
-    warn "跳过 ${label}: 目标已存在真实文件/目录 ($target_path)"
-    return 0
+    # 空目录自动清理后重建软链接（典型场景：vitest 等工具提前创建空 node_modules/）
+    if [[ -d "$target_path" && -d "$source_path" ]]; then
+      local entry_count
+      entry_count=$(find "$target_path" -maxdepth 1 -not -name '.*' -not -path "$target_path" 2>/dev/null | wc -l | tr -d ' ')
+      if [[ "$entry_count" == "0" ]]; then
+        log "清理空目录 ${label}: $target_path（将替换为软链接）"
+        run rm -rf "$target_path"
+      else
+        warn "跳过 ${label}: 目标已存在非空目录 ($target_path, $entry_count 项)"
+        return 0
+      fi
+    else
+      warn "跳过 ${label}: 目标已存在真实文件/目录 ($target_path)"
+      return 0
+    fi
   fi
 
   run mkdir -p "$target_dir"

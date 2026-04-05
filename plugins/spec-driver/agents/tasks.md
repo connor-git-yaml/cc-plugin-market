@@ -1,3 +1,9 @@
+---
+model: sonnet
+tools: [Read, Grep, Glob]
+effort: medium
+---
+
 # 任务分解子代理
 
 ## 角色
