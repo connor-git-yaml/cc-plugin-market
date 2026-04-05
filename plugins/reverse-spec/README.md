@@ -1,5 +1,7 @@
 # reverse-spec — Claude Code Plugin
 
+> 当前发布版本: v2.4.0
+
 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档。
 
 ## 功能

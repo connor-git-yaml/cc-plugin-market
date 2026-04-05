@@ -1,8 +1,9 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **版本**: 聚合自 29 个增量 spec / blueprint（011–022, 032, 062–068, 070–078）
-> **最后聚合**: 2026-04-05（已纳入 078-script-platform-shared-layer）
+> **发布版本**: v3.9.0
+> **版本**: 聚合自 31 个增量 spec / blueprint（011–022, 032, 062–068, 070–081）
+> **最后聚合**: 2026-04-05（已纳入 078-script-platform-shared-layer、080-doc-version-release-contract-unification、081-maintainability-hotspot-refactors）
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
 
@@ -37,6 +38,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - **质量控制层**：通过门禁策略、验证铁律、双阶段审查与并行汇合点控制风险
 - **知识聚合层**：通过 `spec-driver-sync` 将增量 spec 合并为产品级 `current-spec.md`，再为对外文档生成提供上游事实源
 - **运营反馈层**：通过 Catalog、workflow registry、scorecards、adoption report 与 Project Context suggestions 形成可持续运营的产品事实层
+- **发布合同层**：通过 release contract 将 plugin metadata、README release 行、product-mapping 与 current-spec 的发布信息收敛到单链路
 
 **核心价值**：
 
@@ -44,6 +46,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - 让 Feature / Story / Fix 三类常见研发路径都有明确最小闭环
 - 把“验证是否真实执行”提升为硬约束，而不是口头承诺
 - 让 `current-spec.md` 成为 README / 使用文档的事实源，而不是事后再拼装
+- 让版本 bump、plugin metadata 与产品事实层同步不再依赖多处手工修改
 
 ---
 
@@ -78,6 +81,8 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | Project Context 初始化收口 | `init-project.sh` 默认创建最小 `.specify/project-context.yaml`，并对 legacy Markdown 给出迁移提示 | 075 |
 | Wrapper Source Contract | `plugins/spec-driver/skills/**` 与 `.codex/skills/spec-driver-*/SKILL.md` 通过 contract + validator 保持单一来源与再生成一致性 | 077 |
 | Script Platform Shared Layer | `plugins/spec-driver/scripts/lib/` 统一提供 YAML、artifact IO、patcher 与 diagnostics helper，减少多脚本重复实现 | 078 |
+| Release Contract | `contracts/release-contract.yaml` 统一驱动版本、plugin metadata、README release 行与产品级 release 文案 | 080 |
+| Maintainability Hotspots | workflow / quality / scorecard / init-project 热点入口收敛为 thin orchestrator，降低后续演进摩擦 | 081 |
 
 ---
 
@@ -414,7 +419,8 @@ plugins/spec-driver/
 | 27 | [076-codebase-rationalization-blueprint](../../076-codebase-rationalization-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义代码库结构与可维护性收敛路线，聚焦包装层、脚本平台、分发结构与发布合同 |
 | 28 | [077-wrapper-source-truth-consolidation](../../077-wrapper-source-truth-consolidation/spec.md) | FEATURE | 2026-04-05 | 为 spec-driver Codex wrapper 建立 source-of-truth contract、validator 与显式生成标记 |
 | 29 | [078-script-platform-shared-layer](../../078-script-platform-shared-layer/spec.md) | FEATURE | 2026-04-05 | 收敛脚本平台共享层，统一 YAML / artifact IO / catalog patch / diagnostics helper |
-| 30 | [081-maintainability-hotspot-refactors](../../081-maintainability-hotspot-refactors/spec.md) | REFACTOR | 2026-04-05 | 将 workflow-registry / quality-report / scorecard / init-project 热点入口收敛为 thin orchestrator，并补 core-module 级 targeted tests |
+| 30 | [080-doc-version-release-contract-unification](../../080-doc-version-release-contract-unification/spec.md) | FEATURE | 2026-04-05 | 统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路 |
+| 31 | [081-maintainability-hotspot-refactors](../../081-maintainability-hotspot-refactors/spec.md) | REFACTOR | 2026-04-05 | 将 workflow-registry / quality-report / scorecard / init-project 热点入口收敛为 thin orchestrator，并补 core-module 级 targeted tests |
 
 ---
 
@@ -468,6 +474,8 @@ plugins/spec-driver/
 | 27 | 076-codebase-rationalization-blueprint | ENHANCEMENT | [specs/076-codebase-rationalization-blueprint/blueprint.md](../../076-codebase-rationalization-blueprint/blueprint.md) |
 | 28 | 077-wrapper-source-truth-consolidation | FEATURE | [specs/077-wrapper-source-truth-consolidation/spec.md](../../077-wrapper-source-truth-consolidation/spec.md) |
 | 29 | 078-script-platform-shared-layer | FEATURE | [specs/078-script-platform-shared-layer/spec.md](../../078-script-platform-shared-layer/spec.md) |
+| 30 | 080-doc-version-release-contract-unification | FEATURE | [specs/080-doc-version-release-contract-unification/spec.md](../../080-doc-version-release-contract-unification/spec.md) |
+| 31 | 081-maintainability-hotspot-refactors | REFACTOR | [specs/081-maintainability-hotspot-refactors/spec.md](../../081-maintainability-hotspot-refactors/spec.md) |
 
 ---
 

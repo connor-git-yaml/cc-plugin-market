@@ -3,7 +3,7 @@
 <!-- spec-driver:section:badges -->
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![npm version](https://img.shields.io/npm/v/reverse-spec.svg)
-![Version](https://img.shields.io/badge/version-2.0.0-green)
+![Version](https://img.shields.io/badge/version-2.4.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
 <!-- spec-driver:section:badges:end -->
@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.8.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, canonical project-context initialization, wrapper source-of-truth contracts, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, canonical project-context initialization, wrapper source-of-truth contracts, release contracts, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -567,7 +567,7 @@ plugins/                           # Claude Code plugins
 │   ├── contracts/                 # Reverse-spec skill source contracts
 │   ├── skills/                    # Canonical reverse-spec skill source
 │   └── scripts/                   # Skill sync / validation / lifecycle
-└── spec-driver/                   # Spec Driver orchestrator (v3.8.0)
+└── spec-driver/                   # Spec Driver orchestrator
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation

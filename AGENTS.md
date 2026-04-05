@@ -74,6 +74,17 @@
 - 不要把 prompt、规范或执行说明写成无层级大段文本；原因：目标、约束、验证和示例应模块化组织，降低执行歧义。
 - 不要泛滥调用通用工具；原因：优先使用仓内专用脚本、contract、skill 和 shared helper，只有缺少领域入口时再退回通用命令行。
 
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-release-contract.md` 同步，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: release-contract -->
+## 发布合同约定
+
+- 版本、plugin metadata、marketplace entry、产品级 release 文案的 canonical source 在 `contracts/release-contract.yaml`
+- 需要更新这些字段时，优先改 contract，再运行 `npm run release:sync`
+- 不要手工分别修改 `plugin.json`、`marketplace.json`、`package-lock.json`、README 里的受控 release 行
+- 提交前运行 `npm run release:check`；仓库级 `check-plugin-sync.sh` 也会复核 release contract
+<!-- END SHARED SECTION: release-contract -->
+
 ## 4. 版本号规范
 
 插件版本号采用语义化版本（SemVer），每次变更时按以下规则 bump：

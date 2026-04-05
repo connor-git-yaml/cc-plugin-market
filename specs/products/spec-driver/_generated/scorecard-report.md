@@ -2,7 +2,7 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T14:44:17.713Z
+> **Generated**: 2026-04-05T15:45:50.411Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -17,7 +17,7 @@
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=12, fresh=12, stale=0 |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=13, fresh=13, stale=0 |
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 28 个增量 spec。
+- current-spec 覆盖了全部 31 个增量 spec。
 
 ```json
 {
@@ -46,11 +46,11 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- 全部 12 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
+- 全部 13 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 12,
+  "totalFeatures": 13,
   "fresh": [
     "012-product-spec-sync",
     "063-product-entity-catalog",
@@ -63,7 +63,8 @@
     "073-project-context-schema-resolver",
     "074-feedback-to-context-suggestions",
     "075-init-template-tests-docs-closure",
-    "077-wrapper-source-truth-consolidation"
+    "077-wrapper-source-truth-consolidation",
+    "080-doc-version-release-contract-unification"
   ],
   "stale": [],
   "missing": [],
@@ -88,7 +89,9 @@
       "020-fix-plugin-script-path",
       "021-add-research-templates",
       "022-sync-doc-redesign",
-      "032-rename-speckit-to-spec-driver"
+      "032-rename-speckit-to-spec-driver",
+      "078-script-platform-shared-layer",
+      "081-maintainability-hotspot-refactors"
     ]
   }
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T14:44:17.713Z",
+  "generatedAt": "2026-04-05T15:45:50.411Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spec-driver",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 28 个增量 spec。"
+        "current-spec 覆盖了全部 31 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,10 +45,10 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 12 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 13 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 12,
+        "totalFeatures": 13,
         "fresh": [
           "012-product-spec-sync",
           "063-product-entity-catalog",
@@ -61,7 +61,8 @@
           "073-project-context-schema-resolver",
           "074-feedback-to-context-suggestions",
           "075-init-template-tests-docs-closure",
-          "077-wrapper-source-truth-consolidation"
+          "077-wrapper-source-truth-consolidation",
+          "080-doc-version-release-contract-unification"
         ],
         "stale": [],
         "missing": [],
@@ -86,7 +87,9 @@
             "020-fix-plugin-script-path",
             "021-add-research-templates",
             "022-sync-doc-redesign",
-            "032-rename-speckit-to-spec-driver"
+            "032-rename-speckit-to-spec-driver",
+            "078-script-platform-shared-layer",
+            "081-maintainability-hotspot-refactors"
           ]
         }
       },

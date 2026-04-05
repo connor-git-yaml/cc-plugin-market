@@ -1,0 +1,30 @@
+schemaVersion: 1
+marketplace:
+  path: ".claude-plugin/marketplace.json"
+  metadata:
+    description: "Claude Code Plugin Marketplace — 多 plugin 集合仓库"
+    version: "1.0.0"
+products:
+  reverse-spec:
+    displayName: "Reverse-Spec"
+    version: "2.4.0"
+    packageManifestPath: "package.json"
+    packageLockPath: "package-lock.json"
+    pluginManifestPath: "plugins/reverse-spec/.claude-plugin/plugin.json"
+    pluginReadmePath: "plugins/reverse-spec/README.md"
+    currentSpecPath: "specs/products/reverse-spec/current-spec.md"
+    productMappingKey: "reverse-spec"
+    pluginDescription: "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档"
+    marketplaceDescription: "通过 AST 静态分析 + LLM 混合流水线逆向生成 Spec 文档"
+    productMappingDescription: "reverse-spec v2.4.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并统一版本、文档与发布合同"
+  spec-driver:
+    displayName: "Spec Driver"
+    version: "3.9.0"
+    pluginManifestPath: "plugins/spec-driver/.claude-plugin/plugin.json"
+    pluginReadmePath: "plugins/spec-driver/README.md"
+    currentSpecPath: "specs/products/spec-driver/current-spec.md"
+    productMappingKey: "spec-driver"
+    postinstallPath: "plugins/spec-driver/scripts/postinstall.sh"
+    pluginDescription: "自治研发编排器——支持 feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程，并提供共享 Project Context resolver、suggestions、wrapper source-of-truth 与 release contract 合同"
+    marketplaceDescription: "自治研发编排器——支持 spec-driver-feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程，并提供共享 Project Context resolver、suggestions、wrapper source-of-truth 与 release contract 合同"
+    productMappingDescription: "Spec Driver v3.9.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth、release contract 合同与产品级生成产物分层，同时显式校验架构合理性与可读性"

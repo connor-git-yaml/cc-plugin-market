@@ -82,6 +82,17 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 成熟 `spec/plan` 的执行裁剪，应进入 `spec-driver-implement` 或具体 feature 制品，而不是写进 `Project Context`
 <!-- END SHARED SECTION: context-layering -->
 
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-release-contract.md` 同步，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: release-contract -->
+## 发布合同约定
+
+- 版本、plugin metadata、marketplace entry、产品级 release 文案的 canonical source 在 `contracts/release-contract.yaml`
+- 需要更新这些字段时，优先改 contract，再运行 `npm run release:sync`
+- 不要手工分别修改 `plugin.json`、`marketplace.json`、`package-lock.json`、README 里的受控 release 行
+- 提交前运行 `npm run release:check`；仓库级 `check-plugin-sync.sh` 也会复核 release contract
+<!-- END SHARED SECTION: release-contract -->
+
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-branch-sync-policy.md` 同步，请勿手动编辑区块内容。
 
 <!-- BEGIN SHARED SECTION: branch-sync-policy -->

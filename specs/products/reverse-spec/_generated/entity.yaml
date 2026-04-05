@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T14:44:17.677Z"
+generatedAt: "2026-04-05T15:45:50.393Z"
 id: "reverse-spec"
 name: "Reverse-Spec"
 kind: "library-tooling"
-description: "reverse-spec v2.3.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并收敛 reverse-spec Skill 的 source-of-truth 与分发结构"
+description: "reverse-spec v2.4.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并统一版本、文档与发布合同"
 owner:
   value: "unknown"
   source: "unknown"
@@ -26,19 +26,19 @@ docs:
     available: true
 quality:
   currentSpec:
-    version: "聚合自 48 个增量 spec / blueprint（001–010, 024–031, 033–060, 076, 079）"
+    version: "聚合自 49 个增量 spec / blueprint（001–010, 024–031, 033–060, 076, 079–080）"
     lastAggregated: "2026-04-05"
     status: "活跃"
   report:
     path: "specs/products/reverse-spec/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T14:44:17.708Z"
+    generatedAt: "2026-04-05T15:45:50.408Z"
   scorecard:
     path: "specs/products/reverse-spec/_generated/scorecard-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T14:44:17.713Z"
+    generatedAt: "2026-04-05T15:45:50.411Z"
 workflowRefs:
   - "reverse-spec.init"
   - "reverse-spec.generate"

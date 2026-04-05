@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T14:44:17.713Z",
+  "generatedAt": "2026-04-05T15:45:50.411Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "reverse-spec",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 48 个增量 spec。"
+        "current-spec 覆盖了全部 49 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,10 +45,10 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 17 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 18 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 17,
+        "totalFeatures": 18,
         "fresh": [
           "042-api-surface-reference",
           "043-runtime-topology-ops",
@@ -66,7 +66,8 @@
           "058-adr-decision-pipeline",
           "059-provenance-quality-gates",
           "060-product-ux-fact-ingestion",
-          "079-reverse-spec-skill-distribution-consolidation"
+          "079-reverse-spec-skill-distribution-consolidation",
+          "080-doc-version-release-contract-unification"
         ],
         "stale": [],
         "missing": [],

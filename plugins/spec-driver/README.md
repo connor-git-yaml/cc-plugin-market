@@ -1,5 +1,7 @@
 # Spec Driver
 
+> 当前发布版本: v3.9.0
+
 **自治研发编排器** — 支持 7 种模式（feature/implement/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程，并通过本地 run events 生成 adoption / friction insights 与 Project Context suggestions。
 
 ## 功能概述
@@ -43,7 +45,7 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 
 安装时会同步当前 `spec-driver-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
 
-### 包装来源约定（v3.8.0）
+### 包装来源约定
 
 - `plugins/spec-driver/skills/**` 是 `spec-driver-*` Codex wrapper 的 canonical source
 - `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` 定义 wrapper / metadata / project override 的 source-of-truth 合同
@@ -296,7 +298,7 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 
 `Project Context suggestions` 仍然只生成到 `.specify/project-context.suggestions.yaml|md`，不会自动覆盖 canonical `project-context.yaml`。
 
-### 变更说明（v3.8.0）
+### 当前结构状态
 
 `spec-driver` 现在明确区分了三类资产：
 

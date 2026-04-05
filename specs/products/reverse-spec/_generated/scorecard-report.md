@@ -2,7 +2,7 @@
 
 > **Product**: reverse-spec
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T14:44:17.713Z
+> **Generated**: 2026-04-05T15:45:50.411Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -17,7 +17,7 @@
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=17, fresh=17, stale=0 |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=18, fresh=18, stale=0 |
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 48 个增量 spec。
+- current-spec 覆盖了全部 49 个增量 spec。
 
 ```json
 {
@@ -46,11 +46,11 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- 全部 17 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
+- 全部 18 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 17,
+  "totalFeatures": 18,
   "fresh": [
     "042-api-surface-reference",
     "043-runtime-topology-ops",
@@ -68,7 +68,8 @@
     "058-adr-decision-pipeline",
     "059-provenance-quality-gates",
     "060-product-ux-fact-ingestion",
-    "079-reverse-spec-skill-distribution-consolidation"
+    "079-reverse-spec-skill-distribution-consolidation",
+    "080-doc-version-release-contract-unification"
   ],
   "stale": [],
   "missing": [],

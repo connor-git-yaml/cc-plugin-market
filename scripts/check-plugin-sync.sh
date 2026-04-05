@@ -130,6 +130,14 @@ if [ -f "plugins/reverse-spec/scripts/validate-skill-sources.mjs" ]; then
   fi
 fi
 
+# CHECK-7: release contract 一致性
+if [ -f "scripts/validate-release-contracts.mjs" ]; then
+  RELEASE_CONTRACT_OUTPUT=""
+  if ! RELEASE_CONTRACT_OUTPUT=$(node scripts/validate-release-contracts.mjs --project-root "$REPO_ROOT" --json 2>&1); then
+    ERRORS+=("CHECK-7 失败: release contract 校验失败 — ${RELEASE_CONTRACT_OUTPUT}")
+  fi
+fi
+
 # ---- 输出结果 ----
 if [ ${#WARNINGS[@]} -gt 0 ]; then
   echo "" >&2

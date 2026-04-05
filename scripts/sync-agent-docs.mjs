@@ -28,6 +28,14 @@ const sectionConfigs = [
       resolve(rootDir, 'CLAUDE.md'),
     ],
   },
+  {
+    key: 'release-contract',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-release-contract.md'),
+    targets: [
+      resolve(rootDir, 'AGENTS.md'),
+      resolve(rootDir, 'CLAUDE.md'),
+    ],
+  },
 ];
 
 function syncSection(targetContent, key, sourceContent) {
@@ -58,4 +66,4 @@ for (const section of sectionConfigs) {
   }
 }
 
-console.log('Synced shared agent guidance sections into AGENTS.md and CLAUDE.md');
+console.log('Synced shared guidance sections into AGENTS.md and CLAUDE.md');

@@ -21,6 +21,10 @@ const sections = [
     key: 'context-layering',
     sourcePath: resolve(rootDir, 'docs/shared/agent-context-layering.md'),
   },
+  {
+    key: 'release-contract',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-release-contract.md'),
+  },
 ];
 
 function readSyncedSection(filePath: string, key: string): string {
