@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T05:48:40.401Z"
+generatedAt: "2026-04-05T06:23:32.114Z"
 productCount: 2
 products:
   - id: "reverse-spec"
@@ -12,9 +12,6 @@ products:
     workflowRefCount: 6
     qualityStatus: "pass"
     specCount: 46
-    qualityReportPath: "specs/products/reverse-spec/_generated/quality-report.json"
-    scorecardStatus: "pass"
-    scorecardScore: 100
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
@@ -25,6 +22,3 @@ products:
     workflowRefCount: 7
     qualityStatus: "pass"
     specCount: 23
-    qualityReportPath: "specs/products/spec-driver/_generated/quality-report.json"
-    scorecardStatus: "pass"
-    scorecardScore: 100

@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.3.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.4.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -423,9 +423,9 @@ Each phase can also be run independently for fine-grained control:
 | plan | 4 | Technical architecture and design | Serial | Read, Write, Bash |
 | tasks | 5 | Task decomposition and dependency ordering | Serial | Read, Write, Bash |
 | analyze | 5.5 | Cross-artifact consistency analysis | Serial | Read, Bash |
-| implement | 6 | Code generation per task list | Serial | Read, Write, Bash, WebFetch |
+| implement | 6 | Contract-check mature spec/plan, then implement per task list | Serial | Read, Write, Bash, WebFetch |
 | spec-review | 7a | Spec compliance review | Parallel (VERIFY_GROUP) | Read, Glob, Grep |
-| quality-review | 7b | Code quality review | Parallel (VERIFY_GROUP) | Read, Glob, Grep |
+| quality-review | 7b | Code quality review incl. architecture rationality and readability | Parallel (VERIFY_GROUP) | Read, Glob, Grep |
 | verify | 7c | Build, lint, and test validation | Serial (after 7a+7b) | Bash, Read, Write |
 | sync | — | Product specification aggregation | Serial | Read, Write, Bash, Glob |
 
@@ -562,7 +562,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.3.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.4.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation

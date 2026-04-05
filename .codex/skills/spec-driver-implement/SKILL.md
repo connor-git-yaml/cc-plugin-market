@@ -21,6 +21,7 @@ disable-model-invocation: true
 
 你是 **Spec Driver** 的成熟 Spec 实施编排器，角色为“**实施负责人**”。这是一个面向成熟 `spec.md + plan.md` 的聚焦实施入口。你的职责不是重新做完整调研或重写规范，而是在 `spec.md` 与 `plan.md` 已经成熟的前提下，以最短路径完成：
 
+- `spec/plan contract check`
 - `plan review`
 - `task refinement`
 - `implementation`
@@ -185,6 +186,41 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
   - tasks.md 缺失 → 允许继续，在 task-refinement 阶段生成
 ```
 
+### 7.5 Spec / Plan 合同检查（Implement 首要前置 gate）
+
+在进入任何子代理前，编排器必须先做一次显式合同检查。`implement` 不仅检查“文件存在”，还要检查“输入是否足够成熟到可以直接实施”。
+
+```text
+检查项 A: 位置与归属是否正确
+  - spec.md 必须位于 {feature_dir}/spec.md
+  - plan.md 必须位于 {feature_dir}/plan.md
+  - 两者不得指向其他 feature 目录或仓库根层的临时文件
+
+检查项 B: spec.md 是否具备最小实施合同
+  - 明确的功能目标 / 输入背景
+  - 可执行的 requirements
+  - success criteria 或等价验收目标
+  - 非模板占位文本
+
+检查项 C: plan.md 是否具备最小实施合同
+  - 与 spec 对应的实施方案或架构策略
+  - 明确的实现范围 / 依赖 / 风险
+  - 验证方式、测试命令或等价验证计划
+  - 非模板占位文本
+
+检查项 D: spec / plan 是否相互一致
+  - feature 编号与目标一致
+  - plan 没有明显偏离 spec 的范围
+  - 若 tasks.md 已存在，其范围不应与 spec / plan 明显冲突
+
+判定:
+  - 任一检查项失败 → BLOCKED，不进入后续 phase
+  - 输出 `[CONTRACT_CHECK] READY|BLOCKED` 与具体缺口
+  - 若为 BLOCKED，优先建议:
+    1. 回到 `$spec-driver-feature`
+    2. 或手动补齐 spec.md / plan.md 后重新运行 implement
+```
+
 ### 8. Resume 与 Implement 的边界
 
 ```text
@@ -226,23 +262,26 @@ implement:
 
 ---
 
-### Phase 1: Intake / 预检 [1/6]
+### Phase 1: Spec / Plan Contract Check + Intake / 合同检查与预检 [1/6]
 
-`[1/6] 正在检查成熟实施输入...`
+`[1/6] 正在执行 spec/plan 合同检查与成熟实施预检...`
 
 **此阶段由编排器亲自执行，不委派子代理。**
 
 执行内容：
 
-1. 确认 `feature_dir`、`spec.md`、`plan.md`
-2. 读取 `tasks.md`（如存在）并判断是否为“可直接细化”的状态
-3. 输出输入摘要：
+1. 确认 `feature_dir`、`spec.md`、`plan.md` 的路径和归属正确
+2. 执行上面的 `Spec / Plan 合同检查`
+3. 读取 `tasks.md`（如存在）并判断是否为“可直接细化”的状态
+4. 输出输入摘要：
    - `spec.md`: available / blocked
    - `plan.md`: available / blocked
+   - `contract_check`: ready / blocked
    - `tasks.md`: present / missing / stale
-4. 若预检失败，明确输出：
+5. 若合同检查或预检失败，明确输出：
    - 回退到 `$spec-driver-feature <需求描述>`
    - 或 `$spec-driver-story <需求描述>`
+   - 或先补齐当前 `spec.md` / `plan.md` 再重新运行 implement
 
 ---
 
@@ -319,12 +358,16 @@ implement:
 
 `[5/6] 正在执行验证闭环...`
 
-#### Phase 5a+5b: Spec 合规审查 + 代码质量审查（并行）
+#### Phase 5a+5b: Spec 合规审查 + 代码质量审查（含架构合理性/可读性检查，并行）
 
 **并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
 1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
-2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查（含架构合理性与可读性）", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+
+`quality-review` 在本阶段必须显式检查：
+- 架构合理性：最终实现是否仍然符合已成熟 plan.md 的结构合同
+- 可读性：是否存在“能跑但难读难改”的实现方式；如有必须指出
 
 等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 

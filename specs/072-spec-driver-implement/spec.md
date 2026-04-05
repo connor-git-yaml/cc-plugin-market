@@ -11,7 +11,7 @@
 
 作为已有完整 `spec.md` 和 `plan.md` 的开发者，我希望直接调用独立的 `spec-driver-implement`，让系统聚焦计划审查、任务细化、代码实施和验证，而不是重新回到完整调研链路。
 
-**Independent Test**: 阅读新 Skill 文档，确认默认阶段只覆盖 `intake -> plan-review -> task-refinement -> implementation -> verification -> closure`，且明确要求现成 `spec.md + plan.md`。
+**Independent Test**: 阅读新 Skill 文档，确认默认阶段以 `spec/plan contract check` 起步，并只覆盖 `contract-check/intake -> plan-review -> task-refinement -> implementation -> verification -> closure`，且明确要求现成 `spec.md + plan.md`。
 
 ### User Story 2 - 双端安装与 Workflow Library 同步感知新入口 (Priority: P1)
 
@@ -32,6 +32,7 @@
 - **FR-001**: 系统 MUST 新增 `plugins/spec-driver/skills/spec-driver-implement/SKILL.md`
 - **FR-002**: `spec-driver-implement` MUST 以现有 `specs/<feature>/` 目录为输入，且至少要求 `spec.md` 与 `plan.md`
 - **FR-003**: `spec-driver-implement` MUST 聚焦 `plan-review`、`task-refinement`、`implementation`、`verification`，不得重新要求完整调研链路
+- **FR-003A**: `spec-driver-implement` MUST 在进入任何子代理前先执行 `spec.md + plan.md` 的合同检查，至少校验位置正确、内容非模板、spec/plan 相互一致、足以直接实施
 - **FR-004**: 若 `spec.md` 或 `plan.md` 缺失，Skill MUST 明确提示回退到 `spec-driver-feature` 或 `spec-driver-story`
 - **FR-005**: Codex 安装脚本 MUST 安装 `spec-driver-implement` 包装 Skill
 - **FR-006**: Workflow registry MUST 新增 `spec-driver-implement` workflow definition，并提供至少一条 implement-oriented golden path

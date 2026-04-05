@@ -79,6 +79,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(storyWrapper).toContain('opus/sonnet');
     expect(storyWrapper).toContain('.specify/project-context.yaml');
     expect(storyWrapper).toContain('[参考路径缺失]');
+    expect(storyWrapper).toContain('架构合理性');
+    expect(storyWrapper).toContain('可读性');
 
     const implementWrapper = readFileSync(
       join(tempDir, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'),
@@ -87,6 +89,10 @@ describe('Spec Driver Codex skills script', () => {
     expect(implementWrapper).toContain('description: "成熟 Spec 实施');
     expect(implementWrapper).toContain('$spec-driver-implement [<feature-dir-or-id>]');
     expect(implementWrapper).toContain('成熟 `spec.md + plan.md` 的聚焦实施');
+    expect(implementWrapper).toContain('Spec / Plan 合同检查（Implement 首要前置 gate）');
+    expect(implementWrapper).toContain('[CONTRACT_CHECK] READY|BLOCKED');
+    expect(implementWrapper).toContain('架构合理性');
+    expect(implementWrapper).toContain('可读性');
 
     const constitutionWrapper = readFileSync(
       join(tempDir, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
@@ -132,6 +138,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(wrapperContent).toContain('$PLUGIN_DIR/skills/spec-driver-feature/SKILL.md');
     expect(wrapperContent).toContain('$spec-driver-feature <需求描述>');
     expect(wrapperContent).toContain('# Spec Driver — 自治研发编排器');
+    expect(wrapperContent).toContain('架构合理性');
+    expect(wrapperContent).toContain('可读性');
     expect(wrapperContent).not.toContain(
       resolve('plugins/spec-driver/skills/spec-driver-feature/SKILL.md'),
     );

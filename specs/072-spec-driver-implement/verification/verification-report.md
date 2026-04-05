@@ -7,6 +7,7 @@
 ## Verification Summary
 
 - `spec-driver-implement` 已作为第七个 Spec Driver Skill 接入 Claude / Codex 安装链路。
+- `spec-driver-implement` 现已把 `Spec / Plan 合同检查` 前移为首个前置 gate，不再只检查文件存在性。
 - workflow registry、golden paths、entity catalog 与产品级活文档已识别成熟 `spec.md + plan.md` 的聚焦实施入口。
 - `resume` 与 `implement` 的边界已在 Skill、README、product current-spec 中收敛为一致合同。
 

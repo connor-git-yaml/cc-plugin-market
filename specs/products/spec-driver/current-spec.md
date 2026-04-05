@@ -29,7 +29,7 @@
 
 ## 1. 产品概述
 
-Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Development 的常见研发链路收敛为一套可复用的命令体系，覆盖 feature、implement、story、fix、resume、sync、doc 七种模式，并以质量门、验证铁律、调研路由和产品活文档维持流程一致性。
+Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Development 的常见研发链路收敛为一套可复用的命令体系，覆盖 feature、implement、story、fix、resume、sync、doc 七种模式，并以质量门、验证铁律、调研路由、架构合理性/可读性审查和产品活文档维持流程一致性。
 
 当前产品的核心定位有三层：
 
@@ -68,7 +68,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | 命名一致性 | 对外命令、技能目录、元数据统一使用 `spec-driver-*` | 014, 032 |
 | 产品实体目录 | 生成 `entity.yaml` 与 `catalog-index.yaml` 作为机器可读 Catalog | 063 |
 | Workflow Library | 七个入口拥有 machine-readable workflow definition 与 golden paths | 064, 072 |
-| Mature Spec 实施 | 对成熟 `spec.md + plan.md` 提供独立 implement 入口 | 072 |
+| Mature Spec 实施 | 对成熟 `spec.md + plan.md` 提供独立 implement 入口，并在最前置执行 spec/plan 合同检查 | 072 |
 | 持续治理 | 生成 `scorecard-report` 与 `scorecard-index`，解释产品 readiness | 065 |
 | Adoption / Friction | 生成本地 `adoption-report`，识别 rerun、gate pause 与 verification 热点 | 066 |
 | 治理信号对齐 | 生成产品级 `quality-report` 并把 scorecard 统计范围收敛到已实现 feature | 068 |
@@ -93,7 +93,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 
 1. **完整 Feature 编排**：Constitution → 调研 → 规范 → 澄清/检查 → 规划 → 任务 → 实现 → 审查 → 验证
 2. **快速需求交付**：跳过重调研，压缩为 story 模式的快速交付链路
-3. **成熟 Spec 聚焦实施**：对现成 `spec.md + plan.md` 做计划审查、任务细化、实现与验证
+3. **成熟 Spec 聚焦实施**：先对现成 `spec.md + plan.md` 做合同检查，再进入计划审查、任务细化、实现与验证
 4. **快速修复闭环**：问题诊断、修复规划、修复实现与验证
 5. **产品规范聚合**：从多份增量 spec 合并出产品级活文档
 6. **文档派生**：让 README / 使用文档优先消费 `current-spec.md` 的事实摘要
@@ -134,7 +134,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | FR-003 | fix 模式提供问题诊断到修复验证的最短闭环 | 011 | 活跃 |
 | FR-004 | 产物持久化到 `specs/<feature>/`，支持 resume / rerun | 011 | 活跃 |
 | FR-005 | 模型预设与子代理模型选择支持分层配置 | 011 | 活跃 |
-| FR-031 | implement 模式面向成熟 `spec.md + plan.md`，聚焦计划审查、任务细化、实施与验证 | 072 | 活跃 |
+| FR-031 | implement 模式面向成熟 `spec.md + plan.md`，先执行合同检查，再聚焦计划审查、任务细化、实施与验证 | 072 | 活跃 |
 
 ### FR-GROUP-2: 调研路由与门禁策略
 

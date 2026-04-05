@@ -701,12 +701,16 @@ elif research_mode == "custom":
 
 `[10/10] 正在执行验证闭环...`
 
-#### Phase 7a+7b: Spec 合规审查 + 代码质量审查（并行）
+#### Phase 7a+7b: Spec 合规审查 + 代码质量审查（含架构合理性/可读性检查，并行）
 
 **并行调度（VERIFY_GROUP 第一段）**: 在同一消息中同时发出以下两个 Task 调用：
 
 1. 读取 `$PLUGIN_DIR/agents/spec-review.md` prompt，调用 Task(description: "Spec 合规审查", prompt: "{spec-review prompt}" + "{上下文注入 + spec.md + tasks.md 路径}", model: "{config.agents.verify.model}")
-2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+2. 读取 `$PLUGIN_DIR/agents/quality-review.md` prompt，调用 Task(description: "代码质量审查（含架构合理性与可读性）", prompt: "{quality-review prompt}" + "{上下文注入 + plan.md + spec.md 路径}", model: "{config.agents.verify.model}")
+
+`quality-review` 在本阶段必须显式检查：
+- 架构合理性：实现是否符合 plan.md 的分层、边界和依赖策略
+- 可读性：控制流、命名、复杂逻辑拆分与解释是否便于后续维护
 
 等待两个 Task 均返回结果后继续。如某个子代理失败，不中断另一个正在运行的子代理，等待两者均完成后统一处理。
 
