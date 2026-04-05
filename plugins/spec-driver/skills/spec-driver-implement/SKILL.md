@@ -95,8 +95,11 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 - `.specify/project-context.yaml` 是 canonical source
 - `.specify/project-context.md` 仅作为 legacy fallback
 - 若 `.yaml` 与 `.md` 并存，resolver 只读取 `.yaml`，并在 diagnostics 中返回迁移 warning
+- 若存在 `.specify/project-context.suggestions.yaml` 或 `.specify/project-context.suggestions.md`，读取为 `project_context_suggestions_block`
+- `project_context_suggestions_block` 仅作 advisory-only 建议，不覆盖用户显式输入或 `project-context` 正文
 - 若 diagnostics 中包含 `[参考路径缺失]`，不中断流程，但必须在阶段总结与最终报告中列为风险项
 - 若无 project-context 文件，resolver 返回 `projectContextBlock = "未配置"`
+- 若无 suggestions 文件，设置 `project_context_suggestions_block = "无建议"`
 
 ### 4. 门禁配置加载
 
@@ -258,6 +261,7 @@ implement:
 **前序制品**: {已存在的 spec.md / plan.md / tasks.md / verification}
 **配置**: {相关配置片段}
 **项目上下文**: {project_context_block}
+**上下文建议（只读）**: {project_context_suggestions_block}
 ---
 ```
 

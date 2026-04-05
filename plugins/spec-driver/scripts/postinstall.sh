@@ -14,7 +14,7 @@ BOLD='\033[1m'
 
 # Plugin 信息
 PLUGIN_NAME="Spec Driver"
-PLUGIN_VERSION="3.5.0"
+PLUGIN_VERSION="3.6.0"
 MIN_CLAUDE_VERSION="1.0.0"
 
 # 推算插件根目录
@@ -76,6 +76,7 @@ main() {
   echo -e "${GREEN}${BOLD}══════════════════════════════════════════${NC}"
   echo ""
   echo -e "  自治研发编排器——支持 feature/implement/story/fix/resume/sync/doc 七种模式"
+  echo -e "  sync 完成后还会生成 Project Context suggestions"
   echo ""
   echo -e "  ${BOLD}快速开始:${NC}"
   echo -e "    /spec-driver:spec-driver-feature \"你的需求描述\"     # 完整流程（含调研）"

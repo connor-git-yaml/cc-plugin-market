@@ -66,8 +66,11 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 - `.specify/project-context.yaml` 是 canonical source
 - `.specify/project-context.md` 仅作为 legacy fallback
 - 若 `.yaml` 与 `.md` 并存，resolver 只读取 `.yaml`，并在 diagnostics 中返回迁移 warning
+- 若存在 `.specify/project-context.suggestions.yaml` 或 `.specify/project-context.suggestions.md`，读取为 `project_context_suggestions_block`
+- `project_context_suggestions_block` 仅作 advisory-only 建议，不覆盖用户显式输入或 `project-context` 正文
 - 若 diagnostics 中包含 `[参考路径缺失]`，不中断流程，但必须在聚合报告中列为风险项
 - 若无 project-context 文件，resolver 返回 `projectContextBlock = "未配置"`
+- 若无 suggestions 文件，设置 `project_context_suggestions_block = "无建议"`
 
 ---
 
@@ -189,6 +192,7 @@ Task(
 **产品模板**: $PLUGIN_DIR/templates/product-spec-template.md
 **已有产品文档**: {specs/products/ 下已有的产品目录列表（如有）}
 **项目上下文**: {project_context_block}
+**上下文建议（只读）**: {project_context_suggestions_block}
 ---
 ```
 
@@ -240,7 +244,13 @@ node "$PLUGIN_DIR/scripts/generate-product-scorecards.mjs" --project-root "{proj
 node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{project_root}" --json
 ```
 
-8. 解析 helper 返回：
+8. 执行 Project Context suggestions helper，把治理与 adoption 信号转成只读建议：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-project-context-suggestions.mjs" --project-root "{project_root}" --json
+```
+
+9. 解析 helper 返回：
    - `specs/products/<product>/_generated/quality-report.md`
    - `specs/products/<product>/_generated/quality-report.json`
    - `specs/products/_generated/quality-report-index.yaml`
@@ -249,6 +259,8 @@ node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{proje
    - `specs/products/_generated/scorecard-index.yaml`
    - `specs/products/spec-driver/_generated/adoption-report.md`
    - `specs/products/spec-driver/_generated/adoption-report.json`
+   - `.specify/project-context.suggestions.yaml`
+   - `.specify/project-context.suggestions.md`
    - 基于 quality-report / verification-report 的 warning
 
 2. 输出聚合完成报告：

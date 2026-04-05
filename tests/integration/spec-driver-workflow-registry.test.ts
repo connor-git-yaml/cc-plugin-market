@@ -74,6 +74,8 @@ describe('generate-workflow-registry.mjs', () => {
       'specs/products/_generated/scorecard-index.yaml',
       'specs/products/spec-driver/_generated/adoption-report.md',
       'specs/products/spec-driver/_generated/adoption-report.json',
+      '.specify/project-context.suggestions.yaml',
+      '.specify/project-context.suggestions.md',
     ]));
     expect(payload.warnings).toEqual(expect.arrayContaining([
       'workflow override 忽略非 metadata 字段: spec-driver-story.entryCommand',
@@ -92,6 +94,8 @@ describe('generate-workflow-registry.mjs', () => {
         'specs/products/_generated/scorecard-index.yaml',
         'specs/products/spec-driver/_generated/adoption-report.md',
         'specs/products/spec-driver/_generated/adoption-report.json',
+        '.specify/project-context.suggestions.yaml',
+        '.specify/project-context.suggestions.md',
       ]),
     );
     expect(jsonIndex.goldenPaths).toEqual(expect.arrayContaining([
@@ -126,5 +130,6 @@ describe('generate-workflow-registry.mjs', () => {
     expect(markdownIndex).toContain('spec-driver-implement');
     expect(markdownIndex).toContain('scorecard-report.md');
     expect(markdownIndex).toContain('adoption-report.md');
+    expect(markdownIndex).toContain('project-context.suggestions.yaml');
   });
 });

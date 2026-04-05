@@ -95,6 +95,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(implementWrapper).toContain('[CONTRACT_CHECK] READY|BLOCKED');
     expect(implementWrapper).toContain('resolve-project-context.mjs');
     expect(implementWrapper).toContain('.specify/project-context.yaml');
+    expect(implementWrapper).toContain('.specify/project-context.suggestions.yaml');
+    expect(implementWrapper).toContain('advisory-only');
     expect(implementWrapper).toContain('架构合理性');
     expect(implementWrapper).toContain('可读性');
 
@@ -142,6 +144,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(wrapperContent).toContain('$PLUGIN_DIR/skills/spec-driver-feature/SKILL.md');
     expect(wrapperContent).toContain('$spec-driver-feature <需求描述>');
     expect(wrapperContent).toContain('# Spec Driver — 自治研发编排器');
+    expect(wrapperContent).toContain('.specify/project-context.suggestions.yaml');
+    expect(wrapperContent).toContain('advisory-only');
     expect(wrapperContent).toContain('架构合理性');
     expect(wrapperContent).toContain('可读性');
     expect(wrapperContent).not.toContain(

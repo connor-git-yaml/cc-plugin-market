@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-05T05:48:43.344Z",
+  "generatedAt": "2026-04-05T10:30:10.753Z",
   "sourceDir": "plugins/spec-driver/workflows",
   "overrideDir": ".specify/workflows",
   "workflowCount": 7,
@@ -225,7 +225,9 @@
         "specs/products/<product>/_generated/scorecard-report.json",
         "specs/products/_generated/scorecard-index.yaml",
         "specs/products/spec-driver/_generated/adoption-report.md",
-        "specs/products/spec-driver/_generated/adoption-report.json"
+        "specs/products/spec-driver/_generated/adoption-report.json",
+        ".specify/project-context.suggestions.yaml",
+        ".specify/project-context.suggestions.md"
       ],
       "recommendedWhen": [
         "需要刷新产品事实源",

@@ -20,8 +20,8 @@
     {
       "name": "spec-driver",
       "source": "./plugins/spec-driver",
-      "description": "自治研发编排器——支持 spec-driver-feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程",
-      "version": "3.5.0",
+      "description": "自治研发编排器——支持 spec-driver-feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程，并提供共享 Project Context resolver 与 suggestions 闭环",
+      "version": "3.6.0",
       "category": "orchestration",
       "tags": ["orchestrator", "spec-driven", "autonomous", "spec-driver"]
     }

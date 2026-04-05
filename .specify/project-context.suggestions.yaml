@@ -1,0 +1,143 @@
+schemaVersion: 1
+generatedAt: "2026-04-05T10:30:21.062Z"
+status: "advisory"
+contextSource:
+  state: "missing"
+  yamlPath: ".specify/project-context.yaml"
+  markdownPath: ".specify/project-context.md"
+  warnings:
+    []
+  suggestionsYamlPath: ".specify/project-context.suggestions.yaml"
+  suggestionsMarkdownPath: ".specify/project-context.suggestions.md"
+summary:
+  criticalCount: 0
+  recommendedCount: 5
+  optionalCount: 0
+  suggestionCount: 5
+suggestions:
+  - id: "create-project-context-yaml"
+    priority: "recommended"
+    category: "context-source"
+    title: "建立 canonical Project Context YAML"
+    summary: "当前仓库尚未声明 `.specify/project-context.yaml`，建议建立项目级长期偏好与参考资料的单一入口。"
+    suggestedChanges:
+      - field: "project_context.source"
+        action: "create"
+        value: ".specify/project-context.yaml"
+      - field: "references.paths"
+        action: "seed"
+        value:
+          - "specs/products/reverse-spec/current-spec.md"
+          - "specs/products/reverse-spec/_generated/quality-report.md"
+          - "specs/products/reverse-spec/_generated/scorecard-report.md"
+          - "specs/products/spec-driver/current-spec.md"
+          - "specs/products/spec-driver/_generated/quality-report.md"
+          - "specs/products/spec-driver/_generated/scorecard-report.md"
+    evidence:
+      - sourceType: "file-check"
+        path: ".specify/project-context.yaml"
+        note: "未检测到 canonical YAML Project Context。"
+  - id: "add-stable-reference-documents"
+    priority: "recommended"
+    category: "references"
+    title: "把稳定事实文档纳入 Project Context references"
+    summary: "建议把产品活文档与治理报告声明进 Project Context，供 feature / implement / sync 等流程显式注入上下文，而不是依赖口头记忆。"
+    suggestedChanges:
+      - field: "references.paths"
+        action: "append"
+        value:
+          - "specs/products/reverse-spec/current-spec.md"
+          - "specs/products/reverse-spec/_generated/quality-report.md"
+          - "specs/products/reverse-spec/_generated/scorecard-report.md"
+          - "specs/products/spec-driver/current-spec.md"
+          - "specs/products/spec-driver/_generated/quality-report.md"
+          - "specs/products/spec-driver/_generated/scorecard-report.md"
+          - "specs/products/spec-driver/_generated/adoption-report.md"
+    evidence:
+      - sourceType: "document"
+        path: "specs/products/reverse-spec/current-spec.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/reverse-spec/_generated/quality-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/reverse-spec/_generated/scorecard-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spec-driver/current-spec.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spec-driver/_generated/quality-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spec-driver/_generated/scorecard-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spec-driver/_generated/adoption-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+  - id: "codify-workflow-preferences"
+    priority: "recommended"
+    category: "workflow-preferences"
+    title: "把高频 workflow 路由固化到 Project Context"
+    summary: "当前运行记录已经形成稳定的 workflow 使用偏好，建议把默认入口与成熟 spec 的专用入口写入 Project Context。"
+    suggestedChanges:
+      - field: "workflow_preferences.default_workflow"
+        action: "set"
+        value: "spec-driver-feature"
+      - field: "workflow_preferences.mature_spec_workflow"
+        action: "set"
+        value: "spec-driver-implement"
+    evidence:
+      - sourceType: "adoption-report"
+        path: "specs/products/spec-driver/_generated/adoption-report.json"
+        note: "最近 run summary 中最常使用的 workflow 是 spec-driver-feature（4 次）。"
+      - sourceType: "workflow-index"
+        path: "specs/products/spec-driver/_generated/workflow-index.json"
+        note: "workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。"
+  - id: "codify-verification-policy"
+    priority: "recommended"
+    category: "verification-policy"
+    title: "把验证偏好固化到 Project Context"
+    summary: "当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。"
+    suggestedChanges:
+      - field: "verification_policy.required_commands"
+        action: "set"
+        value:
+          - "npm run lint"
+          - "npm run build"
+          - "feature-scoped tests"
+      - field: "verification_policy.require_quality_review"
+        action: "set"
+        value: true
+      - field: "verification_policy.review_dimensions"
+        action: "set"
+        value:
+          - "architecture"
+          - "readability"
+          - "maintainability"
+    evidence:
+      - sourceType: "scorecard-report"
+        path: "specs/products/spec-driver/_generated/scorecard-report.json"
+        note: "verification-freshness 当前状态为 pass。"
+  - id: "declare-default-owner-and-reviewers"
+    priority: "recommended"
+    category: "ownership"
+    title: "补充默认 owner / reviewers"
+    summary: "产品 Catalog 仍存在 owner 未声明的情况，建议在 Project Context 中补充默认 owner 与 reviewers，降低后续审查责任不清的问题。"
+    suggestedChanges:
+      - field: "ownership.default_owner"
+        action: "set"
+        value: "<team-or-maintainer>"
+      - field: "ownership.default_reviewers"
+        action: "set"
+        value:
+          - "<maintainer-or-team>"
+    evidence:
+      - sourceType: "entity-catalog"
+        path: "specs/products/reverse-spec/_generated/entity.yaml"
+        note: "reverse-spec 的 entity.yaml 仍显示 owner=unknown。"
+      - sourceType: "entity-catalog"
+        path: "specs/products/spec-driver/_generated/entity.yaml"
+        note: "spec-driver 的 entity.yaml 仍显示 owner=unknown。"
+warnings:
+  []

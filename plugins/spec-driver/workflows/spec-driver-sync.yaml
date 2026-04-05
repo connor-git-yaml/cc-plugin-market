@@ -25,6 +25,8 @@ artifacts:
   - "specs/products/_generated/scorecard-index.yaml"
   - "specs/products/spec-driver/_generated/adoption-report.md"
   - "specs/products/spec-driver/_generated/adoption-report.json"
+  - ".specify/project-context.suggestions.yaml"
+  - ".specify/project-context.suggestions.md"
 recommendedWhen:
   - "需要刷新产品事实源"
   - "为 doc/scorecard/adoption 提供上游事实"

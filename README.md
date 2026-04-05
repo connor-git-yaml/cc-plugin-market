@@ -18,7 +18,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 | Plugin | Type | Description |
 | ------ | ---- | ----------- |
 | **[reverse-spec](#reverse-spec)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
-| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 14 specialized sub-agent prompts and 7 execution modes |
+| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 14 specialized sub-agent prompts, 7 execution modes, and Project Context suggestions |
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.5.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.6.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -562,7 +562,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.5.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.6.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation

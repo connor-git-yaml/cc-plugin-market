@@ -1,6 +1,6 @@
 # Spec Driver
 
-**自治研发编排器** — 支持 7 种模式（feature/implement/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程，并通过本地 run events 生成 adoption / friction insights。
+**自治研发编排器** — 支持 7 种模式（feature/implement/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程，并通过本地 run events 生成 adoption / friction insights 与 Project Context suggestions。
 
 ## 功能概述
 
@@ -58,6 +58,13 @@ Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 
 若两者并存，resolver 只读取 YAML 并返回迁移 warning。运行时只注入 `project-context` 中声明且有效的路径；路径失效时会标注 `[参考路径缺失]` 并在最终报告提示风险。
 
+如果 `spec-driver-sync` 已生成建议文件：
+
+- `.specify/project-context.suggestions.yaml`
+- `.specify/project-context.suggestions.md`
+
+则 `feature / implement / sync` 会把其中内容作为 **advisory-only** 上下文建议注入；它们不会覆盖用户显式输入，也不会自动改写 canonical `project-context`。
+
 此外，项目初始化会预创建 `.specify/runs/`，供 `record-workflow-run.mjs` 记录最小运行摘要；这些日志默认只保留本地，不需要提交到 Git。
 
 ## 使用方法
@@ -105,6 +112,8 @@ Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 ```bash
 /spec-driver:spec-driver-sync
 ```
+
+除刷新 `current-spec`、Catalog、quality / scorecard / adoption 产物外，`sync` 还会生成 `.specify/project-context.suggestions.yaml|md`，把治理与使用反馈转成可 review 的长期上下文建议。
 
 ### 开源文档生成（doc）
 
