@@ -22,25 +22,46 @@
 
 ### Feature 084-harness-native-integration: Harness 原生能力集成
 
-**问题**：当前仅使用 28 种 Hook 中的 1 种（SessionStart），Agent frontmatter、`.claude/rules/`、CI/CD Action 等原生能力完全未利用。CLAUDE.md >200 行，每次会话全量加载浪费 token。
+**问题**：当前仅使用 28 种 Hook 中的 1 种（SessionStart），Agent frontmatter、`.claude/rules/`、CI/CD Action 等原生能力完全未利用。CLAUDE.md / AGENTS.md 都超过 130 行，包含重复的 auto-generated 技术清单和手写行为约定（未走 `docs/shared/` 同步，双端内容存在漂移风险）。
+
+**Codex 兼容策略**：
+
+本 Feature 涉及 Claude Code 独占能力（Hooks、`.claude/rules/`、Agent frontmatter），需严格遵循以下分层原则：
+
+```
+docs/shared/             ← 跨平台规则的唯一事实源
+  ↓ npm run docs:sync:agents
+CLAUDE.md + AGENTS.md    ← 各自平台的"瘦壳"，只放平台专属 + 共享同步区块
+  ↓ Claude Code only
+.claude/rules/           ← 路径特定的增强过滤（Codex 不可用，属于加分项而非必需项）
+```
+
+- **共享规则**（行为约定、同步约定、发布约定等）必须在 `docs/shared/` 中维护，通过 `docs:sync:agents` 同步到 CLAUDE.md 和 AGENTS.md
+- **`.claude/rules/`** 仅提供路径特定的增强过滤（如操作 `tests/**` 时额外加载测试规范），但规则本身的内容必须在 `docs/shared/` 也有等价版本——Codex 用户虽然不能按路径过滤，但通过 AGENTS.md 的共享同步区块看到完整规则
+- **行为约定（11 条）**目前分别手写在 CLAUDE.md 和 AGENTS.md 中，未走同步。本 Feature 将其提取到 `docs/shared/agent-behavior-rules.md`，消除双端漂移
+- **Agent frontmatter**（model/tools/effort）是 Claude Code 增强；Codex 侧通过 `spec-driver.config.yaml` 的 `model_compat` 获得等价能力，无需适配
+- **Hooks**（PreToolUse/PostToolUse/Stop/Worktree）是 Claude Code 独占；Codex 侧无等价机制，但宪法 IX 已明确"Harness 增强不可用时，编排核心独立运行，功能不退化"
 
 **范围**：
 
 1. **PreToolUse 源码保护门禁** — 检测活跃 spec-driver 工作流时，硬性阻止对 `src/` 的 Edit/Write，将"不允许直接改代码"从软约束升为硬门禁
 2. **PostToolUse 自动格式化** — Edit/Write 后自动 prettier
 3. **Stop 完整性检查** — Claude 即将结束时，prompt hook 检查是否有遗漏任务
-4. **`.claude/rules/` 路径规则拆分** — 将 CLAUDE.md 中的路径特定规则（spec-driver 约束、panoramic 开发、测试规范、语言约定）拆到 `.claude/rules/`，CLAUDE.md 瘦身到 <100 行
-5. **CLAUDE.md 瘦身** — 删除 auto-generated 技术清单（50 行重复的 "TypeScript 5.x, Node.js LTS"）
+4. **CLAUDE.md + AGENTS.md 双端瘦身** — 删除两个文件中的 auto-generated 技术清单；将行为约定提取到 `docs/shared/agent-behavior-rules.md` 走统一同步；两端均瘦身到 <100 行
+5. **`.claude/rules/` 路径规则增强** — 从 `docs/shared/` 的共享规则中提取路径特定版本，按操作路径按需加载（Claude Code 增强，Codex 不受影响）
 6. **Agent frontmatter 声明式配置** — 为 14 个 agent .md 添加原生 model/tools/effort 声明，减少 SKILL.md 样板
 7. **WorktreeCreate/Remove Hook** — 替代 post-checkout git hook，在 Claude Code 原生 worktree 操作时更可靠地同步本地态
 8. **CI/CD 集成** — 引入 claude-code-action PR 审查 + repo:check GitHub Action
+9. **`docs:sync:agents` 脚本升级** — 支持新增的 `agent-behavior-rules.md` 共享区块同步
 
 **交付物**：
 - `plugins/spec-driver/hooks/hooks.json` 更新（PreToolUse/PostToolUse/Stop/Worktree）
 - `plugins/spec-driver/scripts/hooks/guard-spec-driver-edit.sh`
-- `.claude/rules/*.md`（4-5 个路径规则文件）
-- CLAUDE.md 精简版
+- `docs/shared/agent-behavior-rules.md`（从两端提取的共享行为约定）
+- `.claude/rules/*.md`（3-4 个路径规则增强文件）
+- CLAUDE.md + AGENTS.md 精简版（各 <100 行）
 - 14 个 agent .md frontmatter 更新
+- `scripts/sync-agent-docs.mjs` 适配新共享区块
 - `.github/workflows/claude-review.yml`
 
 ---
