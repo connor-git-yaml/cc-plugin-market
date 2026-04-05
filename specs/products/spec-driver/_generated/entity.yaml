@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T12:10:38.351Z"
+generatedAt: "2026-04-05T14:10:04.362Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
-description: "Spec Driver v3.7.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化与产品级生成产物分层，同时显式校验架构合理性与可读性"
+description: "Spec Driver v3.8.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth 合同与产品级生成产物分层，同时显式校验架构合理性与可读性"
 owner:
   value: "unknown"
   source: "unknown"
@@ -26,17 +26,19 @@ docs:
     available: true
 quality:
   currentSpec:
-    version: "聚合自 26 个增量 spec / blueprint（011–022, 032, 062–068, 070–075）"
-    lastAggregated: "2026-04-05（已纳入 075-init-template-tests-docs-closure）"
+    version: "聚合自 28 个增量 spec / blueprint（011–022, 032, 062–068, 070–077）"
+    lastAggregated: "2026-04-05（已纳入 077-wrapper-source-truth-consolidation）"
     status: "活跃"
   report:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
+    score: 100
+    generatedAt: "2026-04-05T14:10:12.143Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T12:10:38.371Z"
+    generatedAt: "2026-04-05T14:10:59.657Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"

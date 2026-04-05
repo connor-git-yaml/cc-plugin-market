@@ -149,7 +149,7 @@ products:
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
-    description: "Spec Driver v3.7.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化与产品级生成产物分层，同时显式校验架构合理性与可读性"
+    description: "Spec Driver v3.8.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth 合同与产品级生成产物分层，同时显式校验架构合理性与可读性"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -229,3 +229,9 @@ products:
       - id: "075-init-template-tests-docs-closure"
         type: FEATURE
         summary: "补齐 project-context 初始化模板、legacy markdown 迁移说明、集成测试与文档收口"
+      - id: "076-codebase-rationalization-blueprint"
+        type: ENHANCEMENT
+        summary: "代码库结构与可维护性收敛蓝图，定义 077–081 的包装层、脚本平台与发布合同收敛路线"
+      - id: "077-wrapper-source-truth-consolidation"
+        type: FEATURE
+        summary: "收拢 spec-driver wrapper source-of-truth，新增 contract、validator 与 Codex wrapper 标记"

@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.7.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, canonical project-context initialization, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.8.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, canonical project-context initialization, wrapper source-of-truth contracts, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -297,6 +297,8 @@ Spec Driver keeps a single workflow source under `plugins/spec-driver/skills/*/S
 
 - Claude Code: distributed as a plugin and auto-registered when the project is opened in Claude Code
 - Codex: install wrapper skills from repository root via `npm run codex:spec-driver:install` (or `npm run codex:spec-driver:install:global`)
+
+Codex wrapper generation is governed by `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml`; generated files under `.codex/skills/spec-driver-*/SKILL.md` should be refreshed via install, not edited directly.
 
 To initialize Spec Driver in a new project (Claude Code):
 
@@ -562,7 +564,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.7.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.8.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation
@@ -587,6 +589,7 @@ plugins/                           # Claude Code plugins
     │   ├── spec-driver-resume/        # Interrupted workflow recovery
     │   ├── spec-driver-sync/          # Product spec aggregation
     │   └── spec-driver-doc/           # Open-source doc generation
+    ├── contracts/                 # Wrapper source-of-truth contracts
     ├── templates/                 # Report and config templates
     └── scripts/                   # Initialization and scanning scripts
 

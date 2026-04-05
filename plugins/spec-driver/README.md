@@ -43,6 +43,20 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 
 安装时会同步当前 `spec-driver-*` 源 Skill 的描述与正文，只叠加最小的 Codex 运行时适配说明；升级 Spec Driver 后重新执行 `install` 可刷新已安装的 Codex Skill。
 
+### 包装来源约定（v3.8.0）
+
+- `plugins/spec-driver/skills/**` 是 `spec-driver-*` Codex wrapper 的 canonical source
+- `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` 定义 wrapper / metadata / project override 的 source-of-truth 合同
+- `.codex/skills/spec-driver-*/SKILL.md` 是安装脚本生成的包装层，不应直接手改
+- `.claude/commands/spec-driver.*.md` 是仓库级项目 override，可按项目需要调整，但它们不是插件 Skill 的 canonical source
+
+仓库维护者可用下面的命令重建并校验包装层：
+
+```bash
+npm run codex:spec-driver:install
+npm run spec-driver:check:wrappers
+```
+
 除 7 个主流程 Skill 外，Codex 安装包还会附带一个 bootstrap helper：
 
 ```text
@@ -281,6 +295,16 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 - 同时存在 `.yaml` 与 `.md`：系统固定只读取 YAML，并提示清理 legacy Markdown
 
 `Project Context suggestions` 仍然只生成到 `.specify/project-context.suggestions.yaml|md`，不会自动覆盖 canonical `project-context.yaml`。
+
+### 变更说明（v3.8.0）
+
+`spec-driver` 现在明确区分了三类资产：
+
+- `plugins/spec-driver/skills/**`：插件 Skill 源
+- `.codex/skills/spec-driver-*/SKILL.md`：由安装脚本生成的 Codex 包装层
+- `.claude/commands/spec-driver.*.md`：仓库级项目 override
+
+所有 Codex wrapper 都会写入 `Wrapper Source Contract` 头部，并通过 `validate-wrapper-sources.mjs` 校验是否仍与 canonical source 一致。
 
 ## 许可证
 

@@ -14,7 +14,7 @@ BOLD='\033[1m'
 
 # Plugin 信息
 PLUGIN_NAME="Spec Driver"
-PLUGIN_VERSION="3.7.0"
+PLUGIN_VERSION="3.8.0"
 MIN_CLAUDE_VERSION="1.0.0"
 
 # 推算插件根目录

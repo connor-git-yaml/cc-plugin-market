@@ -29,6 +29,7 @@
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:check": "bash scripts/check-plugin-sync.sh",
     "worktree:sync-local-state": "bash scripts/sync-worktree-local-state.sh",
+    "spec-driver:check:wrappers": "node plugins/spec-driver/scripts/validate-wrapper-sources.mjs --project-root . --json",
     "codex:spec-driver:install": "bash plugins/spec-driver/scripts/codex-skills.sh install",
     "codex:spec-driver:install:global": "bash plugins/spec-driver/scripts/codex-skills.sh install --global",
     "codex:spec-driver:remove": "bash plugins/spec-driver/scripts/codex-skills.sh remove",

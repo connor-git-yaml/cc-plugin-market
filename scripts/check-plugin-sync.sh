@@ -114,6 +114,14 @@ else
   WARNINGS+=("警告: 找不到 ${SETTINGS}，跳过 enabledPlugins 校验")
 fi
 
+# CHECK-5: spec-driver Codex wrapper source-of-truth 一致性
+if [ -f "plugins/spec-driver/scripts/validate-wrapper-sources.mjs" ]; then
+  WRAPPER_CHECK_OUTPUT=""
+  if ! WRAPPER_CHECK_OUTPUT=$(node plugins/spec-driver/scripts/validate-wrapper-sources.mjs --project-root "$REPO_ROOT" --json 2>&1); then
+    ERRORS+=("CHECK-5 失败: spec-driver Codex wrapper/source-of-truth 校验失败 — ${WRAPPER_CHECK_OUTPUT}")
+  fi
+fi
+
 # ---- 输出结果 ----
 if [ ${#WARNINGS[@]} -gt 0 ]; then
   echo "" >&2
