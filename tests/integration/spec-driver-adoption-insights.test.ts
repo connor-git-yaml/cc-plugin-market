@@ -13,10 +13,11 @@ describe('spec-driver adoption insights', () => {
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-adoption-'));
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
     mkdirSync(join(projectRoot, '.specify', 'runs'), { recursive: true });
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'workflow-index.json'),
       JSON.stringify({
         workflows: [
           { id: 'spec-driver-feature', title: '新功能研发', persona: '功能开发者' },
@@ -28,7 +29,7 @@ describe('spec-driver adoption insights', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'scorecard-report.json'),
       JSON.stringify({
         status: 'fail',
         score: 68,
@@ -96,14 +97,14 @@ describe('spec-driver adoption insights', () => {
 
     expect(payload.status).toBe('attention');
     expect(payload.totalRuns).toBe(3);
-    expect(payload.jsonPath).toBe('specs/products/spec-driver/adoption-report.json');
-    expect(payload.markdownPath).toBe('specs/products/spec-driver/adoption-report.md');
+    expect(payload.jsonPath).toBe('specs/products/spec-driver/_generated/adoption-report.json');
+    expect(payload.markdownPath).toBe('specs/products/spec-driver/_generated/adoption-report.md');
     expect(payload.warnings).toEqual(expect.arrayContaining([
       expect.stringContaining('忽略损坏的 JSONL 行'),
     ]));
 
     const report = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'adoption-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'adoption-report.json'), 'utf-8'),
     ) as {
       status: string;
       summary: { totalRuns: number; overallSuccessRate: number };
@@ -153,7 +154,7 @@ describe('spec-driver adoption insights', () => {
     expect(report.stats.runsWithPhaseDurations).toBe(1);
 
     const markdownReport = readFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'adoption-report.md'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'adoption-report.md'),
       'utf-8',
     );
     expect(markdownReport).toContain('# Spec Driver Adoption Report');

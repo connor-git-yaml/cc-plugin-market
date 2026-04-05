@@ -33,6 +33,19 @@
 - 质量门（如 `GATE_DESIGN`、`GATE_VERIFY`）语义不得弱化
 - 任何写操作仅限流程定义允许的产物路径，不得越界修改
 
+## 3.1 目录结构约定
+
+- `plugins/**` 是插件源码与模板源；优先改这里，不直接手改安装包装目录
+- `.codex/`、`.claude/` 是运行时/分发包装层；若内容来自安装脚本，改 source 后重新生成
+- `.specify/` 是项目级配置与运行态目录：
+  - `templates/`、`workflows/`、`scorecards/` 可作为项目覆盖层
+  - `runs/` 属于本地运行事件，不作为长期人工事实源
+- `specs/<feature>/` 只放 feature / blueprint 制品
+- `specs/products/<product>/current-spec.md` 是产品级人工事实正文
+- `specs/products/<product>/_generated/` 只放该产品的机器生成产物（如 `entity`、`workflow-index`、`scorecard-report`、`quality-report`、`adoption-report`）
+- `specs/products/_generated/` 只放跨产品索引（如 `catalog-index`、`scorecard-index`、`quality-report-index`）
+- 若需调整生成产物路径，优先抽共享 helper，不要在多个脚本里重复硬编码
+
 ## 4. 版本号规范
 
 插件版本号采用语义化版本（SemVer），每次变更时按以下规则 bump：

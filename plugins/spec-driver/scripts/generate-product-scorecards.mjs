@@ -4,6 +4,22 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  getCatalogIndexPath,
+  getLegacyProductEntityPath,
+  getLegacyProductQualityReportJsonPath,
+  getLegacyProductScorecardReportJsonPath,
+  getLegacyProductWorkflowIndexJsonPath,
+  getProductCurrentSpecPath,
+  getProductEntityPath,
+  getProductQualityReportJsonPath,
+  getProductScorecardReportJsonPath,
+  getProductScorecardReportMarkdownPath,
+  getProductWorkflowIndexJsonPath,
+  getProductsRoot,
+  getScorecardIndexPath,
+  toRelativePosix,
+} from './lib/product-artifact-paths.mjs';
 
 const SCORECARD_SCHEMA_VERSION = 1;
 const VALID_RULE_FIELDS = new Set([
@@ -40,7 +56,7 @@ function parseArgs(argv) {
 export function generateProductScorecards(options = {}) {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const generatedAt = new Date().toISOString();
-  const productsRoot = path.join(projectRoot, 'specs', 'products');
+  const productsRoot = getProductsRoot(projectRoot);
   const mappingPath = path.join(productsRoot, 'product-mapping.yaml');
   if (!fs.existsSync(mappingPath)) {
     throw new Error(`未找到 product mapping: ${mappingPath}`);
@@ -55,11 +71,13 @@ export function generateProductScorecards(options = {}) {
   const warnings = [...ruleset.warnings];
 
   for (const [productId, productDef] of Object.entries(mapping.products)) {
-    const entityPath = path.join(productsRoot, productId, 'entity.yaml');
+    const entityPath = fs.existsSync(getProductEntityPath(projectRoot, productId))
+      ? getProductEntityPath(projectRoot, productId)
+      : getLegacyProductEntityPath(projectRoot, productId);
     const entity = fs.existsSync(entityPath)
       ? parseYamlDocument(fs.readFileSync(entityPath, 'utf-8'))
       : {};
-    const currentSpecPath = path.join(productsRoot, productId, 'current-spec.md');
+    const currentSpecPath = getProductCurrentSpecPath(projectRoot, productId);
     const qualityReport = readQualityReport(projectRoot, productId, entity);
     const featureInputs = collectFeatureInputs(projectRoot, productDef.specs);
     const productContext = {
@@ -107,14 +125,13 @@ export function generateProductScorecards(options = {}) {
       ]),
     };
 
-    const productDir = path.join(productsRoot, productId);
-    fs.mkdirSync(productDir, { recursive: true });
-    const jsonPath = path.join(productDir, 'scorecard-report.json');
-    const markdownPath = path.join(productDir, 'scorecard-report.md');
+    const jsonPath = getProductScorecardReportJsonPath(projectRoot, productId);
+    const markdownPath = getProductScorecardReportMarkdownPath(projectRoot, productId);
+    fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
     fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf-8');
     fs.writeFileSync(markdownPath, renderScorecardMarkdown(report), 'utf-8');
 
-    patchEntityScorecard(productDir, entityPath, report, projectRoot);
+    patchEntityScorecard(entityPath, report, projectRoot, productId);
 
     scorecardSummaries.push({
       id: productId,
@@ -131,7 +148,8 @@ export function generateProductScorecards(options = {}) {
     });
   }
 
-  const scorecardIndexPath = path.join(productsRoot, 'scorecard-index.yaml');
+  const scorecardIndexPath = getScorecardIndexPath(projectRoot);
+  fs.mkdirSync(path.dirname(scorecardIndexPath), { recursive: true });
   const scorecardIndex = {
     schemaVersion: SCORECARD_SCHEMA_VERSION,
     generatedAt,
@@ -554,14 +572,14 @@ function buildScorecardSummary(ruleResults, productContext, score, status) {
   ];
 }
 
-function patchEntityScorecard(productDir, entityPath, report, projectRoot) {
+function patchEntityScorecard(entityPath, report, projectRoot, productId) {
   if (!fs.existsSync(entityPath)) {
     return;
   }
   const entity = parseYamlDocument(fs.readFileSync(entityPath, 'utf-8'));
   entity.quality = isObject(entity.quality) ? entity.quality : {};
   entity.quality.scorecard = {
-    path: toPosix(path.relative(projectRoot, path.join(productDir, 'scorecard-report.json'))),
+    path: toRelativePosix(projectRoot, getProductScorecardReportJsonPath(projectRoot, productId)),
     status: report.status,
     score: report.score,
     generatedAt: report.generatedAt,
@@ -570,7 +588,7 @@ function patchEntityScorecard(productDir, entityPath, report, projectRoot) {
   if (!sourceRefs.some((source) => source.kind === 'scorecard-report')) {
     sourceRefs.push({
       kind: 'scorecard-report',
-      path: toPosix(path.relative(projectRoot, path.join(productDir, 'scorecard-report.json'))),
+      path: toRelativePosix(projectRoot, getProductScorecardReportJsonPath(projectRoot, productId)),
     });
   }
   entity.sourceRefs = sourceRefs;
@@ -578,7 +596,7 @@ function patchEntityScorecard(productDir, entityPath, report, projectRoot) {
 }
 
 function patchCatalogIndex(projectRoot, productSummaries) {
-  const catalogIndexPath = path.join(projectRoot, 'specs', 'products', 'catalog-index.yaml');
+  const catalogIndexPath = getCatalogIndexPath(projectRoot);
   if (!fs.existsSync(catalogIndexPath)) {
     return;
   }
@@ -602,22 +620,29 @@ function patchCatalogIndex(projectRoot, productSummaries) {
 }
 
 function readWorkflowIndex(projectRoot) {
-  const indexPath = path.join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json');
-  if (!fs.existsSync(indexPath)) {
-    return null;
+  const candidates = [
+    getProductWorkflowIndexJsonPath(projectRoot, 'spec-driver'),
+    getLegacyProductWorkflowIndexJsonPath(projectRoot, 'spec-driver'),
+  ];
+  for (const indexPath of candidates) {
+    if (!fs.existsSync(indexPath)) {
+      continue;
+    }
+    try {
+      return JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+    } catch {
+      return null;
+    }
   }
-  try {
-    return JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function readQualityReport(projectRoot, productId, entity) {
   const explicitPath = entity?.quality?.report?.path;
   const candidates = [
     explicitPath ? path.join(projectRoot, explicitPath) : null,
-    path.join(projectRoot, 'specs', 'products', productId, 'quality-report.json'),
+    getProductQualityReportJsonPath(projectRoot, productId),
+    getLegacyProductQualityReportJsonPath(projectRoot, productId),
     path.join(projectRoot, 'specs', 'quality-report.json'),
   ].filter(Boolean);
 
@@ -627,12 +652,12 @@ function readQualityReport(projectRoot, productId, entity) {
     }
     try {
       return {
-        path: toPosix(path.relative(projectRoot, candidate)),
+        path: toRelativePosix(projectRoot, candidate),
         payload: JSON.parse(fs.readFileSync(candidate, 'utf-8')),
       };
     } catch {
       return {
-        path: toPosix(path.relative(projectRoot, candidate)),
+        path: toRelativePosix(projectRoot, candidate),
         payload: null,
       };
     }

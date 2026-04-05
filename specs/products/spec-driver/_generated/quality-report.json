@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "title": "Spec Driver Product Quality Report",
-  "generatedAt": "2026-04-05T02:12:33.409Z",
+  "generatedAt": "2026-04-05T03:19:01.897Z",
   "projectName": "Spec Driver",
   "productId": "spec-driver",
   "status": "pass",
@@ -80,7 +80,7 @@
     {
       "documentId": "entity",
       "title": "Product Entity Catalog",
-      "sourcePath": "specs/products/spec-driver/entity.yaml",
+      "sourcePath": "specs/products/spec-driver/_generated/entity.yaml",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -100,7 +100,7 @@
             {
               "sourceType": "spec",
               "ref": "entity",
-              "path": "specs/products/spec-driver/entity.yaml",
+              "path": "specs/products/spec-driver/_generated/entity.yaml",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -112,7 +112,7 @@
     {
       "documentId": "scorecard-report",
       "title": "Scorecard Report",
-      "sourcePath": "specs/products/spec-driver/scorecard-report.json",
+      "sourcePath": "specs/products/spec-driver/_generated/scorecard-report.json",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -132,7 +132,7 @@
             {
               "sourceType": "generated-doc",
               "ref": "scorecard-report",
-              "path": "specs/products/spec-driver/scorecard-report.json",
+              "path": "specs/products/spec-driver/_generated/scorecard-report.json",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -144,7 +144,7 @@
     {
       "documentId": "workflow-index",
       "title": "Workflow Registry Index",
-      "sourcePath": "specs/products/spec-driver/workflow-index.json",
+      "sourcePath": "specs/products/spec-driver/_generated/workflow-index.json",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -164,7 +164,7 @@
             {
               "sourceType": "generated-doc",
               "ref": "workflow-index",
-              "path": "specs/products/spec-driver/workflow-index.json",
+              "path": "specs/products/spec-driver/_generated/workflow-index.json",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -176,7 +176,7 @@
     {
       "documentId": "adoption-report",
       "title": "Adoption Report",
-      "sourcePath": "specs/products/spec-driver/adoption-report.json",
+      "sourcePath": "specs/products/spec-driver/_generated/adoption-report.json",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -196,7 +196,7 @@
             {
               "sourceType": "generated-doc",
               "ref": "adoption-report",
-              "path": "specs/products/spec-driver/adoption-report.json",
+              "path": "specs/products/spec-driver/_generated/adoption-report.json",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -229,7 +229,7 @@
       "title": "Product Entity Catalog",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/spec-driver/entity.yaml",
+      "presentPath": "specs/products/spec-driver/_generated/entity.yaml",
       "coverage": "covered",
       "requiredBy": [
         "catalog"
@@ -245,7 +245,7 @@
       "title": "Scorecard Report",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/spec-driver/scorecard-report.json",
+      "presentPath": "specs/products/spec-driver/_generated/scorecard-report.json",
       "coverage": "covered",
       "requiredBy": [
         "scorecards"
@@ -261,7 +261,7 @@
       "title": "Workflow Registry Index",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/spec-driver/workflow-index.json",
+      "presentPath": "specs/products/spec-driver/_generated/workflow-index.json",
       "coverage": "covered",
       "requiredBy": [
         "workflow-registry"
@@ -277,7 +277,7 @@
       "title": "Adoption Report",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/spec-driver/adoption-report.json",
+      "presentPath": "specs/products/spec-driver/_generated/adoption-report.json",
       "coverage": "covered",
       "requiredBy": [
         "adoption-feedback"

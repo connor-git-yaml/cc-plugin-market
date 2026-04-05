@@ -3,9 +3,9 @@
 ## 现有事实源
 
 - `specs/products/<product>/current-spec.md`
-- `specs/products/<product>/entity.yaml`
-- `specs/products/catalog-index.yaml`
-- `specs/products/spec-driver/workflow-index.json`
+- `specs/products/<product>/_generated/entity.yaml`
+- `specs/products/_generated/catalog-index.yaml`
+- `specs/products/spec-driver/_generated/workflow-index.json`
 - `specs/quality-report.json`
 - `specs/<feature>/verification/verification-report.md`
 

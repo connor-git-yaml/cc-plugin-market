@@ -9,7 +9,7 @@
 
 - `plugins/spec-driver/workflows/*.yaml` 的正式 machine-readable definitions
 - `.specify/workflows/*.yaml` 的 metadata-only 项目级覆盖
-- `specs/products/spec-driver/workflow-index.md/.json` 的可读索引
+- `specs/products/spec-driver/_generated/workflow-index.md/.json` 的可读索引
 
 ## 2. 架构决策
 

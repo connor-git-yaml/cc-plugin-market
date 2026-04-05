@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T02:12:33.424Z",
+  "generatedAt": "2026-04-05T03:19:05.049Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spec-driver",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 18 个增量 spec。"
+        "current-spec 覆盖了全部 22 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,16 +45,18 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 5 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 7 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 5,
+        "totalFeatures": 7,
         "fresh": [
           "012-product-spec-sync",
           "063-product-entity-catalog",
           "064-workflow-registry-golden-paths",
           "065-scorecards-continuous-governance",
-          "066-adoption-friction-insights"
+          "066-adoption-friction-insights",
+          "068-scorecard-signal-alignment",
+          "071-product-artifact-boundary-cleanup"
         ],
         "stale": [],
         "missing": [],
@@ -62,7 +64,9 @@
         "coverageRatio": 1,
         "ignored": {
           "blueprint": [
-            "062-catalog-driven-spec-driver-blueprint"
+            "062-catalog-driven-spec-driver-blueprint",
+            "067-governance-remediation-blueprint",
+            "070-project-context-implement-skill-blueprint"
           ],
           "nonImplemented": [
             "011-speckit-driver-pro",
@@ -93,7 +97,7 @@
         "Required docs 覆盖 5/5。"
       ],
       "evidence": {
-        "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+        "qualityReportPath": "specs/products/spec-driver/_generated/quality-report.json",
         "coveredRequiredDocs": 5,
         "totalRequiredDocs": 5,
         "coverageRatio": 1
@@ -111,7 +115,7 @@
         "quality-report 未检测到显式文档冲突。"
       ],
       "evidence": {
-        "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+        "qualityReportPath": "specs/products/spec-driver/_generated/quality-report.json",
         "totalConflicts": 0,
         "high": 0,
         "medium": 0,

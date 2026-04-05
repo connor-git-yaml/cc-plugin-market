@@ -149,7 +149,7 @@ products:
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
-    description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并补齐 Catalog、Workflow Registry、Scorecards 与 Adoption Feedback 四层产品事实"
+    description: "Spec Driver v3.2.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -205,3 +205,15 @@ products:
       - id: "066-adoption-friction-insights"
         type: FEATURE
         summary: "本地运行事件、adoption-report 与 friction hotspots 反馈闭环"
+      - id: "067-governance-remediation-blueprint"
+        type: ENHANCEMENT
+        summary: "治理收敛蓝图，定义 verification 债与 quality / scorecard 信号对齐的修正路线"
+      - id: "068-scorecard-signal-alignment"
+        type: FEATURE
+        summary: "产品级 quality-report 接入与 scorecard 统计口径校准"
+      - id: "070-project-context-implement-skill-blueprint"
+        type: ENHANCEMENT
+        summary: "Project Context 与 Implement Skill 解耦蓝图，定义 071–075 的后续路线"
+      - id: "071-product-artifact-boundary-cleanup"
+        type: FEATURE
+        summary: "清理产品事实源与生成产物目录边界，统一 `_generated` 合同与共享路径 helper"

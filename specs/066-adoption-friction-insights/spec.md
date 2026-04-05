@@ -13,7 +13,7 @@
 
 **Why this priority**: 066 是 062 里程碑的反馈层，没有 adoption report，063-065 仍然缺少“实际使用发生了什么”的闭环。
 
-**Independent Test**: 写入若干 run summary 到 `.specify/runs/*.jsonl`，运行 adoption helper，验证输出 `specs/products/spec-driver/adoption-report.md/.json`。
+**Independent Test**: 写入若干 run summary 到 `.specify/runs/*.jsonl`，运行 adoption helper，验证输出 `specs/products/spec-driver/_generated/adoption-report.md/.json`。
 
 **Acceptance Scenarios**:
 
@@ -63,7 +63,7 @@
 
 - **FR-001**: 系统 MUST 提供 `record-workflow-run.mjs`，将最小 run summary 追加到 `.specify/runs/*.jsonl`。
 - **FR-002**: run summary MUST 只包含最小必要字段，如 `workflowId`、`runId`、`result`、`durationMs`、`rerunPhase`、`gatePauses`、`verificationFailures`、`artifacts`。
-- **FR-003**: 系统 MUST 提供 `generate-adoption-insights.mjs`，输出 `specs/products/spec-driver/adoption-report.md/.json`。
+- **FR-003**: 系统 MUST 提供 `generate-adoption-insights.mjs`，输出 `specs/products/spec-driver/_generated/adoption-report.md/.json`。
 - **FR-004**: adoption helper MUST 聚合 workflow 使用次数、成功率 / 失败率、rerun 热点、gate pause 热点、verification 失败热点。
 - **FR-005**: helper MUST 在日志缺失或损坏时降级生成报告，并在 `warnings` 中解释原因。
 - **FR-006**: `init-project.sh` MUST 预创建 `.specify/runs/`。
@@ -78,7 +78,7 @@
 
 ## Success Criteria
 
-- **SC-001**: adoption helper 能生成 `specs/products/spec-driver/adoption-report.md/.json`。
+- **SC-001**: adoption helper 能生成 `specs/products/spec-driver/_generated/adoption-report.md/.json`。
 - **SC-002**: 报告中包含 workflow usage、rerun hotspots、gate pause hotspots、verification failure hotspots。
 - **SC-003**: 缺少 run logs 或存在损坏 JSONL 行时，helper 仍然 PASS 并输出 warning。
 - **SC-004**: `spec-driver-sync` workflow registry 中出现 adoption 产物路径。

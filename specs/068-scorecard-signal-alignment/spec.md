@@ -15,7 +15,7 @@
 
 ### User Story 2 - 产品级质量报告可直接被治理层消费 (Priority: P1)
 
-作为 Spec Driver 的治理消费者，我希望 `specs/products/<product>/quality-report.json` 稳定存在，且包含 required docs 与 conflicts 统计，这样 `docs-coverage` / `docs-conflicts` 不再只能退化成 `WARN`。
+作为 Spec Driver 的治理消费者，我希望 `specs/products/<product>/_generated/quality-report.json` 稳定存在，且包含 required docs 与 conflicts 统计，这样 `docs-coverage` / `docs-conflicts` 不再只能退化成 `WARN`。
 
 **Independent Test**: 运行 product quality report 集成测试，确认为两个产品生成 `quality-report.md/.json`，并回写 entity/catalog 摘要。
 
@@ -38,7 +38,7 @@
 
 ## Success Criteria
 
-- `specs/products/spec-driver/scorecard-report.md` 显示 `PASS`
-- `specs/products/reverse-spec/scorecard-report.md` 显示 `PASS`
-- `specs/products/quality-report-index.yaml` 已生成
+- `specs/products/spec-driver/_generated/scorecard-report.md` 显示 `PASS`
+- `specs/products/reverse-spec/_generated/scorecard-report.md` 显示 `PASS`
+- `specs/products/_generated/quality-report-index.yaml` 已生成
 - `catalog-index.yaml` 和 `entity.yaml` 已回写 quality report 摘要

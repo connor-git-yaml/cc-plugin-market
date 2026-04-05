@@ -3,6 +3,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  getCatalogIndexPath,
+  getLegacyProductAdoptionReportJsonPath,
+  getLegacyProductEntityPath,
+  getLegacyProductScorecardReportJsonPath,
+  getLegacyProductWorkflowIndexJsonPath,
+  getProductAdoptionReportJsonPath,
+  getProductCurrentSpecPath,
+  getProductEntityPath,
+  getProductQualityReportJsonPath,
+  getProductQualityReportMarkdownPath,
+  getProductScorecardReportJsonPath,
+  getProductWorkflowIndexJsonPath,
+  getProductsRoot,
+  getQualityReportIndexPath,
+  toRelativePosix,
+} from './lib/product-artifact-paths.mjs';
 
 const QUALITY_SCHEMA_VERSION = 1;
 
@@ -32,7 +49,7 @@ function parseArgs(argv) {
 export function generateProductQualityReports(options = {}) {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const generatedAt = new Date().toISOString();
-  const productsRoot = path.join(projectRoot, 'specs', 'products');
+  const productsRoot = getProductsRoot(projectRoot);
   const mappingPath = path.join(productsRoot, 'product-mapping.yaml');
   if (!fs.existsSync(mappingPath)) {
     throw new Error(`未找到 product mapping: ${mappingPath}`);
@@ -43,10 +60,9 @@ export function generateProductQualityReports(options = {}) {
   const warnings = [];
 
   for (const [productId] of Object.entries(mapping.products)) {
-    const productDir = path.join(productsRoot, productId);
-    fs.mkdirSync(productDir, { recursive: true });
-
-    const entityPath = path.join(productDir, 'entity.yaml');
+    const entityPath = fs.existsSync(getProductEntityPath(projectRoot, productId))
+      ? getProductEntityPath(projectRoot, productId)
+      : getLegacyProductEntityPath(projectRoot, productId);
     const entity = fs.existsSync(entityPath)
       ? parseYamlDocument(fs.readFileSync(entityPath, 'utf-8'))
       : {};
@@ -108,11 +124,12 @@ export function generateProductQualityReports(options = {}) {
       stats,
     };
 
-    const jsonPath = path.join(productDir, 'quality-report.json');
-    const markdownPath = path.join(productDir, 'quality-report.md');
+    const jsonPath = getProductQualityReportJsonPath(projectRoot, productId);
+    const markdownPath = getProductQualityReportMarkdownPath(projectRoot, productId);
+    fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
     fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf-8');
     fs.writeFileSync(markdownPath, renderQualityMarkdown(report), 'utf-8');
-    patchEntityQuality(productDir, entityPath, report, projectRoot);
+    patchEntityQuality(entityPath, report, projectRoot, productId);
 
     summaries.push({
       id: productId,
@@ -126,7 +143,8 @@ export function generateProductQualityReports(options = {}) {
     warnings.push(...generalWarnings);
   }
 
-  const indexPath = path.join(productsRoot, 'quality-report-index.yaml');
+  const indexPath = getQualityReportIndexPath(projectRoot);
+  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
   fs.writeFileSync(indexPath, stringifyYaml({
     schemaVersion: QUALITY_SCHEMA_VERSION,
     generatedAt,
@@ -182,49 +200,61 @@ function collectDocumentRefs(projectRoot, productId, entity) {
   addDoc({
     id: 'entity',
     title: 'Product Entity Catalog',
-    path: path.join(projectRoot, 'specs', 'products', productId, 'entity.yaml'),
+    path: firstExistingPath(
+      getProductEntityPath(projectRoot, productId),
+      getLegacyProductEntityPath(projectRoot, productId),
+    ),
     sourceType: 'spec',
     required: true,
     requiredBy: ['catalog'],
     includedInBundles: ['governance'],
     notes: [],
-    available: fs.existsSync(path.join(projectRoot, 'specs', 'products', productId, 'entity.yaml')),
+    available: fs.existsSync(getProductEntityPath(projectRoot, productId)) || fs.existsSync(getLegacyProductEntityPath(projectRoot, productId)),
   });
 
   addDoc({
     id: 'scorecard-report',
     title: 'Scorecard Report',
-    path: path.join(projectRoot, 'specs', 'products', productId, 'scorecard-report.json'),
+    path: firstExistingPath(
+      getProductScorecardReportJsonPath(projectRoot, productId),
+      getLegacyProductScorecardReportJsonPath(projectRoot, productId),
+    ),
     sourceType: 'generated-doc',
     required: true,
     requiredBy: ['scorecards'],
     includedInBundles: ['governance'],
     notes: [],
-    available: fs.existsSync(path.join(projectRoot, 'specs', 'products', productId, 'scorecard-report.json')),
+    available: fs.existsSync(getProductScorecardReportJsonPath(projectRoot, productId)) || fs.existsSync(getLegacyProductScorecardReportJsonPath(projectRoot, productId)),
   });
 
   if (productId === 'spec-driver') {
     addDoc({
       id: 'workflow-index',
       title: 'Workflow Registry Index',
-      path: path.join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'),
+      path: firstExistingPath(
+        getProductWorkflowIndexJsonPath(projectRoot, 'spec-driver'),
+        getLegacyProductWorkflowIndexJsonPath(projectRoot, 'spec-driver'),
+      ),
       sourceType: 'generated-doc',
       required: true,
       requiredBy: ['workflow-registry'],
       includedInBundles: ['governance'],
       notes: [],
-      available: fs.existsSync(path.join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json')),
+      available: fs.existsSync(getProductWorkflowIndexJsonPath(projectRoot, 'spec-driver')) || fs.existsSync(getLegacyProductWorkflowIndexJsonPath(projectRoot, 'spec-driver')),
     });
     addDoc({
       id: 'adoption-report',
       title: 'Adoption Report',
-      path: path.join(projectRoot, 'specs', 'products', 'spec-driver', 'adoption-report.json'),
+      path: firstExistingPath(
+        getProductAdoptionReportJsonPath(projectRoot, 'spec-driver'),
+        getLegacyProductAdoptionReportJsonPath(projectRoot, 'spec-driver'),
+      ),
       sourceType: 'generated-doc',
       required: true,
       requiredBy: ['adoption-feedback'],
       includedInBundles: ['governance'],
       notes: [],
-      available: fs.existsSync(path.join(projectRoot, 'specs', 'products', 'spec-driver', 'adoption-report.json')),
+      available: fs.existsSync(getProductAdoptionReportJsonPath(projectRoot, 'spec-driver')) || fs.existsSync(getLegacyProductAdoptionReportJsonPath(projectRoot, 'spec-driver')),
     });
   }
 
@@ -236,12 +266,12 @@ function collectDocumentRefs(projectRoot, productId, entity) {
 
 function defaultDocPath(projectRoot, productId, docId) {
   if (docId === 'current-spec') {
-    return path.join(projectRoot, 'specs', 'products', productId, 'current-spec.md');
+    return getProductCurrentSpecPath(projectRoot, productId);
   }
   if (docId === 'readme') {
     return path.join(projectRoot, 'README.md');
   }
-  return path.join(projectRoot, 'specs', 'products', productId, `${docId}.md`);
+  return path.join(getProductGeneratedRootForDoc(projectRoot, productId), `${docId}.md`);
 }
 
 function titleForDocId(docId) {
@@ -483,14 +513,14 @@ function renderQualityMarkdown(report) {
   ].join('\n');
 }
 
-function patchEntityQuality(productDir, entityPath, report, projectRoot) {
+function patchEntityQuality(entityPath, report, projectRoot, productId) {
   if (!fs.existsSync(entityPath)) {
     return;
   }
   const entity = parseYamlDocument(fs.readFileSync(entityPath, 'utf-8'));
   entity.quality = isObject(entity.quality) ? entity.quality : {};
   entity.quality.report = {
-    path: toPosix(path.relative(projectRoot, path.join(productDir, 'quality-report.json'))),
+    path: toRelativePosix(projectRoot, getProductQualityReportJsonPath(projectRoot, productId)),
     status: report.status,
     score: report.stats.score,
     generatedAt: report.generatedAt,
@@ -499,7 +529,7 @@ function patchEntityQuality(productDir, entityPath, report, projectRoot) {
   if (!sourceRefs.some((source) => source.kind === 'quality-report')) {
     sourceRefs.push({
       kind: 'quality-report',
-      path: toPosix(path.relative(projectRoot, path.join(productDir, 'quality-report.json'))),
+      path: toRelativePosix(projectRoot, getProductQualityReportJsonPath(projectRoot, productId)),
     });
   }
   entity.sourceRefs = sourceRefs;
@@ -507,7 +537,7 @@ function patchEntityQuality(productDir, entityPath, report, projectRoot) {
 }
 
 function patchCatalogIndex(projectRoot, summaries) {
-  const catalogIndexPath = path.join(projectRoot, 'specs', 'products', 'catalog-index.yaml');
+  const catalogIndexPath = getCatalogIndexPath(projectRoot);
   if (!fs.existsSync(catalogIndexPath)) {
     return;
   }
@@ -553,6 +583,17 @@ function slugToTitle(value) {
 
 function toPosix(value) {
   return value.split(path.sep).join('/');
+}
+
+function getProductGeneratedRootForDoc(projectRoot, productId) {
+  return path.dirname(getProductQualityReportMarkdownPath(projectRoot, productId));
+}
+
+function firstExistingPath(preferredPath, legacyPath) {
+  if (preferredPath && fs.existsSync(preferredPath)) {
+    return preferredPath;
+  }
+  return legacyPath ?? preferredPath;
 }
 
 function isObject(value) {

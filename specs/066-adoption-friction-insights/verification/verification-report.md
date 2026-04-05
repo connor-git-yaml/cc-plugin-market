@@ -26,6 +26,7 @@ npm run build
 - `tests/integration/spec-driver-init-project.test.ts` 验证 `init-project.sh` 会创建 `.specify/runs/`
 - `tests/integration/spec-driver-workflow-registry.test.ts` 验证 `spec-driver-sync` 的 workflow artifacts 已包含 adoption report
 - `npm run codex:spec-driver:install` 用于刷新 `.codex/skills/*` 包装技能，使 Codex 侧也带上 066 的 run logging / adoption 合同
+- adoption 产物路径已与 071 的目录合同对齐，当前真实输出位于 `specs/products/spec-driver/_generated/adoption-report.md/.json`
 
 ## Notes
 

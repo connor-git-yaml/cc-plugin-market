@@ -144,7 +144,7 @@ flowchart TD
 
 为减少目录爆炸，这轮只引入最小目录：
 
-- `specs/products/<product>/entity.yaml`
+- `specs/products/<product>/_generated/entity.yaml`
 - `plugins/spec-driver/workflows/*.yaml`
 - `.specify/workflows/*.yaml`（项目级覆盖，可选）
 - `.specify/scorecards/*.yaml`
@@ -183,8 +183,8 @@ flowchart TD
 
 **交付物**:
 
-- `specs/products/<product>/entity.yaml`
-- `specs/products/catalog-index.yaml` 或等价索引文件
+- `specs/products/<product>/_generated/entity.yaml`
+- `specs/products/_generated/catalog-index.yaml` 或等价索引文件
 - entity schema（最小字段集）
 
 **最小字段集**:

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "title": "Reverse-Spec Product Quality Report",
-  "generatedAt": "2026-04-05T02:12:33.409Z",
+  "generatedAt": "2026-04-05T03:19:01.897Z",
   "projectName": "Reverse-Spec",
   "productId": "reverse-spec",
   "status": "pass",
@@ -80,7 +80,7 @@
     {
       "documentId": "entity",
       "title": "Product Entity Catalog",
-      "sourcePath": "specs/products/reverse-spec/entity.yaml",
+      "sourcePath": "specs/products/reverse-spec/_generated/entity.yaml",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -100,7 +100,7 @@
             {
               "sourceType": "spec",
               "ref": "entity",
-              "path": "specs/products/reverse-spec/entity.yaml",
+              "path": "specs/products/reverse-spec/_generated/entity.yaml",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -112,7 +112,7 @@
     {
       "documentId": "scorecard-report",
       "title": "Scorecard Report",
-      "sourcePath": "specs/products/reverse-spec/scorecard-report.json",
+      "sourcePath": "specs/products/reverse-spec/_generated/scorecard-report.json",
       "available": true,
       "coverage": "high",
       "confidence": "high",
@@ -132,7 +132,7 @@
             {
               "sourceType": "generated-doc",
               "ref": "scorecard-report",
-              "path": "specs/products/reverse-spec/scorecard-report.json",
+              "path": "specs/products/reverse-spec/_generated/scorecard-report.json",
               "note": "generated=true",
               "confidence": "high",
               "inferred": false
@@ -165,7 +165,7 @@
       "title": "Product Entity Catalog",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/reverse-spec/entity.yaml",
+      "presentPath": "specs/products/reverse-spec/_generated/entity.yaml",
       "coverage": "covered",
       "requiredBy": [
         "catalog"
@@ -181,7 +181,7 @@
       "title": "Scorecard Report",
       "required": true,
       "present": true,
-      "presentPath": "specs/products/reverse-spec/scorecard-report.json",
+      "presentPath": "specs/products/reverse-spec/_generated/scorecard-report.json",
       "coverage": "covered",
       "requiredBy": [
         "scorecards"

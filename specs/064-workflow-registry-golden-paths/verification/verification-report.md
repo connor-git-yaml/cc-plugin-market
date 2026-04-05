@@ -31,10 +31,10 @@ node plugins/spec-driver/scripts/generate-product-entity-catalog.mjs --project-r
 
 - `plugins/spec-driver/workflows/*.yaml`
 - `plugins/spec-driver/workflows/golden-paths.yaml`
-- `specs/products/spec-driver/workflow-index.md`
-- `specs/products/spec-driver/workflow-index.json`
-- `specs/products/spec-driver/entity.yaml`
-- `specs/products/catalog-index.yaml`
+- `specs/products/spec-driver/_generated/workflow-index.md`
+- `specs/products/spec-driver/_generated/workflow-index.json`
+- `specs/products/spec-driver/_generated/entity.yaml`
+- `specs/products/_generated/catalog-index.yaml`
 
 ## Notes
 

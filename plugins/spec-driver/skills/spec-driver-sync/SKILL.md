@@ -133,7 +133,7 @@ if specs/ 下无 NNN-* 功能目录或所有目录中均无 spec.md:
 
 ## 聚合流程
 
-**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/entity.yaml`、`specs/products/catalog-index.yaml`、`specs/products/<product>/scorecard-report.md/.json`、`specs/products/scorecard-index.yaml` 以及 `specs/products/spec-driver/adoption-report.md/.json`。
+**目的**：将 `specs/NNN-xxx/` 下的增量功能规范智能合并为 `specs/products/<product>/current-spec.md` 产品级活文档，并在其中产出一份可供 `spec-driver-doc` 消费的“对外文档摘要”；随后通过确定性 helper 生成 `specs/products/<product>/_generated/entity.yaml`、`specs/products/_generated/catalog-index.yaml`、`specs/products/<product>/_generated/scorecard-report.md/.json`、`specs/products/_generated/scorecard-index.yaml` 以及 `specs/products/spec-driver/_generated/adoption-report.md/.json`。
 
 **适用场景**：
 
@@ -201,8 +201,8 @@ node "$PLUGIN_DIR/scripts/generate-product-entity-catalog.mjs" --project-root "{
 ```
 
 3. 解析 helper 返回：
-   - `specs/products/<product>/entity.yaml`
-   - `specs/products/catalog-index.yaml`
+   - `specs/products/<product>/_generated/entity.yaml`
+   - `specs/products/_generated/catalog-index.yaml`
    - 缺失 `current-spec.md` / quality report 时的 warning
 
 4. 执行 workflow registry helper（若当前产品包含 `spec-driver`）：
@@ -230,14 +230,14 @@ node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{proje
 ```
 
 8. 解析 helper 返回：
-   - `specs/products/<product>/quality-report.md`
-   - `specs/products/<product>/quality-report.json`
-   - `specs/products/quality-report-index.yaml`
-   - `specs/products/<product>/scorecard-report.md`
-   - `specs/products/<product>/scorecard-report.json`
-   - `specs/products/scorecard-index.yaml`
-   - `specs/products/spec-driver/adoption-report.md`
-   - `specs/products/spec-driver/adoption-report.json`
+   - `specs/products/<product>/_generated/quality-report.md`
+   - `specs/products/<product>/_generated/quality-report.json`
+   - `specs/products/_generated/quality-report-index.yaml`
+   - `specs/products/<product>/_generated/scorecard-report.md`
+   - `specs/products/<product>/_generated/scorecard-report.json`
+   - `specs/products/_generated/scorecard-index.yaml`
+   - `specs/products/spec-driver/_generated/adoption-report.md`
+   - `specs/products/spec-driver/_generated/adoption-report.json`
    - 基于 quality-report / verification-report 的 warning
 
 2. 输出聚合完成报告：
@@ -266,15 +266,15 @@ node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{proje
 产品映射: specs/products/product-mapping.yaml
 doc 上游摘要: 已写入 current-spec.md 的“对外文档摘要（供 spec-driver-doc 使用）”区块
 实体目录:
-  ✅ {产品 A}: specs/products/{产品 A}/entity.yaml
-  ✅ {产品 B}: specs/products/{产品 B}/entity.yaml
-Catalog 索引: specs/products/catalog-index.yaml
+  ✅ {产品 A}: specs/products/{产品 A}/_generated/entity.yaml
+  ✅ {产品 B}: specs/products/{产品 B}/_generated/entity.yaml
+Catalog 索引: specs/products/_generated/catalog-index.yaml
 持续治理:
-  ✅ {产品 A}: specs/products/{产品 A}/scorecard-report.md
-  ✅ {产品 B}: specs/products/{产品 B}/scorecard-report.md
-Scorecard 索引: specs/products/scorecard-index.yaml
+  ✅ {产品 A}: specs/products/{产品 A}/_generated/scorecard-report.md
+  ✅ {产品 B}: specs/products/{产品 B}/_generated/scorecard-report.md
+Scorecard 索引: specs/products/_generated/scorecard-index.yaml
 本地反馈:
-  ✅ spec-driver: specs/products/spec-driver/adoption-report.md
+  ✅ spec-driver: specs/products/spec-driver/_generated/adoption-report.md
   数据源: .specify/runs/*.jsonl（本地，不默认提交）
 在线调研证据: {if online_research_required: ".specify/research/sync-online-research.md"}{if not online_research_required: "跳过（项目未要求）"}
 ══════════════════════════════════════════

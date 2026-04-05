@@ -3,6 +3,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  getLegacyProductScorecardReportJsonPath,
+  getLegacyProductWorkflowIndexJsonPath,
+  getProductAdoptionReportJsonPath,
+  getProductAdoptionReportMarkdownPath,
+  getProductScorecardReportJsonPath,
+  getProductWorkflowIndexJsonPath,
+  toRelativePosix,
+} from './lib/product-artifact-paths.mjs';
 
 const SCHEMA_VERSION = 1;
 const PRODUCT_ID = 'spec-driver';
@@ -32,11 +41,14 @@ function parseArgs(argv) {
 export function generateAdoptionInsights(options = {}) {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const generatedAt = new Date().toISOString();
-  const workflowIndex = readJsonFile(path.join(projectRoot, 'specs', 'products', PRODUCT_ID, 'workflow-index.json')) ?? {
+  const workflowIndex = readJsonFile(getProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
+    ?? readJsonFile(getLegacyProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
+    ?? {
     workflows: [],
     goldenPaths: [],
   };
-  const scorecard = readJsonFile(path.join(projectRoot, 'specs', 'products', PRODUCT_ID, 'scorecard-report.json'));
+  const scorecard = readJsonFile(getProductScorecardReportJsonPath(projectRoot, PRODUCT_ID))
+    ?? readJsonFile(getLegacyProductScorecardReportJsonPath(projectRoot, PRODUCT_ID));
   const runLogResult = readRunLogs(projectRoot);
   const metrics = calculateMetrics(runLogResult.events, workflowIndex.workflows);
   const report = {
@@ -63,16 +75,15 @@ export function generateAdoptionInsights(options = {}) {
       ? {
           status: scorecard.status ?? null,
           score: scorecard.score ?? null,
-          reportPath: 'specs/products/spec-driver/scorecard-report.json',
+          reportPath: toRelativePosix(projectRoot, getProductScorecardReportJsonPath(projectRoot, PRODUCT_ID)),
         }
       : null,
     warnings: dedupeStringValues(runLogResult.warnings),
   };
 
-  const outputDir = path.join(projectRoot, 'specs', 'products', PRODUCT_ID);
-  fs.mkdirSync(outputDir, { recursive: true });
-  const jsonPath = path.join(outputDir, 'adoption-report.json');
-  const markdownPath = path.join(outputDir, 'adoption-report.md');
+  const jsonPath = getProductAdoptionReportJsonPath(projectRoot, PRODUCT_ID);
+  const markdownPath = getProductAdoptionReportMarkdownPath(projectRoot, PRODUCT_ID);
+  fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
   fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf-8');
   fs.writeFileSync(markdownPath, renderMarkdown(report), 'utf-8');
 
@@ -81,8 +92,8 @@ export function generateAdoptionInsights(options = {}) {
     generatedAt,
     productId: PRODUCT_ID,
     status: report.status,
-    jsonPath: relativePosix(projectRoot, jsonPath),
-    markdownPath: relativePosix(projectRoot, markdownPath),
+    jsonPath: toRelativePosix(projectRoot, jsonPath),
+    markdownPath: toRelativePosix(projectRoot, markdownPath),
     totalRuns: metrics.totalRuns,
     warnings: report.warnings,
   };

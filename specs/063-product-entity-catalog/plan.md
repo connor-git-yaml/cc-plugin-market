@@ -7,8 +7,8 @@
 
 在不引入新运行时依赖、不重写 `current-spec.md` 聚合逻辑的前提下，为 `spec-driver-sync` 增加一个最小 Catalog 层：
 
-- `specs/products/<product>/entity.yaml`
-- `specs/products/catalog-index.yaml`
+- `specs/products/<product>/_generated/entity.yaml`
+- `specs/products/_generated/catalog-index.yaml`
 
 并让 `sync` skill 把这两类制品视为正式交付物。
 

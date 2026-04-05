@@ -17,7 +17,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** `specs/products/product-mapping.yaml` 与至少一份 `current-spec.md`，**When** 运行 Catalog helper，**Then** 系统生成 `specs/products/<product>/entity.yaml` 与 `specs/products/catalog-index.yaml`。
+1. **Given** `specs/products/product-mapping.yaml` 与至少一份 `current-spec.md`，**When** 运行 Catalog helper，**Then** 系统生成 `specs/products/<product>/_generated/entity.yaml` 与 `specs/products/_generated/catalog-index.yaml`。
 2. **Given** `reverse-spec` 与 `spec-driver` 两个产品都存在 `current-spec.md`，**When** 运行 helper，**Then** 两个实体文档都包含 `id`、`name`、`kind`、`owner`、`lifecycle`、`repo`、`docs`、`quality`、`workflowRefs` 与 `sourceRefs`。
 
 ---
@@ -62,7 +62,7 @@
 ### Functional Requirements
 
 - **FR-001**: 系统 MUST 提供一个确定性 helper，从 `product-mapping.yaml + current-spec.md + repo metadata + quality report` 生成 `entity.yaml` 和 `catalog-index.yaml`。
-- **FR-002**: helper MUST 在 `specs/products/<product>/entity.yaml` 中输出最小字段集：`id`、`name`、`kind`、`owner`、`lifecycle`、`repo`、`docs`、`quality`、`workflowRefs`、`sourceRefs`。
+- **FR-002**: helper MUST 在 `specs/products/<product>/_generated/entity.yaml` 中输出最小字段集：`id`、`name`、`kind`、`owner`、`lifecycle`、`repo`、`docs`、`quality`、`workflowRefs`、`sourceRefs`。
 - **FR-003**: helper MUST 将 `current-spec.md` 视为正文事实层，只引用路径和聚合元信息，不复制长段正文。
 - **FR-004**: helper MUST 在缺失 owner / lifecycle / quality report 时显式写出 `unknown` 或 `inferred`，不得省略字段。
 - **FR-005**: helper MUST 为 `reverse-spec` 与 `spec-driver` 推导稳定的 `workflowRefs` 集合，作为 064 workflow registry 的最小前置引用。
@@ -82,7 +82,7 @@
 ## Success Criteria
 
 - **SC-001**: 当前仓库中的 `reverse-spec` 与 `spec-driver` 都能稳定生成 `entity.yaml`。
-- **SC-002**: `specs/products/catalog-index.yaml` 会收录全部产品实体，并保留稳定的 `entityPath` / `currentSpecPath`。
+- **SC-002**: `specs/products/_generated/catalog-index.yaml` 会收录全部产品实体，并保留稳定的 `entityPath` / `currentSpecPath`。
 - **SC-003**: 缺失 `current-spec.md` 的测试场景会返回 warning，并把 `lifecycle`、`currentSpec.status` 等字段显式写成 `unknown`。
 - **SC-004**: `plugins/spec-driver/skills/spec-driver-sync/SKILL.md` 与 `.codex/skills/spec-driver-sync/SKILL.md` 都包含 Catalog 生成步骤。
 - **SC-005**: 相关集成测试、`npm run lint`、`npm run build` 全部通过。

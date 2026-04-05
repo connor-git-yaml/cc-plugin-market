@@ -36,7 +36,7 @@
 - [x] T015 [US3] 生成 3 条 golden paths
 - [x] T016 [US3] 更新 `spec-driver-doc` source / codex skill，使其发现 `workflow-index`
 - [x] T017 [US3] 更新 063 entity helper，优先引用真实 workflow definitions
-- [x] T018 [US3] 刷新 `specs/products/spec-driver/entity.yaml` 与 `catalog-index.yaml`
+- [x] T018 [US3] 刷新 `specs/products/spec-driver/_generated/entity.yaml` 与 `catalog-index.yaml`
 
 ## Phase 6: Validation
 

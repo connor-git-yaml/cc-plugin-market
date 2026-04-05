@@ -4,6 +4,15 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  getCatalogIndexPath,
+  getLegacyProductQualityReportJsonPath,
+  getProductCurrentSpecPath,
+  getProductEntityPath,
+  getProductQualityReportJsonPath,
+  getProductsRoot,
+  toRelativePosix,
+} from './lib/product-artifact-paths.mjs';
 
 const DEFAULT_KIND = 'product';
 const DEFAULT_OWNER = 'unknown';
@@ -55,7 +64,7 @@ function parseArgs(argv) {
 export function generateProductEntityCatalog(options = {}) {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const generatedAt = new Date().toISOString();
-  const productsRoot = path.join(projectRoot, 'specs', 'products');
+  const productsRoot = getProductsRoot(projectRoot);
   const mappingPath = path.join(productsRoot, 'product-mapping.yaml');
 
   if (!fs.existsSync(mappingPath)) {
@@ -68,10 +77,10 @@ export function generateProductEntityCatalog(options = {}) {
   const warnings = [];
 
   for (const [productId, productDef] of Object.entries(mapping.products)) {
-    const currentSpecRelPath = toPosix(path.join('specs', 'products', productId, 'current-spec.md'));
-    const currentSpecPath = path.join(projectRoot, currentSpecRelPath);
-    const entityRelPath = toPosix(path.join('specs', 'products', productId, 'entity.yaml'));
-    const entityPath = path.join(projectRoot, entityRelPath);
+    const currentSpecPath = getProductCurrentSpecPath(projectRoot, productId);
+    const currentSpecRelPath = toRelativePosix(projectRoot, currentSpecPath);
+    const entityPath = getProductEntityPath(projectRoot, productId);
+    const entityRelPath = toRelativePosix(projectRoot, entityPath);
 
     const currentSpecMeta = fs.existsSync(currentSpecPath)
       ? parseCurrentSpec(fs.readFileSync(currentSpecPath, 'utf-8'))
@@ -185,13 +194,14 @@ export function generateProductEntityCatalog(options = {}) {
     products: entities,
   };
 
-  const catalogIndexPath = path.join(productsRoot, 'catalog-index.yaml');
+  const catalogIndexPath = getCatalogIndexPath(projectRoot);
+  fs.mkdirSync(path.dirname(catalogIndexPath), { recursive: true });
   fs.writeFileSync(catalogIndexPath, stringifyYaml(catalogIndex), 'utf-8');
 
   return {
     projectRoot,
     generatedAt,
-    catalogIndexPath: toPosix(path.relative(projectRoot, catalogIndexPath)),
+    catalogIndexPath: toRelativePosix(projectRoot, catalogIndexPath),
     entities,
     warnings,
   };
@@ -454,7 +464,8 @@ function detectRepoMetadata(projectRoot) {
 
 function detectQualityReport(projectRoot, productId) {
   const candidates = [
-    path.join(projectRoot, 'specs', 'products', productId, 'quality-report.json'),
+    getProductQualityReportJsonPath(projectRoot, productId),
+    getLegacyProductQualityReportJsonPath(projectRoot, productId),
     path.join(projectRoot, 'specs', 'quality-report.json'),
   ];
 
@@ -466,12 +477,12 @@ function detectQualityReport(projectRoot, productId) {
     try {
       const payload = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
       return {
-        path: toPosix(path.relative(projectRoot, candidate)),
+        path: toRelativePosix(projectRoot, candidate),
         status: typeof payload.status === 'string' ? payload.status : 'available',
       };
     } catch {
       return {
-        path: toPosix(path.relative(projectRoot, candidate)),
+        path: toRelativePosix(projectRoot, candidate),
         status: 'available',
       };
     }

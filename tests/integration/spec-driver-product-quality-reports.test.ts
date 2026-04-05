@@ -14,6 +14,9 @@ describe('generate-product-quality-reports.mjs', () => {
     projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-product-quality-'));
     mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', '_generated'), { recursive: true });
 
     writeFileSync(
       join(projectRoot, 'specs', 'products', 'product-mapping.yaml'),
@@ -43,28 +46,28 @@ describe('generate-product-quality-reports.mjs', () => {
     );
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', 'scorecard-report.json'),
+      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'scorecard-report.json'),
       JSON.stringify({ status: 'pass', stats: { score: 100 } }, null, 2),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'scorecard-report.json'),
       JSON.stringify({ status: 'pass', stats: { score: 100 } }, null, 2),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'workflow-index.json'),
       JSON.stringify({ workflows: [{ id: 'spec-driver-sync' }], goldenPaths: [{ id: 'sync-governance' }] }, null, 2),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'adoption-report.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'adoption-report.json'),
       JSON.stringify({ status: 'healthy', totalRuns: 5 }, null, 2),
       'utf-8',
     );
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'),
       [
         'id: "reverse-spec"',
         'name: "Reverse-Spec"',
@@ -84,7 +87,7 @@ describe('generate-product-quality-reports.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'entity.yaml'),
       [
         'id: "spec-driver"',
         'name: "Spec Driver"',
@@ -106,15 +109,15 @@ describe('generate-product-quality-reports.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'catalog-index.yaml'),
+      join(projectRoot, 'specs', 'products', '_generated', 'catalog-index.yaml'),
       [
         'schemaVersion: 1',
         'products:',
         '  - id: "reverse-spec"',
-        '    entityPath: "specs/products/reverse-spec/entity.yaml"',
+        '    entityPath: "specs/products/reverse-spec/_generated/entity.yaml"',
         '    qualityStatus: "unavailable"',
         '  - id: "spec-driver"',
-        '    entityPath: "specs/products/spec-driver/entity.yaml"',
+        '    entityPath: "specs/products/spec-driver/_generated/entity.yaml"',
         '    qualityStatus: "unavailable"',
       ].join('\n'),
       'utf-8',
@@ -134,22 +137,22 @@ describe('generate-product-quality-reports.mjs', () => {
       products: Array<{ id: string; status: string; reportPath: string }>;
     };
 
-    expect(payload.qualityReportIndexPath).toBe('specs/products/quality-report-index.yaml');
+    expect(payload.qualityReportIndexPath).toBe('specs/products/_generated/quality-report-index.yaml');
     expect(payload.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'reverse-spec',
         status: 'pass',
-        reportPath: 'specs/products/reverse-spec/quality-report.json',
+        reportPath: 'specs/products/reverse-spec/_generated/quality-report.json',
       }),
       expect.objectContaining({
         id: 'spec-driver',
         status: 'pass',
-        reportPath: 'specs/products/spec-driver/quality-report.json',
+        reportPath: 'specs/products/spec-driver/_generated/quality-report.json',
       }),
     ]));
 
     const reverseReport = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'quality-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'quality-report.json'), 'utf-8'),
     ) as {
       stats: { totalRequiredDocs: number; coveredRequiredDocs: number };
       conflicts: unknown[];
@@ -159,7 +162,7 @@ describe('generate-product-quality-reports.mjs', () => {
     expect(reverseReport.conflicts).toEqual([]);
 
     const specDriverReport = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'quality-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'quality-report.json'), 'utf-8'),
     ) as {
       stats: { totalRequiredDocs: number; coveredRequiredDocs: number };
     };
@@ -167,19 +170,19 @@ describe('generate-product-quality-reports.mjs', () => {
     expect(specDriverReport.stats.coveredRequiredDocs).toBe(5);
 
     const reverseEntity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       quality: { report: { path: string; status: string } };
     };
-    expect(reverseEntity.quality.report.path).toBe('specs/products/reverse-spec/quality-report.json');
+    expect(reverseEntity.quality.report.path).toBe('specs/products/reverse-spec/_generated/quality-report.json');
     expect(reverseEntity.quality.report.status).toBe('pass');
 
     const catalogIndexRaw = readFileSync(
-      join(projectRoot, 'specs', 'products', 'catalog-index.yaml'),
+      join(projectRoot, 'specs', 'products', '_generated', 'catalog-index.yaml'),
       'utf-8',
     );
     expect(catalogIndexRaw).toContain('qualityStatus: "pass"');
-    expect(catalogIndexRaw).toContain('qualityReportPath: "specs/products/reverse-spec/quality-report.json"');
-    expect(catalogIndexRaw).toContain('qualityReportPath: "specs/products/spec-driver/quality-report.json"');
+    expect(catalogIndexRaw).toContain('qualityReportPath: "specs/products/reverse-spec/_generated/quality-report.json"');
+    expect(catalogIndexRaw).toContain('qualityReportPath: "specs/products/spec-driver/_generated/quality-report.json"');
   });
 });

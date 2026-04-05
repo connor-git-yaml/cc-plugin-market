@@ -24,11 +24,11 @@ npm run build
 
 ## Results
 
-- `specs/products/reverse-spec/scorecard-report.md` → `PASS / 100`
-- `specs/products/spec-driver/scorecard-report.md` → `PASS / 100`
-- `specs/products/reverse-spec/quality-report.json` 已生成
-- `specs/products/spec-driver/quality-report.json` 已生成
-- `specs/products/quality-report-index.yaml` 已生成
+- `specs/products/reverse-spec/_generated/scorecard-report.md` → `PASS / 100`
+- `specs/products/spec-driver/_generated/scorecard-report.md` → `PASS / 100`
+- `specs/products/reverse-spec/_generated/quality-report.json` 已生成
+- `specs/products/spec-driver/_generated/quality-report.json` 已生成
+- `specs/products/_generated/quality-report-index.yaml` 已生成
 
 ## Residual Risks
 

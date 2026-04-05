@@ -27,9 +27,9 @@ node plugins/spec-driver/scripts/generate-product-entity-catalog.mjs --project-r
 
 当前仓库会新增：
 
-- `specs/products/reverse-spec/entity.yaml`
-- `specs/products/spec-driver/entity.yaml`
-- `specs/products/catalog-index.yaml`
+- `specs/products/reverse-spec/_generated/entity.yaml`
+- `specs/products/spec-driver/_generated/entity.yaml`
+- `specs/products/_generated/catalog-index.yaml`
 
 ## Notes
 

@@ -3,6 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  getProductWorkflowIndexJsonPath,
+  getProductWorkflowIndexMarkdownPath,
+  toRelativePosix,
+} from './lib/product-artifact-paths.mjs';
 
 const ALLOWED_OVERRIDE_FIELDS = new Set([
   'title',
@@ -238,7 +243,6 @@ export function generateWorkflowRegistry(options = {}) {
   const pluginDir = path.dirname(scriptDir);
   const workflowDir = path.join(pluginDir, 'workflows');
   const overrideDir = path.join(projectRoot, '.specify', 'workflows');
-  const outputDir = path.join(projectRoot, 'specs', 'products', 'spec-driver');
   const warnings = [];
   const generatedAt = new Date().toISOString();
 
@@ -247,7 +251,9 @@ export function generateWorkflowRegistry(options = {}) {
   const workflows = workflowDefs.map((workflow) => applyWorkflowOverride(workflow, overrides.get(workflow.id), warnings));
   const goldenPaths = readGoldenPaths(path.join(workflowDir, 'golden-paths.yaml'));
 
-  fs.mkdirSync(outputDir, { recursive: true });
+  const jsonPath = getProductWorkflowIndexJsonPath(projectRoot, 'spec-driver');
+  const markdownPath = getProductWorkflowIndexMarkdownPath(projectRoot, 'spec-driver');
+  fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
 
   const indexJson = {
     generatedAt,
@@ -260,8 +266,6 @@ export function generateWorkflowRegistry(options = {}) {
     warnings,
   };
 
-  const jsonPath = path.join(outputDir, 'workflow-index.json');
-  const markdownPath = path.join(outputDir, 'workflow-index.md');
   fs.writeFileSync(jsonPath, `${JSON.stringify(indexJson, null, 2)}\n`, 'utf-8');
   fs.writeFileSync(markdownPath, renderWorkflowIndexMarkdown(indexJson), 'utf-8');
 
@@ -269,8 +273,8 @@ export function generateWorkflowRegistry(options = {}) {
     generatedAt,
     workflowCount: workflows.length,
     goldenPathCount: goldenPaths.length,
-    jsonPath: relativePosix(projectRoot, jsonPath),
-    markdownPath: relativePosix(projectRoot, markdownPath),
+    jsonPath: toRelativePosix(projectRoot, jsonPath),
+    markdownPath: toRelativePosix(projectRoot, markdownPath),
     workflows,
     goldenPaths,
     warnings,

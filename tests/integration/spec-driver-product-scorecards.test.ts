@@ -17,6 +17,9 @@ describe('generate-product-scorecards.mjs', () => {
     execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master'], { cwd: projectRoot, stdio: 'ignore' });
     mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', '_generated'), { recursive: true });
     mkdirSync(join(projectRoot, 'docs', 'shared'), { recursive: true });
 
     writeFileSync(join(projectRoot, 'README.md'), '# Demo Repo\n', 'utf-8');
@@ -99,7 +102,7 @@ describe('generate-product-scorecards.mjs', () => {
     utimesSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'current-spec.md'), new Date(), new Date(Date.now() + 1000));
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'),
       [
         'id: "reverse-spec"',
         'name: "Reverse-Spec"',
@@ -112,13 +115,13 @@ describe('generate-product-scorecards.mjs', () => {
         '  - "reverse-spec.batch"',
         'quality:',
         '  report:',
-        '    path: "specs/quality-report.json"',
+        '    path: "specs/products/reverse-spec/_generated/quality-report.json"',
         '    status: "warn"',
       ].join('\n'),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'entity.yaml'),
       [
         'id: "spec-driver"',
         'name: "Spec Driver"',
@@ -135,27 +138,27 @@ describe('generate-product-scorecards.mjs', () => {
         '  - "spec-driver-doc"',
         'quality:',
         '  report:',
-        '    path: "specs/quality-report.json"',
+        '    path: "specs/products/spec-driver/_generated/quality-report.json"',
         '    status: "warn"',
       ].join('\n'),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'catalog-index.yaml'),
+      join(projectRoot, 'specs', 'products', '_generated', 'catalog-index.yaml'),
       [
         'schemaVersion: 1',
         'products:',
         '  - id: "reverse-spec"',
-        '    entityPath: "specs/products/reverse-spec/entity.yaml"',
+        '    entityPath: "specs/products/reverse-spec/_generated/entity.yaml"',
         '    qualityStatus: "warn"',
         '  - id: "spec-driver"',
-        '    entityPath: "specs/products/spec-driver/entity.yaml"',
+        '    entityPath: "specs/products/spec-driver/_generated/entity.yaml"',
         '    qualityStatus: "warn"',
       ].join('\n'),
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'workflow-index.json'),
       JSON.stringify({
         workflows: [
           { id: 'spec-driver-feature' },
@@ -170,7 +173,20 @@ describe('generate-product-scorecards.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'quality-report.json'),
+      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'quality-report.json'),
+      JSON.stringify({
+        status: 'warn',
+        stats: {
+          totalRequiredDocs: 12,
+          coveredRequiredDocs: 12,
+        },
+        conflicts: [],
+        requiredDocs: [],
+      }, null, 2),
+      'utf-8',
+    );
+    writeFileSync(
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'quality-report.json'),
       JSON.stringify({
         status: 'warn',
         stats: {
@@ -198,21 +214,21 @@ describe('generate-product-scorecards.mjs', () => {
       warnings: string[];
     };
 
-    expect(payload.scorecardIndexPath).toBe('specs/products/scorecard-index.yaml');
+    expect(payload.scorecardIndexPath).toBe('specs/products/_generated/scorecard-index.yaml');
     expect(payload.warnings).toEqual([]);
     expect(payload.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'reverse-spec',
-        markdownPath: 'specs/products/reverse-spec/scorecard-report.md',
+        markdownPath: 'specs/products/reverse-spec/_generated/scorecard-report.md',
       }),
       expect.objectContaining({
         id: 'spec-driver',
-        markdownPath: 'specs/products/spec-driver/scorecard-report.md',
+        markdownPath: 'specs/products/spec-driver/_generated/scorecard-report.md',
       }),
     ]));
 
     const reverseReport = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'scorecard-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'scorecard-report.json'), 'utf-8'),
     ) as {
       rules: Array<{ id: string; status: string; evidence: Record<string, unknown> }>;
     };
@@ -228,13 +244,13 @@ describe('generate-product-scorecards.mjs', () => {
     );
 
     const specDriverReport = readFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.md'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'scorecard-report.md'),
       'utf-8',
     );
     expect(specDriverReport).toContain('# Spec Driver Scorecard Report');
     expect(specDriverReport).toContain('Workflow 就绪度');
     const specDriverReportJson = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'scorecard-report.json'), 'utf-8'),
     ) as {
       rules: Array<{ id: string; evidence: Record<string, unknown> }>;
     };
@@ -248,15 +264,15 @@ describe('generate-product-scorecards.mjs', () => {
     );
 
     const reverseEntity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       quality: { scorecard: { path: string; status: string } };
     };
-    expect(reverseEntity.quality.scorecard.path).toBe('specs/products/reverse-spec/scorecard-report.json');
+    expect(reverseEntity.quality.scorecard.path).toBe('specs/products/reverse-spec/_generated/scorecard-report.json');
     expect(reverseEntity.quality.scorecard.status).toBe('pass');
 
     const catalogIndex = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'catalog-index.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', '_generated', 'catalog-index.yaml'), 'utf-8'),
     ) as {
       products: Array<{ id: string; scorecardStatus: string }>;
     };
@@ -272,7 +288,7 @@ describe('generate-product-scorecards.mjs', () => {
     ]));
 
     const scorecardIndex = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'scorecard-index.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', '_generated', 'scorecard-index.yaml'), 'utf-8'),
     ) as {
       productCount: number;
       products: Array<{ id: string; reportPath: string }>;
@@ -281,11 +297,11 @@ describe('generate-product-scorecards.mjs', () => {
     expect(scorecardIndex.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'reverse-spec',
-        reportPath: 'specs/products/reverse-spec/scorecard-report.json',
+        reportPath: 'specs/products/reverse-spec/_generated/scorecard-report.json',
       }),
       expect.objectContaining({
         id: 'spec-driver',
-        reportPath: 'specs/products/spec-driver/scorecard-report.json',
+        reportPath: 'specs/products/spec-driver/_generated/scorecard-report.json',
       }),
     ]));
   });

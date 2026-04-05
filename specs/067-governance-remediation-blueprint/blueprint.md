@@ -59,9 +59,9 @@
 ### 4.1 交付物
 
 - `plugins/spec-driver/scripts/generate-product-quality-reports.mjs`
-- `specs/products/<product>/quality-report.md`
-- `specs/products/<product>/quality-report.json`
-- `specs/products/quality-report-index.yaml`
+- `specs/products/<product>/_generated/quality-report.md`
+- `specs/products/<product>/_generated/quality-report.json`
+- `specs/products/_generated/quality-report-index.yaml`
 - `generate-product-scorecards.mjs` 的治理范围校准
 - 缺失的已实现 feature verification 补齐或刷新
 

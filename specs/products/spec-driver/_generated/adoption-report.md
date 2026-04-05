@@ -1,6 +1,6 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-04-04T17:14:30.167Z
+- Generated At: 2026-04-05T03:19:17.049Z
 - Status: healthy
 - Total Runs: 5
 - Active Workflows: 2
@@ -50,6 +50,6 @@
 
 ## Scorecard Context
 
-- Status: fail
-- Score: 68
-- Report: specs/products/spec-driver/scorecard-report.json
+- Status: pass
+- Score: 100
+- Report: specs/products/spec-driver/_generated/scorecard-report.json

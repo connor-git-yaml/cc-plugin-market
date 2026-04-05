@@ -63,7 +63,7 @@
 
 - **FR-001**: 系统 MUST 在 `plugins/spec-driver/workflows/` 下为 `feature/story/fix/resume/sync/doc` 六个入口提供 workflow definition YAML。
 - **FR-002**: 每个 workflow definition MUST 包含最小字段集：`id`、`title`、`persona`、`useCases`、`entryCommand`、`requiredInputs`、`keyGates`、`artifacts`、`recommendedWhen`、`templateVersion`。
-- **FR-003**: 系统 MUST 提供 registry helper，生成 `specs/products/spec-driver/workflow-index.md` 与 `workflow-index.json`。
+- **FR-003**: 系统 MUST 提供 registry helper，生成 `specs/products/spec-driver/_generated/workflow-index.md` 与 `workflow-index.json`。
 - **FR-004**: 系统 MUST 输出至少 3 条 golden paths：`新功能研发`、`快速修复`、`产品事实与文档更新`。
 - **FR-005**: helper MUST 支持 `.specify/workflows/*.yaml` 项目级覆盖。
 - **FR-006**: 项目级覆盖 MUST 只允许修改 metadata / 推荐说明 / templateVersion，不得修改 `entryCommand`、`keyGates`、`artifacts` 等核心语义字段。

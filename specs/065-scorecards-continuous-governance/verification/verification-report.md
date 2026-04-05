@@ -23,14 +23,14 @@ node plugins/spec-driver/scripts/generate-product-scorecards.mjs --project-root 
   - `catalog-index.yaml` 会附带 `scorecardStatus / scorecardScore`
 - `tests/integration/spec-driver-init-project.test.ts` 验证 `init-project.sh` 会创建 `.specify/scorecards/` 并复制 `default-governance.yaml`
 - `tests/integration/spec-driver-workflow-registry.test.ts` 验证 `spec-driver-sync` 的 workflow artifacts 已包含：
-  - `specs/products/<product>/scorecard-report.md`
-  - `specs/products/<product>/scorecard-report.json`
-  - `specs/products/scorecard-index.yaml`
+  - `specs/products/<product>/_generated/scorecard-report.md`
+  - `specs/products/<product>/_generated/scorecard-report.json`
+  - `specs/products/_generated/scorecard-index.yaml`
 - `tests/integration/spec-driver-product-entity-catalog.test.ts` 回归通过，说明 065 没破坏 063 的 Catalog helper
 - 在当前仓库执行 helper 后，真实输出已写入：
-  - `specs/products/reverse-spec/scorecard-report.md`
-  - `specs/products/spec-driver/scorecard-report.md`
-  - `specs/products/scorecard-index.yaml`
+  - `specs/products/reverse-spec/_generated/scorecard-report.md`
+  - `specs/products/spec-driver/_generated/scorecard-report.md`
+  - `specs/products/_generated/scorecard-index.yaml`
 
 ## Observations
 

@@ -12,6 +12,7 @@ describe('generate-workflow-registry.mjs', () => {
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-workflow-registry-'));
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
   });
 
   afterEach(() => {
@@ -52,8 +53,8 @@ describe('generate-workflow-registry.mjs', () => {
 
     expect(payload.workflowCount).toBe(6);
     expect(payload.goldenPathCount).toBe(3);
-    expect(payload.jsonPath).toBe('specs/products/spec-driver/workflow-index.json');
-    expect(payload.markdownPath).toBe('specs/products/spec-driver/workflow-index.md');
+    expect(payload.jsonPath).toBe('specs/products/spec-driver/_generated/workflow-index.json');
+    expect(payload.markdownPath).toBe('specs/products/spec-driver/_generated/workflow-index.md');
 
     const storyWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-story');
     const syncWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-sync') as
@@ -63,29 +64,29 @@ describe('generate-workflow-registry.mjs', () => {
     expect(storyWorkflow?.recommendedWhen).toEqual(['团队内部的常规迭代需求']);
     expect(storyWorkflow?.entryCommand.claude).toBe('/spec-driver:spec-driver-story <需求描述>');
     expect(syncWorkflow?.artifacts).toEqual(expect.arrayContaining([
-      'specs/products/<product>/scorecard-report.md',
-      'specs/products/<product>/scorecard-report.json',
-      'specs/products/scorecard-index.yaml',
-      'specs/products/spec-driver/adoption-report.md',
-      'specs/products/spec-driver/adoption-report.json',
+      'specs/products/<product>/_generated/scorecard-report.md',
+      'specs/products/<product>/_generated/scorecard-report.json',
+      'specs/products/_generated/scorecard-index.yaml',
+      'specs/products/spec-driver/_generated/adoption-report.md',
+      'specs/products/spec-driver/_generated/adoption-report.json',
     ]));
     expect(payload.warnings).toEqual(expect.arrayContaining([
       'workflow override 忽略非 metadata 字段: spec-driver-story.entryCommand',
     ]));
 
     const jsonIndex = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'workflow-index.json'), 'utf-8'),
     ) as {
       workflows: Array<{ id: string; artifacts: string[] }>;
       goldenPaths: Array<{ id: string; workflows: string[] }>;
     };
     expect(jsonIndex.workflows.find((workflow) => workflow.id === 'spec-driver-sync')?.artifacts).toEqual(
       expect.arrayContaining([
-        'specs/products/<product>/scorecard-report.md',
-        'specs/products/<product>/scorecard-report.json',
-        'specs/products/scorecard-index.yaml',
-        'specs/products/spec-driver/adoption-report.md',
-        'specs/products/spec-driver/adoption-report.json',
+        'specs/products/<product>/_generated/scorecard-report.md',
+        'specs/products/<product>/_generated/scorecard-report.json',
+        'specs/products/_generated/scorecard-index.yaml',
+        'specs/products/spec-driver/_generated/adoption-report.md',
+        'specs/products/spec-driver/_generated/adoption-report.json',
       ]),
     );
     expect(jsonIndex.goldenPaths).toEqual(expect.arrayContaining([
@@ -104,7 +105,7 @@ describe('generate-workflow-registry.mjs', () => {
     ]));
 
     const markdownIndex = readFileSync(
-      join(projectRoot, 'specs', 'products', 'spec-driver', 'workflow-index.md'),
+      join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'workflow-index.md'),
       'utf-8',
     );
     expect(markdownIndex).toContain('# Spec Driver Workflow Registry');

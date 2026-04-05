@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T02:12:33.424Z"
+generatedAt: "2026-04-05T03:19:05.049Z"
 rulesetId: "default-governance"
 productCount: 2
 products:
@@ -8,8 +8,8 @@ products:
     kind: "library-tooling"
     status: "pass"
     score: 100
-    reportPath: "specs/products/reverse-spec/scorecard-report.json"
-    markdownPath: "specs/products/reverse-spec/scorecard-report.md"
+    reportPath: "specs/products/reverse-spec/_generated/scorecard-report.json"
+    markdownPath: "specs/products/reverse-spec/_generated/scorecard-report.md"
     ruleCount: 6
     passCount: 6
     warnCount: 0
@@ -19,8 +19,8 @@ products:
     kind: "plugin"
     status: "pass"
     score: 100
-    reportPath: "specs/products/spec-driver/scorecard-report.json"
-    markdownPath: "specs/products/spec-driver/scorecard-report.md"
+    reportPath: "specs/products/spec-driver/_generated/scorecard-report.json"
+    markdownPath: "specs/products/spec-driver/_generated/scorecard-report.md"
     ruleCount: 6
     passCount: 6
     warnCount: 0

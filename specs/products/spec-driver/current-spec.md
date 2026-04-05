@@ -1,7 +1,7 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **版本**: 聚合自 18 个增量 spec / blueprint（011–022, 032, 062–066）
+> **版本**: 聚合自 22 个增量 spec / blueprint（011–022, 032, 062–068, 070–071）
 > **最后聚合**: 2026-04-05
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
@@ -70,6 +70,8 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | Workflow Library | 六个入口拥有 machine-readable workflow definition 与 golden paths | 064 |
 | 持续治理 | 生成 `scorecard-report` 与 `scorecard-index`，解释产品 readiness | 065 |
 | Adoption / Friction | 生成本地 `adoption-report`，识别 rerun、gate pause 与 verification 热点 | 066 |
+| 治理信号对齐 | 生成产品级 `quality-report` 并把 scorecard 统计范围收敛到已实现 feature | 068 |
+| 产物边界清理 | `current-spec.md` 保持人工事实正文，机器生成产物统一写入 `_generated/` | 071 |
 
 ---
 
@@ -182,6 +184,8 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | FR-026 | 六个入口拥有 workflow definition、workflow-index 与 3 条 golden paths | 064 | 活跃 |
 | FR-027 | 生成 `scorecard-report.md/.json` 与 `scorecard-index.yaml`，以持续规则解释产品健康度 | 065 | 活跃 |
 | FR-028 | 生成本地 `adoption-report.md/.json`，基于 `.specify/runs/*.jsonl` 聚合 adoption / friction 热点 | 066 | 活跃 |
+| FR-029 | 生成产品级 `quality-report.md/.json`，并作为 scorecard 的文档质量输入 | 068 | 活跃 |
+| FR-030 | 产品级机器生成产物统一写入 `specs/products/<product>/_generated/`，跨产品索引统一写入 `specs/products/_generated/` | 071 | 活跃 |
 
 ---
 
@@ -227,7 +231,8 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - Bash 脚本（初始化、安装、扫描）
 - YAML / JSON 配置
 - `.specify/` 作为项目级持久化目录
-- `entity.yaml` / `workflow-index` / `scorecard-report` / `adoption-report` 作为产品级运营事实
+- `specs/products/<product>/current-spec.md` 作为产品级人工事实正文
+- `specs/products/<product>/_generated/` 与 `specs/products/_generated/` 作为产品级机器生成事实层
 
 ### 项目结构
 
@@ -269,7 +274,7 @@ plugins/spec-driver/
 - agents 目录承载阶段级子代理 prompt
 - `sync` 与 `doc` 的契约从“松散关系”提升为“产品事实源 → 对外派生”
 - `.specify/templates/` 允许项目级覆盖内置模板
-- `entity.yaml`、workflow registry、scorecards 和 adoption report 构成最小的 Catalog-driven 运营层
+- `entity.yaml`、workflow registry、quality report、scorecards 和 adoption report 构成最小的 Catalog-driven 运营层
 
 ---
 
@@ -282,7 +287,7 @@ plugins/spec-driver/
 | 门禁显式化 | 让暂停、放行、失败都可追踪，不做隐式决策 | 017 |
 | 并行可回退 | 并行是加速手段，不得改变业务语义 | 019 |
 | 产品事实源单一化 | README / 使用文档不应再次发明产品语义 | 012, 016, 022 |
-| Catalog 只做机器可读壳层 | `current-spec.md` 仍是正文事实层，`entity.yaml` / workflow / scorecards / adoption 只做索引与治理 | 062–066 |
+| Catalog 只做机器可读壳层 | `current-spec.md` 仍是正文事实层，`entity.yaml` / workflow / quality / scorecards / adoption 只做索引与治理 | 062–071 |
 
 ---
 
@@ -305,7 +310,7 @@ plugins/spec-driver/
 | 021 | 项目级模板同步面继续扩大时，需要更明确的模板版本兼容策略 | 中 |
 | 022 | sync / doc 的事实层契约已确立，但自动验证其一致性的门禁仍偏轻量 | 中 |
 | 032 | 仓库外部历史材料可能仍残留 `speckit-*` 旧命名 | 低 |
-| 065 | 当前 scorecard 仍暴露真实治理缺口，verification / quality 事实仍需继续补齐 | 中 |
+| 070 | `Project Context` 仍停留在软约定层，尚未形成 schema / resolver / feedback suggestions 机制 | 中 |
 
 ---
 
@@ -364,6 +369,10 @@ plugins/spec-driver/
 | 16 | [064-workflow-registry-golden-paths](../../064-workflow-registry-golden-paths/spec.md) | FEATURE | 2026-04-04 | 建立 workflow registry 与 3 条 golden paths |
 | 17 | [065-scorecards-continuous-governance](../../065-scorecards-continuous-governance/spec.md) | FEATURE | 2026-04-04 | 生成持续治理 scorecards 与 scorecard 索引 |
 | 18 | [066-adoption-friction-insights](../../066-adoption-friction-insights/spec.md) | FEATURE | 2026-04-05 | 生成本地 adoption / friction 报告与 run events 合同 |
+| 19 | [067-governance-remediation-blueprint](../../067-governance-remediation-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义治理收敛路线，修正 verification 债与质量信号来源 |
+| 20 | [068-scorecard-signal-alignment](../../068-scorecard-signal-alignment/spec.md) | FEATURE | 2026-04-05 | 生成产品级 quality-report，并校准 scorecard 统计口径 |
+| 21 | [070-project-context-implement-skill-blueprint](../../070-project-context-implement-skill-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义 Project Context 与 Implement Skill 解耦路线 |
+| 22 | [071-product-artifact-boundary-cleanup](../../071-product-artifact-boundary-cleanup/spec.md) | FEATURE | 2026-04-05 | 清理产品事实源与生成产物目录边界，统一 `_generated` 合同 |
 
 ---
 
@@ -406,6 +415,10 @@ plugins/spec-driver/
 | 16 | 064-workflow-registry-golden-paths | FEATURE | [specs/064-workflow-registry-golden-paths/spec.md](../../064-workflow-registry-golden-paths/spec.md) |
 | 17 | 065-scorecards-continuous-governance | FEATURE | [specs/065-scorecards-continuous-governance/spec.md](../../065-scorecards-continuous-governance/spec.md) |
 | 18 | 066-adoption-friction-insights | FEATURE | [specs/066-adoption-friction-insights/spec.md](../../066-adoption-friction-insights/spec.md) |
+| 19 | 067-governance-remediation-blueprint | ENHANCEMENT | [specs/067-governance-remediation-blueprint/blueprint.md](../../067-governance-remediation-blueprint/blueprint.md) |
+| 20 | 068-scorecard-signal-alignment | FEATURE | [specs/068-scorecard-signal-alignment/spec.md](../../068-scorecard-signal-alignment/spec.md) |
+| 21 | 070-project-context-implement-skill-blueprint | ENHANCEMENT | [specs/070-project-context-implement-skill-blueprint/blueprint.md](../../070-project-context-implement-skill-blueprint/blueprint.md) |
+| 22 | 071-product-artifact-boundary-cleanup | FEATURE | [specs/071-product-artifact-boundary-cleanup/spec.md](../../071-product-artifact-boundary-cleanup/spec.md) |
 
 ---
 

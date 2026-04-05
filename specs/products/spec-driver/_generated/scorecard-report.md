@@ -2,7 +2,7 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T02:12:33.424Z
+> **Generated**: 2026-04-05T03:19:05.049Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -17,9 +17,9 @@
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=5, fresh=5, stale=0 |
-| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
-| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/quality-report.json, totalConflicts=0, high=0 |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=7, fresh=7, stale=0 |
+| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
+| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
 | Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, missing=0, goldenPathCount=3 |
 
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 18 个增量 spec。
+- current-spec 覆盖了全部 22 个增量 spec。
 
 ```json
 {
@@ -46,17 +46,19 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- 全部 5 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
+- 全部 7 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 5,
+  "totalFeatures": 7,
   "fresh": [
     "012-product-spec-sync",
     "063-product-entity-catalog",
     "064-workflow-registry-golden-paths",
     "065-scorecards-continuous-governance",
-    "066-adoption-friction-insights"
+    "066-adoption-friction-insights",
+    "068-scorecard-signal-alignment",
+    "071-product-artifact-boundary-cleanup"
   ],
   "stale": [],
   "missing": [],
@@ -64,7 +66,9 @@
   "coverageRatio": 1,
   "ignored": {
     "blueprint": [
-      "062-catalog-driven-spec-driver-blueprint"
+      "062-catalog-driven-spec-driver-blueprint",
+      "067-governance-remediation-blueprint",
+      "070-project-context-implement-skill-blueprint"
     ],
     "nonImplemented": [
       "011-speckit-driver-pro",
@@ -94,7 +98,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+  "qualityReportPath": "specs/products/spec-driver/_generated/quality-report.json",
   "coveredRequiredDocs": 5,
   "totalRequiredDocs": 5,
   "coverageRatio": 1
@@ -111,7 +115,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+  "qualityReportPath": "specs/products/spec-driver/_generated/quality-report.json",
   "totalConflicts": 0,
   "high": 0,
   "medium": 0,

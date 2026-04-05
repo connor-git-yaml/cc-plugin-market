@@ -2,7 +2,7 @@
 
 > **Product**: reverse-spec
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T02:12:33.424Z
+> **Generated**: 2026-04-05T03:19:05.049Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -18,8 +18,8 @@
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
 | Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=16, fresh=16, stale=0 |
-| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/reverse-spec/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
-| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/reverse-spec/quality-report.json, totalConflicts=0, high=0 |
+| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
+| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
 | Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, currentSpecAvailable=true |
 
@@ -122,7 +122,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/reverse-spec/quality-report.json",
+  "qualityReportPath": "specs/products/reverse-spec/_generated/quality-report.json",
   "coveredRequiredDocs": 3,
   "totalRequiredDocs": 3,
   "coverageRatio": 1
@@ -139,7 +139,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/reverse-spec/quality-report.json",
+  "qualityReportPath": "specs/products/reverse-spec/_generated/quality-report.json",
   "totalConflicts": 0,
   "high": 0,
   "medium": 0,

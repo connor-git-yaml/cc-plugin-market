@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-04T17:14:30.028Z"
+generatedAt: "2026-04-05T03:18:51.725Z"
 productCount: 2
 products:
   - id: "reverse-spec"
@@ -7,24 +7,24 @@ products:
     kind: "library-tooling"
     lifecycle: "active"
     owner: "unknown"
-    entityPath: "specs/products/reverse-spec/entity.yaml"
+    entityPath: "specs/products/reverse-spec/_generated/entity.yaml"
     currentSpecPath: "specs/products/reverse-spec/current-spec.md"
     workflowRefCount: 6
     qualityStatus: "pass"
     specCount: 46
+    qualityReportPath: "specs/products/reverse-spec/_generated/quality-report.json"
     scorecardStatus: "pass"
     scorecardScore: 100
-    qualityReportPath: "specs/products/reverse-spec/quality-report.json"
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
     lifecycle: "active"
     owner: "unknown"
-    entityPath: "specs/products/spec-driver/entity.yaml"
+    entityPath: "specs/products/spec-driver/_generated/entity.yaml"
     currentSpecPath: "specs/products/spec-driver/current-spec.md"
     workflowRefCount: 6
     qualityStatus: "pass"
-    specCount: 18
+    specCount: 22
+    qualityReportPath: "specs/products/spec-driver/_generated/quality-report.json"
     scorecardStatus: "pass"
     scorecardScore: 100
-    qualityReportPath: "specs/products/spec-driver/quality-report.json"

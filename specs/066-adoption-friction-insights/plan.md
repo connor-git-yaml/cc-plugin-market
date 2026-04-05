@@ -3,7 +3,7 @@
 ## Goals
 
 1. 增加最小 run summary 记录 helper，落本地 `.specify/runs/*.jsonl`
-2. 增加 adoption / friction 聚合 helper，生成 `specs/products/spec-driver/adoption-report.md/.json`
+2. 增加 adoption / friction 聚合 helper，生成 `specs/products/spec-driver/_generated/adoption-report.md/.json`
 3. 将 adoption report 接入 `spec-driver-sync`、workflow registry 与初始化目录
 
 ## Workstreams
@@ -26,11 +26,11 @@
 - 新增 `plugins/spec-driver/scripts/generate-adoption-insights.mjs`
 - 读取：
   - `.specify/runs/*.jsonl`
-  - `specs/products/spec-driver/workflow-index.json`
-  - `specs/products/spec-driver/scorecard-report.json`
+  - `specs/products/spec-driver/_generated/workflow-index.json`
+  - `specs/products/spec-driver/_generated/scorecard-report.json`
 - 输出：
-  - `specs/products/spec-driver/adoption-report.md`
-  - `specs/products/spec-driver/adoption-report.json`
+  - `specs/products/spec-driver/_generated/adoption-report.md`
+  - `specs/products/spec-driver/_generated/adoption-report.json`
 
 ### 3. Product Chain Integration
 

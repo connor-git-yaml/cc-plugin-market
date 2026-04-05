@@ -235,8 +235,8 @@ products:
   - `specs/products/product-mapping.yaml`（产品映射）
   - `specs/products/<product>/current-spec.md`（每个产品一个）
 - 后置制品（由编排器 helper 生成，不在本阶段直接写入）：
-  - `specs/products/<product>/entity.yaml`
-  - `specs/products/catalog-index.yaml`
+  - `specs/products/<product>/_generated/entity.yaml`
+  - `specs/products/_generated/catalog-index.yaml`
 - 返回给编排器：
 
 ```text

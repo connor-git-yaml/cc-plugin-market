@@ -14,6 +14,7 @@ describe('generate-product-entity-catalog.mjs', () => {
     projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-catalog-'));
     mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', '_generated'), { recursive: true });
     writeFileSync(join(projectRoot, 'README.md'), '# Demo Repo\n', 'utf-8');
     writeFileSync(
       join(projectRoot, 'package.json'),
@@ -92,12 +93,12 @@ describe('generate-product-entity-catalog.mjs', () => {
       warnings: string[];
     };
 
-    expect(payload.catalogIndexPath).toBe('specs/products/catalog-index.yaml');
+    expect(payload.catalogIndexPath).toBe('specs/products/_generated/catalog-index.yaml');
     expect(payload.warnings).toEqual([]);
     expect(payload.entities.map((entity) => entity.id)).toEqual(['reverse-spec', 'spec-driver']);
 
     const reverseEntity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       id: string;
       name: string;
@@ -121,7 +122,7 @@ describe('generate-product-entity-catalog.mjs', () => {
     );
 
     const specDriverEntity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       id: string;
       kind: string;
@@ -136,7 +137,7 @@ describe('generate-product-entity-catalog.mjs', () => {
     ]));
 
     const catalogIndex = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'catalog-index.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', '_generated', 'catalog-index.yaml'), 'utf-8'),
     ) as {
       productCount: number;
       products: Array<{ id: string; entityPath: string; currentSpecPath: string; specCount: number }>;
@@ -145,13 +146,13 @@ describe('generate-product-entity-catalog.mjs', () => {
     expect(catalogIndex.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'reverse-spec',
-        entityPath: 'specs/products/reverse-spec/entity.yaml',
+        entityPath: 'specs/products/reverse-spec/_generated/entity.yaml',
         currentSpecPath: 'specs/products/reverse-spec/current-spec.md',
         specCount: 1,
       }),
       expect.objectContaining({
         id: 'spec-driver',
-        entityPath: 'specs/products/spec-driver/entity.yaml',
+        entityPath: 'specs/products/spec-driver/_generated/entity.yaml',
         currentSpecPath: 'specs/products/spec-driver/current-spec.md',
         specCount: 1,
       }),
@@ -185,7 +186,7 @@ describe('generate-product-entity-catalog.mjs', () => {
     ]);
 
     const entity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'demo', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'demo', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       docs: Array<{ id: string; available: boolean }>;
       lifecycle: { value: string; source: string };

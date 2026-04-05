@@ -61,8 +61,8 @@
 
 ### Functional Requirements
 
-- **FR-001**: 系统 MUST 提供 `generate-product-scorecards.mjs`，输出 `specs/products/<product>/scorecard-report.md/.json`。
-- **FR-002**: 系统 MUST 输出 `specs/products/scorecard-index.yaml`，汇总各产品的 scorecard 状态与分数。
+- **FR-001**: 系统 MUST 提供 `generate-product-scorecards.mjs`，输出 `specs/products/<product>/_generated/scorecard-report.md/.json`。
+- **FR-002**: 系统 MUST 输出 `specs/products/_generated/scorecard-index.yaml`，汇总各产品的 scorecard 状态与分数。
 - **FR-003**: scorecard 规则 MUST 通过 YAML 定义，并提供默认 ruleset `default-governance`。
 - **FR-004**: `init-project.sh` MUST 预创建 `.specify/scorecards/` 并导入默认 scorecard YAML。
 - **FR-005**: 首批 scorecard 维度 MUST 包含：`spec-freshness`、`verification-freshness`、`docs-coverage`、`docs-conflicts`、`branch-hygiene`、`workflow-readiness`。

@@ -33,6 +33,6 @@
 ## Final Contract
 
 - 运行事件：`.specify/runs/*.jsonl`
-- 报告：`specs/products/spec-driver/adoption-report.md/.json`
+- 报告：`specs/products/spec-driver/_generated/adoption-report.md/.json`
 - 输入只允许最小字段：workflow、result、duration、rerun、gate pause、verification failure、artifact paths
 - 不记录完整 prompt 正文
