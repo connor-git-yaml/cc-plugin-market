@@ -14,7 +14,7 @@
       "name": "reverse-spec",
       "source": "./plugins/reverse-spec",
       "description": "通过 AST 静态分析 + LLM 混合流水线逆向生成 Spec 文档",
-      "version": "2.4.0",
+      "version": "2.5.0",
       "category": "documentation",
       "tags": [
         "spec",
@@ -26,8 +26,8 @@
     {
       "name": "spec-driver",
       "source": "./plugins/spec-driver",
-      "description": "自治研发编排器——支持 spec-driver-feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程，并提供共享 Project Context resolver、suggestions、wrapper source-of-truth 与 release contract 合同",
-      "version": "3.9.0",
+      "description": "自治研发编排器——支持 spec-driver-feature/implement/story/fix/resume/sync/doc 七种模式自动执行 Spec-Driven Development 全流程，并提供共享 Project Context resolver、suggestions、wrapper source-of-truth、release contract 与 repo maintenance 合同",
+      "version": "3.10.0",
       "category": "orchestration",
       "tags": [
         "orchestrator",

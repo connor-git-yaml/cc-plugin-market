@@ -48,6 +48,17 @@ function ensureFileExists(filePath, message) {
   }
 }
 
+export function loadWrapperSourceContract(projectRoot) {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const contractPath = path.resolve(scriptDir, '..', 'contracts', 'wrapper-source-of-truth.yaml');
+  const contract = parseYamlDocument(fs.readFileSync(contractPath, 'utf-8'));
+  return {
+    projectRoot: path.resolve(projectRoot),
+    contractPath,
+    contract,
+  };
+}
+
 function validateWrapperMarkers(projectRoot, entries, errors) {
   const requiredFragments = [
     '## Wrapper Source Contract',
@@ -248,6 +259,16 @@ function formatTextResult(result) {
   return lines.join('\n');
 }
 
+export function validateWrapperSources(options = {}) {
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const { contractPath, contract } = loadWrapperSourceContract(projectRoot);
+  const result = validateContract(projectRoot, contract);
+  return {
+    ...result,
+    contractPath: path.relative(projectRoot, contractPath).split(path.sep).join('/'),
+  };
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -255,11 +276,7 @@ function main() {
     return;
   }
 
-  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-  const contractPath = path.resolve(scriptDir, '..', 'contracts', 'wrapper-source-of-truth.yaml');
-  const projectRoot = options.projectRoot;
-  const contract = parseYamlDocument(fs.readFileSync(contractPath, 'utf-8'));
-  const result = validateContract(projectRoot, contract);
+  const result = validateWrapperSources(options);
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -272,4 +289,13 @@ function main() {
   }
 }
 
-main();
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isDirectExecution()) {
+  main();
+}

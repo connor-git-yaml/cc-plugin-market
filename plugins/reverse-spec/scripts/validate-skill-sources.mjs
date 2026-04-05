@@ -42,7 +42,7 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
-function loadContract(projectRoot) {
+export function loadReverseSpecSkillContract(projectRoot) {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const contractPath = path.resolve(
     scriptDir,
@@ -218,6 +218,28 @@ function formatText(result) {
   return lines.join('\n');
 }
 
+export function validateReverseSpecSkillSources(options = {}) {
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const { contractPath, contract } = loadReverseSpecSkillContract(projectRoot);
+  const entries = Array.isArray(contract.skills?.entries)
+    ? contract.skills.entries
+    : [];
+  const errors = [];
+  const checks = [
+    validateSources(projectRoot, entries, errors),
+    validateMirrors(projectRoot, entries, errors),
+    validatePluginMetadata(projectRoot, contract, errors),
+  ];
+
+  return {
+    schemaVersion: contract.schemaVersion ?? 1,
+    status: errors.length > 0 ? 'fail' : 'pass',
+    contractPath: toProjectRelative(projectRoot, contractPath),
+    checks,
+    errors,
+  };
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -227,24 +249,7 @@ function main() {
     return;
   }
 
-  const { contractPath, contract } = loadContract(options.projectRoot);
-  const entries = Array.isArray(contract.skills?.entries)
-    ? contract.skills.entries
-    : [];
-  const errors = [];
-  const checks = [
-    validateSources(options.projectRoot, entries, errors),
-    validateMirrors(options.projectRoot, entries, errors),
-    validatePluginMetadata(options.projectRoot, contract, errors),
-  ];
-
-  const result = {
-    schemaVersion: contract.schemaVersion ?? 1,
-    status: errors.length > 0 ? 'fail' : 'pass',
-    contractPath: toProjectRelative(options.projectRoot, contractPath),
-    checks,
-    errors,
-  };
+  const result = validateReverseSpecSkillSources(options);
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -257,10 +262,19 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(1);
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isDirectExecution()) {
+  try {
+    main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  }
 }

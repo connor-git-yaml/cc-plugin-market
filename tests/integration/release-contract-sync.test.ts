@@ -95,13 +95,13 @@ describe('release contract sync', () => {
     expect(payload.status).toBe('pass');
     expect(payload.errors).toEqual([]);
 
-    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "2.4.0"');
+    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "2.5.0"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', '.claude-plugin', 'plugin.json'), 'utf-8'))
-      .toContain('"version": "3.9.0"');
+      .toContain('"version": "3.10.0"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', 'README.md'), 'utf-8'))
-      .toContain('> 当前发布版本: v3.9.0');
+      .toContain('> 当前发布版本: v3.10.0');
     expect(readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'current-spec.md'), 'utf-8'))
-      .toContain('> **发布版本**: v3.9.0');
+      .toContain('> **发布版本**: v3.10.0');
   });
 
   it('validator 会显式报告 release drift', () => {

@@ -7,7 +7,7 @@
 
 products:
   reverse-spec:
-    description: "reverse-spec v2.4.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并统一版本、文档与发布合同"
+    description: "reverse-spec v2.5.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并通过 repo:sync / repo:check 固化技能分发、发布合同与仓库边界"
     specs:
       - id: "001-reverse-spec-v2"
         type: INITIAL
@@ -158,7 +158,7 @@ products:
         summary: "统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路"
 
   spec-driver:
-    description: "Spec Driver v3.9.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth、release contract 合同与产品级生成产物分层，同时显式校验架构合理性与可读性"
+    description: "Spec Driver v3.10.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth、release contract、repo:sync / repo:check 与产品级生成产物分层，同时显式校验架构合理性与可读性"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL

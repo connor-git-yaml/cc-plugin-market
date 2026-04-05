@@ -1,44 +1,37 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 const rootDir = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
-const sectionConfigs = [
+export const sectionConfigs = [
   {
     key: 'branch-sync-policy',
     sourcePath: resolve(rootDir, 'docs/shared/agent-branch-sync-policy.md'),
-    targets: [
-      resolve(rootDir, 'AGENTS.md'),
-      resolve(rootDir, 'CLAUDE.md'),
-    ],
+    targets: ['AGENTS.md', 'CLAUDE.md'],
   },
   {
     key: 'mainline-focus',
     sourcePath: resolve(rootDir, 'docs/shared/agent-mainline-focus.md'),
-    targets: [
-      resolve(rootDir, 'AGENTS.md'),
-      resolve(rootDir, 'CLAUDE.md'),
-    ],
+    targets: ['AGENTS.md', 'CLAUDE.md'],
   },
   {
     key: 'context-layering',
     sourcePath: resolve(rootDir, 'docs/shared/agent-context-layering.md'),
-    targets: [
-      resolve(rootDir, 'AGENTS.md'),
-      resolve(rootDir, 'CLAUDE.md'),
-    ],
+    targets: ['AGENTS.md', 'CLAUDE.md'],
   },
   {
     key: 'release-contract',
     sourcePath: resolve(rootDir, 'docs/shared/agent-release-contract.md'),
-    targets: [
-      resolve(rootDir, 'AGENTS.md'),
-      resolve(rootDir, 'CLAUDE.md'),
-    ],
+    targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
+  {
+    key: 'repo-maintenance',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-repo-maintenance.md'),
+    targets: ['AGENTS.md', 'CLAUDE.md'],
   },
 ];
 
-function syncSection(targetContent, key, sourceContent) {
+export function syncSection(targetContent, key, sourceContent) {
   const beginMarker = `<!-- BEGIN SHARED SECTION: ${key} -->`;
   const endMarker = `<!-- END SHARED SECTION: ${key} -->`;
   const start = targetContent.indexOf(beginMarker);
@@ -53,17 +46,80 @@ function syncSection(targetContent, key, sourceContent) {
   return `${before}\n${sourceContent.trim()}\n${after}`;
 }
 
-for (const section of sectionConfigs) {
-  const sourceContent = readFileSync(section.sourcePath, 'utf8').trim();
+export function syncSharedAgentDocs(projectRoot = rootDir) {
+  const resolvedRoot = resolve(projectRoot);
+  const touchedPaths = [];
 
-  for (const targetPath of section.targets) {
-    const targetContent = readFileSync(targetPath, 'utf8');
-    const nextContent = syncSection(targetContent, section.key, sourceContent);
+  for (const section of sectionConfigs) {
+    const sourceContent = readFileSync(section.sourcePath, 'utf8').trim();
 
-    if (nextContent !== targetContent) {
-      writeFileSync(targetPath, nextContent, 'utf8');
+    for (const targetPath of section.targets.map((target) => resolve(resolvedRoot, target))) {
+      const targetContent = readFileSync(targetPath, 'utf8');
+      const nextContent = syncSection(targetContent, section.key, sourceContent);
+
+      if (nextContent !== targetContent) {
+        writeFileSync(targetPath, nextContent, 'utf8');
+        touchedPaths.push(targetPath);
+      }
     }
   }
+
+  return {
+    projectRoot: resolvedRoot,
+    touchedPaths: touchedPaths.map((targetPath) => targetPath.slice(resolvedRoot.length + 1)),
+  };
 }
 
-console.log('Synced shared guidance sections into AGENTS.md and CLAUDE.md');
+export function validateSharedAgentDocs(projectRoot = rootDir) {
+  const resolvedRoot = resolve(projectRoot);
+  const errors = [];
+  const checks = [];
+
+  for (const section of sectionConfigs) {
+    const sourceContent = readFileSync(section.sourcePath, 'utf8').trim();
+    const targetResults = [];
+
+    for (const targetPath of section.targets.map((target) => resolve(resolvedRoot, target))) {
+      const targetContent = readFileSync(targetPath, 'utf8');
+      const syncedContent = syncSection(targetContent, section.key, sourceContent);
+      const inSync = syncedContent === targetContent;
+
+      targetResults.push({
+        path: targetPath.slice(resolvedRoot.length + 1),
+        status: inSync ? 'pass' : 'fail',
+      });
+
+      if (!inSync) {
+        errors.push(`${section.key} 在 ${targetPath.slice(resolvedRoot.length + 1)} 中存在漂移，请先运行 npm run docs:sync:agents`);
+      }
+    }
+
+    checks.push({
+      id: `shared-section:${section.key}`,
+      title: `Shared agent section: ${section.key}`,
+      status: targetResults.every((item) => item.status === 'pass') ? 'pass' : 'fail',
+      evidence: {
+        sourcePath: section.sourcePath.slice(rootDir.length + 1),
+        targets: targetResults,
+      },
+    });
+  }
+
+  return {
+    status: errors.length > 0 ? 'fail' : 'pass',
+    checks,
+    errors,
+  };
+}
+
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isDirectExecution()) {
+  const result = syncSharedAgentDocs(rootDir);
+  console.log(`Synced shared guidance sections into AGENTS.md and CLAUDE.md (${result.touchedPaths.length} updated)`);
+}

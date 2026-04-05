@@ -34,7 +34,7 @@ function parseArgs(argv) {
   return options;
 }
 
-function loadContract(projectRoot) {
+export function loadSkillSourceContract(projectRoot) {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const contractPath = path.resolve(
     scriptDir,
@@ -100,6 +100,17 @@ function formatText(result) {
   return lines.join('\n');
 }
 
+export function syncReverseSpecSkillMirrors(options = {}) {
+  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  const { contractPath, contract } = loadSkillSourceContract(projectRoot);
+  const entries = syncMirrors(projectRoot, contract);
+  return {
+    status: 'pass',
+    contractPath: toProjectRelative(projectRoot, contractPath),
+    entries,
+  };
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -109,13 +120,7 @@ function main() {
     return;
   }
 
-  const { contractPath, contract } = loadContract(options.projectRoot);
-  const entries = syncMirrors(options.projectRoot, contract);
-  const result = {
-    status: 'pass',
-    contractPath: toProjectRelative(options.projectRoot, contractPath),
-    entries,
-  };
+  const result = syncReverseSpecSkillMirrors(options);
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -125,10 +130,19 @@ function main() {
   console.log(formatText(result));
 }
 
-try {
-  main();
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(message);
-  process.exit(1);
+function isDirectExecution() {
+  if (!process.argv[1]) {
+    return false;
+  }
+  return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+}
+
+if (isDirectExecution()) {
+  try {
+    main();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  }
 }

@@ -1,6 +1,6 @@
 # reverse-spec — Claude Code Plugin
 
-> 当前发布版本: v2.4.0
+> 当前发布版本: v2.5.0
 
 通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档。
 
@@ -75,6 +75,13 @@ reverse-spec mcp-server  # 启动 MCP stdio server
   ```bash
   npm run reverse-spec:check:skills
   ```
+
+若本次改动同时触及 release contract、shared docs 或 spec-driver 包装层，优先直接运行：
+
+```bash
+npm run repo:sync
+npm run repo:check
+```
 
 ### 认证
 

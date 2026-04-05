@@ -1,6 +1,6 @@
 # Spec Driver
 
-> 当前发布版本: v3.9.0
+> 当前发布版本: v3.10.0
 
 **自治研发编排器** — 支持 7 种模式（feature/implement/story/fix/resume/sync/doc），一键触发 Spec-Driven Development 全流程，并通过本地 run events 生成 adoption / friction insights 与 Project Context suggestions。
 
@@ -57,6 +57,13 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 ```bash
 npm run codex:spec-driver:install
 npm run spec-driver:check:wrappers
+```
+
+若本次变更同时涉及共享片段、release contract、产品级 `_generated` 产物或 reverse-spec skill mirrors，优先直接运行：
+
+```bash
+npm run repo:sync
+npm run repo:check
 ```
 
 除 7 个主流程 Skill 外，Codex 安装包还会附带一个 bootstrap helper：

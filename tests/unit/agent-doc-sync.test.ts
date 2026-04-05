@@ -25,6 +25,10 @@ const sections = [
     key: 'release-contract',
     sourcePath: resolve(rootDir, 'docs/shared/agent-release-contract.md'),
   },
+  {
+    key: 'repo-maintenance',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-repo-maintenance.md'),
+  },
 ];
 
 function readSyncedSection(filePath: string, key: string): string {
