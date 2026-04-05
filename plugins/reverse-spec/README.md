@@ -58,6 +58,22 @@ reverse-spec mcp-server  # 启动 MCP stdio server
 
 ## 配置
 
+## Skill Source Contract
+
+- `plugins/reverse-spec/skills/**` 是 reverse-spec Skill 的 **canonical source**
+- `src/skills-global/**` 与 `skills/**` 是 compatibility mirrors，不再手工维护
+- 同步命令：
+
+  ```bash
+  npm run reverse-spec:sync:skills
+  ```
+
+- 校验命令：
+
+  ```bash
+  npm run reverse-spec:check:skills
+  ```
+
 ### 认证
 
 支持两种认证方式（自动检测，优先级从高到低）：

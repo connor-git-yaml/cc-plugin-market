@@ -122,6 +122,14 @@ if [ -f "plugins/spec-driver/scripts/validate-wrapper-sources.mjs" ]; then
   fi
 fi
 
+# CHECK-6: reverse-spec skill source-of-truth 一致性
+if [ -f "plugins/reverse-spec/scripts/validate-skill-sources.mjs" ]; then
+  REVERSE_SPEC_SKILL_OUTPUT=""
+  if ! REVERSE_SPEC_SKILL_OUTPUT=$(node plugins/reverse-spec/scripts/validate-skill-sources.mjs --project-root "$REPO_ROOT" --json 2>&1); then
+    ERRORS+=("CHECK-6 失败: reverse-spec skill/source-of-truth 校验失败 — ${REVERSE_SPEC_SKILL_OUTPUT}")
+  fi
+fi
+
 # ---- 输出结果 ----
 if [ ${#WARNINGS[@]} -gt 0 ]; then
   echo "" >&2

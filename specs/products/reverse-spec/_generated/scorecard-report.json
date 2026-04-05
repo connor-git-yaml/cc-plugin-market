@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T14:10:59.657Z",
+  "generatedAt": "2026-04-05T14:44:17.713Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "reverse-spec",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 46 个增量 spec。"
+        "current-spec 覆盖了全部 48 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,10 +45,10 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 16 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 17 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 16,
+        "totalFeatures": 17,
         "fresh": [
           "042-api-surface-reference",
           "043-runtime-topology-ops",
@@ -65,7 +65,8 @@
           "057-component-view-dynamic-scenarios",
           "058-adr-decision-pipeline",
           "059-provenance-quality-gates",
-          "060-product-ux-fact-ingestion"
+          "060-product-ux-fact-ingestion",
+          "079-reverse-spec-skill-distribution-consolidation"
         ],
         "stale": [],
         "missing": [],
@@ -74,7 +75,8 @@
         "ignored": {
           "blueprint": [
             "024-multilang-blueprint",
-            "054-multi-source-doc-system-blueprint"
+            "054-multi-source-doc-system-blueprint",
+            "076-codebase-rationalization-blueprint"
           ],
           "nonImplemented": [
             "001-reverse-spec-v2",

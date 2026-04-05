@@ -36,6 +36,20 @@ describe('skill-installer', () => {
   });
 
   describe('installSkills', () => {
+    it('Skill 定义直接来自 reverse-spec canonical source', () => {
+      for (const skill of SKILL_DEFINITIONS) {
+        const canonicalPath = join(
+          process.cwd(),
+          'plugins',
+          'reverse-spec',
+          'skills',
+          skill.name,
+          'SKILL.md',
+        );
+        expect(readFileSync(canonicalPath, 'utf-8')).toBe(skill.content);
+      }
+    });
+
     it('项目级安装 3 个 skill', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
       const summary = installSkills({ targetDir, mode: 'project', platform: 'claude' });

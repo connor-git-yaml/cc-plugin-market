@@ -146,10 +146,20 @@ describe('init 端到端测试', () => {
       'utf-8',
     );
 
-    // 验证 CLI 调用逻辑（Claude Code 原生模式使用 prepare）
-    expect(content).toContain('command -v reverse-spec');
-    expect(content).toContain('npm_config_yes=true npx reverse-spec');
-    expect(content).toContain('reverse-spec prepare');
+    const canonical = readFileSync(
+      join(
+        process.cwd(),
+        'plugins',
+        'reverse-spec',
+        'skills',
+        'reverse-spec',
+        'SKILL.md',
+      ),
+      'utf-8',
+    );
+    expect(content).toBe(canonical);
+    expect(content).toContain('reverse-spec generate $TARGET_PATH --deep');
+    expect(content).toContain('## Purpose');
   });
 
   it('init --remove 清理已安装 skill', () => {

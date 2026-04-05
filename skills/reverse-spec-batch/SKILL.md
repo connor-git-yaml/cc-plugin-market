@@ -15,33 +15,105 @@ description: |
 $ARGUMENTS
 ```
 
+You **MUST** consider the user input before proceeding (if not empty).
+
+## Purpose
+
+Systematically reverse-engineer specs for an entire codebase. Generates an index spec with architecture overview, then iterates through modules producing individual .spec.md files.
+
 ## Execution Flow
 
-### 1. 项目扫描
+### 1. Project Survey
 
-扫描项目结构，识别顶层模块（src/ 子目录、monorepo 包等），检查 specs/ 中已有的 spec。
+Scan the project root to understand structure:
 
-### 2. 展示计划并确认
+1. **Detect project type**: monorepo, single app, library, CLI, etc.
+2. **Identify top-level modules**: `src/` subdirectories, packages in monorepo, major feature folders
+3. **Estimate total scope**: file count, LOC per module
+4. **Detect existing specs**: Check `specs/` directory for already-generated specs
 
-列出待分析模块（按依赖顺序），显示文件数和 LOC，等待用户确认后再执行。
+### 2. Generate Batch Plan
 
-### 3. 逐模块生成
+Present the analysis plan to the user:
 
-对每个模块执行 `/reverse-spec`。跳过已存在的 spec（除非用户指定 --force）。
+```markdown
+## Reverse-Spec Batch Plan
 
-CLI 批量模式（如可用）：
+**Project**: <name>
+**Type**: <project type>
+**Total scope**: N files, ~N LOC
 
-```bash
-if command -v reverse-spec >/dev/null 2>&1; then
-  reverse-spec batch [--force] [--output-dir specs/]
-elif command -v npx >/dev/null 2>&1; then
-  npm_config_yes=true npx reverse-spec batch [--force] [--output-dir specs/]
-fi
+### Modules to analyze (in dependency order):
+
+| # | Module | Files | LOC | Existing Spec? | Priority |
+|---|--------|-------|-----|----------------|----------|
+| 1 | core/utils | 5 | 320 | No | Foundation |
+| 2 | models/ | 8 | 890 | No | Data layer |
+| 3 | auth/ | 12 | 1450 | Yes (outdated) | Critical |
+| ... | | | | | |
+
+**Estimated effort**: ~N minutes with AI analysis
+
+Proceed with all? Or select specific modules (e.g., "1,3,5" or "auth/ models/")
 ```
 
-### 4. 汇总报告
+Wait for user confirmation before proceeding.
 
-报告生成结果：成功/跳过/失败模块、跨模块观察。
+### 3. Run Batch Pipeline
 
-**语言**: 中文正文 + 英文代码标识符/路径/代码块
-**规则**: 按依赖顺序处理；可恢复（中断后跳过已完成）；不重复已有 spec
+Execute the batch pipeline using the globally installed `reverse-spec` CLI:
+
+```bash
+reverse-spec batch
+```
+
+如果需要强制重新生成所有 spec：
+
+```bash
+reverse-spec batch --force
+```
+
+如果需要自定义输出目录：
+
+```bash
+reverse-spec batch --output-dir specs
+```
+
+### 4. Final Summary
+
+After batch completes:
+
+```markdown
+## Batch Reverse-Spec Complete
+
+**Generated**: N/M specs
+**Index**: specs/_index.spec.md
+**Total time**: ~N minutes
+
+### Generated Specs:
+- specs/auth.spec.md (high confidence)
+- specs/models.spec.md (medium confidence)
+- specs/api.spec.md (skipped by user)
+
+### Project-Wide Observations:
+- <Cross-module patterns noticed>
+- <Shared technical debt themes>
+- <Architecture recommendations>
+```
+
+## 语言规范
+
+**所有 spec 文档的正文内容必须使用中文撰写。** 具体规则：
+
+- **用中文**：所有描述、说明、分析、总结、表格内容、注释
+- **保留英文**：代码标识符（函数名、类名、变量名）、文件路径、类型签名、代码块内容
+- **章节标题**：使用中文，例如 `## 1. 意图`、`## 2. 接口定义`
+- **表格表头**：使用中文，例如 `| 模块 | 规格 | 用途 | 依赖 |`
+- **Frontmatter**：保留英文（YAML 键名）
+
+## Guidelines
+
+- 按**依赖顺序**处理模块（基础模块优先）
+- **可恢复**：如果中断，检查已有 specs 并跳过已完成的模块
+- **不重复生成**已存在的 spec，除非用户指定 `--force`
+- 每个模块的 spec 保持**自包含**，但通过索引交叉引用

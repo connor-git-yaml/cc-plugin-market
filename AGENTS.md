@@ -39,6 +39,7 @@
 - `.codex/`、`.claude/` 是运行时/分发包装层；若内容来自安装脚本，改 source 后重新生成
 - `plugins/spec-driver/skills/**` 是 spec-driver Codex wrappers 的 canonical source；`.codex/skills/spec-driver-*/SKILL.md` 只通过安装脚本再生成
 - `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` 是 spec-driver 包装层合同；`.claude/commands/spec-driver.*.md` 属于项目 override，不是 plugin source-of-truth
+- `plugins/reverse-spec/skills/**` 是 reverse-spec Skill 的 canonical source；`src/skills-global/**` 与 `skills/**` 是兼容镜像，只通过同步脚本再生成
 - `.specify/` 是项目级配置与运行态目录：
   - `templates/`、`workflows/`、`scorecards/` 可作为项目覆盖层
   - `runs/` 属于本地运行事件，不作为长期人工事实源

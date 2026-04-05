@@ -564,6 +564,9 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
+│   ├── contracts/                 # Reverse-spec skill source contracts
+│   ├── skills/                    # Canonical reverse-spec skill source
+│   └── scripts/                   # Skill sync / validation / lifecycle
 └── spec-driver/                   # Spec Driver orchestrator (v3.8.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
@@ -598,7 +601,12 @@ templates/                         # Handlebars output templates
 ├── index-spec.hbs                 # Architecture index template
 └── drift-report.hbs               # Drift report template
 
-skills/                            # Local skills (via npx tsx)
+src/skills-global/                 # Generated published compatibility mirrors
+├── reverse-spec/SKILL.md
+├── reverse-spec-batch/SKILL.md
+└── reverse-spec-diff/SKILL.md
+
+skills/                            # Generated repo-local compatibility mirrors
 ├── reverse-spec/SKILL.md
 ├── reverse-spec-batch/SKILL.md
 └── reverse-spec-diff/SKILL.md

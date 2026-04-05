@@ -7,7 +7,7 @@
 
 products:
   reverse-spec:
-    description: "reverse-spec v2.2.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口"
+    description: "reverse-spec v2.3.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并收敛 reverse-spec Skill 的 source-of-truth 与分发结构"
     specs:
       - id: "001-reverse-spec-v2"
         type: INITIAL
@@ -147,6 +147,12 @@ products:
       - id: "060-product-ux-fact-ingestion"
         type: FEATURE
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
+      - id: "076-codebase-rationalization-blueprint"
+        type: ENHANCEMENT
+        summary: "代码库结构与可维护性收敛蓝图，定义 077-081 的结构治理路线"
+      - id: "079-reverse-spec-skill-distribution-consolidation"
+        type: FEATURE
+        summary: "收敛 reverse-spec Skill 的 canonical source、compatibility mirrors 与分发校验合同"
 
   spec-driver:
     description: "Spec Driver v3.8.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth 合同与产品级生成产物分层，同时显式校验架构合理性与可读性"

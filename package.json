@@ -1,6 +1,6 @@
 {
   "name": "reverse-spec",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "通过 AST 静态分析 + LLM 混合流水线，将遗留源代码逆向工程为结构化 Spec 文档",
   "type": "module",
   "main": "dist/index.js",
@@ -12,7 +12,6 @@
     "grammars/",
     "queries/",
     "scripts/lifecycle-runner.cjs",
-    "src/skills-global/",
     "plugins/",
     "templates/",
     "README.md"
@@ -30,6 +29,8 @@
     "hooks:check": "bash scripts/check-plugin-sync.sh",
     "worktree:sync-local-state": "bash scripts/sync-worktree-local-state.sh",
     "spec-driver:check:wrappers": "node plugins/spec-driver/scripts/validate-wrapper-sources.mjs --project-root . --json",
+    "reverse-spec:sync:skills": "node plugins/reverse-spec/scripts/sync-skill-mirrors.mjs --project-root . --json",
+    "reverse-spec:check:skills": "node plugins/reverse-spec/scripts/validate-skill-sources.mjs --project-root . --json",
     "codex:spec-driver:install": "bash plugins/spec-driver/scripts/codex-skills.sh install",
     "codex:spec-driver:install:global": "bash plugins/spec-driver/scripts/codex-skills.sh install --global",
     "codex:spec-driver:remove": "bash plugins/spec-driver/scripts/codex-skills.sh remove",

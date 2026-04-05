@@ -1,0 +1,34 @@
+schemaVersion: 1
+plugin:
+  id: "reverse-spec"
+  sourceRoot: "plugins/reverse-spec"
+  metadataSource: "plugins/reverse-spec/.claude-plugin/plugin.json"
+  marketplaceManifest: ".claude-plugin/marketplace.json"
+
+skills:
+  canonicalRoot: "plugins/reverse-spec/skills"
+  generator:
+    script: "plugins/reverse-spec/scripts/sync-skill-mirrors.mjs"
+    command: "npm run reverse-spec:sync:skills"
+  entries:
+    - id: "reverse-spec"
+      source: "plugins/reverse-spec/skills/reverse-spec/SKILL.md"
+      mirrors:
+        - id: "published-compat"
+          path: "src/skills-global/reverse-spec/SKILL.md"
+        - id: "repo-local-compat"
+          path: "skills/reverse-spec/SKILL.md"
+    - id: "reverse-spec-batch"
+      source: "plugins/reverse-spec/skills/reverse-spec-batch/SKILL.md"
+      mirrors:
+        - id: "published-compat"
+          path: "src/skills-global/reverse-spec-batch/SKILL.md"
+        - id: "repo-local-compat"
+          path: "skills/reverse-spec-batch/SKILL.md"
+    - id: "reverse-spec-diff"
+      source: "plugins/reverse-spec/skills/reverse-spec-diff/SKILL.md"
+      mirrors:
+        - id: "published-compat"
+          path: "src/skills-global/reverse-spec-diff/SKILL.md"
+        - id: "repo-local-compat"
+          path: "skills/reverse-spec-diff/SKILL.md"
