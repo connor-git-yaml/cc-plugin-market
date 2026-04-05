@@ -78,11 +78,25 @@ fi
 
 ### 3.5 项目上下文注入（project-context，可选）
 
-- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，在进入后续阶段前读取该文件
-- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
-- 将 `project_context_block` 追加到各阶段运行时上下文注入块
-- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
-- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+运行统一 resolver：
+
+```bash
+node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
+```
+
+解析输出 JSON，并设置：
+
+- `project_context_block = result.projectContextBlock`
+- `project_context_diagnostics = result.diagnostics`
+- `project_context_reference_missing = result.referenceSummary.missing`
+
+行为约束：
+
+- `.specify/project-context.yaml` 是 canonical source
+- `.specify/project-context.md` 仅作为 legacy fallback
+- 若 `.yaml` 与 `.md` 并存，resolver 只读取 `.yaml`，并在 diagnostics 中返回迁移 warning
+- 若 diagnostics 中包含 `[参考路径缺失]`，不中断流程，但必须在阶段总结与最终报告中列为风险项
+- 若无 project-context 文件，resolver 返回 `projectContextBlock = "未配置"`
 
 ### 4. 门禁配置加载
 

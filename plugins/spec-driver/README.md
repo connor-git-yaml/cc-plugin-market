@@ -51,12 +51,12 @@ $spec-driver-constitution [原则更新说明]
 
 用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver.constitution`。
 
-Codex 包装技能会自动检测项目级上下文文件：
+Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 
-- `.specify/project-context.yaml`
-- `.specify/project-context.md`
+- `.specify/project-context.yaml`：canonical source
+- `.specify/project-context.md`：legacy fallback，仅在缺少 YAML 时读取
 
-若存在，将把 `project-context` 中声明且有效的路径注入运行时上下文；路径失效时会标注 `[参考路径缺失]` 并在最终报告提示风险。
+若两者并存，resolver 只读取 YAML 并返回迁移 warning。运行时只注入 `project-context` 中声明且有效的路径；路径失效时会标注 `[参考路径缺失]` 并在最终报告提示风险。
 
 此外，项目初始化会预创建 `.specify/runs/`，供 `record-workflow-run.mjs` 记录最小运行摘要；这些日志默认只保留本地，不需要提交到 Git。
 

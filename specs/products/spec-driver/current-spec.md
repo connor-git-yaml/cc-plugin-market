@@ -1,7 +1,7 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **版本**: 聚合自 23 个增量 spec / blueprint（011–022, 032, 062–068, 070–072）
+> **版本**: 聚合自 24 个增量 spec / blueprint（011–022, 032, 062–068, 070–073）
 > **最后聚合**: 2026-04-05
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
@@ -29,7 +29,7 @@
 
 ## 1. 产品概述
 
-Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Development 的常见研发链路收敛为一套可复用的命令体系，覆盖 feature、implement、story、fix、resume、sync、doc 七种模式，并以质量门、验证铁律、调研路由、架构合理性/可读性审查和产品活文档维持流程一致性。
+Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Development 的常见研发链路收敛为一套可复用的命令体系，覆盖 feature、implement、story、fix、resume、sync、doc 七种模式，并以质量门、验证铁律、调研路由、共享 Project Context resolver、架构合理性/可读性审查和产品活文档维持流程一致性。
 
 当前产品的核心定位有三层：
 
@@ -69,6 +69,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | 产品实体目录 | 生成 `entity.yaml` 与 `catalog-index.yaml` 作为机器可读 Catalog | 063 |
 | Workflow Library | 七个入口拥有 machine-readable workflow definition 与 golden paths | 064, 072 |
 | Mature Spec 实施 | 对成熟 `spec.md + plan.md` 提供独立 implement 入口，并在最前置执行 spec/plan 合同检查 | 072 |
+| Project Context Resolver | `.specify/project-context.yaml` 成为 canonical source，所有主 Skill 统一通过 resolver 获取上下文、在线调研策略和 diagnostics | 073 |
 | 持续治理 | 生成 `scorecard-report` 与 `scorecard-index`，解释产品 readiness | 065 |
 | Adoption / Friction | 生成本地 `adoption-report`，识别 rerun、gate pause 与 verification 热点 | 066 |
 | 治理信号对齐 | 生成产品级 `quality-report` 并把 scorecard 统计范围收敛到已实现 feature | 068 |
@@ -111,6 +112,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - 产品活文档聚合、product mapping 与对外文档摘要
 - 产品实体目录、workflow registry、scorecards 与 adoption report
 - 项目级 `.specify/` 初始化与脚本路径发现
+- Project Context resolver、legacy Markdown 兼容与统一 diagnostics
 - 命名规范统一与技能元数据对齐
 
 ### 范围外
@@ -190,6 +192,14 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | FR-028 | 生成本地 `adoption-report.md/.json`，基于 `.specify/runs/*.jsonl` 聚合 adoption / friction 热点 | 066 | 活跃 |
 | FR-029 | 生成产品级 `quality-report.md/.json`，并作为 scorecard 的文档质量输入 | 068 | 活跃 |
 | FR-030 | 产品级机器生成产物统一写入 `specs/products/<product>/_generated/`，跨产品索引统一写入 `specs/products/_generated/` | 071 | 活跃 |
+
+### FR-GROUP-8: Project Context 与执行上下文治理
+
+| ID | 功能描述 | 来源 | 状态 |
+|----|----------|------|------|
+| FR-032 | 所有主 Skill 统一通过共享 resolver 读取 `.specify/project-context.*`，不再复制各自的解析规则 | 073 | 活跃 |
+| FR-033 | `.specify/project-context.yaml` 是 canonical source，`.md` 仅作为 legacy fallback；并存时固定 YAML 优先并输出迁移 warning | 073 | 活跃 |
+| FR-034 | Project Context resolver 输出 `projectContextBlock`、`onlineResearch`、`diagnostics` 和引用路径存在性检查结果 | 073 | 活跃 |
 
 ---
 
@@ -280,6 +290,7 @@ plugins/spec-driver/
 - `sync` 与 `doc` 的契约从“松散关系”提升为“产品事实源 → 对外派生”
 - `.specify/templates/` 允许项目级覆盖内置模板
 - `entity.yaml`、workflow registry、quality report、scorecards 和 adoption report 构成最小的 Catalog-driven 运营层
+- `resolve-project-context.mjs` 将 Project Context 规则从 Skill 文本约定收敛为共享解析机制
 
 ---
 
@@ -315,8 +326,8 @@ plugins/spec-driver/
 | 021 | 项目级模板同步面继续扩大时，需要更明确的模板版本兼容策略 | 中 |
 | 022 | sync / doc 的事实层契约已确立，但自动验证其一致性的门禁仍偏轻量 | 中 |
 | 032 | 仓库外部历史材料可能仍残留 `speckit-*` 旧命名 | 低 |
-| 070 | `Project Context` 仍停留在软约定层，尚未形成 schema / resolver / feedback suggestions 机制 | 中 |
-| 072 | implement skill 已建立，但与未来 resolver / suggestions 的共享上下文注入仍待后续 Feature 收口 | 中 |
+| 070 | `Project Context` 已收敛出 schema / resolver 路线，但 feedback suggestions 与 init/template 收口仍待后续 Feature 完成 | 中 |
+| 072 | implement skill 已建立，后续仍需把 resolver 输出与 suggestions 机制进一步串接到更细粒度的执行决策中 | 中 |
 
 ---
 
@@ -380,6 +391,7 @@ plugins/spec-driver/
 | 21 | [070-project-context-implement-skill-blueprint](../../070-project-context-implement-skill-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义 Project Context 与 Implement Skill 解耦路线 |
 | 22 | [071-product-artifact-boundary-cleanup](../../071-product-artifact-boundary-cleanup/spec.md) | FEATURE | 2026-04-05 | 清理产品事实源与生成产物目录边界，统一 `_generated` 合同 |
 | 23 | [072-spec-driver-implement](../../072-spec-driver-implement/spec.md) | FEATURE | 2026-04-05 | 新增成熟 spec/plan 的聚焦实施入口，并接入 workflow / catalog / adoption |
+| 24 | [073-project-context-schema-resolver](../../073-project-context-schema-resolver/spec.md) | FEATURE | 2026-04-05 | 引入共享 Project Context resolver，统一 YAML canonical、legacy Markdown fallback 与 diagnostics 合同 |
 
 ---
 
@@ -427,6 +439,7 @@ plugins/spec-driver/
 | 21 | 070-project-context-implement-skill-blueprint | ENHANCEMENT | [specs/070-project-context-implement-skill-blueprint/blueprint.md](../../070-project-context-implement-skill-blueprint/blueprint.md) |
 | 22 | 071-product-artifact-boundary-cleanup | FEATURE | [specs/071-product-artifact-boundary-cleanup/spec.md](../../071-product-artifact-boundary-cleanup/spec.md) |
 | 23 | 072-spec-driver-implement | FEATURE | [specs/072-spec-driver-implement/spec.md](../../072-spec-driver-implement/spec.md) |
+| 24 | 073-project-context-schema-resolver | FEATURE | [specs/073-project-context-schema-resolver/spec.md](../../073-project-context-schema-resolver/spec.md) |
 
 ---
 

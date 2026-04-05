@@ -149,7 +149,7 @@ products:
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
-    description: "Spec Driver v3.4.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层，同时显式校验架构合理性与可读性"
+    description: "Spec Driver v3.5.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与产品级生成产物分层，同时显式校验架构合理性与可读性"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -220,3 +220,6 @@ products:
       - id: "072-spec-driver-implement"
         type: FEATURE
         summary: "新增成熟 Spec/Plan 的聚焦实施入口 spec-driver-implement，并接入 workflow / catalog / adoption"
+      - id: "073-project-context-schema-resolver"
+        type: FEATURE
+        summary: "引入共享 Project Context resolver，统一 YAML canonical、legacy Markdown fallback 与 diagnostics 合同"

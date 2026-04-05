@@ -55,34 +55,34 @@ fi
 
 ### 2.5 项目上下文注入（project-context，可选）
 
-- 若项目根目录存在 `.specify/project-context.yaml` 或 `.specify/project-context.md`，在进入后续阶段前读取该文件
-- 从该文件中提取“声明且实际存在”的文档与参考路径，生成 `project_context_block`
-- 将 `project_context_block` 追加到各阶段运行时上下文注入块
-- 若声明路径不存在，输出 `[参考路径缺失] {path}`，不中断流程，并在阶段总结与最终报告中列为风险项
-- 若无 project-context 文件，设置 `project_context_block = "未配置"`
+运行统一 resolver：
+
+```bash
+node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
+```
+
+解析输出 JSON，并设置：
+
+- `project_context_block = result.projectContextBlock`
+- `project_context_diagnostics = result.diagnostics`
+- `project_context_reference_missing = result.referenceSummary.missing`
+
+行为约束：
+
+- `.specify/project-context.yaml` 是 canonical source
+- `.specify/project-context.md` 仅作为 legacy fallback
+- 若 `.yaml` 与 `.md` 并存，resolver 只读取 `.yaml`，并在 diagnostics 中返回迁移 warning
+- 若 diagnostics 中包含 `[参考路径缺失]`，不中断流程，但必须在阶段总结与最终报告中列为风险项
+- 若无 project-context 文件，resolver 返回 `projectContextBlock = "未配置"`
 
 ### 2.6 在线调研策略解析（project-context 扩展）
 
-为降低“只做本地排障而遗漏外部已知问题/修复实践”的风险，读取 project-context 后追加在线调研策略解析：
+为降低“只做本地排障而遗漏外部已知问题/修复实践”的风险，从 resolver 输出读取：
 
-```text
-输入: .specify/project-context.yaml/.md 内容（如存在）
-
-1. 是否要求在线调研
-   - 若检测到以下任一关键词，设置 online_research_required=true：
-     ["perplexity", "sonar-pro-search", "在线调研", "在线搜索"]
-   - 否则 online_research_required=false
-
-2. 调研点数量约束
-   - online_research_max_points=5（默认）
-   - online_research_min_points=0（默认）
-   - 若 project-context 明确给出更严格阈值，按项目阈值覆盖
-
-3. 运行时变量
-   - online_research_required: bool
-   - online_research_min_points: int
-   - online_research_max_points: int
-```
+- `online_research_required = result.onlineResearch.required`
+- `online_research_min_points = result.onlineResearch.minPoints`
+- `online_research_max_points = result.onlineResearch.maxPoints`
+- `online_research_preferred_tools = result.onlineResearch.preferredTools`
 
 说明：`online_research_min_points=0` 允许“本次不做在线调研点”，但必须记录 `skip_reason`（见 Step 5.5 产物格式与 GATE_DESIGN 前置硬门禁）。
 

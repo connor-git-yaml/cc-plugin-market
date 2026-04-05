@@ -78,7 +78,9 @@ describe('Spec Driver Codex skills script', () => {
     expect(storyWrapper).toContain('model_compat.defaults.codex');
     expect(storyWrapper).toContain('opus/sonnet');
     expect(storyWrapper).toContain('.specify/project-context.yaml');
-    expect(storyWrapper).toContain('[参考路径缺失]');
+    expect(storyWrapper).toContain('resolve-project-context.mjs');
+    expect(storyWrapper).toContain('canonical source');
+    expect(storyWrapper).toContain('legacy fallback');
     expect(storyWrapper).toContain('架构合理性');
     expect(storyWrapper).toContain('可读性');
 
@@ -91,6 +93,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(implementWrapper).toContain('成熟 `spec.md + plan.md` 的聚焦实施');
     expect(implementWrapper).toContain('Spec / Plan 合同检查（Implement 首要前置 gate）');
     expect(implementWrapper).toContain('[CONTRACT_CHECK] READY|BLOCKED');
+    expect(implementWrapper).toContain('resolve-project-context.mjs');
+    expect(implementWrapper).toContain('.specify/project-context.yaml');
     expect(implementWrapper).toContain('架构合理性');
     expect(implementWrapper).toContain('可读性');
 

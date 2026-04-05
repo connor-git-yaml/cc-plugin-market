@@ -1,6 +1,6 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-04-05T05:49:18.641Z
+- Generated At: 2026-04-05T06:44:24.370Z
 - Status: healthy
 - Total Runs: 5
 - Active Workflows: 2
