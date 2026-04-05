@@ -46,7 +46,11 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 
 <!-- MANUAL ADDITIONS START -->
 
-## Language Convention
+## Manual Rules
+
+- 跨任务稳定的仓库级执行规则以 [AGENTS.md](AGENTS.md) 为准；本文件只保留 Claude 侧需要默认带入上下文的摘要。
+
+### Language Convention
 
 - **所有文档、注释、commit message、PR 描述默认使用中文**
 - 英文专有名词（如 AST、CodeSkeleton、Handlebars、Zod）保持原文，不翻译
@@ -54,6 +58,20 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 代码注释使用中文
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
 - 使用 spec-driver 的方式执行需求变更和问题修复不允许直接修改源代码。
+
+### Behavior & Interaction
+
+- 不要自行添加未要求的优化、功能、清理或重构；原因：spec、gate 和生成合同会放大任何额外改动的验证面。
+- 不要猜测需求、实现或上下文；原因：猜测会污染事实源。查不到就明确说“不知道”。
+- 不要在没完整看过目标文件前直接动代码；原因：本仓库存在 source-of-truth 和包装层同步链路，盲改风险高。
+- 不要把审查理解成“证明它能跑”；原因：review 和验证默认先找漏洞、异常分支、回归和合同漂移。
+- 不要把核心判断交给子代理；原因：执行可分发，但关键取舍和最终结论必须在主线程收口。
+- 不要把一次授权当成长期授权；原因：执行脚本、rebase、push 等都只对当次任务生效。
+- 不要一次性抛出全部背景和工具说明；原因：上下文按需供给，避免噪声。
+- 不要混用不同场景规则；原因：feature、fix、review、doc 的门禁和产物不同，按对应 skill / phase 加载。
+- 不要擅自改字段名、层级或标点格式；原因：Markdown/YAML/JSON 合同和脚本解析依赖精确字面值。
+- 不要把 prompt 或规范写成无结构长段；原因：目标、约束、验证要模块化。
+- 不要优先用通用工具；原因：先用仓内脚本、skill、contract 和 shared helper，再退回 shell。
 
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-context-layering.md` 同步，请勿手动编辑区块内容。
 
