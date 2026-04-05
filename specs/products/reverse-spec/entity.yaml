@@ -30,13 +30,15 @@ quality:
     lastAggregated: "2026-03-22"
     status: "活跃"
   report:
-    path: null
-    status: "unavailable"
+    path: "specs/products/reverse-spec/quality-report.json"
+    status: "pass"
+    score: 100
+    generatedAt: "2026-04-05T02:12:33.409Z"
   scorecard:
     path: "specs/products/reverse-spec/scorecard-report.json"
-    status: "fail"
-    score: 65
-    generatedAt: "2026-04-04T17:14:30.165Z"
+    status: "pass"
+    score: 100
+    generatedAt: "2026-04-05T02:12:33.424Z"
 workflowRefs:
   - "reverse-spec.init"
   - "reverse-spec.generate"
@@ -54,3 +56,5 @@ sourceRefs:
     path: "README.md"
   - kind: "scorecard-report"
     path: "specs/products/reverse-spec/scorecard-report.json"
+  - kind: "quality-report"
+    path: "specs/products/reverse-spec/quality-report.json"

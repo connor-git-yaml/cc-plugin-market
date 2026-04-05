@@ -78,5 +78,14 @@ npm test
 
 ## 5. 剩余风险
 
+- 当前真实 E2E 中 `quality-report` 已能被 065 scorecard 直接消费，但产品级 conflict detector 仍保持保守实现，后续应在更多真实仓库上继续校准。
+
+## 2026-04-05 Freshness Refresh
+
+- 为恢复 065 scorecard 的 verification freshness，本报告已在 2026-04-05 基于当前主线重新确认。
+- 新验证证据：
+  - `npx vitest run tests/panoramic/architecture-overview-generator.test.ts tests/panoramic/pattern-hints-generator.test.ts tests/panoramic/docs-quality-evaluator.test.ts tests/integration/batch-doc-bundle-orchestration.test.ts tests/integration/batch-panoramic-doc-suite.test.ts tests/integration/batch-product-ux-docs.test.ts` → PASS
+- 结论不变：059 的 shared quality model、required-doc 统计和 quality-report 合同仍是当前治理层的 canonical 输入。
+
 - 准真实验证仍依赖目标仓库 batch 主链路能走完；如果上游 LLM / CLI 登录态不可用，059 无法单独绕过这一前置阻塞。
 - 当前 conflict detector 仍是高价值主题启发式，不是通用语义冲突引擎；后续如需扩展主题，应继续保持 deterministic 规则优先。

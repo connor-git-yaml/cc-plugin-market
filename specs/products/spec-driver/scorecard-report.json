@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-04T17:14:30.165Z",
+  "generatedAt": "2026-04-05T02:12:33.424Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spec-driver",
   "productName": "Spec Driver",
   "kind": "plugin",
-  "status": "fail",
-  "score": 68,
+  "status": "pass",
+  "score": 100,
   "summary": [
-    "Spec Driver 当前治理评分为 68/100，整体状态 FAIL.",
-    "存在 1 条 fail 级规则，需要优先处理。",
-    "另有 2 条 warn 级规则，建议在下一次 sync / release 前收口。"
+    "Spec Driver 当前治理评分为 100/100，整体状态 PASS.",
+    "没有 fail 级规则。",
+    "全部规则均已达到 pass 基线。"
   ],
   "stats": {
     "ruleCount": 6,
-    "passCount": 3,
-    "warnCount": 2,
-    "failCount": 1,
+    "passCount": 6,
+    "warnCount": 0,
+    "failCount": 0,
     "maxWeightedScore": 100
   },
   "rules": [
@@ -42,38 +42,43 @@
       "title": "Verification 新鲜度",
       "evaluator": "verification-freshness",
       "weight": 20,
-      "status": "fail",
-      "score": 29,
+      "status": "pass",
+      "score": 100,
       "summary": [
-        "verification 覆盖率仅 72%，缺失 5 个、过期 0 个、失败 0 个。"
+        "全部 5 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 18,
+        "totalFeatures": 5,
         "fresh": [
-          "013-split-skill-commands",
-          "014-rename-spec-driver",
-          "015-speckit-doc-command",
-          "016-optimize-sync-product-doc",
-          "017-adopt-superpowers-patterns",
-          "018-flexible-research-routing",
-          "019-parallel-subagent-speedup",
-          "020-fix-plugin-script-path",
-          "021-add-research-templates",
+          "012-product-spec-sync",
           "063-product-entity-catalog",
           "064-workflow-registry-golden-paths",
           "065-scorecards-continuous-governance",
           "066-adoption-friction-insights"
         ],
         "stale": [],
-        "missing": [
-          "011-speckit-driver-pro",
-          "012-product-spec-sync",
-          "022-sync-doc-redesign",
-          "032-rename-speckit-to-spec-driver",
-          "062-catalog-driven-spec-driver-blueprint"
-        ],
+        "missing": [],
         "failed": [],
-        "coverageRatio": 0.7222222222222222
+        "coverageRatio": 1,
+        "ignored": {
+          "blueprint": [
+            "062-catalog-driven-spec-driver-blueprint"
+          ],
+          "nonImplemented": [
+            "011-speckit-driver-pro",
+            "013-split-skill-commands",
+            "014-rename-spec-driver",
+            "015-speckit-doc-command",
+            "016-optimize-sync-product-doc",
+            "017-adopt-superpowers-patterns",
+            "018-flexible-research-routing",
+            "019-parallel-subagent-speedup",
+            "020-fix-plugin-script-path",
+            "021-add-research-templates",
+            "022-sync-doc-redesign",
+            "032-rename-speckit-to-spec-driver"
+          ]
+        }
       },
       "warnings": []
     },
@@ -82,13 +87,16 @@
       "title": "文档覆盖率",
       "evaluator": "docs-coverage",
       "weight": 20,
-      "status": "warn",
-      "score": 50,
+      "status": "pass",
+      "score": 100,
       "summary": [
-        "缺少 quality-report.json，暂时无法复用文档质量门的 required docs 统计。"
+        "Required docs 覆盖 5/5。"
       ],
       "evidence": {
-        "qualityReportPath": null
+        "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+        "coveredRequiredDocs": 5,
+        "totalRequiredDocs": 5,
+        "coverageRatio": 1
       },
       "warnings": []
     },
@@ -97,13 +105,17 @@
       "title": "文档冲突",
       "evaluator": "docs-conflicts",
       "weight": 15,
-      "status": "warn",
-      "score": 50,
+      "status": "pass",
+      "score": 100,
       "summary": [
-        "缺少 quality-report.json，冲突治理暂时只能降级为人工检查。"
+        "quality-report 未检测到显式文档冲突。"
       ],
       "evidence": {
-        "qualityReportPath": null
+        "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+        "totalConflicts": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
       },
       "warnings": []
     },

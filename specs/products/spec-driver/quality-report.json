@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "title": "Spec Driver Product Quality Report",
+  "generatedAt": "2026-04-05T02:12:33.409Z",
+  "projectName": "Spec Driver",
+  "productId": "spec-driver",
+  "status": "pass",
+  "bundleCoverage": "full",
+  "summary": [
+    "产品治理相关文档可用 6/6，其中高覆盖 6 份。",
+    "未检测到显式冲突记录。",
+    "Required docs 覆盖 5/5，缺失 0 份。",
+    "治理文档契约完整，质量门可直接消费。"
+  ],
+  "provenance": [
+    {
+      "documentId": "current-spec",
+      "title": "Current Spec",
+      "sourcePath": "specs/products/spec-driver/current-spec.md",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "current-spec"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "current-spec 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "current-spec",
+              "ref": "current-spec",
+              "path": "specs/products/spec-driver/current-spec.md",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "documentId": "readme",
+      "title": "README",
+      "sourcePath": "README.md",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "readme"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "readme 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "readme",
+              "ref": "readme",
+              "path": "README.md",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "documentId": "entity",
+      "title": "Product Entity Catalog",
+      "sourcePath": "specs/products/spec-driver/entity.yaml",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "spec"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "entity 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "spec",
+              "ref": "entity",
+              "path": "specs/products/spec-driver/entity.yaml",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "documentId": "scorecard-report",
+      "title": "Scorecard Report",
+      "sourcePath": "specs/products/spec-driver/scorecard-report.json",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "generated-doc"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "scorecard-report 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "generated-doc",
+              "ref": "scorecard-report",
+              "path": "specs/products/spec-driver/scorecard-report.json",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "documentId": "workflow-index",
+      "title": "Workflow Registry Index",
+      "sourcePath": "specs/products/spec-driver/workflow-index.json",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "generated-doc"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "workflow-index 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "generated-doc",
+              "ref": "workflow-index",
+              "path": "specs/products/spec-driver/workflow-index.json",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "documentId": "adoption-report",
+      "title": "Adoption Report",
+      "sourcePath": "specs/products/spec-driver/adoption-report.json",
+      "available": true,
+      "coverage": "high",
+      "confidence": "high",
+      "sectionCount": 1,
+      "entryCount": 1,
+      "sourceTypes": [
+        "generated-doc"
+      ],
+      "warnings": [],
+      "sections": [
+        {
+          "id": "document",
+          "title": "Document Presence",
+          "summary": "adoption-report 已生成并可复用。",
+          "coverage": "high",
+          "entries": [
+            {
+              "sourceType": "generated-doc",
+              "ref": "adoption-report",
+              "path": "specs/products/spec-driver/adoption-report.json",
+              "note": "generated=true",
+              "confidence": "high",
+              "inferred": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "conflicts": [],
+  "requiredDocs": [
+    {
+      "docId": "current-spec",
+      "title": "Current Spec",
+      "required": true,
+      "present": true,
+      "presentPath": "specs/products/spec-driver/current-spec.md",
+      "coverage": "covered",
+      "requiredBy": [
+        "product-governance"
+      ],
+      "includedInBundles": [
+        "governance"
+      ],
+      "missingFromBundles": [],
+      "notes": []
+    },
+    {
+      "docId": "entity",
+      "title": "Product Entity Catalog",
+      "required": true,
+      "present": true,
+      "presentPath": "specs/products/spec-driver/entity.yaml",
+      "coverage": "covered",
+      "requiredBy": [
+        "catalog"
+      ],
+      "includedInBundles": [
+        "governance"
+      ],
+      "missingFromBundles": [],
+      "notes": []
+    },
+    {
+      "docId": "scorecard-report",
+      "title": "Scorecard Report",
+      "required": true,
+      "present": true,
+      "presentPath": "specs/products/spec-driver/scorecard-report.json",
+      "coverage": "covered",
+      "requiredBy": [
+        "scorecards"
+      ],
+      "includedInBundles": [
+        "governance"
+      ],
+      "missingFromBundles": [],
+      "notes": []
+    },
+    {
+      "docId": "workflow-index",
+      "title": "Workflow Registry Index",
+      "required": true,
+      "present": true,
+      "presentPath": "specs/products/spec-driver/workflow-index.json",
+      "coverage": "covered",
+      "requiredBy": [
+        "workflow-registry"
+      ],
+      "includedInBundles": [
+        "governance"
+      ],
+      "missingFromBundles": [],
+      "notes": []
+    },
+    {
+      "docId": "adoption-report",
+      "title": "Adoption Report",
+      "required": true,
+      "present": true,
+      "presentPath": "specs/products/spec-driver/adoption-report.json",
+      "coverage": "covered",
+      "requiredBy": [
+        "adoption-feedback"
+      ],
+      "includedInBundles": [
+        "governance"
+      ],
+      "missingFromBundles": [],
+      "notes": []
+    }
+  ],
+  "dependencyWarnings": [],
+  "warnings": [],
+  "stats": {
+    "totalProvenanceDocs": 6,
+    "availableProvenanceDocs": 6,
+    "highCoverageDocs": 6,
+    "lowCoverageDocs": 0,
+    "totalConflicts": 0,
+    "highSeverityConflicts": 0,
+    "totalRequiredDocs": 5,
+    "coveredRequiredDocs": 5,
+    "partialRequiredDocs": 0,
+    "missingRequiredDocs": 0,
+    "dependencyWarningCount": 0,
+    "warningCount": 0,
+    "score": 100
+  }
+}

@@ -65,3 +65,10 @@
 
 1. 当前 `component-view` 的组件分类与 scenario 触发选择仍以规则启发式为主，后续可在真实项目上继续校准权重，但不影响 057 当前验收。
 2. `event-surface` / `runtime-topology` 仍属于弱增强信号；当这些输入缺失时 057 会降级输出 warnings，而不是补全更强推断，这一保守策略是当前 feature 的有意边界。
+
+## 2026-04-05 Freshness Refresh
+
+- 为恢复 065 scorecard 的 verification freshness，本报告已在 2026-04-05 基于当前主线重新确认。
+- 新验证证据：
+  - `npx vitest run tests/panoramic/architecture-overview-generator.test.ts tests/panoramic/pattern-hints-generator.test.ts tests/panoramic/docs-quality-evaluator.test.ts tests/integration/batch-doc-bundle-orchestration.test.ts tests/integration/batch-panoramic-doc-suite.test.ts tests/integration/batch-product-ux-docs.test.ts` → PASS
+- 结论不变：057 的 component / dynamic 输出仍与 055/059/060 的项目级文档链路兼容。

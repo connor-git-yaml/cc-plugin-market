@@ -319,11 +319,18 @@ function evaluateSpecFreshness(rule, productContext) {
 }
 
 function evaluateVerificationFreshness(rule, productContext) {
-  const total = productContext.featureInputs.length;
+  const governedFeatures = productContext.featureInputs.filter((feature) => feature.governed);
+  const ignored = {
+    blueprint: productContext.featureInputs.filter((feature) => feature.artifactType === 'blueprint').map((feature) => feature.id),
+    nonImplemented: productContext.featureInputs
+      .filter((feature) => feature.artifactType === 'feature' && !feature.governed)
+      .map((feature) => feature.id),
+  };
+  const total = governedFeatures.length;
   if (total === 0) {
     return buildRuleResult(rule, 'warn', 50, [
-      '产品映射中没有增量 spec，verification 新鲜度无法计算。',
-    ], { totalFeatures: 0 });
+      '当前没有纳入治理的已实现增量 spec，verification 新鲜度无法计算。',
+    ], { totalFeatures: 0, ignored });
   }
 
   const fresh = [];
@@ -331,7 +338,7 @@ function evaluateVerificationFreshness(rule, productContext) {
   const missing = [];
   const failed = [];
 
-  for (const feature of productContext.featureInputs) {
+  for (const feature of governedFeatures) {
     if (!feature.verificationPath || !feature.verificationStat) {
       missing.push(feature.id);
       continue;
@@ -354,19 +361,19 @@ function evaluateVerificationFreshness(rule, productContext) {
   const warnCoverageRatio = Number(rule.thresholds?.warnCoverageRatio ?? 0.8);
   if (fresh.length === total && failed.length === 0) {
     return buildRuleResult(rule, 'pass', 100, [
-      `全部 ${total} 个增量 spec 都有新鲜的 verification 报告。`,
-    ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio });
+      `全部 ${total} 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。`,
+    ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio, ignored });
   }
 
   if (coverageRatio >= warnCoverageRatio && failed.length === 0) {
     return buildRuleResult(rule, 'warn', Math.round(60 + (coverageRatio * 20)), [
-      `verification 覆盖率为 ${formatPercent(coverageRatio)}，仍有 ${missing.length + stale.length} 个增量 spec 未通过新鲜度要求。`,
-    ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio });
+      `verification 覆盖率为 ${formatPercent(coverageRatio)}，仍有 ${missing.length + stale.length} 个已实现增量 spec 未通过新鲜度要求。`,
+    ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio, ignored });
   }
 
   return buildRuleResult(rule, 'fail', Math.round(coverageRatio * 40), [
-    `verification 覆盖率仅 ${formatPercent(coverageRatio)}，缺失 ${missing.length} 个、过期 ${stale.length} 个、失败 ${failed.length} 个。`,
-  ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio });
+    `verification 覆盖率仅 ${formatPercent(coverageRatio)}，缺失 ${missing.length} 个、过期 ${stale.length} 个、失败 ${failed.length} 个已实现增量 spec。`,
+  ], { totalFeatures: total, fresh, stale, missing, failed, coverageRatio, ignored });
 }
 
 function evaluateDocsCoverage(rule, productContext) {
@@ -639,12 +646,26 @@ function collectFeatureInputs(projectRoot, specs) {
     const id = typeof entry === 'string' ? entry : entry.id;
     const featureDir = path.join(projectRoot, 'specs', id);
     const specPath = path.join(featureDir, 'spec.md');
+    const blueprintPath = path.join(featureDir, 'blueprint.md');
+    const artifactPath = fs.existsSync(specPath)
+      ? specPath
+      : (fs.existsSync(blueprintPath) ? blueprintPath : null);
     const verificationPath = path.join(featureDir, 'verification', 'verification-report.md');
+    const artifactContent = artifactPath ? fs.readFileSync(artifactPath, 'utf-8') : null;
+    const artifactType = fs.existsSync(specPath)
+      ? 'feature'
+      : (fs.existsSync(blueprintPath) ? 'blueprint' : 'missing');
+    const status = parseFeatureArtifactStatus(artifactContent);
+    const governed = artifactType === 'feature' && /implemented/i.test(status ?? '');
     return {
       id,
       featureDir,
       specPath,
       specStat: safeStat(specPath),
+      blueprintPath: fs.existsSync(blueprintPath) ? blueprintPath : null,
+      artifactType,
+      artifactStatus: status,
+      governed,
       verificationPath: fs.existsSync(verificationPath) ? verificationPath : null,
       verificationStat: safeStat(verificationPath),
       verificationContent: fs.existsSync(verificationPath) ? fs.readFileSync(verificationPath, 'utf-8') : null,
@@ -666,6 +687,14 @@ function parseVerificationStatus(content) {
   }
   const match = content.match(/(?:^[-*]\s*Status:|^\*\*状态\*\*:|^\*\*Status\*\*:|^Status:)\s*(PASS|WARN|FAIL|PARTIAL|N\/A)/im);
   return match ? match[1].toUpperCase() : 'UNKNOWN';
+}
+
+function parseFeatureArtifactStatus(content) {
+  if (!content) {
+    return null;
+  }
+  const match = content.match(/^\*\*(?:状态|Status)\*\*:\s*(.+)$/im);
+  return match ? match[1].trim() : null;
 }
 
 function detectRepoMetadata(projectRoot) {

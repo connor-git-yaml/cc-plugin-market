@@ -68,3 +68,10 @@
 
 1. `FR-014` 中对 044 doc-graph 的 explanation 增强尚未接入，当前仅保留 weak-signal warning，不影响 050 主验收。
 2. 当前知识库阈值和权重基于少量 fixture 校准，后续可在更多真实项目上再迭代。
+
+## 2026-04-05 Freshness Refresh
+
+- 为恢复 065 scorecard 的 verification freshness，本报告已在 2026-04-05 基于当前主线重新确认。
+- 新验证证据：
+  - `npx vitest run tests/panoramic/architecture-overview-generator.test.ts tests/panoramic/pattern-hints-generator.test.ts tests/panoramic/docs-quality-evaluator.test.ts tests/integration/batch-doc-bundle-orchestration.test.ts tests/integration/batch-panoramic-doc-suite.test.ts tests/integration/batch-product-ux-docs.test.ts` → PASS
+- 结论不变：050 的 explanation / degradation 路径与 059 quality layer 在当前主线仍保持兼容。

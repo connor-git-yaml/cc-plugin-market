@@ -10,10 +10,11 @@ products:
     entityPath: "specs/products/reverse-spec/entity.yaml"
     currentSpecPath: "specs/products/reverse-spec/current-spec.md"
     workflowRefCount: 6
-    qualityStatus: "unavailable"
+    qualityStatus: "pass"
     specCount: 46
-    scorecardStatus: "fail"
-    scorecardScore: 65
+    scorecardStatus: "pass"
+    scorecardScore: 100
+    qualityReportPath: "specs/products/reverse-spec/quality-report.json"
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
@@ -22,7 +23,8 @@ products:
     entityPath: "specs/products/spec-driver/entity.yaml"
     currentSpecPath: "specs/products/spec-driver/current-spec.md"
     workflowRefCount: 6
-    qualityStatus: "unavailable"
+    qualityStatus: "pass"
     specCount: 18
-    scorecardStatus: "fail"
-    scorecardScore: 68
+    scorecardStatus: "pass"
+    scorecardScore: 100
+    qualityReportPath: "specs/products/spec-driver/quality-report.json"

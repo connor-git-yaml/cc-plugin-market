@@ -1,29 +1,29 @@
 schemaVersion: 1
-generatedAt: "2026-04-04T17:14:30.165Z"
+generatedAt: "2026-04-05T02:12:33.424Z"
 rulesetId: "default-governance"
 productCount: 2
 products:
   - id: "reverse-spec"
     name: "Reverse-Spec"
     kind: "library-tooling"
-    status: "fail"
-    score: 65
+    status: "pass"
+    score: 100
     reportPath: "specs/products/reverse-spec/scorecard-report.json"
     markdownPath: "specs/products/reverse-spec/scorecard-report.md"
     ruleCount: 6
-    passCount: 3
-    warnCount: 2
-    failCount: 1
+    passCount: 6
+    warnCount: 0
+    failCount: 0
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
-    status: "fail"
-    score: 68
+    status: "pass"
+    score: 100
     reportPath: "specs/products/spec-driver/scorecard-report.json"
     markdownPath: "specs/products/spec-driver/scorecard-report.md"
     ruleCount: 6
-    passCount: 3
-    warnCount: 2
-    failCount: 1
+    passCount: 6
+    warnCount: 0
+    failCount: 0
 warnings:
   []

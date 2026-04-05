@@ -2,24 +2,24 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-04T17:14:30.165Z
-> **Status**: FAIL
-> **Score**: 68/100
+> **Generated**: 2026-04-05T02:12:33.424Z
+> **Status**: PASS
+> **Score**: 100/100
 
 ## Summary
 
-- Spec Driver 当前治理评分为 68/100，整体状态 FAIL.
-- 存在 1 条 fail 级规则，需要优先处理。
-- 另有 2 条 warn 级规则，建议在下一次 sync / release 前收口。
+- Spec Driver 当前治理评分为 100/100，整体状态 PASS.
+- 没有 fail 级规则。
+- 全部规则均已达到 pass 基线。
 
 ## Rule Breakdown
 
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | FAIL | 29 | 20 | totalFeatures=18, fresh=13, stale=0 |
-| 文档覆盖率 | WARN | 50 | 20 | [无] |
-| 文档冲突 | WARN | 50 | 15 | [无] |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=5, fresh=5, stale=0 |
+| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
+| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
 | Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, missing=0, goldenPathCount=3 |
 
@@ -43,67 +43,79 @@
 ### Verification 新鲜度
 
 - Evaluator: `verification-freshness`
-- Status: FAIL
-- Score: 29 / 100
+- Status: PASS
+- Score: 100 / 100
 - Weight: 20
-- verification 覆盖率仅 72%，缺失 5 个、过期 0 个、失败 0 个。
+- 全部 5 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 18,
+  "totalFeatures": 5,
   "fresh": [
-    "013-split-skill-commands",
-    "014-rename-spec-driver",
-    "015-speckit-doc-command",
-    "016-optimize-sync-product-doc",
-    "017-adopt-superpowers-patterns",
-    "018-flexible-research-routing",
-    "019-parallel-subagent-speedup",
-    "020-fix-plugin-script-path",
-    "021-add-research-templates",
+    "012-product-spec-sync",
     "063-product-entity-catalog",
     "064-workflow-registry-golden-paths",
     "065-scorecards-continuous-governance",
     "066-adoption-friction-insights"
   ],
   "stale": [],
-  "missing": [
-    "011-speckit-driver-pro",
-    "012-product-spec-sync",
-    "022-sync-doc-redesign",
-    "032-rename-speckit-to-spec-driver",
-    "062-catalog-driven-spec-driver-blueprint"
-  ],
+  "missing": [],
   "failed": [],
-  "coverageRatio": 0.7222222222222222
+  "coverageRatio": 1,
+  "ignored": {
+    "blueprint": [
+      "062-catalog-driven-spec-driver-blueprint"
+    ],
+    "nonImplemented": [
+      "011-speckit-driver-pro",
+      "013-split-skill-commands",
+      "014-rename-spec-driver",
+      "015-speckit-doc-command",
+      "016-optimize-sync-product-doc",
+      "017-adopt-superpowers-patterns",
+      "018-flexible-research-routing",
+      "019-parallel-subagent-speedup",
+      "020-fix-plugin-script-path",
+      "021-add-research-templates",
+      "022-sync-doc-redesign",
+      "032-rename-speckit-to-spec-driver"
+    ]
+  }
 }
 ```
 
 ### 文档覆盖率
 
 - Evaluator: `docs-coverage`
-- Status: WARN
-- Score: 50 / 100
+- Status: PASS
+- Score: 100 / 100
 - Weight: 20
-- 缺少 quality-report.json，暂时无法复用文档质量门的 required docs 统计。
+- Required docs 覆盖 5/5。
 
 ```json
 {
-  "qualityReportPath": null
+  "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+  "coveredRequiredDocs": 5,
+  "totalRequiredDocs": 5,
+  "coverageRatio": 1
 }
 ```
 
 ### 文档冲突
 
 - Evaluator: `docs-conflicts`
-- Status: WARN
-- Score: 50 / 100
+- Status: PASS
+- Score: 100 / 100
 - Weight: 15
-- 缺少 quality-report.json，冲突治理暂时只能降级为人工检查。
+- quality-report 未检测到显式文档冲突。
 
 ```json
 {
-  "qualityReportPath": null
+  "qualityReportPath": "specs/products/spec-driver/quality-report.json",
+  "totalConflicts": 0,
+  "high": 0,
+  "medium": 0,
+  "low": 0
 }
 ```
 

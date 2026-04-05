@@ -74,3 +74,10 @@
 1. `FR-013` 为可选扩展项，当前未实现 data-model/config 文档引用摘要；不影响 045 主验收。
 2. 045 当前串行组合上游 generator，未来若 Phase 3 再叠加组合型能力，可考虑缓存结构化输出减少重复扫描。
 3. rebase 到最新 `origin/master` 后，`tests/panoramic/config-reference-generator.test.ts:621` 与 `tests/panoramic/data-model-generator.test.ts:901` 的 `useLLM=true` 用例稳定超时；045 未修改对应 generator / test / LLM helper 文件，但全量 `npm test` 当前不能宣称全绿。
+
+## 2026-04-05 Freshness Refresh
+
+- 为恢复 065 scorecard 的 verification freshness，本报告已在 2026-04-05 基于当前主线重新确认。
+- 新验证证据：
+  - `npx vitest run tests/panoramic/architecture-overview-generator.test.ts tests/panoramic/pattern-hints-generator.test.ts tests/panoramic/docs-quality-evaluator.test.ts tests/integration/batch-doc-bundle-orchestration.test.ts tests/integration/batch-panoramic-doc-suite.test.ts tests/integration/batch-product-ux-docs.test.ts` → PASS
+- 结论不变：045 当前主链路仍可用，且继续作为 055/057/059 的上游结构事实来源。

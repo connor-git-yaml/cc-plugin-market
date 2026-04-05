@@ -38,29 +38,49 @@ describe('generate-product-scorecards.mjs', () => {
         '      - id: "001-core"',
         '        type: FEATURE',
         '        summary: "核心能力"',
+        '      - id: "002-draft-debt"',
+        '        type: FEATURE',
+        '        summary: "历史草稿债"',
         '  spec-driver:',
         '    description: "Spec Driver 编排器"',
         '    specs:',
         '      - id: "011-driver"',
         '        type: FEATURE',
         '        summary: "驱动能力"',
+        '      - id: "012-blueprint"',
+        '        type: BLUEPRINT',
+        '        summary: "治理蓝图"',
       ].join('\n'),
       'utf-8',
     );
 
     mkdirSync(join(projectRoot, 'specs', '001-core', 'verification'), { recursive: true });
-    writeFileSync(join(projectRoot, 'specs', '001-core', 'spec.md'), '# 001 Core\n', 'utf-8');
+    writeFileSync(join(projectRoot, 'specs', '001-core', 'spec.md'), '# 001 Core\n\n**Status**: Implemented\n', 'utf-8');
     writeFileSync(
       join(projectRoot, 'specs', '001-core', 'verification', 'verification-report.md'),
       '# Verification\n\n- Status: PASS\n',
       'utf-8',
     );
 
+    mkdirSync(join(projectRoot, 'specs', '002-draft-debt'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'specs', '002-draft-debt', 'spec.md'),
+      '# 002 Draft Debt\n\n**Status**: Draft\n',
+      'utf-8',
+    );
+
     mkdirSync(join(projectRoot, 'specs', '011-driver', 'verification'), { recursive: true });
-    writeFileSync(join(projectRoot, 'specs', '011-driver', 'spec.md'), '# 011 Driver\n', 'utf-8');
+    writeFileSync(join(projectRoot, 'specs', '011-driver', 'spec.md'), '# 011 Driver\n\n**Status**: Implemented\n', 'utf-8');
     writeFileSync(
       join(projectRoot, 'specs', '011-driver', 'verification', 'verification-report.md'),
       '# Verification\n\n- Status: PASS\n',
+      'utf-8',
+    );
+
+    mkdirSync(join(projectRoot, 'specs', '012-blueprint'), { recursive: true });
+    writeFileSync(
+      join(projectRoot, 'specs', '012-blueprint', 'blueprint.md'),
+      '# 012 Blueprint\n\n**状态**: Implemented\n',
       'utf-8',
     );
 
@@ -194,10 +214,18 @@ describe('generate-product-scorecards.mjs', () => {
     const reverseReport = JSON.parse(
       readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'scorecard-report.json'), 'utf-8'),
     ) as {
-      rules: Array<{ id: string; status: string }>;
+      rules: Array<{ id: string; status: string; evidence: Record<string, unknown> }>;
     };
     expect(reverseReport.rules.find((rule) => rule.id === 'docs-coverage')?.status).toBe('pass');
     expect(reverseReport.rules.find((rule) => rule.id === 'verification-freshness')?.status).toBe('pass');
+    expect(reverseReport.rules.find((rule) => rule.id === 'verification-freshness')?.evidence).toEqual(
+      expect.objectContaining({
+        totalFeatures: 1,
+        ignored: expect.objectContaining({
+          nonImplemented: ['002-draft-debt'],
+        }),
+      }),
+    );
 
     const specDriverReport = readFileSync(
       join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.md'),
@@ -205,6 +233,19 @@ describe('generate-product-scorecards.mjs', () => {
     );
     expect(specDriverReport).toContain('# Spec Driver Scorecard Report');
     expect(specDriverReport).toContain('Workflow 就绪度');
+    const specDriverReportJson = JSON.parse(
+      readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'scorecard-report.json'), 'utf-8'),
+    ) as {
+      rules: Array<{ id: string; evidence: Record<string, unknown> }>;
+    };
+    expect(specDriverReportJson.rules.find((rule) => rule.id === 'verification-freshness')?.evidence).toEqual(
+      expect.objectContaining({
+        totalFeatures: 1,
+        ignored: expect.objectContaining({
+          blueprint: ['012-blueprint'],
+        }),
+      }),
+    );
 
     const reverseEntity = parseYamlDocument(
       readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'entity.yaml'), 'utf-8'),

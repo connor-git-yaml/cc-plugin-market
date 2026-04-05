@@ -224,19 +224,28 @@ node "$PLUGIN_DIR/scripts/generate-product-entity-catalog.mjs" --project-root "{
 node "$PLUGIN_DIR/scripts/generate-workflow-registry.mjs" --project-root "{project_root}" --json
 ```
 
-5. 执行 scorecard helper 生成持续治理报告：
+5. 执行 product quality helper 生成产品级文档质量报告：
+
+```bash
+node "$PLUGIN_DIR/scripts/generate-product-quality-reports.mjs" --project-root "{project_root}" --json
+```
+
+6. 执行 scorecard helper 生成持续治理报告：
 
 ```bash
 node "$PLUGIN_DIR/scripts/generate-product-scorecards.mjs" --project-root "{project_root}" --json
 ```
 
-6. 执行 adoption helper 生成本地使用与卡点分析：
+7. 执行 adoption helper 生成本地使用与卡点分析：
 
 ```bash
 node "$PLUGIN_DIR/scripts/generate-adoption-insights.mjs" --project-root "{project_root}" --json
 ```
 
-7. 解析 helper 返回：
+8. 解析 helper 返回：
+   - `specs/products/<product>/quality-report.md`
+   - `specs/products/<product>/quality-report.json`
+   - `specs/products/quality-report-index.yaml`
    - `specs/products/<product>/scorecard-report.md`
    - `specs/products/<product>/scorecard-report.json`
    - `specs/products/scorecard-index.yaml`
