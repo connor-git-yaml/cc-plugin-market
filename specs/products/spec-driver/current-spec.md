@@ -1,7 +1,7 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **发布版本**: v3.10.0
+> **发布版本**: v3.10.1
 > **版本**: 聚合自 31 个增量 spec / blueprint（011–022, 032, 062–068, 070–081）
 > **最后聚合**: 2026-04-05（已纳入 078-script-platform-shared-layer、080-doc-version-release-contract-unification、081-maintainability-hotspot-refactors）
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
