@@ -1,22 +1,17 @@
 <!--
   同步影响报告
   ==================
-  版本变更：1.0.0 → 2.0.0（重大重构）
+  版本变更：2.0.0 → 2.1.0（新增原则 + 扩展）
   修改的原则：
-    - 原则 I-V 从项目级移入 Plugin: reverse-spec 分区
-    - 原则 VI（双语文档规范）提升为项目级原则 I
+    - 原则 VIII：扩展为 Prompt + Harness 双层执行（新增 Hooks 定位）
+    - 原则 IX：明确"编排核心"与"Harness 增强"的边界
+    - 原则 X：扩展门禁类型（Prompt 层 GATE_* + Harness 层 Hooks）
+    - 原则 XI：升级为编排器独立验证 + Agent 报告双重确认
   新增章节：
-    - 项目级原则（从 reverse-spec 专属提升为全局适用）
-    - Plugin: spec-driver 约束（新增 5 条原则）
-    - 技术栈约束拆分为 per-plugin 表
-  移除章节：N/A（内容迁移，无删除）
-  需要更新的模板：
-    - plugins/spec-driver/agents/constitution.md — 建议更新检查逻辑以识别 Plugin 分区
-    - .specify/templates/constitution-template.md ✅ 无需更新（通用模板）
-    - .specify/templates/plan-template.md ✅ 无需更新
-    - .specify/templates/spec-template.md ✅ 无需更新
-    - .specify/templates/tasks-template.md ✅ 无需更新
-  后续 TODO：考虑更新 constitution 子代理 Prompt，使其在检查时识别功能所属 Plugin 并重点检查对应分区
+    - 原则 XIII：可观测性与架构守护
+  修改的技术栈表：
+    - spec-driver 表新增 Harness 增强层（Hooks/rules/CI）
+  需要更新的模板：无
 -->
 
 # reverse-spec 项目 Constitution
@@ -123,40 +118,41 @@ LLM 推理不得产生或捏造结构化数据。
 
 > 适用于 `plugins/spec-driver/` 下的 Markdown Prompt、YAML 配置和 Bash 脚本开发。
 
-### VIII. Prompt 工程优先
+### VIII. Prompt 编排 + Harness 强制
 
-所有编排行为通过 Markdown Prompt 和 YAML 配置实现。
-子代理行为由 Prompt 文件定义，不依赖编程逻辑。
+编排决策逻辑通过 Markdown Prompt 和 YAML 配置实现；不可绕过的硬约束通过 Claude Code Harness 机制（Hooks、`.claude/rules/`）强制执行。两者互补。
 
-- 子代理（agents/*.md）是行为的唯一定义来源
+- 子代理（agents/*.md）是行为决策的唯一定义来源
 - Skill 文件（skills/*/SKILL.md）定义用户触发入口和编排流程
 - 行为变更通过修改 Prompt 文本实现，不引入运行时代码
 - 模板（templates/*.md）定义输出结构，与 Prompt 逻辑分离
+- Hooks（hooks.json）仅用于 Prompt 无法保证的硬约束（如阻止文件写入），不承载编排决策
 
 ### IX. 零运行时依赖
 
 spec-driver 插件不依赖任何 npm 包或外部运行时。
-全部由 Markdown Prompt、YAML 配置和 Bash 辅助脚本构成。
+编排核心由 Markdown Prompt + YAML 配置构成；Harness 增强（Hooks、CI/CD）依赖 Claude Code 平台能力，是可选层。
 
 - 不允许引入 Node.js 模块、Python 脚本或其他需要安装的依赖
-- Bash 脚本仅用于辅助功能（项目初始化、元信息扫描等），不承载核心编排逻辑
-- 必须在任何安装了 Claude Code 的环境中开箱即用
+- Bash / MJS 脚本用于辅助功能（初始化、扫描、Hook 门禁、治理检查），不承载编排决策逻辑
+- 编排核心（Prompt + YAML）必须在任何安装了 Claude Code 的环境中开箱即用
+- Harness 增强不可用时（如 Codex 运行时），编排核心独立运行，功能不退化
 
 ### X. 质量门控不可绕过
 
-每个编排流程必须包含质量门（Quality Gate），确保阶段产出满足质量要求后才推进。
+编排流程通过双层门禁保障质量：Prompt 层（GATE_*）在阶段间拦截，Harness 层（Hooks）在工具调用时拦截。
 
-- 质量门至少覆盖：设计门（GATE_DESIGN）、任务门（GATE_TASKS）、验证门（GATE_VERIFY）
-- 关键质量门在 feature 模式下必须暂停等待用户确认
+- Prompt 层至少覆盖：设计门（GATE_DESIGN）、任务门（GATE_TASKS）、验证门（GATE_VERIFY）
+- Harness 层通过 PreToolUse Hook 强制不可绕过的约束（如活跃工作流中禁止直接改 src/）
 - 设计硬门禁（GATE_DESIGN）在 feature 模式下不可被任何策略或配置绕过
-- 质量门决策必须输出格式化日志，包含门禁名称、策略、结果和原因
+- 门禁决策必须输出格式化日志，包含门禁名称、层级、策略、结果和原因
 
 ### XI. 验证铁律
 
-实现子代理不得在没有实际验证证据的情况下声称任务完成。
+验证通过双重确认保障：编排器独立执行验证命令 + Agent 报告实际证据。任何一方不通过即视为未完成。
 
-- 完成声明必须附带当前执行上下文中实际运行的验证命令输出
-- 推测性表述（"should pass""looks correct"）不可作为完成依据
+- 编排器在 implement 完成后自行运行 build + lint + test，不信任 Agent 自我报告
+- Agent 完成声明必须附带实际运行的验证命令输出，推测性表述不可作为依据
 - 验证子代理必须对验证证据进行二次核查
 - 项目未配置验证命令时，允许完成但标注"无可用验证工具"
 
@@ -169,16 +165,26 @@ spec-driver 插件不依赖任何 npm 包或外部运行时。
 - 无法识别的配置字段或值输出警告但不阻断流程
 - 新增能力必须在现有架构内实现，不引入新的运行时依赖
 
+### XIII. 可观测性与架构守护
+
+编排过程必须可追溯；代码架构劣化必须在产生时被检测，而非事后重构。
+
+- 编排器应记录执行 Trace（Phase 启停、Gate 决策、降级事件），写入 `specs/{feature}/trace.md`
+- 子 Agent 间的制品传递应有显式合同（路径、必选章节、校验规则），而非仅靠路径约定
+- implement/verify 阶段应检测架构劣化信号：单文件行数异常增长、循环依赖、bare except 吞异常
+- 涉及删除/重命名时，verify 阶段应扫描旧名称残留（代码 + 文档）
+
 ### spec-driver 技术栈约束
 
 | 类别 | 约束 |
 |------|------|
 | **Prompt 语言** | Markdown（子代理、Skill、模板） |
-| **配置格式** | YAML（driver-config.yaml） |
-| **辅助脚本** | Bash 5.x |
+| **配置格式** | YAML（driver-config.yaml、orchestration.yaml） |
+| **辅助脚本** | Bash 5.x / MJS（初始化、扫描、治理检查） |
+| **Harness 增强** | Hooks（hooks.json）、`.claude/rules/`、CI/CD Action（可选层） |
 | **运行环境** | Claude Code 沙箱 |
 | **AI 模型** | Claude 4.5/4.6 Sonnet/Opus（通过 Claude Code 原生调用） |
-| **运行时依赖** | 无（零依赖） |
+| **运行时依赖** | 编排核心零依赖；Harness 增强依赖 Claude Code 平台 |
 
 ---
 
@@ -226,4 +232,4 @@ spec-driver 插件不依赖任何 npm 包或外部运行时。
 - 复杂度偏差必须在计划文档的复杂度追踪章节中给出理由
 - Constitution 检查子代理应根据功能所属 Plugin 重点检查对应分区的原则，项目级原则始终检查
 
-**版本**：2.0.0 | **批准日期**：2026-02-10 | **最后修订**：2026-02-27
+**版本**：2.1.0 | **批准日期**：2026-02-10 | **最后修订**：2026-04-06
