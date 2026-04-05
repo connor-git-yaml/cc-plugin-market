@@ -13,6 +13,7 @@ function runInitScript(cwd: string): {
   NEEDS_CONSTITUTION: boolean;
   NEEDS_CONFIG: boolean;
   HAS_SPEC_DRIVER_SKILLS: boolean;
+  PROJECT_CONTEXT_MODE: string;
   SKILL_MAP: string;
   RESULTS: string[];
 } {
@@ -24,6 +25,7 @@ function runInitScript(cwd: string): {
     NEEDS_CONSTITUTION: boolean;
     NEEDS_CONFIG: boolean;
     HAS_SPEC_DRIVER_SKILLS: boolean;
+    PROJECT_CONTEXT_MODE: string;
     SKILL_MAP: string;
     RESULTS: string[];
   };
@@ -44,15 +46,20 @@ describe('init-project.sh', () => {
     const result = runInitScript(projectDir);
     expect(result.NEEDS_CONSTITUTION).toBe(true);
     expect(result.NEEDS_CONFIG).toBe(true);
+    expect(result.PROJECT_CONTEXT_MODE).toBe('yaml');
 
     expect(existsSync(join(projectDir, '.specify', 'templates', 'plan-template.md'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'templates', 'project-context-template.yaml'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'spec-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'tasks-template.md'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'project-context.yaml'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'project-context.md'))).toBe(false);
     expect(existsSync(join(projectDir, '.specify', 'workflows'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'scorecards'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'runs'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'scorecards', 'default-governance.yaml'))).toBe(true);
     expect(result.RESULTS.some((r) => r.startsWith('specify_templates:'))).toBe(true);
+    expect(result.RESULTS).toContain('project_context:created');
     expect(result.RESULTS).toContain('scorecards:ready');
   });
 
@@ -68,7 +75,19 @@ describe('init-project.sh', () => {
     const result = runInitScript(projectDir);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'plan-template.md'))).toBe(true);
     expect(existsSync(join(projectDir, '.specify', 'templates', 'constitution-template.md'))).toBe(true);
+    expect(existsSync(join(projectDir, '.specify', 'templates', 'project-context-template.yaml'))).toBe(true);
     expect(result.RESULTS.some((r) => r.startsWith('specify_templates:copied:'))).toBe(true);
+  });
+
+  it('检测到 legacy project-context.md 时不自动创建 yaml，但返回迁移模式', () => {
+    mkdirSync(join(projectDir, '.specify'), { recursive: true });
+    writeFileSync(join(projectDir, '.specify', 'project-context.md'), '# Legacy Context\n', 'utf-8');
+
+    const result = runInitScript(projectDir);
+
+    expect(result.PROJECT_CONTEXT_MODE).toBe('legacy-md');
+    expect(result.RESULTS).toContain('project_context:legacy_md');
+    expect(existsSync(join(projectDir, '.specify', 'project-context.yaml'))).toBe(false);
   });
 
   it('同时识别 .claude/commands 和 .codex/commands 下的 spec-driver 覆盖', () => {

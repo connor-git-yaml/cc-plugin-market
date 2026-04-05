@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T10:30:21.056Z",
+  "generatedAt": "2026-04-05T12:09:16.083Z",
   "productId": "spec-driver",
   "status": "healthy",
   "summary": {
@@ -164,8 +164,8 @@
     ]
   },
   "scorecardContext": {
-    "status": "pass",
-    "score": 100,
+    "status": "warn",
+    "score": 94,
     "reportPath": "specs/products/spec-driver/_generated/scorecard-report.json"
   },
   "warnings": []

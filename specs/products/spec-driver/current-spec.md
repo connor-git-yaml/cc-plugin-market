@@ -1,8 +1,8 @@
 # Spec Driver — 产品规范活文档
 
 > **产品**: spec-driver
-> **版本**: 聚合自 25 个增量 spec / blueprint（011–022, 032, 062–068, 070–074）
-> **最后聚合**: 2026-04-05
+> **版本**: 聚合自 26 个增量 spec / blueprint（011–022, 032, 062–068, 070–075）
+> **最后聚合**: 2026-04-05（已纳入 075-init-template-tests-docs-closure）
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
 
@@ -75,6 +75,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | 治理信号对齐 | 生成产品级 `quality-report` 并把 scorecard 统计范围收敛到已实现 feature | 068 |
 | 产物边界清理 | `current-spec.md` 保持人工事实正文，机器生成产物统一写入 `_generated/` | 071 |
 | Context 建议闭环 | 将 quality / scorecard / adoption 信号转为 `.specify/project-context.suggestions.*`，供后续流程只读消费 | 074 |
+| Project Context 初始化收口 | `init-project.sh` 默认创建最小 `.specify/project-context.yaml`，并对 legacy Markdown 给出迁移提示 | 075 |
 
 ---
 
@@ -115,6 +116,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 - `.specify/project-context.suggestions.yaml|md` 作为 Project Context 的独立建议层
 - 项目级 `.specify/` 初始化与脚本路径发现
 - Project Context resolver、legacy Markdown 兼容与统一 diagnostics
+- canonical `.specify/project-context.yaml` 模板、迁移说明与 shared docs 同步
 - 命名规范统一与技能元数据对齐
 
 ### 范围外
@@ -175,6 +177,7 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 | FR-019 | 全局安装场景下脚本路径发现不依赖本地 `plugins/spec-driver/` | 020 | 活跃 |
 | FR-020 | 调研模板同步到 `.specify/templates/` 且不覆盖用户自定义版本 | 021 | 活跃 |
 | FR-021 | 子代理优先读取项目级调研模板，其次回退插件内置模板 | 021 | 活跃 |
+| FR-035 | `init-project.sh` 自动创建最小 `.specify/project-context.yaml`，并在 `.md` 存量项目中保留迁移提示而不强制改写 | 075 | 活跃 |
 
 ### FR-GROUP-6: 命名与包装规范
 
@@ -200,9 +203,9 @@ Spec Driver 是一个 **自治研发编排器 Plugin**。它把 Spec-Driven Deve
 
 | ID | 功能描述 | 来源 | 状态 |
 |----|----------|------|------|
-| FR-032 | 所有主 Skill 统一通过共享 resolver 读取 `.specify/project-context.*`，不再复制各自的解析规则 | 073 | 活跃 |
-| FR-033 | `.specify/project-context.yaml` 是 canonical source，`.md` 仅作为 legacy fallback；并存时固定 YAML 优先并输出迁移 warning | 073 | 活跃 |
-| FR-034 | Project Context resolver 输出 `projectContextBlock`、`onlineResearch`、`diagnostics` 和引用路径存在性检查结果 | 073 | 活跃 |
+| FR-033 | 所有主 Skill 统一通过共享 resolver 读取 `.specify/project-context.*`，不再复制各自的解析规则 | 073 | 活跃 |
+| FR-034 | `.specify/project-context.yaml` 是 canonical source，`.md` 仅作为 legacy fallback；并存时固定 YAML 优先并输出迁移 warning | 073 | 活跃 |
+| FR-036 | Project Context resolver 输出 `projectContextBlock`、`onlineResearch`、`diagnostics` 和引用路径存在性检查结果，并与初始化模板字段保持一致 | 073, 075 | 活跃 |
 
 ---
 
@@ -329,7 +332,7 @@ plugins/spec-driver/
 | 021 | 项目级模板同步面继续扩大时，需要更明确的模板版本兼容策略 | 中 |
 | 022 | sync / doc 的事实层契约已确立，但自动验证其一致性的门禁仍偏轻量 | 中 |
 | 032 | 仓库外部历史材料可能仍残留 `speckit-*` 旧命名 | 低 |
-| 070 | `Project Context` 已建立 shared schema / resolver 与 advisory suggestions 闭环，但 init/template/docs 最终收口仍待后续 Feature 完成 | 中 |
+| 070 | `Project Context` 基础闭环已完成；后续演进重点转向更强的执行路由与策略自动化，而非基础资产缺失 | 中 |
 | 072 | implement skill 已建立，但 resolver 与 suggestions 目前主要用于前置约束和建议注入，尚未形成更强的自动路由能力 | 中 |
 
 ---
@@ -396,6 +399,7 @@ plugins/spec-driver/
 | 23 | [072-spec-driver-implement](../../072-spec-driver-implement/spec.md) | FEATURE | 2026-04-05 | 新增成熟 spec/plan 的聚焦实施入口，并接入 workflow / catalog / adoption |
 | 24 | [073-project-context-schema-resolver](../../073-project-context-schema-resolver/spec.md) | FEATURE | 2026-04-05 | 引入共享 Project Context resolver，统一 YAML canonical、legacy Markdown fallback 与 diagnostics 合同 |
 | 25 | [074-feedback-to-context-suggestions](../../074-feedback-to-context-suggestions/spec.md) | FEATURE | 2026-04-05 | 生成 Project Context suggestions，并将其作为 advisory-only 上下文建议接入 feature / implement / sync |
+| 26 | [075-init-template-tests-docs-closure](../../075-init-template-tests-docs-closure/spec.md) | FEATURE | 2026-04-05 | 补齐 canonical project-context 初始化模板、legacy Markdown 迁移说明、集成测试与共享文档收口 |
 
 ---
 
@@ -445,6 +449,7 @@ plugins/spec-driver/
 | 23 | 072-spec-driver-implement | FEATURE | [specs/072-spec-driver-implement/spec.md](../../072-spec-driver-implement/spec.md) |
 | 24 | 073-project-context-schema-resolver | FEATURE | [specs/073-project-context-schema-resolver/spec.md](../../073-project-context-schema-resolver/spec.md) |
 | 25 | 074-feedback-to-context-suggestions | FEATURE | [specs/074-feedback-to-context-suggestions/spec.md](../../074-feedback-to-context-suggestions/spec.md) |
+| 26 | 075-init-template-tests-docs-closure | FEATURE | [specs/075-init-template-tests-docs-closure/spec.md](../../075-init-template-tests-docs-closure/spec.md) |
 
 ---
 

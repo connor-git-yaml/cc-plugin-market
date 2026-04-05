@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T10:30:21.051Z",
+  "generatedAt": "2026-04-05T12:10:38.371Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spec-driver",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 25 个增量 spec。"
+        "current-spec 覆盖了全部 26 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,10 +45,10 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 10 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 11 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 10,
+        "totalFeatures": 11,
         "fresh": [
           "012-product-spec-sync",
           "063-product-entity-catalog",
@@ -59,7 +59,8 @@
           "071-product-artifact-boundary-cleanup",
           "072-spec-driver-implement",
           "073-project-context-schema-resolver",
-          "074-feedback-to-context-suggestions"
+          "074-feedback-to-context-suggestions",
+          "075-init-template-tests-docs-closure"
         ],
         "stale": [],
         "missing": [],

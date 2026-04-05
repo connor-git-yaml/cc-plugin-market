@@ -37,6 +37,8 @@ SPECIFY_TEMPLATES_DIR="${SPECIFY_DIR}/templates"
 SPECIFY_SCORECARDS_DIR="${SPECIFY_DIR}/scorecards"
 SPECIFY_RUNS_DIR="${SPECIFY_DIR}/runs"
 CONSTITUTION_FILE="${SPECIFY_DIR}/memory/constitution.md"
+PROJECT_CONTEXT_FILE="${SPECIFY_DIR}/project-context.yaml"
+LEGACY_PROJECT_CONTEXT_FILE="${SPECIFY_DIR}/project-context.md"
 CONFIG_FILE="${PROJECT_ROOT}/spec-driver.config.yaml"
 ALT_CONFIG_FILE="${SPECIFY_DIR}/spec-driver.config.yaml"
 
@@ -48,6 +50,7 @@ FALLBACK_SPECIFY_TEMPLATES_DIR="${PLUGIN_DIR}/../../.specify/templates"
 DEFAULT_SCORECARD_DIR="${PLUGIN_DIR}/scorecards"
 REQUIRED_SPECIFY_TEMPLATES=(
   "plan-template.md"
+  "project-context-template.yaml"
   "spec-template.md"
   "tasks-template.md"
   "checklist-template.md"
@@ -67,6 +70,7 @@ NEEDS_CONFIG=false
 HAS_GATE_POLICY=false
 HAS_SPEC_DRIVER_SKILLS=false
 SKILL_MAP=""
+PROJECT_CONTEXT_MODE="missing"
 
 # 步骤 1: 检查/创建 .specify/ 目录
 init_specify_dir() {
@@ -150,6 +154,36 @@ sync_scorecard_defaults() {
     INIT_RESULTS+=("scorecards:copied:${copied_count}")
   fi
   INIT_RESULTS+=("scorecards:ready")
+}
+
+ensure_project_context() {
+  if [[ -f "$PROJECT_CONTEXT_FILE" && -f "$LEGACY_PROJECT_CONTEXT_FILE" ]]; then
+    PROJECT_CONTEXT_MODE="dual"
+    INIT_RESULTS+=("project_context:dual")
+    return 0
+  fi
+
+  if [[ -f "$PROJECT_CONTEXT_FILE" ]]; then
+    PROJECT_CONTEXT_MODE="yaml"
+    INIT_RESULTS+=("project_context:exists")
+    return 0
+  fi
+
+  if [[ -f "$LEGACY_PROJECT_CONTEXT_FILE" ]]; then
+    PROJECT_CONTEXT_MODE="legacy-md"
+    INIT_RESULTS+=("project_context:legacy_md")
+    return 0
+  fi
+
+  local template_path="${SPECIFY_TEMPLATES_DIR}/project-context-template.yaml"
+  if [[ ! -f "$template_path" ]]; then
+    INIT_RESULTS+=("project_context:missing_template")
+    return 0
+  fi
+
+  cp "$template_path" "$PROJECT_CONTEXT_FILE"
+  PROJECT_CONTEXT_MODE="yaml"
+  INIT_RESULTS+=("project_context:created")
 }
 
 # 步骤 2: 检查 constitution.md
@@ -254,6 +288,7 @@ output_results() {
   "NEEDS_CONFIG": ${NEEDS_CONFIG},
   "HAS_GATE_POLICY": ${HAS_GATE_POLICY},
   "HAS_SPEC_DRIVER_SKILLS": ${HAS_SPEC_DRIVER_SKILLS},
+  "PROJECT_CONTEXT_MODE": "${PROJECT_CONTEXT_MODE}",
   "SKILL_MAP": "${SKILL_MAP}",
   "RESULTS": ${results_json}
 }
@@ -308,6 +343,21 @@ EOF
             echo -e "     → 将优先使用项目已有版本"
           fi
           ;;
+        project_context)
+          if [[ "$value" == "exists" ]]; then
+            echo -e "  ✅ 已检测到 canonical Project Context: .specify/project-context.yaml"
+          elif [[ "$value" == "created" ]]; then
+            echo -e "  ✅ 已创建最小 Project Context: .specify/project-context.yaml"
+          elif [[ "$value" == "legacy_md" ]]; then
+            echo -e "  ℹ️  检测到 legacy Project Context: .specify/project-context.md"
+            echo -e "     → 当前仍兼容 Markdown fallback，建议迁移到 .specify/project-context.yaml"
+          elif [[ "$value" == "dual" ]]; then
+            echo -e "  ⚠️  ${YELLOW}同时检测到 .specify/project-context.yaml 与 .specify/project-context.md${NC}"
+            echo -e "     → resolver 将只读取 YAML，建议清理 legacy Markdown"
+          elif [[ "$value" == "missing_template" ]]; then
+            echo -e "  ⚠️  ${YELLOW}未找到 project-context 模板，跳过自动创建${NC}"
+          fi
+          ;;
         specify_templates)
           if [[ "$value" == ready ]]; then
             echo -e "  ✅ .specify/templates 基础模板已就绪"
@@ -331,6 +381,7 @@ main() {
 init_specify_dir
 sync_specify_templates
 sync_scorecard_defaults
+ensure_project_context
 check_constitution
 check_config
 check_gate_policy

@@ -1,0 +1,40 @@
+# Canonical project-level context for Spec Driver.
+# Keep only stable, cross-task defaults here.
+
+product:
+  name: ""
+  summary: ""
+
+owner:
+  name: ""
+  team: ""
+  email: ""
+
+references: []
+# - label: "Architecture Notes"
+#   path: "docs/architecture.md"
+#   required: true
+#   purpose: "Shared design constraints"
+
+architecture_constraints: []
+# - "Prefer editing source files under plugins/** and src/** before touching generated wrappers."
+
+verification_policy:
+  require_real_execution: true
+  required_commands: []
+  notes: []
+
+research_policy:
+  online_required: false
+  min_points: 0
+  max_points: 5
+  preferred_tools: []
+  notes: []
+
+workflow_preferences:
+  default_mode: ""
+  preferred_preset: ""
+  notes: []
+
+forbidden_changes: []
+notes: []

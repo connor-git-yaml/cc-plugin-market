@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.6.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.7.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, shared Project Context resolution, Project Context suggestions, canonical project-context initialization, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -301,7 +301,7 @@ Spec Driver keeps a single workflow source under `plugins/spec-driver/skills/*/S
 To initialize Spec Driver in a new project (Claude Code):
 
 ```bash
-# Creates .specify/ directory, constitution.md, and spec-driver.config.yaml
+# Creates .specify/ directory, project-context.yaml, constitution.md, and spec-driver.config.yaml
 /spec-driver:spec-driver-feature "your feature description"
 # The first run will auto-initialize the project structure
 ```
@@ -562,7 +562,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.6.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.7.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation

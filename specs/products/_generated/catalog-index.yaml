@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T10:30:10.757Z"
+generatedAt: "2026-04-05T12:10:38.351Z"
 productCount: 2
 products:
   - id: "reverse-spec"
@@ -23,6 +23,6 @@ products:
     currentSpecPath: "specs/products/spec-driver/current-spec.md"
     workflowRefCount: 7
     qualityStatus: "pass"
-    specCount: 25
+    specCount: 26
     scorecardStatus: "pass"
     scorecardScore: 100

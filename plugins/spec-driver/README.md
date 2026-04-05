@@ -65,7 +65,7 @@ Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 
 则 `feature / implement / sync` 会把其中内容作为 **advisory-only** 上下文建议注入；它们不会覆盖用户显式输入，也不会自动改写 canonical `project-context`。
 
-此外，项目初始化会预创建 `.specify/runs/`，供 `record-workflow-run.mjs` 记录最小运行摘要；这些日志默认只保留本地，不需要提交到 Git。
+此外，项目初始化会预创建最小 `.specify/project-context.yaml` 与 `.specify/runs/`；后者供 `record-workflow-run.mjs` 记录最小运行摘要，这些运行日志默认只保留本地，不需要提交到 Git。
 
 ## 使用方法
 
@@ -219,7 +219,7 @@ plugins/spec-driver/
 │   ├── spec-driver-doc/SKILL.md      # 开源文档生成
 │   └── spec-driver-constitution/     # Codex bootstrap helper 源 Skill
 ├── agents/                       # 14 个子代理 prompt
-├── templates/                    # 6 个模板
+├── templates/                    # initialize / research / config 模板源
 ├── scripts/                      # 初始化脚本
 └── README.md
 ```
@@ -271,6 +271,16 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 | `/speckit.taskstoissues` | `/spec-driver.taskstoissues` |
 
 如果您在 `.claude/commands/` 或 `.codex/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
+
+### 迁移说明（v3.7.0）
+
+`init-project.sh` 现在会在首次初始化时创建最小 `.specify/project-context.yaml`，并把 `.specify/project-context.md` 明确降级为 legacy fallback：
+
+- 新项目：默认创建 `.specify/project-context.yaml`
+- 存量仅有 `.specify/project-context.md` 的项目：继续兼容，但会在 resolver / suggestions 中收到迁移提示
+- 同时存在 `.yaml` 与 `.md`：系统固定只读取 YAML，并提示清理 legacy Markdown
+
+`Project Context suggestions` 仍然只生成到 `.specify/project-context.suggestions.yaml|md`，不会自动覆盖 canonical `project-context.yaml`。
 
 ## 许可证
 

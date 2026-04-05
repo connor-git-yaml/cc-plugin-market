@@ -1,8 +1,8 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T10:30:21.062Z"
+generatedAt: "2026-04-05T12:10:38.408Z"
 status: "advisory"
 contextSource:
-  state: "missing"
+  state: "yaml"
   yamlPath: ".specify/project-context.yaml"
   markdownPath: ".specify/project-context.md"
   warnings:
@@ -11,34 +11,12 @@ contextSource:
   suggestionsMarkdownPath: ".specify/project-context.suggestions.md"
 summary:
   criticalCount: 0
-  recommendedCount: 5
-  optionalCount: 0
-  suggestionCount: 5
+  recommendedCount: 1
+  optionalCount: 3
+  suggestionCount: 4
 suggestions:
-  - id: "create-project-context-yaml"
-    priority: "recommended"
-    category: "context-source"
-    title: "建立 canonical Project Context YAML"
-    summary: "当前仓库尚未声明 `.specify/project-context.yaml`，建议建立项目级长期偏好与参考资料的单一入口。"
-    suggestedChanges:
-      - field: "project_context.source"
-        action: "create"
-        value: ".specify/project-context.yaml"
-      - field: "references.paths"
-        action: "seed"
-        value:
-          - "specs/products/reverse-spec/current-spec.md"
-          - "specs/products/reverse-spec/_generated/quality-report.md"
-          - "specs/products/reverse-spec/_generated/scorecard-report.md"
-          - "specs/products/spec-driver/current-spec.md"
-          - "specs/products/spec-driver/_generated/quality-report.md"
-          - "specs/products/spec-driver/_generated/scorecard-report.md"
-    evidence:
-      - sourceType: "file-check"
-        path: ".specify/project-context.yaml"
-        note: "未检测到 canonical YAML Project Context。"
   - id: "add-stable-reference-documents"
-    priority: "recommended"
+    priority: "optional"
     category: "references"
     title: "把稳定事实文档纳入 Project Context references"
     summary: "建议把产品活文档与治理报告声明进 Project Context，供 feature / implement / sync 等流程显式注入上下文，而不是依赖口头记忆。"
@@ -76,7 +54,7 @@ suggestions:
         path: "specs/products/spec-driver/_generated/adoption-report.md"
         note: "该文档已存在且长期稳定，可作为项目参考资料。"
   - id: "codify-workflow-preferences"
-    priority: "recommended"
+    priority: "optional"
     category: "workflow-preferences"
     title: "把高频 workflow 路由固化到 Project Context"
     summary: "当前运行记录已经形成稳定的 workflow 使用偏好，建议把默认入口与成熟 spec 的专用入口写入 Project Context。"
@@ -95,7 +73,7 @@ suggestions:
         path: "specs/products/spec-driver/_generated/workflow-index.json"
         note: "workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。"
   - id: "codify-verification-policy"
-    priority: "recommended"
+    priority: "optional"
     category: "verification-policy"
     title: "把验证偏好固化到 Project Context"
     summary: "当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。"

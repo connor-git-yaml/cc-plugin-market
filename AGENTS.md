@@ -52,7 +52,7 @@
 
 <!-- BEGIN SHARED SECTION: context-layering -->
 - `AGENTS.md` / `CLAUDE.md` 只放默认会进入上下文、且跨任务稳定的仓库级规则
-- `.specify/project-context.yaml|md` 只放项目级长期偏好、约束与参考资料，不承载 Spec 级执行策略
+- `.specify/project-context.yaml` 是 canonical Project Context；`.specify/project-context.md` 仅作为 legacy fallback，二者都只放项目级长期偏好、约束与参考资料，不承载 Spec 级执行策略
 - 某条规则若在不使用 Spec Driver Skill 时也必须生效，就不应只写在 `Project Context`
 - 成熟 `spec/plan` 的执行裁剪，应进入 `spec-driver-implement` 或具体 feature 制品，而不是写进 `Project Context`
 <!-- END SHARED SECTION: context-layering -->
