@@ -17,6 +17,10 @@ const sections = [
     key: 'mainline-focus',
     sourcePath: resolve(rootDir, 'docs/shared/agent-mainline-focus.md'),
   },
+  {
+    key: 'context-layering',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-context-layering.md'),
+  },
 ];
 
 function readSyncedSection(filePath: string, key: string): string {

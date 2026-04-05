@@ -20,6 +20,14 @@ const sectionConfigs = [
       resolve(rootDir, 'CLAUDE.md'),
     ],
   },
+  {
+    key: 'context-layering',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-context-layering.md'),
+    targets: [
+      resolve(rootDir, 'AGENTS.md'),
+      resolve(rootDir, 'CLAUDE.md'),
+    ],
+  },
 ];
 
 function syncSection(targetContent, key, sourceContent) {

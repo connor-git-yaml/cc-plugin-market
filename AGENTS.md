@@ -46,6 +46,17 @@
 - `specs/products/_generated/` 只放跨产品索引（如 `catalog-index`、`scorecard-index`、`quality-report-index`）
 - 若需调整生成产物路径，优先抽共享 helper，不要在多个脚本里重复硬编码
 
+## 3.2 上下文归属约定
+
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-context-layering.md` 同步，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: context-layering -->
+- `AGENTS.md` / `CLAUDE.md` 只放默认会进入上下文、且跨任务稳定的仓库级规则
+- `.specify/project-context.yaml|md` 只放项目级长期偏好、约束与参考资料，不承载 Spec 级执行策略
+- 某条规则若在不使用 Spec Driver Skill 时也必须生效，就不应只写在 `Project Context`
+- 成熟 `spec/plan` 的执行裁剪，应进入 `spec-driver-implement` 或具体 feature 制品，而不是写进 `Project Context`
+<!-- END SHARED SECTION: context-layering -->
+
 ## 4. 版本号规范
 
 插件版本号采用语义化版本（SemVer），每次变更时按以下规则 bump：

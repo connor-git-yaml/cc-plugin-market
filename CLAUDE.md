@@ -55,6 +55,15 @@ TypeScript 5.x, Node.js LTS (20.x+): Follow standard conventions
 - 生成 spec、plan、tasks 等设计文档时，正文内容使用中文，技术术语保持英文
 - 使用 spec-driver 的方式执行需求变更和问题修复不允许直接修改源代码。
 
+以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-context-layering.md` 同步，请勿手动编辑区块内容。
+
+<!-- BEGIN SHARED SECTION: context-layering -->
+- `AGENTS.md` / `CLAUDE.md` 只放默认会进入上下文、且跨任务稳定的仓库级规则
+- `.specify/project-context.yaml|md` 只放项目级长期偏好、约束与参考资料，不承载 Spec 级执行策略
+- 某条规则若在不使用 Spec Driver Skill 时也必须生效，就不应只写在 `Project Context`
+- 成熟 `spec/plan` 的执行裁剪，应进入 `spec-driver-implement` 或具体 feature 制品，而不是写进 `Project Context`
+<!-- END SHARED SECTION: context-layering -->
+
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-branch-sync-policy.md` 同步，请勿手动编辑区块内容。
 
 <!-- BEGIN SHARED SECTION: branch-sync-policy -->

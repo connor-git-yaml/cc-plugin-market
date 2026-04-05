@@ -1,6 +1,6 @@
 # Project Context 与 Implement Skill 解耦蓝图
 
-**版本**: 0.1.0
+**版本**: 0.1.1
 **创建日期**: 2026-04-05
 **最后更新**: 2026-04-05
 **状态**: Draft
@@ -80,23 +80,37 @@
 - 但实现层内部类型、resolver、脚本命名应避免继续直接叫 `ProjectContext`
 - 推荐内部命名为 `ProjectProfile` / `ResolvedProjectProfile`
 
+### 3.6 上下文加载层级必须显式分层
+
+- `CLAUDE.md` / `AGENTS.md` 只放**默认会进入上下文**且跨任务稳定的规则
+- `Project Context` 只放**项目级长期偏好与约束**，不能承载“默认必须执行”的关键流程规则
+- Spec 级执行语义（如成熟 `spec/plan` 直接进入 implementation）必须放在具体 Skill 或 feature 制品中
+- 若某条规则在不使用 Spec Driver Skill 时也必须生效，它就不应只存在于 `Project Context`
+
+### 3.7 上下文优先级必须确定
+
+- 冲突时采用固定优先级：**用户显式输入 > Skill 执行合同 > `AGENTS.md` / `CLAUDE.md` > `Project Context` 默认值**
+- `Project Context` 只提供默认值与补充参考，不得覆盖更高层的显式执行语义
+- resolver 必须把冲突来源显式写入 warning / diagnostics，而不是静默取最后一个值
+
 ---
 
 ## 4. 目标架构
 
 ```mermaid
 flowchart TD
-    A[".specify/project-context.yaml<br/>项目级长期配置"] --> B["Project Profile Resolver"]
-    B --> C["Resolved Project Profile<br/>归一化默认值与警告"]
-    C --> D["spec-driver-feature"]
-    C --> E["spec-driver-story"]
-    C --> F["spec-driver-fix"]
-    C --> G["spec-driver-resume"]
-    C --> H["spec-driver-sync"]
-    C --> I["spec-driver-doc"]
-    C --> J["spec-driver-implement"]
-    K["spec.md / plan.md / tasks.md"] --> J
-    L["scorecards / adoption / verification / rerun hotspots"] --> M["Project Context Suggestions"]
+    A["CLAUDE.md / AGENTS.md<br/>默认全局规则"] --> D["所有会话/Skill"]
+    B[".specify/project-context.yaml<br/>项目级长期配置"] --> C["Project Profile Resolver"]
+    C --> E["Resolved Project Profile<br/>归一化默认值与警告"]
+    E --> F["spec-driver-feature"]
+    E --> G["spec-driver-story"]
+    E --> H["spec-driver-fix"]
+    E --> I["spec-driver-resume"]
+    E --> J["spec-driver-sync"]
+    E --> K["spec-driver-doc"]
+    E --> L["spec-driver-implement"]
+    M["spec.md / plan.md / tasks.md"] --> L
+    N["scorecards / adoption / verification / rerun hotspots"] --> O["Project Context Suggestions"]
 ```
 
 ### 4.1 Project Context 的职责边界
@@ -117,6 +131,43 @@ flowchart TD
 - 现在先写测试还是先写代码
 
 这些都属于 `spec-driver-implement` 或其他具体 Skill 的执行语义。
+
+### 4.1.1 `CLAUDE.md / AGENTS.md` 与 `Project Context` 的分工
+
+**应放入 `CLAUDE.md / AGENTS.md` 的内容**：
+
+- 仓库级目录结构约定
+- 提交 / rebase / 验证的全局工程规范
+- 默认语言、命名、兼容性、门禁不变性
+- 任何“即使不走 Spec Driver Skill 也必须成立”的规则
+
+**应放入 `Project Context` 的内容**：
+
+- 项目背景、长期目标、术语、参考资料
+- 默认 research / verification 偏好
+- 领域约束、架构禁区、默认 workflow 偏好
+- 会随着项目演进而调整，但不应成为硬性的全局入口规则
+
+**不应放入 `Project Context` 的内容**：
+
+- “若 `spec/plan` 已成熟则进入 implementation” 这类 Spec 级流程裁剪
+- 当前具体 feature 的阶段编排
+- 需要默认总是生效的仓库治理规则
+
+### 4.1.2 上下文冲突的固定优先级
+
+当多个层级同时给出配置时，统一按以下顺序生效：
+
+1. 用户在当前会话中的显式要求或命令参数
+2. 当前 Skill 的执行合同与 feature 制品中的明确要求
+3. `AGENTS.md` / `CLAUDE.md` 中的仓库级稳定规则
+4. `.specify/project-context.yaml` 中的项目级默认值
+
+要求：
+
+- resolver 输出必须保留每个值的来源层级
+- 一旦发生冲突，低优先级值不得静默覆盖高优先级值
+- diagnostics 中必须能说明“为什么这次没有采用 project-context 的默认值”
 
 ### 4.2 Implement Skill 的职责边界
 
@@ -220,6 +271,10 @@ flowchart TD
 - 复用现有 `specs/<feature>/...` 目录合同
 - 复用现有 gates，不弱化 `GATE_VERIFY`
 - 若检测到 `spec`/`plan` 缺失或质量不足，必须显式提示“应回退到 `spec-driver-feature` 或 `story`”
+- 必须定义与 `spec-driver-resume` 的关系：
+  - `resume` 负责“从中断流程恢复”
+  - `implement` 负责“针对成熟 `spec/plan` 的聚焦实施”
+  - 当目录已存在且用户目标明确为实施时，允许 `resume` 建议切换到 `implement`，但不隐式替换用户入口
 
 **验收标准**:
 
@@ -227,6 +282,7 @@ flowchart TD
 2. Codex/Claude 双端都能安装对应包装
 3. 至少支持从现有 feature 目录恢复并直接进入实施
 4. 对成熟 `spec/plan` 场景不再强制重复调研 / 重写 spec
+5. `resume` 与 `implement` 的路由边界在文档和提示中都有明确说明
 
 ### 6.3 Feature 073: Project Context Schema + Resolver
 
@@ -265,12 +321,16 @@ flowchart TD
 - 内部命名与 panoramic `ProjectContext` 区分开
 - 解析失败时要给 warning，不静默忽略
 - 所有 Skill 都通过同一个 resolver 获取注入内容
+- `.specify/project-context.yaml` 是 canonical source；`.specify/project-context.md` 仅作为 legacy 兼容输入
+- 若 `.yaml` 与 `.md` 同时存在，resolver 只读取 `.yaml`，并对 `.md` 输出迁移 warning
+- 075 完成后，新初始化项目不再创建 `.md` 版本模板
 
 **验收标准**:
 
 1. 不再在 6 个以上 Skill 里复制粘贴 `project-context` 规则
 2. README 与 Skill 里对 `project-context` 的承诺都有实际实现支撑
 3. 缺失文件时行为稳定、可解释
+4. `.yaml` 与 `.md` 并存时行为是确定性的，并有清晰迁移提示
 
 ### 6.4 Feature 074: Feedback to Context Suggestions
 
@@ -318,12 +378,16 @@ flowchart TD
 - README / skill docs 更新
 - integration tests
 - migration notes
+- `AGENTS.md` / `CLAUDE.md` 的共享上下文归属片段
+- `.codex/.claude/.specify` 源/包装/运行态边界说明与最小收口
 
 **设计约束**:
 
 - 不破坏现有项目的空目录初始化体验
 - 默认模板必须简洁，避免吓退用户
 - 对存量 `.specify/project-context.md` 给出兼容迁移策略
+- 若 `AGENTS.md` 与 `CLAUDE.md` 需要共享新增规则，必须走 `docs/shared/* + docs:sync:agents` 机制，不再手工双写
+- 不要求在本 milestone 中把 `.codex/.claude/.specify` 全部去跟踪，但要明确 source-of-truth 与再生成方式
 
 **验收标准**:
 
@@ -333,6 +397,8 @@ flowchart TD
    - context 解析
    - implement skill 入口
    - suggestions 输出
+4. `AGENTS.md` / `CLAUDE.md` 的上下文归属规则来自共享片段，避免手工漂移
+5. `.yaml/.md` 迁移规则与 `.codex/.claude/.specify` 的 source-of-truth 都有明确文档
 
 ---
 
