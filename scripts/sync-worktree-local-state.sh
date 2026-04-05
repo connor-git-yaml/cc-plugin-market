@@ -125,6 +125,7 @@ RELATIVE_TARGETS=(
   ".claude/settings.local.json"
   ".specify/.spec-driver-path"
   ".agents"
+  "node_modules"
 )
 
 for relative_path in "${RELATIVE_TARGETS[@]}"; do
