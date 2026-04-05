@@ -13,6 +13,8 @@ import {
   getProductsRoot,
   toRelativePosix,
 } from './lib/product-artifact-paths.mjs';
+import { readJsonArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
+import { parseYamlDocument } from './lib/simple-yaml.mjs';
 
 const DEFAULT_KIND = 'product';
 const DEFAULT_OWNER = 'unknown';
@@ -171,8 +173,7 @@ export function generateProductEntityCatalog(options = {}) {
       ]),
     };
 
-    fs.mkdirSync(path.dirname(entityPath), { recursive: true });
-    fs.writeFileSync(entityPath, stringifyYaml(entityDoc), 'utf-8');
+    writeYamlArtifact(entityPath, entityDoc);
 
     entities.push({
       id: productId,
@@ -196,8 +197,7 @@ export function generateProductEntityCatalog(options = {}) {
   };
 
   const catalogIndexPath = getCatalogIndexPath(projectRoot);
-  fs.mkdirSync(path.dirname(catalogIndexPath), { recursive: true });
-  fs.writeFileSync(catalogIndexPath, stringifyYaml(catalogIndex), 'utf-8');
+  writeYamlArtifact(catalogIndexPath, catalogIndex);
 
   return {
     projectRoot,
@@ -213,83 +213,27 @@ function compactArray(items) {
 }
 
 function parseProductMapping(content) {
+  const document = parseYamlDocument(content);
+  const rawProducts = isObject(document.products) ? document.products : {};
   const products = {};
-  let currentProductId = null;
-  let currentSpec = null;
 
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.replace(/\t/g, '    ');
-    const productMatch = /^  ([^:\s]+):\s*$/.exec(line);
-    if (productMatch) {
-      currentProductId = productMatch[1];
-      products[currentProductId] = { description: '', specs: [] };
-      currentSpec = null;
-      continue;
-    }
-
-    if (!currentProductId) {
-      continue;
-    }
-
-    const descriptionMatch = /^    description:\s*(.+)\s*$/.exec(line);
-    if (descriptionMatch) {
-      products[currentProductId].description = parseYamlScalar(descriptionMatch[1]);
-      continue;
-    }
-
-    const specIdMatch = /^      - id:\s*(.+)\s*$/.exec(line);
-    if (specIdMatch) {
-      currentSpec = {
-        id: parseYamlScalar(specIdMatch[1]),
-        type: '',
-        summary: '',
-      };
-      products[currentProductId].specs.push(currentSpec);
-      continue;
-    }
-
-    if (!currentSpec) {
-      continue;
-    }
-
-    const typeMatch = /^        type:\s*(.+)\s*$/.exec(line);
-    if (typeMatch) {
-      currentSpec.type = parseYamlScalar(typeMatch[1]);
-      continue;
-    }
-
-    const summaryMatch = /^        summary:\s*(.+)\s*$/.exec(line);
-    if (summaryMatch) {
-      currentSpec.summary = parseYamlScalar(summaryMatch[1]);
-    }
+  for (const [productId, rawProduct] of Object.entries(rawProducts)) {
+    const product = isObject(rawProduct) ? rawProduct : {};
+    products[productId] = {
+      description: typeof product.description === 'string' ? product.description : '',
+      specs: Array.isArray(product.specs)
+        ? product.specs
+            .filter((entry) => isObject(entry) && typeof entry.id === 'string')
+            .map((entry) => ({
+              id: entry.id,
+              type: typeof entry.type === 'string' ? entry.type : '',
+              summary: typeof entry.summary === 'string' ? entry.summary : '',
+            }))
+        : [],
+    };
   }
 
   return { products };
-}
-
-function parseYamlScalar(rawValue) {
-  const trimmed = rawValue.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1);
-  }
-
-  if (trimmed === 'null') {
-    return null;
-  }
-
-  if (trimmed === 'true') {
-    return true;
-  }
-
-  if (trimmed === 'false') {
-    return false;
-  }
-
-  return trimmed;
 }
 
 function parseCurrentSpec(content) {
@@ -475,18 +419,11 @@ function detectQualityReport(projectRoot, productId) {
       continue;
     }
 
-    try {
-      const payload = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
-      return {
-        path: toRelativePosix(projectRoot, candidate),
-        status: typeof payload.status === 'string' ? payload.status : 'available',
-      };
-    } catch {
-      return {
-        path: toRelativePosix(projectRoot, candidate),
-        status: 'available',
-      };
-    }
+    const payload = readJsonArtifact(candidate);
+    return {
+      path: toRelativePosix(projectRoot, candidate),
+      status: typeof payload?.status === 'string' ? payload.status : 'available',
+    };
   }
 
   return {
@@ -502,58 +439,8 @@ function slugToTitle(value) {
     .join(' ');
 }
 
-function stringifyYaml(value, indent = 0) {
-  if (value === null) {
-    return `${' '.repeat(indent)}null`;
-  }
-
-  if (typeof value === 'string') {
-    return `${' '.repeat(indent)}${JSON.stringify(value)}`;
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return `${' '.repeat(indent)}${String(value)}`;
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return `${' '.repeat(indent)}[]`;
-    }
-
-    return value
-      .map((entry) => {
-        if (isScalar(entry)) {
-          return `${' '.repeat(indent)}- ${stringifyYaml(entry).trimStart()}`;
-        }
-
-        const rendered = stringifyYaml(entry, indent + 2).split('\n');
-        return [`${' '.repeat(indent)}- ${rendered[0].trimStart()}`, ...rendered.slice(1)].join('\n');
-      })
-      .join('\n');
-  }
-
-  if (typeof value === 'object') {
-    const entries = Object.entries(value);
-    if (entries.length === 0) {
-      return `${' '.repeat(indent)}{}`;
-    }
-
-    return entries
-      .map(([key, entry]) => {
-        if (isScalar(entry)) {
-          return `${' '.repeat(indent)}${key}: ${stringifyYaml(entry).trimStart()}`;
-        }
-
-        return `${' '.repeat(indent)}${key}:\n${stringifyYaml(entry, indent + 2)}`;
-      })
-      .join('\n');
-  }
-
-  return `${' '.repeat(indent)}${JSON.stringify(String(value))}`;
-}
-
-function isScalar(value) {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function toPosix(filePath) {

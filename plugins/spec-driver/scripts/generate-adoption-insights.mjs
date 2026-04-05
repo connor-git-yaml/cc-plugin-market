@@ -12,6 +12,8 @@ import {
   getProductWorkflowIndexJsonPath,
   toRelativePosix,
 } from './lib/product-artifact-paths.mjs';
+import { appendWarningsSection, dedupeStringValues } from './lib/script-diagnostics.mjs';
+import { readJsonArtifact, writeJsonArtifact, writeMarkdownArtifact } from './lib/script-report-io.mjs';
 
 const SCHEMA_VERSION = 1;
 const PRODUCT_ID = 'spec-driver';
@@ -41,14 +43,14 @@ function parseArgs(argv) {
 export function generateAdoptionInsights(options = {}) {
   const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
   const generatedAt = new Date().toISOString();
-  const workflowIndex = readJsonFile(getProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
-    ?? readJsonFile(getLegacyProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
+  const workflowIndex = readJsonArtifact(getProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
+    ?? readJsonArtifact(getLegacyProductWorkflowIndexJsonPath(projectRoot, PRODUCT_ID))
     ?? {
     workflows: [],
     goldenPaths: [],
   };
-  const scorecard = readJsonFile(getProductScorecardReportJsonPath(projectRoot, PRODUCT_ID))
-    ?? readJsonFile(getLegacyProductScorecardReportJsonPath(projectRoot, PRODUCT_ID));
+  const scorecard = readJsonArtifact(getProductScorecardReportJsonPath(projectRoot, PRODUCT_ID))
+    ?? readJsonArtifact(getLegacyProductScorecardReportJsonPath(projectRoot, PRODUCT_ID));
   const runLogResult = readRunLogs(projectRoot);
   const metrics = calculateMetrics(runLogResult.events, workflowIndex.workflows);
   const report = {
@@ -83,9 +85,8 @@ export function generateAdoptionInsights(options = {}) {
 
   const jsonPath = getProductAdoptionReportJsonPath(projectRoot, PRODUCT_ID);
   const markdownPath = getProductAdoptionReportMarkdownPath(projectRoot, PRODUCT_ID);
-  fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
-  fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf-8');
-  fs.writeFileSync(markdownPath, renderMarkdown(report), 'utf-8');
+  writeJsonArtifact(jsonPath, report);
+  writeMarkdownArtifact(markdownPath, renderMarkdown(report));
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -380,14 +381,7 @@ function renderMarkdown(report) {
     lines.push(`- Report: ${report.scorecardContext.reportPath}`);
   }
 
-  if (report.warnings.length > 0) {
-    lines.push('');
-    lines.push('## Warnings');
-    lines.push('');
-    for (const warning of report.warnings) {
-      lines.push(`- ${warning}`);
-    }
-  }
+  appendWarningsSection(lines, report.warnings);
 
   return `${lines.join('\n').trimEnd()}\n`;
 }
@@ -498,21 +492,6 @@ function asStringArray(value) {
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function dedupeStringValues(values) {
-  return Array.from(new Set(values.map((value) => asString(value)).filter(Boolean)));
-}
-
-function readJsonFile(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-  } catch {
-    return null;
-  }
 }
 
 function relativePosix(projectRoot, candidatePath) {

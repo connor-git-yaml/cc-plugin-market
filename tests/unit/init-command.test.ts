@@ -203,10 +203,20 @@ describe('init 命令集成流程', () => {
       join(targetDir, 'reverse-spec', 'SKILL.md'),
       'utf-8',
     );
-    expect(skillContent).toContain('command -v reverse-spec');
-    expect(skillContent).toContain('npm_config_yes=true npx reverse-spec');
-    // 新模板使用 prepare 子命令（Claude Code 原生模式）
-    expect(skillContent).toContain('reverse-spec prepare');
+    const canonical = readFileSync(
+      join(
+        process.cwd(),
+        'plugins',
+        'reverse-spec',
+        'skills',
+        'reverse-spec',
+        'SKILL.md',
+      ),
+      'utf-8',
+    );
+    expect(skillContent).toBe(canonical);
+    expect(skillContent).toContain('reverse-spec generate $TARGET_PATH --deep');
+    expect(skillContent).toContain('## Purpose');
   });
 
   it('--global 正确传递 mode=global', () => {

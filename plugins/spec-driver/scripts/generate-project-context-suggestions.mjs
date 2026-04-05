@@ -30,6 +30,8 @@ import {
   getProjectContextSuggestionsYamlPath,
   getProjectContextYamlPath,
 } from './lib/project-context-paths.mjs';
+import { appendWarningsSection, dedupeStringValues } from './lib/script-diagnostics.mjs';
+import { readJsonArtifact, writeMarkdownArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
 
 const SCHEMA_VERSION = 1;
 
@@ -118,9 +120,8 @@ export function generateProjectContextSuggestions(options = {}) {
 
   const yamlPath = getProjectContextSuggestionsYamlPath(projectRoot);
   const markdownPath = getProjectContextSuggestionsMarkdownPath(projectRoot);
-  fs.mkdirSync(path.dirname(yamlPath), { recursive: true });
-  fs.writeFileSync(yamlPath, `${stringifyYaml(report)}\n`, 'utf-8');
-  fs.writeFileSync(markdownPath, renderMarkdown(report), 'utf-8');
+  writeYamlArtifact(yamlPath, report);
+  writeMarkdownArtifact(markdownPath, renderMarkdown(report));
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -222,10 +223,10 @@ function loadProductSignals(projectRoot, productId) {
     workflowIndexJsonPath,
     entityPath,
     ownerUnknown: /owner:\s*\n\s+value:\s+"unknown"/.test(entityRaw),
-    quality: qualityJsonPath ? readJsonFile(qualityJsonPath) : null,
-    scorecard: scorecardJsonPath ? readJsonFile(scorecardJsonPath) : null,
-    adoption: adoptionJsonPath ? readJsonFile(adoptionJsonPath) : null,
-    workflowIndex: workflowIndexJsonPath ? readJsonFile(workflowIndexJsonPath) : null,
+    quality: qualityJsonPath ? readJsonArtifact(qualityJsonPath) : null,
+    scorecard: scorecardJsonPath ? readJsonArtifact(scorecardJsonPath) : null,
+    adoption: adoptionJsonPath ? readJsonArtifact(adoptionJsonPath) : null,
+    workflowIndex: workflowIndexJsonPath ? readJsonArtifact(workflowIndexJsonPath) : null,
   };
 }
 
@@ -567,13 +568,7 @@ function renderMarkdown(report) {
     }
   }
 
-  if (report.warnings.length > 0) {
-    lines.push('## Warnings', '');
-    for (const warning of report.warnings) {
-      lines.push(`- ${warning}`);
-    }
-    lines.push('');
-  }
+  appendWarningsSection(lines, report.warnings);
 
   return `${lines.join('\n')}\n`;
 }
@@ -605,71 +600,6 @@ function firstConflictPath(projectRoot, sources) {
     ? sources.map((source) => source?.path).find((entry) => typeof entry === 'string')
     : null;
   return firstPath ? firstPath : toRelativePosix(projectRoot, getProjectContextSuggestionsYamlPath(projectRoot));
-}
-
-function readJsonFile(filePath) {
-  if (!filePath || !fs.existsSync(filePath)) {
-    return null;
-  }
-
-  return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-}
-
-function dedupeStringValues(values) {
-  return Array.from(new Set(values.filter((value) => typeof value === 'string' && value.trim().length > 0)));
-}
-
-function isScalar(value) {
-  return value === null
-    || typeof value === 'string'
-    || typeof value === 'number'
-    || typeof value === 'boolean';
-}
-
-function stringifyYaml(value, indent = 0) {
-  if (value === null) {
-    return `${' '.repeat(indent)}null`;
-  }
-
-  if (typeof value === 'string') {
-    return `${' '.repeat(indent)}${JSON.stringify(value)}`;
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return `${' '.repeat(indent)}${String(value)}`;
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return `${' '.repeat(indent)}[]`;
-    }
-
-    return value
-      .map((entry) => {
-        if (isScalar(entry)) {
-          return `${' '.repeat(indent)}- ${stringifyYaml(entry).trimStart()}`;
-        }
-
-        const rendered = stringifyYaml(entry, indent + 2).split('\n');
-        return [`${' '.repeat(indent)}- ${rendered[0].trimStart()}`, ...rendered.slice(1)].join('\n');
-      })
-      .join('\n');
-  }
-
-  const entries = Object.entries(value);
-  if (entries.length === 0) {
-    return `${' '.repeat(indent)}{}`;
-  }
-
-  return entries
-    .map(([key, entryValue]) => {
-      if (isScalar(entryValue)) {
-        return `${' '.repeat(indent)}${key}: ${stringifyYaml(entryValue).trimStart()}`;
-      }
-
-      return `${' '.repeat(indent)}${key}:\n${stringifyYaml(entryValue, indent + 2)}`;
-    })
-    .join('\n');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

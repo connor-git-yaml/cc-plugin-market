@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import {
-  getCatalogIndexPath,
   getLegacyProductAdoptionReportJsonPath,
   getLegacyProductEntityPath,
   getLegacyProductScorecardReportJsonPath,
@@ -20,6 +19,10 @@ import {
   getQualityReportIndexPath,
   toRelativePosix,
 } from './lib/product-artifact-paths.mjs';
+import { patchProductCatalogIndex, patchYamlArtifact } from './lib/product-artifact-patchers.mjs';
+import { appendWarningsSection, dedupeStringValues } from './lib/script-diagnostics.mjs';
+import { writeJsonArtifact, writeMarkdownArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
+import { parseYamlDocument } from './lib/simple-yaml.mjs';
 
 const QUALITY_SCHEMA_VERSION = 1;
 
@@ -126,9 +129,8 @@ export function generateProductQualityReports(options = {}) {
 
     const jsonPath = getProductQualityReportJsonPath(projectRoot, productId);
     const markdownPath = getProductQualityReportMarkdownPath(projectRoot, productId);
-    fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
-    fs.writeFileSync(jsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf-8');
-    fs.writeFileSync(markdownPath, renderQualityMarkdown(report), 'utf-8');
+    writeJsonArtifact(jsonPath, report);
+    writeMarkdownArtifact(markdownPath, renderQualityMarkdown(report));
     patchEntityQuality(entityPath, report, projectRoot, productId);
 
     summaries.push({
@@ -144,14 +146,13 @@ export function generateProductQualityReports(options = {}) {
   }
 
   const indexPath = getQualityReportIndexPath(projectRoot);
-  fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-  fs.writeFileSync(indexPath, stringifyYaml({
+  writeYamlArtifact(indexPath, {
     schemaVersion: QUALITY_SCHEMA_VERSION,
     generatedAt,
     productCount: summaries.length,
     products: summaries,
     warnings: dedupeStringValues(warnings),
-  }), 'utf-8');
+  });
   patchCatalogIndex(projectRoot, summaries);
 
   return {
@@ -480,7 +481,7 @@ function buildSummaryLines(input) {
 }
 
 function renderQualityMarkdown(report) {
-  return [
+  const lines = [
     `# ${report.projectName} Product Quality Report`,
     '',
     `> **Product**: ${report.productId}`,
@@ -510,43 +511,35 @@ function renderQualityMarkdown(report) {
           '',
         ])
       : ['- 未检测到显式 conflict record。', '']),
-  ].join('\n');
+  ];
+  appendWarningsSection(lines, report.warnings);
+  return lines.join('\n');
 }
 
 function patchEntityQuality(entityPath, report, projectRoot, productId) {
-  if (!fs.existsSync(entityPath)) {
-    return;
-  }
-  const entity = parseYamlDocument(fs.readFileSync(entityPath, 'utf-8'));
-  entity.quality = isObject(entity.quality) ? entity.quality : {};
-  entity.quality.report = {
-    path: toRelativePosix(projectRoot, getProductQualityReportJsonPath(projectRoot, productId)),
-    status: report.status,
-    score: report.stats.score,
-    generatedAt: report.generatedAt,
-  };
-  const sourceRefs = Array.isArray(entity.sourceRefs) ? entity.sourceRefs : [];
-  if (!sourceRefs.some((source) => source.kind === 'quality-report')) {
-    sourceRefs.push({
-      kind: 'quality-report',
+  patchYamlArtifact(entityPath, (entity) => {
+    entity.quality = isObject(entity.quality) ? entity.quality : {};
+    entity.quality.report = {
       path: toRelativePosix(projectRoot, getProductQualityReportJsonPath(projectRoot, productId)),
-    });
-  }
-  entity.sourceRefs = sourceRefs;
-  fs.writeFileSync(entityPath, stringifyYaml(entity), 'utf-8');
+      status: report.status,
+      score: report.stats.score,
+      generatedAt: report.generatedAt,
+    };
+    const sourceRefs = Array.isArray(entity.sourceRefs) ? entity.sourceRefs : [];
+    if (!sourceRefs.some((source) => source.kind === 'quality-report')) {
+      sourceRefs.push({
+        kind: 'quality-report',
+        path: toRelativePosix(projectRoot, getProductQualityReportJsonPath(projectRoot, productId)),
+      });
+    }
+    entity.sourceRefs = sourceRefs;
+    return entity;
+  });
 }
 
 function patchCatalogIndex(projectRoot, summaries) {
-  const catalogIndexPath = getCatalogIndexPath(projectRoot);
-  if (!fs.existsSync(catalogIndexPath)) {
-    return;
-  }
-  const catalog = parseYamlDocument(fs.readFileSync(catalogIndexPath, 'utf-8'));
-  if (!Array.isArray(catalog.products)) {
-    return;
-  }
   const summaryById = new Map(summaries.map((product) => [product.id, product]));
-  catalog.products = catalog.products.map((product) => {
+  patchProductCatalogIndex(projectRoot, (product) => {
     const summary = summaryById.get(product.id);
     if (!summary) {
       return product;
@@ -557,7 +550,6 @@ function patchCatalogIndex(projectRoot, summaries) {
       qualityReportPath: summary.reportPath,
     };
   });
-  fs.writeFileSync(catalogIndexPath, stringifyYaml(catalog), 'utf-8');
 }
 
 function clampScore(value) {
@@ -568,10 +560,6 @@ function parseProductMapping(content) {
   const document = parseYamlDocument(content);
   const products = isObject(document.products) ? document.products : {};
   return { products };
-}
-
-function dedupeStringValues(items) {
-  return Array.from(new Set(items.filter(Boolean)));
 }
 
 function slugToTitle(value) {
@@ -598,241 +586,6 @@ function firstExistingPath(preferredPath, legacyPath) {
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function parseYamlDocument(content) {
-  const lines = tokenizeYamlLines(content);
-  if (lines.length === 0) {
-    return {};
-  }
-
-  const state = { index: 0 };
-  const parsed = parseYamlBlock(lines, state, lines[0].indent);
-  return isObject(parsed) ? parsed : {};
-}
-
-function tokenizeYamlLines(content) {
-  const lines = [];
-  for (const rawLine of content.split('\n')) {
-    const withoutComment = stripYamlComment(rawLine);
-    if (withoutComment.trim() === '') {
-      continue;
-    }
-
-    lines.push({
-      indent: rawLine.match(/^\s*/)?.[0].length ?? 0,
-      text: withoutComment.trim(),
-    });
-  }
-  return lines;
-}
-
-function parseYamlBlock(lines, state, indent) {
-  if (state.index >= lines.length) {
-    return {};
-  }
-
-  const line = lines[state.index];
-  if (line.text.startsWith('- ')) {
-    return parseYamlArray(lines, state, indent);
-  }
-  return parseYamlObject(lines, state, indent);
-}
-
-function parseYamlObject(lines, state, indent) {
-  const result = {};
-
-  while (state.index < lines.length) {
-    const line = lines[state.index];
-    if (line.indent < indent || line.text.startsWith('- ')) {
-      break;
-    }
-    if (line.indent > indent) {
-      state.index += 1;
-      continue;
-    }
-
-    const separator = line.text.indexOf(':');
-    if (separator === -1) {
-      state.index += 1;
-      continue;
-    }
-
-    const key = line.text.slice(0, separator).trim();
-    const remainder = line.text.slice(separator + 1).trim();
-    state.index += 1;
-
-    if (remainder === '') {
-      if (state.index >= lines.length || lines[state.index].indent <= indent) {
-        result[key] = {};
-        continue;
-      }
-      result[key] = parseYamlBlock(lines, state, lines[state.index].indent);
-      continue;
-    }
-
-    result[key] = parseYamlScalar(remainder);
-  }
-
-  return result;
-}
-
-function parseYamlArray(lines, state, indent) {
-  const result = [];
-
-  while (state.index < lines.length) {
-    const line = lines[state.index];
-    if (line.indent < indent || !line.text.startsWith('- ')) {
-      break;
-    }
-
-    const itemText = line.text.slice(2).trim();
-    state.index += 1;
-
-    if (itemText === '') {
-      if (state.index >= lines.length || lines[state.index].indent <= indent) {
-        result.push(null);
-        continue;
-      }
-      result.push(parseYamlBlock(lines, state, lines[state.index].indent));
-      continue;
-    }
-
-    const separator = itemText.indexOf(':');
-    if (separator !== -1) {
-      const key = itemText.slice(0, separator).trim();
-      const remainder = itemText.slice(separator + 1).trim();
-      const item = {};
-      if (remainder === '') {
-        if (state.index >= lines.length || lines[state.index].indent <= indent) {
-          item[key] = {};
-        } else {
-          item[key] = parseYamlBlock(lines, state, lines[state.index].indent);
-        }
-      } else {
-        item[key] = parseYamlScalar(remainder);
-      }
-
-      while (state.index < lines.length) {
-        const next = lines[state.index];
-        if (next.indent < indent + 2 || next.text.startsWith('- ')) {
-          break;
-        }
-        if (next.indent > indent + 2) {
-          state.index += 1;
-          continue;
-        }
-        const nestedSeparator = next.text.indexOf(':');
-        if (nestedSeparator === -1) {
-          state.index += 1;
-          continue;
-        }
-        const nestedKey = next.text.slice(0, nestedSeparator).trim();
-        const nestedRemainder = next.text.slice(nestedSeparator + 1).trim();
-        state.index += 1;
-        if (nestedRemainder === '') {
-          if (state.index >= lines.length || lines[state.index].indent <= next.indent) {
-            item[nestedKey] = {};
-          } else {
-            item[nestedKey] = parseYamlBlock(lines, state, lines[state.index].indent);
-          }
-        } else {
-          item[nestedKey] = parseYamlScalar(nestedRemainder);
-        }
-      }
-
-      result.push(item);
-      continue;
-    }
-
-    result.push(parseYamlScalar(itemText));
-  }
-
-  return result;
-}
-
-function stripYamlComment(line) {
-  let inSingle = false;
-  let inDouble = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    if (char === '\'' && !inDouble) {
-      inSingle = !inSingle;
-    } else if (char === '"' && !inSingle) {
-      inDouble = !inDouble;
-    } else if (char === '#' && !inSingle && !inDouble) {
-      return line.slice(0, index).trimEnd();
-    }
-  }
-  return line;
-}
-
-function parseYamlScalar(rawValue) {
-  if (rawValue === 'true') {
-    return true;
-  }
-  if (rawValue === 'false') {
-    return false;
-  }
-  if (rawValue === 'null') {
-    return null;
-  }
-  if (/^-?\d+(\.\d+)?$/.test(rawValue)) {
-    return Number(rawValue);
-  }
-  if ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith('\'') && rawValue.endsWith('\''))) {
-    return rawValue.slice(1, -1);
-  }
-  return rawValue;
-}
-
-function stringifyYaml(value, indent = 0) {
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return '[]\n';
-    }
-    return value.map((item) => {
-      if (isObject(item) || Array.isArray(item)) {
-        const nested = stringifyYaml(item, indent + 2).trimEnd().split('\n');
-        const [first, ...rest] = nested;
-        return `${' '.repeat(indent)}- ${first}\n${rest.map((line) => `${' '.repeat(indent + 2)}${line}`).join('\n')}`;
-      }
-      return `${' '.repeat(indent)}- ${formatYamlScalar(item)}`;
-    }).join('\n') + '\n';
-  }
-
-  if (isObject(value)) {
-    return Object.entries(value).map(([key, item]) => {
-      if (Array.isArray(item)) {
-        if (item.length === 0) {
-          return `${' '.repeat(indent)}${key}: []`;
-        }
-        const serialized = stringifyYaml(item, indent + 2);
-        return `${' '.repeat(indent)}${key}:\n${serialized.trimEnd()}`;
-      }
-      if (isObject(item)) {
-        const serialized = stringifyYaml(item, indent + 2);
-        return `${' '.repeat(indent)}${key}:\n${serialized.trimEnd()}`;
-      }
-      return `${' '.repeat(indent)}${key}: ${formatYamlScalar(item)}`;
-    }).join('\n') + '\n';
-  }
-
-  return `${' '.repeat(indent)}${formatYamlScalar(value)}\n`;
-}
-
-function formatYamlScalar(value) {
-  if (value === null || value === undefined) {
-    return 'null';
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  const stringValue = String(value);
-  if (stringValue === '' || /[:#\-\n]/.test(stringValue) || /^\s|\s$/.test(stringValue)) {
-    return `"${stringValue.replace(/"/g, '\\"')}"`;
-  }
-  return `"${stringValue.replace(/"/g, '\\"')}"`;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

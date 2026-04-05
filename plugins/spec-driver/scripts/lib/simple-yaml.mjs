@@ -79,6 +79,10 @@ function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isScalar(value) {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
 function parseYamlSequence(lines, state, indent) {
   const result = [];
 
@@ -200,4 +204,52 @@ export function parseYamlDocument(content) {
   const state = { index: 0 };
   const parsed = parseYamlBlock(lines, state, lines[0].indent);
   return isObject(parsed) ? parsed : {};
+}
+
+function formatYamlScalar(value) {
+  if (value === null || value === undefined) {
+    return 'null';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return JSON.stringify(String(value));
+}
+
+export function stringifyYaml(value, indent = 0) {
+  if (isScalar(value)) {
+    return `${' '.repeat(indent)}${formatYamlScalar(value)}`;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return `${' '.repeat(indent)}[]`;
+    }
+
+    return value
+      .map((entry) => {
+        if (isScalar(entry)) {
+          return `${' '.repeat(indent)}- ${stringifyYaml(entry).trimStart()}`;
+        }
+
+        const rendered = stringifyYaml(entry, indent + 2).split('\n');
+        return [`${' '.repeat(indent)}- ${rendered[0].trimStart()}`, ...rendered.slice(1)].join('\n');
+      })
+      .join('\n');
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    return `${' '.repeat(indent)}{}`;
+  }
+
+  return entries
+    .map(([key, entryValue]) => {
+      if (isScalar(entryValue)) {
+        return `${' '.repeat(indent)}${key}: ${stringifyYaml(entryValue).trimStart()}`;
+      }
+
+      return `${' '.repeat(indent)}${key}:\n${stringifyYaml(entryValue, indent + 2)}`;
+    })
+    .join('\n');
 }
