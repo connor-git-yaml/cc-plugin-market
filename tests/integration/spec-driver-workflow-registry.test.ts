@@ -51,18 +51,23 @@ describe('generate-workflow-registry.mjs', () => {
       warnings: string[];
     };
 
-    expect(payload.workflowCount).toBe(6);
-    expect(payload.goldenPathCount).toBe(3);
+    expect(payload.workflowCount).toBe(7);
+    expect(payload.goldenPathCount).toBe(4);
     expect(payload.jsonPath).toBe('specs/products/spec-driver/_generated/workflow-index.json');
     expect(payload.markdownPath).toBe('specs/products/spec-driver/_generated/workflow-index.md');
 
     const storyWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-story');
+    const implementWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-implement');
     const syncWorkflow = payload.workflows.find((workflow) => workflow.id === 'spec-driver-sync') as
       | { artifacts?: string[] }
       | undefined;
     expect(storyWorkflow?.persona).toBe('项目级迭代开发者');
     expect(storyWorkflow?.recommendedWhen).toEqual(['团队内部的常规迭代需求']);
     expect(storyWorkflow?.entryCommand.claude).toBe('/spec-driver:spec-driver-story <需求描述>');
+    expect(implementWorkflow).toEqual(expect.objectContaining({
+      persona: '实施负责人',
+      recommendedWhen: expect.arrayContaining(['需求与设计已成熟，只需聚焦实施和验证']),
+    }));
     expect(syncWorkflow?.artifacts).toEqual(expect.arrayContaining([
       'specs/products/<product>/_generated/scorecard-report.md',
       'specs/products/<product>/_generated/scorecard-report.json',
@@ -102,6 +107,10 @@ describe('generate-workflow-registry.mjs', () => {
         id: 'product-facts-refresh',
         workflows: ['spec-driver-sync', 'spec-driver-doc'],
       }),
+      expect.objectContaining({
+        id: 'mature-spec-delivery',
+        workflows: ['spec-driver-implement', 'spec-driver-sync', 'spec-driver-doc'],
+      }),
     ]));
 
     const markdownIndex = readFileSync(
@@ -111,8 +120,10 @@ describe('generate-workflow-registry.mjs', () => {
     expect(markdownIndex).toContain('# Spec Driver Workflow Registry');
     expect(markdownIndex).toContain('## 如何选择技能');
     expect(markdownIndex).toContain('### 新功能研发');
+    expect(markdownIndex).toContain('### 成熟 Spec 聚焦实施');
     expect(markdownIndex).toContain('### 快速修复');
     expect(markdownIndex).toContain('### 产品事实与文档更新');
+    expect(markdownIndex).toContain('spec-driver-implement');
     expect(markdownIndex).toContain('scorecard-report.md');
     expect(markdownIndex).toContain('adoption-report.md');
   });

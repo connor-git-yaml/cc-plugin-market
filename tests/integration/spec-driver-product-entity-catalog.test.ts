@@ -42,7 +42,7 @@ describe('generate-product-entity-catalog.mjs', () => {
         '        type: FEATURE',
         '        summary: "核心流水线"',
         '  spec-driver:',
-        '    description: "Spec Driver v3.1.0 — 自治研发编排器 Plugin"',
+        '    description: "Spec Driver v3.3.0 — 自治研发编排器 Plugin"',
         '    specs:',
         '      - id: "011-speckit-driver-pro"',
         '        type: INITIAL',
@@ -132,6 +132,7 @@ describe('generate-product-entity-catalog.mjs', () => {
     expect(specDriverEntity.kind).toBe('plugin');
     expect(specDriverEntity.workflowRefs).toEqual(expect.arrayContaining([
       'spec-driver-feature',
+      'spec-driver-implement',
       'spec-driver-sync',
       'spec-driver-doc',
     ]));

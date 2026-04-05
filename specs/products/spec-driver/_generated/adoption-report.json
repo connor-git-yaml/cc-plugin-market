@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T03:19:17.049Z",
+  "generatedAt": "2026-04-05T05:49:18.641Z",
   "productId": "spec-driver",
   "status": "healthy",
   "summary": {
@@ -19,7 +19,7 @@
     "logFileCount": 1,
     "validRunCount": 5,
     "invalidLineCount": 0,
-    "workflowCount": 6,
+    "workflowCount": 7,
     "runsWithPhaseDurations": 5
   },
   "workflowSummaries": [
@@ -59,6 +59,22 @@
       "id": "spec-driver-fix",
       "title": "快速问题修复",
       "persona": "修复者",
+      "totalRuns": 0,
+      "successRuns": 0,
+      "failedRuns": 0,
+      "pausedRuns": 0,
+      "partialRuns": 0,
+      "rerunRuns": 0,
+      "successRate": 0,
+      "failureRate": 0,
+      "rerunRate": 0,
+      "averageDurationMs": null,
+      "lastRunAt": null
+    },
+    {
+      "id": "spec-driver-implement",
+      "title": "成熟 Spec 实施",
+      "persona": "实施负责人",
       "totalRuns": 0,
       "successRuns": 0,
       "failedRuns": 0,

@@ -2,7 +2,7 @@
 
 > **Product**: reverse-spec
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T03:19:05.049Z
+> **Generated**: 2026-04-05T05:49:18.638Z
 > **Status**: PASS
 > **Score**: 100/100
 

@@ -2,7 +2,7 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T03:19:05.049Z
+> **Generated**: 2026-04-05T05:49:18.638Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -17,11 +17,11 @@
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=7, fresh=7, stale=0 |
+| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=8, fresh=8, stale=0 |
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
-| Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, missing=0, goldenPathCount=3 |
+| Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=7, missing=0, goldenPathCount=4 |
 
 ## Rule Details
 
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 22 个增量 spec。
+- current-spec 覆盖了全部 23 个增量 spec。
 
 ```json
 {
@@ -46,11 +46,11 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- 全部 7 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
+- 全部 8 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
 
 ```json
 {
-  "totalFeatures": 7,
+  "totalFeatures": 8,
   "fresh": [
     "012-product-spec-sync",
     "063-product-entity-catalog",
@@ -58,7 +58,8 @@
     "065-scorecards-continuous-governance",
     "066-adoption-friction-insights",
     "068-scorecard-signal-alignment",
-    "071-product-artifact-boundary-cleanup"
+    "071-product-artifact-boundary-cleanup",
+    "072-spec-driver-implement"
   ],
   "stale": [],
   "missing": [],
@@ -147,7 +148,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 15
-- workflow registry 覆盖了全部 6 个 workflowRefs，并提供 3 条 golden paths。
+- workflow registry 覆盖了全部 7 个 workflowRefs，并提供 4 条 golden paths。
 
 ```json
 {
@@ -155,11 +156,12 @@
     "spec-driver-doc",
     "spec-driver-feature",
     "spec-driver-fix",
+    "spec-driver-implement",
     "spec-driver-resume",
     "spec-driver-story",
     "spec-driver-sync"
   ],
   "missing": [],
-  "goldenPathCount": 3
+  "goldenPathCount": 4
 }
 ```

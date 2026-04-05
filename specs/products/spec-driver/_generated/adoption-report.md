@@ -1,6 +1,6 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-04-05T03:19:17.049Z
+- Generated At: 2026-04-05T05:49:18.641Z
 - Status: healthy
 - Total Runs: 5
 - Active Workflows: 2
@@ -16,6 +16,7 @@
 | `spec-driver-doc` | 开源维护者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-feature` | 功能开发者 | 4 | 100.0% | 0.0% | 0 | 0.0% | 144.5s | 2026-04-04T16:55:41.078Z |
 | `spec-driver-fix` | 修复者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
+| `spec-driver-implement` | 实施负责人 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-resume` | 流程恢复者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-story` | 迭代开发者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-sync` | 产品文档负责人 | 1 | 100.0% | 0.0% | 0 | 0.0% | 87.0s | 2026-04-04T16:55:41.078Z |

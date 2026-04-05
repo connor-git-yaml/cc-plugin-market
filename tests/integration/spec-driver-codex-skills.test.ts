@@ -55,6 +55,11 @@ describe('Spec Driver Codex skills script', () => {
       ),
     ).toBe(true);
     expect(
+      existsSync(
+        join(tempDir, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'),
+      ),
+    ).toBe(true);
+    expect(
       existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-doc', 'SKILL.md')),
     ).toBe(true);
     expect(
@@ -74,6 +79,14 @@ describe('Spec Driver Codex skills script', () => {
     expect(storyWrapper).toContain('opus/sonnet');
     expect(storyWrapper).toContain('.specify/project-context.yaml');
     expect(storyWrapper).toContain('[参考路径缺失]');
+
+    const implementWrapper = readFileSync(
+      join(tempDir, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(implementWrapper).toContain('description: "成熟 Spec 实施');
+    expect(implementWrapper).toContain('$spec-driver-implement [<feature-dir-or-id>]');
+    expect(implementWrapper).toContain('成熟 `spec.md + plan.md` 的聚焦实施');
 
     const constitutionWrapper = readFileSync(
       join(tempDir, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
@@ -100,6 +113,9 @@ describe('Spec Driver Codex skills script', () => {
     expect(result.exitCode).toBe(0);
     expect(
       existsSync(join(fakeHome, '.codex', 'skills', 'spec-driver-sync', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(join(fakeHome, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md')),
     ).toBe(true);
     expect(
       existsSync(

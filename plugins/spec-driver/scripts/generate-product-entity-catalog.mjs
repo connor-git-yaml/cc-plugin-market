@@ -30,6 +30,7 @@ const WORKFLOW_REFS_BY_PRODUCT = {
   ],
   'spec-driver': [
     'spec-driver-feature',
+    'spec-driver-implement',
     'spec-driver-story',
     'spec-driver-fix',
     'spec-driver-resume',

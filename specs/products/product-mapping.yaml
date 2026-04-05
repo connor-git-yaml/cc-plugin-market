@@ -149,7 +149,7 @@ products:
         summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
 
   spec-driver:
-    description: "Spec Driver v3.2.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层"
+    description: "Spec Driver v3.3.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL
@@ -217,3 +217,6 @@ products:
       - id: "071-product-artifact-boundary-cleanup"
         type: FEATURE
         summary: "清理产品事实源与生成产物目录边界，统一 `_generated` 合同与共享路径 helper"
+      - id: "072-spec-driver-implement"
+        type: FEATURE
+        summary: "新增成熟 Spec/Plan 的聚焦实施入口 spec-driver-implement，并接入 workflow / catalog / adoption"

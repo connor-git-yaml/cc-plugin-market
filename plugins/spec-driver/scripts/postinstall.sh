@@ -14,7 +14,7 @@ BOLD='\033[1m'
 
 # Plugin 信息
 PLUGIN_NAME="Spec Driver"
-PLUGIN_VERSION="3.2.0"
+PLUGIN_VERSION="3.3.0"
 MIN_CLAUDE_VERSION="1.0.0"
 
 # 推算插件根目录
@@ -75,16 +75,18 @@ main() {
   echo -e "${GREEN}${BOLD}  ${PLUGIN_NAME} v${PLUGIN_VERSION} 安装成功${NC}"
   echo -e "${GREEN}${BOLD}══════════════════════════════════════════${NC}"
   echo ""
-  echo -e "  自治研发编排器——支持 run/story/fix/resume/sync 五种模式"
+  echo -e "  自治研发编排器——支持 feature/implement/story/fix/resume/sync/doc 七种模式"
   echo ""
   echo -e "  ${BOLD}快速开始:${NC}"
   echo -e "    /spec-driver:spec-driver-feature \"你的需求描述\"     # 完整流程（含调研）"
+  echo -e "    /spec-driver:spec-driver-implement 072-spec-driver-implement  # 成熟 spec/plan 直接实施"
   echo -e "    /spec-driver:spec-driver-story \"需求变更\"       # 快速需求实现"
   echo -e "    /spec-driver:spec-driver-fix \"问题描述\"         # 快速问题修复"
   echo ""
   echo -e "  ${BOLD}其他命令:${NC}"
   echo -e "    /spec-driver:spec-driver-resume                  # 恢复中断的流程"
   echo -e "    /spec-driver:spec-driver-sync                    # 聚合产品规范"
+  echo -e "    /spec-driver:spec-driver-doc                     # 生成开源文档"
   echo -e "    /spec-driver:spec-driver-feature --rerun plan         # 重跑指定阶段"
   echo ""
   echo -e "  ${BOLD}配置文件:${NC} spec-driver.config.yaml（首次使用时自动引导创建）"

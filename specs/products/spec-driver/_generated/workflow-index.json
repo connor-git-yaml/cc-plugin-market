@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-04-05T03:18:55.083Z",
+  "generatedAt": "2026-04-05T05:48:43.344Z",
   "sourceDir": "plugins/spec-driver/workflows",
   "overrideDir": ".specify/workflows",
-  "workflowCount": 6,
-  "goldenPathCount": 3,
+  "workflowCount": 7,
+  "goldenPathCount": 4,
   "workflows": [
     {
       "id": "spec-driver-doc",
@@ -100,6 +100,37 @@
       "recommendedWhen": [
         "问题范围明确",
         "需要最短修复闭环"
+      ],
+      "templateVersion": "1.0.0"
+    },
+    {
+      "id": "spec-driver-implement",
+      "title": "成熟 Spec 实施",
+      "persona": "实施负责人",
+      "useCases": [
+        "已具备成熟 spec.md 与 plan.md",
+        "聚焦计划审查、任务细化、代码实施与验证"
+      ],
+      "entryCommand": {
+        "claude": "/spec-driver:spec-driver-implement [<feature-dir-or-id>]",
+        "codex": "$spec-driver-implement [<feature-dir-or-id>]"
+      },
+      "requiredInputs": [
+        "specs/<feature>/spec.md",
+        "specs/<feature>/plan.md"
+      ],
+      "keyGates": [
+        "GATE_TASKS",
+        "GATE_VERIFY"
+      ],
+      "artifacts": [
+        "specs/<feature>/plan.md",
+        "specs/<feature>/tasks.md",
+        "specs/<feature>/verification/verification-report.md"
+      ],
+      "recommendedWhen": [
+        "需求与设计已成熟，只需聚焦实施和验证",
+        "希望避免重复调研与重写 spec/plan"
       ],
       "templateVersion": "1.0.0"
     },
@@ -243,6 +274,20 @@
       "recommendedWhen": [
         "增量 spec 已完成，需要刷新 current-spec 和对外文档",
         "适合 release 前或 onboarding 前的文档收口"
+      ]
+    },
+    {
+      "id": "mature-spec-delivery",
+      "title": "成熟 Spec 聚焦实施",
+      "persona": "实施负责人",
+      "workflows": [
+        "spec-driver-implement",
+        "spec-driver-sync",
+        "spec-driver-doc"
+      ],
+      "recommendedWhen": [
+        "spec.md 与 plan.md 已成熟，只需推进实施与验证",
+        "架构和需求已冻结，希望快速完成交付并同步产品事实"
       ]
     }
   ],

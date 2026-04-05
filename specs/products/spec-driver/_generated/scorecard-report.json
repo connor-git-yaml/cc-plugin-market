@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T03:19:05.049Z",
+  "generatedAt": "2026-04-05T05:49:18.638Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spec-driver",
@@ -29,7 +29,7 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "current-spec 覆盖了全部 22 个增量 spec。"
+        "current-spec 覆盖了全部 23 个增量 spec。"
       ],
       "evidence": {
         "laggingSpecs": [],
@@ -45,10 +45,10 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "全部 7 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
+        "全部 8 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。"
       ],
       "evidence": {
-        "totalFeatures": 7,
+        "totalFeatures": 8,
         "fresh": [
           "012-product-spec-sync",
           "063-product-entity-catalog",
@@ -56,7 +56,8 @@
           "065-scorecards-continuous-governance",
           "066-adoption-friction-insights",
           "068-scorecard-signal-alignment",
-          "071-product-artifact-boundary-cleanup"
+          "071-product-artifact-boundary-cleanup",
+          "072-spec-driver-implement"
         ],
         "stale": [],
         "missing": [],
@@ -150,19 +151,20 @@
       "status": "pass",
       "score": 100,
       "summary": [
-        "workflow registry 覆盖了全部 6 个 workflowRefs，并提供 3 条 golden paths。"
+        "workflow registry 覆盖了全部 7 个 workflowRefs，并提供 4 条 golden paths。"
       ],
       "evidence": {
         "workflowRefs": [
           "spec-driver-doc",
           "spec-driver-feature",
           "spec-driver-fix",
+          "spec-driver-implement",
           "spec-driver-resume",
           "spec-driver-story",
           "spec-driver-sync"
         ],
         "missing": [],
-        "goldenPathCount": 3
+        "goldenPathCount": 4
       },
       "warnings": []
     }

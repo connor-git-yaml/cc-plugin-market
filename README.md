@@ -33,7 +33,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 │  │  • generate / batch   │     │  • spec-driver-feature           │  │
 │  │  • diff / prepare     │     │  • spec-driver-story             │  │
 │  │  • MCP server         │     │  • spec-driver-fix               │  │
-│  │  • CLI + Skills       │     │  • spec-driver-resume/sync/doc   │  │
+│  │  • CLI + Skills       │     │  • implement/resume/sync/doc     │  │
 │  └──────────────────────┘     └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -273,7 +273,7 @@ ModuleSpec → specs/*.spec.md
 <!-- spec-driver:section:spec-driver -->
 ## Spec Driver
 
-**Spec Driver** (v3.2.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 6 execution modes, and parallel sub-agent dispatch for accelerated execution.
+**Spec Driver** (v3.3.0) is a Claude Code plugin that serves as an autonomous development orchestrator. It automates the full Spec-Driven Development lifecycle through 14 specialized sub-agent prompts, 5 quality gates, 7 execution modes, and parallel sub-agent dispatch for accelerated execution.
 
 ### How It Works
 
@@ -313,6 +313,7 @@ Choose the right mode based on your scenario:
 | Scenario | Command | Phases | Human Interaction |
 | -------- | ------- | ------ | ----------------- |
 | New feature, major requirement | `/spec-driver:spec-driver-feature <desc>` | 10 | ≤5 |
+| Mature spec/plan, direct implementation | `/spec-driver:spec-driver-implement [<feature>]` | 6 | ≤2 |
 | Feature iteration, requirement change | `/spec-driver:spec-driver-story <desc>` | 5 | ≤2 |
 | Bug fix, issue resolution | `/spec-driver:spec-driver-fix <desc>` | 4 | ≤1 |
 | Resume interrupted workflow | `/spec-driver:spec-driver-resume` | Variable | 0 |
@@ -561,7 +562,7 @@ src/                               # reverse-spec TypeScript source
 
 plugins/                           # Claude Code plugins
 ├── reverse-spec/                  # reverse-spec MCP plugin
-└── spec-driver/                   # Spec Driver orchestrator (v3.2.0)
+└── spec-driver/                   # Spec Driver orchestrator (v3.3.0)
     ├── .claude-plugin/plugin.json # Plugin metadata
     ├── agents/                    # 14 specialized sub-agent prompts
     │   ├── constitution.md        # Phase 0: Principle validation
@@ -578,8 +579,9 @@ plugins/                           # Claude Code plugins
     │   ├── quality-review.md      # Phase 7b: Code quality review
     │   ├── verify.md              # Phase 7c: Build/lint/test verification
     │   └── sync.md                # Product spec aggregation
-    ├── skills/                    # 6 execution mode definitions
+    ├── skills/                    # 7 execution mode definitions
     │   ├── spec-driver-feature/       # Full 10-phase orchestration
+    │   ├── spec-driver-implement/     # Mature spec/plan focused delivery
     │   ├── spec-driver-story/         # Quick 5-phase iteration
     │   ├── spec-driver-fix/           # Rapid 4-phase bug fix
     │   ├── spec-driver-resume/        # Interrupted workflow recovery

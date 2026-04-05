@@ -27,3 +27,13 @@ goldenPaths:
     recommendedWhen:
       - "增量 spec 已完成，需要刷新 current-spec 和对外文档"
       - "适合 release 前或 onboarding 前的文档收口"
+  - id: "mature-spec-delivery"
+    title: "成熟 Spec 聚焦实施"
+    persona: "实施负责人"
+    workflows:
+      - "spec-driver-implement"
+      - "spec-driver-sync"
+      - "spec-driver-doc"
+    recommendedWhen:
+      - "spec.md 与 plan.md 已成熟，只需推进实施与验证"
+      - "架构和需求已冻结，希望快速完成交付并同步产品事实"

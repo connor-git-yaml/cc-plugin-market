@@ -131,6 +131,7 @@ describe('generate-product-scorecards.mjs', () => {
         '    available: true',
         'workflowRefs:',
         '  - "spec-driver-feature"',
+        '  - "spec-driver-implement"',
         '  - "spec-driver-story"',
         '  - "spec-driver-fix"',
         '  - "spec-driver-resume"',
@@ -162,13 +163,14 @@ describe('generate-product-scorecards.mjs', () => {
       JSON.stringify({
         workflows: [
           { id: 'spec-driver-feature' },
+          { id: 'spec-driver-implement' },
           { id: 'spec-driver-story' },
           { id: 'spec-driver-fix' },
           { id: 'spec-driver-resume' },
           { id: 'spec-driver-sync' },
           { id: 'spec-driver-doc' },
         ],
-        goldenPaths: [{ id: 'new-feature-delivery' }],
+        goldenPaths: [{ id: 'new-feature-delivery' }, { id: 'mature-spec-delivery' }],
       }, null, 2),
       'utf-8',
     );

@@ -60,6 +60,7 @@ fi
 SKILLS=(
   "spec-driver-constitution"
   "spec-driver-feature"
+  "spec-driver-implement"
   "spec-driver-story"
   "spec-driver-fix"
   "spec-driver-resume"
@@ -78,6 +79,7 @@ ensure_source_exists() {
 rewrite_codex_runtime_text() {
   sed \
     -e 's|/spec-driver:spec-driver-feature|$spec-driver-feature|g' \
+    -e 's|/spec-driver:spec-driver-implement|$spec-driver-implement|g' \
     -e 's|/spec-driver:spec-driver-story|$spec-driver-story|g' \
     -e 's|/spec-driver:spec-driver-fix|$spec-driver-fix|g' \
     -e 's|/spec-driver:spec-driver-resume|$spec-driver-resume|g' \
@@ -175,6 +177,7 @@ write_wrapper() {
 install_all() {
   write_wrapper "spec-driver-constitution" "spec-driver-constitution"
   write_wrapper "spec-driver-feature" "spec-driver-feature"
+  write_wrapper "spec-driver-implement" "spec-driver-implement"
   write_wrapper "spec-driver-story" "spec-driver-story"
   write_wrapper "spec-driver-fix" "spec-driver-fix"
   write_wrapper "spec-driver-resume" "spec-driver-resume"

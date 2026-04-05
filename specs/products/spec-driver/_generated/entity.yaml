@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T03:18:51.725Z"
+generatedAt: "2026-04-05T05:48:40.401Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
-description: "Spec Driver v3.2.0 — 自治研发编排器 Plugin，支持 feature/story/fix/resume/sync/doc 六种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层"
+description: "Spec Driver v3.3.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback 与产品级生成产物分层"
 owner:
   value: "unknown"
   source: "unknown"
@@ -26,23 +26,24 @@ docs:
     available: true
 quality:
   currentSpec:
-    version: "聚合自 22 个增量 spec / blueprint（011–022, 032, 062–068, 070–071）"
+    version: "聚合自 23 个增量 spec / blueprint（011–022, 032, 062–068, 070–072）"
     lastAggregated: "2026-04-05"
     status: "活跃"
   report:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T03:19:01.897Z"
+    generatedAt: "2026-04-05T05:48:45.841Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T03:19:05.049Z"
+    generatedAt: "2026-04-05T05:49:18.638Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"
   - "spec-driver-fix"
+  - "spec-driver-implement"
   - "spec-driver-resume"
   - "spec-driver-story"
   - "spec-driver-sync"

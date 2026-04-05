@@ -1,10 +1,10 @@
 # Spec Driver Workflow Registry
 
-- Generated At: 2026-04-05T03:18:55.083Z
+- Generated At: 2026-04-05T05:48:43.344Z
 - Source Dir: plugins/spec-driver/workflows
 - Override Dir: .specify/workflows
-- Workflows: 6
-- Golden Paths: 3
+- Workflows: 7
+- Golden Paths: 4
 
 ## 如何选择技能
 
@@ -13,6 +13,7 @@
 | `spec-driver-doc` | 开源维护者 | README 生成 / 文档套件补齐 / 对外文档整理 | `/spec-driver:spec-driver-doc` | `$spec-driver-doc` |
 | `spec-driver-feature` | 功能开发者 | 全新功能 / 大型需求 / 需要完整调研与质量门 | `/spec-driver:spec-driver-feature <需求描述>` | `$spec-driver-feature <需求描述>` |
 | `spec-driver-fix` | 修复者 | Bug 修复 / 定位与修复回归问题 | `/spec-driver:spec-driver-fix <问题描述>` | `$spec-driver-fix <问题描述>` |
+| `spec-driver-implement` | 实施负责人 | 已具备成熟 spec.md 与 plan.md / 聚焦计划审查、任务细化、代码实施与验证 | `/spec-driver:spec-driver-implement [<feature-dir-or-id>]` | `$spec-driver-implement [<feature-dir-or-id>]` |
 | `spec-driver-resume` | 流程恢复者 | 上次 feature/story/fix 流程中断 / 从已有产物断点继续 | `/spec-driver:spec-driver-resume` | `$spec-driver-resume` |
 | `spec-driver-story` | 迭代开发者 | 中等规模增量需求 / 已有上下文的功能迭代 | `/spec-driver:spec-driver-story <需求描述>` | `$spec-driver-story <需求描述>` |
 | `spec-driver-sync` | 产品文档负责人 | 聚合增量 spec / 更新 current-spec 与产品 Catalog | `/spec-driver:spec-driver-sync` | `$spec-driver-sync` |
@@ -45,6 +46,15 @@
 - Recommended When:
   - 增量 spec 已完成，需要刷新 current-spec 和对外文档
   - 适合 release 前或 onboarding 前的文档收口
+
+### 成熟 Spec 聚焦实施
+
+- ID: `mature-spec-delivery`
+- Persona: 实施负责人
+- Workflows: `spec-driver-implement` -> `spec-driver-sync` -> `spec-driver-doc`
+- Recommended When:
+  - spec.md 与 plan.md 已成熟，只需推进实施与验证
+  - 架构和需求已冻结，希望快速完成交付并同步产品事实
 
 ## Workflow Details
 
@@ -86,6 +96,19 @@
 - Recommended When: 问题范围明确 / 需要最短修复闭环
 - Claude Entry: `/spec-driver:spec-driver-fix <问题描述>`
 - Codex Entry: `$spec-driver-fix <问题描述>`
+
+### 成熟 Spec 实施
+
+- ID: `spec-driver-implement`
+- Persona: 实施负责人
+- Template Version: 1.0.0
+- Use Cases: 已具备成熟 spec.md 与 plan.md / 聚焦计划审查、任务细化、代码实施与验证
+- Required Inputs: specs/<feature>/spec.md / specs/<feature>/plan.md
+- Key Gates: GATE_TASKS / GATE_VERIFY
+- Artifacts: specs/<feature>/plan.md / specs/<feature>/tasks.md / specs/<feature>/verification/verification-report.md
+- Recommended When: 需求与设计已成熟，只需聚焦实施和验证 / 希望避免重复调研与重写 spec/plan
+- Claude Entry: `/spec-driver:spec-driver-implement [<feature-dir-or-id>]`
+- Codex Entry: `$spec-driver-implement [<feature-dir-or-id>]`
 
 ### 恢复中断流程
 

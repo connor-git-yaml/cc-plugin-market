@@ -30,6 +30,12 @@ $spec-driver-resume --preset <balanced|quality-first|cost-efficient>
 
 **说明**: 此命令无需需求描述参数，自动扫描当前特性目录的已有制品。不接受 `--rerun` 和 `--sync` 参数。如需选择性重跑某个阶段，请使用 `$spec-driver-feature --rerun <phase>`。
 
+**边界**:
+
+- `resume` 用于“中断流程恢复”
+- `implement` 用于“成熟 `spec.md + plan.md` 的聚焦实施”
+- 如果目录已具备成熟 `spec/plan` 且用户目标明确为直接实施，可建议切换到 `$spec-driver-implement`，但不得隐式替换入口
+
 ---
 
 ## 初始化阶段
@@ -150,6 +156,15 @@ if 特性目录存在但无任何制品文件:
   - 使用 $spec-driver-feature <需求描述> 启动新的研发流程
   """
   终止流程
+```
+
+若检测到目录已具备成熟 `spec.md + plan.md`，但用户目标明显是“直接实施而非恢复断点”，输出提示：
+
+```text
+[提示] 当前目录已具备成熟 spec/plan，更适合使用:
+$spec-driver-implement {feature_dir}
+
+resume 仍可继续使用，但其目标是从中断点恢复，而不是聚焦实施。
 ```
 
 如果存在多个特性目录，提示用户选择要恢复的目录。
