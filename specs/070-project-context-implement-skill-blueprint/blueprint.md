@@ -1,9 +1,9 @@
 # Project Context 与 Implement Skill 解耦蓝图
 
-**版本**: 0.1.1
+**版本**: 1.0.0
 **创建日期**: 2026-04-05
 **最后更新**: 2026-04-05
-**状态**: Draft
+**状态**: Implemented
 
 ---
 
@@ -457,7 +457,31 @@ flowchart TD
 
 ---
 
-## 10. 一句话总结
+## 10. 结案验证
+
+### 已完成项
+
+- **071**: 已完成产品事实源与机器生成产物目录分层，`specs/products/<product>/_generated/` 与 `specs/products/_generated/` 成为统一生成路径
+- **072**: `spec-driver-implement` 已作为正式 Skill 落地，并接入 workflow registry、Catalog、adoption 与产品活文档
+- **073**: `.specify/project-context.yaml` 已成为 canonical source，共享 resolver 已接入主 Skill，`.md` 仅保留 legacy fallback
+- **074**: `quality / scorecard / adoption` 信号已可生成 `.specify/project-context.suggestions.yaml|md`，并以 advisory-only 方式供流程读取
+- **075**: `init-project.sh` 已默认创建最小 `project-context.yaml`，legacy Markdown 迁移说明、集成测试和共享文档同步也已收口
+
+### 当前仓库验证结论
+
+- `cc-plugin-market` 已验证：
+  - `spec-driver-implement` 可通过 Codex / Claude 双端安装链路落地
+  - Project Context resolver、suggestions、Catalog、workflow、quality、scorecard、adoption 能共同工作
+  - `spec-driver` 产品级治理信号已回到 `PASS / 100`
+- 当前仓库的 `spec-driver` 活文档已纳入 `070–075` 全部内容，`Project Context` 也已经在仓库根目录完成了一次 dogfooding
+
+### 已知边界
+
+- 当前 milestone 只完成了 `Project Context` 与 `implement skill` 的分层与机制化，不包含新的 portal / UI / 审批系统
+- `.specify/project-context.md` 仍作为 legacy fallback 保留，后续是否彻底移除仍需单独版本决策
+- `.codex/`、`.claude/`、`.specify/runs/` 仍然保留运行态 / 分发态角色，本 milestone 只明确了 source-of-truth 与再生成方式，没有彻底改变其仓库存在形式
+
+## 11. 一句话总结
 
 这轮里程碑的核心不是“让 Project Context 更强”，而是：
 
