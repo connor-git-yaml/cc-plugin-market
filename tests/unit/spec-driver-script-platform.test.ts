@@ -177,46 +177,80 @@ describe('spec-driver script platform shared layer', () => {
   });
 
   it('目标脚本链路统一复用共享 YAML、IO 与 diagnostics 合同', () => {
-    const sharedYamlTargets = [
+    const thinEntryTargets = [
       'plugins/spec-driver/scripts/generate-workflow-registry.mjs',
       'plugins/spec-driver/scripts/generate-product-quality-reports.mjs',
       'plugins/spec-driver/scripts/generate-product-scorecards.mjs',
+    ];
+    const sharedYamlTargets = [
+      'plugins/spec-driver/scripts/lib/workflow-registry-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-quality-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-scorecard-core.mjs',
+    ];
+    const legacySharedYamlTargets = [
       'plugins/spec-driver/scripts/generate-product-entity-catalog.mjs',
     ];
     const sharedIoTargets = [
-      'plugins/spec-driver/scripts/generate-workflow-registry.mjs',
-      'plugins/spec-driver/scripts/generate-product-quality-reports.mjs',
-      'plugins/spec-driver/scripts/generate-product-scorecards.mjs',
+      'plugins/spec-driver/scripts/lib/workflow-registry-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-quality-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-scorecard-core.mjs',
+    ];
+    const legacySharedIoTargets = [
       'plugins/spec-driver/scripts/generate-product-entity-catalog.mjs',
       'plugins/spec-driver/scripts/generate-project-context-suggestions.mjs',
       'plugins/spec-driver/scripts/generate-adoption-insights.mjs',
     ];
     const sharedDiagnosticsTargets = [
-      'plugins/spec-driver/scripts/generate-workflow-registry.mjs',
-      'plugins/spec-driver/scripts/generate-product-quality-reports.mjs',
-      'plugins/spec-driver/scripts/generate-product-scorecards.mjs',
+      'plugins/spec-driver/scripts/lib/workflow-registry-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-quality-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-scorecard-core.mjs',
+    ];
+    const legacySharedDiagnosticsTargets = [
       'plugins/spec-driver/scripts/generate-project-context-suggestions.mjs',
       'plugins/spec-driver/scripts/generate-adoption-insights.mjs',
     ];
     const noLocalDupTargets = [
-      'plugins/spec-driver/scripts/generate-workflow-registry.mjs',
-      'plugins/spec-driver/scripts/generate-product-quality-reports.mjs',
-      'plugins/spec-driver/scripts/generate-product-scorecards.mjs',
+      'plugins/spec-driver/scripts/lib/workflow-registry-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-quality-core.mjs',
+      'plugins/spec-driver/scripts/lib/product-scorecard-core.mjs',
       'plugins/spec-driver/scripts/generate-product-entity-catalog.mjs',
       'plugins/spec-driver/scripts/generate-project-context-suggestions.mjs',
     ];
+    const entryToCoreImports = new Map([
+      ['plugins/spec-driver/scripts/generate-workflow-registry.mjs', "./lib/workflow-registry-core.mjs"],
+      ['plugins/spec-driver/scripts/generate-product-quality-reports.mjs', "./lib/product-quality-core.mjs"],
+      ['plugins/spec-driver/scripts/generate-product-scorecards.mjs', "./lib/product-scorecard-core.mjs"],
+    ]);
+
+    for (const relativePath of thinEntryTargets) {
+      const source = readFileSync(resolve(relativePath), 'utf-8');
+      expect(source).toContain("from './lib/script-cli-args.mjs'");
+      expect(source).toContain(`from '${entryToCoreImports.get(relativePath)}'`);
+    }
 
     for (const relativePath of sharedYamlTargets) {
+      const source = readFileSync(resolve(relativePath), 'utf-8');
+      expect(source).toContain("from './simple-yaml.mjs'");
+    }
+    for (const relativePath of legacySharedYamlTargets) {
       const source = readFileSync(resolve(relativePath), 'utf-8');
       expect(source).toContain("from './lib/simple-yaml.mjs'");
     }
 
     for (const relativePath of sharedIoTargets) {
       const source = readFileSync(resolve(relativePath), 'utf-8');
+      expect(source).toContain("from './script-report-io.mjs'");
+    }
+    for (const relativePath of legacySharedIoTargets) {
+      const source = readFileSync(resolve(relativePath), 'utf-8');
       expect(source).toContain("from './lib/script-report-io.mjs'");
     }
 
     for (const relativePath of sharedDiagnosticsTargets) {
+      const source = readFileSync(resolve(relativePath), 'utf-8');
+      expect(source).toContain("from './script-diagnostics.mjs'");
+    }
+    for (const relativePath of legacySharedDiagnosticsTargets) {
       const source = readFileSync(resolve(relativePath), 'utf-8');
       expect(source).toContain("from './lib/script-diagnostics.mjs'");
     }

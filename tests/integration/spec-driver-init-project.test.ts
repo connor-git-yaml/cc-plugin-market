@@ -31,6 +31,13 @@ function runInitScript(cwd: string): {
   };
 }
 
+function runInitScriptText(cwd: string): string {
+  return execFileSync('bash', [SCRIPT_PATH], {
+    cwd,
+    encoding: 'utf-8',
+  });
+}
+
 describe('init-project.sh', () => {
   let projectDir: string;
 
@@ -109,5 +116,14 @@ describe('init-project.sh', () => {
     expect(result.HAS_SPEC_DRIVER_SKILLS).toBe(true);
     expect(result.SKILL_MAP).toContain('plan');
     expect(result.SKILL_MAP).toContain('tasks');
+  });
+
+  it('文本模式会输出阶段结果摘要', () => {
+    const stdout = runInitScriptText(projectDir);
+
+    expect(stdout).toContain('[初始化] 项目环境检查');
+    expect(stdout).toContain('.specify/templates');
+    expect(stdout).toContain('.specify/project-context.yaml');
+    expect(stdout).toContain('spec-driver.config.yaml');
   });
 });

@@ -414,6 +414,7 @@ plugins/spec-driver/
 | 27 | [076-codebase-rationalization-blueprint](../../076-codebase-rationalization-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义代码库结构与可维护性收敛路线，聚焦包装层、脚本平台、分发结构与发布合同 |
 | 28 | [077-wrapper-source-truth-consolidation](../../077-wrapper-source-truth-consolidation/spec.md) | FEATURE | 2026-04-05 | 为 spec-driver Codex wrapper 建立 source-of-truth contract、validator 与显式生成标记 |
 | 29 | [078-script-platform-shared-layer](../../078-script-platform-shared-layer/spec.md) | FEATURE | 2026-04-05 | 收敛脚本平台共享层，统一 YAML / artifact IO / catalog patch / diagnostics helper |
+| 30 | [081-maintainability-hotspot-refactors](../../081-maintainability-hotspot-refactors/spec.md) | REFACTOR | 2026-04-05 | 将 workflow-registry / quality-report / scorecard / init-project 热点入口收敛为 thin orchestrator，并补 core-module 级 targeted tests |
 
 ---
 
