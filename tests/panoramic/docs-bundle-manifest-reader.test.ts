@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { readDocsBundleManifest } from '../../src/panoramic/docs-bundle-manifest-reader.js';
+import { readDocsBundleManifest } from '../../src/panoramic/pipelines/docs-bundle-manifest-reader.js';
 
 describe('readDocsBundleManifest', () => {
   const tempDirs: string[] = [];

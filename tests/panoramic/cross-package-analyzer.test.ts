@@ -11,8 +11,8 @@ import {
   CrossPackageAnalyzer,
   type CrossPackageInput,
   type CrossPackageOutput,
-} from '../../src/panoramic/cross-package-analyzer.js';
-import type { WorkspacePackageInfo } from '../../src/panoramic/workspace-index-generator.js';
+} from '../../src/panoramic/generators/cross-package-analyzer.js';
+import type { WorkspacePackageInfo } from '../../src/panoramic/generators/workspace-index-generator.js';
 import type { DependencyGraph, GraphNode, DependencyEdge } from '../../src/models/dependency-graph.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 

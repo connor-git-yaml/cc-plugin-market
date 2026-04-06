@@ -4,10 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   orchestrateDocsBundle,
-} from '../../src/panoramic/docs-bundle-orchestrator.js';
+} from '../../src/panoramic/pipelines/docs-bundle-orchestrator.js';
 import {
   DOCS_BUNDLE_MANIFEST_FILE,
-} from '../../src/panoramic/docs-bundle-types.js';
+} from '../../src/panoramic/models/docs-bundle-types.js';
 import { parseYamlDocument } from '../../src/panoramic/parsers/yaml-config-parser.js';
 
 describe('docs-bundle-orchestrator', () => {

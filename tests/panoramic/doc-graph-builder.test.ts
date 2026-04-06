@@ -8,7 +8,7 @@ import {
   buildDocGraph,
   scanExistingSpecDocuments,
   scanStoredModuleSpecs,
-} from '../../src/panoramic/doc-graph-builder.js';
+} from '../../src/panoramic/builders/doc-graph-builder.js';
 
 describe('DocGraphBuilder', () => {
   let tmpDir: string;

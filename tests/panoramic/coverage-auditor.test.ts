@@ -4,8 +4,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ModuleGroup } from '../../src/batch/module-grouper.js';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import type { DocGraph } from '../../src/panoramic/doc-graph-builder.js';
-import { CoverageAuditor } from '../../src/panoramic/coverage-auditor.js';
+import type { DocGraph } from '../../src/panoramic/builders/doc-graph-builder.js';
+import { CoverageAuditor } from '../../src/panoramic/pipelines/coverage-auditor.js';
 import { GeneratorRegistry } from '../../src/panoramic/generator-registry.js';
 
 describe('CoverageAuditor', () => {

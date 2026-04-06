@@ -7,8 +7,8 @@
  * - 降级测试: LLM 不可用、LLM 调用异常、部分批次失败
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { DataModel } from '../../../src/panoramic/data-model-generator.js';
-import type { ConfigFileResult } from '../../../src/panoramic/config-reference-generator.js';
+import type { DataModel } from '../../../src/panoramic/generators/data-model-generator.js';
+import type { ConfigFileResult } from '../../../src/panoramic/generators/config-reference-generator.js';
 
 // mock 依赖模块（vi.mock 会被 vitest 提升到文件顶部）
 vi.mock('../../../src/auth/auth-detector.js');

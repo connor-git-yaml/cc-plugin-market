@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import { MockReadmeGenerator } from '../../src/panoramic/mock-readme-generator.js';
+import { MockReadmeGenerator } from '../../src/panoramic/generators/mock-readme-generator.js';
 
 // ============================================================
 // 辅助函数

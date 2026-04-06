@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import * as panoramic from '../../src/panoramic/index.js';
-import { ArchitectureIRGenerator } from '../../src/panoramic/architecture-ir-generator.js';
+import { ArchitectureIRGenerator } from '../../src/panoramic/generators/architecture-ir-generator.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 
 function createTempDir(): string {

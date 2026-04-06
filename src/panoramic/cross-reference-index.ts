@@ -8,8 +8,8 @@ import type {
   ModuleCrossReferenceIndex,
   ModuleSpec,
 } from '../models/module-spec.js';
-import type { DocGraph, DocGraphReferenceSample } from './doc-graph-builder.js';
-import { MODULE_SPEC_ANCHOR_ID } from './doc-graph-builder.js';
+import type { DocGraph, DocGraphReferenceSample } from './builders/doc-graph-builder.js';
+import { MODULE_SPEC_ANCHOR_ID } from './builders/doc-graph-builder.js';
 
 interface CrossModuleAccumulator {
   targetSpecPath: string;

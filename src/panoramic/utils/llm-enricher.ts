@@ -13,8 +13,8 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
-import type { DataModel } from '../data-model-generator.js';
-import type { ConfigFileResult } from '../config-reference-generator.js';
+import type { DataModel } from '../generators/data-model-generator.js';
+import type { ConfigFileResult } from '../generators/config-reference-generator.js';
 import { detectAuth } from '../../auth/auth-detector.js';
 import { callLLMviaCli } from '../../auth/cli-proxy.js';
 import { callLLMviaCodex } from '../../auth/codex-proxy.js';

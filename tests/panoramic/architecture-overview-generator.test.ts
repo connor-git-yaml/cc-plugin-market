@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import * as panoramic from '../../src/panoramic/index.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
-import { ArchitectureOverviewGenerator } from '../../src/panoramic/architecture-overview-generator.js';
+import { ArchitectureOverviewGenerator } from '../../src/panoramic/generators/architecture-overview-generator.js';
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'architecture-overview-test-'));

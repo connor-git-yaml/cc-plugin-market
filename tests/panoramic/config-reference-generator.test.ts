@@ -21,7 +21,7 @@ vi.mock('../../src/panoramic/utils/llm-enricher.js', async () => {
   };
 });
 
-import { ConfigReferenceGenerator } from '../../src/panoramic/config-reference-generator.js';
+import { ConfigReferenceGenerator } from '../../src/panoramic/generators/config-reference-generator.js';
 import { parseYamlContent } from '../../src/panoramic/parsers/yaml-config-parser.js';
 import { parseEnvContent } from '../../src/panoramic/parsers/env-config-parser.js';
 import { parseTomlContent } from '../../src/panoramic/parsers/toml-config-parser.js';

@@ -38,9 +38,9 @@ export { GeneratorRegistry, bootstrapGenerators, type GeneratorEntry } from './g
 export { ArtifactParserRegistry, bootstrapParsers, type ParserEntry } from './parser-registry.js';
 
 // Generator 实现
-export { MockReadmeGenerator } from './mock-readme-generator.js';
-export { ConfigReferenceGenerator } from './config-reference-generator.js';
-export { DataModelGenerator } from './data-model-generator.js';
+export { MockReadmeGenerator } from './generators/mock-readme-generator.js';
+export { ConfigReferenceGenerator } from './generators/config-reference-generator.js';
+export { DataModelGenerator } from './generators/data-model-generator.js';
 export {
   ApiSurfaceGenerator,
   type ApiSource,
@@ -58,7 +58,7 @@ export {
   type InterfaceSurfaceModule,
   type InterfaceSurfaceInput,
   type InterfaceSurfaceOutput,
-} from './interface-surface-generator.js';
+} from './generators/interface-surface-generator.js';
 export {
   WorkspaceIndexGenerator,
   extractWorkspaceData,
@@ -66,7 +66,7 @@ export {
   type WorkspaceInput,
   type WorkspaceOutput,
   type WorkspaceGroup,
-} from './workspace-index-generator.js';
+} from './generators/workspace-index-generator.js';
 
 export {
   CrossPackageAnalyzer,
@@ -75,13 +75,13 @@ export {
   type TopologyLevel,
   type CycleGroup,
   type DependencyStats,
-} from './cross-package-analyzer.js';
+} from './generators/cross-package-analyzer.js';
 
 export {
   RuntimeTopologyGenerator,
   type RuntimeTopologyInput,
   type RuntimeTopologyOutput,
-} from './runtime-topology-generator.js';
+} from './generators/runtime-topology-generator.js';
 
 export {
   EventSurfaceGenerator,
@@ -92,7 +92,7 @@ export {
   type EventChannel,
   type EventSurfaceInput,
   type EventSurfaceOutput,
-} from './event-surface-generator.js';
+} from './generators/event-surface-generator.js';
 
 export {
   TroubleshootingGenerator,
@@ -103,7 +103,7 @@ export {
   type TroubleshootingExplanation,
   type TroubleshootingInput,
   type TroubleshootingOutput,
-} from './troubleshooting-generator.js';
+} from './generators/troubleshooting-generator.js';
 
 export {
   CoverageAuditor,
@@ -118,37 +118,37 @@ export {
   type CoverageAuditorOptions,
   type CoverageIssue,
   type ModuleCoverageStatus,
-} from './coverage-auditor.js';
+} from './pipelines/coverage-auditor.js';
 
 export {
   ArchitectureOverviewGenerator,
   type ArchitectureOverviewInput,
   type ArchitectureOverviewOutput,
-} from './architecture-overview-generator.js';
+} from './generators/architecture-overview-generator.js';
 
 export {
   ArchitectureIRGenerator,
   type ArchitectureIRInput,
   type ArchitectureIROutput,
-} from './architecture-ir-generator.js';
+} from './generators/architecture-ir-generator.js';
 
 export {
   buildComponentView,
   renderComponentView,
   type BuildComponentViewOptions,
-} from './component-view-builder.js';
+} from './builders/component-view-builder.js';
 
 export {
   buildDynamicScenarios,
   renderDynamicScenarios,
   type BuildDynamicScenariosOptions,
-} from './dynamic-scenarios-builder.js';
+} from './builders/dynamic-scenarios-builder.js';
 
 export {
   PatternHintsGenerator,
   type PatternHintsGeneratorDependencies,
   type PatternHintsLLMEnhancer,
-} from './pattern-hints-generator.js';
+} from './generators/pattern-hints-generator.js';
 
 export {
   generateBatchAdrDocs,
@@ -158,7 +158,7 @@ export {
   type AdrIndexOutput,
   type GenerateBatchAdrDocsOptions,
   type GenerateBatchAdrDocsResult,
-} from './adr-decision-pipeline.js';
+} from './pipelines/adr-decision-pipeline.js';
 
 export {
   generateProductUxDocs,
@@ -173,18 +173,18 @@ export {
   type ProductUserSegment,
   type UserJourney,
   type UserJourneysOutput,
-} from './product-ux-docs.js';
+} from './pipelines/product-ux-docs.js';
 
 export {
   evaluateDocsQuality,
   renderDocsQualityReport,
   type EvaluateDocsQualityOptions,
-} from './docs-quality-evaluator.js';
+} from './pipelines/docs-quality-evaluator.js';
 
 export {
   adaptArchitectureNarrativeProvenance,
   type AdaptNarrativeProvenanceOptions,
-} from './narrative-provenance-adapter.js';
+} from './pipelines/narrative-provenance-adapter.js';
 
 export {
   readDocsBundleManifest,
@@ -192,7 +192,7 @@ export {
   type BundleProfileReference,
   type DocsBundleManifestReference,
   type ReadDocsBundleManifestResult,
-} from './docs-bundle-manifest-reader.js';
+} from './pipelines/docs-bundle-manifest-reader.js';
 
 export {
   buildSyntheticImageName,
@@ -216,7 +216,7 @@ export {
   type RuntimeConfigHint,
   type RuntimeTopology,
   type RuntimeTopologyStats,
-} from './runtime-topology-model.js';
+} from './models/runtime-topology-model.js';
 
 export {
   createArchitectureEvidence,
@@ -235,7 +235,7 @@ export {
   type DeploymentUnitSummary,
   type ArchitectureOverviewStats,
   type ArchitectureOverviewModel,
-} from './architecture-overview-model.js';
+} from './models/architecture-overview-model.js';
 
 export {
   summarizeArchitectureIR,
@@ -254,7 +254,7 @@ export {
   type ArchitectureIRMermaidSection,
   type ArchitectureIRMermaidExport,
   type ArchitectureIRExportBundle,
-} from './architecture-ir-model.js';
+} from './models/architecture-ir-model.js';
 
 export {
   summarizeComponentView,
@@ -282,7 +282,7 @@ export {
   type DynamicScenarioStats,
   type DynamicScenarioModel,
   type DynamicScenariosOutput,
-} from './component-view-model.js';
+} from './models/component-view-model.js';
 
 export {
   determineDocsQualityStatus,
@@ -307,7 +307,7 @@ export {
   type RequiredDocCoverage,
   type RequiredDocRule,
   type RequiredDocStatus,
-} from './docs-quality-model.js';
+} from './models/docs-quality-model.js';
 
 export {
   loadStoredModuleSpecs,
@@ -321,9 +321,9 @@ export {
   type StoredModuleSpecRecord,
 } from './stored-module-specs.js';
 
-export { buildArchitectureIR, type BuildArchitectureIROptions } from './architecture-ir-builder.js';
-export { exportArchitectureIRJson, exportArchitectureIRStructurizrDsl } from './architecture-ir-exporters.js';
-export { buildArchitectureIRMermaidExport } from './architecture-ir-mermaid-adapter.js';
+export { buildArchitectureIR, type BuildArchitectureIROptions } from './builders/architecture-ir-builder.js';
+export { exportArchitectureIRJson, exportArchitectureIRStructurizrDsl } from './exporters/architecture-ir-exporters.js';
+export { buildArchitectureIRMermaidExport } from './builders/architecture-ir-mermaid-adapter.js';
 
 export {
   MINIMUM_PATTERN_CONFIDENCE,
@@ -331,7 +331,7 @@ export {
   evaluatePatternHints,
   buildPatternExplanation,
   type PatternEvaluationResult,
-} from './pattern-knowledge-base.js';
+} from './models/pattern-knowledge-base.js';
 
 export {
   createPatternEvidenceRef,
@@ -351,17 +351,17 @@ export {
   type PatternHintsOutput,
   type PatternSignalRule,
   type PatternKnowledgeBaseEntry,
-} from './pattern-hints-model.js';
+} from './models/pattern-hints-model.js';
 
 export {
   orchestrateDocsBundle,
   buildDocsBundleInput,
-} from './docs-bundle-orchestrator.js';
+} from './pipelines/docs-bundle-orchestrator.js';
 
 export {
   getDocsBundleProfile,
   listDocsBundleProfiles,
-} from './docs-bundle-profiles.js';
+} from './models/docs-bundle-profiles.js';
 
 export {
   DOCS_BUNDLE_VERSION,
@@ -380,7 +380,7 @@ export {
   type DocsBundleManifest,
   type DocsBundleProfileSummary,
   type DocsBundleResult,
-} from './docs-bundle-types.js';
+} from './models/docs-bundle-types.js';
 
 // Parser 实现 + 类型
 export * from './parsers/index.js';

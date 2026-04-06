@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import type { ArchitectureNarrativeOutput } from '../../src/panoramic/architecture-narrative.js';
-import type { PatternHintsOutput } from '../../src/panoramic/pattern-hints-model.js';
-import { generateBatchAdrDocs } from '../../src/panoramic/adr-decision-pipeline.js';
+import type { ArchitectureNarrativeOutput } from '../../src/panoramic/pipelines/architecture-narrative.js';
+import type { PatternHintsOutput } from '../../src/panoramic/models/pattern-hints-model.js';
+import { generateBatchAdrDocs } from '../../src/panoramic/pipelines/adr-decision-pipeline.js';
 
 
 describe('generateBatchAdrDocs', () => {

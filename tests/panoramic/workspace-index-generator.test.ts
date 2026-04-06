@@ -16,12 +16,12 @@ import {
   _sanitizeMermaidId,
   _buildMermaidDiagram,
   _expandGlobPatterns,
-} from '../../src/panoramic/workspace-index-generator.js';
+} from '../../src/panoramic/generators/workspace-index-generator.js';
 import type {
   WorkspacePackageInfo,
   WorkspaceInput,
   WorkspaceOutput,
-} from '../../src/panoramic/workspace-index-generator.js';
+} from '../../src/panoramic/generators/workspace-index-generator.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 
 // ============================================================

@@ -7,7 +7,7 @@ import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { analyzeFiles } from '../../src/core/ast-analyzer.js';
 import type { DependencyGraph } from '../../src/models/dependency-graph.js';
-import { scanStoredModuleSpecs } from '../../src/panoramic/doc-graph-builder.js';
+import { scanStoredModuleSpecs } from '../../src/panoramic/builders/doc-graph-builder.js';
 import { DeltaRegenerator } from '../../src/batch/delta-regenerator.js';
 
 describe('DeltaRegenerator', () => {

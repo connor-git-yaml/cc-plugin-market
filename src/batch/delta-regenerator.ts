@@ -10,7 +10,7 @@ import {
   buildDocGraph,
   resolveSpecForSource,
   type StoredModuleSpecSummary,
-} from '../panoramic/doc-graph-builder.js';
+} from '../panoramic/builders/doc-graph-builder.js';
 import { loadTemplate } from '../panoramic/utils/template-loader.js';
 import type { ModuleGroup } from './module-grouper.js';
 

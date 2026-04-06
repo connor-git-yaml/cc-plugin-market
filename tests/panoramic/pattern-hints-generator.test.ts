@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import * as panoramic from '../../src/panoramic/index.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
-import { PatternHintsGenerator } from '../../src/panoramic/pattern-hints-generator.js';
+import { PatternHintsGenerator } from '../../src/panoramic/generators/pattern-hints-generator.js';
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pattern-hints-test-'));

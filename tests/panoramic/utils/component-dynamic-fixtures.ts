@@ -4,10 +4,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { CodeSkeleton, ExportSymbol, ImportReference } from '../../../src/models/code-skeleton.js';
 import type { ModuleSpec } from '../../../src/models/module-spec.js';
-import type { ArchitectureIR, ArchitectureIREvidence, ArchitectureIRRelationship, ArchitectureIRView } from '../../../src/panoramic/architecture-ir-model.js';
-import { summarizeArchitectureIR } from '../../../src/panoramic/architecture-ir-model.js';
-import type { EventSurfaceOutput } from '../../../src/panoramic/event-surface-generator.js';
-import type { RuntimeTopologyOutput } from '../../../src/panoramic/runtime-topology-generator.js';
+import type { ArchitectureIR, ArchitectureIREvidence, ArchitectureIRRelationship, ArchitectureIRView } from '../../../src/panoramic/models/architecture-ir-model.js';
+import { summarizeArchitectureIR } from '../../../src/panoramic/models/architecture-ir-model.js';
+import type { EventSurfaceOutput } from '../../../src/panoramic/generators/event-surface-generator.js';
+import type { RuntimeTopologyOutput } from '../../../src/panoramic/generators/runtime-topology-generator.js';
 import { loadStoredModuleSpecs, type StoredModuleSpecRecord } from '../../../src/panoramic/stored-module-specs.js';
 import { renderSpec } from '../../../src/generator/spec-renderer.js';
 

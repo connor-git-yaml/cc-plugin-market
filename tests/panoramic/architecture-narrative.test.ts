@@ -7,7 +7,7 @@ import { renderSpec } from '../../src/generator/spec-renderer.js';
 import {
   buildArchitectureNarrative,
   renderArchitectureNarrative,
-} from '../../src/panoramic/architecture-narrative.js';
+} from '../../src/panoramic/pipelines/architecture-narrative.js';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 
 describe('architecture-narrative', () => {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildComponentView } from '../../src/panoramic/component-view-builder.js';
-import { buildDynamicScenarios, renderDynamicScenarios } from '../../src/panoramic/dynamic-scenarios-builder.js';
-import type { DynamicScenario } from '../../src/panoramic/component-view-model.js';
+import { buildComponentView } from '../../src/panoramic/builders/component-view-builder.js';
+import { buildDynamicScenarios, renderDynamicScenarios } from '../../src/panoramic/builders/dynamic-scenarios-builder.js';
+import type { DynamicScenario } from '../../src/panoramic/models/component-view-model.js';
 import {
   cleanupComponentDynamicFixture,
   setupComponentDynamicFixture,

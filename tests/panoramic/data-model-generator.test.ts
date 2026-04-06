@@ -34,7 +34,7 @@ import {
   type DataModelInput,
   type DataModelOutput,
   type ModelRelation,
-} from '../../src/panoramic/data-model-generator.js';
+} from '../../src/panoramic/generators/data-model-generator.js';
 import { GeneratorRegistry } from '../../src/panoramic/generator-registry.js';
 import {
   enrichFieldDescriptions,

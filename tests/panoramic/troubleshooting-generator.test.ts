@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import { TroubleshootingGenerator } from '../../src/panoramic/troubleshooting-generator.js';
+import { TroubleshootingGenerator } from '../../src/panoramic/generators/troubleshooting-generator.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 
 function createTempDir(): string {

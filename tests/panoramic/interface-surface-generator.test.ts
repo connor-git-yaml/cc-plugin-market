@@ -6,7 +6,7 @@ import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
-import { InterfaceSurfaceGenerator } from '../../src/panoramic/interface-surface-generator.js';
+import { InterfaceSurfaceGenerator } from '../../src/panoramic/generators/interface-surface-generator.js';
 import { renderSpec } from '../../src/generator/spec-renderer.js';
 
 function createTempDir(): string {

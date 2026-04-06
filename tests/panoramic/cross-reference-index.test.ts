@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
 import { buildCrossReferenceIndex } from '../../src/panoramic/cross-reference-index.js';
-import type { DocGraph } from '../../src/panoramic/doc-graph-builder.js';
+import type { DocGraph } from '../../src/panoramic/builders/doc-graph-builder.js';
 
 describe('CrossReferenceIndex', () => {
   it('为当前 ModuleSpec 生成同模块与跨模块链接', () => {

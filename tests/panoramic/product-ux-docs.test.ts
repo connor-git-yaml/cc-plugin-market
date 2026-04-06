@@ -9,7 +9,7 @@ vi.mock('node:child_process', () => ({
   spawnSync: spawnSyncMock,
 }));
 
-import { generateProductUxDocs } from '../../src/panoramic/product-ux-docs.js';
+import { generateProductUxDocs } from '../../src/panoramic/pipelines/product-ux-docs.js';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 
 describe('generateProductUxDocs', () => {

@@ -29,18 +29,18 @@ import {
   buildDocGraph,
   scanStoredModuleSpecs,
   type StoredModuleSpecSummary,
-} from '../panoramic/doc-graph-builder.js';
+} from '../panoramic/builders/doc-graph-builder.js';
 import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js';
 import { renderSpec } from '../generator/spec-renderer.js';
-import { CoverageAuditor } from '../panoramic/coverage-auditor.js';
+import { CoverageAuditor } from '../panoramic/pipelines/coverage-auditor.js';
 import { buildProjectContext } from '../panoramic/project-context.js';
 import {
   generateBatchProjectDocs,
   generateDocsQualityReport,
   type BatchProjectDocsResult,
 } from '../panoramic/batch-project-docs.js';
-import { orchestrateDocsBundle } from '../panoramic/docs-bundle-orchestrator.js';
-import type { DocsBundleProfileSummary } from '../panoramic/docs-bundle-types.js';
+import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
+import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 
 // ============================================================
 // 类型定义

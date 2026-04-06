@@ -13,25 +13,25 @@ import {
   renderArchitectureNarrative,
   type ArchitectureNarrativeOutput,
   type BatchGeneratedDocSummary,
-} from './architecture-narrative.js';
-import { generateBatchAdrDocs, type AdrIndexOutput } from './adr-decision-pipeline.js';
-import { buildComponentView, renderComponentView } from './component-view-builder.js';
-import { buildDynamicScenarios, renderDynamicScenarios } from './dynamic-scenarios-builder.js';
-import { evaluateDocsQuality, renderDocsQualityReport } from './docs-quality-evaluator.js';
-import { readDocsBundleManifest } from './docs-bundle-manifest-reader.js';
+} from './pipelines/architecture-narrative.js';
+import { generateBatchAdrDocs, type AdrIndexOutput } from './pipelines/adr-decision-pipeline.js';
+import { buildComponentView, renderComponentView } from './builders/component-view-builder.js';
+import { buildDynamicScenarios, renderDynamicScenarios } from './builders/dynamic-scenarios-builder.js';
+import { evaluateDocsQuality, renderDocsQualityReport } from './pipelines/docs-quality-evaluator.js';
+import { readDocsBundleManifest } from './pipelines/docs-bundle-manifest-reader.js';
 import {
   generateProductUxDocs,
   type GenerateProductUxDocsResult,
-} from './product-ux-docs.js';
+} from './pipelines/product-ux-docs.js';
 import {
   getBatchProjectOutputBaseName,
   isBatchProjectGeneratorId,
 } from './output-filenames.js';
-import type { ArchitectureOverviewOutput } from './architecture-overview-generator.js';
-import type { ArchitectureIROutput } from './architecture-ir-generator.js';
-import type { EventSurfaceOutput } from './event-surface-generator.js';
-import type { PatternHintsOutput } from './pattern-hints-model.js';
-import type { RuntimeTopologyOutput } from './runtime-topology-generator.js';
+import type { ArchitectureOverviewOutput } from './generators/architecture-overview-generator.js';
+import type { ArchitectureIROutput } from './generators/architecture-ir-generator.js';
+import type { EventSurfaceOutput } from './generators/event-surface-generator.js';
+import type { PatternHintsOutput } from './models/pattern-hints-model.js';
+import type { RuntimeTopologyOutput } from './generators/runtime-topology-generator.js';
 import { loadStoredModuleSpecs } from './stored-module-specs.js';
 
 export interface BatchProjectDocsResult {

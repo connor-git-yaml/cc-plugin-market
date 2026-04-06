@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { evaluateDocsQuality, renderDocsQualityReport } from '../../src/panoramic/docs-quality-evaluator.js';
-import type { ArchitectureNarrativeOutput, BatchGeneratedDocSummary } from '../../src/panoramic/architecture-narrative.js';
+import { evaluateDocsQuality, renderDocsQualityReport } from '../../src/panoramic/pipelines/docs-quality-evaluator.js';
+import type { ArchitectureNarrativeOutput, BatchGeneratedDocSummary } from '../../src/panoramic/pipelines/architecture-narrative.js';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import type { ComponentViewOutput, DynamicScenariosOutput } from '../../src/panoramic/component-view-model.js';
-import type { AdrIndexOutput } from '../../src/panoramic/adr-decision-pipeline.js';
-import type { FeatureBriefIndexOutput, ProductOverviewOutput, UserJourneysOutput } from '../../src/panoramic/product-ux-docs.js';
-import type { RuntimeTopologyOutput } from '../../src/panoramic/runtime-topology-generator.js';
+import type { ComponentViewOutput, DynamicScenariosOutput } from '../../src/panoramic/models/component-view-model.js';
+import type { AdrIndexOutput } from '../../src/panoramic/pipelines/adr-decision-pipeline.js';
+import type { FeatureBriefIndexOutput, ProductOverviewOutput, UserJourneysOutput } from '../../src/panoramic/pipelines/product-ux-docs.js';
+import type { RuntimeTopologyOutput } from '../../src/panoramic/generators/runtime-topology-generator.js';
 
 const tempDirs: string[] = [];
 

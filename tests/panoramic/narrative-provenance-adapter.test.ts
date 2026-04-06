@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { adaptArchitectureNarrativeProvenance } from '../../src/panoramic/narrative-provenance-adapter.js';
-import type { ArchitectureNarrativeOutput } from '../../src/panoramic/architecture-narrative.js';
+import { adaptArchitectureNarrativeProvenance } from '../../src/panoramic/pipelines/narrative-provenance-adapter.js';
+import type { ArchitectureNarrativeOutput } from '../../src/panoramic/pipelines/architecture-narrative.js';
 
 describe('adaptArchitectureNarrativeProvenance', () => {
   it('将 architecture-narrative 包装为 section-level provenance records', () => {

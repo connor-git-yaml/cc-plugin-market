@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildComponentView, renderComponentView } from '../../src/panoramic/component-view-builder.js';
-import type { ComponentDescriptor } from '../../src/panoramic/component-view-model.js';
+import { buildComponentView, renderComponentView } from '../../src/panoramic/builders/component-view-builder.js';
+import type { ComponentDescriptor } from '../../src/panoramic/models/component-view-model.js';
 import {
   cleanupComponentDynamicFixture,
   setupComponentDynamicFixture,

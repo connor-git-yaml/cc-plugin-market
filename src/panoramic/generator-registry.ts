@@ -21,19 +21,19 @@ import type { z } from 'zod';
 import type { DocumentGenerator, ProjectContext } from './interfaces.js';
 import { GeneratorMetadataSchema } from './interfaces.js';
 import { AbstractRegistry } from './abstract-registry.js';
-import { MockReadmeGenerator } from './mock-readme-generator.js';
-import { ConfigReferenceGenerator } from './config-reference-generator.js';
-import { DataModelGenerator } from './data-model-generator.js';
-import { WorkspaceIndexGenerator } from './workspace-index-generator.js';
-import { CrossPackageAnalyzer } from './cross-package-analyzer.js';
+import { MockReadmeGenerator } from './generators/mock-readme-generator.js';
+import { ConfigReferenceGenerator } from './generators/config-reference-generator.js';
+import { DataModelGenerator } from './generators/data-model-generator.js';
+import { WorkspaceIndexGenerator } from './generators/workspace-index-generator.js';
+import { CrossPackageAnalyzer } from './generators/cross-package-analyzer.js';
 import { ApiSurfaceGenerator } from './api-surface/index.js';
-import { InterfaceSurfaceGenerator } from './interface-surface-generator.js';
-import { RuntimeTopologyGenerator } from './runtime-topology-generator.js';
-import { EventSurfaceGenerator } from './event-surface-generator.js';
-import { TroubleshootingGenerator } from './troubleshooting-generator.js';
-import { ArchitectureOverviewGenerator } from './architecture-overview-generator.js';
-import { ArchitectureIRGenerator } from './architecture-ir-generator.js';
-import { PatternHintsGenerator } from './pattern-hints-generator.js';
+import { InterfaceSurfaceGenerator } from './generators/interface-surface-generator.js';
+import { RuntimeTopologyGenerator } from './generators/runtime-topology-generator.js';
+import { EventSurfaceGenerator } from './generators/event-surface-generator.js';
+import { TroubleshootingGenerator } from './generators/troubleshooting-generator.js';
+import { ArchitectureOverviewGenerator } from './generators/architecture-overview-generator.js';
+import { ArchitectureIRGenerator } from './generators/architecture-ir-generator.js';
+import { PatternHintsGenerator } from './generators/pattern-hints-generator.js';
 
 // ============================================================
 // GeneratorEntry 接口

@@ -12,7 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
-import { RuntimeTopologyGenerator } from '../../src/panoramic/runtime-topology-generator.js';
+import { RuntimeTopologyGenerator } from '../../src/panoramic/generators/runtime-topology-generator.js';
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'runtime-topology-test-'));
