@@ -85,6 +85,14 @@ export function generateFallbackConfig() {
           { id: '2', name: 'verify', display_name: '质量验证', agent: 'verify', agent_mode: 'single', gates_before: [], gates_after: ['GATE_VERIFY'], conditional: null, skip_if_exists: null, is_critical: true },
         ],
       },
+      refactor: {
+        name: 'Refactor Mode - Fallback', description: 'Minimal refactor mode',
+        phases: [
+          { id: '1', name: 'impact_analysis', display_name: '影响分析', agent: 'refactor-plan', agent_mode: 'single', gates_before: [], gates_after: [], conditional: null, skip_if_exists: null, is_critical: true },
+          { id: '2', name: 'batch_implement', display_name: '代码重构', agent: 'implement', agent_mode: 'single', gates_before: [], gates_after: [], conditional: null, skip_if_exists: null, is_critical: true },
+          { id: '3', name: 'final_verify', display_name: '验证与交付', agent: 'verify', agent_mode: 'single', gates_before: [], gates_after: ['GATE_VERIFY'], conditional: null, skip_if_exists: null, is_critical: true },
+        ],
+      },
     },
   };
 }
