@@ -95,8 +95,8 @@ echo "[Orchestrator] 已加载 feature 模式编排配置（${PHASE_COUNT} 个 P
 通过编排器查询 Gate 行为：
 
 ```bash
-# 查询 feature 模式下的所有 Gate
-for GATE in GATE_RESEARCH GATE_DESIGN GATE_ANALYSIS GATE_TASKS GATE_VERIFY; do
+# 查询 feature 模式下的所有 Gate（含中期门禁）
+for GATE in GATE_RESEARCH GATE_DESIGN GATE_ANALYSIS GATE_TASKS GATE_IMPLEMENT_MID GATE_VERIFY; do
   BEHAVIOR=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-gate-behavior feature $GATE)
   # 解析 BEHAVIOR JSON，提取 behavior 字段和 is_hard_gate 标记
 done

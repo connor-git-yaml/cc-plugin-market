@@ -109,7 +109,7 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 通过 Orchestrator 查询 implement 模式的 Gate 行为（4-tier 优先级：user_config > hard_gate > gate_policy > yaml_default）：
 
 ```bash
-for GATE in GATE_TASKS GATE_VERIFY; do
+for GATE in GATE_TASKS GATE_IMPLEMENT_MID GATE_VERIFY; do
   behavior[$GATE] = Orchestrator.getGateBehavior("$GATE").behavior
 done
 ```
@@ -365,6 +365,34 @@ implement:
 
 `[4/6] 正在执行代码实施...`
 
+#### GATE_IMPLEMENT_MID 前置计算
+
+在进入子代理调用前，编排器先计算是否需要中期门禁：
+
+```text
+1. 解析 tasks.md 中的 top-level task 行
+   - 匹配模式: 行首（忽略前导空格 0-3 个）以 `- [ ]` 或 `- [x]` 或 `- [X]` 开头的行
+   - 仅计数第一级 checkbox（Markdown 缩进层级 0 或 Phase 标题下第一级）
+   - 嵌套子任务（缩进 >= 4 空格或 >= 1 tab 的 checkbox）不计入
+   - 设 total_tasks = 匹配到的 top-level task 行总数
+
+2. 判断是否触发 GATE_IMPLEMENT_MID:
+   if total_tasks 无法解析（正则无匹配结果）:
+     gate_mid_enabled = false
+     输出: [GATE] GATE_IMPLEMENT_MID | SKIPPED | reason=tasks_unparseable
+   elif total_tasks <= 5:
+     gate_mid_enabled = false
+     输出: [GATE] GATE_IMPLEMENT_MID | SKIPPED | reason=task_count<=5
+   else:
+     gate_mid_enabled = true
+     mid_point = floor(total_tasks * 0.5)
+     输出: [INFO] GATE_IMPLEMENT_MID 已启用 | total_tasks={total_tasks} | mid_point={mid_point}
+```
+
+#### 分支 A: 跳过门禁（gate_mid_enabled = false）
+
+直接执行完整 Phase 4，与原有逻辑完全一致：
+
 读取 `prompt_source[implement]`，调用 Task(description: "执行成熟 spec 实施", prompt: "{implement prompt}" + "{上下文注入 + spec.md + plan.md + tasks.md 路径}", model: "{config.agents.implement.model}")。
 
 在 prompt 中追加指示：
@@ -372,6 +400,118 @@ implement:
 ```text
 [IMPLEMENT 模式] 本次实施建立在成熟 spec/plan 上。
 - 严格按 tasks.md 落地
+- 不重新打开调研阶段
+- 若发现 spec/plan 与真实代码冲突，仅修补与本次任务直接相关的必要差异
+- 完成声明仍必须遵守验证铁律，给出实际命令与输出证据
+```
+
+#### 分支 B: 触发门禁（gate_mid_enabled = true）
+
+将 Phase 4 拆分为 Phase 4a → GATE_IMPLEMENT_MID → Phase 4b：
+
+##### Phase 4a: 前半段实施
+
+读取 `prompt_source[implement]`，调用 Task(description: "执行前半段实施（前 {mid_point} 个任务）", prompt: "{implement prompt}" + "{上下文注入 + spec.md + plan.md + tasks.md 路径}" + "{4a 追加指令}", model: "{config.agents.implement.model}")。
+
+**4a 追加指令**：
+
+```text
+[IMPLEMENT 模式 — 分段实施 Phase 4a]
+本次实施建立在成熟 spec/plan 上。
+
+**重要: 本次仅执行 tasks.md 中的前 {mid_point} 个 top-level 任务。**
+
+执行要求:
+- 严格按 tasks.md 顺序，完成前 {mid_point} 个 top-level 任务后停止
+- 每完成一个 task，在 tasks.md 中将对应 checkbox 标记为 [x]
+- 不重新打开调研阶段
+- 若发现 spec/plan 与真实代码冲突，仅修补与本次任务直接相关的必要差异
+
+完成时返回以下信息（中期进度报告）:
+1. 已完成的 task 编号/标题列表
+2. 本次变更的文件列表（每个文件的路径和变更类型：新增/修改/删除）
+3. 执行过程中遇到的异常或与预期不符的情况（如有）
+4. 对 tasks.md 前置假设的观察（如发现某些假设不成立，明确列出）
+```
+
+若 Phase 4a 子代理调用失败（返回错误或超时），不进入 GATE_IMPLEMENT_MID，直接标记 Phase 4 为 FAILED 并进入错误处理流程。
+
+##### GATE_IMPLEMENT_MID: 中期门禁
+
+**此阶段由编排器亲自执行，不委派子代理。**
+
+```text
+1. 获取 behavior[GATE_IMPLEMENT_MID]
+
+2. 收集检查输入:
+   - 从 Phase 4a 子代理返回中提取: 已完成 task 列表、变更文件列表、异常观察
+   - 读取 plan.md 的变更文件预期范围
+   - 读取 tasks.md 中的前置条件和依赖假设
+
+3. 执行检查（两项轻量级信号检测）:
+
+   检查项 A — 架构劣化信号:
+     对比 Phase 4a 的变更文件列表与 plan.md 的预期范围
+     - 变更文件全部在 plan.md 预期范围内 → PASS
+     - 出现少量 plan.md 未提及的辅助文件变更（如 package-lock.json、测试文件）→ WARNING
+     - 出现 plan.md 未提及的核心模块/架构层文件变更 → CRITICAL
+     判定: PASS | WARNING | CRITICAL
+
+   检查项 B — 前置假设验证:
+     检查 tasks.md 中声明的前置条件在实施过程中是否仍然成立
+     - Phase 4a 子代理未报告异常 → PASS
+     - 异常涉及已完成任务的内部实现细节 → WARNING
+     - 异常涉及剩余任务的前置条件 → CRITICAL
+     判定: PASS | WARNING | CRITICAL
+
+   综合判定:
+     if 任一检查项为 CRITICAL:
+       gate_result = CRITICAL
+     elif 任一检查项为 WARNING:
+       gate_result = WARNING
+     else:
+       gate_result = PASS
+
+4. 根据 behavior 和 gate_result 决策:
+   - always → 暂停展示检查结果摘要，用户选择:
+     A) 修复后继续（编排器等待用户修复后重新进入 Phase 4b）
+     B) 强制继续（忽略问题，进入 Phase 4b）
+     C) 中止（终止实施流程）
+   - auto → 自动继续（仅在日志中记录检查结果）
+   - on_failure →
+     if gate_result == CRITICAL:
+       暂停展示检查结果，用户选择 A/B/C
+     else:
+       自动继续
+
+5. 输出:
+   [GATE] GATE_IMPLEMENT_MID | policy={gate_policy} | override={有/无} | decision={PAUSE|AUTO_CONTINUE} | reason={理由}
+   [GATE_DETAIL] architecture_drift={PASS|WARNING|CRITICAL} | assumption_validity={PASS|WARNING|CRITICAL}
+```
+
+##### Phase 4b: 后半段实施
+
+读取 `prompt_source[implement]`，调用 Task(description: "执行后半段实施（剩余任务）", prompt: "{implement prompt}" + "{上下文注入 + spec.md + plan.md + tasks.md 路径}" + "{4b 追加指令}", model: "{config.agents.implement.model}")。
+
+**4b 追加指令**：
+
+```text
+[IMPLEMENT 模式 — 分段实施 Phase 4b]
+本次实施建立在成熟 spec/plan 上。
+
+**重要: 本次继续执行 tasks.md 中尚未完成的剩余 top-level 任务。**
+
+前半段实施摘要（Phase 4a 已完成）:
+- 已完成 task: {4a 已完成的 task 编号/标题列表}
+- 已变更文件: {4a 变更文件列表}
+- 异常观察: {4a 报告的异常，若无则 "无"}
+{若 GATE_IMPLEMENT_MID 产生了 WARNING 以上的发现}:
+- 门禁检查发现: {检查结果摘要}
+- 用户决策: {用户在门禁中的选择}
+
+执行要求:
+- 从 tasks.md 中第一个未标记 [x] 的 top-level task 开始，按顺序完成全部剩余任务
+- 每完成一个 task，在 tasks.md 中将对应 checkbox 标记为 [x]
 - 不重新打开调研阶段
 - 若发现 spec/plan 与真实代码冲突，仅修补与本次任务直接相关的必要差异
 - 完成声明仍必须遵守验证铁律，给出实际命令与输出证据
