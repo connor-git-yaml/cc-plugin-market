@@ -1,6 +1,6 @@
 # Spec Driver
 
-> 当前发布版本: v3.10.1
+> 当前发布版本: v3.11.0
 
 **自治研发编排器** — 支持 8 种模式（feature/implement/story/fix/resume/sync/doc/refactor），一键触发 Spec-Driven Development 全流程。基于 orchestration.yaml 配置驱动，含 6 个质量门禁和 15 个专业子代理。
 
