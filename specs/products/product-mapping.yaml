@@ -158,7 +158,7 @@ products:
         summary: "统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路"
 
   spec-driver:
-    description: "Spec Driver v3.10.1 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc 七种模式，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver、Project Context Suggestions、canonical project-context 初始化、wrapper source-of-truth、release contract、repo:sync / repo:check 与产品级生成产物分层，同时显式校验架构合理性与可读性"
+    description: "Spec Driver v3.11.0 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式，基于 orchestration.yaml 配置驱动编排、6 个质量门禁（含 GATE_IMPLEMENT_MID 中期检查）、sync-merge-engine 确定性合并、15 个专业子代理，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与 release contract"
     specs:
       - id: "011-speckit-driver-pro"
         type: INITIAL

@@ -53,6 +53,10 @@ vi.mock('../../src/diff/drift-orchestrator.js', () => ({
   detectDrift: mocks.detectDrift,
 }));
 
+vi.mock('../../src/config/project-config.js', () => ({
+  loadProjectConfig: vi.fn(() => ({})),
+}));
+
 import { createMcpServer } from '../../src/mcp/server.js';
 
 function findTool(server: any, name: string) {
@@ -186,6 +190,32 @@ describe('createMcpServer', () => {
     const callArgs = mocks.runBatch.mock.calls[0]!;
     expect(callArgs[1]).toEqual(
       expect.objectContaining({ languages: ['ts-js', 'python'] }),
+    );
+  });
+
+  // ────────────────────────────────────────────────────────────
+  // T094-05: batch 工具接受 incremental 参数并正确传递给 runBatch()
+  // ────────────────────────────────────────────────────────────
+  it('T094-05: batch handler 接受 incremental 参数并传递给 runBatch', async () => {
+    const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 1,
+      successful: ['a'],
+      failed: [],
+      skipped: [],
+      degraded: [],
+      duration: 1,
+      indexGenerated: true,
+      summaryLogPath: 'specs/x.md',
+    });
+    const tool = findTool(server, 'batch');
+
+    await tool.handler({ projectRoot: '/tmp/p', force: false, incremental: true });
+
+    expect(mocks.runBatch).toHaveBeenCalledTimes(1);
+    const callArgs = mocks.runBatch.mock.calls[0]!;
+    expect(callArgs[1]).toEqual(
+      expect.objectContaining({ incremental: true }),
     );
   });
 

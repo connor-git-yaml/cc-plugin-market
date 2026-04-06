@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-05T16:15:26.128Z",
+  "generatedAt": "2026-04-06T14:46:58.426Z",
   "productId": "spec-driver",
-  "status": "healthy",
+  "status": "insufficient-data",
   "summary": {
-    "totalRuns": 5,
-    "activeWorkflowCount": 2,
-    "overallSuccessRate": 100,
+    "totalRuns": 0,
+    "activeWorkflowCount": 0,
+    "overallSuccessRate": 0,
     "overallFailureRate": 0,
     "overallPausedRate": 0,
     "topWorkflow": {
-      "id": "spec-driver-feature",
-      "title": "新功能研发",
-      "totalRuns": 4
+      "id": "spec-driver-doc",
+      "title": "开源文档生成",
+      "totalRuns": 0
     }
   },
   "stats": {
-    "logFileCount": 1,
-    "validRunCount": 5,
+    "logFileCount": 0,
+    "validRunCount": 0,
     "invalidLineCount": 0,
     "workflowCount": 7,
-    "runsWithPhaseDurations": 5
+    "runsWithPhaseDurations": 0
   },
   "workflowSummaries": [
     {
@@ -43,17 +43,17 @@
       "id": "spec-driver-feature",
       "title": "新功能研发",
       "persona": "功能开发者",
-      "totalRuns": 4,
-      "successRuns": 4,
+      "totalRuns": 0,
+      "successRuns": 0,
       "failedRuns": 0,
       "pausedRuns": 0,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 100,
+      "successRate": 0,
       "failureRate": 0,
       "rerunRate": 0,
-      "averageDurationMs": 144500,
-      "lastRunAt": "2026-04-04T16:55:41.078Z"
+      "averageDurationMs": null,
+      "lastRunAt": null
     },
     {
       "id": "spec-driver-fix",
@@ -123,50 +123,31 @@
       "id": "spec-driver-sync",
       "title": "产品事实聚合",
       "persona": "产品文档负责人",
-      "totalRuns": 1,
-      "successRuns": 1,
+      "totalRuns": 0,
+      "successRuns": 0,
       "failedRuns": 0,
       "pausedRuns": 0,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 100,
+      "successRate": 0,
       "failureRate": 0,
       "rerunRate": 0,
-      "averageDurationMs": 87000,
-      "lastRunAt": "2026-04-04T16:55:41.078Z"
+      "averageDurationMs": null,
+      "lastRunAt": null
     }
   ],
   "friction": {
     "rerunHotspots": [],
     "gatePauseHotspots": [],
     "verificationFailureHotspots": [],
-    "slowestPhases": [
-      {
-        "phase": "research",
-        "sampleCount": 4,
-        "averageDurationMs": 61250
-      },
-      {
-        "phase": "aggregate",
-        "sampleCount": 1,
-        "averageDurationMs": 42000
-      },
-      {
-        "phase": "verify",
-        "sampleCount": 4,
-        "averageDurationMs": 25750
-      },
-      {
-        "phase": "adoption",
-        "sampleCount": 1,
-        "averageDurationMs": 12000
-      }
-    ]
+    "slowestPhases": []
   },
   "scorecardContext": {
     "status": "pass",
     "score": 100,
     "reportPath": "specs/products/spec-driver/_generated/scorecard-report.json"
   },
-  "warnings": []
+  "warnings": [
+    "未发现可用的 workflow run 事件，adoption 报告仅输出空摘要"
+  ]
 }

@@ -11,6 +11,8 @@ export interface CLICommand {
   deep: boolean;
   force: boolean;
   incremental?: boolean;
+  /** 语言过滤（如 ['typescript', 'python']），仅处理指定语言（仅 batch） */
+  languages?: string[];
   outputDir?: string;
   version: boolean;
   help: boolean;
@@ -22,6 +24,8 @@ export interface CLICommand {
   skillTarget: 'claude' | 'codex' | 'both';
   /** --verify 选项（仅 auth-status 子命令） */
   verify?: boolean;
+  /** 用户在 CLI 中显式提供的参数名集合（用于与配置文件合并） */
+  _explicitFlags?: Set<string>;
 }
 
 /** 解析错误 */
@@ -186,6 +190,15 @@ export function parseArgs(argv: string[]): ParseResult {
       },
     };
   }
+  if (argv.includes('--languages') && sub !== 'batch') {
+    return {
+      ok: false,
+      error: {
+        type: 'invalid_option',
+        message: '--languages 选项仅在 batch 子命令下有效',
+      },
+    };
+  }
 
   if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server') {
     return {
@@ -203,6 +216,10 @@ export function parseArgs(argv: string[]): ParseResult {
   const incremental = argv.includes('--incremental');
   const outputDirIdx = argv.indexOf('--output-dir');
   const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+  const languagesIdx = argv.indexOf('--languages');
+  const languages = languagesIdx !== -1 && argv[languagesIdx + 1]
+    ? argv[languagesIdx + 1]!.split(',').map(s => s.trim()).filter(Boolean)
+    : undefined;
 
   // 提取位置参数（排除选项和选项值）
   const positional = extractPositionalArgs(argv.slice(1));
@@ -235,6 +252,12 @@ export function parseArgs(argv: string[]): ParseResult {
   }
 
   if (sub === 'batch') {
+    const explicitFlags = new Set<string>();
+    if (argv.includes('--force')) explicitFlags.add('force');
+    if (argv.includes('--incremental')) explicitFlags.add('incremental');
+    if (languagesIdx !== -1) explicitFlags.add('languages');
+    if (outputDirIdx !== -1) explicitFlags.add('outputDir');
+
     return {
       ok: true,
       command: {
@@ -242,12 +265,14 @@ export function parseArgs(argv: string[]): ParseResult {
         deep: false,
         force,
         incremental,
+        languages,
         outputDir,
         version: false,
         help: false,
         global: false,
         remove: false,
         skillTarget: defaultSkillTarget(),
+        _explicitFlags: explicitFlags,
       },
     };
   }
@@ -288,7 +313,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages') {
         i++; // 跳过选项值
       }
       continue;

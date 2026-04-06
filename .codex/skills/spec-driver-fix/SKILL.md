@@ -2,6 +2,9 @@
 name: spec-driver-fix
 description: "快速问题修复 — 4 阶段完成：诊断-规划-修复-验证"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: sonnet
+effort: medium
 ---
 
 ## Wrapper Source Contract
@@ -109,35 +112,17 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 
 说明：`online_research_min_points=0` 允许“本次不做在线调研点”，但必须记录 `skip_reason`（见 Step 5.5 产物格式与 GATE_DESIGN 前置硬门禁）。
 
-### 3. 门禁配置加载
+### 3. 门禁配置加载（通过编排器查询）
 
-读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+通过 Orchestrator 查询 fix 模式的 Gate 行为（4-tier 优先级：user_config > hard_gate > gate_policy > yaml_default）：
 
-```text
-1. 读取 gate_policy 字段（默认 balanced）
-   - 如果值无法识别，输出警告并回退到 balanced
-
-2. 读取 gates 字段（默认空）
-   - 如果包含无法识别的门禁名称，输出警告但不阻断
-
-3. Fix 模式门禁子集: GATE_DESIGN, GATE_VERIFY（2 个，无 GATE_RESEARCH/GATE_ANALYSIS/GATE_TASKS）
-
-4. 构建行为表:
-   for GATE in [GATE_DESIGN, GATE_VERIFY]:
-     if gates.{GATE}.pause 有配置:
-       behavior[GATE] = gates.{GATE}.pause
-     else:
-       根据 gate_policy 应用默认行为
-
-balanced 默认值表:
-  | 门禁         | 默认行为 | 分类       |
-  | ------------ | -------- | ---------- |
-  | GATE_DESIGN  | always   | 关键       |
-  | GATE_VERIFY  | always   | 关键       |
-
-strict 默认值: 全部 always
-autonomous 默认值: 全部 on_failure
+```bash
+for GATE in GATE_DESIGN GATE_VERIFY; do
+  behavior[$GATE] = Orchestrator.getGateBehavior("$GATE").behavior
+done
 ```
+
+Gate 行为表由 `orchestration.yaml` + `spec-driver.config.yaml` 联合决定，无需在此硬编码默认值。
 
 ### 4. 特性目录准备
 
@@ -226,8 +211,26 @@ autonomous 默认值: 全部 on_failure
 
 执行以下诊断步骤：
 
-1. **根因定位**: 基于问题描述和问题上下文报告，分析可能的根因
-2. **影响范围评估**: 确定受影响的文件、模块和功能点
+1. **5-Why 根因追溯**
+   从表面症状出发，连续追问至少 5 层 Why，直到定位根本原因：
+   - Why 1: 表面症状为何发生？→ 直接触发条件
+   - Why 2: 该触发条件为何存在？→ 上游逻辑缺陷
+   - Why 3: 上游逻辑为何有缺陷？→ 设计假设/边界条件
+   - Why 4: 该假设为何不成立？→ 需求变化/环境差异
+   - Why 5: 为何未被现有机制捕获？→ 测试/监控盲区
+   输出 root cause chain（从表面到根因的完整链条）。
+   如果在第 3-4 层已经到达明确根因，可以提前终止并标注 `[ROOT CAUSE REACHED at Why {N}]`。
+
+2. **影响范围扫描**
+   检查同一 pattern 是否在其他位置存在：
+   - 使用 Grep 搜索与根因相同的代码模式（函数调用、条件判断、数据访问模式）
+   - 标记所有匹配位置，区分：
+     - `[同源]`：与当前 bug 共享相同根因，需同步修复
+     - `[类似]`：模式相似但上下文不同，需评估是否受影响
+     - `[安全]`：模式相似但有防护措施，无需修复
+   - 检查修复是否需要同步更新：调用方、测试文件、文档、类型定义
+   - 输出影响范围清单（文件路径 + 分类 + 需要的修复动作）
+
 3. **修复策略制定**: 提出 1-2 个修复方案，标注推荐方案
 4. **Spec 影响评估**: 检查修复是否需要更新现有 spec
 
@@ -239,13 +242,35 @@ autonomous 默认值: 全部 on_failure
 ## 问题描述
 {用户原始描述}
 
-## 根因分析
-- **根因**: {根因描述}
-- **引入原因**: {可能的引入原因，如近期变更、设计缺陷等}
+## 5-Why 根因追溯
 
-## 影响范围
-- 受影响文件: {文件列表}
-- 受影响功能: {功能列表}
+| 层级 | 问题 | 发现 |
+|------|------|------|
+| Why 1 | {表面症状为何发生？} | {直接触发条件} |
+| Why 2 | {触发条件为何存在？} | {上游逻辑缺陷} |
+| Why 3 | {上游逻辑为何有缺陷？} | {设计假设/边界条件} |
+| Why 4 | {假设为何不成立？} | {需求变化/环境差异} |
+| Why 5 | {为何未被捕获？} | {测试/监控盲区} |
+
+**Root Cause**: {根本原因一句话总结}
+**Root Cause Chain**: {症状} → {Why 1} → {Why 2} → ... → {根因}
+
+## 影响范围扫描
+
+### 同源问题（需同步修复）
+| 文件 | 位置 | 模式 | 修复动作 |
+|------|------|------|----------|
+| {path} | L{line} | {pattern} | {action} |
+
+### 类似模式（需评估）
+| 文件 | 位置 | 模式 | 评估结果 |
+|------|------|------|----------|
+| {path} | L{line} | {pattern} | {安全/需修复/待确认} |
+
+### 同步更新清单
+- 调用方: {需要更新的调用方列表}
+- 测试: {需要新增/修改的测试}
+- 文档: {需要更新的文档}
 
 ## 修复策略
 ### 方案 A（推荐）
@@ -445,6 +470,7 @@ if fix-report.md 中受影响文件 > 10 个 或 涉及 > 3 个模块:
 
 ## 模型选择
 
+<!-- 此段落与 spec-driver-feature SKILL.md 共享，后续考虑提取到 docs/shared/ -->
 与 run 模式共享同一套模型配置逻辑与运行时兼容归一化。fix 模式下诊断阶段使用高质量推理模型（逻辑名 `opus`），在 Codex 运行时会按 `model_compat` 自动映射到对应模型；其他阶段默认遵循 preset，仅在显式配置 `agents.{agent_id}.model` 时覆盖。
 
 ---

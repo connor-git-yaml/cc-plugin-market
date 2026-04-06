@@ -2,6 +2,9 @@
 name: spec-driver-resume
 description: "恢复中断的 Spec-driver 研发流程 — 扫描已有制品并从断点继续编排"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: sonnet
+effort: medium
 ---
 
 ## Wrapper Source Contract
@@ -202,6 +205,71 @@ if online_research_required:
 
 ## 中断恢复机制
 
+### 结构化断点恢复（优先路径）
+
+如果 `{feature_dir}/execution-state.json` 存在，优先基于结构化断点精确恢复：
+
+```text
+1. 读取 execution-state.json，解析以下字段：
+   - last_completed: 最后完成的 task ID
+   - in_progress: 当前正在执行的 task ID（中断点）
+   - discovered_issues: 执行过程中发现的问题列表
+   - pending_decisions: 需要人工决策的待定项
+   - modified_files: 已修改的文件路径列表
+
+2. 精确恢复逻辑：
+   - 从 in_progress 对应的 task 恢复执行
+   - 读取 tasks.md 中该 task 及后续 task 的定义
+   - 已完成的 task（last_completed 之前的）跳过，不重新执行
+   - modified_files 用于验证已完成 task 的产物是否完好
+
+3. 问题与决策处理：
+   - discovered_issues 非空时，在恢复前展示给用户：
+     """
+     [恢复] 上次执行中发现以下问题:
+     {issues 列表}
+     是否已解决？(Y/n)
+     """
+   - pending_decisions 非空时，逐项请求用户决策后再继续
+
+4. 输出恢复信息：
+   [恢复] 基于 execution-state.json 精确恢复
+   上次中断点: task {in_progress}（{task 描述}）
+   已完成: {last_completed} 之前的 {N} 个 task
+   待执行: {剩余 task 数} 个 task
+   已修改文件: {modified_files 数量} 个
+   {if discovered_issues: "未解决问题: {count} 个"}
+   {if pending_decisions: "待定决策: {count} 个"}
+```
+
+### execution-state.json 格式规范
+
+```json
+{
+  "version": "1.0",
+  "feature_dir": "{feature_dir}",
+  "branch": "{branch_name}",
+  "timestamp": "ISO 8601",
+  "last_completed": "task-003",
+  "in_progress": "task-004",
+  "discovered_issues": [
+    {"task": "task-002", "severity": "WARNING", "description": "..."}
+  ],
+  "pending_decisions": [
+    {"task": "task-004", "question": "...", "options": ["A", "B"]}
+  ],
+  "modified_files": [
+    "src/foo.ts",
+    "src/bar.ts"
+  ]
+}
+```
+
+### 制品文件回退恢复（无 execution-state.json 时）
+
+如果 `execution-state.json` 不存在，回退到基于制品文件存在性的恢复逻辑：
+
+<!-- Phase 编号参考 spec-driver-feature SKILL.md，如有变更需同步更新 -->
 扫描 `{feature_dir}` 下的制品文件，从后向前确定恢复点：
 
 ```text
@@ -220,11 +288,13 @@ product/tech-research.md 存在  → 从对应阶段恢复
 输出恢复信息：
 
 ```text
-[恢复] 检测到已有制品，从 Phase {N} ({阶段名}) 继续...
+[恢复] {execution-state.json 存在 ? "基于结构化断点精确恢复" : "基于制品文件推断恢复点"}
+从 Phase {N} ({阶段名}) 继续...
 
 已有制品:
   ✅ {已完成的制品列表}
   ⏳ {待生成的制品}
+{if execution-state.json 不存在: "[提示] 未找到 execution-state.json，使用制品文件推断恢复点，精度较低"}
 ```
 
 ---

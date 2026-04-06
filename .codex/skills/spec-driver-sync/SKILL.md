@@ -2,6 +2,9 @@
 name: spec-driver-sync
 description: "聚合功能规范为产品级活文档与 doc 上游事实源 — 将 specs/ 下的增量 spec 合并为 current-spec.md，并生成最小产品 Catalog"
 disable-model-invocation: false
+allowed-tools: [Read, Write, Glob, Bash]
+model: sonnet
+effort: medium
 ---
 
 ## Wrapper Source Contract

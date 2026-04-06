@@ -2,7 +2,7 @@
 
 > **Product**: reverse-spec
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-05T16:15:26.131Z
+> **Generated**: 2026-04-06T14:46:58.428Z
 > **Status**: PASS
 > **Score**: 100/100
 
@@ -189,3 +189,12 @@
   "currentSpecAvailable": true
 }
 ```
+
+## Warnings
+
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.spec-freshness.sourcePath
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.verification-freshness.sourcePath
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.docs-coverage.sourcePath
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.docs-conflicts.sourcePath
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.branch-hygiene.sourcePath
+- scorecard override 忽略非 metadata 字段: default-governance.yaml.workflow-readiness.sourcePath

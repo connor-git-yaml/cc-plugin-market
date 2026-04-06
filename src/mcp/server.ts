@@ -10,6 +10,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.js';
 import { runBatch } from '../batch/batch-orchestrator.js';
+import { loadProjectConfig } from '../config/project-config.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
@@ -140,16 +141,27 @@ export function createMcpServer(): McpServer {
         .string()
         .optional()
         .describe('项目根目录（默认为当前工作目录）'),
-      force: z.boolean().default(false).describe('强制重新生成所有 spec'),
+      force: z.boolean().optional().describe('强制重新生成所有 spec'),
+      incremental: z
+        .boolean()
+        .optional()
+        .describe('仅重生成受影响的 spec（增量模式）'),
       languages: z
         .array(z.string())
         .optional()
         .describe('仅处理指定语言（如 ["typescript", "python"]）'),
     },
-    async ({ projectRoot, force, languages }) => {
+    async ({ projectRoot, force, incremental, languages }) => {
       try {
         const root = projectRoot ?? process.cwd();
-        const result = await runBatch(root, { force, languages });
+
+        // 加载项目配置作为 fallback（MCP 显式参数优先）
+        const fileConfig = loadProjectConfig(root);
+        const result = await runBatch(root, {
+          force: force ?? fileConfig.force,
+          incremental: incremental ?? fileConfig.incremental,
+          languages: languages ?? fileConfig.languages,
+        });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         };

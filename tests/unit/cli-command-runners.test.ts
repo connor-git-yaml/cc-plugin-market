@@ -39,6 +39,11 @@ vi.mock('../../src/utils/specify-template-sync.js', () => ({
   ensureSpecifyTemplates: mocks.ensureSpecifyTemplates,
 }));
 
+vi.mock('../../src/config/project-config.js', () => ({
+  loadProjectConfig: vi.fn(() => ({})),
+  mergeConfig: vi.fn((cliOptions: Record<string, unknown>) => cliOptions),
+}));
+
 vi.mock('../../src/cli/utils/error-handler.js', () => ({
   EXIT_CODES: {
     SUCCESS: 0,

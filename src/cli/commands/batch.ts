@@ -5,6 +5,7 @@
 
 import { runBatch } from '../../batch/batch-orchestrator.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
 import type { CLICommand } from '../utils/parse-args.js';
 
 /**
@@ -19,10 +20,24 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
   }
 
   try {
+    // 加载项目级配置并与 CLI 参数合并
+    const fileConfig = loadProjectConfig(process.cwd());
+    const merged = mergeConfig(
+      {
+        force: command.force,
+        incremental: command.incremental,
+        languages: command.languages,
+        outputDir: command.outputDir,
+      },
+      fileConfig,
+      command._explicitFlags ?? new Set(),
+    );
+
     const result = await runBatch(process.cwd(), {
-      force: command.force,
-      incremental: command.incremental,
-      outputDir: command.outputDir,
+      force: merged.force,
+      incremental: merged.incremental,
+      languages: merged.languages,
+      outputDir: merged.outputDir,
       onProgress: (completed, total) => {
         // 简易进度输出
         const bar = '='.repeat(Math.floor((completed / total) * 20)).padEnd(20, ' ');

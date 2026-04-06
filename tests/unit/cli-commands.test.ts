@@ -123,4 +123,52 @@ describe('parseArgs', () => {
       expect(result.error.type).toBe('missing_args');
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // T094-05: --languages 选项
+  // ────────────────────────────────────────────────────────────
+  it('解析 batch --languages typescript,python', () => {
+    const result = parseArgs(['batch', '--languages', 'typescript,python']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('batch');
+      expect(result.command.languages).toEqual(['typescript', 'python']);
+    }
+  });
+
+  it('batch --languages 单个语言', () => {
+    const result = parseArgs(['batch', '--languages', 'go']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.languages).toEqual(['go']);
+    }
+  });
+
+  it('无 --languages 时 languages 为 undefined', () => {
+    const result = parseArgs(['batch']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.languages).toBeUndefined();
+    }
+  });
+
+  it('--languages 在非 batch 命令下报错', () => {
+    const result = parseArgs(['generate', 'src/', '--languages', 'typescript']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('--languages');
+    }
+  });
+
+  it('batch --languages 生成 _explicitFlags', () => {
+    const result = parseArgs(['batch', '--force', '--languages', 'typescript']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command._explicitFlags).toBeDefined();
+      expect(result.command._explicitFlags!.has('force')).toBe(true);
+      expect(result.command._explicitFlags!.has('languages')).toBe(true);
+      expect(result.command._explicitFlags!.has('incremental')).toBe(false);
+    }
+  });
 });

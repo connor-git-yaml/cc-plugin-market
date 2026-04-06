@@ -2,6 +2,9 @@
 name: spec-driver-doc
 description: "生成 README 等开源标准文档 — 交互式选择协议和文档模式，一键生成完整文档套件"
 disable-model-invocation: false
+allowed-tools: [Read, Write, Glob, Bash]
+model: sonnet
+effort: medium
 ---
 
 ## Wrapper Source Contract

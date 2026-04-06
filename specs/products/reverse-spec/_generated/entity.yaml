@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-05T16:15:26.082Z"
+generatedAt: "2026-04-06T14:46:58.381Z"
 id: "reverse-spec"
 name: "Reverse-Spec"
 kind: "library-tooling"
@@ -12,7 +12,7 @@ lifecycle:
   source: "inferred:current-spec.status"
 repo:
   path: "."
-  remote: "https://github.com/connor-git-yaml/cc-plugin-market.git"
+  remote: "git@github.com:connor-git-yaml/cc-plugin-market.git"
   defaultBranch: "master"
   packageName: "reverse-spec"
 docs:
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/reverse-spec/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T16:15:26.129Z"
+    generatedAt: "2026-04-06T14:46:58.427Z"
   scorecard:
     path: "specs/products/reverse-spec/_generated/scorecard-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-05T16:15:26.131Z"
+    generatedAt: "2026-04-06T14:46:58.428Z"
 workflowRefs:
   - "reverse-spec.init"
   - "reverse-spec.generate"

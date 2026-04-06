@@ -1,25 +1,25 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-04-05T16:15:26.128Z
-- Status: healthy
-- Total Runs: 5
-- Active Workflows: 2
-- Overall Success Rate: 100.0%
+- Generated At: 2026-04-06T14:46:58.426Z
+- Status: insufficient-data
+- Total Runs: 0
+- Active Workflows: 0
+- Overall Success Rate: 0.0%
 - Overall Failure Rate: 0.0%
 - Overall Paused Rate: 0.0%
-- Most Used Workflow: `spec-driver-feature` (4 runs)
+- Most Used Workflow: `spec-driver-doc` (0 runs)
 
 ## Workflow Usage
 
 | Workflow | Persona | Runs | Success | Failure | Paused | Rerun | Avg Duration | Last Run |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `spec-driver-doc` | 开源维护者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
-| `spec-driver-feature` | 功能开发者 | 4 | 100.0% | 0.0% | 0 | 0.0% | 144.5s | 2026-04-04T16:55:41.078Z |
+| `spec-driver-feature` | 功能开发者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-fix` | 修复者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-implement` | 实施负责人 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-resume` | 流程恢复者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 | `spec-driver-story` | 迭代开发者 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
-| `spec-driver-sync` | 产品文档负责人 | 1 | 100.0% | 0.0% | 0 | 0.0% | 87.0s | 2026-04-04T16:55:41.078Z |
+| `spec-driver-sync` | 产品文档负责人 | 0 | 0.0% | 0.0% | 0 | 0.0% | - | - |
 
 ## Friction Hotspots
 
@@ -37,20 +37,21 @@
 
 ### Slowest Phases
 
-- research: 61.3s（samples=4）
-- aggregate: 42.0s（samples=1）
-- verify: 25.8s（samples=4）
-- adoption: 12.0s（samples=1）
+- 无
 
 ## Data Quality
 
-- Log Files: 1
-- Valid Runs: 5
+- Log Files: 0
+- Valid Runs: 0
 - Invalid Lines: 0
-- Runs With Phase Durations: 5
+- Runs With Phase Durations: 0
 
 ## Scorecard Context
 
 - Status: pass
 - Score: 100
 - Report: specs/products/spec-driver/_generated/scorecard-report.json
+
+## Warnings
+
+- 未发现可用的 workflow run 事件，adoption 报告仅输出空摘要

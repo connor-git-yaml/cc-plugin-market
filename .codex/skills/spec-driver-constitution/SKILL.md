@@ -2,6 +2,9 @@
 name: spec-driver-constitution
 description: "创建或更新项目宪法，并同步计划/规范/任务模板与运行时约束"
 disable-model-invocation: false
+allowed-tools: [Read, Write, Edit, Glob, Bash]
+model: sonnet
+effort: low
 ---
 
 ## Wrapper Source Contract

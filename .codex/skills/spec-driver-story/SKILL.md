@@ -2,6 +2,9 @@
 name: spec-driver-story
 description: "快速需求实现 — 跳过调研，5 阶段完成：规范-规划-任务-实现-验证"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: opus
+effort: high
 ---
 
 ## Wrapper Source Contract
@@ -114,36 +117,18 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 
 说明：`online_research_min_points=0` 允许“本次不做在线调研点”，但必须记录 `skip_reason`（见 Step 7.5 产物格式与 GATE_DESIGN 前置硬门禁）。
 
-### 4. 门禁配置加载
+### 4. 门禁配置加载（通过编排器查询）
 
-读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+通过 Orchestrator 查询 story 模式的 Gate 行为（4-tier 优先级：user_config > hard_gate > gate_policy > yaml_default）：
 
-```text
-1. 读取 gate_policy 字段（默认 balanced）
-   - 如果值无法识别，输出警告并回退到 balanced
-
-2. 读取 gates 字段（默认空）
-   - 如果包含无法识别的门禁名称，输出警告但不阻断
-
-3. Story 模式门禁子集: GATE_DESIGN, GATE_TASKS, GATE_VERIFY（3 个，无 GATE_RESEARCH/GATE_ANALYSIS）
-
-4. 构建行为表:
-   for GATE in [GATE_DESIGN, GATE_TASKS, GATE_VERIFY]:
-     if gates.{GATE}.pause 有配置:
-       behavior[GATE] = gates.{GATE}.pause
-     else:
-       根据 gate_policy 应用默认行为
-
-balanced 默认值表:
-  | 门禁         | 默认行为 | 分类       |
-  | ------------ | -------- | ---------- |
-  | GATE_DESIGN  | always   | 关键       |
-  | GATE_TASKS   | always   | 关键       |
-  | GATE_VERIFY  | always   | 关键       |
-
-strict 默认值: 全部 always
-autonomous 默认值: 全部 on_failure
+```bash
+# 查询 story 模式下 3 个 Gate 的行为
+for GATE in GATE_DESIGN GATE_TASKS GATE_VERIFY; do
+  behavior[$GATE] = Orchestrator.getGateBehavior("$GATE").behavior
+done
 ```
+
+Gate 行为表由 `orchestration.yaml` + `spec-driver.config.yaml` 联合决定，无需在此硬编码默认值。
 
 ### 5. Prompt 来源映射
 
@@ -170,7 +155,27 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 
 **重要**: 特性目录必须遵循 `specs/NNN-<short-name>/` 格式（如 `specs/016-add-dark-mode/`），禁止使用 `specs/features/` 子目录。
 
-### 7. 代码库上下文扫描
+### 6.5 自适应入口检测（新增）
+
+编排器在 feature 目录准备完成后，扫描已有制品以决定从哪个阶段开始：
+
+```text
+1. 扫描 {feature_dir}/ 目录：
+   - spec.md 存在且非空 → skip_specify = true
+   - plan.md 存在且非空 → skip_plan = true
+   - tasks.md 存在且非空 → skip_tasks = true
+
+2. 输出跳过日志：
+   if skip_specify: "[自适应] 检测到已有 spec.md，跳过 specify 阶段"
+   if skip_plan: "[自适应] 检测到已有 plan.md，跳过 plan 阶段"
+   if skip_tasks: "[自适应] 检测到已有 tasks.md，跳过 tasks 阶段"
+
+3. 调整执行流程：
+   - 跳过的阶段不执行子代理调用，但门禁仍然执行（如 GATE_DESIGN）
+   - 用户可通过 --rerun 强制重新生成已有制品
+```
+
+### 7. 代码库上下文扫描 + Scope 评估
 
 **此步骤替代调研阶段，是 story 模式的核心加速点。**
 
@@ -179,6 +184,42 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 - 扫描与需求相关的源代码文件（通过 Grep/Glob 定位关键模块）
 - 读取 `specs/products/` 下的产品活文档（如存在）作为现有规范上下文
 - 汇总为**代码上下文摘要**（替代 research-synthesis.md 的角色）
+
+**早期 Scope 评估**（Phase 1 前置检查）：
+
+在代码上下文扫描完成后，立即评估需求变更的规模：
+
+```text
+1. 统计预期影响范围:
+   - affected_files: 根据需求描述和代码扫描，预估需要修改的文件数
+   - cross_package: 是否跨越 2+ 个顶层包/模块边界
+   - db_schema_change: 是否涉及数据库 schema 变更、配置格式迁移
+   - public_api_change: 是否修改公共 API/契约
+
+2. 判定 scope 级别:
+   - LARGE: affected_files > 15 或 cross_package = true 或 db_schema_change = true
+   - MEDIUM: affected_files 8-15
+   - SMALL: affected_files < 8
+
+3. 若 scope = LARGE:
+   输出建议:
+   """
+   [scope 评估] 检测到需求范围较大:
+   - 预估影响文件: {affected_files}
+   - 跨包影响: {cross_package}
+   - Schema/配置迁移: {db_schema_change}
+
+   建议切换到完整 Feature 模式:
+   $spec-driver-feature <需求描述>
+
+   Feature 模式包含产品调研和技术调研，适合大型需求变更。
+   继续当前 story 模式？(Y/n)
+   """
+   等待用户确认后继续。
+
+4. 输出日志:
+   [SCOPE] mode=story | files={affected_files} | cross_package={true/false} | level={SMALL/MEDIUM/LARGE} | decision={CONTINUE/SWITCH_TO_FEATURE}
+```
 
 ### 7.5 在线调研补充（可选）
 
@@ -246,6 +287,21 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 
 `[1/5] 正在检查项目宪法...`
 
+**内联快速检查（优先于 Agent 调用）**：
+
+编排器先在主线程执行轻量级宪法检查，仅在发现潜在违反时才启动完整 Agent：
+
+```text
+1. 读取 .specify/memory/constitution.md
+2. 提取需求描述中的关键词
+3. 快速匹配：
+   - 是否涉及新增运行时依赖？→ 对照原则 IX
+   - 是否涉及绕过质量门？→ 对照原则 X
+   - 是否修改 src/ 源码？→ 对照原则 VIII
+4. 无匹配 → 输出 "[Constitution] PASS（内联检查）"，跳过 Agent 调用
+5. 有匹配 → 继续调用完整 Constitution Agent 分析
+```
+
 读取 `prompt_source[constitution]`，调用 Task(description: "检查项目宪法", prompt: "{constitution prompt}" + "{上下文注入: 需求描述}", model: "opus")。解析返回：PASS → 继续 | VIOLATION → 暂停。
 
 ---
@@ -308,6 +364,21 @@ if online_research_required:
 
 `[3/5] 正在生成规划和任务...`
 
+**合并调用优化（新增）**：
+
+当 gate_policy 为 autonomous 或 balanced 时，可将 plan 和 tasks 合并为一次 Agent 调用以减少耗时：
+
+```text
+if gate_policy != "strict":
+  合并调用: Task(description: "执行技术规划+任务分解",
+    prompt: "{plan prompt}\n\n---\n\n{tasks prompt}" + "{上下文注入}",
+    model: "{config.agents.plan.model}")
+  验证 plan.md 和 tasks.md 均已生成
+  如果任一缺失，回退到分步调用
+else:
+  保持分步调用（plan → 用户审查 → tasks）
+```
+
 **合并执行** plan 和 tasks 两个阶段以提升速度：
 
 1. 调用 Task(description: "执行技术规划", prompt: "{plan prompt}" + "{上下文注入 + spec.md 路径}", model: "{config.agents.plan.model}")
@@ -360,6 +431,32 @@ if online_research_required:
 `[4/5] 正在执行代码实现...`
 
 读取 `prompt_source[implement]`，调用 Task(description: "执行代码实现", prompt: "{implement prompt}" + "{上下文注入 + tasks.md + plan.md 路径}", model: "{config.agents.implement.model}")。
+
+### Phase 4.5: 编排器独立验证（新增）
+
+**此步骤由编排器亲自执行，不委派子代理。**
+
+implement 完成后、进入 verify 子代理前，编排器独立运行项目验证命令：
+
+```text
+1. 从 spec-driver.config.yaml 的 verification.commands 或自动检测获取验证命令
+2. 依次执行 build、lint、test 命令
+3. 如果任一命令失败 → 记录并传递给 verify 子代理
+4. 全部通过 → 输出: [编排器验证] build ✅ lint ✅ test ✅
+```
+
+**增量验证策略（新增）**：
+
+编排器根据变更文件类型自动选择验证级别：
+
+```text
+1. 执行 git diff --name-only 获取变更文件列表
+2. 判定验证级别：
+   - Level 0: 变更仅涉及 *.md / *.yaml / *.json / *.sh → 仅 repo:check + lint
+   - Level 1: 变更涉及 src/ 但非核心模块 → build + lint + 受影响测试
+   - Level 2: 变更涉及 src/core/ 或 tests/ 基础设施 → 全量 build + lint + test
+3. 输出: [增量验证] Level={0|1|2} | 变更文件={N} | 策略={描述}
+```
 
 ---
 
@@ -458,25 +555,35 @@ node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root
 
 ## 范围过大检测
 
-在 Phase 3（规划+任务）完成后，检测需求范围：
+**主检测点**已前移到初始化阶段 Step 7（代码库上下文扫描 + Scope 评估），在 Phase 1 之前触发。
+
+Phase 3（规划+任务）完成后执行**二次确认**，基于 tasks.md 的精确数据复核：
 
 ```text
-if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
-  输出建议:
-  """
-  [提示] 检测到需求范围较大（{N} 个模块/{M} 个文件），建议切换到完整模式：
-  $spec-driver-feature <需求描述>
+if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 15 个文件:
+  if Step 7 scope 评估已触发且用户已确认继续:
+    输出提醒（不阻断）:
+    """
+    [scope 二次确认] 任务分解后实际范围（{N} 模块/{M} 文件）超出 story 模式建议上限。
+    用户已在初始化阶段确认继续，保持 story 模式。
+    """
+  else:
+    输出建议:
+    """
+    [提示] 检测到需求范围较大（{N} 个模块/{M} 个文件），建议切换到完整模式：
+    $spec-driver-feature <需求描述>
 
-  完整模式包含产品调研和技术调研，适合大型需求变更。
+    完整模式包含产品调研和技术调研，适合大型需求变更。
 
-  继续当前 story 模式？(Y/n)
-  """
+    继续当前 story 模式？(Y/n)
+    """
 ```
 
 ---
 
 ## 模型选择
 
+<!-- 此段落与 spec-driver-feature SKILL.md 共享，后续考虑提取到 docs/shared/ -->
 与 run 模式共享同一套模型配置逻辑和 preset 默认表，并执行同一套运行时兼容归一化：
 
 - 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值

@@ -1,6 +1,6 @@
 # Project Context Suggestions
 
-- Generated At: `2026-04-05T16:15:26.148Z`
+- Generated At: `2026-04-06T14:46:58.451Z`
 - Status: `advisory`
 - Context Source: `yaml`
 
@@ -40,11 +40,11 @@ Evidence:
 - Category: `workflow-preferences`
 
 Suggested Changes:
-- `workflow_preferences.default_workflow` · set: `spec-driver-feature`
+- `workflow_preferences.default_workflow` · set: `spec-driver-doc`
 - `workflow_preferences.mature_spec_workflow` · set: `spec-driver-implement`
 
 Evidence:
-- `adoption-report` · `specs/products/spec-driver/_generated/adoption-report.json` — 最近 run summary 中最常使用的 workflow 是 spec-driver-feature（4 次）。
+- `adoption-report` · `specs/products/spec-driver/_generated/adoption-report.json` — 最近 run summary 中最常使用的 workflow 是 spec-driver-doc（0 次）。
 - `workflow-index` · `specs/products/spec-driver/_generated/workflow-index.json` — workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。
 
 ### [OPTIONAL] 把验证偏好固化到 Project Context
