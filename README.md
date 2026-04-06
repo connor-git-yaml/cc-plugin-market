@@ -18,7 +18,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 | Plugin | Type | Description |
 | ------ | ---- | ----------- |
 | **[reverse-spec](#reverse-spec)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
-| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 14 specialized sub-agent prompts, 7 execution modes, and Project Context suggestions |
+| **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 15 specialized sub-agent prompts, 8 execution modes, orchestration.yaml config, and 6 quality gates |
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
@@ -30,10 +30,10 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 │  │                       │     │                              │  │
 │  │  Code → AST → Spec    │     │  Idea → Spec → Plan → Code  │  │
 │  │                       │     │                              │  │
-│  │  • generate / batch   │     │  • spec-driver-feature           │  │
-│  │  • diff / prepare     │     │  • spec-driver-story             │  │
-│  │  • MCP server         │     │  • spec-driver-fix               │  │
-│  │  • CLI + Skills       │     │  • implement/resume/sync/doc     │  │
+│  │  • generate / batch   │     │  • feature / story / fix     │  │
+│  │  • diff / prepare     │     │  • implement / resume        │  │
+│  │  • MCP server         │     │  • sync / doc / refactor     │  │
+│  │  • CLI + Skills       │     │  • orchestration.yaml        │  │
 │  └──────────────────────┘     └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
