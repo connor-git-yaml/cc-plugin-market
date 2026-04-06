@@ -1,0 +1,688 @@
+# orchestration.yaml
+# Spec Driver 编排配置 - 所有模式统一编排定义
+# Version: 1.0 (2026-04-06)
+#
+# 此文件定义了 spec-driver 的 7 种模式（feature/story/implement/fix/resume/sync/doc）
+# 的完整 Phase 序列、Gate 行为、并行组调度策略。
+#
+# 修改指南：
+#   - 新增 Phase 时，在对应 modes.{mode}.phases 数组末尾添加
+#   - 新增 Gate 时，在 gates 块添加定义，并在 Phase 的 gates_before/after 中引用
+#   - 新增并行组时，在 parallel_groups 块添加，并在 Phase 中设置 agent_mode: parallel_group
+#   - Feature 093 (refactor 模式)：见文末注释化模板
+
+version: "1.0"
+
+# ═══════════════════════════════════════════════════════════════
+# 全局并行调度配置
+# ═══════════════════════════════════════════════════════════════
+
+parallel_scheduling:
+  max_concurrent_tasks: 2          # 单消息最多并行 Task 数（受上下文限制）
+  fallback_to_serial_on_failure: true  # 并行失败时回退到串行
+  fallback_reason_log: true        # 记录回退原因日志
+
+# ═══════════════════════════════════════════════════════════════
+# 门禁全局定义（6 个 Gate）
+# ═══════════════════════════════════════════════════════════════
+
+gates:
+  GATE_RESEARCH:
+    type: research_checkpoint
+    applicable_modes: [feature]
+    description: "调研完整性门禁"
+    default_behavior: auto
+    severity: non_critical
+    hard_gate_modes: []
+    insertion_point: null
+
+  GATE_DESIGN:
+    type: design_checkpoint
+    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    description: "需求规范质量门禁（feature 模式下为硬门禁）"
+    default_behavior: always
+    severity: critical
+    hard_gate_modes: [feature]      # feature 模式下此门禁不可覆盖
+    insertion_point: null
+
+  GATE_ANALYSIS:
+    type: quality_analysis
+    applicable_modes: [feature, implement]
+    description: "设计一致性分析门禁"
+    default_behavior: on_failure
+    severity: non_critical
+    hard_gate_modes: []
+    insertion_point: null
+
+  GATE_TASKS:
+    type: task_generation
+    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    description: "任务分解完整性门禁"
+    default_behavior: always
+    severity: critical
+    hard_gate_modes: []
+    insertion_point: null
+
+  GATE_IMPLEMENT_MID:
+    type: implementation_checkpoint
+    applicable_modes: [implement]
+    description: "实现中期检查门禁（Feature 090）"
+    default_behavior: on_failure
+    severity: non_critical
+    hard_gate_modes: []
+    insertion_point: "after_task_50_percent"
+
+  GATE_VERIFY:
+    type: verification_checkpoint
+    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    description: "最终验证综合门禁"
+    default_behavior: always
+    severity: critical
+    hard_gate_modes: []
+    insertion_point: null
+
+# ═══════════════════════════════════════════════════════════════
+# 并行组定义（3 个主要并行组）
+# ═══════════════════════════════════════════════════════════════
+
+parallel_groups:
+  RESEARCH_GROUP:
+    members: [1a, 1b]
+    convergence_point: "1c"
+    fallback_strategy: serial_fallback
+    max_concurrent: 2
+    description: "产品调研 + 技术调研并行，进行产研汇总"
+
+  DESIGN_PREP_GROUP:
+    members: [clarify, quality_checklist]  # Phase 3 内部的两个子任务
+    convergence_point: "3.5"         # GATE_DESIGN
+    fallback_strategy: serial_fallback
+    max_concurrent: 2
+    description: "需求澄清 + 质量检查并行"
+
+  VERIFY_GROUP:
+    members: [7a, 7b]
+    convergence_point: "7c"
+    fallback_strategy: serial_fallback
+    max_concurrent: 2
+    description: "Spec 审查 + 代码质量审查并行，进行综合验证"
+
+# ═══════════════════════════════════════════════════════════════
+# 模式定义：7 种 Phase 序列
+# ═══════════════════════════════════════════════════════════════
+
+modes:
+
+  # ─────────────────────────────────────────────────────────────
+  # Feature 模式：完整 10 阶段编排（Spec-Driven Development）
+  # ─────────────────────────────────────────────────────────────
+  feature:
+    name: "Spec-Driven Development（完整 10 阶段）"
+    description: "包含完整的调研、规范、规划、实现、验证流程"
+    phases:
+      # Phase 0: 宪法检查
+      - id: "0"
+        name: constitution_check
+        display_name: 项目宪法检查
+        agent: null
+        agent_mode: inline
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 0.5: 调研模式确定
+      - id: "0.5"
+        name: research_mode_determination
+        display_name: 调研模式确定
+        agent: null
+        agent_mode: inline
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 1a: 产品调研（RESEARCH_GROUP 成员）
+      - id: "1a"
+        name: product_research
+        display_name: 产品调研
+        agent: product-research
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: "research_mode in [full, product-only]"
+        skip_if_exists: "research/product-research.md"
+        is_critical: false
+
+      # Phase 1b: 技术调研（RESEARCH_GROUP 成员）
+      - id: "1b"
+        name: tech_research
+        display_name: 技术调研
+        agent: tech-research
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: "research_mode in [full, tech-only, codebase-scan, custom]"
+        skip_if_exists: "research/tech-research.md"
+        is_critical: false
+
+      # Phase 1c: 产研汇总（RESEARCH_GROUP 汇合点）
+      - id: "1c"
+        name: research_synthesis
+        display_name: 产研汇总
+        agent: null
+        agent_mode: inline
+        gates_before: []
+        gates_after: [GATE_RESEARCH]
+        conditional: "research_mode in [full]"
+        skip_if_exists: "research/research-synthesis.md"
+        is_critical: false
+
+      # Phase 1d: 在线调研补充
+      - id: "1d"
+        name: online_research
+        display_name: 在线调研补充
+        agent: null
+        agent_mode: inline
+        gates_before: []
+        gates_after: []
+        conditional: "online_research_required == true"
+        skip_if_exists: "research/online-research.md"
+        is_critical: false
+
+      # Phase 2: 需求规范
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: [GATE_RESEARCH]
+        gates_after: []
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      # Phase 3: 需求澄清 + 质量检查（并行 DESIGN_PREP_GROUP）
+      - id: "3"
+        name: clarify_and_checklist
+        display_name: 需求澄清 + 质量检查
+        agent: [clarify, quality_checklist]
+        agent_mode: parallel_group
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 3.5: GATE_DESIGN（编排器执行）
+      - id: "3.5"
+        name: gate_design
+        display_name: 规范质量门禁
+        agent: null
+        agent_mode: gate
+        gates_before: []
+        gates_after: [GATE_DESIGN]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 4: 技术规划
+      - id: "4"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before: [GATE_DESIGN]
+        gates_after: []
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      # Phase 5: 任务分解
+      - id: "5"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      # Phase 5.5: 一致性分析 + GATE_ANALYSIS
+      - id: "5.5"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_ANALYSIS, GATE_TASKS]
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 6: 代码实现
+      - id: "6"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: [GATE_TASKS]
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 6.5: 编排器独立验证
+      - id: "6.5"
+        name: verify_independent
+        display_name: 编排器独立验证
+        agent: null
+        agent_mode: orchestrator_verify
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7a: Spec 合规审查（VERIFY_GROUP 成员）
+      - id: "7a"
+        name: spec_review
+        display_name: Spec 合规审查
+        agent: spec-review
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7b: 代码质量审查（VERIFY_GROUP 成员）
+      - id: "7b"
+        name: quality_review
+        display_name: 代码质量审查
+        agent: quality-review
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7c: 工具链验证 + 证据核查（VERIFY_GROUP 汇合点）
+      - id: "7c"
+        name: verify
+        display_name: 工具链验证 + 证据核查
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: "verification/verification-report.md"
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Story 模式：故事式快速迭代（7 阶段）
+  # ─────────────────────────────────────────────────────────────
+  story:
+    name: "Story 模式（7 阶段快速迭代）"
+    description: "基于 product-research 快速迭代小功能"
+    phases:
+      - id: "1"
+        name: clarify
+        display_name: 需求澄清
+        agent: clarify
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: false
+
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_DESIGN]
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      - id: "3"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before: [GATE_DESIGN]
+        gates_after: []
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "4"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_TASKS]
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      - id: "5"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "6"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Implement 模式：代码实现专一流程（6 阶段）
+  # ─────────────────────────────────────────────────────────────
+  implement:
+    name: "Implement 模式（6 阶段实现流程）"
+    description: "基于已有规范和规划进行代码实现"
+    phases:
+      - id: "1"
+        name: clarify
+        display_name: 需求澄清（快速检查）
+        agent: clarify
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: false
+
+      - id: "2"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before: [GATE_DESIGN]
+        gates_after: []
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "3"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      - id: "4"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_ANALYSIS, GATE_TASKS]
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "5"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+        # 特殊：此 Phase 中期触发 GATE_IMPLEMENT_MID（insertion_point: after_task_50_percent）
+
+      - id: "6"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Fix 模式：修复流程（3 阶段最小化）
+  # ─────────────────────────────────────────────────────────────
+  fix:
+    name: "Fix 模式（3 阶段修复流程）"
+    description: "快速处理 bug 和小型修复"
+    phases:
+      - id: "1"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_DESIGN]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "2"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "3"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Resume 模式：中断恢复流程（4 阶段）
+  # ─────────────────────────────────────────────────────────────
+  resume:
+    name: "Resume 模式（4 阶段中断恢复）"
+    description: "恢复中断的实现流程，验证已有制品"
+    phases:
+      - id: "1"
+        name: clarify
+        display_name: 需求澄清（快速检查）
+        agent: clarify
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "2"
+        name: tasks
+        display_name: 任务分解（更新）
+        agent: tasks
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_TASKS]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "3"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "4"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Sync 模式：制品同步模式（3 阶段最小化）
+  # ─────────────────────────────────────────────────────────────
+  sync:
+    name: "Sync 模式（3 阶段制品同步）"
+    description: "聚合多个 spec 为产品级文档"
+    phases:
+      - id: "1"
+        name: gather
+        display_name: 制品聚合
+        agent: null
+        agent_mode: inline
+        gates_before: []
+        gates_after: []
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "2"
+        name: sync
+        display_name: 制品同步
+        agent: sync
+        agent_mode: single
+        gates_before: [GATE_DESIGN]
+        gates_after: [GATE_TASKS]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "3"
+        name: verify
+        display_name: 质量验证
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+  # ─────────────────────────────────────────────────────────────
+  # Doc 模式：文档生成模式（3 阶段）
+  # ─────────────────────────────────────────────────────────────
+  doc:
+    name: "Doc 模式（3 阶段文档生成）"
+    description: "生成开源标准文档（README、变更日志等）"
+    phases:
+      - id: "1"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_DESIGN]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "2"
+        name: doc
+        display_name: 文档生成
+        agent: doc
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_TASKS]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "3"
+        name: verify
+        display_name: 质量验证
+        agent: verify
+        agent_mode: single
+        gates_before: []
+        gates_after: [GATE_VERIFY]
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+# ═══════════════════════════════════════════════════════════════
+# Feature 093 预留：refactor 模式（注释化模板）
+# ═══════════════════════════════════════════════════════════════
+
+  # refactor:
+  #   name: "Refactor 模式（代码重构流程）"
+  #   description: "提取现有代码的规范，进行代码重构"
+  #   phases:
+  #     - id: "1"
+  #       name: reverse_spec
+  #       display_name: 逆向规范提取
+  #       agent: reverse-spec
+  #       agent_mode: single
+  #       gates_before: []
+  #       gates_after: []
+  #       conditional: null
+  #       skip_if_exists: null
+  #       is_critical: true
+  #
+  #     - id: "2"
+  #       name: refactor
+  #       display_name: 代码重构
+  #       agent: refactor
+  #       agent_mode: single
+  #       gates_before: []
+  #       gates_after: [GATE_TASKS]
+  #       conditional: null
+  #       skip_if_exists: null
+  #       is_critical: true
+  #
+  #     - id: "3"
+  #       name: verify
+  #       display_name: 验证与交付
+  #       agent: verify
+  #       agent_mode: single
+  #       gates_before: []
+  #       gates_after: [GATE_VERIFY]
+  #       conditional: null
+  #       skip_if_exists: null
+  #       is_critical: true
+
+# ═══════════════════════════════════════════════════════════════
+# End of orchestration.yaml
+# ═══════════════════════════════════════════════════════════════
