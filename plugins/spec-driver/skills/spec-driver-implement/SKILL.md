@@ -104,35 +104,17 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 - 若无 project-context 文件，resolver 返回 `projectContextBlock = "未配置"`
 - 若无 suggestions 文件，设置 `project_context_suggestions_block = "无建议"`
 
-### 4. 门禁配置加载
+### 4. 门禁配置加载（通过编排器查询）
 
-读取 spec-driver.config.yaml 中的 `gate_policy` 和 `gates` 字段，构建门禁行为表：
+通过 Orchestrator 查询 implement 模式的 Gate 行为（4-tier 优先级：user_config > hard_gate > gate_policy > yaml_default）：
 
-```text
-1. 读取 gate_policy 字段（默认 balanced）
-   - 如果值无法识别，输出警告并回退到 balanced
-
-2. 读取 gates 字段（默认空）
-   - 如果包含无法识别的门禁名称，输出警告但不阻断
-
-3. Implement 模式门禁子集: GATE_TASKS, GATE_VERIFY
-
-4. 构建行为表:
-   for GATE in [GATE_TASKS, GATE_VERIFY]:
-     if gates.{GATE}.pause 有配置:
-       behavior[GATE] = gates.{GATE}.pause
-     else:
-       根据 gate_policy 应用默认行为
-
-balanced 默认值表:
-  | 门禁         | 默认行为 | 分类       |
-  | ------------ | -------- | ---------- |
-  | GATE_TASKS   | always   | 关键       |
-  | GATE_VERIFY  | always   | 关键       |
-
-strict 默认值: 全部 always
-autonomous 默认值: 全部 on_failure
+```bash
+for GATE in GATE_TASKS GATE_VERIFY; do
+  behavior[$GATE] = Orchestrator.getGateBehavior("$GATE").behavior
+done
 ```
+
+Gate 行为表由 `orchestration.yaml` + `spec-driver.config.yaml` 联合决定，无需在此硬编码默认值。
 
 ### 5. Prompt 来源映射
 

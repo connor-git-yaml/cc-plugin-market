@@ -88,7 +88,7 @@ PHASES=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-phases feature)
 echo "[Orchestrator] 已加载 feature 模式编排配置（${PHASE_COUNT} 个 Phase）"
 ```
 
-**后备策略**：如果 orchestration.yaml 不存在或无效，自动使用内置后备配置（`orchestrator-fallback.js`）。所有 7 种模式都可自动降级。
+**后备策略**：如果 orchestration.yaml 不存在或无效，自动使用内置后备配置（`orchestrator-fallback.mjs`）。所有 7 种模式都可自动降级。
 
 ### 4. 门禁配置加载
 
@@ -304,7 +304,7 @@ echo "[HH:MM:SS] GATE_${GATE_ID}: $GATE_DECISION | policy={gate_policy} | reason
 
 ## 后备和降级
 
-- **orchestration.yaml 缺失或无效**：自动使用 `orchestrator-fallback.js`（包含 7 种模式的最小配置）
+- **orchestration.yaml 缺失或无效**：自动使用 `orchestrator-fallback.mjs`（包含 7 种模式的最小配置）
 - **yaml 包不可用**：CLI 返回错误，编排器回退到 fallback
 - **特定 Phase agent 不可用**：记录警告，继续其他 Phase
 - **并行调用失败**：自动回退到串行模式，标注 `[回退:串行]`
@@ -313,11 +313,11 @@ echo "[HH:MM:SS] GATE_${GATE_ID}: $GATE_DECISION | policy={gate_policy} | reason
 
 ## 参考资源
 
-- 编排配置详情：`orchestration.yaml`（项目根目录）
-- 编排器模块：`plugins/spec-driver/scripts/orchestrator.mjs`
+- 编排配置：`plugins/spec-driver/config/orchestration.yaml`
+- 编排器模块：`plugins/spec-driver/lib/orchestrator.mjs`
+- 后备配置：`plugins/spec-driver/lib/orchestrator-fallback.mjs`
 - 编排器 CLI：`plugins/spec-driver/scripts/orchestrator-cli.mjs`
-- 后备配置：`plugins/spec-driver/scripts/orchestrator-fallback.mjs`
-- 测试套件：`plugins/spec-driver/scripts/orchestrator.test.mjs`
+- 测试套件：`plugins/spec-driver/tests/orchestrator.test.mjs`
 
 ---
 

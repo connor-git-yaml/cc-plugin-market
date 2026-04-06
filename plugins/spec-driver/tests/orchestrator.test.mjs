@@ -1,483 +1,296 @@
 /**
  * orchestrator.test.mjs
- * Smoke Test Suite for Orchestrator
+ * Smoke Test Suite for Orchestrator（使用 Node.js 内置测试框架）
+ *
+ * 运行方式: node --test plugins/spec-driver/tests/orchestrator.test.mjs
  *
  * 测试覆盖：
  * - 配置加载和验证
  * - 7 种模式的 Phase 序列
- * - Gate 行为解析和优先级
+ * - Gate 4-tier 优先级
  * - 并行组调度
- * - 条件执行和跳过逻辑
- * - 向后兼容性降级
+ * - 条件执行
+ * - 向后兼容降级
  */
 
-import { strict as assert } from 'assert';
-import { Orchestrator, validateOrchestrationYaml } from '../lib/orchestrator.js';
-import { generateFallbackConfig } from '../lib/orchestrator-fallback.js';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { Orchestrator, validateOrchestrationYaml, evaluateCondition } from '../lib/orchestrator.mjs';
+import { generateFallbackConfig } from '../lib/orchestrator-fallback.mjs';
 
-const mockLogger = {
+const silentLogger = {
   info: () => {},
   warn: () => {},
   error: () => {},
   debug: () => {},
 };
 
-// ═════════════════════════════════════════════════════════════════
-// Test Suites
-// ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+// Feature 模式
+// ═════════════════════════════════════════════════════════════
 
-describe('Orchestrator - Feature Mode', () => {
-  it('should load orchestration.yaml successfully', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-    const summary = orchestrator.getSummary();
-
-    assert(summary.phasesCount > 0, 'Feature mode should have phases');
-    assert(summary.gatesCount === 6, 'Should have 6 gates defined');
+describe('Feature Mode', () => {
+  it('加载 orchestration.yaml 成功', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const summary = orch.getSummary();
+    assert.ok(summary.phasesCount > 0, 'Feature 模式应有 Phase');
+    assert.equal(summary.gatesCount, 6, '应有 6 个 Gate');
   });
 
-  it('should have 10+ phases in feature mode', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    assert(phases.length >= 10, 'Feature mode should have 10+ phases');
+  it('Feature 模式有 10+ 个 Phase', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.ok(orch.getPhases().length >= 10, 'Feature 模式应有 ≥10 个 Phase');
   });
 
-  it('should correctly identify GATE_DESIGN as hard gate in feature mode', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-    const behavior = orchestrator.getGateBehavior('GATE_DESIGN');
-
-    assert.equal(behavior, 'always', 'GATE_DESIGN should always trigger');
+  it('GATE_DESIGN 在 feature 模式下是硬门禁', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const gate = orch.getGateBehavior('GATE_DESIGN');
+    assert.equal(gate.behavior, 'always');
+    assert.equal(gate.isHardGate, true);
+    assert.equal(gate.source, 'hard_gate');
   });
 
-  it('should have 3 parallel groups', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
+  it('有 3 个并行组', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const groups = orch.getParallelGroups();
+    assert.equal(groups.length, 3);
 
-    const researchGroup = orchestrator.getParallelGroup('RESEARCH_GROUP');
-    const designGroup = orchestrator.getParallelGroup('DESIGN_PREP_GROUP');
-    const verifyGroup = orchestrator.getParallelGroup('VERIFY_GROUP');
-
-    assert(researchGroup, 'RESEARCH_GROUP should exist');
-    assert(designGroup, 'DESIGN_PREP_GROUP should exist');
-    assert(verifyGroup, 'VERIFY_GROUP should exist');
-
-    assert.deepEqual(researchGroup.members, ['1a', '1b']);
-    assert.equal(researchGroup.convergencePoint, '1c');
+    const research = orch.getParallelGroup('RESEARCH_GROUP');
+    assert.ok(research);
+    assert.deepEqual(research.members, ['1a', '1b']);
+    assert.equal(research.convergencePoint, '1c');
   });
 });
 
-describe('Orchestrator - Story Mode', () => {
-  it('should load story mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'story', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
+// ═════════════════════════════════════════════════════════════
+// Story 模式
+// ═════════════════════════════════════════════════════════════
 
-    assert(phases.length > 0, 'Story mode should have phases');
-    assert(
-      phases.length <= 10,
-      'Story mode should have fewer phases than feature mode'
-    );
+describe('Story Mode', () => {
+  it('加载成功且 Phase 数量 < feature', () => {
+    const orch = new Orchestrator({}, 'story', { logger: silentLogger });
+    const phases = orch.getPhases();
+    assert.ok(phases.length > 0);
+    assert.ok(phases.length <= 10, 'Story 模式 Phase 应少于 feature');
   });
 
-  it('should have GATE_DESIGN in story mode', () => {
-    const orchestrator = new Orchestrator({}, 'story', {
-      logger: mockLogger,
-    });
-    const behavior = orchestrator.getGateBehavior('GATE_DESIGN');
-
-    assert.equal(behavior, 'always', 'GATE_DESIGN should trigger');
-  });
-
-  it('GATE_DESIGN should not be hard gate in story mode', () => {
-    const orchestrator = new Orchestrator({}, 'story', {
-      logger: mockLogger,
-    });
-
-    // story 模式下用户配置应该能覆盖 GATE_DESIGN
+  it('GATE_DESIGN 非硬门禁，用户可覆盖', () => {
     const userConfig = {
       gate_policy: 'autonomous',
       gates: { GATE_DESIGN: { pause: 'on_failure' } },
     };
-    const orchestrator2 = new Orchestrator(userConfig, 'story', {
-      logger: mockLogger,
-    });
-    const behavior = orchestrator2.getGateBehavior('GATE_DESIGN');
-
-    // story 模式下，用户配置应该被应用
-    assert.equal(
-      behavior,
-      'on_failure',
-      'User config should override in story mode'
-    );
+    const orch = new Orchestrator(userConfig, 'story', { logger: silentLogger });
+    const gate = orch.getGateBehavior('GATE_DESIGN');
+    assert.equal(gate.behavior, 'on_failure', '用户配置应覆盖 story 模式的 GATE_DESIGN');
+    assert.equal(gate.source, 'user_config');
   });
 });
 
-describe('Orchestrator - Implement Mode', () => {
-  it('should load implement mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'implement', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
+// ═════════════════════════════════════════════════════════════
+// 其他 5 种模式
+// ═════════════════════════════════════════════════════════════
 
-    assert(phases.length > 0, 'Implement mode should have phases');
+describe('Implement Mode', () => {
+  it('加载成功', () => {
+    const orch = new Orchestrator({}, 'implement', { logger: silentLogger });
+    assert.ok(orch.getPhases().length > 0);
   });
 
-  it('should have GATE_IMPLEMENT_MID in implement mode', () => {
-    const orchestrator = new Orchestrator({}, 'implement', {
-      logger: mockLogger,
-    });
-
-    const implementMidGate = orchestrator.gateBehaviorMap.GATE_IMPLEMENT_MID;
-    assert(implementMidGate, 'GATE_IMPLEMENT_MID should be defined');
-    assert.equal(implementMidGate.behavior, 'on_failure');
+  it('GATE_IMPLEMENT_MID 存在', () => {
+    const orch = new Orchestrator({}, 'implement', { logger: silentLogger });
+    const gate = orch.getGateBehavior('GATE_IMPLEMENT_MID');
+    assert.equal(gate.behavior, 'on_failure');
   });
 });
 
-describe('Orchestrator - Fix Mode', () => {
-  it('should load fix mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'fix', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    assert(phases.length > 0, 'Fix mode should have phases');
-    assert(phases.length <= 5, 'Fix mode should be minimal');
+describe('Fix Mode', () => {
+  it('加载成功且 Phase ≤ 5', () => {
+    const orch = new Orchestrator({}, 'fix', { logger: silentLogger });
+    const phases = orch.getPhases();
+    assert.ok(phases.length > 0);
+    assert.ok(phases.length <= 5, 'Fix 模式应为最小化');
   });
 });
 
-describe('Orchestrator - Resume Mode', () => {
-  it('should load resume mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'resume', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    assert(phases.length > 0, 'Resume mode should have phases');
+describe('Resume Mode', () => {
+  it('加载成功', () => {
+    const orch = new Orchestrator({}, 'resume', { logger: silentLogger });
+    assert.ok(orch.getPhases().length > 0);
   });
 });
 
-describe('Orchestrator - Sync Mode', () => {
-  it('should load sync mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'sync', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    assert(phases.length > 0, 'Sync mode should have phases');
+describe('Sync Mode', () => {
+  it('加载成功', () => {
+    const orch = new Orchestrator({}, 'sync', { logger: silentLogger });
+    assert.ok(orch.getPhases().length > 0);
   });
 });
 
-describe('Orchestrator - Doc Mode', () => {
-  it('should load doc mode successfully', () => {
-    const orchestrator = new Orchestrator({}, 'doc', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    assert(phases.length > 0, 'Doc mode should have phases');
+describe('Doc Mode', () => {
+  it('加载成功', () => {
+    const orch = new Orchestrator({}, 'doc', { logger: silentLogger });
+    assert.ok(orch.getPhases().length > 0);
   });
 });
 
-describe('Gate Behavior Priority', () => {
-  it('should apply balanced policy defaults', () => {
-    const orchestrator = new Orchestrator(
-      { gate_policy: 'balanced' },
-      'feature',
-      { logger: mockLogger }
-    );
+// ═════════════════════════════════════════════════════════════
+// Gate 4-tier 优先级
+// ═════════════════════════════════════════════════════════════
 
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_RESEARCH'),
-      'auto',
-      'GATE_RESEARCH should default to auto in balanced policy'
-    );
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_TASKS'),
-      'always',
-      'GATE_TASKS should default to always in balanced policy'
-    );
+describe('Gate 4-tier Priority', () => {
+  it('balanced 策略默认值', () => {
+    const orch = new Orchestrator({ gate_policy: 'balanced' }, 'feature', {
+      logger: silentLogger,
+    });
+    assert.equal(orch.getGateBehavior('GATE_RESEARCH').behavior, 'auto');
+    assert.equal(orch.getGateBehavior('GATE_TASKS').behavior, 'always');
   });
 
-  it('should apply strict policy defaults', () => {
-    const orchestrator = new Orchestrator(
-      { gate_policy: 'strict' },
-      'feature',
-      { logger: mockLogger }
-    );
-
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_RESEARCH'),
-      'always',
-      'All gates should be always in strict policy'
-    );
+  it('strict 策略：全部 always', () => {
+    const orch = new Orchestrator({ gate_policy: 'strict' }, 'feature', {
+      logger: silentLogger,
+    });
+    assert.equal(orch.getGateBehavior('GATE_RESEARCH').behavior, 'always');
+    assert.equal(orch.getGateBehavior('GATE_ANALYSIS').behavior, 'always');
   });
 
-  it('should apply autonomous policy defaults', () => {
-    const orchestrator = new Orchestrator(
-      { gate_policy: 'autonomous' },
-      'feature',
-      { logger: mockLogger }
-    );
-
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_RESEARCH'),
-      'on_failure',
-      'All gates should be on_failure in autonomous policy'
-    );
+  it('autonomous 策略：全部 on_failure', () => {
+    const orch = new Orchestrator({ gate_policy: 'autonomous' }, 'feature', {
+      logger: silentLogger,
+    });
+    // 注意：GATE_DESIGN 在 feature 模式下是硬门禁，不受 autonomous 影响
+    assert.equal(orch.getGateBehavior('GATE_RESEARCH').behavior, 'on_failure');
+    assert.equal(orch.getGateBehavior('GATE_DESIGN').behavior, 'always', '硬门禁不可覆盖');
   });
 
-  it('user config should override policy but not hard gates', () => {
+  it('用户配置覆盖策略，但硬门禁不受影响', () => {
     const userConfig = {
       gate_policy: 'balanced',
       gates: {
-        GATE_DESIGN: { pause: 'on_failure' }, // Should be ignored (hard gate)
-        GATE_RESEARCH: { pause: 'always' }, // Should be applied
+        GATE_DESIGN: { pause: 'on_failure' },  // 应被忽略（硬门禁）
+        GATE_RESEARCH: { pause: 'always' },     // 应被应用
       },
     };
-    const orchestrator = new Orchestrator(userConfig, 'feature', {
-      logger: mockLogger,
-    });
-
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_DESIGN'),
-      'always',
-      'Hard gate should not be overridden'
-    );
-    assert.equal(
-      orchestrator.getGateBehavior('GATE_RESEARCH'),
-      'always',
-      'User config should override policy'
-    );
+    const orch = new Orchestrator(userConfig, 'feature', { logger: silentLogger });
+    assert.equal(orch.getGateBehavior('GATE_DESIGN').behavior, 'always', '硬门禁不可覆盖');
+    assert.equal(orch.getGateBehavior('GATE_DESIGN').source, 'hard_gate');
+    assert.equal(orch.getGateBehavior('GATE_RESEARCH').behavior, 'always', '用户配置应覆盖');
+    assert.equal(orch.getGateBehavior('GATE_RESEARCH').source, 'user_config');
   });
 });
 
-describe('Phase Execution Conditions', () => {
-  it('should evaluate research_mode conditional', () => {
-    const context = {
-      research_mode: 'full',
-      fileExists: () => false,
-    };
+// ═════════════════════════════════════════════════════════════
+// 条件执行
+// ═════════════════════════════════════════════════════════════
 
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    // Find phase 1a (product_research)
-    const phase1a = phases.find((p) => p.id === '1a');
-    assert(
-      phase1a && orchestrator.shouldExecutePhase(phase1a, context),
-      'Phase 1a should execute in full research mode'
-    );
-
-    // Test with tech-only mode
-    context.research_mode = 'tech-only';
-    assert(
-      !orchestrator.shouldExecutePhase(phase1a, context),
-      'Phase 1a should not execute in tech-only mode'
+describe('Phase Condition Evaluation', () => {
+  it('research_mode in [full, product-only] — 匹配', () => {
+    assert.equal(
+      evaluateCondition('research_mode in [full, product-only]', { research_mode: 'full' }),
+      true
     );
   });
 
-  it('should skip phases with existing artifacts', () => {
-    const context = {
+  it('research_mode in [full, product-only] — 不匹配', () => {
+    assert.equal(
+      evaluateCondition('research_mode in [full, product-only]', { research_mode: 'tech-only' }),
+      false
+    );
+  });
+
+  it('== 相等比较', () => {
+    assert.equal(
+      evaluateCondition('online_research_required == true', { online_research_required: 'true' }),
+      true
+    );
+  });
+
+  it('skip_if_exists 跳过已有制品', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const phases = orch.getPhases();
+    const specifyPhase = phases.find((p) => p.name === 'specify');
+
+    const ctx = {
       featureDir: '/test/feature',
-      fileExists: (filePath) => filePath.includes('spec.md'),
+      fileExists: (fp) => fp.includes('spec.md'),
     };
+    assert.equal(orch.shouldExecutePhase(specifyPhase, ctx), false, '有 spec.md 应跳过');
+  });
 
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-    const phases = orchestrator.getPhases();
-
-    // Find phase 2 (specify)
-    const phase2 = phases.find((p) => p.id === '2');
-    assert(
-      !orchestrator.shouldExecutePhase(phase2, context),
-      'Phase 2 should be skipped if spec.md exists'
-    );
+  it('空条件默认返回 true', () => {
+    assert.equal(evaluateCondition(null, {}), true);
+    assert.equal(evaluateCondition('', {}), true);
   });
 });
+
+// ═════════════════════════════════════════════════════════════
+// Fallback 和向后兼容
+// ═════════════════════════════════════════════════════════════
 
 describe('Fallback Configuration', () => {
-  it('should use fallback config when orchestration.yaml is missing', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
+  it('fallback 配置包含全部 7 种模式', () => {
+    const fb = generateFallbackConfig();
+    const modes = Object.keys(fb.modes);
+    assert.ok(modes.includes('feature'));
+    assert.ok(modes.includes('story'));
+    assert.ok(modes.includes('implement'));
+    assert.ok(modes.includes('fix'));
+    assert.ok(modes.includes('resume'));
+    assert.ok(modes.includes('sync'));
+    assert.ok(modes.includes('doc'));
+  });
+
+  it('fallback 配置包含全部 6 个 Gate', () => {
+    const fb = generateFallbackConfig();
+    assert.ok(fb.gates.GATE_RESEARCH);
+    assert.ok(fb.gates.GATE_DESIGN);
+    assert.ok(fb.gates.GATE_ANALYSIS);
+    assert.ok(fb.gates.GATE_TASKS);
+    assert.ok(fb.gates.GATE_IMPLEMENT_MID);
+    assert.ok(fb.gates.GATE_VERIFY);
+  });
+
+  it('fallback feature 模式 Phase gates_after 是字符串数组', () => {
+    const fb = generateFallbackConfig();
+    const specifyPhase = fb.modes.feature.phases.find((p) => p.name === 'specify');
+    assert.ok(specifyPhase, 'feature fallback 应有 specify phase');
+    assert.ok(Array.isArray(specifyPhase.gates_after));
+    specifyPhase.gates_after.forEach((g) => {
+      assert.equal(typeof g, 'string', `Gate 引用应为字符串，实际: ${typeof g}`);
     });
-
-    // 即使没有找到 orchestration.yaml，也应该通过 fallback 正常工作
-    assert(orchestrator.config, 'Config should exist');
-    assert(orchestrator.config.modes, 'Modes should be defined');
-    assert(orchestrator.config.gates, 'Gates should be defined');
-  });
-
-  it('fallback config should have all 7 modes', () => {
-    const fallbackConfig = generateFallbackConfig();
-
-    assert(fallbackConfig.modes.feature, 'Feature mode should exist');
-    assert(fallbackConfig.modes.story, 'Story mode should exist');
-    assert(fallbackConfig.modes.implement, 'Implement mode should exist');
-    assert(fallbackConfig.modes.fix, 'Fix mode should exist');
-    assert(fallbackConfig.modes.resume, 'Resume mode should exist');
-    assert(fallbackConfig.modes.sync, 'Sync mode should exist');
-    assert(fallbackConfig.modes.doc, 'Doc mode should exist');
-  });
-
-  it('fallback config should have all 6 gates', () => {
-    const fallbackConfig = generateFallbackConfig();
-
-    assert(fallbackConfig.gates.GATE_RESEARCH, 'GATE_RESEARCH should exist');
-    assert(fallbackConfig.gates.GATE_DESIGN, 'GATE_DESIGN should exist');
-    assert(fallbackConfig.gates.GATE_ANALYSIS, 'GATE_ANALYSIS should exist');
-    assert(fallbackConfig.gates.GATE_TASKS, 'GATE_TASKS should exist');
-    assert(
-      fallbackConfig.gates.GATE_IMPLEMENT_MID,
-      'GATE_IMPLEMENT_MID should exist'
-    );
-    assert(fallbackConfig.gates.GATE_VERIFY, 'GATE_VERIFY should exist');
   });
 });
 
-describe('Backward Compatibility', () => {
-  it('should work without orchestration.yaml', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-
-    // Should still be able to get phases and gates
-    const phases = orchestrator.getPhases();
-    const behavior = orchestrator.getGateBehavior('GATE_DESIGN');
-
-    assert(phases.length > 0, 'Should still have phases');
-    assert(behavior, 'Should still have gate behaviors');
-  });
-
-  it('should gracefully handle missing mode', () => {
-    const orchestrator = new Orchestrator({}, 'feature', {
-      logger: mockLogger,
-    });
-
-    // Accessing non-existent mode should not crash
-    const phases = orchestrator.getPhases();
-    assert(Array.isArray(phases), 'Should return array even if mode missing');
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════
-// Validation Tests
-// ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+// 配置验证
+// ═════════════════════════════════════════════════════════════
 
 describe('Config Validation', () => {
-  it('should validate null config', () => {
-    const result = validateOrchestrationYaml(null);
-    assert.equal(result.valid, false, 'Null config should be invalid');
+  it('null 配置应报错', () => {
+    const r = validateOrchestrationYaml(null);
+    assert.equal(r.valid, false);
   });
 
-  it('should validate missing modes', () => {
-    const config = { version: '1.0' };
-    const result = validateOrchestrationYaml(config);
-    assert.equal(result.valid, false, 'Config without modes should be invalid');
+  it('缺少 modes 应报错', () => {
+    const r = validateOrchestrationYaml({ version: '1.0' });
+    assert.equal(r.valid, false);
   });
 
-  it('should warn on missing feature mode', () => {
-    const config = {
+  it('缺少 feature 模式应警告', () => {
+    const r = validateOrchestrationYaml({
       version: '1.0',
-      modes: { story: { phases: [] } },
+      modes: { story: { phases: [{ id: '1', name: 'test' }] } },
       gates: {},
-    };
-    const result = validateOrchestrationYaml(config);
-    assert(
-      result.warnings.some((w) => w.includes('feature')),
-      'Should warn when feature mode missing'
-    );
+    });
+    assert.ok(r.warnings.some((w) => w.includes('feature')));
   });
 
-  it('should validate valid config', () => {
-    const config = {
+  it('合法配置应通过', () => {
+    const r = validateOrchestrationYaml({
       version: '1.0',
-      modes: {
-        feature: { phases: [{ id: '1', name: 'test' }] },
-      },
+      modes: { feature: { phases: [{ id: '1', name: 'test' }] } },
       gates: { GATE_DESIGN: { type: 'test' } },
-    };
-    const result = validateOrchestrationYaml(config);
-    assert.equal(result.valid, true, 'Valid config should pass');
+    });
+    assert.equal(r.valid, true);
   });
 });
-
-// ═════════════════════════════════════════════════════════════════
-// Test Runner
-// ═════════════════════════════════════════════════════════════════
-
-console.log('Running Orchestrator Smoke Tests...\n');
-
-const testSuites = [
-  {
-    name: 'Feature Mode',
-    tests: [
-      'should load orchestration.yaml successfully',
-      'should have 10+ phases in feature mode',
-      'should correctly identify GATE_DESIGN as hard gate in feature mode',
-      'should have 3 parallel groups',
-    ],
-  },
-  {
-    name: 'Story Mode',
-    tests: [
-      'should load story mode successfully',
-      'should have GATE_DESIGN in story mode',
-      'GATE_DESIGN should not be hard gate in story mode',
-    ],
-  },
-  {
-    name: 'Other Modes',
-    tests: [
-      'should load implement mode successfully',
-      'should load fix mode successfully',
-      'should load resume mode successfully',
-      'should load sync mode successfully',
-      'should load doc mode successfully',
-    ],
-  },
-  {
-    name: 'Gate Behavior & Phase Conditions',
-    tests: [
-      'should apply balanced policy defaults',
-      'should apply strict policy defaults',
-      'should apply autonomous policy defaults',
-      'user config should override policy but not hard gates',
-      'should evaluate research_mode conditional',
-      'should skip phases with existing artifacts',
-    ],
-  },
-  {
-    name: 'Fallback & Backward Compatibility',
-    tests: [
-      'should use fallback config when orchestration.yaml is missing',
-      'fallback config should have all 7 modes',
-      'fallback config should have all 6 gates',
-      'should work without orchestration.yaml',
-      'should gracefully handle missing mode',
-    ],
-  },
-  {
-    name: 'Config Validation',
-    tests: [
-      'should validate null config',
-      'should validate missing modes',
-      'should warn on missing feature mode',
-      'should validate valid config',
-    ],
-  },
-];
-
-console.log(`✅ All smoke tests defined: ${testSuites.length} suites\n`);
-
-export {};
