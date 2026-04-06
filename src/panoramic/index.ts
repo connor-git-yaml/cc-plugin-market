@@ -50,7 +50,7 @@ export {
   type ApiEndpoint,
   type ApiSurfaceInput,
   type ApiSurfaceOutput,
-} from './api-surface-generator.js';
+} from './api-surface/index.js';
 export {
   InterfaceSurfaceGenerator,
   type InterfaceSurfaceRole,
