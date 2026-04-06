@@ -1,0 +1,8 @@
+# constitution 子代理制品 Schema
+output_path: ".specify/memory/constitution.md"
+required_sections:
+  - "## 项目级原则"
+  - "## 质量标准"
+  - "## 治理规则"
+optional_sections:
+  - "## Measurable Guardrails"

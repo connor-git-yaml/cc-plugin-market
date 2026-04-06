@@ -1,0 +1,8 @@
+# tech-research 子代理制品 Schema
+output_path: "{feature_dir}/research/tech-research.md"
+required_sections:
+  - "## 技术方案"
+  - "## 依赖分析"
+  - "## 架构约束"
+optional_sections:
+  - "## 原型验证"

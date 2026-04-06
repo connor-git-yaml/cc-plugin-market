@@ -1,0 +1,9 @@
+# plan 子代理制品 Schema
+output_path: "{feature_dir}/plan.md"
+required_sections:
+  - "## 方案总览"
+  - "## 实施模块"
+  - "## Impact Assessment"
+optional_sections:
+  - "## 依赖顺序"
+  - "## 数据迁移"

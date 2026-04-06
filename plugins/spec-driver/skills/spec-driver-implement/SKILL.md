@@ -171,6 +171,26 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
      - >1 个候选 → 暂停并要求用户显式指定
 ```
 
+### 6.5 自适应入口检测（新增）
+
+编排器在 feature 目录准备完成后，扫描已有制品以决定从哪个阶段开始：
+
+```text
+1. 扫描 {feature_dir}/ 目录：
+   - spec.md 存在且非空 → skip_specify = true
+   - plan.md 存在且非空 → skip_plan = true
+   - tasks.md 存在且非空 → skip_tasks = true
+
+2. 输出跳过日志：
+   if skip_specify: "[自适应] 检测到已有 spec.md，跳过 specify 阶段"
+   if skip_plan: "[自适应] 检测到已有 plan.md，跳过 plan 阶段"
+   if skip_tasks: "[自适应] 检测到已有 tasks.md，跳过 tasks 阶段"
+
+3. 调整执行流程：
+   - 跳过的阶段不执行子代理调用，但门禁仍然执行（如 GATE_DESIGN）
+   - 用户可通过 --force-rerun 强制重新生成已有制品
+```
+
 ### 7. 输入质量前置检查
 
 在继续前，检查目标目录下的核心制品：
@@ -270,6 +290,21 @@ implement:
 ### Phase 1: Spec / Plan Contract Check + Intake / 合同检查与预检 [1/6]
 
 `[1/6] 正在执行 spec/plan 合同检查与成熟实施预检...`
+
+**内联快速检查（优先于 Agent 调用）**：
+
+编排器先在主线程执行轻量级宪法检查，仅在发现潜在违反时才启动完整 Agent：
+
+```text
+1. 读取 .specify/memory/constitution.md
+2. 提取需求描述中的关键词
+3. 快速匹配：
+   - 是否涉及新增运行时依赖？→ 对照原则 IX
+   - 是否涉及绕过质量门？→ 对照原则 X
+   - 是否修改 src/ 源码？→ 对照原则 VIII
+4. 无匹配 → 输出 "[Constitution] PASS（内联检查）"，跳过 Agent 调用
+5. 有匹配 → 继续调用完整 Constitution Agent 分析
+```
 
 **此阶段由编排器亲自执行，不委派子代理。**
 

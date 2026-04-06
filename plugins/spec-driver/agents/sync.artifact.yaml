@@ -1,0 +1,7 @@
+# sync 子代理制品 Schema
+output_path: "specs/products/{product}/current-spec.md"
+required_sections:
+  - "## 产品概述"
+  - "## 核心能力"
+optional_sections:
+  - "## 文档健康度"

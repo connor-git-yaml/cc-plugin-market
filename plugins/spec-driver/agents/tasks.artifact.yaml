@@ -1,0 +1,7 @@
+# tasks 子代理制品 Schema
+output_path: "{feature_dir}/tasks.md"
+required_sections:
+  - "## 执行顺序"
+optional_sections:
+  - "## Architecture Guard"
+  - "## 原子性约束"

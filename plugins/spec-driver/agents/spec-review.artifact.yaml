@@ -1,0 +1,7 @@
+# spec-review 子代理制品 Schema
+output_path: "{feature_dir}/verification/spec-review-report.md"
+required_sections:
+  - "## FR 覆盖率"
+  - "## 逐条检查"
+optional_sections:
+  # none

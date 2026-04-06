@@ -1,0 +1,6 @@
+# clarify 子代理制品 Schema
+output_path: "{feature_dir}/spec.md (in-place update)"
+required_sections:
+  - "## 澄清结果"
+optional_sections:
+  # none

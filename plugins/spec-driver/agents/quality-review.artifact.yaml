@@ -1,0 +1,11 @@
+# quality-review 子代理制品 Schema
+output_path: "{feature_dir}/verification/quality-review-report.md"
+required_sections:
+  - "## 架构合理性"
+  - "## 设计模式"
+  - "## 安全性"
+  - "## 性能"
+  - "## 可维护性"
+optional_sections:
+  - "## STRUCTURAL_DEBT"
+  - "## 跨模块一致性"

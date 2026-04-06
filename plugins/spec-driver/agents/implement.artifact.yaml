@@ -1,0 +1,7 @@
+# implement 子代理制品 Schema
+output_path: "源代码变更 + {feature_dir}/tasks.md 进度更新"
+required_sections:
+  - "## 执行摘要"
+  - "## 任务完成情况"
+optional_sections:
+  - "## 未完成任务"

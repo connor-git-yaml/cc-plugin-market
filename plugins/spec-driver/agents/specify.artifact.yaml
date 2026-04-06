@@ -1,0 +1,11 @@
+# specify 子代理制品 Schema
+output_path: "{feature_dir}/spec.md"
+required_sections:
+  - "## 概述"
+  - "## User Stories"
+  - "## Functional Requirements"
+  - "## 非功能需求"
+  - "## 验收标准"
+optional_sections:
+  - "## 数据模型"
+  - "## API 契约"

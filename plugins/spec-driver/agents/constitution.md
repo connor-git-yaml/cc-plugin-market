@@ -46,6 +46,20 @@ effort: medium
    - 存在 WARNING 但无 VIOLATION → 返回 `PASS（含警告）`
    - 存在 VIOLATION → 返回 `VIOLATION`，列出所有违规项
 
+### Measurable Guardrails 检查（新增）
+
+在原则检查之外，额外执行以下可量化约束检查：
+
+1. **单文件行数上限**：检查需求涉及的目标文件，如果任一文件已超过 800 行，输出警告：
+   `[Guardrail] {文件} 已达 {N} 行，超过 800 行上限，建议先拆分`
+
+2. **循环依赖零容忍**：如果需求涉及新增模块间依赖，检查是否引入循环：
+   `[Guardrail] 检测到潜在循环依赖: {A} → {B} → {A}`
+
+3. **Silent Failure 零容忍**：如果需求涉及错误处理，检查是否存在：
+   - bare except / catch-all 返回空的模式
+   `[Guardrail] 禁止 silent failure: bare except 返回空结果`
+
 ## 输出
 
 **不生成文件**，结果通过返回消息传递给主编排器。

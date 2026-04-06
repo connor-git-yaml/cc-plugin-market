@@ -1,0 +1,9 @@
+# product-research 子代理制品 Schema
+output_path: "{feature_dir}/research/product-research.md"
+required_sections:
+  - "## 市场验证"
+  - "## 竞品分析"
+  - "## 用户画像"
+  - "## MVP 推荐"
+optional_sections:
+  - "## 在线调研结果"
