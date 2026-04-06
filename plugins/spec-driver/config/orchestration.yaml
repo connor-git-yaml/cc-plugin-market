@@ -29,56 +29,82 @@ parallel_scheduling:
 gates:
   GATE_RESEARCH:
     type: research_checkpoint
-    applicable_modes: [feature]
+    applicable_modes:
+      - feature
     description: "调研完整性门禁"
     default_behavior: auto
     severity: non_critical
-    hard_gate_modes: []
+    hard_gate_modes: null
     insertion_point: null
 
   GATE_DESIGN:
     type: design_checkpoint
-    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    applicable_modes:
+      - feature
+      - story
+      - implement
+      - fix
+      - resume
+      - sync
+      - doc
     description: "需求规范质量门禁（feature 模式下为硬门禁）"
     default_behavior: always
     severity: critical
-    hard_gate_modes: [feature]      # feature 模式下此门禁不可覆盖
+    hard_gate_modes:
+      - feature
     insertion_point: null
 
   GATE_ANALYSIS:
     type: quality_analysis
-    applicable_modes: [feature, implement]
+    applicable_modes:
+      - feature
+      - implement
     description: "设计一致性分析门禁"
     default_behavior: on_failure
     severity: non_critical
-    hard_gate_modes: []
+    hard_gate_modes: null
     insertion_point: null
 
   GATE_TASKS:
     type: task_generation
-    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    applicable_modes:
+      - feature
+      - story
+      - implement
+      - fix
+      - resume
+      - sync
+      - doc
     description: "任务分解完整性门禁"
     default_behavior: always
     severity: critical
-    hard_gate_modes: []
+    hard_gate_modes: null
     insertion_point: null
 
   GATE_IMPLEMENT_MID:
     type: implementation_checkpoint
-    applicable_modes: [implement]
+    applicable_modes:
+      - implement
     description: "实现中期检查门禁（Feature 090）"
     default_behavior: on_failure
     severity: non_critical
-    hard_gate_modes: []
+    hard_gate_modes: null
     insertion_point: "after_task_50_percent"
 
   GATE_VERIFY:
     type: verification_checkpoint
-    applicable_modes: [feature, story, implement, fix, resume, sync, doc]
+    applicable_modes:
+      - feature
+      - story
+      - implement
+      - fix
+      - resume
+      - sync
+      - doc
     description: "最终验证综合门禁"
     default_behavior: always
     severity: critical
-    hard_gate_modes: []
+    hard_gate_modes: null
     insertion_point: null
 
 # ═══════════════════════════════════════════════════════════════
@@ -87,21 +113,27 @@ gates:
 
 parallel_groups:
   RESEARCH_GROUP:
-    members: [1a, 1b]
+    members:
+      - "1a"
+      - "1b"
     convergence_point: "1c"
     fallback_strategy: serial_fallback
     max_concurrent: 2
     description: "产品调研 + 技术调研并行，进行产研汇总"
 
   DESIGN_PREP_GROUP:
-    members: [clarify, quality_checklist]  # Phase 3 内部的两个子任务
-    convergence_point: "3.5"         # GATE_DESIGN
+    members:
+      - clarify
+      - quality_checklist
+    convergence_point: "3.5"
     fallback_strategy: serial_fallback
     max_concurrent: 2
     description: "需求澄清 + 质量检查并行"
 
   VERIFY_GROUP:
-    members: [7a, 7b]
+    members:
+      - "7a"
+      - "7b"
     convergence_point: "7c"
     fallback_strategy: serial_fallback
     max_concurrent: 2
@@ -126,8 +158,8 @@ modes:
         display_name: 项目宪法检查
         agent: null
         agent_mode: inline
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -138,8 +170,8 @@ modes:
         display_name: 调研模式确定
         agent: null
         agent_mode: inline
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -150,8 +182,8 @@ modes:
         display_name: 产品调研
         agent: product-research
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: "research_mode in [full, product-only]"
         skip_if_exists: "research/product-research.md"
         is_critical: false
@@ -162,8 +194,8 @@ modes:
         display_name: 技术调研
         agent: tech-research
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: "research_mode in [full, tech-only, codebase-scan, custom]"
         skip_if_exists: "research/tech-research.md"
         is_critical: false
@@ -174,8 +206,9 @@ modes:
         display_name: 产研汇总
         agent: null
         agent_mode: inline
-        gates_before: []
-        gates_after: [GATE_RESEARCH]
+        gates_before: null
+        gates_after:
+          - GATE_RESEARCH
         conditional: "research_mode in [full]"
         skip_if_exists: "research/research-synthesis.md"
         is_critical: false
@@ -186,8 +219,8 @@ modes:
         display_name: 在线调研补充
         agent: null
         agent_mode: inline
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: "online_research_required == true"
         skip_if_exists: "research/online-research.md"
         is_critical: false
@@ -198,8 +231,9 @@ modes:
         display_name: 需求规范
         agent: specify
         agent_mode: single
-        gates_before: [GATE_RESEARCH]
-        gates_after: []
+        gates_before:
+          - GATE_RESEARCH
+        gates_after: null
         conditional: null
         skip_if_exists: "spec.md"
         is_critical: true
@@ -208,10 +242,12 @@ modes:
       - id: "3"
         name: clarify_and_checklist
         display_name: 需求澄清 + 质量检查
-        agent: [clarify, quality_checklist]
+        agent:
+          - clarify
+          - quality_checklist
         agent_mode: parallel_group
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -222,8 +258,9 @@ modes:
         display_name: 规范质量门禁
         agent: null
         agent_mode: gate
-        gates_before: []
-        gates_after: [GATE_DESIGN]
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -234,8 +271,9 @@ modes:
         display_name: 技术规划
         agent: plan
         agent_mode: single
-        gates_before: [GATE_DESIGN]
-        gates_after: []
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
         conditional: null
         skip_if_exists: "plan.md"
         is_critical: true
@@ -246,8 +284,8 @@ modes:
         display_name: 任务分解
         agent: tasks
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: "tasks.md"
         is_critical: true
@@ -258,8 +296,10 @@ modes:
         display_name: 一致性分析
         agent: analyze
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_ANALYSIS, GATE_TASKS]
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -270,8 +310,9 @@ modes:
         display_name: 代码实现
         agent: implement
         agent_mode: single
-        gates_before: [GATE_TASKS]
-        gates_after: []
+        gates_before:
+          - GATE_TASKS
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -282,8 +323,8 @@ modes:
         display_name: 编排器独立验证
         agent: null
         agent_mode: orchestrator_verify
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -294,8 +335,8 @@ modes:
         display_name: Spec 合规审查
         agent: spec-review
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -306,8 +347,8 @@ modes:
         display_name: 代码质量审查
         agent: quality-review
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -318,8 +359,9 @@ modes:
         display_name: 工具链验证 + 证据核查
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: "verification/verification-report.md"
         is_critical: true
@@ -336,8 +378,8 @@ modes:
         display_name: 需求澄清
         agent: clarify
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: "spec.md"
         is_critical: false
@@ -347,8 +389,9 @@ modes:
         display_name: 需求规范
         agent: specify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_DESIGN]
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
         conditional: null
         skip_if_exists: "spec.md"
         is_critical: true
@@ -358,8 +401,9 @@ modes:
         display_name: 技术规划
         agent: plan
         agent_mode: single
-        gates_before: [GATE_DESIGN]
-        gates_after: []
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
         conditional: null
         skip_if_exists: "plan.md"
         is_critical: true
@@ -369,8 +413,9 @@ modes:
         display_name: 任务分解
         agent: tasks
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_TASKS]
+        gates_before: null
+        gates_after:
+          - GATE_TASKS
         conditional: null
         skip_if_exists: "tasks.md"
         is_critical: true
@@ -380,8 +425,8 @@ modes:
         display_name: 代码实现
         agent: implement
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -391,8 +436,9 @@ modes:
         display_name: 验证与交付
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -409,8 +455,8 @@ modes:
         display_name: 需求澄清（快速检查）
         agent: clarify
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: "spec.md"
         is_critical: false
@@ -420,8 +466,9 @@ modes:
         display_name: 技术规划
         agent: plan
         agent_mode: single
-        gates_before: [GATE_DESIGN]
-        gates_after: []
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
         conditional: null
         skip_if_exists: "plan.md"
         is_critical: true
@@ -431,8 +478,8 @@ modes:
         display_name: 任务分解
         agent: tasks
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: "tasks.md"
         is_critical: true
@@ -442,8 +489,10 @@ modes:
         display_name: 一致性分析
         agent: analyze
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_ANALYSIS, GATE_TASKS]
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -453,8 +502,8 @@ modes:
         display_name: 代码实现
         agent: implement
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -465,8 +514,9 @@ modes:
         display_name: 验证与交付
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -483,8 +533,9 @@ modes:
         display_name: 需求规范
         agent: specify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_DESIGN]
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -494,8 +545,8 @@ modes:
         display_name: 代码实现
         agent: implement
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -505,8 +556,9 @@ modes:
         display_name: 验证与交付
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -523,8 +575,8 @@ modes:
         display_name: 需求澄清（快速检查）
         agent: clarify
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -534,8 +586,9 @@ modes:
         display_name: 任务分解（更新）
         agent: tasks
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_TASKS]
+        gates_before: null
+        gates_after:
+          - GATE_TASKS
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -545,8 +598,8 @@ modes:
         display_name: 代码实现
         agent: implement
         agent_mode: single
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -556,8 +609,9 @@ modes:
         display_name: 验证与交付
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -574,8 +628,8 @@ modes:
         display_name: 制品聚合
         agent: null
         agent_mode: inline
-        gates_before: []
-        gates_after: []
+        gates_before: null
+        gates_after: null
         conditional: null
         skip_if_exists: null
         is_critical: false
@@ -585,8 +639,10 @@ modes:
         display_name: 制品同步
         agent: sync
         agent_mode: single
-        gates_before: [GATE_DESIGN]
-        gates_after: [GATE_TASKS]
+        gates_before:
+          - GATE_DESIGN
+        gates_after:
+          - GATE_TASKS
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -596,8 +652,9 @@ modes:
         display_name: 质量验证
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -614,8 +671,9 @@ modes:
         display_name: 需求规范
         agent: specify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_DESIGN]
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -625,8 +683,9 @@ modes:
         display_name: 文档生成
         agent: doc
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_TASKS]
+        gates_before: null
+        gates_after:
+          - GATE_TASKS
         conditional: null
         skip_if_exists: null
         is_critical: true
@@ -636,8 +695,9 @@ modes:
         display_name: 质量验证
         agent: verify
         agent_mode: single
-        gates_before: []
-        gates_after: [GATE_VERIFY]
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
         conditional: null
         skip_if_exists: null
         is_critical: true
