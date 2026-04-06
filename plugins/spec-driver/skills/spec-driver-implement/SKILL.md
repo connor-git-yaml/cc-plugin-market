@@ -2,6 +2,9 @@
 name: spec-driver-implement
 description: "成熟 Spec 实施 — 聚焦计划审查、任务细化、代码实施与验证"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: opus
+effort: high
 ---
 
 # Spec Driver — 聚焦实施（Implement 模式）

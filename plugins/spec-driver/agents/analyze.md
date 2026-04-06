@@ -54,13 +54,41 @@ effort: medium
    - 任务排序矛盾（如集成任务排在基础设置之前）
    - 冲突的需求（如一个要求 Next.js 另一个指定 Vue）
 
-8. **严重性分配**
+8. **检测 Pass G: 跨 Feature 文件冲突检测**
+
+   扫描当前 Feature 与近 5 个活跃 Feature 的文件路径交集，在实现前评估并行冲突风险：
+
+   1. 从当前 Feature 的 tasks.md 提取所有文件路径引用（匹配反引号包裹路径 `` `src/...` ``、[P] 标记后跟路径、行首路径引用 `- src/...`）
+   2. 扫描 `specs/` 下最近 5 个活跃 Feature 目录（按编号倒序，排除 spec.md frontmatter 中 `status` 为 `Completed` 或 `Abandoned` 的 Feature）的 tasks.md，提取各自的文件路径集合。不足 5 个时扫描所有可用；某个 Feature 的 tasks.md 不存在时跳过该 Feature 继续
+   3. 排除通用配置文件（`package.json`、`package-lock.json`、`tsconfig.json`、`tsconfig.build.json`、`.eslintrc.json`、`.prettierrc`、`spec-driver.config.yaml`、`.gitignore`、`AGENTS.md`、`CLAUDE.md`）
+   4. 仅检测 `src/`、`plugins/`、`scripts/` 下的文件路径
+   5. 对每个近期 Feature 计算与当前 Feature 的文件路径交集：
+      - 3+ 文件重叠 → 严重性 **HIGH**
+      - 1-2 文件重叠 → 严重性 **MEDIUM**
+      - 仅测试文件（路径含 `test`/`spec`/`__tests__`）重叠 → 严重性 **LOW**
+   6. 交集非空 → 输出 OVERLAP_WARNING 表格：
+
+      ```
+      Pass G: 跨 Feature 文件冲突检测
+
+      OVERLAP_WARNING — 检测到 {N} 个 Feature 存在文件重叠
+
+      | Feature | 重叠文件 | 严重性 |
+      |---------|---------|--------|
+      | 090-xxx | src/foo.ts, plugins/bar/baz.mjs | HIGH |
+
+      建议: 与 Feature 090 协调实现顺序，优先合并变更量小的一方。
+      ```
+
+      交集全空 → 输出 `Pass G: CLEAN — 当前 Feature 与近 5 个活跃 Feature 无文件重叠`
+
+9. **严重性分配**
    - **CRITICAL**: 违反宪法 MUST、核心需求零覆盖、阻断基线功能
    - **HIGH**: 重复/冲突需求、模糊安全/性能属性、不可测试的验收标准
    - **MEDIUM**: 术语漂移、非功能任务覆盖缺失、边界条件规格不足
    - **LOW**: 措辞改进、轻微冗余
 
-9. **生成分析报告**
+10. **生成分析报告**
    - 发现表（限 50 条，超出汇总）
    - 覆盖汇总表
    - 宪法对齐问题

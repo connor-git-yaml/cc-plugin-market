@@ -2,6 +2,9 @@
 name: spec-driver-fix
 description: "快速问题修复 — 4 阶段完成：诊断-规划-修复-验证"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: sonnet
+effort: medium
 ---
 
 # Spec Driver — 快速问题修复（Fix 模式）

@@ -2,6 +2,9 @@
 name: spec-driver-feature
 description: "执行 Spec-Driven Development 完整研发流程（10 阶段编排：调研-规范-规划-实现-验证）"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: opus
+effort: high
 ---
 
 # Spec Driver — 自治研发编排器

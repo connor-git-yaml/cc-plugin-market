@@ -202,11 +202,33 @@ check_constitution() {
 check_config() {
   if [[ -f "$CONFIG_FILE" ]] || [[ -f "$ALT_CONFIG_FILE" ]]; then
     INIT_RESULTS+=("config:exists")
+    validate_config_schema
     return 0
   fi
 
   NEEDS_CONFIG=true
   INIT_RESULTS+=("config:missing")
+}
+
+# 步骤 3a: Schema 校验（config 存在时执行）
+validate_config_schema() {
+  local validate_script="${SCRIPT_DIR}/validate-config.mjs"
+  if [[ ! -f "$validate_script" ]]; then
+    INIT_RESULTS+=("config_schema:skip")
+    return 0
+  fi
+
+  if node "$validate_script" --project-root "$PROJECT_ROOT" --validate >/dev/null 2>&1; then
+    INIT_RESULTS+=("config_schema:pass")
+  else
+    local output
+    output="$(node "$validate_script" --project-root "$PROJECT_ROOT" --validate 2>&1)" || true
+    INIT_RESULTS+=("config_schema:fail")
+    echo -e "  ${RED}配置 Schema 校验失败:${NC}"
+    echo "$output" | while IFS= read -r line; do
+      echo -e "    $line"
+    done
+  fi
 }
 
 # 步骤 4: 检查 gate_policy 配置
@@ -275,6 +297,22 @@ run_init_checks() {
   check_config
   check_gate_policy
   detect_spec_driver_skills
+  show_effective_config
+}
+
+# effective config 展示（仅当配置文件存在时）
+show_effective_config() {
+  local validate_script="${SCRIPT_DIR}/validate-config.mjs"
+  if [[ ! -f "$validate_script" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$CONFIG_FILE" ]] && [[ ! -f "$ALT_CONFIG_FILE" ]]; then
+    return 0
+  fi
+  # 仅 text 输出模式下展示
+  if [[ "$OUTPUT_MODE" == "text" ]]; then
+    node "$validate_script" --project-root "$PROJECT_ROOT" --show-effective 2>/dev/null || true
+  fi
 }
 
 # 主流程

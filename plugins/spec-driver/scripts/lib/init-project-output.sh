@@ -97,6 +97,18 @@ print_init_text_result() {
         echo -e "  ⚠️  ${YELLOW}未找到 project-context 模板，跳过自动创建${NC}"
       fi
       ;;
+    config_schema)
+      if [[ "$value" == "pass" ]]; then
+        echo -e "  ✅ 配置文件 Schema 校验通过"
+      elif [[ "$value" == "fail" ]]; then
+        echo -e "  ❌ ${RED}配置文件 Schema 校验失败${NC}（详见上方错误信息）"
+      elif [[ "$value" == "skip" ]]; then
+        echo -e "  ℹ️  Schema 校验脚本不存在，跳过"
+      fi
+      ;;
+    scorecards)
+      # scorecards 结果已有处理，此处仅为保持 case 完整
+      ;;
     specify_templates)
       if [[ "$value" == ready ]]; then
         echo -e "  ✅ .specify/templates 基础模板已就绪"

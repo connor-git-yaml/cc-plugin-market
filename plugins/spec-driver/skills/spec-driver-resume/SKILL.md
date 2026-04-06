@@ -2,6 +2,9 @@
 name: spec-driver-resume
 description: "恢复中断的 Spec-driver 研发流程 — 扫描已有制品并从断点继续编排"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: sonnet
+effort: medium
 ---
 
 # Spec Driver — 中断恢复

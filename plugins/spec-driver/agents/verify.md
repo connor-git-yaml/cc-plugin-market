@@ -134,6 +134,16 @@ effort: medium
      c. 已安装 → 依次执行构建、Lint、测试命令
      d. 记录每个命令的退出码、输出摘要
 
+   **超时保护**: 执行每个 Bash 验证命令时 MUST 附加 `timeout {N}s` 前缀，其中 N 为编排器注入的 `verification.timeout` 值（秒，默认 300）。示例：
+
+   ```bash
+   timeout 300s npm test
+   ```
+
+   - 如超时触发（退出码 124），记录 `[TIMEOUT] 命令 "{cmd}" 在 {N} 秒后被终止` 并标记该命令为 FAIL
+   - 若 `timeout` 命令不可用（macOS 未安装 coreutils），使用 `gtimeout` 作为降级替代；若两者均不可用，跳过超时保护并在报告中注明
+   - 编排器在构建 verify Agent 上下文时，会将 `verification.timeout` 值显式写入运行时上下文注入区域
+
 ### 报告生成
 
 7. **生成验证报告**

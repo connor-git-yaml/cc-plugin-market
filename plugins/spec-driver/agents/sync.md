@@ -302,6 +302,23 @@ products:
 
 3. **术语一致性**：检查已删除的代码概念是否仍在 current-spec.md 中被描述为"当前状态"
 
+4. **矛盾检测**：检查不同 Feature spec 之间是否存在数值冲突或行为描述冲突：
+   - 对比各 spec 的 Functional Requirements 和 Constraints 区域
+   - 标注数值矛盾（如"最大行数"在不同 spec 中给出不同值）
+   - 标注行为冲突（如一个 spec 要求同步执行另一个要求异步执行）
+   - 输出格式：`[矛盾] FR-xxx (Feature A) vs FR-yyy (Feature B): {描述}`
+   - 若无矛盾：输出 `[矛盾检测] 通过 — 各 Feature spec 之间未发现数值或行为冲突`
+
+5. **术语一致性检查**：检查同一概念在不同 spec 中是否使用不同术语：
+   - 构建术语映射表（从已有术语表和 current-spec.md 术语表章节提取）
+   - 扫描各 spec 中未使用标准术语的地方
+   - 重点检测以下常见不一致模式：
+     - 同义替换（如"编排器" vs "调度器"、"子代理" vs "子任务"）
+     - 缩写不一致（如"FR" vs "功能需求"、"NFR" vs "非功能需求"）
+     - 英中混用（如"Schema" vs "模式"、"validate" vs "校验"）
+   - 输出格式：`[术语不一致] "{术语A}" (Feature X) vs "{术语B}" (Feature Y) — 建议统一为 "{标准术语}"`
+   - 若全部一致：输出 `[术语一致性] 通过 — 各 Feature spec 术语使用一致`
+
 ## 约束
 
 - **不修改增量 spec**：原始 `specs/NNN-xxx/` 文件只读

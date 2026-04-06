@@ -2,6 +2,9 @@
 name: spec-driver-story
 description: "快速需求实现 — 跳过调研，5 阶段完成：规范-规划-任务-实现-验证"
 disable-model-invocation: true
+allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+model: opus
+effort: high
 ---
 
 # Spec Driver — 快速需求实现（Story 模式）
