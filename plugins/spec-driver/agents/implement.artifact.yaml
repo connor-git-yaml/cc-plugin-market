@@ -1,4 +1,5 @@
 # implement 子代理制品 Schema
+# 注意：implement 的产出是源代码变更 + tasks.md 进度更新，无独立制品文件
 output_path: "源代码变更 + {feature_dir}/tasks.md 进度更新"
 required_sections:
   - "## 执行摘要"

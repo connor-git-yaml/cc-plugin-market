@@ -1,9 +1,11 @@
 # product-research 子代理制品 Schema
 output_path: "{feature_dir}/research/product-research.md"
 required_sections:
-  - "## 市场验证"
-  - "## 竞品分析"
-  - "## 用户画像"
-  - "## MVP 推荐"
+  - "## 1. 需求概述"
+  - "## 2. 市场现状"
+  - "## 3. 竞品分析"
+  - "## 4. 用户场景验证"
+  - "## 5. MVP 范围建议"
+  - "## 6. 结论与建议"
 optional_sections:
-  - "## 在线调研结果"
+  # 无——所有章节均为模板必填

@@ -164,7 +164,7 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 
 3. 调整执行流程：
    - 跳过的阶段不执行子代理调用，但门禁仍然执行（如 GATE_DESIGN）
-   - 用户可通过 --force-rerun 强制重新生成已有制品
+   - 用户可通过 --rerun 强制重新生成已有制品
 ```
 
 ### 7. 代码库上下文扫描 + Scope 评估
@@ -575,6 +575,7 @@ if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 15 个文件:
 
 ## 模型选择
 
+<!-- 此段落与 spec-driver-feature SKILL.md 共享，后续考虑提取到 docs/shared/ -->
 与 run 模式共享同一套模型配置逻辑和 preset 默认表，并执行同一套运行时兼容归一化：
 
 - 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值

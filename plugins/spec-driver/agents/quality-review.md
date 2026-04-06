@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Grep, Glob]
+tools: [Read, Bash, Grep, Glob]
 effort: medium
 ---
 
@@ -45,7 +45,7 @@ effort: medium
      - 单文件 <300 行增长到 >500 行：**WARNING**
      - 单文件 <500 行增长到 >800 行：**CRITICAL**（建议阻断 implement，要求先拆分）
      - 同一文件在连续 3 个 Feature 中行数持续增长：**CRITICAL**
-   - 检查方式：`wc -l` 目标文件，对比 git 历史中的行数
+   - 检查方式：通过 Read 工具读取文件后估算行数，或使用 Bash 执行 `wc -l`，对比 git 历史中的行数
 
    #### 维度 1.7: 跨模块一致性
    - 并行子任务完成后，全局扫描：

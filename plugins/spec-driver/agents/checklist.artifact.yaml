@@ -1,6 +1,8 @@
 # checklist 子代理制品 Schema
 output_path: "{feature_dir}/checklists/requirements.md"
 required_sections:
-  - "## 需求检查清单"
+  - "## Content Quality（内容质量）"
+  - "## Requirement Completeness（需求完整性）"
+  - "## Feature Readiness（特性就绪度）"
 optional_sections:
-  - "## 架构检查清单"
+  # 无——三个维度均为必填

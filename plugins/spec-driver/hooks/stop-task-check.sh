@@ -3,20 +3,19 @@
 
 set -euo pipefail
 
-INCOMPLETE=0
-FEATURE_NAME=""
+FEATURES=""
 
 for tasks_file in specs/*/tasks.md; do
   [ -f "$tasks_file" ] || continue
   COUNT=$(grep -c '^\- \[ \]' "$tasks_file" 2>/dev/null || echo "0")
   if [ "$COUNT" -gt 0 ]; then
-    FEATURE_NAME=$(dirname "$tasks_file" | xargs basename)
-    INCOMPLETE=$((INCOMPLETE + COUNT))
+    NAME=$(dirname "$tasks_file" | xargs basename)
+    FEATURES="${FEATURES}${NAME}(${COUNT}) "
   fi
 done
 
-if [ "$INCOMPLETE" -gt 0 ]; then
-  echo "[提醒] ${FEATURE_NAME} 还有 ${INCOMPLETE} 个未完成任务" >&2
+if [ -n "$FEATURES" ]; then
+  echo "[提醒] 未完成任务: ${FEATURES}" >&2
 fi
 
 # 非阻断，始终 exit 0

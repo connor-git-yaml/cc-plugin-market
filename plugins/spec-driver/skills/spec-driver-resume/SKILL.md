@@ -243,6 +243,7 @@ if online_research_required:
 
 如果 `execution-state.json` 不存在，回退到基于制品文件存在性的恢复逻辑：
 
+<!-- Phase 编号参考 spec-driver-feature SKILL.md，如有变更需同步更新 -->
 扫描 `{feature_dir}` 下的制品文件，从后向前确定恢复点：
 
 ```text

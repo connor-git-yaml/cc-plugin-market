@@ -35,6 +35,7 @@
 | `contracts/**` | release metadata source | 编辑后运行 `release:sync` |
 | `specs/<feature>/` | feature artifacts | 由 spec-driver 生成/维护 |
 | `specs/products/_generated/` | machine outputs | 不手改，由脚本生成 |
+| `.specify/**` | runtime state + project overlay | 不直接手改运行态（runs/），project-context.yaml 可编辑 |
 
 ## 常用命令
 

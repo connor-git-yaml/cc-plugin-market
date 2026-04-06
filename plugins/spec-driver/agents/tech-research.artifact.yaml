@@ -1,8 +1,12 @@
 # tech-research 子代理制品 Schema
 output_path: "{feature_dir}/research/tech-research.md"
 required_sections:
-  - "## 技术方案"
-  - "## 依赖分析"
-  - "## 架构约束"
+  - "## 1. 调研目标"
+  - "## 2. 架构方案对比"
+  - "## 3. 依赖库评估"
+  - "## 4. 设计模式推荐"
+  - "## 5. 技术风险清单"
+  - "## 6. 产品-技术对齐度"
+  - "## 7. 结论与建议"
 optional_sections:
-  - "## 原型验证"
+  # 无——所有章节均为模板必填

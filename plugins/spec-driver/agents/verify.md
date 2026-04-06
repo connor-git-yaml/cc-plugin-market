@@ -95,7 +95,7 @@ effort: medium
 
 ### Layer 2: 原生工具链验证
 
-3. **语言/构建系统检测**
+2.1. **语言/构建系统检测**
    - 扫描项目根目录和子目录的特征文件：
 
    | 特征文件 | 语言/构建系统 | 构建命令 | Lint 命令 | 测试命令 |
@@ -119,15 +119,15 @@ effort: medium
    | mix.exs | Elixir | `mix compile` | `mix credo` | `mix test` |
    | Gemfile | Ruby | N/A | `rubocop` | `bundle exec rspec` |
 
-4. **Monorepo 检测**
+2.2. **Monorepo 检测**
    - 检查 workspace 配置（package.json workspaces、Cargo [workspace]、pnpm-workspace.yaml）
    - 如果是 Monorepo，递归扫描每个子项目
    - 每个子项目独立执行验证
 
-5. **自定义命令覆盖**
+2.3. **自定义命令覆盖**
    - 如果运行时上下文中提供了 spec-driver.config.yaml 的 verification.commands，使用自定义命令覆盖默认命令
 
-6. **执行验证**
+2.4. **执行验证**
    - 对每种检测到的语言/构建系统：
      a. 检查命令工具是否已安装（`which <tool>` 或 `command -v <tool>`）
      b. 未安装 → 标记"工具未安装"，跳过（不阻断）

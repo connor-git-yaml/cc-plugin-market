@@ -109,7 +109,7 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 balanced 默认值表:
   | 门禁         | 默认行为 | 分类       |
   | ------------ | -------- | ---------- |
-  | GATE_DESIGN  | always   | 关键       |
+  | GATE_DESIGN  | always   | 关键       | <!-- fix 模式下实际行为以 Phase 2.5 运行时逻辑为准 -->
   | GATE_VERIFY  | always   | 关键       |
 
 strict 默认值: 全部 always
@@ -462,6 +462,7 @@ if fix-report.md 中受影响文件 > 10 个 或 涉及 > 3 个模块:
 
 ## 模型选择
 
+<!-- 此段落与 spec-driver-feature SKILL.md 共享，后续考虑提取到 docs/shared/ -->
 与 run 模式共享同一套模型配置逻辑与运行时兼容归一化。fix 模式下诊断阶段使用高质量推理模型（逻辑名 `opus`），在 Codex 运行时会按 `model_compat` 自动映射到对应模型；其他阶段默认遵循 preset，仅在显式配置 `agents.{agent_id}.model` 时覆盖。
 
 ---

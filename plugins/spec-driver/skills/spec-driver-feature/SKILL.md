@@ -181,7 +181,7 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 
 3. 调整执行流程：
    - 跳过的阶段不执行子代理调用，但门禁仍然执行（如 GATE_DESIGN）
-   - 用户可通过 --force-rerun 强制重新生成已有制品
+   - 用户可通过 --rerun 强制重新生成已有制品
 ```
 
 ---

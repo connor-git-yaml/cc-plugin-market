@@ -110,7 +110,7 @@ effort: high
 
    **降级处理**: 如果项目没有可用的验证工具（无 build/test/lint 命令），标注"无可用验证工具——通过文件存在性和内容检查验证"，不阻断流程。对于纯 Markdown/YAML/Shell 项目，使用语法检查（`bash -n`、YAML 解析）作为验证手段。
 
-7. **Phase 完成验证**
+8. **Phase 完成验证**
    - 每个 Phase 完成后，检查该 Phase 所有任务的 checkbox
    - 如果有未完成任务，报告原因
    - 如果 Phase 是 User Story，验证该 Story 可独立测试

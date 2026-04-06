@@ -1,8 +1,9 @@
 # constitution 子代理制品 Schema
-output_path: ".specify/memory/constitution.md"
+# 注意：constitution 不生成文件，检查结果通过返回消息传递给编排器
+output_path: "# 无文件输出——宪法检查结果通过返回消息传递"
 required_sections:
-  - "## 项目级原则"
-  - "## 质量标准"
-  - "## 治理规则"
+  - "## 执行摘要"
+  - "## 检查详情"
+  - "## 综合判定"
 optional_sections:
-  - "## Measurable Guardrails"
+  # 无——所有章节均为返回消息必填

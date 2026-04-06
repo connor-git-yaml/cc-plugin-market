@@ -1,7 +1,12 @@
 # spec-review 子代理制品 Schema
-output_path: "{feature_dir}/verification/spec-review-report.md"
+# 注意：spec-review 不生成文件，报告通过返回消息传递给编排器
+output_path: "# 无文件输出——合规审查报告通过返回消息传递"
 required_sections:
-  - "## FR 覆盖率"
-  - "## 逐条检查"
+  - "## Spec 合规审查报告"
+  - "### 逐条 FR 状态"
+  - "### 总体合规率"
+  - "### 偏差清单"
+  - "### 过度实现检测"
+  - "### 问题分级汇总"
 optional_sections:
-  # none
+  # 无——所有章节均为返回消息必填

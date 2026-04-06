@@ -1,7 +1,10 @@
 # tasks 子代理制品 Schema
 output_path: "{feature_dir}/tasks.md"
 required_sections:
-  - "## 执行顺序"
+  - "## Phase 1: Setup"
+  - "## Phase 2: Foundational"
+  - "## Dependencies & Execution Order"
+  - "## Implementation Strategy"
 optional_sections:
-  - "## Architecture Guard"
-  - "## 原子性约束"
+  - "## FR 覆盖映射表"
+  - "## Phase N: Polish & Cross-Cutting Concerns"

@@ -1,11 +1,11 @@
 # quality-review 子代理制品 Schema
-output_path: "{feature_dir}/verification/quality-review-report.md"
+# 注意：quality-review 不生成文件，报告通过返回消息传递给编排器
+output_path: "# 无文件输出——质量审查报告通过返回消息传递"
 required_sections:
-  - "## 架构合理性"
-  - "## 设计模式"
-  - "## 安全性"
-  - "## 性能"
-  - "## 可维护性"
+  - "## 代码质量审查报告"
+  - "### 六维度评估"
+  - "### 问题清单"
+  - "### 总体质量评级"
+  - "### 问题分级汇总"
 optional_sections:
-  - "## STRUCTURAL_DEBT"
-  - "## 跨模块一致性"
+  # 无——所有章节均为返回消息必填

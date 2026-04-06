@@ -1,7 +1,10 @@
 # analyze 子代理制品 Schema
-output_path: "{feature_dir}/analysis-report.md"
+# 注意：analyze 不生成文件，分析报告通过返回消息传递给编排器
+output_path: "# 无文件输出——分析报告通过返回消息传递"
 required_sections:
-  - "## 一致性分析"
-  - "## 风险识别"
+  - "## 执行摘要"
+  - "## 发现表"
+  - "## 覆盖汇总"
+  - "## 指标"
 optional_sections:
-  - "## 跨 Feature 冲突"
+  # 无——所有章节均为返回消息必填
