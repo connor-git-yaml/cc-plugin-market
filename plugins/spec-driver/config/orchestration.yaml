@@ -2,14 +2,13 @@
 # Spec Driver 编排配置 - 所有模式统一编排定义
 # Version: 1.0 (2026-04-06)
 #
-# 此文件定义了 spec-driver 的 7 种模式（feature/story/implement/fix/resume/sync/doc）
+# 此文件定义了 spec-driver 的 8 种模式（feature/story/implement/fix/resume/sync/doc/refactor）
 # 的完整 Phase 序列、Gate 行为、并行组调度策略。
 #
 # 修改指南：
 #   - 新增 Phase 时，在对应 modes.{mode}.phases 数组末尾添加
 #   - 新增 Gate 时，在 gates 块添加定义，并在 Phase 的 gates_before/after 中引用
 #   - 新增并行组时，在 parallel_groups 块添加，并在 Phase 中设置 agent_mode: parallel_group
-#   - Feature 093 (refactor 模式)：见文末注释化模板
 
 version: "1.0"
 

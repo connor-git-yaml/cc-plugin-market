@@ -133,6 +133,38 @@ describe('Doc Mode', () => {
   });
 });
 
+describe('Refactor Mode', () => {
+  it('加载成功且有 5 个 Phase', () => {
+    const orch = new Orchestrator({}, 'refactor', { logger: silentLogger });
+    const phases = orch.getPhases();
+    assert.equal(phases.length, 5, 'Refactor 模式应有 5 个 Phase');
+  });
+
+  it('Phase 序列正确: impact→batch_plan→batch_impl→residual→verify', () => {
+    const orch = new Orchestrator({}, 'refactor', { logger: silentLogger });
+    const names = orch.getPhases().map((p) => p.name);
+    assert.deepEqual(names, [
+      'impact_analysis', 'batch_planning', 'batch_implement',
+      'residual_scan', 'final_verify',
+    ]);
+  });
+
+  it('batch_implement 使用 batch_loop agent_mode', () => {
+    const orch = new Orchestrator({}, 'refactor', { logger: silentLogger });
+    const batchPhase = orch.getPhases().find((p) => p.name === 'batch_implement');
+    assert.ok(batchPhase);
+    assert.equal(batchPhase.agent_mode, 'batch_loop');
+  });
+
+  it('GATE_TASKS 和 GATE_VERIFY 适用于 refactor', () => {
+    const orch = new Orchestrator({}, 'refactor', { logger: silentLogger });
+    const tasks = orch.getGateBehavior('GATE_TASKS');
+    const verify = orch.getGateBehavior('GATE_VERIFY');
+    assert.ok(tasks.behavior, 'GATE_TASKS 应有行为定义');
+    assert.ok(verify.behavior, 'GATE_VERIFY 应有行为定义');
+  });
+});
+
 // ═════════════════════════════════════════════════════════════
 // Gate 4-tier 优先级
 // ═════════════════════════════════════════════════════════════
@@ -228,7 +260,7 @@ describe('Phase Condition Evaluation', () => {
 // ═════════════════════════════════════════════════════════════
 
 describe('Fallback Configuration', () => {
-  it('fallback 配置包含全部 7 种模式', () => {
+  it('fallback 配置包含全部 8 种模式', () => {
     const fb = generateFallbackConfig();
     const modes = Object.keys(fb.modes);
     assert.ok(modes.includes('feature'));
@@ -238,6 +270,8 @@ describe('Fallback Configuration', () => {
     assert.ok(modes.includes('resume'));
     assert.ok(modes.includes('sync'));
     assert.ok(modes.includes('doc'));
+    assert.ok(modes.includes('refactor'), 'fallback 应包含 refactor 模式');
+    assert.equal(modes.length, 8, '应有 8 种模式');
   });
 
   it('fallback 配置包含全部 6 个 Gate', () => {

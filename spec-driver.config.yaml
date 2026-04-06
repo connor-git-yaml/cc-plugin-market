@@ -79,6 +79,7 @@ research:
 
 verification:
   commands: {}
+  timeout: 300  # 验证命令超时（秒），默认 300；超过 3600 会触发警告
   monorepo:
     enabled: true
 
@@ -102,6 +103,8 @@ gate_policy: balanced
 #     pause: auto
 #   GATE_TASKS:
 #     pause: always
+#   GATE_IMPLEMENT_MID:
+#     pause: on_failure    # 实现中期检查（<=5 tasks 自动跳过）
 #   GATE_VERIFY:
 #     pause: always
 
