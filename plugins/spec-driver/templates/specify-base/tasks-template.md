@@ -240,6 +240,21 @@ With multiple developers:
 
 ---
 
+## 原子性约束
+
+- 每个任务完成后，整个系统必须可以通过基础验证（编译/lint）
+- 如果一个改动需要同时修改多个层级（如删除模型字段 + 删除 Store 参数 + 删除 Service 调用），这些修改必须在同一个任务中完成，而不是拆分到不同任务
+- 每个任务附简要验证命令（如 `npm run build`、`npm run lint`、`grep -rn "旧名称" src/`）
+
+## Architecture Guard
+
+> 以下守护条目由 plan agent 在规划阶段填充。implement agent 在每个任务完成后必须逐条检查。
+
+- [ ] AG-001 本次改动涉及的最大文件行数不超过 {阈值，默认 800} 行（若超过，先拆分再实现）
+- [ ] AG-002 新增代码不引入循环依赖（检查方式：grep 延迟 import 或运行依赖分析）
+- [ ] AG-003 新增代码不引入 bare except / catch-all-return-empty 模式（`except: return []`、`except: return None`、`except: pass`）
+- [ ] AG-004 {plan agent 可根据实际情况追加项目特定的守护条目}
+
 ## Notes
 
 - [P] tasks = different files, no dependencies

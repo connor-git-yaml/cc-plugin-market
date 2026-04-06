@@ -699,6 +699,25 @@ elif research_mode == "custom":
 
 读取 `prompt_source[implement]`，调用 Task(description: "执行代码实现", prompt: "{implement prompt}" + "{上下文注入 + tasks.md + plan.md + data-model.md + contracts/ 路径}", model: "{config.agents.implement.model}")。解析返回：完成/部分完成/失败。
 
+### Phase 6.5: 编排器独立验证（新增）
+
+**此步骤由编排器亲自执行，不委派子代理。**
+
+implement 完成后、进入 verify 子代理前，编排器独立运行项目验证命令：
+
+```text
+1. 从 spec-driver.config.yaml 的 verification.commands 或自动检测获取验证命令
+2. 依次执行 build、lint、test 命令
+3. 记录每个命令的退出码和输出摘要
+4. 如果任一命令失败:
+   - 输出: [编排器验证] {命令} 失败（退出码 {N}），implement 产出未通过独立验证
+   - 将失败信息传递给 verify 子代理作为已知问题输入
+5. 如果全部通过:
+   - 输出: [编排器验证] build ✅ lint ✅ test ✅
+```
+
+此步骤的目的是不依赖 implement Agent 的自我报告，由编排器独立确认代码质量基线。
+
 ---
 
 ### Phase 7: 验证闭环 [10/10]

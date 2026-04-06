@@ -338,6 +338,19 @@ if online_research_required:
 
 读取 `prompt_source[implement]`，调用 Task(description: "执行代码实现", prompt: "{implement prompt}" + "{上下文注入 + tasks.md + plan.md 路径}", model: "{config.agents.implement.model}")。
 
+### Phase 4.5: 编排器独立验证（新增）
+
+**此步骤由编排器亲自执行，不委派子代理。**
+
+implement 完成后、进入 verify 子代理前，编排器独立运行项目验证命令：
+
+```text
+1. 从 spec-driver.config.yaml 的 verification.commands 或自动检测获取验证命令
+2. 依次执行 build、lint、test 命令
+3. 如果任一命令失败 → 记录并传递给 verify 子代理
+4. 全部通过 → 输出: [编排器验证] build ✅ lint ✅ test ✅
+```
+
 ---
 
 ### Phase 5: 验证闭环 [5/5]

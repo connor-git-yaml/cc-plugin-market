@@ -61,6 +61,38 @@ effort: medium
    - **PARTIAL**: 部分验证类型有证据，部分缺失（如有构建证据但无测试证据）
    - 列出缺失的验证类型（构建/测试/Lint）和检测到的推测性表述
 
+### Layer 1.75: 深度检查（新增）
+
+   对关键 FR 执行超越"文件存在性"的深度验证：
+
+   **a. 调用链完整性**
+   - 对每个 FR 追踪完整调用链（入口→中间层→底层），检查链路上是否有断点
+   - 特别关注：参数是否在传递链路中丢失（如 `**kwargs` 断链）、异常是否在中间层被吞掉
+
+   **b. 数据持久化验证**
+   - 涉及数据库写入的 FR，检查 commit/flush 是否存在于正确位置
+   - SQLite: `conn.commit()`；ORM: `session.flush()` / `session.commit()`
+
+   **c. 配置贯穿验证**
+   - 涉及配置项的 FR，检查配置值是否从配置源一路传递到使用点
+   - 检查: env var → config loader → service constructor → 实际使用
+
+### Layer 1.8: 残留扫描（新增）
+
+   当本次改动涉及删除/重命名时，执行以下检查：
+
+   - 搜索旧名称在 `src/`、`plugins/`、`tests/` 中的残留引用（`grep -rn "旧名称"`)
+   - 搜索旧名称在 `docs/`、`README.md`、`AGENTS.md`、`CLAUDE.md` 中的残留引用
+   - 如果迁移了文件，确认旧位置无孤立文件
+   - 发现残留 → 标记为 RESIDUAL_FOUND，列出残留位置
+
+### Layer 1.9: 文档一致性检查（新增）
+
+   如果本次改动涉及架构级变更（新增/删除模块、修改公共接口），检查：
+
+   - 架构文档（Blueprint / README / ADR）中对已删除/重命名概念的引用
+   - 发现不一致 → 标记为 DOC_DRIFT，列出需要更新的文档位置
+
 ### Layer 2: 原生工具链验证
 
 3. **语言/构建系统检测**
@@ -108,7 +140,7 @@ effort: medium
    - 确保 `{feature_dir}/verification/` 目录存在
    - **加载报告模板**: 检查 `.specify/templates/verification-report-template.md` 是否存在，如存在则使用项目级模板，否则使用 `$PLUGIN_DIR/templates/verification-report-template.md`
    - 按模板写入 `{feature_dir}/verification/verification-report.md`
-   - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 2 各语言结果 + 总体摘要
+   - 报告结构：Layer 1 对齐表 + Layer 1.5 验证铁律合规 + Layer 1.75 深度检查 + Layer 1.8 残留扫描 + Layer 1.9 文档一致性 + Layer 2 各语言结果 + 总体摘要
 
 8. **触发质量门**
    - 构建失败或测试失败 → GATE_VERIFY 触发暂停
