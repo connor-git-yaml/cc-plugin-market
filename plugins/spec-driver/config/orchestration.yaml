@@ -89,7 +89,7 @@ gates:
     default_behavior: on_failure
     severity: non_critical
     hard_gate_modes: null
-    insertion_point: "after_task_50_percent"
+    insertion_point: "after_task_50_percent"  # 声明性元数据，实际触发逻辑在 implement SKILL.md 中
 
   GATE_VERIFY:
     type: verification_checkpoint
@@ -741,7 +741,7 @@ modes:
         name: batch_implement
         display_name: 逐批实现
         agent: implement
-        agent_mode: batch_loop
+        agent_mode: batch_loop            # 声明性标签，实际循环逻辑在 refactor SKILL.md 中
         gates_before:
           - GATE_TASKS
         gates_after: null

@@ -221,6 +221,8 @@ gate_policy: balanced
 #     pause: auto
 #   GATE_TASKS:
 #     pause: always
+#   GATE_IMPLEMENT_MID:
+#     pause: on_failure    # 实施中期门禁（>5 tasks 时在 50% 处触发）
 #   GATE_VERIFY:
 #     pause: always
 
