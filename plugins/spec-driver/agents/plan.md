@@ -26,30 +26,59 @@ effort: high
    - 读取 research-synthesis.md，提取推荐的技术方案和架构决策
    - 读取 plan-template.md，理解计划结构
 
-2. **技术上下文分析**
+2. **Codebase Reality Check**（必选步骤）
+   - 从 spec.md 提取所有将被修改的目标文件列表
+   - 对每个目标文件读取并记录：
+     - **行数（LOC）**：文件总行数
+     - **方法/函数数**：公开接口数量
+     - **已知 debt**：TODO/FIXME/HACK 标记、超长函数（>200 行）、循环依赖
+   - 汇总到 plan.md 的 `Codebase Reality Check` 区块
+   - **前置清理规则**：如果任一目标文件满足以下条件，必须增加前置 cleanup task：
+     - 文件 LOC > 500 且将新增 > 50 行
+     - 存在 > 3 个 TODO/FIXME 标记且与本次变更相关
+     - 存在明确的代码重复（>30 行相同逻辑出现 2+ 次）
+   - 前置 task 在 tasks.md 中排列于功能 task 之前，标注 `[CLEANUP]`
+
+3. **Impact Radius 评估**（必选步骤）
+   - 分析本次变更的影响范围，输出 Impact Assessment：
+     - **影响文件数**：直接修改 + 间接受影响（调用方/依赖方）
+     - **跨包影响**：是否跨越 `plugins/`、`src/`、`scripts/` 等顶层边界
+     - **数据迁移**：是否涉及 schema 变更、配置格式变更、状态文件格式变更
+     - **API/契约变更**：是否修改公共接口、agent prompt 协议、skill 输入输出
+     - **风险等级**：LOW / MEDIUM / HIGH
+   - **风险等级判定规则**：
+     - HIGH：影响文件 > 20 或 跨包影响 > 2 或 涉及数据迁移 或 修改公共 API 契约
+     - MEDIUM：影响文件 10-20 或 跨包影响 = 1 或 修改内部接口
+     - LOW：影响文件 < 10 且无跨包影响
+   - **HIGH 风险强制分阶段**：当风险等级为 HIGH 时，plan 必须将实现拆分为 2+ 个可独立验证的阶段（Phase），每阶段有明确的验证点
+   - 汇总到 plan.md 的 `Impact Assessment` 区块
+
+4. **技术上下文分析**
    - 确定语言/版本、主要依赖、存储方案、测试策略
    - 标记不确定项为 `NEEDS CLARIFICATION`
    - 基于调研结论做出技术选型
 
-3. **Constitution Check**
+5. **Constitution Check**
    - 对每条宪法原则评估技术计划的兼容性
    - 生成评估表：原则 | 适用性 | 评估 | 说明
    - 如有 VIOLATION，必须调整计划或提供豁免论证
 
-4. **Phase 0: 研究决策**
+6. **Phase 0: 研究决策**
    - 对所有 `NEEDS CLARIFICATION` 项进行研究
    - 生成 `{feature_dir}/research.md`，记录每个决策的结论、理由和替代方案
 
-5. **Phase 1: 设计与契约**
+7. **Phase 1: 设计与契约**
    - 从 spec.md 提取实体 → 生成 `{feature_dir}/data-model.md`
    - 从功能需求生成 API 契约 → 写入 `{feature_dir}/contracts/`
    - 生成 `{feature_dir}/quickstart.md`（快速上手指南）
    - 运行 agent context 更新脚本（如存在）
 
-6. **生成 plan.md**
-   - 按模板结构填充：Summary、Technical Context、Constitution Check、Project Structure、Architecture
+8. **生成 plan.md**
+   - 按模板结构填充：Summary、Technical Context、Codebase Reality Check、Impact Assessment、Constitution Check、Project Structure、Architecture
    - 包含 Mermaid 架构图
    - 包含 Complexity Tracking 表（记录偏离简单方案的决策及理由）
+   - Codebase Reality Check 区块必须包含每个目标文件的 LOC/方法数/debt 表格
+   - Impact Assessment 区块必须包含影响范围和风险等级判定
 
 ## 输出
 

@@ -147,7 +147,7 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 
 **重要**: 特性目录必须遵循 `specs/NNN-<short-name>/` 格式（如 `specs/016-add-dark-mode/`），禁止使用 `specs/features/` 子目录。
 
-### 7. 代码库上下文扫描
+### 7. 代码库上下文扫描 + Scope 评估
 
 **此步骤替代调研阶段，是 story 模式的核心加速点。**
 
@@ -156,6 +156,42 @@ prompt_source[verify] = "$PLUGIN_DIR/agents/verify.md"
 - 扫描与需求相关的源代码文件（通过 Grep/Glob 定位关键模块）
 - 读取 `specs/products/` 下的产品活文档（如存在）作为现有规范上下文
 - 汇总为**代码上下文摘要**（替代 research-synthesis.md 的角色）
+
+**早期 Scope 评估**（Phase 1 前置检查）：
+
+在代码上下文扫描完成后，立即评估需求变更的规模：
+
+```text
+1. 统计预期影响范围:
+   - affected_files: 根据需求描述和代码扫描，预估需要修改的文件数
+   - cross_package: 是否跨越 2+ 个顶层包/模块边界
+   - db_schema_change: 是否涉及数据库 schema 变更、配置格式迁移
+   - public_api_change: 是否修改公共 API/契约
+
+2. 判定 scope 级别:
+   - LARGE: affected_files > 15 或 cross_package = true 或 db_schema_change = true
+   - MEDIUM: affected_files 8-15
+   - SMALL: affected_files < 8
+
+3. 若 scope = LARGE:
+   输出建议:
+   """
+   [scope 评估] 检测到需求范围较大:
+   - 预估影响文件: {affected_files}
+   - 跨包影响: {cross_package}
+   - Schema/配置迁移: {db_schema_change}
+
+   建议切换到完整 Feature 模式:
+   /spec-driver:spec-driver-feature <需求描述>
+
+   Feature 模式包含产品调研和技术调研，适合大型需求变更。
+   继续当前 story 模式？(Y/n)
+   """
+   等待用户确认后继续。
+
+4. 输出日志:
+   [SCOPE] mode=story | files={affected_files} | cross_package={true/false} | level={SMALL/MEDIUM/LARGE} | decision={CONTINUE/SWITCH_TO_FEATURE}
+```
 
 ### 7.5 在线调研补充（可选）
 
@@ -448,19 +484,28 @@ node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root
 
 ## 范围过大检测
 
-在 Phase 3（规划+任务）完成后，检测需求范围：
+**主检测点**已前移到初始化阶段 Step 7（代码库上下文扫描 + Scope 评估），在 Phase 1 之前触发。
+
+Phase 3（规划+任务）完成后执行**二次确认**，基于 tasks.md 的精确数据复核：
 
 ```text
-if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 20 个文件:
-  输出建议:
-  """
-  [提示] 检测到需求范围较大（{N} 个模块/{M} 个文件），建议切换到完整模式：
-  /spec-driver:spec-driver-feature <需求描述>
+if tasks.md 中任务涉及 > 5 个模块 或 预估变更 > 15 个文件:
+  if Step 7 scope 评估已触发且用户已确认继续:
+    输出提醒（不阻断）:
+    """
+    [scope 二次确认] 任务分解后实际范围（{N} 模块/{M} 文件）超出 story 模式建议上限。
+    用户已在初始化阶段确认继续，保持 story 模式。
+    """
+  else:
+    输出建议:
+    """
+    [提示] 检测到需求范围较大（{N} 个模块/{M} 个文件），建议切换到完整模式：
+    /spec-driver:spec-driver-feature <需求描述>
 
-  完整模式包含产品调研和技术调研，适合大型需求变更。
+    完整模式包含产品调研和技术调研，适合大型需求变更。
 
-  继续当前 story 模式？(Y/n)
-  """
+    继续当前 story 模式？(Y/n)
+    """
 ```
 
 ---

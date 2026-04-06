@@ -27,6 +27,36 @@
 **Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
 **Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
+## Codebase Reality Check
+
+> **必选区块**：plan 子代理必须对每个将被修改的目标文件执行 Reality Check。
+
+| 文件路径 | LOC | 方法/函数数 | TODO/FIXME | 超长函数(>200L) | 需前置清理 |
+|----------|-----|------------|------------|-----------------|-----------|
+| [path]   | [N] | [N]        | [N]        | [Y/N]           | [Y/N]     |
+
+**前置清理 Task**（仅在需要时填写）：
+- [ ] `[CLEANUP]` {清理任务描述} — 原因: {触发规则}
+
+## Impact Assessment
+
+> **必选区块**：评估变更的影响半径和风险等级。
+
+| 维度 | 评估 |
+|------|------|
+| **直接修改文件数** | [N] |
+| **间接受影响文件数** | [N]（调用方/依赖方） |
+| **跨包影响** | [无 / 涉及 {包列表}] |
+| **数据迁移** | [无 / {迁移描述}] |
+| **API/契约变更** | [无 / {变更描述}] |
+| **风险等级** | [LOW / MEDIUM / HIGH] |
+
+**风险等级判定理由**: [简述判定依据]
+
+**分阶段计划**（仅 HIGH 风险时必填）：
+- Phase A: {范围} — 验证点: {验证方法}
+- Phase B: {范围} — 验证点: {验证方法}
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
