@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Grep, Glob, WebSearch, WebFetch]
+tools: [Read, Write, Grep, Glob, WebSearch, WebFetch]
 effort: medium
 ---
 

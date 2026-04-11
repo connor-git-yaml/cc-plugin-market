@@ -244,7 +244,12 @@ GATE_BEHAVIOR=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-gate-behavio
 # - is_hard_gate: true | false
 # - reason: 门禁说明
 
-if [ "$behavior" == "always" ]; then
+# ⚠️ 硬门禁优先级最高：is_hard_gate=true 时无条件暂停，不受 gate_policy 影响
+if [ "$is_hard_gate" == "true" ]; then
+  # **必须暂停**：使用 AskUserQuestion 向用户展示制品摘要，等待明确确认后方可继续
+  # 编排器不得自行判断"质量良好"而跳过硬门禁
+  GATE_DECISION="PAUSE"
+elif [ "$behavior" == "always" ]; then
   # 暂停，展示相关制品，等待用户选择
   GATE_DECISION="PAUSE"
 elif [ "$behavior" == "auto" ]; then
@@ -259,8 +264,14 @@ elif [ "$behavior" == "on_failure" ]; then
   fi
 fi
 
+# PAUSE 执行方式：
+# - 列出当前 Gate 之前生成的制品清单和摘要
+# - 使用 AskUserQuestion 提问："GATE_{name} 审查：是否继续？"
+# - 用户确认后方可执行下一个 Phase
+# - 硬门禁（is_hard_gate=true）：用户必须选择"继续"才能推进，没有自动继续选项
+
 # 记录 Gate 决策到 trace.md
-echo "[HH:MM:SS] GATE_${GATE_ID}: $GATE_DECISION | policy={gate_policy} | reason={...}"
+echo "[HH:MM:SS] GATE_${GATE_ID}: $GATE_DECISION | policy={gate_policy} | is_hard_gate={is_hard_gate}"
 ```
 
 ---

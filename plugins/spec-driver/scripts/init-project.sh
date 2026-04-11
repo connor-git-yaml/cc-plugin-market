@@ -224,10 +224,13 @@ validate_config_schema() {
     local output
     output="$(node "$validate_script" --project-root "$PROJECT_ROOT" --validate 2>&1)" || true
     INIT_RESULTS+=("config_schema:fail")
-    echo -e "  ${RED}配置 Schema 校验失败:${NC}"
-    echo "$output" | while IFS= read -r line; do
-      echo -e "    $line"
-    done
+    # 仅在 text 模式下输出错误详情，避免污染 --json 输出
+    if [[ "$OUTPUT_MODE" == "text" ]]; then
+      echo -e "  ${RED}配置 Schema 校验失败:${NC}"
+      echo "$output" | while IFS= read -r line; do
+        echo -e "    $line"
+      done
+    fi
   fi
 }
 

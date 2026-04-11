@@ -117,6 +117,66 @@ function cmdEvaluateCondition(expression, contextJson) {
 }
 
 /**
+ * recommend-research-mode --description <text> [--has-existing-research] [--online-required]
+ *
+ * 基于需求特征推荐 research_mode，用于 Phase 0.5 的 auto 模式决策。
+ * 规则（按优先级）：
+ *   1. 已有 research/ 制品 → skip
+ *   2. 需求涉及外部 API/标准/最佳实践且 online_required → full
+ *   3. 需求涉及 UI/UX/产品定位 → product-only
+ *   4. 需求为内部重构/代码整理 → codebase-scan
+ *   5. 需求涉及新模块/新架构 → tech-only
+ *   6. 默认 → codebase-scan
+ */
+function cmdRecommendResearchMode(description, hasExistingResearch, onlineRequired) {
+  // 规则 1：已有调研制品
+  if (hasExistingResearch) {
+    return output({
+      success: true,
+      recommended: 'skip',
+      reason: '已有 research/ 调研制品，跳过调研阶段',
+      confidence: 'high',
+    });
+  }
+
+  const desc = (description || '').toLowerCase();
+
+  // 信号词匹配
+  const externalSignals = ['api', 'sdk', 'third-party', '第三方', '标准', 'standard', 'best practice', '最佳实践', 'spec', 'rfc'];
+  const uxSignals = ['ui', 'ux', '用户体验', '产品', 'product', '界面', '交互', 'design'];
+  const refactorSignals = ['refactor', '重构', '收敛', '整理', '清理', '迁移', 'cleanup', 'reorganize', '拆分', 'split', '合并', 'merge', '统一', 'unify'];
+  const newArchSignals = ['new module', '新模块', '新增模块', '架构', 'architecture', 'framework', '框架'];
+
+  const hasExternal = externalSignals.some(s => desc.includes(s));
+  const hasUx = uxSignals.some(s => desc.includes(s));
+  const hasRefactor = refactorSignals.some(s => desc.includes(s));
+  const hasNewArch = newArchSignals.some(s => desc.includes(s));
+
+  // 规则 2：外部 API/标准
+  if (hasExternal && onlineRequired) {
+    return output({ success: true, recommended: 'full', reason: '需求涉及外部 API/标准，且 online_required=true', confidence: 'high' });
+  }
+
+  // 规则 3：UI/UX
+  if (hasUx && !hasRefactor) {
+    return output({ success: true, recommended: 'product-only', reason: '需求涉及 UI/UX/产品定位', confidence: 'medium' });
+  }
+
+  // 规则 4：内部重构
+  if (hasRefactor) {
+    return output({ success: true, recommended: 'codebase-scan', reason: '需求为内部重构/代码整理', confidence: 'high' });
+  }
+
+  // 规则 5：新架构/新模块
+  if (hasNewArch) {
+    return output({ success: true, recommended: 'tech-only', reason: '需求涉及新模块/新架构设计', confidence: 'medium' });
+  }
+
+  // 规则 6：默认
+  output({ success: true, recommended: 'codebase-scan', reason: '默认推荐：代码库上下文扫描', confidence: 'low' });
+}
+
+/**
  * validate-config
  */
 function cmdValidateConfig() {
@@ -149,6 +209,7 @@ if (args.length === 0) {
   console.error('  get-parallel-groups <mode>           获取并行组定义');
   console.error('  evaluate-condition <expr> [--context <json>]  求值条件表达式');
   console.error('  validate-config                      验证配置文件');
+  console.error('  recommend-research-mode --description <text> [--has-existing-research] [--online-required]');
   process.exit(1);
 }
 
@@ -181,6 +242,15 @@ switch (command) {
   case 'validate-config':
     cmdValidateConfig();
     break;
+
+  case 'recommend-research-mode': {
+    const descIdx = args.indexOf('--description');
+    const desc = descIdx !== -1 ? args[descIdx + 1] : '';
+    const hasExisting = args.includes('--has-existing-research');
+    const onlineReq = args.includes('--online-required');
+    cmdRecommendResearchMode(desc, hasExisting, onlineReq);
+    break;
+  }
 
   default:
     fail(`未知命令 '${command}'`);

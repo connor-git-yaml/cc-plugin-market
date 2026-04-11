@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Grep]
+tools: [Read, Write, Grep]
 effort: low
 ---
 
