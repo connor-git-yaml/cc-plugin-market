@@ -139,6 +139,7 @@ RELATIVE_TARGETS=(
   ".specify/.spec-driver-path"
   ".agents"
   "node_modules"
+  "_reference"
 )
 
 for relative_path in "${RELATIVE_TARGETS[@]}"; do
