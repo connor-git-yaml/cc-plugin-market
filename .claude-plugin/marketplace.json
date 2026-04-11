@@ -27,7 +27,7 @@
       "name": "spec-driver",
       "source": "./plugins/spec-driver",
       "description": "自治研发编排器——支持八种模式（含大规模重构）自动执行 Spec-Driven Development 全流程，配置驱动编排 + 6 Gate 质量门禁 + 确定性 sync 合并",
-      "version": "3.11.1",
+      "version": "3.11.2",
       "category": "orchestration",
       "tags": [
         "orchestrator",
