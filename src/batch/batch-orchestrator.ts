@@ -273,6 +273,8 @@ export async function runBatch(
   const groupingOptions: GroupingOptions = {
     ...options.grouping,
     languageAware: isMultiLang,
+    classifyDirectories: options.grouping?.classifyDirectories ?? true, // 默认启用目录语义分类（排除 examples/vendor/dist 等）
+    projectRoot: resolvedRoot,
   };
   const groupResult = groupFilesToModules(mergedGraph, groupingOptions);
   const processingOrder = groupResult.moduleOrder;
@@ -671,7 +673,24 @@ export async function runBatch(
   fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
   writeSummaryLog(summary, summaryLogPathAbs);
 
-  // 步骤 7：成功后清理检查点
+  // 步骤 7：生成人类友好的 README.md 索引
+  try {
+    const { generateBatchReadme } = await import('./batch-readme-generator.js');
+    const readmeContent = generateBatchReadme({
+      projectName: path.basename(resolvedRoot),
+      version: '2.8.0', // TODO: 从 package.json 读取
+      moduleSpecs: successful,
+      projectDocs: projectDocs ?? [],
+      bundles: docsBundleProfiles,
+      outputDir: resolvedOutputDir,
+    });
+    fs.writeFileSync(path.join(resolvedOutputDir, 'README.md'), readmeContent, 'utf-8');
+    logger.info('README.md 索引已生成');
+  } catch (err) {
+    logger.warn(`README.md 生成失败: ${String(err)}`);
+  }
+
+  // 步骤 8：成功后清理检查点
   if (failed.length === 0) {
     clearCheckpoint(checkpointPath);
   }

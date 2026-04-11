@@ -198,6 +198,11 @@ export function groupFilesToModules(
       const cls = classMap.get(g.name);
       return !cls || cls.category === 'source';
     });
+
+    // 安全回退：如果分类后 0 个模块，说明分类器过于激进，回退到不分类
+    if (sourceGroups.length === 0 && groups.length > 0) {
+      sourceGroups = groups;
+    }
   } else {
     sourceGroups = groups;
   }
