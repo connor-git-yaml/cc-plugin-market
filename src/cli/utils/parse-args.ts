@@ -306,6 +306,7 @@ export function parseArgs(argv: string[]): ParseResult {
       ok: true,
       command: {
         subcommand: 'batch',
+        target: positional[0], // batch 目标目录（可选，默认 cwd）
         deep: false,
         force,
         incremental,

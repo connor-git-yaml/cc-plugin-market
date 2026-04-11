@@ -3,6 +3,7 @@
  * 对当前项目执行批量 Spec 生成
  */
 
+import { resolve } from 'node:path';
 import { runBatch } from '../../batch/batch-orchestrator.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
@@ -20,8 +21,11 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
   }
 
   try {
+    // 解析目标路径：优先使用 CLI 传入的 target，其次使用 cwd
+    const projectRoot = resolve(command.target ?? process.cwd());
+
     // 加载项目级配置并与 CLI 参数合并
-    const fileConfig = loadProjectConfig(process.cwd());
+    const fileConfig = loadProjectConfig(projectRoot);
     const merged = mergeConfig(
       {
         force: command.force,
@@ -33,7 +37,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       command._explicitFlags ?? new Set(),
     );
 
-    const result = await runBatch(process.cwd(), {
+    const result = await runBatch(projectRoot, {
       force: merged.force,
       incremental: merged.incremental,
       languages: merged.languages,
