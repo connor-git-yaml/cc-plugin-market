@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildArchitectureIR } from '../../src/panoramic/builders/architecture-ir-builder.js';
-import { getArchitectureIRView, type ArchitectureOverviewOutput } from '../../src/panoramic/index.js';
+import { getArchitectureIRView, type ArchitectureOverviewOutput } from '../../src/panoramic/internal.js';
 import type { RuntimeTopologyOutput } from '../../src/panoramic/generators/runtime-topology-generator.js';
 import type { WorkspaceOutput } from '../../src/panoramic/generators/workspace-index-generator.js';
 import type { CrossPackageOutput } from '../../src/panoramic/generators/cross-package-analyzer.js';

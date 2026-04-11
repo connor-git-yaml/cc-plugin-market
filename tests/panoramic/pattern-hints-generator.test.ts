@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ProjectContext } from '../../src/panoramic/interfaces.js';
-import * as panoramic from '../../src/panoramic/index.js';
+import * as panoramic from '../../src/panoramic/internal.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 import { PatternHintsGenerator } from '../../src/panoramic/generators/pattern-hints-generator.js';
 

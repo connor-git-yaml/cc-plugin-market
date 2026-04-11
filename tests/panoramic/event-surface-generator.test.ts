@@ -302,7 +302,7 @@ export function main() {
   });
 
   it('barrel 导出 EventSurfaceGenerator 及其类型', async () => {
-    const panoramic = await import('../../src/panoramic/index.js');
+    const panoramic = await import('../../src/panoramic/internal.js');
 
     expect(panoramic.EventSurfaceGenerator).toBe(EventSurfaceGenerator);
     expect(typeof panoramic.GeneratorRegistry.getInstance).toBe('function');

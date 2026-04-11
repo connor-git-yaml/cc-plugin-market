@@ -256,7 +256,7 @@ export function boot() {
   });
 
   it('barrel 导出 TroubleshootingGenerator 和相关类型', async () => {
-    const panoramic = await import('../../src/panoramic/index.js');
+    const panoramic = await import('../../src/panoramic/internal.js');
 
     expect(panoramic.TroubleshootingGenerator).toBe(TroubleshootingGenerator);
     expect(typeof panoramic.GeneratorRegistry.getInstance).toBe('function');

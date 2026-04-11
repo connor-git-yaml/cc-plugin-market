@@ -264,7 +264,7 @@ describe('RuntimeTopologyGenerator - registry / exports 集成', () => {
   });
 
   it('barrel 导出 RuntimeTopologyGenerator 和共享 helper', async () => {
-    const panoramic = await import('../../src/panoramic/index.js');
+    const panoramic = await import('../../src/panoramic/internal.js');
 
     expect(panoramic.RuntimeTopologyGenerator).toBe(RuntimeTopologyGenerator);
     expect(typeof panoramic.summarizeRuntimeTopology).toBe('function');
