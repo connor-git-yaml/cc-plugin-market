@@ -8,7 +8,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { ProjectContext } from '../interfaces.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import type {
   ArchitectureNarrativeOutput,
   BatchGeneratedDocSummary,
@@ -889,4 +889,97 @@ function slugify(value: string): string {
 
 function uniqueSorted<T extends string>(items: T[]): T[] {
   return [...new Set(items)].sort((left, right) => left.localeCompare(right));
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * AdrDecisionPipelineGenerator
+ *
+ * 将 generateBatchAdrDocs() 适配为 DocumentGenerator 接口。
+ * generate() 包含 fs 文件写出副作用（写出 ADR 草稿与索引）。
+ * render() 为纯 Markdown 摘要，不含 fs 调用。
+ *
+ * TInput: GenerateBatchAdrDocsOptions
+ * TOutput: GenerateBatchAdrDocsResult
+ */
+export class AdrDecisionPipelineGenerator
+  implements DocumentGenerator<GenerateBatchAdrDocsOptions, GenerateBatchAdrDocsResult>
+{
+  readonly id = 'adr-decision-pipeline' as const;
+  readonly name = 'ADR 决策流水线生成器' as const;
+  readonly description = '基于架构事实与模块 spec 生成候选 ADR 草稿与索引，并写出到 outputDir/docs/adr/';
+
+  private readonly outputDir: string;
+
+  constructor(outputDir: string) {
+    this.outputDir = outputDir;
+  }
+
+  isApplicable(context: ProjectContext): boolean {
+    // 只要项目根目录存在即可适用（outputDir 由构造函数注入）
+    return Boolean(context.projectRoot);
+  }
+
+  async extract(context: ProjectContext): Promise<GenerateBatchAdrDocsOptions> {
+    // 构造最小化 options，必需字段来自 context 和 outputDir
+    // architectureNarrative 必须提供，此处使用最小 stub（由编排层注入完整值）
+    return {
+      projectRoot: context.projectRoot,
+      outputDir: this.outputDir,
+      projectContext: context,
+      generatedDocs: [],
+      architectureNarrative: {
+        title: '',
+        generatedAt: new Date().toISOString().split('T')[0]!,
+        projectName: '',
+        executiveSummary: [],
+        repositoryMap: [],
+        keyModules: [],
+        keySymbols: [],
+        keyMethods: [],
+        observations: [],
+        supportingDocs: [],
+      },
+    };
+  }
+
+  async generate(
+    input: GenerateBatchAdrDocsOptions,
+    _options?: GenerateOptions,
+  ): Promise<GenerateBatchAdrDocsResult> {
+    // generate() 包含 fs 写出副作用（写出 ADR 文件）
+    return generateBatchAdrDocs(input);
+  }
+
+  render(output: GenerateBatchAdrDocsResult): string {
+    // render() 为纯摘要，无 fs 调用
+    const { index } = output;
+    const lines: string[] = [
+      `# ${index.title}`,
+      '',
+      `**生成时间**: ${index.generatedAt}`,
+      `**ADR 草稿数**: ${index.draftCount}`,
+      '',
+      ...index.summary,
+    ];
+
+    if (output.writtenFiles.length > 0) {
+      lines.push('', '**写出文件**:');
+      for (const file of output.writtenFiles) {
+        lines.push(`- ${file}`);
+      }
+    }
+
+    if (output.warnings.length > 0) {
+      lines.push('', '**警告**:');
+      for (const warning of output.warnings) {
+        lines.push(`- ${warning}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
 }

@@ -26,6 +26,8 @@ import {
 } from '../models/component-view-model.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { sanitizeMermaidId } from '../utils/mermaid-helpers.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
+import { ArchitectureIRGenerator } from '../generators/architecture-ir-generator.js';
 
 interface RankedComponentDescriptor extends ComponentDescriptor {
   score: number;
@@ -827,4 +829,55 @@ function getMetadataString(element: ArchitectureIRElement | undefined, key: stri
 
 function escapeMermaidLabel(value: string): string {
   return value.replace(/"/g, '\\"');
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * ComponentViewBuilderGenerator
+ *
+ * 将 buildComponentView() 适配为 DocumentGenerator 接口，
+ * 供 GeneratorRegistry 统一管理。
+ *
+ * TInput: ArchitectureIR（从 ArchitectureIRGenerator 中提取）
+ * TOutput: ComponentViewOutput
+ */
+export class ComponentViewBuilderGenerator
+  implements DocumentGenerator<ArchitectureIR, ComponentViewOutput>
+{
+  readonly id = 'component-view-builder' as const;
+  readonly name = '关键组件视图生成器' as const;
+  readonly description = '基于 Architecture IR 与 stored module specs 生成关键组件视图，输出组件关系图与 Mermaid 可视化';
+
+  private readonly irGenerator: ArchitectureIRGenerator;
+
+  constructor() {
+    this.irGenerator = new ArchitectureIRGenerator();
+  }
+
+  isApplicable(context: ProjectContext): boolean | Promise<boolean> {
+    // 委托 ArchitectureIRGenerator 的判断逻辑：需要架构概览数据
+    return this.irGenerator.isApplicable(context);
+  }
+
+  async extract(context: ProjectContext): Promise<ArchitectureIR> {
+    // 从 ArchitectureIRGenerator 获取 IR
+    const irInput = await this.irGenerator.extract(context);
+    const irOutput = await this.irGenerator.generate(irInput);
+    return irOutput.ir;
+  }
+
+  async generate(input: ArchitectureIR, _options?: GenerateOptions): Promise<ComponentViewOutput> {
+    // 委托 buildComponentView()，storedModules 为空数组（编排级无法注入）
+    return buildComponentView({
+      architectureIR: input,
+      storedModules: [],
+    });
+  }
+
+  render(output: ComponentViewOutput): string {
+    return renderComponentView(output);
+  }
 }

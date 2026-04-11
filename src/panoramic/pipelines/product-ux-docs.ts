@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { ProjectContext } from '../interfaces.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import type { BatchGeneratedDocSummary } from './architecture-narrative.js';
 import { loadTemplate } from '../utils/template-loader.js';
 
@@ -1124,4 +1124,82 @@ function uniqueEvidence(entries: ProductEvidenceRef[]): ProductEvidenceRef[] {
   }
 
   return deduped;
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * ProductUxDocsGenerator
+ *
+ * 将 generateProductUxDocs() 适配为 DocumentGenerator 接口。
+ * generate() 包含 fs 文件写出副作用（写出产品概览、用户旅程、feature brief）。
+ * render() 为纯摘要，不含 fs 调用。
+ *
+ * TInput: GenerateProductUxDocsOptions
+ * TOutput: GenerateProductUxDocsResult
+ */
+export class ProductUxDocsGenerator
+  implements DocumentGenerator<GenerateProductUxDocsOptions, GenerateProductUxDocsResult>
+{
+  readonly id = 'product-ux-docs' as const;
+  readonly name = '产品 UX 文档生成器' as const;
+  readonly description = '基于 current-spec、README 与 GitHub 数据生成产品概览、用户旅程与 feature brief 文档';
+
+  private readonly outputDir: string;
+
+  constructor(outputDir: string) {
+    this.outputDir = outputDir;
+  }
+
+  isApplicable(context: ProjectContext): boolean {
+    // 只要项目根目录存在即可适用
+    return Boolean(context.projectRoot);
+  }
+
+  async extract(context: ProjectContext): Promise<GenerateProductUxDocsOptions> {
+    return {
+      projectRoot: context.projectRoot,
+      outputDir: this.outputDir,
+      projectContext: context,
+      generatedDocs: [],
+    };
+  }
+
+  async generate(
+    input: GenerateProductUxDocsOptions,
+    _options?: GenerateOptions,
+  ): Promise<GenerateProductUxDocsResult> {
+    // generate() 包含 fs 写出副作用
+    return generateProductUxDocs(input);
+  }
+
+  render(output: GenerateProductUxDocsResult): string {
+    // render() 为纯摘要，无 fs 调用
+    const lines: string[] = [
+      `# 产品文档生成摘要`,
+      '',
+      `**产品概览**: ${output.overview.title}`,
+      `**用户旅程**: ${output.journeys.journeys.length} 条`,
+      `**Feature Brief**: ${output.featureBriefIndex.briefs.length} 个`,
+      '',
+    ];
+
+    if (output.writtenFiles.length > 0) {
+      lines.push('**写出文件**:');
+      for (const file of output.writtenFiles) {
+        lines.push(`- ${file}`);
+      }
+    }
+
+    if (output.warnings.length > 0) {
+      lines.push('', '**警告**:');
+      for (const warning of output.warnings) {
+        lines.push(`- ${warning}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
 }

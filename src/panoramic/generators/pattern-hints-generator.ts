@@ -4,7 +4,6 @@
  * 组合 045 的架构概览输出，生成规则驱动的模式提示与 explanation 附录。
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import { ArchitectureOverviewGenerator } from './architecture-overview-generator.js';
 import {
@@ -19,12 +18,8 @@ import {
   type PatternKnowledgeBaseEntry,
 } from '../models/pattern-hints-model.js';
 import { loadTemplate } from '../utils/template-loader.js';
-import { detectAuth } from '../../auth/auth-detector.js';
-import { callLLMviaCli } from '../../auth/cli-proxy.js';
-import { callLLMviaCodex } from '../../auth/codex-proxy.js';
-import { resolveReverseSpecModel } from '../../core/model-selection.js';
+import { callLLM, extractJsonArray } from '../utils/llm-facade.js';
 
-const LLM_TIMEOUT_MS = 2_500;
 
 export type PatternHintsLLMEnhancer = (
   hints: PatternHint[],
@@ -138,11 +133,6 @@ async function defaultPatternHintsLLMEnhancer(
     return hints;
   }
 
-  const auth = detectAuth();
-  if (!auth.preferred) {
-    return hints;
-  }
-
   const systemPrompt = [
     '你是架构文档说明增强器。',
     '你的任务不是重新判断模式，也不是修改 confidence、evidence 或 alternatives。',
@@ -168,7 +158,13 @@ async function defaultPatternHintsLLMEnhancer(
     })),
   });
 
-  const responseText = await callPatternHintsLLM(systemPrompt, userPrompt);
+  // 使用 llm-facade 统一调用门面
+  const responseText = await callLLM(userPrompt, {
+    systemPrompt,
+    timeout: 2500,
+    maxTokens: 1024,
+    temperature: 0.2,
+  });
   if (!responseText) {
     return hints;
   }
@@ -200,51 +196,6 @@ async function defaultPatternHintsLLMEnhancer(
   });
 }
 
-async function callPatternHintsLLM(
-  systemPrompt: string,
-  userPrompt: string,
-): Promise<string | null> {
-  const authResult = detectAuth();
-  if (!authResult.preferred) {
-    return null;
-  }
-
-  const providerRuntime = authResult.preferred.type === 'cli-proxy' && authResult.preferred.provider === 'codex'
-    ? 'codex'
-    : 'claude';
-  const model = process.env['PANORAMIC_LLM_MODEL'] ?? resolveReverseSpecModel({
-    provider: providerRuntime,
-  }).model;
-
-  if (authResult.preferred.type === 'api-key') {
-    const client = new Anthropic({
-      apiKey: process.env['ANTHROPIC_API_KEY'],
-      timeout: LLM_TIMEOUT_MS,
-    });
-
-    const response = await client.messages.create({
-      model,
-      max_tokens: 1_024,
-      temperature: 0.2,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    });
-
-    const text = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
-    return text || null;
-  }
-
-  const fullPrompt = `${systemPrompt}\n\n---\n\n${userPrompt}`;
-  const cliResponse = authResult.preferred.provider === 'codex'
-    ? await callLLMviaCodex(fullPrompt, { model, timeout: LLM_TIMEOUT_MS })
-    : await callLLMviaCli(fullPrompt, { model, timeout: LLM_TIMEOUT_MS });
-
-  return cliResponse.content || null;
-}
-
 function parsePatternHintsEnhancement(
   text: string,
 ): Array<{ patternId: string; summary?: string; explanation?: string }> | null {
@@ -267,22 +218,6 @@ function parsePatternHintsEnhancement(
   }
 }
 
-function extractJsonArray(text: string): unknown {
-  const trimmed = text.trim();
-
-  const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    return JSON.parse(codeBlockMatch[1]!.trim());
-  }
-
-  const arrayStart = trimmed.indexOf('[');
-  const arrayEnd = trimmed.lastIndexOf(']');
-  if (arrayStart >= 0 && arrayEnd > arrayStart) {
-    return JSON.parse(trimmed.slice(arrayStart, arrayEnd + 1));
-  }
-
-  return JSON.parse(trimmed);
-}
 
 function normalizeInferenceMarker(text: string, inferred: boolean): string {
   if (!inferred || text.includes('[推断]')) {

@@ -425,6 +425,27 @@ export { AbstractRegistry } from './abstract-registry.js';
 export { resetTemplateCache } from './utils/template-loader.js';
 export { sanitizeMermaidId } from './utils/mermaid-helpers.js';
 export { enrichFieldDescriptions, enrichConfigDescriptions } from './utils/llm-enricher.js';
+export { callLLM, extractJsonArray, isLLMAvailable, type LLMCallOptions } from './utils/llm-facade.js';
+
+// F-094-03: Generator Adapter 类（DocumentGenerator 接口适配）
+export { ComponentViewBuilderGenerator } from './builders/component-view-builder.js';
+export { DynamicScenariosBuilderGenerator } from './builders/dynamic-scenarios-builder.js';
+export {
+  buildArchitectureNarrative,
+  renderArchitectureNarrative,
+  loadStoredNarrativeModules,
+  ArchitectureNarrativeGenerator,
+  type BuildArchitectureNarrativeOptions,
+  type ArchitectureNarrativeOutput,
+  type BatchGeneratedDocSummary,
+  type NarrativeModuleInsight,
+  type NarrativeSymbolInsight,
+  type RepositoryMapEntry,
+  type SupportingDocLink,
+} from './pipelines/architecture-narrative.js';
+export { AdrDecisionPipelineGenerator } from './pipelines/adr-decision-pipeline.js';
+export { ProductUxDocsGenerator } from './pipelines/product-ux-docs.js';
+export { DocsQualityEvaluatorGenerator } from './pipelines/docs-quality-evaluator.js';
 export {
   writeMultiFormat,
   type WriteMultiFormatOptions,

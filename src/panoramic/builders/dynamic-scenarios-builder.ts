@@ -21,6 +21,7 @@ import {
   type DynamicScenarioStep,
 } from '../models/component-view-model.js';
 import { loadTemplate } from '../utils/template-loader.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 
 export interface BuildDynamicScenariosOptions {
   componentView: ComponentViewModel;
@@ -401,4 +402,58 @@ function scoreTriggerMethod(name: string): number {
   if (/(connect|run|execute|initialize|start)/.test(lower)) return 2;
   if (/(session|resume|persist)/.test(lower)) return 1;
   return 0;
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * context 扩展键：ComponentViewBuilderGenerator 完成后将 ViewModel 存入 context
+ * DynamicScenariosBuilderGenerator 在 extract 中读取此字段
+ */
+const CONTEXT_COMPONENT_VIEW_MODEL_KEY = '__componentViewModel';
+
+/**
+ * DynamicScenariosBuilderGenerator
+ *
+ * 将 buildDynamicScenarios() 适配为 DocumentGenerator 接口。
+ * 依赖 ComponentViewBuilderGenerator 先行运行并将 ComponentViewModel
+ * 存入 context（通过 CONTEXT_COMPONENT_VIEW_MODEL_KEY）。
+ *
+ * TInput: ComponentViewModel（从 context 中读取）
+ * TOutput: DynamicScenariosOutput
+ */
+export class DynamicScenariosBuilderGenerator
+  implements DocumentGenerator<ComponentViewModel, DynamicScenariosOutput>
+{
+  readonly id = 'dynamic-scenarios-builder' as const;
+  readonly name = '动态链路场景生成器' as const;
+  readonly description = '基于 ComponentViewModel 构建关键动态链路说明，展示组件间交互的请求/控制/事件链路';
+
+  isApplicable(context: ProjectContext): boolean {
+    // 检查 context 中是否已有 ComponentViewModel
+    // 若无，则当前 Generator 无法运行
+    return CONTEXT_COMPONENT_VIEW_MODEL_KEY in (context as Record<string, unknown>);
+  }
+
+  async extract(context: ProjectContext): Promise<ComponentViewModel> {
+    // 从 context 中纯读取 ViewModel（由 ComponentViewBuilderGenerator 先行注入）
+    const viewModel = (context as Record<string, unknown>)[CONTEXT_COMPONENT_VIEW_MODEL_KEY];
+    if (!viewModel) {
+      throw new Error('DynamicScenariosBuilderGenerator: context 中不存在 ComponentViewModel，请先运行 ComponentViewBuilderGenerator');
+    }
+    return viewModel as ComponentViewModel;
+  }
+
+  async generate(input: ComponentViewModel, _options?: GenerateOptions): Promise<DynamicScenariosOutput> {
+    return buildDynamicScenarios({
+      componentView: input,
+      storedModules: [],
+    });
+  }
+
+  render(output: DynamicScenariosOutput): string {
+    return renderDynamicScenarios(output);
+  }
 }

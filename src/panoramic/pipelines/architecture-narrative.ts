@@ -7,7 +7,7 @@
  */
 import * as path from 'node:path';
 import type { ExportSymbol, MemberInfo } from '../../models/code-skeleton.js';
-import type { ProjectContext } from '../interfaces.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import type { ArchitectureOverviewOutput } from '../generators/architecture-overview-generator.js';
 import {
   loadStoredModuleSpecs,
@@ -575,4 +575,50 @@ function dedupeNarrativeItems<T>(items: T[], getKey: (item: T) => string): T[] {
     results.push(item);
   }
   return results;
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * ArchitectureNarrativeGenerator
+ *
+ * 将 buildArchitectureNarrative() 适配为 DocumentGenerator 接口。
+ * 面向人类阅读的技术架构说明文档。
+ *
+ * TInput: BuildArchitectureNarrativeOptions
+ * TOutput: ArchitectureNarrativeOutput
+ */
+export class ArchitectureNarrativeGenerator
+  implements DocumentGenerator<BuildArchitectureNarrativeOptions, ArchitectureNarrativeOutput>
+{
+  readonly id = 'architecture-narrative' as const;
+  readonly name = '技术架构说明生成器' as const;
+  readonly description = '面向人类阅读的技术架构叙事文档，聚合 module spec 与架构事实，生成关键模块/类/方法的结构化说明';
+
+  isApplicable(context: ProjectContext): boolean {
+    // 检查项目根目录是否存在（最低要求）
+    return Boolean(context.projectRoot);
+  }
+
+  async extract(context: ProjectContext): Promise<BuildArchitectureNarrativeOptions> {
+    return {
+      projectRoot: context.projectRoot,
+      outputDir: context.projectRoot,
+      projectContext: context,
+      generatedDocs: [],
+    };
+  }
+
+  async generate(
+    input: BuildArchitectureNarrativeOptions,
+    _options?: GenerateOptions,
+  ): Promise<ArchitectureNarrativeOutput> {
+    return buildArchitectureNarrative(input);
+  }
+
+  render(output: ArchitectureNarrativeOutput): string {
+    return renderArchitectureNarrative(output);
+  }
 }

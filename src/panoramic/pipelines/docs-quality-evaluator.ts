@@ -6,7 +6,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ProjectContext } from '../interfaces.js';
+import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import type { ArchitectureNarrativeOutput, BatchGeneratedDocSummary } from './architecture-narrative.js';
 import type { ArchitectureOverviewOutput } from '../generators/architecture-overview-generator.js';
 import type { PatternHintsOutput } from '../models/pattern-hints-model.js';
@@ -1163,4 +1163,147 @@ function normalizeProjectPath(candidatePath: string, projectRoot: string): strin
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+// ============================================================
+// DocumentGenerator Adapter
+// ============================================================
+
+/**
+ * 安全读取 JSON 文件，失败时返回 undefined（各字段均可选）
+ */
+function safeReadJson<T>(filePath: string): T | undefined {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return undefined;
+    }
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(content) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * DocsQualityEvaluatorGenerator
+ *
+ * 将 evaluateDocsQuality() 适配为 DocumentGenerator 接口。
+ * 编排感知型 extract：从 outputDir 读取上游 JSON 产物（各字段均可选）。
+ * generate() 无 fs 写出副作用（纯计算）。
+ * render() 调用 renderDocsQualityReport() 返回 Markdown 质量报告。
+ *
+ * 必须最后注册，确保上游 JSON 产物已写出。
+ *
+ * TInput: EvaluateDocsQualityOptions
+ * TOutput: DocsQualityReport
+ */
+export class DocsQualityEvaluatorGenerator
+  implements DocumentGenerator<EvaluateDocsQualityOptions, DocsQualityReport>
+{
+  readonly id = 'docs-quality-evaluator' as const;
+  readonly name = '文档质量评估器' as const;
+  readonly description = '聚合评估各上游产物的 provenance、conflict 与 required-doc 覆盖，生成总体质量结论报告';
+
+  private readonly outputDir: string;
+
+  constructor(outputDir: string) {
+    this.outputDir = outputDir;
+  }
+
+  isApplicable(context: ProjectContext): boolean {
+    // 只要项目根目录存在即可适用（上游产物读取为可选）
+    return Boolean(context.projectRoot);
+  }
+
+  async extract(context: ProjectContext): Promise<EvaluateDocsQualityOptions> {
+    // 编排感知型 extract：从 outputDir 读取上游 JSON 产物，各字段均可选
+    const outputDir = this.outputDir;
+
+    // 读取各上游 Generator 产物（JSON 快照），各字段均可选
+    type Opts = Parameters<typeof evaluateDocsQuality>[0];
+
+    // product-ux-docs 产物
+    const productOverview = safeReadJson<Opts['productOverview']>(
+      path.join(outputDir, 'product-overview.json'),
+    );
+    const userJourneys = safeReadJson<Opts['userJourneys']>(
+      path.join(outputDir, 'user-journeys.json'),
+    );
+    const featureBriefIndex = safeReadJson<Opts['featureBriefIndex']>(
+      path.join(outputDir, 'feature-briefs', 'index.json'),
+    );
+
+    // adr-decision-pipeline 产物
+    const adrIndex = safeReadJson<Opts['adrIndex']>(
+      path.join(outputDir, 'docs', 'adr', 'index.json'),
+    );
+
+    // 其他上游 Generator 产物
+    const architectureOverview = safeReadJson<Opts['architectureOverview']>(
+      path.join(outputDir, 'architecture-overview.json'),
+    );
+    const patternHints = safeReadJson<Opts['patternHints']>(
+      path.join(outputDir, 'pattern-hints.json'),
+    );
+    const componentView = safeReadJson<Opts['componentView']>(
+      path.join(outputDir, 'component-view.json'),
+    );
+    const dynamicScenarios = safeReadJson<Opts['dynamicScenarios']>(
+      path.join(outputDir, 'dynamic-scenarios.json'),
+    );
+    const runtimeTopology = safeReadJson<Opts['runtimeTopology']>(
+      path.join(outputDir, 'runtime-topology.json'),
+    );
+    const docsBundleManifest = safeReadJson<Opts['docsBundleManifest']>(
+      path.join(outputDir, 'docs-bundle-manifest.json'),
+    );
+    const dependencyWarnings = safeReadJson<Opts['dependencyWarnings']>(
+      path.join(outputDir, 'dependency-warnings.json'),
+    );
+
+    // 最小化 architectureNarrative（必需字段，无法从 JSON 读取时使用 stub）
+    const architectureNarrative: Opts['architectureNarrative'] = {
+      title: '',
+      generatedAt: new Date().toISOString().split('T')[0]!,
+      projectName: '',
+      executiveSummary: [],
+      repositoryMap: [],
+      keyModules: [],
+      keySymbols: [],
+      keyMethods: [],
+      observations: [],
+      supportingDocs: [],
+    };
+
+    return {
+      projectRoot: context.projectRoot,
+      outputDir,
+      projectContext: context,
+      generatedDocs: [],
+      architectureNarrative,
+      architectureOverview,
+      patternHints,
+      componentView,
+      dynamicScenarios,
+      runtimeTopology,
+      adrIndex,
+      productOverview,
+      userJourneys,
+      featureBriefIndex,
+      docsBundleManifest,
+      dependencyWarnings,
+    };
+  }
+
+  async generate(
+    input: EvaluateDocsQualityOptions,
+    _options?: GenerateOptions,
+  ): Promise<DocsQualityReport> {
+    // generate() 为纯计算，无 fs 写出副作用
+    return evaluateDocsQuality(input);
+  }
+
+  render(output: DocsQualityReport): string {
+    return renderDocsQualityReport(output);
+  }
 }

@@ -34,6 +34,12 @@ import { TroubleshootingGenerator } from './generators/troubleshooting-generator
 import { ArchitectureOverviewGenerator } from './generators/architecture-overview-generator.js';
 import { ArchitectureIRGenerator } from './generators/architecture-ir-generator.js';
 import { PatternHintsGenerator } from './generators/pattern-hints-generator.js';
+import { ComponentViewBuilderGenerator } from './builders/component-view-builder.js';
+import { ArchitectureNarrativeGenerator } from './pipelines/architecture-narrative.js';
+import { AdrDecisionPipelineGenerator } from './pipelines/adr-decision-pipeline.js';
+import { ProductUxDocsGenerator } from './pipelines/product-ux-docs.js';
+import { DynamicScenariosBuilderGenerator } from './builders/dynamic-scenarios-builder.js';
+import { DocsQualityEvaluatorGenerator } from './pipelines/docs-quality-evaluator.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -192,8 +198,11 @@ export class GeneratorRegistry extends AbstractRegistry<DocumentGenerator<any, a
  * 启动 Generator 注册
  * 在 CLI/MCP 入口最早时机调用，完成所有内置 Generator 的注册。
  * 幂等：如果 Registry 已有 Generator 注册则跳过。
+ *
+ * @param outputDir - 文档输出目录（可选）。副作用型和聚合评估型 Adapter 需要此参数。
+ *                   若不传则使用当前工作目录作为默认值。
  */
-export function bootstrapGenerators(): void {
+export function bootstrapGenerators(outputDir?: string): void {
   const registry = GeneratorRegistry.getInstance();
 
   // 幂等检查：非空则直接返回
@@ -201,6 +210,10 @@ export function bootstrapGenerators(): void {
     return;
   }
 
+  // 使用当前工作目录作为默认 outputDir
+  const resolvedOutputDir = outputDir ?? process.cwd();
+
+  // 原有 13 个 Generator（保持注册顺序不变）
   registry.register(new MockReadmeGenerator());
   registry.register(new ConfigReferenceGenerator());
   registry.register(new DataModelGenerator());
@@ -214,4 +227,12 @@ export function bootstrapGenerators(): void {
   registry.register(new PatternHintsGenerator());
   registry.register(new EventSurfaceGenerator());
   registry.register(new TroubleshootingGenerator());
+
+  // 新增 6 个 Adapter（按依赖图顺序注册）
+  registry.register(new ComponentViewBuilderGenerator());                        // 无前置依赖
+  registry.register(new ArchitectureNarrativeGenerator());                       // 无前置依赖
+  registry.register(new AdrDecisionPipelineGenerator(resolvedOutputDir));        // 依赖 IR
+  registry.register(new ProductUxDocsGenerator(resolvedOutputDir));              // 无前置依赖
+  registry.register(new DynamicScenariosBuilderGenerator());                     // 依赖 component-view-builder 产出
+  registry.register(new DocsQualityEvaluatorGenerator(resolvedOutputDir));       // 依赖所有上游，最后注册
 }
