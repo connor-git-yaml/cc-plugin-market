@@ -140,7 +140,7 @@ describe('自举测试：reverse-spec 分析自身', () => {
     // 验证渲染输出
     expect(markdown).toContain('---');
     expect(markdown).toContain('## 1. 意图');
-    expect(markdown).toContain('## 2. 接口定义');
+    expect(markdown).toContain('## 2. 业务逻辑');
     expect(markdown).toContain('<!-- baseline-skeleton:');
     expect(markdown.length).toBeGreaterThan(500);
   });

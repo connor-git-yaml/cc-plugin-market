@@ -16,11 +16,11 @@ describe('llm-client', () => {
       const raw = `## 1. 意图
 此模块用于处理用户认证
 
-## 2. 接口定义
-导出 login() 和 logout() 函数
-
-## 3. 业务逻辑
+## 2. 业务逻辑
 验证用户凭证并生成 JWT token
+
+## 3. 接口定义
+导出 login() 和 logout() 函数
 
 ## 4. 数据结构
 User 类型包含 id、name、email 字段
@@ -58,7 +58,7 @@ JWT 过期时间默认 24 小时
       const raw = `## 1. 意图
 此模块用于测试
 
-## 2. 接口定义
+## 2. 业务逻辑
 无导出`;
 
       const result = parseLLMResponse(raw);
@@ -66,18 +66,18 @@ JWT 过期时间默认 24 小时
       // 应有 7 个缺失章节的警告
       expect(result.parseWarnings.length).toBeGreaterThan(0);
       // 正常 LLM 流程不注入占位符，缺失章节为空字符串（FR-002/FR-003）
-      expect(result.sections.businessLogic).toBe('');
+      expect(result.sections.interfaceDefinition).toBe('');
     });
 
     it('应提取不确定性标记', () => {
       const raw = `## 1. 意图
 此模块 [推断: 基于函数命名] 用于数据转换
 
-## 2. 接口定义
-接口定义
-
-## 3. 业务逻辑
+## 2. 业务逻辑
 [不明确: 缺少类型信息] 可能进行了类型转换
+
+## 3. 接口定义
+接口定义
 
 ## 4. 数据结构
 数据结构
@@ -123,13 +123,13 @@ JWT 过期时间默认 24 小时
       const raw = `# 意图
 模块目的
 
-### 2. 接口定义
+### 2. 业务逻辑
 导出信息`;
 
       const result = parseLLMResponse(raw);
 
       expect(result.sections.intent).toContain('模块目的');
-      expect(result.sections.interfaceDefinition).toContain('导出信息');
+      expect(result.sections.businessLogic).toContain('导出信息');
     });
   });
 

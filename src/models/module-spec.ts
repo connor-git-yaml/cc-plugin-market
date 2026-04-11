@@ -45,6 +45,8 @@ export const SpecFrontmatterSchema = z.object({
   language: z.string().optional(),
   /** 跨语言引用（如 ['go:services/auth', 'python:scripts/deploy']） */
   crossLanguageRefs: z.array(z.string()).optional(),
+  /** 人类可读的模块显示名（默认取目录名） */
+  displayName: z.string().optional(),
 });
 export type SpecFrontmatter = z.infer<typeof SpecFrontmatterSchema>;
 

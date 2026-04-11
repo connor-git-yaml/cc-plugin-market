@@ -195,12 +195,12 @@ describe('三阶段流水线集成测试', () => {
     const mockResponse = `## 1. 意图
 用户服务模块，管理用户的 CRUD 操作。
 
-## 2. 接口定义
+## 2. 业务逻辑
+通过 Map 存储用户数据，创建时分配 UUID，删除时发送事件。
+
+## 3. 接口定义
 - \`User\` 接口：用户数据结构
 - \`UserService\` 类：提供 createUser、getUser、listUsers、deleteUser 方法
-
-## 3. 业务逻辑
-通过 Map 存储用户数据，创建时分配 UUID，删除时发送事件。
 
 ## 4. 数据结构
 User 包含 id、name、email、createdAt 字段。
@@ -280,7 +280,7 @@ getUser 对不存在的 ID 返回 undefined。
     // 验证输出结构
     expect(markdown).toContain('type: module-spec');
     expect(markdown).toContain('## 1. 意图');
-    expect(markdown).toContain('## 2. 接口定义');
+    expect(markdown).toContain('## 2. 业务逻辑');
     expect(markdown).toContain('## 9. 依赖关系');
     expect(markdown).toContain('附录：文件清单');
     // 基线骨架应作为 HTML 注释嵌入

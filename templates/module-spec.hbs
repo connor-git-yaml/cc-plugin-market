@@ -19,7 +19,7 @@ skeletonHash: {{frontmatter.skeletonHash}}
 
 <a id="module-spec"></a>
 
-# {{frontmatter.sourceTarget}}
+# {{#if frontmatter.displayName}}{{frontmatter.displayName}}{{else}}{{frontmatter.sourceTarget}}{{/if}}
 
 {{#if crossReferenceIndex}}
 <!-- cross-reference-index: auto generatedAt={{crossReferenceIndex.generatedAt}} same={{crossReferenceIndex.sameModule.length}} cross={{crossReferenceIndex.crossModule.length}} -->
@@ -54,7 +54,11 @@ skeletonHash: {{frontmatter.skeletonHash}}
 
 {{{sections.intent}}}
 
-## 2. 接口定义
+## 2. 业务逻辑
+
+{{{sections.businessLogic}}}
+
+## 3. 接口定义
 
 {{{sections.interfaceDefinition}}}
 
@@ -70,10 +74,6 @@ skeletonHash: {{frontmatter.skeletonHash}}
 
 {{/each}}
 {{/if}}
-
-## 3. 业务逻辑
-
-{{{sections.businessLogic}}}
 
 ## 4. 数据结构
 
@@ -106,5 +106,5 @@ skeletonHash: {{frontmatter.skeletonHash}}
 | 文件 | 行数 | 主要用途 |
 |------|------|----------|
 {{#each fileInventory}}
-| `{{path}}` | {{loc}} | {{purpose}} |
+| `{{shortPath}}` | {{loc}} | {{purpose}} |
 {{/each}}

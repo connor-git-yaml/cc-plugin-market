@@ -446,23 +446,37 @@ export async function generateSpec(
   const classDiagram = generateClassDiagram(relMerged);
   const depDiagram = generateDependencyDiagram(relMerged, relSkeletons);
 
+  // 生成 displayName：从 targetPath 提取最后一级目录名作为人类可读标题
+  const resolvedTarget = path.resolve(targetPath);
+  const displayName = path.basename(resolvedTarget);
+
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
-    sourceTarget: path.relative(baseDir, path.resolve(targetPath)),
+    sourceTarget: path.relative(baseDir, resolvedTarget),
+    displayName,
     relatedFiles: filePaths.map((f) => path.relative(baseDir, f)),
     confidence,
     skeletonHash: mergedSkeleton.hash,
     existingVersion,
   });
 
-  // 构建 fileInventory（使用相对路径）
-  const fileInventory = skeletons.map((s) => ({
-    path: path.relative(baseDir, s.filePath),
-    loc: s.loc,
-    purpose: s.exports.length > 0
-      ? `导出 ${s.exports.map((e) => e.name).join(', ')}`
-      : '内部模块',
-  }));
+  // 构建 fileInventory（使用短路径：基于 sourceTarget 公共前缀）
+  const sourceTargetDir = path.dirname(path.relative(baseDir, resolvedTarget));
+  const fileInventory = skeletons.map((s) => {
+    const relPath = path.relative(baseDir, s.filePath);
+    // shortPath：去掉与 sourceTarget 相同的前缀目录
+    const shortPath = relPath.startsWith(sourceTargetDir + path.sep)
+      ? relPath.slice(sourceTargetDir.length + 1)
+      : path.basename(relPath);
+    return {
+      path: relPath,
+      shortPath,
+      loc: s.loc,
+      purpose: s.exports.length > 0
+        ? `导出 ${s.exports.map((e) => e.name).join(', ')}`
+        : '内部模块',
+    };
+  });
 
   // 构建 ModuleSpec
   const specName = path.basename(targetPath).replace(/\.[^.]+$/, '');

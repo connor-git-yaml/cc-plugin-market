@@ -7,6 +7,8 @@ import type { SpecFrontmatter } from '../models/module-spec.js';
 export interface FrontmatterInput {
   /** 源目标路径 */
   sourceTarget: string;
+  /** 人类可读的模块显示名（默认取目录名） */
+  displayName?: string;
   /** 相关文件路径列表 */
   relatedFiles: string[];
   /** 置信度等级 */
@@ -50,6 +52,11 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
     confidence: data.confidence,
     skeletonHash: data.skeletonHash,
   };
+
+  // displayName（人类可读标题）
+  if (data.displayName) {
+    frontmatter.displayName = data.displayName;
+  }
 
   // 多语言项目扩展字段（仅设置时填充）
   if (data.language) {

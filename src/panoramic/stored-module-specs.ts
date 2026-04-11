@@ -60,7 +60,7 @@ export function parseStoredModuleSpec(
     relatedFiles: frontmatter.relatedFiles.map((item) => normalizeStoredProjectPath(item, projectRoot)),
     confidence: frontmatter.confidence ?? 'medium',
     intentSummary: extractStoredSpecSectionSummary(content, 1, frontmatter.sourceTarget),
-    businessSummary: extractStoredSpecSectionSummary(content, 3, `${frontmatter.sourceTarget} 的业务逻辑以模块职责为中心组织`),
+    businessSummary: extractStoredSpecSectionSummary(content, 2, `${frontmatter.sourceTarget} 的业务逻辑以模块职责为中心组织`),
     dependencySummary: extractStoredSpecSectionSummary(content, 9, `${frontmatter.sourceTarget} 的依赖关系未在既有 spec 中显式描述`),
     baselineSkeleton: extractStoredBaselineSkeleton(content),
   };

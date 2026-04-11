@@ -482,8 +482,8 @@ async function callLLMviaCodexProxy(
 /** 9 个章节的中文/英文标题映射（含常见变体，提高匹配容错性） */
 const SECTION_TITLES: Array<[keyof SpecSections, string[]]> = [
   ['intent', ['意图', 'Intent', 'Purpose', '目的', '概述']],
-  ['interfaceDefinition', ['接口定义', 'Interface', 'API', '接口', '导出接口', '公共接口', '接口与导出', '模块接口', '对外接口', '接口设计']],
   ['businessLogic', ['业务逻辑', 'Business Logic', '核心逻辑', '实现逻辑', '逻辑', '处理流程', '数据流', '核心流程', '管线', '工作流', '核心算法']],
+  ['interfaceDefinition', ['接口定义', 'Interface', 'API', '接口', '导出接口', '公共接口', '接口与导出', '模块接口', '对外接口', '接口设计']],
   ['dataStructures', ['数据结构', 'Data Structure', '类型定义', '数据模型', '类型']],
   ['constraints', ['约束条件', 'Constraint', '约束', '限制条件', '限制']],
   ['edgeCases', ['边界条件', 'Edge Case', '边界', '异常处理', '错误处理']],
@@ -505,11 +505,22 @@ export function parseLLMResponse(raw: string): ParsedSpecSections {
 
   // 按标题模式分割响应
   // 支持 "## 1. 意图"、"## 意图"、"# 1. 意图" 等格式
+  // 先标记代码块区域，避免匹配代码块内的 ## 标题（Fix-096）
+  const codeBlockRegex = /^```[\s\S]*?^```/gm;
+  const codeBlockRanges: Array<{ start: number; end: number }> = [];
+  let cbMatch: RegExpExecArray | null;
+  while ((cbMatch = codeBlockRegex.exec(raw)) !== null) {
+    codeBlockRanges.push({ start: cbMatch.index, end: cbMatch.index + cbMatch[0].length });
+  }
+
   const sectionRegex = /^#{1,3}\s*(?:\d+\.\s*)?(.+?)$/gm;
   const matches: Array<{ title: string; index: number }> = [];
 
   let match: RegExpExecArray | null;
   while ((match = sectionRegex.exec(raw)) !== null) {
+    // 跳过代码块内的标题匹配
+    const inCodeBlock = codeBlockRanges.some(r => match!.index >= r.start && match!.index < r.end);
+    if (inCodeBlock) continue;
     matches.push({ title: match[1]!.trim(), index: match.index });
   }
 

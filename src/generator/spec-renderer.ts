@@ -94,7 +94,7 @@ export function renderSpec(moduleSpec: ModuleSpec): string {
 
   const markdown = moduleSpecTemplate!(moduleSpec);
 
-  // 将基线骨架序列化为 HTML 注释块（漂移检测用）
+  // 将基线骨架序列化为 HTML 注释块（漂移检测 + panoramic 管线消费）
   const baselineJson = JSON.stringify(moduleSpec.baselineSkeleton);
   const baselineComment = `\n\n<!-- baseline-skeleton: ${baselineJson} -->\n`;
 
