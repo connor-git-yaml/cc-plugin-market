@@ -535,10 +535,12 @@ export function parseLLMResponse(raw: string): ParsedSpecSections {
     }
   }
 
-  // 填充缺失章节（提供有意义的降级内容而非空占位符）
+  // 填充缺失章节：正常 LLM 流程不注入占位符，仅记录警告 + 置空字符串
+  // 仅在 generateAstOnlyContent（降级路径）中才使用有意义的降级文本
   for (const [key, titles] of SECTION_TITLES) {
     if (!sections[key] || !sections[key]!.trim()) {
-      sections[key] = `> 此章节待补充。可通过 \`reverse-spec generate --deep\` 提供更多上下文以改善生成质量。`;
+      // 不注入"此章节待补充"占位符——空字符串更诚实
+      sections[key] = '';
       parseWarnings.push(`章节 "${titles[0]}" 未在 LLM 响应中找到`);
     }
   }
@@ -693,6 +695,13 @@ graph LR
   - 对语法错误区域使用 \`[SYNTAX ERROR: 描述]\` 标记
 - 每个标记必须附带理由说明
 - **不要偷懒**：即使某些信息在 AST 中不明显，也要根据代码结构进行合理推断并标注
+
+## 绝对禁止
+
+- **严禁占位符**：绝对禁止在任何章节输出"此章节待补充"、"待完善"、"暂无内容"、"TODO"、"[待补充]" 等任何形式的占位符文本
+- **Section 2 接口定义**必须包含关键函数/类的行为摘要，不仅仅是签名列表——每个导出符号至少一句话描述其语义职责
+- **Section 3 业务逻辑**必须包含核心处理流程的叙事性描述（数据流、算法步骤、状态转换），并附 Mermaid 流程图展示主要处理路径
+- 若上下文已提供代码切片（## 代码切片），必须基于切片中的控制流结构生成具体描述，不得忽略此信息
 
 ## 格式
 

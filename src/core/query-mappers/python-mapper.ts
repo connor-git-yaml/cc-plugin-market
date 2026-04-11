@@ -287,7 +287,7 @@ export class PythonMapper implements QueryMapper {
     };
   }
 
-  /** 提取类成员（方法） */
+  /** 提取类成员（方法 + __init__ 中的 self.xxx 属性） */
   private _extractClassMembers(
     classNode: Parser.SyntaxNode,
     includePrivate: boolean,
@@ -329,18 +329,142 @@ export class PythonMapper implements QueryMapper {
         const returnSuffix = returnType ? ` -> ${returnType}` : '';
         const signature = `${asyncPrefix}def ${methodName}${params}${returnSuffix}`;
 
+        // 判断可见性：__xxx → private, _xxx → protected, 其余 public
+        const methodVisibility = methodName.startsWith('__') && !methodName.endsWith('__')
+          ? 'private' as const
+          : methodName.startsWith('_')
+            ? 'protected' as const
+            : 'public' as const;
+
         members.push({
           name: methodName,
           kind,
           signature,
           jsDoc: null,
-          visibility: undefined,
+          visibility: methodVisibility,
           isStatic,
         });
+
+        // 对 __init__ 方法：提取 self.xxx = ... 赋值作为 property 成员
+        if (methodName === '__init__') {
+          const initBody = child.childForFieldName('body');
+          if (initBody) {
+            const props = this._extractInitProperties(initBody, includePrivate);
+            members.push(...props);
+          }
+        }
       }
     }
 
     return members;
+  }
+
+  /**
+   * 从 __init__ 方法体中提取 self.xxx = ... 赋值，作为 property 类型的 MemberInfo
+   * 可见性规则：__xxx → private, _xxx → protected, 其余 public
+   */
+  private _extractInitProperties(
+    bodyNode: Parser.SyntaxNode,
+    includePrivate: boolean,
+  ): MemberInfo[] {
+    const props: MemberInfo[] = [];
+    const seen = new Set<string>();
+
+    // 递归遍历 body（包含 if/try/with 块内的赋值）
+    this._walkInitBody(bodyNode, props, seen, includePrivate);
+
+    return props;
+  }
+
+  /** 递归遍历 __init__ 函数体，收集 self.xxx = ... 赋值 */
+  private _walkInitBody(
+    node: Parser.SyntaxNode,
+    props: MemberInfo[],
+    seen: Set<string>,
+    includePrivate: boolean,
+  ): void {
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (!child) continue;
+
+      if (child.type === 'expression_statement') {
+        const expr = child.child(0);
+        if (expr?.type === 'assignment') {
+          const left = expr.childForFieldName('left');
+          // 匹配 self.xxx 形式的赋值目标
+          if (left?.type === 'attribute') {
+            const obj = left.childForFieldName('object');
+            const attr = left.childForFieldName('attribute');
+            if (obj?.text === 'self' && attr?.text) {
+              const propName = attr.text;
+              if (seen.has(propName)) continue;
+
+              // 计算可见性
+              const visibility = propName.startsWith('__')
+                ? 'private' as const
+                : propName.startsWith('_')
+                  ? 'protected' as const
+                  : 'public' as const;
+
+              // 根据 includePrivate 过滤私有属性
+              if (!includePrivate && visibility === 'private') continue;
+
+              // 尝试获取类型注解（右值类型推断为粗略）
+              const rightNode = expr.childForFieldName('right');
+              const typeHint = this._inferPropertyType(rightNode);
+              const signature = typeHint ? `${propName}: ${typeHint}` : propName;
+
+              seen.add(propName);
+              props.push({
+                name: propName,
+                kind: 'property',
+                signature,
+                jsDoc: null,
+                visibility,
+                isStatic: false,
+              });
+            }
+          }
+        }
+      } else if (
+        // 递归进入控制流块（if/try/with/for/while）
+        child.type === 'if_statement' ||
+        child.type === 'try_statement' ||
+        child.type === 'with_statement' ||
+        child.type === 'for_statement' ||
+        child.type === 'while_statement' ||
+        child.type === 'block'
+      ) {
+        this._walkInitBody(child, props, seen, includePrivate);
+      }
+    }
+  }
+
+  /**
+   * 简单推断属性右值类型（粗略推断，仅用于签名显示）
+   * None → None, 数字字面量 → int/float, 字符串 → str, [] → list, {} → dict
+   */
+  private _inferPropertyType(valueNode: Parser.SyntaxNode | null | undefined): string | undefined {
+    if (!valueNode) return undefined;
+    switch (valueNode.type) {
+      case 'none': return 'None';
+      case 'true':
+      case 'false': return 'bool';
+      case 'integer': return 'int';
+      case 'float': return 'float';
+      case 'string': return 'str';
+      case 'list': return 'list';
+      case 'dictionary': return 'dict';
+      case 'set': return 'set';
+      case 'tuple': return 'tuple';
+      case 'call': {
+        // 如 dict(), list(), MyClass() 等
+        const func = valueNode.childForFieldName('function');
+        if (func?.text) return func.text;
+        return undefined;
+      }
+      default: return undefined;
+    }
   }
 
   // ============================================================

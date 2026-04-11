@@ -21,6 +21,18 @@ export interface ProjectConfig {
   languages?: string[];
   /** 深度分析 */
   deep?: boolean;
+  /**
+   * 显式排除的目录列表（FR-013）
+   * 优先级高于自动目录分类，这些目录不生成 spec
+   * 示例：['examples', 'worked', 'vendor']
+   */
+  excludeDirs?: string[];
+  /**
+   * 显式包含的目录列表（FR-013）
+   * 即使目录名称匹配排除模式，也强制纳入分析
+   * 示例：['examples/core-example']
+   */
+  includeDirs?: string[];
 }
 
 /** 配置文件搜索顺序 */
@@ -97,6 +109,24 @@ function validateConfig(raw: YamlObject | Record<string, unknown>): ProjectConfi
     const filtered = rawLangs.filter((v): v is string => typeof v === 'string');
     if (filtered.length > 0) {
       config.languages = filtered;
+    }
+  }
+
+  // excludeDirs: 用户显式排除的目录列表（FR-013）
+  const rawExcludeDirs = raw['excludeDirs'];
+  if (Array.isArray(rawExcludeDirs)) {
+    const filtered = rawExcludeDirs.filter((v): v is string => typeof v === 'string');
+    if (filtered.length > 0) {
+      config.excludeDirs = filtered;
+    }
+  }
+
+  // includeDirs: 用户显式包含的目录列表（FR-013）
+  const rawIncludeDirs = raw['includeDirs'];
+  if (Array.isArray(rawIncludeDirs)) {
+    const filtered = rawIncludeDirs.filter((v): v is string => typeof v === 'string');
+    if (filtered.length > 0) {
+      config.includeDirs = filtered;
     }
   }
 

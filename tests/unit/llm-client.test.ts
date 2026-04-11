@@ -54,7 +54,7 @@ JWT 过期时间默认 24 小时
       expect(result.parseWarnings).toHaveLength(0);
     });
 
-    it('缺失章节应填充占位符', () => {
+    it('缺失章节应记录警告并设为空字符串（不注入占位符）', () => {
       const raw = `## 1. 意图
 此模块用于测试
 
@@ -65,7 +65,8 @@ JWT 过期时间默认 24 小时
 
       // 应有 7 个缺失章节的警告
       expect(result.parseWarnings.length).toBeGreaterThan(0);
-      expect(result.sections.businessLogic).toContain('此章节待补充');
+      // 正常 LLM 流程不注入占位符，缺失章节为空字符串（FR-002/FR-003）
+      expect(result.sections.businessLogic).toBe('');
     });
 
     it('应提取不确定性标记', () => {
@@ -109,12 +110,13 @@ JWT 过期时间默认 24 小时
       expect(inferMarker?.rationale).toContain('基于函数命名');
     });
 
-    it('空响应应返回全部占位符', () => {
+    it('空响应应返回全部警告，章节为空字符串（不注入占位符）', () => {
       const result = parseLLMResponse('');
 
-      // 所有 9 个章节都应该有占位符
+      // 所有 9 个章节都应该有警告
       expect(result.parseWarnings.length).toBe(9);
-      expect(result.sections.intent).toContain('此章节待补充');
+      // 正常 LLM 流程不注入占位符，缺失章节为空字符串（FR-002/FR-003）
+      expect(result.sections.intent).toBe('');
     });
 
     it('应处理非标准标题格式', () => {

@@ -125,3 +125,41 @@ export const CodeSkeletonSchema = z.object({
   parserUsed: ParserUsedSchema,
 });
 export type CodeSkeleton = z.infer<typeof CodeSkeletonSchema>;
+
+// --- 代码切片（FR-001, FR-004, FR-010）---
+
+/**
+ * 代码切片的优先级枚举
+ * P1：公开导出函数（最高优先级）
+ * P2：被多处 import 的内部函数
+ * P3：含复杂控制流的函数
+ */
+export enum CodeSlicePriority {
+  P1_PUBLIC_EXPORT = 1,
+  P2_MULTI_IMPORT = 2,
+  P3_COMPLEX_CONTROL_FLOW = 3,
+}
+
+/**
+ * 函数体的控制流骨架切片
+ * 包含条件分支结构、核心调用链和关键常量引用
+ * 去除了注释、空行和具体实现细节
+ */
+export interface CodeSlice {
+  /** 来源文件路径 */
+  filePath: string;
+  /** 函数或方法名称 */
+  symbolName: string;
+  /** 函数签名 */
+  signature: string;
+  /** 控制流骨架行（保留 if/for/try/return/调用，移除注释和空行） */
+  controlFlowLines: string[];
+  /** 优先级（数值越小优先级越高） */
+  priority: CodeSlicePriority;
+  /** 估算的 token 数 */
+  estimatedTokens: number;
+  /** 原始起始行号（1-based） */
+  startLine: number;
+  /** 原始结束行号（1-based） */
+  endLine: number;
+}

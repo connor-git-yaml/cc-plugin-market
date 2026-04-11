@@ -2,10 +2,13 @@
  * 文件→模块分组与模块级拓扑排序
  * 将 dependency-cruiser 的文件级 DependencyGraph 聚合为目录级模块
  * 支持语言感知分组：同目录多语言文件拆分为带语言后缀的子模块（Feature 031）
+ * 支持目录语义分类过滤（Feature 095）
  */
 import * as path from 'node:path';
 import type { DependencyGraph } from '../models/dependency-graph.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
+import { classifyDirectories } from './directory-classifier.js';
+import type { DirectoryClassifierOptions } from './directory-classifier.js';
 
 // ============================================================
 // 类型定义
@@ -43,6 +46,19 @@ export interface GroupingOptions {
   rootModuleName?: string;
   /** 启用语言感知分组（同目录不同语言拆分为子模块） */
   languageAware?: boolean;
+  /**
+   * 启用目录语义分类，自动过滤非 source 类别目录（FR-005）
+   * 开启后，example/vendor/test 等目录的模块不会进入 moduleOrder
+   */
+  classifyDirectories?: boolean;
+  /**
+   * 目录分类器选项（仅在 classifyDirectories: true 时生效）
+   */
+  directoryClassifierOptions?: DirectoryClassifierOptions;
+  /**
+   * 项目根目录绝对路径（用于目录分类器解析目录路径）
+   */
+  projectRoot?: string;
 }
 
 // ============================================================
@@ -157,9 +173,38 @@ export function groupFilesToModules(
     }
   }
 
-  // 步骤 4：模块级拓扑排序
+  // 步骤 3.5（可选）：目录语义分类过滤（FR-005）
+  // 将非 source 类别的模块标记，但仍保留在 groups 中（供 batch-orchestrator 决策是否跳过）
+  let sourceGroups: ModuleGroup[];
+  if (options.classifyDirectories) {
+    const projectRoot = options.projectRoot ?? '';
+    // 构建目录绝对路径和 import 边
+    const dirPaths = groups.map((g) => {
+      // dirPath 可能是相对路径，尝试结合 projectRoot 解析
+      return projectRoot ? path.resolve(projectRoot, g.dirPath) : g.dirPath;
+    });
+
+    // 构建文件级 import 边（用于 import 反向引用信号）
+    const importEdges = graph.edges.map((e) => ({ from: e.from, to: e.to }));
+
+    const classifications = classifyDirectories(dirPaths, importEdges, options.directoryClassifierOptions);
+    const classMap = new Map<string, typeof classifications[0]>();
+    for (let i = 0; i < groups.length; i++) {
+      classMap.set(groups[i]!.name, classifications[i]!);
+    }
+
+    // sourceGroups：只保留 source 类别的模块进入 moduleOrder
+    sourceGroups = groups.filter((g) => {
+      const cls = classMap.get(g.name);
+      return !cls || cls.category === 'source';
+    });
+  } else {
+    sourceGroups = groups;
+  }
+
+  // 步骤 4：模块级拓扑排序（仅对 source 模块排序）
   const moduleOrder = topologicalSortModules(
-    groups.map((g) => g.name),
+    sourceGroups.map((g) => g.name),
     moduleEdges,
   );
 

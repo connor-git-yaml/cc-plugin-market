@@ -7,12 +7,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
+import type { CodeSlice } from '../models/code-skeleton.js';
 import type { ModuleSpec, SpecSections, StageProgressCallback } from '../models/module-spec.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
 import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
+import { extractCodeSlices } from './code-slice-extractor.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
 import { renderSpec, initRenderer } from '../generator/spec-renderer.js';
@@ -64,6 +66,8 @@ export interface PrepareResult {
   codeSnippets: string[];
   /** 扫描到的文件路径 */
   filePaths: string[];
+  /** 提取的代码切片（控制流骨架，FR-001） */
+  codeSlices: CodeSlice[];
 }
 
 // ============================================================
@@ -209,18 +213,134 @@ export async function prepareContext(
   const contextStart = Date.now();
   onStageProgress?.({ stage: 'context', message: '上下文组装中...' });
 
+  // 步骤 2.5：提取代码切片（控制流骨架，FR-001）
+  // 降级保护：extractCodeSlices 内部有 try/catch，失败时返回空数组
+  let codeSlices: CodeSlice[] = [];
+  try {
+    codeSlices = extractCodeSlices(skeletons, undefined, {
+      maxTokens: 40_000,
+    });
+    if (codeSlices.length > 0) {
+      onStageProgress?.({ stage: 'context', message: `代码切片提取完成（${codeSlices.length} 个函数，~${codeSlices.reduce((s, c) => s + c.estimatedTokens, 0).toLocaleString()} tokens）` });
+    }
+  } catch (err) {
+    // FR-011：降级保护，切片提取失败不影响主流程
+    onStageProgress?.({ stage: 'context', message: `⚠ 代码切片提取失败，已降级（${err instanceof Error ? err.message : String(err)}）` });
+    codeSlices = [];
+  }
+
+  // 步骤 2.6：读取 README.md（FR-007）
+  const README_MAX_CHARS = 6000;
+  let readmeContext: string | undefined;
+  const targetDir = fs.statSync(path.resolve(targetPath)).isDirectory()
+    ? path.resolve(targetPath)
+    : path.dirname(path.resolve(targetPath));
+  const projectRootDir = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
+  for (const readmeDir of [targetDir, projectRootDir]) {
+    const readmePath = path.join(readmeDir, 'README.md');
+    if (fs.existsSync(readmePath)) {
+      try {
+        const readmeContent = fs.readFileSync(readmePath, 'utf-8');
+        readmeContext = readmeContent.slice(0, README_MAX_CHARS);
+        if (readmeContent.length > README_MAX_CHARS) {
+          readmeContext += '\n\n...(README 内容已截断)';
+        }
+        break;
+      } catch {
+        // 读取失败时跳过（降级保护）
+      }
+    }
+  }
+
+  // 步骤 2.7：扫描 Markdown 知识文件（FR-009）
+  const KNOWLEDGE_MAX_CHARS = 8000;
+  let knowledgeFiles: string | undefined;
+  try {
+    const knowledgePatterns = ['SKILL.md', 'AGENTS.md', 'CLAUDE.md'];
+    const knowledgeDirs = ['skills', 'commands', 'agents'];
+    const knowledgeParts: string[] = [];
+    let knowledgeChars = 0;
+
+    // 扫描根目录的知识文件
+    for (const pattern of knowledgePatterns) {
+      const filePath = path.join(projectRootDir, pattern);
+      if (fs.existsSync(filePath)) {
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const snippet = content.slice(0, 2000);
+          knowledgeParts.push(`### ${pattern}\n\n${snippet}${content.length > 2000 ? '\n...(已截断)' : ''}`);
+          knowledgeChars += snippet.length;
+        } catch { /* 跳过 */ }
+      }
+    }
+
+    // 扫描 skills/、commands/、agents/ 目录下的 .md 文件
+    for (const dir of knowledgeDirs) {
+      const dirPath = path.join(projectRootDir, dir);
+      if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+        try {
+          const entries = fs.readdirSync(dirPath);
+          for (const entry of entries) {
+            if (knowledgeChars >= KNOWLEDGE_MAX_CHARS) break;
+            const fullPath = path.join(dirPath, entry);
+            // 支持 skills/wiki/SKILL.md 嵌套结构
+            const mdPath = fs.statSync(fullPath).isDirectory()
+              ? path.join(fullPath, 'SKILL.md')
+              : (entry.endsWith('.md') ? fullPath : null);
+            if (mdPath && fs.existsSync(mdPath)) {
+              try {
+                const content = fs.readFileSync(mdPath, 'utf-8');
+                const maxChunk = Math.min(1500, KNOWLEDGE_MAX_CHARS - knowledgeChars);
+                if (maxChunk <= 0) break;
+                const snippet = content.slice(0, maxChunk);
+                knowledgeParts.push(`### ${path.relative(projectRootDir, mdPath)}\n\n${snippet}${content.length > maxChunk ? '\n...(已截断)' : ''}`);
+                knowledgeChars += snippet.length;
+              } catch { /* 跳过 */ }
+            }
+          }
+        } catch { /* 跳过 */ }
+      }
+    }
+
+    if (knowledgeParts.length > 0) {
+      knowledgeFiles = knowledgeParts.join('\n\n---\n\n');
+      onStageProgress?.({ stage: 'context', message: `知识文件发现 ${knowledgeParts.length} 个` });
+    }
+  } catch {
+    // FR-011：知识文件扫描失败不影响主流程
+  }
+
+  // 步骤 2.8：构建调用方上下文（FR-008）
+  let callerContext: string | undefined;
+  try {
+    // 从 skeleton 的 imports 反向推断：哪些模块的 exports 被当前模块引用
+    const callerModules = mergedSkeleton.imports
+      .filter(imp => imp.isRelative)
+      .map(imp => imp.moduleSpecifier)
+      .slice(0, 10);
+    if (callerModules.length > 0) {
+      callerContext = `当前模块依赖以下 ${callerModules.length} 个内部模块：\n${callerModules.map(m => `- \`${m}\``).join('\n')}\n\n请基于这些依赖关系理解本模块在架构中的定位。`;
+    }
+  } catch {
+    // 降级保护
+  }
+
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
+    codeSlices: codeSlices.length > 0 ? codeSlices : undefined,
+    readmeContext,
+    knowledgeFiles,
+    callerContext,
   });
 
-  // token 数警告（FR-007：当 token 超过 80,000——即 100,000 预算的 80%）
+  // token 数警告（当 token 超过 80,000——即 100,000 预算的 80%）
   if (context.tokenCount > 80_000) {
     onStageProgress?.({ stage: 'context', message: `⚠ 上下文 token 数较大 (${context.tokenCount.toLocaleString()})，可能影响质量` });
   }
 
   onStageProgress?.({ stage: 'context', message: '上下文组装完成', duration: Date.now() - contextStart });
 
-  return { skeletons, mergedSkeleton, context, codeSnippets, filePaths };
+  return { skeletons, mergedSkeleton, context, codeSnippets, filePaths, codeSlices };
 }
 
 /**
@@ -387,6 +507,8 @@ export async function generateSpec(
 
 /**
  * LLM 不可用时的 AST-only 降级内容生成
+ * Section 2 从 skeleton.exports 生成签名表格
+ * Section 3 从 skeleton.imports 生成 Mermaid 依赖图
  */
 function generateAstOnlyContent(skeleton: CodeSkeleton): string {
   const sections: string[] = [];
@@ -394,17 +516,64 @@ function generateAstOnlyContent(skeleton: CodeSkeleton): string {
   sections.push('## 1. 意图');
   sections.push(`[推断: LLM 不可用] 本模块位于 ${skeleton.filePath}，包含 ${skeleton.exports.length} 个导出符号。`);
 
+  // Section 2：从 exports 生成签名表格
   sections.push('## 2. 接口定义');
   if (skeleton.exports.length > 0) {
+    sections.push('| 名称 | 类型 | 签名 |');
+    sections.push('|------|------|------|');
     for (const exp of skeleton.exports) {
-      sections.push(`- \`${exp.signature}\``);
+      // 处理签名中的竖线以避免破坏表格
+      const safeSig = exp.signature.replace(/\|/g, '\\|');
+      sections.push(`| \`${exp.name}\` | ${exp.kind} | \`${safeSig}\` |`);
+    }
+    // 列出成员详情（如有）
+    const classExports = skeleton.exports.filter((e) => e.kind === 'class' && e.members && e.members.length > 0);
+    if (classExports.length > 0) {
+      sections.push('');
+      sections.push('**类成员**');
+      for (const cls of classExports) {
+        sections.push(`\n*${cls.name}*`);
+        sections.push('| 成员 | 类型 | 签名 |');
+        sections.push('|------|------|------|');
+        for (const member of cls.members!) {
+          const vis = member.visibility ? `[${member.visibility}] ` : '';
+          const safeMemberSig = member.signature.replace(/\|/g, '\\|');
+          sections.push(`| \`${member.name}\` | ${member.kind} | ${vis}\`${safeMemberSig}\` |`);
+        }
+      }
     }
   } else {
     sections.push('无导出符号。');
   }
 
+  // Section 3：从 imports 生成 Mermaid 依赖图
   sections.push('## 3. 业务逻辑');
-  sections.push('[推断: LLM 不可用] 无法分析业务逻辑。');
+  sections.push('[推断: LLM 不可用] 以下为基于 AST 骨架推断的模块依赖关系。');
+  if (skeleton.imports.length > 0) {
+    // 仅取内部相对导入绘图（外部依赖较多时图太乱）
+    const relativeImports = skeleton.imports.filter((imp) => imp.isRelative);
+    const externalImports = skeleton.imports.filter((imp) => !imp.isRelative);
+    if (relativeImports.length > 0) {
+      sections.push('');
+      sections.push('```mermaid');
+      sections.push('flowchart TD');
+      const modName = path.basename(skeleton.filePath, path.extname(skeleton.filePath));
+      for (const imp of relativeImports) {
+        const depName = path.basename(imp.moduleSpecifier);
+        sections.push(`  ${modName}["${modName}"] --> ${depName}["${depName}"]`);
+      }
+      sections.push('```');
+    }
+    if (externalImports.length > 0) {
+      sections.push('');
+      sections.push('**外部依赖**');
+      for (const imp of externalImports) {
+        sections.push(`- \`${imp.moduleSpecifier}\``);
+      }
+    }
+  } else {
+    sections.push('无模块依赖。');
+  }
 
   sections.push('## 4. 数据结构');
   const typeExports = skeleton.exports.filter(
@@ -433,7 +602,8 @@ function generateAstOnlyContent(skeleton: CodeSkeleton): string {
   sections.push('## 9. 依赖关系');
   if (skeleton.imports.length > 0) {
     for (const imp of skeleton.imports) {
-      sections.push(`- \`${imp.moduleSpecifier}\``);
+      const names = imp.namedImports?.join(', ') ?? imp.defaultImport ?? '*';
+      sections.push(`- \`${names}\` from \`${imp.moduleSpecifier}\``);
     }
   } else {
     sections.push('无导入依赖。');

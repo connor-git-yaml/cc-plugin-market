@@ -8,7 +8,38 @@ import * as path from 'node:path';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 /** 通用忽略目录（与语言无关，始终忽略） */
-const UNIVERSAL_IGNORE_DIRS = new Set(['.git', 'coverage', 'specs']);
+const UNIVERSAL_IGNORE_DIRS = new Set([
+  // VCS
+  '.git',
+  // 测试产物和覆盖率
+  'coverage',
+  // 本工具的输出目录
+  'specs',
+  // 构建产物
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  // 第三方打包产物和依赖
+  'vendor',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'env',
+  // 示例/文档代码（通常不是核心源码）
+  'examples',
+  'example',
+  'worked',
+  'fixtures',
+  '__fixtures__',
+  'testdata',
+  'test-fixtures',
+  // CI/CD 和工具配置
+  '.cache',
+  '.parcel-cache',
+  '.turbo',
+]);
 
 /**
  * 已知扩展名到语言名称的映射表
