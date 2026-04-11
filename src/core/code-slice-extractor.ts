@@ -64,6 +64,9 @@ const COMMENT_PATTERNS = [
 /** 函数调用模式（识别为有意义的调用行） */
 const CALL_PATTERN = /\w+\s*\(/;
 
+/** 全大写常量定义模式（如 MAX_NODES = 5000, _ALLOWED_SCHEMES = {"http"}） */
+const CONSTANT_DEFINITION_PATTERN = /^\s*_?[A-Z][A-Z0-9_]{2,}\s*[=:]/;
+
 /**
  * 判断一行是否为控制流/关键行（应当保留）
  */
@@ -81,7 +84,10 @@ function isControlFlowLine(line: string): boolean {
     if (pattern.test(line)) return true;
   }
 
-  // 含函数调用的行（但不是纯赋值或常量定义）
+  // 全大写常量定义（如 MAX_NODES_FOR_VIZ = 5000）——约束条件的重要来源
+  if (CONSTANT_DEFINITION_PATTERN.test(trimmed)) return true;
+
+  // 含函数调用的行
   if (CALL_PATTERN.test(trimmed)) return true;
 
   return false;

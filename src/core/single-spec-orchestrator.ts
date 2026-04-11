@@ -786,14 +786,42 @@ function scanTestFiles(projectRootDir: string): string {
     return '';
   }
 
-  // 限制最多展示 50 个文件，避免 token 过多
-  const displayFiles = foundFiles.slice(0, 50);
-  const parts: string[] = [];
-  parts.push(`扫描到 ${foundFiles.length} 个测试文件（${foundFiles.length > 50 ? '以下展示前 50 个' : '全部如下'}）：`);
-  parts.push('');
-  for (const { relativePath } of displayFiles) {
-    parts.push(`- \`${relativePath}\``);
+  // 提取测试函数名（轻量正则扫描，不做完整 AST）
+  const TEST_FUNCTION_PATTERNS = [
+    /(?:describe|it|test)\s*\(\s*['"`]([^'"`]+)['"`]/g,  // JS/TS: describe('name'), it('name'), test('name')
+    /def\s+(test_\w+)/g,                                   // Python: def test_xxx
+    /func\s+(Test\w+)/g,                                    // Go: func TestXxx
+  ];
+
+  let totalTestFunctions = 0;
+  const fileDetails: string[] = [];
+  const displayFiles = foundFiles.slice(0, 100);
+
+  for (const { filePath, relativePath } of displayFiles) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const funcNames: string[] = [];
+      for (const pattern of TEST_FUNCTION_PATTERNS) {
+        const re = new RegExp(pattern.source, pattern.flags);
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(content)) !== null) {
+          if (m[1]) funcNames.push(m[1]);
+        }
+      }
+      totalTestFunctions += funcNames.length;
+      const funcSummary = funcNames.length > 0
+        ? `（${funcNames.length} 个测试: ${funcNames.slice(0, 5).join(', ')}${funcNames.length > 5 ? ` ...+${funcNames.length - 5}` : ''}）`
+        : '';
+      fileDetails.push(`- \`${relativePath}\`${funcSummary}`);
+    } catch {
+      fileDetails.push(`- \`${relativePath}\``);
+    }
   }
+
+  const parts: string[] = [];
+  parts.push(`扫描到 **${foundFiles.length} 个测试文件**，共 **${totalTestFunctions} 个测试函数**${foundFiles.length > 100 ? '（以下展示前 100 个）' : ''}：`);
+  parts.push('');
+  parts.push(...fileDetails);
 
   return parts.join('\n');
 }
