@@ -69,6 +69,8 @@ function parseYamlScalar(rawValue) {
   if (trimmed === 'true') return true;
   if (trimmed === 'false') return false;
   if (trimmed === 'null') return null;
+  if (trimmed === '[]') return [];
+  if (trimmed === '{}') return {};
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
     return Number(trimmed);
   }
