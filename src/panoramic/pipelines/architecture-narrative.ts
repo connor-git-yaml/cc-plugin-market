@@ -80,6 +80,8 @@ type StoredNarrativeModule = StoredModuleSpecRecord;
 export interface BuildArchitectureNarrativeOptions {
   projectRoot: string;
   outputDir: string;
+  /** specs 根目录（用于扫描模块 specs，默认 outputDir） */
+  specsRootDir?: string;
   projectContext: ProjectContext;
   architectureOverview?: ArchitectureOverviewOutput;
   generatedDocs: BatchGeneratedDocSummary[];
@@ -88,7 +90,7 @@ export interface BuildArchitectureNarrativeOptions {
 export function buildArchitectureNarrative(
   options: BuildArchitectureNarrativeOptions,
 ): ArchitectureNarrativeOutput {
-  const modules = loadStoredNarrativeModules(options.outputDir, options.projectRoot);
+  const modules = loadStoredNarrativeModules(options.specsRootDir ?? options.outputDir, options.projectRoot);
   const projectName = resolveProjectName(
     options.architectureOverview?.model.projectName,
     options.projectRoot,

@@ -6,7 +6,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { listBatchProjectGeneratorIds, getBatchProjectOutputBaseName } from '../output-filenames.js';
+import { listBatchProjectGeneratorIds, getBatchProjectOutputBaseName, BATCH_OUTPUT_SUBDIRS } from '../output-filenames.js';
 import {
   DOCS_BUNDLE_VERSION,
   DOCS_BUNDLE_MANIFEST_FILE,
@@ -147,6 +147,8 @@ interface DocsBundleLandingContext {
 export interface OrchestrateDocsBundleOptions {
   projectRoot: string;
   outputDir: string;
+  /** docs-bundle.yaml 写入目录（默认 outputDir） */
+  metaDir?: string;
 }
 
 export function orchestrateDocsBundle(
@@ -170,7 +172,9 @@ export function orchestrateDocsBundle(
 
   writeProfiles(profiles, generatedAt, paths);
 
-  const manifestPathAbs = path.join(paths.outputDir, DOCS_BUNDLE_MANIFEST_FILE);
+  const manifestDir = options.metaDir ? path.resolve(options.metaDir) : paths.outputDir;
+  fs.mkdirSync(manifestDir, { recursive: true });
+  const manifestPathAbs = path.join(manifestDir, DOCS_BUNDLE_MANIFEST_FILE);
   fs.writeFileSync(manifestPathAbs, stringifyYaml(manifest), 'utf-8');
 
   const profileSummaries = profiles.map((profile) => toProfileSummary(profile));
@@ -213,11 +217,14 @@ function resolvePaths(options: OrchestrateDocsBundleOptions): OrchestratorPaths 
 function collectProjectDocs(paths: OrchestratorPaths): SourceDocument[] {
   const docs: SourceDocument[] = [];
   const seen = new Set<string>();
+  // 项目级文档现在位于 project/ 子目录下
+  const projectSubDir = path.join(paths.outputDir, BATCH_OUTPUT_SUBDIRS.PROJECT);
 
   for (const generatorId of listBatchProjectGeneratorIds()) {
     const baseName = getBatchProjectOutputBaseName(generatorId);
-    const sourcePathAbs = path.join(paths.outputDir, `${baseName}.md`);
-    if (!fs.existsSync(sourcePathAbs)) {
+    // 优先查找 project/ 子目录，兼容旧版平铺布局
+    const sourcePathAbs = resolveDocPath(paths.outputDir, projectSubDir, `${baseName}.md`);
+    if (!sourcePathAbs) {
       continue;
     }
 
@@ -238,8 +245,10 @@ function collectProjectDocs(paths: OrchestratorPaths): SourceDocument[] {
     seen.add(baseName);
   }
 
-  const architectureNarrativeAbs = path.join(paths.outputDir, `${ARCHITECTURE_NARRATIVE_ID}.md`);
-  if (!seen.has(ARCHITECTURE_NARRATIVE_ID) && fs.existsSync(architectureNarrativeAbs)) {
+  const architectureNarrativeAbs = resolveDocPath(
+    paths.outputDir, projectSubDir, `${ARCHITECTURE_NARRATIVE_ID}.md`,
+  );
+  if (!seen.has(ARCHITECTURE_NARRATIVE_ID) && architectureNarrativeAbs) {
     const metadata = PROJECT_DOC_METADATA[ARCHITECTURE_NARRATIVE_ID] ?? {
       title: humanizeDocumentId(ARCHITECTURE_NARRATIVE_ID),
       description: 'Project-level generated document.',
@@ -260,8 +269,8 @@ function collectProjectDocs(paths: OrchestratorPaths): SourceDocument[] {
       continue;
     }
     const relativePath = metadata.relativePath ?? `${docId}.md`;
-    const sourcePathAbs = path.join(paths.outputDir, relativePath);
-    if (!fs.existsSync(sourcePathAbs)) {
+    const sourcePathAbs = resolveDocPath(paths.outputDir, projectSubDir, relativePath);
+    if (!sourcePathAbs) {
       continue;
     }
     docs.push({
@@ -279,9 +288,22 @@ function collectProjectDocs(paths: OrchestratorPaths): SourceDocument[] {
   return docs.sort((left, right) => left.id.localeCompare(right.id));
 }
 
+/**
+ * 在 project/ 子目录和 outputDir 根目录中查找文件（兼容新旧布局）
+ */
+function resolveDocPath(outputDir: string, projectSubDir: string, relativePath: string): string | undefined {
+  const subDirPath = path.join(projectSubDir, relativePath);
+  if (fs.existsSync(subDirPath)) return subDirPath;
+  const rootPath = path.join(outputDir, relativePath);
+  if (fs.existsSync(rootPath)) return rootPath;
+  return undefined;
+}
+
 function collectIndexSpec(paths: OrchestratorPaths): SourceDocument | undefined {
-  const sourcePathAbs = path.join(paths.outputDir, INDEX_SPEC_FILE);
-  if (!fs.existsSync(sourcePathAbs)) {
+  // _index.spec.md 位于 modules/ 子目录（兼容旧版根目录布局）
+  const modulesSubDir = path.join(paths.outputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
+  const sourcePathAbs = resolveDocPath(paths.outputDir, modulesSubDir, INDEX_SPEC_FILE);
+  if (!sourcePathAbs) {
     return undefined;
   }
 
@@ -447,6 +469,13 @@ function toBundleDocument(
 }
 
 function toBundleProjectDocNavPath(source: SourceDocument, paths: OrchestratorPaths): string {
+  // 项目文档位于 project/ 子目录——优先相对于 project/ 子目录计算 nav path
+  const projectSubDirRelative = path.posix.join(paths.outputDirRelative, BATCH_OUTPUT_SUBDIRS.PROJECT);
+  const relativeToProject = path.posix.relative(projectSubDirRelative, source.relativePath);
+  if (relativeToProject && !relativeToProject.startsWith('..')) {
+    return relativeToProject;
+  }
+  // 兼容旧版平铺布局
   const relativeToOutput = path.posix.relative(paths.outputDirRelative, source.relativePath);
   if (!relativeToOutput || relativeToOutput.startsWith('..')) {
     return path.posix.basename(source.relativePath);

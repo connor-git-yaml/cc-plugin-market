@@ -48,8 +48,10 @@ export function readDocsBundleManifest(
 ): ReadDocsBundleManifestResult {
   const warnings: string[] = [];
 
-  const manifestPath = CANDIDATE_MANIFEST_NAMES
-    .map((fileName) => path.join(outputDir, fileName))
+  // 在 outputDir 及其 _meta/ 子目录中查找 manifest（兼容新旧布局）
+  const searchDirs = [outputDir, path.join(outputDir, '_meta')];
+  const manifestPath = searchDirs
+    .flatMap((dir) => CANDIDATE_MANIFEST_NAMES.map((fileName) => path.join(dir, fileName)))
     .find((candidatePath) => fs.existsSync(candidatePath));
 
   if (!manifestPath) {

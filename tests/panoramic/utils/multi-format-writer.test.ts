@@ -139,8 +139,8 @@ describe('writeMultiFormat', () => {
     expect(fs.existsSync(path.join(outputDir, 'data-model.mmd'))).toBe(false);
   });
 
-  // T021: all 格式含 mermaid
-  it('all 格式含 mermaid——生成 .md + .json + .mmd', () => {
+  // T021: all 格式含 mermaid（Feature 098: JSON 不再输出）
+  it('all 格式含 mermaid——生成 .md + .mmd（不生成 .json）', () => {
     tempDir = createTempDir();
     const outputDir = path.join(tempDir, 'output');
 
@@ -153,26 +153,25 @@ describe('writeMultiFormat', () => {
       mermaidSource: SAMPLE_MERMAID,
     });
 
-    // 生成三个文件
-    expect(result).toHaveLength(3);
+    // 生成两个文件（.md + .mmd，不含 .json）
+    expect(result).toHaveLength(2);
     expect(result).toContain(path.join(outputDir, 'data-model.md'));
-    expect(result).toContain(path.join(outputDir, 'data-model.json'));
     expect(result).toContain(path.join(outputDir, 'data-model.mmd'));
 
-    // 验证各文件内容
+    // 验证内容
     const md = fs.readFileSync(path.join(outputDir, 'data-model.md'), 'utf-8');
     expect(md).toBe(SAMPLE_MARKDOWN);
-
-    const json = JSON.parse(fs.readFileSync(path.join(outputDir, 'data-model.json'), 'utf-8'));
-    expect(json.models[0].name).toBe('User');
 
     const mmd = fs.readFileSync(path.join(outputDir, 'data-model.mmd'), 'utf-8');
     expect(mmd).toContain('erDiagram');
     expect(mmd).toContain('User');
+
+    // 不生成 .json
+    expect(fs.existsSync(path.join(outputDir, 'data-model.json'))).toBe(false);
   });
 
   // T022: all 格式不含 mermaid
-  it('all 格式不含 mermaid——生成 .md + .json，不生成空 .mmd', () => {
+  it('all 格式不含 mermaid——仅生成 .md（不生成 .json 和 .mmd）', () => {
     tempDir = createTempDir();
     const outputDir = path.join(tempDir, 'output');
 
@@ -185,12 +184,12 @@ describe('writeMultiFormat', () => {
       // 不提供 mermaidSource
     });
 
-    // 仅生成 .md + .json
-    expect(result).toHaveLength(2);
+    // 仅生成 .md
+    expect(result).toHaveLength(1);
     expect(result).toContain(path.join(outputDir, 'config-reference.md'));
-    expect(result).toContain(path.join(outputDir, 'config-reference.json'));
 
-    // 不生成 .mmd
+    // 不生成 .json 和 .mmd
+    expect(fs.existsSync(path.join(outputDir, 'config-reference.json'))).toBe(false);
     expect(fs.existsSync(path.join(outputDir, 'config-reference.mmd'))).toBe(false);
   });
 
@@ -208,7 +207,8 @@ describe('writeMultiFormat', () => {
       mermaidSource: '',
     });
 
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(1);
+    expect(fs.existsSync(path.join(outputDir, 'data-model.json'))).toBe(false);
     expect(fs.existsSync(path.join(outputDir, 'data-model.mmd'))).toBe(false);
   });
 

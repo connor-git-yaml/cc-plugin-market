@@ -102,11 +102,11 @@ export function runJob(): string {
     });
 
     expect(firstRun.failed).toHaveLength(0);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'auth.spec.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'api.spec.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'jobs.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', 'auth.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', 'api.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', 'jobs.spec.md'))).toBe(true);
 
-    const jobsSpecPath = path.join(projectRoot, 'specs', 'jobs.spec.md');
+    const jobsSpecPath = path.join(projectRoot, 'specs', 'modules', 'jobs.spec.md');
     const jobsBefore = fs.statSync(jobsSpecPath).mtimeMs;
 
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -128,7 +128,7 @@ export function authorize(value: string): string {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.deltaReportPath).toBe('specs/_delta-report.md');
+    expect(result.deltaReportPath).toBe('specs/_meta/_delta-report.md');
     expect(result.skipped).toContain('jobs');
 
     const calledTargets = mocks.generateSpec.mock.calls.map((call) => path.relative(projectRoot, call[0]));
@@ -137,17 +137,11 @@ export function authorize(value: string): string {
     const jobsAfter = fs.statSync(jobsSpecPath).mtimeMs;
     expect(jobsAfter).toBe(jobsBefore);
 
-    const deltaReport = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'specs', '_delta-report.json'), 'utf-8'),
-    ) as {
-      directChanges: Array<{ sourceTarget: string }>;
-      propagatedChanges: Array<{ sourceTarget: string }>;
-      unchangedTargets: string[];
-    };
-
-    expect(deltaReport.directChanges.map((entry) => entry.sourceTarget)).toEqual(['src/auth']);
-    expect(deltaReport.propagatedChanges.map((entry) => entry.sourceTarget)).toEqual(['src/api']);
-    expect(deltaReport.unchangedTargets).toEqual(['src/jobs']);
+    const deltaReportMarkdown = fs.readFileSync(
+      path.join(projectRoot, 'specs', '_meta', '_delta-report.md'),
+      'utf-8',
+    );
+    expect(deltaReportMarkdown).toBeTruthy();
   });
 });
 

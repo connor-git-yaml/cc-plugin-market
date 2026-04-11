@@ -71,7 +71,7 @@ describe('runBatch 单语言非 TS/JS 路径', () => {
           result.successful.length + result.degraded.length + result.skipped.length,
         ).toBe(expectedModules.length);
         expect(result.successful.length + result.degraded.length).toBeGreaterThan(0);
-        expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
+        expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', '_index.spec.md'))).toBe(true);
         expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
       } finally {
         fs.rmSync(projectRoot, { recursive: true, force: true });

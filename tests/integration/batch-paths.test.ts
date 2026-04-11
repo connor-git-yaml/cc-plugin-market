@@ -81,8 +81,8 @@ export function greet(name: string): string {
     // 摘要与索引都应位于 projectRoot 下，而非当前 cwd
     expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
     expect(fs.existsSync(path.join(isolatedCwd, result.summaryLogPath))).toBe(false);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
-    expect(fs.existsSync(path.join(isolatedCwd, 'specs', '_index.spec.md'))).toBe(false);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', '_index.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(isolatedCwd, 'specs', 'modules', '_index.spec.md'))).toBe(false);
   });
 
   it('outputDir 为相对路径时，基准应仍然是 projectRoot', async () => {
@@ -98,7 +98,7 @@ export function greet(name: string): string {
     ).toBe(result.totalModules);
     expect(result.summaryLogPath.startsWith('custom-specs/')).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, result.summaryLogPath))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'custom-specs', '_index.spec.md'))).toBe(true);
-    expect(fs.existsSync(path.join(isolatedCwd, 'custom-specs', '_index.spec.md'))).toBe(false);
+    expect(fs.existsSync(path.join(projectRoot, 'custom-specs', 'modules', '_index.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(isolatedCwd, 'custom-specs', 'modules', '_index.spec.md'))).toBe(false);
   });
 });

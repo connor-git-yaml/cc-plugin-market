@@ -211,20 +211,16 @@ export function generateProductUxDocs(
 
 function writeOverview(outputDir: string, overview: ProductOverviewOutput): string[] {
   const mdPath = path.join(outputDir, 'product-overview.md');
-  const jsonPath = path.join(outputDir, 'product-overview.json');
   fs.mkdirSync(outputDir, { recursive: true });
   fs.writeFileSync(mdPath, renderProductOverview(overview), 'utf-8');
-  fs.writeFileSync(jsonPath, JSON.stringify(overview, null, 2), 'utf-8');
-  return [mdPath, jsonPath];
+  return [mdPath];
 }
 
 function writeJourneys(outputDir: string, journeys: UserJourneysOutput): string[] {
   const mdPath = path.join(outputDir, 'user-journeys.md');
-  const jsonPath = path.join(outputDir, 'user-journeys.json');
   fs.mkdirSync(outputDir, { recursive: true });
   fs.writeFileSync(mdPath, renderUserJourneys(journeys), 'utf-8');
-  fs.writeFileSync(jsonPath, JSON.stringify(journeys, null, 2), 'utf-8');
-  return [mdPath, jsonPath];
+  return [mdPath];
 }
 
 function writeFeatureBriefs(outputDir: string, index: FeatureBriefIndexOutput): string[] {
@@ -233,17 +229,13 @@ function writeFeatureBriefs(outputDir: string, index: FeatureBriefIndexOutput): 
   fs.mkdirSync(briefsDir, { recursive: true });
 
   const indexMd = path.join(briefsDir, 'index.md');
-  const indexJson = path.join(briefsDir, 'index.json');
   fs.writeFileSync(indexMd, renderFeatureBriefIndex(index), 'utf-8');
-  fs.writeFileSync(indexJson, JSON.stringify(index, null, 2), 'utf-8');
-  writtenFiles.push(indexMd, indexJson);
+  writtenFiles.push(indexMd);
 
   for (const brief of index.briefs) {
     const mdPath = path.join(briefsDir, `${brief.fileName}.md`);
-    const jsonPath = path.join(briefsDir, `${brief.fileName}.json`);
     fs.writeFileSync(mdPath, renderFeatureBrief(brief), 'utf-8');
-    fs.writeFileSync(jsonPath, JSON.stringify(brief, null, 2), 'utf-8');
-    writtenFiles.push(mdPath, jsonPath);
+    writtenFiles.push(mdPath);
   }
 
   return writtenFiles;

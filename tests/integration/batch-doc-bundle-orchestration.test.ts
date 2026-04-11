@@ -166,7 +166,7 @@ describe('runBatch docs bundle orchestration', () => {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.docsBundleManifestPath).toBe('specs/docs-bundle.yaml');
+    expect(result.docsBundleManifestPath).toBe('specs/_meta/docs-bundle.yaml');
     expect(result.docsBundleProfiles?.map((profile) => profile.id)).toEqual([
       'developer-onboarding',
       'architecture-review',
@@ -174,7 +174,7 @@ describe('runBatch docs bundle orchestration', () => {
       'ops-handover',
     ]);
 
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'docs-bundle.yaml'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', '_meta', 'docs-bundle.yaml'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'mkdocs.yml'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'index.md'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'bundles', 'developer-onboarding', 'docs', 'runtime-topology.md'))).toBe(true);
@@ -212,13 +212,13 @@ describe('runBatch docs bundle orchestration', () => {
 
     expect(result.projectDocs).toEqual(
       expect.arrayContaining([
-        'specs/architecture-overview.md',
-        'specs/architecture-narrative.md',
-        'specs/runtime-topology.md',
+        'specs/project/architecture-overview.md',
+        'specs/project/architecture-narrative.md',
+        'specs/project/runtime-topology.md',
       ]),
     );
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'architecture-overview.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', '_index.spec.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', 'architecture-overview.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'modules', '_index.spec.md'))).toBe(true);
   });
 });
 

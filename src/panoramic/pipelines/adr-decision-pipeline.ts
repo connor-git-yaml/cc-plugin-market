@@ -148,11 +148,9 @@ export function generateBatchAdrDocs(
     const markdown = renderAdrDraft(draft);
     const baseName = `${draft.decisionId.toLowerCase()}-${draft.slug}`;
     const mdPath = path.join(adrDir, `${baseName}.md`);
-    const jsonPath = path.join(adrDir, `${baseName}.json`);
     fs.mkdirSync(adrDir, { recursive: true });
     fs.writeFileSync(mdPath, markdown, 'utf-8');
-    fs.writeFileSync(jsonPath, JSON.stringify(draft, null, 2), 'utf-8');
-    writtenFiles.push(mdPath, jsonPath);
+    writtenFiles.push(mdPath);
   }
 
   const index: AdrIndexOutput = {
@@ -168,10 +166,8 @@ export function generateBatchAdrDocs(
   fs.mkdirSync(adrDir, { recursive: true });
   const indexMarkdown = renderAdrIndex(index);
   const indexMarkdownPath = path.join(adrDir, 'index.md');
-  const indexJsonPath = path.join(adrDir, 'index.json');
   fs.writeFileSync(indexMarkdownPath, indexMarkdown, 'utf-8');
-  fs.writeFileSync(indexJsonPath, JSON.stringify(index, null, 2), 'utf-8');
-  writtenFiles.push(indexMarkdownPath, indexJsonPath);
+  writtenFiles.push(indexMarkdownPath);
 
   return {
     index,

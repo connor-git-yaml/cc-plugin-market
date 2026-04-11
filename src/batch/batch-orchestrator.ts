@@ -42,6 +42,7 @@ import {
 } from '../panoramic/batch-project-docs.js';
 import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
+import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 
 // ============================================================
 // 类型定义
@@ -379,7 +380,8 @@ export async function runBatch(
     reporter.start(moduleName);
     state.currentModule = moduleName;
 
-    const specPath = path.join(resolvedOutputDir, `${moduleName}.spec.md`);
+    const modulesDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
+    const specPath = path.join(modulesDir, `${moduleName}.spec.md`);
     const moduleSourceTarget = normalizeProjectPath(group.dirPath);
     const rootTargetsToGenerate = isRoot
       ? group.files
@@ -421,7 +423,7 @@ export async function runBatch(
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
         const genOptions: GenerateSpecOptions = {
-          outputDir: resolvedOutputDir,
+          outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
           onStageProgress: (progress) => {
@@ -550,6 +552,8 @@ export async function runBatch(
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
   const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
+  const projectDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.PROJECT);
+  const metaDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META);
   try {
     const docGraph = buildDocGraph({
       projectRoot: resolvedRoot,
@@ -563,22 +567,19 @@ export async function runBatch(
       const specOutputPath = path.isAbsolute(moduleSpec.outputPath)
         ? moduleSpec.outputPath
         : path.join(resolvedRoot, moduleSpec.outputPath);
+      fs.mkdirSync(path.dirname(specOutputPath), { recursive: true });
       fs.writeFileSync(specOutputPath, renderSpec(moduleSpec), 'utf-8');
     }
 
-    const docGraphPathAbs = path.join(resolvedOutputDir, '_doc-graph.json');
-    fs.mkdirSync(path.dirname(docGraphPathAbs), { recursive: true });
-    fs.writeFileSync(docGraphPathAbs, JSON.stringify(docGraph, null, 2), 'utf-8');
-    docGraphPath = toProjectPath(docGraphPathAbs);
+    // 注意：不再生成 _doc-graph.json（Feature 098 — 结构化数据通过内存传递，减少输出冗余）
 
     if (deltaReport) {
       try {
         const deltaRegenerator = new DeltaRegenerator();
         const deltaMarkdown = deltaRegenerator.render(deltaReport);
-        const deltaMarkdownPathAbs = path.join(resolvedOutputDir, '_delta-report.md');
-        const deltaJsonPathAbs = path.join(resolvedOutputDir, '_delta-report.json');
+        const deltaMarkdownPathAbs = path.join(metaDir, '_delta-report.md');
+        fs.mkdirSync(metaDir, { recursive: true });
         fs.writeFileSync(deltaMarkdownPathAbs, deltaMarkdown, 'utf-8');
-        fs.writeFileSync(deltaJsonPathAbs, JSON.stringify(deltaReport, null, 2), 'utf-8');
         deltaReportPath = toProjectPath(deltaMarkdownPathAbs);
       } catch (err) {
         logger.warn(`差量报告生成失败: ${String(err)}`);
@@ -589,7 +590,8 @@ export async function runBatch(
     try {
       projectDocsResult = await generateBatchProjectDocs({
         projectRoot: resolvedRoot,
-        outputDir: resolvedOutputDir,
+        outputDir: projectDir,
+        specsRootDir: resolvedOutputDir,
       });
       projectContext = projectDocsResult.projectContext;
       projectDocs = projectDocsResult.generatedDocs
@@ -611,10 +613,9 @@ export async function runBatch(
         moduleGroups: groupResult.groups,
       });
       const coverageMarkdown = coverageAuditor.render(coverageAudit);
-      const coverageMarkdownPathAbs = path.join(resolvedOutputDir, '_coverage-report.md');
-      const coverageJsonPathAbs = path.join(resolvedOutputDir, '_coverage-report.json');
+      const coverageMarkdownPathAbs = path.join(projectDir, '_coverage-report.md');
+      fs.mkdirSync(projectDir, { recursive: true });
       fs.writeFileSync(coverageMarkdownPathAbs, coverageMarkdown, 'utf-8');
-      fs.writeFileSync(coverageJsonPathAbs, JSON.stringify(coverageAudit, null, 2), 'utf-8');
       coverageReportPath = toProjectPath(coverageMarkdownPathAbs);
     } catch (err) {
       logger.warn(`覆盖率审计生成失败: ${String(err)}`);
@@ -634,7 +635,7 @@ export async function runBatch(
       processedLanguages,
     );
     const indexMarkdown = renderIndex(index as any);
-    const indexPath = path.join(resolvedOutputDir, '_index.spec.md');
+    const indexPath = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES, '_index.spec.md');
     fs.mkdirSync(path.dirname(indexPath), { recursive: true });
     fs.writeFileSync(indexPath, indexMarkdown, 'utf-8');
     indexGenerated = true;
@@ -646,6 +647,7 @@ export async function runBatch(
     const docsBundleResult = orchestrateDocsBundle({
       projectRoot: resolvedRoot,
       outputDir: resolvedOutputDir,
+      metaDir,
     });
     docsBundleManifestPath = docsBundleResult.manifestPath;
     docsBundleProfiles = docsBundleResult.profiles;
@@ -655,6 +657,8 @@ export async function runBatch(
 
   if (projectDocsResult) {
     try {
+      // 传入 manifestSearchDir 以便质量报告找到 _meta/ 中的 docs-bundle.yaml
+      projectDocsResult.qualityInputs.manifestSearchDir = metaDir;
       const qualityDoc = generateDocsQualityReport(projectDocsResult.qualityInputs);
       projectDocs = Array.from(new Set([
         ...(projectDocs ?? []),
@@ -667,9 +671,10 @@ export async function runBatch(
     }
   }
 
-  // 步骤 6：写入摘要日志
+  // 步骤 6：写入摘要日志（输出到 _meta/ 子目录）
   const summary = reporter.finish();
-  const summaryLogPathAbs = path.join(resolvedOutputDir, `batch-summary-${Date.now()}.md`);
+  fs.mkdirSync(metaDir, { recursive: true });
+  const summaryLogPathAbs = path.join(metaDir, `batch-summary-${Date.now()}.md`);
   fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
   writeSummaryLog(summary, summaryLogPathAbs);
 
@@ -678,7 +683,7 @@ export async function runBatch(
     const { generateBatchReadme } = await import('./batch-readme-generator.js');
     const readmeContent = generateBatchReadme({
       projectName: path.basename(resolvedRoot),
-      version: '2.8.0', // TODO: 从 package.json 读取
+      version: '2.9.0', // TODO: 从 package.json 读取
       moduleSpecs: successful,
       projectDocs: projectDocs ?? [],
       bundles: docsBundleProfiles,

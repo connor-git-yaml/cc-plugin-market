@@ -3,7 +3,7 @@
 <!-- spec-driver:section:badges -->
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![npm version](https://img.shields.io/npm/v/reverse-spec.svg)
-![Version](https://img.shields.io/badge/version-2.8.0-green)
+![Version](https://img.shields.io/badge/version-2.9.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
 <!-- spec-driver:section:badges:end -->

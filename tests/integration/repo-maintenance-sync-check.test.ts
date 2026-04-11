@@ -81,7 +81,7 @@ describe('repo maintenance sync/check', () => {
     const specDriverReadmePath = join(projectRoot, 'plugins', 'spec-driver', 'README.md');
     writeFileSync(
       specDriverReadmePath,
-      readFileSync(specDriverReadmePath, 'utf-8').replace('> 当前发布版本: v3.11.0', '> 当前发布版本: v0.0.1'),
+      readFileSync(specDriverReadmePath, 'utf-8').replace('> 当前发布版本: v3.11.1', '> 当前发布版本: v0.0.1'),
       'utf-8',
     );
 
@@ -126,7 +126,7 @@ describe('repo maintenance sync/check', () => {
       ]),
     );
 
-    expect(readFileSync(specDriverReadmePath, 'utf-8')).toContain('> 当前发布版本: v3.11.0');
+    expect(readFileSync(specDriverReadmePath, 'utf-8')).toContain('> 当前发布版本: v3.11.1');
     expect(readFileSync(agentPath, 'utf-8')).toContain('## 仓库级同步约定');
   });
 });

@@ -37,3 +37,20 @@ export function getBatchProjectOutputFileName(generatorId: string): string {
 export function listBatchProjectGeneratorIds(): BatchProjectGeneratorId[] {
   return Object.keys(BATCH_PROJECT_OUTPUT_BASE_NAMES) as BatchProjectGeneratorId[];
 }
+
+// ============================================================
+// batch 输出目录结构常量
+// ============================================================
+
+/**
+ * batch 输出的子目录名称
+ * 用于将 specs/ 根目录下的文件组织到语义分类子目录中
+ */
+export const BATCH_OUTPUT_SUBDIRS = {
+  /** 模块级 Spec 文件 + 架构索引 */
+  MODULES: 'modules',
+  /** 项目级文档（架构、产品、质量等） */
+  PROJECT: 'project',
+  /** 系统元数据（batch 摘要、manifest、差量报告等） */
+  META: '_meta',
+} as const;

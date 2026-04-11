@@ -60,11 +60,15 @@ export interface BatchDocsQualityInputs {
   productOverview?: GenerateProductUxDocsResult['overview'];
   userJourneys?: GenerateProductUxDocsResult['journeys'];
   featureBriefIndex?: GenerateProductUxDocsResult['featureBriefIndex'];
+  /** docs-bundle manifest 所在目录（默认 outputDir） */
+  manifestSearchDir?: string;
 }
 
 export interface GenerateBatchProjectDocsOptions {
   projectRoot: string;
   outputDir: string;
+  /** specs 根目录（用于扫描模块 specs，默认 outputDir） */
+  specsRootDir?: string;
 }
 
 export async function generateBatchProjectDocs(
@@ -107,6 +111,7 @@ export async function generateBatchProjectDocs(
   const architectureNarrative = buildArchitectureNarrative({
     projectRoot: options.projectRoot,
     outputDir: options.outputDir,
+    specsRootDir: options.specsRootDir,
     projectContext,
     architectureOverview,
     generatedDocs,
@@ -130,7 +135,7 @@ export async function generateBatchProjectDocs(
   let productUxDocs: GenerateProductUxDocsResult | undefined;
 
   if (architectureIR) {
-    const storedModules = loadStoredModuleSpecs(options.outputDir, options.projectRoot);
+    const storedModules = loadStoredModuleSpecs(options.specsRootDir ?? options.outputDir, options.projectRoot);
 
     try {
       const componentView = buildComponentView({
@@ -272,7 +277,7 @@ export async function generateBatchProjectDocs(
 export function generateDocsQualityReport(
   options: BatchDocsQualityInputs,
 ): BatchGeneratedDocSummary {
-  const manifestRead = readDocsBundleManifest(options.outputDir, options.projectRoot);
+  const manifestRead = readDocsBundleManifest(options.manifestSearchDir ?? options.outputDir, options.projectRoot);
   const qualityReport = evaluateDocsQuality({
     projectRoot: options.projectRoot,
     outputDir: options.outputDir,

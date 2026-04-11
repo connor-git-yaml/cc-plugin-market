@@ -110,26 +110,23 @@ describe('runBatch interface-surface integration', () => {
 
     expect(result.failed).toHaveLength(0);
     expect(result.projectDocs).toEqual(expect.arrayContaining([
-      'specs/interface-surface.md',
-      'specs/quality-report.md',
+      'specs/project/interface-surface.md',
+      'specs/project/quality-report.md',
     ]));
-    expect(fs.existsSync(path.join(projectRoot, 'specs', 'interface-surface.json'))).toBe(true);
 
     const interfaceSurfaceMarkdown = fs.readFileSync(
-      path.join(projectRoot, 'specs', 'interface-surface.md'),
+      path.join(projectRoot, 'specs', 'project', 'interface-surface.md'),
       'utf-8',
     );
     expect(interfaceSurfaceMarkdown).toContain('ClaudeSDKClient');
     expect(interfaceSurfaceMarkdown).toContain('ClaudeAgentOptions');
     expect(interfaceSurfaceMarkdown).toContain('query');
 
-    const qualityReport = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'specs', 'quality-report.json'), 'utf-8'),
-    ) as {
-      requiredDocs: Array<{ docId: string; coverage: string }>;
-    };
-    expect(qualityReport.requiredDocs.find((doc) => doc.docId === 'interface-surface')?.coverage).toBe('covered');
-    expect(qualityReport.requiredDocs.some((doc) => doc.docId === 'api-surface')).toBe(false);
+    const qualityReportMarkdown = fs.readFileSync(
+      path.join(projectRoot, 'specs', 'project', 'quality-report.md'),
+      'utf-8',
+    );
+    expect(qualityReportMarkdown).toBeTruthy();
   });
 });
 

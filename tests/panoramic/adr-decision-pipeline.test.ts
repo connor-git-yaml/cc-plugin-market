@@ -98,7 +98,9 @@ describe('generateBatchAdrDocs', () => {
 
     expect(result.drafts.some((draft) => draft.title.includes('CLI'))).toBe(true);
     expect(result.drafts.some((draft) => draft.title.includes('JSON'))).toBe(true);
-    expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.json'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.md'))).toBe(true);
+    // Feature 098: 不再生成 .json
+    expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.json'))).toBe(false);
   });
 });
 

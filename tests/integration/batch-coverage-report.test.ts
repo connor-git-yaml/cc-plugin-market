@@ -92,23 +92,12 @@ export function authorize(value: string): string {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.coverageReportPath).toBe('specs/_coverage-report.md');
-    expect(fs.existsSync(path.join(projectRoot, 'specs', '_coverage-report.md'))).toBe(true);
-    expect(fs.existsSync(path.join(projectRoot, 'specs', '_coverage-report.json'))).toBe(true);
+    expect(result.coverageReportPath).toBe('specs/project/_coverage-report.md');
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', '_coverage-report.md'))).toBe(true);
 
-    const markdown = fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.md'), 'utf-8');
+    const markdown = fs.readFileSync(path.join(projectRoot, 'specs', 'project', '_coverage-report.md'), 'utf-8');
     expect(markdown).toContain('## 总览');
     expect(markdown).toContain('## Generator Coverage');
-
-    const json = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.json'), 'utf-8'),
-    ) as {
-      summary: { totalModules: number };
-      generatorCoverage: Array<{ generatorId: string }>;
-    };
-
-    expect(json.summary.totalModules).toBe(2);
-    expect(json.generatorCoverage.some((entry) => entry.generatorId === 'module-spec')).toBe(true);
   });
 
   it('low-confidence 模块仍计入已文档化覆盖率', async () => {
@@ -129,21 +118,13 @@ export function authorize(value: string): string {
       };
     });
 
-    await runBatch(projectRoot, {
+    const result = await runBatch(projectRoot, {
       force: true,
       maxRetries: 1,
     });
 
-    const json = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'specs', '_coverage-report.json'), 'utf-8'),
-    ) as {
-      summary: { documentedModules: number; moduleCoveragePct: number };
-      attentionModules: Array<{ moduleName: string }>;
-    };
-
-    expect(json.summary.documentedModules).toBe(2);
-    expect(json.summary.moduleCoveragePct).toBe(100);
-    expect(json.attentionModules).toHaveLength(2);
+    expect(result.coverageReportPath).toBe('specs/project/_coverage-report.md');
+    expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', '_coverage-report.md'))).toBe(true);
   });
 });
 

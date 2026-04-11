@@ -89,9 +89,7 @@ export function writeMultiFormat(options: WriteMultiFormatOptions): string[] {
     fs.writeFileSync(mdPath, markdown, 'utf-8');
     writtenFiles.push(mdPath);
 
-    // 写 .json
-    fs.writeFileSync(jsonPath, JSON.stringify(structuredData, null, 2), 'utf-8');
-    writtenFiles.push(jsonPath);
+    // 注意：不再生成 .json（Feature 098 — 减少输出冗余，结构化数据通过内存传递）
 
     // 写 .mmd（条件：mermaidSource 存在且非空字符串）
     if (mermaidSource && mermaidSource.trim().length > 0) {

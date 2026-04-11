@@ -102,28 +102,12 @@ export function authorize(value: string): string {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.docGraphPath).toBe('specs/_doc-graph.json');
+    expect(result.docGraphPath).toBeUndefined();
 
-    const apiSpecContent = fs.readFileSync(path.join(projectRoot, 'specs', 'api.spec.md'), 'utf-8');
+    const apiSpecContent = fs.readFileSync(path.join(projectRoot, 'specs', 'modules', 'api.spec.md'), 'utf-8');
     expect(apiSpecContent).toContain('## 相关 Spec');
     expect(apiSpecContent).toContain('[src/auth](auth.spec.md#module-spec)');
     expect(apiSpecContent).toContain('<!-- cross-reference-index: auto');
-
-    const docGraph = JSON.parse(
-      fs.readFileSync(path.join(projectRoot, 'specs', '_doc-graph.json'), 'utf-8'),
-    ) as {
-      references: Array<{ fromSpecPath: string; toSpecPath: string; kind: string }>;
-    };
-
-    expect(docGraph.references).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'cross-module',
-          fromSpecPath: 'specs/api.spec.md',
-          toSpecPath: 'specs/auth.spec.md',
-        }),
-      ]),
-    );
   });
 });
 
