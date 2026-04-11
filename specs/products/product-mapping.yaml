@@ -7,7 +7,7 @@
 
 products:
   reverse-spec:
-    description: "reverse-spec v2.5.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并通过 repo:sync / repo:check 固化技能分发、发布合同与仓库边界"
+    description: "reverse-spec v2.6.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并通过 repo:sync / repo:check 固化技能分发、发布合同与仓库边界"
     specs:
       - id: "001-reverse-spec-v2"
         type: INITIAL
