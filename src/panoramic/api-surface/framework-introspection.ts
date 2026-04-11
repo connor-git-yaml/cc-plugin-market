@@ -14,6 +14,9 @@ import {
 } from './utils.js';
 import { dedupeEndpoints, normalizeTypeText } from './endpoint-utils.js';
 import { extractFromFastApi } from './fastapi-extractor.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('framework-introspection');
 
 // ============================================================
 // tsoa 解析函数
@@ -116,8 +119,8 @@ function extractFromTsoa(projectRoot: string): ExtractionResult | null {
   for (const filePath of files) {
     try {
       project.addSourceFileAtPath(filePath);
-    } catch {
-      // ignore parse failure
+    } catch (err) {
+      logger.warn(`TS/JS 文件解析失败，已跳过: ${filePath}`, String(err));
     }
   }
 

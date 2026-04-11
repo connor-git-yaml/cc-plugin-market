@@ -15,6 +15,9 @@ import { z } from 'zod';
 import type { DataModel } from '../generators/data-model-generator.js';
 import type { ConfigFileResult } from '../generators/config-reference-generator.js';
 import { callLLM, extractJsonArray, isLLMAvailable } from './llm-facade.js';
+import { createLogger } from './logger.js';
+
+const logger = createLogger('llm-enricher');
 
 // ============================================================
 // Zod Schema（LLM 返回值验证）
@@ -198,8 +201,8 @@ export async function enrichFieldDescriptions(
           field.description = `${AI_PREFIX}${result.description}`;
         }
       }
-    } catch {
-      // 单个模型失败时静默跳过，不中断其他模型
+    } catch (err) {
+      logger.debug(`单个模型字段增强失败，静默跳过: ${String(err)}`);
       continue;
     }
   }
@@ -268,8 +271,8 @@ export async function enrichModelDescriptions(
           model.description = `${AI_PREFIX}${result.description}`;
         }
       }
-    } catch {
-      // 单批次失败时静默跳过，不中断其他批次
+    } catch (err) {
+      logger.debug(`单批次模型描述增强失败，静默跳过: ${String(err)}`);
       continue;
     }
   }
@@ -330,8 +333,8 @@ export async function enrichConfigDescriptions(
           }
         }
       }
-    } catch {
-      // 文件级增强失败不阻断配置项级增强
+    } catch (err) {
+      logger.debug(`配置文件级 LLM 增强失败，不阻断配置项级增强: ${String(err)}`);
     }
   }
 
@@ -373,7 +376,8 @@ export async function enrichConfigDescriptions(
           entry.description = `${AI_PREFIX}${result.description}`;
         }
       }
-    } catch {
+    } catch (err) {
+      logger.debug(`配置项级 LLM 增强失败，静默跳过: ${String(err)}`);
       continue;
     }
   }

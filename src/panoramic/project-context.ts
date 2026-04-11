@@ -15,6 +15,9 @@ import {
 } from './interfaces.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { scanFiles } from '../utils/file-scanner.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('project-context');
 
 // ============================================================
 // Lock 文件优先级检测表（按优先级从高到低）
@@ -108,8 +111,8 @@ function detectWorkspaceType(projectRoot: string): WorkspaceType {
       if (parsed && parsed.workspaces) {
         return 'monorepo';
       }
-    } catch {
-      // JSON.parse 失败时跳过，降级为 single
+    } catch (err) {
+      logger.debug(`package.json 解析失败，workspace 类型降级为 single: ${String(err)}`);
     }
   }
 
@@ -121,8 +124,8 @@ function detectWorkspaceType(projectRoot: string): WorkspaceType {
       if (/^\[tool\.uv\.workspace\]/m.test(content)) {
         return 'monorepo';
       }
-    } catch {
-      // readFileSync 失败时跳过，降级为 single
+    } catch (err) {
+      logger.debug(`pyproject.toml 读取失败，workspace 类型降级为 single: ${String(err)}`);
     }
   }
 
@@ -149,8 +152,8 @@ function detectLanguages(projectRoot: string): string[] {
     if (result.languageStats) {
       return [...result.languageStats.keys()];
     }
-  } catch {
-    // scanFiles 异常时返回空数组
+  } catch (err) {
+    logger.debug(`scanFiles 异常，语言检测结果降级为空数组: ${String(err)}`);
   }
 
   return [];
@@ -170,7 +173,8 @@ function scanConfigFiles(projectRoot: string): Map<string, string> {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(projectRoot, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    logger.debug(`配置文件扫描失败，返回空列表: ${String(err)}`);
     return configMap;
   }
 
@@ -214,7 +218,8 @@ function discoverExistingSpecs(projectRoot: string): string[] {
     if (!fs.statSync(specsDir).isDirectory()) {
       return [];
     }
-  } catch {
+  } catch (err) {
+    logger.debug(`specs 目录 stat 失败，降级为空列表: ${String(err)}`);
     return [];
   }
 
@@ -234,8 +239,8 @@ function walkSpecsDir(dir: string, results: string[]): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    // 不可读的目录静默跳过
+  } catch (err) {
+    logger.debug(`目录不可读，静默跳过: ${dir} — ${String(err)}`);
     return;
   }
 

@@ -13,6 +13,9 @@ import {
   type StoredModuleSpecRecord,
 } from '../stored-module-specs.js';
 import { loadTemplate } from '../utils/template-loader.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('interface-surface-generator');
 
 export type InterfaceSurfaceRole = 'entrypoint' | 'core' | 'support';
 
@@ -195,7 +198,8 @@ function walkStoredSpecPaths(dir: string, results: string[], seen: Set<string>):
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    logger.debug(`目录读取失败，静默跳过: ${dir} — ${String(err)}`);
     return;
   }
 
@@ -334,7 +338,8 @@ function looksLikeNodeLibrary(projectRoot: string): boolean {
       ? pkg.keywords.filter((item): item is string => typeof item === 'string')
       : [];
     return keywords.some((keyword) => /(sdk|library|client|plugin|toolkit|api-client)/i.test(keyword));
-  } catch {
+  } catch (err) {
+    logger.debug(`JS library 检测失败，降级为 false: ${String(err)}`);
     return false;
   }
 }
@@ -348,7 +353,8 @@ function looksLikePythonLibrary(projectRoot: string): boolean {
   try {
     const content = fs.readFileSync(pyprojectPath, 'utf-8');
     return /^\[project\]/m.test(content) || /^\[tool\.poetry\]/m.test(content);
-  } catch {
+  } catch (err) {
+    logger.debug(`Python library 检测失败，降级为 false: ${String(err)}`);
     return false;
   }
 }
@@ -368,8 +374,8 @@ function detectProjectName(projectRoot: string): string {
       if (typeof pkg.name === 'string' && pkg.name.trim().length > 0) {
         return pkg.name.trim();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`package.json 读取失败，使用默认项目名称: ${String(err)}`);
     }
   }
 
@@ -381,8 +387,8 @@ function detectProjectName(projectRoot: string): string {
       if (match?.[1]) {
         return match[1];
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`pyproject.toml 读取失败，使用默认项目名称: ${String(err)}`);
     }
   }
 

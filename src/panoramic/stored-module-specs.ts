@@ -7,6 +7,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('stored-module-specs');
 
 export interface StoredModuleSpecRecord {
   sourceTarget: string;
@@ -165,7 +168,8 @@ export function extractStoredBaselineSkeleton(content: string): CodeSkeleton | u
 
   try {
     return JSON.parse(match[1]) as CodeSkeleton;
-  } catch {
+  } catch (err) {
+    logger.debug(`baseline-skeleton JSON 解析失败: ${String(err)}`);
     return undefined;
   }
 }

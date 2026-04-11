@@ -12,6 +12,9 @@
  */
 import { AbstractArtifactParser } from './abstract-artifact-parser.js';
 import type { DockerfileInfo, DockerfileStage, DockerfileInstruction } from './types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('dockerfile-parser');
 
 /** 指令匹配正则 */
 const INSTRUCTION_RE = /^(\w+)\s+(.*)/;
@@ -79,7 +82,8 @@ export class DockerfileParser extends AbstractArtifactParser<DockerfileInfo> {
       }
 
       return { stages };
-    } catch {
+    } catch (err) {
+      logger.debug(`Dockerfile 解析失败，使用降级结果: ${String(err)}`);
       return this.createFallback();
     }
   }

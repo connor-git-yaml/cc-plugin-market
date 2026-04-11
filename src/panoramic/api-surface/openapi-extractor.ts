@@ -12,6 +12,9 @@ import {
   uniqueStrings,
 } from './utils.js';
 import { dedupeEndpoints, renderResponseType } from './endpoint-utils.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('openapi-extractor');
 
 function isPlainObject(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -236,7 +239,8 @@ export function extractFromSchema(projectRoot: string): ExtractionResult | null 
     let doc: unknown;
     try {
       doc = JSON.parse(content);
-    } catch {
+    } catch (err) {
+      logger.debug(`OpenAPI JSON 解析失败，跳过该文件: ${String(err)}`);
       continue;
     }
 

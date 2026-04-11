@@ -15,6 +15,9 @@ import { spawnSync } from 'node:child_process';
 import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import type { BatchGeneratedDocSummary } from './architecture-narrative.js';
 import { loadTemplate } from '../utils/template-loader.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('product-ux-docs');
 
 export type ProductFactSourceType =
   | 'current-spec'
@@ -1047,8 +1050,8 @@ function resolveProjectName(
       if (pkg.name?.trim()) {
         return pkg.name.trim();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`package.json 读取失败，尝试从 README 获取项目名称: ${String(err)}`);
     }
   }
 

@@ -16,6 +16,9 @@ import { ArtifactParserRegistry } from '../parser-registry.js';
 import type { ConfigEntries } from '../parsers/types.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { enrichConfigDescriptions } from '../utils/llm-enricher.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('config-reference-generator');
 
 // ============================================================
 // 类型定义
@@ -136,8 +139,8 @@ export class ConfigReferenceGenerator
           return true;
         }
       }
-    } catch {
-      // 目录不可读时降级为 false
+    } catch (err) {
+      logger.debug(`根目录扫描失败，isApplicable 降级为 false: ${context.projectRoot} — ${String(err)}`);
     }
 
     return false;
@@ -159,8 +162,8 @@ export class ConfigReferenceGenerator
           projectName = pkg.name;
         }
       }
-    } catch {
-      // 使用默认名称
+    } catch (err) {
+      logger.debug(`package.json 解析失败，使用默认项目名称: ${String(err)}`);
     }
 
     return { files, projectName };
@@ -231,8 +234,8 @@ export class ConfigReferenceGenerator
           this.scanDirectory(subDir, projectRoot, discovered);
         }
       }
-    } catch {
-      // 目录不可读时跳过
+    } catch (err) {
+      logger.debug(`一级子目录扫描失败，已跳过: ${projectRoot} — ${String(err)}`);
     }
 
     const parserRegistry = ArtifactParserRegistry.getInstance();
@@ -256,8 +259,8 @@ export class ConfigReferenceGenerator
           // 无匹配 Parser 时返回空 entries
           results.push({ filePath: relativePath, format, entries: [] });
         }
-      } catch {
-        // 文件不可读时跳过，不报错
+      } catch (err) {
+        logger.debug(`配置文件解析失败，使用空 entries: ${relativePath} — ${String(err)}`);
         results.push({ filePath: relativePath, format, entries: [] });
       }
     }
@@ -280,8 +283,8 @@ export class ConfigReferenceGenerator
           discovered.add(path.join(dir, entry.name));
         }
       }
-    } catch {
-      // 不可读目录静默跳过
+    } catch (err) {
+      logger.debug(`目录不可读，静默跳过: ${dir} — ${String(err)}`);
     }
   }
 

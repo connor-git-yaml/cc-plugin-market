@@ -24,6 +24,9 @@ import { LanguageAdapterRegistry } from '../../adapters/language-adapter-registr
 import { sanitizeMermaidId } from '../utils/mermaid-helpers.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { enrichFieldDescriptions, enrichModelDescriptions } from '../utils/llm-enricher.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('data-model-generator');
 
 // ============================================================
 // Zod Schema + TypeScript 类型
@@ -561,8 +564,8 @@ export class DataModelGenerator
           path.isAbsolute(f) ? f : path.join(context.projectRoot, f),
         );
       }
-    } catch {
-      // scanFiles 失败时回退到空列表
+    } catch (err) {
+      logger.debug(`scanFiles 失败，回退到空文件列表: ${String(err)}`);
     }
 
     // Python 文件处理
@@ -575,8 +578,8 @@ export class DataModelGenerator
           if (pyModels.length > 0) {
             sourceFiles.push(path.relative(context.projectRoot, filePath));
           }
-        } catch {
-          // 单文件解析失败，跳过继续
+        } catch (err) {
+          logger.warn(`Python 文件解析失败，已跳过: ${path.relative(context.projectRoot, filePath)}`, String(err));
         }
       }
     }
@@ -596,8 +599,8 @@ export class DataModelGenerator
           if (tsModels.length > 0) {
             sourceFiles.push(path.relative(context.projectRoot, filePath));
           }
-        } catch {
-          // 单文件解析失败，跳过继续
+        } catch (err) {
+          logger.warn(`TypeScript 文件解析失败，已跳过: ${path.relative(context.projectRoot, filePath)}`, String(err));
         }
       }
     }

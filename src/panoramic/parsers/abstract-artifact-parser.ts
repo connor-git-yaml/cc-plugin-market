@@ -10,6 +10,9 @@
  */
 import * as fs from 'node:fs';
 import type { ArtifactParser } from '../interfaces.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('abstract-artifact-parser');
 
 /**
  * 非代码制品解析器抽象基类
@@ -57,7 +60,8 @@ export abstract class AbstractArtifactParser<T> implements ArtifactParser<T> {
       // 统一换行符为 LF，确保 CRLF 环境下正则解析正确
       const content = raw.replace(/\r\n/g, '\n');
       return this.doParse(content, filePath);
-    } catch {
+    } catch (err) {
+      logger.debug(`制品文件解析失败，使用降级结果: ${filePath} — ${String(err)}`);
       return this.createFallback();
     }
   }

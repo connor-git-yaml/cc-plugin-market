@@ -37,6 +37,9 @@ import {
   type RequiredDocRule,
   type RequiredDocStatus,
 } from '../models/docs-quality-model.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('docs-quality-evaluator');
 
 export interface EvaluateDocsQualityOptions {
   projectRoot: string;
@@ -730,7 +733,8 @@ function looksLikeNodeLibrary(projectRoot: string): boolean {
       ? pkg.keywords.filter((item): item is string => typeof item === 'string')
       : [];
     return keywords.some((keyword) => /(sdk|library|client|plugin|toolkit|api-client)/i.test(keyword));
-  } catch {
+  } catch (err) {
+    logger.debug(`JS library 检测失败，降级为 false: ${String(err)}`);
     return false;
   }
 }
@@ -744,7 +748,8 @@ function looksLikePythonLibrary(projectRoot: string): boolean {
   try {
     const content = fs.readFileSync(pyprojectPath, 'utf-8');
     return /^\[project\]/m.test(content) || /^\[tool\.poetry\]/m.test(content);
-  } catch {
+  } catch (err) {
+    logger.debug(`Python library 检测失败，降级为 false: ${String(err)}`);
     return false;
   }
 }

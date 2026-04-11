@@ -15,6 +15,9 @@
 import * as path from 'node:path';
 import { AbstractArtifactParser } from './abstract-artifact-parser.js';
 import type { BehaviorInfo, BehaviorState } from './types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('behavior-yaml-parser');
 
 /** 格式类型 */
 type FormatType = 'yaml' | 'markdown';
@@ -66,7 +69,8 @@ export class BehaviorYamlParser extends AbstractArtifactParser<BehaviorInfo> {
         return this.parseYaml(content);
       }
       return this.parseMarkdown(content);
-    } catch {
+    } catch (err) {
+      logger.debug(`行为定义文件解析失败，使用降级结果: ${String(err)}`);
       return this.createFallback();
     }
   }

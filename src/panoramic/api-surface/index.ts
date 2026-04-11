@@ -33,6 +33,9 @@ import { collectAuthHints, dedupeEndpoints, deriveTags, extractPathParameters } 
 import { extractFromSchema } from './openapi-extractor.js';
 import { extractFromFrameworkIntrospection } from './framework-introspection.js';
 import { analyzeExpressFile } from './express-extractor.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('api-surface-generator');
 
 // ============================================================
 // 子模块 re-export
@@ -114,8 +117,8 @@ function extractFromExpressAst(projectRoot: string): ExtractionResult | null {
   for (const filePath of files) {
     try {
       project.addSourceFileAtPath(filePath);
-    } catch {
-      // ignore parse failure
+    } catch (err) {
+      logger.warn(`TS/JS 文件解析失败，已跳过: ${filePath}`, String(err));
     }
   }
 

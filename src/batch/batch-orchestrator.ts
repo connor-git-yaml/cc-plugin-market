@@ -18,7 +18,8 @@ import {
   DEFAULT_CHECKPOINT_PATH,
 } from './checkpoint.js';
 import { DeltaRegenerator, type DeltaReport } from './delta-regenerator.js';
-import { createReporter, writeSummaryLog } from './progress-reporter.js';
+import { createReporter, writeSummaryLog, type ProgressMode } from './progress-reporter.js';
+import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
 import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
@@ -63,6 +64,8 @@ export interface BatchOptions {
   grouping?: GroupingOptions;
   /** 语言过滤（如 ['typescript', 'python']），仅处理指定语言的模块 */
   languages?: string[];
+  /** 进度报告输出模式（默认根据 process.stdout.isTTY 自动检测） */
+  progressMode?: ProgressMode;
 }
 
 export interface BatchResult {
@@ -91,6 +94,8 @@ export interface BatchResult {
   /** 055 输出的 profile 摘要 */
   docsBundleProfiles?: DocsBundleProfileSummary[];
 }
+
+const logger = createLogger('batch-orchestrator');
 
 // ============================================================
 // 内部辅助函数
@@ -343,7 +348,7 @@ export async function runBatch(
   }
 
   // 步骤 4：按模块级拓扑顺序处理
-  const reporter = createReporter(processingOrder.length);
+  const reporter = createReporter(processingOrder.length, options.progressMode);
   const successful: string[] = [];
   const failed: FailedModule[] = [];
   const skipped: string[] = [];
@@ -573,8 +578,8 @@ export async function runBatch(
         fs.writeFileSync(deltaMarkdownPathAbs, deltaMarkdown, 'utf-8');
         fs.writeFileSync(deltaJsonPathAbs, JSON.stringify(deltaReport, null, 2), 'utf-8');
         deltaReportPath = toProjectPath(deltaMarkdownPathAbs);
-      } catch {
-        console.warn('差量报告生成失败');
+      } catch (err) {
+        logger.warn(`差量报告生成失败: ${String(err)}`);
       }
     }
 
@@ -590,8 +595,8 @@ export async function runBatch(
         .filter((filePath) => filePath.endsWith('.md'))
         .map(toProjectPath)
         .sort((a, b) => a.localeCompare(b));
-    } catch {
-      console.warn('项目级 panoramic 文档生成失败');
+    } catch (err) {
+      logger.warn(`项目级 panoramic 文档生成失败: ${String(err)}`);
     }
 
     try {
@@ -609,11 +614,11 @@ export async function runBatch(
       fs.writeFileSync(coverageMarkdownPathAbs, coverageMarkdown, 'utf-8');
       fs.writeFileSync(coverageJsonPathAbs, JSON.stringify(coverageAudit, null, 2), 'utf-8');
       coverageReportPath = toProjectPath(coverageMarkdownPathAbs);
-    } catch {
-      console.warn('覆盖率审计生成失败');
+    } catch (err) {
+      logger.warn(`覆盖率审计生成失败: ${String(err)}`);
     }
-  } catch {
-    console.warn('文档图谱生成失败');
+  } catch (err) {
+    logger.warn(`文档图谱生成失败: ${String(err)}`);
   }
 
   // 步骤 6：生成架构索引（使用收集的 ModuleSpec）
@@ -631,8 +636,8 @@ export async function runBatch(
     fs.mkdirSync(path.dirname(indexPath), { recursive: true });
     fs.writeFileSync(indexPath, indexMarkdown, 'utf-8');
     indexGenerated = true;
-  } catch {
-    console.warn('架构索引生成失败');
+  } catch (err) {
+    logger.warn(`架构索引生成失败: ${String(err)}`);
   }
 
   try {
@@ -642,8 +647,8 @@ export async function runBatch(
     });
     docsBundleManifestPath = docsBundleResult.manifestPath;
     docsBundleProfiles = docsBundleResult.profiles;
-  } catch {
-    console.warn('文档 bundle 编排失败');
+  } catch (err) {
+    logger.warn(`文档 bundle 编排失败: ${String(err)}`);
   }
 
   if (projectDocsResult) {
@@ -655,8 +660,8 @@ export async function runBatch(
           .filter((filePath) => filePath.endsWith('.md'))
           .map(toProjectPath),
       ])).sort((a, b) => a.localeCompare(b));
-    } catch {
-      console.warn('文档质量报告生成失败');
+    } catch (err) {
+      logger.warn(`文档质量报告生成失败: ${String(err)}`);
     }
   }
 
@@ -705,8 +710,8 @@ async function buildGraphForLanguageGroup(
         node.language = langGroup.adapterId;
       }
       return langGraph;
-    } catch {
-      // 语言专属图失败后回落到目录图，保持 batch 宽容语义。
+    } catch (err) {
+      logger.debug(`语言专属依赖图构建失败，回落到目录图: ${String(err)}`);
     }
   }
 

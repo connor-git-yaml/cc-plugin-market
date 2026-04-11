@@ -11,6 +11,9 @@ import type { SourceFile } from 'ts-morph';
 import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { sanitizeMermaidId } from '../utils/mermaid-helpers.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('event-surface-generator');
 
 export type EventChannelKind = 'event' | 'topic' | 'queue' | 'webhook' | 'unknown';
 export type EventRole = 'publisher' | 'subscriber';
@@ -116,7 +119,8 @@ export class EventSurfaceGenerator
     return collectSourceFiles(context.projectRoot).some((filePath) => {
       try {
         return EVENT_PATTERN_RE.test(fs.readFileSync(filePath, 'utf-8'));
-      } catch {
+      } catch (err) {
+        logger.debug(`文件读取失败，isApplicable 降级为 false: ${filePath} — ${String(err)}`);
         return false;
       }
     });
@@ -142,8 +146,10 @@ export class EventSurfaceGenerator
       for (const filePath of tsFiles) {
         try {
           project.addSourceFileAtPath(filePath);
-        } catch {
-          warnings.add(`跳过无法解析的 TS/JS 文件: ${toPosixPath(path.relative(context.projectRoot, filePath))}`);
+        } catch (err) {
+          const relPath = toPosixPath(path.relative(context.projectRoot, filePath));
+          warnings.add(`跳过无法解析的 TS/JS 文件: ${relPath}`);
+          logger.warn(`TS/JS 文件解析失败，已跳过: ${relPath}`, String(err));
         }
       }
 
@@ -204,7 +210,8 @@ function collectSourceFiles(projectRoot: string): string[] {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      logger.debug(`目录读取失败，静默跳过: ${dir} — ${String(err)}`);
       return;
     }
 
@@ -240,8 +247,8 @@ function detectProjectName(projectRoot: string): string {
       if (parsed.name?.trim()) {
         return parsed.name.trim();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`package.json 读取失败，使用目录名作为项目名称: ${String(err)}`);
     }
   }
 

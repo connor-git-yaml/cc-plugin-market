@@ -33,6 +33,10 @@ import {
   type RuntimeVolumeMount,
 } from '../models/runtime-topology-model.js';
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('runtime-topology-generator');
+
 const COMPOSE_FILE_RE = /^(?:docker-compose|compose)(?:\.[^/]+)*\.ya?ml$/i;
 const ROOT_DOCKERFILE_RE = /^Dockerfile(?:\.[^/]+)*$/;
 const ENV_FILE_RE = /^\.env(?:\.[^/]+)*$/;
@@ -780,8 +784,8 @@ function detectProjectName(projectRoot: string): string {
         return parsed.name;
       }
     }
-  } catch {
-    // ignore and fallback to dirname
+  } catch (err) {
+    logger.debug(`package.json 读取失败，使用目录名作为项目名称: ${String(err)}`);
   }
 
   return path.basename(projectRoot);
@@ -870,7 +874,8 @@ function collectSourceFiles(
 function safeReadDir(dir: string): fs.Dirent[] {
   try {
     return fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    logger.debug(`目录读取失败，返回空列表: ${dir} — ${String(err)}`);
     return [];
   }
 }

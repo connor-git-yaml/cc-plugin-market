@@ -19,6 +19,9 @@ import {
 } from '../models/pattern-hints-model.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { callLLM, extractJsonArray } from '../utils/llm-facade.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('pattern-hints-generator');
 
 
 export type PatternHintsLLMEnhancer = (
@@ -213,7 +216,8 @@ function parsePatternHintsEnhancement(
         summary: typeof item['summary'] === 'string' ? item['summary'] : undefined,
         explanation: typeof item['explanation'] === 'string' ? item['explanation'] : undefined,
       }));
-  } catch {
+  } catch (err) {
+    logger.debug(`LLM 响应解析失败，跳过增强: ${String(err)}`);
     return null;
   }
 }

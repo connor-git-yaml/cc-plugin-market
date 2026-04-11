@@ -22,6 +22,9 @@ import * as path from 'node:path';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from '../interfaces.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { sanitizeMermaidId } from '../utils/mermaid-helpers.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('workspace-index-generator');
 
 // ============================================================
 // 类型定义（T001）
@@ -145,8 +148,8 @@ function expandGlobPatterns(projectRoot: string, patterns: string[]): string[] {
             }
           }
         }
-      } catch {
-        // 父目录不存在或不可读，静默跳过
+      } catch (err) {
+        logger.debug(`父目录不存在或不可读，静默跳过: ${String(err)}`);
       }
     } else {
       // 精确路径，直接检查存在性
@@ -252,7 +255,8 @@ function detectLanguage(packageDir: string): string {
     if (fileSet.has('pyproject.toml')) return 'Python';
 
     return 'Unknown';
-  } catch {
+  } catch (err) {
+    logger.debug(`语言检测失败，使用 Unknown: ${String(err)}`);
     return 'Unknown';
   }
 }
@@ -273,7 +277,8 @@ function extractPyprojectInfo(
   let content: string;
   try {
     content = fs.readFileSync(pyprojectPath, 'utf-8');
-  } catch {
+  } catch (err) {
+    logger.debug(`pyproject.toml 读取失败，跳过子包: ${packageDir} — ${String(err)}`);
     return null;
   }
 
@@ -384,8 +389,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
       const content = fs.readFileSync(pnpmWorkspacePath, 'utf-8');
       memberPatterns = parsePnpmWorkspaceYaml(content);
       workspaceType = 'pnpm';
-    } catch {
-      console.warn('无法读取 pnpm-workspace.yaml，尝试其他检测方式');
+    } catch (err) {
+      logger.debug(`无法读取 pnpm-workspace.yaml，尝试其他检测方式: ${String(err)}`);
       memberPatterns = [];
     }
   }
@@ -409,8 +414,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
           memberPatterns = pkg.workspaces.packages;
           workspaceType = 'npm';
         }
-      } catch {
-        console.warn('无法解析 package.json');
+      } catch (err) {
+        logger.debug(`无法解析 package.json workspace: ${String(err)}`);
       }
     }
   }
@@ -432,8 +437,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
           memberPatterns = parseUvWorkspaceToml(content);
           workspaceType = 'uv';
         }
-      } catch {
-        console.warn('无法解析 pyproject.toml');
+      } catch (err) {
+        logger.debug(`无法解析 pyproject.toml workspace: ${String(err)}`);
       }
     }
   }
@@ -448,8 +453,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
           projectName = pkg.name;
         }
       }
-    } catch {
-      // 使用默认名称
+    } catch (err) {
+      logger.debug(`pnpm 场景读取 package.json 失败，使用默认名称: ${String(err)}`);
     }
   }
 
@@ -476,8 +481,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
         if (nameMatch) {
           allNames.add(nameMatch[1]!);
         }
-      } catch {
-        // 忽略
+      } catch (err) {
+        logger.debug(`uv 子包 pyproject.toml 读取失败，跳过名称收集: ${dir} — ${String(err)}`);
       }
       tempInfos.push({ dir, relPath });
     }
@@ -508,9 +513,8 @@ export function extractWorkspaceData(context: ProjectContext): WorkspaceInput {
         const name = typeof pkg.name === 'string' ? pkg.name : path.basename(dir);
         allNames.add(name);
         validDirs.push({ dir, relPath, pkg });
-      } catch {
-        // JSON 解析失败时记录警告并跳过（T014）
-        console.warn(`无法解析 ${pkgJsonPath}，跳过该子包`);
+      } catch (err) {
+        logger.debug(`子包 package.json 解析失败，跳过: ${pkgJsonPath} — ${String(err)}`);
       }
     }
 

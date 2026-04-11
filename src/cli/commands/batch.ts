@@ -38,15 +38,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       incremental: merged.incremental,
       languages: merged.languages,
       outputDir: merged.outputDir,
-      onProgress: (completed, total) => {
-        // 简易进度输出
-        const bar = '='.repeat(Math.floor((completed / total) * 20)).padEnd(20, ' ');
-        process.stdout.write(`\r[${bar}] ${completed}/${total}`);
-      },
     });
-
-    // 换行（进度条之后）
-    console.log();
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
     if (result.indexGenerated) {

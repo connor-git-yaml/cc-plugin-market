@@ -17,6 +17,9 @@ import {
   TS_SOURCE_EXTENSIONS,
   uniqueStrings,
 } from './utils.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('express-extractor');
 
 // ============================================================
 // 模块解析（Express 专用）
@@ -42,8 +45,8 @@ function resolveModulePath(fromFile: string, specifier: string, extensions: stri
       if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
         return path.resolve(candidate);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`文件存在性检查失败: ${candidate} — ${String(err)}`);
     }
   }
 

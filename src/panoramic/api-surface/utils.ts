@@ -4,6 +4,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { FileCollectionOptions } from './types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('api-surface-utils');
 
 // ============================================================
 // 常量
@@ -82,7 +85,8 @@ export function collectProjectFiles(
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      logger.debug(`目录遍历失败，静默跳过: ${dir} — ${String(err)}`);
       return;
     }
 
@@ -126,8 +130,8 @@ export function detectProjectName(projectRoot: string): string {
       if (typeof pkg.name === 'string' && pkg.name.trim().length > 0) {
         return pkg.name.trim();
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`package.json 解析失败，使用默认项目名称: ${String(err)}`);
     }
   }
 
@@ -139,8 +143,8 @@ export function detectProjectName(projectRoot: string): string {
       if (match?.[1]) {
         return match[1];
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`pyproject.toml 读取失败，使用默认项目名称: ${String(err)}`);
     }
   }
 
@@ -341,7 +345,8 @@ export function extractDependencyNames(text: string): string[] {
 export function tryReadFile(filePath: string): string | null {
   try {
     return fs.readFileSync(filePath, 'utf-8');
-  } catch {
+  } catch (err) {
+    logger.debug(`文件读取失败: ${filePath} — ${String(err)}`);
     return null;
   }
 }
@@ -376,8 +381,8 @@ export function resolvePythonModulePath(fromFile: string, specifier: string, pro
       if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
         return path.resolve(candidate);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      logger.debug(`Python 模块路径解析失败: ${candidate} — ${String(err)}`);
     }
   }
 

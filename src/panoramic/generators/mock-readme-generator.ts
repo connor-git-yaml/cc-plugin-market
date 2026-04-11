@@ -6,6 +6,9 @@
  * 唯一目的：验证 DocumentGenerator 接口的四步生命周期在实际使用中是可行的。
  */
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from '../interfaces.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('mock-readme-generator');
 
 // ============================================================
 // 类型定义
@@ -103,8 +106,8 @@ export class MockReadmeGenerator implements DocumentGenerator<ReadmeInput, Readm
         description: typeof parsed['description'] === 'string' ? parsed['description'] : 'No description provided',
         hasPackageJson: true,
       };
-    } catch {
-      // JSON 解析失败，使用默认值
+    } catch (err) {
+      logger.debug(`package.json JSON 解析失败，使用默认值: ${String(err)}`);
       return {
         projectName: 'unknown-project',
         description: 'No description provided',
