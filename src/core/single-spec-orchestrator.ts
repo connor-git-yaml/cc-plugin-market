@@ -437,28 +437,41 @@ export async function generateSpec(
   const uncertaintyCount = parsed.uncertaintyMarkers.length;
 
   // 步骤 7.5：混合渲染策略（FR-007）
-  // AST 优先的章节（Section 3 接口定义、Section 4 数据结构）直接由 AST 生成，LLM 作为补充
+  // 叙述优先：LLM 的文字描述放前面（对人友好），AST 精确表格放后面（作参考）
   // LLM 优先的章节（意图、业务逻辑、约束、边界、技术债务、测试覆盖、依赖关系）保持 LLM 为主
   const astInterfaceDef = generateAstInterfaceDefinition(skeletons);
   const astDataStructures = generateAstDataStructures(skeletons);
 
   const sections = { ...parsed.sections };
 
-  // 接口定义（Section 3）：AST 表格 + LLM 行为分析补充（FR-001, FR-002）
-  if (astInterfaceDef && astInterfaceDef !== '本模块无公共导出。') {
+  // 接口定义（Section 3）：LLM 叙述在前 + AST 精确参考表在后
+  {
     const llmInterface = sections.interfaceDefinition?.trim();
-    sections.interfaceDefinition = astInterfaceDef + (llmInterface ? '\n\n### LLM 行为分析\n\n' + llmInterface : '');
-  } else if (!sections.interfaceDefinition) {
-    // 无导出且 LLM 也没有内容时，给出友好提示
-    sections.interfaceDefinition = '本模块无公共导出。';
+    const hasAst = astInterfaceDef && astInterfaceDef !== '本模块无公共导出。';
+
+    if (llmInterface && hasAst) {
+      // 最佳情况：LLM 叙述 + AST 参考表
+      sections.interfaceDefinition = llmInterface + '\n\n---\n\n### 完整接口参考（AST 精确提取）\n\n' + astInterfaceDef;
+    } else if (hasAst) {
+      // LLM 无内容：仅 AST 表格
+      sections.interfaceDefinition = astInterfaceDef;
+    } else if (!llmInterface) {
+      sections.interfaceDefinition = '本模块无公共导出。';
+    }
   }
 
-  // 数据结构（Section 4）：AST 表格 + LLM 补充（FR-003, FR-004）
-  if (astDataStructures) {
+  // 数据结构（Section 4）：LLM 叙述在前 + AST 字段表在后
+  {
     const llmDataStructures = sections.dataStructures?.trim();
-    sections.dataStructures = astDataStructures + (llmDataStructures ? '\n\n### LLM 补充\n\n' + llmDataStructures : '');
+    const hasAst = !!astDataStructures;
+
+    if (llmDataStructures && hasAst) {
+      sections.dataStructures = llmDataStructures + '\n\n---\n\n### 完整字段定义（AST 精确提取）\n\n' + astDataStructures;
+    } else if (hasAst) {
+      sections.dataStructures = astDataStructures;
+    }
+    // 若 AST 无数据结构，保留 LLM 内容不变
   }
-  // 若 AST 无数据结构，保留 LLM 内容不变（fallback）
 
   // 计算置信度
   const confidence = calculateConfidence(
