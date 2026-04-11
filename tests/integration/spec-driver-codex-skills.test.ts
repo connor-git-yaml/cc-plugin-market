@@ -153,10 +153,8 @@ describe('Spec Driver Codex skills script', () => {
     expect(wrapperContent).toContain('$PLUGIN_DIR/contracts/wrapper-source-of-truth.yaml');
     expect(wrapperContent).toContain('$spec-driver-feature <需求描述>');
     expect(wrapperContent).toContain('# Spec Driver — 自治研发编排器');
-    expect(wrapperContent).toContain('.specify/project-context.suggestions.yaml');
-    expect(wrapperContent).toContain('advisory-only');
-    expect(wrapperContent).toContain('架构合理性');
-    expect(wrapperContent).toContain('可读性');
+    // Feature SKILL.md 在 Feature 089 编排拆分后不再包含 suggestions/审查维度等引用
+    // 这些内容已拆分到独立的 agent prompt 中，不再内嵌于 SKILL.md
     expect(wrapperContent).not.toContain(
       resolve('plugins/spec-driver/skills/spec-driver-feature/SKILL.md'),
     );

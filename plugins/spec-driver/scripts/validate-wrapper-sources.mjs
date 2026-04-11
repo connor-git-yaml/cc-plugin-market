@@ -260,7 +260,8 @@ function formatTextResult(result) {
 }
 
 export function validateWrapperSources(options = {}) {
-  const projectRoot = path.resolve(options.projectRoot ?? process.cwd());
+  // realpathSync 解决 macOS /var → /private/var symlink 导致 path.relative 计算错误的问题
+  const projectRoot = fs.realpathSync(path.resolve(options.projectRoot ?? process.cwd()));
   const { contractPath, contract } = loadWrapperSourceContract(projectRoot);
   const result = validateContract(projectRoot, contract);
   return {
