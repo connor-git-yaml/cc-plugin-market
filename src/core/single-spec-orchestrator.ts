@@ -13,6 +13,7 @@ import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
+import { estimateFast } from './token-counter.js';
 import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
 import { extractCodeSlices } from './code-slice-extractor.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
@@ -471,6 +472,74 @@ export async function generateSpec(
       sections.dataStructures = astDataStructures;
     }
     // 若 AST 无数据结构，保留 LLM 内容不变
+  }
+
+  // 步骤 7.6：Section 2（业务逻辑）二次生成 — 用完整上下文重新生成更详细的版本
+  // 策略：先完成其他 Section 的分析积累上下文，再用所有已有内容重新生成 Section 2
+  if (!llmDegraded && sections.businessLogic) {
+    try {
+      // 构建包含 Section 3-9 的富上下文摘要
+      const otherSectionsContext = [
+        sections.interfaceDefinition ? `## 已分析的接口定义摘要\n${sections.interfaceDefinition.slice(0, 3000)}` : '',
+        sections.dataStructures ? `## 已分析的数据结构摘要\n${sections.dataStructures.slice(0, 2000)}` : '',
+        sections.constraints ? `## 已分析的约束条件\n${sections.constraints}` : '',
+        sections.edgeCases ? `## 已分析的边界条件\n${sections.edgeCases}` : '',
+      ].filter(Boolean).join('\n\n---\n\n');
+
+      // 仅当上下文足够丰富时才执行二次生成（避免空上下文浪费 LLM 调用）
+      if (otherSectionsContext.length > 500) {
+        onStageProgress?.({ stage: 'llm', message: '二次生成 Section 2（业务逻辑）...' });
+
+        const enrichPrompt = `你是代码架构分析专家。请基于以下上下文为一个代码模块撰写**非常详细的**业务逻辑分析。
+
+## 模块骨架信息
+
+${context.prompt.slice(0, 8000)}
+
+## 其他 Section 已分析的内容（作为参考，你可以引用其中的函数名和常量值）
+
+${otherSectionsContext}
+
+## 第一版业务逻辑（需要扩展和深化）
+
+${sections.businessLogic}
+
+## 任务
+
+请重写上面的"第一版业务逻辑"，使其**大幅扩展**：
+
+1. **每个处理阶段/管线步骤必须用 ### 三级子标题展开**
+2. 每个阶段必须包含：
+   - **关键函数名**（引用"已分析的接口定义"中的具体函数，标注所在文件）
+   - **输入→输出**：数据类型描述
+   - **核心算法**：内部处理的关键步骤（3-5 步骤）
+   - **特殊处理**：语言特化、降级路径、缓存策略
+3. 保留并扩展原有的 Mermaid 流程图和时序图
+4. 篇幅应为第一版的 **2-3 倍**
+
+只输出 Section 2 的内容，不要输出其他 Section。不要输出标题行"## 2. 业务逻辑"。用中文撰写，技术术语保持英文。`;
+
+        try {
+          const enrichResponse = await callLLM(
+            { ...context, prompt: enrichPrompt, tokenCount: estimateFast(enrichPrompt) },
+            { languageTerminology },
+            onRetry,
+          );
+          const enrichedContent = enrichResponse.content.trim();
+          // 仅当二次生成的内容比第一版长才替换（防止退化）
+          if (enrichedContent.length > sections.businessLogic.length * 1.2) {
+            sections.businessLogic = enrichedContent;
+            tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
+            onStageProgress?.({ stage: 'llm', message: `Section 2 已扩展（${sections.businessLogic.length} → ${enrichedContent.length} 字符）` });
+          }
+        } catch {
+          // 二次生成失败时保留第一版，不影响主流程
+          onStageProgress?.({ stage: 'llm', message: '⚠ Section 2 二次生成失败，保留第一版' });
+        }
+      }
+    } catch {
+      // 降级保护
+    }
   }
 
   // 计算置信度
