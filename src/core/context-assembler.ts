@@ -234,7 +234,7 @@ export async function assembleContext(
   skeleton: CodeSkeleton,
   options: AssemblyOptions = {},
 ): Promise<AssembledContext> {
-  const maxTokens = options.maxTokens ?? 100_000;
+  const maxTokens = options.maxTokens ?? 500_000;
   const truncatedParts: string[] = [];
 
   // 准备各部分内容（按裁剪优先级从低到高排列：先裁低优先级）
@@ -294,7 +294,7 @@ export async function assembleContext(
   }
 
   // token breakdown 日志（FR-010）
-  if (total > 80_000) {
+  if (total > 400_000) {
     const bd = [`skeleton:${skeletonTokens}`, ...parts.filter(p => p.tokens > 0).map(p => `${p.name}:${p.tokens}`)].join(' + ');
     console.warn(`[context-assembler] token 用量 ${total.toLocaleString()}/${maxTokens.toLocaleString()} (${bd})`);
   }

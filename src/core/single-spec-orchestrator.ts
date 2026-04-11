@@ -218,7 +218,7 @@ export async function prepareContext(
   let codeSlices: CodeSlice[] = [];
   try {
     codeSlices = extractCodeSlices(skeletons, undefined, {
-      maxTokens: 40_000,
+      maxTokens: 200_000,
     });
     if (codeSlices.length > 0) {
       onStageProgress?.({ stage: 'context', message: `代码切片提取完成（${codeSlices.length} 个函数，~${codeSlices.reduce((s, c) => s + c.estimatedTokens, 0).toLocaleString()} tokens）` });
@@ -325,16 +325,31 @@ export async function prepareContext(
     // 降级保护
   }
 
+  // 步骤 2.9：扫描测试文件，注入测试覆盖上下文（FR-008 测试文件感知）
+  let testContext: string | undefined;
+  try {
+    const testInfo = scanTestFiles(projectRootDir);
+    if (testInfo) {
+      testContext = `## 项目测试文件概览\n\n${testInfo}\n\n请在生成 Section 8（测试覆盖）时参考以上实际测试文件列表，列出已覆盖的功能模块，并指出尚未覆盖的关键路径。`;
+      onStageProgress?.({ stage: 'context', message: `测试文件扫描完成` });
+    }
+  } catch {
+    // FR-011：测试文件扫描失败不影响主流程
+  }
+
+  // 将测试上下文追加到 README 上下文中（避免增加新参数，复用 readmeContext 扩展）
+  const combinedReadmeContext = [readmeContext, testContext].filter(Boolean).join('\n\n---\n\n') || undefined;
+
   const context: AssembledContext = await assembleContext(mergedSkeleton, {
     codeSnippets,
     codeSlices: codeSlices.length > 0 ? codeSlices : undefined,
-    readmeContext,
+    readmeContext: combinedReadmeContext,
     knowledgeFiles,
     callerContext,
   });
 
-  // token 数警告（当 token 超过 80,000——即 100,000 预算的 80%）
-  if (context.tokenCount > 80_000) {
+  // token 数警告（当 token 超过 400,000——即 500,000 预算的 80%）
+  if (context.tokenCount > 400_000) {
     onStageProgress?.({ stage: 'context', message: `⚠ 上下文 token 数较大 (${context.tokenCount.toLocaleString()})，可能影响质量` });
   }
 
@@ -421,6 +436,30 @@ export async function generateSpec(
   // 步骤 7：不确定性标记已在 parseLLMResponse 中提取
   const uncertaintyCount = parsed.uncertaintyMarkers.length;
 
+  // 步骤 7.5：混合渲染策略（FR-007）
+  // AST 优先的章节（Section 3 接口定义、Section 4 数据结构）直接由 AST 生成，LLM 作为补充
+  // LLM 优先的章节（意图、业务逻辑、约束、边界、技术债务、测试覆盖、依赖关系）保持 LLM 为主
+  const astInterfaceDef = generateAstInterfaceDefinition(skeletons);
+  const astDataStructures = generateAstDataStructures(skeletons);
+
+  const sections = { ...parsed.sections };
+
+  // 接口定义（Section 3）：AST 表格 + LLM 行为分析补充（FR-001, FR-002）
+  if (astInterfaceDef && astInterfaceDef !== '本模块无公共导出。') {
+    const llmInterface = sections.interfaceDefinition?.trim();
+    sections.interfaceDefinition = astInterfaceDef + (llmInterface ? '\n\n### LLM 行为分析\n\n' + llmInterface : '');
+  } else if (!sections.interfaceDefinition) {
+    // 无导出且 LLM 也没有内容时，给出友好提示
+    sections.interfaceDefinition = '本模块无公共导出。';
+  }
+
+  // 数据结构（Section 4）：AST 表格 + LLM 补充（FR-003, FR-004）
+  if (astDataStructures) {
+    const llmDataStructures = sections.dataStructures?.trim();
+    sections.dataStructures = astDataStructures + (llmDataStructures ? '\n\n### LLM 补充\n\n' + llmDataStructures : '');
+  }
+  // 若 AST 无数据结构，保留 LLM 内容不变（fallback）
+
   // 计算置信度
   const confidence = calculateConfidence(
     skeletons,
@@ -493,7 +532,8 @@ export async function generateSpec(
 
   const moduleSpec: ModuleSpec = {
     frontmatter,
-    sections: parsed.sections,
+    // 使用混合渲染后的 sections（步骤 7.5 已将 AST 内容合并到 interfaceDefinition 和 dataStructures）
+    sections,
     mermaidDiagrams: diagrams.length > 0 ? diagrams : undefined,
     fileInventory,
     baselineSkeleton: relMerged,
@@ -517,6 +557,245 @@ export async function generateSpec(
     warnings,
     moduleSpec,
   };
+}
+
+// ============================================================
+// AST 直出辅助函数（FR-001, FR-002, FR-003, FR-004）
+// ============================================================
+
+/**
+ * 从多个 CodeSkeleton 的 exports 生成按源文件分组的接口定义表格（FR-001, FR-002）
+ * 每组输出 `### <文件名>` 子标题 + Markdown 表格
+ * 表格列：名称、类型(kind)、签名、成员数
+ * 含 members 的类/接口展开为缩进子表格
+ *
+ * @param skeletons - 各文件的 CodeSkeleton 数组
+ * @returns Markdown 格式的接口定义文本
+ */
+export function generateAstInterfaceDefinition(skeletons: CodeSkeleton[]): string {
+  // 过滤掉没有任何导出的骨架
+  const withExports = skeletons.filter((s) => s.exports.length > 0);
+
+  if (withExports.length === 0) {
+    return '本模块无公共导出。';
+  }
+
+  const parts: string[] = [];
+
+  for (const skeleton of withExports) {
+    const fileName = path.basename(skeleton.filePath);
+    parts.push(`### ${fileName}`);
+    parts.push('');
+    parts.push('| 名称 | 类型 | 签名 | 成员数 |');
+    parts.push('|------|------|------|--------|');
+
+    for (const exp of skeleton.exports) {
+      // 处理签名中的竖线避免破坏表格
+      const safeSig = exp.signature.replace(/\|/g, '\\|');
+      const memberCount = exp.members ? exp.members.length : '-';
+      parts.push(`| \`${exp.name}\` | ${exp.kind} | \`${safeSig}\` | ${memberCount} |`);
+    }
+
+    // 展开含 members 的类/接口为缩进子表格（FR-001 US-1 验收场景 3）
+    const classLike = skeleton.exports.filter(
+      (e) => (e.kind === 'class' || e.kind === 'interface') && e.members && e.members.length > 0,
+    );
+
+    for (const cls of classLike) {
+      parts.push('');
+      parts.push(`**${cls.name} 成员**`);
+      parts.push('');
+      parts.push('| 成员 | 类型 | 签名 | 可见性 |');
+      parts.push('|------|------|------|--------|');
+
+      for (const member of cls.members!) {
+        const safeMemberSig = member.signature.replace(/\|/g, '\\|');
+        const visibility = member.visibility ?? 'public';
+        parts.push(`| \`${member.name}\` | ${member.kind} | \`${safeMemberSig}\` | ${visibility} |`);
+      }
+    }
+
+    parts.push('');
+  }
+
+  return parts.join('\n').trimEnd();
+}
+
+/**
+ * 从 CodeSkeleton 中提取数据结构并生成字段/值表格（FR-003, FR-004）
+ * 处理 kind === 'class' | 'interface' | 'type' | 'enum'
+ * 对含 members 的类生成字段表格，对 enum 生成值列表
+ *
+ * @param skeletons - 各文件的 CodeSkeleton 数组
+ * @returns Markdown 格式的数据结构文本
+ */
+export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
+  // 从所有骨架筛选数据结构相关导出
+  const dataExports = skeletons.flatMap((s) =>
+    s.exports
+      .filter((e) => e.kind === 'class' || e.kind === 'interface' || e.kind === 'type' || e.kind === 'enum' || e.kind === 'data_class')
+      .map((e) => ({ exp: e, filePath: s.filePath })),
+  );
+
+  if (dataExports.length === 0) {
+    return '';
+  }
+
+  const parts: string[] = [];
+
+  for (const { exp, filePath } of dataExports) {
+    const fileName = path.basename(filePath);
+
+    if (exp.kind === 'enum') {
+      // enum：生成值列表表格
+      parts.push(`#### \`${exp.name}\` (enum) — ${fileName}`);
+      parts.push('');
+
+      if (exp.members && exp.members.length > 0) {
+        parts.push('| 枚举值 | 签名 |');
+        parts.push('|--------|------|');
+        for (const member of exp.members) {
+          const safeSig = member.signature.replace(/\|/g, '\\|');
+          parts.push(`| \`${member.name}\` | \`${safeSig}\` |`);
+        }
+      } else {
+        // 没有成员信息时，展示签名
+        const safeSig = exp.signature.replace(/\|/g, '\\|');
+        parts.push(`\`${safeSig}\``);
+      }
+      parts.push('');
+    } else if (exp.kind === 'class' || exp.kind === 'interface' || exp.kind === 'data_class') {
+      // class/interface/dataclass：生成字段表格
+      const kindLabel = exp.kind === 'data_class' ? 'dataclass' : exp.kind;
+      parts.push(`#### \`${exp.name}\` (${kindLabel}) — ${fileName}`);
+      parts.push('');
+
+      if (exp.members && exp.members.length > 0) {
+        // 分离属性（property）和方法（method）
+        const properties = exp.members.filter((m) => m.kind === 'property' || m.kind === 'getter' || m.kind === 'setter');
+        const methods = exp.members.filter((m) => m.kind !== 'property' && m.kind !== 'getter' && m.kind !== 'setter');
+
+        if (properties.length > 0) {
+          parts.push('**字段**');
+          parts.push('');
+          parts.push('| 字段名 | 类型/签名 | 可见性 |');
+          parts.push('|--------|-----------|--------|');
+          for (const prop of properties) {
+            const safeSig = prop.signature.replace(/\|/g, '\\|');
+            const visibility = prop.visibility ?? 'public';
+            parts.push(`| \`${prop.name}\` | \`${safeSig}\` | ${visibility} |`);
+          }
+          parts.push('');
+        }
+
+        if (methods.length > 0) {
+          parts.push('**方法**');
+          parts.push('');
+          parts.push('| 方法名 | 签名 | 可见性 |');
+          parts.push('|--------|------|--------|');
+          for (const method of methods) {
+            const safeSig = method.signature.replace(/\|/g, '\\|');
+            const visibility = method.visibility ?? 'public';
+            parts.push(`| \`${method.name}\` | \`${safeSig}\` | ${visibility} |`);
+          }
+          parts.push('');
+        }
+
+        if (properties.length === 0 && methods.length === 0) {
+          const safeSig = exp.signature.replace(/\|/g, '\\|');
+          parts.push(`\`${safeSig}\``);
+          parts.push('');
+        }
+      } else {
+        // 没有成员信息时，展示签名
+        const safeSig = exp.signature.replace(/\|/g, '\\|');
+        parts.push(`\`${safeSig}\``);
+        parts.push('');
+      }
+    } else if (exp.kind === 'type') {
+      // type alias：展示签名
+      const safeSig = exp.signature.replace(/\|/g, '\\|');
+      parts.push(`#### \`${exp.name}\` (type) — ${fileName}`);
+      parts.push('');
+      parts.push(`\`${safeSig}\``);
+      parts.push('');
+    }
+  }
+
+  return parts.join('\n').trimEnd();
+}
+
+/**
+ * 扫描项目测试目录，统计测试文件数和测试函数名（FR-008）
+ * 支持模式：.test.* / .spec.* / test_*.py
+ *
+ * @param projectRootDir - 项目根目录
+ * @returns 测试文件统计信息文本，如无测试目录返回空字符串
+ */
+function scanTestFiles(projectRootDir: string): string {
+  const testDirCandidates = ['tests', 'test', '__tests__', 'spec'];
+  const testFilePatterns = [
+    /\.test\.(ts|tsx|js|jsx|py)$/,
+    /\.spec\.(ts|tsx|js|jsx|py)$/,
+    /^test_.*\.py$/,
+  ];
+
+  const foundFiles: Array<{ filePath: string; relativePath: string }> = [];
+
+  // 递归扫描测试文件
+  function walkDir(dir: string, depth: number = 0): void {
+    if (depth > 5) return; // 避免无限递归
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() && !entry.isFile()) continue;
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          // 跳过 node_modules、.git 等
+          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name.startsWith('.')) continue;
+          walkDir(fullPath, depth + 1);
+        } else if (entry.isFile()) {
+          const isTestFile = testFilePatterns.some((p) => p.test(entry.name));
+          if (isTestFile) {
+            foundFiles.push({
+              filePath: fullPath,
+              relativePath: path.relative(projectRootDir, fullPath),
+            });
+          }
+        }
+      }
+    } catch {
+      // 目录读取失败时跳过
+    }
+  }
+
+  // 先检查常规测试目录
+  for (const candidate of testDirCandidates) {
+    const candidatePath = path.join(projectRootDir, candidate);
+    if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isDirectory()) {
+      walkDir(candidatePath);
+    }
+  }
+
+  // 如果没有找到，也扫描项目根目录（处理测试文件散布的情况）
+  if (foundFiles.length === 0) {
+    walkDir(projectRootDir);
+  }
+
+  if (foundFiles.length === 0) {
+    return '';
+  }
+
+  // 限制最多展示 50 个文件，避免 token 过多
+  const displayFiles = foundFiles.slice(0, 50);
+  const parts: string[] = [];
+  parts.push(`扫描到 ${foundFiles.length} 个测试文件（${foundFiles.length > 50 ? '以下展示前 50 个' : '全部如下'}）：`);
+  parts.push('');
+  for (const { relativePath } of displayFiles) {
+    parts.push(`- \`${relativePath}\``);
+  }
+
+  return parts.join('\n');
 }
 
 /**

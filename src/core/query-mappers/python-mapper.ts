@@ -287,7 +287,7 @@ export class PythonMapper implements QueryMapper {
     };
   }
 
-  /** 提取类成员（方法 + __init__ 中的 self.xxx 属性） */
+  /** 提取类成员（类级字段 + 方法 + __init__ 中的 self.xxx 属性） */
   private _extractClassMembers(
     classNode: Parser.SyntaxNode,
     includePrivate: boolean,
@@ -296,6 +296,29 @@ export class PythonMapper implements QueryMapper {
     const body = classNode.childForFieldName('body');
     if (!body) return members;
 
+    // 第一阶段：提取类级字段（dataclass / TypedDict 模式，FR-004, FR-010）
+    // 遍历 class body 的直接 typed_assignment / assignment 节点
+    for (let i = 0; i < body.childCount; i++) {
+      const stmt = body.child(i);
+      if (!stmt) continue;
+
+      // typed_assignment：如 `name: str` 或 `name: str = "default"`
+      if (stmt.type === 'typed_assignment' || stmt.type === 'annotated_assignment') {
+        const fieldMember = this._extractClassLevelField(stmt, includePrivate);
+        if (fieldMember) members.push(fieldMember);
+      }
+
+      // 普通 expression_statement 内的 assignment（如 `count = 0`）
+      if (stmt.type === 'expression_statement') {
+        const inner = stmt.child(0);
+        if (inner?.type === 'assignment') {
+          const fieldMember = this._extractClassLevelAssignment(inner, includePrivate);
+          if (fieldMember) members.push(fieldMember);
+        }
+      }
+    }
+
+    // 第二阶段：提取方法
     for (let i = 0; i < body.childCount; i++) {
       const rawChild = body.child(i);
       if (!rawChild) continue;
@@ -357,6 +380,104 @@ export class PythonMapper implements QueryMapper {
     }
 
     return members;
+  }
+
+  /**
+   * 从类级 typed_assignment / annotated_assignment 节点提取字段（FR-004, FR-010）
+   * 用于识别 @dataclass 字段：`field_name: FieldType = default_value`
+   * 格式：`{ name, type, default?, kind: 'property', visibility: 'public' }`
+   */
+  private _extractClassLevelField(
+    node: Parser.SyntaxNode,
+    includePrivate: boolean,
+  ): MemberInfo | null {
+    // 目标形如：name: Type 或 name: Type = default
+    // tree-sitter Python 将 `a: int = 0` 解析为 annotated_assignment
+    const leftNode = node.childForFieldName('left') ?? node.childForFieldName('target');
+    const typeNode = node.childForFieldName('type') ?? node.childForFieldName('annotation');
+    const valueNode = node.childForFieldName('right') ?? node.childForFieldName('value');
+
+    if (!leftNode) return null;
+
+    const fieldName = leftNode.text.trim();
+    // 跳过非标识符（如元组解包等复杂赋值）
+    if (!fieldName || /\s/.test(fieldName) || fieldName.includes('.') || fieldName.includes('(')) return null;
+    // 跳过 dunder 属性（__class__, __slots__ 等）
+    if (fieldName.startsWith('__') && fieldName.endsWith('__')) return null;
+
+    // 可见性
+    const visibility = fieldName.startsWith('__')
+      ? 'private' as const
+      : fieldName.startsWith('_')
+        ? 'protected' as const
+        : 'public' as const;
+
+    if (!includePrivate && visibility === 'private') return null;
+
+    const typeAnnotation = typeNode?.text?.trim();
+    const defaultValue = valueNode?.text?.trim();
+
+    // 构建签名：`field: Type = default` 或 `field: Type` 或 `field`
+    let signature = fieldName;
+    if (typeAnnotation) {
+      signature = `${fieldName}: ${typeAnnotation}`;
+      if (defaultValue) signature += ` = ${defaultValue}`;
+    } else if (defaultValue) {
+      signature = `${fieldName} = ${defaultValue}`;
+    }
+
+    return {
+      name: fieldName,
+      kind: 'property',
+      signature,
+      jsDoc: null,
+      visibility,
+      isStatic: false,
+    };
+  }
+
+  /**
+   * 从类级普通 assignment 节点提取类变量字段（如 `count = 0`）
+   * 用于非注解赋值的类变量
+   */
+  private _extractClassLevelAssignment(
+    node: Parser.SyntaxNode,
+    includePrivate: boolean,
+  ): MemberInfo | null {
+    const leftNode = node.childForFieldName('left');
+    const rightNode = node.childForFieldName('right');
+
+    if (!leftNode) return null;
+
+    const fieldName = leftNode.text.trim();
+    // 仅处理简单标识符（跳过元组解包、属性赋值等）
+    if (!fieldName || /\s/.test(fieldName) || fieldName.includes('.') || fieldName.includes('(')) return null;
+    // 跳过 dunder 属性
+    if (fieldName.startsWith('__') && fieldName.endsWith('__')) return null;
+
+    // 可见性
+    const visibility = fieldName.startsWith('__')
+      ? 'private' as const
+      : fieldName.startsWith('_')
+        ? 'protected' as const
+        : 'public' as const;
+
+    if (!includePrivate && visibility === 'private') return null;
+
+    const inferredType = this._inferPropertyType(rightNode);
+    const defaultValue = rightNode?.text?.trim();
+    const signature = inferredType
+      ? `${fieldName}: ${inferredType}${defaultValue ? ` = ${defaultValue}` : ''}`
+      : `${fieldName}${defaultValue ? ` = ${defaultValue}` : ''}`;
+
+    return {
+      name: fieldName,
+      kind: 'property',
+      signature,
+      jsDoc: null,
+      visibility,
+      isStatic: true, // 类级变量视为 static
+    };
   }
 
   /**

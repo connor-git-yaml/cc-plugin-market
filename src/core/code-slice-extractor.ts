@@ -195,7 +195,7 @@ export function extractCodeSlices(
   sourceFiles?: Map<string, string>,
   options: CodeSliceExtractorOptions = {},
 ): CodeSlice[] {
-  const maxTokens = options.maxTokens ?? 40_000;
+  const maxTokens = options.maxTokens ?? 200_000;
   const multiImportThreshold = options.multiImportThreshold ?? 2;
   const complexFlowThreshold = options.complexFlowThreshold ?? 3;
 

@@ -79,6 +79,8 @@ vi.mock('../../src/utils/chunk-splitter.js', () => ({
 import {
   prepareContext,
   generateSpec,
+  generateAstInterfaceDefinition,
+  generateAstDataStructures,
 } from '../../src/core/single-spec-orchestrator.js';
 
 function createSections() {
@@ -192,7 +194,8 @@ describe('single-spec-orchestrator', () => {
     ]);
     mocks.assembleContext.mockResolvedValue({
       prompt: 'assembled',
-      tokenCount: 81_000,
+      // 超过 400_000（即 500_000 预算的 80%）以触发 "token 数较大" 警告
+      tokenCount: 420_000,
       truncated: false,
       truncatedParts: [],
       breakdown: {
@@ -291,5 +294,154 @@ describe('single-spec-orchestrator', () => {
         outputDir: path.join(tempDir, 'specs'),
       }),
     ).rejects.toThrow('boom');
+  });
+});
+
+// ============================================================
+// FR-001/FR-002: AST 接口定义生成测试
+// ============================================================
+
+describe('generateAstInterfaceDefinition', () => {
+  it('无导出骨架返回友好提示', () => {
+    const result = generateAstInterfaceDefinition([]);
+    expect(result).toBe('本模块无公共导出。');
+  });
+
+  it('单文件骨架生成文件名标题和表格', () => {
+    const skeletons = [createSkeleton('/project/src/utils.ts', {
+      exports: [
+        { name: 'foo', kind: 'function' as const, signature: 'function foo(): void', startLine: 1, endLine: 5, isDefault: false },
+        { name: 'bar', kind: 'function' as const, signature: 'function bar(x: number): string', startLine: 7, endLine: 12, isDefault: false },
+      ],
+    })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 文件名标题
+    expect(result).toContain('### utils.ts');
+    // 表格头
+    expect(result).toContain('| 名称 | 类型 | 签名 | 成员数 |');
+    // 导出符号行
+    expect(result).toContain('`foo`');
+    expect(result).toContain('`bar`');
+    // 无 members 时显示 -
+    expect(result).toContain('| - |');
+  });
+
+  it('含 members 的类展开为子表格', () => {
+    const skeletons = [createSkeleton('/project/src/config.py', {
+      exports: [
+        {
+          name: 'LanguageConfig',
+          kind: 'class' as const,
+          signature: 'class LanguageConfig',
+          startLine: 1,
+          endLine: 20,
+          isDefault: false,
+          members: [
+            { name: 'name', kind: 'property' as const, signature: 'name: str', isStatic: false, visibility: 'public' as const },
+            { name: 'get_name', kind: 'method' as const, signature: 'def get_name(self) -> str', isStatic: false, visibility: 'public' as const },
+          ],
+        },
+      ],
+    })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 成员数应为 2
+    expect(result).toContain('| 2 |');
+    // 展开子表
+    expect(result).toContain('**LanguageConfig 成员**');
+    expect(result).toContain('| 成员 | 类型 | 签名 | 可见性 |');
+    expect(result).toContain('`name`');
+  });
+
+  it('签名中含竖线字符时应转义', () => {
+    const skeletons = [createSkeleton('/project/src/a.ts', {
+      exports: [
+        { name: 'fn', kind: 'function' as const, signature: 'function fn(x: A | B): void', startLine: 1, endLine: 3, isDefault: false },
+      ],
+    })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 竖线应被转义为 \|
+    expect(result).toContain('\\|');
+  });
+});
+
+// ============================================================
+// FR-003/FR-004: AST 数据结构生成测试
+// ============================================================
+
+describe('generateAstDataStructures', () => {
+  it('无数据结构导出时返回空字符串', () => {
+    const skeletons = [createSkeleton('/project/src/utils.ts')];
+    // createSkeleton 默认 exports 只有 function，不含 class/interface/type/enum
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toBe('');
+  });
+
+  it('class 含属性和方法时生成分区表格', () => {
+    const skeletons = [createSkeleton('/project/src/config.ts', {
+      exports: [
+        {
+          name: 'Config',
+          kind: 'class' as const,
+          signature: 'class Config',
+          startLine: 1,
+          endLine: 20,
+          isDefault: false,
+          members: [
+            { name: 'host', kind: 'property' as const, signature: 'host: string', isStatic: false, visibility: 'public' as const },
+            { name: 'getHost', kind: 'method' as const, signature: 'getHost(): string', isStatic: false, visibility: 'public' as const },
+          ],
+        },
+      ],
+    })];
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toContain('`Config` (class)');
+    // 属性分区
+    expect(result).toContain('**字段**');
+    expect(result).toContain('`host`');
+    // 方法分区
+    expect(result).toContain('**方法**');
+    expect(result).toContain('`getHost`');
+  });
+
+  it('enum 生成枚举值表格', () => {
+    const skeletons = [createSkeleton('/project/src/types.ts', {
+      exports: [
+        {
+          name: 'FileType',
+          kind: 'enum' as const,
+          signature: 'enum FileType',
+          startLine: 1,
+          endLine: 8,
+          isDefault: false,
+          members: [
+            { name: 'Python', kind: 'property' as const, signature: 'Python = "py"', isStatic: false },
+            { name: 'TypeScript', kind: 'property' as const, signature: 'TypeScript = "ts"', isStatic: false },
+          ],
+        },
+      ],
+    })];
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toContain('`FileType` (enum)');
+    expect(result).toContain('| 枚举值 | 签名 |');
+    expect(result).toContain('`Python`');
+    expect(result).toContain('`TypeScript`');
+  });
+
+  it('type alias 展示签名', () => {
+    const skeletons = [createSkeleton('/project/src/types.ts', {
+      exports: [
+        {
+          name: 'UserId',
+          kind: 'type' as const,
+          signature: 'type UserId = string',
+          startLine: 1,
+          endLine: 1,
+          isDefault: false,
+        },
+      ],
+    })];
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toContain('`UserId` (type)');
+    expect(result).toContain('`type UserId = string`');
   });
 });
