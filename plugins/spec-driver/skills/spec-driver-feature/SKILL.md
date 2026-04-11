@@ -1,7 +1,7 @@
 ---
 name: spec-driver-feature
 description: "执行 Spec-Driven Development 完整研发流程（基于 orchestration.yaml 动态编排）"
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
 model: opus
 effort: high

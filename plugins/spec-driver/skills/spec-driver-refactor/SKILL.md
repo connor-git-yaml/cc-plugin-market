@@ -1,7 +1,7 @@
 ---
 name: spec-driver-refactor
 description: "大规模代码重构 — 5 阶段：影响分析→分批规划→逐批实现→残留扫描→最终验证"
-disable-model-invocation: true
+disable-model-invocation: false
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
 model: opus
 effort: high
