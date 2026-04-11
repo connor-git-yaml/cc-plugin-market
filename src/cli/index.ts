@@ -16,6 +16,7 @@ import { runInit } from './commands/init.js';
 import { runPrepare } from './commands/prepare.js';
 import { runAuthStatus } from './commands/auth-status.js';
 import { runMcpServer } from './commands/mcp-server.js';
+import { runPanoramicCommand } from './commands/panoramic.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -36,6 +37,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   reverse-spec diff <spec-file> <source> [--output-dir <dir>]
   reverse-spec init [--global] [--remove] [--target <claude|codex|both>]
   reverse-spec auth-status [--verify]
+  reverse-spec panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
   reverse-spec mcp-server
   reverse-spec --version / --help
 
@@ -46,6 +48,7 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   diff          检测 Spec 与源代码之间的漂移
   init          安装 skills 到 Claude Code / Codex 的项目或全局目录
   auth-status   查看当前认证状态（API Key / Claude CLI / Codex CLI）
+  panoramic     运行 panoramic 架构分析（cross-package / architecture-ir / overview）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -63,6 +66,8 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   --force        强制重新生成所有 Spec（仅 batch）
   --incremental  仅重生成受影响的 Spec（仅 batch）
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
+  --json         以 JSON 格式输出结果（仅 panoramic）
+  --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --output-dir   自定义输出目录
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
@@ -115,6 +120,9 @@ async function main(): Promise<void> {
       break;
     case 'auth-status':
       await runAuthStatus(command);
+      break;
+    case 'panoramic':
+      await runPanoramicCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer();

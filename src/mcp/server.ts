@@ -16,6 +16,7 @@ import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
 import { scanFiles } from '../utils/file-scanner.js';
+import { queryPanoramic } from '../panoramic/query.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -202,6 +203,43 @@ export function createMcpServer(): McpServer {
             {
               type: 'text' as const,
               text: `diff 失败: ${err instanceof Error ? err.message : String(err)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ─── 工具 5: panoramic-query — panoramic 架构分析 ───
+  server.tool(
+    'panoramic-query',
+    '运行 panoramic 架构分析，支持 cross-package / architecture-ir / overview 三种操作',
+    {
+      operation: z
+        .enum(['cross-package', 'architecture-ir', 'overview'])
+        .describe('分析操作类型'),
+      projectRoot: z
+        .string()
+        .describe('项目根目录绝对路径（必需）'),
+    },
+    async ({ operation, projectRoot }) => {
+      try {
+        const result = await queryPanoramic({ operation, projectRoot });
+        if (!result.ok) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({ error: result.error }) }],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result.data) }],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `panoramic-query 失败: ${err instanceof Error ? err.message : String(err)}`,
             },
           ],
           isError: true,

@@ -72,10 +72,10 @@ describe('createMcpServer', () => {
     vi.clearAllMocks();
   });
 
-  it('注册 prepare/generate/batch/diff 四个工具', () => {
+  it('注册 prepare/generate/batch/diff/panoramic-query 五个工具', () => {
     const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
     const names = server.tools.map((t) => t.name).sort();
-    expect(names).toEqual(['batch', 'diff', 'generate', 'prepare']);
+    expect(names).toEqual(['batch', 'diff', 'generate', 'panoramic-query', 'prepare']);
   });
 
   it('prepare handler 成功返回 JSON 文本', async () => {

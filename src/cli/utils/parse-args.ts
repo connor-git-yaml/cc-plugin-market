@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -26,6 +26,12 @@ export interface CLICommand {
   verify?: boolean;
   /** 用户在 CLI 中显式提供的参数名集合（用于与配置文件合并） */
   _explicitFlags?: Set<string>;
+  /** panoramic 子操作（仅 panoramic 子命令） */
+  panoramicOperation?: 'cross-package' | 'architecture-ir' | 'overview';
+  /** --json 输出标志（仅 panoramic 子命令） */
+  jsonOutput?: boolean;
+  /** --project-root 参数（仅 panoramic 子命令，未传时使用 process.cwd()） */
+  projectRoot?: string;
 }
 
 /** 解析错误 */
@@ -82,6 +88,44 @@ export function parseArgs(argv: string[]): ParseResult {
   }
 
   const sub = argv[0];
+
+  // panoramic 子命令
+  if (sub === 'panoramic') {
+    if (argv.includes('--help') || argv.includes('-h') || argv.length === 1) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'panoramic',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const op = argv[1];
+    if (op !== 'cross-package' && op !== 'architecture-ir' && op !== 'overview') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_subcommand',
+          message: `未知 panoramic 子操作: ${op ?? '（未提供）'}（可选: cross-package | architecture-ir | overview）`,
+        },
+      };
+    }
+    const jsonOutput = argv.includes('--json');
+    const projectRootIdx = argv.indexOf('--project-root');
+    const projectRoot = projectRootIdx !== -1 ? argv[projectRootIdx + 1] : undefined;
+    return {
+      ok: true,
+      command: {
+        subcommand: 'panoramic',
+        panoramicOperation: op,
+        jsonOutput,
+        projectRoot,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
 
   // init 子命令
   if (sub === 'init') {
@@ -200,7 +244,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic') {
     return {
       ok: false,
       error: {
@@ -313,7 +357,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root') {
         i++; // 跳过选项值
       }
       continue;
