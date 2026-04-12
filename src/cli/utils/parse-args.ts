@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -32,6 +32,10 @@ export interface CLICommand {
   jsonOutput?: boolean;
   /** --project-root 参数（仅 panoramic 子命令，未传时使用 process.cwd()） */
   projectRoot?: string;
+  /** cache 子操作（仅 cache 子命令） */
+  cacheOperation?: 'stats' | 'clear';
+  /** --generator 参数（仅 cache clear 子命令） */
+  cacheGeneratorId?: string;
 }
 
 /** 解析错误 */
@@ -121,6 +125,45 @@ export function parseArgs(argv: string[]): ParseResult {
         panoramicOperation: op,
         jsonOutput,
         projectRoot,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
+  // cache 子命令
+  if (sub === 'cache') {
+    if (argv.includes('--help') || argv.includes('-h') || argv.length === 1) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'cache',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const op = argv[1];
+    if (op !== 'stats' && op !== 'clear') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_subcommand',
+          message: `未知 cache 子操作: ${op ?? '（未提供）'}（可选: stats | clear）`,
+        },
+      };
+    }
+    const outputDirIdx = argv.indexOf('--output-dir');
+    const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+    const generatorIdx = argv.indexOf('--generator');
+    const cacheGeneratorId = generatorIdx !== -1 ? argv[generatorIdx + 1] : undefined;
+    return {
+      ok: true,
+      command: {
+        subcommand: 'cache',
+        cacheOperation: op,
+        cacheGeneratorId,
+        outputDir,
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },
@@ -244,7 +287,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache') {
     return {
       ok: false,
       error: {
@@ -358,7 +401,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator') {
         i++; // 跳过选项值
       }
       continue;

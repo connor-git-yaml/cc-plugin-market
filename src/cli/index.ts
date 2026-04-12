@@ -17,6 +17,7 @@ import { runPrepare } from './commands/prepare.js';
 import { runAuthStatus } from './commands/auth-status.js';
 import { runMcpServer } from './commands/mcp-server.js';
 import { runPanoramicCommand } from './commands/panoramic.js';
+import { runCacheCommand } from './commands/cache.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -38,6 +39,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
   spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
+  spectra cache <stats|clear> [--generator <id>] [--output-dir <dir>]
   spectra mcp-server
   spectra --version / --help
 
@@ -49,6 +51,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   init          安装 skills 到 Claude Code / Codex 的项目或全局目录
   auth-status   查看当前认证状态（API Key / Claude CLI / Codex CLI）
   panoramic     运行 panoramic 架构分析（cross-package / architecture-ir / overview）
+  cache         管理内容哈希缓存（stats / clear）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -68,6 +71,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
+  --generator    指定 generator ID（仅 cache clear）
   --output-dir   自定义输出目录
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
@@ -130,6 +134,9 @@ async function main(): Promise<void> {
       break;
     case 'panoramic':
       await runPanoramicCommand(command);
+      break;
+    case 'cache':
+      await runCacheCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer();

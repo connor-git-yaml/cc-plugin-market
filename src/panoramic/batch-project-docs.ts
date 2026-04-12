@@ -6,6 +6,9 @@
  */
 import type { DocumentGenerator, ProjectContext } from './interfaces.js';
 import { GeneratorRegistry, bootstrapGenerators } from './generator-registry.js';
+import { CacheManager } from './cache/cache-manager.js';
+import { ContentHasherImpl } from './cache/content-hasher.js';
+import { ManifestManagerImpl } from './cache/manifest-manager.js';
 import { buildProjectContext } from './project-context.js';
 import { writeMultiFormat } from './utils/multi-format-writer.js';
 import {
@@ -84,8 +87,31 @@ export async function generateBatchProjectDocs(
   const generatedDocs: BatchGeneratedDocSummary[] = [];
   const structuredOutputs = new Map<string, unknown>();
 
+  // 初始化内容哈希缓存（Feature 100）
+  // 注入点说明：此缓存层位于 DeltaRegenerator.plan() 之后、runProjectGenerator() 之前
+  // 两套缓存平行独立——DeltaRegenerator 负责模块级增量（AST skeleton hash），
+  // ContentHashCache 负责 generator 级缓存命中检查（内容 hash）
+  const cacheManager = new CacheManager(
+    new ContentHasherImpl(),
+    new ManifestManagerImpl(),
+  );
+  await cacheManager.initialize(options.outputDir);
+
   for (const generator of applicableGenerators) {
     try {
+      // 缓存命中检查
+      const cacheHit = await cacheManager.check(generator, projectContext);
+      if (cacheHit !== false) {
+        // 命中：复用已记录的输出路径，跳过 extract → generate → render
+        generatedDocs.push({
+          generatorId: generator.id,
+          writtenFiles: cacheHit.outputFiles,
+          warnings: [],
+        });
+        structuredOutputs.set(generator.id, undefined);
+        continue;
+      }
+
       const generatedDoc = await runProjectGenerator(
         generator,
         projectContext,
@@ -97,7 +123,11 @@ export async function generateBatchProjectDocs(
         warnings: generatedDoc.warnings,
       });
       structuredOutputs.set(generator.id, generatedDoc.structuredData);
+
+      // 记录成功执行的结果到缓存（outputFiles 取自 generatedDoc.writtenFiles）
+      await cacheManager.record(generator, projectContext, generatedDoc.writtenFiles);
     } catch (error) {
+      // 生成失败时保留旧 entry 不变（不删除、不更新），避免偶发失败破坏历次缓存
       generatedDocs.push({
         generatorId: generator.id,
         writtenFiles: [],
@@ -105,6 +135,9 @@ export async function generateBatchProjectDocs(
       });
     }
   }
+
+  // 所有 generator 执行完毕后，原子写入 manifest
+  await cacheManager.flush();
 
   const architectureOverview = structuredOutputs.get('architecture-overview') as ArchitectureOverviewOutput | undefined;
   const patternHints = structuredOutputs.get('pattern-hints') as PatternHintsOutput | undefined;

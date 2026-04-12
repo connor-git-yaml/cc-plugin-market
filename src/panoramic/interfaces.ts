@@ -222,6 +222,16 @@ export interface DocumentGenerator<TInput, TOutput> {
    * @returns Markdown 字符串
    */
   render(output: TOutput): string | Promise<string>;
+
+  /**
+   * （可选）声明此 generator 依赖的文件路径列表
+   * 用于 ContentHasher 精确计算聚合 hash，提升缓存精度。
+   * 未实现时，CacheManager 退回到扫描 projectRoot 下所有源文件的 fallback 策略。
+   *
+   * 注意：应包含 generator 在 extract() 中直接读取的所有文件路径，
+   * 不仅是源代码文件，还包括依赖的配置文件路径（如 tsconfig.json、package.json 等）。
+   */
+  getDependencies?(context: ProjectContext): string[] | Promise<string[]>;
 }
 
 // ============================================================
