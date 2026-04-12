@@ -8,3 +8,7 @@ export { buildKnowledgeGraph, writeKnowledgeGraph } from './graph-builder.js';
 
 // 映射函数与常量
 export { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
+
+// 图谱查询引擎与结果类型
+export { GraphQueryEngine } from './graph-query.js';
+export type { QueryResult, NodeResult, PathResult, CommunityResult, GodNodesResult } from './graph-query.js';

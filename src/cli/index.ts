@@ -21,6 +21,7 @@ import { runCacheCommand } from './commands/cache.js';
 import { runWatchCommand } from './commands/watch.js';
 import { runGraphCommand } from './commands/graph.js';
 import { runCommunityCommand } from './commands/community.js';
+import { runQueryCommand } from './commands/query.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -46,6 +47,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra watch [--debounce <seconds>] [--verbose]
   spectra graph [--directed] [--output-dir <dir>]
   spectra community [--min-size <N>] [--output-dir <dir>]
+  spectra query "<问题>" [--budget <N>] [--format json|text]
   spectra mcp-server
   spectra --version / --help
 
@@ -61,6 +63,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   watch         监听文件变更，自动触发增量文档同步
   graph         构建知识图谱并输出 _meta/graph.json
   community     社区检测与架构洞察分析，输出 _meta/GRAPH_REPORT.md
+  query         查询知识图谱，返回相关模块及依赖关系子图
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -86,6 +89,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --output-dir   自定义输出目录
   --directed     输出有向图（仅 graph 命令）
   --min-size     最小社区节点数过滤（仅 community 命令）
+  --budget       返回节点数量上限（仅 query 命令，默认 50）
+  --format       输出格式 text|json（仅 query 命令，默认 text）
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
 
@@ -159,6 +164,9 @@ async function main(): Promise<void> {
       break;
     case 'community':
       await runCommunityCommand(command);
+      break;
+    case 'query':
+      await runQueryCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer();

@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -46,6 +46,12 @@ export interface CLICommand {
   directed?: boolean;
   /** 最小社区节点数过滤（仅 community 命令） */
   communityMinSize?: number;
+  /** query 命令查询词（仅 query 子命令，来自第一个位置参数） */
+  queryQuestion?: string;
+  /** query 命令 budget 上限（仅 query 子命令，--budget <N>） */
+  budget?: number;
+  /** query 命令输出格式（仅 query 子命令，--format text|json，默认 text） */
+  format?: 'text' | 'json';
 }
 
 /** 解析错误 */
@@ -293,6 +299,49 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // query 子命令
+  if (sub === 'query') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'query',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    // 第一个位置参数为查询词
+    const queryPositional = extractPositionalArgs(argv.slice(1));
+    const queryQuestion = queryPositional[0];
+    // 解析 --budget <N>
+    const budgetIdx = argv.indexOf('--budget');
+    let budget: number | undefined;
+    if (budgetIdx !== -1 && argv[budgetIdx + 1] !== undefined) {
+      const parsed = parseInt(argv[budgetIdx + 1]!, 10);
+      if (!isNaN(parsed)) budget = parsed;
+    }
+    // 解析 --format text|json
+    const formatIdx = argv.indexOf('--format');
+    let format: 'text' | 'json' | undefined;
+    if (formatIdx !== -1) {
+      const raw = argv[formatIdx + 1];
+      if (raw === 'json') format = 'json';
+      else if (raw === 'text') format = 'text';
+    }
+    return {
+      ok: true,
+      command: {
+        subcommand: 'query',
+        queryQuestion,
+        budget,
+        format,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // init 子命令
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
@@ -410,7 +459,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query') {
     return {
       ok: false,
       error: {
@@ -524,7 +573,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format') {
         i++; // 跳过选项值
       }
       continue;
