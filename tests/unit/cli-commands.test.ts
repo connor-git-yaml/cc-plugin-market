@@ -171,4 +171,45 @@ describe('parseArgs', () => {
       expect(result.command._explicitFlags!.has('incremental')).toBe(false);
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // T007: watch 子命令相关测试
+  // ────────────────────────────────────────────────────────────
+  it('解析 watch 子命令（无选项）', () => {
+    const result = parseArgs(['watch']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('watch');
+      expect(result.command.watchDebounce).toBeUndefined();
+      expect(result.command.watchVerbose).toBe(false);
+    }
+  });
+
+  it('解析 watch --debounce 5', () => {
+    const result = parseArgs(['watch', '--debounce', '5']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('watch');
+      expect(result.command.watchDebounce).toBe(5);
+    }
+  });
+
+  it('解析 watch --verbose', () => {
+    const result = parseArgs(['watch', '--verbose']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('watch');
+      expect(result.command.watchVerbose).toBe(true);
+    }
+  });
+
+  it('解析 watch --debounce 和 --verbose 组合', () => {
+    const result = parseArgs(['watch', '--debounce', '10', '--verbose']);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.command.subcommand).toBe('watch');
+      expect(result.command.watchDebounce).toBe(10);
+      expect(result.command.watchVerbose).toBe(true);
+    }
+  });
 });

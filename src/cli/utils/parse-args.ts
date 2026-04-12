@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -36,6 +36,10 @@ export interface CLICommand {
   cacheOperation?: 'stats' | 'clear';
   /** --generator 参数（仅 cache clear 子命令） */
   cacheGeneratorId?: string;
+  /** watch debounce 时长（秒，仅 watch 子命令，默认 3） */
+  watchDebounce?: number;
+  /** watch 详细日志模式（仅 watch 子命令） */
+  watchVerbose?: boolean;
 }
 
 /** 解析错误 */
@@ -170,6 +174,41 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // watch 子命令
+  if (sub === 'watch') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'watch',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const debounceIdx = argv.indexOf('--debounce');
+    const debounceRaw = debounceIdx !== -1 ? argv[debounceIdx + 1] : undefined;
+    let watchDebounce: number | undefined;
+    if (debounceRaw !== undefined) {
+      const parsed = parseInt(debounceRaw, 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        return { ok: false, error: { type: 'invalid_option', message: `--debounce 必须为正整数，收到: ${debounceRaw}` } };
+      }
+      watchDebounce = parsed;
+    }
+    const watchVerbose = argv.includes('--verbose');
+    return {
+      ok: true,
+      command: {
+        subcommand: 'watch',
+        watchDebounce,
+        watchVerbose,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // init 子命令
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
@@ -287,7 +326,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch') {
     return {
       ok: false,
       error: {
@@ -401,7 +440,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce') {
         i++; // 跳过选项值
       }
       continue;

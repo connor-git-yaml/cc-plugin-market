@@ -18,6 +18,7 @@ import { runAuthStatus } from './commands/auth-status.js';
 import { runMcpServer } from './commands/mcp-server.js';
 import { runPanoramicCommand } from './commands/panoramic.js';
 import { runCacheCommand } from './commands/cache.js';
+import { runWatchCommand } from './commands/watch.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -40,6 +41,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra auth-status [--verify]
   spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
   spectra cache <stats|clear> [--generator <id>] [--output-dir <dir>]
+  spectra watch [--debounce <seconds>] [--verbose]
   spectra mcp-server
   spectra --version / --help
 
@@ -52,6 +54,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   auth-status   查看当前认证状态（API Key / Claude CLI / Codex CLI）
   panoramic     运行 panoramic 架构分析（cross-package / architecture-ir / overview）
   cache         管理内容哈希缓存（stats / clear）
+  watch         监听文件变更，自动触发增量文档同步
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -72,6 +75,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --generator    指定 generator ID（仅 cache clear）
+  --debounce     文件变更静默等待时长（秒，默认 3，仅 watch）
+  --verbose      打印详细变更日志（仅 watch）
   --output-dir   自定义输出目录
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
@@ -137,6 +142,9 @@ async function main(): Promise<void> {
       break;
     case 'cache':
       await runCacheCommand(command);
+      break;
+    case 'watch':
+      await runWatchCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer();
