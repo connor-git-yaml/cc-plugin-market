@@ -2,254 +2,116 @@
 # 由 Spec Driver sync 子代理自动生成，可手动编辑覆盖
 # 手动添加的条目在重跑 sync 时不会被覆盖
 #
-# 最后更新: 2026-04-05
+# 最后更新: 2026-04-12
 # 未纳入正式映射: 023-fix-mcp-hardcoded-path（spec.md 仍为模板占位，待补齐后再纳入聚合）
+# 未纳入正式映射: 096-fix-spec-doc-structure（spec.md 仍为模板占位，待补齐后再纳入聚合）
+# 未纳入正式映射: 098-fix-batch-structure（spec.md 仍为模板占位，待补齐后再纳入聚合）
+# 未纳入正式映射: 112-name-fix-graph（spec.md 仍为模板占位，待补齐后再纳入聚合）
 
 products:
   spectra:
     description: "Spectra v3.0.0 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并通过 repo:sync / repo:check 固化技能分发、发布合同与仓库边界"
     specs:
-      - id: "001-reverse-spec-v2"
-        type: INITIAL
-        summary: "核心能力：AST + LLM 混合流水线，单模块/批量 Spec 生成 + 漂移检测"
-      - id: "002-cli-global-distribution"
-        type: FEATURE
-        summary: "CLI 全局分发与 npm install -g 支持"
-      - id: "003-skill-init"
-        type: FEATURE
-        summary: "项目级 Skill 初始化与自包含架构"
-      - id: "004-claude-sub-auth"
-        type: FEATURE
-        summary: "Claude 订阅账号认证，支持 Max/Pro 用户无 API Key 使用"
-      - id: "005-batch-quality-fixes"
-        type: FIX
-        summary: "Batch 模块级聚合重构与生成质量修复"
-      - id: "006-batch-progress-timeout"
-        type: ENHANCEMENT
-        summary: "批量生成细粒度进度报告与超时优化"
-      - id: "007-fix-batch-llm-defaults"
-        type: FIX
-        summary: "修复 Batch LLM 默认模型、提示词与超时配置"
-      - id: "008-fix-spec-absolute-paths"
-        type: FIX
-        summary: "修复 Spec 输出绝对路径泄露为相对路径"
-      - id: "009-plugin-marketplace"
-        type: REFACTOR
-        summary: "重构为 Claude Code Plugin Marketplace 架构"
-      - id: "010-fix-dotspecs-to-specs"
-        type: FIX
-        summary: "统一 spec 输出目录引用 .specs → specs"
-      - id: "024-multilang-blueprint"
-        type: ENHANCEMENT
-        summary: "多语言支持蓝图：定义 Python/Go/Java 首批适配路线与瓶颈清单"
-      - id: "025-multilang-adapter-layer"
-        type: REFACTOR
-        summary: "LanguageAdapter 抽象层、Registry 与多语言数据模型扩展"
-      - id: "026-multilang-prompt-parameterize"
-        type: ENHANCEMENT
-        summary: "LLM Prompt 与上下文语言参数化"
-      - id: "027-multilang-tree-sitter-backend"
-        type: REFACTOR
-        summary: "引入 tree-sitter 作为多语言解析后端"
-      - id: "028-python-language-adapter"
-        type: FEATURE
-        summary: "Python LanguageAdapter 实现"
-      - id: "029-go-language-adapter"
-        type: FEATURE
-        summary: "Go LanguageAdapter 实现"
-      - id: "030-java-language-adapter"
-        type: FEATURE
-        summary: "Java LanguageAdapter 实现"
-      - id: "031-multilang-mixed-project"
-        type: FEATURE
-        summary: "多语言混合项目检测、分组处理与索引增强"
-      - id: "033-panoramic-doc-blueprint"
-        type: ENHANCEMENT
-        summary: "全景文档化 Milestone 蓝图，定义 panoramic Phase 0–3 演进路线"
-      - id: "034-doc-generator-interfaces"
-        type: FEATURE
-        summary: "DocumentGenerator / ArtifactParser 接口定义"
-      - id: "035-project-context-unified"
-        type: FEATURE
-        summary: "ProjectContext 统一上下文构建"
-      - id: "036-generator-registry"
-        type: FEATURE
-        summary: "GeneratorRegistry / ParserRegistry 注册与发现机制"
-      - id: "037-artifact-parsers"
-        type: FEATURE
-        summary: "Dockerfile、YAML、SKILL.md 等非代码制品解析"
-      - id: "038-data-model-doc"
-        type: FEATURE
-        summary: "通用数据模型文档生成"
-      - id: "039-config-reference-generator"
-        type: FEATURE
-        summary: "配置参考手册生成"
-      - id: "040-monorepo-workspace-index"
-        type: FEATURE
-        summary: "Workspace 层级索引与 Monorepo 概览"
-      - id: "041-cross-package-deps"
-        type: FEATURE
-        summary: "跨包依赖分析与循环依赖检测"
-      - id: "042-api-surface-reference"
-        type: FEATURE
-        summary: "API Surface Reference，支持 schema / introspection / AST 三层来源"
-      - id: "043-runtime-topology-ops"
-        type: FEATURE
-        summary: "运行时拓扑与运维抽取，共享运行时中间模型"
-      - id: "044-doc-graph-cross-reference-index"
-        type: FEATURE
-        summary: "DocGraph 与交叉引用索引"
-      - id: "045-architecture-overview-system-context"
-        type: FEATURE
-        summary: "架构概览、系统上下文与部署视图"
-      - id: "046-coverage-audit-missing-doc-report"
-        type: FEATURE
-        summary: "覆盖率审计、缺失文档与低置信度报告"
-      - id: "047-event-surface-documentation"
-        type: FEATURE
-        summary: "事件面文档与事件流视图"
-      - id: "048-troubleshooting-explanation-docs"
-        type: FEATURE
-        summary: "故障排查与原理说明文档"
-      - id: "049-incremental-spec-regeneration"
-        type: FEATURE
-        summary: "增量差量 Spec 重生成与 delta report"
-      - id: "050-pattern-hints-explanation"
-        type: FEATURE
-        summary: "架构模式提示、证据链与替代方案"
-      - id: "051-semantic-enrichment-multiformat"
-        type: ENHANCEMENT
-        summary: "LLM 语义增强与 Markdown / JSON / Mermaid 多格式输出"
-      - id: "052-batch-singlelang-graph"
-        type: FIX
-        summary: "修复 Batch 单语言非 TS/JS 依赖图选择"
-      - id: "053-panoramic-batch-doc-suite"
-        type: FEATURE
-        summary: "Batch 自动产出 panoramic 项目级文档套件与架构叙事"
-      - id: "054-multi-source-doc-system-blueprint"
-        type: ENHANCEMENT
-        summary: "多源文档系统蓝图，定义 055-060 的交付、IR、ADR、治理与产品事实路线"
-      - id: "055-doc-bundle-publish-orchestration"
-        type: FEATURE
-        summary: "文档 bundle、阅读路径导航与 MkDocs/TechDocs 兼容发布编排"
-      - id: "056-architecture-ir-export"
-        type: FEATURE
-        summary: "架构中间表示导出，统一 JSON / Mermaid / Structurizr DSL"
-      - id: "057-component-view-dynamic-scenarios"
-        type: FEATURE
-        summary: "组件视图与动态链路文档"
-      - id: "058-adr-decision-pipeline"
-        type: FEATURE
-        summary: "ADR 决策流水线，输出 docs/adr 候选草稿与索引"
-      - id: "059-provenance-quality-gates"
-        type: FEATURE
-        summary: "文档 provenance、required-doc 规则与质量门"
-      - id: "060-product-ux-fact-ingestion"
-        type: FEATURE
-        summary: "产品 / UX 事实接入，输出 product-overview、user-journeys 与 feature briefs"
-      - id: "076-codebase-rationalization-blueprint"
-        type: ENHANCEMENT
-        summary: "代码库结构与可维护性收敛蓝图，定义 077-081 的结构治理路线"
-      - id: "079-reverse-spec-skill-distribution-consolidation"
-        type: FEATURE
-        summary: "收敛 reverse-spec Skill 的 canonical source、compatibility mirrors 与分发校验合同"
-      - id: "080-doc-version-release-contract-unification"
-        type: FEATURE
-        summary: "统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路"
-
+      - "001"
+      - "002"
+      - "003"
+      - "004"
+      - "005"
+      - "006"
+      - "007"
+      - "008"
+      - "009"
+      - "010"
+      - "024"
+      - "025"
+      - "026"
+      - "027"
+      - "028"
+      - "029"
+      - "030"
+      - "031"
+      - "033"
+      - "034"
+      - "035"
+      - "036"
+      - "037"
+      - "038"
+      - "039"
+      - "040"
+      - "041"
+      - "042"
+      - "043"
+      - "044"
+      - "045"
+      - "046"
+      - "047"
+      - "048"
+      - "049"
+      - "050"
+      - "051"
+      - "052"
+      - "053"
+      - "054"
+      - "055"
+      - "056"
+      - "057"
+      - "058"
+      - "059"
+      - "060"
+      - "076"
+      - "079"
+      - "080"
+      - "095"
+      - "097"
+      - "099"
+      - "100"
+      - "101"
+      - "102"
+      - "103"
+      - "104"
+      - "105"
+      - "106"
+      - "107"
   spec-driver:
     description: "Spec Driver v3.11.2 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式，基于 orchestration.yaml 配置驱动编排、6 个质量门禁（含 GATE_IMPLEMENT_MID 中期检查）、sync-merge-engine 确定性合并、15 个专业子代理，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与 release contract"
     specs:
-      - id: "011-speckit-driver-pro"
-        type: INITIAL
-        summary: "完整自治编排器：10 阶段工作流、质量门、resume/rerun 机制、story/fix 快速模式"
-      - id: "012-product-spec-sync"
-        type: FEATURE
-        summary: "产品规范聚合（sync）：增量 spec 智能合并为产品级活文档"
-      - id: "013-split-skill-commands"
-        type: REFACTOR
-        summary: "拆分单体技能为 feature/resume/sync 等独立命令，优化上下文预算"
-      - id: "014-rename-spec-driver"
-        type: REFACTOR
-        summary: "重命名 speckitdriver → spec-driver，统一 spec-driver-* 前缀"
-      - id: "015-speckit-doc-command"
-        type: FEATURE
-        summary: "新增 spec-driver-doc 命令，一键生成 README 等开源文档"
-      - id: "016-optimize-sync-product-doc"
-        type: ENHANCEMENT
-        summary: "优化 sync 产品文档，扩展为 14 章节模板"
-      - id: "017-adopt-superpowers-patterns"
-        type: ENHANCEMENT
-        summary: "验证铁律、三级门禁策略、双阶段代码审查、设计硬门禁"
-      - id: "018-flexible-research-routing"
-        type: ENHANCEMENT
-        summary: "Feature 模式灵活调研路由：6 种模式、智能推荐、命令行覆盖"
-      - id: "019-parallel-subagent-speedup"
-        type: ENHANCEMENT
-        summary: "并行子代理加速：调研并行、verify 并行、串行回退"
-      - id: "020-fix-plugin-script-path"
-        type: FIX
-        summary: "修复全局安装场景下的插件脚本路径发现机制"
-      - id: "021-add-research-templates"
-        type: FEATURE
-        summary: "将调研模板纳入 specify-base 与项目级模板同步体系"
-      - id: "022-sync-doc-redesign"
-        type: ENHANCEMENT
-        summary: "重设计 sync / doc 文档架构，明确 current-spec 作为上游事实源"
-      - id: "032-rename-speckit-to-spec-driver"
-        type: REFACTOR
-        summary: "清理残留 speckit 命名，统一到 spec-driver 前缀"
-      - id: "062-catalog-driven-spec-driver-blueprint"
-        type: ENHANCEMENT
-        summary: "Catalog-Driven Spec Driver 蓝图，定义 063-066 的 Catalog、Golden Path、Scorecards 与 Adoption 路线"
-      - id: "063-product-entity-catalog"
-        type: FEATURE
-        summary: "产品实体目录与 Catalog 生成，输出 entity.yaml 与 catalog-index"
-      - id: "064-workflow-registry-golden-paths"
-        type: FEATURE
-        summary: "Workflow Registry 与 Golden Paths，输出 workflow-index 与推荐路径"
-      - id: "065-scorecards-continuous-governance"
-        type: FEATURE
-        summary: "持续治理 scorecards、规则 DSL 与 scorecard-report / scorecard-index"
-      - id: "066-adoption-friction-insights"
-        type: FEATURE
-        summary: "本地运行事件、adoption-report 与 friction hotspots 反馈闭环"
-      - id: "067-governance-remediation-blueprint"
-        type: ENHANCEMENT
-        summary: "治理收敛蓝图，定义 verification 债与 quality / scorecard 信号对齐的修正路线"
-      - id: "068-scorecard-signal-alignment"
-        type: FEATURE
-        summary: "产品级 quality-report 接入与 scorecard 统计口径校准"
-      - id: "070-project-context-implement-skill-blueprint"
-        type: ENHANCEMENT
-        summary: "Project Context 与 Implement Skill 解耦蓝图，定义 071–075 的后续路线"
-      - id: "071-product-artifact-boundary-cleanup"
-        type: FEATURE
-        summary: "清理产品事实源与生成产物目录边界，统一 `_generated` 合同与共享路径 helper"
-      - id: "072-spec-driver-implement"
-        type: FEATURE
-        summary: "新增成熟 Spec/Plan 的聚焦实施入口 spec-driver-implement，并接入 workflow / catalog / adoption"
-      - id: "073-project-context-schema-resolver"
-        type: FEATURE
-        summary: "引入共享 Project Context resolver，统一 YAML canonical、legacy Markdown fallback 与 diagnostics 合同"
-      - id: "074-feedback-to-context-suggestions"
-        type: FEATURE
-        summary: "将 quality / scorecard / adoption 信号转为 Project Context suggestions，并以 advisory-only 方式接入 feature / implement / sync"
-      - id: "075-init-template-tests-docs-closure"
-        type: FEATURE
-        summary: "补齐 project-context 初始化模板、legacy markdown 迁移说明、集成测试与文档收口"
-      - id: "076-codebase-rationalization-blueprint"
-        type: ENHANCEMENT
-        summary: "代码库结构与可维护性收敛蓝图，定义 077–081 的包装层、脚本平台与发布合同收敛路线"
-      - id: "077-wrapper-source-truth-consolidation"
-        type: FEATURE
-        summary: "收拢 spec-driver wrapper source-of-truth，新增 contract、validator 与 Codex wrapper 标记"
-      - id: "078-script-platform-shared-layer"
-        type: FEATURE
-        summary: "收敛脚本平台共享层，统一 YAML / artifact IO / catalog patch / diagnostics helper"
-      - id: "080-doc-version-release-contract-unification"
-        type: FEATURE
-        summary: "统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路"
-      - id: "081-maintainability-hotspot-refactors"
-        type: REFACTOR
-        summary: "将 workflow-registry / quality-report / scorecard / init-project 热点入口收敛为 thin orchestrator，并补 core-module 级 targeted tests"
+      - "011"
+      - "012"
+      - "013"
+      - "014"
+      - "015"
+      - "016"
+      - "017"
+      - "018"
+      - "019"
+      - "020"
+      - "021"
+      - "022"
+      - "032"
+      - "062"
+      - "063"
+      - "064"
+      - "065"
+      - "066"
+      - "067"
+      - "068"
+      - "070"
+      - "071"
+      - "072"
+      - "073"
+      - "074"
+      - "075"
+      - "076"
+      - "077"
+      - "078"
+      - "080"
+      - "081"
+      - "082"
+      - "084"
+      - "085"
+      - "087"
+      - "089"
+      - "090"
+      - "091"
+      - "092"
+      - "093"

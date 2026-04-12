@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-11T17:53:51.042Z"
+generatedAt: "2026-04-12T15:25:22.309Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
-description: "Spec Driver v3.11.1 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式，基于 orchestration.yaml 配置驱动编排、6 个质量门禁（含 GATE_IMPLEMENT_MID 中期检查）、sync-merge-engine 确定性合并、15 个专业子代理，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与 release contract"
+description: "Spec Driver v3.11.2 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式，基于 orchestration.yaml 配置驱动编排、6 个质量门禁（含 GATE_IMPLEMENT_MID 中期检查）、sync-merge-engine 确定性合并、15 个专业子代理，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与 release contract"
 owner:
   value: "unknown"
   source: "unknown"
@@ -14,7 +14,7 @@ repo:
   path: "."
   remote: "git@github.com:connor-git-yaml/cc-plugin-market.git"
   defaultBranch: "master"
-  packageName: "reverse-spec"
+  packageName: "spectra-cli"
 docs:
   - id: "current-spec"
     kind: "fact"
@@ -26,19 +26,19 @@ docs:
     available: true
 quality:
   currentSpec:
-    version: "聚合自 31 个增量 spec / blueprint（011–022, 032, 062–068, 070–081）"
-    lastAggregated: "2026-04-05（已纳入 078-script-platform-shared-layer、080-doc-version-release-contract-unification、081-maintainability-hotspot-refactors）"
+    version: "聚合自 40 个增量 spec / blueprint（011–022, 032, 062–068, 070–082, 084–085, 087, 089–093）"
+    lastAggregated: "2026-04-12"
     status: "活跃"
   report:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-11T17:53:51.097Z"
+    generatedAt: "2026-04-12T15:25:30.955Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
-    status: "pass"
-    score: 100
-    generatedAt: "2026-04-11T17:53:51.099Z"
+    status: "warn"
+    score: 90
+    generatedAt: "2026-04-12T15:25:35.688Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"

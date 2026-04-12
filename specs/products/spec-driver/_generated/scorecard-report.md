@@ -2,22 +2,22 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-11T17:53:51.099Z
-> **Status**: PASS
-> **Score**: 100/100
+> **Generated**: 2026-04-12T15:25:35.688Z
+> **Status**: WARN
+> **Score**: 90/100
 
 ## Summary
 
-- Spec Driver 当前治理评分为 100/100，整体状态 PASS.
+- Spec Driver 当前治理评分为 90/100，整体状态 WARN.
 - 没有 fail 级规则。
-- 全部规则均已达到 pass 基线。
+- 另有 1 条 warn 级规则，建议在下一次 sync / release 前收口。
 
 ## Rule Breakdown
 
 | Rule | Status | Score | Weight | Key Evidence |
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
-| Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=13, fresh=13, stale=0 |
+| Verification 新鲜度 | WARN | 50 | 20 | totalFeatures=0, ignored=[object Object] |
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, coveredRequiredDocs=5, totalRequiredDocs=5 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spec-driver/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
@@ -31,7 +31,7 @@
 - Status: PASS
 - Score: 100 / 100
 - Weight: 20
-- current-spec 覆盖了全部 31 个增量 spec。
+- current-spec 覆盖了全部 40 个增量 spec。
 
 ```json
 {
@@ -43,56 +43,17 @@
 ### Verification 新鲜度
 
 - Evaluator: `verification-freshness`
-- Status: PASS
-- Score: 100 / 100
+- Status: WARN
+- Score: 50 / 100
 - Weight: 20
-- 全部 13 个纳入治理的已实现增量 spec 都有新鲜的 verification 报告。
+- 当前没有纳入治理的已实现增量 spec，verification 新鲜度无法计算。
 
 ```json
 {
-  "totalFeatures": 13,
-  "fresh": [
-    "012-product-spec-sync",
-    "063-product-entity-catalog",
-    "064-workflow-registry-golden-paths",
-    "065-scorecards-continuous-governance",
-    "066-adoption-friction-insights",
-    "068-scorecard-signal-alignment",
-    "071-product-artifact-boundary-cleanup",
-    "072-spec-driver-implement",
-    "073-project-context-schema-resolver",
-    "074-feedback-to-context-suggestions",
-    "075-init-template-tests-docs-closure",
-    "077-wrapper-source-truth-consolidation",
-    "080-doc-version-release-contract-unification"
-  ],
-  "stale": [],
-  "missing": [],
-  "failed": [],
-  "coverageRatio": 1,
+  "totalFeatures": 0,
   "ignored": {
-    "blueprint": [
-      "062-catalog-driven-spec-driver-blueprint",
-      "067-governance-remediation-blueprint",
-      "070-project-context-implement-skill-blueprint",
-      "076-codebase-rationalization-blueprint"
-    ],
-    "nonImplemented": [
-      "011-speckit-driver-pro",
-      "013-split-skill-commands",
-      "014-rename-spec-driver",
-      "015-speckit-doc-command",
-      "016-optimize-sync-product-doc",
-      "017-adopt-superpowers-patterns",
-      "018-flexible-research-routing",
-      "019-parallel-subagent-speedup",
-      "020-fix-plugin-script-path",
-      "021-add-research-templates",
-      "022-sync-doc-redesign",
-      "032-rename-speckit-to-spec-driver",
-      "078-script-platform-shared-layer",
-      "081-maintainability-hotspot-refactors"
-    ]
+    "blueprint": [],
+    "nonImplemented": []
   }
 }
 ```

@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-11T17:53:51.121Z"
+generatedAt: "2026-04-12T15:25:40.752Z"
 status: "advisory"
 contextSource:
   state: "yaml"
@@ -11,8 +11,8 @@ contextSource:
   suggestionsMarkdownPath: ".specify/project-context.suggestions.md"
 summary:
   criticalCount: 0
-  recommendedCount: 1
-  optionalCount: 3
+  recommendedCount: 2
+  optionalCount: 2
   suggestionCount: 4
 suggestions:
   - id: "add-stable-reference-documents"
@@ -24,22 +24,25 @@ suggestions:
       - field: "references.paths"
         action: "append"
         value:
-          - "specs/products/spectra/current-spec.md"
-          - "specs/products/spectra/_generated/quality-report.md"
-          - "specs/products/spectra/_generated/scorecard-report.md"
+          - "specs/products/reverse-spec/current-spec.md"
+          - "specs/products/reverse-spec/_generated/quality-report.md"
+          - "specs/products/reverse-spec/_generated/scorecard-report.md"
           - "specs/products/spec-driver/current-spec.md"
           - "specs/products/spec-driver/_generated/quality-report.md"
           - "specs/products/spec-driver/_generated/scorecard-report.md"
           - "specs/products/spec-driver/_generated/adoption-report.md"
+          - "specs/products/spectra/current-spec.md"
+          - "specs/products/spectra/_generated/quality-report.md"
+          - "specs/products/spectra/_generated/scorecard-report.md"
     evidence:
       - sourceType: "document"
-        path: "specs/products/spectra/current-spec.md"
+        path: "specs/products/reverse-spec/current-spec.md"
         note: "该文档已存在且长期稳定，可作为项目参考资料。"
       - sourceType: "document"
-        path: "specs/products/spectra/_generated/quality-report.md"
+        path: "specs/products/reverse-spec/_generated/quality-report.md"
         note: "该文档已存在且长期稳定，可作为项目参考资料。"
       - sourceType: "document"
-        path: "specs/products/spectra/_generated/scorecard-report.md"
+        path: "specs/products/reverse-spec/_generated/scorecard-report.md"
         note: "该文档已存在且长期稳定，可作为项目参考资料。"
       - sourceType: "document"
         path: "specs/products/spec-driver/current-spec.md"
@@ -53,6 +56,15 @@ suggestions:
       - sourceType: "document"
         path: "specs/products/spec-driver/_generated/adoption-report.md"
         note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spectra/current-spec.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spectra/_generated/quality-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
+      - sourceType: "document"
+        path: "specs/products/spectra/_generated/scorecard-report.md"
+        note: "该文档已存在且长期稳定，可作为项目参考资料。"
   - id: "codify-workflow-preferences"
     priority: "optional"
     category: "workflow-preferences"
@@ -61,22 +73,22 @@ suggestions:
     suggestedChanges:
       - field: "workflow_preferences.default_workflow"
         action: "set"
-        value: "spec-driver-doc"
+        value: "spec-driver-fix"
       - field: "workflow_preferences.mature_spec_workflow"
         action: "set"
         value: "spec-driver-implement"
     evidence:
       - sourceType: "adoption-report"
         path: "specs/products/spec-driver/_generated/adoption-report.json"
-        note: "最近 run summary 中最常使用的 workflow 是 spec-driver-doc（0 次）。"
+        note: "最近 run summary 中最常使用的 workflow 是 spec-driver-fix（1 次）。"
       - sourceType: "workflow-index"
         path: "specs/products/spec-driver/_generated/workflow-index.json"
         note: "workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。"
   - id: "codify-verification-policy"
-    priority: "optional"
+    priority: "recommended"
     category: "verification-policy"
     title: "把验证偏好固化到 Project Context"
-    summary: "当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。"
+    summary: "当前 verification 信号存在缺口，建议把验证偏好与最低完成标准显式写入 Project Context。"
     suggestedChanges:
       - field: "verification_policy.required_commands"
         action: "set"
@@ -96,7 +108,7 @@ suggestions:
     evidence:
       - sourceType: "scorecard-report"
         path: "specs/products/spec-driver/_generated/scorecard-report.json"
-        note: "verification-freshness 当前状态为 pass。"
+        note: "verification-freshness 当前状态为 warn。"
   - id: "declare-default-owner-and-reviewers"
     priority: "recommended"
     category: "ownership"
@@ -112,10 +124,13 @@ suggestions:
           - "<maintainer-or-team>"
     evidence:
       - sourceType: "entity-catalog"
-        path: "specs/products/spectra/_generated/entity.yaml"
-        note: "spectra 的 entity.yaml 仍显示 owner=unknown。"
+        path: "specs/products/reverse-spec/_generated/entity.yaml"
+        note: "reverse-spec 的 entity.yaml 仍显示 owner=unknown。"
       - sourceType: "entity-catalog"
         path: "specs/products/spec-driver/_generated/entity.yaml"
         note: "spec-driver 的 entity.yaml 仍显示 owner=unknown。"
+      - sourceType: "entity-catalog"
+        path: "specs/products/spectra/_generated/entity.yaml"
+        note: "spectra 的 entity.yaml 仍显示 owner=unknown。"
 warnings:
   []

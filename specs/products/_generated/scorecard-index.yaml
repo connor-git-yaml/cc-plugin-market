@@ -1,29 +1,29 @@
 schemaVersion: 1
-generatedAt: "2026-04-11T17:53:51.099Z"
+generatedAt: "2026-04-12T15:25:35.688Z"
 rulesetId: "default-governance"
 productCount: 2
 products:
-  - id: "reverse-spec"
-    name: "Reverse-Spec"
+  - id: "spectra"
+    name: "Spectra"
     kind: "library-tooling"
-    status: "pass"
-    score: 100
-    reportPath: "specs/products/reverse-spec/_generated/scorecard-report.json"
-    markdownPath: "specs/products/reverse-spec/_generated/scorecard-report.md"
+    status: "warn"
+    score: 85
+    reportPath: "specs/products/spectra/_generated/scorecard-report.json"
+    markdownPath: "specs/products/spectra/_generated/scorecard-report.md"
     ruleCount: 6
-    passCount: 6
-    warnCount: 0
+    passCount: 4
+    warnCount: 2
     failCount: 0
   - id: "spec-driver"
     name: "Spec Driver"
     kind: "plugin"
-    status: "pass"
-    score: 100
+    status: "warn"
+    score: 90
     reportPath: "specs/products/spec-driver/_generated/scorecard-report.json"
     markdownPath: "specs/products/spec-driver/_generated/scorecard-report.md"
     ruleCount: 6
-    passCount: 6
-    warnCount: 0
+    passCount: 5
+    warnCount: 1
     failCount: 0
 warnings:
   - "scorecard override 忽略非 metadata 字段: default-governance.yaml.spec-freshness.sourcePath"

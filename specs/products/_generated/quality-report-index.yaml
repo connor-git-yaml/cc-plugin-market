@@ -1,13 +1,13 @@
 schemaVersion: 1
-generatedAt: "2026-04-11T17:53:51.097Z"
+generatedAt: "2026-04-12T15:25:30.955Z"
 productCount: 2
 products:
-  - id: "reverse-spec"
-    name: "Reverse-Spec"
+  - id: "spectra"
+    name: "Spectra"
     status: "pass"
     score: 100
-    reportPath: "specs/products/reverse-spec/_generated/quality-report.json"
-    markdownPath: "specs/products/reverse-spec/_generated/quality-report.md"
+    reportPath: "specs/products/spectra/_generated/quality-report.json"
+    markdownPath: "specs/products/spectra/_generated/quality-report.md"
   - id: "spec-driver"
     name: "Spec Driver"
     status: "pass"

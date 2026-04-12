@@ -1,14 +1,14 @@
 # Project Context Suggestions
 
-- Generated At: `2026-04-11T17:53:51.121Z`
+- Generated At: `2026-04-12T15:25:40.752Z`
 - Status: `advisory`
 - Context Source: `yaml`
 
 ## Summary
 
 - Critical: 0
-- Recommended: 1
-- Optional: 3
+- Recommended: 2
+- Optional: 2
 - Total Suggestions: 4
 
 ## Suggestions
@@ -21,16 +21,19 @@
 - Category: `references`
 
 Suggested Changes:
-- `references.paths` · append: `specs/products/spectra/current-spec.md`, `specs/products/spectra/_generated/quality-report.md`, `specs/products/spectra/_generated/scorecard-report.md`, `specs/products/spec-driver/current-spec.md`, `specs/products/spec-driver/_generated/quality-report.md`, `specs/products/spec-driver/_generated/scorecard-report.md`, `specs/products/spec-driver/_generated/adoption-report.md`
+- `references.paths` · append: `specs/products/reverse-spec/current-spec.md`, `specs/products/reverse-spec/_generated/quality-report.md`, `specs/products/reverse-spec/_generated/scorecard-report.md`, `specs/products/spec-driver/current-spec.md`, `specs/products/spec-driver/_generated/quality-report.md`, `specs/products/spec-driver/_generated/scorecard-report.md`, `specs/products/spec-driver/_generated/adoption-report.md`, `specs/products/spectra/current-spec.md`, `specs/products/spectra/_generated/quality-report.md`, `specs/products/spectra/_generated/scorecard-report.md`
 
 Evidence:
-- `document` · `specs/products/spectra/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
-- `document` · `specs/products/spectra/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
-- `document` · `specs/products/spectra/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/reverse-spec/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/reverse-spec/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/reverse-spec/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/_generated/adoption-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 
 ### [OPTIONAL] 把高频 workflow 路由固化到 Project Context
 
@@ -40,16 +43,16 @@ Evidence:
 - Category: `workflow-preferences`
 
 Suggested Changes:
-- `workflow_preferences.default_workflow` · set: `spec-driver-doc`
+- `workflow_preferences.default_workflow` · set: `spec-driver-fix`
 - `workflow_preferences.mature_spec_workflow` · set: `spec-driver-implement`
 
 Evidence:
-- `adoption-report` · `specs/products/spec-driver/_generated/adoption-report.json` — 最近 run summary 中最常使用的 workflow 是 spec-driver-doc（0 次）。
+- `adoption-report` · `specs/products/spec-driver/_generated/adoption-report.json` — 最近 run summary 中最常使用的 workflow 是 spec-driver-fix（1 次）。
 - `workflow-index` · `specs/products/spec-driver/_generated/workflow-index.json` — workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。
 
-### [OPTIONAL] 把验证偏好固化到 Project Context
+### [RECOMMENDED] 把验证偏好固化到 Project Context
 
-当前 verification 新鲜度已达标，但仍建议把验证命令、质量审查与实现完成条件固化到 Project Context，降低后续漂移。
+当前 verification 信号存在缺口，建议把验证偏好与最低完成标准显式写入 Project Context。
 
 - ID: `codify-verification-policy`
 - Category: `verification-policy`
@@ -60,7 +63,7 @@ Suggested Changes:
 - `verification_policy.review_dimensions` · set: `architecture`, `readability`, `maintainability`
 
 Evidence:
-- `scorecard-report` · `specs/products/spec-driver/_generated/scorecard-report.json` — verification-freshness 当前状态为 pass。
+- `scorecard-report` · `specs/products/spec-driver/_generated/scorecard-report.json` — verification-freshness 当前状态为 warn。
 
 ### [RECOMMENDED] 补充默认 owner / reviewers
 
@@ -74,6 +77,7 @@ Suggested Changes:
 - `ownership.default_reviewers` · set: `<maintainer-or-team>`
 
 Evidence:
-- `entity-catalog` · `specs/products/spectra/_generated/entity.yaml` — spectra 的 entity.yaml 仍显示 owner=unknown。
+- `entity-catalog` · `specs/products/reverse-spec/_generated/entity.yaml` — reverse-spec 的 entity.yaml 仍显示 owner=unknown。
 - `entity-catalog` · `specs/products/spec-driver/_generated/entity.yaml` — spec-driver 的 entity.yaml 仍显示 owner=unknown。
+- `entity-catalog` · `specs/products/spectra/_generated/entity.yaml` — spectra 的 entity.yaml 仍显示 owner=unknown。
 

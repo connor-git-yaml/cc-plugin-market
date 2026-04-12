@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-11T17:53:51.097Z",
+  "generatedAt": "2026-04-12T15:25:40.717Z",
   "productId": "spec-driver",
-  "status": "insufficient-data",
+  "status": "healthy",
   "summary": {
-    "totalRuns": 0,
-    "activeWorkflowCount": 0,
-    "overallSuccessRate": 0,
+    "totalRuns": 1,
+    "activeWorkflowCount": 1,
+    "overallSuccessRate": 100,
     "overallFailureRate": 0,
     "overallPausedRate": 0,
     "topWorkflow": {
-      "id": "spec-driver-doc",
-      "title": "开源文档生成",
-      "totalRuns": 0
+      "id": "spec-driver-fix",
+      "title": "快速问题修复",
+      "totalRuns": 1
     }
   },
   "stats": {
-    "logFileCount": 0,
-    "validRunCount": 0,
+    "logFileCount": 1,
+    "validRunCount": 1,
     "invalidLineCount": 0,
     "workflowCount": 7,
     "runsWithPhaseDurations": 0
@@ -59,17 +59,17 @@
       "id": "spec-driver-fix",
       "title": "快速问题修复",
       "persona": "修复者",
-      "totalRuns": 0,
-      "successRuns": 0,
+      "totalRuns": 1,
+      "successRuns": 1,
       "failedRuns": 0,
       "pausedRuns": 0,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 0,
+      "successRate": 100,
       "failureRate": 0,
       "rerunRate": 0,
       "averageDurationMs": null,
-      "lastRunAt": null
+      "lastRunAt": "2026-04-12T14:55:18.423Z"
     },
     {
       "id": "spec-driver-implement",
@@ -143,11 +143,9 @@
     "slowestPhases": []
   },
   "scorecardContext": {
-    "status": "pass",
-    "score": 100,
+    "status": "warn",
+    "score": 90,
     "reportPath": "specs/products/spec-driver/_generated/scorecard-report.json"
   },
-  "warnings": [
-    "未发现可用的 workflow run 事件，adoption 报告仅输出空摘要"
-  ]
+  "warnings": []
 }

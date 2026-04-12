@@ -2,8 +2,8 @@
 
 > **产品**: spectra
 > **发布版本**: v3.0.0
-> **版本**: 聚合自 49 个增量 spec / blueprint（001–010, 024–031, 033–060, 076, 079–080）
-> **最后聚合**: 2026-04-05
+> **版本**: 聚合自 62 个增量 spec / blueprint（001–010, 024–031, 033–060, 076, 079–080, 095, 097, 099–107）
+> **最后聚合**: 2026-04-12
 > **生成方式**: Spec Driver sync 聚合 + 人工校准
 > **状态**: 活跃
 
@@ -30,30 +30,34 @@
 
 ## 1. 产品概述
 
-Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链**。它最初聚焦于 TypeScript/JavaScript 的 Spec 生成与漂移检测，现已演进为覆盖 **多语言代码分析、批量文档化、全景文档生成、交叉引用、覆盖率审计、增量重生成、多源事实接入与文档交付编排** 的产品能力集合。
+Spectra 是一个面向代码与工程制品的 **结构化逆向文档与知识图谱工具链**。它最初聚焦于 TypeScript/JavaScript 的 Spec 生成与漂移检测，现已演进为覆盖 **多语言代码分析、批量文档化、全景文档生成、交叉引用、覆盖率审计、增量重生成、多源事实接入、文档交付编排、知识图谱持久化、社区检测、多格式导出与多模态制品提取** 的产品能力集合。
 
-当前产品定位有两层：
+当前产品定位有四层：
 
-- **逆向规格层**：从源代码、依赖图和配置中生成结构化 spec、差异报告与批量索引
+- **逆向规格层**：从源代码、依赖图和配置中生成结构化 spec、差异报告与批量索引；通过深度代码反求（095）和 AST 直出策略（097）消除核心章节空壳
 - **全景文档层**：基于统一的 `ProjectContext`、Generator/Parser 注册机制和共享中间模型，生成数据模型、配置、API、运行时、架构、事件面、故障排查、模式提示等多种文档
 - **文档系统层**：在技术事实之上继续组织 docs bundle、Architecture IR、component / dynamic、ADR、quality gate 以及产品 / UX 文档
+- **知识图谱层**：基于 `_meta/graph.json` 统一持久化架构关系、文档关系和交叉引用，支持社区检测、God Node 识别、MCP 查询、多格式导出（Obsidian Vault / HTML）、文件监听增量同步、PreToolUse Hook 注入与多模态制品提取
 
 **核心价值**：
 
 - **多语言覆盖**：从 JS/TS 扩展到 Python、Go、Java，并支持混合项目检测与分组处理
 - **文档类型扩展**：从单一模块 spec 扩展到 10+ 类 panoramic 文档
-- **可持续维护**：支持 doc graph、coverage audit、delta regeneration，避免文档生成一次后失管
+- **深度质量提升**：AST 骨架 + LLM 语义桥接消除核心章节空壳，AST 直出接口定义和数据结构表格实现全面超越纯 LLM 的质量
+- **知识图谱能力**：统一 architecture-ir / doc-graph / cross-reference-index 为持久化知识图谱，支持社区检测、架构洞察、MCP 查询与多格式可视化导出
+- **可持续维护**：支持 doc graph、coverage audit、delta regeneration、内容哈希缓存与文件监听增量同步，避免文档生成一次后失管
 - **交付能力增强**：输出 docs bundle、Architecture IR、ADR、quality report 和产品 / UX 文档，文档不再只是散落文件
 - **多入口复用**：CLI、Claude Code Plugin 与 MCP Server 共用同一核心能力
 - **分发结构收敛**：`plugins/spectra/skills/**` 作为 Spectra Skill 的 canonical source，`src/skills-global/**` 与 `skills/**` 转为可再生成镜像
 - **发布合同统一**：package、plugin metadata、README release 行与产品事实层共享同一 release contract，同步路径更短、更可校验
+- **品牌统一**：产品从 reverse-spec 统一重命名为 Spectra（099），npm 包名 `spectra-cli`，CLI bin 入口 `spectra`
 - **诚实降级**：在 LLM、解析器或上游制品不足时保留 AST-only / 目录图 / 占位说明等静默降级路径
 
 **分发方式**：
 
-- **CLI**：`spectra generate|batch|diff|mcp-server|auth-status`
+- **CLI**：`spectra generate|batch|diff|graph|community|watch|cache|install|mcp-server|auth-status`
 - **Plugin**：`plugins/spectra/.claude-plugin/plugin.json`
-- **MCP**：通过 stdio server 暴露生成与批量工具
+- **MCP**：通过 stdio server 暴露生成、批量与 graph query 工具
 
 ---
 
@@ -61,7 +65,7 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 
 ### 产品愿景
 
-让开发者可以把“看代码理解系统”转成“读取持续更新的结构化文档理解系统”，并让文档体系从单点生成演进为覆盖架构、接口、运行时与维护视角的长期事实层。
+让开发者可以把"看代码理解系统"转成"读取持续更新的结构化文档与知识图谱理解系统"，并让文档体系从单点生成演进为覆盖架构、接口、运行时、维护视角、社区结构与跨制品语义关联的长期事实层。
 
 ### 产品级 KPI
 
@@ -69,11 +73,13 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 |------|--------|------|
 | 单模块 Spec 生成可用性 | 一条命令完成结构化文档生成 | 001 |
 | 接口定义准确率 | 100% 来自 AST / 结构提取，零 LLM 捏造签名 | 001 |
+| 核心章节非空率 | Section 2（接口定义）和 Section 3（业务逻辑）100% 包含实质内容 | 095, 097 |
+| 接口定义章节质量 | AST 直出分组表格，质量 >= 纯 LLM | 097 |
 | 批量处理自主性 | 对大型项目支持断点恢复、进度报告与失败降级 | 001, 006, 007 |
 | 多语言首批覆盖 | Python / Go / Java 三种语言首批可用 | 024–031 |
 | 混合项目识别 | 混合项目自动按语言分组并生成索引 | 031 |
-| 全景文档生成器规模 | ≥ 10 类生成器可注册、发现与执行 | 033–050 |
-| 输出格式 | Markdown + JSON + Mermaid `.mmd` | 051 |
+| 全景文档生成器规模 | >= 10 类生成器可注册、发现与执行 | 033–050 |
+| 输出格式 | Markdown + JSON + Mermaid `.mmd` + Obsidian Vault + HTML | 051, 103 |
 | 文档互链能力 | 生成 related spec、稳定 anchor 与 `_doc-graph.json` | 044 |
 | 文档审计能力 | 输出 coverage report，覆盖缺失、断链、低置信度 | 046 |
 | 增量更新能力 | 支持 `--incremental` 仅重生受影响文档 | 049 |
@@ -85,6 +91,15 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 | 产品事实接入 | 输出 product-overview、user-journeys、feature-briefs | 060 |
 | Skill 分发收敛 | Spectra Skill 的 canonical source / mirror / validator 合同收敛 | 079 |
 | 发布合同统一 | package / plugin / marketplace / README / current-spec 通过 release contract 统一同步 | 080 |
+| 内容哈希缓存 | 二次 batch（少量变化）耗时 < 30 秒，缓存命中率 > 90% | 100 |
+| 知识图谱持久化 | 统一 `_meta/graph.json`，置信度标签系统，NetworkX 兼容 | 101 |
+| 社区检测与架构洞察 | 输出 `GRAPH_REPORT.md`，含社区列表、God Node、异常边 | 102 |
+| 多格式导出 | Obsidian Vault（双向链接 + Graph View）+ HTML 交互式可视化 | 103 |
+| PreToolUse Hook | Claude Code 搜索前自动注入架构摘要 | 104 |
+| Post-commit Hook | git commit 后自动触发增量图谱更新 | 104 |
+| MCP Graph Query | 5 个 MCP 工具：query / node / path / community / stats | 105 |
+| 文件监听增量同步 | `spectra watch` 持续监听 + debounce + 增量 batch | 106 |
+| 多模态制品提取 | Markdown/OpenAPI/AsyncAPI/图像→知识图谱节点 | 107 |
 
 ---
 
@@ -95,10 +110,12 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 | 角色 | 描述 | 主要使用场景 |
 |------|------|------------|
 | **接手遗留模块的开发者** | 需要快速理解某个目录或模块 | 运行 `spectra generate <target> --deep` |
-| **大型仓库维护者** | 需要批量生成全项目文档并保持可更新 | 运行 `spectra batch` / `spectra batch --incremental` |
+| **大型仓库维护者** | 需要批量生成全项目文档并保持可更新 | 运行 `spectra batch` / `spectra batch --incremental` / `spectra watch` |
 | **多语言平台工程师** | 管理 Python、Go、Java、TS/JS 混合仓库 | 使用多语言适配器和 mixed-project batch |
 | **架构/文档负责人** | 需要 API、运行时、架构、事件、排障等 panoramic 文档 | 调用 panoramic generators 或 batch 输出 |
 | **集成开发者** | 通过外部 Agent / 工具调用能力 | 使用 CLI 或 MCP Server |
+| **架构分析师** | 需要理解代码库的社区结构与架构热点 | `spectra graph` + `spectra community` + MCP graph query |
+| **知识管理者** | 需要将架构知识导出到 Obsidian 或可视化面板 | `spectra export --format obsidian|html` |
 
 ### 核心使用场景
 
@@ -109,6 +126,10 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 5. **文档维护闭环**：在代码变更后运行 diff、coverage audit、delta regeneration，缩小文档漂移
 6. **文档交付与架构审查**：按受众生成 docs bundle，并输出 Architecture IR、component view、dynamic scenarios 和 ADR
 7. **产品与 UX 文档补全**：基于 `current-spec.md`、README、设计说明和 issue/PR 生成产品概览、用户旅程和 feature brief
+8. **知识图谱构建与分析**：运行 `spectra graph` 构建统一知识图谱，运行 `spectra community` 获取社区检测和架构洞察报告
+9. **持续同步**：通过 `spectra watch` 文件监听或 post-commit hook 保持文档与代码自动同步
+10. **MCP 交互式查询**：通过 Claude Code 的 MCP 工具实时查询节点详情、最短路径和社区统计
+11. **多模态文档扩展**：通过 `--include-docs` 将 Markdown、OpenAPI、图像等工程制品纳入知识图谱
 
 ---
 
@@ -119,11 +140,21 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 - TypeScript / JavaScript / Python / Go / Java 源码分析
 - 基于 `LanguageAdapter`、tree-sitter 与现有 AST 路径的多语言解析
 - 单模块 spec、批量索引、依赖图、漂移检测
+- 深度代码反求：AST 骨架 + LLM 语义桥接，消除接口定义和业务逻辑章节空壳（095）
+- AST 直出接口定义与数据结构表格，混合策略全面超越纯 LLM（097）
 - panoramic 文档：数据模型、配置、workspace、跨包依赖、API、运行时、架构、事件面、故障排查、模式提示
 - 非代码制品解析：Dockerfile、YAML、TOML、`.env`、SKILL.md、behavior YAML
 - Markdown / JSON / Mermaid 输出
 - doc graph、coverage audit、delta regeneration
 - CLI / Plugin / MCP 三种交付入口
+- SHA256 内容哈希缓存：`_meta/_cache-manifest.json`、`spectra cache` CLI 子命令（100）
+- 知识图谱持久化：`_meta/graph.json`、置信度标签、`spectra graph` CLI（101）
+- 社区检测与架构洞察：`spectra community`、`GRAPH_REPORT.md`（102）
+- 多格式导出：Obsidian Vault（双向链接 + frontmatter）、HTML 交互式可视化（103）
+- PreToolUse Hook + Post-commit Hook：`spectra install`（104）
+- MCP Graph Query 工具集：graph_query / graph_node / graph_path / graph_community / graph_stats（105）
+- 文件监听增量同步：`spectra watch`、debounce、SIGINT 优雅退出（106）
+- 多模态制品提取：Markdown 文档、OpenAPI/AsyncAPI 规范、图像图表→知识图谱节点（107）
 
 ### 范围外
 
@@ -151,7 +182,7 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 
 | ID | 功能描述 | 来源 | 状态 |
 |----|----------|------|------|
-| FR-005 | `generate`、`batch`、`diff`、`mcp-server`、`auth-status` 子命令 | 001, 002, 004, 009 | 活跃 |
+| FR-005 | `generate`、`batch`、`diff`、`graph`、`community`、`watch`、`cache`、`install`、`mcp-server`、`auth-status` 子命令 | 001, 002, 004, 009, 100–106 | 活跃 |
 | FR-006 | 模块级 batch：拓扑排序、循环依赖聚合、checkpoint 与进度报告 | 001, 005, 006 | 活跃 |
 | FR-007 | LLM 失败或超时时重试并回退 AST-only | 006, 007 | 活跃 |
 | FR-008 | mixed-project batch 支持按语言分图与合并 | 031 | 活跃 |
@@ -210,7 +241,7 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 |----|----------|------|------|
 | FR-037 | Plugin Marketplace 架构 + MCP stdio server | 009 | 活跃 |
 | FR-038 | CLI 与 Plugin 共用同一套核心分析实现 | 002, 009 | 活跃 |
-| FR-039 | 保持只读：仅向 `specs/`、`drift-logs/` 等产物目录写入 | 001, 010 | 活跃 |
+| FR-039 | 保持只读：仅向 `specs/`、`drift-logs/`、`_meta/` 等产物目录写入 | 001, 010, 101 | 活跃 |
 | FR-040 | 使用相对路径输出，避免泄露本机目录结构 | 008, 010 | 活跃 |
 | FR-041 | 批量输出包含 Markdown、JSON 与 Mermaid 文件族 | 051 | 活跃 |
 | FR-042 | `plugins/spectra/skills/**` 是 Spectra Skill 的 canonical source，`src/skills-global/**` 与 `skills/**` 通过同步脚本维护 compatibility mirrors | 079 | 活跃 |
@@ -227,6 +258,48 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 | FR-048 | quality report 扩展 provenance、required-doc、冲突检测与产品管理类文档校验 | 059 | 活跃 |
 | FR-049 | 产品 / UX 事实接入，输出 `product-overview`、`user-journeys`、`feature-briefs` | 060 | 活跃 |
 
+### FR-GROUP-9: 深度代码反求与质量提升
+
+| ID | 功能描述 | 来源 | 状态 |
+|----|----------|------|------|
+| FR-050 | 深度代码反求：AST 骨架 + LLM 语义桥接，从代码反推规范级文档 | 095 | 活跃 |
+| FR-051 | AST 直出接口定义：按子模块分组的函数/类表格（含参数和行为摘要） | 097 | 活跃 |
+| FR-052 | AST 直出数据结构：提取 `@dataclass`/`TypedDict`/`interface` 字段并生成结构表格 | 097 | 活跃 |
+| FR-053 | 智能目录分类与排除：自动识别测试/配置/生成文件并分类处理 | 095 | 活跃 |
+
+### FR-GROUP-10: 知识图谱与持续同步
+
+| ID | 功能描述 | 来源 | 状态 |
+|----|----------|------|------|
+| FR-054 | SHA256 内容哈希缓存层：`_meta/_cache-manifest.json`、cache-hit 跳过全链路 | 100 | 活跃 |
+| FR-055 | `spectra cache clear/stats` CLI 子命令 | 100 | 活跃 |
+| FR-056 | 统一知识图谱持久化：`graph-builder.ts` 合并 architecture-ir / doc-graph / cross-reference-index 为 `_meta/graph.json` | 101 | 活跃 |
+| FR-057 | 置信度标签系统：`EXTRACTED` / `INFERRED` / `LLM_ENRICHED` 分级标注关系可信度 | 101 | 活跃 |
+| FR-058 | `spectra graph` CLI 命令独立调用图谱构建 | 101 | 活跃 |
+| FR-059 | 社区检测算法（Label Propagation）识别模块聚类 | 102 | 活跃 |
+| FR-060 | God Node 识别：度数远高于均值的节点报告 | 102 | 活跃 |
+| FR-061 | 跨社区异常边发现（Surprising Connections） | 102 | 活跃 |
+| FR-062 | `GRAPH_REPORT.md` 架构洞察报告生成 | 102 | 活跃 |
+| FR-063 | Obsidian Vault 导出：`[[双向链接]]` + frontmatter + 兼容 Graph View | 103 | 活跃 |
+| FR-064 | HTML 交互式可视化导出 | 103 | 活跃 |
+| FR-065 | PreToolUse Hook：Claude Code 调用 Glob/Grep 前注入架构摘要 | 104 | 活跃 |
+| FR-066 | Post-commit Hook：git commit 后自动触发增量图谱更新 | 104 | 活跃 |
+| FR-067 | `spectra install` 统一 hook 管理命令 | 104 | 活跃 |
+| FR-068 | MCP graph_query 工具：自然语言查询知识图谱 | 105 | 活跃 |
+| FR-069 | MCP graph_node / graph_path 工具：精确节点详情与最短路径 | 105 | 活跃 |
+| FR-070 | MCP graph_community / graph_stats 工具：社区详情与全局统计 | 105 | 活跃 |
+| FR-071 | `spectra watch` 文件监听 + debounce + 增量 batch 自动触发 | 106 | 活跃 |
+| FR-072 | SIGINT 优雅退出：等待当前更新完成后退出 | 106 | 活跃 |
+
+### FR-GROUP-11: 多模态制品提取
+
+| ID | 功能描述 | 来源 | 状态 |
+|----|----------|------|------|
+| FR-073 | OpenAPI/AsyncAPI 规范提取：解析为 `api` / `api-schema` / `event` 节点 | 107 | 活跃 |
+| FR-074 | Markdown 文档提取：解析 heading 结构为 `doc-section` 节点，提取交叉引用 | 107 | 活跃 |
+| FR-075 | 图像图表提取：识别架构图/流程图并以 `diagram` 节点纳入知识图谱 | 107 | 活跃 |
+| FR-076 | `--include-docs` 批量标志统一控制多模态制品提取 | 107 | 活跃 |
+
 ---
 
 ## 6. 非功能需求
@@ -235,11 +308,13 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 
 | 需求 | 目标 | 来源 |
 |------|------|------|
-| AST 预处理（500 文件） | ≤ 10 秒 | 001 |
-| 单文件上下文预算 | ≤ 100k token | 001 |
-| 大模块失败耗时 | ≤ 5 分钟（含降级） | 006, 007 |
+| AST 预处理（500 文件） | <= 10 秒 | 001 |
+| 单文件上下文预算 | <= 100k token | 001 |
+| 大模块失败耗时 | <= 5 分钟（含降级） | 006, 007 |
 | 单语言非 TS/JS batch | 返回非空模块集合 | 052 |
 | panoramic 输出 | 支持按 generator 单独执行，避免一次性生成全部文档 | 033–050 |
+| 二次 batch（少量变化） | 耗时 < 30 秒，缓存命中率 > 90% | 100 |
+| 文件监听响应 | 修改后 3 秒静默 + debounce，单次增量 batch | 106 |
 
 ### 可靠性
 
@@ -247,13 +322,18 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 - 解析器或上游制品不足时回退到目录图、占位说明或低置信度标记
 - doc graph 与 coverage report 为后续增量重生成提供可复用事实层
 - 多格式输出保持同一份结构化数据的多视图渲染，减少格式间漂移
+- 缓存 manifest 使用原子写入（write-tmp-then-rename），避免中断损坏
+- `spectra watch` 支持 SIGINT 优雅退出，不留孤儿进程或损坏索引
+- `graph.json` 缺失时 community / graph query 给出友好错误提示，不崩溃
 
 ### 兼容性
 
 - Node.js LTS 20.x+
 - 平台：macOS、Linux，Windows 为尽力支持
 - 语言：TS/JS、Python、Go、Java 为一等支持
-- 输出合同：Markdown、JSON、Mermaid `.mmd`
+- 输出合同：Markdown、JSON、Mermaid `.mmd`、Obsidian Vault `.md`、HTML
+- MCP：通过 stdio server 暴露 graph query 工具集
+- 知识图谱格式：NetworkX 兼容 JSON
 
 ### 可用性
 
@@ -261,6 +341,7 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档工具链
 - CLI 保留阶段进度、错误上下文和报告路径输出
 - panoramic 层优先复用共享模型，避免每类文档重复解析
 - 缺失信息采用 `[推断]`、`low confidence`、`[待补充]` 标记，而非静默捏造
+- `spectra cache stats` 提供缓存命中率和大小统计
 
 ---
 
@@ -293,12 +374,14 @@ cc-plugin-market/
 │   ├── core/                 # AST、context、LLM、tree-sitter
 │   ├── adapters/             # 多语言适配器
 │   ├── graph/                # 依赖图与拓扑排序
-│   ├── batch/                # batch、checkpoint、delta regeneration
+│   ├── batch/                # batch、checkpoint、delta regeneration、cache
 │   ├── diff/                 # structural / semantic diff
 │   ├── panoramic/            # generators、parsers、registries、auditors
+│   ├── knowledge-graph/      # graph-builder、community-analysis、export [推断]
 │   ├── auth/                 # provider / CLI proxy
 │   ├── cli/                  # 命令入口
-│   └── mcp/                  # MCP stdio server
+│   └── mcp/                  # MCP stdio server + graph query tools
+├── _meta/                    # graph.json、_cache-manifest.json、GRAPH_REPORT.md
 ├── templates/
 ├── specs/
 └── tests/
@@ -315,6 +398,8 @@ cc-plugin-market/
           → LLM 语义增强（可选）
             → MultiFormatWriter 渲染 Markdown / JSON / Mermaid
               → coverage / delta / batch 报告
+                → graph-builder 合并为 _meta/graph.json
+                  → community-analysis / export / MCP query
 ```
 
 ### 架构要点
@@ -323,6 +408,10 @@ cc-plugin-market/
 - panoramic 主链路由 `ProjectContext + Registry + Generators + Parsers` 组成
 - `044/046/049` 形成文档维护闭环：图谱 → 审计 → 增量重生
 - `043/045/050` 共享运行时 / 架构中间模型，避免重复建模
+- `100` 在 batch 入口注入缓存检查，命中时跳过全链路
+- `101/102/103/105` 形成知识图谱闭环：持久化 → 分析 → 导出 → 查询
+- `104/106` 形成持续同步闭环：hook / watch → 增量 batch → 图谱更新
+- `107` 扩展图谱数据源从代码到多模态工程制品
 
 ---
 
@@ -330,11 +419,14 @@ cc-plugin-market/
 
 | 原则 | 说明 | 来源 |
 |------|------|------|
-| AST 精确性优先 | 结构性数据必须来自 AST、解析器或显式 schema，而非 LLM 虚构 | 001, 042 |
+| AST 精确性优先 | 结构性数据必须来自 AST、解析器或显式 schema，而非 LLM 虚构 | 001, 042, 097 |
 | Adapter-first | 语言差异通过 `LanguageAdapter` 隔离，不把判断散落在主流程中 | 024, 025 |
 | 共享中间模型 | panoramic 文档优先复用 `ProjectContext`、Runtime Model、DocGraph | 033–050 |
-| 诚实降级 | 信息不足时明确标注或降级，不以“完整”为名编造事实 | 001, 046, 048 |
+| 诚实降级 | 信息不足时明确标注或降级，不以"完整"为名编造事实 | 001, 046, 048 |
 | 只读与可回溯 | 不改源码；输出文档附带来源、锚点、报告或路径以便追踪 | 001, 044, 049 |
+| 置信度分级 | 知识图谱中所有关系标注 `EXTRACTED` / `INFERRED` / `LLM_ENRICHED` | 101 |
+| 缓存透明 | 缓存命中/未命中均有日志输出，用户可通过 `cache stats` 审查 | 100 |
+| hook 可卸载 | 所有 hook 通过 `spectra install` 统一管理，不侵入用户已有 hook | 104 |
 
 ---
 
@@ -350,6 +442,8 @@ cc-plugin-market/
 | 051 | 语义增强 | LLM 补充说明存在时延与额度波动，需保留无 LLM 路径 | 设计约束 |
 | 009 | 分发 | Plugin 自动更新和签名机制仍缺失 | 未解决 |
 | 079 | 分发结构 | compatibility mirrors 仍作为历史兼容目录保留，后续仍需评估是否继续保留 | 设计约束 |
+| 101 | 图谱规模 | 超大型代码库（>10k 文件）的 graph.json 可能过大，尚无分片策略 | 未解决 |
+| 107 | 图像提取 | 图像图表提取依赖 LLM 多模态能力，置信度波动较大 | 设计约束 |
 
 ### 技术债
 
@@ -359,6 +453,7 @@ cc-plugin-market/
 | 043/045 | 运行时模型与真实部署配置可能存在环境漂移 | 中 |
 | 044/046/049 | doc graph owner mapping 规则若过粗，会影响增量命中准确性 | 中 |
 | 051 | 大模块 LLM 语义增强仍需更细的 prompt 体积控制 | 中 |
+| 099 | 品牌重命名后，外部文档、链接中可能仍残留 `reverse-spec` 引用 | 低 |
 
 ---
 
@@ -371,16 +466,19 @@ cc-plugin-market/
 | 目标仓库可通过静态文件与目录结构提取出足够多的工程事实 | 033–050 | 中 |
 | tree-sitter grammar 与查询足以覆盖首批语言的主流代码形态 | 024–031 | 中 |
 | batch 产生的模块划分能为 panoramic 生成提供稳定输入 | 005, 031, 052 | 中 |
-| 上游项目允许把生成文档写入 `specs/` | 001, 010 | 低 |
+| 上游项目允许把生成文档写入 `specs/` 和 `_meta/` | 001, 010, 101 | 低 |
+| graph.json 格式足以覆盖社区检测、MCP 查询和多格式导出的数据需求 | 101, 102, 105 | 中 |
 
 ### 风险矩阵
 
 | 风险 | 概率 | 影响 | 缓解措施 |
 |------|------|------|---------|
-| 大型仓库 LLM 上下文过大 | 中 | 中 | token 预算、降级、增量 regeneration |
+| 大型仓库 LLM 上下文过大 | 中 | 中 | token 预算、降级、增量 regeneration、缓存 |
 | 多语言依赖图误判 | 中 | 中 | 目录图兜底、适配器独立测试、低置信度标记 |
 | panoramic 输出过多导致用户不知道从何读起 | 中 | 低 | workspace index、architecture overview、coverage report 作为入口 |
 | 文档互链漂移 | 低 | 中 | `_doc-graph.json` + `_coverage-report.*` + delta report |
+| graph.json 过大影响 MCP 查询性能 | 中 | 中 | budget 参数限制返回节点数、lazy loading |
+| 文件监听在大型 monorepo 中事件风暴 | 中 | 中 | debounce + 变更文件集合去重 |
 
 ---
 
@@ -392,6 +490,7 @@ cc-plugin-market/
 | 文件级 batch 视角 | 001 初始设计偏文件粒度 | 005: 模块级聚合 | 模块级更适合大型项目理解 |
 | 固定 120 秒 LLM 超时 | 早期统一超时策略 | 007: 模型感知超时 | 避免大模块频繁误杀 |
 | TS/JS 专用主流程 | 001 初始只覆盖 JS/TS | 024–031: 多语言适配链路 | 产品已扩展为多语言 |
+| `reverse-spec` 品牌名 | 产品初始命名 | 099: Spectra | 统一品牌，npm 包名 `spectra-cli` |
 
 ---
 
@@ -445,9 +544,20 @@ cc-plugin-market/
 | 44 | [058-adr-decision-pipeline](../../058-adr-decision-pipeline/spec.md) | FEATURE | 2026-03-20 | 增加 ADR 决策流水线与 docs/adr 草稿索引 |
 | 45 | [059-provenance-quality-gates](../../059-provenance-quality-gates/spec.md) | FEATURE | 2026-03-21 | 增加 provenance、required-doc 与 quality report |
 | 46 | [060-product-ux-fact-ingestion](../../060-product-ux-fact-ingestion/spec.md) | FEATURE | 2026-03-22 | 增加 product-overview、user-journeys 与 feature briefs |
-| 47 | [076-codebase-rationalization-blueprint](../../076-codebase-rationalization-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义代码库结构与可维护性收敛路线，明确 077-081 的结构治理目标 |
-| 48 | [079-reverse-spec-skill-distribution-consolidation](../../079-reverse-spec-skill-distribution-consolidation/spec.md) | FEATURE | 2026-04-05 | 收敛 Spectra Skill 的 canonical source、compatibility mirrors 与分发校验合同 |
-| 49 | [080-doc-version-release-contract-unification](../../080-doc-version-release-contract-unification/spec.md) | FEATURE | 2026-04-05 | 统一 release contract、版本 bump、plugin metadata、README 与产品事实层同步链路 |
+| 47 | [076-codebase-rationalization-blueprint](../../076-codebase-rationalization-blueprint/blueprint.md) | ENHANCEMENT | 2026-04-05 | 定义代码库结构与可维护性收敛路线 |
+| 48 | [079-reverse-spec-skill-distribution-consolidation](../../079-reverse-spec-skill-distribution-consolidation/spec.md) | FEATURE | 2026-04-05 | 收敛 Spectra Skill 的 canonical source 与分发校验合同 |
+| 49 | [080-doc-version-release-contract-unification](../../080-doc-version-release-contract-unification/spec.md) | FEATURE | 2026-04-05 | 统一 release contract 与产品事实层同步链路 |
+| 50 | [095-deep-reverse-spec](../../095-deep-reverse-spec/spec.md) | FEATURE | 2026-04-11 | 深度代码反求增强：AST + LLM 语义桥接消除核心章节空壳 |
+| 51 | [097-spec-quality-parity](../../097-spec-quality-parity/spec.md) | FEATURE | 2026-04-11 | Spec 质量全面超越纯 LLM：AST 直出接口定义和数据结构 |
+| 52 | [099-spectra-rebrand](../../099-spectra-rebrand/spec.md) | FEATURE | 2026-04-12 | 品牌重命名 reverse-spec → Spectra，v3.0.0 |
+| 53 | [100-content-hash-cache](../../100-content-hash-cache/spec.md) | FEATURE | 2026-04-12 | SHA256 内容哈希缓存层 |
+| 54 | [101-graph-persistence](../../101-graph-persistence/spec.md) | FEATURE | 2026-04-12 | 统一知识图谱持久化与置信度标签 |
+| 55 | [102-community-analysis](../../102-community-analysis/spec.md) | FEATURE | 2026-04-12 | 社区检测与架构洞察分析 |
+| 56 | [103-multi-format-export](../../103-multi-format-export/spec.md) | FEATURE | 2026-04-12 | 多格式导出：Obsidian Vault + HTML |
+| 57 | [104-pretooluse-hook](../../104-pretooluse-hook/spec.md) | FEATURE | 2026-04-12 | PreToolUse Hook 注入 + Post-commit Hook |
+| 58 | [105-mcp-graph-query](../../105-mcp-graph-query/spec.md) | FEATURE | 2026-04-12 | MCP Graph Query 工具集 |
+| 59 | [106-watch-incremental](../../106-watch-incremental/spec.md) | FEATURE | 2026-04-12 | 文件监听 + 自动增量同步 |
+| 60 | [107-multi-modal-extraction](../../107-multi-modal-extraction/spec.md) | FEATURE | 2026-04-12 | 多模态工程制品提取 |
 
 ---
 
@@ -465,6 +575,11 @@ cc-plugin-market/
 | **Delta Regeneration** | 基于影响范围只重生成受变更影响文档的 batch 模式 |
 | **Runtime Model** | 从 Dockerfile / Compose / env 抽取出的共享运行时拓扑模型 |
 | **Pattern Hint** | 对潜在架构模式的提示、置信度与证据链说明 |
+| **Knowledge Graph** | `_meta/graph.json` 中的统一知识图谱，合并 architecture-ir / doc-graph / cross-reference-index |
+| **置信度标签** | `EXTRACTED` / `INFERRED` / `LLM_ENRICHED`，标注图谱关系的可信度等级 |
+| **Community** | 知识图谱中通过 Label Propagation 算法识别的模块聚类 |
+| **God Node** | 度数远高于均值的图谱节点，通常是架构热点或潜在的代码 smell |
+| **Cache Manifest** | `_meta/_cache-manifest.json`，记录文件 SHA256 哈希与缓存状态 |
 
 ---
 
@@ -521,24 +636,39 @@ cc-plugin-market/
 | 47 | 076-codebase-rationalization-blueprint | ENHANCEMENT | [specs/076-codebase-rationalization-blueprint/blueprint.md](../../076-codebase-rationalization-blueprint/blueprint.md) |
 | 48 | 079-reverse-spec-skill-distribution-consolidation | FEATURE | [specs/079-reverse-spec-skill-distribution-consolidation/spec.md](../../079-reverse-spec-skill-distribution-consolidation/spec.md) |
 | 49 | 080-doc-version-release-contract-unification | FEATURE | [specs/080-doc-version-release-contract-unification/spec.md](../../080-doc-version-release-contract-unification/spec.md) |
+| 50 | 095-deep-reverse-spec | FEATURE | [specs/095-deep-reverse-spec/spec.md](../../095-deep-reverse-spec/spec.md) |
+| 51 | 097-spec-quality-parity | FEATURE | [specs/097-spec-quality-parity/spec.md](../../097-spec-quality-parity/spec.md) |
+| 52 | 099-spectra-rebrand | FEATURE | [specs/099-spectra-rebrand/spec.md](../../099-spectra-rebrand/spec.md) |
+| 53 | 100-content-hash-cache | FEATURE | [specs/100-content-hash-cache/spec.md](../../100-content-hash-cache/spec.md) |
+| 54 | 101-graph-persistence | FEATURE | [specs/101-graph-persistence/spec.md](../../101-graph-persistence/spec.md) |
+| 55 | 102-community-analysis | FEATURE | [specs/102-community-analysis/spec.md](../../102-community-analysis/spec.md) |
+| 56 | 103-multi-format-export | FEATURE | [specs/103-multi-format-export/spec.md](../../103-multi-format-export/spec.md) |
+| 57 | 104-pretooluse-hook | FEATURE | [specs/104-pretooluse-hook/spec.md](../../104-pretooluse-hook/spec.md) |
+| 58 | 105-mcp-graph-query | FEATURE | [specs/105-mcp-graph-query/spec.md](../../105-mcp-graph-query/spec.md) |
+| 59 | 106-watch-incremental | FEATURE | [specs/106-watch-incremental/spec.md](../../106-watch-incremental/spec.md) |
+| 60 | 107-multi-modal-extraction | FEATURE | [specs/107-multi-modal-extraction/spec.md](../../107-multi-modal-extraction/spec.md) |
 
 ---
 
 ## 对外文档摘要（供 spec-driver-doc 使用）
 
-Spectra 是一个把代码和工程制品逆向为结构化文档系统的工具。它既能从单个模块生成传统 spec，也能在大型、多语言项目中输出 API、架构、运行时、事件面、故障排查、ADR、quality report 与产品 / UX 文档，并进一步组织成可交付的 docs bundle。
+Spectra 是一个把代码和工程制品逆向为结构化文档系统与知识图谱的工具。它既能从单个模块生成传统 spec，也能在大型、多语言项目中输出 API、架构、运行时、事件面、故障排查、ADR、quality report 与产品 / UX 文档，并进一步组织成可交付的 docs bundle。知识图谱层将所有结构化分析持久化为统一的 `graph.json`，支持社区检测、架构洞察、多格式导出和 MCP 实时查询。
 
 **主要价值主张**：
 
-- 用统一事实层替代“靠人读代码拼全貌”
+- 用统一事实层替代"靠人读代码拼全貌"
 - 在多语言、多模块项目中保持可批量、可增量、可回溯
 - 输出 docs bundle、Architecture IR、ADR 和 quality gate，降低文档交付与评审成本
 - 让 `current-spec.md`、README、设计 Markdown 与 issue/PR 进入同一套产品文档链路
+- 知识图谱提供社区结构、God Node 热点和跨模块路径分析能力
+- 通过 `spectra watch` 和 post-commit hook 实现文档与代码的持续自动同步
 - 对外提供 CLI / Plugin / MCP，多入口共用同一套核心能力
 
 **典型工作流**：
 
 1. 先用 `spectra batch` 建立模块 spec、项目级 panoramic 文档和架构叙事
-2. 通过 docs bundle、Architecture IR、component / dynamic、ADR 和 quality report 组织可交付的技术文档系统
-3. 基于 `current-spec.md`、README、设计 Markdown 和 issue/PR 继续生成产品概览、用户旅程与 feature briefs
-4. 用 coverage / delta report 持续维护文档新鲜度
+2. 用 `spectra graph` 构建知识图谱，`spectra community` 获取架构洞察
+3. 通过 docs bundle、Architecture IR、component / dynamic、ADR 和 quality report 组织可交付的技术文档系统
+4. 用 `spectra export --format obsidian` 导出到 Obsidian 进行交互式浏览
+5. 通过 `spectra watch` 或 post-commit hook 持续维护文档新鲜度
+6. Claude Code 通过 MCP graph query 工具实时查询架构关系
