@@ -11,6 +11,7 @@ import type { CLICommand } from '../utils/parse-args.js';
 import { CacheManager } from '../../panoramic/cache/cache-manager.js';
 import { ContentHasherImpl } from '../../panoramic/cache/content-hasher.js';
 import { ManifestManagerImpl } from '../../panoramic/cache/manifest-manager.js';
+import { BATCH_OUTPUT_SUBDIRS } from '../../panoramic/output-filenames.js';
 
 const CACHE_HELP = `spectra cache — 管理内容哈希缓存
 
@@ -23,7 +24,7 @@ const CACHE_HELP = `spectra cache — 管理内容哈希缓存
   clear    清除缓存（全部或指定 generator）
 
 选项:
-  --output-dir   指定输出目录（默认为 <cwd>/specs）
+  --output-dir   指定 batch project 输出目录（默认为 <cwd>/specs/project）
   --generator    指定要清除的 generator ID（仅 clear）`;
 
 /**
@@ -35,7 +36,7 @@ export async function runCacheCommand(command: CLICommand): Promise<void> {
     return;
   }
 
-  const outputDir = command.outputDir ?? path.join(process.cwd(), 'specs');
+  const outputDir = command.outputDir ?? path.join(process.cwd(), 'specs', BATCH_OUTPUT_SUBDIRS.PROJECT);
   const cacheManager = new CacheManager(
     new ContentHasherImpl(),
     new ManifestManagerImpl(),

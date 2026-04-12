@@ -37,6 +37,19 @@ import type { PatternHintsOutput } from './models/pattern-hints-model.js';
 import type { RuntimeTopologyOutput } from './generators/runtime-topology-generator.js';
 import { loadStoredModuleSpecs } from './stored-module-specs.js';
 
+/**
+ * 这些 generator 的 structuredData 被后续 pipeline 阶段在内存中直接消费
+ * （architectureNarrative、component-view、dynamic-scenarios、ADR 等）。
+ * 缓存命中时无法恢复 structuredData，因此跳过缓存，始终全量运行。
+ */
+const CACHE_SKIP_GENERATOR_IDS = new Set([
+  'architecture-overview',
+  'pattern-hints',
+  'architecture-ir',
+  'event-surface',
+  'runtime-topology',
+]);
+
 export interface BatchProjectDocsResult {
   projectContext: ProjectContext;
   generatedDocs: BatchGeneratedDocSummary[];
@@ -99,7 +112,20 @@ export async function generateBatchProjectDocs(
 
   for (const generator of applicableGenerators) {
     try {
-      // 缓存命中检查
+      // upstream generators 跳过缓存：其 structuredData 被后续 pipeline 阶段在内存消费
+      if (CACHE_SKIP_GENERATOR_IDS.has(generator.id)) {
+        const generatedDoc = await runProjectGenerator(generator, projectContext, options.outputDir);
+        generatedDocs.push({
+          generatorId: generatedDoc.generatorId,
+          writtenFiles: generatedDoc.writtenFiles,
+          warnings: generatedDoc.warnings,
+        });
+        structuredOutputs.set(generator.id, generatedDoc.structuredData);
+        await cacheManager.record(generator, projectContext, generatedDoc.writtenFiles);
+        continue;
+      }
+
+      // 缓存命中检查（leaf generators）
       const cacheHit = await cacheManager.check(generator, projectContext);
       if (cacheHit !== false) {
         // 命中：复用已记录的输出路径，跳过 extract → generate → render
@@ -108,7 +134,6 @@ export async function generateBatchProjectDocs(
           writtenFiles: cacheHit.outputFiles,
           warnings: [],
         });
-        structuredOutputs.set(generator.id, undefined);
         continue;
       }
 

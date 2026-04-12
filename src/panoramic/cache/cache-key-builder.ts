@@ -34,7 +34,11 @@ const EXCLUDED_DIRS = new Set([
 const INCLUDED_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx',
   '.json', '.md', '.yaml', '.yml',
+  '.toml', '.lock',
 ]);
+
+/** fallback 扫描时：无扩展名但需要包含的文件名前缀（Dockerfile, .env 等） */
+const INCLUDED_FILENAME_PREFIXES = ['Dockerfile', '.env'];
 
 // ============================================================
 // 辅助函数
@@ -44,7 +48,7 @@ const INCLUDED_EXTENSIONS = new Set([
  * 递归扫描 projectRoot 下所有源文件
  * 排除噪声目录，仅收集指定扩展名，结果排序后返回
  */
-export function scanSourceFiles(root: string): string[] {
+export function scanSourceFiles(root: string, excludePaths: string[] = []): string[] {
   const results: string[] = [];
 
   function walk(dir: string): void {
@@ -59,13 +63,18 @@ export function scanSourceFiles(root: string): string[] {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
 
+      // 跳过明确排除的路径（如 outputDir）
+      if (excludePaths.some((excluded) => fullPath.startsWith(excluded))) {
+        continue;
+      }
+
       if (entry.isDirectory()) {
         if (!EXCLUDED_DIRS.has(entry.name)) {
           walk(fullPath);
         }
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
-        if (INCLUDED_EXTENSIONS.has(ext)) {
+        if (INCLUDED_EXTENSIONS.has(ext) || INCLUDED_FILENAME_PREFIXES.some((prefix) => entry.name.startsWith(prefix))) {
           results.push(fullPath);
         }
       }
@@ -83,6 +92,7 @@ export function scanSourceFiles(root: string): string[] {
 export async function resolveInputFiles(
   generator: DocumentGenerator<unknown, unknown>,
   context: ProjectContext,
+  outputDir?: string,
 ): Promise<string[]> {
   // 优先使用 generator 声明的依赖
   if (typeof generator.getDependencies === 'function') {
@@ -90,8 +100,8 @@ export async function resolveInputFiles(
     return [...deps].sort();
   }
 
-  // fallback: 扫描 projectRoot 下所有源文件
-  return scanSourceFiles(context.projectRoot);
+  // fallback: 扫描 projectRoot 下所有源文件（排除 outputDir 避免自我引用）
+  return scanSourceFiles(context.projectRoot, outputDir ? [outputDir] : []);
 }
 
 /**
@@ -109,9 +119,10 @@ export async function buildGeneratorCacheKey(
   generator: DocumentGenerator<unknown, unknown>,
   context: ProjectContext,
   hasher: ContentHasher,
+  outputDir?: string,
 ): Promise<string> {
   // 解析输入文件列表
-  const inputFiles = await resolveInputFiles(generator, context);
+  const inputFiles = await resolveInputFiles(generator, context, outputDir);
 
   // 计算文件集合的聚合哈希
   const aggregatedFileHash = await hasher.hashFiles(inputFiles);

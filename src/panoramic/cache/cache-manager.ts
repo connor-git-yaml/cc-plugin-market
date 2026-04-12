@@ -21,6 +21,7 @@ export class CacheManager {
   private hasher: ContentHasher;
   private manifestManager: ManifestManager;
   private manifestPath: string = '';
+  private outputDir: string = '';
   /** check() 阶段缓存的 cacheKey，供 record() 复用以避免重复计算 */
   private lastCacheKey: string | null = null;
   private lastInputFiles: string[] | null = null;
@@ -35,6 +36,7 @@ export class CacheManager {
    * @param outputDir panoramic 输出目录
    */
   async initialize(outputDir: string): Promise<void> {
+    this.outputDir = outputDir;
     this.manifestPath = path.join(outputDir, '_meta', '_cache-manifest.json');
     await this.manifestManager.load(this.manifestPath);
   }
@@ -57,8 +59,8 @@ export class CacheManager {
     let cacheKey: string;
     let inputFiles: string[];
     try {
-      cacheKey = await buildGeneratorCacheKey(generator, context, this.hasher);
-      inputFiles = await resolveInputFiles(generator, context);
+      cacheKey = await buildGeneratorCacheKey(generator, context, this.hasher, this.outputDir || undefined);
+      inputFiles = await resolveInputFiles(generator, context, this.outputDir || undefined);
     } catch {
       // cache key 计算失败（如依赖文件已删除），判定 stale
       this.lastCacheKey = null;
@@ -119,8 +121,8 @@ export class CacheManager {
     outputFiles: string[],
   ): Promise<void> {
     // 优先复用 check() 阶段缓存的 cacheKey/inputFiles，避免重复计算
-    const cacheKey = this.lastCacheKey ?? await buildGeneratorCacheKey(generator, context, this.hasher);
-    const inputFiles = this.lastInputFiles ?? await resolveInputFiles(generator, context);
+    const cacheKey = this.lastCacheKey ?? await buildGeneratorCacheKey(generator, context, this.hasher, this.outputDir || undefined);
+    const inputFiles = this.lastInputFiles ?? await resolveInputFiles(generator, context, this.outputDir || undefined);
     // 用完后清空，避免跨 generator 误用
     this.lastCacheKey = null;
     this.lastInputFiles = null;
