@@ -34,6 +34,11 @@ export const sectionConfigs = [
     sourcePath: resolve(rootDir, 'docs/shared/agent-behavior-rules.md'),
     targets: ['AGENTS.md', 'CLAUDE.md'],
   },
+  {
+    key: 'code-quality',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-code-quality.md'),
+    targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {
