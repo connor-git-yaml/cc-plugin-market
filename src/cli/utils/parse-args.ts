@@ -56,6 +56,10 @@ export interface CLICommand {
   installGit?: boolean;
   /** install 子命令：是否切换为卸载模式 */
   installRemove?: boolean;
+  /** 启用 Markdown 文档 + API 规范提取（仅 batch 子命令）— Feature 107 */
+  includeDocs?: boolean;
+  /** 启用图像/图表 Vision 提取（仅 batch 子命令）— Feature 107 */
+  includeImages?: boolean;
 }
 
 /** 解析错误 */
@@ -548,6 +552,12 @@ export function parseArgs(argv: string[]): ParseResult {
     if (languagesIdx !== -1) explicitFlags.add('languages');
     if (outputDirIdx !== -1) explicitFlags.add('outputDir');
 
+    // Feature 107：多模态提取标志
+    const includeDocs = argv.includes('--include-docs');
+    const includeImages = argv.includes('--include-images');
+    if (includeDocs) explicitFlags.add('includeDocs');
+    if (includeImages) explicitFlags.add('includeImages');
+
     return {
       ok: true,
       command: {
@@ -564,6 +574,8 @@ export function parseArgs(argv: string[]): ParseResult {
         remove: false,
         skillTarget: defaultSkillTarget(),
         _explicitFlags: explicitFlags,
+        includeDocs: includeDocs || undefined,
+        includeImages: includeImages || undefined,
       },
     };
   }

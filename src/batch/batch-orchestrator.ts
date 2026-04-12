@@ -68,6 +68,10 @@ export interface BatchOptions {
   languages?: string[];
   /** 进度报告输出模式（默认根据 process.stdout.isTTY 自动检测） */
   progressMode?: ProgressMode;
+  /** 启用 Markdown 文档 + OpenAPI/AsyncAPI 规范提取（--include-docs），默认 false — Feature 107 */
+  includeDocs?: boolean;
+  /** 启用图像/图表 Vision 提取（--include-images），默认 false — Feature 107 */
+  includeImages?: boolean;
 }
 
 export interface BatchResult {
@@ -613,10 +617,28 @@ export async function runBatch(
             ? [...spec.crossReferenceIndex.sameModule, ...spec.crossReferenceIndex.crossModule]
             : [],
         );
+
+      // Feature 107: 多模态提取管道（--include-docs / --include-images）
+      let extractionResults: import('../extraction/index.js').ExtractionResult[] | undefined;
+      if (options.includeDocs || options.includeImages) {
+        try {
+          const { runExtractionPipeline } = await import('../extraction/index.js');
+          extractionResults = await runExtractionPipeline({
+            projectRoot: resolvedRoot,
+            outputDir: resolvedOutputDir,
+            includeDocs: options.includeDocs ?? false,
+            includeImages: options.includeImages ?? false,
+          });
+        } catch (extractErr) {
+          logger.warn(`多模态提取失败，跳过: ${String(extractErr)}`);
+        }
+      }
+
       const graphJson = buildKnowledgeGraph({
         architectureIR: projectDocsResult?.architectureIR,
         docGraph,
         crossReferenceLinks,
+        extractionResults,  // Feature 107 第四路数据源
       });
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
       docGraphPath = toProjectPath(graphWrittenPath);

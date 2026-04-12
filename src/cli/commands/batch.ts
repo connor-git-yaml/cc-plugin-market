@@ -42,6 +42,9 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       incremental: merged.incremental,
       languages: merged.languages,
       outputDir: merged.outputDir,
+      // Feature 107：多模态提取标志（不纳入配置文件合并，仅从 CLI 传入）
+      includeDocs: command.includeDocs,
+      includeImages: command.includeImages,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 

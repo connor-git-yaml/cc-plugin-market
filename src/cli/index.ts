@@ -39,7 +39,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 用法:
   spectra generate <target> [--deep] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--force] [--incremental] [--languages <lang,...>] [--output-dir <dir>]
+  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--output-dir <dir>]
   spectra diff <spec-file> <source> [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
@@ -84,6 +84,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --force        强制重新生成所有 Spec（仅 batch）
   --incremental  仅重生成受影响的 Spec（仅 batch）
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
+  --include-docs 启用 Markdown 文档和 OpenAPI/AsyncAPI 规范提取（仅 batch）
+  --include-images 启用图像/图表 Vision 提取（仅 batch）
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --generator    指定 generator ID（仅 cache clear）

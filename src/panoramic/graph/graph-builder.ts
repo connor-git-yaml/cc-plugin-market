@@ -74,8 +74,8 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
   const edgeMap = new Map<string, GraphEdge>();
   // 被跳过的数据源记录
   const skippedSources: Array<{ source: string; reason: string }> = [];
-  // 使用的数据源列表
-  const sources: ('architecture-ir' | 'doc-graph' | 'cross-reference')[] = [];
+  // 使用的数据源列表（Feature 107 扩展：支持 'extraction' 数据源）
+  const sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction')[] = [];
 
   // --------------------------------------------------------
   // 步骤 1：处理 DocGraph（先插入，优先级低）
@@ -242,6 +242,63 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
     }
   } else {
     skippedSources.push({ source: 'cross-reference', reason: '未提供 CrossReferenceLinks 数据源或为空数组' });
+  }
+
+  // --------------------------------------------------------
+  // 步骤 3.5：处理 ExtractionResults（Feature 107 第四路数据源）
+  // last-write-wins：提取节点可覆盖前序数据源同 ID 节点
+  // 悬空边（source/target 不存在）在步骤 4 统一过滤
+  // --------------------------------------------------------
+  if (options.extractionResults && options.extractionResults.length > 0) {
+    try {
+      sources.push('extraction');
+      for (const result of options.extractionResults) {
+        for (const node of result.nodes) {
+          const graphNode: GraphNode = {
+            id: node.id,
+            kind: node.kind as GraphNode['kind'],
+            label: node.label,
+            metadata: {
+              ...node.metadata,
+              sourceTag: 'extraction',
+              sourceFile: node.source_file,
+              confidence: node.confidence,
+            },
+          };
+          // last-write-wins：提取节点覆盖同 ID 的前序节点，但合并 metadata
+          const existingNode = nodeMap.get(node.id);
+          if (existingNode) {
+            graphNode.metadata = { ...existingNode.metadata, ...graphNode.metadata };
+          }
+          nodeMap.set(node.id, graphNode);
+        }
+
+        for (const edge of result.edges) {
+          const confidenceScore = CONFIDENCE_SCORES[edge.confidence] ?? 0.5;
+          const graphEdge: GraphEdge = {
+            source: edge.source,
+            target: edge.target,
+            relation: edge.relation,
+            confidence: edge.confidence,
+            confidenceScore,
+          };
+          const key = directed
+            ? directedEdgeKey(graphEdge.source, graphEdge.target, graphEdge.relation)
+            : undirectedEdgeKey(graphEdge.source, graphEdge.target, graphEdge.relation);
+          const existing = edgeMap.get(key);
+          if (!existing || confidenceScore > existing.confidenceScore) {
+            edgeMap.set(key, graphEdge);
+          }
+        }
+      }
+    } catch (err) {
+      skippedSources.push({
+        source: 'extraction',
+        reason: `处理 ExtractionResults 时发生错误: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  } else {
+    skippedSources.push({ source: 'extraction', reason: '未提供 extractionResults 或为空数组' });
   }
 
   // --------------------------------------------------------

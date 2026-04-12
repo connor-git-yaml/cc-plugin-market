@@ -3,6 +3,7 @@
  * 定义 GraphNode、GraphEdge、GraphJSON、ConfidenceLevel 等图谱数据模型
  * 遵循 NetworkX node-link 格式，供下游 Feature 102/105/107 消费
  */
+import type { ExtractionResult } from '../../extraction/extraction-types.js';
 
 // ============================================================
 // 置信度类型
@@ -27,8 +28,9 @@ export type ConfidenceLevel = 'EXTRACTED' | 'INFERRED' | 'AMBIGUOUS';
 export interface GraphNode {
   /** 节点唯一标识符，通常为文件路径或元素 ID */
   id: string;
-  /** 节点类型：模块 / 包 / 组件 / Spec 文档 / 通用文档 */
-  kind: 'module' | 'package' | 'component' | 'spec' | 'document';
+  /** 节点类型：模块 / 包 / 组件 / Spec 文档 / 通用文档 / API / API Schema / 事件 / 图表（Feature 107 扩展） */
+  kind: 'module' | 'package' | 'component' | 'spec' | 'document'
+      | 'api' | 'api-schema' | 'event' | 'diagram';
   /** 显示标签，人类可读名称 */
   label: string;
   /** 附加元数据（来源标记、technology 等扩展信息） */
@@ -75,8 +77,8 @@ export interface GraphJSON {
     nodeCount: number;
     /** 边总数 */
     edgeCount: number;
-    /** 图构建使用的数据源列表 */
-    sources: ('architecture-ir' | 'doc-graph' | 'cross-reference')[];
+    /** 图构建使用的数据源列表（Feature 107 扩展：新增 'extraction' 数据源） */
+    sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction')[];
     /** 被跳过的数据源及原因（容错标注） */
     skippedSources?: Array<{
       source: string;
@@ -115,4 +117,6 @@ export interface BuildGraphOptions {
   crossReferenceLinks?: any[];
   /** 是否生成有向图，默认 false */
   directed?: boolean;
+  /** 多模态提取结果（可选，缺失或为空数组时跳过第四路合并）— Feature 107 */
+  extractionResults?: ExtractionResult[];
 }
