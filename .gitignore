@@ -43,3 +43,6 @@ specs/.reverse-spec-checkpoint.json
 .specify/templates/
 .agents
 .agents/
+
+# Worktree 本地态（由 sync-worktree-local-state.sh 管理，绝对路径符号链接，机器相关）
+_reference
