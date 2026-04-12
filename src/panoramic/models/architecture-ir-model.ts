@@ -4,6 +4,7 @@
  * Feature 056 将现有 panoramic 架构事实统一为一份中间表示，
  * 供 JSON / Structurizr DSL / Mermaid 互通导出复用。
  */
+import type { ConfidenceLevel } from '../graph/graph-types.js';
 
 export type ArchitectureIRSourceTag =
   | 'architecture-overview'
@@ -58,6 +59,10 @@ export interface ArchitectureIRRelationship {
   tags: string[];
   sourceTags: ArchitectureIRSourceTag[];
   evidence: ArchitectureIREvidence[];
+  /** 图谱持久化置信度标签（可选，旧数据缺失时为 undefined） */
+  confidence?: ConfidenceLevel;
+  /** 置信度数值分数，范围 [0.0, 1.0]（可选） */
+  confidenceScore?: number;
   metadata: Record<string, unknown>;
 }
 

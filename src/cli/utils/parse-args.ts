@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -40,6 +40,10 @@ export interface CLICommand {
   watchDebounce?: number;
   /** watch 详细日志模式（仅 watch 子命令） */
   watchVerbose?: boolean;
+  /** graph 命令操作类型 */
+  graphOperation?: 'build';
+  /** 是否生成有向图（仅 graph 命令） */
+  directed?: boolean;
 }
 
 /** 解析错误 */
@@ -209,6 +213,34 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // graph 子命令
+  if (sub === 'graph') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'graph',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const outputDirIdx = argv.indexOf('--output-dir');
+    const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+    const directed = argv.includes('--directed');
+    return {
+      ok: true,
+      command: {
+        subcommand: 'graph',
+        graphOperation: 'build',
+        directed,
+        outputDir,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // init 子命令
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
@@ -326,7 +358,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph') {
     return {
       ok: false,
       error: {

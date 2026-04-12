@@ -43,6 +43,7 @@ import {
 import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
+import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
 
 // ============================================================
 // 类型定义
@@ -601,6 +602,26 @@ export async function runBatch(
         .sort((a, b) => a.localeCompare(b));
     } catch (err) {
       logger.warn(`项目级 panoramic 文档生成失败: ${String(err)}`);
+    }
+
+    // Feature 101: 知识图谱持久化（graph-persistence）
+    // 注入位置：generateBatchProjectDocs 之后，可获取 architectureIR
+    try {
+      const crossReferenceLinks = collectedModuleSpecs
+        .flatMap((spec) =>
+          spec.crossReferenceIndex
+            ? [...spec.crossReferenceIndex.sameModule, ...spec.crossReferenceIndex.crossModule]
+            : [],
+        );
+      const graphJson = buildKnowledgeGraph({
+        architectureIR: projectDocsResult?.architectureIR,
+        docGraph,
+        crossReferenceLinks,
+      });
+      const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
+      docGraphPath = toProjectPath(graphWrittenPath);
+    } catch (graphErr) {
+      logger.warn(`graph-persistence: 图构建失败，跳过 graph.json 生成: ${graphErr instanceof Error ? graphErr.message : String(graphErr)}`);
     }
 
     try {

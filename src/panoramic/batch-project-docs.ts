@@ -55,6 +55,8 @@ export interface BatchProjectDocsResult {
   generatedDocs: BatchGeneratedDocSummary[];
   architectureNarrative: ArchitectureNarrativeOutput;
   qualityInputs: BatchDocsQualityInputs;
+  /** Feature 101: 供 graph-persistence 消费的 Architecture IR（可选） */
+  architectureIR?: ArchitectureIROutput['ir'];
 }
 
 interface GeneratedProjectDocResult extends BatchGeneratedDocSummary {
@@ -313,6 +315,7 @@ export async function generateBatchProjectDocs(
     projectContext,
     generatedDocs,
     architectureNarrative,
+    architectureIR: architectureIR?.ir,
     qualityInputs: {
       projectRoot: options.projectRoot,
       outputDir: options.outputDir,
