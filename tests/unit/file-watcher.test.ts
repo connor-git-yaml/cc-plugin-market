@@ -299,3 +299,49 @@ describe('startFsWatch 路径过滤：路径分段匹配边界', () => {
     expect(shouldIgnorePath('/project/src/app.ts')).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FileWatcher 降级路径测试（FR-005）
+// ---------------------------------------------------------------------------
+
+describe('FileWatcher 降级路径', () => {
+  it('chokidar 导入失败时降级到 fs.watch 并打印警告', async () => {
+    const fsModule = await import('node:fs');
+    const pathModule = await import('node:path');
+    const tmpDirModule = await import('node:os');
+    const tmpDir = fsModule.mkdtempSync(pathModule.join(tmpDirModule.tmpdir(), 'fallback-test-'));
+
+    // 捕获 console.warn 输出
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+
+    try {
+      // 通过 vi.mock 不可行（模块已缓存），改用动态 mock：
+      // 构造一个 FileWatcher 实例后，覆盖私有 startChokidar 方法使其抛异常
+      const { FileWatcher } = await import('../../src/watcher/file-watcher.js');
+      const watcher = new FileWatcher(
+        { projectRoot: tmpDir, debounceMs: 300 },
+        () => { /* noop */ },
+      );
+
+      // 覆盖 startChokidar 使其抛出异常，触发降级
+      const fw = watcher as unknown as { startChokidar(): Promise<void> };
+      fw.startChokidar = async () => {
+        throw new Error('chokidar not available');
+      };
+
+      await watcher.start();
+
+      // 验证降级警告被打印
+      expect(warnings.some((w) => w.includes('降级'))).toBe(true);
+
+      await watcher.stop();
+    } finally {
+      console.warn = originalWarn;
+      fsModule.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});

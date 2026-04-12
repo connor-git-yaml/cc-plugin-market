@@ -102,7 +102,10 @@ export function authorize(value: string): string {
     });
 
     expect(result.failed).toHaveLength(0);
-    expect(result.docGraphPath).toBeUndefined();
+    // Feature 101 引入 graph-persistence 后 docGraphPath 会被填充
+    if (result.docGraphPath) {
+      expect(fs.existsSync(path.join(projectRoot, result.docGraphPath))).toBe(true);
+    }
 
     const apiSpecContent = fs.readFileSync(path.join(projectRoot, 'specs', 'modules', 'api.spec.md'), 'utf-8');
     expect(apiSpecContent).toContain('## 相关 Spec');

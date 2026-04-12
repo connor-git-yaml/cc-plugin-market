@@ -4,6 +4,7 @@
  */
 
 import { resolve } from 'node:path';
+import { execSync } from 'node:child_process';
 import { runBatch } from '../../batch/batch-orchestrator.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
@@ -25,6 +26,24 @@ let pendingShutdown = false;
 // ---------------------------------------------------------------------------
 // 辅助函数
 // ---------------------------------------------------------------------------
+
+/**
+ * 检测是否有外部 batch 进程正在运行（FR-010）
+ * 宁可漏检也不崩溃——异常时返回 false
+ */
+export function isExternalBatchRunning(): boolean {
+  try {
+    const output = execSync('pgrep -f "spectra batch"', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    // 排除空输出（pgrep 无匹配时抛异常，但某些平台可能返回空字符串）
+    return output.trim().length > 0;
+  } catch {
+    // pgrep 返回非 0 表示无匹配进程
+    return false;
+  }
+}
 
 /**
  * 注册 SIGINT / SIGTERM 信号处理器（FR-003）
@@ -100,6 +119,12 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
   // onChange 回调：debounce 到期后触发
   const handleChange = async (events: FileChangeEvent[]): Promise<void> => {
     printChangedFiles(events);
+
+    // FR-010：外部 batch 进程检测
+    if (isExternalBatchRunning()) {
+      console.log('[watch] 检测到外部 spectra batch 正在运行，跳过本次触发');
+      return;
+    }
 
     // FR-011：进程内串行保护
     if (isRunning) {
