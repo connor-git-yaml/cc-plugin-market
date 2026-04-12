@@ -17,7 +17,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 
 | Plugin | Type | Description |
 | ------ | ---- | ----------- |
-| **[Spectra](#spectra)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
+| **[Spectra](#spectra)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline; builds a persistent knowledge graph, detects architecture communities, and exports to Obsidian Vault or HTML interactive visualization |
 | **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 15 specialized sub-agent prompts, 8 execution modes, orchestration.yaml config, and 6 quality gates |
 
 ```text
@@ -28,12 +28,14 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 │  │      Spectra           │     │        Spec Driver           │  │
 │  │  (Reverse Engineer)   │     │  (Forward Orchestrator)      │  │
 │  │                       │     │                              │  │
-│  │  Code → AST → Spec    │     │  Idea → Spec → Plan → Code  │  │
+│  │  Code → Spec + Graph  │     │  Idea → Spec → Plan → Code  │  │
 │  │                       │     │                              │  │
 │  │  • generate / batch   │     │  • feature / story / fix     │  │
 │  │  • diff / prepare     │     │  • implement / resume        │  │
-│  │  • MCP server         │     │  • sync / doc / refactor     │  │
-│  │  • CLI + Skills       │     │  • orchestration.yaml        │  │
+│  │  • graph / community  │     │  • sync / doc / refactor     │  │
+│  │  • export / watch     │     │  • orchestration.yaml        │  │
+│  │  • MCP server         │     │                              │  │
+│  │  • CLI + Skills       │     │                              │  │
 │  └──────────────────────┘     └──────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -166,19 +168,26 @@ Notes:
 <!-- spec-driver:section:spectra -->
 ## Spectra
 
-A hybrid AST + LLM pipeline that reverse-engineers legacy source code into structured, nine-section Spec documents. TypeScript/JavaScript projects benefit from AST-enhanced precise analysis, while other languages are supported via LLM-only fallback mode.
+A hybrid AST + LLM pipeline that reverse-engineers source code into structured Spec documents and builds a persistent knowledge graph of architecture relationships. It supports single-module spec generation, full-project batch processing, multi-language projects (TS/JS/Python/Go/Java), panoramic documentation (API, architecture, runtime, event surface, ADR), and multi-format export — including Obsidian Vault with bidirectional links and HTML interactive visualization.
 
 ### Features
 
 - **Single Module Spec Generation** (`generate`) — Complete nine-section spec documents; TS/JS interface definitions 100% AST-extracted
-- **Batch Project Processing** (`batch`) — Dependency-topology-ordered generation with checkpoint recovery and architecture index
+- **Batch Project Processing** (`batch`) — Dependency-topology-ordered generation with checkpoint recovery and architecture index; supports `--incremental` to only regenerate affected modules
 - **Spec Drift Detection** (`diff`) — AST structural diff + LLM semantic evaluation, three severity levels, automatic noise filtering
 - **AST Preprocessing** (`prepare`) — AST analysis + context assembly without LLM calls, no auth required
-- **MCP Server** — Model Context Protocol server for IDE integration
+- **Knowledge Graph** (`graph`) — Builds a unified `_meta/graph.json` merging architecture-ir, doc-graph, and cross-reference-index; confidence labels, NetworkX compatible
+- **Community Detection** (`community`) — Louvain community detection on the knowledge graph; outputs `GRAPH_REPORT.md` with community list, God Node hotspots, and anomalous edges
+- **Multi-Format Export** (`export`) — Obsidian Vault (bidirectional `[[links]]` + frontmatter + Graph View compatible) and HTML interactive visualization
+- **File Watch Incremental Sync** (`watch`) — Monitors source files and incrementally rebuilds specs and graph on change; debounced, graceful SIGINT exit
+- **Content Hash Cache** (`cache`) — SHA256 content hashing for sub-30s re-batch on small changes; cache hit rate >90% on typical incremental runs
+- **MCP Graph Query Tools** — 5 tools exposed over stdio MCP server: `graph_query` (natural language), `graph_node`, `graph_path`, `graph_community`, `graph_stats`
+- **Panoramic Documentation** — 10+ generator types: API surface, runtime, architecture IR, event surface, fault analysis, ADR, quality report, product/UX docs, docs bundle
+- **PreToolUse & Post-commit Hooks** (`install`) — Injects architecture summary before Claude Code searches; triggers incremental graph update on git commit
 - **Dual Authentication** — API Key direct connection and Claude CLI subscription proxy, auto-detected
 - **Hybrid Pipeline** — Three-phase engine (preprocessing → context assembly → generation); raw source code never directly sent to LLM
 - **Honest Uncertainty Labeling** — Inferred content marked `[inferred]`, ambiguous code marked `[unclear]`
-- **Read-Only Safety** — All commands strictly read-only; writes limited to `specs/` and `drift-logs/`
+- **Read-Only Safety** — All commands strictly read-only; writes limited to `specs/`, `_meta/`, and `drift-logs/`
 
 ### Getting Started
 
@@ -230,7 +239,106 @@ spectra init [--global] [--target claude|codex|both]
 
 # Remove installed skills
 spectra init --remove [--target claude|codex|both]
+
+# Build persistent knowledge graph (_meta/graph.json)
+spectra graph
+
+# Community detection — outputs GRAPH_REPORT.md
+spectra community
+
+# Export to Obsidian Vault (bidirectional links + frontmatter + Graph View compatible)
+spectra export --format obsidian --output obsidian-vault/
+
+# Export to HTML interactive visualization
+spectra export --format html --output docs/graph.html
+
+# Watch for file changes and incrementally sync specs and graph
+spectra watch
+
+# Cache management
+spectra cache --list
+spectra cache --clear
 ```
+
+### Knowledge Graph & Visualization
+
+Spectra builds a unified knowledge graph (`_meta/graph.json`) from all generated docs and architecture analysis. This graph powers community detection, architecture insights, multi-format export, and MCP real-time queries.
+
+#### Step 1 — Build the Graph
+
+Run after `spectra batch` to merge architecture-ir, doc-graph, and cross-reference-index:
+
+```bash
+spectra batch          # generate or refresh all module specs first
+spectra graph          # builds _meta/graph.json
+```
+
+#### Step 2 — Community Detection & Architecture Insights
+
+```bash
+spectra community
+```
+
+Outputs `_meta/GRAPH_REPORT.md` containing:
+- Detected communities (logical subsystems found by Louvain algorithm)
+- God Node hotspots (over-coupled modules)
+- Anomalous edges (unexpected cross-boundary dependencies)
+- Architecture health summary
+
+#### Step 3 — Export to Obsidian Vault
+
+```bash
+spectra export --format obsidian --output obsidian-vault/
+```
+
+Each spec becomes an Obsidian note with:
+- `[[bidirectional links]]` to related modules
+- YAML frontmatter (module, language, spec version, community label)
+- Graph View compatible — open the vault in Obsidian and use **Graph View** to visually navigate architecture relationships
+
+Open the exported vault in Obsidian:
+1. **File → Open Vault…** → select the `obsidian-vault/` directory
+2. Open **Graph View** (Ctrl/Cmd+G) to explore module relationships interactively
+3. Use the community labels in the frontmatter to filter by subsystem
+
+#### Step 4 — HTML Interactive Visualization
+
+```bash
+spectra export --format html --output docs/graph.html
+```
+
+Generates a self-contained HTML file with a D3-force interactive graph:
+- Pan, zoom, and click nodes for module details
+- Color-coded by community
+- No server required — open directly in a browser or host on any static site
+
+#### Continuous Sync
+
+Keep docs and graph fresh automatically:
+
+```bash
+# Watch mode — debounced incremental rebuild on file change
+spectra watch
+
+# Or install post-commit hook (triggers after every git commit)
+spectra install
+```
+
+#### MCP Graph Query (Claude Code)
+
+With `spectra mcp-server` running, Claude Code can query the knowledge graph directly:
+
+| Tool | Usage |
+|------|-------|
+| `graph_query` | Natural language query: "which modules depend on auth?" |
+| `graph_node` | Exact node details by module path |
+| `graph_path` | Shortest dependency path between two modules |
+| `graph_community` | All members and metrics for a detected community |
+| `graph_stats` | Global graph statistics (node count, edge count, density) |
+
+These tools are invoked automatically by Claude Code when `spectra install` hooks are active, injecting architecture context before code searches.
+
+---
 
 ### Claude Code Skills
 
@@ -265,6 +373,12 @@ LLM Prompt
     │   ├── API Key → @anthropic-ai/sdk
     │   └── CLI proxy → spawn claude
 ModuleSpec → specs/*.spec.md
+    ↓  [graph-builder]                    ← Phase 4: Knowledge Graph
+_meta/graph.json  (architecture-ir + doc-graph + cross-reference-index)
+    ├── spectra community  → _meta/GRAPH_REPORT.md
+    ├── spectra export --format obsidian  → obsidian-vault/  (Graph View)
+    ├── spectra export --format html      → graph.html  (D3-force interactive)
+    └── MCP graph_query / graph_node / graph_path / graph_community / graph_stats
 ```
 <!-- spec-driver:section:spectra:end -->
 
