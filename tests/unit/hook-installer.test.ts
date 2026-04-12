@@ -66,7 +66,12 @@ describe('hook-installer', () => {
       const script = generateContextScript();
       expect(script).toContain('spectra: Knowledge graph loaded');
       expect(script).toContain('God nodes:');
-      expect(script).toContain('→ Read specs/project/graph-report.md');
+      expect(script).toContain('→ Read _meta/GRAPH_REPORT.md');
+    });
+
+    it('不使用 grep -P（macOS 不兼容的 GNU 扩展）', () => {
+      const script = generateContextScript();
+      expect(script).not.toContain('grep -oP');
     });
   });
 
@@ -152,6 +157,25 @@ describe('hook-installer', () => {
       const stat = fs.statSync(scriptPath);
       // 0o755 = 493
       expect(stat.mode & 0o111).toBeGreaterThan(0);
+    });
+
+    it('PreToolUse 为非数组值时安全降级为空数组并正常安装', () => {
+      const claudeDir = path.join(tmpDir, '.claude');
+      fs.mkdirSync(claudeDir, { recursive: true });
+      // 模拟 PreToolUse 被手工写成字符串
+      const corrupted = { hooks: { PreToolUse: 'not-an-array' } };
+      fs.writeFileSync(
+        path.join(claudeDir, 'settings.json'),
+        JSON.stringify(corrupted, null, 2),
+        'utf-8',
+      );
+
+      installClaudeHook(tmpDir);
+
+      const settings = readSettings(tmpDir);
+      expect(Array.isArray(settings.hooks?.PreToolUse)).toBe(true);
+      expect(settings.hooks?.PreToolUse).toHaveLength(1);
+      expect(settings.hooks?.PreToolUse?.[0]?.command).toContain('spectra-context.sh');
     });
 
     it('写入前创建 .bak 备份', () => {

@@ -12,6 +12,7 @@ import {
   installGitHook,
   removeGitHook,
   generatePostCommitSegment,
+  resolveHookPath,
 } from '../../src/hooks/git-hook-installer.js';
 
 /** 创建含真实 .git/hooks/ 结构的临时目录 */
@@ -173,6 +174,69 @@ describe('git-hook-installer', () => {
       // 原内容未改变
       const content = readPostCommit(tmpDir);
       expect(content).toContain('echo "no spectra"');
+    });
+  });
+
+  // ─── resolveHookPath + worktree 支持测试 ─────────────────────────────────
+
+  describe('resolveHookPath()', () => {
+    it('普通仓库：.git 是目录时返回 .git/hooks/post-commit', () => {
+      tmpDir = makeTempGitRepo();
+      const result = resolveHookPath(tmpDir);
+      expect(result).toBe(path.join(tmpDir, '.git', 'hooks', 'post-commit'));
+    });
+
+    it('.git 不存在时抛出错误', () => {
+      tmpDir = makeTempDir();
+      expect(() => resolveHookPath(tmpDir)).toThrow('.git directory not found');
+    });
+
+    it('worktree：.git 是文件时解析 gitdir 并返回正确的 hook 路径', () => {
+      tmpDir = makeTempDir();
+
+      // 模拟 worktree 的 .git 文件结构：
+      // tmpDir/.git → 文件，内容: "gitdir: /some/path/.git/worktrees/my-worktree"
+      // 对应的 hooks 目录: /some/path/.git/worktrees/my-worktree/hooks/
+      const fakeGitDir = path.join(tmpDir, 'actual-git-dir', 'worktrees', 'wt-1');
+      fs.mkdirSync(fakeGitDir, { recursive: true });
+
+      // 写入 .git 文件（模拟 worktree）
+      fs.writeFileSync(path.join(tmpDir, '.git'), `gitdir: ${fakeGitDir}\n`, 'utf-8');
+
+      const result = resolveHookPath(tmpDir);
+      expect(result).toBe(path.join(fakeGitDir, 'hooks', 'post-commit'));
+    });
+
+    it('worktree：.git 文件格式错误时抛出可识别错误', () => {
+      tmpDir = makeTempDir();
+      fs.writeFileSync(path.join(tmpDir, '.git'), 'invalid content\n', 'utf-8');
+
+      expect(() => resolveHookPath(tmpDir)).toThrow('Cannot parse .git file');
+    });
+  });
+
+  describe('worktree 场景下 installGitHook / removeGitHook', () => {
+    it('worktree 场景下安装和卸载 hook 正确写入 gitdir 指向的 hooks 目录', () => {
+      tmpDir = makeTempDir();
+
+      // 构造模拟 worktree 结构
+      const fakeGitDir = path.join(tmpDir, 'actual-git-dir', 'worktrees', 'wt-1');
+      fs.mkdirSync(fakeGitDir, { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, '.git'), `gitdir: ${fakeGitDir}\n`, 'utf-8');
+
+      // 安装
+      installGitHook(tmpDir);
+
+      // 验证 hook 写入了正确位置
+      const hookPath = path.join(fakeGitDir, 'hooks', 'post-commit');
+      expect(fs.existsSync(hookPath)).toBe(true);
+      const content = fs.readFileSync(hookPath, 'utf-8');
+      expect(content).toContain('# --- spectra begin ---');
+
+      // 卸载
+      removeGitHook(tmpDir);
+      const updated = fs.readFileSync(hookPath, 'utf-8');
+      expect(updated).not.toContain('# --- spectra begin ---');
     });
   });
 });

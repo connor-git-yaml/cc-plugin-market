@@ -3,8 +3,8 @@
  * 在 .git/hooks/post-commit 中追加/删除 spectra 标记段落
  */
 
-import { existsSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, chmodSync, statSync, mkdirSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
 
 /** spectra 段落开始标记 */
 const SEGMENT_BEGIN = '# --- spectra begin ---';
@@ -30,26 +30,60 @@ if [ "$_spectra_has_code" -gt 0 ]; then
 fi
 
 if [ "$_spectra_has_docs" -gt 0 ]; then
-  echo "[spectra] Docs changed. Run 'spectra batch --update' to refresh."
+  echo "[spectra] Docs changed. Run 'spectra graph' to refresh the knowledge graph."
 fi
 ${SEGMENT_END}
 `;
 }
 
 /**
- * 安装 git post-commit hook 段落
- * - 幂等：段落已存在时打印提示并返回
- * - 若 post-commit 不存在则创建并写入 #!/bin/sh 头部
+ * 解析 post-commit hook 文件的真实路径
+ * - 普通仓库：.git 是目录 → .git/hooks/post-commit
+ * - worktree：.git 是文件（含 "gitdir: <path>"） → 解析 gitdir 并定位 hooks/post-commit
  * @param projectRoot - 项目根目录绝对路径
- * @throws 当 .git/ 目录不存在时（FR-013）
+ * @throws 当 .git 不存在或格式不可识别时
  */
-export function installGitHook(projectRoot: string): void {
-  const gitDir = join(projectRoot, '.git');
-  if (!existsSync(gitDir)) {
+export function resolveHookPath(projectRoot: string): string {
+  const gitPath = join(projectRoot, '.git');
+
+  let stat;
+  try {
+    stat = statSync(gitPath);
+  } catch {
     throw new Error('[spectra] .git directory not found. Is this a git repository?');
   }
 
-  const hookPath = join(gitDir, 'hooks', 'post-commit');
+  if (stat.isDirectory()) {
+    return join(gitPath, 'hooks', 'post-commit');
+  }
+
+  if (stat.isFile()) {
+    // git worktree：.git 是包含 "gitdir: <path>" 的文件
+    const content = readFileSync(gitPath, 'utf-8').trim();
+    const match = /^gitdir:\s*(.+)$/.exec(content);
+    if (!match) {
+      throw new Error('[spectra] Cannot parse .git file. Is this a valid git worktree?');
+    }
+    const gitDir = resolve(dirname(gitPath), match[1]!);
+    return join(gitDir, 'hooks', 'post-commit');
+  }
+
+  throw new Error('[spectra] .git directory not found. Is this a git repository?');
+}
+
+/**
+ * 安装 git post-commit hook 段落
+ * - 幂等：段落已存在时打印提示并返回
+ * - 若 post-commit 不存在则创建并写入 #!/bin/sh 头部
+ * - 支持普通仓库和 git worktree
+ * @param projectRoot - 项目根目录绝对路径
+ * @throws 当 .git 不存在时（FR-013）
+ */
+export function installGitHook(projectRoot: string): void {
+  const hookPath = resolveHookPath(projectRoot);
+
+  // 确保 hooks 目录存在（worktree 场景下可能不存在）
+  mkdirSync(dirname(hookPath), { recursive: true });
 
   // 若 post-commit 不存在，创建含 #!/bin/sh 头部的文件
   let existing = '';
@@ -84,7 +118,13 @@ export function installGitHook(projectRoot: string): void {
  * @param projectRoot - 项目根目录绝对路径
  */
 export function removeGitHook(projectRoot: string): void {
-  const hookPath = join(projectRoot, '.git', 'hooks', 'post-commit');
+  let hookPath: string;
+  try {
+    hookPath = resolveHookPath(projectRoot);
+  } catch {
+    // .git 不存在 → 无需卸载
+    return;
+  }
 
   if (!existsSync(hookPath)) {
     return;

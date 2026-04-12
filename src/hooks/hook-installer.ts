@@ -54,10 +54,16 @@ NODE_COUNT=$(node -e "
   } catch(e) { process.exit(0); }
 ")
 
-# 从 GRAPH_REPORT.md grep 提取社区数，fallback 为 N/A
+# 从 GRAPH_REPORT.md 提取社区数（使用 node 解析，兼容 macOS）
 COMMUNITY_COUNT="N/A"
 if [ -f "$REPORT_FILE" ]; then
-  COMMUNITY_COUNT=$(grep -oP '(?<=\\| 社区 \\| )\\d+' "$REPORT_FILE" 2>/dev/null | head -1 || echo "N/A")
+  COMMUNITY_COUNT=$(node -e "
+    try {
+      const t = require('fs').readFileSync('$REPORT_FILE','utf8');
+      const m = t.match(/\\| 社区 \\| (\\d+)/);
+      console.log(m ? m[1] : 'N/A');
+    } catch(e) { console.log('N/A'); }
+  " 2>/dev/null || echo "N/A")
 fi
 
 # 读取 God Nodes（按 degree 排序取前 5）
@@ -76,7 +82,7 @@ GOD_NODES=$(node -e "
 
 echo "spectra: Knowledge graph loaded (\$NODE_COUNT nodes · \$COMMUNITY_COUNT communities)"
 echo "God nodes: \$GOD_NODES"
-echo "→ Read specs/project/graph-report.md before searching raw files."
+echo "→ Read _meta/GRAPH_REPORT.md for the full knowledge graph report."
 
 exit 0
 `;
@@ -107,8 +113,9 @@ export function installClaudeHook(projectRoot: string): void {
     }
   }
 
-  // 幂等判定：检查是否已安装
-  const existingHooks = settings.hooks?.PreToolUse ?? [];
+  // 幂等判定：检查是否已安装（防御 PreToolUse 被写成非数组）
+  const rawHooks = settings.hooks?.PreToolUse;
+  const existingHooks: HookConfig[] = Array.isArray(rawHooks) ? rawHooks : [];
   const alreadyInstalled = existingHooks.some(h => h.command.includes(HOOK_COMMAND_MARKER));
   if (alreadyInstalled) {
     console.log('[spectra] hook already installed, skipping.');
@@ -164,7 +171,8 @@ export function removeClaudeHook(projectRoot: string): void {
     throw new Error('[spectra] settings.json 格式错误，请手动修复后重试。');
   }
 
-  const existingHooks = settings.hooks?.PreToolUse ?? [];
+  const rawHooks = settings.hooks?.PreToolUse;
+  const existingHooks: HookConfig[] = Array.isArray(rawHooks) ? rawHooks : [];
   const spectraHook = existingHooks.find(h => h.command.includes(HOOK_COMMAND_MARKER));
   if (!spectraHook) {
     console.log('[spectra] hook not found, nothing to remove.');
