@@ -212,4 +212,41 @@ describe('parseArgs', () => {
       expect(result.command.watchVerbose).toBe(true);
     }
   });
+
+  // ────────────────────────────────────────────────────────────
+  // Task 8：--debounce 边界用例
+  // ────────────────────────────────────────────────────────────
+  it('watch --debounce 无值时报错（invalid_option）', () => {
+    const result = parseArgs(['watch', '--debounce']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('--debounce');
+    }
+  });
+
+  it('watch --debounce 值为另一个 flag 时报错（invalid_option）', () => {
+    const result = parseArgs(['watch', '--debounce', '--verbose']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+      expect(result.error.message).toContain('--debounce');
+    }
+  });
+
+  it('watch --debounce 负数值报错', () => {
+    const result = parseArgs(['watch', '--debounce', '-5']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+    }
+  });
+
+  it('watch --debounce 零值报错', () => {
+    const result = parseArgs(['watch', '--debounce', '0']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.type).toBe('invalid_option');
+    }
+  });
 });

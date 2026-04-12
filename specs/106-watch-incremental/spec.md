@@ -111,13 +111,13 @@
 
 ### 与现有增量机制的整合
 
-- **FR-007**: 系统 MUST 在 watch 触发的增量更新中复用现有的 `batch --incremental` 增量判定路径，不引入新的增量语义或独立的"脏文件"跟踪机制。 `[必须]`
+- **FR-007**: 系统 MUST 在 watch 触发的增量更新中复用现有的 `batch --incremental` 增量判定路径，不引入新的增量语义或独立的"脏文件"跟踪机制。包括配置加载阶段（`loadProjectConfig/mergeConfig`），将 `outputDir` 和 `languages` 透传给 `runBatch`，与 `spectra batch` 的行为保持一致。 `[必须]`
 - **FR-008**: 系统 MUST 在 watch 触发更新时，在控制台日志中输出本轮触发源（变更文件列表），增量判定仍由现有 DeltaRegenerator 全权负责，watch 不干预其决策过程。 `[必须]`
 - **FR-009**: 系统 MUST 在增量生成失败时保留模块的"待更新"状态，确保下次触发或手动 `batch --incremental` 仍会重新处理。 `[必须]`
 
 ### 并发保护
 
-- **FR-010**: 系统 MUST 在 watch 触发更新前检测是否有其他 batch 进程正在运行，若有则跳过本次触发并打印提示。 `[必须]`
+- **FR-010**: 系统通过进程内 `isRunning` 串行标志实现并发保护：当前轮次更新未完成时，新的文件变更先被记录，等当前任务结束后再触发下一轮（FR-011）。不使用 lock file（跨平台风险高，且与架构决策冲突；已在 spec Clarifications #3 中明确排除）。用户应避免同时运行 `spectra watch` 和 `spectra batch`，两者共享同一 checkpoint 文件；启动时会打印提示信息。 `[必须]`
 - **FR-011**: 系统 MUST 在 watch 进程内部串行执行更新任务——当前一轮更新未完成时，新的文件变更先被记录，等当前任务结束后再触发下一轮。 `[必须]`
 
 ### 性能约束

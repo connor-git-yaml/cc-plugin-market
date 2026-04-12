@@ -193,10 +193,26 @@ export function parseArgs(argv: string[]): ParseResult {
     const debounceIdx = argv.indexOf('--debounce');
     const debounceRaw = debounceIdx !== -1 ? argv[debounceIdx + 1] : undefined;
     let watchDebounce: number | undefined;
-    if (debounceRaw !== undefined) {
+    if (debounceIdx !== -1) {
+      // 未提供值，或值为另一个 flag
+      if (debounceRaw === undefined || debounceRaw.startsWith('-')) {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--debounce 需要正整数值（秒），未提供有效值`,
+          },
+        };
+      }
       const parsed = parseInt(debounceRaw, 10);
       if (isNaN(parsed) || parsed <= 0) {
-        return { ok: false, error: { type: 'invalid_option', message: `--debounce 必须为正整数，收到: ${debounceRaw}` } };
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--debounce 必须为正整数，收到: ${debounceRaw}`,
+          },
+        };
       }
       watchDebounce = parsed;
     }

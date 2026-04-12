@@ -6,6 +6,7 @@
 import { resolve } from 'node:path';
 import { runBatch } from '../../batch/batch-orchestrator.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
 import { FileWatcher, CATEGORY_LABEL } from '../../watcher/index.js';
 import type { FileChangeEvent } from '../../watcher/index.js';
 import type { CLICommand } from '../utils/parse-args.js';
@@ -80,6 +81,10 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
     : 3000;
   const verbose = command.watchVerbose ?? false;
 
+  // 加载项目级配置（与 batch.ts 模式一致）
+  const fileConfig = loadProjectConfig(projectRoot);
+  const merged = mergeConfig({}, fileConfig, new Set());
+
   console.log(`[watch] 正在启动文件监听...`);
   console.log(`[watch] 项目根目录: ${projectRoot}`);
   console.log(`[watch] Debounce 时长: ${debounceMs / 1000} 秒`);
@@ -108,7 +113,7 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
     // 启动 batch 执行循环
     isRunning = true;
     try {
-      await executeBatchLoop(projectRoot, verbose);
+      await executeBatchLoop(projectRoot, verbose, merged.outputDir, merged.languages);
     } finally {
       isRunning = false;
       if (pendingShutdown) {
@@ -132,6 +137,8 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
     // 启动监听（FR-001）
     await watcher.start();
 
+    // 提示用户避免并发运行 batch（WONTFIX 缓解措施）
+    console.log('[watch] 注意：请勿同时运行 spectra batch，两者会竞争同一 checkpoint 文件');
     // FR-013：启动完成后打印"已就绪"消息
     console.log('[watch] 已就绪，监听文件变更中... (Ctrl+C 停止)');
   } catch (err) {
@@ -143,15 +150,15 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
  * 执行 batch 并在 pendingNextRound 非空时继续下一轮
  * 失败时不清空等待状态（FR-009）
  */
-async function executeBatchLoop(projectRoot: string, verbose: boolean): Promise<void> {
+async function executeBatchLoop(projectRoot: string, verbose: boolean, outputDir?: string, languages?: string[]): Promise<void> {
   // 循环执行直到没有待处理变更
   while (true) {
     const batchStartTime = Date.now();
     console.log('[watch] 触发增量更新...');
 
     try {
-      // FR-007：复用 runBatch({ incremental: true })
-      const result = await runBatch(projectRoot, { incremental: true });
+      // FR-007：复用 runBatch({ incremental: true })，透传配置文件的 outputDir/languages
+      const result = await runBatch(projectRoot, { incremental: true, outputDir, languages });
       const elapsed = ((Date.now() - batchStartTime) / 1000).toFixed(1);
       console.log(
         `[watch] 增量更新完成（${elapsed}s）：` +

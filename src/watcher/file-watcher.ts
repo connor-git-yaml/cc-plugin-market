@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync, watch as fsWatch } from 'node:fs';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, normalize, sep } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -211,10 +211,24 @@ export class FileWatcher {
     this.watcher.on('change', (filePath: string) => this.handleRawChange(filePath));
     this.watcher.on('unlink', (filePath: string) => this.handleRawChange(filePath));
 
+    // Task 2：挂载 error 事件处理器，防止未捕获异常导致进程 crash
+    this.watcher.on('error', (err: unknown) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[watch] 文件监听器错误: ${errMsg}`);
+      if (this.verbose) {
+        console.error(err);
+      }
+    });
+
     if (this.verbose) {
       console.log(`[watch] chokidar 启动，监听目录: ${this.projectRoot}`);
       console.log(`[watch] 忽略规则: ${this.ignoredPatterns.join(', ')}`);
     }
+
+    // Task 3：等待 chokidar 完成初始目录扫描后再 resolve，保证 ready 后才打印"已就绪"
+    await new Promise<void>((resolve) => {
+      this.watcher.once('ready', resolve);
+    });
   }
 
   /**
@@ -230,9 +244,13 @@ export class FileWatcher {
         if (!filename) return;
         const fullPath = resolve(this.projectRoot, filename);
         // 简单过滤：检查路径是否包含忽略规则中的路径片段
-        const shouldIgnore = this.ignoredPatterns.some((pattern) =>
-          fullPath.includes(`/${pattern}/`) || fullPath.includes(`/${pattern}`) || fullPath.endsWith(`/${pattern}`),
-        );
+        const normalizedFull = normalize(fullPath);
+        const pathParts = normalizedFull.split(sep);
+        const shouldIgnore = this.ignoredPatterns.some((pattern) => {
+          // 去除尾部路径分隔符，取基础名称做路径分段匹配，避免 false-positive
+          const patternBase = pattern.replace(/[/\\]+$/, '');
+          return pathParts.includes(patternBase);
+        });
         if (shouldIgnore) return;
         this.handleRawChange(fullPath);
       },

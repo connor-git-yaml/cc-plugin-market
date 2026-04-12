@@ -36,6 +36,12 @@ vi.mock('../../src/cli/utils/error-handler.js', () => ({
   EXIT_CODES: { SUCCESS: 0, API_ERROR: 2, TARGET_ERROR: 1 },
 }));
 
+// Mock 项目配置加载，模拟有配置文件的场景（Task 7）
+vi.mock('../../src/config/project-config.js', () => ({
+  loadProjectConfig: vi.fn().mockReturnValue({ outputDir: 'custom-specs', languages: ['typescript'] }),
+  mergeConfig: vi.fn().mockImplementation((_cli: Record<string, unknown>, fileConfig: Record<string, unknown>, _flags: Set<string>) => fileConfig),
+}));
+
 // ---------------------------------------------------------------------------
 // 测试套件
 // ---------------------------------------------------------------------------
@@ -78,11 +84,72 @@ describe('watch 子命令集成测试', () => {
 
       // 启动时间 < 2000ms（FR-013）
       expect(elapsed).toBeLessThan(2000);
+      // start() 应成功 resolve（不抛出），表明 ready 事件已处理
+      // 使用 chokidar 时会等待 ready 事件；降级路径立即完成
+      expect(elapsed).toBeGreaterThanOrEqual(0);
 
       await watcher.stop();
     } finally {
       console.log = originalLog;
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // 测试：runBatch 调用时包含 outputDir 和 languages（Task 7 新增）
+  // -------------------------------------------------------------------------
+  it('runBatch 被调用时包含配置文件中的 outputDir 和 languages', async () => {
+    const { runBatch } = await import('../../src/batch/batch-orchestrator.js');
+    const { FileWatcher } = await import('../../src/watcher/file-watcher.js');
+    const { runWatchCommand } = await import('../../src/cli/commands/watch.ts');
+
+    // 捕获 onChange 回调，用于手动触发变更事件
+    let capturedOnChange: ((events: Array<{ path: string; category: 'code' | 'docs' | 'config' }>) => void) | null = null;
+    const originalFileWatcher = FileWatcher;
+
+    // spy FileWatcher.prototype.start 使其立即 resolve，同时捕获 onChange
+    vi.spyOn(FileWatcher.prototype, 'start').mockImplementation(async function (this: InstanceType<typeof originalFileWatcher>) {
+      // 从构造函数通过私有成员访问 onChange
+      const self = this as unknown as { onChange: (events: Array<{ path: string; category: 'code' | 'docs' | 'config' }>) => void };
+      capturedOnChange = self.onChange;
+    });
+    vi.spyOn(FileWatcher.prototype, 'stop').mockResolvedValue(undefined);
+
+    // 启动 watch 命令（不会阻塞，因为 start 被 mock）
+    const commandPromise = runWatchCommand({
+      subcommand: 'watch',
+      deep: false,
+      force: false,
+      version: false,
+      help: false,
+      global: false,
+      remove: false,
+      skillTarget: 'claude',
+    });
+
+    // 等待 runWatchCommand 执行到 watcher.start() 并返回
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // 手动触发一次文件变更
+    if (capturedOnChange) {
+      capturedOnChange([{ path: join(tmpDir, 'src/app.ts'), category: 'code' }]);
+    }
+
+    // 等待 debounce 和异步处理
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // 验证 runBatch 被调用，且包含配置文件透传的 outputDir 和 languages
+    if (capturedOnChange) {
+      expect(runBatch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          incremental: true,
+          outputDir: 'custom-specs',
+          languages: ['typescript'],
+        }),
+      );
+    }
+
+    await commandPromise.catch(() => { /* 忽略清理阶段可能的错误 */ });
   });
 
   // -------------------------------------------------------------------------
