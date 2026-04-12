@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const lifecycleName = process.argv[2];
 
 if (!lifecycleName) {
-  console.error('reverse-spec: missing lifecycle script name');
+  console.error('spectra: missing lifecycle script name');
   process.exit(1);
 }
 
@@ -15,7 +15,7 @@ const targetScript = resolve(__dirname, '..', 'dist', 'scripts', `${lifecycleNam
 
 if (!existsSync(targetScript)) {
   console.log(
-    `reverse-spec: skip ${lifecycleName}, build output not found at dist/scripts/${lifecycleName}.js`,
+    `spectra: skip ${lifecycleName}, build output not found at dist/scripts/${lifecycleName}.js`,
   );
   process.exit(0);
 }

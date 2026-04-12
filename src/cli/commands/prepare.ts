@@ -33,7 +33,7 @@ export async function runPrepare(command: CLICommand, version: string): Promise<
   }
 
   // 进度信息 → stderr（不污染 stdout）
-  console.error(`reverse-spec prepare v${version}`);
+  console.error(`spectra prepare v${version}`);
   console.error(`正在分析 ${target} ...`);
 
   if (!validateTargetPath(targetPath)) {

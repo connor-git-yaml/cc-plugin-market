@@ -1,8 +1,8 @@
 /**
- * reverse-spec Skill 模板分发合同
+ * spectra Skill 模板分发合同
  *
  * canonical source:
- *   plugins/reverse-spec/skills/<skill>/SKILL.md
+ *   plugins/spectra/skills/<skill>/SKILL.md
  *
  * compatibility mirrors:
  *   src/skills-global/<skill>/SKILL.md
@@ -17,10 +17,10 @@ import type {
   SkillTargetPlatform,
 } from './skill-installer.js';
 
-const REVERSE_SPEC_SKILL_NAMES = [
-  'reverse-spec',
-  'reverse-spec-batch',
-  'reverse-spec-diff',
+const SPECTRA_SKILL_NAMES = [
+  'spectra',
+  'spectra-batch',
+  'spectra-diff',
 ] as const;
 
 function resolveRepoRoot(): string {
@@ -32,7 +32,7 @@ function resolveCanonicalSkillPath(skillName: string): string {
   return path.join(
     resolveRepoRoot(),
     'plugins',
-    'reverse-spec',
+    'spectra',
     'skills',
     skillName,
     'SKILL.md',
@@ -48,14 +48,14 @@ function loadCanonicalSkillDefinition(skillName: string): SkillDefinition {
 }
 
 export const SKILL_DEFINITIONS: readonly SkillDefinition[] =
-  REVERSE_SPEC_SKILL_NAMES.map((skillName) =>
+  SPECTRA_SKILL_NAMES.map((skillName) =>
     loadCanonicalSkillDefinition(skillName),
   );
 
 /**
  * 获取指定平台的 Skill 定义集合
- * 当前保持 reverse-spec 与 spec-driver 的安装边界隔离：
- * - reverse-spec init 仅安装 reverse-spec 三件套
+ * 当前保持 spectra 与 spec-driver 的安装边界隔离：
+ * - spectra init 仅安装 spectra 三件套
  */
 export function getSkillDefinitionsForPlatform(
   _platform: SkillTargetPlatform,

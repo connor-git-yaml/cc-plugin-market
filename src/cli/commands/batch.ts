@@ -13,7 +13,7 @@ import type { CLICommand } from '../utils/parse-args.js';
  * 执行 batch 子命令
  */
 export async function runBatchCommand(command: CLICommand, version: string): Promise<void> {
-  console.log(`reverse-spec v${version} — 批量生成`);
+  console.log(`spectra v${version} — 批量生成`);
 
   if (!checkAuth()) {
     process.exitCode = EXIT_CODES.API_ERROR;

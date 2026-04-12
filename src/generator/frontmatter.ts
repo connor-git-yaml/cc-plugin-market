@@ -45,7 +45,7 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
   const frontmatter: SpecFrontmatter = {
     type: 'module-spec',
     version: incrementVersion(data.existingVersion),
-    generatedBy: 'reverse-spec v2.0',
+    generatedBy: 'spectra v3.0',
     sourceTarget: data.sourceTarget,
     relatedFiles: data.relatedFiles,
     lastUpdated: new Date().toISOString(),

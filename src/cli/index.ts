@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * reverse-spec CLI 入口点
+ * spectra CLI 入口点
  * 全局命令调度器
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './utils/parse-args.js';
 import { printError } from './utils/error-handler.js';
@@ -28,18 +28,18 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
 const version = pkg.version;
 
 // 帮助文本
-const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${version}
+const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 
 用法:
-  reverse-spec generate <target> [--deep] [--output-dir <dir>]
-  reverse-spec prepare <target> [--deep]
-  reverse-spec batch [--force] [--incremental] [--languages <lang,...>] [--output-dir <dir>]
-  reverse-spec diff <spec-file> <source> [--output-dir <dir>]
-  reverse-spec init [--global] [--remove] [--target <claude|codex|both>]
-  reverse-spec auth-status [--verify]
-  reverse-spec panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
-  reverse-spec mcp-server
-  reverse-spec --version / --help
+  spectra generate <target> [--deep] [--output-dir <dir>]
+  spectra prepare <target> [--deep]
+  spectra batch [--force] [--incremental] [--languages <lang,...>] [--output-dir <dir>]
+  spectra diff <spec-file> <source> [--output-dir <dir>]
+  spectra init [--global] [--remove] [--target <claude|codex|both>]
+  spectra auth-status [--verify]
+  spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
+  spectra mcp-server
+  spectra --version / --help
 
 子命令:
   generate      对指定文件或目录生成 Spec（需要认证）
@@ -73,6 +73,13 @@ const HELP_TEXT = `reverse-spec — 代码逆向工程 Spec 生成工具 v${vers
   --help, -h     显示帮助信息`;
 
 async function main(): Promise<void> {
+  // deprecation 检测：旧命令名发出迁移警告
+  const binName = basename(process.argv[1] ?? '').replace(/\.js$/, '');
+  if (binName === 'reverse-spec') {
+    console.error('[DEPRECATED] \'reverse-spec\' is deprecated. Please use \'spectra\' instead.');
+    console.error('This alias will be removed in the next major release.\n');
+  }
+
   // 注册所有语言适配器（在命令调度前执行）
   bootstrapAdapters();
   // 注册所有文档生成器
@@ -93,7 +100,7 @@ async function main(): Promise<void> {
   const { command } = result;
 
   if (command.version) {
-    console.log(`reverse-spec v${version}`);
+    console.log(`spectra v${version}`);
     return;
   }
 

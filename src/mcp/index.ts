@@ -14,9 +14,9 @@ export async function startMcpServer(): Promise<void> {
   const server = createMcpServer();
   const transport = new StdioServerTransport();
 
-  console.error('[reverse-spec MCP] 启动 stdio server...');
+  console.error('[spectra MCP] 启动 stdio server...');
 
   await server.connect(transport);
 
-  console.error('[reverse-spec MCP] server 已连接，等待请求...');
+  console.error('[spectra MCP] server 已连接，等待请求...');
 }

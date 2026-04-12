@@ -791,7 +791,7 @@ function mergeIndexSpecs(
       frontmatter: {
         type: 'module-spec',
         version: storedSpec.version ?? 'v1',
-        generatedBy: 'reverse-spec v2.0',
+        generatedBy: 'spectra v3.0',
         sourceTarget: storedSpec.sourceTarget,
         relatedFiles: storedSpec.relatedFiles,
         lastUpdated: new Date().toISOString(),

@@ -8,7 +8,7 @@
  * - 统计 root/leaf 包和总依赖边数
  *
  * 实现 DocumentGenerator<CrossPackageInput, CrossPackageOutput> 接口。
- * 通过 GeneratorRegistry 注册后可被 `reverse-spec batch` 自动发现和调用。
+ * 通过 GeneratorRegistry 注册后可被 `spectra batch` 自动发现和调用。
  *
  * 技术决策：
  * - 复用 WorkspaceIndexGenerator.extract() 获取子包列表（最大复用、最小新增）

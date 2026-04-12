@@ -55,12 +55,12 @@ describe('Skill 注册器', () => {
     installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     expect(existsSync(skillsTargetDir)).toBe(true);
-    expect(existsSync(join(skillsTargetDir, 'reverse-spec', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(skillsTargetDir, 'spectra', 'SKILL.md'))).toBe(true);
   });
 
   it('单个 skill 失败不中断其他', () => {
-    // 将 reverse-spec-batch 目录创建为一个阻止写入的结构
-    const batchDir = join(skillsTargetDir, 'reverse-spec-batch');
+    // 将 spectra-batch 目录创建为一个阻止写入的结构
+    const batchDir = join(skillsTargetDir, 'spectra-batch');
     mkdirSync(batchDir, { recursive: true });
     mkdirSync(join(batchDir, 'SKILL.md'), { recursive: true }); // 创建为目录而非文件
 
@@ -70,22 +70,22 @@ describe('Skill 注册器', () => {
       platform: 'claude',
     });
 
-    // reverse-spec 和 reverse-spec-diff 应成功
-    const rsResult = summary.results.find((r) => r.skillName === 'reverse-spec');
+    // spectra 和 spectra-diff 应成功
+    const rsResult = summary.results.find((r) => r.skillName === 'spectra');
     expect(rsResult?.status).toBe('installed');
 
-    const diffResult = summary.results.find((r) => r.skillName === 'reverse-spec-diff');
+    const diffResult = summary.results.find((r) => r.skillName === 'spectra-diff');
     expect(diffResult?.status).toBe('installed');
 
-    // reverse-spec-batch 应失败
-    const batchResult = summary.results.find((r) => r.skillName === 'reverse-spec-batch');
+    // spectra-batch 应失败
+    const batchResult = summary.results.find((r) => r.skillName === 'spectra-batch');
     expect(batchResult?.status).toBe('failed');
   });
 
   it('卸载时清理 3 个 skill 目录', () => {
     // 先注册
     installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
-    expect(existsSync(join(skillsTargetDir, 'reverse-spec'))).toBe(true);
+    expect(existsSync(join(skillsTargetDir, 'spectra'))).toBe(true);
 
     // 然后卸载
     const summary = removeSkills({
@@ -104,7 +104,7 @@ describe('Skill 注册器', () => {
   });
 
   it('卸载时其他 skill 不受影响', () => {
-    // 注册 reverse-spec skills
+    // 注册 spectra skills
     installSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     // 创建一个"其他" skill
@@ -112,7 +112,7 @@ describe('Skill 注册器', () => {
     mkdirSync(otherSkillDir, { recursive: true });
     writeFileSync(join(otherSkillDir, 'SKILL.md'), '# Other skill');
 
-    // 卸载 reverse-spec skills
+    // 卸载 spectra skills
     removeSkills({ targetDir: skillsTargetDir, mode: 'global', platform: 'claude' });
 
     // 其他 skill 仍然存在

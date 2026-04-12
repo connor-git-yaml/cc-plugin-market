@@ -6,10 +6,10 @@
 import type { CLICommand } from '../utils/parse-args.js';
 import { queryPanoramic } from '../../panoramic/query.js';
 
-const PANORAMIC_HELP = `reverse-spec panoramic — panoramic 架构分析
+const PANORAMIC_HELP = `spectra panoramic — panoramic 架构分析
 
 用法:
-  reverse-spec panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
+  spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
 
 子操作:
   cross-package    分析 monorepo 子包间的依赖关系，检测循环依赖，输出拓扑排序

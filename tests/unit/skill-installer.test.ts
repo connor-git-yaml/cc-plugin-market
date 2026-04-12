@@ -36,12 +36,12 @@ describe('skill-installer', () => {
   });
 
   describe('installSkills', () => {
-    it('Skill 定义直接来自 reverse-spec canonical source', () => {
+    it('Skill 定义直接来自 spectra canonical source', () => {
       for (const skill of SKILL_DEFINITIONS) {
         const canonicalPath = join(
           process.cwd(),
           'plugins',
-          'reverse-spec',
+          'spectra',
           'skills',
           skill.name,
           'SKILL.md',
@@ -91,7 +91,7 @@ describe('skill-installer', () => {
 
       expect(existsSync(targetDir)).toBe(true);
       expect(
-        existsSync(join(targetDir, 'reverse-spec', 'SKILL.md')),
+        existsSync(join(targetDir, 'spectra', 'SKILL.md')),
       ).toBe(true);
     });
 
@@ -114,8 +114,8 @@ describe('skill-installer', () => {
     it('单个 skill 失败不中断其他', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
-      // 将 reverse-spec-batch 目录创建为只读文件（阻止写入）
-      const batchDir = join(targetDir, 'reverse-spec-batch');
+      // 将 spectra-batch 目录创建为只读文件（阻止写入）
+      const batchDir = join(targetDir, 'spectra-batch');
       mkdirSync(batchDir, { recursive: true });
       // 创建一个同名文件来阻止在其下创建子文件
       // 用一个无写入权限的目录来模拟
@@ -127,41 +127,41 @@ describe('skill-installer', () => {
       // 应有 3 个结果
       expect(summary.results).toHaveLength(3);
 
-      // reverse-spec 和 reverse-spec-diff 应成功
+      // spectra 和 spectra-diff 应成功
       const rsResult = summary.results.find(
-        (r) => r.skillName === 'reverse-spec',
+        (r) => r.skillName === 'spectra',
       );
       expect(rsResult?.status).toBe('installed');
 
       const diffResult = summary.results.find(
-        (r) => r.skillName === 'reverse-spec-diff',
+        (r) => r.skillName === 'spectra-diff',
       );
       expect(diffResult?.status).toBe('installed');
 
-      // reverse-spec-batch 应失败
+      // spectra-batch 应失败
       const batchResult = summary.results.find(
-        (r) => r.skillName === 'reverse-spec-batch',
+        (r) => r.skillName === 'spectra-batch',
       );
       expect(batchResult?.status).toBe('failed');
       expect(batchResult?.error).toBeDefined();
     });
 
-    it('codex 平台安装仅包含 reverse-spec 三件套', () => {
+    it('codex 平台安装仅包含 spectra 三件套', () => {
       const targetDir = join(tempDir, '.codex', 'skills');
       const summary = installSkills({ targetDir, mode: 'project', platform: 'codex' });
       const expected = getSkillDefinitionsForPlatform('codex');
 
       expect(summary.results).toHaveLength(expected.length);
       const installedSkillNames = summary.results.map((r) => r.skillName);
-      expect(installedSkillNames).toContain('reverse-spec');
-      expect(installedSkillNames).toContain('reverse-spec-batch');
-      expect(installedSkillNames).toContain('reverse-spec-diff');
+      expect(installedSkillNames).toContain('spectra');
+      expect(installedSkillNames).toContain('spectra-batch');
+      expect(installedSkillNames).toContain('spectra-diff');
       expect(installedSkillNames).not.toContain('spec-driver-feature');
       expect(
-        existsSync(join(targetDir, 'reverse-spec', 'SKILL.md')),
+        existsSync(join(targetDir, 'spectra', 'SKILL.md')),
       ).toBe(true);
       expect(
-        existsSync(join(targetDir, 'reverse-spec-batch', 'SKILL.md')),
+        existsSync(join(targetDir, 'spectra-batch', 'SKILL.md')),
       ).toBe(true);
     });
   });
@@ -201,7 +201,7 @@ describe('skill-installer', () => {
     it('移除时不影响其他 skill', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
-      // 安装 reverse-spec skills
+      // 安装 spectra skills
       installSkills({ targetDir, mode: 'project', platform: 'claude' });
 
       // 创建一个"其他" skill
@@ -248,27 +248,27 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'installed',
-            targetPath: '.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'installed',
-            targetPath: '.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '.claude/skills/spectra-batch/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'installed',
-            targetPath: '.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '.claude/skills',
       });
 
-      expect(output).toContain('reverse-spec skills 安装完成:');
-      expect(output).toContain('✓ 已安装: .claude/skills/reverse-spec/SKILL.md');
-      expect(output).toContain('提示: 在 Claude Code 中使用 /reverse-spec 即可调用');
+      expect(output).toContain('spectra skills 安装完成:');
+      expect(output).toContain('✓ 已安装: .claude/skills/spectra/SKILL.md');
+      expect(output).toContain('提示: 在 Claude Code 中使用 /spectra 即可调用');
     });
 
     it('更新输出包含 已更新 标记', () => {
@@ -278,25 +278,25 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'updated',
-            targetPath: '.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'updated',
-            targetPath: '.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '.claude/skills/spectra-batch/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'updated',
-            targetPath: '.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '.claude/skills',
       });
 
-      expect(output).toContain('reverse-spec skills 已更新:');
+      expect(output).toContain('spectra skills 已更新:');
       expect(output).toContain('✓ 已更新');
     });
 
@@ -307,26 +307,26 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'installed',
-            targetPath: '~/.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '~/.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'installed',
-            targetPath: '~/.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '~/.claude/skills/spectra-batch/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'installed',
-            targetPath: '~/.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '~/.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '~/.claude/skills',
       });
 
       expect(output).toContain('已安装到全局目录');
-      expect(output).toContain('~/.claude/skills/reverse-spec/SKILL.md');
+      expect(output).toContain('~/.claude/skills/spectra/SKILL.md');
       expect(output).toContain('注意: 全局 skill 优先级高于项目级 skill');
     });
 
@@ -337,25 +337,25 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'removed',
-            targetPath: '.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'removed',
-            targetPath: '.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '.claude/skills/spectra-batch/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'removed',
-            targetPath: '.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '.claude/skills',
       });
 
-      expect(output).toContain('reverse-spec skills 已移除:');
+      expect(output).toContain('spectra skills 已移除:');
       expect(output).toContain('✓ 已删除');
     });
 
@@ -366,25 +366,25 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'skipped',
-            targetPath: '.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'skipped',
-            targetPath: '.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '.claude/skills/spectra-batch/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'skipped',
-            targetPath: '.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '.claude/skills',
       });
 
-      expect(output).toBe('未检测到已安装的 reverse-spec skills，无需清理');
+      expect(output).toBe('未检测到已安装的 spectra skills，无需清理');
     });
 
     it('部分失败输出包含警告标记', () => {
@@ -394,20 +394,20 @@ describe('skill-installer', () => {
         platform: 'claude',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'installed',
-            targetPath: '.claude/skills/reverse-spec/SKILL.md',
+            targetPath: '.claude/skills/spectra/SKILL.md',
           },
           {
-            skillName: 'reverse-spec-batch',
+            skillName: 'spectra-batch',
             status: 'failed',
-            targetPath: '.claude/skills/reverse-spec-batch/SKILL.md',
+            targetPath: '.claude/skills/spectra-batch/SKILL.md',
             error: '权限不足',
           },
           {
-            skillName: 'reverse-spec-diff',
+            skillName: 'spectra-diff',
             status: 'installed',
-            targetPath: '.claude/skills/reverse-spec-diff/SKILL.md',
+            targetPath: '.claude/skills/spectra-diff/SKILL.md',
           },
         ],
         targetBasePath: '.claude/skills',
@@ -425,17 +425,17 @@ describe('skill-installer', () => {
         platform: 'codex',
         results: [
           {
-            skillName: 'reverse-spec',
+            skillName: 'spectra',
             status: 'installed',
-            targetPath: '.codex/skills/reverse-spec/SKILL.md',
+            targetPath: '.codex/skills/spectra/SKILL.md',
           },
         ],
         targetBasePath: '.codex/skills',
       });
 
       expect(output).toContain('Codex');
-      expect(output).toContain('.codex/skills/reverse-spec/SKILL.md');
-      expect(output).toContain('$reverse-spec');
+      expect(output).toContain('.codex/skills/spectra/SKILL.md');
+      expect(output).toContain('$spectra');
     });
   });
 });

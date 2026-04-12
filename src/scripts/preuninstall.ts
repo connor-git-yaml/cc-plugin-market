@@ -63,7 +63,7 @@ function main(): void {
           console.warn(`⚠ 警告: 清理 ${result.skillName} 失败: ${result.error ?? '未知错误'}`);
         }
       }
-      console.log(`reverse-spec skills 已从 ${platformLabel} 注销`);
+      console.log(`spectra skills 已从 ${platformLabel} 注销`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

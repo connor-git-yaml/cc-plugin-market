@@ -9,7 +9,7 @@ import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 export interface ReadmeGeneratorInput {
   /** 项目名称 */
   projectName: string;
-  /** reverse-spec 版本号 */
+  /** spectra 版本号 */
   version: string;
   /** 成功生成的模块列表 */
   moduleSpecs: string[];
@@ -40,7 +40,7 @@ export function generateBatchReadme(input: ReadmeGeneratorInput): string {
 
   lines.push(`# ${projectName} — 技术文档索引`);
   lines.push('');
-  lines.push(`> 由 reverse-spec v${version} 自动生成 | ${new Date().toLocaleDateString('zh-CN')}`);
+  lines.push(`> 由 spectra v${version} 自动生成 | ${new Date().toLocaleDateString('zh-CN')}`);
   lines.push('');
 
   // 目录结构说明

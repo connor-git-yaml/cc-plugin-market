@@ -22,13 +22,13 @@ const DEFAULT_LIFECYCLE = 'unknown';
 const ENTITY_SCHEMA_VERSION = 1;
 
 const WORKFLOW_REFS_BY_PRODUCT = {
-  'reverse-spec': [
-    'reverse-spec.init',
-    'reverse-spec.generate',
-    'reverse-spec.batch',
-    'reverse-spec.diff',
-    'reverse-spec.mcp-server',
-    'reverse-spec.auth-status',
+  'spectra': [
+    'spectra.init',
+    'spectra.generate',
+    'spectra.batch',
+    'spectra.diff',
+    'spectra.mcp-server',
+    'spectra.auth-status',
   ],
   'spec-driver': [
     'spec-driver-feature',
@@ -304,7 +304,7 @@ function inferKind(productId, description, currentSpecMeta) {
     return 'plugin';
   }
 
-  if (productId === 'reverse-spec' || corpus.includes('mcp') || corpus.includes('cli') || corpus.includes('tool')) {
+  if (productId === 'spectra' || corpus.includes('mcp') || corpus.includes('cli') || corpus.includes('tool')) {
     return 'library-tooling';
   }
 

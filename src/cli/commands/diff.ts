@@ -20,7 +20,7 @@ export async function runDiff(command: CLICommand, version: string): Promise<voi
   const specFile = command.specFile!;
   const source = command.target!;
 
-  console.log(`reverse-spec v${version} — 漂移检测`);
+  console.log(`spectra v${version} — 漂移检测`);
   console.log(`Spec: ${specFile}`);
   console.log(`Source: ${source}`);
 

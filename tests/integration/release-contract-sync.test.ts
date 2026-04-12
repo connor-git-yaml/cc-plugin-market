@@ -57,13 +57,13 @@ describe('release contract sync', () => {
     copyFile(projectRoot, 'package.json');
     copyFile(projectRoot, 'package-lock.json');
     copyFile(projectRoot, '.claude-plugin/marketplace.json');
-    copyFile(projectRoot, 'plugins/reverse-spec/.claude-plugin/plugin.json');
-    copyFile(projectRoot, 'plugins/reverse-spec/README.md');
+    copyFile(projectRoot, 'plugins/spectra/.claude-plugin/plugin.json');
+    copyFile(projectRoot, 'plugins/spectra/README.md');
     copyFile(projectRoot, 'plugins/spec-driver/.claude-plugin/plugin.json');
     copyFile(projectRoot, 'plugins/spec-driver/README.md');
     copyFile(projectRoot, 'plugins/spec-driver/scripts/postinstall.sh');
     copyFile(projectRoot, 'specs/products/product-mapping.yaml');
-    copyFile(projectRoot, 'specs/products/reverse-spec/current-spec.md');
+    copyFile(projectRoot, 'specs/products/spectra/current-spec.md');
     copyFile(projectRoot, 'specs/products/spec-driver/current-spec.md');
   });
 
@@ -95,7 +95,7 @@ describe('release contract sync', () => {
     expect(payload.status).toBe('pass');
     expect(payload.errors).toEqual([]);
 
-    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "2.9.0"');
+    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "3.0.0"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', '.claude-plugin', 'plugin.json'), 'utf-8'))
       .toContain('"version": "3.11.2"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', 'README.md'), 'utf-8'))
@@ -123,6 +123,6 @@ describe('release contract sync', () => {
       errors: string[];
     };
     expect(payload.status).toBe('fail');
-    expect(payload.errors.join('\n')).toContain('reverse-spec package version');
+    expect(payload.errors.join('\n')).toContain('spectra package version');
   });
 });

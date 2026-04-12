@@ -1,6 +1,6 @@
 # Contributing to CC Plugin Market
 
-Thank you for considering contributing to CC Plugin Market! This repository ships two complementary products — **reverse-spec** (code-to-spec) and **Spec Driver** (spec-to-code orchestration).
+Thank you for considering contributing to CC Plugin Market! This repository ships two complementary products — **Spectra** (code-to-spec) and **Spec Driver** (spec-to-code orchestration).
 
 ## Development Setup
 
@@ -33,10 +33,10 @@ npm test
 
 ```
 cc-plugin-market/
-├── src/                      # reverse-spec core (TypeScript)
+├── src/                      # Spectra core (TypeScript)
 ├── plugins/
 │   ├── spec-driver/          # Spec Driver plugin (Skills + Agents)
-│   └── reverse-spec/         # reverse-spec plugin (Skills)
+│   └── spectra/              # Spectra plugin (Skills)
 ├── specs/                    # Feature specs and product docs
 ├── scripts/                  # Repo-level sync/check scripts
 └── .specify/                 # Project context and memory

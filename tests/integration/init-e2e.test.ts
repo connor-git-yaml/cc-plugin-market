@@ -69,16 +69,16 @@ describe('init 端到端测试', () => {
 
     // 验证文件存在
     expect(
-      existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec', 'SKILL.md')),
+      existsSync(join(tempDir, '.claude', 'skills', 'spectra', 'SKILL.md')),
     ).toBe(true);
     expect(
       existsSync(
-        join(tempDir, '.claude', 'skills', 'reverse-spec-batch', 'SKILL.md'),
+        join(tempDir, '.claude', 'skills', 'spectra-batch', 'SKILL.md'),
       ),
     ).toBe(true);
     expect(
       existsSync(
-        join(tempDir, '.claude', 'skills', 'reverse-spec-diff', 'SKILL.md'),
+        join(tempDir, '.claude', 'skills', 'spectra-diff', 'SKILL.md'),
       ),
     ).toBe(true);
   });
@@ -92,7 +92,7 @@ describe('init 端到端测试', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Codex');
     expect(
-      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
+      existsSync(join(tempDir, '.codex', 'skills', 'spectra', 'SKILL.md')),
     ).toBe(true);
   });
 
@@ -103,16 +103,16 @@ describe('init 端到端测试', () => {
     expect(result.stdout).toContain('Codex');
 
     expect(
-      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
+      existsSync(join(tempDir, '.codex', 'skills', 'spectra', 'SKILL.md')),
     ).toBe(true);
     expect(
       existsSync(
-        join(tempDir, '.codex', 'skills', 'reverse-spec-batch', 'SKILL.md'),
+        join(tempDir, '.codex', 'skills', 'spectra-batch', 'SKILL.md'),
       ),
     ).toBe(true);
     expect(
       existsSync(
-        join(tempDir, '.codex', 'skills', 'reverse-spec-diff', 'SKILL.md'),
+        join(tempDir, '.codex', 'skills', 'spectra-diff', 'SKILL.md'),
       ),
     ).toBe(true);
   });
@@ -124,10 +124,10 @@ describe('init 端到端测试', () => {
     expect(result.stdout).toContain('Claude Code');
     expect(result.stdout).toContain('Codex');
     expect(
-      existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec', 'SKILL.md')),
+      existsSync(join(tempDir, '.claude', 'skills', 'spectra', 'SKILL.md')),
     ).toBe(true);
     expect(
-      existsSync(join(tempDir, '.codex', 'skills', 'reverse-spec', 'SKILL.md')),
+      existsSync(join(tempDir, '.codex', 'skills', 'spectra', 'SKILL.md')),
     ).toBe(true);
   });
 
@@ -142,7 +142,7 @@ describe('init 端到端测试', () => {
     });
 
     const content = readFileSync(
-      join(tempDir, '.claude', 'skills', 'reverse-spec', 'SKILL.md'),
+      join(tempDir, '.claude', 'skills', 'spectra', 'SKILL.md'),
       'utf-8',
     );
 
@@ -150,15 +150,15 @@ describe('init 端到端测试', () => {
       join(
         process.cwd(),
         'plugins',
-        'reverse-spec',
+        'spectra',
         'skills',
-        'reverse-spec',
+        'spectra',
         'SKILL.md',
       ),
       'utf-8',
     );
     expect(content).toBe(canonical);
-    expect(content).toContain('reverse-spec generate $TARGET_PATH --deep');
+    expect(content).toContain('spectra generate $TARGET_PATH --deep');
     expect(content).toContain('## Purpose');
   });
 
@@ -173,7 +173,7 @@ describe('init 端到端测试', () => {
       },
     });
     expect(
-      existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec')),
+      existsSync(join(tempDir, '.claude', 'skills', 'spectra')),
     ).toBe(true);
 
     // 再移除
@@ -190,7 +190,7 @@ describe('init 端到端测试', () => {
 
     // 验证目录已删除
     expect(
-      existsSync(join(tempDir, '.claude', 'skills', 'reverse-spec')),
+      existsSync(join(tempDir, '.claude', 'skills', 'spectra')),
     ).toBe(false);
   });
 
@@ -212,7 +212,7 @@ describe('init 端到端测试', () => {
   it('--version 正常工作', () => {
     const result = runCLI(['--version']);
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toMatch(/reverse-spec v\d+\.\d+\.\d+/);
+    expect(result.stdout).toMatch(/spectra v\d+\.\d+\.\d+/);
   });
 
   it('init 重复执行显示 已更新', () => {

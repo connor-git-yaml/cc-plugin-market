@@ -52,7 +52,7 @@ describe('repo maintenance sync/check', () => {
     copyTree(projectRoot, 'contracts');
     copyTree(projectRoot, 'scripts');
     copyTree(projectRoot, 'plugins/spec-driver');
-    copyTree(projectRoot, 'plugins/reverse-spec');
+    copyTree(projectRoot, 'plugins/spectra');
     copyTree(projectRoot, '.claude-plugin');
     copyTree(projectRoot, '.claude');
     copyTree(projectRoot, '.specify');
@@ -85,7 +85,7 @@ describe('repo maintenance sync/check', () => {
       'utf-8',
     );
 
-    rmSync(join(projectRoot, 'skills', 'reverse-spec'), { recursive: true, force: true });
+    rmSync(join(projectRoot, 'skills', 'spectra'), { recursive: true, force: true });
 
     const sync = runNode(join(projectRoot, 'scripts', 'repo-sync.mjs'), projectRoot);
     expect(sync.exitCode).toBe(0);
@@ -98,13 +98,13 @@ describe('repo maintenance sync/check', () => {
     expect(syncPayload.steps).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'agent-docs', status: 'pass' }),
-        expect.objectContaining({ id: 'reverse-spec-skills', status: 'pass' }),
+        expect.objectContaining({ id: 'spectra-skills', status: 'pass' }),
         expect.objectContaining({ id: 'project-context-suggestions', status: 'pass' }),
       ]),
     );
 
     expect(existsSync(join(projectRoot, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'))).toBe(true);
-    expect(existsSync(join(projectRoot, 'skills', 'reverse-spec', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(projectRoot, 'skills', 'spectra', 'SKILL.md'))).toBe(true);
 
     const check = runNode(join(projectRoot, 'scripts', 'repo-check.mjs'), projectRoot);
     expect(check.exitCode).toBe(0);

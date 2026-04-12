@@ -2,7 +2,7 @@
 
 **schemaVersion**: 1.0.0
 **创建日期**: 2026-04-11
-**说明**: 定义 `reverse-spec panoramic` CLI 子命令和 `panoramic-query` MCP tool 三种操作的 JSON 输出字段契约。
+**说明**: 定义 `spectra panoramic` CLI 子命令和 `panoramic-query` MCP tool 三种操作的 JSON 输出字段契约。
 
 ---
 

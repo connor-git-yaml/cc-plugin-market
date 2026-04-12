@@ -187,7 +187,7 @@ export function formatSummary(summary: InstallSummary): string {
 
   // 移除模式：全部 skipped
   if (action === 'remove' && allSkipped) {
-    return '未检测到已安装的 reverse-spec skills，无需清理';
+    return '未检测到已安装的 spectra skills，无需清理';
   }
 
   // 标题
@@ -198,19 +198,19 @@ export function formatSummary(summary: InstallSummary): string {
     const hasAnyUpdated = results.some((r) => r.status === 'updated');
     if (hasFailure && !allFailed) {
       if (platform === 'codex') {
-        lines.push('reverse-spec skills 安装完成（Codex，部分失败）:');
+        lines.push('spectra skills 安装完成（Codex，部分失败）:');
       } else {
-        lines.push('reverse-spec skills 安装完成（部分失败）:');
+        lines.push('spectra skills 安装完成（部分失败）:');
       }
     } else if (hasAnyUpdated && allUpdated && !hasFailure) {
-      lines.push(`reverse-spec skills 已更新${platformSuffix}:`);
+      lines.push(`spectra skills 已更新${platformSuffix}:`);
     } else if (mode === 'global') {
-      lines.push(`reverse-spec skills 已安装到全局目录${platformSuffix}:`);
+      lines.push(`spectra skills 已安装到全局目录${platformSuffix}:`);
     } else {
-      lines.push(`reverse-spec skills 安装完成${platformSuffix}:`);
+      lines.push(`spectra skills 安装完成${platformSuffix}:`);
     }
   } else {
-    lines.push(`reverse-spec skills 已移除${platformSuffix}:`);
+    lines.push(`spectra skills 已移除${platformSuffix}:`);
   }
 
   // 逐项状态
@@ -243,9 +243,9 @@ export function formatSummary(summary: InstallSummary): string {
     if (mode === 'global') {
       lines.push('注意: 全局 skill 优先级高于项目级 skill');
     } else if (platform === 'codex') {
-      lines.push('提示: 在 Codex 中可通过提及 $reverse-spec 触发 skill');
+      lines.push('提示: 在 Codex 中可通过提及 $spectra 触发 skill');
     } else {
-      lines.push('提示: 在 Claude Code 中使用 /reverse-spec 即可调用');
+      lines.push('提示: 在 Claude Code 中使用 /spectra 即可调用');
     }
   }
 

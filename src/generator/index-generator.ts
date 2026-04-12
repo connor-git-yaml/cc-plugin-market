@@ -136,7 +136,7 @@ export function generateIndex(
   const frontmatter: IndexFrontmatter = {
     type: 'architecture-index',
     version: 'v1',
-    generatedBy: 'reverse-spec v2.0',
+    generatedBy: 'spectra v3.0',
     projectRoot: graph.projectRoot,
     totalModules: specs.length,
     lastUpdated: new Date().toISOString(),

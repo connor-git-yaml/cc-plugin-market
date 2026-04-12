@@ -21,12 +21,12 @@
 - Category: `references`
 
 Suggested Changes:
-- `references.paths` · append: `specs/products/reverse-spec/current-spec.md`, `specs/products/reverse-spec/_generated/quality-report.md`, `specs/products/reverse-spec/_generated/scorecard-report.md`, `specs/products/spec-driver/current-spec.md`, `specs/products/spec-driver/_generated/quality-report.md`, `specs/products/spec-driver/_generated/scorecard-report.md`, `specs/products/spec-driver/_generated/adoption-report.md`
+- `references.paths` · append: `specs/products/spectra/current-spec.md`, `specs/products/spectra/_generated/quality-report.md`, `specs/products/spectra/_generated/scorecard-report.md`, `specs/products/spec-driver/current-spec.md`, `specs/products/spec-driver/_generated/quality-report.md`, `specs/products/spec-driver/_generated/scorecard-report.md`, `specs/products/spec-driver/_generated/adoption-report.md`
 
 Evidence:
-- `document` · `specs/products/reverse-spec/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
-- `document` · `specs/products/reverse-spec/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
-- `document` · `specs/products/reverse-spec/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
+- `document` · `specs/products/spectra/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/current-spec.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/_generated/quality-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
 - `document` · `specs/products/spec-driver/_generated/scorecard-report.md` — 该文档已存在且长期稳定，可作为项目参考资料。
@@ -74,6 +74,6 @@ Suggested Changes:
 - `ownership.default_reviewers` · set: `<maintainer-or-team>`
 
 Evidence:
-- `entity-catalog` · `specs/products/reverse-spec/_generated/entity.yaml` — reverse-spec 的 entity.yaml 仍显示 owner=unknown。
+- `entity-catalog` · `specs/products/spectra/_generated/entity.yaml` — spectra 的 entity.yaml 仍显示 owner=unknown。
 - `entity-catalog` · `specs/products/spec-driver/_generated/entity.yaml` — spec-driver 的 entity.yaml 仍显示 owner=unknown。
 

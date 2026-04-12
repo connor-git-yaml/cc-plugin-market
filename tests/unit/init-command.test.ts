@@ -196,26 +196,26 @@ describe('init 命令集成流程', () => {
     // 验证格式化输出
     const output = formatSummary(summary);
     expect(output).toContain('安装完成');
-    expect(output).toContain('/reverse-spec');
+    expect(output).toContain('/spectra');
 
     // 验证文件内容包含 CLI 调用逻辑
     const skillContent = readFileSync(
-      join(targetDir, 'reverse-spec', 'SKILL.md'),
+      join(targetDir, 'spectra', 'SKILL.md'),
       'utf-8',
     );
     const canonical = readFileSync(
       join(
         process.cwd(),
         'plugins',
-        'reverse-spec',
+        'spectra',
         'skills',
-        'reverse-spec',
+        'spectra',
         'SKILL.md',
       ),
       'utf-8',
     );
     expect(skillContent).toBe(canonical);
-    expect(skillContent).toContain('reverse-spec generate $TARGET_PATH --deep');
+    expect(skillContent).toContain('spectra generate $TARGET_PATH --deep');
     expect(skillContent).toContain('## Purpose');
   });
 
@@ -251,7 +251,7 @@ describe('init 命令集成流程', () => {
     const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
 
     const output = formatSummary(summary);
-    expect(output).toBe('未检测到已安装的 reverse-spec skills，无需清理');
+    expect(output).toBe('未检测到已安装的 spectra skills，无需清理');
   });
 
   it('--remove --global 全局移除', () => {

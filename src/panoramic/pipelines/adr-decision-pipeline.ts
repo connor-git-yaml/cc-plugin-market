@@ -496,7 +496,7 @@ function buildCurrentSpecFactSourceCandidate(corpus: AdrCorpus): CandidateDraft 
     summary: '先用 Spec Driver 聚合产品级事实，再派生 README、产品概览和对外文档，减少事实漂移。',
     decision: '把 `current-spec.md` 作为产品/文档层的规范化事实源之一，优先消费聚合后的产品语义而不是重复从代码和增量 spec 中猜测产品定位。',
     context: [
-      '当前仓库同时存在 reverse-spec 与 spec-driver，两者的职责边界之一就是“事实聚合”和“文档派生”分层。',
+      '当前仓库同时存在 spectra 与 spec-driver，两者的职责边界之一就是”事实聚合”和”文档派生”分层。',
       '没有产品级事实源时，对外文档会在 README、spec 和实现之间反复漂移。',
     ],
     consequences: [
@@ -806,6 +806,7 @@ function collectSourcePathSignals(projectRoot: string): string[] {
       || lower.startsWith('coverage/')
       || lower.startsWith('specs/')
       || lower.startsWith('.reverse-spec')
+      || lower.startsWith('.spectra')
     ) {
       return;
     }

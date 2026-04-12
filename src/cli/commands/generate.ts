@@ -28,7 +28,7 @@ export async function runGenerate(command: CLICommand, version: string): Promise
     // 忽略模板同步失败，避免影响 generate 主流程
   }
 
-  console.log(`reverse-spec v${version}`);
+  console.log(`spectra v${version}`);
   console.log(`正在分析 ${target} ...`);
 
   if (!validateTargetPath(targetPath)) {

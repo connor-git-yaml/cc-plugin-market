@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { syncReverseSpecSkillMirrors } from '../../plugins/reverse-spec/scripts/sync-skill-mirrors.mjs';
-import { validateReverseSpecSkillSources } from '../../plugins/reverse-spec/scripts/validate-skill-sources.mjs';
+import { syncSpectraSkillMirrors } from '../../plugins/spectra/scripts/sync-skill-mirrors.mjs';
+import { validateSpectraSkillSources } from '../../plugins/spectra/scripts/validate-skill-sources.mjs';
 import { generateAdoptionInsights } from '../../plugins/spec-driver/scripts/generate-adoption-insights.mjs';
 import { generateProductEntityCatalog } from '../../plugins/spec-driver/scripts/generate-product-entity-catalog.mjs';
 import { generateProductQualityReports } from '../../plugins/spec-driver/scripts/generate-product-quality-reports.mjs';
@@ -184,7 +184,7 @@ export function syncRepository(projectRoot) {
 
   runStep('agent-docs', '同步 AGENTS/CLAUDE 共享区块', () => syncSharedAgentDocs(resolvedRoot));
   runStep('release-contract', '同步版本与发布合同', () => syncReleaseContract(resolvedRoot));
-  runStep('reverse-spec-skills', '同步 reverse-spec compatibility mirrors', () => syncReverseSpecSkillMirrors({ projectRoot: resolvedRoot }));
+  runStep('spectra-skills', '同步 spectra compatibility mirrors', () => syncSpectraSkillMirrors({ projectRoot: resolvedRoot }));
   runStep('spec-driver-codex-wrappers', '再生成 spec-driver Codex wrappers', () => runSpecDriverCodexInstall(resolvedRoot));
   runStep('workflow-registry', '生成 workflow registry', () => generateWorkflowRegistry({ projectRoot: resolvedRoot }));
   runStep('product-entity-catalog', '生成产品 entity catalog', () => generateProductEntityCatalog({ projectRoot: resolvedRoot }));
@@ -230,8 +230,8 @@ export function validateRepository(projectRoot) {
     checks,
   );
   aggregateValidation(
-    'reverse-spec-skills',
-    validateReverseSpecSkillSources({ projectRoot: resolvedRoot }),
+    'spectra-skills',
+    validateSpectraSkillSources({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

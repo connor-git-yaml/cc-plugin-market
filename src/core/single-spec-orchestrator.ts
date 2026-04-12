@@ -1,6 +1,6 @@
 /**
  * 单模块 Spec 生成编排器
- * /reverse-spec 命令入口 — 串联三阶段流水线
+ * /spectra 命令入口 — 串联三阶段流水线
  * 参见 contracts/core-pipeline.md
  */
 import * as fs from 'node:fs';

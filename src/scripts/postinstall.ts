@@ -52,7 +52,7 @@ function parseTargets(raw: string): SkillTargetPlatform[] {
 function main(): void {
   // 仅在全局安装时执行
   if (process.env['npm_config_global'] !== 'true') {
-    console.log('reverse-spec: 本地安装，跳过 skill 注册');
+    console.log('spectra: 本地安装，跳过 skill 注册');
     return;
   }
 
@@ -73,7 +73,7 @@ function main(): void {
         }
       }
 
-      console.log(`reverse-spec skills 已注册到 ${platformLabel}`);
+      console.log(`spectra skills 已注册到 ${platformLabel}`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

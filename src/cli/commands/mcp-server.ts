@@ -1,6 +1,6 @@
 /**
  * mcp-server 子命令
- * 启动 MCP stdio server，通过 JSON-RPC 2.0 暴露 reverse-spec 工具能力
+ * 启动 MCP stdio server，通过 JSON-RPC 2.0 暴露 spectra 工具能力
  */
 
 import { startMcpServer } from '../../mcp/index.js';

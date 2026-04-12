@@ -35,7 +35,7 @@ describe('CLI 端到端测试', () => {
     it('输出版本号并退出码为 0', () => {
       const result = runCLI(['--version']);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/reverse-spec v\d+\.\d+\.\d+/);
+      expect(result.stdout).toMatch(/spectra v\d+\.\d+\.\d+/);
     });
   });
 
@@ -92,7 +92,7 @@ describe('CLI 端到端测试', () => {
     it('输出帮助信息', () => {
       const result = runCLI([]);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('reverse-spec');
+      expect(result.stdout).toContain('spectra');
       expect(result.stdout).toContain('用法');
     });
   });

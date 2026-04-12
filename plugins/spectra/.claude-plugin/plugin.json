@@ -1,0 +1,20 @@
+{
+  "name": "spectra",
+  "version": "3.0.0",
+  "description": "通过 AST 静态分析 + LLM 混合流水线，将源代码逆向工程为结构化 Spec 文档的多语言代码分析平台",
+  "author": {
+    "name": "Connor Lu",
+    "url": "https://github.com/connor-git-yaml"
+  },
+  "homepage": "https://github.com/connor-git-yaml/cc-plugin-market",
+  "repository": "https://github.com/connor-git-yaml/cc-plugin-market",
+  "license": "MIT",
+  "keywords": [
+    "spectra",
+    "spec",
+    "ast",
+    "documentation",
+    "claude-code"
+  ],
+  "mcpServers": "./.mcp.json"
+}

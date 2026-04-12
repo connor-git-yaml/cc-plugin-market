@@ -8,9 +8,9 @@
   需要更新的模板：无
 -->
 
-# reverse-spec 项目 Constitution
+# Spectra 项目 Constitution
 
-本 Constitution 是治理 reverse-spec 项目（含所有 Plugin）开发和输出的最高权威。
+本 Constitution 是治理 Spectra 项目（含所有 Plugin）开发和输出的最高权威。
 
 ---
 
@@ -54,9 +54,9 @@
 
 ---
 
-## Plugin: reverse-spec 约束
+## Plugin: spectra 约束
 
-> 适用于 `plugins/reverse-spec/` 及 `src/` 下的 TypeScript 源代码开发。
+> 适用于 `plugins/spectra/` 及 `src/` 下的 TypeScript 源代码开发。
 
 ### V. AST 精确性优先（不可妥协）
 
@@ -81,8 +81,8 @@ LLM 推理不得产生或捏造结构化数据。
 
 ### VII. 只读安全性
 
-所有 reverse-spec 工具（`/reverse-spec`、`/reverse-spec-batch`、
-`/reverse-spec-diff`）必须是纯只读操作。
+所有 spectra 工具（`/spectra`、`/spectra-batch`、
+`/spectra-diff`）必须是纯只读操作。
 不得修改目标源代码。
 
 - 分析过程不得写入、删除或重命名源文件
@@ -101,7 +101,7 @@ LLM 推理不得产生或捏造结构化数据。
 - 对于非 TS/JS 目标项目，优雅降级为纯文本 LLM 分析模式，不引入其他语言运行时
 - 500 个文件的 AST 解析必须在 10 秒内完成
 
-### reverse-spec 技术栈约束
+### spectra 技术栈约束
 
 | 类别 | 约束 |
 |------|------|
@@ -194,7 +194,7 @@ spec-driver 插件不依赖任何 npm 包或外部运行时。
 
 ## 质量标准
 
-### 输出质量门控（reverse-spec）
+### 输出质量门控（spectra）
 
 每份生成的 Spec 在发布前必须通过以下自检项：
 
@@ -215,7 +215,7 @@ spec-driver 插件不依赖任何 npm 包或外部运行时。
 - [ ] 验证阶段包含实际运行的命令输出（非推测性声明）
 - [ ] 配置变更向后兼容（未配置新字段时行为不变）
 
-### 大规模代码库处理（reverse-spec）
+### 大规模代码库处理（spectra）
 
 - 超过 50 个文件或 5,000 行代码的目标必须启用增量模式
 - 批量处理必须按依赖拓扑排序

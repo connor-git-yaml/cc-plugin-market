@@ -35,8 +35,8 @@ function copyRequiredTree(projectRoot: string) {
   mkdirSync(join(projectRoot, 'src'), { recursive: true });
 
   cpSync(
-    join(REPO_ROOT, 'plugins', 'reverse-spec'),
-    join(projectRoot, 'plugins', 'reverse-spec'),
+    join(REPO_ROOT, 'plugins', 'spectra'),
+    join(projectRoot, 'plugins', 'spectra'),
     { recursive: true },
   );
   mkdirSync(join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'lib'), {
@@ -55,11 +55,11 @@ function copyRequiredTree(projectRoot: string) {
   cpSync(join(REPO_ROOT, 'skills'), join(projectRoot, 'skills'), { recursive: true });
 }
 
-describe('reverse-spec skill source-of-truth', () => {
+describe('spectra skill source-of-truth', () => {
   let projectRoot: string;
 
   beforeEach(() => {
-    projectRoot = mkdtempSync(join(tmpdir(), 'reverse-spec-skill-source-'));
+    projectRoot = mkdtempSync(join(tmpdir(), 'spectra-skill-source-'));
     copyRequiredTree(projectRoot);
   });
 
@@ -71,7 +71,7 @@ describe('reverse-spec skill source-of-truth', () => {
     const sync = runCommand(
       'node',
       [
-        join(projectRoot, 'plugins', 'reverse-spec', 'scripts', 'sync-skill-mirrors.mjs'),
+        join(projectRoot, 'plugins', 'spectra', 'scripts', 'sync-skill-mirrors.mjs'),
         '--project-root',
         projectRoot,
         '--json',
@@ -86,7 +86,7 @@ describe('reverse-spec skill source-of-truth', () => {
         join(
           projectRoot,
           'plugins',
-          'reverse-spec',
+          'spectra',
           'scripts',
           'validate-skill-sources.mjs',
         ),
@@ -107,7 +107,7 @@ describe('reverse-spec skill source-of-truth', () => {
 
     expect(payload.status).toBe('pass');
     expect(payload.contractPath).toBe(
-      'plugins/reverse-spec/contracts/skill-source-of-truth.yaml',
+      'plugins/spectra/contracts/skill-source-of-truth.yaml',
     );
     expect(payload.errors).toEqual([]);
     expect(payload.checks).toEqual(
@@ -123,7 +123,7 @@ describe('reverse-spec skill source-of-truth', () => {
     runCommand(
       'node',
       [
-        join(projectRoot, 'plugins', 'reverse-spec', 'scripts', 'sync-skill-mirrors.mjs'),
+        join(projectRoot, 'plugins', 'spectra', 'scripts', 'sync-skill-mirrors.mjs'),
         '--project-root',
         projectRoot,
         '--json',
@@ -131,7 +131,7 @@ describe('reverse-spec skill source-of-truth', () => {
       projectRoot,
     );
 
-    const mirrorPath = join(projectRoot, 'skills', 'reverse-spec', 'SKILL.md');
+    const mirrorPath = join(projectRoot, 'skills', 'spectra', 'SKILL.md');
     writeFileSync(
       mirrorPath,
       `${readFileSync(mirrorPath, 'utf-8')}\n<!-- drift -->\n`,
@@ -144,7 +144,7 @@ describe('reverse-spec skill source-of-truth', () => {
         join(
           projectRoot,
           'plugins',
-          'reverse-spec',
+          'spectra',
           'scripts',
           'validate-skill-sources.mjs',
         ),

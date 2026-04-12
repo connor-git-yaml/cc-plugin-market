@@ -60,7 +60,7 @@ npm run codex:spec-driver:install
 npm run spec-driver:check:wrappers
 ```
 
-若本次变更同时涉及共享片段、release contract、产品级 `_generated` 产物或 reverse-spec skill mirrors，优先直接运行：
+若本次变更同时涉及共享片段、release contract、产品级 `_generated` 产物或 spectra skill mirrors，优先直接运行：
 
 ```bash
 npm run repo:sync
@@ -274,7 +274,7 @@ node plugins/spec-driver/scripts/sync-merge-engine.mjs --project-root . --json
 
 ## 与现有系统的关系
 
-- **独立于 reverse-spec plugin**：Spec Driver 是正向研发工具，reverse-spec 是逆向分析工具，互补关系
+- **独立于 Spectra plugin**：Spec Driver 是正向研发工具，Spectra 是逆向分析工具，互补关系
 - **共享 `.specify/memory/constitution.md`**：复用项目宪法
 - **兼容已有 spec-driver skills**：检测到项目已有定制版 spec-driver skills 时优先使用
 - **命令覆盖双端兼容**：阶段 prompt 覆盖同时支持 `.claude/commands/spec-driver.{phase}.md` 与 `.codex/commands/spec-driver.{phase}.md`

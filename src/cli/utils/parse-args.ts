@@ -150,7 +150,7 @@ export function parseArgs(argv: string[]): ParseResult {
         error: {
           type: 'invalid_option',
           message:
-            'init 命令不接受位置参数，用法: reverse-spec init [--global] [--remove] [--target <claude|codex|both>]',
+            'init 命令不接受位置参数，用法: spectra init [--global] [--remove] [--target <claude|codex|both>]',
         },
       };
     }
@@ -274,7 +274,7 @@ export function parseArgs(argv: string[]): ParseResult {
         ok: false,
         error: {
           type: 'missing_target',
-          message: `${sub} 命令需要指定目标路径，例如: reverse-spec ${sub} src/`,
+          message: `${sub} 命令需要指定目标路径，例如: spectra ${sub} src/`,
         },
       };
     }
@@ -328,7 +328,7 @@ export function parseArgs(argv: string[]): ParseResult {
       ok: false,
       error: {
         type: 'missing_args',
-        message: 'diff 命令需要两个参数，例如: reverse-spec diff specs/auth.spec.md src/auth/',
+        message: 'diff 命令需要两个参数，例如: spectra diff specs/auth.spec.md src/auth/',
       },
     };
   }

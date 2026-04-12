@@ -41,7 +41,7 @@ function updateRootReadme(content, contract) {
   next = replaceExactLine(
     next,
     /^!\[Version\]\(https:\/\/img\.shields\.io\/badge\/version-[^)]+-green\)$/m,
-    `![Version](https://img.shields.io/badge/version-${contract.products['reverse-spec'].version}-green)`,
+    `![Version](https://img.shields.io/badge/version-${contract.products['spectra'].version}-green)`,
   );
   next = next.replace(/\*\*Spec Driver\*\* \(v[0-9.]+\)/g, '**Spec Driver**');
   next = next.replace(
@@ -302,9 +302,9 @@ export function validateReleaseContract(projectRoot) {
   const rootReadme = readFileSync(path.resolve(projectRoot, 'README.md'), 'utf8');
   expectEqual(
     'root-readme-badge',
-    'README reverse-spec version badge',
+    'README spectra version badge',
     rootReadme.match(/^!\[Version\]\(https:\/\/img\.shields\.io\/badge\/version-([^)]+)-green\)$/m)?.[1],
-    contract.products?.['reverse-spec']?.version,
+    contract.products?.['spectra']?.version,
   );
 
   const productMapping = readFileSync(

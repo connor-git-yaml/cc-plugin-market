@@ -108,7 +108,7 @@ bash "$PLUGIN_DIR/scripts/scan-project.sh" --json
 如果项目包含 TypeScript 或 JavaScript 源代码，**尝试**通过以下命令获取 AST 分析数据：
 
 ```bash
-timeout 60 npx reverse-spec prepare --deep src/ 2>/dev/null
+timeout 60 npx spectra prepare --deep src/ 2>/dev/null
 ```
 
 **降级规则**：

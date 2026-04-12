@@ -73,7 +73,7 @@ export function callLLMviaCodex(
   const cliPath = cfg.cliPath ?? 'codex';
   const outputLastMessagePath = path.join(
     os.tmpdir(),
-    `reverse-spec-codex-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`,
+    `spectra-codex-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`,
   );
 
   return new Promise<LLMResponse>((resolve, reject) => {

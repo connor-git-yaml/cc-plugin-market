@@ -35,7 +35,7 @@ export function createMcpServer(): McpServer {
   bootstrapParsers();
 
   const server = new McpServer({
-    name: 'reverse-spec',
+    name: 'spectra',
     version: pkg.version,
   });
 

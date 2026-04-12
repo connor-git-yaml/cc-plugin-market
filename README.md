@@ -2,8 +2,8 @@
 
 <!-- spec-driver:section:badges -->
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![npm version](https://img.shields.io/npm/v/reverse-spec.svg)
-![Version](https://img.shields.io/badge/version-2.9.0-green)
+![npm version](https://img.shields.io/npm/v/spectra-cli.svg)
+![Version](https://img.shields.io/badge/version-3.0.0-green)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
 ![Node.js](https://img.shields.io/badge/Node.js-20.x+-339933)
 <!-- spec-driver:section:badges:end -->
@@ -17,7 +17,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 
 | Plugin | Type | Description |
 | ------ | ---- | ----------- |
-| **[reverse-spec](#reverse-spec)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
+| **[Spectra](#spectra)** | CLI + MCP + Skills | Reverse-engineers legacy code into structured Spec documents via AST + LLM hybrid pipeline |
 | **[Spec Driver](#spec-driver)** | Plugin (Agents + Skills) | Autonomous development orchestrator — automates the full SDD lifecycle with 15 specialized sub-agent prompts, 8 execution modes, orchestration.yaml config, and 6 quality gates |
 
 ```text
@@ -25,7 +25,7 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 │                       CC Plugin Market                          │
 │                                                                 │
 │  ┌──────────────────────┐     ┌──────────────────────────────┐  │
-│  │    reverse-spec       │     │        Spec Driver           │  │
+│  │      Spectra           │     │        Spec Driver           │  │
 │  │  (Reverse Engineer)   │     │  (Forward Orchestrator)      │  │
 │  │                       │     │                              │  │
 │  │  Code → AST → Spec    │     │  Idea → Spec → Plan → Code  │  │
@@ -60,11 +60,11 @@ claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yam
 ```bash
 # Install to current project (recommended — scoped to this project only)
 claude plugin install spec-driver@cc-plugin-market --scope project
-claude plugin install reverse-spec@cc-plugin-market --scope project
+claude plugin install spectra@cc-plugin-market --scope project
 
 # Or install for current user (available across all projects)
 claude plugin install spec-driver@cc-plugin-market --scope user
-claude plugin install reverse-spec@cc-plugin-market --scope user
+claude plugin install spectra@cc-plugin-market --scope user
 ```
 
 ### Update Plugins
@@ -82,11 +82,11 @@ claude plugin install spec-driver@cc-plugin-market --scope project
 ```bash
 # Remove from current project
 claude plugin remove spec-driver --scope project
-claude plugin remove reverse-spec --scope project
+claude plugin remove spectra --scope project
 
 # Remove from user scope
 claude plugin remove spec-driver --scope user
-claude plugin remove reverse-spec --scope user
+claude plugin remove spectra --scope user
 ```
 
 ### Verify Installation
@@ -100,40 +100,40 @@ claude plugin list
 # Test spec-driver skills
 /spec-driver:spec-driver-doc
 
-# Test reverse-spec skills
-/reverse-spec src/
+# Test spectra skills
+/spectra src/
 ```
 <!-- spec-driver:section:plugin-installation:end -->
 
 ### Codex Support
 
-For Codex, install `reverse-spec` CLI and register reverse-spec skills into `.codex/skills`:
+For Codex, install `spectra` CLI and register spectra skills into `.codex/skills`:
 
 ```bash
 # Install CLI
-npm install -g reverse-spec
+npm install -g spectra-cli
 
 # Project-level Codex skills
-reverse-spec init --target codex
+spectra init --target codex
 
 # Or global Codex skills
-reverse-spec init --global --target codex
+spectra init --global --target codex
 ```
 
 Install both Claude + Codex skills in one command:
 
 ```bash
-reverse-spec init --global --target both
+spectra init --global --target both
 ```
 
 Optional: control npm postinstall target with environment variable:
 
 ```bash
-REVERSE_SPEC_SKILL_TARGET=codex npm install -g reverse-spec
+SPECTRA_SKILL_TARGET=codex npm install -g spectra-cli
 # values: claude | codex | both
 ```
 
-Spec Driver uses an independent Codex entrypoint (parallel to reverse-spec):
+Spec Driver uses an independent Codex entrypoint (parallel to Spectra):
 
 ```bash
 # Run from repository root
@@ -163,8 +163,8 @@ Notes:
 
 ---
 
-<!-- spec-driver:section:reverse-spec -->
-## reverse-spec
+<!-- spec-driver:section:spectra -->
+## Spectra
 
 A hybrid AST + LLM pipeline that reverse-engineers legacy source code into structured, nine-section Spec documents. TypeScript/JavaScript projects benefit from AST-enhanced precise analysis, while other languages are supported via LLM-only fallback mode.
 
@@ -190,17 +190,17 @@ A hybrid AST + LLM pipeline that reverse-engineers legacy source code into struc
 **Install globally (recommended):**
 
 ```bash
-npm install -g reverse-spec
+npm install -g spectra-cli
 ```
 
-After installation, `reverse-spec` CLI is available globally, and skills are auto-registered to Claude Code by default.  
+After installation, `spectra` CLI is available globally, and skills are auto-registered to Claude Code by default.  
 If Codex is detected (`~/.codex` exists), Codex skill registration is also attempted automatically.
 
 **Or from source:**
 
 ```bash
 git clone https://github.com/connor-git-yaml/cc-plugin-market.git
-cd reverse-spec
+cd spectra
 npm install && npm run build
 ```
 
@@ -208,45 +208,45 @@ npm install && npm run build
 
 ```bash
 # Single module spec generation
-reverse-spec generate src/auth/ --deep
+spectra generate src/auth/ --deep
 
 # AST preprocessing only (no LLM, no auth required)
-reverse-spec prepare src/auth/ --deep
+spectra prepare src/auth/ --deep
 
 # Batch spec generation for entire project
-reverse-spec batch --force
+spectra batch --force
 
 # Spec drift detection
-reverse-spec diff specs/auth.spec.md src/auth/
+spectra diff specs/auth.spec.md src/auth/
 
 # Custom output directory
-reverse-spec generate src/auth/ --output-dir out/
+spectra generate src/auth/ --output-dir out/
 
 # Check authentication status
-reverse-spec auth-status --verify
+spectra auth-status --verify
 
 # Install skills to current project / globally
-reverse-spec init [--global] [--target claude|codex|both]
+spectra init [--global] [--target claude|codex|both]
 
 # Remove installed skills
-reverse-spec init --remove [--target claude|codex|both]
+spectra init --remove [--target claude|codex|both]
 ```
 
 ### Claude Code Skills
 
 ```bash
-/reverse-spec src/auth/                          # Single module spec
-/reverse-spec-batch                              # Full project batch
-/reverse-spec-diff specs/auth.spec.md src/auth/  # Drift detection
+/spectra src/auth/                               # Single module spec
+/spectra-batch                                   # Full project batch
+/spectra-diff specs/auth.spec.md src/auth/       # Drift detection
 ```
 
 ### Codex Skills
 
-In Codex, after `reverse-spec init --target codex`, these skills are available:
+In Codex, after `spectra init --target codex`, these skills are available:
 
-- `reverse-spec`
-- `reverse-spec-batch`
-- `reverse-spec-diff`
+- `spectra`
+- `spectra-batch`
+- `spectra-diff`
 
 ### Architecture
 
@@ -266,7 +266,7 @@ LLM Prompt
     │   └── CLI proxy → spawn claude
 ModuleSpec → specs/*.spec.md
 ```
-<!-- spec-driver:section:reverse-spec:end -->
+<!-- spec-driver:section:spectra:end -->
 
 ---
 
@@ -511,9 +511,9 @@ verification:
 
 When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both to `gpt-5.3-codex`; depth is controlled by `codex_thinking` levels.
 
-`reverse-spec` CLI (`generate` / `batch` / `diff`) now follows the same model config source:
+`spectra` CLI (`generate` / `batch` / `diff`) now follows the same model config source:
 
-- Priority: `REVERSE_SPEC_MODEL` > `spec-driver.config.yaml agents.specify.model` > `spec-driver.config.yaml preset` > built-in default
+- Priority: `SPECTRA_MODEL` > `spec-driver.config.yaml agents.specify.model` > `spec-driver.config.yaml preset` > built-in default
 - Config discovery: current directory upward search for `spec-driver.config.yaml`, then `.specify/spec-driver.config.yaml`
 
 ### Supported Verification Languages
@@ -527,7 +527,7 @@ JS/TS (npm/pnpm/yarn/bun), Rust (Cargo), Go, Python (pip/poetry/uv), Java (Maven
 ## Project Structure
 
 ```text
-src/                               # reverse-spec TypeScript source
+src/                               # Spectra TypeScript source
 ├── core/                          # Core analysis pipeline
 │   ├── ast-analyzer.ts            # ts-morph AST → CodeSkeleton
 │   ├── tree-sitter-fallback.ts    # AST fault-tolerant fallback
@@ -563,9 +563,9 @@ src/                               # reverse-spec TypeScript source
 └── scripts/                       # npm lifecycle scripts
 
 plugins/                           # Claude Code plugins
-├── reverse-spec/                  # reverse-spec MCP plugin
-│   ├── contracts/                 # Reverse-spec skill source contracts
-│   ├── skills/                    # Canonical reverse-spec skill source
+├── spectra/                       # Spectra MCP plugin
+│   ├── contracts/                 # Spectra skill source contracts
+│   ├── skills/                    # Canonical spectra skill source
 │   └── scripts/                   # Skill sync / validation / lifecycle
 └── spec-driver/                   # Spec Driver orchestrator
     ├── .claude-plugin/plugin.json # Plugin metadata
@@ -602,14 +602,14 @@ templates/                         # Handlebars output templates
 └── drift-report.hbs               # Drift report template
 
 src/skills-global/                 # Generated published compatibility mirrors
-├── reverse-spec/SKILL.md
-├── reverse-spec-batch/SKILL.md
-└── reverse-spec-diff/SKILL.md
+├── spectra/SKILL.md
+├── spectra-batch/SKILL.md
+└── spectra-diff/SKILL.md
 
 skills/                            # Generated repo-local compatibility mirrors
-├── reverse-spec/SKILL.md
-├── reverse-spec-batch/SKILL.md
-└── reverse-spec-diff/SKILL.md
+├── spectra/SKILL.md
+├── spectra-batch/SKILL.md
+└── spectra-diff/SKILL.md
 
 tests/                             # Test suite (313 cases)
 ├── unit/                          # 30 unit test files
@@ -622,7 +622,7 @@ tests/                             # Test suite (313 cases)
 <!-- spec-driver:section:tech-stack -->
 ## Tech Stack
 
-### reverse-spec Stack
+### Spectra Stack
 
 | Category | Technology |
 | -------- | --------- |

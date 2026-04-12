@@ -1,6 +1,6 @@
 /**
  * init 子命令入口
- * 安装/移除 reverse-spec skills
+ * 安装/移除 spectra skills
  */
 
 import type { CLICommand } from '../utils/parse-args.js';

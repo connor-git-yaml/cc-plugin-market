@@ -18,10 +18,10 @@ references:
     path: "specs/products/spec-driver/current-spec.md"
     required: true
     purpose: "Spec Driver 产品事实源"
-  - label: "Reverse Spec Current Spec"
-    path: "specs/products/reverse-spec/current-spec.md"
+  - label: "Spectra Current Spec"
+    path: "specs/products/spectra/current-spec.md"
     required: false
-    purpose: "Reverse Spec 产品事实源"
+    purpose: "Spectra 产品事实源"
 
 architecture_constraints:
   - "优先修改 plugins/** 与 src/** 下的源码，不直接手改 .codex/** 与 .claude/** 包装产物。"
