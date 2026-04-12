@@ -1,14 +1,14 @@
-# Reverse-Spec Scorecard Report
+# Spectra Scorecard Report
 
-> **Product**: reverse-spec
+> **Product**: spectra
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-11T17:53:51.099Z
+> **Generated**: 2026-04-12T00:00:00.000Z
 > **Status**: PASS
 > **Score**: 100/100
 
 ## Summary
 
-- Reverse-Spec 当前治理评分为 100/100，整体状态 PASS.
+- Spectra 当前治理评分为 100/100，整体状态 PASS.
 - 没有 fail 级规则。
 - 全部规则均已达到 pass 基线。
 
@@ -18,8 +18,8 @@
 | --- | --- | --- | --- | --- |
 | Current Spec 新鲜度 | PASS | 100 | 20 | laggingSpecs=0, lagDays=0 |
 | Verification 新鲜度 | PASS | 100 | 20 | totalFeatures=18, fresh=18, stale=0 |
-| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
-| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/reverse-spec/_generated/quality-report.json, totalConflicts=0, high=0 |
+| 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
+| 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
 | Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, currentSpecAvailable=true |
 
@@ -125,7 +125,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/reverse-spec/_generated/quality-report.json",
+  "qualityReportPath": "specs/products/spectra/_generated/quality-report.json",
   "coveredRequiredDocs": 3,
   "totalRequiredDocs": 3,
   "coverageRatio": 1
@@ -142,7 +142,7 @@
 
 ```json
 {
-  "qualityReportPath": "specs/products/reverse-spec/_generated/quality-report.json",
+  "qualityReportPath": "specs/products/spectra/_generated/quality-report.json",
   "totalConflicts": 0,
   "high": 0,
   "medium": 0,
