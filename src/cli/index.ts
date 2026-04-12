@@ -22,6 +22,7 @@ import { runWatchCommand } from './commands/watch.js';
 import { runGraphCommand } from './commands/graph.js';
 import { runCommunityCommand } from './commands/community.js';
 import { runQueryCommand } from './commands/query.js';
+import { runInstall } from './commands/install.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -48,6 +49,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra graph [--directed] [--output-dir <dir>]
   spectra community [--min-size <N>] [--output-dir <dir>]
   spectra query "<问题>" [--budget <N>] [--format json|text]
+  spectra install [--git] [--remove]
   spectra mcp-server
   spectra --version / --help
 
@@ -64,6 +66,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   graph         构建知识图谱并输出 _meta/graph.json
   community     社区检测与架构洞察分析，输出 _meta/GRAPH_REPORT.md
   query         查询知识图谱，返回相关模块及依赖关系子图
+  install       安装/卸载 Claude Code PreToolUse hook 和 git post-commit hook（≠ init：init = skill 安装，install = hook 安装）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -74,7 +77,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 
 选项:
   --global, -g   安装到全局 ~/.claude/skills/ 或 ~/.codex/skills/（由 --target 决定，仅 init）
-  --remove       移除已安装的 skills（仅 init）
+  --remove       移除已安装的 skills（仅 init）或 hooks（仅 install）
   --target       目标平台: claude | codex | both（仅 init，默认按当前运行时自动选择）
   --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
@@ -91,6 +94,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --min-size     最小社区节点数过滤（仅 community 命令）
   --budget       返回节点数量上限（仅 query 命令，默认 50）
   --format       输出格式 text|json（仅 query 命令，默认 text）
+  --git          同时操作 git post-commit hook（仅 install）
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
 
@@ -167,6 +171,9 @@ async function main(): Promise<void> {
       break;
     case 'query':
       await runQueryCommand(command);
+      break;
+    case 'install':
+      runInstall(command);
       break;
     case 'mcp-server':
       await runMcpServer();

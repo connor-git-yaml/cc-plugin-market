@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -52,6 +52,10 @@ export interface CLICommand {
   budget?: number;
   /** query 命令输出格式（仅 query 子命令，--format text|json，默认 text） */
   format?: 'text' | 'json';
+  /** install 子命令：是否同时操作 git hook */
+  installGit?: boolean;
+  /** install 子命令：是否切换为卸载模式 */
+  installRemove?: boolean;
 }
 
 /** 解析错误 */
@@ -342,6 +346,33 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // install 子命令（hook 安装）
+  if (sub === 'install') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'install',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+          installGit: false, installRemove: false,
+        },
+      };
+    }
+    const installGit = argv.includes('--git');
+    const installRemove = argv.includes('--remove');
+    return {
+      ok: true,
+      command: {
+        subcommand: 'install',
+        installGit,
+        installRemove,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // init 子命令
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
@@ -431,12 +462,12 @@ export function parseArgs(argv: string[]): ParseResult {
       },
     };
   }
-  if (argv.includes('--remove')) {
+  if (argv.includes('--remove') && sub !== 'install') {
     return {
       ok: false,
       error: {
         type: 'invalid_option',
-        message: '--remove 选项仅在 init 子命令下有效',
+        message: '--remove 选项仅在 init / install 子命令下有效',
       },
     };
   }
@@ -459,7 +490,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install') {
     return {
       ok: false,
       error: {
