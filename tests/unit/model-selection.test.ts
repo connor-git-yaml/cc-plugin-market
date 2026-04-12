@@ -17,7 +17,7 @@ describe('model-selection', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'reverse-spec-model-'));
+    tempDir = mkdtempSync(join(tmpdir(), 'spectra-model-'));
     process.env = { ...originalEnv };
     delete process.env['REVERSE_SPEC_MODEL'];
     delete process.env['CODEX_THREAD_ID'];

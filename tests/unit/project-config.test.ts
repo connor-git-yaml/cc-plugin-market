@@ -1,6 +1,6 @@
 /**
  * project-config 单元测试
- * 验证 .reverse-spec.yaml / .json 配置文件的发现、加载、验证和合并
+ * 验证 .spectra.yaml / .json（优先）和 .reverse-spec.yaml / .json（向后兼容）的发现、加载、验证和合并
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -25,21 +25,55 @@ describe('project-config', () => {
 
   // ─── findConfigFile ───────────────────────────────────────
   describe('findConfigFile', () => {
-    it('找到 .reverse-spec.yaml', () => {
+    // 新品牌名
+    it('找到 .spectra.yaml', () => {
+      fs.writeFileSync(path.join(tmpDir, '.spectra.yaml'), 'force: true');
+      expect(findConfigFile(tmpDir)).toBe(
+        path.join(tmpDir, '.spectra.yaml'),
+      );
+    });
+
+    it('找到 .spectra.yml', () => {
+      fs.writeFileSync(path.join(tmpDir, '.spectra.yml'), 'force: true');
+      expect(findConfigFile(tmpDir)).toBe(
+        path.join(tmpDir, '.spectra.yml'),
+      );
+    });
+
+    it('找到 .spectra.json', () => {
+      fs.writeFileSync(
+        path.join(tmpDir, '.spectra.json'),
+        '{"force": true}',
+      );
+      expect(findConfigFile(tmpDir)).toBe(
+        path.join(tmpDir, '.spectra.json'),
+      );
+    });
+
+    it('.spectra.yaml 优先于 .reverse-spec.yaml', () => {
+      fs.writeFileSync(path.join(tmpDir, '.spectra.yaml'), 'force: true');
+      fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yaml'), 'force: false');
+      expect(findConfigFile(tmpDir)).toBe(
+        path.join(tmpDir, '.spectra.yaml'),
+      );
+    });
+
+    // 旧品牌名（向后兼容）
+    it('找到 .reverse-spec.yaml（向后兼容）', () => {
       fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yaml'), 'force: true');
       expect(findConfigFile(tmpDir)).toBe(
         path.join(tmpDir, '.reverse-spec.yaml'),
       );
     });
 
-    it('找到 .reverse-spec.yml', () => {
+    it('找到 .reverse-spec.yml（向后兼容）', () => {
       fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yml'), 'force: true');
       expect(findConfigFile(tmpDir)).toBe(
         path.join(tmpDir, '.reverse-spec.yml'),
       );
     });
 
-    it('找到 .reverse-spec.json', () => {
+    it('找到 .reverse-spec.json（向后兼容）', () => {
       fs.writeFileSync(
         path.join(tmpDir, '.reverse-spec.json'),
         '{"force": true}',
@@ -49,14 +83,14 @@ describe('project-config', () => {
       );
     });
 
-    it('.yaml 优先于 .json', () => {
-      fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yaml'), 'force: true');
+    it('.yaml 优先于 .json（同品牌）', () => {
+      fs.writeFileSync(path.join(tmpDir, '.spectra.yaml'), 'force: true');
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.json'),
+        path.join(tmpDir, '.spectra.json'),
         '{"force": false}',
       );
       expect(findConfigFile(tmpDir)).toBe(
-        path.join(tmpDir, '.reverse-spec.yaml'),
+        path.join(tmpDir, '.spectra.yaml'),
       );
     });
 

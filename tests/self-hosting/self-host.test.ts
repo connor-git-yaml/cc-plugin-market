@@ -1,8 +1,8 @@
 /**
  * 自举测试
- * 对 reverse-spec 项目自身运行 AST 分析，验证所有模块生成有效骨架（SC-009）
+ * 对 spectra 项目自身运行 AST 分析，验证所有模块生成有效骨架（SC-009）
  *
- * 注：完整的 /reverse-spec-batch（含 LLM）需要 API 密钥，
+ * 注：完整的 /spectra-batch（含 LLM）需要 API 密钥，
  *     本测试仅验证 AST 阶段 + 模板渲染的自举能力
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -17,7 +17,7 @@ import type { ModuleSpec } from '../../src/models/module-spec.js';
 
 const PROJECT_SRC = path.resolve(__dirname, '../../src');
 
-describe('自举测试：reverse-spec 分析自身', () => {
+describe('自举测试：spectra 分析自身', () => {
   beforeAll(() => {
     LanguageAdapterRegistry.resetInstance();
     bootstrapAdapters();

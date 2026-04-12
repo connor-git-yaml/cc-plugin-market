@@ -8,7 +8,10 @@ import * as path from 'node:path';
 import { BatchStateSchema, type BatchState } from '../models/module-spec.js';
 
 /** 默认检查点路径（Constitution IV：位于 specs/ 内） */
-export const DEFAULT_CHECKPOINT_PATH = 'specs/.reverse-spec-checkpoint.json';
+export const DEFAULT_CHECKPOINT_PATH = 'specs/.spectra-checkpoint.json';
+
+/** 旧品牌检查点路径（用于自动迁移） */
+export const LEGACY_CHECKPOINT_PATH = 'specs/.reverse-spec-checkpoint.json';
 
 /**
  * 加载已有检查点以恢复执行
@@ -18,6 +21,22 @@ export const DEFAULT_CHECKPOINT_PATH = 'specs/.reverse-spec-checkpoint.json';
  */
 export function loadCheckpoint(checkpointPath: string): BatchState | null {
   const resolvedPath = path.resolve(checkpointPath);
+
+  // 自动迁移旧品牌检查点文件（.reverse-spec-checkpoint.json → .spectra-checkpoint.json）
+  if (!fs.existsSync(resolvedPath)) {
+    const legacyPath = path.resolve(
+      path.dirname(resolvedPath),
+      path.basename(LEGACY_CHECKPOINT_PATH),
+    );
+    if (fs.existsSync(legacyPath)) {
+      try {
+        fs.renameSync(legacyPath, resolvedPath);
+        console.log(`检查点文件已迁移: ${path.basename(legacyPath)} → ${path.basename(resolvedPath)}`);
+      } catch {
+        // 迁移失败时继续，视同无检查点
+      }
+    }
+  }
 
   if (!fs.existsSync(resolvedPath)) {
     return null;
