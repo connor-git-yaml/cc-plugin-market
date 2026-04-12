@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { GraphJSON } from '../graph/graph-types.js';
+import { enrichNodeDegrees } from '../graph/graph-builder.js';
 import { loadGraph, detectCommunities } from './community-detector.js';
 import { findGodNodes } from './god-node-analyzer.js';
 import { findSurprisingEdges } from './surprising-edges.js';
@@ -60,6 +61,9 @@ export function runCommunityAnalysis(
 
   // God Node 识别
   const godNodes = findGodNodes(graph, nodeCommunityMap);
+
+  // 将 degree 写入 graphJson 节点 metadata（供 hook 脚本读取）
+  enrichNodeDegrees(graphJson, godNodes);
 
   // 异常边发现
   const surprisingEdges = findSurprisingEdges(graph, nodeCommunityMap, {

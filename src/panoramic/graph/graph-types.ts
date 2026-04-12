@@ -28,8 +28,8 @@ export type ConfidenceLevel = 'EXTRACTED' | 'INFERRED' | 'AMBIGUOUS';
 export interface GraphNode {
   /** 节点唯一标识符，通常为文件路径或元素 ID */
   id: string;
-  /** 节点类型：模块 / 包 / 组件 / Spec 文档 / 通用文档 / API / API Schema / 事件 / 图表（Feature 107 扩展） */
-  kind: 'module' | 'package' | 'component' | 'spec' | 'document'
+  /** 节点类型：模块 / 包 / 组件 / 服务 / Spec 文档 / 通用文档 / API / API Schema / 事件 / 图表（Feature 107 扩展） */
+  kind: 'module' | 'package' | 'component' | 'service' | 'spec' | 'document'
       | 'api' | 'api-schema' | 'event' | 'diagram';
   /** 显示标签，人类可读名称 */
   label: string;

@@ -120,9 +120,12 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
   const handleChange = async (events: FileChangeEvent[]): Promise<void> => {
     printChangedFiles(events);
 
-    // FR-010：外部 batch 进程检测
+    // FR-010：外部 batch 进程检测（队列变更，不丢弃）
     if (isExternalBatchRunning()) {
-      console.log('[watch] 检测到外部 spectra batch 正在运行，跳过本次触发');
+      for (const event of events) {
+        pendingNextRound.add(event.path);
+      }
+      console.log(`[watch] 检测到外部 spectra batch 正在运行，${events.length} 个变更已加入等待队列`);
       return;
     }
 
@@ -138,7 +141,7 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
     // 启动 batch 执行循环
     isRunning = true;
     try {
-      await executeBatchLoop(projectRoot, verbose, merged.outputDir, merged.languages);
+      await executeBatchLoop(projectRoot, verbose, merged.outputDir, merged.languages, merged.includeDocs, merged.includeImages);
     } finally {
       isRunning = false;
       if (pendingShutdown) {
@@ -175,15 +178,22 @@ export async function runWatchCommand(command: CLICommand): Promise<void> {
  * 执行 batch 并在 pendingNextRound 非空时继续下一轮
  * 失败时不清空等待状态（FR-009）
  */
-async function executeBatchLoop(projectRoot: string, verbose: boolean, outputDir?: string, languages?: string[]): Promise<void> {
+async function executeBatchLoop(
+  projectRoot: string,
+  verbose: boolean,
+  outputDir?: string,
+  languages?: string[],
+  includeDocs?: boolean,
+  includeImages?: boolean,
+): Promise<void> {
   // 循环执行直到没有待处理变更
   while (true) {
     const batchStartTime = Date.now();
     console.log('[watch] 触发增量更新...');
 
     try {
-      // FR-007：复用 runBatch({ incremental: true })，透传配置文件的 outputDir/languages
-      const result = await runBatch(projectRoot, { incremental: true, outputDir, languages });
+      // FR-007：复用 runBatch({ incremental: true })，透传配置文件的所有选项
+      const result = await runBatch(projectRoot, { incremental: true, outputDir, languages, includeDocs, includeImages });
       const elapsed = ((Date.now() - batchStartTime) / 1000).toFixed(1);
       console.log(
         `[watch] 增量更新完成（${elapsed}s）：` +

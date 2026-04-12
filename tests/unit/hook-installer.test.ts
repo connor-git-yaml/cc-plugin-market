@@ -66,7 +66,7 @@ describe('hook-installer', () => {
       const script = generateContextScript();
       expect(script).toContain('spectra: Knowledge graph loaded');
       expect(script).toContain('God nodes:');
-      expect(script).toContain('→ Read _meta/GRAPH_REPORT.md');
+      expect(script).toContain('→ Read specs/_meta/GRAPH_REPORT.md');
     });
 
     it('不使用 grep -P（macOS 不兼容的 GNU 扩展）', () => {
@@ -150,7 +150,7 @@ describe('hook-installer', () => {
     it('生成 spectra-context.sh 并 chmod +x（FR-005）', () => {
       installClaudeHook(tmpDir);
 
-      const scriptPath = path.join(tmpDir, '_meta', 'hooks', 'spectra-context.sh');
+      const scriptPath = path.join(tmpDir, 'specs', '_meta', 'hooks', 'spectra-context.sh');
       expect(fs.existsSync(scriptPath)).toBe(true);
 
       // 验证可执行权限

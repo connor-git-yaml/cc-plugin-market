@@ -51,7 +51,8 @@ export async function runCommunityCommand(command: CLICommand): Promise<void> {
     console.error(
       '[community] graph.json 不存在，请先运行 `spectra graph` 生成知识图谱',
     );
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   // 读取并验证 graph.json
@@ -62,13 +63,15 @@ export async function runCommunityCommand(command: CLICommand): Promise<void> {
 
     if (!Array.isArray(graphJson.nodes) || !Array.isArray(graphJson.links)) {
       console.error('[community] graph.json 格式异常：缺少 nodes 或 links 数组');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   } catch (err) {
     console.error(
       `[community] graph.json 解析失败: ${err instanceof Error ? err.message : String(err)}`,
     );
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   // 空图处理
@@ -99,6 +102,6 @@ export async function runCommunityCommand(command: CLICommand): Promise<void> {
     console.error(
       `[community] 社区分析失败: ${err instanceof Error ? err.message : String(err)}`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   }
 }

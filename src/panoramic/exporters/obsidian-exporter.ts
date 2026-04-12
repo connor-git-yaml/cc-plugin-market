@@ -168,21 +168,21 @@ export function buildCommunityPage(
     '',
   ];
 
-  // 核心节点 Top 3
+  // 核心节点 Top 3（纯文本，community 页面没有对应的节点页文件）
   if (communityInfo.coreNodes.length > 0) {
     lines.push('## 核心节点（Top 3）', '');
     for (const nodeId of communityInfo.coreNodes.slice(0, 3)) {
       const label = nodeLabel(nodeId);
-      lines.push(`- [[${sanitizeFilename(label)}]]`);
+      lines.push(`- ${label}`);
     }
     lines.push('');
   }
 
-  // 社区内所有节点
+  // 社区内所有节点（纯文本）
   lines.push('## 所有节点', '');
   for (const nodeId of communityInfo.nodes) {
     const label = nodeLabel(nodeId);
-    lines.push(`- [[${sanitizeFilename(label)}]]`);
+    lines.push(`- ${label}`);
   }
   lines.push('');
 

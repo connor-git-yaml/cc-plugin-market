@@ -22,6 +22,10 @@ export interface ProjectConfig {
   languages?: string[];
   /** 深度分析 */
   deep?: boolean;
+  /** 包含文档提取（markdown/OpenAPI/AsyncAPI 等） */
+  includeDocs?: boolean;
+  /** 包含图像提取（Vision API 分析图表文件） */
+  includeImages?: boolean;
   /**
    * 显式排除的目录列表（FR-013）
    * 优先级高于自动目录分类，这些目录不生成 spec
@@ -105,6 +109,12 @@ function validateConfig(raw: YamlObject | Record<string, unknown>): ProjectConfi
   }
   if (typeof raw['deep'] === 'boolean') {
     config.deep = raw['deep'];
+  }
+  if (typeof raw['includeDocs'] === 'boolean') {
+    config.includeDocs = raw['includeDocs'];
+  }
+  if (typeof raw['includeImages'] === 'boolean') {
+    config.includeImages = raw['includeImages'];
   }
 
   // languages: 支持 YAML 数组和 JSON 数组

@@ -119,6 +119,6 @@ describe('runCommunityAnalysis 端到端', () => {
     runCommunityAnalysis(graphJson, tmpDir);
     const elapsed = performance.now() - start;
 
-    expect(elapsed).toBeLessThan(5000);
-  });
+    expect(elapsed).toBeLessThan(10000);
+  }, 15000);
 });

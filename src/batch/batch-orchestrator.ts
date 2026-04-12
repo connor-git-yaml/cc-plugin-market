@@ -44,6 +44,11 @@ import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orches
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
+import { createRequire } from 'node:module';
+
+// 从 package.json 读取版本号（避免硬编码）
+const _require = createRequire(import.meta.url);
+const SPECTRA_VERSION: string = (_require('../../package.json') as { version: string }).version;
 
 // ============================================================
 // 类型定义
@@ -640,10 +645,8 @@ export async function runBatch(
         crossReferenceLinks,
         extractionResults,  // Feature 107 第四路数据源
       });
-      const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
-      docGraphPath = toProjectPath(graphWrittenPath);
 
-      // Feature 102: 社区分析（在 graph.json 构建之后自动执行）
+      // Feature 102: 社区分析（写盘前执行，使 degree 信息写入 graph.json）
       try {
         const { runCommunityAnalysis } = await import('../panoramic/community/index.js');
         const reportPath = runCommunityAnalysis(graphJson, resolvedOutputDir);
@@ -651,6 +654,10 @@ export async function runBatch(
       } catch (communityErr) {
         logger.warn(`community-analysis: 社区分析失败，跳过报告生成: ${communityErr instanceof Error ? communityErr.message : String(communityErr)}`);
       }
+
+      // 社区分析完成后写盘（graphJson 已含 degree metadata）
+      const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
+      docGraphPath = toProjectPath(graphWrittenPath);
     } catch (graphErr) {
       logger.warn(`graph-persistence: 图构建失败，跳过 graph.json 生成: ${graphErr instanceof Error ? graphErr.message : String(graphErr)}`);
     }
@@ -735,7 +742,7 @@ export async function runBatch(
     const { generateBatchReadme } = await import('./batch-readme-generator.js');
     const readmeContent = generateBatchReadme({
       projectName: path.basename(resolvedRoot),
-      version: '2.9.0', // TODO: 从 package.json 读取
+      version: SPECTRA_VERSION,
       moduleSpecs: successful,
       projectDocs: projectDocs ?? [],
       bundles: docsBundleProfiles,

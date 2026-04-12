@@ -25,7 +25,7 @@ const EXPORT_HELP = `spectra export — 将知识图谱导出为可视化格式
 
 选项:
   --format <obsidian|html>  导出格式（必填）
-  --output-dir <dir>        输出目录（默认: {cwd}/_meta/export/）
+  --output-dir <dir>        输出目录（默认: {cwd}/specs/_meta/export/）
   --help                    显示帮助信息
 
 输出:
@@ -62,22 +62,22 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
     console.error(`[export] 无效的导出格式: ${exportFormat ?? '（未指定）'}`);
     console.error('[export] 可选格式: obsidian | html');
     console.error('[export] 用法: spectra export --format <obsidian|html>');
-    process.exit(1);
+    process.exitCode = 1;
     return;
   }
 
-  // 确定输出目录（FR-014：默认 _meta/export/）
+  // 确定输出目录（FR-014：默认 specs/_meta/export/）
   const cwd = process.cwd();
   const outputDir = command.outputDir
     ? path.resolve(command.outputDir)
-    : path.join(cwd, '_meta', 'export');
+    : path.join(cwd, 'specs', '_meta', 'export');
 
   // 读取 graph.json（FR-015：缺失则 graceful exit）
   const graphJsonPath = resolveGraphJsonPath(cwd);
   if (!fs.existsSync(graphJsonPath)) {
-    console.error('[export] 找不到 _meta/graph.json');
+    console.error('[export] 找不到 specs/_meta/graph.json');
     console.error('[export] 请先运行 spectra graph 构建知识图谱');
-    process.exit(1);
+    process.exitCode = 1;
     return;
   }
 
@@ -87,7 +87,7 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
     graphJson = JSON.parse(raw) as GraphJSON;
   } catch (err) {
     console.error(`[export] 读取 graph.json 失败: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    process.exitCode = 1;
     return;
   }
 
@@ -95,7 +95,7 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
   if (!graphJson.nodes || graphJson.nodes.length === 0) {
     console.error('[export] 图谱为空，无可导出内容');
     console.error('[export] 请先运行 spectra graph 并确保项目有源码可分析');
-    process.exit(1);
+    process.exitCode = 1;
     return;
   }
 
@@ -122,6 +122,6 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
     console.log(`[export] 耗时: ${result.durationMs} ms`);
   } catch (err) {
     console.error(`[export] 导出失败: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }

@@ -181,6 +181,6 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
     console.error(
       `[graph] 图构建失败: ${err instanceof Error ? err.message : String(err)}`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   }
 }

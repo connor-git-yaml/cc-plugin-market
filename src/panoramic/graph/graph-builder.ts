@@ -362,6 +362,28 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
 // ============================================================
 
 /**
+ * 将 God Node 的 degree 写入对应节点的 metadata（in-place 修改）
+ *
+ * 在社区检测后、写盘前调用，使 hook 脚本可以从 graph.json 中读取 degree。
+ *
+ * @param graphJson - 待修改的 GraphJSON（直接修改 nodes 数组）
+ * @param godNodes - findGodNodes 返回的 God Node 列表
+ */
+export function enrichNodeDegrees(graphJson: GraphJSON, godNodes: Array<{ id: string; degree: number }>): void {
+  if (godNodes.length === 0) return;
+  const degreeMap = new Map<string, number>();
+  for (const g of godNodes) {
+    degreeMap.set(g.id, g.degree);
+  }
+  for (const node of graphJson.nodes) {
+    const d = degreeMap.get(node.id);
+    if (d !== undefined) {
+      node.metadata = { ...node.metadata, degree: d };
+    }
+  }
+}
+
+/**
  * 将 GraphJSON 原子写入目标路径
  * 内部调用 writeAtomicJson，同步执行
  *

@@ -566,11 +566,11 @@ export class GraphQueryEngine {
     const finalNodes = communityNodes.slice(0, effectiveBudget);
     const truncated = finalNodes.length < communityNodes.length;
 
-    // 尝试从 _meta/graph-report.md 读取 cohesion（graceful degrade）
+    // 尝试从 specs/_meta/GRAPH_REPORT.md 读取 cohesion（graceful degrade）
     let cohesion: number | null = null;
     let cohesionMessage: string | undefined;
     try {
-      const reportPath = join(process.cwd(), '_meta', 'graph-report.md');
+      const reportPath = join(process.cwd(), 'specs', '_meta', 'GRAPH_REPORT.md');
       const reportContent = readFileSync(reportPath, 'utf-8');
       // 匹配格式如：| communityId | 0.85 | 或类似表格行
       // 转义 communityId 中的正则特殊字符，防止 ReDoS
@@ -583,7 +583,7 @@ export class GraphQueryEngine {
       }
     } catch {
       // graph-report.md 不存在或读取失败，graceful degrade
-      cohesionMessage = '内聚度不可用（_meta/graph-report.md 不存在）';
+      cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
     }
 
     return {

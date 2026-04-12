@@ -149,24 +149,28 @@ describe('buildCommunityPage', () => {
     expect(page.content).toContain('0.75');
   });
 
-  it('内容包含核心节点的 [[链接]]', () => {
+  it('内容包含核心节点（纯文本，无 wikilink）', () => {
     const page = buildCommunityPage(0, communityInfo, nodeIdToLabel, communityResult, graphJson);
-    expect(page.content).toContain('[[Module-A]]');
-    expect(page.content).toContain('[[Module-B]]');
+    expect(page.content).toContain('- Module A');
+    expect(page.content).toContain('- Module B');
+    // community 页面不生成 wikilink（避免链接到不存在的文件）
+    expect(page.content).not.toContain('[[Module-A]]');
   });
 
-  it('内容包含社区内所有节点的 [[链接]]', () => {
+  it('内容包含社区内所有节点（纯文本）', () => {
     const page = buildCommunityPage(0, communityInfo, nodeIdToLabel, communityResult, graphJson);
-    expect(page.content).toContain('[[Module-A]]');
-    expect(page.content).toContain('[[Module-B]]');
-    expect(page.content).toContain('[[Module-C]]');
+    expect(page.content).toContain('- Module A');
+    expect(page.content).toContain('- Module B');
+    expect(page.content).toContain('- Module C');
+    expect(page.content).not.toContain('[[Module-C]]');
   });
 
   it('节点 ID 在 nodeIdToLabel 中不存在时回退到 ID 本身', () => {
     const sparseMap = new Map([['a', 'Module A']]);
     const page = buildCommunityPage(0, communityInfo, sparseMap, communityResult, graphJson);
-    expect(page.content).toContain('[[b]]');
-    expect(page.content).toContain('[[c]]');
+    expect(page.content).toContain('- b');
+    expect(page.content).toContain('- c');
+    expect(page.content).not.toContain('[[b]]');
   });
 
   it('内容包含跨社区链接（FR-002）', () => {

@@ -96,10 +96,20 @@ function parseYamlBlock(lines: string[], startLine: number, parentIndent: number
       const valueStr = trimmed.slice(colonIdx + 2).trim();
 
       if (valueStr === '' || valueStr.startsWith('#')) {
-        // key: （子对象，由下一行决定）
-        const sub = parseYamlBlock(lines, i + 1, indent);
-        result[key] = sub.value;
-        i = sub.nextLine;
+        // key: （子对象或数组，由下一行决定）
+        const nextNonEmpty = lines.slice(i + 1).findIndex((l) => l.trimStart() !== '' && !l.trimStart().startsWith('#'));
+        const nextLine = nextNonEmpty === -1 ? lines.length : i + 1 + nextNonEmpty;
+        const nextTrimmed = nextLine < lines.length ? lines[nextLine]!.trimStart() : '';
+        if (nextTrimmed.startsWith('- ')) {
+          // 数组 block
+          const arr = parseYamlArray(lines, i + 1, indent);
+          result[key] = arr.value;
+          i = arr.nextLine;
+        } else {
+          const sub = parseYamlBlock(lines, i + 1, indent);
+          result[key] = sub.value;
+          i = sub.nextLine;
+        }
       } else {
         result[key] = parseYamlValue(valueStr);
         i++;
@@ -110,8 +120,34 @@ function parseYamlBlock(lines: string[], startLine: number, parentIndent: number
       result[key] = sub.value;
       i = sub.nextLine;
     } else {
-      // 非 key: value 行（可能是列表项 - 或纯值），跳过
+      // 非 key: value 行，跳过
       i++;
+    }
+  }
+
+  return { value: result, nextLine: i };
+}
+
+/**
+ * 解析 YAML 列表块（`- item` 格式）
+ */
+function parseYamlArray(lines: string[], startLine: number, parentIndent: number): ParseBlock {
+  const result: unknown[] = [];
+  let i = startLine;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('#') || trimmed === '') { i++; continue; }
+
+    const indent = line.length - trimmed.length;
+    if (indent <= parentIndent) break;
+
+    if (trimmed.startsWith('- ')) {
+      result.push(parseYamlValue(trimmed.slice(2).trim()));
+      i++;
+    } else {
+      break;
     }
   }
 
@@ -313,6 +349,18 @@ function parseAsyncApiDoc(doc: unknown, relativeSourceFile: string): Pick<Extrac
 
   if (!isObj(doc) || !isObj(doc.channels)) return { nodes, edges };
 
+  // 创建 service 节点（代表该文件本身）
+  const serviceNodeId = `service:${relativeSourceFile}`;
+  const serviceLabel = relativeSourceFile.split('/').pop()?.replace(/\.[^.]+$/, '') ?? relativeSourceFile;
+  nodes.push({
+    id: serviceNodeId,
+    label: serviceLabel,
+    kind: 'service',
+    source_file: relativeSourceFile,
+    confidence: 'EXTRACTED',
+    metadata: { sourceTarget: relativeSourceFile },
+  });
+
   for (const [channelName, channelItem] of Object.entries(doc.channels)) {
     if (!isObj(channelItem)) continue;
 
@@ -330,10 +378,10 @@ function parseAsyncApiDoc(doc: unknown, relativeSourceFile: string): Pick<Extrac
       },
     });
 
-    // publish → publishes 边
+    // publish → publishes 边（service 节点已存在，不会悬空）
     if (isObj(channelItem.publish)) {
       edges.push({
-        source: `service:${relativeSourceFile}`,
+        source: serviceNodeId,
         target: nodeId,
         relation: 'publishes',
         confidence: 'EXTRACTED',
@@ -344,7 +392,7 @@ function parseAsyncApiDoc(doc: unknown, relativeSourceFile: string): Pick<Extrac
     // subscribe → subscribes 边
     if (isObj(channelItem.subscribe)) {
       edges.push({
-        source: `service:${relativeSourceFile}`,
+        source: serviceNodeId,
         target: nodeId,
         relation: 'subscribes',
         confidence: 'EXTRACTED',

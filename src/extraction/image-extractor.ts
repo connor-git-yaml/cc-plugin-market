@@ -13,7 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { createLogger } from '../panoramic/utils/logger.js';
-import type { ExtractionResult, ExtractedNode, ExtractedEdge } from './extraction-types.js';
+import type { ExtractionResult, ExtractedNode } from './extraction-types.js';
 import { EMPTY_EXTRACTION_RESULT } from './extraction-types.js';
 
 const logger = createLogger('extraction-image');
@@ -253,18 +253,8 @@ export async function extractImage(
     },
   ];
 
-  const edges: ExtractedEdge[] = [];
-
-  // depicts 边：diagram → 识别到的组件（INFERRED）
-  for (const component of visionResult.components) {
-    edges.push({
-      source: nodeId,
-      target: `component:${component}`,
-      relation: 'depicts',
-      confidence: 'INFERRED',
-      weight: 1.0,
-    });
-  }
-
-  return { nodes, edges };
+  // depicts 边已移除：Vision API 返回的组件名（自由文本）无法与图谱节点 ID 对应，
+  // 生成的边会因 source/target 不存在而被 graph-builder 静默过滤。
+  // 识别到的组件名保留在 diagram 节点的 metadata.components 字段中。
+  return { nodes, edges: [] };
 }

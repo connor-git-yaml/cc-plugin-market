@@ -28,7 +28,7 @@ const HOOK_COMMAND_MARKER = 'spectra-context.sh';
 /** PreToolUse hook 条目定义 */
 const HOOK_ENTRY: HookConfig = {
   matcher: 'Glob|Grep',
-  command: 'bash _meta/hooks/spectra-context.sh',
+  command: 'bash specs/_meta/hooks/spectra-context.sh',
 };
 
 /**
@@ -40,8 +40,8 @@ export function generateContextScript(): string {
   return `#!/bin/bash
 set -euo pipefail
 
-GRAPH_FILE="_meta/graph.json"
-REPORT_FILE="_meta/GRAPH_REPORT.md"
+GRAPH_FILE="specs/_meta/graph.json"
+REPORT_FILE="specs/_meta/GRAPH_REPORT.md"
 
 # graph.json 不存在时静默降级
 [ -f "$GRAPH_FILE" ] || exit 0
@@ -82,7 +82,7 @@ GOD_NODES=$(node -e "
 
 echo "spectra: Knowledge graph loaded (\$NODE_COUNT nodes · \$COMMUNITY_COUNT communities)"
 echo "God nodes: \$GOD_NODES"
-echo "→ Read _meta/GRAPH_REPORT.md for the full knowledge graph report."
+echo "→ Read specs/_meta/GRAPH_REPORT.md for the full knowledge graph report."
 
 exit 0
 `;
@@ -141,12 +141,12 @@ export function installClaudeHook(projectRoot: string): void {
   console.log('[spectra] PreToolUse hook installed to .claude/settings.json');
 
   // 生成 shell 脚本
-  const hooksDir = join(projectRoot, '_meta', 'hooks');
+  const hooksDir = join(projectRoot, 'specs', '_meta', 'hooks');
   mkdirSync(hooksDir, { recursive: true });
   const scriptPath = join(hooksDir, 'spectra-context.sh');
   writeFileSync(scriptPath, generateContextScript(), 'utf-8');
   chmodSync(scriptPath, 0o755);
-  console.log('[spectra] Hook script written to _meta/hooks/spectra-context.sh');
+  console.log('[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh');
 }
 
 /**

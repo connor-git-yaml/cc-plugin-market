@@ -53,7 +53,7 @@ describe('install-e2e', () => {
     expect(settings.hooks?.PreToolUse?.[0]?.command).toContain('spectra-context.sh');
 
     // shell 脚本文件存在且可执行
-    const scriptPath = path.join(tmpDir, '_meta', 'hooks', 'spectra-context.sh');
+    const scriptPath = path.join(tmpDir, 'specs', '_meta', 'hooks', 'spectra-context.sh');
     expect(fs.existsSync(scriptPath)).toBe(true);
     const stat = fs.statSync(scriptPath);
     expect(stat.mode & 0o111).toBeGreaterThan(0);

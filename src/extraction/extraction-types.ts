@@ -23,7 +23,7 @@ export type ArtifactKind = 'document' | 'api-spec' | 'image';
 /**
  * 提取节点类型（对应 GraphNode.kind 新增的四个枚举值 + document）
  */
-export type ExtractedNodeKind = 'document' | 'api' | 'api-schema' | 'event' | 'diagram';
+export type ExtractedNodeKind = 'document' | 'api' | 'api-schema' | 'event' | 'diagram' | 'service';
 
 // ============================================================
 // Zod Schema 定义
@@ -39,7 +39,7 @@ export const ExtractedNodeSchema = z.object({
   /** 人类可读显示标签 */
   label: z.string(),
   /** 节点类型 */
-  kind: z.enum(['document', 'api', 'api-schema', 'event', 'diagram']),
+  kind: z.enum(['document', 'api', 'api-schema', 'event', 'diagram', 'service']),
   /** 来源文件路径（提取器内部使用绝对路径，合并到图谱时建议转换为相对路径） */
   source_file: z.string(),
   /** 置信度标签：EXTRACTED（确定性提取）| INFERRED（LLM 推断）| AMBIGUOUS（弱信号） */
