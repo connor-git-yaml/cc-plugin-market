@@ -18,6 +18,7 @@
     "README.md"
   ],
   "scripts": {
+    "prebuild": "tsx scripts/inline-d3.ts",
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -59,6 +60,8 @@
   "devDependencies": {
     "@types/node": "^22.12.0",
     "@vitest/coverage-v8": "^3.0.4",
+    "d3-force": "^3.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   },

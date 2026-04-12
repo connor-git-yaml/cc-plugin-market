@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -60,6 +60,8 @@ export interface CLICommand {
   includeDocs?: boolean;
   /** 启用图像/图表 Vision 提取（仅 batch 子命令）— Feature 107 */
   includeImages?: boolean;
+  /** export 命令目标格式（使用 exportFormat 避免与 query 的 format 冲突） */
+  exportFormat?: 'obsidian' | 'html';
 }
 
 /** 解析错误 */
@@ -377,6 +379,36 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // export 子命令
+  if (sub === 'export') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'export',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const outputDirIdx = argv.indexOf('--output-dir');
+    const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+    const formatIdx = argv.indexOf('--format');
+    const formatRaw = formatIdx !== -1 ? argv[formatIdx + 1] : undefined;
+    // exportFormat 允许任意值传入，handler 层校验有效性
+    const exportFormat = formatRaw as 'obsidian' | 'html' | undefined;
+    return {
+      ok: true,
+      command: {
+        subcommand: 'export',
+        exportFormat,
+        outputDir,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // init 子命令
   if (sub === 'init') {
     const hasGlobal = argv.includes('--global') || argv.includes('-g');
@@ -494,7 +526,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install' && sub !== 'export') {
     return {
       ok: false,
       error: {

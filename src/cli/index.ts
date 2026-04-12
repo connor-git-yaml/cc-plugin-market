@@ -23,6 +23,7 @@ import { runGraphCommand } from './commands/graph.js';
 import { runCommunityCommand } from './commands/community.js';
 import { runQueryCommand } from './commands/query.js';
 import { runInstall } from './commands/install.js';
+import { runExportCommand } from './commands/export.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -50,6 +51,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra community [--min-size <N>] [--output-dir <dir>]
   spectra query "<问题>" [--budget <N>] [--format json|text]
   spectra install [--git] [--remove]
+  spectra export --format <obsidian|html> [--output-dir <dir>]
   spectra mcp-server
   spectra --version / --help
 
@@ -67,6 +69,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   community     社区检测与架构洞察分析，输出 _meta/GRAPH_REPORT.md
   query         查询知识图谱，返回相关模块及依赖关系子图
   install       安装/卸载 Claude Code PreToolUse hook 和 git post-commit hook（≠ init：init = skill 安装，install = hook 安装）
+  export        将知识图谱导出为 Obsidian Vault 或 HTML 交互式可视化
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -97,6 +100,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --budget       返回节点数量上限（仅 query 命令，默认 50）
   --format       输出格式 text|json（仅 query 命令，默认 text）
   --git          同时操作 git post-commit hook（仅 install）
+  --format       导出格式 obsidian|html（仅 export 命令，必填）
   --version, -v  显示版本号
   --help, -h     显示帮助信息`;
 
@@ -176,6 +180,9 @@ async function main(): Promise<void> {
       break;
     case 'install':
       runInstall(command);
+      break;
+    case 'export':
+      await runExportCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer();
