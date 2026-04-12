@@ -4,10 +4,10 @@
  * 采用 lazy load 策略：首次调用时加载 _meta/graph.json，后续复用内存缓存
  */
 
-import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
+import { resolveGraphJsonPath } from '../panoramic/graph/graph-paths.js';
 
 // ──────────────────────────────────────────────────────────
 // 模块级缓存（lazy load 单实例）
@@ -23,7 +23,7 @@ let cachedEngine: GraphQueryEngine | null = null;
  */
 function getEngine(): GraphQueryEngine {
   if (cachedEngine === null) {
-    const graphPath = join(process.cwd(), '_meta', 'graph.json');
+    const graphPath = resolveGraphJsonPath(process.cwd());
     cachedEngine = GraphQueryEngine.loadFromFile(graphPath);
   }
   return cachedEngine;

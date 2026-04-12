@@ -3,11 +3,11 @@
  * 执行知识图谱关键词查询，支持 text 和 json 两种输出格式
  */
 
-import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { CLICommand } from '../utils/parse-args.js';
 import { GraphQueryEngine } from '../../panoramic/graph/graph-query.js';
 import type { QueryResult } from '../../panoramic/graph/graph-query.js';
+import { resolveGraphJsonPath } from '../../panoramic/graph/graph-paths.js';
 
 const QUERY_HELP = `spectra query — 查询知识图谱
 
@@ -56,8 +56,8 @@ export async function runQueryCommand(command: CLICommand): Promise<void> {
     return;
   }
 
-  // 检查 _meta/graph.json 是否存在
-  const graphPath = join(process.cwd(), '_meta', 'graph.json');
+  // 检查 specs/_meta/graph.json 是否存在
+  const graphPath = resolveGraphJsonPath(process.cwd());
   if (!existsSync(graphPath)) {
     console.error(`[query] 错误：图谱文件不存在：${graphPath}`);
     console.error('提示：请先运行 `spectra graph` 命令生成知识图谱。');

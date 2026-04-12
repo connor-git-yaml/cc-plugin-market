@@ -12,6 +12,7 @@ import { loadGraph, detectCommunities } from '../../panoramic/community/communit
 import { findGodNodes } from '../../panoramic/community/god-node-analyzer.js';
 import { generateObsidianVault } from '../../panoramic/exporters/obsidian-exporter.js';
 import { generateHtmlExport } from '../../panoramic/exporters/html-exporter.js';
+import { resolveGraphJsonPath } from '../../panoramic/graph/graph-paths.js';
 
 const EXPORT_HELP = `spectra export — 将知识图谱导出为可视化格式
 
@@ -72,7 +73,7 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
     : path.join(cwd, '_meta', 'export');
 
   // 读取 graph.json（FR-015：缺失则 graceful exit）
-  const graphJsonPath = path.join(cwd, '_meta', 'graph.json');
+  const graphJsonPath = resolveGraphJsonPath(cwd);
   if (!fs.existsSync(graphJsonPath)) {
     console.error('[export] 找不到 _meta/graph.json');
     console.error('[export] 请先运行 spectra graph 构建知识图谱');

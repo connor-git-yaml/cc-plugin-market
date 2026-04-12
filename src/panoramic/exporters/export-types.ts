@@ -31,4 +31,6 @@ export interface ObsidianPage {
   relativePath: string;
   /** 文件内容（Markdown 字符串） */
   content: string;
+  /** 仅 god-nodes 页面填充，用于碰撞检测时生成 disambiguator */
+  nodeId?: string;
 }

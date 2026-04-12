@@ -32,6 +32,15 @@ function fnv1a32(str: string): number {
 }
 
 /**
+ * 返回 FNV-1a 32-bit hash 的前 4 位十六进制（用于碰撞去重）
+ * @param str - 用于生成哈希的字符串
+ * @returns 4 位十六进制字符串
+ */
+function fnv1a4(str: string): string {
+  return (fnv1a32(str) >>> 0).toString(16).padStart(8, '0').slice(0, 4);
+}
+
+/**
  * 对文件名执行 Obsidian 安全 sanitize
  *
  * 规则：
@@ -81,6 +90,7 @@ export function buildIndexPage(
   graphJson: GraphJSON,
   communityResult: CommunityResult,
   godNodes: GodNode[],
+  godNodeFinalNames?: Map<string, string>,
 ): ObsidianPage {
   const { nodeCount, edgeCount } = graphJson.graph;
   const communityCount = communityResult.communities.length;
@@ -105,12 +115,13 @@ export function buildIndexPage(
     lines.push('');
   }
 
-  // God Node 列表
+  // God Node 列表（使用碰撞检测后的最终文件名，保证 wikilink 有效）
   if (godNodes.length > 0) {
     lines.push('## God Nodes（高影响力节点）', '');
     for (const godNode of godNodes) {
-      const sanitized = sanitizeFilename(godNode.label);
-      lines.push(`- [[${sanitized}]] — 度数 ${godNode.degree}，主要关系 ${godNode.primaryRelation}`);
+      // 优先使用碰撞检测后的最终文件名；无映射时回退到 sanitizeFilename
+      const wikilinkName = godNodeFinalNames?.get(godNode.id) ?? sanitizeFilename(godNode.label);
+      lines.push(`- [[${wikilinkName}]] — 度数 ${godNode.degree}，主要关系 ${godNode.primaryRelation}`);
     }
     lines.push('');
   }
@@ -283,6 +294,7 @@ export function buildGodNodePage(
   return {
     relativePath: `god-nodes/${sanitizedName}.md`,
     content: lines.join('\n'),
+    nodeId: godNode.id,
   };
 }
 
@@ -319,25 +331,58 @@ export function generateObsidianVault(
     nodeIdToLabel.set(node.id, node.label);
   }
 
-  // 收集所有页面
+  // 第一阶段：构建 god-node pages 并做碰撞检测
+  // 必须先于 index.md 生成，以获取最终文件名映射（FR-001/FR-004 wikilink 正确性）
+  const rawGodNodePages: ObsidianPage[] = godNodes.map((godNode) =>
+    buildGodNodePage(godNode, communityResult, graphJson, nodeIdToLabel)
+  );
+
+  // 碰撞检测：相同 relativePath 的后来者追加 FNV-1a hash 后缀
+  // 修复：碰撞后的新路径也注册到 seenPaths，防止二次碰撞盲区
+  const seenPaths = new Map<string, string>();
+  const deduplicatedGodNodePages = rawGodNodePages.map((page) => {
+    if (!seenPaths.has(page.relativePath)) {
+      seenPaths.set(page.relativePath, page.nodeId ?? page.relativePath);
+      return page;
+    }
+    // 发生碰撞：追加 FNV-1a 前 4 位十六进制后缀（基于 nodeId + relativePath）
+    const suffix = fnv1a4((page.nodeId ?? '') + page.relativePath);
+    const ext = path.extname(page.relativePath);          // '.md'
+    const base = page.relativePath.slice(0, -ext.length); // 去掉 .md
+    const newRelativePath = `${base}-${suffix}${ext}`;
+    // 注册新路径，防止二次碰撞覆盖
+    seenPaths.set(newRelativePath, page.nodeId ?? newRelativePath);
+    return { ...page, relativePath: newRelativePath };
+  });
+
+  // 从去重后的 god-node pages 提取 nodeId → wikilink 文件名映射
+  // wikilink 名称 = relativePath 去掉 'god-nodes/' 前缀和 '.md' 扩展
+  const godNodeFinalNames = new Map<string, string>();
+  for (const page of deduplicatedGodNodePages) {
+    if (page.nodeId) {
+      const ext = path.extname(page.relativePath);
+      const base = page.relativePath.slice('god-nodes/'.length, -ext.length);
+      godNodeFinalNames.set(page.nodeId, base);
+    }
+  }
+
+  // 第二阶段：构建 index.md（使用最终 wikilink 名称映射）和 community pages
   const pages: ObsidianPage[] = [];
 
-  // index.md
-  pages.push(buildIndexPage(graphJson, communityResult, godNodes));
+  // index.md（传入 godNodeFinalNames 确保 wikilink 与实际文件一致）
+  pages.push(buildIndexPage(graphJson, communityResult, godNodes, godNodeFinalNames));
 
   // communities/*.md
   for (const community of communityResult.communities) {
     pages.push(buildCommunityPage(community.id, community, nodeIdToLabel, communityResult, graphJson));
   }
 
-  // god-nodes/*.md
-  for (const godNode of godNodes) {
-    pages.push(buildGodNodePage(godNode, communityResult, graphJson, nodeIdToLabel));
-  }
+  // 合并所有已去重的页面
+  const deduplicatedPages = [...pages, ...deduplicatedGodNodePages];
 
   // 写盘：创建目录并写文件
   const writtenFiles: string[] = [];
-  for (const page of pages) {
+  for (const page of deduplicatedPages) {
     const absolutePath = path.resolve(outputDir, page.relativePath);
     const dir = path.dirname(absolutePath);
     fs.mkdirSync(dir, { recursive: true });

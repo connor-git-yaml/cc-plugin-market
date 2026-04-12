@@ -8,6 +8,8 @@ import * as path from 'node:path';
 import type { CLICommand } from '../utils/parse-args.js';
 import type { GraphJSON } from '../../panoramic/graph/graph-types.js';
 import { runCommunityAnalysis } from '../../panoramic/community/index.js';
+import { loadGraph, detectCommunities } from '../../panoramic/community/community-detector.js';
+import { writeKnowledgeGraph } from '../../panoramic/graph/index.js';
 
 const COMMUNITY_HELP = `spectra community — 社区检测与架构洞察分析
 
@@ -80,6 +82,19 @@ export async function runCommunityCommand(command: CLICommand): Promise<void> {
       minSize: command.communityMinSize,
     });
     console.log(`✓ GRAPH_REPORT.md 已生成: ${reportPath}`);
+
+    // 将社区 ID 持久化回 graph.json 节点 metadata
+    // detectCommunities 是确定性算法（Louvain 固定 seed），两次调用结果一致
+    const g = loadGraph(graphJson);
+    const { nodeCommunityMap } = detectCommunities(g, { minSize: command.communityMinSize });
+    for (const node of graphJson.nodes) {
+      const communityId = nodeCommunityMap.get(node.id);
+      if (communityId !== undefined) {
+        node.metadata['community'] = String(communityId);
+      }
+    }
+    writeKnowledgeGraph(graphJson, outputDir);
+    console.log(`✓ graph.json 社区 ID 已更新`);
   } catch (err) {
     console.error(
       `[community] 社区分析失败: ${err instanceof Error ? err.message : String(err)}`,

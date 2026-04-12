@@ -337,7 +337,8 @@ export class GraphQueryEngine {
     }
 
     // BFS 从得分节点出发扩展子图
-    const startIds = scored.map((s) => s.id);
+    // 限制 seed 节点数量 ≤ budget，确保 budget 为硬上限
+    const startIds = scored.slice(0, Math.max(1, budget)).map((s) => s.id);
     const { nodes: visitedIds, edges: bfsEdges } = this.bfs(startIds, depth);
 
     // 收集子图节点对象
