@@ -1,6 +1,6 @@
 product:
   name: "CC Plugin Market"
-  summary: "Reverse Spec 与 Spec Driver 的共享研发仓库，重点维护 panoramic 文档链路和自治研发编排能力。"
+  summary: "Spectra 与 Spec Driver 的共享研发仓库，重点维护 panoramic 文档链路和自治研发编排能力。"
 
 owner:
   name: "Connor Lu"
