@@ -620,6 +620,15 @@ export async function runBatch(
       });
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
       docGraphPath = toProjectPath(graphWrittenPath);
+
+      // Feature 102: 社区分析（在 graph.json 构建之后自动执行）
+      try {
+        const { runCommunityAnalysis } = await import('../panoramic/community/index.js');
+        const reportPath = runCommunityAnalysis(graphJson, resolvedOutputDir);
+        logger.info(`community-analysis: GRAPH_REPORT.md 已生成: ${reportPath}`);
+      } catch (communityErr) {
+        logger.warn(`community-analysis: 社区分析失败，跳过报告生成: ${communityErr instanceof Error ? communityErr.message : String(communityErr)}`);
+      }
     } catch (graphErr) {
       logger.warn(`graph-persistence: 图构建失败，跳过 graph.json 生成: ${graphErr instanceof Error ? graphErr.message : String(graphErr)}`);
     }

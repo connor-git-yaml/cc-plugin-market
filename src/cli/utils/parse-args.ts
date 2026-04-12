@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -44,6 +44,8 @@ export interface CLICommand {
   graphOperation?: 'build';
   /** 是否生成有向图（仅 graph 命令） */
   directed?: boolean;
+  /** 最小社区节点数过滤（仅 community 命令） */
+  communityMinSize?: number;
 }
 
 /** 解析错误 */
@@ -229,6 +231,40 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // community 子命令
+  if (sub === 'community') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'community',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const outputDirIdx = argv.indexOf('--output-dir');
+    const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+    const minSizeIdx = argv.indexOf('--min-size');
+    let communityMinSize: number | undefined;
+    if (minSizeIdx !== -1 && argv[minSizeIdx + 1]) {
+      const parsed = parseInt(argv[minSizeIdx + 1]!, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        communityMinSize = parsed;
+      }
+    }
+    return {
+      ok: true,
+      command: {
+        subcommand: 'community',
+        communityMinSize,
+        outputDir,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // graph 子命令
   if (sub === 'graph') {
     if (argv.includes('--help') || argv.includes('-h')) {
@@ -374,7 +410,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community') {
     return {
       ok: false,
       error: {
@@ -488,7 +524,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size') {
         i++; // 跳过选项值
       }
       continue;
