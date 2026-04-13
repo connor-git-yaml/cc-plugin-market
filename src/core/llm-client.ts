@@ -135,7 +135,7 @@ export function getTimeoutForModel(model: string): number {
   if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
   if (lowerModel.startsWith('gpt-5')) return 300_000; // 5 分钟
   if (lowerModel.includes('codex')) return 300_000;  // 5 分钟
-  if (lowerModel.includes('sonnet')) return 600_000;  // 10 分钟
+  if (lowerModel.includes('sonnet')) return 600_000;  // 10 分钟（中大型模块实测 3-8 分钟）
   if (lowerModel.includes('haiku')) return 60_000;    // 1 分钟
   return 180_000;                                      // 3 分钟（保守默认）
 }

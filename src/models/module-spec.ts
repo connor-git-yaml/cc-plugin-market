@@ -249,7 +249,7 @@ export type RedactionResult = z.infer<typeof RedactionResultSchema>;
 // ============================================================
 
 /** 处理阶段标识符 */
-export type StageId = 'scan' | 'ast' | 'context' | 'llm' | 'parse' | 'render'
+export type StageId = 'scan' | 'ast' | 'context' | 'llm' | 'parse' | 'render' | 'enrich'
   | 'lang-detect'   // 语言检测阶段（scanFiles 后的语言统计分析）
   | 'lang-graph';   // 语言级依赖图构建阶段
 

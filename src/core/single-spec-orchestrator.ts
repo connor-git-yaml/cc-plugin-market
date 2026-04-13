@@ -497,7 +497,8 @@ export async function generateSpec(
 
       // 仅当上下文足够丰富时才执行二次生成（避免空上下文浪费 LLM 调用）
       if (otherSectionsContext.length > 500) {
-        onStageProgress?.({ stage: 'llm', message: '二次生成 Section 2（业务逻辑）...' });
+        const enrichStart = Date.now();
+        onStageProgress?.({ stage: 'enrich', message: '二次生成 Section 2（业务逻辑）...' });
 
         const enrichPrompt = `你是代码架构分析专家。请基于以下上下文为一个代码模块撰写**非常详细的**业务逻辑分析。
 
@@ -536,11 +537,11 @@ ${sections.businessLogic}
           if (enrichedContent.length > sections.businessLogic.length * 1.2) {
             sections.businessLogic = enrichedContent;
             tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
-            onStageProgress?.({ stage: 'llm', message: `Section 2 已扩展（${sections.businessLogic.length} → ${enrichedContent.length} 字符）` });
           }
+          onStageProgress?.({ stage: 'enrich', message: 'enrich 完成', duration: Date.now() - enrichStart });
         } catch {
           // 二次生成失败时保留第一版，不影响主流程
-          onStageProgress?.({ stage: 'llm', message: '⚠ Section 2 二次生成失败，保留第一版' });
+          onStageProgress?.({ stage: 'enrich', message: '⚠ Section 2 二次生成失败，保留第一版', duration: Date.now() - enrichStart });
         }
       }
     } catch {

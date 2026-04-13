@@ -439,6 +439,10 @@ export async function runBatch(
     let retryCount = 0;
     let moduleSuccess = false;
 
+    // 各阶段耗时（毫秒）— 用于模块完成后打印可观测性摘要行
+    const stageDurations: Partial<Record<string, number>> = {};
+    const moduleStartTime = Date.now();
+
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
         // 小模块优化：文件数 ≤ 2 且总行数 < 200 时降级为 Sonnet + 跳过 enrichment
@@ -455,6 +459,16 @@ export async function runBatch(
           modelOverride: isSmallModule ? 'claude-sonnet-4-5-20250929' : undefined,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
+            if (progress.duration !== undefined) {
+              if (progress.stage === 'llm') {
+                // 首次 llm 完成记为 LLM#1，后续不覆盖（enrich 已独立为 'enrich' stage）
+                if (!('llm' in stageDurations)) {
+                  stageDurations['llm'] = progress.duration;
+                }
+              } else {
+                stageDurations[progress.stage] = progress.duration;
+              }
+            }
             if (progress.stage === 'context' && progress.duration !== undefined) {
               const currentCompleted = checkedState.completedModules.length + failed.length + skipped.length;
               options.onProgress?.(currentCompleted + 0.5, processingOrder.length);
@@ -538,6 +552,13 @@ export async function runBatch(
             tokenUsage: result.tokenUsage,
           });
         }
+
+        // 耗时可观测性：打印各阶段耗时摘要
+        const fmt = (ms: number | undefined) => ms !== undefined ? `${(ms / 1000).toFixed(1)}s` : '-';
+        const totalMs = Date.now() - moduleStartTime;
+        process.stderr.write(
+          `[${moduleName}] AST: ${fmt(stageDurations['ast'])} | context: ${fmt(stageDurations['context'])} | LLM#1: ${fmt(stageDurations['llm'])} | enrich: ${fmt(stageDurations['enrich'])} | render: ${fmt(stageDurations['render'])} | total: ${fmt(totalMs)}\n`,
+        );
 
         moduleSuccess = true;
       } catch (error: any) {
