@@ -64,8 +64,8 @@ describe('product-quality core module', () => {
       }) => Array<{ topic: string; severity: string }>;
     }>('plugins/spec-driver/scripts/lib/product-quality-core.mjs');
 
-    const currentSpecPath = join(projectRoot, 'specs', 'products', 'reverse-spec', 'current-spec.md');
-    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
+    const currentSpecPath = join(projectRoot, 'specs', 'products', 'spectra', 'current-spec.md');
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spectra'), { recursive: true });
     writeFileSync(currentSpecPath, '# Another Product Name\n', 'utf-8');
 
     const conflicts = detectProductConflicts({
@@ -74,14 +74,14 @@ describe('product-quality core module', () => {
         {
           id: 'entity',
           available: true,
-          path: join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'),
-          relativePath: 'specs/products/reverse-spec/_generated/entity.yaml',
+          path: join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'entity.yaml'),
+          relativePath: 'specs/products/spectra/_generated/entity.yaml',
         },
         {
           id: 'current-spec',
           available: true,
           path: currentSpecPath,
-          relativePath: 'specs/products/reverse-spec/current-spec.md',
+          relativePath: 'specs/products/spectra/current-spec.md',
         },
       ],
     });

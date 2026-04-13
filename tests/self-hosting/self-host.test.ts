@@ -112,7 +112,7 @@ describe('自举测试：spectra 分析自身', () => {
       frontmatter: {
         type: 'module-spec',
         version: 'v1',
-        generatedBy: 'reverse-spec-v2-self-host',
+        generatedBy: 'spectra-v3-self-host',
         sourceTarget: richSkeleton.filePath,
         relatedFiles: [richSkeleton.filePath],
         lastUpdated: new Date().toISOString(),

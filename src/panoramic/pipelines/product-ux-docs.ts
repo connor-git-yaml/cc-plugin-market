@@ -536,7 +536,6 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
     if (entry.isDirectory()) {
       if (
         ['node_modules', '.git', 'specs', 'dist', 'coverage', 'bundles'].includes(entry.name)
-        || entry.name.startsWith('.reverse-spec')
         || entry.name.startsWith('.spectra')
       ) {
         continue;
@@ -551,7 +550,7 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
 
     const lower = relative.toLowerCase();
     const isRootReadme = lower === 'readme.md';
-    const isGeneratedOutput = /(^|\/)\.(reverse-spec|spectra)[^/]*\//i.test(lower)
+    const isGeneratedOutput = /(^|\/)\.spectra[^/]*\//i.test(lower)
       || /(^|\/)docs\/adr\//i.test(lower)
       || /(^|\/)feature-briefs\//i.test(lower);
     const isDesignLike = /(design|product|roadmap|journey|ux|persona|brief)/i.test(entry.name)

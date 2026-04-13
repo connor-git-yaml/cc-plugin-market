@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './utils/parse-args.js';
 import { printError } from './utils/error-handler.js';
@@ -105,13 +105,6 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --help, -h     显示帮助信息`;
 
 async function main(): Promise<void> {
-  // deprecation 检测：旧命令名发出迁移警告
-  const binName = basename(process.argv[1] ?? '').replace(/\.js$/, '');
-  if (binName === 'reverse-spec') {
-    console.error('[DEPRECATED] \'reverse-spec\' is deprecated. Please use \'spectra\' instead.');
-    console.error('This alias will be removed in the next major release.\n');
-  }
-
   // 注册所有语言适配器（在命令调度前执行）
   bootstrapAdapters();
   // 注册所有文档生成器

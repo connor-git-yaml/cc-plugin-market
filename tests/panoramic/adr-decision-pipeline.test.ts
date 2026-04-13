@@ -22,7 +22,7 @@ describe('generateBatchAdrDocs', () => {
 
     fs.mkdirSync(path.join(projectRoot, 'src', 'panoramic'), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, 'src', 'core'), { recursive: true });
-    fs.mkdirSync(path.join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'specs', 'products', 'spectra'), { recursive: true });
     fs.writeFileSync(
       path.join(projectRoot, 'src', 'panoramic', 'generator-registry.ts'),
       'export class GeneratorRegistry {}',
@@ -34,7 +34,7 @@ describe('generateBatchAdrDocs', () => {
       'utf-8',
     );
     fs.writeFileSync(
-      path.join(projectRoot, 'specs', 'products', 'reverse-spec', 'current-spec.md'),
+      path.join(projectRoot, 'specs', 'products', 'spectra', 'current-spec.md'),
       [
         '# Reverse-Spec',
         'current-spec 作为产品规范活文档与事实源。',
@@ -44,7 +44,7 @@ describe('generateBatchAdrDocs', () => {
       'utf-8',
     );
 
-    const narrative = buildNarrative('reverse-spec', [
+    const narrative = buildNarrative('spectra', [
       buildModule('src/panoramic/generator-registry.ts', '注册中心负责 generator / parser 的发现与管理'),
       buildModule('src/core/fallback.ts', 'fallback 模块负责 AST-only 与低置信度降级'),
       buildModule('src/batch/batch-orchestrator.ts', 'batch 组织主链路与项目级文档编排'),

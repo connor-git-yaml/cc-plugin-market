@@ -1,8 +1,7 @@
 /**
  * 项目级配置文件加载器
  *
- * 支持 .spectra.yaml / .spectra.yml / .spectra.json（优先）
- * 以及 .reverse-spec.yaml / .reverse-spec.yml / .reverse-spec.json（向后兼容）
+ * 支持 .spectra.yaml / .spectra.yml / .spectra.json
  * 优先级：CLI 显式参数 > 配置文件 > 默认值
  */
 import * as fs from 'node:fs';
@@ -40,14 +39,11 @@ export interface ProjectConfig {
   includeDirs?: string[];
 }
 
-/** 配置文件搜索顺序（新品牌名优先，旧名向后兼容） */
+/** 配置文件搜索顺序 */
 const CONFIG_FILENAMES = [
   '.spectra.yaml',
   '.spectra.yml',
   '.spectra.json',
-  '.reverse-spec.yaml',
-  '.reverse-spec.yml',
-  '.reverse-spec.json',
 ] as const;
 
 /**

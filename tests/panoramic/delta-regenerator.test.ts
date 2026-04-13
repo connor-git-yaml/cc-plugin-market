@@ -261,7 +261,7 @@ async function writeModuleStoredSpec(
     `---
 type: module-spec
 version: v1
-generatedBy: reverse-spec
+generatedBy: spectra
 sourceTarget: ${sourceTarget}
 relatedFiles:
 ${relatedFiles.map((item) => `  - ${item}`).join('\n')}
@@ -298,7 +298,7 @@ async function writeRootStoredSpec(
     `---
 type: module-spec
 version: v1
-generatedBy: reverse-spec
+generatedBy: spectra
 sourceTarget: ${sourceTarget}
 relatedFiles:
   - ${sourceTarget}

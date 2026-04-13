@@ -43,7 +43,7 @@ function writeModuleSpec(
     frontmatter: {
       type: 'module-spec',
       version: 'v1',
-      generatedBy: 'reverse-spec v2.2.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget,
       relatedFiles: [sourceTarget],
       lastUpdated: '2026-03-22T00:00:00.000Z',

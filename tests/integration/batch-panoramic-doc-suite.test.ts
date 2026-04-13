@@ -288,7 +288,7 @@ async function buildMockModuleSpec(
     frontmatter: {
       type: 'module-spec',
       version,
-      generatedBy: 'reverse-spec v2.1.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget,
       relatedFiles,
       lastUpdated: new Date().toISOString(),

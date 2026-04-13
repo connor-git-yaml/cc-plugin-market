@@ -188,7 +188,7 @@ function buildModuleSpecFromSkeleton(skel: CodeSkeleton): ModuleSpec {
     frontmatter: {
       type: 'module-spec',
       version: 'v1',
-      generatedBy: 'reverse-spec-v2-golden-master',
+      generatedBy: 'spectra-v3-golden-master',
       sourceTarget: skel.filePath,
       relatedFiles: [skel.filePath],
       lastUpdated: new Date().toISOString(),

@@ -805,7 +805,6 @@ function collectSourcePathSignals(projectRoot: string): string[] {
       || lower.startsWith('dist/')
       || lower.startsWith('coverage/')
       || lower.startsWith('specs/')
-      || lower.startsWith('.reverse-spec')
       || lower.startsWith('.spectra')
     ) {
       return;

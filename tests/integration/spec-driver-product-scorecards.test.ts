@@ -15,9 +15,9 @@ describe('generate-product-scorecards.mjs', () => {
     execFileSync('git', ['init', '--initial-branch=master'], { cwd: projectRoot, stdio: 'ignore' });
     execFileSync('git', ['remote', 'add', 'origin', 'https://example.com/demo.git'], { cwd: projectRoot, stdio: 'ignore' });
     execFileSync('git', ['symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/master'], { cwd: projectRoot, stdio: 'ignore' });
-    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spectra'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver'), { recursive: true });
-    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spectra', '_generated'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', '_generated'), { recursive: true });
     mkdirSync(join(projectRoot, 'docs', 'shared'), { recursive: true });
@@ -35,7 +35,7 @@ describe('generate-product-scorecards.mjs', () => {
       join(projectRoot, 'specs', 'products', 'product-mapping.yaml'),
       [
         'products:',
-        '  reverse-spec:',
+        '  spectra:',
         '    description: "Reverse-Spec 文档平台"',
         '    specs:',
         '      - id: "001-core"',
@@ -88,7 +88,7 @@ describe('generate-product-scorecards.mjs', () => {
     );
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', 'current-spec.md'),
+      join(projectRoot, 'specs', 'products', 'spectra', 'current-spec.md'),
       '# Reverse-Spec\n\n> **状态**: 活跃\n',
       'utf-8',
     );
@@ -98,24 +98,24 @@ describe('generate-product-scorecards.mjs', () => {
       'utf-8',
     );
 
-    utimesSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'current-spec.md'), new Date(), new Date(Date.now() + 1000));
+    utimesSync(join(projectRoot, 'specs', 'products', 'spectra', 'current-spec.md'), new Date(), new Date(Date.now() + 1000));
     utimesSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'current-spec.md'), new Date(), new Date(Date.now() + 1000));
 
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'entity.yaml'),
       [
-        'id: "reverse-spec"',
+        'id: "spectra"',
         'name: "Reverse-Spec"',
         'kind: "library-tooling"',
         'docs:',
         '  - id: "current-spec"',
         '    available: true',
         'workflowRefs:',
-        '  - "reverse-spec.generate"',
-        '  - "reverse-spec.batch"',
+        '  - "spectra.generate"',
+        '  - "spectra.batch"',
         'quality:',
         '  report:',
-        '    path: "specs/products/reverse-spec/_generated/quality-report.json"',
+        '    path: "specs/products/spectra/_generated/quality-report.json"',
         '    status: "warn"',
       ].join('\n'),
       'utf-8',
@@ -149,8 +149,8 @@ describe('generate-product-scorecards.mjs', () => {
       [
         'schemaVersion: 1',
         'products:',
-        '  - id: "reverse-spec"',
-        '    entityPath: "specs/products/reverse-spec/_generated/entity.yaml"',
+        '  - id: "spectra"',
+        '    entityPath: "specs/products/spectra/_generated/entity.yaml"',
         '    qualityStatus: "warn"',
         '  - id: "spec-driver"',
         '    entityPath: "specs/products/spec-driver/_generated/entity.yaml"',
@@ -175,7 +175,7 @@ describe('generate-product-scorecards.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'quality-report.json'),
+      join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'quality-report.json'),
       JSON.stringify({
         status: 'warn',
         stats: {
@@ -220,8 +220,8 @@ describe('generate-product-scorecards.mjs', () => {
     expect(payload.warnings).toEqual([]);
     expect(payload.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'reverse-spec',
-        markdownPath: 'specs/products/reverse-spec/_generated/scorecard-report.md',
+        id: 'spectra',
+        markdownPath: 'specs/products/spectra/_generated/scorecard-report.md',
       }),
       expect.objectContaining({
         id: 'spec-driver',
@@ -230,7 +230,7 @@ describe('generate-product-scorecards.mjs', () => {
     ]));
 
     const reverseReport = JSON.parse(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'scorecard-report.json'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'scorecard-report.json'), 'utf-8'),
     ) as {
       rules: Array<{ id: string; status: string; evidence: Record<string, unknown> }>;
     };
@@ -266,11 +266,11 @@ describe('generate-product-scorecards.mjs', () => {
     );
 
     const reverseEntity = parseYamlDocument(
-      readFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'), 'utf-8'),
+      readFileSync(join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'entity.yaml'), 'utf-8'),
     ) as {
       quality: { scorecard: { path: string; status: string } };
     };
-    expect(reverseEntity.quality.scorecard.path).toBe('specs/products/reverse-spec/_generated/scorecard-report.json');
+    expect(reverseEntity.quality.scorecard.path).toBe('specs/products/spectra/_generated/scorecard-report.json');
     expect(reverseEntity.quality.scorecard.status).toBe('pass');
 
     const catalogIndex = parseYamlDocument(
@@ -280,7 +280,7 @@ describe('generate-product-scorecards.mjs', () => {
     };
     expect(catalogIndex.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'reverse-spec',
+        id: 'spectra',
         scorecardStatus: 'pass',
       }),
       expect.objectContaining({
@@ -298,8 +298,8 @@ describe('generate-product-scorecards.mjs', () => {
     expect(scorecardIndex.productCount).toBe(2);
     expect(scorecardIndex.products).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'reverse-spec',
-        reportPath: 'specs/products/reverse-spec/_generated/scorecard-report.json',
+        id: 'spectra',
+        reportPath: 'specs/products/spectra/_generated/scorecard-report.json',
       }),
       expect.objectContaining({
         id: 'spec-driver',

@@ -1,6 +1,6 @@
 /**
  * project-config 单元测试
- * 验证 .spectra.yaml / .json（优先）和 .reverse-spec.yaml / .json（向后兼容）的发现、加载、验证和合并
+ * 验证 .spectra.yaml / .yml / .json 的发现、加载、验证和合并
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
@@ -50,40 +50,7 @@ describe('project-config', () => {
       );
     });
 
-    it('.spectra.yaml 优先于 .reverse-spec.yaml', () => {
-      fs.writeFileSync(path.join(tmpDir, '.spectra.yaml'), 'force: true');
-      fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yaml'), 'force: false');
-      expect(findConfigFile(tmpDir)).toBe(
-        path.join(tmpDir, '.spectra.yaml'),
-      );
-    });
-
-    // 旧品牌名（向后兼容）
-    it('找到 .reverse-spec.yaml（向后兼容）', () => {
-      fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yaml'), 'force: true');
-      expect(findConfigFile(tmpDir)).toBe(
-        path.join(tmpDir, '.reverse-spec.yaml'),
-      );
-    });
-
-    it('找到 .reverse-spec.yml（向后兼容）', () => {
-      fs.writeFileSync(path.join(tmpDir, '.reverse-spec.yml'), 'force: true');
-      expect(findConfigFile(tmpDir)).toBe(
-        path.join(tmpDir, '.reverse-spec.yml'),
-      );
-    });
-
-    it('找到 .reverse-spec.json（向后兼容）', () => {
-      fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.json'),
-        '{"force": true}',
-      );
-      expect(findConfigFile(tmpDir)).toBe(
-        path.join(tmpDir, '.reverse-spec.json'),
-      );
-    });
-
-    it('.yaml 优先于 .json（同品牌）', () => {
+    it('.yaml 优先于 .json', () => {
       fs.writeFileSync(path.join(tmpDir, '.spectra.yaml'), 'force: true');
       fs.writeFileSync(
         path.join(tmpDir, '.spectra.json'),
@@ -103,7 +70,7 @@ describe('project-config', () => {
   describe('loadProjectConfig', () => {
     it('加载 YAML 配置', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.yaml'),
+        path.join(tmpDir, '.spectra.yaml'),
         'outputDir: docs/specs\nforce: true\nincremental: false\n',
       );
       const config = loadProjectConfig(tmpDir);
@@ -114,7 +81,7 @@ describe('project-config', () => {
 
     it('加载 JSON 配置', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.json'),
+        path.join(tmpDir, '.spectra.json'),
         JSON.stringify({
           outputDir: 'specs',
           incremental: true,
@@ -129,7 +96,7 @@ describe('project-config', () => {
 
     it('languages 数组正确解析', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.yaml'),
+        path.join(tmpDir, '.spectra.yaml'),
         'languages:\n  - typescript\n  - python\n  - go\n',
       );
       const config = loadProjectConfig(tmpDir);
@@ -143,7 +110,7 @@ describe('project-config', () => {
 
     it('无效 YAML 输出警告并返回空对象', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.yaml'),
+        path.join(tmpDir, '.spectra.yaml'),
         '{ invalid yaml [[[',
       );
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -155,7 +122,7 @@ describe('project-config', () => {
 
     it('忽略未知字段', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.json'),
+        path.join(tmpDir, '.spectra.json'),
         JSON.stringify({ outputDir: 'specs', unknownField: 42 }),
       );
       const config = loadProjectConfig(tmpDir);
@@ -165,7 +132,7 @@ describe('project-config', () => {
 
     it('类型不匹配的字段被忽略', () => {
       fs.writeFileSync(
-        path.join(tmpDir, '.reverse-spec.json'),
+        path.join(tmpDir, '.spectra.json'),
         JSON.stringify({ force: 'yes', outputDir: 123 }),
       );
       const config = loadProjectConfig(tmpDir);

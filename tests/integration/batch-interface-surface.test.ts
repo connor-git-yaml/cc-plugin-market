@@ -152,7 +152,7 @@ async function buildMockModuleSpec(
     frontmatter: {
       type: 'module-spec',
       version,
-      generatedBy: 'reverse-spec v2.2.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget,
       confidence: 'high',
       relatedFiles,

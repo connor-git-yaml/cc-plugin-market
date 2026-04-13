@@ -40,7 +40,7 @@ describe('DocGraphBuilder', () => {
       `---
 type: architecture-index
 version: v1
-generatedBy: reverse-spec
+generatedBy: spectra
 projectRoot: ${tmpDir}
 totalModules: 2
 lastUpdated: 2026-03-20T00:00:00.000Z
@@ -175,7 +175,7 @@ function createModuleSpec(options: {
     frontmatter: {
       type: 'module-spec',
       version: 'v1',
-      generatedBy: 'reverse-spec v2.1.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget: options.sourceTarget,
       relatedFiles: options.relatedFiles,
       lastUpdated: '2026-03-20T00:00:00.000Z',
@@ -225,7 +225,7 @@ function writeSpecFile(
     `---
 type: module-spec
 version: v1
-generatedBy: reverse-spec
+generatedBy: spectra
 sourceTarget: ${options.sourceTarget}
 relatedFiles:
 ${options.relatedFiles.map((item) => `  - ${item}`).join('\n')}

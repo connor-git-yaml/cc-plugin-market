@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "reverse-spec": {
-      "command": "reverse-spec",
-      "args": ["mcp-server"]
-    }
-  }
-}

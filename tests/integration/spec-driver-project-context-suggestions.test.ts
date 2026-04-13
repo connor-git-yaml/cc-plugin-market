@@ -14,11 +14,11 @@ describe('generate-project-context-suggestions.mjs', () => {
     projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-context-suggestions-'));
     mkdirSync(join(projectRoot, '.specify'), { recursive: true });
     mkdirSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated'), { recursive: true });
-    mkdirSync(join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated'), { recursive: true });
+    mkdirSync(join(projectRoot, 'specs', 'products', 'spectra', '_generated'), { recursive: true });
 
     writeFileSync(join(projectRoot, 'README.md'), '# Demo Repo\n', 'utf-8');
     writeFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'current-spec.md'), '# Spec Driver\n', 'utf-8');
-    writeFileSync(join(projectRoot, 'specs', 'products', 'reverse-spec', 'current-spec.md'), '# Reverse-Spec\n', 'utf-8');
+    writeFileSync(join(projectRoot, 'specs', 'products', 'spectra', 'current-spec.md'), '# Reverse-Spec\n', 'utf-8');
     writeFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'quality-report.md'), '# Quality\n', 'utf-8');
     writeFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'scorecard-report.md'), '# Scorecard\n', 'utf-8');
     writeFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', '_generated', 'adoption-report.md'), '# Adoption\n', 'utf-8');
@@ -34,9 +34,9 @@ describe('generate-project-context-suggestions.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'entity.yaml'),
+      join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'entity.yaml'),
       [
-        'id: "reverse-spec"',
+        'id: "spectra"',
         'owner:',
         '  value: "unknown"',
         '  source: "unknown"',
@@ -112,7 +112,7 @@ describe('generate-project-context-suggestions.mjs', () => {
       'utf-8',
     );
     writeFileSync(
-      join(projectRoot, 'specs', 'products', 'reverse-spec', '_generated', 'quality-report.json'),
+      join(projectRoot, 'specs', 'products', 'spectra', '_generated', 'quality-report.json'),
       JSON.stringify({
         status: 'pass',
         conflicts: [],

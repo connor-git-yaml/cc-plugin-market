@@ -33,7 +33,7 @@ function createSpec(opts: {
     frontmatter: {
       type: 'module-spec',
       version: 'v1',
-      generatedBy: 'reverse-spec v2.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget: opts.sourceTarget,
       relatedFiles: [],
       lastUpdated: new Date().toISOString(),
@@ -199,7 +199,7 @@ describe('module-spec.hbs 模板渲染', () => {
       frontmatter: {
         type: 'module-spec',
         version: 'v1',
-        generatedBy: 'reverse-spec v2.0',
+        generatedBy: 'spectra v3.0.1',
         sourceTarget: 'src/api',
         relatedFiles: ['src/api/routes.ts'],
         lastUpdated: new Date().toISOString(),
@@ -251,7 +251,7 @@ describe('module-spec.hbs 模板渲染', () => {
       frontmatter: {
         type: 'module-spec',
         version: 'v1',
-        generatedBy: 'reverse-spec v2.0',
+        generatedBy: 'spectra v3.0.1',
         sourceTarget: 'src/utils',
         relatedFiles: [],
         lastUpdated: new Date().toISOString(),
@@ -298,7 +298,7 @@ describe('module-spec.hbs 模板渲染', () => {
       frontmatter: {
         type: 'module-spec',
         version: 'v1',
-        generatedBy: 'reverse-spec v2.0',
+        generatedBy: 'spectra v3.0.1',
         sourceTarget: 'src/api',
         relatedFiles: ['src/api/routes.ts'],
         lastUpdated: new Date().toISOString(),

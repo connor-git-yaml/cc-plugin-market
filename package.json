@@ -5,8 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "spectra": "dist/cli/index.js",
-    "reverse-spec": "dist/cli/index.js"
+    "spectra": "dist/cli/index.js"
   },
   "files": [
     "dist/",

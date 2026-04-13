@@ -245,7 +245,7 @@ function createModuleSpec(input: {
     frontmatter: {
       type: 'module-spec',
       version: 'v1',
-      generatedBy: 'reverse-spec v2.2.0',
+      generatedBy: 'spectra v3.0.1',
       sourceTarget: input.sourceTarget,
       relatedFiles: input.relatedFiles,
       lastUpdated: '2026-03-21T00:00:00.000Z',
