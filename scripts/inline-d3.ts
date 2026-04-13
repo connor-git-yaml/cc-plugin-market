@@ -67,7 +67,6 @@ const output = [
   ` * 请勿手动编辑 D3_FORCE_BUNDLE 常量（会被下次构建覆盖）`,
   ` *`,
   ` * d3-force 版本: ${d3Version}`,
-  ` * 生成时间: ${new Date().toISOString()}`,
   ` */`,
   ``,
   `// 内联 d3-force bundle — 由 scripts/inline-d3.ts 在构建期生成`,
@@ -78,8 +77,13 @@ const output = [
   existingFunctionBody,
 ].join('\n');
 
-fs.writeFileSync(TEMPLATE_OUTPUT_PATH, output, 'utf-8');
-console.log(`[inline-d3] d3-force ${d3Version} 已内联到 html-template.ts（bundle 长度: ${d3Bundle.length} 字符）`);
+// 内容未变化时跳过写入，保持工作树干净
+if (fs.existsSync(TEMPLATE_OUTPUT_PATH) && fs.readFileSync(TEMPLATE_OUTPUT_PATH, 'utf-8') === output) {
+  console.log(`[inline-d3] d3-force ${d3Version} 内容无变化，跳过写入`);
+} else {
+  fs.writeFileSync(TEMPLATE_OUTPUT_PATH, output, 'utf-8');
+  console.log(`[inline-d3] d3-force ${d3Version} 已内联到 html-template.ts（bundle 长度: ${d3Bundle.length} 字符）`);
+}
 
 /**
  * 生成默认的 buildHtmlTemplate 函数体内容

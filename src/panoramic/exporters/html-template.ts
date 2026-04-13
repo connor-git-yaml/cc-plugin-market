@@ -4,7 +4,6 @@
  * 请勿手动编辑 D3_FORCE_BUNDLE 常量（会被下次构建覆盖）
  *
  * d3-force 版本: 3.0.0
- * 生成时间: 2026-04-13T09:26:21.709Z
  */
 
 // 内联 d3-force bundle — 由 scripts/inline-d3.ts 在构建期生成
