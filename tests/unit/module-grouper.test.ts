@@ -307,6 +307,30 @@ describe('module-grouper', () => {
       expect(result.groups).toHaveLength(1);
     });
 
+    it('classifyDirectories 启用时 tests/ 被过滤后仍能触发降级', () => {
+      // 模拟 Graphify: graphify/ + tests/，目录分类器会过滤 tests/
+      const graph = createGraph([
+        'graphify/pipeline.py',
+        'graphify/extract.py',
+        'graphify/analyze.py',
+        'tests/test_pipeline.py',
+        'tests/test_extract.py',
+      ]);
+
+      const result = groupFilesToModules(graph, {
+        classifyDirectories: true,
+        projectRoot: '/tmp/test',
+      });
+
+      // tests/ 被过滤后，graphify/ 是唯一 source 模块 → 降级
+      // moduleOrder 应包含文件级模块
+      const sourceModuleNames = result.moduleOrder;
+      expect(sourceModuleNames).toContain('pipeline');
+      expect(sourceModuleNames).toContain('extract');
+      expect(sourceModuleNames).toContain('analyze');
+      expect(sourceModuleNames).not.toContain('graphify');
+    });
+
     it('src/ 布局下单目录不触发降级', () => {
       // src/ 布局是标准结构，单目录多文件是正常情况，不应降级
       const graph = createGraph([
