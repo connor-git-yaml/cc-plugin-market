@@ -379,6 +379,19 @@ export async function runBatch(
   const concurrency = options.concurrency ?? 1;
   const modulesDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
 
+  // BUG-A 预计算：统计每个 dirPath 下有多少个单文件模块，冲突路径才使用文件路径
+  const dirPathGroupCount = new Map<string, number>();
+  for (const group of groupResult.groups) {
+    if (group.files.length === 1) {
+      dirPathGroupCount.set(group.dirPath, (dirPathGroupCount.get(group.dirPath) ?? 0) + 1);
+    }
+  }
+  const conflictingDirPaths = new Set(
+    [...dirPathGroupCount.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([dirPath]) => dirPath),
+  );
+
   // state 在此处保证非 null（第 341 行的 if 分支已确保初始化）
   const checkedState = state!;
 
@@ -479,8 +492,14 @@ export async function runBatch(
             completedAt: new Date().toISOString(),
           });
         } else {
-          const fullDirPath = path.join(resolvedRoot, group.dirPath);
-          const result = await generateSpec(fullDirPath, {
+          // BUG-A 修复：同一 dirPath 下有多个单文件模块时（如 graphify/ 下有 a.py/b.py），
+          // 使用文件路径避免多个模块覆盖同一个 {dirName}.spec.md；
+          // 否则仍使用目录路径（每个目录只有一个文件时，目录名才是有意义的模块标识）
+          const hasDirPathConflict = group.files.length === 1 && conflictingDirPaths.has(group.dirPath);
+          const targetPath = hasDirPathConflict
+            ? path.join(resolvedRoot, group.files[0]!)
+            : path.join(resolvedRoot, group.dirPath);
+          const result = await generateSpec(targetPath, {
             ...genOptions,
             existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
           });

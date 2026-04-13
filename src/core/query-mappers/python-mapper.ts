@@ -136,6 +136,38 @@ function parseAllList(rootNode: Parser.SyntaxNode): Set<string> | null {
   return null;
 }
 
+/**
+ * 从 Python 函数/类 body 的第一个 expression_statement 提取 docstring。
+ * 返回去引号后的第一行，最多 200 字符；无 docstring 则返回 null。
+ */
+function extractPythonDocstring(bodyNode: Parser.SyntaxNode | null): string | null {
+  if (!bodyNode) return null;
+  for (let i = 0; i < bodyNode.childCount; i++) {
+    const child = bodyNode.child(i);
+    if (!child) continue;
+    if (child.type !== 'expression_statement') break; // docstring 必须是 body 的第一条语句
+    const expr = child.child(0);
+    if (!expr) break;
+    const stringNode = expr.type === 'string' ? expr
+      : expr.type === 'concatenated_string' ? expr.child(0)
+        : null;
+    if (!stringNode) break;
+    const raw = stringNode.text;
+    // 去掉三引号或单引号包裹
+    const stripped = raw
+      .replace(/^"""([\s\S]*?)"""$/, '$1')
+      .replace(/^'''([\s\S]*?)'''$/, '$1')
+      .replace(/^"(.*)"$/, '$1')
+      .replace(/^'(.*)'$/, '$1')
+      .trim();
+    if (!stripped) return null;
+    // 取第一行
+    const firstLine = stripped.split('\n')[0]?.trim() ?? '';
+    return firstLine.length > 200 ? firstLine.slice(0, 200) + '…' : firstLine || null;
+  }
+  return null;
+}
+
 // ============================================================
 // PythonMapper
 // ============================================================
@@ -245,7 +277,7 @@ export class PythonMapper implements QueryMapper {
       name,
       kind: 'function',
       signature,
-      jsDoc: null,
+      jsDoc: extractPythonDocstring(node.childForFieldName('body')) ?? null,
       isDefault: false,
       startLine: wrapperNode.startPosition.row + 1,
       endLine: wrapperNode.endPosition.row + 1,
@@ -279,7 +311,7 @@ export class PythonMapper implements QueryMapper {
       name,
       kind: 'class',
       signature,
-      jsDoc: null,
+      jsDoc: extractPythonDocstring(node.childForFieldName('body')) ?? null,
       isDefault: false,
       startLine: wrapperNode.startPosition.row + 1,
       endLine: wrapperNode.endPosition.row + 1,
@@ -363,7 +395,7 @@ export class PythonMapper implements QueryMapper {
           name: methodName,
           kind,
           signature,
-          jsDoc: null,
+          jsDoc: extractPythonDocstring(child.childForFieldName('body')) ?? null,
           visibility: methodVisibility,
           isStatic,
         });

@@ -91,6 +91,8 @@ const SUPPORTED_METHODS = new Set([
 ]);
 const PUBLISHER_METHODS = new Set(['emit', 'publish', 'send', 'dispatch']);
 const SUBSCRIBER_METHODS = new Set(['on', 'once', 'addListener', 'subscribe', 'consume', 'listen']);
+/** Python 文件专用订阅方法集合（排除 JS-only 的 once/addListener，避免误提取 vis.js 事件；保留 on 因 Python 事件总线常用 on() 订阅） */
+const PY_SUBSCRIBER_METHODS = new Set(['on', 'subscribe', 'consume', 'listen']);
 const EVENT_PATTERN_RE = /\.(emit|on|once|addListener|publish|subscribe|consume|send|dispatch|listen)\(\s*(['"`])[^'"`]+\2/;
 const TEXT_EVENT_RE = /\.(emit|on|once|addListener|publish|subscribe|consume|send|dispatch|listen)\(\s*(['"`])([^'"`]+)\2(?:\s*,\s*([^\n)]+))?/g;
 const STATE_HINT_ORDER = [
@@ -317,7 +319,7 @@ function extractTextOccurrences(projectRoot: string, filePath: string): EventOcc
       const methodName = match[1]!;
       const channelName = match[3]!;
       const role = PUBLISHER_METHODS.has(methodName) ? 'publisher'
-        : SUBSCRIBER_METHODS.has(methodName) ? 'subscriber'
+        : PY_SUBSCRIBER_METHODS.has(methodName) ? 'subscriber'
           : null;
       if (!role) {
         continue;

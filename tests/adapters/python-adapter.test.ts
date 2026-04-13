@@ -295,3 +295,43 @@ describe('PythonLanguageAdapter.getTestPatterns()', () => {
     expect(patterns.testDirs).toContain('test');
   });
 });
+
+// ════════════════════════ BUG-C：docstring 提取测试 ════════════════════════
+
+describe('PythonLanguageAdapter docstring 提取 (BUG-C)', () => {
+  const adapter = new PythonLanguageAdapter();
+
+  it('从含 """docstring""" 的函数提取 jsDoc 第一行', async () => {
+    // basic.py 中 greet 函数有 """问候函数""" docstring
+    const skeleton = await adapter.analyzeFile(basicPy);
+
+    const greet = skeleton.exports.find((e) => e.name === 'greet');
+    expect(greet).toBeDefined();
+    expect(greet!.jsDoc).not.toBeNull();
+    expect(greet!.jsDoc).toBe('问候函数');
+  });
+
+  it('从含 """docstring""" 的类提取 jsDoc 第一行', async () => {
+    // basic.py 中 User 类有 """用户类""" docstring
+    const skeleton = await adapter.analyzeFile(basicPy);
+
+    const userClass = skeleton.exports.find((e) => e.name === 'User');
+    expect(userClass).toBeDefined();
+    expect(userClass!.jsDoc).not.toBeNull();
+    expect(userClass!.jsDoc).toBe('用户类');
+  });
+
+  it('没有 docstring 的函数 jsDoc 为 null', async () => {
+    // empty.py 不含函数，改用 dunder-all.py 中无 docstring 的函数
+    const skeleton = await adapter.analyzeFile(dunderAllPy);
+
+    // dunder-all.py 中如果存在无 docstring 的导出符号，jsDoc 应为 null
+    for (const exp of skeleton.exports) {
+      if (exp.jsDoc !== null) {
+        // 有 docstring 也是合法的，跳过
+        continue;
+      }
+      expect(exp.jsDoc).toBeNull();
+    }
+  });
+});

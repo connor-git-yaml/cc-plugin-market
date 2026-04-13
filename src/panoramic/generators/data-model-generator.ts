@@ -169,6 +169,27 @@ export function parsePydanticFieldCall(text: string): {
 }
 
 /**
+ * Strip Python 行内注释（`#` 后的内容），避免注释内容混入类型字符串。
+ * 正确处理字符串字面量中的 `#`（如 `Literal['#fff']` 不会被截断）。
+ */
+function stripPythonInlineComment(typeStr: string): string {
+  let inStr = false;
+  let strChar = '';
+  for (let i = 0; i < typeStr.length; i++) {
+    const ch = typeStr[i]!;
+    if (inStr) {
+      if (ch === strChar) inStr = false;
+    } else if (ch === "'" || ch === '"') {
+      inStr = true;
+      strChar = ch;
+    } else if (ch === '#') {
+      return typeStr.slice(0, i).trim();
+    }
+  }
+  return typeStr;
+}
+
+/**
  * 从 Python 类源代码行中提取字段声明
  * 使用 AST 确定的类边界（startLine/endLine），从源文本提取字段
  *
@@ -267,6 +288,7 @@ function parseFieldDeclaration(line: string): DataModelField | null {
 
   if (eqIdx > 0) {
     typeStr = afterColon.slice(0, eqIdx).trim();
+    typeStr = stripPythonInlineComment(typeStr);
     const rawDefault = afterColon.slice(eqIdx + 1).trim();
 
     // 解析 Pydantic Field() 调用
@@ -278,7 +300,7 @@ function parseFieldDeclaration(line: string): DataModelField | null {
       defaultValue = rawDefault;
     }
   } else {
-    typeStr = afterColon;
+    typeStr = stripPythonInlineComment(afterColon);
   }
 
   // 判断可选性

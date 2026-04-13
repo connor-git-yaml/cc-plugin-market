@@ -388,6 +388,16 @@ function buildUserJourneys(
   };
 }
 
+/**
+ * 判断 issue/PR 是否可能是 bug 报告或问题（而非功能请求）。
+ */
+function isLikelyBugOrQuestion(item: { title: string; labels: string[] }): boolean {
+  const bugLabels = ['bug', 'question', 'invalid', 'wontfix', 'duplicate', 'help wanted'];
+  if (item.labels.some((l) => bugLabels.includes(l.toLowerCase().trim()))) return true;
+  const bugPattern = /^(fix|bug|error|broken|fails?|crash(es)?|cannot|can't|doesn't|doesn't|issue|problem|wrong|not work)/i;
+  return bugPattern.test(item.title.trim());
+}
+
 function buildFeatureBriefIndex(
   corpus: ProductFactCorpus,
   overview: ProductOverviewOutput,
@@ -396,7 +406,8 @@ function buildFeatureBriefIndex(
   const briefs: FeatureBrief[] = [];
   const defaultAudience = overview.targetUsers[0]?.name ?? '开发者';
 
-  for (const issue of corpus.issues.slice(0, 3)) {
+  const featureIssues = corpus.issues.filter((issue) => !isLikelyBugOrQuestion(issue));
+  for (const issue of featureIssues.slice(0, 3)) {
     const id = `ISSUE-${issue.number}`;
     briefs.push({
       id,
@@ -414,7 +425,8 @@ function buildFeatureBriefIndex(
     });
   }
 
-  for (const pr of corpus.pullRequests.slice(0, 2)) {
+  const featurePrs = corpus.pullRequests.filter((pr) => !isLikelyBugOrQuestion(pr));
+  for (const pr of featurePrs.slice(0, 2)) {
     const id = `PR-${pr.number}`;
     briefs.push({
       id,
@@ -843,7 +855,9 @@ function buildTargetUsers(corpus: ProductFactCorpus): ProductUserSegment[] {
     return dedupeSegments(segments);
   }
 
-  const readmeParagraph = corpus.readmes.flatMap((source) => extractParagraphs(source.text)).find(Boolean);
+  const readmeParagraph = corpus.readmes
+    .flatMap((source) => extractParagraphs(source.text))
+    .find((para) => isDescriptiveParagraph(para));
   if (!readmeParagraph) {
     return [];
   }
@@ -901,8 +915,14 @@ function buildCoreScenarios(
     }
   }
 
+  // README Usage/Features 节 fallback（优先于 GitHub issues）
+  if (scenarios.length === 0) {
+    scenarios.push(...extractScenariosFromReadme(corpus, targetUsers));
+  }
+  // GitHub issues/PRs 兜底（仅使用非 bug 类）
   if (scenarios.length === 0) {
     for (const item of [...corpus.issues.slice(0, 2), ...corpus.pullRequests.slice(0, 2)]) {
+      if (isLikelyBugOrQuestion(item)) continue;
       scenarios.push({
         id: `scenario-${scenarios.length + 1}`,
         title: item.title,

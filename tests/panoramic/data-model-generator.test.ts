@@ -1025,3 +1025,50 @@ describe('DataModelGenerator 回归测试——useLLM=false 不调用 LLM', () =
     expect(output.erDiagram).toContain('Config');
   });
 });
+
+// ============================================================
+// BUG-K: Python 行内注释 strip 测试
+// ============================================================
+
+describe('extractPythonFieldsFromLines — 行内注释 strip (BUG-K)', () => {
+  it('类型字段后带行内注释时，typeStr 仅保留类型名', () => {
+    // `grammar: str  # e.g. "tree_sitter_python"` 应提取 typeStr = "str"
+    const source = [
+      '@dataclass',
+      'class PluginConfig:',
+      '    grammar: str  # e.g. "tree_sitter_python"',
+      '    version: int  # 默认版本',
+    ];
+    const fields = extractPythonFieldsFromLines(source, 1, source.length);
+
+    expect(fields).toHaveLength(2);
+    expect(fields[0]!.typeStr).toBe('str');
+    expect(fields[1]!.typeStr).toBe('int');
+  });
+
+  it('类型字段有默认值且带行内注释时，typeStr 仅保留类型名', () => {
+    // `host: str = "localhost"  # server address` 应提取 typeStr = "str"
+    const source = [
+      'class Config(BaseModel):',
+      '    host: str = "localhost"  # server address',
+    ];
+    const fields = extractPythonFieldsFromLines(source, 1, source.length);
+
+    expect(fields).toHaveLength(1);
+    expect(fields[0]!.typeStr).toBe('str');
+    expect(fields[0]!.defaultValue).toBe('"localhost"  # server address');
+  });
+
+  it('Literal 类型中包含 # 字符时不被误截断', () => {
+    // `color: Literal['#fff', '#000']` 中的 # 在字符串内，不应被截断
+    const source = [
+      '@dataclass',
+      "class Theme:",
+      "    color: Literal['#fff', '#000']",
+    ];
+    const fields = extractPythonFieldsFromLines(source, 1, source.length);
+
+    expect(fields).toHaveLength(1);
+    expect(fields[0]!.typeStr).toBe("Literal['#fff', '#000']");
+  });
+});
