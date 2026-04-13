@@ -578,21 +578,27 @@ model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5.3-codex
-      sonnet: gpt-5.3-codex
+      opus: gpt-5.4
+      sonnet: gpt-5.4
     claude:
-      gpt-5.3-codex: sonnet
+      gpt-5.4: sonnet
       gpt-5: opus
       gpt-5-mini: sonnet
+      o3: opus
+      o4-mini: sonnet
   defaults:
-    codex: gpt-5.3-codex
+    codex: gpt-5.4
     claude: sonnet
+
+# Codex service tier
+codex:
+  service_tier: fast  # fast | standard | flex
 
 # Codex thinking level (use one model + adjust effort)
 codex_thinking:
-  default_level: medium  # low | medium | high
+  default_level: xhigh  # low | medium | high | xhigh
   level_map:
-    opus: high
+    opus: xhigh
     sonnet: medium
     haiku: low
 
@@ -623,7 +629,7 @@ verification:
 | `quality-first` | Opus | Opus |
 | `cost-efficient` | Sonnet | Sonnet |
 
-When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both to `gpt-5.3-codex`; depth is controlled by `codex_thinking` levels.
+When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both to `gpt-5.4`; depth is controlled by `codex_thinking` levels (`low` / `medium` / `high` / `xhigh`).
 
 `spectra` CLI (`generate` / `batch` / `diff`) now follows the same model config source:
 
