@@ -1,12 +1,12 @@
 /**
  * Product / UX fact ingestion
  *
- * Feature 060: 将 current-spec、README/设计说明、GitHub issue/PR 与近期提交
+ * Feature 060: 将 current-spec、README/设计说明与近期提交
  * 汇总为产品概览、用户旅程与 feature brief 文档。
  *
  * 设计原则：
- * 1. current-spec 是首选事实源；README / 设计文档 / GitHub issue/PR 为补充源
- * 2. 允许无 GitHub token / 无 gh CLI 的离线降级
+ * 1. current-spec 是首选事实源；README / 设计文档为补充源
+ * 2. 文档生成完全基于仓库内容，不依赖外部 API 或 CLI
  * 3. narrative 与 journey/brief synthesis 必须保留 evidence / confidence / inferred
  */
 import * as fs from 'node:fs';
@@ -23,8 +23,6 @@ export type ProductFactSourceType =
   | 'current-spec'
   | 'readme'
   | 'design-doc'
-  | 'issue'
-  | 'pull-request'
   | 'commit'
   | 'inference';
 
@@ -150,16 +148,6 @@ interface CurrentSpecDoc extends MarkdownSource {
   sections: Map<string, string>;
 }
 
-interface GitHubItem {
-  sourceType: 'issue' | 'pull-request';
-  number: number;
-  title: string;
-  body: string;
-  state: string;
-  labels: string[];
-  url?: string;
-}
-
 interface CommitFact {
   sha: string;
   subject: string;
@@ -171,8 +159,6 @@ interface ProductFactCorpus {
   currentSpecs: CurrentSpecDoc[];
   readmes: MarkdownSource[];
   designDocs: MarkdownSource[];
-  issues: GitHubItem[];
-  pullRequests: GitHubItem[];
   commits: CommitFact[];
   warnings: string[];
 }
@@ -261,18 +247,16 @@ function buildProductFactCorpus(projectRoot: string): ProductFactCorpus {
   const currentSpecs = collectCurrentSpecs(projectRoot);
   const readmes = collectReadmes(projectRoot);
   const designDocs = collectLocalDesignDocs(projectRoot);
-  const gitHubFacts = collectGitHubFacts(projectRoot);
   const commits = collectRecentCommits(projectRoot, 10);
   const warnings = uniqueSorted([
-    ...gitHubFacts.warnings,
     ...(currentSpecs.length === 0
-      ? ['未找到 current-spec.md，将更多依赖 README / 设计文档 / issue/PR 进行产品事实推断。']
+      ? ['未找到 current-spec.md，将更多依赖 README 与设计文档进行产品事实推断。']
       : []),
     ...(readmes.length === 0
       ? ['未找到项目级 README.md，产品定位摘要将缺少一份高价值补充源。']
       : []),
     ...(designDocs.length === 0
-      ? ['未找到本地设计说明/roadmap Markdown，UX 旅程与 feature brief 将更多依赖 current-spec / issue/PR。']
+      ? ['未找到本地设计说明/roadmap Markdown，UX 旅程与 feature brief 将更多依赖 current-spec 与 README。']
       : []),
   ]);
 
@@ -281,8 +265,6 @@ function buildProductFactCorpus(projectRoot: string): ProductFactCorpus {
     currentSpecs,
     readmes,
     designDocs,
-    issues: gitHubFacts.issues,
-    pullRequests: gitHubFacts.pullRequests,
     commits,
     warnings,
   };
@@ -296,8 +278,6 @@ function buildProductOverview(corpus: ProductFactCorpus): ProductOverviewOutput 
     ...collectEvidenceFromSources(corpus.currentSpecs, 'high'),
     ...collectEvidenceFromSources(corpus.readmes, 'medium'),
     ...collectEvidenceFromSources(corpus.designDocs, 'medium'),
-    ...corpus.issues.slice(0, 3).map((issue) => toGitHubEvidence(issue, issue.title, 'medium')),
-    ...corpus.pullRequests.slice(0, 2).map((pr) => toGitHubEvidence(pr, pr.title, 'medium')),
   ]);
 
   const warnings = uniqueSorted([
@@ -380,22 +360,12 @@ function buildUserJourneys(
     generatedAt: new Date().toISOString(),
     projectName: corpus.projectName,
     summary: journeys.length > 0
-      ? [`基于 ${journeys.length} 条核心场景组织用户旅程，优先引用 current-spec、README 与可用的 issue/PR 事实。`]
+      ? [`基于 ${journeys.length} 条核心场景组织用户旅程，优先引用 current-spec、README 与本地设计文档事实。`]
       : ['仅基于代码与现有规格推断；尚未识别到稳定的用户旅程输入。'],
     journeys,
     warnings,
     confidence: currentSpecConfidence(corpus.currentSpecs.length > 0, journeys.length),
   };
-}
-
-/**
- * 判断 issue/PR 是否可能是 bug 报告或问题（而非功能请求）。
- */
-function isLikelyBugOrQuestion(item: { title: string; labels: string[] }): boolean {
-  const bugLabels = ['bug', 'question', 'invalid', 'wontfix', 'duplicate', 'help wanted'];
-  if (item.labels.some((l) => bugLabels.includes(l.toLowerCase().trim()))) return true;
-  const bugPattern = /^(fix|bug|error|broken|fails?|crash(es)?|cannot|can't|doesn't|doesn't|issue|problem|wrong|not work)/i;
-  return bugPattern.test(item.title.trim());
 }
 
 function buildFeatureBriefIndex(
@@ -404,153 +374,35 @@ function buildFeatureBriefIndex(
   journeys: UserJourneysOutput,
 ): FeatureBriefIndexOutput {
   const briefs: FeatureBrief[] = [];
-  const defaultAudience = overview.targetUsers[0]?.name ?? '开发者';
 
-  const featureIssues = corpus.issues.filter((issue) => !isLikelyBugOrQuestion(issue));
-  for (const issue of featureIssues.slice(0, 3)) {
-    const id = `ISSUE-${issue.number}`;
+  for (const scenario of journeys.journeys.slice(0, 3)) {
+    const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
     briefs.push({
       id,
-      slug: slugify(issue.title),
-      fileName: briefFileName(id, issue.title),
-      title: issue.title,
-      summary: firstMeaningfulSentence(issue.body) ?? issue.title,
-      problem: firstMeaningfulSentence(issue.body) ?? `${issue.title} 对应的问题陈述未在 issue 正文中明确给出。`,
-      proposedSolution: `围绕 issue #${issue.number} 组织功能说明，并将其纳入产品 / UX 文档事实层。`,
-      audience: inferAudience(issue.title, overview.targetUsers) ?? defaultAudience,
-      status: issue.state === 'closed' ? 'shipped' : 'candidate',
-      evidence: [toGitHubEvidence(issue, issue.title, 'high')],
-      confidence: 'high',
-      inferred: false,
+      slug: slugify(scenario.title),
+      fileName: briefFileName(id, scenario.title),
+      title: scenario.title,
+      summary: scenario.goal,
+      problem: `${scenario.actor} 需要更直接地完成”${scenario.title}”相关任务，当前缺少独立的功能说明文档。`,
+      proposedSolution: `围绕 ${scenario.title} 组织一份产品 brief，把用户目标、路径和预期输出显式化。`,
+      audience: scenario.actor,
+      status: 'candidate',
+      evidence: scenario.evidence,
+      confidence: 'medium',
+      inferred: true,
     });
   }
-
-  const featurePrs = corpus.pullRequests.filter((pr) => !isLikelyBugOrQuestion(pr));
-  for (const pr of featurePrs.slice(0, 2)) {
-    const id = `PR-${pr.number}`;
-    briefs.push({
-      id,
-      slug: slugify(pr.title),
-      fileName: briefFileName(id, pr.title),
-      title: pr.title,
-      summary: firstMeaningfulSentence(pr.body) ?? pr.title,
-      problem: firstMeaningfulSentence(pr.body) ?? `${pr.title} 对应的变更动机未在 PR 正文中明确给出。`,
-      proposedSolution: `把 PR #${pr.number} 的实现意图沉淀为可读的 feature brief，并连接到产品概览与用户旅程。`,
-      audience: inferAudience(pr.title, overview.targetUsers) ?? defaultAudience,
-      status: pr.state === 'closed' ? 'shipped' : 'candidate',
-      evidence: [toGitHubEvidence(pr, pr.title, 'high')],
-      confidence: 'high',
-      inferred: false,
-    });
-  }
-
-  if (briefs.length === 0) {
-    for (const scenario of journeys.journeys.slice(0, 3)) {
-      const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
-      briefs.push({
-        id,
-        slug: slugify(scenario.title),
-        fileName: briefFileName(id, scenario.title),
-        title: scenario.title,
-        summary: scenario.goal,
-        problem: `${scenario.actor} 需要更直接地完成”${scenario.title}”相关任务，但现有事实源未提供独立 issue/PR 说明。`,
-        proposedSolution: `围绕 ${scenario.title} 组织一份产品 brief，把用户目标、路径和预期输出显式化。`,
-        audience: scenario.actor,
-        status: 'candidate',
-        evidence: scenario.evidence,
-        confidence: 'medium',
-        inferred: true,
-      });
-    }
-  }
-
-  // 独立数据源 A：从 current-spec 意图段列表项派生（不依赖 journeys）
-  if (briefs.length === 0) {
-    for (const spec of corpus.currentSpecs) {
-      for (const sectionKey of ['核心功能', '功能', 'Features', '产品概述']) {
-        const section = spec.sections.get(sectionKey);
-        if (!section) continue;
-        for (const item of extractListItems(section).slice(0, 3)) {
-          const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
-          briefs.push({
-            id,
-            slug: slugify(item),
-            fileName: briefFileName(id, item),
-            title: item,
-            summary: item,
-            problem: `产品文档中缺少对”${item}”功能的独立说明。`,
-            proposedSolution: `围绕”${item}”整理一份 feature brief，把功能目标、用户价值和实现路径显式化。`,
-            audience: defaultAudience,
-            status: 'shipped',
-            evidence: [{
-              sourceType: 'current-spec',
-              label: spec.label,
-              path: spec.path,
-              excerpt: item,
-              confidence: 'medium',
-              inferred: true,
-            }],
-            confidence: 'medium',
-            inferred: true,
-          });
-          if (briefs.length >= 3) break;
-        }
-        if (briefs.length >= 3) break;
-      }
-      if (briefs.length >= 3) break;
-    }
-  }
-
-  // 独立数据源 B：从 README 段落派生（适用于无 current-spec 的项目，如 Python Graphify）
-  if (briefs.length === 0) {
-    for (const readme of corpus.readmes) {
-      for (const para of extractParagraphs(readme.text).slice(0, 3)) {
-        const title = firstSentence(para) ?? para.slice(0, 60);
-        const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
-        briefs.push({
-          id,
-          slug: slugify(title),
-          fileName: briefFileName(id, title),
-          title,
-          summary: para,
-          problem: `”${title}”相关的用户价值与功能说明尚未系统化。`,
-          proposedSolution: `围绕”${title}”整理一份 feature brief，将其从 README 沉淀为结构化产品说明。`,
-          audience: defaultAudience,
-          status: 'candidate',
-          evidence: [{
-            sourceType: 'readme',
-            label: readme.label,
-            path: readme.path,
-            excerpt: para,
-            confidence: 'low',
-            inferred: true,
-          }],
-          confidence: 'low',
-          inferred: true,
-        });
-        if (briefs.length >= 3) break;
-      }
-      if (briefs.length >= 3) break;
-    }
-  }
-
-  const warnings = uniqueSorted([
-    ...corpus.warnings,
-    ...(corpus.issues.length === 0 && corpus.pullRequests.length === 0
-      ? ['未获取到 GitHub issue/PR 事实，feature briefs 已回退到 current-spec / journey 派生模式。']
-      : []),
-  ]);
 
   return {
     title: `Feature Briefs: ${corpus.projectName}`,
     generatedAt: new Date().toISOString(),
     projectName: corpus.projectName,
     summary: [
-      `共组织 ${briefs.length} 份 feature brief，优先使用 issue/PR 事实，缺失时回退到 current-spec 与 journey synthesis。`,
+      `共组织 ${briefs.length} 份 feature brief，基于 current-spec 与用户旅程派生。`,
     ],
     briefs: briefs.slice(0, 5),
-    warnings,
-    confidence: currentSpecConfidence(corpus.issues.length + corpus.pullRequests.length > 0, briefs.length),
+    warnings: [...corpus.warnings],
+    confidence: currentSpecConfidence(corpus.currentSpecs.length > 0, briefs.length),
   };
 }
 
@@ -648,122 +500,6 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
       text: fs.readFileSync(fullPath, 'utf-8'),
     });
   }
-}
-
-function collectGitHubFacts(projectRoot: string): {
-  issues: GitHubItem[];
-  pullRequests: GitHubItem[];
-  warnings: string[];
-} {
-  const warnings: string[] = [];
-  const repo = resolveGitHubRepo(projectRoot);
-  if (!repo) {
-    return {
-      issues: [],
-      pullRequests: [],
-      warnings: ['未解析到 GitHub 远端仓库，跳过 issue/PR 事实接入。'],
-    };
-  }
-
-  const issues = runGhJson(projectRoot, [
-    'issue',
-    'list',
-    '--repo',
-    repo,
-    '--state',
-    'all',
-    '--limit',
-    '12',
-    '--json',
-    'number,title,body,state,labels,url',
-  ], 'issue', warnings);
-
-  const pullRequests = runGhJson(projectRoot, [
-    'pr',
-    'list',
-    '--repo',
-    repo,
-    '--state',
-    'all',
-    '--limit',
-    '12',
-    '--json',
-    'number,title,body,state,labels,url',
-  ], 'pull-request', warnings);
-
-  return {
-    issues,
-    pullRequests,
-    warnings,
-  };
-}
-
-function runGhJson(
-  projectRoot: string,
-  args: string[],
-  sourceType: GitHubItem['sourceType'],
-  warnings: string[],
-): GitHubItem[] {
-  const result = spawnSync('gh', args, {
-    cwd: projectRoot,
-    encoding: 'utf-8',
-  });
-
-  if (result.error) {
-    warnings.push(`gh CLI 不可用，跳过 GitHub ${sourceType === 'issue' ? 'issue' : 'PR'} 接入。`);
-    return [];
-  }
-
-  if (result.status !== 0) {
-    const stderr = `${result.stderr ?? ''}`.trim();
-    warnings.push(
-      `GitHub ${sourceType === 'issue' ? 'issue' : 'PR'} 接入失败: ${stderr || `退出码 ${result.status}`}`,
-    );
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(result.stdout || '[]') as Array<Record<string, unknown>>;
-    return parsed.map((item) => ({
-      sourceType,
-      number: normalizeNumber(item.number),
-      title: `${item.title ?? ''}`.trim(),
-      body: `${item.body ?? ''}`.trim(),
-      state: `${item.state ?? 'unknown'}`.trim(),
-      labels: Array.isArray(item.labels)
-        ? item.labels
-          .map((label) => {
-            if (label && typeof label === 'object') {
-              return `${(label as { name?: unknown }).name ?? ''}`.trim();
-            }
-            return `${label ?? ''}`.trim();
-          })
-          .filter((label) => label.length > 0)
-        : [],
-      url: typeof item.url === 'string' ? item.url : undefined,
-    }));
-  } catch (error) {
-    warnings.push(`GitHub ${sourceType === 'issue' ? 'issue' : 'PR'} 输出解析失败: ${String(error)}`);
-    return [];
-  }
-}
-
-function resolveGitHubRepo(projectRoot: string): string | undefined {
-  const result = spawnSync('git', ['remote', 'get-url', 'origin'], {
-    cwd: projectRoot,
-    encoding: 'utf-8',
-  });
-
-  if (result.status !== 0) {
-    return undefined;
-  }
-
-  const remoteUrl = `${result.stdout ?? ''}`.trim();
-  const match = remoteUrl.match(/github\.com[:/](.+?)\/(.+?)(?:\.git)?$/i);
-  if (!match?.[1] || !match[2]) {
-    return undefined;
-  }
-  return `${match[1]}/${match[2]}`;
 }
 
 function collectRecentCommits(projectRoot: string, limit: number): CommitFact[] {
@@ -915,24 +651,9 @@ function buildCoreScenarios(
     }
   }
 
-  // README Usage/Features 节 fallback（优先于 GitHub issues）
+  // README Usage/Features 节 fallback
   if (scenarios.length === 0) {
     scenarios.push(...extractScenariosFromReadme(corpus, targetUsers));
-  }
-  // GitHub issues/PRs 兜底（仅使用非 bug 类）
-  if (scenarios.length === 0) {
-    for (const item of [...corpus.issues.slice(0, 2), ...corpus.pullRequests.slice(0, 2)]) {
-      if (isLikelyBugOrQuestion(item)) continue;
-      scenarios.push({
-        id: `scenario-${scenarios.length + 1}`,
-        title: item.title,
-        summary: firstMeaningfulSentence(item.body) ?? item.title,
-        actors: [inferAudience(item.title, targetUsers) ?? targetUsers[0]?.name ?? '使用者'],
-        evidence: [toGitHubEvidence(item, item.title, 'medium')],
-        confidence: 'medium',
-        inferred: true,
-      });
-    }
   }
 
   // Phase 3：从 README Features/How it works 等标题下提取叙述段落场景
@@ -1199,22 +920,6 @@ function collectEvidenceFromSources(
   }));
 }
 
-function toGitHubEvidence(
-  item: GitHubItem,
-  excerpt: string,
-  confidence: ProductEvidenceRef['confidence'],
-): ProductEvidenceRef {
-  return {
-    sourceType: item.sourceType,
-    label: `${item.sourceType === 'issue' ? 'issue' : 'pr'} #${item.number}`,
-    path: item.url,
-    ref: item.url,
-    excerpt,
-    confidence,
-    inferred: false,
-  };
-}
-
 function currentSpecConfidence(hasCurrentSpec: boolean, signalCount: number): 'high' | 'medium' | 'low' {
   if (hasCurrentSpec && signalCount >= 2) {
     return 'high';
@@ -1340,7 +1045,7 @@ export class ProductUxDocsGenerator
 {
   readonly id = 'product-ux-docs' as const;
   readonly name = '产品 UX 文档生成器' as const;
-  readonly description = '基于 current-spec、README 与 GitHub 数据生成产品概览、用户旅程与 feature brief 文档';
+  readonly description = '基于 current-spec、README 与本地设计文档生成产品概览、用户旅程与 feature brief 文档';
 
   private readonly outputDir: string;
 
