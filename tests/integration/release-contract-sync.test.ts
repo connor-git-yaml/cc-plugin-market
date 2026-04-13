@@ -95,7 +95,7 @@ describe('release contract sync', () => {
     expect(payload.status).toBe('pass');
     expect(payload.errors).toEqual([]);
 
-    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "3.0.0"');
+    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "3.0.1"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', '.claude-plugin', 'plugin.json'), 'utf-8'))
       .toContain('"version": "3.11.2"');
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', 'README.md'), 'utf-8'))

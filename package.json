@@ -1,6 +1,6 @@
 {
   "name": "spectra-cli",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "通过 AST 静态分析 + LLM 混合流水线，将源代码逆向工程为结构化 Spec 文档的多语言代码分析平台",
   "type": "module",
   "main": "dist/index.js",
