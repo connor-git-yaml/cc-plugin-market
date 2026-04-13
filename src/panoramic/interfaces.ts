@@ -55,11 +55,13 @@ export type GenerateOptions = z.infer<typeof GenerateOptionsSchema>;
 
 /**
  * 包管理器枚举 Schema
- * 10 个枚举值：npm/yarn/pnpm/pip/uv/go/maven/gradle/pipenv/unknown
- * pip 为预留值（无自动检测规则），unknown 为无法识别时的默认值
+ * 11 个枚举值：npm/yarn/pnpm/pip/uv/poetry/go/maven/gradle/pipenv/unknown
+ * pip 为 pyproject.toml 存在但无特定工具链标识时的降级值
+ * poetry 由 pyproject.toml 中 [tool.poetry] 段触发
+ * unknown 为无法识别时的默认值
  */
 export const PackageManagerSchema = z.enum([
-  'npm', 'yarn', 'pnpm', 'pip', 'uv',
+  'npm', 'yarn', 'pnpm', 'pip', 'uv', 'poetry',
   'go', 'maven', 'gradle', 'pipenv', 'unknown',
 ]);
 

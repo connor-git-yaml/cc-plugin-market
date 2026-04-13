@@ -222,6 +222,108 @@ describe('module-grouper', () => {
   });
 
   // ============================================================
+  // 扁平包文件级分组自动降级（Feature 114）
+  // ============================================================
+
+  describe('扁平包文件级分组', () => {
+    it('单目录多文件自动降级为文件级模块（basePrefix 为空）', () => {
+      // 模拟 Python 扁平包：所有 .py 文件在同一目录下，无 src/ 布局
+      const graph = createGraph([
+        'graphify/pipeline.py',
+        'graphify/extract.py',
+        'graphify/cluster.py',
+        'graphify/analyze.py',
+      ]);
+
+      // basePrefix 自动检测为 ''（无 src/ 或 lib/）
+      const result = groupFilesToModules(graph);
+
+      // 应产生 4 个文件级模块而非 1 个 graphify 目录级模块
+      expect(result.groups).toHaveLength(4);
+      const names = result.groups.map((g) => g.name).sort();
+      expect(names).toEqual(['analyze', 'cluster', 'extract', 'pipeline']);
+    });
+
+    it('文件级模块间依赖边正确保留', () => {
+      const graph = createGraph(
+        [
+          'graphify/pipeline.py',
+          'graphify/extract.py',
+        ],
+        [['graphify/pipeline.py', 'graphify/extract.py']],
+      );
+
+      const result = groupFilesToModules(graph);
+
+      expect(result.moduleEdges).toHaveLength(1);
+      expect(result.moduleEdges[0]).toEqual({ from: 'pipeline', to: 'extract' });
+    });
+
+    it('文件级分组的拓扑排序正确', () => {
+      const graph = createGraph(
+        [
+          'graphify/pipeline.py',
+          'graphify/extract.py',
+          'graphify/utils.py',
+        ],
+        [
+          ['graphify/pipeline.py', 'graphify/extract.py'],
+          ['graphify/extract.py', 'graphify/utils.py'],
+        ],
+      );
+
+      const result = groupFilesToModules(graph);
+
+      const utilsIdx = result.moduleOrder.indexOf('utils');
+      const extractIdx = result.moduleOrder.indexOf('extract');
+      const pipelineIdx = result.moduleOrder.indexOf('pipeline');
+      expect(utilsIdx).toBeLessThan(extractIdx);
+      expect(extractIdx).toBeLessThan(pipelineIdx);
+    });
+
+    it('多目录项目不触发文件级降级', () => {
+      // 多个顶层目录 → 多个模块 → 不触发降级
+      const graph = createGraph([
+        'agents/runner.py',
+        'config/loader.py',
+        'utils/helper.py',
+      ]);
+
+      const result = groupFilesToModules(graph);
+
+      expect(result.groups).toHaveLength(3);
+      const names = result.groups.map((g) => g.name).sort();
+      expect(names).toEqual(['agents', 'config', 'utils']);
+    });
+
+    it('单文件模块不触发降级', () => {
+      const graph = createGraph([
+        'graphify/main.py',
+      ]);
+
+      const result = groupFilesToModules(graph);
+
+      // 1 个文件 → 1 个模块 graphify，不降级
+      expect(result.groups).toHaveLength(1);
+    });
+
+    it('src/ 布局下单目录不触发降级', () => {
+      // src/ 布局是标准结构，单目录多文件是正常情况，不应降级
+      const graph = createGraph([
+        'src/services/auth.ts',
+        'src/services/middleware.ts',
+        'src/services/handler.ts',
+      ]);
+
+      const result = groupFilesToModules(graph);
+
+      expect(result.groups).toHaveLength(1);
+      expect(result.groups[0]!.name).toBe('services');
+      expect(result.groups[0]!.files).toHaveLength(3);
+    });
+  });
+
+  // ============================================================
   // Phase 4: 语言感知分组测试（T038-T045）
   // ============================================================
 

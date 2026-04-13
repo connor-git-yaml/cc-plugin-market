@@ -150,6 +150,29 @@ export function groupFilesToModules(
     }
   }
 
+  // 步骤 2.5：扁平包自动降级为文件级分组
+  // 仅当无标准源码目录布局（basePrefix === ''）且目录级分组只产生 1 个包含多文件的非 root 模块时触发
+  // 典型场景：Python 单包项目（graphify/pipeline.py, graphify/extract.py, ...）
+  const nonRootGroups = groups.filter((g) => g.name !== rootModuleName);
+  if (basePrefix === '' && nonRootGroups.length === 1 && nonRootGroups[0]!.files.length > 1) {
+    const soleGroup = nonRootGroups[0]!;
+    const rootGroup = groups.find((g) => g.name === rootModuleName);
+    // 将唯一模块拆分为文件级子模块
+    const fileGroups: ModuleGroup[] = soleGroup.files.map((file) => {
+      const stem = path.basename(file).replace(/\.[^.]+$/, '');
+      return {
+        name: stem,
+        dirPath: soleGroup.dirPath,
+        files: [file],
+        language: soleGroup.language,
+      };
+    });
+    // 重建 groups：保留 root（若存在）+ 文件级模块
+    groups.length = 0;
+    if (rootGroup) groups.push(rootGroup);
+    groups.push(...fileGroups);
+  }
+
   // 步骤 3：构建模块间依赖关系
   const fileToModule = new Map<string, string>();
   for (const group of groups) {

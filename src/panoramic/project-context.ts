@@ -81,6 +81,21 @@ function detectPackageManager(projectRoot: string): PackageManager {
       return manager;
     }
   }
+
+  // pyproject.toml 降级检测：无 lock 文件时通过内容判断 poetry 或 pip
+  const pyprojectPath = path.join(projectRoot, 'pyproject.toml');
+  if (fs.existsSync(pyprojectPath)) {
+    try {
+      const content = fs.readFileSync(pyprojectPath, 'utf-8');
+      if (/^\[tool\.poetry\]/m.test(content)) {
+        return 'poetry';
+      }
+      return 'pip';
+    } catch {
+      return 'pip';
+    }
+  }
+
   return 'unknown';
 }
 

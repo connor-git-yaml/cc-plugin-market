@@ -108,10 +108,41 @@ describe('detectPackageManager', () => {
     expect(ctx.packageManager).toBe('pnpm');
   });
 
-  it('无 lock 文件返回 unknown', async () => {
+  it('无 lock 文件且无 pyproject.toml 返回 unknown', async () => {
     tmpDir = createTmpDir();
     const ctx = await buildProjectContext(tmpDir);
     expect(ctx.packageManager).toBe('unknown');
+  });
+
+  it('pyproject.toml 存在但无 lock 文件 -> pip', async () => {
+    tmpDir = createTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'pyproject.toml'),
+      '[project]\nname = "my-project"\nversion = "1.0.0"\n',
+    );
+    const ctx = await buildProjectContext(tmpDir);
+    expect(ctx.packageManager).toBe('pip');
+  });
+
+  it('pyproject.toml 含 [tool.poetry] -> poetry', async () => {
+    tmpDir = createTmpDir();
+    fs.writeFileSync(
+      path.join(tmpDir, 'pyproject.toml'),
+      '[project]\nname = "my-project"\n\n[tool.poetry]\nname = "my-project"\n',
+    );
+    const ctx = await buildProjectContext(tmpDir);
+    expect(ctx.packageManager).toBe('poetry');
+  });
+
+  it('pyproject.toml + uv.lock 共存时 lock 文件优先 -> uv', async () => {
+    tmpDir = createTmpDir();
+    fs.writeFileSync(path.join(tmpDir, 'uv.lock'), '');
+    fs.writeFileSync(
+      path.join(tmpDir, 'pyproject.toml'),
+      '[project]\nname = "my-project"\n',
+    );
+    const ctx = await buildProjectContext(tmpDir);
+    expect(ctx.packageManager).toBe('uv');
   });
 });
 
