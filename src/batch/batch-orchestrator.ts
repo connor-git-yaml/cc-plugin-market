@@ -65,6 +65,8 @@ export interface BatchOptions {
   onProgress?: (completed: number, total: number) => void;
   /** 每个模块的 LLM 最大重试次数（默认 3） */
   maxRetries?: number;
+  /** 并发处理的模块数上限（默认 1 = 顺序处理，建议 3-5） */
+  concurrency?: number;
   /** 检查点文件路径 */
   checkpointPath?: string;
   /** 模块分组选项 */
@@ -374,35 +376,28 @@ export async function runBatch(
     : '';
 
   const completedPaths = new Set(state.completedModules.map((m) => m.path));
+  const concurrency = options.concurrency ?? 1;
+  const modulesDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
 
-  for (const moduleName of processingOrder) {
+  // state 在此处保证非 null（第 341 行的 if 分支已确保初始化）
+  const checkedState = state!;
+
+  /** 单个模块的处理逻辑（提取为函数以支持并行调度） */
+  async function processOneModule(moduleName: string): Promise<void> {
     const group = moduleGroups.get(moduleName);
-    if (!group) continue;
+    if (!group) return;
 
-    // 跳过已完成的模块（断点恢复）
-    if (completedPaths.has(moduleName)) {
-      continue;
-    }
+    if (completedPaths.has(moduleName)) return;
 
-    // 检查是否匹配根模块名（支持语言感知拆分后的 root--lang 变体）
     const isRoot = moduleName === rootModuleName || moduleName.startsWith(`${rootModuleName}--`);
-
-    reporter.start(moduleName);
-    state.currentModule = moduleName;
-
-    const modulesDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
     const specPath = path.join(modulesDir, `${moduleName}.spec.md`);
     const moduleSourceTarget = normalizeProjectPath(group.dirPath);
     const rootTargetsToGenerate = isRoot
       ? group.files
         .map((filePath) => normalizeProjectPath(filePath))
         .filter((sourceTarget) => {
-          if (forceFullRegeneration) {
-            return true;
-          }
-          if (shouldUseIncrementalPlan) {
-            return regenerateTargets.has(sourceTarget);
-          }
+          if (forceFullRegeneration) return true;
+          if (shouldUseIncrementalPlan) return regenerateTargets.has(sourceTarget);
           const storedSpec = storedSpecByTarget.get(sourceTarget);
           return !storedSpec || !fs.existsSync(path.join(resolvedRoot, storedSpec.outputPath));
         })
@@ -412,7 +407,7 @@ export async function runBatch(
       if (rootTargetsToGenerate.length === 0) {
         skipped.push(moduleName);
         reporter.complete(moduleName, 'skipped');
-        continue;
+        return;
       }
     } else {
       const shouldGenerate = forceFullRegeneration
@@ -422,38 +417,43 @@ export async function runBatch(
       if (!shouldGenerate) {
         skipped.push(moduleName);
         reporter.complete(moduleName, 'skipped');
-        continue;
+        return;
       }
     }
 
-    // 处理模块
+    reporter.start(moduleName);
+
     let retryCount = 0;
     let moduleSuccess = false;
 
     while (retryCount < maxRetries && !moduleSuccess) {
       try {
+        // 小模块优化：文件数 ≤ 2 且总行数 < 200 时降级为 Sonnet + 跳过 enrichment
+        const totalLoc = group.files.reduce((sum, f) => {
+          try { return sum + fs.readFileSync(path.join(resolvedRoot, f), 'utf-8').split('\n').length; } catch { return sum; }
+        }, 0);
+        const isSmallModule = group.files.length <= 2 && totalLoc < 200;
+
         const genOptions: GenerateSpecOptions = {
           outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
+          skipEnrichment: isSmallModule,
+          modelOverride: isSmallModule ? 'claude-sonnet-4-5-20250929' : undefined,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
-            // context 阶段完成时触发进度条半步更新（US3）
             if (progress.stage === 'context' && progress.duration !== undefined) {
-              const currentCompleted = state!.completedModules.length + failed.length + skipped.length;
+              const currentCompleted = checkedState.completedModules.length + failed.length + skipped.length;
               options.onProgress?.(currentCompleted + 0.5, processingOrder.length);
             }
           },
         };
 
         if (isRoot) {
-          // root 模块：散文件逐个处理
           const generatedRootSpecs: string[] = [];
           for (const file of group.files) {
             const sourceTarget = normalizeProjectPath(file);
-            if (!rootTargetsToGenerate.includes(sourceTarget)) {
-              continue;
-            }
+            if (!rootTargetsToGenerate.includes(sourceTarget)) continue;
             const fullPath = path.join(resolvedRoot, file);
             const storedSpec = storedSpecByTarget.get(sourceTarget);
             const result = await generateSpec(fullPath, {
@@ -473,24 +473,21 @@ export async function runBatch(
 
           successful.push(moduleName);
           reporter.complete(moduleName, 'success');
-          state.completedModules.push({
+          checkedState.completedModules.push({
             path: moduleName,
             specPath: generatedRootSpecs[0]!,
             completedAt: new Date().toISOString(),
           });
         } else {
-          // 正常模块：传入目录路径
           const fullDirPath = path.join(resolvedRoot, group.dirPath);
           const result = await generateSpec(fullDirPath, {
             ...genOptions,
             existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
           });
 
-          // 多语言项目：注入 language 到 frontmatter + 跨语言提示到 constraints
           if (isMultiLang && group.language) {
             (result.moduleSpec.frontmatter as any).language = group.language;
 
-            // 检测跨语言引用
             const crossRefs = detectCrossLanguageRefs(
               group.files,
               languageGroupsList,
@@ -500,7 +497,6 @@ export async function runBatch(
               (result.moduleSpec.frontmatter as any).crossLanguageRefs = crossRefs;
             }
 
-            // 注入跨语言调用提示到 constraints section（CQ-001/T063）
             if (crossLangHint) {
               result.moduleSpec.sections.constraints += crossLangHint;
             }
@@ -516,7 +512,7 @@ export async function runBatch(
             reporter.complete(moduleName, 'success');
           }
 
-          state.completedModules.push({
+          checkedState.completedModules.push({
             path: moduleName,
             specPath: toProjectPath(path.resolve(result.specPath)),
             completedAt: new Date().toISOString(),
@@ -536,21 +532,50 @@ export async function runBatch(
             degradedToAstOnly: false,
           };
           failed.push(failedModule);
-          state.failedModules.push(failedModule);
+          checkedState.failedModules.push(failedModule);
           reporter.complete(moduleName, 'failed');
         }
       }
     }
 
-    // 每个模块后保存检查点
-    state.currentModule = null;
-    state.lastUpdatedAt = new Date().toISOString();
-    saveCheckpoint(state, checkpointPath);
+    checkedState.lastUpdatedAt = new Date().toISOString();
+    saveCheckpoint(checkedState, checkpointPath);
 
     options.onProgress?.(
-      state.completedModules.length + failed.length + skipped.length,
+      checkedState.completedModules.length + failed.length + skipped.length,
       processingOrder.length,
     );
+  }
+
+  // 步骤 4：并发控制调度
+  if (concurrency <= 1) {
+    // 顺序处理（向后兼容默认行为）
+    for (const moduleName of processingOrder) {
+      await processOneModule(moduleName);
+    }
+  } else {
+    // 并行处理：使用信号量控制并发数
+    const pending: Promise<void>[] = [];
+    let activeCount = 0;
+
+    for (const moduleName of processingOrder) {
+      // 等待直到有空闲槽位
+      while (activeCount >= concurrency) {
+        await Promise.race(pending);
+      }
+
+      activeCount++;
+      const task = processOneModule(moduleName).finally(() => {
+        activeCount--;
+        // 从 pending 中移除已完成的 promise
+        const idx = pending.indexOf(task);
+        if (idx >= 0) pending.splice(idx, 1);
+      });
+      pending.push(task);
+    }
+
+    // 等待所有剩余任务完成
+    await Promise.allSettled(pending);
   }
 
   // 步骤 5：生成架构索引（使用收集的 ModuleSpec）

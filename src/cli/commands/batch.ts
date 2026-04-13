@@ -42,6 +42,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       incremental: merged.incremental,
       languages: merged.languages,
       outputDir: merged.outputDir,
+      concurrency: command.concurrency ?? 1,
       // Feature 107：多模态提取标志（不纳入配置文件合并，仅从 CLI 传入）
       includeDocs: command.includeDocs,
       includeImages: command.includeImages,

@@ -38,6 +38,10 @@ export interface GenerateSpecOptions {
   projectRoot?: string;
   /** 阶段进度回调（可选） */
   onStageProgress?: StageProgressCallback;
+  /** 跳过 Section 2 二次增强（小模块优化，减少 LLM 调用次数） */
+  skipEnrichment?: boolean;
+  /** 覆盖 LLM 模型（batch 中小模块可降级为 Sonnet） */
+  modelOverride?: string;
 }
 
 export interface GenerateSpecResult {
@@ -408,7 +412,11 @@ export async function generateSpec(
 
   let llmContent: string;
   try {
-    const llmResponse: LLMResponse = await callLLM(context, { languageTerminology }, onRetry);
+    const llmResponse: LLMResponse = await callLLM(
+      context,
+      { languageTerminology, ...(options.modelOverride ? { model: options.modelOverride } : {}) },
+      onRetry,
+    );
     llmContent = llmResponse.content;
     tokenUsage = llmResponse.inputTokens + llmResponse.outputTokens;
   } catch (error) {
@@ -476,7 +484,8 @@ export async function generateSpec(
 
   // 步骤 7.6：Section 2（业务逻辑）二次生成 — 用完整上下文重新生成更详细的版本
   // 策略：先完成其他 Section 的分析积累上下文，再用所有已有内容重新生成 Section 2
-  if (!llmDegraded && sections.businessLogic) {
+  // skipEnrichment: batch 中小模块可跳过此步骤以减少 LLM 调用
+  if (!llmDegraded && sections.businessLogic && !options.skipEnrichment) {
     try {
       // 构建包含 Section 3-9 的富上下文摘要
       const otherSectionsContext = [

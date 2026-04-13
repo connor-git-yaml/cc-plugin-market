@@ -62,6 +62,8 @@ export interface CLICommand {
   includeImages?: boolean;
   /** export 命令目标格式（使用 exportFormat 避免与 query 的 format 冲突） */
   exportFormat?: 'obsidian' | 'html';
+  /** batch 并发数（仅 batch 子命令，默认 1 = 顺序处理） */
+  concurrency?: number;
 }
 
 /** 解析错误 */
@@ -590,6 +592,10 @@ export function parseArgs(argv: string[]): ParseResult {
     if (includeDocs) explicitFlags.add('includeDocs');
     if (includeImages) explicitFlags.add('includeImages');
 
+    // 并发数：--concurrency <N>（默认 1 = 顺序处理）
+    const concurrencyIdx = argv.indexOf('--concurrency');
+    const concurrency = concurrencyIdx >= 0 ? parseInt(argv[concurrencyIdx + 1] ?? '1', 10) : undefined;
+
     return {
       ok: true,
       command: {
@@ -608,6 +614,7 @@ export function parseArgs(argv: string[]): ParseResult {
         _explicitFlags: explicitFlags,
         includeDocs: includeDocs || undefined,
         includeImages: includeImages || undefined,
+        concurrency: concurrency && concurrency > 0 ? concurrency : undefined,
       },
     };
   }
