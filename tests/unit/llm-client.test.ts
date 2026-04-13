@@ -227,6 +227,11 @@ JWT 过期时间默认 24 小时
       expect(getTimeoutForModel('gpt-5.4')).toBe(300_000);
     });
 
+    it('Sonnet 模型应为大规格生成预留 10 分钟超时窗口', () => {
+      expect(getTimeoutForModel('claude-3-7-sonnet')).toBe(600_000);
+      expect(getTimeoutForModel('sonnet-4')).toBe(600_000);
+    });
+
     it('未知模型仍回退到保守默认值', () => {
       expect(getTimeoutForModel('custom-model')).toBe(180_000);
     });

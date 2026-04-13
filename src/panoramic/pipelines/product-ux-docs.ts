@@ -614,6 +614,20 @@ function buildTargetUsers(corpus: ProductFactCorpus): ProductUserSegment[] {
   }];
 }
 
+/**
+ * 判断一段文字是否是有意义的描述性段落（非标题、非导航链接）。
+ */
+function isDescriptiveParagraph(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 30) return false;
+  if (trimmed.startsWith('#')) return false;
+  const linkCount = (trimmed.match(/\[.*?\]\(.*?\)/g) ?? []).length;
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount > 0 && linkCount / wordCount > 0.5) return false;
+  if (trimmed.startsWith('<') || trimmed.startsWith('![')) return false;
+  return true;
+}
+
 function buildCoreScenarios(
   corpus: ProductFactCorpus,
   targetUsers: ProductUserSegment[],
@@ -668,12 +682,70 @@ function buildCoreScenarios(
 }
 
 /**
- * 从叙述型 README 的功能/特性标题段落中提取场景
- *
- * 匹配 Features、How it works、Capabilities 等标题，
- * 优先从列表项提取，若无列表则从段落提取。
+ * 从 README 提取场景：
+ * 1. corpus 模式优先读取 Features / Usage 等章节列表项
+ * 2. 单文档模式回退到叙述型标题段落与段落文本
  */
 function extractScenariosFromReadme(
+  source: ProductFactCorpus | MarkdownSource,
+  targetUsers: ProductUserSegment[],
+): ProductScenario[] {
+  if ('currentSpecs' in source) {
+    return extractScenariosFromReadmeCorpus(source, targetUsers);
+  }
+
+  return extractScenariosFromReadmeDocument(source, targetUsers);
+}
+
+function extractScenariosFromReadmeCorpus(
+  corpus: ProductFactCorpus,
+  targetUsers: ProductUserSegment[],
+): ProductScenario[] {
+  const scenarios: ProductScenario[] = [];
+  const sectionKeySet = new Set([
+    'usage', 'features', 'getting started', 'quick start', 'overview',
+    '使用', '使用方法', '功能', '快速开始', '特性',
+  ]);
+
+  for (const readme of corpus.readmes) {
+    const sections = parseMarkdownSections(readme.text);
+    for (const [rawKey, section] of sections) {
+      if (!sectionKeySet.has(rawKey.toLowerCase())) continue;
+
+      const items = extractListItems(section);
+      for (const item of items.slice(0, 4)) {
+        if (item.length < 10) continue;
+
+        const [titlePart, ...restParts] = item.split(/[:：]/);
+        const title = titlePart?.trim() || item;
+        const summary = restParts.join('：').trim() || item;
+        scenarios.push({
+          id: `scenario-${scenarios.length + 1}`,
+          title: title.slice(0, 80),
+          summary: summary.slice(0, 200) || title.slice(0, 200),
+          actors: [inferAudience(title, targetUsers) ?? targetUsers[0]?.name ?? '开发者'],
+          evidence: [{
+            sourceType: 'readme',
+            label: readme.label,
+            path: readme.path,
+            excerpt: item,
+            confidence: 'medium',
+            inferred: true,
+          }],
+          confidence: 'medium',
+          inferred: true,
+        });
+        if (scenarios.length >= 4) return scenarios;
+      }
+      if (scenarios.length >= 4) return scenarios;
+    }
+    if (scenarios.length >= 4) return scenarios;
+  }
+
+  return scenarios;
+}
+
+function extractScenariosFromReadmeDocument(
   readme: MarkdownSource,
   targetUsers: ProductUserSegment[],
 ): ProductScenario[] {

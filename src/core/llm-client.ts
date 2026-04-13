@@ -126,7 +126,7 @@ export type RetryCallback = (event: RetryEvent) => void;
  * 基于实测数据：
  * - Opus: spec 生成通常 >120s，需要更长超时
  * - GPT-5 / Codex: 中大型模块 spec 生成实测可超过 180s
- * - Sonnet: spec 生成通常 ~90s
+ * - Sonnet: 大模块 spec 生成可能超过 4 分钟，给 10 分钟裕量
  * - Haiku: 响应极快
  * - 未知模型: 保守默认值
  */
@@ -135,7 +135,7 @@ export function getTimeoutForModel(model: string): number {
   if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
   if (lowerModel.startsWith('gpt-5')) return 300_000; // 5 分钟
   if (lowerModel.includes('codex')) return 300_000;  // 5 分钟
-  if (lowerModel.includes('sonnet')) return 120_000;  // 2 分钟
+  if (lowerModel.includes('sonnet')) return 600_000;  // 10 分钟
   if (lowerModel.includes('haiku')) return 60_000;    // 1 分钟
   return 180_000;                                      // 3 分钟（保守默认）
 }

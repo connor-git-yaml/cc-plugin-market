@@ -95,6 +95,10 @@ const SUBSCRIBER_METHODS = new Set(['on', 'once', 'addListener', 'subscribe', 'c
 const PY_SUBSCRIBER_METHODS = new Set(['on', 'subscribe', 'consume', 'listen']);
 const EVENT_PATTERN_RE = /\.(emit|on|once|addListener|publish|subscribe|consume|send|dispatch|listen)\(\s*(['"`])[^'"`]+\2/;
 const TEXT_EVENT_RE = /\.(emit|on|once|addListener|publish|subscribe|consume|send|dispatch|listen)\(\s*(['"`])([^'"`]+)\2(?:\s*,\s*([^\n)]+))?/g;
+/** Python hook/callback/handler 函数定义模式——识别 on_xxx、xxx_hook、xxx_callback、handle_xxx 命名 */
+const PY_HOOK_DEF_RE = /^(?:async\s+)?def\s+(on_[a-z_][a-z0-9_]*|[a-z_][a-z0-9_]*_hook|[a-z_][a-z0-9_]*_callback|handle_[a-z_][a-z0-9_]*)\s*\(/;
+/** Python 装饰器事件模式——识别 @app.route、@hook、@receiver、@app.on_event 等 */
+const PY_DECORATOR_EVENT_RE = /^@(\w+(?:\.\w+)*)(?:\(\s*(['"`])([^'"`]+)\2)?/;
 const STATE_HINT_ORDER = [
   'created',
   'opened',
@@ -164,6 +168,7 @@ export class EventSurfaceGenerator
 
     for (const filePath of textFiles) {
       occurrences.push(...extractTextOccurrences(context.projectRoot, filePath));
+      occurrences.push(...extractPythonHookOccurrences(context.projectRoot, filePath));
     }
 
     return {
@@ -340,6 +345,101 @@ function extractTextOccurrences(projectRoot: string, filePath: string): EventOcc
   }
 
   return occurrences;
+}
+
+/**
+ * 从 Python 文件中提取 hook/callback/handler 函数定义和装饰器事件。
+ * 识别 on_xxx、xxx_hook、xxx_callback、handle_xxx 命名模式，
+ * 以及 @app.route('...')、@hook('...')、@receiver 等装饰器模式。
+ */
+function extractPythonHookOccurrences(projectRoot: string, filePath: string): EventOccurrence[] {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, 'utf-8');
+  } catch {
+    return [];
+  }
+
+  const relFile = toPosixPath(path.relative(projectRoot, filePath));
+  const lines = content.split(/\r?\n/);
+  const occurrences: EventOccurrence[] = [];
+  const EVENT_DECORATOR_NAMES = new Set([
+    'hook', 'receiver', 'on_event', 'route', 'websocket',
+    'listener', 'handler', 'event', 'signal',
+  ]);
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]?.trim() ?? '';
+
+    // 检测装饰器事件：@app.route('/path')、@hook('event_name') 等
+    const decoMatch = PY_DECORATOR_EVENT_RE.exec(line);
+    if (decoMatch) {
+      const decoratorPath = decoMatch[1]!;
+      const channelArg = decoMatch[3]; // 装饰器参数中的字符串
+      const lastSegment = decoratorPath.split('.').pop() ?? '';
+
+      if (EVENT_DECORATOR_NAMES.has(lastSegment)) {
+        const channelName = channelArg || `@${decoratorPath}`;
+        // 查找装饰器下方的函数定义
+        const funcName = findDecoratedFunction(lines, lineIndex);
+
+        occurrences.push({
+          channelName,
+          kind: inferDecoratorKind(lastSegment),
+          role: 'subscriber',
+          sourceFile: relFile,
+          symbolName: funcName,
+          methodName: `@${decoratorPath}`,
+          payloadFields: [],
+        });
+      }
+    }
+
+    // 检测 hook/callback 函数定义：def on_xxx、def xxx_hook 等
+    const hookMatch = PY_HOOK_DEF_RE.exec(line);
+    if (hookMatch) {
+      const funcName = hookMatch[1]!;
+      const channelName = deriveChannelFromHookName(funcName);
+
+      occurrences.push({
+        channelName,
+        kind: 'event',
+        role: 'subscriber',
+        sourceFile: relFile,
+        symbolName: funcName,
+        methodName: 'hook-definition',
+        payloadFields: [],
+      });
+    }
+  }
+
+  return occurrences;
+}
+
+/** 从装饰器类型推断 channel kind */
+function inferDecoratorKind(segment: string): EventChannelKind {
+  if (segment === 'route' || segment === 'websocket') return 'webhook';
+  if (segment === 'signal' || segment === 'receiver') return 'topic';
+  return 'event';
+}
+
+/** 查找装饰器下方的函数定义名 */
+function findDecoratedFunction(lines: string[], decoratorLine: number): string {
+  for (let i = decoratorLine + 1; i < Math.min(decoratorLine + 5, lines.length); i++) {
+    const line = lines[i]?.trim() ?? '';
+    const match = /^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
+    if (match?.[1]) return match[1];
+  }
+  return 'anonymous';
+}
+
+/** 从 hook 函数名派生事件 channel 名（on_xxx → xxx、xxx_hook → xxx） */
+function deriveChannelFromHookName(funcName: string): string {
+  if (funcName.startsWith('on_')) return funcName.slice(3);
+  if (funcName.endsWith('_hook')) return funcName.slice(0, -5);
+  if (funcName.endsWith('_callback')) return funcName.slice(0, -9);
+  if (funcName.startsWith('handle_')) return funcName.slice(7);
+  return funcName;
 }
 
 function dedupeOccurrences(items: EventOccurrence[]): EventOccurrence[] {

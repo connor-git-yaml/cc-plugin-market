@@ -160,6 +160,35 @@ export function validateSecondary() {
     expect(tokenEntries).toHaveLength(1);
     expect(tokenEntries[0]!.relatedLocations).toHaveLength(2);
   });
+
+  it('识别 Python raise / logging 模式并保留恢复证据', async () => {
+    writeFile(
+      path.join(tmpDir, 'worker.py'),
+      `
+import logging
+
+def connect_broker(broker_id):
+    logging.error("Broker unavailable")
+    logging.warning(f"Retrying broker {broker_id}")
+    retry_connection()
+    return fallback_to_cache()
+
+def parse_payload(payload):
+    raise ValueError("Payload invalid")
+      `.trim(),
+    );
+
+    const output = await generator.generate(await generator.extract(createContext(tmpDir)));
+    const titles = output.entries.map((entry) => entry.title);
+
+    expect(titles).toContain('故障: Broker unavailable');
+    expect(titles).toContain('故障: Payload invalid');
+
+    const retryEntry = output.entries.find((entry) => entry.title.startsWith('故障: Retrying broker'));
+    expect(retryEntry).toBeDefined();
+    expect(retryEntry!.recoverySteps.some((step) => step.includes('重试'))).toBe(true);
+    expect(retryEntry!.recoverySteps.some((step) => step.includes('回退') || step.includes('缓存'))).toBe(true);
+  });
 });
 
 describe('TroubleshootingGenerator - explanation evidence', () => {

@@ -76,11 +76,17 @@ const IGNORE_DIRS = new Set([
 ]);
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.py', '.go', '.java']);
-const QUICK_SIGNAL_RE = /throw new (?:\w+)?Error|(?:logger|console)\.error|process\.env|os\.getenv|getenv\(|retry|reconnect|fallback|recover|backoff|restart|resume|reset/;
+const QUICK_SIGNAL_RE = /throw new (?:\w+)?Error|raise \w+(?:Error|Exception)|(?:logger|console|logging)\.(?:error|warning)|process\.env|os\.getenv|getenv\(|retry|reconnect|fallback|recover|backoff|restart|resume|reset/;
 const ENV_FILE_RE = /^\.env(\..*)?$/;
 const ERROR_PATTERNS = [
   /throw new (?:\w+)?Error\(\s*(['"`])([^'"`]+)\1/,
   /(?:logger|console)\.error\(\s*(['"`])([^'"`]+)\1/,
+  // Python: raise ValueError('...')、raise Exception('...')
+  /raise \w+(?:Error|Exception)\(\s*(['"`])([^'"`]+)\1/,
+  // Python: logging.error('...')、logging.warning('...')
+  /logging\.(?:error|warning)\(\s*(['"`])([^'"`]+)\1/,
+  // Python: logging.error(f'...')（f-string 提取首段文本）
+  /logging\.(?:error|warning)\(\s*f(['"`])([^'"`{]+)/,
 ] as const;
 const JS_ENV_RE = /process\.env(?:\[['"]([A-Z][A-Z0-9_]*)['"]\]|\.([A-Z][A-Z0-9_]*))/g;
 const PY_ENV_RE = /\b(?:os\.)?getenv\(\s*(['"])([A-Z][A-Z0-9_]*)\1/g;

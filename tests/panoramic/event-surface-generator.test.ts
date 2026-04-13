@@ -207,6 +207,80 @@ def register_handlers():
     expect(channel!.publishers).toHaveLength(1);
     expect(channel!.subscribers).toHaveLength(1);
   });
+
+  it('识别 Python hook 命名和装饰器事件模式', async () => {
+    writeFile(
+      path.join(tmpDir, 'hooks.py'),
+      `
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.route("/orders")
+def orders_webhook(request):
+    return request
+
+@receiver
+def audit_signal(payload):
+    return payload
+
+@hook("user.updated")
+def sync_user(payload):
+    return payload
+
+def on_cache_refresh(payload):
+    return payload
+
+def metrics_callback(payload):
+    return payload
+
+def handle_job_retry(payload):
+    return payload
+      `.trim(),
+    );
+
+    const output = await generator.generate(await generator.extract(createContext(tmpDir)));
+    const channelSummaries = output.channels.map((channel) => ({
+      name: channel.channelName,
+      kind: channel.kind,
+      subscribers: channel.subscribers.map((item) => `${item.symbolName}:${item.methodName}`),
+    }));
+
+    expect(channelSummaries).toEqual(expect.arrayContaining([
+      {
+        name: '/orders',
+        kind: 'webhook',
+        subscribers: ['orders_webhook:@app.route'],
+      },
+      {
+        name: '@receiver',
+        kind: 'topic',
+        subscribers: ['audit_signal:@receiver'],
+      },
+      {
+        name: 'user.updated',
+        kind: 'event',
+        subscribers: ['sync_user:@hook'],
+      },
+      {
+        name: 'cache_refresh',
+        kind: 'event',
+        subscribers: ['on_cache_refresh:hook-definition'],
+      },
+      {
+        name: 'metrics',
+        kind: 'event',
+        subscribers: ['metrics_callback:hook-definition'],
+      },
+      {
+        name: 'job_retry',
+        kind: 'event',
+        subscribers: ['handle_job_retry:hook-definition'],
+      },
+    ]));
+    expect(output.totalPublishers).toBe(0);
+    expect(output.totalSubscribers).toBe(6);
+  });
 });
 
 describe('EventSurfaceGenerator - 状态附录', () => {
