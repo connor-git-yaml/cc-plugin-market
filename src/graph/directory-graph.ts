@@ -70,14 +70,14 @@ export async function buildDirectoryGraph(
     if (!skeleton) continue;
 
     for (const imp of skeleton.imports) {
-      // 仅处理相对 import
-      if (!imp.isRelative) continue;
+      let resolved: string | undefined;
 
-      const resolved = resolveImportPath(
-        file,
-        imp.moduleSpecifier,
-        fileSet,
-      );
+      if (imp.isRelative) {
+        resolved = resolveImportPath(file, imp.moduleSpecifier, fileSet);
+      } else {
+        // 尝试解析项目内绝对 import（适用于 Python 包名式导入，如 graphify.core）
+        resolved = resolveAbsoluteImportPath(imp.moduleSpecifier, fileSet);
+      }
 
       if (resolved && resolved !== file) {
         edges.push({
@@ -222,6 +222,62 @@ function resolveImportPath(
     if (file.startsWith(dirPrefix)) {
       return file;
     }
+  }
+
+  return undefined;
+}
+
+/**
+ * 解析项目内绝对 import 路径（Python 包名式导入）
+ *
+ * 将点分包名转换为路径后，在 fileSet 中查找匹配的项目内文件。
+ * 外部库不存在于 fileSet 中，自动排除，不产生误边。
+ *
+ * @param specifier - import 模块标识符（如 `graphify.core.parser`）
+ * @param fileSet - 可用文件集合
+ * @returns 解析后的文件路径，或 undefined（无法解析 / 非项目内模块）
+ */
+function resolveAbsoluteImportPath(
+  specifier: string,
+  fileSet: Set<string>,
+): string | undefined {
+  // 将点分包名转换为路径（graphify.core → graphify/core）
+  const asPath = specifier.replace(/\./g, '/');
+
+  // 尝试精确文件匹配
+  if (fileSet.has(asPath)) {
+    return asPath;
+  }
+
+  // 尝试补全常见扩展名
+  const extensions = ['.py', '.pyi', '.ts', '.tsx', '.js', '.jsx', '.go', '.java'];
+  for (const ext of extensions) {
+    if (fileSet.has(asPath + ext)) {
+      return asPath + ext;
+    }
+  }
+
+  // 尝试包 index 文件（Python __init__.py、JS/TS index）
+  const indexFiles = ['__init__.py', 'index.ts', 'index.js', 'index.tsx'];
+  for (const indexFile of indexFiles) {
+    const candidate = `${asPath}/${indexFile}`;
+    if (fileSet.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  // 尝试匹配目录下的任意文件（最佳稳定性：优先 __init__.py，其次字典序第一个）
+  const dirPrefix = `${asPath}/`;
+  const dirMatches: string[] = [];
+  for (const file of fileSet) {
+    if (file.startsWith(dirPrefix)) {
+      dirMatches.push(file);
+    }
+  }
+
+  if (dirMatches.length > 0) {
+    const initPy = dirMatches.find((f) => f.endsWith('/__init__.py'));
+    return initPy ?? dirMatches.sort()[0];
   }
 
   return undefined;

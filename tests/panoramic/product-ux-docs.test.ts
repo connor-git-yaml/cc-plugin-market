@@ -171,6 +171,102 @@ describe('generateProductUxDocs', () => {
     expect(fs.existsSync(path.join(outputDir, 'feature-briefs', 'index.md'))).toBe(true);
     expect(result.writtenFiles.some((filePath) => filePath.endsWith('feature-briefs/issue-12-improve-onboarding-summary.md'))).toBe(true);
   });
+
+  it('叙述型 README 无 current-spec 无 GitHub 时，从 Features 标题提取场景并生成 feature brief', () => {
+    // 移除 current-spec，模拟纯 Python 项目
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+
+    // 用叙述型 README 替换（无列表，Features 标题下有段落描述）
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# Graphify',
+        '',
+        'Graphify 是一个将代码仓库转换为知识图谱的 Python 工具，帮助开发者理解大型代码库的结构与依赖关系。',
+        '',
+        '## Features',
+        '',
+        '- Code Graph: 将代码文件解析为有向图，节点代表模块，边代表依赖关系',
+        '- Community Detection: 使用社区发现算法自动识别功能模块簇',
+        '- Export: 将图谱导出为 HTML 可视化或 JSON 格式',
+        '',
+        '## How it works',
+        '',
+        'Graphify 首先扫描项目目录，解析 Python import 语句，然后构建有向依赖图。',
+        '社区检测算法在图上运行，将高度互联的模块聚类为功能组。',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    // GitHub 不可用
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('get-url')) {
+        return { status: 1, stdout: '', stderr: 'no remote' };
+      }
+      if (command === 'git' && args.includes('log')) {
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+      generatedDocs: [],
+    });
+
+    // 场景应从 README Features 标题下的列表项提取
+    expect(result.overview.coreScenarios.length).toBeGreaterThan(0);
+    // journeys 从 coreScenarios 派生，不应为空
+    expect(result.journeys.journeys.length).toBeGreaterThan(0);
+    // feature briefs 不应为空
+    expect(result.featureBriefIndex.briefs.length).toBeGreaterThan(0);
+  });
+
+  it('extractParagraphs 过滤 badge 行、纯链接行和短于 20 字的行', () => {
+    // 通过写一个含噪声内容的 README 间接验证过滤效果
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# Test Project',
+        '',
+        '[![Build Status](https://img.shields.io/badge/build-passing-green)](https://ci.example.com)',
+        '',
+        '[View Documentation](https://docs.example.com)',
+        '',
+        'Short.',
+        '',
+        'This is a meaningful paragraph that describes the product in sufficient detail for extraction.',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('get-url')) {
+        return { status: 1, stdout: '', stderr: 'no remote' };
+      }
+      if (command === 'git' && args.includes('log')) {
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+      generatedDocs: [],
+    });
+
+    // 只有足够长的有意义段落应出现在 summary 中，badge/链接/短行被过滤
+    const summaryText = result.overview.summary.join('\n');
+    expect(summaryText).not.toContain('shields.io');
+    expect(summaryText).not.toContain('docs.example.com');
+    expect(summaryText).not.toContain('Short.');
+    expect(summaryText).toContain('meaningful paragraph');
+  });
 });
 
 function createProjectContext(projectRoot: string): ProjectContext {

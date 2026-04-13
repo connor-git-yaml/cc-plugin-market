@@ -441,7 +441,7 @@ function buildFeatureBriefIndex(
         fileName: briefFileName(id, scenario.title),
         title: scenario.title,
         summary: scenario.goal,
-        problem: `${scenario.actor} 需要更直接地完成“${scenario.title}”相关任务，但现有事实源未提供独立 issue/PR 说明。`,
+        problem: `${scenario.actor} 需要更直接地完成”${scenario.title}”相关任务，但现有事实源未提供独立 issue/PR 说明。`,
         proposedSolution: `围绕 ${scenario.title} 组织一份产品 brief，把用户目标、路径和预期输出显式化。`,
         audience: scenario.actor,
         status: 'candidate',
@@ -449,6 +449,76 @@ function buildFeatureBriefIndex(
         confidence: 'medium',
         inferred: true,
       });
+    }
+  }
+
+  // 独立数据源 A：从 current-spec 意图段列表项派生（不依赖 journeys）
+  if (briefs.length === 0) {
+    for (const spec of corpus.currentSpecs) {
+      for (const sectionKey of ['核心功能', '功能', 'Features', '产品概述']) {
+        const section = spec.sections.get(sectionKey);
+        if (!section) continue;
+        for (const item of extractListItems(section).slice(0, 3)) {
+          const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
+          briefs.push({
+            id,
+            slug: slugify(item),
+            fileName: briefFileName(id, item),
+            title: item,
+            summary: item,
+            problem: `产品文档中缺少对”${item}”功能的独立说明。`,
+            proposedSolution: `围绕”${item}”整理一份 feature brief，把功能目标、用户价值和实现路径显式化。`,
+            audience: defaultAudience,
+            status: 'shipped',
+            evidence: [{
+              sourceType: 'current-spec',
+              label: spec.label,
+              path: spec.path,
+              excerpt: item,
+              confidence: 'medium',
+              inferred: true,
+            }],
+            confidence: 'medium',
+            inferred: true,
+          });
+          if (briefs.length >= 3) break;
+        }
+        if (briefs.length >= 3) break;
+      }
+      if (briefs.length >= 3) break;
+    }
+  }
+
+  // 独立数据源 B：从 README 段落派生（适用于无 current-spec 的项目，如 Python Graphify）
+  if (briefs.length === 0) {
+    for (const readme of corpus.readmes) {
+      for (const para of extractParagraphs(readme.text).slice(0, 3)) {
+        const title = firstSentence(para) ?? para.slice(0, 60);
+        const id = `BRIEF-${String(briefs.length + 1).padStart(2, '0')}`;
+        briefs.push({
+          id,
+          slug: slugify(title),
+          fileName: briefFileName(id, title),
+          title,
+          summary: para,
+          problem: `”${title}”相关的用户价值与功能说明尚未系统化。`,
+          proposedSolution: `围绕”${title}”整理一份 feature brief，将其从 README 沉淀为结构化产品说明。`,
+          audience: defaultAudience,
+          status: 'candidate',
+          evidence: [{
+            sourceType: 'readme',
+            label: readme.label,
+            path: readme.path,
+            excerpt: para,
+            confidence: 'low',
+            inferred: true,
+          }],
+          confidence: 'low',
+          inferred: true,
+        });
+        if (briefs.length >= 3) break;
+      }
+      if (briefs.length >= 3) break;
     }
   }
 
@@ -845,7 +915,101 @@ function buildCoreScenarios(
     }
   }
 
+  // Phase 3：从 README Features/How it works 等标题下提取叙述段落场景
+  if (scenarios.length === 0) {
+    for (const readme of corpus.readmes) {
+      scenarios.push(...extractScenariosFromReadme(readme, targetUsers));
+      if (scenarios.length >= 3) break;
+    }
+  }
+
   return dedupeScenarios(scenarios).slice(0, 6);
+}
+
+/**
+ * 从叙述型 README 的功能/特性标题段落中提取场景
+ *
+ * 匹配 Features、How it works、Capabilities 等标题，
+ * 优先从列表项提取，若无列表则从段落提取。
+ */
+function extractScenariosFromReadme(
+  readme: MarkdownSource,
+  targetUsers: ProductUserSegment[],
+): ProductScenario[] {
+  const FEATURE_HEADING = /^(Features?|How\s+it\s+works?|What\s+(?:it\s+)?does|Capabilities|Use\s+cases?|Getting\s+started|Overview|About)\s*$/i;
+
+  const scenarios: ProductScenario[] = [];
+  const lines = readme.text.split('\n');
+  let inSection = false;
+  let sectionLines: string[] = [];
+  const sections: string[] = [];
+
+  for (const line of lines) {
+    const headingMatch = /^#{1,3}\s+(.+)$/.exec(line);
+    if (headingMatch) {
+      if (inSection && sectionLines.length > 0) {
+        sections.push(sectionLines.join('\n'));
+      }
+      inSection = FEATURE_HEADING.test(headingMatch[1]?.trim() ?? '');
+      sectionLines = [];
+    } else if (inSection) {
+      sectionLines.push(line);
+    }
+  }
+  if (inSection && sectionLines.length > 0) {
+    sections.push(sectionLines.join('\n'));
+  }
+
+  for (const section of sections) {
+    const items = extractListItems(section);
+    if (items.length > 0) {
+      for (const item of items.slice(0, 4)) {
+        const colonIdx = item.search(/[:：]/);
+        const title = colonIdx > 0 ? item.slice(0, colonIdx).trim() : item;
+        const summary = colonIdx > 0 ? item.slice(colonIdx + 1).trim() : item;
+        scenarios.push({
+          id: `scenario-${scenarios.length + 1}`,
+          title,
+          summary: summary || title,
+          actors: inferActors(title + summary, targetUsers),
+          evidence: [{
+            sourceType: 'readme',
+            label: readme.label,
+            path: readme.path,
+            excerpt: item,
+            confidence: 'medium',
+            inferred: true,
+          }],
+          confidence: 'medium',
+          inferred: true,
+        });
+      }
+    } else {
+      // 无列表时从段落提取
+      for (const para of extractParagraphs(section).slice(0, 2)) {
+        const title = firstSentence(para) ?? para.slice(0, 60);
+        scenarios.push({
+          id: `scenario-${scenarios.length + 1}`,
+          title,
+          summary: para,
+          actors: inferActors(para, targetUsers),
+          evidence: [{
+            sourceType: 'readme',
+            label: readme.label,
+            path: readme.path,
+            excerpt: para,
+            confidence: 'low',
+            inferred: true,
+          }],
+          confidence: 'low',
+          inferred: true,
+        });
+      }
+    }
+    if (scenarios.length >= 3) break;
+  }
+
+  return scenarios;
 }
 
 function parseMarkdownSections(markdown: string): Map<string, string> {
@@ -924,11 +1088,27 @@ function extractParagraphs(content: string): string[] {
     .split(/\n\s*\n/g)
     .map((paragraph) => paragraph.replace(/\n+/g, ' ').trim())
     .filter((paragraph) =>
-      paragraph.length > 0
+      paragraph.length >= 20
       && !paragraph.startsWith('|')
       && !paragraph.startsWith('##')
-      && !paragraph.startsWith('```'),
+      && !paragraph.startsWith('```')
+      && !isBadgeLine(paragraph)
+      && !isPureLinkLine(paragraph),
     );
+}
+
+/** 是否为纯徽章行（仅含 ![...](url) 或 [![...](url)](url2) 无其他文字） */
+function isBadgeLine(text: string): boolean {
+  // 先移除图片 ![...](...) 再移除剩余链接壳 [...](...) ，判断是否为空
+  const withoutImages = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+  const withoutAll = withoutImages.replace(/\[[^\]]*\]\([^)]+\)/g, '').trim();
+  return withoutAll.length === 0 && text.includes('![');
+}
+
+/** 是否为纯链接行（仅含 [...](url) 无其他文字） */
+function isPureLinkLine(text: string): boolean {
+  const withoutLinks = text.replace(/\[[^\]]*\]\([^)]+\)/g, '').trim();
+  return withoutLinks.length === 0 && text.includes('](');
 }
 
 function splitScenarioText(value: string): string[] {

@@ -216,4 +216,65 @@ describe('directory-graph', () => {
     expect(graph.edges).toHaveLength(1);
     expect(graph.edges[0]!.to).toBe('src/utils.py');
   });
+
+  it('T033: Python 绝对包名 import 正确生成依赖边', async () => {
+    const files = ['graphify/app.py', 'graphify/core/__init__.py', 'graphify/utils/helpers.py'];
+    const skeletons = [
+      createSkeleton('graphify/app.py', [
+        { moduleSpecifier: 'graphify.core', isRelative: false },   // 包导入
+        { moduleSpecifier: 'graphify.utils', isRelative: false },  // 子包导入
+      ]),
+      createSkeleton('graphify/core/__init__.py', []),
+      createSkeleton('graphify/utils/helpers.py', []),
+    ];
+
+    const graph = await buildDirectoryGraph(files, '/project', skeletons);
+
+    expect(graph.edges).toHaveLength(2);
+    expect(graph.edges).toContainEqual(expect.objectContaining({
+      from: 'graphify/app.py',
+      to: 'graphify/core/__init__.py',
+    }));
+    expect(graph.edges).toContainEqual(expect.objectContaining({
+      from: 'graphify/app.py',
+      to: 'graphify/utils/helpers.py',
+    }));
+  });
+
+  it('T034: Python 绝对 import 精确匹配单文件模块', async () => {
+    const files = ['src/main.py', 'src/models.py', 'src/utils.py'];
+    const skeletons = [
+      createSkeleton('src/main.py', [
+        { moduleSpecifier: 'src.models', isRelative: false },
+        { moduleSpecifier: 'numpy', isRelative: false },  // 第三方，不产生边
+      ]),
+      createSkeleton('src/models.py', [
+        { moduleSpecifier: 'src.utils', isRelative: false },
+      ]),
+      createSkeleton('src/utils.py', []),
+    ];
+
+    const graph = await buildDirectoryGraph(files, '/project', skeletons);
+
+    expect(graph.edges).toHaveLength(2);
+    expect(graph.edges).toContainEqual(expect.objectContaining({ from: 'src/main.py', to: 'src/models.py' }));
+    expect(graph.edges).toContainEqual(expect.objectContaining({ from: 'src/models.py', to: 'src/utils.py' }));
+  });
+
+  it('T035: 第三方绝对 import（不在 fileSet 中）不产生边', async () => {
+    const files = ['graphify/app.py'];
+    const skeletons = [
+      createSkeleton('graphify/app.py', [
+        { moduleSpecifier: 'requests', isRelative: false },
+        { moduleSpecifier: 'numpy', isRelative: false },
+        { moduleSpecifier: 'flask.Flask', isRelative: false },
+        { moduleSpecifier: 'os.path', isRelative: false },
+      ]),
+    ];
+
+    const graph = await buildDirectoryGraph(files, '/project', skeletons);
+
+    expect(graph.edges).toHaveLength(0);
+    expect(graph.modules).toHaveLength(1);
+  });
 });

@@ -8,7 +8,7 @@ import type {
   ModuleCrossReferenceIndex,
   ModuleSpec,
 } from '../models/module-spec.js';
-import type { DocGraph, DocGraphReferenceSample } from './builders/doc-graph-builder.js';
+import type { DocGraph, DocGraphReferenceSample, DocGraphSpecNode } from './builders/doc-graph-builder.js';
 import { MODULE_SPEC_ANCHOR_ID } from './builders/doc-graph-builder.js';
 
 interface CrossModuleAccumulator {
@@ -94,6 +94,14 @@ export function buildCrossReferenceIndex(
     }
   }
 
+  // 补充：从 skeleton imports 推断跨模块引用（适用于无相对 import 的项目，如 Python）
+  supplementCrossModuleFromSkeletonImports(
+    moduleSpec,
+    docGraph,
+    currentNode,
+    crossModuleMap,
+  );
+
   const crossModule = [...crossModuleMap.values()]
     .map((entry) => {
       const evidenceCount = entry.outboundCount + entry.inboundCount;
@@ -131,6 +139,78 @@ export function buildCrossReferenceIndex(
     sameModule,
     crossModule,
   };
+}
+
+/**
+ * 从 skeleton imports 补充跨模块引用
+ *
+ * 当 docGraph.references 不含引用（如 Python 绝对 import 项目）时，
+ * 遍历 skeleton 的 isRelative=false imports，将包名式 specifier 解析为
+ * docGraph 中已知的 spec，并增加出站引用计数。
+ */
+function supplementCrossModuleFromSkeletonImports(
+  moduleSpec: ModuleSpec,
+  docGraph: DocGraph,
+  currentNode: DocGraphSpecNode,
+  crossModuleMap: Map<string, CrossModuleAccumulator>,
+): void {
+  for (const imp of moduleSpec.baselineSkeleton.imports) {
+    // 相对 import 已由 docGraph.references 覆盖
+    if (imp.isRelative) continue;
+
+    const targetSpecPath = resolveSpecifierToSpecPath(imp.moduleSpecifier, docGraph.specs);
+    if (!targetSpecPath || targetSpecPath === currentNode.specPath) continue;
+
+    // 若 docGraph.references 已包含该跨模块引用，跳过（避免重复计数）
+    const alreadyCovered = docGraph.references.some(
+      (ref) =>
+        ref.kind === 'cross-module'
+        && ref.fromSpecPath === currentNode.specPath
+        && ref.toSpecPath === targetSpecPath,
+    );
+    if (alreadyCovered) continue;
+
+    const targetSpec = docGraph.specs.find((spec) => spec.specPath === targetSpecPath);
+    if (!targetSpec) continue;
+
+    const entry = getOrCreateCrossModuleAccumulator(
+      crossModuleMap,
+      targetSpecPath,
+      targetSpec.sourceTarget,
+    );
+    entry.outboundCount += 1;
+    entry.samples.push({
+      fromSource: currentNode.sourceTarget,
+      toSource: targetSpec.sourceTarget,
+    });
+  }
+}
+
+/**
+ * 将模块标识符（点分包名）解析为 docGraph 中匹配的 spec 路径
+ *
+ * 优先精确匹配 sourceTarget，其次匹配 specifier 是 sourceTarget 的子路径前缀。
+ * 返回最长匹配（最具体的 spec）。
+ */
+function resolveSpecifierToSpecPath(
+  specifier: string,
+  specs: DocGraphSpecNode[],
+): string | undefined {
+  const asPath = specifier.replace(/\./g, '/');
+
+  let bestMatch: { specPath: string; length: number } | undefined;
+
+  for (const spec of specs) {
+    // 规范化 sourceTarget：统一分隔符并去掉文件扩展名
+    const st = spec.sourceTarget.replace(/\\/g, '/').replace(/\.(py|pyi|ts|tsx|js|jsx|go|java|rs)$/, '');
+    if (asPath === st || asPath.startsWith(`${st}/`)) {
+      if (!bestMatch || st.length > bestMatch.length) {
+        bestMatch = { specPath: spec.specPath, length: st.length };
+      }
+    }
+  }
+
+  return bestMatch?.specPath;
 }
 
 function getOrCreateCrossModuleAccumulator(
