@@ -218,6 +218,144 @@ describe('generateProductUxDocs', () => {
     expect(result.overview.targetUsers.map((user) => user.name)).toContain('开发者');
   });
 
+  it('HTML-heavy README：产品摘要不包含 HTML 标签', () => {
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '<p align="center"><img src="https://example.com/logo.png" width="230" alt="Logo"></p>',
+        '',
+        '<div align="center">',
+        '',
+        '<h2>Khoj — Your AI Second Brain</h2>',
+        '',
+        '</div>',
+        '',
+        'Khoj is an open-source AI assistant that lets you chat with your documents and get contextual answers.',
+        '',
+        '## Features',
+        '',
+        '- Chat with any local or online LLM (e.g llama3, qwen, gemma, mistral, gpt, claude, gemini, deepseek).',
+        '- Get answers from the internet and your docs (including image, pdf, markdown, org-mode files).',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('get-url')) {
+        return { status: 1, stdout: '', stderr: 'no remote' };
+      }
+      if (command === 'git' && args.includes('log')) {
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    const summaryText = result.overview.summary.join('\n');
+    // HTML 标签必须被清除
+    expect(summaryText).not.toMatch(/<[^>]+>/);
+    expect(summaryText).not.toContain('<div');
+    expect(summaryText).not.toContain('<p align');
+    expect(summaryText).not.toContain('<img');
+    // 有意义的文字内容应保留
+    expect(summaryText).toContain('Khoj is an open-source AI assistant');
+  });
+
+  it('场景标题词边界截断：不在单词中间截断', () => {
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# Test Project',
+        '',
+        'Test Project is a demonstration product for validating truncation behavior.',
+        '',
+        '## Features',
+        '',
+        '- Chat with any local or online LLM including llama3, qwen, gemma, mistral, gpt, claude, gemini, deepseek models.',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('get-url')) {
+        return { status: 1, stdout: '', stderr: 'no remote' };
+      }
+      if (command === 'git' && args.includes('log')) {
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    for (const scenario of result.overview.coreScenarios) {
+      // 标题不应在单词中间截断（最后一个字符不是字母/数字且无省略号时为截断中点）
+      expect(scenario.title).not.toMatch(/[a-zA-Z0-9]$/);
+    }
+  });
+
+  it('用户旅程"消费输出"步骤根据场景关键词推断，chat 场景返回 AI 回答描述', () => {
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# ChatBot',
+        '',
+        'ChatBot lets you chat with your documents and get instant answers from any LLM.',
+        '',
+        '## Features',
+        '',
+        '- Chat with your documents to get contextual answers.',
+        '- Export conversation history as markdown reports.',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('get-url')) {
+        return { status: 1, stdout: '', stderr: 'no remote' };
+      }
+      if (command === 'git' && args.includes('log')) {
+        return { status: 0, stdout: '', stderr: '' };
+      }
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    const journeys = result.journeys.journeys;
+    const chatJourney = journeys.find((j) => /chat/i.test(j.title));
+    expect(chatJourney).toBeDefined();
+    const outputStep = chatJourney!.steps.find((s) => s.title === '消费输出');
+    expect(outputStep).toBeDefined();
+    // chat 场景的"消费输出"应描述 AI 回答，而非通用模板
+    expect(outputStep!.detail).toContain('AI 助手');
+    // 不应是旧的静态模板
+    expect(outputStep!.detail).not.toBe('使用生成的文档、接口说明或评审材料完成后续沟通、实现或交接。');
+
+    // export 场景的"消费输出"应描述导出产物
+    const exportJourney = journeys.find((j) => /export/i.test(j.title));
+    if (exportJourney) {
+      const exportOutputStep = exportJourney.steps.find((s) => s.title === '消费输出');
+      expect(exportOutputStep?.detail).toContain('导出');
+    }
+  });
+
   it('extractParagraphs 过滤 badge 行、纯链接行和短于 20 字的行', () => {
     // 通过写一个含噪声内容的 README 间接验证过滤效果
     fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
