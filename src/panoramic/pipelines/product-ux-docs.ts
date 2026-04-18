@@ -15,6 +15,11 @@ import { spawnSync } from 'node:child_process';
 import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { createLogger } from '../utils/logger.js';
+import {
+  truncateAtNaturalBoundary,
+  isDescriptiveText,
+} from '../utils/text-segmenter.js';
+import { sanitizeMarkdownContent } from '../utils/html-sanitizer.js';
 
 const logger = createLogger('product-ux-docs');
 
@@ -322,11 +327,11 @@ function buildUserJourneys(
       title: scenario.title,
       actor,
       goal: detail,
-      outcome: `完成 ${scenario.title} 对应的关键任务，并获得结构化文档或可执行下一步。`,
+      outcome: deriveOutcomeFromScenario(scenario, actor),
       steps: [
         {
           title: '触发场景',
-          detail: `${actor} 识别当前任务需要：${scenario.title}`,
+          detail: deriveTriggerFromScenario(scenario, actor),
           inferred: true,
         },
         {
@@ -336,7 +341,7 @@ function buildUserJourneys(
         },
         {
           title: '消费输出',
-          detail: '使用生成的文档、接口说明或评审材料完成后续沟通、实现或交接。',
+          detail: deriveConsumptionFromScenario(scenario),
           inferred: true,
         },
       ],
@@ -626,16 +631,11 @@ function buildTargetUsers(corpus: ProductFactCorpus): ProductUserSegment[] {
 
 /**
  * 判断一段文字是否是有意义的描述性段落（非标题、非导航链接）。
+ * Feature 125: 委托给 Unicode 感知的 isDescriptiveText，按字符数判断链接密度，
+ * 避免按 ASCII 空格分词导致中文段落被误过滤。
  */
 function isDescriptiveParagraph(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.length < 30) return false;
-  if (trimmed.startsWith('#')) return false;
-  const linkCount = (trimmed.match(/\[.*?\]\(.*?\)/g) ?? []).length;
-  const wordCount = trimmed.split(/\s+/).length;
-  if (wordCount > 0 && linkCount / wordCount > 0.5) return false;
-  if (trimmed.startsWith('<') || trimmed.startsWith('![')) return false;
-  return true;
+  return isDescriptiveText(text, { minLength: 30, linkThreshold: 0.5 });
 }
 
 function buildCoreScenarios(
@@ -731,8 +731,8 @@ function extractScenariosFromReadmeCorpus(
         const summary = restParts.join('：').trim() || item;
         scenarios.push({
           id: `scenario-${scenarios.length + 1}`,
-          title: title.slice(0, 80),
-          summary: summary.slice(0, 200) || title.slice(0, 200),
+          title: truncateAtNaturalBoundary(title, 80),
+          summary: truncateAtNaturalBoundary(summary || title, 200),
           actors: [inferAudience(title, targetUsers) ?? targetUsers[0]?.name ?? '开发者'],
           evidence: [{
             sourceType: 'readme',
@@ -810,7 +810,7 @@ function extractScenariosFromReadmeDocument(
     } else {
       // 无列表时从段落提取
       for (const para of extractParagraphs(section).slice(0, 2)) {
-        const title = firstSentence(para) ?? para.slice(0, 60);
+        const title = firstSentence(para) ?? truncateAtNaturalBoundary(para, 60);
         scenarios.push({
           id: `scenario-${scenarios.length + 1}`,
           title,
@@ -907,7 +907,10 @@ function extractListItems(content: string): string[] {
 }
 
 function extractParagraphs(content: string): string[] {
-  return content
+  // 先做 block-level HTML 净化（保留行内尖括号如 Array<T>、<target>）
+  // 再 decode entity（&lt; → <），然后按段落切分
+  const sanitized = sanitizeMarkdownContent(content);
+  return sanitized
     .split(/\n\s*\n/g)
     .map((paragraph) => paragraph.replace(/\n+/g, ' ').trim())
     .filter((paragraph) =>
@@ -1053,6 +1056,90 @@ function firstMeaningfulSentence(text: string): string | undefined {
 
 function firstSentence(text: string): string | undefined {
   return firstMeaningfulSentence(text);
+}
+
+/**
+ * 提取 scenario 中"最后一句话"，作为"消费输出"/"outcome"的描述。
+ * 最后一句通常承载结果语义（如 "...returns a result"、"...得到 XXX"）。
+ * 若无明显句子分隔符，返回整段文字的 trim。
+ *
+ * 规则：
+ *   - 英文句尾 `.?!` 必须后跟 `\s+`（空格）才计为句子边界，
+ *     避免把 "e.g" / "i.e" / "2.1" 等缩写/版本号误拆
+ *   - 中文全角标点 `。！？` 不强制空格（中文无空格习惯）
+ */
+function lastMeaningfulSentence(text: string): string | undefined {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return undefined;
+  const sentences = normalized
+    .split(/(?<=[。！？])|(?<=[.?!])\s+/)
+    .filter((s) => s.trim().length > 0);
+  if (sentences.length === 0) return undefined;
+  return sentences[sentences.length - 1]!.trim();
+}
+
+/**
+ * Feature 125 Story 1: 从 scenario 的事实字段（summary / evidence）推导"消费输出"描述。
+ * 这是 evidence-backed mapping，替代 Fix 124 的关键词桶分类。
+ *
+ * 优先级：
+ *   1. scenario.summary 的最后一句（承载结果语义）— 前提长度 ≥ 10
+ *   2. scenario.evidence[0].excerpt 的最后一句
+ *   3. scenario.title 的最后一句
+ *   4. 兜底 fallback（只在完全无事实时使用）
+ */
+function deriveConsumptionFromScenario(scenario: ProductScenario): string {
+  // 优先从 summary 取最后一句
+  if (scenario.summary && scenario.summary.length >= 10) {
+    const last = lastMeaningfulSentence(scenario.summary);
+    if (last && last.length >= 10) {
+      return truncateAtNaturalBoundary(last, 140);
+    }
+  }
+
+  // 次选：evidence excerpt 的最后一句
+  const evidenceExcerpt = scenario.evidence?.[0]?.excerpt;
+  if (evidenceExcerpt && evidenceExcerpt.length >= 10) {
+    const last = lastMeaningfulSentence(evidenceExcerpt);
+    if (last && last.length >= 10 && last !== scenario.title) {
+      return truncateAtNaturalBoundary(last, 140);
+    }
+  }
+
+  // 再次：title 本身作为"消费输出"的粗略描述
+  if (scenario.title && scenario.title.length >= 10) {
+    return truncateAtNaturalBoundary(scenario.title, 140);
+  }
+
+  // 兜底 fallback（低置信度通用句子，仅完全无事实时触发）
+  return '查看场景输出，继续后续工作流程。';
+}
+
+/**
+ * Feature 125 Story 1: 从 scenario 的 summary/title 推导"触发场景"描述。
+ * 优先用 summary 的首句（承载动机/入口），避免直接复述 title 造成三步同文。
+ */
+function deriveTriggerFromScenario(scenario: ProductScenario, actor: string): string {
+  // summary 首句（承载动机）
+  if (scenario.summary && scenario.summary.length >= 10) {
+    const first = firstMeaningfulSentence(scenario.summary);
+    // 避免和 title 完全一致（会和第二步"执行关键动作"重复）
+    if (first && first !== scenario.title && first.length >= 10) {
+      return `${actor} 开始：${truncateAtNaturalBoundary(first, 120)}`;
+    }
+  }
+  // 兜底：用 title
+  return `${actor} 需要：${truncateAtNaturalBoundary(scenario.title, 120)}`;
+}
+
+/**
+ * Feature 125 Story 1: 基于 scenario 生成 outcome（场景完成后的状态）。
+ * 用 actor + scenario summary/title 合成，保留场景完成后的结果语义。
+ */
+function deriveOutcomeFromScenario(scenario: ProductScenario, actor: string): string {
+  // outcome = 消费输出 + 推进语，避免和步骤 detail 完全相同
+  const consumption = deriveConsumptionFromScenario(scenario);
+  return `${actor} 完成场景后：${consumption}`;
 }
 
 function slugify(value: string): string {
