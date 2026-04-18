@@ -13,7 +13,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { DocumentGenerator, GenerateOptions, ProjectContext } from '../interfaces.js';
-import type { BatchGeneratedDocSummary } from './architecture-narrative.js';
 import { loadTemplate } from '../utils/template-loader.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -125,7 +124,6 @@ export interface GenerateProductUxDocsOptions {
   projectRoot: string;
   outputDir: string;
   projectContext: ProjectContext;
-  generatedDocs: BatchGeneratedDocSummary[];
 }
 
 export interface GenerateProductUxDocsResult {
@@ -548,6 +546,18 @@ function collectOverviewParagraphs(corpus: ProductFactCorpus): string[] {
     paragraphs.push(...extractParagraphs(source.text).slice(0, 2));
   }
 
+  // 当 current-spec 与 README 均不足时，以近期 commit subject 作为补充事实证据
+  if (paragraphs.length < 2 && corpus.commits.length > 0) {
+    const commitSummary = corpus.commits
+      .slice(0, 5)
+      .map((commit) => commit.subject)
+      .filter((subject) => subject.length >= 10)
+      .join('；');
+    if (commitSummary.length >= 20) {
+      paragraphs.push(`近期变更摘要（基于 git 提交记录推断）：${commitSummary}`);
+    }
+  }
+
   return uniqueSorted(paragraphs.filter((paragraph) => paragraph.length >= 20)).slice(0, 6);
 }
 
@@ -832,7 +842,7 @@ function parseMarkdownSections(markdown: string): Map<string, string> {
   for (let index = 0; index < matches.length; index += 1) {
     const current = matches[index];
     const next = matches[index + 1];
-    if (!current?.index) {
+    if (current?.index == null) {
       continue;
     }
 
@@ -1062,14 +1072,6 @@ function normalizeProjectPath(filePath: string, projectRoot: string): string {
   return path.relative(projectRoot, filePath).split(path.sep).join('/');
 }
 
-function normalizeNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-  const parsed = Number.parseInt(`${value ?? ''}`, 10);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))].sort((left, right) =>
     left.localeCompare(right, 'zh-Hans-CN'),
@@ -1135,7 +1137,6 @@ export class ProductUxDocsGenerator
       projectRoot: context.projectRoot,
       outputDir: this.outputDir,
       projectContext: context,
-      generatedDocs: [],
     };
   }
 

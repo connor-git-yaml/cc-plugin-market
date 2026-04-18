@@ -293,7 +293,6 @@ export async function generateBatchProjectDocs(
       projectRoot: options.projectRoot,
       outputDir: options.outputDir,
       projectContext,
-      generatedDocs,
     });
     generatedDocs.push({
       generatorId: 'product-ux-docs',

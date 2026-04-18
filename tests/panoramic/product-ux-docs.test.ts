@@ -112,7 +112,6 @@ describe('generateProductUxDocs', () => {
       projectRoot,
       outputDir,
       projectContext: createProjectContext(projectRoot),
-      generatedDocs: [],
     });
 
     expect(result.overview.summary.join('\n')).toContain('Demo Product');
@@ -178,7 +177,6 @@ describe('generateProductUxDocs', () => {
       projectRoot,
       outputDir,
       projectContext: createProjectContext(projectRoot),
-      generatedDocs: [],
     });
 
     // 场景应从 README Features 标题下的列表项提取
@@ -187,6 +185,37 @@ describe('generateProductUxDocs', () => {
     expect(result.journeys.journeys.length).toBeGreaterThan(0);
     // feature briefs 不应为空
     expect(result.featureBriefIndex.briefs.length).toBeGreaterThan(0);
+  });
+
+  it('parseMarkdownSections 正确解析以 ## 开头的第一个章节（index=0 不被 falsy 跳过）', () => {
+    // 当 current-spec.md 第一行就是 ## 标题（index === 0）时，该章节不应被丢失
+    fs.writeFileSync(
+      path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'),
+      [
+        '## 产品概述',
+        '',
+        '这是一个以 ## 标题开头的文档，index 为 0，以前会被 !current?.index 错误跳过。',
+        '',
+        '## 用户画像与场景',
+        '',
+        '| 角色 | 描述 | 主要使用场景 |',
+        '| --- | --- | --- |',
+        '| 开发者 | 核心使用者 | 读文档 |',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    // 产品概述章节应被正确解析，不因 index=0 falsy 而丢失
+    const summaryText = result.overview.summary.join('\n');
+    expect(summaryText).toContain('以 ## 标题开头的文档');
+    // 用户画像章节（第二个 ## 标题）也应被正确解析
+    expect(result.overview.targetUsers.map((user) => user.name)).toContain('开发者');
   });
 
   it('extractParagraphs 过滤 badge 行、纯链接行和短于 20 字的行', () => {
@@ -222,7 +251,6 @@ describe('generateProductUxDocs', () => {
       projectRoot,
       outputDir,
       projectContext: createProjectContext(projectRoot),
-      generatedDocs: [],
     });
 
     // 只有足够长的有意义段落应出现在 summary 中，badge/链接/短行被过滤
