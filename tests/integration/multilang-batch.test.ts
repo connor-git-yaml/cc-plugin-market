@@ -260,7 +260,6 @@ describe('多语言混合项目集成', () => {
           },
         ],
         failedModules: [],
-        currentModule: null,
         forceRegenerate: false,
         languageGroups: languageGroupsRecord,
         filterLanguages: undefined,

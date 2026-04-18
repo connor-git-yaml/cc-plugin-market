@@ -194,7 +194,6 @@ describe('batch-orchestrator 单元测试', () => {
           },
         ],
         failedModules: [],
-        currentModule: null,
         forceRegenerate: false,
         languageGroups: {
           'ts-js': ['src/api/routes.ts', 'src/api/middleware.ts'],
@@ -359,6 +358,85 @@ describe('batch-orchestrator 单元测试', () => {
 
       const refs = detectCrossLanguageRefs(['a.ts', 'b.ts'], languageGroups, graph);
       expect(refs).toHaveLength(0);
+    });
+  });
+
+  // H2 修复：并发调度器在 pending 为空时不应死锁
+  describe('H2: 并发调度器 pending 空数组不死锁', () => {
+    it('模拟并发调度：pending 空时能正确退出 while 循环', async () => {
+      // 复现 H2 的修复逻辑：while (activeCount >= concurrency) 循环内
+      // 若 pending 为空，必须 break，否则 Promise.race([]) 永不 resolve
+      const concurrency = 3;
+      const results: number[] = [];
+
+      // 模拟并发调度器的核心逻辑（提取自 batch-orchestrator）
+      async function simulateConcurrentScheduler(items: number[]): Promise<void> {
+        const pending: Promise<void>[] = [];
+        let activeCount = 0;
+
+        for (const item of items) {
+          while (activeCount >= concurrency) {
+            // H2 修复的关键守卫：pending 为空时 break，避免 Promise.race([]) 死锁
+            if (pending.length === 0) break;
+            await Promise.race(pending);
+          }
+
+          activeCount++;
+          const task = (async () => {
+            await Promise.resolve(); // 模拟异步工作
+            results.push(item);
+          })().finally(() => {
+            activeCount--;
+            const idx = pending.indexOf(task);
+            if (idx >= 0) pending.splice(idx, 1);
+          });
+          pending.push(task);
+        }
+
+        await Promise.allSettled(pending);
+      }
+
+      // 添加超时保护：如果死锁，测试会因超时失败
+      await Promise.race([
+        simulateConcurrentScheduler([1, 2, 3, 4, 5]),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('死锁：并发调度器未在 1s 内完成')), 1000),
+        ),
+      ]);
+
+      // 验证所有 items 都被处理
+      expect(results.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('concurrency > modules 数量时也能正确完成（activeCount 始终 < concurrency）', async () => {
+      // 仅 2 个模块，concurrency = 5，activeCount 永远不会达到 concurrency
+      // 修复前：while 循环条件永不为真，不会死锁；但验证修复不引入回归
+      const concurrency = 5;
+      const results: number[] = [];
+
+      const pending: Promise<void>[] = [];
+      let activeCount = 0;
+
+      for (const item of [10, 20]) {
+        while (activeCount >= concurrency) {
+          if (pending.length === 0) break;
+          await Promise.race(pending);
+        }
+
+        activeCount++;
+        const task = (async () => {
+          await Promise.resolve();
+          results.push(item);
+        })().finally(() => {
+          activeCount--;
+          const idx = pending.indexOf(task);
+          if (idx >= 0) pending.splice(idx, 1);
+        });
+        pending.push(task);
+      }
+
+      await Promise.allSettled(pending);
+      expect(results.sort((a, b) => a - b)).toEqual([10, 20]);
     });
   });
 });

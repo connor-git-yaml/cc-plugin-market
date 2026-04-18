@@ -492,5 +492,57 @@ describe('module-grouper', () => {
       // agents/ext 仅一种语言，不拆分
       expect(names).toContain('agents/ext');
     });
+
+    // M1 修复：stem 冲突时改用相对路径作为 name，确保全局唯一
+    it('T046: 扁平包降级时同名文件 stem 冲突不覆盖（M1 修复）', () => {
+      // Python 单包项目：两个 __init__.py（不同目录）或同名文件
+      const graph = createGraph([
+        'graphify/__init__.py',
+        'graphify/__init__.pyi',
+        'graphify/pipeline.py',
+      ]);
+
+      const result = groupFilesToModules(graph, {
+        basePrefix: '',
+        classifyDirectories: false,
+      });
+
+      const names = result.groups.map((g) => g.name);
+      // 所有 name 应唯一：stem 冲突项必须使用相对路径（下划线）命名
+      const uniqueNames = new Set(names);
+      expect(uniqueNames.size).toBe(names.length);
+
+      // 无冲突的 stem（如 pipeline）仍使用 stem
+      expect(names).toContain('pipeline');
+
+      // 冲突的 stem（__init__ 出现两次）应改用路径 name，而不是 __init__
+      const initEntries = names.filter((n) => n.includes('__init__'));
+      // 确认没有重复的 __init__（即原始 stem 未被直接使用两次）
+      expect(initEntries.length).toBeLessThanOrEqual(2);
+      if (initEntries.length === 2) {
+        expect(initEntries[0]).not.toBe(initEntries[1]);
+      }
+    });
+
+    it('T047: 扁平包降级时无冲突的 stem 正常使用 stem 命名（M1 不应改变无冲突行为）', () => {
+      const graph = createGraph([
+        'mylib/pipeline.py',
+        'mylib/utils.py',
+        'mylib/extract.py',
+      ]);
+
+      const result = groupFilesToModules(graph, {
+        basePrefix: '',
+        classifyDirectories: false,
+      });
+
+      const names = result.groups.map((g) => g.name);
+      // 无冲突时应使用 stem
+      expect(names).toContain('pipeline');
+      expect(names).toContain('utils');
+      expect(names).toContain('extract');
+      // 所有 name 唯一
+      expect(new Set(names).size).toBe(names.length);
+    });
   });
 });

@@ -213,7 +213,6 @@ export const BatchStateSchema = z.object({
   processingOrder: z.array(z.string()),
   completedModules: z.array(CompletedModuleSchema),
   failedModules: z.array(FailedModuleSchema),
-  currentModule: z.string().nullable().optional(),
   forceRegenerate: z.boolean(),
   /** 语言分组信息（key: adapterId, value: 文件路径列表） */
   languageGroups: z.record(z.string(), z.array(z.string())).optional(),

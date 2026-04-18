@@ -40,6 +40,7 @@ import {
   generateDocsQualityReport,
   type BatchProjectDocsResult,
 } from '../panoramic/batch-project-docs.js';
+import { resolveReverseSpecModel } from '../core/model-selection.js';
 import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
@@ -348,7 +349,6 @@ export async function runBatch(
       processingOrder,
       completedModules: [],
       failedModules: [],
-      currentModule: null,
       forceRegenerate: force,
       // 多语言扩展字段
       languageGroups: isMultiLang
@@ -395,6 +395,9 @@ export async function runBatch(
   // state 在此处保证非 null（第 341 行的 if 分支已确保初始化）
   const checkedState = state!;
 
+  // H3 修复：通过集中模型配置解析 Sonnet 模型 ID，避免硬编码版本字符串
+  const sonnetModelId = resolveReverseSpecModel({ cwd: resolvedRoot, agentId: 'specify-sonnet' }).model;
+
   /** 单个模块的处理逻辑（提取为函数以支持并行调度） */
   async function processOneModule(moduleName: string): Promise<void> {
     const group = moduleGroups.get(moduleName);
@@ -404,7 +407,12 @@ export async function runBatch(
 
     const isRoot = moduleName === rootModuleName || moduleName.startsWith(`${rootModuleName}--`);
     const specPath = path.join(modulesDir, `${moduleName}.spec.md`);
-    const moduleSourceTarget = normalizeProjectPath(group.dirPath);
+    // H4 修复：文件级降级场景下 moduleSourceTarget 须与 targetPath 保持一致（文件路径）
+    // 否则 --incremental 的 regenerateTargets 查询和 storedSpecByTarget 查询全部错位
+    const hasDirPathConflict = !isRoot && group.files.length === 1 && conflictingDirPaths.has(group.dirPath);
+    const moduleSourceTarget = hasDirPathConflict
+      ? normalizeProjectPath(group.files[0]!)
+      : normalizeProjectPath(group.dirPath);
     const rootTargetsToGenerate = isRoot
       ? group.files
         .map((filePath) => normalizeProjectPath(filePath))
@@ -456,7 +464,7 @@ export async function runBatch(
           projectRoot: resolvedRoot,
           deep: true,
           skipEnrichment: isSmallModule,
-          modelOverride: isSmallModule ? 'claude-sonnet-4-5-20250929' : undefined,
+          modelOverride: isSmallModule ? sonnetModelId : undefined,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
             if (progress.duration !== undefined) {
@@ -509,7 +517,7 @@ export async function runBatch(
           // BUG-A 修复：同一 dirPath 下有多个单文件模块时（如 graphify/ 下有 a.py/b.py），
           // 使用文件路径避免多个模块覆盖同一个 {dirName}.spec.md；
           // 否则仍使用目录路径（每个目录只有一个文件时，目录名才是有意义的模块标识）
-          const hasDirPathConflict = group.files.length === 1 && conflictingDirPaths.has(group.dirPath);
+          // 注意：hasDirPathConflict 已在上方计算（H4 修复）
           const targetPath = hasDirPathConflict
             ? path.join(resolvedRoot, group.files[0]!)
             : path.join(resolvedRoot, group.dirPath);
@@ -601,6 +609,8 @@ export async function runBatch(
     for (const moduleName of processingOrder) {
       // 等待直到有空闲槽位
       while (activeCount >= concurrency) {
+        // H2 修复：pending 为空时 Promise.race([]) 永不 resolve，会死锁
+        if (pending.length === 0) break;
         await Promise.race(pending);
       }
 

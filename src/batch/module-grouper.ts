@@ -216,11 +216,25 @@ export function groupFilesToModules(
   if (basePrefix === '' && sourceNonRoot.length === 1 && sourceNonRoot[0]!.files.length > 1) {
     const soleGroup = sourceNonRoot[0]!;
     const rootGroup = sourceGroups.find((g) => g.name === rootModuleName);
+
+    // M1 修复：先用 stem 分配，冲突项改用包含扩展名的相对路径作为 name，确保全局唯一
+    // 冲突来源：同名文件（__init__.py/__init__.pyi）或不同目录的同名文件
+    const stemCount = new Map<string, number>();
+    for (const file of soleGroup.files) {
+      const stem = path.basename(file).replace(/\.[^.]+$/, '');
+      stemCount.set(stem, (stemCount.get(stem) ?? 0) + 1);
+    }
+
     // 将唯一 source 模块拆分为文件级子模块
     const fileGroups: ModuleGroup[] = soleGroup.files.map((file) => {
       const stem = path.basename(file).replace(/\.[^.]+$/, '');
+      // stem 有冲突时，改用包含扩展名的完整相对路径（路径分隔符替换为 __）作为唯一名称
+      // 保留扩展名是为了区分 __init__.py 和 __init__.pyi 这类同 stem 但不同扩展名的文件
+      const name = (stemCount.get(stem) ?? 0) > 1
+        ? file.replace(/[/\\]/g, '__').replace(/\./g, '_')
+        : stem;
       return {
-        name: stem,
+        name,
         dirPath: soleGroup.dirPath,
         files: [file],
         language: soleGroup.language,
