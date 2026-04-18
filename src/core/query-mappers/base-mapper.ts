@@ -21,4 +21,7 @@ export interface QueryMapper {
 
   /** 从 AST tree 提取解析错误 */
   extractParseErrors(tree: Parser.Tree): ParseError[];
+
+  /** 提取模块级文档注释（可选，仅支持此概念的语言实现，如 Python） */
+  extractModuleDoc?(tree: Parser.Tree): string | null;
 }

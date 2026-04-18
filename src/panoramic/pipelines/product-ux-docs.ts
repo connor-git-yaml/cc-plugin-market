@@ -490,8 +490,8 @@ function walkMarkdownDocs(root: string, dir: string, results: MarkdownSource[]):
     const isGeneratedOutput = /(^|\/)\.spectra[^/]*\//i.test(lower)
       || /(^|\/)docs\/adr\//i.test(lower)
       || /(^|\/)feature-briefs\//i.test(lower);
-    const isDesignLike = /(design|product|roadmap|journey|ux|persona|brief)/i.test(entry.name)
-      || /(^|\/)(design|product|roadmap|journey|ux|persona|brief)s?\//i.test(lower);
+    const isDesignLike = /(design|product|roadmap|journey|ux|persona|brief|architecture|arch|notes|overview|guide|system|model|diagram)/i.test(entry.name)
+      || /(^|\/)(design|product|roadmap|journey|ux|persona|brief|architecture|arch|notes|overview|guide|system|model|diagram)s?\//i.test(lower);
     if (!isDesignLike || isRootReadme || isGeneratedOutput) {
       continue;
     }

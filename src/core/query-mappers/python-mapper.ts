@@ -708,6 +708,19 @@ export class PythonMapper implements QueryMapper {
   }
 
   // ============================================================
+  // 公开方法 — 模块级 docstring 提取
+  // ============================================================
+
+  /**
+   * 提取 Python 文件根节点的模块级 docstring
+   * 查找 rootNode 下第一个 expression_statement 的字符串字面量，截取首行，限 200 字符
+   */
+  extractModuleDoc(tree: Parser.Tree): string | null {
+    // rootNode 的子节点结构与函数/类 body 相同，直接复用 extractPythonDocstring
+    return extractPythonDocstring(tree.rootNode);
+  }
+
+  // ============================================================
   // 内部方法 — 错误收集
   // ============================================================
 

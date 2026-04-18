@@ -179,12 +179,16 @@ export class TreeSitterAnalyzer {
       const hash = createHash('sha256').update(content).digest('hex');
       const loc = content.split('\n').length;
 
+      // 提取模块级文档注释（仅支持此概念的 mapper 实现，如 Python）
+      const moduleDoc = mapper.extractModuleDoc?.(tree) ?? undefined;
+
       const skeleton: CodeSkeleton = {
         filePath,
         language,
         loc,
         exports,
         imports,
+        ...(moduleDoc != null ? { moduleDoc } : {}),
         parseErrors: parseErrors.length > 0 ? parseErrors : undefined,
         hash,
         analyzedAt: new Date().toISOString(),

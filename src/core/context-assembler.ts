@@ -72,6 +72,9 @@ function formatSkeleton(skeleton: CodeSkeleton): string {
   parts.push(`- 语言: ${skeleton.language}`);
   parts.push(`- 行数: ${skeleton.loc}`);
   parts.push(`- 解析器: ${skeleton.parserUsed}`);
+  if (skeleton.moduleDoc) {
+    parts.push(`- 模块说明: ${skeleton.moduleDoc}`);
+  }
   parts.push('');
 
   // 导入

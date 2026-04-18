@@ -818,7 +818,7 @@ export async function runBatch(
     const readmeContent = generateBatchReadme({
       projectName: path.basename(resolvedRoot),
       version: SPECTRA_VERSION,
-      moduleSpecs: successful,
+      moduleSpecs: collectedModuleSpecs.map(s => path.basename(s.outputPath, '.spec.md')),
       projectDocs: projectDocs ?? [],
       bundles: docsBundleProfiles,
       outputDir: resolvedOutputDir,

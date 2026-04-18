@@ -123,6 +123,7 @@ export const CodeSkeletonSchema = z.object({
   hash: z.string().regex(/^[0-9a-f]{64}$/),
   analyzedAt: z.string().datetime(),
   parserUsed: ParserUsedSchema,
+  moduleDoc: z.string().optional(),
 });
 export type CodeSkeleton = z.infer<typeof CodeSkeletonSchema>;
 
