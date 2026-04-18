@@ -99,6 +99,8 @@ const TEXT_EVENT_RE = /\.(emit|on|once|addListener|publish|subscribe|consume|sen
 const PY_HOOK_DEF_RE = /^(?:async\s+)?def\s+(on_[a-z_][a-z0-9_]*|[a-z_][a-z0-9_]*_hook|[a-z_][a-z0-9_]*_callback|handle_[a-z_][a-z0-9_]*)\s*\(/;
 /** Python 装饰器事件模式——识别 @app.route、@hook、@receiver、@app.on_event 等 */
 const PY_DECORATOR_EVENT_RE = /^@(\w+(?:\.\w+)*)(?:\(\s*(['"`])([^'"`]+)\2)?/;
+/** Python hook/decorator 快速文本扫描模式（用于 isApplicable 阶段） */
+const PY_HOOK_QUICK_RE = /(?:^@\w|def on_|_hook\s*\(|_callback\s*\(|handle_)/m;
 const STATE_HINT_ORDER = [
   'created',
   'opened',
@@ -124,7 +126,15 @@ export class EventSurfaceGenerator
   isApplicable(context: ProjectContext): boolean {
     return collectSourceFiles(context.projectRoot).some((filePath) => {
       try {
-        return EVENT_PATTERN_RE.test(fs.readFileSync(filePath, 'utf-8'));
+        const content = fs.readFileSync(filePath, 'utf-8');
+        if (EVENT_PATTERN_RE.test(content)) {
+          return true;
+        }
+        // 对 Python 文件额外扫描 hook/decorator 命名模式
+        if (path.extname(filePath) === '.py' && PY_HOOK_QUICK_RE.test(content)) {
+          return true;
+        }
+        return false;
       } catch (err) {
         logger.debug(`文件读取失败，isApplicable 降级为 false: ${filePath} — ${String(err)}`);
         return false;
@@ -363,10 +373,14 @@ function extractPythonHookOccurrences(projectRoot: string, filePath: string): Ev
   const relFile = toPosixPath(path.relative(projectRoot, filePath));
   const lines = content.split(/\r?\n/);
   const occurrences: EventOccurrence[] = [];
+  // 仅保留语义明确的事件订阅装饰器，移除 'handler'（Click/Flask 普通函数装饰，产生大量噪声）
+  // 和裸 'event'（语义过宽，无法区分事件订阅与普通事件标注）
   const EVENT_DECORATOR_NAMES = new Set([
     'hook', 'receiver', 'on_event', 'route', 'websocket',
-    'listener', 'handler', 'event', 'signal',
+    'listener', 'signal',
   ]);
+  // 记录已被装饰器匹配处理的函数定义行号，避免同一函数被 hook-definition 模式重复添加
+  const decoratedFuncLines = new Set<number>();
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex]?.trim() ?? '';
@@ -380,8 +394,14 @@ function extractPythonHookOccurrences(projectRoot: string, filePath: string): Ev
 
       if (EVENT_DECORATOR_NAMES.has(lastSegment)) {
         const channelName = channelArg || `@${decoratorPath}`;
-        // 查找装饰器下方的函数定义
-        const funcName = findDecoratedFunction(lines, lineIndex);
+        // 查找装饰器下方的函数定义，并记录其行号用于去重
+        const funcLineIndex = findDecoratedFunctionLine(lines, lineIndex);
+        const funcName = funcLineIndex >= 0
+          ? ((/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(lines[funcLineIndex]?.trim() ?? ''))?.[1] ?? 'anonymous')
+          : 'anonymous';
+        if (funcLineIndex >= 0) {
+          decoratedFuncLines.add(funcLineIndex);
+        }
 
         occurrences.push({
           channelName,
@@ -396,20 +416,23 @@ function extractPythonHookOccurrences(projectRoot: string, filePath: string): Ev
     }
 
     // 检测 hook/callback 函数定义：def on_xxx、def xxx_hook 等
-    const hookMatch = PY_HOOK_DEF_RE.exec(line);
-    if (hookMatch) {
-      const funcName = hookMatch[1]!;
-      const channelName = deriveChannelFromHookName(funcName);
+    // 若当前行已被装饰器模式处理，跳过避免重复
+    if (!decoratedFuncLines.has(lineIndex)) {
+      const hookMatch = PY_HOOK_DEF_RE.exec(line);
+      if (hookMatch) {
+        const funcName = hookMatch[1]!;
+        const channelName = deriveChannelFromHookName(funcName);
 
-      occurrences.push({
-        channelName,
-        kind: 'event',
-        role: 'subscriber',
-        sourceFile: relFile,
-        symbolName: funcName,
-        methodName: 'hook-definition',
-        payloadFields: [],
-      });
+        occurrences.push({
+          channelName,
+          kind: 'event',
+          role: 'subscriber',
+          sourceFile: relFile,
+          symbolName: funcName,
+          methodName: 'hook-definition',
+          payloadFields: [],
+        });
+      }
     }
   }
 
@@ -423,14 +446,15 @@ function inferDecoratorKind(segment: string): EventChannelKind {
   return 'event';
 }
 
-/** 查找装饰器下方的函数定义名 */
-function findDecoratedFunction(lines: string[], decoratorLine: number): string {
+/** 查找装饰器下方的函数定义行号，未找到返回 -1 */
+function findDecoratedFunctionLine(lines: string[], decoratorLine: number): number {
   for (let i = decoratorLine + 1; i < Math.min(decoratorLine + 5, lines.length); i++) {
     const line = lines[i]?.trim() ?? '';
-    const match = /^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(line);
-    if (match?.[1]) return match[1];
+    if (/^(?:async\s+)?def\s+[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(line)) {
+      return i;
+    }
   }
-  return 'anonymous';
+  return -1;
 }
 
 /** 从 hook 函数名派生事件 channel 名（on_xxx → xxx、xxx_hook → xxx） */

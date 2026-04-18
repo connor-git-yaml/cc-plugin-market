@@ -375,6 +375,33 @@ export function main() {
     }
   });
 
+  it('纯 Python decorator/hook 风格项目（无 .emit/.on）isApplicable 返回 true', async () => {
+    // 验证 H5 修复：纯 hook/decorator Python 项目不再在 registry 过滤阶段被跳过
+    const pyOnlyDir = createTempDir();
+    try {
+      writeFile(
+        path.join(pyOnlyDir, 'signals.py'),
+        `
+from django.dispatch import receiver
+
+@receiver
+def handle_user_signup(sender, **kwargs):
+    pass
+
+def on_order_placed(order):
+    pass
+        `.trim(),
+      );
+
+      bootstrapGenerators();
+      const registry = GeneratorRegistry.getInstance();
+      const applicable = await registry.filterByContext(createContext(pyOnlyDir));
+      expect(applicable.some((item) => item.id === 'event-surface')).toBe(true);
+    } finally {
+      cleanupDir(pyOnlyDir);
+    }
+  });
+
   it('barrel 导出 EventSurfaceGenerator 及其类型', async () => {
     const panoramic = await import('../../src/panoramic/internal.js');
 
