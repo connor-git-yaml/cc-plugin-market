@@ -322,11 +322,11 @@ function buildUserJourneys(
       title: scenario.title,
       actor,
       goal: detail,
-      outcome: `${actor} 完成了 ${truncateAtWordBoundary(scenario.title, 50)}，并可继续下一步工作。`,
+      outcome: `完成 ${scenario.title} 对应的关键任务，并获得结构化文档或可执行下一步。`,
       steps: [
         {
           title: '触发场景',
-          detail: `${actor} 需要：${truncateAtWordBoundary(scenario.summary || scenario.title, 100)}`,
+          detail: `${actor} 识别当前任务需要：${scenario.title}`,
           inferred: true,
         },
         {
@@ -336,7 +336,7 @@ function buildUserJourneys(
         },
         {
           title: '消费输出',
-          detail: inferJourneyOutput(scenario.title, scenario.summary ?? ''),
+          detail: '使用生成的文档、接口说明或评审材料完成后续沟通、实现或交接。',
           inferred: true,
         },
       ],
@@ -543,10 +543,7 @@ function collectOverviewParagraphs(corpus: ProductFactCorpus): string[] {
   }
 
   for (const source of [...corpus.readmes, ...corpus.designDocs]) {
-    // 仅保留描述性段落（过滤 HTML block、纯链接导航、badge 行等）
-    paragraphs.push(
-      ...extractParagraphs(source.text).filter(isDescriptiveParagraph).slice(0, 2),
-    );
+    paragraphs.push(...extractParagraphs(source.text).slice(0, 2));
   }
 
   // 当 current-spec 与 README 均不足时，以近期 commit subject 作为补充事实证据
@@ -734,7 +731,7 @@ function extractScenariosFromReadmeCorpus(
         const summary = restParts.join('：').trim() || item;
         scenarios.push({
           id: `scenario-${scenarios.length + 1}`,
-          title: truncateAtWordBoundary(title, 80),
+          title: title.slice(0, 80),
           summary: summary.slice(0, 200) || title.slice(0, 200),
           actors: [inferAudience(title, targetUsers) ?? targetUsers[0]?.name ?? '开发者'],
           evidence: [{
@@ -913,8 +910,6 @@ function extractParagraphs(content: string): string[] {
   return content
     .split(/\n\s*\n/g)
     .map((paragraph) => paragraph.replace(/\n+/g, ' ').trim())
-    // strip inline/block HTML tags（保留文字内容）
-    .map((paragraph) => paragraph.replace(/<[^>]+>/g, '').trim())
     .filter((paragraph) =>
       paragraph.length >= 20
       && !paragraph.startsWith('|')
@@ -1058,44 +1053,6 @@ function firstMeaningfulSentence(text: string): string | undefined {
 
 function firstSentence(text: string): string | undefined {
   return firstMeaningfulSentence(text);
-}
-
-/**
- * 在词边界处截断文字，避免在单词中间截断。
- * 若文字本身不超过 maxLen，原样返回；否则在 maxLen 处向左找最近空格截断并加省略号。
- */
-function truncateAtWordBoundary(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  const cut = text.lastIndexOf(' ', maxLen);
-  return cut > 0 ? `${text.slice(0, cut)}…` : `${text.slice(0, maxLen)}…`;
-}
-
-/**
- * 根据场景标题/摘要关键词推断用户旅程"消费输出"的具体描述，
- * 避免每条旅程都使用完全相同的通用模板。
- */
-function inferJourneyOutput(title: string, summary: string): string {
-  const text = `${title} ${summary}`.toLowerCase();
-  // export/report 优先于 chat 检查，避免 "export conversation history" 误匹配 chat
-  if (/\bexport\b|导出|\breport\b|报告|\boutput\b.*doc|生成.*文档|\brendering?\b|渲染/.test(text)) {
-    return '获得导出的文件、报告或文档产物。';
-  }
-  if (/\bchat\b|\bconvers\b|对话|聊天|\banswer\b|回答|\bmessage\b|消息/.test(text)) {
-    return '获得 AI 助手的回答或对话响应。';
-  }
-  if (/search|搜索|find|查找|query|查询|retriev|检索/.test(text)) {
-    return '查看搜索结果并获取所需信息。';
-  }
-  if (/install|setup|deploy|部署|配置|config|connect|接入/.test(text)) {
-    return '完成安装或配置，系统可正常使用。';
-  }
-  if (/sync|同步|index|索引|ingest|intake|upload|上传/.test(text)) {
-    return '数据已同步或索引更新完成，可供后续查询。';
-  }
-  if (/agent|automation|自动化|automat|workflow|工作流/.test(text)) {
-    return '自动化任务执行完成，查看运行结果。';
-  }
-  return '查看结果并继续后续工作流程。';
 }
 
 function slugify(value: string): string {
