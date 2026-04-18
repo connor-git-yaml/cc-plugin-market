@@ -153,8 +153,10 @@ function extractPythonDocstring(bodyNode: Parser.SyntaxNode | null): string | nu
         : null;
     if (!stringNode) break;
     const raw = stringNode.text;
+    // 去掉合法的字符串前缀（r/u/b/f 及其大写形式，可组合，如 rb、RB 等）
+    const withoutPrefix = raw.replace(/^[rRuUbBfF]+/, '');
     // 去掉三引号或单引号包裹
-    const stripped = raw
+    const stripped = withoutPrefix
       .replace(/^"""([\s\S]*?)"""$/, '$1')
       .replace(/^'''([\s\S]*?)'''$/, '$1')
       .replace(/^"(.*)"$/, '$1')

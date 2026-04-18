@@ -1046,8 +1046,8 @@ describe('extractPythonFieldsFromLines — 行内注释 strip (BUG-K)', () => {
     expect(fields[1]!.typeStr).toBe('int');
   });
 
-  it('类型字段有默认值且带行内注释时，typeStr 仅保留类型名', () => {
-    // `host: str = "localhost"  # server address` 应提取 typeStr = "str"
+  it('类型字段有默认值且带行内注释时，typeStr 和 defaultValue 均不含注释', () => {
+    // `host: str = "localhost"  # server address` 应提取 typeStr = "str"，defaultValue = '"localhost"'
     const source = [
       'class Config(BaseModel):',
       '    host: str = "localhost"  # server address',
@@ -1056,7 +1056,7 @@ describe('extractPythonFieldsFromLines — 行内注释 strip (BUG-K)', () => {
 
     expect(fields).toHaveLength(1);
     expect(fields[0]!.typeStr).toBe('str');
-    expect(fields[0]!.defaultValue).toBe('"localhost"  # server address');
+    expect(fields[0]!.defaultValue).toBe('"localhost"');
   });
 
   it('Literal 类型中包含 # 字符时不被误截断', () => {

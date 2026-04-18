@@ -297,7 +297,8 @@ function parseFieldDeclaration(line: string): DataModelField | null {
       defaultValue = parsed.default;
       description = parsed.description;
     } else {
-      defaultValue = rawDefault;
+      // 清理尾部行内注释（如 `30  # seconds` → `30`）
+      defaultValue = stripPythonInlineComment(rawDefault);
     }
   } else {
     typeStr = stripPythonInlineComment(afterColon);

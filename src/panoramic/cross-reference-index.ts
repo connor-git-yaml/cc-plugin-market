@@ -154,6 +154,14 @@ function supplementCrossModuleFromSkeletonImports(
   currentNode: DocGraphSpecNode,
   crossModuleMap: Map<string, CrossModuleAccumulator>,
 ): void {
+  // 预构建已覆盖引用的 Set，将内层查询从 O(references) 降到 O(1)
+  const coveredKeys = new Set<string>();
+  for (const ref of docGraph.references) {
+    if (ref.kind === 'cross-module') {
+      coveredKeys.add(`${ref.fromSpecPath}:${ref.toSpecPath}`);
+    }
+  }
+
   for (const imp of moduleSpec.baselineSkeleton.imports) {
     // 相对 import 已由 docGraph.references 覆盖
     if (imp.isRelative) continue;
@@ -162,13 +170,7 @@ function supplementCrossModuleFromSkeletonImports(
     if (!targetSpecPath || targetSpecPath === currentNode.specPath) continue;
 
     // 若 docGraph.references 已包含该跨模块引用，跳过（避免重复计数）
-    const alreadyCovered = docGraph.references.some(
-      (ref) =>
-        ref.kind === 'cross-module'
-        && ref.fromSpecPath === currentNode.specPath
-        && ref.toSpecPath === targetSpecPath,
-    );
-    if (alreadyCovered) continue;
+    if (coveredKeys.has(`${currentNode.specPath}:${targetSpecPath}`)) continue;
 
     const targetSpec = docGraph.specs.find((spec) => spec.specPath === targetSpecPath);
     if (!targetSpec) continue;

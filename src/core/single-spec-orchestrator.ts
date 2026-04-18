@@ -529,7 +529,7 @@ ${sections.businessLogic}
         try {
           const enrichResponse = await callLLM(
             { ...context, prompt: enrichPrompt, tokenCount: estimateFast(enrichPrompt) },
-            { languageTerminology },
+            { languageTerminology, ...(options.modelOverride ? { model: options.modelOverride } : {}) },
             onRetry,
           );
           const enrichedContent = enrichResponse.content.trim();

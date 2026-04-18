@@ -38,6 +38,23 @@ export async function buildDirectoryGraph(
   const fileSet = new Set(files);
   const registry = LanguageAdapterRegistry.getInstance();
 
+  // 预构建目录前缀索引：dirPrefix → 该目录下的文件列表
+  // 将 resolveAbsoluteImportPath 中目录扫描从 O(n) 降到 O(候选数)
+  const dirPrefixIndex = new Map<string, string[]>();
+  for (const file of files) {
+    // 提取所有父目录前缀（从根到直接父目录）
+    const parts = file.split('/');
+    for (let depth = 1; depth < parts.length; depth++) {
+      const prefix = parts.slice(0, depth).join('/') + '/';
+      const existing = dirPrefixIndex.get(prefix);
+      if (existing) {
+        existing.push(file);
+      } else {
+        dirPrefixIndex.set(prefix, [file]);
+      }
+    }
+  }
+
   // 构建文件路径到骨架的映射
   const skeletonMap = new Map<string, CodeSkeleton>();
   for (let i = 0; i < files.length; i++) {
@@ -76,7 +93,7 @@ export async function buildDirectoryGraph(
         resolved = resolveImportPath(file, imp.moduleSpecifier, fileSet);
       } else {
         // 尝试解析项目内绝对 import（适用于 Python 包名式导入，如 graphify.core）
-        resolved = resolveAbsoluteImportPath(imp.moduleSpecifier, fileSet);
+        resolved = resolveAbsoluteImportPath(imp.moduleSpecifier, fileSet, dirPrefixIndex);
       }
 
       if (resolved && resolved !== file) {
@@ -240,6 +257,7 @@ function resolveImportPath(
 function resolveAbsoluteImportPath(
   specifier: string,
   fileSet: Set<string>,
+  dirPrefixIndex?: Map<string, string[]>,
 ): string | undefined {
   // 将点分包名转换为路径（graphify.core → graphify/core）
   const asPath = specifier.replace(/\./g, '/');
@@ -267,11 +285,17 @@ function resolveAbsoluteImportPath(
   }
 
   // 尝试匹配目录下的任意文件（最佳稳定性：优先 __init__.py，其次字典序第一个）
+  // 使用预构建目录前缀索引（O(候选数)），回退为全量扫描（O(n)）
   const dirPrefix = `${asPath}/`;
-  const dirMatches: string[] = [];
-  for (const file of fileSet) {
-    if (file.startsWith(dirPrefix)) {
-      dirMatches.push(file);
+  let dirMatches: string[];
+  if (dirPrefixIndex) {
+    dirMatches = dirPrefixIndex.get(dirPrefix) ?? [];
+  } else {
+    dirMatches = [];
+    for (const file of fileSet) {
+      if (file.startsWith(dirPrefix)) {
+        dirMatches.push(file);
+      }
     }
   }
 
