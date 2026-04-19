@@ -59,6 +59,28 @@ export interface BudgetDecision {
   message: string;
 }
 
+/** runBudgetGate 每次迭代的审计记录 */
+export interface BudgetGateAttempt {
+  attempt: number;
+  estimate: number;
+  policy: BudgetPolicy;
+  message: string;
+}
+
+/** runBudgetGate 的最终结果 */
+export interface BudgetGateResult {
+  /** 最终 policy（continue / cancel；cheaper-model / skip-enrichment 只作为中间状态存在于 attempts 日志） */
+  finalPolicy: 'continue' | 'cancel';
+  /** 最终生效的估算（若采纳了降级，会在 baseEstimate 上应用 reduction） */
+  finalEstimate: number;
+  /** 是否采纳了 skip-enrichment */
+  skipEnrichmentApplied: boolean;
+  /** 是否采纳了 cheaper-model */
+  cheaperModelApplied: boolean;
+  /** 每次迭代的审计记录（供 summary / log 展示） */
+  attempts: BudgetGateAttempt[];
+}
+
 // ============================================================
 // 估算
 // ============================================================
@@ -211,6 +233,108 @@ export async function buildBudgetDecision(
     policy,
     interactive: true,
     message: `${overMessage}；用户交互选择: ${policy}`,
+  };
+}
+
+/**
+ * 根据降级 policy 调整估算值（Feature 127 Codex review 修复）
+ *
+ * - skip-enrichment：enrichment 是 Section 2 的二次 LLM 调用，平均约占
+ *   整体 token 消耗的 30%；跳过后估算减为 70%
+ * - cheaper-model：tokens 数不变（budget 以 token 为单位），返回原值
+ * - continue / cancel：返回原值
+ */
+export function applyPolicyToEstimate(
+  baseEstimate: number,
+  policy: BudgetPolicy,
+): number {
+  switch (policy) {
+    case 'skip-enrichment':
+      return Math.round(baseEstimate * 0.7);
+    case 'cheaper-model':
+    case 'continue':
+    case 'cancel':
+    default:
+      return baseEstimate;
+  }
+}
+
+/**
+ * 驱动完整的预算 gate 循环（Feature 127 Codex review 修复 — Finding 1）
+ *
+ * 与 buildBudgetDecision 的差别：
+ * - buildBudgetDecision 只做一次性决策（policy 选择）
+ * - runBudgetGate 负责把"降级 policy → 重估 → 二次 gate"的闭环跑完
+ *
+ * 语义：
+ * 1. attempt 0：用 baseEstimate 做首次 gate
+ * 2. policy 是 continue / cancel：立即返回
+ * 3. policy 是 cheaper-model / skip-enrichment：应用 policy → 重估 → attempt++ 再进
+ * 4. attempt ≥ 1（Edge Case 8）：即便还是超预算，也强制 cancel 避免循环
+ *
+ * 任一成功降级后得到 ≤ 预算的估算 → 返回 continue + 记录所采纳的降级
+ */
+export async function runBudgetGate(args: {
+  baseEstimate: number;
+  budget: number;
+  preset?: BudgetPolicy;
+  isTTY: boolean;
+  promptPolicy?: () => Promise<BudgetPolicy>;
+}): Promise<BudgetGateResult> {
+  const attempts: BudgetGateAttempt[] = [];
+  let estimate = args.baseEstimate;
+  let skipEnrichmentApplied = false;
+  let cheaperModelApplied = false;
+
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    const decision = await buildBudgetDecision({
+      totalEstimate: estimate,
+      budget: args.budget,
+      preset: args.preset,
+      isTTY: args.isTTY,
+      promptPolicy: args.promptPolicy,
+      attempt,
+    });
+    attempts.push({
+      attempt,
+      estimate,
+      policy: decision.policy,
+      message: decision.message,
+    });
+
+    // 终态 policy：直接返回
+    if (decision.policy === 'continue' || decision.policy === 'cancel') {
+      return {
+        finalPolicy: decision.policy,
+        finalEstimate: estimate,
+        skipEnrichmentApplied,
+        cheaperModelApplied,
+        attempts,
+      };
+    }
+
+    // 降级 policy：应用调整后进入下一轮 gate
+    if (decision.policy === 'skip-enrichment') {
+      skipEnrichmentApplied = true;
+    } else if (decision.policy === 'cheaper-model') {
+      cheaperModelApplied = true;
+    }
+    estimate = applyPolicyToEstimate(estimate, decision.policy);
+  }
+
+  // Edge Case 8：两轮仍超预算（例如 cheaper-model 不减 tokens），强制 cancel
+  attempts.push({
+    attempt: 2,
+    estimate,
+    policy: 'cancel',
+    message: `两轮降级后估算 ${estimate.toLocaleString()} tokens 仍 > 预算 ${args.budget.toLocaleString()}，强制 cancel`,
+  });
+  return {
+    finalPolicy: 'cancel',
+    finalEstimate: estimate,
+    skipEnrichmentApplied,
+    cheaperModelApplied,
+    attempts,
   };
 }
 

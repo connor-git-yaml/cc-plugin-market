@@ -12,6 +12,8 @@ export const EXIT_CODES = {
   SUCCESS: 0,
   TARGET_ERROR: 1,
   API_ERROR: 2,
+  /** Feature 127: 预算 gate 主动取消，供 CI 区分"成功 0 模块"和"被预算拦截" */
+  BUDGET_EXCEEDED: 3,
 } as const;
 
 /**

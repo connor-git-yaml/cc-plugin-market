@@ -28,8 +28,9 @@ import {
   estimateModuleCost,
   buildDryRunReport,
   renderDryRunReport,
-  buildBudgetDecision,
+  runBudgetGate,
   type BudgetPolicy,
+  type BudgetGateAttempt,
   type ModuleEstimate,
 } from './budget-gate.js';
 import { createLogger } from '../panoramic/utils/logger.js';
@@ -135,6 +136,12 @@ export interface BatchResult {
     policy: BudgetPolicy;
     message: string;
     interactive: boolean;
+    /** Codex review 修复：每轮 gate 的审计记录 */
+    attempts?: BudgetGateAttempt[];
+    /** 是否采纳了 skip-enrichment 降级 */
+    skipEnrichmentApplied?: boolean;
+    /** 是否采纳了 cheaper-model 降级 */
+    cheaperModelApplied?: boolean;
   };
 }
 
@@ -400,8 +407,21 @@ export async function runBatch(
     };
   }
 
-  // Feature 127：预算守护 gate — AST + 模块聚合完成后预估，超预算时调用 handler
-  let budgetDecisionResult: { policy: BudgetPolicy; message: string; interactive: boolean } | undefined;
+  // Feature 127：预算守护 gate — AST + 模块聚合完成后预估，超预算时驱动 gate 循环
+  // Codex review 修复（Finding 1）：降级 policy 后必须 re-estimate 并进入二次 gate，
+  // 否则 cheaper-model / skip-enrichment 形同虚设；最多循环一轮后强制 cancel。
+  let budgetDecisionResult:
+    | {
+        policy: BudgetPolicy;
+        message: string;
+        interactive: boolean;
+        attempts?: BudgetGateAttempt[];
+        skipEnrichmentApplied?: boolean;
+        cheaperModelApplied?: boolean;
+      }
+    | undefined;
+  let budgetSkipEnrichmentAll = false;
+  let budgetCheaperModelAll = false;
   if (typeof options.budget === 'number' && options.budget > 0) {
     const estimates: ModuleEstimate[] = [];
     for (const moduleName of processingOrder) {
@@ -409,23 +429,32 @@ export async function runBatch(
       if (!group) continue;
       estimates.push(estimateModuleCost(moduleName, group.files, resolvedRoot));
     }
-    const total = estimates.reduce(
+    const baseTotal = estimates.reduce(
       (s, e) => s + e.estimatedInput + e.estimatedOutput,
       0,
     );
-    const decision = await buildBudgetDecision({
-      totalEstimate: total,
+    const gateResult = await runBudgetGate({
+      baseEstimate: baseTotal,
       budget: options.budget,
       preset: options.onOverBudget,
       isTTY: !!process.stdout.isTTY,
     });
-    console.log(`[budget] ${decision.message}`);
+    budgetSkipEnrichmentAll = gateResult.skipEnrichmentApplied;
+    budgetCheaperModelAll = gateResult.cheaperModelApplied;
+    for (const a of gateResult.attempts) {
+      console.log(`[budget] ${a.message}`);
+    }
+    // final message 取最后一条 attempt
+    const last = gateResult.attempts[gateResult.attempts.length - 1]!;
     budgetDecisionResult = {
-      policy: decision.policy,
-      message: decision.message,
-      interactive: decision.interactive,
+      policy: gateResult.finalPolicy,
+      message: last.message,
+      interactive: false,
+      attempts: gateResult.attempts,
+      skipEnrichmentApplied: gateResult.skipEnrichmentApplied,
+      cheaperModelApplied: gateResult.cheaperModelApplied,
     };
-    if (decision.policy === 'cancel') {
+    if (gateResult.finalPolicy === 'cancel') {
       // 取消：不调用任何 LLM，立即返回
       return {
         totalModules: processingOrder.length,
@@ -441,7 +470,7 @@ export async function runBatch(
         budgetDecision: budgetDecisionResult,
       };
     }
-    // 其它 policy 会在模块处理循环中影响 genOptions（见下方）
+    // continue 分支：budgetSkipEnrichmentAll / budgetCheaperModelAll 用于下方 genOptions 注入
   }
 
   // 步骤 3：检查是否存在检查点
@@ -570,15 +599,16 @@ export async function runBatch(
         }, 0);
         const isSmallModule = group.files.length <= 2 && totalLoc < 200;
 
-        // Feature 127：预算策略 cheaper-model / skip-enrichment 覆盖 isSmallModule 的默认
-        const budgetSkipEnrichment = budgetDecisionResult?.policy === 'skip-enrichment';
-        const budgetCheaperModel = budgetDecisionResult?.policy === 'cheaper-model';
+        // Feature 127：预算降级策略（Codex review 修复）：
+        // 降级在 gate 循环中就已采纳，此处只读取 budgetSkipEnrichmentAll /
+        // budgetCheaperModelAll 注入到每个模块的 genOptions，确保所有模块一致降级。
         const genOptions: GenerateSpecOptions = {
           outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
-          skipEnrichment: isSmallModule || budgetSkipEnrichment,
-          modelOverride: isSmallModule || budgetCheaperModel ? sonnetModelId : undefined,
+          skipEnrichment: isSmallModule || budgetSkipEnrichmentAll,
+          modelOverride:
+            isSmallModule || budgetCheaperModelAll ? sonnetModelId : undefined,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
             if (progress.duration !== undefined) {

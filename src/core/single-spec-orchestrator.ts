@@ -547,15 +547,19 @@ ${sections.businessLogic}
             { languageTerminology, ...(options.modelOverride ? { model: options.modelOverride } : {}) },
             onRetry,
           );
+          // Feature 127（Codex review 修复）：enrichment 的 LLM 调用总是消耗 tokens，
+          // 无论生成内容是否被最终采纳，都必须在所有口径（tokenUsage +
+          // costMetadata）中记录，否则会系统性低报 LLM 花销。采纳与否只影响
+          // section 内容替换，不改变已发生的真实成本。
+          tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
+          costInputTokens += enrichResponse.inputTokens;
+          costOutputTokens += enrichResponse.outputTokens;
+          costDurationMs += enrichResponse.duration;
+
           const enrichedContent = enrichResponse.content.trim();
           // 仅当二次生成的内容比第一版长才替换（防止退化）
           if (enrichedContent.length > sections.businessLogic.length * 1.2) {
             sections.businessLogic = enrichedContent;
-            tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
-            // Feature 127：记录 enrichment 成本（仅当采纳了重写时）
-            costInputTokens += enrichResponse.inputTokens;
-            costOutputTokens += enrichResponse.outputTokens;
-            costDurationMs += enrichResponse.duration;
           }
           onStageProgress?.({ stage: 'enrich', message: 'enrich 完成', duration: Date.now() - enrichStart });
         } catch {

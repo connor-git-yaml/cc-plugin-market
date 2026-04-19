@@ -10,6 +10,8 @@ import {
   buildDryRunReport,
   renderDryRunReport,
   buildBudgetDecision,
+  applyPolicyToEstimate,
+  runBudgetGate,
 } from '../../src/batch/budget-gate.js';
 
 let tmpDir: string;
@@ -134,5 +136,99 @@ describe('buildBudgetDecision', () => {
     });
     expect(d.policy).toBe('continue');
     expect(promptCalled).toBe(false);
+  });
+});
+
+describe('applyPolicyToEstimate', () => {
+  it('skip-enrichment 把估算降至 70%', () => {
+    expect(applyPolicyToEstimate(1000, 'skip-enrichment')).toBe(700);
+  });
+
+  it('cheaper-model / continue / cancel 不改变估算（token 口径不变）', () => {
+    expect(applyPolicyToEstimate(1000, 'cheaper-model')).toBe(1000);
+    expect(applyPolicyToEstimate(1000, 'continue')).toBe(1000);
+    expect(applyPolicyToEstimate(1000, 'cancel')).toBe(1000);
+  });
+});
+
+describe('runBudgetGate', () => {
+  it('未超预算 → finalPolicy=continue，attempts 仅 1 轮', async () => {
+    const r = await runBudgetGate({
+      baseEstimate: 100,
+      budget: 500,
+      isTTY: true,
+    });
+    expect(r.finalPolicy).toBe('continue');
+    expect(r.finalEstimate).toBe(100);
+    expect(r.attempts).toHaveLength(1);
+    expect(r.skipEnrichmentApplied).toBe(false);
+    expect(r.cheaperModelApplied).toBe(false);
+  });
+
+  it('超预算 + preset=cancel → 单轮 cancel', async () => {
+    const r = await runBudgetGate({
+      baseEstimate: 1000,
+      budget: 500,
+      preset: 'cancel',
+      isTTY: true,
+    });
+    expect(r.finalPolicy).toBe('cancel');
+    expect(r.attempts).toHaveLength(1);
+  });
+
+  it('超预算 + preset=skip-enrichment + 降级后仍在预算内 → continue', async () => {
+    // 预算 800, baseEstimate 1000, 降级至 700 < 800 → continue
+    const r = await runBudgetGate({
+      baseEstimate: 1000,
+      budget: 800,
+      preset: 'skip-enrichment',
+      isTTY: true,
+    });
+    expect(r.finalPolicy).toBe('continue');
+    expect(r.skipEnrichmentApplied).toBe(true);
+    expect(r.cheaperModelApplied).toBe(false);
+    expect(r.attempts).toHaveLength(2);
+    expect(r.attempts[0]!.policy).toBe('skip-enrichment');
+    expect(r.attempts[1]!.policy).toBe('continue');
+    expect(r.finalEstimate).toBe(700);
+  });
+
+  it('超预算 + preset=skip-enrichment + 降级后仍超预算 → 强制 cancel（Edge Case 8）', async () => {
+    // baseEstimate=10000, budget=100; skip-enrichment → 7000, 仍超
+    // 第二轮强制走 attempt=1 分支触发 cancel
+    const r = await runBudgetGate({
+      baseEstimate: 10000,
+      budget: 100,
+      preset: 'skip-enrichment',
+      isTTY: false,
+    });
+    expect(r.finalPolicy).toBe('cancel');
+    expect(r.skipEnrichmentApplied).toBe(true);
+  });
+
+  it('超预算 + preset=cheaper-model → tokens 不变 → 必然 cancel（Codex review 揭示的设计事实）', async () => {
+    const r = await runBudgetGate({
+      baseEstimate: 1000,
+      budget: 500,
+      preset: 'cheaper-model',
+      isTTY: false,
+    });
+    // 第 1 轮选 cheaper-model，但 applyPolicyToEstimate 不降 token；
+    // 第 2 轮 attempt=1 强制 cancel（buildBudgetDecision 的 Edge Case 8）
+    expect(r.finalPolicy).toBe('cancel');
+    expect(r.cheaperModelApplied).toBe(true);
+  });
+
+  it('支持连续两轮的交互式 prompt（首轮 skip-enrichment 失败后，Edge Case 8 强制 cancel）', async () => {
+    const choices: ('skip-enrichment' | 'cancel')[] = ['skip-enrichment', 'cancel'];
+    let i = 0;
+    const r = await runBudgetGate({
+      baseEstimate: 10000,
+      budget: 100,
+      isTTY: true,
+      promptPolicy: async () => choices[i++]!,
+    });
+    // 降级 10000 → 7000 仍超预算，第 2 轮 attempt=1 强制 cancel（不消费第二个 choice）
+    expect(r.finalPolicy).toBe('cancel');
   });
 });

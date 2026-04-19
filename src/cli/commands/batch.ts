@@ -90,7 +90,15 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       console.log(`✓ 预算决策: ${result.budgetDecision.policy}（${result.budgetDecision.message}）`);
     }
 
-    process.exitCode = result.failed.length > 0 ? EXIT_CODES.TARGET_ERROR : EXIT_CODES.SUCCESS;
+    // Feature 127（Codex review 修复）：预算 cancel 必须返回非零 exit 让 CI 能识别。
+    // 优先级：failed > budget-cancel > success。
+    if (result.failed.length > 0) {
+      process.exitCode = EXIT_CODES.TARGET_ERROR;
+    } else if (result.budgetDecision?.policy === 'cancel') {
+      process.exitCode = EXIT_CODES.BUDGET_EXCEEDED;
+    } else {
+      process.exitCode = EXIT_CODES.SUCCESS;
+    }
   } catch (err) {
     process.exitCode = handleError(err);
   }
