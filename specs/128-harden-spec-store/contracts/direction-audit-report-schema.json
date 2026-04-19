@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spectra.local/schemas/direction-audit-report/1.0.0",
+  "title": "DirectionAuditReport",
+  "description": "依赖方向自查工具的输出报告 Schema（Feature 128）",
+  "type": "object",
+  "required": ["graphPath", "generatedAt", "totalEdges", "summary", "edges", "rootCauseBreakdown"],
+  "additionalProperties": false,
+  "properties": {
+    "graphPath": {
+      "type": "string",
+      "description": "被审计的 graph.json 文件路径（相对于 projectRoot）"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "报告生成时间（ISO 8601）"
+    },
+    "totalEdges": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "审计的边总数"
+    },
+    "summary": {
+      "type": "object",
+      "required": ["correct", "suspicious", "incorrect", "skipped"],
+      "additionalProperties": false,
+      "properties": {
+        "correct": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "方向确认正确的边数（有 AST import 证据支撑）"
+        },
+        "suspicious": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "方向可疑的边数（无直接 import 证据，由 LLM 语义推断产生）"
+        },
+        "incorrect": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "方向确认错误的边数（AST import 方向与图边方向相反）"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "因无 import 数据而跳过审计的边数（如纯 Markdown corpus）"
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DirectionAuditEdge"
+      },
+      "description": "各边的分类结果列表"
+    },
+    "rootCauseBreakdown": {
+      "type": "object",
+      "required": ["astExtraction", "panoramicBuilder", "crossReferenceInference", "unknown"],
+      "additionalProperties": false,
+      "properties": {
+        "astExtraction": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "疑似在 AST 提取阶段引入的错误数"
+        },
+        "panoramicBuilder": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "疑似在 panoramic builder 阶段引入的错误数"
+        },
+        "crossReferenceInference": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "疑似在 cross-reference 推断阶段引入的错误数"
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "无法定位来源的错误数"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "DirectionAuditEdge": {
+      "type": "object",
+      "required": ["sourceId", "targetId", "relation", "result", "confidence", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": {
+          "type": "string",
+          "description": "来源节点 ID（与 graph.json nodes[*].id 一致）"
+        },
+        "targetId": {
+          "type": "string",
+          "description": "目标节点 ID（与 graph.json nodes[*].id 一致）"
+        },
+        "relation": {
+          "type": "string",
+          "description": "关系类型（与 graph.json links[*].relation 一致）"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["correct", "suspicious", "incorrect", "skipped"],
+          "description": "方向审计结论"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "审计置信度分数（0.0-1.0）"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "判断依据说明"
+        },
+        "suspectedStage": {
+          "type": "string",
+          "enum": ["ast-extraction", "panoramic-builder", "cross-reference-inference"],
+          "description": "推测的错误来源阶段（仅 incorrect/suspicious 时有值）"
+        }
+      }
+    }
+  }
+}
