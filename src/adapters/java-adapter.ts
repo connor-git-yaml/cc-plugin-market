@@ -15,6 +15,8 @@ import type {
 } from './language-adapter.js';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
+import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
+import type { CommentRegion } from '../debt-scanner/types.js';
 
 export class JavaLanguageAdapter implements LanguageAdapter {
   readonly id = 'java';
@@ -75,5 +77,16 @@ export class JavaLanguageAdapter implements LanguageAdapter {
       filePattern: /^(.*Test|Test.*|.*Tests|.*IT)\.java$/,
       testDirs: ['src/test/java'],
     };
+  }
+
+  /**
+   * 基于 tree-sitter-java 的注释提取。
+   * Java grammar 将行注释标为 `line_comment`，块注释标为 `block_comment`。
+   */
+  async extractComments(filePath: string): Promise<CommentRegion[]> {
+    return extractCommentsWithTreeSitter(filePath, {
+      grammarName: 'java',
+      commentNodeTypes: new Set(['line_comment', 'block_comment']),
+    });
   }
 }

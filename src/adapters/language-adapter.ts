@@ -5,6 +5,9 @@
  */
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
 import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { CommentRegion } from '../debt-scanner/types.js';
+
+export type { CommentRegion };
 
 // ============================================================
 // 辅助类型
@@ -134,4 +137,16 @@ export interface LanguageAdapter {
    * 用于 secret-redactor 和 noise-filter 识别测试文件。
    */
   getTestPatterns(): TestPatterns;
+
+  /**
+   * 基于 AST 提取源文件中的所有注释 region（可选能力）。
+   * 用于 Feature 130 debt-scanner：识别 TODO/FIXME 等注释，
+   * 并且排除字符串字面量内的 "TODO" 字样，避免规则误判。
+   *
+   * 适配器如未实现该能力，debt-scanner 会跳过这些文件并在 diagnostics 中计数。
+   *
+   * @param filePath 源文件绝对路径
+   * @returns 该文件的所有注释 region（已去掉注释起始/结束标记）
+   */
+  extractComments?(filePath: string): Promise<CommentRegion[]>;
 }

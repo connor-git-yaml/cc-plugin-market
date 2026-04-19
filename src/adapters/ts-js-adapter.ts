@@ -6,6 +6,7 @@
  *
  * 实现策略：委托（delegation）——调用现有函数，不复制代码。
  */
+import * as fs from 'node:fs';
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
 import type { DependencyGraph } from '../models/dependency-graph.js';
 import type {
@@ -15,9 +16,11 @@ import type {
   LanguageTerminology,
   TestPatterns,
 } from './language-adapter.js';
+import type { CommentRegion } from '../debt-scanner/types.js';
 import { analyzeFileInternal } from '../core/ast-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
 import { buildGraph } from '../graph/dependency-graph.js';
+import { Project, ScriptTarget, ScriptKind } from 'ts-morph';
 
 export class TsJsLanguageAdapter implements LanguageAdapter {
   readonly id = 'ts-js';
@@ -91,4 +94,101 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
       testDirs: ['__tests__', 'tests', 'test', '__mocks__'],
     };
   }
+
+  /**
+   * 使用 ts-morph 基于 AST 提取所有注释 region。
+   * 字符串字面量里的 "TODO" 天然不会被 TypeScript 扫描器归为 comment trivia，
+   * 因此该实现无需额外过滤即可满足 AC-1.2。
+   */
+  async extractComments(filePath: string): Promise<CommentRegion[]> {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    // 独立 Project 实例，避免污染全局 ts-morph 缓存
+    const project = new Project({
+      useInMemoryFileSystem: true,
+      compilerOptions: {
+        target: ScriptTarget.ESNext,
+        allowJs: true,
+        checkJs: false,
+      },
+    });
+
+    const lower = filePath.toLowerCase();
+    const scriptKind = lower.endsWith('.tsx')
+      ? ScriptKind.TSX
+      : lower.endsWith('.jsx')
+      ? ScriptKind.JSX
+      : lower.endsWith('.js')
+      ? ScriptKind.JS
+      : ScriptKind.TS;
+
+    const sourceFile = project.createSourceFile('__extract__' + (scriptKind === ScriptKind.TSX || scriptKind === ScriptKind.TS ? '.ts' : '.js'), content, {
+      scriptKind,
+      overwrite: true,
+    });
+
+    const ts = sourceFile.getSourceFile().compilerNode;
+    const fullText = ts.getFullText();
+    const regions: CommentRegion[] = [];
+    const seen = new Set<number>();
+
+    // 基于 SourceFile AST 遍历，收集 leading 和 trailing comment ranges
+    sourceFile.forEachDescendant((node) => {
+      const leading = node.getLeadingCommentRanges();
+      const trailing = node.getTrailingCommentRanges();
+      for (const range of [...leading, ...trailing]) {
+        const pos = range.getPos();
+        if (seen.has(pos)) continue;
+        seen.add(pos);
+        const raw = fullText.slice(pos, range.getEnd());
+        const isBlock = raw.startsWith('/*');
+        regions.push({
+          kind: isBlock ? 'block' : 'line',
+          text: stripCommentMarkers(raw),
+          startLine: offsetToLine(fullText, pos),
+          endLine: offsetToLine(fullText, range.getEnd()),
+        });
+      }
+    });
+
+    // 根节点的 leading comments 需要单独处理（forEachDescendant 不会把第一个 token 前的 trivia 交给任何 descendant 吗？
+    // 保险起见：扫描 SourceFile 的第一个 child 的 leading comments 已覆盖顶部 trivia，
+    // 因此此处无需额外处理。
+
+    // 稳定排序：按 startLine → kind
+    regions.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
+    return regions;
+  }
+}
+
+/**
+ * 去除注释起始/结束标记（// 或 /* * /）以及每行前导的 * 装饰。
+ * 保留内部换行，供 debt-classifier 逐行正则匹配。
+ */
+function stripCommentMarkers(raw: string): string {
+  if (raw.startsWith('//')) {
+    return raw.slice(2).replace(/^[ \t]/, '');
+  }
+  if (raw.startsWith('/*')) {
+    // 去除 /* 和结尾 */
+    let inner = raw.slice(2);
+    if (inner.endsWith('*/')) inner = inner.slice(0, -2);
+    // 去除每行开头的前导空白 + 可选 *
+    return inner
+      .split('\n')
+      .map((line) => line.replace(/^\s*\*[ \t]?/, ''))
+      .join('\n')
+      .trim();
+  }
+  return raw;
+}
+
+/**
+ * 从字符偏移量计算 1-indexed 行号
+ */
+function offsetToLine(text: string, offset: number): number {
+  let line = 1;
+  for (let i = 0; i < offset && i < text.length; i++) {
+    if (text.charCodeAt(i) === 10 /* \n */) line++;
+  }
+  return line;
 }

@@ -15,6 +15,8 @@ import type {
 } from './language-adapter.js';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
+import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
+import type { CommentRegion } from '../debt-scanner/types.js';
 
 export class GoLanguageAdapter implements LanguageAdapter {
   readonly id = 'go';
@@ -69,5 +71,15 @@ export class GoLanguageAdapter implements LanguageAdapter {
       filePattern: /^.*_test\.go$/,
       testDirs: [],
     };
+  }
+
+  /**
+   * 基于 tree-sitter-go 的注释提取。Go grammar 的注释节点类型为 `comment`。
+   */
+  async extractComments(filePath: string): Promise<CommentRegion[]> {
+    return extractCommentsWithTreeSitter(filePath, {
+      grammarName: 'go',
+      commentNodeTypes: new Set(['comment']),
+    });
   }
 }

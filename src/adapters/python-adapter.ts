@@ -19,6 +19,8 @@ import type {
 import type { DependencyGraph, DependencyEdge, GraphNode } from '../models/dependency-graph.js';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
+import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
+import type { CommentRegion } from '../debt-scanner/types.js';
 
 export class PythonLanguageAdapter implements LanguageAdapter {
   readonly id = 'python';
@@ -79,6 +81,19 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       filePattern: /^(test_.*|.*_test|conftest)\.py$/,
       testDirs: ['tests', 'test', '__tests__'],
     };
+  }
+
+  /**
+   * 基于 tree-sitter-python 的注释提取。
+   *
+   * Python AST 将 docstring 归类为 `string` 节点（位于 expression_statement 下），
+   * 而非 `comment` 节点；因此 docstring 天然被排除，只有真正的 `#` 行注释被收集。
+   */
+  async extractComments(filePath: string): Promise<CommentRegion[]> {
+    return extractCommentsWithTreeSitter(filePath, {
+      grammarName: 'python',
+      commentNodeTypes: new Set(['comment']),
+    });
   }
 
   /**
