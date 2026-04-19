@@ -818,7 +818,17 @@ export async function runBatch(
     const readmeContent = generateBatchReadme({
       projectName: path.basename(resolvedRoot),
       version: SPECTRA_VERSION,
-      moduleSpecs: collectedModuleSpecs.map(s => path.basename(s.outputPath, '.spec.md')),
+      // 使用 allIndexSpecs（新生成 + 已有存储 spec 的合并）确保增量模式下也能正确计数
+      // 精确匹配 modulesDir 前缀（相对于 resolvedRoot），避免将 bundles/*/docs/modules/ 误计入
+      moduleSpecs: (() => {
+        const modulesDirRel = path.relative(resolvedRoot, modulesDir).split(path.sep).join('/') + '/';
+        return allIndexSpecs
+          .filter(s => {
+            const p = s.outputPath.replace(/\\/g, '/');
+            return p.startsWith(modulesDirRel) && !path.basename(s.outputPath).startsWith('_');
+          })
+          .map(s => path.basename(s.outputPath, '.spec.md'));
+      })(),
       projectDocs: projectDocs ?? [],
       bundles: docsBundleProfiles,
       outputDir: resolvedOutputDir,
