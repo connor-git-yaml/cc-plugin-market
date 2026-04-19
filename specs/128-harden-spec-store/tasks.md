@@ -28,25 +28,25 @@
 
 **目标**：在 `src/spec-store/` 建立统一查询入口，提取并泛化 `batch-orchestrator.ts` 的 `mergeIndexSpecs` 逻辑，为后续 B-F 迁移打基础。
 
-- [ ] A.1 创建目录结构骨架：新建 `src/spec-store/` 目录，创建文件 `src/spec-store/index.ts`（空导出占位）、`src/spec-store/spec-identity.ts`（空导出占位）
+- [x] A.1 创建目录结构骨架：新建 `src/spec-store/` 目录，创建文件 `src/spec-store/index.ts`（空导出占位）、`src/spec-store/spec-identity.ts`（空导出占位）
   - **验证**：`npm run build` 无新增 TypeScript 错误
 
-- [ ] A.2 在 `src/spec-store/spec-identity.ts` 实现 `SpecSourceKind` 类型枚举（`'canonical' | 'derived' | 'bundle_copy'`）和 `getDefaultSourceKind()` 辅助函数（缺失字段时返回 `'canonical'`）
+- [x] A.2 在 `src/spec-store/spec-identity.ts` 实现 `SpecSourceKind` 类型枚举（`'canonical' | 'derived' | 'bundle_copy'`）和 `getDefaultSourceKind()` 辅助函数（缺失字段时返回 `'canonical'`）
   - **参考**：`specs/128-harden-spec-store/contracts/source-kind-schema.ts` 的类型定义
   - **验证**：类型定义与合同文件对齐
 
-- [ ] A.3 在 `src/spec-store/index.ts` 实现 `SpecStore` 类构造函数（`SpecStoreOptions` 参数），将 `batch-orchestrator.ts` 第 912-966 行的 `mergeIndexSpecs` 核心逻辑迁移到构造函数中，构建 `mergedMap: Map<string, IndexableModuleSpec>`，保留 `skeletonHash` 存在性检查
+- [x] A.3 在 `src/spec-store/index.ts` 实现 `SpecStore` 类构造函数（`SpecStoreOptions` 参数），将 `batch-orchestrator.ts` 第 912-966 行的 `mergeIndexSpecs` 核心逻辑迁移到构造函数中，构建 `mergedMap: Map<string, IndexableModuleSpec>`，保留 `skeletonHash` 存在性检查
   - **参考**：`specs/128-harden-spec-store/contracts/spec-store-interface.ts` 的 `ISpecStore` 接口
   - **验证**：类型检查通过，`mergedMap` 包含正确的去重逻辑
 
-- [ ] A.4 在 `src/spec-store/index.ts` 实现 orphan 检测逻辑：构造时对所有 `storedSpecs` 做 `fs.existsSync(path.join(projectRoot, spec.sourceTarget))` 判断，将 orphan 的 `outputPath` 加入 `orphans: Set<string>`；仅对 `sourceKind === 'canonical'`（或字段缺失）的 spec 做判断
+- [x] A.4 在 `src/spec-store/index.ts` 实现 orphan 检测逻辑：构造时对所有 `storedSpecs` 做 `fs.existsSync(path.join(projectRoot, spec.sourceTarget))` 判断，将 orphan 的 `outputPath` 加入 `orphans: Set<string>`；仅对 `sourceKind === 'canonical'`（或字段缺失）的 spec 做判断
   - **验证**：orphan 集合在构造时正确填充
 
-- [ ] A.5 在 `src/spec-store/index.ts` 实现 4 种查询视图方法：`allKnownSpecs()`（排除 orphan + 排除非 canonical）、`currentRunSpecs()`、`storedOnlySpecs()`、`orphanSpecs()`，以及辅助方法 `asDocGraphInput()` 和 `totalKnownCount()`
+- [x] A.5 在 `src/spec-store/index.ts` 实现 4 种查询视图方法：`allKnownSpecs()`（排除 orphan + 排除非 canonical）、`currentRunSpecs()`、`storedOnlySpecs()`、`orphanSpecs()`，以及辅助方法 `asDocGraphInput()` 和 `totalKnownCount()`
   - **参考**：`specs/128-harden-spec-store/data-model.md` 第 1 节方法签名
   - **验证**：`asDocGraphInput()` 返回类型与 `buildDocGraph` 调用签名精确对应
 
-- [ ] A.6 新建 `tests/spec-store/spec-store.test.ts`，覆盖以下场景（最少 15 个 test case）：
+- [x] A.6 新建 `tests/spec-store/spec-store.test.ts`，覆盖以下场景（最少 15 个 test case）：
   - orphan 识别（storedSpec 的 sourceTarget 不存在时出现在 `orphanSpecs()`）
   - 空集合（currentSpecs=[], storedSpecs=[] 时 `allKnownSpecs()` 返回 []，不报错）
   - 身份过滤（`sourceKind: 'bundle_copy'` 的 spec 不出现在 `allKnownSpecs()`）
@@ -56,10 +56,10 @@
   - 增量场景（只生成 1 个）：`allKnownSpecs().length === 5`（1 新 + 4 缓存）
   - AST-only 场景：`allKnownSpecs()` 结果与全量一致
 
-- [ ] A.7 新建 `tests/spec-store/spec-identity.test.ts`，覆盖：sourceKind 缺失时 `getDefaultSourceKind()` 返回 `'canonical'`；`derivedFrom` 缺失时行为正确
+- [x] A.7 新建 `tests/spec-store/spec-identity.test.ts`，覆盖：sourceKind 缺失时 `getDefaultSourceKind()` 返回 `'canonical'`；`derivedFrom` 缺失时行为正确
   - **验证**：`npx vitest run tests/spec-store/` 全绿
 
-- [ ] A.8 运行验证门禁：
+- [x] A.8 运行验证门禁：
   ```bash
   npx vitest run tests/spec-store/
   npx vitest run
@@ -67,7 +67,7 @@
   ```
   确认新增测试全绿，无新增失败（pre-existing `export-command.test.ts` 除外）
 
-- [ ] A.9 提交并推送：
+- [x] A.9 提交并推送：
   ```bash
   git add src/spec-store/ tests/spec-store/
   git commit -m "feat(128): add SpecStore abstraction + unit tests"

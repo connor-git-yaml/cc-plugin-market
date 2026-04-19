@@ -11,6 +11,7 @@ import { buildKnowledgeGraph, writeKnowledgeGraph } from '../../panoramic/graph/
 import type { ArchitectureIR } from '../../panoramic/models/architecture-ir-model.js';
 import type { DocGraph } from '../../panoramic/builders/doc-graph-builder.js';
 import type { CrossReferenceLink } from '../../models/module-spec.js';
+import { SpecStore } from '../../spec-store/index.js';
 
 const GRAPH_HELP = `spectra graph — 构建并持久化知识图谱
 
@@ -137,6 +138,7 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
   const architectureIR = loadArchitectureIR(outputDir);
 
   // 构建轻量 DocGraph（基于已存储 spec 文件，无需 DependencyGraph）
+  // 通过 SpecStore 过滤，排除 orphan/bundle_copy/derived
   let docGraph: DocGraph | undefined;
   try {
     const { scanStoredModuleSpecs } = await import('../../panoramic/builders/doc-graph-builder.js');
@@ -144,22 +146,40 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
     const stored = scanStoredModuleSpecs(outputDir, projectRoot);
 
     if (stored.length > 0) {
-      docGraph = {
+      // 构造轻量 SpecStore（独立运行，无本次生成 spec），通过 storedOnlySpecs() 获取过滤后列表
+      const specStore = new SpecStore({
+        currentSpecs: [],
+        storedSpecs: stored,
         projectRoot,
-        generatedAt: new Date().toISOString(),
-        specs: stored.map((s) => ({
-          specPath: s.specPath,
-          sourceTarget: s.sourceTarget,
-          relatedFiles: s.relatedFiles,
-          linked: s.linked,
-          confidence: s.confidence,
-          currentRun: false,
-        })),
-        sourceToSpec: [],
-        references: [],
-        missingSpecs: [],
-        unlinkedSpecs: [],
-      };
+        toProjectPath: (absPath: string) => {
+          const rel = path.relative(projectRoot, absPath);
+          return rel.startsWith('..') ? absPath : rel;
+        },
+      });
+      // storedOnlySpecs() 按 sourceKind 过滤，orphanSpecs() 获取 orphan 集合
+      const canonicalSpecs = specStore.storedOnlySpecs({ sourceKind: 'canonical' });
+      const orphanPaths = new Set(specStore.orphanSpecs().map((s) => s.outputPath));
+      // 排除 orphan（源文件不存在的 spec）
+      const validSpecs = canonicalSpecs.filter((s) => !orphanPaths.has(s.outputPath));
+
+      if (validSpecs.length > 0) {
+        docGraph = {
+          projectRoot,
+          generatedAt: new Date().toISOString(),
+          specs: validSpecs.map((s) => ({
+            specPath: s.specPath,
+            sourceTarget: s.sourceTarget,
+            relatedFiles: s.relatedFiles,
+            linked: s.linked,
+            confidence: s.confidence,
+            currentRun: false,
+          })),
+          sourceToSpec: [],
+          references: [],
+          missingSpecs: [],
+          unlinkedSpecs: [],
+        };
+      }
     }
   } catch {
     // DocGraph 构建失败时 graceful skip

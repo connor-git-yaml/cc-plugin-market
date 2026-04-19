@@ -820,11 +820,14 @@ export async function runBatch(
   const projectDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.PROJECT);
   const metaDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META);
   try {
+    // 通过 SpecStore.asDocGraphInput() 获取：已过滤 orphan/bundle_copy/derived
+    const { moduleSpecs: docGraphModuleSpecs, existingSpecs: docGraphExistingSpecs } =
+      specStore.asDocGraphInput();
     const docGraph = buildDocGraph({
       projectRoot: resolvedRoot,
       dependencyGraph: mergedGraph,
-      moduleSpecs: collectedModuleSpecs,
-      existingSpecs: existingStoredSpecs,
+      moduleSpecs: docGraphModuleSpecs,
+      existingSpecs: docGraphExistingSpecs,
     });
 
     for (const moduleSpec of collectedModuleSpecs) {
