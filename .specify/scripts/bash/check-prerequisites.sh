@@ -115,7 +115,7 @@ fi
 # Check for tasks.md if required
 if $REQUIRE_TASKS && [[ ! -f "$TASKS" ]]; then
     echo "ERROR: tasks.md not found in $FEATURE_DIR" >&2
-    echo "Run /spec-driver:spec-driver-implement first to create the task list." >&2
+    echo "Run /spec-driver:spec-driver-implement --entry-point=tasks first to create the task list." >&2
     exit 1
 fi
 
