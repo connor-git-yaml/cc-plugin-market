@@ -53,6 +53,22 @@ export class AnthropicLLMClient implements SimpleLLMClient {
   }
 }
 
+/**
+ * 若环境中存在 ANTHROPIC_API_KEY 且未注入显式 client，则返回默认 AnthropicLLMClient；
+ * 否则返回 undefined（调用方进入 no-llm-client 降级，仍产出规则命中的 open questions）。
+ *
+ * 目的：让 CLI/MCP 等主入口无需重复实例化；仅通过环境变量即可启用 LLM 主题推断。
+ * 对 CLI-proxy / Codex-proxy 路径（不设置 API_KEY 的用户）会降级到规则 only，这是有意保守的行为。
+ */
+export function tryCreateDefaultLLMClient(): SimpleLLMClient | undefined {
+  if (!process.env['ANTHROPIC_API_KEY']) return undefined;
+  try {
+    return new AnthropicLLMClient();
+  } catch {
+    return undefined;
+  }
+}
+
 /** 测试实现：按预设脚本返回响应 */
 export class StubLLMClient implements SimpleLLMClient {
   readonly model = 'stub-llm';

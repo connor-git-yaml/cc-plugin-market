@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { LanguageAdapterRegistry } from '../../adapters/language-adapter-registry.js';
-import { scanProjectDebt } from '../../debt-scanner/index.js';
+import { scanProjectDebt, describeScannedLanguages } from '../../debt-scanner/index.js';
 import { buildDebtReportFromReport } from '../../debt-scanner/aggregator/report-builder.js';
 import { patchQualityReportWithDebt } from '../../debt-scanner/aggregator/quality-report-patcher.js';
 import { indexDebtInReadme } from '../../debt-scanner/aggregator/readme-indexer.js';
@@ -24,6 +24,11 @@ export interface DebtPipelineOptions {
   /** batch 输出目录（= specsDir，含 modules/project/_meta 子目录） */
   specsDir: string;
   registry: LanguageAdapterRegistry;
+  /**
+   * 可选：语言过滤 adapter id 列表（例如 ['python']）。
+   * 传入时让 debt 扫描只覆盖 batch 本次处理的语言子集，避免发布 out-of-scope 的债务。
+   */
+  languages?: string[];
   llmClient?: SimpleLLMClient;
   budgetLimit?: number;
   dryRun?: boolean;
@@ -66,6 +71,7 @@ export async function generateDebtIntelligence(
     report = await scanProjectDebt({
       projectRoot: options.projectRoot,
       registry: options.registry,
+      languages: options.languages,
       llmClient: options.llmClient,
       budgetLimit: options.budgetLimit,
       dryRun: options.dryRun,
@@ -81,11 +87,8 @@ export async function generateDebtIntelligence(
       `扫描 ${report.diagnostics.docsScanned} 个 design-doc，LLM 调用 ${report.diagnostics.llmCalls} 次`,
   );
 
-  // 选择语言标签：从 registry 反推
-  const extensions = [...options.registry.getSupportedExtensions()];
-  const languages = Array.from(
-    new Set(extensions.map(extToLang).filter((v): v is string => !!v)),
-  );
+  // 报告中的语言标签严格遵循 languages 过滤器，避免列出未扫描的语言
+  const languages = describeScannedLanguages(options.registry, options.languages);
 
   const markdown = buildDebtReportFromReport(report, languages);
   const projectDir = path.join(options.specsDir, 'project');
@@ -118,12 +121,14 @@ export async function generateDebtIntelligence(
     }
   }
 
-  let readmeIndexed = false;
-  try {
-    readmeIndexed = indexDebtInReadme(options.specsDir);
-  } catch (err) {
-    diagnostics.push(`specs/README.md 索引失败：${(err as Error).message}`);
-  }
+  // 说明：batch 路径上 specs/README.md 由 batch-readme-generator 在 debt pipeline 之后重写，
+  // 所以这里的 indexDebtInReadme 即便成功也会被 batch 覆写。为了避免"看起来生效实际没用"的假阳性，
+  // 在批处理上下文中直接 skip：README 入口由 batch-readme-generator 统一拥有（它会检测
+  // project/technical-debt.md 是否存在并生成链接）。
+  //
+  // indexDebtInReadme 仍保留在 aggregator 中供独立调用 scanProjectDebt 的 caller 使用。
+  const readmeIndexed = false;
+  void indexDebtInReadme; // 显式保留 import（向外暴露）
 
   return {
     generated: true,
@@ -139,22 +144,3 @@ export async function generateDebtIntelligence(
   };
 }
 
-/** 扩展名 → 语言标签（用于报告描述） */
-function extToLang(ext: string): string | undefined {
-  switch (ext) {
-    case '.ts':
-    case '.tsx':
-    case '.js':
-    case '.jsx':
-      return 'typescript/javascript';
-    case '.py':
-    case '.pyi':
-      return 'python';
-    case '.go':
-      return 'go';
-    case '.java':
-      return 'java';
-    default:
-      return undefined;
-  }
-}

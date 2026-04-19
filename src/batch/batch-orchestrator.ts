@@ -1008,11 +1008,18 @@ export async function runBatch(
   let debtResult: DebtPipelineResult | undefined;
   if (options.enableDebtIntelligence !== false) {
     try {
+      // Codex review：CLI 不会显式构造 SimpleLLMClient；若环境变量可用则自动注入默认实现，
+      // 确保生产路径下 `?` 结尾的 design-doc open question 能走 LLM 主题推断而非被降级丢弃。
+      const { tryCreateDefaultLLMClient } = await import('../debt-scanner/llm-clients.js');
+      const llmClient = options.debtLlmClient ?? tryCreateDefaultLLMClient();
       debtResult = await generateDebtIntelligence({
         projectRoot: resolvedRoot,
         specsDir: resolvedOutputDir,
         registry: LanguageAdapterRegistry.getInstance(),
-        llmClient: options.debtLlmClient,
+        // Codex review：batch 的 --languages 过滤必须传到 debt 扫描，否则 filtered 运行
+        // 会扫出并发布不在本次处理范围的债务条目。
+        languages: options.languages,
+        llmClient,
         budgetLimit: options.budget,
         dryRun: options.dryRun,
       });

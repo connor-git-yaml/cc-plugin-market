@@ -89,16 +89,21 @@ describe('generateDebtIntelligence pipeline', () => {
     expect(qr).toContain('## 技术债');
   });
 
-  it('specs/README.md 有 "质量审计" 节时插入链接', async () => {
+  it('pipeline 不再直接修改 specs/README.md（由 batch-readme-generator 统一拥有）', async () => {
+    // Codex review 修复后：debt pipeline 在 batch 路径上 README 会被步骤 7 重写，
+    // 所以 pipeline 显式 skip README 索引，避免假阳性。README 链接由 batch-readme-generator 根据
+    // project/technical-debt.md 是否存在自动生成（见 tests/unit/batch-readme-generator.test.ts）。
     const { projectRoot, specsDir } = makeFixture({
       'src/foo.ts': '// FIXME urgent\nexport const x = 1;',
       'specs/README.md': '# Specs\n\n## 质量审计\n\n- [coverage](coverage.md)\n\n',
     });
     const registry = freshRegistry();
     const res = await generateDebtIntelligence({ projectRoot, specsDir, registry });
-    expect(res.readmeIndexed).toBe(true);
-    const r = fs.readFileSync(path.join(specsDir, 'README.md'), 'utf-8');
-    expect(r).toContain('[技术债清单](project/technical-debt.md)');
+    expect(res.generated).toBe(true);
+    expect(res.readmeIndexed).toBe(false);
+    // technical-debt.md 仍被写入
+    const tdPath = path.join(specsDir, 'project', 'technical-debt.md');
+    expect(fs.existsSync(tdPath)).toBe(true);
   });
 
   it('无 design-doc 时 open-question 节明确为空', async () => {

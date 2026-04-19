@@ -124,9 +124,13 @@ export function generateBatchReadme(input: ReadmeGeneratorInput): string {
   }
 
   // 质量审计
+  // Codex review 修复：debt pipeline 在步骤 7（本 generator）之前运行，
+  // 若由 readme-indexer 向旧 README 追加链接会被这里重写 README 时清零，
+  // 所以由本 generator 统一拥有 technical-debt.md 链接的索引权。
   const qualityDocs = [
     { file: 'quality-report.md', label: '质量报告（评分与改进建议）' },
     { file: '_coverage-report.md', label: '覆盖率审计' },
+    { file: 'technical-debt.md', label: '技术债清单（代码注释 + 设计开放问题）' },
   ].filter(d => fs.existsSync(path.join(projectDir, d.file)));
 
   if (qualityDocs.length > 0) {
