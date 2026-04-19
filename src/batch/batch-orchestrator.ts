@@ -56,6 +56,11 @@ import {
 } from '../panoramic/batch-project-docs.js';
 import { resolveReverseSpecModel } from '../core/model-selection.js';
 import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
+import {
+  generateDebtIntelligence,
+  type DebtPipelineResult,
+} from '../panoramic/pipelines/debt-intelligence-pipeline.js';
+import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/design-docs/llm-topic-inferrer.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
@@ -101,6 +106,10 @@ export interface BatchOptions {
   budget?: number;
   /** Feature 127：超预算时的非交互策略（CI 场景） */
   onOverBudget?: BudgetPolicy;
+  /** Feature 130：是否生成 technical-debt.md（默认 true） */
+  enableDebtIntelligence?: boolean;
+  /** Feature 130：debt-intelligence 的 LLM 客户端注入（未注入则降级为 no-llm-client） */
+  debtLlmClient?: DebtSimpleLLMClient;
 }
 
 export interface BatchResult {
@@ -144,6 +153,8 @@ export interface BatchResult {
     /** 是否采纳了 cheaper-model 降级 */
     cheaperModelApplied?: boolean;
   };
+  /** 130 debt-intelligence pipeline 结果 */
+  debt?: DebtPipelineResult;
 }
 
 const logger = createLogger('batch-orchestrator');
@@ -993,6 +1004,41 @@ export async function runBatch(
     }
   }
 
+  // Feature 130：债务情报 pipeline（写入 project/technical-debt.md + 追加 quality-report）
+  let debtResult: DebtPipelineResult | undefined;
+  if (options.enableDebtIntelligence !== false) {
+    try {
+      debtResult = await generateDebtIntelligence({
+        projectRoot: resolvedRoot,
+        specsDir: resolvedOutputDir,
+        registry: LanguageAdapterRegistry.getInstance(),
+        llmClient: options.debtLlmClient,
+        budgetLimit: options.budget,
+        dryRun: options.dryRun,
+      });
+      // 把 debt 的 tokenUsage 汇入 cost 汇总（以 debt-intelligence 为模块标签）
+      if (debtResult.tokenUsage.input > 0 || debtResult.tokenUsage.output > 0) {
+        costRecords.push({
+          moduleName: 'debt-intelligence',
+          loc: 0,
+          cost: {
+            tokenUsage: {
+              input: debtResult.tokenUsage.input,
+              output: debtResult.tokenUsage.output,
+            },
+            durationMs: debtResult.durationMs,
+            llmModel: resolveReverseSpecModel().model,
+            fallbackReason: debtResult.fallbackReason ?? null,
+          },
+        });
+        // 重新聚合 cost summary（含 debt tokens）
+        Object.assign(costSummary, aggregateCostSummary(costRecords));
+      }
+    } catch (err) {
+      logger.warn(`debt-intelligence pipeline 失败: ${String(err)}`);
+    }
+  }
+
   // 步骤 6：写入摘要日志（输出到 _meta/ 子目录）
   const summary = reporter.finish();
   fs.mkdirSync(metaDir, { recursive: true });
@@ -1051,6 +1097,7 @@ export async function runBatch(
     docsBundleProfiles,
     costSummary,
     budgetDecision: budgetDecisionResult,
+    debt: debtResult,
   };
 }
 
