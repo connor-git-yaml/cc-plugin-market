@@ -14,7 +14,7 @@ effort: low
 ## 触发方式
 
 ```text
-/spec-driver.constitution [原则更新说明]
+/spec-driver:spec-driver-constitution [原则更新说明]
 $spec-driver-constitution [原则更新说明]
 ```
 

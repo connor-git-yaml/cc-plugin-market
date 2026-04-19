@@ -29,15 +29,12 @@ function runCommand(
 
 function copyRequiredTree(projectRoot: string) {
   mkdirSync(join(projectRoot, 'plugins'), { recursive: true });
-  mkdirSync(join(projectRoot, '.claude'), { recursive: true });
+  mkdirSync(join(projectRoot, '.claude', 'commands'), { recursive: true });
 
   cpSync(join(REPO_ROOT, 'plugins', 'spec-driver'), join(projectRoot, 'plugins', 'spec-driver'), {
     recursive: true,
   });
   cpSync(join(REPO_ROOT, '.claude-plugin'), join(projectRoot, '.claude-plugin'), { recursive: true });
-  cpSync(join(REPO_ROOT, '.claude', 'commands'), join(projectRoot, '.claude', 'commands'), {
-    recursive: true,
-  });
 }
 
 describe('validate-wrapper-sources.mjs', () => {

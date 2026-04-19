@@ -44,7 +44,6 @@ describe('runtime boundary contract', () => {
 
     mkdirSync(join(projectRoot, '.claude', 'commands'), { recursive: true });
     writeFileSync(join(projectRoot, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: {} }, null, 2), 'utf-8');
-    writeFileSync(join(projectRoot, '.claude', 'commands', 'spec-driver.implement.md'), '# override\n', 'utf-8');
 
     mkdirSync(join(projectRoot, '.specify', 'memory'), { recursive: true });
     mkdirSync(join(projectRoot, '.specify', 'templates'), { recursive: true });

@@ -51,7 +51,7 @@ bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global
 - `plugins/spec-driver/skills/**` 是 `spec-driver-*` Codex wrapper 的 canonical source
 - `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` 定义 wrapper / metadata / project override 的 source-of-truth 合同
 - `.codex/skills/spec-driver-*/SKILL.md` 是安装脚本生成的包装层，不应直接手改
-- `.claude/commands/spec-driver.*.md` 是仓库级项目 override，可按项目需要调整，但它们不是插件 Skill 的 canonical source
+- `.claude/commands/spec-driver.*.md` 在 v3.x 作为仓库级项目 override 存在；v4.0 起编排器不再读取该路径（原子命令删除并撤下 `prompt_source` fallback），如需自定义 phase prompt 请直接编辑 `plugins/spec-driver/agents/{phase}.md`
 
 仓库维护者可用下面的命令重建并校验包装层：
 
@@ -73,7 +73,7 @@ npm run repo:check
 $spec-driver-constitution [原则更新说明]
 ```
 
-用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver.constitution`。
+用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver:spec-driver-constitution`。
 
 Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 
@@ -277,7 +277,7 @@ node plugins/spec-driver/scripts/sync-merge-engine.mjs --project-root . --json
 - **独立于 Spectra plugin**：Spec Driver 是正向研发工具，Spectra 是逆向分析工具，互补关系
 - **共享 `.specify/memory/constitution.md`**：复用项目宪法
 - **兼容已有 spec-driver skills**：检测到项目已有定制版 spec-driver skills 时优先使用
-- **命令覆盖双端兼容**：阶段 prompt 覆盖同时支持 `.claude/commands/spec-driver.{phase}.md` 与 `.codex/commands/spec-driver.{phase}.md`
+- **统一 prompt 源**（v4.0+）：所有 phase prompt 从 `$PLUGIN_DIR/agents/{phase}.md` 加载；v3.x 的 `.claude/commands/` 与 `.codex/commands/` 覆盖路径已在 v4.0 连同原子命令一并移除（详见 [`docs/migrations/skill-deprecation.md`](../../docs/migrations/skill-deprecation.md)）
 
 ## 目录结构
 
@@ -345,17 +345,19 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 | `/spec-driver:speckit-resume` | `/spec-driver:spec-driver-resume` |
 | `/spec-driver:speckit-sync` | `/spec-driver:spec-driver-sync` |
 | `/spec-driver:speckit-doc` | `/spec-driver:spec-driver-doc` |
-| `/speckit.specify` | `/spec-driver.specify` |
-| `/speckit.plan` | `/spec-driver.plan` |
-| `/speckit.tasks` | `/spec-driver.tasks` |
-| `/speckit.implement` | `/spec-driver.implement` |
-| `/speckit.analyze` | `/spec-driver.analyze` |
-| `/speckit.checklist` | `/spec-driver.checklist` |
-| `/speckit.clarify` | `/spec-driver.clarify` |
-| `/speckit.constitution` | `/spec-driver.constitution` |
-| `/speckit.taskstoissues` | `/spec-driver.taskstoissues` |
+| `/speckit.specify` | `/spec-driver.specify` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.plan` | `/spec-driver.plan` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.tasks` | `/spec-driver.tasks` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.implement` | `/spec-driver.implement` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.analyze` | `/spec-driver.analyze` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.checklist` | `/spec-driver.checklist` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.clarify` | `/spec-driver.clarify` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.constitution` | `/spec-driver.constitution` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.taskstoissues` | `/spec-driver.taskstoissues` ⚠️ 已于 v4.0 弃用 |
 
 如果您在 `.claude/commands/` 或 `.codex/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
+
+> **v4.0 变更**：表格下半区的 9 个 `/spec-driver.{phase}` 原子命令已于 v4.0 版本**全部删除**。这些命令的功能已被编排器 Skill 完整覆盖，详见 [迁移指南 `docs/migrations/skill-deprecation.md`](../../docs/migrations/skill-deprecation.md)。
 
 ### 迁移说明（v3.7.0）
 
@@ -373,7 +375,7 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 
 - `plugins/spec-driver/skills/**`：插件 Skill 源
 - `.codex/skills/spec-driver-*/SKILL.md`：由安装脚本生成的 Codex 包装层
-- `.claude/commands/spec-driver.*.md`：仓库级项目 override
+- `.claude/commands/spec-driver.*.md`：v3.x 仓库级项目 override；v4.0 起编排器不再读取，保留该目录仅用于历史兼容
 
 所有 Codex wrapper 都会写入 `Wrapper Source Contract` 头部，并通过 `validate-wrapper-sources.mjs` 校验是否仍与 canonical source 一致。
 

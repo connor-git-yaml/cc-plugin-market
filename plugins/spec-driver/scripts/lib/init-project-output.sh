@@ -53,7 +53,7 @@ print_init_text_result() {
         echo -e "  ✅ constitution.md 已存在"
       else
         echo -e "  ⚠️  ${YELLOW}未找到 constitution.md${NC}"
-        echo -e "     → 建议先运行 /spec-driver.constitution（Claude）或 \$spec-driver-constitution（Codex）创建项目宪法"
+        echo -e "     → 建议先运行 /spec-driver:spec-driver-constitution（Claude）或 \$spec-driver-constitution（Codex）创建项目宪法"
       fi
       ;;
     config)
