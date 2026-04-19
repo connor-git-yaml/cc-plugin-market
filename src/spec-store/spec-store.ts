@@ -73,7 +73,7 @@ export class SpecStore {
 
       // 从 storedSpec 构造 IndexableModuleSpec，将 sourceKind 携带进 frontmatter
       // 这样 allKnownSpecs() 的 sourceKind 过滤才能正确工作
-      const storedSourceKind = (storedSpec as StoredModuleSpecSummary & { sourceKind?: string }).sourceKind;
+      const storedSourceKind = storedSpec.sourceKind;
       const frontmatterFromStored: SpecFrontmatter & { sourceKind?: string } = {
         type: 'module-spec',
         version: storedSpec.version ?? 'v1',
@@ -116,9 +116,7 @@ export class SpecStore {
 
     // 3. Orphan 检测：仅对 canonical（或字段缺失）的 storedSpec 做文件存在性检查
     for (const storedSpec of storedSpecs) {
-      const sourceKind = getDefaultSourceKind(
-        (storedSpec as StoredModuleSpecSummary & { sourceKind?: string }).sourceKind,
-      );
+      const sourceKind = getDefaultSourceKind(storedSpec.sourceKind);
 
       // bundle_copy 和 derived 的派生 spec 不做 orphan 判断（其源是另一个 spec，不是代码文件）
       if (sourceKind !== 'canonical') {
@@ -197,9 +195,7 @@ export class SpecStore {
 
       // 按 sourceKind 过滤（若有）
       if (options?.sourceKind !== undefined) {
-        const actualKind = getDefaultSourceKind(
-          (storedSpec as StoredModuleSpecSummary & { sourceKind?: string }).sourceKind,
-        );
+        const actualKind = getDefaultSourceKind(storedSpec.sourceKind);
         if (actualKind !== options.sourceKind) {
           return false;
         }
@@ -245,9 +241,7 @@ export class SpecStore {
           return false;
         }
         // 排除 bundle_copy / derived（docGraph 只处理 canonical spec）
-        const sourceKind = getDefaultSourceKind(
-          (storedSpec as StoredModuleSpecSummary & { sourceKind?: string }).sourceKind,
-        );
+        const sourceKind = getDefaultSourceKind(storedSpec.sourceKind);
         if (sourceKind !== 'canonical') {
           return false;
         }
