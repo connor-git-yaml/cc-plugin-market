@@ -7,7 +7,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DependencyGraph } from '../../models/dependency-graph.js';
 import type { ModuleSpec } from '../../models/module-spec.js';
-import { DOCS_BUNDLE_ROOT_DIR } from '../models/docs-bundle-types.js';
 
 export const MODULE_SPEC_ANCHOR_ID = 'module-spec';
 export const CROSS_REFERENCE_MARKER_PREFIX = '<!-- cross-reference-index: auto';
@@ -27,6 +26,10 @@ export interface StoredModuleSpecSummary extends ExistingSpecDocument {
   crossLanguageRefs?: string[];
   intentSummary: string;
   outputPath: string;
+  /** spec 身份类型；缺失时视为 'canonical' */
+  sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
+  /** 派生来源 spec 的路径；canonical 时为 null 或 undefined */
+  derivedFrom?: string | null;
 }
 
 export interface DocGraphSpecNode {
@@ -113,16 +116,21 @@ export function scanStoredModuleSpecs(
     return [];
   }
 
-  // bundle 目录下的 spec 是 canonical modules/ 的复制输出产物，
-  // 不应作为权威 spec 源参与 graph 构建（会导致依赖边挂到 bundle 副本上）
   const specFiles: string[] = [];
-  walkSpecFiles(specsDir, specFiles, path.join(specsDir, DOCS_BUNDLE_ROOT_DIR));
+  walkSpecFiles(specsDir, specFiles);
 
   return specFiles
     .flatMap((filePath) => {
       const content = fs.readFileSync(filePath, 'utf-8');
       const metadata = extractStoredModuleSpecSummary(content);
       if (!metadata) {
+        return [];
+      }
+
+      // bundle_copy / derived 的副本不参与 graph 构建；
+      // 缺失 sourceKind 字段的历史 spec 视为 canonical（向后兼容）
+      const sourceKind = metadata.sourceKind;
+      if (sourceKind === 'bundle_copy' || sourceKind === 'derived') {
         return [];
       }
 
@@ -140,6 +148,8 @@ export function scanStoredModuleSpecs(
         ),
         intentSummary: metadata.intentSummary,
         outputPath: normalizeProjectPath(filePath, projectRoot),
+        sourceKind: metadata.sourceKind,
+        derivedFrom: metadata.derivedFrom,
       };
       return [document];
     })
@@ -369,6 +379,8 @@ function extractStoredModuleSpecSummary(content: string): {
   skeletonHash?: string;
   language?: string;
   crossLanguageRefs?: string[];
+  sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
+  derivedFrom?: string | null;
   intentSummary: string;
 } | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
@@ -383,6 +395,8 @@ function extractStoredModuleSpecSummary(content: string): {
   let confidence: 'high' | 'medium' | 'low' | undefined;
   let skeletonHash: string | undefined;
   let language: string | undefined;
+  let sourceKind: 'canonical' | 'derived' | 'bundle_copy' | undefined;
+  let derivedFrom: string | null | undefined;
   const relatedFiles: string[] = [];
   const crossLanguageRefs: string[] = [];
   let inRelatedFiles = false;
@@ -435,6 +449,24 @@ function extractStoredModuleSpecSummary(content: string): {
       continue;
     }
 
+    if (line.startsWith('sourceKind:')) {
+      const parsed = stripYamlScalar(line.slice('sourceKind:'.length).trim());
+      if (parsed === 'canonical' || parsed === 'derived' || parsed === 'bundle_copy') {
+        sourceKind = parsed;
+      }
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line.startsWith('derivedFrom:')) {
+      const val = stripYamlScalar(line.slice('derivedFrom:'.length).trim());
+      derivedFrom = val === 'null' || val === '~' || val === '' ? null : val;
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
     if (line === 'relatedFiles:') {
       inRelatedFiles = true;
       inCrossLanguageRefs = false;
@@ -480,6 +512,8 @@ function extractStoredModuleSpecSummary(content: string): {
     skeletonHash,
     language,
     crossLanguageRefs: crossLanguageRefs.length > 0 ? crossLanguageRefs : undefined,
+    sourceKind,
+    derivedFrom,
     intentSummary,
   };
 }
@@ -508,7 +542,7 @@ function stripYamlScalar(value: string): string {
   return value;
 }
 
-function walkSpecFiles(dir: string, results: string[], excludeDir?: string): void {
+function walkSpecFiles(dir: string, results: string[]): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink()) {
@@ -516,10 +550,7 @@ function walkSpecFiles(dir: string, results: string[], excludeDir?: string): voi
     }
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (excludeDir && fullPath === excludeDir) {
-        continue;
-      }
-      walkSpecFiles(fullPath, results, excludeDir);
+      walkSpecFiles(fullPath, results);
       continue;
     }
     if (entry.isFile() && entry.name.endsWith('.spec.md')) {

@@ -24,6 +24,67 @@ describe('DocGraphBuilder', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it('sourceKind=bundle_copy 的 spec 被 scanStoredModuleSpecs 过滤掉', () => {
+    // canonical spec
+    writeSpecFile(path.join(specsDir, 'auth.spec.md'), {
+      sourceTarget: 'src/auth',
+      relatedFiles: [],
+      linked: false,
+    });
+
+    // bundle_copy spec — 应被过滤
+    const bundleDir = path.join(specsDir, 'bundles', 'developer-onboarding', 'docs', 'modules');
+    fs.mkdirSync(bundleDir, { recursive: true });
+    writeSpecFileWithSourceKind(path.join(bundleDir, 'auth.spec.md'), {
+      sourceTarget: 'src/auth',
+      relatedFiles: [],
+      linked: false,
+      sourceKind: 'bundle_copy',
+      derivedFrom: 'specs/modules/auth.spec.md',
+    });
+
+    const results = scanStoredModuleSpecs(specsDir, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.specPath).toBe('specs/auth.spec.md');
+  });
+
+  it('sourceKind=derived 的 spec 被 scanStoredModuleSpecs 过滤掉', () => {
+    writeSpecFile(path.join(specsDir, 'core.spec.md'), {
+      sourceTarget: 'src/core',
+      relatedFiles: [],
+      linked: false,
+    });
+    writeSpecFileWithSourceKind(path.join(specsDir, 'core-derived.spec.md'), {
+      sourceTarget: 'src/core',
+      relatedFiles: [],
+      linked: false,
+      sourceKind: 'derived',
+      derivedFrom: 'specs/core.spec.md',
+    });
+
+    const results = scanStoredModuleSpecs(specsDir, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.specPath).toBe('specs/core.spec.md');
+  });
+
+  it('缺失 sourceKind 的历史 spec 视为 canonical 保留（向后兼容）', () => {
+    // 两个没有 sourceKind 字段的历史 spec
+    writeSpecFile(path.join(specsDir, 'auth.spec.md'), {
+      sourceTarget: 'src/auth',
+      relatedFiles: [],
+      linked: false,
+    });
+    writeSpecFile(path.join(specsDir, 'api.spec.md'), {
+      sourceTarget: 'src/api',
+      relatedFiles: [],
+      linked: false,
+    });
+
+    const results = scanStoredModuleSpecs(specsDir, tmpDir);
+    // 两个都应保留，因为缺失 sourceKind 默认视为 canonical
+    expect(results).toHaveLength(2);
+  });
+
   it('聚合源码映射、交叉引用、缺口与未互链 spec', () => {
     writeSpecFile(path.join(specsDir, 'auth.spec.md'), {
       sourceTarget: 'src/auth',
@@ -206,6 +267,48 @@ function createModuleSpec(options: {
     },
     outputPath: options.outputPath,
   };
+}
+
+function writeSpecFileWithSourceKind(
+  specPath: string,
+  options: {
+    sourceTarget: string;
+    relatedFiles: string[];
+    linked: boolean;
+    sourceKind: 'canonical' | 'derived' | 'bundle_copy';
+    derivedFrom?: string | null;
+  },
+): void {
+  const marker = options.linked
+    ? '\n<!-- cross-reference-index: auto generatedAt=2026-03-20T00:00:00.000Z same=0 cross=0 -->\n'
+    : '\n';
+
+  const derivedFromLine = options.derivedFrom != null
+    ? `\nderivedFrom: ${JSON.stringify(options.derivedFrom)}`
+    : '';
+
+  fs.writeFileSync(
+    specPath,
+    `---
+type: module-spec
+version: v1
+generatedBy: spectra
+sourceTarget: ${options.sourceTarget}
+relatedFiles:
+${options.relatedFiles.map((item) => `  - ${item}`).join('\n') || '  []'}
+lastUpdated: 2026-03-20T00:00:00.000Z
+confidence: high
+skeletonHash: ${'a'.repeat(64)}
+sourceKind: ${options.sourceKind}${derivedFromLine}
+---
+
+# ${options.sourceTarget}
+## 1. 意图
+${options.sourceTarget} intent
+${marker}
+`,
+    'utf-8',
+  );
 }
 
 function writeSpecFile(

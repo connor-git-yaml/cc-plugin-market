@@ -555,7 +555,15 @@ function writeProfiles(
       }
 
       fs.mkdirSync(path.dirname(outputPathAbs), { recursive: true });
-      fs.copyFileSync(sourcePathAbs, outputPathAbs);
+
+      // module-spec 副本注入 sourceKind 标记，避免被 scanStoredModuleSpecs 当成 canonical 纳入
+      if (document.kind === 'module-spec') {
+        const original = fs.readFileSync(sourcePathAbs, 'utf-8');
+        const annotated = injectBundleCopyFrontmatter(original, document.sourcePath);
+        fs.writeFileSync(outputPathAbs, annotated, 'utf-8');
+      } else {
+        fs.copyFileSync(sourcePathAbs, outputPathAbs);
+      }
     }
 
     const mkdocsPathAbs = path.join(paths.projectRoot, profile.mkdocsConfigPath);
@@ -632,6 +640,24 @@ function humanizeDocumentId(documentId: string): string {
     .filter((token) => token.length > 0)
     .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
     .join(' ');
+}
+
+/**
+ * 在 spec 文件的 frontmatter 中注入 sourceKind: bundle_copy 和 derivedFrom 字段。
+ * 通过字符串操作在第一个 '---' 块结束前插入两行，避免引入 gray-matter 依赖。
+ * 如果文件没有合法 frontmatter，原样返回不修改。
+ */
+function injectBundleCopyFrontmatter(content: string, canonicalPath: string): string {
+  const match = /^(---\r?\n)([\s\S]*?)(\r?\n---)/m.exec(content);
+  if (!match) {
+    return content;
+  }
+
+  const openFence = match[1];
+  const body = match[2];
+  const closeFence = match[3];
+  const injected = `${openFence}${body}\nsourceKind: bundle_copy\nderivedFrom: ${JSON.stringify(canonicalPath)}${closeFence}`;
+  return content.replace(match[0], injected);
 }
 
 function stringifyYaml(value: unknown, indent = 0): string {

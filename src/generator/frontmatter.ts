@@ -29,6 +29,10 @@ export interface FrontmatterInput {
   llmModel?: string;
   /** 降级原因（Feature 127）；未降级时为 null，未知时不传 */
   fallbackReason?: string | null;
+  /** spec 身份类型（Feature 128，canonical / derived / bundle_copy） */
+  sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
+  /** 派生来源 spec 的 outputPath（Feature 128）；canonical 时为 null 或 undefined */
+  derivedFrom?: string | null;
 }
 
 /**
@@ -82,6 +86,14 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
     frontmatter.llmModel = typeof data.llmModel === 'string' ? data.llmModel : '';
     frontmatter.fallbackReason =
       data.fallbackReason === undefined ? null : data.fallbackReason;
+  }
+
+  // spec 身份字段（Feature 128，bundle_copy / derived 时由调用方注入）
+  if (data.sourceKind !== undefined) {
+    frontmatter.sourceKind = data.sourceKind;
+  }
+  if (data.derivedFrom !== undefined) {
+    frontmatter.derivedFrom = data.derivedFrom;
   }
 
   return frontmatter;

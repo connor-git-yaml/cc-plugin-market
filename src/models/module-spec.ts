@@ -75,6 +75,10 @@ export const SpecFrontmatterSchema = z.object({
   llmModel: z.string().optional(),
   /** 降级原因（Feature 127）；未降级时为 null */
   fallbackReason: z.string().nullable().optional(),
+  /** spec 身份类型（Feature 128）；缺失时应用层默认视为 'canonical'（向后兼容历史 spec） */
+  sourceKind: z.enum(['canonical', 'derived', 'bundle_copy']).optional(),
+  /** 派生来源 spec 的 outputPath（Feature 128，相对于 projectRoot）；canonical 时为 null 或 undefined */
+  derivedFrom: z.string().nullable().optional(),
 });
 export type SpecFrontmatter = z.infer<typeof SpecFrontmatterSchema>;
 
