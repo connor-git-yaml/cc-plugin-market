@@ -15,6 +15,12 @@ skeletonHash: {{frontmatter.skeletonHash}}
 {{#each frontmatter.crossLanguageRefs}}
   - {{this}}
 {{/each}}
+{{/if}}{{#if frontmatter.tokenUsage}}tokenUsage:
+  input: {{frontmatter.tokenUsage.input}}
+  output: {{frontmatter.tokenUsage.output}}
+durationMs: {{frontmatter.durationMs}}
+llmModel: "{{frontmatter.llmModel}}"
+fallbackReason: {{#if frontmatter.fallbackReason}}"{{frontmatter.fallbackReason}}"{{else}}null{{/if}}
 {{/if}}---
 
 <a id="module-spec"></a>

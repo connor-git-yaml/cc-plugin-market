@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
 import type { CodeSlice } from '../models/code-skeleton.js';
-import type { ModuleSpec, SpecSections, StageProgressCallback } from '../models/module-spec.js';
+import type { CostMetadata, ModuleSpec, SpecSections, StageProgressCallback } from '../models/module-spec.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { analyzeFile, analyzeFiles } from './ast-analyzer.js';
 import { redact } from './secret-redactor.js';
@@ -49,7 +49,7 @@ export interface GenerateSpecResult {
   specPath: string;
   /** 提取的骨架 */
   skeleton: CodeSkeleton;
-  /** LLM token 消耗 */
+  /** LLM token 消耗（input + output 总和，向后兼容保留） */
   tokenUsage: number;
   /** 置信度等级 */
   confidence: 'high' | 'medium' | 'low';
@@ -57,6 +57,8 @@ export interface GenerateSpecResult {
   warnings: string[];
   /** 完整的 ModuleSpec 对象（用于索引生成） */
   moduleSpec: ModuleSpec;
+  /** 成本元数据（Feature 127） */
+  costMetadata: CostMetadata;
 }
 
 /** prepare 子命令的返回结果（阶段 1-2，不含 LLM 调用） */
@@ -387,6 +389,13 @@ export async function generateSpec(
   let tokenUsage = 0;
   let llmDegraded = false;
 
+  // Feature 127：成本元数据采集
+  let costInputTokens = 0;
+  let costOutputTokens = 0;
+  let costDurationMs = 0;
+  let costLlmModel = '';
+  let costFallbackReason: string | null = null;
+
   // 阶段 1-2：预处理 + 上下文组装
   const { skeletons, mergedSkeleton, context, filePaths } = await prepareContext(targetPath, options);
 
@@ -419,11 +428,17 @@ export async function generateSpec(
     );
     llmContent = llmResponse.content;
     tokenUsage = llmResponse.inputTokens + llmResponse.outputTokens;
+    // Feature 127：记录 LLM#1 成本
+    costInputTokens += llmResponse.inputTokens;
+    costOutputTokens += llmResponse.outputTokens;
+    costDurationMs += llmResponse.duration;
+    costLlmModel = llmResponse.model;
   } catch (error) {
     if (error instanceof LLMUnavailableError) {
       // LLM 不可用，降级为 AST-only 输出
       llmDegraded = true;
       warnings.push('LLM 不可用，已降级为 AST-only Spec');
+      costFallbackReason = 'LLM 不可用';
       onStageProgress?.({ stage: 'llm', message: '⚠ LLM 不可用，降级为 AST-only' });
       llmContent = generateAstOnlyContent(mergedSkeleton);
     } else {
@@ -537,6 +552,10 @@ ${sections.businessLogic}
           if (enrichedContent.length > sections.businessLogic.length * 1.2) {
             sections.businessLogic = enrichedContent;
             tokenUsage += enrichResponse.inputTokens + enrichResponse.outputTokens;
+            // Feature 127：记录 enrichment 成本（仅当采纳了重写时）
+            costInputTokens += enrichResponse.inputTokens;
+            costOutputTokens += enrichResponse.outputTokens;
+            costDurationMs += enrichResponse.duration;
           }
           onStageProgress?.({ stage: 'enrich', message: 'enrich 完成', duration: Date.now() - enrichStart });
         } catch {
@@ -578,6 +597,14 @@ ${sections.businessLogic}
   const resolvedTarget = path.resolve(targetPath);
   const displayName = path.basename(resolvedTarget);
 
+  // Feature 127：成本元数据（LLM#1 + enrichment 累加）
+  const costMetadata: CostMetadata = {
+    tokenUsage: { input: costInputTokens, output: costOutputTokens },
+    durationMs: costDurationMs,
+    llmModel: costLlmModel,
+    fallbackReason: costFallbackReason,
+  };
+
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
     sourceTarget: path.relative(baseDir, resolvedTarget),
@@ -586,6 +613,10 @@ ${sections.businessLogic}
     confidence,
     skeletonHash: mergedSkeleton.hash,
     existingVersion,
+    tokenUsage: costMetadata.tokenUsage,
+    durationMs: costMetadata.durationMs,
+    llmModel: costMetadata.llmModel,
+    fallbackReason: costMetadata.fallbackReason,
   });
 
   // 构建 fileInventory（使用短路径：基于 sourceTarget 公共前缀）
@@ -645,6 +676,7 @@ ${sections.businessLogic}
     confidence,
     warnings,
     moduleSpec,
+    costMetadata,
   };
 }
 
