@@ -59,6 +59,7 @@ import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orches
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
+import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
 
 // 从 package.json 读取版本号（避免硬编码）
@@ -809,6 +810,13 @@ export async function runBatch(
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
   const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
+  // SpecStore 统一查询入口：Step B-F 各消费方逐步迁移到此
+  const specStore = new SpecStore({
+    currentSpecs: collectedModuleSpecs,
+    storedSpecs: existingStoredSpecs,
+    projectRoot: resolvedRoot,
+    toProjectPath,
+  });
   const projectDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.PROJECT);
   const metaDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META);
   try {
@@ -995,11 +1003,11 @@ export async function runBatch(
     const readmeContent = generateBatchReadme({
       projectName: path.basename(resolvedRoot),
       version: SPECTRA_VERSION,
-      // 使用 allIndexSpecs（新生成 + 已有存储 spec 的合并）确保增量模式下也能正确计数
+      // 通过 SpecStore.allKnownSpecs() 获取：新生成 + 历史存储，已排除 orphan/bundle_copy/derived
       // 精确匹配 modulesDir 前缀（相对于 resolvedRoot），避免将 bundles/*/docs/modules/ 误计入
       moduleSpecs: (() => {
         const modulesDirRel = path.relative(resolvedRoot, modulesDir).split(path.sep).join('/') + '/';
-        return allIndexSpecs
+        return specStore.allKnownSpecs()
           .filter(s => {
             const p = s.outputPath.replace(/\\/g, '/');
             return p.startsWith(modulesDirRel) && !path.basename(s.outputPath).startsWith('_');
