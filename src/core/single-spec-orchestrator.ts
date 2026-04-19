@@ -57,8 +57,8 @@ export interface GenerateSpecResult {
   warnings: string[];
   /** 完整的 ModuleSpec 对象（用于索引生成） */
   moduleSpec: ModuleSpec;
-  /** 成本元数据（Feature 127） */
-  costMetadata: CostMetadata;
+  /** 成本元数据（Feature 127，可选以兼容历史 mock） */
+  costMetadata?: CostMetadata;
 }
 
 /** prepare 子命令的返回结果（阶段 1-2，不含 LLM 调用） */

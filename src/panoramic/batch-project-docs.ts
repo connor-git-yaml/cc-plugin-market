@@ -21,6 +21,7 @@ import { generateBatchAdrDocs, type AdrIndexOutput } from './pipelines/adr-decis
 import { buildComponentView, renderComponentView } from './builders/component-view-builder.js';
 import { buildDynamicScenarios, renderDynamicScenarios } from './builders/dynamic-scenarios-builder.js';
 import { evaluateDocsQuality, renderDocsQualityReport } from './pipelines/docs-quality-evaluator.js';
+import { renderQualityCostSection, type CostSummary } from '../batch/cost-summary.js';
 import { readDocsBundleManifest } from './pipelines/docs-bundle-manifest-reader.js';
 import {
   generateProductUxDocs,
@@ -80,6 +81,8 @@ export interface BatchDocsQualityInputs {
   featureBriefIndex?: GenerateProductUxDocsResult['featureBriefIndex'];
   /** docs-bundle manifest 所在目录（默认 outputDir） */
   manifestSearchDir?: string;
+  /** Feature 127：LLM 成本汇总，存在时在 quality-report.md 追加"LLM 成本与预算"节 */
+  costSummary?: CostSummary;
 }
 
 export interface GenerateBatchProjectDocsOptions {
@@ -356,11 +359,16 @@ export function generateDocsQualityReport(
     docsBundleManifest: manifestRead.manifest,
     dependencyWarnings: manifestRead.warnings,
   });
+  let markdown = renderDocsQualityReport(qualityReport);
+  // Feature 127：在质量报告末尾追加 "LLM 成本与预算" 节
+  if (options.costSummary) {
+    markdown = markdown.trimEnd() + '\n\n' + renderQualityCostSection(options.costSummary);
+  }
   const qualityWrittenFiles = writeMultiFormat({
     outputDir: options.outputDir,
     baseName: 'quality-report',
     outputFormat: 'all',
-    markdown: renderDocsQualityReport(qualityReport),
+    markdown,
     structuredData: qualityReport,
   });
 

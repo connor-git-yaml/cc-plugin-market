@@ -21,6 +21,8 @@
  */
 import * as fs from 'node:fs';
 import type { StageProgress } from '../models/module-spec.js';
+import type { CostSummary } from './cost-summary.js';
+import { renderSummaryCostSection } from './cost-summary.js';
 
 // ============================================================
 // 类型定义
@@ -224,10 +226,12 @@ export function createReporter(total: number, mode?: ProgressMode): ProgressRepo
  *
  * @param summary - 批处理摘要
  * @param outputPath - 输出路径（specs/ 目录下）
+ * @param costSummary - 可选的 LLM 成本汇总（Feature 127 FR-008），存在时追加 "LLM 成本汇总" 节
  */
 export function writeSummaryLog(
   summary: BatchSummary,
   outputPath: string,
+  costSummary?: CostSummary,
 ): void {
   const lines: string[] = [
     '# 批处理摘要日志',
@@ -254,6 +258,12 @@ export function writeSummaryLog(
   for (const mod of summary.modules) {
     const duration = mod.duration ? `${mod.duration}ms` : '-';
     lines.push(`| ${mod.path} | ${mod.status} | ${duration} |`);
+  }
+
+  // Feature 127：追加 LLM 成本汇总节
+  if (costSummary) {
+    lines.push('');
+    lines.push(renderSummaryCostSection(costSummary));
   }
 
   fs.writeFileSync(outputPath, lines.join('\n'), 'utf-8');

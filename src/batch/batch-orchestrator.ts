@@ -19,6 +19,11 @@ import {
 } from './checkpoint.js';
 import { DeltaRegenerator, type DeltaReport } from './delta-regenerator.js';
 import { createReporter, writeSummaryLog, type ProgressMode } from './progress-reporter.js';
+import {
+  aggregateCostSummary,
+  type CostSummary,
+  type ModuleCostRecord,
+} from './cost-summary.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
@@ -107,6 +112,8 @@ export interface BatchResult {
   docsBundleManifestPath?: string;
   /** 055 输出的 profile 摘要 */
   docsBundleProfiles?: DocsBundleProfileSummary[];
+  /** 127 输出的 LLM 成本汇总 */
+  costSummary?: CostSummary;
 }
 
 const logger = createLogger('batch-orchestrator');
@@ -369,6 +376,8 @@ export async function runBatch(
   const skipped: string[] = [];
   const degraded: string[] = [];
   const collectedModuleSpecs: ModuleSpec[] = [];
+  // Feature 127：累积每模块成本，用于 batch 汇总 + 质量报告
+  const costRecords: ModuleCostRecord[] = [];
 
   // 预计算跨语言提示文本（多语言项目）
   const crossLangHint = isMultiLang
@@ -497,6 +506,18 @@ export async function runBatch(
             });
             collectedModuleSpecs.push(result.moduleSpec);
             generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
+            // Feature 127：root 子模块也采集成本（mock 未返回时跳过）
+            if (result.costMetadata) {
+              let fileLoc = 0;
+              try {
+                fileLoc = fs.readFileSync(fullPath, 'utf-8').split('\n').length;
+              } catch { /* ignore */ }
+              costRecords.push({
+                moduleName: `${moduleName}/${path.basename(file)}`,
+                loc: fileLoc,
+                cost: result.costMetadata,
+              });
+            }
           }
 
           if (generatedRootSpecs.length === 0) {
@@ -558,7 +579,23 @@ export async function runBatch(
             specPath: toProjectPath(path.resolve(result.specPath)),
             completedAt: new Date().toISOString(),
             tokenUsage: result.tokenUsage,
+            // Feature 127：结构化成本元数据（mock 未返回时省略）
+            ...(result.costMetadata ? { costMetadata: result.costMetadata } : {}),
           });
+          // Feature 127：采集用于 batch 汇总（基于 module group 行数）
+          if (result.costMetadata) {
+            costRecords.push({
+              moduleName,
+              loc: group.files.reduce((sum, f) => {
+                try {
+                  return sum + fs.readFileSync(path.join(resolvedRoot, f), 'utf-8').split('\n').length;
+                } catch {
+                  return sum;
+                }
+              }, 0),
+              cost: result.costMetadata,
+            });
+          }
         }
 
         // 耗时可观测性：打印各阶段耗时摘要
@@ -789,10 +826,15 @@ export async function runBatch(
     logger.warn(`文档 bundle 编排失败: ${String(err)}`);
   }
 
+  // Feature 127：聚合 LLM 成本（在质量报告前计算，供其追加成本节）
+  const costSummary: CostSummary = aggregateCostSummary(costRecords);
+
   if (projectDocsResult) {
     try {
       // 传入 manifestSearchDir 以便质量报告找到 _meta/ 中的 docs-bundle.yaml
       projectDocsResult.qualityInputs.manifestSearchDir = metaDir;
+      // Feature 127：将成本汇总注入质量报告
+      projectDocsResult.qualityInputs.costSummary = costSummary;
       const qualityDoc = generateDocsQualityReport(projectDocsResult.qualityInputs);
       projectDocs = Array.from(new Set([
         ...(projectDocs ?? []),
@@ -810,7 +852,7 @@ export async function runBatch(
   fs.mkdirSync(metaDir, { recursive: true });
   const summaryLogPathAbs = path.join(metaDir, `batch-summary-${Date.now()}.md`);
   fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
-  writeSummaryLog(summary, summaryLogPathAbs);
+  writeSummaryLog(summary, summaryLogPathAbs, costSummary);
 
   // 步骤 7：生成人类友好的 README.md 索引
   try {
@@ -861,6 +903,7 @@ export async function runBatch(
     projectDocs,
     docsBundleManifestPath,
     docsBundleProfiles,
+    costSummary,
   };
 }
 
