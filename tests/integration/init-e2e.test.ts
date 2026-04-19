@@ -39,12 +39,13 @@ describe('init 端到端测试', () => {
   let tempDir: string;
 
   beforeAll(() => {
-    // 确保编译产物存在
+    // 确保编译产物存在。execFileSync 的 60_000ms 是子进程超时，vitest hook 还需要
+    // 显式超时（默认 10s）才能容纳 CI 冷缓存下的 `npm run build` 耗时。
     execFileSync('npm', ['run', 'build'], {
       encoding: 'utf-8',
       timeout: 60_000,
     });
-  });
+  }, 60_000);
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'init-e2e-'));

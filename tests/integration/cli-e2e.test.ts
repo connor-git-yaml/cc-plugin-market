@@ -27,9 +27,13 @@ function runCLI(args: string[]): { stdout: string; exitCode: number } {
 
 describe('CLI 端到端测试', () => {
   beforeAll(() => {
-    // 确保编译产物存在
-    execFileSync('npm', ['run', 'build'], { encoding: 'utf-8' });
-  });
+    // 确保编译产物存在。`npm run build` 在 CI 冷缓存环境常超 10s（vitest hook 默认上限），
+    // 显式给 60s hook timeout 匹配 execFileSync 的 60_000ms 子进程超时。
+    execFileSync('npm', ['run', 'build'], {
+      encoding: 'utf-8',
+      timeout: 60_000,
+    });
+  }, 60_000);
 
   describe('--version', () => {
     it('输出版本号并退出码为 0', () => {

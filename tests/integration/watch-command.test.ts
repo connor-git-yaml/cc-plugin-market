@@ -134,18 +134,20 @@ describe('watch 子命令集成测试', () => {
       capturedOnChange([{ path: join(tmpDir, 'src/app.ts'), category: 'code' }]);
     }
 
-    // 等待 debounce 和异步处理
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    // 验证 runBatch 被调用，且包含配置文件透传的 outputDir 和 languages
+    // 等待 runBatch 被调用（CI 环境慢，采用 vi.waitFor 主动轮询而非固定 sleep）
     if (capturedOnChange) {
-      expect(runBatch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          incremental: true,
-          outputDir: 'custom-specs',
-          languages: ['typescript'],
-        }),
+      await vi.waitFor(
+        () => {
+          expect(runBatch).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+              incremental: true,
+              outputDir: 'custom-specs',
+              languages: ['typescript'],
+            }),
+          );
+        },
+        { timeout: 5000, interval: 50 },
       );
     }
 
