@@ -11,7 +11,6 @@ directories:
     description: "Claude 仓库级项目配置与 override，允许项目内受控维护。"
     requiredFiles:
       - ".claude/settings.json"
-      - ".claude/commands/spec-driver.implement.md"
     ignoredPaths:
       - ".claude/settings.local.json"
   specify:
