@@ -64,6 +64,12 @@ export interface CLICommand {
   exportFormat?: 'obsidian' | 'html';
   /** batch 并发数（仅 batch 子命令，默认 1 = 顺序处理） */
   concurrency?: number;
+  /** Feature 127: 仅预估模式（仅 batch 子命令） */
+  dryRun?: boolean;
+  /** Feature 127: batch 预算上限，超出触发 gate（仅 batch 子命令，与 query 的 budget 独立） */
+  batchBudget?: number;
+  /** Feature 127: 超预算时的非交互策略（仅 batch 子命令） */
+  onOverBudget?: 'continue' | 'cheaper-model' | 'skip-enrichment' | 'cancel';
 }
 
 /** 解析错误 */
@@ -596,6 +602,36 @@ export function parseArgs(argv: string[]): ParseResult {
     const concurrencyIdx = argv.indexOf('--concurrency');
     const concurrency = concurrencyIdx >= 0 ? parseInt(argv[concurrencyIdx + 1] ?? '1', 10) : undefined;
 
+    // Feature 127: dry-run / budget / on-over-budget
+    const dryRun = argv.includes('--dry-run');
+    const batchBudgetIdx = argv.indexOf('--budget');
+    let batchBudget: number | undefined;
+    if (batchBudgetIdx !== -1 && argv[batchBudgetIdx + 1] !== undefined) {
+      const parsed = parseInt(argv[batchBudgetIdx + 1]!, 10);
+      if (!isNaN(parsed) && parsed > 0) batchBudget = parsed;
+    }
+    const onOverBudgetIdx = argv.indexOf('--on-over-budget');
+    let onOverBudget: CLICommand['onOverBudget'];
+    if (onOverBudgetIdx !== -1 && argv[onOverBudgetIdx + 1] !== undefined) {
+      const raw = argv[onOverBudgetIdx + 1]!;
+      if (
+        raw === 'continue' ||
+        raw === 'cheaper-model' ||
+        raw === 'skip-enrichment' ||
+        raw === 'cancel'
+      ) {
+        onOverBudget = raw;
+      } else {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--on-over-budget 值必须是 continue | cheaper-model | skip-enrichment | cancel，实际: ${raw}`,
+          },
+        };
+      }
+    }
+
     return {
       ok: true,
       command: {
@@ -615,6 +651,9 @@ export function parseArgs(argv: string[]): ParseResult {
         includeDocs: includeDocs || undefined,
         includeImages: includeImages || undefined,
         concurrency: concurrency && concurrency > 0 ? concurrency : undefined,
+        dryRun: dryRun || undefined,
+        batchBudget,
+        onOverBudget,
       },
     };
   }
@@ -655,7 +694,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget') {
         i++; // 跳过选项值
       }
       continue;

@@ -46,6 +46,10 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       // Feature 107：多模态提取标志（不纳入配置文件合并，仅从 CLI 传入）
       includeDocs: command.includeDocs,
       includeImages: command.includeImages,
+      // Feature 127：dry-run + 预算守护
+      dryRun: command.dryRun,
+      budget: command.batchBudget,
+      onOverBudget: command.onOverBudget,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
@@ -75,7 +79,16 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
         .join(', ');
       console.log(`✓ Bundle Profiles: ${preview}`);
     }
-    console.log(`✓ 日志: ${result.summaryLogPath}`);
+    if (result.summaryLogPath) {
+      console.log(`✓ 日志: ${result.summaryLogPath}`);
+    }
+    // Feature 127：dry-run / 预算决策输出
+    if (result.dryRunReportPath) {
+      console.log(`✓ Dry-run 预估报告: ${result.dryRunReportPath}`);
+    }
+    if (result.budgetDecision) {
+      console.log(`✓ 预算决策: ${result.budgetDecision.policy}（${result.budgetDecision.message}）`);
+    }
 
     process.exitCode = result.failed.length > 0 ? EXIT_CODES.TARGET_ERROR : EXIT_CODES.SUCCESS;
   } catch (err) {

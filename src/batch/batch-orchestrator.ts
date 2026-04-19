@@ -24,6 +24,14 @@ import {
   type CostSummary,
   type ModuleCostRecord,
 } from './cost-summary.js';
+import {
+  estimateModuleCost,
+  buildDryRunReport,
+  renderDryRunReport,
+  buildBudgetDecision,
+  type BudgetPolicy,
+  type ModuleEstimate,
+} from './budget-gate.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
@@ -85,6 +93,12 @@ export interface BatchOptions {
   includeDocs?: boolean;
   /** 启用图像/图表 Vision 提取（--include-images），默认 false — Feature 107 */
   includeImages?: boolean;
+  /** Feature 127：仅预估模式，跳过所有 LLM 调用，产出 dry-run 报告 */
+  dryRun?: boolean;
+  /** Feature 127：预算上限（input+output tokens 总数），超出触发 gate */
+  budget?: number;
+  /** Feature 127：超预算时的非交互策略（CI 场景） */
+  onOverBudget?: BudgetPolicy;
 }
 
 export interface BatchResult {
@@ -114,6 +128,14 @@ export interface BatchResult {
   docsBundleProfiles?: DocsBundleProfileSummary[];
   /** 127 输出的 LLM 成本汇总 */
   costSummary?: CostSummary;
+  /** 127 dry-run 模式输出的预估报告路径 */
+  dryRunReportPath?: string;
+  /** 127 预算决策结果（超预算场景） */
+  budgetDecision?: {
+    policy: BudgetPolicy;
+    message: string;
+    interactive: boolean;
+  };
 }
 
 const logger = createLogger('batch-orchestrator');
@@ -342,6 +364,86 @@ export async function runBatch(
     console.log(`检测到 ${processedLanguages.length} 种语言: ${processedLanguages.join(', ')}`);
   }
 
+  // Feature 127：dry-run 模式 — AST + 模块聚合已完成，直接产出预估报告后返回
+  if (options.dryRun) {
+    const estimates: ModuleEstimate[] = [];
+    for (const moduleName of processingOrder) {
+      const group = moduleGroups.get(moduleName);
+      if (!group) continue;
+      estimates.push(estimateModuleCost(moduleName, group.files, resolvedRoot));
+    }
+    const report = buildDryRunReport(estimates);
+    fs.mkdirSync(path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META), { recursive: true });
+    const dryRunPath = path.join(
+      resolvedOutputDir,
+      BATCH_OUTPUT_SUBDIRS.META,
+      'dry-run-estimate.md',
+    );
+    fs.writeFileSync(dryRunPath, renderDryRunReport(report), 'utf-8');
+    console.log(`[dry-run] 预估报告: ${toProjectPath(dryRunPath)}`);
+    console.log(
+      `[dry-run] 预估总 tokens: ${(report.totalEstimatedInput + report.totalEstimatedOutput).toLocaleString()} ` +
+        `(input ${report.totalEstimatedInput.toLocaleString()} + output ${report.totalEstimatedOutput.toLocaleString()})`,
+    );
+    return {
+      totalModules: processingOrder.length,
+      successful: [],
+      failed: [],
+      skipped: processingOrder.slice(),
+      degraded: [],
+      duration: Date.now() - startTime,
+      indexGenerated: false,
+      summaryLogPath: '',
+      detectedLanguages: isMultiLang ? processedLanguages : undefined,
+      languageStats,
+      dryRunReportPath: toProjectPath(dryRunPath),
+    };
+  }
+
+  // Feature 127：预算守护 gate — AST + 模块聚合完成后预估，超预算时调用 handler
+  let budgetDecisionResult: { policy: BudgetPolicy; message: string; interactive: boolean } | undefined;
+  if (typeof options.budget === 'number' && options.budget > 0) {
+    const estimates: ModuleEstimate[] = [];
+    for (const moduleName of processingOrder) {
+      const group = moduleGroups.get(moduleName);
+      if (!group) continue;
+      estimates.push(estimateModuleCost(moduleName, group.files, resolvedRoot));
+    }
+    const total = estimates.reduce(
+      (s, e) => s + e.estimatedInput + e.estimatedOutput,
+      0,
+    );
+    const decision = await buildBudgetDecision({
+      totalEstimate: total,
+      budget: options.budget,
+      preset: options.onOverBudget,
+      isTTY: !!process.stdout.isTTY,
+    });
+    console.log(`[budget] ${decision.message}`);
+    budgetDecisionResult = {
+      policy: decision.policy,
+      message: decision.message,
+      interactive: decision.interactive,
+    };
+    if (decision.policy === 'cancel') {
+      // 取消：不调用任何 LLM，立即返回
+      return {
+        totalModules: processingOrder.length,
+        successful: [],
+        failed: [],
+        skipped: processingOrder.slice(),
+        degraded: [],
+        duration: Date.now() - startTime,
+        indexGenerated: false,
+        summaryLogPath: '',
+        detectedLanguages: isMultiLang ? processedLanguages : undefined,
+        languageStats,
+        budgetDecision: budgetDecisionResult,
+      };
+    }
+    // 其它 policy 会在模块处理循环中影响 genOptions（见下方）
+  }
+
   // 步骤 3：检查是否存在检查点
   let state: BatchState | null = loadCheckpoint(checkpointPath);
   const isResume = state !== null;
@@ -468,12 +570,15 @@ export async function runBatch(
         }, 0);
         const isSmallModule = group.files.length <= 2 && totalLoc < 200;
 
+        // Feature 127：预算策略 cheaper-model / skip-enrichment 覆盖 isSmallModule 的默认
+        const budgetSkipEnrichment = budgetDecisionResult?.policy === 'skip-enrichment';
+        const budgetCheaperModel = budgetDecisionResult?.policy === 'cheaper-model';
         const genOptions: GenerateSpecOptions = {
           outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
-          skipEnrichment: isSmallModule,
-          modelOverride: isSmallModule ? sonnetModelId : undefined,
+          skipEnrichment: isSmallModule || budgetSkipEnrichment,
+          modelOverride: isSmallModule || budgetCheaperModel ? sonnetModelId : undefined,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
             if (progress.duration !== undefined) {
@@ -904,6 +1009,7 @@ export async function runBatch(
     docsBundleManifestPath,
     docsBundleProfiles,
     costSummary,
+    budgetDecision: budgetDecisionResult,
   };
 }
 
