@@ -496,35 +496,43 @@ Aggregates individual feature specs from `specs/` into a unified product-level `
 
 Interactive generation of README.md, LICENSE, CONTRIBUTING.md, and CODE_OF_CONDUCT.md with conflict detection and backup.
 
-### Individual Phase Commands
+### Orchestrator Skill Commands
 
-Each phase can also be run independently for fine-grained control:
+All phases are orchestrated end-to-end by the following skills. For single-phase control, use `spec-driver-implement --entry-point=<phase>`:
 
 ```bash
-# Create or update project constitution
-/spec-driver.constitution
+# Create or update project constitution (single-phase skill)
+/spec-driver:spec-driver-constitution
 
-# Generate requirement specification from description
-/spec-driver.specify
+# Full spec-driven flow: specify → clarify → plan → tasks → implement → verify
+/spec-driver:spec-driver-feature <需求描述>
 
-# Clarify ambiguities in the current spec
-/spec-driver.clarify
+# Fast path without research: specify → plan → tasks → implement → verify
+/spec-driver:spec-driver-story <需求描述>
 
-# Generate quality checklist
-/spec-driver.checklist
+# Run only the implement phase (spec.md + plan.md + tasks.md already exist)
+/spec-driver:spec-driver-implement
 
-# Create implementation plan
-/spec-driver.plan
+# Run only the plan phase (update or regenerate plan.md)
+/spec-driver:spec-driver-implement --entry-point=plan
 
-# Generate dependency-ordered tasks
-/spec-driver.tasks
+# Large-scale refactor: impact analysis → batched planning → iterative implement
+/spec-driver:spec-driver-refactor <重构目标>
 
-# Run cross-artifact consistency analysis
-/spec-driver.analyze
+# Quick bug fix: diagnose → plan → fix → verify
+/spec-driver:spec-driver-fix <问题描述>
 
-# Execute implementation plan
-/spec-driver.implement
+# Generate README / LICENSE / CONTRIBUTING / CODE_OF_CONDUCT
+/spec-driver:spec-driver-doc
+
+# Aggregate feature specs into product-level current-spec.md + catalog
+/spec-driver:spec-driver-sync
+
+# Resume an interrupted spec-driver run from its last artifact
+/spec-driver:spec-driver-resume
 ```
+
+> **v4.0 变更**：9 个原子命令 `/spec-driver.{specify,plan,tasks,implement,clarify,analyze,checklist,constitution,taskstoissues}` 已于 v4.0 删除。完整映射与迁移步骤见 [`docs/migrations/skill-deprecation.md`](docs/migrations/skill-deprecation.md)。
 
 ### Sub-Agents
 

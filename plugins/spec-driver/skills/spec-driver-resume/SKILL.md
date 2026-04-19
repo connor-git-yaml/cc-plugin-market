@@ -52,7 +52,7 @@ fi
 
 ### 2. Constitution 处理
 
-如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行项目宪法入口创建项目宪法（Claude: `/spec-driver.constitution`；Codex: `$spec-driver-constitution`）。如果 constitution 存在：继续。
+如果 `NEEDS_CONSTITUTION = true`：暂停，提示用户先运行项目宪法入口创建项目宪法（Claude: `/spec-driver:spec-driver-constitution`；Codex: `$spec-driver-constitution`）。如果 constitution 存在：继续。
 
 ### 3. 配置加载
 

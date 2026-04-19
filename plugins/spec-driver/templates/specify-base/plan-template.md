@@ -3,7 +3,7 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the `/spec-driver.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**Note**: This template is filled in by the plan phase of the spec-driver orchestrator (e.g. `/spec-driver:spec-driver-feature` or `/spec-driver:spec-driver-implement --entry-point=plan`). See `.specify/templates/commands/plan.md` for the execution workflow.
 
 ## Summary
 
@@ -69,12 +69,12 @@
 
 ```text
 specs/[###-feature]/
-├── plan.md              # This file (/spec-driver.plan command output)
-├── research.md          # Phase 0 output (/spec-driver.plan command)
-├── data-model.md        # Phase 1 output (/spec-driver.plan command)
-├── quickstart.md        # Phase 1 output (/spec-driver.plan command)
-├── contracts/           # Phase 1 output (/spec-driver.plan command)
-└── tasks.md             # Phase 2 output (/spec-driver.tasks command - NOT created by /spec-driver.plan)
+├── plan.md              # This file (plan phase output)
+├── research.md          # Phase 0 output (plan phase)
+├── data-model.md        # Phase 1 output (plan phase)
+├── quickstart.md        # Phase 1 output (plan phase)
+├── contracts/           # Phase 1 output (plan phase)
+└── tasks.md             # Phase 2 output (tasks phase — NOT created by plan phase)
 ```
 
 ### Source Code (repository root)

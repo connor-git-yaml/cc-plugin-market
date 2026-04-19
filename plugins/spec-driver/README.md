@@ -73,7 +73,7 @@ npm run repo:check
 $spec-driver-constitution [原则更新说明]
 ```
 
-用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver.constitution`。
+用于在项目缺少 `.specify/memory/constitution.md` 时补建或更新项目宪法；Claude 中对应命令为 `/spec-driver:spec-driver-constitution`。
 
 Codex 包装技能会通过共享 resolver 读取项目级上下文文件：
 
@@ -345,17 +345,19 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 | `/spec-driver:speckit-resume` | `/spec-driver:spec-driver-resume` |
 | `/spec-driver:speckit-sync` | `/spec-driver:spec-driver-sync` |
 | `/spec-driver:speckit-doc` | `/spec-driver:spec-driver-doc` |
-| `/speckit.specify` | `/spec-driver.specify` |
-| `/speckit.plan` | `/spec-driver.plan` |
-| `/speckit.tasks` | `/spec-driver.tasks` |
-| `/speckit.implement` | `/spec-driver.implement` |
-| `/speckit.analyze` | `/spec-driver.analyze` |
-| `/speckit.checklist` | `/spec-driver.checklist` |
-| `/speckit.clarify` | `/spec-driver.clarify` |
-| `/speckit.constitution` | `/spec-driver.constitution` |
-| `/speckit.taskstoissues` | `/spec-driver.taskstoissues` |
+| `/speckit.specify` | `/spec-driver.specify` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.plan` | `/spec-driver.plan` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.tasks` | `/spec-driver.tasks` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.implement` | `/spec-driver.implement` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.analyze` | `/spec-driver.analyze` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.checklist` | `/spec-driver.checklist` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.clarify` | `/spec-driver.clarify` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.constitution` | `/spec-driver.constitution` ⚠️ 已于 v4.0 弃用 |
+| `/speckit.taskstoissues` | `/spec-driver.taskstoissues` ⚠️ 已于 v4.0 弃用 |
 
 如果您在 `.claude/commands/` 或 `.codex/commands/` 中有自定义的 `speckit.*.md` 命令文件，请手动重命名为 `spec-driver.*.md` 以确保编排器正确发现。
+
+> **v4.0 变更**：表格下半区的 9 个 `/spec-driver.{phase}` 原子命令已于 v4.0 版本**全部删除**。这些命令的功能已被编排器 Skill 完整覆盖，详见 [迁移指南 `docs/migrations/skill-deprecation.md`](../../docs/migrations/skill-deprecation.md)。
 
 ### 迁移说明（v3.7.0）
 
