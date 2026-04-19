@@ -1,22 +1,22 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-04-12T15:25:35.688Z",
+  "generatedAt": "2026-04-19T06:19:05.595Z",
   "rulesetId": "default-governance",
   "rulesetTitle": "默认持续治理评分",
   "productId": "spectra",
   "productName": "Spectra",
   "kind": "library-tooling",
   "status": "warn",
-  "score": 85,
+  "score": 90,
   "summary": [
-    "Spectra 当前治理评分为 85/100，整体状态 WARN.",
+    "Spectra 当前治理评分为 90/100，整体状态 WARN.",
     "没有 fail 级规则。",
-    "另有 2 条 warn 级规则，建议在下一次 sync / release 前收口。"
+    "另有 1 条 warn 级规则，建议在下一次 sync / release 前收口。"
   ],
   "stats": {
     "ruleCount": 6,
-    "passCount": 4,
-    "warnCount": 2,
+    "passCount": 5,
+    "warnCount": 1,
     "failCount": 0,
     "maxWeightedScore": 100
   },
@@ -117,13 +117,20 @@
       "title": "Workflow 就绪度",
       "evaluator": "workflow-readiness",
       "weight": 15,
-      "status": "warn",
-      "score": 65,
+      "status": "pass",
+      "score": 100,
       "summary": [
-        "产品已有部分 workflow / 入口事实，但入口与文档绑定还不完整。"
+        "产品公开了 6 个入口引用，且 current-spec 可作为消费入口。"
       ],
       "evidence": {
-        "workflowRefs": [],
+        "workflowRefs": [
+          "spectra.init",
+          "spectra.generate",
+          "spectra.batch",
+          "spectra.diff",
+          "spectra.mcp-server",
+          "spectra.auth-status"
+        ],
         "currentSpecAvailable": true
       },
       "warnings": []

@@ -117,3 +117,15 @@ Each generated spec must contain these 9 sections in Chinese:
 - **保留英文**：代码标识符、文件路径、类型签名、代码块内容
 - **章节标题**：使用中文，例如 `## 1. 意图`、`## 2. 接口定义`
 - **Frontmatter**：保留英文（YAML 键名）
+
+## 图查询工具（MCP）
+
+单模块生成完成后，若项目已跑过 `spectra batch`，则 `specs/_meta/graph.json` 会提供 5 个 MCP 图查询工具供 AI 助手调用：
+
+- `graph_query`：按关键词查询相关模块和子图（`{ question: "认证模块", depth: 2 }`）
+- `graph_node`：查询指定节点的详情和邻居（`{ id: "src/auth/login.ts" }`）
+- `graph_path`：查找两个节点间的最短路径（`{ source, target }`）
+- `graph_community`：列出某社区的节点（`{ communityId: "c-0" }`）
+- `graph_god_nodes`：识别度数最高的枢纽节点（`{ limit: 10 }`）
+
+使用场景：通过 `/spectra` 生成单模块 spec 后，想追问"这个模块被谁调用了"、"从 A 到 B 的依赖路径是什么"、"项目里哪个模块最核心"等结构性问题，即可使用这些工具。

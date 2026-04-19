@@ -1,7 +1,7 @@
 # Spec Driver Workflow Registry
 
-- Generated At: 2026-04-12T15:25:26.705Z
-- Source Dir: ../../../../../../.claude/plugins/marketplaces/cc-plugin-market/plugins/spec-driver/workflows
+- Generated At: 2026-04-19T06:19:05.554Z
+- Source Dir: plugins/spec-driver/workflows
 - Override Dir: .specify/workflows
 - Workflows: 7
 - Golden Paths: 4

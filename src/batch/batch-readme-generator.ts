@@ -5,6 +5,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
+import {
+  extractGraphHighlights,
+  renderGodNodesBlock,
+  renderSurprisingBlock,
+  renderGraphQueryHint,
+} from './readme-graph-section.js';
 
 export interface ReadmeGeneratorInput {
   /** 项目名称 */
@@ -72,6 +78,13 @@ export function generateBatchReadme(input: ReadmeGeneratorInput): string {
     lines.push('');
   }
 
+  // Feature 127：图摘要（代码核心抽象 + 意外连接），位于产品与使用之后、架构与接口之前
+  const graphHighlights = extractGraphHighlights(outputDir);
+  if (graphHighlights.hasGraph || graphHighlights.hasGraphReport) {
+    lines.push(...renderGodNodesBlock(graphHighlights));
+    lines.push(...renderSurprisingBlock(graphHighlights));
+  }
+
   // 架构与接口
   const archDocs = [
     { file: 'interface-surface.md', label: '接口表面（全项目 API 索引）' },
@@ -91,6 +104,10 @@ export function generateBatchReadme(input: ReadmeGeneratorInput): string {
       lines.push(`- [${doc.label}](${BATCH_OUTPUT_SUBDIRS.PROJECT}/${doc.file})`);
     }
     lines.push('');
+    // Feature 127：图查询能力入口
+    if (graphHighlights.hasGraph) {
+      lines.push(...renderGraphQueryHint());
+    }
   }
 
   // 模块规范

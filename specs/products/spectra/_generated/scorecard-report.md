@@ -2,15 +2,15 @@
 
 > **Product**: spectra
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-04-12T15:25:35.688Z
+> **Generated**: 2026-04-19T06:19:05.595Z
 > **Status**: WARN
-> **Score**: 85/100
+> **Score**: 90/100
 
 ## Summary
 
-- Spectra 当前治理评分为 85/100，整体状态 WARN.
+- Spectra 当前治理评分为 90/100，整体状态 WARN.
 - 没有 fail 级规则。
-- 另有 2 条 warn 级规则，建议在下一次 sync / release 前收口。
+- 另有 1 条 warn 级规则，建议在下一次 sync / release 前收口。
 
 ## Rule Breakdown
 
@@ -21,7 +21,7 @@
 | 文档覆盖率 | PASS | 100 | 20 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, coveredRequiredDocs=3, totalRequiredDocs=3 |
 | 文档冲突 | PASS | 100 | 15 | qualityReportPath=specs/products/spectra/_generated/quality-report.json, totalConflicts=0, high=0 |
 | 分支规范卫生 | PASS | 100 | 10 | hasRemote=true, hasDefaultBranch=true, hasPolicyFile=true |
-| Workflow 就绪度 | WARN | 65 | 15 | workflowRefs=0, currentSpecAvailable=true |
+| Workflow 就绪度 | PASS | 100 | 15 | workflowRefs=6, currentSpecAvailable=true |
 
 ## Rule Details
 
@@ -114,14 +114,21 @@
 ### Workflow 就绪度
 
 - Evaluator: `workflow-readiness`
-- Status: WARN
-- Score: 65 / 100
+- Status: PASS
+- Score: 100 / 100
 - Weight: 15
-- 产品已有部分 workflow / 入口事实，但入口与文档绑定还不完整。
+- 产品公开了 6 个入口引用，且 current-spec 可作为消费入口。
 
 ```json
 {
-  "workflowRefs": [],
+  "workflowRefs": [
+    "spectra.init",
+    "spectra.generate",
+    "spectra.batch",
+    "spectra.diff",
+    "spectra.mcp-server",
+    "spectra.auth-status"
+  ],
   "currentSpecAvailable": true
 }
 ```

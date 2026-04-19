@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-12T15:25:35.688Z"
+generatedAt: "2026-04-19T06:19:05.595Z"
 rulesetId: "default-governance"
 productCount: 2
 products:
@@ -7,12 +7,12 @@ products:
     name: "Spectra"
     kind: "library-tooling"
     status: "warn"
-    score: 85
+    score: 90
     reportPath: "specs/products/spectra/_generated/scorecard-report.json"
     markdownPath: "specs/products/spectra/_generated/scorecard-report.md"
     ruleCount: 6
-    passCount: 4
-    warnCount: 2
+    passCount: 5
+    warnCount: 1
     failCount: 0
   - id: "spec-driver"
     name: "Spec Driver"

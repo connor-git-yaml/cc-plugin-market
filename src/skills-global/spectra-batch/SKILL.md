@@ -117,3 +117,47 @@ After batch completes:
 - **可恢复**：如果中断，检查已有 specs 并跳过已完成的模块
 - **不重复生成**已存在的 spec，除非用户指定 `--force`
 - 每个模块的 spec 保持**自包含**，但通过索引交叉引用
+
+## 图查询工具（MCP）
+
+Batch 完成后，Spectra 自动生成 `specs/_meta/graph.json` 和 `specs/_meta/GRAPH_REPORT.md`，并暴露 5 个 MCP 图查询工具。在支持 MCP 的 AI 助手中可直接调用：
+
+### `graph_query` — 关键词子图查询
+
+按自然语言查询词匹配节点并扩展邻居子图。
+
+- 用途：探索"认证模块"、"数据库连接"等抽象主题的相关代码
+- 典型调用：`graph_query({ question: "认证模块", budget: 30, depth: 2 })`
+- 返回：JSON 格式的节点和边列表
+
+### `graph_node` — 单节点详情
+
+查询某个节点的详细信息和直接邻居。
+
+- 用途：追踪某个函数、模块或类的完整影响范围
+- 典型调用：`graph_node({ id: "src/auth/login.ts", budget: 20 })` 或 `graph_node({ keyword: "login" })`
+- 返回：目标节点元数据 + 邻居列表
+
+### `graph_path` — 最短路径
+
+查找两个节点间的最短调用/依赖路径。
+
+- 用途：理解"模块 A 是如何最终影响到模块 B 的"
+- 典型调用：`graph_path({ source: "src/cli/main.ts", target: "src/db/connection.ts" })`
+- 返回：有序的节点 ID 列表（起点 → 终点）
+
+### `graph_community` — 社区节点查询
+
+列出某个社区（模块聚类）的所有节点，识别代码边界。
+
+- 用途：从社区层面审视架构划分是否合理
+- 典型调用：`graph_community({ communityId: "c-0" })`
+- 返回：该社区下的全部节点
+
+### `graph_god_nodes` — 枢纽节点识别
+
+识别图谱中度数最高的核心节点，定位过度耦合或架构瓶颈。
+
+- 用途：代码审查、重构规划的起点
+- 典型调用：`graph_god_nodes({ limit: 10 })`
+- 返回：按度数降序的节点列表
