@@ -945,8 +945,9 @@ export async function runBatch(
   let indexGenerated = false;
   try {
     initRenderer();
+    // 通过 SpecStore.allKnownSpecs() 获取：已过滤 orphan/bundle_copy/derived
     const index = generateIndex(
-      allIndexSpecs,
+      specStore.allKnownSpecs(),
       mergedGraph,
       languageStats,
       processedLanguages,

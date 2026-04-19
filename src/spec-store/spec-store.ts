@@ -12,24 +12,15 @@ import type {
   StoredModuleSpecSummary,
   ExistingSpecDocument,
 } from '../panoramic/builders/doc-graph-builder.js';
+import type { IndexableModuleSpec } from '../generator/index-generator.js';
 import { getDefaultSourceKind, type SpecSourceKind } from './spec-identity.js';
 
 // ============================================================
 // IndexableModuleSpec — SpecStore 对外暴露的统一 spec 视图
 // ============================================================
-
-/**
- * 可被 index-generator、README 生成器、coverage auditor 等使用的最小 spec 结构。
- * 兼容 ModuleSpec（本次生成）和 StoredModuleSpecSummary（磁盘缓存）。
- */
-export interface IndexableModuleSpec {
-  frontmatter: SpecFrontmatter;
-  outputPath: string;
-  sections?: {
-    intent?: string;
-  };
-  intentSummary?: string;
-}
+// 从 src/generator/index-generator.ts 重导出，保证所有消费方共享一份类型定义，
+// 避免 SpecStore 和 index-generator 各自声明导致的类型不兼容。
+export type { IndexableModuleSpec };
 
 // ============================================================
 // SpecStoreOptions — 构造参数
