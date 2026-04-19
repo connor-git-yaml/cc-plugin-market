@@ -31,6 +31,26 @@ export type LanguageDistribution = z.infer<typeof LanguageDistributionSchema>;
 // ModuleSpec 相关
 // ============================================================
 
+/** LLM token 使用量（input / output 分项） */
+export const TokenUsageSchema = z.object({
+  input: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+});
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+
+/** 单次 spec 生成的成本元数据（Feature 127） */
+export const CostMetadataSchema = z.object({
+  /** 本次生成消耗的 input / output token 数 */
+  tokenUsage: TokenUsageSchema,
+  /** LLM + enrichment 总耗时（毫秒） */
+  durationMs: z.number().int().nonnegative(),
+  /** 实际使用的 LLM 模型 ID；AST-only 降级时为空字符串 */
+  llmModel: z.string(),
+  /** 降级原因；未降级时为 null */
+  fallbackReason: z.string().nullable(),
+});
+export type CostMetadata = z.infer<typeof CostMetadataSchema>;
+
 /** YAML Frontmatter */
 export const SpecFrontmatterSchema = z.object({
   type: z.literal('module-spec'),
@@ -47,6 +67,14 @@ export const SpecFrontmatterSchema = z.object({
   crossLanguageRefs: z.array(z.string()).optional(),
   /** 人类可读的模块显示名（默认取目录名） */
   displayName: z.string().optional(),
+  /** 本次生成消耗的 token 使用量（Feature 127） */
+  tokenUsage: TokenUsageSchema.optional(),
+  /** LLM + enrichment 总耗时（毫秒）（Feature 127） */
+  durationMs: z.number().int().nonnegative().optional(),
+  /** 实际使用的 LLM 模型 ID（Feature 127） */
+  llmModel: z.string().optional(),
+  /** 降级原因（Feature 127）；未降级时为 null */
+  fallbackReason: z.string().nullable().optional(),
 });
 export type SpecFrontmatter = z.infer<typeof SpecFrontmatterSchema>;
 
@@ -189,7 +217,10 @@ export const CompletedModuleSchema = z.object({
   path: z.string().min(1),
   specPath: z.string().min(1),
   completedAt: z.string().datetime(),
+  /** 历史字段：input+output 累加的 token 总数（向后兼容） */
   tokenUsage: z.number().int().nonnegative().optional(),
+  /** 本次生成的成本元数据（Feature 127） */
+  costMetadata: CostMetadataSchema.optional(),
 });
 export type CompletedModule = z.infer<typeof CompletedModuleSchema>;
 
