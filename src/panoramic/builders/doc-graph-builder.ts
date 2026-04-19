@@ -7,6 +7,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DependencyGraph } from '../../models/dependency-graph.js';
 import type { ModuleSpec } from '../../models/module-spec.js';
+import { DOCS_BUNDLE_ROOT_DIR } from '../models/docs-bundle-types.js';
 
 export const MODULE_SPEC_ANCHOR_ID = 'module-spec';
 export const CROSS_REFERENCE_MARKER_PREFIX = '<!-- cross-reference-index: auto';
@@ -112,8 +113,10 @@ export function scanStoredModuleSpecs(
     return [];
   }
 
+  // bundle 目录下的 spec 是 canonical modules/ 的复制输出产物，
+  // 不应作为权威 spec 源参与 graph 构建（会导致依赖边挂到 bundle 副本上）
   const specFiles: string[] = [];
-  walkSpecFiles(specsDir, specFiles);
+  walkSpecFiles(specsDir, specFiles, path.join(specsDir, DOCS_BUNDLE_ROOT_DIR));
 
   return specFiles
     .flatMap((filePath) => {
@@ -505,7 +508,7 @@ function stripYamlScalar(value: string): string {
   return value;
 }
 
-function walkSpecFiles(dir: string, results: string[]): void {
+function walkSpecFiles(dir: string, results: string[], excludeDir?: string): void {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink()) {
@@ -513,7 +516,10 @@ function walkSpecFiles(dir: string, results: string[]): void {
     }
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      walkSpecFiles(fullPath, results);
+      if (excludeDir && fullPath === excludeDir) {
+        continue;
+      }
+      walkSpecFiles(fullPath, results, excludeDir);
       continue;
     }
     if (entry.isFile() && entry.name.endsWith('.spec.md')) {
