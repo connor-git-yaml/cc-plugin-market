@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -58,6 +58,16 @@ export interface CLICommand {
   installRemove?: boolean;
   /** mcp-server 子命令：是否启用 dev 热重载模式（--dev 或 SPECTRA_DEV=1） */
   mcpDev?: boolean;
+  /** direction-audit 子命令：graph.json 路径（默认: specs/_meta/graph.json） */
+  directionAuditGraph?: string;
+  /** direction-audit 子命令：报告写入路径（可选） */
+  directionAuditOutput?: string;
+  /** direction-audit 子命令：输出格式 json|text（默认: text） */
+  directionAuditFormat?: 'json' | 'text';
+  /** direction-audit 子命令：生成 CI baseline 快照的路径 */
+  directionAuditSnapshot?: string;
+  /** direction-audit 子命令：对比快照路径；incorrect 增加时 exit 1 */
+  directionAuditCompareSnapshot?: string;
   /** 启用 Markdown 文档 + API 规范提取（仅 batch 子命令）— Feature 107 */
   includeDocs?: boolean;
   /** 启用图像/图表 Vision 提取（仅 batch 子命令）— Feature 107 */
@@ -389,6 +399,44 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // direction-audit 子命令
+  if (sub === 'direction-audit') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'direction-audit',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const graphIdx = argv.indexOf('--graph');
+    const directionAuditGraph = graphIdx !== -1 ? argv[graphIdx + 1] : undefined;
+    const outputIdx = argv.indexOf('--output');
+    const directionAuditOutput = outputIdx !== -1 ? argv[outputIdx + 1] : undefined;
+    const formatIdx = argv.indexOf('--format');
+    const formatRaw = formatIdx !== -1 ? argv[formatIdx + 1] : undefined;
+    const directionAuditFormat = formatRaw === 'json' ? 'json' : formatRaw === 'text' ? 'text' : undefined;
+    const snapshotIdx = argv.indexOf('--snapshot');
+    const directionAuditSnapshot = snapshotIdx !== -1 ? argv[snapshotIdx + 1] : undefined;
+    const compareIdx = argv.indexOf('--compare-snapshot');
+    const directionAuditCompareSnapshot = compareIdx !== -1 ? argv[compareIdx + 1] : undefined;
+    return {
+      ok: true,
+      command: {
+        subcommand: 'direction-audit',
+        directionAuditGraph,
+        directionAuditOutput,
+        directionAuditFormat,
+        directionAuditSnapshot,
+        directionAuditCompareSnapshot,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // export 子命令
   if (sub === 'export') {
     if (argv.includes('--help') || argv.includes('-h')) {
@@ -538,7 +586,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install' && sub !== 'export') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install' && sub !== 'export' && sub !== 'direction-audit') {
     return {
       ok: false,
       error: {
@@ -698,7 +746,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot') {
         i++; // 跳过选项值
       }
       continue;

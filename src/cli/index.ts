@@ -24,6 +24,7 @@ import { runCommunityCommand } from './commands/community.js';
 import { runQueryCommand } from './commands/query.js';
 import { runInstall } from './commands/install.js';
 import { runExportCommand } from './commands/export.js';
+import { runDirectionAuditCommand } from './commands/direction-audit.js';
 import { bootstrapAdapters } from '../adapters/index.js';
 import { bootstrapGenerators } from '../panoramic/generator-registry.js';
 import { bootstrapParsers } from '../panoramic/parser-registry.js';
@@ -52,6 +53,9 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra query "<问题>" [--budget <N>] [--format json|text]
   spectra install [--git] [--remove]
   spectra export --format <obsidian|html> [--output-dir <dir>]
+  spectra direction-audit [--graph <path>] [--output <path>] [--format json|text]
+  spectra direction-audit --snapshot <path>
+  spectra direction-audit --compare-snapshot <path>
   spectra mcp-server
   spectra --version / --help
 
@@ -70,6 +74,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   query         查询知识图谱，返回相关模块及依赖关系子图
   install       安装/卸载 Claude Code PreToolUse hook 和 git post-commit hook（≠ init：init = skill 安装，install = hook 安装）
   export        将知识图谱导出为 Obsidian Vault 或 HTML 交互式可视化
+  direction-audit 依赖方向自查工具（SC-006 CI regression guard）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -176,6 +181,9 @@ async function main(): Promise<void> {
       break;
     case 'export':
       await runExportCommand(command);
+      break;
+    case 'direction-audit':
+      await runDirectionAuditCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer(command);
