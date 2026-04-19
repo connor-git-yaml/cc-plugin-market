@@ -809,8 +809,7 @@ export async function runBatch(
   let projectDocsResult: BatchProjectDocsResult | undefined;
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
-  const allIndexSpecs = mergeIndexSpecs(collectedModuleSpecs, existingStoredSpecs, toProjectPath);
-  // SpecStore 统一查询入口：Step B-F 各消费方逐步迁移到此
+  // SpecStore 统一查询入口：所有消费方（README、graph、coverage、index、cross-ref）共享此源
   const specStore = new SpecStore({
     currentSpecs: collectedModuleSpecs,
     storedSpecs: existingStoredSpecs,
@@ -1100,58 +1099,3 @@ async function buildFallbackGraph(
   return buildDirectoryGraph(langGroup.files, projectRoot, emptySkeletons);
 }
 
-function mergeIndexSpecs(
-  currentSpecs: ModuleSpec[],
-  storedSpecs: StoredModuleSpecSummary[],
-  toProjectPath: (absPath: string) => string,
-): Array<{
-  frontmatter: ModuleSpec['frontmatter'];
-  outputPath: string;
-  sections?: Pick<ModuleSpec['sections'], 'intent'>;
-  intentSummary?: string;
-}> {
-  const merged = new Map<string, {
-    frontmatter: ModuleSpec['frontmatter'];
-    outputPath: string;
-    sections?: Pick<ModuleSpec['sections'], 'intent'>;
-    intentSummary?: string;
-  }>();
-
-  for (const storedSpec of storedSpecs) {
-    if (!storedSpec.skeletonHash) {
-      continue;
-    }
-
-    merged.set(storedSpec.outputPath, {
-      frontmatter: {
-        type: 'module-spec',
-        version: storedSpec.version ?? 'v1',
-        generatedBy: 'spectra v3.0',
-        sourceTarget: storedSpec.sourceTarget,
-        relatedFiles: storedSpec.relatedFiles,
-        lastUpdated: new Date().toISOString(),
-        confidence: storedSpec.confidence ?? 'medium',
-        skeletonHash: storedSpec.skeletonHash,
-        language: storedSpec.language,
-        crossLanguageRefs: storedSpec.crossLanguageRefs,
-      },
-      outputPath: storedSpec.outputPath,
-      intentSummary: storedSpec.intentSummary,
-    });
-  }
-
-  for (const currentSpec of currentSpecs) {
-    const normalizedOutputPath = path.isAbsolute(currentSpec.outputPath)
-      ? toProjectPath(path.resolve(currentSpec.outputPath))
-      : currentSpec.outputPath;
-    merged.set(normalizedOutputPath, {
-      frontmatter: currentSpec.frontmatter,
-      outputPath: normalizedOutputPath,
-      sections: {
-        intent: currentSpec.sections.intent,
-      },
-    });
-  }
-
-  return [...merged.values()].sort((a, b) => a.outputPath.localeCompare(b.outputPath));
-}
