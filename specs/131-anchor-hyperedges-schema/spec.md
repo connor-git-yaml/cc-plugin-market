@@ -31,7 +31,7 @@
 
 **优先级理由**：这是所有后续 Story（Story 2、3、4）的数据合同基础。没有 schema v2.0，其他 Story 的产出无法写入或正确读取。技术侧原地扩展风险低，必须首先独立交付。
 
-**独立可测试性**：在不运行 embedding 或 LLM 的情况下，可以通过单元测试验证 `doc-graph-types.ts` 的类型导出和 golden-master fixture 的合规性，独立交付后下游工具即可开始适配新字段。
+**独立可测试性**：在不运行 embedding 或 LLM 的情况下，可以通过单元测试验证 `src/panoramic/graph/graph-types.ts` 的类型导出和 golden-master fixture 的合规性，独立交付后下游工具即可开始适配新字段。
 
 **验收场景**：
 
@@ -118,7 +118,7 @@
 
 ### Schema 与数据合同
 
-- **FR-001**：系统 MUST 在 `doc-graph-types.ts` 中新增以下边类型枚举值：`references`、`conceptually_related_to`、`rationale_for`，并更新现有边类型联合类型以包含这三项。`[必须]` [对应 Story 1]
+- **FR-001**：系统 MUST 在 `src/panoramic/graph/graph-types.ts` 中新增以下边类型枚举值：`references`、`conceptually_related_to`、`rationale_for`，并更新现有边类型联合类型以包含这三项。`[必须]` [对应 Story 1]
 
 - **FR-002**：系统 MUST 在边类型定义中新增 `confidence` 枚举字段，取值范围为 `EXTRACTED | INFERRED | AMBIGUOUS`；所有由 embedding 自动生成的边 MUST 标记为 `INFERRED`；从 design-doc 文本明确抽取（含直接引用函数名、文件路径等强证据）的边 MUST 标记为 `EXTRACTED`；证据不足、语义歧义的边 MUST 标记为 `AMBIGUOUS`。**注：此枚举为本 Feature 对外的数据合同命名，直接透传至 MCP 工具响应。**`[必须]` [对应 Story 1, Story 2]
 
@@ -236,7 +236,7 @@
 
 - **AC-011**：所有 embedding 调用（local 模式和 OpenAI fallback 模式）的 `tokenUsage` 记录均可被 F1 BudgetGate 聚合；local 模式的 `tokenUsage` 记录包含 `llmModel: 'local-embedding'` 和 `durationMs` 字段。（自动化：单元测试）
 
-- **AC-012**：schema v2.0 升级（`doc-graph-types.ts` 变更 + direction-audit 白名单）在独立 commit 中交付，不与 embedding 或 hyperedge 逻辑混合。（人工代码审查：commit 历史）
+- **AC-012**：schema v2.0 升级（`src/panoramic/graph/graph-types.ts` 变更 + direction-audit 白名单）在独立 commit 中交付，不与 embedding 或 hyperedge 逻辑混合。（人工代码审查：commit 历史）
 
 ---
 
@@ -250,7 +250,7 @@
 | `src/panoramic/anchoring/**`（新建） | 可写 | Story 2 锚定模块 |
 | `src/panoramic/hyperedges/**`（新建） | 可写 | Story 3 超边提取模块 |
 | `src/mcp/graph-tools.ts` | 可写 | MCP 工具适配 |
-| `src/models/doc-graph-types.ts` | 可写 | schema 类型定义 |
+| `src/panoramic/graph/graph-types.ts` | 可写 | schema 类型定义（实际文件位置） |
 | `plugins/*/SKILL.md` | 可写 | 工具说明更新 |
 | `specs/_meta/graph.json` | 可写（产物） | 示例项目输出 |
 | `src/spec-store/**` | **只读** | F2 SpecStore 不可修改 |
@@ -307,10 +307,10 @@
 
 | 维度 | 评估值 | 说明 |
 |------|--------|------|
-| **组件总数** | 5 | `anchoring/`（新建）、`hyperedges/`（新建）、`doc-graph-builder.ts`（改）、`doc-graph-types.ts`（改）、`graph-tools.ts`（改）|
+| **组件总数** | 5 | `anchoring/`（新建）、`hyperedges/`（新建）、`doc-graph-builder.ts`（改）、`src/panoramic/graph/graph-types.ts`（改）、`graph-tools.ts`（改）|
 | **接口数量** | 6 | `EmbeddingProvider` 接口、`DocChunk` 类型、`SemanticEdge` 类型、`Hyperedge` 类型、`graph_hyperedges` MCP 工具接口、direction-audit 白名单注册表接口 |
 | **依赖新引入数** | 1 | `@huggingface/transformers`（optionalDependencies）；Zod 和 Anthropic SDK 已有 |
-| **跨模块耦合** | 是 | 需修改 `doc-graph-builder.ts`（调用 anchoring + hyperedges）、`graph-tools.ts`（适配新类型）、`doc-graph-types.ts`（类型合同）、direction-audit 白名单 4 个现有模块 |
+| **跨模块耦合** | 是 | 需修改 `doc-graph-builder.ts`（调用 anchoring + hyperedges）、`graph-tools.ts`（适配新类型）、`src/panoramic/graph/graph-types.ts`（类型合同）、direction-audit 白名单 4 个现有模块 |
 | **复杂度信号** | 1 项 | Strategy Pattern（EmbeddingProvider）属于接口抽象；无递归结构、状态机、并发控制、数据迁移 |
 | **总体复杂度** | **MEDIUM** | 组件数 5（处于 3-5 区间）、接口数 6（处于 4-8 区间）、1 个复杂度信号（Strategy Pattern） |
 

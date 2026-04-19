@@ -129,20 +129,19 @@
 
 **问题**：spec.md FR-002 使用 `CONFIRMED | INFERRED | SPECULATIVE`，但部分上下文（如最初需求 Prompt）中出现 `EXTRACTED | INFERRED | AMBIGUOUS`。两套命名哪个为准？
 
-**推荐答案**：以 **spec.md 现有的 `CONFIRMED | INFERRED | SPECULATIVE`** 为准，不做变更。
+**最终决议**（由主编排器于 Phase 3 GATE_DESIGN 修正）：使用 **`EXTRACTED | INFERRED | AMBIGUOUS`**，对齐用户原始 Prompt。
 
-**理由**：
-- spec.md 经过 specify 阶段正式产出，`CONFIRMED | INFERRED | SPECULATIVE` 已成为该 Feature 的内部数据合同；FR-002、FR-003、AC-003 均基于该命名写就，修改会造成连锁改动。
-- 语义上，`CONFIRMED / INFERRED / SPECULATIVE` 三档与置信度概念更直接对应（高/中/低置信度），比 `EXTRACTED / INFERRED / AMBIGUOUS` 更符合图数据库领域惯例（如 Neo4j、Memgraph 的 provenance 标注）。
-- `EXTRACTED` 在语义上描述的是"来源"而非"置信度"，与 `confidence` 字段的语义不匹配；`AMBIGUOUS` 与 `SPECULATIVE` 表达了相似含义但 `SPECULATIVE` 更准确（尚未证实的推测 vs 来源模糊）。
-- 若需求 Prompt 中的 `EXTRACTED / INFERRED / AMBIGUOUS` 与外部接口合同有关，应在 SKILL.md 或 MCP 工具文档中做映射说明，不改动内部枚举。
+> clarify 子代理最初建议"以 spec 现有 `CONFIRMED | INFERRED | SPECULATIVE` 为准"，理由是"spec 内部已固化"。主编排器审核后否决该建议 —— 用户 Prompt 是事实源，且该枚举值会通过 `confidence` 字段透传至 MCP 工具响应（外部合同），必须对齐原 Prompt 命名。spec.md、plan.md、tasks.md 均已采用 `EXTRACTED | INFERRED | AMBIGUOUS`。
 
-**spec.md 补丁**：
+**主编排器理由**：
+- **用户 Prompt 是权威事实源**：F4 Prompt 明确写出 `confidence`（EXTRACTED/INFERRED/AMBIGUOUS），clarify agent 不能以"内部合同已固化"为由覆盖用户明文要求。
+- **EXTRACTED 的语义**：虽然描述"来源"，但在"带证据抽取"语境下天然包含"高置信"语义（证据支撑 = CONFIRMED），不是纯来源标签。
+- **AMBIGUOUS 的语义**：涵盖"证据不足 / 语义歧义"两类低置信场景，相比 SPECULATIVE（仅"推测"）更贴合 embedding 相似度输出的不确定性来源。
+- **下游 MCP 工具合同**：外部消费方应拿到与 Prompt 一致的枚举值。
 
-无需修改 FR-002 枚举值。在 FR-002 末尾追加澄清注释：
-```
-- **FR-002**：系统 MUST 在边类型定义中新增 `confidence` 枚举字段，取值范围为 `CONFIRMED | INFERRED | SPECULATIVE`；所有由 embedding 自动生成的边 MUST 标记为 `INFERRED`。**注：此枚举为内部数据合同，不与外部 `EXTRACTED / AMBIGUOUS` 命名对齐；MCP 工具响应直接透传该枚举值。**`[必须]` [对应 Story 1, Story 2]
-```
+**spec.md 实际补丁**（主编排器执行）：
+
+FR-002 枚举已改为 `EXTRACTED | INFERRED | AMBIGUOUS`，并补充 EXTRACTED / AMBIGUOUS 的语义界定。下游 plan.md / tasks.md 均已对齐。
 
 ---
 
@@ -187,5 +186,5 @@
 | Q2 | `evidenceSource` 路径格式 | repo-relative 路径 | fixture 可移植性 + MCP 消费方期望 + FR-004 原文已采用 |
 | Q3 | hyperedge `nodes` 混合节点 | 允许混合，但至少 1 个代码节点 | 真实流程为 doc+code 混合结构；纯 doc 超边失去双向溯源价值 |
 | Q4 | 相似度阈值边界 | `>= threshold`（含边界） | 行业标准 + 直觉一致 |
-| Q5 | `confidence` 枚举命名 | 维持 `CONFIRMED \| INFERRED \| SPECULATIVE` | spec 内部合同已固化；语义比 EXTRACTED/AMBIGUOUS 更准确 |
+| Q5 | `confidence` 枚举命名 | **主编排器纠正为 `EXTRACTED \| INFERRED \| AMBIGUOUS`** | 用户 Prompt 为事实源；clarify agent 最初建议保留内部命名，主编排器否决 |
 | Q6 | feature flag 命名和默认值 | `SPECTRA_HYPEREDGES_ENABLED=true` + `--hyperedges` CLI，默认关闭 | 与现有命名规范一致；保守策略符合 research 建议 |
