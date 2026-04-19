@@ -56,6 +56,8 @@ export interface CLICommand {
   installGit?: boolean;
   /** install 子命令：是否切换为卸载模式 */
   installRemove?: boolean;
+  /** mcp-server 子命令：是否启用 dev 热重载模式（--dev 或 SPECTRA_DEV=1） */
+  mcpDev?: boolean;
   /** 启用 Markdown 文档 + API 规范提取（仅 batch 子命令）— Feature 107 */
   includeDocs?: boolean;
   /** 启用图像/图表 Vision 提取（仅 batch 子命令）— Feature 107 */
@@ -479,12 +481,14 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  // mcp-server 子命令（无额外参数）
+  // mcp-server 子命令
   if (sub === 'mcp-server') {
+    const mcpDev = argv.includes('--dev');
     return {
       ok: true,
       command: {
         subcommand: 'mcp-server',
+        mcpDev,
         deep: false,
         force: false,
         version: false,

@@ -178,7 +178,7 @@ async function main(): Promise<void> {
       await runExportCommand(command);
       break;
     case 'mcp-server':
-      await runMcpServer();
+      await runMcpServer(command);
       break;
   }
 }
