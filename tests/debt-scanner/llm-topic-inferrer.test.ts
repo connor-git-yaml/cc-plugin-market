@@ -117,6 +117,56 @@ describe('inferOpenQuestionTopics', () => {
     expect(res.entries).toHaveLength(0);
   });
 
+  it('LLM 仅回传 id（未 echo key）时，主键对齐仍成功', async () => {
+    // 真实 LLM 常改写 snippet，导致 key 对不上；id 是更稳健的主键（AC-2.3 加固）
+    const c = makeCandidate('a.md', 'Should we use X or Y?');
+    const stub = new StubLLMClient(() => ({
+      text: JSON.stringify({
+        results: [
+          // 注意：没有 key 字段
+          { id: 'c0', isOpenQuestion: true, topics: ['x-vs-y'] },
+        ],
+      }),
+      inputTokens: 20,
+      outputTokens: 8,
+      model: 'stub',
+    }));
+    const res = await inferOpenQuestionTopics({
+      confirmed: [],
+      llmCandidates: [c],
+      llmClient: stub,
+    });
+    expect(res.entries).toHaveLength(1);
+    expect(res.entries[0]?.topics).toEqual(['x-vs-y']);
+  });
+
+  it('LLM 回传 key 被改写（非 verbatim）但 id 存在时，id 为主键仍能对齐', async () => {
+    const c = makeCandidate('a.md', 'Should we use X or Y for parsing?');
+    const stub = new StubLLMClient(() => ({
+      text: JSON.stringify({
+        results: [
+          {
+            id: 'c0',
+            // 故意把 key 写错（snippet 被改写）
+            key: 'a.md|Should we use X or Y?', // 少一个 "for parsing"
+            isOpenQuestion: true,
+            topics: ['parsing'],
+          },
+        ],
+      }),
+      inputTokens: 30,
+      outputTokens: 10,
+      model: 'stub',
+    }));
+    const res = await inferOpenQuestionTopics({
+      confirmed: [],
+      llmCandidates: [c],
+      llmClient: stub,
+    });
+    expect(res.entries).toHaveLength(1);
+    expect(res.entries[0]?.topics).toEqual(['parsing']);
+  });
+
   it('LLM 抛错时降级为 budget-exhausted，不中断流程', async () => {
     const stub = new StubLLMClient(() => { throw new Error('network'); });
     const res = await inferOpenQuestionTopics({

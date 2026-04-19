@@ -35,9 +35,18 @@ export function patchQualityReportWithDebt(opts: PatchQualityReportOptions): boo
       section +
       original.slice(existing.end);
   } else {
-    // 追加到末尾；若没有结尾换行则补一个
-    const sep = original.endsWith('\n') ? '' : '\n';
-    next = original + sep + '\n' + section;
+    // AC-4.1 / plan §3.4：优先插入到 "## Required Docs" 节末尾；
+    // 找不到锚点时退化到文件末尾追加（向后兼容模板漂移）。
+    const anchor = findRequiredDocsInsertionPoint(original);
+    if (anchor != null) {
+      const before = original.slice(0, anchor);
+      const after = original.slice(anchor);
+      const leadingNewline = before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      next = before + leadingNewline + section + (after.startsWith('\n') ? '' : '\n') + after;
+    } else {
+      const sep = original.endsWith('\n') ? '' : '\n';
+      next = original + sep + '\n' + section;
+    }
   }
 
   if (next === original) return false;
@@ -84,11 +93,24 @@ function findExistingSection(text: string): { start: number; end: number } | nul
 }
 
 /**
+ * 找到 "## Required Docs" 节结束位置（下一个同级 heading 前、或文件末尾）。
+ * 返回可插入位置（字符偏移）；没有该节时返回 null。
+ */
+function findRequiredDocsInsertionPoint(text: string): number | null {
+  const re = /^##\s+Required Docs\s*$/m;
+  const m = re.exec(text);
+  if (!m) return null;
+  const afterHeading = m.index + m[0].length;
+  const nextRe = /^#{1,2}\s+\S/gm;
+  nextRe.lastIndex = afterHeading;
+  const next = nextRe.exec(text);
+  return next ? next.index : text.length;
+}
+
+/**
  * 辅助：根据 specsDir 推断 quality-report.md 的常见路径。
+ * 文件不存在时也返回该路径，由 patcher 自行 skip。
  */
 export function findQualityReportPath(specsDir: string): string {
-  // 产品文档约定：<specsDir>/project/quality-report.md
-  const primary = path.join(specsDir, 'project', 'quality-report.md');
-  if (fs.existsSync(primary)) return primary;
-  return primary; // 不存在时依然返回，patcher 自己会 skip
+  return path.join(specsDir, 'project', 'quality-report.md');
 }

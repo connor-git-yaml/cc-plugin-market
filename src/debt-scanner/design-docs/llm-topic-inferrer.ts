@@ -135,8 +135,11 @@ export async function inferOpenQuestionTopics(
   tokenUsage.output += output.outputTokens;
 
   const parsed = parseLLMJson(output.text);
-  for (const c of opts.llmCandidates) {
-    const found = parsed.get(c.docPath + '|' + c.snippet);
+  for (let idx = 0; idx < opts.llmCandidates.length; idx++) {
+    const c = opts.llmCandidates[idx];
+    if (!c) continue;
+    // 主键用 id（c0/c1/…，LLM 难以改写的短字符串），兼容回退到 key（docPath|snippet）
+    const found = parsed.byId.get('c' + idx) ?? parsed.byKey.get(c.docPath + '|' + c.snippet);
     if (!found) continue;
     if (!found.isOpenQuestion) continue;
     entries.push({
@@ -181,34 +184,49 @@ interface ParsedRow {
   topics: string[];
 }
 
-/** 解析 LLM JSON 响应，容错：取第一段 JSON；失败返回空 map */
-function parseLLMJson(raw: string): Map<string, ParsedRow> {
-  const out = new Map<string, ParsedRow>();
+interface ParsedIndex {
+  byId: Map<string, ParsedRow>;
+  byKey: Map<string, ParsedRow>;
+}
+
+/** 解析 LLM JSON 响应，容错：取第一段 JSON；失败返回空索引 */
+function parseLLMJson(raw: string): ParsedIndex {
+  const byId = new Map<string, ParsedRow>();
+  const byKey = new Map<string, ParsedRow>();
   const jsonText = extractJsonBlock(raw);
-  if (!jsonText) return out;
+  if (!jsonText) return { byId, byKey };
   let obj: unknown;
   try {
     obj = JSON.parse(jsonText);
   } catch {
-    return out;
+    return { byId, byKey };
   }
-  if (!obj || typeof obj !== 'object') return out;
+  if (!obj || typeof obj !== 'object') return { byId, byKey };
   const results = (obj as { results?: unknown }).results;
-  if (!Array.isArray(results)) return out;
+  if (!Array.isArray(results)) return { byId, byKey };
   for (const row of results) {
     if (!row || typeof row !== 'object') continue;
-    const r = row as { key?: unknown; isOpenQuestion?: unknown; topics?: unknown };
-    const key = typeof r.key === 'string' ? r.key : null;
-    if (!key) continue;
+    const r = row as {
+      id?: unknown;
+      key?: unknown;
+      isOpenQuestion?: unknown;
+      topics?: unknown;
+    };
     const topics = Array.isArray(r.topics)
       ? r.topics.filter((t): t is string => typeof t === 'string')
       : [];
-    out.set(key, {
+    const parsed: ParsedRow = {
       isOpenQuestion: Boolean(r.isOpenQuestion),
       topics,
-    });
+    };
+    if (typeof r.id === 'string' && r.id.length > 0) {
+      byId.set(r.id, parsed);
+    }
+    if (typeof r.key === 'string' && r.key.length > 0) {
+      byKey.set(r.key, parsed);
+    }
   }
-  return out;
+  return { byId, byKey };
 }
 
 /** 取第一段 {…} 或 [...] JSON，容错 markdown 围栏 */

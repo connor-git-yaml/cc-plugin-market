@@ -67,6 +67,41 @@ describe('patchQualityReportWithDebt', () => {
     expect(out).toContain('内容');
   });
 
+  it('存在 "## Required Docs" 锚点时插入到其节末尾（AC-4.1）', () => {
+    const original = [
+      '# Quality',
+      '',
+      '## Provenance Coverage',
+      'content A',
+      '',
+      '## Required Docs',
+      'content B',
+      '',
+      '## 健康度',
+      'content C',
+      '',
+    ].join('\n');
+    const p = tmp(original);
+    const changed = patchQualityReportWithDebt({ qualityReportPath: p, metrics });
+    expect(changed).toBe(true);
+    const out = fs.readFileSync(p, 'utf-8');
+    const debtIdx = out.indexOf('## 技术债');
+    const requiredIdx = out.indexOf('## Required Docs');
+    const healthIdx = out.indexOf('## 健康度');
+    expect(requiredIdx).toBeGreaterThan(-1);
+    expect(debtIdx).toBeGreaterThan(requiredIdx);
+    expect(debtIdx).toBeLessThan(healthIdx);
+  });
+
+  it('缺少 "## Required Docs" 锚点时退化为尾部追加', () => {
+    const p = tmp('# Quality\n\n## 其它\n内容\n');
+    const changed = patchQualityReportWithDebt({ qualityReportPath: p, metrics });
+    expect(changed).toBe(true);
+    const out = fs.readFileSync(p, 'utf-8');
+    expect(out).toContain('## 技术债');
+    expect(out.lastIndexOf('## 技术债')).toBeGreaterThan(out.indexOf('## 其它'));
+  });
+
   it('renderDebtSection 包含所有关键字段', () => {
     const s = renderDebtSection(metrics, 'technical-debt.md');
     expect(s).toContain('## 技术债');
