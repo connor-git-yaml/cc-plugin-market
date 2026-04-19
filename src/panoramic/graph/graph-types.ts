@@ -18,6 +18,31 @@ import type { ExtractionResult } from '../../extraction/extraction-types.js';
 export type ConfidenceLevel = 'EXTRACTED' | 'INFERRED' | 'AMBIGUOUS';
 
 // ============================================================
+// schema v2.0：语义边类型
+// ============================================================
+
+/**
+ * F4 新增：语义边类型联合（供 direction-audit 白名单使用）
+ * - references：文档直接引用代码实体（如 spec 中明确提到函数名）
+ * - conceptually_related_to：概念层面相关（向量相似度驱动）
+ * - rationale_for：文档章节为代码决策提供设计依据
+ */
+export type SemanticEdgeRelation =
+  | 'references'
+  | 'conceptually_related_to'
+  | 'rationale_for';
+
+/**
+ * 语义边类型注册表（const 对象，供 direction-audit 白名单引用）
+ * 三个 key 均可从模块导入，用于运行时类型判断
+ */
+export const SEMANTIC_EDGE_RELATIONS = {
+  REFERENCES: 'references',
+  CONCEPTUALLY_RELATED_TO: 'conceptually_related_to',
+  RATIONALE_FOR: 'rationale_for',
+} as const;
+
+// ============================================================
 // 图节点与边类型
 // ============================================================
 
@@ -40,6 +65,9 @@ export interface GraphNode {
 /**
  * 图谱边（关系）
  * 表示节点之间的有向或无向关系
+ *
+ * schema v2.0 新增字段：evidenceText、evidenceSource
+ * 新增允许的 relation 值：'references' | 'conceptually_related_to' | 'rationale_for'
  */
 export interface GraphEdge {
   /** 来源节点 ID */
@@ -52,6 +80,38 @@ export interface GraphEdge {
   confidence: ConfidenceLevel;
   /** 置信度数值分数，范围 [0.0, 1.0] */
   confidenceScore: number;
+  /**
+   * schema v2.0 新增：证据文本（最大 200 字符）
+   * INFERRED/AMBIGUOUS 语义边非空；EXTRACTED 边可省略
+   */
+  evidenceText?: string;
+  /**
+   * schema v2.0 新增：证据来源（格式 "repo-relative-path:startLine-endLine"）
+   * 示例："specs/ingestion.md:15-18"
+   */
+  evidenceSource?: string;
+}
+
+// ============================================================
+// schema v2.0：Hyperedge 类型
+// ============================================================
+
+/**
+ * F4 新增：超边（Hyperedge）
+ * 连接 3 个以上节点的命名关系，由 LLM 从 design-doc 描述中提取
+ * 用于表示命名流程、跨模块协作等多节点语义关系
+ */
+export interface Hyperedge {
+  /** 超边唯一标识符（UUID v4） */
+  id: string;
+  /** 超边标签（≤ 8 Unicode 字符，人类可读的流程名称） */
+  label: string;
+  /** 参与节点 ID 列表（≥ 3 个，至少 1 个非 doc-section 代码节点） */
+  nodes: string[];
+  /** LLM 提取的设计依据（非空字符串，最大 200 字符） */
+  rationale: string;
+  /** 置信度（LLM 提取一般为 INFERRED 或 AMBIGUOUS） */
+  confidence: ConfidenceLevel;
 }
 
 // ============================================================
@@ -61,6 +121,10 @@ export interface GraphEdge {
 /**
  * 图谱 JSON 输出格式
  * 严格遵循 NetworkX node-link 格式，可通过 nx.json_graph.node_link_graph() 无错加载
+ *
+ * schema v2.0 变更：
+ * - schemaVersion 从字面量 '1.0' 扩展为联合类型 '1.0' | '2.0'
+ * - 新增顶层 hyperedges? 字段（optional，向后兼容）
  */
 export interface GraphJSON {
   /** 是否有向图（默认 false，无向图） */
@@ -86,13 +150,21 @@ export interface GraphJSON {
     }>;
     /** Feature 100 cache：输入内容 hash（SHA-256 前 16 位） */
     inputHash?: string;
-    /** graph.json 格式版本号，用于下游 Feature 兼容性判断 */
-    schemaVersion: '1.0';
+    /**
+     * graph.json 格式版本号，用于下游 Feature 兼容性判断
+     * schema v2.0 扩展为联合类型，'1.0' 文件仍可赋值给此接口
+     */
+    schemaVersion: '1.0' | '2.0';
   };
   /** 节点数组 */
   nodes: GraphNode[];
   /** 边数组（NetworkX node-link 格式使用 "links" 键） */
   links: GraphEdge[];
+  /**
+   * schema v2.0 新增：超边数组（optional，v1.0 文件无此字段时默认 undefined）
+   * 由 LLM hyperedge 提取链路写入，MCP graph_hyperedges 工具读取
+   */
+  hyperedges?: Hyperedge[];
 }
 
 // ============================================================

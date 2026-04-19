@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import type { CLICommand } from '../../src/cli/utils/parse-args.js';
 import { runDirectionAuditCommand } from '../../src/cli/commands/direction-audit.js';
 
@@ -604,6 +605,178 @@ describe('direction-audit 集成测试', () => {
       const jsonStart = rawJson.indexOf('{');
       const report = JSON.parse(rawJson.slice(jsonStart)) as { totalEdges: number };
       expect(report.totalEdges).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // T008: schema v2.0 新边类型白名单验证（references/conceptually_related_to/rationale_for）
+  // 验证这三种语义边类型不触发 direction-audit 违规
+  // -----------------------------------------------------------------------
+  describe('schema v2.0 语义边白名单 (T008)', () => {
+    /**
+     * v2.0 fixture：包含三种新语义边类型，source 或 target 至少一侧为文档节点
+     * 验证期望：这三种边均被分类为 skipped，不出现在 incorrect 列表
+     */
+    const GRAPH_V2_WITH_SEMANTIC_EDGES = {
+      directed: false,
+      multigraph: false,
+      graph: {
+        name: 'spectra-knowledge-graph',
+        generatedAt: '2026-04-19T00:00:00.000Z',
+        nodeCount: 5,
+        edgeCount: 5,
+        sources: ['architecture-ir', 'doc-graph'],
+        schemaVersion: '2.0',
+      },
+      nodes: [
+        { id: 'specs/design.md', kind: 'spec', label: 'design', metadata: {} },
+        { id: 'src/pipeline.ts', kind: 'module', label: 'pipeline', metadata: {} },
+        { id: 'src/ingestion.ts', kind: 'module', label: 'ingestion', metadata: {} },
+        { id: 'docs/arch.md', kind: 'document', label: 'arch', metadata: {} },
+        { id: 'src/processor.ts', kind: 'module', label: 'processor', metadata: {} },
+      ],
+      links: [
+        // 三种语义边（至少一侧为文档节点）→ 期望 skipped
+        {
+          source: 'specs/design.md',
+          target: 'src/pipeline.ts',
+          relation: 'references',
+          confidence: 'INFERRED',
+          confidenceScore: 0.82,
+          evidenceText: 'pipeline handles ingestion of design specs',
+          evidenceSource: 'specs/design.md:15-18',
+          metadata: {},
+        },
+        {
+          source: 'docs/arch.md',
+          target: 'src/ingestion.ts',
+          relation: 'conceptually_related_to',
+          confidence: 'AMBIGUOUS',
+          confidenceScore: 0.6,
+          evidenceText: 'ingestion module aligns with architecture decisions',
+          evidenceSource: 'docs/arch.md:22-25',
+          metadata: {},
+        },
+        {
+          source: 'specs/design.md',
+          target: 'src/processor.ts',
+          relation: 'rationale_for',
+          confidence: 'INFERRED',
+          confidenceScore: 0.75,
+          evidenceText: 'processor design was driven by this specification section',
+          evidenceSource: 'specs/design.md:30-35',
+          metadata: {},
+        },
+        // 正常代码边，不应受语义边白名单影响
+        {
+          source: 'src/pipeline.ts',
+          target: 'src/ingestion.ts',
+          relation: 'imports',
+          confidence: 'EXTRACTED',
+          confidenceScore: 0.95,
+          metadata: {},
+        },
+        // 两侧均为文档节点的普通 references 边（跨模块），也应 skipped
+        {
+          source: 'specs/design.md',
+          target: 'docs/arch.md',
+          relation: 'references',
+          confidence: 'INFERRED',
+          confidenceScore: 0.7,
+          metadata: {},
+        },
+      ],
+    };
+
+    it('三种新语义边类型均被分类为 skipped，不出现在 incorrect 列表', async () => {
+      const graphPath = join(tmpDir, 'graph-v2-semantic.json');
+      writeFileSync(graphPath, JSON.stringify(GRAPH_V2_WITH_SEMANTIC_EDGES), 'utf-8');
+
+      const cap = captureConsole();
+      try {
+        await runDirectionAuditCommand(makeCmd({
+          directionAuditGraph: graphPath,
+          directionAuditFormat: 'json',
+        }));
+      } finally {
+        cap.restore();
+      }
+
+      expect(process.exitCode).not.toBe(1);
+      const rawJson = cap.logs.join('\n');
+      const jsonStart = rawJson.indexOf('{');
+      const report = JSON.parse(rawJson.slice(jsonStart)) as {
+        summary: { correct: number; suspicious: number; incorrect: number; skipped: number };
+        edges: Array<{ sourceId: string; targetId: string; relation: string; result: string }>;
+      };
+
+      // 不应有 incorrect
+      expect(report.summary.incorrect).toBe(0);
+
+      // references/conceptually_related_to/rationale_for 边均应为 skipped
+      const semanticEdgeRelations = ['references', 'conceptually_related_to', 'rationale_for'];
+      for (const edge of report.edges) {
+        if (semanticEdgeRelations.includes(edge.relation)) {
+          expect(edge.result).toBe('skipped');
+        }
+      }
+    });
+
+    it('三种新边类型不出现在 incorrect 列表中（AC-010 验证）', async () => {
+      const graphPath = join(tmpDir, 'graph-v2-semantic-incorrect-check.json');
+      writeFileSync(graphPath, JSON.stringify(GRAPH_V2_WITH_SEMANTIC_EDGES), 'utf-8');
+
+      const cap = captureConsole();
+      try {
+        await runDirectionAuditCommand(makeCmd({
+          directionAuditGraph: graphPath,
+          directionAuditFormat: 'json',
+        }));
+      } finally {
+        cap.restore();
+      }
+
+      const rawJson = cap.logs.join('\n');
+      const jsonStart = rawJson.indexOf('{');
+      const report = JSON.parse(rawJson.slice(jsonStart)) as {
+        edges: Array<{ relation: string; result: string }>;
+      };
+
+      // incorrect 列表中不包含任何语义边类型
+      const incorrectEdges = report.edges.filter((e) => e.result === 'incorrect');
+      const semanticEdgeRelations = new Set(['references', 'conceptually_related_to', 'rationale_for']);
+      for (const edge of incorrectEdges) {
+        expect(semanticEdgeRelations.has(edge.relation)).toBe(false);
+      }
+    });
+
+    it('使用 graph-v2.json fixture 文件时，direction-audit 返回码 0', async () => {
+      // 直接使用 tests/fixtures/graph-v2.json（标准 golden-master fixture）
+      const root = join(fileURLToPath(import.meta.url), '../../..');
+      const v2FixturePath = join(root, 'tests/fixtures/graph-v2.json');
+
+      const cap = captureConsole();
+      try {
+        await runDirectionAuditCommand(makeCmd({
+          directionAuditGraph: v2FixturePath,
+          directionAuditFormat: 'json',
+        }));
+      } finally {
+        cap.restore();
+      }
+
+      // 返回码 0（process.exitCode 不为 1）
+      expect(process.exitCode).not.toBe(1);
+
+      const rawJson = cap.logs.join('\n');
+      const jsonStart = rawJson.indexOf('{');
+      const report = JSON.parse(rawJson.slice(jsonStart)) as {
+        summary: { incorrect: number };
+        edges: Array<{ relation: string; result: string }>;
+      };
+
+      // graph-v2.json 中的语义边（references/conceptually_related_to）不触发 incorrect
+      expect(report.summary.incorrect).toBe(0);
     });
   });
 });

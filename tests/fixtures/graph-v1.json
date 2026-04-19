@@ -1,0 +1,48 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-04-19T00:00:00.000Z",
+    "nodeCount": 3,
+    "edgeCount": 2,
+    "sources": ["architecture-ir"],
+    "schemaVersion": "1.0"
+  },
+  "nodes": [
+    {
+      "id": "src/a.ts",
+      "kind": "module",
+      "label": "a",
+      "metadata": {}
+    },
+    {
+      "id": "src/b.ts",
+      "kind": "module",
+      "label": "b",
+      "metadata": {}
+    },
+    {
+      "id": "src/c.ts",
+      "kind": "module",
+      "label": "c",
+      "metadata": {}
+    }
+  ],
+  "links": [
+    {
+      "source": "src/a.ts",
+      "target": "src/b.ts",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "src/b.ts",
+      "target": "src/c.ts",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.92
+    }
+  ]
+}

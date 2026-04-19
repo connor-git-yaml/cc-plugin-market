@@ -1,0 +1,74 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-04-19T00:00:00.000Z",
+    "nodeCount": 4,
+    "edgeCount": 3,
+    "sources": ["architecture-ir", "doc-graph"],
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "src/a.ts",
+      "kind": "module",
+      "label": "a",
+      "metadata": {}
+    },
+    {
+      "id": "src/b.ts",
+      "kind": "module",
+      "label": "b",
+      "metadata": {}
+    },
+    {
+      "id": "specs/doc.md",
+      "kind": "spec",
+      "label": "doc",
+      "metadata": {}
+    },
+    {
+      "id": "src/pipeline.ts",
+      "kind": "module",
+      "label": "pipeline",
+      "metadata": {}
+    }
+  ],
+  "links": [
+    {
+      "source": "src/a.ts",
+      "target": "src/b.ts",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "specs/doc.md",
+      "target": "src/pipeline.ts",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.82,
+      "evidenceText": "ingestion pipeline processes document chunks and emits semantic edges",
+      "evidenceSource": "specs/ingestion.md:15-18"
+    },
+    {
+      "source": "specs/doc.md",
+      "target": "src/a.ts",
+      "relation": "conceptually_related_to",
+      "confidence": "AMBIGUOUS",
+      "confidenceScore": 0.6,
+      "evidenceText": "module a implements the core ingestion logic described in this section",
+      "evidenceSource": "specs/doc.md:22-25"
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "he-001",
+      "label": "全量摄取",
+      "nodes": ["src/a.ts", "src/b.ts", "specs/doc.md"],
+      "rationale": "三个节点共同构成全量摄取流程：a.ts 负责读取，b.ts 负责处理，doc.md 提供设计约束",
+      "confidence": "INFERRED"
+    }
+  ]
+}

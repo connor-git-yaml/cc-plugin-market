@@ -32,7 +32,7 @@
 
 ---
 
-### T001 [S] [!] 扩展 `graph-types.ts`：新增 SemanticEdgeRelation、SEMANTIC_EDGE_RELATIONS 注册表
+### T001 [x] [S] [!] 扩展 `graph-types.ts`：新增 SemanticEdgeRelation、SEMANTIC_EDGE_RELATIONS 注册表
 
 **目标文件**: `src/panoramic/graph/graph-types.ts`
 
@@ -51,7 +51,7 @@
 
 ---
 
-### T002 [S] 扩展 `graph-types.ts`：GraphEdge 新增 optional evidence 字段
+### T002 [x] [S] 扩展 `graph-types.ts`：GraphEdge 新增 optional evidence 字段
 
 **目标文件**: `src/panoramic/graph/graph-types.ts`
 
@@ -71,7 +71,7 @@
 
 ---
 
-### T003 [S] 扩展 `graph-types.ts`：新增 Hyperedge 接口 + 扩展 GraphJSON
+### T003 [x] [S] 扩展 `graph-types.ts`：新增 Hyperedge 接口 + 扩展 GraphJSON
 
 **目标文件**: `src/panoramic/graph/graph-types.ts`
 
@@ -90,7 +90,7 @@
 
 ---
 
-### T004 [S] 新增 `graph-v1.json` golden-master fixture（v1.0 格式）
+### T004 [x] [S] 新增 `graph-v1.json` golden-master fixture（v1.0 格式）
 
 **目标文件**: `tests/fixtures/graph-v1.json`
 
@@ -109,7 +109,7 @@
 
 ---
 
-### T005 [S] 新增 `graph-v2.json` golden-master fixture（v2.0 格式）
+### T005 [x] [S] 新增 `graph-v2.json` golden-master fixture（v2.0 格式）
 
 **目标文件**: `tests/fixtures/graph-v2.json`
 
@@ -127,7 +127,7 @@
 
 ---
 
-### T006 [S] 新增 `graph-types-v2.test.ts`：schema 单测（v1.0 + v2.0 双版本 fixture 验证）
+### T006 [x] [S] 新增 `graph-types-v2.test.ts`：schema 单测（v1.0 + v2.0 双版本 fixture 验证）
 
 **目标文件**: `tests/panoramic/graph-types-v2.test.ts`
 
@@ -148,7 +148,7 @@
 
 ---
 
-### T007 [S] 扩展 `direction-audit.ts`：白名单注册 3 种新边类型
+### T007 [x] [S] 扩展 `direction-audit.ts`：白名单注册 3 种新边类型
 
 **目标文件**: `src/cli/commands/direction-audit.ts`
 
@@ -167,7 +167,7 @@
 
 ---
 
-### T008 [S] [!] 扩展 direction-audit 集成测试：新边类型不触发违规
+### T008 [x] [S] [!] 扩展 direction-audit 集成测试：新边类型不触发违规
 
 **目标文件**: `tests/integration/direction-audit.test.ts`（现有文件，添加用例）
 
