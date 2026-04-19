@@ -498,7 +498,7 @@ Interactive generation of README.md, LICENSE, CONTRIBUTING.md, and CODE_OF_CONDU
 
 ### Orchestrator Skill Commands
 
-All phases are orchestrated end-to-end by the following skills. For single-phase control, use `spec-driver-implement --entry-point=<phase>`:
+All phases are orchestrated end-to-end by the following skills. To selectively re-run an earlier phase, use `/spec-driver:spec-driver-resume`; to re-plan from scratch, re-invoke `/spec-driver:spec-driver-feature`:
 
 ```bash
 # Create or update project constitution (single-phase skill)
@@ -513,8 +513,8 @@ All phases are orchestrated end-to-end by the following skills. For single-phase
 # Run only the implement phase (spec.md + plan.md + tasks.md already exist)
 /spec-driver:spec-driver-implement
 
-# Run only the plan phase (update or regenerate plan.md)
-/spec-driver:spec-driver-implement --entry-point=plan
+# Resume an interrupted spec-driver run from its last artifact (e.g. plan.md / tasks.md missing)
+/spec-driver:spec-driver-resume
 
 # Large-scale refactor: impact analysis → batched planning → iterative implement
 /spec-driver:spec-driver-refactor <重构目标>
@@ -527,9 +527,6 @@ All phases are orchestrated end-to-end by the following skills. For single-phase
 
 # Aggregate feature specs into product-level current-spec.md + catalog
 /spec-driver:spec-driver-sync
-
-# Resume an interrupted spec-driver run from its last artifact
-/spec-driver:spec-driver-resume
 ```
 
 > **v4.0 变更**：9 个原子命令 `/spec-driver.{specify,plan,tasks,implement,clarify,analyze,checklist,constitution,taskstoissues}` 已于 v4.0 删除。完整映射与迁移步骤见 [`docs/migrations/skill-deprecation.md`](docs/migrations/skill-deprecation.md)。

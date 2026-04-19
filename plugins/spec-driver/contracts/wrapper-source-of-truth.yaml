@@ -40,5 +40,5 @@ codexWrappers:
 claudeProjectOverrides:
   classification: "project-override"
   root: ".claude/commands"
-  note: "Reserved for Claude Code project-level command overrides. The legacy atomic commands (spec-driver.{specify,plan,tasks,implement,clarify,analyze,checklist,constitution,taskstoissues}) were deprecated in favor of the orchestrator skills under plugins/spec-driver/skills/. See docs/migrations/skill-deprecation.md."
+  note: "Kept for directory structure only. The 9 legacy atomic commands (spec-driver.{specify,plan,tasks,implement,clarify,analyze,checklist,constitution,taskstoissues}) were removed in v4.0, and the orchestrator skills no longer read .claude/commands/spec-driver.*.md as a prompt-source fallback. If such files still exist in a repository they will be ignored by the runtime. See docs/migrations/skill-deprecation.md."
   entries: []

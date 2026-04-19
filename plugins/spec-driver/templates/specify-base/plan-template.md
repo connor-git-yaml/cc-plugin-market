@@ -3,7 +3,7 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the plan phase of the spec-driver orchestrator (e.g. `/spec-driver:spec-driver-feature` or `/spec-driver:spec-driver-implement --entry-point=plan`). See `.specify/templates/commands/plan.md` for the execution workflow.
+**Note**: This template is filled in by the plan phase of the spec-driver orchestrator (e.g. `/spec-driver:spec-driver-feature`). See `.specify/templates/commands/plan.md` for the execution workflow.
 
 ## Summary
 

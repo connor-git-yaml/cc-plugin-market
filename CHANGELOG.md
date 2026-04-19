@@ -12,14 +12,15 @@
 
 ### Changed — spec-driver
 
-- `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` — `claudeProjectOverrides.entries` 清空（9 条 → 0 条），`note` 改为弃用说明并指向迁移指南
+- **prompt_source fallback 下线（BREAKING 伴生）** — `spec-driver-implement` / `spec-driver-story` / `spec-driver-resume` 三个编排器 skill 的 `prompt_source` 逻辑不再探测 `.claude/commands/spec-driver.{phase}.md` 或 `.codex/commands/spec-driver.{phase}.md`，所有 phase prompt 统一从 `$PLUGIN_DIR/agents/{phase}.md` 加载。用户通过放置这些 override 文件定制 prompt 的能力被移除（v3.x 隐含机制），唯一定制路径为编辑 `plugins/spec-driver/agents/{phase}.md` 后重装插件。移除理由：删除原子命令后仍保留 fallback 会导致残留 override 文件 silently shadow 新流程（由 Codex adversarial review 识别）
+- `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` — `claudeProjectOverrides.entries` 清空（9 条 → 0 条），`note` 改写为"Kept for directory structure only ... will be ignored by the runtime"，与上述 fallback 下线保持一致
 - `contracts/runtime-boundary-contract.yaml` — `claude.requiredFiles` 移除 `.claude/commands/spec-driver.implement.md`
 - `plugins/spec-driver/skills/spec-driver-{constitution,implement,resume,story}/SKILL.md` 与 `plugins/spec-driver/agents/constitution.md` — 所有 `/spec-driver.constitution` 引用改为 `/spec-driver:spec-driver-constitution`
 - `plugins/spec-driver/scripts/codex-skills.sh` — 移除 `spec-driver-constitution` 的 source_command 特殊分支；`write_wrapper_source_contract` 中移除"Project overrides"说明行
 - `.codex/skills/spec-driver-{constitution,implement,resume,story}/SKILL.md` — 通过 `npm run codex:spec-driver:install` 从更新后的 source SKILL 再生
 - `README.md` — "Individual Phase Commands" 段替换为"Orchestrator Skill Commands"，列出 9 个编排器 skill 入口，段末指向迁移指南
 - `plugins/spec-driver/README.md` — 修正 `/spec-driver.constitution` 提示为新格式；保留历史 speckit→spec-driver 映射表并为 9 个 `/spec-driver.{phase}` 行加标注"已于 v4.0 弃用"，表下补充 v4.0 变更说明
-- `.specify/scripts/bash/check-prerequisites.sh` — 错误提示从 `/spec-driver.specify/plan/tasks` 改为 `/spec-driver:spec-driver-feature` 与 `/spec-driver:spec-driver-implement --entry-point={plan,tasks}`
+- `.specify/scripts/bash/check-prerequisites.sh` — 错误提示从 `/spec-driver.specify/plan/tasks` 改为 `/spec-driver:spec-driver-feature`（缺特性目录）与 `/spec-driver:spec-driver-resume`（特性目录已在、仅缺 plan/tasks）
 - `plugins/spec-driver/scripts/lib/init-project-output.sh` — constitution 缺失提示改为 `/spec-driver:spec-driver-constitution`
 - `plugins/spec-driver/templates/specify-base/{plan,tasks,checklist}-template.md` — 注释中对原子命令的具名引用改为中性描述（如"plan phase"、"tasks phase"、"checklist phase"）
 - `tests/integration/runtime-boundary-contract.test.ts` — 移除对已删除合同条目的 `writeFileSync` setup

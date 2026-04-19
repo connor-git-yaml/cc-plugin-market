@@ -118,16 +118,7 @@ node "$PLUGIN_DIR/scripts/resolve-project-context.mjs" --project-root . --json
 
 ```text
 对于 phase ∈ [specify, clarify, checklist, plan, tasks, analyze, implement]:
-  if 当前运行时为 Codex 且 .codex/commands/spec-driver.{phase}.md 存在:
-    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
-  else if 当前运行时为 Claude 且 .claude/commands/spec-driver.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
-  else if .codex/commands/spec-driver.{phase}.md 存在:
-    prompt_source[phase] = ".codex/commands/spec-driver.{phase}.md"
-  else if .claude/commands/spec-driver.{phase}.md 存在:
-    prompt_source[phase] = ".claude/commands/spec-driver.{phase}.md"
-  else:
-    prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
+  prompt_source[phase] = "$PLUGIN_DIR/agents/{phase}.md"
 
 # 以下阶段始终使用 Plugin 内置版本：
 prompt_source[constitution] = "$PLUGIN_DIR/agents/constitution.md"
