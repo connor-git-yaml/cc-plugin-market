@@ -64,6 +64,7 @@ import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/des
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
+import { buildHtmlTemplate } from '../panoramic/exporters/html-template.js';
 import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
 import type { BatchMode } from '../panoramic/qa/types.js';
@@ -113,6 +114,8 @@ export interface BatchOptions {
   debtLlmClient?: DebtSimpleLLMClient;
   /** F5：批处理运行模式（full | reading | code-only，默认 full） */
   mode?: BatchMode;
+  /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件（默认 false） */
+  generateHtml?: boolean;
 }
 
 export interface BatchResult {
@@ -158,6 +161,8 @@ export interface BatchResult {
   };
   /** 130 debt-intelligence pipeline 结果 */
   debt?: DebtPipelineResult;
+  /** F5 Story 3：生成的 graph.html 路径（--html flag 触发时写入） */
+  graphHtmlPath?: string;
 }
 
 const logger = createLogger('batch-orchestrator');
@@ -833,6 +838,7 @@ export async function runBatch(
   let docGraphPath: string | undefined;
   let coverageReportPath: string | undefined;
   let projectDocs: string[] | undefined;
+  let graphHtmlPath: string | undefined;
   let projectDocsResult: BatchProjectDocsResult | undefined;
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
@@ -943,6 +949,48 @@ export async function runBatch(
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
       docGraphPath = toProjectPath(graphWrittenPath);
+
+      // F5 Story 3：--html flag 触发生成 graph.html 可视化文件（FR-021 self-contained）
+      if (options.generateHtml) {
+        try {
+          // T-036：为每个节点注入 specPath 和 specPathExists 字段
+          // spec 类型节点：id 本身就是 specPath（形如 "specs/modules/xxx.spec.md"）
+          // module/component 类型节点：尝试从 metadata 推导对应的 spec 文件路径
+          const enrichedNodes = graphJson.nodes.map((node) => {
+            let specPath: string | undefined;
+            if (node.kind === 'spec') {
+              // spec 节点的 id 就是 spec 文件的 repo-relative 路径
+              specPath = node.id;
+            } else if (
+              typeof node.metadata?.sourceTarget === 'string' &&
+              (node.metadata.sourceTarget as string).endsWith('.spec.md')
+            ) {
+              specPath = node.metadata.sourceTarget as string;
+            }
+            if (!specPath) return node;
+            const absSpecPath = path.join(resolvedRoot, specPath);
+            const specPathExists = fs.existsSync(absSpecPath);
+            return { ...node, specPath: absSpecPath, specPathExists };
+          });
+          const enrichedGraphJson = { ...graphJson, nodes: enrichedNodes };
+          const graphDataJson = JSON.stringify(enrichedGraphJson);
+          const htmlContent = buildHtmlTemplate(graphDataJson);
+          const htmlPath = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META, 'graph.html');
+          fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
+          fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
+          graphHtmlPath = toProjectPath(htmlPath);
+          logger.info(`graph.html 已生成: ${graphHtmlPath}`);
+          // FR-024：体积超 5 MB 输出 warn（不阻断）
+          const htmlSize = Buffer.byteLength(htmlContent, 'utf-8');
+          if (htmlSize >= 5 * 1024 * 1024) {
+            logger.warn(
+              `[warn] graph.html 体积 ${(htmlSize / (1024 * 1024)).toFixed(1)} MB 超过 5 MB，建议考虑减少节点数量`,
+            );
+          }
+        } catch (htmlErr) {
+          logger.warn(`graph.html 生成失败，跳过: ${htmlErr instanceof Error ? htmlErr.message : String(htmlErr)}`);
+        }
+      }
     } catch (graphErr) {
       logger.warn(`graph-persistence: 图构建失败，跳过 graph.json 生成: ${graphErr instanceof Error ? graphErr.message : String(graphErr)}`);
     }
@@ -1128,6 +1176,7 @@ export async function runBatch(
     costSummary,
     budgetDecision: budgetDecisionResult,
     debt: debtResult,
+    graphHtmlPath,
   };
 }
 

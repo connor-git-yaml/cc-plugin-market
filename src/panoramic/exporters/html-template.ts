@@ -13,24 +13,67 @@ export const D3_FORCE_BUNDLE = `// https://d3js.org/d3-force/ v3.0.0 Copyright 2
 `;
 // --- END D3_FORCE_BUNDLE ---
 
+import type { GraphHtmlOptions } from '../qa/types.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('html-template');
+
+/** 力导向布局阈值（Q3 锁定：< 2000 启用力导向，≥ 2000 切静态坐标模式） */
+const FORCE_THRESHOLD = 2000;
+
+/** 文件体积警告阈值默认值（5 MB） */
+const DEFAULT_FILE_SIZE_WARN_BYTES = 5 * 1024 * 1024;
+
 /**
  * 构建完整 HTML 模板
  * 将 d3 bundle、图谱数据 JSON、CSS、交互 JS 组装为单文件字符串
  *
- * @param graphDataJson - buildGraphData() 返回的 JSON 字符串
- * @returns 完整 HTML 字符串（单文件，包含所有内联资源）
+ * @param graphDataJson - buildGraphData() 返回的 JSON 字符串（含 hyperedges 字段）
+ * @param options - graph.html 生成配置（可选，未传时行为与旧版等价）
+ * @returns 完整 HTML 字符串（单文件，包含所有内联资源，零外部 CDN 引用）
  */
-export function buildHtmlTemplate(graphDataJson: string): string {
+export function buildHtmlTemplate(graphDataJson: string, options?: GraphHtmlOptions): string {
+  // 合并默认值
+  const opts = {
+    forceLayoutThreshold: FORCE_THRESHOLD as 2000,
+    showHyperedges: options?.showHyperedges ?? true,
+    enableSearch: options?.enableSearch ?? true,
+    enableJumpToSpec: options?.enableJumpToSpec ?? true,
+    fileSizeWarnThreshold: options?.fileSizeWarnThreshold ?? DEFAULT_FILE_SIZE_WARN_BYTES,
+  };
+
+  // 检查生成 HTML 体积（先估算：JSON + bundle 大小约等于最终 HTML 的 90%）
+  const estimatedSize = graphDataJson.length + D3_FORCE_BUNDLE.length;
+  if (estimatedSize >= opts.fileSizeWarnThreshold) {
+    logger.warn(
+      `[warn] graph.html 预估体积 ${(estimatedSize / (1024 * 1024)).toFixed(1)} MB 超过 ${opts.fileSizeWarnThreshold / (1024 * 1024)} MB 阈值，生成不阻断`,
+    );
+  }
+
   // 对 </script> 标签转义，防止浏览器提前关闭脚本块
   const safeJson = graphDataJson.replace(/<\//g, '<\\/');
-  // D3_FORCE_BUNDLE 的占位符将在运行时替换为实际 bundle
-  return buildFullHtml(safeJson, D3_FORCE_BUNDLE);
+  return buildFullHtml(safeJson, D3_FORCE_BUNDLE, opts);
 }
 
 /**
  * 组装完整 HTML 字符串（内部函数，便于测试）
+ * F5 扩展：支持 hyperedge 凸包、大图横幅、节点跳转 spec、力导向阈值
  */
-export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
+export function buildFullHtml(
+  graphDataJson: string,
+  d3Bundle: string,
+  opts?: {
+    forceLayoutThreshold?: number;
+    showHyperedges?: boolean;
+    enableSearch?: boolean;
+    enableJumpToSpec?: boolean;
+    fileSizeWarnThreshold?: number;
+  },
+): string {
+  const threshold = opts?.forceLayoutThreshold ?? FORCE_THRESHOLD;
+  const showHyperedges = opts?.showHyperedges ?? true;
+  const enableJumpToSpec = opts?.enableJumpToSpec ?? true;
+
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -57,6 +100,11 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     .legend-color { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
     .legend-label { font-size: 12px; color: #8b949e; }
     .legend-item.hidden .legend-label { text-decoration: line-through; opacity: 0.5; }
+    #hyperedge-section { padding: 12px 16px; border-bottom: 1px solid #30363d; flex-shrink: 0; display: none; }
+    #hyperedge-section h3 { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; margin-bottom: 8px; }
+    #hyperedge-list { max-height: 120px; overflow-y: auto; }
+    .hyperedge-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 12px; color: #8b949e; }
+    .hyperedge-dot { width: 10px; height: 10px; border-radius: 2px; border: 1.5px dashed currentColor; flex-shrink: 0; }
     #detail-section { padding: 12px 16px; flex: 1; overflow-y: auto; }
     #detail-section h3 { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; margin-bottom: 8px; }
     #detail-placeholder { font-size: 12px; color: #484f58; font-style: italic; }
@@ -65,6 +113,10 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     .detail-row { display: flex; gap: 8px; margin-bottom: 6px; }
     .detail-key { font-size: 11px; color: #8b949e; min-width: 60px; flex-shrink: 0; }
     .detail-value { font-size: 11px; word-break: break-all; }
+    #spec-link-row { display: none; margin-top: 8px; }
+    #open-spec-btn { padding: 5px 10px; background: #21262d; border: 1px solid #388bfd; border-radius: 6px; color: #58a6ff; font-size: 12px; cursor: pointer; }
+    #open-spec-btn:hover { background: #388bfd; color: #ffffff; }
+    #spec-link-error { display: none; color: #f85149; font-size: 11px; margin-top: 4px; }
     #canvas-area { flex: 1; position: relative; overflow: hidden; }
     #graph-svg { width: 100%; height: 100%; cursor: grab; }
     #graph-svg:active { cursor: grabbing; }
@@ -76,9 +128,20 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     .node circle.god-node { stroke: #d29922; stroke-width: 2; }
     .node text { font-size: 10px; fill: #8b949e; pointer-events: none; }
     .link { stroke-opacity: 0.4; }
+    #large-graph-banner { display: none; position: fixed; top: 0; left: 0; right: 0; background: #d29922; color: #0d1117; padding: 8px 16px; font-size: 13px; font-weight: 600; z-index: 100; text-align: center; }
+    #hyperedge-tooltip { position: fixed; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #e6edf3; pointer-events: none; display: none; z-index: 200; }
+    .node.search-dim circle { opacity: 0.15; }
+    .node.search-dim text { opacity: 0.15; }
+    .link.search-dim { opacity: 0.1; }
   </style>
 </head>
 <body>
+  <!-- 大图模式横幅（节点数 >= FORCE_THRESHOLD 时动态显示） -->
+  <div id="large-graph-banner">
+    大图模式（<span id="banner-node-count"></span> 个节点），力导向布局已关闭，部分交互受限
+  </div>
+  <!-- 超边 tooltip -->
+  <div id="hyperedge-tooltip"></div>
   <div id="sidebar">
     <div id="sidebar-header">
       <h1>知识图谱</h1>
@@ -92,18 +155,30 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
       <h3>社区图例</h3>
       <div id="legend-list"></div>
     </div>
+    <!-- 超边图例区块（有 hyperedge 数据时显示） -->
+    <div id="hyperedge-section">
+      <h3>流程超边</h3>
+      <div id="hyperedge-list"></div>
+    </div>
     <div id="detail-section">
       <h3>节点详情</h3>
       <div id="detail-placeholder">点击节点查看详情</div>
       <div id="node-detail">
         <div id="node-detail-title"></div>
         <div id="node-detail-rows"></div>
+        <!-- F5：spec 文件跳转区块（enableJumpToSpec = true 时有效） -->
+        <div id="spec-link-row">
+          <button id="open-spec-btn">打开 Spec 文件</button>
+          <div id="spec-link-error"></div>
+        </div>
       </div>
     </div>
   </div>
   <div id="canvas-area">
     <svg id="graph-svg">
       <g id="graph-group">
+        <!-- 超边凸包层（在连线层之前，视觉上在节点之下） -->
+        <g id="hyperedges-layer"></g>
         <g id="links-layer"></g>
         <g id="nodes-layer"></g>
       </g>
@@ -118,6 +193,11 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
   <script>
 (function() {
   'use strict';
+  // F5 配置常量（由生成时写入）
+  var FORCE_THRESHOLD = ${threshold};
+  var SHOW_HYPEREDGES = ${showHyperedges};
+  var ENABLE_JUMP_TO_SPEC = ${enableJumpToSpec};
+
   var GRAPH_DATA = ${graphDataJson};
   var hiddenCommunities = new Set();
   var currentTransform = { x: 0, y: 0, k: 1 };
@@ -172,6 +252,29 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     });
   }
 
+  // 构建超边图例区块（FR-019）
+  function buildHyperedgeLegend() {
+    if (!SHOW_HYPEREDGES) return;
+    var hyperedges = GRAPH_DATA.hyperedges || [];
+    if (hyperedges.length === 0) return;
+    var section = document.getElementById('hyperedge-section');
+    var listEl = document.getElementById('hyperedge-list');
+    if (!section || !listEl) return;
+    section.style.display = 'block';
+    hyperedges.forEach(function(he) {
+      var item = document.createElement('div');
+      item.className = 'hyperedge-item';
+      var dot = document.createElement('div');
+      dot.className = 'hyperedge-dot';
+      dot.style.color = he.color || '#8b949e';
+      var text = document.createElement('span');
+      text.textContent = he.label + ' (' + (he.nodes || []).length + ' 节点)';
+      item.appendChild(dot);
+      item.appendChild(text);
+      listEl.appendChild(item);
+    });
+  }
+
   var nodeCommMap = new Map();
   GRAPH_DATA.nodes.forEach(function(n) { nodeCommMap.set(n.id, n.communityId); });
 
@@ -211,7 +314,7 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     });
   }
 
-  // 展示节点详情面板（FR-009: kind、度数、邻居列表、社区 ID）
+  // 展示节点详情面板（含 F5 扩展：spec 跳转按钮）
   function showDetail(node) {
     document.getElementById('detail-placeholder').style.display = 'none';
     document.getElementById('node-detail').style.display = 'block';
@@ -235,7 +338,7 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
       row.appendChild(val);
       rows.appendChild(row);
     });
-    // 邻居节点列表（FR-009）
+    // 邻居节点列表
     var neighbors = [];
     GRAPH_DATA.links.forEach(function(link) {
       var src = typeof link.source === 'object' ? link.source.id : link.source;
@@ -268,18 +371,61 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     document.querySelectorAll('.node circle.highlighted').forEach(function(el) { el.classList.remove('highlighted'); });
     var nodeEl = nodesLayer.querySelector('[data-id="' + node.id.replace(/"/g, '\\\\"') + '"] circle');
     if (nodeEl) nodeEl.classList.add('highlighted');
+
+    // F5 新增：spec 文件跳转（FR-020）
+    if (ENABLE_JUMP_TO_SPEC) {
+      var specLinkRow = document.getElementById('spec-link-row');
+      var openSpecBtn = document.getElementById('open-spec-btn');
+      var specLinkError = document.getElementById('spec-link-error');
+      if (node.specPath) {
+        specLinkRow.style.display = 'block';
+        specLinkError.style.display = 'none';
+        specLinkError.textContent = '';
+        if (node.specPathExists === false) {
+          // 预先标记为不存在，显示友好提示
+          openSpecBtn.textContent = 'Spec 文件未找到';
+          openSpecBtn.onclick = function() {
+            specLinkError.textContent = 'spec 文件未找到：' + node.specPath;
+            specLinkError.style.display = 'block';
+          };
+        } else {
+          openSpecBtn.textContent = '打开 Spec 文件';
+          openSpecBtn.onclick = function() {
+            try {
+              // file:// URL 在本地浏览器中触发 OS 默认程序打开
+              window.open('file://' + node.specPath, '_blank');
+            } catch (e) {
+              specLinkError.textContent = 'spec 文件打开失败：' + node.specPath;
+              specLinkError.style.display = 'block';
+            }
+          };
+        }
+      } else {
+        specLinkRow.style.display = 'none';
+      }
+    }
   }
 
+  // 搜索功能（FR-019）：高亮匹配节点，其余淡出
   function initSearch() {
     var input = document.getElementById('search-input');
     var results = document.getElementById('search-results');
     input.addEventListener('input', function() {
       var q = input.value.trim().toLowerCase();
       results.innerHTML = '';
-      if (!q) return;
+
+      if (!q) {
+        // 清空搜索时恢复所有节点正常显示
+        document.querySelectorAll('.node').forEach(function(n) { n.classList.remove('search-dim'); });
+        document.querySelectorAll('.link').forEach(function(l) { l.classList.remove('search-dim'); });
+        return;
+      }
+
+      var matchedIds = new Set();
       GRAPH_DATA.nodes.filter(function(n) {
         return (n.label || '').toLowerCase().indexOf(q) !== -1 || n.id.toLowerCase().indexOf(q) !== -1;
       }).slice(0, 20).forEach(function(node) {
+        matchedIds.add(node.id);
         var item = document.createElement('div');
         item.className = 'search-result-item';
         item.textContent = node.label || node.id;
@@ -291,8 +437,37 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
           showDetail(node);
           results.innerHTML = '';
           input.value = '';
+          // 恢复正常显示
+          document.querySelectorAll('.node').forEach(function(n) { n.classList.remove('search-dim'); });
+          document.querySelectorAll('.link').forEach(function(l) { l.classList.remove('search-dim'); });
         });
         results.appendChild(item);
+      });
+
+      // 高亮匹配节点，淡出其余节点（FR-019 差异化点）
+      document.querySelectorAll('.node').forEach(function(n) {
+        var nid = n.dataset.id || '';
+        if (matchedIds.has(nid)) {
+          n.classList.remove('search-dim');
+        } else {
+          n.classList.add('search-dim');
+        }
+      });
+      document.querySelectorAll('.link').forEach(function(l) {
+        var sc = l.dataset.sourceCommunity;
+        var tc = l.dataset.targetCommunity;
+        // 仅在相关节点都不匹配时才淡出连线（简化处理：全部淡出）
+        l.classList.add('search-dim');
+        if (sc && tc) {
+          // 若连线两端有匹配节点则保持显示
+          GRAPH_DATA.links.forEach(function(link) {
+            var src = typeof link.source === 'object' ? link.source.id : link.source;
+            var tgt = typeof link.target === 'object' ? link.target.id : link.target;
+            if (matchedIds.has(src) || matchedIds.has(tgt)) {
+              l.classList.remove('search-dim');
+            }
+          });
+        }
       });
     });
   }
@@ -339,30 +514,219 @@ export function buildFullHtml(graphDataJson: string, d3Bundle: string): string {
     });
   }
 
+  // ============================================================
+  // F5 新增：hyperedge 凸包渲染（FR-013 / FR-019）
+  // ============================================================
+
+  // Graham Scan 凸包算法（约 25 行，无外部依赖）
+  function convexHull(points) {
+    if (points.length < 3) return points.slice();
+    // 找最低点（y 最大，svg 坐标系 y 向下）
+    var pivot = points.reduce(function(a, b) { return b.y > a.y || (b.y === a.y && b.x < a.x) ? b : a; });
+    // 按极角排序
+    var sorted = points.filter(function(p) { return p !== pivot; }).sort(function(a, b) {
+      var angA = Math.atan2(a.y - pivot.y, a.x - pivot.x);
+      var angB = Math.atan2(b.y - pivot.y, b.x - pivot.x);
+      if (angA !== angB) return angA - angB;
+      // 距离相同极角时，近点先处理（后续会被远点替换）
+      var dA = (a.x - pivot.x) * (a.x - pivot.x) + (a.y - pivot.y) * (a.y - pivot.y);
+      var dB = (b.x - pivot.x) * (b.x - pivot.x) + (b.y - pivot.y) * (b.y - pivot.y);
+      return dA - dB;
+    });
+    // 构建凸包
+    var hull = [pivot];
+    for (var i = 0; i < sorted.length; i++) {
+      while (hull.length >= 2) {
+        var a = hull[hull.length - 2];
+        var b = hull[hull.length - 1];
+        var c = sorted[i];
+        // 叉积判断是否左转（逆时针）
+        if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) >= 0) break;
+        hull.pop();
+      }
+      hull.push(sorted[i]);
+    }
+    return hull;
+  }
+
+  // 将凸包点集转为 SVG path "d" 属性字符串
+  function hullToPathD(hull) {
+    if (hull.length === 0) return '';
+    var d = 'M ' + hull[0].x + ' ' + hull[0].y;
+    for (var i = 1; i < hull.length; i++) {
+      d += ' L ' + hull[i].x + ' ' + hull[i].y;
+    }
+    d += ' Z';
+    return d;
+  }
+
+  // 渲染所有超边的凸包（在节点位置确定后调用）
+  function renderHyperedges(nodePositions) {
+    if (!SHOW_HYPEREDGES) return;
+    var hyperedges = GRAPH_DATA.hyperedges || [];
+    if (hyperedges.length === 0) return;
+    var layer = document.getElementById('hyperedges-layer');
+    if (!layer) return;
+    layer.innerHTML = '';
+
+    // 超边颜色调色板
+    var palette = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#8957e5', '#f78166'];
+
+    hyperedges.forEach(function(he, idx) {
+      var pts = (he.nodes || []).map(function(nid) {
+        return nodePositions.get(nid);
+      }).filter(Boolean);
+
+      // 少于 3 个节点跳过凸包渲染
+      if (pts.length < 3) return;
+
+      var hull = convexHull(pts);
+      var color = he.color || palette[idx % palette.length];
+
+      // 外描边（更宽，半透明）
+      var pathOuter = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pathOuter.setAttribute('d', hullToPathD(hull));
+      pathOuter.setAttribute('stroke', color);
+      pathOuter.setAttribute('stroke-width', '8');
+      pathOuter.setAttribute('stroke-opacity', '0.08');
+      pathOuter.setAttribute('fill', color);
+      pathOuter.setAttribute('fill-opacity', '0.04');
+      pathOuter.setAttribute('stroke-linejoin', 'round');
+      layer.appendChild(pathOuter);
+
+      // 内虚线边框
+      var pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pathEl.setAttribute('d', hullToPathD(hull));
+      pathEl.setAttribute('stroke-dasharray', '6 3');
+      pathEl.setAttribute('stroke', color);
+      pathEl.setAttribute('stroke-width', '1.5');
+      pathEl.setAttribute('fill', 'none');
+      pathEl.setAttribute('stroke-linejoin', 'round');
+
+      // 鼠标悬浮显示 tooltip
+      var tooltip = document.getElementById('hyperedge-tooltip');
+      pathEl.addEventListener('mouseenter', function(e) {
+        if (tooltip) {
+          tooltip.textContent = he.label + (he.rationale ? '：' + he.rationale.slice(0, 60) : '');
+          tooltip.style.display = 'block';
+          tooltip.style.left = (e.clientX + 12) + 'px';
+          tooltip.style.top = (e.clientY - 8) + 'px';
+        }
+      });
+      pathEl.addEventListener('mousemove', function(e) {
+        if (tooltip) {
+          tooltip.style.left = (e.clientX + 12) + 'px';
+          tooltip.style.top = (e.clientY - 8) + 'px';
+        }
+      });
+      pathEl.addEventListener('mouseleave', function() {
+        if (tooltip) tooltip.style.display = 'none';
+      });
+      layer.appendChild(pathEl);
+    });
+  }
+
+  // 计算大图模式社区中心（从节点坐标均值推算，无需预计算字段）
+  function computeCommunityCenter(nodes) {
+    var communityPoints = new Map();
+    nodes.forEach(function(n) {
+      var cid = n.communityId;
+      if (cid == null || cid < 0) return;
+      if (!communityPoints.has(cid)) communityPoints.set(cid, []);
+      communityPoints.get(cid).push({ x: n.x || 0, y: n.y || 0 });
+    });
+    var centers = new Map();
+    communityPoints.forEach(function(pts, cid) {
+      if (pts.length === 0) return;
+      var cx = pts.reduce(function(s, p) { return s + p.x; }, 0) / pts.length;
+      var cy = pts.reduce(function(s, p) { return s + p.y; }, 0) / pts.length;
+      centers.set(cid, { x: cx, y: cy });
+    });
+    return centers;
+  }
+
+  // 大图静态模式：按社区聚类分配坐标（Radial placement）
+  function assignStaticCoords(nodes) {
+    var communityMap = new Map();
+    nodes.forEach(function(n) {
+      var cid = n.communityId != null ? n.communityId : -1;
+      if (!communityMap.has(cid)) communityMap.set(cid, []);
+      communityMap.get(cid).push(n);
+    });
+
+    var communityIds = Array.from(communityMap.keys());
+    var commCount = communityIds.length;
+    var radius = Math.min(400, 100 + commCount * 30);
+
+    communityIds.forEach(function(cid, ci) {
+      var members = communityMap.get(cid);
+      var angle = (ci / commCount) * 2 * Math.PI;
+      var cx = radius * Math.cos(angle);
+      var cy = radius * Math.sin(angle);
+      var r2 = Math.max(20, Math.sqrt(members.length) * 15);
+      members.forEach(function(n, ni) {
+        var a2 = (ni / members.length) * 2 * Math.PI;
+        n.x = cx + r2 * Math.cos(a2);
+        n.y = cy + r2 * Math.sin(a2);
+        n.fx = n.x;
+        n.fy = n.y;
+      });
+    });
+  }
+
   function main() {
-    initStats(); buildLegend(); initSearch(); initZoomPan();
+    initStats(); buildLegend(); buildHyperedgeLegend(); initSearch(); initZoomPan();
     var nodes = GRAPH_DATA.nodes;
     var links = GRAPH_DATA.links;
-    var isLarge = nodes.length > 5000;
+
+    // Q3 锁定：< FORCE_THRESHOLD 使用力导向，>= FORCE_THRESHOLD 静态坐标
+    var isLarge = nodes.length >= FORCE_THRESHOLD;
     var linkEls = renderLinks(links);
     var nodeEls = renderNodes(nodes);
 
     if (isLarge) {
-      var nodeById = new Map(nodes.map(function(n) { return [n.id, n]; }));
-      nodes.forEach(function(n) { n.x = n.fx || 0; n.y = n.fy || 0; });
-      links.forEach(function(link) {
-        var s = nodeById.get(link.source); var t = nodeById.get(link.target);
-        if (s) link.source = s; if (t) link.target = t;
-      });
-      updateNodes(nodeEls); updateLinks(linkEls, links); centerGraph();
+      // 显示大图横幅（FR-023）
+      var banner = document.getElementById('large-graph-banner');
+      if (banner) banner.style.display = 'block';
+      var countEl = document.getElementById('banner-node-count');
+      if (countEl) countEl.textContent = String(nodes.length);
+
+      // 按社区分配静态坐标（若 fx/fy 已有值则使用，否则计算）
+      var hasFxFy = nodes.some(function(n) { return n.fx != null || n.fy != null; });
+      if (!hasFxFy) {
+        assignStaticCoords(nodes);
+      } else {
+        var nodeById = new Map(nodes.map(function(n) { return [n.id, n]; }));
+        nodes.forEach(function(n) { n.x = n.fx || 0; n.y = n.fy || 0; });
+        links.forEach(function(link) {
+          var s = nodeById.get(link.source); var t = nodeById.get(link.target);
+          if (s) link.source = s; if (t) link.target = t;
+        });
+      }
+      updateNodes(nodeEls); updateLinks(linkEls, links);
+      // 渲染超边凸包（静态坐标已确定）
+      var nodePositions = new Map(nodes.map(function(n) { return [n.id, { x: n.x || 0, y: n.y || 0 }]; }));
+      renderHyperedges(nodePositions);
+      centerGraph();
     } else {
+      // 500-2000 节点区间：额外调参加速稳定（R4 缓解）
+      var alphaDecayVal = nodes.length > 500 ? 0.05 : 0.0228;
+      var chargeStrength = nodes.length > 500 ? -80 : -150;
+
       var sim = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(links).id(function(d) { return d.id; }).distance(60).strength(0.5))
-        .force('charge', d3.forceManyBody().strength(-150))
+        .force('charge', d3.forceManyBody().strength(chargeStrength))
         .force('center', d3.forceCenter(0, 0))
-        .force('collision', d3.forceCollide().radius(function(d) { return (d.radius || 6) + 4; }));
+        .force('collision', d3.forceCollide().radius(function(d) { return (d.radius || 6) + 4; }))
+        .alphaDecay(alphaDecayVal);
+
       sim.on('tick', function() { updateNodes(nodeEls); updateLinks(linkEls, links); });
-      sim.on('end', centerGraph);
+      sim.on('end', function() {
+        // 力导向完成后渲染超边凸包
+        var nodePositions = new Map(nodes.map(function(n) { return [n.id, { x: n.x || 0, y: n.y || 0 }]; }));
+        renderHyperedges(nodePositions);
+        centerGraph();
+      });
     }
   }
 

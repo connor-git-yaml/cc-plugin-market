@@ -387,7 +387,7 @@ commit_points: 6
 
 ---
 
-### T-028 [S]：确认 `scripts/inline-d3.ts` 和 D3_FORCE_BUNDLE 现状
+### T-028 [S]：确认 `scripts/inline-d3.ts` 和 D3_FORCE_BUNDLE 现状 ✅
 
 - **Step**: Step 4
 - **估时**: XS
@@ -399,7 +399,7 @@ commit_points: 6
 
 ---
 
-### T-029 [S]：扩展 `buildHtmlTemplate()` 签名 + 新增 `GraphHtmlOptions` 默认值处理
+### T-029 [S]：扩展 `buildHtmlTemplate()` 签名 + 新增 `GraphHtmlOptions` 默认值处理 ✅
 
 - **Step**: Step 4
 - **估时**: S
@@ -411,7 +411,7 @@ commit_points: 6
 
 ---
 
-### T-030 [S]：替换力导向阈值逻辑（5000 → 2000，FR-022）
+### T-030 [S]：替换力导向阈值逻辑（5000 → 2000，FR-022）✅
 
 - **Step**: Step 4
 - **估时**: S
@@ -423,7 +423,7 @@ commit_points: 6
 
 ---
 
-### T-031 [S]：新增大图模式横幅 HTML 区块（FR-023）
+### T-031 [S]：新增大图模式横幅 HTML 区块（FR-023）✅
 
 - **Step**: Step 4
 - **估时**: S
@@ -435,7 +435,7 @@ commit_points: 6
 
 ---
 
-### T-032 [S]：新增 spec 文件跳转逻辑（FR-020）
+### T-032 [S]：新增 spec 文件跳转逻辑（FR-020）✅
 
 - **Step**: Step 4
 - **估时**: M
@@ -447,7 +447,7 @@ commit_points: 6
 
 ---
 
-### T-033 [S]：新增 hyperedge 超边图例区块 + SVG 凸包渲染（FR-013 / FR-019）
+### T-033 [S]：新增 hyperedge 超边图例区块 + SVG 凸包渲染（FR-013 / FR-019）✅
 
 - **Step**: Step 4
 - **估时**: L
@@ -459,7 +459,7 @@ commit_points: 6
 
 ---
 
-### T-034 [S]：确认 `batch-orchestrator.ts` 中知识图谱写盘后调用 `buildHtmlTemplate()` 的位置并实现
+### T-034 [S]：确认 `batch-orchestrator.ts` 中知识图谱写盘后调用 `buildHtmlTemplate()` 的位置并实现 ✅
 
 - **Step**: Step 4
 - **估时**: M
@@ -471,7 +471,7 @@ commit_points: 6
 
 ---
 
-### T-035 [S]：在 CLI 注册 `--html` flag
+### T-035 [S]：在 CLI 注册 `--html` flag ✅
 
 - **Step**: Step 4
 - **估时**: S
@@ -483,7 +483,7 @@ commit_points: 6
 
 ---
 
-### T-036 [S]：补充 `node.specPath` 和 `specPathExists` 字段（如 T-002 确认需要）
+### T-036 [S]：补充 `node.specPath` 和 `specPathExists` 字段（如 T-002 确认需要）✅
 
 - **Step**: Step 4
 - **估时**: M
@@ -495,7 +495,7 @@ commit_points: 6
 
 ---
 
-### T-037 [S]：Story 3 单元测试补全（buildHtmlTemplate 完整断言）
+### T-037 [S]：Story 3 单元测试补全（buildHtmlTemplate 完整断言）✅
 
 - **Step**: Step 4
 - **估时**: M
@@ -507,7 +507,7 @@ commit_points: 6
 
 ---
 
-### T-038 [S]：graph.html 浏览器人工验证（需人工验证）
+### T-038 [S]：graph.html 浏览器人工验证（需人工验证）✅
 
 - **Step**: Step 4
 - **估时**: M

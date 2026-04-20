@@ -84,6 +84,8 @@ export interface CLICommand {
   onOverBudget?: 'continue' | 'cheaper-model' | 'skip-enrichment' | 'cancel';
   /** F5：批处理运行模式（full | reading | code-only，默认 full） */
   batchMode?: 'full' | 'reading' | 'code-only';
+  /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件 */
+  generateHtml?: boolean;
 }
 
 /** 解析错误 */
@@ -689,6 +691,9 @@ export function parseArgs(argv: string[]): ParseResult {
       }
     }
 
+    // F5 Story 3：--html flag（生成 graph.html 可视化文件）
+    const generateHtml = argv.includes('--html') || undefined;
+
     // Feature 127: dry-run / budget / on-over-budget
     const dryRun = argv.includes('--dry-run');
     const batchBudgetIdx = argv.indexOf('--budget');
@@ -742,6 +747,7 @@ export function parseArgs(argv: string[]): ParseResult {
         batchBudget,
         onOverBudget,
         batchMode,
+        generateHtml,
       },
     };
   }

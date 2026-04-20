@@ -52,6 +52,8 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       onOverBudget: command.onOverBudget,
       // F5：批处理运行模式
       mode: command.batchMode,
+      // F5 Story 3：graph.html 生成 flag
+      generateHtml: command.generateHtml,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
@@ -60,6 +62,9 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     }
     if (result.docGraphPath) {
       console.log(`✓ 文档图谱: ${result.docGraphPath}`);
+    }
+    if (result.graphHtmlPath) {
+      console.log(`✓ 图谱可视化: ${result.graphHtmlPath}`);
     }
     if (result.coverageReportPath) {
       console.log(`✓ 覆盖率审计: ${result.coverageReportPath}`);
