@@ -202,7 +202,7 @@ commit_points: 6
 
 ---
 
-### T-014 [S]：创建 `qa/graph-retriever.ts` + 单元测试
+### T-014 [S]：创建 `qa/graph-retriever.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -214,7 +214,7 @@ commit_points: 6
 
 ---
 
-### T-015 [P]：创建 `qa/rag-reranker.ts` + 单元测试
+### T-015 [P]：创建 `qa/rag-reranker.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -226,7 +226,7 @@ commit_points: 6
 
 ---
 
-### T-016 [P]：创建 `qa/debt-context.ts` + 单元测试
+### T-016 [P]：创建 `qa/debt-context.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -238,7 +238,7 @@ commit_points: 6
 
 ---
 
-### T-017 [P]：创建 `qa/citation.ts` + 单元测试
+### T-017 [P]：创建 `qa/citation.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -250,7 +250,7 @@ commit_points: 6
 
 ---
 
-### T-018 [P]：创建 `qa/prompt-builder.ts` + 单元测试
+### T-018 [P]：创建 `qa/prompt-builder.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: S
@@ -262,7 +262,7 @@ commit_points: 6
 
 ---
 
-### T-019 [S]：创建 `qa/llm-caller.ts` + 单元测试
+### T-019 [S]：创建 `qa/llm-caller.ts` + 单元测试 ✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -274,7 +274,7 @@ commit_points: 6
 
 ---
 
-### T-020 [S]：创建 `qa/index.ts`（公开 API `answerQuestion()`）
+### T-020 [S]：创建 `qa/index.ts`（公开 API `answerQuestion()`）✅
 
 - **Step**: Step 2
 - **估时**: M
@@ -286,7 +286,7 @@ commit_points: 6
 
 ---
 
-### T-021 [S]：qa 模块集成测试（5 类问题 + Citation 覆盖率验证）
+### T-021 [S]：qa 模块集成测试（5 类问题 + Citation 覆盖率验证）✅
 
 - **Step**: Step 2
 - **估时**: L
