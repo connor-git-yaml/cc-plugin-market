@@ -79,6 +79,23 @@ spectra batch --force
 spectra batch --output-dir specs
 ```
 
+如果需要启用 LLM hyperedge 提取（生成超边，用于 `graph_hyperedges` MCP 工具）：
+
+```bash
+spectra batch --hyperedges
+```
+
+#### Hyperedges 相关选项与环境变量
+
+| 选项 / 环境变量 | 类型 | 说明 |
+|---|---|---|
+| `--hyperedges` | CLI flag | 启用 LLM hyperedge 提取；等价于设置 `SPECTRA_HYPEREDGES_ENABLED=true` |
+| `SPECTRA_HYPEREDGES_ENABLED` | `true` \| `false` | 环境变量方式控制 hyperedge 提取（默认 `false`） |
+| `SPECTRA_EMBEDDING_PROVIDER` | `local` \| `openai` | 语义嵌入提供方（默认 `local`；选 `openai` 时需要 `OPENAI_API_KEY`） |
+| `OPENAI_API_KEY` | string | 仅当 `SPECTRA_EMBEDDING_PROVIDER=openai` 时需要提供 |
+
+**注意**：启用 `--hyperedges` 会额外调用 LLM 对 design-doc 进行超边提取，会增加 token 消耗和批量运行时间。建议仅在需要架构流程分析时启用。
+
 ### 4. Final Summary
 
 After batch completes:

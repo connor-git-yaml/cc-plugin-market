@@ -6,7 +6,8 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { GraphJSON, GraphNode, GraphEdge } from './graph-types.js';
+import type { GraphJSON, GraphNode, GraphEdge, Hyperedge, SemanticEdgeRelation } from './graph-types.js';
+import { SEMANTIC_EDGE_RELATIONS } from './graph-types.js';
 
 // ============================================================
 // 查询结果类型定义
@@ -77,6 +78,25 @@ export interface CommunityResult {
 export interface GodNodesResult {
   /** 按度数降序排列的枢纽节点列表（含 degree 字段） */
   nodes: Array<GraphNode & { degree: number }>;
+}
+
+/**
+ * schema v2.0：语义边信息（供 graph_node 工具 semanticEdges 字段使用）
+ * 表示与某节点关联的一条语义边，含方向、对端节点和证据字段
+ */
+export interface SemanticEdgeInfo {
+  /** 语义边类型（三种之一） */
+  type: SemanticEdgeRelation;
+  /** 相对于查询节点的方向（outgoing: 以该节点为 source；incoming: 以该节点为 target） */
+  direction: 'incoming' | 'outgoing';
+  /** 对端节点 ID */
+  peer: string;
+  /** 证据文本（来自 GraphEdge.evidenceText） */
+  evidenceText?: string;
+  /** 证据来源（来自 GraphEdge.evidenceSource） */
+  evidenceSource?: string;
+  /** 置信度 */
+  confidence?: 'EXTRACTED' | 'INFERRED' | 'AMBIGUOUS';
 }
 
 // ============================================================
@@ -594,6 +614,85 @@ export class GraphQueryEngine {
         ? `社区 ${communityId} 共 ${communityNodes.length} 个节点，已截断至 ${finalNodes.length} 个${cohesionMessage ? '；' + cohesionMessage : ''}`
         : cohesionMessage,
     };
+  }
+
+  /**
+   * 超边查询（对应 graph_hyperedges MCP tool）
+   * 返回图谱中所有超边，支持按 label 子串模糊过滤和按 node_id 精确过滤
+   * @param options - 过滤选项（均可选；两项均不传时返回全部）
+   * @returns Hyperedge 数组（graph.json 无 hyperedges 字段时返回空数组）
+   */
+  getHyperedges(options?: { label?: string; nodeId?: string; limit?: number }): Hyperedge[] {
+    const all = this.graph.hyperedges ?? [];
+
+    let result = all;
+
+    // label 模糊过滤（子串，大小写不敏感）
+    if (options?.label !== undefined && options.label.length > 0) {
+      const filterLower = options.label.toLowerCase();
+      result = result.filter((he) => he.label.toLowerCase().includes(filterLower));
+    }
+
+    // node_id 精确过滤（节点 ID 必须在 nodes 数组中）
+    if (options?.nodeId !== undefined && options.nodeId.length > 0) {
+      const targetId = options.nodeId;
+      result = result.filter((he) => he.nodes.includes(targetId));
+    }
+
+    // limit 截断（默认不截断）
+    const limit = options?.limit;
+    if (limit !== undefined && limit > 0 && result.length > limit) {
+      result = result.slice(0, limit);
+    }
+
+    return result;
+  }
+
+  /**
+   * 语义边查询（对应 graph_node MCP tool 的 semanticEdges 字段）
+   * 返回与指定节点关联的所有语义边（relation 为三种语义类型之一）
+   * 节点不存在或无语义边时返回空数组（不报错）
+   * @param nodeId - 目标节点 ID；undefined 或 null 时直接返回空数组
+   * @returns SemanticEdgeInfo 数组
+   */
+  getSemanticEdges(nodeId: string | null | undefined): SemanticEdgeInfo[] {
+    if (nodeId === null || nodeId === undefined || nodeId.length === 0) {
+      return [];
+    }
+
+    const semanticRelations = new Set<string>([
+      SEMANTIC_EDGE_RELATIONS.REFERENCES,
+      SEMANTIC_EDGE_RELATIONS.CONCEPTUALLY_RELATED_TO,
+      SEMANTIC_EDGE_RELATIONS.RATIONALE_FOR,
+    ]);
+
+    const result: SemanticEdgeInfo[] = [];
+
+    for (const edge of this.graph.links) {
+      if (!semanticRelations.has(edge.relation)) continue;
+
+      if (edge.source === nodeId) {
+        result.push({
+          type: edge.relation as SemanticEdgeRelation,
+          direction: 'outgoing',
+          peer: edge.target,
+          evidenceText: edge.evidenceText,
+          evidenceSource: edge.evidenceSource,
+          confidence: edge.confidence,
+        });
+      } else if (edge.target === nodeId) {
+        result.push({
+          type: edge.relation as SemanticEdgeRelation,
+          direction: 'incoming',
+          peer: edge.source,
+          evidenceText: edge.evidenceText,
+          evidenceSource: edge.evidenceSource,
+          confidence: edge.confidence,
+        });
+      }
+    }
+
+    return result;
   }
 
   /**

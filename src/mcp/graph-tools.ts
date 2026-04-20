@@ -1,6 +1,6 @@
 /**
  * Graph Query MCP Tool 注册模块
- * 注册 5 个图谱查询工具：graph_query、graph_node、graph_path、graph_community、graph_god_nodes
+ * 注册 6 个图谱查询工具：graph_query、graph_node、graph_path、graph_community、graph_god_nodes、graph_hyperedges
  * 采用 lazy load 策略：首次调用时加载 _meta/graph.json，后续复用内存缓存
  */
 
@@ -115,7 +115,7 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 2: graph_node — 单节点详情查询 ───
   server.tool(
     'graph_node',
-    '精确查找节点详情和邻居，适用于已知节点 ID 或名称关键词的场景。id 参数优先于 keyword。',
+    '精确查找节点详情和邻居，适用于已知节点 ID 或名称关键词的场景。id 参数优先于 keyword。返回结果包含关联的语义边（references / conceptually_related_to / rationale_for）列表。',
     {
       id: z
         .string()
@@ -138,8 +138,17 @@ export function registerGraphTools(server: McpServer): void {
       try {
         const engine = getEngine(projectRoot);
         const result = engine.getNode({ id, keyword, budget });
+
+        // 追加语义边列表（schema v2.0 新字段，向后兼容现有字段）
+        const semanticEdges = engine.getSemanticEdges(result.node?.id);
+
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ ...result, semanticEdges }),
+            },
+          ],
         };
       } catch (err) {
         return buildErrorResponse(err);
@@ -193,6 +202,83 @@ export function registerGraphTools(server: McpServer): void {
         const result = engine.getCommunity(communityId, budget);
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        return buildErrorResponse(err);
+      }
+    },
+  );
+
+  // ─── 工具 6: graph_hyperedges — 超边查询 ───
+  server.tool(
+    'graph_hyperedges',
+    '查询知识图谱中的超边（Hyperedges），每条超边连接 3 个以上节点，表达命名流程或跨模块协作关系。支持按 label 模糊过滤和按节点 ID 精确过滤。',
+    {
+      label: z
+        .string()
+        .optional()
+        .describe('按 hyperedge label 模糊匹配（子串匹配，大小写不敏感）。不传则不过滤。'),
+      node_id: z
+        .string()
+        .optional()
+        .describe('按节点 ID 精确匹配（返回 nodes 数组中含此 ID 的 hyperedge）。不传则不过滤。'),
+      limit: z
+        .number()
+        .optional()
+        .describe('返回超边数量上限（默认返回全部匹配的超边）'),
+      projectRoot: z
+        .string()
+        .optional()
+        .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
+    },
+    async ({ label, node_id, limit, projectRoot }) => {
+      // 额外校验：label 或 node_id 为空字符串时返回明确错误
+      if (label !== undefined && label.trim().length === 0) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: 'label 参数不能为空字符串，请传入有效的过滤词或省略此参数',
+              }),
+            },
+          ],
+          isError: true as const,
+        };
+      }
+      if (node_id !== undefined && node_id.trim().length === 0) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                error: 'node_id 参数不能为空字符串，请传入有效的节点 ID 或省略此参数',
+              }),
+            },
+          ],
+          isError: true as const,
+        };
+      }
+
+      try {
+        const engine = getEngine(projectRoot);
+        const hyperedges = engine.getHyperedges({
+          label,
+          nodeId: node_id,
+          limit,
+        });
+        const filtered = (label !== undefined && label.length > 0) || (node_id !== undefined && node_id.length > 0);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                { hyperedges, total: hyperedges.length, filtered },
+                null,
+                2,
+              ),
+            },
+          ],
         };
       } catch (err) {
         return buildErrorResponse(err);

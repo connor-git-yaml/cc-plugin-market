@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-04-19T06:19:05.560Z"
+generatedAt: "2026-04-20T02:47:23.291Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-19T06:19:05.594Z"
+    generatedAt: "2026-04-20T02:47:23.332Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-04-19T06:19:05.595Z"
+    generatedAt: "2026-04-20T02:47:23.334Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"

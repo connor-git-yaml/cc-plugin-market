@@ -120,12 +120,50 @@ Each generated spec must contain these 9 sections in Chinese:
 
 ## 图查询工具（MCP）
 
-单模块生成完成后，若项目已跑过 `spectra batch`，则 `specs/_meta/graph.json` 会提供 5 个 MCP 图查询工具供 AI 助手调用：
+单模块生成完成后，若项目已跑过 `spectra batch`，则 `specs/_meta/graph.json` 会提供 6 个 MCP 图查询工具供 AI 助手调用：
 
 - `graph_query`：按关键词查询相关模块和子图（`{ question: "认证模块", depth: 2 }`）
-- `graph_node`：查询指定节点的详情和邻居（`{ id: "src/auth/login.ts" }`）
+- `graph_node`：查询指定节点的详情和邻居（`{ id: "src/auth/login.ts" }`）；v2.0 起返回额外的 `semanticEdges` 字段（见下）
 - `graph_path`：查找两个节点间的最短路径（`{ source, target }`）
 - `graph_community`：列出某社区的节点（`{ communityId: "c-0" }`）
 - `graph_god_nodes`：识别度数最高的枢纽节点（`{ limit: 10 }`）
+- `graph_hyperedges`：查询超边（Hyperedges），表达 3+ 节点共同参与的架构流程或概念群（见下）
 
 使用场景：通过 `/spectra` 生成单模块 spec 后，想追问"这个模块被谁调用了"、"从 A 到 B 的依赖路径是什么"、"项目里哪个模块最核心"等结构性问题，即可使用这些工具。
+
+### `graph_hyperedges`
+
+查询 `graph.json` 中的超边（Hyperedges），表达 3+ 节点共同参与的架构流程或概念群。需要先运行 `spectra batch --hyperedges` 生成含超边的图谱。
+
+**参数**（均可选）：
+- `label`（string）：按 hyperedge label 模糊匹配（子串，大小写不敏感）
+- `node_id`（string）：按节点 ID 精确匹配（返回 nodes 数组中含此 ID 的 hyperedge）
+- `limit`（number）：返回数量上限（默认返回全部匹配的超边）
+
+**返回**：hyperedge 列表，每条含 `id` / `label` / `nodes` / `rationale` / `confidence`，以及 `total`（匹配总数）和 `filtered`（是否使用了过滤参数）
+
+**典型调用**：
+```json
+{ "label": "Ingestion Pipeline" }
+{ "node_id": "src/auth/login.ts" }
+{}
+```
+
+**使用场景**：
+- 查询 "Full Ingestion Pipeline" 等命名流程涉及的所有函数/模块
+- 反向溯源某个函数属于哪些架构流程（通过 `node_id` 过滤）
+- 了解项目中有哪些跨模块的复杂协作关系
+
+### `graph_node` v2.0 新增：`semanticEdges` 字段
+
+v2.0 起，`graph_node` 响应额外返回 `semanticEdges` 数组，列出与当前节点关联的所有语义边（`references` / `conceptually_related_to` / `rationale_for`）。
+
+每条语义边包含：
+- `type`：边类型（`references` / `conceptually_related_to` / `rationale_for`）
+- `direction`：相对当前节点的方向（`outgoing` / `incoming`）
+- `peer`：对端节点 ID
+- `evidenceText`：证据文本（可选）
+- `evidenceSource`：证据来源（格式 `"path:startLine-endLine"`，可选）
+- `confidence`：置信度（`EXTRACTED` / `INFERRED` / `AMBIGUOUS`）
+
+节点无关联语义边时，`semanticEdges` 返回空数组（不报错）。

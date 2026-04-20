@@ -732,7 +732,7 @@
 
 ---
 
-### T033 [S] 修改 `graph-tools.ts`：新增 graph_hyperedges MCP 工具
+### T033 [x] [S] 修改 `graph-tools.ts`：新增 graph_hyperedges MCP 工具
 
 **目标文件**: `src/mcp/graph-tools.ts`
 
@@ -756,7 +756,7 @@
 
 ---
 
-### T034 [S] 修改 `graph-tools.ts`：graph_node 工具适配 v2.0 语义边
+### T034 [x] [S] 修改 `graph-tools.ts`：graph_node 工具适配 v2.0 语义边
 
 **目标文件**: `src/mcp/graph-tools.ts`
 
@@ -774,7 +774,7 @@
 
 ---
 
-### T035 [P] 新增 `graph-tools-v2.test.ts`：MCP 工具 v2.0 集成测试
+### T035 [x] [P] 新增 `graph-tools-v2.test.ts`：MCP 工具 v2.0 集成测试
 
 **目标文件**: `tests/panoramic/graph-tools-v2.test.ts`
 
@@ -795,7 +795,7 @@
 
 ---
 
-### T036 [P] 修改 `plugins/spectra/skills/spectra/SKILL.md`：新增 graph_hyperedges 工具说明
+### T036 [x] [P] 修改 `plugins/spectra/skills/spectra/SKILL.md`：新增 graph_hyperedges 工具说明
 
 **目标文件**: `plugins/spectra/skills/spectra/SKILL.md`
 
@@ -813,7 +813,7 @@
 
 ---
 
-### T037 [P] 修改 `plugins/spectra/skills/spectra-batch/SKILL.md`：新增 --hyperedges 选项说明
+### T037 [x] [P] 修改 `plugins/spectra/skills/spectra-batch/SKILL.md`：新增 --hyperedges 选项说明
 
 **目标文件**: `plugins/spectra/skills/spectra-batch/SKILL.md`
 

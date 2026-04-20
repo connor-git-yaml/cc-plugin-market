@@ -77,7 +77,7 @@ describe('createMcpServer', () => {
     const names = server.tools.map((t) => t.name).sort();
     expect(names).toEqual([
       'batch', 'diff', 'generate',
-      'graph_community', 'graph_god_nodes', 'graph_node', 'graph_path', 'graph_query',
+      'graph_community', 'graph_god_nodes', 'graph_hyperedges', 'graph_node', 'graph_path', 'graph_query',
       'panoramic-query', 'prepare',
     ]);
   });
