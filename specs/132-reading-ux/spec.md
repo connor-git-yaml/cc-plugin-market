@@ -266,7 +266,7 @@ priority: P1/P2
 | R1 | Graph-first BFS 命中节点数 < 3 时 RAG 精排失效 | FR-014，Story 2 AC 6 | Fallback 到纯 RAG（`anchorDocToCode` 路径）；再失败降级返回"图谱数据不足"提示 |
 | R2 | `@xenova/transformers` 首次加载 5-15 秒 + 150-400 MB 内存 | Story 2，NFR-005 | 混合方案仅在 Top-K 精排阶段用 embedding；复用 F4 anchoring 已加载实例，避免重复初始化 |
 | R3 | Hyperedge 问答语义对齐依赖 LLM 质量，召回可能不稳定 | FR-013，Story 2 AC 5 | 在 LLM prompt 中显式列出 hyperedge.label 作为候选，让 LLM 从列表中挑选而非自由发散 |
-| R4 | graph.html 节点数 > 1000 时 force layout 卡顿 | FR-022，Story 3 AC 6 | 节点数阈值检查：> 1000 自动切静态坐标模式（复用已有 community clustering） |
+| R4 | graph.html 节点数 ≥ 2000 时 force layout 卡顿 | FR-022，Story 3 AC 6 | 节点数阈值检查：≥ 2000 自动切静态坐标模式（Q3 锁定，复用 `graph.communities[].center` 预计算坐标） |
 | R5 | `--mode=reading` 实际性能收益低于预期 | NFR-001，SC-001，Q1 | verify 阶段实际测量冷/热启动耗时；收益不足时降级为文档层跳过 + 日志提示 |
 | R6 | 问答 Citation 漂移到错误 chunk（chunk 边界 vs 语义边界不一致） | FR-012，NFR-002 | 强制 Citation 包含 `{startLine, endLine}`；verify 阶段 E2E 检查每条 Citation 可定位到实际 spec 行 |
 | R7 | graph.html self-contained 时文件体积膨胀（500+ 节点数据 + D3 + CSS） | FR-021，FR-024，Story 3 AC 7 | 使用 gzip-friendly 的 minified JSON；超过 5 MB 时输出警告（不阻断） |

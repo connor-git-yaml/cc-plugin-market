@@ -3,8 +3,8 @@ feature: F5 Reading UX
 branch: 132-reading-ux
 phase: tasks
 created: 2026-04-20
-total_tasks: 62
-commit_points: 7
+total_tasks: 54
+commit_points: 6
 ---
 
 # F5 Reading UX Tasks
@@ -38,15 +38,19 @@ commit_points: 7
 
 ---
 
-### T-002 [P]：确认 `node.specPath` 字段来源
+### T-002 [P]：确认 `node.specPath` + `hyperedges` 字段来源和传递路径
 
 - **Step**: Step 0
 - **估时**: S
-- **Input**: `src/panoramic/graph/` 中 `GraphNode` 类型定义；`buildKnowledgeGraph()` 的输出结构；`graph.json` 示例
-- **Output**: 确认 `GraphNode` 是否已有 `specPath` 字段；若无，确认需在哪里补充（`buildKnowledgeGraph()` 还是图谱写盘层）；将结论追加到 plan.md
+- **Input**: `src/panoramic/graph/` 中 `GraphNode` 类型定义；`buildKnowledgeGraph()` 的输出结构；`graph.json` 示例；`src/panoramic/exporters/html-template.ts` 的 `buildHtmlTemplate()` 现有签名
+- **Output**: 同时确认两件事：
+  - **(a) `node.specPath`**：`GraphNode` 是否已有 `specPath` 字段；若无，确认需在哪里补充（`buildKnowledgeGraph()` 还是图谱写盘层）
+  - **(b) `hyperedges` 传入路径**：`graph.hyperedges[]` 是否已从 `buildKnowledgeGraph()` 经 batch-orchestrator 传入 `buildHtmlTemplate()`；若否，记录需在 `buildHtmlTemplate()` 调用方（batch-orchestrator 阶段 7 知识图谱写盘）补充传入的具体位置
+  - 结论追加到 `specs/132-reading-ux/codebase-notes.md`（专用文件，避免修改 plan.md 正文）
 - **Test**: 无（纯代码阅读）
-- **Exit Criteria**: plan.md 中有 `node.specPath` 字段是否存在的明确结论，以及缺少时的补充方案
+- **Exit Criteria**: codebase-notes.md 中有 (a) 和 (b) 两项的明确结论；若任一项需修改 plan §2 "修改模块表" 或需在 T-033 之前新增补充 task，在此处提出
 - **Commit Point**: 否
+- **关联 F-002 修复**：合并 T-033 跨关注点到此处前置确认，使 T-033 专注 HTML 侧实现
 
 ---
 
@@ -350,14 +354,15 @@ commit_points: 7
 
 ---
 
-### T-026 [P]：更新 `plugins/*/SKILL.md`（新增 MCP 工具说明）
+### T-026 [P]：更新 `plugins/spectra/**/SKILL.md`（新增 MCP 工具说明）
 
 - **Step**: Step 3
 - **估时**: XS
-- **Input**: T-023、T-024；现有 `plugins/` 目录下各 SKILL.md 文件
-- **Output**: 在相关 `plugins/*/SKILL.md` 文件中新增 `panoramic-query` 的 `natural-language` operation 说明和 `batch` 工具的 `mode` 参数说明
+- **Input**: T-023、T-024；`plugins/spectra/skills/spectra/SKILL.md` 和 `plugins/spectra/skills/spectra-batch/SKILL.md`
+- **Output**: 仅在 `plugins/spectra/` 下的相关 SKILL.md 文件中新增 `panoramic-query` 的 `natural-language` operation 说明和 `batch` 工具的 `mode` 参数说明
+- **约束**: **不得修改** `plugins/spec-driver/**` 下任何文件（F5 Prompt 读写边界硬约束）
 - **Test**: 无（文档更新）
-- **Exit Criteria**: SKILL.md 中可见新增 operation 和 schema 说明
+- **Exit Criteria**: `plugins/spectra/skills/spectra/SKILL.md` 和 `plugins/spectra/skills/spectra-batch/SKILL.md` 中可见新增 operation 和 schema 说明；`git diff plugins/spec-driver/` 应为空
 - **Commit Point**: 否
 
 ---
@@ -368,8 +373,8 @@ commit_points: 7
 - **估时**: XS
 - **Input**: T-023 ~ T-026 全部完成
 - **Output**: git commit，message：`feat(132): Step 3 MCP natural-language 接入 — panoramic-query 扩展 + query.ts 路由 + SKILL.md 更新`
-- **Test**: 提交前执行 `npx vitest run` + `npm run build` 零失败
-- **Exit Criteria**: commit 成功，push；MCP 集成测试绿；向后兼容验证通过
+- **Test**: 提交前执行 `npx vitest run` + `npm run build` 零失败；额外：`git diff plugins/spec-driver/` 必须为空（读写边界检查）
+- **Exit Criteria**: commit 成功，push；MCP 集成测试绿；向后兼容验证通过；MCP 路径调用 `batch` 工具时服务端日志中含 `[info] batch mode=<full|reading|code-only>` 输出（F-009 修复：FR-006 在 MCP 路径的可观察性）
 - **Commit Point**: **是**
 
 ---
@@ -556,14 +561,16 @@ commit_points: 7
 
 ---
 
-### T-042 [S]：E2E 问答覆盖率验证（SC-002 / FR-011 / NFR-002）
+### T-042 [S]：E2E 问答覆盖率 + 问答性能（SC-002 / FR-011 / NFR-002 / plan §8 Story 2 性能）
 
 - **Step**: Step 5
 - **估时**: M
 - **Input**: T-040；graphify 示例项目（有图谱数据）
-- **Output**: 对 graphify 示例项目跑 FR-011 表中 5 类问题各 3 次（共 ≥ 15 次），统计包含有效 Citation 的比例；100% Citation 覆盖率验证（每条答案含 specPath + lineRange + excerpt）
-- **Test**: E2E（SC-002）
-- **Exit Criteria**: ≥ 15 次问答，100% 含有效 Citation；结果记录到 `specs/132-reading-ux/qa-coverage-report.md`
+- **Output**: 对 graphify 示例项目跑 FR-011 表中 5 类问题各 3 次（共 ≥ 15 次）：
+  - （a）**Citation 覆盖率**：统计包含有效 Citation 的比例，要求 100%（每条答案含 specPath + lineRange + excerpt）
+  - （b）**问答性能测量**（F-005 修复）：同时记录每次问答耗时，区分冷启动（首次调用，embedding provider 首次加载）和热启动（embedding singleton 已加载），目标：**冷启动 < 20s / 热启动 < 5s**（plan §8 Story 2 性能目标）
+- **Test**: E2E（SC-002 + Story 2 性能）
+- **Exit Criteria**: ≥ 15 次问答，100% 含有效 Citation；冷启动 ≥ 1 次 < 20s、热启动 ≥ 10 次平均 < 5s；结果记录到 `specs/132-reading-ux/qa-coverage-report.md`（含性能子章节）
 - **Commit Point**: 否
 
 ---
