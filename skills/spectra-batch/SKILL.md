@@ -79,6 +79,34 @@ spectra batch --force
 spectra batch --output-dir specs
 ```
 
+如果需要指定运行模式（F5 新增，FR-001）：
+
+```bash
+# 完整模式（默认）
+spectra batch --mode=full
+
+# 轻量阅读模式：跳过产品文档层（product-overview、ADR 等），速度更快
+spectra batch --mode=reading
+
+# 纯 AST 模式：跳过所有 LLM 推断，仅保留代码结构分析
+spectra batch --mode=code-only
+```
+
+#### `--mode` 参数说明（FR-001 / FR-007）
+
+| 枚举值 | 说明 | 跳过的生成器 |
+|--------|------|-------------|
+| `full`（默认） | 完整文档生成，包含所有 LLM 推断 | 无 |
+| `reading` | 轻量模式，跳过产品文档层 | `product-overview`、`adrs`、`coverage-audit`、`docs-bundle` |
+| `code-only` | 纯 AST 模式，跳过所有 LLM 推断 | `architecture-overview`、`architecture-ir`、`pattern-hints`、`event-surface`、`runtime-topology`、`product-overview`、`adrs` 等所有 LLM 驱动生成器 |
+
+不传 `--mode` 时默认为 `full`（FR-002）。无效 mode 值会在启动时报错退出（FR-005），日志中包含允许的枚举值列表。运行时日志会输出当前 mode（FR-006）：`[info] batch mode=<full|reading|code-only>`。
+
+**MCP 工具透传**：通过 MCP 工具 `batch` 调用时，同样支持 `mode` 参数（FR-007）：
+```json
+{ "mode": "reading" }
+```
+
 如果需要启用 LLM hyperedge 提取（生成超边，用于 `graph_hyperedges` MCP 工具）：
 
 ```bash

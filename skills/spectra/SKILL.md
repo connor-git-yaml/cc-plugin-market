@@ -118,6 +118,51 @@ Each generated spec must contain these 9 sections in Chinese:
 - **章节标题**：使用中文，例如 `## 1. 意图`、`## 2. 接口定义`
 - **Frontmatter**：保留英文（YAML 键名）
 
+## 架构问答工具（MCP）
+
+### `panoramic-query` — 架构分析 + 自然语言问答
+
+`panoramic-query` MCP 工具支持四种 operation：
+
+| operation | 说明 | 必填参数 |
+|-----------|------|----------|
+| `cross-package` | 跨包依赖分析（monorepo 项目） | `projectRoot` |
+| `architecture-ir` | 架构信息模型（IR）提取 | `projectRoot` |
+| `overview` | 架构概览文档生成 | `projectRoot` |
+| `natural-language` | **自然语言问答**（FR-009）| `projectRoot` + `question` |
+
+#### `natural-language` operation（F5 新增）
+
+通过自然语言问题查询项目架构，支持 5 类典型问题：调用关系、调用路径、设计决策映射、技术债、流程归属。
+
+**参数**：
+- `operation`（必填）：`"natural-language"`
+- `projectRoot`（必填）：项目根目录绝对路径
+- `question`（必填）：问题文本（`operation=natural-language` 时必填；空字符串会被拒绝）
+
+**返回**：JSON 格式的 `QnAAnswer` 结构：
+- `answer`（string）：LLM 生成的回答文本
+- `citations`（Citation[]）：溯源引用列表（100% 覆盖率，每条含三字段）
+  - `specPath`：引用来源的 spec 文件路径（repo-relative）
+  - `lineRange`：`{ startLine, endLine }`（1-based，含边界）
+  - `excerpt`：原文摘要（≤ 200 字符）
+  - `nodeId`（可选）：对应 graph 节点 ID
+  - `similarity`（可选）：余弦相似度得分（RAG 精排路径）
+- `tokenUsage`：`{ input, output, overBudget }`（overBudget=true 时已超 $0.05 硬限额，但不阻断调用）
+- `durationMs`：问答耗时（毫秒）
+- `fallbackMode`（可选）：`'rag-only' | 'bfs-only' | 'graph-insufficient'`（降级模式）
+
+**前置条件**：需先运行 `spectra batch` 生成 `specs/_meta/graph.json`。
+
+**典型调用**：
+```json
+{
+  "operation": "natural-language",
+  "projectRoot": "/absolute/path/to/project",
+  "question": "什么模块调用了认证逻辑？"
+}
+```
+
 ## 图查询工具（MCP）
 
 单模块生成完成后，若项目已跑过 `spectra batch`，则 `specs/_meta/graph.json` 会提供 6 个 MCP 图查询工具供 AI 助手调用：

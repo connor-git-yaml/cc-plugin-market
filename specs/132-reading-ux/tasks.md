@@ -298,7 +298,7 @@ commit_points: 6
 
 ---
 
-### T-022 [S]：提交 Step 2（commit point）[COMMIT]
+### T-022 [S]：提交 Step 2（commit point）[COMMIT] ✅
 
 - **Step**: Step 2
 - **估时**: XS
@@ -318,7 +318,7 @@ commit_points: 6
 
 ---
 
-### T-023 [S]：扩展 `panoramic-query` tool schema，新增 `natural-language` operation + `question` 参数
+### T-023 [S]：扩展 `panoramic-query` tool schema，新增 `natural-language` operation + `question` 参数 ✅
 
 - **Step**: Step 3
 - **估时**: S
@@ -330,7 +330,7 @@ commit_points: 6
 
 ---
 
-### T-024 [S]：在 `query.ts` 中路由 `natural-language` operation 到 `answerQuestion()`
+### T-024 [S]：在 `query.ts` 中路由 `natural-language` operation 到 `answerQuestion()` ✅
 
 - **Step**: Step 3
 - **估时**: M
@@ -342,7 +342,7 @@ commit_points: 6
 
 ---
 
-### T-025 [S]：E2E 验证 MCP 问答路径（5 类问题）
+### T-025 [S]：E2E 验证 MCP 问答路径（5 类问题）✅
 
 - **Step**: Step 3
 - **估时**: M
@@ -354,7 +354,7 @@ commit_points: 6
 
 ---
 
-### T-026 [P]：更新 `plugins/spectra/**/SKILL.md`（新增 MCP 工具说明）
+### T-026 [P]：更新 `plugins/spectra/**/SKILL.md`（新增 MCP 工具说明）✅
 
 - **Step**: Step 3
 - **估时**: XS
@@ -367,7 +367,7 @@ commit_points: 6
 
 ---
 
-### T-027 [S]：提交 Step 3（commit point）[COMMIT]
+### T-027 [S]：提交 Step 3（commit point）[COMMIT] ✅
 
 - **Step**: Step 3
 - **估时**: XS

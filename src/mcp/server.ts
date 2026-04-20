@@ -226,18 +226,23 @@ export function createMcpServer(): McpServer {
   // ─── 工具 5: panoramic-query — panoramic 架构分析 ───
   server.tool(
     'panoramic-query',
-    '运行 panoramic 架构分析，支持 cross-package / architecture-ir / overview 三种操作',
+    '运行 panoramic 架构分析，支持 cross-package / architecture-ir / overview / natural-language 四种操作',
     {
       operation: z
-        .enum(['cross-package', 'architecture-ir', 'overview'])
-        .describe('分析操作类型'),
+        .enum(['cross-package', 'architecture-ir', 'overview', 'natural-language'])
+        .describe('分析操作类型；natural-language 触发自然语言问答（FR-009）'),
       projectRoot: z
         .string()
         .describe('项目根目录绝对路径（必需）'),
+      // F5：natural-language operation 专用字段（FR-009）
+      question: z
+        .string()
+        .optional()
+        .describe('问题文本（operation=natural-language 时必填，其他 operation 忽略）'),
     },
-    async ({ operation, projectRoot }) => {
+    async ({ operation, projectRoot, question }) => {
       try {
-        const result = await queryPanoramic({ operation, projectRoot });
+        const result = await queryPanoramic({ operation, projectRoot, question });
         if (!result.ok) {
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({ error: result.error }) }],
