@@ -31,6 +31,18 @@
 - `docs/migrations/skill-deprecation.md` — 完整迁移指南：背景说明、9 条旧→新映射表、使用示例对比、如何确认旧命令消失、Codex 用户说明、自定义 override 清理建议、FAQ、相关合同变更
 - `CHANGELOG.md` — 本文件
 
+### Added — spectra（F5 Reading UX，Minor 功能新增）
+
+- **轻量模式**：`spectra batch --mode=<full|reading|code-only>` — `reading` 模式跳过 5 个产品文档层 generator（ADR 推断、产品概述、故障排查、数据模型、质量评估），`code-only` 模式额外跳过 8 个架构推断层；冷启动目标 < 300s，热启动目标 < 60s（FR-001 ~ FR-008）
+- **自然语言问答**：MCP `panoramic-query` 工具新增 `natural-language` operation — 支持 5 类典型问题（调用关系、调用路径、设计决策、技术债、流程归属），采用 Graph-first BFS + embedding 精排 + LLM 组装的 B+C 混合架构，100% Citation 覆盖（specPath + lineRange + excerpt 三字段），budget-gate record-only 模式不阻断问答（FR-009 ~ FR-017）
+- **交互式图谱可视化**：`spectra batch --html` 在 `_meta/graph.html` 生成单文件离线交互图谱，包含力导向布局（< 2000 节点）、大图静态模式（≥ 2000 节点 + 横幅警告）、搜索/过滤、节点点击跳转 Spec 文件、Hyperedge 超边凸包可视化，零 CDN 引用（FR-018 ~ FR-024）
+- `src/panoramic/qa/`：新增 8 个模块（graph-retriever、rag-reranker、debt-context、citation、prompt-builder、llm-caller、index、types）
+- `plugins/spectra/skills/spectra/SKILL.md`、`plugins/spectra/skills/spectra-batch/SKILL.md`：更新 MCP 工具说明，记录 `natural-language` operation 和 `--mode` 参数
+
+### 相关 Spec — F5 Reading UX
+
+- `specs/132-reading-ux/`（spec.md / plan.md / tasks.md / perf-baseline.md / qa-coverage-report.md / risk-regression.md / browser-verification.md）
+
 ### 影响评估
 
 - 用户手工调用 `/spec-driver.specify` 等旧命令将得到 "command not found"，需按迁移指南改为对应编排器入口

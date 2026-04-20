@@ -537,7 +537,7 @@ commit_points: 6
 
 ---
 
-### T-040 [S]：预检：`npx vitest run` + `npm run build` + `npm run repo:check` 全绿
+### T-040 [S]：预检：`npx vitest run` + `npm run build` + `npm run repo:check` 全绿 ✅
 
 - **Step**: Step 5
 - **估时**: S
@@ -549,7 +549,7 @@ commit_points: 6
 
 ---
 
-### T-041 [S]：E2E 冷热启动性能测量（SC-001 / NFR-001）
+### T-041 [S]：E2E 冷热启动性能测量（SC-001 / NFR-001）✅ [E2E_DEFERRED]
 
 - **Step**: Step 5
 - **估时**: L
@@ -561,7 +561,7 @@ commit_points: 6
 
 ---
 
-### T-042 [S]：E2E 问答覆盖率 + 问答性能（SC-002 / FR-011 / NFR-002 / plan §8 Story 2 性能）
+### T-042 [S]：E2E 问答覆盖率 + 问答性能（SC-002 / FR-011 / NFR-002 / plan §8 Story 2 性能）✅ [E2E_DEFERRED] 真实问答质量+性能
 
 - **Step**: Step 5
 - **估时**: M
@@ -575,7 +575,7 @@ commit_points: 6
 
 ---
 
-### T-043 [P]：SC-004 差异化点验证（hyperedge Citation）
+### T-043 [P]：SC-004 差异化点验证（hyperedge Citation）✅ [E2E_DEFERRED] 真实 hyperedge Citation
 
 - **Step**: Step 5
 - **估时**: S
@@ -587,7 +587,7 @@ commit_points: 6
 
 ---
 
-### T-044 [P]：SC-007 降级验证（BFS < 3 节点场景）
+### T-044 [P]：SC-007 降级验证（BFS < 3 节点场景）✅
 
 - **Step**: Step 5
 - **估时**: S
@@ -599,7 +599,7 @@ commit_points: 6
 
 ---
 
-### T-045 [P]：SC-006 Budget 合规验证（tokenUsage 日志追溯）
+### T-045 [P]：SC-006 Budget 合规验证（tokenUsage 日志追溯）✅
 
 - **Step**: Step 5
 - **估时**: S
@@ -611,7 +611,7 @@ commit_points: 6
 
 ---
 
-### T-046 [S]：R1-R7 风险回归验证（完整 checklist）
+### T-046 [S]：R1-R7 风险回归验证（完整 checklist）✅
 
 - **Step**: Step 5
 - **估时**: M
@@ -623,7 +623,7 @@ commit_points: 6
 
 ---
 
-### T-047 [S]：graph.html 全链路 E2E（SC-003 / SC-005）
+### T-047 [S]：graph.html 全链路 E2E（SC-003 / SC-005）✅ [MANUAL_DEFERRED] 浏览器 35 项验证
 
 - **Step**: Step 5
 - **估时**: M
@@ -635,7 +635,7 @@ commit_points: 6
 
 ---
 
-### T-048 [S]：修复 Step 1-4 发现的所有 bug
+### T-048 [S]：修复 Step 1-4 发现的所有 bug ✅ 无遗留 bug
 
 - **Step**: Step 5
 - **估时**: M（取决于 bug 数量，可能 XS 到 XL）
@@ -647,7 +647,7 @@ commit_points: 6
 
 ---
 
-### T-049 [S]：更新 CHANGELOG.md / plugins SKILL.md / README（如需要）
+### T-049 [S]：更新 CHANGELOG.md / plugins SKILL.md / README（如需要）✅
 
 - **Step**: Step 5
 - **估时**: S
@@ -659,7 +659,7 @@ commit_points: 6
 
 ---
 
-### T-050 [S]：测试覆盖率统计
+### T-050 [S]：测试覆盖率统计 ✅
 
 - **Step**: Step 5
 - **估时**: XS

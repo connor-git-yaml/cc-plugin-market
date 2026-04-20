@@ -225,6 +225,16 @@ spectra prepare src/auth/ --deep
 # Batch spec generation for entire project
 spectra batch --force
 
+# Lightweight reading mode — skip product-doc generators, faster batch (F5)
+spectra batch --mode=reading
+
+# Pure AST mode — skip all LLM inference (F5)
+spectra batch --mode=code-only
+
+# Generate interactive graph.html visualization after batch (F5)
+spectra batch --html
+spectra batch --mode=reading --html
+
 # Spec drift detection
 spectra diff specs/auth.spec.md src/auth/
 

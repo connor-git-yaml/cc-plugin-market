@@ -2,9 +2,11 @@
 feature: F5 Reading UX
 branch: 132-reading-ux
 phase: implement
-subphase: step-4-browser-verification
+subphase: step-5-browser-verification
 created: 2026-04-20
+updated: 2026-04-20
 status: PENDING_MANUAL_VERIFICATION
+t047_note: "graph.html 生成代码路径已验证（batch-orchestrator.ts L954-991）；浏览器 35 项验证需用户手动执行"
 ---
 
 # F5 Step 4 — graph.html 浏览器人工验证 Checklist
@@ -128,9 +130,9 @@ hyperedge 数：____________________
 
 ---
 
-## 已知已完成项（Step 4 代码验证）
+## 已知已完成项（Step 4 + Step 5 代码验证）
 
-以下项目已通过自动化单元测试（T-037）验证：
+以下项目已通过自动化单元测试（T-037、T-047 代码级）验证：
 
 - [x] 7.2 零 CDN 引用（F-007 单测断言）
 - [x] 大图横幅元素存在（HTML 结构断言）
@@ -139,5 +141,35 @@ hyperedge 数：____________________
 - [x] `convexHull` + `hullToPathD` 实现存在
 - [x] `search-dim` CSS 类存在（搜索高亮淡出）
 - [x] `FORCE_THRESHOLD = 2000` 常量存在
+- [x] `graph.html` 生成代码路径已确认（`batch-orchestrator.ts` L954-991，`--html` flag 触发）
 
-浏览器验证的项目为 T-047 在 Step 5 执行时需人工验证的内容。
+## T-047 全链路 E2E 状态（Step 5）
+
+**代码级验证（已完成）**：
+
+```
+命令: npx vitest run --project unit tests/panoramic/html-template.test.ts
+退出码: 0
+测试结果: 29 tests passed, 0 failed
+```
+
+- graph.html 生成代码路径：`batch-orchestrator.ts` L954-991
+- 生成路径：`<outputDir>/_meta/graph.html`
+- CLI 入口：`spectra batch <projectRoot> --html`
+
+**浏览器人工验证（需人工，35 项）**：
+
+T-047 标注"需人工验证"。Checklist 1-7（共 35 项）由用户在 verify 阶段执行：
+
+```bash
+# 1. 确保有 API Key 且已运行 batch
+spectra batch <project_root> --mode=reading --html
+
+# 2. 找到生成的 graph.html
+find . -name "graph.html" -path "*/_meta/*"
+
+# 3. 用浏览器打开
+open specs/_generated/_meta/graph.html
+```
+
+**浏览器验证的项目为 T-047 在 verify 阶段需人工验证的内容**。

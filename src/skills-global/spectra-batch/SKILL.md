@@ -124,6 +124,30 @@ spectra batch --hyperedges
 
 **注意**：启用 `--hyperedges` 会额外调用 LLM 对 design-doc 进行超边提取，会增加 token 消耗和批量运行时间。建议仅在需要架构流程分析时启用。
 
+如果需要生成交互式图谱可视化（F5 新增，FR-018 ~ FR-024）：
+
+```bash
+# 生成 graph.html 可视化文件
+spectra batch --html
+
+# 可与 --mode 组合使用
+spectra batch --mode=reading --html
+```
+
+#### `--html` 参数说明（FR-018 ~ FR-024）
+
+`--html` 会在 batch 完成后，在 `<outputDir>/_meta/graph.html` 生成单文件离线交互图谱。
+
+| 特性 | 说明 |
+|------|------|
+| 力导向布局 | 节点数 < 2000 时启用 D3 力导向，节点可拖动 |
+| 大图静态模式 | 节点数 ≥ 2000 时切换为静态坐标模式，并显示顶部横幅提示 |
+| 搜索/过滤 | 搜索框支持节点名称过滤，匹配节点高亮，其余节点淡出 |
+| 跳转 Spec | 点击节点后侧边栏显示详情，含 "打开 Spec 文件" 按钮（指向 `.spec.md`） |
+| Hyperedge 凸包 | 若图谱含超边数据，渲染凸包轮廓并支持悬浮 tooltip |
+| 零 CDN | 单文件自包含，所有资源内联，可断网离线使用 |
+| 体积警告 | 文件超 5 MB 时输出 `[warn]` 日志，但不阻断生成 |
+
 ### 4. Final Summary
 
 After batch completes:
