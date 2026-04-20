@@ -50,6 +50,8 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       dryRun: command.dryRun,
       budget: command.batchBudget,
       onOverBudget: command.onOverBudget,
+      // F5：批处理运行模式
+      mode: command.batchMode,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 

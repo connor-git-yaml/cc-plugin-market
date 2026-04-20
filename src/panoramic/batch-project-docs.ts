@@ -37,6 +37,7 @@ import type { EventSurfaceOutput } from './generators/event-surface-generator.js
 import type { PatternHintsOutput } from './models/pattern-hints-model.js';
 import type { RuntimeTopologyOutput } from './generators/runtime-topology-generator.js';
 import { loadStoredModuleSpecs } from './stored-module-specs.js';
+import type { BatchMode } from './qa/types.js';
 
 /**
  * 这些 generator 的 structuredData 被后续 pipeline 阶段在内存中直接消费
@@ -85,11 +86,35 @@ export interface BatchDocsQualityInputs {
   costSummary?: CostSummary;
 }
 
+// F5：reading 模式跳过的 generator ID 集合（产品文档层）
+const READING_SKIP_IDS = new Set([
+  'adr-pipeline',
+  'product-ux-docs',
+  'troubleshooting',
+  'data-model',
+  'docs-quality-evaluator',
+]);
+
+// F5：code-only 模式跳过的 generator ID 集合（在 reading 基础上还跳过架构推断层）
+const CODE_ONLY_SKIP_IDS = new Set([
+  ...READING_SKIP_IDS,
+  'architecture-overview',
+  'architecture-ir',
+  'pattern-hints',
+  'event-surface',
+  'runtime-topology',
+  'architecture-narrative',
+  'component-view',
+  'dynamic-scenarios',
+]);
+
 export interface GenerateBatchProjectDocsOptions {
   projectRoot: string;
   outputDir: string;
   /** specs 根目录（用于扫描模块 specs，默认 outputDir） */
   specsRootDir?: string;
+  /** F5：批处理运行模式（full | reading | code-only，默认 full） */
+  mode?: BatchMode;
 }
 
 export async function generateBatchProjectDocs(
@@ -99,8 +124,17 @@ export async function generateBatchProjectDocs(
   bootstrapGenerators();
 
   const registry = GeneratorRegistry.getInstance();
+  const effectiveMode: BatchMode = options.mode ?? 'full';
+
+  // F5：按 mode 过滤 generator，reading/code-only 模式跳过对应集合中的 generator
+  const modeSkipIds =
+    effectiveMode === 'code-only' ? CODE_ONLY_SKIP_IDS :
+    effectiveMode === 'reading' ? READING_SKIP_IDS :
+    new Set<string>(); // full 模式不跳过任何 generator
+
   const applicableGenerators = (await registry.filterByContext(projectContext))
-    .filter((generator) => isBatchProjectGeneratorId(generator.id));
+    .filter((generator) => isBatchProjectGeneratorId(generator.id))
+    .filter((generator) => !modeSkipIds.has(generator.id));
 
   const generatedDocs: BatchGeneratedDocSummary[] = [];
   const structuredOutputs = new Map<string, unknown>();

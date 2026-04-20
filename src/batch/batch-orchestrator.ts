@@ -66,6 +66,7 @@ import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
 import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
+import type { BatchMode } from '../panoramic/qa/types.js';
 
 // 从 package.json 读取版本号（避免硬编码）
 const _require = createRequire(import.meta.url);
@@ -110,6 +111,8 @@ export interface BatchOptions {
   enableDebtIntelligence?: boolean;
   /** Feature 130：debt-intelligence 的 LLM 客户端注入（未注入则降级为 no-llm-client） */
   debtLlmClient?: DebtSimpleLLMClient;
+  /** F5：批处理运行模式（full | reading | code-only，默认 full） */
+  mode?: BatchMode;
 }
 
 export interface BatchResult {
@@ -262,6 +265,19 @@ export async function runBatch(
   projectRoot: string,
   options: BatchOptions = {},
 ): Promise<BatchResult> {
+  // F5：mode 校验，无效值在启动阶段立即报错
+  const validModes: BatchMode[] = ['full', 'reading', 'code-only'];
+  if (options.mode !== undefined && !validModes.includes(options.mode)) {
+    throw new Error(
+      `无效的 mode 值: "${options.mode}"。有效值：full | reading | code-only`,
+    );
+  }
+
+  const effectiveMode: BatchMode = options.mode ?? 'full';
+
+  // F5：FR-006 — 日志输出当前 mode
+  logger.info(`[info] batch mode: ${effectiveMode}`);
+
   const {
     force = false,
     incremental = false,
@@ -618,7 +634,7 @@ export async function runBatch(
           outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
-          skipEnrichment: isSmallModule || budgetSkipEnrichmentAll,
+          skipEnrichment: isSmallModule || budgetSkipEnrichmentAll || effectiveMode === 'code-only',
           modelOverride:
             isSmallModule || budgetCheaperModelAll ? sonnetModelId : undefined,
           onStageProgress: (progress) => {
@@ -870,6 +886,7 @@ export async function runBatch(
         projectRoot: resolvedRoot,
         outputDir: projectDir,
         specsRootDir: resolvedOutputDir,
+        mode: effectiveMode,
       });
       projectContext = projectDocsResult.projectContext;
       projectDocs = projectDocsResult.generatedDocs
@@ -930,22 +947,25 @@ export async function runBatch(
       logger.warn(`graph-persistence: 图构建失败，跳过 graph.json 生成: ${graphErr instanceof Error ? graphErr.message : String(graphErr)}`);
     }
 
-    try {
-      const coverageAuditor = new CoverageAuditor();
-      const coverageAudit = await coverageAuditor.audit({
-        projectRoot: resolvedRoot,
-        outputDir: resolvedOutputDir,
-        projectContext,
-        docGraph,
-        moduleGroups: groupResult.groups,
-      });
-      const coverageMarkdown = coverageAuditor.render(coverageAudit);
-      const coverageMarkdownPathAbs = path.join(projectDir, '_coverage-report.md');
-      fs.mkdirSync(projectDir, { recursive: true });
-      fs.writeFileSync(coverageMarkdownPathAbs, coverageMarkdown, 'utf-8');
-      coverageReportPath = toProjectPath(coverageMarkdownPathAbs);
-    } catch (err) {
-      logger.warn(`覆盖率审计生成失败: ${String(err)}`);
+    // F5：reading/code-only 模式跳过 Coverage Audit（依赖完整产品文档集）
+    if (effectiveMode === 'full') {
+      try {
+        const coverageAuditor = new CoverageAuditor();
+        const coverageAudit = await coverageAuditor.audit({
+          projectRoot: resolvedRoot,
+          outputDir: resolvedOutputDir,
+          projectContext,
+          docGraph,
+          moduleGroups: groupResult.groups,
+        });
+        const coverageMarkdown = coverageAuditor.render(coverageAudit);
+        const coverageMarkdownPathAbs = path.join(projectDir, '_coverage-report.md');
+        fs.mkdirSync(projectDir, { recursive: true });
+        fs.writeFileSync(coverageMarkdownPathAbs, coverageMarkdown, 'utf-8');
+        coverageReportPath = toProjectPath(coverageMarkdownPathAbs);
+      } catch (err) {
+        logger.warn(`覆盖率审计生成失败: ${String(err)}`);
+      }
     }
   } catch (err) {
     logger.warn(`文档图谱生成失败: ${String(err)}`);
@@ -971,16 +991,19 @@ export async function runBatch(
     logger.warn(`架构索引生成失败: ${String(err)}`);
   }
 
-  try {
-    const docsBundleResult = orchestrateDocsBundle({
-      projectRoot: resolvedRoot,
-      outputDir: resolvedOutputDir,
-      metaDir,
-    });
-    docsBundleManifestPath = docsBundleResult.manifestPath;
-    docsBundleProfiles = docsBundleResult.profiles;
-  } catch (err) {
-    logger.warn(`文档 bundle 编排失败: ${String(err)}`);
+  // F5：reading/code-only 模式跳过 Docs Bundle（依赖完整产品文档集）
+  if (effectiveMode === 'full') {
+    try {
+      const docsBundleResult = orchestrateDocsBundle({
+        projectRoot: resolvedRoot,
+        outputDir: resolvedOutputDir,
+        metaDir,
+      });
+      docsBundleManifestPath = docsBundleResult.manifestPath;
+      docsBundleProfiles = docsBundleResult.profiles;
+    } catch (err) {
+      logger.warn(`文档 bundle 编排失败: ${String(err)}`);
+    }
   }
 
   // Feature 127：聚合 LLM 成本（在质量报告前计算，供其追加成本节）

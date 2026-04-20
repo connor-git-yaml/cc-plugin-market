@@ -82,6 +82,8 @@ export interface CLICommand {
   batchBudget?: number;
   /** Feature 127: 超预算时的非交互策略（仅 batch 子命令） */
   onOverBudget?: 'continue' | 'cheaper-model' | 'skip-enrichment' | 'cancel';
+  /** F5：批处理运行模式（full | reading | code-only，默认 full） */
+  batchMode?: 'full' | 'reading' | 'code-only';
 }
 
 /** 解析错误 */
@@ -654,6 +656,39 @@ export function parseArgs(argv: string[]): ParseResult {
     const concurrencyIdx = argv.indexOf('--concurrency');
     const concurrency = concurrencyIdx >= 0 ? parseInt(argv[concurrencyIdx + 1] ?? '1', 10) : undefined;
 
+    // F5：--mode flag 解析（full | reading | code-only）
+    // 支持两种写法：--mode reading 和 --mode=reading
+    let batchMode: CLICommand['batchMode'] | undefined;
+    const modeIdxSpace = argv.indexOf('--mode');
+    const modeEqArg = argv.find((a) => a.startsWith('--mode='));
+    if (modeIdxSpace !== -1 && argv[modeIdxSpace + 1] !== undefined) {
+      const rawMode = argv[modeIdxSpace + 1]!;
+      if (rawMode === 'full' || rawMode === 'reading' || rawMode === 'code-only') {
+        batchMode = rawMode;
+      } else {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--mode 值必须是 full | reading | code-only，实际: ${rawMode}`,
+          },
+        };
+      }
+    } else if (modeEqArg !== undefined) {
+      const rawMode = modeEqArg.slice('--mode='.length);
+      if (rawMode === 'full' || rawMode === 'reading' || rawMode === 'code-only') {
+        batchMode = rawMode;
+      } else {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--mode 值必须是 full | reading | code-only，实际: ${rawMode}`,
+          },
+        };
+      }
+    }
+
     // Feature 127: dry-run / budget / on-over-budget
     const dryRun = argv.includes('--dry-run');
     const batchBudgetIdx = argv.indexOf('--budget');
@@ -706,6 +741,7 @@ export function parseArgs(argv: string[]): ParseResult {
         dryRun: dryRun || undefined,
         batchBudget,
         onOverBudget,
+        batchMode,
       },
     };
   }
@@ -746,7 +782,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot' || args[i] === '--mode') {
         i++; // 跳过选项值
       }
       continue;

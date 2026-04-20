@@ -152,10 +152,20 @@ export function createMcpServer(): McpServer {
         .array(z.string())
         .optional()
         .describe('仅处理指定语言（如 ["typescript", "python"]）'),
+      // F5：运行模式参数（FR-007）
+      mode: z
+        .enum(['full', 'reading', 'code-only'])
+        .optional()
+        .describe('运行模式：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）'),
     },
-    async ({ projectRoot, force, incremental, languages }) => {
+    async ({ projectRoot, force, incremental, languages, mode }) => {
       try {
         const root = projectRoot ?? process.cwd();
+
+        // F5：F-009 修复 — MCP 路径 mode 日志输出（FR-006）
+        const effectiveMode = mode ?? 'full';
+        const mcpLogger = { info: (msg: string) => console.error(msg) };
+        mcpLogger.info(`[info] batch mode=${effectiveMode}`);
 
         // 加载项目配置作为 fallback（MCP 显式参数优先）
         const fileConfig = loadProjectConfig(root);
@@ -163,6 +173,7 @@ export function createMcpServer(): McpServer {
           force: force ?? fileConfig.force,
           incremental: incremental ?? fileConfig.incremental,
           languages: languages ?? fileConfig.languages,
+          mode: effectiveMode,
         });
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result) }],
