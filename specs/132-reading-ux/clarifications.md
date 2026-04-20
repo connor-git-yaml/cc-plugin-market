@@ -135,6 +135,20 @@ synthesis §3.2 的编排器建议与此一致，无反对意见。
 
 ## 待主编排器处理
 
-- [ ] **Q1**：通过 AskUserQuestion 询问用户选择 Option A / B / C，选定后更新 spec.md 的 FR-008、NFR-001、SC-001 和 Q1 状态
-- [ ] **Q2**：已锁定 Option C，主编排器更新 spec.md（FR-017、NFR-004、Story 2 AC 7，Q2 → Resolved）
-- [ ] **Q3**：已锁定 < 2000 策略，主编排器更新 spec.md（FR-022、FR-023、Story 3 AC 6、GraphHtmlOptions，Q3 → Resolved）
+- [x] **Q1**：已通过 AskUserQuestion 询问用户，**用户选择 Option A**（分场景指标：冷启动 < 300s + 热启动 < 60s）。spec.md 的 FR-008、NFR-001、SC-001、Story 1 AC 6 已回填。
+- [x] **Q2**：锁定 Option C（hardcode $0.05/query，record-only 不阻断），spec.md 的 FR-017、Story 2 AC 7 已回填。
+- [x] **Q3**：锁定 < 2000 force layout 策略，spec.md 的 FR-022、FR-023、Story 3 AC 5/6、GraphHtmlOptions、Out of Scope 1 已回填。
+
+---
+
+## 用户决策回执（2026-04-20）
+
+**Q1 决策**：用户确认选择 **Option A — 分场景指标**
+- 冷启动（无 SpecStore 缓存）：`--mode=reading` < 300 秒（相对 full 模式 ~776s 节省 ≥ 60%）
+- 热启动（有 SpecStore 缓存）：`--mode=reading` < 60 秒（相对 full 模式节省 ≥ 90%）
+- `--mode=code-only` 同等目标
+- verify 阶段 MUST 实际测量冷/热启动各自耗时，收益不足时退化为文档层跳过 + 日志提示（R5 缓解）
+
+**决策理由**：选项 A 诚实展示 F5 两种价值，两种场景均可执行验收。
+
+**Q2/Q3 决策**：按编排器倾向锁定（见上方分别说明），无用户异议。

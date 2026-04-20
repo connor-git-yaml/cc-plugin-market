@@ -50,7 +50,7 @@ priority: P1/P2
 
 5. **Given** MCP `batch` 工具调用时带有 `mode: "reading"` 参数，**When** 工具执行，**Then** 行为与 CLI 等价，schema 校验通过，返回与 `reading` 模式一致的输出结构。
 
-6. **Given** `--mode=reading` 运行的热启动场景（已有 SpecStore 缓存），**When** 对 graphify 示例项目（5 文件）运行，**Then** 总耗时达到 `[待澄清 Q1]` 所确认的性能目标（冷/热启动性能指标待 clarify 阶段确认后补充具体数值）。
+6. **Given** `--mode=reading` 对 graphify 示例项目（5 文件）运行，**When** 冷启动（无 SpecStore 缓存），**Then** 总耗时 < 300 秒（相对 full 模式 ~776s 节省 ≥ 60%）；**When** 热启动（有 SpecStore 缓存），**Then** 总耗时 < 60 秒（Q1 选项 A 已锁定）。
 
 ---
 
@@ -76,7 +76,7 @@ priority: P1/P2
 
 6. **Given** 图谱数据不足（BFS 命中节点数 < 3），**When** 系统处理问答，**Then** 系统降级到纯 RAG 路径继续尝试；若仍失败，则返回明确提示"图谱数据不足以回答此问题"，而非返回无引用的猜测性回答。
 
-7. **Given** 问答 LLM 调用的 budget 被耗尽（budget gate 触发），**When** 用户发起问答，**Then** 系统按照 `[待澄清 Q2]` 所确认的 budget 策略处理（具体行为待 clarify 阶段确认），并向用户给出可理解的提示，而非静默失败。
+7. **Given** 问答单次 token 成本超过 $0.05 的 hardcode 上限，**When** 系统处理完问答，**Then** LLM 调用**不被阻断**（继续返回答案），但 `tokenUsage.overBudget` 标记为 `true` 供后续审计；日志输出 "[warn] qna token cost over hardcode limit, recorded only"（Q2 选项 C 已锁定）。
 
 8. **Given** 用户发起问答，**When** 系统处理，**Then** 所有新 LLM 调用必须经过 F1 `runBudgetGate()` 并记录 `tokenUsage`，不允许绕过 budget 合规机制。
 
@@ -100,9 +100,9 @@ priority: P1/P2
 
 4. **Given** 用户点击节点后，spec 文件路径不存在或无法打开，**When** 打开行为触发，**Then** 系统在 graph.html 内展示友好的错误提示（如"spec 文件未找到：{path}"），而非浏览器报错或静默无响应。
 
-5. **Given** 项目节点数量在 1000 以内，**When** graph.html 渲染，**Then** 力导向布局正常运行，交互响应流畅（无明显卡顿）。
+5. **Given** 项目节点数量 < 2000，**When** graph.html 渲染，**Then** 力导向布局正常运行，节点可拖动，交互响应流畅（无明显卡顿）。
 
-6. **Given** 项目节点数量超过 1000（`[待澄清 Q3]`），**When** graph.html 渲染，**Then** 系统自动切换为静态坐标模式（关闭 force layout），保证页面不卡死；切换行为在控制台或页面角落有提示。
+6. **Given** 项目节点数量 ≥ 2000（Q3 已锁定），**When** graph.html 渲染，**Then** 系统自动切换为静态坐标模式（关闭 force layout + 禁用拖动 + 启用 community 预计算坐标），页面顶部横幅提示"大图模式：部分交互受限"，生成日志输出 warning。
 
 7. **Given** 生成的 `graph.html` 文件体积超过 5 MB（节点数据 + D3 + CSS 三合一内联），**When** 生成完成，**Then** 生成工具输出警告提示，但不阻断生成流程。
 
@@ -132,19 +132,27 @@ priority: P1/P2
 - **FR-005**：系统 MUST 在传入无效 `mode` 值时，在启动阶段返回包含有效枚举值列表的错误提示并退出 `[必须]`
 - **FR-006**：系统 MUST 在每次运行时于命令行日志中明确输出当前 `mode` 值 `[必须]`
 - **FR-007**：`batch` MCP 工具的 schema MUST 新增 `mode` enum 参数，且与 CLI 行为完全等价 `[必须]`
-- **FR-008**：`reading` 模式在热启动（有 SpecStore 缓存）下的耗时目标 `[待澄清 Q1]`（具体数值待 clarify 阶段确认后回填）`[必须]`
+- **FR-008**：`reading` 模式在 graphify 示例项目（5 文件）下的性能目标——冷启动 < 300 秒、热启动（有 SpecStore 缓存）< 60 秒；`code-only` 模式同等目标 `[必须]`（Q1 选项 A 已锁定）
 
 #### Story 2：自然语言问答
 
 - **FR-009**：系统 MUST 提供自然语言问答能力，接受用户自然语言查询并返回带引用的答案 `[必须]`
 - **FR-010**：系统 MUST 采用 Graph-first BFS 命中候选 → embedding 精排 Top-K → LLM 组装的 B+C 混合架构（synthesis §1 已锁定）`[必须]`
-- **FR-011**：系统 MUST 支持以下 5 类典型问题类型：（1）调用关系查询；（2）调用路径查询；（3）设计决策映射；（4）技术债查询（集成 F3 debt-scanner）；（5）流程归属查询（集成 F4 hyperedges）`[必须]`
+- **FR-011**：系统 MUST 支持以下 5 类典型问题类型，每类有明确的检索路径和 Citation 层级 `[必须]`：
+
+  | # | 问题类型 | 典型示例 | 主检索路径 | 数据源 | Citation 层级 |
+  |---|---------|---------|-----------|--------|---------------|
+  | 1 | 调用关系 | "什么调用了 storage？" | Graph BFS（inbound edges） | `graph.json` `references` 边 | 代码层 spec.md |
+  | 2 | 调用路径 | "从 parse_file 到 save_processed 的调用路径？" | Graph 双端 BFS（source→target） | `graph.json` `references` 边 | 代码层 spec.md（每跳一条） |
+  | 3 | 设计决策映射 | "handle_search 对应哪个设计决策？" | Graph BFS + hyperedge 反向查询 | `rationale_for` 边 + `hyperedges[]` | design-doc 层 + `[conceptually_related_to]` 区块 |
+  | 4 | 技术债查询 | "项目最老的 TODO 是哪条？" | 按 `DebtReport.codeEntries.ageDays` 倒序 | F3 `scanProjectDebt()` 输出 | 代码行（debt entry 原位置） |
+  | 5 | 流程归属 | "handle_search 属于哪个流程？" | `engine.getHyperedges({ nodeId })` | F4 hyperedges | hyperedge 来源文件的相关段落 |
 - **FR-012**：系统 MUST 在每条答案中提供 100% 的 `Citation` 覆盖，每条 `Citation` 必须包含 `specPath`、`lineRange`（含 `startLine` 和 `endLine`）、`excerpt` 三个字段 `[必须]`（来自 synthesis §2 差异化点 1 和 3）
 - **FR-013**：系统 MUST 能引用 spec.md 中 `[conceptually_related_to]` 区块（F4 hyperedges）的内容作为 Citation 来源，不仅限于代码行 `[必须]`
 - **FR-014**：系统 MUST 在 BFS 命中节点数 < 3 时降级到纯 RAG 路径；若仍失败，则返回明确的"图谱数据不足"提示，不返回无引用的猜测性答案 `[必须]`
 - **FR-015**：系统 MUST 对问答的每次 LLM 调用执行 F1 `runBudgetGate()`，并记录 `tokenUsage`，不允许绕过 budget 合规机制 `[必须]`（来自 synthesis §1 LLM 调用合规）
 - **FR-016**：问答 MUST 为单轮无状态模式，不在服务端维护会话历史；多轮对话由调用方自行组装上下文 `[必须]`
-- **FR-017**：问答的独立 budget 策略 SHOULD 由 `[待澄清 Q2]` 确认（倾向选项 C：小额 hardcode 不阻断，仅记账）`[可选]`
+- **FR-017**：问答每次调用 MUST 走 F1 `runBudgetGate()` 的 **record-only 模式**，hardcode 单次上限约 $0.05/query（估算 5k input + 1k output）；若超额，LLM 调用**不阻断**（继续返回答案），但在 `tokenUsage` 中标记 `overBudget: true` 供后续审计 `[必须]`（Q2 选项 C 已锁定）
 
 #### Story 3：graph.html 交互可视化
 
@@ -152,13 +160,16 @@ priority: P1/P2
 - **FR-019**：系统 MUST 在 `graph.html` 内提供节点搜索/过滤功能，支持按名称关键词高亮节点 `[必须]`
 - **FR-020**：系统 MUST 在用户点击节点时触发打开该节点关联 spec 文件的行为，并在 spec 文件不存在时展示友好提示（而非静默或浏览器报错）`[必须]`（来自 synthesis §2 差异化点 2）
 - **FR-021**：`graph.html` MUST 为完全 self-contained 文件（CSS + D3 + 数据三合一内联），零 CDN 依赖，可在离线环境打开 `[必须]`（来自 synthesis §1 graph.html self-contained 决策）
-- **FR-022**：系统 MUST 在节点数超过 1000 时自动切换为静态坐标模式（关闭 force layout），防止页面卡死（R4 缓解措施）`[必须]`
-- **FR-023**：节点数上限策略（< 500 / < 2000 / 无上限）SHOULD 由 `[待澄清 Q3]` 确认；默认倾向 < 2000 `[可选]`
+- **FR-022**：系统 MUST 在节点数 ≥ 2000 时自动切换为静态坐标模式（关闭 force layout + 禁用拖动 + 启用 community 预计算坐标），并输出 warning；< 2000 节点启用完整 force layout 交互 `[必须]`（Q3 已锁定）
+- **FR-023**：`graph.html` 节点数 ≥ 2000 时 MUST 顶部展示横幅"大图模式：部分交互受限（拖动已禁用）"，生成日志输出 `[warn] graph node count exceeds 2000, force layout disabled, using static layout` `[必须]`（Q3 已锁定）
 - **FR-024**：系统 SHOULD 在生成的 `graph.html` 超过 5 MB 时输出警告（不阻断生成）`[可选]`
 
 ### Non-Functional Requirements
 
-- **NFR-001 性能**：`reading` / `code-only` 模式的具体性能目标见 `[待澄清 Q1]`。当前已知冲突：tech-research 执行摘要 §3 认为热启动可达 < 120 秒，但后续建议 §1 认为冷启动含首次 spec 生成时不可达。性能指标确认前，verify 阶段 MUST 实际测量并记录冷/热启动各自耗时 `[待澄清 Q1]`（来自 synthesis §3.1 冲突标注）
+- **NFR-001 性能**：`reading` / `code-only` 模式的性能目标（Q1 选项 A 已锁定，基准为 graphify 示例 5 文件项目，full 模式 ~776s）：
+  - **冷启动**（无 SpecStore 缓存）：`--mode=reading` < 300 秒、`--mode=code-only` < 300 秒
+  - **热启动**（有 SpecStore 缓存）：`--mode=reading` < 60 秒、`--mode=code-only` < 60 秒
+  - verify 阶段 MUST 实际测量并记录冷/热启动各自耗时；收益不足时退化为文档层跳过 + 日志提示（R5 缓解）
 
 - **NFR-002 溯源强制**：所有问答答案的 Citation 覆盖率 MUST 达到 100%，即答案中每一条非引言性陈述都有对应 `Citation`；溯源跨越代码层 + 设计决策层两个维度（来自 synthesis §2 差异化点 1 和 3）
 
@@ -184,7 +195,7 @@ priority: P1/P2
 
 - **BatchMode**：控制 batch-project-docs 流水线执行范围的枚举值（`full | reading | code-only`），决定哪些生成器被激活或跳过；存在于 CLI flag 和 MCP `batch` 工具 schema 两个入口
 
-- **GraphHtmlOptions**：生成 `graph.html` 时的配置选项，包含：节点数量上限策略（`[待澄清 Q3]`）、force layout 开关阈值（默认 1000）、self-contained 内联模式（MUST 始终开启）、文件体积警告阈值（默认 5 MB）
+- **GraphHtmlOptions**：生成 `graph.html` 时的配置选项，包含：force layout 开关阈值（节点数 ≥ 2000 自动关闭，Q3 已锁定）、community 预计算坐标开关（大图模式启用）、self-contained 内联模式（MUST 始终开启）、文件体积警告阈值（默认 5 MB，见 FR-024）
 
 ---
 
@@ -192,9 +203,9 @@ priority: P1/P2
 
 ### 可度量成果
 
-- **SC-001 轻量模式性能**：`--mode=reading` 热启动（有 SpecStore 缓存）下，对 graphify 示例项目（5 文件）的运行耗时达到 `[待澄清 Q1]` 确认的目标值（暂定参考值：< 120 秒热启动，具体以 clarify 阶段结论为准）
+- **SC-001 轻量模式性能**：对 graphify 示例项目（5 文件），`--mode=reading` 冷启动实测耗时 < 300 秒、热启动 < 60 秒；`--mode=code-only` 同等目标（Q1 选项 A 已锁定）
 
-- **SC-002 问答覆盖率**：在 graphify 示例项目上，5 类典型问题类型各执行 3 次问答，100% 的返回答案包含至少 1 条有效 `Citation`（含 specPath + lineRange + excerpt），零无引用答案
+- **SC-002 问答覆盖率**：在 graphify 示例项目上，FR-011 表中 5 类典型问题各执行至少 3 次问答（共 ≥ 15 次），100% 的返回答案包含至少 1 条有效 `Citation`（含 `specPath` + `lineRange` + `excerpt`），零无引用答案
 
 - **SC-003 graph.html 可用性**：生成的 `graph.html` 在主流浏览器（Chrome / Firefox / Safari）离线环境下可打开，节点可拖动，搜索框可用，点击节点有可观察的响应行为
 
@@ -212,7 +223,7 @@ priority: P1/P2
 
 本 Feature（F5）明确不包含以下内容：
 
-1. **F6+ 大规模图谱功能**：节点数 > 2000（`[待澄清 Q3]` 确认的上限以上）的大图降级方案留给 F6+
+1. **F6+ 大规模图谱功能**：节点数 ≥ 2000 时本 Feature 已提供降级策略（FR-022/023），但完整大图渲染优化（如 WebGL、viewport culling、分层加载）留给 F6+
 2. **GraphQL 接口**：不为问答或可视化引入 GraphQL 端点
 3. **多轮问答 / 会话管理**：F5 问答严格单轮无状态，多轮对话组装由调用方负责，F5 不在服务端维护任何会话历史
 4. **实时协同**：不支持多用户同时编辑 / 查看 graph.html 的协同场景
@@ -224,38 +235,25 @@ priority: P1/P2
 
 ## Open Questions
 
-以下问题来自 synthesis §3，需在 clarify 阶段通过与用户/产品 owner 确认后回填。本 spec 对应位置标注了 `[待澄清 Q{N}]`。
+所有 clarify 阶段的待澄清项均已解决，详见 `clarifications.md`。本 spec 的 FR/NFR/SC 已回填对应决策结果。
 
-### Q1（P0 — 必须澄清）：性能目标场景定义冲突
+### Q1（P0 — 已解决 ✅）：性能目标场景定义
 
-**背景**：tech-research 内部存在矛盾——执行摘要 §3 认为可达 < 120 秒，但后续建议 §1 认为冷启动含首次 spec 生成时不可达（约 600 秒）。根因：`--mode=reading` 跳过的产品文档层只占约 80-150 秒，主要耗时在逐模块 spec 生成（约 600 秒）。
+**决策**：选项 A — 分场景指标（冷启动 < 300s + 热启动 < 60s）
+**依据**：Prompt 原始"< 120 秒"仅在 SpecStore 热启动下可达（冷启动主要耗时约 600s 在逐模块 spec 生成无法跳过）。分场景指标诚实展示 F5 的两种价值：冷启动相对 full 模式（~776s）节省 ≥ 60%，热启动节省 ≥ 90%。
+**影响范围已回填**：FR-008、NFR-001、SC-001、Story 1 Acceptance Scenario 6
 
-**待确认**：F5 Prompt 中"graphify 示例项目（5 文件）`--mode=reading` < 120 秒"是指冷启动还是热启动？如果是冷启动，是否需要重新定义指标（例如"`--mode=code-only` 冷启动 < X 秒" + "`--mode=reading` 热启动 < 120 秒"）？
+### Q2（P1 — 已解决 ✅）：问答的独立 budget 策略
 
-**影响范围**：FR-008、NFR-001、SC-001
+**决策**：选项 C — hardcode $0.05/query，走 `runBudgetGate()` 的 record-only 模式，仅记账不阻断
+**依据**：问答是交互级操作，"阻断"语义不合适；超额仅标记 `tokenUsage.overBudget: true` 供审计。
+**影响范围已回填**：FR-017、Story 2 Acceptance Scenario 7
 
-### Q2（P1）：问答的独立 budget 参数策略
+### Q3（P2 — 已解决 ✅）：graph.html 节点数上限策略
 
-**背景**：tech-research 后续建议提出是否为问答引入独立 budget 参数，避免和 batch 长任务的 budget 互相影响。
-
-**三个选项**：
-- 选项 A：和 batch 共用 `CLAUDE_BATCH_BUDGET_USD`
-- 选项 B：新增独立 `SPECTRA_QNA_BUDGET_USD` 环境变量 + CLI flag
-- 选项 C：Hardcode 小额度（如 $0.05/query），不阻断，仅记账
-
-**编排器倾向**：选项 C（问答是交互级操作，"阻断"语义不合适）
-
-**待确认**：用户/产品 owner 是否同意选项 C，或有其他偏好？
-
-**影响范围**：FR-015、FR-017，以及 Story 2 Acceptance Scenario 7
-
-### Q3（P2）：graph.html 节点数上限策略
-
-**背景**：tech-research §2.5 提出节点数 > 1000 时需切静态坐标，但未确认 F5 的节点数目标范围。
-
-**待确认**：F5 的节点数目标是 < 500 / < 2000 / 无上限？（编排器倾向 < 2000，更大规模留给 F6+）
-
-**影响范围**：FR-022、FR-023、`GraphHtmlOptions.nodeLimit`，以及 Story 3 Acceptance Scenario 6
+**决策**：< 2000 节点启用完整 force layout；≥ 2000 节点自动降级为静态坐标（关闭 force + 禁用拖动 + 启用 community 预计算坐标 + 顶部横幅 + 日志 warning）
+**依据**：graphify 示例项目（5 文件）和 Spectra 自身仓库均 << 2000，覆盖 F5 主线场景；大图渲染优化留给 F6+。
+**影响范围已回填**：FR-022、FR-023、GraphHtmlOptions、Story 3 Acceptance Scenario 5/6
 
 ---
 
