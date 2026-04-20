@@ -348,7 +348,8 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
       sources,
       skippedSources: skippedSources.length > 0 ? skippedSources : undefined,
       inputHash,
-      schemaVersion: '1.0',
+      // schema v2.0：本版本默认输出均为 2.0，消费方按 schemaVersion 分支读取（向后兼容 v1.0 fixture）
+      schemaVersion: '2.0',
     },
     nodes,
     links,

@@ -108,7 +108,7 @@ describe('graph-persistence — graph.json 基础字段检查（AC-101-03）', (
     expect(Array.isArray(result.nodes)).toBe(true);
     expect(Array.isArray(result.links)).toBe(true);
     expect(result.graph).toBeDefined();
-    expect(result.graph.schemaVersion).toBe('1.0');
+    expect(result.graph.schemaVersion).toBe('2.0');
     expect(typeof result.graph.generatedAt).toBe('string');
     expect(result.graph.nodeCount).toBe(result.nodes.length);
     expect(result.graph.edgeCount).toBe(result.links.length);
@@ -130,7 +130,7 @@ describe('graph-persistence — graph.json 基础字段检查（AC-101-03）', (
     expect(Array.isArray(parsed.nodes)).toBe(true);
     expect(Array.isArray(parsed.links)).toBe(true);
     expect(parsed.graph.generatedAt).toBeDefined();
-    expect(parsed.graph.schemaVersion).toBe('1.0');
+    expect(parsed.graph.schemaVersion).toBe('2.0');
     expect(parsed.graph.nodeCount).toBe(parsed.nodes.length);
     expect(parsed.graph.edgeCount).toBe(parsed.links.length);
   });
@@ -178,7 +178,7 @@ describe('graph-persistence — 容错降级（AC-101-07）', () => {
   it('所有数据源均为 undefined 时 buildKnowledgeGraph 不抛出', () => {
     expect(() => buildKnowledgeGraph({})).not.toThrow();
     const result = buildKnowledgeGraph({});
-    expect(result.graph.schemaVersion).toBe('1.0');
+    expect(result.graph.schemaVersion).toBe('2.0');
   });
 
   it('architectureIR 为 undefined 时 skippedSources 包含 architecture-ir', () => {
@@ -191,7 +191,7 @@ describe('graph-persistence — 容错降级（AC-101-07）', () => {
     const docGraph = makeMockDocGraph(['specs/auth.spec.md', 'specs/api.spec.md']);
     const result = buildKnowledgeGraph({ docGraph });
     expect(result.nodes.length).toBe(2);
-    expect(result.graph.schemaVersion).toBe('1.0');
+    expect(result.graph.schemaVersion).toBe('2.0');
   });
 });
 

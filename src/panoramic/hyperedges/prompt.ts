@@ -13,13 +13,7 @@
  */
 import type { GraphNode } from '../graph/graph-types.js';
 import type { DocChunk } from '../anchoring/chunker.js';
-
-// ============================================================
-// 文档类节点 kind 集合（需要从代码节点列表中排除）
-// ============================================================
-
-/** 视为"文档类节点"的 kind 值，提取 hyperedge 时不作为代码节点 */
-const DOC_NODE_KINDS = new Set<GraphNode['kind']>(['spec', 'document']);
+import { DOC_NODE_KINDS } from './constants.js';
 
 // ============================================================
 // 公开 API

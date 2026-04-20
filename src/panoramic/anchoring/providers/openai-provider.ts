@@ -61,7 +61,8 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
    * @throws Error 当 API 请求失败（HTTP 非 200）或网络异常时
    */
   async embed(texts: string[]): Promise<EmbedResult> {
-    const startedAt = Date.now();
+    // 与 LocalEmbeddingProvider 统一使用 performance.now()（亚毫秒精度）
+    const startedAt = performance.now();
 
     const response = await fetch(OpenAIEmbeddingProvider.ENDPOINT, {
       method: 'POST',
@@ -94,7 +95,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       // 使用 API 返回的真实 token 计数，而非字符数粗估
       inputTokens: payload.usage.prompt_tokens,
       outputTokens: 0,
-      durationMs: Date.now() - startedAt,
+      durationMs: performance.now() - startedAt,
     };
 
     return { vectors, tokenUsage };

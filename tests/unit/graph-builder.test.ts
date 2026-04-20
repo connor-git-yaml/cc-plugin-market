@@ -134,7 +134,7 @@ describe('buildKnowledgeGraph — 字段结构完整性（AC-101-03）', () => {
     expect(Array.isArray(result.nodes)).toBe(true);
     expect(Array.isArray(result.links)).toBe(true);
     expect(result.graph).toBeDefined();
-    expect(result.graph.schemaVersion).toBe('1.0');
+    expect(result.graph.schemaVersion).toBe('2.0');
     expect(typeof result.graph.generatedAt).toBe('string');
     expect(result.graph.nodeCount).toBe(result.nodes.length);
     expect(result.graph.edgeCount).toBe(result.links.length);
@@ -259,7 +259,7 @@ describe('buildKnowledgeGraph — 容错降级（AC-101-07）', () => {
   it('architectureIR 为 undefined 时不抛出，graph.json 仍生成', () => {
     expect(() => buildKnowledgeGraph({})).not.toThrow();
     const result = buildKnowledgeGraph({});
-    expect(result.graph.schemaVersion).toBe('1.0');
+    expect(result.graph.schemaVersion).toBe('2.0');
     expect(Array.isArray(result.nodes)).toBe(true);
     expect(Array.isArray(result.links)).toBe(true);
   });

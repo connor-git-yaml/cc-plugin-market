@@ -21,13 +21,7 @@ import type { EmbeddingTokenUsage } from '../anchoring/embedding-provider.js';
 import { buildHyperedgePrompt } from './prompt.js';
 import { HyperedgesOutputSchema } from './schema.js';
 import { extractJsonArray } from '../utils/llm-facade.js';
-
-// ============================================================
-// 视为"文档类节点"的 kind 集合（不参与代码节点语义校验）
-// ============================================================
-
-/** 文档类节点 kind：这类节点不算"代码节点" */
-const DOC_NODE_KINDS = new Set<GraphNode['kind']>(['spec', 'document']);
+import { DOC_NODE_KINDS } from './constants.js';
 
 // ============================================================
 // 对外接口类型
@@ -67,10 +61,11 @@ export interface ExtractResult {
    */
   usage: EmbeddingTokenUsage[];
   /**
-   * Zod 校验失败的原始样本
-   * 用于 trace 日志记录
+   * 校验失败的原始样本
+   * 用于 trace 日志记录。errors 可能是 Zod schema 校验失败（`z.ZodError`），
+   * 也可能是 JSON 解析阶段的 `Error`（LLM 输出非法 JSON）。
    */
-  failedSamples: Array<{ raw: unknown; errors: z.ZodError }>;
+  failedSamples: Array<{ raw: unknown; errors: z.ZodError | Error }>;
 }
 
 // ============================================================
@@ -177,7 +172,7 @@ export async function extractHyperedges(
       return {
         hyperedges: [],
         usage: [tokenUsage],
-        failedSamples: [{ raw: rawContent, errors: new Error('JSON 解析失败') as unknown as z.ZodError }],
+        failedSamples: [{ raw: rawContent, errors: new Error('JSON 解析失败') }],
       };
     }
   }

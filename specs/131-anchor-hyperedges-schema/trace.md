@@ -30,3 +30,9 @@ Gate policy: balanced（GATE_DESIGN 硬门禁始终暂停）
 [10:30:28] Phase 6 Commit 3 fallback COMPLETED | commit=248d6a2 | 14 tests 新增，全量 1815 | build OK
 [10:40:01] Phase 6 Commit 4 hyperedges COMPLETED | commit=207f3e1 | 27 tests 新增，全量 1842 | build OK
 [10:48:09] Phase 6 Commit 5 MCP COMPLETED | 新增 11 MCP tests，全量 1853 | build OK | graph_community 延后 Polish
+[10:56:22] Phase 6 Commit 6 e2e COMPLETED | commit=85cb634 | 14 tests 新增，全量 1867 passed | build OK | 40/40 Tasks done
+[10:57:34] Phase 6.5 independent verify PASSED | vitest 1867 / build OK / repo-check PASS / release-check VALID / direction-audit returncode=0 / schema 独立 commit 5844a45 确认
+[10:57:34] Phase 7a+7b STARTED | parallel | spec-review + quality-review
+[11:07:30] Phase 7a spec-review COMPLETED | artifacts=[spec-review.md] | 24/26 FR / 10/12 AC / W-001 需修 schemaVersion
+[11:07:30] Phase 7b quality-review COMPLETED | artifacts=[quality-review.md] | 评级 GOOD / W-2 类型转型 crash / W-3 计时 API / W-4 DOC_NODE_KINDS 重复
+[11:07:30] 主编排器修复 review WARNING: (a) graph-builder.ts schemaVersion=2.0; (b) extractor.ts failedSamples.errors 类型 ZodError|Error; (c) openai-provider 计时改 performance.now(); (d) 提取 DOC_NODE_KINDS 到 constants.ts
