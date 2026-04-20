@@ -519,7 +519,7 @@ commit_points: 6
 
 ---
 
-### T-039 [S]：提交 Step 4（commit point）[COMMIT]
+### T-039 [S]：提交 Step 4（commit point）[COMMIT] ✅
 
 - **Step**: Step 4
 - **估时**: XS
