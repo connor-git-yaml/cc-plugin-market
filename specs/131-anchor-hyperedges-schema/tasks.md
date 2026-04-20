@@ -461,7 +461,7 @@
 
 ---
 
-### T021 [S] 新增 `providers/openai-provider.ts`：OpenAI text-embedding-3-small Provider
+### T021 [x] [S] 新增 `providers/openai-provider.ts`：OpenAI text-embedding-3-small Provider
 
 **目标文件**: `src/panoramic/anchoring/providers/openai-provider.ts`
 
@@ -482,7 +482,7 @@
 
 ---
 
-### T022 [P] 新增 `openai-provider.test.ts`：OpenAI Provider 单测（mock fetch）
+### T022 [x] [P] 新增 `openai-provider.test.ts`：OpenAI Provider 单测（mock fetch）
 
 **目标文件**: `tests/panoramic/anchoring/providers/openai-provider.test.ts`
 
@@ -502,7 +502,7 @@
 
 ---
 
-### T023 [S] 新增 `providers/factory.ts`：createEmbeddingProvider 工厂函数
+### T023 [x] [S] 新增 `providers/factory.ts`：createEmbeddingProvider 工厂函数
 
 **目标文件**: `src/panoramic/anchoring/providers/factory.ts`
 
@@ -524,7 +524,7 @@
 
 ---
 
-### T024 [P] 新增 `factory.test.ts`：环境变量切换单测
+### T024 [x] [P] 新增 `factory.test.ts`：环境变量切换单测
 
 **目标文件**: `tests/panoramic/anchoring/providers/factory.test.ts`
 
