@@ -29,3 +29,4 @@ Gate policy: balanced（GATE_DESIGN 硬门禁始终暂停）
 [10:25:13] GATE_IMPLEMENT_MID (T020/40 = 50): AUTO_CONTINUE | on_failure 且零失败
 [10:30:28] Phase 6 Commit 3 fallback COMPLETED | commit=248d6a2 | 14 tests 新增，全量 1815 | build OK
 [10:40:01] Phase 6 Commit 4 hyperedges COMPLETED | commit=207f3e1 | 27 tests 新增，全量 1842 | build OK
+[10:48:09] Phase 6 Commit 5 MCP COMPLETED | 新增 11 MCP tests，全量 1853 | build OK | graph_community 延后 Polish

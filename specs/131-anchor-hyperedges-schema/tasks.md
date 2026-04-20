@@ -840,7 +840,7 @@
 
 ---
 
-### T038 [P] 新增纯代码项目降级集成测试
+### T038 [x] [P] 新增纯代码项目降级集成测试
 
 **目标文件**: `tests/integration/pure-code-degradation.test.ts`（新建）
 
@@ -860,7 +860,7 @@
 
 ---
 
-### T039 [P] direction-audit 回归验证：v2.0 fixture 零违规断言
+### T039 [x] [P] direction-audit 回归验证：v2.0 fixture 零违规断言
 
 **目标文件**: `tests/integration/direction-audit.test.ts`（在 T008 基础上补充端到端断言）
 
@@ -880,7 +880,7 @@
 
 ---
 
-### T040 [S] 核查 `doc-graph-builder.ts` 端到端集成完整性
+### T040 [x] [S] 核查 `doc-graph-builder.ts` 端到端集成完整性
 
 **目标文件**: `src/panoramic/builders/doc-graph-builder.ts`（核查，必要时补充）
 
