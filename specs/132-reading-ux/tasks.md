@@ -671,7 +671,7 @@ commit_points: 6
 
 ---
 
-### T-051 [S]：提交 Step 5（commit point）[COMMIT]
+### T-051 [S]：提交 Step 5（commit point）[COMMIT] ✅
 
 - **Step**: Step 5
 - **估时**: XS
