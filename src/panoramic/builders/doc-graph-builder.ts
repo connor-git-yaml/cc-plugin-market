@@ -2,11 +2,18 @@
  * DocGraphBuilder
  * 汇总当前批量生成的 ModuleSpec、既有 spec 文件以及文件级依赖图，
  * 产出源码 -> spec -> 交叉引用 -> 缺口的统一图谱。
+ *
+ * schema v2.0 集成（F4）：
+ * - anchorDocToCode()：将 design-doc 与代码节点的语义边写入 GraphJSON.links
+ * - tokenUsage 汇总记录供调用方（如 BudgetGate）审计
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DependencyGraph } from '../../models/dependency-graph.js';
 import type { ModuleSpec } from '../../models/module-spec.js';
+import type { GraphNode, GraphEdge } from '../graph/graph-types.js';
+import type { EmbeddingProvider, EmbeddingTokenUsage } from '../anchoring/embedding-provider.js';
+import { anchorDocToCode } from '../anchoring/index.js';
 
 export const MODULE_SPEC_ANCHOR_ID = 'module-spec';
 export const CROSS_REFERENCE_MARKER_PREFIX = '<!-- cross-reference-index: auto';
@@ -568,4 +575,67 @@ function normalizeProjectPath(inputPath: string, projectRoot: string): string {
     ? path.relative(projectRoot, inputPath)
     : inputPath;
   return relative.split(path.sep).join('/');
+}
+
+// ============================================================
+// schema v2.0 — anchorDocToCode 集成接口（F4 Commit 2）
+// ============================================================
+
+/**
+ * anchorDocToCode 集成选项
+ * 供 doc-graph-builder 的调用方传入，驱动语义锚定链路
+ */
+export interface AnchorIntegrationOptions {
+  /** Markdown 文档文件绝对路径列表 */
+  markdownFiles: string[];
+  /** 图谱中的代码节点列表 */
+  graphNodes: GraphNode[];
+  /** EmbeddingProvider 实例（Local 或 OpenAI） */
+  provider: EmbeddingProvider;
+  /** 相似度阈值（默认 0.75） */
+  threshold?: number;
+  /** evidenceText 最大字符数（默认 200） */
+  maxEvidenceLength?: number;
+}
+
+/**
+ * anchorDocToCode 集成结果
+ */
+export interface AnchorIntegrationResult {
+  /** 生成的语义边（追加到 GraphJSON.links） */
+  semanticEdges: GraphEdge[];
+  /**
+   * 所有 embedding 调用的 token 使用记录
+   * 格式与 BudgetGate F1 的 BudgetGateAttempt 兼容（含 llmModel + durationMs）
+   */
+  tokenUsage: EmbeddingTokenUsage[];
+}
+
+/**
+ * 在 doc-graph-builder 流程中调用 anchorDocToCode，
+ * 将语义边追加到图谱 links 数组。
+ *
+ * - 零 markdownFiles 时直接返回空结果（FR-015 降级）
+ * - tokenUsage 汇总记录供调用方审计（AC-011）
+ *
+ * @param projectRoot 项目根目录（绝对路径）
+ * @param anchorOptions 锚定选项
+ */
+export async function runAnchorIntegration(
+  projectRoot: string,
+  anchorOptions: AnchorIntegrationOptions,
+): Promise<AnchorIntegrationResult> {
+  const result = await anchorDocToCode({
+    projectRoot,
+    markdownFiles: anchorOptions.markdownFiles,
+    graphNodes: anchorOptions.graphNodes,
+    provider: anchorOptions.provider,
+    threshold: anchorOptions.threshold,
+    maxEvidenceLength: anchorOptions.maxEvidenceLength,
+  });
+
+  return {
+    semanticEdges: result.edges,
+    tokenUsage: result.tokenUsage,
+  };
 }

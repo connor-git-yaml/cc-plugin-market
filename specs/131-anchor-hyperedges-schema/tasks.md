@@ -195,7 +195,7 @@
 
 ---
 
-### T009 [S] 新增 `package.json` optionalDependencies（@huggingface/transformers）
+### T009 [x] [S] 新增 `package.json` optionalDependencies（@huggingface/transformers）
 
 **目标文件**: `package.json`
 
@@ -213,7 +213,7 @@
 
 ---
 
-### T010 [P] 新增 `embedding-provider.ts`：EmbeddingProvider 接口 + TokenUsage 类型
+### T010 [x] [P] 新增 `embedding-provider.ts`：EmbeddingProvider 接口 + TokenUsage 类型
 
 **目标文件**: `src/panoramic/anchoring/embedding-provider.ts`
 
@@ -232,7 +232,7 @@
 
 ---
 
-### T011 [P] 新增 `chunker.ts`：Hybrid Chunking 实现
+### T011 [x] [P] 新增 `chunker.ts`：Hybrid Chunking 实现
 
 **目标文件**: `src/panoramic/anchoring/chunker.ts`
 
@@ -254,7 +254,7 @@
 
 ---
 
-### T012 [P] 新增 `chunker.test.ts`：Hybrid Chunking 单测
+### T012 [x] [P] 新增 `chunker.test.ts`：Hybrid Chunking 单测
 
 **目标文件**: `tests/panoramic/anchoring/chunker.test.ts`
 
@@ -275,7 +275,7 @@
 
 ---
 
-### T013 [S] 新增 `providers/local-provider.ts`：LocalEmbeddingProvider
+### T013 [x] [S] 新增 `providers/local-provider.ts`：LocalEmbeddingProvider
 
 **目标文件**: `src/panoramic/anchoring/providers/local-provider.ts`
 
@@ -298,7 +298,7 @@
 
 ---
 
-### T014 [P] 新增 `local-provider.test.ts`：Local Provider 单测（mock ONNX）
+### T014 [x] [P] 新增 `local-provider.test.ts`：Local Provider 单测（mock ONNX）
 
 **目标文件**: `tests/panoramic/anchoring/providers/local-provider.test.ts`
 
@@ -318,7 +318,7 @@
 
 ---
 
-### T015 [S] 新增 `similarity.ts`：Cosine 相似度计算 + 阈值过滤
+### T015 [x] [S] 新增 `similarity.ts`：Cosine 相似度计算 + 阈值过滤
 
 **目标文件**: `src/panoramic/anchoring/similarity.ts`
 
@@ -339,7 +339,7 @@
 
 ---
 
-### T016 [P] 新增 `similarity.test.ts`：threshold 边界值单测
+### T016 [x] [P] 新增 `similarity.test.ts`：threshold 边界值单测
 
 **目标文件**: `tests/panoramic/anchoring/similarity.test.ts`
 
@@ -360,7 +360,7 @@
 
 ---
 
-### T017 [S] 新增 `edge-builder.ts`：语义边生成 + evidenceText 截断算法
+### T017 [x] [S] 新增 `edge-builder.ts`：语义边生成 + evidenceText 截断算法
 
 **目标文件**: `src/panoramic/anchoring/edge-builder.ts`
 
@@ -383,7 +383,7 @@
 
 ---
 
-### T018 [P] 新增 `edge-builder.test.ts`：边生成逻辑单测
+### T018 [x] [P] 新增 `edge-builder.test.ts`：边生成逻辑单测
 
 **目标文件**: `tests/panoramic/anchoring/edge-builder.test.ts`
 
@@ -404,7 +404,7 @@
 
 ---
 
-### T019 [S] 新增 `tests/fixtures/design-doc-project/` fixture
+### T019 [x] [S] 新增 `tests/fixtures/design-doc-project/` fixture
 
 **目标文件**: `tests/fixtures/design-doc-project/`（目录）
 
@@ -425,7 +425,7 @@
 
 ---
 
-### T020 [S] 新增 `anchoring/index.ts`：anchorDocToCode 编排函数 + BudgetGate 集成
+### T020 [x] [S] 新增 `anchoring/index.ts`：anchorDocToCode 编排函数 + BudgetGate 集成
 
 **目标文件**: `src/panoramic/anchoring/index.ts`
 

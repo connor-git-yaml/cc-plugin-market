@@ -64,6 +64,9 @@
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"
   },
+  "optionalDependencies": {
+    "@huggingface/transformers": "^3.x"
+  },
   "engines": {
     "node": ">=20.0.0"
   }
