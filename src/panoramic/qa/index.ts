@@ -186,6 +186,17 @@ export async function answerQuestion(
 
   console.info(`[info] qa: embedding_chunks=${rerankResult.rankedChunks.length}, embedding_ms=${embeddingMs}`);
 
+  // W-002：BFS 候选节点不足 3 个（rag-only 降级）且 RAG 精排 0 个 chunk 时，二级降级
+  if (graphCtx.fallbackMode === 'rag-only' && rerankResult.rankedChunks.length === 0) {
+    return {
+      text: '图谱数据不足以回答此问题：BFS 命中候选节点不足 3 个，且 RAG 精排未命中任何相关 spec 片段。请尝试更具体的问题或运行 `spectra batch` 补充图谱数据。',
+      citations: [],
+      tokenUsage: { input: 0, output: 0, overBudget: false },
+      durationMs: Date.now() - t0,
+      fallbackMode: 'rag-only',
+    };
+  }
+
   // ── Step 4：debt 上下文注入 ───────────────────────────────
 
   // 注意：scanProjectDebt 需要 registry，但 QnAOptions 未提供
@@ -233,8 +244,14 @@ export async function answerQuestion(
       ? llmResult.parsedCitations
       : citations;
 
+  // W-004：finalCitations 为空且 answer 中未包含"图谱数据不足"时，加注无引用警告
+  let answerText = llmResult.answer;
+  if (finalCitations.length === 0 && !answerText.includes('图谱数据不足')) {
+    answerText = '[注意：本答案无引用，图谱数据可能不足]\n\n' + answerText;
+  }
+
   return {
-    text: llmResult.answer,
+    text: answerText,
     citations: finalCitations,
     tokenUsage: llmResult.tokenUsage,
     durationMs: totalMs,

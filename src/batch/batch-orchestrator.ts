@@ -974,6 +974,10 @@ export async function runBatch(
           });
           const enrichedGraphJson = { ...graphJson, nodes: enrichedNodes };
           const graphDataJson = JSON.stringify(enrichedGraphJson);
+          // FR-023：节点数 >= 2000 时输出 warn 提示（大图性能风险）
+          if (enrichedNodes.length >= 2000) {
+            logger.warn('[warn] graph node count exceeds 2000, force layout disabled, using static layout');
+          }
           const htmlContent = buildHtmlTemplate(graphDataJson);
           const htmlPath = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META, 'graph.html');
           fs.mkdirSync(path.dirname(htmlPath), { recursive: true });

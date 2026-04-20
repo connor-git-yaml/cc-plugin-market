@@ -271,6 +271,90 @@ describe('answerQuestion', () => {
     });
   });
 
+  describe('边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级', () => {
+    it('fallbackMode=rag-only 且 rankedChunks 为空时应返回"图谱数据不足"提示，不调用 LLM', async () => {
+      vi.mocked(GraphQueryEngine.loadFromFile).mockReturnValue(
+        {} as unknown as InstanceType<typeof GraphQueryEngine>,
+      );
+
+      // BFS 命中节点少于 3 个，graph-retriever 设置 fallbackMode='rag-only'
+      vi.mocked(retrieveGraphContext).mockReturnValue({
+        bfsNodes: [
+          { id: 'node-a', label: '模块 A', kind: 'module' },
+        ],
+        topChunks: [],
+        hyperedges: [],
+        fallbackMode: 'rag-only',
+      });
+
+      // RAG 精排未命中任何 chunk
+      vi.mocked(rerankWithEmbedding).mockResolvedValue({
+        rankedChunks: [],
+      });
+
+      const result = await answerQuestion({ text: '测试问题' }, defaultOptions);
+
+      expect(result.text).toContain('图谱数据不足');
+      expect(result.text).toContain('BFS 命中候选节点不足 3 个');
+      expect(result.citations).toEqual([]);
+      expect(result.fallbackMode).toBe('rag-only');
+      // 不应调用后续 LLM 步骤
+      expect(callQnALlm).not.toHaveBeenCalled();
+    });
+
+    it('fallbackMode=bfs-only 时即使 rankedChunks 为空也继续正常流程', async () => {
+      setupNormalMocks();
+      // 覆盖为 bfs-only 降级
+      vi.mocked(retrieveGraphContext).mockReturnValue({
+        bfsNodes: [
+          { id: 'node-a', label: '模块 A', kind: 'module' },
+        ],
+        topChunks: [],
+        hyperedges: [],
+        fallbackMode: 'bfs-only',
+      });
+      vi.mocked(rerankWithEmbedding).mockResolvedValue({
+        rankedChunks: [],
+        fallbackMode: 'bfs-only',
+      });
+
+      // bfs-only 应继续走 LLM（不触发 W-002 二级降级）
+      const result = await answerQuestion({ text: '测试' }, defaultOptions);
+      expect(callQnALlm).toHaveBeenCalledOnce();
+      // bfs-only + 无引用时会触发 W-004 兜底提示
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('边界条件 — W-004：finalCitations 为空时加注无引用警告', () => {
+    it('LLM parsedCitations 为空且 buildCitations 也为空时 answer 前应加注"[注意：本答案无引用"', async () => {
+      setupNormalMocks();
+
+      vi.mocked(buildCitations).mockReturnValue([]);
+      vi.mocked(callQnALlm).mockResolvedValue({
+        answer: '这是一个没有引用的回答',
+        parsedCitations: [],
+        tokenUsage: { input: 100, output: 50, overBudget: false },
+      });
+
+      const result = await answerQuestion({ text: '测试' }, defaultOptions);
+
+      expect(result.citations).toEqual([]);
+      expect(result.text).toContain('[注意：本答案无引用');
+      expect(result.text).toContain('这是一个没有引用的回答');
+    });
+
+    it('finalCitations 非空时 answer 不加注无引用警告', async () => {
+      setupNormalMocks();
+
+      const result = await answerQuestion({ text: '测试' }, defaultOptions);
+
+      // setupNormalMocks 中有 parsedCitations，不为空
+      expect(result.citations.length).toBeGreaterThan(0);
+      expect(result.text).not.toContain('[注意：本答案无引用');
+    });
+  });
+
   describe('citations 合并', () => {
     it('LLM 解析的 citations 非空时应优先使用', async () => {
       setupNormalMocks();

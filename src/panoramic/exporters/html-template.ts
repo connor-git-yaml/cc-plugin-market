@@ -540,8 +540,8 @@ export function buildFullHtml(
         var a = hull[hull.length - 2];
         var b = hull[hull.length - 1];
         var c = sorted[i];
-        // 叉积判断是否左转（逆时针）
-        if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) >= 0) break;
+        // 叉积判断是否左转（逆时针）；> 0 保留共线点，避免凸包退化（P1-4 修复）
+        if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) > 0) break;
         hull.pop();
       }
       hull.push(sorted[i]);

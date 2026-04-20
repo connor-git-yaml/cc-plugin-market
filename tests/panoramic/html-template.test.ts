@@ -124,6 +124,33 @@ describe('buildHtmlTemplate', () => {
       // 静态坐标路径标志：assignStaticCoords 函数
       expect(html).toContain('assignStaticCoords');
     });
+
+    // P1-6：力导向阈值边界测试（1999 / 2000 / 2001）
+    it('节点数 1999（临界值以下）时 HTML 包含 forceSimulation（力导向模式）', () => {
+      const json = makeGraphJson(1999);
+      const html = buildHtmlTemplate(json);
+      // force layout 代码始终存在（运行时由 isLarge 判断是否真正执行）
+      expect(html).toContain('forceSimulation');
+      // 阈值常量存在于 HTML 中
+      expect(html).toContain('FORCE_THRESHOLD = 2000');
+    });
+
+    it('节点数 2000（恰好达到阈值）时 HTML 包含静态布局标志 assignStaticCoords', () => {
+      const json = makeGraphJson(2000);
+      const html = buildHtmlTemplate(json);
+      // 静态坐标分配函数必须存在
+      expect(html).toContain('assignStaticCoords');
+      // 阈值常量存在
+      expect(html).toContain('FORCE_THRESHOLD = 2000');
+    });
+
+    it('节点数 2001（超过阈值）时 HTML 同样包含静态布局标志 assignStaticCoords', () => {
+      const json = makeGraphJson(2001);
+      const html = buildHtmlTemplate(json);
+      // 超阈值行为与 2000 一致：静态布局
+      expect(html).toContain('assignStaticCoords');
+      expect(html).toContain('FORCE_THRESHOLD = 2000');
+    });
   });
 
   describe('T-031：大图横幅（FR-023）', () => {

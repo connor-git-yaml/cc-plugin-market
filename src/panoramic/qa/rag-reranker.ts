@@ -147,34 +147,39 @@ export async function rerankWithEmbedding(
     return { rankedChunks: [], fallbackMode: 'bfs-only' };
   }
 
-  // Step 3d：按节点构建 nodeVectors（将 chunk 向量映射到对应的 bfs 节点）
-  // 此处简化：对每个 bfs 节点使用 query vector 本身作为代理，
-  // 实际精排以 chunk-query 相似度为主（filterByThreshold 需要 nodeVectors Map）
-  // 策略：为每个 bfsNode 的 id 建立 nodeVectors，值为 queryVector
+  // Step 3d：以 query 为唯一代理节点，计算 chunk-query 相似度（单一排序维度）
+  // 使用 __query__ 作为虚拟节点 ID，避免 chunk × bfsNode 笛卡尔积的语义伪装
   const nodeVectors = new Map<string, Float32Array>();
-  for (const bfsNode of graphCtx.bfsNodes) {
-    nodeVectors.set(bfsNode.id, queryVector);
-  }
+  nodeVectors.set('__query__', queryVector);
 
-  // 当没有 bfsNodes 时，使用 "query" 作为兜底节点
-  if (nodeVectors.size === 0) {
-    nodeVectors.set('_query_', queryVector);
-  }
-
-  // Step 3e：filterByThreshold 筛选相似度达标的 pairs
+  // Step 3e：filterByThreshold 筛选相似度达标的 pairs（按 chunk-query 相似度排序）
   const pairs = filterByThreshold(chunkVectors, nodeVectors, threshold);
 
   // Step 3f：将 pairs 映射到 RankedChunk，按 similarity 降序取 Top-K
+  // nodeId 来自 chunk.filePath 对应的 BFS 节点（通过 specPath 匹配）
+  // 匹配失败时保底使用第一个 bfsNode 的 id
+  const fallbackNodeId = graphCtx.bfsNodes[0]?.id ?? '__unknown__';
   const topPairs = pairs.slice(0, topK);
 
   const rankedChunks: RankedChunk[] = topPairs
     .map((pair) => {
       const chunk = chunks[pair.chunkIndex];
       if (!chunk) return null;
+
+      // 按 specPath 匹配 chunk.filePath 来源所属的 BFS 节点
+      const matchedNode = graphCtx.bfsNodes.find(
+        (n) => n.specPath !== undefined && (
+          // 支持绝对路径和 repo-relative 路径两种情况
+          n.specPath === chunk.filePath ||
+          chunk.filePath.endsWith(n.specPath) ||
+          n.specPath.endsWith(chunk.filePath)
+        ),
+      );
+
       return {
         chunk,
         similarity: pair.similarity,
-        nodeId: pair.nodeId,
+        nodeId: matchedNode?.id ?? fallbackNodeId,
       };
     })
     .filter((item): item is RankedChunk => item !== null);

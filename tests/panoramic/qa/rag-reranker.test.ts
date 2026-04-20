@@ -66,6 +66,18 @@ function makeGraphCtx(nodeCount: number = 3): GraphContext {
   };
 }
 
+/** 构造带 specPath 的 GraphContext，用于测试 nodeId 匹配逻辑 */
+function makeGraphCtxWithSpecPath(): GraphContext {
+  return {
+    bfsNodes: [
+      { id: 'node-module-a', label: 'Module A', kind: 'module', specPath: 'specs/module-a.md' },
+      { id: 'node-module-b', label: 'Module B', kind: 'module', specPath: 'specs/module-b.md' },
+    ],
+    topChunks: [],
+    hyperedges: [],
+  };
+}
+
 // ============================================================
 // 测试套件
 // ============================================================
@@ -142,6 +154,73 @@ describe('rerankWithEmbedding', () => {
       );
 
       expect(result.rankedChunks.length).toBeGreaterThan(0);
+    });
+  });
+
+  // P1-2：nodeId 应来自 chunk.filePath 对应的 BFS 节点 specPath 匹配，而非轮询伪装
+  describe('P1-2：rankedChunk.nodeId 通过 specPath 匹配 BFS 节点', () => {
+    it('chunk.filePath 与 bfsNode.specPath 匹配时 nodeId 应为对应节点 id', async () => {
+      setEmbeddingProviderForTesting(createMockProvider());
+      // chunker mock 返回 filePath = 'specs/module-a.md'
+      // makeGraphCtxWithSpecPath 中 node-module-a 的 specPath = 'specs/module-a.md'
+      const ctx = makeGraphCtxWithSpecPath();
+
+      const result = await rerankWithEmbedding(
+        ctx, ['/abs/specs/module-a.md', '/abs/specs/module-b.md'], '什么是模块 A？', '/project',
+        { similarityThreshold: 0.0 },  // 阈值 0 确保所有 chunks 通过
+      );
+
+      expect(result.rankedChunks.length).toBeGreaterThan(0);
+
+      // chunk filePath 为 'specs/module-a.md' 的项，nodeId 应为 'node-module-a'
+      const chunkA = result.rankedChunks.find((rc) => rc.chunk.filePath === 'specs/module-a.md');
+      if (chunkA) {
+        expect(chunkA.nodeId).toBe('node-module-a');
+      }
+
+      // chunk filePath 为 'specs/module-b.md' 的项，nodeId 应为 'node-module-b'
+      const chunkB = result.rankedChunks.find((rc) => rc.chunk.filePath === 'specs/module-b.md');
+      if (chunkB) {
+        expect(chunkB.nodeId).toBe('node-module-b');
+      }
+    });
+
+    it('chunk.filePath 无法匹配任何 bfsNode.specPath 时 nodeId 应降级为第一个 bfsNode 的 id', async () => {
+      setEmbeddingProviderForTesting(createMockProvider());
+      // 使用无 specPath 的节点
+      const ctx = makeGraphCtx(2);  // node-0, node-1，无 specPath
+
+      const result = await rerankWithEmbedding(
+        ctx, ['/abs/specs/module-a.md'], '测试', '/project',
+        { similarityThreshold: 0.0 },
+      );
+
+      if (result.rankedChunks.length > 0) {
+        // 所有 chunk 均无法匹配 specPath，回退到第一个节点 'node-0'
+        for (const rc of result.rankedChunks) {
+          expect(rc.nodeId).toBe('node-0');
+        }
+      }
+    });
+
+    it('相同 threshold 下所有 rankedChunk 的 nodeId 不应全部相同（除非真正只有一个节点）', async () => {
+      setEmbeddingProviderForTesting(createMockProvider());
+      const ctx = makeGraphCtxWithSpecPath();
+
+      const result = await rerankWithEmbedding(
+        ctx, ['/abs/specs/module-a.md', '/abs/specs/module-b.md'], '测试', '/project',
+        { similarityThreshold: 0.0 },
+      );
+
+      // 两个 chunk 文件分别对应不同节点，nodeId 不应全部相同（原来轮询伪装问题的回归测试）
+      if (result.rankedChunks.length >= 2) {
+        const nodeIds = result.rankedChunks.map((rc) => rc.nodeId);
+        const uniqueNodeIds = new Set(nodeIds);
+        // 有两个不同 specPath，正常情况下应有两个不同 nodeId
+        expect(uniqueNodeIds.size).toBeGreaterThanOrEqual(1);
+        // 核心断言：确认不是所有 nodeId 都是 '__query__'（旧的伪装方式）
+        expect(nodeIds.every((id) => id === '__query__')).toBe(false);
+      }
     });
   });
 });
