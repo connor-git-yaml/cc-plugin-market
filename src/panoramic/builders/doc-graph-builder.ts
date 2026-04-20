@@ -9,11 +9,14 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import Anthropic from '@anthropic-ai/sdk';
 import type { DependencyGraph } from '../../models/dependency-graph.js';
 import type { ModuleSpec } from '../../models/module-spec.js';
-import type { GraphNode, GraphEdge } from '../graph/graph-types.js';
+import type { GraphNode, GraphEdge, Hyperedge } from '../graph/graph-types.js';
 import type { EmbeddingProvider, EmbeddingTokenUsage } from '../anchoring/embedding-provider.js';
 import { anchorDocToCode } from '../anchoring/index.js';
+import type { DocChunk } from '../anchoring/chunker.js';
+import { extractHyperedges } from '../hyperedges/index.js';
 
 export const MODULE_SPEC_ANCHOR_ID = 'module-spec';
 export const CROSS_REFERENCE_MARKER_PREFIX = '<!-- cross-reference-index: auto';
@@ -637,5 +640,83 @@ export async function runAnchorIntegration(
   return {
     semanticEdges: result.edges,
     tokenUsage: result.tokenUsage,
+  };
+}
+
+// ============================================================
+// schema v2.0 — hyperedge 集成接口（F4 Commit 4 T032）
+// ============================================================
+
+/**
+ * hyperedge 集成选项
+ *
+ * feature flag 架构（analyze F06）：
+ * - hyperedgesEnabled 由 caller 从 SPECTRA_HYPEREDGES_ENABLED env + --hyperedges CLI 合并后传入
+ * - 此处不读取 process.env，遵循"env 读取在 CLI 层"的约定
+ */
+export interface HyperedgeIntegrationOptions {
+  /**
+   * 是否启用 hyperedge 提取
+   * 由 CLI 层面从 SPECTRA_HYPEREDGES_ENABLED env 和 --hyperedges CLI flag 合并后传入
+   * 如未提供则默认 false（功能默认关闭）
+   */
+  hyperedgesEnabled?: boolean;
+  /** 图谱代码节点列表（用于 prompt 构造 + 语义校验） */
+  graphNodes: GraphNode[];
+  /** 文档切片列表（来自 chunkMarkdownFiles） */
+  docChunks: DocChunk[];
+  /** 可选项目摘要 */
+  projectSummary?: string;
+  /** LLM 模型 ID，默认 claude-haiku-4-5-20251001 */
+  model?: string;
+}
+
+/**
+ * hyperedge 集成结果
+ */
+export interface HyperedgeIntegrationResult {
+  /** 提取并通过校验的超边列表（追加到 GraphJSON.hyperedges） */
+  hyperedges: Hyperedge[];
+  /** LLM 调用的 token 使用记录 */
+  tokenUsage: EmbeddingTokenUsage[];
+}
+
+/**
+ * 在 doc-graph-builder 流程中调用 extractHyperedges，
+ * 将超边附加到图谱 hyperedges 数组。
+ *
+ * - feature flag 关闭时直接返回空结果（FR-017 feature flag 保护）
+ * - docChunks 为空时直接返回空结果（FR-015 降级）
+ * - tokenUsage 汇总记录供调用方审计（NFR-003）
+ *
+ * @param options HyperedgeIntegrationOptions
+ */
+export async function runHyperedgeIntegration(
+  options: HyperedgeIntegrationOptions,
+): Promise<HyperedgeIntegrationResult> {
+  const enabled = options.hyperedgesEnabled ?? false;
+
+  // 若未开启，提前返回空结果（不创建 Anthropic 客户端）
+  if (!enabled) {
+    return { hyperedges: [], tokenUsage: [] };
+  }
+
+  // 创建 Anthropic SDK 客户端（仅在 flag 开启时才实例化）
+  const anthropicClient = new Anthropic({
+    apiKey: process.env['ANTHROPIC_API_KEY'],
+  });
+
+  const result = await extractHyperedges({
+    enabled,
+    codeNodes: options.graphNodes,
+    docChunks: options.docChunks,
+    projectSummary: options.projectSummary,
+    anthropicClient,
+    model: options.model,
+  });
+
+  return {
+    hyperedges: result.hyperedges,
+    tokenUsage: result.usage,
   };
 }

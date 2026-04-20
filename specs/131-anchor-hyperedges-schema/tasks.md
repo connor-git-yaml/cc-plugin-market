@@ -556,7 +556,7 @@
 
 ---
 
-### T025 [S] 新增 `hyperedges/schema.ts`：Zod schema 定义
+### T025 [x] [S] 新增 `hyperedges/schema.ts`：Zod schema 定义
 
 **目标文件**: `src/panoramic/hyperedges/schema.ts`
 
@@ -575,7 +575,7 @@
 
 ---
 
-### T026 [P] 新增 `schema.test.ts`：Zod schema 边界值测试
+### T026 [x] [P] 新增 `schema.test.ts`：Zod schema 边界值测试
 
 **目标文件**: `tests/panoramic/hyperedges/schema.test.ts`
 
@@ -596,7 +596,7 @@
 
 ---
 
-### T027 [S] 新增 `hyperedges/prompt.ts`：LLM prompt 构造
+### T027 [x] [S] 新增 `hyperedges/prompt.ts`：LLM prompt 构造
 
 **目标文件**: `src/panoramic/hyperedges/prompt.ts`
 
@@ -618,7 +618,7 @@
 
 ---
 
-### T028 [S] 新增 `hyperedges/extractor.ts`：LLM 调用 + Zod 校验 + BudgetGate 集成
+### T028 [x] [S] 新增 `hyperedges/extractor.ts`：LLM 调用 + Zod 校验 + BudgetGate 集成
 
 **目标文件**: `src/panoramic/hyperedges/extractor.ts`
 
@@ -643,7 +643,7 @@
 
 ---
 
-### T029 [P] 新增 `extractor.test.ts`：LLM 调用 + 降级 + BudgetGate 单测
+### T029 [x] [P] 新增 `extractor.test.ts`：LLM 调用 + 降级 + BudgetGate 单测
 
 **目标文件**: `tests/panoramic/hyperedges/extractor.test.ts`
 
@@ -664,7 +664,7 @@
 
 ---
 
-### T030 [S] 新增 `hyperedges/index.ts`：模块对外接口
+### T030 [x] [S] 新增 `hyperedges/index.ts`：模块对外接口
 
 **目标文件**: `src/panoramic/hyperedges/index.ts`
 
@@ -682,7 +682,7 @@
 
 ---
 
-### T031 [S] 新增 `tests/fixtures/pure-code-project/` fixture：零 markdown 降级测试
+### T031 [x] [S] 新增 `tests/fixtures/pure-code-project/` fixture：零 markdown 降级测试
 
 **目标文件**: `tests/fixtures/pure-code-project/`（目录）
 
@@ -700,7 +700,7 @@
 
 ---
 
-### T032 [S] 修改 `doc-graph-builder.ts`：添加 anchoring + hyperedges 协调调用入口
+### T032 [x] [S] 修改 `doc-graph-builder.ts`：添加 anchoring + hyperedges 协调调用入口
 
 **目标文件**: `src/panoramic/builders/doc-graph-builder.ts`
 
