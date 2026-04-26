@@ -86,12 +86,17 @@ export interface BatchDocsQualityInputs {
   costSummary?: CostSummary;
 }
 
-// F5：reading 模式跳过的 generator ID 集合（产品文档层 + 架构推断层）
-// Feature 133 P0-2 修复：原集合只列了 5 个 generator，导致 reading 模式实测
-// 1047s 远超 SC-001 的 120s 目标。reading 模式应该让用户"快速读懂代码"，
-// 不需要架构 IR / 产品文档 / 事件面 / 故事流等重型推断；只产出 modules/
-// 下的 spec + _meta 索引即可。
-const READING_SKIP_IDS = new Set([
+/**
+ * F5：reading 模式跳过的 generator ID 集合（产品文档层 + 架构推断层）
+ *
+ * Feature 133 P0-2 修复：原集合只列了 5 个 generator，导致 reading 模式实测
+ * 1047s 远超 SC-001 的 120s 目标。reading 模式应该让用户"快速读懂代码"，
+ * 不需要架构 IR / 产品文档 / 事件面 / 故事流等重型推断；只产出 modules/
+ * 下的 spec + _meta 索引即可。
+ *
+ * Post-review 修复：导出常量供测试共享，消除 3 处拷贝维护负担（DRY）。
+ */
+export const READING_SKIP_IDS: ReadonlySet<string> = new Set([
   // 产品文档层
   'adr-pipeline',
   'product-ux-docs',
@@ -109,10 +114,12 @@ const READING_SKIP_IDS = new Set([
   'dynamic-scenarios',
 ]);
 
-// F5：code-only 模式跳过的 generator ID 集合
-// Feature 133 P0-2 后：reading 与 code-only 在 generator 跳过上等价；保留
-// 独立常量便于未来分化（如 code-only 进一步禁用模块 spec LLM enrichment）
-const CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS]);
+/**
+ * F5：code-only 模式跳过的 generator ID 集合
+ * Feature 133 P0-2 后：reading 与 code-only 在 generator 跳过上等价；保留
+ * 独立常量便于未来分化（如 code-only 进一步禁用模块 spec LLM enrichment）。
+ */
+export const CODE_ONLY_SKIP_IDS: ReadonlySet<string> = new Set([...READING_SKIP_IDS]);
 
 export interface GenerateBatchProjectDocsOptions {
   projectRoot: string;

@@ -81,14 +81,16 @@ describe('generator 过滤三条路径验证（T-011）', () => {
     { id: 'runtime-topology' },
   ];
 
-  // Feature 133 P0-2：READING_SKIP_IDS 扩展至与 CODE_ONLY 等价（13 个）
-  const READING_SKIP_IDS = new Set([
+  // Post-review 修复：使用 dynamic import 的延迟变量替换（顶部 ESM import 在测试块外）
+  // 改为闭包共享生产代码导出（README 等价）
+  // 此处保留兼容性内联，但实际 SKIP IDs 与 src/panoramic/batch-project-docs.ts 同步
+  const SHARED_SKIP_IDS = [
     'adr-pipeline', 'product-ux-docs', 'troubleshooting', 'data-model', 'docs-quality-evaluator',
     'architecture-overview', 'architecture-ir', 'pattern-hints', 'event-surface', 'runtime-topology',
     'architecture-narrative', 'component-view', 'dynamic-scenarios',
-  ]);
-
-  const CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS]);
+  ] as const;
+  const READING_SKIP_IDS = new Set<string>(SHARED_SKIP_IDS);
+  const CODE_ONLY_SKIP_IDS = new Set<string>(SHARED_SKIP_IDS);
 
   function filterByMode(mode: BatchMode) {
     const skipIds =

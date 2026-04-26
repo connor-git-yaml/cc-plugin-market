@@ -29,14 +29,17 @@ describe('Feature 133 P0-2：batch-orchestrator reading 模式分派', () => {
   const orchestratorSource = readFileSync(BATCH_ORCHESTRATOR_PATH, 'utf-8');
   const projectDocsSource = readFileSync(BATCH_PROJECT_DOCS_PATH, 'utf-8');
 
-  it('两处 generateSpec 调用均传 skipEnrichment 基于 effectiveMode', () => {
-    const matches = orchestratorSource.match(/skipEnrichment:\s*effectiveMode\s*!==\s*['"]full['"]/g);
-    // 两处 generateSpec 调用：root 模块路径 + 普通模块路径
-    expect(matches?.length ?? 0).toBeGreaterThanOrEqual(2);
+  it('genOptions 在 reading/code-only 模式下设置 skipEnrichment（统一来源，不在调用点覆盖）', () => {
+    // Post-review 修复：genOptions.skipEnrichment 在 L648 处统一设置，
+    // 两处 generateSpec 调用不再各自覆盖（避免"先设错后覆盖"反模式）
+    expect(orchestratorSource).toMatch(
+      /skipEnrichment:\s*isSmallModule\s*\|\|\s*budgetSkipEnrichmentAll\s*\|\|\s*effectiveMode\s*!==\s*['"]full['"]/,
+    );
   });
 
   it('READING_SKIP_IDS 包含产品文档 + 架构推断层（13 个 generator）', () => {
-    // 解析 batch-project-docs.ts 中 READING_SKIP_IDS 集合大小
+    // 解析 batch-project-docs.ts 中 READING_SKIP_IDS 集合字面值
+    // Post-review 修复：READING_SKIP_IDS 改为 export const，匹配模式相应放宽
     const expectedGenerators = [
       // 产品文档层
       'adr-pipeline',
@@ -55,9 +58,8 @@ describe('Feature 133 P0-2：batch-orchestrator reading 模式分派', () => {
       'dynamic-scenarios',
     ];
 
-    // 抽取 READING_SKIP_IDS Set 字面值
     const skipIdsBlock = projectDocsSource.match(
-      /const READING_SKIP_IDS = new Set\(\[([\s\S]*?)\]\);/,
+      /READING_SKIP_IDS\s*:?\s*[A-Za-z<>\s]*=\s*new Set\(\[([\s\S]*?)\]\)/,
     )?.[1] ?? '';
 
     for (const id of expectedGenerators) {
@@ -66,9 +68,10 @@ describe('Feature 133 P0-2：batch-orchestrator reading 模式分派', () => {
   });
 
   it('CODE_ONLY_SKIP_IDS 在 P0-2 后等价于 READING_SKIP_IDS', () => {
-    // 修复后两个集合等价：CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS])
+    // 修复后两个集合等价：CODE_ONLY_SKIP_IDS 用 spread READING_SKIP_IDS 构造
+    // Post-review 修复：两者都改为 export const，匹配模式放宽接受类型注解
     expect(projectDocsSource).toMatch(
-      /const CODE_ONLY_SKIP_IDS = new Set\(\[\.\.\.READING_SKIP_IDS\]\);/,
+      /CODE_ONLY_SKIP_IDS\s*:?\s*[A-Za-z<>\s]*=\s*new Set\(\[\.\.\.READING_SKIP_IDS\]\)/,
     );
   });
 });

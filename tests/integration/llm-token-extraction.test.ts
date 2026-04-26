@@ -1,14 +1,20 @@
 /**
- * cli-proxy 真实流回归测试（Feature 133 P0-1）
+ * LLM token 提取链路真实集成测试（Feature 133 P0-1）
  *
  * Phase 2 集成回归发现：所有 module spec frontmatter 的 tokenUsage 全为 0，
- * 但 LLM 真调用了。根因是 cli-proxy.ts 的 StreamMessage 类型把
+ * 但 LLM 真调用了。根因之一是 cli-proxy.ts 的 StreamMessage 类型把
  * input_tokens/output_tokens 当作 result 类型 message 的顶层字段，但 Claude
  * CLI 实际嵌套在 usage.* 下；mock-only 测试沿用相同错误假设导致单测全过却
  * 生产失败。
  *
- * 这个集成测试用真实的 Anthropic SDK 调用（callLLM 走 SDK 路径）/ 真实
- * Claude CLI 调用（走 cli-proxy 路径）来验证 token 链路端到端贯通。
+ * 这个集成测试覆盖范围（post-review 修复后澄清）：
+ * - **SDK 路径**：在 ANTHROPIC_API_KEY 设置时 callLLM 走 callLLMviaSdk，
+ *   验证 Anthropic SDK 返回的 response.usage.* 能传递到上层 LLMResponse
+ *   并最终写入 frontmatter
+ * - **cli-proxy 路径不在此覆盖**：当 ANTHROPIC_API_KEY 设置时，detectAuth
+ *   优先走 SDK，cli-proxy 不会被触发；cli-proxy 的嵌套 usage 解析逻辑由
+ *   tests/unit/cli-proxy.test.ts 的 3 个 mock case 覆盖（嵌套优先 / 顶层
+ *   兼容 / 缺失返回 0）
  *
  * CI 环境无 ANTHROPIC_API_KEY 时自动 skip；本地开发者验证修复时手动启用。
  */

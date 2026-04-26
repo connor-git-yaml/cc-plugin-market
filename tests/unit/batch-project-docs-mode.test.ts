@@ -11,28 +11,8 @@ import { describe, it, expect } from 'vitest';
 // 通过引用实现文件中的常量进行测试
 // ============================================================
 
-// 直接内联实现中的常量（与 batch-project-docs.ts 保持一致）
-// Feature 133 P0-2：READING_SKIP_IDS 扩展至与 CODE_ONLY 等价（13 个 generator），
-// 修复 reading 模式 1047s 远超 SC-001 120s 目标的回归
-const READING_SKIP_IDS = new Set([
-  // 产品文档层
-  'adr-pipeline',
-  'product-ux-docs',
-  'troubleshooting',
-  'data-model',
-  'docs-quality-evaluator',
-  // 架构推断层（P0-2 新增）
-  'architecture-overview',
-  'architecture-ir',
-  'pattern-hints',
-  'event-surface',
-  'runtime-topology',
-  'architecture-narrative',
-  'component-view',
-  'dynamic-scenarios',
-]);
-
-const CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS]);
+// Post-review 修复：直接 import 生产代码的导出常量，消除拷贝维护负担
+import { READING_SKIP_IDS, CODE_ONLY_SKIP_IDS } from '../../src/panoramic/batch-project-docs.js';
 
 // plan §5 完整 generator 列表
 const ALL_BATCH_GENERATOR_IDS = [

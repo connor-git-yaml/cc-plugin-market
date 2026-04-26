@@ -645,7 +645,9 @@ export async function runBatch(
           outputDir: modulesDir,
           projectRoot: resolvedRoot,
           deep: true,
-          skipEnrichment: isSmallModule || budgetSkipEnrichmentAll || effectiveMode === 'code-only',
+          // Feature 133 P0-2：reading/code-only 模式都跳过 enrichment（SC-001 < 120s
+          // 目标）；同时尊重 small-module 优化和 budget gate 降级——任一为真都跳过
+          skipEnrichment: isSmallModule || budgetSkipEnrichmentAll || effectiveMode !== 'full',
           modelOverride:
             isSmallModule || budgetCheaperModelAll ? sonnetModelId : undefined,
           onStageProgress: (progress) => {
@@ -674,12 +676,10 @@ export async function runBatch(
             if (!rootTargetsToGenerate.includes(sourceTarget)) continue;
             const fullPath = path.join(resolvedRoot, file);
             const storedSpec = storedSpecByTarget.get(sourceTarget);
+            // genOptions.skipEnrichment 已在 L648 处理 reading/code-only 模式分派
             const result = await generateSpec(fullPath, {
               ...genOptions,
               existingVersion: storedSpec?.version,
-              // Feature 133 P0-2：reading/code-only 模式跳过模块 spec LLM
-              // enrichment，让 5 文件项目能在 SC-001 的 120s 目标内完成
-              skipEnrichment: effectiveMode !== 'full',
             });
             collectedModuleSpecs.push(result.moduleSpec);
             generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
@@ -719,12 +719,10 @@ export async function runBatch(
           const targetPath = hasDirPathConflict
             ? path.join(resolvedRoot, group.files[0]!)
             : path.join(resolvedRoot, group.dirPath);
+          // genOptions.skipEnrichment 已在 L648 处理 reading/code-only 模式分派
           const result = await generateSpec(targetPath, {
             ...genOptions,
             existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
-            // Feature 133 P0-2：reading/code-only 模式跳过模块 spec LLM
-            // enrichment，让 5 文件项目能在 SC-001 的 120s 目标内完成
-            skipEnrichment: effectiveMode !== 'full',
           });
 
           if (isMultiLang && group.language) {
