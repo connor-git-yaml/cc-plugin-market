@@ -52,6 +52,7 @@ workflow_preferences:
 forbidden_changes:
   - "避免直接修改 .codex/skills/**；应通过 install 脚本重新生成包装。"
   - "避免把 Spec 级执行策略写进 Project Context；这类语义应进入 feature 制品或 spec-driver-implement。"
+  - "流程结构覆盖（phases/gates）应放 .specify/orchestration-overrides.yaml，不进 Project Context；行为偏好放 .specify/spec-driver.config.yaml。"
 
 notes:
   - "Project Context 只承载项目级长期偏好、约束与参考资料。"

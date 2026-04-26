@@ -1,0 +1,6 @@
+# T1 fixture: 仅覆盖 gate 行为（GATE_DESIGN default_behavior 改为 auto）
+version: "1.0"
+
+gates:
+  GATE_DESIGN:
+    default_behavior: auto

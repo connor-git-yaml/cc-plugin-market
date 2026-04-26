@@ -1,0 +1,8 @@
+# T2 fixture: 故意制造 YAML 语法错误
+version: "1.0"
+modes:
+  fix:
+    phases: [
+      - 未闭合的列表
+      bad: yaml: here
+    unclosed bracket here

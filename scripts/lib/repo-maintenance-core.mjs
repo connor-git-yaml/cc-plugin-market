@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { syncSpectraSkillMirrors } from '../../plugins/spectra/scripts/sync-skill-mirrors.mjs';
 import { validateSpectraSkillSources } from '../../plugins/spectra/scripts/validate-skill-sources.mjs';
+import { validateOrchestrationOverrides } from '../../plugins/spec-driver/scripts/validate-orchestration-overrides.mjs';
 import { generateAdoptionInsights } from '../../plugins/spec-driver/scripts/generate-adoption-insights.mjs';
 import { generateProductEntityCatalog } from '../../plugins/spec-driver/scripts/generate-product-entity-catalog.mjs';
 import { generateProductQualityReports } from '../../plugins/spec-driver/scripts/generate-product-quality-reports.mjs';
@@ -202,7 +203,7 @@ export function syncRepository(projectRoot) {
   };
 }
 
-export function validateRepository(projectRoot) {
+export async function validateRepository(projectRoot) {
   const resolvedRoot = path.resolve(projectRoot);
   const warnings = [];
   const errors = [];
@@ -251,6 +252,14 @@ export function validateRepository(projectRoot) {
   for (const error of releaseResult.errors ?? []) {
     errors.push(`[release-contract] ${error}`);
   }
+
+  aggregateValidation(
+    'orchestration-overrides',
+    await validateOrchestrationOverrides({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
 
   return {
     projectRoot: resolvedRoot,

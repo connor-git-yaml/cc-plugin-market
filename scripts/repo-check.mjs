@@ -3,7 +3,7 @@ import { parseCommonProjectArgs } from '../plugins/spec-driver/scripts/lib/scrip
 import { validateRepository } from './lib/repo-maintenance-core.mjs';
 
 const args = parseCommonProjectArgs(process.argv.slice(2), { json: false });
-const result = validateRepository(args.projectRoot);
+const result = await validateRepository(args.projectRoot);
 
 if (args.json) {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

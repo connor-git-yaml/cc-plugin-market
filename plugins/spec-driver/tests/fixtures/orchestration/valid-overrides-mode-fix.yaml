@@ -1,0 +1,32 @@
+# T1 fixture: fix mode 整段重写（裁剪为 2 个 phase）+ GATE_DESIGN 字段覆盖
+version: "1.0"
+
+modes:
+  fix:
+    name: "Fix 模式（简化版）"
+    description: "两阶段快速修复"
+    phases:
+      - id: "1"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+      - id: "2"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+gates:
+  GATE_DESIGN:
+    default_behavior: auto

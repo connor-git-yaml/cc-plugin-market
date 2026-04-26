@@ -39,6 +39,11 @@ export const sectionConfigs = [
     sourcePath: resolve(rootDir, 'docs/shared/agent-code-quality.md'),
     targets: ['AGENTS.md', 'CLAUDE.md'],
   },
+  {
+    key: 'orchestration-overrides',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-orchestration-overrides.md'),
+    targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {

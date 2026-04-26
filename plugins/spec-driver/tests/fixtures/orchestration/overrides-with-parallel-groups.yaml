@@ -1,0 +1,14 @@
+# T1/T2 fixture: 含 parallel_groups（应被 strip）+ 合法 gate 覆盖（AC-023 验证）
+version: "1.0"
+
+# parallel_groups 在 overrides 中不支持，应被 strip 并发出 unsupported-field warning
+parallel_groups:
+  PG_RESEARCH:
+    members:
+      - product_research
+      - tech_research
+
+# 合法字段：gate 覆盖仍应生效（AC-023）
+gates:
+  GATE_DESIGN:
+    default_behavior: auto

@@ -1,0 +1,13 @@
+# T2 anchor 边界 fixture: 使用 YAML anchor & merge key（simple-yaml 不支持）
+# 预期行为：simple-yaml 对 anchor/merge key 的实际处理取决于实现
+# 可能解析失败 → parse-error + 降级到 base
+# 或静默接受 anchor 但忽略 merge key
+version: "1.0"
+
+_base_gate: &base_gate
+  default_behavior: auto
+
+gates:
+  GATE_DESIGN:
+    <<: *base_gate
+    severity: non_critical

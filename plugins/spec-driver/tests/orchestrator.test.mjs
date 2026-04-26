@@ -17,6 +17,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Orchestrator, validateOrchestrationYaml, evaluateCondition } from '../lib/orchestrator.mjs';
 import { generateFallbackConfig } from '../lib/orchestrator-fallback.mjs';
+import { orchestrationBaseSchema } from '../contracts/orchestration-schema.mjs';
 
 const silentLogger = {
   info: () => {},
@@ -326,5 +327,69 @@ describe('Config Validation', () => {
       gates: { GATE_DESIGN: { type: 'test' } },
     });
     assert.equal(r.valid, true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// T-025：base Zod schema 回归 + preloadedConfig 断言
+// ═════════════════════════════════════════════════════════════
+
+describe('Base Zod Schema 回归（T-025）', () => {
+  it('base orchestration.yaml 100% 通过 orchestrationBaseSchema', async () => {
+    // 通过 Orchestrator 正常加载，若 Zod 校验失败则 isFallback=true
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.equal(orch.isFallback, false, 'base orchestration.yaml 应通过 Zod 校验，isFallback 应为 false');
+    // 直接用 orchestrationBaseSchema 校验真实 config
+    const result = orchestrationBaseSchema.safeParse(orch.config);
+    assert.equal(result.success, true, '现有 config 应通过 orchestrationBaseSchema.safeParse');
+  });
+
+  it('Orchestrator with preloadedConfig skips file load', () => {
+    // 构造最小合法 preloadedConfig（仅含 modes/gates 基础结构）
+    const minConfig = {
+      version: '99.0',
+      parallel_scheduling: { max_concurrent_tasks: 1 },
+      gates: {
+        GATE_DESIGN: { default_behavior: 'always', severity: 'critical', hard_gate_modes: null, insertion_point: null },
+        GATE_ANALYSIS: { default_behavior: 'always', severity: 'non_critical', hard_gate_modes: null, insertion_point: null },
+        GATE_TASKS: { default_behavior: 'always', severity: 'non_critical', hard_gate_modes: null, insertion_point: null },
+        GATE_IMPLEMENT_MID: { default_behavior: 'auto', severity: 'non_critical', hard_gate_modes: null, insertion_point: null },
+        GATE_VERIFY: { default_behavior: 'always', severity: 'critical', hard_gate_modes: null, insertion_point: null },
+        GATE_RESEARCH: { default_behavior: 'auto', severity: 'non_critical', hard_gate_modes: null, insertion_point: null },
+      },
+      parallel_groups: {},
+      modes: {
+        feature: { phases: [{ id: '1', name: 'test', display_name: 'Test', agent: null, agent_mode: 'single', gates_before: null, gates_after: null, conditional: null, skip_if_exists: null, is_critical: true }] },
+        story: { phases: [] },
+        implement: { phases: [] },
+        fix: { phases: [] },
+        resume: { phases: [] },
+        sync: { phases: [] },
+        doc: { phases: [] },
+        refactor: { phases: [] },
+      },
+    };
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger }, { preloadedConfig: minConfig });
+    // version 应来自 preloadedConfig（99.0），而非真实文件（1.0）
+    assert.equal(orch.config.version, '99.0', 'preloadedConfig 应直接使用，不从文件加载');
+    assert.equal(orch.isFallback, false, 'preloadedConfig 路径 isFallback 应为 false');
+  });
+
+  it('validateOrchestrationYaml 薄壳保留向后兼容行为（CL-016）', () => {
+    // 薄壳：null 返回 invalid
+    const r1 = validateOrchestrationYaml(null);
+    assert.equal(r1.valid, false, 'null 输入应无效');
+
+    // 薄壳：缺失 modes 应无效
+    const r2 = validateOrchestrationYaml({ version: '1.0', gates: {} });
+    assert.equal(r2.valid, false, '缺少 modes 应无效');
+
+    // 薄壳：合法最小配置通过（不再做 phases/gates 深层校验，只检查 modes 存在性）
+    const r3 = validateOrchestrationYaml({
+      version: '1.0',
+      modes: { feature: { phases: [] } },
+      gates: { GATE_DESIGN: {} },
+    });
+    assert.equal(r3.valid, true, '含 modes 的合法配置应通过薄壳校验');
   });
 });

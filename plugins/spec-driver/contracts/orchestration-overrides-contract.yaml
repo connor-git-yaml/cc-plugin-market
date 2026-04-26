@@ -1,0 +1,114 @@
+# orchestration-overrides-contract.yaml
+# spec-driver 项目级流程定制（Per-Project Workflow Overrides）合同
+# 说明 .specify/orchestration-overrides.yaml 的 schema、合并语义与降级策略
+#
+# 参考风格：plugins/spec-driver/contracts/wrapper-source-of-truth.yaml
+
+contract: orchestration-overrides
+version: "1.0"
+description: >
+  spec-driver 项目级流程定制（Per-Project Workflow Overrides）合同：
+  定义 .specify/orchestration-overrides.yaml 的 schema、合并语义、降级策略。
+  plugin base 的 orchestration.yaml 为底层默认值，项目层仅声明差异覆盖。
+
+canonical_schema: "plugins/spec-driver/contracts/orchestration-schema.mjs"
+
+vs_spec_driver_config:
+  description: >
+    orchestration-overrides.yaml 与 spec-driver.config.yaml 职责分工说明
+  orchestration_overrides:
+    - "流程结构覆盖：mode phase 序列、gate behavior、parallel_scheduling"
+    - "作用：控制编排引擎如何执行 phases/gates"
+  spec_driver_config:
+    - "行为偏好：gate_policy、resume_strategy、research.enabled 等"
+    - "作用：控制 agent 在执行时的决策偏好（非结构覆盖）"
+  rule: "流程结构覆盖放 orchestration-overrides.yaml；行为偏好放 spec-driver.config.yaml"
+
+supported_overrides:
+  - path: "modes.<mode>"
+    semantic: "整段替换"
+    constraint: "mode key 必须是 base reserved enum: feature|story|implement|fix|resume|sync|doc|refactor"
+    notes: >
+      overrides 中出现同名 mode 时，整段 phases 数组替换 base 对应 mode；
+      base 的其余 phase 字段不保留。无法局部 patch 单个 phase，需完整声明 phases 数组。
+    reserved_modes:
+      - feature
+      - story
+      - implement
+      - fix
+      - resume
+      - sync
+      - doc
+      - refactor
+
+  - path: "gates.<GATE_ID>"
+    semantic: "对象字段合并"
+    constraint: "仅 default_behavior / severity / hard_gate_modes 三个字段可覆盖"
+    notes: >
+      未在 overrides 中声明的 gate 字段继承 base 值。
+      hard_gate_modes 数组是整段替换（非追加）。
+
+  - path: "parallel_scheduling.*"
+    semantic: "顶层标量后者覆盖前者（scalar override）"
+    notes: >
+      仅支持顶层标量字段（如 max_concurrent_tasks）。
+      CI 资源受限时可将 max_concurrent_tasks 降为 1（串行执行）。
+
+out_of_scope:
+  - id: phase_patch
+    description: "二期；按 phase id 局部 patch 单个 phase 字段"
+  - id: mode_extends
+    description: "二期；schema 接受 modes.<m>.extends 字段但 MVP resolver 不处理，仍整段替换"
+  - id: parallel_groups
+    description: "二期；overrides 中出现 parallel_groups 时 strip 该字段 + 发出 unsupported-field warning，其余合法字段照常生效"
+
+diagnostic_codes:
+  - code: orchestration-overrides.parse-error
+    level: warning
+    trigger: ".specify/orchestration-overrides.yaml YAML 语法错误（parseYamlDocument 抛出异常）"
+    behavior: "忽略 overrides，回退使用 base config"
+
+  - code: orchestration-overrides.schema-fallback
+    level: warning
+    trigger: "Zod schema 校验失败（含非 reserved mode 名、必填字段缺失等）"
+    behavior: "忽略 overrides，回退使用 base config"
+
+  - code: orchestration-overrides.version-mismatch
+    level: warning
+    trigger: "overrides.version 与 base.version 不一致（resolver 层额外比对，非 Zod 层）"
+    behavior: "忽略 overrides，回退使用 base config（专属 code，不复用 schema-fallback）"
+
+  - code: orchestration-overrides.unsupported-field
+    level: warning
+    trigger: "overrides 含 MVP 不支持但二期保留的字段（如 parallel_groups）"
+    behavior: "strip 该字段后继续处理其余合法字段，不使整体 overrides 失效"
+
+  - code: orchestration-overrides.mode-overridden
+    level: info
+    trigger: "overrides 中 mode 名与 base 重名，整段替换已生效"
+    behavior: "提示 mode 被 overrides 整段替换（informational，仍生效）"
+
+  - code: orchestration.base-invalid
+    level: error
+    trigger: "base orchestration.yaml 无法通过 orchestrationBaseSchema Zod 校验（base 本身损坏）"
+    behavior: "使用 generateFallbackConfig() 内置后备配置，不再尝试合并 overrides"
+
+cli:
+  command: >
+    node plugins/spec-driver/scripts/orchestrator-cli.mjs
+    effective-orchestration <mode>
+    [--annotate|--diff]
+    [--format yaml|json]
+    [--project-root <path>]
+  examples:
+    - "node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration fix --annotate"
+    - "node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration feature --format json"
+    - "node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration fix --diff"
+
+examples_path: "plugins/spec-driver/templates/orchestration-overrides.example.yaml"
+
+notes:
+  - "overrides 文件不存在时静默使用 base config，不输出任何 diagnostic（正常场景）"
+  - "overrides 文件存在但为空（零字节）时等效于无 overrides，静默使用 base"
+  - "YAML anchor（& / <<:）不被 simple-yaml.mjs 支持；若 anchor 导致解析异常则触发 parse-error 降级"
+  - "simple-yaml.mjs 不提供行号信息，diagnostic 无法精确指向出错行"

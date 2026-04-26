@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 import { generateFallbackConfig } from './orchestrator-fallback.mjs';
+import { orchestrationBaseSchema, formatZodIssue } from '../contracts/orchestration-schema.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,14 +19,25 @@ export class Orchestrator {
    * @param {Object} userConfig - 用户配置（来自 spec-driver.config.yaml）
    * @param {string} mode - 运行模式
    * @param {Object} context - 项目上下文
+   * @param {Object} [options={}] - 可选扩展选项（T-012，D-PLAN-6）
+   * @param {Object} [options.preloadedConfig] - 预加载好的 merged orchestration config（由 resolveOrchestrationConfig 提供）。
+   *   存在时直接使用，跳过 loadAndValidateConfig() 文件读取，防止 CLI 读取两次 YAML 且确保使用合并后的 config。
+   *   不传时行为与迁移前完全一致（向后兼容）。
    */
-  constructor(userConfig, mode, context = {}) {
+  constructor(userConfig, mode, context = {}, options = {}) {
     this.userConfig = userConfig || {};
     this.mode = mode;
     this.context = context;
     this.logger = context.logger || defaultLogger;
 
-    this.loadAndValidateConfig();
+    if (options.preloadedConfig) {
+      // 使用预加载的 merged config，绕过文件读取（D-PLAN-6 关键陷阱防御）
+      this.config = options.preloadedConfig;
+      this.isFallback = false;
+    } else {
+      this.loadAndValidateConfig();
+    }
+
     this.buildGateBehaviorMap();
     this.buildPhaseMap();
     this.buildParallelGroupMap();
@@ -46,17 +58,18 @@ export class Orchestrator {
       const content = fs.readFileSync(configPath, 'utf-8');
       const parsed = parseYamlDocument(content);
 
-      const result = validateOrchestrationYaml(parsed);
-      if (!result.valid) {
-        this.logger.error(`[ORCHESTRATOR] Config validation failed: ${result.errors.join('; ')}`);
+      // 使用 orchestrationBaseSchema.safeParse 替代手写校验（CL-016，T-011）
+      const zodResult = orchestrationBaseSchema.safeParse(parsed);
+      if (!zodResult.success) {
+        const issues = zodResult.error.issues.map(formatZodIssue).join('; ');
+        this.logger.error(`[ORCHESTRATOR] Config validation failed: ${issues}`);
         this.config = generateFallbackConfig();
         this.isFallback = true;
         return;
       }
 
-      this.config = parsed;
+      this.config = zodResult.data;
       this.isFallback = false;
-      result.warnings.forEach((w) => this.logger.warn(`[ORCHESTRATOR] ${w}`));
     } catch (error) {
       this.logger.error(`[ORCHESTRATOR] Failed to load config: ${error.message}`);
       this.config = generateFallbackConfig();
@@ -183,27 +196,36 @@ export class Orchestrator {
 }
 
 /**
- * 验证 orchestration.yaml 配置
+ * 验证 orchestration.yaml 配置（向后兼容薄壳，T-011）
+ *
+ * 历史逻辑：手写循环校验 modes/phases/gates（已移除）。
+ * 当前实现：保留向后兼容的 null 检查和 modes 存在性检查，
+ * 内部核心校验已迁移至 loadAndValidateConfig() 使用 orchestrationBaseSchema.safeParse()。
+ *
+ * 本函数作为公共 API 保留，仅做基础 null/modes 检查，
+ * 调用方应优先使用 orchestrationBaseSchema.safeParse() 获取完整 Zod 校验。
  */
 export function validateOrchestrationYaml(config) {
   const errors = [];
   const warnings = [];
 
-  if (!config) { errors.push('Config is null or undefined'); return { valid: false, errors, warnings }; }
-  if (!config.version) warnings.push('version field missing');
-  if (!config.modes || Object.keys(config.modes).length === 0) errors.push('modes section is missing or empty');
-  if (config.modes && !config.modes.feature) warnings.push('feature mode not found');
-  if (!config.gates || Object.keys(config.gates).length === 0) warnings.push('No gates defined');
+  // 基础 null 检查
+  if (!config) {
+    errors.push('Config is null or undefined');
+    return { valid: false, errors, warnings };
+  }
 
-  if (config.modes) {
-    for (const [modeId, mc] of Object.entries(config.modes)) {
-      if (!mc.phases || !Array.isArray(mc.phases)) errors.push(`Mode ${modeId}: phases is not an array`);
-      else if (mc.phases.length === 0) warnings.push(`Mode ${modeId}: empty phases`);
-      else mc.phases.forEach((p, i) => {
-        if (!p.id) errors.push(`Mode ${modeId}, phase[${i}]: missing id`);
-        if (!p.name) errors.push(`Mode ${modeId}, phase[${i}]: missing name`);
-      });
-    }
+  // modes 存在性检查（最关键的结构约束）
+  if (!config.modes || Object.keys(config.modes).length === 0) {
+    errors.push('modes section is missing or empty');
+  }
+
+  // 语义警告（向后兼容）
+  if (config.modes && !config.modes.feature) {
+    warnings.push('feature mode not found');
+  }
+  if (!config.gates || Object.keys(config.gates).length === 0) {
+    warnings.push('No gates defined');
   }
 
   return { valid: errors.length === 0, errors, warnings };

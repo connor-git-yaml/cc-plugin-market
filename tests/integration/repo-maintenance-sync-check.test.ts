@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -68,6 +69,9 @@ describe('repo maintenance sync/check', () => {
     copyFile(projectRoot, '.gitignore');
 
     rmSync(join(projectRoot, '.codex'), { recursive: true, force: true });
+
+    // 链接 node_modules 使外部依赖（如 zod）在临时目录下可解析（orchestration-schema.mjs 等模块依赖 zod）
+    symlinkSync(join(REPO_ROOT, 'node_modules'), join(projectRoot, 'node_modules'));
   });
 
   afterEach(() => {

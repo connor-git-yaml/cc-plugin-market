@@ -1,0 +1,5 @@
+# T1 fixture: 仅覆盖 parallel_scheduling.max_concurrent_tasks
+version: "1.0"
+
+parallel_scheduling:
+  max_concurrent_tasks: 3

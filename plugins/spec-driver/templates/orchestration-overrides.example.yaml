@@ -1,0 +1,81 @@
+# orchestration-overrides.example.yaml
+# spec-driver 项目级流程定制示例
+#
+# 说明：本文件示范如何使用 .specify/orchestration-overrides.yaml 自定义 spec-driver 流程。
+# 将所需覆盖字段复制到你项目的 .specify/orchestration-overrides.yaml，
+# 只需声明与 plugin base 有差异的部分。
+#
+# 详见合同文档：plugins/spec-driver/contracts/orchestration-overrides-contract.yaml
+# 完整 schema 定义：plugins/spec-driver/contracts/orchestration-schema.mjs
+#
+# 注意：本文件包含三个独立示例场景，实际使用时按需选取，不应全部合并到一个文件。
+#
+# 警告：YAML anchor（& / <<:）不被 simple-yaml.mjs 支持，请勿使用。
+
+# ─────────────────────────────────────────────────────────────
+# 示例一：Gate behavior 调整（低风险项目允许 GATE_DESIGN 自动通过）
+# 场景：低风险 CLI 工具项目，fix 流程中 GATE_DESIGN 无需人工审批
+# ─────────────────────────────────────────────────────────────
+
+version: "1.0"  # 必填；必须与 plugin 内 orchestration.yaml 的 version 一致，不一致则触发 version-mismatch warning
+
+gates:
+  GATE_DESIGN:
+    default_behavior: auto  # 替换 base 的 always（自动通过，无需人工干预）
+    # 未声明的字段（severity、hard_gate_modes 等）保持 base 值不变
+
+# ─────────────────────────────────────────────────────────────
+# 示例二：modes.fix 整段重写（fix 模式裁剪为 implement + verify 两阶段）
+# 场景：Solo Developer 高频小修复，去掉 specify 阶段降低流程摩擦
+# 注意：modes.<m> 是整段替换，必须完整声明 phases 数组，不支持局部 patch
+# ─────────────────────────────────────────────────────────────
+
+# version: "1.0"
+
+# modes:
+#   fix:
+#     name: "Fix 模式（精简）"
+#     description: "去掉 specify phase，直接进入实现（适合低风险高频小修复）"
+#     phases:
+#       # phase 1：代码实现
+#       - id: "1"
+#         name: implement
+#         display_name: 代码实现
+#         agent: implement
+#         agent_mode: single
+#         gates_before: null
+#         gates_after: null
+#         conditional: null
+#         skip_if_exists: null
+#         is_critical: true
+#       # phase 2：验证与交付（含 GATE_VERIFY 门禁）
+#       - id: "2"
+#         name: verify
+#         display_name: 验证与交付
+#         agent: verify
+#         agent_mode: single
+#         gates_before: null
+#         gates_after:
+#           - GATE_VERIFY
+#         conditional: null
+#         skip_if_exists: null
+#         is_critical: true
+
+# ─────────────────────────────────────────────────────────────
+# 示例三：并行调度资源限制（CI 环境串行执行）
+# 场景：CI 资源受限，避免并行任务导致上下文超限或队列饥饿
+# ─────────────────────────────────────────────────────────────
+
+# version: "1.0"
+
+# parallel_scheduling:
+#   max_concurrent_tasks: 1  # 替换 base 的默认值（降为 1 = 串行执行）
+
+# ─────────────────────────────────────────────────────────────
+# 二期保留字段（MVP 不支持，出现时 strip + unsupported-field warning，不影响其余字段生效）
+# ─────────────────────────────────────────────────────────────
+
+# parallel_groups:   # 二期支持；MVP 中此字段会被 strip 并发出 warning
+#   MY_GROUP:
+#     members: ["1a", "1b"]
+#     convergence_point: "1c"

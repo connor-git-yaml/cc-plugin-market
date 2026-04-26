@@ -1,0 +1,17 @@
+# T2 fixture: schema 校验失败（非 reserved mode 名 'fxi'）
+version: "1.0"
+
+modes:
+  fxi:
+    name: "错误的 mode 名"
+    phases:
+      - id: "1"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
