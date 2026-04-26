@@ -621,6 +621,11 @@ ${sections.businessLogic}
     durationMs: costMetadata.durationMs,
     llmModel: costMetadata.llmModel,
     fallbackReason: costMetadata.fallbackReason,
+    // Feature 133 P2-1：canonical spec 显式写入 sourceKind 字段，让用户在
+    // 视觉/grep 扫描时一眼识别 spec 身份（不再依赖"无字段=canonical"的隐式默认）。
+    // bundle_copy / derived 类型的 spec 由 spec-store / docs-bundle 等调用方
+    // 在各自路径独立设置，不受此默认影响。
+    sourceKind: 'canonical',
   });
 
   // 构建 fileInventory（使用短路径：基于 sourceTarget 公共前缀）

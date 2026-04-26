@@ -72,4 +72,38 @@ describe('generateFrontmatter (Feature 127)', () => {
     expect(fm.crossLanguageRefs).toEqual(['ts-js:services/api']);
     expect(fm.tokenUsage).toBeDefined();
   });
+
+  // Feature 133 P2-1：canonical spec 显式写入 sourceKind 字段
+  describe('sourceKind 显式写入（Feature 133 P2-1）', () => {
+    it('传入 sourceKind: canonical 时显式写入 frontmatter', () => {
+      const fm = generateFrontmatter({
+        ...BASE_INPUT,
+        sourceKind: 'canonical',
+      });
+      expect(fm.sourceKind).toBe('canonical');
+    });
+
+    it('传入 sourceKind: bundle_copy 时显式写入', () => {
+      const fm = generateFrontmatter({
+        ...BASE_INPUT,
+        sourceKind: 'bundle_copy',
+      });
+      expect(fm.sourceKind).toBe('bundle_copy');
+    });
+
+    it('传入 sourceKind: derived + derivedFrom 时两个字段同时写入', () => {
+      const fm = generateFrontmatter({
+        ...BASE_INPUT,
+        sourceKind: 'derived',
+        derivedFrom: 'specs/modules/parent.spec.md',
+      });
+      expect(fm.sourceKind).toBe('derived');
+      expect(fm.derivedFrom).toBe('specs/modules/parent.spec.md');
+    });
+
+    it('未传入 sourceKind 时 frontmatter 不含该字段（向后兼容）', () => {
+      const fm = generateFrontmatter(BASE_INPUT);
+      expect(fm.sourceKind).toBeUndefined();
+    });
+  });
 });
