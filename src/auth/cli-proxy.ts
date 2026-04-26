@@ -37,6 +37,18 @@ interface StreamMessage {
   // result 类型的字段
   result?: string;
   model?: string;
+  /**
+   * Claude CLI 实际输出格式（Feature 133 P0-1 修复）:
+   * type=result message 把 token 嵌套在 usage.* 下，不是顶层。
+   * 顶层字段保留作向后兼容（未来 CLI 格式回退或测试 mock）。
+   */
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+  /** 旧顶层格式（向后兼容） */
   input_tokens?: number;
   output_tokens?: number;
   // content_block_delta 类型的字段
@@ -241,10 +253,18 @@ function parseStreamJsonOutput(
       if (msg.model) {
         model = msg.model;
       }
-      if (msg.input_tokens !== undefined) {
+      // Feature 133 P0-1 修复：优先从嵌套 usage 字段读取（Claude CLI 当前格式），
+      // 回落到顶层字段（向后兼容）。原实现仅读顶层导致 frontmatter token 全为 0。
+      const inputFromUsage = msg.usage?.input_tokens;
+      const outputFromUsage = msg.usage?.output_tokens;
+      if (inputFromUsage !== undefined) {
+        inputTokens = inputFromUsage;
+      } else if (msg.input_tokens !== undefined) {
         inputTokens = msg.input_tokens;
       }
-      if (msg.output_tokens !== undefined) {
+      if (outputFromUsage !== undefined) {
+        outputTokens = outputFromUsage;
+      } else if (msg.output_tokens !== undefined) {
         outputTokens = msg.output_tokens;
       }
       continue;

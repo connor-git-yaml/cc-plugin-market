@@ -62,7 +62,7 @@ describe('cli-proxy', () => {
 
       const promise = callLLMviaCli('测试 prompt', { model: 'claude-sonnet-4-5-20250929' });
 
-      // 模拟 stream-json 输出
+      // 模拟 stream-json 输出（旧顶层字段格式，向后兼容）
       mockChild.stdout.emit('data', Buffer.from(
         '{"type":"result","result":"这是 LLM 回复","model":"claude-sonnet-4-5-20250929","input_tokens":100,"output_tokens":50}\n',
       ));
@@ -75,6 +75,69 @@ describe('cli-proxy', () => {
       expect(result.inputTokens).toBe(100);
       expect(result.outputTokens).toBe(50);
       expect(result.duration).toBeGreaterThanOrEqual(0);
+    });
+
+    // ============================================================
+    // Feature 133 P0-1：token 提取从嵌套 usage 字段读取
+    // ============================================================
+    // 根因：Claude CLI 实际 stream-json 输出中 type=result message 把
+    // input_tokens/output_tokens 嵌套在 usage.* 下，但旧代码当顶层字段读，
+    // 导致所有 module spec frontmatter 的 tokenUsage 全为 0。
+    // 这组 case 锁定修复后的行为，避免回归。
+
+    it('Feature 133 P0-1：从嵌套 usage 字段提取 token（Claude CLI 当前实际格式）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test', { model: 'claude-sonnet-4-6' });
+
+      // Claude CLI 真实输出格式：token 嵌套在 usage 下
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","subtype":"success","result":"reply","model":"claude-sonnet-4-6","usage":{"input_tokens":1500,"output_tokens":300,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      expect(result.inputTokens).toBe(1500);
+      expect(result.outputTokens).toBe(300);
+      expect(result.content).toBe('reply');
+    });
+
+    it('Feature 133 P0-1：嵌套 usage 优先于顶层字段（防止格式混淆）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test');
+
+      // 同时存在嵌套和顶层时，嵌套应优先（顶层是旧格式或 mock 残留）
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","result":"r","input_tokens":99,"output_tokens":99,"usage":{"input_tokens":2000,"output_tokens":500}}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      expect(result.inputTokens).toBe(2000);
+      expect(result.outputTokens).toBe(500);
+    });
+
+    it('Feature 133 P0-1：result 不含任何 token 字段时返回 0（不抛错）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test');
+
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","result":"reply"}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      expect(result.inputTokens).toBe(0);
+      expect(result.outputTokens).toBe(0);
+      expect(result.content).toBe('reply');
     });
 
     it('超时 → 抛出 LLMTimeoutError + kill 进程', async () => {
