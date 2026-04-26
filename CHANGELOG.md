@@ -5,6 +5,22 @@
 
 ## [Unreleased]
 
+### 🎯 Milestone — M-101 Phase 2 Reading Platform Delivered
+
+把 Spectra 从"分层文档生成器"演进为"可查询、可视化、可按场景伸缩的代码阅读平台"。本 Milestone 由 7 个 Feature + 2 个 Postmortem Fix 组成（详见 [M-101 blueprint](specs/M-101-phase2-reading-platform/blueprint.md) / [postmortem](specs/M-101-phase2-reading-platform/postmortem.md)）：
+
+- **F1 Reveal & Cost Transparency** — README 首屏图摘要 + `tokenUsage` frontmatter + `--budget` / `--dry-run` / `--on-over-budget`
+- **F2 Harden** — `SpecStore` 抽象 + `sourceKind` 元数据 + dev 热重载 + 依赖方向 audit CLI
+- **F2.5 Rationalize** — 删除 9 个遗留原子 skill，spec-driver 单入口（[migration](docs/migrations/skill-deprecation.md)）
+- **F3 Debt Intelligence** — `technical-debt.md` + 代码 TODO 扫描 + design-doc Open Questions 提取
+- **F4 Anchor + Hyperedges** — `graph.json` schema v2.0（`references` / `conceptually_related_to` / `rationale_for` 边 + Hyperedges）+ chunked markdown embedding 函数级语义锚定
+- **F5 Reading UX** — `--mode=reading` / `--mode=code-only` 轻量模式 + MCP `panoramic-query` 自然语言问答（RAG）+ `graph.html` D3 交互可视化
+- **附带产出 Feature 133 (orchestration-overrides)** — spec-driver 项目级流程定制（分层 orchestration，[migration](docs/migrations/orchestration-overrides.md)）
+
+**度量**：89 Phase 2 commits · 6,895 行新 src 代码（6 模块）· +571 测试（1,625 → 2,196）· 默认 LLM 成本下降 ~5x。
+
+**Postmortem 7 教训**已写入 [M-101 postmortem](specs/M-101-phase2-reading-platform/postmortem.md) 作为 Phase 3 准入参考。Phase 3 候选方向见 [M-102 proposal](specs/M-102-phase3/proposal.md)。
+
 ### Changed — spectra ⚠️ BREAKING
 
 - **默认 Claude 模型升级（Feature 133 P0-3）** — 升级到最新发布的 Sonnet 4.6 / Opus 4.7 1M 系列：

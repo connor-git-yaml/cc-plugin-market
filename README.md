@@ -41,6 +41,14 @@ A curated collection of Claude Code plugins for Spec-Driven Development. This re
 ```
 <!-- spec-driver:section:plugins-overview:end -->
 
+## Project Milestones
+
+| Milestone | Status | Highlights | Docs |
+|-----------|--------|------------|------|
+| **M-100** Spectra Evolution | ✅ Delivered | reverse-spec → Spectra rebrand · panoramic Phase 1（多语言索引、跨包依赖、LLM 语义增强、多格式输出） | [blueprint](specs/M-100-spectra-evolution/blueprint.md) |
+| **M-101** Phase 2 — Reading Platform | ✅ Delivered | 图能力上首屏 · LLM 成本透明（`--budget` / `--dry-run`）· SpecStore + sourceKind · TODO/Open Questions 提取 · graph schema v2.0 + Hyperedges · 自然语言问答 + `graph.html` 交互可视化 · 默认 model 升级 Sonnet 4.6 / Opus 4.7 1M | [blueprint](specs/M-101-phase2-reading-platform/blueprint.md) · [postmortem](specs/M-101-phase2-reading-platform/postmortem.md) |
+| **M-102** Phase 3 — TBD | 🟡 Proposal | 候选方向：F6 Graphify 集成 / 大项目实战优化 / spec-driver 平台化深化 / AI for AI（多 runtime） | [proposal](specs/M-102-phase3/proposal.md) |
+
 <!-- spec-driver:section:plugin-installation -->
 ## Plugin Installation
 
