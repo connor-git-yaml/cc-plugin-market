@@ -13,6 +13,16 @@ import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 import { callLLMviaCodex as codexProxyCall } from '../auth/codex-proxy.js';
 import { resolveCodexExecutionConfig, resolveReverseSpecModel } from './model-selection.js';
 
+/**
+ * Anthropic SDK 当前版本的 Usage 类型未明示 prompt caching 相关字段，
+ * 但响应 payload 实际含 cache_creation_input_tokens / cache_read_input_tokens。
+ * 这里扩展类型，避免 inline 断言重复（Fix 134 quality-review 建议）。
+ */
+type UsageWithCache = Anthropic.Usage & {
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+};
+
 // ============================================================
 // 配置类型
 // ============================================================
@@ -317,10 +327,7 @@ async function callLLMviaSdk(
       // Fix 134：input 累加 cache_creation_input_tokens + cache_read_input_tokens，
       // prompt caching 启用时主输入会进 cache_read_input_tokens；只读 input_tokens
       // 主字段会严重低估（Phase 2 集成回归发现 5 模块累计 input=30 vs output=35,759）。
-      const usage = response.usage as Anthropic.Usage & {
-        cache_creation_input_tokens?: number | null;
-        cache_read_input_tokens?: number | null;
-      };
+      const usage = response.usage as UsageWithCache;
       const inputTokens = (usage.input_tokens ?? 0)
         + (usage.cache_creation_input_tokens ?? 0)
         + (usage.cache_read_input_tokens ?? 0);

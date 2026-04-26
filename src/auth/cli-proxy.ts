@@ -259,14 +259,14 @@ function parseStreamJsonOutput(
       // 因 prompt caching 启用时主输入会进 cache_read_input_tokens，input_tokens
       // 主字段只剩"非 cached"增量部分（5 模块累计 input=30 vs output=35,759 异常）。
       const usage = msg.usage;
-      const usageHasInputField = usage !== undefined
+      const hasAnyInputField = usage !== undefined
         && (usage.input_tokens !== undefined
           || usage.cache_creation_input_tokens !== undefined
           || usage.cache_read_input_tokens !== undefined);
-      const inputFromUsage = usageHasInputField
-        ? (usage!.input_tokens ?? 0)
-          + (usage!.cache_creation_input_tokens ?? 0)
-          + (usage!.cache_read_input_tokens ?? 0)
+      const inputFromUsage = hasAnyInputField
+        ? (usage?.input_tokens ?? 0)
+          + (usage?.cache_creation_input_tokens ?? 0)
+          + (usage?.cache_read_input_tokens ?? 0)
         : undefined;
       const outputFromUsage = usage?.output_tokens;
       if (inputFromUsage !== undefined) {

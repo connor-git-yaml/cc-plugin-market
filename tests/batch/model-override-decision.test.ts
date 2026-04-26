@@ -82,7 +82,7 @@ describe('decideModelOverride - Fix 134 P0-3 reading 模式 model override', () 
 
   describe('sonnetModelId 透传', () => {
     it('override 时返回的是输入的 sonnetModelId（不硬编码模型名）', () => {
-      const customId = 'claude-haiku-4-5-20251001';
+      const customId = 'claude-any-model-test-id';
       const result = decideModelOverride(
         input({ effectiveMode: 'reading', sonnetModelId: customId }),
       );
