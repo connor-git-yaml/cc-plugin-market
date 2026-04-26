@@ -314,11 +314,22 @@ async function callLLMviaSdk(
           .map((block) => block.text)
           .join('\n') || '';
 
+      // Fix 134：input 累加 cache_creation_input_tokens + cache_read_input_tokens，
+      // prompt caching 启用时主输入会进 cache_read_input_tokens；只读 input_tokens
+      // 主字段会严重低估（Phase 2 集成回归发现 5 模块累计 input=30 vs output=35,759）。
+      const usage = response.usage as Anthropic.Usage & {
+        cache_creation_input_tokens?: number | null;
+        cache_read_input_tokens?: number | null;
+      };
+      const inputTokens = (usage.input_tokens ?? 0)
+        + (usage.cache_creation_input_tokens ?? 0)
+        + (usage.cache_read_input_tokens ?? 0);
+
       return {
         content,
         model: response.model,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens,
+        outputTokens: usage.output_tokens,
         duration,
       };
     } catch (error: any) {

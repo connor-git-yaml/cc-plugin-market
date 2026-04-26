@@ -255,8 +255,20 @@ function parseStreamJsonOutput(
       }
       // Feature 133 P0-1 修复：优先从嵌套 usage 字段读取（Claude CLI 当前格式），
       // 回落到顶层字段（向后兼容）。原实现仅读顶层导致 frontmatter token 全为 0。
-      const inputFromUsage = msg.usage?.input_tokens;
-      const outputFromUsage = msg.usage?.output_tokens;
+      // Fix 134：input 累加 cache_creation_input_tokens + cache_read_input_tokens，
+      // 因 prompt caching 启用时主输入会进 cache_read_input_tokens，input_tokens
+      // 主字段只剩"非 cached"增量部分（5 模块累计 input=30 vs output=35,759 异常）。
+      const usage = msg.usage;
+      const usageHasInputField = usage !== undefined
+        && (usage.input_tokens !== undefined
+          || usage.cache_creation_input_tokens !== undefined
+          || usage.cache_read_input_tokens !== undefined);
+      const inputFromUsage = usageHasInputField
+        ? (usage!.input_tokens ?? 0)
+          + (usage!.cache_creation_input_tokens ?? 0)
+          + (usage!.cache_read_input_tokens ?? 0)
+        : undefined;
+      const outputFromUsage = usage?.output_tokens;
       if (inputFromUsage !== undefined) {
         inputTokens = inputFromUsage;
       } else if (msg.input_tokens !== undefined) {

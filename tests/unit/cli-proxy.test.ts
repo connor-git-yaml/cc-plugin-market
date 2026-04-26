@@ -140,6 +140,70 @@ describe('cli-proxy', () => {
       expect(result.content).toBe('reply');
     });
 
+    // ============================================================
+    // Fix 134：input 累加 cache_creation_input_tokens + cache_read_input_tokens
+    // ============================================================
+    // 根因：prompt caching 启用时，主输入会进 cache_read_input_tokens，
+    // input_tokens 主字段只剩"非 cached"增量部分（5 模块累计 input=30 vs
+    // output=35,759 异常）。修复：累加三个 input 子字段。
+
+    it('Fix 134：累加 cache_creation_input_tokens + cache_read_input_tokens（prompt caching 真实场景）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test', { model: 'claude-sonnet-4-6' });
+
+      // 真实 prompt caching 场景：input_tokens 是非 cached 增量，
+      // 主输入大量进 cache_read_input_tokens
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","subtype":"success","result":"reply","model":"claude-sonnet-4-6","usage":{"input_tokens":100,"output_tokens":300,"cache_creation_input_tokens":200,"cache_read_input_tokens":1500}}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      // 100 + 200 + 1500 = 1800
+      expect(result.inputTokens).toBe(1800);
+      expect(result.outputTokens).toBe(300);
+    });
+
+    it('Fix 134：仅有 cache_read_input_tokens 时仍累加（input_tokens 缺失）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test');
+
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","result":"r","usage":{"output_tokens":50,"cache_read_input_tokens":800}}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      // 0 + 0 + 800 = 800（input_tokens 缺失，cache_creation 缺失，cache_read=800）
+      expect(result.inputTokens).toBe(800);
+      expect(result.outputTokens).toBe(50);
+    });
+
+    it('Fix 134：cache 子字段缺失时退化为 input_tokens 主字段（向后兼容）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCli('test');
+
+      // 旧格式或无 prompt caching 场景：只有 input_tokens
+      mockChild.stdout.emit('data', Buffer.from(
+        '{"type":"result","result":"r","usage":{"input_tokens":2000,"output_tokens":500}}\n',
+      ));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      // 2000 + 0 + 0 = 2000
+      expect(result.inputTokens).toBe(2000);
+      expect(result.outputTokens).toBe(500);
+    });
+
     it('超时 → 抛出 LLMTimeoutError + kill 进程', async () => {
       const mockChild = createMockChild();
       mockedSpawn.mockReturnValue(mockChild);
