@@ -47,3 +47,14 @@ specs/.reverse-spec-checkpoint.json
 
 # Worktree 本地态（由 sync-worktree-local-state.sh 管理，绝对路径符号链接，机器相关）
 _reference
+
+# Claude Code worktree 自动管理目录（运行态，机器相关）
+.claude/worktrees/
+.claire/
+
+# Spectra batch dogfood 临时产物（顶层 spec 文件如 src.spec.md / plugins.spec.md 仍 tracked）
+specs/README.md
+specs/_meta/
+specs/modules/
+specs/project/
+specs/bundles/
