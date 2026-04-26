@@ -72,6 +72,22 @@ export interface ResolvedReverseSpecRuntime {
   configPath?: string;
 }
 
+/**
+ * 返回当前 runtime 下"sonnet 等价"的真实模型 ID（Fix 134 — 修 sonnetModelId 真 bug）。
+ *
+ * 之前 batch-orchestrator 用 `resolveReverseSpecModel({ agentId: 'specify-sonnet' })`
+ * 来取 sonnet override 的模型 ID，但 'specify-sonnet' 在 yaml agents 表中不存在，会
+ * fallback 到 preset；当用户配置 `preset: quality-first` 时，sonnetModelId 实际是
+ * opus！这破坏了"小模块/budget 降级/reading 模式 强制 sonnet"的设计意图。
+ *
+ * 此 helper 直接从 LOGICAL_*_MODEL_MAP 取 'sonnet'，不依赖 yaml 配置，
+ * 保证 sonnetModelId 一定是真 sonnet（claude → claude-sonnet-4-6；codex → gpt-5.4）。
+ */
+export function getCanonicalSonnetModelId(runtime: ReverseSpecRuntime = 'claude'): string {
+  const map = runtime === 'codex' ? LOGICAL_CODEX_MODEL_MAP : LOGICAL_CLAUDE_MODEL_MAP;
+  return map['sonnet'] ?? DEFAULT_CLAUDE_MODEL;
+}
+
 export interface ResolvedReverseSpecModel {
   model: string;
   source: ReverseSpecModelSource;

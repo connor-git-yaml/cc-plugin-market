@@ -6,6 +6,7 @@ import {
   resolveCodexExecutionConfig,
   resolveReverseSpecModel,
   resolveReverseSpecRuntime,
+  getCanonicalSonnetModelId,
 } from '../../src/core/model-selection.js';
 
 // Feature 133 P0-3：默认 model 升级（Sonnet 4.6 / Opus 4.7 1M）
@@ -206,6 +207,41 @@ codex_thinking:
     expect(result.model).toBe('gpt-5.4');
     expect(result.reasoningEffort).toBe('xhigh');
     expect(result.serviceTier).toBe('fast');
+  });
+
+  // Fix 134：getCanonicalSonnetModelId 真实 sonnet ID 不依赖 yaml 配置
+  // 根因：之前用 resolveReverseSpecModel({ agentId: 'specify-sonnet' }) 取 sonnet
+  // override 模型 ID，但该 agentId 在 yaml agents 不存在，会 fallback 到 preset；
+  // 当用户配置 quality-first 时 sonnetModelId 实际是 opus，破坏小模块/budget/
+  // reading 模式 强制 sonnet 的设计意图。helper 直接从 LOGICAL_*_MODEL_MAP 取，
+  // 不读 yaml，保证 sonnet override 总是真 sonnet。
+  describe('getCanonicalSonnetModelId（Fix 134）', () => {
+    it('claude runtime → claude-sonnet-4-6（不读 yaml）', () => {
+      // 即使 cwd 下有 quality-first preset 的 yaml，helper 也返回 sonnet
+      writeConfig(
+        tempDir,
+        `
+preset: quality-first
+agents:
+  specify:
+    model: opus
+`,
+      );
+      process.chdir(tempDir);
+      try {
+        expect(getCanonicalSonnetModelId('claude')).toBe(SONNET_MODEL);
+      } finally {
+        process.chdir(originalEnv['HOME'] ?? '/');
+      }
+    });
+
+    it('codex runtime → gpt-5.4（runtime 感知）', () => {
+      expect(getCanonicalSonnetModelId('codex')).toBe(CODEX_MODEL);
+    });
+
+    it('默认 runtime（不传参）→ claude-sonnet-4-6', () => {
+      expect(getCanonicalSonnetModelId()).toBe(SONNET_MODEL);
+    });
   });
 });
 

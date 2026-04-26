@@ -61,7 +61,8 @@ import {
   generateDocsQualityReport,
   type BatchProjectDocsResult,
 } from '../panoramic/batch-project-docs.js';
-import { resolveReverseSpecModel } from '../core/model-selection.js';
+import { resolveReverseSpecModel, getCanonicalSonnetModelId } from '../core/model-selection.js';
+import { detectAuth } from '../auth/auth-detector.js';
 import { orchestrateDocsBundle } from '../panoramic/pipelines/docs-bundle-orchestrator.js';
 import {
   generateDebtIntelligence,
@@ -581,8 +582,22 @@ export async function runBatch(
   // state 在此处保证非 null（第 341 行的 if 分支已确保初始化）
   const checkedState = state!;
 
-  // H3 修复：通过集中模型配置解析 Sonnet 模型 ID，避免硬编码版本字符串
-  const sonnetModelId = resolveReverseSpecModel({ cwd: resolvedRoot, agentId: 'specify-sonnet' }).model;
+  // H3 修复：通过集中模型配置解析 Sonnet 模型 ID，避免硬编码版本字符串。
+  // Fix 134：直接从 LOGICAL_*_MODEL_MAP 取 'sonnet'，不走 yaml fallback
+  // 链——之前用 `agentId: 'specify-sonnet'` 在 yaml agents 不存在时回落到
+  // preset，当用户配置 quality-first 时 sonnetModelId 实际是 opus，破坏了
+  // 小模块/budget 降级/reading 模式 强制 sonnet 的设计意图（graphify E2E 暴露）。
+  // 按当前认证 runtime 决定 sonnet ID（claude → claude-sonnet-4-6；codex → gpt-5.4），
+  // 与 callLLM 内 detectAuth 的运行时保持一致；探测失败时默认 claude。
+  const detectedRuntime = (() => {
+    try {
+      const auth = detectAuth();
+      return auth.preferred?.provider === 'codex' ? 'codex' : 'claude';
+    } catch {
+      return 'claude';
+    }
+  })();
+  const sonnetModelId = getCanonicalSonnetModelId(detectedRuntime);
 
   /** 单个模块的处理逻辑（提取为函数以支持并行调度） */
   async function processOneModule(moduleName: string): Promise<void> {
