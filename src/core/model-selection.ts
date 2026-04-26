@@ -3,11 +3,15 @@ import * as path from 'node:path';
 
 type PlainObject = Record<string, unknown>;
 
-const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-5-20250929';
+// Feature 133 P0-3：默认 Claude 模型升级到最新 Sonnet 4.6 / Opus 4.7 1M
+// - Sonnet 4.6（claude-sonnet-4-6，2026-02-17 发布，含 1M context）
+// - Opus 4.7（claude-opus-4-7，2026-04-16 发布，含 1M context，无需 beta header）
+// - balanced preset 默认改为 sonnet（4.6 性能足够强且成本远低于 opus，作为推荐默认）
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_CODEX_MODEL = 'gpt-5.4';
 
 const LOGICAL_CLAUDE_MODEL_MAP: Record<string, string> = {
-  opus: 'claude-opus-4-1-20250805',
+  opus: 'claude-opus-4-7',
   sonnet: DEFAULT_CLAUDE_MODEL,
   haiku: 'claude-haiku-4-5-20251001',
 };
@@ -19,7 +23,7 @@ const LOGICAL_CODEX_MODEL_MAP: Record<string, string> = {
 };
 
 const PRESET_MODEL_MAP: Record<string, string> = {
-  balanced: 'opus',
+  balanced: 'sonnet',           // Feature 133 P0-3：从 'opus' 改为 'sonnet'
   'quality-first': 'opus',
   'cost-efficient': 'sonnet',
 };
@@ -40,6 +44,9 @@ const DEFAULT_CODEX_ALIASES: Record<string, string> = {
   opus: DEFAULT_CODEX_MODEL,
   sonnet: DEFAULT_CODEX_MODEL,
   haiku: DEFAULT_CODEX_MODEL,
+  // Feature 133 P0-3：新增最新模型映射；保留历史映射作向后兼容（用户 spec / fixture 可能引用）
+  'claude-opus-4-7': DEFAULT_CODEX_MODEL,
+  'claude-sonnet-4-6': DEFAULT_CODEX_MODEL,
   'claude-opus-4-1-20250805': DEFAULT_CODEX_MODEL,
   'claude-opus-4-6': DEFAULT_CODEX_MODEL,
   'claude-sonnet-4-5-20250929': DEFAULT_CODEX_MODEL,

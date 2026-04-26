@@ -60,7 +60,8 @@ describe('llm provider selection', () => {
 
     expect(mocks.anthropicCreate).toHaveBeenCalledTimes(1);
     const request = mocks.anthropicCreate.mock.calls[0]![0];
-    expect(request.model).toBe('claude-opus-4-1-20250805');
+    // Feature 133 P0-3：opus 逻辑名升级到 claude-opus-4-7（原 claude-opus-4-1-20250805）
+    expect(request.model).toBe('claude-opus-4-7');
     expect(mocks.callLLMviaCodex).not.toHaveBeenCalled();
   });
 

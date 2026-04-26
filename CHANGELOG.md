@@ -5,6 +5,31 @@
 
 ## [Unreleased]
 
+### Changed — spectra ⚠️ BREAKING
+
+- **默认 Claude 模型升级（Feature 133 P0-3）** — 升级到最新发布的 Sonnet 4.6 / Opus 4.7 1M 系列：
+  - `DEFAULT_CLAUDE_MODEL`: `claude-sonnet-4-5-20250929` → **`claude-sonnet-4-6`**（2026-02-17 发布，含 1M context）
+  - 逻辑名 `opus`: `claude-opus-4-1-20250805` → **`claude-opus-4-7`**（2026-04-16 发布，1M context 默认可用，无需 beta header）
+  - **`balanced` preset 改为映射到 `sonnet`**（旧映射 `opus`），与 `cost-efficient` 等价；`quality-first` 仍指 `opus`
+  - `DEFAULT_CODEX_ALIASES` 同步新增最新模型映射，保留历史条目作向后兼容
+- **影响**：未显式 pin model 的项目下次运行会切换到新模型。`balanced` preset 用户的实际 LLM 调用从 Opus 切到 Sonnet（成本 $5/$25 → $3/$15 per MTok，速度更快）
+- **建议**：希望保留旧行为的用户在 `spec-driver.config.yaml` 显式指定：
+  ```yaml
+  preset: quality-first    # 强制使用 Opus
+  # 或
+  agents:
+    specify:
+      model: claude-opus-4-1-20250805    # 显式 pin 旧版 Opus
+  ```
+- 调研依据：见 `specs/133-fix-postmortem-phase2/research/online-research.md`
+
+### Fixed — spectra
+
+- **CLI proxy token 提取（Feature 133 P0-1）** — Phase 2 集成回归发现：所有 module spec frontmatter 的 `tokenUsage` 全为 0，但 LLM 真调用了。根因是 `src/auth/cli-proxy.ts` 的 `StreamMessage` 类型把 `input_tokens / output_tokens` 当作 `type=result` message 的顶层字段，但 Claude CLI 实际嵌套在 `usage.*` 下；mock-only 测试沿用相同错误假设导致 2154 单测全过却生产失败（cost-summary 因此误报"未调用 LLM"）。
+  - 修复：StreamMessage 接口新增嵌套 `usage` 字段，保留旧顶层字段作向后兼容；`parseStreamJsonOutput` 在 `type=result` 分支优先读 `msg.usage.*`，回落顶层
+  - 新增 3 个单测 case + 1 个真实 SDK 集成测试（`vi.skipIf(!ANTHROPIC_API_KEY)` 守卫）
+  - 下游影响：`frontmatter.tokenUsage` 在 CLI proxy 路径下恢复非零值；`batch-summary.md` / `quality-report.md` 的"未调用 LLM"误报自动消失
+
 ### Removed — spec-driver ⚠️ BREAKING
 
 - **9 个遗留原子命令** `/spec-driver.{specify,plan,tasks,implement,clarify,analyze,checklist,constitution,taskstoissues}` 已从 `.claude/commands/` 删除。这些命令由 spec 032 从 speckit 重命名继承而来，但功能长期落后于 `plugins/spec-driver/skills/spec-driver-*/` 下的编排器 Skill，且两套零代码依赖、互不调用，长期造成命令面板混乱与维护双倍负担。

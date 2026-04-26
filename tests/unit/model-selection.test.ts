@@ -8,8 +8,9 @@ import {
   resolveReverseSpecRuntime,
 } from '../../src/core/model-selection.js';
 
-const SONNET_MODEL = 'claude-sonnet-4-5-20250929';
-const OPUS_MODEL = 'claude-opus-4-1-20250805';
+// Feature 133 P0-3：默认 model 升级（Sonnet 4.6 / Opus 4.7 1M）
+const SONNET_MODEL = 'claude-sonnet-4-6';
+const OPUS_MODEL = 'claude-opus-4-7';
 const CODEX_MODEL = 'gpt-5.4';
 
 describe('model-selection', () => {
@@ -108,6 +109,21 @@ preset: cost-efficient
     expect(result.model).toBe(SONNET_MODEL);
   });
 
+  // Feature 133 P0-3：balanced preset 默认映射到 sonnet（旧行为是 opus）
+  it('balanced preset 默认映射到 sonnet（Feature 133 P0-3 breaking change）', () => {
+    writeConfig(
+      tempDir,
+      `
+preset: balanced
+`,
+    );
+
+    const result = resolveReverseSpecModel({ cwd: tempDir, env: process.env });
+
+    expect(result.source).toBe('driver-config-preset');
+    expect(result.model).toBe(SONNET_MODEL);
+  });
+
   it('支持在上级目录 .specify 下发现配置文件', () => {
     const workspace = join(tempDir, 'workspace');
     const nested = join(workspace, 'apps', 'web');
@@ -162,7 +178,8 @@ model_compat:
 
     expect(runtime.runtime).toBe('claude');
     expect(runtime.source).toBe('config');
-    expect(result.model).toBe(OPUS_MODEL);
+    // Feature 133 P0-3：未设 preset 时默认 balanced，新版本 balanced 映射到 sonnet（旧版是 opus）
+    expect(result.model).toBe(SONNET_MODEL);
   });
 
   it('读取 Codex execution 配置', () => {
