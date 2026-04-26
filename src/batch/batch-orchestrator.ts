@@ -677,6 +677,9 @@ export async function runBatch(
             const result = await generateSpec(fullPath, {
               ...genOptions,
               existingVersion: storedSpec?.version,
+              // Feature 133 P0-2：reading/code-only 模式跳过模块 spec LLM
+              // enrichment，让 5 文件项目能在 SC-001 的 120s 目标内完成
+              skipEnrichment: effectiveMode !== 'full',
             });
             collectedModuleSpecs.push(result.moduleSpec);
             generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
@@ -719,6 +722,9 @@ export async function runBatch(
           const result = await generateSpec(targetPath, {
             ...genOptions,
             existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
+            // Feature 133 P0-2：reading/code-only 模式跳过模块 spec LLM
+            // enrichment，让 5 文件项目能在 SC-001 的 120s 目标内完成
+            skipEnrichment: effectiveMode !== 'full',
           });
 
           if (isMultiLang && group.language) {

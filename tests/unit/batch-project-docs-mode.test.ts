@@ -12,16 +12,16 @@ import { describe, it, expect } from 'vitest';
 // ============================================================
 
 // 直接内联实现中的常量（与 batch-project-docs.ts 保持一致）
+// Feature 133 P0-2：READING_SKIP_IDS 扩展至与 CODE_ONLY 等价（13 个 generator），
+// 修复 reading 模式 1047s 远超 SC-001 120s 目标的回归
 const READING_SKIP_IDS = new Set([
+  // 产品文档层
   'adr-pipeline',
   'product-ux-docs',
   'troubleshooting',
   'data-model',
   'docs-quality-evaluator',
-]);
-
-const CODE_ONLY_SKIP_IDS = new Set([
-  ...READING_SKIP_IDS,
+  // 架构推断层（P0-2 新增）
   'architecture-overview',
   'architecture-ir',
   'pattern-hints',
@@ -31,6 +31,8 @@ const CODE_ONLY_SKIP_IDS = new Set([
   'component-view',
   'dynamic-scenarios',
 ]);
+
+const CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS]);
 
 // plan §5 完整 generator 列表
 const ALL_BATCH_GENERATOR_IDS = [
@@ -78,16 +80,17 @@ describe('batch-project-docs generator 过滤（T-008）', () => {
       expect(activated).not.toContain('docs-quality-evaluator');
     });
 
-    it('架构层 generator 仍在激活列表（architecture-overview）', () => {
-      expect(activated).toContain('architecture-overview');
+    // Feature 133 P0-2：架构层 generator 在 reading 模式下也跳过（与 code-only 等价）
+    it('架构层 generator 不在激活列表（architecture-overview）', () => {
+      expect(activated).not.toContain('architecture-overview');
     });
 
-    it('架构层 generator 仍在激活列表（architecture-ir）', () => {
-      expect(activated).toContain('architecture-ir');
+    it('架构层 generator 不在激活列表（architecture-ir）', () => {
+      expect(activated).not.toContain('architecture-ir');
     });
 
-    it('架构层 generator 仍在激活列表（architecture-narrative）', () => {
-      expect(activated).toContain('architecture-narrative');
+    it('架构层 generator 不在激活列表（architecture-narrative）', () => {
+      expect(activated).not.toContain('architecture-narrative');
     });
 
     it('静态 generator 仍在激活列表（workspace-index）', () => {
@@ -145,18 +148,19 @@ describe('batch-project-docs generator 过滤（T-008）', () => {
   });
 
   describe('跳过集合结构验证', () => {
-    it('code-only 跳过集合是 reading 跳过集合的超集', () => {
+    it('code-only 跳过集合是 reading 跳过集合的超集（含等价情况）', () => {
       for (const id of READING_SKIP_IDS) {
         expect(CODE_ONLY_SKIP_IDS.has(id)).toBe(true);
       }
     });
 
-    it('READING_SKIP_IDS 包含 5 个产品文档层 generator', () => {
-      expect(READING_SKIP_IDS.size).toBe(5);
+    // Feature 133 P0-2：reading 现在跳过 13 个 generator（含产品文档 5 + 架构推断 8）
+    it('READING_SKIP_IDS 包含 13 个 generator（产品文档 5 + 架构推断 8）', () => {
+      expect(READING_SKIP_IDS.size).toBe(13);
     });
 
-    it('CODE_ONLY_SKIP_IDS 包含 13 个 generator（reading 5 + 架构推断 8）', () => {
-      expect(CODE_ONLY_SKIP_IDS.size).toBe(13);
+    it('CODE_ONLY_SKIP_IDS 与 READING_SKIP_IDS 等价（P0-2 后）', () => {
+      expect(CODE_ONLY_SKIP_IDS.size).toBe(READING_SKIP_IDS.size);
     });
   });
 });

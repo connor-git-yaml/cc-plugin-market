@@ -81,15 +81,14 @@ describe('generator 过滤三条路径验证（T-011）', () => {
     { id: 'runtime-topology' },
   ];
 
+  // Feature 133 P0-2：READING_SKIP_IDS 扩展至与 CODE_ONLY 等价（13 个）
   const READING_SKIP_IDS = new Set([
     'adr-pipeline', 'product-ux-docs', 'troubleshooting', 'data-model', 'docs-quality-evaluator',
-  ]);
-
-  const CODE_ONLY_SKIP_IDS = new Set([
-    ...READING_SKIP_IDS,
     'architecture-overview', 'architecture-ir', 'pattern-hints', 'event-surface', 'runtime-topology',
     'architecture-narrative', 'component-view', 'dynamic-scenarios',
   ]);
+
+  const CODE_ONLY_SKIP_IDS = new Set([...READING_SKIP_IDS]);
 
   function filterByMode(mode: BatchMode) {
     const skipIds =
@@ -109,9 +108,10 @@ describe('generator 过滤三条路径验证（T-011）', () => {
     expect(ids).not.toContain('adr-pipeline');
   });
 
-  it('reading 模式：含 architecture-overview（架构层保留）', () => {
+  // Feature 133 P0-2：reading 模式现在也跳过架构层（与 code-only 等价）
+  it('reading 模式：不含 architecture-overview（架构层在 P0-2 后跳过）', () => {
     const ids = filterByMode('reading');
-    expect(ids).toContain('architecture-overview');
+    expect(ids).not.toContain('architecture-overview');
   });
 
   it('code-only 模式：不含 architecture-narrative', () => {
