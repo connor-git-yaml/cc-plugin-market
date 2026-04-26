@@ -42,9 +42,15 @@ import type { DependencyGraph, GraphNode, DependencyEdge } from '../models/depen
 import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
 import {
   buildDocGraph,
+  runAnchorIntegration,
+  runHyperedgeIntegration,
   scanStoredModuleSpecs,
   type StoredModuleSpecSummary,
 } from '../panoramic/builders/doc-graph-builder.js';
+import { chunkMarkdownFiles } from '../panoramic/anchoring/chunker.js';
+import { createEmbeddingProvider } from '../panoramic/anchoring/providers/factory.js';
+import { DOC_NODE_KINDS } from '../panoramic/hyperedges/constants.js';
+import type { GraphNode as PanoramicGraphNode } from '../panoramic/graph/graph-types.js';
 import { buildCrossReferenceIndex } from '../panoramic/cross-reference-index.js';
 import { renderSpec } from '../generator/spec-renderer.js';
 import { CoverageAuditor } from '../panoramic/pipelines/coverage-auditor.js';
@@ -936,6 +942,67 @@ export async function runBatch(
         crossReferenceLinks,
         extractionResults,  // Feature 107 第四路数据源
       });
+
+      // Feature 133 P1-1：anchor + hyperedge 集成接通生产路径
+      // F4 提供了 runAnchorIntegration / runHyperedgeIntegration 集成函数，
+      // 但 batch 编排器从未调用过它们，导致 graph.json 不含 references /
+      // conceptually_related_to 边和 hyperedges。本次接通生产路径。
+      try {
+        const designDocAbsPaths = (projectDocs ?? [])
+          .map((rel) => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
+          .filter((abs) => fs.existsSync(abs));
+
+        const codeNodes: PanoramicGraphNode[] = graphJson.nodes.filter(
+          (n) => !DOC_NODE_KINDS.has(n.kind),
+        );
+
+        if (designDocAbsPaths.length > 0 && codeNodes.length > 0) {
+          // 1) anchor 集成 — references / conceptually_related_to 边
+          try {
+            const provider = createEmbeddingProvider();
+            const anchorResult = await runAnchorIntegration(resolvedRoot, {
+              markdownFiles: designDocAbsPaths,
+              graphNodes: codeNodes,
+              provider,
+            });
+            if (anchorResult.semanticEdges.length > 0) {
+              graphJson.links.push(...anchorResult.semanticEdges);
+              logger.info(
+                `anchor-integration: 追加 ${anchorResult.semanticEdges.length} 条语义边到 graph.json`,
+              );
+            }
+          } catch (anchorErr) {
+            logger.warn(
+              `anchor-integration: 失败，跳过语义边生成: ${anchorErr instanceof Error ? anchorErr.message : String(anchorErr)}`,
+            );
+          }
+
+          // 2) hyperedge 集成 — LLM 提取超边（默认启用，env=false 可关闭）
+          try {
+            const docChunks = chunkMarkdownFiles(designDocAbsPaths, resolvedRoot);
+            const hyperedgesEnabled = process.env['SPECTRA_HYPEREDGES_ENABLED'] !== 'false';
+            const hyperResult = await runHyperedgeIntegration({
+              hyperedgesEnabled,
+              graphNodes: codeNodes,
+              docChunks,
+            });
+            if (hyperResult.hyperedges.length > 0) {
+              graphJson.hyperedges = hyperResult.hyperedges;
+              logger.info(
+                `hyperedge-integration: 写入 ${hyperResult.hyperedges.length} 条 hyperedge 到 graph.json`,
+              );
+            }
+          } catch (hyperErr) {
+            logger.warn(
+              `hyperedge-integration: 失败，跳过超边生成: ${hyperErr instanceof Error ? hyperErr.message : String(hyperErr)}`,
+            );
+          }
+        }
+      } catch (integrationErr) {
+        logger.warn(
+          `semantic-integration: 整体失败，graph.json 将不含 anchor/hyperedge 数据: ${integrationErr instanceof Error ? integrationErr.message : String(integrationErr)}`,
+        );
+      }
 
       // Feature 102: 社区分析（写盘前执行，使 degree 信息写入 graph.json）
       try {
