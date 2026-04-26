@@ -651,6 +651,23 @@ When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both t
 - Priority: `SPECTRA_MODEL` > `spec-driver.config.yaml agents.specify.model` > `spec-driver.config.yaml preset` > built-in default
 - Config discovery: current directory upward search for `spec-driver.config.yaml`, then `.specify/spec-driver.config.yaml`
 
+### Per-Project Orchestration Overrides
+
+Customize phase sequences, gate behaviors, and concurrency per project via `.specify/orchestration-overrides.yaml` — like ESLint `extends` or Docker Compose `override.yml`. Plugin base `orchestration.yaml` stays untouched; you only override what differs.
+
+Typical scenarios:
+- High-risk projects: force all gates to `pause` for human approval
+- Low-risk projects: auto-skip `GATE_VERIFY` to ship faster
+- CI environments: lower `parallel_scheduling.max_concurrent_tasks` to 1
+
+Inspect the merged effective config:
+
+```bash
+node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <mode> --annotate
+```
+
+Full guide: [docs/migrations/orchestration-overrides.md](docs/migrations/orchestration-overrides.md)
+
 ### Supported Verification Languages
 
 JS/TS (npm/pnpm/yarn/bun), Rust (Cargo), Go, Python (pip/poetry/uv), Java (Maven/Gradle), Kotlin, Swift (SPM), C/C++ (CMake/Make), C# (.NET), Elixir (Mix), Ruby (Bundler)

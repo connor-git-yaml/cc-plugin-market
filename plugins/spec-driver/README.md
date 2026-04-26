@@ -272,6 +272,23 @@ node plugins/spec-driver/scripts/sync-merge-engine.mjs --project-root . --dry-ru
 node plugins/spec-driver/scripts/sync-merge-engine.mjs --project-root . --json
 ```
 
+### 项目级 orchestration 覆盖（Feature 133）
+
+通过 `.specify/orchestration-overrides.yaml` 按项目定制 phase 序列 / gate 行为 / 并发策略，**不动 plugin 内置 base config**。类比 ESLint `extends` / Docker Compose `override.yml`。
+
+典型场景：
+- **高风险项目** — 强制所有 gate 人工审（覆盖 `gates.GATE_VERIFY.default_behavior: pause`）
+- **低风险项目** — 自动跳过 verify gate（覆盖 `gates.GATE_VERIFY.default_behavior: auto`）
+- **CI 环境** — 降低并发到 1（覆盖 `parallel_scheduling.max_concurrent_tasks: 1`）
+
+查看合并后的 effective config：
+
+```bash
+node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <mode> --annotate
+```
+
+完整使用指南：[docs/migrations/orchestration-overrides.md](../../docs/migrations/orchestration-overrides.md)
+
 ## 与现有系统的关系
 
 - **独立于 Spectra plugin**：Spec Driver 是正向研发工具，Spectra 是逆向分析工具，互补关系
