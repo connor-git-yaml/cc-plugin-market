@@ -60,8 +60,11 @@ describe('llm provider selection', () => {
 
     expect(mocks.anthropicCreate).toHaveBeenCalledTimes(1);
     const request = mocks.anthropicCreate.mock.calls[0]![0];
-    // Feature 133 P0-3：opus 逻辑名升级到 claude-opus-4-7（原 claude-opus-4-1-20250805）
-    expect(request.model).toBe('claude-opus-4-7');
+    // Fix 134：spec-driver.config.yaml preset 从 quality-first 改为 balanced，
+    // 默认 model 从 opus 升级到 sonnet（与 PRESET_MODEL_MAP.balanced 对齐）。
+    // 本测试核心意图：Codex 环境走 API Key 时仍使用 Claude 模型而非 Codex 模型，
+    // 具体模型名跟随当前默认配置即可。
+    expect(request.model).toBe('claude-sonnet-4-6');
     expect(mocks.callLLMviaCodex).not.toHaveBeenCalled();
   });
 
