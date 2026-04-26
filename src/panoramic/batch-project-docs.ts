@@ -55,7 +55,11 @@ const CACHE_SKIP_GENERATOR_IDS = new Set([
 export interface BatchProjectDocsResult {
   projectContext: ProjectContext;
   generatedDocs: BatchGeneratedDocSummary[];
-  architectureNarrative: ArchitectureNarrativeOutput;
+  /**
+   * Feature 133（adversarial-review post-fix）：reading / code-only 模式
+   * 跳过整个产品文档 pipeline 后此字段为 undefined；full 模式必填。
+   */
+  architectureNarrative?: ArchitectureNarrativeOutput;
   qualityInputs: BatchDocsQualityInputs;
   /** Feature 101: 供 graph-persistence 消费的 Architecture IR（可选） */
   architectureIR?: ArchitectureIROutput['ir'];
@@ -70,7 +74,12 @@ export interface BatchDocsQualityInputs {
   outputDir: string;
   projectContext: ProjectContext;
   generatedDocs: BatchGeneratedDocSummary[];
-  architectureNarrative: ArchitectureNarrativeOutput;
+  /**
+   * Feature 133（adversarial-review post-fix）：reading / code-only 模式
+   * 跳过整个 narrative 生成时此字段为 undefined；下游 generateDocsQualityReport
+   * 等消费方需处理 undefined 情况
+   */
+  architectureNarrative?: ArchitectureNarrativeOutput;
   architectureOverview?: ArchitectureOverviewOutput;
   patternHints?: PatternHintsOutput;
   componentView?: ReturnType<typeof buildComponentView>;
@@ -216,148 +225,160 @@ export async function generateBatchProjectDocs(
   // 所有 generator 执行完毕后，原子写入 manifest
   await cacheManager.flush();
 
+  // architecture-overview / pattern-hints / architecture-ir / runtime-topology /
+  // event-surface 这些 generator 已被 mode skip 过滤；reading / code-only 模式下
+  // structuredOutputs 中读不到对应键，全部得到 undefined（下游 builder 自行处理）
   const architectureOverview = structuredOutputs.get('architecture-overview') as ArchitectureOverviewOutput | undefined;
   const patternHints = structuredOutputs.get('pattern-hints') as PatternHintsOutput | undefined;
-  const architectureNarrative = buildArchitectureNarrative({
-    projectRoot: options.projectRoot,
-    outputDir: options.outputDir,
-    specsRootDir: options.specsRootDir,
-    projectContext,
-    architectureOverview,
-    generatedDocs,
-  });
-  const narrativeWrittenFiles = writeMultiFormat({
-    outputDir: options.outputDir,
-    baseName: 'architecture-narrative',
-    outputFormat: 'all',
-    markdown: renderArchitectureNarrative(architectureNarrative),
-    structuredData: architectureNarrative,
-  });
-  generatedDocs.push({
-    generatorId: 'architecture-narrative',
-    writtenFiles: narrativeWrittenFiles,
-    warnings: [],
-  });
-
   const architectureIR = structuredOutputs.get('architecture-ir') as ArchitectureIROutput | undefined;
   const runtimeTopology = structuredOutputs.get('runtime-topology') as RuntimeTopologyOutput | undefined;
   const eventSurface = structuredOutputs.get('event-surface') as EventSurfaceOutput | undefined;
+
+  // Feature 133（adversarial-review post-fix）：硬编码后处理 pipeline 也尊重 mode
+  // 之前的实现只让 modeSkipIds 过滤 registry-based generators，但下面这块
+  // architecture-narrative / component-view / dynamic-scenarios / adr-pipeline /
+  // product-ux-docs 是无条件跑的，导致 reading / code-only 模式仍然写出这些
+  // 应被跳过的文件、消耗下游耗时。本次把整段包在 mode === 'full' 守卫内。
+  let architectureNarrative: ArchitectureNarrativeOutput | undefined;
   let productUxDocs: GenerateProductUxDocsResult | undefined;
 
-  if (architectureIR) {
-    const storedModules = loadStoredModuleSpecs(options.specsRootDir ?? options.outputDir, options.projectRoot);
+  if (effectiveMode === 'full') {
+    architectureNarrative = buildArchitectureNarrative({
+      projectRoot: options.projectRoot,
+      outputDir: options.outputDir,
+      specsRootDir: options.specsRootDir,
+      projectContext,
+      architectureOverview,
+      generatedDocs,
+    });
+    const narrativeWrittenFiles = writeMultiFormat({
+      outputDir: options.outputDir,
+      baseName: 'architecture-narrative',
+      outputFormat: 'all',
+      markdown: renderArchitectureNarrative(architectureNarrative),
+      structuredData: architectureNarrative,
+    });
+    generatedDocs.push({
+      generatorId: 'architecture-narrative',
+      writtenFiles: narrativeWrittenFiles,
+      warnings: [],
+    });
 
-    try {
-      const componentView = buildComponentView({
-        architectureIR: architectureIR.ir,
-        storedModules,
-        architectureNarrative,
-        runtime: runtimeTopology,
-        eventSurface,
-      });
-      const componentWrittenFiles = writeMultiFormat({
-        outputDir: options.outputDir,
-        baseName: 'component-view',
-        outputFormat: 'all',
-        markdown: renderComponentView(componentView),
-        structuredData: componentView,
-        mermaidSource: componentView.mermaidDiagram,
-      });
-      generatedDocs.push({
-        generatorId: 'component-view',
-        writtenFiles: componentWrittenFiles,
-        warnings: componentView.warnings,
-      });
-      structuredOutputs.set('component-view', componentView);
+    if (architectureIR) {
+      const storedModules = loadStoredModuleSpecs(options.specsRootDir ?? options.outputDir, options.projectRoot);
 
-      const dynamicScenarios = buildDynamicScenarios({
-        componentView: componentView.model,
-        storedModules,
-        runtime: runtimeTopology,
-        eventSurface,
-      });
-      const scenarioWrittenFiles = writeMultiFormat({
-        outputDir: options.outputDir,
-        baseName: 'dynamic-scenarios',
-        outputFormat: 'all',
-        markdown: renderDynamicScenarios(dynamicScenarios),
-        structuredData: dynamicScenarios,
-      });
-      generatedDocs.push({
-        generatorId: 'dynamic-scenarios',
-        writtenFiles: scenarioWrittenFiles,
-        warnings: dynamicScenarios.warnings,
-      });
-      structuredOutputs.set('dynamic-scenarios', dynamicScenarios);
-    } catch (error) {
+      try {
+        const componentView = buildComponentView({
+          architectureIR: architectureIR.ir,
+          storedModules,
+          architectureNarrative,
+          runtime: runtimeTopology,
+          eventSurface,
+        });
+        const componentWrittenFiles = writeMultiFormat({
+          outputDir: options.outputDir,
+          baseName: 'component-view',
+          outputFormat: 'all',
+          markdown: renderComponentView(componentView),
+          structuredData: componentView,
+          mermaidSource: componentView.mermaidDiagram,
+        });
+        generatedDocs.push({
+          generatorId: 'component-view',
+          writtenFiles: componentWrittenFiles,
+          warnings: componentView.warnings,
+        });
+        structuredOutputs.set('component-view', componentView);
+
+        const dynamicScenarios = buildDynamicScenarios({
+          componentView: componentView.model,
+          storedModules,
+          runtime: runtimeTopology,
+          eventSurface,
+        });
+        const scenarioWrittenFiles = writeMultiFormat({
+          outputDir: options.outputDir,
+          baseName: 'dynamic-scenarios',
+          outputFormat: 'all',
+          markdown: renderDynamicScenarios(dynamicScenarios),
+          structuredData: dynamicScenarios,
+        });
+        generatedDocs.push({
+          generatorId: 'dynamic-scenarios',
+          writtenFiles: scenarioWrittenFiles,
+          warnings: dynamicScenarios.warnings,
+        });
+        structuredOutputs.set('dynamic-scenarios', dynamicScenarios);
+      } catch (error) {
+        generatedDocs.push({
+          generatorId: 'component-view',
+          writtenFiles: [],
+          warnings: [`组件视图生成失败: ${String(error)}`],
+        });
+        generatedDocs.push({
+          generatorId: 'dynamic-scenarios',
+          writtenFiles: [],
+          warnings: ['动态链路生成跳过：依赖的 component-view 生成失败'],
+        });
+      }
+    } else {
       generatedDocs.push({
         generatorId: 'component-view',
         writtenFiles: [],
-        warnings: [`组件视图生成失败: ${String(error)}`],
+        warnings: ['组件视图生成跳过：缺少 architecture-ir 输出'],
       });
       generatedDocs.push({
         generatorId: 'dynamic-scenarios',
         writtenFiles: [],
-        warnings: ['动态链路生成跳过：依赖的 component-view 生成失败'],
+        warnings: ['动态链路生成跳过：缺少 architecture-ir 输出'],
       });
     }
-  } else {
-    generatedDocs.push({
-      generatorId: 'component-view',
-      writtenFiles: [],
-      warnings: ['组件视图生成跳过：缺少 architecture-ir 输出'],
-    });
-    generatedDocs.push({
-      generatorId: 'dynamic-scenarios',
-      writtenFiles: [],
-      warnings: ['动态链路生成跳过：缺少 architecture-ir 输出'],
-    });
-  }
 
-  try {
-    const adrDocs = generateBatchAdrDocs({
-      projectRoot: options.projectRoot,
-      outputDir: options.outputDir,
-      projectContext,
-      generatedDocs,
-      architectureNarrative,
-      architectureOverview,
-      patternHints,
-    });
-    generatedDocs.push({
-      generatorId: 'adr-pipeline',
-      writtenFiles: adrDocs.writtenFiles,
-      warnings: adrDocs.warnings,
-    });
-    structuredOutputs.set('adr-index', adrDocs.index);
-  } catch (error) {
-    generatedDocs.push({
-      generatorId: 'adr-pipeline',
-      writtenFiles: [],
-      warnings: [`ADR 草稿生成失败: ${String(error)}`],
-    });
-  }
+    try {
+      const adrDocs = generateBatchAdrDocs({
+        projectRoot: options.projectRoot,
+        outputDir: options.outputDir,
+        projectContext,
+        generatedDocs,
+        architectureNarrative,
+        architectureOverview,
+        patternHints,
+      });
+      generatedDocs.push({
+        generatorId: 'adr-pipeline',
+        writtenFiles: adrDocs.writtenFiles,
+        warnings: adrDocs.warnings,
+      });
+      structuredOutputs.set('adr-index', adrDocs.index);
+    } catch (error) {
+      generatedDocs.push({
+        generatorId: 'adr-pipeline',
+        writtenFiles: [],
+        warnings: [`ADR 草稿生成失败: ${String(error)}`],
+      });
+    }
 
-  try {
-    productUxDocs = generateProductUxDocs({
-      projectRoot: options.projectRoot,
-      outputDir: options.outputDir,
-      projectContext,
-    });
-    generatedDocs.push({
-      generatorId: 'product-ux-docs',
-      writtenFiles: productUxDocs.writtenFiles,
-      warnings: productUxDocs.warnings,
-    });
-    structuredOutputs.set('product-overview', productUxDocs.overview);
-    structuredOutputs.set('user-journeys', productUxDocs.journeys);
-    structuredOutputs.set('feature-briefs/index', productUxDocs.featureBriefIndex);
-  } catch (error) {
-    generatedDocs.push({
-      generatorId: 'product-ux-docs',
-      writtenFiles: [],
-      warnings: [`产品 / UX 文档生成失败: ${String(error)}`],
-    });
+    try {
+      productUxDocs = generateProductUxDocs({
+        projectRoot: options.projectRoot,
+        outputDir: options.outputDir,
+        projectContext,
+      });
+      generatedDocs.push({
+        generatorId: 'product-ux-docs',
+        writtenFiles: productUxDocs.writtenFiles,
+        warnings: productUxDocs.warnings,
+      });
+      structuredOutputs.set('product-overview', productUxDocs.overview);
+      structuredOutputs.set('user-journeys', productUxDocs.journeys);
+      structuredOutputs.set('feature-briefs/index', productUxDocs.featureBriefIndex);
+    } catch (error) {
+      generatedDocs.push({
+        generatorId: 'product-ux-docs',
+        writtenFiles: [],
+        warnings: [`产品 / UX 文档生成失败: ${String(error)}`],
+      });
+    }
   }
 
   return {
@@ -387,6 +408,15 @@ export async function generateBatchProjectDocs(
 export function generateDocsQualityReport(
   options: BatchDocsQualityInputs,
 ): BatchGeneratedDocSummary {
+  // Feature 133（adversarial-review post-fix）：reading / code-only 模式下
+  // architectureNarrative 是 undefined，这种情况不应该走到这里（caller 在
+  // batch-orchestrator 已加 mode === 'full' 守卫）。这里做防御性运行时校验，
+  // 把 optional 类型收窄为 evaluateDocsQuality 期望的 required 类型
+  if (!options.architectureNarrative) {
+    throw new Error(
+      'generateDocsQualityReport 调用方未提供 architectureNarrative — 该函数仅在 mode === "full" 时可用',
+    );
+  }
   const manifestRead = readDocsBundleManifest(options.manifestSearchDir ?? options.outputDir, options.projectRoot);
   const qualityReport = evaluateDocsQuality({
     projectRoot: options.projectRoot,

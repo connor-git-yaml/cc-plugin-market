@@ -49,10 +49,20 @@ describe('Feature 133 P1-1：batch-orchestrator anchor + hyperedge 接通', () =
     expect(callCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('hyperedge 默认启用，env=SPECTRA_HYPEREDGES_ENABLED=false 时关闭', () => {
-    // 确认 env-based 默认 enable 逻辑（与 P1-1 修复语义一致）
+  it('hyperedge 默认 opt-in：BatchOptions.hyperedgesEnabled === true 或 env === "true"', () => {
+    // Feature 133 adversarial-review post-fix：
+    // 默认 false（不再是 env=false 才关），需要显式 opt-in
+    expect(source).toMatch(/options\.hyperedgesEnabled\s*===\s*true/);
     expect(source).toMatch(/SPECTRA_HYPEREDGES_ENABLED/);
-    expect(source).toMatch(/!== ['"]false['"]/);
+    expect(source).toMatch(/===\s*['"]true['"]/);
+  });
+
+  it('semantic-integration 守卫：mode === "full" 且未触发 budget skip-enrichment', () => {
+    // Feature 133 adversarial-review post-fix：reading / code-only 或 budget 降级
+    // 模式都应跳过整个 anchor + hyperedge 集成块
+    expect(source).toMatch(/effectiveMode\s*===\s*['"]full['"]/);
+    expect(source).toMatch(/!budgetSkipEnrichmentAll/);
+    expect(source).toMatch(/semanticIntegrationAllowed/);
   });
 
   it('集成失败时 warn 日志降级，不抛异常阻断 batch', () => {

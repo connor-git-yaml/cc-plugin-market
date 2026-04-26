@@ -122,6 +122,12 @@ export interface BatchOptions {
   mode?: BatchMode;
   /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件（默认 false） */
   generateHtml?: boolean;
+  /**
+   * Feature 133 P1-1（adversarial-review post-fix）：是否启用 hyperedge LLM 提取
+   * 默认 false，需要显式 opt-in（CLI `--hyperedges` 或 env `SPECTRA_HYPEREDGES_ENABLED=true`）。
+   * 同样要求 mode === 'full' 且未触发 budget gate skip-enrichment 降级。
+   */
+  hyperedgesEnabled?: boolean;
 }
 
 export interface BatchResult {
@@ -947,65 +953,96 @@ export async function runBatch(
         extractionResults,  // Feature 107 第四路数据源
       });
 
-      // Feature 133 P1-1：anchor + hyperedge 集成接通生产路径
+      // Feature 133 P1-1（adversarial-review post-fix）：anchor + hyperedge 集成
       // F4 提供了 runAnchorIntegration / runHyperedgeIntegration 集成函数，
       // 但 batch 编排器从未调用过它们，导致 graph.json 不含 references /
-      // conceptually_related_to 边和 hyperedges。本次接通生产路径。
-      try {
-        const designDocAbsPaths = (projectDocs ?? [])
-          .map((rel) => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
-          .filter((abs) => fs.existsSync(abs));
+      // conceptually_related_to 边和 hyperedges。本块接通生产路径。
+      //
+      // Codex adversarial-review 收紧的守卫：
+      // - 只在 mode === 'full' 时跑（reading/code-only 不应做 LLM-heavy 富化）
+      // - 只在未触发 budget gate skip-enrichment 降级时跑（与模块 spec enrichment
+      //   降级策略一致，避免成本超预算）
+      // - hyperedge 集成默认 false，需要显式 opt-in（CLI `--hyperedges` 或 env
+      //   `SPECTRA_HYPEREDGES_ENABLED=true`）；即使 mode/budget 允许，未 opt-in
+      //   也只跑 anchor，不跑 hyperedge
+      const semanticIntegrationAllowed =
+        effectiveMode === 'full' && !budgetSkipEnrichmentAll;
 
-        const codeNodes: PanoramicGraphNode[] = graphJson.nodes.filter(
-          (n) => !DOC_NODE_KINDS.has(n.kind),
+      if (!semanticIntegrationAllowed) {
+        const reason = effectiveMode !== 'full'
+          ? `mode=${effectiveMode}（非 full）`
+          : 'budget gate 已触发 skip-enrichment 降级';
+        logger.info(
+          `semantic-integration: 跳过 anchor + hyperedge 集成 — ${reason}（保持 graph.json 仅含静态边）`,
         );
+      } else {
+        try {
+          const designDocAbsPaths = (projectDocs ?? [])
+            .map((rel) => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
+            .filter((abs) => fs.existsSync(abs));
 
-        if (designDocAbsPaths.length > 0 && codeNodes.length > 0) {
-          // 1) anchor 集成 — references / conceptually_related_to 边
-          try {
-            const provider = createEmbeddingProvider();
-            const anchorResult = await runAnchorIntegration(resolvedRoot, {
-              markdownFiles: designDocAbsPaths,
-              graphNodes: codeNodes,
-              provider,
-            });
-            if (anchorResult.semanticEdges.length > 0) {
-              graphJson.links.push(...anchorResult.semanticEdges);
-              logger.info(
-                `anchor-integration: 追加 ${anchorResult.semanticEdges.length} 条语义边到 graph.json`,
+          const codeNodes: PanoramicGraphNode[] = graphJson.nodes.filter(
+            (n) => !DOC_NODE_KINDS.has(n.kind),
+          );
+
+          if (designDocAbsPaths.length > 0 && codeNodes.length > 0) {
+            // 1) anchor 集成 — references / conceptually_related_to 边
+            // anchor 用 embedding（local 不计费 / openai 按字符计费），不需要
+            // 单独 opt-in，但仍受 mode + budget 守卫保护
+            try {
+              const provider = createEmbeddingProvider();
+              const anchorResult = await runAnchorIntegration(resolvedRoot, {
+                markdownFiles: designDocAbsPaths,
+                graphNodes: codeNodes,
+                provider,
+              });
+              if (anchorResult.semanticEdges.length > 0) {
+                graphJson.links.push(...anchorResult.semanticEdges);
+                logger.info(
+                  `anchor-integration: 追加 ${anchorResult.semanticEdges.length} 条语义边到 graph.json`,
+                );
+              }
+            } catch (anchorErr) {
+              logger.warn(
+                `anchor-integration: 失败，跳过语义边生成: ${anchorErr instanceof Error ? anchorErr.message : String(anchorErr)}`,
               );
             }
-          } catch (anchorErr) {
-            logger.warn(
-              `anchor-integration: 失败，跳过语义边生成: ${anchorErr instanceof Error ? anchorErr.message : String(anchorErr)}`,
-            );
-          }
 
-          // 2) hyperedge 集成 — LLM 提取超边（默认启用，env=false 可关闭）
-          try {
-            const docChunks = chunkMarkdownFiles(designDocAbsPaths, resolvedRoot);
-            const hyperedgesEnabled = process.env['SPECTRA_HYPEREDGES_ENABLED'] !== 'false';
-            const hyperResult = await runHyperedgeIntegration({
-              hyperedgesEnabled,
-              graphNodes: codeNodes,
-              docChunks,
-            });
-            if (hyperResult.hyperedges.length > 0) {
-              graphJson.hyperedges = hyperResult.hyperedges;
+            // 2) hyperedge 集成 — LLM 提取超边（显式 opt-in 控制）
+            // 解析顺序：BatchOptions.hyperedgesEnabled === true (CLI --hyperedges) 优先；
+            // 否则查 env SPECTRA_HYPEREDGES_ENABLED === 'true'；都未设置 → 默认 false
+            const hyperedgesOptIn = options.hyperedgesEnabled === true
+              || process.env['SPECTRA_HYPEREDGES_ENABLED'] === 'true';
+            if (!hyperedgesOptIn) {
               logger.info(
-                `hyperedge-integration: 写入 ${hyperResult.hyperedges.length} 条 hyperedge 到 graph.json`,
+                'hyperedge-integration: 跳过 — 未显式 opt-in（用 --hyperedges 或 SPECTRA_HYPEREDGES_ENABLED=true 启用）',
               );
+            } else {
+              try {
+                const docChunks = chunkMarkdownFiles(designDocAbsPaths, resolvedRoot);
+                const hyperResult = await runHyperedgeIntegration({
+                  hyperedgesEnabled: true,
+                  graphNodes: codeNodes,
+                  docChunks,
+                });
+                if (hyperResult.hyperedges.length > 0) {
+                  graphJson.hyperedges = hyperResult.hyperedges;
+                  logger.info(
+                    `hyperedge-integration: 写入 ${hyperResult.hyperedges.length} 条 hyperedge 到 graph.json`,
+                  );
+                }
+              } catch (hyperErr) {
+                logger.warn(
+                  `hyperedge-integration: 失败，跳过超边生成: ${hyperErr instanceof Error ? hyperErr.message : String(hyperErr)}`,
+                );
+              }
             }
-          } catch (hyperErr) {
-            logger.warn(
-              `hyperedge-integration: 失败，跳过超边生成: ${hyperErr instanceof Error ? hyperErr.message : String(hyperErr)}`,
-            );
           }
+        } catch (integrationErr) {
+          logger.warn(
+            `semantic-integration: 整体失败，graph.json 将不含 anchor/hyperedge 数据: ${integrationErr instanceof Error ? integrationErr.message : String(integrationErr)}`,
+          );
         }
-      } catch (integrationErr) {
-        logger.warn(
-          `semantic-integration: 整体失败，graph.json 将不含 anchor/hyperedge 数据: ${integrationErr instanceof Error ? integrationErr.message : String(integrationErr)}`,
-        );
       }
 
       // Feature 102: 社区分析（写盘前执行，使 degree 信息写入 graph.json）
@@ -1132,7 +1169,10 @@ export async function runBatch(
   // Feature 127：聚合 LLM 成本（在质量报告前计算，供其追加成本节）
   const costSummary: CostSummary = aggregateCostSummary(costRecords);
 
-  if (projectDocsResult) {
+  // Feature 133（adversarial-review post-fix）：reading / code-only 模式跳过
+  // docs-quality-evaluator 调用——该评估器依赖 architectureNarrative + 完整产
+  // 品文档集，在 mode !== 'full' 时这些上游产物已被跳过，强行调用会得到空报告
+  if (projectDocsResult && effectiveMode === 'full') {
     try {
       // 传入 manifestSearchDir 以便质量报告找到 _meta/ 中的 docs-bundle.yaml
       projectDocsResult.qualityInputs.manifestSearchDir = metaDir;

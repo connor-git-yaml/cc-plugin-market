@@ -86,6 +86,8 @@ export interface CLICommand {
   batchMode?: 'full' | 'reading' | 'code-only';
   /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件 */
   generateHtml?: boolean;
+  /** Feature 133（adversarial-review post-fix）：是否启用 hyperedge LLM 提取（--hyperedges） */
+  hyperedgesEnabled?: boolean;
 }
 
 /** 解析错误 */
@@ -694,6 +696,10 @@ export function parseArgs(argv: string[]): ParseResult {
     // F5 Story 3：--html flag（生成 graph.html 可视化文件）
     const generateHtml = argv.includes('--html') || undefined;
 
+    // Feature 133（adversarial-review post-fix）：--hyperedges flag — 显式 opt-in
+    // hyperedge LLM 提取（默认 false，避免对所有 batch 静默触发额外 Anthropic 调用）
+    const hyperedgesEnabled = argv.includes('--hyperedges') || undefined;
+
     // Feature 127: dry-run / budget / on-over-budget
     const dryRun = argv.includes('--dry-run');
     const batchBudgetIdx = argv.indexOf('--budget');
@@ -748,6 +754,7 @@ export function parseArgs(argv: string[]): ParseResult {
         onOverBudget,
         batchMode,
         generateHtml,
+        hyperedgesEnabled,
       },
     };
   }

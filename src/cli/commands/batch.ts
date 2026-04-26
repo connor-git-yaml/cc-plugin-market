@@ -54,6 +54,8 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       mode: command.batchMode,
       // F5 Story 3：graph.html 生成 flag
       generateHtml: command.generateHtml,
+      // Feature 133（adversarial-review post-fix）：hyperedge LLM 提取（默认 false）
+      hyperedgesEnabled: command.hyperedgesEnabled,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
