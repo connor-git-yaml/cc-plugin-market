@@ -41,7 +41,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 用法:
   spectra generate <target> [--deep] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--output-dir <dir>]
+  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--output-dir <dir>]
   spectra diff <spec-file> <source> [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
@@ -95,6 +95,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --include-docs 启用 Markdown 文档和 OpenAPI/AsyncAPI 规范提取（仅 batch）
   --include-images 启用图像/图表 Vision 提取（仅 batch）
   --mode         批处理运行模式: full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）（仅 batch）
+  --hyperedges   启用 hyperedge LLM 提取（仅 batch + mode=full 生效，默认 false；可用 env SPECTRA_HYPEREDGES_ENABLED=true 等价开启）
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --generator    指定 generator ID（仅 cache clear）
