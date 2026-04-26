@@ -33,6 +33,7 @@ import {
   type BudgetGateAttempt,
   type ModuleEstimate,
 } from './budget-gate.js';
+import { decideModelOverride } from './model-override-decision.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
@@ -654,8 +655,15 @@ export async function runBatch(
           // Feature 133 P0-2：reading/code-only 模式都跳过 enrichment（SC-001 < 120s
           // 目标）；同时尊重 small-module 优化和 budget gate 降级——任一为真都跳过
           skipEnrichment: isSmallModule || budgetSkipEnrichmentAll || effectiveMode !== 'full',
-          modelOverride:
-            isSmallModule || budgetCheaperModelAll ? sonnetModelId : undefined,
+          // Fix 134 P0-3：reading/code-only 模式同样强制 sonnet override，
+          // 与默认 model 解耦（即使用户配置 quality-first/opus，reading 仍走
+          // sonnet，确保 SC-001 < 120s 始终满足）；提取为 decideModelOverride 便于单测
+          modelOverride: decideModelOverride({
+            isSmallModule,
+            budgetCheaperModelAll,
+            effectiveMode,
+            sonnetModelId,
+          }),
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
             if (progress.duration !== undefined) {
