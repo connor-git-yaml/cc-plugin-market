@@ -25,6 +25,13 @@
 
 ### Fixed — spectra
 
+- **Phase 2 收尾清理（Fix 134，4 个偏差，patch）** — Phase 2 集成回归测试在 graphify 示例项目（5 Python 文件）发现 Fix 133 残留 4 个偏差：
+  - **(1) `spec-driver.config.yaml` 覆盖 sonnet 默认** — yaml 锁死 `preset: quality-first` + 10 个 agent 显式 `model: opus`，覆盖了 Fix 133 P0-3 的 sonnet 默认；dogfood 跑 spec-driver 流程时仍是 `claude-opus-4-7`。修复：`preset: quality-first → balanced`、10 个 `model: opus → sonnet`、首行注释同步。**附带修复**：`batch-orchestrator.ts:584` 用 `agentId: 'specify-sonnet'`（yaml 中不存在）调用 `resolveReverseSpecModel` 会 fallback 到 preset，原 quality-first 让 sonnetModelId 实际是 opus，破坏了小模块优化和 budget gate 降级；改 preset 后 fallback 才真正命中 sonnet。
+  - **(2) `tokenUsage.input` 异常低（5 模块累计 input=30 vs output=35,759）** — Fix 133 P0-1 修了 output 提取，但 input 路径只读 `input_tokens` 主字段，漏了 prompt caching 时主输入会进 `cache_read_input_tokens` 的语义。修复：`src/auth/cli-proxy.ts` + `src/core/llm-client.ts` 累加 `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`（任一缺失 fallback 0）；新增 7 个单测覆盖累加场景 + 向后兼容 + null 字段 + 边界。
+  - **(3) reading 模式 499s 仍超 SC-001 < 120s** — Fix 133 P0-2 已跳过产品文档 + 模块 spec 的 LLM enrichment，但模块 spec 主调用仍走默认 model（受用户配置影响）。修复（方向 A）：提取 `src/batch/model-override-decision.ts` 纯函数 helper，决策矩阵 `isSmallModule || budgetCheaperModelAll || effectiveMode !== 'full'` 任一为真即强制 sonnet override，与默认 model 解耦；新增 8 个单测覆盖决策矩阵。
+  - **(4) CLI batch help 字符串遗漏 `--hyperedges`** — Fix 133 已实现 `--hyperedges` flag 解析（`src/cli/utils/parse-args.ts:701`）+ batch handler 接入（`src/cli/commands/batch.ts:58`），但 `src/cli/index.ts:44` 的 batch help 字符串没列出，用户 `spectra batch --help` 看不到。修复：help 字符串追加 `[--hyperedges]` + 选项详情说明（仅 `mode=full` 生效 + env 等价路径）。注：项目用自定义 parse-args（非 commander），按实际架构修复。
+  - 验证：vitest 全量 2194 passed | 1 skipped，零新增失败；端到端三场景在 graphify 示例项目验证（默认 batch / reading 模式 < 120s / `--hyperedges` 可见）。
+
 - **CLI proxy token 提取（Feature 133 P0-1）** — Phase 2 集成回归发现：所有 module spec frontmatter 的 `tokenUsage` 全为 0，但 LLM 真调用了。根因是 `src/auth/cli-proxy.ts` 的 `StreamMessage` 类型把 `input_tokens / output_tokens` 当作 `type=result` message 的顶层字段，但 Claude CLI 实际嵌套在 `usage.*` 下；mock-only 测试沿用相同错误假设导致 2154 单测全过却生产失败（cost-summary 因此误报"未调用 LLM"）。
   - 修复：StreamMessage 接口新增嵌套 `usage` 字段，保留旧顶层字段作向后兼容；`parseStreamJsonOutput` 在 `type=result` 分支优先读 `msg.usage.*`，回落顶层
   - 新增 3 个单测 case + 1 个真实 SDK 集成测试（`vi.skipIf(!ANTHROPIC_API_KEY)` 守卫）
