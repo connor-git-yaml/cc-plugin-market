@@ -1,29 +1,29 @@
 # Speckit Driver Pro - 驱动配置文件
-# 预设: quality-first（所有阶段均使用 Opus）
+# 预设: balanced（默认 Sonnet 4.6，Phase 2 / Fix 134 新默认；与源码 PRESET_MODEL_MAP.balanced='sonnet' 对齐）
 
-preset: quality-first
+preset: balanced
 
 agents:
   product-research:
-    model: opus
+    model: sonnet
   tech-research:
-    model: opus
+    model: sonnet
   specify:
-    model: opus
+    model: sonnet
   plan:
-    model: opus
+    model: sonnet
   analyze:
-    model: opus
+    model: sonnet
   clarify:
-    model: opus
+    model: sonnet
   checklist:
-    model: opus
+    model: sonnet
   tasks:
-    model: opus
+    model: sonnet
   implement:
-    model: opus
+    model: sonnet
   verify:
-    model: opus
+    model: sonnet
 
 # Codex 运行时默认统一到 GPT-5.4，思考深度和 service tier 通过下方配置控制
 model_compat:
