@@ -10,8 +10,13 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+// 动态从 release-contract.yaml 读期望版本，避免 release 升版后测试再次 stale
+import { loadReleaseContract } from '../../scripts/lib/release-contract-core.mjs';
 
 const REPO_ROOT = resolve('.');
+const { contract: RELEASE_CONTRACT } = loadReleaseContract(REPO_ROOT);
+const SPEC_DRIVER_VERSION: string = RELEASE_CONTRACT.products['spec-driver'].version;
+const SPECTRA_VERSION: string = RELEASE_CONTRACT.products['spectra'].version;
 
 function runNode(scriptPath: string, projectRoot: string) {
   try {
@@ -95,13 +100,14 @@ describe('release contract sync', () => {
     expect(payload.status).toBe('pass');
     expect(payload.errors).toEqual([]);
 
-    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8')).toContain('"version": "3.0.1"');
+    expect(readFileSync(join(projectRoot, 'package.json'), 'utf-8'))
+      .toContain(`"version": "${SPECTRA_VERSION}"`);
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', '.claude-plugin', 'plugin.json'), 'utf-8'))
-      .toContain('"version": "3.11.2"');
+      .toContain(`"version": "${SPEC_DRIVER_VERSION}"`);
     expect(readFileSync(join(projectRoot, 'plugins', 'spec-driver', 'README.md'), 'utf-8'))
-      .toContain('> 当前发布版本: v3.11.2');
+      .toContain(`> 当前发布版本: v${SPEC_DRIVER_VERSION}`);
     expect(readFileSync(join(projectRoot, 'specs', 'products', 'spec-driver', 'current-spec.md'), 'utf-8'))
-      .toContain('> **发布版本**: v3.11.2');
+      .toContain(`> **发布版本**: v${SPEC_DRIVER_VERSION}`);
   });
 
   it('validator 会显式报告 release drift', () => {

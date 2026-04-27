@@ -74,6 +74,7 @@ describe('runExportCommand', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
+  let processCwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'export-cmd-test-'));
@@ -81,6 +82,9 @@ describe('runExportCommand', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     // process.exit mock（不真正退出）
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    // process.cwd mock 隔离仓库真实 specs/_meta/graph.json，否则
+    // graceful-exit 测试会读到真实图谱使断言失效（由 v4.0 release 后才显现的环境耦合）
+    processCwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
   });
 
   afterEach(() => {
@@ -133,8 +137,8 @@ describe('runExportCommand', () => {
   });
 
   it('空图（0 节点）时 graceful exit，不生成文件', async () => {
-    // 写入空图 JSON
-    const metaDir = path.join(tmpDir, '_meta');
+    // 写入空图 JSON 到 mock cwd 下的 specs/_meta/graph.json（与 export.ts 的 resolveGraphJsonPath 对齐）
+    const metaDir = path.join(tmpDir, 'specs', '_meta');
     fs.mkdirSync(metaDir, { recursive: true });
     const emptyGraph = {
       directed: false,
@@ -159,9 +163,11 @@ describe('runExportCommand', () => {
       skillTarget: 'claude' as const,
     };
     await runExportCommand(command);
-    // 不应生成导出文件（不存在 index.md 或 graph.html）
-    const hasExportFiles = fs.existsSync(path.join(tmpDir, 'export', 'index.md'))
-      || fs.existsSync(path.join(tmpDir, 'export', 'graph.html'));
+    // 不应生成导出文件
+    // outputDir 显式传入 tmpDir 时，obsidian-exporter 写到 {outputDir}/index.md，
+    // 即 tmpDir/index.md（不会再嵌套 'export' 子目录）
+    const hasExportFiles = fs.existsSync(path.join(tmpDir, 'index.md'))
+      || fs.existsSync(path.join(tmpDir, 'graph.html'));
     expect(hasExportFiles).toBe(false);
   });
 

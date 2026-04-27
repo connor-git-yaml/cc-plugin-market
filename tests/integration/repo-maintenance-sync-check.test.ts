@@ -12,8 +12,12 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+// 动态从 release-contract.yaml 读期望版本，避免 release 升版后测试再次 stale
+import { loadReleaseContract } from '../../scripts/lib/release-contract-core.mjs';
 
 const REPO_ROOT = resolve('.');
+const { contract: RELEASE_CONTRACT } = loadReleaseContract(REPO_ROOT);
+const SPEC_DRIVER_VERSION: string = RELEASE_CONTRACT.products['spec-driver'].version;
 
 function runNode(scriptPath: string, projectRoot: string) {
   try {
@@ -83,11 +87,12 @@ describe('repo maintenance sync/check', () => {
     writeFileSync(agentPath, readFileSync(agentPath, 'utf-8').replace('## 发布合同约定', '## 漂移后的合同约定'), 'utf-8');
 
     const specDriverReadmePath = join(projectRoot, 'plugins', 'spec-driver', 'README.md');
-    writeFileSync(
-      specDriverReadmePath,
-      readFileSync(specDriverReadmePath, 'utf-8').replace('> 当前发布版本: v3.11.2', '> 当前发布版本: v0.0.1'),
-      'utf-8',
-    );
+    // 用正则匹配任意版本号，避免硬编码失效（Codex Finding 4：原代码 replace v3.11.2 是 no-op，导致 drift 注入失败）
+    const originalReadme = readFileSync(specDriverReadmePath, 'utf-8');
+    const driftedReadme = originalReadme.replace(/^> 当前发布版本: v[\d.]+/m, '> 当前发布版本: v0.0.1');
+    expect(driftedReadme).toContain('> 当前发布版本: v0.0.1');
+    expect(driftedReadme).not.toBe(originalReadme); // 确保 drift 实际注入
+    writeFileSync(specDriverReadmePath, driftedReadme, 'utf-8');
 
     rmSync(join(projectRoot, 'skills', 'spectra'), { recursive: true, force: true });
 
@@ -130,7 +135,7 @@ describe('repo maintenance sync/check', () => {
       ]),
     );
 
-    expect(readFileSync(specDriverReadmePath, 'utf-8')).toContain('> 当前发布版本: v3.11.2');
+    expect(readFileSync(specDriverReadmePath, 'utf-8')).toContain(`> 当前发布版本: v${SPEC_DRIVER_VERSION}`);
     expect(readFileSync(agentPath, 'utf-8')).toContain('## 仓库级同步约定');
   });
 });
