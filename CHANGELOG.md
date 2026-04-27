@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+_(no unreleased changes yet — see [4.0.0] below for the latest release)_
+
+## [4.0.0] — 2026-04-27
+
+> **Phase 2 Reading Platform Milestone Release** — 同时升级 Spectra v3.0.1 → v4.0.0 + Spec Driver v3.11.2 → v4.0.0。`balanced` preset / 默认 Claude 模型 / 编排器入口 三处 BREAKING，详见各 `### ⚠️ BREAKING` 节。
+
 ### 🎯 Milestone — M-101 Phase 2 Reading Platform Delivered
 
 把 Spectra 从"分层文档生成器"演进为"可查询、可视化、可按场景伸缩的代码阅读平台"。本 Milestone 由 7 个 Feature + 2 个 Postmortem Fix 组成（详见 [M-101 blueprint](specs/M-101-phase2-reading-platform/blueprint.md) / [postmortem](specs/M-101-phase2-reading-platform/postmortem.md)）：

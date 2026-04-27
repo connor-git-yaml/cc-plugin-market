@@ -1,7 +1,7 @@
 {
   "name": "spectra",
-  "version": "3.0.1",
-  "description": "通过 AST 静态分析 + LLM 混合流水线，将源代码逆向工程为结构化 Spec 文档的多语言代码分析平台",
+  "version": "4.0.0",
+  "description": "把任意代码库变成可查询、可视化、可按场景伸缩的代码阅读平台。AST + LLM 混合 pipeline 生成分层 Spec、知识图谱、技术债清单、自然语言问答与交互式 graph.html",
   "author": {
     "name": "Connor Lu",
     "url": "https://github.com/connor-git-yaml"
