@@ -14,6 +14,7 @@ import type {
 import type { ModuleSpec, SpecFrontmatter, SpecSections } from '../models/module-spec.js';
 import type { DependencyGraph } from '../models/dependency-graph.js';
 import type { LanguageFileStat } from '../utils/file-scanner.js';
+import { getSpectraVersionString } from './frontmatter.js';
 
 export interface IndexableModuleSpec {
   frontmatter: SpecFrontmatter;
@@ -136,7 +137,7 @@ export function generateIndex(
   const frontmatter: IndexFrontmatter = {
     type: 'architecture-index',
     version: 'v1',
-    generatedBy: 'spectra v3.0',
+    generatedBy: getSpectraVersionString(),
     projectRoot: graph.projectRoot,
     totalModules: specs.length,
     lastUpdated: new Date().toISOString(),

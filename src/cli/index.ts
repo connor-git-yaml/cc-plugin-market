@@ -94,8 +94,9 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
   --include-docs 启用 Markdown 文档和 OpenAPI/AsyncAPI 规范提取（仅 batch）
   --include-images 启用图像/图表 Vision 提取（仅 batch）
-  --mode         批处理运行模式: full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）（仅 batch）
+  --mode         批处理运行模式: full（默认，完整文档，LLM 全量）| reading（省约 38% 时间，模块级 LLM 仍运行，跳过架构叙事/ADR/产品文档层）| code-only（纯 AST，< 30s，无 LLM，最快）（仅 batch）
   --hyperedges   启用 hyperedge LLM 提取（仅 batch + mode=full 生效，默认 false；可用 env SPECTRA_HYPEREDGES_ENABLED=true 等价开启）
+  --enable-adr   显式启用 ADR pipeline（v4.0.1 临时禁用，将在 v4.1 evidence-binding 重构后恢复；默认 false）（仅 batch）
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --generator    指定 generator ID（仅 cache clear）

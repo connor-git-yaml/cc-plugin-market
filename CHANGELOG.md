@@ -5,7 +5,25 @@
 
 ## [Unreleased]
 
-_(no unreleased changes yet — see [4.0.0] below for the latest release)_
+_(no unreleased changes yet — see [4.0.1] below for the latest release)_
+
+## [4.0.1] — 2026-04-27
+
+> **Spectra v4.0.1 信任修复** — 修复 v4.0.0 实测中发现的 4 类 bug，全部采用"临时治理"策略：禁用错误默认行为 + 补全 WARNING 可观测性 + 修正文档和版本字符串。不含架构改动（留 v4.1）。
+
+### Fixed — spectra
+
+- **ADR pipeline 临时禁用（Bug 1）** — v4.0.0 ADR pipeline 生成的内容存在 hallucination（evidence 与决策不实际绑定）。v4.0.1 默认禁用 ADR pipeline（`enableAdr: false`），需用 CLI `--enable-adr` 显式开启。末尾打印可见 hint 提醒用户。ADR 彻底修复（evidence-binding 重构）计划在 v4.1 完成。
+
+- **`--hyperedges` 静默无效补 WARNING（Bug 2）** — 当 `mode != full` 或 budget gate 触发 skip-enrichment 时，hyperedge 集成被静默跳过但无任何提示，导致用户误以为功能正常运行。修复：`!semanticIntegrationAllowed` 分支从 `logger.info` 升级为 `logger.warn`；用户显式 opt-in `--hyperedges` 但条件不满足时向 stderr 打印可见 WARNING；`designDocAbsPaths` 为空时补充操作建议；batch summary 末尾新增 hyperedge 状态行。
+
+- **`generatedBy` 版本字符串回归（Bug 3）** — `src/generator/frontmatter.ts`、`src/generator/index-generator.ts`、`src/spec-store/spec-store.ts` 三处均硬编码 `generatedBy: 'spectra v3.0'`，导致所有生成文档的 frontmatter 版本信息与实际版本不符。修复：新增 `getSpectraVersionString()` 辅助函数，通过 `createRequire(import.meta.url)` 动态读取 `package.json.version`；三处调用统一替换；`scripts/check-plugin-sync.sh` 新增 grep 检查规则，防止回归。
+
+- **`--mode reading` help 文字误导（Bug 4）** — 原帮助文字将 reading 模式描述为"轻量，跳过产品文档层"，未说明模块级 LLM 仍然运行，导致用户误以为 reading 是快速模式。修复：`--mode` 选项帮助文字补充三档时间预估和特征说明（full/reading/code-only）；reading 模式在 TTY 终端打印 hint，明确指向更快的 `--mode code-only`。
+
+- **中和遗留 hallucinated ADR 文件（Codex adversarial review 追加）** — 从 v4.0.0 升级到 v4.0.1 后，先前批次写入的 `docs/adr/adr-*.md` 和 `index.md` 仍保留在磁盘上，用户可能误以为是当前批次产物。修复：ADR pipeline 禁用时（`enableAdr: false`），若检测到遗留 `docs/adr/` 目录，自动写入 `_PIPELINE_DISABLED.md` 警告标记并改写 `index.md` 为 supersede notice，明确标注这些文件来自先前批次且已知存在 hallucination；不删除用户文件（保守策略）。
+
+- **hyperedge 成功路径可见性修复（Codex adversarial review 追加）** — `--hyperedges` opt-in 时 batch summary 末尾的 hyperedge 数量状态行使用 `logger.info`，而默认 logger level=warn，在生产环境完全不可见。修复：用户显式 opt-in `--hyperedges` 时，无论 count 是 0 还是 > 0，均改用 `process.stderr.write` 强制输出并同时 `logger.warn`；count=0 时补充 `"LLM 未返回有效候选；可在 graph.json 验证"` 的上下文提示。
 
 ## [4.0.0] — 2026-04-27
 

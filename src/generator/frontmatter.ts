@@ -2,7 +2,31 @@
  * YAML Frontmatter 生成器（含版本自增）
  * 参见 contracts/generator.md
  */
+import { createRequire } from 'node:module';
 import type { SpecFrontmatter, TokenUsage } from '../models/module-spec.js';
+
+/** 模块级缓存，避免每次生成 frontmatter 都重复读取 package.json */
+let _versionCache: string | undefined;
+
+/**
+ * 从 package.json 动态读取 Spectra 版本号，返回 "spectra vX.Y.Z" 格式字符串。
+ * 读取失败时返回 "spectra (unknown version)" 并打印警告，避免硬编码版本字符串。
+ * 结果在模块生命周期内缓存，多次调用不重复 I/O。
+ */
+export function getSpectraVersionString(): string {
+  if (_versionCache !== undefined) {
+    return _versionCache;
+  }
+  try {
+    const _require = createRequire(import.meta.url);
+    const pkg = _require('../../package.json') as { version: string };
+    _versionCache = `spectra v${pkg.version}`;
+  } catch {
+    process.stderr.write('[warn] frontmatter: 读取 package.json 版本失败，降级为 unknown version\n');
+    _versionCache = 'spectra (unknown version)';
+  }
+  return _versionCache;
+}
 
 export interface FrontmatterInput {
   /** 源目标路径 */
@@ -57,7 +81,7 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
   const frontmatter: SpecFrontmatter = {
     type: 'module-spec',
     version: incrementVersion(data.existingVersion),
-    generatedBy: 'spectra v3.0',
+    generatedBy: getSpectraVersionString(),
     sourceTarget: data.sourceTarget,
     relatedFiles: data.relatedFiles,
     lastUpdated: new Date().toISOString(),

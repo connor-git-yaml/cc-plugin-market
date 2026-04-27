@@ -130,6 +130,12 @@ export interface BatchOptions {
    * 同样要求 mode === 'full' 且未触发 budget gate skip-enrichment 降级。
    */
   hyperedgesEnabled?: boolean;
+  /**
+   * Feature 135 Bug 1：是否显式启用 ADR pipeline。
+   * v4.0.1 临时禁用（默认 false），evidence-binding 重构完成后（v4.1）恢复默认。
+   * 需用 CLI `--enable-adr` 显式开启。
+   */
+  enableAdr?: boolean;
 }
 
 export interface BatchResult {
@@ -932,6 +938,7 @@ export async function runBatch(
         outputDir: projectDir,
         specsRootDir: resolvedOutputDir,
         mode: effectiveMode,
+        enableAdr: options.enableAdr,
       });
       projectContext = projectDocsResult.projectContext;
       projectDocs = projectDocsResult.generatedDocs
@@ -991,13 +998,25 @@ export async function runBatch(
       const semanticIntegrationAllowed =
         effectiveMode === 'full' && !budgetSkipEnrichmentAll;
 
+      // Bug 2（Feature 135）：hyperedgesOptIn 需要在此提前解析，用于 WARNING 可观测性
+      const hyperedgesOptInEarly = options.hyperedgesEnabled === true
+        || process.env['SPECTRA_HYPEREDGES_ENABLED'] === 'true';
+
       if (!semanticIntegrationAllowed) {
         const reason = effectiveMode !== 'full'
           ? `mode=${effectiveMode}（非 full）`
           : 'budget gate 已触发 skip-enrichment 降级';
-        logger.info(
+        // 升级为 warn 级别（Bug 2 T09），确保用户能感知到 hyperedges 被静默跳过
+        logger.warn(
           `semantic-integration: 跳过 anchor + hyperedge 集成 — ${reason}（保持 graph.json 仅含静态边）`,
         );
+        // 若用户显式请求了 --hyperedges 但条件不允许，向 stderr 打印可见 WARNING
+        if (hyperedgesOptInEarly) {
+          process.stderr.write(
+            `[WARNING] --hyperedges 已启用但当前运行条件不满足（${reason}），hyperedge 集成已跳过。\n` +
+            `          如需 hyperedge，请使用 --mode full 且未触发 budget gate skip-enrichment。\n`,
+          );
+        }
       } else {
         try {
           const designDocAbsPaths = (projectDocs ?? [])
@@ -1007,6 +1026,10 @@ export async function runBatch(
           const codeNodes: PanoramicGraphNode[] = graphJson.nodes.filter(
             (n) => !DOC_NODE_KINDS.has(n.kind),
           );
+
+          // Bug 2（T11）：hyperedge 数量状态变量（用于 batch summary 末尾输出）
+          let hyperedgeCount = 0;
+          let hyperedgeWarningReason: string | undefined;
 
           if (designDocAbsPaths.length > 0 && codeNodes.length > 0) {
             // 1) anchor 集成 — references / conceptually_related_to 边
@@ -1032,11 +1055,8 @@ export async function runBatch(
             }
 
             // 2) hyperedge 集成 — LLM 提取超边（显式 opt-in 控制）
-            // 解析顺序：BatchOptions.hyperedgesEnabled === true (CLI --hyperedges) 优先；
-            // 否则查 env SPECTRA_HYPEREDGES_ENABLED === 'true'；都未设置 → 默认 false
-            const hyperedgesOptIn = options.hyperedgesEnabled === true
-              || process.env['SPECTRA_HYPEREDGES_ENABLED'] === 'true';
-            if (!hyperedgesOptIn) {
+            // 使用提前解析的 hyperedgesOptInEarly 避免重复声明
+            if (!hyperedgesOptInEarly) {
               logger.info(
                 'hyperedge-integration: 跳过 — 未显式 opt-in（用 --hyperedges 或 SPECTRA_HYPEREDGES_ENABLED=true 启用）',
               );
@@ -1050,6 +1070,7 @@ export async function runBatch(
                 });
                 if (hyperResult.hyperedges.length > 0) {
                   graphJson.hyperedges = hyperResult.hyperedges;
+                  hyperedgeCount = hyperResult.hyperedges.length;
                   logger.info(
                     `hyperedge-integration: 写入 ${hyperResult.hyperedges.length} 条 hyperedge 到 graph.json`,
                   );
@@ -1059,6 +1080,31 @@ export async function runBatch(
                   `hyperedge-integration: 失败，跳过超边生成: ${hyperErr instanceof Error ? hyperErr.message : String(hyperErr)}`,
                 );
               }
+            }
+          } else if (hyperedgesOptInEarly) {
+            // Bug 2 T10：用户启用了 --hyperedges 但前置条件未满足（无 projectDocs）
+            hyperedgeWarningReason = '前置条件未满足：designDocAbsPaths 为空';
+            const warnMsg =
+              '[WARNING] --hyperedges 已启用但前置条件未满足：designDocAbsPaths 为空。\n' +
+              '          请先不带 --hyperedges 完整运行一次 batch（mode=full），生成项目文档后再启用。\n';
+            logger.warn(warnMsg.trim());
+            process.stderr.write(warnMsg);
+          }
+
+          // Bug 2 T11：batch summary hyperedge 状态行（仅当用户 opt-in 时打印）
+          // Codex adversarial review 追加修复：opt-in 时默认 logger level=warn，
+          // logger.info 在生产环境不可见，改用 process.stderr.write 强制输出
+          if (hyperedgesOptInEarly) {
+            if (hyperedgeWarningReason) {
+              const msg = `[hyperedges] 已提取 0 条（WARNING: ${hyperedgeWarningReason}）`;
+              process.stderr.write(`${msg}\n`);
+              logger.warn(msg);
+            } else {
+              const msg = hyperedgeCount > 0
+                ? `[hyperedges] 已提取 ${hyperedgeCount} 条`
+                : `[hyperedges] 已提取 0 条（LLM 未返回有效候选；可在 graph.json 验证）`;
+              process.stderr.write(`${msg}\n`);
+              logger.warn(msg);
             }
           }
         } catch (integrationErr) {

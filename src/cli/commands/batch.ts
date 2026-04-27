@@ -37,6 +37,15 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       command._explicitFlags ?? new Set(),
     );
 
+    // Feature 135 Bug 4：reading 模式 TTY hint
+    // 避免用户误以为 reading 模式是"快速模式"——模块级 LLM 仍会运行
+    if (command.batchMode === 'reading' && process.stdout.isTTY) {
+      console.log(
+        '提示：reading 模式省约 38% 时间，但模块级 LLM 仍运行（非快速模式）。\n' +
+        '如需最快分析（< 30s），请使用 --mode code-only',
+      );
+    }
+
     const result = await runBatch(projectRoot, {
       force: merged.force,
       incremental: merged.incremental,
@@ -56,6 +65,8 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       generateHtml: command.generateHtml,
       // Feature 133（adversarial-review post-fix）：hyperedge LLM 提取（默认 false）
       hyperedgesEnabled: command.hyperedgesEnabled,
+      // Feature 135 Bug 1：ADR pipeline 默认禁用，需用 --enable-adr 显式开启
+      enableAdr: command.enableAdr ?? false,
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
@@ -97,6 +108,11 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     }
     if (result.budgetDecision) {
       console.log(`✓ 预算决策: ${result.budgetDecision.policy}（${result.budgetDecision.message}）`);
+    }
+
+    // Feature 135 Bug 1：ADR pipeline 临时禁用时打印 hint（仅 TTY，与 reading mode hint 保持一致风格）
+    if (!command.enableAdr && process.stdout.isTTY) {
+      console.log('⚠ ADR pipeline 在 v4.0.1 临时禁用。可用 --enable-adr 显式开启（预计 v4.1 重构后恢复默认）');
     }
 
     // Feature 127（Codex review 修复）：预算 cancel 必须返回非零 exit 让 CI 能识别。

@@ -176,6 +176,8 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     const result = await runBatch(projectRoot, {
       force: true,
       maxRetries: 1,
+      // Feature 135 Bug 1：ADR pipeline 默认禁用，此集成测试显式开启以验证全量行为
+      enableAdr: true,
     });
 
     expect(result.failed).toHaveLength(0);

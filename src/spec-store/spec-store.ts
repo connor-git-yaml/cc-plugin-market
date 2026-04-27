@@ -8,6 +8,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ModuleSpec, SpecFrontmatter } from '../models/module-spec.js';
+import { getSpectraVersionString } from '../generator/frontmatter.js';
 import type {
   StoredModuleSpecSummary,
   ExistingSpecDocument,
@@ -77,7 +78,7 @@ export class SpecStore {
       const frontmatterFromStored: SpecFrontmatter & { sourceKind?: string } = {
         type: 'module-spec',
         version: storedSpec.version ?? 'v1',
-        generatedBy: 'spectra v3.0',
+        generatedBy: getSpectraVersionString(),
         sourceTarget: storedSpec.sourceTarget,
         relatedFiles: storedSpec.relatedFiles,
         lastUpdated: new Date().toISOString(),

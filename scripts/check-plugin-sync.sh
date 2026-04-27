@@ -15,4 +15,14 @@ else
   REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 cd "$REPO_ROOT"
+
+# ---- 检查 src/ 中是否有硬编码版本字符串（Feature 135 Bug 3）----
+# grep -rn "spectra v[0-9]" 匹配 "spectra v3.0" 等形式的硬编码版本
+HARDCODED_VERSION_HITS=$(grep -rn 'spectra v[0-9]' src/ --include="*.ts" 2>/dev/null || true)
+if [[ -n "$HARDCODED_VERSION_HITS" ]]; then
+  echo "FAIL: hardcoded version string found in src/"
+  echo "$HARDCODED_VERSION_HITS"
+  exit 1
+fi
+
 exec node scripts/repo-check.mjs --project-root "$REPO_ROOT"

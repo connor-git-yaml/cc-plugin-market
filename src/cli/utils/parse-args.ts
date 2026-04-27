@@ -88,6 +88,8 @@ export interface CLICommand {
   generateHtml?: boolean;
   /** Feature 133（adversarial-review post-fix）：是否启用 hyperedge LLM 提取（--hyperedges） */
   hyperedgesEnabled?: boolean;
+  /** Feature 135 Bug 1：是否显式启用 ADR pipeline（v4.0.1 临时禁用，用 --enable-adr 显式开启） */
+  enableAdr?: boolean;
 }
 
 /** 解析错误 */
@@ -700,6 +702,10 @@ export function parseArgs(argv: string[]): ParseResult {
     // hyperedge LLM 提取（默认 false，避免对所有 batch 静默触发额外 Anthropic 调用）
     const hyperedgesEnabled = argv.includes('--hyperedges') || undefined;
 
+    // Feature 135 Bug 1：--enable-adr flag — 显式 opt-in ADR pipeline
+    // ADR pipeline 在 v4.0.1 临时禁用（默认 false），用 --enable-adr 显式开启
+    const enableAdr = argv.includes('--enable-adr') || undefined;
+
     // Feature 127: dry-run / budget / on-over-budget
     const dryRun = argv.includes('--dry-run');
     const batchBudgetIdx = argv.indexOf('--budget');
@@ -755,6 +761,7 @@ export function parseArgs(argv: string[]): ParseResult {
         batchMode,
         generateHtml,
         hyperedgesEnabled,
+        enableAdr,
       },
     };
   }

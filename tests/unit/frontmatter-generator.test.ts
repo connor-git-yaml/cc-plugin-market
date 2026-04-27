@@ -2,9 +2,12 @@
  * Feature 127: frontmatter 生成器的成本字段写入测试
  * 验证 generateFrontmatter 能正确输出 tokenUsage / durationMs / llmModel /
  * fallbackReason，且在未传入时保持历史行为
+ *
+ * Feature 135 Bug 3: generatedBy 版本字段从 package.json 动态读取
  */
+import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
-import { generateFrontmatter } from '../../src/generator/frontmatter.js';
+import { generateFrontmatter, getSpectraVersionString } from '../../src/generator/frontmatter.js';
 
 const BASE_INPUT = {
   sourceTarget: 'src/foo',
@@ -105,5 +108,31 @@ describe('generateFrontmatter (Feature 127)', () => {
       const fm = generateFrontmatter(BASE_INPUT);
       expect(fm.sourceKind).toBeUndefined();
     });
+  });
+});
+
+// Feature 135 Bug 3：generatedBy 字段从 package.json 动态读取
+describe('getSpectraVersionString（Feature 135 Bug 3）', () => {
+  const _require = createRequire(import.meta.url);
+  const pkg = _require('../../package.json') as { version: string };
+
+  it('返回值格式为 "spectra vX.Y.Z"', () => {
+    const result = getSpectraVersionString();
+    expect(result).toMatch(/^spectra v\d+\.\d+\.\d+/);
+  });
+
+  it('版本号与 package.json.version 一致', () => {
+    const result = getSpectraVersionString();
+    expect(result).toBe(`spectra v${pkg.version}`);
+  });
+
+  it('generateFrontmatter 输出的 generatedBy 使用动态版本号', () => {
+    const fm = generateFrontmatter(BASE_INPUT);
+    expect(fm.generatedBy).toBe(`spectra v${pkg.version}`);
+  });
+
+  it('generatedBy 不含硬编码字符串 "spectra v3.0"', () => {
+    const fm = generateFrontmatter(BASE_INPUT);
+    expect(fm.generatedBy).not.toBe('spectra v3.0');
   });
 });

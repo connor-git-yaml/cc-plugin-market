@@ -4,6 +4,8 @@
  * 将已注册的 panoramic 项目级 generators 真正接入 batch 主链路，
  * 统一处理 applicability、命名映射、多格式写出与架构叙事补充文档。
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import type { DocumentGenerator, ProjectContext } from './interfaces.js';
 import { GeneratorRegistry, bootstrapGenerators } from './generator-registry.js';
 import { CacheManager } from './cache/cache-manager.js';
@@ -38,6 +40,9 @@ import type { PatternHintsOutput } from './models/pattern-hints-model.js';
 import type { RuntimeTopologyOutput } from './generators/runtime-topology-generator.js';
 import { loadStoredModuleSpecs } from './stored-module-specs.js';
 import type { BatchMode } from './qa/types.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('batch-project-docs');
 
 /**
  * 这些 generator 的 structuredData 被后续 pipeline 阶段在内存中直接消费
@@ -137,6 +142,12 @@ export interface GenerateBatchProjectDocsOptions {
   specsRootDir?: string;
   /** F5：批处理运行模式（full | reading | code-only，默认 full） */
   mode?: BatchMode;
+  /**
+   * Feature 135 Bug 1：是否显式启用 ADR pipeline。
+   * v4.0.1 临时禁用（默认 false），evidence-binding 重构完成后（v4.1）恢复默认。
+   * 需用 CLI `--enable-adr` 显式开启。
+   */
+  enableAdr?: boolean;
 }
 
 export async function generateBatchProjectDocs(
@@ -334,27 +345,77 @@ export async function generateBatchProjectDocs(
       });
     }
 
-    try {
-      const adrDocs = generateBatchAdrDocs({
-        projectRoot: options.projectRoot,
-        outputDir: options.outputDir,
-        projectContext,
-        generatedDocs,
-        architectureNarrative,
-        architectureOverview,
-        patternHints,
-      });
-      generatedDocs.push({
-        generatorId: 'adr-pipeline',
-        writtenFiles: adrDocs.writtenFiles,
-        warnings: adrDocs.warnings,
-      });
-      structuredOutputs.set('adr-index', adrDocs.index);
-    } catch (error) {
+    // Feature 135 Bug 1：ADR pipeline 默认禁用，需要显式 --enable-adr 开启
+    if (options.enableAdr) {
+      try {
+        const adrDocs = generateBatchAdrDocs({
+          projectRoot: options.projectRoot,
+          outputDir: options.outputDir,
+          projectContext,
+          generatedDocs,
+          architectureNarrative,
+          architectureOverview,
+          patternHints,
+        });
+        generatedDocs.push({
+          generatorId: 'adr-pipeline',
+          writtenFiles: adrDocs.writtenFiles,
+          warnings: adrDocs.warnings,
+        });
+        structuredOutputs.set('adr-index', adrDocs.index);
+      } catch (error) {
+        generatedDocs.push({
+          generatorId: 'adr-pipeline',
+          writtenFiles: [],
+          warnings: [`ADR 草稿生成失败: ${String(error)}`],
+        });
+      }
+    } else {
+      // ADR pipeline 在 v4.0.1 临时禁用，evidence-binding 重构完成后（v4.1）恢复
+      logger.warn(
+        'ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。',
+      );
+
+      // 中和遗留 ADR 文件：从 v4.0.0 升级时，先前批次写入的 adr-*.md 仍在磁盘上，
+      // 用户可能把这些当作当前批次产物信任。写入 _PIPELINE_DISABLED.md 并改写 index.md
+      // 以明确标注这些文件来自先前批次、内容可能存在 hallucination，但不删除用户文件。
+      const adrDir = path.join(options.outputDir, 'docs', 'adr');
+      if (fs.existsSync(adrDir)) {
+        const disabledNotice =
+          `# ADR Pipeline 已禁用（Spectra v4.0.1）\n\n` +
+          `> 警告：ADR 自动生成流水线在 Spectra v4.0.1 中临时禁用（evidence-binding 重构中）。\n` +
+          `>\n` +
+          `> **本目录下的 ADR 文件可能由 v4.0.0 或更早版本生成，已知存在 hallucination 问题** —\n` +
+          `> 内容可能与你的项目无关（如把 Spectra 自身的 "JSON 流式协议" 写进你的项目）。\n` +
+          `> **请勿将这些文件视为当前批次的产物。**\n` +
+          `>\n` +
+          `> 如需重新启用 ADR 生成，请加 \`--enable-adr\` flag；\n` +
+          `> 但当前版本 ADR 内容质量尚未保证，建议等 v4.1 evidence-binding 重构完成后再用。\n`;
+
+        const noticePath = path.join(adrDir, '_PIPELINE_DISABLED.md');
+        fs.writeFileSync(noticePath, disabledNotice, 'utf-8');
+
+        // 改写 index.md 为 supersede notice，避免下游读 index 时看到 stale links
+        const indexPath = path.join(adrDir, 'index.md');
+        if (fs.existsSync(indexPath)) {
+          fs.writeFileSync(
+            indexPath,
+            `# ADR Pipeline 已禁用\n\n` +
+            `当前批次未生成新 ADR。详见 [_PIPELINE_DISABLED.md](./_PIPELINE_DISABLED.md)。\n\n` +
+            `本目录下的其他 \`adr-*.md\` 文件来自先前批次，可能包含 hallucinated 内容，请勿信任。\n`,
+            'utf-8',
+          );
+        }
+
+        logger.warn('ADR pipeline 已禁用 — 已在 ' + adrDir + ' 下写入 _PIPELINE_DISABLED.md 标记');
+      } else {
+        logger.warn('ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）');
+      }
+
       generatedDocs.push({
         generatorId: 'adr-pipeline',
         writtenFiles: [],
-        warnings: [`ADR 草稿生成失败: ${String(error)}`],
+        warnings: ['ADR pipeline 临时禁用（v4.0.1），evidence-binding 重构完成后（v4.1）恢复默认'],
       });
     }
 
