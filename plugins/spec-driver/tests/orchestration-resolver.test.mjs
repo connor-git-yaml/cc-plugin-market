@@ -160,6 +160,22 @@ describe('T1 合并测试', () => {
       cleanupTempDir(tmpDir);
     }
   });
+
+  it('T1-Z: _loadOverrides 抛错 → loader-error diagnostic（不复用 parse-error）', async () => {
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => { throw new Error('Custom loader failure'); },
+    });
+    const loaderErrorDiag = result.diagnostics.find(d => d.code === 'orchestration-overrides.loader-error');
+    assert.ok(loaderErrorDiag, '应有 loader-error diagnostic，实际 diagnostics: ' + JSON.stringify(result.diagnostics));
+    assert.match(loaderErrorDiag.message, /loader 失败/, 'message 应指明 loader 失败');
+    assert.doesNotMatch(loaderErrorDiag.message, /YAML 解析失败/, 'message 不应再写 YAML 解析失败');
+    // 行为不变：触发降级
+    assert.equal(result.isFallback, true);
+    // 不再有 parse-error
+    const parseErrorDiag = result.diagnostics.find(d => d.code === 'orchestration-overrides.parse-error');
+    assert.equal(parseErrorDiag, undefined, '不应再有 parse-error');
+  });
 });
 
 // ═════════════════════════════════════════════════════════════
@@ -278,6 +294,42 @@ describe('T2 降级路径测试', () => {
     } finally {
       cleanupTempDir(tmpDir);
     }
+  });
+
+  it('T2-X: phase 字段缺失 → schema-fallback message 含 generate-template hint', async () => {
+    const overridesYaml = `
+version: "1.0"
+modes:
+  fix:
+    phases:
+      - id: "1"
+        name: diagnose
+`;  // 缺 display_name/agent/agent_mode 等必填字段
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => parseYamlDocument(overridesYaml),
+    });
+    const schemaFallback = result.diagnostics.find(d => d.code === 'orchestration-overrides.schema-fallback');
+    assert.ok(schemaFallback, '应有 schema-fallback diagnostic');
+    assert.match(schemaFallback.message, /hint: 运行 `orchestrator-cli generate-template fix`/,
+      'message 末尾应有针对 fix mode 的 hint');
+  });
+
+  it('T2-Y: mode 名 typo → schema-fallback message 不附 hint', async () => {
+    const overridesYaml = `
+version: "1.0"
+modes:
+  feauture:
+    phases: []
+`;
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => parseYamlDocument(overridesYaml),
+    });
+    const schemaFallback = result.diagnostics.find(d => d.code === 'orchestration-overrides.schema-fallback');
+    assert.ok(schemaFallback, '应有 schema-fallback diagnostic');
+    assert.doesNotMatch(schemaFallback.message, /generate-template/,
+      'mode typo 错误不应附 generate-template hint');
   });
 });
 
@@ -457,6 +509,26 @@ describe('T3 CLI dry-run 输出测试', () => {
     );
   });
 
+  it('T3-Y: generate-template fix → 输出含 version/modes.fix/所有 phase 字段', () => {
+    const r = runCli(['generate-template', 'fix']);
+    assert.equal(r.exitCode, 0, `exit 0，stderr: ${r.stderr}`);
+    assert.match(r.stdout, /^# 由 orchestrator-cli generate-template 生成/, '输出应以注释行开头');
+    assert.match(r.stdout, /version:/, '应含 version');
+    assert.match(r.stdout, /modes:/, '应含 modes');
+    assert.match(r.stdout, /\bfix:/, '应含 fix mode');
+    // 验证所有 phase 必填字段都被输出
+    for (const field of ['id:', 'name:', 'display_name:', 'agent:', 'agent_mode:', 'gates_before:', 'gates_after:', 'conditional:', 'skip_if_exists:', 'is_critical:']) {
+      assert.match(r.stdout, new RegExp(field), `输出应含 phase 字段 ${field}`);
+    }
+  });
+
+  it('T3-Z: generate-template invalidmode → exit 1 + stderr 含合法 mode 列表', () => {
+    const r = runCli(['generate-template', 'invalidmode']);
+    assert.equal(r.exitCode, 1, '非法 mode 应 exit 1');
+    assert.match(r.stderr, /invalidmode.*不存在|"mode "invalidmode" 不存在/, 'stderr 应说明 mode 不存在');
+    assert.match(r.stderr, /feature|fix|story/, 'stderr 应含合法 mode 列表');
+  });
+
   it('T3-X: GATE_VERIFY.default_behavior: skip override → 合并成功，无 base-invalid，source=overrides', async () => {
     const overridesYaml = `
 version: "1.0"
@@ -486,5 +558,49 @@ gates:
     );
     // isFallback 应为 false
     assert.equal(result.isFallback, false, '不应降级');
+  });
+
+  it('T3-V: generate-template feature → 17 phases 全部输出且无空行错位', () => {
+    const r = runCli(['generate-template', 'feature']);
+    assert.equal(r.exitCode, 0, `exit 0，stderr: ${r.stderr}`);
+
+    // 计数 phase 元素（每个以 "      - id:" 开头）
+    const phaseCount = (r.stdout.match(/^      - id: /gm) || []).length;
+    assert.ok(phaseCount >= 15, `feature mode 应输出 >= 15 个 phase，实际 ${phaseCount}`);
+
+    // 验证 phases: 紧跟首个 phase 无多余空行（修复 Fix 2 之后）
+    assert.match(r.stdout, /phases:\n      - id: "0"/,
+      `phases: 后应直接接首个 phase（无空行），实际输出片段: ${r.stdout.match(/phases:[^]{0,200}/)?.[0]}`);
+
+    // 验证 phase 间确实有空行
+    assert.match(r.stdout, /is_critical: (true|false)\n\n      - id:/,
+      'phase 之间应有空行分隔');
+  });
+
+  it('T3-W: generate-template fix 输出经 effective-orchestration 回读应零 fallback diagnostic（roundtrip）', () => {
+    // 1. 跑 generate-template，拿到 stdout
+    const gen = runCli(['generate-template', 'fix']);
+    assert.equal(gen.exitCode, 0, `generate-template 应 exit 0，stderr: ${gen.stderr}`);
+
+    // 2. 写到 tmp dir 的 .specify/orchestration-overrides.yaml
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sd-roundtrip-'));
+    fs.mkdirSync(path.join(tmpRoot, '.specify'));
+    fs.writeFileSync(path.join(tmpRoot, '.specify', 'orchestration-overrides.yaml'), gen.stdout);
+
+    try {
+      // 3. 跑 effective-orchestration --format json，解析 diagnostics
+      const eff = runCli(['effective-orchestration', 'fix', '--format', 'json', '--project-root', tmpRoot]);
+      assert.equal(eff.exitCode, 0, `effective-orchestration 应 exit 0，stderr: ${eff.stderr}`);
+      const result = JSON.parse(eff.stdout);
+      const fallbackDiags = (result.diagnostics || []).filter((d) =>
+        d.level === 'warning' || d.level === 'error',
+      );
+      assert.equal(fallbackDiags.length, 0,
+        `roundtrip 不应触发任何 warning/error diagnostic，实际: ${JSON.stringify(fallbackDiags)}`,
+      );
+    } finally {
+      // 清理 tmp dir
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

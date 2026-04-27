@@ -324,6 +324,88 @@ async function cmdEffectiveOrchestration(mode, options) {
   process.stdout.write(yamlOutput + '\n');
 }
 
+// ─────────────────────────────────────────────────────────────
+// generate-template 子命令（Feature 136 / US-1 + US-3）
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * generate-template <mode> [--project-root <path>]
+ * 输出指定 mode 的完整 YAML 骨架，供用户保存为 .specify/orchestration-overrides.yaml
+ *
+ * 设计要点：
+ *   - 使用 baseConfig（未合并 overrides）以保证模板始终从 plugin 默认值生成，
+ *     避免被项目级 overrides 污染（即使该 mode 已被 overrides 整段替换）
+ *   - 模板包含 version + 单一 mode 完整结构 + 所有 phase 字段
+ *   - phase 数组之间插入空行，视觉风格与 base orchestration.yaml 一致
+ */
+async function cmdGenerateTemplate(mode, options) {
+  const { projectRoot } = options;
+
+  // 复用 resolver 取得 base config（不依赖 overrides 是否存在）
+  let resolverResult;
+  try {
+    resolverResult = await resolveOrchestrationConfig({ projectRoot });
+  } catch (err) {
+    fail(`resolver 调用失败：${err.message}`);
+    return;
+  }
+
+  // Fix 3：base 损坏时不要静默生成 fallback 模板
+  if (resolverResult.isBaseInvalid) {
+    process.stderr.write(JSON.stringify({
+      success: false,
+      error: 'plugin base orchestration.yaml 加载或校验失败，无法生成模板',
+      diagnostics: (resolverResult.diagnostics || [])
+        .filter((d) => d.level === 'error')
+        .map((d) => ({ code: d.code, message: d.message })),
+    }) + '\n');
+    process.exit(1);
+    return;
+  }
+
+  const baseConfig = resolverResult.baseConfig;
+  const baseModes = baseConfig.modes || {};
+  const validModes = Object.keys(baseModes);
+  if (!validModes.includes(mode)) {
+    process.stderr.write(JSON.stringify({
+      success: false,
+      error: `mode "${mode}" 不存在，合法值为 [${validModes.join(', ')}]`,
+    }) + '\n');
+    process.exit(1);
+    return;
+  }
+
+  // Fix 4：header 扩到 4 行，明确说明内容来源
+  const header = [
+    '# 由 orchestrator-cli generate-template 生成',
+    '# 内容来自 plugin 默认 orchestration.yaml，不反映当前项目已有 overrides',
+    '# 修改下方 phases 内容后保存为 .specify/orchestration-overrides.yaml',
+    '# 注意：mode 整段替换，phases 数组必须完整声明所有字段',
+    '',
+  ].join('\n');
+
+  // Fix 1：version 单独输出，强制带引号保留字符串语义
+  // serializeYaml 的 yamlScalar 会把 "1.0" 输出为无引号 1.0，被 simple-yaml 解析为 number 1，
+  // 触发 version-mismatch。改为 JSON.stringify 保证字符串字面量始终带双引号。
+  const versionLine = `version: ${JSON.stringify(baseConfig.version)}\n`;
+
+  // 仅序列化 modes 部分（不包含 version）
+  let body = serializeYaml({ modes: { [mode]: baseModes[mode] } });
+
+  // Fix 2：phase 数组元素之间插入空行（首个 phase 除外）
+  // 用 firstSeen 标志保证只在第 2、3、…个 phase 前插入空行，首个保持原样
+  let firstSeen = false;
+  body = body.replace(/(\n {6}- id: )/g, (match) => {
+    if (!firstSeen) {
+      firstSeen = true;
+      return match;
+    }
+    return '\n' + match;
+  });
+
+  process.stdout.write(header + versionLine + body + '\n');
+}
+
 // 主函数
 const args = process.argv.slice(2);
 
@@ -338,6 +420,7 @@ if (args.length === 0) {
   console.error('  validate-config [--project-root <path>]                      验证配置文件');
   console.error('  recommend-research-mode --description <text> [--has-existing-research] [--online-required]');
   console.error('  effective-orchestration <mode> [--format yaml|json] [--annotate] [--diff] [--project-root <path>]');
+  console.error('  generate-template <mode> [--project-root <path>]              生成 mode override 模板');
   process.exit(1);
 }
 
@@ -390,6 +473,15 @@ switch (command) {
     const diff = restArgs.includes('--diff');
     const projectRoot = parseProjectRoot(restArgs);
     await cmdEffectiveOrchestration(mode, { format, annotate, diff, projectRoot });
+    break;
+  }
+
+  case 'generate-template': {
+    if (args.length < 2) fail('generate-template 需要 <mode> 参数');
+    const mode = args[1];
+    const restArgs = args.slice(2);
+    const projectRoot = parseProjectRoot(restArgs);
+    await cmdGenerateTemplate(mode, { projectRoot });
     break;
   }
 

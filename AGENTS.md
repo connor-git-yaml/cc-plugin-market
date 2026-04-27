@@ -177,6 +177,7 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <m
 | diagnostic code | 含义 | 处理方式 |
 |----------------|------|---------|
 | `orchestration-overrides.parse-error` | YAML 语法错误 | 检查 overrides 文件语法 |
+| `orchestration-overrides.loader-error` | `_loadOverrides` 注入函数抛错（仅测试场景或自定义集成会触发） | 检查注入函数实现 |
 | `orchestration-overrides.schema-fallback` | Zod 校验失败（如非法 mode 名） | 检查 mode 名是否为 reserved enum |
 | `orchestration-overrides.version-mismatch` | version 字段与 base 不一致 | 见下方处理步骤 |
 | `orchestration-overrides.unsupported-field` | 使用了 MVP 不支持的字段（如 parallel_groups） | 移除该字段或等待二期 |
@@ -199,4 +200,14 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <m
 | `auto` | 自动决定是否触发（基于条件） | 默认行为，平衡自动化与人工审查 |
 | `on_failure` | 仅工具链/质量检查失败时触发 | CI 友好：成功时静默，失败时暂停 |
 | `skip` | 跳过 gate 检查点 | 全自动化 CI 流程、不需要质量门的快速修复 |
+
+### 生成 mode override 模板
+
+不熟悉完整 phase schema 时，可用 `generate-template` 命令一键生成模板：
+
+```bash
+node plugins/spec-driver/scripts/orchestrator-cli.mjs generate-template fix > .specify/orchestration-overrides.yaml
+```
+
+输出包含 version 字段、`modes.<mode>` 完整结构、所有 phase 字段。修改 phases 内容后保存即可被 resolver 识别。
 <!-- END SHARED SECTION: orchestration-overrides -->

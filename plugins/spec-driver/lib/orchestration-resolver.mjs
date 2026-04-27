@@ -248,31 +248,50 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _load
   }
 
   // ── 步骤 4：读取并解析 overrides YAML ─────────────────────
+  // AC-4.1/4.2：区分 _loadOverrides 注入函数抛错（loader-error）与文件路径方式抛错（parse-error）
   let rawOverrides;
-  try {
-    if (_loadOverrides) {
+  if (_loadOverrides) {
+    try {
       rawOverrides = await _loadOverrides();
-    } else {
+    } catch (loaderError) {
+      // AC-4.1：注入函数抛错 → loader-error（语义不同于 YAML 解析失败）
+      diagnostics.push(createDiagnostic(
+        'warning',
+        'orchestration-overrides.loader-error',
+        `[orchestration-overrides] overrides loader 失败，将使用 base 配置：${loaderError.message}`,
+      ));
+      const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
+      return {
+        mergedConfig: baseConfig,
+        baseConfig,
+        fieldSources: baseFieldSources,
+        diagnostics,
+        isFallback: true,
+        isBaseInvalid: false,
+      };
+    }
+  } else {
+    try {
       const overridesPath = path.join(projectRoot, '.specify', 'orchestration-overrides.yaml');
       const content = fs.readFileSync(overridesPath, 'utf-8');
       rawOverrides = parseYamlDocument(content);
+    } catch (error) {
+      // AC-4.2：文件 IO 或 YAML 语法错误 → parse-error code，降级到 base
+      diagnostics.push(createDiagnostic(
+        'warning',
+        'orchestration-overrides.parse-error',
+        `[orchestration-overrides] YAML 解析失败，将使用 base 配置：${error.message}`,
+      ));
+      const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
+      return {
+        mergedConfig: baseConfig,
+        baseConfig,
+        fieldSources: baseFieldSources,
+        diagnostics,
+        isFallback: true,
+        isBaseInvalid: false,
+      };
     }
-  } catch (error) {
-    // YAML 语法错误：warning + parse-error code，降级到 base
-    diagnostics.push(createDiagnostic(
-      'warning',
-      'orchestration-overrides.parse-error',
-      `[orchestration-overrides] YAML 解析失败，将使用 base 配置：${error.message}`,
-    ));
-    const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
-    return {
-      mergedConfig: baseConfig,
-      baseConfig,
-      fieldSources: baseFieldSources,
-      diagnostics,
-      isFallback: true,
-      isBaseInvalid: false,
-    };
   }
 
   // 空文件或 null 解析结果：静默返回 base
@@ -326,10 +345,22 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _load
   const overridesParseResult = orchestrationOverridesSchema.safeParse(rawOverridesForStrip);
   if (!overridesParseResult.success) {
     const issues = overridesParseResult.error.issues.map(formatZodIssue).join('; ');
+    // AC-2.1/2.2/2.3：当 issue 命中 modes.<mode>.phases.* 路径时，附加 generate-template hint。
+    // 检测路径结构 modes.<m>.phases.*（path[0]==='modes' && path[2]==='phases' && length>=4）
+    // 注意：将来若 overridesSchema 调整 phases 嵌套层级，需要同步更新此处路径判断。
+    const phaseIssue = overridesParseResult.error.issues.find(
+      iss => Array.isArray(iss.path) && iss.path.length >= 4
+          && iss.path[0] === 'modes' && iss.path[2] === 'phases',
+    );
+    let message = `[orchestration-overrides] overrides 校验失败，将使用 base 配置：${issues}`;
+    if (phaseIssue) {
+      const modeName = phaseIssue.path[1];
+      message += `\nhint: 运行 \`orchestrator-cli generate-template ${modeName}\` 获取含所有必填字段的完整 phase 模板`;
+    }
     diagnostics.push(createDiagnostic(
       'warning',
       'orchestration-overrides.schema-fallback',
-      `[orchestration-overrides] overrides 校验失败，将使用 base 配置：${issues}`,
+      message,
     ));
     const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
     return {
