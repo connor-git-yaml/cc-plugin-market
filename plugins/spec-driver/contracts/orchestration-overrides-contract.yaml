@@ -47,6 +47,16 @@ supported_overrides:
     notes: >
       未在 overrides 中声明的 gate 字段继承 base 值。
       hard_gate_modes 数组是整段替换（非追加）。
+    valid_values:
+      default_behavior:
+        - value: always
+          desc: 总是触发 gate 检查点（用户确认）
+        - value: auto
+          desc: 根据条件自动决定是否触发
+        - value: on_failure
+          desc: 仅在工具链或质量检查失败时触发
+        - value: skip
+          desc: 跳过该 gate 检查点（CI 或自动化场景）
 
   - path: "parallel_scheduling.*"
     semantic: "顶层标量后者覆盖前者（scalar override）"

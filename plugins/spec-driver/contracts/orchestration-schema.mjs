@@ -104,7 +104,7 @@ export const phaseSchema = z.object({
  * 关键观察：
  *   - type: string（自由文本，如 "research_checkpoint"）
  *   - applicable_modes: string[] 或不存在（非所有 gate 都有此字段）
- *   - default_behavior: "always" | "auto" | "on_failure"（实际值含 on_failure，非 spec 定义的 skip）
+ *   - default_behavior: "always" | "auto" | "on_failure" | "skip"（skip 表示跳过该 gate 检查点）
  *   - severity: "critical" | "non_critical"（实际值，非 spec 定义的 warning/info）
  *   - hard_gate_modes: null | string[]（nullable）
  *   - insertion_point: null | string（nullable）
@@ -115,12 +115,12 @@ export const gateDefinitionSchema = z.object({
   // 实际上所有 gate 都有此字段，但为了健壮性设为 optional
   applicable_modes: z.array(z.string()).optional(),
   description: z.string(),
-  // 实际 default_behavior 值包含 on_failure（非 spec 文档定义的 skip）
-  default_behavior: z.enum(['always', 'auto', 'on_failure'], {
+  // 实际 default_behavior 值包含 on_failure 和 skip（override 场景允许 skip 跳过 gate）
+  default_behavior: z.enum(['always', 'auto', 'on_failure', 'skip'], {
     error_map: (issue) => {
       if (issue.code === 'invalid_enum_value') {
         return {
-          message: `default_behavior 不合法：期望 [always | auto | on_failure]，实际为 "${issue.received}"`,
+          message: `default_behavior 不合法：期望 [always | auto | on_failure | skip]，实际为 "${issue.received}"`,
         };
       }
       return { message: issue.message };
@@ -148,8 +148,8 @@ export const gateDefinitionSchema = z.object({
  * 只有 default_behavior / severity / hard_gate_modes 可被覆盖
  */
 export const gateOverrideSchema = z.object({
-  // overrides 中的 default_behavior 允许 always/auto/skip（用户定制场景包含 skip）
-  default_behavior: z.enum(['always', 'auto', 'skip', 'on_failure']).optional(),
+  // overrides 中的 default_behavior 允许 always/auto/on_failure/skip（与 gateDefinitionSchema 对齐）
+  default_behavior: z.enum(['always', 'auto', 'on_failure', 'skip']).optional(),
   severity: z.enum(['critical', 'non_critical', 'warning', 'info']).optional(),
   // hard_gate_modes 整段替换，非追加
   hard_gate_modes: z.array(z.string()).optional(),

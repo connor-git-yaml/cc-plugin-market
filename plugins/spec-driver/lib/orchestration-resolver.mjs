@@ -9,7 +9,7 @@
  *   4. 返回合并结果 + fieldSources + diagnostics
  *
  * 导出：
- *   - resolveOrchestrationConfig({ projectRoot, _loadBase? })
+ *   - resolveOrchestrationConfig({ projectRoot, _loadBase?, _loadOverrides? })
  *     返回 { mergedConfig, fieldSources, diagnostics, isFallback, isBaseInvalid }
  */
 
@@ -170,6 +170,9 @@ function defaultLoadBase() {
  * @param {Function} [params._loadBase] - 可选注入函数，覆盖默认 base 加载路径（D-PLAN-4，测试支持）
  *   签名：() => object（同步或异步均可，返回解析后的 YAML 对象）
  *   测试中可注入抛错函数来模拟 base 不可读场景。
+ * @param {Function} [params._loadOverrides] - 可选注入函数，覆盖默认 overrides 加载路径（测试支持）
+ *   签名：() => object（同步或异步均可，返回解析后的 YAML 对象，null 表示无 overrides）
+ *   测试中可注入内联 YAML 对象来避免创建临时文件。
  *
  * @returns {Promise<{
  *   mergedConfig: object,
@@ -180,7 +183,7 @@ function defaultLoadBase() {
  *   isBaseInvalid: boolean
  * }>}
  */
-export async function resolveOrchestrationConfig({ projectRoot, _loadBase }) {
+export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _loadOverrides }) {
   const diagnostics = [];
 
   // ── 步骤 1：加载 base config ───────────────────────────────
@@ -227,25 +230,33 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase }) {
   const baseConfig = baseParseResult.data;
 
   // ── 步骤 3：检查 overrides 文件是否存在 ────────────────────
-  const overridesPath = path.join(projectRoot, '.specify', 'orchestration-overrides.yaml');
-  if (!fs.existsSync(overridesPath)) {
-    // 不存在：静默返回 base，无 diagnostic（spec AC-007/AC-015）
-    const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
-    return {
-      mergedConfig: baseConfig,
-      baseConfig,
-      fieldSources: baseFieldSources,
-      diagnostics,
-      isFallback: false,
-      isBaseInvalid: false,
-    };
+  // _loadOverrides 注入时跳过文件系统检查，直接进入步骤 4
+  if (!_loadOverrides) {
+    const overridesPath = path.join(projectRoot, '.specify', 'orchestration-overrides.yaml');
+    if (!fs.existsSync(overridesPath)) {
+      // 不存在：静默返回 base，无 diagnostic（spec AC-007/AC-015）
+      const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
+      return {
+        mergedConfig: baseConfig,
+        baseConfig,
+        fieldSources: baseFieldSources,
+        diagnostics,
+        isFallback: false,
+        isBaseInvalid: false,
+      };
+    }
   }
 
   // ── 步骤 4：读取并解析 overrides YAML ─────────────────────
   let rawOverrides;
   try {
-    const content = fs.readFileSync(overridesPath, 'utf-8');
-    rawOverrides = parseYamlDocument(content);
+    if (_loadOverrides) {
+      rawOverrides = await _loadOverrides();
+    } else {
+      const overridesPath = path.join(projectRoot, '.specify', 'orchestration-overrides.yaml');
+      const content = fs.readFileSync(overridesPath, 'utf-8');
+      rawOverrides = parseYamlDocument(content);
+    }
   } catch (error) {
     // YAML 语法错误：warning + parse-error code，降级到 base
     diagnostics.push(createDiagnostic(

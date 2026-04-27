@@ -190,4 +190,13 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <m
 2. 将 `.specify/orchestration-overrides.yaml` 顶部的 `version` 更新为与 base 一致的值
 3. 重新验证：`node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <mode> --format json`，确认 `diagnostics` 为空
 4. 如果 base version 已升级，需重新审查 overrides 中的 phase 定义是否与新 base 兼容
+
+### gate default_behavior 合法值
+
+| 值 | 语义 | 典型场景 |
+|----|------|----------|
+| `always` | 总是触发 gate（强制人工确认） | 关键发布前必须人工审核 |
+| `auto` | 自动决定是否触发（基于条件） | 默认行为，平衡自动化与人工审查 |
+| `on_failure` | 仅工具链/质量检查失败时触发 | CI 友好：成功时静默，失败时暂停 |
+| `skip` | 跳过 gate 检查点 | 全自动化 CI 流程、不需要质量门的快速修复 |
 <!-- END SHARED SECTION: orchestration-overrides -->

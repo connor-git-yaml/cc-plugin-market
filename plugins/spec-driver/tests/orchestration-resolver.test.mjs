@@ -21,6 +21,7 @@ import { spawnSync } from 'node:child_process';
 import { resolveOrchestrationConfig } from '../lib/orchestration-resolver.mjs';
 import { orchestrationBaseSchema, orchestrationMergedSchema } from '../contracts/orchestration-schema.mjs';
 import { Orchestrator } from '../lib/orchestrator.mjs';
+import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'orchestration');
@@ -454,5 +455,36 @@ describe('T3 CLI dry-run 输出测试', () => {
       r.stderr.includes('feature') || r.stderr.includes('合法值'),
       `stderr 应包含合法 mode 列表，实际: ${r.stderr}`,
     );
+  });
+
+  it('T3-X: GATE_VERIFY.default_behavior: skip override → 合并成功，无 base-invalid，source=overrides', async () => {
+    const overridesYaml = `
+version: "1.0"
+gates:
+  GATE_VERIFY:
+    default_behavior: skip
+    severity: non_critical
+`;
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => parseYamlDocument(overridesYaml),
+    });
+    // 合并应成功（无 base-invalid diagnostic）
+    const baseInvalidDiags = result.diagnostics.filter(d => d.code === 'orchestration.base-invalid');
+    assert.equal(baseInvalidDiags.length, 0, `不应有 base-invalid diagnostic，实际: ${JSON.stringify(baseInvalidDiags)}`);
+    // skip 应正确反映在 mergedConfig 中
+    assert.equal(
+      result.mergedConfig.gates.GATE_VERIFY.default_behavior,
+      'skip',
+      `GATE_VERIFY.default_behavior 应为 skip，实际: ${result.mergedConfig.gates.GATE_VERIFY.default_behavior}`,
+    );
+    // source 应标注为 overrides
+    assert.equal(
+      result.fieldSources['gates.GATE_VERIFY.default_behavior'],
+      'overrides',
+      `fieldSources 应标注 source=overrides`,
+    );
+    // isFallback 应为 false
+    assert.equal(result.isFallback, false, '不应降级');
   });
 });
