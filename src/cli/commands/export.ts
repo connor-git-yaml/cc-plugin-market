@@ -17,7 +17,7 @@ import { resolveGraphJsonPath } from '../../panoramic/graph/graph-paths.js';
 const EXPORT_HELP = `spectra export — 将知识图谱导出为可视化格式
 
 用法:
-  spectra export --format <obsidian|html> [--output-dir <dir>]
+  spectra export --format <obsidian|html> [--output-dir <dir>] [--project-root <path>]
 
 说明:
   读取 _meta/graph.json（需先运行 spectra graph），重建社区归属，
@@ -25,7 +25,9 @@ const EXPORT_HELP = `spectra export — 将知识图谱导出为可视化格式
 
 选项:
   --format <obsidian|html>  导出格式（必填）
-  --output-dir <dir>        输出目录（默认: {cwd}/specs/_meta/export/）
+  --output-dir <dir>        输出目录（默认: {project-root}/specs/_meta/export/）
+                            相对路径基于 --project-root 解析；绝对路径直接采用
+  --project-root <path>     项目根目录（默认: 当前 shell 目录）
   --help                    显示帮助信息
 
 输出:
@@ -67,9 +69,13 @@ export async function runExportCommand(command: CLICommand): Promise<void> {
   }
 
   // 确定输出目录（FR-014：默认 specs/_meta/export/）
-  const cwd = process.cwd();
+  // 优先使用 --project-root 参数显式传入的项目根，回退到 process.cwd()
+  // 这让 spectra export 能从任意 shell 目录正确指向目标项目（fix(138)）
+  const cwd = command.projectRoot ?? process.cwd();
+  // 相对路径基于 projectRoot 解析（与 batch-orchestrator 一致），绝对路径直接采用
+  // 避免 --project-root /a --output-dir relative 被错误地基于 shell cwd 解析的反直觉行为
   const outputDir = command.outputDir
-    ? path.resolve(command.outputDir)
+    ? (path.isAbsolute(command.outputDir) ? command.outputDir : path.join(cwd, command.outputDir))
     : path.join(cwd, 'specs', '_meta', 'export');
 
   // 读取 graph.json（FR-015：缺失则 graceful exit）

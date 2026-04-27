@@ -74,7 +74,6 @@ describe('runExportCommand', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
-  let processCwdSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'export-cmd-test-'));
@@ -82,9 +81,8 @@ describe('runExportCommand', () => {
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     // process.exit mock（不真正退出）
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
-    // process.cwd mock 隔离仓库真实 specs/_meta/graph.json，否则
-    // graceful-exit 测试会读到真实图谱使断言失效（由 v4.0 release 后才显现的环境耦合）
-    processCwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    // 注：fix(138) 后 export 子命令支持 --project-root，测试用 command.projectRoot 注入
+    // 替代以前的 process.cwd mock，更接近产品真实调用模式
   });
 
   afterEach(() => {
@@ -98,6 +96,7 @@ describe('runExportCommand', () => {
       subcommand: 'export' as const,
       exportFormat: 'obsidian' as const,
       outputDir: tmpDir,
+      projectRoot: tmpDir,
       deep: false,
       force: false,
       version: false,
@@ -122,6 +121,7 @@ describe('runExportCommand', () => {
       subcommand: 'export' as const,
       exportFormat: 'invalid' as 'obsidian' | 'html',
       outputDir: tmpDir,
+      projectRoot: tmpDir,
       deep: false,
       force: false,
       version: false,
@@ -137,7 +137,7 @@ describe('runExportCommand', () => {
   });
 
   it('空图（0 节点）时 graceful exit，不生成文件', async () => {
-    // 写入空图 JSON 到 mock cwd 下的 specs/_meta/graph.json（与 export.ts 的 resolveGraphJsonPath 对齐）
+    // 写入空图 JSON 到 projectRoot 下的 specs/_meta/graph.json（与 export.ts 的 resolveGraphJsonPath 对齐）
     const metaDir = path.join(tmpDir, 'specs', '_meta');
     fs.mkdirSync(metaDir, { recursive: true });
     const emptyGraph = {
@@ -154,6 +154,7 @@ describe('runExportCommand', () => {
       subcommand: 'export' as const,
       exportFormat: 'obsidian' as const,
       outputDir: tmpDir,
+      projectRoot: tmpDir,
       deep: false,
       force: false,
       version: false,
@@ -178,5 +179,61 @@ describe('runExportCommand', () => {
     if (!result.ok) return;
     // outputDir 未指定，handler 层使用 _meta/export/ 默认
     expect(result.command.outputDir).toBeUndefined();
+  });
+
+  it('sentinel: 提供 --project-root 时不再访问 process.cwd（防回归）', async () => {
+    // 写入有效 graph.json 让 export 跑到读取 graph 之后的代码路径，
+    // 否则 graceful-exit 在 graph 缺失时提前 return，无法验证后续代码不调 cwd
+    const metaDir = path.join(tmpDir, 'specs', '_meta');
+    fs.mkdirSync(metaDir, { recursive: true });
+    const minimalGraph = {
+      directed: false,
+      multigraph: false,
+      graph: { name: 'spectra-knowledge-graph', generatedAt: '2026-01-01T00:00:00.000Z', nodeCount: 0, edgeCount: 0, sources: [], schemaVersion: '1.0' },
+      nodes: [],
+      links: [],
+    };
+    fs.writeFileSync(path.join(metaDir, 'graph.json'), JSON.stringify(minimalGraph), 'utf-8');
+
+    // 用 spy 但不 mock：监控但不改 process.cwd 行为
+    const cwdSpy = vi.spyOn(process, 'cwd');
+    const { runExportCommand } = await import('../../src/cli/commands/export.js');
+    await runExportCommand({
+      subcommand: 'export' as const,
+      exportFormat: 'obsidian' as const,
+      outputDir: tmpDir,
+      projectRoot: tmpDir,
+      deep: false, force: false, version: false, help: false,
+      global: false, remove: false, skillTarget: 'claude' as const,
+    });
+    // 提供 projectRoot 时 export 路径不应再调用 process.cwd
+    expect(cwdSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// orchestrator-cli.sh wrapper 集成测试（fix/138 Codex Finding 2）
+// ============================================================
+
+describe('orchestrator-cli.sh wrapper', () => {
+  it('从外部 cwd 启动 wrapper 不应触发 ERR_MODULE_NOT_FOUND', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const REPO_ROOT = path.resolve(__dirname, '..', '..');
+    const WRAPPER_PATH = path.join(REPO_ROOT, 'plugins', 'spec-driver', 'scripts', 'orchestrator-cli.sh');
+    const externalCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-wrapper-test-'));
+    try {
+      // validate-config 不需要项目级 overrides，只验证 zod 等依赖能正常解析
+      const stdout = execFileSync('bash', [WRAPPER_PATH, 'validate-config', '--project-root', REPO_ROOT], {
+        cwd: externalCwd,
+        encoding: 'utf-8',
+        timeout: 10_000,
+      });
+      const result = JSON.parse(stdout);
+      expect(result.success).toBe(true);
+      // 输出含 mode_count 表示完整 schema 校验链路成功执行（zod 已加载）
+      expect(result.mode_count).toBeGreaterThan(0);
+    } finally {
+      fs.rmSync(externalCwd, { recursive: true, force: true });
+    }
   });
 });

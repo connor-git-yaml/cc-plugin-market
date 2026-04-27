@@ -30,7 +30,7 @@ export interface CLICommand {
   panoramicOperation?: 'cross-package' | 'architecture-ir' | 'overview';
   /** --json 输出标志（仅 panoramic 子命令） */
   jsonOutput?: boolean;
-  /** --project-root 参数（仅 panoramic 子命令，未传时使用 process.cwd()） */
+  /** --project-root 参数（panoramic / batch / export 子命令支持，未传时使用 process.cwd()） */
   projectRoot?: string;
   /** cache 子操作（仅 cache 子命令） */
   cacheOperation?: 'stats' | 'clear';
@@ -459,6 +459,8 @@ export function parseArgs(argv: string[]): ParseResult {
     }
     const outputDirIdx = argv.indexOf('--output-dir');
     const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
+    const projectRootIdx = argv.indexOf('--project-root');
+    const projectRoot = projectRootIdx !== -1 ? argv[projectRootIdx + 1] : undefined;
     const formatIdx = argv.indexOf('--format');
     const formatRaw = formatIdx !== -1 ? argv[formatIdx + 1] : undefined;
     // exportFormat 允许任意值传入，handler 层校验有效性
@@ -469,6 +471,7 @@ export function parseArgs(argv: string[]): ParseResult {
         subcommand: 'export',
         exportFormat,
         outputDir,
+        projectRoot,
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },
