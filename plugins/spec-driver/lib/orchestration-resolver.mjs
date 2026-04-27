@@ -294,8 +294,42 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _load
     }
   }
 
-  // 空文件或 null 解析结果：静默返回 base
-  if (!rawOverrides || typeof rawOverrides !== 'object') {
+  // fix(139): 区分两种"非合法对象"场景以提供更准确的 diagnostic
+  //   - 文件路径：合法空 YAML 文件（simple-yaml 解析为 null）→ 静默返 base（保持原行为）
+  //   - 注入路径：loader 函数返非纯对象（null/undefined/标量/数组/Date/Map 等）违反契约 → 发 loader-error
+  //
+  // 守卫用 Object.prototype.toString.call() 精确识别"纯对象"（[object Object]），
+  // 排除数组、Date、Map、Set 等 typeof === 'object' 的非纯对象类型，否则它们会
+  // 绕过守卫被 schema 校验误判为 schema-fallback（Codex 对抗审查 fix/139 角度 3）。
+  const isPlainObject = rawOverrides !== null
+    && rawOverrides !== undefined
+    && Object.prototype.toString.call(rawOverrides) === '[object Object]';
+
+  if (!isPlainObject) {
+    // 描述具体类型用于诊断 message（替代误导性的 typeof，避免 null 显示为 "object"）
+    const typeName = rawOverrides === null
+      ? 'null'
+      : Array.isArray(rawOverrides)
+        ? 'Array'
+        : Object.prototype.toString.call(rawOverrides).slice(8, -1); // [object X] → X
+
+    if (_loadOverrides) {
+      diagnostics.push(createDiagnostic(
+        'warning',
+        'orchestration-overrides.loader-error',
+        `[orchestration-overrides] _loadOverrides 注入函数返回非纯对象（${typeName}），将使用 base 配置`,
+      ));
+      const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
+      return {
+        mergedConfig: baseConfig,
+        baseConfig,
+        fieldSources: baseFieldSources,
+        diagnostics,
+        isFallback: true,
+        isBaseInvalid: false,
+      };
+    }
+    // 文件路径下空文件：静默返回 base（合法空 YAML 用法）
     const baseFieldSources = buildBaseOnlyFieldSources(baseConfig);
     return {
       mergedConfig: baseConfig,
@@ -348,14 +382,21 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _load
     // AC-2.1/2.2/2.3：当 issue 命中 modes.<mode>.phases.* 路径时，附加 generate-template hint。
     // 检测路径结构 modes.<m>.phases.*（path[0]==='modes' && path[2]==='phases' && length>=4）
     // 注意：将来若 overridesSchema 调整 phases 嵌套层级，需要同步更新此处路径判断。
-    const phaseIssue = overridesParseResult.error.issues.find(
-      iss => Array.isArray(iss.path) && iss.path.length >= 4
-          && iss.path[0] === 'modes' && iss.path[2] === 'phases',
+    //
+    // fix(139)：多 mode 同时出 phase 字段错误时，枚举所有命中的 mode 名（去重）
+    // 避免单一 .find() 取第一个时 hint 误导：用户先看到 story 错误但 hint 却建议
+    // generate-template fix（取决于 Zod issue 顺序，按 schema shape 而非 YAML 顺序）
+    const hitModes = new Set(
+      overridesParseResult.error.issues
+        .filter(iss => Array.isArray(iss.path) && iss.path.length >= 4
+            && iss.path[0] === 'modes' && iss.path[2] === 'phases')
+        .map(iss => iss.path[1])
     );
     let message = `[orchestration-overrides] overrides 校验失败，将使用 base 配置：${issues}`;
-    if (phaseIssue) {
-      const modeName = phaseIssue.path[1];
-      message += `\nhint: 运行 \`orchestrator-cli generate-template ${modeName}\` 获取含所有必填字段的完整 phase 模板`;
+    if (hitModes.size > 0) {
+      const modeList = [...hitModes].sort().join(' / ');
+      const example = [...hitModes].sort()[0];
+      message += `\nhint: 运行 \`orchestrator-cli generate-template ${example}\` 获取含所有必填字段的完整 phase 模板（命中 mode: ${modeList}）`;
     }
     diagnostics.push(createDiagnostic(
       'warning',

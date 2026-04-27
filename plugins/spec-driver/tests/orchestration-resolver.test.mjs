@@ -176,6 +176,56 @@ describe('T1 合并测试', () => {
     const parseErrorDiag = result.diagnostics.find(d => d.code === 'orchestration-overrides.parse-error');
     assert.equal(parseErrorDiag, undefined, '不应再有 parse-error');
   });
+
+  it('T1-Y: _loadOverrides 返非纯对象 → loader-error diagnostic（fix/139）', async () => {
+    // 覆盖典型非纯对象类型；含 truthy 但 typeof === 'object' 的 Array/Date/Map/Set
+    // 验证守卫 Object.prototype.toString.call() === '[object Object]' 精确排除这些类型
+    const cases = [
+      { value: null,            typeName: 'null' },
+      { value: undefined,       typeName: 'Undefined' },
+      { value: 42,              typeName: 'Number' },
+      { value: 'string',        typeName: 'String' },
+      { value: false,           typeName: 'Boolean' },
+      { value: [],              typeName: 'Array' },
+      { value: [1, 2, 3],       typeName: 'Array' },
+      { value: new Date(),      typeName: 'Date' },
+      { value: new Map(),       typeName: 'Map' },
+      { value: new Set(),       typeName: 'Set' },
+    ];
+    for (const { value, typeName } of cases) {
+      const result = await resolveOrchestrationConfig({
+        projectRoot: '/nonexistent',
+        _loadOverrides: () => value,
+      });
+      const loaderErrorDiag = result.diagnostics.find(d => d.code === 'orchestration-overrides.loader-error');
+      assert.ok(loaderErrorDiag,
+        `_loadOverrides 返 ${typeName} 应触发 loader-error，实际 diagnostics: ${JSON.stringify(result.diagnostics)}`);
+      assert.match(loaderErrorDiag.message, /返回非纯对象/,
+        `message 应指明"返回非纯对象"（${typeName}）`);
+      assert.match(loaderErrorDiag.message, new RegExp(`（${typeName}）`),
+        `message 应含具体类型名 "${typeName}"，实际 message: ${loaderErrorDiag.message}`);
+      assert.equal(result.isFallback, true, `非纯对象返回应触发降级（${typeName}）`);
+      // 不应误判为 schema-fallback（Codex 角度 3+4 修复点）
+      const schemaFallback = result.diagnostics.find(d => d.code === 'orchestration-overrides.schema-fallback');
+      assert.equal(schemaFallback, undefined, `${typeName} 不应被误判为 schema-fallback`);
+    }
+  });
+
+  it('T1-Y-precision: 注入返空对象 {} → 不触发 loader-error，进入正常 schema 校验路径', async () => {
+    // 类型守卫精确性回归：`typeof rawOverrides !== 'object'` 不应误判合法的空对象
+    // 注：simple-yaml 对 comment-only 和空文件都解析为 {} 而非 null，因此文件路径下
+    // 这个边界由 schema-fallback（缺 version）兜底，不会落到 loader-error 分支
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => ({}),  // 合法空对象
+    });
+    const loaderErrorDiag = result.diagnostics.find(d => d.code === 'orchestration-overrides.loader-error');
+    assert.equal(loaderErrorDiag, undefined,
+      '注入返空对象 {} 不应触发 loader-error（{} 是合法对象，由 schema 校验进一步处理）');
+    // {} 缺 version 字段 → schema-fallback 兜底（行为符合 fix(135) 设计）
+    const schemaFallback = result.diagnostics.find(d => d.code === 'orchestration-overrides.schema-fallback');
+    assert.ok(schemaFallback, '{} 缺 version 应触发 schema-fallback 而非 loader-error');
+  });
 });
 
 // ═════════════════════════════════════════════════════════════
@@ -313,6 +363,36 @@ modes:
     assert.ok(schemaFallback, '应有 schema-fallback diagnostic');
     assert.match(schemaFallback.message, /hint: 运行 `orchestrator-cli generate-template fix`/,
       'message 末尾应有针对 fix mode 的 hint');
+    // fix(139)：单 mode 命中时也输出 "命中 mode: fix" 后缀
+    assert.match(schemaFallback.message, /命中 mode: fix/,
+      '单 mode 命中时 hint 应含"命中 mode: fix"');
+  });
+
+  it('T2-Z: 多 mode 同时缺字段 → hint 枚举所有命中 mode（fix/139）', async () => {
+    const overridesYaml = `
+version: "1.0"
+modes:
+  fix:
+    phases:
+      - id: "1"
+        name: diagnose
+  story:
+    phases:
+      - id: "1"
+        name: specify
+`;  // fix 和 story 都缺 display_name/agent/agent_mode 等必填字段
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => parseYamlDocument(overridesYaml),
+    });
+    const schemaFallback = result.diagnostics.find(d => d.code === 'orchestration-overrides.schema-fallback');
+    assert.ok(schemaFallback, '应有 schema-fallback diagnostic');
+    // hint 应同时含 fix 和 story（去重 + 排序）
+    assert.match(schemaFallback.message, /命中 mode: fix \/ story/,
+      'hint 应枚举所有命中的 mode 名（fix / story）');
+    // example 应取首个（按字典序 fix 在前）
+    assert.match(schemaFallback.message, /generate-template fix/,
+      'hint 中的 generate-template 示例应取字典序首个 mode（fix）');
   });
 
   it('T2-Y: mode 名 typo → schema-fallback message 不附 hint', async () => {
