@@ -10,7 +10,7 @@
 
 products:
   spectra:
-    description: "Spectra v4.0.0 — Phase 2 Reading Platform Milestone 发布。新增：图能力上首屏、LLM 成本透明（--budget/--dry-run）、SpecStore 抽象 + sourceKind 元数据、技术债自动提取、graph.json schema v2.0 + Hyperedges、--mode=reading/code-only 轻量模式、MCP 自然语言问答（RAG）、graph.html D3 交互可视化。默认 LLM 升级到 Sonnet 4.6（成本 -5x）。完整 Milestone 见 specs/M-101-phase2-reading-platform/blueprint.md"
+    description: "Spectra v4.0.1 — 信任修复 hotfix（Feature 135）。修复 v4.0.0 实测中暴露的 4 类 bug：(1) ADR pipeline 默认禁用 + 中和遗留 hallucinated ADR 文件（需 --enable-adr 显式开启）；(2) --hyperedges flag 静默无效升级为 fail-loud WARNING（含成功路径 0 结果可见性）；(3) generatedBy frontmatter 版本字符串回归修复（动态读 package.json）；(4) --mode reading help 文字纠正 + TTY hint。架构性修复（ADR evidence-binding + hyperedges 数据流补齐 + cost 治理）留 v4.1（Feature 140，含 MapReduce 架构升级）"
     specs:
       - "001"
       - "002"
