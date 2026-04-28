@@ -5,7 +5,14 @@
 
 ## [Unreleased]
 
-_(no unreleased changes yet — see [4.0.1] below for the latest release)_
+### Added — design artifacts only（无代码改动，不触发 release）
+
+- **Feature 140 设计阶段定稿**（specs/140-spectra-doc-pipeline-quality/）— Spectra v4.1.0 文档生产线质量重构的完整设计制品（spec.md / plan.md / tasks.md / 77 项 GATE_DESIGN checklist）。基于 MapReduce 架构（cluster orchestrator + Sonnet map + Opus reduce + first-fit-decreasing 装箱），解决 v4.0.1 fail-loud 临时治理掩盖的 6 类质量问题：ADR hallucinate / hyperedges 无效 / narrative template 化 / --include-docs 半实现 / graph.html 不一致 / context 不可观测。Codex adversarial review 已捕捉 2 个设计阶段 bug 并修复（HIGH: ADR migrate 谓词 OR 误用；MEDIUM: 超大 cluster 截断丢模块）。
+- **MapReduce 架构权威设计文档**（docs/spectra-v4.1-mapreduce-architecture.md）+ **三 Feature 路线图**（docs/spectra-v4-hotfix-roadmap.md）+ **Feature 136→140 业务规划 v3**（docs/spectra-v4.1-feature-b-plan.md）。
+- **Feature 141 路线规划**（symbol-level graph，留 v4.2.0）— 把图谱粒度从模块文件级降到代码符号级（class/function/method），让 God Nodes 识别真实代码核心抽象。
+
+待 Feature 140 实施完成后将以 v4.1.0 minor release。
+
 
 ## [4.0.1] — 2026-04-27
 
