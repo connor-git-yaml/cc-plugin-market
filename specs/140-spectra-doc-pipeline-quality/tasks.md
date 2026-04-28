@@ -52,8 +52,8 @@ estimatedEffort: "22-30 人天"
   - **前置任务**: T01
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001, FR-002
-  - **实施细节**: 实现三级 fallback chain：`community`（复用 `src/panoramic/community/` 的 Louvain 实现，minSize=3 / maxSize=15）→ `directory`（按文件目录 path.dirname 分组）→ `single`（整体 1 cluster）；每级捕获异常后降级；cluster 超过 maxSize=15 时按 module spec 大小排序截断尾部并设 `clusterTruncated: true`
-  - **验收**: 单元测试（T07）mock Louvain 失败后正确降级 directory；mock directory 失败后降级 single；cluster 划分结果符合 minSize/maxSize 约束
+  - **实施细节**: 实现三级 fallback chain：`community`（复用 `src/panoramic/community/` 的 Louvain 实现，minSize=3 / maxSize=15）→ `directory`（按文件目录 path.dirname 分组）→ `single`（整体 1 cluster）；每级捕获异常后降级；cluster 超过 maxSize=15 时**按 first-fit-decreasing 装箱算法拆分成多个子 cluster**（每个 ≤ 15 模块，零模块丢失），frontmatter 标 `clusterSplit: <N>`。**禁止用截断尾部静默丢弃模块**（Codex review finding 2）
+  - **验收**: 单元测试（T07）mock Louvain 失败后正确降级 directory；mock directory 失败后降级 single；cluster 划分结果符合 minSize/maxSize 约束；超 maxSize=15 的输入拆分后所有源模块仍出现在某个子 cluster 中（Set 等价性断言）
   - **预估**: 1 人天
 
 - [ ] T03: 实现 cluster-orchestrator.ts — Phase B Map 并发调度
@@ -80,20 +80,20 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T09）断言各 hook 在正确时机被调用，调用次数与 cluster 数一致
   - **预估**: 0.5 人天
 
-- [ ] T06: 实现 cluster-orchestrator.ts — token 预算截断逻辑
+- [ ] T06: 实现 cluster-orchestrator.ts — token 预算装箱拆分（修复 Codex review finding 2）
   - **前置任务**: T02
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001
-  - **实施细节**: 每 cluster 在喂入 map.fn 前，估算 token 数（chars / 3.5 粗算）；超 100k 时按 module spec 大小降序排序截断尾部（保留最大的），并在传递参数中附加 `clusterTruncated: true` 标记；shared header 不参与截断（始终包含）
-  - **验收**: 单元测试构造超 100k token 的 cluster，断言截断逻辑触发且 shared header 完整保留
+  - **实施细节**: 每 cluster 在喂入 map.fn 前，估算 token 数（chars / 3.5 粗算）；shared header 始终完整包含且预留固定额度（默认 15k）；剩余预算 ≤ 85k；若 cluster 模块 token 总和超剩余预算 → **first-fit-decreasing 装箱算法**：(1) 按 module spec token 大小降序排序；(2) 顺序放入子 bin，每 bin 容量 = 剩余预算；(3) 不能放入现有 bin 时新建 bin。结果：原 cluster 拆成 N 个子 cluster，每个 ≤ 100k 总预算，**零模块丢失**。frontmatter 标 `clusterSplit: <N>`。**禁止截断**
+  - **验收**: 单元测试构造超 100k token 的 cluster，断言：(1) 拆分后所有源模块仍出现在某个子 cluster 中（Set 等价性）；(2) 每个子 cluster 总 token ≤ 100k；(3) shared header 在每个子 cluster 中完整保留；(4) 不出现 clusterTruncated: true 字段
   - **预估**: 0.5 人天
 
 - [ ] T07: 单元测试 — 聚类策略 fallback chain
   - **前置任务**: T02
   - **影响文件**: `src/panoramic/__tests__/cluster-orchestrator-clustering.test.ts`（新建）
   - **FR 关联**: FR-002
-  - **实施细节**: 测试用例：(1) Louvain 成功 → community clusters；(2) Louvain 抛异常 → fallback directory；(3) directory 失败 → fallback single；(4) 输入 < minSize=3 → single；(5) cluster maxSize=15 超限时截断
-  - **验收**: `npx vitest run` 全 5 用例通过；覆盖 fallback chain 的所有分支
+  - **实施细节**: 测试用例：(1) Louvain 成功 → community clusters；(2) Louvain 抛异常 → fallback directory；(3) directory 失败 → fallback single；(4) 输入 < minSize=3 → single；(5) cluster maxSize=15 超限时拆分成多个子 cluster（first-fit-decreasing），断言所有源模块仍存在于某个子 cluster 中（Set 等价性）
+  - **验收**: `npx vitest run` 全 5 用例通过；覆盖 fallback chain 的所有分支；用例 5 显式断言无模块丢失
   - **预估**: 0.5 人天
 
 - [ ] T08: 单元测试 — Map 并发调度 + Reduce 重试
@@ -400,20 +400,20 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；mock LLM 不依赖真实 API
   - **预估**: 0.5 人天
 
-- [ ] T43: 实现 FR-006 — 旧 ADR supersede notice
+- [ ] T43: 实现 FR-006 — 旧 ADR supersede notice（修复 Codex review finding 1）
   - **前置任务**: T37（删除 hardcoded 函数后才需处理旧 ADR）
   - **影响文件**: `src/panoramic/pipelines/adr-migration.ts`（新建）、`src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-006
-  - **实施细节**: 新建 `adr-migration.ts`，导出 `migrateOldAdrs(adrDir: string): void`；对每个旧 ADR 文件（检测条件：frontmatter 无 `generatedByModel` 字段 或 `status !== 'superseded'`）：(1) 将 frontmatter `status` 改为 `superseded`；(2) 追加 `supersededBy: <新 ADR 路径>` 字段（若新 ADR 已生成）或 `supersededAt: "4.1.0"`；(3) 不删除文件；在 batch-orchestrator 的 ADR 生成后调用 `migrateOldAdrs`
-  - **验收**: 集成测试（T44）断言旧 ADR 文件存在且 status=superseded；新 ADR 生成后旧 ADR 含 supersededBy 字段
+  - **实施细节**: 新建 `adr-migration.ts`，导出 `migrateOldAdrs(adrDir: string, currentBatchAdrPaths: Set<string>): void`。**legacy 判定谓词必须用 AND，且排除当前批次产物**：旧 ADR = `frontmatter.generatedByModel` 字段缺失 **AND** `frontmatter.status !== 'superseded'` **AND** 文件路径**不在** `currentBatchAdrPaths` 集合内。(1) 满足全部条件 → frontmatter `status` 改为 `superseded` + 追加 `supersededAt: "4.1.0"`；(2) 不删除文件；(3) 在 batch-orchestrator 的 ADR 生成完成后、传入新批次 ADR 路径集合调用 `migrateOldAdrs`。**禁止用 OR 连接谓词**（OR 会让新生成的 proposed/accepted 状态 ADR 被误判为旧 ADR 立即 supersede 自己，是 Codex review 已识别的高危逻辑 bug）
+  - **验收**: 集成测试（T44）断言旧 ADR 被 supersede 且新生成 ADR **不被 supersede**
   - **预估**: 1 人天
 
-- [ ] T44: 集成测试 — 旧 ADR supersede + 新 ADR 生成
+- [ ] T44: 集成测试 — 旧 ADR supersede + 新 ADR 生成（含 anti-regression assertion）
   - **前置任务**: T43
   - **影响文件**: `tests/integration/adr-supersede.test.ts`（新建）
   - **FR 关联**: FR-006
-  - **实施细节**: 准备含旧格式 ADR 的 fixture（模拟 v4.0.x 产出，无 generatedByModel 字段）；执行 mock batch；断言：(1) 旧 ADR 文件仍存在；(2) 旧 ADR frontmatter status=superseded；(3) 新 ADR 含 generatedByModel 字段；(4) 旧 ADR supersededBy 指向新 ADR
-  - **验收**: 全部断言通过
+  - **实施细节**: 准备含旧格式 ADR 的 fixture（模拟 v4.0.x 产出，无 generatedByModel 字段）；执行 mock batch；断言：(1) 旧 ADR 文件仍存在且 status=superseded；(2) 新 ADR 含 generatedByModel 字段；(3) **关键 anti-regression**：新生成 ADR 在 migrate 后 frontmatter.status **保持 proposed/accepted**，绝不能被改成 superseded（防止 Codex review 已识别的谓词逻辑 bug 复现）；(4) 旧 ADR 文件路径不在 currentBatchAdrPaths 时才被处理
+  - **验收**: 全部断言通过；特别是 anti-regression 断言（新 ADR 不被 supersede）
   - **预估**: 0.5 人天
 
 - [ ] T45: 集成测试 — ADR 4 fixture 跨项目 distinct 率

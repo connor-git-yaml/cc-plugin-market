@@ -540,11 +540,13 @@ token 计数使用粗算（chars / 3.5）。
 
 ---
 
-### NFR-002：每个 LLM 调用 input ≤ 100k tokens
+### NFR-002：每个 LLM 调用 input ≤ 100k tokens（保证全模块覆盖，不静默丢弃）
 
-**描述**：cluster orchestrator 保证每个 Map call 的 input token 数 ≤ 100k（chunk budget 100k，支持在 Sonnet 4.6 的 200k 上下文内工作，留 100k 给 output 与缓冲）。cluster 内容超出时按 spec 大小排序截断尾部，frontmatter 标注 `clusterTruncated: true`。
+**描述**：cluster orchestrator 保证每个 Map call 的 input token 数 ≤ 100k（chunk budget 100k，支持在 Sonnet 4.6 的 200k 上下文内工作，留 100k 给 output 与缓冲）。
 
-**验证方式**：集成测试 mock token 计数器，构造超出 100k 的 cluster，断言截断逻辑触发且产物包含截断标记。
+**超大 cluster 处理（基于 Codex review finding 2 修正）**：cluster 经初始 Louvain 划分后若 token 总和超 100k，**必须按确定性算法拆分成多个子 cluster**，每个子 cluster ≤ 100k。**禁止用"按 spec 大小排序截断尾部"等方式静默丢弃模块**——这会违反"项目规模与模型容量解耦"的核心承诺（架构文档 §一）。拆分策略：按模块 spec 大小贪心装箱（first-fit decreasing），保证每个模块进入 exactly 1 个子 cluster，**零模块丢失**。子 cluster 在 Reduce 阶段与同源 cluster 的输出一并合并去重。frontmatter 仅标注 `clusterSplit: <count>`（记录拆分数量），不再使用 `clusterTruncated` 字段。
+
+**验证方式**：(1) 单元测试构造超 100k 的合成 cluster，断言所有模块都出现在拆分后的某个子 cluster 中（Set 等价性）；(2) 集成测试断言 batch 产物覆盖所有源模块的 ADR/narrative/hyperedge 引用，无任何模块被静默丢弃。
 
 ---
 

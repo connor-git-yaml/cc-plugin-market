@@ -112,7 +112,7 @@ export async function clusterDispatch<TIn, TMap, TRed>(
 2. **Map 失败容忍**：单个 cluster failure 不中断整体；最终 ≥ 50% cluster 成功才算交付（否则 fail-closed）
 3. **Reduce 失败重试**：1 次重试，仍失败则 fail-closed（不写产物）
 4. **Concurrency 控制**：固定 maxConcurrency=4（避免 Anthropic API 限流；可配）
-5. **token 预算**：每 cluster Map call input ≤ 100k tokens（典型 15 模块 × 5k = 75k + shared header 10k = 85k，留缓冲到 100k）；超出时按 cluster 内 module spec 大小排序，截断尾部 + frontmatter `clusterTruncated: true`
+5. **token 预算**：每 cluster Map call input ≤ 100k tokens（典型 15 模块 × 5k = 75k + shared header 10k = 85k，留缓冲到 100k）；超出时**按 first-fit-decreasing 装箱算法拆分成多个子 cluster**，保证每个模块进入 exactly 1 个子 cluster（零模块丢失）；frontmatter 标 `clusterSplit: <N>`。**禁止用截断尾部方式静默丢弃模块**（违反 §一"项目规模与模型容量解耦"承诺；Codex review 已识别的问题）
 
 ### Merge confidence 评分
 
@@ -312,7 +312,7 @@ Phase C: Reduce（单次去重 + 合并）
 |------|------|------|------|
 | 跨 cluster 决策被丢失（cluster A 引入 / B 实现）| 中 | 高 | (1) shared header 提供全局 inventory；(2) Reduce 用 opus；(3) confidence 分级让用户知道哪些是 single-cluster 决策 |
 | Reduce 阶段幻觉级联（合并出原 candidates 不存在的内容）| 中 | 高 | Reduce LLM 收到的是 Zod-validated structured candidates，不是自由文本；evidenceRefs 程序化校验过滤掉 LLM 编造 |
-| Cluster 划分不均（某 cluster 30 模块超 token 预算）| 中 | 中 | maxSize=15 硬上限；超出按 spec 大小截断尾部 + 标 truncated |
+| Cluster 划分不均（某 cluster 30 模块超 token 预算）| 中 | 中 | maxSize=15 硬上限；超出按 first-fit-decreasing 装箱拆分成子 cluster（零模块丢弃，仅 runtime 增加），frontmatter 标 `clusterSplit: <N>` |
 | Map 并发过高导致 Anthropic API 429 | 中 | 中 | maxConcurrency=4 默认；可配；遇 429 自动 backoff（标准 SDK 已支持）|
 | 单 cluster Map 失败导致整体 ADR 不完整 | 中 | 中 | 50% 成功阈值兜底；< 50% → fail-closed 不写部分产物（避免误导）|
 | Cluster 划分本身崩溃（community detection 失败）| 低 | 高 | Fallback chain：community → directory → single；都 fail 才报错 |
