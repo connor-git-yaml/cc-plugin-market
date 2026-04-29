@@ -172,3 +172,30 @@ A 的调研结果决定：
 3. 启动顺序是否调整（如先 D 后 B）？
 
 回答上述后即可启动 Phase 3 第一波（B 或 D 的第一个 Feature）。
+
+---
+
+## Resolution
+
+Phase 3 主题已在 M-103 Blueprint 选定为：**"大规模可靠性（B）+ AI-Native 输出（D 的子集）"**
+
+**理由（基于 4 份材料的客观证据）**：
+
+1. **B（大项目实战优化）确认为最现实债务**：Spectra v4.0.0 三方对比报告验证时使用 karpathy/micrograd（6 文件），M-101 postmortem L4 教训明确指出"5 模块 < 120s"假设未在真实大项目验证。Phase 3 必须先建立 500+ 文件项目的实测基线，才能说 Spectra "生产就绪"。
+
+2. **Python AST 失败（P0）改变了原 Proposal 的排序假设**：M-102 Proposal 在写 D（AI for AI）时隐含了"各语言 MCP 图工具可用"的前提，但 Python 项目的 graph.json 完全没有代码节点，所有 MCP graph 工具在 Python 项目上形同虚设。Python AST 修复作为 v4.x patch 独立进行，Phase 3 在其完成基础上拓展 Python 大型项目场景。
+
+3. **D（AI for AI）的高 ROI 不变，但范围收窄**：Phase 3 先做"AI Essence 输出格式"（单模块 ≤200 token 机器可读摘要），这是 D 的核心价值落地，多 runtime 适配（Cursor/Continue 集成）列为 Wave 3 调研事项，不强制承诺交付。
+
+**Python AST 真相对各候选的影响**：
+- **A（F6 Graphify 集成）**：归档。Python AST 修复后，Spectra 自身可以提取 Python 图数据，Graphify 集成的差异化价值降低。外部依赖风险（fork 风险）不变，延期评估。
+- **C（spec-driver 平台化）**：归档。价值偏团队多人场景，当前主要用户是个人/小团队，等用户群扩大再做。
+
+**未选中的候选**：
+- 方向 A（F6 Graphify 集成）→ 归档，等 Python AST 成熟后重新评估集成价值
+- 方向 C（spec-driver 平台化深化）→ 延期，列为 Phase 4 候选
+- 方向 D 的多 runtime 全量适配 → 缩减为 Wave 3 调研阶段，不列为 Phase 3 承诺交付
+
+详见 `specs/M-103-phase3-scale-ai-native/blueprint.md`。
+
+Resolved at: 2026-04-29
