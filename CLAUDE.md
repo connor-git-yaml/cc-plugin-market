@@ -110,6 +110,18 @@ TypeScript 5.x + Node.js 20.x+ 项目，详见 package.json。跨任务稳定的
 - 提交前必须执行全量单元测试 `npx vitest run` 并确认零失败；测试不过不允许提交
 - 提交前必须执行 `npm run build` 确认类型检查零错误
 - 新增功能或修复 bug 时，对应的单元测试必须在同一个提交中包含
+
+### 模型选择策略
+
+按"质量优先 + 成本可控"原则分场景选择模型：
+
+- **生产代码（implement / 修复 / 重构）**：尽量使用 **Opus**（claude-opus-4-7）保证质量。生产代码的 bug 在 review/test 阶段不一定能完全捕获，错误成本高于 LLM 调用成本
+- **测试场景（验证 / 端到端测试 / fixture 跑 batch）**：使用 **Sonnet**（claude-sonnet-4-6）节约 token，因为测试目的是验证流程通畅、暴露问题，不需要最强模型
+- **设计阶段（specify / plan / tasks）**：默认 Sonnet 即可；复杂架构决策可临时升 Opus
+- **诊断阶段（fix-report 5-Why 根因追溯）**：使用 Opus（spec-driver-fix 已默认如此）
+- **审查阶段（spec-review / quality-review / verify）**：默认 Sonnet 即可；critical 项目可升 Opus
+
+实施时通过 spec-driver.config.yaml 的 `agents.{agent_id}.model` 配置控制；临时覆盖用 `--preset quality-first`（全局升 Opus）。**禁止把成本作为约束牺牲生产代码质量** — Opus 调用即使贵 5x，少一个生产 bug 就回本。
 <!-- END SHARED SECTION: code-quality -->
 
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-mainline-focus.md` 同步，请勿手动编辑区块内容。
