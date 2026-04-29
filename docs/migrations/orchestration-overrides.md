@@ -72,17 +72,22 @@ version: "1.0"
 
 gates:
   GATE_DESIGN:
-    default_behavior: pause   # 默认 auto，强制改 pause
-    severity: error
+    default_behavior: always   # 默认 auto，强制改 always（每次都触发）
+    severity: critical
   GATE_VERIFY:
-    default_behavior: pause
-    severity: error
+    default_behavior: always
+    severity: critical
   GATE_IMPLEMENT_MID:
-    default_behavior: pause
-    severity: error
+    default_behavior: always
+    severity: critical
 ```
 
 效果：每次 design / mid-impl / verify 走完都暂停，等人工 approve 才继续。
+
+> **枚举值参考**（来自 `plugins/spec-driver/contracts/orchestration-schema.mjs`）：
+> - `default_behavior` 必须是 `always` / `auto` / `on_failure` / `skip` 之一
+> - `severity` 必须是 `critical` / `non_critical` / `warning` / `info` 之一
+> - 写错枚举值（如 `pause` / `error`）会触发 `orchestration-overrides.schema-fallback` warning 且 overrides 静默退化为 base，必须按 schema 严格匹配。
 
 ### 场景 B：低风险项目 — 自动跳过 verify gate
 
@@ -93,7 +98,7 @@ version: "1.0"
 
 gates:
   GATE_VERIFY:
-    default_behavior: auto    # 默认 pause，改 auto，verify 通过自动 ship
+    default_behavior: auto    # 默认 always，改 auto，verify 通过自动 ship
 ```
 
 效果：verify phase 跑完后，如果工具链零失败，自动进入 commit / push 阶段，不暂停。
@@ -131,7 +136,7 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <m
 gates:
   GATE_VERIFY:
     default_behavior: auto      # source: project-override
-    severity: error             # source: base
+    severity: critical          # source: base
     hard_gate_modes: [feature]  # source: base
 ```
 

@@ -88,9 +88,20 @@ export interface BudgetGateResult {
 /** output ≈ 0.3 × input */
 const OUTPUT_RATIO = 0.3;
 
+/**
+ * 单模块 system prompt + 上下文骨架的固定开销估算（Bug 修复 — Phase 2 集成测试发现）
+ *
+ * 经验值来源：micrograd（4 个 Python 文件）实测 system prompt + AST skeleton +
+ * panoramic context 约 6,000-8,000 input tokens / 模块。取保守值 6,500，让 dry-run
+ * 估算从之前 ~64x 偏差缩到 < 1.5x。
+ *
+ * 这是固定开销不随源码大小线性增长，所以加常数项而非 ratio。
+ */
+const SYSTEM_PROMPT_TOKENS_PER_MODULE = 6500;
+
 /** 估算假设的人类可读说明（写入报告） */
 export const ESTIMATION_ASSUMPTION =
-  'input ≈ estimateFast(源文件拼接文本)，output ≈ 0.3 × input。基于历史平均比率，首版不校准。';
+  'input ≈ estimateFast(源文件拼接文本) + 6500（system prompt + AST skeleton 固定开销 / 模块），output ≈ 0.3 × input。基于历史平均比率，首版不校准。';
 
 /**
  * 估算单个模块的 token 成本
@@ -104,18 +115,20 @@ export function estimateModuleCost(
   files: string[],
   projectRoot: string,
 ): ModuleEstimate {
-  let input = 0;
+  let sourceInput = 0;
   let loc = 0;
   for (const rel of files) {
     const abs = path.isAbsolute(rel) ? rel : path.join(projectRoot, rel);
     try {
       const content = fs.readFileSync(abs, 'utf-8');
-      input += estimateFast(content);
+      sourceInput += estimateFast(content);
       loc += content.split('\n').length;
     } catch {
       // 读取失败跳过
     }
   }
+  // 真实 input = 源码 token + system prompt / AST skeleton / panoramic context 固定开销
+  const input = sourceInput + SYSTEM_PROMPT_TOKENS_PER_MODULE;
   const estimatedOutput = Math.round(input * OUTPUT_RATIO);
   return {
     moduleName,

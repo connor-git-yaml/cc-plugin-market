@@ -25,25 +25,42 @@ afterEach(() => {
 });
 
 describe('estimateModuleCost', () => {
-  it('空文件列表返回零估算', () => {
+  // system prompt + AST skeleton + panoramic context 固定开销（来自 budget-gate.ts SYSTEM_PROMPT_TOKENS_PER_MODULE）
+  const SYSTEM_PROMPT_TOKENS = 6500;
+
+  it('空文件列表只含 system prompt 固定开销（修正 dry-run 64x 偏差）', () => {
     const est = estimateModuleCost('empty', [], tmpDir);
-    expect(est.estimatedInput).toBe(0);
-    expect(est.estimatedOutput).toBe(0);
+    // 不再是 0 — 即使没源码也要算 system prompt 开销
+    expect(est.estimatedInput).toBe(SYSTEM_PROMPT_TOKENS);
+    expect(est.estimatedOutput).toBe(Math.round(SYSTEM_PROMPT_TOKENS * 0.3));
     expect(est.loc).toBe(0);
   });
 
-  it('基于 estimateFast 计算 input，output 为 0.3 × input', () => {
+  it('基于 estimateFast 计算 input + system prompt 累加，output 为 0.3 × input', () => {
     const file = 'a.ts';
     fs.writeFileSync(path.join(tmpDir, file), 'const x = 1;\n'.repeat(100));
     const est = estimateModuleCost('m', [file], tmpDir);
-    expect(est.estimatedInput).toBeGreaterThan(0);
+    // estimatedInput = 源码 token + system prompt 固定开销
+    expect(est.estimatedInput).toBeGreaterThan(SYSTEM_PROMPT_TOKENS);
     expect(est.estimatedOutput).toBe(Math.round(est.estimatedInput * 0.3));
     expect(est.loc).toBe(101); // 100 行 + 1 trailing newline
   });
 
-  it('读取失败的文件静默跳过', () => {
+  it('system prompt 固定开销让 dry-run 偏差从 64x 缩到 < 1.5x（Phase 2 集成测试发现）', () => {
+    // 模拟 micrograd 单文件场景：源文件 ~30 行 ≈ 200 tokens
+    const file = 'engine.py';
+    fs.writeFileSync(path.join(tmpDir, file), 'class Value:\n    pass\n'.repeat(15));
+    const est = estimateModuleCost('engine', [file], tmpDir);
+    // 源码估算约 100-200 token；加上 6500 system prompt 后总估算应 ≥ 6500
+    // 实测真实 LLM 调用约 7000-8000 input/模块（micrograd 案例），偏差应 < 1.5x
+    expect(est.estimatedInput).toBeGreaterThanOrEqual(SYSTEM_PROMPT_TOKENS);
+    expect(est.estimatedInput).toBeLessThan(SYSTEM_PROMPT_TOKENS + 5000);
+  });
+
+  it('读取失败的文件静默跳过，但 system prompt 开销仍算', () => {
     const est = estimateModuleCost('bad', ['nonexistent.ts'], tmpDir);
-    expect(est.estimatedInput).toBe(0);
+    // 即使所有文件都读取失败，仍有 system prompt 固定开销
+    expect(est.estimatedInput).toBe(SYSTEM_PROMPT_TOKENS);
   });
 });
 
