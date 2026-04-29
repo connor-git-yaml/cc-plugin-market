@@ -82,9 +82,14 @@ export async function generateDebtIntelligence(
   }
 
   diagnostics.push(...report.diagnostics.messages);
+  // Feature 145 P2（T021）：诊断日志输出 docsScanned、openQuestions.length、ruleCandidates
+  // 字段名与 DebtDiagnostics 定义保持一致；ruleCandidates 表示规则匹配阶段被识别为候选 open question 的数量。
+  // 用于排查 P2 根因：docsScanned=0 说明 projectRoot 传值有问题；docsScanned>0 但 openQuestions 为空说明内容匹配问题
   diagnostics.push(
     `扫描 ${report.diagnostics.filesScanned} 个源文件，跳过 ${report.diagnostics.filesSkipped} 个，` +
-      `扫描 ${report.diagnostics.docsScanned} 个 design-doc，LLM 调用 ${report.diagnostics.llmCalls} 次`,
+      `扫描 ${report.diagnostics.docsScanned} 个 design-doc，` +
+      `发现 ${report.openQuestions.length} 个 open question（ruleCandidates=${report.diagnostics.ruleCandidates}），` +
+      `LLM 调用 ${report.diagnostics.llmCalls} 次`,
   );
 
   // 报告中的语言标签严格遵循 languages 过滤器，避免列出未扫描的语言

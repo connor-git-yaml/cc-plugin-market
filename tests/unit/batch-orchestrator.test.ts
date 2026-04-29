@@ -1,6 +1,7 @@
 /**
  * batch-orchestrator 单元测试
  * 验证多语言编排核心功能：图合并、跨语言检测、跨语言提示、断点恢复（T066-T075）
+ * Feature 145 T016-T017：designDocAbsPaths 磁盘优先合并策略
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -10,6 +11,7 @@ import {
   mergeGraphsForTopologicalSort,
   detectCrossLanguageRefs,
   generateCrossLanguageHint,
+  buildDesignDocAbsPaths,
 } from '../../src/batch/batch-orchestrator.js';
 import { loadCheckpoint, saveCheckpoint, clearCheckpoint } from '../../src/batch/checkpoint.js';
 import { groupFilesByLanguage } from '../../src/batch/language-grouper.js';
@@ -438,5 +440,60 @@ describe('batch-orchestrator 单元测试', () => {
       await Promise.allSettled(pending);
       expect(results.sort((a, b) => a - b)).toEqual([10, 20]);
     });
+  });
+});
+
+// ============================================================
+// Feature 145 T016-T017：buildDesignDocAbsPaths 磁盘优先合并策略
+// ============================================================
+
+describe('buildDesignDocAbsPaths (Feature 145 P1)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-p1-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // T016：writtenFiles=[] 但 outputDir/project/ 下有 .md 文件 → designDocAbsPaths 非空
+  it('T016: writtenFiles 为空但 outputDir/project/ 有 .md 文件 → designDocAbsPaths 包含磁盘文件', () => {
+    // 在 tmpDir 下创建 outputDir/project/ 目录和两个 .md 文件
+    const outputDir = path.join(tmpDir, 'output');
+    const projectDir = path.join(outputDir, 'project');
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, 'spec1.md'), '# spec1', 'utf-8');
+    fs.writeFileSync(path.join(projectDir, 'spec2.md'), '# spec2', 'utf-8');
+
+    const projectRoot = path.join(tmpDir, 'project-root');
+    fs.mkdirSync(projectRoot, { recursive: true });
+
+    // writtenFiles 为空（模拟 generateBatchProjectDocs 未返回任何文件）
+    const { paths, fromDocsCount, fromDiskCount } = buildDesignDocAbsPaths(
+      [],
+      projectRoot,
+      outputDir,
+    );
+
+    // 应从磁盘扫描到 2 个 .md 文件
+    expect(paths.length).toBe(2);
+    expect(fromDocsCount).toBe(0);
+    expect(fromDiskCount).toBe(2);
+    // hyperedge 集成不应被跳过（designDocAbsPaths.length > 0）
+  });
+
+  // T017：outputDir/project/ 不存在 → designDocAbsPaths 为空但不抛出异常
+  it('T017: outputDir/project/ 目录不存在 → designDocAbsPaths 为空，不抛异常', () => {
+    const outputDir = path.join(tmpDir, 'nonexistent-output');
+    const projectRoot = path.join(tmpDir, 'project-root');
+    fs.mkdirSync(projectRoot, { recursive: true });
+
+    // 断言不抛异常
+    expect(() => {
+      const { paths } = buildDesignDocAbsPaths([], projectRoot, outputDir);
+      expect(paths).toHaveLength(0);
+    }).not.toThrow();
   });
 });

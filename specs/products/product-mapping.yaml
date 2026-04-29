@@ -10,7 +10,7 @@
 
 products:
   spectra:
-    description: "Spectra v4.0.1 — 信任修复 hotfix（Feature 135）。修复 v4.0.0 实测中暴露的 4 类 bug：(1) ADR pipeline 默认禁用 + 中和遗留 hallucinated ADR 文件（需 --enable-adr 显式开启）；(2) --hyperedges flag 静默无效升级为 fail-loud WARNING（含成功路径 0 结果可见性）；(3) generatedBy frontmatter 版本字符串回归修复（动态读 package.json）；(4) --mode reading help 文字纠正 + TTY hint。架构性修复（ADR evidence-binding + hyperedges 数据流补齐 + cost 治理）留 v4.1（Feature 140，含 MapReduce 架构升级）"
+    description: "Spectra v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）。(1) PythonLanguageAdapter 新增 extractSymbolNodes()，graph.json 含函数/类符号节点（kind=component）和 containment 边；(2) designDocAbsPaths 磁盘优先合并策略，hyperedge 首次运行即生效；(3) debt-intelligence-pipeline 诊断日志增强；(4) budget-gate 加入 SYSTEM_PROMPT_TOKEN_OVERHEAD=2000 和 CONTEXT_ASSEMBLY_MULTIPLIER=1.35 常量，压缩 dry-run 偏差"
     specs:
       - "001"
       - "002"

@@ -1,8 +1,11 @@
 /**
  * PythonLanguageAdapter 单元测试 + 集成测试
  * 覆盖 Feature 028 全部 MUST 级别 FR
+ * Feature 145：新增 extractSymbolNodes 单元测试
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { PythonLanguageAdapter } from '../../src/adapters/python-adapter.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
@@ -264,6 +267,128 @@ describe('PythonLanguageAdapter.getTerminology()', () => {
 
   it('moduleSystem 描述 Python 的 package/module 系统 (FR-019)', () => {
     expect(terminology.moduleSystem).toMatch(/package|module|import/i);
+  });
+});
+
+// ════════════════════════ extractSymbolNodes 测试 (T010-T012 Feature 145) ════════════════════════
+
+describe('PythonLanguageAdapter.extractSymbolNodes() (Feature 145)', () => {
+  it('T010: fixture .py 含 def add(x, y) → 节点 ID={relPath}#add，kind=component，边 relation=contains', async () => {
+    const adapter = new PythonLanguageAdapter();
+    // mock analyzeFile 返回含一个 function export 的 skeleton
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [{ name: 'add', kind: 'function', signature: 'def add(x, y)', jsDoc: null }],
+      imports: [],
+      raw: '',
+    });
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-143-'));
+    try {
+      const pyFile = path.join(tmpDir, 'math.py');
+      fs.writeFileSync(pyFile, 'def add(x, y): return x + y\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+
+      // 应有至少一个 ExtractionResult（math.py）
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      const result = results[0]!;
+
+      // 应含 module 节点（文件级）和 component 节点（函数级）
+      const moduleNode = result.nodes.find(n => n.kind === 'module');
+      expect(moduleNode).toBeDefined();
+      expect(moduleNode!.id).toBe('math.py');
+
+      const componentNode = result.nodes.find(n => n.kind === 'component');
+      expect(componentNode).toBeDefined();
+      expect(componentNode!.id).toBe('math.py#add');
+      expect(componentNode!.label).toBe('add');
+
+      // 应含 containment 边
+      const containsEdge = result.edges.find(e => e.relation === 'contains');
+      expect(containsEdge).toBeDefined();
+      expect(containsEdge!.source).toBe('math.py');
+      expect(containsEdge!.target).toBe('math.py#add');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T011: 无 exports 的 .py 文件 → 不抛异常，产出 module 节点，无 containment 边', async () => {
+    const adapter = new PythonLanguageAdapter();
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [],
+      imports: [],
+      raw: '',
+    });
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-143-'));
+    try {
+      const pyFile = path.join(tmpDir, 'empty_module.py');
+      fs.writeFileSync(pyFile, '# empty\n', 'utf-8');
+
+      let results: Awaited<ReturnType<typeof adapter.extractSymbolNodes>>;
+      await expect(async () => {
+        results = await adapter.extractSymbolNodes(tmpDir);
+      }).not.toThrow();
+
+      results = await adapter.extractSymbolNodes(tmpDir);
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      const result = results[0]!;
+
+      // 含文件级 module 节点
+      const moduleNode = result.nodes.find(n => n.kind === 'module');
+      expect(moduleNode).toBeDefined();
+
+      // 无 containment 边（无 exports）
+      const containsEdges = result.edges.filter(e => e.relation === 'contains');
+      expect(containsEdges).toHaveLength(0);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T012: 同名函数跨两个 .py 文件 → ID 全局唯一（不冲突）', async () => {
+    const adapter = new PythonLanguageAdapter();
+    // 两个文件都有 forward 函数
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [{ name: 'forward', kind: 'function', signature: 'def forward(x)', jsDoc: null }],
+      imports: [],
+      raw: '',
+    });
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-143-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'a.py'), 'def forward(x): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'b.py'), 'def forward(x): pass\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+
+      // 两个文件各产出一个 ExtractionResult
+      expect(results.length).toBe(2);
+
+      // 收集所有节点 ID，检查全局唯一
+      const allIds = results.flatMap(r => r.nodes.map(n => n.id));
+      const uniqueIds = new Set(allIds);
+      expect(uniqueIds.size).toBe(allIds.length);
+
+      // a.py#forward 和 b.py#forward 均存在
+      expect(uniqueIds.has('a.py#forward')).toBe(true);
+      expect(uniqueIds.has('b.py#forward')).toBe(true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
   });
 });
 

@@ -22,8 +22,9 @@ export type ArtifactKind = 'document' | 'api-spec' | 'image';
 
 /**
  * 提取节点类型（对应 GraphNode.kind 新增的四个枚举值 + document）
+ * Feature 145：新增 'component'（函数/类符号）和 'module'（文件级模块）以支持 Python AST 桥接
  */
-export type ExtractedNodeKind = 'document' | 'api' | 'api-schema' | 'event' | 'diagram' | 'service';
+export type ExtractedNodeKind = 'document' | 'api' | 'api-schema' | 'event' | 'diagram' | 'service' | 'component' | 'module';
 
 // ============================================================
 // Zod Schema 定义
@@ -38,8 +39,11 @@ export const ExtractedNodeSchema = z.object({
   id: z.string(),
   /** 人类可读显示标签 */
   label: z.string(),
-  /** 节点类型 */
-  kind: z.enum(['document', 'api', 'api-schema', 'event', 'diagram', 'service']),
+  /**
+   * 节点类型
+   * Feature 145：新增 'component'（函数/类符号）和 'module'（文件级模块）以支持 Python AST 桥接
+   */
+  kind: z.enum(['document', 'api', 'api-schema', 'event', 'diagram', 'service', 'component', 'module']),
   /** 来源文件路径（提取器内部使用绝对路径，合并到图谱时建议转换为相对路径） */
   source_file: z.string(),
   /** 置信度标签：EXTRACTED（确定性提取）| INFERRED（LLM 推断）| AMBIGUOUS（弱信号） */

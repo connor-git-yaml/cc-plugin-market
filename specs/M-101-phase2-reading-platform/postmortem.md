@@ -188,3 +188,25 @@ Wave 1 中另一个 Claude Code session 在 `claude/cool-kapitsa-478213` 自动 
 ## 7. 一句话总结
 
 **Phase 2 把 Spectra 从"分层文档生成器"做成了"真正能 ship 给团队用的代码阅读平台"**，但教训是：**架构 / 配置 / 性能 / 字段提取的边界，单测护不住，必须靠真实 E2E 守。**
+
+---
+
+## 追加教训（2026-04-29）— Python 集成测试盲区（Feature 145）
+
+### 暴露的问题
+
+Phase 2 集成测试（micrograd 项目）发现 `graph.json` 仅含 4 个 spec 节点、0 边、0 hyperedge，与预期的"函数级知识图谱"完全不符。根因是：
+
+1. **P0（新功能缺失）**：`PythonLanguageAdapter.analyzeFile()` 已能提取 `CodeSkeleton.exports`，但知识图谱构建器（`graph-builder.ts`）不消费这些符号，只消费 spec 文件节点。桥接层在适配器开发阶段（Feature 028）被遗漏。
+2. **P1（集成 bug）**：`designDocAbsPaths` 依赖本轮 `writtenFiles`，首次运行时为空，导致 hyperedge 被静默跳过。
+3. **P2/P3**：debt-scanner 可观测性不足、干跑偏差未校准。
+
+### 根本原因
+
+Python 适配器（Feature 028）的开发阶段只覆盖了单适配器单测，**没有端到端场景测试**（"在真实 Python 项目上跑 batch，检查 graph.json 输出"）。这个测试盲区使得桥接层缺口直到 Phase 2 集成测试才被发现。
+
+### 教训与改进建议
+
+1. **适配器开发阶段就要配套 e2e 场景测试**：新增 `LanguageAdapter` 实现时，除单测外，应同时在项目级 batch 上跑一次最小化端到端验证（检查 graph.json 中有无该语言的节点和边）。
+2. **知识图谱数据源桥接要有验收门禁**：每新增适配器，应在 `graph-builder.test.ts` 中添加对应语言的 ExtractionResult 注入测试（类似 Feature 145 T013）。
+3. **hyperedge 路径的首次运行场景要有独立测试**：磁盘状态依赖（`writtenFiles` 是否为空）是典型的时序 bug，应在 batch 编排器测试中覆盖"空 outputDir 首次运行"场景。

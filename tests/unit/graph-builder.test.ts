@@ -2,6 +2,7 @@
  * graph-builder 单元测试
  * 覆盖字段结构完整性、节点去重、边去重、容错降级、性能测试
  * 验收标准：AC-101-03、AC-101-04、AC-101-07、AC-101-09
+ * Feature 145 T013：Python ExtractionResult 注入验证
  */
 import { describe, it, expect } from 'vitest';
 import { performance } from 'node:perf_hooks';
@@ -9,6 +10,7 @@ import { buildKnowledgeGraph } from '../../src/panoramic/graph/graph-builder.js'
 import type { ArchitectureIR, ArchitectureIRElement, ArchitectureIRRelationship } from '../../src/panoramic/models/architecture-ir-model.js';
 import type { DocGraph, DocGraphSpecNode, DocGraphReference } from '../../src/panoramic/builders/doc-graph-builder.js';
 import type { CrossReferenceLink } from '../../src/models/module-spec.js';
+import type { ExtractionResult } from '../../src/extraction/extraction-types.js';
 
 // ============================================================
 // Mock 数据辅助函数
@@ -324,5 +326,67 @@ describe('buildKnowledgeGraph — 性能测试（AC-101-09）', () => {
     expect(result.nodes.length).toBe(nodeCount);
     // 因无向图去重，边数量可能少于 10000（相同源目节点的重复边会合并）
     expect(result.graph.edgeCount).toBe(result.links.length);
+  });
+});
+
+// ============================================================
+// Feature 145 T013: Python ExtractionResult 注入 buildKnowledgeGraph
+// ============================================================
+
+describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
+  /**
+   * 构造 3 个模拟 .py 文件的 ExtractionResult，
+   * 验证 buildKnowledgeGraph 输出中 kind='component' 节点 ≥ 3，containment 边 ≥ 3
+   */
+  it('3 个 .py fixture ExtractionResult 注入后，输出含 ≥ 3 个 component 节点和 ≥ 3 条 containment 边', () => {
+    // 模拟 a.py：含函数 forward
+    const resultA: ExtractionResult = {
+      nodes: [
+        { id: 'a.py', kind: 'module', label: 'a', source_file: 'a.py', confidence: 'EXTRACTED' },
+        { id: 'a.py#forward', kind: 'component', label: 'forward', source_file: 'a.py', confidence: 'EXTRACTED' },
+      ],
+      edges: [
+        { source: 'a.py', target: 'a.py#forward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+
+    // 模拟 b.py：含函数 backward
+    const resultB: ExtractionResult = {
+      nodes: [
+        { id: 'b.py', kind: 'module', label: 'b', source_file: 'b.py', confidence: 'EXTRACTED' },
+        { id: 'b.py#backward', kind: 'component', label: 'backward', source_file: 'b.py', confidence: 'EXTRACTED' },
+      ],
+      edges: [
+        { source: 'b.py', target: 'b.py#backward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+
+    // 模拟 c.py：含类 Value（含函数 add）
+    const resultC: ExtractionResult = {
+      nodes: [
+        { id: 'c.py', kind: 'module', label: 'c', source_file: 'c.py', confidence: 'EXTRACTED' },
+        { id: 'c.py#Value', kind: 'component', label: 'Value', source_file: 'c.py', confidence: 'EXTRACTED' },
+        { id: 'c.py#add', kind: 'component', label: 'add', source_file: 'c.py', confidence: 'EXTRACTED' },
+      ],
+      edges: [
+        { source: 'c.py', target: 'c.py#Value', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+        { source: 'c.py', target: 'c.py#add', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+
+    const graphJson = buildKnowledgeGraph({
+      extractionResults: [resultA, resultB, resultC],
+    });
+
+    // 验证 component 节点数量 ≥ 3
+    const componentNodes = graphJson.nodes.filter(n => n.kind === 'component');
+    expect(componentNodes.length).toBeGreaterThanOrEqual(3);
+
+    // 验证 containment 边数量 ≥ 3
+    const containsEdges = graphJson.links.filter(e => e.relation === 'contains');
+    expect(containsEdges.length).toBeGreaterThanOrEqual(3);
+
+    // 验证 extraction 数据源被记录
+    expect(graphJson.graph.sources).toContain('extraction');
   });
 });

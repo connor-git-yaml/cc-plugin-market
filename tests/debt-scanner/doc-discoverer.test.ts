@@ -1,5 +1,6 @@
 /**
  * doc-discoverer + detectOpenQuestions 单元测试
+ * Feature 145 T020：确认 discoverDesignDocs 能找到 README.md（P2 根因诊断）
  */
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
@@ -19,6 +20,17 @@ function makeTmp(files: Record<string, string>): string {
 }
 
 describe('discoverDesignDocs', () => {
+  // T020: Feature 145 P2 — 确认 discoverDesignDocs 能找到 README.md
+  it('T020: fixture 目录含 README.md → discoverDesignDocs 返回包含 README.md 的非空路径列表', () => {
+    const root = makeTmp({
+      'README.md': '# Python micrograd\n\nTODO: add more features\n',
+      'src/main.py': 'def main(): pass',
+    });
+    const found = discoverDesignDocs(root);
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.some(p => p.endsWith('README.md'))).toBe(true);
+  });
+
   it('找到根目录与一级子目录中的 README/architecture/notes/design（大小写不敏感）', () => {
     const root = makeTmp({
       'README.md': '# hi',

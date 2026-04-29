@@ -3,6 +3,23 @@
 本文件记录 cc-plugin-market（Spectra + Spec Driver）仓库的重要变更。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [v4.1.0] - 2026-04-29
+
+> **Spectra v4.1.0 Python AST 函数级 Graph + Phase 2 Bug 修复** — P0（新功能）：Python 项目 `graph.json` 现在包含函数/类符号节点；P1/P2（bug 修复）：hyperedge 首次运行即生效、debt-scanner 诊断日志增强。
+>
+> **注**：原 spec 的 P3（dry-run 偏差校准）在 rebase 时发现已由 master `5bb416f` 用 `SYSTEM_PROMPT_TOKENS_PER_MODULE = 6500` 单常量方案抢先修复，本 feature 撤回 P3 改动避免重复实现。
+
+### Added — spectra
+
+- **Python 函数级 Graph（P0）** — `PythonLanguageAdapter` 新增 `extractSymbolNodes(projectRoot)` 方法，遍历所有 `.py` 文件，将 `CodeSkeleton.exports` 中的函数/类转换为 `ExtractionResult` 格式（`kind='component'`，`id={relPath}#{symbolName}`），并生成文件级 `module` 节点和 `contains` containment 边，注入 `buildKnowledgeGraph()` 第四路数据源（FR-001~FR-005）。
+- **ExtractionResult kind 类型扩展** — `extraction-types.ts` 的 `ExtractedNodeSchema` 和 `ExtractedNodeKind` 新增 `'component'` 和 `'module'` 枚举值，与 `GraphNode.kind` 对齐（Feature 145 P0 支撑）。
+- **Codex 对抗审查衍生改进** — `python-adapter.ts` 解析失败 metadata 标记 + batch-orchestrator 聚合 warn（C001）；`buildDesignDocAbsPaths` 检测嵌套子目录 warn（W002）；`buildDependencyGraph` 失败升 warn 级别（W004）；`extraction-types` 测试覆盖完整 8 种 kind（I002）。
+
+### Fixed — spectra
+
+- **hyperedge 首次运行即生效（P1）** — `batch-orchestrator.ts` 中 `designDocAbsPaths` 构建逻辑改为"磁盘优先"合并策略：先取本轮 `writtenFiles`，再主动扫描 `outputDir/project/` 目录下已存在的 `.md` 文件，去重合并。解决首次运行时 `writtenFiles` 为空导致 hyperedge 被静默跳过的 bug（FR-006/FR-007）。
+- **debt-scanner 诊断日志增强（P2）** — `debt-intelligence-pipeline.ts` 诊断日志新增 `openQuestions.length` 和 `ruleCandidates`，便于排查 Open Questions 为空的根因（FR-008/FR-009）。
+
 ## [Unreleased]
 
 ### Added — design artifacts only（无代码改动，不触发 release）

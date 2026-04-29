@@ -9,6 +9,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
+import type { ExtractionResult } from '../extraction/extraction-types.js';
 import type {
   LanguageAdapter,
   AnalyzeFileOptions,
@@ -97,6 +98,124 @@ export class PythonLanguageAdapter implements LanguageAdapter {
   }
 
   /**
+   * 递归扫描项目根目录下所有 `.py` 文件，排除语言生态常见忽略目录。
+   *
+   * 复用 `defaultIgnoreDirs` 并叠加 Python 项目惯例（test/tests/dist 等）。
+   * 由 `extractSymbolNodes` 与 `buildDependencyGraph` 共用，避免 DRY 违反。
+   *
+   * @throws 当根目录不可读时抛出（调用方按需 try-catch 决定是否吞掉）
+   */
+  private scanPyFiles(resolvedRoot: string): string[] {
+    const ignoreNames = new Set([
+      ...this.defaultIgnoreDirs,
+      'test', 'tests', 'dist', 'node_modules', '.git',
+    ]);
+    const pyFiles: string[] = [];
+    function walk(dir: string): void {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (!ignoreNames.has(entry.name) && !entry.name.startsWith('.')) {
+            walk(path.join(dir, entry.name));
+          }
+        } else if (entry.isFile() && entry.name.endsWith('.py')) {
+          pyFiles.push(path.join(dir, entry.name));
+        }
+      }
+    }
+    walk(resolvedRoot);
+    return pyFiles;
+  }
+
+  /**
+   * 提取 Python 项目所有 .py 文件的符号节点（函数/类），转换为 ExtractionResult 格式
+   *
+   * Feature 145 P0：桥接 Python AST（CodeSkeleton.exports）到知识图谱 ExtractionResult 第四路数据源。
+   * 每个 .py 文件产出一个 ExtractionResult，包含：
+   * - 文件级 module 节点（id = relPath, kind = 'module'）
+   * - 每个 export 符号的 component 节点（id = {relPath}#{name}, kind = 'component'）
+   * - module → component 的 containment 边（relation = 'contains'）
+   *
+   * NF-004：处理完每个文件后 skeleton 立即丢弃，不集中持有全量数据，避免内存压力。
+   */
+  async extractSymbolNodes(projectRoot: string): Promise<ExtractionResult[]> {
+    const resolvedRoot = path.resolve(projectRoot);
+
+    let pyFiles: string[];
+    try {
+      pyFiles = this.scanPyFiles(resolvedRoot);
+    } catch {
+      // 目录不可读时返回空结果，不抛出
+      return [];
+    }
+
+    const results: ExtractionResult[] = [];
+
+    for (const absPath of pyFiles) {
+      const relPath = path.relative(resolvedRoot, absPath).split(path.sep).join('/');
+      let skeleton: CodeSkeleton;
+      try {
+        skeleton = await this.analyzeFile(absPath);
+      } catch {
+        // 单文件解析失败不影响整体，仍产出文件级 module 节点；
+        // metadata.parseError 标记用于调用方聚合统计（Codex 对抗审查 C001 修复）
+        results.push({
+          nodes: [
+            {
+              id: relPath,
+              kind: 'module',
+              label: path.basename(relPath, '.py'),
+              source_file: relPath,
+              confidence: 'EXTRACTED',
+              metadata: { parseError: true },
+            },
+          ],
+          edges: [],
+        });
+        continue;
+      }
+
+      const nodes: ExtractionResult['nodes'] = [];
+      const edges: ExtractionResult['edges'] = [];
+
+      // 文件级 module 节点
+      nodes.push({
+        id: relPath,
+        kind: 'module',
+        label: path.basename(relPath, '.py'),
+        source_file: relPath,
+        confidence: 'EXTRACTED',
+      });
+
+      // 每个导出符号（函数/类）产出 component 节点 + containment 边
+      for (const symbol of skeleton.exports) {
+        const symbolId = `${relPath}#${symbol.name}`;
+        nodes.push({
+          id: symbolId,
+          kind: 'component',
+          label: symbol.name,
+          source_file: relPath,
+          confidence: 'EXTRACTED',
+          metadata: {
+            symbolKind: symbol.kind,
+            signature: symbol.signature ?? undefined,
+          },
+        });
+        edges.push({
+          source: relPath,
+          target: symbolId,
+          relation: 'contains',
+          confidence: 'EXTRACTED',
+          weight: 1.0,
+        });
+      }
+
+      results.push({ nodes, edges });
+    }
+
+    return results;
+  }
+
+  /**
    * 构建 Python 项目的模块依赖图
    * 扫描所有 .py 文件，解析 import 语句，仅对本地模块构建有向边
    */
@@ -106,24 +225,8 @@ export class PythonLanguageAdapter implements LanguageAdapter {
   ): Promise<DependencyGraph> {
     const resolvedRoot = path.resolve(projectRoot);
 
-    // 递归扫描所有 .py 文件，排除语言生态常见忽略目录（复用 defaultIgnoreDirs + 额外补充）
-    const ignoreNames = new Set([
-      ...this.defaultIgnoreDirs,
-      'test', 'tests', 'dist', 'node_modules', '.git',
-    ]);
-    const pyFiles: string[] = [];
-    function scan(dir: string): void {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (entry.isDirectory()) {
-          if (!ignoreNames.has(entry.name) && !entry.name.startsWith('.')) {
-            scan(path.join(dir, entry.name));
-          }
-        } else if (entry.isFile() && entry.name.endsWith('.py')) {
-          pyFiles.push(path.join(dir, entry.name));
-        }
-      }
-    }
-    scan(resolvedRoot);
+    // 递归扫描所有 .py 文件，排除语言生态常见忽略目录
+    const pyFiles = this.scanPyFiles(resolvedRoot);
 
     // 构建模块名 → 绝对路径映射（basename 不含扩展名）
     const pyModuleMap = new Map<string, string>();

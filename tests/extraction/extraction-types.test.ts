@@ -60,7 +60,12 @@ describe('ExtractedNodeSchema', () => {
   });
 
   it('支持所有合法 kind 枚举值', () => {
-    const kinds = ['document', 'api', 'api-schema', 'event', 'diagram'] as const;
+    // Feature 145（Codex I002）：补全枚举至全部 8 种 kind
+    // 'service' 来自 Feature 107，'component'/'module' 来自 Feature 145（Python 符号桥接）
+    const kinds = [
+      'document', 'api', 'api-schema', 'event', 'diagram',
+      'service', 'component', 'module',
+    ] as const;
     for (const kind of kinds) {
       const result = ExtractedNodeSchema.safeParse({
         id: `${kind}:test`,

@@ -1032,6 +1032,43 @@ export async function runBatch(
             : [],
         );
 
+      // Feature 145 P0：Python 符号提取（不依赖 flag，始终执行）
+      // 从所有 .py 文件提取函数/类符号节点，注入 buildKnowledgeGraph 第四路
+      let pythonSymbolResults: import('../extraction/extraction-types.js').ExtractionResult[] = [];
+      try {
+        const { PythonLanguageAdapter } = await import('../adapters/python-adapter.js');
+        const pythonAdapter = new PythonLanguageAdapter();
+        pythonSymbolResults = await pythonAdapter.extractSymbolNodes(resolvedRoot);
+        if (pythonSymbolResults.length > 0) {
+          const symbolCount = pythonSymbolResults.reduce(
+            (sum, r) => sum + r.nodes.filter(n => n.kind === 'component').length, 0,
+          );
+          // Codex 对抗审查 C001 修复：聚合 parseError 数，避免"全失败伪装成功"
+          const filesFailed = pythonSymbolResults.reduce(
+            (sum, r) => sum + r.nodes.filter(n => n.kind === 'module' && n.metadata?.['parseError'] === true).length, 0,
+          );
+          const totalFiles = pythonSymbolResults.length;
+          if (filesFailed === totalFiles && totalFiles > 0) {
+            // 所有 .py 文件都解析失败 — 强信号，必须 warn
+            logger.warn(
+              `Python 符号提取：${totalFiles} 个文件全部解析失败（可能是 tree-sitter Python WASM 加载或 grammar 问题）；` +
+              `graph.json 仅含 module 节点，缺失全部函数/类 component 节点`,
+            );
+          } else if (filesFailed > 0) {
+            logger.warn(
+              `Python 符号提取部分失败：${filesFailed}/${totalFiles} 个文件解析失败，` +
+              `成功提取 ${symbolCount} 个符号节点`,
+            );
+          } else {
+            logger.info(
+              `Python 符号提取完成：${totalFiles} 个文件，${symbolCount} 个符号节点`,
+            );
+          }
+        }
+      } catch (pyErr) {
+        logger.warn(`Python 符号提取失败，跳过: ${String(pyErr)}`);
+      }
+
       // Feature 107: 多模态提取管道（--include-docs / --include-images）
       let extractionResults: import('../extraction/index.js').ExtractionResult[] | undefined;
       if (options.includeDocs || options.includeImages) {
@@ -1048,11 +1085,17 @@ export async function runBatch(
         }
       }
 
+      // 合并 Python 符号提取结果和多模态提取结果（Feature 145 ADR-002）
+      const mergedResults = [
+        ...pythonSymbolResults,
+        ...(extractionResults ?? []),
+      ];
+
       const graphJson = buildKnowledgeGraph({
         architectureIR: projectDocsResult?.architectureIR,
         docGraph,
         crossReferenceLinks,
-        extractionResults,  // Feature 107 第四路数据源
+        extractionResults: mergedResults.length > 0 ? mergedResults : undefined,  // Feature 107 + 143 第四路数据源
       });
 
       // Feature 133 P1-1（adversarial-review post-fix）：anchor + hyperedge 集成
@@ -1091,9 +1134,24 @@ export async function runBatch(
         }
       } else {
         try {
-          const designDocAbsPaths = (projectDocs ?? [])
-            .map((rel) => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
-            .filter((abs) => fs.existsSync(abs));
+          const { paths: designDocAbsPaths, fromDocsCount, fromDiskCount, nestedDirsDetected } = buildDesignDocAbsPaths(
+            projectDocs ?? [],
+            resolvedRoot,
+            resolvedOutputDir,
+          );
+          // FR-007：诊断日志，显示 designDocAbsPaths 来源与数量
+          logger.info(
+            `hyperedge: designDocAbsPaths.length=${designDocAbsPaths.length} ` +
+            `(fromDocs=${fromDocsCount}, fromDisk=${fromDiskCount})`,
+          );
+          // Codex 对抗审查 W002 修复：嵌套子目录的 .md 不参与 anchor/hyperedge 集成，向用户暴露
+          if (nestedDirsDetected.length > 0) {
+            logger.warn(
+              `hyperedge: outputDir/project/ 下检测到 ${nestedDirsDetected.length} 个子目录` +
+              `（${nestedDirsDetected.join(', ')}），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。` +
+              `当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。`,
+            );
+          }
 
           const codeNodes: PanoramicGraphNode[] = graphJson.nodes.filter(
             (n) => !DOC_NODE_KINDS.has(n.kind),
@@ -1453,7 +1511,10 @@ async function buildGraphForLanguageGroup(
       }
       return langGraph;
     } catch (err) {
-      logger.debug(`语言专属依赖图构建失败，回落到目录图: ${String(err)}`);
+      // Codex 对抗审查 W004 修复：升 warn 级别，避免静默回落到不含 import 边的目录图
+      logger.warn(
+        `语言专属依赖图构建失败（${langGroup.adapterId}），回落到目录图（不含 import 边）: ${String(err)}`,
+      );
     }
   }
 
@@ -1481,5 +1542,56 @@ async function buildFallbackGraph(
     parserUsed: 'tree-sitter',
   }));
   return buildDirectoryGraph(langGroup.files, projectRoot, emptySkeletons);
+}
+
+// ============================================================
+// Feature 145 P1：designDocAbsPaths "磁盘优先"合并策略
+// ============================================================
+
+/**
+ * 构建 hyperedge/anchor 集成所需的设计文档绝对路径列表
+ *
+ * 合并策略（ADR-003）：
+ * 1. fromDocs：本轮 generateBatchProjectDocs 写出的文件（来自 writtenFiles）
+ * 2. fromDisk：主动扫描 outputDir/project/ 目录下已存在的 .md 文件（磁盘优先）
+ * 去重后合并，解决首次运行时 writtenFiles 为空导致 hyperedge 被跳过的 bug（FR-006）。
+ *
+ * 导出供单元测试使用。
+ */
+export function buildDesignDocAbsPaths(
+  projectDocs: string[],
+  resolvedRoot: string,
+  resolvedOutputDir: string,
+): { paths: string[]; fromDocsCount: number; fromDiskCount: number; nestedDirsDetected: string[] } {
+  // 来自本轮 generator 输出（以 resolvedRoot 为基准解析相对路径）
+  const fromProjectDocs = projectDocs
+    .map(rel => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
+    .filter(abs => fs.existsSync(abs));
+
+  // 主动扫描 outputDir/project/ 目录下已存在的 .md 文件（磁盘优先）
+  // 架构假设：outputDir/project/ 为扁平结构（无子目录），readdirSync 非递归覆盖全部产物 .md
+  // Codex 对抗审查 W002 修复：检测到子目录时返回告警信号，调用方负责输出 warn
+  const projectDir = path.join(resolvedOutputDir, 'project');
+  const fromDisk: string[] = [];
+  const nestedDirsDetected: string[] = [];
+  if (fs.existsSync(projectDir)) {
+    for (const entry of fs.readdirSync(projectDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
+        fromDisk.push(path.join(projectDir, entry.name));
+      } else if (entry.isDirectory()) {
+        nestedDirsDetected.push(entry.name);
+      }
+    }
+  }
+
+  // 去重合并（fromProjectDocs 优先，fromDisk 补充）
+  const merged = [...new Set([...fromProjectDocs, ...fromDisk])];
+
+  return {
+    paths: merged,
+    fromDocsCount: fromProjectDocs.length,
+    fromDiskCount: fromDisk.length,
+    nestedDirsDetected,
+  };
 }
 
