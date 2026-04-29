@@ -1,0 +1,7 @@
+{
+  "name": "small-ts-project",
+  "version": "1.0.0",
+  "description": "E2E 测试用 fixture：最小化 TypeScript 项目，用于验证 Spectra batch pipeline 的产物结构",
+  "type": "module",
+  "private": true
+}

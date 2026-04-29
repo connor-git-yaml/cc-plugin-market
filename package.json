@@ -24,6 +24,7 @@
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:e2e": "vitest run --project e2e",
     "lint": "tsc --noEmit",
     "docs:sync:agents": "node scripts/sync-agent-docs.mjs",
     "repo:sync": "node scripts/repo-sync.mjs",

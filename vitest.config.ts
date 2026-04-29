@@ -62,6 +62,15 @@ export default defineConfig({
           testTimeout: 120_000,
         },
       },
+      // Feature 144: E2E Fixture 测试基础设施
+      // 不调真实 LLM，用 vi.mock('@anthropic-ai/sdk') 完整跑 batch pipeline，断言产物结构
+      {
+        test: {
+          name: 'e2e',
+          include: ['tests/e2e/**/*.e2e.test.ts'],
+          testTimeout: 60_000,
+        },
+      },
     ],
   },
 });
