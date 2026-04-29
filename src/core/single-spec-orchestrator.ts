@@ -42,6 +42,12 @@ export interface GenerateSpecOptions {
   skipEnrichment?: boolean;
   /** 覆盖 LLM 模型（batch 中小模块可降级为 Sonnet） */
   modelOverride?: string;
+  /**
+   * 生成本 spec 的批处理模式（Bug 142）。
+   * batch 流程传入 effectiveMode 后，会写入 frontmatter 的 generatedByMode 字段，
+   * 用于后续 mode-aware 增量缓存判定；单文件 generate 不传，frontmatter 中不写入该字段。
+   */
+  generatedByMode?: 'full' | 'reading' | 'code-only';
 }
 
 export interface GenerateSpecResult {
@@ -626,6 +632,11 @@ ${sections.businessLogic}
     // bundle_copy / derived 类型的 spec 由 spec-store / docs-bundle 等调用方
     // 在各自路径独立设置，不受此默认影响。
     sourceKind: 'canonical',
+    // Bug 142：batch 流程传入 effectiveMode 时写入 generatedByMode；
+    // 单文件 generate 不传，frontmatter 中省略该字段。
+    ...(options.generatedByMode !== undefined
+      ? { generatedByMode: options.generatedByMode }
+      : {}),
   });
 
   // 构建 fileInventory（使用短路径：基于 sourceTarget 公共前缀）

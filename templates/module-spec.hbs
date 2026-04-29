@@ -21,6 +21,7 @@ skeletonHash: {{frontmatter.skeletonHash}}
 durationMs: {{frontmatter.durationMs}}
 llmModel: "{{frontmatter.llmModel}}"
 fallbackReason: {{#if frontmatter.fallbackReason}}"{{frontmatter.fallbackReason}}"{{else}}null{{/if}}
+{{/if}}{{#if frontmatter.generatedByMode}}generatedByMode: {{frontmatter.generatedByMode}}
 {{/if}}---
 
 <a id="module-spec"></a>

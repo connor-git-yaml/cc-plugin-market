@@ -57,6 +57,8 @@ export interface FrontmatterInput {
   sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
   /** 派生来源 spec 的 outputPath（Feature 128）；canonical 时为 null 或 undefined */
   derivedFrom?: string | null;
+  /** 生成本 spec 时的批处理模式（Bug 142）；单文件 generate 不传，batch 流程传入 effectiveMode */
+  generatedByMode?: 'full' | 'reading' | 'code-only';
 }
 
 /**
@@ -118,6 +120,11 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
   }
   if (data.derivedFrom !== undefined) {
     frontmatter.derivedFrom = data.derivedFrom;
+  }
+
+  // 批处理模式标记（Bug 142）；仅 batch 流程传入，单文件 generate 不写入
+  if (data.generatedByMode !== undefined) {
+    frontmatter.generatedByMode = data.generatedByMode;
   }
 
   return frontmatter;

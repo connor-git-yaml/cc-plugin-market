@@ -20,7 +20,8 @@ export type DeltaChangeReason =
   | 'missing-spec'
   | 'metadata-missing'
   | 'skeleton-changed'
-  | 'dependency-propagation';
+  | 'dependency-propagation'
+  | 'mode-changed';
 
 export interface DeltaTargetState {
   sourceTarget: string;
@@ -49,6 +50,12 @@ export interface DeltaRegeneratorOptions {
   dependencyGraph: DependencyGraph;
   moduleGroups: ModuleGroup[];
   storedSpecs: StoredModuleSpecSummary[];
+  /**
+   * 当前批处理的有效模式（Bug 142）。
+   * 传入时启用 mode-aware cache：旧 spec（无 generatedByMode）或 mode 不匹配时强制 cache miss。
+   * 不传入时 mode 检查跳过（向后兼容旧调用方，如不区分模式的纯增量场景）。
+   */
+  effectiveMode?: 'full' | 'reading' | 'code-only';
 }
 
 interface CurrentTargetSnapshot {
@@ -114,7 +121,11 @@ export class DeltaRegenerator {
       }
     }
 
-    const directChanges = detectDirectChanges(snapshots, options.storedSpecs);
+    const directChanges = detectDirectChanges(
+      snapshots,
+      options.storedSpecs,
+      options.effectiveMode,
+    );
     if (directChanges.length === 0) {
       return buildReport({
         generatedAt,
@@ -264,6 +275,7 @@ async function computeSkeletonHash(
 function detectDirectChanges(
   snapshots: CurrentTargetSnapshot[],
   storedSpecs: StoredModuleSpecSummary[],
+  effectiveMode?: 'full' | 'reading' | 'code-only',
 ): DeltaTargetState[] {
   const storedByTarget = new Map(storedSpecs.map((spec) => [spec.sourceTarget, spec]));
 
@@ -303,6 +315,22 @@ function detectDirectChanges(
           reason: 'skeleton-changed' as const,
           impactedBy: [],
         }];
+      }
+
+      // Bug 142：mode-aware cache 检查（仅当调用方传入 effectiveMode 时启用）。
+      // 旧 spec（缺失 generatedByMode）或 mode 不匹配 → 强制 cache miss（安全降级）。
+      // 不假设旧 spec 与当前 mode 兼容，宁可多生成一次。
+      if (effectiveMode !== undefined) {
+        if (!stored.generatedByMode || stored.generatedByMode !== effectiveMode) {
+          return [{
+            sourceTarget: snapshot.sourceTarget,
+            sourceFiles: snapshot.sourceFiles,
+            currentHash: snapshot.currentHash,
+            previousHash: stored.skeletonHash,
+            reason: 'mode-changed' as const,
+            impactedBy: [],
+          }];
+        }
       }
 
       return [];

@@ -172,6 +172,10 @@ async function buildMockModuleSpec(
       lastUpdated: new Date().toISOString(),
       confidence: 'high',
       skeletonHash: hash,
+      // Bug 142：mock spec 必须含 generatedByMode 字段，
+      // 否则第二次 incremental 运行时 stored.generatedByMode=undefined → mode-changed cache miss，
+      // 所有模块都会被强制重生成，破坏 "skipped jobs" 期望。
+      generatedByMode: 'full' as const,
     },
     sections: {
       intent: `${sourceTarget} intent`,

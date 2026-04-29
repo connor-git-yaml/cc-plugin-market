@@ -111,6 +111,43 @@ interface TruncateResult {
 }
 
 // ============================================================
+// 查询词拆分（Bug 142）
+// ============================================================
+
+/**
+ * 将查询字符串拆分为小写词项集合。
+ *
+ * 支持以下拆分规则：
+ * - PascalCase：'PQueue' → ['p', 'queue']（'p' 长度=1 被过滤，最终保留 ['queue']）
+ * - 连续大写：'XMLParser' → ['xml', 'parser']
+ * - 分隔符：空格 / `-` / `_` / `.` 全部视作分隔
+ *
+ * 处理规则：
+ * - 全部转小写
+ * - 长度 ≤ 1 的 token 被过滤（避免 'p' / 'i' 等单字符噪声匹配）
+ * - 去重后返回稳定顺序（基于 Set 插入顺序）
+ *
+ * 注意：中文字符不会被 PascalCase 正则改动，按原样进入分隔符拆分；
+ * 因此中文查询如「优先队列」不会被错误拆分（无空格时整段保留为一个 token）。
+ *
+ * @param q - 原始查询字符串
+ * @returns 去重、过滤后的小写 token 数组
+ */
+export function tokenize(q: string): string[] {
+  const normalized = q
+    .replace(/([a-z])([A-Z])/g, '$1 $2')         // 'PQueue' → 'P Queue'
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');  // 'XMLParser' → 'XML Parser'
+  return Array.from(
+    new Set(
+      normalized
+        .toLowerCase()
+        .split(/[\s\-_.]+/)
+        .filter((t) => t.length > 1),
+    ),
+  );
+}
+
+// ============================================================
 // GraphQueryEngine 核心类
 // ============================================================
 
@@ -327,11 +364,8 @@ export class GraphQueryEngine {
     const budget = options?.budget ?? 50;
     const depth = options?.depth ?? 2;
 
-    // 将查询词拆分为小写词项
-    const terms = question
-      .toLowerCase()
-      .split(/[\s\-_./\\]+/)
-      .filter((t) => t.length > 0);
+    // 将查询词拆分为小写词项（Bug 142：使用 tokenize 支持 PascalCase / 连续大写拆分）
+    const terms = tokenize(question);
 
     if (terms.length === 0) {
       return {

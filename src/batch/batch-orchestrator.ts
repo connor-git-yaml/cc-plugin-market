@@ -81,6 +81,22 @@ import type { BatchMode } from '../panoramic/qa/types.js';
 const _require = createRequire(import.meta.url);
 const SPECTRA_VERSION: string = (_require('../../package.json') as { version: string }).version;
 
+/**
+ * Bug 142：单模块重试累计 input token 预算上限。
+ * 超过该值时提前终止重试，避免相同 prompt 反复失败导致的 token 浪费。
+ * 默认 40_000（p-queue 实测：单模块合理上限 ~10k，4× 仍属充足容忍）。
+ * 可通过环境变量 SPECTRA_RETRY_TOKEN_BUDGET 覆盖。
+ */
+const RETRY_TOKEN_BUDGET = Number(process.env['SPECTRA_RETRY_TOKEN_BUDGET'] ?? 40_000);
+
+/**
+ * Bug 142：LLM 调用失败抛异常时（最常见失败模式），无法从 result.costMetadata 取到实际 token，
+ * 此时按估算值累积。基于 bench.ts 实测：单次失败的 input prompt 约 15k tokens。
+ * 这是关键修复点：若仅在成功路径累积 token，最常见的"LLM 调用本身失败"场景下
+ * cumulativeInputTokens 永远是 0，预算检查彻底失效。
+ */
+const ESTIMATED_FAILED_CALL_INPUT = 15_000;
+
 // ============================================================
 // 类型定义
 // ============================================================
@@ -411,6 +427,9 @@ export async function runBatch(
         dependencyGraph: mergedGraph,
         moduleGroups: groupResult.groups,
         storedSpecs: existingStoredSpecs,
+        // Bug 142：传入 effectiveMode 启用 mode-aware cache，
+        // 旧 spec（无 generatedByMode）或 mode 不匹配时强制 cache miss。
+        effectiveMode,
       });
     }
   }
@@ -654,6 +673,12 @@ export async function runBatch(
     let retryCount = 0;
     let moduleSuccess = false;
 
+    // Bug 142：单模块累计 input token 跟踪。
+    // 在「成功路径 + 失败路径」两侧都必须累积，否则最常见的 LLM 调用失败场景下，
+    // cumulativeInputTokens 永远为 0，预算检查彻底失效（参见 ESTIMATED_FAILED_CALL_INPUT 注释）。
+    let cumulativeInputTokens = 0;
+    let moduleTokenBudgetExceeded = false;
+
     // 各阶段耗时（毫秒）— 用于模块完成后打印可观测性摘要行
     const stageDurations: Partial<Record<string, number>> = {};
     const moduleStartTime = Date.now();
@@ -685,6 +710,9 @@ export async function runBatch(
             effectiveMode,
             sonnetModelId,
           }),
+          // Bug 142：将 batch effectiveMode 写入 spec frontmatter 的 generatedByMode 字段，
+          // 供下次 batch 运行的 mode-aware cache 判定使用。
+          generatedByMode: effectiveMode,
           onStageProgress: (progress) => {
             reporter.stage(moduleName, progress);
             if (progress.duration !== undefined) {
@@ -716,6 +744,11 @@ export async function runBatch(
               ...genOptions,
               existingVersion: storedSpec?.version,
             });
+            // Bug 142：root 分支也必须累积 token——否则 root 模块的 budget 永远是 0，
+            // short-circuit 在 root 路径无效（前次实施漏掉这里导致 review 发现 CRITICAL）。
+            if (result.costMetadata?.tokenUsage.input) {
+              cumulativeInputTokens += result.costMetadata.tokenUsage.input;
+            }
             collectedModuleSpecs.push(result.moduleSpec);
             generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
             // Feature 127：root 子模块也采集成本（mock 未返回时跳过）
@@ -759,6 +792,10 @@ export async function runBatch(
             ...genOptions,
             existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
           });
+          // Bug 142：非 root 分支累积 input token，供 catch 块统一做预算检查。
+          if (result.costMetadata?.tokenUsage.input) {
+            cumulativeInputTokens += result.costMetadata.tokenUsage.input;
+          }
 
           if (isMultiLang && group.language) {
             (result.moduleSpec.frontmatter as any).language = group.language;
@@ -821,6 +858,37 @@ export async function runBatch(
         moduleSuccess = true;
       } catch (error: any) {
         retryCount++;
+        // Bug 142：LLM 调用本身抛异常时（最常见失败模式），无法从 result.costMetadata 取到 token，
+        // 按估算值累积。这是关键修复点：仅靠成功路径累积无法覆盖此场景。
+        cumulativeInputTokens += ESTIMATED_FAILED_CALL_INPUT;
+
+        // Bug 142 hotfix（v4.0.2）：把 budget 检查从 retrospective 改为 forecast。
+        // 旧逻辑 `cumulativeInputTokens > RETRY_TOKEN_BUDGET` 是事后判断：
+        // default 配置下（maxRetries=3, ESTIMATED=15k, BUDGET=40k）3 次失败后 cumulative=45k
+        // 才触发 break，但此时 retryCount 已经达到 maxRetries 本来就会停，
+        // budget 检查只是给最后一次失败贴个不同 label，实际省 0 个 token。
+        // 新逻辑：再做一次重试是否会超预算？(forecast) 如果超 → 不再重试，标 reason 退出。
+        // 按 default 配置：第 2 次失败 cumulative=30k → 30k+15k=45k > 40k → break，
+        // 不进第 3 次，省 1 次 LLM 调用（~15k tokens）。
+        if (cumulativeInputTokens + ESTIMATED_FAILED_CALL_INPUT > RETRY_TOKEN_BUDGET) {
+          moduleTokenBudgetExceeded = true;
+          const failedModule: FailedModule = {
+            path: moduleName,
+            error:
+              `累计 input token ${cumulativeInputTokens} 已达预算上限 ${RETRY_TOKEN_BUDGET}，` +
+              `下一次重试预计将超出预算，提前终止重试。原始错误：${error.message ?? String(error)}`,
+            failedAt: new Date().toISOString(),
+            retryCount,
+            degradedToAstOnly: false,
+            reason: 'retry-budget-exceeded',
+          };
+          failed.push(failedModule);
+          checkedState.failedModules.push(failedModule);
+          reporter.complete(moduleName, 'failed');
+          break;
+        }
+
+        // Budget 与 maxRetries 互补：budget 控制 token 总量，maxRetries 控制失败次数。
         if (retryCount >= maxRetries) {
           const failedModule: FailedModule = {
             path: moduleName,
@@ -835,6 +903,10 @@ export async function runBatch(
         }
       }
     }
+
+    // 安全保险：moduleTokenBudgetExceeded 在 catch 块已 break，
+    // 此处仅用于消除"已声明未使用"的 TS 警告（保留变量便于未来观测性扩展）。
+    void moduleTokenBudgetExceeded;
 
     checkedState.lastUpdatedAt = new Date().toISOString();
     saveCheckpoint(checkedState, checkpointPath);
@@ -1306,7 +1378,9 @@ export async function runBatch(
   fs.mkdirSync(metaDir, { recursive: true });
   const summaryLogPathAbs = path.join(metaDir, `batch-summary-${Date.now()}.md`);
   fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
-  writeSummaryLog(summary, summaryLogPathAbs, costSummary);
+  // Bug 142：传入 failedModules，让 batch-summary markdown 含 "## 失败详情" 节，
+  // 用户能直接看到 reason（如 retry-budget-exceeded），不必翻 checkpoint。
+  writeSummaryLog(summary, summaryLogPathAbs, costSummary, checkedState.failedModules);
 
   // 步骤 7：生成人类友好的 README.md 索引
   try {

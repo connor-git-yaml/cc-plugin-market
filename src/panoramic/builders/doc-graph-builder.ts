@@ -40,6 +40,8 @@ export interface StoredModuleSpecSummary extends ExistingSpecDocument {
   sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
   /** 派生来源 spec 的路径；canonical 时为 null 或 undefined */
   derivedFrom?: string | null;
+  /** 生成本 spec 时的批处理模式（Bug 142）；旧 spec 缺失时为 undefined */
+  generatedByMode?: 'full' | 'reading' | 'code-only';
 }
 
 export interface DocGraphSpecNode {
@@ -160,6 +162,7 @@ export function scanStoredModuleSpecs(
         outputPath: normalizeProjectPath(filePath, projectRoot),
         sourceKind: metadata.sourceKind,
         derivedFrom: metadata.derivedFrom,
+        generatedByMode: metadata.generatedByMode,
       };
       return [document];
     })
@@ -391,6 +394,7 @@ function extractStoredModuleSpecSummary(content: string): {
   crossLanguageRefs?: string[];
   sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
   derivedFrom?: string | null;
+  generatedByMode?: 'full' | 'reading' | 'code-only';
   intentSummary: string;
 } | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
@@ -407,6 +411,7 @@ function extractStoredModuleSpecSummary(content: string): {
   let language: string | undefined;
   let sourceKind: 'canonical' | 'derived' | 'bundle_copy' | undefined;
   let derivedFrom: string | null | undefined;
+  let generatedByMode: 'full' | 'reading' | 'code-only' | undefined;
   const relatedFiles: string[] = [];
   const crossLanguageRefs: string[] = [];
   let inRelatedFiles = false;
@@ -477,6 +482,16 @@ function extractStoredModuleSpecSummary(content: string): {
       continue;
     }
 
+    if (line.startsWith('generatedByMode:')) {
+      const parsed = stripYamlScalar(line.slice('generatedByMode:'.length).trim());
+      if (parsed === 'full' || parsed === 'reading' || parsed === 'code-only') {
+        generatedByMode = parsed;
+      }
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
     if (line === 'relatedFiles:') {
       inRelatedFiles = true;
       inCrossLanguageRefs = false;
@@ -524,6 +539,7 @@ function extractStoredModuleSpecSummary(content: string): {
     crossLanguageRefs: crossLanguageRefs.length > 0 ? crossLanguageRefs : undefined,
     sourceKind,
     derivedFrom,
+    generatedByMode,
     intentSummary,
   };
 }

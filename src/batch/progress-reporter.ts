@@ -20,7 +20,7 @@
  * 参见 contracts/batch-module.md
  */
 import * as fs from 'node:fs';
-import type { StageProgress } from '../models/module-spec.js';
+import type { FailedModule, StageProgress } from '../models/module-spec.js';
 import type { CostSummary } from './cost-summary.js';
 import { renderSummaryCostSection } from './cost-summary.js';
 
@@ -227,11 +227,15 @@ export function createReporter(total: number, mode?: ProgressMode): ProgressRepo
  * @param summary - 批处理摘要
  * @param outputPath - 输出路径（specs/ 目录下）
  * @param costSummary - 可选的 LLM 成本汇总（Feature 127 FR-008），存在时追加 "LLM 成本汇总" 节
+ * @param failedModules - 可选的失败模块详情（Bug 142），含 reason / retryCount / error；
+ *                         传入时追加 "## 失败详情" 节，让用户能直接看到失败原因
+ *                         （如 retry-budget-exceeded），不必再翻 checkpoint 文件
  */
 export function writeSummaryLog(
   summary: BatchSummary,
   outputPath: string,
   costSummary?: CostSummary,
+  failedModules?: FailedModule[],
 ): void {
   const lines: string[] = [
     '# 批处理摘要日志',
@@ -258,6 +262,24 @@ export function writeSummaryLog(
   for (const mod of summary.modules) {
     const duration = mod.duration ? `${mod.duration}ms` : '-';
     lines.push(`| ${mod.path} | ${mod.status} | ${duration} |`);
+  }
+
+  // Bug 142：追加失败详情节，输出 reason / retryCount / error
+  if (failedModules && failedModules.length > 0) {
+    lines.push('');
+    lines.push('## 失败详情');
+    lines.push('');
+    lines.push('| 模块 | 原因 | 重试次数 | 错误 |');
+    lines.push('|------|------|---------|------|');
+    for (const fm of failedModules) {
+      const reason = fm.reason ?? '-';
+      // 错误消息可能包含管道符 / 换行，转义后截断到合理长度
+      const errorEscaped = fm.error
+        .replace(/\r?\n/g, ' ')
+        .replace(/\|/g, '\\|')
+        .slice(0, 500);
+      lines.push(`| ${fm.path} | ${reason} | ${fm.retryCount} | ${errorEscaped} |`);
+    }
   }
 
   // Feature 127：追加 LLM 成本汇总节

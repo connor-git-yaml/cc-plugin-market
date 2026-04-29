@@ -75,6 +75,8 @@ export const SpecFrontmatterSchema = z.object({
   llmModel: z.string().optional(),
   /** 降级原因（Feature 127）；未降级时为 null */
   fallbackReason: z.string().nullable().optional(),
+  /** 生成本 spec 时的批处理模式（Bug 142 修复）；旧 spec 缺失此字段时视为 cache miss */
+  generatedByMode: z.enum(['full', 'reading', 'code-only']).optional(),
   /** spec 身份类型（Feature 128）；缺失时应用层默认视为 'canonical'（向后兼容历史 spec） */
   sourceKind: z.enum(['canonical', 'derived', 'bundle_copy']).optional(),
   /** 派生来源 spec 的 outputPath（Feature 128，相对于 projectRoot）；canonical 时为 null 或 undefined */
@@ -235,6 +237,8 @@ export const FailedModuleSchema = z.object({
   failedAt: z.string().datetime(),
   retryCount: z.number().int().nonnegative(),
   degradedToAstOnly: z.boolean(),
+  /** 失败原因标识（Bug 142）；'retry-budget-exceeded' 表示累计 input token 超限 */
+  reason: z.string().optional(),
 });
 export type FailedModule = z.infer<typeof FailedModuleSchema>;
 
