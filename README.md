@@ -662,20 +662,139 @@ When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both t
 
 ### Per-Project Orchestration Overrides
 
-Customize phase sequences, gate behaviors, and concurrency per project via `.specify/orchestration-overrides.yaml` — like ESLint `extends` or Docker Compose `override.yml`. Plugin base `orchestration.yaml` stays untouched; you only override what differs.
+Customize phase sequences, gate behaviors, and concurrency per project via `.specify/orchestration-overrides.yaml` — like ESLint `extends` or Docker Compose `override.yml`. Plugin base `config/orchestration.yaml` stays untouched; you only override what differs. The resolver auto-detects the file and merges on every `/spec-driver:*` skill invocation — **no flags required**.
 
-Typical scenarios:
-- High-risk projects: force all gates to `pause` for human approval
-- Low-risk projects: auto-skip `GATE_VERIFY` to ship faster
-- CI environments: lower `parallel_scheduling.max_concurrent_tasks` to 1
+#### How it works
 
-Inspect the merged effective config:
-
-```bash
-node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <mode> --annotate
+```
+Plugin base                       Project override (optional)         Resolver auto-merges
+plugins/spec-driver/              .specify/orchestration-overrides    on every skill call
+  config/orchestration.yaml       .yaml
+        │                                  │                                  │
+        │  modes / gates /                 │  Write only the diff             │  /spec-driver:spec-driver-feature
+        │  parallel_scheduling             │                                  │  /spec-driver:spec-driver-fix
+        ▼                                  ▼                                  ▼
+                                  ┌────────────────────────┐
+                                  │  Effective Configuration  │ ← all skills run against this
+                                  └────────────────────────┘
 ```
 
-Full guide: [docs/migrations/orchestration-overrides.md](docs/migrations/orchestration-overrides.md)
+#### Supported override fields
+
+| Path | Merge semantic | Use case |
+|------|---------------|----------|
+| `modes.<mode>.phases` | Full replace | Add / remove / replace phase sequence for a mode |
+| `gates.<GATE_ID>` | Field-level merge | Override `default_behavior` / `severity` / `hard_gate_modes` per gate |
+| `parallel_scheduling.<field>` | Scalar replace | Tune `max_concurrent_tasks` etc. |
+
+#### 4-step workflow
+
+**Step 1** — Create the file in your project root:
+
+```bash
+mkdir -p .specify
+touch .specify/orchestration-overrides.yaml
+```
+
+**Step 2** — Write your overrides (see scenarios below).
+
+**Step 3** — Run any `/spec-driver:*` skill. The resolver auto-merges:
+
+```
+/spec-driver:spec-driver-fix  Fix login OAuth callback
+```
+
+**Step 4** — Verify your overrides took effect:
+
+```bash
+ORCH_CLI=~/.claude/plugins/cache/cc-plugin-market/spec-driver/4.0.0/scripts/orchestrator-cli.mjs
+node $ORCH_CLI effective-orchestration <mode> --annotate
+```
+
+The `--annotate` mode marks each field with `# source: base` or `# source: project-override`, so you can see at a glance what's overridden.
+
+#### Real scenarios
+
+**A. High-compliance project — force every gate to require human approval**
+
+```yaml
+version: "1.0"
+
+gates:
+  GATE_DESIGN:
+    default_behavior: always   # base: auto → always (always trigger gate)
+    severity: critical
+  GATE_VERIFY:
+    default_behavior: always
+    severity: critical
+  GATE_IMPLEMENT_MID:
+    default_behavior: always
+    severity: critical
+```
+
+**B. Low-risk project — auto-pass `GATE_VERIFY` when toolchain is green**
+
+```yaml
+version: "1.0"
+
+gates:
+  GATE_VERIFY:
+    default_behavior: auto    # base: always → auto (skip when zero failures)
+```
+
+**C. CI resource-constrained — serialize all parallel work**
+
+```yaml
+version: "1.0"
+
+parallel_scheduling:
+  max_concurrent_tasks: 1     # base: 3 → 1 (no parallel spec-review/quality-review)
+```
+
+**D. Strip a phase from a mode — minimal `fix` flow**
+
+```yaml
+version: "1.0"
+
+modes:
+  fix:
+    phases:                    # full replace: drop spec-review / quality-review subphases
+      - id: diagnose
+        name: Diagnose
+      - id: plan
+        name: Plan
+      - id: implement
+        name: Implement
+      - id: verify
+        name: Verify
+```
+
+#### Strict enum values (writing wrong values silently falls back to base)
+
+| Field | Allowed values |
+|-------|---------------|
+| `default_behavior` | `always` / `auto` / `on_failure` / `skip` |
+| `severity` | `critical` / `non_critical` / `warning` / `info` |
+
+⚠️ Writing `pause`, `error`, or other non-listed values triggers a `orchestration-overrides.schema-fallback` warning — the override is **silently discarded** and base behavior is used. Always use the exact strings above.
+
+#### Troubleshooting
+
+If the override seems not to take effect:
+
+```bash
+# Inspect diagnostics in JSON mode
+node $ORCH_CLI effective-orchestration <mode> --format json | jq '.diagnostics'
+```
+
+- `[]` → override is fully active
+- `level: warning, code: orchestration-overrides.schema-fallback` → enum value is wrong; the message points to the offending field
+
+#### Full reference
+
+- User guide: [`docs/migrations/orchestration-overrides.md`](docs/migrations/orchestration-overrides.md) — full migration / scenario examples
+- Schema contract: [`plugins/spec-driver/contracts/orchestration-overrides-contract.yaml`](plugins/spec-driver/contracts/orchestration-overrides-contract.yaml) — exhaustive field list and merge rules
+- Feature spec: [`specs/133-orchestration-overrides/spec.md`](specs/133-orchestration-overrides/spec.md)
 
 ### Supported Verification Languages
 
