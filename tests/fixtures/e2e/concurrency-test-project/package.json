@@ -1,0 +1,7 @@
+{
+  "name": "concurrency-test-project",
+  "version": "1.0.0",
+  "description": "Feature 146 E2E fixture：≥10 个独立模块，用于验证 Spectra batch pipeline 在并发模式下的行为",
+  "type": "module",
+  "private": true
+}

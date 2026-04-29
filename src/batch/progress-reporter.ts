@@ -28,8 +28,14 @@ import { renderSummaryCostSection } from './cost-summary.js';
 // 类型定义
 // ============================================================
 
-/** 进度报告输出模式 */
-export type ProgressMode = 'tty' | 'pipe';
+/**
+ * 进度报告输出模式
+ *
+ * - `tty`：交互终端模式（ANSI 控制码 + 实时刷新）
+ * - `pipe`：管道/CI 模式（纯文本行日志）
+ * - `silent`：静默模式（Feature 146 / TD-002）— 所有方法 no-op，用于测试或后台运行场景
+ */
+export type ProgressMode = 'tty' | 'pipe' | 'silent';
 
 export interface BatchSummary {
   totalModules: number;
@@ -63,12 +69,26 @@ export interface ProgressReporter {
 // 内部工具函数
 // ============================================================
 
-/** 渲染进度条字符串（TTY 模式复用） */
-function renderProgressBar(completed: number, total: number): string {
+/**
+ * 渲染进度条字符串（TTY 模式复用）。
+ *
+ * Feature 146 FR-010：扩展支持「进行中」三维状态。
+ * - active > 0 时：`[bar] X/N | 进行中: Y | 排队: Z`
+ * - active = 0 时：降级为原始二维格式 `[bar] X/N`（向后兼容）
+ *
+ * @param completed - 已完成模块数
+ * @param total     - 总模块数
+ * @param active    - 当前进行中的模块数（默认 0，等同未传入）
+ */
+export function renderProgressBar(completed: number, total: number, active: number = 0): string {
   const percent = total > 0 ? completed / total : 0;
   const barWidth = 20;
   const filled = Math.floor(percent * barWidth);
   const bar = '='.repeat(filled).padEnd(barWidth, ' ');
+  if (active > 0) {
+    const queued = Math.max(0, total - completed - active);
+    return `[${bar}] ${completed}/${total} | 进行中: ${active} | 排队: ${queued}`;
+  }
   return `[${bar}] ${completed}/${total}`;
 }
 
@@ -81,16 +101,70 @@ function renderProgressBar(completed: number, total: number): string {
  *
  * @param total - 模块总数
  * @param mode  - 输出模式（默认根据 process.stdout.isTTY 自动检测）
+ * @param options - Feature 146：可选配置，含 getActiveCount getter（FR-011：不改 ProgressReporter 接口签名）
  * @returns ProgressReporter
  */
-export function createReporter(total: number, mode?: ProgressMode): ProgressReporter {
+export function createReporter(
+  total: number,
+  mode?: ProgressMode,
+  options?: { getActiveCount?: () => number },
+): ProgressReporter {
   // 自动检测模式：isTTY 为 true 时使用 tty，否则使用 pipe
+  // 'silent' 模式必须显式传入，不会被自动选中
   const effectiveMode: ProgressMode = mode ?? (process.stdout.isTTY ? 'tty' : 'pipe');
 
   const startTime = Date.now();
   let completed = 0;
   const modules: BatchSummary['modules'] = [];
   const moduleStartTimes = new Map<string, number>();
+
+  // 读取「进行中」计数：未注入 getter 时返回 0（即降级为二维进度条，向后兼容）
+  const getActive = (): number => {
+    try {
+      return options?.getActiveCount?.() ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  // ============================================================
+  // Silent 模式实现（Feature 146 / TD-002）
+  // ============================================================
+
+  if (effectiveMode === 'silent') {
+    return {
+      start(modulePath: string): void {
+        moduleStartTimes.set(modulePath, Date.now());
+      },
+
+      stage(_modulePath: string, _progress: StageProgress): void {
+        // no-op
+      },
+
+      complete(
+        modulePath: string,
+        status: 'success' | 'failed' | 'skipped' | 'degraded',
+      ): void {
+        completed++;
+        const moduleStart = moduleStartTimes.get(modulePath);
+        const duration = moduleStart ? Date.now() - moduleStart : undefined;
+        modules.push({ path: modulePath, status, duration });
+      },
+
+      finish(): BatchSummary {
+        const duration = Date.now() - startTime;
+        return {
+          totalModules: total,
+          successful: modules.filter((m) => m.status === 'success').length,
+          failed: modules.filter((m) => m.status === 'failed').length,
+          skipped: modules.filter((m) => m.status === 'skipped').length,
+          degraded: modules.filter((m) => m.status === 'degraded').length,
+          duration,
+          modules,
+        };
+      },
+    };
+  }
 
   // ============================================================
   // TTY 模式实现
@@ -102,7 +176,7 @@ export function createReporter(total: number, mode?: ProgressMode): ProgressRepo
         moduleStartTimes.set(modulePath, Date.now());
         // 清行 → 输出模块开始日志 → 重绘进度条（completed 在 complete() 中递增，与 pipe 模式对齐）
         process.stdout.write(`\x1b[2K\r[${completed + 1}/${total}] 正在处理 ${modulePath}...\n`);
-        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total)}`);
+        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total, getActive())}`);
       },
 
       stage(modulePath: string, progress: StageProgress): void {
@@ -114,7 +188,7 @@ export function createReporter(total: number, mode?: ProgressMode): ProgressRepo
           process.stdout.write(`\x1b[2K\r  ✓ ${progress.stage}完成 (${progress.duration}ms)\n`);
         }
         // 重绘进度条
-        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total)}`);
+        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total, getActive())}`);
       },
 
       complete(
@@ -134,7 +208,7 @@ export function createReporter(total: number, mode?: ProgressMode): ProgressRepo
 
         // 清行 → 输出完成行 → 重绘进度条
         process.stdout.write(`\x1b[2K\r  ${statusEmoji} ${modulePath} — ${status}${duration ? ` (${duration}ms)` : ''}\n`);
-        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total)}`);
+        process.stdout.write(`\x1b[2K\r${renderProgressBar(completed, total, getActive())}`);
 
         modules.push({ path: modulePath, status, duration });
       },

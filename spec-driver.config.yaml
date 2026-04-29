@@ -3,6 +3,15 @@
 
 preset: balanced
 
+# ═══════════════════════════════════════
+# Spectra batch 并发配置（Feature 146）
+# ═══════════════════════════════════════
+# Spectra batch 的并发处理参数。
+# 优先级：CLI flag --concurrency=N > 此处 batch.concurrency > 代码默认值 3
+# GATE_DESIGN 决议 C-001：配置位置确认为 spec-driver.config.yaml
+batch:
+  concurrency: 3  # 并发处理模块数上限（1=顺序，建议 3-5；超出 5 在 Anthropic 免费/低配额下易触发 429）
+
 agents:
   product-research:
     model: sonnet

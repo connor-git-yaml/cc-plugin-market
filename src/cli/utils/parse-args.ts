@@ -74,7 +74,7 @@ export interface CLICommand {
   includeImages?: boolean;
   /** export 命令目标格式（使用 exportFormat 避免与 query 的 format 冲突） */
   exportFormat?: 'obsidian' | 'html';
-  /** batch 并发数（仅 batch 子命令，默认 1 = 顺序处理） */
+  /** batch 并发数（仅 batch 子命令，默认 3 = Feature 146 新默认；显式传 1 退化为顺序处理） */
   concurrency?: number;
   /** Feature 127: 仅预估模式（仅 batch 子命令） */
   dryRun?: boolean;
@@ -661,9 +661,32 @@ export function parseArgs(argv: string[]): ParseResult {
     if (includeDocs) explicitFlags.add('includeDocs');
     if (includeImages) explicitFlags.add('includeImages');
 
-    // 并发数：--concurrency <N>（默认 1 = 顺序处理）
-    const concurrencyIdx = argv.indexOf('--concurrency');
-    const concurrency = concurrencyIdx >= 0 ? parseInt(argv[concurrencyIdx + 1] ?? '1', 10) : undefined;
+    // 并发数（Feature 146）：--concurrency <N> 或 --concurrency=N
+    // 默认值由 spec-driver.config.yaml batch.concurrency 或代码默认值 3 决定
+    // 非数字 / 非有限值时返回 invalid_option 错误，而非静默回退
+    let concurrency: number | undefined;
+    const concurrencyIdxSpace = argv.indexOf('--concurrency');
+    const concurrencyEqArg = argv.find((a) => a.startsWith('--concurrency='));
+    let rawConcurrencyValue: string | undefined;
+    if (concurrencyIdxSpace >= 0 && argv[concurrencyIdxSpace + 1] !== undefined) {
+      rawConcurrencyValue = argv[concurrencyIdxSpace + 1];
+    } else if (concurrencyEqArg !== undefined) {
+      rawConcurrencyValue = concurrencyEqArg.slice('--concurrency='.length);
+    }
+    if (rawConcurrencyValue !== undefined) {
+      const parsed = Number(rawConcurrencyValue);
+      if (!Number.isFinite(parsed)) {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--concurrency 需要数字，实际: ${rawConcurrencyValue}`,
+          },
+        };
+      }
+      concurrency = parsed;
+      explicitFlags.add('concurrency');
+    }
 
     // F5：--mode flag 解析（full | reading | code-only）
     // 支持两种写法：--mode reading 和 --mode=reading
@@ -757,7 +780,8 @@ export function parseArgs(argv: string[]): ParseResult {
         _explicitFlags: explicitFlags,
         includeDocs: includeDocs || undefined,
         includeImages: includeImages || undefined,
-        concurrency: concurrency && concurrency > 0 ? concurrency : undefined,
+        // Feature 146：保留显式传入值（含 0/负数），由 runBatch 内部统一规范化（FR-002）
+        concurrency,
         dryRun: dryRun || undefined,
         batchBudget,
         onOverBudget,

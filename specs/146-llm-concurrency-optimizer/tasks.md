@@ -19,7 +19,7 @@
 
 **目标**：引入外部依赖，建立配置入口。不改动任何运行时逻辑，零业务风险。
 
-- [ ] T001 引入 `p-limit ^6.1.0` 到 `package.json` 的 `dependencies` 节（非 devDependencies），安装并验证 ESM import 正常
+- [x] T001 引入 `p-limit ^6.1.0` 到 `package.json` 的 `dependencies` 节（非 devDependencies），安装并验证 ESM import 正常
   - **文件**: `package.json`（修改），`package-lock.json`（自动更新）
   - **验收**: `node -e "import('p-limit').then(m => console.log('ok', typeof m.default))"` 输出 `ok function`
   - **估算**: 15 min
@@ -27,7 +27,7 @@
   - **是否阻塞其他 task**: 是（T003、T004、T007、T008 依赖 p-limit 安装）
   - ★ CRITICAL PATH
 
-- [ ] T002 [P] 在 `.specify/spec-driver.config.yaml` 新增 `batch.concurrency` 配置节
+- [x] T002 [P] 在 `.specify/spec-driver.config.yaml` 新增 `batch.concurrency` 配置节
   - **文件**: `.specify/spec-driver.config.yaml`（修改）
   - **变更内容**: 在顶层新增 `batch:` 键，其下新增 `concurrency: 3`，附注释说明 CLI 优先级规则
   - **验收**: `cat .specify/spec-driver.config.yaml | grep -A3 'batch:'` 显示 `concurrency: 3`
@@ -45,7 +45,7 @@
 
 **⚠️ CRITICAL**: 此 Phase 必须在 Phase 1 完成后执行，且其完成是 Phase 3/4 测试能运行的前提。
 
-- [ ] T003 替换手写信号量为 `p-limit`，改写 `batch-orchestrator.ts` 步骤 4 并发调度段
+- [x] T003 替换手写信号量为 `p-limit`，改写 `batch-orchestrator.ts` 步骤 4 并发调度段
   - **文件**: `src/batch/batch-orchestrator.ts`（修改）
   - **变更内容**:
     1. 文件顶部添加 `import pLimit from 'p-limit';`
@@ -57,7 +57,7 @@
   - **是否阻塞其他 task**: 是，关键路径核心
   - ★ CRITICAL PATH
 
-- [ ] T004 修改 `BatchOptions.concurrency` 默认值从 1 到 3，强化 JSDoc 注释，添加边界规范化逻辑
+- [x] T004 修改 `BatchOptions.concurrency` 默认值从 1 到 3，强化 JSDoc 注释，添加边界规范化逻辑
   - **文件**: `src/batch/batch-orchestrator.ts`（修改，接续 T003 的同一文件）
   - **变更内容**:
     1. 更新 `BatchOptions.concurrency` 的 JSDoc 注释，记录默认值变更原因、双层重试语义（FR-016）、9N 放大分析
@@ -82,7 +82,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] 在 CLI 入口文件新增 `--concurrency=N` flag 解析，建立优先级链
+- [x] T005 [US1] 在 CLI 入口文件新增 `--concurrency=N` flag 解析，建立优先级链
   - **文件**: `src/cli/`（实现阶段确认具体文件路径，可能是 `src/cli/batch-command.ts` 或类似）
   - **变更内容**:
     1. 新增 `--concurrency` 参数解析（支持 `--concurrency=N` 和 `--concurrency N` 两种语法）
@@ -96,7 +96,7 @@
 
 ### Tests for User Story 1
 
-- [ ] T006 [P] [US1] 新建并发 E2E 测试文件，写测试桩（测试用例先行，验证当前状态下测试应失败或通过）
+- [x] T006 [P] [US1] 新建并发 E2E 测试文件，写测试桩（测试用例先行，验证当前状态下测试应失败或通过）
   - **文件**: `tests/e2e/batch-concurrency.e2e.test.ts`（新建）
   - **变更内容**: 参考 tech-research Q6 代码示例，使用 `vi.hoisted()` + `vi.mock('@anthropic-ai/sdk')` 模式，建立 mock 并发计数器基础设施；写以下 4 个测试用例框架（内容在 T007/T008 中填充）：
     - `concurrency=3` 时同时执行不超过 3 个 LLM 调用（SC-003）
@@ -108,7 +108,7 @@
   - **依赖**: T001（p-limit 安装），T003（runBatch 已使用 p-limit）
   - **是否阻塞其他 task**: T007、T008 依赖此文件基础设施
 
-- [ ] T007 [US1] 补全 E2E 测试：并发上限严格执行（SC-003）+ 并行加速（SC-006）
+- [x] T007 [US1] 补全 E2E 测试：并发上限严格执行（SC-003）+ 并行加速（SC-006）
   - **文件**: `tests/e2e/batch-concurrency.e2e.test.ts`（修改）
   - **变更内容**:
     1. 并发上限测试：mock LLM 每次调用延迟 20ms，跟踪最大同时调用数，断言 `maxConcurrentCalls <= 3` 且 `> 1`
@@ -133,7 +133,7 @@
 
 > **注**：失败隔离逻辑（FR-006、FR-007）已在 T003 中通过 `p-limit` 封装 + `Promise.allSettled` 实现。本 Phase 主要任务是验证正确性，并确认外层无遗漏 catch 路径。
 
-- [ ] T008 [US2] 验证并强化失败隔离：确认 `p-limit` 封装层 catch 路径完整，必要时补充兜底 catch
+- [x] T008 [US2] 验证并强化失败隔离：确认 `p-limit` 封装层 catch 路径完整，必要时补充兜底 catch
   - **文件**: `src/batch/batch-orchestrator.ts`（可能修改）
   - **变更内容**: 检查 T003 写入的 `limit(() => processOneModule(m))` 调用链：若 `processOneModule` 内部已 catch 所有异常，确认无改动需要；若存在边界异常路径，在 `limit` 封装层添加兜底 `catch` 块（参考 tech-research Q4 代码示例）
   - **验收**: `grep -A5 'limit(' src/batch/batch-orchestrator.ts` 显示 try/catch 兜底结构
@@ -143,7 +143,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T009 [US2] 补全 E2E 测试：单模块失败不阻塞（SC-004）
+- [x] T009 [US2] 补全 E2E 测试：单模块失败不阻塞（SC-004）
   - **文件**: `tests/e2e/batch-concurrency.e2e.test.ts`（修改 T006 建立的文件）
   - **变更内容**: 实现"1 个必然失败 + 5 个正常模块"场景：`mockCreate` 第 N 次调用抛出 `Error('Network error')`，断言 `result.failed.length === 1`、`result.successful.length === 5`
   - **验收**: `npx vitest run tests/e2e/batch-concurrency.e2e.test.ts` 失败隔离用例通过
@@ -163,7 +163,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T010 [P] [US3] 修复 `ProgressMode` 类型：新增 `'silent'` 值（FR-012，TD-002 同步修复）
+- [x] T010 [P] [US3] 修复 `ProgressMode` 类型：新增 `'silent'` 值（FR-012，TD-002 同步修复）
   - **文件**: `src/batch/progress-reporter.ts`（修改）
   - **变更内容**:
     1. `ProgressMode` 类型从 `'tty' | 'pipe'` 扩展为 `'tty' | 'pipe' | 'silent'`
@@ -173,7 +173,7 @@
   - **依赖**: 无（独立文件，可与 T008 并行）
   - **是否阻塞其他 task**: T011 依赖此类型修复
 
-- [ ] T011 [US3] 扩展 `renderProgressBar` 支持三维状态，注入 `limit.activeCount`
+- [x] T011 [US3] 扩展 `renderProgressBar` 支持三维状态，注入 `limit.activeCount`
   - **文件**: `src/batch/progress-reporter.ts`（修改），`src/batch/batch-orchestrator.ts`（修改）
   - **变更内容**:
     1. `renderProgressBar(completed, total)` 签名扩展为 `renderProgressBar(completed, total, active = 0)`：`active > 0` 时渲染 `[bar] X/N | 进行中: Y | 排队: Z`，`active = 0` 时降级为原始二维格式（向后兼容）
@@ -198,7 +198,7 @@
 
 > **注**：tokenUsage 累加安全性已由 JS 单线程模型保证（tech-research Q3 确认）。`BatchResult.duration` 应已是墙钟耗时（`Date.now()` 在 runBatch 开始和结束各取一次），此 Phase 主要验证现有实现是否正确，并在必要时补充注释。
 
-- [ ] T012 [US4] 验证 `tokenUsage` 累加路径和 `durationMs` 计算方式，补充安全性注释
+- [x] T012 [US4] 验证 `tokenUsage` 累加路径和 `durationMs` 计算方式，补充安全性注释
   - **文件**: `src/batch/batch-orchestrator.ts`（修改注释，可能无逻辑改动）
   - **变更内容**:
     1. 确认 `cumulativeInputTokens +=` 操作在 `await` 之后的同步位置（无读-await-写模式），添加注释：`// JS 单线程保证：此 += 在 await 返回后同步执行，无并发竞态风险（FR-008）`
@@ -210,7 +210,7 @@
 
 ### Tests for User Story 4
 
-- [ ] T013 [US4] 补全 E2E 测试：tokenUsage 并发累加正确性（SC-005）
+- [x] T013 [US4] 补全 E2E 测试：tokenUsage 并发累加正确性（SC-005）
   - **文件**: `tests/e2e/batch-concurrency.e2e.test.ts`（修改）
   - **变更内容**: 实现"10 个模块各返回 `input_tokens: 100`，以 `concurrency=3` 运行，断言 `costSummary.totalInputTokens === 1000`（严格相等）"用例
   - **验收**: `npx vitest run tests/e2e/batch-concurrency.e2e.test.ts` tokenUsage 用例通过
@@ -232,7 +232,7 @@
 
 > **注**：F144 E2E 使用 `vi.mock` 模拟 LLM（无真实网络延迟），并发与顺序在 mock 场景下行为等同。此 Phase 主要是运行验证 + 必要时修复。
 
-- [ ] T014 [US5] 运行 F144 E2E 套件，若 `progressMode: 'silent'` 类型错误已修复则无需改动，否则在测试文件中适配
+- [x] T014 [US5] 运行 F144 E2E 套件，若 `progressMode: 'silent'` 类型错误已修复则无需改动，否则在测试文件中适配
   - **文件**: `tests/e2e/batch-pipeline.e2e.test.ts`（可能修改）
   - **变更内容**: 运行 `npm run test:e2e`，确认 4/4 通过。若发现时序相关失败，在该文件显式传入 `concurrency: 1` 锁定顺序路径；TD-002 已在 T010 修复后 `progressMode: 'silent'` 不再有类型错误
   - **验收**: `npm run test:e2e` 输出 4/4 通过，零失败零超时（SC-007）
@@ -242,7 +242,7 @@
 
 ### Tests for User Story 5
 
-- [ ] T015 [US5] 新建单元测试：边界规范化逻辑（`concurrency=0/-1/3.7/超出模块数`）
+- [x] T015 [US5] 新建单元测试：边界规范化逻辑（`concurrency=0/-1/3.7/超出模块数`）
   - **文件**: `tests/batch/`（具体文件实现阶段确认，可能是 `tests/batch/batch-orchestrator.test.ts`）
   - **变更内容**: 新增以下 4 个单元测试用例（mock `processOneModule`，不启动完整 pipeline）：
     - `concurrency=0` → 修正为 1，`logger.warn` 被调用
@@ -262,7 +262,7 @@
 
 **目标**：全量回归验证，确保 SC-007/SC-008/SC-009/SC-010 全部满足，清理冗余代码，补充遗漏文档。
 
-- [ ] T016 全量回归验收：运行完整测试套件和构建检查
+- [x] T016 全量回归验收：运行完整测试套件和构建检查
   - **文件**: 无新改动
   - **执行命令（顺序）**:
     1. `npx vitest run`——确认通过数 ≥ 2268，零失败（SC-008）
@@ -275,7 +275,7 @@
   - **是否阻塞其他 task**: 是（此为最终门禁）
   - ★ CRITICAL PATH
 
-- [ ] T017 [P] 检查 `npm run repo:check` 与 `npm run release:check`（仓库同步合规）
+- [x] T017 [P] 检查 `npm run repo:check` 与 `npm run release:check`（仓库同步合规）
   - **文件**: 无改动（仅运行检查）
   - **验收**: 两个命令均无错误输出
   - **估算**: 10 min

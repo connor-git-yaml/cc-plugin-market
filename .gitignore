@@ -59,3 +59,7 @@ specs/_meta/
 specs/modules/
 specs/project/
 specs/bundles/
+
+# E2E fixture 运行时泄漏（panoramic pipeline 偶尔创建相对路径 var/folders/... 输出，
+# 与 mkdtempSync 临时目录一同清理；该模式由 Feature 144/146 测试触发，本质是 pipeline 兼容问题）
+tests/fixtures/e2e/*/var/

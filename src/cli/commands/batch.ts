@@ -7,7 +7,27 @@ import { resolve } from 'node:path';
 import { runBatch } from '../../batch/batch-orchestrator.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
+import { readBatchConcurrency } from '../../config/spec-driver-config.js';
 import type { CLICommand } from '../utils/parse-args.js';
+
+/**
+ * Feature 146：解析 batch 并发数。
+ * 优先级：CLI flag --concurrency=N > spec-driver.config.yaml batch.concurrency > 默认值 3
+ * 边界规范化（<=0、非整数）由 runBatch 内部统一处理，此处只决定来源。
+ */
+function resolveBatchConcurrency(
+  cliConcurrency: number | undefined,
+  projectRoot: string,
+): number {
+  if (typeof cliConcurrency === 'number') {
+    return cliConcurrency;
+  }
+  const fromConfig = readBatchConcurrency(projectRoot);
+  if (typeof fromConfig === 'number') {
+    return fromConfig;
+  }
+  return 3;
+}
 
 /**
  * 执行 batch 子命令
@@ -51,7 +71,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       incremental: merged.incremental,
       languages: merged.languages,
       outputDir: merged.outputDir,
-      concurrency: command.concurrency ?? 1,
+      concurrency: resolveBatchConcurrency(command.concurrency, projectRoot),
       // Feature 107：多模态提取标志（不纳入配置文件合并，仅从 CLI 传入）
       includeDocs: command.includeDocs,
       includeImages: command.includeImages,

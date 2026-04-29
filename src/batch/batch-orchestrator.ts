@@ -6,6 +6,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import pLimit from 'p-limit';
 import { buildGraph } from '../graph/dependency-graph.js';
 import { buildDirectoryGraph } from '../graph/directory-graph.js';
 import { generateSpec, type GenerateSpecOptions } from '../core/single-spec-orchestrator.js';
@@ -112,7 +113,25 @@ export interface BatchOptions {
   onProgress?: (completed: number, total: number) => void;
   /** 每个模块的 LLM 最大重试次数（默认 3） */
   maxRetries?: number;
-  /** 并发处理的模块数上限（默认 1 = 顺序处理，建议 3-5） */
+  /**
+   * 并发处理的模块数上限（默认 3，顺序处理请传 1）。
+   *
+   * Feature 146：默认值从 1 提升到 3。理由：Sonnet 单次调用 15-30s，
+   * concurrency=3 时吞吐量显著提升且 429 风险可控（Anthropic RPM ~50-60）。
+   *
+   * 双层重试语义（FR-016）：
+   * - SDK 层：maxRetries=2（含退避），处理单次请求级 429/529
+   * - 应用层：maxRetries=3（模块级），处理更高层次的模块失败
+   * - 理论最差情况：每模块 3×3=9 次 HTTP 请求（9N 放大）
+   * - concurrency 作为速率总闸，限制总体并发流量
+   *
+   * 边界规范化（FR-002，在 runBatch 内执行）：
+   * - <=0 → 静默修正为 1 并输出 warn
+   * - 非整数 → Math.floor 向下取整
+   *
+   * 优先级链（CLI 层和 runBatch 层共同保证）：
+   * CLI flag --concurrency=N > spec-driver.config.yaml batch.concurrency > 默认值 3
+   */
   concurrency?: number;
   /** 检查点文件路径 */
   checkpointPath?: string;
@@ -279,6 +298,30 @@ export function detectCrossLanguageRefs(
   }
 
   return [...new Set(refs)];
+}
+
+/**
+ * Feature 146 FR-002 — 并发数边界规范化
+ *
+ * 规则：
+ * - 非整数（含小数、非数字、Infinity、NaN）→ Math.floor 向下取整
+ * - 取整后 <= 0 → 修正为 1（顺序处理）并通过 onWarn 上报
+ *
+ * 提取为独立纯函数便于单元测试（不需要启动完整 pipeline）。
+ *
+ * @param raw  原始 concurrency 值（已合并 CLI / config / 默认值之后传入）
+ * @param onWarn 修正发生时的告警回调（用于注入 logger.warn 或测试中的 spy）
+ */
+export function normalizeConcurrency(
+  raw: number,
+  onWarn?: (message: string) => void,
+): number {
+  let normalized = Math.floor(raw);
+  if (!Number.isFinite(normalized) || normalized <= 0) {
+    onWarn?.(`concurrency=${raw} 无效，修正为 1（顺序处理）`);
+    normalized = 1;
+  }
+  return normalized;
 }
 
 /**
@@ -573,7 +616,15 @@ export async function runBatch(
   }
 
   // 步骤 4：按模块级拓扑顺序处理
-  const reporter = createReporter(processingOrder.length, options.progressMode);
+  // Feature 146 FR-010/FR-011：通过 getActiveCount getter 注入 limit.activeCount，
+  // 使 TTY 进度条可展示「进行中」三维状态，而无需修改 ProgressReporter 接口。
+  // 这里使用闭包延迟读取：reporter 在 limit 之前创建，runtime 调用时 limit 已就位。
+  let limitRef: ReturnType<typeof pLimit> | undefined;
+  const reporter = createReporter(
+    processingOrder.length,
+    options.progressMode,
+    { getActiveCount: () => limitRef?.activeCount ?? 0 },
+  );
   const successful: string[] = [];
   const failed: FailedModule[] = [];
   const skipped: string[] = [];
@@ -588,7 +639,14 @@ export async function runBatch(
     : '';
 
   const completedPaths = new Set(state.completedModules.map((m) => m.path));
-  const concurrency = options.concurrency ?? 1;
+  // Feature 146 — concurrency 读取与规范化（FR-002、FR-003）
+  // 默认值 3：Sonnet 调用 15-30s，concurrency=3 显著提升吞吐量且 429 风险可控。
+  // 优先级链：调用方（CLI）已合并 CLI flag > config，传入 options.concurrency；
+  // 此处仅做最后一道防线的规范化（防御非法传入），具体规则见 normalizeConcurrency 注释。
+  const concurrency = normalizeConcurrency(
+    options.concurrency ?? 3,
+    (msg) => logger.warn(msg),
+  );
   const modulesDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.MODULES);
 
   // BUG-A 预计算：统计每个 dirPath 下有多少个单文件模块，冲突路径才使用文件路径
@@ -917,38 +975,49 @@ export async function runBatch(
     );
   }
 
-  // 步骤 4：并发控制调度
-  if (concurrency <= 1) {
-    // 顺序处理（向后兼容默认行为）
-    for (const moduleName of processingOrder) {
-      await processOneModule(moduleName);
-    }
-  } else {
-    // 并行处理：使用信号量控制并发数
-    const pending: Promise<void>[] = [];
-    let activeCount = 0;
-
-    for (const moduleName of processingOrder) {
-      // 等待直到有空闲槽位
-      while (activeCount >= concurrency) {
-        // H2 修复：pending 为空时 Promise.race([]) 永不 resolve，会死锁
-        if (pending.length === 0) break;
-        await Promise.race(pending);
+  // 步骤 4：并发调度（Feature 146 — 使用 p-limit 替换手写信号量）
+  // 历史背景：原手写信号量（pending 队列 + 活跃计数 + race 等待）出现过死锁 bug（H2 修复痕迹），
+  // 且 concurrency<=1 与并发分支双路径增加维护成本。
+  // clarify.md AU-005 决议：统一走 pLimit(concurrency) 路径，pLimit(1) 语义等同顺序执行（队列串行）。
+  // FR-006/FR-007：limit 内部捕获异常 + Promise.allSettled 双重保护，确保单模块失败不阻塞其他模块。
+  // FR-008（并发安全性）：JS 单线程事件循环保证：所有 successful.push / failed.push / costRecords.push /
+  // cumulativeInputTokens += 等共享状态修改，均发生在 await 返回后的同步执行段，
+  // 多个模块的修改语句不会在指令级交错（不存在原生意义的「数据竞态」）。
+  // FR-009：BatchResult.duration 由 startTime/endTime 在 runBatch 入口/出口取一次 Date.now() 计算，
+  // 反映墙钟耗时（并发下小于各模块耗时之和），无需额外修改。
+  const limit = pLimit(concurrency);
+  limitRef = limit; // 注入到 reporter 的 getActiveCount getter（FR-010）
+  const tasks = processingOrder.map((moduleName) =>
+    limit(async () => {
+      try {
+        await processOneModule(moduleName);
+      } catch (err) {
+        // 兜底：processOneModule 内部已捕获 LLM 重试失败并写入 failed[]，但
+        // saveCheckpoint / onProgress / reporter.complete 等 try 之外的副作用调用
+        // 仍可能抛出未预期错误（如 EACCES / 磁盘满）。Codex 对抗审查指出，仅
+        // logger.warn 而不写 failed[] 会让这类模块从最终结果中静默消失，破坏
+        // BatchResult 的 totalModules == successful + failed + skipped 不变量。
+        // 此处补齐 failed[] + reporter.complete，保证「每个模块都有最终状态」。
+        logger.warn(`模块 ${moduleName} 出现未捕获异常: ${String(err)}`);
+        const failedModule: FailedModule = {
+          path: moduleName,
+          error: err instanceof Error ? err.message : String(err),
+          failedAt: new Date().toISOString(),
+          retryCount: 0,
+          degradedToAstOnly: false,
+          reason: 'unhandled-exception',
+        };
+        failed.push(failedModule);
+        checkedState.failedModules.push(failedModule);
+        try {
+          reporter.complete(moduleName, 'failed');
+        } catch {
+          // reporter.complete 自身抛出（如 TTY 已关闭）不能再向外冒泡。
+        }
       }
-
-      activeCount++;
-      const task = processOneModule(moduleName).finally(() => {
-        activeCount--;
-        // 从 pending 中移除已完成的 promise
-        const idx = pending.indexOf(task);
-        if (idx >= 0) pending.splice(idx, 1);
-      });
-      pending.push(task);
-    }
-
-    // 等待所有剩余任务完成
-    await Promise.allSettled(pending);
-  }
+    }),
+  );
+  await Promise.allSettled(tasks);
 
   // 步骤 5：生成架构索引（使用收集的 ModuleSpec）
   let deltaReportPath: string | undefined;
