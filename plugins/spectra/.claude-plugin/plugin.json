@@ -1,6 +1,6 @@
 {
   "name": "spectra",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "把任意代码库变成可查询、可视化、可按场景伸缩的代码阅读平台。AST + LLM 混合 pipeline 生成分层 Spec、知识图谱、技术债清单、自然语言问答与交互式 graph.html",
   "author": {
     "name": "Connor Lu",

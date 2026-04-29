@@ -3,6 +3,30 @@
 本文件记录 cc-plugin-market（Spectra + Spec Driver）仓库的重要变更。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [4.1.1] — 2026-04-30
+
+> **Spectra v4.1.1 LLM 并发优化（Feature 146）** — 替换手写信号量为 p-limit + 默认并发数从 1 提升到 3。Patch release（用户体验变化，非破坏性）。
+
+### Changed — spectra
+
+- **默认并发数 1 → 3**（Feature 146）— `batch-orchestrator` 默认 `concurrency: 3`（之前为 1，串行）。Sonnet 单请求 15-30s，concurrency=3 时大项目（30+ 模块）总耗时下降 ~60-65%。小项目（< 5 模块）无感。
+- **p-limit 替换手写信号量**（Feature 146）— 移除 ~30 行手写并发实现（含历史 H2 死锁补丁），替换为 `p-limit ^6.1.0` 的 4 行调用。代码可读性提升 + 修复一些极端场景的死锁风险。
+- **三级配置链**（Feature 146）— `BatchOptions.concurrency` > 环境变量 `SPECTRA_CONCURRENCY` > 默认 3。CI 资源紧张时 export `SPECTRA_CONCURRENCY=1` 可恢复串行。
+
+### 影响评估
+
+- **正向**：大项目跑 batch 显著加速；性能默认值更接近 user 实际期望
+- **负面（罕见）**：依赖外部 API rate limit 严格的环境（如 Anthropic 1 RPM 测试 key）可能触发限流，需手动设 `SPECTRA_CONCURRENCY=1`
+- **建议**：升级后首次跑 batch 观察是否触发 rate limit；若是，env 设 1 串行即可
+
+### 验证
+
+- 全量 vitest 通过
+- graphify 测试项目（5 文件）实测 batch 耗时变化（small project 应基本不变）
+- micrograd 测试项目（4 文件）实测一致
+
+详见 specs/146-llm-concurrency-optimizer/。
+
 ## [v4.1.0] - 2026-04-29
 
 > **Spectra v4.1.0 Python AST 函数级 Graph + Phase 2 Bug 修复** — P0（新功能）：Python 项目 `graph.json` 现在包含函数/类符号节点；P1/P2（bug 修复）：hyperedge 首次运行即生效、debt-scanner 诊断日志增强。
