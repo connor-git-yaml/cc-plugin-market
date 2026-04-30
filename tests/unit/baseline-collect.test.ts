@@ -7,7 +7,9 @@ import { pathToFileURL } from 'node:url';
 interface CollectorModule {
   parseArgs: (argv: string[]) => {
     target: string | null;
+    targets: string | null;
     mode: string;
+    tool: string;
     commit: string | null;
     verifyArtifacts: boolean;
     output: string | null;
@@ -40,6 +42,8 @@ interface CollectorModule {
   };
   parseTimeStderr: (stderr: string) => number | null;
   verifyArtifacts: (opts: { rootDir: string }) => { ok: boolean; errors: string[] };
+  getBaselineHome: () => string;
+  SUPPORTED_TOOLS: readonly string[];
 }
 
 async function loadCollector(): Promise<CollectorModule> {
@@ -254,25 +258,34 @@ describe('baseline-collect', () => {
     });
   });
 
-  describe('verifyArtifacts', () => {
+  describe('verifyArtifacts (Q1=C: micrograd + nanoGPT + self-dogfood, no 500+ enforcement)', () => {
+    const REQUIRED = ['micrograd', 'nanoGPT', 'self-dogfood'] as const;
+
     function validFixture(): Record<string, unknown> {
       return {
         schemaVersion: '1.0',
         meta: {
+          tool: 'spectra',
           targetCommit: 'abc1234567',
-          targetFileCountsByType: { ts: 600, tsx: 0, py: 0, md: 0, other: 0 },
+          targetFileCountsByType: { ts: 50, tsx: 0, py: 0, md: 0, other: 0 },
         },
         perf: { totalWallMs: 1000, tokensInput: 100, tokensOutput: 50 },
       };
     }
 
-    it('returns ok when both required projects exist with valid schema + ≥500 files + commit', async () => {
+    function writeFixturesForAll(baselineDir: string, mutator?: (f: Record<string, unknown>) => void) {
+      for (const proj of REQUIRED) {
+        mkdirSync(join(baselineDir, proj, 'spectra'), { recursive: true });
+        const f = validFixture();
+        mutator?.(f);
+        writeFileSync(join(baselineDir, proj, 'spectra', 'full.json'), JSON.stringify(f));
+      }
+    }
+
+    it('returns ok when all 3 required projects have spectra/full.json with valid schema', async () => {
       const { verifyArtifacts } = await loadCollector();
       const baselineDir = join(tempDir, 'tests', 'baseline');
-      for (const proj of ['continue', 'khoj']) {
-        mkdirSync(join(baselineDir, proj), { recursive: true });
-        writeFileSync(join(baselineDir, proj, 'full.json'), JSON.stringify(validFixture()));
-      }
+      writeFixturesForAll(baselineDir);
       const r = verifyArtifacts({ rootDir: tempDir });
       expect(r.ok).toBe(true);
       expect(r.errors).toEqual([]);
@@ -288,12 +301,9 @@ describe('baseline-collect', () => {
     it('fails when schemaVersion mismatch', async () => {
       const { verifyArtifacts } = await loadCollector();
       const baselineDir = join(tempDir, 'tests', 'baseline');
-      for (const proj of ['continue', 'khoj']) {
-        mkdirSync(join(baselineDir, proj), { recursive: true });
-        const f = validFixture();
+      writeFixturesForAll(baselineDir, (f) => {
         f.schemaVersion = '99.0';
-        writeFileSync(join(baselineDir, proj, 'full.json'), JSON.stringify(f));
-      }
+      });
       const r = verifyArtifacts({ rootDir: tempDir });
       expect(r.ok).toBe(false);
       expect(r.errors.some((e: string) => e.includes('schemaVersion mismatch'))).toBe(true);
@@ -302,44 +312,81 @@ describe('baseline-collect', () => {
     it('fails when key field is null', async () => {
       const { verifyArtifacts } = await loadCollector();
       const baselineDir = join(tempDir, 'tests', 'baseline');
-      for (const proj of ['continue', 'khoj']) {
-        mkdirSync(join(baselineDir, proj), { recursive: true });
-        const f = validFixture();
-        (f.perf as Record<string, unknown>).totalWallMs = null;
-        (f.perf as Record<string, unknown>).tokensInput = null;
-        writeFileSync(join(baselineDir, proj, 'full.json'), JSON.stringify(f));
-      }
+      writeFixturesForAll(baselineDir, (f) => {
+        const perf = f.perf as Record<string, unknown>;
+        perf.totalWallMs = null;
+        perf.tokensInput = null;
+      });
       const r = verifyArtifacts({ rootDir: tempDir });
       expect(r.ok).toBe(false);
       expect(r.errors.some((e: string) => e.includes('null perf.totalWallMs'))).toBe(true);
     });
 
-    it('fails when target file count < SC-001 minimum 500 (spec §2.1)', async () => {
-      const { verifyArtifacts } = await loadCollector();
-      const baselineDir = join(tempDir, 'tests', 'baseline');
-      for (const proj of ['continue', 'khoj']) {
-        mkdirSync(join(baselineDir, proj), { recursive: true });
-        const f = validFixture();
-        (f.meta as { targetFileCountsByType: { ts: number } }).targetFileCountsByType.ts = 100;
-        writeFileSync(join(baselineDir, proj, 'full.json'), JSON.stringify(f));
-      }
-      const r = verifyArtifacts({ rootDir: tempDir });
-      expect(r.ok).toBe(false);
-      expect(r.errors.some((e: string) => e.includes('< SC-001 minimum 500'))).toBe(true);
-    });
-
     it('fails when meta.targetCommit missing (spec §6 reproducibility)', async () => {
       const { verifyArtifacts } = await loadCollector();
       const baselineDir = join(tempDir, 'tests', 'baseline');
-      for (const proj of ['continue', 'khoj']) {
-        mkdirSync(join(baselineDir, proj), { recursive: true });
-        const f = validFixture();
+      writeFixturesForAll(baselineDir, (f) => {
         delete (f.meta as { targetCommit?: string }).targetCommit;
-        writeFileSync(join(baselineDir, proj, 'full.json'), JSON.stringify(f));
-      }
+      });
       const r = verifyArtifacts({ rootDir: tempDir });
       expect(r.ok).toBe(false);
       expect(r.errors.some((e: string) => e.includes('missing meta.targetCommit'))).toBe(true);
+    });
+
+    it('fails when meta.tool missing', async () => {
+      const { verifyArtifacts } = await loadCollector();
+      const baselineDir = join(tempDir, 'tests', 'baseline');
+      writeFixturesForAll(baselineDir, (f) => {
+        delete (f.meta as { tool?: string }).tool;
+      });
+      const r = verifyArtifacts({ rootDir: tempDir });
+      expect(r.ok).toBe(false);
+      expect(r.errors.some((e: string) => e.includes('missing meta.tool'))).toBe(true);
+    });
+  });
+
+  describe('parseArgs --tool flag', () => {
+    it('defaults tool to spectra', async () => {
+      const { parseArgs } = await loadCollector();
+      const r = parseArgs(['--target', 'self-dogfood']);
+      expect(r.tool).toBe('spectra');
+    });
+
+    it('accepts spectra / graphify / llm-agent', async () => {
+      const { parseArgs } = await loadCollector();
+      expect(parseArgs(['--target', 'x', '--tool', 'graphify']).tool).toBe('graphify');
+      expect(parseArgs(['--target', 'x', '--tool', 'llm-agent']).tool).toBe('llm-agent');
+    });
+
+    it('rejects unknown tool', async () => {
+      const { parseArgs } = await loadCollector();
+      expect(() => parseArgs(['--target', 'x', '--tool', 'bogus'])).toThrow(/--tool must be/);
+    });
+  });
+
+  describe('getBaselineHome', () => {
+    it('uses SPECTRA_BASELINE_HOME env var when set', async () => {
+      const { getBaselineHome } = await loadCollector() as unknown as { getBaselineHome: () => string };
+      const original = process.env.SPECTRA_BASELINE_HOME;
+      try {
+        process.env.SPECTRA_BASELINE_HOME = '/tmp/custom-baseline-home';
+        expect(getBaselineHome()).toBe('/tmp/custom-baseline-home');
+      } finally {
+        if (original === undefined) delete process.env.SPECTRA_BASELINE_HOME;
+        else process.env.SPECTRA_BASELINE_HOME = original;
+      }
+    });
+
+    it('defaults to ~/.spectra-baselines when env var unset', async () => {
+      const { getBaselineHome } = await loadCollector() as unknown as { getBaselineHome: () => string };
+      const original = process.env.SPECTRA_BASELINE_HOME;
+      try {
+        delete process.env.SPECTRA_BASELINE_HOME;
+        const home = getBaselineHome();
+        expect(home).toMatch(/\.spectra-baselines$/);
+      } finally {
+        if (original !== undefined) process.env.SPECTRA_BASELINE_HOME = original;
+      }
     });
   });
 });

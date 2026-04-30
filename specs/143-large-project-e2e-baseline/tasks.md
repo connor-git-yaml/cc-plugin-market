@@ -4,6 +4,8 @@
 **Branch**: `feature/143-large-project-e2e-baseline`  
 **Date**: 2026-04-30
 
+> **Implement 阶段用户决策**：把 baseline 升级为"持久 perf bench platform"。Q1=C 放弃 spec §2.1 硬性 500+ 要求，最终选定 **3 项目 × spectra × full mode**（micrograd / nanoGPT / self-dogfood）。Q2=A workspace 持久化在 `~/.spectra-baselines/`。Q3=A 多 tool 架构（spectra 完整 + 竞品 stub 接口）。Phase 0/3/4 已完成；Phase 1 Wave 1（Continue / khoj 大项目）废弃，改成本 Feature 实跑 3 个固定 baseline。
+
 ---
 
 ## 任务编号约定
@@ -133,108 +135,72 @@
 
 ---
 
-## Phase 1：Wave 1 baseline 采集 + 报告回填（约 2-4 小时人时 + 30-90 分钟实跑）
+## Phase 1（修订）：3 个固定 baseline projects × spectra × full mode 采集 + 报告回填
 
-**目标**：Wave 1 三个项目的 fixture 全部存在 + 两份报告完整数据回填。Phase 1 完成才可标 SC-002 / SC-003 PASS。
+**用户决策修订**：原计划的 Wave 1（Continue / Khoj 大项目）废弃。新计划：3 个固定 projects（micrograd / nanoGPT / self-dogfood），仅 full mode（reading / code-only 命令就绪但不入本 Feature）。
 
-### T1.1 self-dogfood baseline（full + reading + code-only）
+### T1.1 micrograd baseline（spectra full）
 
-- 跑：
-  ```bash
-  npm run baseline:collect -- --target self-dogfood --mode full
-  npm run baseline:collect -- --target self-dogfood --mode reading
-  npm run baseline:collect -- --target self-dogfood --mode code-only
-  ```
-- target self-dogfood：collector 把 PROJECT_ROOT 作为 target，不重新 clone（特殊 case，写在 collector 里）
-- 产物：`tests/baseline/self-dogfood/{full,reading,code-only}.json`
+- 跑：`npm run baseline:collect -- --target karpathy/micrograd --mode full`
+- 预期：~3 分钟，~$0.55
+- 产物：`tests/baseline/micrograd/spectra/full.json`
 
-### T1.2 micrograd 补齐 reading + code-only
+### T1.2 nanoGPT baseline（spectra full）
 
-- 跑：
-  ```bash
-  npm run baseline:collect -- --target karpathy/micrograd --mode reading
-  npm run baseline:collect -- --target karpathy/micrograd --mode code-only
-  ```
-- 产物：`tests/baseline/micrograd/{reading,code-only}.json`
+- 跑：`npm run baseline:collect -- --target karpathy/nanoGPT --mode full`
+- 预期：~5-10 分钟，~$0.40-0.80
+- 产物：`tests/baseline/nanoGPT/spectra/full.json`
 
-### T1.3 Continue baseline（full）
+### T1.3 self-dogfood baseline（spectra full）
 
-- 跑：
-  ```bash
-  npm run baseline:collect -- --target continuedev/continue --mode full --commit <锁定 tag>
-  ```
-- 在 tasks 阶段锁定 commit tag（建议查 https://github.com/continuedev/continue/releases 选最近 stable）
-- 大概率耗时 30-60 分钟，cost ~$1-2
-- 产物：`tests/baseline/continue/full.json`
-- **风险缓解**：如果跑超过 90 分钟仍未结束，记录已采集的 partial 数据（batch checkpoint 应该有）+ 在 fixture 里标 `meta.runStatus: "partial"`
+- 跑：`npm run baseline:collect -- --target self-dogfood --mode full`
+- 预期：~10 分钟，~$6
+- 产物：`tests/baseline/self-dogfood/spectra/full.json`
 
 ### T1.4 回填 perf-baseline-report.md
 
-- 把所有 `<待 Phase 1 回填>` 替换为 fixture 里的具体数字
-- spec §5.1 七个维度全部填齐
-- 跑 SC-004 校验：`grep -E "(约|估计|大约)" perf-baseline-report.md | grep -v estimatedTokens` 应无输出
-- spec §5.1 dry-run 偏差表用 `dryRun.biasRatio` 填
+- 把所有 `<待 Phase 1 回填>` 替换为 3 个 fixture 里的具体数字
+- spec §5.1 维度填齐（耗时 / LLM 调用次数+P50/P95 / token / dry-run 偏差 / graph 规模 / spec 成功率 / memory）
+- 删除 Wave 2 / continue / khoj 相关章节（已由用户决策放弃）
+- 跑 SC-004 校验
 
 ### T1.5 回填 bottleneck-analysis.md
 
-- 排序至少 3 个瓶颈（按 phases 占比降序）
-- F145/F146 并发数建议章节：基于 `phases.specGenerationMs / totalWallMs` 算 LLM 等待占比
-  - 例如：LLM 等待占 65% → 建议 concurrency=3（不超过 sonnet 默认 RPS）
-- 引用具体 fixture 文件路径作为数据来源
+- 排序至少 3 个瓶颈（按 LLM 调用 P95 / 总耗时占比 / token 总量 等维度）
+- F145/F146 并发数建议章节：基于 fixture llmCallDurationsMs + tokensInput/Output 推断
+- 引用 3 个 fixture 文件路径作为数据来源
 
 ### T1.6 Phase 1 commit
 
-- commit message：`feat(143): first baseline data fixtures + report 回填 [Phase 1/4]`
+- commit message：`feat(143): 3 个固定 baseline 采集 + 报告回填 [Phase 1/4]`
 - 跑 SC-002 / SC-003 / SC-004 / SC-005 grep 校验，全绿才 commit
+- 跑 `npm run baseline:collect -- --verify-artifacts` 标 SC-001 PASS
 
 ---
 
-## Phase 2：Diff 工具完善 + Reproducibility 验证 + Wave 2 khoj（约 2-3 小时 + 30-60 分钟实跑）
+## Phase 2（修订）：Reproducibility 验证（取消 Wave 2 khoj）
 
-**目标**：reproducibility gate 验证 collector 稳定 + Wave 2 khoj 满足 SC-001 双语言。Phase 2 完成才可标 SC-001 PASS。
+**用户决策修订**：Wave 2 khoj / langchain 全部废弃（cost 超预算）。Phase 2 仅保留 reproducibility 验证（同 commit 重跑稳定性）。
 
-### T2.1 [P] 完善 baseline-diff.mjs reproducibility 模式
+### T2.1 micrograd 同 commit reproducibility 抽样
 
-- T0.2 的 skeleton 在 Phase 0 已实现 regression 模式，本任务补充 reproducibility 模式细节
-- 实测中如发现 schemaVersion 字段需调整，回头改 plan §5.3 + collector + 已有 fixture 一并 bump
-
-### T2.2 micrograd 同 commit 重跑 reproducibility 验证
-
-- 跑两次：
+- 跑：
   ```bash
-  cp tests/baseline/micrograd/full.json /tmp/micrograd-full-run1.json
+  cp tests/baseline/micrograd/spectra/full.json /tmp/micrograd-run1.json
   npm run baseline:collect -- --target karpathy/micrograd --mode full
-  npm run baseline:diff -- /tmp/micrograd-full-run1.json tests/baseline/micrograd/full.json --mode reproducibility
+  npm run baseline:diff -- /tmp/micrograd-run1.json tests/baseline/micrograd/spectra/full.json --mode reproducibility
   ```
-- 期望退出码 0（< 5% 偏差）
-- 如失败：collector 有不确定性 bug，回 T2.1 / collector 修复
+- 期望退出码 0（< 5% 偏差，spec §6 reproducibility tolerance）
+- 如失败：collector 有不确定性 bug
 
-### T2.3 [P] self-dogfood 同 commit reproducibility 抽样
+### T2.2 SC-001 本地验证
 
-- 同上，跑 1 次重复
-- 中等规模 sample，提高 reproducibility 信心
+- 跑：`npm run baseline:collect -- --verify-artifacts`
+- 期望退出码 0；扫 3 个 fixture：micrograd / nanoGPT / self-dogfood × spectra/full.json
 
-### T2.4 khoj baseline（full）
+### T2.3 Phase 2 commit
 
-- 跑：
-  ```bash
-  npm run baseline:collect -- --target khoj-ai/khoj --mode full --commit <锁定 tag>
-  ```
-- Python 项目，确保 collector parseTargetFiles 正确识别 .py 扩展名
-- 产物：`tests/baseline/khoj/full.json`
-
-### T2.5 SC-001 本地验证
-
-- 跑：
-  ```bash
-  npm run baseline:collect -- --verify-artifacts
-  ```
-- 期望退出码 0
-- 输出至少标识 4 个 fixture 存在：micrograd / self-dogfood / continue / khoj
-
-### T2.6 Phase 2 commit
-
-- commit message：`feat(143): baseline diff tool + reproducibility verification + Wave 2 khoj [Phase 2/4]`
+- commit message：`feat(143): reproducibility verification + SC-001 PASS [Phase 2/4]`
 - 标 SC-001 PASS
 
 ---

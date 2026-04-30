@@ -2,11 +2,14 @@
 /**
  * Feature 143 — baseline collector
  *
- * 跑 spectra batch 在指定 target 项目上，解析产物并落 fixture JSON 到
- * tests/baseline/<project>/<mode>.json，schemaVersion 1.0。
+ * 跑指定工具（spectra / graphify / llm-agent）在指定 target 项目上，
+ * 解析产物并落 fixture JSON 到 tests/baseline/<project>/<tool>/<mode>.json。
+ *
+ * Workspace 持久化在 ~/.spectra-baselines/<project>/（用户偏好 Q2=A，跨 worktree 共享）。
+ * 设置 SPECTRA_BASELINE_HOME 环境变量可覆盖。
  *
  * 用法：
- *   node scripts/baseline-collect.mjs --target <name> --mode <full|reading|code-only>
+ *   node scripts/baseline-collect.mjs --target <name> --mode <full|reading|code-only> [--tool spectra]
  *   node scripts/baseline-collect.mjs --target self-dogfood --mode full
  *   node scripts/baseline-collect.mjs --verify-artifacts
  *
@@ -14,6 +17,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -21,12 +25,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCHEMA_VERSION = '1.0';
-const COLLECTOR_VERSION = '0.1.0';
+const COLLECTOR_VERSION = '0.2.0';
 
-// 解析后给 verifyArtifacts 用：SC-001 要求的 500+ 项目（双语言覆盖）
-const SC001_REQUIRED_PROJECTS = ['continue', 'khoj'];
+// Workspace 家目录：跨 worktree 共享，避免每次重 clone（Q2=A）
+export function getBaselineHome() {
+  return process.env.SPECTRA_BASELINE_HOME ?? path.join(os.homedir(), '.spectra-baselines');
+}
+
+// 支持的 tools（Q3=A 留接口；spectra 完整实现，竞品后续 PR 填充）
+export const SUPPORTED_TOOLS = ['spectra', 'graphify', 'llm-agent'];
+const DEFAULT_TOOL = 'spectra';
+
+// SC 验收（用户决策 Q1=C：放弃 spec §2.1 硬性 500+，改成"已选定 baseline 的 fixture 存在 + schema 完整"）
+const SC001_REQUIRED_PROJECTS = ['micrograd', 'nanoGPT', 'self-dogfood'];
 const SC001_REQUIRED_MODE = 'full';
-const SC001_MIN_FILE_COUNT = 500; // spec.md §2.1
+const SC001_REQUIRED_TOOL = 'spectra'; // 验收 spectra 自己的基线；竞品 fixture 不卡 SC-001
 
 const KNOWN_TARGETS = {
   'self-dogfood': {
@@ -40,15 +53,10 @@ const KNOWN_TARGETS = {
     name: 'micrograd',
     repoUrl: 'https://github.com/karpathy/micrograd.git',
   },
-  'continuedev/continue': {
+  'karpathy/nanoGPT': {
     type: 'clone',
-    name: 'continue',
-    repoUrl: 'https://github.com/continuedev/continue.git',
-  },
-  'khoj-ai/khoj': {
-    type: 'clone',
-    name: 'khoj',
-    repoUrl: 'https://github.com/khoj-ai/khoj.git',
+    name: 'nanoGPT',
+    repoUrl: 'https://github.com/karpathy/nanoGPT.git',
   },
 };
 
@@ -68,6 +76,7 @@ export function parseArgs(argv) {
     target: null,
     targets: null, // 逗号分隔多 target，CI workflow_dispatch 友好
     mode: 'full',
+    tool: DEFAULT_TOOL, // spectra | graphify | llm-agent
     commit: null,
     verifyArtifacts: false,
     output: null,
@@ -84,6 +93,9 @@ export function parseArgs(argv) {
         break;
       case '--mode':
         args.mode = argv[++i];
+        break;
+      case '--tool':
+        args.tool = argv[++i];
         break;
       case '--commit':
         args.commit = argv[++i];
@@ -103,6 +115,9 @@ export function parseArgs(argv) {
         }
     }
   }
+  if (!SUPPORTED_TOOLS.includes(args.tool)) {
+    throw new Error(`--tool must be one of ${SUPPORTED_TOOLS.join('|')}, got: ${args.tool}`);
+  }
   return args;
 }
 
@@ -110,13 +125,17 @@ export function parseArgs(argv) {
 // Target 文件统计
 // ============================================================
 
-export function parseTargetFiles(targetDir) {
+export function parseTargetFiles(targetDir, opts = {}) {
   const counts = { ts: 0, tsx: 0, py: 0, md: 0, other: 0 };
   let locEstimate = 0;
   const skip = new Set([
     'node_modules', 'dist', '.git', '.next', 'build', 'coverage',
     '.workspaces', 'tests/baseline/.workspaces',
+    '.spectra-baseline-output', // collector 自己产物
   ]);
+  if (opts.extraSkip) {
+    for (const s of opts.extraSkip) skip.add(s);
+  }
 
   function walk(dir) {
     let entries;
@@ -234,8 +253,13 @@ export function parseGraph(metaDir) {
       graphSizeBytes: stat.size,
     };
   }
+  // graph.json 用 networkx node-link format：nodes + links（不是 edges）
   const nodes = Array.isArray(parsed?.nodes) ? parsed.nodes.length : null;
-  const edges = Array.isArray(parsed?.edges) ? parsed.edges.length : null;
+  const edges = Array.isArray(parsed?.links)
+    ? parsed.links.length
+    : Array.isArray(parsed?.edges)
+      ? parsed.edges.length
+      : null;
   const hyperedges = Array.isArray(parsed?.hyperedges)
     ? parsed.hyperedges.length
     : 0;
@@ -334,10 +358,11 @@ export function prepareTarget(targetSpec, commit) {
       commit: getGitCommit(def.path) ?? 'unknown',
     };
   }
-  // clone — 不指定 commit 时 shallow clone 省时间；指定 commit 时全量 clone（确保 hash 在历史中）
-  const workspaceDir = path.join(PROJECT_ROOT, 'tests/baseline/.workspaces', def.name);
+  // clone — 持久化在 ~/.spectra-baselines/<project>/，跨 worktree 共享，已存在则不重 clone
+  const workspaceDir = path.join(getBaselineHome(), def.name);
   if (!fs.existsSync(workspaceDir)) {
     fs.mkdirSync(path.dirname(workspaceDir), { recursive: true });
+    console.log(`[baseline] cloning ${def.repoUrl} → ${workspaceDir}`);
     const cloneArgs = commit
       ? ['clone', def.repoUrl, workspaceDir]
       : ['clone', '--depth', '50', def.repoUrl, workspaceDir];
@@ -345,6 +370,8 @@ export function prepareTarget(targetSpec, commit) {
     if (clone.status !== 0) {
       throw new Error(`git clone failed for ${def.repoUrl}`);
     }
+  } else {
+    console.log(`[baseline] reusing existing workspace ${workspaceDir}`);
   }
   if (commit) {
     let checkout = spawnSync('git', ['-C', workspaceDir, 'checkout', commit], { stdio: 'inherit' });
@@ -438,7 +465,8 @@ export function runDryRun({ targetPath, mode }) {
     maxBuffer: 16 * 1024 * 1024,
   });
   if (r.status !== 0) return { estimatedTokens: null, note: 'dry-run-failed' };
-  const m = (r.stdout ?? '').match(/预估.*?(\d[\d,]*)\s*tokens?/i);
+  // 实际格式：`[dry-run] 预估总 tokens: 35,534 (input ... + output ...)`
+  const m = (r.stdout ?? '').match(/预估总\s*tokens?:\s*([\d,]+)/i);
   return {
     estimatedTokens: m ? Number(m[1].replace(/,/g, '')) : null,
     note: m ? null : 'estimate-not-found',
@@ -453,6 +481,7 @@ export function assembleFixture({
   spectraVersion,
   target,
   mode,
+  tool,
   model,
   fileStats,
   command,
@@ -470,6 +499,7 @@ export function assembleFixture({
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
+      tool, // 必含：spectra | graphify | llm-agent（Q3=A 多工具维度）
       spectraVersion,
       collectorVersion: COLLECTOR_VERSION,
       targetProject: target.spec,
@@ -538,11 +568,17 @@ function estimateCostUsd(batchStats, model) {
 // Verify Artifacts（SC-001）
 // ============================================================
 
+/**
+ * SC-001 验收（用户决策 Q1=C 后）：
+ *   要求 SC001_REQUIRED_PROJECTS 每个项目在 SC001_REQUIRED_TOOL 下有 SC001_REQUIRED_MODE 的 fixture，
+ *   且 fixture schema 完整（targetCommit / targetFileCountsByType / perf 关键字段非 null）。
+ *   不再 enforce "≥ 500 文件"硬性要求；改成"已选定 baseline 的覆盖完整"。
+ */
 export function verifyArtifacts({ rootDir }) {
   const baselineDir = path.join(rootDir, 'tests/baseline');
   const errors = [];
   for (const proj of SC001_REQUIRED_PROJECTS) {
-    const fixturePath = path.join(baselineDir, proj, `${SC001_REQUIRED_MODE}.json`);
+    const fixturePath = path.join(baselineDir, proj, SC001_REQUIRED_TOOL, `${SC001_REQUIRED_MODE}.json`);
     if (!fs.existsSync(fixturePath)) {
       errors.push(`missing fixture: ${path.relative(rootDir, fixturePath)}`);
       continue;
@@ -563,18 +599,14 @@ export function verifyArtifacts({ rootDir }) {
     if (parsed.perf?.tokensInput == null) {
       errors.push(`fixture ${path.relative(rootDir, fixturePath)} has null perf.tokensInput`);
     }
-    // SC-001 spec §2.1：≥ 500 文件双语言。检查 fixture meta 反映的目标项目规模
-    const counts = parsed.meta?.targetFileCountsByType;
-    if (!counts) {
+    if (!parsed.meta?.targetFileCountsByType) {
       errors.push(`fixture ${path.relative(rootDir, fixturePath)} missing meta.targetFileCountsByType`);
-    } else {
-      const total = (counts.ts ?? 0) + (counts.tsx ?? 0) + (counts.py ?? 0) + (counts.md ?? 0) + (counts.other ?? 0);
-      if (total < SC001_MIN_FILE_COUNT) {
-        errors.push(`fixture ${path.relative(rootDir, fixturePath)} target has ${total} files, < SC-001 minimum ${SC001_MIN_FILE_COUNT} (spec §2.1)`);
-      }
     }
     if (!parsed.meta?.targetCommit) {
       errors.push(`fixture ${path.relative(rootDir, fixturePath)} missing meta.targetCommit (spec §6 reproducibility)`);
+    }
+    if (!parsed.meta?.tool) {
+      errors.push(`fixture ${path.relative(rootDir, fixturePath)} missing meta.tool`);
     }
   }
   return { ok: errors.length === 0, errors };
@@ -627,7 +659,14 @@ async function runOneTarget(args) {
   const fileStats = parseTargetFiles(target.path);
   console.log(`[baseline] target=${target.spec} commit=${target.commit.slice(0, 7)} files=${JSON.stringify(fileStats.fileCountsByType)} loc=${fileStats.locEstimate}`);
 
-  const outputDir = args.output ?? path.join(target.path, '.spectra-baseline-output');
+  // outputDir 默认放到 baseline home 的 -output 子目录（与 target workspace 同级），
+  // 避免 collector 自己产物污染 parseTargetFiles 的目标项目文件计数。
+  // 跑前清理保证从干净状态测量（baseline 测的是冷启动性能，不是 incremental 运行）。
+  const outputDir = args.output
+    ?? path.join(getBaselineHome(), `${target.name}-output`, `${args.tool}-${args.mode}`);
+  if (fs.existsSync(outputDir)) {
+    fs.rmSync(outputDir, { recursive: true, force: true });
+  }
   const model = 'claude-sonnet-4-6';
 
   let perfRaw, llmStats, phases, batchStats, graphStats, memoryPeakKb, dryRun, command, runArgs, envAllowlist;
@@ -658,6 +697,13 @@ async function runOneTarget(args) {
     runArgs = [];
     envAllowlist = {};
   } else {
+    // tool dispatch（Q3=A）：spectra 完整实现，竞品留 stub
+    if (args.tool === 'graphify' || args.tool === 'llm-agent') {
+      throw new Error(
+        `tool=${args.tool} 的 collector 实现待 follow-up PR；当前仅 spectra 实现完整。\n` +
+        `参考 CLAUDE.local.md "Baseline 测试 / 扩展竞品 collector" 章节。`,
+      );
+    }
     dryRun = runDryRun({ targetPath: target.path, mode: args.mode });
     perfRaw = runBatchAndCapture({ targetPath: target.path, mode: args.mode, outputDir });
     if (perfRaw.exitCode !== 0) {
@@ -693,6 +739,7 @@ async function runOneTarget(args) {
     spectraVersion: readSpectraVersion(),
     target,
     mode: args.mode,
+    tool: args.tool,
     model,
     fileStats,
     command,
@@ -708,7 +755,8 @@ async function runOneTarget(args) {
     memoryPeakKb,
   });
 
-  const fixtureDir = path.join(PROJECT_ROOT, 'tests/baseline', target.name);
+  // 多工具 fixture 路径：tests/baseline/<project>/<tool>/<mode>.json
+  const fixtureDir = path.join(PROJECT_ROOT, 'tests/baseline', target.name, args.tool);
   fs.mkdirSync(fixtureDir, { recursive: true });
   const fixturePath = path.join(fixtureDir, `${args.mode}.json`);
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');

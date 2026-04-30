@@ -133,8 +133,9 @@ flowchart TD
 {
   "schemaVersion": "1.0",
   "meta": {
+    "tool": "spectra",                    // Q3=A 多 tool 维度：spectra | graphify | llm-agent
     "spectraVersion": "4.1.0",            // 来自 package.json
-    "collectorVersion": "0.1.0",          // collector 自身版本，schema 演化用
+    "collectorVersion": "0.2.0",          // collector 自身版本，schema 演化用
     "targetProject": "continuedev/continue",
     "targetCommit": "abc123...",          // 必须是 pin 死的 commit hash
     "targetFileCountsByType": {           // 按扩展名分桶（spec §5.1 必含）
@@ -239,6 +240,26 @@ flowchart TD
 
 阈值都写成常量在 `scripts/baseline-diff.mjs` 顶部（`REPRODUCIBILITY_THRESHOLDS` + `REGRESSION_THRESHOLDS` 两个 object），便于调整。
 
+### 5.5 Multi-tool 架构（用户决策 Q3=A，implement 阶段加入）
+
+把 baseline collector 设计为支持多个分析工具的对比基础设施，不再绑死 spectra：
+
+| 工具 | --tool 值 | 当前状态 | 实现位置 |
+|------|----------|---------|---------|
+| Spectra（本仓库）| `spectra`（默认）| ✅ 完整实现 | collector 直接调 `dist/cli/index.js batch` |
+| Graphify（潜在竞品）| `graphify` | 🔵 接口预留 | collector 当前抛 "follow-up PR" 错误；扩展见 CLAUDE.local.md |
+| LLM Agent（潜在竞品）| `llm-agent` | 🔵 接口预留 | 同上 |
+
+Fixture 路径分层：`tests/baseline/<project>/<tool>/<mode>.json`，使同一 baseline target 可以同时持有多工具的 fixture，做横向对比。SC-001 验收只检查 `<project>/spectra/full.json`，竞品 fixture 不入 SC 必含集合。
+
+**扩展新工具的步骤**（CLAUDE.local.md 详写）：
+1. 在 `SUPPORTED_TOOLS` 数组加 tool 名
+2. 在 `runOneTarget` 的 tool dispatch 分支里实现 `runXxxAndCapture`（对应 `runBatchAndCapture`）+ `parseXxxOutput`（对应 `parseBatchSummary` + `parseGraph`）
+3. 把解析结果对齐 schema 1.0 的 perf / output / phases / dryRun 字段（部分字段可填 null + extractionMethod）
+4. fixture 自动写到 `tests/baseline/<project>/<new-tool>/<mode>.json`
+
+**Spec 1.0 schema 兼容性**：所有 tool 共享同一 schema，便于 diff 工具做"同 project / 不同 tool"的横向对比（未来扩展 `baseline-diff --cross-tool` 模式）。
+
 ---
 
 ## 6. Project Structure
@@ -265,47 +286,63 @@ scripts/
 
 tests/
 ├── baseline/
-│   ├── README.md                    # 新建（fixture 目录说明）
-│   ├── micrograd/
-│   │   ├── full.json                # ~5KB
-│   │   ├── reading.json
-│   │   └── code-only.json
-│   ├── self-dogfood/                # 本仓库自身
-│   │   ├── full.json
-│   │   └── reading.json
-│   ├── continue/                    # Wave 1，最大 TS 目标
-│   │   └── full.json                # ~8-15KB（实际由 collector 跑出）
-│   ├── khoj/                        # Wave 2，Python 目标（满足 spec §2.1）
-│   │   └── full.json
-│   └── .workspaces/                 # 内容 gitignored，目录用 .gitkeep 保留
-│       └── .gitkeep                 # gitignore 规则：`tests/baseline/.workspaces/*` + `!tests/baseline/.workspaces/.gitkeep`
+│   ├── README.md                            # fixture 目录说明
+│   ├── micrograd/                           # 各 baseline target 一个目录
+│   │   └── spectra/                         # 工具维度（Q3=A 多 tool 架构）
+│   │       └── full.json                    # ~3-10KB（实测）
+│   ├── nanoGPT/
+│   │   └── spectra/
+│   │       └── full.json
+│   └── self-dogfood/
+│       └── spectra/
+│           └── full.json
 └── unit/
-    ├── baseline-collect.test.ts     # 新建（解析 fixture / 错误处理 / schema 完整性）
-    └── baseline-diff.test.ts        # 新建（阈值判定 / schema mismatch / reproducibility 模式）
+    ├── baseline-collect.test.ts             # 解析 fixture / 错误处理 / schema 完整性 / tool flag
+    └── baseline-diff.test.ts                # 阈值判定 / schema mismatch / reproducibility / 0 分母
+
+# Workspace（实际 baseline target 的 git clone）持久化在用户家目录，跨 worktree 共享
+~/.spectra-baselines/
+├── micrograd/                               # git clone 的源码（持久 reuse，不重 clone）
+├── nanoGPT/
+└── *-output/<tool>-<mode>/                  # collector 跑产物（每次重跑前清理）
+    ├── _meta/{batch-summary-*.md, graph.json, ...}
+    ├── spectra-stdout.log
+    └── spectra-stderr.log
 
 .github/workflows/
-└── baseline-weekly.yml              # 可选（Phase 3，默认 on: workflow_dispatch）
+└── baseline-collect.yml                     # workflow_dispatch 模板（不绑 cron）
 ```
 
-**Fixture 大小预估**：每个 JSON 主体在 5-15KB（取决于 llmCallDurationsMs 是否 inline 全部样本；当前设计仅存 P50/P95/min/max，不存全样本数组，所以 << 1MB 上限）。如未来需要 inline 全样本，使用 `gzip` 压缩后再写盘，扩展名为 `.json.gz`。
+**Fixture 大小预估**：每个 JSON 主体在 3-10KB（实测 micrograd ~2.4KB；当前 schema 仅存 P50/P95/min/max 不存全样本，所以 << 1MB 上限）。
+
+**Workspace 持久化设计（用户决策 Q2=A）**：
+- target git clone 放 `~/.spectra-baselines/<project>/`（默认）或 `$SPECTRA_BASELINE_HOME/<project>/`（环境变量覆盖）
+- 跨 worktree 共享同一份 clone，避免每次 worktree 切换重 clone
+- collector 检测目录已存在则 reuse；commit 锁定时 fallback fetch（C2 修复）
+- collector 自身产物（batch 输出 / log）放 `~/.spectra-baselines/<project>-output/<tool>-<mode>/`，与 target 同级（避免污染 parseTargetFiles 的文件计数），跑前清理保证从 0 测量
 
 ---
 
 ## 7. 决策日志（D1-D6）
 
-### D1: Baseline target projects 选型
+### D1: Baseline target projects 选型（implement 阶段用户决策修订）
 
-**Decision**: Wave 1 选 3 个 TS 项目（覆盖小/中/大规模），Wave 2 必补 1 个 Python 500+（满足 spec §2.1 双语言要求），可选再扩 1 个极限压力。
+**用户在 implement 阶段提出**："找到合适的项目后面测试就不要切来切去了"——把 baseline 从"一次性测量"升级为**"持久 perf bench platform"**。在此前提下用户决策 **Q1=C：放弃 spec §2.1 硬性 500+ 要求**，理由是：
+- Continue (800+) 单次 cost ~$60-90，超出"测量基础设施"的成本范围
+- spec §2.1 对"500+"的硬性要求基于"研究/测量"语义；持久 bench 的语义不同（重要的是覆盖 / 成本可重复性 / 跨工具横向对比）
+- 大项目放到 follow-up Feature 按需加（如果未来 Phase 3 优化决策真的需要 500+ 数据点）
 
-| Wave | 项目 | URL | Pin commit | 文件数 | 主语言 | 选择理由 |
-|------|------|-----|-----------|-------|-------|---------|
-| 1 必跑 | karpathy/micrograd | github.com/karpathy/micrograd | tag `master`（commit 在 collector 跑时记录到 fixture） | ~6 | Python | 极小项目锚点，验证 collector 自身正确性（参考 spec.md §1.1 的 v3.x baseline，**注**：v4.1 数据不与 v3.x 直接可比，仅作为锚点） |
-| 1 必跑 | self-dogfood（本仓库）| 当前 worktree | HEAD（写入 fixture）| ~250+ | TypeScript | 中等规模 + 我们最熟悉的代码，便于人工 sanity-check fixture 数据 |
-| 1 必跑 | continuedev/continue | github.com/continuedev/continue | **`v0.9.245` 或 collector 跑时的最新 stable tag**（在 tasks 阶段锁定具体 tag）| 800+ | TypeScript | spec.md §4 推荐，最接近 Phase 3 用户场景；满足 spec §2.1 "TS 500+"|
-| 2 必跑 | khoj-ai/khoj（含 backend）| github.com/khoj-ai/khoj | release tag（tasks 阶段锁定）| 300+ .py + 100+ .ts | Python | **必跑**：spec §2.1 要求"至少 1 个 Python 500+"；khoj 总文件数 500+（Python + TS 混合），是当前 Python 项目候选中最现实的选择 |
-| 2 可选 | langchain-ai/langchain | github.com/langchain-ai/langchain | release tag | 1000+ .py | Python | 极限压力测试，cost $2+，仅在前面四个全部成功且预算允许时跑 |
+**最终选定（固定）**：
 
-**SC-001 满足节点**: spec §3 SC-001 要求"2 个项目各完成至少 1 次完整 full-mode batch"——**Wave 1 完成后 Continue 单项就满足"至少 1 个 TS 500+"，但 spec §2.1 要求双语言**，因此 SC-001 完整 PASS 需要 Wave 2 的 khoj 也跑完。Phase 化交付（§0）已经把 Wave 2 khoj 划入 Phase 2。
+| 项目 | URL | Pin commit | 规模 | 主语言 | 角色 |
+|------|-----|-----------|------|-------|------|
+| karpathy/micrograd | github.com/karpathy/micrograd | HEAD（fixture 记录）| 5 .py / 248 LOC | Python | 极小锚点，验证 collector 正确性 |
+| **karpathy/nanoGPT** | **github.com/karpathy/nanoGPT** | HEAD（fixture 记录）| **15 .py / 1.5k LOC** | **Python (PyTorch)** | **中型 ML 项目锚点**（用户选定，替代原"小-中"层）|
+| self-dogfood（本仓库）| 当前 worktree | HEAD（写入 fixture）| ~250+ TS / 17 module | TypeScript | 中型 TS / 我们自己的代码 |
+
+**SC-001 满足规则修订**：spec §3 SC-001 原要求"2 个项目各完成至少 1 次完整 full-mode batch"——本 Feature 实际交付为"3 个固定 baseline projects 在 spectra tool full mode 下都有完整 fixture"。verifyArtifacts 不再 enforce ≥500 文件，改为 enforce 三个项目的 spectra/full.json 存在 + schema 完整。
+
+**500+ 大项目**（Continue / Khoj / LangChain）作为 **follow-up Feature** 处理：保留 collector 的 `KNOWN_TARGETS` 扩展点，但本 Feature 不实跑。
 
 **Rationale**: Wave 1 三档（小/中/大）覆盖规模主轴 + 双语言（TS/Python）。Wave 2 优先 Python 后端（khoj）补 Python AST patch 后的对比基线。LangChain 作为可选压力测试，不是 Wave 1 必需。
 
@@ -313,21 +350,24 @@ tests/
 - 全选 5 个 Wave 1：单 Feature 跑完成本 $5+，且 Continue 可能 60+ 分钟，全部排队跑会超出本 Feature 1-2 天工期
 - 只选 1 个大项目：无对比，无法识别"小项目锚点 vs 大项目放大"的非线性
 
-### D2: Mode 覆盖矩阵
+### D2: Mode 覆盖矩阵（implement 阶段简化为 3×full）
 
-**Decision**:
+**Decision**：本 Feature 仅交付 **3 项目 × full mode** = 3 个 fixture。reading / code-only 模式 **命令就绪但不入本 Feature 验收**，留给后续按需补跑（见 CLAUDE.local.md "扩展 mode 对比"章节）。
 
 | Project | full | reading | code-only |
 |---------|------|---------|-----------|
-| micrograd | ✅ Wave 1 | ✅ Wave 1 | ✅ Wave 1 |
-| self-dogfood | ✅ Wave 1 | ✅ Wave 1 | ⚪ Wave 2 |
-| continue | ✅ Wave 1 | ⚪ Wave 2 | ⚪ Wave 2 |
+| micrograd | ✅ 本 Feature | 命令就绪，未跑 | 命令就绪，未跑 |
+| nanoGPT | ✅ 本 Feature | 命令就绪，未跑 | 命令就绪，未跑 |
+| self-dogfood | ✅ 本 Feature | 命令就绪，未跑 | 命令就绪，未跑 |
 
-**Rationale**: micrograd 极小（< 5 分钟），三模式全跑成本可忽略，作为 mode 对比的"完整样本"。Continue 跑 full 一次就够大（预计 30-60 分钟，$1-2），先采 full 确认基线；reading / code-only 留 Wave 2。self-dogfood 中等成本，full + reading 即可形成对比。
+**Rationale**:
+- 用户决策"找到合适的就别切了"——把"持久 bench"的 baseline 维度从"模式 × 项目 × 工具"全矩阵收缩为"项目 × 工具"主轴，模式只取最完整的 full
+- full mode 是用户最常用的（生成完整 spec + 7 类文档 + graph + cost summary），最有 reference value
+- reading / code-only 的 cost/value 验证作为独立分析任务（不是每次升版都要跑），CLAUDE.local.md 留命令模板
 
 **Alternatives 拒绝**:
-- 全 3×3 矩阵：Continue 跑 3 次成本 $3-6，超出 spec.md §7 风险表的"< $5"预算
-- 只跑 full：无法回答"reading 模式真的省 38%？" 的可验证 SC
+- 全 3×3 矩阵：cost ~$25 / 时间 ~30min，超出"持久 bench 重复跑"的成本预期
+- 只跑 micrograd 三模式：无 cross-project 对比，bottleneck 分析会偏向小项目噪声
 
 ### D3: Baseline data schema
 
