@@ -95,6 +95,30 @@
       ],
       "judgedAt": "2026-04-30T12:39:28.363Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 6,
+      "rationale": "该产物是 repomap 形态（ranked file/symbol list + 关键签名），不应按 spec.md 标准评 1 分。覆盖度尚可：model.py 的 LayerNorm/CausalSelfAttention/MLP/Block/GPT/GPTConfig 核心 abstractions 全部列出含关键签名（__init__ 字段 / forward），train.py 的 get_batch/estimate_loss/get_lr 也在；config 与 data prepare 文件覆盖完整。但关系展现弱：仅文件/符号扁平列表，无 calls / 继承 / data flow，Block 与 Attention/MLP 的组合关系需读者自行推断。信息密度高、无幻觉、签名真实，作为 LLM context 可支撑中等任务但缺关系网，扣分集中在\"关系展现\"维度。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 6,
+          "rationaleAnonymized": "该产物是 repomap 形态（ranked file/symbol list + 关键签名），不应按 spec.md 标准评 1 分。覆盖度尚可：model.py 的 LayerNorm/CausalSelfAttention/MLP/Block/GPT/GPTConfig 核心 abstractions 全部列出含关键签名（__init__ 字段 / forward），train.py 的 get_batch/estimate_loss/get_lr 也在；config 与 data prepare 文件覆盖完整。但关系展现弱：仅文件/符号扁平列表，无 calls / 继承 / data flow，Block 与 Attention/MLP 的组合关系需读者自行推断。信息密度高、无幻觉、签名真实，作为 LLM context 可支撑中等任务但缺关系网，扣分集中在\"关系展现\"维度。",
+          "durationMs": 15622,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 6,
+          "rationaleAnonymized": "该产物为 repomap 形态，排名展示 model.py 关键 class（LayerNorm / CausalSelfAttention / MLP / Block / GPTConfig / GPT）及 train.py / prepare.py 关键函数签名，覆盖度尚可（~75%）、真实性高且与代码 1:1 对应。但仅展示扁平符号列表与签名，未呈现 calls / imports / 继承等关系，关系展现维度较弱；作为 LLM context 可用于定位但语义信息不足，复杂任务仍需翻 source。整体中等。",
+          "durationMs": 27500,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:43:36.476Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "aider-repomap-stdout.log"
     }
   }
 }

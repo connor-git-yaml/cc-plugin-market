@@ -167,6 +167,30 @@
       ],
       "judgedAt": "2026-04-30T12:36:41.701Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 8,
+      "rationale": "覆盖度强（4/4 模块全含 intent/behavior/api/data 四章节，AST 精确提取关键签名），关系展现到位（nn→engine 跨模块链接 + Mermaid flowchart 描述前向/反向数据流），LLM-as-context 价值高（grounding 任务满分 10，17KB 上下文支撑 micrograd-add-tanh 完美实现）。真实性好，含 `engine.py:4-10` 等行号锚点。扣分：(1) `_index.spec.md` 仅 42 行，依赖图 mermaid 块为空；(2) moduleCount=5 但 specModuleCount=4，setup.py 之外的 5th 模块缺席；(3) 单 spec 平均 251 行偏长，部分章节（如 setup.py 的\"测试覆盖\"）信息密度可压缩。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 8,
+          "rationaleAnonymized": "覆盖度强（4/4 模块全含 intent/behavior/api/data 四章节，AST 精确提取关键签名），关系展现到位（nn→engine 跨模块链接 + Mermaid flowchart 描述前向/反向数据流），LLM-as-context 价值高（grounding 任务满分 10，17KB 上下文支撑 micrograd-add-tanh 完美实现）。真实性好，含 `engine.py:4-10` 等行号锚点。扣分：(1) `_index.spec.md` 仅 42 行，依赖图 mermaid 块为空；(2) moduleCount=5 但 specModuleCount=4，setup.py 之外的 5th 模块缺席；(3) 单 spec 平均 251 行偏长，部分章节（如 setup.py 的\"测试覆盖\"）信息密度可压缩。",
+          "durationMs": 14817,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 8,
+          "rationaleAnonymized": "覆盖度强（4/4 模块 9 章节齐全，含 intent/behavior/api/data/约束/边界/测试/依赖），关系展现到位（nn→engine 跨模块链接 + mermaid flowchart 可视化前向传播 + Value DAG 反向传播阶段化描述）；信息密度高，每段含 file:line 锚点 + 代码引用 + chain rule 推导；grounding 实测满分 10（add-tanh 任务完美），LLM-as-context 价值极强。扣分：(1) `_index.spec.md` 仅 42 行且 mermaid 依赖图为空，架构总览偏弱；(2) setup.py 等基础设施模块占比偏高、信息冗余；(3) `__init__.py` 空文件却产出 200+ 行近似过度生成。整体偏精良。",
+          "durationMs": 14613,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:39:59.312Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "modules/*.spec.md"
     }
   }
 }

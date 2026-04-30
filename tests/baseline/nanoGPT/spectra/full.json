@@ -135,6 +135,30 @@
       ],
       "judgedAt": "2026-04-30T12:38:28.902Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 7,
+      "rationale": "产物形态为 spec.md 类，意图/业务逻辑/接口/数据/约束/边界等章节齐全，平均 362 行属理想区间，0 broken-links，跨模块关联（如 model.py 入站 3）展现清晰。亮点：阶段化业务逻辑叙述深入、含具体行号和代码引用、weight tying 等细节准确。扣分：nanoGPT 共 15 个 .py 仅产 6 个 spec 模块，data/shakespeare 等覆盖缺失；_index.spec.md 仅 45 行且依赖图 mermaid 为空；isolatedNodes 12/32 反映关系网未充分展开；output.specModuleCount=4 与 quality.moduleCount=7 口径不一致。整体作为 LLM context 价值良好但覆盖度不足。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 7,
+          "rationaleAnonymized": "产物形态为 spec.md 类，意图/业务逻辑/接口/数据/约束/边界等章节齐全，平均 362 行属理想区间，0 broken-links，跨模块关联（如 model.py 入站 3）展现清晰。亮点：阶段化业务逻辑叙述深入、含具体行号和代码引用、weight tying 等细节准确。扣分：nanoGPT 共 15 个 .py 仅产 6 个 spec 模块，data/shakespeare 等覆盖缺失；_index.spec.md 仅 45 行且依赖图 mermaid 为空；isolatedNodes 12/32 反映关系网未充分展开；output.specModuleCount=4 与 quality.moduleCount=7 口径不一致。整体作为 LLM context 价值良好但覆盖度不足。",
+          "durationMs": 13774,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 7,
+          "rationaleAnonymized": "6 个模块 spec 章节完整（意图/逻辑/接口/数据/约束/边界全覆盖），平均 362 行信息密度良好，含具体行号锚点（model.py:118）、类签名、阶段化业务流程，LLM-as-context 价值较高。跨模块关联清晰展现 model.py 的中心地位（3 入站）。扣分：覆盖度不足——nanoGPT 共 15 个 .py 文件仅产出 6 个 spec（缺 train.py 等关键样本展示），_index.spec.md 仅 45 行且 mermaid 依赖图为空，isolatedNodes 12/32 反映关系网未充分构建，cross-links 仅 12 条偏少。",
+          "durationMs": 13551,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:41:50.010Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "modules/*.spec.md"
     }
   }
 }

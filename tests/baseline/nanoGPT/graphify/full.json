@@ -102,6 +102,30 @@
       ],
       "judgedAt": "2026-04-30T12:39:02.265Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 4,
+      "rationale": "核心 abstractions（GPT/LayerNorm/MLP/Block/GPTConfig/CausalSelfAttention）出现在 God Nodes，覆盖度尚可；但执行质量明显偏弱：61/61 边全部缺 type（仅\"--uses-->\"占位），关系语义不可区分；9 个孤立节点；17 个 community 中多数为 0-1 节点的噪声 cluster；最致命的是节点命名大量为截断 docstring（如\"This training script can be run both on a single gpu in debug mode, and also in\"），既无 file/class/method 签名也无层级，作为 LLM context 不够独立；inferred 边平均 confidence 仅 0.5。形态本身（图报告）合法，但信息密度低、关系网失真，给 4 分。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 4,
+          "rationaleAnonymized": "核心 abstractions（GPT/LayerNorm/MLP/Block/GPTConfig/CausalSelfAttention）出现在 God Nodes，覆盖度尚可；但执行质量明显偏弱：61/61 边全部缺 type（仅\"--uses-->\"占位），关系语义不可区分；9 个孤立节点；17 个 community 中多数为 0-1 节点的噪声 cluster；最致命的是节点命名大量为截断 docstring（如\"This training script can be run both on a single gpu in debug mode, and also in\"），既无 file/class/method 签名也无层级，作为 LLM context 不够独立；inferred 边平均 confidence 仅 0.5。形态本身（图报告）合法，但信息密度低、关系网失真，给 4 分。",
+          "durationMs": 28405,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 4,
+          "rationaleAnonymized": "优点：识别出 nanoGPT 核心 abstractions（GPT、GPTConfig、Block、MLP、LayerNorm、CausalSelfAttention），god nodes ranking 与真实结构吻合，0 token 成本；提供 community / 中心性 / inferred edges 等图视角。缺点：(1) 多个节点名是被截断的 docstring 片段（如\"A much shorter version of train.py for benchmarking\"、\"This training script can be run both on...\"），可读性严重受损；(2) 17 个 community 中 9 个为空或单节点，聚类基本失效；(3) 61 条边全部缺 type，关系语义不清；(4) 9 个 isolated 节点显示提取召回不足；(5) 缺函数级签名与 forward/generate 等关键方法。作为 LLM context 仍需回看源码，整体偏低于及格线。",
+          "durationMs": 34867,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:42:53.318Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "GRAPH_REPORT.md"
     }
   }
 }

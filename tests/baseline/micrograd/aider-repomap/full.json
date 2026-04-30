@@ -95,6 +95,30 @@
       ],
       "judgedAt": "2026-04-30T12:37:40.622Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 6,
+      "rationale": "该产物为 repomap 形态，按 rubric 不因形态扣分。覆盖度尚可：Value 类含核心算子（__add__/__mul__/__pow__/relu/backward），nn.py 的 Module/Neuron/Layer/MLP 层级清晰，test 函数也列出。真实性高，与源码 1:1 对应。但关系展现弱：仅暴露类继承（Neuron(Module) 等），无 calls / data flow / import 依赖；方法体被 ⋮ 折叠，LLM 拿到此产物完成中等编码任务仍需翻源码（如 backward 的 topo 排序细节、_backward 闭包逻辑均缺失）。信息密度高、易扫读是加分项，但作为独立 context 价值受限，给 6 分。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 6,
+          "rationaleAnonymized": "该产物为 repomap 形态，按 rubric 不因形态扣分。覆盖度尚可：Value 类含核心算子（__add__/__mul__/__pow__/relu/backward），nn.py 的 Module/Neuron/Layer/MLP 层级清晰，test 函数也列出。真实性高，与源码 1:1 对应。但关系展现弱：仅暴露类继承（Neuron(Module) 等），无 calls / data flow / import 依赖；方法体被 ⋮ 折叠，LLM 拿到此产物完成中等编码任务仍需翻源码（如 backward 的 topo 排序细节、_backward 闭包逻辑均缺失）。信息密度高、易扫读是加分项，但作为独立 context 价值受限，给 6 分。",
+          "durationMs": 27026,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 6,
+          "rationaleAnonymized": "产物为 repomap 形态（ranked file + 关键签名摘录），覆盖了 micrograd 核心 abstractions（Value 及其运算符 / Module / Neuron / Layer / MLP），真实性高、信息密度好、1.5s 零 LLM 成本。但关系展现仅靠类继承隐式可见，缺 calls / data flow / topo build_topo 等关键交互；签名后用 ⋮ 省略实现，LLM 仅凭此完成中等编码任务需补充源码；无 high-level intent 描述。综合按\"项目理解 context\"绝对质量给 6 分。",
+          "durationMs": 29054,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:41:22.639Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "aider-repomap-stdout.log"
     }
   }
 }

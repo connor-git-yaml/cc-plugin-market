@@ -95,6 +95,30 @@
       ],
       "judgedAt": "2026-04-30T12:41:05.013Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 4,
+      "rationale": "该产物为 repomap 形态，列出多个文件的关键 interface / type / class 签名，真实性高（直接从 AST 抽取，1:1 对应源码）。但作为 self-dogfood（~250 .ts / 17 module）的项目理解 context 存在明显短板：(1) 覆盖度中等，仅展示 top-level 签名，类内部方法、核心实现（如 batch / panoramic 流水线）几乎未涉及；(2) 关系展现极弱，仅扁平 ranked 文件列表，无 calls / imports / extends / data flow；(3) 信息密度尚可（5.9KB），但因受 2048 token repo-map 上限限制，关键 abstractions 多为残缺片段（\"⋮\" 截断）；(4) LLM-as-context 价值有限，仅够定位 API 入口，复杂编码任务仍需翻源码。形态不扣分，但相对 spec/graph 类产物在关系与深度维度天然劣势。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 4,
+          "rationaleAnonymized": "该产物为 repomap 形态，列出多个文件的关键 interface / type / class 签名，真实性高（直接从 AST 抽取，1:1 对应源码）。但作为 self-dogfood（~250 .ts / 17 module）的项目理解 context 存在明显短板：(1) 覆盖度中等，仅展示 top-level 签名，类内部方法、核心实现（如 batch / panoramic 流水线）几乎未涉及；(2) 关系展现极弱，仅扁平 ranked 文件列表，无 calls / imports / extends / data flow；(3) 信息密度尚可（5.9KB），但因受 2048 token repo-map 上限限制，关键 abstractions 多为残缺片段（\"⋮\" 截断）；(4) LLM-as-context 价值有限，仅够定位 API 入口，复杂编码任务仍需翻源码。形态不扣分，但相对 spec/graph 类产物在关系与深度维度天然劣势。",
+          "durationMs": 31572,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 4,
+          "rationaleAnonymized": "该产物是 repomap 形态（ranked file + 关键签名摘录），覆盖了 self-dogfood 仓库中约 20 个文件的 export 接口/类型签名，真实性高（与代码 1:1 对应，无幻觉），形态本身合法。但作为项目理解 context 存在明显短板：(1) 覆盖度不足——仅展示 interface/type 头部签名，缺失核心 class 实现、method 列表、模块 intent；panoramic 主线（WorkspaceIndexGenerator / CrossPackageAnalyzer 等关键 abstraction）未突出；(2) 关系展现几乎为零——无 calls/imports/extends 边，纯扁平文件列表；(3) LLM-as-context 价值有限，仅能定位文件，复杂编码任务仍需翻源码；(4) 含测试 fixture 噪声（pure-code-project 等）稀释信息密度。综合给 4 分。",
+          "durationMs": 13713,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:45:31.131Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "aider-repomap-stdout.log"
     }
   }
 }

@@ -102,6 +102,30 @@
       ],
       "judgedAt": "2026-04-30T12:40:35.831Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 6,
+      "rationale": "该产物以 graph 形态呈现：3097 节点 / 7136 边 / 105 communities，覆盖度尚可（God Nodes 列出 parse/runBatch/generateProductScorecards 等核心抽象），关系网完整（calls 边 + community 聚类），并标注 EXTRACTED/INFERRED 置信度，作为 LLM context 有一定价值。但扣分明显：所有 7136 条边 edgesWithoutType（无 calls/extends/uses 语义区分），19 个孤立节点，community 仅有编号无语义命名（\"Community 0/1/2…\"），节点列表扁平堆砌函数名缺乏 intent / 签名 / 边权重，可读性差。形态合法但信息密度未发挥 graph 优势。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 6,
+          "rationaleAnonymized": "该产物以 graph 形态呈现：3097 节点 / 7136 边 / 105 communities，覆盖度尚可（God Nodes 列出 parse/runBatch/generateProductScorecards 等核心抽象），关系网完整（calls 边 + community 聚类），并标注 EXTRACTED/INFERRED 置信度，作为 LLM context 有一定价值。但扣分明显：所有 7136 条边 edgesWithoutType（无 calls/extends/uses 语义区分），19 个孤立节点，community 仅有编号无语义命名（\"Community 0/1/2…\"），节点列表扁平堆砌函数名缺乏 intent / 签名 / 边权重，可读性差。形态合法但信息密度未发挥 graph 优势。",
+          "durationMs": 13997,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 6,
+          "rationaleAnonymized": "该产物是 graph 报告形态，在\"关系展现\"维度表现强：3097 节点 / 7136 边、105 communities、God Nodes 排名（parse 82 边、runBatch 58 边）有效暴露核心 hub。覆盖度尚可（593 文件全量），但扣分明显：(1) 7136 条边全部 edgesWithoutType，关系语义空洞，仅\"calls\"占位；(2) 22% INFERRED 边引入幻觉风险，\"Surprising Connections\"多为 parse() 名称撞车导致的假连接（test 文件→无关 parser）；(3) Community 仅列节点名 + cohesion 数值（0.01-0.09 普遍偏低），无 community intent 描述，LLM 难直接用作 context；(4) 19 孤立节点。作为 ranking/拓扑骨架可用，但缺乏可读 intent 层和高质量边类型。",
+          "durationMs": 15707,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:44:45.810Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "GRAPH_REPORT.md"
     }
   }
 }

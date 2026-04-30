@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SUPPORTED_RUBRICS = ['spec-quality', 'task-execution', 'commit-quality', 'grounding'];
+const SUPPORTED_RUBRICS = ['spec-quality', 'task-execution', 'commit-quality', 'grounding', 'documentation-quality'];
 const JUDGE_MODEL = 'claude-opus-4-7';
 const RUBRIC_DIR = path.join(__dirname, 'lib', 'rubric-templates');
 
@@ -131,23 +131,57 @@ export function loadRubric(rubricName) {
 }
 
 // ============================================================
-// Spec content 摘要（spec-quality rubric 用）
+// 工具产物加载（documentation-quality / spec-quality rubric 用）
+//
+// 不同工具产物形态：
+//   - spectra: outputDir/modules/*.spec.md（多文件）
+//   - graphify: outputDir/GRAPH_REPORT.md
+//   - aider-repomap: outputDir/aider-repomap-stdout.log
 // ============================================================
 
-export function summarizeSpecContent(outputDir, maxModules = 5) {
+export function summarizeToolOutput(outputDir, tool, maxBytes = 12000) {
+  if (!outputDir || !fs.existsSync(outputDir)) return '(outputDir not found)';
+
+  // 1. spectra: 拼 spec.md 摘录
   const modulesDir = path.join(outputDir, 'modules');
-  if (!fs.existsSync(modulesDir)) return '(no spec.md modules in outputDir)';
-  const files = fs.readdirSync(modulesDir).filter((n) => n.endsWith('.spec.md')).slice(0, maxModules);
-  const samples = [];
-  for (const f of files) {
-    const content = fs.readFileSync(path.join(modulesDir, f), 'utf-8');
-    // 取每个模块前 80 行 + section headings
-    const lines = content.split('\n');
-    const sample = lines.slice(0, 80).join('\n');
-    const headings = lines.filter((l) => /^#+\s/.test(l)).slice(0, 20).join('\n');
-    samples.push(`### Module ${f}\n${sample.length > 2000 ? sample.slice(0, 2000) + '\n...(truncated)' : sample}\n\n--- All headings ---\n${headings}`);
+  if (fs.existsSync(modulesDir) && tool === 'spectra') {
+    const files = fs.readdirSync(modulesDir).filter((n) => n.endsWith('.spec.md')).slice(0, 5);
+    const samples = [];
+    for (const f of files) {
+      const content = fs.readFileSync(path.join(modulesDir, f), 'utf-8');
+      const lines = content.split('\n');
+      const sample = lines.slice(0, 80).join('\n');
+      const headings = lines.filter((l) => /^#+\s/.test(l)).slice(0, 20).join('\n');
+      samples.push(`### File ${f}\n${sample.length > 2000 ? sample.slice(0, 2000) + '\n...(truncated)' : sample}\n\n--- All headings ---\n${headings}`);
+    }
+    return samples.join('\n\n---\n\n').slice(0, maxBytes);
   }
-  return samples.join('\n\n---\n\n');
+
+  // 2. graphify: 取 GRAPH_REPORT.md
+  const graphReport = path.join(outputDir, 'GRAPH_REPORT.md');
+  if (fs.existsSync(graphReport) && tool === 'graphify') {
+    return `### File GRAPH_REPORT.md\n${fs.readFileSync(graphReport, 'utf-8').slice(0, maxBytes)}`;
+  }
+
+  // 3. aider-repomap: 取 stdout log
+  const aiderLog = path.join(outputDir, 'aider-repomap-stdout.log');
+  if (fs.existsSync(aiderLog) && tool === 'aider-repomap') {
+    return `### File aider-repomap-stdout.log\n${fs.readFileSync(aiderLog, 'utf-8').slice(0, maxBytes)}`;
+  }
+
+  // 4. 其他 tool 或 fallback：扫 outputDir 找 .md 文件
+  if (fs.existsSync(outputDir)) {
+    const mdFiles = fs.readdirSync(outputDir).filter((n) => n.endsWith('.md'));
+    if (mdFiles.length > 0) {
+      return `### File ${mdFiles[0]}\n${fs.readFileSync(path.join(outputDir, mdFiles[0]), 'utf-8').slice(0, maxBytes)}`;
+    }
+  }
+  return '(no recognizable output artifacts)';
+}
+
+// 兼容 alias（保留 spec-quality rubric 的旧调用）
+export function summarizeSpecContent(outputDir, maxModules = 5) {
+  return summarizeToolOutput(outputDir, 'spectra', maxModules * 2400);
 }
 
 // ============================================================
@@ -169,7 +203,9 @@ export function buildJudgePrompt({ rubricTemplate, fixture, contextOverride }) {
     taskExecution: fixture.taskExecution,
   }, null, 2);
 
-  const specContent = contextOverride ?? summarizeSpecContent(fixture.meta?.outputDir);
+  // 按 fixture 的 meta.tool 加载对应工具的产物（公平比较：spectra/graphify/aider 各自 native artifact）
+  const tool = fixture.meta?.tool ?? 'spectra';
+  const specContent = contextOverride ?? summarizeToolOutput(fixture.meta?.outputDir, tool);
 
   return `${rubricTemplate}
 
@@ -227,8 +263,17 @@ export function parseJudgeOutput(rawOutput) {
 export async function judgeFixture({ fixturePath, rubric, interRater = 1, dryRun = false }) {
   const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   const rubricTemplate = loadRubric(rubric);
+  // 关键：在 anonymize 之前根据 真实 meta.tool 加载对应产物（anonymize 后 tool 名是占位符）
+  const realTool = fixture.meta?.tool ?? 'spectra';
+  const realOutputDir = fixture.meta?.outputDir;
+  const specContentRaw = summarizeToolOutput(realOutputDir, realTool);
   const { anonymized, reverseMap } = anonymizeFixture(fixture);
-  const prompt = buildJudgePrompt({ rubricTemplate, fixture: anonymized });
+  // specContent 也要 strip 工具名（防止 judge 通过 outputDir 路径或 GRAPH_REPORT 里的工具名识别身份）
+  let specContent = specContentRaw;
+  for (const [anon, real] of reverseMap.entries()) {
+    specContent = specContent.split(real).join(anon);
+  }
+  const prompt = buildJudgePrompt({ rubricTemplate, fixture: anonymized, contextOverride: specContent });
 
   const runs = [];
   for (let i = 0; i < interRater; i++) {
@@ -267,6 +312,19 @@ export async function judgeFixture({ fixturePath, rubric, interRater = 1, dryRun
       runs,
       judgedAt: new Date().toISOString(),
       judgeModel: JUDGE_MODEL,
+    };
+  } else if (rubric === 'documentation-quality') {
+    fixture.quality = fixture.quality ?? {};
+    fixture.quality.judgeDocumentationQuality = {
+      score: avgScore,
+      rationale: finalRationale,
+      interRaterDelta,
+      runs,
+      judgedAt: new Date().toISOString(),
+      judgeModel: JUDGE_MODEL,
+      sourceArtifact: realTool === 'spectra' ? 'modules/*.spec.md' :
+                      realTool === 'graphify' ? 'GRAPH_REPORT.md' :
+                      realTool === 'aider-repomap' ? 'aider-repomap-stdout.log' : 'unknown',
     };
   } else if (rubric === 'task-execution' && fixture.taskExecution) {
     fixture.taskExecution.rubricJudgeScore = avgScore;

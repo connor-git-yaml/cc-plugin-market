@@ -263,7 +263,9 @@ export function renderMarkdown(scanned, agg, insights) {
   }
   lines.push('');
 
-  lines.push('### 3.2 Spec Quality (judgeSpecQuality)');
+  lines.push('### 3.2 Spec Quality (judgeSpecQuality, rubric 偏 spec.md 形式)');
+  lines.push('');
+  lines.push('> ⚠️ Spec quality rubric 期望 4 章节 spec.md（Intent/Behavior/API/Data）— 对 graphify (产 graph) / aider-repomap (产 ranked list) **rubric mismatch**。这些 1 分是产物形态不匹配 rubric，不代表工具能力差。');
   lines.push('');
   lines.push('| 项目 | 工具 | score | inter-rater Δ | structure (with all 4 chapters) |');
   lines.push('|------|------|-------|----------------|----------------------------------|');
@@ -274,6 +276,39 @@ export function renderMarkdown(scanned, agg, insights) {
     lines.push(`| ${x.project} | ${x.tool} | ${fmtScore(j?.score, j?.interRaterDelta)} | ${j?.interRaterDelta ?? 'n/a'} | ${allFour} |`);
   }
   lines.push('');
+
+  // §3.2b Documentation Quality (公平 rubric，看每工具的 native artifact)
+  const hasDocQuality = sortedSpectra.some((x) => x.fx.quality?.judgeDocumentationQuality?.score != null);
+  if (hasDocQuality) {
+    lines.push('### 3.2b Documentation Quality (judgeDocumentationQuality, **公平 rubric**)');
+    lines.push('');
+    lines.push('> 用同一 rubric 评每个工具的 **native artifact**（spectra spec.md / graphify GRAPH_REPORT.md / aider repomap stdout）。**不评是否符合特定模板**，评作为"项目理解 context"的有用性（覆盖度/关系/可读性/LLM-context-value/真实性）。');
+    lines.push('');
+    lines.push('| 项目 | 工具 | score | inter-rater Δ | source artifact |');
+    lines.push('|------|------|-------|----------------|------------------|');
+    for (const x of sortedSpectra) {
+      const j = x.fx.quality?.judgeDocumentationQuality;
+      lines.push(`| ${x.project} | ${x.tool} | ${fmtScore(j?.score, j?.interRaterDelta)} | ${j?.interRaterDelta ?? 'n/a'} | ${j?.sourceArtifact ?? 'n/a'} |`);
+    }
+    lines.push('');
+
+    // 计算每 tool 平均
+    const toolAvg = {};
+    for (const x of sortedSpectra) {
+      const s = x.fx.quality?.judgeDocumentationQuality?.score;
+      if (s == null) continue;
+      toolAvg[x.tool] = toolAvg[x.tool] ?? [];
+      toolAvg[x.tool].push(s);
+    }
+    const avgRow = ['| **均分** |'];
+    for (const tool of Object.keys(toolAvg).sort()) {
+      const arr = toolAvg[tool];
+      const avg = Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10;
+      avgRow.push(` ${tool} **${avg}** |`);
+    }
+    lines.push(avgRow.join(''));
+    lines.push('');
+  }
 
   // Grounding（如 micrograd spectra fixture 含 codingContextGrounding）
   const groundingFx = scanned.spectraClass.find((x) => x.fx.quality?.codingContextGrounding?.allGroupScores);
@@ -377,6 +412,35 @@ export function renderMarkdown(scanned, agg, insights) {
   lines.push(`| SC-004 | ≥ 3 工具 × ≥ 3 任务 | ${sc004Tools >= 3 && sc004Tasks >= 3 ? '✅' : '⚠️'} ${sc004Tools} 工具 × ${sc004Tasks} 任务 = ${sc004Tools * sc004Tasks} 矩阵 |`);
   lines.push(`| SC-008 | cost ≤ $120 | ${agg.cumulativeCost <= SC008_BUDGET ? '✅' : '⚠️'} ${fmtCost(agg.cumulativeCost)} / ${fmtCost(SC008_BUDGET)} (剩 ${fmtCost(agg.budgetRemaining)}) |`);
   lines.push('');
+
+  // §8 Sample Outputs（用户可点链接看真实产物）
+  const sampleOutputsDir = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/sample-outputs');
+  if (fs.existsSync(sampleOutputsDir)) {
+    lines.push('## 8. Sample Outputs（点链接看真实产物）');
+    lines.push('');
+    lines.push('> 入库的代表性产物，用于直观对比不同工具产物形态 + 用户/reviewer 自验证 judge 评分合理性。完整产物路径在 `~/.spectra-baselines/<project>-output/<tool>-full/`（本地，gitignored）。');
+    lines.push('');
+    for (const proj of fs.readdirSync(sampleOutputsDir).sort()) {
+      const projDir = path.join(sampleOutputsDir, proj);
+      if (!fs.statSync(projDir).isDirectory()) continue;
+      lines.push(`### ${proj}`);
+      lines.push('');
+      for (const tool of fs.readdirSync(projDir).sort()) {
+        const toolDir = path.join(projDir, tool);
+        if (!fs.statSync(toolDir).isDirectory()) continue;
+        const files = fs.readdirSync(toolDir).filter((n) => !n.startsWith('.'));
+        if (files.length === 0) continue;
+        const linkSuffix = files.map((f) => {
+          const full = path.join(toolDir, f);
+          const sz = fmtBytes(fs.statSync(full).size);
+          const rel = path.relative(PROJECT_ROOT, full);
+          return `[${f}](../../${rel}) (${sz})`;
+        }).join(' / ');
+        lines.push(`- **${tool}**: ${linkSuffix}`);
+      }
+      lines.push('');
+    }
+  }
 
   lines.push('---');
   lines.push('');

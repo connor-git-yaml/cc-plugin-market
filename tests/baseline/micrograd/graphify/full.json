@@ -102,6 +102,30 @@
       ],
       "judgedAt": "2026-04-30T12:37:11.661Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 4.5,
+      "rationale": "产物为 graph 报告形态（41 节点 / 56 边 / 9 communities），覆盖了 Value/Layer/Neuron/Module/MLP 等核心 abstractions 并展现 god node 排序，关系展现是其强项（calls/uses + community + 中介中心性）。但扣分明显：(1) 56 条边全部 edgesWithoutType，关系语义弱；(2) 出现 \"stores a single scalar value and its gradient\" 这种把 docstring 误识别为节点的幻觉，真实性受损；(3) 仅图骨架，缺少关键签名、数据流、反向传播链路等 mid-level 信息，作为 LLM context 仍需翻 source；(4) 多个 community 含 0 节点，结构噪声大。覆盖度尚可，关系/真实性/LLM 价值偏弱，综合 4 分。",
+      "interRaterDelta": 1,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 4,
+          "rationaleAnonymized": "产物为 graph 报告形态（41 节点 / 56 边 / 9 communities），覆盖了 Value/Layer/Neuron/Module/MLP 等核心 abstractions 并展现 god node 排序，关系展现是其强项（calls/uses + community + 中介中心性）。但扣分明显：(1) 56 条边全部 edgesWithoutType，关系语义弱；(2) 出现 \"stores a single scalar value and its gradient\" 这种把 docstring 误识别为节点的幻觉，真实性受损；(3) 仅图骨架，缺少关键签名、数据流、反向传播链路等 mid-level 信息，作为 LLM context 仍需翻 source；(4) 多个 community 含 0 节点，结构噪声大。覆盖度尚可，关系/真实性/LLM 价值偏弱，综合 4 分。",
+          "durationMs": 13361,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 5,
+          "rationaleAnonymized": "产物为 graph 报告形态，覆盖了 micrograd 的核心 abstractions（Value/Layer/Neuron/Module/MLP），并通过 god nodes + INFERRED 边展现了 calls/uses 关系，关系展现维度尚可（averageDegree 2.7，Value 23 边合理）。但存在明显缺陷：1）出现\"stores a single scalar value and its gradient\"这种把 docstring 误识别为节点的幻觉，真实性扣分；2）9 个 community 中多个为空或单节点，cohesion 信号噪声大；3）缺少关键签名/方法级细节（如 backward、_backward、各算子重载未展现），LLM-as-context 价值有限，复杂任务仍需翻源码；4）56 条边全部 edgesWithoutType，关系语义弱。综合中等水平。",
+          "durationMs": 13806,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:40:26.519Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "GRAPH_REPORT.md"
     }
   }
 }

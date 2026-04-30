@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-04-30T17:22:42.172Z
-> **Git**: feature/147-competitor-evaluation-platform @ 353e526
+> **生成时间**: 2026-04-30T17:46:39.737Z
+> **Git**: feature/147-competitor-evaluation-platform @ 2e5e17a
 > **Fixture 总数**: 29（Spectra 类 9 + Spec Driver 类 20）
 
 ---
@@ -36,7 +36,9 @@
 | self-dogfood | graphify | 4.2 s | 0 | 0 | $0 | 3097/7136 |
 | self-dogfood | spectra | 30.0 min | 17 | 1,976,755 | $9.86 | 17/66 |
 
-### 3.2 Spec Quality (judgeSpecQuality)
+### 3.2 Spec Quality (judgeSpecQuality, rubric 偏 spec.md 形式)
+
+> ⚠️ Spec quality rubric 期望 4 章节 spec.md（Intent/Behavior/API/Data）— 对 graphify (产 graph) / aider-repomap (产 ranked list) **rubric mismatch**。这些 1 分是产物形态不匹配 rubric，不代表工具能力差。
 
 | 项目 | 工具 | score | inter-rater Δ | structure (with all 4 chapters) |
 |------|------|-------|----------------|----------------------------------|
@@ -49,6 +51,24 @@
 | self-dogfood | aider-repomap | 1 | 0 | n/a |
 | self-dogfood | graphify | 1 | 0 | n/a |
 | self-dogfood | spectra | 6 | 0 | 17/18 |
+
+### 3.2b Documentation Quality (judgeDocumentationQuality, **公平 rubric**)
+
+> 用同一 rubric 评每个工具的 **native artifact**（spectra spec.md / graphify GRAPH_REPORT.md / aider repomap stdout）。**不评是否符合特定模板**，评作为"项目理解 context"的有用性（覆盖度/关系/可读性/LLM-context-value/真实性）。
+
+| 项目 | 工具 | score | inter-rater Δ | source artifact |
+|------|------|-------|----------------|------------------|
+| micrograd | aider-repomap | 6 | 0 | aider-repomap-stdout.log |
+| micrograd | graphify | 4.5 (Δ=1) | 1 | GRAPH_REPORT.md |
+| micrograd | spectra | 8 | 0 | modules/*.spec.md |
+| nanoGPT | aider-repomap | 6 | 0 | aider-repomap-stdout.log |
+| nanoGPT | graphify | 4 | 0 | GRAPH_REPORT.md |
+| nanoGPT | spectra | 7 | 0 | modules/*.spec.md |
+| self-dogfood | aider-repomap | 4 | 0 | aider-repomap-stdout.log |
+| self-dogfood | graphify | 6 | 0 | GRAPH_REPORT.md |
+| self-dogfood | spectra | 7 | 0 | modules/*.spec.md |
+
+| **均分** | aider-repomap **5.3** | graphify **4.8** | spectra **7.3** |
 
 ### 3.3 Coding-Context Grounding
 
@@ -96,6 +116,16 @@
 | SC-002 | schema 1.1 fixture | ✅ 9 个 spectra 类 |
 | SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 4 工具 × 5 任务 = 20 矩阵 |
 | SC-008 | cost ≤ $120 | ✅ $12.69 / $120.00 (剩 $107.31) |
+
+## 8. Sample Outputs（点链接看真实产物）
+
+> 入库的代表性产物，用于直观对比不同工具产物形态 + 用户/reviewer 自验证 judge 评分合理性。完整产物路径在 `~/.spectra-baselines/<project>-output/<tool>-full/`（本地，gitignored）。
+
+### micrograd
+
+- **aider-repomap**: [repomap.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/aider-repomap/repomap.md) (3.5 KB)
+- **graphify**: [GRAPH_REPORT.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/graphify/GRAPH_REPORT.md) (4.6 KB)
+- **spectra**: [engine.spec.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/spectra/engine.spec.md) (17.6 KB) / [nn.spec.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/spectra/nn.spec.md) (20.0 KB)
 
 ---
 

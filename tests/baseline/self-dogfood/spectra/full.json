@@ -138,6 +138,30 @@
       ],
       "judgedAt": "2026-04-30T12:40:00.340Z",
       "judgeModel": "claude-opus-4-7"
+    },
+    "judgeDocumentationQuality": {
+      "score": 7,
+      "rationale": "覆盖度满分（17/17 模块四章节齐全，所有关键 abstractions 命中）；关系展现优秀（cross-module 出/入站计数 + 文件级示例 + 依赖图，关系网完整）；真实性高（AST 精确提取，broken-links 仅 2/138）。LLM-as-context 信息齐全但 token 成本高。主要扣分：可读性/信息密度严重失衡——avgSpecLines 1472 远超合理区间，4 模块 >1000 行，panoramic.spec.md 12468 行属严重 AST 堆砌，抽象层次失败、扫读困难。结构与关系强项扛起 7 分，密度问题无法上 8。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 7,
+          "rationaleAnonymized": "覆盖度满分（17/17 模块四章节齐全，所有关键 abstractions 命中）；关系展现优秀（cross-module 出/入站计数 + 文件级示例 + 依赖图，关系网完整）；真实性高（AST 精确提取，broken-links 仅 2/138）。LLM-as-context 信息齐全但 token 成本高。主要扣分：可读性/信息密度严重失衡——avgSpecLines 1472 远超合理区间，4 模块 >1000 行，panoramic.spec.md 12468 行属严重 AST 堆砌，抽象层次失败、扫读困难。结构与关系强项扛起 7 分，密度问题无法上 8。",
+          "durationMs": 25275,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 7,
+          "rationaleAnonymized": "结构完整性强（17/17 模块四章节齐全），跨模块关联展现优秀（出入站统计 + 示例引用），AST 精确提取的接口/数据结构提升真实性。意图章节高度凝练（\"将 X 转化为 Y，使 Z\"句式），LLM-as-context 价值高。但平均 1472 行远超合理区间，panoramic.spec.md 12468 行严重堆砌、抽象失衡，可读性显著扣分；2 处 broken cross-links 可接受。整体覆盖度与关系展现接近 9 分，被信息密度拖至 7 分。",
+          "durationMs": 14275,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T17:44:16.073Z",
+      "judgeModel": "claude-opus-4-7",
+      "sourceArtifact": "modules/*.spec.md"
     }
   }
 }
