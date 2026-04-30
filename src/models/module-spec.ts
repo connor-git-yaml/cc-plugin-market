@@ -38,6 +38,32 @@ export const TokenUsageSchema = z.object({
 });
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
+/**
+ * Feature 140 FR-012 — 单次 spec 生成的 token 来源细分（observability）。
+ *
+ * 4 个字段含义：
+ * - `contextAssembly`：跨模块上下文总 input token（dependencies / snippets / slices /
+ *   readme / caller / knowledge），来自 `AssembledContext.tokenBreakdown.contextAssembly`
+ * - `promptTemplate`：LLM prompt 模板 instructions 的 input token
+ * - `sourceFile`：目标模块 skeleton 的 input token
+ * - `llmReasoning`：LLM response 的 output token（来自 SDK usage.outputTokens）
+ *
+ * 与 `TokenUsage` 的关系：`TokenUsage.input ≈ contextAssembly + promptTemplate + sourceFile`
+ * （存在轻微差异：分隔符开销 + estimateFast vs SDK actual 差异）；
+ * `TokenUsage.output = llmReasoning`。本字段是 input 端的进一步细分。
+ */
+export const CostBreakdownSchema = z.object({
+  /** 跨模块上下文总 input token（dependencies / snippets / readme 等聚合） */
+  contextAssembly: z.number().int().nonnegative(),
+  /** prompt 模板 instructions 的 input token */
+  promptTemplate: z.number().int().nonnegative(),
+  /** 目标模块 skeleton 的 input token */
+  sourceFile: z.number().int().nonnegative(),
+  /** LLM response output token（来自 SDK usage） */
+  llmReasoning: z.number().int().nonnegative(),
+});
+export type CostBreakdown = z.infer<typeof CostBreakdownSchema>;
+
 /** 单次 spec 生成的成本元数据（Feature 127） */
 export const CostMetadataSchema = z.object({
   /** 本次生成消耗的 input / output token 数 */
@@ -81,6 +107,16 @@ export const SpecFrontmatterSchema = z.object({
   sourceKind: z.enum(['canonical', 'derived', 'bundle_copy']).optional(),
   /** 派生来源 spec 的 outputPath（Feature 128，相对于 projectRoot）；canonical 时为 null 或 undefined */
   derivedFrom: z.string().nullable().optional(),
+  /**
+   * Feature 140 FR-012 — input token 来源细分（observability）。
+   * 旧 spec 缺失此字段时视为未观测，下游聚合 Top N 时跳过。
+   */
+  costBreakdown: CostBreakdownSchema.optional(),
+  /**
+   * Feature 140 FR-012 — context 是否被 budget 截断。
+   * true 时表示 `assembleContext` 因超预算丢弃了部分跨模块输入；缺失时视为 false（向后兼容）。
+   */
+  contextTruncated: z.boolean().optional(),
 });
 export type SpecFrontmatter = z.infer<typeof SpecFrontmatterSchema>;
 

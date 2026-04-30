@@ -158,14 +158,14 @@ estimatedEffort: "22-30 人天"
 
 ### 1b — Context 可观测性（US-006）
 
-- [ ] T15: 修改 src/core/context-assembler.ts — token 计数与 costBreakdown 计算
+- [x] T15: 修改 src/core/context-assembler.ts — token 计数与 costBreakdown 计算
   - **影响文件**: `src/core/context-assembler.ts`（修改）
   - **FR 关联**: FR-012
   - **实施细节**: 新增 `estimateTokens(text: string): number`（返回 `Math.ceil(text.length / 3.5)`）；在 assembleContext 执行过程中分段统计：`contextAssembly`（cross-module context）、`promptTemplate`（template tokens）、`sourceFile`（主文件 tokens）；返回值追加 `tokenBreakdown: { contextAssembly, promptTemplate, sourceFile }` 字段；超出 `contextBudget` 时按相关性顺序截断（本模块 import > 同目录 > 其他），并返回 `truncated: true`
   - **验收**: 单元测试（T16）通过；现有 context-assembler 相关测试零新增失败
   - **预估**: 0.5 人天
 
-- [ ] T16: 单元测试 — context-assembler token 计数 + 截断
+- [x] T16: 单元测试 — context-assembler token 计数 + 截断
   - **前置任务**: T15
   - **影响文件**: `src/core/__tests__/context-assembler-token.test.ts`（新建）
   - **FR 关联**: FR-012
@@ -173,7 +173,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；mock 文件系统，不依赖真实项目
   - **预估**: 0.5 人天
 
-- [ ] T17: 修改 module spec 写入逻辑 — frontmatter costBreakdown 字段 + batch summary Top 5
+- [x] T17: 修改 module spec 写入逻辑 — frontmatter costBreakdown 字段 + batch summary Top 5
   - **影响文件**: `src/panoramic/pipelines/module-spec-writer.ts`（或等效文件，修改）、`src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-012, FR-013
   - **实施细节**: module spec frontmatter 新增字段（Zod schema 扩展）：`costBreakdown: { contextAssembly, promptTemplate, sourceFile, llmReasoning }` + `contextTruncated: boolean`；`llmReasoning` 来自 LLM response usage.outputTokens；batch 完成后在 batch-orchestrator 中聚合所有模块的 `contextAssembly`，按降序取 Top 5，打印到 stdout（格式："Top 5 input token 消费模块：\n  1. <moduleName>: <N> tokens\n..."）

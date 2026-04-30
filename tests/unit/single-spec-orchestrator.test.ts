@@ -149,6 +149,12 @@ describe('single-spec-orchestrator', () => {
         snippets: 100,
         instructions: 100,
       },
+      // Feature 140 T15 — AssembledContext 新增三层聚合字段
+      tokenBreakdown: {
+        contextAssembly: 200, // dependencies + snippets
+        promptTemplate: 100,  // instructions
+        sourceFile: 100,      // skeleton
+      },
     });
     mocks.callLLM.mockResolvedValue({
       content: 'llm content',

@@ -615,6 +615,22 @@ ${sections.businessLogic}
     fallbackReason: costFallbackReason,
   };
 
+  // Feature 140 FR-012：从 AssembledContext 提取 token 来源细分
+  // costBreakdown 仅在 LLM 实际调用过的路径写入（AST-only 降级时跳过，避免误导观测）；
+  // 即便 LLM 失败但 context 已组装，contextTruncated 仍然如实反映本次 budget 决策。
+  //
+  // 类型契约：AssembledContext.tokenBreakdown 是必填字段（非 optional），
+  // 测试 mock 必须按 TS 类型完整提供该字段；此处不再加 fallback，
+  // 由 type system 在编译期捕获不合规 mock。
+  const costBreakdown = llmDegraded
+    ? undefined
+    : {
+        contextAssembly: context.tokenBreakdown.contextAssembly,
+        promptTemplate: context.tokenBreakdown.promptTemplate,
+        sourceFile: context.tokenBreakdown.sourceFile,
+        llmReasoning: costOutputTokens,
+      };
+
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
     sourceTarget: path.relative(baseDir, resolvedTarget),
@@ -637,6 +653,9 @@ ${sections.businessLogic}
     ...(options.generatedByMode !== undefined
       ? { generatedByMode: options.generatedByMode }
       : {}),
+    // Feature 140 FR-012：context 来源 input token 细分 + 是否被 budget 裁剪
+    ...(costBreakdown !== undefined ? { costBreakdown } : {}),
+    contextTruncated: context.truncated,
   });
 
   // 构建 fileInventory（使用短路径：基于 sourceTarget 公共前缀）

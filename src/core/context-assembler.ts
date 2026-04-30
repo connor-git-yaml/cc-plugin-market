@@ -6,7 +6,7 @@
  */
 import type { CodeSkeleton } from '../models/code-skeleton.js';
 import type { CodeSlice } from '../models/code-skeleton.js';
-import { estimateFast } from './token-counter.js';
+import { estimateFast, estimateTokens } from './token-counter.js';
 
 // ============================================================
 // 类型定义
@@ -36,7 +36,7 @@ export interface AssembledContext {
   prompt: string;
   /** token 计数 */
   tokenCount: number;
-  /** 各部分 token 分布 */
+  /** 各部分 token 分布（细粒度，按内部分类）*/
   breakdown: {
     skeleton: number;
     dependencies: number;
@@ -50,6 +50,26 @@ export interface AssembledContext {
     callerContext?: number;
     /** 知识文件的 token 数 */
     knowledgeFiles?: number;
+  };
+  /**
+   * Feature 140 T15 — 三层聚合 token 分布（粗粒度，供 module spec frontmatter 写入）
+   *
+   * 与 `breakdown` 的关系：
+   * - `tokenBreakdown.sourceFile` = `breakdown.skeleton`
+   * - `tokenBreakdown.promptTemplate` = `breakdown.instructions`
+   * - `tokenBreakdown.contextAssembly` = breakdown 中所有跨模块上下文的总和
+   *   （dependencies + snippets + codeSlices + readmeContext + callerContext + knowledgeFiles）
+   *
+   * 用途：观测每个模块在 LLM 调用中实际消耗的 input token（FR-012），
+   * batch-orchestrator 据此计算 Top 5 token 消费模块（FR-013）。
+   */
+  tokenBreakdown: {
+    /** 跨模块上下文（dependencies / snippets / slices / readme / caller / knowledge）总 token */
+    contextAssembly: number;
+    /** prompt 模板 instructions 的 token */
+    promptTemplate: number;
+    /** 目标文件 skeleton 的 token */
+    sourceFile: number;
   };
   /** 是否有部分被裁剪 */
   truncated: boolean;
@@ -315,6 +335,23 @@ export async function assembleContext(
   // 提取各部分 token 到 breakdown
   const partTokenMap = Object.fromEntries(parts.map(p => [p.name, p.tokens]));
 
+  // Feature 140 T15：三层聚合 token 分布（contextAssembly / promptTemplate / sourceFile）
+  // 用于 module spec frontmatter `costBreakdown` 字段 + batch summary Top 5 token 消费模块。
+  //
+  // 口径说明：内部裁剪决策走 estimateFast（CJK-aware，更精准，确保 LLM 实际成本不超 budget）；
+  // 对外报告 tokenBreakdown 走 estimateTokens（chars/3.5 简化公式，与 cluster-orchestrator FFD
+  // 装箱口径一致），让用户在 module spec frontmatter 看到的 token 数与跨模块 batch summary
+  // 一致。两公式对 ASCII 代码场景结果接近（3.5 vs 3.8），CJK 场景下 estimateTokens 偏低约 30%
+  // 是 spec FR-012 已接受的精度损失。
+  //
+  // 反映**裁剪后**的实际 token 数：仅统计仍在 prompt 里（即未被清零）的 part，
+  // 排除 instructions（promptTemplate 单独）和 skeleton（sourceFile 单独）。
+  const contextAssemblyTokens = parts
+    .filter((p) => p.tokens > 0)
+    .reduce((sum, p) => sum + estimateTokens(p.text), 0);
+  const promptTemplateTokens = estimateTokens(instructionsText);
+  const sourceFileTokens = estimateTokens(skeletonText);
+
   return {
     prompt,
     tokenCount,
@@ -327,6 +364,11 @@ export async function assembleContext(
       readmeContext: partTokenMap['readmeContext'] ?? 0,
       callerContext: partTokenMap['callerContext'] ?? 0,
       knowledgeFiles: partTokenMap['knowledgeFiles'] ?? 0,
+    },
+    tokenBreakdown: {
+      contextAssembly: contextAssemblyTokens,
+      promptTemplate: promptTemplateTokens,
+      sourceFile: sourceFileTokens,
     },
     truncated: truncatedParts.length > 0,
     truncatedParts,

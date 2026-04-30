@@ -108,6 +108,12 @@ describe('single-spec-orchestrator: enrichment cost accounting (Feature 127)', (
       truncated: false,
       truncatedParts: [],
       breakdown: { skeleton: 100, dependencies: 100, snippets: 100, instructions: 100 },
+      // Feature 140 T15 — AssembledContext 新增三层聚合字段
+      tokenBreakdown: {
+        contextAssembly: 200,
+        promptTemplate: 100,
+        sourceFile: 100,
+      },
     });
     // parseLLMResponse 返回 businessLogic 一段较长文本（超过 enrichment 拒绝阈值 × 1.2 倍判定的参照）
     mocks.parseLLMResponse.mockReturnValue({

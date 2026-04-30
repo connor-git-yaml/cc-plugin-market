@@ -46,6 +46,33 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 7（Phase 1b）：Context Observability + costBreakdown frontmatter
+
+- **`estimateTokens(text)` 公共导出**（`src/core/token-counter.ts`）— spec FR-012 锁定的简化估算公式（`Math.ceil(text.length / 3.5)`），供 Feature 140 cluster orchestrator FFD 装箱、context-assembler costBreakdown 等场景统一口径。与既有 `estimateFast`（CJK-aware，2.5/3.8 分母）保留并存：内部裁剪决策走 `estimateFast` 求精准，对外报告走 `estimateTokens` 求一致。
+- **`AssembledContext.tokenBreakdown` 三层聚合字段**（`src/core/context-assembler.ts`）— 新增非可选字段 `tokenBreakdown: { contextAssembly, promptTemplate, sourceFile }`：
+  - `contextAssembly` 聚合 6 类跨模块输入（dependencies / snippets / codeSlices / readmeContext / callerContext / knowledgeFiles）的裁剪后 token 数
+  - `promptTemplate` = LLM prompt 模板 instructions
+  - `sourceFile` = 目标模块 skeleton
+- **`SpecFrontmatter.costBreakdown` + `contextTruncated` 字段**（`src/models/module-spec.ts`）— 新增可选字段（向后兼容旧 spec）：
+  - `costBreakdown: { contextAssembly, promptTemplate, sourceFile, llmReasoning }` — input 端 3 层 + LLM output token，供观测每模块在 LLM 调用中的实际消耗
+  - `contextTruncated: boolean` — context 是否因 budget 被裁剪
+  - 配套 `CostBreakdownSchema` Zod 校验
+- **`generateFrontmatter` 透传**（`src/generator/frontmatter.ts`）— `FrontmatterInput` 接受 `costBreakdown` / `contextTruncated`，仅在传入时写入（保持向后兼容）。
+- **`single-spec-orchestrator.ts` 接通**（`src/core/single-spec-orchestrator.ts`）— `assembleContext` 后从 `context.tokenBreakdown` 提取，`llmReasoning = costInputTokens 累加 output`；LLM 降级（`llmDegraded=true`）时跳过 `costBreakdown` 写入（避免 AST-only 路径产生误导观测），但 `contextTruncated` 仍如实反映本次 budget 决策。
+- **batch-orchestrator Top 5 token 消费模块**（`src/batch/batch-orchestrator.ts`，FR-013）— 步骤 6 之前新增聚合：从 `collectedModuleSpecs[].frontmatter.costBreakdown.contextAssembly` 排序取 Top 5，按"千分位 + en-US locale"格式打到 `process.stderr`：
+  ```
+  Top 5 input token 消费模块：
+    1. src/foo/big-module: 12,400 tokens
+    2. src/bar/medium-module: 8,300 tokens
+    ...
+  ```
+  缺失字段（mock / AST-only / 旧 cache）的模块自动跳过；聚合失败 try/catch 兜底，不阻断主流程。
+- **16 个新增单元测试**：
+  - `tests/unit/context-assembler-token.test.ts` 新建 11 用例（estimateTokens 公式 / 三层聚合数据流 / 裁剪后精确断言 / 公式同源比值稳定性 / NaN 防御 / 向后兼容）
+  - `tests/unit/frontmatter-generator.test.ts` +5 用例（costBreakdown 4 字段 / contextTruncated true/false / AST-only 边界值）
+- **TS 类型契约修复**：3 个老 mock（`single-spec-orchestrator.test.ts` / `enrichment-cost-accounting.test.ts`）补充 `tokenBreakdown` 字段，让 mock 与 TS 类型一致；删除 source 中的运行时 fallback（type lie）— 测试 mock 必须按 TS 类型完整提供该字段，由编译期捕获不合规 mock。
+- **Codex adversarial review**：1 轮 4 warning 全部修复（W1 `estimateTokens` 调用一致性 / W2 `toLocaleString('en-US')` locale 锁定 / W3 case 9 精确比值断言 / W4 删除 type lie fallback + 更新 mock）。
+
 ### Added — Feature 140 Step 6（Phase 1c）：graph.html 始终生成 + 极小图 banner
 
 - **`graph.html` 默认生成**（`src/batch/batch-orchestrator.ts`）— FR-011 / US-005：移除 `if (options.generateHtml)` opt-in 条件，改为 `?? true` 默认生成。CLI 不传 `--html` 也会产出 `_meta/graph.html`，与既有 `_meta/graph.json` / `_meta/GRAPH_REPORT.md` 输出一致性对齐。调用方仍可显式传 `generateHtml: false` 跳过。

@@ -58,6 +58,25 @@ export function estimateFast(text: string): number {
 }
 
 /**
+ * Spec FR-012 锁定的简化 token 估算公式：`Math.ceil(text.length / 3.5)`。
+ *
+ * 用途：Feature 140 cluster orchestrator FFD 装箱、context-assembler costBreakdown
+ * 报告等场景的统一估算，确保跨模块一致性（同一文本在不同模块给出相同 token 数）。
+ *
+ * **与 estimateFast 的区别**：estimateFast 对 CJK 文本使用 2.5 系数（更精准），
+ * estimateTokens 始终用 3.5（spec 锁定，便于跨模块一致性）。
+ * 二者在 ASCII 代码场景结果相近（3.5 vs 3.8）；在中文文档场景 estimateTokens
+ * 可能低估约 30%，但 spec 已接受这一精度损失换取一致性。
+ *
+ * @param text - 待估算文本（空字符串返回 0）
+ * @returns 估算的 token 数
+ */
+export function estimateTokens(text: string): number {
+  if (!text) return 0;
+  return Math.ceil(text.length / 3.5);
+}
+
+/**
  * 精确 token 计数（带缓存）
  * 首次调用约 1-5ms，后续从缓存读取
  *

@@ -3,7 +3,7 @@
  * 参见 contracts/generator.md
  */
 import { createRequire } from 'node:module';
-import type { SpecFrontmatter, TokenUsage } from '../models/module-spec.js';
+import type { CostBreakdown, SpecFrontmatter, TokenUsage } from '../models/module-spec.js';
 
 /** 模块级缓存，避免每次生成 frontmatter 都重复读取 package.json */
 let _versionCache: string | undefined;
@@ -59,6 +59,17 @@ export interface FrontmatterInput {
   derivedFrom?: string | null;
   /** 生成本 spec 时的批处理模式（Bug 142）；单文件 generate 不传，batch 流程传入 effectiveMode */
   generatedByMode?: 'full' | 'reading' | 'code-only';
+  /**
+   * Feature 140 FR-012 — context 来源 input token 细分。
+   * 由 single-spec-orchestrator 从 `AssembledContext.tokenBreakdown` + LLM response usage
+   * 组装传入；AST-only / 失败模式不传。
+   */
+  costBreakdown?: CostBreakdown;
+  /**
+   * Feature 140 FR-012 — context 是否因 budget 被裁剪。
+   * 由 single-spec-orchestrator 从 `AssembledContext.truncated` 透传。
+   */
+  contextTruncated?: boolean;
 }
 
 /**
@@ -125,6 +136,16 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
   // 批处理模式标记（Bug 142）；仅 batch 流程传入，单文件 generate 不写入
   if (data.generatedByMode !== undefined) {
     frontmatter.generatedByMode = data.generatedByMode;
+  }
+
+  // Feature 140 FR-012：context 来源 input token 细分 + 是否被 budget 裁剪
+  // 仅 single-spec-orchestrator 主流程传入；AST-only 模式 / 早期失败路径不写入此字段
+  // （下游聚合 Top N 时遇缺失字段视为未观测，跳过）。
+  if (data.costBreakdown !== undefined) {
+    frontmatter.costBreakdown = data.costBreakdown;
+  }
+  if (data.contextTruncated !== undefined) {
+    frontmatter.contextTruncated = data.contextTruncated;
   }
 
   return frontmatter;

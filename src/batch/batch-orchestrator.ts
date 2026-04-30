@@ -1513,6 +1513,37 @@ export async function runBatch(
     }
   }
 
+  // Feature 140 FR-013：Top 5 contextAssembly token 消费模块
+  // 用途：让用户在 batch 末尾直观看到哪些模块在跨模块上下文上消耗最多 token，
+  // 便于针对性优化（拆分大模块 / 减少 dependency / 启用 --no-include-docs 等）。
+  // 数据源：collectedModuleSpecs[].frontmatter.costBreakdown.contextAssembly（Feature 140 T17 写入）。
+  // 缺失字段（mock 路径 / AST-only 降级 / 旧 cache 命中）的模块会被跳过，不参与排序。
+  // 输出渠道：process.stderr（与现有 batch summary 行约定一致，避免污染 stdout 数据流）。
+  try {
+    const topModules = collectedModuleSpecs
+      .map((spec) => ({
+        sourceTarget: spec.frontmatter.sourceTarget,
+        contextAssembly: spec.frontmatter.costBreakdown?.contextAssembly,
+      }))
+      .filter((m): m is { sourceTarget: string; contextAssembly: number } =>
+        typeof m.contextAssembly === 'number' && m.contextAssembly > 0,
+      )
+      .sort((a, b) => b.contextAssembly - a.contextAssembly)
+      .slice(0, 5);
+    if (topModules.length > 0) {
+      const lines = ['Top 5 input token 消费模块：'];
+      topModules.forEach((m, idx) => {
+        // 锁定 'en-US' locale，确保 CI（en_US.UTF-8）和开发环境（zh_CN.UTF-8 / de_DE 等）
+        // 输出一致的千分位分隔符（"8,500" 而非 "8.500" / "8 500"），便于 grep 与 fixture 断言
+        lines.push(`  ${idx + 1}. ${m.sourceTarget}: ${m.contextAssembly.toLocaleString('en-US')} tokens`);
+      });
+      process.stderr.write(lines.join('\n') + '\n');
+    }
+  } catch (err) {
+    // 聚合失败不应阻断主流程（Top 5 是观测，不是核心交付）
+    logger.warn(`Top 5 token 消费模块聚合失败，跳过: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // 步骤 6：写入摘要日志（输出到 _meta/ 子目录）
   const summary = reporter.finish();
   fs.mkdirSync(metaDir, { recursive: true });

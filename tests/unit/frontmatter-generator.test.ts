@@ -136,3 +136,63 @@ describe('getSpectraVersionString（Feature 135 Bug 3）', () => {
     expect(fm.generatedBy).not.toBe('spectra v3.0');
   });
 });
+
+describe('generateFrontmatter (Feature 140 — costBreakdown / contextTruncated)', () => {
+  it('未传 costBreakdown / contextTruncated 时字段不出现（向后兼容历史 spec）', () => {
+    const fm = generateFrontmatter(BASE_INPUT);
+    expect(fm.costBreakdown).toBeUndefined();
+    expect(fm.contextTruncated).toBeUndefined();
+  });
+
+  it('传入 costBreakdown 后写入 4 个子字段（FR-012 完整观测）', () => {
+    const fm = generateFrontmatter({
+      ...BASE_INPUT,
+      costBreakdown: {
+        contextAssembly: 8500,
+        promptTemplate: 600,
+        sourceFile: 1200,
+        llmReasoning: 950,
+      },
+    });
+    expect(fm.costBreakdown).toEqual({
+      contextAssembly: 8500,
+      promptTemplate: 600,
+      sourceFile: 1200,
+      llmReasoning: 950,
+    });
+  });
+
+  it('contextTruncated=true 写入 frontmatter（budget 触发裁剪场景）', () => {
+    const fm = generateFrontmatter({
+      ...BASE_INPUT,
+      contextTruncated: true,
+    });
+    expect(fm.contextTruncated).toBe(true);
+  });
+
+  it('contextTruncated=false 也显式写入（不省略，便于 grep 与下游聚合）', () => {
+    const fm = generateFrontmatter({
+      ...BASE_INPUT,
+      contextTruncated: false,
+    });
+    expect(fm.contextTruncated).toBe(false);
+  });
+
+  it('costBreakdown 各字段为 0 时仍合规写入（AST-only 边界场景边界值）', () => {
+    const fm = generateFrontmatter({
+      ...BASE_INPUT,
+      costBreakdown: {
+        contextAssembly: 0,
+        promptTemplate: 0,
+        sourceFile: 0,
+        llmReasoning: 0,
+      },
+    });
+    expect(fm.costBreakdown).toEqual({
+      contextAssembly: 0,
+      promptTemplate: 0,
+      sourceFile: 0,
+      llmReasoning: 0,
+    });
+  });
+});
