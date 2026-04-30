@@ -21,11 +21,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { buildQualitySection } from './lib/baseline-quality.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SCHEMA_VERSION = '1.0';
-const COLLECTOR_VERSION = '0.2.0';
+const SCHEMA_VERSION = '1.1'; // F147 升级：加 quality 段 + frozenFixture/pinnedAt/staleAfterDate/upstreamVersion
+const COLLECTOR_VERSION = '0.3.0'; // F147 minor bump
+const STALE_AFTER_MONTHS = 6; // 竞品 fixture 超期 warning 阈值（自己 fixture 的 staleAfterDate 实际不强制）
 
 // Workspace 家目录：跨 worktree 共享，避免每次重 clone（Q2=A）
 export function getBaselineHome() {
@@ -81,6 +83,9 @@ export function parseArgs(argv) {
     verifyArtifacts: false,
     output: null,
     skipBatch: false, // 测试用：仅生成 fixture skeleton 不实际跑 batch
+    upgradeOnly: false, // F147：仅升级现有 fixture schema 1.0 → 1.1（不重跑 batch，零 cost）
+    force: false, // F147：upgrade-only 时强制重算 quality 段（即使 schemaVersion 已是 1.1）
+    frozen: false, // F147：标记 frozenFixture true（竞品冷冻；自己 fixture 默认 false）
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -108,6 +113,15 @@ export function parseArgs(argv) {
         break;
       case '--skip-batch':
         args.skipBatch = true;
+        break;
+      case '--upgrade-only':
+        args.upgradeOnly = true;
+        break;
+      case '--frozen':
+        args.frozen = true;
+        break;
+      case '--force':
+        args.force = true;
         break;
       default:
         if (a.startsWith('--')) {
@@ -495,11 +509,17 @@ export function assembleFixture({
   batchStats,
   graphStats,
   memoryPeakKb,
+  qualitySection,           // F147: quality 段（来自 buildQualitySection）；如无 outputDir 则 null
+  frozen = false,           // F147: frozenFixture 标记
+  upstreamVersion,          // F147: 竞品的版本/commit；自己等于 spectraVersion
 }) {
+  const nowIso = new Date().toISOString();
+  const staleAfterDate = new Date(Date.now() + STALE_AFTER_MONTHS * 30 * 24 * 3600 * 1000)
+    .toISOString().slice(0, 10);
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
-      tool, // 必含：spectra | graphify | llm-agent（Q3=A 多工具维度）
+      tool, // 必含：spectra | graphify | aider-repomap | cody | superpowers | gstack | spec-driver | control
       spectraVersion,
       collectorVersion: COLLECTOR_VERSION,
       targetProject: target.spec,
@@ -509,7 +529,7 @@ export function assembleFixture({
       spectraModuleCount: batchStats.specModuleCount,
       mode,
       model,
-      runTimestampUtc: new Date().toISOString(),
+      runTimestampUtc: nowIso,
       runHostOs: process.platform,
       command,
       args,
@@ -517,6 +537,11 @@ export function assembleFixture({
       outputDir,
       stdoutLogPath: path.join(outputDir, 'spectra-stdout.log'),
       stderrLogPath: path.join(outputDir, 'spectra-stderr.log'),
+      // F147 schema 1.1 新增字段
+      pinnedAt: nowIso,
+      staleAfterDate,
+      upstreamVersion: upstreamVersion ?? spectraVersion,
+      frozenFixture: frozen,
     },
     dryRun: {
       estimatedTokens: dryRun?.estimatedTokens ?? null,
@@ -550,8 +575,43 @@ export function assembleFixture({
       specFailedCount: batchStats.specFailedCount,
     },
     phases,
-    quality: null,
+    quality: qualitySection ?? null, // F147 schema 1.1：quality 段（静态分析）
   };
+}
+
+/**
+ * F147 schema 升级：读现有 1.0 fixture + outputDir 现存产物 → 输出 1.1 fixture（零 LLM cost）
+ */
+export function upgradeFixtureToV11({ fixturePath, outputDir, projectRoot, frozen = false, force = false }) {
+  if (!fs.existsSync(fixturePath)) {
+    throw new Error(`fixture not found: ${fixturePath}`);
+  }
+  const old = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+  if (old.schemaVersion === SCHEMA_VERSION && !force) {
+    return { upgraded: false, reason: 'already at 1.1 (use --force to recompute quality)' };
+  }
+  // 读现有 outputDir 算 quality 段（不重跑 batch）
+  const qualitySection = outputDir && fs.existsSync(outputDir)
+    ? buildQualitySection(outputDir, projectRoot)
+    : null;
+  const nowIso = new Date().toISOString();
+  const staleAfterDate = new Date(Date.now() + STALE_AFTER_MONTHS * 30 * 24 * 3600 * 1000)
+    .toISOString().slice(0, 10);
+  const upgraded = {
+    ...old,
+    schemaVersion: SCHEMA_VERSION,
+    meta: {
+      ...old.meta,
+      collectorVersion: COLLECTOR_VERSION,
+      pinnedAt: old.meta?.runTimestampUtc ?? nowIso,
+      staleAfterDate,
+      upstreamVersion: old.meta?.spectraVersion ?? 'unknown',
+      frozenFixture: frozen,
+    },
+    quality: qualitySection,
+  };
+  fs.writeFileSync(fixturePath, JSON.stringify(upgraded, null, 2) + '\n', 'utf-8');
+  return { upgraded: true, fixturePath, qualityNonNull: qualitySection != null };
 }
 
 function estimateCostUsd(batchStats, model) {
@@ -637,7 +697,7 @@ async function main() {
   }
 
   if (!args.target && !args.targets) {
-    throw new Error('--target or --targets is required (e.g. self-dogfood, karpathy/micrograd, continuedev/continue, khoj-ai/khoj)');
+    throw new Error('--target or --targets is required (e.g. self-dogfood, karpathy/micrograd, karpathy/nanoGPT)');
   }
   if (!['full', 'reading', 'code-only'].includes(args.mode)) {
     throw new Error(`--mode must be one of full|reading|code-only, got: ${args.mode}`);
@@ -646,6 +706,31 @@ async function main() {
   const targetSpecs = args.targets
     ? args.targets.split(',').map((s) => s.trim()).filter(Boolean)
     : [args.target];
+
+  // F147 schema 1.1 升级模式：仅读现有 fixture + outputDir → 写 1.1 fixture（零 LLM cost）
+  if (args.upgradeOnly) {
+    for (const targetSpec of targetSpecs) {
+      const def = KNOWN_TARGETS[targetSpec];
+      if (!def) {
+        console.error(`[upgrade-only] unknown target: ${targetSpec}`);
+        continue;
+      }
+      const projectRoot = def.type === 'local' ? def.path : path.join(getBaselineHome(), def.name);
+      const fixturePath = path.join(PROJECT_ROOT, 'tests/baseline', def.name, args.tool, `${args.mode}.json`);
+      const outputDir = path.join(getBaselineHome(), `${def.name}-output`, `${args.tool}-${args.mode}`);
+      try {
+        const r = upgradeFixtureToV11({ fixturePath, outputDir, projectRoot, frozen: args.frozen, force: args.force });
+        if (r.upgraded) {
+          console.log(`[upgrade-only] ${path.relative(PROJECT_ROOT, fixturePath)} → schema ${SCHEMA_VERSION}, quality=${r.qualityNonNull ? 'filled' : 'null'}`);
+        } else {
+          console.log(`[upgrade-only] ${path.relative(PROJECT_ROOT, fixturePath)} skipped: ${r.reason}`);
+        }
+      } catch (e) {
+        console.error(`[upgrade-only] ${targetSpec}: ${e.message}`);
+      }
+    }
+    return;
+  }
 
   for (const targetSpec of targetSpecs) {
     await runOneTarget({ ...args, target: targetSpec });
@@ -753,6 +838,9 @@ async function runOneTarget(args) {
     batchStats,
     graphStats,
     memoryPeakKb,
+    // F147 schema 1.1：实跑模式下也填 quality 段（静态分析 outputDir 产物）
+    qualitySection: !args.skipBatch ? buildQualitySection(outputDir, target.path) : null,
+    frozen: args.frozen,
   });
 
   // 多工具 fixture 路径：tests/baseline/<project>/<tool>/<mode>.json

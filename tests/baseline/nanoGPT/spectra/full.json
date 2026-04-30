@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
     "spectraVersion": "4.1.1",
-    "collectorVersion": "0.2.0",
+    "collectorVersion": "0.3.0",
     "targetProject": "karpathy/nanoGPT",
     "targetCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
     "targetFileCountsByType": {
@@ -37,7 +37,11 @@
     },
     "outputDir": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stdout.log",
-    "stderrLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stderr.log"
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stderr.log",
+    "pinnedAt": "2026-04-30T08:18:27.105Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "4.1.1",
+    "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 50348,
@@ -78,5 +82,36 @@
     "otherMs": null,
     "extractionMethod": "unavailable"
   },
-  "quality": null
+  "quality": {
+    "specStructure": {
+      "modulesWithIntent": 6,
+      "modulesWithBehavior": 6,
+      "modulesWithApi": 6,
+      "modulesWithDataModel": 6,
+      "modulesWithAllFour": 6,
+      "modulesWithInputsOutputs": 6,
+      "averageSpecLines": 362,
+      "shorterThan100Lines": 1,
+      "longerThan1000Lines": 0,
+      "outlierFiles": [
+        "_index.spec.md (45 lines, too short)"
+      ],
+      "moduleCount": 7
+    },
+    "graphSanity": {
+      "isolatedNodes": 12,
+      "selfLoops": 0,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 1.1,
+      "maxDegree": 7,
+      "edgesWithoutType": 18
+    },
+    "crossLinks": {
+      "totalLinks": 12,
+      "brokenLinks": 0,
+      "externalLinks": 0
+    },
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null
+  }
 }

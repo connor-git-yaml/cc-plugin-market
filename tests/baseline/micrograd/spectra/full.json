@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
     "spectraVersion": "4.1.1",
-    "collectorVersion": "0.2.0",
+    "collectorVersion": "0.3.0",
     "targetProject": "karpathy/micrograd",
     "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
     "targetFileCountsByType": {
@@ -37,7 +37,11 @@
     },
     "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stdout.log",
-    "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log"
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log",
+    "pinnedAt": "2026-04-30T07:57:17.092Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "4.1.1",
+    "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 35534,
@@ -78,5 +82,36 @@
     "otherMs": null,
     "extractionMethod": "unavailable"
   },
-  "quality": null
+  "quality": {
+    "specStructure": {
+      "modulesWithIntent": 4,
+      "modulesWithBehavior": 4,
+      "modulesWithApi": 4,
+      "modulesWithDataModel": 4,
+      "modulesWithAllFour": 4,
+      "modulesWithInputsOutputs": 4,
+      "averageSpecLines": 251,
+      "shorterThan100Lines": 1,
+      "longerThan1000Lines": 0,
+      "outlierFiles": [
+        "_index.spec.md (42 lines, too short)"
+      ],
+      "moduleCount": 5
+    },
+    "graphSanity": {
+      "isolatedNodes": 5,
+      "selfLoops": 0,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 0.9,
+      "maxDegree": 4,
+      "edgesWithoutType": 6
+    },
+    "crossLinks": {
+      "totalLinks": 5,
+      "brokenLinks": 0,
+      "externalLinks": 0
+    },
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null
+  }
 }

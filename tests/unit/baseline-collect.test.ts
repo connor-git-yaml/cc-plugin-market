@@ -263,7 +263,7 @@ describe('baseline-collect', () => {
 
     function validFixture(): Record<string, unknown> {
       return {
-        schemaVersion: '1.0',
+        schemaVersion: '1.1',
         meta: {
           tool: 'spectra',
           targetCommit: 'abc1234567',

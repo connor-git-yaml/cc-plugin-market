@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
     "spectraVersion": "4.1.1",
-    "collectorVersion": "0.2.0",
+    "collectorVersion": "0.3.0",
     "targetProject": "self-dogfood",
     "targetCommit": "485bfec4621ffb2cf6d43bb37ef624a35dff8d9e",
     "targetFileCountsByType": {
@@ -37,7 +37,11 @@
     },
     "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stdout.log",
-    "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stderr.log"
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stderr.log",
+    "pinnedAt": "2026-04-30T08:46:30.474Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "4.1.1",
+    "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 1051660,
@@ -78,5 +82,39 @@
     "otherMs": null,
     "extractionMethod": "unavailable"
   },
-  "quality": null
+  "quality": {
+    "specStructure": {
+      "modulesWithIntent": 17,
+      "modulesWithBehavior": 17,
+      "modulesWithApi": 17,
+      "modulesWithDataModel": 17,
+      "modulesWithAllFour": 17,
+      "modulesWithInputsOutputs": 17,
+      "averageSpecLines": 1472,
+      "shorterThan100Lines": 0,
+      "longerThan1000Lines": 4,
+      "outlierFiles": [
+        "batch.spec.md (1946 lines, too long)",
+        "core.spec.md (1840 lines, too long)",
+        "debt-scanner.spec.md (1495 lines, too long)",
+        "panoramic.spec.md (12468 lines, too long)"
+      ],
+      "moduleCount": 18
+    },
+    "graphSanity": {
+      "isolatedNodes": 0,
+      "selfLoops": 13,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 7.8,
+      "maxDegree": 14,
+      "edgesWithoutType": 66
+    },
+    "crossLinks": {
+      "totalLinks": 138,
+      "brokenLinks": 2,
+      "externalLinks": 0
+    },
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null
+  }
 }
