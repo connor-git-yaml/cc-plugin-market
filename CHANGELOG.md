@@ -46,13 +46,34 @@
 
 ## [Unreleased]
 
-### Added — design artifacts only（无代码改动，不触发 release）
+### Added — Feature 140 Phase 0：Cluster Orchestrator 基础设施
+
+- **`src/panoramic/cluster-orchestrator.ts`**（新建，~600 行）— Spectra v4.1.0 MapReduce 统一调度层。提供 `clusterDispatch<TInput, TMapOutput, TReduceOutput>()` 通用接口，作为下游 ADR / narrative / hyperedges 三个 pipeline 的基础设施（Phase 3 全部阻塞于此 Phase）。覆盖 spec FR-001、FR-002、FR-014。
+  - **Phase A 聚类策略三级 fallback chain**：community（复用 Louvain）→ directory（path.dirname 分组）→ single（兜底）；显式 `directoryFallback` 字段强制类型化降级路径
+  - **Phase A.5 First-Fit-Decreasing 装箱**：cluster 超 maxSize=15 或超 tokenBudget=85k 时按 module token 大小降序装箱拆分；**保证零模块丢失**（Codex review 已修的设计 bug 不退化）；巨型 input 通过 `diagnostics.oversizedInputs` 量化报告
+  - **Phase B 并发 Map**：`p-limit(maxConcurrency=4)` + `perCallTimeout=180s`（默认）；单 cluster 失败容忍；`< 50% Map 成功` → fail-closed
+  - **Phase C 单次 Reduce + 1 次重试**：`timeout=300s`；重试仍失败 → fail-closed（finalOutput=null + diagnostics.failClosedReason='reduce-failed'）
+  - **6 个 telemetry hooks**：`onClusterPlanned / onMapStart / onMapComplete / onMapFailed / onReduceStart / onReduceComplete` + `safeInvokeHook` 包裹（同时处理同步抛错 + async hook 的 rejected Promise）
+  - **`mergeConfidence` 程序化打分**：high（0 失败 + 0 重试）/ medium（0-30% 失败 OR 1 重试成功）/ low（> 30% 失败）
+  - **AbortSignal 透传**：`MapOptions.fn` / `ReduceOptions.fn` 可选 `signal: AbortSignal` 参数；超时时 controller.abort 触发，caller 转发给 SDK 可真正取消 in-flight LLM 调用
+  - **fail-closed 边界**：5 种 fail-closed 路径（clustering-failed / shared-header-failed / map-below-threshold / reduce-failed / 成功）每条都填充完整 diagnostics（含 clusterCount / clusterSplits / oversizedInputs）
+- **38 个单元测试**（tests/panoramic/cluster-orchestrator-{clustering,dispatch,telemetry}.test.ts）— 覆盖：
+  - 聚类策略 fallback chain（5 case + 2 边界）
+  - FFD 装箱（合规不拆 / 超 maxSize / 超 budget / 大小不均 / 无 truncated 字段 / 巨型 input / tokenBudget=0 / 组合用例）
+  - Map 并发上限 + 单 cluster 失败继续 + Map < 50% 成功 fail-closed + Map 超时
+  - Reduce 重试 1 次成功 + 重试仍失败 + Reduce 超时
+  - 6 个 telemetry hook 触发时机 + mergeConfidence 三态判定
+  - sharedHeader 抛错 fail-closed + 同步 hook 抛错（含 onMapFailed）+ async hook rejected Promise + AbortSignal 透传 + oversizedInputs 量化
+- **覆盖率**：cluster-orchestrator.ts **93.61% lines / 100% functions / 89.74% branches**（≥ 90% 目标达成）
+- **Codex adversarial review**：双轮对抗审查共发现 5 个 critical/warning，全部修复（async hook rejection 处理 / FFD 巨型 input / directoryFallback 类型化 / withTimeout AbortSignal / 测试盲区补充）
+
+### Added — Feature 140 设计阶段定稿（已合入 master）
 
 - **Feature 140 设计阶段定稿**（specs/140-spectra-doc-pipeline-quality/）— Spectra v4.1.0 文档生产线质量重构的完整设计制品（spec.md / plan.md / tasks.md / 77 项 GATE_DESIGN checklist）。基于 MapReduce 架构（cluster orchestrator + Sonnet map + Opus reduce + first-fit-decreasing 装箱），解决 v4.0.1 fail-loud 临时治理掩盖的 6 类质量问题：ADR hallucinate / hyperedges 无效 / narrative template 化 / --include-docs 半实现 / graph.html 不一致 / context 不可观测。Codex adversarial review 已捕捉 2 个设计阶段 bug 并修复（HIGH: ADR migrate 谓词 OR 误用；MEDIUM: 超大 cluster 截断丢模块）。
 - **MapReduce 架构权威设计文档**（docs/spectra-v4.1-mapreduce-architecture.md）+ **三 Feature 路线图**（docs/spectra-v4-hotfix-roadmap.md）+ **Feature 136→140 业务规划 v3**（docs/spectra-v4.1-feature-b-plan.md）。
 - **Feature 141 路线规划**（symbol-level graph，留 v4.2.0）— 把图谱粒度从模块文件级降到代码符号级（class/function/method），让 God Nodes 识别真实代码核心抽象。
 
-待 Feature 140 实施完成后将以 v4.1.0 minor release。
+Feature 140 余下 8 步（Phase 1-4 共 46 任务，约 19-26 人天）按 step-by-step delivery 推进；待全部完成后由 user 决定何时升 v4.1.0 → v4.2.0 minor release。
 
 
 ## [4.0.1] — 2026-04-27

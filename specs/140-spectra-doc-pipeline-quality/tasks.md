@@ -41,14 +41,14 @@ estimatedEffort: "22-30 人天"
 
 > 目标：交付稳定的 `cluster-orchestrator.ts`，作为 Phase 3 三个生成器的统一 MapReduce dispatch 层。Phase 3 全部阻塞于此 Phase 完成。
 
-- [ ] T01: 创建 src/panoramic/cluster-orchestrator.ts — 接口类型定义
+- [x] T01: 创建 src/panoramic/cluster-orchestrator.ts — 接口类型定义
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`（新建）
   - **FR 关联**: FR-001, FR-014
   - **实施细节**: 导出 `ClusterDispatchOptions<TInput, TMapOutput, TReduceOutput>`、`ClusterDispatchResult<TReduceOutput>`、`CallTelemetry` 接口；导出 `clusterDispatch` 函数签名；使用 Zod 定义 `callTelemetrySchema`；字段严格按架构文档 §二 接口定义
   - **验收**: `npx tsc --noEmit` 零错误；接口含 `sharedHeader / map / reduce / onClusterPlanned / onMapStart / onMapComplete / onMapFailed / onReduceStart / onReduceComplete`；`ClusterDispatchResult.diagnostics` 含 `mergeConfidence: 'high' | 'medium' | 'low'`
   - **预估**: 0.5 人天
 
-- [ ] T02: 实现 cluster-orchestrator.ts — Phase A 聚类策略
+- [x] T02: 实现 cluster-orchestrator.ts — Phase A 聚类策略
   - **前置任务**: T01
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001, FR-002
@@ -56,7 +56,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T07）mock Louvain 失败后正确降级 directory；mock directory 失败后降级 single；cluster 划分结果符合 minSize/maxSize 约束；超 maxSize=15 的输入拆分后所有源模块仍出现在某个子 cluster 中（Set 等价性断言）
   - **预估**: 1 人天
 
-- [ ] T03: 实现 cluster-orchestrator.ts — Phase B Map 并发调度
+- [x] T03: 实现 cluster-orchestrator.ts — Phase B Map 并发调度
   - **前置任务**: T02
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001, FR-002
@@ -64,7 +64,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T08）验证：并发度不超 4、单个失败继续、<50% 成功触发 fail-closed
   - **预估**: 0.5 人天
 
-- [ ] T04: 实现 cluster-orchestrator.ts — Phase C Reduce + 重试
+- [x] T04: 实现 cluster-orchestrator.ts — Phase C Reduce + 重试
   - **前置任务**: T03
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001
@@ -72,7 +72,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T08）验证：Reduce 失败重试 1 次；仍失败时 `finalOutput` 为 null 且 diagnostics 正确
   - **预估**: 0.5 人天
 
-- [ ] T05: 实现 cluster-orchestrator.ts — Telemetry hooks 集成
+- [x] T05: 实现 cluster-orchestrator.ts — Telemetry hooks 集成
   - **前置任务**: T04
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-014
@@ -80,7 +80,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T09）断言各 hook 在正确时机被调用，调用次数与 cluster 数一致
   - **预估**: 0.5 人天
 
-- [ ] T06: 实现 cluster-orchestrator.ts — token 预算装箱拆分（修复 Codex review finding 2）
+- [x] T06: 实现 cluster-orchestrator.ts — token 预算装箱拆分（修复 Codex review finding 2）
   - **前置任务**: T02
   - **影响文件**: `src/panoramic/cluster-orchestrator.ts`
   - **FR 关联**: FR-001
@@ -88,7 +88,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试构造超 100k token 的 cluster，断言：(1) 拆分后所有源模块仍出现在某个子 cluster 中（Set 等价性）；(2) 每个子 cluster 总 token ≤ 100k；(3) shared header 在每个子 cluster 中完整保留；(4) 不出现 clusterTruncated: true 字段
   - **预估**: 0.5 人天
 
-- [ ] T07: 单元测试 — 聚类策略 fallback chain
+- [x] T07: 单元测试 — 聚类策略 fallback chain
   - **前置任务**: T02
   - **影响文件**: `src/panoramic/__tests__/cluster-orchestrator-clustering.test.ts`（新建）
   - **FR 关联**: FR-002
@@ -96,7 +96,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `npx vitest run` 全 5 用例通过；覆盖 fallback chain 的所有分支；用例 5 显式断言无模块丢失
   - **预估**: 0.5 人天
 
-- [ ] T08: 单元测试 — Map 并发调度 + Reduce 重试
+- [x] T08: 单元测试 — Map 并发调度 + Reduce 重试
   - **前置任务**: T03, T04
   - **影响文件**: `src/panoramic/__tests__/cluster-orchestrator-dispatch.test.ts`（新建）
   - **FR 关联**: FR-001, FR-002
@@ -104,7 +104,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；mock LLM 不依赖真实 API key
   - **预估**: 0.5 人天
 
-- [ ] T09: 单元测试 — Telemetry hooks + mergeConfidence 计算
+- [x] T09: 单元测试 — Telemetry hooks + mergeConfidence 计算
   - **前置任务**: T05
   - **影响文件**: `src/panoramic/__tests__/cluster-orchestrator-telemetry.test.ts`（新建）
   - **FR 关联**: FR-014
