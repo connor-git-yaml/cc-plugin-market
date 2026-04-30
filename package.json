@@ -38,6 +38,7 @@
     "eval:grounding": "node scripts/eval-grounding.mjs",
     "eval:task-runner": "node scripts/eval-task-runner.mjs",
     "eval:refresh-self": "node scripts/eval-refresh-self.mjs",
+    "eval:report": "node scripts/eval-report.mjs",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:check": "bash scripts/check-plugin-sync.sh",
     "worktree:sync-local-state": "bash scripts/sync-worktree-local-state.sh",
