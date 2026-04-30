@@ -1,0 +1,78 @@
+name: Baseline Collection (Feature 143)
+
+# Phase 3 模板：默认 workflow_dispatch 手动触发，不绑 cron。
+# 启用 weekly cron 见 plan.md §7 D6 cost 评估，需团队/用户明确决策。
+#
+# 触发后 GitHub Actions 跑 npm run baseline:collect，把生成的 fixture 上传为 artifact，
+# 但不直接 commit 回仓库（避免分支噪音；用户 download 后手动选择是否更新 tests/baseline/）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: '逗号分隔目标项目，如 self-dogfood,karpathy/micrograd,continuedev/continue,khoj-ai/khoj'
+        default: 'karpathy/micrograd'
+        required: true
+      mode:
+        description: 'batch mode'
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - reading
+          - code-only
+        required: true
+      commit:
+        description: '可选：锁定 target 的 commit hash 或 tag（仅单 target 有效）'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90  # Continue full mode 可能跑 60 分钟
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build spectra CLI
+        run: npm run build
+
+      - name: Run baseline collector
+        run: |
+          if [ -n "${{ inputs.commit }}" ]; then
+            npm run baseline:collect -- --target "${{ inputs.targets }}" --mode "${{ inputs.mode }}" --commit "${{ inputs.commit }}"
+          else
+            npm run baseline:collect -- --targets "${{ inputs.targets }}" --mode "${{ inputs.mode }}"
+          fi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SPECTRA_LOG_LEVEL: info
+
+      - name: Upload fixtures
+        if: always()  # 即使失败也上传部分产物，便于 debug
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-fixtures-${{ inputs.mode }}
+          path: |
+            tests/baseline/**/*.json
+            tests/baseline/.workspaces/**/spectra-baseline-output/spectra-stdout.log
+            tests/baseline/.workspaces/**/spectra-baseline-output/spectra-stderr.log
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Verify SC-001 (only when running production targets)
+        if: contains(inputs.targets, 'continue') && contains(inputs.targets, 'khoj') && inputs.mode == 'full'
+        run: npm run baseline:collect -- --verify-artifacts
