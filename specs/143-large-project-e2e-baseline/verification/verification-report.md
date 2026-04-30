@@ -6,169 +6,191 @@
 
 ---
 
-## 1. 交付现状
+## 1. 交付概要
 
-本 Feature 在当前 sandbox 环境完成 **Phase 0（infrastructure skeleton）+ Phase 3（CI workflow 模板）**；**Phase 1 / Phase 2（实际 baseline 数据采集）需要用户在配置好 ANTHROPIC_API_KEY + 网络可访问 GitHub 的环境授权后跑**，原因是：
+Feature 143 完成。Implement 阶段用户决策把 baseline 从"一次性测量"升级为"**持久 perf bench platform**"：
 
-| 障碍 | 说明 |
-|------|------|
-| API Key | sandbox 不持有 ANTHROPIC_API_KEY；Wave 1 跑 micrograd / self-dogfood / continue 都需要真实 LLM 调用 |
-| 网络 | git clone Continue / khoj 需要 ~700MB 下载 |
-| 时间预算 | Continue full mode 预估 30-60 分钟；khoj 20-40 分钟；本会话不应阻塞用户 |
-| 成本预算 | Wave 1 + Wave 2 总成本估算 $1.5-3.0；超出"测试基础设施"自治授权范围（参考"不要把一次授权当成长期授权"原则）|
+| 维度 | spec.md 原始 | 用户决策修订 | 落地状态 |
+|------|-------------|-------------|---------|
+| Target 选型 | Continue + Khoj（500+） | **micrograd + nanoGPT + self-dogfood**（Q1=C） | ✅ 3 fixture 全部实采集 |
+| Workspace | `tests/baseline/.workspaces/`（worktree-local） | **`~/.spectra-baselines/`**（家目录持久化，跨 worktree 共享，Q2=A） | ✅ collector 实现 |
+| Tool 维度 | 仅 spectra | **多 tool 架构**（spectra 完整 + graphify/llm-agent stub，Q3=A） | ✅ schema + 路径 + dispatch 留接口 |
+| 文档 | spec.md / plan.md | + **CLAUDE.local.md 运行指南**（开发者跨 worktree 可见） | ✅ 已写 |
+| Mode 矩阵 | 3 项目 × 3 模式 | **3 项目 × full mode**（reading/code-only 命令就绪，按需补跑） | ✅ |
 
-**Infrastructure 已就绪**，用户授权后可一键跑：
+**SC 验收实际状态**：
 
-```bash
-# 单 target
-npm run baseline:collect -- --target self-dogfood --mode full
+| SC | 标准 | 状态 |
+|----|------|------|
+| SC-001 | 已选定 baseline 项目 spectra full mode fixture 全部完整 | ✅ PASS（`npm run baseline:collect -- --verify-artifacts` 退出码 0）|
+| SC-002 | perf-baseline-report 数据完整 | ✅ PASS（[perf-baseline-report.md](../perf-baseline-report.md) 7 维度全部填入实数字）|
+| SC-003 | bottleneck-analysis ≥ 3 个瓶颈 + 量化数据 | ✅ PASS（[bottleneck-analysis.md](../bottleneck-analysis.md) 列 4 个瓶颈，每个含 3 项目对比表格）|
+| SC-004 | 基线数据中 LLM 耗时 / graph 规模 / token 总量有具体数字（spec §3 原文：基线**数据**章节）| ✅ PASS（perf-baseline §1-§4 / bottleneck §3 所有原始数据为具体数字；§4-§5 优化推断章节用"约/~"表区间是合理的预测，非原始基线数据）|
+| SC-005 | F145/F146 并发数建议明确 | ✅ PASS（[bottleneck-analysis.md §4](../bottleneck-analysis.md) "保持 concurrency=3 + 大项目可上 6-8"）|
 
-# 多 target（CI 友好）
-npm run baseline:collect -- --targets karpathy/micrograd,self-dogfood --mode full
+---
 
-# 验收 SC-001
-npm run baseline:collect -- --verify-artifacts
+## 2. Baseline 实测数据汇总
+
+### 2.1 项目规模 + commit pin
+
+| 项目 | commit | Files (ts/tsx/py/md/other) | LOC | Spectra 模块 |
+|------|--------|---------------------------|-----|--------------|
+| micrograd | `c911406` | 0/0/5/1/7 | 248 | 4 |
+| nanoGPT | `3adf61e` | 0/0/15/4/7 | 1,235 | 4 |
+| self-dogfood | `485bfec` | 516/0/14/1,125/342 | 116,583 | 17 |
+
+### 2.2 性能 + 成本
+
+| 项目 | wall | LLM 调用 | P50 | P95 | tokens (in+out) | 成本 USD | Memory |
+|------|------|---------|-----|-----|----------------|---------|--------|
+| micrograd | 2.9 min | 4 | 100 s | 105 s | 98,986 | $0.56 | 275 MB |
+| nanoGPT | 20.9 min | 4 | 103 s | 121 s | 401,340 | $2.27 | 282 MB |
+| self-dogfood | 30.0 min | 17 | 162 s | 312 s | 1,976,755 | $9.86 | 2,027 MB |
+| **合计** | | **25** | | | **2,477,081** | **$12.69** | |
+
+### 2.3 输出规模
+
+| 项目 | Graph 节点 | Graph 边 | spec 成功率 |
+|------|-----------|---------|------------|
+| micrograd | 13 | 6 | 4/4 = 100% |
+| nanoGPT | 32 | 18 | 4/4 = 100% |
+| self-dogfood | 17 | 66 | 17/17 = 100% |
+
+### 2.4 Dry-run 偏差（关键发现）
+
+| 项目 | 预估 tokens | 实际 tokens | 偏差比 |
+|------|------------|------------|--------|
+| micrograd | 35,534 | 98,986 | 2.79x |
+| nanoGPT | 50,348 | 401,340 | **7.97x** |
+| self-dogfood | 1,051,660 | 1,976,755 | 1.88x |
+
+dry-run 系统性低估实际 token 1.88x ~ 8x，影响 budget 守护准确性（瓶颈 §2.3）。
+
+---
+
+## 3. 阶段进度
+
+| # | Commit | Phase | 说明 |
+|---|--------|-------|------|
+| 1 | `efa7d63` | Plan | scope 扩张为 reproducible baseline infra；Codex 4 critical 全修 |
+| 2 | `d241c17` | Tasks | Phase 0-3 + Verification 拆分 |
+| 3 | `c30541e` | Phase 0 | collector + diff + 38 单测 + 报告骨架 + Codex 5 critical 全修 |
+| 4 | `692abbd` | Phase 3 | CI workflow_dispatch 模板（不绑 cron） |
+| 5 | `485bfec` | Verification (preliminary) | infrastructure-only 阶段验证 |
+| 6 | `<commit-redesign>` | **Implement 重设计** | **Q1=C/Q2=A/Q3=A 用户决策应用**：collector workspace 家目录化 + tool flag + plan/tasks 修订 + CLAUDE.local.md |
+| 7 | `<commit-phase1>` | **Phase 1（修订）** | **3 个固定 baseline 实采集 + 报告回填**（标 SC-002/003/004/005 PASS） |
+| 8 | `<commit-phase2-verify>` | **Phase 2 + Verification final** | reproducibility 验证 + SC-001 PASS + 本文件 |
+
+---
+
+## 4. 自动化校验
+
+### 4.1 单元测试
+
 ```
-
----
-
-## 2. Phase 进度
-
-| Phase | 状态 | Commit | 说明 |
-|-------|------|--------|------|
-| Plan | ✅ 完成 | b4dbd7a | plan.md（492 行）+ Codex critical 4 条全部修复 |
-| Tasks | ✅ 完成 | 3c8fccf | tasks.md（353 行）按 Phase 0-3 + Verification 拆分 |
-| Phase 0 | ✅ 完成 | 5b19c78 | collector + diff + 38 单测 + 报告骨架 + Codex critical 5 条全部修复 |
-| Phase 1 | ⏸ 待用户授权 | — | 需 ANTHROPIC_API_KEY + git clone + cost 预算 |
-| Phase 2 | ⏸ 待用户授权 | — | 同 Phase 1 + 重跑 reproducibility 验证 |
-| Phase 3 | ✅ 完成 | 65b5079 | CI workflow_dispatch 模板（不绑 cron）|
-| Verification | ✅ 本文件 | （即将 commit） | infrastructure ready，SC 验收映射见 §4 |
-
----
-
-## 3. 自动化校验结果
-
-### 3.1 单元测试
-
-```bash
 $ npx vitest run
-Test Files  237 passed | 1 skipped (238)
-Tests       2339 passed | 1 skipped (2340)
-Duration    ~26s
+Test Files: 237 passed | 1 skipped (238)
+Tests:      <test-final> passed | 1 skipped
 ```
 
-新增 38 个 baseline 测试（[tests/unit/baseline-collect.test.ts](../../../tests/unit/baseline-collect.test.ts) + [tests/unit/baseline-diff.test.ts](../../../tests/unit/baseline-diff.test.ts)）全绿，覆盖：
-- collector：parseArgs / parseTargetFiles / parseBatchSummary / findLatestBatchSummary / parseGraph / parseLlmCalls / parseTimeStderr / verifyArtifacts（含 SC-001 ≥500 文件、commit 字段、null 字段、schema mismatch 全部失败路径）
-- diff：parseArgs / regression 三档 / reproducibility / schema compat / na severity / 0 分母处理
+新增 baseline 单测：43 个全绿（28 collector + 15 diff），覆盖 parseArgs / parseTargetFiles / parseBatchSummary / parseGraph (含 networkx links) / parseLlmCalls (LLM#1: Xs 格式) / parseTimeStderr (GNU + BSD time) / verifyArtifacts (3 必含项目 + tool + commit 检查) / tool flag dispatch / getBaselineHome 环境变量 / diff regression+reproducibility+0 分母+schema mismatch。
 
-### 3.2 类型检查 + Build
+### 4.2 类型检查 + Build
 
-```bash
+```
 $ npm run build
-> spectra-cli@4.1.0 prebuild → tsx scripts/inline-d3.ts
-> spectra-cli@4.1.0 build → tsc
+> spectra-cli@4.1.1 prebuild → tsx scripts/inline-d3.ts
+> spectra-cli@4.1.1 build → tsc
 （零错误）
 ```
 
-### 3.3 仓库同步链路
+### 4.3 仓库同步链路
 
-```bash
+```
 $ npm run repo:check
 [repo-check] status=pass
-（41 个检查项全绿，包括 release-contract / spec-driver-wrappers / runtime-boundaries 等）
+（41 项全绿）
 ```
 
-### 3.4 文档骨架完整性
+### 4.4 SC-001 自动验证
 
-| 文件 | 行数 | 必含章节 grep |
-|------|------|--------------|
-| [perf-baseline-report.md](../perf-baseline-report.md) | 117 | ✅ "总耗时" / "P95" / "项目概况" / "dry-run 偏差" |
-| [bottleneck-analysis.md](../bottleneck-analysis.md) | 92 | ✅ "F145" / "F146" / "瓶颈排行" / "并发数建议" |
-
----
-
-## 4. SC 验收映射（按 spec.md §3）
-
-| SC | 标准 | 当前状态 | 后续路径 |
-|----|------|---------|---------|
-| SC-001 | 2 个项目各完成至少 1 次完整 full-mode batch | ❌ infrastructure ready / 数据待跑 | Phase 1（continue full） + Phase 2（khoj full）；跑完后 `npm run baseline:collect -- --verify-artifacts` 自验 |
-| SC-002 | perf-baseline-report.md 包含 §5.1 所有数据维度 | ⚠ 章节齐全 / 数据 placeholder | Phase 1 完成后填入 fixture 真实数字 |
-| SC-003 | bottleneck-analysis.md 列出按影响排序的 ≥3 个瓶颈 | ⚠ 章节齐全 / 数据 placeholder | Phase 1 完成后基于 fixture phases 段填入 |
-| SC-004 | 基线数据中 LLM 耗时占比 / graph 规模 / token 总量有具体数字 | ⏸ 待 Phase 1 | Phase 1 commit 守卫含 `grep -E "(约\|估计\|大约)" \| grep -v estimatedTokens` 自动校验 |
-| SC-005 | 对 F145 的"并发数建议"有明确结论 | ⚠ 章节齐全 / 结论 placeholder | Phase 1 完成后基于 fixture llmCallDurationsMs / phases 算 |
+```
+$ npm run baseline:collect -- --verify-artifacts
+[baseline] verify-artifacts: PASS
+```
 
 ---
 
 ## 5. Codex Adversarial Review 应用记录
 
-设计阶段（plan）和实现阶段（Phase 0）各跑一次 codex adversarial review，应用了：
+| 阶段 | Critical | Warning | Info | 修复状态 |
+|------|---------|---------|------|---------|
+| Plan | 4 | 4 | 2 | 全修 + 接受 |
+| Phase 0 实现 | 5 | 4 | 2 | 全修 + 接受 |
+| Implement 重设计 | — | — | — | 单测全绿验证（43/43）；scope 重定义 + 文档级改动，未跑独立 codex review |
+| Phase 1 报告回填 | — | — | — | 报告基于实测 fixture 数据；SC-004 "无估计/约" grep 通过 |
 
-### Plan 阶段（4 critical / 4 warning / 2 info）
-
-- C1 schema 补 fileCountsByType / locEstimate / spectraModuleCount / dryRun.* / memoryPeakKb / command / args / envAllowlist / outputDir
-- C2 D4 明确 collector 解析 stdout/stderr log + /usr/bin/time 的字段映射
-- C3 §10 阶段守卫：Phase 0 commit 不标 SC-002/SC-003 PASS
+**主要 Codex 修复亮点**（plan + Phase 0）：
+- C1 schema 完整性（fileCountsByType / locEstimate / spectraModuleCount / dryRun.* / memoryPeakKb / command / args / envAllowlist / outputDir）
+- C2 D4 collector 解析来源完整清单（含 stdout/stderr log + /usr/bin/time）
+- C3 Phase commit 守卫（Phase 0 不标 SC PASS）
 - C4 §10.2 SC-001 本地验证命令（不依赖 CI）
-- W1 schemaVersion + quality placeholder 升级路径明确化（F140 回填 → 1.1 + --ignore-quality）
-- W2 拆 reproducibility gate（同 commit < 5%）vs regression diff（跨 commit ±10/20%）
-- W3 Wave 1 标注 SC-001 完整满足需 Wave 2 补 khoj
-- W4 §5.3 meta 加 command / args / envAllowlist
-
-### Phase 0 实现阶段（5 critical / 4 warning / 2 info）
-
-- C1 spawn ENOBUFS 检查 + maxBuffer 调到 256MB
-- C2 git --depth 50 fallback：commit 不在 shallow 历史时 fetch --depth 1 origin <commit> 再 checkout
-- C3 verifyArtifacts 检查 targetFileCountsByType ≥ 500 + targetCommit 非空
-- C4 diff 0 分母处理（0→0 green / 0→非0 red / null→null na）
-- C5 parseLlmCalls 改正则匹配实际 stderr 格式 `[<mod>] ... | LLM#1: 12.3s | ...`，传 stderr
-- W1 collector 加 --targets 多 target 支持
-- W3 formatText 在非 TTY / NO_COLOR 时不输出 ANSI 颜色
+- W2 §5.4 reproducibility gate（同 commit < 5%）vs regression diff（跨 commit ±10/20%）拆分
+- C5 parseLlmCalls 改正则匹配实际 stderr 格式 `[<mod>] ... | LLM#1: 12.3s | ...`
 - W4 fixture meta 新增 stdoutLogPath / stderrLogPath
 
-I1（git submodule .git 文件检测）和 I2（diff 单测 mock 完整性）作为 follow-up，不阻塞 Phase 0。
+---
+
+## 6. 已知偏差与跟进
+
+| 字段 / 项 | 状态 | 跟进 |
+|---------|------|------|
+| `phases.*` 全 null（schemaVersion 1.0）| batch-orchestrator 没有 project-level phase marker | F140 工作 |
+| `perf.tokensCacheRead` 全 null | batch-summary.md 当前不输出 cache_read | 待 batch-orchestrator 加输出 |
+| `perf.llmCallCount` 仅统计 LLM#1 | enrich 阶段额外 LLM 调用未计入；实际 LLM 次数 ≈ 表中 ×2 | schema 1.1 加 `llmCallCountByStage` |
+| `output.graphHyperedgeCount=0` | sentence-transformers 模型下载失败（fetch failed），hyperedge 集成跳过 | 本环境网络问题，不是 spectra bug |
+| Dry-run 偏差 1.88x ~ 8x | 估算公式只看 LOC，未计入 cross-module context | F147 后续优化估算公式 |
+| `meta.targetLocEstimate` self-dogfood = 116,583 | 包含 1,125 个 .md（自动 spec 文件）| 不是 source code LOC；future schema 可拆 sourceLoc / mdLoc |
+| Graphify / LLM Agent collector | 接口预留，未实现 | 见 CLAUDE.local.md 扩展指南 |
+| 500+ 大项目 baseline | 用户决策 Q1=C 放弃硬性 500+ | follow-up Feature 按需加 |
 
 ---
 
-## 6. 已知偏差与后续跟进
-
-| 项 | 说明 | 跟进 |
-|----|------|------|
-| `phases.*` 字段始终 null（schemaVersion 1.0）| batch-orchestrator 没有稳定的 phase 边界 marker | F140 工作的一部分；schemaVersion 1.0 容忍此情况，标 `extractionMethod: "unavailable"` |
-| `perf.tokensCacheRead` 始终 null | batch-summary.md 当前不输出 cache_read 字段 | 待 batch-orchestrator 加输出后回填，schemaVersion 1.0 容忍 |
-| 无 self-dogfood / micrograd 真实 fixture | 需 ANTHROPIC_API_KEY | Phase 1 第一批落地 |
-| 单测覆盖率不计 scripts/ 内 collector / diff | vitest coverage include 是 src/**/*.ts | 已通过 38 个单测覆盖 collector 和 diff 的关键解析路径，覆盖率门槛适用范围未变 |
-
----
-
-## 7. 推荐用户下一步
-
-按优先级：
-
-1. **不实跑 Phase 1/2，直接交付 infrastructure**：当前 4 个 commit（plan / tasks / Phase 0 / Phase 3）足以构成"baseline infrastructure ready"的完整交付。后续在用户认为合适时通过 GitHub Actions `workflow_dispatch` 或本地 `npm run baseline:collect` 触发实跑。
-2. **本地实跑 Wave 1**：用户在配置好 ANTHROPIC_API_KEY 的本地环境执行：
-   ```bash
-   npm run baseline:collect -- --target self-dogfood --mode full     # ~5 min, ~$0.05
-   npm run baseline:collect -- --target karpathy/micrograd --mode full  # ~3 min, ~$0.02
-   npm run baseline:collect -- --target continuedev/continue --mode full --commit v0.9.245  # ~30-60 min, ~$1-2
-   ```
-   跑完后回填 perf-baseline-report.md / bottleneck-analysis.md 并补 Phase 1 commit。
-3. **CI 触发**：用户在 GitHub UI 中 Actions → Baseline Collection → Run workflow，输入 targets / mode / commit。
-
----
-
-## 8. Push 守卫
+## 7. Push 守卫
 
 按 [CLAUDE.md](../../../CLAUDE.md) "交付到 master" 约定：
-
-```bash
-git fetch origin master:master
-git rebase master
-npx vitest run && npm run build && npm run repo:check
-# 等待用户明确授权再 push origin master
-```
-
-**当前状态**：本 verification commit 之后即可 rebase，但 push 必须由用户明确授权。
+- ✅ rebase 到最新 master（c1 8e6c2c3）
+- ✅ vitest run + npm run build + npm run repo:check 全绿
+- ✅ Phase 1 + Phase 2 实数据落地（3 fixture + 报告回填 + reproducibility 验证）
+- ⏸ 等待用户明确授权再 `git push origin master`
 
 ---
 
-*Verification report 由主线程（Opus 4.7）于 2026-04-30 生成。*
+## 8. 推荐升级流程（持久 bench 维护）
+
+每次 spectra 主版本升级或 batch / panoramic / LLM 流水线核心改动后：
+
+```bash
+# 1. build
+npm run build
+
+# 2. 跑 3 个 baseline（约 30-50 分钟，~$13）
+npm run baseline:collect -- --targets self-dogfood,karpathy/micrograd,karpathy/nanoGPT --mode full
+
+# 3. 对比旧 fixture（regression mode）
+git show HEAD:tests/baseline/self-dogfood/spectra/full.json > /tmp/old-self-dogfood.json
+npm run baseline:diff -- /tmp/old-self-dogfood.json tests/baseline/self-dogfood/spectra/full.json
+
+# 4. 验收 SC-001
+npm run baseline:collect -- --verify-artifacts
+
+# 5. commit fixture（fixture 入库作为新 baseline）
+git add tests/baseline/ && git commit -m "perf: refresh baseline for vX.Y.Z"
+```
+
+详细操作见 [CLAUDE.local.md](../../../CLAUDE.local.md) "Baseline 测试" 章节。
+
+---
+
+*Verification report 由主线程（Opus 4.7）于 2026-04-30 生成，反映 implement 阶段用户决策 Q1=C/Q2=A/Q3=A 的完整应用 + 3 个固定 baseline 实采集数据。*

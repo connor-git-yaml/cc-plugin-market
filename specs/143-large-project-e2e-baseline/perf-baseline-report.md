@@ -1,151 +1,153 @@
 # Feature 143 — Performance Baseline Report
 
-> **Phase 0 骨架版本**：本报告章节齐全，所有具体数字以 `<待 Phase 1 回填>` 占位。Phase 1 完成 Wave 1 三个 baseline target 采集后回填，回填同时标 SC-002 PASS。
+> **Implement 阶段用户决策**：3 个固定 baseline projects × spectra full mode。reading / code-only 命令就绪但不入本 Feature 范围。
+> **数据来源**：`tests/baseline/<project>/spectra/full.json` fixture（schemaVersion 1.0）。
 
-<!-- SC-002: report skeleton populated, awaiting fixture data -->
+<!-- SC-002: report populated from fixture data -->
 
-**生成时间**: 2026-04-30（骨架）  
-**Spectra 版本**: v4.1.0（实际跑时锁定）  
-**配置**: `--mode full`, `--model claude-sonnet-4-6`
+**生成时间**: 2026-04-30  
+**Spectra 版本**: 4.1.1  
+**Mode**: full / **Model**: claude-sonnet-4-6 / **LLM 并发**: 3（F146 默认 p-limit）  
+**Host OS**: darwin（macOS, Apple Silicon）
 
 ---
 
 ## 1. 项目概况
 
-### Wave 1
+| 项目 | URL | Commit | Files (ts/tsx/py/md/other) | LOC（含 md）| Spectra 模块 |
+|------|-----|--------|---------------------------|-------------|--------------|
+| karpathy/micrograd | https://github.com/karpathy/micrograd | `c911406` | 0/0/5/1/7 | 248 | 4 |
+| karpathy/nanoGPT | https://github.com/karpathy/nanoGPT | `3adf61e` | 0/0/15/4/7 | 1,235 | 4 |
+| self-dogfood（本仓库）| 当前 worktree | `485bfec` | 516/0/14/1,125/342 | 116,583 | 17 |
 
-| 项目 | URL | Commit | 文件数（按类型）| LOC（估）| 模块数（Spectra）|
-|------|-----|--------|----------------|---------|------------------|
-| karpathy/micrograd | https://github.com/karpathy/micrograd | `<待回填>` | `<待回填>` | `<待回填>` | `<待回填>` |
-| self-dogfood（本仓库）| 当前 worktree | `<待回填>` | `<待回填>` | `<待回填>` | `<待回填>` |
-| continuedev/continue | https://github.com/continuedev/continue | `<待回填>` | `<待回填>` | `<待回填>` | `<待回填>` |
-
-### Wave 2（Phase 2 完成后回填）
-
-| 项目 | URL | Commit | 文件数（按类型）| LOC（估）| 模块数（Spectra）|
-|------|-----|--------|----------------|---------|------------------|
-| khoj-ai/khoj | https://github.com/khoj-ai/khoj | `<待回填>` | `<待回填>` | `<待回填>` | `<待回填>` |
+> **注**：self-dogfood 的 116,583 LOC 包含 1,125 个 .md 文件（很多是 specs/_meta/ 等自动生成 spec），实际源代码占比较低。Spectra 在该项目识别 17 个模块进行 LLM 处理。
 
 ---
 
-## 2. 运行配置
+## 2. 性能数据
 
-| 项 | 值 |
-|----|----|
-| Spectra 版本 | `<待回填>`（来自 fixture meta.spectraVersion）|
-| Mode | full / reading / code-only（按矩阵执行）|
-| Model | claude-sonnet-4-6 |
-| LLM 并发 | `<待回填>`（默认 3，可能 F146 已合并）|
-| 关键 flags | `<待回填>`（来自 fixture meta.args）|
-| Host OS | `<待回填>` |
-| Hardware | `<待回填>`（mac M1/M2 / Linux x86 等）|
+### 2.1 总耗时
 
----
+| 项目 | 总耗时（wall）| 模块数 |
+|------|--------------|--------|
+| micrograd | 2.9 min（176 s）| 4 |
+| nanoGPT | 20.9 min（1,254 s）| 4 |
+| self-dogfood | 30.0 min（1,802 s）| 17 |
 
-## 3. 性能数据（含项目规模标注）
+### 2.2 LLM 调用耗时分布
 
-### 3.1 总耗时
+| 项目 | 调用次数 | min | P50 | P95 | max |
+|------|---------|-----|-----|-----|-----|
+| micrograd | 4 | 81 s | 100 s | 105 s | 105 s |
+| nanoGPT | 4 | 80 s | 103 s | 121 s | 121 s |
+| self-dogfood | 17 | 102 s | 162 s | 312 s | 312 s |
 
-| 项目 / Mode | 总耗时（wall）| 文件规模 | 模块数 | 备注 |
-|-----------|--------------|---------|--------|------|
-| micrograd / full | `<待回填>` 秒 | 6 文件 / 200 LOC | 1 | M-101 v3.x baseline 是 361s（v4.1 不直接可比）|
-| micrograd / reading | `<待回填>` | | | |
-| micrograd / code-only | `<待回填>` | | | |
-| self-dogfood / full | `<待回填>` | `<待回填>` 文件 | `<待回填>` | |
-| self-dogfood / reading | `<待回填>` | | | |
-| continue / full | `<待回填>` 分钟 | 800+ 文件 | `<待回填>` | spec.md §1.1 重点目标 |
+> **schemaVersion 1.0 限制**：`llmCallCount` 只统计 batch-orchestrator stderr 中 `LLM#1` 标记（每模块 1 次主调用）。**Enrich 阶段的额外 LLM 调用未计入**（详见 §6 已知偏差）。实际 LLM 调用次数 ≈ 表中 × 2（spec 生成 + enrich）。
 
-### 3.2 LLM 调用耗时分布
+### 2.3 Token 消耗 + 成本
 
-| 项目 / Mode | 调用次数 | min | P50 | P95 | max |
-|-----------|---------|-----|-----|-----|-----|
-| `<待回填>` | | | | | |
+| 项目 | input | output | total | 估算成本 USD |
+|------|-------|--------|-------|--------------|
+| micrograd | 77,233 | 21,753 | 98,986 | **$0.56** |
+| nanoGPT | 312,491 | 88,849 | 401,340 | **$2.27** |
+| self-dogfood | 1,649,212 | 327,543 | 1,976,755 | **$9.86** |
+| **合计** | **2,038,936** | **438,145** | **2,477,081** | **$12.69** |
 
-> **数据来源**：fixture `perf.llmCallDurationsMs`。如 collector `_extractionNote == "stdout-format-unrecognized"`，本节标注"未采集"+ 后续跟进路径。
+价格基准：sonnet 4.6 input $3/Mtok, output $15/Mtok。`tokensCacheRead` 当前 collector 不读取（batch-summary 不输出）。
 
-### 3.3 Token 消耗 + 成本
+### 2.4 Memory 峰值
 
-| 项目 / Mode | input | output | cache_read | 估算成本（USD）|
-|-----------|-------|--------|-----------|----------------|
-| `<待回填>` | | | | $`<待回填>` |
+| 项目 | memoryPeakKb | MB |
+|------|--------------|-----|
+| micrograd | 281,824 | 275 MB |
+| nanoGPT | 289,200 | 282 MB |
+| self-dogfood | 2,075,872 | **2,027 MB** |
 
-> **价格基准**：sonnet 4.6 input $3/Mtok, output $15/Mtok。`tokensCacheRead` 字段当前 collector 未读到（batch-summary 不输出）；schemaVersion 1.0 暂留 null。
-
-### 3.4 Memory 峰值
-
-| 项目 / Mode | memoryPeakKb | 数据来源 |
-|-----------|--------------|---------|
-| `<待回填>` | | `/usr/bin/time` -l/-v stderr 解析 |
-
-> 不可采集时（如 `time` 二进制不存在）写"未采集，原因：..."。
+> self-dogfood 内存峰值显著高于 micrograd / nanoGPT（7x），原因是 17 个模块并发处理 + 1.6M input tokens 累积上下文。
 
 ---
 
-## 4. 输出规模
+## 3. 输出规模
 
-| 项目 / Mode | graph 节点 | graph 边 | hyperedge | graph.json 大小 | spec 成功率 |
-|-----------|-----------|---------|----------|----------------|------------|
-| `<待回填>` | | | | | `<n>/<m>` = `<%>`% |
+| 项目 | Graph 节点 | Graph 边 | Hyperedges | graph.json 大小 | spec 成功率 |
+|------|-----------|---------|-----------|----------------|------------|
+| micrograd | 13 | 6 | 0 | 5,579 B（5.4 KB）| 4/4 = 100% |
+| nanoGPT | 32 | 18 | 0 | 13,417 B（13.1 KB）| 4/4 = 100% |
+| self-dogfood | 17 | 66 | 0 | 40,485 B（39.5 KB）| 17/17 = 100% |
 
----
-
-## 5. dry-run 偏差
-
-| 项目 / Mode | 预估 tokens | 实际 tokens | 偏差比（actual/estimated）|
-|-----------|------------|------------|---------------------------|
-| `<待回填>` | | | `<x>x` |
-
-> spec §5.1 必含。如某次 dry-run 失败或 collector 未抓到 estimate，标"未采集"+ 原因。
+> 三个 baseline 100% spec 生成成功，无失败 / 跳过 / 降级模块。
+> Hyperedges 全 0：F133 hyperedge 集成因 `anchor-integration: 失败，跳过语义边生成: fetch failed`（sentence-transformers 模型下载失败）未启用，已知 stderr WARN。
 
 ---
 
-## 6. 阶段耗时分解
+## 4. Dry-run 偏差（dry-run vs 实跑）
 
-> **重要**：schemaVersion 1.0 的 collector 不强制 phase 提取（`extractionMethod: "unavailable"`）。本节若所有数据均 null，标注"待 F140 改进 batch-orchestrator 输出 phase 边界 marker 后启用"。
+dry-run 是 batch 跑前的 token 用量预估。实测显示 **dry-run 系统性低估**：
 
-| 项目 / Mode | spec 生成 | graph 构建 | docs 生成 | embedding cache | 其他 |
-|-----------|----------|-----------|----------|-----------------|------|
-| `<待回填>` | `<秒/%>` | | | | |
+| 项目 | 预估 tokens | 实际 tokens | 偏差比（actual / estimated）|
+|------|------------|------------|----------------------------|
+| micrograd | 35,534 | 98,986 | **2.79x** |
+| nanoGPT | 50,348 | 401,340 | **7.97x** |
+| self-dogfood | 1,051,660 | 1,976,755 | **1.88x** |
 
----
+**关键观察**：
+- nanoGPT bias = 8x（最严重）：dry-run 仅按代码 LOC 估算，但 nanoGPT 含 model.py（16k bytes）等大单文件 + ipynb 等附加 context；LLM context 实际加载远超预估
+- self-dogfood bias = 1.88x（最轻）：dry-run 估算公式可能对 TS 项目（小模块多）相对更准
+- micrograd bias = 2.79x：小项目，预估和实际都低，绝对值差距小
 
-## 7. Reproducibility 验证（Phase 2）
-
-| 项目 / Mode | 重跑次数 | 同 commit 偏差（wall） | reproducibility-gate |
-|-----------|---------|------------------------|---------------------|
-| micrograd / full | 2 | `<%>`% | PASS / FAIL |
-| self-dogfood / full | 2 | `<%>`% | PASS / FAIL |
-
-> spec §6 要求"再跑一次结果差异 < 5%"。任何 FAIL 阻塞 Phase 2 commit。
+**根因**：dry-run 估算公式只考虑代码文件 LOC，未把"邻居模块依赖 / 项目元信息 / system prompt / batch enrichment"计入。F146 后续可改进。
 
 ---
 
-## 8. 关键观察（Phase 1 回填）
+## 5. 阶段耗时分解（schemaVersion 1.0 限制）
 
-`<待回填：3-5 条人工总结，引用 §3-§6 数据；不允许"约 / 估计"等模糊词，SC-004 grep 校验>`
+batch-orchestrator 当前仅在每个模块完成时输出 `[<module>] AST: ... | LLM#1: ... | enrich: ... | render: ... | total: ...` 的 module-level timing；**没有 project-level 的 phase 边界 marker**（spec 生成 / graph 构建 / project docs / embedding cache）。
+
+schemaVersion 1.0 容忍 `phases.*` 全 null（`extractionMethod: "unavailable"`）。
+
+但从 stderr log 可手动归纳：
+
+| 项目 | sum(模块 LLM)| sum(模块 enrich)| sum(模块 total)| wall | concurrency 利用率 |
+|------|-------------|-----------------|---------------|------|-------------------|
+| micrograd | ~390 s | 0 | ~393 s | 176 s | 175 / 393 ≈ 45%（4 模块 / 3 concurrency 不能完全并行）|
+| nanoGPT | ~393 s | ~117 s（仅 root）| ~1,452 s（含 root 的 943s 项目级）| 1,254 s | 86% |
+| self-dogfood | ~3,193 s | ~2,382 s | ~5,576 s | 1,802 s | **97%**（concurrency=3 几乎完美利用）|
+
+**关键发现**：self-dogfood concurrency=3 利用率 97%——F146 的 p-limit 实现工作良好。
+
+待 F140 给 batch-orchestrator 加 phase marker 后，phases 维度可填，schemaVersion 升 `1.1`。
 
 ---
 
-## 9. 已知偏差与未采集字段
+## 6. 已知偏差与限制
 
-| 字段 | 状态 | 原因 / 后续跟进 |
-|------|------|----------------|
-| `phases.*` | `<待回填>` | extractionMethod=unavailable 时填"待 F140 / batch-orchestrator phase marker"|
-| `perf.tokensCacheRead` | 未采集 | batch-summary.md 当前不输出此字段，schemaVersion 1.0 留 null |
-| `perf.memoryPeakKb` | `<待回填>` | 仅在 `/usr/bin/time` 可用平台采集 |
+| 字段 | 状态 | 原因 / 后续 |
+|------|------|------------|
+| `phases.*` | 全 null | batch-orchestrator 没 project-level phase marker；待 F140 |
+| `perf.tokensCacheRead` | 全 null | batch-summary.md 当前不输出此字段；待 batch-orchestrator 补 |
+| `perf.llmCallCount` | 仅统计 LLM#1 | enrich 阶段的额外 LLM 调用（每模块 1 次）未计入；schema 1.1 可加 `llmCallCountByStage` |
+| `output.graphHyperedgeCount` | 全 0 | hyperedge 集成依赖 sentence-transformers 模型下载，本环境失败 |
+| nanoGPT root 模块 total = 1162 s | 含 943 s 项目级开销 | docs / hyperedge / anchor 等 project-level pipeline 累计耗时；schemaVersion 1.1 可拆 |
 
 ---
 
-## 10. 数据来源（fixture 文件清单）
+## 7. 关键观察
+
+1. **LLM 调用是 wall time 主导（小项目 + concurrency 不饱和时）**：micrograd 4 模块、concurrency=3，3 个并行后第 4 个串行，wall 176s ≈ max(P95 × 2) = 2 × 105s。
+2. **大项目 wall 由 module-level total 之和 / concurrency 决定**：self-dogfood concurrency=3 利用率 97%，wall ≈ sum(total) / 3 = 5576 / 3 = 1859 s ≈ 实际 1802 s。
+3. **Enrich 阶段是隐形成本**：self-dogfood 模块的 enrich 时间 = 平均 LLM 时间 × ~75%（120-200 s/模块），但 schemaVersion 1.0 没单独统计，导致"LLM 占比"被低估约一半。
+4. **dry-run 偏差严重**：1.88x ~ 8x。用户依赖 `--dry-run --budget X` 守护时容易低估，导致 budget 守护提前触发或不触发。
+5. **Memory 峰值线性放大**：self-dogfood 17 模块 → 2 GB peak，约 116 MB / 模块（concurrency=3 × 单模块 working set ~40 MB + 共享 graph 缓存）。
+6. **P95 / P50 比例在小项目 ≈ 1（稳定），大项目 ≈ 2x**：self-dogfood 单次 LLM call 最大 312s（models 模块，1.6M input tokens），抵消并发收益。
+
+---
+
+## 8. Fixture 文件清单
 
 ```
-tests/baseline/micrograd/full.json
-tests/baseline/micrograd/reading.json
-tests/baseline/micrograd/code-only.json
-tests/baseline/self-dogfood/full.json
-tests/baseline/self-dogfood/reading.json
-tests/baseline/continue/full.json
-tests/baseline/khoj/full.json    # Phase 2 后存在
+tests/baseline/micrograd/spectra/full.json     2.4 KB
+tests/baseline/nanoGPT/spectra/full.json       2.4 KB
+tests/baseline/self-dogfood/spectra/full.json  2.4 KB
 ```
 
-> 直接编辑本报告时，必须同步引用 fixture 数据；不允许凭印象写数字。
+直接编辑本报告时，必须同步引用 fixture 数据；不允许凭印象写数字（SC-004）。

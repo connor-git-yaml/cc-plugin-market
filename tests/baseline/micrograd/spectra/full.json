@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "tool": "spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.2.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": {
+      "ts": 0,
+      "tsx": 0,
+      "py": 5,
+      "md": 1,
+      "other": 7
+    },
+    "targetLocEstimate": 248,
+    "spectraModuleCount": 4,
+    "mode": "full",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T07:57:17.092Z",
+    "runHostOs": "darwin",
+    "command": "/usr/bin/time",
+    "args": [
+      "-l",
+      "node",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/unruffled-rosalind-5150e5/dist/cli/index.js",
+      "batch",
+      "/Users/connorlu/.spectra-baselines/micrograd",
+      "--mode",
+      "full",
+      "--output-dir",
+      "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null,
+      "SPECTRA_LOG_LEVEL": null
+    },
+    "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log"
+  },
+  "dryRun": {
+    "estimatedTokens": 35534,
+    "actualTokens": 98986,
+    "biasRatio": 2.79
+  },
+  "perf": {
+    "totalWallMs": 176076,
+    "llmCallCount": 4,
+    "llmCallDurationsMs": {
+      "p50": 100400,
+      "p95": 105400,
+      "min": 81300,
+      "max": 105400,
+      "samplesCount": 4
+    },
+    "tokensInput": 77233,
+    "tokensOutput": 21753,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": 0.56,
+    "memoryPeakKb": 281824
+  },
+  "output": {
+    "graphNodeCount": 13,
+    "graphEdgeCount": 6,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": 5579,
+    "specModuleCount": 4,
+    "specSuccessCount": 4,
+    "specSkippedCount": 0,
+    "specFailedCount": 0
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "unavailable"
+  },
+  "quality": null
+}

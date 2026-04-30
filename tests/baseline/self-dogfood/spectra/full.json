@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0",
+  "meta": {
+    "tool": "spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.2.0",
+    "targetProject": "self-dogfood",
+    "targetCommit": "485bfec4621ffb2cf6d43bb37ef624a35dff8d9e",
+    "targetFileCountsByType": {
+      "ts": 516,
+      "tsx": 0,
+      "py": 14,
+      "md": 1125,
+      "other": 342
+    },
+    "targetLocEstimate": 116583,
+    "spectraModuleCount": 17,
+    "mode": "full",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T08:46:30.474Z",
+    "runHostOs": "darwin",
+    "command": "/usr/bin/time",
+    "args": [
+      "-l",
+      "node",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/unruffled-rosalind-5150e5/dist/cli/index.js",
+      "batch",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/unruffled-rosalind-5150e5",
+      "--mode",
+      "full",
+      "--output-dir",
+      "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null,
+      "SPECTRA_LOG_LEVEL": null
+    },
+    "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stderr.log"
+  },
+  "dryRun": {
+    "estimatedTokens": 1051660,
+    "actualTokens": 1976755,
+    "biasRatio": 1.88
+  },
+  "perf": {
+    "totalWallMs": 1801843,
+    "llmCallCount": 17,
+    "llmCallDurationsMs": {
+      "p50": 161900,
+      "p95": 312000,
+      "min": 102500,
+      "max": 312000,
+      "samplesCount": 17
+    },
+    "tokensInput": 1649212,
+    "tokensOutput": 327543,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": 9.86,
+    "memoryPeakKb": 2075872
+  },
+  "output": {
+    "graphNodeCount": 17,
+    "graphEdgeCount": 66,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": 40485,
+    "specModuleCount": 17,
+    "specSuccessCount": 17,
+    "specSkippedCount": 0,
+    "specFailedCount": 0
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "unavailable"
+  },
+  "quality": null
+}
