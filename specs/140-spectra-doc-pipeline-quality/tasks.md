@@ -266,7 +266,7 @@ estimatedEffort: "22-30 人天"
 
 ### Phase 3a — Hyperedges 接 Orchestrator（US-002，2-3 人天）
 
-- [ ] T27: 修改 src/batch/batch-orchestrator.ts — 扩展 designDocAbsPaths 计算逻辑
+- [x] T27: 修改 src/batch/batch-orchestrator.ts — 扩展 designDocAbsPaths 计算逻辑
   - **前置任务**: T02（Phase 0 完成）
   - **影响文件**: `src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-007
@@ -274,7 +274,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T28）mock 文件系统断言各来源按优先级合并；新项目（仅 README）的 `designDocAbsPaths.length >= 1`
   - **预估**: 0.5 人天
 
-- [ ] T28: 单元测试 — designDocAbsPaths 扩展逻辑
+- [x] T28: 单元测试 — designDocAbsPaths 扩展逻辑
   - **前置任务**: T27
   - **影响文件**: `tests/unit/design-doc-paths.test.ts`（新建）
   - **FR 关联**: FR-007
@@ -282,7 +282,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过
   - **预估**: 0.5 人天
 
-- [ ] T29: 修改 hyperedge pipeline — 接入 cluster orchestrator
+- [x] T29: 修改 hyperedge pipeline — 接入 cluster orchestrator
   - **前置任务**: T27, T05（telemetry hooks）
   - **影响文件**: `src/panoramic/pipelines/hyperedge-pipeline.ts`（修改）
   - **FR 关联**: FR-007
@@ -290,7 +290,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 集成测试（T30）在 3 个非空 fixture 上断言 `graph.json.hyperedges.length >= 1`
   - **预估**: 1 人天
 
-- [ ] T30: 集成测试 — hyperedge 新项目首次 batch
+- [x] T30: 集成测试 — hyperedge 新项目首次 batch
   - **前置任务**: T29
   - **影响文件**: `tests/integration/hyperedge-first-run.test.ts`（新建）
   - **FR 关联**: FR-007

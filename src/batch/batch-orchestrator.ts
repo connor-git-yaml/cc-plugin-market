@@ -7,6 +7,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import pLimit from 'p-limit';
+import { findReadmePath } from '../extraction/index.js';
 import { buildGraph } from '../graph/dependency-graph.js';
 import { buildDirectoryGraph } from '../graph/directory-graph.js';
 import { generateSpec, type GenerateSpecOptions } from '../core/single-spec-orchestrator.js';
@@ -1249,15 +1250,28 @@ export async function runBatch(
         }
       } else {
         try {
-          const { paths: designDocAbsPaths, fromDocsCount, fromDiskCount, nestedDirsDetected } = buildDesignDocAbsPaths(
+          // Feature 140 T27 — 启用扩展来源（README + docs/ + module specs + project-context）
+          // 让 hyperedge 在新项目首次 batch 也能产出非空 designDocAbsPaths（FR-007）。
+          const designDocResult = buildDesignDocAbsPaths(
             projectDocs ?? [],
             resolvedRoot,
             resolvedOutputDir,
+            {
+              includeReadme: true,
+              includeDocs: options.includeDocs ?? false,
+              modulesDir,
+              includeProjectContext: true,
+            },
           );
+          const { paths: designDocAbsPaths, fromDocsCount, fromDiskCount, nestedDirsDetected } = designDocResult;
           // FR-007：诊断日志，显示 designDocAbsPaths 来源与数量
           logger.info(
             `hyperedge: designDocAbsPaths.length=${designDocAbsPaths.length} ` +
-            `(fromDocs=${fromDocsCount}, fromDisk=${fromDiskCount})`,
+            `(fromDocs=${fromDocsCount}, fromDisk=${fromDiskCount}, ` +
+            `fromReadme=${designDocResult.fromReadmeCount}, ` +
+            `fromDocsDir=${designDocResult.fromDocsDirCount}, ` +
+            `fromModuleSpecs=${designDocResult.fromModuleSpecsCount}, ` +
+            `fromProjectContext=${designDocResult.fromProjectContextCount})`,
           );
           // Codex 对抗审查 W002 修复：嵌套子目录的 .md 不参与 anchor/hyperedge 集成，向用户暴露
           if (nestedDirsDetected.length > 0) {
@@ -1722,18 +1736,51 @@ async function buildFallbackGraph(
 /**
  * 构建 hyperedge/anchor 集成所需的设计文档绝对路径列表
  *
- * 合并策略（ADR-003）：
+ * **Feature 145 合并策略**（基线，向后兼容）：
  * 1. fromDocs：本轮 generateBatchProjectDocs 写出的文件（来自 writtenFiles）
  * 2. fromDisk：主动扫描 outputDir/project/ 目录下已存在的 .md 文件（磁盘优先）
- * 去重后合并，解决首次运行时 writtenFiles 为空导致 hyperedge 被跳过的 bug（FR-006）。
  *
- * 导出供单元测试使用。
+ * **Feature 140 T27 扩展**（spec FR-007 — 扩展 design doc 来源）：
+ * 通过 `extraOptions` 启用以下额外来源（默认全部启用，给 caller 显式 opt-out 的能力）：
+ * 3. fromReadme: 根目录 README.md（最高语义价值，作为顶层叙述）
+ * 4. fromDocsDir: `docs/` 目录下递归扫描的 .md（仅 `--include-docs=true` 时启用）
+ * 5. fromModuleSpecs: `<modulesDir>/*.spec.md`（当前 batch 产物，每次 batch 后存在）
+ * 6. fromProjectContext: `.specify/project-context.{yaml,md}`
+ *
+ * 解决 spec FR-007 的"hyperedge 在新项目首次 batch 后产出 0 条 hyperedge"问题：
+ * 之前 designDocAbsPaths 仅依赖 outputDir/project/，对从未 batch 过的新项目结果为空。
+ * 扩展后即使新项目，仅有 README.md 也能产出 ≥ 1 条 hyperedge。
+ *
+ * @param projectDocs 本轮 generator 输出的相对路径列表
+ * @param resolvedRoot 项目根目录绝对路径
+ * @param resolvedOutputDir 输出目录绝对路径（含 `project/` 子目录）
+ * @param extraOptions Feature 140 T27 扩展配置；不传时只走基线行为（向后兼容）
+ * @returns paths 列表 + 各来源 count + 检测到的嵌套子目录
  */
 export function buildDesignDocAbsPaths(
   projectDocs: string[],
   resolvedRoot: string,
   resolvedOutputDir: string,
-): { paths: string[]; fromDocsCount: number; fromDiskCount: number; nestedDirsDetected: string[] } {
+  extraOptions?: {
+    /** 是否包含根 README.md（默认 true）*/
+    includeReadme?: boolean;
+    /** 是否包含 docs/ 下递归 .md（默认 false；仅 --include-docs=true 时设为 true）*/
+    includeDocs?: boolean;
+    /** module specs 目录（包含 *.spec.md）；不传则跳过该来源 */
+    modulesDir?: string;
+    /** 是否包含 .specify/project-context.{yaml,md}（默认 true）*/
+    includeProjectContext?: boolean;
+  },
+): {
+  paths: string[];
+  fromDocsCount: number;
+  fromDiskCount: number;
+  fromReadmeCount: number;
+  fromDocsDirCount: number;
+  fromModuleSpecsCount: number;
+  fromProjectContextCount: number;
+  nestedDirsDetected: string[];
+} {
   // 来自本轮 generator 输出（以 resolvedRoot 为基准解析相对路径）
   const fromProjectDocs = projectDocs
     .map(rel => path.isAbsolute(rel) ? rel : path.join(resolvedRoot, rel))
@@ -1755,14 +1802,128 @@ export function buildDesignDocAbsPaths(
     }
   }
 
-  // 去重合并（fromProjectDocs 优先，fromDisk 补充）
-  const merged = [...new Set([...fromProjectDocs, ...fromDisk])];
+  // ============================================================
+  // Feature 140 T27 — 扩展来源（spec FR-007）
+  // ============================================================
+
+  const includeReadme = extraOptions?.includeReadme ?? true;
+  const includeDocsDir = extraOptions?.includeDocs ?? false;
+  const includeProjectContext = extraOptions?.includeProjectContext ?? true;
+
+  // 来源 3：根 README.md（共享 extraction-pipeline 的 findReadmePath，确保 canonical 优先级一致；
+  // 修复 Codex W-1 — 之前内联实现遇首匹配就 break，与 findReadmePath 的 canonical 优先逻辑漂移）
+  const fromReadme: string[] = [];
+  if (includeReadme) {
+    try {
+      const readmePath = findReadmePath(resolvedRoot);
+      if (readmePath) fromReadme.push(readmePath);
+    } catch {
+      /* projectRoot 不可读取时静默忽略 */
+    }
+  }
+
+  // 来源 4：docs/**/*.md（仅 --include-docs=true）
+  const fromDocsDir: string[] = [];
+  if (includeDocsDir) {
+    const docsDir = path.join(resolvedRoot, 'docs');
+    if (fs.existsSync(docsDir)) {
+      collectMdRecursive(docsDir, fromDocsDir);
+    }
+  }
+
+  // 来源 5：modulesDir/*.spec.md（当前 batch 产物）
+  const fromModuleSpecs: string[] = [];
+  if (extraOptions?.modulesDir && fs.existsSync(extraOptions.modulesDir)) {
+    try {
+      for (const entry of fs.readdirSync(extraOptions.modulesDir, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.spec.md')) {
+          fromModuleSpecs.push(path.join(extraOptions.modulesDir, entry.name));
+        }
+      }
+    } catch {
+      /* 不可读取时静默忽略 */
+    }
+  }
+
+  // 来源 6：.specify/project-context.{yaml,md}
+  // 修复 Codex C-2：yaml 是 canonical source，md 仅 legacy fallback。
+  // docs/shared/agent-context-layering.md 明确：".specify/project-context.yaml 是 canonical
+  // Project Context；.specify/project-context.md 仅作为 legacy fallback"。
+  // 此处遵循同一规则：yaml 存在时只取 yaml；不存在时 fallback 到 md；都不存在时返回 0。
+  const fromProjectContext: string[] = [];
+  if (includeProjectContext) {
+    const yamlPath = path.join(resolvedRoot, '.specify', 'project-context.yaml');
+    const mdPath = path.join(resolvedRoot, '.specify', 'project-context.md');
+    if (fs.existsSync(yamlPath)) {
+      fromProjectContext.push(yamlPath);
+    } else if (fs.existsSync(mdPath)) {
+      fromProjectContext.push(mdPath);
+    }
+  }
+
+  // 去重合并（fromProjectDocs 优先 → fromDisk → fromReadme → fromDocsDir → fromModuleSpecs → fromProjectContext）
+  const merged = [
+    ...new Set([
+      ...fromProjectDocs,
+      ...fromDisk,
+      ...fromReadme,
+      ...fromDocsDir,
+      ...fromModuleSpecs,
+      ...fromProjectContext,
+    ]),
+  ];
 
   return {
     paths: merged,
     fromDocsCount: fromProjectDocs.length,
     fromDiskCount: fromDisk.length,
+    fromReadmeCount: fromReadme.length,
+    fromDocsDirCount: fromDocsDir.length,
+    fromModuleSpecsCount: fromModuleSpecs.length,
+    fromProjectContextCount: fromProjectContext.length,
     nestedDirsDetected,
   };
+}
+
+/**
+ * 递归收集目录下所有 .md 文件（Feature 140 T27 — fromDocsDir 实现）。
+ *
+ * 跳过常见生成目录避免把 build artifact 的 markdown 误送给 LLM。
+ * 黑名单设计原则：覆盖 JS/TS / Python / Rust / Go / Java / 通用缓存目录的产物路径。
+ * 修复 Codex W-2：之前的 5 项黑名单遗漏 `__pycache__` / `target` / `.cache` / `tmp` 等。
+ */
+const MD_SCAN_DIR_BLACKLIST = new Set([
+  'node_modules', // npm/yarn/pnpm
+  '.git',         // git
+  '.cache',       // 通用缓存（npm/yarn/parcel/etc）
+  'dist',         // JS/TS 构建产物
+  'build',        // 通用构建产物（CMake/Java/etc）
+  'coverage',     // 测试覆盖率报告
+  'out',          // Next.js / 通用输出
+  'target',       // Rust / Java/Maven
+  '__pycache__',  // Python
+  '.pytest_cache',
+  'tmp',          // 临时文件
+  '.tmp',
+  '.next',        // Next.js
+  '.nuxt',        // Nuxt.js
+  '.turbo',       // Turborepo
+]);
+
+function collectMdRecursive(dir: string, out: string[]): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (MD_SCAN_DIR_BLACKLIST.has(entry.name)) continue;
+      collectMdRecursive(path.join(dir, entry.name), out);
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      out.push(path.join(dir, entry.name));
+    }
+  }
 }
 

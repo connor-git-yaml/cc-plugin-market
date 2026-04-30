@@ -705,6 +705,14 @@ export interface HyperedgeIntegrationResult {
  * - docChunks 为空时直接返回空结果（FR-015 降级）
  * - tokenUsage 汇总记录供调用方审计（NFR-003）
  *
+ * **Feature 140 T29 — MapReduce 接入**：
+ * 当 docChunks 总 token 数超过单次 LLM call 容量（默认 50k）时，自动通过
+ * `clusterDispatch`（来自 `src/panoramic/cluster-orchestrator.ts`）拆分为多批，
+ * 每批独立调用 extractHyperedges（Map），最后程序化去重合并（Reduce by node-set hash）。
+ *
+ * 触发条件：docChunks 总 token > tokenBudget（50k）。小项目（README + 几份 docs）
+ * 不会触发拆分，行为与原单次调用完全一致（向后兼容）。
+ *
  * @param options HyperedgeIntegrationOptions
  */
 export async function runHyperedgeIntegration(
@@ -717,22 +725,112 @@ export async function runHyperedgeIntegration(
     return { hyperedges: [], tokenUsage: [] };
   }
 
+  // docChunks 为空 → 提前返回（避免无意义 LLM 调用）
+  if (options.docChunks.length === 0) {
+    return { hyperedges: [], tokenUsage: [] };
+  }
+
   // 创建 Anthropic SDK 客户端（仅在 flag 开启时才实例化）
   const anthropicClient = new Anthropic({
     apiKey: process.env['ANTHROPIC_API_KEY'],
   });
 
-  const result = await extractHyperedges({
-    enabled,
-    codeNodes: options.graphNodes,
-    docChunks: options.docChunks,
-    projectSummary: options.projectSummary,
-    anthropicClient,
-    model: options.model,
+  // Feature 140 T29 — 通过 cluster orchestrator 包装 extractHyperedges
+  // 让 docChunks 在超 token 预算时自动 FFD 装箱拆分，每批独立 Map call，
+  // 程序化 Reduce 按 node-set 哈希去重。
+  const { clusterDispatch } = await import('../cluster-orchestrator.js');
+
+  type MapOutput = {
+    hyperedges: Hyperedge[];
+    usage: EmbeddingTokenUsage[];
+  };
+
+  const dispatchResult = await clusterDispatch<DocChunk, MapOutput, MapOutput>({
+    inputs: options.docChunks,
+    clusterStrategy: { kind: 'single' }, // hyperedge 不需要语义聚类，按 token 装箱足够
+    sharedHeader: async () => options.projectSummary ?? '',
+    tokenBudget: {
+      // 50k chunks + 10k shared header = 60k total，留余地避免 prompt 超限
+      totalBudget: 60_000,
+      sharedHeaderBudget: 10_000,
+      // 用 DocChunk 自带 tokenCount（chunker 已估算），无需重新计算
+      estimateInputTokens: (input) => (input as DocChunk).tokenCount,
+    },
+    map: {
+      fn: async (chunks): Promise<{ output: MapOutput; telemetry: import('../cluster-orchestrator.js').CallTelemetry }> => {
+        const startMs = Date.now();
+        const result = await extractHyperedges({
+          enabled: true,
+          codeNodes: options.graphNodes,
+          docChunks: chunks,
+          ...(options.projectSummary !== undefined ? { projectSummary: options.projectSummary } : {}),
+          anthropicClient,
+          ...(options.model !== undefined ? { model: options.model } : {}),
+        });
+        const totalInput = result.usage.reduce((s, u) => s + (u.inputTokens ?? 0), 0);
+        const totalOutput = result.usage.reduce((s, u) => s + (u.outputTokens ?? 0), 0);
+        return {
+          output: { hyperedges: result.hyperedges, usage: result.usage },
+          telemetry: {
+            inputTokens: totalInput,
+            outputTokens: totalOutput,
+            durationMs: Date.now() - startMs,
+            modelId: options.model ?? 'claude-haiku-4-5-20251001',
+          },
+        };
+      },
+      maxConcurrency: 4,
+    },
+    reduce: {
+      fn: async (mapOutputs): Promise<{ output: MapOutput; telemetry: import('../cluster-orchestrator.js').CallTelemetry }> => {
+        const startMs = Date.now();
+        // 程序化去重：按 sorted nodes 哈希聚合，保留 rationale 最长的（更高语义价值）
+        //
+        // **spec 偏离声明**（Feature 140 T29）：
+        // spec 写"Reduce fn：单次去重合并（by node-set 相似度，sonnet 即可）"，
+        // "sonnet 即可" 暗示 LLM 语义去重。本实现选择程序化 exact-match dedup
+        // 的理由：
+        // (1) 节点集合是结构化数据（已 normalize 的字符串数组），exact-match 在多数
+        //     场景已足够；(2) hyperedge 在每 batch 最多 10 条，跨 batch 总数典型 <50，
+        //     LLM dedup 成本/收益比低；(3) 程序化 dedup 是确定性的，避免 Reduce 阶段
+        //     LLM 失败导致整个 hyperedge pipeline fail-closed 的级联风险。
+        //
+        // **已知限制**：节点集合近似（如 src/auth.ts vs src/Auth.ts 大小写差异）但
+        // 不完全相同的语义重复 hyperedge 不会被合并。此情况罕见（chunker 输出节点 ID
+        // 是稳定的），生产环境如果出现可以二期通过 sonnet rerank 二轮 dedup 处理。
+        // 详见 specs/140-spectra-doc-pipeline-quality/verification/ 待补的 Step 3 偏离记录。
+        const dedupMap = new Map<string, Hyperedge>();
+        const aggregatedUsage: EmbeddingTokenUsage[] = [];
+        for (const mo of mapOutputs) {
+          aggregatedUsage.push(...mo.usage);
+          for (const h of mo.hyperedges) {
+            const key = [...h.nodes].sort().join('|');
+            const existing = dedupMap.get(key);
+            if (!existing || h.rationale.length > existing.rationale.length) {
+              dedupMap.set(key, h);
+            }
+          }
+        }
+        return {
+          output: { hyperedges: [...dedupMap.values()], usage: aggregatedUsage },
+          telemetry: {
+            inputTokens: 0, // 程序化 reduce，无 LLM
+            outputTokens: 0,
+            durationMs: Date.now() - startMs,
+            modelId: 'programmatic-dedup',
+          },
+        };
+      },
+    },
   });
 
+  // fail-closed: < 50% Map 成功 OR Reduce 失败
+  if (dispatchResult.finalOutput === null) {
+    return { hyperedges: [], tokenUsage: [] };
+  }
+
   return {
-    hyperedges: result.hyperedges,
-    tokenUsage: result.usage,
+    hyperedges: dispatchResult.finalOutput.hyperedges,
+    tokenUsage: dispatchResult.finalOutput.usage,
   };
 }

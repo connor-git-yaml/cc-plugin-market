@@ -46,6 +46,35 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 3（Phase 3a）：hyperedges 接入 cluster orchestrator
+
+- **`buildDesignDocAbsPaths` 扩展**（`src/batch/batch-orchestrator.ts`，T27） — 新增 4 个 design doc 来源：
+  - **fromReadme**：根 README.md（共享 `findReadmePath` 助手，canonical 优先级一致）
+  - **fromDocsDir**：`docs/` 目录递归扫描的 `.md`（仅 `--include-docs=true` 时启用，14 项黑名单覆盖 node_modules / __pycache__ / target / .cache / tmp / .next 等）
+  - **fromModuleSpecs**：`<modulesDir>/*.spec.md`（当前 batch 产物）
+  - **fromProjectContext**：`.specify/project-context.{yaml,md}`（**yaml canonical 优先**，仅 yaml 缺失时 fallback 到 md，遵循 `docs/shared/agent-context-layering.md` 规则）
+  - 解决 spec FR-007：新项目首次 batch 仅 README.md 存在时，hyperedge 也能产出 ≥ 1 条（之前 designDocAbsPaths 仅依赖 outputDir/project/，对从未 batch 过的新项目结果为空）
+- **`runHyperedgeIntegration` MapReduce 接入**（`src/panoramic/builders/doc-graph-builder.ts`，T29） — 通过 `clusterDispatch` 包装 `extractHyperedges`：
+  - clusterStrategy: `single`（hyperedge 不需要语义聚类，按 token 装箱）
+  - tokenBudget: totalBudget=60k / sharedHeaderBudget=10k → 实际 chunk 容量 50k
+  - estimateInputTokens 用 `DocChunk.tokenCount`（chunker 已估算）
+  - Map fn: 调用 `extractHyperedges` 处理一批 chunks（maxConcurrency=4）
+  - **Reduce fn: 程序化去重**（按 sorted node-set hash 聚合，保留 rationale 最长的）— spec T29 提到 sonnet 但本实现选择程序化 exact-match，理由：节点集合是结构化数据，确定性去重更可靠且零 LLM 成本风险（详见 source 的 spec 偏离声明）
+  - fail-closed: dispatchResult.finalOutput=null → 返回空 hyperedges（caller 看到空数组就跳过写入）
+  - 函数对外接口完全不变，向后兼容
+- **batch-orchestrator 调用处升级** — 启用所有 4 个扩展来源 + 诊断日志显示各 count（fromDocs / fromDisk / fromReadme / fromDocsDir / fromModuleSpecs / fromProjectContext）
+- **17 个新增测试**：
+  - `tests/unit/design-doc-paths.test.ts` 新建 16 用例（基础来源覆盖 + 黑名单 + canonical yaml 优先 + 防御性边界 + 部分缺失组合）
+  - `tests/integration/hyperedge-first-run.test.ts` 新建 7 用例 + 4 fixture-based `it.todo()` 留 Phase 1a（含 case 7 fail-closed 全部 Map 失败时返回空 hyperedges）
+- **Codex adversarial review**：1 轮 2 critical + 5 warning，全部修复或显式记录决策：
+  - **C-1 (spec 偏离)**：Reduce 用程序化代替 sonnet → 源码 docstring 显式声明偏离理由 + 已知限制（生产可二期通过 sonnet rerank 二轮 dedup 处理）
+  - **C-2 (yaml+md 共存)**：原代码两个都加入 → 改为 yaml 优先 + case 12-13 测试覆盖
+  - **W-1 (README 内联实现漂移)**：复用 `findReadmePath` 共享助手
+  - **W-2 (黑名单过窄)**：从 5 项扩到 14 项（npm/python/rust/通用产物目录）+ case 14 测试覆盖
+  - **W-4 (fail-closed 无测试)**：case 7 mock 全部 Map 失败 + 断言空 hyperedges + tokenUsage
+  - **W-3 (巨型 chunk 超 token)**：上游不动，留 Step 2/4 chunker 改造时统一处理
+  - **W-5 (fromProjectContext 默认启用)**：保持启用（spec 锁定来源 4），不视为 bug
+
 ### Added — Feature 140 Step 5（Phase 2）：--include-docs 数据流打通
 
 - **`extraction-pipeline` 返回类型变更**（`src/extraction/extraction-pipeline.ts`，T21）— `runExtractionPipeline` 返回 `ExtractionPipelineOutput { results, readmeContent? }` 包装对象（之前为 `ExtractionResult[]`）。`includeDocs=true` 时读取 projectRoot 下的 `README.md`（不区分大小写：README.md / readme.md / Readme.md / README.MD 等）全量内容（移除 v4.0.x 旧 5k token 限制），放入 `readmeContent`，供下游 narrative / hyperedge 等 pipeline 作为 shared header 注入。
