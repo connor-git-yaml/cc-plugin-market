@@ -77,12 +77,19 @@ export function parseArgs(argv) {
 export function detectToolInstalled(tool) {
   switch (tool) {
     case 'graphify': {
-      const r = spawnSync('graphify', ['--version'], { encoding: 'utf-8' });
-      return r.status === 0 ? { ok: true, version: (r.stdout ?? '').trim() } : { ok: false, hint: 'install: uv tool install graphifyy && graphify install' };
+      // graphify 不支持 --version flag；用 --help 退出码探测安装
+      const r = spawnSync('graphify', ['--help'], { encoding: 'utf-8' });
+      if (r.status === 0 || r.status === 2) { // help 输出 0 或 click 默认 2 都视为已装
+        // 尝试从 PyPI 装包记录提取版本（uv tool list 或 pip show）
+        const v = spawnSync('uv', ['tool', 'list'], { encoding: 'utf-8' });
+        const m = (v.stdout ?? '').match(/graphifyy\s+v?([\d.]+)/);
+        return { ok: true, version: m ? m[1] : 'installed' };
+      }
+      return { ok: false, hint: 'install: uv tool install graphifyy && graphify install' };
     }
     case 'aider-repomap': {
       const r = spawnSync('aider', ['--version'], { encoding: 'utf-8' });
-      return r.status === 0 ? { ok: true, version: (r.stdout ?? '').trim() } : { ok: false, hint: 'install: pip install aider-chat' };
+      return r.status === 0 ? { ok: true, version: (r.stdout ?? '').trim() } : { ok: false, hint: 'install: uv tool install aider-chat' };
     }
     case 'cody':
       return { ok: false, hint: 'cody is optional/manual (Sourcegraph account + source upload)；不在本 Feature 自动化范围。详见 specs/147-*/research/competitive-landscape.md §1.3' };
@@ -100,53 +107,98 @@ export function detectToolInstalled(tool) {
 // ============================================================
 
 /**
- * graphify build → 解析 NetworkX graph.json → 组装 fixture
+ * graphify update <path> → 解析 NetworkX graph.json → 组装 fixture
+ *
+ * graphify 实际 CLI 是 `graphify update <path>`（不是 build），把产物写到 cwd 的 ./graphify-out/。
+ * 为避免污染持久 workspace（~/.spectra-baselines/<project>/），在临时目录里 rsync 一份再跑。
  */
 export function runGraphify({ targetPath, outputDir }) {
   fs.mkdirSync(outputDir, { recursive: true });
-  const args = ['build', '--no-llm', '--code-only', '--output', outputDir];
+  // 临时 workdir：避免污染 ~/.spectra-baselines/<project>/
+  const tmpWorkdir = fs.mkdtempSync(path.join(os.tmpdir(), 'graphify-eval-'));
+  // 把 target 内容复制到 tmpWorkdir（仅源码，不含 .git / node_modules）
+  const cpResult = spawnSync(
+    'rsync',
+    ['-a', '--exclude=.git', '--exclude=node_modules', '--exclude=dist', `${targetPath}/`, `${tmpWorkdir}/`],
+    { encoding: 'utf-8' },
+  );
+  if (cpResult.status !== 0) {
+    fs.rmSync(tmpWorkdir, { recursive: true, force: true });
+    throw new Error(`rsync target → tmpWorkdir failed: ${cpResult.stderr}`);
+  }
   const start = process.hrtime.bigint();
-  const r = spawnSync('graphify', args, {
-    cwd: targetPath,
+  const r = spawnSync('graphify', ['update', '.'], {
+    cwd: tmpWorkdir,
     encoding: 'utf-8',
     maxBuffer: 64 * 1024 * 1024,
   });
   const totalWallMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
-  if (r.status !== 0) throw new Error(`graphify build failed: ${r.stderr}`);
-  // graphify 输出 graph.json 到 outputDir/graph.json（NetworkX 同 schema 与 spectra）
-  const graphPath = path.join(outputDir, 'graph.json');
+  if (r.status !== 0) {
+    fs.rmSync(tmpWorkdir, { recursive: true, force: true });
+    throw new Error(`graphify update failed: ${r.stderr}`);
+  }
+  // graphify 默认输出 ./graphify-out/{graph.json, GRAPH_REPORT.md, graph.html}
+  const graphifyOut = path.join(tmpWorkdir, 'graphify-out');
+  const graphPath = path.join(graphifyOut, 'graph.json');
   let graphStats = { graphNodeCount: null, graphEdgeCount: null, graphHyperedgeCount: 0, graphSizeBytes: null };
   if (fs.existsSync(graphPath)) {
+    // 复制产物到 outputDir
+    const cpOut = spawnSync('cp', ['-R', graphifyOut + '/.', outputDir], { encoding: 'utf-8' });
+    if (cpOut.status !== 0) console.warn('[runGraphify] cp graphify-out failed:', cpOut.stderr);
     const stat = fs.statSync(graphPath);
     const g = JSON.parse(fs.readFileSync(graphPath, 'utf-8'));
     graphStats = {
       graphNodeCount: Array.isArray(g.nodes) ? g.nodes.length : null,
-      graphEdgeCount: Array.isArray(g.links) ? g.links.length : null,
+      graphEdgeCount: Array.isArray(g.links) ? g.links.length : Array.isArray(g.edges) ? g.edges.length : null,
       graphHyperedgeCount: Array.isArray(g.hyperedges) ? g.hyperedges.length : 0,
       graphSizeBytes: stat.size,
     };
   }
+  fs.rmSync(tmpWorkdir, { recursive: true, force: true });
   return { totalWallMs, graphStats, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
 /**
  * aider --show-repo-map → markdown ranked symbol list → 抽取 symbol count + token estimate
+ *
+ * aider 默认要走 OAuth；用 ANTHROPIC_API_KEY=dummy + --model anthropic/claude-3-5-sonnet 跳过实际 LLM 调用。
+ * --show-repo-map 仅本地 tree-sitter + PageRank，不发 API 请求，dummy key 不会被实际使用。
  */
 export function runAiderRepomap({ targetPath, mapTokens = 2048 }) {
   const start = process.hrtime.bigint();
-  const r = spawnSync('aider', ['--show-repo-map', '--map-tokens', String(mapTokens)], {
-    cwd: targetPath,
-    encoding: 'utf-8',
-    maxBuffer: 32 * 1024 * 1024,
-    env: { ...process.env, AIDER_NO_AUTO_COMMIT: '1' }, // 防止 aider 改 git
-  });
+  const r = spawnSync(
+    'aider',
+    [
+      '--show-repo-map',
+      '--map-tokens', String(mapTokens),
+      '--no-fancy-input',
+      '--no-stream',
+      '--yes-always',
+      '--weak-model', 'none',
+      '--model', 'anthropic/claude-3-5-sonnet',
+      '--no-auto-commits',
+      '--no-suggest-shell-commands',
+      '--no-check-update',
+      '--no-gitignore',
+    ],
+    {
+      cwd: targetPath,
+      encoding: 'utf-8',
+      maxBuffer: 32 * 1024 * 1024,
+      env: {
+        ...process.env,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'dummy',
+        AIDER_NO_AUTO_COMMIT: '1',
+      },
+    },
+  );
   const totalWallMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
   if (r.status !== 0) throw new Error(`aider --show-repo-map failed: ${r.stderr}`);
   const stdout = r.stdout ?? '';
   // 解析 markdown ranked symbol list：每行形如 `path/to/file.py:` + 后续 def/class 行
   const lines = stdout.split('\n');
-  const fileLines = lines.filter((l) => /^[^\s].*:\s*$/.test(l)); // file path lines
-  const symbolLines = lines.filter((l) => /^\s+(def|class|function|async def|export)\s/.test(l));
+  const fileLines = lines.filter((l) => /^[^\s].*:\s*$/.test(l));
+  const symbolLines = lines.filter((l) => /^[│|]?\s+(def|class|function|async def|export|interface|type)\s/.test(l));
   return {
     totalWallMs,
     repoMapStats: {

@@ -1,37 +1,37 @@
 {
   "schemaVersion": "1.1",
   "meta": {
-    "tool": "aider-repomap",
+    "tool": "graphify",
     "spectraVersion": "4.1.1",
     "collectorVersion": "0.3.0",
-    "targetProject": "karpathy/micrograd",
-    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetProject": "self-dogfood",
+    "targetCommit": "6103ae2c25800753993758de5857c8d2b5f67cdb",
     "targetFileCountsByType": {
-      "ts": 0,
+      "ts": 517,
       "tsx": 0,
-      "py": 5,
-      "md": 7,
-      "other": 12
+      "py": 14,
+      "md": 1179,
+      "other": 398
     },
-    "targetLocEstimate": 248,
+    "targetLocEstimate": 116741,
     "spectraModuleCount": null,
     "mode": "full",
     "model": null,
-    "runTimestampUtc": "2026-04-30T11:33:25.312Z",
+    "runTimestampUtc": "2026-04-30T11:33:04.781Z",
     "runHostOs": "darwin",
-    "command": "aider",
+    "command": "graphify",
     "args": [
-      "--show-repo-map",
-      "--map-tokens",
-      "2048"
+      "build",
+      "--no-llm",
+      "--code-only"
     ],
     "envAllowlist": {},
-    "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full",
-    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full/aider-repomap-stdout.log",
-    "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full/aider-repomap-stderr.log",
-    "pinnedAt": "2026-04-30T11:33:25.312Z",
+    "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/graphify-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/graphify-full/graphify-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/graphify-full/graphify-stderr.log",
+    "pinnedAt": "2026-04-30T11:33:04.781Z",
     "staleAfterDate": "2026-10-27",
-    "upstreamVersion": "aider 0.86.2",
+    "upstreamVersion": "installed",
     "frozenFixture": true
   },
   "dryRun": {
@@ -40,7 +40,7 @@
     "biasRatio": null
   },
   "perf": {
-    "totalWallMs": 1574,
+    "totalWallMs": 4221,
     "llmCallCount": 0,
     "llmCallDurationsMs": null,
     "tokensInput": 0,
@@ -50,10 +50,10 @@
     "memoryPeakKb": null
   },
   "output": {
-    "graphNodeCount": 33,
-    "graphEdgeCount": null,
+    "graphNodeCount": 3097,
+    "graphEdgeCount": 7136,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 3230,
+    "graphSizeBytes": 5767755,
     "specModuleCount": null,
     "specSuccessCount": null,
     "specSkippedCount": null,
@@ -61,7 +61,7 @@
   },
   "phases": {
     "specGenerationMs": null,
-    "graphBuildMs": 1574,
+    "graphBuildMs": 4221,
     "docsGenerationMs": null,
     "embeddingCacheMs": null,
     "otherMs": null,
@@ -69,7 +69,14 @@
   },
   "quality": {
     "specStructure": null,
-    "graphSanity": null,
+    "graphSanity": {
+      "isolatedNodes": 19,
+      "selfLoops": 0,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 4.6,
+      "maxDegree": 360,
+      "edgesWithoutType": 7136
+    },
     "crossLinks": null,
     "codingContextGrounding": null,
     "graphTopologyAccuracy": null

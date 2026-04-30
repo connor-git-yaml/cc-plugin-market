@@ -10,27 +10,29 @@
       "ts": 0,
       "tsx": 0,
       "py": 5,
-      "md": 6,
-      "other": 11
+      "md": 7,
+      "other": 12
     },
     "targetLocEstimate": 248,
     "spectraModuleCount": null,
     "mode": "full",
     "model": null,
-    "runTimestampUtc": "2026-04-30T11:23:47.947Z",
+    "runTimestampUtc": "2026-04-30T11:32:59.341Z",
     "runHostOs": "darwin",
-    "command": "graphify:not-installed-locally",
-    "args": [],
+    "command": "graphify",
+    "args": [
+      "build",
+      "--no-llm",
+      "--code-only"
+    ],
     "envAllowlist": {},
     "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/graphify-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/graphify-full/graphify-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/graphify-full/graphify-stderr.log",
-    "pinnedAt": "2026-04-30T11:23:47.947Z",
+    "pinnedAt": "2026-04-30T11:32:59.341Z",
     "staleAfterDate": "2026-10-27",
-    "upstreamVersion": "unknown",
-    "frozenFixture": true,
-    "installStatus": "not-installed-locally",
-    "installHint": "install: uv tool install graphifyy && graphify install"
+    "upstreamVersion": "installed",
+    "frozenFixture": true
   },
   "dryRun": {
     "estimatedTokens": null,
@@ -38,7 +40,7 @@
     "biasRatio": null
   },
   "perf": {
-    "totalWallMs": null,
+    "totalWallMs": 108,
     "llmCallCount": 0,
     "llmCallDurationsMs": null,
     "tokensInput": 0,
@@ -48,10 +50,10 @@
     "memoryPeakKb": null
   },
   "output": {
-    "graphNodeCount": null,
-    "graphEdgeCount": null,
+    "graphNodeCount": 41,
+    "graphEdgeCount": 56,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": null,
+    "graphSizeBytes": 37143,
     "specModuleCount": null,
     "specSuccessCount": null,
     "specSkippedCount": null,
@@ -59,11 +61,24 @@
   },
   "phases": {
     "specGenerationMs": null,
-    "graphBuildMs": null,
+    "graphBuildMs": 108,
     "docsGenerationMs": null,
     "embeddingCacheMs": null,
     "otherMs": null,
     "extractionMethod": "tool-specific"
   },
-  "quality": null
+  "quality": {
+    "specStructure": null,
+    "graphSanity": {
+      "isolatedNodes": 2,
+      "selfLoops": 0,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 2.7,
+      "maxDegree": 23,
+      "edgesWithoutType": 56
+    },
+    "crossLinks": null,
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null
+  }
 }

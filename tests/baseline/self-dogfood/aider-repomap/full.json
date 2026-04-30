@@ -4,20 +4,20 @@
     "tool": "aider-repomap",
     "spectraVersion": "4.1.1",
     "collectorVersion": "0.3.0",
-    "targetProject": "karpathy/micrograd",
-    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetProject": "self-dogfood",
+    "targetCommit": "6103ae2c25800753993758de5857c8d2b5f67cdb",
     "targetFileCountsByType": {
-      "ts": 0,
+      "ts": 517,
       "tsx": 0,
-      "py": 5,
-      "md": 7,
-      "other": 12
+      "py": 14,
+      "md": 1179,
+      "other": 400
     },
-    "targetLocEstimate": 248,
+    "targetLocEstimate": 116741,
     "spectraModuleCount": null,
     "mode": "full",
     "model": null,
-    "runTimestampUtc": "2026-04-30T11:33:25.312Z",
+    "runTimestampUtc": "2026-04-30T11:33:37.603Z",
     "runHostOs": "darwin",
     "command": "aider",
     "args": [
@@ -26,10 +26,10 @@
       "2048"
     ],
     "envAllowlist": {},
-    "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full",
-    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full/aider-repomap-stdout.log",
-    "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/aider-repomap-full/aider-repomap-stderr.log",
-    "pinnedAt": "2026-04-30T11:33:25.312Z",
+    "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/aider-repomap-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/aider-repomap-full/aider-repomap-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/aider-repomap-full/aider-repomap-stderr.log",
+    "pinnedAt": "2026-04-30T11:33:37.603Z",
     "staleAfterDate": "2026-10-27",
     "upstreamVersion": "aider 0.86.2",
     "frozenFixture": true
@@ -40,7 +40,7 @@
     "biasRatio": null
   },
   "perf": {
-    "totalWallMs": 1574,
+    "totalWallMs": 9407,
     "llmCallCount": 0,
     "llmCallDurationsMs": null,
     "tokensInput": 0,
@@ -50,10 +50,10 @@
     "memoryPeakKb": null
   },
   "output": {
-    "graphNodeCount": 33,
+    "graphNodeCount": 0,
     "graphEdgeCount": null,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 3230,
+    "graphSizeBytes": 5934,
     "specModuleCount": null,
     "specSuccessCount": null,
     "specSkippedCount": null,
@@ -61,7 +61,7 @@
   },
   "phases": {
     "specGenerationMs": null,
-    "graphBuildMs": 1574,
+    "graphBuildMs": 9407,
     "docsGenerationMs": null,
     "embeddingCacheMs": null,
     "otherMs": null,

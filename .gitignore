@@ -67,3 +67,8 @@ tests/fixtures/e2e/*/var/
 # Feature 143 baseline workspaces（运行时 clone 大型开源项目的 scratch 目录，不入库）
 tests/baseline/.workspaces/*
 !tests/baseline/.workspaces/.gitkeep
+
+# Feature 147 aider repomap 副作用产物（aider --show-repo-map 在 cwd 创建）
+.aider.chat.history.md
+.aider.tags.cache.v*
+.aider.input.history
