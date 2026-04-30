@@ -46,6 +46,16 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 6（Phase 1c）：graph.html 始终生成 + 极小图 banner
+
+- **`graph.html` 默认生成**（`src/batch/batch-orchestrator.ts`）— FR-011 / US-005：移除 `if (options.generateHtml)` opt-in 条件，改为 `?? true` 默认生成。CLI 不传 `--html` 也会产出 `_meta/graph.html`，与既有 `_meta/graph.json` / `_meta/GRAPH_REPORT.md` 输出一致性对齐。调用方仍可显式传 `generateHtml: false` 跳过。
+- **`--no-html` CLI flag**（`src/cli/utils/parse-args.ts` + `src/cli/index.ts` help）— CI / 资源紧张场景显式 opt-out 路径；与 `--html` 同时出现时 `--no-html` 优先（与 git `--no-*` 系列约定一致）。
+- **极小图 banner 注入**（`src/panoramic/exporters/html-template.ts`）— 节点数 < 3 时在 `graph.html` 顶部注入说明 banner（"This project has too few cross-module references for meaningful visualization. Run with --include-docs to add semantic context."），样式 `position: fixed` 浮动顶部（避开 body flex 布局），`role="alert"` 提升可访问性，#FFF3CD 警告色与 #FFC107 边框。
+- **export 入口同步**（`src/panoramic/exporters/html-exporter.ts`）— `generateHtml(graphJson, communityResult, godNodes)` 也透传 `nodeCount`，使 `spectra export --format html` 在小图场景同样注入 banner（修复 batch / export 入口不一致）。
+- **`GraphHtmlOptions.nodeCount` 字段**（`src/panoramic/qa/types.ts`）— 可选字段，未传时不显示 banner（向后兼容）。
+- **18 个新单元测试**：`tests/panoramic/html-template.test.ts` +9（banner 文案 / 阈值边界 0/1/2/3/30 / 未传兼容 / 警告色 / role / NaN 防御 / position fixed 布局）；`tests/panoramic/html-exporter.test.ts` +2（export 入口 banner 一致性）；`tests/unit/parse-args-html-flag.test.ts` 新建 6（--html / --no-html / 双向冲突 / 反序）；`tests/integration/graph-html-generation.test.ts` 新建 4 契约 + 4 fixture-based `it.todo()`（待 Phase 1a fixture 落地后填充）。
+- **Codex adversarial review**：双轮 0 critical + 4 warning（W1 CLI help / W1 `--no-html` / W2 banner flex layout 错位 / W3 export 入口不一致 / 反序测试缺失），全部修复并落测。
+
 ### Added — Feature 140 Phase 0：Cluster Orchestrator 基础设施
 
 - **`src/panoramic/cluster-orchestrator.ts`**（新建，~600 行）— Spectra v4.1.0 MapReduce 统一调度层。提供 `clusterDispatch<TInput, TMapOutput, TReduceOutput>()` 通用接口，作为下游 ADR / narrative / hyperedges 三个 pipeline 的基础设施（Phase 3 全部阻塞于此 Phase）。覆盖 spec FR-001、FR-002、FR-014。

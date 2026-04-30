@@ -263,7 +263,12 @@ export function generateHtml(
   godNodes: GodNode[],
 ): string {
   const graphDataJson = buildGraphData(graphJson, communityResult, godNodes);
-  return buildHtmlTemplate(graphDataJson);
+  // Feature 140 T19：透传 nodeCount，让 export 入口在极小图（< 3 节点）时也能注入说明 banner，
+  // 与 batch-orchestrator 入口行为一致（修复 Codex review W3 — 入口分叉一致性）。
+  return buildHtmlTemplate(graphDataJson, {
+    forceLayoutThreshold: 2000,
+    nodeCount: graphJson.nodes.length,
+  });
 }
 
 // ============================================================

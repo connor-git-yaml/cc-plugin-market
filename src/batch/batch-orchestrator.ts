@@ -157,7 +157,14 @@ export interface BatchOptions {
   debtLlmClient?: DebtSimpleLLMClient;
   /** F5：批处理运行模式（full | reading | code-only，默认 full） */
   mode?: BatchMode;
-  /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件（默认 false） */
+  /**
+   * 是否在知识图谱写盘后生成 graph.html 可视化文件。
+   *
+   * **Feature 140 FR-011 行为变更**：默认从 `false` 改为 `true`，graph.html 始终生成
+   * （之前需要 `--html` flag opt-in；现在 batch 末尾无条件生成）。
+   * 调用方仍可显式传 `generateHtml: false` 跳过（如 CI 资源紧张场景）。
+   * 极小图（节点数 < 3）会在生成的 HTML 中注入说明 banner（T19）。
+   */
   generateHtml?: boolean;
   /**
    * Feature 133 P1-1（adversarial-review post-fix）：是否启用 hyperedge LLM 提取
@@ -1326,8 +1333,10 @@ export async function runBatch(
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
       docGraphPath = toProjectPath(graphWrittenPath);
 
-      // F5 Story 3：--html flag 触发生成 graph.html 可视化文件（FR-021 self-contained）
-      if (options.generateHtml) {
+      // Feature 140 FR-011：graph.html 始终生成（之前 `if (options.generateHtml)` 是
+      // `--html` flag opt-in，导致大量 batch 输出缺失 graph.html）。改用 `?? true` 默认
+      // 生成，调用方仍可显式 false 跳过。极小图（< 3 节点）由 buildHtmlTemplate 注入 banner。
+      if (options.generateHtml ?? true) {
         try {
           // T-036：为每个节点注入 specPath 和 specPathExists 字段
           // spec 类型节点：id 本身就是 specPath（形如 "specs/modules/xxx.spec.md"）
@@ -1354,7 +1363,11 @@ export async function runBatch(
           if (enrichedNodes.length >= 2000) {
             logger.warn('[warn] graph node count exceeds 2000, force layout disabled, using static layout');
           }
-          const htmlContent = buildHtmlTemplate(graphDataJson);
+          // Feature 140 T19：传入 nodeCount，让 buildHtmlTemplate 在极小图（< 3 节点）时注入说明 banner
+          const htmlContent = buildHtmlTemplate(graphDataJson, {
+            forceLayoutThreshold: 2000,
+            nodeCount: enrichedNodes.length,
+          });
           const htmlPath = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META, 'graph.html');
           fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
           fs.writeFileSync(htmlPath, htmlContent, 'utf-8');

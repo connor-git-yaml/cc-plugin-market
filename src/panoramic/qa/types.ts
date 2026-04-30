@@ -126,4 +126,9 @@ export interface GraphHtmlOptions {
   enableJumpToSpec?: boolean;
   /** 文件体积警告阈值（字节，默认 5 MB = 5 * 1024 * 1024） */
   fileSizeWarnThreshold?: number;
+  /**
+   * 节点总数（含 enrichedNodes 注入后的最终值）。Feature 140 T19 用于决定是否注入
+   * "极小图"banner（节点数 < 3 时）。未传时不显示 banner，与旧版兼容。
+   */
+  nodeCount?: number;
 }

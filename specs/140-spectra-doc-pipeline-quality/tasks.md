@@ -182,21 +182,21 @@ estimatedEffort: "22-30 人天"
 
 ### 1c — graph.html 始终生成（US-005）
 
-- [ ] T18: 修改 src/batch/batch-orchestrator.ts — 移除 graph.html 跳过条件
+- [x] T18: 修改 src/batch/batch-orchestrator.ts — 移除 graph.html 跳过条件
   - **影响文件**: `src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-011
   - **实施细节**: 找到当前 `exportGraphHtml` 调用处的复杂度阈值条件判断（通常形如 `if (graph.nodeCount > threshold)`）；移除跳过条件，改为无条件调用 `exportGraphHtml`；传入图节点数量用于 banner 判断
   - **验收**: `grep -n 'exportGraphHtml\|skipGraph\|complexity' src/batch/batch-orchestrator.ts` 确认无跳过分支
   - **预估**: 0.5 人天
 
-- [ ] T19: 修改 graph HTML 生成器 — 极小图 banner
+- [x] T19: 修改 graph HTML 生成器 — 极小图 banner
   - **影响文件**: `src/panoramic/export-graph-html.ts`（或等效文件，修改）
   - **FR 关联**: FR-011
   - **实施细节**: 在 HTML 模板中，当 `nodeCount < 3` 时在图容器顶部插入 banner div：`"This project has too few cross-module references for meaningful visualization. Run with --include-docs to add semantic context."`；banner 样式需清晰（建议 `background: #FFF3CD; border: 1px solid #FFC107; padding: 12px; margin: 8px;`）
   - **验收**: 集成测试（T20）断言 empty-project fixture 的 graph.html 含该 banner 字符串；且非极小图不含 banner
   - **预估**: 0.5 人天
 
-- [ ] T20: 集成测试 — graph.html 始终生成
+- [x] T20: 集成测试 — graph.html 始终生成（unit + 契约层）
   - **前置任务**: T18, T19
   - **影响文件**: `tests/integration/graph-html-generation.test.ts`（新建）
   - **FR 关联**: FR-011

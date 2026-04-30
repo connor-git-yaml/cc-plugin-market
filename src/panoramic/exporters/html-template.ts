@@ -25,6 +25,17 @@ const FORCE_THRESHOLD = 2000;
 const DEFAULT_FILE_SIZE_WARN_BYTES = 5 * 1024 * 1024;
 
 /**
+ * 极小图阈值（Feature 140 T19）：节点数 < SMALL_GRAPH_THRESHOLD 时在 HTML
+ * 顶部注入说明 banner，引导用户用 `--include-docs` 增加语义上下文。
+ */
+const SMALL_GRAPH_THRESHOLD = 3;
+
+/** Feature 140 T19：极小图 banner 文案（spec 锁定，不可改） */
+const SMALL_GRAPH_BANNER_MESSAGE =
+  'This project has too few cross-module references for meaningful visualization. ' +
+  'Run with --include-docs to add semantic context.';
+
+/**
  * 构建完整 HTML 模板
  * 将 d3 bundle、图谱数据 JSON、CSS、交互 JS 组装为单文件字符串
  *
@@ -40,6 +51,7 @@ export function buildHtmlTemplate(graphDataJson: string, options?: GraphHtmlOpti
     enableSearch: options?.enableSearch ?? true,
     enableJumpToSpec: options?.enableJumpToSpec ?? true,
     fileSizeWarnThreshold: options?.fileSizeWarnThreshold ?? DEFAULT_FILE_SIZE_WARN_BYTES,
+    nodeCount: options?.nodeCount,
   };
 
   // 检查生成 HTML 体积（先估算：JSON + bundle 大小约等于最终 HTML 的 90%）
@@ -68,11 +80,25 @@ export function buildFullHtml(
     enableSearch?: boolean;
     enableJumpToSpec?: boolean;
     fileSizeWarnThreshold?: number;
+    /** Feature 140 T19：节点数 < 3 时注入"极小图"banner */
+    nodeCount?: number;
   },
 ): string {
   const threshold = opts?.forceLayoutThreshold ?? FORCE_THRESHOLD;
   const showHyperedges = opts?.showHyperedges ?? true;
   const enableJumpToSpec = opts?.enableJumpToSpec ?? true;
+  // Feature 140 T19：极小图 banner（< 3 节点时显示）
+  // 安全说明：nodeCount 必须是数字（caller 在 batch-orchestrator 中通过 .length 计算），
+  // 不接受字符串；banner 文案为常量，不含用户输入，无 XSS 风险。
+  // 布局说明：body 是横向 flex 容器（line 85: display: flex），banner 必须用 position: fixed
+  // 浮在顶部，否则会被作为 flex 子项与 sidebar 并排成竖条（Codex review W2 修复）。
+  // z-index: 101（略高于 large-graph-banner 的 100，因为极小图 banner 优先级更高 — 用户首次
+  // 看到极小图时最需要这个引导）。
+  const showSmallGraphBanner =
+    typeof opts?.nodeCount === 'number' && opts.nodeCount < SMALL_GRAPH_THRESHOLD;
+  const smallGraphBannerHtml = showSmallGraphBanner
+    ? `<div id="small-graph-banner" role="alert" style="position: fixed; top: 0; left: 0; right: 0; background: #FFF3CD; border-bottom: 1px solid #FFC107; color: #664d03; padding: 12px 16px; font-size: 13px; line-height: 1.5; z-index: 101; text-align: center;">${SMALL_GRAPH_BANNER_MESSAGE}</div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -140,6 +166,7 @@ export function buildFullHtml(
   <div id="large-graph-banner">
     大图模式（<span id="banner-node-count"></span> 个节点），力导向布局已关闭，部分交互受限
   </div>
+  ${smallGraphBannerHtml}
   <!-- 超边 tooltip -->
   <div id="hyperedge-tooltip"></div>
   <div id="sidebar">

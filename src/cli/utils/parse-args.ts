@@ -721,8 +721,15 @@ export function parseArgs(argv: string[]): ParseResult {
       }
     }
 
-    // F5 Story 3：--html flag（生成 graph.html 可视化文件）
-    const generateHtml = argv.includes('--html') || undefined;
+    // Feature 140 T18：graph.html 默认生成（FR-011 始终生成）。`--html` 旧 flag 仍兼容
+    // （等价于显式 true），新增 `--no-html` 用于 CI / 资源紧张场景显式 opt-out。
+    // 解析顺序：`--no-html` 优先 → 显式 false；`--html` 显式 true；都未指定 → undefined
+    // （batch-orchestrator 用 `?? true` 默认生成）。
+    const generateHtml: boolean | undefined = argv.includes('--no-html')
+      ? false
+      : argv.includes('--html')
+        ? true
+        : undefined;
 
     // Feature 133（adversarial-review post-fix）：--hyperedges flag — 显式 opt-in
     // hyperedge LLM 提取（默认 false，避免对所有 batch 静默触发额外 Anthropic 调用）

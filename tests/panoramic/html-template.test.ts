@@ -381,3 +381,93 @@ describe('buildHtmlTemplate — 体积 warn（T-034 / FR-024）', () => {
     expect(html).toContain('知识图谱可视化');
   });
 });
+
+describe('Feature 140 T19 — 极小图 banner（< 3 节点时注入）', () => {
+  /**
+   * spec FR-011 锁定的 banner 文案，不可改。caller (batch-orchestrator) 通过
+   * `nodeCount` 参数把图节点总数告诉 buildHtmlTemplate；< 3 时注入 banner。
+   */
+  const BANNER_SUBSTRING_EN =
+    'This project has too few cross-module references for meaningful visualization';
+  const BANNER_HINT_INCLUDE_DOCS = 'Run with --include-docs to add semantic context';
+
+  it('nodeCount=0 时 HTML 包含 small-graph banner 与文案', () => {
+    const json = makeGraphJson(0);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 0 });
+    expect(html).toContain('id="small-graph-banner"');
+    expect(html).toContain(BANNER_SUBSTRING_EN);
+    expect(html).toContain(BANNER_HINT_INCLUDE_DOCS);
+  });
+
+  it('nodeCount=1 时也应注入 banner（< 3 阈值）', () => {
+    const json = makeGraphJson(1);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 1 });
+    expect(html).toContain('id="small-graph-banner"');
+  });
+
+  it('nodeCount=2 时也应注入 banner（< 3 阈值）', () => {
+    const json = makeGraphJson(2);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 2 });
+    expect(html).toContain('id="small-graph-banner"');
+  });
+
+  it('nodeCount=3 时不再注入 banner（边界值，恰好达到阈值）', () => {
+    const json = makeGraphJson(3);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 3 });
+    expect(html).not.toContain('id="small-graph-banner"');
+  });
+
+  it('nodeCount=30 时不注入 banner（典型小型项目）', () => {
+    const json = makeGraphJson(30);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 30 });
+    expect(html).not.toContain('id="small-graph-banner"');
+    // 但应该仍有 large-graph-banner 元素（运行时根据节点数显示）
+    expect(html).toContain('id="large-graph-banner"');
+  });
+
+  it('未传 nodeCount 时不注入 banner（向后兼容）', () => {
+    const json = makeGraphJson(5);
+    const html = buildHtmlTemplate(json); // 无 options
+    expect(html).not.toContain('id="small-graph-banner"');
+  });
+
+  it('banner 含警告色样式（FFF3CD 背景 + FFC107 边框）', () => {
+    const json = makeGraphJson(0);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 0 });
+    expect(html).toContain('#FFF3CD');
+    expect(html).toContain('#FFC107');
+  });
+
+  it('banner 含 role="alert" 提升可访问性', () => {
+    const json = makeGraphJson(0);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 0 });
+    expect(html).toContain('role="alert"');
+  });
+
+  it('banner 用 position: fixed 浮在顶部（不参与 body flex 布局，修复 Codex review W2）', () => {
+    // Codex review W2：body 是横向 flex 容器（display: flex），banner 必须 position: fixed
+    // 否则会被作为 flex 子项与 sidebar 并排成竖条
+    const json = makeGraphJson(0);
+    const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000, nodeCount: 0 });
+    // 直接断言 banner div 的 inline style 含 position: fixed + 顶部定位
+    expect(html).toContain('id="small-graph-banner"');
+    // 提取 small-graph-banner 这个 div 的 style attribute
+    const bannerMatch = html.match(/<div[^>]*id="small-graph-banner"[^>]*>/);
+    expect(bannerMatch).not.toBeNull();
+    const bannerTag = bannerMatch![0];
+    expect(bannerTag).toMatch(/position:\s*fixed/);
+    expect(bannerTag).toMatch(/top:\s*0/);
+    expect(bannerTag).toMatch(/z-index:\s*10[01]/); // 100 或 101 都可接受（>= large-graph-banner）
+  });
+
+  it('nodeCount=NaN / 字符串等非法值不注入 banner（防御性）', () => {
+    const json = makeGraphJson(5);
+    // TypeScript 阻止非数字传入，但运行时若 caller 不严格仍可能传 NaN
+    const html = buildHtmlTemplate(json, {
+      forceLayoutThreshold: 2000,
+      nodeCount: NaN,
+    });
+    // NaN < 3 是 false，不注入
+    expect(html).not.toContain('id="small-graph-banner"');
+  });
+});

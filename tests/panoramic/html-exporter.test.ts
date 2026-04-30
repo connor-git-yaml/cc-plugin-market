@@ -344,6 +344,25 @@ describe('generateHtml', () => {
     const sizeBytes = Buffer.byteLength(html, 'utf-8');
     expect(sizeBytes).toBeLessThan(2 * 1024 * 1024);
   });
+
+  // Feature 140 T19 — Codex review W3 修复：export 入口（generateHtml 函数）也透传 nodeCount
+  it('节点数 < 3（极小图）→ HTML 含 small-graph banner（修复 Codex review W3 — export 入口一致性）', () => {
+    const smallNodes = [makeNode('only', 'Only Module')];
+    const smallGraph = makeGraphJson(smallNodes, []);
+    const smallCommunity = makeCommunityResult([['only']]);
+    const html = generateHtml(smallGraph, smallCommunity, []);
+    expect(html).toContain('id="small-graph-banner"');
+    expect(html).toContain('too few cross-module references for meaningful visualization');
+  });
+
+  it('节点数 >= 3 → HTML 不含 small-graph banner', () => {
+    // 默认 generateHtml 测试用 2 个节点（a/b），加 1 个变 3 节点恰好达阈值
+    const threeNodes = [makeNode('a', 'A'), makeNode('b', 'B'), makeNode('c', 'C')];
+    const threeGraph = makeGraphJson(threeNodes, [makeEdge('a', 'b'), makeEdge('b', 'c')]);
+    const threeCommunity = makeCommunityResult([['a', 'b', 'c']]);
+    const html = generateHtml(threeGraph, threeCommunity, []);
+    expect(html).not.toContain('id="small-graph-banner"');
+  });
 });
 
 // ============================================================

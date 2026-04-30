@@ -41,7 +41,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 用法:
   spectra generate <target> [--deep] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--concurrency <N>] [--output-dir <dir>]
+  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
   spectra diff <spec-file> <source> [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
@@ -98,6 +98,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --hyperedges   启用 hyperedge LLM 提取（仅 batch + mode=full 生效，默认 false；可用 env SPECTRA_HYPEREDGES_ENABLED=true 等价开启）
   --enable-adr   显式启用 ADR pipeline（v4.0.1 临时禁用，将在 v4.1 evidence-binding 重构后恢复；默认 false）（仅 batch）
   --concurrency  最大并发模块数（仅 batch，默认 3；优先级 CLI > spec-driver.config.yaml batch.concurrency > 默认 3；≤0 / 非整数会规范化为 1 并打印 warn）
+  --html         显式启用 graph.html 生成（仅 batch；Feature 140 起默认已启用，本 flag 仅作显式标注，不影响行为）
+  --no-html      禁用 graph.html 生成（仅 batch；CI / 资源紧张场景使用；与 --html 同时出现时 --no-html 优先）
   --json         以 JSON 格式输出结果（仅 panoramic）
   --project-root 指定分析目标目录（仅 panoramic，默认为 cwd）
   --generator    指定 generator ID（仅 cache clear）
