@@ -160,6 +160,44 @@ _meta/graph.json  (architecture-ir + doc-graph + cross-reference-index)
     └── MCP graph_query / graph_node / graph_path / graph_community / graph_god_nodes / graph_hyperedges
 ```
 
+## v4.1.0 Performance & Behavior Notes
+
+> Spectra v4.1.0 (Feature 140) refactored the doc pipeline to a MapReduce architecture (cluster orchestrator + Sonnet map + Opus reduce). Behavior changes user-visible during `spectra batch`:
+
+### Batch latency
+
+- **Medium-sized projects (10-30 modules)**: end-to-end batch increases by **60-120s** vs. v4.0.x. The new pipeline runs 3 LLM rounds (Map → Reduce → Critique) for each of ADR / hyperedges / architecture-narrative, in exchange for grounded outputs and resilience on large projects.
+- **Small projects (< 5 modules)**: latency is roughly unchanged (clustering falls back to `single` strategy; only one Map call per pipeline).
+- **Large projects (50+ modules)**: latency scales linearly with cluster count rather than module count, because Map runs cluster-parallel (`p-limit(maxConcurrency=4)`). Previously, large projects could hit context-window limits in monolithic LLM calls; v4.1.0 resolves this via the FFD packing.
+- Inspect `_meta/cost-summary.md` (or watch `process.stderr` during batch) for the **Top 5 input-token consumer modules** — useful for spotting accidentally bloated context.
+
+### ADR generation behavior
+
+- ADR pipeline is **opt-in** via `--enable-adr` (unchanged from v4.0.1).
+- When enabled, **0 ADRs is now a possible outcome** — v4.1.0 generates ADR candidates only from real evidence (file paths + line ranges + snippet match), not from keyword matching against hardcoded templates. Previous v4.0.x output of "always 4 ADRs" was the hallucination bug this release fixes. With v4.1.0, 0 ADRs can mean either: (a) the project genuinely has too little verifiable decision-evidence in code/comments, or (b) a failure mode triggered (Reduce model unavailable, evidence verification rejected all candidates, etc.). Both cases currently surface the same stderr warning (`ADR LLM 路径 fail-closed (reason: <reason>)`); a future release will distinguish them. Check the warning's `reason` field when present, and inspect the generated `docs/adr/index.md` — it lists no drafts in either case, but stderr will indicate why.
+- Each ADR's frontmatter now contains `generatedByModel: { map, reduce }` (full provenance — Sonnet model for Map / Opus or Sonnet-fallback model for Reduce). The verified evidence list is rendered in the body under `## Evidence`, where each ref shows `source`, `location`, and an `(UNVERIFIED: <reason>)` annotation when programmatic file/line/snippet validation fails.
+- Older v4.0.x ADRs in `docs/adr/*.md` are auto-migrated: `status` set to `superseded` + `supersededAt: 4.1.0`. Files are not deleted.
+
+### `graph.html` defaults
+
+- `graph.html` is now **always generated** by `spectra batch` (previously opt-in via `--html`). Use `--no-html` to skip. This aligns the batch output set with `graph.json` and `GRAPH_REPORT.md`, which were always generated.
+- For very small projects (< 3 nodes), the rendered `graph.html` shows a banner explaining that the graph has too few cross-module references to be meaningful, and recommends rerunning with `--include-docs`.
+
+### Module spec frontmatter
+
+Each generated `*.spec.md` now includes (when LLM was actually called):
+
+```yaml
+costBreakdown:
+  contextAssembly: <input tokens consumed by cross-module context>
+  promptTemplate: <input tokens of the prompt template itself>
+  sourceFile: <input tokens of the target module's skeleton>
+  llmReasoning: <output tokens generated>
+contextTruncated: <boolean — whether context-assembler trimmed inputs to fit budget>
+```
+
+Use this to debug "why is module X so expensive" — typically the `contextAssembly` line tells the story.
+
 ## Authentication
 
 Two modes, auto-detected:

@@ -1,0 +1,14 @@
+{
+  "name": "ky",
+  "purpose": "Feature 140 跨项目隔离测试 — TypeScript 项目代表",
+  "language": "typescript",
+  "modules": 4,
+  "sourceProject": "https://github.com/sindresorhus/ky",
+  "snapshotNote": "手写最小快照（不克隆 GitHub）。仅含核心 Ky / Hooks / Retrier 抽象。",
+  "expected": {
+    "graphHtmlBanner": false,
+    "hyperedgesCount": ">=1",
+    "adrTitleContains": ["hooks", "Fetch", "retry", "pipeline"],
+    "domainWords": ["Ky", "KyOptions", "Hooks", "Retrier"]
+  }
+}

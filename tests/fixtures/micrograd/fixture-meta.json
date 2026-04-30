@@ -1,0 +1,14 @@
+{
+  "name": "micrograd",
+  "purpose": "Feature 140 跨项目隔离测试 — 小型 Python 项目代表（4 模块）",
+  "language": "python",
+  "modules": 4,
+  "sourceProject": "https://github.com/karpathy/micrograd",
+  "snapshotNote": "手写最小快照（不克隆 GitHub）。仅含 Feature 140 测试断言所需的核心抽象与代码量。",
+  "expected": {
+    "graphHtmlBanner": false,
+    "hyperedgesCount": ">=1",
+    "adrTitleContains": ["梯度", "动态计算图", "Value", "backward"],
+    "domainWords": ["Value", "Neuron", "Layer", "MLP"]
+  }
+}

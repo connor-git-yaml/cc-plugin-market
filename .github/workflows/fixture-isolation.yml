@@ -1,0 +1,83 @@
+# Feature 140 T14 — 跨项目隔离 CI workflow
+#
+# 触发：每 PR + push master；matrix strategy 4 个 fixture 并行 job。
+# 任一 fixture 断言失败 → workflow 整体 failed。
+#
+# 设计权威：specs/140-spectra-doc-pipeline-quality/tasks.md T14 / T47
+# spec 关联：FR-015（测试 fixture 集 + CI 跨项目隔离测试）
+
+name: fixture-isolation
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'tests/fixtures/**'
+      - 'tests/integration/cross-project-isolation.test.ts'
+      - '.github/workflows/fixture-isolation.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vitest.config.ts'
+      - 'tsconfig.json'
+  push:
+    branches: [master]
+    paths:
+      - 'src/**'
+      - 'tests/fixtures/**'
+      - 'tests/integration/cross-project-isolation.test.ts'
+      - '.github/workflows/fixture-isolation.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vitest.config.ts'
+      - 'tsconfig.json'
+
+jobs:
+  fixture-isolation:
+    name: fixture-isolation (${{ matrix.fixture }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  # 任一 fixture 失败时仍跑完其他，便于定位
+      matrix:
+        fixture: [empty-project, micrograd, nanoGPT, ky]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify fixture exists
+        run: |
+          if [ ! -d "tests/fixtures/${{ matrix.fixture }}" ]; then
+            echo "ERROR: fixture directory tests/fixtures/${{ matrix.fixture }} not found"
+            exit 1
+          fi
+          if [ ! -f "tests/fixtures/${{ matrix.fixture }}/fixture-meta.json" ]; then
+            echo "ERROR: fixture-meta.json missing for ${{ matrix.fixture }}"
+            exit 1
+          fi
+
+      - name: Run cross-project isolation tests
+        # 注：cross-project-isolation 测试目前对全部 4 fixture 同时断言（FR-015 反 hallucinate 不变量
+        # 必须看到所有 fixture 才能验证），不做 fixture 分片。matrix 4 个 job 跑同样的断言，目的是：
+        # (1) 验证每个 matrix 节点上的 npm ci / fixture 磁盘 / vitest 路径解析都通过
+        # (2) 当某个 fixture 目录损坏时，verify 步骤会在对应 matrix job 失败，artifact 上传该 fixture
+        # (3) 一次性暴露多 OS / Node 版本下的隐藏环境差异（未来扩展 matrix 时无需改测试）
+        run: npx vitest run tests/integration/cross-project-isolation.test.ts
+
+      - name: Upload fixture artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-${{ matrix.fixture }}-output
+          path: |
+            tests/fixtures/${{ matrix.fixture }}/_meta/
+            tests/fixtures/${{ matrix.fixture }}/specs/
+          retention-days: 7

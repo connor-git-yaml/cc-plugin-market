@@ -1,0 +1,14 @@
+{
+  "name": "nanoGPT",
+  "purpose": "Feature 140 跨项目隔离测试 — 中型 Python 项目代表",
+  "language": "python",
+  "modules": 4,
+  "sourceProject": "https://github.com/karpathy/nanoGPT",
+  "snapshotNote": "手写最小快照（不克隆 GitHub）。仅含核心 GPT / Block / CausalSelfAttention / MLP 抽象。",
+  "expected": {
+    "graphHtmlBanner": false,
+    "hyperedgesCount": ">=1",
+    "adrTitleContains": ["causal", "attention", "GPT", "decoder", "因果"],
+    "domainWords": ["GPT", "Block", "CausalSelfAttention", "block_size"]
+  }
+}

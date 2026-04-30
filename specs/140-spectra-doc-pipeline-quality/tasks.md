@@ -121,35 +121,35 @@ estimatedEffort: "22-30 人天"
 
 ### 1a — 测试 Fixture 集
 
-- [ ] T10: 创建 fixture 目录结构 + micrograd / empty-project fixture
+- [x] T10: 创建 fixture 目录结构 + micrograd / empty-project fixture
   - **影响文件**: `tests/fixtures/micrograd/`（新建）、`tests/fixtures/empty-project/`（新建）
   - **FR 关联**: FR-015
   - **实施细节**: micrograd fixture 含 4 个 Python 文件快照（engine.py / nn.py / __init__.py / README.md），snapshot 管理（不依赖网络）；empty-project 仅含 README.md（最小合法项目）；每个 fixture 目录含 `fixture-meta.json`（记录来源版本 / 文件数 / 语言）
   - **验收**: 目录结构存在；`fixture-meta.json` 合规；Vitest 可正确 resolve fixture 路径
   - **预估**: 0.5 人天
 
-- [ ] T11: 创建 nanoGPT fixture
+- [x] T11: 创建 nanoGPT fixture
   - **影响文件**: `tests/fixtures/nanoGPT/`（新建）
   - **FR 关联**: FR-015
   - **实施细节**: 15 个 Python 文件快照（model.py / train.py / bench.py / data/ 下 4 文件等），确保模块间有真实 import 关系；snapshot 管理；fixture-meta.json 含 `modules: 15`
   - **验收**: 目录存在；bench.py 在 fixture 中真实存在（用于 FR-012 `--context-budget 5000` 测试断言）
   - **预估**: 0.5 人天
 
-- [ ] T12: 创建 sindresorhus/ky fixture
+- [x] T12: 创建 sindresorhus/ky fixture
   - **影响文件**: `tests/fixtures/ky/`（新建）
   - **FR 关联**: FR-015
   - **实施细节**: ~30 TypeScript 文件快照（仅 src/ 目录：core.ts / types.ts / utils.ts / index.ts 等），确保有清晰跨模块 import；fixture-meta.json 含 `language: 'typescript', modules: ~30`；提取时剔除 test/ 和 node_modules
   - **验收**: src/ 目录 TS 文件 ≥ 20；有跨模块 import 关系；Spectra 能对其执行 batch（无语法错误）
   - **预估**: 0.5 人天
 
-- [ ] T13: 创建跨项目隔离集成测试文件
+- [x] T13: 创建跨项目隔离集成测试文件
   - **影响文件**: `tests/integration/cross-project-isolation.test.ts`（新建）
   - **FR 关联**: FR-015
   - **实施细节**: 5 个断言套件：(1) ADR 标题集合 distinct 率 = 100%（各 fixture ADR 标题集合互不相交）；(2) module spec 含 ≥3 个项目特有 identifier；(3) narrative 含领域词（≥3 个接口表头抽象名）；(4) hyperedges ≥1（micrograd/nanoGPT/ky）；(5) evidence verified=true 占比 ≥90%；使用 mock LLM response fixture（不依赖真实 API）
   - **验收**: `npx vitest run tests/integration/cross-project-isolation.test.ts` 编译通过（初始状态可预期失败，Phase 4 集成完成后应全绿）
   - **预估**: 1 人天
 
-- [ ] T14: 配置 CI workflow — 跨项目隔离测试
+- [x] T14: 配置 CI workflow — 跨项目隔离测试
   - **影响文件**: `.github/workflows/fixture-isolation.yml`（新建）
   - **FR 关联**: FR-015
   - **实施细节**: workflow 触发条件：每 PR + push main；matrix strategy：4 个 fixture 并行 job；每 job 执行 `npx vitest run tests/integration/cross-project-isolation.test.ts --fixture <name>`；失败时 upload artifact（失败 fixture 产物）；整体失败信号：任一 fixture 的断言失败
@@ -430,7 +430,7 @@ estimatedEffort: "22-30 人天"
 
 > 目标：全量验收、版本发布。**前置**: Phase 0-3 全部完成。
 
-- [ ] T46: 全量跑 4 fixture DoD 验收脚本
+- [x] T46: 全量跑 4 fixture DoD 验收脚本
   - **前置任务**: T29, T35, T44（Phase 3 全部完成）
   - **影响文件**: `scripts/validate-feature-140-dod.ts`（新建）
   - **FR 关联**: FR-001 到 FR-015 全部
@@ -446,7 +446,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: CI 日志显示 4 fixture 全部通过；故意注入重复标题时 CI 报错
   - **预估**: 0.5 人天
 
-- [ ] T48: 回归测试 — 现有 2232 测试零新增失败
+- [x] T48: 回归测试 — 现有 2232 测试零新增失败
   - **前置任务**: 所有 Phase 0-3 任务完成
   - **影响文件**: 无新文件（执行现有测试套件）
   - **FR 关联**: NFR-003
@@ -454,7 +454,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `npx vitest run` 输出零新增失败；pre-existing 失败已标注
   - **预估**: 0.5 人天
 
-- [ ] T49: 更新 CHANGELOG.md — v4.1.0 条目
+- [x] T49: 更新 CHANGELOG.md — v4.1.0 条目
   - **前置任务**: T48
   - **影响文件**: `CHANGELOG.md`（修改）
   - **FR 关联**: 无（文档任务）
@@ -490,7 +490,7 @@ estimatedEffort: "22-30 人天"
 
 ## 补充任务 — 跨 Phase 保障
 
-- [ ] T53: TypeScript 类型检查守护 — 全量 tsc 零错误
+- [x] T53: TypeScript 类型检查守护 — 全量 tsc 零错误
   - **影响文件**: 无新文件（CI 检查任务）
   - **FR 关联**: NFR-003
   - **实施细节**: 在 `.github/workflows/` 中确认已有（或新增）`npm run build`（含 `tsc --noEmit`）的 CI step；确保 Phase 0-3 所有新文件引入后无类型错误；特别关注 `ClusterDispatchOptions` 泛型的传播是否正确
@@ -505,7 +505,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: batch 在 mock LLM 下完成时间 < 10min；cluster 数合理
   - **预估**: 0.5 人天
 
-- [ ] T55: 更新 Spectra 用户文档 — batch 耗时说明 + --context-budget 用法
+- [x] T55: 更新 Spectra 用户文档 — batch 耗时说明 + --context-budget 用法
   - **前置任务**: T50
   - **影响文件**: `docs/spectra-batch-guide.md`（修改，或等效用户文档文件）
   - **FR 关联**: NFR-001

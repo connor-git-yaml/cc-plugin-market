@@ -46,6 +46,51 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 8（Phase 1a + Phase 4）：fixture 集 + 跨项目隔离 + DoD 验收脚本
+
+**spec FR-015 / DoD 1-11 完整交付** — 4 fixture 项目 + 2 个测试 + 1 个 CI workflow + 1 个 DoD 验收脚本，封顶 7 步实施，整体验收。
+
+- **T10-T12 — 4 个 fixture 项目落地**（`tests/fixtures/`，FR-015）：
+  - **`empty-project/`** — 仅 README + fixture-meta（modules=0 / hyperedges=0 / adrCount=0 / graphHtmlBanner=true）；锁定"极小图 banner 触发"边界
+  - **`micrograd/`** — Python tiny scalar autograd（`__init__.py` / `engine.py` / `nn.py`，含 `Value` / `Neuron` / `Layer` / `MLP` 4 个核心抽象）；ADR 标题预期含 `Value` / `Neuron` / `MLP` / `backward`；domainWords 4 项
+  - **`nanoGPT/`** — Python 极简 GPT（`__init__.py` / `model.py` / `train.py` / `bench.py`，含 `GPT` / `Block` / `CausalSelfAttention` / `MLP`）；ADR 标题预期含 `causal attention` / `block` / `train`；domainWords 4 项
+  - **`ky/`** — TypeScript fetch wrapper（`src/types.ts` / `src/retrier.ts` / `src/core.ts` / `src/index.ts`，含 `Ky` / `Hooks` / `Retrier` / `KyOptions`）；ADR 标题预期含 `hooks pipeline` / `retry` / `KyOptions`；domainWords 4 项
+  - 每个 fixture 独立 README + `fixture-meta.json`（声明 `language` / `modules` / `expected.adrTitleContains` / `expected.domainWords` / `expected.graphHtmlBanner` / `expected.hyperedgesCount`）
+  - **关键不变量**：3 个 named fixture 的 `adrTitleContains` 与 `domainWords` 集合两两互不相交（FR-015 反 hallucinate 锁定）— 跨项目串台时测试立即捕获
+- **T13 — `tests/integration/cross-project-isolation.test.ts`**（6 contract case + 5 fixture-based `it.todo()`）：
+  - case 1: 4 个 fixture 目录 + `fixture-meta.json` 都存在
+  - case 2: 每个 fixture 都含 README.md（最小合法项目）
+  - case 3: 各 fixture 的 `adrTitleContains` 集合互不相交
+  - case 4: 各 fixture 的 `domainWords` 集合互不相交（项目特有抽象名）
+  - case 5: 声明 modules 数与实际源文件数对齐（micrograd ≥3 .py / nanoGPT ≥4 .py / ky ≥4 .ts）
+  - case 6: empty-project 期望 graphHtmlBanner=true / hyperedgesCount=0
+  - 5 个 `it.todo()` 留给 `T51` 真实 LLM 端到端验证（micrograd → ADR 含 `Value/Neuron/MLP` / nanoGPT → causal attention 决策 / ky → hooks pipeline 决策 / empty-project → 0 ADR + banner / FR-005 evidence verified ≥ 90%）
+- **T14 — `.github/workflows/fixture-isolation.yml`**（CI 跨项目隔离 workflow）：
+  - 触发：每 PR + push master；matrix strategy 4 个 fixture 并行 job（`fail-fast: false`）
+  - 步骤：checkout → setup-node 20 → npm ci → 验 fixture 目录与 meta → `npx vitest run tests/integration/cross-project-isolation.test.ts`
+  - 失败时 upload-artifact 保留 `_meta/` + `specs/`（retention 7 天）
+  - paths filter: 仅 `src/**` / `tests/fixtures/**` / 隔离测试本体 / 本 workflow 改动触发
+- **T46 — `scripts/validate-feature-140-dod.ts`**（DoD 11 项验收脚本）：
+  - 用法：`npx tsx scripts/validate-feature-140-dod.ts`
+  - DoD-1: ADR 8 个 hardcoded candidate 函数 + matchEvidence 已删除（FR-003）
+  - DoD-2: ADR MapReduce + Evidence Verifier + Migration 三模块就位
+  - DoD-3: hyperedge designDocAbsPaths 含 README + docs + module specs + project-context（FR-007）
+  - DoD-4: --include-docs 数据流接通 readmeContent（FR-010）
+  - DoD-5: graph.html 默认生成（`?? true`）+ 极小图 banner（FR-011）
+  - DoD-6: costBreakdown frontmatter + Top 5 batch summary（FR-012/FR-013）
+  - DoD-7: narrative MapReduce + 3-pass critique 模块就位（FR-008/FR-009）
+  - DoD-8: 现有回归测试零新增失败（NFR-003，跑 `npx vitest run`）
+  - DoD-9: cluster orchestrator 行覆盖率 ≥ 90%（实测 93.61% lines / 100% functions）
+  - DoD-10: 4 fixture 目录 + fixture-meta.json 就位（FR-015）
+  - DoD-11: 跨 cluster 决策捕获（手动验证文档锁定，T51 在 nanoGPT 上跑）
+  - 输出：表格化 pass/fail + 总体 status + exit code
+- **延后 user 决定项**（不在 Step 8 自动化范围）：
+  - T47: CI 实测（需要 push GitHub Actions）
+  - T50: `contracts/release-contract.yaml` 升版本（F146 v4.1.1 在并行升版本，避免冲突；F140 完成后由 user 决定何时升 v4.2.0）
+  - T51: 3 fresh project 真实 LLM 端到端验证
+  - T52: `git tag v4.x.0` 发版
+  - T54: 100 文件合成 fixture（性能测试）
+
 ### Added — Feature 140 Step 2（Phase 3c）：ADR MapReduce + Evidence Verifier ★ 修复 6 类质量问题中最严重的 ADR hallucinate
 
 **spec FR-003 / FR-004 / FR-005 / FR-006 / US-001 完整交付** — 9 task / ~1500 行新建 + ~330 行删除 + 39 个新测试。

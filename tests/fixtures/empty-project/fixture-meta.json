@@ -1,0 +1,11 @@
+{
+  "name": "empty-project",
+  "purpose": "Feature 140 跨项目隔离测试 — 最小合法项目（仅 README）",
+  "language": "none",
+  "modules": 0,
+  "expected": {
+    "graphHtmlBanner": true,
+    "hyperedgesCount": 0,
+    "adrCount": 0
+  }
+}
