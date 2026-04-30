@@ -11,6 +11,16 @@ keyMethodCount: {{keyMethods.length}}
 # {{title}}
 
 > 自动生成于 {{generatedAt}}
+{{#if readmeExcerpt}}
+
+## 0. README 摘录（Feature 140 FR-010）
+
+> 摘录自项目 `README.md`，前 1000 字符。完整 README 在 LLM 阶段（Phase 3b MapReduce）作为 shared header 注入 narrative pipeline。
+
+```
+{{readmeExcerpt}}
+```
+{{/if}}
 
 ## 1. 先说结论
 

@@ -3,8 +3,8 @@
  * 导出 runExtractionPipeline 函数及关键类型
  */
 
-export { runExtractionPipeline } from './extraction-pipeline.js';
-export type { ExtractionPipelineOptions } from './extraction-pipeline.js';
+export { runExtractionPipeline, findReadmePath } from './extraction-pipeline.js';
+export type { ExtractionPipelineOptions, ExtractionPipelineOutput } from './extraction-pipeline.js';
 
 export type {
   ExtractionResult,

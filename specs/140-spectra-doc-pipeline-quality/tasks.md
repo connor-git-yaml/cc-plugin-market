@@ -210,14 +210,14 @@ estimatedEffort: "22-30 人天"
 
 > 目标：消除 --include-docs 语义矛盾，打通数据流。依赖 Phase 1 fixture 可选（可并行但 fixture 先行有利）。
 
-- [ ] T21: 修改 src/extraction/extraction-pipeline.ts — 返回 markdown 内容供下游消费
+- [x] T21: 修改 src/extraction/extraction-pipeline.ts — 返回 markdown 内容供下游消费
   - **影响文件**: `src/extraction/extraction-pipeline.ts`（修改）
   - **FR 关联**: FR-010
   - **实施细节**: `--include-docs=true` 时：(1) README.md → 单独提取全量内容，放入返回值 `extractionResult.readmeContent: string`（不截断，移除旧 5k 限制）；(2) 其他 .md → 提取为图节点（kind: doc），放入 `extractionResult.docNodes`；修改函数返回类型追加这两个字段；不改变 `--include-docs=false` 时的行为
   - **验收**: 单元测试（T23）通过；现有 extraction-pipeline 测试零新增失败；`grep -n '5000\|5k' src/extraction/extraction-pipeline.ts` 确认无旧 token 限制
   - **预估**: 0.5 人天
 
-- [ ] T22: 修改 src/batch/batch-orchestrator.ts — 修复日志 + 传递 readmeContent
+- [x] T22: 修改 src/batch/batch-orchestrator.ts — 修复日志 + 传递 readmeContent
   - **前置任务**: T21
   - **影响文件**: `src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-010
@@ -225,7 +225,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `grep -n '跳过 .md\|skip.*md\|不支持' src/batch/batch-orchestrator.ts` 无命中；新日志格式包含"include-docs: 已加入"
   - **预估**: 0.5 人天
 
-- [ ] T23: 单元测试 — --include-docs 数据流
+- [x] T23: 单元测试 — --include-docs 数据流
   - **前置任务**: T21, T22
   - **影响文件**: `tests/unit/include-docs-pipeline.test.ts`（新建）
   - **FR 关联**: FR-010
@@ -233,7 +233,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；覆盖开关前后两个代码路径
   - **预估**: 0.5 人天
 
-- [ ] T24: 修改 src/panoramic/pipelines/architecture-narrative.ts — 消费 readmeContent
+- [x] T24: 修改 src/panoramic/pipelines/architecture-narrative.ts — 消费 readmeContent
   - **前置任务**: T22
   - **影响文件**: `src/panoramic/pipelines/architecture-narrative.ts`（修改）
   - **FR 关联**: FR-010
@@ -241,7 +241,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试验证 readmeContent 存在时出现在 map prompt 的 sharedHeader 中；不存在时 prompt 结构不变
   - **预估**: 0.5 人天
 
-- [ ] T25: 集成测试 — --include-docs 开关前后对比
+- [x] T25: 集成测试 — --include-docs 开关前后对比
   - **前置任务**: T23, T24
   - **影响文件**: `tests/integration/include-docs-integration.test.ts`（新建）
   - **FR 关联**: FR-010
@@ -249,7 +249,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 测试通过；mock LLM 不依赖真实 API
   - **预估**: 0.5 人天
 
-- [ ] T26: 修改 hyperedge extractor 调用 — 传入 readmeContent
+- [x] T26: 修改 hyperedge extractor 调用 — 传入 readmeContent
   - **前置任务**: T22
   - **影响文件**: `src/panoramic/pipelines/hyperedge-pipeline.ts`（或等效调用位置，修改）
   - **FR 关联**: FR-007, FR-010

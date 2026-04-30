@@ -1,13 +1,23 @@
 /**
- * 多模态提取管道（Feature 107）
+ * 多模态提取管道（Feature 107 + Feature 140 T21）
  * 协调三路提取器（Markdown、OpenAPI、图像），集成缓存，控制并发
  *
  * 行为契约（extraction-pipeline.contract.md）：
- * - includeDocs=false && includeImages=false 时立即返回 []
- * - 所有提取失败时返回 []，不抛出异常
+ * - includeDocs=false && includeImages=false 时立即返回空 output
+ * - 所有提取失败时返回空 output，不抛出异常
  * - 返回的 ExtractionResult[] 已通过 Zod schema 验证
  * - Markdown LLM 并发上限 5，单次超时 8 秒（FR-016）
  * - 图片数量 > 50 输出警告（FR-017）
+ *
+ * **Feature 140 FR-010 行为变更**：返回类型从 `ExtractionResult[]` 改为 `ExtractionPipelineOutput`
+ * 包装对象，新增 `readmeContent?: string` 字段：当 `includeDocs=true` 且 projectRoot 下存在
+ * `README.md`（不区分大小写：README.md / readme.md / Readme.md）时，读取其全量内容（不截断）
+ * 放入 `readmeContent`，供下游 architecture-narrative / hyperedge 等 pipeline 作为 shared
+ * header 注入（架构 §三 ADR shared header / §四 Narrative Phase B）。
+ *
+ * 与原有 ExtractionResult[] 的关系：README.md 仍会被走 Markdown LLM 提取通道（产生 nodes/edges
+ * 进入 results 数组），同时其 raw 内容也独立放入 readmeContent；二者并存不冲突，但下游使用
+ * readmeContent 比拼 nodes 更直接（保留原始语境）。
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -36,6 +46,18 @@ export interface ExtractionPipelineOptions {
   includeDocs: boolean;
   /** 是否启用图像/图表 Vision 提取 */
   includeImages: boolean;
+}
+
+/**
+ * Feature 140 FR-010 — 提取管道输出。
+ *
+ * - `results`: 既有 ExtractionResult[]（每个文件一个 ExtractionResult，含 nodes/edges）
+ * - `readmeContent`: 仅 includeDocs=true 时，projectRoot 下的 README 全量内容（不截断）；
+ *   未启用或不存在时为 undefined。下游 narrative / hyperedge 用作 shared header 注入。
+ */
+export interface ExtractionPipelineOutput {
+  results: ExtractionResult[];
+  readmeContent?: string;
 }
 
 // ============================================================
@@ -212,19 +234,48 @@ async function extractWithCache(
 // ============================================================
 
 /**
+ * 在 projectRoot 下定位 README 文件（不区分大小写）。
+ * 优先级：README.md > readme.md > Readme.md > 其他大小写组合（按目录条目自然顺序）。
+ * 找不到时返回 undefined。
+ *
+ * **导出原因**：batch-orchestrator 在 generateBatchProjectDocs 之前需要早期 README 读取
+ * （narrative 在 docs 阶段生成，早于 extraction-pipeline）；共享同一个 findReadmePath
+ * 助手避免两处大小写匹配候选列表漂移（修复 Codex review CRITICAL 2）。
+ *
+ * @param projectRoot - 项目根目录绝对路径
+ * @returns README 文件绝对路径；找不到返回 undefined
+ */
+export function findReadmePath(projectRoot: string): string | undefined {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(projectRoot, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  // 优先匹配规范命名 README.md，否则任何大小写
+  const candidates = entries.filter(
+    (e) => e.isFile() && /^readme\.md$/i.test(e.name),
+  );
+  if (candidates.length === 0) return undefined;
+  // 优先返回 'README.md' 本身（spec 锁定首选规范名）
+  const canonical = candidates.find((e) => e.name === 'README.md');
+  return path.join(projectRoot, (canonical ?? candidates[0]!).name);
+}
+
+/**
  * 运行多模态提取管道
  *
  * @param options - 管道选项
- * @returns 所有提取结果数组（每个文件一个 ExtractionResult），不抛出异常
+ * @returns ExtractionPipelineOutput — { results, readmeContent? }；不抛出异常
  */
 export async function runExtractionPipeline(
   options: ExtractionPipelineOptions,
-): Promise<ExtractionResult[]> {
+): Promise<ExtractionPipelineOutput> {
   const { projectRoot, outputDir, includeDocs, includeImages } = options;
 
   // 快速返回：两个标志均未启用
   if (!includeDocs && !includeImages) {
-    return [];
+    return { results: [] };
   }
 
   // 扫描文件
@@ -281,5 +332,21 @@ export async function runExtractionPipeline(
 
   await concurrentPool(imageTasks, 3);
 
-  return allResults;
+  // Feature 140 FR-010：includeDocs=true 时单独读取 README 全量内容（不走 LLM 提取链路）
+  // 不截断（移除 v4.0.x 时代的 5k token 限制）；读取失败 → undefined（下游不阻断）。
+  // 注意：README 仍会被上方 markdown LLM 提取链路处理（产生 nodes/edges 进入 results），
+  // 此处的 readmeContent 是 raw 内容并存，供 narrative / hyperedge 等下游 pipeline 直接消费。
+  let readmeContent: string | undefined;
+  if (includeDocs) {
+    const readmePath = findReadmePath(projectRoot);
+    if (readmePath) {
+      try {
+        readmeContent = fs.readFileSync(readmePath, 'utf-8');
+      } catch (err) {
+        logger.warn(`README 读取失败（不阻断主流程）: ${path.relative(projectRoot, readmePath)} — ${String(err)}`);
+      }
+    }
+  }
+
+  return { results: allResults, readmeContent };
 }

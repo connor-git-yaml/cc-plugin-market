@@ -46,6 +46,21 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 5（Phase 2）：--include-docs 数据流打通
+
+- **`extraction-pipeline` 返回类型变更**（`src/extraction/extraction-pipeline.ts`，T21）— `runExtractionPipeline` 返回 `ExtractionPipelineOutput { results, readmeContent? }` 包装对象（之前为 `ExtractionResult[]`）。`includeDocs=true` 时读取 projectRoot 下的 `README.md`（不区分大小写：README.md / readme.md / Readme.md / README.MD 等）全量内容（移除 v4.0.x 旧 5k token 限制），放入 `readmeContent`，供下游 narrative / hyperedge 等 pipeline 作为 shared header 注入。
+- **`findReadmePath` 共享导出**（`src/extraction/index.ts`）— 公共导出大小写不敏感的 README 路径定位助手，避免 batch-orchestrator 与 extraction-pipeline 维护两份不同的候选列表（修复 Codex CRITICAL 2 — 候选列表前后不一致漏掉 `README.MD`）。
+- **`batch-orchestrator` 早期 README 读取**（`src/batch/batch-orchestrator.ts`，T22）— 在 `generateBatchProjectDocs` 之前共享 `findReadmePath` 做 early read（narrative 在 docs 阶段生成，早于 multimodal extraction-pipeline），透传 `readmeContent` 到 narrative 选项。同时新日志：`include-docs: 已加入 N 份 .md 作为语义上下文（含 README: 是/否）`，替代 v4.0.x 时代误导性的"跳过 .md 文件（不支持）"。
+- **`generateBatchProjectDocs` 透传**（`src/panoramic/batch-project-docs.ts`，T24）— `GenerateBatchProjectDocsOptions` 加 `readmeContent?` 字段，传递给 `buildArchitectureNarrative`。
+- **`architecture-narrative.readmeExcerpt`**（`src/panoramic/pipelines/architecture-narrative.ts`，T24）— `BuildArchitectureNarrativeOptions` 加 `readmeContent?` 参数；`ArchitectureNarrativeOutput` 加 `readmeExcerpt?` 字段（截断到 1000 chars + `…` 省略号；空白字符串视为不存在）。
+- **`templates/architecture-narrative.hbs` 新增 README 摘录段**（修复 Codex CRITICAL 1 — 字段产出但模板从未渲染）— 新增 `## 0. README 摘录` 段，`{{#if readmeExcerpt}}` 守卫，仅在传入 readmeContent 时渲染。
+- **hyperedge 集成注入 README 虚拟 DocChunk**（`src/batch/batch-orchestrator.ts`，T26）— 当 `extractedReadmeContent` 存在时，合成虚拟 `DocChunk { filePath: 'README.md', startLine: 1, endLine: lines, headingPath: 'README', text: readmeText, tokenCount: ceil(length/4) }` 并 `unshift` 到 `docChunks` 头部（最高优先级）。让 hyperedge extractor 在 LLM 调用中始终能看到项目顶层叙述，不依赖 designDocAbsPaths 的扫描覆盖度。
+- **14 个新增测试**：
+  - `tests/extraction/extraction-pipeline.test.ts` 修改 7 处适配新返回类型（`.toEqual([])` → `.results.toEqual([])`，`.length` → `.results.length`）
+  - `tests/unit/include-docs-pipeline.test.ts` 新建 12 用例（runExtractionPipeline readmeContent 7 case + buildArchitectureNarrative readmeExcerpt 4 case + renderArchitectureNarrative markdown 渲染断言 case 12-13 锁定 Codex CRITICAL 1）
+  - `tests/integration/include-docs-integration.test.ts` 新建 4 用例 + 3 fixture-based `it.todo()`（待 Phase 1a fixture 落地）
+- **Codex adversarial review**：1 轮 2 critical + 6 warning，2 critical 全部修复（W1 `readmeExcerpt` silently ignored → 模板加 README 摘录段；W2 候选列表不一致 → 共享 `findReadmePath` 导出）。warning 中的 token 口径漂移、E2E 覆盖盲区、anchor 集成缺失等留 Step 3 / Phase 1a 处理。
+
 ### Added — Feature 140 Step 7（Phase 1b）：Context Observability + costBreakdown frontmatter
 
 - **`estimateTokens(text)` 公共导出**（`src/core/token-counter.ts`）— spec FR-012 锁定的简化估算公式（`Math.ceil(text.length / 3.5)`），供 Feature 140 cluster orchestrator FFD 装箱、context-assembler costBreakdown 等场景统一口径。与既有 `estimateFast`（CJK-aware，2.5/3.8 分母）保留并存：内部裁剪决策走 `estimateFast` 求精准，对外报告走 `estimateTokens` 求一致。

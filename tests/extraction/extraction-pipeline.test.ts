@@ -69,7 +69,7 @@ describe('runExtractionPipeline - 基础开关', () => {
       includeImages: false,
     });
 
-    expect(result).toEqual([]);
+    expect(result.results).toEqual([]);
     expect(mockExtractMarkdown).not.toHaveBeenCalled();
     expect(mockExtractOpenApi).not.toHaveBeenCalled();
     expect(mockExtractImage).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe('runExtractionPipeline - 基础开关', () => {
       includeImages: false,
     });
 
-    expect(result).toEqual([]);
+    expect(result.results).toEqual([]);
   });
 
   it('includeImages=false 时不处理图片文件', async () => {
@@ -98,7 +98,7 @@ describe('runExtractionPipeline - 基础开关', () => {
     });
 
     expect(mockExtractImage).not.toHaveBeenCalled();
-    expect(result).toEqual([]);
+    expect(result.results).toEqual([]);
   });
 });
 
@@ -128,7 +128,7 @@ describe('runExtractionPipeline - 文档扫描', () => {
     });
 
     expect(mockExtractMarkdown).toHaveBeenCalledTimes(1);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.results.length).toBeGreaterThan(0);
   });
 
   it('includeDocs=true 时扫描 OpenAPI 规范文件', async () => {
@@ -156,7 +156,7 @@ describe('runExtractionPipeline - 文档扫描', () => {
     });
 
     expect(mockExtractOpenApi).toHaveBeenCalledTimes(1);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.results.length).toBeGreaterThan(0);
   });
 });
 
@@ -227,7 +227,7 @@ describe('runExtractionPipeline - 缓存集成', () => {
 
     // 缓存命中时不调用提取器
     expect(mockExtractMarkdown).not.toHaveBeenCalled();
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.results.length).toBeGreaterThan(0);
   });
 });
 
@@ -271,6 +271,6 @@ describe('runExtractionPipeline - 异常隔离', () => {
       includeImages: false,
     });
 
-    expect(result).toEqual([]);
+    expect(result.results).toEqual([]);
   });
 });

@@ -148,6 +148,13 @@ export interface GenerateBatchProjectDocsOptions {
    * 需用 CLI `--enable-adr` 显式开启。
    */
   enableAdr?: boolean;
+  /**
+   * Feature 140 FR-010 — README 全量内容（来自 extraction-pipeline，仅 --include-docs=true 时存在）。
+   * 透传给 architecture-narrative pipeline 作为 shared header；
+   * 未来 Step 4 (Phase 3b) MapReduce 重构后，本字段会注入 narrative cluster orchestrator 的
+   * Map prompt sharedHeader 中。
+   */
+  readmeContent?: string;
 }
 
 export async function generateBatchProjectDocs(
@@ -261,6 +268,8 @@ export async function generateBatchProjectDocs(
       projectContext,
       architectureOverview,
       generatedDocs,
+      // Feature 140 T24：透传 readmeContent 给 narrative（仅 --include-docs=true 时存在）
+      ...(options.readmeContent !== undefined ? { readmeContent: options.readmeContent } : {}),
     });
     const narrativeWrittenFiles = writeMultiFormat({
       outputDir: options.outputDir,

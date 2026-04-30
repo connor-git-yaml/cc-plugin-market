@@ -73,7 +73,15 @@ export interface ArchitectureNarrativeOutput {
   keyMethods: NarrativeSymbolInsight[];
   observations: string[];
   supportingDocs: SupportingDocLink[];
+  /**
+   * Feature 140 FR-010 — README 摘录（前 1000 chars）。
+   * 仅 caller 提供 readmeContent 时填充；Step 4 (Phase 3b) MapReduce 重构后本字段语义会被替换。
+   */
+  readmeExcerpt?: string;
 }
+
+/** Feature 140 — README 摘录在 v4.1 template-based narrative 中的字符上限。Step 4 MapReduce 后取消。*/
+const README_EXCERPT_MAX_CHARS = 1000;
 
 type StoredNarrativeModule = StoredModuleSpecRecord;
 
@@ -85,6 +93,19 @@ export interface BuildArchitectureNarrativeOptions {
   projectContext: ProjectContext;
   architectureOverview?: ArchitectureOverviewOutput;
   generatedDocs: BatchGeneratedDocSummary[];
+  /**
+   * Feature 140 FR-010 — README 全量内容（仅 --include-docs=true 时由 extraction-pipeline 提供）。
+   *
+   * **本 Step 5 接通数据流**：参数透传到 ArchitectureNarrativeOutput.readmeExcerpt（截断到
+   * 1000 chars 用于 v4.1 当前 template-based 渲染）。
+   *
+   * **Step 4 (Phase 3b) 完整 MapReduce 重构后**：本字段将作为 cluster orchestrator shared header
+   * 注入 Map prompt（架构文档 §四 Phase B），让 LLM 在生成 narrative 时直接看到原始 README，
+   * 而非依赖二次提炼的 module spec。届时本 readmeExcerpt 字段会被废弃或重新定位。
+   *
+   * 未传时（默认 / --include-docs=false）行为完全不变，向后兼容。
+   */
+  readmeContent?: string;
 }
 
 export function buildArchitectureNarrative(
@@ -119,6 +140,15 @@ export function buildArchitectureNarrative(
     supportingDocs,
   );
 
+  // Feature 140 FR-010 — 截取 README 前 README_EXCERPT_MAX_CHARS 字符；
+  // 不传 readmeContent / 空 readme → 输出不含 readmeExcerpt（向后兼容）
+  const readmeExcerpt =
+    options.readmeContent && options.readmeContent.trim().length > 0
+      ? options.readmeContent.length > README_EXCERPT_MAX_CHARS
+        ? `${options.readmeContent.slice(0, README_EXCERPT_MAX_CHARS).trimEnd()}…`
+        : options.readmeContent
+      : undefined;
+
   return {
     title: `技术架构说明: ${projectName}`,
     generatedAt: new Date().toISOString().split('T')[0]!,
@@ -130,6 +160,7 @@ export function buildArchitectureNarrative(
     keyMethods,
     observations,
     supportingDocs,
+    ...(readmeExcerpt !== undefined ? { readmeExcerpt } : {}),
   };
 }
 

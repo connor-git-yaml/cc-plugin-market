@@ -1080,6 +1080,28 @@ export async function runBatch(
     }
 
     let projectContext = await buildProjectContext(resolvedRoot);
+
+    // Feature 140 T22/T24 — 读取 README 全量内容，供 architecture-narrative 在
+    // generateBatchProjectDocs 阶段使用（早于下方 multimodal extraction-pipeline）。
+    // 仅 --include-docs=true 时读取；下方 extraction-pipeline 仍会返回相同 readmeContent
+    // 供 hyperedge integration 使用，二者读取的是同一文件，无冲突。
+    //
+    // 共享 findReadmePath（来自 extraction-pipeline）确保大小写匹配候选列表口径一致
+    // （修复 Codex review CRITICAL 2 — 之前的硬编码列表 ['README.md', 'readme.md', 'Readme.md']
+    // 漏掉 README.MD / Readme.MD 等其他大小写组合）。
+    let earlyReadmeContent: string | undefined;
+    if (options.includeDocs) {
+      try {
+        const { findReadmePath } = await import('../extraction/index.js');
+        const readmePath = findReadmePath(resolvedRoot);
+        if (readmePath) {
+          earlyReadmeContent = fs.readFileSync(readmePath, 'utf-8');
+        }
+      } catch (readmeErr) {
+        logger.warn(`README 早期读取失败（不阻断 narrative 主流程）: ${String(readmeErr)}`);
+      }
+    }
+
     try {
       projectDocsResult = await generateBatchProjectDocs({
         projectRoot: resolvedRoot,
@@ -1087,6 +1109,8 @@ export async function runBatch(
         specsRootDir: resolvedOutputDir,
         mode: effectiveMode,
         enableAdr: options.enableAdr,
+        // Feature 140 T22/T24：透传 readmeContent 给 architecture-narrative
+        ...(earlyReadmeContent !== undefined ? { readmeContent: earlyReadmeContent } : {}),
       });
       projectContext = projectDocsResult.projectContext;
       projectDocs = projectDocsResult.generatedDocs
@@ -1146,16 +1170,31 @@ export async function runBatch(
       }
 
       // Feature 107: 多模态提取管道（--include-docs / --include-images）
+      // Feature 140 T21/T22：返回类型改为 { results, readmeContent? } 包装对象
       let extractionResults: import('../extraction/index.js').ExtractionResult[] | undefined;
+      let extractedReadmeContent: string | undefined;
       if (options.includeDocs || options.includeImages) {
         try {
           const { runExtractionPipeline } = await import('../extraction/index.js');
-          extractionResults = await runExtractionPipeline({
+          const extractionOutput = await runExtractionPipeline({
             projectRoot: resolvedRoot,
             outputDir: resolvedOutputDir,
             includeDocs: options.includeDocs ?? false,
             includeImages: options.includeImages ?? false,
           });
+          extractionResults = extractionOutput.results;
+          extractedReadmeContent = extractionOutput.readmeContent;
+          // Feature 140 FR-010：用户开启 --include-docs 时，明确告知"已加入 N 份 .md 作为
+          // 语义上下文"（替代 v4.0.x 时代误导性的"跳过 .md 文件（不支持）"）。
+          // N = ExtractionResult 中 kind=document 的节点数 + (有 README 时 +1)。
+          if (options.includeDocs) {
+            const docNodeCount = (extractionResults ?? []).reduce(
+              (sum, r) => sum + r.nodes.filter((n) => n.kind === 'document').length,
+              0,
+            );
+            const totalDocs = docNodeCount + (extractedReadmeContent ? 1 : 0);
+            logger.info(`include-docs: 已加入 ${totalDocs} 份 .md 作为语义上下文（含 README: ${extractedReadmeContent ? '是' : '否'}）`);
+          }
         } catch (extractErr) {
           logger.warn(`多模态提取失败，跳过: ${String(extractErr)}`);
         }
@@ -1269,6 +1308,25 @@ export async function runBatch(
             } else {
               try {
                 const docChunks = chunkMarkdownFiles(designDocAbsPaths, resolvedRoot);
+                // Feature 140 T26 — 注入 README 全量内容作为虚拟 DocChunk（最高优先级，
+                // 放在 docChunks 数组首位）。这让 hyperedge extractor 在 LLM 调用中始终
+                // 能看到项目顶层叙述（README），不依赖 designDocAbsPaths 的扫描覆盖度。
+                // 仅 --include-docs=true 且 README 实际读取成功时注入；未注入时行为完全不变。
+                if (extractedReadmeContent && extractedReadmeContent.trim().length > 0) {
+                  const readmeText = extractedReadmeContent;
+                  const readmeChunk = {
+                    filePath: 'README.md',
+                    startLine: 1,
+                    endLine: readmeText.split('\n').length,
+                    headingPath: 'README',
+                    text: readmeText,
+                    tokenCount: Math.ceil(readmeText.length / 4),
+                  };
+                  docChunks.unshift(readmeChunk);
+                  logger.info(
+                    `hyperedge-integration: 注入 README 作为虚拟 DocChunk（${readmeChunk.tokenCount} tokens 估算）`,
+                  );
+                }
                 const hyperResult = await runHyperedgeIntegration({
                   hyperedgesEnabled: true,
                   graphNodes: codeNodes,
