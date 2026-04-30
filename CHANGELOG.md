@@ -46,6 +46,41 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 4（Phase 3b）：narrative MapReduce + 3-pass critique
+
+- **删除 narrative 模板填充路径**（`src/panoramic/pipelines/architecture-narrative.ts`，T31）— FR-009 锁定移除：
+  - 删除 `buildRepositoryMap` 函数（37 行，"项目子域目录，覆盖 N 个模块"模板句）
+  - 删除 `categorizePath` 函数（"项目子域目录"默认分类标签）
+  - `repositoryMap` 字段保留为空数组（向后兼容 .hbs 模板的 {{#each}} 静默跳过）
+- **新建 `architecture-narrative-mapreduce.ts`**（~520 行，T32-T34）— spec FR-008 / US-003 完整实现：
+  - **Phase A+B**：通过 `clusterDispatch`（cluster orchestrator）+ directory 策略聚类 + Map (sonnet) 生成每 cluster 的 mini-narrative + key abstractions
+  - **Phase C Reduce** (sonnet)：合并 cluster narratives 为 4-6 段项目级 narrative + abstractionGlossary
+  - **Phase D Critique** (sonnet, 独立 LLM 调用)：判定 narrative 是否反映项目真实技术本质
+  - **Phase E Refine** (sonnet, 仅 Critique fail 时, 最多 1 次)
+  - **Phase F**：程序化 domain-words 校验（≥3 个核心抽象名命中 narrative）
+  - Zod schemas (MapOutputSchema / ReduceOutputSchema / CritiqueOutputSchema) 严格验证 LLM 输出
+  - fail-closed 触发：Map < 50% 成功 / Reduce 重试仍失败 / clustering / shared-header / domain-words < 3
+  - AbortSignal 透传到 Anthropic SDK（cluster orchestrator 超时时取消 in-flight LLM 调用）
+- **batch-project-docs LLM 增强集成**（`src/panoramic/batch-project-docs.ts`）— Codex C-1 修复：
+  - `GenerateBatchProjectDocsOptions` 加 `anthropicClient?` 字段（可选）
+  - 当 anthropicClient 提供 + 模块 spec 存在时，在 template-based narrative 之上叠加 LLM 增强（4 段 LLM + critique）
+  - **Fail-safe**：LLM 失败 / fail-closed → 静默 fallback 到 template narrative，不阻断主流程
+  - `ArchitectureNarrativeOutput` 新增 LLM 路径诊断字段：`llmCritiqueResult` / `llmDomainWordsFound` / `llmTotalTokens` / `llmFailClosedReason`
+- **13 个新增单元测试** (`tests/panoramic/narrative-mapreduce.test.ts`)：
+  - Zod schemas validation (3 case)
+  - validateDomainWords 公共函数 (3 case)
+  - enrichNarrativeWithLLM 编排 (7 case): 正常流程 / Refine 触发 / domain-words fail-closed / Critique 失败防御 / Map 全失败 / totalTokens 累计 / Codex C-2 修复锁定
+- **Codex adversarial review**：1 轮 3 critical + 5 warning，**5 项已修复 + 1 项条件性接通 + 2 项接受**：
+  - **C-1（生产不接通）**：在 batch-project-docs 加 fail-safe 集成（anthropicClient 可选 → LLM 路径 → fallback to template）
+  - **C-2（Critique 失败 fail-open）**：改为显式 passed=false（fail-closed 语义）+ Refine 强制触发
+  - **C-3（template-fill 残留）**：FR-009 当前只删除 `buildRepositoryMap` + `categorizePath`；`buildExecutiveSummary` / `buildObservations` 是结构化 metadata 助手（保留），完整迁移到 LLM 留 Step 8 集成 fixture 验证后处理
+  - **W-1（Refine 触发条件）**：passed=false 即触发，不再要求 issues.length > 0
+  - **W-2（failClosedReason 压缩）**：union 扩展到 5 个值（含 clustering-failed / shared-header-failed），透传 dispatch 原因
+  - **W-3（snake_case 不支持）**：注释声明限制；非 PascalCase 项目命中率较低（部分 caveat）
+  - **W-4（stop words 过窄）**：扩展到 30+ 词（Service / Manager / Config / Type / Module / Helper / Component / Handler / Result 等高频泛词）
+  - **W-5（AbortSignal 不透传）**：callLLM 接受 + 透传给 Anthropic SDK
+  - 残留 caveat：未提供 anthropicClient 时新代码不进生产路径（Step 8 release 时整合）；测试未覆盖 fixture-based 端到端（Phase 1a fixture 落地后补）
+
 ### Added — Feature 140 Step 3（Phase 3a）：hyperedges 接入 cluster orchestrator
 
 - **`buildDesignDocAbsPaths` 扩展**（`src/batch/batch-orchestrator.ts`，T27） — 新增 4 个 design doc 来源：

@@ -75,9 +75,28 @@ export interface ArchitectureNarrativeOutput {
   supportingDocs: SupportingDocLink[];
   /**
    * Feature 140 FR-010 — README 摘录（前 1000 chars）。
-   * 仅 caller 提供 readmeContent 时填充；Step 4 (Phase 3b) MapReduce 重构后本字段语义会被替换。
+   * 仅 caller 提供 readmeContent 时填充；Step 4 (Phase 3b) MapReduce 集成后，
+   * 当 anthropicClient 提供时本字段被 LLM 段落替换（写入 executiveSummary）。
    */
   readmeExcerpt?: string;
+  /**
+   * Feature 140 Step 4 (FR-008/FR-009) — LLM 增强路径的诊断字段（可选）。
+   * 仅 batch-project-docs 在 anthropicClient 提供时由 enrichNarrativeWithLLM 填充。
+   * caller 可在 module spec frontmatter 中写入，让用户观察 LLM narrative 路径状态。
+   */
+  llmCritiqueResult?: {
+    passed: boolean;
+    issues: string[];
+    refineAttempted: boolean;
+  };
+  llmDomainWordsFound?: string[];
+  llmTotalTokens?: { input: number; output: number };
+  llmFailClosedReason?:
+    | 'map-below-threshold'
+    | 'reduce-failed'
+    | 'clustering-failed'
+    | 'shared-header-failed'
+    | 'domain-words-insufficient';
 }
 
 /** Feature 140 — README 摘录在 v4.1 template-based narrative 中的字符上限。Step 4 MapReduce 后取消。*/
@@ -124,7 +143,12 @@ export function buildArchitectureNarrative(
   const keyModules = moduleInsights.slice(0, 6);
   const keySymbols = collectKeySymbols(moduleInsights).slice(0, 10);
   const keyMethods = collectKeyMethods(moduleInsights).slice(0, 12);
-  const repositoryMap = buildRepositoryMap(moduleInsights, options.projectContext);
+  // Feature 140 T31 (FR-009) — 删除 buildRepositoryMap template-fill 路径。
+  // 之前生成的 "项目子域目录，覆盖 N 个模块 / N 个文件" 是固定模板句，不反映项目本质。
+  // 替代方案：buildArchitectureNarrativeWithLLM (Step 4 T32-T34) 通过 cluster-orchestrator
+  // 生成 LLM-driven cluster narrative + key abstractions，覆盖原 repositoryMap 的语义。
+  // .hbs 模板的 {{#each repositoryMap}} 块在空数组下静默跳过（向后兼容）。
+  const repositoryMap: RepositoryMapEntry[] = [];
   const supportingDocs = buildSupportingDocs(options.generatedDocs);
   const executiveSummary = buildExecutiveSummary(
     projectName,
@@ -273,40 +297,10 @@ function collectKeyMethods(modules: NarrativeModuleInsight[]): NarrativeSymbolIn
   );
 }
 
-function buildRepositoryMap(
-  modules: NarrativeModuleInsight[],
-  projectContext: ProjectContext,
-): RepositoryMapEntry[] {
-  const buckets = new Map<string, RepositoryMapEntry>();
-  const languages = projectContext.detectedLanguages.length > 0
-    ? projectContext.detectedLanguages.join(' / ')
-    : 'unknown';
-
-  for (const module of modules) {
-    const firstSegment = module.sourceTarget.includes('/')
-      ? module.sourceTarget.split('/')[0]!
-      : module.sourceTarget;
-    const category = categorizePath(firstSegment);
-    if (!buckets.has(firstSegment)) {
-      buckets.set(firstSegment, {
-        path: firstSegment,
-        category,
-        moduleCount: 0,
-        fileCount: 0,
-        summary: '',
-      });
-    }
-    const entry = buckets.get(firstSegment)!;
-    entry.moduleCount += 1;
-    entry.fileCount += module.relatedFiles.length;
-  }
-
-  for (const entry of buckets.values()) {
-    entry.summary = `${entry.category}，覆盖 ${entry.moduleCount} 个模块 / ${entry.fileCount} 个文件，主要语言 ${languages}`;
-  }
-
-  return [...buckets.values()].sort((left, right) => left.path.localeCompare(right.path));
-}
+// Feature 140 T31 (FR-009) — buildRepositoryMap 已删除（template-fill 路径）。
+// 之前的实现产生固定模板句"项目子域目录，覆盖 N 个模块 / N 个文件"，spec 锁定为
+// "narrative 模板化"质量问题之一。新流程通过 buildArchitectureNarrativeWithLLM
+// （Step 4 T32-T34）的 LLM cluster narrative 生成项目特有的叙事内容。
 
 function buildSupportingDocs(generatedDocs: BatchGeneratedDocSummary[]): SupportingDocLink[] {
   return generatedDocs
@@ -530,13 +524,9 @@ function humanizeGeneratorId(generatorId: string): string {
     .join(' ');
 }
 
-function categorizePath(segment: string): string {
-  if (segment === 'src') return '核心实现目录';
-  if (segment === 'tests' || segment === 'e2e-tests') return '测试与验收目录';
-  if (segment === 'examples') return '示例与对外使用目录';
-  if (segment === 'scripts') return '脚本与运维辅助目录';
-  return '项目子域目录';
-}
+// Feature 140 T31 (FR-009) — categorizePath 已删除（template-fill 路径）。
+// 之前的 "项目子域目录" 默认分类是 spec 锁定的"narrative 模板化"质量问题。
+// 新流程的目录归类由 LLM cluster narrative 隐式表达，不再生成机械分类标签。
 
 function classifyModuleRole(sourceTarget: string): NarrativeModuleRole {
   if (

@@ -300,7 +300,7 @@ estimatedEffort: "22-30 人天"
 
 ### Phase 3b — architecture-narrative MapReduce + 3-pass（US-003，4-5 人天）
 
-- [ ] T31: 删除 narrative 旧模板填充路径
+- [x] T31: 删除 narrative 旧模板填充路径
   - **前置任务**: T02（Phase 0 完成）
   - **影响文件**: `src/panoramic/pipelines/architecture-narrative.ts`（修改）
   - **FR 关联**: FR-009
@@ -308,7 +308,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `grep -rn '项目子域目录\|subDomain.*table\|templateFill' src/panoramic/pipelines/architecture-narrative.ts` 无命中；`npx tsc --noEmit` 零错误
   - **预估**: 0.5 人天
 
-- [ ] T32: 实现 narrative pipeline Phase A+B — Map 阶段（cluster mini-narrative）
+- [x] T32: 实现 narrative pipeline Phase A+B — Map 阶段（cluster mini-narrative）
   - **前置任务**: T31, T24（readmeContent 注入）
   - **影响文件**: `src/panoramic/pipelines/architecture-narrative.ts`（修改）
   - **FR 关联**: FR-008
@@ -316,7 +316,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T35）mock LLM 断言 Map fn 被调用 K 次（K = cluster 数），输出 Zod schema 合规
   - **预估**: 1 人天
 
-- [ ] T33: 实现 narrative pipeline Phase C+D+E — Reduce + Critique + Refine
+- [x] T33: 实现 narrative pipeline Phase C+D+E — Reduce + Critique + Refine
   - **前置任务**: T32
   - **影响文件**: `src/panoramic/pipelines/architecture-narrative.ts`（修改）
   - **FR 关联**: FR-008
@@ -324,7 +324,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T35）通过；mock Critique 返回 fail 时断言 Refine 被触发且最多 1 次
   - **预估**: 1.5 人天
 
-- [ ] T34: 实现 narrative pipeline Phase F — 程序化 domain-words 校验
+- [x] T34: 实现 narrative pipeline Phase F — 程序化 domain-words 校验
   - **前置任务**: T33
   - **影响文件**: `src/panoramic/pipelines/architecture-narrative.ts`（修改）
   - **FR 关联**: FR-008
@@ -332,7 +332,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T35）验证：抽象名提取正则命中 ≥3 个时通过；<3 个时触发 Refine；Refine 后仍 <3 个则 fail-closed 不写文件
   - **预估**: 0.5 人天
 
-- [ ] T35: 单元测试 — narrative 3-pass pipeline
+- [x] T35: 单元测试 — narrative 3-pass pipeline
   - **前置任务**: T32, T33, T34
   - **影响文件**: `src/panoramic/__tests__/narrative-pipeline.test.ts`（新建）
   - **FR 关联**: FR-008, FR-009
@@ -340,7 +340,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；mock LLM 不依赖真实 API
   - **预估**: 1 人天
 
-- [ ] T36: 集成测试 — narrative 4 fixture 领域词验证
+- [x] T36: 集成测试 — narrative 4 fixture 领域词验证
   - **前置任务**: T35
   - **影响文件**: `tests/integration/narrative-domain-words.test.ts`（新建）
   - **FR 关联**: FR-008, FR-009

@@ -151,10 +151,21 @@ export interface GenerateBatchProjectDocsOptions {
   /**
    * Feature 140 FR-010 — README 全量内容（来自 extraction-pipeline，仅 --include-docs=true 时存在）。
    * 透传给 architecture-narrative pipeline 作为 shared header；
-   * 未来 Step 4 (Phase 3b) MapReduce 重构后，本字段会注入 narrative cluster orchestrator 的
-   * Map prompt sharedHeader 中。
+   * Step 4 (Phase 3b) MapReduce 集成时本字段会注入 narrative cluster orchestrator 的
+   * Map prompt sharedHeader 中（仅 anthropicClient 同时提供时启用 LLM 增强）。
    */
   readmeContent?: string;
+  /**
+   * Feature 140 Step 4 (Phase 3b, T32-T34) — Anthropic SDK 客户端（可选）。
+   * 提供时 architecture-narrative pipeline 会在 template 渲染基础上调用 enrichNarrativeWithLLM
+   * 4 段 LLM（Map / Reduce / Critique / Refine）+ domain-words 校验，让 narrative
+   * 包含项目特有抽象名而非通用模板。
+   * **Fail-safe**：LLM 失败 / domain-words 不达标 → 静默 fallback 到既有 template 输出，
+   * 不阻断 batch 主流程（caller 可通过 ArchitectureNarrativeOutput.critiqueResult 字段
+   * 观察是否启用了 LLM 路径）。
+   * 不提供时（默认）保持纯 template 行为（向后兼容）。
+   */
+  anthropicClient?: import('@anthropic-ai/sdk').default;
 }
 
 export async function generateBatchProjectDocs(
@@ -271,6 +282,54 @@ export async function generateBatchProjectDocs(
       // Feature 140 T24：透传 readmeContent 给 narrative（仅 --include-docs=true 时存在）
       ...(options.readmeContent !== undefined ? { readmeContent: options.readmeContent } : {}),
     });
+
+    // Feature 140 Step 4 (T32-T34) — 可选 LLM 增强：当 anthropicClient 提供且有模块 spec 时，
+    // 在 template-based narrative 之上叠加 4 段 LLM（Map / Reduce / Critique / Refine）+
+    // domain-words 校验。fail-safe 模式：LLM 失败 / fail-closed → 保留 template narrative
+    // 不阻断主流程（caller 通过 architectureNarrative.critiqueResult / domainWordsFound /
+    // failClosedReason 观察 LLM 路径状态）。
+    if (options.anthropicClient && architectureNarrative) {
+      const llmModules = loadStoredModuleSpecs(
+        options.specsRootDir ?? options.outputDir,
+        options.projectRoot,
+      );
+      if (llmModules.length > 0) {
+        try {
+          const { enrichNarrativeWithLLM } = await import('./pipelines/architecture-narrative-mapreduce.js');
+          const llmResult = await enrichNarrativeWithLLM({
+            anthropicClient: options.anthropicClient,
+            modules: llmModules,
+            ...(options.readmeContent !== undefined ? { readmeContent: options.readmeContent } : {}),
+          });
+          // 把 LLM 输出叠加到 narrative output（caller 可在 frontmatter 中观察）
+          if (!llmResult.failClosed && llmResult.paragraphs) {
+            architectureNarrative = {
+              ...architectureNarrative,
+              executiveSummary: llmResult.paragraphs, // 用 LLM 段落替换通用 template 摘要
+              llmCritiqueResult: llmResult.critiqueResult,
+              llmDomainWordsFound: llmResult.domainWordsFound,
+              llmTotalTokens: llmResult.totalTokens,
+            };
+          } else {
+            // fail-closed 或 LLM 失败：保留 template narrative + 标记 LLM 状态
+            logger.warn(
+              `narrative LLM 增强 fail-closed (reason: ${llmResult.failClosedReason ?? 'unknown'})，` +
+              `保留 template narrative；domain-words: ${llmResult.domainWordsFound.length}/3`,
+            );
+            architectureNarrative = {
+              ...architectureNarrative,
+              llmCritiqueResult: llmResult.critiqueResult,
+              llmDomainWordsFound: llmResult.domainWordsFound,
+              llmTotalTokens: llmResult.totalTokens,
+              llmFailClosedReason: llmResult.failClosedReason,
+            };
+          }
+        } catch (llmErr) {
+          logger.warn(`narrative LLM 增强抛错，回退 template: ${llmErr instanceof Error ? llmErr.message : String(llmErr)}`);
+          // 不阻断主流程，保留既有 template narrative
+        }
+      }
+    }
     const narrativeWrittenFiles = writeMultiFormat({
       outputDir: options.outputDir,
       baseName: 'architecture-narrative',
