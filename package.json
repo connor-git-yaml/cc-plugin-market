@@ -31,6 +31,8 @@
     "repo:check": "node scripts/repo-check.mjs",
     "release:sync": "node scripts/sync-release-contracts.mjs",
     "release:check": "node scripts/validate-release-contracts.mjs",
+    "baseline:collect": "node scripts/baseline-collect.mjs",
+    "baseline:diff": "node scripts/baseline-diff.mjs",
     "hooks:install": "bash scripts/install-hooks.sh",
     "hooks:check": "bash scripts/check-plugin-sync.sh",
     "worktree:sync-local-state": "bash scripts/sync-worktree-local-state.sh",

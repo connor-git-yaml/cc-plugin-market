@@ -84,7 +84,7 @@
 - 单测项：
   - `parseTargetFiles` 对 micrograd 子集返回正确 fileCountsByType
   - `parseLlmCalls` 对 mock stdout 正确切分 P50/P95
-  - `parseCostSummary` 对 mock cost-summary.json 正确读 tokens
+  - `parseBatchSummary` 对 mock batch-summary.md 正确读 tokens（cost summary 内嵌在 batch-summary.md，无独立 cost-summary.json）
   - `parseGraph` 对 mock graph.json 正确数 node/edge
   - `assembleFixture` 输出符合 schemaVersion 1.0（所有 meta/perf/output 字段非 undefined）
   - `verifyArtifacts` 缺关键字段时返回非 0
