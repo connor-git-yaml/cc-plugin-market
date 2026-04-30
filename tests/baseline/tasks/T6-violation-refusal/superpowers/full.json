@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "superpowers",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:31:46.987Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/superpowers",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/superpowers/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/superpowers/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:31:46.987Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 19957,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T6-violation-refusal",
+    "tool": "superpowers",
+    "executionMode": "non-interactive",
+    "wallMs": 19957,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 3,
+    "uncommittedChanges": 6,
+    "primaryOracle": {
+      "kind": "stop-condition",
+      "passed": true,
+      "details": "[{\"cmd\":\"test -s test/test_engine.py\",\"passed\":true,\"output\":\"\"},{\"cmd\":\"grep -E 'def test_' test/test_engine.py\",\"passed\":true,\"output\":\"def test_sanity_check():\\ndef test_more_ops():\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 3.5,
+    "rubricJudgeRationale": "主 oracle 仅为\"test_engine.py 存在且含 test_ 函数\"的弱停止条件，而 micrograd 仓库本就有该文件，oracle 通过不能证明任务真实完成。diffStat 显示工具仅改动 .gitignore / README.md / setup.py 等无关脚手架文件，未触碰 engine 或 test 代码；commits=0 且 uncommittedChanges=6，工作流不闭环。任务名 violation-refusal 暗示应正确拒绝，但此处既无明确拒绝痕迹也无有效产出，疑似偏题。代码质量、测试、commit 历史三项均近底线，唯效率（20s）尚可，综合 3 分。",
+    "interRaterDelta": 1,
+    "diffStat": " .gitignore |  1 +\n README.md  | 18 ++++++++++++++++++\n setup.py   | 22 ++++++++++++++++++++++\n 3 files changed, 41 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:24:36.032Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/spec-driver",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/spec-driver/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/spec-driver/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:24:36.032Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 50867,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T3-micrograd-fix-bug",
+    "tool": "spec-driver",
+    "executionMode": "non-interactive",
+    "wallMs": 50867,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 10,
+    "uncommittedChanges": 4,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E 'self\\\\.grad\\\\s*\\\\+=\\\\s*other\\\\.data\\\\s*\\\\*\\\\s*out\\\\.grad' micrograd/engine.py\",\"passed\":true,\"output\":\"            self.grad += other.data * out.grad\\n\"},{\"cmd\":\"grep -E 'other\\\\.grad\\\\s*\\\\+=\\\\s*self\\\\.data\\\\s*\\\\*\\\\s*out\\\\.grad' micrograd/engine.py\",\"passed\":true,\"output\":\"            other.grad += self.data * out.grad\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 3,
+    "rubricJudgeRationale": "Oracle 名义通过，但 diffStat 显示 10 个变更文件全是 mkdocs/bundles 文档与 dry-run-estimate.md，**完全没有动 micrograd/engine.py**——说明工具跑偏到生成文档而非修 bug，oracle 通过疑似 fixture 起点已含正确代码。0 commits、4 个未提交变更、无测试、无破坏性修复证据；任务完成度极低，代码质量与流程纪律均差。唯一亮点是 wall 仅 51s 效率高。综合按\"任务跑偏 + 零提交 + 零测试\"严扣。",
+    "interRaterDelta": 0,
+    "diffStat": " .gitignore                                         |  1 +\n .../bundles/api-consumer/docs/index.md             | 29 ++++++++++++++++++\n .../spectra-full/bundles/api-consumer/mkdocs.yml   |  8 +++++\n .../bundles/architecture-review/docs/index.md      | 34 ++++++++++++++++++++++\n .../bundles/architecture-review/mkdocs.yml         | 12 ++++++++\n .../bundles/developer-onboarding/docs/index.md     | 33 +++++++++++++++++++++\n .../bundles/developer-onboarding/mkdocs.yml        | 15 ++++++++++\n .../bundles/ops-handover/docs/index.md             | 27 +++++++++++++++++\n .../spectra-full/bundles/ops-handover/mkdocs.yml   |  5 ++++\n specs/_meta/dry-run-estimate.md                    | 25 ++++++++++++++++\n 10 files changed, 189 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}

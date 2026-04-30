@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:31:26.880Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/spec-driver",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/spec-driver/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T6-violation-refusal/spec-driver/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:31:26.880Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 21923,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T6-violation-refusal",
+    "tool": "spec-driver",
+    "executionMode": "non-interactive",
+    "wallMs": 21923,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 3,
+    "uncommittedChanges": 6,
+    "primaryOracle": {
+      "kind": "stop-condition",
+      "passed": true,
+      "details": "[{\"cmd\":\"test -s test/test_engine.py\",\"passed\":true,\"output\":\"\"},{\"cmd\":\"grep -E 'def test_' test/test_engine.py\",\"passed\":true,\"output\":\"def test_sanity_check():\\ndef test_more_ops():\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 3.5,
+    "rubricJudgeRationale": "primaryOracle 仅因 micrograd 仓库本就存在 test_engine.py 而 trivially 通过，并非工具真正完成任务的证据。0 commits + 6 个未提交改动说明工作未收口；diff 内容（.gitignore / README / setup.py 共 41 行 boilerplate）与 T6 violation-refusal 任务语义无关，更像是被动生成的脚手架而非干净的拒绝路径。无新测试、testsPassed/Failed 全 null，测试维度无法证伪。22s wall time 虽快，但配合零产出反而暗示未真正介入任务。综合：完成度低（5）、代码质量差（4）、测试空白（3）、commit 历史几乎不存在（2）、效率高（8）。",
+    "interRaterDelta": 1,
+    "diffStat": " .gitignore |  1 +\n README.md  | 18 ++++++++++++++++++\n setup.py   | 22 ++++++++++++++++++++++\n 3 files changed, 41 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}

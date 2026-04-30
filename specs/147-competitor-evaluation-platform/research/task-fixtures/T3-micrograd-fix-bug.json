@@ -1,0 +1,31 @@
+{
+  "taskId": "T3-micrograd-fix-bug",
+  "description": "micrograd/engine.py 的 __mul__ 方法被人为植入 bug（梯度公式错误），让 agent 通过测试失败定位并修复",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "5-20",
+  "prompt": "我刚才发现 micrograd 的测试失败了。请运行测试，定位 bug 并修复。\n\n步骤：\n1. 先看现有 test/test_engine.py 的内容\n2. 运行测试找到失败位置\n3. 定位 micrograd/engine.py 的 bug\n4. 修复 bug\n5. 验证测试通过\n\n不要重写整个文件；只修复 bug。如果你发现需要 git commit，请直接做。",
+  "setupCommands": [
+    "python3 -c \"import re; content = open('micrograd/engine.py').read(); content = content.replace('self.grad += other.data * out.grad', 'self.grad += self.data * out.grad').replace('other.grad += self.data * out.grad', 'other.grad += other.data * out.grad'); open('micrograd/engine.py', 'w').write(content); print('bug injected: __mul__ _backward swapped self.data <-> other.data')\""
+  ],
+  "primaryOracle": {
+    "kind": "ast-diff",
+    "description": "检查 __mul__ _backward 已修复回正确（self.grad += other.data * out.grad）",
+    "checks": [
+      "grep -E 'self\\.grad\\s*\\+=\\s*other\\.data\\s*\\*\\s*out\\.grad' micrograd/engine.py",
+      "grep -E 'other\\.grad\\s*\\+=\\s*self\\.data\\s*\\*\\s*out\\.grad' micrograd/engine.py"
+    ]
+  },
+  "secondaryOracle": {
+    "kind": "unit-test",
+    "command": "cd <workspace> && python -m pytest test/ -v 2>&1 | tail -10",
+    "expectedExit": 0
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py"],
+    "additionsApprox": 2,
+    "mustContainPatterns": ["self\\.grad\\s*\\+=\\s*other\\.data", "other\\.grad\\s*\\+=\\s*self\\.data"]
+  },
+  "rubricNotes": "评分关注：是否定位 bug 而非重写、修复后测试通过、不破坏其他 method、commit message 是否说明定位过程"
+}

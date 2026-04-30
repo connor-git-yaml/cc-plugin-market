@@ -29,7 +29,7 @@ Feature 147 完成。Phase 0-5 全部交付，13 fixture（schema 1.1）+ 27 LLM
 | SC-001 | 调研报告 ≥ 5+5 竞品 | ✅ PASS | [research/competitive-landscape.md](../research/competitive-landscape.md) — 11 竞品全盘点（5 spectra 类 + 6 spec-driver 类）|
 | SC-002 | schema 1.1 fixture × 3 项目 + quality 段 | ✅ PASS | tests/baseline/{micrograd,nanoGPT,self-dogfood}/spectra/full.json 全 schema 1.1 |
 | SC-003 | ≥ 2 Spectra 类竞品冷冻 fixture | ✅ PASS | Graphify + Aider × 3 项目 = 6 fixture，frozenFixture: true |
-| SC-004 | ≥ 3 工具 × ≥ 3 任务 task-execution fixture | ⚠️ **PARTIAL** | 4 工具 × **1** 任务（T1 tanh）= 4 fixture；T2-T6 留 follow-up（Phase 3+4 节流 99% cost）|
+| SC-004 | ≥ 3 工具 × ≥ 3 任务 task-execution fixture | ✅ **PASS** | 4 工具 × **5** 任务（T1 tanh + T2 lr scheduler + T3 bug fix + T4 extract const + T6 violation refusal）= **20 fixture**（超过 spec 要求 ≥ 9）|
 | SC-005 | LLM-as-judge 流程跑通，quality 段填实 | ✅ PASS | 9 spec-quality + 4 task-execution + 2 grounding judge runs，全部 inter-rater Δ ≤ 1 |
 | SC-006 | 总报告含 quantitative comparison | ✅ PASS | [../competitive-evaluation-report.md](../competitive-evaluation-report.md) §1-§4 完整对比 |
 | SC-007 | npm run eval:refresh-self 命令可用 | ✅ PASS | scripts/eval-refresh-self.mjs + package.json scripts 注册 |
@@ -37,7 +37,18 @@ Feature 147 完成。Phase 0-5 全部交付，13 fixture（schema 1.1）+ 27 LLM
 | SC-009 | Release gate（文档软约束）| ✅ PASS | docs/release-gate.md（PR 描述 checkbox + diff report 流程）|
 | SC-010 | Phase 0 feasibility spike PASS | ✅ PASS | research/feasibility-spike-log.md（4 工具非交互式调用确认）|
 
-**SC-004 PARTIAL 说明**：原计划 4 工具 × 6 任务 = 24 worktree runs（cost ~$50-70）。基于 T1 实测发现"简单任务工具差异化 ≈ 0"后，决定 cost-aware 节流：仅跑 T1 验证端到端 pipeline，复杂任务（T2-T6）的差异化验证留 follow-up Feature。本决定符合 plan §10.3 累计成本守卫精神。
+**SC-004 PASS 说明**：原 plan 估算 4 工具 × 6 任务 = 24 worktree runs（cost $50-70）。实际跑 4 工具 × 5 任务 = **20 fixture**（去掉 T5 wandb 集成因 setup 复杂；其他 5 个全跑），cost $10。所有 20 fixture × 2 inter-rater task-execution judge 全部完成。
+
+**5 任务平均评分**（task-execution rubric，1-10）：
+
+| 工具 | 平均分 | 高分项 | 低分项 |
+|------|--------|--------|--------|
+| **gstack** | **4.8** | T2 lr scheduler 5.5 ⭐ | T6 violation 3.5 |
+| **control** | 4.6 | T1 tanh 6.5 / T6 violation 4.5 | T3 bug fix 3.5 |
+| spec-driver | 4.2 | T4 refactor 5 | T2 lr 3.5 |
+| superpowers | 4.1 | T1 tanh 6 | T2 lr 3 |
+
+inter-rater Δ 大多 ≤ 1，少数 = 2（T3 gstack）。
 
 ---
 
@@ -138,7 +149,7 @@ Phase 1 schema 1.1 静态分析揭示：
 | 项 | 说明 | follow-up |
 |----|------|----------|
 | Permission 阻塞 git commit / pytest | 4 工具 task fixture commits=0，commit history 维度全工具一致扣分 | task-runner 用 `--allowed-tools "Bash(git:*) Bash(python:*) ..."` 显式 allow |
-| SC-004 仅 T1 实跑 | T2-T6 复杂任务差异化未覆盖（cost 节流） | 新 Feature 加 T2-T6 跑（cost ~$5-15 多 task runs） |
+| T5 wandb 集成未跑 | 5/6 任务覆盖；T5 setup 复杂（需 wandb account stub）| 留 follow-up |
 | Cody / RepoMapper / Plandex / Devin 未对比 | 商业账号 / cloud-only 自动化困难 | 标 optional/manual，后续 Feature 按需加 |
 | GStack 实际是"browser QA skills" | rubric 评分以 prompt-based 为准；GStack 真正的 23 skills 需要 ./setup 安装 | follow-up 跑 GStack 完整 setup |
 | eval:refresh-self 不能完整自动化竞品重跑 | cost 大 + plugin 安装路径不同 | 改动对 4 工具对比的逻辑时手动 trigger |

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "control",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/nanoGPT",
+    "targetCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:17:08.547Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/control",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/control/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/control/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:17:08.547Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 84399,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T2-nanogpt-cosine-lr",
+    "tool": "control",
+    "executionMode": "non-interactive",
+    "wallMs": 84399,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 7,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E 'def get_lr|get_lr\\\\s*=' train.py\",\"passed\":true,\"output\":\"def get_lr(it):\\n\"},{\"cmd\":\"grep -E '(cosine|math\\\\.cos|np\\\\.cos)' train.py\",\"passed\":true,\"output\":\"# learning rate decay scheduler (cosine with warmup)\\n    # 3) in between, use cosine decay down to min learning rate\\n    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1\\n\"},{\"cmd\":\"grep -E 'param_group\\\\[.lr.\\\\]|param_group..lr..\\\\s*=' train.py\",\"passed\":true,\"output\":\"        param_group['lr'] = lr\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 4,
+    "rubricJudgeRationale": "主 oracle grep 通过仅因 nanoGPT 原 train.py 已有 cosine lr 实现，并非工具新增；diffStat 显示仅改动 README.md +7 行，filesChanged=1 但 uncommittedChanges=7 且 commits=0，说明工具未真正完成任务也未提交，留下脏工作区。无测试、无 commit history、无 token 计量，任务完成度严重不足，代码质量与测试质量均无从体现。wall 84s 效率尚可，但产出与任务目标严重脱节，扣分至 4。",
+    "interRaterDelta": 0,
+    "diffStat": " README.md | 7 +++++++\n 1 file changed, 7 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:28:04.487Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:28:04.487Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 92873,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T4-micrograd-extract-const",
+    "tool": "spec-driver",
+    "executionMode": "non-interactive",
+    "wallMs": 92873,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 4,
+    "uncommittedChanges": 7,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E '^[A-Z_]+\\\\s*=' micrograd/nn.py\",\"passed\":true,\"output\":\"WEIGHT_INIT_RANGE = 1.0\\n\"},{\"cmd\":\"test $(grep -c 'random.uniform(-1, 1)' micrograd/nn.py) -eq 0\",\"passed\":true,\"output\":\"\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 5,
+    "rubricJudgeRationale": "主 oracle 通过（提取 WEIGHT_INIT_RANGE 常量、消除 random.uniform(-1,1)），但执行质量存在显著缺陷：commits=0 且 uncommittedChanges=7，所有改动未提交，违背渐进式交付；filesChanged=4 远超任务范围（修改 .gitignore、README、setup.py 与任务无关，疑似越权改动）；testsPassed/testsFailed 为 null，无测试验证保障；wallMs ~93s 效率尚可但 token 数据缺失。完成度勉强达标但代码质量、测试、commit 历史维度均拉低评分。",
+    "interRaterDelta": 0,
+    "diffStat": " .gitignore      |  1 +\n README.md       | 18 ++++++++++++++++++\n micrograd/nn.py |  4 +++-\n setup.py        | 22 ++++++++++++++++++++++\n 4 files changed, 44 insertions(+), 1 deletion(-)\n",
+    "sonnetExitCode": 0
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "taskId": "T4-micrograd-extract-const",
+  "description": "在 micrograd/nn.py 中把硬编码的 magic number 提取为模块级 const",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "5-15",
+  "prompt": "在 micrograd/nn.py 中找到硬编码的 weight 初始化范围（`random.uniform(-1, 1)`）并把它提取为模块级 const，命名要清晰反映用途（如 `WEIGHT_INIT_RANGE`）。\n\n要求：\n1. 在 nn.py 顶部（import 后）新增一个 const，命名清晰\n2. 把所有 `random.uniform(-1, 1)` 调用替换为引用该 const\n3. 不修改其他逻辑\n4. 不要新增测试（保持 minimal change）\n\n请直接修改并 commit。",
+  "setupCommands": [],
+  "primaryOracle": {
+    "kind": "ast-diff",
+    "description": "检查 nn.py 含模块级 const 定义 + 不再有 hardcoded uniform(-1, 1)",
+    "checks": [
+      "grep -E '^[A-Z_]+\\s*=' micrograd/nn.py",
+      "test $(grep -c 'random.uniform(-1, 1)' micrograd/nn.py) -eq 0"
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/nn.py"],
+    "additionsApprox": 5,
+    "mustContainPatterns": ["[A-Z_]+\\s*=\\s*\\(.*-1.*1.*\\)|[A-Z_]+\\s*=\\s*-1"]
+  },
+  "rubricNotes": "评分关注：const 命名是否清晰反映语义、是否引用全部替换、是否引入新 import、是否破坏 nn.py 其他逻辑"
+}

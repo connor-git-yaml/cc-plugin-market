@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "superpowers",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:25:19.253Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/superpowers",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/superpowers/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T3-micrograd-fix-bug/superpowers/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:25:19.253Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 43025,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T3-micrograd-fix-bug",
+    "tool": "superpowers",
+    "executionMode": "non-interactive",
+    "wallMs": 43025,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 10,
+    "uncommittedChanges": 4,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E 'self\\\\.grad\\\\s*\\\\+=\\\\s*other\\\\.data\\\\s*\\\\*\\\\s*out\\\\.grad' micrograd/engine.py\",\"passed\":true,\"output\":\"            self.grad += other.data * out.grad\\n\"},{\"cmd\":\"grep -E 'other\\\\.grad\\\\s*\\\\+=\\\\s*self\\\\.data\\\\s*\\\\*\\\\s*out\\\\.grad' micrograd/engine.py\",\"passed\":true,\"output\":\"            other.grad += self.data * out.grad\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 3.5,
+    "rubricJudgeRationale": "主 oracle 通过（engine.py 反向梯度修复正确），但执行质量问题严重：(1) commits=0，未做任何提交，4 个未提交改动游离；(2) filesChanged=10 大量无关文件（bundles/docs/mkdocs、specs/_meta、.gitignore）属严重 scope creep，与 micrograd bug 修复目标无关；(3) testsPassed/Broken 全 null，未跑既有测试验证回归；(4) wall 43s 效率尚可、无人工介入是亮点。综合：完成度 6（oracle 过但无测试佐证）、代码质量 3（污染范围）、测试 1（未跑）、commit 1（零提交）、效率 8。加权约 4。",
+    "interRaterDelta": 1,
+    "diffStat": " .gitignore                                         |  1 +\n .../bundles/api-consumer/docs/index.md             | 29 ++++++++++++++++++\n .../spectra-full/bundles/api-consumer/mkdocs.yml   |  8 +++++\n .../bundles/architecture-review/docs/index.md      | 34 ++++++++++++++++++++++\n .../bundles/architecture-review/mkdocs.yml         | 12 ++++++++\n .../bundles/developer-onboarding/docs/index.md     | 33 +++++++++++++++++++++\n .../bundles/developer-onboarding/mkdocs.yml        | 15 ++++++++++\n .../bundles/ops-handover/docs/index.md             | 27 +++++++++++++++++\n .../spectra-full/bundles/ops-handover/mkdocs.yml   |  5 ++++\n specs/_meta/dry-run-estimate.md                    | 25 ++++++++++++++++\n 10 files changed, 189 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}

@@ -181,7 +181,8 @@ export function runTask({ tool, prompt, wtDir, timeoutMs }) {
 // ============================================================
 
 export function runPrimaryOracle({ wtDir, oracle }) {
-  if (oracle.kind === 'ast-diff') {
+  // ast-diff 和 stop-condition 共享 checks 数组语义（每个 check 是 bash 命令，status=0 视为 PASS）
+  if (oracle.kind === 'ast-diff' || oracle.kind === 'stop-condition') {
     let allPassed = true;
     const results = [];
     for (const cmd of oracle.checks) {
@@ -190,7 +191,7 @@ export function runPrimaryOracle({ wtDir, oracle }) {
       if (!passed) allPassed = false;
       results.push({ cmd, passed, output: (r.stdout ?? '').slice(0, 200) });
     }
-    return { kind: 'ast-diff', passed: allPassed, details: results };
+    return { kind: oracle.kind, passed: allPassed, details: results };
   } else if (oracle.kind === 'unit-test') {
     const r = spawnSync('bash', ['-c', oracle.command.replace('<workspace>', wtDir)], { cwd: wtDir, encoding: 'utf-8', timeout: 60000 });
     return { kind: 'unit-test', passed: r.status === oracle.expectedExit, details: { exitCode: r.status, stdout: (r.stdout ?? '').slice(0, 1000) } };
@@ -341,6 +342,20 @@ async function main() {
     startCommit: taskFixture.startCommit,
   });
   console.log(`[task-runner] worktree prepared: ${wt.wtDir} (branch ${wt.branchName})`);
+
+  // 任务级 setupHook（如 T3 注入 bug，T4 写 magic number，T6 violation 设置等）
+  if (Array.isArray(taskFixture.setupCommands) && taskFixture.setupCommands.length > 0) {
+    console.log(`[task-runner] running ${taskFixture.setupCommands.length} setup command(s)...`);
+    for (const cmd of taskFixture.setupCommands) {
+      const r = spawnSync('bash', ['-c', cmd], { cwd: wt.wtDir, encoding: 'utf-8' });
+      if (r.status !== 0) {
+        throw new Error(`setup command failed: ${cmd}\nstderr: ${r.stderr}`);
+      }
+    }
+    // setup commit（让 task 起始 state 含 setup 修改，但仍是 task pre-state）
+    spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
+    spawnSync('git', ['-C', wt.wtDir, 'commit', '-m', 'eval-bench: task setup'], { encoding: 'utf-8' });
+  }
 
   const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt });
   console.log(`[task-runner] running claude (${args.tool})...`);
