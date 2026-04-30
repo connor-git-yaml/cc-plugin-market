@@ -142,13 +142,17 @@ export function aggregateMetrics(scanned) {
 export function detectInsights(scanned) {
   const insights = [];
 
-  // Spec quality 差异：找每个项目里 spectra vs others 的 score 差异
-  const byProj = new Map();
+  // Documentation quality 差异（公平 rubric；优先于 spec-quality 因后者对 graph/repomap mismatch）
+  // Fallback to spec-quality only if doc-quality 缺失
+  const byProjDoc = new Map();
+  const byProjSpec = new Map();
   for (const x of scanned.spectraClass) {
-    if (!byProj.has(x.project)) byProj.set(x.project, {});
-    byProj.get(x.project)[x.tool] = x.fx.quality?.judgeSpecQuality?.score ?? null;
+    if (!byProjDoc.has(x.project)) byProjDoc.set(x.project, {});
+    if (!byProjSpec.has(x.project)) byProjSpec.set(x.project, {});
+    byProjDoc.get(x.project)[x.tool] = x.fx.quality?.judgeDocumentationQuality?.score ?? null;
+    byProjSpec.get(x.project)[x.tool] = x.fx.quality?.judgeSpecQuality?.score ?? null;
   }
-  for (const [proj, scores] of byProj) {
+  for (const [proj, scores] of byProjDoc) {
     const valid = Object.entries(scores).filter(([_, s]) => s != null);
     if (valid.length < 2) continue;
     const sorted = valid.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
@@ -156,7 +160,7 @@ export function detectInsights(scanned) {
     const bot = sorted[sorted.length - 1];
     if ((top[1] ?? 0) - (bot[1] ?? 0) >= 2) {
       insights.push({
-        kind: 'spec-quality-spread',
+        kind: 'doc-quality-spread',
         project: proj,
         leader: top[0],
         leaderScore: top[1],
@@ -164,6 +168,27 @@ export function detectInsights(scanned) {
         laggardScore: bot[1],
         spread: (top[1] ?? 0) - (bot[1] ?? 0),
       });
+    }
+  }
+  // 若没有 doc-quality 数据，fallback 到 spec-quality（避免完全无 insight）
+  if (insights.length === 0) {
+    for (const [proj, scores] of byProjSpec) {
+      const valid = Object.entries(scores).filter(([_, s]) => s != null);
+      if (valid.length < 2) continue;
+      const sorted = valid.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+      const top = sorted[0];
+      const bot = sorted[sorted.length - 1];
+      if ((top[1] ?? 0) - (bot[1] ?? 0) >= 2) {
+        insights.push({
+          kind: 'spec-quality-spread (fallback - rubric mismatch warning)',
+          project: proj,
+          leader: top[0],
+          leaderScore: top[1],
+          laggard: bot[0],
+          laggardScore: bot[1],
+          spread: (top[1] ?? 0) - (bot[1] ?? 0),
+        });
+      }
     }
   }
 
@@ -377,8 +402,10 @@ export function renderMarkdown(scanned, agg, insights) {
     lines.push('（无显著差异化信号）');
   } else {
     for (const ins of insights.slice(0, 10)) {
-      if (ins.kind === 'spec-quality-spread') {
-        lines.push(`- **spec quality on ${ins.project}**: ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
+      if (ins.kind === 'doc-quality-spread') {
+        lines.push(`- **doc quality on ${ins.project}**: ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
+      } else if (ins.kind?.startsWith('spec-quality-spread')) {
+        lines.push(`- ⚠️ **spec quality on ${ins.project}** (rubric mismatch fallback): ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
       } else if (ins.kind === 'task-spread') {
         lines.push(`- **task ${ins.task}**: ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
       }

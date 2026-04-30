@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-04-30T17:46:39.737Z
-> **Git**: feature/147-competitor-evaluation-platform @ 2e5e17a
+> **生成时间**: 2026-04-30T18:04:45.820Z
+> **Git**: feature/147-competitor-evaluation-platform @ 9d3a1d5
 > **Fixture 总数**: 29（Spectra 类 9 + Spec Driver 类 20）
 
 ---
@@ -98,9 +98,9 @@
 
 ## 5. Differentiation Insights（自动检测，spread ≥ 1）
 
-- **spec quality on micrograd**: spectra (7) vs graphify (1), spread=6
-- **spec quality on nanoGPT**: spectra (6.5) vs graphify (1), spread=5.5
-- **spec quality on self-dogfood**: spectra (6) vs graphify (1), spread=5
+- **doc quality on micrograd**: spectra (8) vs graphify (4.5), spread=3.5
+- **doc quality on nanoGPT**: spectra (7) vs graphify (4), spread=3
+- **doc quality on self-dogfood**: spectra (7) vs aider-repomap (4), spread=3
 - **task T2-nanogpt-cosine-lr**: gstack (5.5) vs superpowers (3), spread=2.5
 - **task T3-micrograd-fix-bug**: gstack (4) vs spec-driver (3), spread=1
 - **task T6-violation-refusal**: control (4.5) vs superpowers (3.5), spread=1
