@@ -1,0 +1,33 @@
+{
+  "taskId": "T1-micrograd-add-tanh",
+  "description": "在 micrograd 仓库的 Value 类中新增 tanh() 方法（双曲正切激活函数），含正确的反向传播闭包",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "10-30",
+  "prompt": "在 micrograd/engine.py 的 Value 类中新增一个 `tanh()` 方法。\n\n要求：\n1. tanh(x) 数值正确（双曲正切函数）\n2. 实现反向传播闭包（_backward），导数 = 1 - tanh(x)²\n3. 风格与现有方法（如 relu() / __add__() / __mul__()）保持一致\n4. 在 test/test_engine.py 中新增 1-2 个简单 unit test 验证（forward + backward）\n5. 不破坏现有任何测试\n6. 可使用 import math\n\n请直接修改文件并提交 commit；不要 surface 计划，直接做。",
+  "primaryOracle": {
+    "kind": "ast-diff",
+    "description": "检查 engine.py 含 `def tanh(self):` 方法 + test_engine.py 含 tanh 相关 test",
+    "checks": [
+      "grep -E '^\\s+def tanh\\(self\\)' micrograd/engine.py",
+      "grep -E '(test_tanh|tanh\\()' test/test_engine.py"
+    ]
+  },
+  "secondaryOracle": {
+    "kind": "unit-test",
+    "command": "cd <workspace> && python -m pytest test/ -v",
+    "expectedExit": 0,
+    "_note": "需要 pytest + numpy 已安装；如无则降级为只看 ast-diff oracle"
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py", "test/test_engine.py"],
+    "additionsApprox": 15,
+    "mustContainPatterns": [
+      "def tanh\\(self\\)",
+      "_backward",
+      "math\\.tanh|exp\\("
+    ]
+  },
+  "rubricNotes": "参考 grounding rubric (scripts/lib/rubric-templates/grounding.md)；评分关注：正向数值正确、反向梯度正确、风格一致、测试覆盖、不破坏既有测试"
+}

@@ -1,0 +1,383 @@
+#!/usr/bin/env node
+/**
+ * Feature 147 Phase 3 — Worktree task runner（spec-driver / SuperPowers / GStack / control 派发）
+ *
+ * 流程：
+ *   1. 准备 worktree：clone target → ~/.spec-driver-bench-worktrees/<task>/<tool>/
+ *   2. spawn `claude --print --plugin-dir <path> "<prompt>"` 让对应工具跑任务
+ *   3. 监测产物：git log / files changed / wall / tokens
+ *   4. 跑 primary oracle（ast-diff / unit-test）
+ *   5. 写 fixture 到 tests/baseline/tasks/<task>/<tool>/full.json
+ *
+ * 用法：
+ *   node scripts/eval-task-runner.mjs --task T1-micrograd-add-tanh --tool spec-driver
+ *   node scripts/eval-task-runner.mjs --task T1-micrograd-add-tanh --tool control --cleanup on-success
+ */
+
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const SCHEMA_VERSION = '1.1';
+const COLLECTOR_VERSION = '0.3.0';
+const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control'];
+
+function getBenchHome() {
+  return process.env.SPEC_DRIVER_BENCH_HOME ?? path.join(os.homedir(), '.spec-driver-bench-worktrees');
+}
+
+function getBaselineHome() {
+  return process.env.SPECTRA_BASELINE_HOME ?? path.join(os.homedir(), '.spectra-baselines');
+}
+
+// ============================================================
+// argv
+// ============================================================
+
+export function parseArgs(argv) {
+  const args = {
+    task: null,
+    tool: null,
+    cleanup: 'on-success', // always | on-success | never
+    timeoutMs: 1800000, // 30 min hard limit
+    skipRun: false, // 仅生成 fixture skeleton + 不实际 spawn claude
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    switch (a) {
+      case '--task': args.task = argv[++i]; break;
+      case '--tool': args.tool = argv[++i]; break;
+      case '--cleanup': args.cleanup = argv[++i]; break;
+      case '--timeout-ms': args.timeoutMs = Number(argv[++i]); break;
+      case '--skip-run': args.skipRun = true; break;
+      default:
+        if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
+    }
+  }
+  if (!args.task) throw new Error('--task required');
+  if (!SUPPORTED_TOOLS.includes(args.tool)) {
+    throw new Error(`--tool must be one of ${SUPPORTED_TOOLS.join('|')}`);
+  }
+  return args;
+}
+
+// ============================================================
+// Task fixture 加载
+// ============================================================
+
+export function loadTaskFixture(taskId) {
+  const p = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures', `${taskId}.json`);
+  if (!fs.existsSync(p)) throw new Error(`task fixture not found: ${p}`);
+  return JSON.parse(fs.readFileSync(p, 'utf-8'));
+}
+
+// ============================================================
+// Worktree 准备
+// ============================================================
+
+export function prepareWorktree({ taskId, tool, target, startCommit }) {
+  const wtDir = path.join(getBenchHome(), taskId, tool);
+  if (fs.existsSync(wtDir)) {
+    fs.rmSync(wtDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(path.dirname(wtDir), { recursive: true });
+  // 从 baseline workspace 复制（避免重新 clone）
+  const sourceDir = path.join(getBaselineHome(), getTargetName(target));
+  if (!fs.existsSync(sourceDir)) {
+    throw new Error(`baseline workspace ${sourceDir} not found; run baseline-collect first to clone`);
+  }
+  // rsync source → wtDir（含 .git，让 worktree 是独立 git 仓）
+  const cp = spawnSync('rsync', ['-a', '--exclude=node_modules', `${sourceDir}/`, `${wtDir}/`], { encoding: 'utf-8' });
+  if (cp.status !== 0) throw new Error(`rsync to worktree failed: ${cp.stderr}`);
+  // checkout 起始 commit + 创建 task branch
+  const branchName = `eval-bench/${taskId}/${tool}`;
+  spawnSync('git', ['-C', wtDir, 'checkout', '-B', branchName, startCommit], { encoding: 'utf-8' });
+  return { wtDir, branchName };
+}
+
+function getTargetName(targetSpec) {
+  const map = { 'karpathy/micrograd': 'micrograd', 'karpathy/nanoGPT': 'nanoGPT', 'self-dogfood': 'self-dogfood' };
+  return map[targetSpec] ?? targetSpec.split('/').pop();
+}
+
+// ============================================================
+// Tool driver dispatch
+// ============================================================
+
+const SUPERPOWERS_PLUGIN_DIR = path.join(os.homedir(), '.claude/plugins/installed');
+const GSTACK_SKILLS_DIR = path.join(os.homedir(), '.claude/skills/gstack');
+
+export function buildDriverPrompt({ tool, taskPrompt }) {
+  switch (tool) {
+    case 'control':
+      return taskPrompt;
+    case 'spec-driver':
+      return `请使用 spec-driver-fix workflow（specify → plan → implement → verify）完成以下任务，包括严格的 spec-driven discipline + 测试覆盖：\n\n${taskPrompt}`;
+    case 'superpowers':
+      return `请使用 SuperPowers 框架的 brainstorm → plan → execute（含 RED/GREEN TDD）方法完成以下任务：\n\n${taskPrompt}`;
+    case 'gstack':
+      return `请使用 GStack 风格的 plan → build → review → test → ship 工作流完成以下任务：\n\n${taskPrompt}`;
+    default:
+      return taskPrompt;
+  }
+}
+
+export function findSuperPowersDir() {
+  if (!fs.existsSync(SUPERPOWERS_PLUGIN_DIR)) return null;
+  const entries = fs.readdirSync(SUPERPOWERS_PLUGIN_DIR);
+  const match = entries.find((e) => /^superpowers/i.test(e));
+  return match ? path.join(SUPERPOWERS_PLUGIN_DIR, match) : null;
+}
+
+export function buildClaudeArgs({ tool, prompt }) {
+  // 注意：--add-dir / --allowed-tools 都是 variadic（<...>），把后续 prompt 吞掉。
+  // 改用 cwd: wtDir 已让 claude 访问目标目录；--allowedTools 写在 plugin-dir 之前并明确分隔。
+  const baseArgs = [
+    '--print',
+    '--model', 'claude-sonnet-4-6',
+    '--output-format', 'text',
+    '--permission-mode', 'acceptEdits',
+  ];
+  if (tool === 'superpowers') {
+    const dir = findSuperPowersDir();
+    if (dir) baseArgs.push('--plugin-dir', dir);
+  } else if (tool === 'gstack') {
+    if (fs.existsSync(GSTACK_SKILLS_DIR)) baseArgs.push('--plugin-dir', GSTACK_SKILLS_DIR);
+  }
+  baseArgs.push(prompt);
+  return baseArgs;
+}
+
+// ============================================================
+// 跑 task
+// ============================================================
+
+export function runTask({ tool, prompt, wtDir, timeoutMs }) {
+  const args = buildClaudeArgs({ tool, prompt });
+  const start = process.hrtime.bigint();
+  const r = spawnSync('claude', args, {
+    cwd: wtDir,
+    encoding: 'utf-8',
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: timeoutMs,
+    env: { ...process.env, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '' },
+  });
+  const wallMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
+  return {
+    wallMs,
+    stdout: r.stdout ?? '',
+    stderr: r.stderr ?? '',
+    exitCode: r.status,
+    timedOut: r.signal === 'SIGTERM' || (r.error && r.error.code === 'ETIMEDOUT'),
+  };
+}
+
+// ============================================================
+// Oracle 验证
+// ============================================================
+
+export function runPrimaryOracle({ wtDir, oracle }) {
+  if (oracle.kind === 'ast-diff') {
+    let allPassed = true;
+    const results = [];
+    for (const cmd of oracle.checks) {
+      const r = spawnSync('bash', ['-c', cmd], { cwd: wtDir, encoding: 'utf-8' });
+      const passed = r.status === 0;
+      if (!passed) allPassed = false;
+      results.push({ cmd, passed, output: (r.stdout ?? '').slice(0, 200) });
+    }
+    return { kind: 'ast-diff', passed: allPassed, details: results };
+  } else if (oracle.kind === 'unit-test') {
+    const r = spawnSync('bash', ['-c', oracle.command.replace('<workspace>', wtDir)], { cwd: wtDir, encoding: 'utf-8', timeout: 60000 });
+    return { kind: 'unit-test', passed: r.status === oracle.expectedExit, details: { exitCode: r.status, stdout: (r.stdout ?? '').slice(0, 1000) } };
+  }
+  return { kind: oracle.kind, passed: false, details: 'unknown oracle kind' };
+}
+
+// ============================================================
+// 测产物：commits / files changed
+// ============================================================
+
+export function captureProductMetrics(wtDir) {
+  const commitLogR = spawnSync('git', ['-C', wtDir, 'log', '--oneline', '@{u}..HEAD', '||', 'true'], { encoding: 'utf-8', shell: true });
+  const allCommitsR = spawnSync('git', ['-C', wtDir, 'log', '--oneline'], { encoding: 'utf-8' });
+  const diffR = spawnSync('git', ['-C', wtDir, 'diff', '--stat', 'HEAD~1'], { encoding: 'utf-8' });
+  const statusR = spawnSync('git', ['-C', wtDir, 'status', '--porcelain'], { encoding: 'utf-8' });
+
+  const newCommits = (commitLogR.stdout ?? '').trim().split('\n').filter(Boolean).length;
+  const filesChanged = (diffR.stdout ?? '').match(/(\d+)\s+files?\s+changed/);
+  const uncommittedChanges = (statusR.stdout ?? '').trim().split('\n').filter(Boolean).length;
+
+  return {
+    commits: newCommits,
+    filesChanged: filesChanged ? Number(filesChanged[1]) : 0,
+    uncommittedChanges,
+    diffStat: (diffR.stdout ?? '').slice(0, 2000),
+  };
+}
+
+// ============================================================
+// Fixture 组装
+// ============================================================
+
+function getGitCommit(dir) {
+  const r = spawnSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' });
+  return r.status === 0 ? r.stdout.trim() : 'unknown';
+}
+
+function readSpectraVersion() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf-8'));
+  return pkg.version;
+}
+
+export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResult, oracleResult, productMetrics }) {
+  const nowIso = new Date().toISOString();
+  const staleAfterDate = new Date(Date.now() + 6 * 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    meta: {
+      tool,
+      spectraVersion: readSpectraVersion(),
+      collectorVersion: COLLECTOR_VERSION,
+      targetProject: taskFixture.target,
+      targetCommit: taskFixture.startCommit,
+      targetFileCountsByType: null,
+      targetLocEstimate: null,
+      spectraModuleCount: null,
+      mode: 'task',
+      model: 'claude-sonnet-4-6',
+      runTimestampUtc: nowIso,
+      runHostOs: process.platform,
+      command: 'claude',
+      args: ['--print', '--model', 'claude-sonnet-4-6'],
+      envAllowlist: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '<redacted>' : null },
+      outputDir: wtDir,
+      stdoutLogPath: path.join(wtDir, 'task-runner-stdout.log'),
+      stderrLogPath: path.join(wtDir, 'task-runner-stderr.log'),
+      pinnedAt: nowIso,
+      staleAfterDate,
+      upstreamVersion: 'unknown',
+      frozenFixture: ['superpowers', 'gstack'].includes(tool),
+    },
+    dryRun: { estimatedTokens: null, actualTokens: null, biasRatio: null },
+    perf: {
+      totalWallMs: runResult.wallMs,
+      llmCallCount: null,
+      llmCallDurationsMs: null,
+      tokensInput: null, // claude --print 不返回 token usage 简单方式
+      tokensOutput: null,
+      tokensCacheRead: null,
+      estimatedCostUsd: null,
+      memoryPeakKb: null,
+    },
+    output: {
+      graphNodeCount: null, graphEdgeCount: null, graphHyperedgeCount: 0, graphSizeBytes: null,
+      specModuleCount: null, specSuccessCount: null, specSkippedCount: null, specFailedCount: null,
+    },
+    phases: { specGenerationMs: null, graphBuildMs: null, docsGenerationMs: null, embeddingCacheMs: null, otherMs: null, extractionMethod: 'task-execution' },
+    quality: null,
+    taskExecution: {
+      taskId,
+      tool,
+      executionMode: 'non-interactive',
+      wallMs: runResult.wallMs,
+      tokensTotal: null,
+      costUsd: null,
+      userInterventions: 0,
+      commits: productMetrics.commits,
+      filesChanged: productMetrics.filesChanged,
+      uncommittedChanges: productMetrics.uncommittedChanges,
+      primaryOracle: {
+        kind: oracleResult.kind,
+        passed: oracleResult.passed,
+        details: typeof oracleResult.details === 'string' ? oracleResult.details : JSON.stringify(oracleResult.details).slice(0, 1000),
+      },
+      testsPassed: null, testsFailed: null, testsBroken: null,
+      rubricJudgeScore: null, // Phase 4 由 eval-judge 填
+      rubricJudgeRationale: null,
+      interRaterDelta: null,
+      diffStat: productMetrics.diffStat,
+      sonnetExitCode: runResult.exitCode,
+      sonnetTimedOut: runResult.timedOut,
+    },
+  };
+}
+
+// ============================================================
+// 入口
+// ============================================================
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const taskFixture = loadTaskFixture(args.task);
+
+  const fixtureDir = path.join(PROJECT_ROOT, 'tests/baseline/tasks', args.task, args.tool);
+  fs.mkdirSync(fixtureDir, { recursive: true });
+  const fixturePath = path.join(fixtureDir, 'full.json');
+
+  if (args.skipRun) {
+    console.log(`[task-runner] skip-run mode: writing fixture skeleton at ${path.relative(PROJECT_ROOT, fixturePath)}`);
+    const stub = assembleTaskFixture({
+      taskId: args.task, tool: args.tool, taskFixture,
+      wtDir: '<not-run>',
+      runResult: { wallMs: null, stdout: '', stderr: '', exitCode: null, timedOut: false },
+      oracleResult: { kind: taskFixture.primaryOracle.kind, passed: false, details: 'skip-run mode' },
+      productMetrics: { commits: 0, filesChanged: 0, uncommittedChanges: 0, diffStat: '' },
+    });
+    fs.writeFileSync(fixturePath, JSON.stringify(stub, null, 2) + '\n', 'utf-8');
+    console.log(`[task-runner] stub written`);
+    return;
+  }
+
+  console.log(`[task-runner] task=${args.task} tool=${args.tool} timeout=${args.timeoutMs}ms`);
+  const wt = prepareWorktree({
+    taskId: args.task,
+    tool: args.tool,
+    target: taskFixture.target,
+    startCommit: taskFixture.startCommit,
+  });
+  console.log(`[task-runner] worktree prepared: ${wt.wtDir} (branch ${wt.branchName})`);
+
+  const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt });
+  console.log(`[task-runner] running claude (${args.tool})...`);
+  const runResult = runTask({ tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs });
+  console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);
+
+  // 持久化 stdout/stderr
+  fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stdout.log'), runResult.stdout, 'utf-8');
+  fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stderr.log'), runResult.stderr, 'utf-8');
+
+  // 跑 oracle
+  const oracleResult = runPrimaryOracle({ wtDir: wt.wtDir, oracle: taskFixture.primaryOracle });
+  console.log(`[task-runner] oracle ${oracleResult.kind}: ${oracleResult.passed ? 'PASS' : 'FAIL'}`);
+
+  const productMetrics = captureProductMetrics(wt.wtDir);
+  console.log(`[task-runner] product: commits=${productMetrics.commits}, files=${productMetrics.filesChanged}, uncommitted=${productMetrics.uncommittedChanges}`);
+
+  const fixture = assembleTaskFixture({
+    taskId: args.task, tool: args.tool, taskFixture, wtDir: wt.wtDir,
+    runResult, oracleResult, productMetrics,
+  });
+  fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
+  console.log(`[task-runner] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);
+
+  // Cleanup
+  if (args.cleanup === 'always' || (args.cleanup === 'on-success' && oracleResult.passed)) {
+    fs.rmSync(wt.wtDir, { recursive: true, force: true });
+    console.log(`[task-runner] worktree cleaned up`);
+  } else {
+    console.log(`[task-runner] worktree retained for debug: ${wt.wtDir}`);
+  }
+}
+
+const isCliEntry = process.argv[1]?.endsWith('eval-task-runner.mjs');
+if (isCliEntry) {
+  main().catch((err) => {
+    console.error(`[task-runner] error: ${err.message}`);
+    process.exit(1);
+  });
+}

@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "gstack",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-04-30T13:00:28.961Z",
+    "runHostOs": "darwin",
+    "command": "claude",
+    "args": [
+      "--print",
+      "--model",
+      "claude-sonnet-4-6"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/gstack",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/gstack/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/gstack/task-runner-stderr.log",
+    "pinnedAt": "2026-04-30T13:00:28.961Z",
+    "staleAfterDate": "2026-10-27",
+    "upstreamVersion": "unknown",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 67829,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "gstack",
+    "executionMode": "non-interactive",
+    "wallMs": 67829,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 5,
+    "uncommittedChanges": 8,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E '^\\\\s+def tanh\\\\(self\\\\)' micrograd/engine.py\",\"passed\":true,\"output\":\"    def tanh(self):\\n\"},{\"cmd\":\"grep -E '(test_tanh|tanh\\\\()' test/test_engine.py\",\"passed\":true,\"output\":\"def test_tanh():\\n    # forward: tanh(0.5) 数值正确\\n    out = x.tanh()\\n    assert abs(out.data - math.tanh(0.5)) < tol\\n    # backward: 导数 = 1 - tanh(x)^2\\n    expected_grad = 1 - math.tanh(0.5)**2\\ndef test_\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 6,
+    "rubricJudgeRationale": "主 oracle 通过（tanh 实现 + 测试已加），代码改动规模合理（5 文件 +81 行），效率良好（wall ~68s）。但严重扣分：commits=0 且 uncommittedChanges=8，完全没有提交历史，违反\"渐进式 commits\"要求；额外动了 .gitignore / README / setup.py，疑似 scope creep；testsPassed/Broken 均为 null，无法确认既有测试未被破坏；token 数据缺失。完成度尚可但工程化交付质量不足。",
+    "interRaterDelta": 0,
+    "diffStat": " .gitignore          |  1 +\n README.md           | 18 ++++++++++++++++++\n micrograd/engine.py | 11 +++++++++++\n setup.py            | 22 ++++++++++++++++++++++\n test/test_engine.py | 29 +++++++++++++++++++++++++++++\n 5 files changed, 81 insertions(+)\n",
+    "sonnetExitCode": 0
+  }
+}
