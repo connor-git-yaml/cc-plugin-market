@@ -58,10 +58,14 @@ describe('generateBatchAdrDocs', () => {
       architectureNarrative: narrative,
     });
 
-    expect(result.drafts.length).toBeGreaterThanOrEqual(2);
-    expect(result.drafts.some((draft) => draft.title.includes('Registry'))).toBe(true);
-    expect(result.drafts.some((draft) => draft.title.includes('current-spec') || draft.title.includes('事实源'))).toBe(true);
+    // Feature 140 T37 (FR-003) — 8 个 hardcoded candidate 函数已删除（spec 锁定的"ADR
+    // hallucinate"质量问题根因）。同步 generateBatchAdrDocs 现在产出空 drafts；ADR 实际
+    // 生成由 runAdrMapReduce (adr-mapreduce.ts) 异步路径完成（caller 显式接通时启用）。
+    expect(result.drafts.length).toBe(0);
     expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.md'))).toBe(true);
+    // 旧 hardcoded 标题（"Registry" / "事实源"）不应再出现
+    expect(result.drafts.some((draft) => draft.title.includes('Registry'))).toBe(false);
+    expect(result.drafts.some((draft) => draft.title.includes('事实源'))).toBe(false);
   });
 
   it('基于 CLI transport / JSON protocol 信号生成运行时 ADR 草稿', () => {
@@ -96,8 +100,11 @@ describe('generateBatchAdrDocs', () => {
       patternHints,
     });
 
-    expect(result.drafts.some((draft) => draft.title.includes('CLI'))).toBe(true);
-    expect(result.drafts.some((draft) => draft.title.includes('JSON'))).toBe(true);
+    // Feature 140 T37 — 同步路径产出空 drafts（hardcoded 删除后）
+    expect(result.drafts.length).toBe(0);
+    // 旧 hardcoded 标题（"CLI" / "JSON"）不应再出现 — 这些是被 spec 锁定要删除的 hallucinated ADR
+    expect(result.drafts.some((draft) => draft.title.includes('CLI'))).toBe(false);
+    expect(result.drafts.some((draft) => draft.title.includes('JSON'))).toBe(false);
     expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.md'))).toBe(true);
     // Feature 098: 不再生成 .json
     expect(fs.existsSync(path.join(outputDir, 'docs', 'adr', 'index.json'))).toBe(false);

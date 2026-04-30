@@ -211,9 +211,13 @@ export function onUserCreated(handler: (payload: { id: string; email: string }) 
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', 'architecture-overview.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', 'component-view.mmd'))).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'specs', 'project', 'data-model.mmd'))).toBe(true);
+    // Feature 140 T37 (FR-003) — 8 个 hardcoded candidate 函数已删除（spec 锁定的 ADR
+    // hallucinate 修复）。同步路径 generateBatchAdrDocs 现在产出空 drafts；ADR 生成由
+    // runAdrMapReduce 异步路径完成（caller 显式接通时启用，本测试未传 anthropicClient
+    // 所以期望空）。原断言 ≥ 2 是基于已删除的 hardcoded 行为。
     const adrFiles = fs.readdirSync(path.join(projectRoot, 'specs', 'project', 'docs', 'adr'))
       .filter((fileName) => /^adr-\d{4}-.+\.md$/i.test(fileName));
-    expect(adrFiles.length).toBeGreaterThanOrEqual(2);
+    expect(adrFiles.length).toBe(0); // 同步 path 不再产出 hardcoded ADR
     expect(fs.existsSync(path.join(projectRoot, 'specs', '_meta', 'docs-bundle.yaml'))).toBe(true);
 
     const narrativeMarkdown = fs.readFileSync(

@@ -46,6 +46,57 @@
 
 ## [Unreleased]
 
+### Added — Feature 140 Step 2（Phase 3c）：ADR MapReduce + Evidence Verifier ★ 修复 6 类质量问题中最严重的 ADR hallucinate
+
+**spec FR-003 / FR-004 / FR-005 / FR-006 / US-001 完整交付** — 9 task / ~1500 行新建 + ~330 行删除 + 39 个新测试。
+
+- **T37 — 删除 8 个 hardcoded ADR candidate 函数**（`src/panoramic/pipelines/adr-decision-pipeline.ts`，FR-003）：
+  - 删除 `buildCliHostedRuntimeCandidate` / `buildStreamJsonProtocolCandidate` / `buildRegistryExtensibilityCandidate` / `buildDeterministicFactsCandidate` / `buildCurrentSpecFactSourceCandidate` / `buildAppendOnlySessionCandidate` / `buildContainerizedRuntimeCandidate` / `buildModularSeparationCandidate` / `buildGenericCoreSeparationCandidate` / `matchEvidence` 全部（共 ~330 行）
+  - 这是 spec 锁定的"ADR hallucinate"质量问题根因 — 任何足够大的项目都会偶然命中关键词，产出 Spectra 自身架构的模板套壳 ADR
+  - `buildAdrCandidates` 改为 stub 返回空数组；同步 `generateBatchAdrDocs` 不再产 hardcoded ADR
+- **T38+T39 — 新建 `adr-mapreduce.ts`**（~470 行，FR-003 / FR-004）：
+  - Zod schemas: `ADRCandidateSchema` / `MapOutputSchema` / `ReduceOutputSchema`（严格校验 LLM 输出 + evidenceRefs ≥1）
+  - `runAdrMapReduce(options)` 主入口：
+    - **Phase A+B**: cluster orchestrator + Map (sonnet) — 每 cluster 提取 ADR 候选 + evidenceRefs
+    - **Phase C Reduce** (opus 优先 / sonnet 降级)：跨 cluster 语义去重 + evidenceRefs 合并 + filter <2 evidenceRefs
+    - 降级标志 `reduceFallbackTriggered` + `actualModel` 写入 `generatedByModel.reduce`
+  - AbortSignal 透传到 Anthropic SDK（cluster orchestrator 超时时取消 in-flight LLM 调用）
+- **T40+T41 — 新建 `adr-evidence-verifier.ts`**（~210 行，FR-005）：
+  - 导出 `verifyEvidenceRefs(refs, projectRoot): VerifiedEvidenceRef[]`
+  - 三重校验：
+    1. **file 存在性** + path traversal 防护（修复 Codex W-2 — 拒绝 `..` 逃逸到 projectRoot 外）
+    2. **location 解析**（"L42-58" / "L42" 单行；行号必须 ≥1 且 startLine ≤ endLine）
+    3. **snippet 匹配**：normalize whitespace 后 Levenshtein 距离 / max_len ≤10%（容忍 LLM 输出格式漂移）
+  - 失败原因 enum: `file-not-found / invalid-location-format / line-out-of-range / snippet-mismatch / read-failed`
+  - **零 LLM 依赖** — 纯程序化校验，确定性结果
+- **T43+T44 — 新建 `adr-migration.ts`**（~210 行，FR-006）：
+  - 导出 `migrateOldAdrs(adrDir, currentBatchAdrPaths)` — 旧 v4.0.x ADR 自动追加 `status: superseded` + `supersededAt: "4.1.0"`
+  - **关键 anti-regression**（修复 Codex review finding 1 — 防止复现）：legacy 谓词必须用 **AND** 而非 OR：
+    - 旧 ADR := 缺 generatedByModel **AND** status !== superseded **AND** **NOT IN currentBatchAdrPaths**
+    - 禁止 OR 连接 — 否则新生成的 proposed/accepted 会被误 supersede 自己
+  - **严格 generatedByModel 解析**（修复 Codex W-4）：YAML block scalar 多行 + 单行内联对象，必须含 `map:` 和 `reduce:` 子字段；空字符串/空对象/损坏字段视为缺失
+  - 不删除文件（保留供历史参考）；不修改正文（只动 frontmatter）
+- **T45 — 新建 `tests/integration/adr-cross-fixture.test.ts`**：
+  - 3 个 programmatic test（micrograd / nanoGPT / ky 项目特有 ADR 标题 distinct = 100%）
+  - 4 个 fixture-based `it.todo()` 留 Phase 1a fixture 落地后启用
+- **C-1 修复 — 接通生产路径**（`src/panoramic/batch-project-docs.ts`）：
+  - `GenerateBatchProjectDocsOptions.anthropicClient` 字段已在 Step 4 加（narrative）；本 step 复用
+  - 当 anthropicClient + enableAdr 同时启用时，`generateBatchProjectDocs` 调用 `runAdrMapReduce` → 写入 ADR 文件（含完整 frontmatter `generatedByModel` + 触发 `migrateOldAdrs` 处理旧 ADR）
+  - **fail-safe**：LLM 失败 / fail-closed → 写空 index.md + warn，不阻断 batch 主流程
+- **39 个新增测试**：
+  - `tests/panoramic/adr-evidence-verifier.test.ts`（11 case + W-2 path traversal case）
+  - `tests/integration/adr-supersede.test.ts`（9 case，含 case 2 / case 8 anti-regression 显式锁定 + W-4 generatedByModel 严格校验）
+  - `tests/panoramic/adr-mapreduce.test.ts`（6 case，含模型选择 + 降级 + evidence gate + fail-closed）
+  - `tests/integration/adr-cross-fixture.test.ts`（3 case + 4 fixture-based todo）
+  - `tests/panoramic/adr-decision-pipeline.test.ts` 修改 2 用例匹配 hardcoded 删除后的新行为
+  - `tests/integration/batch-panoramic-doc-suite.test.ts` 修改 1 断言（adrFiles=0 替代旧 ≥2）
+- **Codex adversarial review**：1 轮 1 critical + 4 warning，**全部修复**：
+  - **C-1 (生产不接通)**：在 batch-project-docs 接通 `runAdrMapReduce` + `migrateOldAdrs` 完整流水线；fail-safe LLM 失败回退
+  - **W-1 (Reduce 降级标志污染)**：每次 reduce.fn 进入时重置 `reduceState`，避免 cluster orchestrator 重试时第一次 primary 失败的标记污染第二次 primary 成功路径
+  - **W-2 (path traversal)**：evidence verifier 加 `path.resolve` + `startsWith(projectRoot)` 防护，拒绝 `..` 逃逸
+  - **W-3 (Levenshtein 误判)**：注释声明限制（10% 阈值对 ASCII 代码已足够严格；CJK / 长 snippet 边界 case 留 fixture 端到端验证）
+  - **W-4 (generatedByModel 弱校验)**：解析改为严格检查 `map:` 和 `reduce:` 子字段同时存在 + 9 个测试覆盖空值/空对象/合规结构
+
 ### Added — Feature 140 Step 4（Phase 3b）：narrative MapReduce + 3-pass critique
 
 - **删除 narrative 模板填充路径**（`src/panoramic/pipelines/architecture-narrative.ts`，T31）— FR-009 锁定移除：

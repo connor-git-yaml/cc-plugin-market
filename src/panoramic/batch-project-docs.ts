@@ -414,7 +414,86 @@ export async function generateBatchProjectDocs(
     }
 
     // Feature 135 Bug 1：ADR pipeline 默认禁用，需要显式 --enable-adr 开启
+    // Feature 140 Step 2 (FR-003)：当 anthropicClient 提供时，先跑 LLM MapReduce 路径产
+    // 出新 ADR；同步路径只写空 index.md。LLM fail-safe：失败 → 回到同步空索引 + warn。
     if (options.enableAdr) {
+      // 修复 Codex C-1：接通 runAdrMapReduce 生产路径（v4.0.1 起的"暂时禁用"问题在 v4.1
+      // 通过 LLM MapReduce + evidence 真实性校验解决）。
+      let llmAdrSuccess = false;
+      let llmAdrWarnings: string[] = [];
+      const adrDir = path.join(options.outputDir, 'docs', 'adr');
+      const adrWrittenFiles: string[] = [];
+      if (options.anthropicClient) {
+        try {
+          const llmModules = loadStoredModuleSpecs(
+            options.specsRootDir ?? options.outputDir,
+            options.projectRoot,
+          );
+          if (llmModules.length > 0) {
+            const { runAdrMapReduce } = await import('./pipelines/adr-mapreduce.js');
+            const adrResult = await runAdrMapReduce({
+              anthropicClient: options.anthropicClient,
+              modules: llmModules,
+              projectRoot: options.projectRoot,
+              ...(options.readmeContent !== undefined ? { readmeContent: options.readmeContent } : {}),
+            });
+            if (!adrResult.failClosed && adrResult.finalCandidates.length > 0) {
+              fs.mkdirSync(adrDir, { recursive: true });
+              for (let idx = 0; idx < adrResult.finalCandidates.length; idx++) {
+                const c = adrResult.finalCandidates[idx]!;
+                const decisionId = `ADR-${String(idx + 1).padStart(4, '0')}`;
+                // 简单 markdown 格式（详细模板渲染留给 spec-driver-feature 后续 PR）
+                // 关键：写入 generatedByModel 供 adr-migration.ts 识别为 v4.1+ 新格式
+                const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+                const adrPath = path.join(adrDir, `${decisionId.toLowerCase()}-${slug}.md`);
+                const fmContent =
+                  `---\n` +
+                  `decisionId: ${decisionId}\n` +
+                  `title: ${JSON.stringify(c.title)}\n` +
+                  `status: proposed\n` +
+                  `confidence: ${adrResult.reduceFallbackTriggered ? 'medium' : 'high'}\n` +
+                  `generatedByModel:\n  map: ${adrResult.generatedByModel.map}\n  reduce: ${adrResult.generatedByModel.reduce}\n` +
+                  `---\n\n` +
+                  `# ${c.title}\n\n` +
+                  `## 摘要\n\n${c.summary}\n\n` +
+                  `## 决策\n\n${c.decision}\n\n` +
+                  `## 上下文\n\n${c.context}\n\n` +
+                  `## 影响\n\n${c.consequences}\n\n` +
+                  `## Evidence\n\n` +
+                  c.verifiedEvidenceRefs.map(
+                    (r) => `- \`${r.source}\` ${r.location}${r.verified ? '' : ` (UNVERIFIED: ${r.verificationReason})`}`,
+                  ).join('\n');
+                fs.writeFileSync(adrPath, fmContent, 'utf-8');
+                adrWrittenFiles.push(adrPath);
+              }
+              // 旧 ADR supersede（T43）：批次 ADR 路径集合传入避免误 supersede 新生成的
+              try {
+                const { migrateOldAdrs } = await import('./pipelines/adr-migration.js');
+                const currentBatchSet = new Set(adrWrittenFiles);
+                const migration = migrateOldAdrs(adrDir, currentBatchSet);
+                if (migration.superseded > 0) {
+                  llmAdrWarnings.push(
+                    `${migration.superseded} 个旧 ADR 自动追加 supersede notice（v4.1.0 升级）`,
+                  );
+                }
+              } catch (migErr) {
+                llmAdrWarnings.push(`ADR migration 失败: ${String(migErr)}`);
+              }
+              llmAdrSuccess = true;
+            } else {
+              llmAdrWarnings.push(
+                `ADR LLM 路径 fail-closed (reason: ${adrResult.failClosedReason ?? 'unknown'})；保留空索引`,
+              );
+            }
+          } else {
+            llmAdrWarnings.push('ADR LLM 路径跳过：未发现可用 module spec');
+          }
+        } catch (llmErr) {
+          llmAdrWarnings.push(`ADR LLM 增强抛错回退: ${String(llmErr).slice(0, 200)}`);
+        }
+      }
+
+      // 同步路径：写 index.md（含 LLM 路径产出的 drafts 或空索引）
       try {
         const adrDocs = generateBatchAdrDocs({
           projectRoot: options.projectRoot,
@@ -427,15 +506,18 @@ export async function generateBatchProjectDocs(
         });
         generatedDocs.push({
           generatorId: 'adr-pipeline',
-          writtenFiles: adrDocs.writtenFiles,
-          warnings: adrDocs.warnings,
+          writtenFiles: [...adrWrittenFiles, ...adrDocs.writtenFiles],
+          warnings: [...llmAdrWarnings, ...adrDocs.warnings],
         });
         structuredOutputs.set('adr-index', adrDocs.index);
+        if (llmAdrSuccess) {
+          logger.info(`ADR LLM 路径产出 ${adrWrittenFiles.length} 条 ADR（已通过 evidence 真实性校验）`);
+        }
       } catch (error) {
         generatedDocs.push({
           generatorId: 'adr-pipeline',
-          writtenFiles: [],
-          warnings: [`ADR 草稿生成失败: ${String(error)}`],
+          writtenFiles: adrWrittenFiles,
+          warnings: [...llmAdrWarnings, `ADR 草稿生成失败: ${String(error)}`],
         });
       }
     } else {

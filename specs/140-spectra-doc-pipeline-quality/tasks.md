@@ -352,7 +352,7 @@ estimatedEffort: "22-30 人天"
 
 > 注意：Phase 3a 启动前执行"决策点 3"grep 检查：`grep -rn 'buildStreamJsonProtocol\|hardcoded candidate\|adr.*template' src/` 确认无 downstream 依赖。
 
-- [ ] T37: 删除 ADR hardcoded candidate 函数
+- [x] T37: 删除 ADR hardcoded candidate 函数
   - **前置任务**: T02（Phase 0 完成）
   - **影响文件**: `src/panoramic/pipelines/adr-decision-pipeline.ts`（修改）
   - **FR 关联**: FR-003
@@ -360,7 +360,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `grep -n 'buildStreamJsonProtocol\|hardcoded\|keyword.*match' src/panoramic/pipelines/adr-decision-pipeline.ts` 无命中；`npx tsc --noEmit` 零错误
   - **预估**: 0.5 人天
 
-- [ ] T38: 实现 ADR Map 阶段 prompt + Zod schema
+- [x] T38: 实现 ADR Map 阶段 prompt + Zod schema
   - **前置任务**: T37
   - **影响文件**: `src/panoramic/pipelines/adr-decision-pipeline.ts`（修改）、`src/panoramic/schemas/adr-candidate.schema.ts`（新建）
   - **FR 关联**: FR-003, FR-004
@@ -368,7 +368,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: `adr-candidate.schema.ts` 编译通过；单元测试（T42）验证 Map 调用使用 sonnet
   - **预估**: 1 人天
 
-- [ ] T39: 实现 ADR Reduce 阶段 prompt + mergedByModel 字段
+- [x] T39: 实现 ADR Reduce 阶段 prompt + mergedByModel 字段
   - **前置任务**: T38
   - **影响文件**: `src/panoramic/pipelines/adr-decision-pipeline.ts`（修改）
   - **FR 关联**: FR-004
@@ -376,7 +376,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T42）断言 Map 调用 sonnet、Reduce 调用 opus；frontmatter `generatedByModel` 字段结构正确
   - **预估**: 1 人天
 
-- [ ] T40: 实现 evidenceRef 自动真实性校验
+- [x] T40: 实现 evidenceRef 自动真实性校验
   - **前置任务**: T39
   - **影响文件**: `src/panoramic/pipelines/adr-evidence-verifier.ts`（新建）
   - **FR 关联**: FR-005
@@ -384,7 +384,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 单元测试（T41）通过；纯程序化，无 LLM 依赖
   - **预估**: 1 人天
 
-- [ ] T41: 单元测试 — evidenceRef 真实性校验
+- [x] T41: 单元测试 — evidenceRef 真实性校验
   - **前置任务**: T40
   - **影响文件**: `src/panoramic/__tests__/adr-evidence-verifier.test.ts`（新建）
   - **FR 关联**: FR-005
@@ -392,7 +392,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；无 LLM 依赖
   - **预估**: 0.5 人天
 
-- [ ] T42: 单元测试 — ADR MapReduce dispatch
+- [x] T42: 单元测试 — ADR MapReduce dispatch
   - **前置任务**: T38, T39, T41
   - **影响文件**: `src/panoramic/__tests__/adr-pipeline-mapreduce.test.ts`（新建）
   - **FR 关联**: FR-003, FR-004, FR-005
@@ -400,7 +400,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部测试通过；mock LLM 不依赖真实 API
   - **预估**: 0.5 人天
 
-- [ ] T43: 实现 FR-006 — 旧 ADR supersede notice（修复 Codex review finding 1）
+- [x] T43: 实现 FR-006 — 旧 ADR supersede notice（修复 Codex review finding 1）
   - **前置任务**: T37（删除 hardcoded 函数后才需处理旧 ADR）
   - **影响文件**: `src/panoramic/pipelines/adr-migration.ts`（新建）、`src/batch/batch-orchestrator.ts`（修改）
   - **FR 关联**: FR-006
@@ -408,7 +408,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 集成测试（T44）断言旧 ADR 被 supersede 且新生成 ADR **不被 supersede**
   - **预估**: 1 人天
 
-- [ ] T44: 集成测试 — 旧 ADR supersede + 新 ADR 生成（含 anti-regression assertion）
+- [x] T44: 集成测试 — 旧 ADR supersede + 新 ADR 生成（含 anti-regression assertion）
   - **前置任务**: T43
   - **影响文件**: `tests/integration/adr-supersede.test.ts`（新建）
   - **FR 关联**: FR-006
@@ -416,7 +416,7 @@ estimatedEffort: "22-30 人天"
   - **验收**: 全部断言通过；特别是 anti-regression 断言（新 ADR 不被 supersede）
   - **预估**: 0.5 人天
 
-- [ ] T45: 集成测试 — ADR 4 fixture 跨项目 distinct 率
+- [x] T45: 集成测试 — ADR 4 fixture 跨项目 distinct 率
   - **前置任务**: T42, T41
   - **影响文件**: `tests/integration/adr-cross-fixture.test.ts`（新建）
   - **FR 关联**: FR-003, FR-005, FR-015
