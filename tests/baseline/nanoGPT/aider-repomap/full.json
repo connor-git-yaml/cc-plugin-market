@@ -72,6 +72,29 @@
     "graphSanity": null,
     "crossLinks": null,
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 1,
+      "rationale": "该产物未生成任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，quality.specStructure 也为 null，仅产出 19 节点的 graph。按 rubric 五个维度逐一衡量：结构完整性、内容真实性、抽象层次、跨模块链接、可读性均无可评内容（0 个 spec 模块即 100% 失败/跳过，远低于 80% 阈值）。属于\"完全没有 spec 输出\"的最低锚点，给 1 分。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 1,
+          "rationaleAnonymized": "该产物未生成任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，quality.specStructure 也为 null，仅产出 19 节点的 graph。按 rubric 五个维度逐一衡量：结构完整性、内容真实性、抽象层次、跨模块链接、可读性均无可评内容（0 个 spec 模块即 100% 失败/跳过，远低于 80% 阈值）。属于\"完全没有 spec 输出\"的最低锚点，给 1 分。",
+          "durationMs": 14783,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 1,
+          "rationaleAnonymized": "该 fixture 在 outputDir 中没有任何 spec.md 模块产出（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount/specFailedCount 全部为 null，quality.specStructure 也为 null。结构完整性、内容真实性、抽象层次、跨模块链接、可读性五个维度均无可评估对象，相当于完全未交付 spec 内容。output.graphNodeCount=19、graphSizeBytes=4330 表明该工具仅产出图结构而非 spec 文档，与 spec.md 评分目标不匹配。按 rubric 最低锚点（缺关键章节、模块成功率为 0）给最低分 1。",
+          "durationMs": 11279,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:39:28.363Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

@@ -115,6 +115,29 @@
       "externalLinks": 0
     },
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 6,
+      "rationale": "结构完整性满分（17/17 模块四章节齐全，命名一致），内容覆盖率高（specSuccessCount=17，零失败/跳过）。但平均 spec 长度 1472 行远超合理区间（300-700），4 个模块超 1000 行（panoramic.spec.md 12468 行严重堆砌），抽象层次失衡，可读性差。cross-links broken 2/138（1.4%）可接受。整体\"内容齐但啰嗦\"，扣分主要在简洁性与抽象层次。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 6,
+          "rationaleAnonymized": "结构完整性满分（17/17 模块四章节齐全，命名一致），内容覆盖率高（specSuccessCount=17，零失败/跳过）。但平均 spec 长度 1472 行远超合理区间（300-700），4 个模块超 1000 行（panoramic.spec.md 12468 行严重堆砌），抽象层次失衡，可读性差。cross-links broken 2/138（1.4%）可接受。整体\"内容齐但啰嗦\"，扣分主要在简洁性与抽象层次。",
+          "durationMs": 9727,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 6,
+          "rationaleAnonymized": "4 章节完整率 100%（17/17）+ broken-links 仅 1.4%（2/138），结构与链接维度表现优秀。但 averageSpecLines 高达 1472 远超 300-700 合理区间，4 个文件超 1000 行，panoramic.spec.md 12468 行属严重 AST 堆砌、抽象失败。无 spec 样本可验证内容真实性。综合：结构与链接强，抽象层次和简洁性显著扣分。",
+          "durationMs": 22221,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:40:00.340Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

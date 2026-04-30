@@ -112,6 +112,29 @@
       "externalLinks": 0
     },
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 6.5,
+      "rationale": "4 章节完整率 6/7 ≈ 85.7%（达标但未达 95% 加分线），平均 362 行处于良好区间，0 broken-links 是亮点。但 specModuleCount=4 与 quality.moduleCount=7 存在不一致，且 nanoGPT 共 15 个 .py 文件却只产出 4-7 个 spec 模块，覆盖率明显不足；_index.spec.md 仅 45 行过短；isolatedNodes 12/32 (37.5%) 间接反映模块互联不充分。无法直接核验 spec 正文内容（样本为空），保守给中等偏上分。",
+      "interRaterDelta": 1,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 6,
+          "rationaleAnonymized": "4 章节完整率 6/7 ≈ 85.7%（达标但未达 95% 加分线），平均 362 行处于良好区间，0 broken-links 是亮点。但 specModuleCount=4 与 quality.moduleCount=7 存在不一致，且 nanoGPT 共 15 个 .py 文件却只产出 4-7 个 spec 模块，覆盖率明显不足；_index.spec.md 仅 45 行过短；isolatedNodes 12/32 (37.5%) 间接反映模块互联不充分。无法直接核验 spec 正文内容（样本为空），保守给中等偏上分。",
+          "durationMs": 25803,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 7,
+          "rationaleAnonymized": "4 章节完整率 6/7 ≈ 86%，未达 95% 加分线但高于 80% 扣分线；平均 362 行落在 300-600 理想区间，无 >1000 行堆砌，broken-links 0，跨链接干净。扣分点：output.specModuleCount=4 与 quality.moduleCount=7 不一致暗示口径错位；_index.spec.md 仅 45 行偏薄；无 spec 正文样本可佐证内容真实性，故不上 8。整体结构与简洁性表现稳健，属于\"工程合格但抽象层次未充分验证\"水平。",
+          "durationMs": 22442,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:38:28.902Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

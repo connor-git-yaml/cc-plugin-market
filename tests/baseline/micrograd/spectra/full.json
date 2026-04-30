@@ -111,7 +111,62 @@
       "brokenLinks": 0,
       "externalLinks": 0
     },
-    "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "codingContextGrounding": {
+      "taskId": "micrograd-add-tanh",
+      "taskScore": 10,
+      "controlScore": null,
+      "groundingDelta": null,
+      "judgeRationale": "实现与参考答案完全一致：正向 `math.tanh(self.data)` 数值正确；反向闭包用 `1 - t**2` 准确表达导数并以 `+=` 累加 grad，符合 micrograd 多路径累积约定；`Value(t, (self,), 'tanh')` 的 children/op 元组与 `relu()` 风格完全一致；代码 8 行简洁清晰。测试覆盖了正向数值（与 `math.tanh` 对照 1e-9 容差）和反向梯度（导数公式校验），调用 `y.backward()` 验证完整链路。无可挑剔。",
+      "interRaterDelta": null,
+      "executionMode": "non-interactive",
+      "allGroupScores": [
+        {
+          "label": "control",
+          "score": null,
+          "contextBytes": 80
+        },
+        {
+          "label": "spectra",
+          "score": 10,
+          "contextBytes": 17435
+        },
+        {
+          "label": "graphify",
+          "score": null,
+          "contextBytes": 4062
+        },
+        {
+          "label": "aider-repomap",
+          "score": 9,
+          "contextBytes": 3257
+        }
+      ],
+      "judgedAt": "2026-04-30T12:46:22.038Z",
+      "judgeModel": "claude-opus-4-7"
+    },
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 7,
+      "rationale": "结构完整性满分——4/4 模块 4 章节齐全（intent/behavior/api/data 全覆盖），格式标准；跨模块链接 0 broken；平均 251 行偏精简但合理。扣分项：(1) outlier `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 1 个模块 <100 行，抽象层次可能不足；(4) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义弱；(5) 无 spec 内容样本，真实性维度无法直接核验。综合结构强、链接干净，但模块覆盖与图质量拉低评分。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 7,
+          "rationaleAnonymized": "结构完整性满分——4/4 模块 4 章节齐全（intent/behavior/api/data 全覆盖），格式标准；跨模块链接 0 broken；平均 251 行偏精简但合理。扣分项：(1) outlier `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 1 个模块 <100 行，抽象层次可能不足；(4) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义弱；(5) 无 spec 内容样本，真实性维度无法直接核验。综合结构强、链接干净，但模块覆盖与图质量拉低评分。",
+          "durationMs": 9593,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 7,
+          "rationaleAnonymized": "结构完整性满分（4/4 模块 4 章节齐全，格式标准），跨模块链接 0 broken，平均 251 行偏精简但可读。扣分：(1) `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义偏弱；(4) 无 spec 内容样本，内容真实性维度无法直接核验。结构与链接表现强，模块覆盖率与图质量拉低评分。",
+          "durationMs": 9630,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:36:41.701Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

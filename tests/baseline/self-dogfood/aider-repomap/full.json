@@ -72,6 +72,29 @@
     "graphSanity": null,
     "crossLinks": null,
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 1,
+      "rationale": "该 fixture 未产出任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，graphNodeCount=0，quality 各项均无数据。意味着工具在 self-dogfood 上未生成任何可评审的规范产物，结构完整性、内容真实性、抽象层次、跨模块链接、可读性 5 个维度全部无法满足最低门槛，4 章节完整率为 0%，远低于 80% 阈值。仅 9.4s 墙钟、零 token 成本说明流程几乎未执行。按 rubric 锚点判定为最低分。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 1,
+          "rationaleAnonymized": "该 fixture 未产出任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，graphNodeCount=0，quality 各项均无数据。意味着工具在 self-dogfood 上未生成任何可评审的规范产物，结构完整性、内容真实性、抽象层次、跨模块链接、可读性 5 个维度全部无法满足最低门槛，4 章节完整率为 0%，远低于 80% 阈值。仅 9.4s 墙钟、零 token 成本说明流程几乎未执行。按 rubric 锚点判定为最低分。",
+          "durationMs": 18539,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 1,
+          "rationaleAnonymized": "Fixture 显示该工具未产出任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 等核心字段全为 null，quality.specStructure 也为 null。无法评估结构完整性、内容真实性、抽象层次、跨模块链接和可读性。graphNodeCount=0、tokensInput/Output=0，说明该工具在 self-dogfood 项目上未实际生成 spec 类产物，仅有 5934 字节的 graph 输出。按 rubric\"4 章节完整率 < 80%\"且\"spec 模块数 < 80%\"严重扣分信号判定为最低分。",
+          "durationMs": 10601,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:41:05.013Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

@@ -79,6 +79,29 @@
     },
     "crossLinks": null,
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 1,
+      "rationale": "该 fixture 完全未产出 spec.md（outputDir 无 spec 模块、specModuleCount/specStructure 均为 null、specSuccessCount 缺失），意味着工具仅生成图谱（3097 节点 / 7136 边）而未交付任何 spec 内容。在以\"spec.md 内容质量\"为评分对象的 rubric 下，结构完整性、内容真实性、抽象层次、跨模块链接、可读性五个维度均无可评估材料，全部按最低锚点处理；附带信号也偏负面（边全部无 type、19 个孤立节点）。给最低分 1。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 1,
+          "rationaleAnonymized": "该 fixture 完全未产出 spec.md（outputDir 无 spec 模块、specModuleCount/specStructure 均为 null、specSuccessCount 缺失），意味着工具仅生成图谱（3097 节点 / 7136 边）而未交付任何 spec 内容。在以\"spec.md 内容质量\"为评分对象的 rubric 下，结构完整性、内容真实性、抽象层次、跨模块链接、可读性五个维度均无可评估材料，全部按最低锚点处理；附带信号也偏负面（边全部无 type、19 个孤立节点）。给最低分 1。",
+          "durationMs": 16020,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 1,
+          "rationaleAnonymized": "该产物根本没有 spec.md 输出（specModuleCount/specSuccessCount 全为 null，outputDir 中 \"no spec.md modules\"），仅产出图结构（3097 节点 / 7136 边）。按 spec 质量 rubric 评估：结构完整性 0（无章节）、内容真实性 0（无可校验内容）、抽象层次/跨模块链接/可读性均无从谈起。此外 7136 条边全部 edgesWithoutType、19 个孤立节点，即便作为图也存在类型语义缺失。作为\"spec.md 内容质量\"评分，只能给最低分。",
+          "durationMs": 19432,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:40:35.831Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

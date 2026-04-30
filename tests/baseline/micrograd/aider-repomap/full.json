@@ -72,6 +72,29 @@
     "graphSanity": null,
     "crossLinks": null,
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 1,
+      "rationale": "fixture 显示 outputDir 无任何 spec.md 模块产出，specModuleCount/specSuccessCount/specStructure 全为 null，4 章节完整率无从谈起；llmCallCount=0、tokensOutput=0 表明该工具未生成自然语言 spec，仅产出 33 节点的图结构。按 spec 质量 rubric 五个维度（结构完整性/内容真实性/抽象层次/跨模块链接/可读性）几乎全部为 0 覆盖，无任何可评分的 spec 文本，给最低分 1。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 1,
+          "rationaleAnonymized": "fixture 显示 outputDir 无任何 spec.md 模块产出，specModuleCount/specSuccessCount/specStructure 全为 null，4 章节完整率无从谈起；llmCallCount=0、tokensOutput=0 表明该工具未生成自然语言 spec，仅产出 33 节点的图结构。按 spec 质量 rubric 五个维度（结构完整性/内容真实性/抽象层次/跨模块链接/可读性）几乎全部为 0 覆盖，无任何可评分的 spec 文本，给最低分 1。",
+          "durationMs": 15418,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 1,
+          "rationaleAnonymized": "该 fixture 输出目录无任何 spec.md 模块（\"no spec.md modules in outputDir\"），specModuleCount / specSuccessCount 全为 null，quality.specStructure 也为 null。工具仅产出 graph（33 节点 / 3230 字节），未生成任何 spec 文档。按 rubric 5 个维度均无可评内容：结构完整性 0、内容真实性 0、抽象层次 0、跨模块链接 0、可读性 0。spec.md 任务彻底缺失，给最低分 1。",
+          "durationMs": 13498,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:37:40.622Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }

@@ -79,6 +79,29 @@
     },
     "crossLinks": null,
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null
+    "graphTopologyAccuracy": null,
+    "judgeSpecQuality": {
+      "score": 1,
+      "rationale": "Fixture 无任何 spec.md 产物（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，0 次 LLM 调用、0 token，仅产出 graph（41 节点 / 56 边）。按 spec quality rubric 五个维度均无可评内容：结构完整性、内容真实性、抽象层次、跨模块链接、可读性全部触底。该工具未产出 spec 文档，spec quality 维度得最低分 1。",
+      "interRaterDelta": 0,
+      "runs": [
+        {
+          "runIndex": 1,
+          "score": 1,
+          "rationaleAnonymized": "Fixture 无任何 spec.md 产物（\"no spec.md modules in outputDir\"），specModuleCount/specSuccessCount 全为 null，0 次 LLM 调用、0 token，仅产出 graph（41 节点 / 56 边）。按 spec quality rubric 五个维度均无可评内容：结构完整性、内容真实性、抽象层次、跨模块链接、可读性全部触底。该工具未产出 spec 文档，spec quality 维度得最低分 1。",
+          "durationMs": 19054,
+          "exitCode": 0
+        },
+        {
+          "runIndex": 2,
+          "score": 1,
+          "rationaleAnonymized": "该 fixture 没有产出任何 spec.md 模块（`output.specModuleCount` 为 null，outputDir 无 spec 模块），quality 段 specStructure / crossLinks / codingContextGrounding 全部缺失。从 spec 质量维度评估：结构完整性、内容真实性、抽象层次、跨模块链接、可读性均无法体现，等同于零交付。仅 graph 相关数据存在（41 节点 / 56 边），但本 rubric 评估对象是 spec.md 内容质量，而非图谱产物。综合判定为最低分。",
+          "durationMs": 10858,
+          "exitCode": 0
+        }
+      ],
+      "judgedAt": "2026-04-30T12:37:11.661Z",
+      "judgeModel": "claude-opus-4-7"
+    }
   }
 }
