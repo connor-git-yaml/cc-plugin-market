@@ -6,7 +6,7 @@
  * 输出 prompt，让 caller（我）自己执行任务并写 fixture。
  *
  * 用法：
- *   node scripts/eval-task-prepare.mjs --task T1-micrograd-add-tanh --tool spec-driver-opus
+ *   node scripts/eval-task-prepare.mjs --task T1-micrograd-add-tanh --tool spec-driver-spectra
  *   → stdout 输出 worktree path + 完整 prompt（含 spectra context if spec-driver-spectra）
  *
  * 设计目的：绕过 Claude CLI OAuth 401，让主 session 当 sonnet/opus runtime

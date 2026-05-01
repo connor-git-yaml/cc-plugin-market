@@ -20,27 +20,65 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { anonymizeFixture } from './eval-judge.mjs';
+
+// ============================================================
+// async spawn helper (for true parallelism with subprocess CLI calls)
+// ============================================================
+
+export function spawnAsync(cmd, args, { timeoutMs = 180000, stdin = null } = {}) {
+  return new Promise((resolve) => {
+    // 关键：stdio[0]='ignore' 防止 child process 卡死等 stdin（除非显式提供 stdin）
+    const stdio = stdin != null ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'];
+    const proc = spawn(cmd, args, { stdio });
+    let stdout = '';
+    let stderr = '';
+    let killed = false;
+    proc.stdout.setEncoding('utf8');
+    proc.stderr.setEncoding('utf8');
+    const t = setTimeout(() => {
+      killed = true;
+      try { proc.kill('SIGKILL'); } catch (_) {}
+    }, timeoutMs);
+    proc.stdout.on('data', (d) => { stdout += d; });
+    proc.stderr.on('data', (d) => { stderr += d; });
+    proc.on('close', (code) => {
+      clearTimeout(t);
+      resolve({ status: code, stdout, stderr, killed });
+    });
+    proc.on('error', (err) => {
+      clearTimeout(t);
+      resolve({ status: -1, stdout, stderr: stderr + '\n' + err.message, killed, spawnError: err.message });
+    });
+    if (stdin != null && proc.stdin) {
+      proc.stdin.write(stdin);
+      proc.stdin.end();
+    }
+  });
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const TASK_FIXTURES_DIR = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures');
 const FIXTURES_ROOT = path.join(PROJECT_ROOT, 'tests/baseline/tasks');
 
-// 默认 4 vendor cross-LLM jury（去 self-judge bias + 跨 vendor systemic bias）
+// 默认 3 vendor 跨国家 cross-LLM jury（去 self-judge bias + 跨 vendor systemic bias）
 // 'siliconflow:<model>' → SiliconFlow OpenAI-compat (https://api.siliconflow.cn/v1)
-// 'openai:<model>'      → 原生 OpenAI
-// 'claude-*'            → Anthropic SDK 原生
+// 'openai:<model>'      → 原生 OpenAI SDK
+// 'claude-cli:<model>'  → Claude CLI 子进程 (Anthropic, 用 subscription / OAuth)
+// 'codex:<model>'       → Codex CLI 子进程 (OpenAI GPT-5.5, ChatGPT subscription)
+// 'claude-*'            → Anthropic SDK (legacy, 需 ANTHROPIC_API_KEY)
 //
-// 使用各家旗舰（不用小尺寸 / 早版本）保证评分代表当前真实能力，2026 年 5 月选型：
+// 当前 executor = SiliconFlow GLM-5.1，jury 故意不含 GLM 避免 self-judge：
+// 注：Codex 因 ChatGPT 免费 tier 周限额（~5 调用 / week），不放在 default。
+// 用户有 Codex Plus / Pro 订阅时可加：'codex:gpt-5.5'
 export const DEFAULT_JUDGES = [
-  'siliconflow:Pro/zai-org/GLM-5.1',                       // 智谱 GLM-5.1 旗舰 (754B MoE)
-  'siliconflow:Pro/moonshotai/Kimi-K2.6',                  // 月之暗面 Kimi K2.6 旗舰
-  'siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507',        // 阿里 Qwen3-235B 旗舰 (MoE)
-  'siliconflow:Pro/deepseek-ai/DeepSeek-V3.2',             // DeepSeek V3.2 旗舰
+  'claude-cli:claude-opus-4-7',                // Anthropic Opus 4.7 (美国, Claude Max subscription)
+  'siliconflow:Pro/moonshotai/Kimi-K2.6',      // Moonshot Kimi K2.6 (中国, SiliconFlow API)
 ];
 const MAX_DIFF_BYTES = 30000;
 const SILICONFLOW_DEFAULT_BASE_URL = 'https://api.siliconflow.cn/v1';
@@ -68,7 +106,25 @@ export function parseJudgeBackend(judgeModel) {
       apiKeyEnv: 'OPENAI_API_KEY',
     };
   }
-  // 默认：Anthropic native（claude-* 模型）
+  if (judgeModel.startsWith('claude-cli:')) {
+    return {
+      provider: 'claude-cli',
+      vendor: 'anthropic',
+      model: judgeModel.slice('claude-cli:'.length),
+      baseURL: null,
+      apiKeyEnv: null, // CLI uses subscription / OAuth, no API key needed
+    };
+  }
+  if (judgeModel.startsWith('codex:')) {
+    return {
+      provider: 'codex-cli',
+      vendor: 'openai',
+      model: judgeModel.slice('codex:'.length),
+      baseURL: null,
+      apiKeyEnv: null, // CLI uses ChatGPT subscription
+    };
+  }
+  // 默认：Anthropic native SDK（claude-* 模型，需 ANTHROPIC_API_KEY）
   return {
     provider: 'anthropic',
     vendor: 'anthropic',
@@ -153,18 +209,28 @@ const KNOWN_TOOL_NAMES = [
 
 export function anonymizeDiff(diff, reverseMap) {
   let result = diff;
-  // 1. 用 fixture 解析出的 reverseMap 替换（精确匹配真实工具值）
+  // 1. 用 fixture 解析出的 reverseMap 替换（精确匹配真实工具值，但要 word-boundary）
+  // 关键：'control' 等通用词不能拆 'uncontrolled' / 'controller'。用 lookahead/behind 限定边界。
   for (const [_anonName, real] of reverseMap.entries()) {
-    if (typeof real === 'string' && real.length > 2) {
+    if (typeof real !== 'string' || real.length < 3) continue;
+    // 长 token (含 '-' 或长度 > 8) 用全局替换；通用短词加 word-boundary
+    if (real.includes('-') || real.length > 8) {
       result = result.split(real).join('<TOOL>');
+    } else {
+      const re = new RegExp(`(?<![A-Za-z])${real.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z])`, 'g');
+      result = result.replace(re, '<TOOL>');
     }
   }
-  // 2. Defense-in-depth: 用 KNOWN_TOOL_NAMES 兜底，case-insensitive
-  // 按长度降序避免 'spec-driver' 提前命中 'spec-driver-spectra'
+  // 2. Defense-in-depth: 用 KNOWN_TOOL_NAMES 兜底，按长度降序，short names 用 word-boundary
   const sorted = [...KNOWN_TOOL_NAMES].sort((a, b) => b.length - a.length);
   for (const tool of sorted) {
-    const re = new RegExp(tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(re, '<TOOL>');
+    const escaped = tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (tool.includes('-') || tool.length > 8) {
+      result = result.replace(new RegExp(escaped, 'gi'), '<TOOL>');
+    } else {
+      // 短通用词如 'control' / 'aider' / 'cody' / 'spectra' / 'gstack' → 加 word-boundary
+      result = result.replace(new RegExp(`(?<![A-Za-z])${escaped}(?![A-Za-z])`, 'gi'), '<TOOL>');
+    }
   }
   return result;
 }
@@ -220,8 +286,9 @@ ${diff}
  */
 export async function defaultClientFactory(judgeModel) {
   const backend = parseJudgeBackend(judgeModel);
-  const apiKey = process.env[backend.apiKeyEnv];
-  if (!apiKey) {
+  // CLI backends (claude-cli / codex-cli) 用 subscription，不需要 API key
+  const apiKey = backend.apiKeyEnv ? process.env[backend.apiKeyEnv] : null;
+  if (backend.apiKeyEnv && !apiKey) {
     throw new Error(`${backend.apiKeyEnv} env not set (required for ${backend.vendor}); export it or use --dry-run`);
   }
   if (backend.provider === 'anthropic') {
@@ -245,6 +312,70 @@ export async function defaultClientFactory(judgeModel) {
           finishReason: stopReason,
           truncated: stopReason === 'max_tokens',
         };
+      },
+    };
+  }
+  if (backend.provider === 'claude-cli') {
+    // Claude Code CLI 子进程（用 subscription/OAuth，无 API key）
+    return {
+      backend,
+      invoke: async (prompt) => {
+        // --output-format json 返回结构化 wrapper：{ result, usage, stop_reason, total_cost_usd }
+        const r = await spawnAsync('claude',
+          ['--print', '--model', backend.model, '--output-format', 'json',
+           '--permission-mode', 'plan', prompt],
+          { timeoutMs: 180000 });
+        if (r.status !== 0 || r.killed) {
+          throw new Error(`claude CLI failed (status=${r.status}, killed=${r.killed}): ${(r.stderr || '').slice(0, 300)}`);
+        }
+        let parsed;
+        try { parsed = JSON.parse(r.stdout); }
+        catch (e) { throw new Error(`claude CLI returned non-JSON: ${r.stdout.slice(0, 200)}`); }
+        const stopReason = parsed.stop_reason ?? null;
+        return {
+          text: parsed.result ?? '',
+          promptTokens: parsed.usage?.input_tokens ?? null,
+          completionTokens: parsed.usage?.output_tokens ?? null,
+          finishReason: stopReason,
+          truncated: stopReason === 'max_tokens',
+          costUsd: parsed.total_cost_usd ?? null,
+        };
+      },
+    };
+  }
+  if (backend.provider === 'codex-cli') {
+    // Codex CLI 子进程（用 ChatGPT subscription，无 API key）
+    return {
+      backend,
+      invoke: async (prompt) => {
+        const tmpFile = path.join(os.tmpdir(), `codex-out-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
+        try {
+          const r = await spawnAsync('codex',
+            ['exec', '--skip-git-repo-check', '--sandbox', 'read-only',
+             '-m', backend.model, '--output-last-message', tmpFile, prompt],
+            { timeoutMs: 240000 });
+          if (r.killed) throw new Error(`codex CLI timed out after 240s`);
+          let text = '';
+          if (fs.existsSync(tmpFile)) {
+            text = fs.readFileSync(tmpFile, 'utf-8');
+          } else {
+            text = r.stdout ?? '';
+          }
+          // Tokens 从 stderr 提取: "tokens used\n20,428"
+          const tokenMatch = (r.stderr ?? '').match(/tokens used\s*\n\s*([\d,]+)/);
+          const totalTokens = tokenMatch ? Number(tokenMatch[1].replace(/,/g, '')) : null;
+          return {
+            text,
+            promptTokens: null,         // Codex 不区分 input/output，只给 total
+            completionTokens: totalTokens, // 全部记 completion，避免 jury cost 估算偏低
+            finishReason: r.status === 0 ? 'stop' : 'error',
+            truncated: false,
+          };
+        } finally {
+          if (fs.existsSync(tmpFile)) {
+            try { fs.unlinkSync(tmpFile); } catch (_) {}
+          }
+        }
       },
     };
   }

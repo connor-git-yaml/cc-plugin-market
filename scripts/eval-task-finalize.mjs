@@ -8,8 +8,11 @@
  *   3. 写完整 schema 1.1 fixture（含 in-session caveat + model 字段）
  *
  * 用法：
- *   node scripts/eval-task-finalize.mjs --task T1-... --tool spec-driver-opus \
+ *   node scripts/eval-task-finalize.mjs --task T1-... --tool spec-driver-spectra \
  *     --wall-ms 60000 --rubric-score 7 --rubric-rationale "..."
+ *
+ * NOTE：Sprint 2 后默认走 scripts/eval-task-executor.mjs (GLM unified executor + cross-LLM jury)；
+ * finalize.mjs 仅 legacy 用途（in-session executor + manual rubric）。
  */
 
 import * as fs from 'node:fs';
@@ -68,7 +71,7 @@ async function main() {
   fixture.taskExecution.model = 'claude-opus-4-7';
   fixture.taskExecution.executionMode = args.executionMode;
   fixture.taskExecution.executorRuntime = 'main-session-opus-4-7';
-  fixture.taskExecution.modelDisclaimer = 'caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献';
+  fixture.taskExecution.modelDisclaimer = 'legacy in-session opus executor — Sprint 2 引入 GLM unified executor 后此路径已不推荐使用，仅保留供 backward compat';
   fixture.taskExecution.rubricJudgeScore = args.rubricScore;
   fixture.taskExecution.rubricJudgeRationale = args.rubricRationale;
   fixture.taskExecution.judgedBy = 'self-judge-main-session-opus-4-7';

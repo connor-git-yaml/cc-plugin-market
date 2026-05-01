@@ -17,12 +17,18 @@ interface JuryModule {
   buildAdversarialPrompt: (input: { taskPrompt: string; diff: string }) => string;
   anonymizeDiff: (diff: string, reverseMap: Map<string, string>) => string;
   parseJudgeBackend: (judgeModel: string) => {
-    provider: 'anthropic' | 'openai-compat';
+    provider: 'anthropic' | 'openai-compat' | 'claude-cli' | 'codex-cli';
     vendor: string;
     model: string;
     baseURL: string | null;
-    apiKeyEnv: string;
+    apiKeyEnv: string | null;
   };
+  spawnAsync: (cmd: string, args: string[], opts?: { timeoutMs?: number; stdin?: string | null }) => Promise<{
+    status: number | null;
+    stdout: string;
+    stderr: string;
+    killed: boolean;
+  }>;
   normalizeSdkError: (e: unknown) => {
     message: string;
     status: number | null;
@@ -231,6 +237,33 @@ describe('eval-judge-jury', () => {
       expect(out).not.toContain('-spectra');
       expect(out).toContain('<TOOL>');
     });
+
+    it('short tool name uses word-boundary (Codex CRITICAL: control vs uncontrolled)', async () => {
+      const { anonymizeDiff } = await loadJury();
+      // 'control' 不应该拆 'uncontrolled' / 'controller' / 'controlled'
+      const dirty = '+ # an uncontrolled scenario, the controller catches errors';
+      const out = anonymizeDiff(dirty, new Map());
+      expect(out).toContain('uncontrolled');   // 不能被改成 un<TOOL>led
+      expect(out).toContain('controller');     // 不能被改成 <TOOL>ler
+      expect(out).not.toContain('un<TOOL>');
+    });
+
+    it('short tool name still strips standalone usage (control as bench label)', async () => {
+      const { anonymizeDiff } = await loadJury();
+      // standalone 'control' as eval tool name 仍要 strip
+      const dirty = 'baseline tool: control vs spec-driver';
+      const out = anonymizeDiff(dirty, new Map());
+      expect(out).toMatch(/baseline tool: <TOOL>/i);
+    });
+
+    it('reverseMap short value also gets word-boundary protection', async () => {
+      const { anonymizeDiff } = await loadJury();
+      const reverseMap = new Map([['<TOOL_X>', 'aider']]);
+      const dirty = 'aider helps; raider unrelated';
+      const out = anonymizeDiff(dirty, reverseMap);
+      expect(out).toContain('raider');           // 不能拆 'raider'
+      expect(out).toMatch(/^<TOOL> helps/);      // 'aider' 单独出现要 strip
+    });
   });
 
   describe('buildAdversarialPrompt', () => {
@@ -283,6 +316,24 @@ describe('eval-judge-jury', () => {
       expect(b.model).toBe('gpt-4o');
       expect(b.apiKeyEnv).toBe('OPENAI_API_KEY');
       expect(b.baseURL).toMatch(/openai\.com/);
+    });
+
+    it('parses claude-cli:<model> as Anthropic via CLI subscription (no apiKey)', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const b = parseJudgeBackend('claude-cli:claude-opus-4-7');
+      expect(b.provider).toBe('claude-cli');
+      expect(b.vendor).toBe('anthropic');
+      expect(b.model).toBe('claude-opus-4-7');
+      expect(b.apiKeyEnv).toBeNull();
+    });
+
+    it('parses codex:<model> as OpenAI via Codex CLI subscription (no apiKey)', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const b = parseJudgeBackend('codex:gpt-5.5');
+      expect(b.provider).toBe('codex-cli');
+      expect(b.vendor).toBe('openai');
+      expect(b.model).toBe('gpt-5.5');
+      expect(b.apiKeyEnv).toBeNull();
     });
 
     it('SILICONFLOW_BASE_URL env override works', async () => {
@@ -377,6 +428,53 @@ describe('eval-judge-jury', () => {
       expect(r.score).toBeNull();
       expect(r.rationale).toMatch(/truncated=true/);
       expect(r.truncated).toBe(true);
+    });
+  });
+
+  describe('spawnAsync (CLI subprocess helper)', () => {
+    it('captures stdout from echo', async () => {
+      const { spawnAsync } = await loadJury();
+      const r = await spawnAsync('echo', ['hello world']);
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('hello world');
+      expect(r.killed).toBe(false);
+    });
+
+    it('captures stderr separately', async () => {
+      const { spawnAsync } = await loadJury();
+      const r = await spawnAsync('sh', ['-c', 'echo to-stderr 1>&2; echo to-stdout']);
+      expect(r.stdout).toContain('to-stdout');
+      expect(r.stderr).toContain('to-stderr');
+    });
+
+    it('returns non-zero status on failure', async () => {
+      const { spawnAsync } = await loadJury();
+      const r = await spawnAsync('sh', ['-c', 'exit 42']);
+      expect(r.status).toBe(42);
+    });
+
+    it('kills process on timeout (does NOT hang on stdin)', async () => {
+      const { spawnAsync } = await loadJury();
+      // 关键：stdio[0]='ignore' 防止 child 等 stdin 卡死。'cat' 不带参数会等 stdin 直到 EOF；
+      // 我们 ignore stdin → cat 立即结束 (空输入) — 不该触发 timeout
+      const r = await spawnAsync('cat', [], { timeoutMs: 2000 });
+      expect(r.killed).toBe(false);
+      expect(r.status).toBe(0);
+    });
+
+    it('forwards stdin when provided', async () => {
+      const { spawnAsync } = await loadJury();
+      const r = await spawnAsync('cat', [], { stdin: 'piped input\n' });
+      expect(r.stdout).toContain('piped input');
+      expect(r.status).toBe(0);
+    });
+
+    it('respects timeout for genuine hang', async () => {
+      const { spawnAsync } = await loadJury();
+      const t0 = Date.now();
+      const r = await spawnAsync('sleep', ['10'], { timeoutMs: 500 });
+      expect(r.killed).toBe(true);
+      expect(Date.now() - t0).toBeLessThan(2000);
     });
   });
 

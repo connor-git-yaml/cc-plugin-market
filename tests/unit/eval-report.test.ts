@@ -388,6 +388,29 @@ describe('eval-report', () => {
       expect(md).toMatch(/4†/);
     });
 
+    it('§4.1 排除 T6 / refusal 任务 + low-agreement (Codex CRITICAL)', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      // 同 tool 在 T1 (normal) 和 T6 (refusal) + 1 个 low-agreement
+      writeFixture(join(tempDir, 'tasks', 'T1-tanh', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: { tool: 'spec-driver', juryMedian: 8, jurySpread: 1, juryAgreement: 'high', primaryOracle: { passed: true } },
+      });
+      writeFixture(join(tempDir, 'tasks', 'T6-violation-refusal', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: { tool: 'spec-driver', juryMedian: 2, jurySpread: 8, juryAgreement: 'low', primaryOracle: { passed: true } },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      // T6 应出现在 §4.4 compliance 表
+      expect(md).toContain('### 4.4 Compliance / Refusal Tasks');
+      expect(md).toContain('T6-violation-refusal');
+      // 主均分应只算 T1 (8)，不掺 T6 (2)，所以 jury avg = 8 而非 5
+      expect(md).toMatch(/\*\*8\*\* \(n=1\)/);
+      expect(md).toMatch(/均分已剔除/);
+      // §5 task-spread 不该含 T6
+      expect(md).not.toMatch(/task T6-violation-refusal/);
+    });
+
     it('§4.1 splits avg row into jury vs self-judge when tool has mixed sources', async () => {
       const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
       // 同一 tool 部分 fixture 有 jury，部分仅 rubric

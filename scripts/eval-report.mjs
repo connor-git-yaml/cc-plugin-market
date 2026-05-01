@@ -246,6 +246,8 @@ export function detectInsights(scanned) {
     byTaskSource.get(x.task)[x.tool] = juryScore != null ? 'jury' : (rubricScore != null ? 'self-judge' : null);
   }
   for (const [task, scores] of byTask) {
+    // T6 / refusal / compliance 任务不进入 task-spread insights（rubric 主观，spread 不反映质量）
+    if (/T6-|violation|refusal|compliance/i.test(task)) continue;
     const valid = Object.entries(scores).filter(([_, s]) => s != null);
     if (valid.length < 2) continue;
     const sorted = valid.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
@@ -463,8 +465,13 @@ export function renderMarkdown(scanned, agg, insights) {
     const toolAvgJury = Object.fromEntries(tools.map((t) => [t, []]));
     const toolAvgRubric = Object.fromEntries(tools.map((t) => [t, []]));
     const mixedSourceTools = new Set();
+    // T6 / refusal / compliance 任务 + low-agreement (spread > 2) fixture 不计入主均分（Codex CRITICAL）
+    // 这类任务 rubric inherently subjective (judges 经常 spread=8)，污染对比信号
+    const isComplianceTask = (task) => /T6-|violation|refusal|compliance/i.test(task);
+    const segregatedScores = []; // 单列 compliance 表
     for (const task of tasks) {
       const row = [task];
+      const taskIsCompliance = isComplianceTask(task);
       for (const tool of tools) {
         const item = scanned.specDriverClass.find((x) => x.task === task && x.tool === tool);
         if (!item) { row.push('—'); continue; }
@@ -472,8 +479,13 @@ export function renderMarkdown(scanned, agg, insights) {
         const score = te.juryMedian != null ? te.juryMedian : te.rubricJudgeScore;
         const isJury = te.juryMedian != null;
         const oraclePass = te.primaryOracle?.passed === true;
-        if (score != null) {
+        const isLowAgreement = te.juryAgreement === 'low';
+        // 排除 compliance + low-agreement 不进入工具均分
+        if (score != null && !taskIsCompliance && !isLowAgreement) {
           if (isJury) toolAvgJury[tool].push(score); else toolAvgRubric[tool].push(score);
+        }
+        if (taskIsCompliance) {
+          segregatedScores.push({ task, tool, score, oraclePass, isJury, agreement: te.juryAgreement, spread: te.jurySpread });
         }
         allPassCount++;
         if (oraclePass) allPassRate++;
@@ -508,6 +520,11 @@ export function renderMarkdown(scanned, agg, insights) {
       lines.push('');
       lines.push(`> ⚠️ **Mixed source warning**: ${[...mixedSourceTools].join(', ')} 部分 fixture 用 jury 评，部分用 self-judge — 跨 fixture 均分不可比（请等所有 fixture 跑完 jury 再读均分）`);
     }
+    if (segregatedScores.length > 0) {
+      const lowAgree = segregatedScores.filter((s) => s.agreement === 'low').length;
+      lines.push('');
+      lines.push(`> ⚠️ **均分已剔除**: T6 / refusal / compliance 任务（${segregatedScores.length / Math.max(1, tools.length)} 个）+ low-agreement (spread > 2) fixture 不进入主均分 — 这类任务 rubric 主观性高 (${lowAgree}/${segregatedScores.length} fixture jury 严重分歧 spread=8)，不是技术质量信号。详见 §4.4 Compliance Tasks`);
+    }
     lines.push('');
     lines.push(`**Oracle pass rate**: ${allPassRate}/${allPassCount} = ${(allPassRate/allPassCount*100).toFixed(0)}%`);
     if (juryTools.size > 0 || selfJudgeTools.size > 0) {
@@ -518,6 +535,21 @@ export function renderMarkdown(scanned, agg, insights) {
       lines.push('> ' + legend.join('; '));
     }
     lines.push('');
+
+    // §4.4 Compliance Tasks (T6 / refusal / violation tasks 单列，不计入主均分)
+    if (segregatedScores.length > 0) {
+      lines.push('### 4.4 Compliance / Refusal Tasks（subjective rubric, 不计入工具均分）');
+      lines.push('');
+      lines.push('> 这些任务测的是 agent 是否拒绝违规请求 + 主动 surface 拒绝。Judges 经常严重分歧 (Opus 倾向"主动写 REFUSAL.md = good refusal" 给高分，Codex/Kimi 倾向"任务没完成"给低分)，spread=8 常见。**不能作为方法论质量对比**。');
+      lines.push('');
+      lines.push('| 任务 | 工具 | jury median | spread | agreement | oracle |');
+      lines.push('|------|------|-------------|--------|-----------|--------|');
+      for (const s of segregatedScores.sort((a, b) => a.task.localeCompare(b.task) || a.tool.localeCompare(b.tool))) {
+        const oracleMark = s.oraclePass === true ? '✓' : (s.oraclePass === false ? '✗' : '—');
+        lines.push(`| ${s.task} | ${s.tool} | ${s.score ?? 'null'} | ${s.spread ?? 'n/a'} | ${s.agreement ?? 'n/a'} | ${oracleMark} |`);
+      }
+      lines.push('');
+    }
 
     // §4.2 Model caveat: 检测 in-session executor 与 sonnet baseline 的混跑（保持原逻辑，下面单独处理 jury 章节）
 

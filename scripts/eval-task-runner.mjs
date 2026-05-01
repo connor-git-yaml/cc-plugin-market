@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCHEMA_VERSION = '1.1';
 const COLLECTOR_VERSION = '0.3.0';
-const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'spec-driver-opus'];
+const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra'];
 
 function getBenchHome() {
   return process.env.SPEC_DRIVER_BENCH_HOME ?? path.join(os.homedir(), '.spec-driver-bench-worktrees');
@@ -98,6 +98,10 @@ export function prepareWorktree({ taskId, tool, target, startCommit }) {
   // checkout 起始 commit + 创建 task branch
   const branchName = `eval-bench/${taskId}/${tool}`;
   spawnSync('git', ['-C', wtDir, 'checkout', '-B', branchName, startCommit], { encoding: 'utf-8' });
+  // 关键：clean 掉 baseline workspace 残留的非追踪文件 (e.g. .spectra-baselines, __pycache__,
+  // specs/_meta artifacts)，否则后续 `git add -A` 会污染 diff，judges 看到一堆无关变更
+  spawnSync('git', ['-C', wtDir, 'reset', '--hard', startCommit], { encoding: 'utf-8' });
+  spawnSync('git', ['-C', wtDir, 'clean', '-ffdx'], { encoding: 'utf-8' });
   return { wtDir, branchName };
 }
 
@@ -134,18 +138,32 @@ export function buildDriverPrompt({ tool, taskPrompt, spectraContext }) {
 
 /**
  * 加载 spectra spec.md 作为 context（spec-driver-spectra 对照组用）
- * 取目标项目对应的 spec.md（micrograd / nanoGPT 在 ~/.spectra-baselines/<project>-output/spectra-full/modules/）。
+ * 按任务相关性排序选择 spec.md：与 taskTargetFiles 名匹配的 spec.md 优先；其次 _index.spec.md；
+ * 最后 fallback 到字母序前 N 个。避免 T2 改 train.py 但加载 bench/configurator spec 的 bug (Codex WARN)。
  */
-export function loadSpectraContext(targetSpec, maxBytes = 12000) {
+export function loadSpectraContext(targetSpec, maxBytes = 12000, options = {}) {
+  const { taskTargetFiles = [], maxFiles = 3 } = options;
   const targetName = { 'karpathy/micrograd': 'micrograd', 'karpathy/nanoGPT': 'nanoGPT', 'self-dogfood': 'self-dogfood' }[targetSpec];
   if (!targetName) return null;
   const modulesDir = path.join(os.homedir(), '.spectra-baselines', `${targetName}-output`, 'spectra-full', 'modules');
   if (!fs.existsSync(modulesDir)) return null;
-  const files = fs.readdirSync(modulesDir).filter((n) => n.endsWith('.spec.md')).slice(0, 3);
+  const allSpecs = fs.readdirSync(modulesDir).filter((n) => n.endsWith('.spec.md'));
+  // 相关性排序: 与 taskTargetFiles basename (去 .py) 匹配的优先
+  const targetBasenames = taskTargetFiles.map((f) => path.basename(f).replace(/\.\w+$/, '')).filter(Boolean);
+  const score = (specName) => {
+    const stem = specName.replace(/\.spec\.md$/, '');
+    if (targetBasenames.includes(stem)) return 100;          // 直接匹配文件名（如 train.py → train.spec.md）
+    if (targetBasenames.some((b) => stem.includes(b))) return 50;  // 部分匹配
+    if (stem === '_index') return 10;                         // index spec 永远兜底有价值
+    return 0;
+  };
+  const sorted = allSpecs.map((n) => ({ name: n, s: score(n) }))
+    .sort((a, b) => b.s - a.s || a.name.localeCompare(b.name))
+    .slice(0, maxFiles);
   let content = '';
-  for (const f of files) {
-    const sample = fs.readFileSync(path.join(modulesDir, f), 'utf-8').slice(0, 4000);
-    content += `### ${f}\n\n${sample}\n\n---\n\n`;
+  for (const { name } of sorted) {
+    const sample = fs.readFileSync(path.join(modulesDir, name), 'utf-8').slice(0, 4000);
+    content += `### ${name}\n\n${sample}\n\n---\n\n`;
     if (content.length > maxBytes) break;
   }
   return content.slice(0, maxBytes);
