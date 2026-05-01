@@ -8,12 +8,33 @@
   "prompt": "在 micrograd/nn.py 中找到硬编码的 weight 初始化范围（`random.uniform(-1, 1)`）并把它提取为模块级 const，命名要清晰反映用途（如 `WEIGHT_INIT_RANGE`）。\n\n要求：\n1. 在 nn.py 顶部（import 后）新增一个 const，命名清晰\n2. 把所有 `random.uniform(-1, 1)` 调用替换为引用该 const\n3. 不修改其他逻辑\n4. 不要新增测试（保持 minimal change）\n\n请直接修改并 commit。",
   "setupCommands": [],
   "primaryOracle": {
+    "kind": "functional",
+    "description": "AST 检查存在 module-level UPPERCASE const = (-1,1)，且 self.w 不再用 literal -1/1；Neuron 仍正确生成 [-1,1] 范围权重",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import ast; src=open('micrograd/nn.py').read(); tree=ast.parse(src); consts=[n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id.isupper() for t in n.targets)]; assert len(consts) > 0, 'no module-level UPPERCASE const'\"",
+        "description": "存在 module-level UPPERCASE 常量",
+        "timeoutMs": 5000
+      },
+      {
+        "cmd": "python3 -c \"import re; src=open('micrograd/nn.py').read(); literal_calls=re.findall(r'random\\.uniform\\s*\\(\\s*-?\\d', src); assert len(literal_calls) == 0, f'still has literal random.uniform with number args: {literal_calls}'\"",
+        "description": "Neuron 不再用 literal random.uniform(-1, 1) 调用",
+        "timeoutMs": 5000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); import random; random.seed(42); from micrograd.nn import Neuron; n = Neuron(20); weights = [w.data for w in n.w]; assert all(-1 <= w <= 1 for w in weights), f'weight out of [-1,1]: {[w for w in weights if not -1 <= w <= 1]}'; assert len(set(weights)) > 1, 'all weights identical (suspicious)'\"",
+        "description": "Neuron(20) 产 20 个权重均在 [-1,1] 且非全相同（功能不破坏）",
+        "timeoutMs": 5000
+      }
+    ]
+  },
+  "legacyOracle": {
     "kind": "ast-diff",
-    "description": "检查 nn.py 含模块级 const 定义 + 不再有 hardcoded uniform(-1, 1)",
     "checks": [
       "grep -E '^[A-Z_]+\\s*=' micrograd/nn.py",
       "test $(grep -c 'random.uniform(-1, 1)' micrograd/nn.py) -eq 0"
-    ]
+    ],
+    "_deprecated": "原代码 random.uniform(-1,1) 无空格 → 第二条 grep 在未做修改时也已 PASS（假阳性）"
   },
   "expectedDiff": {
     "filesChanged": ["micrograd/nn.py"],

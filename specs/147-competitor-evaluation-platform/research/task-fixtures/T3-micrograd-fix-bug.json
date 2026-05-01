@@ -10,17 +10,28 @@
     "python3 -c \"import re; content = open('micrograd/engine.py').read(); content = content.replace('self.grad += other.data * out.grad', 'self.grad += self.data * out.grad').replace('other.grad += self.data * out.grad', 'other.grad += other.data * out.grad'); open('micrograd/engine.py', 'w').write(content); print('bug injected: __mul__ _backward swapped self.data <-> other.data')\""
   ],
   "primaryOracle": {
+    "kind": "functional",
+    "description": "现有 test_more_ops 已对比 torch.autograd 验证 mul 梯度；pytest 通过即说明 bug 修复",
+    "checks": [
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -5",
+        "description": "test_engine.py 全套通过（test_more_ops 含 mul 梯度 vs torch parity）",
+        "timeoutMs": 30000
+      },
+      {
+        "cmd": "python3 -c \"from micrograd.engine import Value; a=Value(3.0); b=Value(2.0); c=a*b; c.backward(); assert a.grad == 2.0 and b.grad == 3.0, f'mul grad wrong: a={a.grad} (should be 2), b={b.grad} (should be 3)'\"",
+        "description": "直接验证 a*b 梯度：da = b, db = a",
+        "timeoutMs": 5000
+      }
+    ]
+  },
+  "legacyOracle": {
     "kind": "ast-diff",
-    "description": "检查 __mul__ _backward 已修复回正确（self.grad += other.data * out.grad）",
     "checks": [
       "grep -E 'self\\.grad\\s*\\+=\\s*other\\.data\\s*\\*\\s*out\\.grad' micrograd/engine.py",
       "grep -E 'other\\.grad\\s*\\+=\\s*self\\.data\\s*\\*\\s*out\\.grad' micrograd/engine.py"
-    ]
-  },
-  "secondaryOracle": {
-    "kind": "unit-test",
-    "command": "cd <workspace> && python -m pytest test/ -v 2>&1 | tail -10",
-    "expectedExit": 0
+    ],
+    "_deprecated": "grep 字面量；如果工具用等价表达式（如 `other.data * out.grad` 提取到变量）会假阴性"
   },
   "expectedDiff": {
     "filesChanged": ["micrograd/engine.py"],

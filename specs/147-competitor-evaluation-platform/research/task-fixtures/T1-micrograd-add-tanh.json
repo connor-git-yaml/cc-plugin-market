@@ -7,18 +7,40 @@
   "estimatedLoc": "10-30",
   "prompt": "在 micrograd/engine.py 的 Value 类中新增一个 `tanh()` 方法。\n\n要求：\n1. tanh(x) 数值正确（双曲正切函数）\n2. 实现反向传播闭包（_backward），导数 = 1 - tanh(x)²\n3. 风格与现有方法（如 relu() / __add__() / __mul__()）保持一致\n4. 在 test/test_engine.py 中新增 1-2 个简单 unit test 验证（forward + backward）\n5. 不破坏现有任何测试\n6. 可使用 import math\n\n请直接修改文件并提交 commit；不要 surface 计划，直接做。",
   "primaryOracle": {
-    "kind": "ast-diff",
-    "description": "检查 engine.py 含 `def tanh(self):` 方法 + test_engine.py 含 tanh 相关 test",
+    "kind": "functional",
+    "description": "真跑 tanh 验证数值 + 梯度 + 多路径累积；不依赖 grep 字符串",
     "checks": [
-      "grep -E '^\\s+def tanh\\(self\\)' micrograd/engine.py",
-      "grep -E '(test_tanh|tanh\\()' test/test_engine.py"
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); assert abs(y.data - math.tanh(0.5)) < 1e-9, f'forward fail: {y.data} vs {math.tanh(0.5)}'\"",
+        "description": "tanh forward 数值匹配 math.tanh",
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); y.backward(); expected = 1 - math.tanh(0.5) ** 2; assert abs(v.grad - expected) < 1e-9, f'backward fail: {v.grad} vs {expected}'\"",
+        "description": "tanh backward 梯度 = 1 - tanh^2",
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(-1.5); y = v.tanh(); y.backward(); assert abs(y.data - math.tanh(-1.5)) < 1e-9 and abs(v.grad - (1 - math.tanh(-1.5) ** 2)) < 1e-9\"",
+        "description": "负值场景验证（防止仅在 0.5 这一点拟合）",
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); z = y + y; z.backward(); expected = 2 * (1 - math.tanh(0.5) ** 2); assert abs(v.grad - expected) < 1e-9, f'multi-path accumulation fail: {v.grad} vs {expected} (用 = 不是 += 写 _backward 会假阳性)'\"",
+        "description": "多路径累积：用 `+=` 而非 `=` 写 _backward（catch 'self.grad = ...' stub）",
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "现有 test/test_engine.py 全套通过（regression check）",
+        "timeoutMs": 30000
+      }
     ]
   },
-  "secondaryOracle": {
-    "kind": "unit-test",
-    "command": "cd <workspace> && python -m pytest test/ -v",
-    "expectedExit": 0,
-    "_note": "需要 pytest + numpy 已安装；如无则降级为只看 ast-diff oracle"
+  "legacyOracle": {
+    "kind": "ast-diff",
+    "checks": ["grep -E '^\\s+def tanh\\(self\\)' micrograd/engine.py"],
+    "_deprecated": "grep-based oracle，可被 stub 欺骗（如 def tanh(self): return self）；保留仅供参考"
   },
   "expectedDiff": {
     "filesChanged": ["micrograd/engine.py", "test/test_engine.py"],

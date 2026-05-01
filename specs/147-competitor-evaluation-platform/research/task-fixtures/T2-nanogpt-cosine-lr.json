@@ -11,13 +11,34 @@
   ],
   "setupNote": "nanoGPT@3adf61e 已含完整 cosine LR scheduler；setup 移除以让 task 实际有 work（idempotent）",
   "primaryOracle": {
+    "kind": "functional",
+    "description": "AST-only 静态检查 + 提取 get_lr 源码到独立 namespace 跑（不 exec 原文件 assignment RHS 避免副作用）",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import ast, sys; src=open('train.py').read(); tree=ast.parse(src); fns={n.name:n for n in tree.body if isinstance(n,ast.FunctionDef)}; assert 'get_lr' in fns, 'get_lr FunctionDef missing'; body_src=ast.unparse(fns['get_lr']); assert 'cos' in body_src.lower() or 'pi' in body_src.lower(), 'get_lr body must contain cosine math (cos/pi)'\"",
+        "description": "AST 检查 get_lr 函数定义存在 + 函数体含 cosine 数学",
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import ast, math; src=open('train.py').read(); tree=ast.parse(src); fn=next((n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='get_lr'),None); assert fn, 'no get_lr'; ns={'math':math,'warmup_iters':2000,'lr_decay_iters':600000,'min_lr':6e-5,'learning_rate':6e-4}; mod=ast.Module(body=[fn],type_ignores=[]); exec(compile(mod,'<get_lr>','exec'),ns); fn_=ns['get_lr']; assert fn_(0) <= ns['learning_rate'], 'warmup start should be <= peak lr'; assert abs(fn_(ns['warmup_iters']) - ns['learning_rate']) / ns['learning_rate'] < 0.05, 'peak lr at warmup end'; assert fn_(ns['lr_decay_iters'] * 2) == ns['min_lr'], 'min_lr floor after decay'; mid_lr = fn_(ns['warmup_iters'] + (ns['lr_decay_iters']-ns['warmup_iters'])//2); assert ns['min_lr'] < mid_lr < ns['learning_rate'], 'mid-decay lr should be between min and peak'\"",
+        "description": "用 standard config (warmup=2000/decay=600k/min=6e-5/peak=6e-4) 跑 get_lr 验证三段式（不 exec 原文件常量 RHS，避免 os.getenv/compute_lr() 副作用）",
+        "timeoutMs": 15000
+      },
+      {
+        "cmd": "python3 -c \"import re; src=open('train.py').read(); m=re.search(r'for\\s+\\w+\\s+in\\s+\\w+\\.param_groups\\s*:\\s*\\n\\s*\\w+\\[.lr.\\]\\s*=', src); assert m, 'training loop must iterate optimizer.param_groups and set lr'\"",
+        "description": "训练循环正确接入 (set 全部 param_groups['lr'])",
+        "timeoutMs": 5000
+      }
+    ]
+  },
+  "legacyOracle": {
     "kind": "ast-diff",
-    "description": "检查 train.py 含 get_lr 函数 + cosine 数学 + 接入循环",
     "checks": [
       "grep -E 'def get_lr|get_lr\\s*=' train.py",
       "grep -E '(cosine|math\\.cos|np\\.cos)' train.py",
       "grep -E 'param_group\\[.lr.\\]|param_group..lr..\\s*=' train.py"
-    ]
+    ],
+    "_deprecated": "grep-based，startCommit 已含 cosine LR 时假阳性 PASS"
   },
   "expectedDiff": {
     "filesChanged": ["train.py"],
