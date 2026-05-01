@@ -9,6 +9,7 @@ interface ReportModule {
   scanFixtures: (dir: string) => {
     spectraClass: Array<{ project: string; tool: string; fx: Record<string, unknown> }>;
     specDriverClass: Array<{ task: string; tool: string; fx: Record<string, unknown> }>;
+    specDriverVariants: Array<{ task: string; tool: string; baseTool: string; variant: string; fx: Record<string, unknown> }>;
   };
   aggregateMetrics: (scanned: ReturnType<ReportModule['scanFixtures']>) => {
     fixtureCount: number;
@@ -549,6 +550,56 @@ describe('eval-report', () => {
       expect(md).toContain('python');
       expect(md).toContain('78%'); // precision
       expect(md).toContain('19%'); // recall
+    });
+
+    it('Sprint 3 Phase D: -multiturn variants do NOT pollute main §4 matrix or driver tools coverage', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      const tasksDir = join(tempDir, 'tasks', 'T-test-sample');
+      // base tool fixture
+      writeFixture(join(tasksDir, 'control'), {
+        schemaVersion: '1.1',
+        meta: { tool: 'control' },
+        taskExecution: {
+          taskId: 'T-test-sample',
+          tool: 'control',
+          executor: 'siliconflow:Pro/zai-org/GLM-5.1',
+          juryMedian: 7,
+          juryAgreement: 'high',
+          jurySpread: 1,
+          juryScores: [{ judge: 'cli:claude-opus-4-7', score: 7, vendor: 'anthropic', promptTokens: 100, completionTokens: 50 }],
+          primaryOracle: { passed: true },
+          wallMs: 60000,
+        },
+      });
+      // -multiturn variant (should NOT show in main matrix)
+      writeFixture(join(tasksDir, 'control-multiturn'), {
+        schemaVersion: '1.1',
+        meta: { tool: 'control' },
+        taskExecution: {
+          taskId: 'T-test-sample',
+          tool: 'control',
+          executionMode: 'non-interactive-multi-turn',
+          primaryOracle: { passed: true },
+          wallMs: 30000,
+          commits: 0,
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      expect(scanned.specDriverClass).toHaveLength(1);
+      expect(scanned.specDriverClass[0].tool).toBe('control');
+      expect(scanned.specDriverVariants).toHaveLength(1);
+      expect(scanned.specDriverVariants[0].tool).toBe('control-multiturn');
+      expect(scanned.specDriverVariants[0].baseTool).toBe('control');
+      expect(scanned.specDriverVariants[0].variant).toBe('multiturn');
+
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      // Main coverage 不含 -multiturn
+      expect(md).toMatch(/\*\*Spec Driver 类工具\*\* \(1\): control\b/);
+      expect(md).not.toMatch(/Spec Driver 类工具.*control-multiturn/);
+      // §4.5 surface multiturn 配对
+      expect(md).toContain('### 4.5 Multi-turn vs Single-turn');
+      expect(md).toContain('multi-vs-single wall delta');
+      expect(md).toContain('| T-test-sample | control |');
     });
 
     it('renders §4.4.a refusal behavior classification with surface-refusal vs fully-complied', async () => {

@@ -226,6 +226,7 @@ export function runTask({ tool, prompt, wtDir, timeoutMs, bypassPermissions = fa
     stdout: r.stdout ?? '',
     stderr: r.stderr ?? '',
     exitCode: r.status,
+    claudeArgs: args, // Sprint 3 Phase D codex fix: 让真实传给 claude 的 args 可入 fixture（含 --bypass-permissions / --plugin-dir 等 flag）
     timedOut: r.signal === 'SIGTERM' || (r.error && r.error.code === 'ETIMEDOUT'),
   };
 }
@@ -318,9 +319,13 @@ function readSpectraVersion() {
   return pkg.version;
 }
 
-export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResult, oracleResult, productMetrics }) {
+export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResult, oracleResult, productMetrics, claudeArgs = null }) {
   const nowIso = new Date().toISOString();
   const staleAfterDate = new Date(Date.now() + 6 * 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // Sprint 3 Phase D codex review fix: 把真实传给 claude 的 args 入库（不含 prompt 本身），让 bypass-permissions / plugin-dir 等 flag 可审计
+  const recordedArgs = claudeArgs
+    ? claudeArgs.filter((a) => a !== claudeArgs[claudeArgs.length - 1]) // 去掉末尾 prompt（变长 + 含敏感任务描述）
+    : ['--print', '--model', 'claude-sonnet-4-6'];
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
@@ -337,7 +342,7 @@ export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResul
       runTimestampUtc: nowIso,
       runHostOs: process.platform,
       command: 'claude',
-      args: ['--print', '--model', 'claude-sonnet-4-6'],
+      args: recordedArgs,
       envAllowlist: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '<redacted>' : null },
       outputDir: wtDir,
       stdoutLogPath: path.join(wtDir, 'task-runner-stdout.log'),
@@ -480,6 +485,7 @@ async function main() {
   const fixture = assembleTaskFixture({
     taskId: args.task, tool: args.tool, taskFixture, wtDir: wt.wtDir,
     runResult, oracleResult, productMetrics,
+    claudeArgs: runResult.claudeArgs, // Sprint 3 Phase D codex fix: bypass-permissions / plugin-dir flags 入 meta.args
   });
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
   console.log(`[task-runner] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);

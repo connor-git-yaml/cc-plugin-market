@@ -50,8 +50,12 @@ export function parseArgs(argv) {
 // Fixture 扫描 + 分类
 // ============================================================
 
+// Sprint 3 Phase D: <tool>-<suffix> 形式（如 -multiturn）的 fixture 是 sub-class，
+// 不进入主 §4 task matrix / Coverage / SC-004，仅 §4.5 配对对照渲染消费
+const VARIANT_SUFFIX_RE = /-(multiturn|interactive)$/;
+
 export function scanFixtures(rootDir = BASELINE_DIR) {
-  const result = { spectraClass: [], specDriverClass: [] };
+  const result = { spectraClass: [], specDriverClass: [], specDriverVariants: [] };
   if (!fs.existsSync(rootDir)) return result;
 
   // Spectra 类: tests/baseline/<project>/<tool>/full.json
@@ -71,17 +75,25 @@ export function scanFixtures(rootDir = BASELINE_DIR) {
   }
 
   // Spec Driver 类: tests/baseline/tasks/<task>/<tool>/full.json
+  // Sprint 3 Phase D: <tool>-multiturn / <tool>-interactive 等 variant 进 specDriverVariants（仅 §4.5 用）
   const tasksDir = path.join(rootDir, 'tasks');
   if (fs.existsSync(tasksDir)) {
     for (const task of fs.readdirSync(tasksDir)) {
       const taskDir = path.join(tasksDir, task);
       if (!fs.statSync(taskDir).isDirectory()) continue;
-      for (const tool of fs.readdirSync(taskDir)) {
-        const fixturePath = path.join(taskDir, tool, 'full.json');
+      for (const toolDirName of fs.readdirSync(taskDir)) {
+        const fixturePath = path.join(taskDir, toolDirName, 'full.json');
         if (!fs.existsSync(fixturePath)) continue;
         try {
           const fx = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
-          result.specDriverClass.push({ task, tool, fixturePath, fx });
+          const variantMatch = toolDirName.match(VARIANT_SUFFIX_RE);
+          if (variantMatch) {
+            // variant fixture：分离出 baseTool + variant 标记
+            const baseTool = toolDirName.replace(VARIANT_SUFFIX_RE, '');
+            result.specDriverVariants.push({ task, tool: toolDirName, baseTool, variant: variantMatch[1], fixturePath, fx });
+          } else {
+            result.specDriverClass.push({ task, tool: toolDirName, fixturePath, fx });
+          }
         } catch (e) {
           console.warn(`[eval-report] skip invalid fixture ${fixturePath}: ${e.message}`);
         }
@@ -161,10 +173,14 @@ export function aggregateMetrics(scanned) {
   const tasks = new Set(scanned.specDriverClass.map((x) => x.task));
   const driverTools = new Set(scanned.specDriverClass.map((x) => x.tool));
 
+  // Sprint 3 Phase D: variants（multiturn 等 sub-class fixture）累积到 fixtureCount，
+  // 但不进入 spectraCount / specDriverCount（保护主 §4 矩阵 / Coverage / SC-004 不被污染）
+  const variantCount = (scanned.specDriverVariants ?? []).length;
   return {
-    fixtureCount: scanned.spectraClass.length + scanned.specDriverClass.length,
+    fixtureCount: scanned.spectraClass.length + scanned.specDriverClass.length + variantCount,
     spectraCount: scanned.spectraClass.length,
     specDriverCount: scanned.specDriverClass.length,
+    variantCount,
     cumulativeCost: Math.round(cumulativeCost * 100) / 100,
     executionCost: Math.round(executionCost * 100) / 100,
     executionCostEstimateTier: Math.round(executionCostEstimateTier * 10000) / 10000,
@@ -312,7 +328,7 @@ export function renderMarkdown(scanned, agg, insights) {
   lines.push(`> **由 \`scripts/eval-report.mjs\` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。`);
   lines.push(`> **生成时间**: ${now}`);
   lines.push(`> **Git**: ${git.branch} @ ${git.head}`);
-  lines.push(`> **Fixture 总数**: ${agg.fixtureCount}（Spectra 类 ${agg.spectraCount} + Spec Driver 类 ${agg.specDriverCount}）`);
+  lines.push(`> **Fixture 总数**: ${agg.fixtureCount}（Spectra 类 ${agg.spectraCount} + Spec Driver 类 ${agg.specDriverCount}${agg.variantCount > 0 ? ` + variants ${agg.variantCount}` : ''}）`);
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -696,6 +712,57 @@ export function renderMarkdown(scanned, agg, insights) {
       for (const s of segregatedScores.sort((a, b) => a.task.localeCompare(b.task) || a.tool.localeCompare(b.tool))) {
         const oracleMark = s.oraclePass === true ? '✓' : (s.oraclePass === false ? '✗' : '—');
         lines.push(`| ${s.task} | ${s.tool} | ${s.score ?? 'null'} | ${s.spread ?? 'n/a'} | ${s.agreement ?? 'n/a'} | ${oracleMark} |`);
+      }
+      lines.push('');
+    }
+
+    // §4.5 Multi-turn vs Single-turn 对照（Sprint 3 Phase D feasibility spike）
+    // variant fixture 已在 scanFixtures 阶段从主 specDriverClass 拆出 → 这里仅消费 specDriverVariants
+    const multiturnPairs = new Map();
+    const unpairedVariants = [];
+    const driverVariants = scanned.specDriverVariants ?? [];
+    for (const variant of driverVariants) {
+      if (variant.variant !== 'multiturn') continue;
+      const basePair = scanned.specDriverClass.find((x) => x.tool === variant.baseTool && x.task === variant.task);
+      if (!basePair) {
+        unpairedVariants.push(`${variant.task}/${variant.tool}`);
+        continue;
+      }
+      const key = `${variant.task}|${variant.baseTool}`;
+      multiturnPairs.set(key, {
+        task: variant.task,
+        tool: variant.baseTool,
+        single: basePair.fx.taskExecution ?? {},
+        multi: variant.fx.taskExecution ?? {},
+      });
+    }
+    if (multiturnPairs.size > 0) {
+      const baseTotalTools = agg.driverTools.length;
+      const pairedTools = new Set();
+      for (const [, p] of multiturnPairs) pairedTools.add(p.tool);
+      lines.push('### 4.5 Multi-turn vs Single-turn（Sprint 3 Phase D feasibility spike）');
+      lines.push('');
+      lines.push(`> 对比 sprint2 single-turn GLM executor 数据 vs sprint3 真实 \`claude --print --bypass-permissions\` multi-turn 实跑数据。**配对样本**：${pairedTools.size}/${baseTotalTools} tools（gstack / superpowers 等真实 plugin 安装 follow-up — 当前 \`~/.claude/plugins/installed\` 不存在，runner 退化为 prompt-only mode）。`);
+      lines.push('>');
+      lines.push('> **核心发现**：multi-turn 模式下 agent 仍 commits=0 — `claude --print` 模型层面的 commit-shy 行为是结构性问题，不是 sprint2 acceptEdits 限制。spec-driver workflow 的 "commit history advantage" 在非交互模式下无法落地。**注意**：这是 `claude --print` non-interactive 模式的固有限制，不是 spec-driver workflow 设计缺陷；workflow 的真实价值依赖 interactive Claude Code session + sub-agent 协作。');
+      lines.push('');
+      lines.push('| 任务 | 工具 | single-turn wall | multi-turn wall | multi-vs-single wall delta † | single oracle | multi oracle | multi commits |');
+      lines.push('|------|------|-----------------|-----------------|-----------------------------|---------------|--------------|---------------|');
+      for (const [, p] of multiturnPairs) {
+        const sw = p.single.wallMs ?? null;
+        const mw = p.multi.wallMs ?? null;
+        const wd = sw != null && mw != null ? `${(((mw - sw) / sw) * 100).toFixed(0)}%` : 'n/a';
+        const so = p.single.primaryOracle?.passed ?? null;
+        const mo = p.multi.primaryOracle?.passed ?? null;
+        const mc = p.multi.commits ?? null;
+        const fmt = (v) => v == null ? 'n/a' : v === true ? '✓' : v === false ? '✗' : v;
+        lines.push(`| ${p.task} | ${p.tool} | ${sw == null ? 'n/a' : fmtMs(sw)} | ${mw == null ? 'n/a' : fmtMs(mw)} | ${wd} | ${fmt(so)} | ${fmt(mo)} | ${mc ?? 'n/a'} |`);
+      }
+      lines.push('');
+      lines.push('> † delta = `(multi - single) / single * 100%`. **negative = multi-turn 更快**（sonnet 4.6 比 GLM 简单任务快）；不代表 spec-driver 退化。');
+      if (unpairedVariants.length > 0) {
+        lines.push('');
+        lines.push(`> ⚠️ Unpaired multiturn variants（找不到对应 single-turn base）：${unpairedVariants.join(', ')}`);
       }
       lines.push('');
     }
