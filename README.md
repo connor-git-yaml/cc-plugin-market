@@ -61,7 +61,7 @@
 npm install -g spectra-cli
 
 # 2. Add the marketplace to Claude Code
-claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yaml/cc-plugin-market.git
+claude plugin marketplace add connor-git-yaml/cc-plugin-market
 
 # 3. Install both plugins (user-scope, available across all projects)
 claude plugin install spectra@cc-plugin-market --scope user
@@ -227,8 +227,15 @@ When `spectra install` is active, Claude Code's PreToolUse hook automatically in
 ### Add the Marketplace
 
 ```bash
-claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yaml/cc-plugin-market.git
+# GitHub shorthand (recommended)
+claude plugin marketplace add connor-git-yaml/cc-plugin-market
+
+# Or use the full HTTPS URL
+claude plugin marketplace add https://github.com/connor-git-yaml/cc-plugin-market.git
 ```
+
+> Both forms register the marketplace under the name `cc-plugin-market`
+> (defined in `.claude-plugin/marketplace.json`), which the install commands below reference.
 
 ### Install Plugins
 

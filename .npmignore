@@ -1,0 +1,25 @@
+# npm 发布黑名单（在 package.json files 白名单基础上进一步过滤）
+#
+# 设计原则：
+# - 业务运行不需要的开发资产不进 npm 包
+# - plugin 通过 Claude Code marketplace 从 git 安装，不走 npm 路径，
+#   所以 plugin 内的 tests / fixtures 不需要打进 spectra-cli npm 包
+
+# Plugin 测试与 fixture（仅 dev 用，运行时不需要）
+plugins/**/tests/
+plugins/**/__tests__/
+plugins/**/__fixtures__/
+plugins/**/*.test.*
+plugins/**/*.spec.*
+
+# 编译后的测试产物（双重保险，tsconfig.json exclude 已处理一道）
+dist/**/__tests__/
+dist/**/__fixtures__/
+dist/**/*.test.*
+dist/**/*.spec.*
+
+# 临时与本地态
+*.log
+.DS_Store
+.env*
+!.env.example

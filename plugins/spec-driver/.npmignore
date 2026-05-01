@@ -1,0 +1,7 @@
+# 排除 plugin 测试代码进入 npm 包
+# 详细策略见仓库根 .npmignore
+tests/
+__tests__/
+__fixtures__/
+*.test.*
+*.spec.*

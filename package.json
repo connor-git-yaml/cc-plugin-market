@@ -43,8 +43,15 @@
     "codex:spec-driver:install:global": "bash plugins/spec-driver/scripts/codex-skills.sh install --global",
     "codex:spec-driver:remove": "bash plugins/spec-driver/scripts/codex-skills.sh remove",
     "codex:spec-driver:remove:global": "bash plugins/spec-driver/scripts/codex-skills.sh remove --global",
+    "release:publish": "npm publish",
+    "release:publish:dry": "npm publish --dry-run",
+    "prepublishOnly": "npm run release:check && npm run repo:check && npm run build && npx vitest run",
     "postinstall": "node scripts/lifecycle-runner.cjs postinstall",
     "preuninstall": "node scripts/lifecycle-runner.cjs preuninstall"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

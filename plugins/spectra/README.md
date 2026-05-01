@@ -29,10 +29,14 @@
 
 ### 方式一：Marketplace 安装（推荐）
 
-1. 将本仓库添加为 Claude Code Plugin Marketplace：
+1. 将本仓库添加为 Claude Code Plugin Marketplace（命令只接收一个 source 参数；marketplace 名 `cc-plugin-market` 由 `.claude-plugin/marketplace.json` 定义）：
 
    ```bash
-   claude plugin marketplace add cc-plugin-market https://github.com/connor-git-yaml/cc-plugin-market.git
+   # GitHub 简写（推荐）
+   claude plugin marketplace add connor-git-yaml/cc-plugin-market
+
+   # 或使用完整 HTTPS URL
+   claude plugin marketplace add https://github.com/connor-git-yaml/cc-plugin-market.git
    ```
 
 2. 安装 Spectra plugin：
