@@ -18,6 +18,7 @@ import { createLogger } from '../utils/logger.js';
 import {
   truncateAtNaturalBoundary,
   isDescriptiveText,
+  isMostlyChinese,
 } from '../utils/text-segmenter.js';
 import { sanitizeMarkdownContent } from '../utils/html-sanitizer.js';
 
@@ -38,6 +39,11 @@ export interface ProductEvidenceRef {
   excerpt: string;
   confidence: 'high' | 'medium' | 'low';
   inferred: boolean;
+  /**
+   * 标记 excerpt 是非中文原文（如英文 README）。template 渲染时加 _[原文非中文]_ 提示，
+   * 避免读者把英文段落误以为是 spectra 生成的中文摘要（Feature 147 bug fix）。
+   */
+  nonChinese?: boolean;
 }
 
 export interface ProductUserSegment {
@@ -275,13 +281,13 @@ function buildProductFactCorpus(projectRoot: string): ProductFactCorpus {
 
 function buildProductOverview(corpus: ProductFactCorpus): ProductOverviewOutput {
   const summary = collectOverviewParagraphs(corpus).slice(0, 4);
-  const targetUsers = buildTargetUsers(corpus);
+  const targetUsers = buildTargetUsers(corpus).map((u) => ({ ...u, evidence: u.evidence.map(annotateEvidenceLanguage) }));
   const coreScenarios = buildCoreScenarios(corpus, targetUsers);
   const evidence = uniqueEvidence([
     ...collectEvidenceFromSources(corpus.currentSpecs, 'high'),
     ...collectEvidenceFromSources(corpus.readmes, 'medium'),
     ...collectEvidenceFromSources(corpus.designDocs, 'medium'),
-  ]);
+  ]).map(annotateEvidenceLanguage);
 
   const warnings = uniqueSorted([
     ...corpus.warnings,
@@ -534,6 +540,28 @@ function collectRecentCommits(projectRoot: string, limit: number): CommitFact[] 
     .filter((entry) => entry.sha.length > 0 && entry.subject.length > 0);
 }
 
+/**
+ * 把非中文段落包装为 markdown blockquote + 来源标签，避免中英混杂污染中文文档。
+ * 当 README/spec 是英文（micrograd / nanoGPT 等英文项目）时，原始段落直接拼进
+ * 中文 shell 会让读者困惑（"这是从哪冒出来的？"）。包装后清楚标注"英文原文摘录"。
+ */
+function tagNonChinesePassage(text: string, sourceHint: string = '原文'): string {
+  if (isMostlyChinese(text)) return text;
+  // 多行 README 段落要每行 `> ` 前缀才是合法 blockquote
+  const quoted = text
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return `> _[${sourceHint}（非中文）]_\n${quoted}`;
+}
+
+/**
+ * 给 evidence 加 nonChinese flag，让 template 能渲染 _[原文非中文]_ 警示标签。
+ */
+function annotateEvidenceLanguage(ev: ProductEvidenceRef): ProductEvidenceRef {
+  return { ...ev, nonChinese: !isMostlyChinese(ev.excerpt) };
+}
+
 function collectOverviewParagraphs(corpus: ProductFactCorpus): string[] {
   const paragraphs: string[] = [];
 
@@ -547,8 +575,10 @@ function collectOverviewParagraphs(corpus: ProductFactCorpus): string[] {
     }
   }
 
+  // README / 设计文档可能是英文（如 karpathy/micrograd），用 tagNonChinesePassage 包装
   for (const source of [...corpus.readmes, ...corpus.designDocs]) {
-    paragraphs.push(...extractParagraphs(source.text).slice(0, 2));
+    const sourceLabel = source.label || (corpus.readmes.includes(source) ? 'README' : '设计文档');
+    paragraphs.push(...extractParagraphs(source.text).slice(0, 2).map((p) => tagNonChinesePassage(p, sourceLabel)));
   }
 
   // 当 current-spec 与 README 均不足时，以近期 commit subject 作为补充事实证据
@@ -613,15 +643,20 @@ function buildTargetUsers(corpus: ProductFactCorpus): ProductUserSegment[] {
     return [];
   }
 
+  // 关键: README 可能是英文（如 karpathy/micrograd），description 直接塞英文会污染中文文档
+  const rawDescription = firstSentence(readmeParagraph) ?? readmeParagraph;
+  const description = isMostlyChinese(rawDescription)
+    ? rawDescription
+    : `${rawDescription}（基于英文 README 推断）`;
   return [{
     name: '开发者',
-    description: firstSentence(readmeParagraph) ?? readmeParagraph,
+    description,
     primaryScenarios: ['阅读文档、生成规格、理解系统行为'],
     evidence: [{
       sourceType: 'readme',
       label: corpus.readmes[0]!.label,
       path: corpus.readmes[0]!.path,
-      excerpt: readmeParagraph,
+      excerpt: readmeParagraph, // excerpt 是事实来源原文，保留原语言
       confidence: 'medium',
       inferred: true,
     }],

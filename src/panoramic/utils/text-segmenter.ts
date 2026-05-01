@@ -154,3 +154,43 @@ export function isDescriptiveText(
 
   return true;
 }
+
+/**
+ * 计算文本中 CJK（中日韩 Unicode 范围）字符占总字符比率。
+ * 用于检测英文 README 段落污染中文文档（Feature 147 bug fix）。
+ *
+ * 仅计入 letter-like 字符（CJK + ASCII letters），排除空白/标点/数字。
+ * 这样 "Hello 你好" 的 CJK ratio = 2/7 ≈ 0.29，不是 2/12。
+ *
+ * Returns 0..1; 0 = 全英文/无 CJK，1 = 全中文。
+ */
+export function cjkRatio(text: string): number {
+  let cjkCount = 0;
+  let asciiAlphaCount = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    // CJK Unified Ideographs + ext A/B + Kana + Hangul（覆盖中日韩）
+    if (
+      (code >= 0x4e00 && code <= 0x9fff) ||
+      (code >= 0x3400 && code <= 0x4dbf) ||
+      (code >= 0x20000 && code <= 0x2a6df) ||
+      (code >= 0x3040 && code <= 0x30ff) ||
+      (code >= 0xac00 && code <= 0xd7af)
+    ) {
+      cjkCount++;
+    } else if ((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) {
+      asciiAlphaCount++;
+    }
+  }
+  const total = cjkCount + asciiAlphaCount;
+  if (total === 0) return 0;
+  return cjkCount / total;
+}
+
+/**
+ * 判断文本是否"主要是中文"。默认 ≥30% CJK 即视为中文段落。
+ * < 30% 视为非中文（英文 README、技术术语堆叠等），生成器应明确标注语言来源。
+ */
+export function isMostlyChinese(text: string, threshold: number = 0.3): boolean {
+  return cjkRatio(text) >= threshold;
+}

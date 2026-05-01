@@ -8,6 +8,8 @@ import {
   truncateAtNaturalBoundary,
   isLinkHeavyParagraph,
   isDescriptiveText,
+  cjkRatio,
+  isMostlyChinese,
 } from '../../../src/panoramic/utils/text-segmenter.js';
 
 describe('segmentText', () => {
@@ -142,5 +144,61 @@ describe('isDescriptiveText', () => {
   it('英文描述性段落返回 true', () => {
     const text = 'Spectra is a reverse-engineering tool that generates product docs from source code analysis.';
     expect(isDescriptiveText(text)).toBe(true);
+  });
+});
+
+describe('cjkRatio (Feature 147 bug fix: 中英混杂检测)', () => {
+  it('纯英文返回 0', () => {
+    expect(cjkRatio('Hello world from Spectra')).toBe(0);
+  });
+
+  it('纯中文返回 1', () => {
+    expect(cjkRatio('这是一个中文段落，没有任何英文。')).toBe(1);
+  });
+
+  it('中英混合返回中间比率', () => {
+    // "Hello 你好" → 5 letters + 2 CJK = 2/7 ≈ 0.286
+    const ratio = cjkRatio('Hello 你好');
+    expect(ratio).toBeGreaterThan(0.2);
+    expect(ratio).toBeLessThan(0.4);
+  });
+
+  it('忽略空白/标点/数字（只数 letter-like）', () => {
+    // "abc 123 !@#" → 3 letters + 0 CJK = 0
+    expect(cjkRatio('abc 123 !@#')).toBe(0);
+    // "abc 你好 123 !@#" → 3 letters + 2 CJK = 2/5 = 0.4
+    expect(cjkRatio('abc 你好 123 !@#')).toBeCloseTo(0.4, 2);
+  });
+
+  it('空字符串返回 0', () => {
+    expect(cjkRatio('')).toBe(0);
+  });
+
+  it('真实英文 README 段落（micrograd）返回近 0', () => {
+    const englishReadme = 'A tiny Autograd engine (with a bite!). Implements backpropagation (reverse-mode autodiff) over a dynamically built DAG.';
+    expect(cjkRatio(englishReadme)).toBe(0);
+  });
+});
+
+describe('isMostlyChinese', () => {
+  it('纯英文返回 false', () => {
+    expect(isMostlyChinese('A tiny Autograd engine')).toBe(false);
+  });
+
+  it('纯中文返回 true', () => {
+    expect(isMostlyChinese('一个微小的自动求导引擎')).toBe(true);
+  });
+
+  it('中文 ≥ 30%（默认阈值）返回 true', () => {
+    // "项目 spec-driver autoscale" → 2 CJK + ~17 letters = 2/19 ≈ 0.10 < 0.3 → false
+    expect(isMostlyChinese('项目 spec-driver autoscale workflow')).toBe(false);
+    // "中文工具 X" → 4 CJK + 1 letter = 4/5 = 0.8 → true
+    expect(isMostlyChinese('中文工具 X')).toBe(true);
+  });
+
+  it('支持自定义阈值', () => {
+    // "Hello 你好" CJK ratio ≈ 0.286，threshold=0.2 → true，0.5 → false
+    expect(isMostlyChinese('Hello 你好', 0.2)).toBe(true);
+    expect(isMostlyChinese('Hello 你好', 0.5)).toBe(false);
   });
 });

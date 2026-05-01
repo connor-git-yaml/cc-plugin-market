@@ -514,6 +514,93 @@ describe('generateProductUxDocs', () => {
     expect(summaryText).not.toContain('Short.');
     expect(summaryText).toContain('meaningful paragraph');
   });
+
+  it('Feature 147 bug fix: 英文 README 段落被包装 blockquote + [非中文] 标签', () => {
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.rmSync(path.join(projectRoot, 'docs', 'product-roadmap.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# micrograd',
+        '',
+        'A tiny Autograd engine (with a bite!). Implements backpropagation (reverse-mode autodiff) over a dynamically built DAG and a small neural networks library on top of it with a PyTorch-like API.',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('log')) return { status: 0, stdout: '', stderr: '' };
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    const summaryText = result.overview.summary.join('\n');
+    // 英文段落应被 blockquote 包装 + 标 [README（非中文）]
+    expect(summaryText).toMatch(/> _\[.+（非中文）\]_/);
+    // 原英文内容仍保留（在 blockquote 内）
+    expect(summaryText).toContain('A tiny Autograd engine');
+    // blockquote 每行 `> ` 前缀
+    expect(summaryText.split('\n').filter((l) => l.includes('Autograd')).every((l) => l.trim().startsWith('>'))).toBe(true);
+
+    // targetUsers fallback 的 description 应标 (基于英文 README 推断)
+    if (result.overview.targetUsers.length > 0) {
+      const dev = result.overview.targetUsers.find((u) => u.name === '开发者');
+      if (dev && dev.description) {
+        expect(dev.description).toMatch(/英文 README 推断|tiny Autograd/);
+      }
+    }
+
+    // evidence 中英文 excerpt 应有 nonChinese: true 标记
+    const englishEvidence = result.overview.evidence.filter((e) => e.excerpt.includes('Autograd'));
+    expect(englishEvidence.length).toBeGreaterThan(0);
+    expect(englishEvidence.every((e) => e.nonChinese === true)).toBe(true);
+
+    // 渲染的 product-overview.md 应含 _[原文非中文]_ 标签
+    const rendered = fs.readFileSync(path.join(outputDir, 'product-overview.md'), 'utf-8');
+    expect(rendered).toContain('_[原文非中文]_');
+  });
+
+  it('Feature 147 bug fix: 中文 README 不被包装（无 false-positive 污染）', () => {
+    fs.rmSync(path.join(projectRoot, 'specs', 'products', 'demo', 'current-spec.md'));
+    fs.rmSync(path.join(projectRoot, 'docs', 'product-roadmap.md'));
+    fs.writeFileSync(
+      path.join(projectRoot, 'README.md'),
+      [
+        '# 中文项目',
+        '',
+        '这是一个面向团队协作的 SDK 与 CLI 工具，把结构化规格沉淀到统一事实层，方便后续审计与归档。',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (command === 'git' && args.includes('log')) return { status: 0, stdout: '', stderr: '' };
+      return { status: 1, stdout: '', stderr: 'not available' };
+    });
+
+    const result = generateProductUxDocs({
+      projectRoot,
+      outputDir,
+      projectContext: createProjectContext(projectRoot),
+    });
+
+    const summaryText = result.overview.summary.join('\n');
+    // 中文段落不该被 blockquote 包装
+    expect(summaryText).not.toMatch(/> _\[.+（非中文）\]_/);
+    // 中文内容直接出现，无 quote 前缀
+    expect(summaryText).toContain('面向团队协作');
+
+    // 中文 evidence 应有 nonChinese: false
+    const chineseEvidence = result.overview.evidence.filter((e) => e.excerpt.includes('团队协作'));
+    if (chineseEvidence.length > 0) {
+      expect(chineseEvidence.every((e) => e.nonChinese === false || e.nonChinese === undefined)).toBe(true);
+    }
+  });
 });
 
 function createProjectContext(projectRoot: string): ProjectContext {
