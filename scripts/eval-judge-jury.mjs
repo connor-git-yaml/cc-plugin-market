@@ -30,8 +30,53 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const TASK_FIXTURES_DIR = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures');
 const FIXTURES_ROOT = path.join(PROJECT_ROOT, 'tests/baseline/tasks');
 
-export const DEFAULT_JUDGES = ['claude-sonnet-4-6', 'claude-opus-4-7'];
+// 默认 4 vendor cross-LLM jury（去 self-judge bias + 跨 vendor systemic bias）
+// 'siliconflow:<model>' → SiliconFlow OpenAI-compat (https://api.siliconflow.cn/v1)
+// 'openai:<model>'      → 原生 OpenAI
+// 'claude-*'            → Anthropic SDK 原生
+//
+// 使用各家旗舰（不用小尺寸 / 早版本）保证评分代表当前真实能力，2026 年 5 月选型：
+export const DEFAULT_JUDGES = [
+  'siliconflow:Pro/zai-org/GLM-5.1',                       // 智谱 GLM-5.1 旗舰 (754B MoE)
+  'siliconflow:Pro/moonshotai/Kimi-K2.6',                  // 月之暗面 Kimi K2.6 旗舰
+  'siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507',        // 阿里 Qwen3-235B 旗舰 (MoE)
+  'siliconflow:Pro/deepseek-ai/DeepSeek-V3.2',             // DeepSeek V3.2 旗舰
+];
 const MAX_DIFF_BYTES = 30000;
+const SILICONFLOW_DEFAULT_BASE_URL = 'https://api.siliconflow.cn/v1';
+
+// ============================================================
+// Backend dispatcher（解析 judge 名 → 选 SDK + endpoint + key）
+// ============================================================
+
+export function parseJudgeBackend(judgeModel) {
+  if (judgeModel.startsWith('siliconflow:')) {
+    return {
+      provider: 'openai-compat',
+      vendor: 'siliconflow',
+      model: judgeModel.slice('siliconflow:'.length),
+      baseURL: process.env.SILICONFLOW_BASE_URL ?? SILICONFLOW_DEFAULT_BASE_URL,
+      apiKeyEnv: 'SILICONFLOW_API_KEY',
+    };
+  }
+  if (judgeModel.startsWith('openai:')) {
+    return {
+      provider: 'openai-compat',
+      vendor: 'openai',
+      model: judgeModel.slice('openai:'.length),
+      baseURL: process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+      apiKeyEnv: 'OPENAI_API_KEY',
+    };
+  }
+  // 默认：Anthropic native（claude-* 模型）
+  return {
+    provider: 'anthropic',
+    vendor: 'anthropic',
+    model: judgeModel,
+    baseURL: null,
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+  };
+}
 
 // ============================================================
 // argv
@@ -46,6 +91,8 @@ export function parseArgs(argv) {
     judges: DEFAULT_JUDGES,
     dryRun: false,
     maxDiffBytes: MAX_DIFF_BYTES,
+    concurrency: 3,
+    vendorConcurrency: 4, // 单 vendor 同时最多 in-flight LLM 调用数（防 SiliconFlow rate limit）
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -57,6 +104,8 @@ export function parseArgs(argv) {
       case '--judges': args.judges = argv[++i].split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--dry-run': args.dryRun = true; break;
       case '--max-diff-bytes': args.maxDiffBytes = Number(argv[++i]); break;
+      case '--concurrency': args.concurrency = Number(argv[++i]); break;
+      case '--vendor-concurrency': args.vendorConcurrency = Number(argv[++i]); break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
@@ -65,6 +114,8 @@ export function parseArgs(argv) {
     throw new Error('--fixture <path> or (--task <id> --tool <name>) or --all required');
   }
   if (args.judges.length === 0) throw new Error('--judges must include at least 1 model');
+  if (args.concurrency < 1) throw new Error('--concurrency must be >= 1');
+  if (args.vendorConcurrency < 1) throw new Error('--vendor-concurrency must be >= 1');
   return args;
 }
 
@@ -92,15 +143,29 @@ export function extractDiff({ wtDir, fallbackDiffStat, maxBytes }) {
   return diff;
 }
 
+// Defense-in-depth: 即使 reverseMap 没含某 tool 名，也 strip 已知工具家族标识
+// (与 eval-judge.mjs:60 TOOL_NAMES 保持同步)
+const KNOWN_TOOL_NAMES = [
+  'spec-driver-spectra', 'spec-driver-opus', 'spec-driver',
+  'superpowers', 'gstack', 'spectra', 'graphify',
+  'aider-repomap', 'aider', 'cody', 'control',
+];
+
 export function anonymizeDiff(diff, reverseMap) {
   let result = diff;
+  // 1. 用 fixture 解析出的 reverseMap 替换（精确匹配真实工具值）
   for (const [_anonName, real] of reverseMap.entries()) {
     if (typeof real === 'string' && real.length > 2) {
       result = result.split(real).join('<TOOL>');
     }
   }
-  // 也 strip 常见路径 marker
-  result = result.replace(/spec-driver-(opus|spectra)/g, '<TOOL>');
+  // 2. Defense-in-depth: 用 KNOWN_TOOL_NAMES 兜底，case-insensitive
+  // 按长度降序避免 'spec-driver' 提前命中 'spec-driver-spectra'
+  const sorted = [...KNOWN_TOOL_NAMES].sort((a, b) => b.length - a.length);
+  for (const tool of sorted) {
+    const re = new RegExp(tool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(re, '<TOOL>');
+  }
   return result;
 }
 
@@ -146,66 +211,156 @@ ${diff}
 }
 
 // ============================================================
-// Anthropic SDK 调用（dependency injection 让 unit test 可 mock）
+// Multi-backend client（adapter pattern：anthropic + openai-compat 统一接口）
 // ============================================================
 
-export async function defaultClientFactory() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY env not set; export it or use --dry-run');
+/**
+ * Default factory: 解析 judgeModel → 实例化对应 SDK adapter，返回统一 invoke() 接口的 client。
+ * Tests 注入 mock factory 返回 { invoke } 即可，无需 mock 各 SDK 内部 shape。
+ */
+export async function defaultClientFactory(judgeModel) {
+  const backend = parseJudgeBackend(judgeModel);
+  const apiKey = process.env[backend.apiKeyEnv];
+  if (!apiKey) {
+    throw new Error(`${backend.apiKeyEnv} env not set (required for ${backend.vendor}); export it or use --dry-run`);
   }
-  const { default: Anthropic } = await import('@anthropic-ai/sdk');
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 120000 });
+  if (backend.provider === 'anthropic') {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    const sdk = new Anthropic({ apiKey, timeout: 120000 });
+    return {
+      backend,
+      invoke: async (prompt) => {
+        const r = await sdk.messages.create({
+          model: backend.model,
+          max_tokens: 4000,
+          temperature: 0.3,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const text = (r.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+        const stopReason = r.stop_reason ?? null;
+        return {
+          text,
+          promptTokens: r.usage?.input_tokens ?? null,
+          completionTokens: r.usage?.output_tokens ?? null,
+          finishReason: stopReason,
+          truncated: stopReason === 'max_tokens',
+        };
+      },
+    };
+  }
+  // OpenAI-compat (SiliconFlow + native OpenAI 共用)
+  const { default: OpenAI } = await import('openai');
+  const sdk = new OpenAI({ apiKey, baseURL: backend.baseURL, timeout: 120000 });
+  return {
+    backend,
+    invoke: async (prompt) => {
+      const r = await sdk.chat.completions.create({
+        model: backend.model,
+        max_tokens: 4000,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const choice = r.choices?.[0];
+      const finishReason = choice?.finish_reason ?? null;
+      return {
+        text: choice?.message?.content ?? '',
+        promptTokens: r.usage?.prompt_tokens ?? null,
+        completionTokens: r.usage?.completion_tokens ?? null,
+        finishReason,
+        truncated: finishReason === 'length',
+      };
+    },
+  };
+}
+
+/**
+ * Normalize SDK errors to capture status / type / retry-after info（不只是 message）
+ * Anthropic: { status, headers, type } via APIError; OpenAI: { status, code, type, headers }
+ */
+export function normalizeSdkError(e) {
+  if (!e || typeof e !== 'object') return { message: String(e) };
+  const status = e.status ?? e.response?.status ?? null;
+  const code = e.code ?? null;
+  const type = e.type ?? e.error?.type ?? null;
+  const requestId = e.request_id ?? e.requestID ?? e.headers?.['request-id'] ?? null;
+  const retryAfter = e.headers?.['retry-after'] ?? e.response?.headers?.get?.('retry-after') ?? null;
+  return {
+    message: e.message ?? String(e),
+    status,
+    code,
+    type,
+    requestId,
+    retryAfterMs: retryAfter ? Number(retryAfter) * 1000 : null,
+    isRateLimit: status === 429,
+    isServerError: typeof status === 'number' && status >= 500,
+  };
 }
 
 export function parseJudgeJson(text) {
-  // 提取 JSON object（容忍 markdown code fence wrapper 或前后空白）
+  // Path 1: 标准 JSON parse（首选）
   const fenceMatch = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   const candidate = fenceMatch ? fenceMatch[1] : text;
   const objMatch = candidate.match(/\{[\s\S]*\}/);
   if (!objMatch) throw new Error('no JSON object in response');
-  const obj = JSON.parse(objMatch[0]);
-  return {
-    score: typeof obj.score === 'number' ? obj.score : Number(obj.score),
-    rationale: String(obj.rationale ?? ''),
-    issues: Array.isArray(obj.issues) ? obj.issues.map(String) : [],
-  };
+  try {
+    const obj = JSON.parse(objMatch[0]);
+    const score = typeof obj.score === 'number' ? obj.score : Number(obj.score);
+    if (Number.isNaN(score)) throw new Error('score field missing or non-numeric');
+    return {
+      score,
+      rationale: String(obj.rationale ?? ''),
+      issues: Array.isArray(obj.issues) ? obj.issues.map(String) : [],
+    };
+  } catch (jsonErr) {
+    // Path 2: JSON 失败时（GLM-5.1 等模型偶发 rationale 字符串内有未转义引号），
+    // 用 regex 抽取 score（必需）+ rationale + issues（best-effort）
+    // 关键：tight match — 只识别 top-level "score" 键（紧跟 { 或 , 之后，不在 string value 内），
+    // 避免误匹配 rationale 字符串里出现的 "score: 0 不合理" 等字眼
+    const scoreMatch = objMatch[0].match(/(?:^\s*\{|[,{])\s*"score"\s*:\s*(\d+(?:\.\d+)?)/);
+    if (!scoreMatch) throw jsonErr; // 连 score 都提不出，真没救，抛原 JSON 错
+    const rationaleMatch = objMatch[0].match(/(?:^\s*\{|[,{])\s*"rationale"\s*:\s*"((?:[^"\\]|\\.)*?)(?:"\s*[,}])/);
+    const rationale = rationaleMatch ? rationaleMatch[1].replace(/\\(.)/g, '$1') : '[parse-recovered: rationale extraction failed]';
+    return {
+      score: Number(scoreMatch[1]),
+      rationale,
+      issues: [`[parse-recovered: original JSON malformed, score extracted via top-level regex; jsonErr=${jsonErr.message.slice(0, 60)}]`],
+    };
+  }
 }
 
 export async function callJudgeViaSdk({ model, prompt, clientFactory = defaultClientFactory }) {
-  const client = await clientFactory();
-  const r = await client.messages.create({
-    model,
-    max_tokens: 1500,
-    temperature: 0.3,
-    messages: [{ role: 'user', content: prompt }],
-  });
-  const text = (r.content ?? [])
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n');
+  const client = await clientFactory(model);
+  const invokeResult = await client.invoke(prompt);
+  const { text, promptTokens, completionTokens, finishReason, truncated } = invokeResult;
   let parsed;
   try {
     parsed = parseJudgeJson(text);
   } catch (e) {
     return {
       judge: model,
+      vendor: client.backend?.vendor ?? null,
       score: null,
-      rationale: `[parse error: ${e.message}]`,
+      rationale: `[parse error: ${e.message}${truncated ? ' | truncated=true (max_tokens hit)' : ''}]`,
       issues: [],
       judgedAt: new Date().toISOString(),
-      promptTokens: r.usage?.input_tokens ?? null,
-      completionTokens: r.usage?.output_tokens ?? null,
+      promptTokens,
+      completionTokens,
+      finishReason: finishReason ?? null,
+      truncated: truncated ?? false,
       rawText: text.slice(0, 500),
     };
   }
   return {
     judge: model,
+    vendor: client.backend?.vendor ?? null,
     score: parsed.score,
     rationale: parsed.rationale,
     issues: parsed.issues,
     judgedAt: new Date().toISOString(),
-    promptTokens: r.usage?.input_tokens ?? null,
-    completionTokens: r.usage?.output_tokens ?? null,
+    promptTokens,
+    completionTokens,
+    finishReason: finishReason ?? null,
+    truncated: truncated ?? false,
   };
 }
 
@@ -247,6 +402,7 @@ export async function runJuryOnFixture({
   clientFactory,
   taskFixturesDir = TASK_FIXTURES_DIR,
   maxDiffBytes = MAX_DIFF_BYTES,
+  vendorLimit, // optional Map<vendor, pLimit fn>，从 main 注入避免重复构造
 }) {
   const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   const taskId = fixture.taskExecution?.taskId ?? fixture.meta?.taskId;
@@ -263,10 +419,10 @@ export async function runJuryOnFixture({
 
   const prompt = buildAdversarialPrompt({ taskPrompt: taskFx.prompt, diff: anonymizedDiff });
 
-  const juryScores = [];
-  for (const judge of judges) {
+  // 并发跑 judges（fixture 内部 N judges 并行；fixture 之间仍 sequential 限速避免 rate limit）
+  const juryScoresPromises = judges.map(async (judge) => {
     if (dryRun) {
-      juryScores.push({
+      return {
         judge,
         score: 7,
         rationale: '[dry-run mock score; no LLM called]',
@@ -274,24 +430,31 @@ export async function runJuryOnFixture({
         judgedAt: new Date().toISOString(),
         promptTokens: null,
         completionTokens: null,
-      });
-      continue;
+      };
     }
-    try {
-      const r = await callJudgeViaSdk({ model: judge, prompt, clientFactory });
-      juryScores.push(r);
-      console.error(`[jury] ${judge}: score=${r.score}`);
-    } catch (e) {
-      console.error(`[jury] ${judge} FAILED: ${e.message}`);
-      juryScores.push({
-        judge,
-        score: null,
-        rationale: `[error: ${e.message}]`,
-        issues: [],
-        judgedAt: new Date().toISOString(),
-      });
-    }
-  }
+    // 用 per-vendor limiter 包裹 (防 SiliconFlow rate limit)
+    const { vendor } = parseJudgeBackend(judge);
+    const limit = vendorLimit?.get(vendor) ?? ((fn) => fn());
+    return limit(async () => {
+      try {
+        const r = await callJudgeViaSdk({ model: judge, prompt, clientFactory });
+        console.error(`[jury] ${judge}: score=${r.score}${r.truncated ? ' (TRUNCATED!)' : ''}`);
+        return r;
+      } catch (e) {
+        const ne = normalizeSdkError(e);
+        console.error(`[jury] ${judge} FAILED: ${ne.message}${ne.status ? ` [HTTP ${ne.status}]` : ''}${ne.isRateLimit ? ' [RATE_LIMIT]' : ''}`);
+        return {
+          judge,
+          score: null,
+          rationale: `[error: ${ne.message}]`,
+          issues: [],
+          judgedAt: new Date().toISOString(),
+          sdkError: ne,
+        };
+      }
+    });
+  });
+  const juryScores = await Promise.all(juryScoresPromises);
 
   const validScores = juryScores.map((j) => j.score).filter((s) => s != null);
   const agg = aggregateJury(validScores);
@@ -366,26 +529,48 @@ async function main() {
     fixturePaths = listAllFixtures();
   }
 
-  console.error(`[jury] judges: ${args.judges.join(', ')}; ${args.dryRun ? 'DRY-RUN' : 'live'}; ${fixturePaths.length} fixture(s)`);
+  console.error(`[jury] judges: ${args.judges.join(', ')}; ${args.dryRun ? 'DRY-RUN' : 'live'}; ${fixturePaths.length} fixture(s); concurrency=${args.concurrency} vendor-concurrency=${args.vendorConcurrency}`);
 
-  for (const fp of fixturePaths) {
+  // 跨 fixture 用 p-limit 控制并发（避免 rate limit）；fixture 内 N judges 已在 runJuryOnFixture 内并行
+  const { default: pLimit } = await import('p-limit');
+  const limit = pLimit(args.concurrency);
+
+  // 单 vendor 真实 in-flight 上限（防同一 gateway 被多 judge × 多 fixture 同时打爆）
+  const vendorLimit = new Map();
+  for (const judge of args.judges) {
+    const { vendor } = parseJudgeBackend(judge);
+    if (!vendorLimit.has(vendor)) vendorLimit.set(vendor, pLimit(args.vendorConcurrency));
+  }
+  // 警告：判官全部同 vendor 时 (如全 SiliconFlow) 跨 vendor jury 退化
+  const uniqueVendors = new Set([...vendorLimit.keys()]);
+  if (uniqueVendors.size === 1) {
+    console.error(`[jury] ⚠️  所有 judges 都来自同一 vendor (${[...uniqueVendors][0]}) — 跨 vendor jury 价值降低；建议加入不同 provider 的 judge`);
+  }
+
+  let done = 0;
+  const total = fixturePaths.length;
+  await Promise.all(fixturePaths.map((fp) => limit(async () => {
     if (!fs.existsSync(fp)) {
       console.error(`[jury] SKIP missing: ${path.relative(PROJECT_ROOT, fp)}`);
-      continue;
+      done++;
+      return;
     }
-    console.error(`\n[jury] === ${path.relative(PROJECT_ROOT, fp)} ===`);
+    const rel = path.relative(PROJECT_ROOT, fp);
     try {
       const r = await runJuryOnFixture({
         fixturePath: fp,
         judges: args.judges,
         dryRun: args.dryRun,
         maxDiffBytes: args.maxDiffBytes,
+        vendorLimit,
       });
-      console.error(`[jury] median=${r.juryMedian} mean=${r.juryMean} spread=${r.jurySpread} agreement=${r.juryAgreement}`);
+      done++;
+      console.error(`[jury ${done}/${total}] ${rel}: median=${r.juryMedian} spread=${r.jurySpread} agreement=${r.juryAgreement}`);
     } catch (e) {
-      console.error(`[jury] FAILED: ${e.message}`);
+      done++;
+      console.error(`[jury ${done}/${total}] ${rel} FAILED: ${e.message}`);
     }
-  }
+  })));
 }
 
 const isCliEntry = process.argv[1]?.endsWith('eval-judge-jury.mjs');

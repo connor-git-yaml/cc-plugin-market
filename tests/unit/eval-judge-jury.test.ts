@@ -16,11 +16,31 @@ interface JuryModule {
   };
   buildAdversarialPrompt: (input: { taskPrompt: string; diff: string }) => string;
   anonymizeDiff: (diff: string, reverseMap: Map<string, string>) => string;
+  parseJudgeBackend: (judgeModel: string) => {
+    provider: 'anthropic' | 'openai-compat';
+    vendor: string;
+    model: string;
+    baseURL: string | null;
+    apiKeyEnv: string;
+  };
+  normalizeSdkError: (e: unknown) => {
+    message: string;
+    status: number | null;
+    code: string | null;
+    type: string | null;
+    requestId: string | null;
+    retryAfterMs: number | null;
+    isRateLimit: boolean;
+    isServerError: boolean;
+  };
   callJudgeViaSdk: (input: {
     model: string;
     prompt: string;
-    clientFactory: () => Promise<{ messages: { create: (...args: unknown[]) => Promise<unknown> } }>;
-  }) => Promise<{ judge: string; score: number | null; rationale: string; issues: string[] }>;
+    clientFactory: (model: string) => Promise<{
+      backend?: { vendor: string };
+      invoke: (prompt: string) => Promise<{ text: string; promptTokens: number | null; completionTokens: number | null }>;
+    }>;
+  }) => Promise<{ judge: string; vendor?: string | null; score: number | null; rationale: string; issues: string[] }>;
   runJuryOnFixture: (input: {
     fixturePath: string;
     judges?: string[];
@@ -102,6 +122,31 @@ describe('eval-judge-jury', () => {
       expect(() => parseJudgeJson('no json here')).toThrow(/no JSON object/);
     });
 
+    it('falls back to regex when rationale contains unescaped quotes (GLM-5.1 bug)', async () => {
+      const { parseJudgeJson } = await loadJury();
+      // 真实 GLM-5.1 bug 复现：rationale 内嵌 "1-2 个" 引号未转义破坏 JSON
+      const buggy = '```json\n{\n  "score": 4,\n  "rationale": "test_engine.py 新增 30 行对于"1-2 个简单 unit test"要求超出。",\n  "issues": ["x"]\n}\n```';
+      const r = parseJudgeJson(buggy);
+      expect(r.score).toBe(4); // 至少 score 提取成功
+      expect(r.issues[0]).toMatch(/parse-recovered/);
+    });
+
+    it('fallback regex 不被 rationale 内嵌的 "score: 0" 字眼误导 (Codex CRITICAL)', async () => {
+      const { parseJudgeJson } = await loadJury();
+      // 攻击场景：JSON 损坏 + rationale 在真实 score 之前提到 "score": 0
+      // 旧 regex: /"score"\s*:\s*(\d+)/  → 会先匹配 rationale 字符串里的 0
+      // 新 regex: 必须紧跟 { 或 , 才算 top-level 键
+      const tricky = '{\n  "rationale": "工具说 \\"score\\": 0 不合理，"score":0 也是错误的，"\n  ,"score": 7\n}';
+      const r = parseJudgeJson(tricky);
+      expect(r.score).toBe(7); // 必须取 top-level 字段，不是 rationale 里的 0
+    });
+
+    it('throws if score also unparseable in fallback', async () => {
+      const { parseJudgeJson } = await loadJury();
+      const noScore = '{"rationale": "x"}';
+      expect(() => parseJudgeJson(noScore)).toThrow();
+    });
+
     it('coerces string score to number', async () => {
       const { parseJudgeJson } = await loadJury();
       const r = parseJudgeJson('{"score": "6", "rationale": "x", "issues": []}');
@@ -161,6 +206,31 @@ describe('eval-judge-jury', () => {
       expect(out).toContain('<TOOL>');
       expect(out).not.toContain('spec-driver-opus');
     });
+
+    it('uses full KNOWN_TOOL_NAMES as defense-in-depth (Codex WARN)', async () => {
+      const { anonymizeDiff } = await loadJury();
+      // 即使 reverseMap 没含 'graphify' / 'superpowers' / 'gstack' 等名字，也要 strip
+      const dirty = '+ from graphify import x\n+ # superpowers brainstorm phase\n+ // gstack review';
+      const out = anonymizeDiff(dirty, new Map());
+      expect(out).not.toMatch(/graphify/i);
+      expect(out).not.toMatch(/superpowers/i);
+      expect(out).not.toMatch(/gstack/i);
+      expect(out).toContain('<TOOL>');
+    });
+
+    it('case-insensitive tool name strip (e.g. comments with capitalized names)', async () => {
+      const { anonymizeDiff } = await loadJury();
+      const out = anonymizeDiff('// Used by Spectra and SuperPowers', new Map());
+      expect(out).not.toMatch(/spectra|superpowers/i);
+    });
+
+    it('long-name precedes short-name (spec-driver-spectra before spec-driver)', async () => {
+      const { anonymizeDiff } = await loadJury();
+      const out = anonymizeDiff('using spec-driver-spectra workflow', new Map());
+      // 不能让 spec-driver 先匹配，留下 -spectra 残段
+      expect(out).not.toContain('-spectra');
+      expect(out).toContain('<TOOL>');
+    });
   });
 
   describe('buildAdversarialPrompt', () => {
@@ -184,45 +254,176 @@ describe('eval-judge-jury', () => {
     });
   });
 
-  describe('callJudgeViaSdk (with mocked clientFactory)', () => {
-    it('calls SDK with correct args + parses response', async () => {
+  describe('parseJudgeBackend (multi-vendor dispatcher)', () => {
+    it('parses claude-* as Anthropic native', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const b = parseJudgeBackend('claude-sonnet-4-6');
+      expect(b.provider).toBe('anthropic');
+      expect(b.vendor).toBe('anthropic');
+      expect(b.model).toBe('claude-sonnet-4-6');
+      expect(b.apiKeyEnv).toBe('ANTHROPIC_API_KEY');
+      expect(b.baseURL).toBeNull();
+    });
+
+    it('parses siliconflow:<model> with vendor + baseURL', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const b = parseJudgeBackend('siliconflow:zai-org/GLM-4.6');
+      expect(b.provider).toBe('openai-compat');
+      expect(b.vendor).toBe('siliconflow');
+      expect(b.model).toBe('zai-org/GLM-4.6');
+      expect(b.apiKeyEnv).toBe('SILICONFLOW_API_KEY');
+      expect(b.baseURL).toMatch(/siliconflow\.cn/);
+    });
+
+    it('parses openai:<model> as native OpenAI', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const b = parseJudgeBackend('openai:gpt-4o');
+      expect(b.provider).toBe('openai-compat');
+      expect(b.vendor).toBe('openai');
+      expect(b.model).toBe('gpt-4o');
+      expect(b.apiKeyEnv).toBe('OPENAI_API_KEY');
+      expect(b.baseURL).toMatch(/openai\.com/);
+    });
+
+    it('SILICONFLOW_BASE_URL env override works', async () => {
+      const { parseJudgeBackend } = await loadJury();
+      const original = process.env.SILICONFLOW_BASE_URL;
+      process.env.SILICONFLOW_BASE_URL = 'https://custom.proxy/v1';
+      try {
+        const b = parseJudgeBackend('siliconflow:zai-org/GLM-4.6');
+        expect(b.baseURL).toBe('https://custom.proxy/v1');
+      } finally {
+        if (original === undefined) delete process.env.SILICONFLOW_BASE_URL;
+        else process.env.SILICONFLOW_BASE_URL = original;
+      }
+    });
+  });
+
+  describe('callJudgeViaSdk (adapter-pattern client)', () => {
+    it('calls injected client.invoke + returns parsed score + vendor', async () => {
       const { callJudgeViaSdk } = await loadJury();
-      const create = vi.fn().mockResolvedValue({
-        content: [{ type: 'text', text: '{"score": 8, "rationale": "good", "issues": ["x"]}' }],
-        usage: { input_tokens: 100, output_tokens: 50 },
+      const invoke = vi.fn().mockResolvedValue({
+        text: '{"score": 8, "rationale": "good", "issues": ["x"]}',
+        promptTokens: 100,
+        completionTokens: 50,
       });
-      const clientFactory = vi.fn().mockResolvedValue({ messages: { create } });
-      const r = await callJudgeViaSdk({ model: 'claude-opus-4-7', prompt: 'p', clientFactory });
-      expect(r.judge).toBe('claude-opus-4-7');
+      const clientFactory = vi.fn().mockResolvedValue({
+        backend: { vendor: 'siliconflow' },
+        invoke,
+      });
+      const r = await callJudgeViaSdk({ model: 'siliconflow:zai-org/GLM-4.6', prompt: 'p', clientFactory });
+      expect(r.judge).toBe('siliconflow:zai-org/GLM-4.6');
+      expect(r.vendor).toBe('siliconflow');
       expect(r.score).toBe(8);
       expect(r.issues).toEqual(['x']);
       expect(r.promptTokens).toBe(100);
-      expect(create).toHaveBeenCalledWith(expect.objectContaining({
-        model: 'claude-opus-4-7',
-        max_tokens: 1500,
-        temperature: 0.3,
-        messages: [{ role: 'user', content: 'p' }],
-      }));
+      expect(invoke).toHaveBeenCalledWith('p');
+      expect(clientFactory).toHaveBeenCalledWith('siliconflow:zai-org/GLM-4.6');
     });
 
     it('returns score=null with rawText preserved on parse error', async () => {
       const { callJudgeViaSdk } = await loadJury();
       const clientFactory = vi.fn().mockResolvedValue({
-        messages: { create: vi.fn().mockResolvedValue({
-          content: [{ type: 'text', text: 'lol no JSON here' }],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        }) },
+        backend: { vendor: 'anthropic' },
+        invoke: vi.fn().mockResolvedValue({
+          text: 'lol no JSON here',
+          promptTokens: 100,
+          completionTokens: 50,
+        }),
       });
       const r = await callJudgeViaSdk({ model: 'claude-opus-4-7', prompt: 'p', clientFactory });
       expect(r.score).toBeNull();
       expect(r.rationale).toMatch(/parse error/);
+    });
+
+    it('clientFactory receives full judgeModel (not stripped)', async () => {
+      const { callJudgeViaSdk } = await loadJury();
+      const clientFactory = vi.fn().mockResolvedValue({
+        invoke: vi.fn().mockResolvedValue({ text: '{"score": 5, "rationale": "x", "issues": []}', promptTokens: 1, completionTokens: 1 }),
+      });
+      await callJudgeViaSdk({ model: 'siliconflow:Qwen/Qwen3-Coder-30B-A3B-Instruct', prompt: 'p', clientFactory });
+      // clientFactory 必须收到完整 'siliconflow:...' 字符串以便它内部 dispatch backend
+      expect(clientFactory).toHaveBeenCalledWith('siliconflow:Qwen/Qwen3-Coder-30B-A3B-Instruct');
+    });
+
+    it('captures finishReason + truncated flag from invoke (Codex WARN)', async () => {
+      const { callJudgeViaSdk } = await loadJury();
+      const clientFactory = vi.fn().mockResolvedValue({
+        backend: { vendor: 'siliconflow' },
+        invoke: vi.fn().mockResolvedValue({
+          text: '{"score": 7, "rationale": "x", "issues": []}',
+          promptTokens: 100, completionTokens: 4000,
+          finishReason: 'length',
+          truncated: true,
+        }),
+      });
+      const r = await callJudgeViaSdk({ model: 'siliconflow:x', prompt: 'p', clientFactory }) as Record<string, unknown>;
+      expect(r.finishReason).toBe('length');
+      expect(r.truncated).toBe(true);
+    });
+
+    it('truncated flag preserved on parse error', async () => {
+      const { callJudgeViaSdk } = await loadJury();
+      const clientFactory = vi.fn().mockResolvedValue({
+        backend: { vendor: 'siliconflow' },
+        invoke: vi.fn().mockResolvedValue({
+          text: '{"score": 7, "rati', // truncated mid-key
+          promptTokens: 100, completionTokens: 4000,
+          finishReason: 'length',
+          truncated: true,
+        }),
+      });
+      const r = await callJudgeViaSdk({ model: 'siliconflow:x', prompt: 'p', clientFactory }) as Record<string, unknown>;
+      expect(r.score).toBeNull();
+      expect(r.rationale).toMatch(/truncated=true/);
+      expect(r.truncated).toBe(true);
+    });
+  });
+
+  describe('normalizeSdkError (Codex WARN: SDK retry metadata)', () => {
+    it('extracts status / code / type / requestId / retryAfter from SDK error', async () => {
+      const { normalizeSdkError } = await loadJury();
+      const sdkErr = {
+        message: 'rate limit exceeded',
+        status: 429,
+        code: 'rate_limit_exceeded',
+        type: 'rate_limit_error',
+        request_id: 'req-abc',
+        headers: { 'retry-after': '5' },
+      };
+      const ne = normalizeSdkError(sdkErr);
+      expect(ne.status).toBe(429);
+      expect(ne.isRateLimit).toBe(true);
+      expect(ne.code).toBe('rate_limit_exceeded');
+      expect(ne.requestId).toBe('req-abc');
+      expect(ne.retryAfterMs).toBe(5000);
+    });
+
+    it('marks 5xx as isServerError', async () => {
+      const { normalizeSdkError } = await loadJury();
+      const ne = normalizeSdkError({ message: 'upstream error', status: 503 });
+      expect(ne.isServerError).toBe(true);
+      expect(ne.isRateLimit).toBe(false);
+    });
+
+    it('handles plain Error (no status)', async () => {
+      const { normalizeSdkError } = await loadJury();
+      const ne = normalizeSdkError(new Error('network down'));
+      expect(ne.message).toBe('network down');
+      expect(ne.status).toBeNull();
+      expect(ne.isRateLimit).toBe(false);
+    });
+
+    it('handles non-Error input gracefully', async () => {
+      const { normalizeSdkError } = await loadJury();
+      const ne = normalizeSdkError('string error');
+      expect(ne.message).toContain('string error');
     });
   });
 
   describe('runJuryOnFixture (integration with mocked SDK)', () => {
     it('writes juryScores + median + spread back to fixture', async () => {
       const { runJuryOnFixture } = await loadJury();
-      // build fake fixture + task fixture
       const taskFxDir = join(tempDir, 'task-fixtures');
       mkdirSync(taskFxDir, { recursive: true });
       writeFileSync(join(taskFxDir, 'T1.json'), JSON.stringify({ taskId: 'T1', prompt: 'add tanh' }));
@@ -233,29 +434,31 @@ describe('eval-judge-jury', () => {
         taskExecution: { taskId: 'T1', tool: 'spec-driver-opus', diffStat: '+def tanh\n' },
       }));
 
-      const create = vi.fn()
-        .mockResolvedValueOnce({
-          content: [{ type: 'text', text: '{"score": 7, "rationale": "decent", "issues": ["i1", "i2"]}' }],
-          usage: { input_tokens: 100, output_tokens: 50 },
-        })
-        .mockResolvedValueOnce({
-          content: [{ type: 'text', text: '{"score": 8, "rationale": "good", "issues": ["i3"]}' }],
-          usage: { input_tokens: 110, output_tokens: 60 },
-        });
-      const clientFactory = vi.fn().mockResolvedValue({ messages: { create } });
+      // 新 adapter contract: clientFactory 收 model arg → 返回 { backend, invoke }
+      const invoke1 = vi.fn().mockResolvedValue({
+        text: '{"score": 7, "rationale": "decent", "issues": ["i1", "i2"]}',
+        promptTokens: 100, completionTokens: 50,
+      });
+      const invoke2 = vi.fn().mockResolvedValue({
+        text: '{"score": 8, "rationale": "good", "issues": ["i3"]}',
+        promptTokens: 110, completionTokens: 60,
+      });
+      const clientFactory = vi.fn()
+        .mockResolvedValueOnce({ backend: { vendor: 'siliconflow' }, invoke: invoke1 })
+        .mockResolvedValueOnce({ backend: { vendor: 'siliconflow' }, invoke: invoke2 });
 
       const result = await runJuryOnFixture({
         fixturePath,
-        judges: ['claude-sonnet-4-6', 'claude-opus-4-7'],
+        judges: ['siliconflow:zai-org/GLM-4.6', 'siliconflow:moonshotai/Kimi-K2-Instruct-0905'],
         clientFactory,
         taskFixturesDir: taskFxDir,
       });
 
       expect(result.juryMedian).toBe(7.5);
       expect(result.juryScores).toHaveLength(2);
-      expect(create).toHaveBeenCalledTimes(2);
+      expect(invoke1).toHaveBeenCalled();
+      expect(invoke2).toHaveBeenCalled();
 
-      // 验证写回 fixture
       const written = JSON.parse(readFileSync(fixturePath, 'utf-8'));
       expect(written.taskExecution.juryScores).toHaveLength(2);
       expect(written.taskExecution.juryMedian).toBe(7.5);
@@ -273,13 +476,15 @@ describe('eval-judge-jury', () => {
       const fixturePath = join(tempDir, 'full.json');
       writeFileSync(fixturePath, JSON.stringify({ taskExecution: { taskId: 'T1' } }));
 
-      const create = vi.fn()
+      const clientFactory = vi.fn()
         .mockRejectedValueOnce(new Error('rate limit'))
         .mockResolvedValueOnce({
-          content: [{ type: 'text', text: '{"score": 6, "rationale": "ok", "issues": []}' }],
-          usage: { input_tokens: 100, output_tokens: 50 },
+          backend: { vendor: 'anthropic' },
+          invoke: vi.fn().mockResolvedValue({
+            text: '{"score": 6, "rationale": "ok", "issues": []}',
+            promptTokens: 100, completionTokens: 50,
+          }),
         });
-      const clientFactory = vi.fn().mockResolvedValue({ messages: { create } });
 
       const result = await runJuryOnFixture({
         fixturePath,
@@ -291,7 +496,7 @@ describe('eval-judge-jury', () => {
       expect(result.juryScores).toHaveLength(2);
       expect(result.juryScores[0].score).toBeNull();
       expect(result.juryScores[1].score).toBe(6);
-      expect(result.juryMedian).toBe(6); // only 1 valid score
+      expect(result.juryMedian).toBe(6);
     });
 
     it('dry-run returns mock scores without calling SDK', async () => {
