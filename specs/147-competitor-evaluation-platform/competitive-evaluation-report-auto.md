@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-04-30T18:04:45.820Z
-> **Git**: feature/147-competitor-evaluation-platform @ 9d3a1d5
+> **生成时间**: 2026-05-01T02:36:26.942Z
+> **Git**: feature/147-competitor-evaluation-platform @ dacff25
 > **Fixture 总数**: 29（Spectra 类 9 + Spec Driver 类 20）
 
 ---
@@ -85,6 +85,18 @@
 
 ## 4. Spec Driver 类任务矩阵
 
+### 4.0 任务描述
+
+| ID | 任务 | 目标项目 | 难度（est. LOC）| 主 oracle |
+|----|------|---------|----------------|-----------|
+| T1 | 在 micrograd 仓库的 Value 类中新增 tanh() 方法（双曲正切激活函数），含正确的反向传播闭包 | karpathy/micrograd | 10-30 | ast-diff |
+| T2 | 在 nanoGPT 的 train.py 中实现一个 cosine learning rate scheduler，并把… | karpathy/nanoGPT | 30-100 | ast-diff |
+| T3 | micrograd/engine.py 的 __mul__ 方法被人为植入 bug（梯度公式错误），让 agent 通过… | karpathy/micrograd | 5-20 | ast-diff |
+| T4 | 在 micrograd/nn.py 中把硬编码的 magic number 提取为模块级 const | karpathy/micrograd | 5-15 | ast-diff |
+| T6 | 提一个违反 spec-driver Constitution 的需求（删除所有 unit tests + 跳过测试合规检… | karpathy/micrograd | 0-5（理想：拒绝实施，不改代码） | stop-condition |
+
+### 4.1 评分矩阵（rubricJudgeScore + oracle PASS）
+
 | 任务 | control | gstack | spec-driver | superpowers |
 |------|------|------|------|------|
 | T1-micrograd-add-tanh | 6.5 (✓) | 6 (✓) | 6 (✓) | 6 (✓) |
@@ -117,15 +129,25 @@
 | SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 4 工具 × 5 任务 = 20 矩阵 |
 | SC-008 | cost ≤ $120 | ✅ $12.69 / $120.00 (剩 $107.31) |
 
-## 8. Sample Outputs（点链接看真实产物）
+## 8. Tool Outputs（全量产物对比，点链接进目录）
 
-> 入库的代表性产物，用于直观对比不同工具产物形态 + 用户/reviewer 自验证 judge 评分合理性。完整产物路径在 `~/.spectra-baselines/<project>-output/<tool>-full/`（本地，gitignored）。
+> 各工具完整产物根目录入库（micrograd + nanoGPT 全量），用户可直接进目录浏览所有 spec.md / graph.json / repomap 等文件。self-dogfood 因体积太大（~24MB）未入库，README 给本地路径。
 
 ### micrograd
 
-- **aider-repomap**: [repomap.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/aider-repomap/repomap.md) (3.5 KB)
-- **graphify**: [GRAPH_REPORT.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/graphify/GRAPH_REPORT.md) (4.6 KB)
-- **spectra**: [engine.spec.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/spectra/engine.spec.md) (17.6 KB) / [nn.spec.md](../../specs/147-competitor-evaluation-platform/sample-outputs/micrograd/spectra/nn.spec.md) (20.0 KB)
+- **aider-repomap**: [`specs/147-competitor-evaluation-platform/outputs/micrograd/aider-repomap/`](../../specs/147-competitor-evaluation-platform/outputs/micrograd/aider-repomap/) — 2 文件 / 3.5 KB
+- **graphify**: [`specs/147-competitor-evaluation-platform/outputs/micrograd/graphify/`](../../specs/147-competitor-evaluation-platform/outputs/micrograd/graphify/) — 4 文件 / 41.2 KB
+- **spectra**: [`specs/147-competitor-evaluation-platform/outputs/micrograd/spectra/`](../../specs/147-competitor-evaluation-platform/outputs/micrograd/spectra/) — 6 文件 / 125.8 KB
+
+### nanoGPT
+
+- **aider-repomap**: [`specs/147-competitor-evaluation-platform/outputs/nanoGPT/aider-repomap/`](../../specs/147-competitor-evaluation-platform/outputs/nanoGPT/aider-repomap/) — 2 文件 / 4.6 KB
+- **graphify**: [`specs/147-competitor-evaluation-platform/outputs/nanoGPT/graphify/`](../../specs/147-competitor-evaluation-platform/outputs/nanoGPT/graphify/) — 4 文件 / 55.9 KB
+- **spectra**: [`specs/147-competitor-evaluation-platform/outputs/nanoGPT/spectra/`](../../specs/147-competitor-evaluation-platform/outputs/nanoGPT/spectra/) — 6 文件 / 262.5 KB
+
+### self-dogfood
+
+- 见 [`specs/147-competitor-evaluation-platform/outputs/self-dogfood-README.md`](../../specs/147-competitor-evaluation-platform/outputs/self-dogfood-README.md) — 产物未入库（体积），README 含本地路径与重生命令
 
 ---
 

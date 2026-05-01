@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "updatedAt": 1777535826454,
+  "entries": {
+    "81eab061234f8efb1ff5d90bcba8d1cb8a35e7ce32c3d0ea8d540d005e3da153": {
+      "cacheKey": "81eab061234f8efb1ff5d90bcba8d1cb8a35e7ce32c3d0ea8d540d005e3da153",
+      "generatorId": "data-model",
+      "inputFiles": [
+        {
+          "path": "/Users/connorlu/.spectra-baselines/micrograd/README.md",
+          "hash": "216163f1cbbd49c33fd8a7a5e6a1798a4ec815f7aa5aca31c5ff063161724eb8",
+          "mtime": 1777535269901.4243,
+          "size": 2420
+        }
+      ],
+      "outputFiles": [
+        "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/project/data-model.md"
+      ],
+      "createdAt": 1777535826454
+    }
+  }
+}

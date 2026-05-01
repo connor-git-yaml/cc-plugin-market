@@ -356,6 +356,30 @@ export function renderMarkdown(scanned, agg, insights) {
   // §4 Spec Driver Task Matrix
   lines.push('## 4. Spec Driver 类任务矩阵');
   lines.push('');
+
+  // §4.0 任务描述（从 task-fixtures/*.json 自动读取）
+  const taskFixturesDir = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures');
+  if (fs.existsSync(taskFixturesDir)) {
+    const taskFiles = fs.readdirSync(taskFixturesDir).filter((n) => n.endsWith('.json')).sort();
+    if (taskFiles.length > 0) {
+      lines.push('### 4.0 任务描述');
+      lines.push('');
+      lines.push('| ID | 任务 | 目标项目 | 难度（est. LOC）| 主 oracle |');
+      lines.push('|----|------|---------|----------------|-----------|');
+      for (const f of taskFiles) {
+        try {
+          const t = JSON.parse(fs.readFileSync(path.join(taskFixturesDir, f), 'utf-8'));
+          const id = t.taskId.split('-')[0];
+          const desc = t.description.length > 60 ? t.description.slice(0, 60) + '…' : t.description;
+          lines.push(`| ${id} | ${desc} | ${t.target} | ${t.estimatedLoc ?? 'n/a'} | ${t.primaryOracle?.kind ?? 'n/a'} |`);
+        } catch (e) { /* skip */ }
+      }
+      lines.push('');
+    }
+  }
+
+  lines.push('### 4.1 评分矩阵（rubricJudgeScore + oracle PASS）');
+  lines.push('');
   if (scanned.specDriverClass.length > 0) {
     const tools = [...agg.driverTools].sort();
     const tasks = [...agg.tasks].sort();
@@ -440,32 +464,45 @@ export function renderMarkdown(scanned, agg, insights) {
   lines.push(`| SC-008 | cost ≤ $120 | ${agg.cumulativeCost <= SC008_BUDGET ? '✅' : '⚠️'} ${fmtCost(agg.cumulativeCost)} / ${fmtCost(SC008_BUDGET)} (剩 ${fmtCost(agg.budgetRemaining)}) |`);
   lines.push('');
 
-  // §8 Sample Outputs（用户可点链接看真实产物）
-  const sampleOutputsDir = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/sample-outputs');
-  if (fs.existsSync(sampleOutputsDir)) {
-    lines.push('## 8. Sample Outputs（点链接看真实产物）');
+  // §8 Tool Outputs（全量产物，点链接进目录看完整对比）
+  const outputsDir = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/outputs');
+  if (fs.existsSync(outputsDir)) {
+    lines.push('## 8. Tool Outputs（全量产物对比，点链接进目录）');
     lines.push('');
-    lines.push('> 入库的代表性产物，用于直观对比不同工具产物形态 + 用户/reviewer 自验证 judge 评分合理性。完整产物路径在 `~/.spectra-baselines/<project>-output/<tool>-full/`（本地，gitignored）。');
+    lines.push('> 各工具完整产物根目录入库（micrograd + nanoGPT 全量），用户可直接进目录浏览所有 spec.md / graph.json / repomap 等文件。self-dogfood 因体积太大（~24MB）未入库，README 给本地路径。');
     lines.push('');
-    for (const proj of fs.readdirSync(sampleOutputsDir).sort()) {
-      const projDir = path.join(sampleOutputsDir, proj);
-      if (!fs.statSync(projDir).isDirectory()) continue;
-      lines.push(`### ${proj}`);
-      lines.push('');
-      for (const tool of fs.readdirSync(projDir).sort()) {
-        const toolDir = path.join(projDir, tool);
-        if (!fs.statSync(toolDir).isDirectory()) continue;
-        const files = fs.readdirSync(toolDir).filter((n) => !n.startsWith('.'));
-        if (files.length === 0) continue;
-        const linkSuffix = files.map((f) => {
-          const full = path.join(toolDir, f);
-          const sz = fmtBytes(fs.statSync(full).size);
-          const rel = path.relative(PROJECT_ROOT, full);
-          return `[${f}](../../${rel}) (${sz})`;
-        }).join(' / ');
-        lines.push(`- **${tool}**: ${linkSuffix}`);
+    for (const entry of fs.readdirSync(outputsDir).sort()) {
+      const entryPath = path.join(outputsDir, entry);
+      const stat = fs.statSync(entryPath);
+      if (stat.isDirectory()) {
+        lines.push(`### ${entry}`);
+        lines.push('');
+        for (const tool of fs.readdirSync(entryPath).sort()) {
+          const toolDir = path.join(entryPath, tool);
+          if (!fs.statSync(toolDir).isDirectory()) continue;
+          const fileCount = fs.readdirSync(toolDir).filter((n) => !n.startsWith('.')).length;
+          // 总大小
+          let totalSize = 0;
+          function walk(d) {
+            for (const f of fs.readdirSync(d)) {
+              const full = path.join(d, f);
+              const s = fs.statSync(full);
+              if (s.isDirectory()) walk(full);
+              else totalSize += s.size;
+            }
+          }
+          walk(toolDir);
+          const rel = path.relative(PROJECT_ROOT, toolDir);
+          lines.push(`- **${tool}**: [\`${rel}/\`](../../${rel}/) — ${fileCount} 文件 / ${fmtBytes(totalSize)}`);
+        }
+        lines.push('');
+      } else if (stat.isFile() && entry.endsWith('.md')) {
+        const rel = path.relative(PROJECT_ROOT, entryPath);
+        lines.push(`### ${entry.replace('-README.md', '')}`);
+        lines.push('');
+        lines.push(`- 见 [\`${rel}\`](../../${rel}) — 产物未入库（体积），README 含本地路径与重生命令`);
+        lines.push('');
       }
-      lines.push('');
     }
   }
 

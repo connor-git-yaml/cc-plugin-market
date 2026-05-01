@@ -1,0 +1,225 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-04-30T07:57:06.485Z",
+    "nodeCount": 13,
+    "edgeCount": 6,
+    "sources": [
+      "doc-graph",
+      "cross-reference",
+      "extraction"
+    ],
+    "skippedSources": [
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      }
+    ],
+    "inputHash": "c81aefc1671e4697",
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "../micrograd-output/spectra-full/modules/__init__.spec.md",
+      "kind": "spec",
+      "label": "__init__",
+      "metadata": {
+        "sourceTarget": "micrograd/__init__.py",
+        "relatedFiles": [
+          "micrograd/__init__.py"
+        ],
+        "confidence": "low",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../micrograd-output/spectra-full/modules/engine.spec.md",
+      "kind": "spec",
+      "label": "engine",
+      "metadata": {
+        "sourceTarget": "micrograd/engine.py",
+        "relatedFiles": [
+          "micrograd/engine.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../micrograd-output/spectra-full/modules/nn.spec.md",
+      "kind": "spec",
+      "label": "nn",
+      "metadata": {
+        "sourceTarget": "micrograd/nn.py",
+        "relatedFiles": [
+          "micrograd/nn.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../micrograd-output/spectra-full/modules/setup.spec.md",
+      "kind": "spec",
+      "label": "setup",
+      "metadata": {
+        "sourceTarget": "setup.py",
+        "relatedFiles": [
+          "setup.py"
+        ],
+        "confidence": "low",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "micrograd/__init__.py",
+      "kind": "module",
+      "label": "__init__",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/__init__.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/engine.py",
+      "kind": "module",
+      "label": "engine",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/engine.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/engine.py#Value",
+      "kind": "component",
+      "label": "Value",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Value",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/engine.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/nn.py",
+      "kind": "module",
+      "label": "nn",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/nn.py#Module",
+      "kind": "component",
+      "label": "Module",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Module",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/nn.py#Neuron",
+      "kind": "component",
+      "label": "Neuron",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Neuron(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/nn.py#Layer",
+      "kind": "component",
+      "label": "Layer",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Layer(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "micrograd/nn.py#MLP",
+      "kind": "component",
+      "label": "MLP",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class MLP(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "setup.py",
+      "kind": "module",
+      "label": "setup",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "setup.py",
+        "confidence": "EXTRACTED"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "../micrograd-output/spectra-full/modules/engine.spec.md",
+      "target": "micrograd/engine.py",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "micrograd/engine.py",
+      "target": "micrograd/engine.py#Value",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py#Module",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py#Neuron",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py#Layer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py#MLP",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    }
+  ]
+}

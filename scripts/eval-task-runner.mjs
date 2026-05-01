@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCHEMA_VERSION = '1.1';
 const COLLECTOR_VERSION = '0.3.0';
-const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control'];
+const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra'];
 
 function getBenchHome() {
   return process.env.SPEC_DRIVER_BENCH_HOME ?? path.join(os.homedir(), '.spec-driver-bench-worktrees');
@@ -111,12 +111,16 @@ function getTargetName(targetSpec) {
 const SUPERPOWERS_PLUGIN_DIR = path.join(os.homedir(), '.claude/plugins/installed');
 const GSTACK_SKILLS_DIR = path.join(os.homedir(), '.claude/skills/gstack');
 
-export function buildDriverPrompt({ tool, taskPrompt }) {
+export function buildDriverPrompt({ tool, taskPrompt, spectraContext }) {
   switch (tool) {
     case 'control':
       return taskPrompt;
     case 'spec-driver':
       return `请使用 spec-driver-fix workflow（specify → plan → implement → verify）完成以下任务，包括严格的 spec-driven discipline + 测试覆盖：\n\n${taskPrompt}`;
+    case 'spec-driver-spectra':
+      // 关键对照组：spec-driver workflow + 预先注入 spectra spec.md 作为项目理解 context
+      // 测试 Spectra + Spec Driver 协同价值（"AI for AI" 叙事的真正实证）
+      return `请使用 spec-driver-fix workflow（specify → plan → implement → verify）完成以下任务。**项目结构与关键 abstractions 已由 spectra 预先分析**，请充分利用以下 spec.md context 指导你的实施决策：\n\n## Spectra-generated context\n\n${spectraContext ?? '(spectra context unavailable)'}\n\n---\n\n## Task\n\n${taskPrompt}`;
     case 'superpowers':
       return `请使用 SuperPowers 框架的 brainstorm → plan → execute（含 RED/GREEN TDD）方法完成以下任务：\n\n${taskPrompt}`;
     case 'gstack':
@@ -124,6 +128,25 @@ export function buildDriverPrompt({ tool, taskPrompt }) {
     default:
       return taskPrompt;
   }
+}
+
+/**
+ * 加载 spectra spec.md 作为 context（spec-driver-spectra 对照组用）
+ * 取目标项目对应的 spec.md（micrograd / nanoGPT 在 ~/.spectra-baselines/<project>-output/spectra-full/modules/）。
+ */
+export function loadSpectraContext(targetSpec, maxBytes = 12000) {
+  const targetName = { 'karpathy/micrograd': 'micrograd', 'karpathy/nanoGPT': 'nanoGPT', 'self-dogfood': 'self-dogfood' }[targetSpec];
+  if (!targetName) return null;
+  const modulesDir = path.join(os.homedir(), '.spectra-baselines', `${targetName}-output`, 'spectra-full', 'modules');
+  if (!fs.existsSync(modulesDir)) return null;
+  const files = fs.readdirSync(modulesDir).filter((n) => n.endsWith('.spec.md')).slice(0, 3);
+  let content = '';
+  for (const f of files) {
+    const sample = fs.readFileSync(path.join(modulesDir, f), 'utf-8').slice(0, 4000);
+    content += `### ${f}\n\n${sample}\n\n---\n\n`;
+    if (content.length > maxBytes) break;
+  }
+  return content.slice(0, maxBytes);
 }
 
 export function findSuperPowersDir() {
@@ -159,12 +182,16 @@ export function buildClaudeArgs({ tool, prompt }) {
 export function runTask({ tool, prompt, wtDir, timeoutMs }) {
   const args = buildClaudeArgs({ tool, prompt });
   const start = process.hrtime.bigint();
+  // 不主动设 ANTHROPIC_API_KEY；让 claude CLI fallback 到 OAuth credentials
+  // （之前设为 '' 会覆盖 OAuth 导致 401 auth error）
+  const env = { ...process.env };
+  if (env.ANTHROPIC_API_KEY === '') delete env.ANTHROPIC_API_KEY;
   const r = spawnSync('claude', args, {
     cwd: wtDir,
     encoding: 'utf-8',
     maxBuffer: 64 * 1024 * 1024,
     timeout: timeoutMs,
-    env: { ...process.env, ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? '' },
+    env,
   });
   const wallMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
   return {
@@ -357,7 +384,12 @@ async function main() {
     spawnSync('git', ['-C', wt.wtDir, 'commit', '-m', 'eval-bench: task setup'], { encoding: 'utf-8' });
   }
 
-  const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt });
+  // 仅 spec-driver-spectra 需要 spectra context（"AI for AI" 协同对照组）
+  const spectraContext = args.tool === 'spec-driver-spectra' ? loadSpectraContext(taskFixture.target) : null;
+  if (args.tool === 'spec-driver-spectra' && !spectraContext) {
+    console.warn(`[task-runner] WARN: spec-driver-spectra 模式但 spectra context 不可用 (target=${taskFixture.target}); 退化为 spec-driver`);
+  }
+  const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt, spectraContext });
   console.log(`[task-runner] running claude (${args.tool})...`);
   const runResult = runTask({ tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs });
   console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);

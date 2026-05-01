@@ -1,0 +1,109 @@
+{
+  "version": "1",
+  "updatedAt": 1777537096390,
+  "entries": {
+    "63fda28aabc9b6fbb542699fe5271525a72485b48a16a6b44ed784495a57d458": {
+      "cacheKey": "63fda28aabc9b6fbb542699fe5271525a72485b48a16a6b44ed784495a57d458",
+      "generatorId": "data-model",
+      "inputFiles": [
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/README.md",
+          "hash": "a78a3a6e9d66ba20ffc0574394da8d9c59e579c9335347c364514f96890c1d50",
+          "mtime": 1777535591861.6843,
+          "size": 13850
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/openwebtext/readme.md",
+          "hash": "3c165c2c62c5bfc5e967bd69a66c6722db9734f558c39c1f50f1a0957b9128e1",
+          "mtime": 1777535591863.4822,
+          "size": 489
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare/readme.md",
+          "hash": "3583454b886973eae50aef1b98dee84d71de7e2772e34dd437893f4c4ec0535c",
+          "mtime": 1777535591863.6636,
+          "size": 161
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare_char/readme.md",
+          "hash": "90b3db09f303bb5dad8643e842ff77c6d1b2337ed3f79a5fdb12f582531730cd",
+          "mtime": 1777535591863.8171,
+          "size": 209
+        }
+      ],
+      "outputFiles": [
+        "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/project/data-model.md",
+        "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/project/data-model.mmd"
+      ],
+      "createdAt": 1777537096378
+    },
+    "385d0818539baf02a32dfaaf70c4d448b37c62db784c4767f1bc40a6f9ae9282": {
+      "cacheKey": "385d0818539baf02a32dfaaf70c4d448b37c62db784c4767f1bc40a6f9ae9282",
+      "generatorId": "event-surface",
+      "inputFiles": [
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/README.md",
+          "hash": "a78a3a6e9d66ba20ffc0574394da8d9c59e579c9335347c364514f96890c1d50",
+          "mtime": 1777535591861.6843,
+          "size": 13850
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/openwebtext/readme.md",
+          "hash": "3c165c2c62c5bfc5e967bd69a66c6722db9734f558c39c1f50f1a0957b9128e1",
+          "mtime": 1777535591863.4822,
+          "size": 489
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare/readme.md",
+          "hash": "3583454b886973eae50aef1b98dee84d71de7e2772e34dd437893f4c4ec0535c",
+          "mtime": 1777535591863.6636,
+          "size": 161
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare_char/readme.md",
+          "hash": "90b3db09f303bb5dad8643e842ff77c6d1b2337ed3f79a5fdb12f582531730cd",
+          "mtime": 1777535591863.8171,
+          "size": 209
+        }
+      ],
+      "outputFiles": [
+        "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/project/event-surface.md"
+      ],
+      "createdAt": 1777537096384
+    },
+    "9aee89c086b9ad606f578a323d95d18911586304ac26db2fbd9a69d4aa39ee23": {
+      "cacheKey": "9aee89c086b9ad606f578a323d95d18911586304ac26db2fbd9a69d4aa39ee23",
+      "generatorId": "troubleshooting",
+      "inputFiles": [
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/README.md",
+          "hash": "a78a3a6e9d66ba20ffc0574394da8d9c59e579c9335347c364514f96890c1d50",
+          "mtime": 1777535591861.6843,
+          "size": 13850
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/openwebtext/readme.md",
+          "hash": "3c165c2c62c5bfc5e967bd69a66c6722db9734f558c39c1f50f1a0957b9128e1",
+          "mtime": 1777535591863.4822,
+          "size": 489
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare/readme.md",
+          "hash": "3583454b886973eae50aef1b98dee84d71de7e2772e34dd437893f4c4ec0535c",
+          "mtime": 1777535591863.6636,
+          "size": 161
+        },
+        {
+          "path": "/Users/connorlu/.spectra-baselines/nanoGPT/data/shakespeare_char/readme.md",
+          "hash": "90b3db09f303bb5dad8643e842ff77c6d1b2337ed3f79a5fdb12f582531730cd",
+          "mtime": 1777535591863.8171,
+          "size": 209
+        }
+      ],
+      "outputFiles": [
+        "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/project/troubleshooting.md"
+      ],
+      "createdAt": 1777537096390
+    }
+  }
+}

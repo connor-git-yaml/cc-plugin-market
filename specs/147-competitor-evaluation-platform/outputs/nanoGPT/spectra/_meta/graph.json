@@ -1,0 +1,520 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-04-30T08:18:16.421Z",
+    "nodeCount": 32,
+    "edgeCount": 18,
+    "sources": [
+      "doc-graph",
+      "cross-reference",
+      "extraction"
+    ],
+    "skippedSources": [
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      }
+    ],
+    "inputHash": "2b73882912c216ff",
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/bench.spec.md",
+      "kind": "spec",
+      "label": "bench",
+      "metadata": {
+        "sourceTarget": "bench.py",
+        "relatedFiles": [
+          "bench.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/configurator.spec.md",
+      "kind": "spec",
+      "label": "configurator",
+      "metadata": {
+        "sourceTarget": "configurator.py",
+        "relatedFiles": [
+          "configurator.py"
+        ],
+        "confidence": "low",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/model.spec.md",
+      "kind": "spec",
+      "label": "model",
+      "metadata": {
+        "sourceTarget": "model.py",
+        "relatedFiles": [
+          "model.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/prepare.spec.md",
+      "kind": "spec",
+      "label": "prepare",
+      "metadata": {
+        "sourceTarget": "data/openwebtext/prepare.py",
+        "relatedFiles": [
+          "data/openwebtext/prepare.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/sample.spec.md",
+      "kind": "spec",
+      "label": "sample",
+      "metadata": {
+        "sourceTarget": "sample.py",
+        "relatedFiles": [
+          "sample.py"
+        ],
+        "confidence": "low",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "../nanoGPT-output/spectra-full/modules/train.spec.md",
+      "kind": "spec",
+      "label": "train",
+      "metadata": {
+        "sourceTarget": "train.py",
+        "relatedFiles": [
+          "train.py"
+        ],
+        "confidence": "medium",
+        "currentRun": true,
+        "sourceTag": "doc-graph"
+      }
+    },
+    {
+      "id": "bench.py",
+      "kind": "module",
+      "label": "bench",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "bench.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/eval_gpt2.py",
+      "kind": "module",
+      "label": "eval_gpt2",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/eval_gpt2_large.py",
+      "kind": "module",
+      "label": "eval_gpt2_large",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_large.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/eval_gpt2_medium.py",
+      "kind": "module",
+      "label": "eval_gpt2_medium",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_medium.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/eval_gpt2_xl.py",
+      "kind": "module",
+      "label": "eval_gpt2_xl",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_xl.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/finetune_shakespeare.py",
+      "kind": "module",
+      "label": "finetune_shakespeare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/finetune_shakespeare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/train_gpt2.py",
+      "kind": "module",
+      "label": "train_gpt2",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/train_gpt2.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "config/train_shakespeare_char.py",
+      "kind": "module",
+      "label": "train_shakespeare_char",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/train_shakespeare_char.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "configurator.py",
+      "kind": "module",
+      "label": "configurator",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "configurator.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/openwebtext/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/openwebtext/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py#encode",
+      "kind": "component",
+      "label": "encode",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def encode(s)",
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py#decode",
+      "kind": "component",
+      "label": "decode",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def decode(l)",
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py",
+      "kind": "module",
+      "label": "model",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED",
+        "degree": 7
+      }
+    },
+    {
+      "id": "model.py#LayerNorm",
+      "kind": "component",
+      "label": "LayerNorm",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class LayerNorm(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#CausalSelfAttention",
+      "kind": "component",
+      "label": "CausalSelfAttention",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class CausalSelfAttention(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#MLP",
+      "kind": "component",
+      "label": "MLP",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class MLP(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#Block",
+      "kind": "component",
+      "label": "Block",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Block(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#GPTConfig",
+      "kind": "component",
+      "label": "GPTConfig",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class GPTConfig",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#GPT",
+      "kind": "component",
+      "label": "GPT",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class GPT(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "sample.py",
+      "kind": "module",
+      "label": "sample",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "sample.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py",
+      "kind": "module",
+      "label": "train",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py#get_batch",
+      "kind": "component",
+      "label": "get_batch",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def get_batch(split)",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py#estimate_loss",
+      "kind": "component",
+      "label": "estimate_loss",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def estimate_loss()",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py#get_lr",
+      "kind": "component",
+      "label": "get_lr",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def get_lr(it)",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/bench.spec.md",
+      "target": "../nanoGPT-output/spectra-full/modules/model.spec.md",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/sample.spec.md",
+      "target": "../nanoGPT-output/spectra-full/modules/model.spec.md",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/train.spec.md",
+      "target": "../nanoGPT-output/spectra-full/modules/model.spec.md",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/model.spec.md",
+      "target": "model.py",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/bench.spec.md",
+      "target": "bench.py",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/sample.spec.md",
+      "target": "sample.py",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "../nanoGPT-output/spectra-full/modules/train.spec.md",
+      "target": "train.py",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "data/shakespeare_char/prepare.py",
+      "target": "data/shakespeare_char/prepare.py#encode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "data/shakespeare_char/prepare.py",
+      "target": "data/shakespeare_char/prepare.py#decode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#LayerNorm",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#CausalSelfAttention",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#MLP",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#Block",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#GPTConfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#GPT",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#get_batch",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#estimate_loss",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#get_lr",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    }
+  ]
+}
