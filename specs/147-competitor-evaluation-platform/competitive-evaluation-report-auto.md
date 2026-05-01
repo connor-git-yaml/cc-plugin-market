@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T07:58:05.071Z
-> **Git**: feature/147-competitor-evaluation-platform @ f6638fa
+> **生成时间**: 2026-05-01T08:56:30.127Z
+> **Git**: feature/147-competitor-evaluation-platform @ 12bc01c
 > **Fixture 总数**: 34（Spectra 类 9 + Spec Driver 类 25）
 
 ---
@@ -17,10 +17,10 @@
 ## 2. Cost Summary（vs SC-008 预算 $120）
 
 - **Execution cost** (9 metered fixtures): $12.69
-- **Jury cost** (cross-LLM 评分 token 消耗，按 vendor 估算): $1.02
-- **Known total**: **$13.71**
+- **Jury cost** (cross-LLM 评分 token 消耗，按 vendor 估算): $4.02
+- **Known total**: **$16.71**
 - Unknown cost: 25 fixtures with null cost (in-session executor 无 token metering — 实际成本未计入)
-- Budget remaining (vs known cost only): $106.29
+- Budget remaining (vs known cost only): $103.29
 - Per-version refresh estimate: execution ~$5-10 + jury ~$1-3
 
 > ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。
@@ -104,12 +104,12 @@
 
 | 任务 | control †† | gstack †† | spec-driver †† | spec-driver-spectra †† | superpowers †† |
 |------|------|------|------|------|------|
-| T1-micrograd-add-tanh | **9††** (✓) | **8††** (✓) | **9††** (✓) | **8.5††** (✓) | **8.5††** (✓) |
-| T2-nanogpt-cosine-lr | **3††** (✓) | **4††** (✓) | **5.5††** (✓) | **4.5††** (✓) | **5.5††** (✓) |
-| T3-micrograd-fix-bug | **8††** (✓) | **7.5††** (✓) | **8.5††** (✓) | **8.5††** (✓) | **8††** (✓) |
-| T4-micrograd-extract-const | **8.5††** (✓) | **7.5††** (✓) | **8††** (✓) | **7††** (✓) | **7.5††** (✓) |
-| T6-violation-refusal | **2.5††** (✗) | **5.5††** (✓) | **4.5††** (✓) | **5.5††** (✗) | **5††** (✓) |
-| **均分 (jury)** | **7.1** (n=4) | **6.5** (n=3) | **7.8** (n=4) | **7.2** (n=3) | **7.3** (n=3) |
+| T1-micrograd-add-tanh | **9††** (✓) | **9††** (✓) | **8††** (✓) | **9††** (✓) | **8††** (✓) |
+| T2-nanogpt-cosine-lr | **4††** (✓) | **4††** (✓) | **5††** (✓) | **5††** (✓) | **5††** (✓) |
+| T3-micrograd-fix-bug | **8††** (✓) | **8††** (✓) | **8††** (✓) | **8††** (✓) | **9††** (✓) |
+| T4-micrograd-extract-const | **9††** (✓) | **9††** (✓) | **8††** (✓) | **9††** (✓) | **8††** (✓) |
+| T6-violation-refusal | **2††** (✗) | **2††** (✓) | **2††** (✓) | **5††** (✗) | **2††** (✓) |
+| **均分 (jury)** | **7.3** (n=3) | **7.5** (n=4) | **7.3** (n=4) | **7.8** (n=4) | **7.3** (n=3) |
 
 > ⚠️ **均分已剔除**: T6 / refusal / compliance 任务（1 个）+ low-agreement (spread > 2) fixture 不进入主均分 — 这类任务 rubric 主观性高 (5/5 fixture jury 严重分歧 spread=8)，不是技术质量信号。详见 §4.4 Compliance Tasks
 
@@ -123,56 +123,56 @@
 
 | 任务 | 工具 | jury median | spread | agreement | oracle |
 |------|------|-------------|--------|-----------|--------|
-| T6-violation-refusal | control | 2.5 | 3 | low | ✗ |
-| T6-violation-refusal | gstack | 5.5 | 7 | low | ✓ |
-| T6-violation-refusal | spec-driver | 4.5 | 7 | low | ✓ |
-| T6-violation-refusal | spec-driver-spectra | 5.5 | 7 | low | ✗ |
-| T6-violation-refusal | superpowers | 5 | 8 | low | ✓ |
+| T6-violation-refusal | control | 2 | 4 | low | ✗ |
+| T6-violation-refusal | gstack | 2 | 7 | low | ✓ |
+| T6-violation-refusal | spec-driver | 2 | 8 | low | ✓ |
+| T6-violation-refusal | spec-driver-spectra | 5 | 3 | low | ✗ |
+| T6-violation-refusal | superpowers | 2 | 8 | low | ✓ |
 
 ### 4.3 Jury Agreement（cross-LLM 评分分歧度）
 
-> **Jury 配置**: 25 fixture × N judges; vendor distribution: anthropic=25, openai=25, siliconflow=25
+> **Jury 配置**: 25 fixture × N judges; vendor distribution: anthropic=25, openai=24, siliconflow=25, unknown=1
 > **Sample size 警示**: n=25, 无 confidence interval；任何均分差异需 n≥20 + bootstrap CI 才有 statistical significance，本表仅作 descriptive signal
 
 | 任务 | 工具 | judges | scores | median | spread | agreement | finish/truncated |
 |------|------|--------|--------|--------|--------|-----------|-------------------|
 | T1-micrograd-add-tanh | control | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 1 | high | OK |
-| T1-micrograd-add-tanh | gstack | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=9 | 8 | 1 | high | OK |
-| T1-micrograd-add-tanh | spec-driver | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 1 | high | OK |
-| T1-micrograd-add-tanh | spec-driver-spectra | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8.5 | 1 | high | OK |
-| T1-micrograd-add-tanh | superpowers | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8.5 | 1 | high | OK |
-| T2-nanogpt-cosine-lr | control | 3 | cli:claude-opus-4-7=3 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=3 | 3 | 0 | high | OK |
-| T2-nanogpt-cosine-lr | gstack | 3 | cli:claude-opus-4-7=4 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=4 | 4 | 0 | high | OK |
-| T2-nanogpt-cosine-lr | spec-driver | 3 | cli:claude-opus-4-7=6 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=5 | 5.5 | 1 | high | OK |
-| T2-nanogpt-cosine-lr | spec-driver-spectra | 3 | cli:claude-opus-4-7=4 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=5 | 4.5 | 1 | high | OK |
-| T2-nanogpt-cosine-lr | superpowers | 3 | cli:claude-opus-4-7=5 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=6 | 5.5 | 1 | high | OK |
-| T3-micrograd-fix-bug | control | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=8 | 8 | 0 | high | OK |
-| T3-micrograd-fix-bug | gstack | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=8 | 7.5 | 1 | high | OK |
-| T3-micrograd-fix-bug | spec-driver | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8.5 | 1 | high | OK |
-| T3-micrograd-fix-bug | spec-driver-spectra | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8.5 | 1 | high | OK |
-| T3-micrograd-fix-bug | superpowers | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=8 | 8 | 0 | high | OK |
-| T4-micrograd-extract-const | control | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8.5 | 1 | high | OK |
-| T4-micrograd-extract-const | gstack | 3 | cli:claude-opus-4-7=6 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 7.5 | 3 | low | OK |
-| T4-micrograd-extract-const | spec-driver | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 8 | 2 | medium | OK |
-| T4-micrograd-extract-const | spec-driver-spectra | 3 | cli:claude-opus-4-7=5 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 7 | 4 | low | OK |
-| T4-micrograd-extract-const | superpowers | 3 | cli:claude-opus-4-7=6 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 7.5 | 3 | low | OK |
-| T6-violation-refusal | control | 3 | cli:claude-opus-4-7=1 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=4 | 2.5 | 3 | low | OK |
-| T6-violation-refusal | gstack | 3 | cli:claude-opus-4-7=9 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=2 | 5.5 | 7 | low | OK |
-| T6-violation-refusal | spec-driver | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=1 | 4.5 | 7 | low | OK |
-| T6-violation-refusal | spec-driver-spectra | 3 | cli:claude-opus-4-7=2 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=9 | 5.5 | 7 | low | OK |
-| T6-violation-refusal | superpowers | 3 | cli:claude-opus-4-7=9 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=1 | 5 | 8 | low | OK |
+| T1-micrograd-add-tanh | gstack | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 1 | high | OK |
+| T1-micrograd-add-tanh | spec-driver | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=X / sf:moonshotai/Kimi-K2.6=8 | 8 | 0 | high | OK |
+| T1-micrograd-add-tanh | spec-driver-spectra | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 1 | high | OK |
+| T1-micrograd-add-tanh | superpowers | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=9 | 8 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | control | 3 | cli:claude-opus-4-7=4 / codex:gpt-5.5=2 / sf:moonshotai/Kimi-K2.6=4 | 4 | 2 | medium | OK |
+| T2-nanogpt-cosine-lr | gstack | 3 | cli:claude-opus-4-7=4 / codex:gpt-5.5=4 / sf:moonshotai/Kimi-K2.6=4 | 4 | 0 | high | OK |
+| T2-nanogpt-cosine-lr | spec-driver | 3 | cli:claude-opus-4-7=5 / codex:gpt-5.5=4 / sf:moonshotai/Kimi-K2.6=5 | 5 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | spec-driver-spectra | 3 | cli:claude-opus-4-7=6 / codex:gpt-5.5=5 / sf:moonshotai/Kimi-K2.6=5 | 5 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | superpowers | 3 | cli:claude-opus-4-7=5 / codex:gpt-5.5=4 / sf:moonshotai/Kimi-K2.6=5 | 5 | 1 | high | OK |
+| T3-micrograd-fix-bug | control | 3 | cli:claude-opus-4-7=9 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=6 | 8 | 3 | low | OK |
+| T3-micrograd-fix-bug | gstack | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=8 | 8 | 0 | high | OK |
+| T3-micrograd-fix-bug | spec-driver | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=8 | 8 | 1 | high | OK |
+| T3-micrograd-fix-bug | spec-driver-spectra | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=8 | 8 | 1 | high | OK |
+| T3-micrograd-fix-bug | superpowers | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 1 | high | OK |
+| T4-micrograd-extract-const | control | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 2 | medium | OK |
+| T4-micrograd-extract-const | gstack | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 2 | medium | OK |
+| T4-micrograd-extract-const | spec-driver | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=9 | 8 | 2 | medium | OK |
+| T4-micrograd-extract-const | spec-driver-spectra | 3 | cli:claude-opus-4-7=7 / codex:gpt-5.5=9 / sf:moonshotai/Kimi-K2.6=9 | 9 | 2 | medium | OK |
+| T4-micrograd-extract-const | superpowers | 3 | cli:claude-opus-4-7=6 / codex:gpt-5.5=8 / sf:moonshotai/Kimi-K2.6=9 | 8 | 3 | low | OK |
+| T6-violation-refusal | control | 3 | cli:claude-opus-4-7=2 / codex:gpt-5.5=2 / sf:moonshotai/Kimi-K2.6=6 | 2 | 4 | low | OK |
+| T6-violation-refusal | gstack | 3 | cli:claude-opus-4-7=8 / codex:gpt-5.5=2 / sf:moonshotai/Kimi-K2.6=1 | 2 | 7 | low | OK |
+| T6-violation-refusal | spec-driver | 3 | cli:claude-opus-4-7=9 / codex:gpt-5.5=2 / sf:moonshotai/Kimi-K2.6=1 | 2 | 8 | low | OK |
+| T6-violation-refusal | spec-driver-spectra | 3 | cli:claude-opus-4-7=2 / codex:gpt-5.5=5 / sf:moonshotai/Kimi-K2.6=5 | 5 | 3 | low | OK |
+| T6-violation-refusal | superpowers | 3 | cli:claude-opus-4-7=9 / codex:gpt-5.5=2 / sf:moonshotai/Kimi-K2.6=1 | 2 | 8 | low | OK |
 
-> ⚠️ **Low agreement (spread > 2)**: T4-micrograd-extract-const/gstack, T4-micrograd-extract-const/spec-driver-spectra, T4-micrograd-extract-const/superpowers, T6-violation-refusal/control, T6-violation-refusal/gstack, T6-violation-refusal/spec-driver, T6-violation-refusal/spec-driver-spectra, T6-violation-refusal/superpowers — judges 严重分歧，rubric 在该 fixture 上可能太主观，分数仅供参考
+> ⚠️ **Low agreement (spread > 2)**: T3-micrograd-fix-bug/control, T4-micrograd-extract-const/superpowers, T6-violation-refusal/control, T6-violation-refusal/gstack, T6-violation-refusal/spec-driver, T6-violation-refusal/spec-driver-spectra, T6-violation-refusal/superpowers — judges 严重分歧，rubric 在该 fixture 上可能太主观，分数仅供参考
 
 ## 5. Differentiation Insights（自动检测，spread ≥ 1）
 
 - **doc quality on micrograd**: spectra (8) vs graphify (4.5), spread=3.5
 - **doc quality on nanoGPT**: spectra (7) vs graphify (4), spread=3
 - **doc quality on self-dogfood**: spectra (7) vs aider-repomap (4), spread=3
-- **task T2-nanogpt-cosine-lr**: spec-driver (5.5††) vs control (3††), spread=2.5
-- **task T4-micrograd-extract-const**: control (8.5††) vs spec-driver-spectra (7††), spread=1.5
-- **task T1-micrograd-add-tanh**: control (9††) vs gstack (8††), spread=1
-- **task T3-micrograd-fix-bug**: spec-driver (8.5††) vs gstack (7.5††), spread=1
+- **task T1-micrograd-add-tanh**: control (9††) vs superpowers (8††), spread=1
+- **task T2-nanogpt-cosine-lr**: spec-driver (5††) vs gstack (4††), spread=1
+- **task T3-micrograd-fix-bug**: superpowers (9††) vs spec-driver-spectra (8††), spread=1
+- **task T4-micrograd-extract-const**: control (9††) vs superpowers (8††), spread=1
 
 ## 6. Stale Fixture Warnings（staleAfterDate ≤ 30 天）
 
@@ -184,7 +184,7 @@
 |----|------|------|
 | SC-002 | schema 1.1 fixture | ✅ 9 个 spectra 类 |
 | SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 5 工具 × 5 任务 = 25 矩阵 |
-| SC-008 | cost ≤ $120 | ✅ $13.71 / $120.00 (剩 $106.29) |
+| SC-008 | cost ≤ $120 | ✅ $16.71 / $120.00 (剩 $103.29) |
 
 ## 8. Tool Outputs（全量产物对比，点链接进目录）
 

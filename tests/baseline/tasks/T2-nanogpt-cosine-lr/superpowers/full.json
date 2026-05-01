@@ -107,46 +107,51 @@
         "issues": [
           "[parse-recovered: original JSON malformed, score extracted via top-level regex; jsonErr=Expected ',' or '}' after property value in JSON at position]"
         ],
-        "judgedAt": "2026-05-01T07:41:46.272Z",
+        "judgedAt": "2026-05-01T08:51:22.925Z",
         "promptTokens": 5,
-        "completionTokens": 1188,
+        "completionTokens": 914,
         "finishReason": "end_turn",
         "truncated": false
       },
       {
         "judge": "codex:gpt-5.5",
         "vendor": "openai",
-        "score": null,
-        "rationale": "[parse error: no JSON object in response]",
-        "issues": [],
-        "judgedAt": "2026-05-01T07:41:27.169Z",
+        "score": 4,
+        "rationale": "核心 cosine warmup/decay 公式和训练循环中更新 optimizer param_groups 的逻辑基本正确，但产出混入大量与任务无关的 train.py 改动，并引入了真实回归风险。新增测试也没有测试 train.py 中的实际实现，而是复制了一份 get_lr，验证价值有限。整体属于能完成主目标的一部分，但破坏现有训练循环/恢复逻辑的风险明显。",
+        "issues": [
+          "train.py resume 分支把 unwanted_prefix 从 '_orig_mod.' 改成 '_orig_mod.module.'，会导致原本 torch.compile 保存的 '_orig_mod.' 前缀 checkpoint 无法正确恢复，属于与 scheduler 无关且破坏现有逻辑的回归。",
+          "train.py 将 wandb 初始化条件从 'if wandb_log and master_process' 改成 'if wandb_log'，DDP 下所有 rank 都会初始化 wandb，可能产生重复 run/日志污染，破坏原有 master-only logging 语义。",
+          "新增 test_lr_scheduler.py 复制了一份 get_lr 实现，而不是导入 train.py 的实际函数；即使 train.py 的 get_lr 被改坏，测试仍可能通过，覆盖不到真实集成。",
+          "diff 修改了 vocab_size 初始化、DDP 注释/变量、memmap 注释、MFU 计算写法等大量非任务范围内容，违反“不破坏现有训练循环逻辑”和任务只改 scheduler 的约束，增加不必要风险。"
+        ],
+        "judgedAt": "2026-05-01T08:51:35.730Z",
         "promptTokens": null,
-        "completionTokens": null,
-        "finishReason": "error",
-        "truncated": false,
-        "rawText": ""
+        "completionTokens": 21951,
+        "finishReason": "stop",
+        "truncated": false
       },
       {
         "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
         "vendor": "siliconflow",
-        "score": 6,
-        "rationale": "核心cosine LR调度逻辑与测试用例本身正确，但diff包含大量与任务无关的侵入式修改，严重违反“不破坏现有训练循环逻辑”的要求；且未在diff中显式确认关键调度参数的存在性，存在运行时NameError风险。",
+        "score": 5,
+        "rationale": "核心 cosine scheduler 的数学实现与循环接入逻辑正确，测试覆盖也较全面；但 diff 夹杂了大量与任务无关的破坏性修改（如 wandb 条件、DDP 初始化、checkpoint prefix、删除 tokens_per_iter 等），严重违反“不破坏现有训练循环逻辑”的要求，且未在 config 区域显式补充 min_lr、decay_lr 等关键参数的默认值，存在 NameError 风险。",
         "issues": [
-          "diff擅自修改了与LR调度无关的多个关键逻辑：将resume时checkpoint的`unwanted_prefix`从`'_orig_mod.'`改为`'_orig_mod.module.'`，可能破坏仅使用torch.compile未使用DDP的checkpoint加载；删除wandb初始化中的`and master_process`条件，会导致DDP多进程训练时各rank均尝试初始化wandb；这些改动极易引入回归bug",
-          "未在diff中展示关键参数`warmup_iters`/`lr_decay_iters`/`min_lr`/`decay_lr`在config区域的默认值或存在性确认，若原文件缺少则直接触发NameError；且原代码中`tokens_per_iter`的计算与打印语句在diff中消失，疑似被意外删除"
+          "第 241 行将 wandb 初始化条件由 `if wandb_log and master_process:` 改为 `if wandb_log:`，在 DDP 多进程场景下会导致所有进程都尝试初始化 wandb，破坏原有分布式训练逻辑",
+          "第 90–104 行附近删除了 `tokens_per_iter` 的计算与打印，并改动了 DDP 相关变量（ddp_rank / ddp_world_size）的初始化位置，包含大量与 scheduler 无关的破坏性变更",
+          "未在 config 区域显式添加 `min_lr`、`decay_lr`、`warmup_iters` 等参数的默认值，若原 train.py 不存在这些变量将直接导致 NameError"
         ],
-        "judgedAt": "2026-05-01T07:42:19.652Z",
+        "judgedAt": "2026-05-01T08:51:48.309Z",
         "promptTokens": 5220,
-        "completionTokens": 4289,
+        "completionTokens": 3596,
         "finishReason": "stop",
         "truncated": false
       }
     ],
-    "juryMedian": 5.5,
-    "juryMean": 5.5,
+    "juryMedian": 5,
+    "juryMean": 4.7,
     "jurySpread": 1,
     "juryAgreement": "high",
-    "juryRunAt": "2026-05-01T07:42:19.652Z",
+    "juryRunAt": "2026-05-01T08:51:48.309Z",
     "judgedBy": null,
     "juryAnonymized": true,
     "juryAdversarial": true

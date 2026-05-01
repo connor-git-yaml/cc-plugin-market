@@ -101,57 +101,62 @@
       {
         "judge": "claude-cli:claude-opus-4-7",
         "vendor": "anthropic",
-        "score": 3,
-        "rationale": "核心 cosine LR scheduler 函数实现正确（warmup + cosine decay + min_lr clamp 均符合公式），训练循环里也正确调用 get_lr 并写入所有 param_groups。但 diff 大量越界改动破坏了原有训练循环逻辑，引入了多处明显回归（违反任务约束 5 '不破坏现有训练循环逻辑'），且 mfu 计算被替换为错误公式，是严重缺陷。",
+        "score": 4,
+        "rationale": "核心 get_lr 函数实现正确（warmup + cosine decay 公式无误），训练循环中也正确接入了 lr 设置。但该 diff 严重越界：擅自修改了大量与任务无关的代码，引入了多处 bug 和退化，违反了'不破坏现有训练循环逻辑'的硬性要求。",
         "issues": [
-          "越界破坏：删除了 `scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))` 整行，但下游 `scaler.scale(loss).backward()` / `scaler.step(optimizer)` / `scaler.update()` 仍在使用 scaler，导致 NameError，训练循环直接跑不起来",
-          "mfu 计算被错误改写：原 `raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)` 被替换成 `raw_model.get_num_params() / 1e6 * 12.0 / (dt * ddp_world_size)`，公式语义完全不同（既不是 MFU 也不对量纲），属于无关回归",
-          "wandb_log 守卫从 `if wandb_log and master_process` 改为 `if wandb_log`，DDP 下所有 rank 都会 init wandb，破坏原有 master-only 日志逻辑",
-          "model.to(device) 被替换为 model.to(dtype=ptdtype)，丢失了把模型迁到 GPU 的关键步骤；同时 ptdtype 在该位置可能未定义",
-          "checkpoint resume 分支注释被改写成误导性内容（'saved with module. prefix from DDP'），但代码实际剥离的是 `_orig_mod.`（torch.compile 前缀），注释与实现不一致",
-          "无关删除：`unoptimized_model = model`、get_batch 的 memmap 内存泄漏注释、`# ddp cleanup` 之外的若干原始注释被删除，超出任务范围"
+          "越界改动引入 bug：第 244 行 `if wandb_log and master_process` 被改成 `if wandb_log`，会导致 DDP 多进程同时初始化 wandb，重复 logging；这是明显的退化",
+          "越界改动破坏现有逻辑：`model.to(device)` 被替换为 `model.to(dtype=ptdtype)`，丢失了 device 迁移，模型不会被搬到 GPU；同时删除了 `scaler = torch.cuda.amp.GradScaler(...)` 初始化，但下方 `scaler.scale(loss).backward()` 仍在使用，会直接 NameError",
+          "model_args 初始化被改写：原本统一 dict 初始化被拆成只在 `init_from == 'scratch'` 分支内赋值 n_layer/n_head 等，导致 resume 和 gpt2 分支下 model_args 缺失这些 key（虽然 resume 分支随后会覆盖，但 gpt2 分支依赖 getattr 回填，逻辑变脆且语义改变）",
+          "MFU 计算被替换：`raw_model.estimate_mfu(...)` 被改成 `raw_model.get_num_params() / 1e6 * 12.0 / (dt * ddp_world_size)`，这是完全不同（且错误）的公式，与任务无关的功能性退化",
+          "删除了 `unoptimized_model = model` 备份和 get_batch 中关于 memory leak 的重要注释，属于无意义的破坏性改动",
+          "缺少对 `decay_lr` 配置变量是否存在的确认；若 nanoGPT 原本未定义该变量，`if get_lr(iter_num) if decay_lr else learning_rate` 会 NameError（虽然 nanoGPT 默认有，但 diff 未在 config 区域显式声明）"
         ],
-        "judgedAt": "2026-05-01T07:40:21.174Z",
+        "judgedAt": "2026-05-01T08:49:35.229Z",
         "promptTokens": 5,
-        "completionTokens": 722,
+        "completionTokens": 760,
         "finishReason": "end_turn",
         "truncated": false
       },
       {
         "judge": "codex:gpt-5.5",
         "vendor": "openai",
-        "score": null,
-        "rationale": "[parse error: no JSON object in response]",
-        "issues": [],
-        "judgedAt": "2026-05-01T07:40:13.841Z",
+        "score": 2,
+        "rationale": "核心 scheduler 本身大体按 warmup+cosine 写出并接入了训练循环，但产出夹带了大量无关修改，并引入会直接导致训练无法运行的回归。尤其是删除 scaler 初始化、错误移动模型设备，已经破坏现有训练循环逻辑，远超任务范围。没有测试或最小验证。",
+        "issues": [
+          "删除了 `scaler = torch.cuda.amp.GradScaler(...)` 初始化，但训练循环仍调用 `scaler.scale(loss).backward()`、`scaler.step(optimizer)`、`scaler.update()`，运行到首个 backward 会直接 `NameError`。",
+          "将 `model.to(device)` 改成 `model.to(dtype=ptdtype)`，模型不会被移动到 CUDA/MPS 等目标设备，而 `get_batch()` 返回的数据在 `device` 上，GPU 训练会出现 CPU/GPU device mismatch。",
+          "`model_args = {}` 后 scratch/resume 分支没有再传入 `dropout`，导致命令行或 config 中的 dropout 设置被静默忽略，改变训练语义。",
+          "DDP 下把 `if wandb_log and master_process:` 改成 `if wandb_log:`，会让所有 rank 初始化 wandb，破坏原有只在主进程记录日志的逻辑。",
+          "大量与学习率调度无关的改动，例如 memmap 注释、MFU 计算改写、模型初始化注释和结构调整，违反“不破坏现有训练循环逻辑/直接实现 scheduler”的任务边界。"
+        ],
+        "judgedAt": "2026-05-01T08:49:42.735Z",
         "promptTokens": null,
-        "completionTokens": null,
-        "finishReason": "error",
-        "truncated": false,
-        "rawText": ""
+        "completionTokens": 19378,
+        "finishReason": "stop",
+        "truncated": false
       },
       {
         "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
         "vendor": "siliconflow",
-        "score": 3,
-        "rationale": "虽然 `get_lr` 的 cosine with warmup 数学实现与在循环中调用并更新 optimizer learning rate 的逻辑基本正确，但 diff 夹杂了大量与任务无关的修改，并删除了 `scaler` 与 `model.to(device)` 等关键代码，严重破坏了现有训练循环。此外，`warmup_iters`、`lr_decay_iters`、`min_lr` 等关键参数未在 diff 中显示被添加到 config 区域或初始化，存在运行时 NameError 风险。",
+        "score": 4,
+        "rationale": "cosine scheduler 的核心数学公式与训练循环接入逻辑基本正确，但 diff 引入了多项严重的回归缺陷：删除了 GradScaler 初始化却仍在训练循环中使用导致 NameError，删除了 model.to(device) 导致模型无法放到正确设备，且包含大量与任务无关的代码重构和注释修改，显著增加了引入 bug 的风险。",
         "issues": [
-          "约第198-199行擅自删除 `model.to(device)` 与 `scaler = torch.cuda.amp.GradScaler(...)`，导致模型未移至目标设备且后续 `scaler.scale/step/update` 调用因 NameError 直接崩溃，完全破坏训练循环。",
-          "`get_lr` 与训练循环依赖的 `warmup_iters`、`lr_decay_iters`、`min_lr`、`decay_lr` 等关键参数未在 diff 中显示被添加到 config 区域或进行初始化，若原文件缺失这些变量将导致运行时错误。",
-          "约第244行将 `if wandb_log and master_process:` 改为 `if wandb_log:`，使 DDP 非主进程也会尝试初始化 wandb，可能引发分布式日志冲突或重复记录。"
+          "删除了 `scaler = torch.cuda.amp.GradScaler(...)` 的初始化代码，但训练循环中仍保留 `scaler.step(optimizer)` 和 `scaler.update()` 的调用，会导致 NameError 使训练直接崩溃。",
+          "将 `model.to(device)` 替换为 `model.to(dtype=ptdtype)`，导致模型不会被移动到目标计算设备（如 GPU），且仅修改了数据类型。",
+          "把 `if wandb_log and master_process:` 改为 `if wandb_log:`，去掉了主进程判断，在 DDP 多进程训练下会导致所有 rank 都尝试初始化 wandb，通常引发冲突或重复日志。"
         ],
-        "judgedAt": "2026-05-01T07:40:58.258Z",
+        "judgedAt": "2026-05-01T08:50:25.718Z",
         "promptTokens": 3195,
-        "completionTokens": 3784,
+        "completionTokens": 4057,
         "finishReason": "stop",
         "truncated": false
       }
     ],
-    "juryMedian": 3,
-    "juryMean": 3,
-    "jurySpread": 0,
-    "juryAgreement": "high",
-    "juryRunAt": "2026-05-01T07:40:58.258Z",
+    "juryMedian": 4,
+    "juryMean": 3.3,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T08:50:25.718Z",
     "judgedBy": null,
     "juryAnonymized": true,
     "juryAdversarial": true

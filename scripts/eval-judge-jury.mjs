@@ -74,10 +74,11 @@ const FIXTURES_ROOT = path.join(PROJECT_ROOT, 'tests/baseline/tasks');
 // 'claude-*'            → Anthropic SDK (legacy, 需 ANTHROPIC_API_KEY)
 //
 // 当前 executor = SiliconFlow GLM-5.1，jury 故意不含 GLM 避免 self-judge：
-// 注：Codex 因 ChatGPT 免费 tier 周限额（~5 调用 / week），不放在 default。
-// 用户有 Codex Plus / Pro 订阅时可加：'codex:gpt-5.5'
+// 3 vendor 跨国家：Anthropic (US) + OpenAI (US) + Moonshot (China)
+// Codex 用 model_reasoning_effort=high 平衡评分质量与 ChatGPT Pro 周配额（xhigh 25 fixture 会耗光）
 export const DEFAULT_JUDGES = [
   'claude-cli:claude-opus-4-7',                // Anthropic Opus 4.7 (美国, Claude Max subscription)
+  'codex:gpt-5.5',                             // OpenAI GPT-5.5 (美国, ChatGPT Pro, low reasoning)
   'siliconflow:Pro/moonshotai/Kimi-K2.6',      // Moonshot Kimi K2.6 (中国, SiliconFlow API)
 ];
 const MAX_DIFF_BYTES = 30000;
@@ -350,10 +351,13 @@ export async function defaultClientFactory(judgeModel) {
       invoke: async (prompt) => {
         const tmpFile = path.join(os.tmpdir(), `codex-out-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
         try {
+          // 覆盖 ~/.codex/config.toml 的 reasoning_effort（默认 xhigh 吃 quota 太狠）
+          // 用 high 平衡评分质量 + 周配额（xhigh 比 high 多 ~3-5x token 消耗）
           const r = await spawnAsync('codex',
             ['exec', '--skip-git-repo-check', '--sandbox', 'read-only',
+             '-c', 'model_reasoning_effort="high"',
              '-m', backend.model, '--output-last-message', tmpFile, prompt],
-            { timeoutMs: 240000 });
+            { timeoutMs: 300000 });
           if (r.killed) throw new Error(`codex CLI timed out after 240s`);
           let text = '';
           if (fs.existsSync(tmpFile)) {

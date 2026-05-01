@@ -102,42 +102,49 @@
         "judge": "claude-cli:claude-opus-4-7",
         "vendor": "anthropic",
         "score": 4,
-        "rationale": "[parse-recovered: rationale extraction failed]",
+        "rationale": "cosine scheduler 的实现本身（get_lr 函数和训练循环里设置 param_groups['lr']）数学正确、逻辑无误，warmup + cosine decay + min_lr clamp 都到位。但本次 diff 包含大量与任务完全无关的破坏性改动：删掉了 GPT-2 init 分支的 from_pretrained 逻辑、改坏了 wandb_log 的 master_process 守卫、把 raw_model 移到 DDP 包装前导致非 master 进程也会执行、删了 unoptimized_model 备份和 memmap 注释，严重违反『不破坏现有训练循环逻辑』的硬性要求。",
         "issues": [
-          "[parse-recovered: original JSON malformed, score extracted via top-level regex; jsonErr=Expected ',' or '}' after property value in JSON at position]"
+          "第 182-186 行将 init_from='gpt2' 分支整段重写：删除了 GPT.from_pretrained(init_from, override_args) 与 dropout override，改成 assert meta_vocab_size + torch.load(init_from)，这会让 'gpt2' 初始化路径完全失效（init_from 是 'gpt2' 字符串而非权重文件路径），属于功能破坏",
+          "第 240 行把 `if wandb_log and master_process:` 改成 `if wandb_log:`，导致 DDP 下所有 rank 都会调用 wandb.init，违反单进程 logging 约定",
+          "raw_model 被移到训练循环外的 `if ddp: model = DDP(...)` 之后但去掉了 master_process 限制，且原来位于循环内的 `raw_model = model.module if ddp else model` 被删除——虽然新位置等价，但同时新增的注释 `# model is wrapped, so we need to unwrap it for checkpointing` 出现在 DDP 包装块外，缩进/语义易混淆",
+          "训练循环 log 块中 `\"lr\": lr` 引用的 lr 变量只在循环顶部新增的 scheduler 块定义；如果 `iter_num % eval_interval == 0` 在第 0 步触发且 decay_lr=False 时也 OK，但代码移除了原本独立的 lr 计算路径，整体可读性下降；另外大量无关的注释润色（micro_step、scaler.step、mfu 等）增加 review 噪音，超出任务范围"
         ],
-        "judgedAt": "2026-05-01T07:40:49.332Z",
+        "judgedAt": "2026-05-01T08:50:06.656Z",
         "promptTokens": 5,
-        "completionTokens": 766,
+        "completionTokens": 774,
         "finishReason": "end_turn",
         "truncated": false
       },
       {
         "judge": "codex:gpt-5.5",
         "vendor": "openai",
-        "score": null,
-        "rationale": "[parse error: no JSON object in response]",
-        "issues": [],
-        "judgedAt": "2026-05-01T07:40:41.956Z",
+        "score": 4,
+        "rationale": "cosine warmup/decay 的核心函数和训练循环设置 lr 基本实现了，但该 diff 混入大量无关改动，并引入了会破坏现有训练路径的回归。边界条件也不完整，例如 warmup/decay 参数非法时会除零或断言失败。没有测试或最小验证说明，且可读性被无关注释改动干扰。",
+        "issues": [
+          "GPT-2 初始化路径被破坏：原本的 `GPT.from_pretrained(init_from, override_args)` 被替换成 `torch.load(init_from, map_location=device)`，当 `init_from` 为 `gpt2`/`gpt2-medium` 等合法配置值时会尝试把字符串当本地文件加载，直接失败，并且丢失 pretrained 权重加载逻辑。",
+          "DDP 下 wandb 行为回归：`if wandb_log and master_process:` 被改成 `if wandb_log:`，会让所有 rank 都初始化 wandb 并记录日志，破坏原有只由 master 进程记录的训练循环逻辑。",
+          "`get_lr(it)` 未处理 `warmup_iters == 0` 或 `lr_decay_iters <= warmup_iters`，会在 warmup 或 decay_ratio 计算中除零；作为新增 scheduler，至少应避免这些配置导致崩溃或给出明确校验。",
+          "diff 包含大量与任务无关的注释和逻辑改动，例如 memmap 注释删除、DDP 注释改写、checkpoint load 注释、raw_model 位置调整等，增加回归风险且违反“不破坏现有训练循环逻辑”的要求。"
+        ],
+        "judgedAt": "2026-05-01T08:50:10.759Z",
         "promptTokens": null,
-        "completionTokens": null,
-        "finishReason": "error",
-        "truncated": false,
-        "rawText": ""
+        "completionTokens": 19104,
+        "finishReason": "stop",
+        "truncated": false
       },
       {
         "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
         "vendor": "siliconflow",
         "score": 4,
-        "rationale": "核心 cosine scheduler 的数学实现与训练循环接入逻辑基本正确，但 diff 混入大量与任务无关的修改，且明确破坏了 wandb 多进程控制和 GPT-2 权重加载等现有功能，严重违背“不破坏现有训练循环逻辑”的要求。",
+        "rationale": "核心 cosine with warmup 的数学实现和训练循环接入基本正确，但 diff 中混杂了大量与任务无关的修改，并引入了两处严重回归：一是完全破坏了从 OpenAI GPT-2 权重初始化的官方加载路径，二是在分布式训练场景下错误地移除了 wandb 的 master_process 保护，导致多进程冲突。",
         "issues": [
-          "第 226 行将 `if wandb_log and master_process:` 改为 `if wandb_log:`，在 DDP 多卡训练时会导致所有进程都尝试初始化 wandb，破坏原有仅主进程记录日志的设计。",
-          "第 179-186 行错误改写了从 OpenAI GPT-2 初始化的逻辑：原代码使用 `GPT.from_pretrained` 加载预训练权重，新代码却假设 `init_from` 是本地文件路径并直接 `torch.load`，这会导致从 gpt2/gpt2-medium 等标识符初始化时失败。",
-          "diff 中未显式添加或确认 `warmup_iters`、`lr_decay_iters`、`min_lr`、`decay_lr` 等关键变量的默认值/配置项，若原文件不存在这些变量将直接触发 NameError。"
+          "严重破坏 `init_from.startswith('gpt2')` 分支：将原本正确调用 `GPT.from_pretrained(init_from, override_args)` 加载预训练权重的逻辑，错误替换为 `torch.load(init_from)` 直接加载 state_dict。这假设 init_from 是本地文件路径且格式完全匹配，无法兼容 'gpt2'/'gpt2-medium' 等 HuggingFace 标识符，导致功能完全失效。",
+          "破坏 DDP 多进程逻辑：将 `if wandb_log and master_process:` 改为 `if wandb_log:`，导致分布式训练时所有 rank 都会执行 `wandb.init()`，必然引发多进程初始化冲突、重复创建 run 或报错。",
+          "未在 diff 中显式添加 `import math`；若原文件顶部无此导入，`get_lr` 中的 `math.cos` 将在运行时抛出 NameError。"
         ],
-        "judgedAt": "2026-05-01T07:41:11.789Z",
+        "judgedAt": "2026-05-01T08:52:57.366Z",
         "promptTokens": 2998,
-        "completionTokens": 2791,
+        "completionTokens": 4654,
         "finishReason": "stop",
         "truncated": false
       }
@@ -146,7 +153,7 @@
     "juryMean": 4,
     "jurySpread": 0,
     "juryAgreement": "high",
-    "juryRunAt": "2026-05-01T07:41:11.790Z",
+    "juryRunAt": "2026-05-01T08:52:57.366Z",
     "judgedBy": null,
     "juryAnonymized": true,
     "juryAdversarial": true
