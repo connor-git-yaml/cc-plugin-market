@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "产出完全符合任务要求，正确提取了常量并替换了调用位置，代码逻辑无误，命名清晰。变更范围控制得当，未引入无关修改。属于高质量的实现。",
+        "issues": [
+          "代码健壮性细节：使用 `*WEIGHT_INIT_RANGE` 解包语法虽然简洁，但隐式依赖常量必须是长度为 2 的序列。若未来维护时误将常量改为单个数值或非序列类型，运行时会抛出不易察觉的 TypeError，显式传参或使用 min/max 常量会更稳健。",
+          "潜在遗漏风险：Diff 仅展示了 `Neuron` 类中的替换。若文件中其他位置（如 `Layer` 或 `MLP` 类，或不同格式的调用如 `random.uniform(-1, 1)` 带空格）存在相同逻辑，简单的字符串匹配可能会漏掉，需确认全文件范围内的所有硬编码均已替换。"
+        ],
+        "judgedAt": "2026-05-01T05:36:01.507Z",
+        "promptTokens": 584,
+        "completionTokens": 5483
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "核心任务完成准确：模块级常量定义位置正确，成功替换硬编码参数且未引入额外逻辑变更，改动保持最小化。但命名精确度和代码自解释性仍有提升空间。",
+        "issues": [
+          "`WEIGHT_INIT_RANGE` 中 `RANGE` 一词表意略模糊，易被误解为区间长度而非上下界；采用 `WEIGHT_INIT_BOUNDS` 或 `WEIGHT_INIT_UNIFORM_BOUNDS` 能更精确反映其作为均匀分布边界的语义。",
+          "模块级常量缺少简短注释说明用途，对于库代码建议补充一行如 `# Uniform distribution bounds for weight initialization` 以提升可维护性。"
+        ],
+        "judgedAt": "2026-05-01T05:33:20.114Z",
+        "promptTokens": 562,
+        "completionTokens": 2644
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 6,
+        "rationale": "工具基本完成了任务，提取了常量并替换了硬编码值，逻辑正确。但未处理可能的其他调用点，且常量命名未明确体现用途，可读性有提升空间。",
+        "issues": [
+          "第15行定义的 `WEIGHT_INIT_RANGE` 命名不够清晰，未明确反映是用于权重初始化的范围，建议如 `WEIGHT_INIT_UNIFORM_RANGE` 更具描述性",
+          "仅替换了一处 `random.uniform(-1,1)`，但未确认或处理模块中是否存在其他相同调用点，存在遗漏风险"
+        ],
+        "judgedAt": "2026-05-01T05:32:47.548Z",
+        "promptTokens": 607,
+        "completionTokens": 145
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "产出完成了常量提取和替换的核心任务，命名清晰且修改最小化。但可能存在未覆盖所有硬编码调用的问题，且解包方式缺乏健壮性。",
+        "issues": [
+          "diff 只修改了 Neuron 类中的一处调用，可能遗漏了 nn.py 中其他地方的 random.uniform(-1, 1) 使用",
+          "常量 WEIGHT_INIT_RANGE 定义为元组并通过 * 解包，未提供长度或类型验证，若常量被意外修改可能导致运行时错误"
+        ],
+        "judgedAt": "2026-05-01T05:33:41.928Z",
+        "promptTokens": 591,
+        "completionTokens": 3378
+      }
+    ],
+    "juryMedian": 8.5,
+    "juryMean": 8,
+    "jurySpread": 3,
+    "juryAgreement": "low",
+    "juryRunAt": "2026-05-01T05:36:01.508Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

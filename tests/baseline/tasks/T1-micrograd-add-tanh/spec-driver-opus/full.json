@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 6,
+        "rationale": "tanh 的前向和反向传播实现数学正确，测试覆盖了正负输入的前向与反向，核心任务完成。但 diff 中混入了大量与任务完全无关的文件（bundles 文档、specs 元数据等），严重污染了仓库；import math 放在方法体内而非模块顶部，与现有风格不一致。",
+        "issues": [
+          "diff 中包含大量无关文件（如 bundles/api-consumer/docs/index.md、bundles/architecture-review/、specs/_meta/dry-run-estimate.md 等），这些文件与 tanh 功能无关，不应出现在本次 commit 中，严重违反任务范围",
+          "import math 位于 tanh() 方法体内部（engine.py 第54行），每次调用都执行 import 语句，应放在模块顶部以与现有代码风格保持一致（如现有文件顶部已有的 import）"
+        ],
+        "judgedAt": "2026-05-01T05:30:00.300Z",
+        "promptTokens": 3970,
+        "completionTokens": 1216
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 5,
+        "rationale": "核心实现（tanh 方法与测试）数学正确、风格与现有代码保持一致，且测试覆盖了前向与反向传播。但产出 diff 中夹杂了大量与任务完全无关的文件（工具生成的文档 bundle、meta 估算文件等），并擅自修改了 .gitignore，属于严重的提交范围污染。",
+        "issues": [
+          "diff 中混入了大量与 micrograd 任务无关的文件（如 Users/connorlu/.<TOOL>-baselines/ 下的文档目录树、specs/_meta/dry-run-estimate.md），这些不应提交到代码仓库，属于严重的提交范围污染。",
+          "擅自修改 .gitignore 添加工具私有忽略规则（.<TOOL>*），超出任务要求范围；此外 engine.py 中的 `import math` 应放在模块顶部而非方法内部，以符合 PEP 8 与项目惯例。"
+        ],
+        "judgedAt": "2026-05-01T05:30:35.821Z",
+        "promptTokens": 3822,
+        "completionTokens": 4730
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "tanh方法实现正确，反向传播逻辑无误，测试覆盖了正负输入且验证了前向和梯度。代码风格与现有代码一致，符合任务主要要求。",
+        "issues": [
+          "test_tanh_negative中先调用backward再验证y.data，应先验证前向结果再进行反向传播，测试逻辑顺序不当",
+          "engine.py中tanh实现未处理math.tanh可能的数值溢出边界情况（如极大数据），虽未明确要求但可增强鲁棒性"
+        ],
+        "judgedAt": "2026-05-01T05:29:43.256Z",
+        "promptTokens": 4198,
+        "completionTokens": 131
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "实现基本正确，完成了核心任务，测试覆盖了正向和反向传播。但存在两个具体问题：一是反向传播闭包中使用了未定义的变量`t`，应使用`out.data`；二是测试未验证梯度在计算图传播中的正确性，仅测试了单节点。",
+        "issues": [
+          "反向传播闭包中使用了变量`t`，该变量在闭包作用域外定义，应使用`out.data`以确保正确捕获值。",
+          "测试仅验证了单节点的梯度，未测试在复杂计算图中梯度传播的正确性，如`tanh`与其他操作组合的情况。"
+        ],
+        "judgedAt": "2026-05-01T05:29:44.365Z",
+        "promptTokens": 4031,
+        "completionTokens": 147
+      }
+    ],
+    "juryMedian": 6.5,
+    "juryMean": 6.5,
+    "jurySpread": 3,
+    "juryAgreement": "low",
+    "juryRunAt": "2026-05-01T05:30:35.822Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

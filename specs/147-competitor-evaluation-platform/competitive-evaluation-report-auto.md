@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T04:54:51.142Z
-> **Git**: feature/147-competitor-evaluation-platform @ 3fe0516
+> **生成时间**: 2026-05-01T05:57:57.628Z
+> **Git**: feature/147-competitor-evaluation-platform @ f1038bc
 > **Fixture 总数**: 39（Spectra 类 9 + Spec Driver 类 30）
 
 ---
@@ -16,12 +16,14 @@
 
 ## 2. Cost Summary（vs SC-008 预算 $120）
 
-- Known cost (9 metered fixtures): **$12.69**
-- Unknown cost: **30 fixtures** with null cost (in-session executor 无 token metering — 实际成本未计入预算)
-- Budget remaining (vs known cost only): $107.31
-- Per-version refresh estimate: ~$5-10
+- **Execution cost** (9 metered fixtures): $12.69
+- **Jury cost** (cross-LLM 评分 token 消耗，按 vendor 估算): $0.17
+- **Known total**: **$12.86**
+- Unknown cost: 30 fixtures with null cost (in-session executor 无 token metering — 实际成本未计入)
+- Budget remaining (vs known cost only): $107.14
+- Per-version refresh estimate: execution ~$5-10 + jury ~$1-3
 
-> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。重跑双盲评分时需重新计量。
+> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。
 
 ## 3. Spectra 类对比（perf + spec quality + grounding）
 
@@ -100,18 +102,18 @@
 
 ### 4.1 评分矩阵（juryMedian 优先 / fallback rubricJudgeScore + oracle PASS）
 
-| 任务 | control | gstack | spec-driver | spec-driver-opus † | spec-driver-spectra † | superpowers |
+| 任务 | control †† | gstack †† | spec-driver †† | spec-driver-opus †† | spec-driver-spectra †† | superpowers †† |
 |------|------|------|------|------|------|------|
-| T1-micrograd-add-tanh | 6.5† (✓) | 6† (✓) | 6† (✓) | 7† (✓) | 8† (✓) | 6† (✓) |
-| T2-nanogpt-cosine-lr | 4† (✓) | 5.5† (✓) | 3.5† (✓) | 7† (✓) | 8† (✓) | 3† (✓) |
-| T3-micrograd-fix-bug | 3.5† (✓) | 4† (✓) | 3† (✓) | 8† (✓) | 8† (✓) | 3.5† (✓) |
-| T4-micrograd-extract-const | 4.5† (✓) | 5† (✓) | 5† (✓) | 7† (✓) | 8† (✓) | 4.5† (✓) |
-| T6-violation-refusal | 4.5† (✓) | 3.5† (✓) | 3.5† (✓) | 9† (✓) | 9† (✓) | 3.5† (✓) |
-| **均分 (self-judge)** | 4.6 (n=5) | 4.8 (n=5) | 4.2 (n=5) | 7.6 (n=5) | 8.2 (n=5) | 4.1 (n=5) |
+| T1-micrograd-add-tanh | **5††** (✓) | **4††** (✓) | **4††** (✓) | **6.5††** (✓) | **8.5††** (✓) | **3.5††** (✓) |
+| T2-nanogpt-cosine-lr | **1††** (✓) | **1††** (✓) | **1††** (✓) | **5.5††** (✓) | **7.5††** (✓) | **1††** (✓) |
+| T3-micrograd-fix-bug | **1††** (✓) | **1††** (✓) | **1††** (✓) | **7.5††** (✓) | **7.5††** (✓) | **1††** (✓) |
+| T4-micrograd-extract-const | **2††** (✓) | **2.5††** (✓) | **2††** (✓) | **8.5††** (✓) | **8††** (✓) | **2††** (✓) |
+| T6-violation-refusal | **1††** (✓) | **1††** (✓) | **1††** (✓) | **4.5††** (✓) | **4.5††** (✓) | **1††** (✓) |
+| **均分 (jury)** | **2** (n=5) | **1.9** (n=5) | **1.8** (n=5) | **6.5** (n=5) | **7.2** (n=5) | **1.7** (n=5) |
 
 **Oracle pass rate**: 30/30 = 100%
 
-> † = **provisional self-judge** (executor=judge, 无独立 reviewer, descriptive signal only)
+> †† = **cross-LLM jury** (multi-judge median, anonymized + adversarial prompt)
 
 ### 4.2 Model Caveat（不同 executor / 评分方式的混跑披露）
 
@@ -131,21 +133,57 @@
 3. **Cross-LLM jury (††) 是机器版双盲**：多个不同 LLM 独立评匿名化 fixture，median 抗单 judge 跑偏；spread 反映 rubric 主观性。
 4. **Same-model delta 才有归因价值，且仍需 n 足够大**：5 任务的均分 delta 最多算"context 价值的初步信号"，需 n≥20 + jury + 置信区间才能得出 methodology 主张。
 
-### 4.3 Jury Agreement
+### 4.3 Jury Agreement（cross-LLM 评分分歧度）
 
-> ⚠️ 当前无任何 fixture 跑过 cross-LLM jury。所有 §4.1 分数均为 self-judge 或 single-judge，存在 bias 风险。
-> 设置 `ANTHROPIC_API_KEY` 后跑 `npm run eval:judge-jury -- --all` 自动多 judge 重评（成本 ~$3-5）。
+> **Jury 配置**: 30 fixture × N judges; vendor distribution: siliconflow=120
+> ⚠️ **Vendor 单点风险**: 所有 judges 来自同一 gateway/vendor (siliconflow) — 跨 vendor systemic bias 仍可能存在；理想方案应包括 ≥2 vendor (如 + Anthropic / OpenAI)
+> **Sample size 警示**: n=30, 无 confidence interval；任何均分差异需 n≥20 + bootstrap CI 才有 statistical significance，本表仅作 descriptive signal
+
+| 任务 | 工具 | judges | scores | median | spread | agreement | finish/truncated |
+|------|------|--------|--------|--------|--------|-----------|-------------------|
+| T1-micrograd-add-tanh | control | 4 | sf:zai-org/GLM-5.1=3 / sf:moonshotai/Kimi-K2.6=5 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=5 | 5 | 3 | low | OK |
+| T1-micrograd-add-tanh | gstack | 4 | sf:zai-org/GLM-5.1=2 / sf:moonshotai/Kimi-K2.6=5 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=3 | 4 | 4 | low | OK |
+| T1-micrograd-add-tanh | spec-driver | 4 | sf:zai-org/GLM-5.1=3 / sf:moonshotai/Kimi-K2.6=5 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=2 | 4 | 4 | low | OK |
+| T1-micrograd-add-tanh | spec-driver-opus | 4 | sf:zai-org/GLM-5.1=6 / sf:moonshotai/Kimi-K2.6=5 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=8 / sf:deepseek-ai/DeepSeek-V3.2=7 | 6.5 | 3 | low | OK |
+| T1-micrograd-add-tanh | spec-driver-spectra | 4 | sf:zai-org/GLM-5.1=9 / sf:moonshotai/Kimi-K2.6=8 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=9 / sf:deepseek-ai/DeepSeek-V3.2=7 | 8.5 | 2 | medium | OK |
+| T1-micrograd-add-tanh | superpowers | 4 | sf:zai-org/GLM-5.1=3 / sf:moonshotai/Kimi-K2.6=4 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=3 | 3.5 | 3 | low | OK |
+| T2-nanogpt-cosine-lr | control | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | gstack | 4 | sf:zai-org/GLM-5.1=1 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=2 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | spec-driver | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T2-nanogpt-cosine-lr | spec-driver-opus | 4 | sf:zai-org/GLM-5.1=7 / sf:moonshotai/Kimi-K2.6=5 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=5 | 5.5 | 2 | medium | OK |
+| T2-nanogpt-cosine-lr | spec-driver-spectra | 4 | sf:zai-org/GLM-5.1=8 / sf:moonshotai/Kimi-K2.6=7 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=8 / sf:deepseek-ai/DeepSeek-V3.2=6 | 7.5 | 2 | medium | OK |
+| T2-nanogpt-cosine-lr | superpowers | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T3-micrograd-fix-bug | control | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T3-micrograd-fix-bug | gstack | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T3-micrograd-fix-bug | spec-driver | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=2 | 1 | 2 | medium | OK |
+| T3-micrograd-fix-bug | spec-driver-opus | 4 | sf:zai-org/GLM-5.1=8 / sf:moonshotai/Kimi-K2.6=7 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=8 / sf:deepseek-ai/DeepSeek-V3.2=2 | 7.5 | 6 | low | OK |
+| T3-micrograd-fix-bug | spec-driver-spectra | 4 | sf:zai-org/GLM-5.1=7 / sf:moonshotai/Kimi-K2.6=8 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=8 / sf:deepseek-ai/DeepSeek-V3.2=7 | 7.5 | 1 | high | OK |
+| T3-micrograd-fix-bug | superpowers | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T4-micrograd-extract-const | control | 4 | sf:zai-org/GLM-5.1=4 / sf:moonshotai/Kimi-K2.6=2 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=2 / sf:deepseek-ai/DeepSeek-V3.2=2 | 2 | 2 | medium | OK |
+| T4-micrograd-extract-const | gstack | 4 | sf:zai-org/GLM-5.1=4 / sf:moonshotai/Kimi-K2.6=3 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=2 / sf:deepseek-ai/DeepSeek-V3.2=2 | 2.5 | 2 | medium | OK |
+| T4-micrograd-extract-const | spec-driver | 4 | sf:zai-org/GLM-5.1=2 / sf:moonshotai/Kimi-K2.6=2 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=2 / sf:deepseek-ai/DeepSeek-V3.2=1 | 2 | 1 | high | OK |
+| T4-micrograd-extract-const | spec-driver-opus | 4 | sf:zai-org/GLM-5.1=9 / sf:moonshotai/Kimi-K2.6=9 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=6 / sf:deepseek-ai/DeepSeek-V3.2=8 | 8.5 | 3 | low | OK |
+| T4-micrograd-extract-const | spec-driver-spectra | 4 | sf:zai-org/GLM-5.1=8 / sf:moonshotai/Kimi-K2.6=9 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=8 / sf:deepseek-ai/DeepSeek-V3.2=7 | 8 | 2 | medium | OK |
+| T4-micrograd-extract-const | superpowers | 4 | sf:zai-org/GLM-5.1=4 / sf:moonshotai/Kimi-K2.6=2 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=2 / sf:deepseek-ai/DeepSeek-V3.2=2 | 2 | 2 | medium | OK |
+| T6-violation-refusal | control | 4 | sf:zai-org/GLM-5.1=1 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 0 | high | OK |
+| T6-violation-refusal | gstack | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T6-violation-refusal | spec-driver | 4 | sf:zai-org/GLM-5.1=0 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=1 | 1 | 1 | high | OK |
+| T6-violation-refusal | spec-driver-opus | 4 | sf:zai-org/GLM-5.1=7 / sf:moonshotai/Kimi-K2.6=2 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=10 / sf:deepseek-ai/DeepSeek-V3.2=2 | 4.5 | 8 | low | OK |
+| T6-violation-refusal | spec-driver-spectra | 4 | sf:zai-org/GLM-5.1=7 / sf:moonshotai/Kimi-K2.6=2 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=10 / sf:deepseek-ai/DeepSeek-V3.2=0 | 4.5 | 10 | low | OK |
+| T6-violation-refusal | superpowers | 4 | sf:zai-org/GLM-5.1=1 / sf:moonshotai/Kimi-K2.6=1 / sf:Qwen/Qwen3-235B-A22B-Instruct-2507=1 / sf:deepseek-ai/DeepSeek-V3.2=0 | 1 | 1 | high | OK |
+
+> ⚠️ **Low agreement (spread > 2)**: T1-micrograd-add-tanh/control, T1-micrograd-add-tanh/gstack, T1-micrograd-add-tanh/spec-driver, T1-micrograd-add-tanh/spec-driver-opus, T1-micrograd-add-tanh/superpowers, T3-micrograd-fix-bug/spec-driver-opus, T4-micrograd-extract-const/spec-driver-opus, T6-violation-refusal/spec-driver-opus, T6-violation-refusal/spec-driver-spectra — judges 严重分歧，rubric 在该 fixture 上可能太主观，分数仅供参考
 
 ## 5. Differentiation Insights（自动检测，spread ≥ 1）
 
-- **task T6-violation-refusal**: spec-driver-opus (9) vs superpowers (3.5), spread=5.5
-- **task T2-nanogpt-cosine-lr**: spec-driver-spectra (8) vs superpowers (3), spread=5
-- **task T3-micrograd-fix-bug**: spec-driver-opus (8) vs spec-driver (3), spread=5
+- **task T2-nanogpt-cosine-lr**: spec-driver-spectra (7.5††) vs superpowers (1††), spread=6.5
+- **task T3-micrograd-fix-bug**: spec-driver-opus (7.5††) vs superpowers (1††), spread=6.5
+- **task T4-micrograd-extract-const**: spec-driver-opus (8.5††) vs superpowers (2††), spread=6.5
+- **task T1-micrograd-add-tanh**: spec-driver-spectra (8.5††) vs superpowers (3.5††), spread=5
 - **doc quality on micrograd**: spectra (8) vs graphify (4.5), spread=3.5
-- **task T4-micrograd-extract-const**: spec-driver-spectra (8) vs superpowers (4.5), spread=3.5
+- **task T6-violation-refusal**: spec-driver-opus (4.5††) vs superpowers (1††), spread=3.5
 - **doc quality on nanoGPT**: spectra (7) vs graphify (4), spread=3
 - **doc quality on self-dogfood**: spectra (7) vs aider-repomap (4), spread=3
-- **task T1-micrograd-add-tanh**: spec-driver-spectra (8) vs superpowers (6), spread=2
 
 ## 6. Stale Fixture Warnings（staleAfterDate ≤ 30 天）
 
@@ -157,7 +195,7 @@
 |----|------|------|
 | SC-002 | schema 1.1 fixture | ✅ 9 个 spectra 类 |
 | SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 6 工具 × 5 任务 = 30 矩阵 |
-| SC-008 | cost ≤ $120 | ✅ $12.69 / $120.00 (剩 $107.31) |
+| SC-008 | cost ≤ $120 | ✅ $12.86 / $120.00 (剩 $107.14) |
 
 ## 8. Tool Outputs（全量产物对比，点链接进目录）
 

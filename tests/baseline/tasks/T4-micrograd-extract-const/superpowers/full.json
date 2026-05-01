@@ -87,6 +87,66 @@
     "rubricJudgeRationale": "主 oracle 通过（提取 WEIGHT_INIT_RANGE 常量，替换 random.uniform 调用），任务核心目标达成。但存在多项严重问题：(1) commits=0，所有 7 处改动均未提交，缺乏版本历史；(2) 改动范围超出任务边界——修改了 4 个文件（.gitignore、README.md、setup.py 共增 41 行），任务仅需改 nn.py，属于明显的 scope creep；(3) testsPassed/testsBroken 均为 null，未运行任何测试验证不破坏既有行为；(4) 无 LLM 成本/token 数据，可观测性差。效率尚可（wall 35s）。综合扣分主要来自越界改动 + 零提交 + 无测试验证。",
     "interRaterDelta": 1,
     "diffStat": " .gitignore      |  1 +\n README.md       | 18 ++++++++++++++++++\n micrograd/nn.py |  4 +++-\n setup.py        | 22 ++++++++++++++++++++++\n 4 files changed, 44 insertions(+), 1 deletion(-)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 4,
+        "rationale": "[parse-recovered: rationale extraction failed]",
+        "issues": [
+          "[parse-recovered: original JSON malformed, score extracted via regex; jsonErr=Expected ',' or '}' after property value in JSON at position]"
+        ],
+        "judgedAt": "2026-05-01T05:41:56.415Z",
+        "promptTokens": 451,
+        "completionTokens": 1444
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该产出严重违反 minimal change 要求，除目标文件 micrograd/nn.py 外，还擅自新增 setup.py、修改 README.md 与 .gitignore，大量无关变更污染了 commit。即使 nn.py 可能完成了常量提取，整体产出也已严重偏离任务范围，不可接受。",
+        "issues": [
+          "新增 setup.py（+22 行）并大幅修改 README.md（+18 行），这些文件变更与提取 weight 初始化常量完全无关，严重违背“不修改其他逻辑”和 minimal change 要求。",
+          "修改 .gitignore（+1 行）同样属于无关变更；且仅凭 diff 统计无法确认 nn.py 内是否已完整替换所有 `random.uniform(-1, 1)` 调用并使用了清晰命名的模块级常量。"
+        ],
+        "judgedAt": "2026-05-01T05:41:54.499Z",
+        "promptTokens": 435,
+        "completionTokens": 1864
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该diff完全偏离任务要求，未修改nn.py中的硬编码值，也未定义相关const，反而新增了多个无关文件，属于严重偏离任务目标的实现。",
+        "issues": [
+          "未在micrograd/nn.py中定义模块级const（如WEIGHT_INIT_RANGE）来替换random.uniform(-1, 1)的硬编码调用",
+          "diff显示修改了4个文件（包括新增.gitignore、README.md等），完全超出任务范围，且无任何对nn.py中目标代码的替换痕迹"
+        ],
+        "judgedAt": "2026-05-01T05:41:34.777Z",
+        "promptTokens": 468,
+        "completionTokens": 133
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该产出严重偏离任务要求：任务要求仅在 nn.py 中修改权重初始化范围，但 diff 显示修改了多个无关文件（.gitignore、README.md、setup.py），且未展示 nn.py 中具体的常量定义和替换代码，无法确认核心目标是否完成。",
+        "issues": [
+          "diff 显示修改了 4 个文件，但任务仅要求修改 micrograd/nn.py，属于严重范围错误",
+          "未展示 nn.py 内的具体代码变更，无法判断是否正确添加常量并替换所有相关调用"
+        ],
+        "judgedAt": "2026-05-01T05:41:36.548Z",
+        "promptTokens": 450,
+        "completionTokens": 130
+      }
+    ],
+    "juryMedian": 2,
+    "juryMean": 2.5,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:41:56.415Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

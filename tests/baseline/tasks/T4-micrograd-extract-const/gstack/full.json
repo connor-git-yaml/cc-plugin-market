@@ -87,6 +87,67 @@
     "rubricJudgeRationale": "主 oracle 通过（提取 WEIGHT_INIT_RANGE 常量且消除原 magic number），但完成度严重打折：0 commits + 7 个未提交改动说明工具未完成提交闭环，需要人工善后；改动 4 文件（含 .gitignore / README / setup.py）远超任务边界，存在范围蔓延嫌疑；testsPassed/testsBroken 全为 null，缺乏测试验证；token / 成本数据缺失无法评估效率，wall 64s 尚可。代码质量与测试维度无法正面加分，commit 历史维度直接零分。",
     "interRaterDelta": 0,
     "diffStat": " .gitignore      |  1 +\n README.md       | 18 ++++++++++++++++++\n micrograd/nn.py |  4 +++-\n setup.py        | 22 ++++++++++++++++++++++\n 4 files changed, 44 insertions(+), 1 deletion(-)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 4,
+        "rationale": "核心任务（在nn.py中提取常量并替换硬编码）可能已完成，但diff中包含了3个完全无关的文件（.gitignore、README.md、setup.py），严重违反'不修改其他逻辑'和'minimal change'要求。nn.py仅4行变更（3增1删），若原文件中有多处random.uniform(-1,1)调用则可能未全部替换。",
+        "issues": [
+          "新增了.gitignore、README.md、setup.py三个与任务完全无关的文件，违反'minimal change'和'不修改其他逻辑'的明确要求，这些文件应排除在本次commit之外",
+          "nn.py仅1行删除，若原文件中存在多处random.uniform(-1,1)调用（如Neuron和Layer类中各一处），则可能遗漏替换，未完成'把所有调用替换为引用该const'的要求"
+        ],
+        "judgedAt": "2026-05-01T05:32:47.447Z",
+        "promptTokens": 451,
+        "completionTokens": 1337
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 3,
+        "rationale": "虽然 nn.py 的变更量暗示可能完成了提取常量的核心操作，但产出 diff 中额外包含 setup.py（+22 行）、README.md（+18 行）和 .gitignore（+1 行）的修改，这些与任务完全无关，严重违反“不修改其他逻辑”和“保持 minimal change”的硬性要求，导致该产出在代码评审中无法被接受。",
+        "issues": [
+          "diff 显示额外新增/修改了 setup.py、README.md 和 .gitignore，这些文件变更与提取 weight 初始化常量的任务毫无关系，属于严重的范围蔓延（scope creep）",
+          "在仅提供变更统计而无法查看 nn.py 具体 diff 内容的情况下，+4/-1 的变更量无法被验证是否完整替换了所有 `random.uniform(-1, 1)` 调用点；且即便 nn.py 修改正确，无关文件的引入已使整体产出不合格"
+        ],
+        "judgedAt": "2026-05-01T05:32:44.210Z",
+        "promptTokens": 435,
+        "completionTokens": 2048
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "产出未完成核心任务，反而添加了大量无关文件，明显偏离了仅修改nn.py中硬编码值的要求。修改范围远超任务描述，引入了非必要的文件变更，完全违背了minimal change原则。",
+        "issues": [
+          "diff显示修改了.gitignore、README.md、setup.py等完全无关文件，而任务仅要求修改nn.py中的初始化范围",
+          "未在nn.py中定义WEIGHT_INIT_RANGE常量，也未替换random.uniform(-1, 1)调用，核心功能缺失"
+        ],
+        "judgedAt": "2026-05-01T05:32:27.130Z",
+        "promptTokens": 468,
+        "completionTokens": 132
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "产出严重偏离任务要求，修改了多个无关文件（如.gitignore、README.md、setup.py），违反了'不修改其他逻辑'的核心指令；且diff未提供nn.py的具体修改内容，无法确认常量添加和替换是否正确。",
+        "issues": [
+          "修改了任务指定文件micrograd/nn.py之外的无关文件（.gitignore、README.md、setup.py）",
+          "可能新增了测试或无关代码（如setup.py的修改），违反了'不要新增测试'的要求"
+        ],
+        "judgedAt": "2026-05-01T05:32:41.397Z",
+        "promptTokens": 450,
+        "completionTokens": 1386
+      }
+    ],
+    "juryMedian": 2.5,
+    "juryMean": 2.8,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:32:47.447Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

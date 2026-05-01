@@ -87,6 +87,68 @@
     "rubricJudgeRationale": "主 oracle（grep cosine/get_lr/param_group）全过看似通过，但 diffStat 显示仅 README.md +7 行、train.py 未改动 — 实际上是原仓库已存在 cosine LR 实现，工具未做任何代码改动；commits=0、uncommittedChanges=7 说明无提交、留下脏工作区；无测试、无代码质量可言；wallMs ~80s 尚可但产出近乎空，oracle 通过属于\"伪阳性\"。综合判定为不合格执行。",
     "interRaterDelta": 0,
     "diffStat": " README.md | 7 +++++++\n 1 file changed, 7 insertions(+)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 0,
+        "rationale": "该产出完全没有完成任何核心任务。任务要求在 train.py 中实现 cosine learning rate scheduler 并接入训练循环，但 diff 仅修改了 README.md，train.py 无任何改动。实现函数、公式逻辑、训练循环集成全部缺失，属于完全失败。",
+        "issues": [
+          "train.py 无任何改动，未实现 get_lr(it) 函数，cosine annealing 调度器的核心逻辑完全缺失",
+          "未在训练循环中调用 get_lr(iter_num) 并设置 optimizer param_groups，集成工作完全未做",
+          "diff 仅修改 README.md（+7行），与任务要求的代码实现无关，属于无效产出"
+        ],
+        "judgedAt": "2026-05-01T05:31:08.272Z",
+        "promptTokens": 485,
+        "completionTokens": 357
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出完全偏离任务目标：仅修改了README.md，而未按要求修改train.py。未实现get_lr函数、cosine annealing调度逻辑、warmup机制，也未在训练循环中接入学习率更新，核心功能零交付。",
+        "issues": [
+          "修改了错误的文件：diff仅包含README.md的7行新增，任务明确要求修改train.py",
+          "未实现任何核心逻辑：没有get_lr函数/类、没有cosine decay公式、没有warmup阶段、没有在训练循环中设置optimizer param_groups的学习率"
+        ],
+        "judgedAt": "2026-05-01T05:31:10.741Z",
+        "promptTokens": 466,
+        "completionTokens": 778
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出的 diff 完全未修改 train.py，而是修改了 README.md，与任务要求严重偏离。任务要求实现 cosine learning rate scheduler 并接入训练循环，但代码中无任何相关实现或配置修改。",
+        "issues": [
+          "未修改 train.py 文件，导致核心功能完全缺失，不符合任务基本要求",
+          "在 README.md 中添加无关内容，未实现 get_lr 函数、未添加学习率调度逻辑、未修改优化器学习率设置"
+        ],
+        "judgedAt": "2026-05-01T05:31:05.916Z",
+        "promptTokens": 499,
+        "completionTokens": 120
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出完全偏离任务要求，仅修改了 README.md 文件，未对 train.py 进行任何改动，未实现余弦学习率调度器，也未接入训练循环，因此核心目标完全未完成。",
+        "issues": [
+          "未修改 train.py 文件，未添加 get_lr 函数或类，也未实现余弦退火调度逻辑。",
+          "未将调度器接入训练循环，未在优化器中设置学习率，所有任务要求均未满足。"
+        ],
+        "judgedAt": "2026-05-01T05:31:05.550Z",
+        "promptTokens": 488,
+        "completionTokens": 116
+      }
+    ],
+    "juryMedian": 1,
+    "juryMean": 0.8,
+    "jurySpread": 1,
+    "juryAgreement": "high",
+    "juryRunAt": "2026-05-01T05:31:10.741Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "核心 cosine annealing 公式和训练循环接入逻辑正确，decay_lr 守卫也考虑了不启用调度器的情况。但存在一个会导致运行时崩溃的遗漏（缺少 import），以及 warmup 边界处的不连续问题。",
+        "issues": [
+          "缺少 `import math`：`get_lr` 函数使用了 `math.cos` 和 `math.pi`，但 diff 中未添加 `import math`，运行时会抛出 NameError。",
+          "warmup 与 cosine 分支在 `it = warmup_iters` 处不连续：warmup 分支在 `it = warmup_iters - 1` 时返回 `learning_rate * warmup_iters / (warmup_iters + 1)`，而 cosine 分支在 `it = warmup_iters`（decay_ratio=0, coeff=1）时返回 `learning_rate`，两者之间存在跳变。标准做法应使用 `learning_rate * it / warmup_iters`，使 it=warmup_iters 时恰好过渡到 cosine 起始值。"
+        ],
+        "judgedAt": "2026-05-01T05:31:29.376Z",
+        "promptTokens": 798,
+        "completionTokens": 2016
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 5,
+        "rationale": "核心 cosine decay 逻辑正确，但 warmup 公式存在边界不连续，且 diff 中未声明关键依赖变量与导入，属于“可运行但有显著缺陷”的级别。",
+        "issues": [
+          "warmup 公式 `learning_rate * (it + 1) / (warmup_iters + 1)` 导致 `it = warmup_iters - 1` 时学习率无法达到 `learning_rate`，而下一步进入 cosine 分支时 `decay_ratio=0` 会直接返回 `learning_rate`，造成两段 schedule 交界处的跳变不连续",
+          "训练循环中使用了 `decay_lr` 变量，但 diff 未显示其定义或初始化，若原代码不存在该变量将直接抛出 NameError；同时 `get_lr` 依赖 `math` 模块，diff 也未显示 `import math`"
+        ],
+        "judgedAt": "2026-05-01T05:31:29.572Z",
+        "promptTokens": 771,
+        "completionTokens": 2821
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 6,
+        "rationale": "实现了 cosine 学习率调度的核心逻辑，数学公式正确，结构清晰。但缺少对关键参数的定义，且未处理迭代步超过总衰减步时的边界情况，存在潜在风险。",
+        "issues": [
+          "未在 config 中定义 warmup_iters、lr_decay_iters、min_lr 等必要参数，这些应显式初始化或从配置传入",
+          "get_lr 函数中 `if it > lr_decay_iters` 应为 `>=`，否则在 it == lr_decay_iters 时会错误进入 cosine 计算而非直接返回 min_lr"
+        ],
+        "judgedAt": "2026-05-01T05:30:57.491Z",
+        "promptTokens": 824,
+        "completionTokens": 144
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 5,
+        "rationale": "产出实现了cosine scheduler的核心逻辑，但存在显著问题：warmup公式使用(it+1)/(warmup_iters+1)而非标准线性增长，导致学习率在warmup结束时未精确达到learning_rate，可能引起不连续；此外，代码假设warmup_iters等参数已定义，但未在diff中显示配置或验证，易引发NameError或运行时错误。",
+        "issues": [
+          "Warmup阶段公式不标准：使用(iter+1)/(warmup_iters+1)而非iter/warmup_iters，导致边界不精确和潜在不连续",
+          "参数未定义或配置缺失：get_lr函数直接引用warmup_iters等变量，但未在diff中显示这些变量的定义或从config导入，可能造成运行时错误"
+        ],
+        "judgedAt": "2026-05-01T05:31:36.895Z",
+        "promptTokens": 831,
+        "completionTokens": 2508
+      }
+    ],
+    "juryMedian": 5.5,
+    "juryMean": 5.8,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:31:36.895Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

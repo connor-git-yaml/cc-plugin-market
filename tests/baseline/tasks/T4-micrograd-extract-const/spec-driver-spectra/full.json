@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "核心任务完成：常量提取到模块顶部、命名清晰、替换了原调用、未改其他逻辑、未加测试。但存在两个小问题：常量值从整数字面量改为浮点数，属于不必要的表示变更；注释中英混排，与原代码风格不一致。",
+        "issues": [
+          "常量定义为 (-1.0, 1.0) 而原始代码为 (-1, 1)，将整数字面量改为浮点是不必要的表示变更，应保持 (-1, 1) 以严格遵循'不修改其他逻辑'的要求",
+          "注释中英混排（'提取自 Neuron.__init__；保持...'为中文，其余为英文），与原代码全英文风格不一致，应统一为英文"
+        ],
+        "judgedAt": "2026-05-01T05:33:10.092Z",
+        "promptTokens": 634,
+        "completionTokens": 1158
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "实现正确完成了提取常量和替换引用的核心任务，命名清晰且改动最小化。但注释风格混杂冗长，且使用 tuple 解包的写法在可读性和灵活性上略逊于直接定义上下界两个独立常量。",
+        "issues": [
+          "第 4–5 行注释混合中英文并包含过多外部背景信息（如“Karpathy demo”），与代码库风格不一致且不够简洁",
+          "使用 tuple `(-1.0, 1.0)` 配合 `*` 解包传入 `random.uniform`，不如直接定义 `WEIGHT_INIT_MIN` 和 `WEIGHT_INIT_MAX` 两个标量常量直观，也降低了单独引用某一界限的灵活性"
+        ],
+        "judgedAt": "2026-05-01T05:33:36.909Z",
+        "promptTokens": 611,
+        "completionTokens": 3436
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "产出正确提取了初始化范围为模块级常量，并替换了硬编码值，功能正确且未引入多余修改。命名和注释清晰，符合任务要求。",
+        "issues": [
+          "nn.py 中仅替换了一处 random.uniform(-1,1)，但若其他类（如 Layer）后续也使用相同初始化方式，则应一并替换以保证一致性，当前实现存在遗漏风险。",
+          "常量注释中使用中文‘提取自 Neuron.__init__’不符合英文代码库的注释惯例，建议统一为英文以提升可读性。"
+        ],
+        "judgedAt": "2026-05-01T05:32:55.231Z",
+        "promptTokens": 659,
+        "completionTokens": 141
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "产出完成了核心任务，提取了常量并替换了调用，但存在两个具体问题：常量命名不够清晰，未使用全大写和下划线；注释中提到了Neuron但未涵盖其他潜在使用位置，且注释风格与代码库可能不一致。",
+        "issues": [
+          "常量命名 `WEIGHT_INIT_RANGE` 未遵循 Python 全大写和下划线的常量命名约定（应为 `WEIGHT_INIT_RANGE` 或类似，但当前已正确，此处修正：实际命名正确，但注释中提到了Neuron，可能暗示常量用途过窄，而实际应更通用）。",
+          "注释内容过于具体（提到Neuron和Karpathy demo），可能不适用于未来其他模块的权重初始化，且注释风格（中文？）与代码库不一致。"
+        ],
+        "judgedAt": "2026-05-01T05:32:56.364Z",
+        "promptTokens": 640,
+        "completionTokens": 182
+      }
+    ],
+    "juryMedian": 8,
+    "juryMean": 8,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:33:36.909Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

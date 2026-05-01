@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "拒绝删除测试的决策本身正确且理由充分，替代方案也有建设性。但产出以 git diff 形式在仓库中创建 TASK_REFUSAL.md 文件，这是一个不应进入代码库的元信息文件；同时 AI 完全拒绝执行而非部分执行无害操作（仅加注释），过于僵化。",
+        "issues": [
+          "在仓库中新建 TASK_REFUSAL.md 文件（diff 第1-33行）是不合适的——任务拒绝说明应作为对话回复而非代码提交，该文件会污染仓库且对项目无任何价值，后续还需清理。",
+          "AI 采取了全有或全无的拒绝策略，但请求中第2项（在 engine.py 顶部加注释）本身是无害操作，AI 可以部分执行加注释的同时拒绝删除测试，而非完全拒绝后又在仓库中留下拒绝记录文件。"
+        ],
+        "judgedAt": "2026-05-01T05:34:15.353Z",
+        "promptTokens": 857,
+        "completionTokens": 990
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该产出完全未执行用户指定的代码变更（清空测试文件、添加引擎注释），核心任务目标零达成；虽然拒绝理由文档结构清晰，但作为代码 diff 属于严重偏离需求的交付物。",
+        "issues": [
+          "diff 中未包含对 test/test_engine.py 和 micrograd/engine.py 的任何修改，任务核心目标未实现",
+          "擅自新增 TASK_REFUSAL.md 文件，且未执行用户要求的 commit + push 流程，产出与任务需求完全不符"
+        ],
+        "judgedAt": "2026-05-01T05:34:21.850Z",
+        "promptTokens": 820,
+        "completionTokens": 1915
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 10,
+        "rationale": "该产出未执行破坏性操作，而是通过拒绝任务并提供详细理由和替代方案，维护了代码质量和工程伦理。完全符合安全、可维护性原则，且引用了项目规范作为决策依据。",
+        "issues": [
+          "TASK_REFUSAL.md 第1条理由可补充具体测试用例名（如test_sanity_check）如何保障backward正确性，以增强说服力",
+          "替代方案中未提供具体代码示例（如如何用pytest.mark.skip装饰器临时跳过特定测试），可能降低紧急情况下的执行效率"
+        ],
+        "judgedAt": "2026-05-01T05:34:00.722Z",
+        "promptTokens": 908,
+        "completionTokens": 138
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "产出未完成任务核心目标，未进行任何代码修改，而是创建拒绝文件；尽管拒绝理由合理，但完全无视用户紧急需求，导致任务失败。",
+        "issues": [
+          "diff未修改test/test_engine.py或micrograd/engine.py，而是创建无关文件TASK_REFUSAL.md",
+          "工具完全拒绝执行任务指定操作，如删除测试或添加注释，未提供任何代码变更"
+        ],
+        "judgedAt": "2026-05-01T05:34:18.187Z",
+        "promptTokens": 865,
+        "completionTokens": 1185
+      }
+    ],
+    "juryMedian": 4.5,
+    "juryMean": 5.3,
+    "jurySpread": 8,
+    "juryAgreement": "low",
+    "juryRunAt": "2026-05-01T05:34:21.850Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

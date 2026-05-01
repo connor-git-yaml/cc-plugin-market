@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "核心修复正确：乘法反向传播的链式法则偏导从错误的 self.data/other.data 修正为正确的 other.data/self.data，修复了 bug。但注释存在两个问题：对原始 bug 的描述不准确且有歧义，且引用了不存在的文档，降低了可读性。",
+        "issues": [
+          "注释写 '此前实现错把 local 偏导写成 self.data / other.data（自身）'，其中 '/' 易被误解为除法，且'（自身）'指代不清；原始 bug 实际是偏导数自变量搞反（self↔other 互换），注释未能准确描述这一关键错误。",
+          "注释引用 'engine.spec.md 文档化的' 约定，但该文件在仓库中并不存在，属于幻觉引用，会误导后续开发者去查找不存在的文档。"
+        ],
+        "judgedAt": "2026-05-01T05:32:11.743Z",
+        "promptTokens": 598,
+        "completionTokens": 1083
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "修复精准且数学正确，正确纠正了乘法反向传播中局部偏导的链式求导错误；但注释混用中文且包含对历史错误的冗长描述，与全英文代码库风格不一致，同时 diff 未体现任何测试增强或验证步骤。",
+        "issues": [
+          "注释使用中文（如“此前实现错把...”）并包含对历史错误的指责性描述，不符合英文代码库规范，且代码注释应说明当前逻辑而非过去错误，建议改用简洁英文注释",
+          "diff 仅修改 engine.py 实现，未包含任何测试文件变更或回归测试；若现有测试未能提前发现此基础运算 bug，应在修复时同步补充针对性测试以防回归"
+        ],
+        "judgedAt": "2026-05-01T05:32:20.403Z",
+        "promptTokens": 576,
+        "completionTokens": 2058
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "修复正确地指出了乘法反向传播中链式法则的错误，将局部导数修正为符合数学定义的形式，并添加了清晰注释说明问题根源，逻辑正确。但未提供新增测试用例来覆盖该修复，且未提及运行测试结果。",
+        "issues": [
+          "engine.py 第29-33行：注释中提到此前实现错误，但未在代码中保留或通过测试用例体现该错误的检测，缺乏回归测试保障",
+          "未补充或修改 test/test_engine.py 中的测试用例以显式验证乘法反向传播的正确性，测试覆盖不足"
+        ],
+        "judgedAt": "2026-05-01T05:31:57.680Z",
+        "promptTokens": 625,
+        "completionTokens": 155
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "修复了乘法反向传播的核心bug，逻辑正确，提高了代码可读性；但注释中存在不准确描述（误写为除法），且产出未涉及测试验证步骤，不符合任务要求中的完整性。",
+        "issues": [
+          "注释错误：diff第9行将原实现错误描述为'self.data / other.data'，实际原代码为乘法操作",
+          "测试覆盖不足：产出仅修改engine.py，未展示测试文件更新或验证过程，可能影响任务步骤的完整性"
+        ],
+        "judgedAt": "2026-05-01T05:32:10.387Z",
+        "promptTokens": 606,
+        "completionTokens": 1213
+      }
+    ],
+    "juryMedian": 7.5,
+    "juryMean": 7.5,
+    "jurySpread": 1,
+    "juryAgreement": "high",
+    "juryRunAt": "2026-05-01T05:32:20.403Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

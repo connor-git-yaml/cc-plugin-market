@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "核心实现逻辑正确，反向传播公式无误，且正确处理了梯度累积（+=）。测试用例设计优秀，覆盖了正向数值验证、边界值以及多路径梯度累积等关键场景。主要扣分点在于代码风格：在函数内部进行 import 违反了 PEP 8 规范，且测试文件中存在冗余导入。",
+        "issues": [
+          "micrograd/engine.py 第 54 行：`import math` 不应位于方法内部，应将其移至文件顶部的模块导入区，以符合 PEP 8 规范并避免每次调用时的重复查找开销。",
+          "test/test_engine.py：测试函数内部多次出现 `import math` 和 `import torch`，这违反了 PEP 8 规范（导入应在文件顶部），且若文件顶部已有导入则属于冗余代码。"
+        ],
+        "judgedAt": "2026-05-01T05:41:27.859Z",
+        "promptTokens": 1101,
+        "completionTokens": 5528
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "实现数学正确，梯度累积逻辑无误，测试覆盖了前向、反向及多路径场景；但在方法体内 import math 与现有代码风格不一致，且测试数量与命名存在可改进之处。",
+        "issues": [
+          "micrograd/engine.py:53 在 tanh() 方法内部 `import math`，与现有方法（如 relu）风格不一致，模块级依赖应置于文件顶部",
+          "test/test_engine.py 新增 3 个 unit test，超出任务要求的“1-2 个”范围；且 `test_tanh_negative_and_zero` 实际包含正数 2.3，函数名与测试数据不符"
+        ],
+        "judgedAt": "2026-05-01T05:40:51.239Z",
+        "promptTokens": 1078,
+        "completionTokens": 3107
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "实现基本正确，tanh方法和反向传播逻辑无误，测试覆盖了前向、反向、多路径梯度累积等场景，风格与现有代码一致。数学和接口均符合要求，未破坏现有功能。",
+        "issues": [
+          "test_tanh_forward_backward_torch_parity 中重复验证了与 math.tanh 的一致性，而 torch 已经验证过，导致冗余断言，可简化",
+          "test_tanh_negative_and_zero 中每次循环都调用 backward()，但未重置梯度，依赖的是第一次 backward 的累积状态，存在测试逻辑隐患"
+        ],
+        "judgedAt": "2026-05-01T05:40:19.954Z",
+        "promptTokens": 1135,
+        "completionTokens": 148
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "实现基本正确，导数公式和测试覆盖良好，但存在两个具体问题：一是`tanh`方法内`import math`位置不符合Python最佳实践，应放在文件顶部；二是反向传播闭包中使用了外部变量`t`，可能导致延迟求值时梯度计算错误，应直接使用`out.data`或重新计算。",
+        "issues": [
+          "`tanh`方法内局部导入`import math`，应移至文件顶部以符合风格和性能要求（engine.py第54行）。",
+          "反向传播闭包捕获了前向传播时计算的`t`值，若`out.data`在`_backward`调用前被修改，梯度计算将错误，应使用`out.data`或`math.tanh(self.data)`重新计算（engine.py第58行）。"
+        ],
+        "judgedAt": "2026-05-01T05:40:21.691Z",
+        "promptTokens": 1140,
+        "completionTokens": 185
+      }
+    ],
+    "juryMedian": 8.5,
+    "juryMean": 8.3,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:41:27.859Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

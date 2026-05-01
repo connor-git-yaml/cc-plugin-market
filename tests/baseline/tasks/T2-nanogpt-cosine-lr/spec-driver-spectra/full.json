@@ -88,6 +88,67 @@
     "model": "claude-opus-4-7",
     "executorRuntime": "main-session-opus-4-7",
     "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
-    "judgedBy": "self-judge-main-session-opus-4-7"
+    "judgedBy": "self-judge-main-session-opus-4-7",
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "核心三段式 cosine scheduler 实现正确，cosine decay 公式与边界连续性（decay→min_lr）无误，训练循环集成位置恰当且覆盖全部 param_groups。扣分主要因为：(1) 生产代码中使用 assert 做运行时校验不可靠；(2) warmup 末端与 cosine 起点存在不必要的不连续跳变。",
+        "issues": [
+          "第244行 `assert 0 <= decay_ratio <= 1`：assert 在 `python -O` 下会被静默移除，生产训练中应使用显式 if/raise 或直接移除，否则优化执行时无法捕获异常 decay_ratio。",
+          "第238行 warmup 公式 `learning_rate * (it + 1) / (warmup_iters + 1)` 在 it=warmup_iters-1 时返回 `learning_rate * warmup_iters / (warmup_iters + 1)`，而 it=warmup_iters 时 cosine 段返回 `learning_rate`，两者之间存在 `learning_rate / (warmup_iters + 1)` 的不连续跳变。标准做法 `learning_rate * it / warmup_iters` 可保证边界连续（it=0 时 lr=0 对首步优化无实质影响）。"
+        ],
+        "judgedAt": "2026-05-01T05:31:56.545Z",
+        "promptTokens": 1064,
+        "completionTokens": 3163
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 7,
+        "rationale": "核心 cosine 退火逻辑与三段式结构正确，注释清晰；但 warmup 阶段的分母选择导致与 cosine 阶段衔接时出现学习率跳变，且 diff 未包含 `decay_lr` 的配置定义，存在运行时 NameError 风险。",
+        "issues": [
+          "warmup 公式 `learning_rate * (it + 1) / (warmup_iters + 1)` 在 `it = warmup_iters - 1` 时无法达到 `learning_rate`，而下一步进入 cosine 阶段后 `it = warmup_iters` 时突然返回 `learning_rate`，造成两段之间 LR 不连续跳升；应改为除以 `warmup_iters` 以保证平滑衔接。",
+          "训练循环中使用了未在 diff 内定义的配置变量 `decay_lr`（`lr = get_lr(iter_num) if decay_lr else learning_rate`），若原文件未声明该变量将直接抛出 NameError；应确保在 config 区显式定义并给出默认值。"
+        ],
+        "judgedAt": "2026-05-01T05:31:39.967Z",
+        "promptTokens": 1027,
+        "completionTokens": 2867
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "实现基本正确，cosine annealing 与 warmup 逻辑无误，参数使用合理，注释清晰。训练循环中正确插入 lr 设置，且兼容 decay_lr 控制开关。但存在两处可改进点。",
+        "issues": [
+          "第234行：`it > lr_decay_iters` 时返回 min_lr，但未处理 lr_decay_iters <= warmup_iters 的边界情况，可能导致 decay_ratio 计算时除零或负值",
+          "缺少对 learning_rate、min_lr 等配置变量是否存在的显式检查或默认赋值，若 config 区未定义可能引发 NameError"
+        ],
+        "judgedAt": "2026-05-01T05:31:05.910Z",
+        "promptTokens": 1113,
+        "completionTokens": 154
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 6,
+        "rationale": "实现基本完成了核心任务，公式和结构大致正确，但存在几个关键缺陷。主要问题包括：未导入必要的math模块，以及未在config区域定义或引用所需的参数变量，这会导致运行时错误。此外，对warmup阶段初始学习率的处理不够精确，且缺少对参数默认值的处理。",
+        "issues": [
+          "未导入math模块：在函数get_lr中使用了math.cos和math.pi，但文件顶部未导入math库，会导致NameError。",
+          "未定义或引用配置参数：函数get_lr直接使用了warmup_iters、learning_rate、lr_decay_iters、min_lr等变量，但这些变量在代码中未定义或未从配置中正确引用，应通过config对象或全局变量传入。"
+        ],
+        "judgedAt": "2026-05-01T05:31:07.078Z",
+        "promptTokens": 1122,
+        "completionTokens": 179
+      }
+    ],
+    "juryMedian": 7.5,
+    "juryMean": 7.3,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:31:56.546Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

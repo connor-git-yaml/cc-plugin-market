@@ -87,6 +87,67 @@
     "rubricJudgeRationale": "主 oracle grep 看似通过，但实际仅检查到 nanoGPT 现有的 `get_lr` cosine 实现（任务前就存在的代码），diffStat 显示仅修改 README.md 7 行，train.py 无任何实质改动，任务并未真正执行（疑似只写文档）。0 commits + 7 个未提交改动说明流程未收口；测试字段全 null，无任何测试覆盖；wall 2.3 min 虽快但产出近乎空。综合判定任务完成度极低，代码/测试/commit 三项均不及格。",
     "interRaterDelta": 1,
     "diffStat": " README.md | 7 +++++++\n 1 file changed, 7 insertions(+)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 0,
+        "rationale": "该产出完全未完成核心任务。任务要求在 train.py 中实现 cosine learning rate scheduler 并接入训练循环，但 diff 显示仅修改了 README.md（加了7行），train.py 没有任何改动。没有任何 get_lr 函数实现、没有参数配置、没有训练循环集成，属于彻底失败。",
+        "issues": [
+          "train.py 未被修改，完全没有实现 get_lr(it) 函数，任务核心目标完全未达成",
+          "diff 仅修改了 README.md，与任务要求的 cosine scheduler 实现和训练循环集成毫无关系，属于完全偏离任务的产出"
+        ],
+        "judgedAt": "2026-05-01T05:30:44.024Z",
+        "promptTokens": 485,
+        "completionTokens": 398
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出完全偏离任务目标：要求修改 train.py 实现 cosine LR scheduler 并接入训练循环，但 diff 显示仅修改了 README.md，未创建或修改 train.py，核心功能零实现。",
+        "issues": [
+          "修改了错误的文件：任务明确要求直接修改 train.py，但产出仅包含 README.md 的变更，train.py 完全未被改动",
+          "核心功能完全缺失：未实现 get_lr(it) 函数/类，未在训练循环中调用并设置学习率，也未将 warmup_iters / lr_decay_iters / min_lr 等参数加入配置"
+        ],
+        "judgedAt": "2026-05-01T05:30:47.294Z",
+        "promptTokens": 466,
+        "completionTokens": 799
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出的 diff 完全未修改 train.py，而是修改了 README.md，与任务要求严重不符。任务要求实现 cosine learning rate scheduler 并接入训练循环，但代码中无任何相关实现。",
+        "issues": [
+          "未修改 train.py 文件，而是修改了 README.md，完全偏离任务目标",
+          "未实现 get_lr 函数或任何 learning rate scheduler 相关逻辑，缺少 warmup 和 cosine decay 的代码"
+        ],
+        "judgedAt": "2026-05-01T05:30:41.422Z",
+        "promptTokens": 499,
+        "completionTokens": 112
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "产出完全未完成任务核心目标，因为 git diff 仅修改了 README.md 文件，未对 train.py 进行任何改动；未实现 cosine learning rate scheduler 的函数或逻辑，导致训练循环无法接入学习率调度。",
+        "issues": [
+          "产出 diff 错误地修改了 README.md 文件，而非任务要求的 train.py 文件",
+          "未实现任何 cosine learning rate scheduler 的代码（如 get_lr 函数或类），缺少核心功能"
+        ],
+        "judgedAt": "2026-05-01T05:30:49.949Z",
+        "promptTokens": 488,
+        "completionTokens": 647
+      }
+    ],
+    "juryMedian": 1,
+    "juryMean": 0.8,
+    "jurySpread": 1,
+    "juryAgreement": "high",
+    "juryRunAt": "2026-05-01T05:30:49.949Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

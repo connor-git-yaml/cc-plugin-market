@@ -87,6 +87,67 @@
     "rubricJudgeRationale": "主 oracle 通过（提取 `WEIGHT_INIT_RANGE` 常量且消除原 `random.uniform(-1, 1)`），但执行质量明显不达标：commits=0 且 uncommittedChanges=7，说明工具未完成提交，改动散落工作区；filesChanged=4 远超任务范围，新增 `.gitignore`、`README.md`、`setup.py` 等无关文件，违背\"最小改动\"原则，污染目标仓库。无测试运行记录（testsPassed/Broken 全 null），未验证既有测试不破坏。token/cost 全 null 无法评估效率，wall 30s 尚可。综合：任务表面完成但代码质量与提交规范严重欠缺，给 4 分。",
     "interRaterDelta": 1,
     "diffStat": " .gitignore      |  1 +\n README.md       | 18 ++++++++++++++++++\n micrograd/nn.py |  4 +++-\n setup.py        | 22 ++++++++++++++++++++++\n 4 files changed, 44 insertions(+), 1 deletion(-)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 4,
+        "rationale": "核心修改可能部分完成，但存在两个严重问题：一是引入了大量与任务无关的文件变更，严重违反 minimal change 原则；二是 nn.py 仅 1 行删除，极可能遗漏了对 bias 初始化中 `random.uniform(-1, 1)` 的替换，未完成'所有'调用的替换要求。",
+        "issues": [
+          "diff 包含 .gitignore、README.md、setup.py 共 41 行无关新增，任务明确要求'不修改其他逻辑'和'minimal change'，这些文件与提取常量毫无关系",
+          "nn.py 变更为 3 插入 1 删除，但 micrograd 原始 Neuron.__init__ 中 weights 和 bias 两处均调用 `random.uniform(-1, 1)`，仅 1 行删除意味着很可能只替换了其中一处，未满足'把所有调用替换'的要求"
+        ],
+        "judgedAt": "2026-05-01T05:32:40.540Z",
+        "promptTokens": 451,
+        "completionTokens": 1749
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "虽然 nn.py 可能包含核心修改，但产出严重违背 minimal change 原则，额外修改了 3 个无关文件（.gitignore、README.md、setup.py），属于典型的范围蔓延；且提供的 diff 缺少 nn.py 具体变更细节，无法验证常量命名及替换完整性。",
+        "issues": [
+          "范围蔓延：任务明确要求仅修改 micrograd/nn.py 并保持 minimal change，但产出却新增/修改了 .gitignore、README.md、setup.py 三个无关文件，其中 setup.py 新增 22 行、README.md 新增 18 行，严重违反'不修改其他逻辑'的约束。",
+          "无法验证核心修改：提供的 diff 仅展示文件级行数统计（nn.py +4/-1），未给出具体代码变更，无法确认是否将所有硬编码的 `random.uniform(-1, 1)` 调用替换为命名清晰的模块级常量，也无法确认常量命名是否清晰反映用途。"
+        ],
+        "judgedAt": "2026-05-01T05:32:32.771Z",
+        "promptTokens": 435,
+        "completionTokens": 1915
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该产出完全偏离任务要求，不仅未修改nn.py中的硬编码值，反而添加了不必要的文件和内容，如.gitignore、README.md和setup.py，与任务无关。任务要求是提取常量并替换引用，但diff显示对nn.py的修改极少且不明确是否正确完成目标。",
+        "issues": [
+          "未在nn.py顶部定义WEIGHT_INIT_RANGE等模块级常量，无法确认是否完成提取",
+          "对nn.py的修改仅4行变更，但未展示具体代码，极可能未替换所有random.uniform(-1, 1)为const引用"
+        ],
+        "judgedAt": "2026-05-01T05:32:15.500Z",
+        "promptTokens": 468,
+        "completionTokens": 147
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该产出严重偏离任务要求，diff 显示修改了多个无关文件（如 .gitignore、README.md、setup.py），而核心的 nn.py 修改内容不明确，未能清晰展示常量定义和替换的具体代码变更。这完全不符合任务中“仅修改 nn.py 并提取常量”的 minimal change 要求。",
+        "issues": [
+          "diff 中未展示 nn.py 内具体的常量定义和替换代码，无法确认是否正确完成核心任务",
+          "修改了多个与任务无关的文件（.gitignore、README.md、setup.py），违反了“不修改其他逻辑”和“保持 minimal change”的要求"
+        ],
+        "judgedAt": "2026-05-01T05:32:15.500Z",
+        "promptTokens": 450,
+        "completionTokens": 148
+      }
+    ],
+    "juryMedian": 2,
+    "juryMean": 2.5,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-01T05:32:40.540Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

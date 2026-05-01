@@ -87,6 +87,67 @@
     "rubricJudgeRationale": "主 oracle 通过（tanh 实现 + 测试已加），代码改动规模合理（5 文件 +81 行），效率良好（wall ~68s）。但严重扣分：commits=0 且 uncommittedChanges=8，完全没有提交历史，违反\"渐进式 commits\"要求；额外动了 .gitignore / README / setup.py，疑似 scope creep；testsPassed/Broken 均为 null，无法确认既有测试未被破坏；token 数据缺失。完成度尚可但工程化交付质量不足。",
     "interRaterDelta": 0,
     "diffStat": " .gitignore          |  1 +\n README.md           | 18 ++++++++++++++++++\n micrograd/engine.py | 11 +++++++++++\n setup.py            | 22 ++++++++++++++++++++++\n test/test_engine.py | 29 +++++++++++++++++++++++++++++\n 5 files changed, 81 insertions(+)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 2,
+        "rationale": "该 diff 仅包含文件变更统计摘要（类似 `git diff --stat` 输出），未展示任何实际代码变更内容，导致核心实现（tanh 方法、_backward 闭包、测试用例）完全不可审查，无法验证正确性。同时引入了任务未要求的文件修改，属于范围蔓延。",
+        "issues": [
+          "Diff 仅包含统计摘要（如 `micrograd/engine.py | 11 +++++++++++`），未展示任何实际代码增删行，tanh() 方法实现、_backward 闭包逻辑及测试代码均不可见，无法验证数学正确性与风格一致性",
+          "任务仅要求修改 `micrograd/engine.py` 和 `test/test_engine.py`，但 diff 包含了对 `.gitignore`、`README.md`、`setup.py` 的无关修改（共 41 行），属于不必要的范围蔓延，可能污染仓库"
+        ],
+        "judgedAt": "2026-05-01T05:29:23.777Z",
+        "promptTokens": 484,
+        "completionTokens": 1539
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 5,
+        "rationale": "产出包含多个与任务无关的文件变更（setup.py、README.md、.gitignore），严重偏离了仅修改 engine.py 和 test_engine.py 的要求；同时测试文件新增29行，与'1-2个简单unit test'的简洁性要求不符，且 engine.py 仅11行新增，存在实现过于紧凑或缺少必要导入的风险。",
+        "issues": [
+          "新增 setup.py（22行）并修改 README.md（18行）、.gitignore（1行），这些变更与实现 tanh 及单元测试的任务目标完全无关，不应出现在本次提交中。",
+          "test/test_engine.py 新增29行，显著超出'1-2个简单unit test'的简洁要求；engine.py 仅新增11行，难以确认是否正确导入了 math 模块并完整实现了 _backward 闭包逻辑。"
+        ],
+        "judgedAt": "2026-05-01T05:29:45.897Z",
+        "promptTokens": 472,
+        "completionTokens": 3700
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 6,
+        "rationale": "实现了 tanh 方法和反向传播，数学逻辑基本正确，测试覆盖了前向和反向计算。但未处理输入为 None 或非数值类型等边界情况，且测试用例单一，缺乏梯度累积场景验证。",
+        "issues": [
+          "micrograd/engine.py 中 tanh() 方法未检查输入值类型，若 data 为 None 或非数值类型会导致运行时错误，应增加类型校验或预处理",
+          "test/test_engine.py 中测试用例仅覆盖单一 scalar 场景，缺少对多个操作组合、梯度叠加的测试，如 (a + b).tanh().backward()"
+        ],
+        "judgedAt": "2026-05-01T05:29:02.946Z",
+        "promptTokens": 503,
+        "completionTokens": 154
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 3,
+        "rationale": "评分较低，因为 diff 未展示任何实际代码修改内容，仅显示文件数量变化，无法评估 tanh 方法的实现正确性、反向传播、测试覆盖等核心要求。该产出未完成任务的基本目标，存在严重缺陷。",
+        "issues": [
+          "diff 内容缺失：未提供 engine.py 中 tanh 方法的实现代码，无法验证数学正确性和风格一致性",
+          "测试缺失：未提供 test_engine.py 中新增的 unit test 代码，无法验证 forward 和 backward 功能"
+        ],
+        "judgedAt": "2026-05-01T05:29:01.893Z",
+        "promptTokens": 488,
+        "completionTokens": 125
+      }
+    ],
+    "juryMedian": 4,
+    "juryMean": 4,
+    "jurySpread": 4,
+    "juryAgreement": "low",
+    "juryRunAt": "2026-05-01T05:29:45.897Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }

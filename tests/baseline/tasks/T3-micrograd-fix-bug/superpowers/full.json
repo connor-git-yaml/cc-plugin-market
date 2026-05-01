@@ -87,6 +87,68 @@
     "rubricJudgeRationale": "主 oracle 通过（engine.py 反向梯度修复正确），但执行质量问题严重：(1) commits=0，未做任何提交，4 个未提交改动游离；(2) filesChanged=10 大量无关文件（bundles/docs/mkdocs、specs/_meta、.gitignore）属严重 scope creep，与 micrograd bug 修复目标无关；(3) testsPassed/Broken 全 null，未跑既有测试验证回归；(4) wall 43s 效率尚可、无人工介入是亮点。综合：完成度 6（oracle 过但无测试佐证）、代码质量 3（污染范围）、测试 1（未跑）、commit 1（零提交）、效率 8。加权约 4。",
     "interRaterDelta": 1,
     "diffStat": " .gitignore                                         |  1 +\n .../bundles/api-consumer/docs/index.md             | 29 ++++++++++++++++++\n .../spectra-full/bundles/api-consumer/mkdocs.yml   |  8 +++++\n .../bundles/architecture-review/docs/index.md      | 34 ++++++++++++++++++++++\n .../bundles/architecture-review/mkdocs.yml         | 12 ++++++++\n .../bundles/developer-onboarding/docs/index.md     | 33 +++++++++++++++++++++\n .../bundles/developer-onboarding/mkdocs.yml        | 15 ++++++++++\n .../bundles/ops-handover/docs/index.md             | 27 +++++++++++++++++\n .../spectra-full/bundles/ops-handover/mkdocs.yml   |  5 ++++\n specs/_meta/dry-run-estimate.md                    | 25 ++++++++++++++++\n 10 files changed, 189 insertions(+)\n",
-    "sonnetExitCode": 0
+    "sonnetExitCode": 0,
+    "juryScores": [
+      {
+        "judge": "siliconflow:Pro/zai-org/GLM-5.1",
+        "vendor": "siliconflow",
+        "score": 0,
+        "rationale": "该产出完全未完成任何任务目标。任务要求定位并修复 micrograd/engine.py 的 bug，但 diff 中没有任何对 micrograd/engine.py 或 test/test_engine.py 的修改。所有变更都是无关的文档和配置文件，与任务毫无关系。",
+        "issues": [
+          "diff 中完全没有对 micrograd/engine.py 的修改，核心任务（定位并修复 bug）完全未执行",
+          "diff 中没有对 test/test_engine.py 的任何操作，说明步骤1（查看测试内容）和步骤2（运行测试）均未完成",
+          "所有 189 行新增内容（bundles 文档、mkdocs.yml、dry-run-estimate.md）均与 micrograd 项目无关，属于无关产出"
+        ],
+        "judgedAt": "2026-05-01T05:32:06.487Z",
+        "promptTokens": 556,
+        "completionTokens": 455
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "该产出完全偏离任务目标。任务要求定位并修复micrograd/engine.py中的bug以使测试通过，但diff显示仅添加了完全无关的文档和配置文件，未涉及任何代码调试、bug修复或测试验证。",
+        "issues": [
+          "完全没有查看或修改任务指定的test/test_engine.py和micrograd/engine.py文件，未执行任何bug定位或修复操作",
+          "产出内容与任务完全无关，添加了大量mkdocs文档、开发手册和估算文件，而非修复micrograd的测试失败"
+        ],
+        "judgedAt": "2026-05-01T05:32:08.031Z",
+        "promptTokens": 542,
+        "completionTokens": 770
+      },
+      {
+        "judge": "siliconflow:Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "该diff完全偏离任务目标，未修复micrograd的测试问题，反而添加了大量与任务无关的文档和配置文件。没有涉及test_engine.py或engine.py的任何修改，表明未执行任务要求的步骤。",
+        "issues": [
+          "diff中修改的文件全部为文档和配置文件（如mkdocs.yml、index.md），无一处涉及test/test_engine.py或micrograd/engine.py的测试或代码修复",
+          "未运行测试或定位bug，产出与任务核心目标完全脱节，属于严重偏离"
+        ],
+        "judgedAt": "2026-05-01T05:32:03.563Z",
+        "promptTokens": 581,
+        "completionTokens": 132
+      },
+      {
+        "judge": "siliconflow:Pro/deepseek-ai/DeepSeek-V3.2",
+        "vendor": "siliconflow",
+        "score": 1,
+        "rationale": "该产出完全偏离任务核心，未提供任何代码修复或测试运行结果，仅添加了无关的文档文件。它未能定位或修复 micrograd 的 bug，也未展示任何与任务相关的代码改动。",
+        "issues": [
+          "产出 diff 仅包含文档文件（如 .md 和 .yml）的添加，未涉及任何代码文件（test_engine.py 或 engine.py）的修改，无法修复 bug。",
+          "产出未遵循任务步骤：未运行测试、定位 bug 或提供修复，而是添加了与任务无关的文档，表明工具未理解任务要求。"
+        ],
+        "judgedAt": "2026-05-01T05:32:03.947Z",
+        "promptTokens": 561,
+        "completionTokens": 143
+      }
+    ],
+    "juryMedian": 1,
+    "juryMean": 0.8,
+    "jurySpread": 1,
+    "juryAgreement": "high",
+    "juryRunAt": "2026-05-01T05:32:08.031Z",
+    "juryAnonymized": true,
+    "juryAdversarial": true
   }
 }
