@@ -244,6 +244,117 @@ describe('eval-report', () => {
       expect(md).not.toContain('### 4.2 Model Caveat');
     });
 
+    it('renders §4.3 Jury Agreement table when fixtures have juryMedian', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus', model: 'claude-opus-4-7' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryScores: [
+            { judge: 'claude-sonnet-4-6', score: 7 },
+            { judge: 'claude-opus-4-7', score: 8 },
+          ],
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toContain('### 4.3 Jury Agreement');
+      // judge labels strip 'claude-' prefix in §4.3 table
+      expect(md).toMatch(/sonnet-4-6=7/);
+      expect(md).toMatch(/opus-4-7=8/);
+      expect(md).toMatch(/spec-driver-opus †{2}/); // marked as jury (††) in §4.1
+      expect(md).toMatch(/cross-LLM jury/);
+    });
+
+    it('§4.1 prefers juryMedian over rubricJudgeScore when both exist', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          rubricJudgeScore: 7, // legacy single self-judge
+          juryMedian: 5.5, // newer cross-LLM jury (lower)
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 5 }, { judge: 'b', score: 6 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      // 应该用 5.5 (jury median) 不是 7 (legacy)
+      expect(md).toMatch(/\*\*5\.5/); // jury score is bold + has †† marker
+      // 均分行拆成 jury / self-judge — 此 fixture 仅有 jury（无 mixed）
+      expect(md).toContain('**均分 (jury)**');
+      expect(md).toMatch(/\*\*5\.5\*\*\s*\(n=1\)/);
+    });
+
+    it('§4.1 splits avg row into jury vs self-judge when tool has mixed sources', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      // 同一 tool 部分 fixture 有 jury，部分仅 rubric
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryMedian: 6,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 6 }, { judge: 'b', score: 7 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      writeFixture(join(tempDir, 'tasks', 'T2', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          rubricJudgeScore: 8, // legacy self-judge, 没跑 jury
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      // 必须有 mixed source warning
+      expect(md).toMatch(/Mixed source warning.*spec-driver-opus/);
+      // 均分要拆开（不能合并 6 和 8 报 7）
+      expect(md).toContain('**均分 (jury)**');
+      expect(md).toContain('**均分 (self-judge)**');
+    });
+
+    it('§4.3 flags low-agreement fixtures (spread > 2)', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryScores: [{ judge: 'a', score: 4 }, { judge: 'b', score: 8 }],
+          juryMedian: 6,
+          jurySpread: 4,
+          juryAgreement: 'low',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toMatch(/Low agreement.*spec-driver-opus/);
+    });
+
+    it('§4.3 prompts to run jury when no fixtures have juryMedian', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver', model: 'claude-sonnet-4-6' },
+        taskExecution: { tool: 'spec-driver', rubricJudgeScore: 5, primaryOracle: { passed: true } },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toContain('### 4.3 Jury Agreement');
+      expect(md).toMatch(/无任何 fixture 跑过 cross-LLM jury/);
+      expect(md).toMatch(/eval:judge-jury/);
+    });
+
     it('falls back model field reading: te.model > meta.model > executorRuntime', async () => {
       const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
       // 一组：仅 meta.model（legacy fixture pattern）

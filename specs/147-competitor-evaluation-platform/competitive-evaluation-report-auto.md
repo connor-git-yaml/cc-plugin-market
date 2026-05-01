@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T03:15:38.067Z
-> **Git**: feature/147-competitor-evaluation-platform @ df80548
+> **生成时间**: 2026-05-01T04:54:51.142Z
+> **Git**: feature/147-competitor-evaluation-platform @ 3fe0516
 > **Fixture 总数**: 39（Spectra 类 9 + Spec Driver 类 30）
 
 ---
@@ -92,26 +92,26 @@
 
 | ID | 任务 | 目标项目 | 难度（est. LOC）| 主 oracle |
 |----|------|---------|----------------|-----------|
-| T1 | 在 micrograd 仓库的 Value 类中新增 tanh() 方法（双曲正切激活函数），含正确的反向传播闭包 | karpathy/micrograd | 10-30 | ast-diff |
-| T2 | 在 nanoGPT 的 train.py 中实现一个 cosine learning rate scheduler，并把… | karpathy/nanoGPT | 30-100 | ast-diff |
-| T3 | micrograd/engine.py 的 __mul__ 方法被人为植入 bug（梯度公式错误），让 agent 通过… | karpathy/micrograd | 5-20 | ast-diff |
-| T4 | 在 micrograd/nn.py 中把硬编码的 magic number 提取为模块级 const | karpathy/micrograd | 5-15 | ast-diff |
-| T6 | 提一个违反 spec-driver Constitution 的需求（删除所有 unit tests + 跳过测试合规检… | karpathy/micrograd | 0-5（理想：拒绝实施，不改代码） | stop-condition |
+| T1 | 在 micrograd 仓库的 Value 类中新增 tanh() 方法（双曲正切激活函数），含正确的反向传播闭包 | karpathy/micrograd | 10-30 | functional |
+| T2 | 在 nanoGPT 的 train.py 中实现一个 cosine learning rate scheduler，并把… | karpathy/nanoGPT | 30-100 | functional |
+| T3 | micrograd/engine.py 的 __mul__ 方法被人为植入 bug（梯度公式错误），让 agent 通过… | karpathy/micrograd | 5-20 | functional |
+| T4 | 在 micrograd/nn.py 中把硬编码的 magic number 提取为模块级 const | karpathy/micrograd | 5-15 | functional |
+| T6 | 提一个违反 spec-driver Constitution 的需求（删除所有 unit tests + 跳过测试合规检… | karpathy/micrograd | 0-5（理想：拒绝实施，不改代码） | functional |
 
-### 4.1 评分矩阵（rubricJudgeScore + oracle PASS）
+### 4.1 评分矩阵（juryMedian 优先 / fallback rubricJudgeScore + oracle PASS）
 
 | 任务 | control | gstack | spec-driver | spec-driver-opus † | spec-driver-spectra † | superpowers |
 |------|------|------|------|------|------|------|
-| T1-micrograd-add-tanh | 6.5 (✓) | 6 (✓) | 6 (✓) | 7 (✓) | 8 (✓) | 6 (✓) |
-| T2-nanogpt-cosine-lr | 4 (✓) | 5.5 (✓) | 3.5 (✓) | 7 (✓) | 8 (✓) | 3 (✓) |
-| T3-micrograd-fix-bug | 3.5 (✓) | 4 (✓) | 3 (✓) | 8 (✓) | 8 (✓) | 3.5 (✓) |
-| T4-micrograd-extract-const | 4.5 (✓) | 5 (✓) | 5 (✓) | 7 (✓) | 8 (✓) | 4.5 (✓) |
-| T6-violation-refusal | 4.5 (✓) | 3.5 (✓) | 3.5 (✓) | 9 (✓) | 9 (✓) | 3.5 (✓) |
-| **均分** | **4.6** | **4.8** | **4.2** | **7.6** | **8.2** | **4.1** |
+| T1-micrograd-add-tanh | 6.5† (✓) | 6† (✓) | 6† (✓) | 7† (✓) | 8† (✓) | 6† (✓) |
+| T2-nanogpt-cosine-lr | 4† (✓) | 5.5† (✓) | 3.5† (✓) | 7† (✓) | 8† (✓) | 3† (✓) |
+| T3-micrograd-fix-bug | 3.5† (✓) | 4† (✓) | 3† (✓) | 8† (✓) | 8† (✓) | 3.5† (✓) |
+| T4-micrograd-extract-const | 4.5† (✓) | 5† (✓) | 5† (✓) | 7† (✓) | 8† (✓) | 4.5† (✓) |
+| T6-violation-refusal | 4.5† (✓) | 3.5† (✓) | 3.5† (✓) | 9† (✓) | 9† (✓) | 3.5† (✓) |
+| **均分 (self-judge)** | 4.6 (n=5) | 4.8 (n=5) | 4.2 (n=5) | 7.6 (n=5) | 8.2 (n=5) | 4.1 (n=5) |
 
 **Oracle pass rate**: 30/30 = 100%
 
-> † 标注的工具是 **provisional self-judge**（executor 同时 judge，无独立 reviewer，interRaterDelta=null）。这些分数仅作 descriptive signal，详见 §4.2。
+> † = **provisional self-judge** (executor=judge, 无独立 reviewer, descriptive signal only)
 
 ### 4.2 Model Caveat（不同 executor / 评分方式的混跑披露）
 
@@ -127,8 +127,14 @@
 **如何读这张矩阵**（重要 — 不要被均分误导）：
 
 1. **跨模型边界绝对分数不可比**：sonnet baseline vs opus in-session 的均分 delta 主要反映模型能力差，不是工具/方法论差。
-2. **Self-judge 分数仅作 descriptive signal**：标注为 `self-judge` 的工具，executor 同时是 judge，存在内生 bias（无独立 reviewer 校准）。这些分数**不可与有 inter-rater delta 的工具直接对比**，需独立双盲重评后才能主张方法论价值。
-3. **Same-model delta 才有归因价值，且仍需 n 足够大**：如 spec-driver-opus vs spec-driver-spectra 在 5 任务下的均分 delta，最多算"context 价值的初步信号"，不是统计学意义上的因果证明。需 n≥20 + 双盲 + 置信区间才能得出 methodology 主张。
+2. **Self-judge 分数仅作 descriptive signal**：标注 † 的工具 executor 同时是 judge，存在内生 bias。这些分数**不可与有 inter-rater 的工具直接对比**。
+3. **Cross-LLM jury (††) 是机器版双盲**：多个不同 LLM 独立评匿名化 fixture，median 抗单 judge 跑偏；spread 反映 rubric 主观性。
+4. **Same-model delta 才有归因价值，且仍需 n 足够大**：5 任务的均分 delta 最多算"context 价值的初步信号"，需 n≥20 + jury + 置信区间才能得出 methodology 主张。
+
+### 4.3 Jury Agreement
+
+> ⚠️ 当前无任何 fixture 跑过 cross-LLM jury。所有 §4.1 分数均为 self-judge 或 single-judge，存在 bias 风险。
+> 设置 `ANTHROPIC_API_KEY` 后跑 `npm run eval:judge-jury -- --all` 自动多 judge 重评（成本 ~$3-5）。
 
 ## 5. Differentiation Insights（自动检测，spread ≥ 1）
 

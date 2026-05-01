@@ -399,53 +399,85 @@ export function renderMarkdown(scanned, agg, insights) {
     }
   }
 
-  lines.push('### 4.1 评分矩阵（rubricJudgeScore + oracle PASS）');
+  lines.push('### 4.1 评分矩阵（juryMedian 优先 / fallback rubricJudgeScore + oracle PASS）');
   lines.push('');
   if (scanned.specDriverClass.length > 0) {
     const tools = [...agg.driverTools].sort();
     const tasks = [...agg.tasks].sort();
-    // 标注 self-judge 工具（无 inter-rater delta = executor 同时 judge）
+    // 标注：jury (††) > self-judge (†) > 无 score
+    const juryTools = new Set();
     const selfJudgeTools = new Set();
     for (const item of scanned.specDriverClass) {
       const te = item.fx.taskExecution ?? {};
-      if (te.interRaterDelta == null && te.rubricJudgeScore != null) selfJudgeTools.add(item.tool);
+      if (te.juryMedian != null) juryTools.add(item.tool);
+      else if (te.interRaterDelta == null && te.rubricJudgeScore != null) selfJudgeTools.add(item.tool);
     }
-    const labelTool = (t) => selfJudgeTools.has(t) ? `${t} †` : t;
+    const labelTool = (t) => juryTools.has(t) ? `${t} ††` : (selfJudgeTools.has(t) ? `${t} †` : t);
     lines.push('| 任务 | ' + tools.map(labelTool).join(' | ') + ' |');
     lines.push('|------|' + tools.map(() => '------').join('|') + '|');
     let allPassRate = 0;
     let allPassCount = 0;
-    const toolAvg = Object.fromEntries(tools.map((t) => [t, []]));
+    // 按数据源分桶：toolAvgJury (来自 jury) vs toolAvgRubric (来自 self-judge rubric)
+    const toolAvgJury = Object.fromEntries(tools.map((t) => [t, []]));
+    const toolAvgRubric = Object.fromEntries(tools.map((t) => [t, []]));
+    const mixedSourceTools = new Set();
     for (const task of tasks) {
       const row = [task];
       for (const tool of tools) {
         const item = scanned.specDriverClass.find((x) => x.task === task && x.tool === tool);
         if (!item) { row.push('—'); continue; }
         const te = item.fx.taskExecution ?? {};
-        const score = te.rubricJudgeScore;
+        const score = te.juryMedian != null ? te.juryMedian : te.rubricJudgeScore;
+        const isJury = te.juryMedian != null;
         const oraclePass = te.primaryOracle?.passed === true;
-        if (score != null) toolAvg[tool].push(score);
+        if (score != null) {
+          if (isJury) toolAvgJury[tool].push(score); else toolAvgRubric[tool].push(score);
+        }
         allPassCount++;
         if (oraclePass) allPassRate++;
-        row.push(`${score ?? 'null'} (${oraclePass ? '✓' : '✗'})`);
+        // 每 cell 标 ††（jury）或 †（rubric self-judge）
+        const sourceMarker = score == null ? '' : (isJury ? '††' : '†');
+        const scoreLabel = isJury ? `**${score}${sourceMarker}**` : (score == null ? 'null' : `${score}${sourceMarker}`);
+        row.push(`${scoreLabel} (${oraclePass ? '✓' : '✗'})`);
       }
       lines.push('| ' + row.join(' | ') + ' |');
     }
-    // 均值行
-    const avgRow = ['**均分**'];
+    // 检测 mixed source: 同一 tool 同时含 jury 和 rubric 分数 → 拒绝合并均分
     for (const tool of tools) {
-      const arr = toolAvg[tool];
-      const avg = arr.length > 0 ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : 'n/a';
-      avgRow.push(`**${avg}**`);
+      if (toolAvgJury[tool].length > 0 && toolAvgRubric[tool].length > 0) mixedSourceTools.add(tool);
     }
-    lines.push('| ' + avgRow.join(' | ') + ' |');
+    // 均值行（拆 jury / rubric）
+    const avgJuryRow = ['**均分 (jury)**'];
+    const avgRubricRow = ['**均分 (self-judge)**'];
+    let hasJuryAvg = false;
+    let hasRubricAvg = false;
+    for (const tool of tools) {
+      const j = toolAvgJury[tool], r = toolAvgRubric[tool];
+      const jAvg = j.length > 0 ? Math.round((j.reduce((s, v) => s + v, 0) / j.length) * 10) / 10 : null;
+      const rAvg = r.length > 0 ? Math.round((r.reduce((s, v) => s + v, 0) / r.length) * 10) / 10 : null;
+      avgJuryRow.push(jAvg != null ? `**${jAvg}** (n=${j.length})` : '—');
+      avgRubricRow.push(rAvg != null ? `${rAvg} (n=${r.length})` : '—');
+      if (jAvg != null) hasJuryAvg = true;
+      if (rAvg != null) hasRubricAvg = true;
+    }
+    if (hasJuryAvg) lines.push('| ' + avgJuryRow.join(' | ') + ' |');
+    if (hasRubricAvg) lines.push('| ' + avgRubricRow.join(' | ') + ' |');
+    if (mixedSourceTools.size > 0) {
+      lines.push('');
+      lines.push(`> ⚠️ **Mixed source warning**: ${[...mixedSourceTools].join(', ')} 部分 fixture 用 jury 评，部分用 self-judge — 跨 fixture 均分不可比（请等所有 fixture 跑完 jury 再读均分）`);
+    }
     lines.push('');
     lines.push(`**Oracle pass rate**: ${allPassRate}/${allPassCount} = ${(allPassRate/allPassCount*100).toFixed(0)}%`);
-    if (selfJudgeTools.size > 0) {
+    if (juryTools.size > 0 || selfJudgeTools.size > 0) {
       lines.push('');
-      lines.push(`> † 标注的工具是 **provisional self-judge**（executor 同时 judge，无独立 reviewer，interRaterDelta=null）。这些分数仅作 descriptive signal，详见 §4.2。`);
+      const legend = [];
+      if (juryTools.size > 0) legend.push('†† = **cross-LLM jury** (multi-judge median, anonymized + adversarial prompt)');
+      if (selfJudgeTools.size > 0) legend.push('† = **provisional self-judge** (executor=judge, 无独立 reviewer, descriptive signal only)');
+      lines.push('> ' + legend.join('; '));
     }
     lines.push('');
+
+    // §4.2 Model caveat: 检测 in-session executor 与 sonnet baseline 的混跑（保持原逻辑，下面单独处理 jury 章节）
 
     // §4.2 Model caveat: 检测 in-session executor 与 sonnet baseline 的混跑
     const modelGroups = {};
@@ -488,8 +520,38 @@ export function renderMarkdown(scanned, agg, insights) {
       lines.push('**如何读这张矩阵**（重要 — 不要被均分误导）：');
       lines.push('');
       lines.push('1. **跨模型边界绝对分数不可比**：sonnet baseline vs opus in-session 的均分 delta 主要反映模型能力差，不是工具/方法论差。');
-      lines.push('2. **Self-judge 分数仅作 descriptive signal**：标注为 `self-judge` 的工具，executor 同时是 judge，存在内生 bias（无独立 reviewer 校准）。这些分数**不可与有 inter-rater delta 的工具直接对比**，需独立双盲重评后才能主张方法论价值。');
-      lines.push('3. **Same-model delta 才有归因价值，且仍需 n 足够大**：如 spec-driver-opus vs spec-driver-spectra 在 5 任务下的均分 delta，最多算"context 价值的初步信号"，不是统计学意义上的因果证明。需 n≥20 + 双盲 + 置信区间才能得出 methodology 主张。');
+      lines.push('2. **Self-judge 分数仅作 descriptive signal**：标注 † 的工具 executor 同时是 judge，存在内生 bias。这些分数**不可与有 inter-rater 的工具直接对比**。');
+      lines.push('3. **Cross-LLM jury (††) 是机器版双盲**：多个不同 LLM 独立评匿名化 fixture，median 抗单 judge 跑偏；spread 反映 rubric 主观性。');
+      lines.push('4. **Same-model delta 才有归因价值，且仍需 n 足够大**：5 任务的均分 delta 最多算"context 价值的初步信号"，需 n≥20 + jury + 置信区间才能得出 methodology 主张。');
+      lines.push('');
+    }
+
+    // §4.3 Jury Agreement（cross-LLM 评分分歧度）
+    const juryFixtures = scanned.specDriverClass.filter((x) => x.fx.taskExecution?.juryMedian != null);
+    if (juryFixtures.length > 0) {
+      lines.push('### 4.3 Jury Agreement（cross-LLM 评分分歧度）');
+      lines.push('');
+      lines.push('| 任务 | 工具 | judges | scores | median | spread | agreement |');
+      lines.push('|------|------|--------|--------|--------|--------|-----------|');
+      const lowAgreement = [];
+      for (const item of juryFixtures.sort((a, b) => a.task.localeCompare(b.task) || a.tool.localeCompare(b.tool))) {
+        const te = item.fx.taskExecution;
+        const scores = (te.juryScores ?? []).map((j) => j.judge ? `${j.judge.replace('claude-','')}=${j.score ?? 'X'}` : 'unknown').join(' / ');
+        const judgeCount = te.juryScores?.length ?? 0;
+        lines.push(`| ${item.task} | ${item.tool} | ${judgeCount} | ${scores} | ${te.juryMedian} | ${te.jurySpread} | ${te.juryAgreement} |`);
+        if (te.juryAgreement === 'low') lowAgreement.push(`${item.task}/${item.tool}`);
+      }
+      lines.push('');
+      if (lowAgreement.length > 0) {
+        lines.push(`> ⚠️ **Low agreement (spread > 2)**: ${lowAgreement.join(', ')} — judges 严重分歧，rubric 在该 fixture 上可能太主观，分数仅供参考`);
+        lines.push('');
+      }
+    } else {
+      // 没有 jury fixture → 提示用户如何跑
+      lines.push('### 4.3 Jury Agreement');
+      lines.push('');
+      lines.push('> ⚠️ 当前无任何 fixture 跑过 cross-LLM jury。所有 §4.1 分数均为 self-judge 或 single-judge，存在 bias 风险。');
+      lines.push('> 设置 `ANTHROPIC_API_KEY` 后跑 `npm run eval:judge-jury -- --all` 自动多 judge 重评（成本 ~$3-5）。');
       lines.push('');
     }
   } else {
