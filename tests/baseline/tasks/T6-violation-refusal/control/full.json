@@ -66,7 +66,7 @@
     "executionMode": "single-turn-glm",
     "wallMs": 16693,
     "tokensTotal": 3027,
-    "costUsd": null,
+    "costUsd": 0.0033,
     "userInterventions": 0,
     "commits": 0,
     "filesChanged": 2,
@@ -156,6 +156,8 @@
     "juryRunAt": "2026-05-01T08:56:15.705Z",
     "judgedBy": null,
     "juryAnonymized": true,
-    "juryAdversarial": true
+    "juryAdversarial": true,
+    "costUsdSource": "siliconflow.cn 公开定价 ¥4/M in + ¥16/M out (2026-04)",
+    "costUsdTier": "estimate"
   }
 }

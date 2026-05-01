@@ -126,6 +126,59 @@
       "judgedAt": "2026-04-30T17:40:26.519Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "GRAPH_REPORT.md"
+    },
+    "graphAccuracy": {
+      "language": "python",
+      "coverageMethod": "label-only",
+      "truthSet": {
+        "filesAnalyzed": 5,
+        "imports": 5,
+        "callsTotal": 48,
+        "uniqueCallTargets": 36
+      },
+      "graph": {
+        "totalEdges": 56,
+        "callEdges": 21,
+        "containmentEdges": 31,
+        "otherEdges": 4
+      },
+      "accuracy": {
+        "graphCalleeCount": 9,
+        "truthCalleeCount": 36,
+        "hits": 7,
+        "callPrecision": 0.778,
+        "callRecall": 0.194,
+        "sampleHits": [
+          "Value",
+          "relu",
+          "backward",
+          "parameters",
+          "__add__",
+          "__mul__",
+          "__pow__"
+        ],
+        "sampleMissed": [
+          "__neg__",
+          "__sub__",
+          "_backward",
+          "add",
+          "append",
+          "build_topo",
+          "isinstance",
+          "reversed",
+          "set",
+          "Layer"
+        ],
+        "sampleFalsePositives": [
+          "__init__",
+          "__call__"
+        ]
+      },
+      "notes": [
+        "label-only matching: 比较 graph callee label 与源码 callee 名是否相同",
+        "precision: graph 中 call-类边命中真实 call 的占比",
+        "recall: 真实 call 中被 graph 覆盖的占比"
+      ]
     }
   }
 }

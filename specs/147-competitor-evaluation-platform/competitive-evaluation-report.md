@@ -1,11 +1,30 @@
 # Spectra & Spec Driver 竞品评估总报告
 
-> **Phase 5 产物 — 整合 Phase 0-4 全部 13 个 fixture + 18 spec-quality judge + 8 task-execution judge + 2 grounding judge 的实测数据。**
+> ⚠️ **本文件是 Phase 5（2026-04-30）冻结快照。当前 fixture 总数 / 成本 / 评分以 [competitive-evaluation-report-auto.md](./competitive-evaluation-report-auto.md) 为准（auto-generated，每次重生最新）。本文件仅保留 Phase 5 时点的核心结论 + Sprint 3 校订（§0、§1、§2.2）。**
+>
+> 当前 (Sprint 3, 2026-05-01) 实际 fixture 总数：**34**（9 spectra 类 + 25 spec-driver 类）— 比本文件 §6 fixture 清单（13）扩了 2.6×。§4 / §6 / §8 数字未同步，**请以 auto-report 为准**。
 
 **Feature**: 147  
-**生成日期**: 2026-04-30  
-**评估覆盖**: 3 项目 × 3 spectra 类工具（9 fixture）+ 4 spec-driver 类工具 × 1 任务（4 fixture）  
-**总成本**: $15.5（首次全量；后续每版本 ~$5-10）
+**Phase 5 生成日期**: 2026-04-30  
+**Sprint 3 校订日期**: 2026-05-01（§0 disclaimer + §1 公平 rubric + §2.2 双 rubric 对比；§4 / §6 / §8 仍是 Phase 5 历史快照）  
+**Phase 5 评估覆盖**: 3 项目 × 3 spectra 类工具（9 fixture）+ 4 spec-driver 类工具 × 1 任务（4 fixture）  
+**Phase 5 总成本**: $15.5（首次全量；当前 cost 见 auto-report §2）
+
+---
+
+## 0. 范围声明（先读这段再看数字）
+
+**Spec Driver 类 task-execution fixture = single-turn LLM prompt-injection 评估，不是真实 multi-turn workflow 端到端实跑。**
+
+- Sprint 1 跑了 4 个真实 plugin 端到端 fixture（T1 only），但 commits=0（acceptEdits 不覆盖 bash），commit history 维度被屏蔽
+- Sprint 2 改用 unified GLM executor (siliconflow-sdk) 单次调用 + cross-LLM jury，每个工具注入"工具理念 system prompt"。这扩到了 25 fixture（5 工具 × 5 任务），但每个 fixture 只有 single-turn
+- **不评估**：SuperPowers 的 RED/GREEN TDD subagents、spec-driver 的 specify→plan→tasks→implement→verify 多 phase orchestration、GStack 的 23 skills 串行调度、commit history 结构化质量
+- **能评估**：在同一 LLM (GLM) 上，不同工具的 system prompt / 方法论描述对单次代码生成质量的影响
+- 因此本报告 §2.4 / §3 矩阵中 spec-driver / superpowers / gstack 之间 ≤ 0.5 的均分差距 **反映的是 prompt 设计差异，不是 workflow ROI**
+
+**Sprint 3 补齐**：Phase D 在 T2 cosine LR 任务上跑了 1 次真实 multi-turn 端到端实跑作为 single-turn 数据的 robustness check（见本文件末尾或 [research/multi-turn-spike-log.md](research/multi-turn-spike-log.md)）。
+
+**Spectra 类 fixture（perf + spec quality + grounding）= 真实端到端实跑**，对外结论以 §2.1 / §2.2 + 公平 doc-quality rubric（auto-report §3.2b）为准。
 
 ---
 
@@ -13,14 +32,18 @@
 
 ### 1.1 Spectra 类（codebase → spec / agent context）
 
-| 工具 | spec quality 评分 | wall（self-dogfood）| 成本 | grounding（micrograd add tanh）|
-|------|-------------------|---------------------|------|--------------------------------|
-| **Spectra**（自己） | **6-7** ✅ | 30 min ($9.86) | 高 | **10/10** ⭐（grounding 完美）|
-| **Graphify** | 1（不竞争） | **4.2 s** ($0) | 极低 | **0**（context 太抽象，sonnet 无法编码）|
-| **Aider repomap** | 1（不竞争） | 9.4 s ($0) | 极低 | **9/10**（markdown 形式有效）|
+| 工具 | doc quality 公平 rubric † | wall（self-dogfood）| 成本 | grounding（micrograd add tanh）|
+|------|---------------------------|---------------------|------|--------------------------------|
+| **Spectra**（自己） | **7.3** ⭐ | 30 min ($9.86) | 高 | **10/10** ⭐（grounding 完美）|
+| **Aider repomap** | 5.3 | 9.4 s ($0) | 极低 | **9/10**（markdown 形式有效）|
+| **Graphify** | 4.8 | **4.2 s** ($0) | 极低 | **0**（context 太抽象，sonnet 无法编码）|
+
+> † doc-quality rubric 评每个工具的 native artifact（spectra spec.md / graphify GRAPH_REPORT.md / aider repomap stdout）作为"项目理解 context"的有用性，**不评是否符合特定模板**（覆盖度 / 关系 / 可读性 / LLM-context-value / 真实性，3 项目均分）。详见 auto-report §3.2b。
+>
+> ⚠️ 旧 spec-quality rubric 期望 4 章节 spec.md 形态（Intent/Behavior/API/Data），对 graphify/aider 是 rubric mismatch，给 1 分不可比；本表已替换为公平 rubric。
 
 **核心结论**：
-- Spectra 唯一在 spec quality 维度竞争（差异化定位）；Graphify / Aider 不产 spec，rubric mismatch 给 1 分是预期
+- **Spectra 在 doc quality 公平 rubric 下领先 ~2 分**（7.3 vs 5.3 / 4.8）；信息密度 + 模块化结构是优势
 - **Speed disparity 极大**：Spectra 比 Graphify 慢 432×（self-dogfood）；spec.md 文档化 + LLM 增强是 cost 主因
 - **Grounding 实证**：Spectra 的 spec.md 作为 LLM coding context 的 grounding 价值得到证明；纯 graph 节点列表（Graphify）不足以做编码上下文
 
@@ -58,7 +81,9 @@
 | self-dogfood | aider-repomap | 9.4 s | 0 | 0 | $0 | 0 (regex) | n/a |
 | **合计** | | | **25** | **2.48M** | **$12.69** | | |
 
-### 2.2 Spectra 类 Spec Quality（opus 双盲 judge × 2 inter-rater = 18 calls）
+### 2.2 Spectra 类 Spec Quality（双 rubric 对比）
+
+#### 2.2.a 旧 rubric（spec.md 形态，graphify/aider mismatch）
 
 | 项目 | spectra | graphify | aider-repomap |
 |------|---------|----------|---------------|
@@ -66,7 +91,18 @@
 | nanoGPT | 6.5 (Δ=1) | 1 (Δ=0) | 1 (Δ=0) |
 | self-dogfood | 6 (Δ=0) | 1 (Δ=0) | 1 (Δ=0) |
 
-inter-rater Δ ≤ 1（评分稳定）。
+> ⚠️ **不可作为对外结论**：rubric 期望 4 章节（Intent/Behavior/API/Data），graphify/aider 不产 spec.md → 1 分是 rubric 形态错配，不是工具能力差。
+
+#### 2.2.b 公平 doc-quality rubric（同 rubric 评 native artifact）
+
+| 项目 | spectra | aider-repomap | graphify |
+|------|---------|---------------|----------|
+| micrograd | 8 | 6 | 4.5 (Δ=1) |
+| nanoGPT | 7 | 6 | 4 |
+| self-dogfood | 7 | 4 | 6 |
+| **均分** | **7.3** ⭐ | **5.3** | **4.8** |
+
+inter-rater Δ ≤ 1（评分稳定）。**对外结论以本表为准。**
 
 ### 2.3 Spectra Coding-Context Grounding（micrograd add tanh，4 对照组双盲）
 

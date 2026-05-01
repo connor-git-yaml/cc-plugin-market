@@ -126,6 +126,60 @@
       "judgedAt": "2026-04-30T17:42:53.318Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "GRAPH_REPORT.md"
+    },
+    "graphAccuracy": {
+      "language": "python",
+      "coverageMethod": "label-only",
+      "truthSet": {
+        "filesAnalyzed": 15,
+        "imports": 42,
+        "callsTotal": 304,
+        "uniqueCallTargets": 177
+      },
+      "graph": {
+        "totalEdges": 61,
+        "callEdges": 22,
+        "containmentEdges": 30,
+        "otherEdges": 9
+      },
+      "accuracy": {
+        "graphCalleeCount": 10,
+        "truthCalleeCount": 177,
+        "hits": 7,
+        "callPrecision": 0.7,
+        "callRecall": 0.04,
+        "sampleHits": [
+          "GPTConfig",
+          "GPT",
+          "__init__",
+          "from_pretrained",
+          "get_num_params",
+          "estimate_mfu",
+          "estimate_loss"
+        ],
+        "sampleMissed": [
+          "__add__",
+          "__mul__",
+          "__sub__",
+          "__truediv__",
+          "astype",
+          "autocast",
+          "backward",
+          "compile",
+          "configure_optimizers",
+          "enumerate"
+        ],
+        "sampleFalsePositives": [
+          "forward",
+          "This training script can be run both on a single gpu in debug mode, and also in",
+          "Sample from a trained model"
+        ]
+      },
+      "notes": [
+        "label-only matching: 比较 graph callee label 与源码 callee 名是否相同",
+        "precision: graph 中 call-类边命中真实 call 的占比",
+        "recall: 真实 call 中被 graph 覆盖的占比"
+      ]
     }
   }
 }

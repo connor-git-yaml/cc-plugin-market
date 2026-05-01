@@ -162,6 +162,16 @@
       "judgedAt": "2026-04-30T17:44:16.073Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "modules/*.spec.md"
+    },
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "TypeScript 源码 — Python AST extractor 不支持"
+      ]
     }
   }
 }

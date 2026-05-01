@@ -97,7 +97,7 @@
       "interRaterDelta": 0.3,                       // 同 fixture 跑 2 次 judge 差异
       "executionMode": "non-interactive"            // sonnet 直接跑 vs user-assisted
     },
-    "graphTopologyAccuracy": null                    // Graphify 对比时填；其他工具留 null
+    "graphAccuracy": null                            // Sprint 3 Phase B.1 落地：Python 项目算 call edge precision/recall，TS 项目 N/A。字段名实现：scripts/graph-accuracy.mjs 写入 quality.graphAccuracy
   },
 
   // ===== 1.1 新增 taskExecution 段（仅 task-execution 类 fixture，路径 tests/baseline/tasks/<task>/<tool>/）=====
@@ -159,7 +159,7 @@
 
 - 静态分析字段（specStructure / graphSanity / crossLinks）：所有 tool 都填，不会为 null
 - `codingContextGrounding`：只 spectra 类 tool 填；spec-driver 类 fixture 此字段为 null（不评 grounding）
-- `graphTopologyAccuracy`：只 graph 类输出工具（spectra / graphify）才填；aider-repomap markdown 输出此字段 null
+- `graphAccuracy`（Sprint 3 Phase B.1 实装）：只 graph 类输出工具（spectra / graphify）才填；aider-repomap markdown 输出此字段含 `_skipped` 说明。schema 见 [`scripts/graph-accuracy.mjs`](../../../scripts/graph-accuracy.mjs)
 
 ### 3.4 taskExecution.primaryOracle.kind
 

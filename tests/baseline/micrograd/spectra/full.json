@@ -191,6 +191,49 @@
       "judgedAt": "2026-04-30T17:39:59.312Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "modules/*.spec.md"
+    },
+    "graphAccuracy": {
+      "language": "python",
+      "coverageMethod": "label-only",
+      "truthSet": {
+        "filesAnalyzed": 5,
+        "imports": 5,
+        "callsTotal": 48,
+        "uniqueCallTargets": 36
+      },
+      "graph": {
+        "totalEdges": 6,
+        "callEdges": 0,
+        "containmentEdges": 5,
+        "otherEdges": 1
+      },
+      "accuracy": {
+        "graphCalleeCount": 0,
+        "truthCalleeCount": 36,
+        "hits": 0,
+        "callPrecision": null,
+        "callRecall": 0,
+        "sampleHits": [],
+        "sampleMissed": [
+          "Value",
+          "__add__",
+          "__mul__",
+          "__neg__",
+          "__pow__",
+          "__sub__",
+          "_backward",
+          "add",
+          "append",
+          "build_topo"
+        ],
+        "sampleFalsePositives": []
+      },
+      "notes": [
+        "label-only matching: 比较 graph callee label 与源码 callee 名是否相同",
+        "precision: graph 中 call-类边命中真实 call 的占比",
+        "recall: 真实 call 中被 graph 覆盖的占比",
+        "⚠️ 该 graph 不含 call/uses 类型边（可能是 contains-only graph，如 spectra v4.x）"
+      ]
     }
   }
 }

@@ -119,6 +119,16 @@
       "judgedAt": "2026-04-30T17:45:31.131Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "aider-repomap-stdout.log"
+    },
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "aider-repomap 输出 markdown ranked list，无 graph.json"
+      ]
     }
   }
 }

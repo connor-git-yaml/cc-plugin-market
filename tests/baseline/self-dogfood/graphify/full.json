@@ -126,6 +126,16 @@
       "judgedAt": "2026-04-30T17:44:45.810Z",
       "judgeModel": "claude-opus-4-7",
       "sourceArtifact": "GRAPH_REPORT.md"
+    },
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "TypeScript 源码 — Python AST extractor 不支持，graph topology accuracy 暂 N/A（follow-up: tree-sitter TS extractor）"
+      ]
     }
   }
 }
