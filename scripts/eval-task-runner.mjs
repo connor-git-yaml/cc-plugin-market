@@ -45,6 +45,7 @@ export function parseArgs(argv) {
     cleanup: 'on-success', // always | on-success | never
     timeoutMs: 1800000, // 30 min hard limit
     skipRun: false, // 仅生成 fixture skeleton + 不实际 spawn claude
+    skipSanity: false, // 跳过 fixture sanity check（oracle 在 setup 后立即 PASS 即视为 fixture invalid）
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -54,6 +55,7 @@ export function parseArgs(argv) {
       case '--cleanup': args.cleanup = argv[++i]; break;
       case '--timeout-ms': args.timeoutMs = Number(argv[++i]); break;
       case '--skip-run': args.skipRun = true; break;
+      case '--skip-sanity': args.skipSanity = true; break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
@@ -222,6 +224,35 @@ export function runPrimaryOracle({ wtDir, oracle }) {
   } else if (oracle.kind === 'unit-test') {
     const r = spawnSync('bash', ['-c', oracle.command.replace('<workspace>', wtDir)], { cwd: wtDir, encoding: 'utf-8', timeout: 60000 });
     return { kind: 'unit-test', passed: r.status === oracle.expectedExit, details: { exitCode: r.status, stdout: (r.stdout ?? '').slice(0, 1000) } };
+  } else if (oracle.kind === 'functional') {
+    // Functional oracle: 真跑 pytest / python / 任何 shell 命令验证功能
+    // 每个 check 是 object: { cmd, mustPass=true, timeoutMs=60000, description }
+    // 取代 grep-based ast-diff，让"加 stub PASS"这种假阳性被自动 catch
+    let allPassed = true;
+    const results = [];
+    for (const rawCheck of oracle.checks) {
+      const check = typeof rawCheck === 'string' ? { cmd: rawCheck } : rawCheck;
+      const cmd = check.cmd;
+      const mustPass = check.mustPass !== false; // 默认 true
+      const timeoutMs = check.timeoutMs ?? 60000;
+      const description = check.description ?? cmd;
+      const r = spawnSync('bash', ['-c', cmd], { cwd: wtDir, encoding: 'utf-8', timeout: timeoutMs });
+      const exited0 = r.status === 0;
+      const passed = mustPass ? exited0 : !exited0;
+      const timedOut = r.signal === 'SIGTERM' || (r.error && r.error.code === 'ETIMEDOUT');
+      if (!passed) allPassed = false;
+      results.push({
+        cmd,
+        description,
+        mustPass,
+        exitCode: r.status,
+        passed,
+        timedOut,
+        stdout: (r.stdout ?? '').slice(0, 500),
+        stderr: (r.stderr ?? '').slice(0, 500),
+      });
+    }
+    return { kind: 'functional', passed: allPassed, details: results };
   }
   return { kind: oracle.kind, passed: false, details: 'unknown oracle kind' };
 }
@@ -383,6 +414,19 @@ async function main() {
     // setup commit（让 task 起始 state 含 setup 修改，但仍是 task pre-state）
     spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
     spawnSync('git', ['-C', wt.wtDir, 'commit', '-m', 'eval-bench: task setup'], { encoding: 'utf-8' });
+  }
+
+  // Sanity check: oracle 不能在 setup 后立即 PASS（fail-fast catch fixture 设计错误）
+  if (!args.skipSanity) {
+    const sanity = runPrimaryOracle({ wtDir: wt.wtDir, oracle: taskFixture.primaryOracle });
+    if (sanity.passed) {
+      throw new Error(
+        `❌ FIXTURE SANITY FAIL: ${args.task} 的 primaryOracle 在 startCommit + setupCommands 后立即 PASS — ` +
+        `task 没有实际工作可做（fixture 设计错误），不允许跑 agent 浪费 token。\n` +
+        `修复 fixture 或 --skip-sanity 强制跳过。`
+      );
+    }
+    console.log(`[task-runner] sanity check OK (oracle FAIL on setup state)`);
   }
 
   // 仅 spec-driver-spectra 需要 spectra context（"AI for AI" 协同对照组）

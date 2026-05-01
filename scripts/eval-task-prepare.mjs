@@ -18,17 +18,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadTaskFixture, prepareWorktree, buildDriverPrompt, loadSpectraContext } from './eval-task-runner.mjs';
+import { loadTaskFixture, prepareWorktree, buildDriverPrompt, loadSpectraContext, runPrimaryOracle } from './eval-task-runner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function parseArgs(argv) {
-  const args = { task: null, tool: null };
+  const args = { task: null, tool: null, skipSanity: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--task') args.task = argv[++i];
     else if (a === '--tool') args.tool = argv[++i];
+    else if (a === '--skip-sanity') args.skipSanity = true;
   }
   if (!args.task || !args.tool) throw new Error('--task and --tool required');
   return args;
@@ -53,6 +54,19 @@ async function main() {
     spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
     spawnSync('git', ['-C', wt.wtDir, 'commit', '-m', 'eval-bench: task setup'], { encoding: 'utf-8' });
   }
+
+  // Sanity check: oracle 不能在 setup 后立即 PASS（fail-fast catch fixture 设计错误如 T2 startCommit 已含答案）
+  if (!args.skipSanity) {
+    const sanityResult = runPrimaryOracle({ wtDir: wt.wtDir, oracle: taskFixture.primaryOracle });
+    if (sanityResult.passed) {
+      throw new Error(
+        `❌ FIXTURE SANITY FAIL: ${args.task} 的 primaryOracle 在 startCommit + setupCommands 后立即 PASS — ` +
+        `task 没有实际工作可做（fixture 设计错误），所有评分将 invalid。\n` +
+        `修复 fixture json（如加 setupCommands 制造问题），或 --skip-sanity 强制跳过。`
+      );
+    }
+  }
+
   const spectraContext = args.tool === 'spec-driver-spectra' ? loadSpectraContext(taskFixture.target) : null;
   const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt, spectraContext });
   console.log(JSON.stringify({
