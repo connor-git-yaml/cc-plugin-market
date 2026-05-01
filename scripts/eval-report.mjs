@@ -97,8 +97,20 @@ export function scanFixtures(rootDir = BASELINE_DIR) {
 // ============================================================
 
 export function aggregateMetrics(scanned) {
-  const cumulativeCost = scanned.spectraClass.reduce((s, x) => s + (x.fx.perf?.estimatedCostUsd ?? 0), 0)
-    + scanned.specDriverClass.reduce((s, x) => s + (x.fx.taskExecution?.costUsd ?? 0), 0);
+  // Cost：区分 known 和 unknown（in-session fixture 的 cost null != 0）
+  let knownCost = 0;
+  let unknownCostFixtures = 0;
+  for (const x of scanned.spectraClass) {
+    const c = x.fx.perf?.estimatedCostUsd;
+    if (c == null) unknownCostFixtures++;
+    else knownCost += c;
+  }
+  for (const x of scanned.specDriverClass) {
+    const c = x.fx.taskExecution?.costUsd;
+    if (c == null) unknownCostFixtures++;
+    else knownCost += c;
+  }
+  const cumulativeCost = knownCost; // 仅 known，不把 null 当 0 加
 
   const stale = [];
   const today = new Date();
@@ -126,6 +138,8 @@ export function aggregateMetrics(scanned) {
     spectraCount: scanned.spectraClass.length,
     specDriverCount: scanned.specDriverClass.length,
     cumulativeCost: Math.round(cumulativeCost * 100) / 100,
+    knownCostFixtures: scanned.spectraClass.length + scanned.specDriverClass.length - unknownCostFixtures,
+    unknownCostFixtures,
     budgetRemaining: Math.round((SC008_BUDGET - cumulativeCost) * 100) / 100,
     projects: [...projects].sort(),
     spectraTools: [...spectraTools].sort(),
@@ -267,9 +281,16 @@ export function renderMarkdown(scanned, agg, insights) {
   // §2 Cost Summary
   lines.push('## 2. Cost Summary（vs SC-008 预算 $120）');
   lines.push('');
-  lines.push(`- Cumulative cost (fixture-level): **${fmtCost(agg.cumulativeCost)}**`);
-  lines.push(`- Budget remaining: ${fmtCost(agg.budgetRemaining)}`);
+  lines.push(`- Known cost (${agg.knownCostFixtures} metered fixture${agg.knownCostFixtures === 1 ? '' : 's'}): **${fmtCost(agg.cumulativeCost)}**`);
+  if (agg.unknownCostFixtures > 0) {
+    lines.push(`- Unknown cost: **${agg.unknownCostFixtures} fixture${agg.unknownCostFixtures === 1 ? '' : 's'}** with null cost (in-session executor 无 token metering — 实际成本未计入预算)`);
+  }
+  lines.push(`- Budget remaining (vs known cost only): ${fmtCost(agg.budgetRemaining)}`);
   lines.push(`- Per-version refresh estimate: ~$5-10`);
+  if (agg.unknownCostFixtures > 0) {
+    lines.push('');
+    lines.push('> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。重跑双盲评分时需重新计量。');
+  }
   lines.push('');
 
   // §3 Spectra Perf + Quality + Grounding
@@ -383,7 +404,14 @@ export function renderMarkdown(scanned, agg, insights) {
   if (scanned.specDriverClass.length > 0) {
     const tools = [...agg.driverTools].sort();
     const tasks = [...agg.tasks].sort();
-    lines.push('| 任务 | ' + tools.join(' | ') + ' |');
+    // 标注 self-judge 工具（无 inter-rater delta = executor 同时 judge）
+    const selfJudgeTools = new Set();
+    for (const item of scanned.specDriverClass) {
+      const te = item.fx.taskExecution ?? {};
+      if (te.interRaterDelta == null && te.rubricJudgeScore != null) selfJudgeTools.add(item.tool);
+    }
+    const labelTool = (t) => selfJudgeTools.has(t) ? `${t} †` : t;
+    lines.push('| 任务 | ' + tools.map(labelTool).join(' | ') + ' |');
     lines.push('|------|' + tools.map(() => '------').join('|') + '|');
     let allPassRate = 0;
     let allPassCount = 0;
@@ -413,7 +441,57 @@ export function renderMarkdown(scanned, agg, insights) {
     lines.push('| ' + avgRow.join(' | ') + ' |');
     lines.push('');
     lines.push(`**Oracle pass rate**: ${allPassRate}/${allPassCount} = ${(allPassRate/allPassCount*100).toFixed(0)}%`);
+    if (selfJudgeTools.size > 0) {
+      lines.push('');
+      lines.push(`> † 标注的工具是 **provisional self-judge**（executor 同时 judge，无独立 reviewer，interRaterDelta=null）。这些分数仅作 descriptive signal，详见 §4.2。`);
+    }
     lines.push('');
+
+    // §4.2 Model caveat: 检测 in-session executor 与 sonnet baseline 的混跑
+    const modelGroups = {};
+    for (const item of scanned.specDriverClass) {
+      const te = item.fx.taskExecution ?? {};
+      const meta = item.fx.meta ?? {};
+      const model = te.model ?? meta.model ?? te.executorRuntime ?? 'unknown';
+      const judgedBy = te.judgedBy ?? (te.interRaterDelta == null ? 'self-judge' : 'independent-double-blind');
+      const key = `${model}|${te.executionMode ?? 'cli-default'}`;
+      if (!modelGroups[key]) modelGroups[key] = { model, mode: te.executionMode ?? 'cli-default', tools: new Set(), disclaimers: new Set(), interRater: [], judgedBy: new Set() };
+      modelGroups[key].tools.add(item.tool);
+      modelGroups[key].judgedBy.add(judgedBy);
+      if (te.modelDisclaimer) modelGroups[key].disclaimers.add(te.modelDisclaimer);
+      if (te.interRaterDelta != null) modelGroups[key].interRater.push(te.interRaterDelta);
+      else modelGroups[key].interRater.push(null);
+    }
+    const groupKeys = Object.keys(modelGroups);
+    if (groupKeys.length > 1) {
+      lines.push('### 4.2 Model Caveat（不同 executor / 评分方式的混跑披露）');
+      lines.push('');
+      lines.push('| 工具 | executor model | execution mode | judge | inter-rater delta |');
+      lines.push('|------|---------------|----------------|-------|-------------------|');
+      for (const key of groupKeys) {
+        const g = modelGroups[key];
+        const irNonNull = g.interRater.filter((v) => v != null);
+        const irLabel = irNonNull.length > 0
+          ? `avg ${(irNonNull.reduce((s, v) => s + v, 0) / irNonNull.length).toFixed(2)}`
+          : '— (no second judge)';
+        const judgeLabel = [...g.judgedBy].sort().join(', ');
+        lines.push(`| ${[...g.tools].sort().join(', ')} | ${g.model} | ${g.mode} | ${judgeLabel} | ${irLabel} |`);
+      }
+      lines.push('');
+      const disclaimers = new Set();
+      for (const key of groupKeys) for (const d of modelGroups[key].disclaimers) disclaimers.add(d);
+      if (disclaimers.size > 0) {
+        lines.push('**披露**:');
+        for (const d of disclaimers) lines.push(`- ${d}`);
+        lines.push('');
+      }
+      lines.push('**如何读这张矩阵**（重要 — 不要被均分误导）：');
+      lines.push('');
+      lines.push('1. **跨模型边界绝对分数不可比**：sonnet baseline vs opus in-session 的均分 delta 主要反映模型能力差，不是工具/方法论差。');
+      lines.push('2. **Self-judge 分数仅作 descriptive signal**：标注为 `self-judge` 的工具，executor 同时是 judge，存在内生 bias（无独立 reviewer 校准）。这些分数**不可与有 inter-rater delta 的工具直接对比**，需独立双盲重评后才能主张方法论价值。');
+      lines.push('3. **Same-model delta 才有归因价值，且仍需 n 足够大**：如 spec-driver-opus vs spec-driver-spectra 在 5 任务下的均分 delta，最多算"context 价值的初步信号"，不是统计学意义上的因果证明。需 n≥20 + 双盲 + 置信区间才能得出 methodology 主张。');
+      lines.push('');
+    }
   } else {
     lines.push('（暂无 task-execution fixture）');
     lines.push('');

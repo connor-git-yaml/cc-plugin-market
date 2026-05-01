@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCHEMA_VERSION = '1.1';
 const COLLECTOR_VERSION = '0.3.0';
-const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra'];
+const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'spec-driver-opus'];
 
 function getBenchHome() {
   return process.env.SPEC_DRIVER_BENCH_HOME ?? path.join(os.homedir(), '.spec-driver-bench-worktrees');
@@ -370,11 +370,12 @@ async function main() {
   });
   console.log(`[task-runner] worktree prepared: ${wt.wtDir} (branch ${wt.branchName})`);
 
-  // 任务级 setupHook（如 T3 注入 bug，T4 写 magic number，T6 violation 设置等）
+  // 任务级 setupHook（如 T2 strip cosine LR，T3 注入 bug，T4 写 magic number，T6 violation 设置等）
   if (Array.isArray(taskFixture.setupCommands) && taskFixture.setupCommands.length > 0) {
     console.log(`[task-runner] running ${taskFixture.setupCommands.length} setup command(s)...`);
+    const setupEnv = { ...process.env, SPECTRA_REPO_ROOT: PROJECT_ROOT };
     for (const cmd of taskFixture.setupCommands) {
-      const r = spawnSync('bash', ['-c', cmd], { cwd: wt.wtDir, encoding: 'utf-8' });
+      const r = spawnSync('bash', ['-c', cmd], { cwd: wt.wtDir, encoding: 'utf-8', env: setupEnv });
       if (r.status !== 0) {
         throw new Error(`setup command failed: ${cmd}\nstderr: ${r.stderr}`);
       }

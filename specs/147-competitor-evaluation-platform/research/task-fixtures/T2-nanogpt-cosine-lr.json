@@ -6,7 +6,10 @@
   "startCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
   "estimatedLoc": "30-100",
   "prompt": "在 nanoGPT 仓库的 train.py 中实现一个 **cosine learning rate scheduler**，并接入训练循环。\n\n要求：\n1. 实现一个 `get_lr(it)` 函数（或类），接受当前迭代步 `it`，返回 cosine annealing 的 learning rate\n2. 公式：含 warmup（前 N steps linear warmup）+ cosine decay（剩余 steps cosine 下降到 min_lr）\n3. 关键参数（learning_rate / warmup_iters / lr_decay_iters / min_lr）应该已经存在或新增到 config 区域\n4. 在训练循环中每个 step 调用 `get_lr(iter_num)` 并 set 到所有 optimizer param_groups\n5. 不破坏现有训练循环逻辑\n6. 不需要跑训练，只要代码改动逻辑正确\n\n请直接修改 train.py 文件并 commit；不要 surface 计划，直接做。",
-  "setupCommands": [],
+  "setupCommands": [
+    "node ${SPECTRA_REPO_ROOT}/scripts/eval-task-setup-T2-strip-cosine-lr.mjs"
+  ],
+  "setupNote": "nanoGPT@3adf61e 已含完整 cosine LR scheduler；setup 移除以让 task 实际有 work（idempotent）",
   "primaryOracle": {
     "kind": "ast-diff",
     "description": "检查 train.py 含 get_lr 函数 + cosine 数学 + 接入循环",

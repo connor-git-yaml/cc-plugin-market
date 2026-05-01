@@ -133,22 +133,39 @@ describe('eval-report', () => {
       expect(agg.stale).toHaveLength(1);
       expect(agg.stale[0].daysLeft).toBeLessThan(0);
     });
+
+    it('treats null cost as unknown, not zero', async () => {
+      const { scanFixtures, aggregateMetrics } = await loadReport();
+      writeFixture(join(tempDir, 'p1', 'spectra'), {
+        meta: { tool: 'spectra' }, perf: { estimatedCostUsd: 5 },
+      });
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' }, taskExecution: { tool: 'spec-driver-opus', costUsd: null },
+      });
+      const agg = aggregateMetrics(scanFixtures(tempDir)) as ReturnType<ReportModule['aggregateMetrics']> & {
+        knownCostFixtures: number;
+        unknownCostFixtures: number;
+      };
+      expect(agg.cumulativeCost).toBe(5);
+      expect(agg.knownCostFixtures).toBe(1);
+      expect(agg.unknownCostFixtures).toBe(1);
+    });
   });
 
   describe('detectInsights', () => {
-    it('detects spec-quality spread ≥ 2 between tools', async () => {
+    it('detects doc-quality spread ≥ 2 between tools', async () => {
       const { scanFixtures, detectInsights } = await loadReport();
       writeFixture(join(tempDir, 'p1', 'spectra'), {
-        meta: { tool: 'spectra' }, quality: { judgeSpecQuality: { score: 7 } },
+        meta: { tool: 'spectra' }, quality: { judgeDocumentationQuality: { score: 7 } },
       });
       writeFixture(join(tempDir, 'p1', 'graphify'), {
-        meta: { tool: 'graphify' }, quality: { judgeSpecQuality: { score: 1 } },
+        meta: { tool: 'graphify' }, quality: { judgeDocumentationQuality: { score: 1 } },
       });
       const insights = detectInsights(scanFixtures(tempDir));
-      const sq = insights.find((i) => i.kind === 'spec-quality-spread');
-      expect(sq).toBeTruthy();
-      expect(sq!.leader).toBe('spectra');
-      expect(sq!.spread).toBe(6);
+      const dq = insights.find((i) => i.kind === 'doc-quality-spread');
+      expect(dq).toBeTruthy();
+      expect(dq!.leader).toBe('spectra');
+      expect(dq!.spread).toBe(6);
     });
 
     it('detects task-spread ≥ 1 between tools', async () => {
@@ -176,6 +193,78 @@ describe('eval-report', () => {
       });
       const insights = detectInsights(scanFixtures(tempDir));
       expect(insights.filter((i) => i.kind === 'spec-quality-spread')).toHaveLength(0);
+    });
+  });
+
+  describe('§4.2 model caveat', () => {
+    it('renders Model Caveat section when groups differ + flags self-judge tools with †', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      // Sonnet baseline，inter-rater 已 double-blind
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver', model: 'claude-sonnet-4-6' },
+        taskExecution: { tool: 'spec-driver', rubricJudgeScore: 4, interRaterDelta: 0.5, primaryOracle: { passed: true } },
+      });
+      // Opus in-session，self-judge
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus', model: 'claude-opus-4-7' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          rubricJudgeScore: 7,
+          interRaterDelta: null,
+          executionMode: 'in-session-opus-no-context',
+          model: 'claude-opus-4-7',
+          modelDisclaimer: 'main session opus disclaimer',
+          judgedBy: 'self-judge-main-session-opus-4-7',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toContain('### 4.2 Model Caveat');
+      expect(md).toContain('claude-sonnet-4-6');
+      expect(md).toContain('claude-opus-4-7');
+      expect(md).toContain('in-session-opus-no-context');
+      expect(md).toContain('main session opus disclaimer');
+      expect(md).toContain('self-judge');
+      // self-judge tool 在 §4.1 表头有 † 标记
+      expect(md).toMatch(/spec-driver-opus †/);
+      // 不能再出现"真正可归因"这种过强归因措辞
+      expect(md).not.toContain('真正可归因');
+      expect(md).toContain('descriptive signal');
+    });
+
+    it('does not render §4.2 when only one model group', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver', model: 'claude-sonnet-4-6' },
+        taskExecution: { tool: 'spec-driver', rubricJudgeScore: 4, interRaterDelta: 0.5, primaryOracle: { passed: true } },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).not.toContain('### 4.2 Model Caveat');
+    });
+
+    it('falls back model field reading: te.model > meta.model > executorRuntime', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      // 一组：仅 meta.model（legacy fixture pattern）
+      writeFixture(join(tempDir, 'tasks', 'T1', 'gstack'), {
+        meta: { tool: 'gstack', model: 'claude-sonnet-4-6' },
+        taskExecution: { tool: 'gstack', rubricJudgeScore: 5, interRaterDelta: 0.3, primaryOracle: { passed: true } },
+      });
+      // 另一组：仅 executorRuntime fallback（无 te.model 也无 meta.model）
+      writeFixture(join(tempDir, 'tasks', 'T1', 'control'), {
+        meta: { tool: 'control' },
+        taskExecution: {
+          tool: 'control',
+          rubricJudgeScore: 4,
+          executorRuntime: 'legacy-runtime-x',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toContain('claude-sonnet-4-6');
+      expect(md).toContain('legacy-runtime-x');
     });
   });
 
