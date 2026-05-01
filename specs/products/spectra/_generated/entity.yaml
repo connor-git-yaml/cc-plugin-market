@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-26T14:46:05.659Z"
+generatedAt: "2026-05-01T03:16:17.692Z"
 id: "spectra"
 name: "Spectra"
 kind: "library-tooling"
-description: "Spectra v3.0.1 — 面向多语言代码与工程制品的结构化 Spec / 多源文档编排平台，支持 CLI、Plugin 与 MCP Server 三种入口，并通过 repo:sync / repo:check 固化技能分发、发布合同与仓库边界"
+description: "Spectra v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）。(1) PythonLanguageAdapter 新增 extractSymbolNodes()，graph.json 含函数/类符号节点（kind=component）和 containment 边；(2) designDocAbsPaths 磁盘优先合并策略，hyperedge 首次运行即生效；(3) debt-intelligence-pipeline 诊断日志增强；(4) budget-gate 加入 SYSTEM_PROMPT_TOKEN_OVERHEAD=2000 和 CONTEXT_ASSEMBLY_MULTIPLIER=1.35 常量，压缩 dry-run 偏差。v4.1.1（Feature 146）— LLM 并发优化器：默认并发 1→3（Sonnet 单请求 15-30s，大项目总耗时降 ~60-65%）+ p-limit ^6.1.0 替换手写信号量（移除 ~30 行含 H2 死锁补丁的实现）+ 三级配置链 BatchOptions.concurrency > SPECTRA_CONCURRENCY env > 默认 3"
 owner:
   value: "unknown"
   source: "unknown"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spectra/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-26T14:46:05.698Z"
+    generatedAt: "2026-05-01T03:16:17.741Z"
   scorecard:
     path: "specs/products/spectra/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-04-26T14:46:05.699Z"
+    generatedAt: "2026-05-01T03:16:17.743Z"
 workflowRefs:
   - "spectra.init"
   - "spectra.generate"

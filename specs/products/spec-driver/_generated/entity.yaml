@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-04-26T14:46:05.659Z"
+generatedAt: "2026-05-01T03:16:17.692Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
-description: "Spec Driver v3.11.2 — 自治研发编排器 Plugin，支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式，基于 orchestration.yaml 配置驱动编排、6 个质量门禁（含 GATE_IMPLEMENT_MID 中期检查）、sync-merge-engine 确定性合并、15 个专业子代理，并补齐 Catalog、Workflow Registry、Scorecards、Adoption Feedback、共享 Project Context resolver 与 release contract"
+description: "Spec Driver v4.0.0 — 删除 9 个遗留原子 skill（统一编排器入口）+ Feature 133 项目级 orchestration overrides（分层 base + override）。BREAKING：移除 .claude/commands/spec-driver.* 原子命令和 prompt_source fallback。八种模式 / 6 个质量门禁（含 GATE_IMPLEMENT_MID）/ sync-merge-engine 确定性合并 / 15 个专业子代理。详见 docs/migrations/skill-deprecation.md + docs/migrations/orchestration-overrides.md"
 owner:
   value: "unknown"
   source: "unknown"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-04-26T14:46:05.698Z"
+    generatedAt: "2026-05-01T03:16:17.741Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-04-26T14:46:05.699Z"
+    generatedAt: "2026-05-01T03:16:17.743Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"
