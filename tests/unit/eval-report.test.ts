@@ -293,6 +293,101 @@ describe('eval-report', () => {
       expect(md).toMatch(/\*\*5\.5\*\*\s*\(n=1\)/);
     });
 
+    it('§2 Cost Summary 拆 execution / jury / unknown (Codex WARN)', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'p1', 'spectra'), {
+        meta: { tool: 'spectra' }, perf: { estimatedCostUsd: 5 },
+      });
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryScores: [
+            { judge: 'siliconflow:Pro/zai-org/GLM-5.1', vendor: 'siliconflow', score: 7, promptTokens: 1000, completionTokens: 500 },
+            { judge: 'siliconflow:Pro/moonshotai/Kimi-K2.6', vendor: 'siliconflow', score: 8, promptTokens: 1000, completionTokens: 500 },
+          ],
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const agg = aggregateMetrics(scanned) as ReturnType<ReportModule['aggregateMetrics']> & {
+        executionCost: number;
+        juryCost: number;
+      };
+      expect(agg.executionCost).toBe(5);
+      expect(agg.juryCost).toBeGreaterThan(0);
+      expect(agg.juryCost).toBeLessThan(0.01); // 2000 tokens × siliconflow price 应该很便宜
+      expect(agg.cumulativeCost).toBeCloseTo(agg.executionCost + agg.juryCost, 2);
+      const md = renderMarkdown(scanned, agg, detectInsights(scanned));
+      expect(md).toMatch(/Execution cost.*\$5/);
+      expect(md).toMatch(/Jury cost/);
+    });
+
+    it('§4.3 蓝色 vendor disclosure + sample size warning (Codex WARN)', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryScores: [
+            { judge: 'siliconflow:Pro/zai-org/GLM-5.1', vendor: 'siliconflow', score: 7 },
+            { judge: 'siliconflow:Pro/moonshotai/Kimi-K2.6', vendor: 'siliconflow', score: 8 },
+          ],
+          juryMedian: 7.5, jurySpread: 1, juryAgreement: 'high',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toMatch(/Jury 配置.*siliconflow=2/);
+      expect(md).toMatch(/Vendor 单点风险/);
+      expect(md).toMatch(/Sample size 警示/);
+      expect(md).toMatch(/n≥20.*statistical significance/);
+    });
+
+    it('§4.3 surfaces truncated responses warning', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: {
+          tool: 'spec-driver-opus',
+          juryScores: [
+            { judge: 'siliconflow:Pro/zai-org/GLM-5.1', vendor: 'siliconflow', score: 7, truncated: true, finishReason: 'length' },
+            { judge: 'siliconflow:Pro/moonshotai/Kimi-K2.6', vendor: 'siliconflow', score: 8, truncated: false },
+          ],
+          juryMedian: 7.5, jurySpread: 1, juryAgreement: 'high',
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      expect(md).toMatch(/Truncated responses.*spec-driver-opus.*1\/2/);
+    });
+
+    it('§5 task insights flag mixed source jury vs self-judge (Codex WARN)', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      // Tool A: jury 评分（cross-LLM）
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver-opus'), {
+        meta: { tool: 'spec-driver-opus' },
+        taskExecution: { tool: 'spec-driver-opus', juryMedian: 8, primaryOracle: { passed: true } },
+      });
+      // Tool B: legacy self-judge
+      writeFixture(join(tempDir, 'tasks', 'T1', 'control'), {
+        meta: { tool: 'control' },
+        taskExecution: { tool: 'control', rubricJudgeScore: 4, primaryOracle: { passed: true } },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned));
+      // §5 insight 应标记 mixed source
+      expect(md).toMatch(/MIXED SOURCE.*不可比/);
+      // 应有 †† (jury) 和 † (self-judge) 标记区分数据源
+      expect(md).toMatch(/8††/);
+      expect(md).toMatch(/4†/);
+    });
+
     it('§4.1 splits avg row into jury vs self-judge when tool has mixed sources', async () => {
       const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
       // 同一 tool 部分 fixture 有 jury，部分仅 rubric

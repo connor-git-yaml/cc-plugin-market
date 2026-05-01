@@ -96,21 +96,44 @@ export function scanFixtures(rootDir = BASELINE_DIR) {
 // 聚合指标
 // ============================================================
 
+// Pricing per million tokens (USD)，2026-05 SiliconFlow + Anthropic 价格快照
+// 估算用，不是精确账单。未列出的 vendor/model 按 fallback price 估算。
+const TOKEN_PRICING = {
+  'siliconflow': { input: 0.30, output: 1.20 }, // 平均价（GLM-5.1/Kimi-K2.6/Qwen3-235B/DeepSeek-V3.2）
+  'anthropic': { input: 3.00, output: 15.00 },  // sonnet 4.6 standard
+  'openai': { input: 2.50, output: 10.00 },     // gpt-4o standard
+  'unknown': { input: 1.00, output: 5.00 },
+};
+
+export function estimateJuryCostUsd(juryScores) {
+  let total = 0;
+  for (const j of juryScores ?? []) {
+    if (!j.promptTokens && !j.completionTokens) continue;
+    const vendor = j.vendor ?? 'unknown';
+    const px = TOKEN_PRICING[vendor] ?? TOKEN_PRICING.unknown;
+    total += ((j.promptTokens ?? 0) * px.input + (j.completionTokens ?? 0) * px.output) / 1_000_000;
+  }
+  return total;
+}
+
 export function aggregateMetrics(scanned) {
-  // Cost：区分 known 和 unknown（in-session fixture 的 cost null != 0）
-  let knownCost = 0;
+  // Cost：区分 execution cost / jury cost / unknown
+  let executionCost = 0;
+  let juryCost = 0;
   let unknownCostFixtures = 0;
   for (const x of scanned.spectraClass) {
     const c = x.fx.perf?.estimatedCostUsd;
     if (c == null) unknownCostFixtures++;
-    else knownCost += c;
+    else executionCost += c;
   }
   for (const x of scanned.specDriverClass) {
     const c = x.fx.taskExecution?.costUsd;
     if (c == null) unknownCostFixtures++;
-    else knownCost += c;
+    else executionCost += c;
+    // 累加 jury cost（每 fixture 跨 N judges）
+    juryCost += estimateJuryCostUsd(x.fx.taskExecution?.juryScores);
   }
-  const cumulativeCost = knownCost; // 仅 known，不把 null 当 0 加
+  const cumulativeCost = executionCost + juryCost;
 
   const stale = [];
   const today = new Date();
@@ -138,6 +161,9 @@ export function aggregateMetrics(scanned) {
     spectraCount: scanned.spectraClass.length,
     specDriverCount: scanned.specDriverClass.length,
     cumulativeCost: Math.round(cumulativeCost * 100) / 100,
+    executionCost: Math.round(executionCost * 100) / 100,
+    juryCost: Math.round(juryCost * 10000) / 10000, // 4-decimal: jury cost 常 < $0.01
+    juryCostDisplay: juryCost < 0.01 ? `<$0.01 (${juryCost.toFixed(4)})` : `$${juryCost.toFixed(2)}`,
     knownCostFixtures: scanned.spectraClass.length + scanned.specDriverClass.length - unknownCostFixtures,
     unknownCostFixtures,
     budgetRemaining: Math.round((SC008_BUDGET - cumulativeCost) * 100) / 100,
@@ -208,9 +234,16 @@ export function detectInsights(scanned) {
 
   // Task execution 差异：找每个任务里 score 差 ≥ 1 的工具对
   const byTask = new Map();
+  const byTaskSource = new Map(); // 跟踪 score 来源（jury / self-judge）以警告混合
   for (const x of scanned.specDriverClass) {
-    if (!byTask.has(x.task)) byTask.set(x.task, {});
-    byTask.get(x.task)[x.tool] = x.fx.taskExecution?.rubricJudgeScore ?? null;
+    if (!byTask.has(x.task)) {
+      byTask.set(x.task, {});
+      byTaskSource.set(x.task, {});
+    }
+    const juryScore = x.fx.taskExecution?.juryMedian;
+    const rubricScore = x.fx.taskExecution?.rubricJudgeScore;
+    byTask.get(x.task)[x.tool] = juryScore ?? rubricScore ?? null;
+    byTaskSource.get(x.task)[x.tool] = juryScore != null ? 'jury' : (rubricScore != null ? 'self-judge' : null);
   }
   for (const [task, scores] of byTask) {
     const valid = Object.entries(scores).filter(([_, s]) => s != null);
@@ -218,15 +251,22 @@ export function detectInsights(scanned) {
     const sorted = valid.sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
     const top = sorted[0];
     const bot = sorted[sorted.length - 1];
+    // 检测 mixed source: 该 task 同时含 jury 和 self-judge 分数 → 不可比较
+    const sources = byTaskSource.get(task) ?? {};
+    const sourceSet = new Set(valid.map(([tool]) => sources[tool]).filter(Boolean));
+    const mixedSource = sourceSet.size > 1;
     if ((top[1] ?? 0) - (bot[1] ?? 0) >= 1) {
       insights.push({
         kind: 'task-spread',
         task,
         leader: top[0],
         leaderScore: top[1],
+        leaderSource: sources[top[0]] ?? null,
         laggard: bot[0],
         laggardScore: bot[1],
+        laggardSource: sources[bot[0]] ?? null,
         spread: (top[1] ?? 0) - (bot[1] ?? 0),
+        mixedSource,
       });
     }
   }
@@ -278,18 +318,20 @@ export function renderMarkdown(scanned, agg, insights) {
   lines.push(`- **Spec Driver 类工具** (${agg.driverTools.length}): ${agg.driverTools.join(' / ')}`);
   lines.push('');
 
-  // §2 Cost Summary
+  // §2 Cost Summary（拆 execution / jury / unknown）
   lines.push('## 2. Cost Summary（vs SC-008 预算 $120）');
   lines.push('');
-  lines.push(`- Known cost (${agg.knownCostFixtures} metered fixture${agg.knownCostFixtures === 1 ? '' : 's'}): **${fmtCost(agg.cumulativeCost)}**`);
+  lines.push(`- **Execution cost** (${agg.knownCostFixtures} metered fixture${agg.knownCostFixtures === 1 ? '' : 's'}): ${fmtCost(agg.executionCost)}`);
+  lines.push(`- **Jury cost** (cross-LLM 评分 token 消耗，按 vendor 估算): ${agg.juryCostDisplay ?? fmtCost(agg.juryCost)}`);
+  lines.push(`- **Known total**: **${fmtCost(agg.cumulativeCost)}**`);
   if (agg.unknownCostFixtures > 0) {
-    lines.push(`- Unknown cost: **${agg.unknownCostFixtures} fixture${agg.unknownCostFixtures === 1 ? '' : 's'}** with null cost (in-session executor 无 token metering — 实际成本未计入预算)`);
+    lines.push(`- Unknown cost: ${agg.unknownCostFixtures} fixture${agg.unknownCostFixtures === 1 ? '' : 's'} with null cost (in-session executor 无 token metering — 实际成本未计入)`);
   }
   lines.push(`- Budget remaining (vs known cost only): ${fmtCost(agg.budgetRemaining)}`);
-  lines.push(`- Per-version refresh estimate: ~$5-10`);
+  lines.push(`- Per-version refresh estimate: execution ~$5-10 + jury ~$1-3`);
   if (agg.unknownCostFixtures > 0) {
     lines.push('');
-    lines.push('> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。重跑双盲评分时需重新计量。');
+    lines.push('> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。');
   }
   lines.push('');
 
@@ -531,19 +573,46 @@ export function renderMarkdown(scanned, agg, insights) {
     if (juryFixtures.length > 0) {
       lines.push('### 4.3 Jury Agreement（cross-LLM 评分分歧度）');
       lines.push('');
-      lines.push('| 任务 | 工具 | judges | scores | median | spread | agreement |');
-      lines.push('|------|------|--------|--------|--------|--------|-----------|');
+
+      // Vendor distribution disclosure
+      const vendorCounts = {};
+      for (const item of juryFixtures) {
+        for (const j of item.fx.taskExecution?.juryScores ?? []) {
+          const v = j.vendor ?? 'unknown';
+          vendorCounts[v] = (vendorCounts[v] ?? 0) + 1;
+        }
+      }
+      const vendorList = Object.entries(vendorCounts).map(([v, n]) => `${v}=${n}`).join(', ');
+      const uniqueVendors = Object.keys(vendorCounts).length;
+      const sampleSize = juryFixtures.length;
+      lines.push(`> **Jury 配置**: ${sampleSize} fixture × N judges; vendor distribution: ${vendorList}`);
+      if (uniqueVendors === 1) {
+        lines.push(`> ⚠️ **Vendor 单点风险**: 所有 judges 来自同一 gateway/vendor (${Object.keys(vendorCounts)[0]}) — 跨 vendor systemic bias 仍可能存在；理想方案应包括 ≥2 vendor (如 + Anthropic / OpenAI)`);
+      }
+      lines.push(`> **Sample size 警示**: n=${sampleSize}, 无 confidence interval；任何均分差异需 n≥20 + bootstrap CI 才有 statistical significance，本表仅作 descriptive signal`);
+      lines.push('');
+
+      lines.push('| 任务 | 工具 | judges | scores | median | spread | agreement | finish/truncated |');
+      lines.push('|------|------|--------|--------|--------|--------|-----------|-------------------|');
       const lowAgreement = [];
+      const truncated = [];
       for (const item of juryFixtures.sort((a, b) => a.task.localeCompare(b.task) || a.tool.localeCompare(b.tool))) {
         const te = item.fx.taskExecution;
-        const scores = (te.juryScores ?? []).map((j) => j.judge ? `${j.judge.replace('claude-','')}=${j.score ?? 'X'}` : 'unknown').join(' / ');
+        const scores = (te.juryScores ?? []).map((j) => j.judge ? `${j.judge.replace('claude-','').replace('siliconflow:Pro/','sf:').replace('siliconflow:','sf:')}=${j.score ?? 'X'}` : 'unknown').join(' / ');
         const judgeCount = te.juryScores?.length ?? 0;
-        lines.push(`| ${item.task} | ${item.tool} | ${judgeCount} | ${scores} | ${te.juryMedian} | ${te.jurySpread} | ${te.juryAgreement} |`);
+        const truncCount = (te.juryScores ?? []).filter((j) => j.truncated).length;
+        const truncLabel = truncCount > 0 ? `${truncCount}/${judgeCount} TRUNC` : 'OK';
+        lines.push(`| ${item.task} | ${item.tool} | ${judgeCount} | ${scores} | ${te.juryMedian} | ${te.jurySpread} | ${te.juryAgreement} | ${truncLabel} |`);
         if (te.juryAgreement === 'low') lowAgreement.push(`${item.task}/${item.tool}`);
+        if (truncCount > 0) truncated.push(`${item.task}/${item.tool} (${truncCount}/${judgeCount})`);
       }
       lines.push('');
       if (lowAgreement.length > 0) {
         lines.push(`> ⚠️ **Low agreement (spread > 2)**: ${lowAgreement.join(', ')} — judges 严重分歧，rubric 在该 fixture 上可能太主观，分数仅供参考`);
+        lines.push('');
+      }
+      if (truncated.length > 0) {
+        lines.push(`> ⚠️ **Truncated responses (max_tokens hit)**: ${truncated.join(', ')} — 该 judge 输出被截断，可能 score 解析降级；考虑提高 max_tokens 重跑`);
         lines.push('');
       }
     } else {
@@ -571,7 +640,10 @@ export function renderMarkdown(scanned, agg, insights) {
       } else if (ins.kind?.startsWith('spec-quality-spread')) {
         lines.push(`- ⚠️ **spec quality on ${ins.project}** (rubric mismatch fallback): ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
       } else if (ins.kind === 'task-spread') {
-        lines.push(`- **task ${ins.task}**: ${ins.leader} (${ins.leaderScore}) vs ${ins.laggard} (${ins.laggardScore}), spread=${ins.spread}`);
+        const mixedTag = ins.mixedSource ? ' ⚠️ MIXED SOURCE (jury vs self-judge — 不可比)' : '';
+        const leaderTag = ins.leaderSource === 'jury' ? '††' : (ins.leaderSource === 'self-judge' ? '†' : '');
+        const laggardTag = ins.laggardSource === 'jury' ? '††' : (ins.laggardSource === 'self-judge' ? '†' : '');
+        lines.push(`- **task ${ins.task}**: ${ins.leader} (${ins.leaderScore}${leaderTag}) vs ${ins.laggard} (${ins.laggardScore}${laggardTag}), spread=${ins.spread}${mixedTag}`);
       }
     }
   }
@@ -672,7 +744,12 @@ export function renderJson(scanned, agg, insights) {
         task: x.task, tool: x.tool,
         wall: x.fx.taskExecution?.wallMs ?? null,
         oraclePass: x.fx.taskExecution?.primaryOracle?.passed ?? null,
-        score: x.fx.taskExecution?.rubricJudgeScore ?? null,
+        score: x.fx.taskExecution?.juryMedian ?? x.fx.taskExecution?.rubricJudgeScore ?? null,
+        scoreSource: x.fx.taskExecution?.juryMedian != null ? 'jury' : (x.fx.taskExecution?.rubricJudgeScore != null ? 'self-judge' : null),
+        juryMedian: x.fx.taskExecution?.juryMedian ?? null,
+        jurySpread: x.fx.taskExecution?.jurySpread ?? null,
+        juryAgreement: x.fx.taskExecution?.juryAgreement ?? null,
+        rubricSelfJudgeScore: x.fx.taskExecution?.rubricJudgeScore ?? null,
         interRater: x.fx.taskExecution?.interRaterDelta ?? null,
       })),
     },
