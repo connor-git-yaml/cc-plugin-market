@@ -24,6 +24,44 @@ import { generateDependencyDiagram } from '../generator/mermaid-dependency-graph
 import { splitIntoChunks, CHUNK_THRESHOLD } from '../utils/chunk-splitter.js';
 
 // ============================================================
+// AST 渲染规模上限（Feature 148）
+// ============================================================
+
+/**
+ * 接口定义章节：详细展开的文件数上限。
+ * 超过该数量后，仅展开导出最多的 Top-K 文件，剩余折叠为汇总表。
+ * 取值依据：以 spec.md ≤ 1500 行总预算为目标，AST 两章节合计 ≤ 800 行。
+ * 大模块（如 panoramic 130 文件）触发折叠；中型模块（如 batch 12 文件）也会折叠后 6 个，避免 1500-2000 行级别 outlier。
+ */
+const FILE_DETAIL_LIMIT = 6;
+
+/**
+ * 数据结构章节：详细展开的数据类型数上限。
+ * 超过该数量后，仅展开成员最多的 Top-K 数据结构，剩余折叠为汇总表。
+ */
+const DATA_DETAIL_LIMIT = 10;
+
+/**
+ * 单个 class/interface 内每张子表的成员数上限（独立应用于字段表 / 方法表 / 枚举值表）。
+ * 超过该数量后，仅展示前 N 个，剩余以省略提示替代，防止 god class 把 spec 撑爆。
+ * 注意：数据结构章节中字段表与方法表分开应用，单个 class 极端情况下可输出 2N 行成员。
+ */
+const MEMBER_DETAIL_LIMIT = 10;
+
+/**
+ * 接口定义章节：详细展开文件内的导出数上限。
+ * 单文件含数十个导出时（如 panoramic 的 model 聚合文件），仅显示前 N 个表格行，剩余以省略提示替代。
+ */
+const EXPORTS_PER_FILE_LIMIT = 12;
+
+/**
+ * 折叠汇总表的最大行数。
+ * 超大模块（如 panoramic 130 文件 / 400 数据结构）即使折叠也会撑出数百行表格；
+ * 加 row limit 后保证 spec.md 总体可控，剩余条目只在 spectra prepare 中可发现。
+ */
+const FOLDED_TABLE_ROW_LIMIT = 30;
+
+// ============================================================
 // 类型定义
 // ============================================================
 
@@ -740,24 +778,45 @@ export function generateAstInterfaceDefinition(skeletons: CodeSkeleton[]): strin
     return '本模块无公共导出。';
   }
 
+  // Feature 148: 按导出数量倒序，文件名升序作 tiebreaker；保证大模块下渲染顺序稳定。
+  // 用字典序比较（不调 localeCompare，避免依赖 ICU/locale 在不同 OS 漂移）。
+  const sortedSkeletons = [...withExports].sort((a, b) => {
+    const countDiff = b.exports.length - a.exports.length;
+    if (countDiff !== 0) return countDiff;
+    const nameA = path.basename(a.filePath);
+    const nameB = path.basename(b.filePath);
+    return nameA < nameB ? -1 : nameA > nameB ? 1 : 0;
+  });
+
+  const detailedSkeletons = sortedSkeletons.slice(0, FILE_DETAIL_LIMIT);
+  const foldedSkeletons = sortedSkeletons.slice(FILE_DETAIL_LIMIT);
+
   const parts: string[] = [];
 
-  for (const skeleton of withExports) {
+  for (const skeleton of detailedSkeletons) {
     const fileName = path.basename(skeleton.filePath);
     parts.push(`### ${fileName}`);
     parts.push('');
     parts.push('| 名称 | 类型 | 签名 | 成员数 |');
     parts.push('|------|------|------|--------|');
 
-    for (const exp of skeleton.exports) {
+    // Feature 148: 单文件导出数过多时只显示前 N 个，避免聚合 model 文件爆炸。
+    const shownExports = skeleton.exports.slice(0, EXPORTS_PER_FILE_LIMIT);
+    for (const exp of shownExports) {
       // 处理签名中的竖线避免破坏表格
       const safeSig = exp.signature.replace(/\|/g, '\\|');
       const memberCount = exp.members ? exp.members.length : '-';
       parts.push(`| \`${exp.name}\` | ${exp.kind} | \`${safeSig}\` | ${memberCount} |`);
     }
+    const exportsOmitted = skeleton.exports.length - shownExports.length;
+    if (exportsOmitted > 0) {
+      parts.push('');
+      parts.push(`*另 ${exportsOmitted} 个导出省略（完整骨架见 \`spectra prepare\`）*`);
+    }
 
-    // 展开含 members 的类/接口为缩进子表格（FR-001 US-1 验收场景 3）
-    const classLike = skeleton.exports.filter(
+    // 展开含 members 的类/接口为缩进子表格（FR-001 US-1 验收场景 3）。
+    // 仅在已显示的 exports 范围内展开，避免被截断的 class 又被全量展开。
+    const classLike = shownExports.filter(
       (e) => (e.kind === 'class' || e.kind === 'interface') && e.members && e.members.length > 0,
     );
 
@@ -768,13 +827,45 @@ export function generateAstInterfaceDefinition(skeletons: CodeSkeleton[]): strin
       parts.push('| 成员 | 类型 | 签名 | 可见性 |');
       parts.push('|------|------|------|--------|');
 
-      for (const member of cls.members!) {
+      const allMembers = cls.members!;
+      const shownMembers = allMembers.slice(0, MEMBER_DETAIL_LIMIT);
+      for (const member of shownMembers) {
         const safeMemberSig = member.signature.replace(/\|/g, '\\|');
         const visibility = member.visibility ?? 'public';
         parts.push(`| \`${member.name}\` | ${member.kind} | \`${safeMemberSig}\` | ${visibility} |`);
       }
+      const omitted = allMembers.length - shownMembers.length;
+      if (omitted > 0) {
+        parts.push('');
+        parts.push(`*另 ${omitted} 个成员省略（完整骨架见 \`spectra prepare\`）*`);
+      }
     }
 
+    parts.push('');
+  }
+
+  // Feature 148: 折叠剩余文件为单一汇总表，保留可发现性但避免 spec 体量爆炸。
+  if (foldedSkeletons.length > 0) {
+    const totalFoldedExports = foldedSkeletons.reduce((sum, s) => sum + s.exports.length, 0);
+    parts.push(`### 其他 ${foldedSkeletons.length} 个文件（共 ${totalFoldedExports} 导出）`);
+    parts.push('');
+    parts.push('*完整骨架见 `spectra prepare`。*');
+    parts.push('');
+    parts.push('| 文件 | 导出数 | 主要符号 |');
+    parts.push('|------|--------|----------|');
+
+    const shownInFolded = foldedSkeletons.slice(0, FOLDED_TABLE_ROW_LIMIT);
+    for (const skeleton of shownInFolded) {
+      const fileName = path.basename(skeleton.filePath);
+      const top = skeleton.exports.slice(0, 3).map((e) => `\`${e.name}\``).join(', ');
+      const extra = skeleton.exports.length > 3 ? ` (+${skeleton.exports.length - 3})` : '';
+      parts.push(`| ${fileName} | ${skeleton.exports.length} | ${top}${extra} |`);
+    }
+    const filesOmittedFromTable = foldedSkeletons.length - shownInFolded.length;
+    if (filesOmittedFromTable > 0) {
+      parts.push('');
+      parts.push(`*另 ${filesOmittedFromTable} 个文件未在汇总表中列出（完整骨架见 \`spectra prepare\`）*`);
+    }
     parts.push('');
   }
 
@@ -801,9 +892,24 @@ export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
     return '';
   }
 
+  // Feature 148: 按 members 数倒序，无 members 的 type/enum 排后；同分时文件名+符号名稳定排序。
+  // 用字典序比较（不调 localeCompare，避免依赖 ICU/locale 在不同 OS 漂移）。
+  const sortedDataExports = [...dataExports].sort((a, b) => {
+    const aMembers = a.exp.members?.length ?? 0;
+    const bMembers = b.exp.members?.length ?? 0;
+    if (aMembers !== bMembers) return bMembers - aMembers;
+    const fileA = path.basename(a.filePath);
+    const fileB = path.basename(b.filePath);
+    if (fileA !== fileB) return fileA < fileB ? -1 : 1;
+    return a.exp.name < b.exp.name ? -1 : a.exp.name > b.exp.name ? 1 : 0;
+  });
+
+  const detailedExports = sortedDataExports.slice(0, DATA_DETAIL_LIMIT);
+  const foldedExports = sortedDataExports.slice(DATA_DETAIL_LIMIT);
+
   const parts: string[] = [];
 
-  for (const { exp, filePath } of dataExports) {
+  for (const { exp, filePath } of detailedExports) {
     const fileName = path.basename(filePath);
 
     if (exp.kind === 'enum') {
@@ -812,11 +918,17 @@ export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
       parts.push('');
 
       if (exp.members && exp.members.length > 0) {
+        const shownMembers = exp.members.slice(0, MEMBER_DETAIL_LIMIT);
         parts.push('| 枚举值 | 签名 |');
         parts.push('|--------|------|');
-        for (const member of exp.members) {
+        for (const member of shownMembers) {
           const safeSig = member.signature.replace(/\|/g, '\\|');
           parts.push(`| \`${member.name}\` | \`${safeSig}\` |`);
+        }
+        const omitted = exp.members.length - shownMembers.length;
+        if (omitted > 0) {
+          parts.push('');
+          parts.push(`*另 ${omitted} 个枚举值省略（完整骨架见 \`spectra prepare\`）*`);
         }
       } else {
         // 没有成员信息时，展示签名
@@ -840,10 +952,16 @@ export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
           parts.push('');
           parts.push('| 字段名 | 类型/签名 | 可见性 |');
           parts.push('|--------|-----------|--------|');
-          for (const prop of properties) {
+          const shownProps = properties.slice(0, MEMBER_DETAIL_LIMIT);
+          for (const prop of shownProps) {
             const safeSig = prop.signature.replace(/\|/g, '\\|');
             const visibility = prop.visibility ?? 'public';
             parts.push(`| \`${prop.name}\` | \`${safeSig}\` | ${visibility} |`);
+          }
+          const propOmitted = properties.length - shownProps.length;
+          if (propOmitted > 0) {
+            parts.push('');
+            parts.push(`*另 ${propOmitted} 个字段省略（完整骨架见 \`spectra prepare\`）*`);
           }
           parts.push('');
         }
@@ -853,10 +971,16 @@ export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
           parts.push('');
           parts.push('| 方法名 | 签名 | 可见性 |');
           parts.push('|--------|------|--------|');
-          for (const method of methods) {
+          const shownMethods = methods.slice(0, MEMBER_DETAIL_LIMIT);
+          for (const method of shownMethods) {
             const safeSig = method.signature.replace(/\|/g, '\\|');
             const visibility = method.visibility ?? 'public';
             parts.push(`| \`${method.name}\` | \`${safeSig}\` | ${visibility} |`);
+          }
+          const methodOmitted = methods.length - shownMethods.length;
+          if (methodOmitted > 0) {
+            parts.push('');
+            parts.push(`*另 ${methodOmitted} 个方法省略（完整骨架见 \`spectra prepare\`）*`);
           }
           parts.push('');
         }
@@ -880,6 +1004,29 @@ export function generateAstDataStructures(skeletons: CodeSkeleton[]): string {
       parts.push(`\`${safeSig}\``);
       parts.push('');
     }
+  }
+
+  // Feature 148: 折叠剩余数据结构为汇总表。
+  if (foldedExports.length > 0) {
+    parts.push(`#### 其他数据结构（共 ${foldedExports.length} 个）`);
+    parts.push('');
+    parts.push('*完整骨架见 `spectra prepare`。*');
+    parts.push('');
+    parts.push('| 名称 | 类型 | 文件 | 成员数 |');
+    parts.push('|------|------|------|--------|');
+    const shownInFolded = foldedExports.slice(0, FOLDED_TABLE_ROW_LIMIT);
+    for (const { exp, filePath } of shownInFolded) {
+      const fileName = path.basename(filePath);
+      const kindLabel = exp.kind === 'data_class' ? 'dataclass' : exp.kind;
+      const memberCount = exp.members ? exp.members.length : '-';
+      parts.push(`| \`${exp.name}\` | ${kindLabel} | ${fileName} | ${memberCount} |`);
+    }
+    const dataOmittedFromTable = foldedExports.length - shownInFolded.length;
+    if (dataOmittedFromTable > 0) {
+      parts.push('');
+      parts.push(`*另 ${dataOmittedFromTable} 个数据结构未在汇总表中列出（完整骨架见 \`spectra prepare\`）*`);
+    }
+    parts.push('');
   }
 
   return parts.join('\n').trimEnd();

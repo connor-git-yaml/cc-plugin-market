@@ -451,3 +451,430 @@ describe('generateAstDataStructures', () => {
     expect(result).toContain('`type UserId = string`');
   });
 });
+
+// ============================================================
+// Feature 148: AST 渲染规模上限测试
+// ============================================================
+
+describe('generateAstInterfaceDefinition — 规模上限', () => {
+  it('文件数 ≤ 阈值时全部详细展开（不出现折叠表）', () => {
+    // 4 个文件，低于 FILE_DETAIL_LIMIT=6
+    const skeletons = Array.from({ length: 4 }, (_, i) =>
+      createSkeleton(`/project/src/file-${i}.ts`, {
+        exports: [
+          {
+            name: `fn${i}`,
+            kind: 'function' as const,
+            signature: `function fn${i}(): void`,
+            startLine: 1,
+            endLine: 5,
+            isDefault: false,
+          },
+          {
+            name: `fnB${i}`,
+            kind: 'function' as const,
+            signature: `function fnB${i}(): number`,
+            startLine: 6,
+            endLine: 10,
+            isDefault: false,
+          },
+        ],
+      }),
+    );
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 所有 4 个文件都应详细展开
+    for (let i = 0; i < 4; i++) {
+      expect(result).toContain(`### file-${i}.ts`);
+    }
+    // 不应出现折叠提示
+    expect(result).not.toContain('其他');
+    expect(result).not.toContain('共');
+  });
+
+  it('文件数 > 阈值时仅详细展开 Top 6 + 折叠剩余文件汇总表', () => {
+    // 9 个文件：file-00..file-08，每个不同导出数以验证排序
+    const skeletons = Array.from({ length: 9 }, (_, i) =>
+      createSkeleton(`/project/src/file-${String(i).padStart(2, '0')}.ts`, {
+        exports: Array.from({ length: 8 - i }, (_, j) => ({
+          name: `fn${i}_${j}`,
+          kind: 'function' as const,
+          signature: `function fn${i}_${j}(): void`,
+          startLine: j * 2 + 1,
+          endLine: j * 2 + 3,
+          isDefault: false,
+        })),
+      }),
+    );
+    const result = generateAstInterfaceDefinition(skeletons);
+    // Top 6（导出数 8, 7, 6, 5, 4, 3）应详细展开
+    expect(result).toContain('### file-00.ts'); // 8 exports（最多）
+    expect(result).toContain('### file-05.ts'); // 3 exports（Top 6 边界）
+    // 后 2 个（导出数 2, 1）会被折叠
+    // 注意：file-08.ts 仅有 0 个导出，会被 withExports 过滤掉
+    expect(result).toContain('### 其他 2 个文件（共 3 导出）');
+    expect(result).toContain('| file-06.ts | 2 |');
+    expect(result).toContain('| file-07.ts | 1 |');
+    // 引导用户用 spectra prepare 重新提取完整 AST
+    expect(result).toContain('spectra prepare');
+  });
+
+  it('单个 class 成员数 > 阈值时截断 + 显示省略提示', () => {
+    // 15 个成员，超过 MEMBER_DETAIL_LIMIT=10
+    const members = Array.from({ length: 15 }, (_, i) => ({
+      name: `member${i}`,
+      kind: 'method' as const,
+      signature: `method${i}(): void`,
+      isStatic: false,
+      visibility: 'public' as const,
+    }));
+    const skeletons = [createSkeleton('/project/src/big.ts', {
+      exports: [
+        {
+          name: 'GodClass',
+          kind: 'class' as const,
+          signature: 'class GodClass',
+          startLine: 1,
+          endLine: 100,
+          isDefault: false,
+          members,
+        },
+      ],
+    })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 前 10 个成员存在
+    expect(result).toContain('`member0`');
+    expect(result).toContain('`member9`');
+    // 第 10+ 个不应直接列出
+    expect(result).not.toContain('| `member10` |');
+    expect(result).not.toContain('| `member14` |');
+    // 应有截断提示
+    expect(result).toContain('另 5 个成员省略');
+  });
+
+  it('单个文件导出数 > 阈值时截断 + 显示省略提示', () => {
+    // 15 个 export，超过 EXPORTS_PER_FILE_LIMIT=12
+    const exports = Array.from({ length: 15 }, (_, i) => ({
+      name: `fn${i}`,
+      kind: 'function' as const,
+      signature: `function fn${i}(): void`,
+      startLine: i * 2 + 1,
+      endLine: i * 2 + 3,
+      isDefault: false,
+    }));
+    const skeletons = [createSkeleton('/project/src/big-aggregate.ts', { exports })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 前 12 个 export 存在
+    expect(result).toContain('`fn0`');
+    expect(result).toContain('`fn11`');
+    // 第 12+ 个不应直接列在表格里
+    expect(result).not.toContain('| `fn12` |');
+    expect(result).toContain('另 3 个导出省略');
+  });
+
+  it('排序稳定性：相同导出数的文件按文件名升序排序', () => {
+    const skeletons = [
+      createSkeleton('/project/src/zebra.ts', {
+        exports: [
+          { name: 'z', kind: 'function' as const, signature: 'function z(): void', startLine: 1, endLine: 1, isDefault: false },
+        ],
+      }),
+      createSkeleton('/project/src/alpha.ts', {
+        exports: [
+          { name: 'a', kind: 'function' as const, signature: 'function a(): void', startLine: 1, endLine: 1, isDefault: false },
+        ],
+      }),
+      createSkeleton('/project/src/middle.ts', {
+        exports: [
+          { name: 'm', kind: 'function' as const, signature: 'function m(): void', startLine: 1, endLine: 1, isDefault: false },
+        ],
+      }),
+    ];
+    const result = generateAstInterfaceDefinition(skeletons);
+    const idxAlpha = result.indexOf('### alpha.ts');
+    const idxMiddle = result.indexOf('### middle.ts');
+    const idxZebra = result.indexOf('### zebra.ts');
+    expect(idxAlpha).toBeGreaterThan(-1);
+    expect(idxMiddle).toBeGreaterThan(idxAlpha);
+    expect(idxZebra).toBeGreaterThan(idxMiddle);
+  });
+
+  it('文件数恰好等于阈值时全部详细展开（边界用例 N=FILE_DETAIL_LIMIT=6）', () => {
+    const skeletons = Array.from({ length: 6 }, (_, i) =>
+      createSkeleton(`/project/src/file-${i}.ts`, {
+        exports: [
+          {
+            name: `fn${i}`,
+            kind: 'function' as const,
+            signature: `function fn${i}(): void`,
+            startLine: 1,
+            endLine: 5,
+            isDefault: false,
+          },
+        ],
+      }),
+    );
+    const result = generateAstInterfaceDefinition(skeletons);
+    for (let i = 0; i < 6; i++) {
+      expect(result).toContain(`### file-${i}.ts`);
+    }
+    expect(result).not.toContain('其他');
+  });
+
+  it('文件数恰好阈值+1 时触发折叠，验证 off-by-one', () => {
+    const skeletons = Array.from({ length: 7 }, (_, i) =>
+      createSkeleton(`/project/src/file-${String(i).padStart(2, '0')}.ts`, {
+        exports: [
+          {
+            name: `fn${i}`,
+            kind: 'function' as const,
+            signature: `function fn${i}(): void`,
+            startLine: 1,
+            endLine: 5,
+            isDefault: false,
+          },
+        ],
+      }),
+    );
+    const result = generateAstInterfaceDefinition(skeletons);
+    // Top 6 详细展开，第 7 个折叠
+    expect(result).toContain('### 其他 1 个文件（共 1 导出）');
+  });
+
+  it('被 EXPORTS_PER_FILE_LIMIT 截断的 class 不会在子表展开', () => {
+    // 文件 13 个 export：前 12 个是 function，第 13 个是 class with members
+    // EXPORTS_PER_FILE_LIMIT=12，class 应该被截断在表外
+    const exports: Array<{
+      name: string;
+      kind: 'function' | 'class';
+      signature: string;
+      startLine: number;
+      endLine: number;
+      isDefault: boolean;
+      members?: Array<{ name: string; kind: 'method'; signature: string; isStatic: boolean; visibility: 'public' }>;
+    }> = Array.from({ length: 12 }, (_, i) => ({
+      name: `fn${i}`,
+      kind: 'function' as const,
+      signature: `function fn${i}(): void`,
+      startLine: i * 2 + 1,
+      endLine: i * 2 + 3,
+      isDefault: false,
+    }));
+    exports.push({
+      name: 'TruncatedClass',
+      kind: 'class' as const,
+      signature: 'class TruncatedClass',
+      startLine: 100,
+      endLine: 150,
+      isDefault: false,
+      members: [
+        { name: 'truncatedMember', kind: 'method' as const, signature: 'truncatedMember(): void', isStatic: false, visibility: 'public' as const },
+      ],
+    });
+    const skeletons = [createSkeleton('/project/src/aggregate.ts', { exports })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    // 第 13 个 export（TruncatedClass）应该不在主表格里
+    expect(result).not.toContain('| `TruncatedClass` |');
+    // 也不应被作为 classLike 展开为子表
+    expect(result).not.toContain('**TruncatedClass 成员**');
+    expect(result).not.toContain('`truncatedMember`');
+    // 应有截断提示
+    expect(result).toContain('另 1 个导出省略');
+  });
+});
+
+describe('generateAstDataStructures — 规模上限', () => {
+  it('数据结构数 ≤ 阈值时全部详细展开（不出现折叠表）', () => {
+    const skeletons = Array.from({ length: 5 }, (_, i) =>
+      createSkeleton(`/project/src/types-${i}.ts`, {
+        exports: [
+          {
+            name: `Type${i}`,
+            kind: 'interface' as const,
+            signature: `interface Type${i}`,
+            startLine: 1,
+            endLine: 5,
+            isDefault: false,
+            members: [
+              { name: `field${i}`, kind: 'property' as const, signature: `field${i}: string`, isStatic: false, visibility: 'public' as const },
+            ],
+          },
+        ],
+      }),
+    );
+    const result = generateAstDataStructures(skeletons);
+    for (let i = 0; i < 5; i++) {
+      expect(result).toContain(`\`Type${i}\` (interface)`);
+    }
+    expect(result).not.toContain('其他数据结构');
+  });
+
+  it('数据结构数 > 阈值时仅详细展开 Top 10 + 折叠剩余汇总表', () => {
+    // 15 个 interface，每个不同字段数以验证排序（成员数 15..1）
+    const skeletons = Array.from({ length: 15 }, (_, i) =>
+      createSkeleton(`/project/src/iface-${String(i).padStart(2, '0')}.ts`, {
+        exports: [
+          {
+            name: `Iface${String(i).padStart(2, '0')}`,
+            kind: 'interface' as const,
+            signature: `interface Iface${String(i).padStart(2, '0')}`,
+            startLine: 1,
+            endLine: 10,
+            isDefault: false,
+            members: Array.from({ length: 15 - i }, (_, j) => ({
+              name: `f${j}`,
+              kind: 'property' as const,
+              signature: `f${j}: string`,
+              isStatic: false,
+              visibility: 'public' as const,
+            })),
+          },
+        ],
+      }),
+    );
+    const result = generateAstDataStructures(skeletons);
+    // Top 10（成员数 15..6）应详细展开
+    expect(result).toContain('`Iface00` (interface)'); // 最多成员
+    expect(result).toContain('`Iface09` (interface)'); // Top 10 边界
+    // 后 5 个折叠
+    expect(result).toContain('#### 其他数据结构（共 5 个）');
+    expect(result).toContain('`Iface10`');
+    expect(result).toContain('`Iface14`');
+    // 折叠条目不应出现 ` (interface)` 这种详细标题（第 11 个起被折叠）
+    expect(result).not.toContain('`Iface10` (interface)');
+    expect(result).toContain('spectra prepare');
+  });
+
+  it('折叠表行数 > 阈值时按 FOLDED_TABLE_ROW_LIMIT 截断', () => {
+    // 50 个简单 interface，触发折叠 + 折叠表 row limit
+    const skeletons = Array.from({ length: 50 }, (_, i) =>
+      createSkeleton(`/project/src/iface-${String(i).padStart(3, '0')}.ts`, {
+        exports: [
+          {
+            name: `Iface${String(i).padStart(3, '0')}`,
+            kind: 'interface' as const,
+            signature: `interface Iface${String(i).padStart(3, '0')}`,
+            startLine: 1,
+            endLine: 5,
+            isDefault: false,
+            members: [
+              {
+                name: 'f',
+                kind: 'property' as const,
+                signature: 'f: string',
+                isStatic: false,
+                visibility: 'public' as const,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const result = generateAstDataStructures(skeletons);
+    // Top 10 详细展开 + 40 折叠
+    expect(result).toContain('#### 其他数据结构（共 40 个）');
+    // 折叠表只显示前 30 行（FOLDED_TABLE_ROW_LIMIT）
+    expect(result).toContain('另 10 个数据结构未在汇总表中列出');
+  });
+
+  it('单 interface 字段数 > 阈值时字段表截断 + 省略提示', () => {
+    const properties = Array.from({ length: 15 }, (_, i) => ({
+      name: `field${i}`,
+      kind: 'property' as const,
+      signature: `field${i}: string`,
+      isStatic: false,
+      visibility: 'public' as const,
+    }));
+    const skeletons = [createSkeleton('/project/src/big.ts', {
+      exports: [
+        {
+          name: 'BigInterface',
+          kind: 'interface' as const,
+          signature: 'interface BigInterface',
+          startLine: 1,
+          endLine: 50,
+          isDefault: false,
+          members: properties,
+        },
+      ],
+    })];
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toContain('`field0`');
+    expect(result).toContain('`field9`');
+    expect(result).not.toContain('| `field10` |');
+    expect(result).toContain('另 5 个字段省略');
+  });
+
+  it('单 enum 值数 > 阈值时枚举值表截断 + 省略提示', () => {
+    const values = Array.from({ length: 15 }, (_, i) => ({
+      name: `Val${i}`,
+      kind: 'property' as const,
+      signature: `Val${i} = "${i}"`,
+      isStatic: false,
+    }));
+    const skeletons = [createSkeleton('/project/src/big-enum.ts', {
+      exports: [
+        {
+          name: 'BigEnum',
+          kind: 'enum' as const,
+          signature: 'enum BigEnum',
+          startLine: 1,
+          endLine: 50,
+          isDefault: false,
+          members: values,
+        },
+      ],
+    })];
+    const result = generateAstDataStructures(skeletons);
+    expect(result).toContain('`Val0`');
+    expect(result).toContain('`Val9`');
+    expect(result).not.toContain('| `Val10` |');
+    expect(result).toContain('另 5 个枚举值省略');
+  });
+});
+
+describe('Feature 148: 大模块行数预算 sanity check', () => {
+  it('生成 130 文件 / 多类成员 mock 时 AST 章节合计受控（< 1000 行）', () => {
+    // 模拟 panoramic 规模：130 个 .ts 文件，大部分 1-3 个导出，少量大类
+    const skeletons: ReturnType<typeof createSkeleton>[] = [];
+    for (let i = 0; i < 130; i++) {
+      const exports = [];
+      const exportCount = Math.max(1, 5 - Math.floor(i / 30));
+      for (let j = 0; j < exportCount; j++) {
+        if (i < 10 && j === 0) {
+          // 前 10 个文件，每个含一个 class 5-15 成员（god class 类型）
+          exports.push({
+            name: `Cls_${i}_${j}`,
+            kind: 'class' as const,
+            signature: `class Cls_${i}_${j}`,
+            startLine: 1,
+            endLine: 30,
+            isDefault: false,
+            members: Array.from({ length: 5 + (i % 10) }, (_, k) => ({
+              name: `m${k}`,
+              kind: 'method' as const,
+              signature: `m${k}(): void`,
+              isStatic: false,
+              visibility: 'public' as const,
+            })),
+          });
+        } else {
+          exports.push({
+            name: `fn_${i}_${j}`,
+            kind: 'function' as const,
+            signature: `function fn_${i}_${j}(): void`,
+            startLine: j * 2 + 1,
+            endLine: j * 2 + 3,
+            isDefault: false,
+          });
+        }
+      }
+      skeletons.push(createSkeleton(`/project/src/file-${String(i).padStart(3, '0')}.ts`, { exports }));
+    }
+    const interfaceOut = generateAstInterfaceDefinition(skeletons);
+    const dataOut = generateAstDataStructures(skeletons);
+    const totalAstLines = interfaceOut.split('\n').length + dataOut.split('\n').length;
+    // 两个 AST 章节合计应 < 1000 行（实际 panoramic 修复前 11714 行）
+    // 加上其他章节预算（~500-700 行）后总 spec ≤ 1500
+    expect(totalAstLines).toBeLessThan(1000);
+  });
+});
