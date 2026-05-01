@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "aider-repomap",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "honojs/hono",
+    "targetCommit": "bfba97ca7ea3d4541a3419f1749e5a1a3e8f1727",
+    "targetFileCountsByType": {
+      "ts": 284,
+      "tsx": 22,
+      "py": 0,
+      "md": 0,
+      "other": 1
+    },
+    "targetLocEstimate": 70545,
+    "spectraModuleCount": null,
+    "mode": "full",
+    "model": null,
+    "runTimestampUtc": "2026-05-01T14:56:33.860Z",
+    "runHostOs": "darwin",
+    "command": "aider",
+    "args": [
+      "--show-repo-map",
+      "--map-tokens",
+      "2048"
+    ],
+    "envAllowlist": {},
+    "outputDir": "/Users/connorlu/.spectra-baselines/hono-output/aider-repomap-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/hono-output/aider-repomap-full/aider-repomap-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/hono-output/aider-repomap-full/aider-repomap-stderr.log",
+    "pinnedAt": "2026-05-01T14:56:33.860Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "aider 0.86.2",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 5630,
+    "llmCallCount": 0,
+    "llmCallDurationsMs": null,
+    "tokensInput": 0,
+    "tokensOutput": 0,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": 0,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": 10,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": 8401,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": 5630,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "tool-specific"
+  },
+  "quality": {
+    "specStructure": null,
+    "graphSanity": null,
+    "crossLinks": null,
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null,
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "aider-repomap 输出 markdown ranked list，无 graph.json"
+      ]
+    }
+  }
+}

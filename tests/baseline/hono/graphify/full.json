@@ -1,0 +1,94 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "graphify",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "honojs/hono",
+    "targetCommit": "bfba97ca7ea3d4541a3419f1749e5a1a3e8f1727",
+    "targetFileCountsByType": {
+      "ts": 284,
+      "tsx": 22,
+      "py": 0,
+      "md": 0,
+      "other": 1
+    },
+    "targetLocEstimate": 70545,
+    "spectraModuleCount": null,
+    "mode": "full",
+    "model": null,
+    "runTimestampUtc": "2026-05-01T14:56:18.373Z",
+    "runHostOs": "darwin",
+    "command": "graphify",
+    "args": [
+      "build",
+      "--no-llm",
+      "--code-only"
+    ],
+    "envAllowlist": {},
+    "outputDir": "/Users/connorlu/.spectra-baselines/hono-output/graphify-full",
+    "stdoutLogPath": "/Users/connorlu/.spectra-baselines/hono-output/graphify-full/graphify-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spectra-baselines/hono-output/graphify-full/graphify-stderr.log",
+    "pinnedAt": "2026-05-01T14:56:18.373Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "installed",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 794,
+    "llmCallCount": 0,
+    "llmCallDurationsMs": null,
+    "tokensInput": 0,
+    "tokensOutput": 0,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": 0,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": 1094,
+    "graphEdgeCount": 1502,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": 1156418,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": 794,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "tool-specific"
+  },
+  "quality": {
+    "specStructure": null,
+    "graphSanity": {
+      "isolatedNodes": 115,
+      "selfLoops": 0,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 2.7,
+      "maxDegree": 28,
+      "edgesWithoutType": 1502
+    },
+    "crossLinks": null,
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null,
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "TypeScript 源码 — 当前 Python AST extractor 不支持 TS（follow-up: tree-sitter TS extractor 复用 src/adapters/typescript-adapter.ts）"
+      ]
+    }
+  }
+}

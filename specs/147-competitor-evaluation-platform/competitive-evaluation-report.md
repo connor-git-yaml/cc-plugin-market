@@ -32,11 +32,13 @@
 
 ### 1.1 Spectra 类（codebase → spec / agent context）
 
-| 工具 | doc quality 公平 rubric † | wall（self-dogfood）| 成本 | grounding（micrograd add tanh）|
-|------|---------------------------|---------------------|------|--------------------------------|
-| **Spectra**（自己） | **7.3** ⭐ | 30 min ($9.86) | 高 | **10/10** ⭐（grounding 完美）|
-| **Aider repomap** | 5.3 | 9.4 s ($0) | 极低 | **9/10**（markdown 形式有效）|
-| **Graphify** | 4.8 | **4.2 s** ($0) | 极低 | **0**（context 太抽象，sonnet 无法编码）|
+| 工具 | doc quality 公平 rubric † | wall（self-dogfood）| 成本 | ~~grounding（micrograd add tanh）~~ ‡ |
+|------|---------------------------|---------------------|------|--------------------------------------|
+| **Spectra**（自己） | **7.3** ⭐ | 30 min ($9.86) | 高 | ~~10/10~~（被 Sprint 3 推翻） |
+| **Aider repomap** | 5.3 | 9.4 s ($0) | 极低 | ~~9/10~~（被 Sprint 3 推翻） |
+| **Graphify** | 4.8 | **4.2 s** ($0) | 极低 | ~~0~~（被 Sprint 3 推翻） |
+
+> ‡ **Sprint 3 grounding 复测推翻 Phase 5 结论**：n=3 任务（tanh / fix-bug / extract-const）× 4 对照组实测，spectra-control mean delta = **0**。Phase 5 的 "10 vs null" 是当时 sonnet 在 plan 模式拒绝生成的伪信号。详见 auto-report §3.3。**简单 micrograd 任务上 spec.md grounding 无显著优势**；复杂任务（需要 codebase context 才能选 API style）尚未测，**spec.md 的真正价值仍在人类可读性 + 模块文档化 + LLM agent 长 horizon 任务的语义 anchor，不是单 turn coding lift**。
 
 > † doc-quality rubric 评每个工具的 native artifact（spectra spec.md / graphify GRAPH_REPORT.md / aider repomap stdout）作为"项目理解 context"的有用性，**不评是否符合特定模板**（覆盖度 / 关系 / 可读性 / LLM-context-value / 真实性，3 项目均分）。详见 auto-report §3.2b。
 >
@@ -45,7 +47,7 @@
 **核心结论**：
 - **Spectra 在 doc quality 公平 rubric 下领先 ~2 分**（7.3 vs 5.3 / 4.8）；信息密度 + 模块化结构是优势
 - **Speed disparity 极大**：Spectra 比 Graphify 慢 432×（self-dogfood）；spec.md 文档化 + LLM 增强是 cost 主因
-- **Grounding 实证**：Spectra 的 spec.md 作为 LLM coding context 的 grounding 价值得到证明；纯 graph 节点列表（Graphify）不足以做编码上下文
+- ~~**Grounding 实证**：Spectra 的 spec.md 作为 LLM coding context 的 grounding 价值得到证明；纯 graph 节点列表（Graphify）不足以做编码上下文~~ — **Sprint 3 推翻**。当前 sonnet 4.6 在简单任务上不依赖 spec.md 也能写出正确代码（n=3 实测 delta=0）。spec.md 的差异化价值是人类可读性 + 长 horizon agent 语义 anchor，不是单 turn coding lift
 
 ### 1.2 Spec Driver 类（spec-driven coding workflow）
 
@@ -104,16 +106,28 @@
 
 inter-rater Δ ≤ 1（评分稳定）。**对外结论以本表为准。**
 
-### 2.3 Spectra Coding-Context Grounding（micrograd add tanh，4 对照组双盲）
+### 2.3 ~~Spectra Coding-Context Grounding~~（Phase 5 旧数据，已被 Sprint 3 推翻）
 
-| 对照组 | context bytes | sonnet output | judge score |
+> ⚠️ **本节是 2026-04-30 Phase 5 数据，结论已不成立**。当前 grounding 数据见 auto-report §3.3（n=3 任务 × 4 对照组 × 2 sonnet/opus，mean delta = 0）。
+
+| ~~对照组~~ | ~~context bytes~~ | ~~sonnet output~~ | ~~judge score~~ |
 |--------|---------------|---------------|-------------|
-| control（仅文件名） | 80 B | **0 B（拒绝生成）** | null |
-| **spectra（spec.md）** | **17 KB** | 572 B（完整代码） | **10** ⭐ |
-| graphify（graph 节点 + 边列表）| 4 KB | **0 B（拒绝生成）** | null |
-| aider-repomap（markdown）| 3 KB | 526 B（完整代码）| **9** |
+| ~~control（仅文件名）~~ | ~~80 B~~ | ~~0 B（拒绝生成）~~ | ~~null~~ |
+| ~~**spectra（spec.md）**~~ | ~~17 KB~~ | ~~572 B（完整代码）~~ | ~~**10**~~ |
+| ~~graphify（graph 节点 + 边列表）~~ | ~~4 KB~~ | ~~0 B（拒绝生成）~~ | ~~null~~ |
+| ~~aider-repomap（markdown）~~ | ~~3 KB~~ | ~~526 B（完整代码）~~ | ~~**9**~~ |
 
-**Spectra grounding 完美得分**，反向证明 spec.md 的 codebase grounding 价值。Aider 9 分仅次（标准 markdown ranked list 也是有效 context）。Graphify 节点列表过抽象，sonnet 无法基于此编码。
+~~**Spectra grounding 完美得分**~~ — Sprint 3 复测发现 control 在 sonnet 4.6 上**不**会拒绝生成（plan 模式细节差异），Phase 5 的 "0 B (拒绝生成)" 是当时 sonnet 行为的伪信号。当 control 写出正确代码时，spec.md 上下文给的额外信息对 sonnet 没有 lift。
+
+**当前 Sprint 3 实测（n=3）**：
+
+| 任务 | control | spectra | graphify | aider | spectra-control delta |
+|------|---------|---------|----------|-------|----------------------|
+| micrograd-add-tanh | 9 | 9 | 10 | 9 | 0 |
+| micrograd-fix-bug | 10 | 10 | 10 | 10 | 0 |
+| micrograd-extract-const | 9 | 9 | sonnet failed | 10 | 0 |
+
+**Sprint 3 结论**：在简单 micrograd 任务上，spec.md 单 turn coding context 价值 ≈ 0；spec.md 的真实价值在 human readability、模块文档化、LLM agent 长 horizon semantic anchor。**未测的复杂场景**：跨模块 / API-style follow / 大型 codebase 导航。详见 auto-report §3.3。
 
 ### 2.4 Spec Driver 类 Task Execution（4 工具 × 5 真实任务 = 20 fixture，每 fixture × 2 inter-rater judge = 40 calls）
 
@@ -211,11 +225,20 @@ aider-repomap:  ░                     9.4 s, $0
 
 ## 5. 关键洞察 + 后续路径
 
-### 5.1 spec.md 是 Spectra 的核心壁垒
+### 5.1 spec.md 价值定位修订（Sprint 3 grounding 复测后）
 
-Phase 2 grounding 实验证明：**spec.md 形式的 codebase context 让 LLM coding 准确度从 0（拒绝生成）跃升到 10（完美实现）**。这是 Graphify（节点列表）远不能替代的。
+> ⚠️ **本节 Phase 5 原结论已修订**。Phase 2 实验声称"spec.md 让 LLM coding 准确度从 0→10"，Sprint 3 用 n=3 任务复测发现这是当时 sonnet 在 plan 模式拒绝生成的伪信号，**真实 grounding delta = 0**。
 
-但 Aider repomap（markdown ranked list）也得 9 分 — 说明"任何 markdown 形式的 codebase 摘要"都是有效 context，Spectra 的差异化在**自动 LLM 增强 + 多模态产物**，而不是 markdown 格式本身。
+**Sprint 3 修订后的 spec.md 价值定位**：
+- **不是**：单 turn coding 任务的 grounding lift（n=3 实测无差异）
+- **是**：(a) 人类可读性（doc-quality 7.3 vs aider 5.3 / graphify 4.8）；(b) 模块化文档化（17/18 模块齐全 4 章节）；(c) LLM agent 在长 horizon 任务（跨模块 navigation、API style follow、复杂 refactor）中的语义 anchor — 这些 Sprint 3 都 **未测**
+
+**待补的 grounding 评估场景**（follow-up Feature）：
+- 跨模块任务：在 nn.py 加方法但要 follow 另一文件的现有 W&B integration 风格
+- 大型 codebase 导航：50k+ LOC 项目中找正确实现位置
+- API-style consistency：在 hono / express 这类框架中加新 middleware 但要 match 框架现有风格
+
+Aider repomap（markdown ranked list）公平 rubric 5.3 分仍然能产 useful context，验证 markdown summary 形式在简单任务上够用；Spectra 的差异化优势仍然在**信息密度 + 模块化结构 + 多模态产物**（spec.md 形式 + graph.json + Mermaid），而不是单 turn coding 的 grounding 神话。
 
 ### 5.2 Spec Driver workflow 编排在简单任务上 zero ROI
 

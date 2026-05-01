@@ -10,6 +10,17 @@ interface RunnerModule {
     passed: boolean;
     details: unknown;
   };
+  parseArgs: (argv: string[]) => {
+    task: string | null;
+    tool: string | null;
+    cleanup: string;
+    timeoutMs: number;
+    skipRun: boolean;
+    skipSanity: boolean;
+    bypassPermissions: boolean;
+    fixtureSuffix: string;
+  };
+  buildClaudeArgs: (input: { tool: string; prompt: string; bypassPermissions?: boolean }) => string[];
 }
 
 let cachedModule: RunnerModule | undefined;
@@ -169,5 +180,50 @@ describe('eval-task-runner.runPrimaryOracle', () => {
       expect(r.passed).toBe(false);
       expect(r.details).toBe('unknown oracle kind');
     });
+  });
+});
+
+describe('eval-task-runner.parseArgs (Sprint 3 Phase D flags)', () => {
+  it('defaults bypassPermissions to false and fixtureSuffix to empty', async () => {
+    const { parseArgs } = await loadRunner();
+    const r = parseArgs(['--task', 'T2-nanogpt-cosine-lr', '--tool', 'spec-driver']);
+    expect(r.bypassPermissions).toBe(false);
+    expect(r.fixtureSuffix).toBe('');
+  });
+
+  it('parses --bypass-permissions', async () => {
+    const { parseArgs } = await loadRunner();
+    const r = parseArgs(['--task', 'T2-nanogpt-cosine-lr', '--tool', 'spec-driver', '--bypass-permissions']);
+    expect(r.bypassPermissions).toBe(true);
+  });
+
+  it('parses --fixture-suffix', async () => {
+    const { parseArgs } = await loadRunner();
+    const r = parseArgs(['--task', 'T2-nanogpt-cosine-lr', '--tool', 'spec-driver', '--fixture-suffix', 'multiturn']);
+    expect(r.fixtureSuffix).toBe('multiturn');
+  });
+});
+
+describe('eval-task-runner.buildClaudeArgs (Sprint 3 Phase D bypass-permissions)', () => {
+  it('uses acceptEdits permission mode by default (no bypass)', async () => {
+    const { buildClaudeArgs } = await loadRunner();
+    const args = buildClaudeArgs({ tool: 'control', prompt: 'do thing' });
+    const i = args.indexOf('--permission-mode');
+    expect(args[i + 1]).toBe('acceptEdits');
+    expect(args).not.toContain('--dangerously-skip-permissions');
+  });
+
+  it('uses bypassPermissions + --dangerously-skip-permissions when bypassPermissions=true', async () => {
+    const { buildClaudeArgs } = await loadRunner();
+    const args = buildClaudeArgs({ tool: 'control', prompt: 'do thing', bypassPermissions: true });
+    const i = args.indexOf('--permission-mode');
+    expect(args[i + 1]).toBe('bypassPermissions');
+    expect(args).toContain('--dangerously-skip-permissions');
+  });
+
+  it('puts prompt as the LAST arg (avoid variadic flag swallow)', async () => {
+    const { buildClaudeArgs } = await loadRunner();
+    const args = buildClaudeArgs({ tool: 'control', prompt: 'PROMPT_TOKEN', bypassPermissions: true });
+    expect(args[args.length - 1]).toBe('PROMPT_TOKEN');
   });
 });

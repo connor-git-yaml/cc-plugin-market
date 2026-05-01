@@ -56,6 +56,65 @@ if __name__ == "__main__":
 \`\`\``,
 };
 
+const TASK_FIX_BUG = {
+  taskId: 'micrograd-fix-bug',
+  prompt: `# 任务
+
+micrograd/engine.py 的 \`__mul__\` 方法当前的反向传播闭包梯度公式有 bug：
+
+\`\`\`python
+def __mul__(self, other):
+    other = other if isinstance(other, Value) else Value(other)
+    out = Value(self.data * other.data, (self, other), '*')
+
+    def _backward():
+        self.grad += self.data * out.grad     # ← BUG: 应该用 other.data
+        other.grad += other.data * out.grad   # ← BUG: 应该用 self.data
+    out._backward = _backward
+    return out
+\`\`\`
+
+数学上：z = x * y → dz/dx = y, dz/dy = x。所以反向传播应该是
+self.grad += other.data * out.grad / other.grad += self.data * out.grad。
+
+**请基于上下文写出完整修正后的 \`__mul__\` 方法（含 forward + backward 闭包）。只输出代码块**：
+
+\`\`\`python
+def __mul__(self, other):
+    ...
+\`\`\``,
+};
+
+const TASK_EXTRACT_CONST = {
+  taskId: 'micrograd-extract-const',
+  prompt: `# 任务
+
+micrograd/nn.py 的 \`Neuron.__init__\` 当前用 \`random.uniform(-1, 1)\` 初始化权重。请把硬编码的 \`-1, 1\` 提取为模块级常量（命名清晰，如 \`WEIGHT_INIT_RANGE = (-1, 1)\`），让所有 \`random.uniform\` 调用引用该常量。
+
+要求：
+1. 在 nn.py 顶部（import 之后）新增 module-level UPPERCASE 常量
+2. 把所有 \`random.uniform(-1, 1)\` 替换为引用该常量
+3. 不修改其他逻辑
+
+**只输出修改后的相关行（const 定义 + Neuron 类相关方法）**，不要重写整个文件：
+
+\`\`\`python
+# 顶部新增 const
+WEIGHT_INIT_RANGE = ...
+
+# Neuron 类（仅展示用 const 的部分）
+class Neuron(Module):
+    def __init__(self, ...):
+        ...
+\`\`\``,
+};
+
+const TASK_REGISTRY = {
+  tanh: TASK_TANH,
+  'fix-bug': TASK_FIX_BUG,
+  'extract-const': TASK_EXTRACT_CONST,
+};
+
 // ============================================================
 // 4 个对照组 context loader
 // ============================================================
@@ -135,8 +194,8 @@ function runSonnetWithContext({ contextHeader, taskPrompt }) {
 
 async function main() {
   const args = parseArgsLocal(process.argv.slice(2));
-  const task = args.task === 'tanh' ? TASK_TANH : null;
-  if (!task) throw new Error(`unknown task: ${args.task}`);
+  const task = TASK_REGISTRY[args.task];
+  if (!task) throw new Error(`unknown task: ${args.task}. supported: ${Object.keys(TASK_REGISTRY).join(', ')}`);
 
   console.log(`[grounding] task=${task.taskId} target=${args.target}`);
   const groupResults = [];
@@ -159,8 +218,16 @@ async function main() {
     console.log(`[grounding] ${ctx.label} done: ${r.durationMs}ms, output ${r.output.length}B`);
   }
 
-  // Step 2: 用 grounding rubric 让 opus 双盲评分（每组）
-  const rubric = loadRubric('grounding');
+  // Step 2: 用 task-specific grounding rubric 让 opus 双盲评分（每组）
+  // Sprint 3 Phase C.1：每个 task 有独立 rubric（grounding-tanh / grounding-fix-bug / grounding-extract-const）
+  const rubricName = `grounding-${args.task}`;
+  let rubric;
+  try {
+    rubric = loadRubric(rubricName);
+  } catch (e) {
+    console.warn(`[grounding] task-specific rubric ${rubricName} not found, falling back to generic 'grounding'`);
+    rubric = loadRubric('grounding');
+  }
   const judgeRuns = [];
   for (const g of groupResults) {
     if (g.sonnetExitCode !== 0 || !g.sonnetOutput.trim()) {
@@ -198,12 +265,14 @@ RATIONALE: <简短中文 ≤ 200 字>
   }
 
   // Step 3: 写回 spectra fixture 的 codingContextGrounding 段
+  // Sprint 3 Phase C.1: 支持多任务累积 — codingContextGroundingByTask: { <taskId>: {...} }
   const fixturePath = path.join(PROJECT_ROOT, 'tests/baseline/micrograd/spectra/full.json');
   const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   const spectraScore = judgeRuns.find((r) => r.label === 'spectra')?.score ?? null;
   const controlScore = judgeRuns.find((r) => r.label === 'control')?.score ?? null;
   fixture.quality = fixture.quality ?? {};
-  fixture.quality.codingContextGrounding = {
+
+  const taskRecord = {
     taskId: task.taskId,
     taskScore: spectraScore,
     controlScore: controlScore,
@@ -214,11 +283,20 @@ RATIONALE: <简短中文 ≤ 200 字>
     allGroupScores: judgeRuns.map((r) => ({ label: r.label, score: r.score, contextBytes: groupResults.find((g) => g.label === r.label)?.contextBytes ?? 0 })),
     judgedAt: new Date().toISOString(),
     judgeModel: JUDGE_MODEL,
+    sourceRunTimestampUtc: new Date().toISOString(), // Sprint 3 Phase C codex review fix: byTask 必须 surface timestamp，便于检测混版本
   };
+
+  // Top-level codingContextGrounding = 最新 run（向后兼容 Phase 5 报告渲染）
+  fixture.quality.codingContextGrounding = taskRecord;
+
+  // 多任务累积（Sprint 3 新增）— byTask map
+  fixture.quality.codingContextGroundingByTask = fixture.quality.codingContextGroundingByTask ?? {};
+  fixture.quality.codingContextGroundingByTask[task.taskId] = taskRecord;
+
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
 
   // 同时把 sonnet 输出写到 outputDir 供后续审查
-  const groundingOutDir = path.join(getBaselineHome(), 'micrograd-output', 'grounding-tanh');
+  const groundingOutDir = path.join(getBaselineHome(), 'micrograd-output', `grounding-${args.task}`);
   fs.mkdirSync(groundingOutDir, { recursive: true });
   for (const g of groupResults) {
     fs.writeFileSync(path.join(groundingOutDir, `${g.label}-output.md`), g.sonnetOutput, 'utf-8');

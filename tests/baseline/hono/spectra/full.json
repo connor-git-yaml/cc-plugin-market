@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "honojs/hono",
+    "targetCommit": "bfba97ca7ea3d4541a3419f1749e5a1a3e8f1727",
+    "targetFileCountsByType": {
+      "ts": 186
+    },
+    "targetLocEstimate": 70545,
+    "spectraModuleCount": 12,
+    "mode": "full",
+    "model": "claude-sonnet-4-6",
+    "runTimestampUtc": "2026-05-01T15:18:43.132Z",
+    "runHostOs": "darwin",
+    "command": "spectra batch",
+    "args": [
+      "/Users/connorlu/.spectra-baselines/hono/src",
+      "--mode",
+      "full",
+      "--output-dir",
+      "/Users/connorlu/.spectra-baselines/hono-output/spectra-full"
+    ],
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": "<redacted>",
+      "SPECTRA_LOG_LEVEL": null
+    },
+    "outputDir": "/Users/connorlu/.spectra-baselines/hono-output/spectra-full",
+    "stdoutLogPath": null,
+    "stderrLogPath": null,
+    "pinnedAt": "2026-05-01T15:18:43.134Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "v4.x.x",
+    "frozenFixture": false,
+    "partialRun": {
+      "reason": "2/12 modules failed (fs / root) due to spectra inferring non-existent dirs in hono src layout — 这是 spectra 的真实 bug，但 10/12 模块产出有效 spec.md，足够作为 production-grade TS 项目 baseline",
+      "failedModules": [
+        "fs",
+        "root"
+      ],
+      "successModules": 10,
+      "memoryPeakNote": "/usr/bin/time -l reported peak ~2GB but stderr log not preserved by manual fixture assembly"
+    }
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 3177400,
+    "llmCallCount": 10,
+    "llmCallDurationsMs": null,
+    "tokensInput": 1070793,
+    "tokensOutput": 182487,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": 5.95,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": 10,
+    "graphEdgeCount": 25,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": 21800,
+    "specModuleCount": 12,
+    "specSuccessCount": 10,
+    "specSkippedCount": 0,
+    "specFailedCount": 2
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "partial-batch-summary"
+  },
+  "quality": {
+    "specStructure": {
+      "moduleCount": 11,
+      "modulesWithIntent": 10,
+      "modulesWithBehavior": 10,
+      "modulesWithApi": 10,
+      "modulesWithDataModel": 10,
+      "modulesWithAllFour": 10,
+      "modulesWithInputsOutputs": 10,
+      "averageSpecLines": 913,
+      "shorterThan100Lines": 0,
+      "longerThan1000Lines": 5,
+      "outlierFiles": [
+        "adapter.spec.md: 1884 lines (long)",
+        "helper.spec.md: 1450 lines (long)",
+        "jsx.spec.md: 1326 lines (long)",
+        "middleware.spec.md: 1117 lines (long)",
+        "utils.spec.md: 1634 lines (long)"
+      ]
+    },
+    "graphSanity": {
+      "isolatedNodes": 0,
+      "selfLoops": 8,
+      "edgesWithMissingTarget": 0,
+      "averageDegree": 5,
+      "maxDegree": 9,
+      "edgesWithoutType": 25
+    },
+    "crossLinks": null,
+    "codingContextGrounding": null,
+    "graphAccuracy": {
+      "language": null,
+      "coverageMethod": "n/a",
+      "truthSet": null,
+      "graph": null,
+      "accuracy": null,
+      "notes": [
+        "TypeScript 源码 — 当前 Python AST extractor 不支持 TS（follow-up）"
+      ]
+    }
+  },
+  "taskExecution": null
+}

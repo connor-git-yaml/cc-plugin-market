@@ -46,7 +46,12 @@
     "pinnedAt": "2026-04-30T10:00:00Z",             // 竞品 fixture pin 时间戳；自己跑等于 runTimestampUtc
     "upstreamVersion": "v1.15",                     // 竞品的 git tag / commit；自己跑等于 spectraVersion
     "staleAfterDate": "2026-10-30",                 // 默认 pinnedAt + 6 月；超期 eval:refresh-self warning（不自动重跑竞品）
-    "frozenFixture": true                            // 竞品冷冻 fixture 标记 true；自己跑标 false
+    "frozenFixture": true,                           // 竞品冷冻 fixture 标记 true；自己跑标 false
+    "partialRun": {                                  // Sprint 3 Phase C.2: 标记 batch 部分失败但有效产物已写盘的场景
+      "reason": "...",                               // 失败原因 + 为何仍有效（如 spectra 误判 spurious 模块路径但 majority 模块成功）
+      "failedModules": ["fs", "root"],
+      "successModules": 10
+    }
   },
 
   // ===== 1.0 字段（不变）=====
@@ -89,13 +94,20 @@
       "brokenLinks": 0,                             // [text](path) 但 path 不存在
       "externalLinks": 12                           // 引用仓库外 URL
     },
-    "codingContextGrounding": {                     // 仅 spectra 维度评估，CLI prompt injection
+    "codingContextGrounding": {                     // 仅 spectra 维度评估；最新一次 grounding run 数据（向后兼容）
+      "taskId": "micrograd-add-tanh",
       "taskScore": 8.2,                             // opus judge 1-10（双盲）
       "controlScore": 5.4,                          // 裸 prompt 无 context
       "groundingDelta": 2.8,
       "judgeRationale": "...",                      // reverse-map 后填回
       "interRaterDelta": 0.3,                       // 同 fixture 跑 2 次 judge 差异
-      "executionMode": "non-interactive"            // sonnet 直接跑 vs user-assisted
+      "executionMode": "non-interactive",            // sonnet 直接跑 vs user-assisted
+      "sourceRunTimestampUtc": "2026-05-01T..."      // Sprint 3 Phase C: byTask 混版本检测
+    },
+    "codingContextGroundingByTask": {                // Sprint 3 Phase C.1 新增：多任务累积 map
+      "micrograd-add-tanh": { /* 同 codingContextGrounding 字段结构 */ },
+      "micrograd-fix-bug": { /* ... */ },
+      "micrograd-extract-const": { /* ... */ }
     },
     "graphAccuracy": null                            // Sprint 3 Phase B.1 落地：Python 项目算 call edge precision/recall，TS 项目 N/A。字段名实现：scripts/graph-accuracy.mjs 写入 quality.graphAccuracy
   },

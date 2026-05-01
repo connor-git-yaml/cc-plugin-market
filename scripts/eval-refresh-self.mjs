@@ -42,6 +42,7 @@ function parseArgs(argv) {
     switch (a) {
       case '--targets': args.targets = argv[++i].split(','); break;
       case '--grounding': args.grounding = true; break;
+      case '--grounding-tasks': args.groundingTasks = argv[++i].split(','); break;
       case '--tasks': args.tasks = argv[++i].split(','); break;
       case '--verify-artifacts': args.verifyArtifacts = true; break;
       case '--skip-perf': args.skipPerf = true; break;
@@ -98,9 +99,12 @@ async function main() {
     runStep(`spec-quality judge for ${t}`, 'scripts/eval-judge.mjs', ['--fixture', fixturePath, '--rubric', 'spec-quality', '--inter-rater', String(args.judgeInterRater)]);
   }
 
-  // Step 3 (optional): grounding 重评
+  // Step 3 (optional): grounding 重评（Sprint 3 Phase C.1: 默认跑 n=3 任务，覆盖 codingContextGroundingByTask 全套）
   if (args.grounding) {
-    runStep('grounding judge', 'scripts/eval-grounding.mjs', ['--target', 'karpathy/micrograd', '--task', 'tanh']);
+    const tasks = args.groundingTasks ?? ['tanh', 'fix-bug', 'extract-const'];
+    for (const t of tasks) {
+      runStep(`grounding judge (${t})`, 'scripts/eval-grounding.mjs', ['--target', 'karpathy/micrograd', '--task', t]);
+    }
   }
 
   // Step 4 (optional): task-execution 重跑

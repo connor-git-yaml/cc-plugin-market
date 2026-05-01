@@ -428,22 +428,54 @@ export function renderMarkdown(scanned, agg, insights) {
     lines.push('');
   }
 
-  // Grounding（如 micrograd spectra fixture 含 codingContextGrounding）
-  const groundingFx = scanned.spectraClass.find((x) => x.fx.quality?.codingContextGrounding?.allGroupScores);
+  // Grounding（如 micrograd spectra fixture 含 codingContextGrounding 或 byTask map）
+  const groundingFx = scanned.spectraClass.find((x) => x.fx.quality?.codingContextGrounding?.allGroupScores || x.fx.quality?.codingContextGroundingByTask);
   if (groundingFx) {
-    const g = groundingFx.fx.quality.codingContextGrounding;
-    lines.push('### 3.3 Coding-Context Grounding');
-    lines.push('');
-    lines.push(`> 任务: \`${g.taskId}\` | judge: ${g.judgeModel}`);
-    lines.push('');
-    lines.push('| 对照组 | context bytes | judge score |');
-    lines.push('|--------|---------------|-------------|');
-    for (const grp of g.allGroupScores ?? []) {
-      lines.push(`| ${grp.label} | ${fmtBytes(grp.contextBytes)} | ${grp.score ?? 'null（拒绝生成）'} |`);
+    const byTask = groundingFx.fx.quality?.codingContextGroundingByTask;
+    if (byTask && Object.keys(byTask).length > 0) {
+      // Sprint 3 Phase C.1: n>=2 任务多 sample 渲染
+      const taskIds = Object.keys(byTask).sort();
+      lines.push('### 3.3 Coding-Context Grounding（n=' + taskIds.length + ' 任务）');
+      lines.push('');
+      lines.push(`> Judge: ${byTask[taskIds[0]].judgeModel}. 每个任务 4 对照组（control / spectra / graphify / aider-repomap）跑一次 sonnet + 一次 opus 双盲评分。`);
+      lines.push('');
+      lines.push('| 任务 | control | spectra | graphify | aider | spectra-control delta |');
+      lines.push('|------|---------|---------|----------|-------|----------------------|');
+      const deltas = [];
+      for (const tid of taskIds) {
+        const t = byTask[tid];
+        const groups = (t.allGroupScores ?? []).reduce((m, g) => { m[g.label] = g.score; return m; }, {});
+        const fmt = (s) => s == null ? '*sonnet failed*' : String(s);
+        const d = t.groundingDelta;
+        if (d != null) deltas.push(d);
+        lines.push(`| ${tid} | ${fmt(groups.control)} | ${fmt(groups.spectra)} | ${fmt(groups.graphify)} | ${fmt(groups['aider-repomap'])} | ${d == null ? 'n/a' : d} |`);
+      }
+      lines.push('');
+      const avgDelta = deltas.length === 0 ? 'n/a' : (Math.round((deltas.reduce((a, b) => a + b, 0) / deltas.length) * 100) / 100);
+      lines.push(`**Mean spectra-control grounding delta** (n=${deltas.length}): **${avgDelta}**`);
+      lines.push('');
+      if (deltas.length >= 2 && deltas.every((d) => d === 0)) {
+        lines.push('> ⚠️ **n=' + deltas.length + ' 全部 delta=0**：在简单 micrograd 任务上，spec.md 作为 sonnet coding context 相对裸 prompt 无显著 grounding 提升。Phase 5 报告的 "spectra=10 vs control=null" 是当时 sonnet 在 plan 模式拒绝生成的产物，不是真实 grounding 价值。Sprint 3 重测 n=3 任务 sonnet 都能从最小 context 直接生成正确代码。');
+        lines.push('> **rubric ceiling effect**：当前 3 个任务（tanh / fix-bug / extract-const）都属于"答案直接可写代码"的 anchored task，控制组也能拿 9-10 分。**未测**需要 codebase context 才能做出选择的复杂任务（如：在 nn.py 加方法但要 follow 同 module 现有 W&B integration 风格、跨文件 refactor、大型 codebase 导航）。当前结论 **仅适用于** "answer-directly-from-prompt" 类任务。');
+        lines.push('> **更准确的 spec.md 价值定位**：人类可读性 + 模块文档化 + LLM agent 长 horizon 任务的语义 anchor，**不**是单 turn coding 的 grounding lift。');
+        lines.push('');
+      }
+    } else if (groundingFx.fx.quality?.codingContextGrounding) {
+      // 单任务回退（legacy fixture 兼容）
+      const g = groundingFx.fx.quality.codingContextGrounding;
+      lines.push('### 3.3 Coding-Context Grounding');
+      lines.push('');
+      lines.push(`> 任务: \`${g.taskId}\` | judge: ${g.judgeModel}`);
+      lines.push('');
+      lines.push('| 对照组 | context bytes | judge score |');
+      lines.push('|--------|---------------|-------------|');
+      for (const grp of g.allGroupScores ?? []) {
+        lines.push(`| ${grp.label} | ${fmtBytes(grp.contextBytes)} | ${grp.score ?? 'null（拒绝生成）'} |`);
+      }
+      lines.push('');
+      lines.push(`**grounding delta** (spectra vs control): ${g.groundingDelta ?? 'null'}`);
+      lines.push('');
     }
-    lines.push('');
-    lines.push(`**grounding delta** (spectra vs control): ${g.groundingDelta ?? 'null'}`);
-    lines.push('');
   }
 
   // §3.4 Graph Topology Accuracy（兑现 spec §2.1.B 第 3 维度承诺）

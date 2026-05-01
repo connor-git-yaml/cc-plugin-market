@@ -1,9 +1,9 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T14:29:22.921Z
-> **Git**: feature/147-competitor-evaluation-platform @ d9ab8ae
-> **Fixture 总数**: 34（Spectra 类 9 + Spec Driver 类 25）
+> **生成时间**: 2026-05-01T15:34:01.986Z
+> **Git**: feature/147-competitor-evaluation-platform @ 66cc270
+> **Fixture 总数**: 37（Spectra 类 12 + Spec Driver 类 25）
 
 ---
 
@@ -23,19 +23,19 @@
 
 ## 1. Coverage
 
-- **项目** (3): micrograd / nanoGPT / self-dogfood
+- **项目** (4): hono / micrograd / nanoGPT / self-dogfood
 - **Spectra 类工具** (3): aider-repomap / graphify / spectra
 - **任务** (5): T1-micrograd-add-tanh / T2-nanogpt-cosine-lr / T3-micrograd-fix-bug / T4-micrograd-extract-const / T6-violation-refusal
 - **Spec Driver 类工具** (5): control / gstack / spec-driver / spec-driver-spectra / superpowers
 
 ## 2. Cost Summary（vs SC-008 预算 $120）
 
-- **Execution cost** (34 fixtures with token usage): $12.91
+- **Execution cost** (37 fixtures with token usage): $18.86
   - **GLM / Kimi（Sprint 3 Phase B.2 回填）**: $0.22 — token 由 SiliconFlow API 实测，单价来自 siliconflow.cn 公开定价（2026-04 截屏）
-  - **Sonnet / Opus**: $12.69 — token 由 Anthropic API 实测，单价来自 docs.anthropic.com（同样未 fact-check，估算 tier）
+  - **Sonnet / Opus**: $18.64 — token 由 Anthropic API 实测，单价来自 docs.anthropic.com（同样未 fact-check，估算 tier）
 - **Jury cost** (cross-LLM 评分 token 消耗，按 vendor 估算): $4.02
-- **Known total**: **$16.93**
-- Budget remaining: $103.07
+- **Known total**: **$22.88**
+- Budget remaining: $97.12
 - Per-version refresh estimate: execution ~$5-10 + jury ~$1-3
 
 > ℹ️ **所有 cost 字段都是估算值**：token 数真实，单价来自 vendor 公开定价页（误差预期 ≤ 20%）。fixture 的 `costUsdSource` 字段记录单价依据；baseline-diff 跨版本对比时不应把单价误差当 regression 信号。
@@ -46,6 +46,9 @@
 
 | 项目 | 工具 | wall | LLM calls | tokens (in+out) | cost | nodes/edges |
 |------|------|------|-----------|-----------------|------|-------------|
+| hono | aider-repomap | 5.6 s | 0 | 0 | $0 | 10/n/a |
+| hono | graphify | 794 ms | 0 | 0 | $0 | 1094/1502 |
+| hono | spectra | 53.0 min | 10 | 1,253,280 | $5.95 | 10/25 |
 | micrograd | aider-repomap | 1.6 s | 0 | 0 | $0 | 33/n/a |
 | micrograd | graphify | 108 ms | 0 | 0 | $0 | 41/56 |
 | micrograd | spectra | 2.9 min | 4 | 98,986 | $0.56 | 13/6 |
@@ -62,6 +65,9 @@
 
 | 项目 | 工具 | score | inter-rater Δ | structure (with all 4 chapters) |
 |------|------|-------|----------------|----------------------------------|
+| hono | aider-repomap | null | n/a | n/a |
+| hono | graphify | null | n/a | n/a |
+| hono | spectra | null | n/a | 10/11 |
 | micrograd | aider-repomap | 1 | 0 | n/a |
 | micrograd | graphify | 1 | 0 | n/a |
 | micrograd | spectra | 7 | 0 | 4/5 |
@@ -78,6 +84,9 @@
 
 | 项目 | 工具 | score | inter-rater Δ | source artifact |
 |------|------|-------|----------------|------------------|
+| hono | aider-repomap | null | n/a | n/a |
+| hono | graphify | null | n/a | n/a |
+| hono | spectra | null | n/a | n/a |
 | micrograd | aider-repomap | 6 | 0 | aider-repomap-stdout.log |
 | micrograd | graphify | 4.5 (Δ=1) | 1 | GRAPH_REPORT.md |
 | micrograd | spectra | 8 | 0 | modules/*.spec.md |
@@ -90,18 +99,21 @@
 
 | **均分** | aider-repomap **5.3** | graphify **4.8** | spectra **7.3** |
 
-### 3.3 Coding-Context Grounding
+### 3.3 Coding-Context Grounding（n=3 任务）
 
-> 任务: `micrograd-add-tanh` | judge: claude-opus-4-7
+> Judge: claude-opus-4-7. 每个任务 4 对照组（control / spectra / graphify / aider-repomap）跑一次 sonnet + 一次 opus 双盲评分。
 
-| 对照组 | context bytes | judge score |
-|--------|---------------|-------------|
-| control | 80 B | null（拒绝生成） |
-| spectra | 17.0 KB | 10 |
-| graphify | 4.0 KB | null（拒绝生成） |
-| aider-repomap | 3.2 KB | 9 |
+| 任务 | control | spectra | graphify | aider | spectra-control delta |
+|------|---------|---------|----------|-------|----------------------|
+| micrograd-add-tanh | 9 | 9 | 10 | 9 | 0 |
+| micrograd-extract-const | 9 | 9 | *sonnet failed* | 10 | 0 |
+| micrograd-fix-bug | 10 | 10 | 10 | 10 | 0 |
 
-**grounding delta** (spectra vs control): null
+**Mean spectra-control grounding delta** (n=3): **0**
+
+> ⚠️ **n=3 全部 delta=0**：在简单 micrograd 任务上，spec.md 作为 sonnet coding context 相对裸 prompt 无显著 grounding 提升。Phase 5 报告的 "spectra=10 vs control=null" 是当时 sonnet 在 plan 模式拒绝生成的产物，不是真实 grounding 价值。Sprint 3 重测 n=3 任务 sonnet 都能从最小 context 直接生成正确代码。
+> **rubric ceiling effect**：当前 3 个任务（tanh / fix-bug / extract-const）都属于"答案直接可写代码"的 anchored task，控制组也能拿 9-10 分。**未测**需要 codebase context 才能做出选择的复杂任务（如：在 nn.py 加方法但要 follow 同 module 现有 W&B integration 风格、跨文件 refactor、大型 codebase 导航）。当前结论 **仅适用于** "answer-directly-from-prompt" 类任务。
+> **更准确的 spec.md 价值定位**：人类可读性 + 模块文档化 + LLM agent 长 horizon 任务的语义 anchor，**不**是单 turn coding 的 grounding lift。
 
 ### 3.4 Graph Topology Accuracy（边对应真实 import/call 的命中率）
 
@@ -110,6 +122,9 @@
 
 | 项目 | 工具 | call edges | truth calls | precision | recall | language |
 |------|------|-----------|-------------|-----------|--------|----------|
+| hono | aider-repomap | n/a | n/a | n/a | n/a | n/a |
+| hono | graphify | n/a | n/a | n/a | n/a | n/a |
+| hono | spectra | n/a | n/a | n/a | n/a | n/a |
 | micrograd | aider-repomap | n/a | n/a | n/a | n/a | n/a |
 | micrograd | graphify | 21 | 36 | 78% | 19% | python |
 | micrograd | spectra | 0 | 36 | n/a | 0% | python |
@@ -242,9 +257,9 @@
 
 | SC | 标准 | 状态 |
 |----|------|------|
-| SC-002 | schema 1.1 fixture | ✅ 9 个 spectra 类 |
+| SC-002 | schema 1.1 fixture | ✅ 12 个 spectra 类 |
 | SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 5 工具 × 5 任务 = 25 矩阵 |
-| SC-008 | cost ≤ $120 | ✅ $16.93 / $120.00 (剩 $103.07) |
+| SC-008 | cost ≤ $120 | ✅ $22.88 / $120.00 (剩 $97.12) |
 
 ## 8. Tool Outputs（全量产物对比，点链接进目录）
 
@@ -268,4 +283,4 @@
 
 ---
 
-*Auto-generated by `scripts/eval-report.mjs` from 34 fixture(s) under `tests/baseline/`. Schema 1.1.*
+*Auto-generated by `scripts/eval-report.mjs` from 37 fixture(s) under `tests/baseline/`. Schema 1.1.*

@@ -36,6 +36,8 @@ const KNOWN_TARGETS = {
   'self-dogfood': { type: 'local', name: 'self-dogfood', path: PROJECT_ROOT, repoUrl: null },
   'karpathy/micrograd': { type: 'clone', name: 'micrograd', repoUrl: 'https://github.com/karpathy/micrograd.git' },
   'karpathy/nanoGPT': { type: 'clone', name: 'nanoGPT', repoUrl: 'https://github.com/karpathy/nanoGPT.git' },
+  // Sprint 3 Phase C.2: production-grade OSS TS 项目（API 框架，~30k LOC）
+  'honojs/hono': { type: 'clone', name: 'hono', repoUrl: 'https://github.com/honojs/hono.git', subdir: 'src' },
 };
 
 // ============================================================
@@ -306,11 +308,13 @@ async function main() {
     process.exit(2);
   }
 
-  const targetPath = def.type === 'local' ? def.path : path.join(getBaselineHome(), def.name);
-  if (def.type === 'clone' && !fs.existsSync(targetPath)) {
-    throw new Error(`target workspace ${targetPath} not found; run baseline-collect first to clone`);
+  const baseTargetPath = def.type === 'local' ? def.path : path.join(getBaselineHome(), def.name);
+  if (def.type === 'clone' && !fs.existsSync(baseTargetPath)) {
+    throw new Error(`target workspace ${baseTargetPath} not found; run baseline-collect first to clone`);
   }
-  const targetCommit = getGitCommit(targetPath);
+  // Sprint 3 Phase C.2: 对大型 production 项目可以指定 subdir 避免扫描 docs/benchmarks/build
+  const targetPath = def.subdir ? path.join(baseTargetPath, def.subdir) : baseTargetPath;
+  const targetCommit = getGitCommit(baseTargetPath); // git 信息总是基于 repo root，subdir 不影响 commit hash
   const outputDir = path.join(getBaselineHome(), `${def.name}-output`, `${args.tool}-${args.mode}`);
   if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true });
 

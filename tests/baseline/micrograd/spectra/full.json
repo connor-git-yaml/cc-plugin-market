@@ -112,22 +112,22 @@
       "externalLinks": 0
     },
     "codingContextGrounding": {
-      "taskId": "micrograd-add-tanh",
-      "taskScore": 10,
-      "controlScore": null,
-      "groundingDelta": null,
-      "judgeRationale": "实现与参考答案完全一致：正向 `math.tanh(self.data)` 数值正确；反向闭包用 `1 - t**2` 准确表达导数并以 `+=` 累加 grad，符合 micrograd 多路径累积约定；`Value(t, (self,), 'tanh')` 的 children/op 元组与 `relu()` 风格完全一致；代码 8 行简洁清晰。测试覆盖了正向数值（与 `math.tanh` 对照 1e-9 容差）和反向梯度（导数公式校验），调用 `y.backward()` 验证完整链路。无可挑剔。",
+      "taskId": "micrograd-extract-const",
+      "taskScore": 9,
+      "controlScore": 9,
+      "groundingDelta": 0,
+      "judgeRationale": "候选输出的代码完全匹配期望签名：`WEIGHT_INIT_RANGE = (-1, 1)` 定义在 import 之后、类定义之前，符合 module-level UPPERCASE 命名规范；`random.uniform(*WEIGHT_INIT_RANGE)` 通过元组解包正确引用常量；仅 2 行改动（1 行新增 + 1 行替换），未破坏其他逻辑，与现有类结构和 Python 命名风格一致。扣 1 分原因：输出中显式引用 \"rubric 模板（grounding-extract-const.md）\" 字样，属于元层级表述而非纯粹的 refactor 输出，略损实现的\"自然性\"，但不影响代码正确性。",
       "interRaterDelta": null,
       "executionMode": "non-interactive",
       "allGroupScores": [
         {
           "label": "control",
-          "score": null,
+          "score": 9,
           "contextBytes": 80
         },
         {
           "label": "spectra",
-          "score": 10,
+          "score": 9,
           "contextBytes": 17435
         },
         {
@@ -137,11 +137,11 @@
         },
         {
           "label": "aider-repomap",
-          "score": 9,
+          "score": 10,
           "contextBytes": 3257
         }
       ],
-      "judgedAt": "2026-04-30T12:46:22.038Z",
+      "judgedAt": "2026-05-01T14:53:54.944Z",
       "judgeModel": "claude-opus-4-7"
     },
     "graphTopologyAccuracy": null,
@@ -234,6 +234,107 @@
         "recall: 真实 call 中被 graph 覆盖的占比",
         "⚠️ 该 graph 不含 call/uses 类型边（可能是 contains-only graph，如 spectra v4.x）"
       ]
+    },
+    "codingContextGroundingByTask": {
+      "micrograd-fix-bug": {
+        "taskId": "micrograd-fix-bug",
+        "taskScore": 10,
+        "controlScore": 10,
+        "groundingDelta": 0,
+        "judgeRationale": "候选实现与期望签名完全一致：梯度公式 `self.grad += other.data * out.grad` 与 `other.grad += self.data * out.grad` 均正确（40% 维度满分）；forward `Value(self.data * other.data, (self, other), '*')` 完整保留（20% 满分）；follow `__add__` 同款 closure 模式 + `isinstance(other, Value)` 类型校验，API 风格一致（15% 满分）；7 行实现简洁清晰（15% 满分）；可直接替换原 method 运行（10% 满分）。无任何瑕疵。",
+        "interRaterDelta": null,
+        "executionMode": "non-interactive",
+        "allGroupScores": [
+          {
+            "label": "control",
+            "score": 10,
+            "contextBytes": 80
+          },
+          {
+            "label": "spectra",
+            "score": 10,
+            "contextBytes": 17435
+          },
+          {
+            "label": "graphify",
+            "score": 10,
+            "contextBytes": 4062
+          },
+          {
+            "label": "aider-repomap",
+            "score": 10,
+            "contextBytes": 3257
+          }
+        ],
+        "judgedAt": "2026-05-01T14:45:59.660Z",
+        "judgeModel": "claude-opus-4-7"
+      },
+      "micrograd-add-tanh": {
+        "taskId": "micrograd-add-tanh",
+        "taskScore": 9,
+        "controlScore": 9,
+        "groundingDelta": 0,
+        "judgeRationale": "实现完全正确：`t = math.tanh(self.data)` 前向值缓存到闭包，`_backward` 用 `+=` 累积梯度且导数公式 `1 - t**2` 正确。API 与 `relu()` 风格高度一致（`Value(t, (self,), 'tanh')` + closure），简洁约 8 行。测试断言了 forward 与 backward 数值，但只覆盖单个正输入（x=0.5），缺负输入与多路反传链式 case，故测试覆盖维度未满分，整体扣 1 分。",
+        "interRaterDelta": null,
+        "executionMode": "non-interactive",
+        "allGroupScores": [
+          {
+            "label": "control",
+            "score": 9,
+            "contextBytes": 80
+          },
+          {
+            "label": "spectra",
+            "score": 9,
+            "contextBytes": 17435
+          },
+          {
+            "label": "graphify",
+            "score": 10,
+            "contextBytes": 4062
+          },
+          {
+            "label": "aider-repomap",
+            "score": 9,
+            "contextBytes": 3257
+          }
+        ],
+        "judgedAt": "2026-05-01T14:43:42.682Z",
+        "judgeModel": "claude-opus-4-7"
+      },
+      "micrograd-extract-const": {
+        "taskId": "micrograd-extract-const",
+        "taskScore": 9,
+        "controlScore": 9,
+        "groundingDelta": 0,
+        "judgeRationale": "候选输出的代码完全匹配期望签名：`WEIGHT_INIT_RANGE = (-1, 1)` 定义在 import 之后、类定义之前，符合 module-level UPPERCASE 命名规范；`random.uniform(*WEIGHT_INIT_RANGE)` 通过元组解包正确引用常量；仅 2 行改动（1 行新增 + 1 行替换），未破坏其他逻辑，与现有类结构和 Python 命名风格一致。扣 1 分原因：输出中显式引用 \"rubric 模板（grounding-extract-const.md）\" 字样，属于元层级表述而非纯粹的 refactor 输出，略损实现的\"自然性\"，但不影响代码正确性。",
+        "interRaterDelta": null,
+        "executionMode": "non-interactive",
+        "allGroupScores": [
+          {
+            "label": "control",
+            "score": 9,
+            "contextBytes": 80
+          },
+          {
+            "label": "spectra",
+            "score": 9,
+            "contextBytes": 17435
+          },
+          {
+            "label": "graphify",
+            "score": null,
+            "contextBytes": 4062
+          },
+          {
+            "label": "aider-repomap",
+            "score": 10,
+            "contextBytes": 3257
+          }
+        ],
+        "judgedAt": "2026-05-01T14:53:54.944Z",
+        "judgeModel": "claude-opus-4-7"
+      }
     }
   }
 }

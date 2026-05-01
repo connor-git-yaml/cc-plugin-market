@@ -60,6 +60,13 @@ const KNOWN_TARGETS = {
     name: 'nanoGPT',
     repoUrl: 'https://github.com/karpathy/nanoGPT.git',
   },
+  // Sprint 3 Phase C.2: production-grade OSS TS API 框架，~30k LOC（src/ 仅源码部分）
+  'honojs/hono': {
+    type: 'clone',
+    name: 'hono',
+    repoUrl: 'https://github.com/honojs/hono.git',
+    subdir: 'src', // 排除 docs / benchmarks / build
+  },
 };
 
 const FILE_TYPE_GLOBS = {
@@ -402,9 +409,11 @@ export function prepareTarget(targetSpec, commit) {
       }
     }
   }
+  // Sprint 3 Phase C.2: 对大型 production 项目，subdir 让 batch 只扫描源码子目录
+  const effectivePath = def.subdir ? path.join(workspaceDir, def.subdir) : workspaceDir;
   return {
     name: def.name,
-    path: workspaceDir,
+    path: effectivePath,
     commit: getGitCommit(workspaceDir) ?? commit ?? 'unknown',
   };
 }

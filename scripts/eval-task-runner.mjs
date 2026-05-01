@@ -46,6 +46,8 @@ export function parseArgs(argv) {
     timeoutMs: 1800000, // 30 min hard limit
     skipRun: false, // 仅生成 fixture skeleton + 不实际 spawn claude
     skipSanity: false, // 跳过 fixture sanity check（oracle 在 setup 后立即 PASS 即视为 fixture invalid）
+    bypassPermissions: false, // Sprint 3 Phase D: dangerously-skip-permissions 让 agent 能 git commit + 跑 pytest
+    fixtureSuffix: '', // Sprint 3 Phase D: 把结果写到 tasks/<task>/<tool>-<suffix>/full.json，避免覆盖 sprint2 single-turn 数据
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -56,6 +58,8 @@ export function parseArgs(argv) {
       case '--timeout-ms': args.timeoutMs = Number(argv[++i]); break;
       case '--skip-run': args.skipRun = true; break;
       case '--skip-sanity': args.skipSanity = true; break;
+      case '--bypass-permissions': args.bypassPermissions = true; break;
+      case '--fixture-suffix': args.fixtureSuffix = argv[++i]; break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
@@ -176,15 +180,18 @@ export function findSuperPowersDir() {
   return match ? path.join(SUPERPOWERS_PLUGIN_DIR, match) : null;
 }
 
-export function buildClaudeArgs({ tool, prompt }) {
+export function buildClaudeArgs({ tool, prompt, bypassPermissions = false }) {
   // 注意：--add-dir / --allowed-tools 都是 variadic（<...>），把后续 prompt 吞掉。
   // 改用 cwd: wtDir 已让 claude 访问目标目录；--allowedTools 写在 plugin-dir 之前并明确分隔。
+  // Sprint 3 Phase D: 加 bypassPermissions 模式，用于 multi-turn 实跑（让 agent 能 git commit + 跑 pytest），
+  // 仅在 ephemeral worktree 内安全（CLAUDE.local.md 已确认）
   const baseArgs = [
     '--print',
     '--model', 'claude-sonnet-4-6',
     '--output-format', 'text',
-    '--permission-mode', 'acceptEdits',
+    '--permission-mode', bypassPermissions ? 'bypassPermissions' : 'acceptEdits',
   ];
+  if (bypassPermissions) baseArgs.push('--dangerously-skip-permissions');
   if (tool === 'superpowers') {
     const dir = findSuperPowersDir();
     if (dir) baseArgs.push('--plugin-dir', dir);
@@ -199,8 +206,8 @@ export function buildClaudeArgs({ tool, prompt }) {
 // 跑 task
 // ============================================================
 
-export function runTask({ tool, prompt, wtDir, timeoutMs }) {
-  const args = buildClaudeArgs({ tool, prompt });
+export function runTask({ tool, prompt, wtDir, timeoutMs, bypassPermissions = false }) {
+  const args = buildClaudeArgs({ tool, prompt, bypassPermissions });
   const start = process.hrtime.bigint();
   // 不主动设 ANTHROPIC_API_KEY；让 claude CLI fallback 到 OAuth credentials
   // （之前设为 '' 会覆盖 OAuth 导致 401 auth error）
@@ -392,7 +399,9 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const taskFixture = loadTaskFixture(args.task);
 
-  const fixtureDir = path.join(PROJECT_ROOT, 'tests/baseline/tasks', args.task, args.tool);
+  // Sprint 3 Phase D: --fixture-suffix 让 multi-turn 实跑结果落到 <tool>-multiturn/ 而不是覆盖 sprint2 single-turn fixture
+  const toolDirName = args.fixtureSuffix ? `${args.tool}-${args.fixtureSuffix}` : args.tool;
+  const fixtureDir = path.join(PROJECT_ROOT, 'tests/baseline/tasks', args.task, toolDirName);
   fs.mkdirSync(fixtureDir, { recursive: true });
   const fixturePath = path.join(fixtureDir, 'full.json');
 
@@ -454,7 +463,7 @@ async function main() {
   }
   const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt, spectraContext });
   console.log(`[task-runner] running claude (${args.tool})...`);
-  const runResult = runTask({ tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs });
+  const runResult = runTask({ tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs, bypassPermissions: args.bypassPermissions });
   console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);
 
   // 持久化 stdout/stderr
