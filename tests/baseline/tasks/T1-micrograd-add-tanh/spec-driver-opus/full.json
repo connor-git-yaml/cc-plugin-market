@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-opus",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-opus-4-7",
+    "runTimestampUtc": "2026-05-01T02:51:05.329Z",
+    "runHostOs": "darwin",
+    "command": "in-session",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-opus",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-opus/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-opus/task-runner-stderr.log",
+    "pinnedAt": "2026-05-01T02:51:05.329Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 60000,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "spec-driver-opus",
+    "executionMode": "in-session-opus-no-context",
+    "wallMs": 60000,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 12,
+    "uncommittedChanges": 0,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E '^\\\\s+def tanh\\\\(self\\\\)' micrograd/engine.py\",\"passed\":true,\"output\":\"    def tanh(self):\\n\"},{\"cmd\":\"grep -E '(test_tanh|tanh\\\\()' test/test_engine.py\",\"passed\":true,\"output\":\"def test_tanh():\\n    y = x.tanh()\\n    assert abs(y.data - math.tanh(0.5)) < 1e-9\\n    # backward: dy/dx = 1 - tanh(x)^2\\n    expected_grad = 1 - math.tanh(0.5) ** 2\\ndef test_tanh_negative():\\n    y = x.t\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 7,
+    "rubricJudgeRationale": "tanh 实现正确（math.tanh + (1-t^2) closure），风格与 relu 一致，2 个 unit test 覆盖正负输入 + backward；扣分：与基线 control 类似不主动跑 pytest 验证",
+    "interRaterDelta": null,
+    "diffStat": " .gitignore                                         |  1 +\n .../bundles/api-consumer/docs/index.md             | 29 ++++++++++++++++++\n .../spectra-full/bundles/api-consumer/mkdocs.yml   |  8 +++++\n .../bundles/architecture-review/docs/index.md      | 34 ++++++++++++++++++++++\n .../bundles/architecture-review/mkdocs.yml         | 12 ++++++++\n .../bundles/developer-onboarding/docs/index.md     | 33 +++++++++++++++++++++\n .../bundles/developer-onboarding/mkdocs.yml        | 15 ++++++++++\n .../bundles/ops-handover/docs/index.md             | 27 +++++++++++++++++\n .../spectra-full/bundles/ops-handover/mkdocs.yml   |  5 ++++\n micrograd/engine.py                                | 11 +++++++\n specs/_meta/dry-run-estimate.md                    | 25 ++++++++++++++++\n test/test_engine.py                                | 24 +++++++++++++++\n 12 files changed, 224 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "claude-opus-4-7",
+    "executorRuntime": "main-session-opus-4-7",
+    "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
+    "judgedBy": "self-judge-main-session-opus-4-7"
+  }
+}

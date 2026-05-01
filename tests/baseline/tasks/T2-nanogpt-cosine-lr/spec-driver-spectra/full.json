@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/nanoGPT",
+    "targetCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-opus-4-7",
+    "runTimestampUtc": "2026-05-01T02:57:50.602Z",
+    "runHostOs": "darwin",
+    "command": "in-session",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-spectra",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-spectra/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-spectra/task-runner-stderr.log",
+    "pinnedAt": "2026-05-01T02:57:50.602Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 90000,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T2-nanogpt-cosine-lr",
+    "tool": "spec-driver-spectra",
+    "executionMode": "in-session-opus-with-spectra-context",
+    "wallMs": 90000,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 4,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E 'def get_lr|get_lr\\\\s*=' train.py\",\"passed\":true,\"output\":\"def get_lr(it):\\n\"},{\"cmd\":\"grep -E '(cosine|math\\\\.cos|np\\\\.cos)' train.py\",\"passed\":true,\"output\":\"# learning rate decay scheduler (cosine with linear warmup, floored at min_lr)\\n#         (2) warmup_iters <= it <= lr_decay_iters → cosine 从 learning_rate 退火到 min_lr\\n    # 2) post-decay floor: 防止 it 超\"},{\"cmd\":\"grep -E 'param_group\\\\[.lr.\\\\]|param_group..lr..\\\\s*=' train.py\",\"passed\":true,\"output\":\"        param_group['lr'] = lr\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 8,
+    "rubricJudgeRationale": "Same correct three-phase impl，但加 docstring 解释三段式语义 + 边界 (it+1)/(warmup+1) 防 lr=0 + 后期 floor 防止 cosine 振荡 + DDP/multi-group 注释。比 opus-no-context 多 10 行 inline 解释和约束理由。",
+    "interRaterDelta": null,
+    "diffStat": " train.py | 25 +++++++++++++++++++++++++\n 1 file changed, 25 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "claude-opus-4-7",
+    "executorRuntime": "main-session-opus-4-7",
+    "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
+    "judgedBy": "self-judge-main-session-opus-4-7"
+  }
+}

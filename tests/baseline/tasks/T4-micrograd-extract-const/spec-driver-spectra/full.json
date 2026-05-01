@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-opus-4-7",
+    "runTimestampUtc": "2026-05-01T02:59:31.412Z",
+    "runHostOs": "darwin",
+    "command": "in-session",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra/task-runner-stderr.log",
+    "pinnedAt": "2026-05-01T02:59:31.412Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 30000,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T4-micrograd-extract-const",
+    "tool": "spec-driver-spectra",
+    "executionMode": "in-session-opus-with-spectra-context",
+    "wallMs": 30000,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 2,
+    "uncommittedChanges": 4,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E '^[A-Z_]+\\\\s*=' micrograd/nn.py\",\"passed\":true,\"output\":\"WEIGHT_INIT_RANGE = (-1.0, 1.0)\\n\"},{\"cmd\":\"test $(grep -c 'random.uniform(-1, 1)' micrograd/nn.py) -eq 0\",\"passed\":true,\"output\":\"\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 8,
+    "rubricJudgeRationale": "Same const + unpack 模式；多 1 行 docstring 解释 tuple semantic + 1 行 rationale 引用 Karpathy 原始行为。Float literal (-1.0, 1.0) 比 int 更明确表达初始化分布。Context-informed naming + provenance comment。",
+    "interRaterDelta": null,
+    "diffStat": " .gitignore      | 1 +\n micrograd/nn.py | 6 +++++-\n 2 files changed, 6 insertions(+), 1 deletion(-)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "claude-opus-4-7",
+    "executorRuntime": "main-session-opus-4-7",
+    "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
+    "judgedBy": "self-judge-main-session-opus-4-7"
+  }
+}

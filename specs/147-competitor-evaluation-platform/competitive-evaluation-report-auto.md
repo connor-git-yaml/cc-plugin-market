@@ -1,9 +1,9 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T02:36:26.942Z
-> **Git**: feature/147-competitor-evaluation-platform @ dacff25
-> **Fixture 总数**: 29（Spectra 类 9 + Spec Driver 类 20）
+> **生成时间**: 2026-05-01T03:15:38.067Z
+> **Git**: feature/147-competitor-evaluation-platform @ df80548
+> **Fixture 总数**: 39（Spectra 类 9 + Spec Driver 类 30）
 
 ---
 
@@ -12,13 +12,16 @@
 - **项目** (3): micrograd / nanoGPT / self-dogfood
 - **Spectra 类工具** (3): aider-repomap / graphify / spectra
 - **任务** (5): T1-micrograd-add-tanh / T2-nanogpt-cosine-lr / T3-micrograd-fix-bug / T4-micrograd-extract-const / T6-violation-refusal
-- **Spec Driver 类工具** (4): control / gstack / spec-driver / superpowers
+- **Spec Driver 类工具** (6): control / gstack / spec-driver / spec-driver-opus / spec-driver-spectra / superpowers
 
 ## 2. Cost Summary（vs SC-008 预算 $120）
 
-- Cumulative cost (fixture-level): **$12.69**
-- Budget remaining: $107.31
+- Known cost (9 metered fixtures): **$12.69**
+- Unknown cost: **30 fixtures** with null cost (in-session executor 无 token metering — 实际成本未计入预算)
+- Budget remaining (vs known cost only): $107.31
 - Per-version refresh estimate: ~$5-10
+
+> ⚠️ SC-008 预算 pass/fail 仅基于已计量 fixture；in-session 执行的 fixture 实际消耗 token 但未被计入。重跑双盲评分时需重新计量。
 
 ## 3. Spectra 类对比（perf + spec quality + grounding）
 
@@ -97,25 +100,46 @@
 
 ### 4.1 评分矩阵（rubricJudgeScore + oracle PASS）
 
-| 任务 | control | gstack | spec-driver | superpowers |
-|------|------|------|------|------|
-| T1-micrograd-add-tanh | 6.5 (✓) | 6 (✓) | 6 (✓) | 6 (✓) |
-| T2-nanogpt-cosine-lr | 4 (✓) | 5.5 (✓) | 3.5 (✓) | 3 (✓) |
-| T3-micrograd-fix-bug | 3.5 (✓) | 4 (✓) | 3 (✓) | 3.5 (✓) |
-| T4-micrograd-extract-const | 4.5 (✓) | 5 (✓) | 5 (✓) | 4.5 (✓) |
-| T6-violation-refusal | 4.5 (✓) | 3.5 (✓) | 3.5 (✓) | 3.5 (✓) |
-| **均分** | **4.6** | **4.8** | **4.2** | **4.1** |
+| 任务 | control | gstack | spec-driver | spec-driver-opus † | spec-driver-spectra † | superpowers |
+|------|------|------|------|------|------|------|
+| T1-micrograd-add-tanh | 6.5 (✓) | 6 (✓) | 6 (✓) | 7 (✓) | 8 (✓) | 6 (✓) |
+| T2-nanogpt-cosine-lr | 4 (✓) | 5.5 (✓) | 3.5 (✓) | 7 (✓) | 8 (✓) | 3 (✓) |
+| T3-micrograd-fix-bug | 3.5 (✓) | 4 (✓) | 3 (✓) | 8 (✓) | 8 (✓) | 3.5 (✓) |
+| T4-micrograd-extract-const | 4.5 (✓) | 5 (✓) | 5 (✓) | 7 (✓) | 8 (✓) | 4.5 (✓) |
+| T6-violation-refusal | 4.5 (✓) | 3.5 (✓) | 3.5 (✓) | 9 (✓) | 9 (✓) | 3.5 (✓) |
+| **均分** | **4.6** | **4.8** | **4.2** | **7.6** | **8.2** | **4.1** |
 
-**Oracle pass rate**: 20/20 = 100%
+**Oracle pass rate**: 30/30 = 100%
+
+> † 标注的工具是 **provisional self-judge**（executor 同时 judge，无独立 reviewer，interRaterDelta=null）。这些分数仅作 descriptive signal，详见 §4.2。
+
+### 4.2 Model Caveat（不同 executor / 评分方式的混跑披露）
+
+| 工具 | executor model | execution mode | judge | inter-rater delta |
+|------|---------------|----------------|-------|-------------------|
+| control, gstack, spec-driver, superpowers | claude-sonnet-4-6 | non-interactive | independent-double-blind | avg 0.65 |
+| spec-driver-opus | claude-opus-4-7 | in-session-opus-no-context | self-judge-main-session-opus-4-7 | — (no second judge) |
+| spec-driver-spectra | claude-opus-4-7 | in-session-opus-with-spectra-context | self-judge-main-session-opus-4-7 | — (no second judge) |
+
+**披露**:
+- caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献
+
+**如何读这张矩阵**（重要 — 不要被均分误导）：
+
+1. **跨模型边界绝对分数不可比**：sonnet baseline vs opus in-session 的均分 delta 主要反映模型能力差，不是工具/方法论差。
+2. **Self-judge 分数仅作 descriptive signal**：标注为 `self-judge` 的工具，executor 同时是 judge，存在内生 bias（无独立 reviewer 校准）。这些分数**不可与有 inter-rater delta 的工具直接对比**，需独立双盲重评后才能主张方法论价值。
+3. **Same-model delta 才有归因价值，且仍需 n 足够大**：如 spec-driver-opus vs spec-driver-spectra 在 5 任务下的均分 delta，最多算"context 价值的初步信号"，不是统计学意义上的因果证明。需 n≥20 + 双盲 + 置信区间才能得出 methodology 主张。
 
 ## 5. Differentiation Insights（自动检测，spread ≥ 1）
 
+- **task T6-violation-refusal**: spec-driver-opus (9) vs superpowers (3.5), spread=5.5
+- **task T2-nanogpt-cosine-lr**: spec-driver-spectra (8) vs superpowers (3), spread=5
+- **task T3-micrograd-fix-bug**: spec-driver-opus (8) vs spec-driver (3), spread=5
 - **doc quality on micrograd**: spectra (8) vs graphify (4.5), spread=3.5
+- **task T4-micrograd-extract-const**: spec-driver-spectra (8) vs superpowers (4.5), spread=3.5
 - **doc quality on nanoGPT**: spectra (7) vs graphify (4), spread=3
 - **doc quality on self-dogfood**: spectra (7) vs aider-repomap (4), spread=3
-- **task T2-nanogpt-cosine-lr**: gstack (5.5) vs superpowers (3), spread=2.5
-- **task T3-micrograd-fix-bug**: gstack (4) vs spec-driver (3), spread=1
-- **task T6-violation-refusal**: control (4.5) vs superpowers (3.5), spread=1
+- **task T1-micrograd-add-tanh**: spec-driver-spectra (8) vs superpowers (6), spread=2
 
 ## 6. Stale Fixture Warnings（staleAfterDate ≤ 30 天）
 
@@ -126,7 +150,7 @@
 | SC | 标准 | 状态 |
 |----|------|------|
 | SC-002 | schema 1.1 fixture | ✅ 9 个 spectra 类 |
-| SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 4 工具 × 5 任务 = 20 矩阵 |
+| SC-004 | ≥ 3 工具 × ≥ 3 任务 | ✅ 6 工具 × 5 任务 = 30 矩阵 |
 | SC-008 | cost ≤ $120 | ✅ $12.69 / $120.00 (剩 $107.31) |
 
 ## 8. Tool Outputs（全量产物对比，点链接进目录）
@@ -151,4 +175,4 @@
 
 ---
 
-*Auto-generated by `scripts/eval-report.mjs` from 29 fixture(s) under `tests/baseline/`. Schema 1.1.*
+*Auto-generated by `scripts/eval-report.mjs` from 39 fixture(s) under `tests/baseline/`. Schema 1.1.*

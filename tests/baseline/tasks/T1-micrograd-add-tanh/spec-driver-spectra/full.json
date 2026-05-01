@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-opus-4-7",
+    "runTimestampUtc": "2026-05-01T02:54:46.738Z",
+    "runHostOs": "darwin",
+    "command": "in-session",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra/task-runner-stderr.log",
+    "pinnedAt": "2026-05-01T02:54:46.738Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 90000,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "spec-driver-spectra",
+    "executionMode": "in-session-opus-with-spectra-context",
+    "wallMs": 90000,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 3,
+    "uncommittedChanges": 5,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E '^\\\\s+def tanh\\\\(self\\\\)' micrograd/engine.py\",\"passed\":true,\"output\":\"    def tanh(self):\\n\"},{\"cmd\":\"grep -E '(test_tanh|tanh\\\\()' test/test_engine.py\",\"passed\":true,\"output\":\"def test_tanh_forward_backward_torch_parity():\\n    y = x.tanh()\\n    yt = xt.tanh()\\n    assert abs(y.data - math.tanh(0.5)) < tol\\n    assert abs(x.grad - (1 - math.tanh(0.5) ** 2)) < tol\\ndef test_tanh_\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 8,
+    "rubricJudgeRationale": "Same correct tanh closure；测试更扎实：torch parity（与 test_more_ops 一致约定）+ 多值 sweep + 多路径累积测试（直接对应 spectra context 强调的 += 累积合同）。比 opus-no-context 多 2 个针对性测试。",
+    "interRaterDelta": null,
+    "diffStat": " .gitignore          |  1 +\n micrograd/engine.py | 11 +++++++++++\n test/test_engine.py | 46 ++++++++++++++++++++++++++++++++++++++++++++++\n 3 files changed, 58 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "claude-opus-4-7",
+    "executorRuntime": "main-session-opus-4-7",
+    "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
+    "judgedBy": "self-judge-main-session-opus-4-7"
+  }
+}

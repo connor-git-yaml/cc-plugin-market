@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-opus",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/nanoGPT",
+    "targetCommit": "3adf61e154c3fe3fca428ad6bc3818b27a3b8291",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "claude-opus-4-7",
+    "runTimestampUtc": "2026-05-01T02:56:56.167Z",
+    "runHostOs": "darwin",
+    "command": "in-session",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-opus",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-opus/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T2-nanogpt-cosine-lr/spec-driver-opus/task-runner-stderr.log",
+    "pinnedAt": "2026-05-01T02:56:56.167Z",
+    "staleAfterDate": "2026-10-28",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 60000,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T2-nanogpt-cosine-lr",
+    "tool": "spec-driver-opus",
+    "executionMode": "in-session-opus-no-context",
+    "wallMs": 60000,
+    "tokensTotal": null,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 4,
+    "primaryOracle": {
+      "kind": "ast-diff",
+      "passed": true,
+      "details": "[{\"cmd\":\"grep -E 'def get_lr|get_lr\\\\s*=' train.py\",\"passed\":true,\"output\":\"def get_lr(it):\\n\"},{\"cmd\":\"grep -E '(cosine|math\\\\.cos|np\\\\.cos)' train.py\",\"passed\":true,\"output\":\"# learning rate schedule: linear warmup -> cosine decay -> min_lr floor\\n    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))\\n\"},{\"cmd\":\"grep -E 'param_group\\\\[.lr.\\\\]|param_group..lr..\\\\s*=' train.py\",\"passed\":true,\"output\":\"        param_group['lr'] = lr\\n\"}]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": 7,
+    "rubricJudgeRationale": "正确实现 warmup + cosine + min_lr floor；接入训练循环 set 全部 param_groups。无 docstring/边界检查注释，但功能正确。无 context 下 reproduce 标准实现。",
+    "interRaterDelta": null,
+    "diffStat": " train.py | 15 +++++++++++++++\n 1 file changed, 15 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "claude-opus-4-7",
+    "executorRuntime": "main-session-opus-4-7",
+    "modelDisclaimer": "caveat: 主 session opus 4.7 直接执行（claude CLI OAuth 失效），与其他 4 工具的 sonnet-4-6 不可直接比较绝对分数；spec-driver-spectra vs spec-driver-opus（同模型）的 delta 是消除模型变量后的 spectra-context 真实贡献",
+    "judgedBy": "self-judge-main-session-opus-4-7"
+  }
+}
