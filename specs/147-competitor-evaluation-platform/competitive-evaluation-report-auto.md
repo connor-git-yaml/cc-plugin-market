@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-01T16:02:31.332Z
-> **Git**: feature/147-competitor-evaluation-platform @ 22752a7
+> **生成时间**: 2026-05-03T05:08:30.453Z
+> **Git**: HEAD @ 461382d
 > **Fixture 总数**: 40（Spectra 类 12 + Spec Driver 类 25 + variants 3）
 
 ---
