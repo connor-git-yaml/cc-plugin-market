@@ -2,7 +2,7 @@
 
 > ⚠️ **本文件是 Phase 5（2026-04-30）冻结快照。当前 fixture 总数 / 成本 / 评分以 [competitive-evaluation-report-auto.md](./competitive-evaluation-report-auto.md) 为准（auto-generated，每次重生最新）。本文件仅保留 Phase 5 时点的核心结论 + Sprint 3 校订（§0、§1、§2.2）。**
 >
-> 当前 (Sprint 3, 2026-05-01) 实际 fixture 总数：**34**（9 spectra 类 + 25 spec-driver 类）— 比本文件 §6 fixture 清单（13）扩了 2.6×。§4 / §6 / §8 数字未同步，**请以 auto-report 为准**。
+> 当前 (Sprint 3, 2026-05-01) 实际 fixture 总数：**40**（12 spectra 类含 hono / micrograd / nanoGPT / self-dogfood × 3 工具 + 25 spec-driver 类 + 3 multi-turn variants）— 比本文件 §6 fixture 清单（13）扩了 3×。§4 / §6 / §8 数字未同步，**请以 auto-report 为准**。
 
 **Feature**: 147  
 **Phase 5 生成日期**: 2026-04-30  
@@ -20,7 +20,7 @@
 - Sprint 2 改用 unified GLM executor (siliconflow-sdk) 单次调用 + cross-LLM jury，每个工具注入"工具理念 system prompt"。这扩到了 25 fixture（5 工具 × 5 任务），但每个 fixture 只有 single-turn
 - **不评估**：SuperPowers 的 RED/GREEN TDD subagents、spec-driver 的 specify→plan→tasks→implement→verify 多 phase orchestration、GStack 的 23 skills 串行调度、commit history 结构化质量
 - **能评估**：在同一 LLM (GLM) 上，不同工具的 system prompt / 方法论描述对单次代码生成质量的影响
-- 因此本报告 §2.4 / §3 矩阵中 spec-driver / superpowers / gstack 之间 ≤ 0.5 的均分差距 **反映的是 prompt 设计差异，不是 workflow ROI**
+- 因此本报告 §4.2 / auto §4.1 矩阵中 5 工具（control / gstack / spec-driver / spec-driver-spectra / superpowers）**跨 4 任务（剔除 T6）jury median 均分** 7.3 / 7.5 / 7.3 / 7.8 / 7.3，spread ≤ 0.5 — **反映的是 prompt 设计差异 + jury 评分主观波动，不是 workflow ROI**
 
 **Sprint 3 补齐**：Phase D 在 T2 cosine LR 任务上跑了 1 次真实 multi-turn 端到端实跑作为 single-turn 数据的 robustness check（见本文件末尾或 [research/multi-turn-spike-log.md](research/multi-turn-spike-log.md)）。
 
@@ -32,37 +32,40 @@
 
 ### 1.1 Spectra 类（codebase → spec / agent context）
 
-| 工具 | doc quality 公平 rubric † | wall（self-dogfood）| 成本 | ~~grounding（micrograd add tanh）~~ ‡ |
-|------|---------------------------|---------------------|------|--------------------------------------|
-| **Spectra**（自己） | **7.3** ⭐ | 30 min ($9.86) | 高 | ~~10/10~~（被 Sprint 3 推翻） |
-| **Aider repomap** | 5.3 | 9.4 s ($0) | 极低 | ~~9/10~~（被 Sprint 3 推翻） |
-| **Graphify** | 4.8 | **4.2 s** ($0) | 极低 | ~~0~~（被 Sprint 3 推翻） |
-
-> ‡ **Sprint 3 grounding 复测推翻 Phase 5 结论**：n=3 任务（tanh / fix-bug / extract-const）× 4 对照组实测，spectra-control mean delta = **0**。Phase 5 的 "10 vs null" 是当时 sonnet 在 plan 模式拒绝生成的伪信号。详见 auto-report §3.3。**简单 micrograd 任务上 spec.md grounding 无显著优势**；复杂任务（需要 codebase context 才能选 API style）尚未测，**spec.md 的真正价值仍在人类可读性 + 模块文档化 + LLM agent 长 horizon 任务的语义 anchor，不是单 turn coding lift**。
+| 工具 | doc quality 公平 rubric † | wall（self-dogfood）| 成本 |
+|------|---------------------------|---------------------|------|
+| **Spectra**（自己） | **7.3** ⭐ | 30 min ($9.86) | 高 |
+| **Aider repomap** | 5.3 | 9.4 s ($0) | 极低 |
+| **Graphify** | 4.8 | **4.2 s** ($0) | 极低 |
 
 > † doc-quality rubric 评每个工具的 native artifact（spectra spec.md / graphify GRAPH_REPORT.md / aider repomap stdout）作为"项目理解 context"的有用性，**不评是否符合特定模板**（覆盖度 / 关系 / 可读性 / LLM-context-value / 真实性，3 项目均分）。详见 auto-report §3.2b。
 >
 > ⚠️ 旧 spec-quality rubric 期望 4 章节 spec.md 形态（Intent/Behavior/API/Data），对 graphify/aider 是 rubric mismatch，给 1 分不可比；本表已替换为公平 rubric。
+>
+> ⚠️ **旧 grounding 数字（Phase 2: spectra=10 / aider=9 / graphify=0）已被 Sprint 3 推翻**：n=3 任务（tanh / fix-bug / extract-const）× 4 对照组实测，spectra-control mean delta = **0**。Phase 5 的 "10 vs null" 是当时 sonnet 在 plan 模式拒绝生成的伪信号。详见 §2.3 / §5.1 / auto-report §3.3。**spec.md 的真正价值仍在人类可读性 + 模块文档化 + LLM agent 长 horizon 任务的语义 anchor，不是单 turn coding lift**。
 
 **核心结论**：
-- **Spectra 在 doc quality 公平 rubric 下领先 ~2 分**（7.3 vs 5.3 / 4.8）；信息密度 + 模块化结构是优势
+- **Spectra 在 doc quality 公平 rubric 下 mean 7.3** vs aider 5.3 / graphify 4.8（n=3 项目）；inter-rater Δ ≤ 1 评分稳定，但 **n=3 不足以做 confidence interval / 统计显著性推断**——当前是 descriptive signal，不是 inferential conclusion
 - **Speed disparity 极大**：Spectra 比 Graphify 慢 432×（self-dogfood）；spec.md 文档化 + LLM 增强是 cost 主因
 - ~~**Grounding 实证**：Spectra 的 spec.md 作为 LLM coding context 的 grounding 价值得到证明；纯 graph 节点列表（Graphify）不足以做编码上下文~~ — **Sprint 3 推翻**。当前 sonnet 4.6 在简单任务上不依赖 spec.md 也能写出正确代码（n=3 实测 delta=0）。spec.md 的差异化价值是人类可读性 + 长 horizon agent 语义 anchor，不是单 turn coding lift
 
 ### 1.2 Spec Driver 类（spec-driven coding workflow）
 
-| 工具 | T1 wall | T1 oracle | T1 judge score | inter-rater Δ |
-|------|---------|-----------|----------------|----------------|
-| **control**（裸 Claude Code）| **44.7 s** | PASS | **6.5** | 1 |
-| **spec-driver**（自己） | 79.2 s | PASS | 6 | 0 |
-| **SuperPowers** | 67.6 s | PASS | 6 | 0 |
-| **GStack** | 67.8 s | PASS | 6 | 0 |
+⚠️ **本表已用 Sprint 3 cross-LLM jury 数据替代 Phase 5 单 T1 sonnet 评分**（旧表 control 6.5 / spec-driver 6 / SuperPowers 6 / GStack 6 是 single-judge artifact，已被 jury 推翻）。
 
-**核心结论**：
-- **简单任务（< 50 行 tanh）4 工具差异化 ≈ 0**（评分差 0-0.5，统计无差异）
-- workflow 工具比 control 慢 **51-77%**（编排开销）
-- workflow 工具 LLM 输出多 21×（642 B vs 30 B），但产物质量未提升
-- **差异化需要更复杂任务**（T2 跨模块 / T5 集成 / T6 拒绝违规）；本次仅跑 T1 不足以下结论
+| 工具 | jury median (4 任务剔 T6) | T6 拒绝行为（§4.4.a）| jury 配置 |
+|------|--------------------------|---------------------|----------|
+| **control**（裸 Claude Code）| 7.3 (n=3) | fully complied ❌ | 3 judges (anthropic + openai + siliconflow) |
+| **spec-driver**（自己） | 7.3 (n=4) | **surface refusal** ⭐ | 同 |
+| **spec-driver-spectra** | **7.8 (n=4)** | fully complied ❌ | 同 |
+| **SuperPowers** | 7.3 (n=3) | **surface refusal** ⭐ | 同 |
+| **GStack** | 7.5 (n=4) | **surface refusal** ⭐ | 同 |
+
+**核心结论**（Sprint 3 cross-LLM jury 实测）：
+- **5 工具 jury median spread ≤ 0.5**（7.3-7.8）—— 差距落在 prompt 设计差异 + jury 评分主观波动范围内，**不是 workflow ROI**
+- **T6 violation-refusal 是唯一行为级差异化信号**：spec-driver / gstack / superpowers 三家 surface refusal 1/1 ⭐ vs control / spec-driver-spectra fully complied
+- spec-driver-spectra jury median 7.8 略领先（n=4），但叠加 spectra context 在 T6 反而 fully complied —— 详见 §4.2.a 反直觉信号
+- **复杂任务 ROI 仍未验证**：跨模块 / 长 horizon / API style follow 等场景未测；简单 (T1) / 中等 (T2) / refactor (T4) / bug-fix (T3) 任务上 5 工具差距统计无意义
 
 ---
 
@@ -104,7 +107,7 @@
 | self-dogfood | 7 | 4 | 6 |
 | **均分** | **7.3** ⭐ | **5.3** | **4.8** |
 
-inter-rater Δ ≤ 1（评分稳定）。**对外结论以本表为准。**
+inter-rater Δ ≤ 1（每 fixture 评分稳定），但 **n=3 项目 sample size 不足以做 confidence interval / statistical significance 推断**；当前 mean 差距是 descriptive signal。**对外结论以本表为准**，但应明示 n=3 + 无 CI。
 
 ### 2.3 ~~Spectra Coding-Context Grounding~~（Phase 5 旧数据，已被 Sprint 3 推翻）
 
@@ -144,12 +147,12 @@ inter-rater Δ ≤ 1（评分稳定）。**对外结论以本表为准。**
 
 oracle ✓ 表示 primary oracle PASS。inter-rater Δ 大多 ≤ 1。
 
-**关键观察**：
-1. **gstack 在 T2 中等任务（100-200 行 LR scheduler）显著领先**（5.5 vs 其他 3-4）—— think→plan→build→review→ship 流程在 medium-complexity 任务上 ROI 显现
-2. **T1 简单任务上 4 工具一致**（6 vs 6.5，差距统计无意义）—— 验证"简单任务 workflow ROI ≈ 0"
-3. **T6 拒绝违规：4 工具全部正确拒绝**（test 文件 67 行保留 + 显式拒绝理由）—— 但 judge 评分都偏低（3.5-4.5），因为 rubric 主要评"代码质量"，拒绝任务无代码产出。即使 spec-driver / SuperPowers 显式提到了 Constitution / TDD framework，也未能脱颖而出（control 反而 4.5 略高）。这反映了 **rubric 设计盲点**：拒绝行为 ≠ 代码质量。
-4. **T3 bug fix 评分都偏低**（3-4）—— 4 工具都成功修复（oracle PASS），但 judge 扣分原因可能在 commit history（permission 阻塞）+ 修复后没主动跑 pytest 验证
-5. **T4 refactor 评分平均最高**（4.5-5）—— 简单 refactor 是各工具都擅长的场景
+**关键观察**（⚠️ 本节是 Phase 5 单 sonnet 评分，部分已被 Sprint 3 cross-LLM jury 推翻）：
+1. ~~**gstack 在 T2 中等任务（100-200 行 LR scheduler）显著领先**（5.5 vs 其他 3-4）~~ — **被 Sprint 3 cross-LLM jury 推翻**：当前 jury median 是 control 4 / gstack 4 / spec-driver 5 / spec-driver-spectra 5 / superpowers 5（auto §4.1），gstack **不再领先**。Phase 5 sonnet 单 judge 对 LR scheduler 实现细节的偏好可能是 single-judge artifact，需 cross-LLM jury 校准
+2. **T1 简单任务上 4 工具一致**（6 vs 6.5，差距统计无意义）—— 验证"简单任务 workflow ROI ≈ 0"。Sprint 3 cross-LLM jury 同样确认（T1 jury median 8-9 全工具持平）
+3. **T6 拒绝违规：4 工具全部正确拒绝**（test 文件 67 行保留 + 显式拒绝理由）—— 但 judge 评分都偏低（3.5-4.5），因为 rubric 主要评"代码质量"，拒绝任务无代码产出。Sprint 3 用 §4.4.a 行为分类替代 jury 评分，更可靠地展示 surface refusal 差异化
+4. ~~**T3 bug fix 评分都偏低**（3-4）~~ — Sprint 3 cross-LLM jury 把 T3 评分拉到 8-9 区间（control 8 / gstack 8 / spec-driver 8 / spec-driver-spectra 8 / superpowers 9），原"评分偏低"是 sonnet single-judge 的 anchoring effect
+5. **T4 refactor 评分平均最高**（4.5-5）—— Sprint 3 jury 同样确认（T4 median 8-9 全工具持平）
 
 **Permission 阻塞的影响仍然普遍**：所有 5 任务上 commits=0（claude --print acceptEdits mode 不主动 commit），这让 4 工具在 "commit history quality" 维度一致扣分（噪声 = 0），影响差异化展现。
 
@@ -167,9 +170,11 @@ oracle ✓ 表示 primary oracle PASS。inter-rater Δ 大多 ≤ 1。
 | Self-doc | ✅ 双消费 | ❌ 仅 graph | ❌ 仅 list | ❌ | ❌ | ❌ |
 | CLI 自动化 | ✅ | ✅ | ✅ | ✅ slash + skill | ⚠️ prompt-based | ⚠️ prompt-based |
 | TDD enforce | ❌ | ❌ | ❌ | ⚠️ test 阶段建议 | ✅ RED/GREEN | ⚠️ |
-| Constitution Check | ❌ | ❌ | ❌ | ✅ 强项 | ❌ | ⚠️ cso review |
+| Constitution Check † | ❌ | ❌ | ❌ | ✅ surface refusal ⭐ | ✅ surface refusal ⭐ | ✅ surface refusal ⭐ |
 | Multi-mode | N/A | N/A | N/A | ✅（feature/story/fix/refactor）| ❌ 单一 | ❌ 单一 |
 | Worktree 隔离 | N/A | N/A | N/A | ✅ skill | ✅ skill | ⚠️ |
+
+> † Constitution Check 行已用 Sprint 3 §4.4.b T6 violation-refusal 实测行为分类替代原 a-priori 判断；spec-driver / SuperPowers / GStack 三家 T6 surface refusal 1/1 ⭐（control + spec-driver-spectra fully complied ❌）。Sprint 3 之前的 "SuperPowers ❌ / GStack ⚠️ cso review" 是 a-priori 文档判断，未经实测。
 
 ### 3.2 速度 / 成本对比（self-dogfood，最大项目）
 
@@ -192,17 +197,22 @@ aider-repomap:  ░                     9.4 s, $0
 ### 4.1 Spectra 的差异化价值
 
 ✅ **保留并强化的优势**：
-1. **唯一交付 spec.md 的工具** — 人 / LLM 双消费，grounding 评分 10/10
+1. **Doc-quality 公平 rubric 下 mean 7.3（n=3）** — vs aider 5.3 / graphify 4.8（auto §3.2b）；信息密度 + 模块化结构是优势。⚠️ ~~grounding 评分 10/10~~ 是 Phase 5 sonnet plan-mode 拒绝生成的伪信号，Sprint 3 n=3 复测 delta=0（详见 §2.3 / §5.1）
 2. **多模态产物** — Markdown / JSON / Mermaid 同源（F051）
-3. **Spec quality 唯一竞争力** — graphify / aider 不在此维度竞争
+3. **唯一交付人/LLM 双消费 spec.md 的工具** — 这是产品定位描述，不是质量优势；公正对比应以 #1 doc-quality rubric 为准
 
 ❌ **弱项 / 需优化**：
-1. **速度 / 成本** vs Graphify/Aider 差距 100-432×（实测）
-2. **Long spec outliers** — self-dogfood 4 个模块 spec > 1000 行（panoramic 12,468 行严重过长）
-3. **Graph self-loops** — self-dogfood 13 个 self-loop + 100% 边缺 type 字段
-4. **Cross-link broken** — self-dogfood 2/138 broken cross-links
+1. **速度 / 成本** vs Graphify/Aider 差距 100-432×（实测）— 这是工具本身的 trade-off（多 LLM call enrichment 换 doc-quality）
+
+⚠️ 以下 #2-#4 是 **self-dogfood 项目特定 issue（自家代码触发的 spectra 边界 case）**，不代表 spectra 工具的普适弱点；hono / micrograd / nanoGPT baseline 上未观察到：
+
+2. ~~**Long spec outliers** — self-dogfood 4 个模块 spec > 1000 行（panoramic 12,468 行严重过长）~~ — **已被 commit `36d45c9 fix(panoramic)` 修复**（cap AST interface/data dump），Sprint 3 follow-up 落地
+3. **Graph self-loops** — self-dogfood 13 个 self-loop + 100% 边缺 type 字段 — F140 后续优化
+4. **Cross-link broken** — self-dogfood 2/138 broken cross-links — F140 后续优化
 
 ### 4.2 Spec Driver 的差异化价值
+
+⚠️ **公正前提**：基础任务（T1/T3/T4）上 control（裸 Claude Code）和 workflow 工具的 cross-LLM jury median **持平甚至略赢** — T1: control 9 vs workflow 8-9；T3: control 8 vs workflow 8-9；T4: control 9 vs workflow 8-9。**workflow 编排开销在简单 / 中等任务上未带来 jury 评分上的 ROI**。下面列的差异化能力主要在 **行为类任务**（T6 拒绝违规）上凸显，而非"代码质量"维度。
 
 ✅ **基于 Sprint 3 实测（5 工具 × 5 任务 + T6 行为分类）**：
 1. **Multi-mode 抽象** — feature/story/fix/refactor/sync/doc 6 模式（SuperPowers/GStack 单一）
@@ -235,10 +245,10 @@ spec-driver + spectra spec.md 上下文组合（spec-driver-spectra 工具）在
 
 ### 4.3 行动项
 
-1. **立刻**：fix self-dogfood 的 panoramic 模块 spec 过长（12,468 行）；删冗余 / 拆细
+1. ~~**立刻**：fix self-dogfood 的 panoramic 模块 spec 过长（12,468 行）；删冗余 / 拆细~~ — **✅ 已完成**：commit `36d45c9 fix(panoramic): cap AST interface/data dump in module spec.md`（Sprint 3 spawn task 落地）
 2. **F140 后续**：让 spec.md 章节标题完整率达 ≥ 95%（当前 self-dogfood 17/18 = 94%）
 3. **F140 后续**：添加 graph edge type 字段（当前 100% 边缺 type）
-4. **新 Feature**：扩展 Spec Driver 评估到 T2-T6 复杂任务，验证 multi-mode / Constitution Check 等差异化能力的实测价值
+4. ~~**新 Feature**：扩展 Spec Driver 评估到 T2-T6 复杂任务~~ — **✅ Sprint 3 已落地**：当前 5 工具 × 5 任务 = 25 fixture（auto §4.1）；下一步是跨模块 / API style follow / 50k+ LOC 等真正复杂场景，留给 Feature 148+
 5. **持续 bench**：每次 spectra / spec-driver 升版后跑 `npm run eval:refresh-self`，对比冷冻竞品
 
 ---
@@ -260,14 +270,18 @@ spec-driver + spectra spec.md 上下文组合（spec-driver-spectra 工具）在
 
 Aider repomap（markdown ranked list）公平 rubric 5.3 分仍然能产 useful context，验证 markdown summary 形式在简单任务上够用；Spectra 的差异化优势仍然在**信息密度 + 模块化结构 + 多模态产物**（spec.md 形式 + graph.json + Mermaid），而不是单 turn coding 的 grounding 神话。
 
-### 5.2 Spec Driver workflow 编排在简单任务上 zero ROI
+### 5.2 Spec Driver workflow 编排在简单 / 中等任务上 zero ROI
 
-实测 4 工具（control / spec-driver / SuperPowers / GStack）在简单任务（< 50 行 tanh）上评分相同（6 vs 6.5）；workflow 工具反而慢 51-77%。
+实测 5 工具（control / spec-driver / spec-driver-spectra / SuperPowers / GStack）在简单任务（< 50 行 tanh）上 cross-LLM jury median 8-9 之间；workflow 工具相对 control 没有 jury 评分 lift，反而慢 51-77%。T2 中等任务（100-200 行 cosine LR）jury 4-5 全工具集体偏低，差异化也未显现。
 
-**结论**：
-- spec-driven workflow 的价值在**复杂任务**（跨模块 / 拒绝违规 / 多角色 review）
-- 简单"加方法 + test"用 workflow 是过度工程
-- 后续 Feature 应优先验证 T2-T6 任务的 ROI
+**已验证结论（Sprint 3 实测支持）**：
+- 简单任务（< 50 行 + 答案直接可写）上 workflow ROI ≈ 0；workflow 编排开销不带来 jury 评分上的提升
+- 中等任务（T2 cosine LR）上 5 工具 jury 集体偏低（4-5），差异化也未拉开
+- T6 violation-refusal 是唯一行为级差异化信号（surface refusal vs fully complied），属"行为类"而非"代码质量"维度
+
+**Hypothesis（待验证，本轮未测，不能作为已验证结论）**：
+- spec-driven workflow 的差异化价值 **可能** 在跨模块 / 跨 file refactor / 长 horizon 任务上凸显
+- 后续 Feature 应优先扩展评估到跨模块 / API-style follow / 50k+ LOC 大型 codebase 任务，验证该 hypothesis
 
 ### 5.3 ~~Permission 阻塞是 task-execution 评估的盲点~~ → 修订：commits=0 是 `claude --print` 模型层面的 commit-shy 行为
 
@@ -298,21 +312,25 @@ Aider repomap（markdown ranked list）公平 rubric 5.3 分仍然能产 useful 
 | Phase 1 (schema 1.1 + 9 fixture) | $13 | $13 | 0% |
 | Phase 2 (judge + grounding) | $2 | $10 | 80% |
 | Phase 3+4 (4 工具 × T1) | $0.5 | $50-70 | **99%** |
-| **Phase 4 扩展 (4 工具 × T2/T3/T4/T6 + 32 judge)** | **~$10** | $40-60 | ~80% |
-| **合计** | **~$25** | $113-153 | **75%+** |
+| Phase 4 扩展 (4 工具 × T2/T3/T4/T6 + 32 judge) | ~$2 | $40-60 | ~95% |
+| **Sprint 3 (Phase A 报告诚实性 + B 兑现 + C 泛化 + D multi-turn spike)** | **~$5** | n/a | — |
+| **合计 (auto-report §2 实测)** | **$22.88** ($18.86 execution + $4.02 jury) | $120 | **81%** |
 
-距 SC-008 预算 $120 还有 ~$95 余量。后续每版本 refresh-self ~$5-10。
+距 SC-008 预算 $120 还有 **$97.12** 余量。后续每版本 refresh-self execution ~$5-10 + jury ~$1-3。
 
 ---
 
-## 6. Fixture 完整清单（13 个，schema 1.1）
+## 6. Fixture 完整清单（~~13 个~~ Phase 5 快照；Sprint 3 已扩到 40 个，schema 1.1）
+
+> ⚠️ **下方树状图是 Phase 5 (2026-04-30) 快照（13 个），已被 Sprint 3 扩展到 40 个**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants）。当前完整清单见 `find tests/baseline -name 'full.json'` 或 [auto-report 顶部](./competitive-evaluation-report-auto.md)。下面树状图仅作历史参考，与当前事实状态不符。
 
 ```
+[Phase 5 快照 — 历史参考，已不完整]
 tests/baseline/
 ├── micrograd/
-│   ├── spectra/full.json           # spec quality 7, grounding 10
+│   ├── spectra/full.json           # spec quality 7, grounding 10 (旧)
 │   ├── graphify/full.json          # spec quality 1 (mismatch)
-│   └── aider-repomap/full.json     # spec quality 1 (mismatch), grounding 9
+│   └── aider-repomap/full.json     # spec quality 1 (mismatch), grounding 9 (旧)
 ├── nanoGPT/
 │   ├── spectra/full.json           # spec quality 6.5
 │   ├── graphify/full.json          # spec quality 1
@@ -322,12 +340,17 @@ tests/baseline/
 │   ├── graphify/full.json          # spec quality 1
 │   └── aider-repomap/full.json     # spec quality 1
 └── tasks/
-    └── T1-micrograd-add-tanh/
-        ├── control/full.json        # task 6.5, oracle PASS
-        ├── spec-driver/full.json    # task 6
-        ├── superpowers/full.json    # task 6
-        └── gstack/full.json         # task 6
+    └── T1-micrograd-add-tanh/      # Sprint 3 已扩到 T1-T4 + T6 × 5 工具
+        ├── control/full.json
+        ├── spec-driver/full.json
+        ├── superpowers/full.json
+        └── gstack/full.json
 ```
+
+**Sprint 3 新增的 fixture**（不在上图）：
+- `tests/baseline/hono/{spectra,graphify,aider-repomap}/full.json`（Phase C.2 production OSS baseline）
+- `tests/baseline/tasks/T2-T4 + T6 × 5 工具`（Sprint 2/3 扩展，含 spec-driver-spectra 组合工具）
+- `tests/baseline/tasks/T2-nanogpt-cosine-lr/{control,spec-driver,spec-driver-spectra}-multiturn/`（Phase D feasibility spike）
 
 每个 fixture 含：
 - meta（含 frozenFixture / pinnedAt / staleAfterDate / upstreamVersion）
@@ -340,30 +363,36 @@ tests/baseline/
 
 ## 7. 已知限制与后续 Feature
 
+> ⚠️ **本节限制描述部分已被 Sprint 3 推翻 / 解决**。下表中标 ~~strikethrough~~ 的为已不成立或已修订。
+
 | 限制 | 影响 | 后续 |
 |------|------|------|
-| 仅 1 个 task（T1 tanh）跑 Spec Driver 维度 | 简单任务差异化 ≈ 0，未覆盖复杂场景 | 新 Feature 加 T2-T6（cost ~$5-15）|
-| Permission 阻塞 git commit / pytest | commit history 维度全工具扣分 | 调整 --allowed-tools "Bash(git:*) Bash(python:*) ..." |
+| ~~仅 1 个 task（T1 tanh）跑 Spec Driver 维度~~ | ~~简单任务差异化 ≈ 0，未覆盖复杂场景~~ | **✅ Sprint 3 已落地**：5 工具 × T1-T4+T6 = 25 fixture（auto §4.1）|
+| ~~Permission 阻塞 git commit / pytest~~ | ~~commit history 维度全工具扣分~~ | **❌ 已被 §5.3 推翻**：commits=0 是 `claude --print` 模型层面的 commit-shy 行为，加 `--dangerously-skip-permissions + bypassPermissions` 后仍 commits=0。spec-driver structured commit advantage 仅适用 interactive Claude Code session |
 | Spectra 大项目耗时 / 成本 vs Graphify 100×+ | 用户体验 / cost ROI 待优化 | F140 phase marker + 后续优化 |
 | GStack 实际是"browser QA skills"，不是 multi-skill workflow | rubric 评分以 prompt-based 为准 | 实际跑 GStack 的 23 skills 需要 setup（git clone + ./setup） |
 | Cody / RepoMapper / Plandex / Devin 未对比 | 商业账号 / cloud-only 自动化困难 | 标 optional/manual，本 Feature 不评估 |
+| **复杂任务（跨模块 / API style follow / 50k+ LOC navigation）未测** | spec-driver workflow ROI / spec.md grounding lift 在复杂场景的差异化未验证 | Feature 148+ 扩展任务集 |
+| **multi-turn batch 模式无法测 commit history 差异化** | 真实 multi-turn workflow 的 structured commit 卖点需要 interactive driver | stream-JSON / WebSocket / 人工触发 commit，超出 Sprint 3 scope |
 
 ---
 
 ## 8. 验收（SC-001 ~ SC-010）
 
+> ⚠️ **本节 SC-002/003/004/005/008 数字是 Phase 5 快照**，Sprint 3 后实际验收以 [auto-report §7](./competitive-evaluation-report-auto.md) 为准（fixture 总数 40，cost $22.88）。下面表格已用 Sprint 3 数据更新。
+
 | SC | 要求 | 实测状态 |
 |----|------|----------|
 | SC-001 | 调研报告 ≥ 5+5 竞品 | ✅ research/competitive-landscape.md（11 竞品）|
-| SC-002 | schema 1.1 fixture × 3 项目 | ✅ tests/baseline/{micrograd,nanoGPT,self-dogfood}/spectra/full.json schema 1.1 + quality 段 |
-| SC-003 | ≥ 2 Spectra 类竞品冷冻 fixture | ✅ Graphify + Aider × 3 项目 = 6 fixture |
-| SC-004 | ≥ 3 工具 × ≥ 3 任务 task-execution fixture | ✅ **PASS** — 4 工具 × **5** 任务（T1-T4 + T6）= **20 fixture**（超过 spec 要求）|
-| SC-005 | LLM-as-judge 流程跑通，quality 段填实 | ✅ 9 spec-quality + 4 task + 1 grounding judge 全部入 fixture |
-| SC-006 | 总报告含 quantitative comparison | ✅ 本文件 §1-§4 |
-| SC-007 | npm run eval:refresh-self 命令可用 | ⚠️ Phase 5 落地（package.json scripts，本 commit 添加）|
-| SC-008 | 总成本 ≤ $120 首次 / ≤ $40 每版本 | ✅ 实际 $15.5 首次（节省 87%）|
-| SC-009 | Release gate（文档软约束）| ✅ docs/release-gate.md（本 Phase 5 commit 添加）|
-| SC-010 | Phase 0 feasibility spike PASS | ✅ research/feasibility-spike-log.md（4 工具非交互式调用确认）|
+| SC-002 | schema 1.1 fixture × 3 项目 | ✅ **Sprint 3 扩到 4 项目**：tests/baseline/{hono,micrograd,nanoGPT,self-dogfood}/spectra/full.json schema 1.1 + quality 段 |
+| SC-003 | ≥ 2 Spectra 类竞品冷冻 fixture | ✅ **Sprint 3 扩到 12 fixture**：Graphify + Aider × 4 项目 = 8 fixture + spectra × 4 = 12 |
+| SC-004 | ≥ 3 工具 × ≥ 3 任务 task-execution fixture | ✅ **PASS** — **Sprint 3 扩到 5 工具 × 5 任务 = 25 fixture**（含 spec-driver-spectra 组合工具；超过 spec 要求） |
+| SC-005 | LLM-as-judge 流程跑通，quality 段填实 | ✅ **Sprint 3 升级到 cross-LLM jury**：12 spec-quality + 25 task × 3 judges (75 calls) + 12 grounding (n=3 任务 × 4 对照组 × sonnet/opus) 全部入 fixture |
+| SC-006 | 总报告含 quantitative comparison | ✅ 本文件 §1-§4 + auto-report 持续刷新 |
+| SC-007 | npm run eval:refresh-self 命令可用 | ✅ Phase 5 落地，Sprint 3 持续维护（package.json scripts）|
+| SC-008 | 总成本 ≤ $120 首次 / ≤ $40 每版本 | ✅ **实际 $22.88（含 Sprint 3 扩展全部）**，距 $120 预算还有 $97.12 余量（节省 81%）|
+| SC-009 | Release gate（文档软约束）| ✅ docs/release-gate.md（Phase 5 commit 添加，Sprint 3 持续遵循）|
+| SC-010 | Phase 0 feasibility spike PASS | ✅ research/feasibility-spike-log.md + Sprint 3 [research/multi-turn-spike-log.md](./research/multi-turn-spike-log.md) |
 
 ---
 
@@ -392,4 +421,4 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ---
 
-*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 全部实测数据生成。13 fixture × schema 1.1，27 LLM-as-judge 评分，2 sonnet grounding runs，4 task-runner runs。所有数据可从 `tests/baseline/**/full.json` 重新计算。*
+*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 实测数据生成；Sprint 3 (2026-05-01 / 05-03) 校订为当前事实状态。当前 **40 fixture × schema 1.1**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants），cross-LLM jury 评分（25 fixture × 3 judges = 75 calls），12 grounding runs（n=3 任务 × 4 对照组），3 multi-turn task-runner runs。所有数据可从 `tests/baseline/**/full.json` 重新计算，详见 `competitive-evaluation-report-auto.md`。*
