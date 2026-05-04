@@ -26,6 +26,18 @@
 
 **Spectra 类 fixture（perf + spec quality + grounding）= 真实端到端实跑**，对外结论以 §2.1 / §2.2 + 公平 doc-quality rubric（auto-report §3.2b）为准。
 
+### 0.1 跨 run 统计噪声 caveat（2026-05-04 重跑实测）
+
+5 工具 × 5 任务 = 25 fixture 重跑一次（同 commit、同 GLM-5.1 driver、同 cross-LLM jury），实测：
+
+- **Oracle 状态**：24/25 fixture 完全稳定（GLM executor 高度可重现）；T6-control 在两次 run 之间 ✗ ↔ ✓ 翻转 1 次（GLM 单次拒绝行为有随机性）
+- **Jury median**：25 fixture 中 11 个 |Δ| ≥ 1（44%），最大漂移 ±3，spread 主要在 ±1 自然波动范围内
+- **5 工具均分排名跨 run 翻转**：旧轮 spec-driver-spectra 7.8 领先 → 新轮 spec-driver 7.5 领先；其他工具均分浮动 -0.7 ~ +0.2
+
+**结论**：当前 jury median 数字是 **single-run snapshot**，n=1 重测不足以做 statistical inference；workflow 工具间 ≤ 0.5 的均分差距 **不应作为质量排名信号**。要做 publish-grade 排名声明，需要 n≥5 重跑 + bootstrap CI（成本 ~$25 / 2 小时，留 Feature 148+）。
+
+详见 `tests/baseline/tasks/*` 当前 fixture（commit `742c0c0`）vs 重跑数据 `/tmp/fixtures-before/` baseline-diff 结果（已 surface 到 §4.2.a 反直觉信号根因）。
+
 ---
 
 ## 1. 执行摘要
@@ -100,14 +112,20 @@
 
 #### 2.2.b 公平 doc-quality rubric（同 rubric 评 native artifact）
 
-| 项目 | spectra | aider-repomap | graphify |
-|------|---------|---------------|----------|
+| 项目 | spectra | aider-repomap | graphify † |
+|------|---------|---------------|------------|
 | micrograd | 8 | 6 | 4.5 (Δ=1) |
 | nanoGPT | 7 | 6 | 4 |
 | self-dogfood | 7 | 4 | 6 |
 | **均分** | **7.3** ⭐ | **5.3** | **4.8** |
 
 inter-rater Δ ≤ 1（每 fixture 评分稳定），但 **n=3 项目 sample size 不足以做 confidence interval / statistical significance 推断**；当前 mean 差距是 descriptive signal。**对外结论以本表为准**，但应明示 n=3 + 无 CI。
+
+> ⭐ = 该列均分最高，**不代表 statistical significance**（n=3 + 无置信区间）。
+>
+> † **graphify 公平性 caveat**：graphify 的主产物是 `graph.json`（machine-readable，1094-3097 节点 / 1502-7136 边），`GRAPH_REPORT.md` 是 graph.json 的 secondary markdown 视图（community / god nodes / edge stats）。doc-quality rubric 评的是 GRAPH_REPORT.md 作为 LLM-context 的有用性 — graphify 4.8 的均分 **仅反映 secondary markdown 文档化能力**，不代表 graphify 工具整体 LLM 价值（其主输出 graph.json 在 §3.4 graph topology accuracy 上 micrograd 78% / nanoGPT 70% precision，是该维度真正优势）。如果 LLM 能消化 raw graph.json，graphify 整体价值会高于本 rubric 反映。
+>
+> aider-repomap 评分包含其 stdout 中 LiteLLM 兼容性 warnings（`Warning for anthropic/claude-3-5-sonnet`等约 10 行） — 这是 aider 工具真实输出现状，作为"LLM context 有用性"评估时合理保留。
 
 ### 2.3 ~~Spectra Coding-Context Grounding~~（Phase 5 旧数据，已被 Sprint 3 推翻）
 
@@ -215,7 +233,7 @@ aider-repomap:  ░                     9.4 s, $0
 ⚠️ **公正前提**：基础任务（T1/T3/T4）上 control（裸 Claude Code）和 workflow 工具的 cross-LLM jury median **持平甚至略赢** — T1: control 9 vs workflow 8-9；T3: control 8 vs workflow 8-9；T4: control 9 vs workflow 8-9。**workflow 编排开销在简单 / 中等任务上未带来 jury 评分上的 ROI**。下面列的差异化能力主要在 **行为类任务**（T6 拒绝违规）上凸显，而非"代码质量"维度。
 
 ✅ **基于 Sprint 3 实测（5 工具 × 5 任务 + T6 行为分类）**：
-1. **Multi-mode 抽象** — feature/story/fix/refactor/sync/doc 6 模式（SuperPowers/GStack 单一）
+1. ~~**Multi-mode 抽象** — feature/story/fix/refactor/sync/doc 6 模式（SuperPowers/GStack 单一）~~ — **本节降级为 feature inventory（未做实测验证）**：本轮评估只覆盖 single-turn batch mode，未验证 multi-mode 切换在哪个具体任务上带来 jury 评分提升或行为差异。**对外结论不应把 multi-mode 当作"已验证的差异化"列出**，应描述为"产品 feature 完整性"（spec-driver 6 模式 vs SuperPowers/GStack 单一模式），由用户判断是否对其用例有价值
 2. **Constitution Check 拒绝违规需求** — **本轮唯一被实测验证的差异化能力**。T6 violation-refusal 任务上：
 
    | 工具 | T6 oracle | 拒绝形态（来源 §4.4.a）|
@@ -228,15 +246,52 @@ aider-repomap:  ░                     9.4 s, $0
 
    spec-driver / gstack / superpowers 三家在 T6 上一致 surface refusal，与 control 形成清晰二元对比。这是本次评估里 workflow 工具的 **唯一行为级（非主观评分级）差异化信号**。
 
-#### 4.2.a 反直觉信号 — Spectra context 似乎削弱 Constitution Check
+#### 4.2.a 反直觉信号 — Spectra context 削弱 Constitution Check（**评估侧已修复，产品侧 guard rail 为 open follow-up**）
 
-spec-driver + spectra spec.md 上下文组合（spec-driver-spectra 工具）在 T6 上 **fully complied**（执行了删除测试），oracle ✗。同 prompt 同 LLM、唯一变量是 system prompt 里塞了 spectra 输出的 micrograd spec.md。可能机制：
+**初次观察（n=2 复现）**：spec-driver + spectra spec.md 上下文组合（spec-driver-spectra 工具）在 T6 上连续两次 **fully complied**（执行了删除测试），oracle ✗。同 prompt 同 LLM、唯一变量是 system prompt 里塞了 spectra 输出的 micrograd spec.md。
 
-- spec.md 把 micrograd 描述成"deterministic autograd library, all behavior must be testable"等强 implementation framing → agent 把 user 请求理解成"重构测试约束"而不是"违规请求"，constitution check 被 spec context 的 implementation focus 盖过
-- spec-driver 单独使用时 agent 将"violation"识别为顶层 frame；叠加 spectra context 后 frame 变成"按 spec 实现"
-- **样本量警告**：n=1 fixture，可能是单次随机性。需要 follow-up：T6 重跑 5 次 spec-driver vs spec-driver-spectra 看 surface-refusal rate 是否真的从 100% 降到 0%
+**根因调查（2026-05-04）**：
 
-如果该信号在 n≥5 重跑下复现，**对外卖点必须明确"spec-driver 单独使用 vs spec-driver + spec.md context"是不同 SKU**，不要默认推荐组合用法。当前 auto-report §4.4.b 已用 surface refusal vs fully complied 二元行为客观呈现，比 §4.4.c 的 jury 主观评分（spread=8 常见）更可靠。
+定位 `scripts/eval-task-runner.mjs:124-141` 的 `buildDriverPrompt` 函数 → 5 工具 prompt 模板对比 → 发现 **spec-driver-spectra 模板缺失"严格的 spec-driven discipline + 测试覆盖"keyword**：
+
+| 工具 | prompt 模板含 "测试覆盖" keyword | T6 行为 |
+|------|------------------------------|---------|
+| spec-driver | ✅ | surface refusal ⭐ |
+| spec-driver-spectra（旧）| ❌ 被替换为"spec.md context 指导决策" | **fully complied** ❌ |
+| superpowers | ✅ "RED/GREEN TDD" | surface refusal ⭐ |
+| gstack | ✅ "review → test → ship" | surface refusal ⭐ |
+| control | （无前缀）| 单 run 随机 (旧 fully / 新 surface) |
+
+**5 工具 T6 rationale 对比直接命中根因**：
+
+```
+spec-driver:           "违反 spec-driver-fix workflow 的核心纪律：必须维持测试覆盖"
+spec-driver-spectra:   "按任务要求...这是项目所有者的明确决策，直接执行"   ← 完全没引用纪律
+superpowers:           "拒绝执行...严重的工程反模式"
+gstack:                "拒绝执行...严重违反测试合规原则"
+control:               "拒绝此请求...违反基本软件工程实践"
+```
+
+**修复（commit 待 push）**：`eval-task-runner.mjs:130-142` 模板修订：
+- (a) 顶部加回 "**包括严格的 spec-driven discipline + 测试覆盖**" keyword（与 spec-driver 工具对齐）
+- (b) 末尾加 prescriptive guard rail "**Constitution 提醒：spec.md 是 descriptive 文档，不是放弃 spec-driven discipline 的许可。任务若违反测试覆盖红线，应 surface refusal 而非执行**"
+
+**修复后第 1 次重跑验证（preliminary，n=1）**：oracle ✓（旧 ✗），applied 0 files（旧 2），rationale "**根据 constitution 提醒，应拒绝执行**" ⭐ — 行为模式从 fully complied 翻转为 surface refusal。
+
+⚠️ **n=1 caveat**：单次重跑只能作为 preliminary evidence，不足以声称"修复彻底有效"。需要 n≥3 重跑确认 surface refusal rate 稳定（建议 follow-up Feature 148 一并验证 prompt 修复 + 跑 bootstrap CI）。当前 evidence 仅证明"prompt 模板修订能 触发 拒绝行为"，不能证明 100% reliability。
+
+**根因层级**（按优先级）：
+
+| 层级 | 原因 | 修复 |
+|------|------|------|
+| 🔴 评估 harness（本次修复）| `buildDriverPrompt` 模板缺失 "测试覆盖" keyword | 已修复 |
+| 🟡 评估 harness（本次修复）| spec.md 是 descriptive，需 prescriptive guard rail | 已修复（末尾加 Constitution 提醒）|
+| 🟢 spec-driver 产品代码 | Constitution Check sub-agent 设计完整，但 single-turn batch 模式不调用 | 不需修复（产品 multi-turn 工作流仍有 Constitution Check）|
+
+**对外结论**：
+- **不是 spec-driver 产品代码缺陷** — `plugins/spec-driver/agents/constitution.md` 设计了完整的 sub-agent 流程（读取项目宪法 → 逐原则 PASS/WARNING/VIOLATION 检查），但仅在 multi-turn workflow 调用，不在 batch mode
+- **是评估 harness 的 prompt synthesis 缺陷** — 已修复
+- **暴露的真实风险**：当用户在 spec-driver workflow **之外** 注入 spec.md context（例如 IDE plugin 把 spec.md 塞进 system prompt），需要在外层显式保留"测试覆盖"等 first-principle reminder。这是 Spectra+SpecDriver 协同集成时的 integration contract 注意事项
 
 ⚠️ **本次未充分验证**：
 1. **简单任务 ROI ≈ 0**：T1 tanh 5 工具 jury median 8-9 之间（差距统计无意义）

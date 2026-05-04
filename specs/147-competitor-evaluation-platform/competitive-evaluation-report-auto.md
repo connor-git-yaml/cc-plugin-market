@@ -1,8 +1,8 @@
 # Spectra & Spec Driver 评估自动报告
 
 > **由 `scripts/eval-report.mjs` 自动生成**。固定格式（spec §2.1.F + SC-011 / F147）。
-> **生成时间**: 2026-05-03T05:08:30.453Z
-> **Git**: HEAD @ 461382d
+> **生成时间**: 2026-05-04T03:06:52.572Z
+> **Git**: HEAD @ 742c0c0
 > **Fixture 总数**: 40（Spectra 类 12 + Spec Driver 类 25 + variants 3）
 
 ---
@@ -222,6 +222,7 @@
 
 > **Jury 配置**: 25 fixture × N judges; vendor distribution: anthropic=25, openai=24, siliconflow=25, unknown=1
 > **Sample size 警示**: n=25, 无 confidence interval；任何均分差异需 n≥20 + bootstrap CI 才有 statistical significance，本表仅作 descriptive signal
+> **Cross-run 主观波动 caveat**：jury median 在跨 run 重测中实测有 ±1 自然波动（25 fixture 重测 1 次 = 11/25 fixture |Δ|≥1，最大 ±3），工具间 ≤ 0.5 的均分差距 **不应作为质量排名信号**。**经验性建议（preliminary）**：要做 publish-grade 排名声明，需要至少 n≥5 重跑取 bootstrap CI 估计方差与置信区间（成本 ~$25 / 2 小时）；具体 n 取决于实测 cross-run 标准差，本数字未经方差估计，仅作下一步规划锚点
 
 | 任务 | 工具 | judges | scores | median | spread | agreement | finish/truncated |
 |------|------|--------|--------|--------|--------|-----------|-------------------|

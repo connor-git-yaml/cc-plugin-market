@@ -269,6 +269,9 @@ describe('eval-report', () => {
       expect(md).toMatch(/opus-4-7=8/);
       expect(md).toMatch(/spec-driver-opus †{2}/); // marked as jury (††) in §4.1
       expect(md).toMatch(/cross-LLM jury/);
+      // Sprint 3 后修订（根因 3 修复）：跨 run 主观波动 caveat
+      expect(md).toContain('Cross-run 主观波动 caveat');
+      expect(md).toMatch(/工具间.*≤ 0\.5.*均分差距.*不应作为质量排名信号/);
     });
 
     it('§4.1 prefers juryMedian over rubricJudgeScore when both exist', async () => {

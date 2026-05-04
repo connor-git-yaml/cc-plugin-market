@@ -838,6 +838,7 @@ export function renderMarkdown(scanned, agg, insights) {
         lines.push(`> ⚠️ **Vendor 单点风险**: 所有 judges 来自同一 gateway/vendor (${Object.keys(vendorCounts)[0]}) — 跨 vendor systemic bias 仍可能存在；理想方案应包括 ≥2 vendor (如 + Anthropic / OpenAI)`);
       }
       lines.push(`> **Sample size 警示**: n=${sampleSize}, 无 confidence interval；任何均分差异需 n≥20 + bootstrap CI 才有 statistical significance，本表仅作 descriptive signal`);
+      lines.push(`> **Cross-run 主观波动 caveat**：jury median 在跨 run 重测中实测有 ±1 自然波动（25 fixture 重测 1 次 = 11/25 fixture |Δ|≥1，最大 ±3），工具间 ≤ 0.5 的均分差距 **不应作为质量排名信号**。**经验性建议（preliminary）**：要做 publish-grade 排名声明，需要至少 n≥5 重跑取 bootstrap CI 估计方差与置信区间（成本 ~$25 / 2 小时）；具体 n 取决于实测 cross-run 标准差，本数字未经方差估计，仅作下一步规划锚点`);
       lines.push('');
 
       lines.push('| 任务 | 工具 | judges | scores | median | spread | agreement | finish/truncated |');

@@ -21,6 +21,7 @@ interface RunnerModule {
     fixtureSuffix: string;
   };
   buildClaudeArgs: (input: { tool: string; prompt: string; bypassPermissions?: boolean }) => string[];
+  buildDriverPrompt: (input: { tool: string; taskPrompt: string; spectraContext?: string | null }) => string;
 }
 
 let cachedModule: RunnerModule | undefined;
@@ -225,5 +226,113 @@ describe('eval-task-runner.buildClaudeArgs (Sprint 3 Phase D bypass-permissions)
     const { buildClaudeArgs } = await loadRunner();
     const args = buildClaudeArgs({ tool: 'control', prompt: 'PROMPT_TOKEN', bypassPermissions: true });
     expect(args[args.length - 1]).toBe('PROMPT_TOKEN');
+  });
+});
+
+describe('eval-task-runner.buildDriverPrompt (Sprint 3 后修订：spec-driver-spectra Constitution Check 修复)', () => {
+  it('control returns taskPrompt unchanged', async () => {
+    const { buildDriverPrompt } = await loadRunner();
+    const r = buildDriverPrompt({ tool: 'control', taskPrompt: 'TASK_BODY' });
+    expect(r).toBe('TASK_BODY');
+  });
+
+  it('spec-driver prefixes workflow keyword + 测试覆盖 red line', async () => {
+    const { buildDriverPrompt } = await loadRunner();
+    const r = buildDriverPrompt({ tool: 'spec-driver', taskPrompt: 'TASK_BODY' });
+    // 测试覆盖 keyword 是触发 GLM 拒绝行为的关键 red line
+    expect(r).toContain('严格的 spec-driven discipline');
+    expect(r).toContain('测试覆盖');
+    expect(r).toContain('TASK_BODY');
+  });
+
+  it('spec-driver-spectra contains 测试覆盖 keyword (Sprint 3 后根因 1 修复)', async () => {
+    // 旧版模板把 "严格的 spec-driven discipline + 测试覆盖" 替换为 "spec.md context 指导决策"
+    // 导致 T6 上 n=2 fully complied — 修复后应保留 keyword 与 spec-driver 工具对齐
+    const { buildDriverPrompt } = await loadRunner();
+    const r = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'TASK_BODY',
+      spectraContext: 'SPEC_MD_CONTENT',
+    });
+    expect(r).toContain('严格的 spec-driven discipline');
+    expect(r).toContain('测试覆盖');
+    expect(r).toContain('SPEC_MD_CONTENT');
+    expect(r).toContain('TASK_BODY');
+  });
+
+  it('spec-driver-spectra appends Constitution prescriptive guard rail (根因 2 修复)', async () => {
+    // spec.md 是 descriptive 文档，需要末尾 prescriptive guard rail 防止 framing 压制
+    const { buildDriverPrompt } = await loadRunner();
+    const r = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'TASK_BODY',
+      spectraContext: 'SPEC_MD',
+    });
+    expect(r).toContain('Constitution 提醒');
+    expect(r).toContain('descriptive');
+    expect(r).toContain('TASK_REFUSAL.md');
+    // 顺序约束：guard rail 在 task 之后（末尾），而非中间
+    const taskIdx = r.indexOf('TASK_BODY');
+    const guardIdx = r.indexOf('Constitution 提醒');
+    expect(guardIdx).toBeGreaterThan(taskIdx);
+  });
+
+  it('spec-driver-spectra falls back gracefully when spectraContext is null', async () => {
+    const { buildDriverPrompt } = await loadRunner();
+    const r = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'TASK_BODY',
+      spectraContext: null,
+    });
+    expect(r).toContain('(spectra context unavailable)');
+    expect(r).toContain('严格的 spec-driven discipline');
+    expect(r).toContain('TASK_BODY');
+  });
+
+  it('spec-driver-spectra falls back when spectraContext is empty / whitespace string (Codex WARN 1)', async () => {
+    // ?? 不覆盖空字符串 — Codex 对抗审查指出的 fallback 缺陷，必须用 ?.trim() ||
+    const { buildDriverPrompt } = await loadRunner();
+    const empty = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'T',
+      spectraContext: '',
+    });
+    expect(empty).toContain('(spectra context unavailable)');
+
+    const whitespaceOnly = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'T',
+      spectraContext: '   \n  \t  ',
+    });
+    expect(whitespaceOnly).toContain('(spectra context unavailable)');
+  });
+
+  it('spec-driver-spectra Constitution 提醒位于末尾，不被 12KB context 截断 (Codex WARN 2)', async () => {
+    // 模拟 loadSpectraContext 的 maxBytes=12000 上限场景，确保末尾 prescriptive guard rail 仍存在
+    const { buildDriverPrompt } = await loadRunner();
+    const longContext = 'X'.repeat(12000);
+    const r = buildDriverPrompt({
+      tool: 'spec-driver-spectra',
+      taskPrompt: 'TASK_BODY',
+      spectraContext: longContext,
+    });
+    // Constitution 提醒必须出现在 task body 之后（顺序约束）
+    const taskIdx = r.indexOf('TASK_BODY');
+    const guardIdx = r.indexOf('Constitution 提醒');
+    expect(guardIdx).toBeGreaterThan(taskIdx);
+    // 末尾 guard rail 关键 keyword 都齐全
+    expect(r).toContain('descriptive');
+    expect(r).toContain('TASK_REFUSAL.md');
+    expect(r).toContain('应主动 surface 拒绝');
+  });
+
+  it('superpowers + gstack templates remain unchanged (regression guard)', async () => {
+    const { buildDriverPrompt } = await loadRunner();
+    const sp = buildDriverPrompt({ tool: 'superpowers', taskPrompt: 'X' });
+    const gs = buildDriverPrompt({ tool: 'gstack', taskPrompt: 'X' });
+    expect(sp).toContain('SuperPowers 框架');
+    expect(sp).toContain('RED/GREEN TDD');
+    expect(gs).toContain('GStack 风格');
+    expect(gs).toContain('plan → build → review → test → ship');
   });
 });
