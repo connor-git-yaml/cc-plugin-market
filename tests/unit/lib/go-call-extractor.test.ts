@@ -30,6 +30,8 @@ import {
   _scanImports,
   _walkGoAst,
   _goNodeLine,
+  _typeNameToCallee,
+  _extractTypeNameRecursive,
   extractGoCallSites,
 } from '../../../scripts/lib/go-call-extractor.mjs';
 import { createWarningsArray } from '../../../scripts/lib/extractor-helpers.mjs';
@@ -484,6 +486,55 @@ describe('extractGoCallSites — 边界形态', () => {
     const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
     const s = findCallByCallee(result, 'split');
     expect(s?.kind).toBe('function');
+  });
+
+  // Codex T-018 CRITICAL fix: 真实 Go AST 集成测试，验证 (*T)(x) / (*pkg.T)(x) / (T)(x) 类型转换
+  it('真实 Go AST 类型转换 (*T)(nil) → kind=function name="T"', async () => {
+    const tmp = makeTempDir('go-real-paren-pointer-T');
+    fs.writeFileSync(
+      path.join(tmp, 'main.go'),
+      [
+        'package main',
+        'type T struct{}',
+        'func main() { _ = (*T)(nil) }',
+      ].join('\n'),
+    );
+    const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
+    const t = findCallByCallee(result, 'T');
+    expect(t).toBeDefined();
+    expect(t?.kind).toBe('function');
+  });
+
+  it('真实 Go AST (T)(0) → kind=function name="T"', async () => {
+    const tmp = makeTempDir('go-real-paren-T');
+    fs.writeFileSync(
+      path.join(tmp, 'main.go'),
+      [
+        'package main',
+        'type T int',
+        'func main() { _ = (T)(0) }',
+      ].join('\n'),
+    );
+    const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
+    const t = findCallByCallee(result, 'T');
+    expect(t).toBeDefined();
+    expect(t?.kind).toBe('function');
+  });
+
+  it('真实 Go AST (*sql.DB)(nil) → kind=static name="DB"', async () => {
+    const tmp = makeTempDir('go-real-paren-pointer-pkg');
+    fs.writeFileSync(
+      path.join(tmp, 'main.go'),
+      [
+        'package main',
+        'import "database/sql"',
+        'func main() { _ = (*sql.DB)(nil) }',
+      ].join('\n'),
+    );
+    const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
+    const db = findCallByCallee(result, 'DB');
+    expect(db).toBeDefined();
+    expect(db?.kind).toBe('static');
   });
 
   it('selector_expression operand 是 PascalCase 但非 import → kind=method (按变量处理)', async () => {
@@ -1228,5 +1279,801 @@ describe('_goNodeLine — direct unit', () => {
 
   it('node 为 null → 1', () => {
     expect(_goNodeLine(null)).toBe(1);
+  });
+});
+
+// ── 12. _typeNameToCallee — direct unit (Phase 6 coverage 补丁) ──
+
+describe('_typeNameToCallee — direct unit', () => {
+  it('null → unresolved + missing-type', () => {
+    expect(_typeNameToCallee(null)).toEqual({
+      name: '<unknown>',
+      kind: 'unresolved',
+      dynamicReason: 'missing-type',
+    });
+  });
+
+  it('type_identifier → kind=function', () => {
+    const fake = { type: 'type_identifier', text: 'T' };
+    expect(_typeNameToCallee(fake)).toEqual({ name: 'T', kind: 'function' });
+  });
+
+  it('qualified_type "sql.DB" → kind=static (取末段)', () => {
+    const fake = {
+      type: 'qualified_type',
+      namedChildren: [
+        { type: 'package_identifier', text: 'sql' },
+        { type: 'type_identifier', text: 'DB' },
+      ],
+    };
+    expect(_typeNameToCallee(fake)).toEqual({ name: 'DB', kind: 'static' });
+  });
+
+  it('qualified_type 无 type_identifier 子节点 → fallback', () => {
+    const fake = {
+      type: 'qualified_type',
+      namedChildren: [{ type: 'package_identifier', text: 'sql' }],
+      text: 'sql.???',
+    };
+    const result = _typeNameToCallee(fake);
+    expect(result.kind).toBe('unresolved');
+  });
+
+  it('generic_type 内层 type_identifier → 递归', () => {
+    const fake = {
+      type: 'generic_type',
+      namedChildren: [
+        { type: 'type_identifier', text: 'List' },
+        { type: 'type_arguments' },
+      ],
+    };
+    expect(_typeNameToCallee(fake).name).toBe('List');
+    expect(_typeNameToCallee(fake).kind).toBe('function');
+  });
+
+  it('generic_type 内层是 qualified_type → 递归到 static', () => {
+    const fake = {
+      type: 'generic_type',
+      namedChildren: [
+        {
+          type: 'qualified_type',
+          namedChildren: [
+            { type: 'package_identifier', text: 'sql' },
+            { type: 'type_identifier', text: 'List' },
+          ],
+        },
+      ],
+    };
+    expect(_typeNameToCallee(fake)).toEqual({ name: 'List', kind: 'static' });
+  });
+
+  it('未知 type kind 但 text 短 → unresolved + dynamicReason', () => {
+    const fake = { type: 'weird_kind', text: 'something' };
+    const result = _typeNameToCallee(fake);
+    expect(result.name).toBe('something');
+    expect(result.kind).toBe('unresolved');
+    expect(result.dynamicReason).toBe('unrecognized-type-callee');
+  });
+
+  it('未知 type kind 但 text 超长 → name=<unknown>', () => {
+    const fake = { type: 'weird_kind', text: 'x'.repeat(100) };
+    const result = _typeNameToCallee(fake);
+    expect(result.name).toBe('<unknown>');
+    expect(result.kind).toBe('unresolved');
+  });
+
+  it('未知 type kind 无 text → name=<unknown>', () => {
+    const fake = { type: 'weird_kind' };
+    const result = _typeNameToCallee(fake);
+    expect(result.name).toBe('<unknown>');
+    expect(result.kind).toBe('unresolved');
+  });
+});
+
+// ── 13. _extractTypeNameRecursive — direct unit (cover qualified_type / generic 路径) ──
+
+describe('_extractTypeNameRecursive — direct unit', () => {
+  it('null → null', () => {
+    expect(_extractTypeNameRecursive(null)).toBeNull();
+  });
+
+  it('type_identifier → 直接返回 text', () => {
+    const fake = { type: 'type_identifier', text: 'Foo' };
+    expect(_extractTypeNameRecursive(fake)).toBe('Foo');
+  });
+
+  it('pointer_type 含 type_identifier → 递归', () => {
+    const fake = {
+      type: 'pointer_type',
+      namedChildren: [{ type: 'type_identifier', text: 'T' }],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBe('T');
+  });
+
+  it('多层 pointer (***T) → 递归到内层', () => {
+    const fake = {
+      type: 'pointer_type',
+      namedChildren: [
+        {
+          type: 'pointer_type',
+          namedChildren: [
+            {
+              type: 'pointer_type',
+              namedChildren: [{ type: 'type_identifier', text: 'T' }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBe('T');
+  });
+
+  it('generic_type 含 type_identifier → 递归', () => {
+    const fake = {
+      type: 'generic_type',
+      namedChildren: [{ type: 'type_identifier', text: 'MyType' }],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBe('MyType');
+  });
+
+  it('generic_type 含 qualified_type → 递归到末段', () => {
+    const fake = {
+      type: 'generic_type',
+      namedChildren: [
+        {
+          type: 'qualified_type',
+          namedChildren: [
+            { type: 'package_identifier', text: 'pkg' },
+            { type: 'type_identifier', text: 'MyType' },
+          ],
+        },
+      ],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBe('MyType');
+  });
+
+  it('qualified_type "pkg.T" → 取末段', () => {
+    const fake = {
+      type: 'qualified_type',
+      namedChildren: [
+        { type: 'package_identifier', text: 'pkg' },
+        { type: 'type_identifier', text: 'T' },
+      ],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBe('T');
+  });
+
+  it('qualified_type 无 type_identifier → null', () => {
+    const fake = {
+      type: 'qualified_type',
+      namedChildren: [{ type: 'package_identifier', text: 'pkg' }],
+    };
+    expect(_extractTypeNameRecursive(fake)).toBeNull();
+  });
+
+  it('未知节点类型 → null', () => {
+    const fake = { type: 'random_kind', text: 'x' };
+    expect(_extractTypeNameRecursive(fake)).toBeNull();
+  });
+});
+
+// ── 14. _classifyCallExpression — 补充覆盖 (func_literal / parenthesized_expression / 其它) ──
+
+describe('_classifyCallExpression — 补充覆盖', () => {
+  it('callee = func_literal (IIFE) → name=<anon-func> kind=function', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) =>
+        n === 'function' ? { type: 'func_literal', text: 'func() {}' } : null,
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: '<anon-func>',
+      kind: 'function',
+    });
+  });
+
+  // Codex T-018 CRITICAL fix: 实测 tree-sitter-go AST，表达式上下文用 unary_expression
+  // 而不是 pointer_type。下面的 fake AST 严格按真实 parser 输出形态构造。
+  it('callee = parenthesized_expression(unary_expression(identifier)) "(*T)(nil)" → kind=function name="T"', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'unary_expression',
+              namedChildren: [{ type: 'identifier', text: 'T' }],
+            },
+          ],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: 'T',
+      kind: 'function',
+    });
+  });
+
+  it('callee = parenthesized_expression(unary_expression(selector_expression)) "(*sql.DB)(nil)" → kind=static name="DB"', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'unary_expression',
+              namedChildren: [
+                {
+                  type: 'selector_expression',
+                  childForFieldName: (k: string) => {
+                    if (k === 'operand') return { type: 'identifier', text: 'sql' };
+                    if (k === 'field') return { type: 'field_identifier', text: 'DB' };
+                    return null;
+                  },
+                },
+              ],
+            },
+          ],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: 'DB',
+      kind: 'static',
+    });
+  });
+
+  it('callee = parenthesized_expression(identifier) "(T)(x)" → kind=function name="T"', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [{ type: 'identifier', text: 'T' }],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: 'T',
+      kind: 'function',
+    });
+  });
+
+  // 类型位置形态测试（为兼容 path 保留，覆盖罕见 fallback）
+  it('callee = parenthesized_expression(pointer_type → type_identifier) "(*T)" 类型位置形态 → kind=function (兼容路径)', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'pointer_type',
+              namedChildren: [{ type: 'type_identifier', text: 'T' }],
+            },
+          ],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: 'T',
+      kind: 'function',
+    });
+  });
+
+  it('callee = parenthesized_expression(pointer_type → qualified_type) 类型位置 → kind=static (兼容)', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'pointer_type',
+              namedChildren: [
+                {
+                  type: 'qualified_type',
+                  namedChildren: [
+                    { type: 'package_identifier', text: 'sql' },
+                    { type: 'type_identifier', text: 'DB' },
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set())).toEqual({
+      name: 'DB',
+      kind: 'static',
+    });
+  });
+
+  it('callee = parenthesized_expression(type_identifier) "(T)" 类型位置 → kind=function (兼容)', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [{ type: 'type_identifier', text: 'T' }],
+        };
+      },
+    };
+    expect(_classifyCallExpression(fake, new Set()).kind).toBe('function');
+  });
+
+  it('callee = parenthesized_expression 内层不识别 → unresolved + paren-callee', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [{ type: 'random_kind', text: 'x' }],
+        };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.kind).toBe('unresolved');
+    expect(result.dynamicReason).toBe('parenthesized-callee');
+  });
+
+  it('callee = parenthesized_expression 无内层 → unresolved (paren-callee)', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [],
+        };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.kind).toBe('unresolved');
+  });
+
+  it('selector_expression 不可用 childForFieldName → unresolved', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return { type: 'selector_expression', childForFieldName: null };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.kind).toBe('unresolved');
+    expect(result.dynamicReason).toBe('selector-no-childForFieldName');
+  });
+
+  it('未知 callee 类型 + text 超长 → name=<unknown>', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return { type: 'index_expression', text: 'x'.repeat(100) };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.name).toBe('<unknown>');
+    expect(result.kind).toBe('unresolved');
+  });
+
+  it('未知 callee 类型 + text 短 → name=text', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return { type: 'index_expression', text: 'arr[0]' };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.name).toBe('arr[0]');
+    expect(result.kind).toBe('unresolved');
+  });
+});
+
+// ── 15. extractGoCallSites — defensive validation ──
+
+describe('extractGoCallSites — defensive validation', () => {
+  it('options 不是对象 → throw', async () => {
+    await expect(extractGoCallSites(null as never)).rejects.toThrow(/options 必须为对象/);
+    await expect(extractGoCallSites('foo' as never)).rejects.toThrow(/options 必须为对象/);
+  });
+
+  it('sourceRoot 不是字符串 → throw', async () => {
+    await expect(extractGoCallSites({ sourceRoot: null as never })).rejects.toThrow(
+      /sourceRoot 必须为非空字符串/,
+    );
+    await expect(extractGoCallSites({ sourceRoot: '' })).rejects.toThrow(
+      /sourceRoot 必须为非空字符串/,
+    );
+  });
+});
+
+// ── 16. _processOneGoFile — read/parse error 路径（通过集成测试触发）──
+
+describe('extractGoCallSites — file read/parse 错误', () => {
+  it('parser.parse throw → warnings.code=parse-error 但 sibling 文件正常', async () => {
+    // 触发 parse 错误的方法是写入足够损坏的 source 让 parser 真的 throw（不是仅 hasError）
+    const tmp = makeTempDir('go-parse-throw');
+    // 先写正常文件
+    fs.writeFileSync(
+      path.join(tmp, 'ok.go'),
+      'package main\nfunc main() { ok() }\nfunc ok() {}',
+    );
+    // 损坏文件 (不 throw 但 hasError)
+    fs.writeFileSync(
+      path.join(tmp, 'broken.go'),
+      'package main\nfunc broken() { ;;; >>>>',
+    );
+    const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
+    // sibling 正常抽取
+    expect(findCallByCallee(result, 'ok')).toBeDefined();
+    // broken 文件应触发 parse-error-partial warning
+    expect(result.warnings.some((w) => w.file === 'broken.go')).toBe(true);
+  });
+
+  it('文件读取失败（不存在）→ walkSourceFiles 不会列出，不触发 warning', async () => {
+    // 这是 negative test：walkSourceFiles 只列存在的文件，所以 readFileSync ENOENT 路径
+    // 实际不会被触发。但验证 error 处理路径仍存在不会让 extractor 整体崩溃。
+    const tmp = makeTempDir('go-empty-dir');
+    const result = (await extractGoCallSites({ sourceRoot: tmp })) as ExtractResult;
+    expect(result.truthCalls).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+});
+
+// ── 16.4. _resolveGoCaller / _walkGoAst — 防御分支补充 ──
+
+describe('_resolveGoCaller — 缺 name 字段防御', () => {
+  it('method_declaration 缺 name → 返回 <anon-method>', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return null;
+        if (n === 'receiver') return null;
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:<anon-method>');
+  });
+
+  it('method_declaration receiver 不是 parameter_list → fallback', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return { type: 'field_identifier', text: 'M' };
+        if (n === 'receiver') return { type: 'random_kind' };
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:M');
+  });
+
+  it('method_declaration receiver namedChildren 不是数组 → fallback', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return { type: 'field_identifier', text: 'M' };
+        if (n === 'receiver') return { type: 'parameter_list', namedChildren: undefined };
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:M');
+  });
+
+  it('method_declaration receiver param 是 null → 跳过', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return { type: 'field_identifier', text: 'M' };
+        if (n === 'receiver') {
+          return { type: 'parameter_list', namedChildren: [null, undefined] };
+        }
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:M');
+  });
+
+  it('method_declaration receiver param namedChildren 不是数组 → 跳过', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return { type: 'field_identifier', text: 'M' };
+        if (n === 'receiver') {
+          return {
+            type: 'parameter_list',
+            namedChildren: [{ type: 'parameter_declaration', namedChildren: undefined }],
+          };
+        }
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:M');
+  });
+
+  it('method_declaration receiver child 是 null → 跳过', () => {
+    const methodDecl = {
+      type: 'method_declaration',
+      childForFieldName: (n: string) => {
+        if (n === 'name') return { type: 'field_identifier', text: 'M' };
+        if (n === 'receiver') {
+          return {
+            type: 'parameter_list',
+            namedChildren: [
+              {
+                type: 'parameter_declaration',
+                namedChildren: [null, { type: 'identifier', text: 't' }],
+              },
+            ],
+          };
+        }
+        return null;
+      },
+      parent: null,
+    };
+    const callNode = { parent: methodDecl };
+    expect(_resolveGoCaller(callNode, 'main.go')).toBe('main.go:M');
+  });
+});
+
+// ── 16.5. _isPhantomCall (via _walkGoAst) — sibling 包含 ERROR / null ──
+
+describe('_walkGoAst — phantom call sibling cases', () => {
+  it('callExpr.parent.namedChildren 含 null sibling → 安全跳过', () => {
+    const callExpr = {
+      type: 'call_expression',
+      childForFieldName: (n: string) =>
+        n === 'function' ? { type: 'identifier', text: 'foo' } : null,
+      startPosition: { row: 0 },
+      hasError: false,
+      parent: null,
+      namedChildren: [],
+    };
+    const parent = {
+      type: 'block',
+      namedChildren: [callExpr, null, undefined],
+      parent: null,
+    };
+    callExpr.parent = parent;
+    const root = { type: 'source_file', namedChildren: [parent] };
+    parent.parent = root;
+
+    const truthBuf: { items: TruthCall[] } = { items: [] };
+    const warnings = createWarningsArray();
+    _walkGoAst(root, 'main.go', truthBuf, warnings, new Set());
+    // foo 仍被抽（没有 sibling ERROR）
+    expect(truthBuf.items.map((c) => c.callee)).toEqual(['foo']);
+  });
+
+  it('callExpr.parent.namedChildren 不是数组 → 不抛错', () => {
+    const callExpr = {
+      type: 'call_expression',
+      childForFieldName: (n: string) =>
+        n === 'function' ? { type: 'identifier', text: 'foo' } : null,
+      startPosition: { row: 0 },
+      hasError: false,
+      parent: { type: 'block', namedChildren: undefined, parent: null },
+      namedChildren: [],
+    };
+    const root = {
+      type: 'source_file',
+      namedChildren: [callExpr.parent as object],
+    };
+
+    const truthBuf: { items: TruthCall[] } = { items: [] };
+    const warnings = createWarningsArray();
+    expect(() => _walkGoAst(root, 'main.go', truthBuf, warnings, new Set())).not.toThrow();
+  });
+
+  it('fn.isMissing 函数返回 true → phantom skip', () => {
+    const fnNode = {
+      type: 'identifier',
+      text: 'phantom',
+      hasError: false,
+      isMissing: () => true,
+    };
+    const callExpr = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => (n === 'function' ? fnNode : null),
+      startPosition: { row: 0 },
+      hasError: false,
+      parent: null,
+      namedChildren: [],
+    };
+    const root = { type: 'source_file', namedChildren: [callExpr] };
+    callExpr.parent = root;
+
+    const truthBuf: { items: TruthCall[] } = { items: [] };
+    const warnings = createWarningsArray();
+    _walkGoAst(root, 'main.go', truthBuf, warnings, new Set());
+    expect(truthBuf.items).toHaveLength(0);
+  });
+});
+
+// ── 16.5. _scanImports — 防御分支补充 ──
+
+describe('_scanImports — 防御分支补充', () => {
+  it('child.namedChildren 不是数组 → 跳过该 import_declaration', () => {
+    const fakeRoot = {
+      type: 'source_file',
+      namedChildren: [
+        {
+          type: 'import_declaration',
+          namedChildren: undefined, // 触发 line 185 fallback
+        },
+      ],
+    };
+    expect(_scanImports(fakeRoot).size).toBe(0);
+  });
+
+  it('import_declaration 子节点是 null/undefined → 跳过', () => {
+    const fakeRoot = {
+      type: 'source_file',
+      namedChildren: [
+        {
+          type: 'import_declaration',
+          namedChildren: [null, undefined], // 触发 line 187 跳过
+        },
+      ],
+    };
+    expect(_scanImports(fakeRoot).size).toBe(0);
+  });
+
+  it('import_spec_list namedChildren 不是数组 → 跳过', () => {
+    const fakeRoot = {
+      type: 'source_file',
+      namedChildren: [
+        {
+          type: 'import_declaration',
+          namedChildren: [{ type: 'import_spec_list', namedChildren: undefined }],
+        },
+      ],
+    };
+    expect(_scanImports(fakeRoot).size).toBe(0);
+  });
+
+  it('import_spec_list 内含 null + 非 import_spec 节点 → 跳过', () => {
+    const fakeRoot = {
+      type: 'source_file',
+      namedChildren: [
+        {
+          type: 'import_declaration',
+          namedChildren: [
+            {
+              type: 'import_spec_list',
+              namedChildren: [null, { type: 'random_kind' }, undefined],
+            },
+          ],
+        },
+      ],
+    };
+    expect(_scanImports(fakeRoot).size).toBe(0);
+  });
+
+  it('importSpec.childForFieldName 不可用 → null', () => {
+    // 直接构造调用 _extractAliasFromImportSpec via _scanImports 顶层 import_spec
+    const fakeRoot = {
+      type: 'source_file',
+      namedChildren: [
+        {
+          type: 'import_declaration',
+          namedChildren: [{ type: 'import_spec', childForFieldName: null }],
+        },
+      ],
+    };
+    expect(_scanImports(fakeRoot).size).toBe(0);
+  });
+});
+
+// ── 16.6. _walkGoAst — 防御分支补充 ──
+
+describe('_walkGoAst — 防御分支补充', () => {
+  it('root 为 null → 直接 return', () => {
+    const truthBuf = { items: [] as TruthCall[] };
+    const warnings = createWarningsArray();
+    expect(() => _walkGoAst(null, 'x.go', truthBuf, warnings, new Set())).not.toThrow();
+    expect(truthBuf.items).toHaveLength(0);
+  });
+});
+
+// ── 16.7. parenthesized_expression 内层 generic_type 路径 ──
+
+describe('_classifyCallExpression — paren generic_type', () => {
+  it('parenthesized_expression(generic_type) → 走 _typeNameToCallee', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'generic_type',
+              namedChildren: [{ type: 'type_identifier', text: 'List' }],
+            },
+          ],
+        };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.name).toBe('List');
+    expect(result.kind).toBe('function');
+  });
+
+  it('parenthesized_expression(pointer_type) 内层无识别 → unresolved', () => {
+    const fake = {
+      type: 'call_expression',
+      childForFieldName: (n: string) => {
+        if (n !== 'function') return null;
+        return {
+          type: 'parenthesized_expression',
+          namedChildren: [
+            {
+              type: 'pointer_type',
+              namedChildren: [{ type: 'random_kind', text: 'x' }],
+            },
+          ],
+        };
+      },
+    };
+    const result = _classifyCallExpression(fake, new Set());
+    expect(result.kind).toBe('unresolved');
+  });
+});
+
+// ── 17. _walkGoAst — isMissing function check (line 580-582 coverage) ──
+
+describe('_walkGoAst — isMissing 函数返回 true 的节点跳过', () => {
+  it('node.isMissing() 返回 true → skip 子树', () => {
+    const callExpr = {
+      type: 'call_expression',
+      childForFieldName: (n: string) =>
+        n === 'function' ? { type: 'identifier', text: 'phantom' } : null,
+      startPosition: { row: 0 },
+      hasError: false,
+      parent: null,
+      namedChildren: [],
+    };
+    // 模拟节点 isMissing() 返回 true
+    const missingNode = {
+      type: 'some_node',
+      isMissing: () => true,
+      namedChildren: [callExpr],
+      parent: null,
+    };
+    callExpr.parent = missingNode;
+    const root = {
+      type: 'source_file',
+      namedChildren: [missingNode],
+    };
+    missingNode.parent = root;
+
+    const truthBuf: { items: TruthCall[] } = { items: [] };
+    const warnings = createWarningsArray();
+    _walkGoAst(root, 'main.go', truthBuf, warnings, new Set());
+    // missing 节点子树不抽
+    expect(truthBuf.items).toHaveLength(0);
   });
 });

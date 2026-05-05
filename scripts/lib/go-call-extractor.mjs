@@ -229,7 +229,7 @@ function _unwrapParenthesized(parenNode) {
  * @param {object} typeNode tree-sitter type 节点
  * @returns {{name: string, kind: 'function'|'static'|'unresolved', dynamicReason?: string}}
  */
-function _typeNameToCallee(typeNode) {
+export function _typeNameToCallee(typeNode) {
   if (!typeNode) return { name: '<unknown>', kind: 'unresolved', dynamicReason: 'missing-type' };
   if (typeNode.type === 'type_identifier' && typeof typeNode.text === 'string') {
     return { name: typeNode.text, kind: 'function' };
@@ -306,31 +306,63 @@ export function _classifyCallExpression(node, importAliases) {
     return { name: '<anon-func>', kind: 'function' };
   }
 
-  // 1.6. callee = parenthesized_expression — 通常是 (*T)(x) / (T)(x) 类型转换
-  // 解开 parenthesized_expression 取内层 pointer_type / qualified_type / type_identifier
+  // 1.6. callee = parenthesized_expression — 通常是 (*T)(x) / (T)(x) / (*pkg.T)(x) 类型转换
+  //
+  // Codex T-018 CRITICAL fix（实测 tree-sitter-go AST）：在 *表达式上下文* 中：
+  //   - `(*T)(nil)`     → parenthesized_expression(unary_expression('*', identifier "T"))
+  //   - `(T)(nil)`      → parenthesized_expression(identifier "T")
+  //   - `(*pkg.T)(nil)` → parenthesized_expression(unary_expression('*', selector_expression(pkg, T)))
+  //
+  // 注意：`pointer_type` / `qualified_type` 节点只在 **类型位置**（type declarations / receiver types）出现；
+  // 在表达式上下文里，`*X` 解析为 `unary_expression`，`pkg.T` 解析为 `selector_expression`。
+  //
+  // 处理逻辑：
+  //   1. 解开 parenthesized_expression
+  //   2. 若内层是 unary_expression（如 *T / *pkg.T）→ 取其内层 operand
+  //   3. 内层是 identifier → kind=function (e.g. T / int)
+  //   4. 内层是 selector_expression(pkg, T) → kind=static + name=末段 field (如 DB)
+  //   5. 其它形态（保留 pointer_type / qualified_type 等罕见类型位置）→ _typeNameToCallee
   if (fnNode.type === 'parenthesized_expression') {
     const inner = _unwrapParenthesized(fnNode);
     if (inner) {
-      // (*sql.DB)(nil) / (*T)(nil) — pointer_type → qualified_type / type_identifier
-      if (inner.type === 'pointer_type' && Array.isArray(inner.namedChildren)) {
-        const target = inner.namedChildren.find(
+      // 解开 unary_expression（实际 Go 表达式上下文常见形态：(*T)(x) / (*pkg.T)(x)）
+      let target = inner;
+      if (inner.type === 'unary_expression' && Array.isArray(inner.namedChildren)) {
+        // unary_expression 内层第一个 named child 是 operand
+        const operand = inner.namedChildren.find((c) => c != null);
+        if (operand) target = operand;
+      }
+      // 内层是 identifier (如 T / int) → bare 类型转换
+      if (target.type === 'identifier' && typeof target.text === 'string') {
+        return { name: target.text, kind: 'function' };
+      }
+      // 内层是 selector_expression (如 pkg.T) → 静态调用
+      if (
+        target.type === 'selector_expression' &&
+        typeof target.childForFieldName === 'function'
+      ) {
+        const fieldNode = target.childForFieldName('field');
+        if (fieldNode && typeof fieldNode.text === 'string') {
+          return { name: fieldNode.text, kind: 'static' };
+        }
+      }
+      // 类型位置形态（罕见，但兼容）：pointer_type / qualified_type / generic_type / type_identifier
+      if (target.type === 'pointer_type' && Array.isArray(target.namedChildren)) {
+        const ptr = target.namedChildren.find(
           (c) =>
             c &&
             (c.type === 'type_identifier' ||
               c.type === 'qualified_type' ||
               c.type === 'generic_type'),
         );
-        if (target) {
-          return _typeNameToCallee(target);
-        }
+        if (ptr) return _typeNameToCallee(ptr);
       }
-      // (T)(x) / (sql.DB)(x) — 直接 type_identifier / qualified_type
       if (
-        inner.type === 'type_identifier' ||
-        inner.type === 'qualified_type' ||
-        inner.type === 'generic_type'
+        target.type === 'type_identifier' ||
+        target.type === 'qualified_type' ||
+        target.type === 'generic_type'
       ) {
-        return _typeNameToCallee(inner);
+        return _typeNameToCallee(target);
       }
     }
     return {
@@ -449,7 +481,7 @@ function _extractReceiverTypeName(methodDecl) {
  * @param {object} node 起点（pointer_type / type_identifier / generic_type 等）
  * @returns {string|null}
  */
-function _extractTypeNameRecursive(node) {
+export function _extractTypeNameRecursive(node) {
   if (!node) return null;
   if (node.type === 'type_identifier' && typeof node.text === 'string') {
     return node.text;
