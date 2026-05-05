@@ -23,13 +23,50 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.ts'],
+      // include: src/ 全量 + scripts/lib 下 4 语言 extractor（Feature 150）
+      include: [
+        'src/**/*.ts',
+        'scripts/lib/ts-call-extractor.mjs',
+        'scripts/lib/go-call-extractor.mjs',
+        'scripts/lib/java-call-extractor.mjs',
+        'scripts/lib/extractor-helpers.mjs',
+      ],
       exclude: ['src/**/*.d.ts', 'src/**/index.ts'],
+      // Feature 150 SC-001 / FR-019：per-file ≥ 95% 阈值，避免全局聚合稀释
+      // vitest 3.x schema：thresholds 顶层既可放全局阈值（branches/functions/lines/statements）
+      // 也可放 glob key（如 'scripts/lib/ts-call-extractor.mjs'），后者覆盖单文件阈值
       thresholds: {
         branches: 80,
         functions: 80,
         lines: 80,
         statements: 80,
+        // Codex CRITICAL 修订（Phase 4A）：extractor-helpers.mjs 也加 95% 阈值，
+        // 避免被 80% 全局聚合稀释。其它 3 个 extractor.mjs 在 T-005/T-009/T-013
+        // 实现时 stub 文件已就位（throw not implemented + 单测覆盖 throw）。
+        'scripts/lib/extractor-helpers.mjs': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
+        'scripts/lib/ts-call-extractor.mjs': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
+        'scripts/lib/go-call-extractor.mjs': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
+        'scripts/lib/java-call-extractor.mjs': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
       },
     },
 

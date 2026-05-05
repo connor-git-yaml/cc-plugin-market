@@ -33,17 +33,31 @@ async function loadGraphAccuracy(): Promise<GraphAccuracyModule> {
 }
 
 describe('graph-accuracy (Sprint 3 Phase B.1)', () => {
-  it('returns N/A for non-Python languages', async () => {
+  // Feature 150 修订（Phase 4 阶段 A）：原合同把 non-Python 语言返回 _skipped 对象，
+  // 现已升级为 strict dispatch — 已知但未实现的 language（ts/go/java）抛 "not yet implemented"，
+  // 未知 language（含旧的 'typescript' 字符串）抛 "Unsupported language"。
+  it('rejects non-canonical language string (e.g. "typescript") as Unsupported', async () => {
     const { analyzeGraphAccuracy } = await loadGraphAccuracy();
-    const result = analyzeGraphAccuracy({
-      sourceRoot: '/tmp/non-existent',
-      graphPath: '/tmp/non-existent.json',
-      language: 'typescript',
-    });
-    expect(result.language).toBe('typescript');
-    expect(result._skipped).toMatch(/not yet supported/i);
-    expect(result.truthSet).toBeNull();
-    expect(result.graph).toBeNull();
+    expect(() =>
+      analyzeGraphAccuracy({
+        sourceRoot: '/tmp/non-existent',
+        graphPath: '/tmp/non-existent.json',
+        language: 'typescript',
+      }),
+    ).toThrow(/Unsupported language: "typescript"/);
+  });
+
+  it('throws "not yet implemented" for canonical ts/go/java language codes', async () => {
+    const { analyzeGraphAccuracy } = await loadGraphAccuracy();
+    for (const lang of ['ts', 'go', 'java'] as const) {
+      expect(() =>
+        analyzeGraphAccuracy({
+          sourceRoot: '/tmp/non-existent',
+          graphPath: '/tmp/non-existent.json',
+          language: lang,
+        }),
+      ).toThrow(/not yet implemented/);
+    }
   });
 
   it('extracts truth set from minimal Python source and matches against graph', async () => {

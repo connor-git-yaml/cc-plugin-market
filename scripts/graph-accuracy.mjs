@@ -142,17 +142,37 @@ function computeCallAccuracy(callEdges, nodeLabelIdx, truthCallTargets) {
   };
 }
 
+/** Feature 150：受支持的 language 全集 */
+export const SUPPORTED_LANGUAGES = Object.freeze(['python', 'ts', 'go', 'java']);
+
+/**
+ * 主入口：根据 language 分派到 python anchor 或 ts/go/java extractor。
+ *
+ * - language='python'（缺省）→ 走现有 python-call-extractor.py 路径，输出 byte-stable
+ * - language='ts'|'go'|'java' → 分派到对应 extractor（当前抛 not yet implemented）
+ * - language ∉ SUPPORTED_LANGUAGES → 抛 "Unsupported language" 错误
+ *
+ * 注：Python 路径完全保留原始逻辑，不引入任何 schema 漂移（FR-002 / FR-021 / SC-005）。
+ *
+ * @param {{sourceRoot: string, graphPath: string, language?: string}} args
+ */
 export function analyzeGraphAccuracy({ sourceRoot, graphPath, language = 'python' }) {
+  // 未知 language → 直接抛错（FR-004）
+  if (!SUPPORTED_LANGUAGES.includes(language)) {
+    throw new Error(
+      `[graph-accuracy] Unsupported language: "${language}". ` +
+        `Supported: ${SUPPORTED_LANGUAGES.join(', ')}`,
+    );
+  }
+
+  // ts / go / java：分派到对应 extractor（当前阶段抛 not yet implemented）
   if (language !== 'python') {
-    return {
-      language,
-      _skipped: 'non-Python languages not yet supported (TypeScript / Go / Java pending)',
-      truthSet: null,
-      graph: null,
-      callPrecision: null,
-      callRecall: null,
-      coverageMethod: 'n/a',
-    };
+    // 同步函数返回 promise 在调用方需要 await，但本 export 历史上是同步函数
+    // 为保留同步签名，这里 throw（非 reject），调用方 sync catch 即可
+    throw new Error(
+      `[graph-accuracy] language="${language}" extractor not yet implemented in this phase ` +
+        `(Phase 4 阶段 A 仅搭 dispatch，extractor 在 Phase 4B/C/D 实现)`,
+    );
   }
 
   if (!fs.existsSync(sourceRoot)) {
