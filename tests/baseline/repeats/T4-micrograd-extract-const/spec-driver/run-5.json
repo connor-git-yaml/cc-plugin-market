@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T17:09:59.883Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T17:09:59.883Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 15337,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T4-micrograd-extract-const",
+    "tool": "spec-driver",
+    "executionMode": "single-turn-glm",
+    "wallMs": 15337,
+    "tokensTotal": 2913,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 1,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import ast; src=open('micrograd/nn.py').read(); tree=ast.parse(src); consts=[n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id.isupper() for t in n.targets)]; assert len(consts) > 0, 'no module-level UPPERCASE const'\\\"\",\"description\":\"存在 module-level UPPERCASE 常量\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import re; src=open('micrograd/nn.py').read(); literal_calls=re.findall(r'random\\\\.uniform\\\\s*\\\\(\\\\s*-?\\\\d', src); assert len(literal_calls) == 0, f'still has literal random.uniform with number args: {literal_calls}'\\\"\",\"description\":\"Neuron 不再用 literal random.uniform(-1, 1) 调用\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); import random; random.seed(42); from micrograd.nn import Neuron; n = Neuron(20); weights = [w.data for w in n.w]; assert all(-1 <= w <= 1 for w in weights), f'weight out of [-1,1]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/nn.py | 4 +++-\n 1 file changed, 3 insertions(+), 1 deletion(-)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 2118,
+    "executorCompletionTokens": 795,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "将 nn.py 中硬编码的权重初始化范围 (-1, 1) 提取为模块级常量 WEIGHT_INIT_RANGE = (-1, 1)，并将 Neuron.__init__ 中的 random.uniform(-1,1) 替换为 random.uniform(*WEIGHT_INIT_RANGE)，保持最小改动且不修改其他逻辑。",
+    "executorPatchedFiles": [
+      "micrograd/nn.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "vendor": "anthropic",
+        "score": 7,
+        "rationale": "完成了核心任务：顶部新增 WEIGHT_INIT_RANGE 常量并替换了 Neuron.__init__ 中的硬编码调用，命名清晰、未引入额外逻辑改动。但常量类型选择（tuple + 解包）略显间接，且对 nn.py 中是否还有其他 random.uniform(-1,1) 出现的核查不够显式。",
+        "issues": [
+          "将常量定义为 tuple (-1, 1) 并通过 random.uniform(*WEIGHT_INIT_RANGE) 解包调用，相比直接定义 WEIGHT_INIT_MIN/MAX 两个常量或保持 random.uniform(WEIGHT_INIT_RANGE[0], WEIGHT_INIT_RANGE[1]) 调用形式，可读性略差且隐藏了参数语义",
+          "diff 仅替换了 Neuron.__init__ 第 16 行一处 random.uniform(-1,1)，未在 commit message 或说明中确认 nn.py 中确实只有这一处硬编码（任务要求是『所有调用』，应显式核查 Layer/MLP 等类避免遗漏）"
+        ],
+        "judgedAt": "2026-05-04T17:10:14.964Z",
+        "promptTokens": 5,
+        "completionTokens": 413,
+        "finishReason": "end_turn",
+        "truncated": false
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "vendor": "openai",
+        "score": 9,
+        "rationale": "实现完成了核心要求：在 import 后新增了用途清晰的模块级常量，并用 `random.uniform(*WEIGHT_INIT_RANGE)` 替换了硬编码范围，行为保持一致。未新增测试也符合任务要求的 minimal change。整体接近完美，问题主要是交付形式和轻微格式细节。",
+        "issues": [
+          "任务要求“直接修改并 commit”，但提供的是 `git diff`，没有任何 commit 证据或提交信息，无法确认是否已完成提交。",
+          "`micrograd/nn.py` 顶部新增常量后与 `class Module` 之间只有一个空行；按常见 Python/PEP8 顶层定义之间应保留两个空行，属于轻微可读性/格式问题。"
+        ],
+        "judgedAt": "2026-05-04T17:13:11.888Z",
+        "promptTokens": null,
+        "completionTokens": 3893,
+        "finishReason": "stop",
+        "truncated": false
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 9,
+        "rationale": "正确完成了核心任务：提取了模块级常量并精准替换了硬编码值，改动最小且命名清晰。但实现方式在健壮性和类型安全上仍有可改进空间。",
+        "issues": [
+          "`random.uniform(*WEIGHT_INIT_RANGE)` 使用隐式解包，若常量元组长度发生变化（如误改为单值或三值）会导致运行时 TypeError，显式索引或拆分为两个独立常量更健壮",
+          "常量定义缺少类型注解（如 `WEIGHT_INIT_RANGE: tuple[float, float] = (-1, 1)`），降低了静态检查能力与代码自解释性"
+        ],
+        "judgedAt": "2026-05-04T17:13:59.008Z",
+        "promptTokens": 562,
+        "completionTokens": 2508,
+        "finishReason": "stop",
+        "truncated": false
+      }
+    ],
+    "juryMedian": 9,
+    "juryMean": 8.3,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-04T17:13:59.008Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 5,
+    "parentTaskTool": "T4-micrograd-extract-const/spec-driver",
+    "capturedAt": "2026-05-04T17:13:59.017Z"
+  }
+}

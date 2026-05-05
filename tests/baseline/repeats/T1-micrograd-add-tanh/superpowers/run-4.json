@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "superpowers",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T13:14:13.210Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/superpowers",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/superpowers/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/superpowers/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T13:14:13.210Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 34888,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "superpowers",
+    "executionMode": "single-turn-glm",
+    "wallMs": 34888,
+    "tokensTotal": 4141,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 2,
+    "uncommittedChanges": 2,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); assert abs(y.data - math.tanh(0.5)) < 1e-9, f'forward fail: {y.data} vs {math.tanh(0.5)}'\\\"\",\"description\":\"tanh forward 数值匹配 math.tanh\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); y.backward(); expected = 1 - math.tanh(0.5) ** 2; assert abs(v.grad - expected) < 1e-9, f'backward fail: {v.grad} vs {expected}'\\\"\",\"description\":\"tanh backward 梯度 = 1 - tanh^2\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(-1.5); y = v.tanh(); y.backward(); assert abs(y.data - math.tanh(-1.5)) < 1e-9 and abs(v.grad - (1 - math.tanh(-1.5) ** 2)) < 1e-9\\\"\",\"description\":\"负值场景验证（防"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/engine.py | 10 ++++++++++\n test/test_engine.py | 31 +++++++++++++++++++++++++++++++\n 2 files changed, 41 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 2143,
+    "executorCompletionTokens": 1998,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "在 Value 类中新增 tanh() 方法，前向使用 math.tanh，反向传播导数为 1 - tanh(x)²，风格与 relu() 一致。新增两个测试分别验证 forward 数值和 backward 梯度，均以 torch 为参考。",
+    "executorPatchedFiles": [
+      "micrograd/engine.py",
+      "test/test_engine.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "score": null,
+        "rationale": "[error: claude CLI failed (status=null, killed=true): [WARN] Fast mode is not available in the Agent SDK. Using Opus 4.6.\n]",
+        "issues": [],
+        "judgedAt": "2026-05-04T13:17:13.234Z",
+        "sdkError": {
+          "message": "claude CLI failed (status=null, killed=true): [WARN] Fast mode is not available in the Agent SDK. Using Opus 4.6.\n",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "vendor": "openai",
+        "score": 8,
+        "rationale": "核心实现正确：`tanh()` forward 使用 `math.tanh`，反传闭包按 `1 - out.data**2` 累加梯度，整体风格也基本贴合现有 `Value` 方法。测试覆盖了 forward 和一个组合表达式 backward，能验证主要链式求导路径。扣分主要在交付和测试质量细节上：任务要求提交 commit，但 diff 本身看不出已提交；测试覆盖较窄且格式略不符合常见 Python 测试文件风格。",
+        "issues": [
+          "任务明确要求“直接修改文件并提交 commit”，当前产出只提供 diff，未体现 commit 已完成，这是交付要求缺漏。",
+          "`test/test_engine.py` 新增的顶层测试函数之间只有一个空行，例如 `test_more_ops()` 后直接接 `test_tanh_forward()`，不符合常见 PEP8/现有测试文件可能采用的两个空行风格。",
+          "`test_tanh_forward()` 只验证 `x=0.5` 一个正数样例，未覆盖负数或接近饱和区间；虽然核心实现没问题，但边界覆盖偏弱。"
+        ],
+        "judgedAt": "2026-05-04T13:17:20.987Z",
+        "promptTokens": null,
+        "completionTokens": 16895,
+        "finishReason": "stop",
+        "truncated": false
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "score": null,
+        "rationale": "[error: Request timed out.]",
+        "issues": [],
+        "judgedAt": "2026-05-04T13:23:33.796Z",
+        "sdkError": {
+          "message": "Request timed out.",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      }
+    ],
+    "juryMedian": 8,
+    "juryMean": 8,
+    "jurySpread": 0,
+    "juryAgreement": "single-judge",
+    "juryRunAt": "2026-05-04T13:23:33.796Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 4,
+    "parentTaskTool": "T1-micrograd-add-tanh/superpowers",
+    "capturedAt": "2026-05-04T13:23:34.087Z"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "149.aggregate.v1",
+  "task": "T3-micrograd-fix-bug",
+  "tool": "control",
+  "actualN": 5,
+  "requestedN": 5,
+  "oraclePassRate": 1,
+  "oraclePassCount": 5,
+  "surfaceRefusalRate": 0,
+  "surfaceRefusalCount": 0,
+  "surfaceRefusalDenominator": 5,
+  "juryMedianSamples": [
+    8,
+    8.5,
+    8,
+    8.5,
+    8
+  ],
+  "bootstrapCi": {
+    "low": 8,
+    "high": 8.5,
+    "b": 1000,
+    "samples": 5,
+    "method": "percentile"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py"
+      ],
+      "wallMs": 26942
+    },
+    {
+      "runIndex": 2,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8.5,
+      "executorPatchedFiles": [
+        "micrograd/engine.py"
+      ],
+      "wallMs": 20004
+    },
+    {
+      "runIndex": 3,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py"
+      ],
+      "wallMs": 22169
+    },
+    {
+      "runIndex": 4,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8.5,
+      "executorPatchedFiles": [
+        "micrograd/engine.py"
+      ],
+      "wallMs": 260218
+    },
+    {
+      "runIndex": 5,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py"
+      ],
+      "wallMs": 21235
+    }
+  ],
+  "failedRuns": [],
+  "vendorCoverage": {
+    "anthropic": 5,
+    "siliconflow": 2,
+    "openai": 2
+  },
+  "totalCostUsd": 0,
+  "aggregatedAt": "2026-05-05T04:46:02.043Z"
+}

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T13:27:14.389Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver-spectra/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T13:27:14.389Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 35220,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "spec-driver-spectra",
+    "executionMode": "single-turn-glm",
+    "wallMs": 35220,
+    "tokensTotal": 8524,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 2,
+    "uncommittedChanges": 2,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); assert abs(y.data - math.tanh(0.5)) < 1e-9, f'forward fail: {y.data} vs {math.tanh(0.5)}'\\\"\",\"description\":\"tanh forward 数值匹配 math.tanh\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); y.backward(); expected = 1 - math.tanh(0.5) ** 2; assert abs(v.grad - expected) < 1e-9, f'backward fail: {v.grad} vs {expected}'\\\"\",\"description\":\"tanh backward 梯度 = 1 - tanh^2\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(-1.5); y = v.tanh(); y.backward(); assert abs(y.data - math.tanh(-1.5)) < 1e-9 and abs(v.grad - (1 - math.tanh(-1.5) ** 2)) < 1e-9\\\"\",\"description\":\"负值场景验证（防"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/engine.py | 10 ++++++++++\n test/test_engine.py | 47 +++++++++++++++++++++++++++++++++++++++++++++++\n 2 files changed, 57 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 6407,
+    "executorCompletionTokens": 2117,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "在 Value 类中新增 tanh() 方法，遵循 relu() 的风格：计算前向值、创建新节点、定义 _backward 闭包（导数 = 1 - tanh(x)²）。在 engine.py 顶部添加 import math，在 test_engine.py 中新增两个测试分别验证前向值和反向梯度。",
+    "executorPatchedFiles": [
+      "micrograd/engine.py",
+      "test/test_engine.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "score": null,
+        "rationale": "[error: claude CLI failed (status=null, killed=true): [WARN] Fast mode is not available in the Agent SDK. Using Opus 4.6.\n]",
+        "issues": [],
+        "judgedAt": "2026-05-04T13:30:14.413Z",
+        "sdkError": {
+          "message": "claude CLI failed (status=null, killed=true): [WARN] Fast mode is not available in the Agent SDK. Using Opus 4.6.\n",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "score": null,
+        "rationale": "[error: codex CLI timed out after 240s]",
+        "issues": [],
+        "judgedAt": "2026-05-04T13:33:16.854Z",
+        "sdkError": {
+          "message": "codex CLI timed out after 240s",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "score": null,
+        "rationale": "[error: Request timed out.]",
+        "issues": [],
+        "judgedAt": "2026-05-04T13:36:35.600Z",
+        "sdkError": {
+          "message": "Request timed out.",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      }
+    ],
+    "juryMedian": null,
+    "juryMean": null,
+    "jurySpread": null,
+    "juryAgreement": "no-data",
+    "juryRunAt": "2026-05-04T13:36:35.600Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 5,
+    "parentTaskTool": "T1-micrograd-add-tanh/spec-driver-spectra",
+    "capturedAt": "2026-05-04T13:36:35.880Z"
+  }
+}

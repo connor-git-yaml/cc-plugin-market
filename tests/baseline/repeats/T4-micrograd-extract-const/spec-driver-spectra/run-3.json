@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver-spectra",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T16:57:23.363Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/spec-driver-spectra/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T16:57:23.363Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 14789,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T4-micrograd-extract-const",
+    "tool": "spec-driver-spectra",
+    "executionMode": "single-turn-glm",
+    "wallMs": 14789,
+    "tokensTotal": 6977,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 1,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import ast; src=open('micrograd/nn.py').read(); tree=ast.parse(src); consts=[n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id.isupper() for t in n.targets)]; assert len(consts) > 0, 'no module-level UPPERCASE const'\\\"\",\"description\":\"存在 module-level UPPERCASE 常量\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import re; src=open('micrograd/nn.py').read(); literal_calls=re.findall(r'random\\\\.uniform\\\\s*\\\\(\\\\s*-?\\\\d', src); assert len(literal_calls) == 0, f'still has literal random.uniform with number args: {literal_calls}'\\\"\",\"description\":\"Neuron 不再用 literal random.uniform(-1, 1) 调用\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); import random; random.seed(42); from micrograd.nn import Neuron; n = Neuron(20); weights = [w.data for w in n.w]; assert all(-1 <= w <= 1 for w in weights), f'weight out of [-1,1]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/nn.py | 4 +++-\n 1 file changed, 3 insertions(+), 1 deletion(-)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 6238,
+    "executorCompletionTokens": 739,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "将 Neuron.__init__ 中硬编码的 random.uniform(-1,1) 提取为模块级常量 WEIGHT_INIT_RANGE = (-1, 1)，并将调用改为 random.uniform(*WEIGHT_INIT_RANGE)，仅此一处引用，最小改动。",
+    "executorPatchedFiles": [
+      "micrograd/nn.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "vendor": "anthropic",
+        "score": 7,
+        "rationale": "完成了任务核心目标：在 import 后新增了语义清晰的 `WEIGHT_INIT_RANGE` 常量，并将 Neuron 中的 `random.uniform(-1,1)` 调用替换为解包引用，未改动其他逻辑也未新增测试，符合 minimal change 要求。但常量类型选择和命名语义存在小瑕疵，且 diff 仅显示一处替换，需确认是否覆盖了文件中所有 `random.uniform(-1, 1)` 出现位置。",
+        "issues": [
+          "常量定义为 tuple `(-1, 1)` 并通过 `*WEIGHT_INIT_RANGE` 解包，语义上 'RANGE' 暗示区间但实际是 (low, high) 参数对；更直观的做法是定义两个常量 `WEIGHT_INIT_LOW = -1.0` / `WEIGHT_INIT_HIGH = 1.0`，或使用浮点字面量 `(-1.0, 1.0)` 与 `random.uniform` 返回 float 的语义一致",
+          "任务要求'把所有 random.uniform(-1, 1) 调用替换为引用该 const'，但 diff 仅展示了 Neuron.__init__ 一处替换；micrograd/nn.py 原始代码中只有这一处该模式调用属实，但 diff 未提供完整文件视图来证明已穷尽替换，评审者无法仅凭此 diff 验证'所有调用'已覆盖"
+        ],
+        "judgedAt": "2026-05-04T16:57:38.550Z",
+        "promptTokens": 5,
+        "completionTokens": 523,
+        "finishReason": "end_turn",
+        "truncated": false
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "vendor": "openai",
+        "score": 9,
+        "rationale": "实现完成了核心要求：在 import 后新增模块级常量，并将硬编码的 random.uniform(-1, 1) 替换为引用该常量，行为等价且未新增测试。整体改动 minimal，命名也能清楚表达用途。无显著功能问题，主要是交付和格式层面的瑕疵。",
+        "issues": [
+          "任务要求“直接修改并 commit”，但提供的产出只有 git diff，未体现是否已实际创建 commit。",
+          "micrograd/nn.py 顶部新增 WEIGHT_INIT_RANGE 后，模块级 class 前只有一个空行；按常见 Python/PEP8 风格，模块级常量与 class 定义之间通常应保留两个空行。"
+        ],
+        "judgedAt": "2026-05-04T16:57:46.619Z",
+        "promptTokens": null,
+        "completionTokens": 16269,
+        "finishReason": "stop",
+        "truncated": false
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "score": null,
+        "rationale": "[error: Request timed out.]",
+        "issues": [],
+        "judgedAt": "2026-05-04T17:06:58.544Z",
+        "sdkError": {
+          "message": "Request timed out.",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      }
+    ],
+    "juryMedian": 8,
+    "juryMean": 8,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-04T17:06:58.544Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 3,
+    "parentTaskTool": "T4-micrograd-extract-const/spec-driver-spectra",
+    "capturedAt": "2026-05-04T17:06:58.604Z"
+  }
+}

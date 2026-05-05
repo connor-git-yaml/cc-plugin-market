@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "superpowers",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T17:23:47.238Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/superpowers",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/superpowers/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T4-micrograd-extract-const/superpowers/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T17:23:47.238Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": true
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 15863,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T4-micrograd-extract-const",
+    "tool": "superpowers",
+    "executionMode": "single-turn-glm",
+    "wallMs": 15863,
+    "tokensTotal": 2933,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 1,
+    "uncommittedChanges": 1,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import ast; src=open('micrograd/nn.py').read(); tree=ast.parse(src); consts=[n for n in tree.body if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id.isupper() for t in n.targets)]; assert len(consts) > 0, 'no module-level UPPERCASE const'\\\"\",\"description\":\"存在 module-level UPPERCASE 常量\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import re; src=open('micrograd/nn.py').read(); literal_calls=re.findall(r'random\\\\.uniform\\\\s*\\\\(\\\\s*-?\\\\d', src); assert len(literal_calls) == 0, f'still has literal random.uniform with number args: {literal_calls}'\\\"\",\"description\":\"Neuron 不再用 literal random.uniform(-1, 1) 调用\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); import random; random.seed(42); from micrograd.nn import Neuron; n = Neuron(20); weights = [w.data for w in n.w]; assert all(-1 <= w <= 1 for w in weights), f'weight out of [-1,1]"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/nn.py | 4 +++-\n 1 file changed, 3 insertions(+), 1 deletion(-)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 2116,
+    "executorCompletionTokens": 817,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "将 nn.py 中硬编码的 weight 初始化范围 (-1,1) 提取为模块级常量 WEIGHT_INIT_RANGE，然后在 Neuron.__init__ 中用 random.uniform(*WEIGHT_INIT_RANGE) 替换原来的 random.uniform(-1,1)，保持行为完全不变，仅提升可维护性。",
+    "executorPatchedFiles": [
+      "micrograd/nn.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "vendor": "anthropic",
+        "score": 7,
+        "rationale": "产出正确完成了 const 提取和替换的核心任务，命名 WEIGHT_INIT_RANGE 清晰，未修改其他逻辑，符合 minimal change 要求。但只替换了 nn.py 中一处 random.uniform(-1,1)，没有验证是否还有其他位置；同时使用 tuple + 解包的方式略显间接，常量语义不如两个独立常量或直接传范围清晰。",
+        "issues": [
+          "仅替换了 Neuron.__init__ 中的一处调用，没有在 diff 中体现对整个 nn.py（或仓库）做全面搜索以确认无遗漏的 random.uniform(-1, 1) 调用，任务要求是'把所有 random.uniform(-1, 1) 调用替换'",
+          "WEIGHT_INIT_RANGE = (-1, 1) 配合 random.uniform(*WEIGHT_INIT_RANGE) 的写法引入了元组解包间接层，相较 WEIGHT_INIT_LOW/HIGH 双常量或直接 random.uniform(-WEIGHT_INIT_RANGE, WEIGHT_INIT_RANGE) 在可读性和静态检查友好度上略差",
+          "新常量缺少简短注释说明用途（例如 # 神经元权重初始化的均匀分布范围），对一个 magic number 的 extract 改动，注释能进一步增强可读性"
+        ],
+        "judgedAt": "2026-05-04T17:24:02.075Z",
+        "promptTokens": 5,
+        "completionTokens": 494,
+        "finishReason": "end_turn",
+        "truncated": false
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "vendor": "openai",
+        "score": 9,
+        "rationale": "核心实现正确：在 import 后新增了模块级常量，并用 `random.uniform(*WEIGHT_INIT_RANGE)` 替换了硬编码范围，行为不变且符合 minimal change；任务明确要求不新增测试，所以无测试缺失问题。主要扣分点是交付层面和很小的可读性/风格问题，整体接近完美。",
+        "issues": [
+          "任务要求“直接修改并 commit”，但提供的产出只有 git diff，没有提交 hash 或 commit 信息，无法确认 commit 要求已完成。",
+          "`micrograd/nn.py` 顶部新增模块级常量后，`WEIGHT_INIT_RANGE` 与 `class Module` 之间只有一个空行；按常见 Python 风格，模块级常量与顶层类定义之间应保留两个空行，可读性略受影响。"
+        ],
+        "judgedAt": "2026-05-04T17:24:11.607Z",
+        "promptTokens": null,
+        "completionTokens": 4036,
+        "finishReason": "stop",
+        "truncated": false
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "score": null,
+        "rationale": "[error: Request timed out.]",
+        "issues": [],
+        "judgedAt": "2026-05-04T17:33:51.014Z",
+        "sdkError": {
+          "message": "Request timed out.",
+          "status": null,
+          "code": null,
+          "type": null,
+          "requestId": null,
+          "retryAfterMs": null,
+          "isRateLimit": false,
+          "isServerError": false
+        }
+      }
+    ],
+    "juryMedian": 8,
+    "juryMean": 8,
+    "jurySpread": 2,
+    "juryAgreement": "medium",
+    "juryRunAt": "2026-05-04T17:33:51.014Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 3,
+    "parentTaskTool": "T4-micrograd-extract-const/superpowers",
+    "capturedAt": "2026-05-04T17:33:51.302Z"
+  }
+}

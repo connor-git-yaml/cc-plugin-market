@@ -59,7 +59,8 @@ export function scanFixtures(rootDir = BASELINE_DIR) {
   if (!fs.existsSync(rootDir)) return result;
 
   // Spectra 类: tests/baseline/<project>/<tool>/full.json
-  for (const proj of fs.readdirSync(rootDir).filter((n) => !n.startsWith('.') && n !== 'tasks' && n !== 'README.md')) {
+  // 排除 'tasks'（spec-driver 类）/ 'repeats'（feature 149 N-run aggregate）/ README
+  for (const proj of fs.readdirSync(rootDir).filter((n) => !n.startsWith('.') && n !== 'tasks' && n !== 'repeats' && n !== 'README.md')) {
     const projDir = path.join(rootDir, proj);
     if (!fs.statSync(projDir).isDirectory()) continue;
     for (const tool of fs.readdirSync(projDir)) {
@@ -102,6 +103,53 @@ export function scanFixtures(rootDir = BASELINE_DIR) {
   }
 
   return result;
+}
+
+// ============================================================
+// Feature 149：扫 repeats/ 目录加载 N-run aggregate
+// ============================================================
+
+/**
+ * 扫 tests/baseline/repeats/<task>/<tool>/aggregate.json，
+ * 返回 Map<`${task}|${tool}`, aggregate>。
+ *
+ * 没有 repeats 目录或所有 fixture 都缺失时返回空 Map（向后兼容渲染分支）。
+ *
+ * @param {string} [rootDir] tests/baseline 根
+ * @returns {Map<string, Record<string, unknown>>}
+ */
+export function loadRepeatAggregates(rootDir = BASELINE_DIR) {
+  /** @type {Map<string, Record<string, unknown>>} */
+  const map = new Map();
+  const repeatsDir = path.join(rootDir, 'repeats');
+  if (!fs.existsSync(repeatsDir)) return map;
+  for (const task of fs.readdirSync(repeatsDir)) {
+    if (task.startsWith('.')) continue;
+    const taskDir = path.join(repeatsDir, task);
+    if (!fs.statSync(taskDir).isDirectory()) continue;
+    for (const tool of fs.readdirSync(taskDir)) {
+      const aggPath = path.join(taskDir, tool, 'aggregate.json');
+      if (!fs.existsSync(aggPath)) continue;
+      try {
+        const agg = JSON.parse(fs.readFileSync(aggPath, 'utf-8'));
+        map.set(`${task}|${tool}`, agg);
+      } catch (e) {
+        console.warn(`[eval-report] skip invalid aggregate ${aggPath}: ${e.message}`);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * 检测两区间是否 overlap：[a.low, a.high] ∩ [b.low, b.high] 非空
+ * @param {{ low: number | null; high: number | null } | null | undefined} a
+ * @param {{ low: number | null; high: number | null } | null | undefined} b
+ * @returns {boolean}
+ */
+export function ciOverlaps(a, b) {
+  if (!a || !b || a.low == null || a.high == null || b.low == null || b.high == null) return false;
+  return a.low <= b.high && b.low <= a.high;
 }
 
 // ============================================================
@@ -318,7 +366,7 @@ function getGitState() {
   return { head, branch };
 }
 
-export function renderMarkdown(scanned, agg, insights) {
+export function renderMarkdown(scanned, agg, insights, repeatAggregatesOverride) {
   const lines = [];
   const git = getGitState();
   const now = new Date().toISOString();
@@ -546,8 +594,19 @@ export function renderMarkdown(scanned, agg, insights) {
     }
   }
 
+  // Feature 149: 加载 N-run aggregate（向后兼容：无 repeats 目录时返回空 Map）
+  // 测试可注入 repeatAggregatesOverride 避免依赖 prod 路径
+  const repeatAggregates = repeatAggregatesOverride instanceof Map
+    ? repeatAggregatesOverride
+    : loadRepeatAggregates();
+  const hasRepeatData = repeatAggregates.size > 0;
+
   lines.push('### 4.1 评分矩阵（juryMedian 优先 / fallback rubricJudgeScore + oracle PASS）');
   lines.push('');
+  if (hasRepeatData) {
+    lines.push('> **Feature 149 N-run bootstrap CI**：repeats/ 目录存在 → 单元格渲染为 `<median> [low, high] (n=actualN)`，n≥3 时显示 95% percentile bootstrap CI；n<3 仍走 single-run 渲染并标 "n=X insufficient for CI"');
+    lines.push('');
+  }
   if (scanned.specDriverClass.length > 0) {
     const tools = [...agg.driverTools].sort();
     const tasks = [...agg.tasks].sort();
@@ -592,10 +651,34 @@ export function renderMarkdown(scanned, agg, insights) {
         }
         allPassCount++;
         if (oraclePass) allPassRate++;
-        // 每 cell 标 ††（jury）或 †（rubric self-judge）
-        const sourceMarker = score == null ? '' : (isJury ? '††' : '†');
-        const scoreLabel = isJury ? `**${score}${sourceMarker}**` : (score == null ? 'null' : `${score}${sourceMarker}`);
-        row.push(`${scoreLabel} (${oraclePass ? '✓' : '✗'})`);
+        // Feature 149: 优先用 N-run bootstrap CI 渲染
+        const repeatAgg = repeatAggregates.get(`${task}|${tool}`);
+        const ci = repeatAgg?.bootstrapCi;
+        const actualN = typeof repeatAgg?.actualN === 'number' ? repeatAgg.actualN : 0;
+        if (repeatAgg && actualN >= 3 && ci?.low != null && ci?.high != null) {
+          // 渲染 <median> [low, high] (n=N)
+          // Feature 149 修复：median 用 juryMedianSamples 的实际中位数，不用 single-run score（避免 single-run 的 null 污染）
+          const samples = (repeatAgg.juryMedianSamples ?? []).filter((v) => typeof v === 'number');
+          const sampleMed = samples.length > 0
+            ? (samples.length % 2 === 1
+                ? samples.slice().sort((a, b) => a - b)[Math.floor(samples.length / 2)]
+                : (samples.slice().sort((a, b) => a - b)[samples.length / 2 - 1] + samples.slice().sort((a, b) => a - b)[samples.length / 2]) / 2)
+            : (score != null ? score : null);
+          const low = Number(ci.low).toFixed(1);
+          const high = Number(ci.high).toFixed(1);
+          const med = sampleMed != null ? Number(sampleMed).toFixed(sampleMed % 1 === 0 ? 0 : 1) : 'null';
+          row.push(`**${med}†† [${low}, ${high}] (n=${actualN})** (${oraclePass ? '✓' : '✗'})`);
+        } else if (repeatAgg && actualN > 0 && actualN < 3) {
+          // n<3 → single-run 渲染 + insufficient 标注
+          const sourceMarker = score == null ? '' : (isJury ? '††' : '†');
+          const scoreLabel = isJury ? `**${score}${sourceMarker}**` : (score == null ? 'null' : `${score}${sourceMarker}`);
+          row.push(`${scoreLabel} (n=${actualN} insufficient for CI) (${oraclePass ? '✓' : '✗'})`);
+        } else {
+          // 每 cell 标 ††（jury）或 †（rubric self-judge）
+          const sourceMarker = score == null ? '' : (isJury ? '††' : '†');
+          const scoreLabel = isJury ? `**${score}${sourceMarker}**` : (score == null ? 'null' : `${score}${sourceMarker}`);
+          row.push(`${scoreLabel} (${oraclePass ? '✓' : '✗'})`);
+        }
       }
       lines.push('| ' + row.join(' | ') + ' |');
     }
@@ -636,6 +719,44 @@ export function renderMarkdown(scanned, agg, insights) {
       if (juryTools.size > 0) legend.push('†† = **cross-LLM jury** (multi-judge median, anonymized + adversarial prompt)');
       if (selfJudgeTools.size > 0) legend.push('† = **provisional self-judge** (executor=judge, 无独立 reviewer, descriptive signal only)');
       lines.push('> ' + legend.join('; '));
+    }
+
+    // Feature 149: 跨工具 CI overlap 检测
+    if (hasRepeatData) {
+      const overlapPairs = [];
+      const toolCiByTool = {};
+      for (const tool of tools) {
+        // 收集该 tool 全部 (task, tool) 对应的 CI；以 task 为粒度做 pair-wise overlap
+        const perTaskCi = {};
+        for (const task of tasks) {
+          const ag = repeatAggregates.get(`${task}|${tool}`);
+          if (ag && typeof ag.actualN === 'number' && ag.actualN >= 3 && ag.bootstrapCi?.low != null && ag.bootstrapCi?.high != null) {
+            perTaskCi[task] = { low: ag.bootstrapCi.low, high: ag.bootstrapCi.high };
+          }
+        }
+        toolCiByTool[tool] = perTaskCi;
+      }
+      for (let i = 0; i < tools.length; i++) {
+        for (let j = i + 1; j < tools.length; j++) {
+          const a = tools[i], b = tools[j];
+          // 共有 task 上 overlap
+          for (const task of tasks) {
+            if (toolCiByTool[a][task] && toolCiByTool[b][task]) {
+              if (ciOverlaps(toolCiByTool[a][task], toolCiByTool[b][task])) {
+                overlapPairs.push({ task, a, b, ciA: toolCiByTool[a][task], ciB: toolCiByTool[b][task] });
+              }
+            }
+          }
+        }
+      }
+      if (overlapPairs.length > 0) {
+        lines.push('');
+        lines.push('> **CI overlap 警告（分差不显著）**：以下工具对在同一 task 上 95% bootstrap CI 区间重叠，分差不应作为质量排名信号：');
+        for (const p of overlapPairs.slice(0, 20)) {
+          lines.push(`> - ${p.task}: ${p.a} [${p.ciA.low.toFixed(1)}, ${p.ciA.high.toFixed(1)}] vs ${p.b} [${p.ciB.low.toFixed(1)}, ${p.ciB.high.toFixed(1)}] — 分差不显著（CI overlap）`);
+        }
+        if (overlapPairs.length > 20) lines.push(`> ...（共 ${overlapPairs.length} 对，仅展示前 20）`);
+      }
     }
     lines.push('');
 
@@ -862,6 +983,58 @@ export function renderMarkdown(scanned, agg, insights) {
       }
       if (truncated.length > 0) {
         lines.push(`> ⚠️ **Truncated responses (max_tokens hit)**: ${truncated.join(', ')} — 该 judge 输出被截断，可能 score 解析降级；考虑提高 max_tokens 重跑`);
+        lines.push('');
+      }
+
+      // Feature 149: Bootstrap CI 视角下的工具排名（actualN ≥ 5 的工具按 task-aggregated median 排序）
+      if (hasRepeatData) {
+        lines.push('#### 4.3.b Bootstrap CI 视角下的工具排名（Feature 149）');
+        lines.push('');
+        lines.push('> 仅纳入 `actualN ≥ 5` 的 (task, tool) pair；按工具维度聚合：列出该工具下所有 task 的 jury median + 95% percentile bootstrap CI [low, high]。CI 区间宽度反映重测稳定性，工具间区间重叠说明分差不显著（详见 §4.1 overlap 警告）。');
+        lines.push('');
+        lines.push('| 工具 | 涉及 task 数 | 最低 CI low | 最高 CI high | 中位 median |');
+        lines.push('|------|--------------|-------------|--------------|-------------|');
+        const toolStats = {};
+        for (const [key, agg] of repeatAggregates.entries()) {
+          const [, tool] = key.split('|');
+          if (typeof agg.actualN !== 'number' || agg.actualN < 5) continue;
+          if (!agg.bootstrapCi || agg.bootstrapCi.low == null || agg.bootstrapCi.high == null) continue;
+          if (!Array.isArray(agg.juryMedianSamples) || agg.juryMedianSamples.length === 0) continue;
+          if (!toolStats[tool]) toolStats[tool] = { tasks: 0, lows: [], highs: [], medians: [] };
+          toolStats[tool].tasks += 1;
+          toolStats[tool].lows.push(agg.bootstrapCi.low);
+          toolStats[tool].highs.push(agg.bootstrapCi.high);
+          // task-level median = median of juryMedianSamples
+          const sorted = [...agg.juryMedianSamples].sort((a, b) => a - b);
+          const m = sorted.length % 2 === 1
+            ? sorted[(sorted.length - 1) / 2]
+            : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+          toolStats[tool].medians.push(m);
+        }
+        const toolsRanked = Object.entries(toolStats)
+          .map(([tool, s]) => {
+            const sortedM = [...s.medians].sort((a, b) => a - b);
+            const overallMedian = sortedM.length % 2 === 1
+              ? sortedM[(sortedM.length - 1) / 2]
+              : (sortedM[sortedM.length / 2 - 1] + sortedM[sortedM.length / 2]) / 2;
+            return {
+              tool,
+              tasks: s.tasks,
+              minLow: Math.min(...s.lows),
+              maxHigh: Math.max(...s.highs),
+              overallMedian,
+            };
+          })
+          .sort((a, b) => b.overallMedian - a.overallMedian);
+        if (toolsRanked.length === 0) {
+          lines.push('| —    | —            | —           | —            | —           |');
+          lines.push('');
+          lines.push('> （目前无任何工具在任何 task 上 actualN ≥ 5；建议先跑 `npm run eval:repeat -- --all-fixtures --n 5`）');
+        } else {
+          for (const r of toolsRanked) {
+            lines.push(`| ${r.tool} | ${r.tasks} | ${r.minLow.toFixed(1)} | ${r.maxHigh.toFixed(1)} | ${r.overallMedian.toFixed(1)} |`);
+          }
+        }
         lines.push('');
       }
     } else {

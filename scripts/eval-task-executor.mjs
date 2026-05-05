@@ -196,7 +196,8 @@ export async function callExecutor({ model, prompt, baseURL = DEFAULT_BASE_URL, 
 // 单 fixture 执行器
 // ============================================================
 
-export async function executeOnFixture({ taskId, tool, executorModel, skipSanity }) {
+// Feature 149 修复：executorModel 加默认值兜底（repeat-runner / 其他外部 caller 不再踩"undefined → SF 400"坑）
+export async function executeOnFixture({ taskId, tool, executorModel = DEFAULT_EXECUTOR_MODEL, skipSanity }) {
   const taskFixture = loadTaskFixture(taskId);
   const wt = prepareWorktree({
     taskId, tool,

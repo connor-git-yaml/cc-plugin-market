@@ -33,7 +33,13 @@ interface ReportModule {
     scanned: ReturnType<ReportModule['scanFixtures']>,
     agg: ReturnType<ReportModule['aggregateMetrics']>,
     insights: ReturnType<ReportModule['detectInsights']>,
+    repeatAggregatesOverride?: Map<string, Record<string, unknown>>,
   ) => string;
+  loadRepeatAggregates: (rootDir: string) => Map<string, Record<string, unknown>>;
+  ciOverlaps: (
+    a: { low: number | null; high: number | null } | null | undefined,
+    b: { low: number | null; high: number | null } | null | undefined,
+  ) => boolean;
   renderJson: (
     scanned: ReturnType<ReportModule['scanFixtures']>,
     agg: ReturnType<ReportModule['aggregateMetrics']>,
@@ -666,6 +672,181 @@ describe('eval-report', () => {
       const parsed = JSON.parse(j);
       expect(parsed.aggregate).toBeTruthy();
       expect(parsed.fixtures.spectraClass).toHaveLength(1);
+    });
+  });
+
+  describe('Feature 149: bootstrap CI rendering', () => {
+    it('loadRepeatAggregates returns empty Map when repeats dir absent', async () => {
+      const { loadRepeatAggregates } = await loadReport();
+      const m = loadRepeatAggregates(tempDir);
+      expect(m.size).toBe(0);
+    });
+
+    it('loadRepeatAggregates parses aggregate.json and keys by task|tool', async () => {
+      const { loadRepeatAggregates } = await loadReport();
+      mkdirSync(join(tempDir, 'repeats', 'T6-violation-refusal', 'spec-driver-spectra'), { recursive: true });
+      writeFileSync(
+        join(tempDir, 'repeats', 'T6-violation-refusal', 'spec-driver-spectra', 'aggregate.json'),
+        JSON.stringify({ task: 'T6', tool: 'spec-driver-spectra', actualN: 5 }),
+      );
+      const m = loadRepeatAggregates(tempDir);
+      expect(m.size).toBe(1);
+      expect(m.has('T6-violation-refusal|spec-driver-spectra')).toBe(true);
+    });
+
+    it('ciOverlaps detects overlapping intervals', async () => {
+      const { ciOverlaps } = await loadReport();
+      expect(ciOverlaps({ low: 6.5, high: 9.0 }, { low: 7.0, high: 8.5 })).toBe(true);
+      expect(ciOverlaps({ low: 5.0, high: 6.0 }, { low: 6.5, high: 8.0 })).toBe(false);
+      expect(ciOverlaps({ low: 5.0, high: 6.5 }, { low: 6.5, high: 8.0 })).toBe(true); // touching counts
+      expect(ciOverlaps(null, { low: 1, high: 2 })).toBe(false);
+      expect(ciOverlaps({ low: null, high: 5 }, { low: 1, high: 2 })).toBe(false);
+    });
+
+    it('§4.1 falls back to single-run rendering when repeats Map empty', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver', model: 'claude-sonnet-4-6' },
+        taskExecution: {
+          tool: 'spec-driver',
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 7 }, { judge: 'b', score: 8 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(
+        scanned,
+        aggregateMetrics(scanned),
+        detectInsights(scanned),
+        new Map(),
+      );
+      // 不应包含 Feature 149 banner
+      expect(md).not.toContain('Feature 149 N-run bootstrap CI');
+      // 不应渲染 [low, high] 格式
+      expect(md).not.toMatch(/\[\d+\.\d+, \d+\.\d+\]/);
+      // 仍含原 single-run 渲染
+      expect(md).toMatch(/\*\*7\.5/);
+    });
+
+    it('§4.1 renders <median> [low, high] (n=N) when actualN>=3', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: {
+          tool: 'spec-driver',
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 7 }, { judge: 'b', score: 8 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const overrides = new Map<string, Record<string, unknown>>();
+      overrides.set('T1|spec-driver', {
+        task: 'T1',
+        tool: 'spec-driver',
+        actualN: 5,
+        bootstrapCi: { low: 6.5, high: 9.0, b: 1000, samples: 5, method: 'percentile' },
+        juryMedianSamples: [7, 7.5, 8, 8, 7.5],
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned), overrides);
+      expect(md).toContain('Feature 149 N-run bootstrap CI');
+      expect(md).toContain('[6.5, 9.0]');
+      expect(md).toContain('(n=5)');
+    });
+
+    it('§4.1 falls back to single-run + insufficient label when actualN<3', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: {
+          tool: 'spec-driver',
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 7 }, { judge: 'b', score: 8 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const overrides = new Map<string, Record<string, unknown>>();
+      overrides.set('T1|spec-driver', {
+        actualN: 2,
+        bootstrapCi: { low: null, high: null, b: 1000, samples: 2, method: 'percentile', reason: 'insufficient-samples' },
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned), overrides);
+      expect(md).toContain('insufficient for CI');
+      expect(md).toContain('n=2');
+    });
+
+    it('§4.1 emits CI overlap warning for overlapping tools on same task', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: {
+          tool: 'spec-driver',
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 7 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      writeFixture(join(tempDir, 'tasks', 'T1', 'gstack'), {
+        meta: { tool: 'gstack' },
+        taskExecution: {
+          tool: 'gstack',
+          juryMedian: 7.8,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 8 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const overrides = new Map<string, Record<string, unknown>>();
+      overrides.set('T1|spec-driver', {
+        actualN: 5,
+        bootstrapCi: { low: 6.5, high: 9.0, b: 1000, samples: 5, method: 'percentile' },
+        juryMedianSamples: [7, 7.5, 8, 8, 7.5],
+      });
+      overrides.set('T1|gstack', {
+        actualN: 5,
+        bootstrapCi: { low: 7.0, high: 8.5, b: 1000, samples: 5, method: 'percentile' },
+        juryMedianSamples: [7, 7.5, 8, 8, 8],
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned), overrides);
+      expect(md).toContain('CI overlap 警告');
+      expect(md).toContain('分差不显著');
+    });
+
+    it('§4.3.b Bootstrap CI 视角下的工具排名 sub-section appears with N>=5 tools', async () => {
+      const { scanFixtures, aggregateMetrics, detectInsights, renderMarkdown } = await loadReport();
+      writeFixture(join(tempDir, 'tasks', 'T1', 'spec-driver'), {
+        meta: { tool: 'spec-driver' },
+        taskExecution: {
+          tool: 'spec-driver',
+          juryMedian: 7.5,
+          jurySpread: 1,
+          juryAgreement: 'high',
+          juryScores: [{ judge: 'a', score: 7 }],
+          primaryOracle: { passed: true },
+        },
+      });
+      const overrides = new Map<string, Record<string, unknown>>();
+      overrides.set('T1|spec-driver', {
+        actualN: 5,
+        bootstrapCi: { low: 6.5, high: 9.0, b: 1000, samples: 5, method: 'percentile' },
+        juryMedianSamples: [7, 7.5, 8, 7, 7.5],
+      });
+      const scanned = scanFixtures(tempDir);
+      const md = renderMarkdown(scanned, aggregateMetrics(scanned), detectInsights(scanned), overrides);
+      expect(md).toContain('#### 4.3.b Bootstrap CI 视角下的工具排名');
+      expect(md).toMatch(/\| spec-driver \| 1 \|/);
     });
   });
 });

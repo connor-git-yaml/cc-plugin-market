@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "1.1",
+  "meta": {
+    "tool": "spec-driver",
+    "spectraVersion": "4.1.1",
+    "collectorVersion": "0.3.0",
+    "targetProject": "karpathy/micrograd",
+    "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+    "targetFileCountsByType": null,
+    "targetLocEstimate": null,
+    "spectraModuleCount": null,
+    "mode": "task",
+    "model": "Pro/zai-org/GLM-5.1",
+    "runTimestampUtc": "2026-05-04T12:26:48.377Z",
+    "runHostOs": "darwin",
+    "command": "siliconflow-sdk",
+    "args": null,
+    "envAllowlist": {
+      "ANTHROPIC_API_KEY": null
+    },
+    "outputDir": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver",
+    "stdoutLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver/task-runner-stdout.log",
+    "stderrLogPath": "/Users/connorlu/.spec-driver-bench-worktrees/T1-micrograd-add-tanh/spec-driver/task-runner-stderr.log",
+    "pinnedAt": "2026-05-04T12:26:48.377Z",
+    "staleAfterDate": "2026-10-31",
+    "upstreamVersion": "unknown",
+    "frozenFixture": false
+  },
+  "dryRun": {
+    "estimatedTokens": null,
+    "actualTokens": null,
+    "biasRatio": null
+  },
+  "perf": {
+    "totalWallMs": 78872,
+    "llmCallCount": null,
+    "llmCallDurationsMs": null,
+    "tokensInput": null,
+    "tokensOutput": null,
+    "tokensCacheRead": null,
+    "estimatedCostUsd": null,
+    "memoryPeakKb": null
+  },
+  "output": {
+    "graphNodeCount": null,
+    "graphEdgeCount": null,
+    "graphHyperedgeCount": 0,
+    "graphSizeBytes": null,
+    "specModuleCount": null,
+    "specSuccessCount": null,
+    "specSkippedCount": null,
+    "specFailedCount": null
+  },
+  "phases": {
+    "specGenerationMs": null,
+    "graphBuildMs": null,
+    "docsGenerationMs": null,
+    "embeddingCacheMs": null,
+    "otherMs": null,
+    "extractionMethod": "task-execution"
+  },
+  "quality": null,
+  "taskExecution": {
+    "taskId": "T1-micrograd-add-tanh",
+    "tool": "spec-driver",
+    "executionMode": "single-turn-glm",
+    "wallMs": 78872,
+    "tokensTotal": 7516,
+    "costUsd": null,
+    "userInterventions": 0,
+    "commits": 0,
+    "filesChanged": 2,
+    "uncommittedChanges": 2,
+    "primaryOracle": {
+      "kind": "functional",
+      "passed": true,
+      "details": "[{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); assert abs(y.data - math.tanh(0.5)) < 1e-9, f'forward fail: {y.data} vs {math.tanh(0.5)}'\\\"\",\"description\":\"tanh forward 数值匹配 math.tanh\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.tanh(); y.backward(); expected = 1 - math.tanh(0.5) ** 2; assert abs(v.grad - expected) < 1e-9, f'backward fail: {v.grad} vs {expected}'\\\"\",\"description\":\"tanh backward 梯度 = 1 - tanh^2\",\"mustPass\":true,\"exitCode\":0,\"passed\":true,\"stdout\":\"\",\"stderr\":\"\"},{\"cmd\":\"python3 -c \\\"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(-1.5); y = v.tanh(); y.backward(); assert abs(y.data - math.tanh(-1.5)) < 1e-9 and abs(v.grad - (1 - math.tanh(-1.5) ** 2)) < 1e-9\\\"\",\"description\":\"负值场景验证（防"
+    },
+    "testsPassed": null,
+    "testsFailed": null,
+    "testsBroken": null,
+    "rubricJudgeScore": null,
+    "rubricJudgeRationale": null,
+    "interRaterDelta": null,
+    "diffStat": " micrograd/engine.py | 12 ++++++++++++\n test/test_engine.py | 38 ++++++++++++++++++++++++++++++++++++++\n 2 files changed, 50 insertions(+)\n",
+    "sonnetExitCode": 0,
+    "sonnetTimedOut": false,
+    "model": "Pro/zai-org/GLM-5.1",
+    "executor": "siliconflow:Pro/zai-org/GLM-5.1",
+    "executorVendor": "siliconflow",
+    "executorPromptTokens": 2145,
+    "executorCompletionTokens": 5371,
+    "executorFinishReason": "stop",
+    "executorTruncated": false,
+    "executorRationale": "在 engine.py 中引入 math 模块并实现 tanh 方法，前向传播调用 math.tanh，反向传播闭包实现导数 (1 - t**2) * out.grad；在 test_engine.py 中新增 test_tanh 测试函数，对比 micrograd 与 PyTorch 的前向与反向结果以确保正确性。",
+    "executorPatchedFiles": [
+      "micrograd/engine.py",
+      "test/test_engine.py"
+    ],
+    "modelDisclaimer": "Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比",
+    "juryScores": [
+      {
+        "judge": "claude-cli:claude-opus-4-7",
+        "vendor": "anthropic",
+        "score": 8,
+        "rationale": "实现正确：tanh 数值用 math.tanh，反向传播闭包用 1-t² 形式（复用 forward 的 t，避免重复计算），风格与 relu() 一致。测试覆盖 forward + backward 且包含复合表达式，与 PyTorch 对齐验证。但存在小瑕疵：import 后多了一个空行、未处理 edge case、测试命名可更细分。",
+        "issues": [
+          "micrograd/engine.py 第 1-2 行：`import math` 后保留了一个原本不存在的空行（diff 中 `+import math` 后紧跟空行 ` `），改变了文件顶部空白结构，与原始文件风格不一致；更干净的做法是 `import math\\n\\nclass Value:`",
+          "test/test_engine.py 中 `test_tanh` 把两个独立场景（简单 tanh、复合 a*b 后 tanh）塞进同一个测试函数，任务要求 1-2 个 unit test，更清晰的做法是拆成 `test_tanh_simple` 和 `test_tanh_composite` 两个函数，便于失败定位",
+          "未测试饱和区边界（如 x=10、x=-10 这类 |tanh| 接近 1、梯度接近 0 的 case），也未测试 x=0（tanh(0)=0，梯度=1）这类对称锚点，覆盖度仍偏窄"
+        ],
+        "judgedAt": "2026-05-04T12:27:04.700Z",
+        "promptTokens": 5,
+        "completionTokens": 481,
+        "finishReason": "end_turn",
+        "truncated": false
+      },
+      {
+        "judge": "codex:gpt-5.5",
+        "vendor": "openai",
+        "score": 8,
+        "rationale": "实现本身基本正确：forward 使用 math.tanh，反传闭包使用 1 - t**2，并且梯度累加方式与现有 Value 方法风格一致。测试覆盖了单点 forward/backward 和一个组合表达式，能验证核心行为。不足主要在交付和测试结构细节上，不影响主要功能正确性。",
+        "issues": [
+          "任务要求“直接修改文件并提交 commit”，但产出只体现了 diff，没有任何 commit 信息或提交记录证据，交付要求未完整满足。",
+          "test/test_engine.py 中只新增了一个 test_tanh 函数，把简单 forward/backward 和组合表达式混在一起；失败定位不如拆成 1-2 个独立 unit test 清晰，也与任务中“新增 1-2 个简单 unit test”的表述不完全贴合。",
+          "engine.py 在 import math 后直接接 class Value，中间缺少常规空行；test_tanh 前也只有一个空行，和 Python/pytest 常见的顶层定义间隔风格不一致。"
+        ],
+        "judgedAt": "2026-05-04T12:27:19.485Z",
+        "promptTokens": null,
+        "completionTokens": 16819,
+        "finishReason": "stop",
+        "truncated": false
+      },
+      {
+        "judge": "siliconflow:Pro/moonshotai/Kimi-K2.6",
+        "vendor": "siliconflow",
+        "score": 8,
+        "rationale": "实现数学正确，测试覆盖了前向与反向传播并与 PyTorch 对齐，但存在代码风格不一致，且测试对边界点和中间变量梯度覆盖不足。",
+        "issues": [
+          "micrograd/engine.py 第55行：引入多余的局部变量 `x = self.data`，与现有方法（如 relu）直接内联使用 self.data 的风格不一致",
+          "test/test_engine.py：未测试 x=0 边界情况（此时 tanh(0)=0 且导数恰为1，是常见易错点），且复合表达式测试未验证中间变量 c 的梯度，链式法则验证不够完整"
+        ],
+        "judgedAt": "2026-05-04T12:28:30.049Z",
+        "promptTokens": 1034,
+        "completionTokens": 3731,
+        "finishReason": "stop",
+        "truncated": false
+      }
+    ],
+    "juryMedian": 8,
+    "juryMean": 8,
+    "jurySpread": 0,
+    "juryAgreement": "high",
+    "juryRunAt": "2026-05-04T12:28:30.049Z",
+    "judgedBy": null,
+    "juryAnonymized": true,
+    "juryAdversarial": true
+  },
+  "repeat": {
+    "runIndex": 3,
+    "parentTaskTool": "T1-micrograd-add-tanh/spec-driver",
+    "capturedAt": "2026-05-04T12:28:30.057Z"
+  }
+}

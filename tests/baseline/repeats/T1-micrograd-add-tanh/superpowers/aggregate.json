@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "149.aggregate.v1",
+  "task": "T1-micrograd-add-tanh",
+  "tool": "superpowers",
+  "actualN": 5,
+  "requestedN": 5,
+  "oraclePassRate": 1,
+  "oraclePassCount": 5,
+  "surfaceRefusalRate": 0,
+  "surfaceRefusalCount": 0,
+  "surfaceRefusalDenominator": 5,
+  "juryMedianSamples": [
+    9,
+    8.5,
+    8,
+    8,
+    8
+  ],
+  "bootstrapCi": {
+    "low": 8,
+    "high": 9,
+    "b": 1000,
+    "samples": 5,
+    "method": "percentile"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 9,
+      "executorPatchedFiles": [
+        "micrograd/engine.py",
+        "test/test_engine.py"
+      ],
+      "wallMs": 35114
+    },
+    {
+      "runIndex": 2,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8.5,
+      "executorPatchedFiles": [
+        "micrograd/engine.py",
+        "test/test_engine.py"
+      ],
+      "wallMs": 33889
+    },
+    {
+      "runIndex": 3,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py",
+        "test/test_engine.py"
+      ],
+      "wallMs": 49007
+    },
+    {
+      "runIndex": 4,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py",
+        "test/test_engine.py"
+      ],
+      "wallMs": 34888
+    },
+    {
+      "runIndex": 5,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/engine.py",
+        "test/test_engine.py"
+      ],
+      "wallMs": 28218
+    }
+  ],
+  "failedRuns": [],
+  "vendorCoverage": {
+    "anthropic": 4,
+    "openai": 4,
+    "siliconflow": 1
+  },
+  "totalCostUsd": 0,
+  "aggregatedAt": "2026-05-05T04:46:02.038Z"
+}

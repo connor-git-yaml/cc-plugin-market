@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "149.aggregate.v1",
+  "task": "T2-nanogpt-cosine-lr",
+  "tool": "spec-driver-spectra",
+  "actualN": 1,
+  "requestedN": 1,
+  "oraclePassRate": 1,
+  "oraclePassCount": 1,
+  "surfaceRefusalRate": 0,
+  "surfaceRefusalCount": 0,
+  "surfaceRefusalDenominator": 1,
+  "juryMedianSamples": [
+    3
+  ],
+  "bootstrapCi": {
+    "low": null,
+    "high": null,
+    "b": 1000,
+    "samples": 1,
+    "method": "percentile",
+    "reason": "insufficient-samples"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 3,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 394180
+    }
+  ],
+  "failedRuns": [
+    {
+      "runIndex": 1,
+      "error": "Connection error."
+    },
+    {
+      "runIndex": 3,
+      "error": "Request timed out."
+    },
+    {
+      "runIndex": 4,
+      "error": "Connection error."
+    },
+    {
+      "runIndex": 5,
+      "error": "Request timed out."
+    }
+  ],
+  "vendorCoverage": {
+    "anthropic": 1,
+    "openai": 1
+  },
+  "totalCostUsd": 0,
+  "aggregatedAt": "2026-05-05T04:46:02.041Z"
+}

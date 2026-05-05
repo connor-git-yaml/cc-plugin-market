@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "149.aggregate.v1",
+  "task": "T4-micrograd-extract-const",
+  "tool": "gstack",
+  "actualN": 5,
+  "requestedN": 5,
+  "oraclePassRate": 1,
+  "oraclePassCount": 5,
+  "surfaceRefusalRate": 0,
+  "surfaceRefusalCount": 0,
+  "surfaceRefusalDenominator": 5,
+  "juryMedianSamples": [
+    8,
+    8,
+    7.5,
+    7,
+    8
+  ],
+  "bootstrapCi": {
+    "low": 7,
+    "high": 8,
+    "b": 1000,
+    "samples": 5,
+    "method": "percentile"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/nn.py"
+      ],
+      "wallMs": 14416
+    },
+    {
+      "runIndex": 2,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/nn.py"
+      ],
+      "wallMs": 27025
+    },
+    {
+      "runIndex": 3,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 7.5,
+      "executorPatchedFiles": [
+        "micrograd/nn.py"
+      ],
+      "wallMs": 14927
+    },
+    {
+      "runIndex": 4,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 7,
+      "executorPatchedFiles": [
+        "micrograd/nn.py"
+      ],
+      "wallMs": 16090
+    },
+    {
+      "runIndex": 5,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 8,
+      "executorPatchedFiles": [
+        "micrograd/nn.py"
+      ],
+      "wallMs": 14625
+    }
+  ],
+  "failedRuns": [],
+  "vendorCoverage": {
+    "anthropic": 5,
+    "openai": 4
+  },
+  "totalCostUsd": 0,
+  "aggregatedAt": "2026-05-05T04:46:02.048Z"
+}

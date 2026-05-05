@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "149.aggregate.v1",
+  "task": "T2-nanogpt-cosine-lr",
+  "tool": "gstack",
+  "actualN": 5,
+  "requestedN": 5,
+  "oraclePassRate": 1,
+  "oraclePassCount": 5,
+  "surfaceRefusalRate": 0,
+  "surfaceRefusalCount": 0,
+  "surfaceRefusalDenominator": 5,
+  "juryMedianSamples": [
+    3,
+    6.5,
+    3.5,
+    3.5,
+    4
+  ],
+  "bootstrapCi": {
+    "low": 3,
+    "high": 6.5,
+    "b": 1000,
+    "samples": 5,
+    "method": "percentile"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 3,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 77707
+    },
+    {
+      "runIndex": 2,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 6.5,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 73266
+    },
+    {
+      "runIndex": 3,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 3.5,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 73463
+    },
+    {
+      "runIndex": 4,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 3.5,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 199583
+    },
+    {
+      "runIndex": 5,
+      "status": "success",
+      "oraclePassed": true,
+      "surfaceRefusal": false,
+      "juryMedian": 4,
+      "executorPatchedFiles": [
+        "train.py"
+      ],
+      "wallMs": 404146
+    }
+  ],
+  "failedRuns": [],
+  "vendorCoverage": {
+    "anthropic": 5,
+    "openai": 4,
+    "siliconflow": 1
+  },
+  "totalCostUsd": 0,
+  "aggregatedAt": "2026-05-05T04:46:02.040Z"
+}
