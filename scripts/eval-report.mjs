@@ -1186,6 +1186,22 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const scanned = scanFixtures();
   const agg = aggregateMetrics(scanned);
+
+  // Codex Phase 4D 测评清理修订（W1）：fixture 缺失时 stderr 显式 warn，
+  // 避免用户误以为 spectra-only 报告就是完整结果（实际是 task fixture 没跑）
+  const tasksDir = path.join(BASELINE_DIR, 'tasks');
+  const repeatsDir = path.join(BASELINE_DIR, 'repeats');
+  if (!fs.existsSync(tasksDir) || agg.specDriverCount === 0) {
+    console.error('[eval-report] ⚠️  tests/baseline/tasks/ 不存在或为空 — Spec Driver 类 fixture 未生成。');
+    console.error('[eval-report] ⚠️  本次报告仅含 Spectra 类 perf anchor (12 fixture)，无 §4 任务矩阵 / §4.4 compliance / §4.5 multi-turn。');
+    console.error('[eval-report] ⚠️  完整报告需先跑：npm run eval:competitor && npm run eval:judge-jury');
+  }
+  if (!fs.existsSync(repeatsDir)) {
+    console.error('[eval-report] ⚠️  tests/baseline/repeats/ 不存在 — Feature 149 N=5 bootstrap CI 数据未生成。');
+    console.error('[eval-report] ⚠️  §4.1 评分矩阵将走 single-run 渲染（无 95% CI 区间）。');
+    console.error('[eval-report] ⚠️  N=5 重测：npm run eval:repeat -- --all-fixtures --n 5 --concurrency 4');
+  }
+
   const insights = detectInsights(scanned);
   const output = args.format === 'json' ? renderJson(scanned, agg, insights) : renderMarkdown(scanned, agg, insights);
 

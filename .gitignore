@@ -69,6 +69,18 @@ tests/fixtures/e2e/*/var/
 tests/baseline/.workspaces/*
 !tests/baseline/.workspaces/.gitkeep
 
+# 测评结果 / 数据不入库（2026-05-05 清理 9.3 MB 测评产物）
+# 入库的只有 perf anchor: tests/baseline/<project>/<tool>/full.json (~100 KB 总量)
+# 不入库的：
+# - truth-set.json (Feature 150: 外部代码 hono/HikariCP/GORM 等的 AST 抽取结果，每次跑生成)
+# - tasks/ (Feature 147: task fixture，每次评估生成，含 LLM 单次随机性，git track 反成噪声)
+# - repeats/ (Feature 149: N=5 重测原始 fixture，每次跑生成)
+# - competitive-evaluation-report-auto.md (auto-report，每次重生成)
+tests/baseline/**/truth-set.json
+tests/baseline/repeats/
+tests/baseline/tasks/
+specs/147-competitor-evaluation-platform/competitive-evaluation-report-auto.md
+
 # Feature 147 aider repomap 副作用产物（aider --show-repo-map 在 cwd 创建）
 .aider.chat.history.md
 .aider.tags.cache.v*
