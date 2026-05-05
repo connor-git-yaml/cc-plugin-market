@@ -179,9 +179,9 @@ Source code
 
 ## 4. 阶段性 Feature 拆分
 
-### Feature 150 — Knowledge Graph 抽象 + CALLS edges（基建，3-4 周）
+### Feature 150 — Knowledge Graph 抽象 + CALLS edges（基建，5-6 周，4 语言并行 sub-feature）
 
-**目标**：建立 single source of truth Knowledge Graph，输出 CALLS / IMPORTS_SYMBOL edges。
+**目标**：建立 single source of truth Knowledge Graph，输出 CALLS / IMPORTS_SYMBOL edges，覆盖 4 语言（ts-js / python / go / java）。
 
 **变更**：
 
@@ -191,7 +191,7 @@ Source code
 | `src/knowledge-graph/call-resolver.ts` | 新增 | 4 阶段 call resolution（free / member / cross-module / MRO fallback）|
 | `src/knowledge-graph/index.ts` | 新增 | Build pipeline + export |
 | `src/models/code-skeleton.ts` | 修改 | + `callSites: CallSite[]` 字段 |
-| `src/adapters/{ts-js,python,go,java}-adapter.ts` | 修改 | analyzeFile 抽 call sites（tree-sitter query）|
+| `src/adapters/{ts-js,python,go,java}-adapter.ts` | 修改 | analyzeFile 抽 call sites（tree-sitter query），4 语言全做（详见下方 Adapter 范围）|
 | `src/panoramic/graph/*.ts` | 重构 | 改为 consume UnifiedGraph |
 | `src/panoramic/builders/component-view-builder.ts` | 重构 | relationship 直接来自 UnifiedGraph.edges |
 | `tests/unit/knowledge-graph/*.test.ts` | 新增 | call-resolver 各场景 + UnifiedGraph schema |
@@ -203,19 +203,81 @@ Source code
 - `CodeSkeleton.callSites` 为 **optional**（zod `.optional()`），drift-orchestrator parse 旧 spec 不抛错
 
 **验收（Codex WARNING #3 修订：精确指标）**：
-- **新生成的 spec.md 中 callSites 字段填充率 ≥ 95%**（Python + TypeScript scope）
-- **micrograd Python baseline call edges precision ≥ 70%**（vs graphify 78%，复用 `scripts/graph-accuracy.mjs` Python AST truth set）
-- **micrograd Python baseline call edges recall ≥ 30%**（当前 spectra recall=0%）
-- **TypeScript 子集 micrograd 暂无（不适用），延 Feature 150b 加 self-dogfood TS 实测**
-- 现有 47 单测继续 pass，+15 new case for knowledge-graph
+- **新生成的 spec.md 中 callSites 字段填充率 ≥ 95%**（4 语言全部）
+- **Python baseline call edges precision ≥ 70% / recall ≥ 30%**（micrograd / nanoGPT，复用 `scripts/graph-accuracy.mjs` Python AST truth set）
+- **TypeScript baseline call edges precision ≥ 70% / recall ≥ 30%**（self-dogfood / hono，需要扩 graph-accuracy.mjs 加 TypeScript truth set）
+- **Go baseline call edges precision ≥ 70% / recall ≥ 30%**（需要选 1 个 Go OSS 项目作为 baseline，例如 hashicorp/go-version 或类似中等规模）
+- **Java baseline call edges precision ≥ 70% / recall ≥ 30%**（需要选 1 个 Java OSS 项目作为 baseline）
+- 现有 47 单测继续 pass，+25-30 new case for knowledge-graph（4 语言 call resolver 各 5-7 case）
+
+**单测覆盖矩阵（Codex INFO #2 修订）**：
+
+| 语言 | 必测场景 | case 数 |
+|------|---------|--------|
+| python | free function / self.method() / Class.method() / dunder (`__add__`) / super() / decorators | 7 |
+| ts-js | function call / method call / arrow function call / class method / dynamic import().then() | 6 |
+| go | regular call / package.Func / receiver.Method / interface method | 5 |
+| java | method call / method overloading（静态选择）/ static method / interface default method / lambda invocation | 7 |
+| 共享 | call-resolver cross-module 解析 / confidence tier 注入 / unresolved 兜底 | 5 |
+| **合计** | | **30** |
 - snapshot test：现有 6 graph MCP tools 在合并前后查询结果集合 1:1（顺序 / score 允许 ±10% 漂移）
+
+**预 dependencies (Feature 150 启动前)**：
+- `scripts/graph-accuracy.mjs` 扩展支持 TypeScript / Go / Java truth set（当前仅 Python）— 估 1 周
+- 选定 Go / Java baseline 项目（小型 OSS，类似 micrograd 量级，便于人工 truth verify）— 估 2-3 天
 
 **预算**：开发 ~3 周（含测试），实测 0 cost（纯 AST 改造，不调 LLM）
 
-**Adapter 范围对齐（Codex WARNING #5 修订）**：
-- Feature 150 **只**实现 ts-js + python adapter 的 callSites（覆盖 micrograd / nanoGPT / hono / self-dogfood 100%）
-- go / java adapter callSites 留 Feature 150b（按需启动；Spec-Driver 用户多数 ts-js / py，go/java 暂无验证场景）
-- §4 表格"4 个 adapter 修改"改为"ts-js + python adapter 修改；go / java 保持不变"
+**Adapter 范围（用户决定 2026-05-05：4 语言全做，不留 follow-up）**：
+
+Feature 150 实现全部 4 个 LanguageAdapter 的 callSites：ts-js / python / go / java。理由：
+- go / java 是常用语言，Spec-Driver 用户群中相当比例
+- 4 adapter 共享 90% 抽象（`call-resolver.ts` cross-language pipeline），各自只是 tree-sitter query DSL 不同
+- 一次性做完避免 Feature 150b 后续 schema migration 复杂度
+
+工作量估算（修订，Codex WARNING #2 反馈：Java 时间提高）：
+- python: tree-sitter query for call（含 self.method() / Class.method() / dunder dispatch）— ~3-4 天（**作为 150a 框架先实现**）
+- ts-js: tree-sitter query for call_expression / member_expression — ~3 天
+- go: tree-sitter query for call_expression / selector_expression — ~3 天
+- java: tree-sitter query for method_invocation / object_creation（method overloading + static dispatch + interface default method + lambda invocation）— **~6-8 天**（Codex WARNING #2：原 4-5 天偏乐观；可拆 Java MVP 仅含 method call + static call，复杂场景留 follow-up）
+- call-resolver 抽象 + 单测 — ~5 天（含在 150a）
+- panoramic / DependencyGraph 合并到 UnifiedGraph — ~5 天（含在 150a）
+- pre-dependencies (graph-accuracy 扩展 + baseline 选定 + 小样本 verify) — ~1.5-2 周
+
+合计 **~6-7 周**（含 pre-deps；纯实现 ~5 周，pre-deps ~1.5-2 周）
+
+**并行支持（用户建议 2026-05-05：多 Feature 并行）**：
+
+Feature 150 内部分 4 个 sub-feature 串行 + 并行混合 ship：
+
+- **Week 0 — Pre-dependencies（强制 gate，Codex CRITICAL #1 修订）**:
+  - 选定 Go / Java baseline 项目（候选见下方）
+  - 扩展 `scripts/graph-accuracy.mjs` 支持 4 语言 truth set（实测 ~1.5-2 周，Codex WARNING #3 修订）
+  - 选定 baseline 项目并人工 verify truth set 小样本（~1 周）
+  - **Pre-dependencies 不完成不允许启动 150a 实现** — 否则 implementation 先于 oracle
+
+- **150a — 框架 + python**（critical path，Codex WARNING #1 修订）：knowledge-graph 抽象 + python callSites + UnifiedGraph 合并
+  - 选 python 而非 ts-js 作为 first language 是因为：python 复杂语义（dunder / `self.method()` / `super()` / class method dispatch）更能 stress test CallSite schema 边界
+  - ts-js 走 ts-morph / dependency-cruiser，python 走 TreeSitterAnalyzer，后者覆盖更多 adapter
+  - **150a 必须 merge to master 后才启动 150b/c/d**（避免 src/knowledge-graph/ 写冲突，Codex CRITICAL #2 修订）
+  - 估时：~2 周
+
+- **150b — ts-js / 150c — go / 150d — java**（150a merge 后并行启动，Codex CRITICAL #2 修订）：
+  - 各自独立 worktree + branch，写入路径 disjoint：`src/adapters/{lang}-adapter.ts` + tree-sitter query 文件，**不共享改 knowledge-graph/**
+  - 每个 sub-feature 走 spec-driver-story（4-5 阶段，轻量），各自 ship + merge
+  - **150d java 估时修订** ~6-8 天（Codex WARNING #2：method overloading + static dispatch + interface default method + lambda 调用复杂度高）
+  - 150b ts-js / 150c go 估 2-3 天
+
+**Baseline 项目候选（Codex INFO #1 修订）**：
+
+| 语言 | 候选项目 | 规模 | 选择理由 |
+|------|---------|------|---------|
+| Python | karpathy/micrograd（已用）+ karpathy/nanoGPT（已用） | 248 / 1.2k LOC | 已 truth verified，无需重选 |
+| TypeScript | hono（已用 baseline）+ self-dogfood（已用） | 116k LOC | 已 baseline，但需扩 graph-accuracy 加 TS truth extractor |
+| Go | hashicorp/go-version (~500 LOC) 或 jbsmith7741/go-tomorrow (~300 LOC) | 300-500 LOC | 小型可人工 verify，纯 stdlib，无复杂依赖 |
+| Java | google/closure-compiler-tests / 自建 micrograd-java port (~250 LOC) | ≤ 500 LOC | 优先小型、避免 Spring / Guava 等大型框架的 dispatch 复杂性 |
+
+Go / Java baseline 必须在 Week 0 选定 + 提交 PR 入库 `tests/baseline/<project>/`，否则 150c / 150d 无 oracle。
 
 ### Feature 151 — Agent-Context MCP Tools（核心差异化，3-4 周）
 
@@ -362,7 +424,7 @@ mcp.tool('detect_changes', {
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| 4 个 LanguageAdapter 加 callSites 工作量大 | Feature 150 延期 | 优先做 ts-js + python（覆盖 90% 用户），go/java 留 follow-up |
+| 4 个 LanguageAdapter 加 callSites 工作量大 | Feature 150 延期 | **(用户决定 2026-05-05)** 4 语言一起做但拆 sub-feature 并行（150a 框架 + 150b/c/d 各语言），3 人并行 sub-feature 可压缩到 4-5 周 |
 | sqlite 持久化引入 cross-version migration 负担 | Feature 152 复杂度 | schema 由 zod 生成，drop-and-rebuild 优于复杂 migration（local cache 而非 source of truth）|
 | MCP impact tool 在大型 repo 上 BFS 慢 | 用户体验 | 默认 depth=2，confidence 阈值默认 0.7，max nodes 截断 |
 | Feature 153 eval 显示 lift = 0 | 战略风险 | 即使 lift = 0，MCP token 效率还在（10k → 120 tokens 是硬指标），仍值得做 |
@@ -379,51 +441,107 @@ mcp.tool('detect_changes', {
 
 ---
 
-## 7. 时间线（参考）
+## 7. 时间线（参考，含并行执行）
 
+**串行 baseline**（单人 dev）：
 ```
-Week 1-3  Feature 150  Knowledge Graph + CALLS edges
-Week 4-6  Feature 151  Agent-Context MCP Tools (impact/context/detect_changes)
-Week 7-9  Feature 152  Incremental Indexing + Persistence
-Week 10   Feature 153  SWE-Bench 风格 eval 验证 ROI
+Week 1-6   Feature 150  Knowledge Graph + 4 语言 CALLS edges
+Week 7-9   Feature 151  Agent-Context MCP Tools
+Week 10-12 Feature 152  Incremental Indexing + JSON snapshot
+Week 13-14 Feature 153  SWE-Bench eval
+合计：~14 周（3.5 个月）
+```
 
-里程碑：
-M1 (Week 3): Spectra 输出 calls edges，graph topology accuracy ≥ 50%
-M2 (Week 6): Spectra MCP server 13 tools（10 现有 + 3 新），可被 Claude Code 调用
-M3 (Week 9): 30 min full re-index → 30 sec incremental
-M4 (Week 10): SWE-Bench eval 数据，确认 MCP pull 比 spec.md push 有 ≥ X% lift
+**并行执行**（多人 / 多 worktree，推荐，Codex CRITICAL #1+#2 修订）：
 ```
+Week 0-1.5 Pre-dependencies                          [必须先完成，gate]
+            - graph-accuracy.mjs 扩 TS/Go/Java truth extractor
+            - 选定 Go / Java baseline 项目 + 小样本人工 verify
+            - 不完成不允许启动 150a
+
+Week 2-3   Feature 150a (框架 + python)             [critical path, 1 人]
+            - python 是 first language（dunder/self/super 压测 schema）
+            - 必须 merge to master 后才启动 150b/c/d
+
+Week 4-5   Feature 150b (ts-js)   ┐
+            Feature 150c (go)       ├ 3 人并行 sub-feature
+            Feature 150d (java)     ┘  (java 6-8 天，可能略超时)
+
+Week 5-7   Feature 151  Agent-Context MCP Tools     [独立人，依赖 150a UnifiedGraph 已 merge]
+Week 6-8   Feature 152  Incremental Indexing        [独立人，依赖 150a]
+Week 8-10  Feature 153  SWE-Bench eval              [eval 团队，依赖 151 ship]
+合计：~10 周（2.5 个月，并行节省 ~4 周）
+
+⚠️ 关键 gate：
+- Week 0-1.5 Pre-deps 不完成 → 150a 不启动（避免 implementation 先于 oracle）
+- 150a 不 merge → 150b/c/d 不启动（避免 src/knowledge-graph/ 写冲突）
+```
+
+**Feature 间依赖图**：
+```
+                         150a (框架 + ts-js)
+                         ╱      │      ╲
+                        ╱       │       ╲
+                  150b/c/d   150b/c/d   150b/c/d
+                  (python)    (go)       (java)
+                         ╲      │      ╱
+                          ╲     │     ╱
+                           Feature 150 ship
+                          ╱           ╲
+                       151             152
+                    (Agent-Context)  (Incremental)
+                          ╲           ╱
+                           ╲         ╱
+                          Feature 153
+                       (SWE-Bench eval)
+```
+
+**关键里程碑**：
+- M1 (Week 2): 150a ship，UnifiedGraph 框架就绪，并行 sub-feature 可启动
+- M2 (Week 4): 150b/c/d 全部 ship，4 语言 CALLS edges 完整覆盖
+- M3 (Week 7): 151 ship，Spectra MCP server 13 tools，可被 Claude Code 调用
+- M4 (Week 8): 152 ship，30 min full → 30 sec incremental
+- M5 (Week 10): 153 ship，SWE-Bench eval 数据确认 MCP pull > spec.md push
 
 ---
 
-## 8. 决策点（需用户确认才启动）
+## 8. 决策点（用户已拍板，2026-05-05）
 
-1. **是否采用 4 阶段切分？** 或合并 150+151 一次做（开发量大但 ship 一次完整能力）
-2. **Feature 152 sqlite 是否必须？** 或保持 in-memory + JSON snapshot 持久化（避免 Node 22 升级阻塞）
-3. **call edges 第一步只做 ts-js + python 还是全 4 语言？** 先 2 语言可加速 Feature 150
-4. **Feature 153 eval 是否独立 feature 还是并入 151？** SWE-Bench 实测能定量验证 ROI
-
-我的推荐：
-- 4 阶段切分 ✅（保持 ship 节奏）
-- Feature 152 用 **JSON snapshot** 优先 ✅（避免 Node 22 升级路径依赖；sqlite 留升级 Node 22 后做）
-- 优先 ts-js + python ✅（覆盖 90% 用户）
-- Feature 153 独立 ✅（eval 跟 dev 解耦）
+| 决策 | 选项 | 用户选择 |
+|------|------|---------|
+| 1. Feature 切分 | 4 阶段 / 合并 150+151 | ✅ **4 阶段**（保持 ship 节奏） |
+| 2. Feature 152 持久化 | sqlite / JSON snapshot | ✅ **JSON snapshot**（避免 Node 22 升级路径依赖） |
+| 3. call edges 范围 | ts-js + python 优先 / 全 4 语言 | ✅ **全 4 语言一起做**，但拆 sub-feature 并行 ship |
+| 4. Feature 153 eval | 独立 feature / 并入 151 | ✅ **独立**（eval 跟 dev 解耦） |
+| 5. 并行执行 | 单人串行 / 多人并行 | ✅ **多 sub-feature 并行**，150a 框架先 ship 后 150b/c/d 并行 |
 
 ## 8.1 Codex 对抗审查反馈（已 inline 修订）
+
+### v1 审查（2026-05-05 第一轮）
 
 | Codex finding | 等级 | 修订位置 |
 |---------------|------|---------|
 | §3.3 vs §5.3 不变量矛盾 | 🔴 CRITICAL | §3.3 重写，明确语义不变 / 实现可变 / 接受 ±10% score 漂移 |
-| LanguageAdapter contract 实质破坏（CodeSkeleton + drift-orchestrator）| 🔴 CRITICAL | §3.3 + Feature 150 schema 兼容明确 callSites optional |
-| node:sqlite 版本依赖（Node 22.5+）| 🔴 CRITICAL | §3.3 + Feature 152 fallback 到 JSON snapshot；§8 推荐改为 JSON 优先 |
-| §2.3 "无 query 接口"前提失实 | 🟡 WARNING | §2.3 重写，承认 GraphQueryEngine 已存在，重构理由换为"缺 agent-context 语义层" |
-| §2.1 三图合并丢失 SCC/topo/mermaid | 🟡 WARNING | §2.1 加约束："derived view 不丢失，migration shim 保 caller" |
-| Feature 150 验收 "≥50% accuracy" 不可测 | 🟡 WARNING | Feature 150 验收改为 callSites 填充率 ≥ 95% + Python precision ≥ 70% / recall ≥ 30% |
-| Feature 151 spec anchor 是 implementation detail | 🟡 WARNING | Feature 151 anchor 降级为 stretch goal，先返回 module 粒度 |
-| §4 vs §6.1 adapter 范围不一致 | 🟡 WARNING | Feature 150 明确只 ts-js + python；go/java 留 150b |
-| BFS 上限设计不足 | 🟡 WARNING | impact tool 加遍历**前**截断（max 200 nodes）|
-| multi-repo 边界 | 🟢 INFO | 留 follow-up Feature |
-| SWE-Bench baseline 偏弱 | 🟢 INFO | Feature 153 详细 spec 阶段补任务采样 + 统计口径 |
+| LanguageAdapter contract 实质破坏 | 🔴 CRITICAL | §3.3 + Feature 150 schema 兼容明确 callSites optional |
+| node:sqlite 版本依赖（Node 22.5+）| 🔴 CRITICAL | §3.3 + Feature 152 fallback 到 JSON snapshot |
+| §2.3 "无 query 接口"前提失实 | 🟡 WARNING | §2.3 重写，重构理由换为"缺 agent-context 语义层" |
+| §2.1 三图合并丢失 SCC/topo/mermaid | 🟡 WARNING | §2.1 加约束："derived view 不丢失，migration shim" |
+| Feature 150 验收 "≥50% accuracy" 不可测 | 🟡 WARNING | Feature 150 验收改为 callSites 填充率 ≥ 95% + 4 语言 precision/recall 精确指标 |
+| Feature 151 spec anchor 是 implementation detail | 🟡 WARNING | Feature 151 anchor 降级为 stretch goal |
+| §4 vs §6.1 adapter 范围不一致 | 🟡 WARNING | Feature 150 明确 4 语言全做（用户决定）|
+| BFS 上限设计不足 | 🟡 WARNING | impact tool 加遍历前截断（max 200 nodes）|
+
+### v2 审查（2026-05-05 第二轮，4 语言并行修订后）
+
+| Codex finding | 等级 | 修订位置 |
+|---------------|------|---------|
+| Pre-dependencies 排到 Week 3-5 → implementation 先于 oracle | 🔴 CRITICAL | Pre-deps 改为 Week 0 强制 gate，未完成不启动 150a |
+| 4 sub-feature 共享 src/knowledge-graph/ 必然 merge 冲突 | 🔴 CRITICAL | 改 sub-feature 顺序：150a merge to master 后才启动 150b/c/d；各 sub-feature 写入路径 disjoint |
+| 150a 选 ts-js 不能充分压测框架 | 🟡 WARNING | first language 改为 python（dunder/self/super 压测 schema），ts-js 移到 150b |
+| Java 4-5 天估时偏乐观 | 🟡 WARNING | Java 估时 4-5 天 → 6-8 天（可拆 Java MVP）|
+| graph-accuracy.mjs 扩 4 语言 1 周不足 | 🟡 WARNING | 扩展估时 1 周 → 1.5-2 周 |
+| Go/Java baseline 项目未指定 | 🟢 INFO | 加 baseline 候选列表（Go: hashicorp/go-version；Java: 自建 micrograd-java port）|
+| 单测覆盖矩阵未列出 | 🟢 INFO | 加单测覆盖矩阵（4 语言 × 调用类型 = 30 case）|
 
 ---
 
