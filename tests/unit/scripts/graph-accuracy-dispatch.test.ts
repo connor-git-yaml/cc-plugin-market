@@ -76,7 +76,8 @@ describe('graph-accuracy dispatch', () => {
     ).rejects.toBeTruthy();
   });
 
-  it('--language java 抛 not yet implemented', () => {
+  it('--language java (sync) 抛 not yet implemented — Phase 4B 后 java 走 async 路径', () => {
+    // sync API 仅 python 实装；java 需用 async analyzeGraphAccuracyJava 或 CLI main 异步路径
     expect(() =>
       analyzeGraphAccuracy({
         sourceRoot: '/any',
@@ -84,6 +85,16 @@ describe('graph-accuracy dispatch', () => {
         language: 'java',
       }),
     ).toThrow(/language="java" extractor not yet implemented/);
+  });
+
+  it('async analyzeGraphAccuracyJava 存在并接受 java 调用 (Phase 4B 异步路径)', async () => {
+    const mod = (await import('../../../scripts/graph-accuracy.mjs')) as Record<string, unknown>;
+    expect(typeof mod.analyzeGraphAccuracyJava).toBe('function');
+    await expect(
+      (mod.analyzeGraphAccuracyJava as (args: { sourceRoot: string; graphPath?: string }) => Promise<unknown>)({
+        sourceRoot: '/non-existent-source-feature-150-java-async',
+      }),
+    ).rejects.toBeTruthy();
   });
 
   it('未知 language 抛 Unsupported language', () => {

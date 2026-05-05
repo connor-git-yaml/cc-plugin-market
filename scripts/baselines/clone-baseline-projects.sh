@@ -38,15 +38,16 @@ SPECTRA_BASELINE_HOME="${SPECTRA_BASELINE_HOME:-$HOME/.spectra-baselines}"
 # HikariCP 配置（FR-011 / FR-012）
 HIKARICP_REPO="https://github.com/brettwooldridge/HikariCP.git"
 HIKARICP_DIR_NAME="HikariCP"
-# v5.1.0 release tag（2023-08-24，Java 11 baseline, JMX, 反射 ~30+ files in src/main）
-HIKARICP_PINNED_COMMIT="bf4af4d3ea25e6f2fe43ec2d1e6c0a3e2e0a5f3a"
+# HikariCP-6.3.3 release tag (peeled commit, 2026-Q1, Java 11 baseline, JMX, ~30+ files in src/main)
+# Phase 4B 启动前 verify (git ls-remote refs/tags/HikariCP-6.3.3^{})
+HIKARICP_PINNED_COMMIT="ea81bfb5852216dbfcb1f219742f91b5abceb81b"
 HIKARICP_SCOPE="src/main"
 
 # GORM 配置（FR-015 / FR-016）
 GORM_REPO="https://github.com/go-gorm/gorm.git"
 GORM_DIR_NAME="gorm"
-# v1.25.12 release tag（2024-11-30，stable, ~10k LOC at top-level package）
-GORM_PINNED_COMMIT="9b2181199d88ed3f72b1f5e9e4f5c0a6f1d3e2c4"
+# v1.30.5 release tag (peeled commit, latest stable, ~10k LOC at top-level package)
+GORM_PINNED_COMMIT="688e8ea00a232bd661c08d3d3ba22750c3b3d95e"
 # 顶层包（FR-016 spec 阶段定死，不含 schema/migrator/logger/callbacks/clause/utils 子包）
 GORM_SCOPE="."
 
@@ -57,6 +58,27 @@ MAX_RETRY=1
 
 log_info() {
   printf '\033[1;34m[clone-baseline]\033[0m %s\n' "$*"
+}
+
+# Codex Phase 4A WARNING #1 修订（v2，2026-05-05）：检测 timeout 命令可用性
+# - GNU coreutils `timeout` (Linux 默认 / macOS 需 brew install coreutils gtimeout)
+# - 如都无则 fallback 到原生 git clone（无 timeout 保护，依赖 git server keepalive）
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+# wrap_with_timeout <seconds> <cmd...> — 若 timeout 不可用则直接跑 cmd
+wrap_with_timeout() {
+  local seconds="$1"
+  shift
+  if [ -n "$TIMEOUT_CMD" ]; then
+    "$TIMEOUT_CMD" "$seconds" "$@"
+  else
+    "$@"
+  fi
 }
 
 log_warn() {
@@ -125,9 +147,10 @@ clone_repo() {
 
     # Codex WARNING #1 修订：用 timeout 包裹 git clone 防止 network 卡死
     # 120s 上限对小型 repo (HikariCP / GORM) 已经足够，避免 retry 等几分钟才触发
+    # 2026-05-05 v2 修复：macOS 无 GNU timeout 时降级到原生 git (依赖 server keepalive)
     local clone_timeout=120
     # 1) 浅 clone 默认分支（depth=1 节省磁盘）
-    if ! timeout "$clone_timeout" git clone --quiet --depth 1 "$repo_url" "$target_dir" 2>&1; then
+    if ! wrap_with_timeout "$clone_timeout" git clone --quiet --depth 1 "$repo_url" "$target_dir" 2>&1; then
       log_warn "$name: network error - git clone 失败或超时（${clone_timeout}s 上限）"
       rm -rf "$target_dir"
       continue
@@ -135,10 +158,10 @@ clone_repo() {
 
     # Codex WARNING #1 修订：所有网络操作都用 timeout 包裹
     # 2) fetch pinned commit（默认分支可能不含此 commit，需要单独 fetch）
-    if ! (cd "$target_dir" && timeout "$clone_timeout" git fetch --quiet --depth 1 origin "$commit_hash" 2>&1); then
+    if ! (cd "$target_dir" && wrap_with_timeout "$clone_timeout" git fetch --quiet --depth 1 origin "$commit_hash" 2>&1); then
       log_warn "$name: network error - 无法 fetch pinned commit $commit_hash（可能在历史而非分支头），尝试全 history fetch"
       # 全量 unshallow 兜底（成本高但保证 commit 可达）。给 unshallow 更长 timeout（5 min）
-      if ! (cd "$target_dir" && timeout 300 git fetch --quiet --unshallow 2>&1); then
+      if ! (cd "$target_dir" && wrap_with_timeout 300 git fetch --quiet --unshallow 2>&1); then
         log_warn "$name: network error - unshallow 失败或超时"
         rm -rf "$target_dir"
         continue

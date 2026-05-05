@@ -168,10 +168,10 @@ export function analyzeGraphAccuracy({ sourceRoot, graphPath, language = 'python
     );
   }
 
-  // ts / go / java：分派到对应 extractor。ts 已在 Phase 4D 实现，但因 ts extractor
-  // 是 async（web-tree-sitter Parser.init/Language.load 是 async），保留本 sync API 仅支
-  // 持 python；ts/go/java 用户应通过 CLI（main async）或调用 extractTruthSetTs 等 async
-  // 包装。go/java 仍未实现。
+  // ts / go / java：分派到对应 extractor。ts (Phase 4D) / java (Phase 4B) 已实现，
+  // 但因 extractor 是 async（web-tree-sitter Parser.init/Language.load 是 async），
+  // 保留本 sync API 仅支持 python；ts/go/java 用户应通过 CLI（main async）或调用
+  // extractTruthSetTs / extractTruthSetJava 等 async 包装。go 仍未实现。
   if (language !== 'python') {
     throw new Error(
       `[graph-accuracy] language="${language}" extractor not yet implemented in this phase ` +
@@ -293,6 +293,80 @@ export async function analyzeGraphAccuracyTs({ sourceRoot, graphPath, baseline }
   };
 }
 
+/**
+ * Feature 150 Phase 4B — Java extractor async 包装。
+ *
+ * 当 --language java 时调用此函数，返回 graph-accuracy 风格的 result 对象（含 truthSet /
+ * graph / accuracy 字段，与 python sync 路径 schema 对齐）。
+ *
+ * 当 graphPath 缺省（仅 truth set 生成模式，--write-fixture 用），返回精简形态：
+ *   {language: 'java', truthSet: {...}, baseline?, generatedAt, extractorVersion}
+ *
+ * @param {{sourceRoot: string, graphPath?: string, baseline?: object}} args
+ */
+export async function analyzeGraphAccuracyJava({ sourceRoot, graphPath, baseline }) {
+  if (!fs.existsSync(sourceRoot)) {
+    throw new Error(`source root does not exist: ${sourceRoot}`);
+  }
+  // 动态 import 避免 sync 路径加载 web-tree-sitter（Parser.init 有 IO 副作用）
+  const { extractJavaCallSites } = await import('./lib/java-call-extractor.mjs');
+
+  const extracted = await extractJavaCallSites({
+    sourceRoot,
+    ...(baseline ? { baseline } : {}),
+  });
+
+  // 仅 truth set 生成模式：无需 graph 比对
+  if (!graphPath) {
+    return {
+      language: 'java',
+      ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+      truthSet: {
+        callsTotal: extracted.truthCalls.length,
+        uniqueCallTargets: new Set(extracted.truthCalls.map((c) => c.callee)).size,
+        warningsCount: extracted.warnings.length,
+      },
+      truthCalls: extracted.truthCalls,
+      warnings: extracted.warnings,
+    };
+  }
+
+  // 完整 graph 比对模式（与 python 路径 schema 对齐）
+  if (!fs.existsSync(graphPath)) {
+    throw new Error(`graph not found: ${graphPath}`);
+  }
+  const graph = loadGraph(graphPath);
+  const nodeLabelIdx = buildNodeLabelIndex(graph.nodes);
+  const classified = classifyEdges(graph.links);
+
+  const truthCalleeNames = new Set(extracted.truthCalls.map((c) => c.callee));
+  const accuracy = computeCallAccuracy(classified.callEdges, nodeLabelIdx, truthCalleeNames);
+
+  return {
+    language: 'java',
+    coverageMethod: 'label-only',
+    ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+    truthSet: {
+      callsTotal: extracted.truthCalls.length,
+      uniqueCallTargets: truthCalleeNames.size,
+      warningsCount: extracted.warnings.length,
+    },
+    graph: {
+      totalEdges: graph.links.length,
+      callEdges: classified.callEdges.length,
+      containmentEdges: classified.containmentEdges.length,
+      otherEdges: classified.otherEdges.length,
+    },
+    accuracy,
+    notes: [
+      'label-only matching: 比较 graph callee label 与源码 callee 名是否相同',
+      classified.callEdges.length === 0
+        ? '⚠️ 该 graph 不含 call/uses 类型边'
+        : null,
+    ].filter(Boolean),
+  };
+}
+
 function writeFixtureQualityField(fixturePath, accuracy) {
   if (!fs.existsSync(fixturePath)) {
     throw new Error(`fixture not found: ${fixturePath}`);
@@ -334,6 +408,20 @@ async function main() {
       graphPath: args.graph,
       ...(baseline ? { baseline } : {}),
     });
+  } else if (language === 'java') {
+    // Phase 4B Java extractor async 包装（同 ts 路径）
+    const baseline = args.baselineScope
+      ? {
+          ...(args.baselineRepo ? { repo: args.baselineRepo } : {}),
+          ...(args.baselineCommit ? { commit: args.baselineCommit } : {}),
+          scope: args.baselineScope,
+        }
+      : undefined;
+    result = await analyzeGraphAccuracyJava({
+      sourceRoot: args.source,
+      graphPath: args.graph,
+      ...(baseline ? { baseline } : {}),
+    });
   } else {
     result = analyzeGraphAccuracy({
       sourceRoot: args.source,
@@ -346,8 +434,11 @@ async function main() {
     console.log(JSON.stringify(result, null, 2));
   }
   if (args.writeFixture) {
-    // ts truth-set-only 模式：把整个 truth set + metadata 直接写到 fixture（不嵌入 quality.graphAccuracy）
-    if (language === 'ts' && !args.graph) {
+    // ts / java truth-set-only 模式：把整个 truth set + metadata 直接写到 fixture
+    // （不嵌入 quality.graphAccuracy）
+    const isAsyncTruthSetOnly =
+      (language === 'ts' || language === 'java') && !args.graph;
+    if (isAsyncTruthSetOnly) {
       const writePayload = {
         language: result.language,
         ...(result.baseline ? { baseline: result.baseline } : {}),
@@ -362,7 +453,7 @@ async function main() {
         'utf-8',
       );
       console.error(
-        `[graph-accuracy] wrote ts truth set → ${args.writeFixture} (${result.truthCalls.length} calls)`,
+        `[graph-accuracy] wrote ${language} truth set → ${args.writeFixture} (${result.truthCalls.length} calls)`,
       );
     } else {
       writeFixtureQualityField(args.writeFixture, result);
