@@ -109,10 +109,12 @@ parseArgs → switch (args.language ?? 'python'):
 | Go | `call_expression` (callee = `selector_expression` with capitalized type) | `static`（package-level） |
 | TS | `call_expression` | `method` / `function`（按 callee 形态） |
 | TS | `new_expression` | `constructor` |
-| TS | `arrow_function` 内的 `call_expression` | `arrow`（按 IIFE / callback 上下文） |
+| TS | call_expression callee = `arrow_function` / `parenthesized_expression(arrow)` (IIFE) | `arrow`（仅 IIFE 直接调用，不含"在 arrow scope 内的其它 call"） |
 | TS | `decorator` 内的 `call_expression` | 按 `method` 处理（label-only 匹配下足够） |
 
 > **Codex CRITICAL #1 修订（2026-05-05）**：原表引用 `super_method_invocation` / `class_instance_creation_expression` 不存在于官方 tree-sitter-java grammar。修订后使用真实 node types：`method_invocation`（基础 + super.foo() 通过检测第一子节点是否为 `super` keyword 区分）/ `object_creation_expression`（new 构造）/ `explicit_constructor_invocation`（构造器内 super()/this()）。Implementation T-006 跑实际 parse 验证 query，必要时迭代修正。
+
+> **Codex Phase 4D CRITICAL #4 修订（2026-05-05）**：原表"arrow_function 内的 call_expression"语义模糊（callee form vs scope context 二义性）。修订后明确：**arrow kind 仅指 IIFE**（call_expression 的 callee 直接是 arrow_function 或 (arrow)() 形式）。callback 内的 method/function call 按 callee 形态分类（method/function），不因外层是 arrow scope 而改 kind。这避免 hono 等 callback 重型代码上 arrow kind 占比异常低 (18/26066) 被误读为 systemic 漏抽。
 
 **unresolved 触发条件**：
 - Java：`Class.forName(...)` / JMX `MBean` lookup / 反射 method invocation → 标 `unresolved-reflection`

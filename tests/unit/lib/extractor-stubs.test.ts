@@ -1,22 +1,16 @@
 /**
- * Extractor stubs (Phase 4A 占位) 单测
+ * Extractor stubs 单测（Phase 4A 占位）
  *
- * 验证 ts/go/java 三个 extractor stub 抛 not implemented 错误，让 vitest
- * coverage 95% per-file thresholds 实际生效（Codex CRITICAL 修订：避免 glob 空匹配）。
+ * Phase 4D 已交付 TS extractor 真实实现（详见 tests/unit/lib/ts-call-extractor.test.ts），
+ * 此文件保留 go / java 两个 stub 单测，让 vitest coverage 95% per-file thresholds
+ * 在 Phase 4B/4C 仍未实现时仍能命中（避免 glob 空匹配）。
  *
- * Phase 4B (Java) / 4C (Go) / 4D (TS) 实现后此文件改为完整 case。
+ * Phase 4B (Java T-006) / 4C (Go T-010) 实现后此文件可清空或合并到对应 *.test.ts。
  */
 
 import { describe, expect, it } from 'vitest';
 
-describe('extractor stubs (Phase 4A)', () => {
-  describe('ts-call-extractor', () => {
-    it('throws not yet implemented (Phase 4D / T-013)', async () => {
-      const { extractTsCallSites } = await import('../../../scripts/lib/ts-call-extractor.mjs');
-      await expect(extractTsCallSites({ sourceRoot: '/tmp' })).rejects.toThrow(/not yet implemented.*Phase 4D/);
-    });
-  });
-
+describe('extractor stubs (Phase 4A 残留 — go/java)', () => {
   describe('go-call-extractor', () => {
     it('throws not yet implemented (Phase 4C / T-010)', async () => {
       const { extractGoCallSites } = await import('../../../scripts/lib/go-call-extractor.mjs');

@@ -44,7 +44,8 @@ describe('graph-accuracy dispatch', () => {
     ).toThrow(/source root does not exist/);
   });
 
-  it('--language ts 抛 not yet implemented', () => {
+  it('--language ts (sync) 抛 not yet implemented — Phase 4D 后 ts 走 async 路径 (Codex WARNING #4 修订)', () => {
+    // sync API 仅 python 实装；ts 需用 async analyzeGraphAccuracyTs 或 CLI main 异步路径
     expect(() =>
       analyzeGraphAccuracy({
         sourceRoot: '/any',
@@ -62,6 +63,17 @@ describe('graph-accuracy dispatch', () => {
         language: 'go',
       }),
     ).toThrow(/language="go" extractor not yet implemented/);
+  });
+
+  it('async analyzeGraphAccuracyTs 存在并接受 ts 调用 (Codex WARNING #4 新增 Phase 4D 异步路径)', async () => {
+    const mod = (await import('../../../scripts/graph-accuracy.mjs')) as Record<string, unknown>;
+    expect(typeof mod.analyzeGraphAccuracyTs).toBe('function');
+    // sourceRoot 不存在 → 应该 reject 但不 swallow（让 CLI 层拿到 error）
+    await expect(
+      (mod.analyzeGraphAccuracyTs as (args: { sourceRoot: string; graphPath?: string }) => Promise<unknown>)({
+        sourceRoot: '/non-existent-source-feature-150-async',
+      }),
+    ).rejects.toBeTruthy();
   });
 
   it('--language java 抛 not yet implemented', () => {

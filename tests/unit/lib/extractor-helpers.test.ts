@@ -155,6 +155,31 @@ describe('walkSourceFiles', () => {
       /root 必须为非空字符串/,
     );
   });
+
+  it('遇到不可读子目录 → catch 内吞异常 + 不影响其它兄弟目录', () => {
+    const tmp = makeTempDir('walk-readdir-error');
+    fs.writeFileSync(path.join(tmp, 'top.ts'), '');
+
+    // 创建不可读目录（chmod 0），readdirSync 会抛 EACCES
+    const blocked = path.join(tmp, 'blocked');
+    fs.mkdirSync(blocked);
+    fs.writeFileSync(path.join(blocked, 'nested.ts'), '');
+    fs.chmodSync(blocked, 0o000);
+
+    try {
+      const result = walkSourceFiles(tmp, ['.ts']);
+      // 应该至少含 top.ts，blocked/ 的内容因权限被静默跳过
+      const basenames = result.map((p) => path.basename(p));
+      expect(basenames).toContain('top.ts');
+    } finally {
+      // 清理：恢复权限以便 afterEach 删除
+      try {
+        fs.chmodSync(blocked, 0o755);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
 });
 
 // ── createWarningsArray ──

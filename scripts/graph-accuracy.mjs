@@ -42,6 +42,9 @@ function parseArgs(argv) {
     else if (k === '--graph') out.graph = argv[++i];
     else if (k === '--write-fixture') out.writeFixture = argv[++i];
     else if (k === '--language') out.language = argv[++i];
+    else if (k === '--baseline-repo') out.baselineRepo = argv[++i];
+    else if (k === '--baseline-commit') out.baselineCommit = argv[++i];
+    else if (k === '--baseline-scope') out.baselineScope = argv[++i];
     else if (k === '--quiet') out.quiet = true;
   }
   return out;
@@ -165,10 +168,11 @@ export function analyzeGraphAccuracy({ sourceRoot, graphPath, language = 'python
     );
   }
 
-  // ts / go / java：分派到对应 extractor（当前阶段抛 not yet implemented）
+  // ts / go / java：分派到对应 extractor。ts 已在 Phase 4D 实现，但因 ts extractor
+  // 是 async（web-tree-sitter Parser.init/Language.load 是 async），保留本 sync API 仅支
+  // 持 python；ts/go/java 用户应通过 CLI（main async）或调用 extractTruthSetTs 等 async
+  // 包装。go/java 仍未实现。
   if (language !== 'python') {
-    // 同步函数返回 promise 在调用方需要 await，但本 export 历史上是同步函数
-    // 为保留同步签名，这里 throw（非 reject），调用方 sync catch 即可
     throw new Error(
       `[graph-accuracy] language="${language}" extractor not yet implemented in this phase ` +
         `(Phase 4 阶段 A 仅搭 dispatch，extractor 在 Phase 4B/C/D 实现)`,
@@ -215,6 +219,80 @@ export function analyzeGraphAccuracy({ sourceRoot, graphPath, language = 'python
   };
 }
 
+/**
+ * Feature 150 Phase 4D — TS extractor async 包装。
+ *
+ * 当 --language ts 时调用此函数，返回 graph-accuracy 风格的 result 对象（含 truthSet /
+ * graph / accuracy 字段，与 python sync 路径 schema 对齐）。
+ *
+ * 当 graphPath 缺省（仅 truth set 生成模式，--write-fixture 用），返回精简形态：
+ *   {language: 'ts', truthSet: {...}, baseline?, generatedAt, extractorVersion}
+ *
+ * @param {{sourceRoot: string, graphPath?: string, baseline?: object}} args
+ */
+export async function analyzeGraphAccuracyTs({ sourceRoot, graphPath, baseline }) {
+  if (!fs.existsSync(sourceRoot)) {
+    throw new Error(`source root does not exist: ${sourceRoot}`);
+  }
+  // 动态 import 避免 sync 路径加载 web-tree-sitter（Parser.init 有 IO 副作用）
+  const { extractTsCallSites } = await import('./lib/ts-call-extractor.mjs');
+
+  const extracted = await extractTsCallSites({
+    sourceRoot,
+    ...(baseline ? { baseline } : {}),
+  });
+
+  // 仅 truth set 生成模式：无需 graph 比对
+  if (!graphPath) {
+    return {
+      language: 'ts',
+      ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+      truthSet: {
+        callsTotal: extracted.truthCalls.length,
+        uniqueCallTargets: new Set(extracted.truthCalls.map((c) => c.callee)).size,
+        warningsCount: extracted.warnings.length,
+      },
+      truthCalls: extracted.truthCalls,
+      warnings: extracted.warnings,
+    };
+  }
+
+  // 完整 graph 比对模式（与 python 路径 schema 对齐）
+  if (!fs.existsSync(graphPath)) {
+    throw new Error(`graph not found: ${graphPath}`);
+  }
+  const graph = loadGraph(graphPath);
+  const nodeLabelIdx = buildNodeLabelIndex(graph.nodes);
+  const classified = classifyEdges(graph.links);
+
+  const truthCalleeNames = new Set(extracted.truthCalls.map((c) => c.callee));
+  const accuracy = computeCallAccuracy(classified.callEdges, nodeLabelIdx, truthCalleeNames);
+
+  return {
+    language: 'ts',
+    coverageMethod: 'label-only',
+    ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+    truthSet: {
+      callsTotal: extracted.truthCalls.length,
+      uniqueCallTargets: truthCalleeNames.size,
+      warningsCount: extracted.warnings.length,
+    },
+    graph: {
+      totalEdges: graph.links.length,
+      callEdges: classified.callEdges.length,
+      containmentEdges: classified.containmentEdges.length,
+      otherEdges: classified.otherEdges.length,
+    },
+    accuracy,
+    notes: [
+      'label-only matching: 比较 graph callee label 与源码 callee 名是否相同',
+      classified.callEdges.length === 0
+        ? '⚠️ 该 graph 不含 call/uses 类型边'
+        : null,
+    ].filter(Boolean),
+  };
+}
+
 function writeFixtureQualityField(fixturePath, accuracy) {
   if (!fs.existsSync(fixturePath)) {
     throw new Error(`fixture not found: ${fixturePath}`);
@@ -227,21 +305,69 @@ function writeFixtureQualityField(fixturePath, accuracy) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  if (!args.source || !args.graph) {
-    console.error('usage: node scripts/graph-accuracy.mjs --source <python-root> --graph <graph.json> [--write-fixture <path>] [--language python]');
+  const language = args.language ?? 'python';
+
+  if (!args.source) {
+    console.error(
+      'usage: node scripts/graph-accuracy.mjs --source <root> [--graph <graph.json>] [--write-fixture <path>] [--language python|ts|go|java]',
+    );
     process.exit(1);
   }
-  const result = analyzeGraphAccuracy({
-    sourceRoot: args.source,
-    graphPath: args.graph,
-    language: args.language ?? 'python',
-  });
+  // python 路径需要 --graph；ts truth-set-only 模式可省略 --graph，仅写 fixture
+  if (language === 'python' && !args.graph) {
+    console.error('[graph-accuracy] --graph is required for --language python');
+    process.exit(1);
+  }
+
+  let result;
+  if (language === 'ts') {
+    // 构造 baseline metadata（FR-014）。三字段中只要 scope 必填，其它可缺省
+    const baseline = args.baselineScope
+      ? {
+          ...(args.baselineRepo ? { repo: args.baselineRepo } : {}),
+          ...(args.baselineCommit ? { commit: args.baselineCommit } : {}),
+          scope: args.baselineScope,
+        }
+      : undefined;
+    result = await analyzeGraphAccuracyTs({
+      sourceRoot: args.source,
+      graphPath: args.graph,
+      ...(baseline ? { baseline } : {}),
+    });
+  } else {
+    result = analyzeGraphAccuracy({
+      sourceRoot: args.source,
+      graphPath: args.graph,
+      language,
+    });
+  }
+
   if (!args.quiet) {
     console.log(JSON.stringify(result, null, 2));
   }
   if (args.writeFixture) {
-    writeFixtureQualityField(args.writeFixture, result);
-    console.error(`[graph-accuracy] wrote quality.graphAccuracy → ${args.writeFixture}`);
+    // ts truth-set-only 模式：把整个 truth set + metadata 直接写到 fixture（不嵌入 quality.graphAccuracy）
+    if (language === 'ts' && !args.graph) {
+      const writePayload = {
+        language: result.language,
+        ...(result.baseline ? { baseline: result.baseline } : {}),
+        truthCalls: result.truthCalls,
+        warnings: result.warnings,
+      };
+      const dir = path.dirname(args.writeFixture);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        args.writeFixture,
+        JSON.stringify(writePayload, null, 2) + '\n',
+        'utf-8',
+      );
+      console.error(
+        `[graph-accuracy] wrote ts truth set → ${args.writeFixture} (${result.truthCalls.length} calls)`,
+      );
+    } else {
+      writeFixtureQualityField(args.writeFixture, result);
+      console.error(`[graph-accuracy] wrote quality.graphAccuracy → ${args.writeFixture}`);
+    }
   }
 }
 
