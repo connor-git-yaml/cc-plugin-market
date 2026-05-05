@@ -235,16 +235,16 @@ Feature 150 实现全部 4 个 LanguageAdapter 的 callSites：ts-js / python / 
 - 4 adapter 共享 90% 抽象（`call-resolver.ts` cross-language pipeline），各自只是 tree-sitter query DSL 不同
 - 一次性做完避免 Feature 150b 后续 schema migration 复杂度
 
-工作量估算（修订，Codex WARNING #2 反馈：Java 时间提高）：
+工作量估算（v3 修订：HikariCP / GORM 大型 baseline 增加复杂度）：
 - python: tree-sitter query for call（含 self.method() / Class.method() / dunder dispatch）— ~3-4 天（**作为 150a 框架先实现**）
 - ts-js: tree-sitter query for call_expression / member_expression — ~3 天
-- go: tree-sitter query for call_expression / selector_expression — ~3 天
-- java: tree-sitter query for method_invocation / object_creation（method overloading + static dispatch + interface default method + lambda invocation）— **~6-8 天**（Codex WARNING #2：原 4-5 天偏乐观；可拆 Java MVP 仅含 method call + static call，复杂场景留 follow-up）
+- go: tree-sitter query for call_expression / selector_expression（GORM generic types + reflection-heavy）— **~5-7 天**（v3 修订：GORM 复杂度高于小型项目）
+- java: tree-sitter query for method_invocation / object_creation（HikariCP method overloading + static dispatch + interface default method + lambda + JMX 反射）— **~8-10 天**（v3 修订：HikariCP 内部 dispatch 复杂）
 - call-resolver 抽象 + 单测 — ~5 天（含在 150a）
 - panoramic / DependencyGraph 合并到 UnifiedGraph — ~5 天（含在 150a）
-- pre-dependencies (graph-accuracy 扩展 + baseline 选定 + 小样本 verify) — ~1.5-2 周
+- pre-dependencies (graph-accuracy 4 语言 extractor + 单测 ≥ 95% + HikariCP/GORM baseline 入库) — ~2.5-3 周
 
-合计 **~6-7 周**（含 pre-deps；纯实现 ~5 周，pre-deps ~1.5-2 周）
+合计 **~7-8 周**（含 pre-deps；纯实现 ~5-6 周，pre-deps ~2.5-3 周）。各 sub-feature 并行后总体 ~10-11 周。
 
 **并行支持（用户建议 2026-05-05：多 Feature 并行）**：
 
@@ -268,16 +268,30 @@ Feature 150 内部分 4 个 sub-feature 串行 + 并行混合 ship：
   - **150d java 估时修订** ~6-8 天（Codex WARNING #2：method overloading + static dispatch + interface default method + lambda 调用复杂度高）
   - 150b ts-js / 150c go 估 2-3 天
 
-**Baseline 项目候选（Codex INFO #1 修订）**：
+**Baseline 项目（用户决定 2026-05-05）**：
 
-| 语言 | 候选项目 | 规模 | 选择理由 |
-|------|---------|------|---------|
-| Python | karpathy/micrograd（已用）+ karpathy/nanoGPT（已用） | 248 / 1.2k LOC | 已 truth verified，无需重选 |
-| TypeScript | hono（已用 baseline）+ self-dogfood（已用） | 116k LOC | 已 baseline，但需扩 graph-accuracy 加 TS truth extractor |
-| Go | hashicorp/go-version (~500 LOC) 或 jbsmith7741/go-tomorrow (~300 LOC) | 300-500 LOC | 小型可人工 verify，纯 stdlib，无复杂依赖 |
-| Java | google/closure-compiler-tests / 自建 micrograd-java port (~250 LOC) | ≤ 500 LOC | 优先小型、避免 Spring / Guava 等大型框架的 dispatch 复杂性 |
+| 语言 | 项目 | 规模 | 选择理由 |
+|------|------|------|---------|
+| Python | karpathy/micrograd + karpathy/nanoGPT | 248 / 1.2k LOC | 已 baseline，无需重选 |
+| TypeScript | hono + self-dogfood | 116k LOC | 已 baseline，需扩 graph-accuracy 加 TS truth extractor |
+| **Go** | **go-gorm/gorm**（core package）| ~10k LOC（core；全包 ~50k）| ORM 实战，generic types + reflection + interface dispatch 充分 stress test |
+| **Java** | **brettwooldridge/HikariCP**（src/main） | ~3-5k LOC | JDBC connection pool，zero-dependency（无 Spring/Guava），thread pool + JMX interface dispatch 复杂度高 |
 
-Go / Java baseline 必须在 Week 0 选定 + 提交 PR 入库 `tests/baseline/<project>/`，否则 150c / 150d 无 oracle。
+**Truth verification 策略（修订：放弃"100% 人工 verify"）**：
+
+| 项目规模 | Verify 策略 |
+|---------|-----------|
+| ≤ 500 LOC（micrograd / Go-Tomorrow 候选）| 100% AST extractor 生成 truth + 100% 人工 spot-check |
+| 500-5k LOC（micrograd-java port / HikariCP core）| AST extractor 全量 truth + 5-10% sample 人工 spot-check |
+| **5k-50k LOC（GORM 全包 / hono 核心）** | **AST extractor 全量 truth + extractor 正确性单测**（不再 100% 人工 verify）+ 1% 随机 sample spot-check |
+| > 50k LOC（self-dogfood）| 同上，spot-check 降到 0.5% sample |
+
+**这意味着 graph-accuracy.mjs 扩展的 AST extractor 本身需要单测覆盖 ≥ 95%**，否则 truth set 不可信，验收无意义。Pre-dependencies 工作量调整：
+
+- graph-accuracy.mjs 4 语言 AST extractor 扩展 + 单测 ≥ 95% 覆盖：~2.5-3 周（vs 原 1.5-2 周）
+- HikariCP / GORM clone + baseline fixture 入库：~3 天
+
+Go / Java baseline 必须在 Week 0 完成入库 `tests/baseline/HikariCP/` 和 `tests/baseline/gorm/`，否则 150c / 150d 无 oracle。
 
 ### Feature 151 — Agent-Context MCP Tools（核心差异化，3-4 周）
 
