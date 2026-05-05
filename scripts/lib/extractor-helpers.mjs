@@ -72,7 +72,15 @@ const LANGUAGE_TO_GRAMMAR_FILE = Object.freeze({
  * 通用 ignore 路径前缀（递归遍历时跳过）。
  * 与 src/core 现有 walker 行为对齐：node_modules / .git / vendor / target / build / dist / out
  */
-const DEFAULT_IGNORE_DIRS = Object.freeze([
+/**
+ * 默认忽略目录列表。导出供调用方做 merge：
+ *   `walkSourceFiles(root, exts, [...DEFAULT_IGNORE_DIRS, ...userExtraIgnore])`
+ *
+ * Codex Phase 4C Round 1 WARNING #3 修订：之前 ignoreDirs 直接覆盖默认值，导致
+ * 调用方传 `['schema']` 时 `vendor/.git/node_modules` 不再被忽略。改为导出常量后，
+ * extractor 内部显式 merge 防止意外覆盖。
+ */
+export const DEFAULT_IGNORE_DIRS = Object.freeze([
   'node_modules',
   '.git',
   'vendor',

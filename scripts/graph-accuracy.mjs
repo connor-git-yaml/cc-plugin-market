@@ -45,6 +45,17 @@ function parseArgs(argv) {
     else if (k === '--baseline-repo') out.baselineRepo = argv[++i];
     else if (k === '--baseline-commit') out.baselineCommit = argv[++i];
     else if (k === '--baseline-scope') out.baselineScope = argv[++i];
+    // Codex Round 1 CRITICAL fix: 支持透传 ignoreDirs 给 Go extractor (FR-016 GORM 顶层包)
+    // 用法：--ignore-dirs schema,callbacks,clause,migrator,logger,internal,utils,tests
+    // Codex Round 2 WARNING #1 fix: 检查 next arg 存在且不是另一个 flag，避免 swallow 后续 --quiet
+    else if (k === '--ignore-dirs') {
+      const nextArg = argv[i + 1];
+      if (nextArg === undefined || nextArg.startsWith('--')) {
+        throw new Error(`[graph-accuracy] --ignore-dirs requires a comma-separated value (e.g. --ignore-dirs schema,callbacks)`);
+      }
+      i++;
+      out.ignoreDirs = nextArg.split(',').map((s) => s.trim()).filter(Boolean);
+    }
     else if (k === '--quiet') out.quiet = true;
   }
   return out;
@@ -168,10 +179,10 @@ export function analyzeGraphAccuracy({ sourceRoot, graphPath, language = 'python
     );
   }
 
-  // ts / go / java：分派到对应 extractor。ts (Phase 4D) / java (Phase 4B) 已实现，
-  // 但因 extractor 是 async（web-tree-sitter Parser.init/Language.load 是 async），
+  // ts / go / java：分派到对应 extractor。ts (Phase 4D) / java (Phase 4B) / go (Phase 4C)
+  // 都已实现，但因 extractor 是 async（web-tree-sitter Parser.init/Language.load 是 async），
   // 保留本 sync API 仅支持 python；ts/go/java 用户应通过 CLI（main async）或调用
-  // extractTruthSetTs / extractTruthSetJava 等 async 包装。go 仍未实现。
+  // extractTruthSetTs / analyzeGraphAccuracyGo / analyzeGraphAccuracyJava 等 async 包装。
   if (language !== 'python') {
     throw new Error(
       `[graph-accuracy] language="${language}" extractor not yet implemented in this phase ` +
@@ -367,6 +378,84 @@ export async function analyzeGraphAccuracyJava({ sourceRoot, graphPath, baseline
   };
 }
 
+/**
+ * Feature 150 Phase 4C — Go extractor async 包装。
+ *
+ * 当 --language go 时调用此函数，返回 graph-accuracy 风格的 result 对象（含 truthSet /
+ * graph / accuracy 字段，与 python sync 路径 schema 对齐）。
+ *
+ * 当 graphPath 缺省（仅 truth set 生成模式，--write-fixture 用），返回精简形态：
+ *   {language: 'go', truthSet: {...}, baseline?, generatedAt, extractorVersion}
+ *
+ * Codex Round 1 CRITICAL fix：透传 `ignoreDirs` 选项到 extractor，让 CLI 路径
+ * （`--language go --ignore-dirs callbacks,schema,...`）能实现 GORM 顶层包 only scope（FR-016）。
+ *
+ * @param {{sourceRoot: string, graphPath?: string, baseline?: object, ignoreDirs?: readonly string[]}} args
+ */
+export async function analyzeGraphAccuracyGo({ sourceRoot, graphPath, baseline, ignoreDirs }) {
+  if (!fs.existsSync(sourceRoot)) {
+    throw new Error(`source root does not exist: ${sourceRoot}`);
+  }
+  // 动态 import 避免 sync 路径加载 web-tree-sitter（Parser.init 有 IO 副作用）
+  const { extractGoCallSites } = await import('./lib/go-call-extractor.mjs');
+
+  const extracted = await extractGoCallSites({
+    sourceRoot,
+    ...(baseline ? { baseline } : {}),
+    ...(ignoreDirs ? { ignoreDirs } : {}),
+  });
+
+  // 仅 truth set 生成模式：无需 graph 比对
+  if (!graphPath) {
+    return {
+      language: 'go',
+      ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+      truthSet: {
+        callsTotal: extracted.truthCalls.length,
+        uniqueCallTargets: new Set(extracted.truthCalls.map((c) => c.callee)).size,
+        warningsCount: extracted.warnings.length,
+      },
+      truthCalls: extracted.truthCalls,
+      warnings: extracted.warnings,
+    };
+  }
+
+  // 完整 graph 比对模式（与 python 路径 schema 对齐）
+  if (!fs.existsSync(graphPath)) {
+    throw new Error(`graph not found: ${graphPath}`);
+  }
+  const graph = loadGraph(graphPath);
+  const nodeLabelIdx = buildNodeLabelIndex(graph.nodes);
+  const classified = classifyEdges(graph.links);
+
+  const truthCalleeNames = new Set(extracted.truthCalls.map((c) => c.callee));
+  const accuracy = computeCallAccuracy(classified.callEdges, nodeLabelIdx, truthCalleeNames);
+
+  return {
+    language: 'go',
+    coverageMethod: 'label-only',
+    ...(extracted.baseline ? { baseline: extracted.baseline } : {}),
+    truthSet: {
+      callsTotal: extracted.truthCalls.length,
+      uniqueCallTargets: truthCalleeNames.size,
+      warningsCount: extracted.warnings.length,
+    },
+    graph: {
+      totalEdges: graph.links.length,
+      callEdges: classified.callEdges.length,
+      containmentEdges: classified.containmentEdges.length,
+      otherEdges: classified.otherEdges.length,
+    },
+    accuracy,
+    notes: [
+      'label-only matching: 比较 graph callee label 与源码 callee 名是否相同',
+      classified.callEdges.length === 0
+        ? '⚠️ 该 graph 不含 call/uses 类型边'
+        : null,
+    ].filter(Boolean),
+  };
+}
+
 function writeFixtureQualityField(fixturePath, accuracy) {
   if (!fs.existsSync(fixturePath)) {
     throw new Error(`fixture not found: ${fixturePath}`);
@@ -422,6 +511,22 @@ async function main() {
       graphPath: args.graph,
       ...(baseline ? { baseline } : {}),
     });
+  } else if (language === 'go') {
+    // Phase 4C Go extractor async 包装（同 ts/java 路径）
+    const baseline = args.baselineScope
+      ? {
+          ...(args.baselineRepo ? { repo: args.baselineRepo } : {}),
+          ...(args.baselineCommit ? { commit: args.baselineCommit } : {}),
+          scope: args.baselineScope,
+        }
+      : undefined;
+    result = await analyzeGraphAccuracyGo({
+      sourceRoot: args.source,
+      graphPath: args.graph,
+      ...(baseline ? { baseline } : {}),
+      // Codex Round 1 CRITICAL: 透传 --ignore-dirs (GORM 顶层包 scope, FR-016)
+      ...(args.ignoreDirs ? { ignoreDirs: args.ignoreDirs } : {}),
+    });
   } else {
     result = analyzeGraphAccuracy({
       sourceRoot: args.source,
@@ -437,7 +542,7 @@ async function main() {
     // ts / java truth-set-only 模式：把整个 truth set + metadata 直接写到 fixture
     // （不嵌入 quality.graphAccuracy）
     const isAsyncTruthSetOnly =
-      (language === 'ts' || language === 'java') && !args.graph;
+      (language === 'ts' || language === 'java' || language === 'go') && !args.graph;
     if (isAsyncTruthSetOnly) {
       const writePayload = {
         language: result.language,

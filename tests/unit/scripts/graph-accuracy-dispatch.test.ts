@@ -55,7 +55,8 @@ describe('graph-accuracy dispatch', () => {
     ).toThrow(/language="ts" extractor not yet implemented/);
   });
 
-  it('--language go 抛 not yet implemented', () => {
+  it('--language go (sync) 抛 not yet implemented — Phase 4C 后 go 走 async 路径', () => {
+    // sync API 仅 python 实装；go 需用 async analyzeGraphAccuracyGo 或 CLI main 异步路径
     expect(() =>
       analyzeGraphAccuracy({
         sourceRoot: '/any',
@@ -63,6 +64,16 @@ describe('graph-accuracy dispatch', () => {
         language: 'go',
       }),
     ).toThrow(/language="go" extractor not yet implemented/);
+  });
+
+  it('async analyzeGraphAccuracyGo 存在并接受 go 调用 (Phase 4C 异步路径)', async () => {
+    const mod = (await import('../../../scripts/graph-accuracy.mjs')) as Record<string, unknown>;
+    expect(typeof mod.analyzeGraphAccuracyGo).toBe('function');
+    await expect(
+      (mod.analyzeGraphAccuracyGo as (args: { sourceRoot: string; graphPath?: string }) => Promise<unknown>)({
+        sourceRoot: '/non-existent-source-feature-150-go-async',
+      }),
+    ).rejects.toBeTruthy();
   });
 
   it('async analyzeGraphAccuracyTs 存在并接受 ts 调用 (Codex WARNING #4 新增 Phase 4D 异步路径)', async () => {
