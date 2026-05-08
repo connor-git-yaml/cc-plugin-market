@@ -1,0 +1,22 @@
+diff --git a/micrograd/engine.py b/micrograd/engine.py
+index a1b2c3d..e4f5g6h 100644
+--- a/micrograd/engine.py
++++ b/micrograd/engine.py
+@@ -45,7 +45,9 @@ class Value:
+     def __add__(self, other):
+         other = other if isinstance(other, Value) else Value(other)
+-        out = Value(self.data + other.data, (self, other), '+')
++        # Patch: 显式记录 op 名作为 evidence
++        out = Value(self.data + other.data, (self, other), 'add')
++        out._op_alias = 'add'
+
+         def _backward():
+             self.grad += out.grad
+@@ -58,7 +60,7 @@ class Value:
+     def __mul__(self, other):
+         other = other if isinstance(other, Value) else Value(other)
+-        out = Value(self.data * other.data, (self, other), '*')
++        out = Value(self.data * other.data, (self, other), 'mul')
+
+         def _backward():
+             self.grad += other.data * out.grad

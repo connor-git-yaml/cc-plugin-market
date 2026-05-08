@@ -25,6 +25,98 @@ const SC008_BUDGET = 120;
 const STALE_WARN_DAYS = 30; // staleAfterDate 还有 ≤ 30 天 → warning
 
 // ============================================================
+// Feature 155 — Agent-Context capability probe
+//
+// 强校验：实际 spawn 一个 dist 后的 createMcpServer，遍历 server.tools 数组
+// 验证 impact / context / detect_changes 三个 tool 都注册。如 dist 不可用，
+// 回退到 source-grep 但标注 weak（不可作为 SC-007 强证据）。
+// ============================================================
+
+export function probeAgentContextCapability() {
+  const expected = ['impact', 'context', 'detect_changes'];
+
+  // Strong path: 通过 spawn node + dist/mcp/server.js 实例化 server
+  const distServer = path.join(PROJECT_ROOT, 'dist/mcp/server.js');
+  if (fs.existsSync(distServer)) {
+    try {
+      const probe = spawnSync(process.execPath, [
+        '-e',
+        `import('${distServer}').then(m => {
+          const server = m.createMcpServer();
+          // McpServer.tools 内部为私有；通过 _registeredTools 或类似私有字段访问。
+          // 折中：MCP SDK 在 .listTools()/server.server._registeredTools 暴露
+          const inst = server.server ?? server;
+          const reg = inst._registeredTools ?? {};
+          const names = Object.keys(reg);
+          process.stdout.write(JSON.stringify(names));
+        }).catch(e => { process.stderr.write(e.message); process.exit(2); });`,
+      ], { encoding: 'utf-8', timeout: 15000 });
+      if (probe.status === 0 && probe.stdout) {
+        const names = JSON.parse(probe.stdout);
+        const found = expected.filter((n) => names.includes(n));
+        if (found.length === expected.length) {
+          return { available: true, reason: 'server runtime probe ok', toolNames: found, mode: 'runtime' };
+        }
+        return {
+          available: false,
+          reason: `runtime probe: tool 缺失 (找到 ${found.join(',') || '无'})`,
+          toolNames: found,
+          mode: 'runtime',
+        };
+      }
+      // probe 失败 → fall through 到 source-grep
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Weak fallback：source-grep（dist 不可用 / probe 失败时）
+  const toolsFile = path.join(PROJECT_ROOT, 'src/mcp/agent-context-tools.ts');
+  const serverFile = path.join(PROJECT_ROOT, 'src/mcp/server.ts');
+  if (!fs.existsSync(toolsFile)) {
+    return { available: false, reason: 'agent-context-tools.ts 不存在', toolNames: [], mode: 'source' };
+  }
+  let toolsContent = '';
+  let serverContent = '';
+  try {
+    toolsContent = fs.readFileSync(toolsFile, 'utf-8');
+    serverContent = fs.existsSync(serverFile) ? fs.readFileSync(serverFile, 'utf-8') : '';
+  } catch (err) {
+    return { available: false, reason: `读取 source 失败: ${err.message}`, toolNames: [], mode: 'source' };
+  }
+
+  // 1) 移除注释行（避免被注释掉的 server.tool 误报）
+  const stripComments = (src) =>
+    src
+      .split('\n')
+      .map((l) => l.replace(/^\s*\/\/.*$/, '').replace(/^\s*\*.*$/, ''))
+      .join('\n')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+  const toolsClean = stripComments(toolsContent);
+  const serverClean = stripComments(serverContent);
+
+  // 2) registerAgentContextTools 必须 export
+  if (!/export\s+function\s+registerAgentContextTools/.test(toolsClean)) {
+    return { available: false, reason: 'registerAgentContextTools 未导出', toolNames: [], mode: 'source' };
+  }
+  const found = expected.filter((name) =>
+    new RegExp(`server\\.tool\\(\\s*['"]${name}['"]`, 'm').test(toolsClean),
+  );
+  if (found.length !== expected.length) {
+    return {
+      available: false,
+      reason: `tool 注册不完整：找到 ${found.join(', ') || '无'}`,
+      toolNames: found,
+      mode: 'source',
+    };
+  }
+  if (!/registerAgentContextTools\s*\(\s*server\s*\)/.test(serverClean)) {
+    return { available: false, reason: 'server.ts 未调用 registerAgentContextTools', toolNames: found, mode: 'source' };
+  }
+  return { available: true, reason: 'source grep ok (weak)', toolNames: found, mode: 'source' };
+}
+
+// ============================================================
 // argv
 // ============================================================
 
@@ -393,6 +485,19 @@ export function renderMarkdown(scanned, agg, insights, repeatAggregatesOverride)
   lines.push('- 真实 multi-turn workflow 的差异化（commits、test-driven loop、Constitution Check）需要 plugin 实跑端到端；Phase D feasibility spike 的小样本数据见 [research/multi-turn-spike-log.md](./research/multi-turn-spike-log.md)（如已落地）');
   lines.push('');
   lines.push('**Spectra 类 fixture（perf + spec quality + grounding）= 真实端到端实跑**，对外结论以 §3 + doc-quality 公平 rubric (§3.2b) 为准。');
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // §0.5 Capability probe — Feature 155 Agent-Context MCP Tools
+  lines.push('## 0.5 MCP 能力探测');
+  lines.push('');
+  const cap = probeAgentContextCapability();
+  if (cap.available) {
+    lines.push(`- ✅ **Agent-Context tools available**：MCP server 注册了 ${cap.toolNames.join(' / ')}（Feature 155）`);
+  } else {
+    lines.push(`- ⚠️ Agent-Context tools 未注册：${cap.reason}`);
+  }
   lines.push('');
   lines.push('---');
   lines.push('');

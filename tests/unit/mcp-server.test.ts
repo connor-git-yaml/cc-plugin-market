@@ -72,12 +72,13 @@ describe('createMcpServer', () => {
     vi.clearAllMocks();
   });
 
-  it('注册 prepare/generate/batch/diff/panoramic-query 及 graph 查询工具', () => {
+  it('注册 prepare/generate/batch/diff/panoramic-query / graph 查询 / agent-context 工具', () => {
     const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
     const names = server.tools.map((t) => t.name).sort();
     expect(names).toEqual([
-      'batch', 'diff', 'generate',
+      'batch', 'context', 'detect_changes', 'diff', 'generate',
       'graph_community', 'graph_god_nodes', 'graph_hyperedges', 'graph_node', 'graph_path', 'graph_query',
+      'impact',
       'panoramic-query', 'prepare',
     ]);
   });
