@@ -352,6 +352,10 @@ export function resolveTsJsImport(
     for (const ext of TS_EXTENSIONS) {
       const candidate = moduleSpec + ext;
       if (fs.existsSync(candidate)) {
+        // Codex final C-4 修复：候选必须在 projectRoot 内，否则 unresolved 防止 graph 污染
+        if (!isInsideProjectRoot(candidate, projectRoot)) {
+          return { resolvedPath: null, kind: 'unresolved' };
+        }
         return {
           resolvedPath: toPosix(path.relative(projectRoot, candidate)),
           kind: 'absolute',
@@ -373,6 +377,10 @@ export function resolveTsJsImport(
     // 按 .ts → .tsx → .js → .jsx 顺序候补
     for (const ext of TS_EXTENSIONS) {
       if (fs.existsSync(base + ext)) {
+        // Codex final C-4 修复：候选必须在 projectRoot 内
+        if (!isInsideProjectRoot(base + ext, projectRoot)) {
+          return { resolvedPath: null, kind: 'unresolved' };
+        }
         return {
           resolvedPath: toPosix(path.relative(projectRoot, base + ext)),
           kind: 'relative',
@@ -383,6 +391,10 @@ export function resolveTsJsImport(
     // 按 /index.ts → /index.tsx 等顺序候补
     for (const suffix of TS_INDEX_SUFFIXES) {
       if (fs.existsSync(base + suffix)) {
+        // Codex final C-4 修复：候选必须在 projectRoot 内
+        if (!isInsideProjectRoot(base + suffix, projectRoot)) {
+          return { resolvedPath: null, kind: 'unresolved' };
+        }
         return {
           resolvedPath: toPosix(path.relative(projectRoot, base + suffix)),
           kind: 'relative',
@@ -423,9 +435,11 @@ export function resolveTsJsImport(
             ? replacement.replace('*', tail)
             : replacement;
 
-          // paths 中的路径相对 configDir 解析
-          // 若 baseUrl 不为 null，paths 内 ./ 开头的路径相对 configDir（不叠加 baseUrl）
-          const absBase = path.resolve(tsConfigContext.configDir, resolved);
+          // Codex final C-3 修复：paths replacement 必须叠加 baseUrl（TypeScript 官方语义）
+          // 标准模式：baseUrl="src", paths={"@/*": ["*"]} → "@/foo" 解析为 "<configDir>/src/foo"
+          // 实施：absBase = configDir + (baseUrl ?? '.') + replacement
+          const baseUrl = typeof tsConfigContext.baseUrl === 'string' ? tsConfigContext.baseUrl : '.';
+          const absBase = path.resolve(tsConfigContext.configDir, baseUrl, resolved);
 
           for (const ext of TS_EXTENSIONS) {
             if (fs.existsSync(absBase + ext)) {

@@ -32,10 +32,13 @@ const DYNAMIC_CALL_NAMES = new Set(['eval', 'Function']);
  * C-4 修复：匿名 arrow/function 也必须入栈，避免内层 callback 归属错外层 class method。
  */
 const SCOPE_DEFINING_TYPES = new Set([
-  'function_declaration',  // function foo() {}
-  'function',              // const f = function() {}
-  'arrow_function',        // const f = () => {}
-  'method_definition',     // class Foo { bar() {} }
+  'function_declaration',           // function foo() {}
+  'function',                       // const f = function() {}
+  'arrow_function',                 // const f = () => {}
+  'method_definition',              // class Foo { bar() {} }
+  // Codex final W-3 修复：generator function 也定义独立 callerContext
+  'generator_function_declaration', // function* gen() {}
+  'generator_function',             // const gen = function*() {}
 ]);
 
 // ============================================================
@@ -946,6 +949,21 @@ export class TypeScriptMapper implements QueryMapper {
         }
         // C-4 修复：匿名 function 表达式用位置唯一化
         return `<fn:${node.startPosition.row + 1}:${node.startPosition.column}>`;
+      }
+      case 'generator_function_declaration': {
+        // Codex final W-3 修复：generator function 声明 function* gen() {}
+        const name = fieldText(node, 'name');
+        if (name) return name;
+        return `<gen:${node.startPosition.row + 1}:${node.startPosition.column}>`;
+      }
+      case 'generator_function': {
+        // generator function 表达式：const gen = function*() {}
+        const parent = node.parent;
+        if (parent?.type === 'variable_declarator') {
+          const varName = fieldText(parent, 'name');
+          if (varName) return varName;
+        }
+        return `<gen:${node.startPosition.row + 1}:${node.startPosition.column}>`;
       }
       default:
         return null;

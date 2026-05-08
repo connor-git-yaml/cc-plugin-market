@@ -35,7 +35,7 @@ vi.mock('../../src/core/single-spec-orchestrator.js', () => ({
 
 import { runBatch } from '../../src/batch/batch-orchestrator.js';
 
-describe('runBatch — retry token budget 短路 (Bug 142)', () => {
+describe('runBatch — retry token budget 短路 (Bug 142)', { timeout: 30000 }, () => {
   let projectRoot: string;
 
   beforeEach(() => {

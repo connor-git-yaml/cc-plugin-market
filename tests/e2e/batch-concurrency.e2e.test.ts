@@ -249,11 +249,13 @@ describe('Spectra batch 并发 E2E（Feature 146）', () => {
     // 两次运行 LLM 调用次数应一致（同 fixture）
     expect(parTotalCalls).toBe(seqTotalCalls);
     // 并发模式总耗时应显著小于顺序模式。
-    // CI 容忍下限：节省 ≥ 15%（× 0.85），低于 spec 期望的 30% 但避免 GitHub Actions
-    // 共享 runner 的偶发抖动导致 flaky。本地实测节省通常 ≥ 50%，CI 阈值仅作回归警戒线
-    // （防止并发完全失效如 pLimit(1) 死锁）。Codex 审查 INFO：阈值与 spec 30% 的差距
-    // 属测试工程权衡，已在测试注释和 spec.md 中分别记录。
-    expect(parElapsed).toBeLessThan(seqElapsed * 0.85);
+    // CI 容忍下限调整：节省 ≥ 5%（× 0.95，原 0.85 = 15% 节省）
+    // Feature 152 在 runBatch 早期加 collectTsJsCodeSkeletons（双路径 ts-morph +
+    // tree-sitter，~12 .ts 文件 fixture 上 ~700-1000ms 顺序前置开销），稀释了 LLM
+    // 阶段的并发节省比例 — 这是产品行为变化（用户跑 spectra 后 graph.json 含 TS
+    // calls 边），不是回归。本测试目的是检测并发完全失效（pLimit(1) 死锁），5%
+    // 容忍仍能命中该回归信号。
+    expect(parElapsed).toBeLessThan(seqElapsed * 0.95);
   }, 180_000);
 
   it('SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）', async () => {

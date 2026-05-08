@@ -1118,9 +1118,17 @@ export async function runBatch(
 
     // Feature 151 Codex Final C-1 修订 — 在 generateBatchProjectDocs 之前构建 UnifiedGraph
     // 让 component-view-builder 能在生成时获取 graph（DI provider getCurrentUnifiedGraph）
+    //
+    // Feature 152 Codex final C-1 修复 — 同时合并 Python + TS/JS codeSkeletons，
+    // 否则用户跑 spectra batch 后 TS 项目 graph.json 中没有 calls 边（US-001 失败）
     setCurrentUnifiedGraph(null);
     try {
-      const earlyCodeSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
+      const pythonSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
+      const tsJsSkeletons = await collectTsJsCodeSkeletons(resolvedRoot, {
+        extractCallSites: true,
+      });
+      // 合并两个 Map（projectRoot 都已 normalize 为绝对路径，key 形态一致）
+      const earlyCodeSkeletons = new Map([...pythonSkeletons, ...tsJsSkeletons]);
       if (earlyCodeSkeletons.size > 0) {
         const earlyUg = buildUnifiedGraph({
           projectRoot: resolvedRoot,
@@ -1128,11 +1136,14 @@ export async function runBatch(
         });
         setCurrentUnifiedGraph(earlyUg);
         const callEdges = earlyUg.edges.filter((e) => e.relation === 'calls').length;
-        logger.info(`[Feature 151] 早期 UnifiedGraph 构建：${earlyUg.nodes.length} 节点 / ${callEdges} calls 边（供 component-view 使用）`);
+        logger.info(
+          `[Feature 151+152] 早期 UnifiedGraph 构建：${earlyUg.nodes.length} 节点 / ${callEdges} calls 边 ` +
+          `(${pythonSkeletons.size} .py + ${tsJsSkeletons.size} .ts/.tsx/.js/.jsx 文件)`,
+        );
       }
     } catch (ugErr) {
       setCurrentUnifiedGraph(null);
-      logger.warn(`[Feature 151] 早期 UnifiedGraph 构建失败（不阻塞）: ${String(ugErr)}`);
+      logger.warn(`[Feature 151+152] 早期 UnifiedGraph 构建失败（不阻塞）: ${String(ugErr)}`);
     }
 
     try {
