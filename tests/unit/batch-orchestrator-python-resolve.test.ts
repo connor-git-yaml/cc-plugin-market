@@ -246,6 +246,45 @@ def run():
     expect(nnImp?.resolvedPath).toBe(path.join(tmpDir, 'micrograd', 'nn.py'));
   });
 
+  it('quality-review W-2 修复：from ... import a, b（3 个点）也拆解 namedImports 不污染', async () => {
+    const collect = await getCollectFn();
+    // 嵌套 3 层包结构：pkg/sub1/sub2/main.py 用 `from ... import engine, nn`
+    // 上溯 (3-1)=2 级 → pkg/，期望 engine 解析到 pkg/engine.py，nn 解析到 pkg/nn.py
+    const tmpDir = createFixture({
+      'pkg/__init__.py': '',
+      'pkg/engine.py': `class Value: pass`,
+      'pkg/nn.py': `class MLP: pass`,
+      'pkg/sub1/__init__.py': '',
+      'pkg/sub1/sub2/__init__.py': '',
+      'pkg/sub1/sub2/main.py': `from ... import engine, nn`,
+    });
+    tmpDirs.push(tmpDir);
+
+    const result = await collect(tmpDir);
+    const mainPath = path.join(tmpDir, 'pkg', 'sub1', 'sub2', 'main.py');
+    const skeleton = result.get(mainPath);
+    const imports = skeleton.imports as Array<{
+      moduleSpecifier: string;
+      namedImports?: string[];
+      resolvedPath: string | null;
+    }>;
+
+    // 拆解后应有 2 条独立 import
+    const engineImp = imports.find((i) => i.moduleSpecifier === '...engine');
+    const nnImp = imports.find((i) => i.moduleSpecifier === '...nn');
+
+    expect(engineImp).toBeDefined();
+    expect(nnImp).toBeDefined();
+
+    // 关键 W-2 修复断言：每条 namedImports 仅含本次拆出的 name（不污染）
+    expect(engineImp?.namedImports).toEqual(['engine']);
+    expect(nnImp?.namedImports).toEqual(['nn']);
+
+    // resolvedPath 各自正确
+    expect(engineImp?.resolvedPath).toBe(path.join(tmpDir, 'pkg', 'engine.py'));
+    expect(nnImp?.resolvedPath).toBe(path.join(tmpDir, 'pkg', 'nn.py'));
+  });
+
   it('Codex C-2 修复：调用方传相对路径 projectRoot → Map key 与 resolvedPath 形态一致（绝对路径）', async () => {
     const collect = await getCollectFn();
     const tmpDir = createFixture({

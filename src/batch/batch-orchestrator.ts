@@ -2042,9 +2042,11 @@ export async function collectPythonCodeSkeletons(
 
           const spec = imp.moduleSpecifier;
 
-          // C-1：裸相对 import —— moduleSpecifier 仅为 '.' 或 '..'
+          // C-1：裸相对 import —— moduleSpecifier 仅为纯点（'.' / '..' / '...' / 更深）
           // "from . import nn, Value" → imp.namedImports=['nn','Value']，逐个拆解
-          if (spec === '.' || spec === '..') {
+          // quality-review W-2 修复：扩展到任意点深度（PEP 328 不限层数），
+          // 避免 'from ... import a, b' 时 a/b 都映射到同一 resolvedPath（namedImports 污染）
+          if (/^\.+$/.test(spec)) {
             const namedImports: string[] = Array.isArray(imp.namedImports)
               ? (imp.namedImports as string[])
               : [];

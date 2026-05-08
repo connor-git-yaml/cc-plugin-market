@@ -412,4 +412,32 @@ describe('import-resolver', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('quality-review CRITICAL 修复：findNearestTsConfig 损坏 tsconfig.json 不抛异常', () => {
+    it('损坏的 tsconfig.json（语法错误）→ 跳过继续上溯，最终返回 null 不抛异常', () => {
+      // 在 /proj/inner 放一个损坏的 tsconfig.json，/proj 无 tsconfig
+      // 调用 findNearestTsConfig('/proj/inner/a.ts', '/proj') 应：
+      // 1. 在 /proj/inner 发现 tsconfig.json，但 JSON.parse 抛异常
+      // 2. catch 后继续上溯到 /proj，未发现 tsconfig
+      // 3. 返回 null，**不**抛异常
+      const corruptedJson = '{"compilerOptions": {invalid syntax/* with comment */}}';
+      vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
+        const ps = String(p);
+        return ps === '/proj/inner/tsconfig.json';
+      });
+      vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
+        const ps = String(p);
+        if (ps === '/proj/inner/tsconfig.json') return corruptedJson;
+        throw new Error('unexpected read');
+      });
+
+      // 不应抛异常
+      let result: ReturnType<typeof findNearestTsConfig> | undefined;
+      expect(() => {
+        result = findNearestTsConfig('/proj/inner/a.ts', '/proj');
+      }).not.toThrow();
+      // 损坏的 tsconfig 被跳过，上溯到 /proj 无 tsconfig → null
+      expect(result).toBeNull();
+    });
+  });
 });

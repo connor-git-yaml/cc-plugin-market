@@ -554,10 +554,17 @@ export function findNearestTsConfig(
 
     const candidate = path.join(dir, 'tsconfig.json');
     if (fs.existsSync(candidate)) {
-      const rawConfig = JSON.parse(
-        fs.readFileSync(candidate, 'utf8') as string,
-      ) as Record<string, unknown>;
-      return { configDir: dir, rawConfig };
+      // quality-review CRITICAL 修复：JSON.parse 必须包 try/catch
+      // 损坏的 tsconfig.json（含注释 / 语法错误）不应抛异常吞掉整个 collect 流程，
+      // 应继续上溯查找有效的 tsconfig（与 FR-2.4 "解析失败返回 unresolved 不抛异常" 同精神）
+      try {
+        const rawConfig = JSON.parse(
+          fs.readFileSync(candidate, 'utf8') as string,
+        ) as Record<string, unknown>;
+        return { configDir: dir, rawConfig };
+      } catch {
+        // 损坏的 tsconfig.json — 视为不存在，继续向上查找
+      }
     }
 
     // 若当前 dir 已是 projectRoot，不再继续上溯
