@@ -39,25 +39,43 @@ export function probeAgentContextCapability() {
   const distServer = path.join(PROJECT_ROOT, 'dist/mcp/server.js');
   if (fs.existsSync(distServer)) {
     try {
+      // strong probe：实例化 server + 实际 invoke 'impact' tool handler，
+      // 验证响应满足 MCP envelope contract（FR-060 要求 invoke tool 而非仅看 registry）
       const probe = spawnSync(process.execPath, [
         '-e',
-        `import('${distServer}').then(m => {
+        `import('${distServer}').then(async m => {
           const server = m.createMcpServer();
-          // McpServer SDK 把工具保存在自身的 _registeredTools（非 server.server）
           const reg = server._registeredTools ?? server.server?._registeredTools ?? {};
           const names = Object.keys(reg);
-          process.stdout.write(JSON.stringify(names));
+          // 真实 invoke 'impact' tool (期望 graph-not-built 错误响应 — 在仓库无 graph 时也能拿到稳定 envelope)
+          let invokeOk = false;
+          let invokeError = null;
+          if (reg.impact && typeof reg.impact.handler === 'function') {
+            try {
+              const result = await reg.impact.handler({ target: '__capability_probe_target__', projectRoot: '/tmp/__nonexistent__' });
+              // 期望返回 { content: [{type:'text', text}], isError: true }（graph-not-built）
+              if (result && Array.isArray(result.content) && result.content[0]?.type === 'text') {
+                invokeOk = true;
+              }
+            } catch (e) {
+              invokeError = e.message;
+            }
+          }
+          process.stdout.write(JSON.stringify({ names, invokeOk, invokeError }));
         }).catch(e => { process.stderr.write(e.message); process.exit(2); });`,
       ], { encoding: 'utf-8', timeout: 15000 });
       if (probe.status === 0 && probe.stdout) {
-        const names = JSON.parse(probe.stdout);
+        const parsed = JSON.parse(probe.stdout);
+        const names = parsed.names ?? [];
         const found = expected.filter((n) => names.includes(n));
-        if (found.length === expected.length) {
-          return { available: true, reason: 'server runtime probe ok', toolNames: found, mode: 'runtime' };
+        if (found.length === expected.length && parsed.invokeOk) {
+          return { available: true, reason: 'server runtime probe + tool invoke ok', toolNames: found, mode: 'runtime' };
         }
         return {
           available: false,
-          reason: `runtime probe: tool 缺失 (找到 ${found.join(',') || '无'})`,
+          reason: parsed.invokeOk
+            ? `runtime probe: tool 缺失 (找到 ${found.join(',') || '无'})`
+            : `runtime probe: tool 注册但 invoke 失败 (${parsed.invokeError ?? 'envelope 不符'})`,
           toolNames: found,
           mode: 'runtime',
         };

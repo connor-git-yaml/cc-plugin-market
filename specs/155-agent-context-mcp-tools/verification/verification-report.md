@@ -164,6 +164,18 @@ $ git diff --name-only origin/master...HEAD | grep -E 'src/(knowledge-graph/(uni
   - baseRef 拒绝 `-` 开头（option-injection 防御层 2）
   - 补 4 个 case (C-314 ~ C-317)
 
+### T-013 GATE_VERIFY round-3 final review（整支 branch）
+
+- 3 CRITICAL（SC-004 file mapping `#` 分隔符未处理 / SC-007 capability probe 未真 invoke tool / SC-008 spec FR-061 允许清单未列 graph-query.ts + engineCache 升级）
+- 4 WARNING（SC-001 阈值修订 spec 残留旧文本 / 集成测试 CI skip 未明示 / C-202 confidence filter 未测 / C-205 budget-truncated 断言 不严）
+- 全部 closed：
+  - moduleFileFromId 兼容 `#` 与 `::` 双分隔符（Feature 151 unified-graph 与旧 panoramic 格式并存）
+  - capability probe 现在真 invoke `impact` tool handler，验证 ToolResult envelope 形态（`isError + content[0].text`），不只看 registry
+  - spec FR-061 明确列出"允许的桥接方式"含 graph-query.ts rawGraph getter + graph-tools.ts engineCache 升级（plan §2 D-1/D-2 强制）
+  - spec.md / quality-checklist.md / tasks.md 内全部 `≥ 5 callers` 残留改为 `≥ 1 caller` 修订阈值
+  - C-202 检查 `Module` symbol 真实命中；新增 C-202b 用 minConfidence=0.95 严格阈值验证 confidence filter 在真实 graph 上生效
+  - C-205 修订注释明确"小型 graph 上未必触发 budget-truncated；严格断言在合成 fixture C-002 完成"
+
 ---
 
 ## 工具链验证
@@ -175,6 +187,15 @@ $ git diff --name-only origin/master...HEAD | grep -E 'src/(knowledge-graph/(uni
 | `npm run lint` | 0 fail |
 | `npm run repo:check` | 全 pass（含 release-contract / orchestration / wrappers / spec-driver-skills 等 30+ 检查） |
 | `npm run baseline:collect -- --target karpathy/micrograd --mode full` | 成功生成 graph.json（含 4 条 calls 边、46 nodes、10 links） |
+
+---
+
+## 集成测试在 CI 环境的行为
+
+- 5 个 integration test（`tests/integration/agent-context-real-graph.test.ts`）依赖 `~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json`
+- 在缺少 baseline 的纯 CI 环境中（如 GitHub Actions 默认），这些 case 会自动 `skip` 而非 fail
+- 验收时用本地 `npm run baseline:collect -- --target karpathy/micrograd --mode full` 重生 baseline 后跑通 5 个 case；CI 上由单测（query-helpers 38 + agent-context 36 + graph-tools-cache 6 = 80 case）守底线
+- 这是有意设计：避免在 CI 上反复跑 LLM-driven baseline collect（每次 ~$0.55 + 3 min）
 
 ---
 

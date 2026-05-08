@@ -493,12 +493,22 @@ function labelFromId(id: string): string {
 // ============================================================
 
 /**
- * 取节点的 module file 部分（symbol id 中 `::` 之前的段）。
- * 模块节点本身（id 不含 `::`）→ 返回 id 自身。
+ * 取节点的 module file 部分。
+ *
+ * 兼容两种分隔符（同一个 graph 内可能并存）：
+ *   - Feature 151 新格式：`<file>::<symbolName>` 例 `micrograd/engine.py::Value.__add__`
+ *   - 旧 panoramic 格式：`<file>#<symbolName>` 例 `micrograd/engine.py#Value`
+ *
+ * 模块节点本身（id 既不含 `::` 也不含 `#`）→ 返回 id 自身。
+ * 取最早出现的分隔符位置作为 cut 点。
  */
 export function moduleFileFromId(nodeId: string): string {
-  const idx = nodeId.indexOf('::');
-  return idx >= 0 ? nodeId.slice(0, idx) : nodeId;
+  const idxColon = nodeId.indexOf('::');
+  const idxHash = nodeId.indexOf('#');
+  const cuts = [idxColon, idxHash].filter((i) => i >= 0);
+  if (cuts.length === 0) return nodeId;
+  const first = Math.min(...cuts);
+  return nodeId.slice(0, first);
 }
 
 /**

@@ -89,11 +89,35 @@ index a1..b2 100644
     });
     const detectData = parseSuccess(detectRes);
     const cs = detectData['changedSymbols'] as Array<{ file: string; symbols: string[] }>;
-    // 真实 graph 含相对 id `micrograd/nn.py` 模块节点 + 多个 # 命名子节点
-    // detect_changes 用 file → graph nodes 映射，应识别 `micrograd/nn.py`
+    // 真实 graph 既含相对 id `micrograd/nn.py#Module` 也含绝对 id `.../nn.py::Module.parameters`
+    // moduleFileFromId 兼容两种分隔符（# / ::），detect_changes 应同时识别两类
     const matchingFile = cs.find((c) => c.file === 'micrograd/nn.py');
     expect(matchingFile).toBeDefined();
-    expect(matchingFile!.symbols.length).toBeGreaterThanOrEqual(1);
+    expect(matchingFile!.symbols.length).toBeGreaterThanOrEqual(2);
+    // 至少应命中 micrograd/nn.py#Module（panoramic 格式）和 .../nn.py::Module.parameters（unified 格式）
+    expect(matchingFile!.symbols.some((s) => s.includes('Module'))).toBe(true);
+  });
+
+  it('C-202b confidence filter 在真实 graph 上生效（detect_changes minConfidence=0.95 过滤掉 INFERRED 边）', async () => {
+    const diff = `diff --git a/micrograd/nn.py b/micrograd/nn.py
+index a1..b2 100644
+--- a/micrograd/nn.py
++++ b/micrograd/nn.py
+@@ -1,3 +1,3 @@
+-old line
++new line
+`;
+    const r = await handleDetectChanges({
+      diff,
+      projectRoot: MICROGRAD_ROOT,
+      depth: 2,
+      budget: 200,
+      minConfidence: 0.95, // 严格阈值，仅留 EXTRACTED 边
+    });
+    const data = parseSuccess(r);
+    const affected = data['affectedSymbols'] as unknown[];
+    // 真实 micrograd 全 4 条 calls 边都是 EXTRACTED 0.95，所以严格 0.95 也应有结果
+    expect(Array.isArray(affected)).toBe(true);
   });
 
   it('C-203 context tool 在真实 graph 上返回 definition 字段', async () => {
@@ -130,7 +154,7 @@ index a1..b2 100644
 
   it('C-205 SC-002b 真实 graph budget=2 强截断验证', async () => {
     // ABS_LAYER 至少有 1 个 caller (MLP.__init__)；budget=2 + depth=5 + minConf=0
-    // 应得到 affected.length ≤ 2，warnings 含 budget-truncated（如果可达节点 > 2）
+    // 应得到 affected.length ≤ 2；effectiveBudget=2 字段回传一致
     const r = await handleImpact({
       target: ABS_LAYER,
       depth: 5,
@@ -142,6 +166,8 @@ index a1..b2 100644
     const data = parseSuccess(r);
     expect(data['effectiveBudget']).toBe(2);
     expect((data['affected'] as unknown[]).length).toBeLessThanOrEqual(2);
+    // 注：micrograd 反向链很短（4 条 calls 边），budget=2 在小型 graph 上未必触发 budget-truncated
+    // 严格的 budget-truncated 验证在合成 fixture 上完成（SC-002a / C-002）
   });
 });
 

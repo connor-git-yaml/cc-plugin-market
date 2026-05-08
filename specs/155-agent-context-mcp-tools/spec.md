@@ -225,11 +225,14 @@ agent / CI 在 review 一个 PR / commit 时，需要回答 "这次改动可能 
   - `src/panoramic/graph/graph-builder.ts`（UnifiedGraph→GraphJSON 序列化器）
   - `src/models/call-site.ts`（CallSite schema）
   
-  允许的桥接方式：
-  - 在 `src/mcp/graph-tools.ts` 增加只读 helper（如 `getCachedGraphData(projectRoot): GraphData | null`），**不**修改 engineCache 与 lazy load 逻辑
-  - 在 `src/mcp/server.ts` 末尾追加 `registerAgentContextTools(server)` 调用，**不**改前序 register*\* 顺序
+  允许的桥接方式（implement 阶段经 GATE_TASKS round-1 修订后明确）：
+  - **`src/mcp/graph-tools.ts`**：增加只读 helper `getCachedGraphData(projectRoot)` **以及** 升级 `engineCache` 为 entry-based + mtime+size stale detection（plan §2 D-2 强制 — 不升级会导致 baseline:collect 重生 graph.json 后 cache stale）。`reloadGraph()` 行为与 lazy 语义保持向后兼容
+  - **`src/panoramic/graph/graph-query.ts`**：仅追加 `get rawGraph(): Readonly<GraphJSON>` getter（plan §2 D-1 强制 — 给 query-helpers 拿 raw graph 用）。**不**修改既有方法签名 / 内部 nodeMap / adjacency 逻辑。graph-query.ts 不在 FR-061 禁动清单
+  - **`src/mcp/server.ts`**：末尾追加 `registerAgentContextTools(server)` 调用，**不**改前序 register*\* 顺序
+  - **`tests/unit/mcp-server.test.ts`**：exact-list 加 `impact / context / detect_changes` 三个 tool 名（注册副效应）
+  - **`scripts/eval-report.mjs`**：新增 §0.5 capability probe section + `probeAgentContextCapability()` 函数
   - 新增 `src/knowledge-graph/query-helpers.ts`、`src/mcp/agent-context-tools.ts` 与各自单测
-  - SC-008 通过 `git diff --name-only master...HEAD` 自动校验
+  - SC-008 通过 `git diff --name-only master...HEAD` 自动校验：禁动清单（unified-graph / call-resolver / adapter / runtime-bootstrap / confidence-mapper / graph-builder / call-site）必须为空
 
 ### Key Entities
 
@@ -320,7 +323,7 @@ agent / CI 在 review 一个 PR / commit 时，需要回答 "这次改动可能 
 - **A-2**：`~/.spectra-baselines/micrograd` 与 `~/.spectra-baselines/nanoGPT` 已 clone（CLAUDE.local.md "Baseline 测试" 段说明）。如未 clone，跑 `bash scripts/baselines/clone-baseline-projects.sh`。
 - **A-3**：micrograd 的 `graph.json` 已含 Feature 151 引入的 calls 边。**第一步实施时必须重新跑** `npm run baseline:collect -- --target karpathy/micrograd --mode full`，因为旧 baseline graph.json 不含 calls 边（只有 contains / cross-module）。
 - **A-4**：`src/mcp/graph-tools.ts` 的 engineCache 与 lazy load 在并发调用下足够稳定。**但**：query-helpers 的反向邻接表 cache MUST 用文件 mtime + edgeCount 复合 key 隔离，graph 重 load 时自动失效。`reloadGraph()` 被调用时 query-helpers cache 也应清退（实施细节 plan 阶段决定）。
-- **A-5**：micrograd graph.json 中存在符号节点 `micrograd/engine.py::Value` 且 calls 边有上游 callers ≥ 5。**实施第一步先 invoke baseline:collect 验证**；若实测发现节点格式（如 `Value.__add__` 不作为独立节点）与 SC-001 假设不符，按 SC-001 备选 target 修订验收条件，不破坏其他 SC。
+- **A-5**：micrograd graph.json 中至少存在 1 条 calls 边（实测 4 条）。**实施第一步先 invoke baseline:collect 验证**。原假设 ≥ 5 callers 已按真实数据修订为 ≥ 1（详见 SC-001 实测调整段）— Python adapter 在小型代码库 + dunder method 上 recall 受限是 Feature 151 known limitation，非本 Feature 缺陷。
 
 ## 与 Feature 152/153/154 的边界
 

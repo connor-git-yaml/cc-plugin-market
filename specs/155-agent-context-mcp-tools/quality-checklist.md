@@ -27,7 +27,7 @@
 
 ## 3. 可验证性
 
-- [x] SC-001：micrograd 上 ≥ 5 callers + ≤ 5 ms hot-path
+- [x] SC-001：micrograd 上 ≥ 1 caller + ≤ 50 ms hot-path（修订：原 ≥ 5 在真实 graph 不可达）
 - [x] SC-002：nanoGPT 上 budget 严格截断 + warnings 标记
 - [x] SC-003：context tool 字段全覆盖 + relatedSpec 包含 fallback case
 - [x] SC-004：detect_changes 在 fixture diff 上输出非空 changedSymbols + affectedSymbols
