@@ -115,9 +115,14 @@ def main():
             except Exception as e:
                 skipped.append({"file": os.path.relpath(fp, root), "reason": str(e)})
 
+    # Feature 151 SC-001 fill-rate 分母：含至少一次 callable 调用的 .py 文件数
+    # 派生自 all_calls set（"file::callee" 形式），取唯一 file 部分计数
+    files_with_calls = len({x.split("::", 1)[0] for x in all_calls})
+
     print(json.dumps({
         "root": root,
         "fileCount": file_count,
+        "filesWithCalls": files_with_calls,
         "imports": sorted(all_imports),
         "calls": sorted(all_calls),
         "uniqueImportTargets": len({x.split("::", 1)[1] for x in all_imports}),

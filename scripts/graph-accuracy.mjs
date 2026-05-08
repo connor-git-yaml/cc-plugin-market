@@ -57,8 +57,46 @@ function parseArgs(argv) {
       out.ignoreDirs = nextArg.split(',').map((s) => s.trim()).filter(Boolean);
     }
     else if (k === '--quiet') out.quiet = true;
+    // Feature 151 SC-001 fill-rate metric — 计算 graph.json 中含 callSites 的 .py 文件占
+    // python-call-extractor.py 输出的 filesWithCalls 的比例
+    else if (k === '--metric') out.metric = argv[++i];
   }
   return out;
+}
+
+/**
+ * Feature 151 SC-001 — 计算 callSites 字段填充率
+ *
+ * @param {{ nodes: Array<{metadata?: { callSitesCount?: number, codeSkeleton?: { callSites?: unknown[] } }, language?: string, filePath?: string, kind?: string }> }} graph
+ * @param {{ filesWithCalls?: number, fileCount: number }} truthSet  来自 python-call-extractor.py 的输出
+ * @returns {{ callsiteFillRate: number, filesWithCallSites: number, denominator: number }}
+ */
+export function computeFillRate(graph, truthSet) {
+  // 分子：graph.json 中 metadata.callSitesCount > 0 的 module 节点（Codex C-4：T-012a 写入此字段）
+  // 兼容路径：node.metadata.codeSkeleton.callSites?.length > 0
+  const filesWithCallSites = new Set();
+  for (const node of graph.nodes) {
+    if (node.kind && node.kind !== 'module') continue;
+    const filePath = node.filePath ?? node.id;
+    const explicitCount = node.metadata?.callSitesCount;
+    if (typeof explicitCount === 'number' && explicitCount > 0) {
+      filesWithCallSites.add(filePath);
+      continue;
+    }
+    const cs = node.metadata?.codeSkeleton?.callSites;
+    if (Array.isArray(cs) && cs.length > 0) {
+      filesWithCallSites.add(filePath);
+    }
+  }
+
+  // 分母：truth set 的 filesWithCalls；老 fixture 没有此字段时回退到 fileCount（更宽松，低估填充率）
+  const denominator = truthSet.filesWithCalls ?? truthSet.fileCount;
+  const callsiteFillRate = denominator > 0 ? filesWithCallSites.size / denominator : 0;
+  return {
+    callsiteFillRate,
+    filesWithCallSites: filesWithCallSites.size,
+    denominator,
+  };
 }
 
 function extractTruthSetPython(sourceRoot) {
@@ -533,6 +571,24 @@ async function main() {
       graphPath: args.graph,
       language,
     });
+  }
+
+  // Feature 151 SC-001 — fill-rate 度量。仅 python 路径，且 --metric=fill-rate 时输出
+  if (args.metric === 'fill-rate') {
+    if (language !== 'python') {
+      console.error('[graph-accuracy] --metric fill-rate currently supports --language python only');
+      process.exit(1);
+    }
+    const truth = extractTruthSetPython(args.source);
+    const graph = loadGraph(args.graph);
+    const fill = computeFillRate(graph, truth);
+    if (!args.quiet) {
+      console.log(JSON.stringify({ ...result, fillRate: fill }, null, 2));
+    }
+    if (args.writeFixture) {
+      writeFixtureQualityField(args.writeFixture, { ...result, fillRate: fill });
+    }
+    return;
   }
 
   if (!args.quiet) {

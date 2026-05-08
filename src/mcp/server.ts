@@ -12,9 +12,7 @@ import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.j
 import { runBatch } from '../batch/batch-orchestrator.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
-import { bootstrapAdapters } from '../adapters/index.js';
-import { bootstrapGenerators } from '../panoramic/generator-registry.js';
-import { bootstrapParsers } from '../panoramic/parser-registry.js';
+import { bootstrapRuntime } from '../runtime-bootstrap.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { queryPanoramic } from '../panoramic/query.js';
 import { registerGraphTools } from './graph-tools.js';
@@ -28,12 +26,8 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
  * 创建并配置 MCP Server 实例
  */
 export function createMcpServer(): McpServer {
-  // 注册所有语言适配器
-  bootstrapAdapters();
-  // 注册所有文档生成器
-  bootstrapGenerators();
-  // 注册所有制品解析器
-  bootstrapParsers();
+  // 单一 runtime 初始化（FR-10）：注册语言适配器 / 文档生成器 / 制品解析器
+  bootstrapRuntime();
 
   const server = new McpServer({
     name: 'spectra',

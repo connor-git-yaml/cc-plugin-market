@@ -1,0 +1,341 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_community community_id=cluster_0 — Layer A 社区节点 > layer-a-graph_community 1`] = `
+{
+  "cohesion": null,
+  "communityId": "cluster_0",
+  "message": "内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）",
+  "nodes": [
+    {
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+    {
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/bar.ts::main",
+      "kind": "function",
+      "label": "main",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+  ],
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_god_nodes top=3 — Layer A degree 排序稳定 > layer-a-graph_god_nodes 1`] = `
+{
+  "nodes": [
+    {
+      "degree": 3,
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "degree": 2,
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "degree": 2,
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+  ],
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_hyperedges — Layer A 超边集合 > layer-a-graph_hyperedges 1`] = `[]`;
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_node id=src/foo.ts — Layer A 节点详情稳定 > layer-a-graph_node 1`] = `
+{
+  "community": null,
+  "message": "未找到匹配关键词的节点：keyword=""",
+  "neighbors": [],
+  "node": null,
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_path 从 main → greet — Layer A 不含 calls 边路径 > layer-a-graph_path 1`] = `
+{
+  "edges": [
+    {
+      "relation": "contains",
+      "source": "src/bar.ts",
+      "target": "src/bar.ts::main",
+    },
+    {
+      "relation": "depends-on",
+      "source": "src/bar.ts",
+      "target": "src/foo.ts",
+    },
+    {
+      "relation": "contains",
+      "source": "src/foo.ts",
+      "target": "src/foo.ts::greet",
+    },
+  ],
+  "message": "找到最短路径，共 4 个节点，3 条边",
+  "path": [
+    {
+      "id": "src/bar.ts::main",
+      "kind": "function",
+      "label": "main",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+    {
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+    {
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+  ],
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1) > graph_query keyword=greet — Layer A 子图稳定 > layer-a-graph_query 1`] = `
+{
+  "edges": [
+    {
+      "relation": "contains",
+      "source": "src/foo.ts",
+      "target": "src/foo.ts::greet",
+    },
+    {
+      "relation": "depends-on",
+      "source": "src/bar.ts",
+      "target": "src/foo.ts",
+    },
+    {
+      "relation": "documents",
+      "source": "src/foo.ts::greet",
+      "target": "src/foo.ts::greet",
+    },
+  ],
+  "nodes": [
+    {
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+  ],
+  "summary": "找到 3 个相关节点",
+  "totalMatches": 3,
+  "truncated": false,
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > graph_god_nodes top=3 — Layer B degree 受 calls 影响 > layer-b-graph_god_nodes 1`] = `
+{
+  "nodes": [
+    {
+      "degree": 4,
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "degree": 2,
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "degree": 2,
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+  ],
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > graph_query keyword=greet — Layer B 含 calls 边 > layer-b-graph_query 1`] = `
+{
+  "edges": [
+    {
+      "relation": "contains",
+      "source": "src/foo.ts",
+      "target": "src/foo.ts::greet",
+    },
+    {
+      "relation": "contains",
+      "source": "src/bar.ts",
+      "target": "src/bar.ts::main",
+    },
+    {
+      "relation": "depends-on",
+      "source": "src/bar.ts",
+      "target": "src/foo.ts",
+    },
+    {
+      "relation": "calls",
+      "source": "src/bar.ts::main",
+      "target": "src/foo.ts::greet",
+    },
+    {
+      "relation": "documents",
+      "source": "src/foo.ts::greet",
+      "target": "src/foo.ts::greet",
+    },
+  ],
+  "nodes": [
+    {
+      "id": "src/foo.ts::greet",
+      "kind": "function",
+      "label": "greet",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/foo.ts",
+      "kind": "file",
+      "label": "foo.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/foo.ts",
+      },
+      "sourceFile": "src/foo.ts",
+    },
+    {
+      "id": "src/bar.ts::main",
+      "kind": "function",
+      "label": "main",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+    {
+      "id": "src/bar.ts",
+      "kind": "file",
+      "label": "bar.ts",
+      "metadata": {
+        "community": "cluster_0",
+        "sourcePath": "src/bar.ts",
+      },
+      "sourceFile": "src/bar.ts",
+    },
+  ],
+  "summary": "找到 4 个相关节点",
+  "totalMatches": 4,
+  "truncated": false,
+}
+`;

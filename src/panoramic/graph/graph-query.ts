@@ -221,6 +221,20 @@ export class GraphQueryEngine {
       );
     }
 
+    return GraphQueryEngine.fromJSON(parsed);
+  }
+
+  /**
+   * Feature 151 T-001a — 从 in-memory JSON 构建查询引擎。
+   *
+   * 该工厂方法把 `loadFromFile` 中的 schema 校验 + 构造逻辑抽出，便于：
+   * 1. snapshot 测试在 calls-filtered graph.json 上构造 Layer A engine（Codex C-1 修订）
+   * 2. 测试 fixture 直接传 mock GraphJSON 不需写入磁盘
+   *
+   * @param parsed - 已解析的对象（来自 readFile + JSON.parse 或测试 mock）
+   * @throws 缺少必要字段 nodes/links 时抛出 Error
+   */
+  static fromJSON(parsed: unknown): GraphQueryEngine {
     // 宽松 schema 校验：仅检查 nodes/links 数组存在（避免因字段扩展导致加载失败）
     if (
       typeof parsed !== 'object' ||
@@ -228,11 +242,8 @@ export class GraphQueryEngine {
       !Array.isArray((parsed as Record<string, unknown>)['nodes']) ||
       !Array.isArray((parsed as Record<string, unknown>)['links'])
     ) {
-      throw new Error(
-        `图谱文件格式不合法 ${graphPath}：缺少必要字段 nodes 或 links 数组`,
-      );
+      throw new Error('图谱 JSON 格式不合法：缺少必要字段 nodes 或 links 数组');
     }
-
     return new GraphQueryEngine(parsed as GraphJSON);
   }
 

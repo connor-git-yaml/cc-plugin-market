@@ -13,7 +13,7 @@
  * - 启用/禁用状态由 Registry 拥有（独立 Map），不修改外部 Parser 实例
  * - getByFilePattern 使用简单的扩展名/文件名匹配（无外部依赖）
  *
- * 生命周期：进程级单例，CLI 和 MCP 入口各自在启动时通过 bootstrapParsers() 完成注册。
+ * 生命周期：进程级单例，所有 entry point 通过 src/runtime-bootstrap.ts 的 bootstrapRuntime 完成注册。
  */
 
 import type { z } from 'zod';

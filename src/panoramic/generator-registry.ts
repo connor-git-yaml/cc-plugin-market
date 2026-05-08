@@ -14,7 +14,7 @@
  * - filterByContext 使用 Promise.resolve() 统一包装同步/异步 isApplicable
  * - Promise.allSettled() 实现并发执行和错误隔离
  *
- * 生命周期：进程级单例，CLI 和 MCP 入口各自在启动时通过 bootstrapGenerators() 完成注册。
+ * 生命周期：进程级单例，所有 entry point 通过 src/runtime-bootstrap.ts 的 bootstrapRuntime 完成注册。
  */
 
 import type { z } from 'zod';

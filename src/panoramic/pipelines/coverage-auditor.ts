@@ -6,10 +6,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ModuleGroup } from '../../batch/module-grouper.js';
 import type { ProjectContext } from '../interfaces.js';
-import {
-  GeneratorRegistry,
-  bootstrapGenerators,
-} from '../generator-registry.js';
+import { GeneratorRegistry } from '../generator-registry.js';
+import { bootstrapRuntime } from '../../runtime-bootstrap.js';
 import {
   resolveSpecForSource,
   type DocGraph,
@@ -244,7 +242,8 @@ export class CoverageAuditor {
     outputDir: string,
     moduleCoverage: ModuleCoverageEntry[],
   ): Promise<GeneratorCoverageEntry[]> {
-    bootstrapGenerators();
+    // 单一 runtime 初始化（FR-10）：注册全部 registry，幂等
+    bootstrapRuntime();
     const registry = GeneratorRegistry.getInstance();
 
     const moduleSpecCoverage: GeneratorCoverageEntry = {

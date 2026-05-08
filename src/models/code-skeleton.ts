@@ -4,6 +4,10 @@
  */
 import { z } from 'zod';
 
+// **Codex P0 W-2 修订** — 从同层 models/call-site.ts import，保持 DAG 方向（models 不反向依赖 knowledge-graph）
+import { CallSiteSchema, type CallSite } from './call-site.js';
+export { CallSiteSchema, type CallSite } from './call-site.js';
+
 // --- 枚举 ---
 
 export const ExportKindSchema = z.enum([
@@ -124,6 +128,8 @@ export const CodeSkeletonSchema = z.object({
   analyzedAt: z.string().datetime(),
   parserUsed: ParserUsedSchema,
   moduleDoc: z.string().optional(),
+  // FR-4 + CL-01：Feature 151 新增 — 函数调用点列表（optional，向后兼容旧 baseline）
+  callSites: z.array(CallSiteSchema).optional(),
 });
 export type CodeSkeleton = z.infer<typeof CodeSkeletonSchema>;
 

@@ -332,7 +332,7 @@ export function scanFiles(targetDir: string, options?: ScanOptions): ScanResult 
   if (registry.isEmpty() && !options?.extensions) {
     throw new Error(
       'LanguageAdapterRegistry 未注册任何适配器。' +
-      '请在使用前调用 bootstrapAdapters() 完成初始化。',
+      '请在使用前调用 bootstrapRuntime（src/runtime-bootstrap.ts）完成初始化。',
     );
   }
 

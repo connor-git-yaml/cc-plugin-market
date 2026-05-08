@@ -25,9 +25,7 @@ import { runQueryCommand } from './commands/query.js';
 import { runInstall } from './commands/install.js';
 import { runExportCommand } from './commands/export.js';
 import { runDirectionAuditCommand } from './commands/direction-audit.js';
-import { bootstrapAdapters } from '../adapters/index.js';
-import { bootstrapGenerators } from '../panoramic/generator-registry.js';
-import { bootstrapParsers } from '../panoramic/parser-registry.js';
+import { bootstrapRuntime } from '../runtime-bootstrap.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -116,12 +114,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --help, -h     显示帮助信息`;
 
 async function main(): Promise<void> {
-  // 注册所有语言适配器（在命令调度前执行）
-  bootstrapAdapters();
-  // 注册所有文档生成器
-  bootstrapGenerators();
-  // 注册所有制品解析器
-  bootstrapParsers();
+  // 单一 runtime 初始化（FR-10）：在命令调度前注册全部 registry
+  bootstrapRuntime();
 
   const result = parseArgs(process.argv.slice(2));
 

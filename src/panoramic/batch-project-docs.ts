@@ -7,7 +7,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DocumentGenerator, ProjectContext } from './interfaces.js';
-import { GeneratorRegistry, bootstrapGenerators } from './generator-registry.js';
+import { GeneratorRegistry } from './generator-registry.js';
+import { bootstrapRuntime } from '../runtime-bootstrap.js';
 import { CacheManager } from './cache/cache-manager.js';
 import { ContentHasherImpl } from './cache/content-hasher.js';
 import { ManifestManagerImpl } from './cache/manifest-manager.js';
@@ -172,7 +173,8 @@ export async function generateBatchProjectDocs(
   options: GenerateBatchProjectDocsOptions,
 ): Promise<BatchProjectDocsResult> {
   const projectContext = await buildProjectContext(options.projectRoot);
-  bootstrapGenerators();
+  // 单一 runtime 初始化（FR-10）：注册全部 registry，幂等
+  bootstrapRuntime();
 
   const registry = GeneratorRegistry.getInstance();
   const effectiveMode: BatchMode = options.mode ?? 'full';
