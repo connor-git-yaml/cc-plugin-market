@@ -60,11 +60,11 @@
 ```
 npx vitest run
 Test Files  281 passed | 2 skipped (283)
-     Tests  3229 passed | 3 skipped | 20 todo (3252)
+     Tests  3231 passed | 3 skipped | 20 todo (3254)
 ```
 
 - ✅ 现有 3155 单测继续 pass
-- ✅ Feature 152 新增 **74 单测**（远超 spec 要求的 ≥ 8）：
+- ✅ Feature 152 新增 **76 单测**（远超 spec 要求的 ≥ 8；含 Phase 5c quality-review 修复后新增 2 条覆盖 JSON.parse 异常 + `...` 拆解）：
   - import-resolver: 31（含 Codex P0 复审 3 条新增）
   - typescript-mapper-callsite: 25（含 Codex P1 复审 4 条补测）
   - ts-js-adapter-callsite: 9（含 Codex P2 复审 4 条补测）
@@ -202,10 +202,11 @@ sampleHits: ["set", "isinstance", "Value", "__add__", "__mul__", "__pow__", "__s
 ## 仍待 follow-up（不阻塞合并）
 
 1. **TD-4 双路径性能优化**（spec §11）：当前 ts-morph + tree-sitter 双路径在 hono 上 enableMs ≈ 920ms，未来可考虑 tree-sitter 路径缓存 parse 树，降低 ~100-200ms
-2. **TD-6 TS re-export 链路追踪**（spec §11，W-1 修复 / EC-13 scope-out）：`export { foo } from './x'` 不分析，留待 Feature 153+
-3. **TD-7 SC-008 self-dogfood 测量改进**（本 verify 引入）：self-dogfood 32% 反映项目特殊性，可改进测量逻辑覆盖 generator 注册系统等深嵌套场景；hono 100% 已证明逻辑正确
-4. **PowerShell / Windows POSIX path 实测**（W-5 修复落地）：单测覆盖 mock path.sep='\\\\'，实际跨平台 CI 验证留作 follow-up
-5. **monorepo 多 tsconfig extends 链**（CL-04 YAGNI 边界）：当前 buildTsConfigContext 不处理 extends 链，留作 Feature 156+
+2. **TD-5 baseline gate 形式化**（spec §11）：本 Feature 在 spec.md SC-002 中嵌入了 baseline 实测数据（hono 26263 / self-dogfood 14395 truth calls），作为 spec-driver-story 模式"轻量 research gate"参考；后续涉及精确 baseline 的 Feature 建议提前在初始化阶段跑一次 truth-set 数据采集
+3. **TD-6 TS re-export 链路追踪**（spec §11，EC-13 scope-out）：`export { foo } from './x'` 不分析，留待 Feature 153+
+4. **TD-7 SC-008 self-dogfood 测量改进**（本 verify 引入）：self-dogfood 32% 反映项目特殊性，可改进测量逻辑覆盖 generator 注册系统等深嵌套场景；hono 100% 已证明逻辑正确
+5. **PowerShell / Windows POSIX path 实测**（W-5 修复落地）：单测覆盖 mock path.sep='\\\\'，实际跨平台 CI 验证留作 follow-up
+6. **monorepo 多 tsconfig extends 链**（CL-04 YAGNI 边界）：当前 buildTsConfigContext 不处理 extends 链，留作 Feature 156+
 
 ---
 
