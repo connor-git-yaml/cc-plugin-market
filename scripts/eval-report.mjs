@@ -43,10 +43,8 @@ export function probeAgentContextCapability() {
         '-e',
         `import('${distServer}').then(m => {
           const server = m.createMcpServer();
-          // McpServer.tools 内部为私有；通过 _registeredTools 或类似私有字段访问。
-          // 折中：MCP SDK 在 .listTools()/server.server._registeredTools 暴露
-          const inst = server.server ?? server;
-          const reg = inst._registeredTools ?? {};
+          // McpServer SDK 把工具保存在自身的 _registeredTools（非 server.server）
+          const reg = server._registeredTools ?? server.server?._registeredTools ?? {};
           const names = Object.keys(reg);
           process.stdout.write(JSON.stringify(names));
         }).catch(e => { process.stderr.write(e.message); process.exit(2); });`,

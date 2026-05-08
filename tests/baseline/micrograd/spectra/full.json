@@ -10,20 +10,20 @@
       "ts": 0,
       "tsx": 0,
       "py": 5,
-      "md": 1,
-      "other": 7
+      "md": 7,
+      "other": 12
     },
     "targetLocEstimate": 248,
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-04-30T07:57:17.092Z",
+    "runTimestampUtc": "2026-05-08T16:39:31.029Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
       "-l",
       "node",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/unruffled-rosalind-5150e5/dist/cli/index.js",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/agitated-gould-193950/dist/cli/index.js",
       "batch",
       "/Users/connorlu/.spectra-baselines/micrograd",
       "--mode",
@@ -38,37 +38,37 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-04-30T07:57:17.092Z",
-    "staleAfterDate": "2026-10-27",
+    "pinnedAt": "2026-05-08T16:39:31.029Z",
+    "staleAfterDate": "2026-11-04",
     "upstreamVersion": "4.1.1",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 35534,
-    "actualTokens": 98986,
-    "biasRatio": 2.79
+    "actualTokens": null,
+    "biasRatio": null
   },
   "perf": {
-    "totalWallMs": 176076,
+    "totalWallMs": 19440,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 100400,
-      "p95": 105400,
-      "min": 81300,
-      "max": 105400,
+      "p50": 4300,
+      "p95": 5300,
+      "min": 4000,
+      "max": 5300,
       "samplesCount": 4
     },
-    "tokensInput": 77233,
-    "tokensOutput": 21753,
+    "tokensInput": null,
+    "tokensOutput": null,
     "tokensCacheRead": null,
-    "estimatedCostUsd": 0.56,
-    "memoryPeakKb": 281824
+    "estimatedCostUsd": null,
+    "memoryPeakKb": 312960
   },
   "output": {
-    "graphNodeCount": 13,
-    "graphEdgeCount": 6,
+    "graphNodeCount": 46,
+    "graphEdgeCount": 10,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 5579,
+    "graphSizeBytes": 18377,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -90,251 +90,30 @@
       "modulesWithDataModel": 4,
       "modulesWithAllFour": 4,
       "modulesWithInputsOutputs": 4,
-      "averageSpecLines": 251,
-      "shorterThan100Lines": 1,
+      "averageSpecLines": 110,
+      "shorterThan100Lines": 3,
       "longerThan1000Lines": 0,
       "outlierFiles": [
-        "_index.spec.md (42 lines, too short)"
+        "__init__.spec.md (78 lines, too short)",
+        "_index.spec.md (42 lines, too short)",
+        "setup.spec.md (87 lines, too short)"
       ],
       "moduleCount": 5
     },
     "graphSanity": {
-      "isolatedNodes": 5,
+      "isolatedNodes": 30,
       "selfLoops": 0,
       "edgesWithMissingTarget": 0,
-      "averageDegree": 0.9,
+      "averageDegree": 0.4,
       "maxDegree": 4,
-      "edgesWithoutType": 6
+      "edgesWithoutType": 10
     },
     "crossLinks": {
       "totalLinks": 5,
       "brokenLinks": 0,
       "externalLinks": 0
     },
-    "codingContextGrounding": {
-      "taskId": "micrograd-extract-const",
-      "taskScore": 9,
-      "controlScore": 9,
-      "groundingDelta": 0,
-      "judgeRationale": "候选输出的代码完全匹配期望签名：`WEIGHT_INIT_RANGE = (-1, 1)` 定义在 import 之后、类定义之前，符合 module-level UPPERCASE 命名规范；`random.uniform(*WEIGHT_INIT_RANGE)` 通过元组解包正确引用常量；仅 2 行改动（1 行新增 + 1 行替换），未破坏其他逻辑，与现有类结构和 Python 命名风格一致。扣 1 分原因：输出中显式引用 \"rubric 模板（grounding-extract-const.md）\" 字样，属于元层级表述而非纯粹的 refactor 输出，略损实现的\"自然性\"，但不影响代码正确性。",
-      "interRaterDelta": null,
-      "executionMode": "non-interactive",
-      "allGroupScores": [
-        {
-          "label": "control",
-          "score": 9,
-          "contextBytes": 80
-        },
-        {
-          "label": "spectra",
-          "score": 9,
-          "contextBytes": 17435
-        },
-        {
-          "label": "graphify",
-          "score": null,
-          "contextBytes": 4062
-        },
-        {
-          "label": "aider-repomap",
-          "score": 10,
-          "contextBytes": 3257
-        }
-      ],
-      "judgedAt": "2026-05-01T14:53:54.944Z",
-      "judgeModel": "claude-opus-4-7"
-    },
-    "graphTopologyAccuracy": null,
-    "judgeSpecQuality": {
-      "score": 7,
-      "rationale": "结构完整性满分——4/4 模块 4 章节齐全（intent/behavior/api/data 全覆盖），格式标准；跨模块链接 0 broken；平均 251 行偏精简但合理。扣分项：(1) outlier `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 1 个模块 <100 行，抽象层次可能不足；(4) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义弱；(5) 无 spec 内容样本，真实性维度无法直接核验。综合结构强、链接干净，但模块覆盖与图质量拉低评分。",
-      "interRaterDelta": 0,
-      "runs": [
-        {
-          "runIndex": 1,
-          "score": 7,
-          "rationaleAnonymized": "结构完整性满分——4/4 模块 4 章节齐全（intent/behavior/api/data 全覆盖），格式标准；跨模块链接 0 broken；平均 251 行偏精简但合理。扣分项：(1) outlier `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 1 个模块 <100 行，抽象层次可能不足；(4) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义弱；(5) 无 spec 内容样本，真实性维度无法直接核验。综合结构强、链接干净，但模块覆盖与图质量拉低评分。",
-          "durationMs": 9593,
-          "exitCode": 0
-        },
-        {
-          "runIndex": 2,
-          "score": 7,
-          "rationaleAnonymized": "结构完整性满分（4/4 模块 4 章节齐全，格式标准），跨模块链接 0 broken，平均 251 行偏精简但可读。扣分：(1) `_index.spec.md` 仅 42 行过短；(2) moduleCount=5 但 specModuleCount=4，覆盖率 80% 临界；(3) 图侧孤立节点 5/13 占比 38%，6 条边全无 type，跨模块语义偏弱；(4) 无 spec 内容样本，内容真实性维度无法直接核验。结构与链接表现强，模块覆盖率与图质量拉低评分。",
-          "durationMs": 9630,
-          "exitCode": 0
-        }
-      ],
-      "judgedAt": "2026-04-30T12:36:41.701Z",
-      "judgeModel": "claude-opus-4-7"
-    },
-    "judgeDocumentationQuality": {
-      "score": 8,
-      "rationale": "覆盖度强（4/4 模块全含 intent/behavior/api/data 四章节，AST 精确提取关键签名），关系展现到位（nn→engine 跨模块链接 + Mermaid flowchart 描述前向/反向数据流），LLM-as-context 价值高（grounding 任务满分 10，17KB 上下文支撑 micrograd-add-tanh 完美实现）。真实性好，含 `engine.py:4-10` 等行号锚点。扣分：(1) `_index.spec.md` 仅 42 行，依赖图 mermaid 块为空；(2) moduleCount=5 但 specModuleCount=4，setup.py 之外的 5th 模块缺席；(3) 单 spec 平均 251 行偏长，部分章节（如 setup.py 的\"测试覆盖\"）信息密度可压缩。",
-      "interRaterDelta": 0,
-      "runs": [
-        {
-          "runIndex": 1,
-          "score": 8,
-          "rationaleAnonymized": "覆盖度强（4/4 模块全含 intent/behavior/api/data 四章节，AST 精确提取关键签名），关系展现到位（nn→engine 跨模块链接 + Mermaid flowchart 描述前向/反向数据流），LLM-as-context 价值高（grounding 任务满分 10，17KB 上下文支撑 micrograd-add-tanh 完美实现）。真实性好，含 `engine.py:4-10` 等行号锚点。扣分：(1) `_index.spec.md` 仅 42 行，依赖图 mermaid 块为空；(2) moduleCount=5 但 specModuleCount=4，setup.py 之外的 5th 模块缺席；(3) 单 spec 平均 251 行偏长，部分章节（如 setup.py 的\"测试覆盖\"）信息密度可压缩。",
-          "durationMs": 14817,
-          "exitCode": 0
-        },
-        {
-          "runIndex": 2,
-          "score": 8,
-          "rationaleAnonymized": "覆盖度强（4/4 模块 9 章节齐全，含 intent/behavior/api/data/约束/边界/测试/依赖），关系展现到位（nn→engine 跨模块链接 + mermaid flowchart 可视化前向传播 + Value DAG 反向传播阶段化描述）；信息密度高，每段含 file:line 锚点 + 代码引用 + chain rule 推导；grounding 实测满分 10（add-tanh 任务完美），LLM-as-context 价值极强。扣分：(1) `_index.spec.md` 仅 42 行且 mermaid 依赖图为空，架构总览偏弱；(2) setup.py 等基础设施模块占比偏高、信息冗余；(3) `__init__.py` 空文件却产出 200+ 行近似过度生成。整体偏精良。",
-          "durationMs": 14613,
-          "exitCode": 0
-        }
-      ],
-      "judgedAt": "2026-04-30T17:39:59.312Z",
-      "judgeModel": "claude-opus-4-7",
-      "sourceArtifact": "modules/*.spec.md"
-    },
-    "graphAccuracy": {
-      "language": "python",
-      "coverageMethod": "label-only",
-      "truthSet": {
-        "filesAnalyzed": 5,
-        "imports": 5,
-        "callsTotal": 48,
-        "uniqueCallTargets": 36
-      },
-      "graph": {
-        "totalEdges": 6,
-        "callEdges": 0,
-        "containmentEdges": 5,
-        "otherEdges": 1
-      },
-      "accuracy": {
-        "graphCalleeCount": 0,
-        "truthCalleeCount": 36,
-        "hits": 0,
-        "callPrecision": null,
-        "callRecall": 0,
-        "sampleHits": [],
-        "sampleMissed": [
-          "Value",
-          "__add__",
-          "__mul__",
-          "__neg__",
-          "__pow__",
-          "__sub__",
-          "_backward",
-          "add",
-          "append",
-          "build_topo"
-        ],
-        "sampleFalsePositives": []
-      },
-      "notes": [
-        "label-only matching: 比较 graph callee label 与源码 callee 名是否相同",
-        "precision: graph 中 call-类边命中真实 call 的占比",
-        "recall: 真实 call 中被 graph 覆盖的占比",
-        "⚠️ 该 graph 不含 call/uses 类型边（可能是 contains-only graph，如 spectra v4.x）"
-      ]
-    },
-    "codingContextGroundingByTask": {
-      "micrograd-fix-bug": {
-        "taskId": "micrograd-fix-bug",
-        "taskScore": 10,
-        "controlScore": 10,
-        "groundingDelta": 0,
-        "judgeRationale": "候选实现与期望签名完全一致：梯度公式 `self.grad += other.data * out.grad` 与 `other.grad += self.data * out.grad` 均正确（40% 维度满分）；forward `Value(self.data * other.data, (self, other), '*')` 完整保留（20% 满分）；follow `__add__` 同款 closure 模式 + `isinstance(other, Value)` 类型校验，API 风格一致（15% 满分）；7 行实现简洁清晰（15% 满分）；可直接替换原 method 运行（10% 满分）。无任何瑕疵。",
-        "interRaterDelta": null,
-        "executionMode": "non-interactive",
-        "allGroupScores": [
-          {
-            "label": "control",
-            "score": 10,
-            "contextBytes": 80
-          },
-          {
-            "label": "spectra",
-            "score": 10,
-            "contextBytes": 17435
-          },
-          {
-            "label": "graphify",
-            "score": 10,
-            "contextBytes": 4062
-          },
-          {
-            "label": "aider-repomap",
-            "score": 10,
-            "contextBytes": 3257
-          }
-        ],
-        "judgedAt": "2026-05-01T14:45:59.660Z",
-        "judgeModel": "claude-opus-4-7"
-      },
-      "micrograd-add-tanh": {
-        "taskId": "micrograd-add-tanh",
-        "taskScore": 9,
-        "controlScore": 9,
-        "groundingDelta": 0,
-        "judgeRationale": "实现完全正确：`t = math.tanh(self.data)` 前向值缓存到闭包，`_backward` 用 `+=` 累积梯度且导数公式 `1 - t**2` 正确。API 与 `relu()` 风格高度一致（`Value(t, (self,), 'tanh')` + closure），简洁约 8 行。测试断言了 forward 与 backward 数值，但只覆盖单个正输入（x=0.5），缺负输入与多路反传链式 case，故测试覆盖维度未满分，整体扣 1 分。",
-        "interRaterDelta": null,
-        "executionMode": "non-interactive",
-        "allGroupScores": [
-          {
-            "label": "control",
-            "score": 9,
-            "contextBytes": 80
-          },
-          {
-            "label": "spectra",
-            "score": 9,
-            "contextBytes": 17435
-          },
-          {
-            "label": "graphify",
-            "score": 10,
-            "contextBytes": 4062
-          },
-          {
-            "label": "aider-repomap",
-            "score": 9,
-            "contextBytes": 3257
-          }
-        ],
-        "judgedAt": "2026-05-01T14:43:42.682Z",
-        "judgeModel": "claude-opus-4-7"
-      },
-      "micrograd-extract-const": {
-        "taskId": "micrograd-extract-const",
-        "taskScore": 9,
-        "controlScore": 9,
-        "groundingDelta": 0,
-        "judgeRationale": "候选输出的代码完全匹配期望签名：`WEIGHT_INIT_RANGE = (-1, 1)` 定义在 import 之后、类定义之前，符合 module-level UPPERCASE 命名规范；`random.uniform(*WEIGHT_INIT_RANGE)` 通过元组解包正确引用常量；仅 2 行改动（1 行新增 + 1 行替换），未破坏其他逻辑，与现有类结构和 Python 命名风格一致。扣 1 分原因：输出中显式引用 \"rubric 模板（grounding-extract-const.md）\" 字样，属于元层级表述而非纯粹的 refactor 输出，略损实现的\"自然性\"，但不影响代码正确性。",
-        "interRaterDelta": null,
-        "executionMode": "non-interactive",
-        "allGroupScores": [
-          {
-            "label": "control",
-            "score": 9,
-            "contextBytes": 80
-          },
-          {
-            "label": "spectra",
-            "score": 9,
-            "contextBytes": 17435
-          },
-          {
-            "label": "graphify",
-            "score": null,
-            "contextBytes": 4062
-          },
-          {
-            "label": "aider-repomap",
-            "score": 10,
-            "contextBytes": 3257
-          }
-        ],
-        "judgedAt": "2026-05-01T14:53:54.944Z",
-        "judgeModel": "claude-opus-4-7"
-      }
-    }
+    "codingContextGrounding": null,
+    "graphTopologyAccuracy": null
   }
 }

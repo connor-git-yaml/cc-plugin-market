@@ -188,6 +188,14 @@ export function canonicalizeSymbolId(
     }
   }
 
+  // repo-relative → 绝对路径（graph 实际可能用绝对 path 形态，例如 baseline 跑出的 graph.json）
+  if (projectRoot && !path.isAbsolute(normalized.split('::')[0] ?? '')) {
+    const filePart = normalized.split('::')[0] ?? '';
+    const symbolPart = normalized.includes('::') ? normalized.slice(filePart.length) : '';
+    const abs = path.join(projectRoot, filePart) + symbolPart;
+    candidates.push(abs);
+  }
+
   for (const c of candidates) {
     if (hasNode(graphData, c)) {
       return { canonicalId: c, reason: 'ok' };
