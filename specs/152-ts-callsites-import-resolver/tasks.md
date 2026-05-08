@@ -476,7 +476,7 @@
 
 ---
 
-- [ ] T-017 修改 batch-orchestrator.ts collectPythonCodeSkeletons：替换 basename map → resolvePythonImport
+- [x] T-017 修改 batch-orchestrator.ts collectPythonCodeSkeletons：替换 basename map → resolvePythonImport
 
   **DoD**：`collectPythonCodeSkeletons` 函数签名不变；内部实现将 L2005-2040 区段的 basename map 算法替换为：遍历每个 Python 文件的 `imports[]`，对每条 import 调用 `resolvePythonImport(moduleSpec, callerFile, projectRoot)` 取 `resolvedPath`；`resolvedPath` 写入 `ImportReference.resolvedPath`（格式与 codeSkeletons Map key 对齐，参照 EC-10 决议：若 Map key 为绝对路径则写入绝对路径，显式 path.join(projectRoot, result.resolvedPath) 转换）；`kind: 'external' | 'unresolved'` 时 `resolvedPath` 保留 null。
 
@@ -497,7 +497,7 @@
 
 ---
 
-- [ ] T-018 写集成测试：micrograd `from micrograd.engine import Value` 解析验证
+- [x] T-018 写集成测试：micrograd `from micrograd.engine import Value` 解析验证
 
   **DoD**：新增或扩展 batch-orchestrator 集成测试，验证：(1) 构造 micrograd-like fixture（`micrograd/engine.py` + `micrograd/nn.py` + `micrograd/nn.py` 中含 `from micrograd.engine import Value`），调用 `collectPythonCodeSkeletons(projectRoot)`，断言 `nn.py` skeleton 的 `imports[0].resolvedPath` 等于预期路径（绝对路径或相对 projectRoot，与 Map key 形态一致）；(2) 两个 `utils.py`（`a/utils.py` vs `b/utils.py`）在相对 import 场景下不混淆。
 
@@ -516,7 +516,7 @@
 
 ---
 
-- [ ] T-019 P3 阶段验证：全量 build + 零回归
+- [x] T-019 P3 阶段验证：全量 build + 零回归
 
   **DoD**：
   1. `npm run build` 零 TypeScript 错误
@@ -542,7 +542,7 @@
 
 ---
 
-- [ ] T-020 在 batch-orchestrator.ts 新增 collectTsJsCodeSkeletons 函数骨架
+- [x] T-020 在 batch-orchestrator.ts 新增 collectTsJsCodeSkeletons 函数骨架
 
   **DoD**：函数签名 `async function collectTsJsCodeSkeletons(projectRoot: string, options?: { extractCallSites?: boolean }): Promise<Map<string, CodeSkeleton>>` 存在；内部返回空 Map（stub）；`npm run build` 零错误；函数结构与 `collectPythonCodeSkeletons` 对称（同文件、类似参数风格）。
 
@@ -590,7 +590,7 @@
 
 ---
 
-- [ ] T-021 实现 collectTsJsCodeSkeletons：文件扫描 + tsconfig context + import resolver 调用
+- [x] T-021 实现 collectTsJsCodeSkeletons：文件扫描 + tsconfig context + import resolver 调用
 
   **DoD**：实现以下逻辑：(1) glob 扫描 `projectRoot` 下所有 `.ts/.tsx/.js/.jsx` 文件（排除 `node_modules/`、`dist/`、`.git/`）；(2) **N-1 修复**：对每个文件调用 `findNearestTsConfig(filePath, projectRoot)` 取 `{ configDir, rawConfig }`，**然后**调用 `buildTsConfigContext(rawConfig, configDir)` 转换为 `TsConfigResolutionContext`（含 baseUrl + paths Map）；(3) 调用 `TsJsLanguageAdapter.analyzeFile(filePath, { extractCallSites: options.extractCallSites })` 取 CodeSkeleton；(4) 对每条 `imports[]` 调用 `resolveTsJsImport(moduleSpec, filePath, projectRoot, tsConfigContext)` 写入 `resolvedPath`（按 EC-10 绝对路径/相对路径对齐 Map key 形态）；(5) 写入 Map：`key = filePath`（绝对路径，与 Python 路径 key 形态对齐）。
 
@@ -611,7 +611,7 @@
 
 ---
 
-- [ ] T-022 写集成测试：collectTsJsCodeSkeletons 端到端验证
+- [x] T-022 写集成测试：collectTsJsCodeSkeletons 端到端验证
 
   **DoD**：覆盖以下场景：
   1. 对项目内小型 TS fixture（2-3 个文件，含 cross-file import）调用 `collectTsJsCodeSkeletons`，验证：(a) 返回 Map 非空；(b) callSites 数组非空（extractCallSites=true 时）；(c) imports[].resolvedPath 非全 null；(d) Map key 为绝对路径
@@ -633,7 +633,7 @@
 
 ---
 
-- [ ] T-023 P4 阶段验证：全量 build + 零回归
+- [x] T-023 P4 阶段验证：全量 build + 零回归
 
   **DoD**：
   1. `npm run build` 零 TypeScript 错误

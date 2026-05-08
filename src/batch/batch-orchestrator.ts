@@ -84,6 +84,13 @@ import { buildHtmlTemplate } from '../panoramic/exporters/html-template.js';
 import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
 import type { BatchMode } from '../panoramic/qa/types.js';
+import {
+  resolvePythonImport,
+  resolveTsJsImport,
+  findNearestTsConfig,
+  buildTsConfigContext,
+  type TsConfigResolutionContext,
+} from '../knowledge-graph/import-resolver.js';
 
 // 从 package.json 读取版本号（避免硬编码）
 const _require = createRequire(import.meta.url);
@@ -1992,24 +1999,22 @@ const PY_SKELETON_IGNORE_DIRS = new Set([
  *
  * 单文件解析失败 / 大文件 / 非 UTF-8 都按 EC-14 兜底（mapper 已处理），不影响整体 collection。
  */
-async function collectPythonCodeSkeletons(
+export async function collectPythonCodeSkeletons(
   projectRoot: string,
 ): Promise<Map<string, CodeSkeleton>> {
   const out = new Map<string, CodeSkeleton>();
   const { PythonLanguageAdapter } = await import('../adapters/python-adapter.js');
   const adapter = new PythonLanguageAdapter();
 
+  // Codex P3+P4 复审 C-2 修复：projectRoot 显式 normalize 为绝对路径
+  // 避免调用方传相对路径 → Map key 与 imports[].resolvedPath 形态不一致
+  // → call-resolver buildImportIndex lookup miss
+  const resolvedProjectRoot = path.resolve(projectRoot);
+
   const pyFiles: string[] = [];
-  walkPyFiles(projectRoot, pyFiles);
+  walkPyFiles(resolvedProjectRoot, pyFiles);
 
-  // Codex P1 C-1 修订：构造模块名 → 绝对路径映射（与 PythonAdapter.buildDependencyGraph 同样的算法）
-  // basename 不含扩展名 → absolute path；用于解析 from X import Y / import X.Y 中的本地引用
-  const pyModuleMap = new Map<string, string>();
-  for (const f of pyFiles) {
-    pyModuleMap.set(path.basename(f, '.py'), f);
-  }
-
-  // Codex P1 W-1 修订：大文件 size guard 提前到 parse 之前（避免 tree-sitter 解析阻塞）
+  // Feature 152 P3 T-017：大文件 size guard 提前到 parse 之前（避免 tree-sitter 解析阻塞）
   // 1MB 阈值与 PythonMapper.CALLSITES_MAX_FILE_BYTES 对齐（EC-14）
   const MAX_FILE_BYTES = 1_000_000;
 
@@ -2026,17 +2031,57 @@ async function collectPythonCodeSkeletons(
         continue;
       }
       const skeleton = await adapter.analyzeFile(filePath, { extractCallSites: true });
-      // Codex P1 C-1 修订：补充 import 的 resolvedPath（mapper 当前总是输出 null）
+
+      // Feature 152 P3 T-017：使用 resolvePythonImport 替换 basename map（plan §5.1）
+      // C-1 修复：from . import X1, X2 形态（moduleSpecifier='.'/'..') 需对每个 namedImport 单独调用
+      // EC-10 修复：resolvedPath 转为绝对路径，与 Map key 格式对齐
       const resolvedSkeleton: CodeSkeleton = {
         ...skeleton,
-        imports: skeleton.imports.map((imp) => {
-          if (imp.resolvedPath) return imp;
-          // 取顶层模块名（如 parser.submodule → parser），与 buildDependencyGraph 一致
-          const topModule = imp.moduleSpecifier.replace(/^\.+/, '').split('.')[0];
-          if (!topModule) return imp;
-          const resolved = pyModuleMap.get(topModule);
-          if (!resolved) return imp;
-          return { ...imp, resolvedPath: resolved };
+        imports: skeleton.imports.flatMap((imp) => {
+          if (imp.resolvedPath) return [imp];
+
+          const spec = imp.moduleSpecifier;
+
+          // C-1：裸相对 import —— moduleSpecifier 仅为 '.' 或 '..'
+          // "from . import nn, Value" → imp.namedImports=['nn','Value']，逐个拆解
+          if (spec === '.' || spec === '..') {
+            const namedImports: string[] = Array.isArray(imp.namedImports)
+              ? (imp.namedImports as string[])
+              : [];
+            if (namedImports.length === 0) {
+              // 没有 namedImports（罕见），仅尝试解析包 __init__
+              const result = resolvePythonImport(spec, filePath, resolvedProjectRoot);
+              const resolvedPath = result.resolvedPath
+                ? path.resolve(resolvedProjectRoot, result.resolvedPath)
+                : null;
+              return [{ ...imp, resolvedPath }];
+            }
+            // 每个 namedImport 单独解析为独立 import 记录
+            // Codex P3+P4 复审 C-1 修复：每条拆出记录的 namedImports 必须**只**含
+            // 当前拆出的 name，否则 buildImportIndex 会把所有 namedImports 都映射到
+            // 同一 resolvedPath（最后一条胜出），导致 alias 污染
+            return namedImports.map((name) => {
+              const combinedSpec = `${spec}${name}`; // '.' + 'nn' → '.nn'
+              const result = resolvePythonImport(combinedSpec, filePath, resolvedProjectRoot);
+              const resolvedPath = result.resolvedPath
+                ? path.resolve(resolvedProjectRoot, result.resolvedPath)
+                : null;
+              return {
+                ...imp,
+                moduleSpecifier: combinedSpec,
+                namedImports: [name], // 关键：仅含本次拆出的 name，避免 alias 污染
+                resolvedPath,
+              };
+            });
+          }
+
+          // 常规形态：直接调用 resolver（from pkg.engine import Value / import os）
+          const result = resolvePythonImport(spec, filePath, resolvedProjectRoot);
+          // EC-10：resolver 返回相对 projectRoot 的 POSIX 路径，需转绝对路径与 Map key 对齐
+          const resolvedPath = result.resolvedPath
+            ? path.resolve(resolvedProjectRoot, result.resolvedPath)
+            : null;
+          return [{ ...imp, resolvedPath }];
         }),
       };
       out.set(filePath, resolvedSkeleton);
@@ -2061,6 +2106,133 @@ function walkPyFiles(dir: string, out: string[]): void {
       walkPyFiles(path.join(dir, entry.name), out);
     } else if (entry.isFile() && (entry.name.endsWith('.py') || entry.name.endsWith('.pyi'))) {
       out.push(path.join(dir, entry.name));
+    }
+  }
+}
+
+// ============================================================
+// Feature 152 — TypeScript/JavaScript CodeSkeleton 收集
+// ============================================================
+
+/** T-020：TS/JS 文件扫描时忽略的目录集合（与 Python 对齐，增加 .next / .nuxt 等前端产物目录） */
+const TSJS_SKELETON_IGNORE_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', 'coverage', 'out', 'target',
+  '.next', '.nuxt', '.turbo', '.cache', 'tmp', '.tmp',
+  '__pycache__', '.pytest_cache', '.tox',
+]);
+
+/**
+ * Feature 152 T-020 — 收集 .ts/.tsx/.js/.jsx 文件 CodeSkeleton（含 callSites + import 路径解析）。
+ *
+ * 与 collectPythonCodeSkeletons 设计对齐：
+ * - 可选 extractCallSites，走 TsJsLanguageAdapter 双路径 merge（Feature 152 T-013/T-014）
+ * - 解析 imports[].resolvedPath：findNearestTsConfig + buildTsConfigContext + resolveTsJsImport
+ * - EC-10：resolvedPath 转绝对路径与 Map key 格式对齐
+ * - T-021a：tsconfig context 按 configDir 缓存，避免每文件重复读
+ * - 单文件失败不阻塞整体（catch 吞掉，同 Python 版本 EC-14 兜底）
+ */
+export async function collectTsJsCodeSkeletons(
+  projectRoot: string,
+  options?: { extractCallSites?: boolean },
+): Promise<Map<string, CodeSkeleton>> {
+  const out = new Map<string, CodeSkeleton>();
+  const { TsJsLanguageAdapter } = await import('../adapters/ts-js-adapter.js');
+  const adapter = new TsJsLanguageAdapter();
+
+  // Codex P3+P4 复审 C-2 修复：projectRoot 显式 normalize 为绝对路径
+  // 避免调用方传相对路径 → Map key 与 imports[].resolvedPath 形态不一致
+  const resolvedProjectRoot = path.resolve(projectRoot);
+
+  const tsJsFiles: string[] = [];
+  walkTsJsFiles(resolvedProjectRoot, tsJsFiles);
+
+  // T-021a：tsconfig context 缓存（by configDir），避免每个文件重复读
+  const tsConfigCache = new Map<string, TsConfigResolutionContext | null>();
+
+  // 大文件 size guard 与 Python 版本对齐（EC-14：1MB 阈值）
+  const MAX_FILE_BYTES = 1_000_000;
+
+  for (const filePath of tsJsFiles) {
+    try {
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        continue; // 文件读不到 stat → 跳过
+      }
+      if (stat.size > MAX_FILE_BYTES) {
+        continue; // 大文件 skip
+      }
+
+      // 主分析（含 callSites if options.extractCallSites）
+      const skeleton = await adapter.analyzeFile(filePath, {
+        extractCallSites: options?.extractCallSites,
+      });
+
+      // T-021a：查找最近的 tsconfig.json 并缓存 context
+      const nearest = findNearestTsConfig(filePath, resolvedProjectRoot);
+      let tsConfigContext: TsConfigResolutionContext | null = null;
+      if (nearest) {
+        if (!tsConfigCache.has(nearest.configDir)) {
+          tsConfigCache.set(nearest.configDir, buildTsConfigContext(nearest.rawConfig, nearest.configDir));
+        }
+        tsConfigContext = tsConfigCache.get(nearest.configDir) ?? null;
+      }
+
+      // 解析 imports[].resolvedPath（EC-10：转绝对路径）
+      const resolvedSkeleton: CodeSkeleton = {
+        ...skeleton,
+        imports: skeleton.imports.map((imp) => {
+          if (imp.resolvedPath) return imp;
+          const result = resolveTsJsImport(
+            imp.moduleSpecifier,
+            filePath,
+            resolvedProjectRoot,
+            tsConfigContext,
+          );
+          // EC-10：resolver 返回相对 projectRoot 的 POSIX 路径，需转绝对路径与 Map key 对齐
+          const resolvedPath = result.resolvedPath
+            ? path.resolve(resolvedProjectRoot, result.resolvedPath)
+            : null;
+          return { ...imp, resolvedPath };
+        }),
+      };
+
+      out.set(filePath, resolvedSkeleton);
+    } catch {
+      // 单文件失败不影响整体（与 collectPythonCodeSkeletons EC-14 一致）
+    }
+  }
+
+  return out;
+}
+
+/**
+ * 递归扫描 .ts/.tsx/.js/.jsx 文件（排除产物目录）。
+ * 复用 walkPyFiles 的扫描模式，扩展 TS/JS 扩展名集合。
+ */
+function walkTsJsFiles(dir: string, out: string[]): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('.')) continue;
+      if (TSJS_SKELETON_IGNORE_DIRS.has(entry.name)) continue;
+      walkTsJsFiles(path.join(dir, entry.name), out);
+    } else if (entry.isFile()) {
+      const name = entry.name;
+      if (
+        name.endsWith('.ts') ||
+        name.endsWith('.tsx') ||
+        name.endsWith('.js') ||
+        name.endsWith('.jsx')
+      ) {
+        out.push(path.join(dir, entry.name));
+      }
     }
   }
 }
