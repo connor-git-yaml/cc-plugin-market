@@ -182,15 +182,23 @@ export class GraphQueryEngine {
       this.adjacency.set(node.id, []);
     }
 
-    // 建立邻接表（无向图双向添加，有向图单向添加）
+    // 建立邻接表（Feature 151 + CL-07 修订）
+    // 优先级：edge.directional（edge-level） > graph.directed（全局，向后兼容）
+    // - directional=true：仅 source → target 单向添加（calls / depends-on / cross-module / contains）
+    // - directional=false：双向添加（对称关系）
+    // - directional 缺失（旧 graph.json）：回退 graph.directed 全局值
     for (const edge of graph.links) {
       const srcList = this.adjacency.get(edge.source);
       const tgtList = this.adjacency.get(edge.target);
 
+      // 决定本边是否双向添加
+      const isDirectional =
+        edge.directional !== undefined ? edge.directional : graph.directed;
+
       if (srcList !== undefined) {
         srcList.push({ node: edge.target, edge });
       }
-      if (!graph.directed && tgtList !== undefined) {
+      if (!isDirectional && tgtList !== undefined) {
         tgtList.push({ node: edge.source, edge });
       }
     }

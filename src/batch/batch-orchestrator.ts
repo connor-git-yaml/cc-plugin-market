@@ -1212,18 +1212,16 @@ export async function runBatch(
         ...(extractionResults ?? []),
       ];
 
-      // Feature 151 T-008c + T-009d — 构建 UnifiedGraph 并 setCurrentUnifiedGraph
-      // 让 component-view-builder DI provider / DependencyGraph shim 等下游能消费
-      // 注：本 P1 阶段尚未把 unifiedGraph 接到 buildKnowledgeGraph（T-012a 的工作）；
-      // 这里只把 UnifiedGraph 准备好放进单例 cache，不影响 graph.json 输出格式
+      // Feature 151 T-008c + T-009d + T-012a — 构建 UnifiedGraph 并接入 graph-builder 第五路
       //
       // Codex P1 C-3 修订：先清空 cache，避免上次 batch 的 stale graph 污染本次 run；
       // 失败 / 无 skeleton 路径也显式 setCurrentUnifiedGraph(null)
       setCurrentUnifiedGraph(null);
+      let unifiedGraph: ReturnType<typeof buildUnifiedGraph> | null = null;
       try {
         const codeSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
         if (codeSkeletons.size > 0) {
-          const unifiedGraph = buildUnifiedGraph({
+          unifiedGraph = buildUnifiedGraph({
             projectRoot: resolvedRoot,
             codeSkeletons,
           });
@@ -1245,7 +1243,8 @@ export async function runBatch(
       } catch (ugErr) {
         // Codex P1 C-3：失败时显式清空，避免 stale graph
         setCurrentUnifiedGraph(null);
-        logger.warn(`[Feature 151] UnifiedGraph 构建失败，跳过 (P1 阶段非阻塞): ${String(ugErr)}`);
+        unifiedGraph = null;
+        logger.warn(`[Feature 151] UnifiedGraph 构建失败，跳过 (非阻塞): ${String(ugErr)}`);
       }
 
       const graphJson = buildKnowledgeGraph({
@@ -1253,6 +1252,8 @@ export async function runBatch(
         docGraph,
         crossReferenceLinks,
         extractionResults: mergedResults.length > 0 ? mergedResults : undefined,  // Feature 107 + 143 第四路数据源
+        // Feature 151 T-012a：UnifiedGraph 第五路（calls + depends-on 边 + per-file callSitesCount metadata）
+        ...(unifiedGraph ? { unifiedGraph } : {}),
       });
 
       // Feature 133 P1-1（adversarial-review post-fix）：anchor + hyperedge 集成

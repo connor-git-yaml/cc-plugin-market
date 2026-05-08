@@ -75,7 +75,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
   // 被跳过的数据源记录
   const skippedSources: Array<{ source: string; reason: string }> = [];
   // 使用的数据源列表（Feature 107 扩展：支持 'extraction' 数据源）
-  const sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction')[] = [];
+  const sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction' | 'unified-graph')[] = [];
 
   // --------------------------------------------------------
   // 步骤 1：处理 DocGraph（先插入，优先级低）
@@ -299,6 +299,99 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
     }
   } else {
     skippedSources.push({ source: 'extraction', reason: '未提供 extractionResults 或为空数组' });
+  }
+
+  // --------------------------------------------------------
+  // Feature 151 步骤 3.5：处理 UnifiedGraph（calls / depends-on 边 + per-file callSitesCount）
+  // 仅当 options.unifiedGraph 提供时才执行
+  //
+  // Codex P2 C-1 修订：必须注入全部 UnifiedGraph 节点（含 symbol 节点），否则 calls 边
+  //   `file::symbol → file::symbol` 会被悬空边过滤丢弃，SC-001/SC-002 完全失效
+  // Codex P2 W-1 修订：directional 缺省按 relation 决定（calls/depends-on 等强制 true）
+  // Codex P2 W-2 修订：edge key 冲突时合并 directional（保留 strictest=true）
+  // --------------------------------------------------------
+  if (options.unifiedGraph) {
+    try {
+      sources.push('unified-graph');
+      const unified = options.unifiedGraph as {
+        nodes: Array<{ id: string; kind?: string; label?: string; filePath?: string; metadata?: Record<string, unknown> }>;
+        edges: Array<{
+          source: string;
+          target: string;
+          relation: string;
+          confidence: 'high' | 'medium' | 'low';
+          directional?: boolean;
+          evidence?: string;
+        }>;
+      };
+
+      // Codex P2 C-1 修订：全部注入 UnifiedGraph 节点，包括 symbol 节点
+      for (const ugNode of unified.nodes) {
+        const existing = nodeMap.get(ugNode.id);
+        const callSitesCount = typeof ugNode.metadata?.['callSitesCount'] === 'number'
+          ? (ugNode.metadata['callSitesCount'] as number)
+          : undefined;
+
+        if (existing) {
+          // 已有节点：仅扩展 metadata.callSitesCount（不覆盖 kind / label / 其他 sourceTag）
+          if (callSitesCount !== undefined) {
+            existing.metadata = { ...existing.metadata, callSitesCount };
+          }
+          continue;
+        }
+
+        // 新节点：UnifiedGraph 'symbol' kind 映射到 GraphNode 'component'（function/class 是组件级符号）
+        // module / package / spec 等其他 kind 直接保留（与 GraphNode kind 范围对齐）
+        const ugKind = ugNode.kind ?? 'module';
+        const mappedKind: GraphNode['kind'] = ugKind === 'symbol' ? 'component' : (ugKind as GraphNode['kind']);
+        nodeMap.set(ugNode.id, {
+          id: ugNode.id,
+          kind: mappedKind,
+          label: ugNode.label ?? path.basename(ugNode.id),
+          metadata: {
+            sourceTag: 'unified-graph',
+            unifiedKind: ugKind,
+            ...(ugNode.filePath ? { sourcePath: ugNode.filePath } : {}),
+            ...(callSitesCount !== undefined ? { callSitesCount } : {}),
+          },
+        });
+      }
+
+      // 把 UnifiedGraph.edges 转换为 GraphEdge 注入第五路
+      // Codex P2 W-1 修订：directional 缺省按 relation 决定，不再统一 false
+      const DIRECTIONAL_RELATIONS = new Set(['calls', 'depends-on', 'cross-module', 'contains']);
+      for (const ugEdge of unified.edges) {
+        const tier = ugEdge.confidence;
+        const confidence: ConfidenceLevel =
+          tier === 'high' ? 'EXTRACTED' : tier === 'medium' ? 'INFERRED' : 'AMBIGUOUS';
+        const confidenceScore = CONFIDENCE_SCORES[confidence];
+        const isDirectional =
+          ugEdge.directional !== undefined ? ugEdge.directional : DIRECTIONAL_RELATIONS.has(ugEdge.relation);
+        const edgeKey = isDirectional
+          ? directedEdgeKey(ugEdge.source, ugEdge.target, ugEdge.relation)
+          : undirectedEdgeKey(ugEdge.source, ugEdge.target, ugEdge.relation);
+        const existingEdge = edgeMap.get(edgeKey);
+        if (!existingEdge) {
+          edgeMap.set(edgeKey, {
+            source: ugEdge.source,
+            target: ugEdge.target,
+            relation: ugEdge.relation,
+            confidence,
+            confidenceScore,
+            directional: isDirectional,
+            ...(ugEdge.evidence ? { evidenceText: ugEdge.evidence.slice(0, 200) } : {}),
+          });
+        } else if (isDirectional && existingEdge.directional !== true) {
+          // Codex P2 W-2 修订：旧边没设 directional，本次升级为 true
+          existingEdge.directional = true;
+        }
+      }
+    } catch (err) {
+      skippedSources.push({
+        source: 'unified-graph',
+        reason: `处理 UnifiedGraph 失败: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
   }
 
   // --------------------------------------------------------

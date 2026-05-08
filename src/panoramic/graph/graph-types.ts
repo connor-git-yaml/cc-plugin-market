@@ -74,12 +74,28 @@ export interface GraphEdge {
   source: string;
   /** 目标节点 ID */
   target: string;
-  /** 关系类型（来自 ArchitectureIRRelationshipKind 或 DocGraphReference.kind 等） */
+  /**
+   * 关系类型（来自 ArchitectureIRRelationshipKind 或 DocGraphReference.kind 等）。
+   *
+   * Feature 151 新增 'calls'（来自 UnifiedGraph.edges）— 函数调用边。
+   * 现有 relation 包括但不限于：
+   * 'contains' | 'depends-on' | 'cross-module' | 'documents' | 'references'
+   * | 'conceptually_related_to' | 'rationale_for' | 'groups' | 'deploys' | 'calls'
+   */
   relation: string;
   /** 统一三级置信度标签 */
   confidence: ConfidenceLevel;
   /** 置信度数值分数，范围 [0.0, 1.0] */
   confidenceScore: number;
+  /**
+   * Feature 151 新增（CL-07 + Codex C-1）：edge-level 方向性标志。
+   *
+   * 用途：覆盖 GraphJSON.directed 全局开关，让 GraphQueryEngine 邻接表按 edge 级判定双向 / 单向。
+   * - calls / depends-on / cross-module / contains 必须 directional=true（语义有方向）
+   * - 对称关系（references / conceptually_related_to / 旧 graph 兼容）默认 false
+   * - 字段缺失时回退到 GraphJSON.directed 全局值（向后兼容旧 graph.json）
+   */
+  directional?: boolean;
   /**
    * schema v2.0 新增：证据文本（最大 200 字符）
    * INFERRED/AMBIGUOUS 语义边非空；EXTRACTED 边可省略
@@ -141,8 +157,13 @@ export interface GraphJSON {
     nodeCount: number;
     /** 边总数 */
     edgeCount: number;
-    /** 图构建使用的数据源列表（Feature 107 扩展：新增 'extraction' 数据源） */
-    sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction')[];
+    /**
+     * 图构建使用的数据源列表
+     * - architecture-ir / doc-graph / cross-reference: 原始 4 路（架构 / 文档 / 引用）
+     * - extraction: Feature 107 扩展（多模态提取 + Python 符号节点）
+     * - unified-graph: Feature 151 扩展（calls + depends-on 边来自 UnifiedGraph）
+     */
+    sources: ('architecture-ir' | 'doc-graph' | 'cross-reference' | 'extraction' | 'unified-graph')[];
     /** 被跳过的数据源及原因（容错标注） */
     skippedSources?: Array<{
       source: string;
@@ -191,4 +212,13 @@ export interface BuildGraphOptions {
   directed?: boolean;
   /** 多模态提取结果（可选，缺失或为空数组时跳过第四路合并）— Feature 107 */
   extractionResults?: ExtractionResult[];
+  /**
+   * Feature 151 — UnifiedGraph 数据源（可选）。
+   *
+   * 提供时，buildKnowledgeGraph 把 UnifiedGraph.edges 中的 calls / depends-on 等关系
+   * 转换为 GraphEdge 注入第五路。同时为对应的 module 节点写入 metadata.callSitesCount，
+   * 供 graph-accuracy.mjs --metric fill-rate 验收（Codex C-4）。
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  unifiedGraph?: any;
 }
