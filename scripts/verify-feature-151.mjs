@@ -19,13 +19,23 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 function parseArgs(argv) {
-  const out = {};
+  const out = { repeats: 3 }; // Codex Final C-2 修订：默认 N=3 中位数
   for (let i = 2; i < argv.length; i++) {
     const k = argv[i];
     if (k === '--target') out.target = argv[++i];
     else if (k === '--out') out.out = argv[++i];
+    else if (k === '--repeats') out.repeats = parseInt(argv[++i], 10);
   }
   return out;
+}
+
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
 }
 
 async function main() {
@@ -174,24 +184,33 @@ async function main() {
   const fillRate = truth.filesWithCalls > 0 ? filesWithCallSites / truth.filesWithCalls : 0;
   console.error(`填充率：${(fillRate * 100).toFixed(1)}% (${filesWithCallSites}/${truth.filesWithCalls})`);
 
-  console.error(`\n=== SC-002 precision/recall ===`);
-  try {
-    const accOut = execFileSync('node', [
-      accuracyScript,
-      '--source', targetRoot,
-      '--graph', graphPath,
-      '--language', 'python',
-    ], { encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
-    const acc = JSON.parse(accOut);
-    if (acc.callPrecision !== undefined) {
-      console.error(`precision: ${(acc.callPrecision * 100).toFixed(1)}%`);
-      console.error(`recall: ${(acc.callRecall * 100).toFixed(1)}%`);
-    } else {
-      console.error('未输出 callPrecision/callRecall — 检查 accuracy.mjs');
+  // Codex Final C-2 修订：SC-002 N=3 重测取中位数
+  console.error(`\n=== SC-002 precision/recall (N=${args.repeats}) ===`);
+  const precisionRuns = [];
+  const recallRuns = [];
+  let lastSampleHits = [];
+  for (let run = 1; run <= args.repeats; run++) {
+    try {
+      const accOut = execFileSync('node', [
+        accuracyScript,
+        '--source', targetRoot,
+        '--graph', graphPath,
+        '--language', 'python',
+      ], { encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
+      const acc = JSON.parse(accOut);
+      if (acc.accuracy?.callPrecision !== undefined) {
+        precisionRuns.push(acc.accuracy.callPrecision);
+        recallRuns.push(acc.accuracy.callRecall);
+        lastSampleHits = acc.accuracy.sampleHits ?? [];
+        console.error(`  run ${run}: precision=${(acc.accuracy.callPrecision * 100).toFixed(1)}% recall=${(acc.accuracy.callRecall * 100).toFixed(1)}%`);
+      }
+    } catch (err) {
+      console.error(`  run ${run} 错误：${err.message}`);
     }
-  } catch (err) {
-    console.error(`accuracy.mjs 错误：${err.message}`);
   }
+  const precisionMedian = median(precisionRuns);
+  const recallMedian = median(recallRuns);
+  console.error(`\n中位数 (N=${args.repeats})：precision=${(precisionMedian * 100).toFixed(1)}% recall=${(recallMedian * 100).toFixed(1)}%`);
 
   // 写出汇总到 args.out（如果指定）
   const summary = {
@@ -206,6 +225,14 @@ async function main() {
     truthFilesWithCalls: truth.filesWithCalls,
     fillRate,
     fillRatePercent: (fillRate * 100).toFixed(1),
+    // Codex Final C-2 修订：N=3 重测中位数
+    precisionRuns: precisionRuns.map((p) => p.toFixed(3)),
+    recallRuns: recallRuns.map((r) => r.toFixed(3)),
+    precisionMedian: precisionMedian.toFixed(3),
+    recallMedian: recallMedian.toFixed(3),
+    precisionMedianPercent: (precisionMedian * 100).toFixed(1),
+    recallMedianPercent: (recallMedian * 100).toFixed(1),
+    sampleHits: lastSampleHits,
   };
   if (args.out) {
     fs.writeFileSync(args.out, JSON.stringify(summary, null, 2), 'utf-8');

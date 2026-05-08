@@ -31,11 +31,18 @@
 
 | 项目 | graph callees | truth callees | hits | precision | recall |
 |------|--------------|---------------|------|-----------|--------|
-| micrograd | 23 | 36 | 22 | **95.7%** ✅ | **61.1%** ✅ |
-| nanoGPT | 83 | 177 | 64 | **77.1%** ✅ | **36.2%** ✅ |
+| micrograd (N=3 中位数) | 23 | 36 | 22 | **95.7%** ✅ | **61.1%** ✅ |
+| nanoGPT (N=3 中位数) | 83 | 177 | 64 | **77.1%** ✅ | **36.2%** ✅ |
 | **算术均值** | — | — | — | **86.4%** ≥ 70% ✅ | **48.7%** ≥ 30% ✅ |
 
-测量工具：`node scripts/graph-accuracy.mjs --source <root> --graph <graph.json> --language python`（label-only 匹配，复用 `normalizeName`）。本次跑单次（N=1）；spec 要求 N=3 中位数 — 留作后续优化（成本：每次 ~5min，已知正常波动）。
+测量工具：`node scripts/verify-feature-151.mjs --target <root> --repeats 3`（自动 N=3 重测取中位数 — Codex Final C-2 修订）。
+- micrograd 3 runs：precision = [0.957, 0.957, 0.957]，recall = [0.611, 0.611, 0.611]
+- nanoGPT 3 runs：precision = [0.771, 0.771, 0.771]，recall = [0.362, 0.362, 0.362]
+
+注：算法为确定性（label-only 匹配 + 静态 truth set + 静态 codeSkeleton），N=3 实际无抖动。N=3 设计本意是缓解 LLM 抽样噪声 — 本验收不涉及 LLM 路径，故无差异。
+
+micrograd hits 样本：`__add__` `__mul__` `__pow__` `__sub__` `__neg__` `Value` `build_topo` `isinstance` 等 — 涵盖 dunder + free + member。
+nanoGPT hits 样本：`__add__` `__sub__` `len` `print` `to` `GPT` `GPTConfig` `configure_optimizers` `nullcontext` `open` 等。
 
 micrograd hits 样本：`__add__` `__mul__` `__pow__` `__sub__` `__neg__` `Value` `build_topo` `isinstance` 等 — 涵盖 dunder + free + member。
 
@@ -168,10 +175,10 @@ Test Files  276 passed | 2 skipped (278)
 ## 仍待 follow-up（不阻塞合并）
 
 1. **T-014 DependencyGraph 完整 shim**：本 Feature 仅 grep 列出 17 consumer，shim 改造留给 Feature 156（sqlite 持久化时配套）
-2. **N=3 重测取均值（SC-001/SC-002）**：成本 / 时间 vs 收益偏低，本次单次跑数字均显著高于阈值
-3. **真实 self-dogfood Layer B snapshot 录制**：依赖完整 spectra batch（含 LLM）— 留作 release 前烟测
-4. **NFR-1 / NFR-5 实跑 baseline:diff**：合并后正式跑
-5. **Python import resolution 智能化**：当前 basename map 不识别 package 路径（如 `from micrograd.engine import Value` 取 `micrograd` 找不到 `__init__.py`）— 留给 Feature 152（ts-js 也需类似）
+2. **真实 self-dogfood Layer B snapshot 录制**：依赖完整 spectra batch（含 LLM）— 留作 release 前烟测
+3. **NFR-1 / NFR-5 实跑 baseline:diff**：合并后正式跑
+4. **Python import resolution 智能化**：当前 basename map 不识别 package 路径（如 `from micrograd.engine import Value` 取 `micrograd` 找不到 `__init__.py`）— 留给 Feature 152（ts-js 也需类似）
+5. **Python 路径三重扫描合并**：`buildDependencyGraph` + `extractSymbolNodes` + `collectPythonCodeSkeletons` 三处独立扫描 .py 文件 — 性能优化，留作 follow-up
 
 ---
 

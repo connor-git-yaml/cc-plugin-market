@@ -239,24 +239,43 @@ function buildComponentRelationships(
   }
   const componentById = new Map(rankedComponents.map((component) => [component.id, component]));
 
-  // Feature 151 T-015 — 优先从 UnifiedGraph.edges 派生关系（calls + depends-on）
-  // 通过 sourceFile 关联 UnifiedGraph 节点 ID（file::symbol 形式）到 component
-  // sourceTarget 是 storedModule 的 spec 路径，与 UnifiedGraph filePath（绝对路径）通常不一致；
-  // 这里 best-effort：仅当 component 的 sourceTarget 包含相对路径段且能匹配 UnifiedGraph 节点 filePath 时连接
+  // Feature 151 T-015 + Codex Final C-1 修订 — 优先从 UnifiedGraph.edges 派生关系
+  //
+  // 路径匹配策略（解决 sourceTarget 是相对路径 vs UnifiedGraph filePath 是绝对路径的不对齐）：
+  // - component.sourceTarget 形如 "src/foo.ts" 或 "src/spec/foo.spec.md"
+  // - UnifiedGraph 节点 filePath 是绝对路径（如 "/repo/src/foo.ts"）
+  // - 用后缀匹配：UnifiedGraph filePath 以 component.sourceTarget endsWith 即视为匹配
   if (unifiedGraph && Array.isArray(unifiedGraph.edges)) {
-    const componentBySourceFile = new Map<string, RankedComponentDescriptor>();
+    // 把 component 按 sourceTarget 索引（多个组件可能同 sourceTarget）
+    const componentsBySourceTarget = new Map<string, RankedComponentDescriptor>();
     for (const component of rankedComponents) {
-      // sourceTarget 形如 "src/foo.ts" 或 spec 路径；以 sourceTarget 当作 file 索引
-      componentBySourceFile.set(component.sourceTarget, component);
+      if (!componentsBySourceTarget.has(component.sourceTarget)) {
+        componentsBySourceTarget.set(component.sourceTarget, component);
+      }
     }
+
+    // 对每条 UG edge 用 endsWith 匹配 component.sourceTarget
+    function findComponentByPath(absOrRelPath: string): RankedComponentDescriptor | undefined {
+      // 直接匹配
+      const direct = componentsBySourceTarget.get(absOrRelPath);
+      if (direct) return direct;
+      // 后缀匹配：UnifiedGraph 节点 filePath 含项目相对路径作后缀
+      for (const [sourceTarget, component] of componentsBySourceTarget) {
+        if (absOrRelPath.endsWith(sourceTarget) || absOrRelPath.endsWith('/' + sourceTarget)) {
+          return component;
+        }
+      }
+      return undefined;
+    }
+
     for (const ugEdge of unifiedGraph.edges) {
       if (ugEdge.relation !== 'calls' && ugEdge.relation !== 'depends-on') continue;
-      // ugEdge.source / target 形如 "src/foo.ts::Class.method" 或 "src/foo.ts"
+      // ugEdge.source / target 形如 "/repo/src/foo.ts::Class.method" 或 "/repo/src/foo.ts"
       const sourceFile = String(ugEdge.source).split('::')[0];
       const targetFile = String(ugEdge.target).split('::')[0];
       if (!sourceFile || !targetFile) continue;
-      const fromComp = componentBySourceFile.get(sourceFile);
-      const toComp = componentBySourceFile.get(targetFile);
+      const fromComp = findComponentByPath(sourceFile);
+      const toComp = findComponentByPath(targetFile);
       if (!fromComp || !toComp || fromComp.id === toComp.id) continue;
       const kind: 'calls' | 'depends-on' = ugEdge.relation;
       const label = ugEdge.relation === 'calls' ? '调用' : '依赖';

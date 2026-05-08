@@ -77,6 +77,7 @@ import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/ind
 import {
   buildUnifiedGraph,
   setCurrentUnifiedGraph,
+  getCurrentUnifiedGraph,
 } from '../knowledge-graph/index.js';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
 import { buildHtmlTemplate } from '../panoramic/exporters/html-template.js';
@@ -1108,6 +1109,25 @@ export async function runBatch(
       }
     }
 
+    // Feature 151 Codex Final C-1 修订 — 在 generateBatchProjectDocs 之前构建 UnifiedGraph
+    // 让 component-view-builder 能在生成时获取 graph（DI provider getCurrentUnifiedGraph）
+    setCurrentUnifiedGraph(null);
+    try {
+      const earlyCodeSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
+      if (earlyCodeSkeletons.size > 0) {
+        const earlyUg = buildUnifiedGraph({
+          projectRoot: resolvedRoot,
+          codeSkeletons: earlyCodeSkeletons,
+        });
+        setCurrentUnifiedGraph(earlyUg);
+        const callEdges = earlyUg.edges.filter((e) => e.relation === 'calls').length;
+        logger.info(`[Feature 151] 早期 UnifiedGraph 构建：${earlyUg.nodes.length} 节点 / ${callEdges} calls 边（供 component-view 使用）`);
+      }
+    } catch (ugErr) {
+      setCurrentUnifiedGraph(null);
+      logger.warn(`[Feature 151] 早期 UnifiedGraph 构建失败（不阻塞）: ${String(ugErr)}`);
+    }
+
     try {
       projectDocsResult = await generateBatchProjectDocs({
         projectRoot: resolvedRoot,
@@ -1212,39 +1232,20 @@ export async function runBatch(
         ...(extractionResults ?? []),
       ];
 
-      // Feature 151 T-008c + T-009d + T-012a — 构建 UnifiedGraph 并接入 graph-builder 第五路
-      //
-      // Codex P1 C-3 修订：先清空 cache，避免上次 batch 的 stale graph 污染本次 run；
-      // 失败 / 无 skeleton 路径也显式 setCurrentUnifiedGraph(null)
-      setCurrentUnifiedGraph(null);
-      let unifiedGraph: ReturnType<typeof buildUnifiedGraph> | null = null;
-      try {
-        const codeSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
-        if (codeSkeletons.size > 0) {
-          unifiedGraph = buildUnifiedGraph({
-            projectRoot: resolvedRoot,
-            codeSkeletons,
-          });
-          setCurrentUnifiedGraph(unifiedGraph);
-          const callEdgeCount = unifiedGraph.edges.filter(
-            (e) => e.relation === 'calls',
-          ).length;
-          const dependEdgeCount = unifiedGraph.edges.filter(
-            (e) => e.relation === 'depends-on',
-          ).length;
-          logger.info(
-            `[Feature 151] UnifiedGraph 构建完成：${unifiedGraph.nodes.length} 节点，` +
-            `${callEdgeCount} calls 边，${dependEdgeCount} depends-on 边`,
-          );
-        } else {
-          // 无 .py 文件：保持 cache=null（已清空）
-          logger.info('[Feature 151] 无 Python skeleton，跳过 UnifiedGraph 构建');
-        }
-      } catch (ugErr) {
-        // Codex P1 C-3：失败时显式清空，避免 stale graph
-        setCurrentUnifiedGraph(null);
-        unifiedGraph = null;
-        logger.warn(`[Feature 151] UnifiedGraph 构建失败，跳过 (非阻塞): ${String(ugErr)}`);
+      // Feature 151 — UnifiedGraph 接入 graph-builder 第五路（早期已在 generateBatchProjectDocs 之前构建，此处复用 cache）
+      // 复用早期构建结果（Codex Final C-1 修订）：cache 在 generateBatchProjectDocs 之前已 set
+      const unifiedGraph = getCurrentUnifiedGraph();
+      if (unifiedGraph) {
+        const callEdgeCount = unifiedGraph.edges.filter(
+          (e) => e.relation === 'calls',
+        ).length;
+        const dependEdgeCount = unifiedGraph.edges.filter(
+          (e) => e.relation === 'depends-on',
+        ).length;
+        logger.info(
+          `[Feature 151] graph-builder 注入 UnifiedGraph：${unifiedGraph.nodes.length} 节点，` +
+          `${callEdgeCount} calls 边，${dependEdgeCount} depends-on 边`,
+        );
       }
 
       const graphJson = buildKnowledgeGraph({
