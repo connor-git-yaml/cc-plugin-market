@@ -314,18 +314,31 @@ async function measurePythonResolution(targetRoot, { collectPythonCodeSkeletons 
 
   const codeSkeletons = await collectPythonCodeSkeletons(targetRoot);
 
-  // 筛选符合条件的 imports：非相对 && 含 '.'（dotted package）
+  // 筛选 eligibleImports：non-relative，**且期望路径文件存在于项目内**
+  // （宽松化：同时覆盖 dotted package `from pkg.engine import X` 和单段 module `from model import X`）
+  // 关键：通过"期望路径在项目中存在"自动排除 stdlib / 第三方包 — 它们的期望文件不在项目内
   const eligibleImports = [];
   for (const sk of codeSkeletons.values()) {
     for (const imp of (sk.imports ?? [])) {
-      if (imp.isRelative === false && imp.moduleSpecifier && imp.moduleSpecifier.includes('.')) {
-        eligibleImports.push({ sk, imp });
+      if (imp.isRelative !== false) continue;
+      const spec = imp.moduleSpecifier;
+      if (!spec) continue;
+
+      // 期望路径：moduleSpecifier 中 '.' 换成 '/'
+      const base = spec.split('.').join('/');
+      const expectedPaths = [
+        path.join(targetRoot, base + '.py'),
+        path.join(targetRoot, base, '__init__.py'),
+      ];
+      const expectedExists = expectedPaths.some((p) => fs.existsSync(p));
+      if (expectedExists) {
+        eligibleImports.push({ sk, imp, expectedPaths });
       }
     }
   }
 
   if (eligibleImports.length === 0) {
-    console.error(`[verify-152] SC-003: 未找到符合条件的 dotted import，返回 N/A`);
+    console.error(`[verify-152] SC-003: 未找到本仓库内 import，返回 N/A`);
     return {
       pythonResolutionRate: null,
       pythonResolutionEligible: 0,
@@ -334,37 +347,26 @@ async function measurePythonResolution(targetRoot, { collectPythonCodeSkeletons 
     };
   }
 
-  // C-7 修复：完整路径比对（不是末段比对）
+  // C-7 修复：完整路径比对 — resolvedPath 必须命中 expected 之一
   let hits = 0;
-  for (const { imp } of eligibleImports) {
+  for (const { imp, expectedPaths } of eligibleImports) {
     if (!imp.resolvedPath) continue;
 
-    // 期望路径：moduleSpecifier 中 '.' 换成 '/'
-    const base = imp.moduleSpecifier.split('.').join('/');
-    const expectedPaths = [
-      base + '.py',
-      base + '/__init__.py',
-    ];
+    // 把 resolvedPath（绝对或相对）转换为绝对路径用于比对
+    const absResolved = path.isAbsolute(imp.resolvedPath)
+      ? imp.resolvedPath
+      : path.resolve(targetRoot, imp.resolvedPath);
 
-    // 把 resolvedPath（绝对或相对）转换为相对 projectRoot 的 POSIX 路径
-    let relPosixPath;
-    if (path.isAbsolute(imp.resolvedPath)) {
-      // 绝对路径 → 相对 projectRoot
-      const rel = path.relative(targetRoot, imp.resolvedPath);
-      relPosixPath = rel.split(path.sep).join('/');
-    } else {
-      // 已经是相对路径，统一为 POSIX
-      relPosixPath = imp.resolvedPath.split(path.sep).join('/');
-    }
-
-    if (expectedPaths.includes(relPosixPath)) {
-      hits++;
-    }
+    // 比对：absResolved 必须等于 expectedPaths 之一（normalize 后）
+    const matched = expectedPaths.some(
+      (expected) => path.normalize(absResolved) === path.normalize(expected),
+    );
+    if (matched) hits++;
   }
 
   const pythonResolutionRate = eligibleImports.length > 0 ? hits / eligibleImports.length : null;
   console.error(
-    `[verify-152] SC-003: ${hits}/${eligibleImports.length} dotted imports 命中正确路径 (${((pythonResolutionRate ?? 0) * 100).toFixed(1)}%)`,
+    `[verify-152] SC-003: ${hits}/${eligibleImports.length} 项目内 imports 命中正确路径 (${((pythonResolutionRate ?? 0) * 100).toFixed(1)}%)`,
   );
 
   return {
