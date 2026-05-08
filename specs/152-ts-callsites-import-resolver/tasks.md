@@ -230,7 +230,7 @@
 
 ---
 
-- [ ] T-007 [P] 在 typescript-mapper.ts 新增 extractCallSites 方法骨架
+- [x] T-007 [P] 在 typescript-mapper.ts 新增 extractCallSites 方法骨架
 
   **DoD**：`TypeScriptMapper` 类尾部新增 `extractCallSites(tree: Parser.Tree, source: string): CallSite[]` 方法；方法内包含 size guard（source.length > 1_000_000 时返回空数组）；walker 框架（walk 函数）骨架已存在，但各 handler 均为空实现（return 不产出）；`npm run build` 零错误；不改动现有 `extractExports` / `extractImports` 方法。
 
@@ -251,7 +251,7 @@
 
 ---
 
-- [ ] T-008 实现 _walkCallSites + handleCallExpression（7 种形态分流）
+- [x] T-008 实现 _walkCallSites + handleCallExpression（7 种形态分流）
 
   **DoD**：实现以下调用形态处理：(1) 顶层 `foo()` → `free`；(2) `this.method()` → `member`（无 qualifier）；(3) `Class.method()`（大写首字母）→ `member` + qualifier；(4) `mod.fn()`（小写首字母）→ `cross-module` + qualifier（严格与 PythonMapper L943-953 对齐）；(5) optional chain `obj?.method()` → 按首字母大小写分流；(6) dynamic import `import('./x')` → `unresolved`（calleeName='import'）；(7) `eval()` / `Function()` → `unresolved`；**C-8 修复**：mkCallSite 不接受 dynamicReason 参数（CallSite schema 仅 6 字段：calleeName / calleeKind / line / column / callerContext / calleeQualifier）；callerContext 通过 SCOPE_DEFINING_TYPES 入栈/出栈机制在类方法场景下输出 `ClassName.methodName`，匿名 arrow/function 输出 `<arrow:line:col>` / `<fn:line:col>`（C-4 修复）。
 
@@ -272,7 +272,7 @@
 
 ---
 
-- [ ] T-009 实现 handleNewExpression（new Foo() → free + viaNew 标记）
+- [x] T-009 实现 handleNewExpression（new Foo() → free + viaNew 标记）
 
   **DoD**：`new Foo()` 产出 `calleeKind: 'free'`，`calleeName` 取构造函数名（`Foo`）；**C-8 修复 V3**：mapper **不**通过 `callerContext` / `calleeQualifier` / 其他字段传递 viaNew 元数据，CallSite schema 仅 6 字段（calleeName / calleeKind / line / column / callerContext / calleeQualifier），**保持纯净**。SC-008 验证 new Foo() 与 class Foo 连通**完全通过 truth-set 对照**（`ts-call-extractor.mjs` 输出的 `kind="constructor"` 条目按 `(file, line)` 关联 graph，不依赖 mapper 元数据），实现细节见 T-029。`new Function('code')` → `unresolved`（W-2 修复，避免误判为本地构造）。
 
@@ -293,7 +293,7 @@
 
 ---
 
-- [ ] T-010 实现 handleDecorator + handleTaggedTemplate
+- [x] T-010 实现 handleDecorator + handleTaggedTemplate
 
   **DoD**：(1) 带参 decorator `@Foo()` 产出 `calleeKind: 'decorator'`；bare `@Foo`（无括号）不产出 callSite（与 Python CL-04 对齐）；(2) tagged template：tag 为 identifier → `free`，tag 为 member_expression → `member`（按首字母大小写）。
 
@@ -313,7 +313,7 @@
 
 ---
 
-- [ ] T-011 写 tests/unit/typescript-mapper-callsite.test.ts（≥ 18 单测，C-3/C-4/W-2/W-3 修复加测）
+- [x] T-011 写 tests/unit/typescript-mapper-callsite.test.ts（≥ 18 单测，C-3/C-4/W-2/W-3 修复加测）
 
   **DoD**：测试文件覆盖以下全部场景：
 
@@ -358,7 +358,7 @@
 
 ---
 
-- [ ] T-012 P1 阶段验证：全量 build + 单测通过
+- [x] T-012 P1 阶段验证：全量 build + 单测通过
 
   **DoD**：
   1. `npm run build` 零 TypeScript 错误

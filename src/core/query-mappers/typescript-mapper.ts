@@ -13,7 +13,30 @@ import type {
   Language,
   Visibility,
 } from '../../models/code-skeleton.js';
+import type { CallSite, CalleeKind } from '../../models/call-site.js';
 import type { QueryMapper, MapperOptions } from './base-mapper.js';
+
+// ============================================================
+// Feature 152 — call site 抽取常量（与 PythonMapper 对齐）
+// ============================================================
+
+/** 文件大小上限：超过 1MB 跳过 callSites 抽取（与 PythonMapper 对齐） */
+const CALLSITES_MAX_FILE_BYTES = 1_000_000;
+
+/** 动态调用名集合：这些 identifier 调用产出 unresolved（C-8 修复，无 dynamicReason 元数据） */
+const DYNAMIC_CALL_NAMES = new Set(['eval', 'Function']);
+
+/**
+ * 作用域定义节点类型集合。
+ * 进入这些节点时将 callerContext 压栈，离开时弹栈。
+ * C-4 修复：匿名 arrow/function 也必须入栈，避免内层 callback 归属错外层 class method。
+ */
+const SCOPE_DEFINING_TYPES = new Set([
+  'function_declaration',  // function foo() {}
+  'function',              // const f = function() {}
+  'arrow_function',        // const f = () => {}
+  'method_definition',     // class Foo { bar() {} }
+]);
 
 // ============================================================
 // 辅助工具
@@ -798,5 +821,403 @@ export class TypeScriptMapper implements QueryMapper {
         }
       }
     }
+  }
+
+  // ============================================================
+  // Feature 152 — call site 抽取（FR-1.1 ~ FR-1.5）
+  // ============================================================
+
+  /**
+   * 从 AST tree 提取函数调用点（Feature 152 P1）。
+   *
+   * 覆盖 6 种 calleeKind：free / member / cross-module / super / decorator / unresolved。
+   * TS extractor 不产出 dunder kind（CL-08）。
+   * 大文件 size guard（EC-14）：source.length > 1MB 直接返回空数组。
+   */
+  extractCallSites(tree: Parser.Tree, source: string): CallSite[] {
+    // size guard：文件超过 1MB 跳过，避免内存/性能问题
+    if (source.length > CALLSITES_MAX_FILE_BYTES) {
+      return [];
+    }
+
+    const out: CallSite[] = [];
+    const callerContextStack: string[] = [];
+
+    this._walkCallSites(tree.rootNode, callerContextStack, out);
+    return out;
+  }
+
+  /**
+   * 递归遍历 AST 抽取 call sites。
+   * callerContextStack 维护当前 function/class 嵌套作用域，进入 SCOPE_DEFINING_TYPES 时压栈。
+   * W-3 修复：handleDecorator 返回需跳过的子树节点，walker 在递归前跳过该节点。
+   */
+  private _walkCallSites(
+    node: Parser.SyntaxNode,
+    callerContextStack: string[],
+    out: CallSite[],
+  ): void {
+    // 进入作用域定义节点时推入 callerContext（C-4 修复：匿名 arrow/function 也入栈）
+    let pushedCtx = false;
+    if (SCOPE_DEFINING_TYPES.has(node.type)) {
+      const ctx = this._deriveCallerContext(node);
+      if (ctx != null) {
+        callerContextStack.push(ctx);
+        pushedCtx = true;
+      }
+    }
+
+    // 获取当前 callerContext（栈顶）
+    const callerCtx = callerContextStack.length > 0
+      ? callerContextStack[callerContextStack.length - 1]
+      : undefined;
+
+    // 核心分发：产出 callSite
+    let skipSubtree: Parser.SyntaxNode | null = null;
+
+    switch (node.type) {
+      case 'call_expression':
+        this._handleCallExpression(node, callerCtx, out);
+        break;
+      case 'new_expression':
+        this._handleNewExpression(node, callerCtx, out);
+        break;
+      case 'decorator':
+        skipSubtree = this._handleDecorator(node, callerCtx, out);
+        break;
+      case 'tagged_template_expression':
+        this._handleTaggedTemplate(node, callerCtx, out);
+        break;
+      default:
+        break;
+    }
+
+    // 递归子节点（W-3 修复：跳过 decorator 内 call_expression 子树，避免双计数）
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (!child) continue;
+      // 如果当前节点的 handleDecorator 标记了要跳过的子树，则跳过该子树
+      if (skipSubtree != null && child.id === skipSubtree.id) continue;
+      this._walkCallSites(child, callerContextStack, out);
+    }
+
+    // 出栈
+    if (pushedCtx) {
+      callerContextStack.pop();
+    }
+  }
+
+  /**
+   * 推导当前节点的 callerContext 字符串。
+   *
+   * C-4 修复：匿名 arrow_function / function 也产生 `<arrow:line:col>` / `<fn:line:col>`，
+   * 确保内层 callback 不会错误归属外层 class method。
+   */
+  private _deriveCallerContext(node: Parser.SyntaxNode): string | null {
+    switch (node.type) {
+      case 'function_declaration': {
+        const name = fieldText(node, 'name');
+        if (name) return name;
+        // 匿名函数声明（理论上少见）
+        return `<fn:${node.startPosition.row + 1}:${node.startPosition.column}>`;
+      }
+      case 'method_definition': {
+        const name = fieldText(node, 'name');
+        const className = this._findAncestorClassName(node);
+        if (className && name) return `${className}.${name}`;
+        return name ?? null;
+      }
+      case 'arrow_function': {
+        // 尝试从 variable_declarator 父节点获取变量名
+        const parent = node.parent;
+        if (parent?.type === 'variable_declarator') {
+          const varName = fieldText(parent, 'name');
+          if (varName) return varName;
+        }
+        // C-4 修复：匿名 arrow function 用位置唯一化
+        return `<arrow:${node.startPosition.row + 1}:${node.startPosition.column}>`;
+      }
+      case 'function': {
+        // 函数表达式（const f = function() {}）
+        const parent = node.parent;
+        if (parent?.type === 'variable_declarator') {
+          const varName = fieldText(parent, 'name');
+          if (varName) return varName;
+        }
+        // C-4 修复：匿名 function 表达式用位置唯一化
+        return `<fn:${node.startPosition.row + 1}:${node.startPosition.column}>`;
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * 向上遍历 AST 找到最近的 class_declaration 节点，返回类名。
+   * 用于 method_definition 推导 callerContext（如 "Foo.bar"）。
+   */
+  private _findAncestorClassName(node: Parser.SyntaxNode): string | null {
+    let current: Parser.SyntaxNode | null = node.parent;
+    while (current != null) {
+      if (current.type === 'class_body' || current.type === 'class_declaration' || current.type === 'class') {
+        // class_body 的父节点才是 class_declaration
+        if (current.type === 'class_body') {
+          const classDecl = current.parent;
+          if (classDecl) {
+            const name = fieldText(classDecl, 'name');
+            if (name) return name;
+          }
+        } else {
+          const name = fieldText(current, 'name');
+          if (name) return name;
+        }
+      }
+      current = current.parent;
+    }
+    return null;
+  }
+
+  /**
+   * 处理 call_expression 节点，分流 7 种形态（T-008）：
+   * 1. dynamic import(`import('./x')`) → unresolved，calleeName='import'
+   * 2. super() 自调用 → super
+   * 3. eval/Function identifier → unresolved
+   * 4. 普通 identifier 调用 → free
+   * 5. C-3 修复：import().then() 链式 — 检测并跳过外层 .then 防双计数
+   * 6. member_expression → handleMemberCall
+   * 7. optional chain 等复杂形式 → 尽力提取 member_expression
+   *
+   * C-8 修复：mkCallSite 不接受 dynamicReason 参数（CallSite schema 仅 6 字段）。
+   */
+  private _handleCallExpression(
+    node: Parser.SyntaxNode,
+    callerCtx: string | undefined,
+    out: CallSite[],
+  ): void {
+    const funcNode = node.childForFieldName('function');
+    if (!funcNode) return;
+
+    // dynamic import：`import('./x')` — funcNode.type 为 'import'
+    if (funcNode.type === 'import') {
+      out.push(this._mkCallSite('import', 'unresolved', node, callerCtx));
+      return;
+    }
+
+    // super() 构造器自调用（call_expression 中 func 为 super）
+    if (funcNode.type === 'super') {
+      out.push(this._mkCallSite('super', 'super', node, callerCtx));
+      return;
+    }
+
+    // identifier 形式：foo() / eval() / Function()
+    if (funcNode.type === 'identifier') {
+      const name = funcNode.text;
+      // eval / Function → unresolved（C-8 修复：无 dynamicReason 元数据）
+      if (DYNAMIC_CALL_NAMES.has(name)) {
+        out.push(this._mkCallSite(name, 'unresolved', node, callerCtx));
+        return;
+      }
+      // 普通 free 调用
+      out.push(this._mkCallSite(name, 'free', node, callerCtx));
+      return;
+    }
+
+    // member_expression 形式：obj.method() / Class.method()
+    if (funcNode.type === 'member_expression') {
+      // C-3 修复：检测链式 `import('./x').then(cb)` 模式，避免 .then 被双计数
+      // 模式：call_expression(function=member_expression(object=call_expression(function=import)))
+      const objectNode = funcNode.childForFieldName('object');
+      if (objectNode?.type === 'call_expression') {
+        const innerFunc = objectNode.childForFieldName('function');
+        if (innerFunc?.type === 'import') {
+          // 外层 .then(cb) 跳过——内层 import() 由递归子节点产出
+          return;
+        }
+      }
+      this._handleMemberCall(funcNode, node, callerCtx, out);
+      return;
+    }
+
+    // optional_member_expression：obj?.method()（tree-sitter 对应节点类型）
+    if (funcNode.type === 'optional_member_expression') {
+      this._handleMemberCall(funcNode, node, callerCtx, out);
+      return;
+    }
+
+    // 其他复杂形式（括号包裹的表达式等）→ 跳过
+  }
+
+  /**
+   * 处理 member_expression / optional_member_expression 中的调用（严格与 PythonMapper L943-953 对齐）：
+   * - this.method() → member（无 qualifier）
+   * - super.method() → super
+   * - 首字母大写 qualifier（Class.method）→ member + qualifier
+   * - 首字母小写 qualifier（mod.fn）→ cross-module + qualifier（关键：不是 member）
+   */
+  private _handleMemberCall(
+    memberNode: Parser.SyntaxNode,
+    callNode: Parser.SyntaxNode,
+    callerCtx: string | undefined,
+    out: CallSite[],
+  ): void {
+    const objectNode = memberNode.childForFieldName('object');
+    const propertyNode = memberNode.childForFieldName('property');
+    if (!propertyNode) return;
+
+    const calleeName = propertyNode.text;
+    const qualifier = objectNode?.text ?? '';
+
+    // this.method() → member（无 qualifier，resolver 通过 callerContext 定位类）
+    if (qualifier === 'this') {
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx));
+      return;
+    }
+
+    // super.method() → super
+    if (qualifier === 'super') {
+      out.push(this._mkCallSite(calleeName, 'super', callNode, callerCtx));
+      return;
+    }
+
+    // 首字母大写（Class.method）→ member + qualifier
+    if (qualifier && /^[A-Z]/.test(qualifier)) {
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, qualifier));
+      return;
+    }
+
+    // 首字母小写（mod.fn）→ cross-module + qualifier（与 PythonMapper 对齐）
+    if (qualifier) {
+      out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, qualifier));
+      return;
+    }
+
+    // 无 qualifier 兜底 → cross-module
+    out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx));
+  }
+
+  /**
+   * 处理 new_expression 节点（T-009）。
+   * - new Foo() → free，calleeName='Foo'（FR-1.3）
+   * - new Function('code') → unresolved（W-2 修复，避免误判为本地构造）
+   * - new Foo.Sub() → 委派 handleMemberCall
+   * C-8 修复：不向 CallSite schema 添加 viaNew 元数据字段。
+   */
+  private _handleNewExpression(
+    node: Parser.SyntaxNode,
+    callerCtx: string | undefined,
+    out: CallSite[],
+  ): void {
+    const constructorNode = node.childForFieldName('constructor');
+    if (!constructorNode) return;
+
+    // identifier 形式：new Foo()
+    if (constructorNode.type === 'identifier') {
+      const name = constructorNode.text;
+      // W-2 修复：new Function('code') → unresolved（动态构造，避免误判为本地构造）
+      if (name === 'Function') {
+        out.push(this._mkCallSite('Function', 'unresolved', node, callerCtx));
+        return;
+      }
+      // 普通构造：new Foo() → free，calleeName='Foo'
+      out.push(this._mkCallSite(name, 'free', node, callerCtx));
+      return;
+    }
+
+    // member_expression 形式：new Foo.Sub()（如 new express.Router()）
+    if (constructorNode.type === 'member_expression') {
+      this._handleMemberCall(constructorNode, node, callerCtx, out);
+      return;
+    }
+  }
+
+  /**
+   * 处理 decorator 节点（T-010）。
+   * - 带参 decorator `@Foo()` → decorator kind
+   * - bare decorator `@Foo`（无括号）→ 不产出（与 Python CL-04 对齐）
+   *
+   * W-3 修复：找到带参 decorator 的 call_expression 后产出 callSite，
+   * 返回该 call_expression 节点作为跳过标记，walker 不再递归进入，
+   * 避免 call_expression 子节点被 walker 再次产出 free/member callSite（双计数）。
+   *
+   * @returns 需要跳过的子树节点（call_expression），或 null（bare decorator 不产出）
+   */
+  private _handleDecorator(
+    node: Parser.SyntaxNode,
+    callerCtx: string | undefined,
+    out: CallSite[],
+  ): Parser.SyntaxNode | null {
+    // 找 decorator 节点的 call_expression 子节点（带参 decorator 才有）
+    const callExpr = findChild(node, 'call_expression');
+    if (!callExpr) {
+      // bare decorator（@Foo 无括号）→ 不产出，无需跳过子树
+      return null;
+    }
+
+    // 从 call_expression 中取 callee 名称
+    const funcNode = callExpr.childForFieldName('function');
+    if (!funcNode) return callExpr;
+
+    let calleeName: string;
+    if (funcNode.type === 'identifier') {
+      calleeName = funcNode.text;
+    } else if (funcNode.type === 'member_expression') {
+      const propNode = funcNode.childForFieldName('property');
+      calleeName = propNode?.text ?? 'unknown';
+    } else {
+      calleeName = 'unknown';
+    }
+
+    out.push(this._mkCallSite(calleeName, 'decorator', callExpr, callerCtx));
+
+    // 返回 callExpr，让 walker 跳过该子树，避免双计数（W-3 修复）
+    return callExpr;
+  }
+
+  /**
+   * 处理 tagged_template_expression 节点（T-010）。
+   * - tag 为 identifier → free
+   * - tag 为 member_expression → 委派 handleMemberCall
+   */
+  private _handleTaggedTemplate(
+    node: Parser.SyntaxNode,
+    callerCtx: string | undefined,
+    out: CallSite[],
+  ): void {
+    const tagNode = node.childForFieldName('tag');
+    if (!tagNode) return;
+
+    if (tagNode.type === 'identifier') {
+      out.push(this._mkCallSite(tagNode.text, 'free', node, callerCtx));
+      return;
+    }
+
+    if (tagNode.type === 'member_expression') {
+      this._handleMemberCall(tagNode, node, callerCtx, out);
+      return;
+    }
+  }
+
+  /**
+   * 构造单个 CallSite 记录（6 字段，C-8 修复：不接受 dynamicReason / viaNew 参数）。
+   * 字段：calleeName / calleeKind / line / column / callerContext / calleeQualifier
+   */
+  private _mkCallSite(
+    calleeName: string,
+    calleeKind: CalleeKind,
+    callNode: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    calleeQualifier?: string,
+  ): CallSite {
+    const cs: CallSite = {
+      calleeName,
+      calleeKind,
+      line: callNode.startPosition.row + 1,
+    };
+    if (callNode.startPosition.column !== undefined) {
+      cs.column = callNode.startPosition.column;
+    }
+    if (callerContext !== undefined) cs.callerContext = callerContext;
+    if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
+    return cs;
   }
 }
