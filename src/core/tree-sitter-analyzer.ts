@@ -28,6 +28,8 @@ import { TypeScriptMapper } from './query-mappers/typescript-mapper.js';
 export interface TreeSitterAnalyzeOptions {
   /** 包含非导出/私有符号（默认 false） */
   includePrivate?: boolean;
+  /** 抽取函数调用点（Feature 151，默认 false；CL-05 节省非 panoramic 场景的 AST 遍历开销）*/
+  extractCallSites?: boolean;
 }
 
 // ════════════════════════ 扩展名到语言映射 ════════════════════════
@@ -168,6 +170,7 @@ export class TreeSitterAnalyzer {
 
       const mapperOptions: MapperOptions = {
         includePrivate: options?.includePrivate,
+        extractCallSites: options?.extractCallSites,
       };
 
       // 提取结构
@@ -182,6 +185,12 @@ export class TreeSitterAnalyzer {
       // 提取模块级文档注释（仅支持此概念的 mapper 实现，如 Python）
       const moduleDoc = mapper.extractModuleDoc?.(tree) ?? undefined;
 
+      // Feature 151 — 抽取函数调用点（仅当 extractCallSites=true 且 mapper 实现了此方法）
+      const callSites =
+        options?.extractCallSites && mapper.extractCallSites
+          ? mapper.extractCallSites(tree, content)
+          : undefined;
+
       const skeleton: CodeSkeleton = {
         filePath,
         language,
@@ -193,6 +202,7 @@ export class TreeSitterAnalyzer {
         hash,
         analyzedAt: new Date().toISOString(),
         parserUsed: 'tree-sitter',
+        ...(callSites != null ? { callSites } : {}),
       };
 
       return skeleton;

@@ -74,6 +74,11 @@ import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/des
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
+import {
+  buildUnifiedGraph,
+  setCurrentUnifiedGraph,
+} from '../knowledge-graph/index.js';
+import type { CodeSkeleton } from '../models/code-skeleton.js';
 import { buildHtmlTemplate } from '../panoramic/exporters/html-template.js';
 import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
@@ -1207,6 +1212,42 @@ export async function runBatch(
         ...(extractionResults ?? []),
       ];
 
+      // Feature 151 T-008c + T-009d — 构建 UnifiedGraph 并 setCurrentUnifiedGraph
+      // 让 component-view-builder DI provider / DependencyGraph shim 等下游能消费
+      // 注：本 P1 阶段尚未把 unifiedGraph 接到 buildKnowledgeGraph（T-012a 的工作）；
+      // 这里只把 UnifiedGraph 准备好放进单例 cache，不影响 graph.json 输出格式
+      //
+      // Codex P1 C-3 修订：先清空 cache，避免上次 batch 的 stale graph 污染本次 run；
+      // 失败 / 无 skeleton 路径也显式 setCurrentUnifiedGraph(null)
+      setCurrentUnifiedGraph(null);
+      try {
+        const codeSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
+        if (codeSkeletons.size > 0) {
+          const unifiedGraph = buildUnifiedGraph({
+            projectRoot: resolvedRoot,
+            codeSkeletons,
+          });
+          setCurrentUnifiedGraph(unifiedGraph);
+          const callEdgeCount = unifiedGraph.edges.filter(
+            (e) => e.relation === 'calls',
+          ).length;
+          const dependEdgeCount = unifiedGraph.edges.filter(
+            (e) => e.relation === 'depends-on',
+          ).length;
+          logger.info(
+            `[Feature 151] UnifiedGraph 构建完成：${unifiedGraph.nodes.length} 节点，` +
+            `${callEdgeCount} calls 边，${dependEdgeCount} depends-on 边`,
+          );
+        } else {
+          // 无 .py 文件：保持 cache=null（已清空）
+          logger.info('[Feature 151] 无 Python skeleton，跳过 UnifiedGraph 构建');
+        }
+      } catch (ugErr) {
+        // Codex P1 C-3：失败时显式清空，避免 stale graph
+        setCurrentUnifiedGraph(null);
+        logger.warn(`[Feature 151] UnifiedGraph 构建失败，跳过 (P1 阶段非阻塞): ${String(ugErr)}`);
+      }
+
       const graphJson = buildKnowledgeGraph({
         architectureIR: projectDocsResult?.architectureIR,
         docGraph,
@@ -1927,3 +1968,97 @@ function collectMdRecursive(dir: string, out: string[]): void {
   }
 }
 
+
+
+// ============================================================
+// Feature 151 — Python CodeSkeleton 收集（含 callSites 抽取）
+// ============================================================
+
+const PY_SKELETON_IGNORE_DIRS = new Set([
+  'node_modules', '.git', '__pycache__', '.venv', 'venv',
+  'build', 'dist', 'coverage', 'out', 'target', '.tox',
+]);
+
+/**
+ * Feature 151 T-008c — 收集 .py 文件 CodeSkeleton（含 callSites + 本地 import 解析）。
+ *
+ * 与 PythonLanguageAdapter.extractSymbolNodes / buildDependencyGraph 不同：
+ * - 显式传 extractCallSites=true，让 graph.json 含 callSites 字段
+ * - 在 PythonMapper 输出基础上补充 import 的 resolvedPath（基于项目内 .py 模块 basename map）
+ *   — Codex P1 C-1 修订：mapper 当前只输出 moduleSpecifier，resolvedPath 始终 null，
+ *     导致 deriveImportEdges / call-resolver Stage 3 cross-module 全部失效
+ *
+ * 单文件解析失败 / 大文件 / 非 UTF-8 都按 EC-14 兜底（mapper 已处理），不影响整体 collection。
+ */
+async function collectPythonCodeSkeletons(
+  projectRoot: string,
+): Promise<Map<string, CodeSkeleton>> {
+  const out = new Map<string, CodeSkeleton>();
+  const { PythonLanguageAdapter } = await import('../adapters/python-adapter.js');
+  const adapter = new PythonLanguageAdapter();
+
+  const pyFiles: string[] = [];
+  walkPyFiles(projectRoot, pyFiles);
+
+  // Codex P1 C-1 修订：构造模块名 → 绝对路径映射（与 PythonAdapter.buildDependencyGraph 同样的算法）
+  // basename 不含扩展名 → absolute path；用于解析 from X import Y / import X.Y 中的本地引用
+  const pyModuleMap = new Map<string, string>();
+  for (const f of pyFiles) {
+    pyModuleMap.set(path.basename(f, '.py'), f);
+  }
+
+  // Codex P1 W-1 修订：大文件 size guard 提前到 parse 之前（避免 tree-sitter 解析阻塞）
+  // 1MB 阈值与 PythonMapper.CALLSITES_MAX_FILE_BYTES 对齐（EC-14）
+  const MAX_FILE_BYTES = 1_000_000;
+
+  for (const filePath of pyFiles) {
+    try {
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        continue; // 文件读不到 stat → 跳过
+      }
+      if (stat.size > MAX_FILE_BYTES) {
+        // 大文件 skip — 不调 analyzeFile（避免 tree-sitter parse 巨型文件）
+        continue;
+      }
+      const skeleton = await adapter.analyzeFile(filePath, { extractCallSites: true });
+      // Codex P1 C-1 修订：补充 import 的 resolvedPath（mapper 当前总是输出 null）
+      const resolvedSkeleton: CodeSkeleton = {
+        ...skeleton,
+        imports: skeleton.imports.map((imp) => {
+          if (imp.resolvedPath) return imp;
+          // 取顶层模块名（如 parser.submodule → parser），与 buildDependencyGraph 一致
+          const topModule = imp.moduleSpecifier.replace(/^\.+/, '').split('.')[0];
+          if (!topModule) return imp;
+          const resolved = pyModuleMap.get(topModule);
+          if (!resolved) return imp;
+          return { ...imp, resolvedPath: resolved };
+        }),
+      };
+      out.set(filePath, resolvedSkeleton);
+    } catch {
+      // 单文件失败不影响整体
+    }
+  }
+  return out;
+}
+
+function walkPyFiles(dir: string, out: string[]): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (entry.name.startsWith('.')) continue;
+      if (PY_SKELETON_IGNORE_DIRS.has(entry.name)) continue;
+      walkPyFiles(path.join(dir, entry.name), out);
+    } else if (entry.isFile() && (entry.name.endsWith('.py') || entry.name.endsWith('.pyi'))) {
+      out.push(path.join(dir, entry.name));
+    }
+  }
+}

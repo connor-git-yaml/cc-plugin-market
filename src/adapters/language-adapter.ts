@@ -21,6 +21,15 @@ export interface AnalyzeFileOptions {
   includePrivate?: boolean;
   /** 类继承层级最大解析深度（默认 5） */
   maxDepth?: number;
+  /**
+   * 抽取函数调用点（Feature 151 + CL-05），默认 false。
+   *
+   * 设计动机：抽 callSites 会增加 AST 遍历开销（NFR-1 性能），
+   * spec drift check / 单文件分析等无 graph 需求的场景不需要 callSites，保持默认 false。
+   * panoramic 流水线（batch-orchestrator / batch-project-docs / coverage-auditor）
+   * 必须显式传 true 才能让 graph.json 含 calls 边。
+   */
+  extractCallSites?: boolean;
 }
 
 /**

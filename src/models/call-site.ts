@@ -38,7 +38,7 @@ export type CalleeKind = z.infer<typeof CalleeKindSchema>;
  * CallSite 仅承载位置 + 分类 + caller 上下文等用于 resolver 决策的最小信息。
  */
 export const CallSiteSchema = z.object({
-  /** callee 名称（如 "foo" / "Class.method" / "__add__"） */
+  /** callee 名称（如 "foo" / "method" / "__add__"） */
   calleeName: z.string().min(1),
   /** callee 分类（CL-01：必填，决定 resolver 进入哪个 Stage） */
   calleeKind: CalleeKindSchema,
@@ -48,5 +48,16 @@ export const CallSiteSchema = z.object({
   column: z.number().int().nonnegative().optional(),
   /** caller 所在 function/class 上下文（如 "Value.__add__"，用于 member resolution） */
   callerContext: z.string().optional(),
+  /**
+   * callee 限定符 — Codex P1 C-2 修订。
+   *
+   * 用于 attribute call（如 `Engine.helper()` / `numpy.array()` / `obj.method()`）的 receiver 名。
+   * resolver 会优先用此 qualifier 在 importIndex / classMemberIndex 中定位 callee 真实来源：
+   * - calleeKind=cross-module → calleeQualifier 是 module alias（如 "numpy"）
+   * - calleeKind=member（Class.method 形式）→ calleeQualifier 是类名（如 "Engine"）
+   * - calleeKind=member（self/cls.method）→ calleeQualifier=undefined（用 callerContext）
+   * - calleeKind=free / dunder / decorator / super / unresolved → 通常 undefined
+   */
+  calleeQualifier: z.string().optional(),
 });
 export type CallSite = z.infer<typeof CallSiteSchema>;

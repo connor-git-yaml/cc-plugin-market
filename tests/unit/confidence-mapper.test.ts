@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   mapDocConfidence,
   mapEvidenceConfidence,
+  mapTierToConfidence,
   CONFIDENCE_SCORES,
 } from '../../src/panoramic/graph/confidence-mapper.js';
 
@@ -58,5 +59,25 @@ describe('mapEvidenceConfidence', () => {
   it('evidenceCount === 0 映射为 AMBIGUOUS', () => {
     const result = mapEvidenceConfidence(0);
     expect(result).toBe('AMBIGUOUS');
+  });
+});
+
+describe('Feature 151 T-010 — mapTierToConfidence (CL-08 1:1 映射)', () => {
+  it('high → EXTRACTED', () => {
+    expect(mapTierToConfidence('high')).toBe('EXTRACTED');
+  });
+
+  it('medium → INFERRED', () => {
+    expect(mapTierToConfidence('medium')).toBe('INFERRED');
+  });
+
+  it('low → AMBIGUOUS', () => {
+    expect(mapTierToConfidence('low')).toBe('AMBIGUOUS');
+  });
+
+  it('与 CONFIDENCE_SCORES 对齐：high → 0.95, medium → 0.65, low → 0.25', () => {
+    expect(CONFIDENCE_SCORES[mapTierToConfidence('high')]).toBe(0.95);
+    expect(CONFIDENCE_SCORES[mapTierToConfidence('medium')]).toBe(0.65);
+    expect(CONFIDENCE_SCORES[mapTierToConfidence('low')]).toBe(0.25);
   });
 });

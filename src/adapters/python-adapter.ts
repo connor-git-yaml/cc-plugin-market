@@ -50,6 +50,8 @@ export class PythonLanguageAdapter implements LanguageAdapter {
     const analyzer = TreeSitterAnalyzer.getInstance();
     return analyzer.analyze(filePath, 'python', {
       includePrivate: options?.includePrivate,
+      // Feature 151 — 透传 extractCallSites flag（CL-05 默认 false）
+      extractCallSites: options?.extractCallSites,
     });
   }
 

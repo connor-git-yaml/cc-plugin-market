@@ -11,7 +11,48 @@ import type {
   MemberKind,
   Language,
 } from '../../models/code-skeleton.js';
+import type { CallSite, CalleeKind } from '../../models/call-site.js';
 import type { QueryMapper, MapperOptions } from './base-mapper.js';
+
+// ============================================================
+// Feature 151 — dunder 映射表（与 scripts/lib/python-call-extractor.py 1:1 对齐）
+// ============================================================
+
+/** 二元运算符 → Python dunder 名（CL-04 + 与 truth-set extractor 严格对齐） */
+const BINOP_DUNDER: Record<string, string> = {
+  '+': '__add__',
+  '-': '__sub__',
+  '*': '__mul__',
+  '/': '__truediv__',
+  '//': '__floordiv__',
+  '%': '__mod__',
+  '**': '__pow__',
+  '<<': '__lshift__',
+  '>>': '__rshift__',
+  '|': '__or__',
+  '^': '__xor__',
+  '&': '__and__',
+  '@': '__matmul__',
+};
+
+/** 一元运算符 → Python dunder 名 */
+const UNARYOP_DUNDER: Record<string, string> = {
+  '+': '__pos__',
+  '-': '__neg__',
+  '~': '__invert__',
+};
+
+/** 大文件阈值 — EC-14：超过此尺寸跳过 callSites 抽取（仍返回正常 CodeSkeleton） */
+const CALLSITES_MAX_FILE_BYTES = 1_000_000; // 1 MB
+
+/** 已知动态调用入口名 — EC-12：抽取层直接 skip，不污染 precision */
+// Codex P1 W-2 修订：补 vars / __import__ / hasattr / delattr
+const DYNAMIC_CALL_FUNCS = new Set([
+  'getattr', 'setattr', 'hasattr', 'delattr',
+  'eval', 'exec', 'compile',
+  'globals', 'locals', 'vars',
+  '__import__',
+]);
 
 // ============================================================
 // 辅助工具
@@ -248,6 +289,33 @@ export class PythonMapper implements QueryMapper {
     const errors: ParseError[] = [];
     this._collectErrors(tree.rootNode, errors);
     return errors;
+  }
+
+  /**
+   * Feature 151 — 抽取函数调用点（FR-5 + CL-04 + Codex W-3 修订）。
+   *
+   * 遍历 7 类 AST 节点：call / attribute / binary_operator / unary_operator
+   * / decorated_definition / async_function_definition / generator
+   *
+   * 大文件 / parse error 兜底（EC-14）：
+   * - source.length > CALLSITES_MAX_FILE_BYTES → 直接返回 []
+   * - tree-sitter 抛错 → 上层 try/catch 转 [] 不污染 pipeline
+   *
+   * 动态调用 skip（EC-12）：
+   * - getattr / setattr / eval / exec 等已知动态入口直接 skip
+   * - 字符串拼接 attribute 不输出
+   *
+   * Bare decorator 不记录（CL-04）：
+   * - @staticmethod / @property / @abstractmethod 等 ast.Name 形式不记录
+   * - 带参 @app.route("/x") 记录 callee=route
+   */
+  extractCallSites(tree: Parser.Tree, source: string): CallSite[] {
+    if (source.length > CALLSITES_MAX_FILE_BYTES) {
+      return [];
+    }
+    const callSites: CallSite[] = [];
+    this._walkCallSites(tree.rootNode, undefined, callSites);
+    return callSites;
   }
 
   // ============================================================
@@ -753,5 +821,273 @@ export class PythonMapper implements QueryMapper {
         }
       }
     }
+  }
+
+  // ============================================================
+  // Feature 151 — call site walker（FR-5 + CL-04）
+  // ============================================================
+
+  /**
+   * 递归遍历 AST 抽取 call sites。
+   * - callerContext 维护当前 function/class 嵌套栈（如 "Value.__add__"）
+   * - 支持 EC-15：async_function_definition / generator 不需特判，因为 tree-sitter 把
+   *   async def 当作 function_definition + async 修饰，本函数已自然覆盖
+   */
+  private _walkCallSites(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    out: CallSite[],
+  ): void {
+    // 维护 callerContext — 进入 function / class 时压栈
+    let nextContext = callerContext;
+    if (node.type === 'function_definition') {
+      const name = fieldText(node, 'name');
+      if (name) {
+        nextContext = callerContext ? `${callerContext}.${name}` : name;
+      }
+    } else if (node.type === 'class_definition') {
+      const name = fieldText(node, 'name');
+      if (name) {
+        nextContext = callerContext ? `${callerContext}.${name}` : name;
+      }
+    }
+
+    switch (node.type) {
+      case 'call':
+        this._handleCall(node, nextContext, out);
+        break;
+      case 'binary_operator':
+        this._handleBinOp(node, nextContext, out);
+        break;
+      case 'unary_operator':
+        this._handleUnaryOp(node, nextContext, out);
+        break;
+      case 'decorated_definition':
+        this._handleDecorated(node, nextContext, out);
+        break;
+      default:
+        break;
+    }
+
+    // 递归子节点
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child) {
+        this._walkCallSites(child, nextContext, out);
+      }
+    }
+  }
+
+  /**
+   * 处理 `call` 节点。
+   * func 字段决定 calleeKind：
+   * - identifier → free（如果在 DYNAMIC_CALL_FUNCS 列表则 skip）
+   * - attribute (object=self / 已知类) → member
+   * - attribute (object=identifier 模块名) → cross-module
+   * - call (内层是 super()) → super
+   */
+  private _handleCall(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    out: CallSite[],
+  ): void {
+    const funcNode = node.childForFieldName('function');
+    if (!funcNode) return;
+
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    // identifier 形式：foo()
+    if (funcNode.type === 'identifier') {
+      const name = funcNode.text;
+      // EC-12 dynamic call skip
+      if (DYNAMIC_CALL_FUNCS.has(name)) return;
+      out.push(this._mkCallSite(name, 'free', line, column, callerContext));
+      return;
+    }
+
+    // attribute 形式：obj.method()
+    if (funcNode.type === 'attribute') {
+      const objectNode = funcNode.childForFieldName('object');
+      const attrNode = funcNode.childForFieldName('attribute');
+      if (!attrNode) return;
+      const calleeName = attrNode.text;
+
+      // EC-12：object 由动态调用 / 字符串拼接派生 → skip
+      if (objectNode && this._isDynamicObject(objectNode)) {
+        return;
+      }
+
+      const objectText = objectNode?.text ?? '';
+
+      // self.method() / cls.method() → member（calleeQualifier 留空，resolver 用 callerContext）
+      if (objectText === 'self' || objectText === 'cls') {
+        out.push(this._mkCallSite(calleeName, 'member', line, column, callerContext));
+        return;
+      }
+
+      // super().method() → super
+      // tree-sitter 表现：func 是 attribute，其 object 是 call(func=identifier=super)
+      if (objectNode?.type === 'call') {
+        const innerFuncNode = objectNode.childForFieldName('function');
+        if (innerFuncNode?.type === 'identifier' && innerFuncNode.text === 'super') {
+          out.push(this._mkCallSite(calleeName, 'super', line, column, callerContext));
+          return;
+        }
+      }
+
+      // 其他形式（Class.method() 或 module.func()）— 携带 calleeQualifier 让 resolver 决策
+      // Codex P1 C-2 修订：保留 qualifier，resolver 通过 importIndex / classMemberIndex 判定
+      // - 首字母大写视为类成员（Class.method）
+      // - 否则视为 cross-module（module.func）
+      if (objectText && /^[A-Z]/.test(objectText)) {
+        out.push(
+          this._mkCallSite(calleeName, 'member', line, column, callerContext, objectText),
+        );
+      } else if (objectText) {
+        out.push(
+          this._mkCallSite(calleeName, 'cross-module', line, column, callerContext, objectText),
+        );
+      } else {
+        out.push(this._mkCallSite(calleeName, 'cross-module', line, column, callerContext));
+      }
+      return;
+    }
+
+    // 其他 func 形式（如 lambda 直接调用、复杂表达式）→ 跳过
+  }
+
+  /** 二元运算符 → dunder（EC-3） */
+  private _handleBinOp(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    out: CallSite[],
+  ): void {
+    // tree-sitter Python: binary_operator 的 operator field 是符号字符串
+    const opNode = node.childForFieldName('operator');
+    if (!opNode) return;
+    const dunder = BINOP_DUNDER[opNode.text];
+    if (!dunder) return;
+    out.push(
+      this._mkCallSite(
+        dunder,
+        'dunder',
+        node.startPosition.row + 1,
+        node.startPosition.column,
+        callerContext,
+      ),
+    );
+  }
+
+  /** 一元运算符 → dunder */
+  private _handleUnaryOp(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    out: CallSite[],
+  ): void {
+    const opNode = node.childForFieldName('operator');
+    if (!opNode) return;
+    const dunder = UNARYOP_DUNDER[opNode.text];
+    if (!dunder) return;
+    out.push(
+      this._mkCallSite(
+        dunder,
+        'dunder',
+        node.startPosition.row + 1,
+        node.startPosition.column,
+        callerContext,
+      ),
+    );
+  }
+
+  /**
+   * 处理 decorated_definition（CL-04 与 truth-set extractor 严格对齐）：
+   * - 带参 decorator (`@app.route("/x")`，AST: `decorator > call > attribute`) → 记录 callee=attr
+   * - 带参 decorator (`@functools.wraps(fn)`) → 记录 callee=wraps
+   * - bare decorator (`@staticmethod`，AST: `decorator > identifier`) → 不记录
+   * - bare attribute decorator (`@app.route`，AST: `decorator > attribute`) → 不记录
+   *
+   * 决定原则：仅当 decorator 是一个 *call*（含括号 + 参数）时才记录
+   * 这与 python-call-extractor.py L69 处理一致
+   */
+  private _handleDecorated(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    out: CallSite[],
+  ): void {
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (!child || child.type !== 'decorator') continue;
+      // decorator 节点的子节点是 expression
+      // call 形式：@app.route("/x") → 子节点是 call
+      // bare 形式：@staticmethod → 子节点是 identifier
+      // bare attribute 形式：@app.route → 子节点是 attribute
+      for (let j = 0; j < child.childCount; j++) {
+        const expr = child.child(j);
+        if (!expr) continue;
+        if (expr.type === '@') continue;
+        // 仅 call 形式记录
+        if (expr.type === 'call') {
+          const funcNode = expr.childForFieldName('function');
+          if (!funcNode) break;
+          let calleeName: string | undefined;
+          if (funcNode.type === 'identifier') {
+            calleeName = funcNode.text;
+          } else if (funcNode.type === 'attribute') {
+            const attrNode = funcNode.childForFieldName('attribute');
+            calleeName = attrNode?.text;
+          }
+          if (calleeName) {
+            out.push(
+              this._mkCallSite(
+                calleeName,
+                'decorator',
+                expr.startPosition.row + 1,
+                expr.startPosition.column,
+                callerContext,
+              ),
+            );
+          }
+        }
+        // bare 形式（identifier / attribute）不记录（CL-04）
+        break;
+      }
+    }
+  }
+
+  /** 判断 attribute 的 object 是否来自 dynamic call 派生（EC-12） */
+  private _isDynamicObject(objectNode: Parser.SyntaxNode): boolean {
+    // getattr(obj, name) / globals()['fn'] 等
+    if (objectNode.type === 'call') {
+      const funcNode = objectNode.childForFieldName('function');
+      if (funcNode?.type === 'identifier' && DYNAMIC_CALL_FUNCS.has(funcNode.text)) {
+        return true;
+      }
+    }
+    // subscript（obj['key']）— 通常是字符串拼接 attribute
+    if (objectNode.type === 'subscript') {
+      return true;
+    }
+    return false;
+  }
+
+  /** 构造单个 CallSite 记录 */
+  private _mkCallSite(
+    calleeName: string,
+    calleeKind: CalleeKind,
+    line: number,
+    column: number,
+    callerContext: string | undefined,
+    calleeQualifier?: string,
+  ): CallSite {
+    const cs: CallSite = {
+      calleeName,
+      calleeKind,
+      line,
+    };
+    if (column !== undefined) cs.column = column;
+    if (callerContext !== undefined) cs.callerContext = callerContext;
+    if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
+    return cs;
   }
 }

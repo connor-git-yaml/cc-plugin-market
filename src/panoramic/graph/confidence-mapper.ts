@@ -4,6 +4,7 @@
  * 供 graph-builder 使用
  */
 import type { ConfidenceLevel } from './graph-types.js';
+import type { ConfidenceTier } from '../../knowledge-graph/unified-graph.js';
 
 /**
  * 置信度级别到默认数值分数的映射表
@@ -60,4 +61,31 @@ export function mapEvidenceConfidence(evidenceCount: number): ConfidenceLevel {
   if (evidenceCount >= 3) return 'EXTRACTED';
   if (evidenceCount >= 1) return 'INFERRED';
   return 'AMBIGUOUS';
+}
+
+/**
+ * Feature 151 T-010 — 把 UnifiedGraph 内部 ConfidenceTier 映射到 GraphJSON 输出 ConfidenceLevel。
+ *
+ * 严格 1:1 映射（CL-08）：
+ * - high   → EXTRACTED  (CONFIDENCE_SCORES: 0.95)
+ * - medium → INFERRED   (CONFIDENCE_SCORES: 0.65)
+ * - low    → AMBIGUOUS  (CONFIDENCE_SCORES: 0.25)
+ *
+ * 设计动机（CL-08 双轨语义保留）：
+ * - UnifiedGraph 内部 high/medium/low 偏向"解析确定度"语义（call-resolver 直观）
+ * - GraphJSON 输出 EXTRACTED/INFERRED/AMBIGUOUS 偏向"证据质量"语义（graph 消费者直观）
+ * - 不在内部统一为 EXTRACTED/INFERRED/AMBIGUOUS（语义偏差会污染 resolver 表达）
+ *
+ * @param tier - UnifiedGraph 内部使用的三档枚举
+ * @returns GraphJSON 输出层使用的 ConfidenceLevel enum
+ */
+export function mapTierToConfidence(tier: ConfidenceTier): ConfidenceLevel {
+  switch (tier) {
+    case 'high':
+      return 'EXTRACTED';
+    case 'medium':
+      return 'INFERRED';
+    case 'low':
+      return 'AMBIGUOUS';
+  }
 }
