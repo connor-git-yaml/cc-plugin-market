@@ -385,7 +385,7 @@
 
 ---
 
-- [ ] T-013 修改 ts-js-adapter.ts：analyzeFile 接受并透传 extractCallSites flag
+- [x] T-013 修改 ts-js-adapter.ts：analyzeFile 接受并透传 extractCallSites flag
 
   **DoD**：`TsJsLanguageAdapter.analyzeFile` 函数签名不变（`AnalyzeFileOptions` 接口已有 `extractCallSites?: boolean`）；内部实现检查 `options?.extractCallSites === true` 决定是否走额外 tree-sitter 路径；`extractCallSites=false`（默认）时代码路径与 master HEAD 完全一致（不修改现有 ts-morph 调用链），零性能影响。
 
@@ -406,7 +406,7 @@
 
 ---
 
-- [ ] T-014 实现双路径合并逻辑（ts-morph 主 + tree-sitter callSites merge）
+- [x] T-014 实现双路径合并逻辑（ts-morph 主 + tree-sitter callSites merge）
 
   **DoD**：当 `extractCallSites=true` 时：(1) 先完成现有 ts-morph 分析（`analyzeFileInternal`）得到完整 `CodeSkeleton`；(2) 额外调用 `TreeSitterAnalyzer.analyze(filePath, 'typescript', { extractCallSites: true })` 取 `callSites` 字段；(3) merge 结果：`{ ...tsMorphResult, callSites: tsCallSites }`；(4) tree-sitter 返回的 `exports` / `imports` 字段 MUST discard（EC-11 隔离）；(5) `.tsx` 文件的 tree-sitter 路径若 dialect 不可用，安全降级为空 `callSites: []`，不阻塞（EC-1）。
 
@@ -427,7 +427,7 @@
 
 ---
 
-- [ ] T-015 写 tests/unit/ts-js-adapter-callsite.test.ts（≥ 3 单测）
+- [x] T-015 写 tests/unit/ts-js-adapter-callsite.test.ts（≥ 3 单测）
 
   **DoD**：覆盖以下场景：
   1. `extractCallSites=false`（默认）：`CodeSkeleton.callSites` 为空数组或 undefined，行为与 master HEAD 一致
@@ -449,7 +449,7 @@
 
 ---
 
-- [ ] T-016 P2 阶段验证：全量 build + 单测通过
+- [x] T-016 P2 阶段验证：全量 build + 单测通过
 
   **DoD**：
   1. `npm run build` 零 TypeScript 错误
