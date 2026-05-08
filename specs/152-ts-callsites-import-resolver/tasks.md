@@ -659,7 +659,7 @@
 
 ---
 
-- [ ] T-024 创建 verify-feature-152.mjs 骨架（CLI 接口 + 帮助输出）
+- [x] T-024 创建 verify-feature-152.mjs 骨架（CLI 接口 + 帮助输出）
 
   **DoD**：文件存在；支持 `--target <path>`（可多次）、`--repeats <n>`（默认 3）、`--metric <name>`（fill-rate | ts-precision-recall | python-resolution | perf | all）、`--out <path>`、`--help` 参数；`--help` 输出参数说明后 exit 0；参考 `scripts/verify-feature-151.mjs` 的整体架构（target → analyze → buildUnifiedGraph → graph-accuracy.mjs）。
 
@@ -679,7 +679,7 @@
 
 ---
 
-- [ ] T-025 实现 SC-001 fillRate 测量（C-6 修复 — 分母用 truth set，不用总文件数）
+- [x] T-025 实现 SC-001 fillRate 测量（C-6 修复 — 分母用 truth set，不用总文件数）
 
   **DoD**：SC-001 逻辑（**C-6 修复**：与 spec §10 SC-001 对齐，与 SC-002 共用同一 truth set 口径）：
   1. 对 target 调用 `collectTsJsCodeSkeletons(target, { extractCallSites: true })`，得到 codeSkeletons Map
@@ -703,7 +703,7 @@
 
 ---
 
-- [ ] T-026 实现 SC-002 precision/recall N=3 中位数测量（TS call graph-accuracy）
+- [x] T-026 实现 SC-002 precision/recall N=3 中位数测量（TS call graph-accuracy）
 
   **DoD**：SC-002 逻辑：(1) 对 target 构建 graph.json；(2) 循环 repeats 次调用 `node scripts/graph-accuracy.mjs --language ts --source <target> --graph <graph.json>`；(3) 解析每次输出的 precision/recall；(4) 取中位数写入 `precisionMedian`、`recallMedian`；(5) 验收阈值：`precisionMedian ≥ 0.70`，`recallMedian ≥ 0.30`；Python 回归保护：同时运行 `node scripts/graph-accuracy.mjs --language python --source <target>` smoke test（FR-8.4）。
 
@@ -723,7 +723,7 @@
 
 ---
 
-- [ ] T-027 实现 SC-003 Python import 解析正确率测量（C-7 修复 — 验证目标命中正确性）
+- [x] T-027 实现 SC-003 Python import 解析正确率测量（C-7 修复 — 验证目标命中正确性）
 
   **DoD**：SC-003 逻辑（**C-7 修复**：spec §10 SC-003 要求"`from pkg.module import X` 形态正确命中目标文件比例"，不是仅 `resolvedPath !== null`）：
   1. 对 target 调用 `collectPythonCodeSkeletons(target)`，得到 codeSkeletons Map
@@ -752,7 +752,7 @@
 
 ---
 
-- [ ] T-028 实现 SC-006 性能 baseline / enable / delta 测量
+- [x] T-028 实现 SC-006 性能 baseline / enable / delta 测量
 
   **DoD**：SC-006 逻辑：(1) 计时 `collectTsJsCodeSkeletons(target, { extractCallSites: false })` → `baselineMs`；(2) 计时 `collectTsJsCodeSkeletons(target, { extractCallSites: true })` → `enableMs`；(3) `deltaMs = enableMs - baselineMs`；(4) 输出平台信息（nodeVersion / platform / cpuCount）；验收阈值：`deltaMs ≤ 5000`（5s，hono 295 文件，标准笔记本硬件）。
 
@@ -771,7 +771,7 @@
 
 ---
 
-- [ ] T-029 实现 SC-008 new Foo() → class Foo graph 连通率测量（C-8 修复 — truth-set 对照）
+- [x] T-029 实现 SC-008 new Foo() → class Foo graph 连通率测量（C-8 修复 — truth-set 对照）
 
   **DoD**：SC-008 逻辑（**C-8 修复**：不向 CallSite schema 加 viaNew 元数据；改用 truth-set 输出的 `kind="constructor"` 条目对照）：
   1. 调用 `node scripts/graph-accuracy.mjs --language ts --source <target>` 生成 truth set，从中筛选 `kind === 'constructor'` 的 truth call → `truthConstructors[]`
@@ -798,7 +798,7 @@
 
 ---
 
-- [ ] T-030 P5 阶段验证：verify 脚本完整运行
+- [x] T-030 P5 阶段验证：verify 脚本完整运行
 
   **DoD**：
   1. `node scripts/verify-feature-152.mjs --help` exit 0
