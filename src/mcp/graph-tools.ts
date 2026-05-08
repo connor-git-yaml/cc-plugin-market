@@ -4,32 +4,69 @@
  * 采用 lazy load 策略：首次调用时加载 _meta/graph.json，后续复用内存缓存
  */
 
+import { existsSync, statSync } from 'node:fs';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
+import type { GraphJSON } from '../panoramic/graph/graph-types.js';
 import { resolveGraphJsonPath } from '../panoramic/graph/graph-paths.js';
 
 // ──────────────────────────────────────────────────────────
 // 模块级缓存（按 projectRoot 多实例）
+//
+// Feature 155 T-002 升级：从 Map<projectRoot, Engine> 升级为 entry-based，
+// 携带 graphPath / mtimeMs / sizeBytes，让 getEngine 在每次调用时校验
+// graph.json 是否被外部重生成（baseline:collect 后 mtime/size 必变）。
 // ──────────────────────────────────────────────────────────
 
-/** 按 projectRoot 缓存 GraphQueryEngine 实例 */
-const engineCache = new Map<string, GraphQueryEngine>();
+/**
+ * 缓存条目：保留 engine + graph 文件元数据，用于 stale detection。
+ * mtime + size 复合校验防止"修改但 mtime 同秒"和"size 不变但 mtime 变化"两种 race。
+ */
+interface CachedEngineEntry {
+  engine: GraphQueryEngine;
+  graphPath: string;
+  mtimeMs: number;
+  sizeBytes: number;
+}
+
+/** 按 projectRoot 缓存 GraphQueryEngine 实例 + graph.json stat 元数据 */
+const engineCache = new Map<string, CachedEngineEntry>();
 
 /**
- * 获取 GraphQueryEngine 实例（按 projectRoot 缓存，首次调用时从磁盘加载）
+ * 获取 GraphQueryEngine 实例（按 projectRoot 缓存，含 stale 检测）。
+ *
+ * 每次调用都 stat graph.json，与缓存条目的 mtimeMs + sizeBytes 比对：
+ * - 命中 + 一致 → 复用 engine
+ * - miss / stale → loadFromFile 重新构造，更新 entry
+ *
+ * 这样 baseline:collect 重生 graph 后无需手动 reloadGraph()，下一次 tool 调用
+ * 自动加载新 graph；同时不破坏已有调用路径（getEngine signature 不变）。
+ *
  * @param projectRoot - 目标项目根目录；未传入时使用 process.cwd()
  * @returns GraphQueryEngine 实例
  * @throws 文件不存在或格式错误时抛出 Error
  */
 function getEngine(projectRoot?: string): GraphQueryEngine {
   const root = projectRoot ?? process.cwd();
-  let engine = engineCache.get(root);
-  if (!engine) {
-    const graphPath = resolveGraphJsonPath(root);
-    engine = GraphQueryEngine.loadFromFile(graphPath);
-    engineCache.set(root, engine);
+  const graphPath = resolveGraphJsonPath(root);
+  const stat = statSync(graphPath);
+  const cached = engineCache.get(root);
+  if (
+    cached !== undefined &&
+    cached.graphPath === graphPath &&
+    cached.mtimeMs === stat.mtimeMs &&
+    cached.sizeBytes === stat.size
+  ) {
+    return cached.engine;
   }
+  const engine = GraphQueryEngine.loadFromFile(graphPath);
+  engineCache.set(root, {
+    engine,
+    graphPath,
+    mtimeMs: stat.mtimeMs,
+    sizeBytes: stat.size,
+  });
   return engine;
 }
 
@@ -39,6 +76,51 @@ function getEngine(projectRoot?: string): GraphQueryEngine {
  */
 export function reloadGraph(): void {
   engineCache.clear();
+}
+
+// ──────────────────────────────────────────────────────────
+// Feature 155 T-002 — 公开 helper：getCachedGraphData
+//
+// agent-context-tools.ts 通过本 helper 拿到 raw GraphJSON + 文件元数据，
+// 以便 query-helpers.ts 构建反向邻接表 cache key（含 mtime / size）。
+// ──────────────────────────────────────────────────────────
+
+/**
+ * 获取项目 graph.json 的反序列化对象 + 文件元数据。
+ *
+ * 行为约定：
+ * - graph.json 不存在 → 返回 null（不抛错），调用方按 graph-not-built 处理
+ * - 加载或解析失败 → 返回 null（不抛错），调用方按 graph-not-built 处理
+ * - 命中缓存（mtime + size 一致）→ 返回缓存 engine 的 rawGraph
+ * - cache stale → 自动重 load 后返回
+ *
+ * 返回的 graphData 是 Readonly<GraphJSON>，调用方禁止修改。
+ *
+ * @param projectRoot - 目标项目根目录；未传入时使用 process.cwd()
+ */
+export function getCachedGraphData(projectRoot?: string): {
+  graphData: Readonly<GraphJSON>;
+  graphPath: string;
+  mtimeMs: number;
+  sizeBytes: number;
+} | null {
+  try {
+    const root = projectRoot ?? process.cwd();
+    const graphPath = resolveGraphJsonPath(root);
+    if (!existsSync(graphPath)) {
+      return null;
+    }
+    const stat = statSync(graphPath);
+    const engine = getEngine(root);
+    return {
+      graphData: engine.rawGraph,
+      graphPath,
+      mtimeMs: stat.mtimeMs,
+      sizeBytes: stat.size,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ──────────────────────────────────────────────────────────

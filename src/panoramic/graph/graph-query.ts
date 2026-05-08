@@ -233,6 +233,19 @@ export class GraphQueryEngine {
   }
 
   /**
+   * Feature 155 T-002 — 暴露原始 GraphJSON 给 Agent-Context MCP tools。
+   *
+   * impact / context / detect_changes 三个 tool 需要直接消费 graph 的 nodes + links
+   * 做反向 BFS、symbol id canonicalize、git diff symbol 映射等操作；GraphQueryEngine
+   * 公开方法（query / getNode / shortestPath 等）粒度过粗，不适配。
+   *
+   * 仅追加只读 getter，不暴露内部 nodeMap / adjacency；遵循"扩展，不破坏"。
+   */
+  get rawGraph(): Readonly<GraphJSON> {
+    return this.graph;
+  }
+
+  /**
    * Feature 151 T-001a — 从 in-memory JSON 构建查询引擎。
    *
    * 该工厂方法把 `loadFromFile` 中的 schema 校验 + 构造逻辑抽出，便于：

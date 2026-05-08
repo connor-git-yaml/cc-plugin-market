@@ -1,0 +1,98 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-05-09T00:00:00.000Z",
+    "nodeCount": 5,
+    "edgeCount": 4,
+    "sources": ["unified-graph"],
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "fixture/engine.py::Value",
+      "kind": "component",
+      "label": "Value",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "fixture/engine.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "fixture/nn.py::Linear",
+      "kind": "component",
+      "label": "Linear",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "fixture/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "fixture/nn.py::ReLU",
+      "kind": "component",
+      "label": "ReLU",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "fixture/nn.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "fixture/loss.py::MSELoss",
+      "kind": "component",
+      "label": "MSELoss",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "fixture/loss.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "fixture/optim.py::SGD",
+      "kind": "component",
+      "label": "SGD",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "fixture/optim.py",
+        "confidence": "EXTRACTED"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "fixture/nn.py::Linear",
+      "target": "fixture/engine.py::Value",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "fixture/nn.py::ReLU",
+      "target": "fixture/engine.py::Value",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "fixture/loss.py::MSELoss",
+      "target": "fixture/engine.py::Value",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": true
+    },
+    {
+      "source": "fixture/optim.py::SGD",
+      "target": "fixture/engine.py::Value",
+      "relation": "calls",
+      "confidence": "AMBIGUOUS",
+      "confidenceScore": 0.25,
+      "directional": true
+    }
+  ]
+}
