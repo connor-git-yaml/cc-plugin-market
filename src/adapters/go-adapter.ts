@@ -39,6 +39,8 @@ export class GoLanguageAdapter implements LanguageAdapter {
     const analyzer = TreeSitterAnalyzer.getInstance();
     return analyzer.analyze(filePath, 'go', {
       includePrivate: options?.includePrivate,
+      // Feature 153 — 透传 extractCallSites flag（与 PythonLanguageAdapter 行为一致）
+      extractCallSites: options?.extractCallSites,
     });
   }
 

@@ -12,7 +12,18 @@ import type {
   Language,
   Visibility,
 } from '../../models/code-skeleton.js';
+import type { CallSite, CalleeKind } from '../../models/call-site.js';
 import type { QueryMapper, MapperOptions } from './base-mapper.js';
+
+// ============================================================
+// Feature 153 — extractCallSites 常量
+// ============================================================
+
+/** 大文件阈值 — 与 PythonMapper.CALLSITES_MAX_FILE_BYTES 一致；超过此尺寸跳过 callSites 抽取 */
+const CALLSITES_MAX_FILE_BYTES = 1_000_000;
+
+/** 反射类调用 receiver 集合（与 scripts/lib/go-call-extractor.mjs `GO_REFLECTION_RECEIVERS` 一致） */
+const GO_REFLECTION_RECEIVERS = new Set(['reflect', 'unsafe']);
 
 // ============================================================
 // 辅助工具
@@ -563,5 +574,469 @@ export class GoMapper implements QueryMapper {
         }
       }
     }
+  }
+
+  // ============================================================
+  // Feature 153 — extractCallSites（FR-1 ~ FR-7 实现）
+  // ============================================================
+
+  /**
+   * 抽取 Go 函数调用点。
+   *
+   * 行为对齐：
+   * - scripts/lib/go-call-extractor.mjs 的 _classifyCallExpression / _scanImports / _resolveGoCaller
+   * - call-resolver 4-stage 决策表（spec.md FR-2 表格 11 行 short-circuit）
+   *
+   * Size guard：source.length > 1MB 时返回 []（与 PythonMapper.extractCallSites 一致）。
+   */
+  extractCallSites(tree: Parser.Tree, source: string): CallSite[] {
+    if (source.length > CALLSITES_MAX_FILE_BYTES) {
+      return [];
+    }
+    const root = tree.rootNode;
+    const importAliases = this._scanImports(root);
+    const callSites: CallSite[] = [];
+    const ctxStack: string[] = [];
+    const recvVarStack: (string | null)[] = [];
+    this._walkCallSites(root, ctxStack, recvVarStack, importAliases, callSites);
+    return callSites;
+  }
+
+  /**
+   * FR-5: 扫描 source_file → import_declaration → import_spec 收集 alias 集合。
+   *
+   * 与 go-call-extractor.mjs `_scanImports` 行为完全一致：
+   * - 自定义 alias `import f "fmt"` → 记 alias `f`
+   * - 标准 import `import "fmt"` → 记 path 末段 `fmt`
+   * - dot import (name=dot) / blank import (name=blank_identifier) → skip（不入集合）
+   */
+  private _scanImports(root: Parser.SyntaxNode): Set<string> {
+    const aliases = new Set<string>();
+    for (let i = 0; i < root.namedChildCount; i++) {
+      const child = root.namedChild(i);
+      if (!child || child.type !== 'import_declaration') continue;
+      // import_spec 直接挂在 import_declaration 下，或挂在 import_spec_list 下
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const spec = child.namedChild(j);
+        if (!spec) continue;
+        if (spec.type === 'import_spec') {
+          const alias = this._extractAliasFromImportSpec(spec);
+          if (alias) aliases.add(alias);
+        } else if (spec.type === 'import_spec_list') {
+          for (let k = 0; k < spec.namedChildCount; k++) {
+            const inner = spec.namedChild(k);
+            if (inner?.type === 'import_spec') {
+              const alias = this._extractAliasFromImportSpec(inner);
+              if (alias) aliases.add(alias);
+            }
+          }
+        }
+      }
+    }
+    return aliases;
+  }
+
+  /** FR-5 辅助：从 import_spec 提取 alias 名（dot/blank 返回 null）。 */
+  private _extractAliasFromImportSpec(spec: Parser.SyntaxNode): string | null {
+    const nameNode = spec.childForFieldName('name');
+    if (nameNode) {
+      if (nameNode.type === 'dot' || nameNode.type === 'blank_identifier') {
+        return null;
+      }
+      if (nameNode.type === 'package_identifier' && typeof nameNode.text === 'string') {
+        return nameNode.text;
+      }
+    }
+    // 无 name → 用 path 末段
+    const pathNode = spec.childForFieldName('path');
+    if (!pathNode || pathNode.type !== 'interpreted_string_literal') return null;
+    const raw = pathNode.text.replace(/^["']|["']$/g, '');
+    if (!raw) return null;
+    const lastSlash = raw.lastIndexOf('/');
+    return lastSlash === -1 ? raw : raw.slice(lastSlash + 1);
+  }
+
+  /**
+   * FR-7: 从 method_declaration 的 receiver 字段递归提取 type 名。
+   *
+   * 支持形态：值 receiver / 指针 / 嵌套指针 / 泛型 / 泛型指针 / qualified type，
+   * 与 go-call-extractor.mjs `_extractReceiverTypeName` + `_extractTypeNameRecursive` 行为一致。
+   */
+  private _extractReceiverTypeName(methodDecl: Parser.SyntaxNode): string | null {
+    const receiverField = methodDecl.childForFieldName('receiver');
+    if (!receiverField || receiverField.type !== 'parameter_list') return null;
+    for (let i = 0; i < receiverField.namedChildCount; i++) {
+      const param = receiverField.namedChild(i);
+      if (!param || param.type !== 'parameter_declaration') continue;
+      for (let j = 0; j < param.namedChildCount; j++) {
+        const child = param.namedChild(j);
+        if (!child) continue;
+        if (child.type === 'identifier') continue; // receiver 名字（var name）
+        const typeName = this._extractTypeNameRecursive(child);
+        if (typeName) return typeName;
+      }
+    }
+    return null;
+  }
+
+  /** 递归从 type 节点中提取末段 type_identifier 名（值 type / pointer / generic / qualified）。 */
+  private _extractTypeNameRecursive(node: Parser.SyntaxNode | null): string | null {
+    if (!node) return null;
+    if (node.type === 'type_identifier' && typeof node.text === 'string') {
+      return node.text;
+    }
+    if (node.type === 'pointer_type') {
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const inner = this._extractTypeNameRecursive(node.namedChild(i));
+        if (inner) return inner;
+      }
+      return null;
+    }
+    if (node.type === 'generic_type') {
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const inner = node.namedChild(i);
+        if (inner && (inner.type === 'type_identifier' || inner.type === 'qualified_type')) {
+          return this._extractTypeNameRecursive(inner);
+        }
+      }
+      return null;
+    }
+    if (node.type === 'qualified_type') {
+      for (let i = 0; i < node.namedChildCount; i++) {
+        const inner = node.namedChild(i);
+        if (inner?.type === 'type_identifier' && typeof inner.text === 'string') {
+          return inner.text;
+        }
+      }
+      return null;
+    }
+    return null;
+  }
+
+  /** FR-7: 从 method_declaration receiver 提取 var name（identifier 子节点；可能为 null）。 */
+  private _extractReceiverVarName(methodDecl: Parser.SyntaxNode): string | null {
+    const receiverField = methodDecl.childForFieldName('receiver');
+    if (!receiverField || receiverField.type !== 'parameter_list') return null;
+    for (let i = 0; i < receiverField.namedChildCount; i++) {
+      const param = receiverField.namedChild(i);
+      if (!param || param.type !== 'parameter_declaration') continue;
+      for (let j = 0; j < param.namedChildCount; j++) {
+        const child = param.namedChild(j);
+        if (child?.type === 'identifier' && typeof child.text === 'string') {
+          return child.text;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * FR-1, FR-7: 递归遍历 AST，对 call_expression 产 CallSite。
+   *
+   * 栈协议（try/finally 配对）：
+   * - 进入 method_declaration → push `Type.method` + receiver var
+   * - 进入 function_declaration → push `funcName` + null
+   * - 进入 func_literal → push `<closure:line:col>` + null
+   * - 离开时 pop（finally 块保证）
+   */
+  private _walkCallSites(
+    node: Parser.SyntaxNode,
+    ctxStack: string[],
+    recvVarStack: (string | null)[],
+    importAliases: ReadonlySet<string>,
+    out: CallSite[],
+  ): void {
+    // ERROR / MISSING 节点：跳过子树（与 extractor 行为一致）
+    if (node.type === 'ERROR' || node.type === 'MISSING') return;
+
+    let pushed = false;
+    if (node.type === 'method_declaration') {
+      const typeName = this._extractReceiverTypeName(node) ?? '<anon-method>';
+      const nameNode = node.childForFieldName('name');
+      const methodName = nameNode?.text ?? '<anon-method>';
+      const recvVar = this._extractReceiverVarName(node);
+      ctxStack.push(`${typeName}.${methodName}`);
+      recvVarStack.push(recvVar);
+      pushed = true;
+    } else if (node.type === 'function_declaration') {
+      const nameNode = node.childForFieldName('name');
+      const fnName = nameNode?.text ?? '<anon-func>';
+      ctxStack.push(fnName);
+      recvVarStack.push(null);
+      pushed = true;
+    } else if (node.type === 'func_literal') {
+      const line = node.startPosition.row + 1;
+      const col = node.startPosition.column;
+      ctxStack.push(`<closure:${line}:${col}>`);
+      recvVarStack.push(null);
+      pushed = true;
+    }
+
+    try {
+      if (node.type === 'call_expression') {
+        const callerCtx = ctxStack.length > 0 ? ctxStack[ctxStack.length - 1] : undefined;
+        const recvVar =
+          recvVarStack.length > 0
+            ? recvVarStack[recvVarStack.length - 1] ?? null
+            : null;
+        this._handleCall(node, callerCtx, recvVar, importAliases, out);
+      }
+      // 递归 children
+      for (let i = 0; i < node.childCount; i++) {
+        const child = node.child(i);
+        if (child) this._walkCallSites(child, ctxStack, recvVarStack, importAliases, out);
+      }
+    } finally {
+      if (pushed) {
+        ctxStack.pop();
+        recvVarStack.pop();
+      }
+    }
+  }
+
+  /**
+   * FR-1, FR-2 (11 行分类表), FR-6: 处理单个 call_expression 节点。
+   *
+   * 路由顺序按 spec.md FR-2 表格行 #1 → #11 short-circuit 匹配，先匹配的形态先返回。
+   */
+  private _handleCall(
+    node: Parser.SyntaxNode,
+    callerContext: string | undefined,
+    receiverVarName: string | null,
+    importAliases: ReadonlySet<string>,
+    out: CallSite[],
+  ): void {
+    // FR-6: phantom call 防御
+    if (this._isPhantomCall(node)) return;
+
+    const funcNode = node.childForFieldName('function');
+    if (!funcNode) return;
+
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    // 行 #1: identifier callee → free
+    if (funcNode.type === 'identifier') {
+      out.push(this._mkCallSite(funcNode.text, 'free', line, column, callerContext));
+      return;
+    }
+
+    // 行 #2: func_literal callee (IIFE) → free + <anon-func>
+    if (funcNode.type === 'func_literal') {
+      out.push(this._mkCallSite('<anon-func>', 'free', line, column, callerContext));
+      return;
+    }
+
+    // 行 #3, #4: parenthesized_expression（类型转换）
+    if (funcNode.type === 'parenthesized_expression') {
+      const cls = this._classifyParenthesized(funcNode);
+      out.push(
+        this._mkCallSite(
+          cls.calleeName,
+          cls.calleeKind,
+          line,
+          column,
+          callerContext,
+          cls.calleeQualifier,
+        ),
+      );
+      return;
+    }
+
+    // 行 #5 ~ #9: selector_expression
+    if (funcNode.type === 'selector_expression') {
+      const operandNode = funcNode.childForFieldName('operand');
+      const fieldNode = funcNode.childForFieldName('field');
+      if (!fieldNode) return;
+      const calleeName = fieldNode.text;
+
+      // 行 #5: reflect/unsafe → unresolved
+      if (
+        operandNode?.type === 'identifier' &&
+        GO_REFLECTION_RECEIVERS.has(operandNode.text)
+      ) {
+        out.push(this._mkCallSite(calleeName, 'unresolved', line, column, callerContext));
+        return;
+      }
+
+      // 行 #6: import alias → cross-module
+      if (operandNode?.type === 'identifier' && importAliases.has(operandNode.text)) {
+        out.push(
+          this._mkCallSite(
+            calleeName,
+            'cross-module',
+            line,
+            column,
+            callerContext,
+            operandNode.text,
+          ),
+        );
+        return;
+      }
+
+      // 行 #7: receiver var match → member + qualifier=undefined（让 resolver 用 callerContext）
+      if (
+        operandNode?.type === 'identifier' &&
+        receiverVarName !== null &&
+        operandNode.text === receiverVarName
+      ) {
+        out.push(this._mkCallSite(calleeName, 'member', line, column, callerContext));
+        return;
+      }
+
+      // 行 #8: 其它 identifier operand（非 alias 非 receiver var）→ free
+      if (operandNode?.type === 'identifier') {
+        out.push(this._mkCallSite(calleeName, 'free', line, column, callerContext));
+        return;
+      }
+
+      // 行 #9: 非 identifier operand（嵌套 selector / call / type_assertion）→ free
+      out.push(this._mkCallSite(calleeName, 'free', line, column, callerContext));
+      return;
+    }
+
+    // 行 #10: index_expression(operand=identifier X, index=type_arguments) → free + name=X
+    // 实测注解：tree-sitter-go 把 `MakeMap[T]()` 解析为 call_expression(function=identifier
+    // "MakeMap", type_arguments=...) 直接进入行 #1；行 #10 作为兜底处理罕见 generic 形态。
+    if (funcNode.type === 'index_expression') {
+      const operandNode = funcNode.childForFieldName('operand');
+      const indexNode = funcNode.childForFieldName('index');
+      if (
+        operandNode?.type === 'identifier' &&
+        (indexNode?.type === 'type_arguments' || indexNode?.type === 'type_argument_list')
+      ) {
+        out.push(
+          this._mkCallSite(operandNode.text, 'free', line, column, callerContext),
+        );
+        return;
+      }
+      // 内层 operand 非 identifier → 行 #11
+    }
+
+    // 行 #11 fallback: unresolved + 截断 funcNode.text ≤ 60 字符
+    const rawText = typeof funcNode.text === 'string' ? funcNode.text : '<unknown>';
+    const safeName = rawText.length <= 60 ? rawText : '<unknown>';
+    out.push(this._mkCallSite(safeName, 'unresolved', line, column, callerContext));
+  }
+
+  /**
+   * FR-2 行 #3, #4: 解开 parenthesized_expression 的 callee。
+   *
+   * 实测形态（与 go-call-extractor.mjs `_classifyCallExpression` 行 1.6 节段一致）：
+   * - `(T)(nil)` → parenthesized(identifier "T") → free + "T"
+   * - `(*T)(nil)` → parenthesized(unary_expression("*", identifier "T")) → free + "T"
+   * - `(*pkg.T)(nil)` → parenthesized(unary_expression("*", selector(pkg, T))) → cross-module + "T" + qualifier "pkg"
+   */
+  private _classifyParenthesized(parenNode: Parser.SyntaxNode): {
+    calleeKind: CalleeKind;
+    calleeName: string;
+    calleeQualifier?: string;
+  } {
+    let cursor: Parser.SyntaxNode | null = parenNode;
+    while (cursor && cursor.type === 'parenthesized_expression') {
+      cursor = cursor.namedChild(0);
+    }
+    if (!cursor) return { calleeKind: 'unresolved', calleeName: '<paren-callee>' };
+
+    // 解开 unary_expression（*X 形态：表达式上下文中的指针）
+    let target: Parser.SyntaxNode = cursor;
+    if (cursor.type === 'unary_expression') {
+      const operand = cursor.namedChild(0);
+      if (operand) target = operand;
+    }
+
+    // identifier T → free
+    if (target.type === 'identifier' && typeof target.text === 'string') {
+      return { calleeKind: 'free', calleeName: target.text };
+    }
+
+    // selector_expression(pkg, T) → cross-module + qualifier=pkg
+    if (target.type === 'selector_expression') {
+      const operandNode = target.childForFieldName('operand');
+      const fieldNode = target.childForFieldName('field');
+      if (
+        operandNode?.type === 'identifier' &&
+        typeof operandNode.text === 'string' &&
+        fieldNode?.text
+      ) {
+        return {
+          calleeKind: 'cross-module',
+          calleeName: fieldNode.text,
+          calleeQualifier: operandNode.text,
+        };
+      }
+    }
+
+    // 罕见类型位置（pointer_type / qualified_type / generic_type / type_identifier）
+    if (target.type === 'type_identifier' && typeof target.text === 'string') {
+      return { calleeKind: 'free', calleeName: target.text };
+    }
+    if (target.type === 'qualified_type') {
+      const innerName = this._extractTypeNameRecursive(target);
+      if (innerName) {
+        // qualified_type 第一个子节点通常是 package_identifier
+        let qualifier: string | undefined;
+        for (let i = 0; i < target.namedChildCount; i++) {
+          const inner = target.namedChild(i);
+          if (inner?.type === 'package_identifier' && typeof inner.text === 'string') {
+            qualifier = inner.text;
+            break;
+          }
+        }
+        return {
+          calleeKind: 'cross-module',
+          calleeName: innerName,
+          calleeQualifier: qualifier,
+        };
+      }
+    }
+    if (target.type === 'pointer_type' || target.type === 'generic_type') {
+      const innerName = this._extractTypeNameRecursive(target);
+      if (innerName) return { calleeKind: 'free', calleeName: innerName };
+    }
+
+    return { calleeKind: 'unresolved', calleeName: '<paren-callee>' };
+  }
+
+  /**
+   * FR-6: phantom call 检测。
+   *
+   * - funcNode 缺失 / hasError → phantom（skip 抽取）
+   * - sibling 含 ERROR/MISSING → phantom
+   * children 仍由 _walkCallSites 递归 walk（不会因 phantom skip 整个子树）。
+   */
+  private _isPhantomCall(callExpr: Parser.SyntaxNode): boolean {
+    const fn = callExpr.childForFieldName('function');
+    if (!fn) return true;
+    if (fn.hasError === true) return true;
+    const parent = callExpr.parent;
+    if (parent) {
+      for (let i = 0; i < parent.namedChildCount; i++) {
+        const sib = parent.namedChild(i);
+        if (sib === callExpr || !sib) continue;
+        if (sib.type === 'ERROR' || sib.type === 'MISSING') return true;
+      }
+    }
+    return false;
+  }
+
+  /** 构造单个 CallSite 记录。 */
+  private _mkCallSite(
+    calleeName: string,
+    calleeKind: CalleeKind,
+    line: number,
+    column: number,
+    callerContext: string | undefined,
+    calleeQualifier?: string,
+  ): CallSite {
+    const cs: CallSite = {
+      calleeName,
+      calleeKind,
+      line,
+    };
+    if (column !== undefined) cs.column = column;
+    if (callerContext !== undefined) cs.callerContext = callerContext;
+    if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
+    return cs;
   }
 }
