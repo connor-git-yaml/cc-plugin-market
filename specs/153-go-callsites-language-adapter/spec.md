@@ -45,7 +45,7 @@ Feature 153 把 Feature 151 已经在 Python 上跑通的 callSites → UnifiedG
 
 **Why this priority**: 这是 Feature 153 的核心交付价值。没有 P1，Go 项目跟着 Feature 151 一起在 Python 上拿到的 calls 边能力对 Go 用户完全不可见，4 语言扩展计划缺一角。
 
-**Independent Test**: 在 `~/.spectra-baselines/gorm`（已 clone）上跑 `node scripts/verify-feature-153.mjs --target ~/.spectra-baselines/gorm`，验证 callPrecision ≥ 0.70（顶层 GORM .go scope 内 call edges）且 callRecall ≥ 0.30；同时验证 callSites 填充率 ≥ 95%（GORM 顶层 .go 文件中至少 95% 抽出非空 callSites 数组）。
+**Independent Test**: 在 `~/.spectra-baselines/gorm`（已 clone）上跑 `node scripts/verify-feature-153.mjs --target ~/.spectra-baselines/gorm`，验证 callPrecision ≥ 0.70（顶层 GORM .go scope 内 call edges）且 callRecall ≥ 0.30；同时验证 callSites 填充率 ≥ 95%（**Codex Round-1 verify-phase CRITICAL A 修订**: 分母用 truth-set 中真实有 calls 的文件数 `truthFilesWithCalls`，分子用 mapper 端在这些文件中抽到非空 callSites 的数量；类型定义 only 文件如 `model.go` / `interfaces.go` 不纳入分母）。
 
 **关于 batch-orchestrator 生产路径（_meta/graph.json）**: 本 Feature **不**承诺 `_meta/graph.json` 含 Go calls 边；这需要 batch-orchestrator 新增 `collectGoCodeSkeletons` 与 Go module path resolver，列入 follow-up Feature scope。
 
@@ -302,9 +302,9 @@ Feature 153 把 Feature 151 已经在 Python 上跑通的 callSites → UnifiedG
   3. buildUnifiedGraph({projectRoot, codeSkeletons}) → UnifiedGraph
   4. extractGoCallSites({sourceRoot, ignoreDirs}) → truth-set（不入库，每次重生成）
   5. label-only matching 计算 callPrecision / callRecall（与 graph-accuracy.mjs 一致）
-  6. 计算 callSites 填充率（filesWithNonEmptyCallSites / totalTopLevelGoFiles）
+  6. 计算 callSites 填充率：分母用 `truthFilesWithCalls`（truth-set 中真实有 calls 的文件数，已排除 `_test.go` 与 type-only 文件如 `model.go`/`interfaces.go`），分子用 mapper 端这些文件中含非空 callSites 的数量。**Codex Round-1 verify-phase CRITICAL A 修订**: 实测发现 GORM 顶层包 14 个 .go 中 2 个是合法的 type-only 文件（仅 struct/interface 定义，无 call_expression），不应纳入分母惩罚 mapper。新分母与 SC-1 spec 意图"mapper 不应漏抽"严格对齐；额外保留 `fillRateOverAll = filesWithCallSites / totalTopLevelGoFiles` 作为可观测信息
   7. N=3 重测取中位数
-- **MUST 输出合约**: stdout JSON 含字段 `target / goFileCount / skeletonsCount / unifiedGraphNodes / unifiedGraphCallsEdges / callSitesTotal / filesWithCallSites / fillRate / fillRatePercent / precisionRuns[] / recallRuns[] / precisionMedian / recallMedian / sampleHits[]`（与 verify-feature-151.mjs summary schema 一致）
+- **MUST 输出合约**: stdout JSON 含字段 `target / goFileCount / skeletonsCount / unifiedGraphNodes / unifiedGraphCallsEdges / callSitesTotal / filesWithCallSites / truthFilesWithCalls / fillRate / fillRatePercent / fillRateOverAll / fillRateOverAllPercent / mapperHitsOnTruthFiles / precisionRuns[] / recallRuns[] / precisionMedian / recallMedian / precisionMedianPercent / recallMedianPercent / sampleHits[] / wallMapperMs`（与 verify-feature-151.mjs summary schema 兼容，新增 fillRateOverAll / mapperHitsOnTruthFiles 等可观测字段，Codex Round-1 verify-phase A 修订）
 - **MUST 显式禁止**（Codex Round-2 CRITICAL A/G）：**不构造**外部 import 的占位 sentinel target / 占位 stub 节点；cross-module 调用接受 Stage 4 low fallback。理由：
   - 占位 target 是悬空虚拟节点，graph_query MCP 工具查不到，对下游消费者无意义
   - precision/recall 评估按 label-only matching（callee 名相等即算命中），confidence 不影响指标
@@ -352,7 +352,7 @@ Feature 153 把 Feature 151 已经在 Python 上跑通的 callSites → UnifiedG
 
 ### Measurable Outcomes
 
-1. **SC-1 — Go callSites 填充率**: 在 GORM 顶层包上跑 verify-feature-153.mjs，`fillRate ≥ 0.95`
+1. **SC-1 — Go callSites 填充率**: 在 GORM 顶层包上跑 verify-feature-153.mjs，`fillRate ≥ 0.95`（分母 = `truthFilesWithCalls`，与 FR-10 步骤 6 修订对齐）
 2. **SC-2 — Go call edges precision/recall（label-only）**: 在 GORM 顶层包上跑 verify-feature-153.mjs（N=3 中位数），`callPrecision ≥ 0.70` 且 `callRecall ≥ 0.30`
 3. **SC-3 — 现有单测无回归**（Codex Round-2 残留矛盾修订）: `npx vitest run` 全量 PASS（启动当下 master 基线 + 本 Feature 新增 ≥ 5 个 GoMapper.extractCallSites 单测）；不写死具体总数，避免 152/154 并行 merge 后失真
 4. **SC-4 — Build / lint 无报错**: `npm run build` 0 错误；`npm run lint`（如有）0 错误
