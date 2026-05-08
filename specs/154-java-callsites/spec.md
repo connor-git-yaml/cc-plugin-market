@@ -101,7 +101,7 @@ Java LanguageAdapter 目前仅实现了 `extractExports` / `extractImports` / `e
 
 - **匿名类（anonymous class）**：`new Runnable() { public void run() { obj.method(); } }` 的匿名类内部调用，`callerContext` 标记 enclosing class 为 `<anon-class>` + 方法名，与 truth-set extractor 行为一致。
 
-- **Static import 命名冲突**：`import static java.util.Collections.sort` 后直接调用 `sort(list)`，此时 method_invocation 节点没有 `object` 字段，`calleeKind` 为 `"free"`（与 Python 中的 free function 调用语义对齐），`calleeQualifier` 为 undefined。
+- **Static import 命名冲突**：`import static java.util.Collections.sort` 后直接调用 `sort(list)`，此时 method_invocation 节点没有 `object` 字段，本 Feature 统一归 `calleeKind: "member"` + `calleeQualifier: undefined`（与 truth-set extractor 的 `kind=method` 一致；不区分 "caller 类内 method 调用" vs "static import 展开 free function"，详见 FR-003 关于 `free` 的 deferred 决策）。
 
 - **PascalCase + 首字母缩写白名单**（URL、UUID、XML、JSON、HTTP、API、JDBC 等，与 java-call-extractor.mjs `JAVA_ACRONYM_TYPE_NAMES` 集合对齐）：`URLConnection.openConnection()` 的 receiver `URLConnection` 识别为 PascalCase 类型标识符，判定为 `calleeKind: "member"` + `calleeQualifier: "URLConnection"`（与 Python mapper PascalCase Class.method 处理一致）。
 
@@ -131,11 +131,13 @@ Java LanguageAdapter 目前仅实现了 `extractExports` / `extractImports` / `e
   | 反射方法名（见 FR-005 集合） | `unresolved` | 方法名 | undefined | 短路于 receiver 检查之前 |
   | `object_creation_expression`（`new ClassName(...)`）| `member` | ClassName（normalize 末段） | ClassName | 构造器视为 class 的特殊 member |
   | `method_invocation`，receiver 为 `type_identifier` / `scoped_type_identifier` / PascalCase identifier / acronym 白名单 / FQN 包路径末段 PascalCase | `member` | 方法名 | receiver 末段类名 | 静态方法调用与 PascalCase Class.method（与 Python mapper 处理一致）|
+  | `method_invocation`，receiver 节点 type === `this`（隐式或显式 `this.method()`）| `member` | 方法名 | undefined | tree-sitter Java grammar 把 `this` 解析为独立 node type，不是 `identifier` |
   | `method_invocation`，receiver 为非 PascalCase identifier（小写变量名）或其他表达式 | `cross-module` | 方法名 | receiver 文本（identifier 时） | 实例方法调用，calleeQualifier 帮助 resolver lookup |
-  | `method_invocation`，无 receiver / receiver 为 `this` | `member` | 方法名 | undefined | this.method() / 静态导入展开的裸调用看 caller 类自身（callerContext 兜底）|
-  | `method_invocation`，无 receiver 且 callerContext 内无对应 method（裸 free function） | `free` | 方法名 | undefined | static import 展开后的 free function 调用 |
+  | `method_invocation`，无 receiver（裸调用，含 static import 展开后的 free function）| `member` | 方法名 | undefined | 仅当 caller 类内有同名 member 才合理；静态 AST 无可靠手段区分"caller 类内 method" vs "static import free function"，故统一归 `member` 与 truth-set extractor 的 `kind=method` 行为对齐（spec v0.2 修订：取消 `free` 分支）|
 
-  当**多条规则同时命中**时，按表的从上到下顺序优先（super > 反射 > 构造器 > static / PascalCase member > instance cross-module > this/free）。 `[必须]`
+  当**多条规则同时命中**时，按表的从上到下顺序优先（super > 反射 > 构造器 > static / PascalCase member > this → member > instance cross-module > 裸调用 → member）。
+
+  **关于 `free` 的 deferred 决策**：tree-sitter AST 在 mapper 阶段没有可靠的 callerContext class member 索引来精确区分 "caller 类内 method 调用" 与 "static import 展开的 free function"。本 Feature 选择**不输出 `free` kind**，统一归 `member`（与 `java-call-extractor.mjs` 的 `kind=method` 行为对齐）。后续若 call-resolver 需要区分两者，应在 resolver 层基于 `imports` 中的 static import 信息做 disambiguation，不在 mapper 阶段处理。本决策已在 plan.md L272-279 / Codex spec adversarial review CRITICAL A 中记录权衡。 `[必须]`
 
 - **FR-004**: `JavaLanguageAdapter.analyzeFile` MUST 将 `options?.extractCallSites` 透传给 `TreeSitterAnalyzer.analyze`，默认值为 `false`（与 Python adapter 的透传方式保持一致）。 `[必须]`
 
@@ -162,7 +164,12 @@ Java LanguageAdapter 目前仅实现了 `extractExports` / `extractImports` / `e
 
 - **FR-010**: `JavaMapper.extractCallSites` MUST 为 lambda 表达式内部的调用生成唯一化的 `callerContext`，格式 `<lambda:行:列>`，行列取自 lambda_expression 节点的 startPosition。同一方法中多个 lambda 因起始位置不同而 callerContext 不同，避免碰撞。 `[必须]`
 
-- **FR-011**: 新增的 Java callSites 抽取逻辑 MUST NOT 修改除 `src/adapters/java-adapter.ts` 和 `src/core/query-mappers/java-mapper.ts` 之外的源代码文件，**包括但不限于**：其它 adapter、mapper、call-resolver、unified-graph schema、CallSite schema（`src/models/call-site.ts`）。本 Feature 严格遵守现有 `CalleeKindSchema` 的合法值集合，不扩展 enum。verify 脚本（`scripts/verify-feature-154.mjs`）和单测属于新增文件，不在此约束内。 `[必须]`
+- **FR-011**: 新增的 Java callSites 抽取逻辑 MUST NOT 修改除 `src/adapters/java-adapter.ts` 和 `src/core/query-mappers/java-mapper.ts` 之外的源代码文件，**包括但不限于**：其它 adapter、mapper、call-resolver、unified-graph schema、CallSite schema（`src/models/call-site.ts`）。本 Feature 严格遵守现有 `CalleeKindSchema` 的合法值集合，不扩展 enum。
+
+  **允许的脚本与测试增量**：
+  - `scripts/verify-feature-154.mjs`（新增）
+  - `src/core/query-mappers/__tests__/java-mapper.test.ts`（新增）
+  - `scripts/lib/java-call-extractor.mjs`：**仅允许在文件顶部增加 `export` 关键字**导出已有的 `REFLECTION_METHOD_NAMES` / `JAVA_ACRONYM_TYPE_NAMES` / `JAVA_PACKAGE_ROOT_NAMES` 三个常量集合，不允许修改集合内容、辅助函数或 `extractJavaCallSites` 行为。该 export 是为了让单测断言"mapper 与 extractor 的常量集合相等"提供可执行手段（同源校验机制，详见 plan.md "Architecture Decision: 常量同源" 章节）。 `[必须]`
 
 - **FR-012**: `scripts/verify-feature-154.mjs` MUST 实现独立的端到端验收脚本，加载 `dist/` build 产物，对 HikariCP `src/main` 下的 `.java` 文件执行 `analyzeFile({ extractCallSites: true })`，计算并输出 `fillRate`（callSites 非空文件比例）、`precision`（与 truth-set 对比的精确率）、`recall`（与 truth-set 对比的召回率），最终以 exit code 0（达标）或非零（未达标）退出。 `[必须]`
 
