@@ -40,6 +40,8 @@ import { AdrDecisionPipelineGenerator } from './pipelines/adr-decision-pipeline.
 import { ProductUxDocsGenerator } from './pipelines/product-ux-docs.js';
 import { DynamicScenariosBuilderGenerator } from './builders/dynamic-scenarios-builder.js';
 import { DocsQualityEvaluatorGenerator } from './pipelines/docs-quality-evaluator.js';
+// Feature 151 T-015 — UnifiedGraph DI provider for ComponentViewBuilderGenerator
+import { getCurrentUnifiedGraph } from '../knowledge-graph/index.js';
 
 // ============================================================
 // GeneratorEntry 接口
@@ -229,7 +231,8 @@ export function bootstrapGenerators(outputDir?: string): void {
   registry.register(new TroubleshootingGenerator());
 
   // 新增 6 个 Adapter（按依赖图顺序注册）
-  registry.register(new ComponentViewBuilderGenerator());                        // 无前置依赖
+  // Feature 151 T-015 — 注入 UnifiedGraph provider，让 ComponentView 关系来自 calls/depends-on 边
+  registry.register(new ComponentViewBuilderGenerator(() => getCurrentUnifiedGraph()));    // 无前置依赖
   registry.register(new ArchitectureNarrativeGenerator());                       // 无前置依赖
   registry.register(new AdrDecisionPipelineGenerator(resolvedOutputDir));        // 依赖 IR
   registry.register(new ProductUxDocsGenerator(resolvedOutputDir));              // 无前置依赖

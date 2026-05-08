@@ -13,7 +13,9 @@ export type ComponentEvidenceSourceType =
   | 'architecture-narrative'
   | 'runtime-topology'
   | 'event-surface'
-  | 'test-file';
+  | 'test-file'
+  // Feature 151 T-015 — UnifiedGraph 派生关系的证据来源
+  | 'unified-graph';
 
 export type ComponentCategory =
   | 'client'

@@ -43,6 +43,20 @@ export interface BuildComponentViewOptions {
   runtime?: RuntimeTopologyOutput;
   eventSurface?: EventSurfaceOutput;
   maxComponents?: number;
+  /**
+   * Feature 151 T-015 + Codex P1 C-3 修订 — UnifiedGraph 数据源（可选）。
+   *
+   * 提供时，buildComponentRelationships 优先从 UnifiedGraph.edges 中读取
+   * relation === 'calls' / 'depends-on' 的关系派生组件级关系。
+   *
+   * 取代旧版仅从 storedModules.imports 推断的 fallback；fallback 路径仍保留向后兼容。
+   *
+   * 可由两条路径注入：
+   * 1. registry 路径（GeneratorRegistry register 时注入 unifiedGraphProvider）
+   * 2. batch 直接路径（buildComponentView({...}) 调用时直接传入）
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  unifiedGraph?: any;
 }
 
 const CLASSLIKE_KINDS = new Set(['class', 'interface', 'type', 'data_class', 'struct', 'protocol']);
@@ -81,6 +95,7 @@ export function buildComponentView(options: BuildComponentViewOptions): Componen
     options.storedModules,
     options.architectureIR,
     options.eventSurface,
+    options.unifiedGraph,
   );
   const groups = buildComponentGroups(rankedComponents);
   const mermaidDiagram = buildComponentMermaid(groups, components, relationships);
@@ -212,6 +227,8 @@ function buildComponentRelationships(
   storedModules: StoredModuleSpecRecord[],
   architectureIR: ArchitectureIR,
   eventSurface: EventSurfaceOutput | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  unifiedGraph?: any,
 ): ComponentRelationship[] {
   const relationships = new Map<string, ComponentRelationship>();
   const primaryByModule = new Map<string, RankedComponentDescriptor>();
@@ -221,6 +238,48 @@ function buildComponentRelationships(
     }
   }
   const componentById = new Map(rankedComponents.map((component) => [component.id, component]));
+
+  // Feature 151 T-015 — 优先从 UnifiedGraph.edges 派生关系（calls + depends-on）
+  // 通过 sourceFile 关联 UnifiedGraph 节点 ID（file::symbol 形式）到 component
+  // sourceTarget 是 storedModule 的 spec 路径，与 UnifiedGraph filePath（绝对路径）通常不一致；
+  // 这里 best-effort：仅当 component 的 sourceTarget 包含相对路径段且能匹配 UnifiedGraph 节点 filePath 时连接
+  if (unifiedGraph && Array.isArray(unifiedGraph.edges)) {
+    const componentBySourceFile = new Map<string, RankedComponentDescriptor>();
+    for (const component of rankedComponents) {
+      // sourceTarget 形如 "src/foo.ts" 或 spec 路径；以 sourceTarget 当作 file 索引
+      componentBySourceFile.set(component.sourceTarget, component);
+    }
+    for (const ugEdge of unifiedGraph.edges) {
+      if (ugEdge.relation !== 'calls' && ugEdge.relation !== 'depends-on') continue;
+      // ugEdge.source / target 形如 "src/foo.ts::Class.method" 或 "src/foo.ts"
+      const sourceFile = String(ugEdge.source).split('::')[0];
+      const targetFile = String(ugEdge.target).split('::')[0];
+      if (!sourceFile || !targetFile) continue;
+      const fromComp = componentBySourceFile.get(sourceFile);
+      const toComp = componentBySourceFile.get(targetFile);
+      if (!fromComp || !toComp || fromComp.id === toComp.id) continue;
+      const kind: 'calls' | 'depends-on' = ugEdge.relation;
+      const label = ugEdge.relation === 'calls' ? '调用' : '依赖';
+      const tier = ugEdge.confidence as 'high' | 'medium' | 'low';
+      const relKey = `${fromComp.id}=>${toComp.id}|${kind}`;
+      if (!relationships.has(relKey)) {
+        relationships.set(relKey, {
+          fromId: fromComp.id,
+          toId: toComp.id,
+          kind,
+          label,
+          confidence: tier,
+          evidence: [
+            {
+              sourceType: 'unified-graph',
+              ref: `${ugEdge.source}->${ugEdge.target}`,
+              note: ugEdge.evidence ?? `UnifiedGraph ${kind} edge`,
+            },
+          ],
+        });
+      }
+    }
+  }
 
   for (const module of storedModules) {
     const sourceComponent = primaryByModule.get(module.sourceTarget);
@@ -852,9 +911,22 @@ export class ComponentViewBuilderGenerator
   readonly description = '基于 Architecture IR 与 stored module specs 生成关键组件视图，输出组件关系图与 Mermaid 可视化';
 
   private readonly irGenerator: ArchitectureIRGenerator;
+  /**
+   * Feature 151 T-015 — UnifiedGraph DI provider（CL-03 方案 B）。
+   *
+   * 注入路径：
+   * 1. registry 路径：`new ComponentViewBuilderGenerator(() => getCurrentUnifiedGraph())`
+   * 2. batch 直接路径：用 buildComponentView({ ..., unifiedGraph }) 直接传入（不经 generator）
+   *
+   * 缺省（无 provider）时返回 undefined，下游 buildComponentRelationships 走 fallback 路径，
+   * 保持向后兼容。
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly unifiedGraphProvider: () => any | null;
 
-  constructor() {
+  constructor(unifiedGraphProvider?: () => unknown) {
     this.irGenerator = new ArchitectureIRGenerator();
+    this.unifiedGraphProvider = unifiedGraphProvider ?? (() => null);
   }
 
   isApplicable(context: ProjectContext): boolean | Promise<boolean> {
@@ -871,9 +943,12 @@ export class ComponentViewBuilderGenerator
 
   async generate(input: ArchitectureIR, _options?: GenerateOptions): Promise<ComponentViewOutput> {
     // 委托 buildComponentView()，storedModules 为空数组（编排级无法注入）
+    // Feature 151 T-015 — 通过 DI provider 获取当前 UnifiedGraph（registry 路径）
+    const unifiedGraph = this.unifiedGraphProvider();
     return buildComponentView({
       architectureIR: input,
       storedModules: [],
+      ...(unifiedGraph ? { unifiedGraph } : {}),
     });
   }
 
