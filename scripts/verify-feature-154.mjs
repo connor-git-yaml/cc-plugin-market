@@ -17,7 +17,7 @@
  *     [--out /tmp/verify-154.json] [--repeats 3] [--debug] [--help]
  */
 
-import { execFileSync } from 'node:child_process';
+// 注：execFileSync 暂未使用；若未来切换到子进程独立测量再重新导入
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -291,6 +291,9 @@ async function main() {
   /** @type {Array<{fillRate:number,precision:number,recall:number}>} */
   const runsRaw = [];
   let lastRun;
+  // 注：N 次重测在同一进程内执行；Node.js ESM 模块缓存使第二次起的 import 命中缓存，
+  // bootstrapRuntime 内部有幂等保护。本设计的目标是检测同进程内 AST 解析的稳定性
+  // （非 LLM 随机性），而非真正进程级独立测量。如需后者，需切换到 execFileSync 子进程。
   for (let i = 1; i <= args.repeats; i++) {
     console.error(`[verify-154] run ${i}/${args.repeats}...`);
     const r = await runOnce(target, projectRoot);

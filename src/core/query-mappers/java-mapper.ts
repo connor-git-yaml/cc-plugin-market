@@ -657,15 +657,12 @@ export class JavaMapper implements QueryMapper {
    * 嵌套优先：第一个匹配立即 return，不继续向上 walk。
    */
   private _resolveCallerContext(node: Parser.SyntaxNode): string {
-    let cursor: Parser.SyntaxNode | null = node ? node.parent : null;
+    let cursor: Parser.SyntaxNode | null = node.parent;
     while (cursor) {
       const t = cursor.type;
 
       if (t === 'method_declaration') {
-        const nameNode =
-          typeof cursor.childForFieldName === 'function'
-            ? cursor.childForFieldName('name')
-            : null;
+        const nameNode = cursor.childForFieldName('name');
         const methodName =
           nameNode && typeof nameNode.text === 'string' ? nameNode.text : '<anon-method>';
         const typeName = this._findEnclosingTypeName(cursor.parent);
@@ -710,10 +707,7 @@ export class JavaMapper implements QueryMapper {
         t === 'record_declaration' ||
         t === 'annotation_type_declaration'
       ) {
-        const nameNode =
-          typeof cursor.childForFieldName === 'function'
-            ? cursor.childForFieldName('name')
-            : null;
+        const nameNode = cursor.childForFieldName('name');
         if (nameNode && typeof nameNode.text === 'string') {
           return nameNode.text;
         }
@@ -770,12 +764,14 @@ export class JavaMapper implements QueryMapper {
     callerContext?: string,
     calleeQualifier?: string,
   ): CallSite {
+    // column 由调用方传入（来自 startPosition.column ?? 0），始终为 number，
+    // 不需要 if (column !== undefined) 判断（Codex quality-review WARN 修订）
     const cs: CallSite = {
       calleeName,
       calleeKind,
       line,
+      column,
     };
-    if (column !== undefined) cs.column = column;
     if (callerContext !== undefined) cs.callerContext = callerContext;
     if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
     return cs;
@@ -820,17 +816,17 @@ export class JavaMapper implements QueryMapper {
    *      类型路径（java.util.UUID）
    */
   private _fieldAccessTerminalIsType(node: Parser.SyntaxNode): boolean {
-    if (typeof node.childForFieldName !== 'function') return false;
     // 必须能拆为 [leftmost identifier, ..., field] segment 列表
     const segments = this._fieldAccessSegments(node);
     if (!segments) return false;
     const fieldNameNode = node.childForFieldName('field');
     if (!fieldNameNode || typeof fieldNameNode.text !== 'string') return false;
-    const fieldText = fieldNameNode.text;
+    // 局部命名 terminalFieldName 避免与模块顶层 fieldText 工具函数遮蔽
+    const terminalFieldName = fieldNameNode.text;
     // Path 1+2: PascalCase 或 acronym 白名单
-    if (this._isJavaTypeName(fieldText)) return true;
+    if (this._isJavaTypeName(terminalFieldName)) return true;
     // Path 3: 全大写 field + 整条链是已知 Java 包路径 → FQN type
-    if (/^[A-Z]/.test(fieldText)) {
+    if (/^[A-Z]/.test(terminalFieldName)) {
       if (this._looksLikePackageQualifiedType(node)) return true;
     }
     return false;

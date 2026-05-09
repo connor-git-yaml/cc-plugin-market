@@ -384,4 +384,22 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
     expect(cs?.calleeKind).toBe('member');
     expect(cs?.calleeQualifier).toBeUndefined();
   });
+
+  // case 15: phantom call FR-007(c) 路径 — non-ERROR 父节点但 sibling 含 ERROR 时
+  // phantom call 跳当前抽取，但 walker 仍 walk 子节点（spec-review WARN 修订）
+  it('case 15 phantom FR-007(c) — sibling ERROR 不阻塞 children walk', async () => {
+    // class 体内有一个语法错误 sibling（缺分号导致 ERROR 节点），
+    // 紧随其后的 method ok() 是合法的真实调用 — children walk 不应被阻塞
+    const file = writeFixture(`
+      class A {
+        int badField = ;
+        void ok() { realCall(); }
+      }
+    `);
+    const sk = await adapter.analyzeFile(file, { extractCallSites: true });
+    // ERROR sibling 之后的真实调用仍被抽（FR-007(c) 关键属性：children 仍 walk）
+    const realHit = sk.callSites?.find((c) => c.calleeName === 'realCall');
+    expect(realHit).toBeDefined();
+    expect(realHit?.callerContext).toBe('A.ok');
+  });
 });
