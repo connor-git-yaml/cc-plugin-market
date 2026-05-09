@@ -517,4 +517,74 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ---
 
-*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 实测数据生成；Sprint 3 (2026-05-01 / 05-03) 校订为当前事实状态。当前 **40 fixture × schema 1.1**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants），cross-LLM jury 评分（25 fixture × 3 judges = 75 calls），12 grounding runs（n=3 任务 × 4 对照组），3 multi-turn task-runner runs。**2026-05-05 测评数据清理后**：仓库 12 个 perf anchor 仍入库（`tests/baseline/<project>/<tool>/full.json`）；spec-driver 类 task fixture / N=5 repeats / truth-set / auto-report 不入库（详见 `CLAUDE.local.md` "Baseline 测试" 入库边界）。重跑 `npm run eval:competitor && npm run eval:judge-jury && npm run eval:report` 在本地复现完整数据。*
+## 10. SWE-Bench Grounding Lift 实验（Feature 158）
+
+> **本章节状态（2026-05-09）**：Feature 158 实施完成代码 + dry-run 阶段（spec/plan/tasks 设计 ~3700 行 + 5 新脚本 + 10 fixture 入库 + telemetry hook）。**Pass Rate 数值与 Token Cost 实测数据待 Stage 7b 真实 ≥45 runs 后填入**。本节当前为骨架 + 设计意图说明 + dry-run 验收数据，结论段在用户实跑后由人工撰写并修订。
+
+### 10.1 实验设计
+
+**目的**：验证 Spectra MCP（Feature 155 的 `impact / context / detect_changes` 3 个 agent-context tools）的 grounding lift — 即 **MCP pull（agent 主动调 tool）** 是否比 **system prompt push（spec.md 整体注入）** 在真实 GitHub bug 修复任务上有更高的 task pass rate。
+
+**对照组（3 组）**：
+- **Group A（baseline / bare）**：裸 claude，仅 fixture `prompt`（即 SWE-Bench `problem_statement`）；不附加任何 grounding context；不启用 MCP server
+- **Group B（spec.md push）**：在 system prompt 前注入 Spectra spec.md 内容（来自 `~/.spectra-baselines/<repo>-output/spectra-full/modules/`）；不启用 MCP；如目标仓库无 baseline，标 `specPushDegraded: true` 退化为 Group A 行为
+- **Group C（mcp pull）**：通过 `--mcp-config` 注册本地 Spectra MCP server；system prompt 含 mandatory tool use instruction 引导 agent 在修复前调 `mcp__spectra__context` / `mcp__spectra__impact`；用 server 侧 telemetry 记录每次 tool call 的 response payload bytes（Feature 158 FR-G）
+
+**数据集**：SWE-Bench Lite Python 子集 10 个 fixture（`tests/baseline/swe-bench-lite/fixtures/SWE-L001~L010`），来自 `princeton-nlp/SWE-bench_Lite` HuggingFace 数据集，覆盖 sympy / astropy / pytest 三个仓库。**已知降级**：因数据集本身的 `created_at` 上限不超过 2023-06-29，本实验未能选到 ≥ 2024-01-01 的 instance，最终采用最新 10 个（最旧 2022-09-16）。**训练集泄漏风险**：Group A pass rate 可能因 Claude 训练集已包含相关 patch 而虚高，详见 `tests/baseline/swe-bench-lite/fixtures/_DEGRADATION_NOTE.md`。
+
+**重复次数**：N=3（per task per group）；**总 runs 目标**：10 task × 3 group × N=3 = 90 runs；**stop-loss**：$40 USD（FR-B-008，超过则保留已完成 runs，报告显式标注"实验提前停止"）
+
+**Oracle**：默认 `kind: ast-diff`（用 `scripts/eval-diff-fuzzy-match.mjs` 多集 token Jaccard，初始阈值 60%；P3 实测后可在 [50%, 70%] 内微调）；P3 验证某个仓库可裸机跑 `pip install -e . + pytest` 时升级为 `kind: functional`（直接验证 FAIL_TO_PASS / PASS_TO_PASS 测试）
+
+**验收声明**：本评测为**小样本探索性 pilot**（N=10 task，目标 8 个，验收下限 5 个），**不构成统计显著性声明**。
+
+### 10.2 Pass Rate 矩阵
+
+| Task | Group A (bare) | Group B (spec-push) | Group C (mcp-pull) |
+|------|---------------|--------------------|--------------------|
+| SWE-L001-pytest-module-imported-twice-under | <pending Stage 7b> | <pending> | <pending> |
+| SWE-L002-astropy-in-v5-nddataref-mask | <pending> | <pending> | <pending> |
+| SWE-L003-pytest-rewrite-fails-when-first | <pending> | <pending> | <pending> |
+| SWE-L004-sympy-bug-with-milli-prefix | <pending> | <pending> | <pending> |
+| SWE-L005-astropy-ascii-qdp-table-format | <pending> | <pending> | <pending> |
+| SWE-L006-astropy-please-support-header-rows | <pending> | <pending> | <pending> |
+| SWE-L007-sympy-collect-factor-and-dimension | <pending> | <pending> | <pending> |
+| SWE-L008-sympy-bug-in-expand-of | <pending> | <pending> | <pending> |
+| SWE-L009-sympy-cannot-parse-greek-characters | <pending> | <pending> | <pending> |
+| SWE-L010-sympy-si-collect-factor-and | <pending> | <pending> | <pending> |
+| **Aggregate** | <pending> | <pending> | <pending> |
+
+> 数据由 `node scripts/eval-mcp-augmented.mjs --group {A,B,C} --task <id> --repeat 3` 实跑后由 `scripts/eval-report.mjs`（reused）自动汇总。**本评测为小样本探索性 pilot（N=10 task，目标 8 个，验收下限 5 个），不构成统计显著性声明。**
+
+### 10.3 Token Cost 静态对比
+
+| Group | 额外 grounding context (tokens) | 数据来源 | 备注 |
+|-------|------------------------------|---------|------|
+| A (bare) | 0 | 不注入额外 context | 基线 |
+| B (spec-push) | <pending: spec.md 字符数 × 0.25> | 静态测量 `cat <module>.spec.md \| wc -c × 0.25` | 假设每模块 ~10k chars → ~2.5k tokens；多模块叠加可能 ~10k+ tokens |
+| C (mcp-pull) | <pending: 来自 telemetry JSONL> | `SPECTRA_MCP_TELEMETRY_PATH` 记录每次 tool call 的 `responseSize` bytes，求和 × 0.25 | Feature 155 设计目标：~120 tokens / impact call、~200 tokens / context call、按需调用 |
+
+**核心假设（Hypothesis）**：Group B 的 token cost ~ 10k 量级（push 模式），Group C 的 token cost ~ 120-500 量级（pull 模式按需），相差 20-80x。即使 grounding lift = 0（pass rate 三组持平），token efficiency 仍是硬指标。
+
+### 10.4 结论
+
+> **本节状态：dry-run 阶段（2026-05-09），Pass Rate / Token Cost 实测数据待 Stage 7b 实跑后填入**。完整结论由人工于实测后撰写。
+
+**预期论证逻辑（Stage 7b 实测后修订）**：
+1. 若 `Group C pass rate > Group A pass rate ≥ Group B pass rate` → MCP pull 优于 system prompt push（验证核心假设）
+2. 若 `Group C pass rate ≈ Group A pass rate ≈ Group B pass rate` → grounding lift 在 SWE-Bench 上不明显，但 Group C 的 token efficiency（10k → 120）仍是硬数据点
+3. 若 `Group A pass rate 异常高（> 60%）` → 训练集泄漏风险显著，结论需限定为"在已泄漏数据集上的有限信号"
+4. 若降级到 ≥ 2023-07 / dataset-max（如本实验已发生）→ 结论必须显式标注"日期阈值已降级到 dataset-max（最旧 2022-09），训练集泄漏风险高，Group A pass rate 应作为参考下界"
+
+**Stage 7b 实跑前置（按 Feature 158 plan）**：
+- P3：3 个候选 task 的裸机 pytest 可行性验证 → 决定 Oracle 路径（functional vs ast-diff）
+- P4：`npm run baseline:collect -- --target sympy/sympy / astropy/astropy / pytest-dev/pytest`（~25-35 min）→ Group B/C 的 grounding 数据基础
+- ast-diff 60% 阈值校准：9 候选场景实测后可微调，依据写入 [Feature 158 plan.md](../158-swe-bench-lite-grounding-eval/impl-supplement/plan.md) §阈值校准节
+
+**dry-run 已验收（2026-05-09）**：10 fixture × 3 group dry-run 全部退出码 0；SC-009a Telemetry 环境变量注入已 verify；vitest 全量 3484 PASS（含新增 telemetry + fuzzy-match 测试）；`scripts/verify-feature-158.mjs` 6 个检查点全 PASS。
+
+完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）
+
+---
+
+*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 实测数据生成；Sprint 3 (2026-05-01 / 05-03) 校订为当前事实状态。当前 **40 fixture × schema 1.1**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants），cross-LLM jury 评分（25 fixture × 3 judges = 75 calls），12 grounding runs（n=3 任务 × 4 对照组），3 multi-turn task-runner runs。**2026-05-05 测评数据清理后**：仓库 12 个 perf anchor 仍入库（`tests/baseline/<project>/<tool>/full.json`）；spec-driver 类 task fixture / N=5 repeats / truth-set / auto-report 不入库（详见 `CLAUDE.local.md` "Baseline 测试" 入库边界）。重跑 `npm run eval:competitor && npm run eval:judge-jury && npm run eval:report` 在本地复现完整数据。**2026-05-09 增补 §10 SWE-Bench Grounding Lift 实验（Feature 158）**：实施 dry-run 阶段完成（10 fixture 入库 + 5 新脚本 + telemetry hook），Pass Rate / Token Cost 实测数据待 Stage 7b 实跑后填入。*

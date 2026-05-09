@@ -19,7 +19,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -71,6 +71,93 @@ function buildErrorResponse(
     isError: true,
     content: [{ type: 'text', text: JSON.stringify(payload) }],
   };
+}
+
+// ============================================================
+// Feature 158 — Telemetry Hook（FR-G-001 / FR-G-002）
+// ============================================================
+
+/**
+ * Telemetry entry — 单次 handler 调用的可观测数据，按行写入 JSONL。
+ * 由 Group C MCP-augmented 评测脚本通过 SPECTRA_MCP_TELEMETRY_PATH 注入路径，
+ * SPECTRA_MCP_RUN_ID 标识本次 run，handler 不解析也不消费这两个 env，仅透传。
+ */
+export interface TelemetryEntry {
+  ts: string; // ISO timestamp
+  toolName: string; // 'impact' | 'context' | 'detect_changes'
+  requestSize: number; // JSON.stringify(args).length
+  responseSize: number; // 序列化后 response text length
+  durationMs: number; // handler 总耗时
+  runId: string; // process.env.SPECTRA_MCP_RUN_ID ?? 'unknown'
+  errorCode?: string; // 仅 isError=true 时填充（buildErrorResponse 的 code）
+}
+
+/**
+ * 写入 telemetry JSONL —— 静默降级：
+ *   - env 未设置 → no-op
+ *   - 写入失败 → 静默吞，不影响 MCP response
+ *
+ * 实现说明（Codex W5 评估）：使用 appendFileSync 而非 async appendFile。
+ *   - eval 场景每 tool call 一次（非高频），SSD 上 sync write < 5ms 不构成瓶颈
+ *   - sync 保证测试可重现（async fire-and-forget 在测试 readFileSync 时可能 race）
+ *   - 如未来高频调用场景出现（生产 long-running MCP server），可切换到 async
+ *
+ * Feature 155 input/output schema 不变（FR-G 合同保护）。
+ */
+export function writeTelemetry(entry: TelemetryEntry): void {
+  const telPath = process.env['SPECTRA_MCP_TELEMETRY_PATH'];
+  if (telPath === undefined || telPath.length === 0) return;
+  try {
+    appendFileSync(telPath, JSON.stringify(entry) + '\n', 'utf-8');
+  } catch {
+    // FR-G-002: silent degrade — 写入失败时不抛异常，不影响 handler 返回
+  }
+}
+
+/**
+ * 从 ToolResult 中提取 errorCode（仅 isError=true 时存在）。
+ * 解析失败时返回 undefined（telemetry 字段缺省）。
+ */
+function extractErrorCode(result: ToolResult): string | undefined {
+  if (result.isError !== true) return undefined;
+  const text = result.content?.[0]?.text;
+  if (typeof text !== 'string') return undefined;
+  try {
+    const parsed = JSON.parse(text) as { code?: unknown };
+    return typeof parsed.code === 'string' ? parsed.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Wrapper：记录 handler 调用 telemetry 后返回原 result。
+ * 包裹所有 return 路径（含 buildErrorResponse 早 return）。
+ *
+ * 设计：调用前先采样 startTime + requestSize，handler 完成后调本函数。
+ * 不破坏 Feature 155 的 input/output schema：result 原样返回。
+ */
+export function recordAndReturn(
+  toolName: string,
+  startTimeMs: number,
+  requestSize: number,
+  result: ToolResult,
+): ToolResult {
+  const responseText = result.content?.[0]?.text ?? '';
+  // 修 Codex W4：用 UTF-8 byte length 而非 char length（中文 / emoji 不会被低估）
+  const responseSize = typeof responseText === 'string' ? Buffer.byteLength(responseText, 'utf-8') : 0;
+  const entry: TelemetryEntry = {
+    ts: new Date().toISOString(),
+    toolName,
+    requestSize,
+    responseSize,
+    durationMs: Date.now() - startTimeMs,
+    runId: process.env['SPECTRA_MCP_RUN_ID'] ?? 'unknown',
+  };
+  const errorCode = extractErrorCode(result);
+  if (errorCode !== undefined) entry.errorCode = errorCode;
+  writeTelemetry(entry);
+  return result;
 }
 
 const PAYLOAD_CAP_BYTES = 1_000_000;
@@ -142,19 +229,28 @@ interface ImpactArgs {
 }
 
 export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
+  // Feature 158 telemetry: 入口采样
+  const _telStart = Date.now();
+  const _telReqSize = (() => {
+    try {
+      return JSON.stringify(args).length;
+    } catch {
+      return 0;
+    }
+  })();
   try {
     if (typeof args.target !== 'string' || args.target.length === 0) {
-      return buildErrorResponse('invalid-input', 'target 必填且为非空字符串');
+      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse('invalid-input', 'target 必填且为非空字符串'));
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return buildErrorResponse(
+      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在或加载失败 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
-      );
+      ));
     }
     const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
 
@@ -174,16 +270,16 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     // canonicalize symbol id
     const canon = canonicalizeSymbolId(args.target, graphData, { projectRoot });
     if (canon.reason === 'invalid') {
-      return buildErrorResponse('invalid-symbol-id', `target 含非法字符或格式: ${args.target}`);
+      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `target 含非法字符或格式: ${args.target}`));
     }
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
       const fuzzy = findFuzzyMatches(graphData, args.target, 5);
-      return buildErrorResponse(
+      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
         'symbol-not-found',
         `target 在 graph 中未找到: ${args.target}`,
         '请检查 symbol id 格式或参考 fuzzyMatches 候选',
         { fuzzyMatches: fuzzy },
-      );
+      ));
     }
     const startId = canon.canonicalId;
 
@@ -219,14 +315,14 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     };
     if (warnings.length > 0) data['warnings'] = warnings;
 
-    return buildSuccessResponse(data, ['affected']);
+    return recordAndReturn('impact', _telStart, _telReqSize, buildSuccessResponse(data, ['affected']));
   } catch (err) {
-    return buildErrorResponse(
+    return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
       'internal-error',
       err instanceof Error ? err.message : String(err),
       undefined,
       { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    );
+    ));
   }
 }
 
@@ -250,19 +346,28 @@ interface ContextArgs {
 }
 
 export async function handleContext(args: ContextArgs): Promise<ToolResult> {
+  // Feature 158 telemetry: 入口采样
+  const _telStart = Date.now();
+  const _telReqSize = (() => {
+    try {
+      return JSON.stringify(args).length;
+    } catch {
+      return 0;
+    }
+  })();
   try {
     if (typeof args.symbolId !== 'string' || args.symbolId.length === 0) {
-      return buildErrorResponse('invalid-input', 'symbolId 必填且为非空字符串');
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('invalid-input', 'symbolId 必填且为非空字符串'));
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return buildErrorResponse(
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 生成图谱',
-      );
+      ));
     }
     const { graphData } = cached;
 
@@ -270,21 +375,21 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
 
     const canon = canonicalizeSymbolId(args.symbolId, graphData, { projectRoot });
     if (canon.reason === 'invalid') {
-      return buildErrorResponse('invalid-symbol-id', `symbolId 含非法字符: ${args.symbolId}`);
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `symbolId 含非法字符: ${args.symbolId}`));
     }
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
       const fuzzy = findFuzzyMatches(graphData, args.symbolId, 5);
-      return buildErrorResponse(
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
         'symbol-not-found',
         `symbolId 在 graph 中未找到: ${args.symbolId}`,
         '请检查 id 格式或参考 fuzzyMatches 候选',
         { fuzzyMatches: fuzzy },
-      );
+      ));
     }
 
     const node = findNode(graphData, canon.canonicalId);
     if (node === null) {
-      return buildErrorResponse('symbol-not-found', `节点对象未找到: ${canon.canonicalId}`);
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('symbol-not-found', `节点对象未找到: ${canon.canonicalId}`));
     }
 
     const definition = buildDefinition(node);
@@ -313,14 +418,14 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
       data['relatedSpec'] = deriveRelatedSpec(canon.canonicalId, projectRoot);
     }
 
-    return buildSuccessResponse(data, ['callers', 'callees', 'imports']);
+    return recordAndReturn('context', _telStart, _telReqSize, buildSuccessResponse(data, ['callers', 'callees', 'imports']));
   } catch (err) {
-    return buildErrorResponse(
+    return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
       'internal-error',
       err instanceof Error ? err.message : String(err),
       undefined,
       { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    );
+    ));
   }
 }
 
@@ -414,16 +519,25 @@ interface ChangedFile {
 }
 
 export async function handleDetectChanges(args: DetectChangesArgs): Promise<ToolResult> {
+  // Feature 158 telemetry: 入口采样
+  const _telStart = Date.now();
+  const _telReqSize = (() => {
+    try {
+      return JSON.stringify(args).length;
+    } catch {
+      return 0;
+    }
+  })();
   try {
     const hasDiff = typeof args.diff === 'string' && args.diff.length > 0;
     const hasBaseRef = typeof args.baseRef === 'string' && args.baseRef.length > 0;
     if (!hasDiff && !hasBaseRef) {
-      return buildErrorResponse(
+      return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
         'invalid-input',
         '必须提供 diff 或 baseRef 之一',
         undefined,
         { reason: 'diff-or-baseref-required' },
-      );
+      ));
     }
 
     const warnings: string[] = [];
@@ -434,11 +548,11 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return buildErrorResponse(
+      return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 生成图谱',
-      );
+      ));
     }
     const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
 
@@ -448,23 +562,23 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     if (hasDiff) {
       // 5MB 上限校验前置（CRITICAL fix：返回 payload-too-large 而非 invalid-diff）
       if (Buffer.byteLength(args.diff!, 'utf-8') > MAX_DIFF_BYTES) {
-        return buildErrorResponse(
+        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
           'payload-too-large',
           `diff 超过上限 ${MAX_DIFF_BYTES} 字节`,
           undefined,
           { limitBytes: MAX_DIFF_BYTES },
-        );
+        ));
       }
       const parsed = parseUnifiedDiff(args.diff!);
       if (parsed.error !== undefined) {
-        return buildErrorResponse('invalid-diff', parsed.error);
+        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse('invalid-diff', parsed.error));
       }
       changedFiles = parsed.changed;
       unmappedFromInput = parsed.unmapped;
     } else {
       const r = runGitDiffNameStatus(args.baseRef!, projectRoot);
       if (!r.ok) {
-        return buildErrorResponse(r.code, r.message, undefined, r.context);
+        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(r.code, r.message, undefined, r.context));
       }
       changedFiles = r.changed;
       unmappedFromInput = r.unmapped;
@@ -547,14 +661,14 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     };
     if (uniqWarnings.length > 0) data['warnings'] = uniqWarnings;
 
-    return buildSuccessResponse(data, ['affectedSymbols']);
+    return recordAndReturn('detect_changes', _telStart, _telReqSize, buildSuccessResponse(data, ['affectedSymbols']));
   } catch (err) {
-    return buildErrorResponse(
+    return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
       'internal-error',
       err instanceof Error ? err.message : String(err),
       undefined,
       { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    );
+    ));
   }
 }
 

@@ -84,6 +84,9 @@ tests/baseline/repeats/
 tests/baseline/tasks/
 specs/147-competitor-evaluation-platform/competitive-evaluation-report-auto.md
 
+# Feature 157 SWE-Bench Lite eval runs（不入库；fixtures/ 入库作为评测基础数据）
+tests/baseline/swe-bench-lite/runs/
+
 # Feature 147 aider repomap 副作用产物（aider --show-repo-map 在 cwd 创建）
 .aider.chat.history.md
 .aider.tags.cache.v*

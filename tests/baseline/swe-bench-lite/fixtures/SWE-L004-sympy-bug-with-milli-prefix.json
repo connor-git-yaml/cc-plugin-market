@@ -1,0 +1,31 @@
+{
+  "taskId": "SWE-L004-sympy-bug-with-milli-prefix",
+  "description": "Bug with milli prefix\nWhat happened:\r\n```\r\nIn [1]: from sympy.physics.units import milli, W\r\nIn [2]: milli*W == 1\r\nOut[2]: True\r\nIn [3]: W*milli\r\nOut[3]: watt*Prefix(milli, m, -3, 10)\r\n```\r\nWhat I exp",
+  "target": "sympy/sympy",
+  "startCommit": "d3b4158dea271485e3daa11bf82e69b8dab348ce",
+  "prompt": "Bug with milli prefix\nWhat happened:\r\n```\r\nIn [1]: from sympy.physics.units import milli, W\r\nIn [2]: milli*W == 1\r\nOut[2]: True\r\nIn [3]: W*milli\r\nOut[3]: watt*Prefix(milli, m, -3, 10)\r\n```\r\nWhat I expected to happen: milli*W should evaluate to milli watts / mW\r\n\r\n`milli*W` or more generally `milli` times some unit evaluates to the number 1. I have tried this with Watts and Volts, I'm not sure what other cases this happens. I'm using sympy version 1.11.1-1 on Arch Linux with Python 3.10.9. If you cannot reproduce I would be happy to be of any assitance.\n",
+  "primaryOracle": {
+    "kind": "ast-diff",
+    "checks": [
+      "git diff HEAD > /tmp/SWE-L004-sympy-bug-with-milli-prefix.actual.diff && node \"<SPECTRA_REPO_ROOT>/scripts/eval-diff-fuzzy-match.mjs\" --expected \"<SPECTRA_REPO_ROOT>/tests/baseline/swe-bench-lite/fixtures/SWE-L004-sympy-bug-with-milli-prefix.goldpatch.diff\" --actual /tmp/SWE-L004-sympy-bug-with-milli-prefix.actual.diff --threshold 60 ; rc=$? ; rm -f /tmp/SWE-L004-sympy-bug-with-milli-prefix.actual.diff ; exit $rc"
+    ]
+  },
+  "swebenchMeta": {
+    "instanceId": "sympy__sympy-24909",
+    "dataset": "lite",
+    "createdAt": "2023-03-13T14:24:25Z",
+    "mergedAt": null,
+    "failToPass": [
+      "test_prefix_operations"
+    ],
+    "passToPass": [
+      "test_prefix_unit",
+      "test_bases"
+    ],
+    "goldPatch": "diff --git a/sympy/physics/units/prefixes.py b/sympy/physics/units/prefixes.py\n--- a/sympy/physics/units/prefixes.py\n+++ b/sympy/physics/units/prefixes.py\n@@ -6,7 +6,7 @@\n \"\"\"\n from sympy.core.expr import Expr\n from sympy.core.sympify import sympify\n-\n+from sympy.core.singleton import S\n \n class Prefix(Expr):\n     \"\"\"\n@@ -85,9 +85,9 @@ def __mul__(self, other):\n \n         fact = self.scale_factor * other.scale_factor\n \n-        if fact == 1:\n-            return 1\n-        elif isinstance(other, Prefix):\n+        if isinstance(other, Prefix):\n+            if fact == 1:\n+                return S.One\n             # simplify prefix\n             for p in PREFIXES:\n                 if PREFIXES[p].scale_factor == fact:\n@@ -103,7 +103,7 @@ def __truediv__(self, other):\n         fact = self.scale_factor / other.scale_factor\n \n         if fact == 1:\n-            return 1\n+            return S.One\n         elif isinstance(other, Prefix):\n             for p in PREFIXES:\n                 if PREFIXES[p].scale_factor == fact:\n",
+    "testPatch": "diff --git a/sympy/physics/units/tests/test_prefixes.py b/sympy/physics/units/tests/test_prefixes.py\n--- a/sympy/physics/units/tests/test_prefixes.py\n+++ b/sympy/physics/units/tests/test_prefixes.py\n@@ -2,7 +2,7 @@\n from sympy.core.numbers import Rational\n from sympy.core.singleton import S\n from sympy.core.symbol import (Symbol, symbols)\n-from sympy.physics.units import Quantity, length, meter\n+from sympy.physics.units import Quantity, length, meter, W\n from sympy.physics.units.prefixes import PREFIXES, Prefix, prefix_unit, kilo, \\\n     kibi\n from sympy.physics.units.systems import SI\n@@ -17,7 +17,8 @@ def test_prefix_operations():\n \n     dodeca = Prefix('dodeca', 'dd', 1, base=12)\n \n-    assert m * k == 1\n+    assert m * k is S.One\n+    assert m * W == W / 1000\n     assert k * k == M\n     assert 1 / m == k\n     assert k / m == M\n@@ -25,7 +26,7 @@ def test_prefix_operations():\n     assert dodeca * dodeca == 144\n     assert 1 / dodeca == S.One / 12\n     assert k / dodeca == S(1000) / 12\n-    assert dodeca / dodeca == 1\n+    assert dodeca / dodeca is S.One\n \n     m = Quantity(\"fake_meter\")\n     SI.set_quantity_dimension(m, S.One)\n",
+    "dateThresholdDegraded": "fallback-2023-07-01-yielded-0-below-min-5; further-degraded-to-dataset-max-date"
+  },
+  "status": "active",
+  "notes": "imported from princeton-nlp/SWE-bench_Lite via T-020"
+}

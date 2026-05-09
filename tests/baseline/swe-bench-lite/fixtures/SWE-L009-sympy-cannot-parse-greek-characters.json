@@ -1,0 +1,29 @@
+{
+  "taskId": "SWE-L009-sympy-cannot-parse-greek-characters",
+  "description": "Cannot parse Greek characters (and possibly others) in parse_mathematica\nThe old Mathematica parser `mathematica` in the package `sympy.parsing.mathematica` was able to parse e.g. Greek characters. He",
+  "target": "sympy/sympy",
+  "startCommit": "58598660a3f6ab3d918781c4988c2e4b2bdd9297",
+  "prompt": "Cannot parse Greek characters (and possibly others) in parse_mathematica\nThe old Mathematica parser `mathematica` in the package `sympy.parsing.mathematica` was able to parse e.g. Greek characters. Hence the following example works fine:\r\n```\r\nfrom sympy.parsing.mathematica import mathematica\r\nmathematica('λ')\r\nOut[]: \r\nλ\r\n```\r\n\r\nAs of SymPy v. 1.11, the `mathematica` function is deprecated, and is replaced by `parse_mathematica`. This function, however, seems unable to handle the simple example above:\r\n```\r\nfrom sympy.parsing.mathematica import parse_mathematica\r\nparse_mathematica('λ')\r\nTraceback (most recent call last):\r\n...\r\nFile \"<string>\", line unknown\r\nSyntaxError: unable to create a single AST for the expression\r\n```\r\n\r\nThis appears to be due to a bug in `parse_mathematica`, which is why I have opened this issue.\r\n\r\nThanks in advance!\nCannot parse Greek characters (and possibly others) in parse_mathematica\nThe old Mathematica parser `mathematica` in the package `sympy.parsing.mathematica` was able to parse e.g. Greek characters. Hence the following example works fine:\r\n```\r\nfrom sympy.parsing.mathematica import mathematica\r\nmathematica('λ')\r\nOut[]: \r\nλ\r\n```\r\n\r\nAs of SymPy v. 1.11, the `mathematica` function is deprecated, and is replaced by `parse_mathematica`. This function, however, seems unable to handle the simple example above:\r\n```\r\nfrom sympy.parsing.mathematica import parse_mathematica\r\nparse_mathematica('λ')\r\nTraceback (most recent call last):\r\n...\r\nFile \"<string>\", line unknown\r\nSyntaxError: unable to create a single AST for the expression\r\n```\r\n\r\nThis appears to be due to a bug in `parse_mathematica`, which is why I have opened this issue.\r\n\r\nThanks in advance!\n",
+  "primaryOracle": {
+    "kind": "ast-diff",
+    "checks": [
+      "git diff HEAD > /tmp/SWE-L009-sympy-cannot-parse-greek-characters.actual.diff && node \"<SPECTRA_REPO_ROOT>/scripts/eval-diff-fuzzy-match.mjs\" --expected \"<SPECTRA_REPO_ROOT>/tests/baseline/swe-bench-lite/fixtures/SWE-L009-sympy-cannot-parse-greek-characters.goldpatch.diff\" --actual /tmp/SWE-L009-sympy-cannot-parse-greek-characters.actual.diff --threshold 60 ; rc=$? ; rm -f /tmp/SWE-L009-sympy-cannot-parse-greek-characters.actual.diff ; exit $rc"
+    ]
+  },
+  "swebenchMeta": {
+    "instanceId": "sympy__sympy-24102",
+    "dataset": "lite",
+    "createdAt": "2022-10-01T18:41:32Z",
+    "mergedAt": null,
+    "failToPass": [
+      "test_mathematica",
+      "test_parser_mathematica_tokenizer"
+    ],
+    "passToPass": [],
+    "goldPatch": "diff --git a/sympy/parsing/mathematica.py b/sympy/parsing/mathematica.py\n--- a/sympy/parsing/mathematica.py\n+++ b/sympy/parsing/mathematica.py\n@@ -654,7 +654,7 @@ def _from_mathematica_to_tokens(self, code: str):\n             code_splits[i] = code_split\n \n         # Tokenize the input strings with a regular expression:\n-        token_lists = [tokenizer.findall(i) if isinstance(i, str) else [i] for i in code_splits]\n+        token_lists = [tokenizer.findall(i) if isinstance(i, str) and i.isascii() else [i] for i in code_splits]\n         tokens = [j for i in token_lists for j in i]\n \n         # Remove newlines at the beginning\n",
+    "testPatch": "diff --git a/sympy/parsing/tests/test_mathematica.py b/sympy/parsing/tests/test_mathematica.py\n--- a/sympy/parsing/tests/test_mathematica.py\n+++ b/sympy/parsing/tests/test_mathematica.py\n@@ -15,6 +15,7 @@ def test_mathematica():\n         'x+y': 'x+y',\n         '355/113': '355/113',\n         '2.718281828': '2.718281828',\n+        'Cos(1/2 * π)': 'Cos(π/2)',\n         'Sin[12]': 'sin(12)',\n         'Exp[Log[4]]': 'exp(log(4))',\n         '(x+1)(x+3)': '(x+1)*(x+3)',\n@@ -94,6 +95,7 @@ def test_parser_mathematica_tokenizer():\n     assert chain(\"+x\") == \"x\"\n     assert chain(\"-1\") == \"-1\"\n     assert chain(\"- 3\") == \"-3\"\n+    assert chain(\"α\") == \"α\"\n     assert chain(\"+Sin[x]\") == [\"Sin\", \"x\"]\n     assert chain(\"-Sin[x]\") == [\"Times\", \"-1\", [\"Sin\", \"x\"]]\n     assert chain(\"x(a+1)\") == [\"Times\", \"x\", [\"Plus\", \"a\", \"1\"]]\ndiff --git a/sympy/testing/quality_unicode.py b/sympy/testing/quality_unicode.py\n--- a/sympy/testing/quality_unicode.py\n+++ b/sympy/testing/quality_unicode.py\n@@ -48,6 +48,8 @@\n \n unicode_strict_whitelist = [\n     r'*/sympy/parsing/latex/_antlr/__init__.py',\n+    # test_mathematica.py uses some unicode for testing Greek characters are working #24055\n+    r'*/sympy/parsing/tests/test_mathematica.py',\n ]\n \n \n",
+    "dateThresholdDegraded": "fallback-2023-07-01-yielded-0-below-min-5; further-degraded-to-dataset-max-date"
+  },
+  "status": "active",
+  "notes": "imported from princeton-nlp/SWE-bench_Lite via T-020"
+}
