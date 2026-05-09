@@ -222,9 +222,9 @@ async function runOnce(target, projectRoot) {
     precision,
     recall,
     truthFilesWithCalls: truthFilesWithCalls.size,
-    truthTuples: truthTuples.size,
+    truthTuplesCount: truthTuples.size,
     mapperFilesWithCalls: mapperFilesWithCalls.size,
-    mapperTuples: mapperTuples.size,
+    mapperTuplesCount: mapperTuples.size,
     intersectFiles,
     intersectTuples,
     truthIndex,
@@ -303,8 +303,8 @@ async function main() {
       `  fillRate=${(r.fillRate * 100).toFixed(1)}% ` +
         `precision=${(r.precision * 100).toFixed(1)}% ` +
         `recall=${(r.recall * 100).toFixed(1)}% ` +
-        `(truthFiles=${r.truthFilesWithCalls} truthTuples=${r.truthTuples} ` +
-        `mapperFiles=${r.mapperFilesWithCalls} mapperTuples=${r.mapperTuples})`,
+        `(truthFiles=${r.truthFilesWithCalls} truthTuples=${r.truthTuplesCount} ` +
+        `mapperFiles=${r.mapperFilesWithCalls} mapperTuples=${r.mapperTuplesCount})`,
     );
     lastRun = r;
   }
@@ -334,7 +334,9 @@ async function main() {
       ? {
           totalFiles: lastRun.files,
           filesWithCalls: lastRun.truthFilesWithCalls,
-          totalCalls: lastRun.truthTuples,
+          totalCalls: lastRun.truthTuplesCount,
+          mapperTuples: lastRun.mapperTuplesCount,
+          intersectTuples: lastRun.intersectTuples,
         }
       : null,
   };
