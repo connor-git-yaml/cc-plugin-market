@@ -13,7 +13,72 @@ import type {
   Language,
   Visibility,
 } from '../../models/code-skeleton.js';
+import type { CallSite, CalleeKind } from '../../models/call-site.js';
 import type { QueryMapper, MapperOptions } from './base-mapper.js';
+
+// ============================================================
+// Feature 154 — callSites 抽取常量
+// 集合内容与 scripts/lib/java-call-extractor.mjs 同名集合保持完全一致；
+// java-mapper-callsite.test.ts 在常量同源 describe 块中通过 import extractor
+// 侧 export 做集合相等断言，CI 全集校验，任一侧扩展时另一侧必失败提示。
+// ============================================================
+
+/** 大文件兜底阈值（FR-006）— 1 MB 字节数（非字符数） */
+export const CALLSITES_MAX_FILE_BYTES = 1_048_576;
+
+/**
+ * 反射方法名集合（FR-005）— 与 java-call-extractor.mjs:REFLECTION_METHOD_NAMES 同源。
+ * receiver 检查之前优先短路：callee 名命中此集合 → calleeKind: 'unresolved'。
+ */
+export const JAVA_REFLECTION_METHOD_NAMES: ReadonlySet<string> = new Set([
+  'forName',
+  'invoke',
+  'newInstance',
+  'getDeclaredMethod',
+  'getMethod',
+  'getDeclaredField',
+  'getField',
+  'getConstructor',
+  'getDeclaredConstructor',
+  'getConstructors',
+  'getDeclaredConstructors',
+  'newProxyInstance',
+]);
+
+/**
+ * Java 标准库 acronym 类型白名单 — 与 java-call-extractor.mjs:JAVA_ACRONYM_TYPE_NAMES 同源。
+ * 全大写但属于 Java 标准库类型（如 java.util.UUID, java.net.URL）；用于 _isJavaTypeName。
+ */
+export const JAVA_ACRONYM_TYPE_NAMES: ReadonlySet<string> = new Set([
+  'URL', 'URI', 'UUID',
+  'XML', 'JSON', 'CSV',
+  'API', 'JDBC', 'JNDI',
+  'AWS', 'TCP', 'UDP',
+  'SQL', 'JPA',
+  'IO',
+]);
+
+/**
+ * Java 包根名白名单 — 与 java-call-extractor.mjs:JAVA_PACKAGE_ROOT_NAMES 同源。
+ * 仅在 _looksLikePackageQualifiedType 内使用，用于判定 FQN 类型路径
+ * （如 java.util.UUID）；**不在 _isJavaTypeName 内使用**，避免 `com` / `org`
+ * 单独被误判为类型（Codex P1 WARNING W-2）。
+ */
+export const JAVA_PACKAGE_ROOT_NAMES: ReadonlySet<string> = new Set([
+  'java', 'javax', 'jakarta',
+  'com', 'org', 'net',
+  'io', 'edu', 'gov', 'mil',
+]);
+
+/** classify 内部返回类型 */
+type ClassifyResult = {
+  calleeName: string;
+  calleeKind: CalleeKind;
+  calleeQualifier?: string;
+};
+
+/** _isPhantomCall 节点种类标记 */
+type PhantomKind = 'method-invocation' | 'object-creation' | 'explicit-constructor';
 
 // ============================================================
 // 辅助工具
@@ -191,6 +256,50 @@ export class JavaMapper implements QueryMapper {
     const errors: ParseError[] = [];
     this._collectErrors(tree.rootNode, errors);
     return errors;
+  }
+
+  /**
+   * Feature 154 — 抽取 Java 函数调用点（FR-001 ~ FR-013）。
+   *
+   * 节点覆盖（FR-001）：
+   * - method_invocation：实例 / 静态方法调用
+   * - object_creation_expression：构造器调用 (new ClassName())
+   * - explicit_constructor_invocation：super(...) / this(...)
+   * - lambda_expression 内部上述三类调用
+   *
+   * 大文件兜底（FR-006，Codex P1 WARNING W-1 修订：用字节数而非字符数）：
+   * - Buffer.byteLength(source, 'utf8') > CALLSITES_MAX_FILE_BYTES → 直接返回 []
+   *
+   * Parse 异常兜底：
+   * - 任何异常被外层 try-catch 捕获 → 返回 [] + warn 日志，不污染 CodeSkeleton
+   *
+   * 详细 kind 映射规则见 spec FR-003 + plan _classifyMethodInvocation 优先级 dispatch。
+   */
+  extractCallSites(tree: Parser.Tree, source: string): CallSite[] {
+    const byteLength = Buffer.byteLength(source, 'utf8');
+    if (byteLength > CALLSITES_MAX_FILE_BYTES) {
+      // FR-006：大文件兜底必须 warn（Codex T-1 review CRITICAL B 修订）
+      console.warn(
+        `[java-mapper] extractCallSites 大文件跳过：byteLength=${byteLength} > ${CALLSITES_MAX_FILE_BYTES}`,
+      );
+      return [];
+    }
+    try {
+      const out: CallSite[] = [];
+      this._walkCallSites(tree.rootNode, out);
+      return out;
+    } catch (err) {
+      // 异常兜底：保留诊断上下文（root node type + byteLength + stack）
+      // 便于排错而非静默吞掉真实 bug（Codex T-1 review WARNING C 修订）
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      console.warn(
+        `[java-mapper] extractCallSites 异常兜底：` +
+          `rootType=${tree.rootNode.type} byteLength=${byteLength} message=${message}` +
+          (stack ? `\n${stack}` : ''),
+      );
+      return [];
+    }
   }
 
   // ============================================================
@@ -477,5 +586,17 @@ export class JavaMapper implements QueryMapper {
         }
       }
     }
+  }
+
+  // ============================================================
+  // Feature 154 — call sites walker（T-3.1 阶段填充逻辑）
+  // ============================================================
+
+  /**
+   * 迭代式 DFS walker（手工栈，避免大文件递归爆栈）。
+   * T-1.3 阶段：stub 返回空，T-3.1 接通分发逻辑。
+   */
+  private _walkCallSites(_root: Parser.SyntaxNode, _out: CallSite[]): void {
+    // T-3.1 实现：迭代栈 + 节点 dispatch + ERROR/MISSING 跳子树
   }
 }

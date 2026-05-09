@@ -45,6 +45,8 @@ export class JavaLanguageAdapter implements LanguageAdapter {
     const analyzer = TreeSitterAnalyzer.getInstance();
     return analyzer.analyze(filePath, 'java', {
       includePrivate: options?.includePrivate,
+      // Feature 154 — 透传 extractCallSites flag（与 python-adapter.ts 对齐，CL-05 默认 false）
+      extractCallSites: options?.extractCallSites,
     });
   }
 

@@ -108,7 +108,9 @@ function _getField(node, fieldName) {
 // Codex Round 2 CRITICAL #4 known limitation: 用户自定义同名 method（如 `c.invoke()`）会被误标
 // unresolved（false positive）。但 false negative cost（漏检反射违反 FR-009）通常更大。当前
 // 接受 false positive 的小概率风险；后续可结合 receiver 类型约束（需符号解析）做精细化。
-const REFLECTION_METHOD_NAMES = new Set([
+// Feature 154 — 顶部 export 三常量供 mapper TS 测试做"集合相等"同源校验
+// （仅加 export 关键字，集合内容、辅助函数和 extractJavaCallSites 行为不变）
+export const REFLECTION_METHOD_NAMES = new Set([
   'forName', // Class.forName(...)
   'invoke', // Method.invoke(...) / Constructor.invoke(...)
   'newInstance', // Class.newInstance() / Constructor.newInstance(...)
@@ -132,7 +134,7 @@ const REFLECTION_METHOD_NAMES = new Set([
  *
  * 不要添加: LOGGER / MAX / MIN / DB_URL / SQL_TIMEOUT 等 — 这些是常量名而非类型名。
  */
-const JAVA_ACRONYM_TYPE_NAMES = new Set([
+export const JAVA_ACRONYM_TYPE_NAMES = new Set([
   'URL', 'URI', 'UUID', // java.net.URL / URI; java.util.UUID
   'XML', 'JSON', 'CSV', // 第三方解析库
   'API', 'JDBC', 'JNDI', // Java EE
@@ -151,7 +153,7 @@ const JAVA_ACRONYM_TYPE_NAMES = new Set([
  * 包含 Java 标准/扩展、Jakarta EE、TLD 反向（com / org / net / io / edu / gov / mil）。
  * 二级 TLD（uk / cn / au / de）不常见做包根，暂不入集合。
  */
-const JAVA_PACKAGE_ROOT_NAMES = new Set([
+export const JAVA_PACKAGE_ROOT_NAMES = new Set([
   'java', 'javax', 'jakarta', // JDK / Jakarta EE
   'com', 'org', 'net', // 商业/组织/网络 TLD 反向
   'io', 'edu', 'gov', 'mil', // 其它 TLD 反向
