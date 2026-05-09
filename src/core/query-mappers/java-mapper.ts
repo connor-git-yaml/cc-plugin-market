@@ -594,10 +594,191 @@ export class JavaMapper implements QueryMapper {
 
   /**
    * 迭代式 DFS walker（手工栈，避免大文件递归爆栈）。
-   * T-1.3 阶段：stub 返回空，T-3.1 接通分发逻辑。
+   *
+   * 节点类型 dispatch（FR-001）：
+   *   - method_invocation                    → _handleMethodInvocation
+   *   - object_creation_expression           → _handleObjectCreation
+   *   - explicit_constructor_invocation      → _handleExplicitConstructorInvocation
+   *
+   * ERROR / MISSING 跳过策略（FR-007）：
+   *   - node.type === 'ERROR' 或 node.isMissing === true → 跳过该节点 + 不入栈子节点
+   *   - 非 ERROR/MISSING 节点正常入栈 namedChildren
    */
-  private _walkCallSites(_root: Parser.SyntaxNode, _out: CallSite[]): void {
-    // T-3.1 实现：迭代栈 + 节点 dispatch + ERROR/MISSING 跳子树
+  private _walkCallSites(root: Parser.SyntaxNode, out: CallSite[]): void {
+    const stack: Parser.SyntaxNode[] = [root];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) continue;
+
+      // ERROR / MISSING 子树整体跳过（不抽取本节点 + 不入栈子节点）
+      if (node.type === 'ERROR' || node.isMissing === true) {
+        continue;
+      }
+
+      switch (node.type) {
+        case 'method_invocation':
+          this._handleMethodInvocation(node, out);
+          break;
+        case 'object_creation_expression':
+          this._handleObjectCreation(node, out);
+          break;
+        case 'explicit_constructor_invocation':
+          this._handleExplicitConstructorInvocation(node, out);
+          break;
+        default:
+          break;
+      }
+
+      // 入栈所有 namedChildren（继续 DFS）
+      const children = node.namedChildren;
+      if (children && children.length > 0) {
+        for (let i = children.length - 1; i >= 0; i--) {
+          const child = children[i];
+          if (child) stack.push(child);
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // Feature 154 — callerContext 解析（T-3.2）
+  // ============================================================
+
+  /**
+   * 向上 walk 找最近一层 function-like enclosing scope，输出 callerContext 字符串。
+   *
+   * 与 scripts/lib/java-call-extractor.mjs 的 _resolveJavaCaller 嵌套优先策略一致：
+   *   - method_declaration            → "{TypeName}.{methodName}"
+   *   - constructor_declaration       → "{TypeName}.<init>"
+   *   - compact_constructor_declaration → "{TypeName}.<init>"  (Java 14+ record)
+   *   - lambda_expression             → "<lambda:{startLine}:{startColumn}>"
+   *   - 顶层（无 enclosing scope）    → "<top-level>"
+   *
+   * 嵌套优先：第一个匹配立即 return，不继续向上 walk。
+   */
+  private _resolveCallerContext(node: Parser.SyntaxNode): string {
+    let cursor: Parser.SyntaxNode | null = node ? node.parent : null;
+    while (cursor) {
+      const t = cursor.type;
+
+      if (t === 'method_declaration') {
+        const nameNode =
+          typeof cursor.childForFieldName === 'function'
+            ? cursor.childForFieldName('name')
+            : null;
+        const methodName =
+          nameNode && typeof nameNode.text === 'string' ? nameNode.text : '<anon-method>';
+        const typeName = this._findEnclosingTypeName(cursor.parent);
+        return `${typeName}.${methodName}`;
+      }
+
+      if (t === 'constructor_declaration' || t === 'compact_constructor_declaration') {
+        const typeName = this._findEnclosingTypeName(cursor.parent);
+        return `${typeName}.<init>`;
+      }
+
+      if (t === 'lambda_expression') {
+        const line = (cursor.startPosition?.row ?? 0) + 1;
+        const col = cursor.startPosition?.column ?? 0;
+        return `<lambda:${line}:${col}>`;
+      }
+
+      cursor = cursor.parent;
+    }
+    return '<top-level>';
+  }
+
+  /**
+   * 从给定节点向上找最近的类型容器，返回类型名或特殊标记。
+   *
+   * 支持的类型节点（Codex P1 CRITICAL C-7 修订：5 类全覆盖）：
+   *   - class_declaration / interface_declaration / enum_declaration
+   *   - record_declaration（Java 14+）
+   *   - annotation_type_declaration（@interface）
+   *
+   * 特殊：遇 object_creation_expression 内层 class_body → 返回 '<anon-class>'。
+   * 找不到容器 → '<top-level>'。
+   */
+  private _findEnclosingTypeName(node: Parser.SyntaxNode | null): string {
+    let cursor: Parser.SyntaxNode | null = node;
+    while (cursor) {
+      const t = cursor.type;
+      if (
+        t === 'class_declaration' ||
+        t === 'interface_declaration' ||
+        t === 'enum_declaration' ||
+        t === 'record_declaration' ||
+        t === 'annotation_type_declaration'
+      ) {
+        const nameNode =
+          typeof cursor.childForFieldName === 'function'
+            ? cursor.childForFieldName('name')
+            : null;
+        if (nameNode && typeof nameNode.text === 'string') {
+          return nameNode.text;
+        }
+        return '<anon-class>';
+      }
+      // 匿名类：method_declaration 父 class_body 父是 object_creation_expression
+      if (t === 'object_creation_expression') {
+        return '<anon-class>';
+      }
+      cursor = cursor.parent;
+    }
+    return '<top-level>';
+  }
+
+  // ============================================================
+  // Feature 154 — phantom call 防护 + CallSite 构造（T-3.3 + T-3.4）
+  // ============================================================
+
+  /**
+   * 判断 method_invocation / object_creation_expression / explicit_constructor_invocation
+   * 是否是 phantom call（受 parse error 影响但本节点 type 仍非 ERROR）。
+   *
+   * Codex P1 CRITICAL C-6 修订：判定为 OR（不是 AND）：
+   *   - 关键 callee 字段子树 hasError === true，OR
+   *   - direct children 中含 ERROR / MISSING
+   *
+   * phantom 命中时调用方仅跳过当前 call 的抽取（不 push out），但 walker 继续
+   * 入栈 namedChildren，避免内层真实 call 被误杀。
+   */
+  private _isPhantomCall(node: Parser.SyntaxNode, kind: PhantomKind): boolean {
+    let calleeForCheck: Parser.SyntaxNode | null = null;
+    if (typeof node.childForFieldName === 'function') {
+      if (kind === 'method-invocation') {
+        calleeForCheck = node.childForFieldName('name');
+      } else if (kind === 'object-creation') {
+        calleeForCheck = node.childForFieldName('type');
+      } else if (kind === 'explicit-constructor') {
+        calleeForCheck = node.childForFieldName('constructor');
+      }
+    }
+    if (calleeForCheck && calleeForCheck.hasError === true) {
+      return true;
+    }
+    const allChildren = Array.isArray(node.children) ? node.children : [];
+    return allChildren.some((c) => c && (c.type === 'ERROR' || c.isMissing === true));
+  }
+
+  /** 构造单个 CallSite 记录（按 CallSiteSchema，可选字段仅在非 undefined 时写入） */
+  private _mkCallSite(
+    calleeName: string,
+    calleeKind: CalleeKind,
+    line: number,
+    column: number,
+    callerContext?: string,
+    calleeQualifier?: string,
+  ): CallSite {
+    const cs: CallSite = {
+      calleeName,
+      calleeKind,
+      line,
+    };
+    if (column !== undefined) cs.column = column;
+    if (callerContext !== undefined) cs.callerContext = callerContext;
+    if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
+    return cs;
   }
 
   // ============================================================
@@ -923,25 +1104,58 @@ export class JavaMapper implements QueryMapper {
   }
 
   // ============================================================
-  // Feature 154 — handler stubs（T-2.4，T-3.4 接通 callerContext + push）
+  // Feature 154 — handler 接通完整链路（T-3.4）
+  // 流程：phantom 检查 → classify → callerContext → push out
+  //
+  // Codex T-3 review WARNING F 修订：3 个 handler 共用 _emitCallSite helper，
+  // 避免 line/column/callerContext/push 写入逻辑在多处漂移。
   // ============================================================
 
-  /** method_invocation handler（T-2.4 stub，T-3.4 接通完整链路）*/
-  private _handleMethodInvocation(node: Parser.SyntaxNode, _out: CallSite[]): void {
-    // T-3.4 实现：调用 _isPhantomCall + _classifyMethodInvocation + _resolveCallerContext + push
-    void this._classifyMethodInvocation(node);
+  /** 共用 emit 流程：phantom check → classify → callerContext → push */
+  private _emitCallSite(
+    node: Parser.SyntaxNode,
+    out: CallSite[],
+    phantomKind: PhantomKind,
+    classifier: (n: Parser.SyntaxNode) => ClassifyResult,
+  ): void {
+    if (this._isPhantomCall(node, phantomKind)) return;
+    const cls = classifier(node);
+    const callerCtx = this._resolveCallerContext(node);
+    const line = (node.startPosition?.row ?? 0) + 1;
+    const col = node.startPosition?.column ?? 0;
+    out.push(
+      this._mkCallSite(
+        cls.calleeName,
+        cls.calleeKind,
+        line,
+        col,
+        callerCtx,
+        cls.calleeQualifier,
+      ),
+    );
   }
 
-  /** object_creation_expression handler（T-2.4 stub，T-3.4 接通完整链路）*/
-  private _handleObjectCreation(node: Parser.SyntaxNode, _out: CallSite[]): void {
-    void this._classifyObjectCreation(node);
+  /** method_invocation handler */
+  private _handleMethodInvocation(node: Parser.SyntaxNode, out: CallSite[]): void {
+    this._emitCallSite(node, out, 'method-invocation', (n) =>
+      this._classifyMethodInvocation(n),
+    );
   }
 
-  /** explicit_constructor_invocation handler（T-2.4 stub，T-3.4 接通完整链路）*/
+  /** object_creation_expression handler */
+  private _handleObjectCreation(node: Parser.SyntaxNode, out: CallSite[]): void {
+    this._emitCallSite(node, out, 'object-creation', (n) =>
+      this._classifyObjectCreation(n),
+    );
+  }
+
+  /** explicit_constructor_invocation handler */
   private _handleExplicitConstructorInvocation(
     node: Parser.SyntaxNode,
-    _out: CallSite[],
+    out: CallSite[],
   ): void {
-    void this._classifyExplicitConstructorInvocation(node);
+    this._emitCallSite(node, out, 'explicit-constructor', (n) =>
+      this._classifyExplicitConstructorInvocation(n),
+    );
   }
 }

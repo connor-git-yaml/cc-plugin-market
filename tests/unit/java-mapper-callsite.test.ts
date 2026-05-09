@@ -177,7 +177,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   // T-2.x / T-3.5 实施完毕后逐个 unskip（Codex T-1 WARNING E1 修订）
 
   // case 1: obj.method() → cross-module + qualifier=obj
-  it.skip('case 1 实例 method call (obj.method())', async () => {
+  it('case 1 实例 method call (obj.method())', async () => {
     const file = writeFixture(
       'class A { void m(B obj) { obj.foo(); } }',
     );
@@ -190,7 +190,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 2: method overloading label-only — 同名 method 调用计数 1 条
-  it.skip('case 2 method overloading 仅 1 条 label', async () => {
+  it('case 2 method overloading 仅 1 条 label', async () => {
     const file = writeFixture(`
       class A {
         void connect(String url) {}
@@ -204,7 +204,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 3: Class.method() → member + qualifier=Class
-  it.skip('case 3 static / PascalCase Class.method()', async () => {
+  it('case 3 static / PascalCase Class.method()', async () => {
     const file = writeFixture(
       'import java.util.Collections;\nclass A { void m(java.util.List<Integer> l) { Collections.sort(l); } }',
     );
@@ -215,7 +215,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 4: interface default method
-  it.skip('case 4 interface default method callerContext', async () => {
+  it('case 4 interface default method callerContext', async () => {
     const file = writeFixture(`
       interface Closeable {
         default void closeAll() { helper(); }
@@ -227,18 +227,33 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
     expect(cs?.callerContext).toBe('Closeable.closeAll');
   });
 
-  // case 5: lambda 嵌套优先
-  it.skip('case 5 lambda 嵌套优先 callerContext', async () => {
+  // case 5: lambda 嵌套优先（Codex T-3 WARNING G：精确断言行列）
+  it('case 5 lambda 嵌套优先 callerContext', async () => {
+    // 固定 fixture 行列：lambda `x -> x.go()` 起始位置可精确定位
+    // 行 2 (0-based row 1) 内 `(x -> x.go())` 的 lambda 起始列为 53（0-based）
+    // 注：tree-sitter 行列从 0 开始，_resolveCallerContext 把 row+1 输出 1-based 行
     const file = writeFixture(
       'import java.util.List;\nclass A { void m(List<B> l) { l.forEach(x -> x.go()); } }',
     );
     const sk = await adapter.analyzeFile(file, { extractCallSites: true });
     const cs = sk.callSites?.find((c) => c.calleeName === 'go');
     expect(cs?.callerContext).toMatch(/^<lambda:\d+:\d+>$/);
+    // 精确断言：固定 fixture 下 lambda 在第 2 行（1-based），列号 > 0
+    const match = cs?.callerContext?.match(/^<lambda:(\d+):(\d+)>$/);
+    expect(match).not.toBeNull();
+    if (match) {
+      const line = parseInt(match[1] ?? '0', 10);
+      const col = parseInt(match[2] ?? '-1', 10);
+      expect(line).toBe(2);
+      expect(col).toBeGreaterThan(0); // lambda 在 method body 内部，列号必非首列
+    }
+    // FR-010 唯一化：同一文件多次运行 _resolveCallerContext 输出稳定
+    const cs2 = sk.callSites?.find((c) => c.calleeName === 'go');
+    expect(cs2?.callerContext).toBe(cs?.callerContext);
   });
 
   // case 6: 反射 unresolved
-  it.skip('case 6 反射 → unresolved', async () => {
+  it('case 6 反射 → unresolved', async () => {
     const file = writeFixture(
       'class A { void m() throws Exception { Class.forName("x"); } }',
     );
@@ -248,7 +263,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 7: record compact constructor + nested class 最近一层
-  it.skip('case 7 record compact constructor + nested class', async () => {
+  it('case 7 record compact constructor + nested class', async () => {
     const file = writeFixture(`
       class Outer {
         record Point(int x, int y) {
@@ -269,7 +284,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 8: generic method invocation
-  it.skip('case 8 generic method invocation 忽略 type args', async () => {
+  it('case 8 generic method invocation 忽略 type args', async () => {
     const file = writeFixture(
       'import java.util.List;\nclass A { void m() { List.<String>of("a"); } }',
     );
@@ -279,7 +294,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 9: 大文件字节兜底（多字节字符）
-  it.skip('case 9 大文件字节兜底（UTF-8 多字节）', async () => {
+  it('case 9 大文件字节兜底（UTF-8 多字节）', async () => {
     // 中文注释 ≈ 3 字节/字符，构造 source.length < 1MB 但 byteLength > 1MB
     const padding = '中'.repeat(400_000); // 字符 4e5，字节 ≈ 12e5 = 1.2 MB
     const content = `class A {\n  // ${padding}\n  void m() { foo(); }\n}\n`;
@@ -290,7 +305,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
 
   // case 10: phantom call — ERROR 子树跳过 + ERROR 外的真实调用照抽
   // Codex T-1 WARNING E2 修订：fixture 加 ERROR 子树内的伪调用 + 负向断言
-  it.skip('case 10 phantom call — ERROR 子树整体跳过', async () => {
+  it('case 10 phantom call — ERROR 子树整体跳过', async () => {
     // method broken 含语法错误，tree-sitter 会把 phantom() 包到 ERROR 子树内；
     // method ok 是干净的真实调用 → realCall() 必须被抽
     const file = writeFixture(`
@@ -313,7 +328,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 11: super() / this() explicit constructor
-  it.skip('case 11 super() / this() → super', async () => {
+  it('case 11 super() / this() → super', async () => {
     const file = writeFixture(`
       class B { B(int x) {} }
       class A extends B {
@@ -327,7 +342,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 12: 匿名类
-  it.skip('case 12 匿名类 callerContext = <anon-class>.{methodName}', async () => {
+  it('case 12 匿名类 callerContext = <anon-class>.{methodName}', async () => {
     const file = writeFixture(`
       class A {
         Runnable r = new Runnable() {
@@ -342,7 +357,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 13: this.method() → member + undefined（Codex CRITICAL E）
-  it.skip('case 13 this.method() → member + undefined', async () => {
+  it('case 13 this.method() → member + undefined', async () => {
     const file = writeFixture(`
       class A {
         void helper() {}
@@ -356,7 +371,7 @@ describe('JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架）
   });
 
   // case 14: static import (sort(list) → member + undefined)（Codex W-3 free deferred 锚点）
-  it.skip('case 14 static import 裸调用 → member + undefined', async () => {
+  it('case 14 static import 裸调用 → member + undefined', async () => {
     const file = writeFixture(`
       import static java.util.Collections.sort;
       import java.util.List;
