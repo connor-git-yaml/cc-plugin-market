@@ -42,6 +42,9 @@ CLAUDE.local.md
 # Spec Driver 本地缓存与运行态
 .specify/.spec-driver-path
 .specify/runs/
+
+# Feature 152 — spectra index UnifiedGraph snapshot（按 worktree 各自独立）
+.spectra/
 .specify/scorecards/
 .specify/templates/
 .agents

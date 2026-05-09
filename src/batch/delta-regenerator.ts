@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { analyzeFiles } from '../core/ast-analyzer.js';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import {
   buildDocGraph,
   resolveSpecForSource,
@@ -47,7 +47,7 @@ export interface DeltaReport {
 
 export interface DeltaRegeneratorOptions {
   projectRoot: string;
-  dependencyGraph: DependencyGraph;
+  dependencyGraph: ModuleGraph;
   moduleGroups: ModuleGroup[];
   storedSpecs: StoredModuleSpecSummary[];
   /**
@@ -338,7 +338,7 @@ function detectDirectChanges(
     .sort((left, right) => left.sourceTarget.localeCompare(right.sourceTarget));
 }
 
-function buildReverseEdges(graph: DependencyGraph): Map<string, string[]> {
+function buildReverseEdges(graph: ModuleGraph): Map<string, string[]> {
   const reverse = new Map<string, string[]>();
 
   for (const edge of graph.edges) {

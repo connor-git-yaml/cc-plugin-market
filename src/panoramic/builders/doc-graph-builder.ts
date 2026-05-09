@@ -10,7 +10,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import type { DependencyGraph } from '../../models/dependency-graph.js';
+import type { ModuleGraph } from '../../knowledge-graph/module-derivation.js';
 import type { ModuleSpec } from '../../models/module-spec.js';
 import type { GraphNode, GraphEdge, Hyperedge } from '../graph/graph-types.js';
 import type { EmbeddingProvider, EmbeddingTokenUsage } from '../anchoring/embedding-provider.js';
@@ -97,7 +97,7 @@ export interface DocGraph {
 
 export interface BuildDocGraphOptions {
   projectRoot: string;
-  dependencyGraph: DependencyGraph;
+  dependencyGraph: ModuleGraph;
   moduleSpecs: ModuleSpec[];
   existingSpecs?: ExistingSpecDocument[];
 }
@@ -249,7 +249,7 @@ export function buildDocGraph(options: BuildDocGraphOptions): DocGraph {
 
 function buildReferenceList(
   specs: DocGraphSpecNode[],
-  dependencyGraph: DependencyGraph,
+  dependencyGraph: ModuleGraph,
 ): DocGraphReference[] {
   const aggregated = new Map<string, DocGraphReference>();
 
@@ -300,7 +300,7 @@ function buildReferenceList(
 
 function buildMissingSpecList(
   specs: DocGraphSpecNode[],
-  dependencyGraph: DependencyGraph,
+  dependencyGraph: ModuleGraph,
 ): DocGraphMissingSpec[] {
   const missing = new Set<string>();
 

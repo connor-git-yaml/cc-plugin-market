@@ -6,11 +6,11 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { generateIndex } from '../../src/generator/index-generator.js';
 import { renderSpec, initRenderer, resetRenderer } from '../../src/generator/spec-renderer.js';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import type { LanguageFileStat } from '../../src/utils/file-scanner.js';
 
-/** 创建测试用 DependencyGraph */
-function createGraph(projectRoot = '/test'): DependencyGraph {
+/** 创建测试用 ModuleGraph */
+function createGraph(projectRoot = '/test'): ModuleGraph {
   return {
     projectRoot,
     modules: [],

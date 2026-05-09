@@ -242,6 +242,13 @@ export class TypeScriptMapper implements QueryMapper {
 
   /**
    * 从 AST tree 提取导入引用
+   *
+   * Feature 156 W1.0 v2 / CRIT-3：除 `import_statement` 外，还要遍历 AST 找
+   *   - `call_expression` callee = `import` keyword → dynamic import
+   *   - `call_expression` callee = `require` Identifier → commonjs-require
+   *
+   * 这样 tree-sitter 降级路径下 AC-11 的 dynamic / commonjs-require 边也能产出
+   * （ts-morph 主路径已在 ast-analyzer.ts 覆盖）。
    */
   extractImports(tree: Parser.Tree, _source: string): ImportReference[] {
     const rootNode = tree.rootNode;
@@ -257,7 +264,87 @@ export class TypeScriptMapper implements QueryMapper {
       if (ref) imports.push(ref);
     }
 
+    // CRIT-3：遍历整棵 AST 找 dynamic import / commonjs-require
+    this._collectCallExpressionImports(rootNode, imports);
+
     return imports;
+  }
+
+  /**
+   * 递归遍历 AST，识别 dynamic import / commonjs-require 调用并产出对应 ImportReference。
+   *
+   * 仅识别 AST 结构上的 call_expression 节点 — 不是文本正则，因此能避免 WARN-2 类
+   * 字符串 / 注释中的 "require('./x')" 误命中（tree-sitter parser 会把它们标识为
+   * string / comment 节点，不会形成 call_expression 子树）。
+   */
+  private _collectCallExpressionImports(
+    node: Parser.SyntaxNode,
+    imports: ImportReference[],
+  ): void {
+    if (node.type === 'call_expression') {
+      const ref = this._extractCallExpressionImport(node);
+      if (ref) imports.push(ref);
+    }
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child) this._collectCallExpressionImports(child, imports);
+    }
+  }
+
+  /**
+   * 从 call_expression 节点派生 ImportReference（仅当 callee 为 `import` keyword 或
+   * `require` Identifier 时）。
+   *
+   * tree-sitter-typescript grammar 把动态 import callee 标识为 `import` 节点（type==='import'），
+   * require 调用则是 type==='identifier' && text==='require'。
+   */
+  private _extractCallExpressionImport(call: Parser.SyntaxNode): ImportReference | null {
+    const fn = call.childForFieldName('function');
+    if (!fn) return null;
+
+    let kind: 'dynamic' | 'commonjs-require' | null = null;
+    if (fn.type === 'import') {
+      kind = 'dynamic';
+    } else if (fn.type === 'identifier' && fn.text === 'require') {
+      kind = 'commonjs-require';
+    }
+    if (!kind) return null;
+
+    // 取第一个参数（必须是字符串字面量）
+    const args = call.childForFieldName('arguments');
+    if (!args) return null;
+
+    let firstStringArg: Parser.SyntaxNode | null = null;
+    for (let i = 0; i < args.childCount; i++) {
+      const arg = args.child(i);
+      if (!arg) continue;
+      if (arg.type === 'string') {
+        firstStringArg = arg;
+        break;
+      }
+    }
+    if (!firstStringArg) return null;
+
+    // 提取 string 字面量的文本内容（剥首尾引号 / 取 string_fragment 子节点）
+    let moduleSpecifier = firstStringArg.text.replace(/^['"`]|['"`]$/g, '');
+    // tree-sitter 把 string 节点细分为 ' / string_fragment / '；优先用 fragment 子节点更稳
+    for (let i = 0; i < firstStringArg.childCount; i++) {
+      const child = firstStringArg.child(i);
+      if (child?.type === 'string_fragment') {
+        moduleSpecifier = child.text;
+        break;
+      }
+    }
+    if (!moduleSpecifier) return null;
+
+    const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
+    return {
+      moduleSpecifier,
+      isRelative,
+      resolvedPath: null,
+      isTypeOnly: false,
+      importType: kind,
+    };
   }
 
   /**

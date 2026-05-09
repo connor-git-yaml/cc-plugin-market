@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { analyzeFiles } from '../../src/core/ast-analyzer.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import { scanStoredModuleSpecs } from '../../src/panoramic/builders/doc-graph-builder.js';
 import { DeltaRegenerator } from '../../src/batch/delta-regenerator.js';
 
@@ -74,7 +74,7 @@ export function runJob(): string {
     const regenerator = new DeltaRegenerator();
     const report = await regenerator.plan({
       projectRoot,
-      dependencyGraph: createDependencyGraph(projectRoot),
+      dependencyGraph: createModuleGraph(projectRoot),
       moduleGroups: createModuleGroups(),
       storedSpecs: [],
     });
@@ -95,7 +95,7 @@ export function runJob(): string {
     const regenerator = new DeltaRegenerator();
     const report = await regenerator.plan({
       projectRoot,
-      dependencyGraph: createDependencyGraph(projectRoot),
+      dependencyGraph: createModuleGraph(projectRoot),
       moduleGroups: createModuleGroups(),
       storedSpecs,
     });
@@ -125,7 +125,7 @@ export function authorize(value: string): string {
     const regenerator = new DeltaRegenerator();
     const report = await regenerator.plan({
       projectRoot,
-      dependencyGraph: createDependencyGraph(projectRoot),
+      dependencyGraph: createModuleGraph(projectRoot),
       moduleGroups: createModuleGroups(),
       storedSpecs: scanStoredModuleSpecs(specsDir, projectRoot),
     });
@@ -165,7 +165,7 @@ export const entry = 'v2';
     const regenerator = new DeltaRegenerator();
     const report = await regenerator.plan({
       projectRoot,
-      dependencyGraph: createRootDependencyGraph(projectRoot),
+      dependencyGraph: createRootModuleGraph(projectRoot),
       moduleGroups: [
         {
           name: 'root',
@@ -189,7 +189,7 @@ function createModuleGroups() {
   ];
 }
 
-function createDependencyGraph(projectRoot: string): DependencyGraph {
+function createModuleGraph(projectRoot: string): ModuleGraph {
   return {
     projectRoot,
     modules: [
@@ -214,7 +214,7 @@ function createDependencyGraph(projectRoot: string): DependencyGraph {
   };
 }
 
-function createRootDependencyGraph(projectRoot: string): DependencyGraph {
+function createRootModuleGraph(projectRoot: string): ModuleGraph {
   return {
     projectRoot,
     modules: [

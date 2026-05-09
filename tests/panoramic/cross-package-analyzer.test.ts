@@ -13,7 +13,7 @@ import {
   type CrossPackageOutput,
 } from '../../src/panoramic/generators/cross-package-analyzer.js';
 import type { WorkspacePackageInfo } from '../../src/panoramic/generators/workspace-index-generator.js';
-import type { DependencyGraph, GraphNode, DependencyEdge } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph, ModuleNode, ModuleEdge } from '../../src/knowledge-graph/module-derivation.js';
 import { GeneratorRegistry, bootstrapGenerators } from '../../src/panoramic/generator-registry.js';
 
 // ============================================================
@@ -75,8 +75,8 @@ function buildInputFromPackages(
     }
   }
 
-  const modules: GraphNode[] = [];
-  const edges: DependencyEdge[] = [];
+  const modules: ModuleNode[] = [];
+  const edges: ModuleEdge[] = [];
 
   for (const pkg of packages) {
     const validDeps = pkg.dependencies.filter(
@@ -104,7 +104,7 @@ function buildInputFromPackages(
     }
   }
 
-  const graph: DependencyGraph = {
+  const graph: ModuleGraph = {
     projectRoot: '/tmp/test',
     modules,
     edges,

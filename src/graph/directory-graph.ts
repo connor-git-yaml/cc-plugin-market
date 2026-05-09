@@ -1,21 +1,28 @@
 /**
- * 轻量级目录依赖图构建器
- * 为无 dependency-cruiser 支持的语言（Python/Go/Java）提供
- * 基于目录结构 + import 推断的依赖图（TD-004）
+ * directory-graph.ts — 多语言轻量级模块图构建器（Feature 156 W1.4）
+ *
+ * 历史：本文件原先直接产出模块图节点 + 边。
+ * Feature 156 W1.2 后改为统一走 UnifiedGraph 派生路径；W1.4 atomic switch 完成后，
+ * 类型系统统一为 ModuleGraph 视图。
+ *
+ * 流程：
+ *   1. 用既有的 resolveImportPath / resolveAbsoluteImportPath 推断每个 import 的
+ *      resolvedPath（适用于 Python/Go/Java/任意语言相对 import）
+ *   2. 把这些 resolvedPath 写回 CodeSkeleton.imports[i]，构造 codeSkeletons Map
+ *   3. buildUnifiedGraph 派生 depends-on 边
+ *   4. deriveModuleGraph 派生 ModuleGraph 视图
  */
 import * as path from 'node:path';
-import type { CodeSkeleton } from '../models/code-skeleton.js';
-import type {
-  DependencyGraph,
-  GraphNode,
-  DependencyEdge,
-} from '../models/dependency-graph.js';
-import { detectSCCs, topologicalSort } from './topological-sort.js';
-import { renderDependencyGraph } from './mermaid-renderer.js';
+import type { CodeSkeleton, ImportReference } from '../models/code-skeleton.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
+import {
+  buildModuleGraphFromCodeSkeletons,
+  createEmptyModuleGraph,
+} from '../knowledge-graph/module-derivation.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 
 /**
- * 基于 CodeSkeleton 的 imports 信息构建轻量级依赖图
+ * 基于 CodeSkeleton 的 imports 信息构建轻量级模块图（W1.4：UnifiedGraph 派生路径）。
  *
  * 对 `isRelative: true` 的 import 使用路径解析构建依赖边；
  * `isRelative: false` 的 import（第三方包）被忽略。
@@ -24,25 +31,23 @@ import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.j
  * @param files - 同一语言的文件路径列表（相对于项目根目录）
  * @param projectRoot - 项目根目录
  * @param skeletons - 与 files 对应的 CodeSkeleton 列表
- * @returns DependencyGraph
+ * @returns ModuleGraph
  */
 export async function buildDirectoryGraph(
   files: string[],
   projectRoot: string,
   skeletons: CodeSkeleton[],
-): Promise<DependencyGraph> {
+): Promise<ModuleGraph> {
   if (files.length === 0) {
-    return createEmptyGraph(projectRoot);
+    return createEmptyModuleGraph(projectRoot);
   }
 
   const fileSet = new Set(files);
   const registry = LanguageAdapterRegistry.getInstance();
 
   // 预构建目录前缀索引：dirPrefix → 该目录下的文件列表
-  // 将 resolveAbsoluteImportPath 中目录扫描从 O(n) 降到 O(候选数)
   const dirPrefixIndex = new Map<string, string[]>();
   for (const file of files) {
-    // 提取所有父目录前缀（从根到直接父目录）
     const parts = file.split('/');
     for (let depth = 1; depth < parts.length; depth++) {
       const prefix = parts.slice(0, depth).join('/') + '/';
@@ -55,7 +60,7 @@ export async function buildDirectoryGraph(
     }
   }
 
-  // 构建文件路径到骨架的映射
+  // 文件路径 → 骨架映射
   const skeletonMap = new Map<string, CodeSkeleton>();
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!;
@@ -65,104 +70,51 @@ export async function buildDirectoryGraph(
     }
   }
 
-  // 步骤 1：创建所有节点
-  const nodeMap = new Map<string, GraphNode>();
-  for (const file of files) {
-    const adapter = registry.getAdapter(file);
-    nodeMap.set(file, {
-      source: file,
-      isOrphan: true,
-      inDegree: 0,
-      outDegree: 0,
-      level: 0,
-      language: adapter?.id,
-    });
-  }
-
-  // 步骤 2：基于 import 推断构建边
-  const edges: DependencyEdge[] = [];
-
+  // ── 1. 重建带 resolvedPath 的 CodeSkeleton Map ──
+  const codeSkeletons = new Map<string, CodeSkeleton>();
   for (const file of files) {
     const skeleton = skeletonMap.get(file);
-    if (!skeleton) continue;
-
-    for (const imp of skeleton.imports) {
+    const baseImports: ImportReference[] = skeleton?.imports ?? [];
+    const newImports: ImportReference[] = baseImports.map((imp) => {
       let resolved: string | undefined;
-
       if (imp.isRelative) {
         resolved = resolveImportPath(file, imp.moduleSpecifier, fileSet);
       } else {
-        // 尝试解析项目内绝对 import（适用于 Python 包名式导入，如 graphify.core）
         resolved = resolveAbsoluteImportPath(imp.moduleSpecifier, fileSet, dirPrefixIndex);
       }
-
-      if (resolved && resolved !== file) {
-        edges.push({
-          from: file,
-          to: resolved,
-          isCircular: false,
-          importType: 'static',
-        });
-
-        // 更新度数
-        const fromNode = nodeMap.get(file);
-        const toNode = nodeMap.get(resolved);
-        if (fromNode && toNode) {
-          fromNode.outDegree++;
-          toNode.inDegree++;
-          fromNode.isOrphan = false;
-          toNode.isOrphan = false;
-        }
+      // 仅当解析到的目标确实在 fileSet 中且非自引用，才写回 resolvedPath
+      if (resolved && resolved !== file && fileSet.has(resolved)) {
+        return { ...imp, resolvedPath: resolved };
       }
-    }
+      return imp;
+    });
+
+    // 构造（或复用）CodeSkeleton；filePath 用相对路径与 fileSet 对齐
+    const language = skeleton?.language ?? guessLanguageFromFile(file);
+    const adapter = registry.getAdapter(file);
+    const synthSk: CodeSkeleton = skeleton
+      ? { ...skeleton, filePath: file, imports: newImports }
+      : {
+          filePath: file,
+          language,
+          loc: 1,
+          exports: [],
+          imports: newImports,
+          hash: '0'.repeat(64),
+          analyzedAt: new Date().toISOString(),
+          parserUsed: 'tree-sitter',
+        };
+    codeSkeletons.set(file, synthSk);
+    void adapter;
   }
 
-  // 步骤 3：构建临时图用于拓扑排序和 SCC 检测
-  const graphNodes = Array.from(nodeMap.values());
-  const tempGraph: DependencyGraph = {
-    projectRoot,
-    modules: graphNodes,
-    edges,
-    topologicalOrder: [],
-    sccs: [],
-    totalModules: graphNodes.length,
-    totalEdges: edges.length,
-    analyzedAt: new Date().toISOString(),
-    mermaidSource: '',
-  };
-
-  // 拓扑排序 + SCC 检测
-  const sortResult = topologicalSort(tempGraph);
-  const sccs = detectSCCs(tempGraph);
-
-  // 更新节点层级
-  for (const [source, level] of sortResult.levels) {
-    const node = nodeMap.get(source);
-    if (node) {
-      node.level = level;
-    }
-  }
-
-  // 生成 Mermaid 源码
-  const mermaidSource = renderDependencyGraph({
-    ...tempGraph,
-    topologicalOrder: sortResult.order,
-    sccs,
-    modules: Array.from(nodeMap.values()),
-  });
-
-  return {
-    projectRoot,
-    modules: Array.from(nodeMap.values()),
-    edges,
-    topologicalOrder: sortResult.order,
-    sccs,
-    totalModules: graphNodes.length,
-    totalEdges: edges.length,
-    analyzedAt: new Date().toISOString(),
-    mermaidSource,
-  };
+  // ── 2. 一站式派生 ModuleGraph（含 language 回填）──
+  return buildModuleGraphFromCodeSkeletons(codeSkeletons, projectRoot);
 }
+
+// ============================================================
+// 路径解析（保留 W1.2 之前的实现，作为多语言相对 import 推断的核心）
+// ============================================================
 
 /**
  * 解析 import 路径到文件集合中的实际文件
@@ -171,11 +123,6 @@ export async function buildDirectoryGraph(
  * - Python 相对 import：`from .utils import x` → `./utils`
  * - Go 本地 package：`"./internal/utils"` → `./internal/utils/`
  * - 通用相对路径：`./foo`, `../bar`
- *
- * @param fromFile - 发起 import 的文件路径
- * @param specifier - import 模块标识符
- * @param fileSet - 可用文件集合
- * @returns 解析后的文件路径，或 undefined（无法解析）
  */
 function resolveImportPath(
   fromFile: string,
@@ -184,10 +131,9 @@ function resolveImportPath(
 ): string | undefined {
   const fromDir = path.dirname(fromFile);
 
-  // 处理 Python 点号相对导入：将 `.module` 和 `..module` 转换为路径
+  // Python 点号相对导入
   let normalizedSpecifier = specifier;
   if (/^\.{1,3}[a-zA-Z_]/.test(specifier)) {
-    // Python 风格：`.utils` → `./utils`，`..models` → `../models`
     const dotMatch = /^(\.{1,3})(.*)$/.exec(specifier);
     if (dotMatch) {
       const dots = dotMatch[1]!;
@@ -202,20 +148,16 @@ function resolveImportPath(
     }
   }
 
-  // 只处理以 ./ 或 ../ 开头的路径
   if (!normalizedSpecifier.startsWith('./') && !normalizedSpecifier.startsWith('../')) {
     return undefined;
   }
 
-  // 解析为相对于项目根的路径
   const resolved = path.normalize(path.join(fromDir, normalizedSpecifier));
 
-  // 尝试精确匹配
   if (fileSet.has(resolved)) {
     return resolved;
   }
 
-  // 尝试补全常见扩展名
   const extensions = ['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.java'];
   for (const ext of extensions) {
     const withExt = resolved + ext;
@@ -224,7 +166,6 @@ function resolveImportPath(
     }
   }
 
-  // 尝试 index 文件
   const indexFiles = ['index.ts', 'index.js', '__init__.py'];
   for (const indexFile of indexFiles) {
     const withIndex = path.join(resolved, indexFile);
@@ -233,7 +174,6 @@ function resolveImportPath(
     }
   }
 
-  // 尝试匹配目录下的文件（Go package 导入场景：import "./internal/utils" 匹配 internal/utils/ 下任意 .go 文件）
   const dirPrefix = resolved + '/';
   for (const file of fileSet) {
     if (file.startsWith(dirPrefix)) {
@@ -246,28 +186,18 @@ function resolveImportPath(
 
 /**
  * 解析项目内绝对 import 路径（Python 包名式导入）
- *
- * 将点分包名转换为路径后，在 fileSet 中查找匹配的项目内文件。
- * 外部库不存在于 fileSet 中，自动排除，不产生误边。
- *
- * @param specifier - import 模块标识符（如 `graphify.core.parser`）
- * @param fileSet - 可用文件集合
- * @returns 解析后的文件路径，或 undefined（无法解析 / 非项目内模块）
  */
 function resolveAbsoluteImportPath(
   specifier: string,
   fileSet: Set<string>,
   dirPrefixIndex?: Map<string, string[]>,
 ): string | undefined {
-  // 将点分包名转换为路径（graphify.core → graphify/core）
   const asPath = specifier.replace(/\./g, '/');
 
-  // 尝试精确文件匹配
   if (fileSet.has(asPath)) {
     return asPath;
   }
 
-  // 尝试补全常见扩展名
   const extensions = ['.py', '.pyi', '.ts', '.tsx', '.js', '.jsx', '.go', '.java'];
   for (const ext of extensions) {
     if (fileSet.has(asPath + ext)) {
@@ -275,7 +205,6 @@ function resolveAbsoluteImportPath(
     }
   }
 
-  // 尝试包 index 文件（Python __init__.py、JS/TS index）
   const indexFiles = ['__init__.py', 'index.ts', 'index.js', 'index.tsx'];
   for (const indexFile of indexFiles) {
     const candidate = `${asPath}/${indexFile}`;
@@ -284,8 +213,6 @@ function resolveAbsoluteImportPath(
     }
   }
 
-  // 尝试匹配目录下的任意文件（最佳稳定性：优先 __init__.py，其次字典序第一个）
-  // 使用预构建目录前缀索引（O(候选数)），回退为全量扫描（O(n)）
   const dirPrefix = `${asPath}/`;
   let dirMatches: string[];
   if (dirPrefixIndex) {
@@ -307,19 +234,28 @@ function resolveAbsoluteImportPath(
   return undefined;
 }
 
+function guessLanguageFromFile(file: string): CodeSkeleton['language'] {
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.py' || ext === '.pyi') return 'python';
+  if (ext === '.go') return 'go';
+  if (ext === '.java') return 'java';
+  if (ext === '.ts' || ext === '.tsx' || ext === '.mts') return 'typescript';
+  return 'javascript';
+}
+
 /**
- * 创建空的依赖图
+ * Public builder：从已含 resolvedPath 的 CodeSkeleton Map 直接派生 ModuleGraph。
+ *
+ * 适用场景：python-adapter 等已知道自己语言 import 解析规则的 adapter，
+ * 在自己内部完成 imports[].resolvedPath 写回后，调用本函数把 UnifiedGraph 派生 +
+ * 视图转换合并为一步。
+ *
+ * 这是 buildModuleGraphFromCodeSkeletons 的薄壳 re-export，保留 backwards-compat 名字。
  */
-function createEmptyGraph(projectRoot: string): DependencyGraph {
-  return {
-    projectRoot,
-    modules: [],
-    edges: [],
-    topologicalOrder: [],
-    sccs: [],
-    totalModules: 0,
-    totalEdges: 0,
-    analyzedAt: new Date().toISOString(),
-    mermaidSource: '',
-  };
+export function buildGraphFromCodeSkeletons(
+  codeSkeletons: ReadonlyMap<string, CodeSkeleton>,
+  projectRoot: string,
+  language?: CodeSkeleton['language'],
+): ModuleGraph {
+  return buildModuleGraphFromCodeSkeletons(codeSkeletons, projectRoot, language);
 }

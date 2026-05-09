@@ -25,6 +25,7 @@ import { runQueryCommand } from './commands/query.js';
 import { runInstall } from './commands/install.js';
 import { runExportCommand } from './commands/export.js';
 import { runDirectionAuditCommand } from './commands/direction-audit.js';
+import { runIndexCommand } from './commands/index.js';
 import { bootstrapRuntime } from '../runtime-bootstrap.js';
 
 // 读取 package.json 版本号
@@ -54,6 +55,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra direction-audit [--graph <path>] [--output <path>] [--format json|text]
   spectra direction-audit --snapshot <path>
   spectra direction-audit --compare-snapshot <path>
+  spectra index [--watch] [--incremental] [--caller-depth <N>] [--project-root <dir>]
   spectra mcp-server
   spectra --version / --help
 
@@ -73,6 +75,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   install       安装/卸载 Claude Code PreToolUse hook 和 git post-commit hook（≠ init：init = skill 安装，install = hook 安装）
   export        将知识图谱导出为 Obsidian Vault 或 HTML 交互式可视化
   direction-audit 依赖方向自查工具（SC-006 CI regression guard）
+  index         构建并持久化 UnifiedGraph snapshot 到 .spectra/unified-graph.json（Feature 156）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -184,6 +187,9 @@ async function main(): Promise<void> {
       break;
     case 'direction-audit':
       await runDirectionAuditCommand(command);
+      break;
+    case 'index':
+      await runIndexCommand(command);
       break;
     case 'mcp-server':
       await runMcpServer(command);

@@ -1,11 +1,11 @@
 /**
  * 文件→模块分组与模块级拓扑排序
- * 将 dependency-cruiser 的文件级 DependencyGraph 聚合为目录级模块
+ * 将文件级 ModuleGraph（Feature 156 W1.4：UnifiedGraph 派生视图）聚合为目录级模块
  * 支持语言感知分组：同目录多语言文件拆分为带语言后缀的子模块（Feature 031）
  * 支持目录语义分类过滤（Feature 095）
  */
 import * as path from 'node:path';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { classifyDirectories } from './directory-classifier.js';
 import type { DirectoryClassifierOptions } from './directory-classifier.js';
@@ -74,7 +74,7 @@ export interface GroupingOptions {
  * 3. 无 src/ 目录时按项目根目录下第一级目录分组
  */
 export function groupFilesToModules(
-  graph: DependencyGraph,
+  graph: ModuleGraph,
   options: GroupingOptions = {},
 ): ModuleGroupResult {
   const {

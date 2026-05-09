@@ -94,6 +94,25 @@ export const ExportSymbolSchema = z.object({
 });
 export type ExportSymbol = z.infer<typeof ExportSymbolSchema>;
 
+/**
+ * Import 语义类型枚举（Feature 156 W1.0 / FR-28 / AC-11）。
+ *
+ * - 'static'：标准 ES Module 静态 import
+ * - 'dynamic'：动态 import() 调用
+ * - 'type-only'：仅类型导入（`import type { ... }`）
+ * - 'commonjs-require'：CommonJS require() 调用
+ *
+ * 注：ModuleEdge.importType 不含 'commonjs-require'，
+ * module-derivation 派生时会归并到 'static'（CommonJS 视为同步加载）。
+ */
+export const ImportSemanticTypeSchema = z.enum([
+  'static',
+  'dynamic',
+  'type-only',
+  'commonjs-require',
+]);
+export type ImportSemanticType = z.infer<typeof ImportSemanticTypeSchema>;
+
 /** 导入引用 */
 export const ImportReferenceSchema = z.object({
   moduleSpecifier: z.string().min(1),
@@ -102,6 +121,13 @@ export const ImportReferenceSchema = z.object({
   namedImports: z.array(z.string()).optional(),
   defaultImport: z.string().nullable().optional(),
   isTypeOnly: z.boolean(),
+  /**
+   * 语法类型（Feature 156 W1.0 新增；可选，向后兼容）。
+   * 由 import-resolver.detectImportType 派生；写入 CodeSkeleton.imports[].importType；
+   * deriveImportEdges 把此值写入 UnifiedGraphEdge.evidence；
+   * module-derivation 在重建 ModuleEdge.importType 时读取此字段。
+   */
+  importType: ImportSemanticTypeSchema.optional(),
 });
 export type ImportReference = z.infer<typeof ImportReferenceSchema>;
 

@@ -11,7 +11,9 @@
  * - CallSite 不携带 confidence 字段，confidence 在 call-resolver 阶段统一计算
  * - UnifiedEdge.directional?: boolean — calls / depends-on / cross-module / contains 必须 true，
  *   覆盖 GraphJSON.directed 全局开关，让 GraphQueryEngine 邻接表按 edge-level 决策
- * - UnifiedGraph 同时包含 calls 与 depends-on 边，供 DependencyGraph shim 派生 import 视图
+ * - UnifiedGraph 同时包含 calls 与 depends-on 边；Feature 156 W1.4 起所有 17 consumer
+ *   统一通过 buildUnifiedGraph + deriveModuleGraph（src/knowledge-graph/module-derivation.ts）
+ *   消费 ModuleGraph 视图，不再走 dependency-cruiser 路径
  */
 import { z } from 'zod';
 
@@ -122,7 +124,11 @@ export type UnifiedEdgeRelation = z.infer<typeof UnifiedEdgeRelationSchema>;
  *
  * `weight` 字段：可选数值，graph-builder 算分时使用。
  *
- * `evidence` 字段：自由文本注释，用于 debug 与 trace。
+ * `evidence` 字段：自由文本注释，用于 debug 与 trace（W1.0 v2 / WARN-3 修订：
+ * 不再编码 importType 前缀，保持纯净 specifier，避免污染 panoramic 消费方）。
+ *
+ * `metadata` 字段：producer 注入的扩展结构化数据（如 importType / callSitesCount），
+ * 与 UnifiedNode.metadata 对应（Codex C-4 + Feature 156 W1.0 v2 / WARN-3 关闭）。
  */
 export const UnifiedEdgeSchema = z
   .object({
@@ -133,6 +139,7 @@ export const UnifiedEdgeSchema = z
     directional: z.boolean().optional(),
     evidence: z.string().optional(),
     weight: z.number().nonnegative().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   // **Codex P0 W-1 修订** — 强制 calls / depends-on / cross-module / contains 必须是
   // directional=true（缺省也按 true 处理；显式 false 视为合同违反，零容忍）
@@ -166,7 +173,7 @@ export type UnifiedGraphMetadata = z.infer<typeof UnifiedGraphMetadataSchema>;
  * UnifiedGraph — 顶层装配。
  *
  * Codex C-3 修订：buildUnifiedGraph 同时产出 calls 与 depends-on 边，
- * 供 DependencyGraph shim 派生 import 视图（不再要求另起 import-edge 数据源）。
+ * 供 ModuleGraph 派生 import 视图（不再要求另起 import-edge 数据源）。
  */
 export const UnifiedGraphSchema = z.object({
   nodes: z.array(UnifiedNodeSchema),

@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit' | 'index';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -90,6 +90,18 @@ export interface CLICommand {
   hyperedgesEnabled?: boolean;
   /** Feature 135 Bug 1：是否显式启用 ADR pipeline（v4.0.1 临时禁用，用 --enable-adr 显式开启） */
   enableAdr?: boolean;
+  /** Feature 156：spectra index 持续监听模式（FR-12） */
+  indexWatch?: boolean;
+  /** Feature 156：spectra index 单次增量更新（FR-30） */
+  indexIncremental?: boolean;
+  /** Feature 156：spectra index caller 扩展深度（OQ-2 / clarify Q3，默认 1） */
+  indexCallerDepth?: number;
+  /**
+   * Feature 156 W4：spectra index --git-range，post-commit hook 上下文使用。
+   * 仅在 --incremental 模式生效；white-list 校验仅允许预设格式（防注入）：
+   *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
+   */
+  indexGitRange?: string;
 }
 
 /** 解析错误 */
@@ -559,6 +571,85 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // index 子命令（Feature 156 — spectra index）
+  if (sub === 'index') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'index',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const indexWatch = argv.includes('--watch');
+    const indexIncremental = argv.includes('--incremental');
+    if (indexWatch && indexIncremental) {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_option',
+          message: '--watch 与 --incremental 互斥，不能同时使用',
+        },
+      };
+    }
+    const callerDepthIdx = argv.indexOf('--caller-depth');
+    let indexCallerDepth: number | undefined;
+    if (callerDepthIdx !== -1 && argv[callerDepthIdx + 1] !== undefined) {
+      const parsed = parseInt(argv[callerDepthIdx + 1]!, 10);
+      if (isNaN(parsed) || parsed < 0) {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--caller-depth 必须为非负整数，收到: ${argv[callerDepthIdx + 1]}`,
+          },
+        };
+      }
+      indexCallerDepth = parsed;
+    }
+    const projectRootIdx = argv.indexOf('--project-root');
+    const projectRoot = projectRootIdx !== -1 ? argv[projectRootIdx + 1] : undefined;
+    // --git-range（W4 T-036 / WARN-2 加固）：仅在 --incremental 时有效，并做 white-list 校验
+    const gitRangeIdx = argv.indexOf('--git-range');
+    let indexGitRange: string | undefined;
+    if (gitRangeIdx !== -1 && argv[gitRangeIdx + 1] !== undefined) {
+      const raw = argv[gitRangeIdx + 1]!;
+      // 白名单：仅允许 SHA-like / HEAD 系列引用 + 单空格组合
+      // 形式：<ref> 或 <ref> <ref>；ref ∈ /^[A-Za-z0-9_~^@/.-]+$/（且至少 1 字符）
+      const REF_PATTERN = /^[A-Za-z0-9_~^@/.-]+$/;
+      const parts = raw.trim().split(/\s+/);
+      const valid =
+        parts.length >= 1 &&
+        parts.length <= 2 &&
+        parts.every((p) => p.length > 0 && p.length <= 100 && REF_PATTERN.test(p));
+      if (!valid) {
+        return {
+          ok: false,
+          error: {
+            type: 'invalid_option',
+            message: `--git-range 格式不合法（仅允许 1~2 个 git ref，如 'HEAD' / 'ORIG_HEAD HEAD'），收到: ${raw}`,
+          },
+        };
+      }
+      indexGitRange = parts.join(' ');
+    }
+    return {
+      ok: true,
+      command: {
+        subcommand: 'index',
+        indexWatch,
+        indexIncremental,
+        indexCallerDepth,
+        indexGitRange,
+        projectRoot,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // --global/--remove/--target 仅在 init 子命令下有效
   if (argv.includes('--global') || argv.includes('-g')) {
     return {
@@ -597,7 +688,7 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
-  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install' && sub !== 'export' && sub !== 'direction-audit') {
+  if (sub !== 'generate' && sub !== 'batch' && sub !== 'diff' && sub !== 'prepare' && sub !== 'auth-status' && sub !== 'mcp-server' && sub !== 'panoramic' && sub !== 'cache' && sub !== 'watch' && sub !== 'graph' && sub !== 'community' && sub !== 'query' && sub !== 'install' && sub !== 'export' && sub !== 'direction-audit' && sub !== 'index') {
     return {
       ok: false,
       error: {
@@ -836,7 +927,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot' || args[i] === '--mode') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot' || args[i] === '--mode' || args[i] === '--caller-depth' || args[i] === '--git-range') {
         i++; // 跳过选项值
       }
       continue;

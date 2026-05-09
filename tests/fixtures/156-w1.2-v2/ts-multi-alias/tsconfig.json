@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["packages/app/src/*", "packages/lib/src/*"],
+      "@app/utils/*": ["packages/lib/src/utils/*"]
+    },
+    "strict": false
+  },
+  "include": ["packages/**/*.ts"]
+}

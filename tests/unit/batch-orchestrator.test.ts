@@ -18,18 +18,18 @@ import { groupFilesByLanguage } from '../../src/batch/language-grouper.js';
 import { scanFiles } from '../../src/utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
-import type { DependencyGraph, DependencyEdge } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph, ModuleEdge } from '../../src/knowledge-graph/module-derivation.js';
 import type { BatchState } from '../../src/models/module-spec.js';
 
 const MULTILANG_FIXTURE = path.resolve(__dirname, '../fixtures/multilang-project');
 const TS_FIXTURE = path.resolve(__dirname, '../fixtures/multilang/typescript');
 
-/** 创建最小化 DependencyGraph */
+/** 创建最小化 ModuleGraph */
 function createGraph(
   modules: { source: string; language?: string }[],
-  edges: DependencyEdge[] = [],
+  edges: ModuleEdge[] = [],
   projectRoot = '/test',
-): DependencyGraph {
+): ModuleGraph {
   return {
     projectRoot,
     modules: modules.map((m) => ({

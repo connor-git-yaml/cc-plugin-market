@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import type { ModuleSpec } from '../../src/models/module-spec.js';
 import {
   buildDocGraph,
@@ -180,7 +180,7 @@ lastUpdated: 2026-03-20T00:00:00.000Z
   });
 });
 
-function createGraph(projectRoot: string): DependencyGraph {
+function createGraph(projectRoot: string): ModuleGraph {
   return {
     projectRoot,
     modules: [

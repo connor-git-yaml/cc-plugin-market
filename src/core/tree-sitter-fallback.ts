@@ -14,10 +14,12 @@ import type {
   CodeSkeleton,
   ExportSymbol,
   ImportReference,
+  ImportSemanticType,
   ParseError,
   Language,
 } from '../models/code-skeleton.js';
 import { TreeSitterAnalyzer } from './tree-sitter-analyzer.js';
+import { resolveTsJsImport } from './import-resolver.js';
 
 // ════════════════════════ 正则降级（最终兜底） ════════════════════════
 
@@ -85,15 +87,30 @@ function extractExportsFromText(content: string): ExportSymbol[] {
 }
 
 /**
- * 基于正则的简易导入提取
+ * 基于正则的简易导入提取（TS/JS）。
+ *
+ * Feature 156 W1.0 修订（FR-28）：
+ *   - 接受 filePath / projectRoot / pathAliases，调用 resolveTsJsImport 填 resolvedPath
+ *   - 同时识别 require('x') 与 import('x') 形态，写入对应的 importType
  */
-function extractImportsFromText(content: string): ImportReference[] {
+function extractImportsFromText(
+  content: string,
+  filePath: string,
+  projectRoot: string,
+  pathAliases?: Record<string, string>,
+): ImportReference[] {
   const imports: ImportReference[] = [];
+  const resolverOpts = pathAliases ? { pathAliases } : undefined;
+  // WARN-2 修订：在纯正则降级路径下，先剥离行注释 / 块注释 / 字符串字面量，
+  // 防止 `// require('./x')` 或 `"require('./x')"` 这类形态误命中 dynamic / require 正则。
+  // WARN-2 v3：static `import ... from '...'` 路径同样改用 sanitized 文本，
+  // 避免字符串字面量 / 注释里的 `import './x'` 字面被误命中（与 dynamic / require 对齐）
+  const sanitized = sanitizeForImportRegex(content);
   const importRe =
     /import\s+(?:type\s+)?(?:({[^}]+})\s+from\s+|(\w+)\s+from\s+|(\w+),\s*({[^}]+})\s+from\s+)?['"]([^'"]+)['"]/g;
 
   let match: RegExpExecArray | null;
-  while ((match = importRe.exec(content)) !== null) {
+  while ((match = importRe.exec(sanitized)) !== null) {
     const moduleSpecifier = match[5]!;
     const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
     const isTypeOnly = match[0].includes('import type');
@@ -108,18 +125,147 @@ function extractImportsFromText(content: string): ImportReference[] {
       : undefined;
 
     const defaultImport = match[2] ?? match[3] ?? null;
+    const resolvedPath = resolveTsJsImport(moduleSpecifier, filePath, projectRoot, resolverOpts);
 
     imports.push({
       moduleSpecifier,
       isRelative,
-      resolvedPath: null,
+      resolvedPath,
       namedImports: namedImports && namedImports.length > 0 ? namedImports : undefined,
       defaultImport,
       isTypeOnly,
+      importType: isTypeOnly ? 'type-only' : 'static',
     });
   }
 
+  // 动态 import('x')（用 sanitized 文本，避免 WARN-2 字符串/注释误命中）
+  const dynamicRe = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  let dyn: RegExpExecArray | null;
+  while ((dyn = dynamicRe.exec(sanitized)) !== null) {
+    const moduleSpecifier = dyn[1]!;
+    addCallExpressionImport(imports, moduleSpecifier, 'dynamic', filePath, projectRoot, resolverOpts);
+  }
+
+  // CommonJS require('x')（限定为 require 标识符调用，避免误匹配 .require()）
+  const requireRe = /(?:^|[^.\w$])require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+  let req: RegExpExecArray | null;
+  while ((req = requireRe.exec(sanitized)) !== null) {
+    const moduleSpecifier = req[1]!;
+    addCallExpressionImport(
+      imports,
+      moduleSpecifier,
+      'commonjs-require',
+      filePath,
+      projectRoot,
+      resolverOpts,
+    );
+  }
+
   return imports;
+}
+
+/**
+ * 把 TS/JS 源文本剥离掉行注释 / 块注释 / 字符串字面量（替换为等长空白），
+ * 让后续 dynamic / require 正则只在真实代码区段匹配。
+ *
+ * WARN-2 修订动机：纯文本正则会命中
+ *   - `// require('./x')`（行注释）
+ *   - `"require('./x')"` / `\`require('./x')\``（字符串字面量）
+ * 这些片段被替换成空格后，dynamic / require 正则就不再误产边。
+ *
+ * 实现采用单趟扫描状态机：
+ *   - normal → string('/")/template(`)/lineComment(//)/blockComment(/*)
+ *   - 各 mode 在终止符处回 normal；保持长度（offset 不变），只把内容字符替换为空格
+ *
+ * 注意：此函数不追求 100% 解析正确（不处理 nested template literal / 转义边界
+ * 罕见情况），只为降低 false positive。生产路径走 tree-sitter / ts-morph，正则
+ * 仅是最终兜底。
+ */
+function sanitizeForImportRegex(content: string): string {
+  const out = Array.from(content);
+  type Mode = 'normal' | 'line' | 'block' | 'sq' | 'dq' | 'tpl';
+  let mode: Mode = 'normal';
+  let i = 0;
+  const n = out.length;
+  while (i < n) {
+    const ch = content[i]!;
+    const next = i + 1 < n ? content[i + 1]! : '';
+    if (mode === 'normal') {
+      if (ch === '/' && next === '/') {
+        mode = 'line';
+        i += 2;
+        continue;
+      }
+      if (ch === '/' && next === '*') {
+        mode = 'block';
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i += 2;
+        continue;
+      }
+      if (ch === "'") { mode = 'sq'; out[i] = ' '; i++; continue; }
+      if (ch === '"') { mode = 'dq'; out[i] = ' '; i++; continue; }
+      if (ch === '`') { mode = 'tpl'; out[i] = ' '; i++; continue; }
+      i++;
+      continue;
+    }
+    if (mode === 'line') {
+      if (ch === '\n') { mode = 'normal'; i++; continue; }
+      out[i] = ch === '\t' ? '\t' : ' ';
+      i++;
+      continue;
+    }
+    if (mode === 'block') {
+      if (ch === '*' && next === '/') {
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        mode = 'normal';
+        i += 2;
+        continue;
+      }
+      out[i] = ch === '\n' ? '\n' : (ch === '\t' ? '\t' : ' ');
+      i++;
+      continue;
+    }
+    if (mode === 'sq' || mode === 'dq' || mode === 'tpl') {
+      // 转义字符：跳过下一字节（保留位置占位）
+      if (ch === '\\' && i + 1 < n) {
+        out[i] = ' ';
+        out[i + 1] = ' ';
+        i += 2;
+        continue;
+      }
+      if ((mode === 'sq' && ch === "'") || (mode === 'dq' && ch === '"') || (mode === 'tpl' && ch === '`')) {
+        out[i] = ' ';
+        mode = 'normal';
+        i++;
+        continue;
+      }
+      out[i] = ch === '\n' ? '\n' : (ch === '\t' ? '\t' : ' ');
+      i++;
+      continue;
+    }
+  }
+  return out.join('');
+}
+
+function addCallExpressionImport(
+  imports: ImportReference[],
+  moduleSpecifier: string,
+  importType: ImportSemanticType,
+  filePath: string,
+  projectRoot: string,
+  resolverOpts: { pathAliases: Record<string, string> } | undefined,
+): void {
+  const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
+  const resolvedPath = resolveTsJsImport(moduleSpecifier, filePath, projectRoot, resolverOpts);
+  imports.push({
+    moduleSpecifier,
+    isRelative,
+    resolvedPath,
+    isTypeOnly: false,
+    importType,
+  });
 }
 
 // ════════════════════════ Python 正则降级 ════════════════════════
@@ -408,32 +554,43 @@ function getLanguage(filePath: string): Language {
  * 1. 尝试 TreeSitterAnalyzer 真正的 AST 解析
  * 2. tree-sitter 失败时降级到正则提取
  *
- * 函数签名保持与重写前完全一致，不影响调用方。
- *
  * @param filePath - 文件路径
- * @returns CodeSkeleton，parserUsed 为 'tree-sitter'（AST）或 'tree-sitter'（正则降级亦标记为 tree-sitter，保持兼容）
+ * @param options - Feature 156 W1.0 新增可选项：projectRoot / pathAliases，
+ *                  仅 TS/JS 正则降级路径会用到（用于 import-resolver 解析 resolvedPath）
+ * @returns CodeSkeleton，parserUsed 为 'tree-sitter'
  */
-export async function analyzeFallback(filePath: string): Promise<CodeSkeleton> {
+export async function analyzeFallback(
+  filePath: string,
+  options?: { projectRoot?: string; pathAliases?: Record<string, string> },
+): Promise<CodeSkeleton> {
   const language = getLanguage(filePath);
 
   // 第一级降级：尝试 tree-sitter AST 解析
   try {
     const analyzer = TreeSitterAnalyzer.getInstance();
     if (analyzer.isLanguageSupported(language)) {
-      return await analyzer.analyze(filePath, language);
+      return await analyzer.analyze(filePath, language, {
+        projectRoot: options?.projectRoot,
+        pathAliases: options?.pathAliases,
+      });
     }
   } catch {
     // tree-sitter 解析失败，继续降级到正则
   }
 
   // 第二级降级：正则提取（最终兜底）
-  return regexFallback(filePath, language);
+  return regexFallback(filePath, language, options?.projectRoot ?? '', options?.pathAliases);
 }
 
 /**
  * 正则降级分析（内部方法，可用于测试对比）
  */
-function regexFallback(filePath: string, language: Language): CodeSkeleton {
+function regexFallback(
+  filePath: string,
+  language: Language,
+  projectRoot: string,
+  pathAliases?: Record<string, string>,
+): CodeSkeleton {
   let content: string;
   try {
     content = fs.readFileSync(filePath, 'utf-8');
@@ -453,13 +610,15 @@ function regexFallback(filePath: string, language: Language): CodeSkeleton {
       : language === 'java'
         ? extractJavaExportsFromText(content)
         : extractExportsFromText(content);
+  // Feature 156 W1.0：TS/JS 正则降级路径调用 import-resolver 填充 resolvedPath；
+  // 其他语言保持现有行为（Python / Go / Java 的解析在各自 adapter 阶段处理，EC-6）
   const imports = language === 'python'
     ? extractPythonImportsFromText(content)
     : language === 'go'
       ? extractGoImportsFromText(content)
       : language === 'java'
         ? extractJavaImportsFromText(content)
-        : extractImportsFromText(content);
+        : extractImportsFromText(content, filePath, projectRoot, pathAliases);
 
   const parseErrors: ParseError[] = [
     {

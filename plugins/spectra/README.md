@@ -123,6 +123,53 @@ Plugin 安装后，`.mcp.json` 自动配置 MCP server：
 /spectra-diff specs/auth.spec.md src/auth/
 ```
 
+## Spectra Index — UnifiedGraph 索引（Feature 156）
+
+`spectra index` 把整个项目索引为 `.spectra/unified-graph.json` snapshot，
+供下游 panoramic / spectra batch / IDE 工具消费同一份图。
+
+### 三种模式
+
+```bash
+# 1. 全量索引（首次使用 / corruption 自愈）
+spectra index
+
+# 2. 一次性增量更新（基于 git diff + caller expansion）
+spectra index --incremental
+
+# 3. 持续监听模式（chokidar + 批量 incremental，进程不退出，Ctrl+C 退出）
+spectra index --watch
+```
+
+### post-commit hook 自动触发（可选，FR-15）
+
+每次 `git commit` 完成后自动跑一次 `spectra index --incremental`，
+保持 `.spectra/unified-graph.json` 与代码库同步。**不会** 阻塞 commit 流程
+（脚本后台异步触发）。
+
+```bash
+# 手动安装：拷贝脚本到 .git/hooks/ 并赋可执行权限
+cp plugins/spectra/hooks/post-commit.sh .git/hooks/post-commit
+chmod +x .git/hooks/post-commit
+```
+
+行为说明（FR-16）：
+- 仅在仓库根存在 `.spectra/` 时触发；未启用用户不受影响
+- 后台异步调用，输出到 `.spectra/index-hook.log`（已被 `.gitignore` 涵盖）
+- 任何失败不影响 commit 退出码（hook 始终 exit 0）
+
+不通过 npm postinstall / install --git-hook 子命令自动安装（保持非破坏性）。
+
+### 验证
+
+`scripts/verify-feature-156.mjs` 提供端到端验证：跑 full → 改动 1 个文件 →
+跑 incremental → canonical sort 后对比 `depends-on / calls / cross-module` 三类边
+diff = 0（AC-3a / AC-3b）。
+
+```bash
+node scripts/verify-feature-156.mjs --project-root <dir>
+```
+
 ## 许可证
 
 MIT

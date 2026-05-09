@@ -12,7 +12,7 @@ import type {
   LanguageDistribution,
 } from '../models/module-spec.js';
 import type { ModuleSpec, SpecFrontmatter, SpecSections } from '../models/module-spec.js';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import type { LanguageFileStat } from '../utils/file-scanner.js';
 import { getSpectraVersionString } from './frontmatter.js';
 
@@ -26,7 +26,7 @@ export interface IndexableModuleSpec {
 /**
  * 从依赖图识别横切关注点（被多个模块依赖的共享模块）
  */
-function identifyCrossCuttingConcerns(graph: DependencyGraph): string[] {
+function identifyCrossCuttingConcerns(graph: ModuleGraph): string[] {
   const concerns: string[] = [];
 
   for (const node of graph.modules) {
@@ -44,7 +44,7 @@ function identifyCrossCuttingConcerns(graph: DependencyGraph): string[] {
  */
 function buildModuleMap(
   specs: IndexableModuleSpec[],
-  graph: DependencyGraph,
+  graph: ModuleGraph,
 ): ModuleMapEntry[] {
   return specs.map((spec) => {
     // 从依赖图中查找该模块的层级和依赖
@@ -123,14 +123,14 @@ function buildLanguageDistribution(
  * 生成项目级架构索引
  *
  * @param specs - 所有已生成的 ModuleSpec
- * @param graph - 项目 DependencyGraph（或合并后的图）
+ * @param graph - 项目 ModuleGraph（或合并后的图）
  * @param languageStats - 完整扫描的语言统计（可选）
  * @param processedLanguages - 本次实际处理的语言列表（可选）
  * @returns ArchitectureIndex
  */
 export function generateIndex(
   specs: IndexableModuleSpec[],
-  graph: DependencyGraph,
+  graph: ModuleGraph,
   languageStats?: Map<string, LanguageFileStat>,
   processedLanguages?: string[],
 ): ArchitectureIndex {

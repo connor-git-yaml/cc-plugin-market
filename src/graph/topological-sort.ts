@@ -1,15 +1,22 @@
 /**
  * 拓扑排序与 Tarjan SCC 检测
  * 参见 contracts/graph-module.md
+ *
+ * Feature 156 W1.4：输入类型为 ModuleGraph
+ * （取自 src/knowledge-graph/module-derivation.ts，UnifiedGraph 派生视图）。
  */
-import type { DependencyGraph, SCC } from '../models/dependency-graph.js';
+import type { ModuleGraph, ModuleStronglyConnectedSet } from '../knowledge-graph/module-derivation.js';
 
 // ============================================================
 // 类型定义
 // ============================================================
 
 export interface TopologicalResult {
-  /** 按依赖顺序排列的文件路径（叶子节点优先） */
+  /**
+   * 按依赖顺序排列的文件路径（dependents-first，依赖前置）
+   * 对于 A→B→C 链，输出 [A, B, C]：A 没有依赖（inDegree=0）排首位，
+   * B 依赖 A 排其次，C 依赖 B 排末位。按此顺序处理可保证每个模块的依赖已被先处理。
+   */
   order: string[];
   /** 模块 → 拓扑层级 */
   levels: Map<string, number>;
@@ -26,10 +33,10 @@ export interface TopologicalResult {
 /**
  * 基于 Tarjan 算法的强连通分量检测
  *
- * @param graph - 依赖关系图
+ * @param graph - ModuleGraph
  * @returns 所有 SCC（单模块 SCC 的 modules.length === 1）
  */
-export function detectSCCs(graph: DependencyGraph): SCC[] {
+export function detectSCCs(graph: ModuleGraph): ModuleStronglyConnectedSet[] {
   const nodes = graph.modules.map((m) => m.source);
   const nodeSet = new Set(nodes);
 
@@ -50,7 +57,7 @@ export function detectSCCs(graph: DependencyGraph): SCC[] {
   const lowlinks = new Map<string, number>();
   const onStack = new Set<string>();
   const stack: string[] = [];
-  const sccs: SCC[] = [];
+  const sccs: ModuleStronglyConnectedSet[] = [];
   let sccId = 0;
 
   function strongConnect(v: string): void {
@@ -102,10 +109,10 @@ export function detectSCCs(graph: DependencyGraph): SCC[] {
  * 使用 Kahn 算法计算处理顺序
  * 循环依赖被折叠为 SCC 后作为整体处理
  *
- * @param graph - 依赖关系图
+ * @param graph - ModuleGraph
  * @returns 拓扑排序结果
  */
-export function topologicalSort(graph: DependencyGraph): TopologicalResult {
+export function topologicalSort(graph: ModuleGraph): TopologicalResult {
   const nodes = graph.modules.map((m) => m.source);
   const nodeSet = new Set(nodes);
 

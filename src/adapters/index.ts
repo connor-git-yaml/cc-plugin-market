@@ -8,7 +8,7 @@ export type { LanguageAdapter } from './language-adapter.js';
 export type { LanguageTerminology } from './language-adapter.js';
 export type { TestPatterns } from './language-adapter.js';
 export type { AnalyzeFileOptions } from './language-adapter.js';
-export type { DependencyGraphOptions } from './language-adapter.js';
+export type { ModuleGraphOptions } from './language-adapter.js';
 
 // Registry
 export { LanguageAdapterRegistry } from './language-adapter-registry.js';

@@ -137,7 +137,7 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
   // 加载 ArchitectureIR（从磁盘缓存读取）
   const architectureIR = loadArchitectureIR(outputDir);
 
-  // 构建轻量 DocGraph（基于已存储 spec 文件，无需 DependencyGraph）
+  // 构建轻量 DocGraph（基于已存储 spec 文件，无需 ModuleGraph）
   // 通过 SpecStore 过滤，排除 orphan/bundle_copy/derived
   let docGraph: DocGraph | undefined;
   try {

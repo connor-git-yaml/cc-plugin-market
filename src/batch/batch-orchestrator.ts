@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import pLimit from 'p-limit';
 import { findReadmePath } from '../extraction/index.js';
-import { buildGraph } from '../graph/dependency-graph.js';
+import { buildModuleGraphForProject } from '../knowledge-graph/module-derivation.js';
 import { buildDirectoryGraph } from '../graph/directory-graph.js';
 import { generateSpec, type GenerateSpecOptions } from '../core/single-spec-orchestrator.js';
 import { generateIndex } from '../generator/index-generator.js';
@@ -41,7 +41,7 @@ import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
 import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
-import type { DependencyGraph, GraphNode, DependencyEdge } from '../models/dependency-graph.js';
+import type { ModuleGraph, ModuleNode, ModuleEdge } from '../knowledge-graph/module-derivation.js';
 import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
 import {
   buildDocGraph,
@@ -248,15 +248,15 @@ const logger = createLogger('batch-orchestrator');
 // ============================================================
 
 /**
- * 合并多个语言的 DependencyGraph 用于全局拓扑排序
+ * 合并多个语言的 ModuleGraph 用于全局拓扑排序
  * 仅合并 modules 和 edges，SCC/Mermaid 按语言独立保留（TD-002 选项 C）
  */
 export function mergeGraphsForTopologicalSort(
-  graphs: DependencyGraph[],
+  graphs: ModuleGraph[],
   projectRoot: string,
-): DependencyGraph {
-  const allModules: GraphNode[] = [];
-  const allEdges: DependencyEdge[] = [];
+): ModuleGraph {
+  const allModules: ModuleNode[] = [];
+  const allEdges: ModuleEdge[] = [];
 
   for (const graph of graphs) {
     allModules.push(...graph.modules);
@@ -289,7 +289,7 @@ export function mergeGraphsForTopologicalSort(
 export function detectCrossLanguageRefs(
   moduleFiles: string[],
   languageGroups: LanguageGroup[],
-  graph: DependencyGraph,
+  graph: ModuleGraph,
 ): string[] {
   const refs: string[] = [];
 
@@ -434,9 +434,9 @@ export async function runBatch(
   const isSingleNonTsJs = processedLanguages.length === 1 && processedLanguages[0] !== 'ts-js';
 
   // 步骤 1.6：根据语言组合选择主依赖图
-  let mergedGraph: DependencyGraph;
+  let mergedGraph: ModuleGraph;
   if (isMultiLang) {
-    const perLangGraphs: DependencyGraph[] = [];
+    const perLangGraphs: ModuleGraph[] = [];
     for (const langGroup of languageGroupsList) {
       perLangGraphs.push(await buildGraphForLanguageGroup(langGroup, resolvedRoot));
     }
@@ -444,12 +444,12 @@ export async function runBatch(
     // 步骤 1.7：合并拓扑排序
     mergedGraph = perLangGraphs.length > 0
       ? mergeGraphsForTopologicalSort(perLangGraphs, resolvedRoot)
-      : await buildGraph(resolvedRoot);
+      : await buildModuleGraphForProject(resolvedRoot);
   } else if (isSingleNonTsJs && languageGroupsList[0]) {
     mergedGraph = await buildGraphForLanguageGroup(languageGroupsList[0], resolvedRoot);
   } else {
-    // 纯 TS/JS 或未识别受支持语言：保持 dependency-cruiser 现有路径
-    mergedGraph = await buildGraph(resolvedRoot);
+    // 纯 TS/JS 或未识别受支持语言：走 UnifiedGraph 派生路径（Feature 156 删除 dependency-cruiser）
+    mergedGraph = await buildModuleGraphForProject(resolvedRoot);
   }
 
   // 步骤 2：文件→模块聚合 + 模块级拓扑排序
@@ -1745,13 +1745,13 @@ export async function runBatch(
 async function buildGraphForLanguageGroup(
   langGroup: LanguageGroup,
   projectRoot: string,
-): Promise<DependencyGraph> {
+): Promise<ModuleGraph> {
   const registry = LanguageAdapterRegistry.getInstance();
   const adapter = registry.getAllAdapters().find((item) => item.id === langGroup.adapterId);
 
-  if (adapter?.buildDependencyGraph) {
+  if (adapter?.buildModuleGraph) {
     try {
-      const langGraph = await adapter.buildDependencyGraph(projectRoot);
+      const langGraph = await adapter.buildModuleGraph(projectRoot);
       for (const node of langGraph.modules) {
         node.language = langGroup.adapterId;
       }
@@ -1773,7 +1773,7 @@ async function buildGraphForLanguageGroup(
 async function buildFallbackGraph(
   langGroup: LanguageGroup,
   projectRoot: string,
-): Promise<DependencyGraph> {
+): Promise<ModuleGraph> {
   // buildDirectoryGraph 需要 CodeSkeleton，但此处我们没有骨架
   // 创建最小化的图（仅节点，无边）
   const { buildDirectoryGraph } = await import('../graph/directory-graph.js');
@@ -2002,7 +2002,7 @@ const PY_SKELETON_IGNORE_DIRS = new Set([
 /**
  * Feature 151 T-008c — 收集 .py 文件 CodeSkeleton（含 callSites + 本地 import 解析）。
  *
- * 与 PythonLanguageAdapter.extractSymbolNodes / buildDependencyGraph 不同：
+ * 与 PythonLanguageAdapter.extractSymbolNodes / buildModuleGraph 不同：
  * - 显式传 extractCallSites=true，让 graph.json 含 callSites 字段
  * - 在 PythonMapper 输出基础上补充 import 的 resolvedPath（基于项目内 .py 模块 basename map）
  *   — Codex P1 C-1 修订：mapper 当前只输出 moduleSpecifier，resolvedPath 始终 null，

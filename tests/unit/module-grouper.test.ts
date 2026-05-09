@@ -4,15 +4,15 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { groupFilesToModules } from '../../src/batch/module-grouper.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 
-/** 创建测试用 DependencyGraph */
+/** 创建测试用 ModuleGraph */
 function createGraph(
   modules: string[],
   edges: Array<[string, string]> = [],
-): DependencyGraph {
+): ModuleGraph {
   return {
     projectRoot: '/test-project',
     modules: modules.map((source) => ({

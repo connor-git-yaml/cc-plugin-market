@@ -1,10 +1,13 @@
 /**
  * 语言适配器接口定义
  * 定义一种编程语言支持所需的全部能力契约：文件分析、降级分析、
- * 依赖图构建（可选）、术语映射、测试文件模式。
+ * 模块图构建（可选）、术语映射、测试文件模式。
+ *
+ * Feature 156 W1.4：模块图统一使用 ModuleGraph
+ * （UnifiedGraph 派生视图，src/knowledge-graph/module-derivation.ts）。
  */
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
 
 export type { CommentRegion };
@@ -30,12 +33,35 @@ export interface AnalyzeFileOptions {
    * 必须显式传 true 才能让 graph.json 含 calls 边。
    */
   extractCallSites?: boolean;
+  /**
+   * 项目根目录绝对路径（Feature 156 W1.0 新增，FR-28）。
+   *
+   * 用于 import-resolver 解析 tsconfig path alias 与跨包相对路径。
+   * 缺失时仍可解析相对路径（fallback 用 path.dirname(filePath) 作 base），
+   * 但 alias 会失效。
+   */
+  projectRoot?: string;
+  /**
+   * tsconfig path alias 映射（Feature 156 W1.0；W1.2 v2 / CRIT-2 扩展为多候选）。
+   *
+   * 形如 `{ '@/star': './src/star' }`（单值，向后兼容；star 表示通配符）
+   * 或   `{ '@app/star': ['./packages/app/star', './apps/star/src'] }`（多候选，CRIT-2 v2）；
+   * 交由 import-resolver.resolveTsJsImport 处理。
+   */
+  pathAliases?: Record<string, string | readonly string[]>;
+  /**
+   * tsconfig.compilerOptions.baseUrl 解析后的绝对路径（Feature 156 W1.2 v2 / CRIT-2 新增）。
+   *
+   * 提供时，未命中 alias 的非相对 import specifier 会基于 baseUrl 尝试解析
+   * （如 baseUrl='/proj/src', specifier='utils/foo' → 尝试 /proj/src/utils/foo.{ts,tsx,...}）。
+   */
+  baseUrl?: string;
 }
 
 /**
- * 依赖图构建选项
+ * 模块图构建选项（W1.4：ModuleGraphOptions）
  */
-export interface DependencyGraphOptions {
+export interface ModuleGraphOptions {
   /** 用于过滤分析文件的 Glob 模式 */
   includeOnly?: string;
   /** 排除模式 */
@@ -82,7 +108,7 @@ export interface TestPatterns {
 /**
  * 语言适配器接口
  * 定义一种编程语言支持所需的全部能力：文件分析、降级分析、
- * 依赖图构建（可选）、术语映射、测试文件模式。
+ * 模块图构建（可选）、术语映射、测试文件模式。
  */
 export interface LanguageAdapter {
   /** 适配器唯一标识（如 'ts-js', 'python', 'go'） */
@@ -123,17 +149,20 @@ export interface LanguageAdapter {
   analyzeFallback(filePath: string): Promise<CodeSkeleton>;
 
   /**
-   * 构建项目级依赖图（可选能力）
-   * 并非所有语言在初始阶段都需要依赖图支持。
+   * 构建项目级模块图（可选能力）
+   * 并非所有语言在初始阶段都需要模块图支持。
+   *
+   * Feature 156 W1.4：所有实现内部统一走 buildUnifiedGraph + deriveModuleGraph
+   * 派生路径，不再依赖 dependency-cruiser 等外部工具。
    *
    * @param projectRoot - 项目根目录
    * @param options - 构建选项（可选）
-   * @returns DependencyGraph
+   * @returns ModuleGraph（UnifiedGraph 派生视图）
    */
-  buildDependencyGraph?(
+  buildModuleGraph?(
     projectRoot: string,
-    options?: DependencyGraphOptions,
-  ): Promise<DependencyGraph>;
+    options?: ModuleGraphOptions,
+  ): Promise<ModuleGraph>;
 
   /**
    * 返回该语言的术语映射

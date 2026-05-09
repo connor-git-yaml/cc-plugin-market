@@ -12,9 +12,11 @@ describe('TsJsLanguageAdapter 静态属性', () => {
     expect(adapter.id).toBe('ts-js');
   });
 
-  it('extensions 包含且仅包含 .ts/.tsx/.js/.jsx', () => {
-    expect(adapter.extensions).toEqual(new Set(['.ts', '.tsx', '.js', '.jsx']));
-    expect(adapter.extensions.size).toBe(4);
+  it('extensions 包含 .ts/.tsx/.js/.jsx + .mjs/.cjs/.mts/.cts（Feature 156 W1.2 v2 / CRIT-3 扩充）', () => {
+    expect(adapter.extensions).toEqual(
+      new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts']),
+    );
+    expect(adapter.extensions.size).toBe(8);
   });
 
   it('languages 包含 "typescript" 和 "javascript"', () => {

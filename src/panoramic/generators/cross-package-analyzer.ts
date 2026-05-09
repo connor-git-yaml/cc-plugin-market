@@ -13,7 +13,7 @@
  * 技术决策：
  * - 复用 WorkspaceIndexGenerator.extract() 获取子包列表（最大复用、最小新增）
  * - 复用 detectSCCs() + topologicalSort() 图算法
- * - 仅新增包级 DependencyGraph 构建、循环标注 Mermaid 生成和 Handlebars 模板渲染
+ * - 仅新增包级 ModuleGraph 构建、循环标注 Mermaid 生成和 Handlebars 模板渲染
  *
  * @module panoramic/cross-package-analyzer
  */
@@ -21,7 +21,7 @@ import * as path from 'node:path';
 import type { DocumentGenerator, ProjectContext, GenerateOptions } from '../interfaces.js';
 import type { WorkspacePackageInfo } from './workspace-index-generator.js';
 import { extractWorkspaceData } from './workspace-index-generator.js';
-import type { DependencyGraph, GraphNode, DependencyEdge } from '../../models/dependency-graph.js';
+import type { ModuleGraph, ModuleNode, ModuleEdge } from '../../knowledge-graph/module-derivation.js';
 import { detectSCCs, topologicalSort } from '../../graph/topological-sort.js';
 import { sanitizeMermaidId } from '../utils/mermaid-helpers.js';
 import { loadTemplate } from '../utils/template-loader.js';
@@ -32,7 +32,7 @@ import { loadTemplate } from '../utils/template-loader.js';
 
 /**
  * CrossPackageAnalyzer extract() 产出
- * 包含项目元信息、子包列表和构建好的包级 DependencyGraph
+ * 包含项目元信息、子包列表和构建好的包级 ModuleGraph
  */
 export interface CrossPackageInput {
   /** 项目名称 */
@@ -44,8 +44,8 @@ export interface CrossPackageInput {
   /** 所有子包元信息列表（复用 WorkspacePackageInfo） */
   packages: WorkspacePackageInfo[];
 
-  /** 包级依赖关系图（复用现有 DependencyGraph 类型） */
-  graph: DependencyGraph;
+  /** 包级模块关系图（复用现有 ModuleGraph 类型） */
+  graph: ModuleGraph;
 }
 
 /**
@@ -136,7 +136,7 @@ export interface DependencyStats {
  * @returns Mermaid 源代码字符串
  */
 function buildCrossPackageMermaid(
-  graph: DependencyGraph,
+  graph: ModuleGraph,
   sccNodeSet: Set<string>,
   sccEdgeSet: Set<string>,
 ): string {
@@ -224,7 +224,7 @@ export class CrossPackageAnalyzer
    * 从项目中提取 workspace 信息并构建包级依赖图（T015）
    *
    * 1. 复用 WorkspaceIndexGenerator.extract() 获取子包列表
-   * 2. 将 WorkspacePackageInfo[] 转换为 DependencyGraph
+   * 2. 将 WorkspacePackageInfo[] 转换为 ModuleGraph
    */
   async extract(context: ProjectContext): Promise<CrossPackageInput> {
     // 复用独立函数获取子包列表（不创建 Generator 实例）
@@ -249,8 +249,8 @@ export class CrossPackageAnalyzer
       }
     }
 
-    const modules: GraphNode[] = [];
-    const edges: DependencyEdge[] = [];
+    const modules: ModuleNode[] = [];
+    const edges: ModuleEdge[] = [];
 
     for (const pkg of packages) {
       // 计算有效出度（过滤自依赖和不存在的依赖）
@@ -280,7 +280,7 @@ export class CrossPackageAnalyzer
       }
     }
 
-    const graph: DependencyGraph = {
+    const graph: ModuleGraph = {
       projectRoot: context.projectRoot,
       modules,
       edges,

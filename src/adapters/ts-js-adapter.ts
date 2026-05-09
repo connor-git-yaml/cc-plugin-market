@@ -1,7 +1,7 @@
 /**
  * TypeScript / JavaScript 语言适配器
  *
- * 将当前分散在 ast-analyzer.ts、tree-sitter-fallback.ts、dependency-graph.ts
+ * 将当前分散在 ast-analyzer.ts、tree-sitter-fallback.ts、module-derivation.ts
  * 中的 TS/JS 专用逻辑聚合为一个内聚的适配器实例。
  *
  * 实现策略：委托（delegation）——调用现有函数，不复制代码。
@@ -15,18 +15,18 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import type {
   LanguageAdapter,
   AnalyzeFileOptions,
-  DependencyGraphOptions,
+  ModuleGraphOptions,
   LanguageTerminology,
   TestPatterns,
 } from './language-adapter.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
 import { analyzeFileInternal } from '../core/ast-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
-import { buildGraph } from '../graph/dependency-graph.js';
+import { buildModuleGraphForProject } from '../knowledge-graph/module-derivation.js';
 import { Project, ScriptTarget, ScriptKind } from 'ts-morph';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 
@@ -35,8 +35,11 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
 
   readonly languages: readonly Language[] = ['typescript', 'javascript'];
 
+  // 扫描扩展名扩充 `.mjs/.cjs/.mts/.cts`：
+  //   - `.mjs/.cjs`：Node.js ESM/CJS 模块文件
+  //   - `.mts/.cts`：TypeScript ESM/CJS 显式扩展
   readonly extensions: ReadonlySet<string> = new Set([
-    '.ts', '.tsx', '.js', '.jsx',
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
   ]);
 
   readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
@@ -105,14 +108,16 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
   }
 
   /**
-   * 依赖图构建（委托 dependency-graph.ts 的 buildGraph）
-   * 进行 options 字段名映射：configPath → tsConfigPath
+   * 模块图构建（W1.4：委托 module-derivation.ts 的 buildModuleGraphForProject，
+   * 内部走 UnifiedGraph + deriveModuleGraph 派生路径，不再调用 dependency-cruiser）。
+   *
+   * options 字段名映射：configPath → tsConfigPath
    */
-  async buildDependencyGraph(
+  async buildModuleGraph(
     projectRoot: string,
-    options?: DependencyGraphOptions,
-  ): Promise<DependencyGraph> {
-    return buildGraph(projectRoot, {
+    options?: ModuleGraphOptions,
+  ): Promise<ModuleGraph> {
+    return buildModuleGraphForProject(projectRoot, {
       includeOnly: options?.includeOnly,
       excludePatterns: options?.excludePatterns,
       tsConfigPath: options?.configPath,
@@ -198,10 +203,6 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
       }
     });
 
-    // 根节点的 leading comments 需要单独处理（forEachDescendant 不会把第一个 token 前的 trivia 交给任何 descendant 吗？
-    // 保险起见：扫描 SourceFile 的第一个 child 的 leading comments 已覆盖顶部 trivia，
-    // 因此此处无需额外处理。
-
     // 稳定排序：按 startLine → kind
     regions.sort((a, b) => a.startLine - b.startLine || a.endLine - b.endLine);
     return regions;
@@ -209,7 +210,7 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
 }
 
 /**
- * 去除注释起始/结束标记（// 或 /* * /）以及每行前导的 * 装饰。
+ * 去除注释起始/结束标记（// 或 block 注释）以及每行前导的 * 装饰。
  * 保留内部换行，供 debt-classifier 逐行正则匹配。
  */
 function stripCommentMarkers(raw: string): string {
@@ -217,10 +218,8 @@ function stripCommentMarkers(raw: string): string {
     return raw.slice(2).replace(/^[ \t]/, '');
   }
   if (raw.startsWith('/*')) {
-    // 去除 /* 和结尾 */
     let inner = raw.slice(2);
     if (inner.endsWith('*/')) inner = inner.slice(0, -2);
-    // 去除每行开头的前导空白 + 可选 *
     return inner
       .split('\n')
       .map((line) => line.replace(/^\s*\*[ \t]?/, ''))

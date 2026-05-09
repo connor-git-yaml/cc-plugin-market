@@ -10,6 +10,7 @@ import type {
   ExportSymbol,
   ExportKind,
   ImportReference,
+  ImportSemanticType,
   MemberInfo,
   Language,
   Visibility,
@@ -17,6 +18,7 @@ import type {
 import { analyzeFallback } from './tree-sitter-fallback.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { AnalyzeFileOptions } from '../adapters/language-adapter.js';
+import { resolveTsJsImport } from './import-resolver.js';
 
 // ============================================================
 // 选项类型（统一使用 adapters 层定义的 AnalyzeFileOptions）
@@ -357,11 +359,35 @@ function extractMember(member: Node): MemberInfo | null {
 }
 
 /**
- * 提取导入引用
+ * 提取导入引用（Feature 156 W1.0 / FR-28 修订）。
+ *
+ * 现在覆盖 4 类 import：
+ *   1. ES Module 静态 import（含 type-only）—— sourceFile.getImportDeclarations()
+ *   2. 动态 import()  —— 遍历 CallExpression，callee = ImportKeyword
+ *   3. CommonJS require() —— 遍历 CallExpression，callee = Identifier("require")
+ *
+ * 同时调用 resolveTsJsImport 填充 resolvedPath，让 deriveImportEdges 能产 depends-on 边。
+ *
+ * @param sourceFile - ts-morph SourceFile
+ * @param filePath - 当前分析的文件路径（绝对或相对均可，传给 resolver 作 fromFile）
+ * @param projectRoot - 项目根目录（可空字符串；空时 alias 失效）
+ * @param pathAliases - tsconfig path alias 映射（可选）
  */
-function extractImports(sourceFile: SourceFile): ImportReference[] {
+function extractImports(
+  sourceFile: SourceFile,
+  filePath: string,
+  projectRoot: string,
+  pathAliases?: Record<string, string | readonly string[]>,
+  baseUrl?: string,
+): ImportReference[] {
   const imports: ImportReference[] = [];
+  // CRIT-2 v2：resolverOpts 同时透传 pathAliases 与 baseUrl
+  const resolverOpts =
+    pathAliases || baseUrl
+      ? { ...(pathAliases ? { pathAliases } : {}), ...(baseUrl ? { baseUrl } : {}) }
+      : undefined;
 
+  // 1. 静态 import / import type
   for (const decl of sourceFile.getImportDeclarations()) {
     const moduleSpecifier = decl.getModuleSpecifierValue();
     const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
@@ -370,13 +396,78 @@ function extractImports(sourceFile: SourceFile): ImportReference[] {
     const namedImports = decl.getNamedImports().map((n) => n.getName());
     const defaultImport = decl.getDefaultImport()?.getText() ?? null;
 
+    // 派生 importType（WARN-1 v2 修订）：
+    //   (a) 顶层 `import type` → type-only
+    //   (b) 否则若没有 default + 没有 namespace + 所有 named import 均为 type-only → type-only
+    //   (c) 其他（含混合 default/namespace + type named）→ static（保留运行时值导入语义）
+    let importType: ImportSemanticType = 'static';
+    if (isTypeOnly) {
+      importType = 'type-only';
+    } else {
+      const hasDefault = decl.getDefaultImport() != null;
+      const hasNamespace = decl.getNamespaceImport() != null;
+      if (!hasDefault && !hasNamespace) {
+        const named = decl.getNamedImports();
+        if (named.length > 0 && named.every((n) => n.isTypeOnly())) {
+          importType = 'type-only';
+        }
+      }
+    }
+
+    const resolvedPath = resolveTsJsImport(
+      moduleSpecifier,
+      filePath,
+      projectRoot,
+      resolverOpts,
+    );
+
     imports.push({
       moduleSpecifier,
       isRelative,
-      resolvedPath: null, // 不解析路径（性能优化）
+      resolvedPath,
       namedImports: namedImports.length > 0 ? namedImports : undefined,
       defaultImport,
       isTypeOnly,
+      importType,
+    });
+  }
+
+  // 2 + 3. 动态 import() 与 CommonJS require()
+  // 遍历所有 CallExpression；按 callee 类型区分
+  for (const call of sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const expr = call.getExpression();
+    let kind: ImportSemanticType | null = null;
+    if (expr.getKind() === SyntaxKind.ImportKeyword) {
+      kind = 'dynamic';
+    } else if (Node.isIdentifier(expr) && expr.getText() === 'require') {
+      kind = 'commonjs-require';
+    }
+    if (!kind) continue;
+
+    const args = call.getArguments();
+    if (args.length === 0) continue;
+    const firstArg = args[0]!;
+    // 仅识别字符串字面量 specifier；模板字符串 / 动态拼接跳过（无法静态解析）
+    if (!Node.isStringLiteral(firstArg) && !Node.isNoSubstitutionTemplateLiteral(firstArg)) {
+      continue;
+    }
+    const moduleSpecifier = firstArg.getLiteralText();
+    if (!moduleSpecifier) continue;
+
+    const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
+    const resolvedPath = resolveTsJsImport(
+      moduleSpecifier,
+      filePath,
+      projectRoot,
+      resolverOpts,
+    );
+
+    imports.push({
+      moduleSpecifier,
+      isRelative,
+      resolvedPath,
+      isTypeOnly: false,
+      importType: kind,
     });
   }
 
@@ -423,7 +514,15 @@ export async function analyzeFileInternal(
 
     // 提取导出和导入
     const exports = extractExports(sourceFile, options);
-    const imports = extractImports(sourceFile);
+    // Feature 156 W1.0：传入 projectRoot 让 import-resolver 解析 alias / 跨包路径
+    // CRIT-2 v2：透传 baseUrl（tsconfig.compilerOptions.baseUrl 解析后的绝对路径）
+    const imports = extractImports(
+      sourceFile,
+      filePath,
+      options.projectRoot ?? '',
+      options.pathAliases,
+      options.baseUrl,
+    );
 
     const skeleton: CodeSkeleton = {
       filePath,

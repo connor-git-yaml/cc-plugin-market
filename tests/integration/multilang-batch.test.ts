@@ -15,7 +15,7 @@ import { mergeGraphsForTopologicalSort } from '../../src/batch/batch-orchestrato
 import { saveCheckpoint, loadCheckpoint, clearCheckpoint } from '../../src/batch/checkpoint.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import type { BatchState } from '../../src/models/module-spec.js';
 
 const FIXTURE_DIR = path.resolve(__dirname, '../fixtures/multilang-project');
@@ -60,7 +60,7 @@ describe('多语言混合项目集成', () => {
     const languageStats = result.languageStats!;
 
     // 创建空的 graph 和 specs 用于索引生成
-    const graph: DependencyGraph = {
+    const graph: ModuleGraph = {
       projectRoot: FIXTURE_DIR,
       modules: [],
       edges: [],
@@ -105,7 +105,7 @@ describe('多语言混合项目集成', () => {
     const result = scanFiles(FIXTURE_DIR, { projectRoot: FIXTURE_DIR });
 
     // 构建简单图用于分组
-    const graph: DependencyGraph = {
+    const graph: ModuleGraph = {
       projectRoot: FIXTURE_DIR,
       modules: result.files.map((f) => ({
         source: f,
@@ -181,7 +181,7 @@ describe('多语言混合项目集成', () => {
   });
 
   it('mergeGraphsForTopologicalSort 正确合并多个语言图', () => {
-    const graph1: DependencyGraph = {
+    const graph1: ModuleGraph = {
       projectRoot: '/test',
       modules: [
         { source: 'a.ts', isOrphan: false, inDegree: 0, outDegree: 1, level: 0, language: 'ts-js' },
@@ -195,7 +195,7 @@ describe('多语言混合项目集成', () => {
       mermaidSource: 'graph TD\n  a',
     };
 
-    const graph2: DependencyGraph = {
+    const graph2: ModuleGraph = {
       projectRoot: '/test',
       modules: [
         { source: 'b.py', isOrphan: false, inDegree: 0, outDegree: 0, level: 0, language: 'python' },

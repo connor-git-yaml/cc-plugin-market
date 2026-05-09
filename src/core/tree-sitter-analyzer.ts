@@ -15,13 +15,14 @@ import * as fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import Parser from 'web-tree-sitter';
-import type { CodeSkeleton, Language, ParseError } from '../models/code-skeleton.js';
+import type { CodeSkeleton, ImportReference, Language, ParseError } from '../models/code-skeleton.js';
 import { GrammarManager } from './grammar-manager.js';
 import type { QueryMapper, MapperOptions } from './query-mappers/base-mapper.js';
 import { PythonMapper } from './query-mappers/python-mapper.js';
 import { GoMapper } from './query-mappers/go-mapper.js';
 import { JavaMapper } from './query-mappers/java-mapper.js';
 import { TypeScriptMapper } from './query-mappers/typescript-mapper.js';
+import { resolveTsJsImport } from './import-resolver.js';
 
 // ════════════════════════ 类型 ════════════════════════
 
@@ -30,6 +31,10 @@ export interface TreeSitterAnalyzeOptions {
   includePrivate?: boolean;
   /** 抽取函数调用点（Feature 151，默认 false；CL-05 节省非 panoramic 场景的 AST 遍历开销）*/
   extractCallSites?: boolean;
+  /** 项目根目录（Feature 156 W1.0，FR-28；用于 import-resolver 解析 alias / 跨包路径） */
+  projectRoot?: string;
+  /** tsconfig path alias 映射（Feature 156 W1.0） */
+  pathAliases?: Record<string, string>;
 }
 
 // ════════════════════════ 扩展名到语言映射 ════════════════════════
@@ -175,7 +180,17 @@ export class TreeSitterAnalyzer {
 
       // 提取结构
       const exports = mapper.extractExports(tree, content, mapperOptions);
-      const imports = mapper.extractImports(tree, content);
+      let imports = mapper.extractImports(tree, content);
+      // Feature 156 W1.0：TS/JS 路径补 resolvedPath + importType
+      // 其他语言（Python / Go / Java）的路径解析由各自 adapter / mapper 阶段处理（EC-6 / batch-orchestrator pyModuleMap）
+      if (language === 'typescript' || language === 'javascript') {
+        imports = postProcessTsJsImports(
+          imports,
+          filePath,
+          options?.projectRoot ?? '',
+          options?.pathAliases,
+        );
+      }
       const parseErrors = mapper.extractParseErrors(tree);
 
       // 计算哈希
@@ -281,3 +296,31 @@ export class TreeSitterAnalyzer {
     };
   }
 }
+
+// ════════════════════════ TS/JS import 后处理（Feature 156 W1.0） ════════════════════════
+
+/**
+ * 给定 typescript-mapper 输出的 imports 列表，逐项调用 resolveTsJsImport 填 resolvedPath；
+ * 同时根据 isTypeOnly 推断 importType。
+ *
+ * 注：当前 typescript-mapper.extractImports 只覆盖 `import_statement`（不含动态 import / require），
+ * 因此动态 / require 边在 tree-sitter 路径下暂时不产；ts-morph 主路径已覆盖 4 类（FR-28）。
+ */
+function postProcessTsJsImports(
+  imports: ImportReference[],
+  filePath: string,
+  projectRoot: string,
+  pathAliases?: Record<string, string>,
+): ImportReference[] {
+  const resolverOpts = pathAliases ? { pathAliases } : undefined;
+  return imports.map((imp) => {
+    const resolvedPath = imp.resolvedPath
+      ?? resolveTsJsImport(imp.moduleSpecifier, filePath, projectRoot, resolverOpts);
+    return {
+      ...imp,
+      resolvedPath: resolvedPath ?? null,
+      importType: imp.importType ?? (imp.isTypeOnly ? 'type-only' : 'static'),
+    };
+  });
+}
+

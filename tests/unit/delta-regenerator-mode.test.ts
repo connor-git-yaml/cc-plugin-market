@@ -19,7 +19,7 @@ import * as path from 'node:path';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { analyzeFiles } from '../../src/core/ast-analyzer.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import type { StoredModuleSpecSummary } from '../../src/panoramic/builders/doc-graph-builder.js';
 import { DeltaRegenerator } from '../../src/batch/delta-regenerator.js';
 
@@ -237,7 +237,7 @@ function makeGroups() {
   ];
 }
 
-function makeGraph(projectRoot: string): DependencyGraph {
+function makeGraph(projectRoot: string): ModuleGraph {
   return {
     projectRoot,
     modules: [

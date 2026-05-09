@@ -94,7 +94,7 @@ describe('directory-graph', () => {
     expect(graph.edges).toHaveLength(0);
   });
 
-  it('T026: 空文件列表返回空的 DependencyGraph', async () => {
+  it('T026: 空文件列表返回空的 ModuleGraph', async () => {
     const graph = await buildDirectoryGraph([], '/project', []);
 
     expect(graph.modules).toHaveLength(0);

@@ -1,8 +1,11 @@
 /**
- * Mermaid 依赖图渲染器
+ * Mermaid 模块图渲染器
  * 参见 contracts/graph-module.md
+ *
+ * Feature 156 W1.4：输入类型为 ModuleGraph
+ * （UnifiedGraph 派生视图，结构等价）。
  */
-import type { DependencyGraph } from '../models/dependency-graph.js';
+import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 
 export interface RenderOptions {
   /** 按目录分组（默认：模块数 > 20 时） */
@@ -52,14 +55,14 @@ function groupByDirectory(
 }
 
 /**
- * 为依赖关系图生成 Mermaid graph TD 源码
+ * 为 ModuleGraph 生成 Mermaid graph TD 源码
  *
- * @param graph - 依赖关系图
+ * @param graph - ModuleGraph
  * @param options - 渲染选项
  * @returns Mermaid graph TD 源码
  */
-export function renderDependencyGraph(
-  graph: DependencyGraph,
+export function renderModuleGraph(
+  graph: ModuleGraph,
   options: RenderOptions = {},
 ): string {
   const {

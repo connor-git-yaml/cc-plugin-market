@@ -4,7 +4,7 @@
  * 入口：buildUnifiedGraph(input)
  *   - 收集所有 CallSite + callerFile
  *   - call-resolver 派生 calls 边
- *   - deriveImportEdges 派生 depends-on 边（Codex C-3：DependencyGraph shim 数据源）
+ *   - deriveImportEdges 派生 depends-on 边（Codex C-3：ModuleGraph 数据源）
  *   - 装配 nodes / edges / metadata 输出 UnifiedGraph
  *
  * 单例 cache：
@@ -65,15 +65,21 @@ export function buildUnifiedGraph(input: BuildUnifiedGraphInput): UnifiedGraph {
 }
 
 /**
- * 从 CodeSkeleton.imports 派生 depends-on 边（Codex C-3 修订）。
+ * 从 CodeSkeleton.imports 派生 depends-on 边（Codex C-3 修订 + Feature 156 W1.0 importType 编码）。
  *
  * 设计动机：
- * - DependencyGraph shim（T-014）需要 import 边数据源；如果 UnifiedGraph 只产 calls 边，
- *   shim 就无法派生 SCC / topologicalOrder / mermaidSource
+ * - ModuleGraph 派生（W1.4）需要 import 边数据源；如果 UnifiedGraph 只产 calls 边，
+ *   就无法派生 SCC / topologicalOrder / mermaidSource
  * - batch-orchestrator / doc-graph-builder / delta-regenerator 等 8+ consumer 消费 import 边
  *
  * 实现：每个 CodeSkeleton.imports[].resolvedPath 派生一条
  *   `${callerFile} -[depends-on]-> ${target}` 边，confidence='high'，directional=true
+ *
+ * Feature 156 W1.0 v2 / WARN-3 修订：
+ *   - evidence 字段保持纯 specifier（如 "./foo"），不再编码 importType 前缀
+ *     —— 避免污染 panoramic 消费方（graph-builder / component-view-builder 直接展示 evidenceText / note）
+ *   - importType 改写入 edge.metadata.importType 结构化字段（UnifiedEdge.metadata 已 schema 支持）
+ *   - module-derivation.deriveModuleGraph 从 metadata.importType 读，不再 split evidence
  *
  * 注：本函数不做 cross-module name resolution（那是 call-resolver 的工作）；
  *     仅产 module-to-module 的 import 边。
@@ -87,14 +93,17 @@ export function deriveImportEdges(
       if (!imp.resolvedPath) continue;
       // 自引用过滤（一些 mapper 把同模块作 import 输出）
       if (imp.resolvedPath === callerFile) continue;
-      edges.push({
+      // W1.0 v2 / WARN-3：evidence 保持纯 specifier；importType 写 metadata
+      const edge: UnifiedEdge = {
         source: callerFile,
         target: imp.resolvedPath,
         relation: 'depends-on',
         confidence: 'high',
         directional: defaultDirectionalForRelation('depends-on'),
         evidence: imp.moduleSpecifier,
-      });
+        ...(imp.importType ? { metadata: { importType: imp.importType } } : {}),
+      };
+      edges.push(edge);
     }
   }
   return edges;

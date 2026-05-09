@@ -1,24 +1,24 @@
 /**
- * dependency-graph model schema 单元测试
+ * module-graph model schema 单元测试（W1.4 重命名自 dependency-graph-model）
  */
 import { describe, it, expect } from 'vitest';
 import {
-  ImportTypeSchema,
-  GraphNodeSchema,
-  DependencyEdgeSchema,
-  SCCSchema,
-  DependencyGraphSchema,
-} from '../../src/models/dependency-graph.js';
+  ModuleImportTypeSchema,
+  ModuleNodeSchema,
+  ModuleEdgeSchema,
+  ModuleStronglyConnectedSetSchema,
+  ModuleGraphSchema,
+} from '../../src/knowledge-graph/module-derivation.js';
 
-describe('dependency-graph model schemas', () => {
-  it('ImportTypeSchema 应接受 static/dynamic/type-only', () => {
-    expect(ImportTypeSchema.parse('static')).toBe('static');
-    expect(ImportTypeSchema.parse('dynamic')).toBe('dynamic');
-    expect(ImportTypeSchema.parse('type-only')).toBe('type-only');
+describe('module-graph model schemas', () => {
+  it('ModuleImportTypeSchema 应接受 static/dynamic/type-only', () => {
+    expect(ModuleImportTypeSchema.parse('static')).toBe('static');
+    expect(ModuleImportTypeSchema.parse('dynamic')).toBe('dynamic');
+    expect(ModuleImportTypeSchema.parse('type-only')).toBe('type-only');
   });
 
-  it('GraphNodeSchema 校验通过', () => {
-    const node = GraphNodeSchema.parse({
+  it('ModuleNodeSchema 校验通过', () => {
+    const node = ModuleNodeSchema.parse({
       source: 'src/a.ts',
       isOrphan: false,
       inDegree: 1,
@@ -28,8 +28,8 @@ describe('dependency-graph model schemas', () => {
     expect(node.source).toBe('src/a.ts');
   });
 
-  it('DependencyEdgeSchema 校验通过', () => {
-    const edge = DependencyEdgeSchema.parse({
+  it('ModuleEdgeSchema 校验通过', () => {
+    const edge = ModuleEdgeSchema.parse({
       from: 'src/a.ts',
       to: 'src/b.ts',
       isCircular: false,
@@ -38,17 +38,17 @@ describe('dependency-graph model schemas', () => {
     expect(edge.importType).toBe('static');
   });
 
-  it('SCCSchema 要求 modules 至少一个元素', () => {
+  it('ModuleStronglyConnectedSetSchema 要求 modules 至少一个元素', () => {
     expect(() =>
-      SCCSchema.parse({
+      ModuleStronglyConnectedSetSchema.parse({
         id: 0,
         modules: [],
       }),
     ).toThrow();
   });
 
-  it('DependencyGraphSchema 完整对象校验通过', () => {
-    const graph = DependencyGraphSchema.parse({
+  it('ModuleGraphSchema 完整对象校验通过', () => {
+    const graph = ModuleGraphSchema.parse({
       projectRoot: '/tmp/project',
       modules: [
         {
@@ -77,4 +77,3 @@ describe('dependency-graph model schemas', () => {
     expect(graph.totalModules).toBe(2);
   });
 });
-

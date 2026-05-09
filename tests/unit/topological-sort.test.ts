@@ -4,13 +4,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { topologicalSort, detectSCCs } from '../../src/graph/topological-sort.js';
-import type { DependencyGraph } from '../../src/models/dependency-graph.js';
+import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 
-/** 创建测试用 DependencyGraph */
+/** 创建测试用 ModuleGraph */
 function createGraph(
   modules: string[],
   edges: Array<[string, string, boolean?]>,
-): DependencyGraph {
+): ModuleGraph {
   return {
     projectRoot: '/test',
     modules: modules.map((source) => ({
@@ -50,7 +50,7 @@ describe('topological-sort', () => {
       expect(result.hasCycles).toBe(false);
       expect(result.cycleGroups).toEqual([]);
 
-      // A 依赖 B，B 依赖 C，所以 C 应该最先出现
+      // edges: A→B、B→C；按 dependents-first（依赖前置）顺序，A 应该最先出现
       const indexA = result.order.indexOf('A');
       const indexB = result.order.indexOf('B');
       const indexC = result.order.indexOf('C');

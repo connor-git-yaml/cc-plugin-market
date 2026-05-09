@@ -106,8 +106,8 @@ export class Parser {
     expect(adapterResult.imports).toEqual(directResult.imports);
   });
 
-  it('adapter.buildDependencyGraph 方法存在', () => {
-    // 验证 buildDependencyGraph 方法存在且可调用
-    expect(typeof adapter.buildDependencyGraph).toBe('function');
+  it('adapter.buildModuleGraph 方法存在', () => {
+    // 验证 buildModuleGraph 方法存在且可调用（W1.4：原 buildDependencyGraph 重命名）
+    expect(typeof adapter.buildModuleGraph).toBe('function');
   });
 });
