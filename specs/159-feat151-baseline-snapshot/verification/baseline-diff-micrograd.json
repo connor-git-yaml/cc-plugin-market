@@ -1,0 +1,45 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-micrograd.json /tmp/feat-157-diff/new-micrograd.json --format json
+
+{
+  "ok": false,
+  "results": [
+    {
+      "field": "perf.totalWallMs",
+      "oldValue": 176076,
+      "newValue": 191128,
+      "deltaPct": 8.5,
+      "severity": "green"
+    },
+    {
+      "field": "perf.tokensInputPlusOutput",
+      "oldValue": 98986,
+      "newValue": 114543,
+      "deltaPct": 15.7,
+      "severity": "red"
+    },
+    {
+      "field": "perf.estimatedCostUsd",
+      "oldValue": 0.56,
+      "newValue": 0.62,
+      "deltaPct": 10.7,
+      "severity": "yellow"
+    },
+    {
+      "field": "output.graphNodeCount",
+      "oldValue": 13,
+      "newValue": 46,
+      "deltaPct": 253.8,
+      "severity": "red"
+    },
+    {
+      "field": "output.specSuccessRatio",
+      "oldValue": 100,
+      "newValue": 100,
+      "deltaPct": 0,
+      "severity": "green"
+    }
+  ],
+  "overall": "fail"
+}

@@ -1,0 +1,17 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-self-dogfood.json /tmp/feat-157-diff/new-self-dogfood.json
+
+baseline-diff (mode=regression)
+  old: /tmp/feat-157-diff/old-self-dogfood.json
+  new: /tmp/feat-157-diff/new-self-dogfood.json
+
+  field                                    old           new           Δ%        severity
+  ---------------------------------------- ------------- ------------- --------- --------
+  perf.totalWallMs                         1801843       2686539       +49.1%    red
+  perf.tokensInputPlusOutput               1976755       2594923       +31.3%    red
+  perf.estimatedCostUsd                    9.86          12.68         +28.6%    red
+  output.graphNodeCount                    17            4887          +28647.1% red
+  output.specSuccessRatio                  100           100           +0%       green
+
+overall: fail

@@ -339,3 +339,427 @@ exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > gr
   "truncated": false,
 }
 `;
+
+exports[`graph MCP tools snapshot — Layer B (self-dogfood, calls-enabled, P3 T-016b) > graph_god_nodes top=5 — Layer B degree 受 calls 影响 > layer-b-self-dogfood-graph_god_nodes 1`] = `
+{
+  "nodes": [
+    {
+      "degree": 46,
+      "id": "src/batch/batch-orchestrator.ts",
+      "kind": "module",
+      "label": "batch-orchestrator.ts",
+      "metadata": {
+        "callSitesCount": 567,
+        "degree": 71,
+        "sourcePath": "src/batch/batch-orchestrator.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "degree": 44,
+      "id": "src/batch/batch-orchestrator.ts::runBatch",
+      "kind": "component",
+      "label": "runBatch",
+      "metadata": {
+        "degree": 45,
+        "sourcePath": "src/batch/batch-orchestrator.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "degree": 28,
+      "id": "src/panoramic/batch-project-docs.ts",
+      "kind": "module",
+      "label": "batch-project-docs.ts",
+      "metadata": {
+        "callSitesCount": 155,
+        "degree": 31,
+        "sourcePath": "src/panoramic/batch-project-docs.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "degree": 22,
+      "id": "src/panoramic/generator-registry.ts",
+      "kind": "module",
+      "label": "generator-registry.ts",
+      "metadata": {
+        "callSitesCount": 58,
+        "degree": 40,
+        "sourcePath": "src/panoramic/generator-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "degree": 20,
+      "id": "src/cli/index.ts",
+      "kind": "module",
+      "label": "index.ts",
+      "metadata": {
+        "callSitesCount": 34,
+        "degree": 20,
+        "sourcePath": "src/cli/index.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+  ],
+}
+`;
+
+exports[`graph MCP tools snapshot — Layer B (self-dogfood, calls-enabled, P3 T-016b) > graph_query keyword=LanguageAdapter — Layer B 含真实 src/ 节点 + calls 边（W-2 路径限定） > layer-b-self-dogfood-graph_query 1`] = `
+{
+  "edges": [
+    {
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "relation": "calls",
+      "source": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getInstance",
+      "target": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry",
+    },
+    {
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "./language-adapter.js",
+      "relation": "depends-on",
+      "source": "src/adapters/language-adapter-registry.ts",
+      "target": "src/adapters/language-adapter.ts",
+    },
+    {
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "../../src/adapters/language-adapter-registry.js",
+      "relation": "depends-on",
+      "source": "tests/adapters/language-adapter-registry.test.ts",
+      "target": "src/adapters/language-adapter-registry.ts",
+    },
+    {
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "../../src/adapters/language-adapter.js",
+      "relation": "depends-on",
+      "source": "tests/adapters/language-adapter-registry.test.ts",
+      "target": "src/adapters/language-adapter.ts",
+    },
+  ],
+  "nodes": [
+    {
+      "id": "src/adapters/language-adapter-registry.ts",
+      "kind": "module",
+      "label": "language-adapter-registry.ts",
+      "metadata": {
+        "callSitesCount": 15,
+        "degree": 52,
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.instance",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.instance",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.extensionMap",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.extensionMap",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.adapterList",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.adapterList",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.constructor",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.constructor",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getInstance",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.getInstance",
+      "metadata": {
+        "degree": 13,
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.resetInstance",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.resetInstance",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.register",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.register",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getAdapter",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.getAdapter",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getSupportedExtensions",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.getSupportedExtensions",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getDefaultIgnoreDirs",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.getDefaultIgnoreDirs",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.isEmpty",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.isEmpty",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getAllAdapters",
+      "kind": "component",
+      "label": "LanguageAdapterRegistry.getAllAdapters",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter-registry.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts",
+      "kind": "module",
+      "label": "language-adapter.ts",
+      "metadata": {
+        "callSitesCount": 0,
+        "degree": 13,
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter",
+      "kind": "component",
+      "label": "LanguageAdapter",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.id",
+      "kind": "component",
+      "label": "LanguageAdapter.id",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.languages",
+      "kind": "component",
+      "label": "LanguageAdapter.languages",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.extensions",
+      "kind": "component",
+      "label": "LanguageAdapter.extensions",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.defaultIgnoreDirs",
+      "kind": "component",
+      "label": "LanguageAdapter.defaultIgnoreDirs",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.analyzeFile",
+      "kind": "component",
+      "label": "LanguageAdapter.analyzeFile",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.analyzeFallback",
+      "kind": "component",
+      "label": "LanguageAdapter.analyzeFallback",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.buildModuleGraph",
+      "kind": "component",
+      "label": "LanguageAdapter.buildModuleGraph",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.getTerminology",
+      "kind": "component",
+      "label": "LanguageAdapter.getTerminology",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.getTestPatterns",
+      "kind": "component",
+      "label": "LanguageAdapter.getTestPatterns",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/language-adapter.ts::LanguageAdapter.extractComments",
+      "kind": "component",
+      "label": "LanguageAdapter.extractComments",
+      "metadata": {
+        "sourcePath": "src/adapters/language-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "tests/adapters/language-adapter-registry.test.ts",
+      "kind": "module",
+      "label": "language-adapter-registry.test.ts",
+      "metadata": {
+        "callSitesCount": 104,
+        "sourcePath": "tests/adapters/language-adapter-registry.test.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+      },
+    },
+    {
+      "id": "src/adapters/go-adapter.ts::GoLanguageAdapter",
+      "kind": "component",
+      "label": "GoLanguageAdapter",
+      "metadata": {
+        "sourcePath": "src/adapters/go-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/go-adapter.ts::GoLanguageAdapter.id",
+      "kind": "component",
+      "label": "GoLanguageAdapter.id",
+      "metadata": {
+        "sourcePath": "src/adapters/go-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+    {
+      "id": "src/adapters/go-adapter.ts::GoLanguageAdapter.languages",
+      "kind": "component",
+      "label": "GoLanguageAdapter.languages",
+      "metadata": {
+        "sourcePath": "src/adapters/go-adapter.ts",
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+      },
+    },
+  ],
+  "summary": "找到 41 个相关节点，已按 budget 限制截断至 30 个",
+  "totalMatches": 41,
+  "truncated": true,
+}
+`;

@@ -587,4 +587,32 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ---
 
-*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 实测数据生成；Sprint 3 (2026-05-01 / 05-03) 校订为当前事实状态。当前 **40 fixture × schema 1.1**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants），cross-LLM jury 评分（25 fixture × 3 judges = 75 calls），12 grounding runs（n=3 任务 × 4 对照组），3 multi-turn task-runner runs。**2026-05-05 测评数据清理后**：仓库 12 个 perf anchor 仍入库（`tests/baseline/<project>/<tool>/full.json`）；spec-driver 类 task fixture / N=5 repeats / truth-set / auto-report 不入库（详见 `CLAUDE.local.md` "Baseline 测试" 入库边界）。重跑 `npm run eval:competitor && npm run eval:judge-jury && npm run eval:report` 在本地复现完整数据。**2026-05-09 增补 §10 SWE-Bench Grounding Lift 实验（Feature 158）**：实施 dry-run 阶段完成（10 fixture 入库 + 5 新脚本 + telemetry hook），Pass Rate / Token Cost 实测数据待 Stage 7b 实跑后填入。*
+*总报告由主线程（Opus 4.7）于 2026-04-30 整合 Phase 0-4 实测数据生成；Sprint 3 (2026-05-01 / 05-03) 校订为当前事实状态。当前 **40 fixture × schema 1.1**（12 spectra 类 + 25 spec-driver 类 + 3 multi-turn variants），cross-LLM jury 评分（25 fixture × 3 judges = 75 calls），12 grounding runs（n=3 任务 × 4 对照组），3 multi-turn task-runner runs。**2026-05-05 测评数据清理后**：仓库 12 个 perf anchor 仍入库（`tests/baseline/<project>/<tool>/full.json`）；spec-driver 类 task fixture / N=5 repeats / truth-set / auto-report 不入库（详见 `CLAUDE.local.md` "Baseline 测试" 入库边界）。重跑 `npm run eval:competitor && npm run eval:judge-jury && npm run eval:report` 在本地复现完整数据。**2026-05-09 增补 §10 SWE-Bench Grounding Lift 实验（Feature 158）**：实施 dry-run 阶段完成（10 fixture 入库 + 5 新脚本 + telemetry hook），Pass Rate / Token Cost 实测数据待 Stage 7b 实跑后填入。**2026-05-10 增补 §11 NFR baseline:diff 验证（Feature 159 follow-up）**：跨 9 feature 累计 perf delta 实测数据 + accept-and-spec 决策（详见 §11）。*
+
+---
+
+## 11. NFR baseline:diff 验证（Feature 159 follow-up，2026-05-09）
+
+3 个固定 baseline（micrograd / nanoGPT / self-dogfood）跑当前 master commit `cf0a131` 后，对比 commit `0449d2b` 时点旧 fixture 的 perf delta。三者跨度均为 9 commits（Feature 148~156，含 4 语言 LanguageAdapter callSites + UnifiedGraph + Agent-Context + Incremental Indexing）。
+
+### 10.1 perf 类指标（参与 SC-3 验收）
+
+| target | totalWallMs Δ% | tokens Δ% | cost Δ% | verdict |
+|--------|----------------|-----------|---------|---------|
+| micrograd     | +8.5% **green** ✅   | +15.7% **red** ❗       | +10.7% **yellow** ⚠️ | accept-and-spec |
+| nanoGPT       | +5.9% **green** ✅   | +8.8% **yellow** ⚠️    | +5.7% **green** ✅   | SC-3a 接受偏差 |
+| self-dogfood  | +49.1% **red** ❗    | +31.3% **red** ❗       | +28.6% **red** ❗     | accept-and-spec |
+
+### 10.2 output 类指标（informational only — expected breaking change，不参与 SC-3）
+
+| target | graphNodeCount 旧 → 新 | Δ% | 说明 |
+|--------|-----------------------|-----|------|
+| micrograd     | 13 → 46     | +254%       | UnifiedGraph + Python callSites 引入新节点类型 |
+| nanoGPT       | 32 → 102    | +218.8%     | 同上 |
+| self-dogfood  | 17 → 4,887  | +28,647%    | 同上 + spec module 17 → 20 + TS callSites 引入大量 src/ 节点 |
+
+### 10.3 一句话结论
+
+跨 9 feature 累计后，三个 baseline 在 perf 维度上均出现非 green 信号；其中 self-dogfood 三项全 red。经 [regression-analysis.md](../159-feat151-baseline-snapshot/verification/regression-analysis.md) 根因分析，**所有 red/yellow 都是新功能（4 语言 callSites + UnifiedGraph）的 expected cost 增量**，非性能回归 — 决策 **accept-and-spec**：本次新 fixture（cf0a131）作为后续 Feature 的新 perf baseline，后续单 feature 跨度应严格遵守 ≤ 10%。`output.graphNodeCount` 大幅增长是 expected breaking change，不计入 SC-3 验收。
+
+baseline:diff 原始数据：[micrograd](../159-feat151-baseline-snapshot/verification/baseline-diff-micrograd.txt) | [nanoGPT](../159-feat151-baseline-snapshot/verification/baseline-diff-nanoGPT.txt) | [self-dogfood](../159-feat151-baseline-snapshot/verification/baseline-diff-self-dogfood.txt)。

@@ -1,0 +1,17 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-nanoGPT.json /tmp/feat-157-diff/new-nanoGPT.json
+
+baseline-diff (mode=regression)
+  old: /tmp/feat-157-diff/old-nanoGPT.json
+  new: /tmp/feat-157-diff/new-nanoGPT.json
+
+  field                                    old           new           Δ%        severity
+  ---------------------------------------- ------------- ------------- --------- --------
+  perf.totalWallMs                         1254041       1328538       +5.9%     green
+  perf.tokensInputPlusOutput               401340        436622        +8.8%     yellow
+  perf.estimatedCostUsd                    2.27          2.4           +5.7%     green
+  output.graphNodeCount                    32            102           +218.8%   red
+  output.specSuccessRatio                  100           100           +0%       green
+
+overall: fail

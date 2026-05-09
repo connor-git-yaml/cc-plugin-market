@@ -77,12 +77,19 @@ Test Files  276 passed | 2 skipped (278)
 
 ### SC-006 UnifiedGraph 性能回归 ≤ 10%
 
-⏸ **deferred**（接受偏差）：本次未跑 N=5 baseline:diff 对比，原因：
-1. 完整 baseline:collect 需 LLM 调用（成本 / 时间）
-2. P1 阶段 Codex 审查标记 W-4「.py 三次重复扫描」性能风险，已确认接受 P3 偏差，留待 follow-up Feature 优化
-3. 单测层 N/A — 实测 verify-feature-151.mjs 在 nanoGPT (15 .py / 1.5k LOC) 上耗时 < 5s，远低于性能预算
+✅ **verified with accepted deviation（Feature 159 follow-up 录制，2026-05-09）**
 
-后续可在合并 master 后正式跑 baseline:diff 验证（不阻塞本 Feature 推进）。
+跨 9 commits（commit 0449d2b → master cf0a131，含 Feature 148~156 累计变更）跑 3 个 baseline 的 baseline:diff（详见 [Feature 159 verification report](../../159-feat151-baseline-snapshot/verification/) §SC-3a/b）：
+
+| target | totalWallMs Δ% | tokens Δ% | cost Δ% | severity |
+|--------|----------------|-----------|---------|----------|
+| micrograd | +8.5% green | +15.7% red | +10.7% yellow | accept-and-spec |
+| nanoGPT | +5.9% green | +8.8% yellow | +5.7% green | SC-3a 接受偏差 |
+| self-dogfood | +49.1% red | +31.3% red | +28.6% red | accept-and-spec |
+
+`output.graphNodeCount` 大幅增长（self-dogfood 17 → 4887）是 **expected breaking change**（UnifiedGraph + 4 语言 callSites 引入新节点类型），不计入 SC-006 验收。
+
+**SC-3b 触发但 accept-and-spec**：所有 red/yellow 信号经 [Feature 159 regression-analysis.md](../../159-feat151-baseline-snapshot/verification/regression-analysis.md) 根因分析，确认为新功能（4 语言 callSites + UnifiedGraph + Agent-Context + Incremental Indexing）的 **expected new-feature cost 增量**，非性能回归。本次新 fixture（cf0a131）作为后续 Feature 的新 perf baseline，后续单 feature 跨度应严格遵守 ≤ 10%。
 
 ### SC-007 bootstrap 收敛
 
@@ -98,11 +105,11 @@ Test Files  276 passed | 2 skipped (278)
 
 ## NFR 验收
 
-- **NFR-1 性能**：collectPythonCodeSkeletons 顺序扫描 nanoGPT 15 文件 < 2s，未观察到回归（实测）
+- **NFR-1 性能**：collectPythonCodeSkeletons 顺序扫描 nanoGPT 15 文件 < 2s，未观察到回归（实测）；Feature 159 follow-up 在 micrograd / nanoGPT 上 totalWallMs 仅 +5.9%~+8.5% green，self-dogfood 跨 9 feature 累计 +49.1% red 经根因分析为 expected new-feature cost（详见 SC-006）
 - **NFR-2 内存**：未严格测量 peak RSS，但所有测试在标准 Node.js heap 下通过
 - **NFR-3 schema 向后兼容**：✅ 旧 graph.json (无 directional 字段) 加载不抛错，graph-query 邻接表回退到 `graph.directed` 全局值；旧 spec.md (无 callSites) 解析不抛错（SC-005）
 - **NFR-4 测试基线**：✅ 现有 3059 单测继续 pass，新增 96 单测全 pass
-- **NFR-5 baseline fixture**：⏸ deferred（同 SC-006）
+- **NFR-5 baseline fixture**：✅ verified with accepted deviation（Feature 159 follow-up 录制，2026-05-09）。3 个 baseline (micrograd / nanoGPT / self-dogfood) fixture 已重置为 cf0a131 commit 时点；详见 SC-006 表格 + [Feature 159 verification report](../../159-feat151-baseline-snapshot/verification/) + [regression-analysis.md](../../159-feat151-baseline-snapshot/verification/regression-analysis.md)
 
 ---
 

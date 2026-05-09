@@ -1,0 +1,45 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-self-dogfood.json /tmp/feat-157-diff/new-self-dogfood.json --format json
+
+{
+  "ok": false,
+  "results": [
+    {
+      "field": "perf.totalWallMs",
+      "oldValue": 1801843,
+      "newValue": 2686539,
+      "deltaPct": 49.1,
+      "severity": "red"
+    },
+    {
+      "field": "perf.tokensInputPlusOutput",
+      "oldValue": 1976755,
+      "newValue": 2594923,
+      "deltaPct": 31.3,
+      "severity": "red"
+    },
+    {
+      "field": "perf.estimatedCostUsd",
+      "oldValue": 9.86,
+      "newValue": 12.68,
+      "deltaPct": 28.6,
+      "severity": "red"
+    },
+    {
+      "field": "output.graphNodeCount",
+      "oldValue": 17,
+      "newValue": 4887,
+      "deltaPct": 28647.1,
+      "severity": "red"
+    },
+    {
+      "field": "output.specSuccessRatio",
+      "oldValue": 100,
+      "newValue": 100,
+      "deltaPct": 0,
+      "severity": "green"
+    }
+  ],
+  "overall": "fail"
+}

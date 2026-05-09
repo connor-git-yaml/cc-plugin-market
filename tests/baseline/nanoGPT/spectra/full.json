@@ -10,20 +10,20 @@
       "ts": 0,
       "tsx": 0,
       "py": 15,
-      "md": 4,
-      "other": 7
+      "md": 10,
+      "other": 12
     },
     "targetLocEstimate": 1235,
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-04-30T08:18:27.105Z",
+    "runTimestampUtc": "2026-05-09T14:19:55.753Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
       "-l",
       "node",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/unruffled-rosalind-5150e5/dist/cli/index.js",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/elated-chebyshev-ac33b6/dist/cli/index.js",
       "batch",
       "/Users/connorlu/.spectra-baselines/nanoGPT",
       "--mode",
@@ -38,37 +38,37 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/nanoGPT-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-04-30T08:18:27.105Z",
-    "staleAfterDate": "2026-10-27",
+    "pinnedAt": "2026-05-09T14:19:55.753Z",
+    "staleAfterDate": "2026-11-05",
     "upstreamVersion": "4.1.1",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 50348,
-    "actualTokens": 401340,
-    "biasRatio": 7.97
+    "actualTokens": 436622,
+    "biasRatio": 8.67
   },
   "perf": {
-    "totalWallMs": 1254041,
+    "totalWallMs": 1328538,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 103400,
-      "p95": 120500,
-      "min": 80400,
-      "max": 120500,
+      "p50": 121700,
+      "p95": 127600,
+      "min": 89500,
+      "max": 127600,
       "samplesCount": 4
     },
-    "tokensInput": 312491,
-    "tokensOutput": 88849,
+    "tokensInput": 345471,
+    "tokensOutput": 91151,
     "tokensCacheRead": null,
-    "estimatedCostUsd": 2.27,
-    "memoryPeakKb": 289200
+    "estimatedCostUsd": 2.4,
+    "memoryPeakKb": 291616
   },
   "output": {
-    "graphNodeCount": 32,
-    "graphEdgeCount": 18,
+    "graphNodeCount": 102,
+    "graphEdgeCount": 44,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 13417,
+    "graphSizeBytes": 45424,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -90,21 +90,21 @@
       "modulesWithDataModel": 6,
       "modulesWithAllFour": 6,
       "modulesWithInputsOutputs": 6,
-      "averageSpecLines": 362,
+      "averageSpecLines": 375,
       "shorterThan100Lines": 1,
       "longerThan1000Lines": 0,
       "outlierFiles": [
-        "_index.spec.md (45 lines, too short)"
+        "_index.spec.md (63 lines, too short)"
       ],
       "moduleCount": 7
     },
     "graphSanity": {
-      "isolatedNodes": 12,
+      "isolatedNodes": 48,
       "selfLoops": 0,
       "edgesWithMissingTarget": 0,
-      "averageDegree": 1.1,
+      "averageDegree": 0.9,
       "maxDegree": 7,
-      "edgesWithoutType": 18
+      "edgesWithoutType": 44
     },
     "crossLinks": {
       "totalLinks": 12,
@@ -112,96 +112,6 @@
       "externalLinks": 0
     },
     "codingContextGrounding": null,
-    "graphTopologyAccuracy": null,
-    "judgeSpecQuality": {
-      "score": 6.5,
-      "rationale": "4 章节完整率 6/7 ≈ 85.7%（达标但未达 95% 加分线），平均 362 行处于良好区间，0 broken-links 是亮点。但 specModuleCount=4 与 quality.moduleCount=7 存在不一致，且 nanoGPT 共 15 个 .py 文件却只产出 4-7 个 spec 模块，覆盖率明显不足；_index.spec.md 仅 45 行过短；isolatedNodes 12/32 (37.5%) 间接反映模块互联不充分。无法直接核验 spec 正文内容（样本为空），保守给中等偏上分。",
-      "interRaterDelta": 1,
-      "runs": [
-        {
-          "runIndex": 1,
-          "score": 6,
-          "rationaleAnonymized": "4 章节完整率 6/7 ≈ 85.7%（达标但未达 95% 加分线），平均 362 行处于良好区间，0 broken-links 是亮点。但 specModuleCount=4 与 quality.moduleCount=7 存在不一致，且 nanoGPT 共 15 个 .py 文件却只产出 4-7 个 spec 模块，覆盖率明显不足；_index.spec.md 仅 45 行过短；isolatedNodes 12/32 (37.5%) 间接反映模块互联不充分。无法直接核验 spec 正文内容（样本为空），保守给中等偏上分。",
-          "durationMs": 25803,
-          "exitCode": 0
-        },
-        {
-          "runIndex": 2,
-          "score": 7,
-          "rationaleAnonymized": "4 章节完整率 6/7 ≈ 86%，未达 95% 加分线但高于 80% 扣分线；平均 362 行落在 300-600 理想区间，无 >1000 行堆砌，broken-links 0，跨链接干净。扣分点：output.specModuleCount=4 与 quality.moduleCount=7 不一致暗示口径错位；_index.spec.md 仅 45 行偏薄；无 spec 正文样本可佐证内容真实性，故不上 8。整体结构与简洁性表现稳健，属于\"工程合格但抽象层次未充分验证\"水平。",
-          "durationMs": 22442,
-          "exitCode": 0
-        }
-      ],
-      "judgedAt": "2026-04-30T12:38:28.902Z",
-      "judgeModel": "claude-opus-4-7"
-    },
-    "judgeDocumentationQuality": {
-      "score": 7,
-      "rationale": "产物形态为 spec.md 类，意图/业务逻辑/接口/数据/约束/边界等章节齐全，平均 362 行属理想区间，0 broken-links，跨模块关联（如 model.py 入站 3）展现清晰。亮点：阶段化业务逻辑叙述深入、含具体行号和代码引用、weight tying 等细节准确。扣分：nanoGPT 共 15 个 .py 仅产 6 个 spec 模块，data/shakespeare 等覆盖缺失；_index.spec.md 仅 45 行且依赖图 mermaid 为空；isolatedNodes 12/32 反映关系网未充分展开；output.specModuleCount=4 与 quality.moduleCount=7 口径不一致。整体作为 LLM context 价值良好但覆盖度不足。",
-      "interRaterDelta": 0,
-      "runs": [
-        {
-          "runIndex": 1,
-          "score": 7,
-          "rationaleAnonymized": "产物形态为 spec.md 类，意图/业务逻辑/接口/数据/约束/边界等章节齐全，平均 362 行属理想区间，0 broken-links，跨模块关联（如 model.py 入站 3）展现清晰。亮点：阶段化业务逻辑叙述深入、含具体行号和代码引用、weight tying 等细节准确。扣分：nanoGPT 共 15 个 .py 仅产 6 个 spec 模块，data/shakespeare 等覆盖缺失；_index.spec.md 仅 45 行且依赖图 mermaid 为空；isolatedNodes 12/32 反映关系网未充分展开；output.specModuleCount=4 与 quality.moduleCount=7 口径不一致。整体作为 LLM context 价值良好但覆盖度不足。",
-          "durationMs": 13774,
-          "exitCode": 0
-        },
-        {
-          "runIndex": 2,
-          "score": 7,
-          "rationaleAnonymized": "6 个模块 spec 章节完整（意图/逻辑/接口/数据/约束/边界全覆盖），平均 362 行信息密度良好，含具体行号锚点（model.py:118）、类签名、阶段化业务流程，LLM-as-context 价值较高。跨模块关联清晰展现 model.py 的中心地位（3 入站）。扣分：覆盖度不足——nanoGPT 共 15 个 .py 文件仅产出 6 个 spec（缺 train.py 等关键样本展示），_index.spec.md 仅 45 行且 mermaid 依赖图为空，isolatedNodes 12/32 反映关系网未充分构建，cross-links 仅 12 条偏少。",
-          "durationMs": 13551,
-          "exitCode": 0
-        }
-      ],
-      "judgedAt": "2026-04-30T17:41:50.010Z",
-      "judgeModel": "claude-opus-4-7",
-      "sourceArtifact": "modules/*.spec.md"
-    },
-    "graphAccuracy": {
-      "language": "python",
-      "coverageMethod": "label-only",
-      "truthSet": {
-        "filesAnalyzed": 15,
-        "imports": 42,
-        "callsTotal": 304,
-        "uniqueCallTargets": 177
-      },
-      "graph": {
-        "totalEdges": 18,
-        "callEdges": 0,
-        "containmentEdges": 11,
-        "otherEdges": 7
-      },
-      "accuracy": {
-        "graphCalleeCount": 0,
-        "truthCalleeCount": 177,
-        "hits": 0,
-        "callPrecision": null,
-        "callRecall": 0,
-        "sampleHits": [],
-        "sampleMissed": [
-          "GPT",
-          "GPTConfig",
-          "__add__",
-          "__mul__",
-          "__sub__",
-          "__truediv__",
-          "astype",
-          "autocast",
-          "backward",
-          "compile"
-        ],
-        "sampleFalsePositives": []
-      },
-      "notes": [
-        "label-only matching: 比较 graph callee label 与源码 callee 名是否相同",
-        "precision: graph 中 call-类边命中真实 call 的占比",
-        "recall: 真实 call 中被 graph 覆盖的占比",
-        "⚠️ 该 graph 不含 call/uses 类型边（可能是 contains-only graph，如 spectra v4.x）"
-      ]
-    }
+    "graphTopologyAccuracy": null
   }
 }

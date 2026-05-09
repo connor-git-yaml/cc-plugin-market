@@ -1,0 +1,17 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-micrograd.json /tmp/feat-157-diff/new-micrograd.json
+
+baseline-diff (mode=regression)
+  old: /tmp/feat-157-diff/old-micrograd.json
+  new: /tmp/feat-157-diff/new-micrograd.json
+
+  field                                    old           new           Δ%        severity
+  ---------------------------------------- ------------- ------------- --------- --------
+  perf.totalWallMs                         176076        191128        +8.5%     green
+  perf.tokensInputPlusOutput               98986         114543        +15.7%    red
+  perf.estimatedCostUsd                    0.56          0.62          +10.7%    yellow
+  output.graphNodeCount                    13            46            +253.8%   red
+  output.specSuccessRatio                  100           100           +0%       green
+
+overall: fail

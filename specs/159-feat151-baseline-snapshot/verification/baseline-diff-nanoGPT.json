@@ -1,0 +1,45 @@
+
+> spectra-cli@4.1.1 baseline:diff
+> node scripts/baseline-diff.mjs /tmp/feat-157-diff/old-nanoGPT.json /tmp/feat-157-diff/new-nanoGPT.json --format json
+
+{
+  "ok": false,
+  "results": [
+    {
+      "field": "perf.totalWallMs",
+      "oldValue": 1254041,
+      "newValue": 1328538,
+      "deltaPct": 5.9,
+      "severity": "green"
+    },
+    {
+      "field": "perf.tokensInputPlusOutput",
+      "oldValue": 401340,
+      "newValue": 436622,
+      "deltaPct": 8.8,
+      "severity": "yellow"
+    },
+    {
+      "field": "perf.estimatedCostUsd",
+      "oldValue": 2.27,
+      "newValue": 2.4,
+      "deltaPct": 5.7,
+      "severity": "green"
+    },
+    {
+      "field": "output.graphNodeCount",
+      "oldValue": 32,
+      "newValue": 102,
+      "deltaPct": 218.8,
+      "severity": "red"
+    },
+    {
+      "field": "output.specSuccessRatio",
+      "oldValue": 100,
+      "newValue": 100,
+      "deltaPct": 0,
+      "severity": "green"
+    }
+  ],
+  "overall": "fail"
+}
