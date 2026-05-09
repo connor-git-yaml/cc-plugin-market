@@ -599,4 +599,349 @@ export class JavaMapper implements QueryMapper {
   private _walkCallSites(_root: Parser.SyntaxNode, _out: CallSite[]): void {
     // T-3.1 实现：迭代栈 + 节点 dispatch + ERROR/MISSING 跳子树
   }
+
+  // ============================================================
+  // Feature 154 — receiver 类型探测辅助（T-2.1）
+  // 设计与 scripts/lib/java-call-extractor.mjs 同源（语义对齐 truth-set）
+  // ============================================================
+
+  /**
+   * 判断 identifier text 是否符合 Java 类型命名约定。
+   *
+   * Java 命名约定：
+   *   - PascalCase（首字母大写 + 含至少一个小写字母）：Math, Logger, FileInputStream
+   *   - 全大写 Acronym（≥ 2 字符且属于白名单）：URL, UUID, JSON
+   *   - 常量 SCREAMING_SNAKE_CASE：LOGGER, MAX_SIZE — **不**视为类型名
+   *
+   * Codex P1 WARNING W-2 修订：**不在此函数内**判定 JAVA_PACKAGE_ROOT_NAMES。
+   * 包根判定只在 _looksLikePackageQualifiedType 内对完整 field_access 链使用，
+   * 避免 `com` / `org` 单独被误归为类型。
+   */
+  private _isJavaTypeName(text: string): boolean {
+    if (typeof text !== 'string' || text.length === 0) return false;
+    if (!/^[A-Z]/.test(text)) return false;
+    // PascalCase（含小写字母）
+    if (/[a-z]/.test(text)) return true;
+    // Acronym 白名单（全大写）
+    if (JAVA_ACRONYM_TYPE_NAMES.has(text)) return true;
+    return false;
+  }
+
+  /**
+   * 判断 field_access 节点的末段 field 是否是类型名。
+   *
+   * 三层判定（Codex T-2 review CRITICAL C-1 修订：必须先要求整条链可拆为 segments，
+   * 避免 `foo().bar.Baz.call()` 这种 leftmost 是 method_invocation 的链被误判为
+   * 类型路径）：
+   *   0. _fieldAccessSegments 拆链失败（leftmost 不是 simple identifier）→ false
+   *   1. 末段 field 是 PascalCase / acronym → 类型路径（Outer.Inner）
+   *   2. 末段 field 全大写但首字母大写 + 整条链是已知 Java 包路径 → FQN
+   *      类型路径（java.util.UUID）
+   */
+  private _fieldAccessTerminalIsType(node: Parser.SyntaxNode): boolean {
+    if (typeof node.childForFieldName !== 'function') return false;
+    // 必须能拆为 [leftmost identifier, ..., field] segment 列表
+    const segments = this._fieldAccessSegments(node);
+    if (!segments) return false;
+    const fieldNameNode = node.childForFieldName('field');
+    if (!fieldNameNode || typeof fieldNameNode.text !== 'string') return false;
+    const fieldText = fieldNameNode.text;
+    // Path 1+2: PascalCase 或 acronym 白名单
+    if (this._isJavaTypeName(fieldText)) return true;
+    // Path 3: 全大写 field + 整条链是已知 Java 包路径 → FQN type
+    if (/^[A-Z]/.test(fieldText)) {
+      if (this._looksLikePackageQualifiedType(node)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 把 field_access 链拆为 [leftmost, ..., field] 的 segment 数组。
+   *
+   * 例如 `java.util.UUID` 树形：
+   *   field_access(field='UUID')
+   *     └ field_access(field='util')
+   *         └ identifier 'java'
+   * 返回 ['java', 'util', 'UUID']。
+   *
+   * 任一节点缺 'object'/'field' 字段或 leftmost 非 identifier → 返回 null。
+   */
+  private _fieldAccessSegments(node: Parser.SyntaxNode): string[] | null {
+    const reversed: string[] = [];
+    let cursor: Parser.SyntaxNode | null = node;
+    while (
+      cursor &&
+      cursor.type === 'field_access' &&
+      typeof cursor.childForFieldName === 'function'
+    ) {
+      const fieldNode = cursor.childForFieldName('field');
+      if (!fieldNode || typeof fieldNode.text !== 'string') return null;
+      reversed.push(fieldNode.text);
+      cursor = cursor.childForFieldName('object');
+    }
+    if (!cursor || cursor.type !== 'identifier' || typeof cursor.text !== 'string') {
+      return null;
+    }
+    reversed.push(cursor.text);
+    return reversed.reverse();
+  }
+
+  /**
+   * 判断 field_access 链是否是"包路径.类型"形态。
+   *
+   * 三个条件全满足才返回 true：
+   *   1. 链至少 3 段（leftmost + ≥ 1 中间 + 末段类型）
+   *   2. leftmost 在 JAVA_PACKAGE_ROOT_NAMES（仅在此函数内使用）
+   *   3. 末段之外每段都是 lowercase package segment 形态（^[a-z][a-z0-9_]*$）
+   */
+  private _looksLikePackageQualifiedType(node: Parser.SyntaxNode): boolean {
+    const segments = this._fieldAccessSegments(node);
+    if (!segments || segments.length < 3) return false;
+    // Codex T-2 review WARNING W-2 修订：合同自洽 — 末段必须 PascalCase
+    const terminal = segments[segments.length - 1];
+    if (!terminal || !/^[A-Z]/.test(terminal)) return false;
+    const packageSegments = segments.slice(0, -1);
+    const leftmost = packageSegments[0];
+    if (leftmost === undefined || !JAVA_PACKAGE_ROOT_NAMES.has(leftmost)) return false;
+    return packageSegments.every((s) => /^[a-z][a-z0-9_]*$/.test(s));
+  }
+
+  /**
+   * 把 scoped type name normalize 到末段（label-only 对齐 truth-set）。
+   * 例如 `Outer.Inner` → `Inner`；`com.foo.Bar` → `Bar`。
+   */
+  private _normalizeJavaTypeName(name: string): string {
+    if (typeof name !== 'string' || name.length === 0) return name;
+    const lastDot = name.lastIndexOf('.');
+    return lastDot === -1 ? name : name.slice(lastDot + 1);
+  }
+
+  /**
+   * 剥离 generic_type.text 中的 type arguments。
+   *
+   * Codex T-2 review WARNING W-1 修订：用 depth-based 解析处理嵌套泛型，
+   * 避免 `Outer<T>.Inner<K>` 被首个 `<` 截断为 `Outer`（应保留 `Outer.Inner`）。
+   *
+   * 例如：
+   *   `ArrayList<String>`         → `ArrayList`
+   *   `Outer.Inner<T,K>`          → `Outer.Inner`
+   *   `Outer<T>.Inner<K>`         → `Outer.Inner`
+   *   `Map<K, List<V>>`           → `Map`
+   */
+  private _stripTypeArgs(text: string): string {
+    if (typeof text !== 'string' || text.length === 0) return text;
+    let depth = 0;
+    let out = '';
+    for (const ch of text) {
+      if (ch === '<') {
+        depth += 1;
+        continue;
+      }
+      if (ch === '>') {
+        depth = Math.max(0, depth - 1);
+        continue;
+      }
+      if (depth === 0) out += ch;
+    }
+    return out;
+  }
+
+  // ============================================================
+  // Feature 154 — classify methods（T-2.2 + T-2.3）
+  // 优先级 dispatch 详见 spec FR-003 + plan 修订版伪代码
+  // ============================================================
+
+  /**
+   * 分类 method_invocation 节点 → CallSite 元数据。
+   *
+   * 优先级 dispatch（spec FR-003 + Codex CRITICAL E 修订）：
+   *   1. objectNode.type === 'super'                 → super
+   *   2. callee 名 ∈ JAVA_REFLECTION_METHOD_NAMES    → unresolved
+   *   3. objectNode.type === 'this'                  → member + undefined
+   *   4. type_identifier / scoped_type_identifier    → member + 末段类名
+   *   5. identifier (PascalCase / acronym)           → member + identifier 文本
+   *   6. identifier (lowercase 变量名)               → cross-module + identifier 文本
+   *   7. field_access 末段 type                      → member + 末段类名
+   *   8. field_access 末段非 type                    → cross-module + undefined
+   *   9. 其它带 receiver                             → cross-module + undefined
+   *  10. 无 receiver                                 → member + undefined
+   */
+  private _classifyMethodInvocation(node: Parser.SyntaxNode): ClassifyResult {
+    if (typeof node.childForFieldName !== 'function') {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode || typeof nameNode.text !== 'string') {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    const calleeName = nameNode.text;
+
+    const objectNode = node.childForFieldName('object');
+
+    // 1. super.method() → super（super() / this() 由 _handleExplicitConstructorInvocation 处理）
+    if (objectNode && objectNode.type === 'super') {
+      return { calleeName, calleeKind: 'super' };
+    }
+
+    // 2. 反射方法名 short-circuit
+    if (JAVA_REFLECTION_METHOD_NAMES.has(calleeName)) {
+      return { calleeName, calleeKind: 'unresolved' };
+    }
+
+    // 3. this.method() — Codex CRITICAL E：tree-sitter 把 'this' 解析为独立 node type
+    if (objectNode && objectNode.type === 'this') {
+      return { calleeName, calleeKind: 'member' };
+    }
+
+    if (objectNode) {
+      // 4. type_identifier / scoped_type_identifier
+      if (
+        objectNode.type === 'type_identifier' ||
+        objectNode.type === 'scoped_type_identifier'
+      ) {
+        return {
+          calleeName,
+          calleeKind: 'member',
+          calleeQualifier: this._normalizeJavaTypeName(objectNode.text),
+        };
+      }
+
+      // 5/6. identifier
+      if (objectNode.type === 'identifier' && typeof objectNode.text === 'string') {
+        if (this._isJavaTypeName(objectNode.text)) {
+          // PascalCase / acronym → static member
+          return {
+            calleeName,
+            calleeKind: 'member',
+            calleeQualifier: objectNode.text,
+          };
+        }
+        // lowercase variable → instance method
+        return {
+          calleeName,
+          calleeKind: 'cross-module',
+          calleeQualifier: objectNode.text,
+        };
+      }
+
+      // 7/8. field_access — Codex T-2 review CRITICAL C-1 修订：
+      // _fieldAccessTerminalIsType 内已强制要求 _fieldAccessSegments 非空，
+      // 此处 segs 必非空，直接取末段做 qualifier
+      if (objectNode.type === 'field_access') {
+        if (this._fieldAccessTerminalIsType(objectNode)) {
+          const segs = this._fieldAccessSegments(objectNode);
+          // _fieldAccessTerminalIsType 已验证 segs 非空，但 TS 类型仍需 narrowing
+          const qualifier =
+            segs && segs.length > 0
+              ? segs[segs.length - 1]
+              : this._normalizeJavaTypeName(objectNode.text);
+          return { calleeName, calleeKind: 'member', calleeQualifier: qualifier };
+        }
+        return { calleeName, calleeKind: 'cross-module' };
+      }
+
+      // 9. 其它 receiver（method_invocation 链 / array_access / parenthesized 等）
+      return { calleeName, calleeKind: 'cross-module' };
+    }
+
+    // 10. 无 receiver（含 static import 展开 free function）→ 统一归 member
+    // spec FR-003 deferred 决策：不输出 free，与 truth-set kind=method 对齐
+    return { calleeName, calleeKind: 'member' };
+  }
+
+  /**
+   * 分类 object_creation_expression 节点（new ClassName()）→ CallSite 元数据。
+   *
+   * type 字段三种形态：
+   *   - type_identifier (`new Foo()`)
+   *   - generic_type (`new ArrayList<Integer>()`，内层 type_identifier 或 scoped_type_identifier)
+   *   - scoped_type_identifier (`new Outer.Inner()`)
+   *
+   * 输出统一 calleeName = calleeQualifier = normalized 末段类名。
+   */
+  private _classifyObjectCreation(node: Parser.SyntaxNode): ClassifyResult {
+    if (typeof node.childForFieldName !== 'function') {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    const typeNode = node.childForFieldName('type');
+    if (!typeNode) {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+
+    let rawName: string | undefined;
+    if (typeNode.type === 'type_identifier' && typeof typeNode.text === 'string') {
+      rawName = typeNode.text;
+    } else if (typeNode.type === 'scoped_type_identifier' && typeof typeNode.text === 'string') {
+      rawName = typeNode.text;
+    } else if (typeNode.type === 'generic_type') {
+      // 内层 type_identifier / scoped_type_identifier 优先
+      const named = Array.isArray(typeNode.namedChildren) ? typeNode.namedChildren : [];
+      const inner = named.find(
+        (c) => c && (c.type === 'type_identifier' || c.type === 'scoped_type_identifier'),
+      );
+      if (inner && typeof inner.text === 'string') {
+        rawName = inner.text;
+      } else if (typeof typeNode.text === 'string') {
+        rawName = this._stripTypeArgs(typeNode.text);
+      }
+    } else if (typeof typeNode.text === 'string' && typeNode.text.length > 0) {
+      rawName = this._stripTypeArgs(typeNode.text);
+    }
+
+    if (!rawName) {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    const className = this._normalizeJavaTypeName(rawName);
+    return {
+      calleeName: className,
+      calleeKind: 'member',
+      calleeQualifier: className,
+    };
+  }
+
+  /**
+   * 分类 explicit_constructor_invocation 节点（构造器内 super(...) / this(...)）。
+   *
+   * constructor 字段 type === 'super' / 'this' → kind=super，calleeName 为字面值。
+   * 其它形态 → unresolved。
+   */
+  private _classifyExplicitConstructorInvocation(node: Parser.SyntaxNode): ClassifyResult {
+    if (typeof node.childForFieldName !== 'function') {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    const ctorNode = node.childForFieldName('constructor');
+    if (!ctorNode) {
+      return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+    }
+    if (ctorNode.type === 'super' || ctorNode.type === 'this') {
+      return { calleeName: ctorNode.type, calleeKind: 'super' };
+    }
+    if (typeof ctorNode.text === 'string') {
+      return { calleeName: ctorNode.text, calleeKind: 'unresolved' };
+    }
+    return { calleeName: '<unknown>', calleeKind: 'unresolved' };
+  }
+
+  // ============================================================
+  // Feature 154 — handler stubs（T-2.4，T-3.4 接通 callerContext + push）
+  // ============================================================
+
+  /** method_invocation handler（T-2.4 stub，T-3.4 接通完整链路）*/
+  private _handleMethodInvocation(node: Parser.SyntaxNode, _out: CallSite[]): void {
+    // T-3.4 实现：调用 _isPhantomCall + _classifyMethodInvocation + _resolveCallerContext + push
+    void this._classifyMethodInvocation(node);
+  }
+
+  /** object_creation_expression handler（T-2.4 stub，T-3.4 接通完整链路）*/
+  private _handleObjectCreation(node: Parser.SyntaxNode, _out: CallSite[]): void {
+    void this._classifyObjectCreation(node);
+  }
+
+  /** explicit_constructor_invocation handler（T-2.4 stub，T-3.4 接通完整链路）*/
+  private _handleExplicitConstructorInvocation(
+    node: Parser.SyntaxNode,
+    _out: CallSite[],
+  ): void {
+    void this._classifyExplicitConstructorInvocation(node);
+  }
 }
