@@ -532,8 +532,8 @@ function writeProfiles(
   paths: OrchestratorPaths,
 ): void {
   for (const profile of profiles) {
-    const rootDirAbs = path.join(paths.projectRoot, profile.rootDir);
-    const docsRootAbs = path.join(paths.projectRoot, profile.docsRoot);
+    const rootDirAbs = resolveAgainstProjectRoot(paths.projectRoot, profile.rootDir);
+    const docsRootAbs = resolveAgainstProjectRoot(paths.projectRoot, profile.docsRoot);
 
     fs.rmSync(rootDirAbs, { recursive: true, force: true });
     fs.mkdirSync(docsRootAbs, { recursive: true });
@@ -541,15 +541,15 @@ function writeProfiles(
     for (const document of profile.documents) {
       if (document.kind === 'landing') {
         fs.writeFileSync(
-          path.join(paths.projectRoot, document.outputPath),
+          resolveAgainstProjectRoot(paths.projectRoot, document.outputPath),
           renderDocsBundleIndex(profile, generatedAt),
           'utf-8',
         );
         continue;
       }
 
-      const sourcePathAbs = path.join(paths.projectRoot, document.sourcePath);
-      const outputPathAbs = path.join(paths.projectRoot, document.outputPath);
+      const sourcePathAbs = resolveAgainstProjectRoot(paths.projectRoot, document.sourcePath);
+      const outputPathAbs = resolveAgainstProjectRoot(paths.projectRoot, document.outputPath);
       if (!fs.existsSync(sourcePathAbs)) {
         continue;
       }
@@ -566,9 +566,17 @@ function writeProfiles(
       }
     }
 
-    const mkdocsPathAbs = path.join(paths.projectRoot, profile.mkdocsConfigPath);
+    const mkdocsPathAbs = resolveAgainstProjectRoot(paths.projectRoot, profile.mkdocsConfigPath);
     fs.writeFileSync(mkdocsPathAbs, renderMkdocsConfig(profile), 'utf-8');
   }
+}
+
+// toProjectPath 在 manifest 字段中可能保留绝对路径（当 outputDir 不在 projectRoot 内，
+// 例如 baseline-collect 的 ~/.spectra-baselines/ 场景）。path.join 不识别绝对路径覆盖
+// 语义，会把绝对路径前缀拼到 projectRoot 下；path.resolve 才正确：当第二个参数为绝对
+// 路径时直接采用，否则相对 projectRoot 解析。
+function resolveAgainstProjectRoot(projectRoot: string, manifestPath: string): string {
+  return path.resolve(projectRoot, manifestPath);
 }
 
 function renderDocsBundleIndex(profile: BundleProfileManifest, generatedAt: string): string {

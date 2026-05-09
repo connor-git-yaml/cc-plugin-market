@@ -156,3 +156,74 @@ describe('docs-bundle-orchestrator', () => {
     fs.writeFileSync(path.join(outputDir, fileName), `${content}\n`, 'utf-8');
   }
 });
+
+describe('docs-bundle-orchestrator (outputDir 在 projectRoot 之外)', () => {
+  // baseline-collect 场景：outputDir 位于 ~/.spectra-baselines/<project>-output/，
+  // 不在 projectRoot 内。此前 toProjectPath 在该场景返回绝对路径，writeProfiles
+  // 的 path.join(projectRoot, absPath) 会把绝对路径前缀拼到 projectRoot 下，
+  // 导致 worktree 出现意外的 Users/.../ 目录树（worktree 污染）。
+  let workspace: string;
+  let projectRoot: string;
+  let outputDir: string;
+
+  beforeEach(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-bundle-baseline-'));
+    projectRoot = path.join(workspace, 'project');
+    outputDir = path.join(workspace, 'baseline-output');
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    seedDoc('architecture-narrative.md', '# architecture-narrative');
+    seedDoc('architecture-overview.md', '# architecture-overview');
+    seedDoc('runtime-topology.md', '# runtime-topology');
+    seedDoc('workspace-index.md', '# workspace-index');
+    seedDoc('config-reference.md', '# config-reference');
+    seedDoc('pattern-hints.md', '# pattern-hints');
+    seedDoc('cross-package-analysis.md', '# cross-package-analysis');
+    seedDoc('interface-surface.md', '# interface-surface');
+    seedDoc('api-surface.md', '# api-surface');
+    seedDoc('data-model.md', '# data-model');
+    seedDoc('event-surface.md', '# event-surface');
+    seedDoc('troubleshooting.md', '# troubleshooting');
+    seedDoc('_index.spec.md', '# architecture index');
+    seedDoc('api.spec.md', '# api spec');
+    seedDoc('worker.spec.md', '# worker spec');
+  });
+
+  afterEach(() => {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  });
+
+  it('bundle 产物写入 outputDir，不污染 projectRoot', () => {
+    orchestrateDocsBundle({ projectRoot, outputDir });
+
+    expect(fs.existsSync(path.join(outputDir, 'bundles', 'developer-onboarding', 'mkdocs.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'bundles', 'developer-onboarding', 'docs', 'index.md'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'bundles', 'api-consumer', 'mkdocs.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'bundles', 'ops-handover', 'mkdocs.yml'))).toBe(true);
+    expect(fs.existsSync(path.join(outputDir, 'bundles', 'architecture-review', 'mkdocs.yml'))).toBe(true);
+
+    // projectRoot 应保持空（编排不应在其下写入任何文件）
+    expect(fs.readdirSync(projectRoot)).toEqual([]);
+  });
+
+  it('manifest 写入 outputDir 且不污染 projectRoot', () => {
+    orchestrateDocsBundle({ projectRoot, outputDir });
+
+    expect(fs.existsSync(path.join(outputDir, DOCS_BUNDLE_MANIFEST_FILE))).toBe(true);
+    expect(fs.readdirSync(projectRoot)).toEqual([]);
+  });
+
+  it('metaDir 在 outputDir 下时，manifest 写入 metaDir 不污染 projectRoot', () => {
+    // 复刻 batch-orchestrator 真实调用形态：传入 metaDir 让 manifest 落到 _meta/ 子目录。
+    const metaDir = path.join(outputDir, '_meta');
+    orchestrateDocsBundle({ projectRoot, outputDir, metaDir });
+
+    expect(fs.existsSync(path.join(metaDir, DOCS_BUNDLE_MANIFEST_FILE))).toBe(true);
+    expect(fs.readdirSync(projectRoot)).toEqual([]);
+  });
+
+  function seedDoc(fileName: string, content: string): void {
+    fs.writeFileSync(path.join(outputDir, fileName), `${content}\n`, 'utf-8');
+  }
+});
