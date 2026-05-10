@@ -609,7 +609,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 > 目标：验证 GLM-5.1 judge 质量达标（IoU ≥ 0.7，Pearson ≥ 0.6，refusal IoU ≥ 0.5）或触发回退方案。
 > 依赖：Phase A 完成（T023 通过）+ Phase B1 完成（T034 通过）。
 
-### T036 新建 pearson.mjs：零依赖 Pearson correlation 实现
+### T036 新建 pearson.mjs：零依赖 Pearson correlation 实现 [DONE]
 
 - **依赖**: T023（Phase A 验证门）, T034（Phase B1 验证门）
 - **文件**: `scripts/lib/pearson.mjs`（新建）
@@ -641,7 +641,10 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T037 新建 eval-pearson.test.mjs：5 个 Pearson vitest case
+### T037 新建 eval-pearson.test.mjs：5 个 Pearson vitest case [DONE]
+
+> **实施备注**：实际落地为 `tests/unit/eval-pearson.test.ts`（项目规范 .test.ts；
+> vitest 可直接 import .mjs）。5 case 全 pass，与离线 Python canonical 公式 ε ≤ 1e-6 对齐。
 
 - **依赖**: T036
 - **文件**: `tests/eval-pearson.test.mjs`（新建）
@@ -659,7 +662,11 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T038 新建 calibrate-glm-judge.mjs：5 fixture × 3 runs 跑批 runner
+### T038 新建 calibrate-glm-judge.mjs：5 fixture × 3 runs 跑批 runner [DONE]
+
+> **实施备注**：完整骨架 + dry-run + api-key-check 模式落地。dry-run 验证：
+> 5 fixture × 3 runs = 15 records，IoU/Pearson/Refusal IoU 计算路径通畅，artifact
+> 写入 `calibration-result.json`。--api-key-check 在 SILICONFLOW_API_KEY 缺失时退出码 73。
 
 - **依赖**: T036, T033（fixture list）, T034（Phase B1 验证门）
 - **文件**: `scripts/calibrate-glm-judge.mjs`（新建）
@@ -704,7 +711,11 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T039 执行 GLM calibration 跑批：5 × 3 = 15 runs
+### T039 执行 GLM calibration 跑批：5 × 3 = 15 runs [DEFERRED-TO-API-KEY-AVAILABLE]
+
+> **延期原因**：当前环境 `SILICONFLOW_API_KEY` 缺失，无法实跑 GLM-5.1 / Kimi-K2.6 judges。
+> T038 runner 已就绪，待 ops 在 key 就绪后按
+> `specs/162-codex-driver-glm-judge-eval/calibration-runbook.md` §2 触发实跑。
 
 - **依赖**: T038
 - **文件**: `specs/162-codex-driver-glm-judge-eval/calibration-results.md`（新建，跑批输出）
@@ -717,7 +728,10 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T040 [条件] GLM calibration 阈值未达：调整 rubric 最多 2 轮 + 回退方案
+### T040 [条件] GLM calibration 阈值未达：调整 rubric 最多 2 轮 + 回退方案 [DEFERRED-TO-API-KEY-AVAILABLE]
+
+> **延期原因**：依赖 T039 实测数据；T039 延期 → T040 同延期。
+> 处置流程见 `calibration-runbook.md` §3-§4。
 
 - **依赖**: T039
 - **文件**: `scripts/eval-judge-jury.mjs`（可能修改 `buildAdversarialPrompt`）；`calibration-results.md`（更新记录）
@@ -734,7 +748,11 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T041 Phase B2 vitest 全量回归验证
+### T041 Phase B2 vitest 全量回归验证 [DEFERRED-TO-API-KEY-AVAILABLE]
+
+> **延期原因**：依赖 T039/T040；本次实施仅跑了 T037 pearson 5 case + dry-run smoke。
+> 完整 Phase B2 回归（含 calibration 实测数据）待 T039 实跑后触发。
+> **本次实施已完成的回归**：`npx vitest run tests/unit/eval-pearson.test.ts` 5/5 pass。
 
 - **依赖**: T034, T037, T039（T040 若触发）
 - **文件**: 无改动（执行命令）
