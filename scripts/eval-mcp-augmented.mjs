@@ -47,6 +47,26 @@ import {
 import { assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
 import { DEFAULT_JUDGES } from './eval-judge-jury.mjs';
 
+// Feature 162 Phase C：quota state store + subAgentMeta 双轨采集（plan §2.3 / §2.4.5）
+import {
+  reserveQuota,
+  acquirePerRunLock,
+  classifyRuns,
+  validateAcceptRestartPartial,
+  applyPartialDecision,
+  writeRunStarted,
+  writeRunFinalizedSuccess,
+  writeRunFinalizedFailed,
+  EX_USAGE,
+} from './lib/eval-quota-store.mjs';
+import {
+  injectSubAgentMetaEnv,
+  readEnvInjectedMeta,
+  parseSubAgentSelfReport,
+  mergeSubAgentMeta,
+  deriveInheritanceStatus,
+} from './lib/sub-agent-meta.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const FIXTURES_DIR = path.join(
@@ -59,6 +79,18 @@ const MCP_SRC_DIR = path.join(PROJECT_ROOT, 'src/mcp');
 
 const DRY_RUN_COST_PER_RUN_USD = 0.25; // 估算（FR-B-005 / FR-B-008）
 const DEFAULT_TIMEOUT_MS = 1_800_000; // 30 min hard ceiling，沿用 runner 默认
+
+// Feature 162 Phase C：quota state store 路径（plan §2.3.1）
+const QUOTA_HOME = path.join(
+  process.env.HOME ?? os.tmpdir(),
+  '.cache',
+  'spectra',
+  'eval-quota',
+);
+const QUOTA_STORE_PATH = path.join(QUOTA_HOME, 'feature-162.json');
+const QUOTA_LOCK_PATH = path.join(QUOTA_HOME, 'feature-162.lock');
+const QUOTA_HISTORY_PATH = path.join(QUOTA_HOME, 'feature-162-history.jsonl');
+const DEFAULT_MAX_RUNS_PER_DAY = 150; // pilot T055 后再校准；先设保守默认
 
 // SWE-Bench target → baseline 目录名（不复用 runner 的硬编码 map）
 const SWEBENCH_TARGET_MAP = {
@@ -82,6 +114,10 @@ export function parseArgs(argv) {
     keepTemp: false,
     allFixtures: false,
     help: false,
+    // Feature 162 Phase C：quota state store + partial run 处理
+    maxRunsPerDay: DEFAULT_MAX_RUNS_PER_DAY,
+    acceptPartial: false,
+    restartPartial: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -114,6 +150,18 @@ export function parseArgs(argv) {
       case '--all-fixtures':
         args.allFixtures = true;
         break;
+      // Feature 162 Phase C：quota state store flags（plan §2.3.7）
+      case '--max-runs-per-day': {
+        const v = Number.parseInt(argv[++i], 10);
+        if (!Number.isNaN(v) && v >= 0) args.maxRunsPerDay = v;
+        break;
+      }
+      case '--accept-partial':
+        args.acceptPartial = true;
+        break;
+      case '--restart-partial':
+        args.restartPartial = true;
+        break;
       case '--help':
       case '-h':
         args.help = true;
@@ -143,6 +191,12 @@ function printUsage() {
       '  --max-judge-calls N  Opus judge 调用上限（默认 20，预留）',
       '  --keep-temp          调试用：保留 /tmp/spectra-mcp-*.json + telemetry JSONL',
       '  --all-fixtures       遍历 fixtures/ 全部 task（仅 dry-run 安全使用）',
+      '',
+      'Feature 162 Phase C — quota state store:',
+      '  --max-runs-per-day N daily quota 上限，达上限优雅 exit 0（默认 150）',
+      '  --accept-partial     续跑时把 partialStale run 视为已完成，append 到 quota.run_ids',
+      '  --restart-partial    续跑时删除 partialStale run-N.json + lock（互斥于 --accept-partial）',
+      '',
       '  --help, -h           本帮助',
       '',
       'Output:',
@@ -356,28 +410,44 @@ function buildMcpConfigFile({ runId, wtDir }) {
 }
 
 function parseTelemetryJsonl(telemetryPath) {
-  // FR-G-003：Group C 每次 run 结束后解析，累计 toolCall / responseSize
-  const out = { mcpToolCallCount: 0, mcpResponseBytes: 0 };
-  if (!fs.existsSync(telemetryPath)) return out;
+  // Feature 162 plan §2.4.4：返回 canonical schema { mcpToolCalls: Array<{tool, success, error, responseBytes, timestamp}> }
+  // legacy 派生字段（mcpToolCallCount / mcpResponseBytes）由调用方计算
+  const mcpToolCalls = [];
+  if (!fs.existsSync(telemetryPath)) return { mcpToolCalls };
   let raw;
   try {
     raw = fs.readFileSync(telemetryPath, 'utf-8');
   } catch {
-    return out;
+    return { mcpToolCalls };
   }
   const lines = raw.split('\n').filter((l) => l.trim().length > 0);
   for (const line of lines) {
     try {
       const j = JSON.parse(line);
-      out.mcpToolCallCount += 1;
-      if (typeof j.responseSize === 'number') {
-        out.mcpResponseBytes += j.responseSize;
-      }
+      // canonical entry：{ tool, success, error, responseBytes, timestamp }
+      mcpToolCalls.push({
+        tool: typeof j.toolName === 'string' ? `mcp__spectra__${j.toolName}` : (j.tool ?? null),
+        success: typeof j.success === 'boolean' ? j.success : (j.error == null),
+        error: j.error ?? null,
+        responseBytes: typeof j.responseSize === 'number' ? j.responseSize : 0,
+        timestamp: j.timestamp ?? j.ts ?? null,
+      });
     } catch {
       // 忽略坏行（telemetry 写入失败的部分行）
     }
   }
-  return out;
+  return { mcpToolCalls };
+}
+
+/** legacy 派生：mcpToolCalls.length */
+function deriveMcpToolCallCount(mcpToolCalls) {
+  return Array.isArray(mcpToolCalls) ? mcpToolCalls.length : 0;
+}
+
+/** legacy 派生：sum(responseBytes) */
+function deriveMcpResponseBytes(mcpToolCalls) {
+  if (!Array.isArray(mcpToolCalls)) return 0;
+  return mcpToolCalls.reduce((s, c) => s + (typeof c?.responseBytes === 'number' ? c.responseBytes : 0), 0);
 }
 
 function cleanupTempFiles({ cfgPath, telemetryPath, keepTemp }) {
@@ -486,11 +556,14 @@ function writeRunResult({ group, taskId, repeatIndex, payload }) {
 /**
  * 实跑 claude（非 dry-run）—— 通过 `child.on('exit')` 等子进程退出
  * 再返回，避免 telemetry JSONL race condition（plan.md §race condition）。
+ *
+ * iter-2 C-2 修复：spawn env 显式合并 envExtras（subAgentMeta 注入）。
+ * 调用方负责通过 injectSubAgentMetaEnv 构造 envExtras，确保 sub-agent 能读到。
  */
-async function spawnClaudeAndWait({ args, wtDir, timeoutMs }) {
+async function spawnClaudeAndWait({ args, wtDir, timeoutMs, envExtras = {} }) {
   return new Promise((resolve) => {
     const start = process.hrtime.bigint();
-    const env = { ...process.env };
+    const env = { ...process.env, ...envExtras };
     if (env.ANTHROPIC_API_KEY === '') delete env.ANTHROPIC_API_KEY;
     const child = spawn('claude', args, {
       cwd: wtDir,
@@ -521,6 +594,7 @@ async function spawnClaudeAndWait({ args, wtDir, timeoutMs }) {
         signal,
         timedOut: timedOut || signal === 'SIGTERM',
         claudeArgs: args,
+        spawnEnv: env, // iter-2 C-2: 回传供 finalize 读 SPECTRA_PLUGIN_* 注入字段
       });
     });
     child.on('error', (err) => {
@@ -534,6 +608,7 @@ async function spawnClaudeAndWait({ args, wtDir, timeoutMs }) {
         timedOut: false,
         spawnError: err.message,
         claudeArgs: args,
+        spawnEnv: env,
       });
     });
   });
@@ -605,6 +680,17 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       `[dry-run] claude args: ${argsPreview.join(' ')} <prompt:${cmdPreview[cmdPreview.length - 1].length}B>\n`,
     );
 
+    // iter-2 W-1：canonical schema = perf.mcpToolCalls[]
+    const perf = {
+      wallMs: 0,
+      ...(group === 'C'
+        ? {
+            mcpToolCalls: [],
+            mcpToolCallCount: 0,
+            mcpResponseBytes: 0,
+          }
+        : {}),
+    };
     return {
       ok: true,
       costUsd: DRY_RUN_COST_PER_RUN_USD,
@@ -616,17 +702,11 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
         timestamp,
         dryRun: true,
         oracleResult: null,
-        wallMs: 0,
+        perf,
         costUsd: DRY_RUN_COST_PER_RUN_USD,
         claudeCliVersion,
         ...(group === 'B' ? { specPushDegraded } : {}),
-        ...(group === 'C'
-          ? {
-              mcpToolCallCount: 0,
-              mcpResponseBytes: 0,
-              telemetryPathPreview: telemetryPath,
-            }
-          : {}),
+        ...(group === 'C' ? { telemetryPathPreview: telemetryPath } : {}),
       },
     };
   }
@@ -685,12 +765,22 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
 
   const claudeArgs = buildClaudeArgsWithMcp({ prompt, mcpConfigPath });
 
+  // iter-2 C-2 修复：spawn 前真正构造 SPECTRA_PLUGIN_* env 注入，传给 sub-agent。
+  // frontmatterTools 与 loadSource 可由调用层注入；当前阶段还没有动态发现机制，
+  // 先按 plugin.json 规范的稳定值显式声明（与 plugins/spec-driver/.claude-plugin/plugin.json 对齐）。
+  const envExtras = injectSubAgentMetaEnv({
+    specDriverVersion: '4.1.0',
+    frontmatterTools: ['Read', 'Edit', 'Bash'],
+    loadSource: 'plugin-cache-or-worktree',
+  });
+
   let runOutcome;
   try {
     runOutcome = await spawnClaudeAndWait({
       args: claudeArgs,
       wtDir: wt.wtDir,
       timeoutMs: DEFAULT_TIMEOUT_MS,
+      envExtras,
     });
   } catch (err) {
     cleanupTempFiles({
@@ -725,12 +815,15 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
   const productMetrics = captureProductMetrics(wt.wtDir);
 
   // Group C telemetry 累计（child 已 exit，可安全读 JSONL）
+  // Feature 162 plan §2.4.4：canonical schema 双写
+  let mcpToolCalls = null;
   let mcpToolCallCount = null;
   let mcpResponseBytes = null;
   if (group === 'C' && telemetryPath) {
     const t = parseTelemetryJsonl(telemetryPath);
-    mcpToolCallCount = t.mcpToolCallCount;
-    mcpResponseBytes = t.mcpResponseBytes;
+    mcpToolCalls = t.mcpToolCalls;
+    mcpToolCallCount = deriveMcpToolCallCount(mcpToolCalls);
+    mcpResponseBytes = deriveMcpResponseBytes(mcpToolCalls);
   }
 
   // 清理 tmp（finally 语义）
@@ -745,9 +838,25 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
 
   const oracleResultMapped = oracleResult.passed ? 'pass' : 'fail';
 
+  // iter-2 W-1 修复：canonical schema 是 perf.mcpToolCalls[]，不在 runResult 顶层
+  // spec FR-037 + plan §2.4 明确 perf 子对象嵌套。同时透出 spawnEnv / subAgentStdout
+  // 供上层 finalize 阶段读 SPECTRA_PLUGIN_* env 注入和 self-report 解析（C-2）。
+  const perf = {
+    wallMs: runOutcome.wallMs,
+    ...(group === 'C'
+      ? {
+          mcpToolCalls,
+          mcpToolCallCount,
+          mcpResponseBytes,
+        }
+      : {}),
+  };
+
   return {
     ok: true,
     costUsd: realCostUsd ?? DRY_RUN_COST_PER_RUN_USD,
+    spawnEnv: runOutcome.spawnEnv ?? null, // 供 readEnvInjectedMeta 读
+    subAgentStdout: runOutcome.stdout ?? null, // 供 parseSubAgentSelfReport 解析
     runResult: {
       group,
       taskId,
@@ -755,7 +864,7 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       runId,
       oracleResult: oracleResultMapped,
       oracleError: null,
-      wallMs: runOutcome.wallMs,
+      perf,
       timestamp,
       costUsd: realCostUsd,
       claudeCliVersion,
@@ -764,12 +873,6 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       claudeExit: runOutcome.exitCode,
       claudeTimedOut: runOutcome.timedOut,
       ...(group === 'B' ? { specPushDegraded } : {}),
-      ...(group === 'C'
-        ? {
-            mcpToolCallCount,
-            mcpResponseBytes,
-          }
-        : {}),
     },
   };
 }
@@ -782,6 +885,7 @@ async function runForTaskList({ args, taskIds, claudeCliVersion }) {
   let cumulativeCost = 0;
   let runsCompleted = 0;
   let runsAttempted = 0;
+  let quotaExhausted = false;
   const failures = [];
   const stopLossTriggered = { value: false };
 
@@ -803,35 +907,160 @@ async function runForTaskList({ args, taskIds, claudeCliVersion }) {
         stopLossTriggered.value = true;
         break outer;
       }
-      const result = await runOne({
-        group: args.group,
-        taskFixture,
-        repeatIndex: i,
-        args,
-        claudeCliVersion,
-      });
+
+      // ─────────────────────────────────────────────────────
+      // Feature 162 Phase C：reserveQuota 短锁 + per-run lock + finally 兜底
+      // ─────────────────────────────────────────────────────
+      const runId = `${taskId}-${args.group}-${i}`;
+      let runLockHandle = null;
+      let startedAt = null;
+      const cohortRunDir = path.join(RUNS_DIR, args.group, taskId);
+      const runFilePath = path.join(cohortRunDir, `run-${runId}.json`);
+      const runLockPath = path.join(cohortRunDir, `run-${runId}.lock`);
+
+      if (!args.dryRun) {
+        const reservation = await reserveQuota({
+          storePath: QUOTA_STORE_PATH,
+          lockPath: QUOTA_LOCK_PATH,
+          runId,
+          maxRunsPerDay: args.maxRunsPerDay,
+          historyPath: QUOTA_HISTORY_PATH,
+        });
+        if (!reservation.reserved) {
+          if (reservation.reason === 'quota_exceeded') {
+            process.stdout.write(
+              `[quota] reached max=${reservation.maxRuns}/day（current=${reservation.currentRuns}）；优雅退出\n`,
+            );
+            quotaExhausted = true;
+            break outer;
+          }
+          if (reservation.reason === 'duplicate_run_id') {
+            process.stdout.write(
+              `[quota] duplicate runId=${runId}（已在 quota.run_ids），跳过\n`,
+            );
+            continue;
+          }
+          process.stderr.write(
+            `[quota] reservation 失败 runId=${runId} reason=${reservation.reason}\n`,
+          );
+          continue;
+        }
+        // 拿 per-run lock + 写 started_at
+        fs.mkdirSync(cohortRunDir, { recursive: true });
+        runLockHandle = await acquirePerRunLock({ runLockPath });
+        startedAt = new Date().toISOString();
+        writeRunStarted({ runFilePath, runId, extra: { group: args.group, taskId, repeatIndex: i } });
+      }
+
+      // ─────────────────────────────────────────────────────
+      // PHASE: LLM spawn + oracle（catch 兜底写 finalized+failed，plan §2.3.3 iter-4 W-9）
+      // ─────────────────────────────────────────────────────
+      let currentPhase = 'init';
+      let result;
+      try {
+        currentPhase = 'driver';
+        result = await runOne({
+          group: args.group,
+          taskFixture,
+          repeatIndex: i,
+          args,
+          claudeCliVersion,
+        });
+        currentPhase = 'finalize';
+      } catch (originalError) {
+        if (!args.dryRun && runLockHandle) {
+          // catch 兜底：写 finalized_at + status='failed' + error.phase
+          // nested try-catch 二级防御：兜底写盘失败时 log 双错误并 rethrow originalError
+          try {
+            writeRunFinalizedFailed({
+              runFilePath,
+              runId,
+              startedAt,
+              errorPhase: currentPhase,
+              error: originalError,
+            });
+          } catch (writeFallbackError) {
+            process.stderr.write(
+              `[CRITICAL][runOne] driver 抛错 + 兜底 finalize 写盘失败:\n` +
+                `  Original error (run=${runId} phase=${currentPhase}): ${originalError?.message ?? originalError}\n` +
+                `  Fallback write error (path=${runFilePath}): ${writeFallbackError?.message ?? writeFallbackError}\n`,
+            );
+          }
+          runLockHandle.release();
+        }
+        throw originalError; // 始终向上抛
+      }
+
       if (!result.ok) {
         failures.push({ taskId, repeatIndex: i, error: result.error });
         if (!args.dryRun) {
-          // 实跑失败 → 不视为退出码非零的 infrastructure error，按 spec 继续
-          process.stderr.write(
-            `[run-failure] ${taskId} run=${i}: ${result.error}\n`,
-          );
+          process.stderr.write(`[run-failure] ${taskId} run=${i}: ${result.error}\n`);
+          // 视为 failed-finalized：兜底写 status='failed'
+          if (runLockHandle) {
+            try {
+              writeRunFinalizedFailed({
+                runFilePath,
+                runId,
+                startedAt,
+                errorPhase: 'oracle',
+                error: new Error(result.error ?? 'unknown'),
+              });
+            } catch (e) {
+              process.stderr.write(`[CRITICAL] 兜底写 failed-finalized 失败 ${runFilePath}: ${e.message}\n`);
+            }
+            runLockHandle.release();
+          }
         }
         continue;
       }
+
       cumulativeCost += result.costUsd ?? 0;
-      // 写 run-N.json（dry-run 也写，便于 Stage 7a 重现 — 但放 runs/<group>/<taskId>/dry-run-<N>.json）
-      // Spec FR-B-005: dry-run 不写 run-N.json（避免污染 fixtures runs/ 目录）
-      if (!args.dryRun) {
-        const fp = writeRunResult({
-          group: args.group,
-          taskId,
-          repeatIndex: i,
-          payload: result.runResult,
+
+      // 成功：写 finalized_at + status='success'（plan §2.3.3 step 13）
+      if (!args.dryRun && runLockHandle) {
+        // iter-2 C-2 修复：env 读源是 spawn env（含 SPECTRA_PLUGIN_* 注入）而非 process.env；
+        // self-report 解析读 sub-agent stdout（spawnClaudeAndWait 的 stdout）。
+        const envMeta = readEnvInjectedMeta({ env: result.spawnEnv ?? process.env });
+        const selfReportMeta = parseSubAgentSelfReport({
+          subAgentStdout: result.subAgentStdout ?? null,
         });
-        process.stdout.write(`[run] wrote ${path.relative(PROJECT_ROOT, fp)}\n`);
+        const merged = mergeSubAgentMeta({ envMeta, selfReportMeta });
+        // iter-2 W-1：mcpToolCalls 从 perf 子对象读
+        const inheritance = deriveInheritanceStatus({
+          subAgentMeta: merged.meta,
+          mcpToolCalls: result.runResult?.perf?.mcpToolCalls ?? [],
+        });
+
+        try {
+          // iter-2 W-1：subAgentMeta 落在 perf 子对象，保持 canonical schema 一致
+          const perfWithMeta = {
+            ...(result.runResult?.perf ?? {}),
+            subAgentMeta: merged.meta,
+          };
+          writeRunFinalizedSuccess({
+            runFilePath,
+            runId,
+            startedAt,
+            payload: {
+              ...result.runResult,
+              perf: perfWithMeta,
+              inheritance_status: inheritance,
+              ...(merged.collectIssues.length > 0 ? { collectIssues: merged.collectIssues } : {}),
+            },
+          });
+          process.stdout.write(`[run] wrote ${path.relative(PROJECT_ROOT, runFilePath)}\n`);
+        } catch (writeErr) {
+          process.stderr.write(
+            `[CRITICAL] 写 finalized-success 失败 ${runFilePath}: ${writeErr.message}\n`,
+          );
+        } finally {
+          runLockHandle.release();
+        }
+      } else if (args.dryRun) {
+        // dry-run 路径：保留旧 writeRunResult 路径以兼容 Stage 7a 重现
+        // （但 spec FR-B-005 明确 dry-run 不写 — 当前实现尊重该约定）
       }
+
       runsCompleted += 1;
     }
   }
@@ -842,6 +1071,7 @@ async function runForTaskList({ args, taskIds, claudeCliVersion }) {
     cumulativeCost,
     failures,
     stopLossTriggered: stopLossTriggered.value,
+    quotaExhausted,
   };
 }
 
@@ -896,6 +1126,56 @@ async function main() {
     process.exit(1);
   }
 
+  // iter-2 W-2 修复：互斥校验对 dry-run 也生效（语义校验与是否真跑无关）
+  // 这样 `--dry-run --accept-partial --restart-partial` 也会按 EX_USAGE=64 拒绝
+  try {
+    validateAcceptRestartPartial({
+      acceptPartial: args.acceptPartial,
+      restartPartial: args.restartPartial,
+    });
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(err.exitCode ?? EX_USAGE);
+  }
+
+  // Feature 162 Phase C：classify + partial 处置仅在非 dry-run 路径生效
+  if (!args.dryRun) {
+    // classify 已有 runs（Group C runDir 为单一 cohort；plan 中 4 类只在 quota.run_ids 联动）
+    // iter-2 C-1：runs 实际落在 RUNS_DIR/<group>/<taskId>/run-N.json（双层），需递归扫描
+    const cohortRunDir = path.join(RUNS_DIR, args.group);
+    if (fs.existsSync(cohortRunDir)) {
+      const classified = classifyRuns({ runDir: cohortRunDir, recursive: true });
+      process.stdout.write(
+        `[quota] classify ${args.group}: finalized=${classified.finalized.length}` +
+          ` partialRunning=${classified.partialRunning.length}` +
+          ` partialStale=${classified.partialStale.length}` +
+          ` failedFinalized=${classified.failedFinalized.length}\n`,
+      );
+      const mode = args.acceptPartial ? 'accept' : args.restartPartial ? 'restart' : null;
+      if (mode && classified.partialStale.length > 0) {
+        const decision = applyPartialDecision({
+          runDir: cohortRunDir,
+          partialStaleList: classified.partialStale,
+          mode,
+          quotaStorePath: QUOTA_STORE_PATH,
+        });
+        process.stdout.write(
+          `[quota] partial decision mode=${mode} processed=${decision.processed.length}\n`,
+        );
+      } else if (classified.partialStale.length > 0) {
+        process.stdout.write(
+          `[quota] partialStale=${classified.partialStale.length}（用 --accept-partial / --restart-partial 决定如何处理）\n`,
+        );
+      }
+    }
+
+    // 配额上限早期检查：maxRunsPerDay=0 立即优雅退出
+    if (args.maxRunsPerDay === 0) {
+      process.stdout.write(`[quota] --max-runs-per-day=0，跳过本次跑批；exit 0\n`);
+      process.exit(0);
+    }
+  }
+
   const claudeCliVersion = args.dryRun ? '(dry-run)' : captureClaudeCliVersion();
 
   // dry-run 输出：预估 cost / runs（FR-B-005）
@@ -927,6 +1207,9 @@ async function main() {
   );
   if (summary.stopLossTriggered) {
     process.stdout.write(`[summary] stop-loss triggered\n`);
+  }
+  if (summary.quotaExhausted) {
+    process.stdout.write(`[summary] quota exhausted (--max-runs-per-day=${args.maxRunsPerDay})\n`);
   }
 
   // FR-B-007：oracle fail 不影响退出码；脚本 infra error 才退出码非零

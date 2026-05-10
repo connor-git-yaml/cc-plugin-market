@@ -180,9 +180,10 @@ function checkSc004(target) {
     let fixture;
     try { fixture = JSON.parse(fs.readFileSync(fp, 'utf-8')); }
     catch (e) { issues.push(`${taskId}: JSON parse fail`); continue; }
-    const trace = fixture.perf?.mcpToolCallTrace;
+    // Feature 162 plan §2.4.3：canonical 字段 perf.mcpToolCalls；兼容旧字段名 perf.mcpToolCallTrace
+    const trace = fixture.perf?.mcpToolCalls ?? fixture.perf?.mcpToolCallTrace;
     if (!Array.isArray(trace)) {
-      issues.push(`${taskId}: perf.mcpToolCallTrace 不是数组（type=${trace === null ? 'null' : typeof trace}）`);
+      issues.push(`${taskId}: perf.mcpToolCalls / mcpToolCallTrace 都不是数组（type=${trace === null ? 'null' : typeof trace}）`);
     }
     if (typeof fixture.perf?.w3Flag !== 'boolean') {
       issues.push(`${taskId}: perf.w3Flag 不是 boolean（type=${typeof fixture.perf?.w3Flag}）`);

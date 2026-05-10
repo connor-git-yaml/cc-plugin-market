@@ -783,7 +783,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 > 目标：实现配额管理基础设施，完成 450 runs，填入竞品评测报告 §10.1-§10.5。
 > 依赖：Phase A（T023）+ Phase B1（T034）+ Phase B2（T042）全部完成。
 
-### T043 新建 eval-quota-store.mjs：quota store + O_EXCL lock + partial run 检测
+### T043 [DONE] 新建 eval-quota-store.mjs：quota store + O_EXCL lock + partial run 检测
 
 - **依赖**: T042
 - **文件**: `scripts/lib/eval-quota-store.mjs`（新建）
@@ -821,7 +821,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T044 新建 tests/helpers/quota-fork-helper.mjs + eval-quota-store.test.mjs
+### T044 [DONE] 新建 tests/helpers/quota-fork-helper.mjs + eval-quota-store.test.mjs
 
 - **依赖**: T043
 - **文件**: `tests/helpers/quota-fork-helper.mjs`（新建）；`tests/eval-quota-store.test.mjs`（新建）
@@ -850,7 +850,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T045 修改 eval-mcp-augmented.mjs：新增 --max-runs-per-day + quota 集成
+### T045 [DONE] 修改 eval-mcp-augmented.mjs：新增 --max-runs-per-day + quota 集成
 
 - **依赖**: T043
 - **文件**: `scripts/eval-mcp-augmented.mjs`
@@ -873,7 +873,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T046 修改 eval-mcp-augmented.mjs：canonical schema 双写 + subAgentMeta 注入
+### T046 [DONE] 修改 eval-mcp-augmented.mjs：canonical schema 双写 + subAgentMeta 注入
 
 - **依赖**: T045
 - **文件**: `scripts/eval-mcp-augmented.mjs`
@@ -898,7 +898,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T047 修改 eval-task-runner.mjs：mcpToolCallTrace rename → mcpToolCalls
+### T047 [DONE] 修改 eval-task-runner.mjs：mcpToolCallTrace rename → mcpToolCalls
 
 - **依赖**: T046（canonical schema 定义）
 - **文件**: `scripts/eval-task-runner.mjs`

@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SCHEMA_VERSION = '1.2'; // Feature 158: 新增 perf.mcpToolCallTrace + perf.w3Flag（mcp-pull cohort 才填，其余 null，向后兼容）
+const SCHEMA_VERSION = '1.3'; // Feature 162: rename perf.mcpToolCallTrace → perf.mcpToolCalls (canonical)；保留旧字段名兼容读取（plan §2.4.3）
 const COLLECTOR_VERSION = '0.4.0';
 export const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'mcp-pull'];
 
@@ -585,7 +585,9 @@ export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResul
       // Feature 158 schema 1.2 新增字段（CR-6 锁定位置：perf 子对象内）
       // mcp-pull cohort：mcpTrace 是数组（可空 []），w3Flag boolean
       // 其他 cohort：两者均为 null（向后兼容 schema 1.1）
-      mcpToolCallTrace: mcpTrace,
+      // Feature 162 plan §2.4.3：rename canonical 字段名 mcpToolCallTrace → mcpToolCalls
+      // 读取兼容：consumer 用 perf.mcpToolCalls ?? perf.mcpToolCallTrace ?? []
+      mcpToolCalls: mcpTrace,
       w3Flag: w3Flag,
     },
     output: {
@@ -725,7 +727,7 @@ async function main() {
   const productMetrics = captureProductMetrics(wt.wtDir);
   console.log(`[task-runner] product: commits=${productMetrics.commits}, files=${productMetrics.filesChanged}, uncommitted=${productMetrics.uncommittedChanges}`);
 
-  // Feature 158: mcp-pull cohort 解析 stream-json，提取 mcpToolCallTrace + w3Flag + cost/tokens（CR-6 修复）
+  // Feature 158/162: mcp-pull cohort 解析 stream-json，提取 mcpToolCalls (canonical) + w3Flag + cost/tokens
   let mcpTrace = null;
   let w3Flag = null;
   let usage = null;
