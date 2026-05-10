@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Write, Grep, Glob]
+tools: [Read, Write, Grep, Glob, mcp__spectra__context, mcp__spectra__impact]
 effort: high
 ---
 

@@ -1,6 +1,6 @@
 ---
 model: sonnet
-tools: [Read, Bash, Grep, Glob]
+tools: [Read, Bash, Grep, Glob, mcp__spectra__detect_changes, mcp__spectra__impact]
 effort: medium
 ---
 
