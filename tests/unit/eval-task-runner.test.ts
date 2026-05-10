@@ -191,6 +191,43 @@ describe('eval-task-runner.runPrimaryOracle', () => {
     });
   });
 
+  describe('unit-test kind', () => {
+    it('replaces single <workspace> placeholder', async () => {
+      const { runPrimaryOracle } = await loadRunner();
+      const r = runPrimaryOracle({
+        wtDir: tempDir,
+        oracle: { kind: 'unit-test', command: 'test -d <workspace>', expectedExit: 0 },
+      });
+      expect(r.kind).toBe('unit-test');
+      expect(r.passed).toBe(true);
+    });
+
+    it('replaces ALL <workspace> placeholders when command contains multiple', async () => {
+      const { runPrimaryOracle } = await loadRunner();
+      writeFileSync(join(tempDir, 'a.txt'), '');
+      writeFileSync(join(tempDir, 'b.txt'), '');
+      // 命令含两个 <workspace> — 修复前第二个不会被替换，bash 会因路径不存在而失败
+      const r = runPrimaryOracle({
+        wtDir: tempDir,
+        oracle: {
+          kind: 'unit-test',
+          command: 'test -f <workspace>/a.txt && test -f <workspace>/b.txt',
+          expectedExit: 0,
+        },
+      });
+      expect(r.passed).toBe(true);
+    });
+
+    it('returns passed=false when command exits with non-zero', async () => {
+      const { runPrimaryOracle } = await loadRunner();
+      const r = runPrimaryOracle({
+        wtDir: tempDir,
+        oracle: { kind: 'unit-test', command: 'test -f <workspace>/nonexistent.txt', expectedExit: 0 },
+      });
+      expect(r.passed).toBe(false);
+    });
+  });
+
   describe('unknown kind', () => {
     it('returns passed=false with details', async () => {
       const { runPrimaryOracle } = await loadRunner();
