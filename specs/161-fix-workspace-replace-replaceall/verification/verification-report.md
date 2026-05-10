@@ -35,3 +35,29 @@
 ## 结论
 
 修复正确、测试覆盖完整、无新增回归。可以提交。
+
+---
+
+## Follow-up（commit bf9cba5 之后追加）
+
+### 主会话独立 Codex 对抗审查发现 [C1 CRITICAL]
+
+主会话在 commit bf9cba5 落地后，对改动重跑了一次独立 Codex 对抗审查，发现 1 项 CRITICAL：
+
+**[C1]** `String.prototype.replaceAll(searchValue, replaceValue)` 当 replaceValue 为字符串时，会把 `$&` / `$$` / `` $` `` / `$'` 解析为特殊替换模式（`$&` → 匹配子串）。`wtDir` 来源含 `process.env.SPEC_DRIVER_BENCH_HOME` 与用户 `homedir()`，存在 `$&` 等字符的极小概率会让路径被静默损坏。
+
+### 修复（follow-up commit）
+
+- `scripts/eval-task-runner.mjs:469-470`：把 `.replaceAll('<workspace>', wtDir)` 改为函数式 `.replaceAll('<workspace>', () => wtDir)`，函数 replacement 不走特殊模式解析。
+- `tests/unit/eval-task-runner.test.ts`：新增第 4 个 case `replaceAll function-form preserves $& / $$ in wtDir literally (Codex C1)` — 直接断言替换输出（不经 bash），同时 explicit 验证字符串 replacement 形式会损坏路径，函数式形式保持字面 `$&`。
+
+### 复跑结果
+
+- `npx vitest run tests/unit/eval-task-runner.test.ts`: 45/45 PASS（新增 1 个 C1 测试）
+- `npx vitest run`（全量）: 38 failed file（全部预存在）/ 264 passed / 3263 passed tests（比 bf9cba5 多 1 个 — 即 C1 新测试）
+- `npm run repo:check`: 全部通过
+
+### Codex W1 / W2 处置
+
+- **W1（特殊字符路径回归测试）**: 已合入 follow-up commit（即 C1 测试本身覆盖 `$&` 路径场景）
+- **W2（fix-report.md MCP 调用语义价值零）**: 接受为 design-level 反馈记录，不在本 commit 修。MCP 集成测试本身的目标是验证 e2e 链路通畅（"call goes through, returns valid envelope"），本次 callees=[] 的语义贫乏由"图谱当前仅含 depends-on，无 calls 关系"引起，需等 Feature 152 ts-callsites 上线补全 calls 边后才能拿到真正的 callee 列表。本约束已在 fix-report.md MCP 集成证据章节明确标注。

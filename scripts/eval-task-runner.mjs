@@ -466,7 +466,8 @@ export function runPrimaryOracle({ wtDir, oracle }) {
     }
     return { kind: oracle.kind, passed: allPassed, details: results };
   } else if (oracle.kind === 'unit-test') {
-    const r = spawnSync('bash', ['-c', oracle.command.replaceAll('<workspace>', wtDir)], { cwd: wtDir, encoding: 'utf-8', timeout: 60000 });
+    // 使用函数式 replacement 避免 $& / $` / $' / $$ 等特殊模式被静默展开（wtDir 含 $ 时会损坏路径）。
+    const r = spawnSync('bash', ['-c', oracle.command.replaceAll('<workspace>', () => wtDir)], { cwd: wtDir, encoding: 'utf-8', timeout: 60000 });
     return { kind: 'unit-test', passed: r.status === oracle.expectedExit, details: { exitCode: r.status, stdout: (r.stdout ?? '').slice(0, 1000) } };
   } else if (oracle.kind === 'functional') {
     // Functional oracle: 真跑 pytest / python / 任何 shell 命令验证功能

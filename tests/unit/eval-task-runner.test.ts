@@ -226,6 +226,22 @@ describe('eval-task-runner.runPrimaryOracle', () => {
       });
       expect(r.passed).toBe(false);
     });
+
+    // Codex review C1：wtDir 若含 $& / $$ / $` / $' 等 replaceAll 特殊模式，字符串
+    // replacement 会被静默展开（$& → 匹配子串）导致路径损坏。函数式 replacement 不走
+    // 特殊模式解析。直接断言 replaceAll 输出（不走 bash 是因为 bash 自身会再次解析 $&，
+    // 端到端路径会被两层语义混淆，无法定位 replacement 阶段是否正确）。
+    it('replaceAll function-form preserves $& / $$ in wtDir literally (Codex C1)', () => {
+      const wtDirWithDollar = '/tmp/oracle-test-dollar$&_path';
+      // 函数式 replacement（修复后）：$& 保持字面
+      const fixed = 'test -f <workspace>/sentinel.txt'.replaceAll('<workspace>', () => wtDirWithDollar);
+      expect(fixed).toBe(`test -f ${wtDirWithDollar}/sentinel.txt`);
+
+      // 字符串 replacement（修复前）：$& 展开为匹配子串 '<workspace>'，路径被静默损坏
+      const buggy = 'test -f <workspace>/sentinel.txt'.replaceAll('<workspace>', wtDirWithDollar);
+      expect(buggy).toBe('test -f /tmp/oracle-test-dollar<workspace>_path/sentinel.txt');
+      expect(buggy).not.toBe(fixed); // 显式声明两种形式语义不等价
+    });
   });
 
   describe('unknown kind', () => {
