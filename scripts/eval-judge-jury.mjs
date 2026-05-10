@@ -25,6 +25,11 @@ import * as path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { anonymizeFixture } from './eval-judge.mjs';
+// Feature 162 (T016 + T018)：共享 backend 语义（normalize / alias / self-judge hard-fail）
+//   已迁移至 scripts/lib/llm-backend-dispatcher.mjs。jury 仍保留本地 defaultClientFactory
+//   实现 anthropic SDK 路径（dispatcher 4 backend 不含原生 anthropic SDK），4 backend 公共
+//   决策点改用共享 dispatcher。
+import { assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
 
 // ============================================================
 // async spawn helper (for true parallelism with subprocess CLI calls)
@@ -73,12 +78,16 @@ const FIXTURES_ROOT = path.join(PROJECT_ROOT, 'tests/baseline/tasks');
 // 'codex:<model>'       → Codex CLI 子进程 (OpenAI GPT-5.5, ChatGPT subscription)
 // 'claude-*'            → Anthropic SDK (legacy, 需 ANTHROPIC_API_KEY)
 //
-// 当前 executor = SiliconFlow GLM-5.1，jury 故意不含 GLM 避免 self-judge：
-// 3 vendor 跨国家：Anthropic (US) + OpenAI (US) + Moonshot (China)
-// Codex 用 model_reasoning_effort=high 平衡评分质量与 ChatGPT Pro 周配额（xhigh 25 fixture 会耗光）
+// Feature 162 Phase B1（T031/T032）：default driver 已切换为 codex:gpt-5.5（DEFAULT_EXECUTOR_MODEL），
+// 因此 jury 不能含 GPT-5.5（self-judge 禁忌，FR-027 + assertNoSelfJudge 启动即 hard-fail）。
+// 替换 codex:gpt-5.5 → siliconflow:Pro/zai-org/GLM-5.1：
+//   - GLM-5.1 与原 codex 互为对端 vendor（OpenAI 美国 vs Zhipu 中国），保留跨国家分布
+//   - Phase B2 calibration 验证 GLM judge IoU ≥ 0.7 + Pearson ≥ 0.6（plan §0.1，5 fixture × 3 runs = 15 数据点）
+//   - 详见 spec.md FR-020 / FR-021 + plan.md §2.5 B1
+// 3 vendor 跨国家：Anthropic (US) + Zhipu (China) + Moonshot (China)
 export const DEFAULT_JUDGES = [
   'claude-cli:claude-opus-4-7',                // Anthropic Opus 4.7 (美国, Claude Max subscription)
-  'codex:gpt-5.5',                             // OpenAI GPT-5.5 (美国, ChatGPT Pro, low reasoning)
+  'siliconflow:Pro/zai-org/GLM-5.1',           // Zhipu GLM-5.1 (中国, SiliconFlow API) — replaces codex:gpt-5.5 (Phase B1 T031)
   'siliconflow:Pro/moonshotai/Kimi-K2.6',      // Moonshot Kimi K2.6 (中国, SiliconFlow API)
 ];
 const MAX_DIFF_BYTES = 30000;
@@ -654,6 +663,12 @@ export function listAllFixtures() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  // Feature 162 FR-027 入口位点 2/3：jury main 启动前 self-judge hard-fail 检查
+  //   driver 来源：SPECTRA_EVAL_EXECUTOR 环境变量（覆盖默认 'codex:gpt-5.5'）
+  //   judges：args.judges（已包含 --judges CLI 覆盖 / DEFAULT_JUDGES 默认）
+  const driverModel = process.env.SPECTRA_EVAL_EXECUTOR || 'codex:gpt-5.5';
+  assertNoSelfJudge({ driver: driverModel, judges: args.judges });
 
   let fixturePaths;
   if (args.fixture) {

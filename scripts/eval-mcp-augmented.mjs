@@ -43,6 +43,9 @@ import {
   runPrimaryOracle,
   captureProductMetrics,
 } from './eval-task-runner.mjs';
+// Feature 162 FR-027 入口位点 1/3：runForTaskList 之前 self-judge hard-fail 检查
+import { assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
+import { DEFAULT_JUDGES } from './eval-judge-jury.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -879,6 +882,18 @@ async function main() {
     }
   } else {
     taskIds = [args.task];
+  }
+
+  // Feature 162 FR-027 入口位点 1/3：parseArgs 之后、runForTaskList 之前
+  //   driver model：SPECTRA_EVAL_EXECUTOR 覆盖默认 'codex:gpt-5.5'
+  //   judges：DEFAULT_JUDGES（args 当前未承载 --judges，沿用 jury 默认）
+  //   触发时机：所有 batch 启动前一次性检查；fail-fast 退出码 1
+  try {
+    const driverModel = process.env.SPECTRA_EVAL_EXECUTOR || 'codex:gpt-5.5';
+    assertNoSelfJudge({ driver: driverModel, judges: DEFAULT_JUDGES });
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(1);
   }
 
   const claudeCliVersion = args.dryRun ? '(dry-run)' : captureClaudeCliVersion();

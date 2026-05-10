@@ -173,7 +173,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 > 目标：重构为多 backend dispatch 架构，接入 Codex CLI driver，落地 self-judge hard-fail，保护 25 fixture schema byte-stable。
 > 依赖：Phase 0 完成（T010 通过）且 T060 审查零 critical。Phase A 与 Phase B1 可并行执行。
 
-### T011 新建 llm-backend-dispatcher.mjs：callBackend + 4 backend handler
+### T011 新建 llm-backend-dispatcher.mjs：callBackend + 4 backend handler [DONE]
 
 - **依赖**: T010, T060
 - **文件**: `scripts/lib/llm-backend-dispatcher.mjs`（新建）
@@ -205,7 +205,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T012 在 dispatcher 中实现 normalizeModelId + MODEL_ALIASES
+### T012 在 dispatcher 中实现 normalizeModelId + MODEL_ALIASES [DONE]
 
 - **依赖**: T011
 - **文件**: `scripts/lib/llm-backend-dispatcher.mjs`（追加到 T011 文件）
@@ -239,7 +239,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T013 在 dispatcher 中实现 classifyError + retry 决策矩阵
+### T013 在 dispatcher 中实现 classifyError + retry 决策矩阵 [DONE]
 
 - **依赖**: T011
 - **文件**: `scripts/lib/llm-backend-dispatcher.mjs`（追加到 T011 文件）
@@ -263,7 +263,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T014 重构 eval-task-executor.mjs：callExecutor 改为 thin wrapper
+### T014 重构 eval-task-executor.mjs：callExecutor 改为 thin wrapper [DONE]
 
 - **依赖**: T011
 - **文件**: `scripts/eval-task-executor.mjs`
@@ -290,7 +290,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T015 修改 DEFAULT_EXECUTOR_MODEL + SPECTRA_EVAL_EXECUTOR 支持
+### T015 修改 DEFAULT_EXECUTOR_MODEL + SPECTRA_EVAL_EXECUTOR 支持 [DONE]
 
 - **依赖**: T014
 - **文件**: `scripts/eval-task-executor.mjs`
@@ -321,7 +321,13 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T016 从 eval-judge-jury.mjs 迁移 parseJudgeBackend 到 dispatcher
+### T016 从 eval-judge-jury.mjs 迁移 parseJudgeBackend 到 dispatcher [DONE-MINIMAL-VIABLE]
+
+> Phase A iter-2 codex review W-2 裁决：self-judge 入口（assertNoSelfJudge）已迁移到 dispatcher 共享，
+> 但本地 `parseJudgeBackend` + `callJudgeViaSdk` + 4 client adapter 仍保留在 eval-judge-jury.mjs。
+> 完整迁移涉及 jury anthropic SDK 路径（dispatcher 4 backend 不含原生 anthropic SDK）+ 改写所有
+> jury 调用点的 client shape 兼容，超出 Phase A 修复范围。
+> 本次声明 [DONE-MINIMAL-VIABLE]：核心 self-judge 决策点已统一，剩余迁移留给独立重构 feature。
 
 - **依赖**: T011
 - **文件**: `scripts/eval-judge-jury.mjs`（删除/重定向）、`scripts/lib/llm-backend-dispatcher.mjs`（接收迁移代码）
@@ -338,7 +344,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T017 确认 llm-pricing.mjs 含 codex:gpt-5.5 条目
+### T017 确认 llm-pricing.mjs 含 codex:gpt-5.5 条目 [DONE]
 
 - **依赖**: T011
 - **文件**: `scripts/lib/llm-pricing.mjs`（仅验证，不改代码）
@@ -351,7 +357,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T018 实现 assertNoSelfJudge + 集成到 3 个入口
+### T018 实现 assertNoSelfJudge + 集成到 3 个入口 [DONE]
 
 - **依赖**: T012
 - **文件**: `scripts/lib/llm-backend-dispatcher.mjs`（export 函数）；`scripts/eval-mcp-augmented.mjs`（入口 1）；`scripts/eval-judge-jury.mjs`（入口 2）；`scripts/eval-task-executor.mjs`（入口 3）
@@ -394,7 +400,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T019 新建 verify-feature-162-fixture-schema-stable.mjs
+### T019 新建 verify-feature-162-fixture-schema-stable.mjs [DONE]
 
 - **依赖**: T014（callExecutor thin wrapper 完成）
 - **文件**: `scripts/verify-feature-162-fixture-schema-stable.mjs`（新建）
@@ -417,7 +423,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T020 新建 eval-llm-backend-dispatcher.test.mjs：8 基础 case + 4 retry matrix case
+### T020 新建 eval-llm-backend-dispatcher.test.mjs：8 基础 case + 4 retry matrix case [DONE]
 
 - **依赖**: T011, T013
 - **文件**: `tests/eval-llm-backend-dispatcher.test.mjs`（新建）
@@ -447,7 +453,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T021 新建 eval-self-judge-hard-fail.test.mjs：5 组 hard-fail case
+### T021 新建 eval-self-judge-hard-fail.test.mjs：5 组 hard-fail case [DONE]
 
 - **依赖**: T018
 - **文件**: `tests/eval-self-judge-hard-fail.test.mjs`（新建）
@@ -469,7 +475,14 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T022 [P] 以 Codex driver 重跑 25 fixture：验证 schema byte-stable
+### T022 [P] 以 Codex driver 重跑 25 fixture：验证 schema byte-stable [DEFERRED-TO-OPS]
+
+> Phase A iter-2 codex review C-3 裁决：CLAUDE.local.md 入库边界明确 `tests/baseline/tasks/` 不入库
+> （"评估流程产物，含 LLM 单次随机性"），本地无 fixture 是预期状态而非异常。
+> 触发场景（ops 任一）：
+>   1. 本地用 GLM driver 跑完 25 fixture（生成 v1 baseline）→ 用 codex driver 重跑（v2）→ 跑此脚本对比
+>   2. CI 流水线中 fixture 已挂载到 worktree 时
+> [DEFERRED-TO-OPS] 比 [DONE-DEFERRED] 语义更精确：脚本本身已完成，执行延后到 ops 触发。
 
 - **依赖**: T019（验证脚本）；T014, T015（callExecutor 多 backend）
 - **文件**: `scripts/verify-feature-162-fixture-schema-stable.mjs`（执行）；tmp dir（运行时）
@@ -482,7 +495,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T023 全量 vitest 回归 + npm run build（Phase A 验证门）
+### T023 全量 vitest 回归 + npm run build（Phase A 验证门）[DONE-PARTIAL]
 
 - **依赖**: T020, T021, T022（所有 Phase A 实现任务）
 - **文件**: 无改动（执行命令）
@@ -500,7 +513,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 > 目标：替换 jury 中的 codex judge 为 GLM-5.1，落地 calibration fixture list。
 > 依赖：Phase 0 完成（T010）且 T060 审查零 critical。[P] 与 Phase A 全程并行。
 
-### T031 [P] 替换 DEFAULT_JUDGES：codex:gpt-5.5 → GLM-5.1
+### T031 [P] 替换 DEFAULT_JUDGES：codex:gpt-5.5 → GLM-5.1 [DONE]
 
 - **依赖**: T010, T060
 - **文件**: `scripts/eval-judge-jury.mjs`
@@ -513,7 +526,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T032 [P] 追加 self-judge 禁忌注释
+### T032 [P] 追加 self-judge 禁忌注释 [DONE]
 
 - **依赖**: T031
 - **文件**: `scripts/eval-judge-jury.mjs`
@@ -533,7 +546,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T033 [P] 落地 calibration-fixture-list.json（5 个 frozen ids）
+### T033 [P] 落地 calibration-fixture-list.json（5 个 frozen ids）[DONE]
 
 - **依赖**: T010（Phase 0 完成即可）
 - **文件**: `specs/162-codex-driver-glm-judge-eval/calibration-fixture-list.json`（新建）
@@ -565,7 +578,7 @@ critical_path_hours: "~38h (Phase 0 → A → B2 → C 串行)"
 
 ---
 
-### T034 [P] B1 验证门：确认 DEFAULT_JUDGES 替换生效
+### T034 [P] B1 验证门：确认 DEFAULT_JUDGES 替换生效 [DONE]
 
 - **依赖**: T031, T032, T033
 - **文件**: 无改动（执行命令）

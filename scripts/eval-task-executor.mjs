@@ -28,6 +28,7 @@ import {
   loadTaskFixture, prepareWorktree, buildDriverPrompt, loadSpectraContext,
   runPrimaryOracle, captureProductMetrics, assembleTaskFixture,
 } from './eval-task-runner.mjs';
+import { callBackend, assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -35,8 +36,10 @@ const FIXTURES_ROOT = path.join(PROJECT_ROOT, 'tests/baseline/tasks');
 const TASK_FIXTURES_DIR = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures');
 const SCHEMA_VERSION = '1.1';
 
-// 默认 executor: SiliconFlow GLM-5.1 旗舰
-const DEFAULT_EXECUTOR_MODEL = 'Pro/zai-org/GLM-5.1';
+// Feature 162: 默认 executor 由 GLM-5.1 切换至 codex:gpt-5.5
+//   - SPECTRA_EVAL_EXECUTOR 环境变量可覆盖（FR-011）
+//   - codex backend 强制 reasoningEffort='medium'，节约 ChatGPT Pro 周配额（FR-012）
+export const DEFAULT_EXECUTOR_MODEL = process.env.SPECTRA_EVAL_EXECUTOR || 'codex:gpt-5.5';
 const DEFAULT_BASE_URL = 'https://api.siliconflow.cn/v1';
 
 // ============================================================
@@ -170,25 +173,55 @@ export function applyPatch(wtDir, patch) {
 }
 
 // ============================================================
-// SiliconFlow GLM 调用
+// Executor 调用：thin wrapper → llm-backend-dispatcher.callBackend
 // ============================================================
 
+/**
+ * Thin wrapper：保留原 `callExecutor({ model, prompt, baseURL, apiKey })` 签名（C-1 修复，
+ * plan §2.1.2）。25 既有 fixture / repeat-runner 等外部调用无需改动即可继续工作。
+ *
+ * 路由规则：
+ *   - model 含 ':' （e.g. 'codex:gpt-5.5' / 'siliconflow:GLM-5.1'）→ 透传 backend prefix
+ *   - model 无 ':' （e.g. 'Pro/zai-org/GLM-5.1'）→ 默认 'siliconflow:' 前缀（向后兼容）
+ *
+ * 返回字段对外保持 4 字段（text / promptTokens / completionTokens / finishReason），
+ * 与 callBackend 标准 shape 子集对齐。
+ */
 export async function callExecutor({ model, prompt, baseURL = DEFAULT_BASE_URL, apiKey }) {
-  if (!apiKey) throw new Error('SILICONFLOW_API_KEY not set');
-  const { default: OpenAI } = await import('openai');
-  const sdk = new OpenAI({ apiKey, baseURL, timeout: 240000 });
-  const r = await sdk.chat.completions.create({
-    model,
-    max_tokens: 8000, // 给 reasoning + patch JSON 充足空间
-    temperature: 0.3,
-    messages: [{ role: 'user', content: prompt }],
+  // W-4 修复（Phase A iter-2 codex review）：model 为 undefined / null / '' 时兜底为 DEFAULT_EXECUTOR_MODEL，
+  // 避免 model.includes 抛 TypeError。25 既有 fixture / repeat runner 在某些路径不传 model 时仍能跑。
+  const effectiveModel = (typeof model === 'string' && model.length > 0) ? model : DEFAULT_EXECUTOR_MODEL;
+  const fullModel = effectiveModel.includes(':') ? effectiveModel : `siliconflow:${effectiveModel}`;
+  const result = await callBackend({
+    model: fullModel,
+    prompt,
+    options: {
+      baseURL,
+      apiKey,
+      timeoutMs: 240000,
+      temperature: 0.3,
+      maxTokens: 8000,
+      // codex backend 强制 medium（FR-012）；其他 backend 忽略此字段
+      reasoningEffort: 'medium',
+    },
   });
-  const choice = r.choices?.[0];
+
+  // 失败时把 dispatcher 的 error 翻译成 Error 抛出，保留原 callExecutor 调用方期望
+  if (!result.ok) {
+    const code = result.error?.code ?? 'unknown';
+    const msg = result.error?.message ?? 'callBackend failed';
+    const err = new Error(`callExecutor[${fullModel}] ${code}: ${msg}`);
+    err.code = code;
+    err.retryable = result.error?.retryable ?? false;
+    err.rawResponse = result.error?.rawResponse;
+    throw err;
+  }
+
   return {
-    text: choice?.message?.content ?? '',
-    promptTokens: r.usage?.prompt_tokens ?? null,
-    completionTokens: r.usage?.completion_tokens ?? null,
-    finishReason: choice?.finish_reason ?? null,
+    text: result.text,
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
+    finishReason: result.finishReason,
   };
 }
 
@@ -197,7 +230,17 @@ export async function callExecutor({ model, prompt, baseURL = DEFAULT_BASE_URL, 
 // ============================================================
 
 // Feature 149 修复：executorModel 加默认值兜底（repeat-runner / 其他外部 caller 不再踩"undefined → SF 400"坑）
-export async function executeOnFixture({ taskId, tool, executorModel = DEFAULT_EXECUTOR_MODEL, skipSanity }) {
+// Feature 162 Phase A iter-2 (C-2 裁决)：self-judge check 仅在 jury 编排路径生效（eval-judge-jury / eval-mcp-augmented）。
+//   callExecutor 单独跑 driver 时无 jury，不需要检查；如需检查请显式传 juryModels。
+//   入口位点（FR-027 入口位点 3/3）：
+//     - juryModels 默认 null（callExecutor 单独场景）→ 跳过 assertNoSelfJudge
+//     - 调用方显式传 juryModels（编排路径）→ 触发完整检查
+//   即使此处跳过，jury 编排入口（eval-judge-jury main / eval-mcp-augmented）已集成 assertNoSelfJudge，
+//   生产环境的 self-judge 风险已在编排层兜底。
+export async function executeOnFixture({ taskId, tool, executorModel = DEFAULT_EXECUTOR_MODEL, skipSanity, juryModels = null }) {
+  if (Array.isArray(juryModels) && juryModels.length > 0) {
+    assertNoSelfJudge({ driver: executorModel, judges: juryModels });
+  }
   const taskFixture = loadTaskFixture(taskId);
   const wt = prepareWorktree({
     taskId, tool,
@@ -280,14 +323,37 @@ export async function executeOnFixture({ taskId, tool, executorModel = DEFAULT_E
     oracleResult, productMetrics,
   });
 
-  // override executor metadata: 这是 GLM 单 turn 跑出来的，不是 sonnet/opus baseline
+  // override executor metadata: backend-aware
+  //   - siliconflow / openai → "{vendor}-sdk"
+  //   - claude-cli / codex   → "{cli-name}-cli"
+  // 保留向后兼容：未带 prefix 的 model 仍标记为 siliconflow（因 callExecutor 默认走该路径）
+  const fullModelId = executorModel.includes(':') ? executorModel : `siliconflow:${executorModel}`;
+  const [backendPrefix] = fullModelId.split(':');
+  const vendorMap = {
+    'siliconflow': 'siliconflow',
+    'openai': 'openai',
+    'claude-cli': 'anthropic',
+    'codex': 'openai',
+  };
+  const commandMap = {
+    'siliconflow': 'siliconflow-sdk',
+    'openai': 'openai-sdk',
+    'claude-cli': 'claude-cli',
+    'codex': 'codex-cli',
+  };
+  const modeMap = {
+    'siliconflow': 'single-turn-glm',
+    'openai': 'single-turn-openai',
+    'claude-cli': 'single-turn-claude-cli',
+    'codex': 'single-turn-codex-cli',
+  };
   fixture.meta.model = executorModel;
-  fixture.meta.command = 'siliconflow-sdk';
+  fixture.meta.command = commandMap[backendPrefix] ?? 'siliconflow-sdk';
   fixture.meta.args = null;
   fixture.taskExecution.model = executorModel;
-  fixture.taskExecution.executor = `siliconflow:${executorModel}`;
-  fixture.taskExecution.executorVendor = 'siliconflow';
-  fixture.taskExecution.executionMode = 'single-turn-glm';
+  fixture.taskExecution.executor = fullModelId;
+  fixture.taskExecution.executorVendor = vendorMap[backendPrefix] ?? 'siliconflow';
+  fixture.taskExecution.executionMode = modeMap[backendPrefix] ?? 'single-turn-glm';
   fixture.taskExecution.tokensTotal = (llmResult.promptTokens ?? 0) + (llmResult.completionTokens ?? 0);
   fixture.taskExecution.executorPromptTokens = llmResult.promptTokens;
   fixture.taskExecution.executorCompletionTokens = llmResult.completionTokens;
@@ -295,7 +361,7 @@ export async function executeOnFixture({ taskId, tool, executorModel = DEFAULT_E
   fixture.taskExecution.executorTruncated = llmResult.finishReason === 'length';
   fixture.taskExecution.executorRationale = patch.rationale;
   fixture.taskExecution.executorPatchedFiles = applied;
-  fixture.taskExecution.modelDisclaimer = 'Single-turn unified GLM executor (Pro/zai-org/GLM-5.1) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比';
+  fixture.taskExecution.modelDisclaimer = `Single-turn unified executor (${fullModelId}) — multi-turn workflow value (specify→plan→tasks loops) 未被测，适合 10-100 LOC 小任务对比`;
 
   // 重要：清空旧 jury 数据 + self-judge 数据，等 jury 重新评
   fixture.taskExecution.juryScores = null;
@@ -335,9 +401,21 @@ export function listAllTaskTool() {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!process.env.SILICONFLOW_API_KEY) {
-    throw new Error('SILICONFLOW_API_KEY env required for GLM executor');
+  // Feature 162: API key 校验改为 backend-aware
+  //   - siliconflow:* / 无 prefix（向后兼容）→ 必须有 SILICONFLOW_API_KEY
+  //   - openai:* → 必须有 OPENAI_API_KEY
+  //   - claude-cli:* / codex:* → 用 subscription，无需 API key
+  const m = args.executorModel;
+  if (m.startsWith('siliconflow:') || (!m.includes(':'))) {
+    if (!process.env.SILICONFLOW_API_KEY) {
+      throw new Error('SILICONFLOW_API_KEY env required for siliconflow backend');
+    }
+  } else if (m.startsWith('openai:')) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY env required for openai backend');
+    }
   }
+  // claude-cli / codex: 不验证 env（subscription 走 CLI 自身鉴权）
 
   const combos = args.all ? listAllTaskTool() : [{ task: args.task, tool: args.tool }];
   if (combos.length === 0) throw new Error('no tasks to run');

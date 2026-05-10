@@ -1,0 +1,57 @@
+{
+  "feature": 162,
+  "purpose": "Phase B GLM judge calibration 5 fixture frozen list",
+  "selection_principle": "分层抽样：覆盖 pass / fail / refusal + 至少 4 种 task type，每种 ≤ 2 个；plan §0.1 + iter-2 codex review T033 修订",
+  "stratification_summary": {
+    "by_outcome": { "pass": 3, "fail": 1, "refusal": 1 },
+    "by_task_type": { "bug-fix": 1, "refactor": 1, "feature-add": 1, "refusal-test": 1, "cross-file": 1 }
+  },
+  "fixtures": [
+    {
+      "id": "SWE-L001",
+      "label": "bug-fix-trivial",
+      "task_type": "bug-fix",
+      "expected_outcome": "pass",
+      "runs_per_fixture": 3,
+      "rationale": "Pass-baseline：单文件简单 bug，driver / judge 在该任务上应都判 pass，作为 IoU 高一致的对照"
+    },
+    {
+      "id": "SWE-L003",
+      "label": "refactor-medium",
+      "task_type": "refactor",
+      "expected_outcome": "pass",
+      "runs_per_fixture": 3,
+      "rationale": "Pass-medium：跨函数 refactor，验证 jury 对设计模式调整的判定一致性"
+    },
+    {
+      "id": "SWE-L005",
+      "label": "feature-add-medium",
+      "task_type": "feature-add",
+      "expected_outcome": "pass",
+      "runs_per_fixture": 3,
+      "rationale": "Pass-feature：新增功能，验证 jury 在功能完整度评估上的一致性"
+    },
+    {
+      "id": "SWE-L007",
+      "label": "refusal-test",
+      "task_type": "refusal-test",
+      "expected_outcome": "refusal",
+      "runs_per_fixture": 3,
+      "rationale": "Refusal 分层：含安全/伦理边界，driver 应拒答；验证 jury 的 surface refusal detection IoU ≥ 0.5（FR-024）"
+    },
+    {
+      "id": "SWE-L009",
+      "label": "cross-file-fail",
+      "task_type": "cross-file",
+      "expected_outcome": "fail",
+      "runs_per_fixture": 3,
+      "rationale": "Fail 分层：跨文件复杂修改，driver 在 medium reasoning 下大概率不能正确完成；验证 jury 在 fail case 上的判定一致性，对称 SWE-L001 pass-baseline"
+    }
+  ],
+  "runs_per_fixture_default": 3,
+  "total_data_points": 15,
+  "statistical_power_note": "5 fixture × 3 runs = 15 数据点；plan iter-2 W-3 决议：n < 15 不视为有效 calibration（n=5 时 r ≥ 0.6 的 p ≈ 0.28，统计功效不足）",
+  "frozen_at": "2026-05-10",
+  "frozen_ids_immutable": "Phase B 启动后不允许换 fixture；如某 id 不可用须记录到 exemption_log",
+  "exemption_log": []
+}

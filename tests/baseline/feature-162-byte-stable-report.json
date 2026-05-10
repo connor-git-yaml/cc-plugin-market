@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0",
+  "feature": "162",
+  "runAt": "2026-05-10T13:54:20.829Z",
+  "fixturesFound": 0,
+  "selfCheck": false,
+  "e2eDeferred": true,
+  "perFixture": [],
+  "summary": {
+    "pass": 0,
+    "fail": 0,
+    "skipped": 25
+  },
+  "deferredTo": "ops",
+  "triggerScenarios": [
+    "scenario-1: 本地用 GLM driver 跑完 25 fixture 后（生成 v1 baseline），再用 codex driver 重跑（生成 v2），跑此脚本对比",
+    "scenario-2: CI 流水线中 fixture 已挂载到 worktree 时（fixture 由 cache 注入而非 git track）"
+  ],
+  "note": "task fixture 不入库（CLAUDE.local.md 入库边界明确 tests/baseline/tasks/ 不入库 — \"评估流程产物，含 LLM 单次随机性\"）。 Phase A 验收策略：dispatcher schema 自校验通过即可； 跨版本 byte-stable 实际对比延后到 ops 触发以下任一场景。"
+}
