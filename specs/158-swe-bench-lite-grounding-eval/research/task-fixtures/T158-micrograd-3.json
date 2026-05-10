@@ -1,0 +1,51 @@
+{
+  "taskId": "T158-micrograd-3",
+  "description": "修复 setupCommands 注入的 Value.__sub__ bug；测 detect_changes + caller graph 传播链 grounding 价值",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "5-15",
+  "setupCommands": [
+    "python3 -c \"import re; p='micrograd/engine.py'; s=open(p).read(); new=re.sub(r'def __sub__\\(self, other\\): # self - other\\s*\\n\\s*return self \\+ \\(-other\\)', 'def __sub__(self, other): # self - other\\n        return self + other  # BUG: should be self + (-other)', s); assert s != new, 'sub injection failed'; open(p,'w').write(new)\""
+  ],
+  "prompt": "micrograd/engine.py 的 Value 类有一个 bug：`__sub__` 方法实现错误（返回了 self + other 而不是 self + (-other)）。这导致 a - b 实际上是 a + b。\n\n请：\n1. 用 spectra detect_changes 或 context 工具找到 __sub__ 的当前实现\n2. 修复成正确的语义：a - b 应该等于 a + (-b)\n3. 用 spectra impact 工具查看 __sub__ 的 caller，确保所有依赖（如 test_more_ops 中的 c - d, b - a 等）都恢复正常\n4. 确认 backward 闭包对负号的处理仍然正确（提示：__sub__ 不需要自己写 _backward，因为它复用 __add__ 和 __neg__ 的 closure）\n\n不破坏其他任何测试。",
+  "expectedSpectraToolCalls": ["detect_changes", "context", "impact"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "验证 a - b 正确性 + 反向传播 + 现有 test 全 PASS",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; a = Value(5.0); b = Value(3.0); c = a - b; assert c.data == 2.0, f'5 - 3 should be 2, got {c.data}'\"",
+        "description": "5 - 3 应该等于 2（forward 数值）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; a = Value(5.0); b = Value(3.0); c = a - b; c.backward(); assert a.grad == 1.0 and b.grad == -1.0, f'a-b backward: a.grad should be 1, b.grad should be -1; got {a.grad}, {b.grad}'\"",
+        "description": "a - b 的反向传播：∂c/∂a=1, ∂c/∂b=-1",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py::test_more_ops -x -q 2>&1 | tail -3",
+        "description": "test_more_ops 含 c - d / b - a，必须恢复 PASS",
+        "mustPass": true,
+        "timeoutMs": 30000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "全套 test_engine.py 不退化",
+        "mustPass": true,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py"],
+    "additionsApprox": 1,
+    "mustContainPatterns": [
+      "self \\+ \\(-other\\)"
+    ]
+  },
+  "rubricNotes": "Bug fix + caller graph 传播链。grounding 价值：detect_changes 让 agent 在 startCommit 上能看到本地相对 baseline 的差异；context 显示 __sub__ 当前实现帮助快速定位。评分关注：找到根因 + 修复正确 + 不破坏 caller。"
+}

@@ -1,0 +1,55 @@
+{
+  "taskId": "T158-micrograd-2",
+  "description": "在 Value 类实现 sigmoid()，并修改 nn.py 的 Neuron 支持 nonlin='sigmoid' 选项；测 caller graph 跨函数依赖（grounding 价值）",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "20-40",
+  "prompt": "在 micrograd 中实现 sigmoid 激活函数支持，要求两步同时完成：\n\n1. **micrograd/engine.py** Value 类新增 `sigmoid()` 方法：\n   - forward: σ(x) = 1 / (1 + e^(-x))\n   - backward: d/dx σ(x) = σ(x) * (1 - σ(x))\n   - 风格与 relu() 保持一致（closure pattern）\n   - 可使用 `import math`\n\n2. **micrograd/nn.py** Neuron 类的 `__call__` 方法当前固定 `act.relu() if self.nonlin else act`。请改造让 Neuron 支持 `nonlin` 参数为字符串值 `'relu'` / `'sigmoid'` / `False`：\n   - `nonlin='relu'` (默认) → 调 `.relu()`\n   - `nonlin='sigmoid'` → 调 `.sigmoid()`\n   - `nonlin=False` → linear（不调激活）\n   - 同时把 `__init__` 签名 `nonlin=True` 改为 `nonlin='relu'` 并保持向后兼容（True → 'relu'）\n\n3. 在 test/test_engine.py 新增 1-2 个 unit test 验证 Value.sigmoid 数值与梯度。\n\n4. 不破坏现有任何测试（test_sanity_check / test_more_ops 都用 ReLU，必须仍 PASS）。\n\n5. 注意：Layer 和 MLP 把 `**kwargs` 透传给 Neuron，所以你不需要改 Layer/MLP，但需要先用 spectra impact / context 工具确认 caller chain，避免漏改某个层级。",
+  "expectedSpectraToolCalls": ["impact", "context"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "验证 Value.sigmoid 数值 + Neuron 透传 + 现有 test 不退化",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.sigmoid(); expected = 1/(1+math.exp(-0.5)); assert abs(y.data - expected) < 1e-9, f'sigmoid forward fail: {y.data} vs {expected}'\"",
+        "description": "Value.sigmoid forward 数值正确",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.sigmoid(); y.backward(); s = 1/(1+math.exp(-0.5)); expected = s*(1-s); assert abs(v.grad - expected) < 1e-9, f'sigmoid backward fail: {v.grad} vs {expected}'\"",
+        "description": "Value.sigmoid backward 梯度 = σ(x)(1-σ(x))",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.nn import Neuron; n = Neuron(2, nonlin='sigmoid'); x = [0.1, 0.2]; out = n(x); assert 0 < out.data < 1, f'sigmoid neuron should output in (0,1), got {out.data}'\"",
+        "description": "Neuron(nonlin='sigmoid') 真正用 sigmoid 激活",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.nn import Neuron; n = Neuron(2, nonlin=True); x = [0.1, 0.2]; out = n(x); assert out.data >= 0, f'nonlin=True should map to relu (>=0), got {out.data}'\"",
+        "description": "Neuron(nonlin=True) 向后兼容 → 仍是 ReLU",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "现有 test/test_engine.py 全套通过（regression check）",
+        "mustPass": true,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py", "micrograd/nn.py", "test/test_engine.py"],
+    "additionsApprox": 30,
+    "mustContainPatterns": [
+      "def sigmoid\\(self\\)",
+      "nonlin"
+    ]
+  },
+  "rubricNotes": "Caller graph 价值场景：grounding 工具应能告知 agent Neuron.__call__ 是 Value 激活的 caller。评分关注：sigmoid 正确性 + Neuron 改造保持向后兼容 + 现有测试不退化。"
+}

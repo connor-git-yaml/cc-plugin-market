@@ -1,0 +1,62 @@
+{
+  "taskId": "T158-micrograd-6",
+  "description": "在 Value 类实现 GELU 激活函数（高难度锚点：手工求导易错 + 多 oracle check 严格）",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "20-35",
+  "prompt": "在 micrograd/engine.py 的 Value 类中新增 `gelu()` 方法（GELU 激活函数 — Gaussian Error Linear Unit）。\n\n数学定义：\n- forward: GELU(x) = x * 0.5 * (1 + erf(x / sqrt(2)))\n- backward: d/dx GELU(x) = 0.5 * (1 + erf(x / sqrt(2))) + x * exp(-x²/2) / sqrt(2π)\n\n要求：\n1. 实现 forward / backward 闭包（用 closure pattern）\n2. backward 闭包中 _backward 必须用 `+=` 累积（多路径正确性）\n3. 使用 `import math`（math.erf, math.exp, math.sqrt, math.pi 都可用）\n4. 在 test/test_engine.py 中新增 unit test 至少验证：\n   - GELU(0) ≈ 0\n   - GELU(1) ≈ 0.84134（来自 PyTorch 参考实现，无需引 torch）\n   - backward 在 x=0 处梯度 ≈ 0.5（GELU'(0) = 0.5）\n5. 不破坏现有任何测试\n\n提示：可以用 spectra context 工具看现有 relu/__pow__ 方法的 closure pattern；这个 task 难点在于手工推导 backward 表达式正确（容易漏 chain rule 项）。",
+  "expectedSpectraToolCalls": ["impact", "context"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "GELU 数值精度 + backward 严格 + 多路径累积 + 现有 test 不退化（高难度锚点：5 个独立 check 必须全 PASS）",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(0.0); y = v.gelu(); assert abs(y.data) < 1e-9, f'GELU(0) should be 0, got {y.data}'\"",
+        "description": "GELU(0) = 0（forward 边界）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(1.0); y = v.gelu(); assert abs(y.data - 0.8413447460685429) < 1e-6, f'GELU(1) ~ 0.84134, got {y.data}'\"",
+        "description": "GELU(1) ≈ 0.84134（forward 数值精度）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(0.0); y = v.gelu(); y.backward(); assert abs(v.grad - 0.5) < 1e-6, f\\\"GELU'(0) = 0.5, got {v.grad}\\\"\"",
+        "description": "backward at x=0 应该 ≈ 0.5",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(1.0); y = v.gelu(); y.backward(); expected = 0.5 * (1 + math.erf(1.0/math.sqrt(2))) + 1.0 * math.exp(-0.5)/math.sqrt(2*math.pi); assert abs(v.grad - expected) < 1e-6, f\\\"GELU'(1) backward error: {v.grad} vs {expected}\\\"\"",
+        "description": "backward at x=1 数值精度（catch 漏 chain rule 项的 stub）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(0.5); y = v.gelu(); z = y + y; z.backward(); g_singlepath = v.grad; v2 = Value(0.5); y2 = v2.gelu(); y2.backward(); assert abs(v.grad - 2*v2.grad) < 1e-6, f'multi-path accumulation: {v.grad} should be 2x of {v2.grad}'\"",
+        "description": "多路径累积验证（catch _backward 用 = 而非 +=）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "现有 test/test_engine.py 全套通过（regression）",
+        "mustPass": true,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py", "test/test_engine.py"],
+    "additionsApprox": 25,
+    "mustContainPatterns": [
+      "def gelu\\(self\\)",
+      "math\\.erf",
+      "math\\.exp"
+    ]
+  },
+  "rubricNotes": "高难度锚点（防天花板效应）。grounding 价值：context 工具能给出 closure pattern 模板；impact 工具能告知 GELU 在哪些测试中被使用。评分关注：手工求导正确性（特别是 chain rule 第二项）+ 多路径 += 累积 + 不破坏既有 test。"
+}

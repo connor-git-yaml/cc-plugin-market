@@ -4,6 +4,17 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
+interface McpToolTraceEntry {
+  toolName: string;
+  callCount: number;
+  firstCallTurn: number;
+  totalDurationMs: number | null;
+}
+interface McpTraceParseResult {
+  trace: McpToolTraceEntry[];
+  w3Flag: boolean;
+}
+
 interface RunnerModule {
   runPrimaryOracle: (input: { wtDir: string; oracle: Record<string, unknown> }) => {
     kind: string;
@@ -20,8 +31,17 @@ interface RunnerModule {
     bypassPermissions: boolean;
     fixtureSuffix: string;
   };
-  buildClaudeArgs: (input: { tool: string; prompt: string; bypassPermissions?: boolean }) => string[];
+  buildClaudeArgs: (input: { tool: string; prompt: string; wtDir?: string | null; bypassPermissions?: boolean }) => string[];
   buildDriverPrompt: (input: { tool: string; taskPrompt: string; spectraContext?: string | null }) => string;
+  parseMcpToolCallTrace: (stdout: string, expectedSpectraToolCalls?: string[] | null) => McpTraceParseResult;
+  parseStreamJsonUsage: (stdout: string) => {
+    costUsd: number | null;
+    tokensInput: number | null;
+    tokensOutput: number | null;
+    tokensCacheRead: number | null;
+  };
+  loadTaskFixture: (taskId: string) => Record<string, unknown>;
+  SUPPORTED_TOOLS: string[];
 }
 
 let cachedModule: RunnerModule | undefined;
@@ -334,5 +354,253 @@ describe('eval-task-runner.buildDriverPrompt (Sprint 3 后修订：spec-driver-s
     expect(sp).toContain('RED/GREEN TDD');
     expect(gs).toContain('GStack 风格');
     expect(gs).toContain('plan → build → review → test → ship');
+  });
+});
+
+describe('eval-task-runner Feature 158 — mcp-pull cohort 接入', () => {
+  it('SUPPORTED_TOOLS 包含 mcp-pull（FR-002 / SC-003）', async () => {
+    const { SUPPORTED_TOOLS } = await loadRunner();
+    expect(SUPPORTED_TOOLS).toContain('mcp-pull');
+    // 现有 cohort 不被破坏
+    expect(SUPPORTED_TOOLS).toContain('control');
+    expect(SUPPORTED_TOOLS).toContain('spec-driver-spectra');
+  });
+
+  it('buildClaudeArgs mcp-pull 注入 --mcp-config 和 --allowedTools（FR-002 + Codex WARNING 6 精确断言）', async () => {
+    const { buildClaudeArgs } = await loadRunner();
+    const args = buildClaudeArgs({ tool: 'mcp-pull', prompt: 'TASK', wtDir: '/tmp/wt-x' });
+    expect(args).toContain('--mcp-config');
+    const cfgIdx = args.indexOf('--mcp-config');
+    expect(args[cfgIdx + 1]).toBe('/tmp/wt-x/.mcp.json');
+    expect(args).toContain('--allowedTools');
+    const allowedIdx = args.indexOf('--allowedTools');
+    // 精确 tool set 断言（spec FR-002 列出 3 spectra tool + 7 std tool）
+    const allowedSet = new Set(args[allowedIdx + 1].split(','));
+    expect(allowedSet).toEqual(new Set([
+      'mcp__spectra__impact',
+      'mcp__spectra__context',
+      'mcp__spectra__detect_changes',
+      'Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write',
+    ]));
+    // stream-json + verbose 用于 trace 解析
+    expect(args).toContain('--output-format');
+    expect(args[args.indexOf('--output-format') + 1]).toBe('stream-json');
+    expect(args).toContain('--include-partial-messages');
+    expect(args).toContain('--verbose');
+    // prompt 仍是最后一个参数
+    expect(args[args.length - 1]).toBe('TASK');
+  });
+
+  it('buildClaudeArgs mcp-pull 没有 wtDir 时抛错（防漏传）', async () => {
+    const { buildClaudeArgs } = await loadRunner();
+    expect(() => buildClaudeArgs({ tool: 'mcp-pull', prompt: 'X' })).toThrow(/wtDir/);
+  });
+
+  it('buildDriverPrompt mcp-pull cohort 与 control 完全一致（无 hint，对齐 spec AUTO-RESOLVED + Codex CRITICAL 5）', async () => {
+    const { buildDriverPrompt } = await loadRunner();
+    const taskBody = 'TASK_BODY_X';
+    const ctrl = buildDriverPrompt({ tool: 'control', taskPrompt: taskBody });
+    const mcp = buildDriverPrompt({ tool: 'mcp-pull', taskPrompt: taskBody });
+    // cohort 间 prompt 主体必须完全一致（避免 confound）
+    expect(mcp).toBe(ctrl);
+    expect(mcp).toBe(taskBody);
+    // 验证不含 hint 关键词
+    expect(mcp).not.toContain('mcp__spectra__impact');
+    expect(mcp).not.toContain('Hint');
+  });
+
+  it('loadTaskFixture 多目录优先序：specs/158 优先，specs/147 fallback（CR-2）', async () => {
+    const { loadTaskFixture } = await loadRunner();
+    // T1 在 specs/147 → 应通过 fallback 找到
+    const t1 = loadTaskFixture('T1-micrograd-add-tanh') as { taskId: string };
+    expect(t1.taskId).toBe('T1-micrograd-add-tanh');
+    // 不存在的 fixture 抛包含两个目录路径的错误
+    expect(() => loadTaskFixture('T999-nonexistent')).toThrow(/specs\/158|specs\/147/);
+  });
+});
+
+describe('eval-task-runner.parseMcpToolCallTrace (Feature 158 FR-005 / W-3)', () => {
+  it('callCount=0 → w3Flag=true（trap 命中）', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const r = parseMcpToolCallTrace('', ['impact']);
+    expect(r.trace).toEqual([]);
+    expect(r.w3Flag).toBe(true);
+  });
+
+  it('解析单次 mcp__spectra__impact 调用，提取 toolName/callCount/firstCallTurn', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const stream =
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__spectra__impact', input: { target: 'X' } }] },
+      }) + '\n';
+    const r = parseMcpToolCallTrace(stream, ['impact']);
+    expect(r.trace).toHaveLength(1);
+    expect(r.trace[0].toolName).toBe('mcp__spectra__impact');
+    expect(r.trace[0].callCount).toBe(1);
+    expect(r.trace[0].firstCallTurn).toBe(1);
+    expect(r.w3Flag).toBe(false);
+  });
+
+  it('CL-001 短名 endsWith 匹配：toolName 不在 expected 列表 → w3Flag=true', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const stream =
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__spectra__context', input: {} }] },
+      }) + '\n';
+    // expected=['detect_changes']，调的是 context → mismatch → w3Flag=true
+    const r = parseMcpToolCallTrace(stream, ['detect_changes']);
+    expect(r.trace[0].toolName).toBe('mcp__spectra__context');
+    expect(r.trace[0].callCount).toBe(1);
+    expect(r.w3Flag).toBe(true);
+  });
+
+  it('expected=null 且有 calls → w3Flag=false（无 expectation 不算 trap）', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const stream =
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__spectra__impact', input: {} }] },
+      }) + '\n';
+    const r = parseMcpToolCallTrace(stream, null);
+    expect(r.w3Flag).toBe(false);
+  });
+
+  it('多次 tool_use + 跨 turn 计数', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__spectra__impact', input: {} }] },
+      }),
+      // 一些 noise
+      JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta' } }),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:01.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_2', name: 'mcp__spectra__impact', input: {} }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:02.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_3', name: 'mcp__spectra__context', input: {} }] },
+      }),
+    ];
+    const r = parseMcpToolCallTrace(lines.join('\n'), ['impact']);
+    // grouped by toolName
+    expect(r.trace).toHaveLength(2);
+    const impact = r.trace.find((t) => t.toolName === 'mcp__spectra__impact');
+    const context = r.trace.find((t) => t.toolName === 'mcp__spectra__context');
+    expect(impact?.callCount).toBe(2);
+    expect(context?.callCount).toBe(1);
+    expect(impact?.firstCallTurn).toBe(1);
+    // 至少一次匹配 expected=['impact'] → w3Flag=false
+    expect(r.w3Flag).toBe(false);
+  });
+
+  it('忽略非 mcp__spectra__ 前缀的 tool_use（如 Read/Grep）', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const stream =
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_x', name: 'Read', input: { path: '/x' } }] },
+      }) + '\n';
+    const r = parseMcpToolCallTrace(stream, ['impact']);
+    expect(r.trace).toEqual([]);
+    expect(r.w3Flag).toBe(true); // 没调 spectra tool 视为 trap
+  });
+
+  it('忽略无效 JSON 行（容错）', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const stream = 'not json\n{}\n{"type":"noise"}\n';
+    const r = parseMcpToolCallTrace(stream, ['impact']);
+    expect(r.trace).toEqual([]);
+    expect(r.w3Flag).toBe(true);
+  });
+
+  it('totalDurationMs 用 tool_use → tool_result 时间差估算', async () => {
+    const { parseMcpToolCallTrace } = await loadRunner();
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-09T15:00:00.000Z',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__spectra__impact', input: {} }] },
+      }),
+      JSON.stringify({
+        type: 'user',
+        timestamp: '2026-05-09T15:00:00.500Z',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: 'ok' }] },
+      }),
+    ];
+    const r = parseMcpToolCallTrace(lines.join('\n'), null);
+    expect(r.trace[0].totalDurationMs).toBe(500);
+  });
+});
+
+describe('eval-task-runner.parseStreamJsonUsage (Feature 158 CR-6 修复)', () => {
+  it('从 modelUsage 块提取 costUsd / tokens', async () => {
+    const { parseStreamJsonUsage } = await loadRunner();
+    const stream = JSON.stringify({
+      type: 'result',
+      modelUsage: {
+        'claude-sonnet-4-6': {
+          inputTokens: 100,
+          outputTokens: 200,
+          cacheReadInputTokens: 50,
+          costUSD: 0.0123,
+        },
+      },
+    }) + '\n';
+    const u = parseStreamJsonUsage(stream);
+    expect(u.costUsd).toBe(0.0123);
+    expect(u.tokensInput).toBe(100);
+    expect(u.tokensOutput).toBe(200);
+    expect(u.tokensCacheRead).toBe(50);
+  });
+
+  it('多 model 累加 costUsd', async () => {
+    const { parseStreamJsonUsage } = await loadRunner();
+    const stream = JSON.stringify({
+      type: 'result',
+      modelUsage: {
+        'claude-sonnet-4-6': { inputTokens: 50, outputTokens: 100, costUSD: 0.01 },
+        'claude-opus-4-7': { inputTokens: 30, outputTokens: 80, costUSD: 0.05 },
+      },
+    }) + '\n';
+    const u = parseStreamJsonUsage(stream);
+    expect(u.costUsd).toBeCloseTo(0.06, 4);
+    expect(u.tokensInput).toBe(80);
+    expect(u.tokensOutput).toBe(180);
+  });
+
+  it('无 modelUsage 时返回全 null（text mode 兼容）', async () => {
+    const { parseStreamJsonUsage } = await loadRunner();
+    const stream = '{"type":"assistant","message":{"content":"text only"}}\n';
+    const u = parseStreamJsonUsage(stream);
+    expect(u.costUsd).toBeNull();
+    expect(u.tokensInput).toBeNull();
+  });
+
+  it('忽略无效 JSON 行', async () => {
+    const { parseStreamJsonUsage } = await loadRunner();
+    const stream = 'noise\n{not json\n{}\n';
+    const u = parseStreamJsonUsage(stream);
+    expect(u.costUsd).toBeNull();
+  });
+
+  it('从末尾倒序找最近的 modelUsage（结果块在最后输出）', async () => {
+    const { parseStreamJsonUsage } = await loadRunner();
+    const lines = [
+      JSON.stringify({ type: 'assistant', message: { content: 'mid' } }),
+      JSON.stringify({ type: 'result', modelUsage: { 'sonnet': { inputTokens: 1, outputTokens: 2, costUSD: 0.001 } } }),
+    ];
+    const u = parseStreamJsonUsage(lines.join('\n'));
+    expect(u.costUsd).toBe(0.001);
   });
 });

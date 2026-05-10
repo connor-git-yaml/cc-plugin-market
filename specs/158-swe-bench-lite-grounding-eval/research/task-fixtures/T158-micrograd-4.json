@@ -1,0 +1,56 @@
+{
+  "taskId": "T158-micrograd-4",
+  "description": "在 Value 类实现 log()（自然对数），含正向 / 反向传播 + 边界值（x ≤ 0 抛 ValueError）；中等难度 refactor",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "15-30",
+  "prompt": "在 micrograd/engine.py 的 Value 类中新增 `log()` 方法（自然对数 ln）。\n\n要求：\n1. forward: log(x) = math.log(x)，要求 x > 0（否则 raise ValueError 报告问题，不要返回 NaN/Inf）\n2. backward: d/dx log(x) = 1/x，所以 _backward 中 self.grad += (1.0 / self.data) * out.grad\n3. 风格与 relu / __pow__ 等其他方法保持一致（closure pattern + 多路径累积用 += 不是 =）\n4. 在 test/test_engine.py 中新增 unit test 验证：\n   - log(1.0) ≈ 0\n   - log(math.e) ≈ 1\n   - backward 在 x=2 处梯度 = 0.5\n5. 不破坏现有任何测试\n6. 可使用 `import math`",
+  "expectedSpectraToolCalls": ["context"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "验证 log forward + backward + 边界值 + 现有 test 不退化",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(math.e); y = v.log(); assert abs(y.data - 1.0) < 1e-9, f'log(e) should be 1, got {y.data}'\"",
+        "description": "log(e) ≈ 1 forward",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(1.0); y = v.log(); assert abs(y.data) < 1e-9, f'log(1) should be 0, got {y.data}'\"",
+        "description": "log(1) ≈ 0",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(2.0); y = v.log(); y.backward(); assert abs(v.grad - 0.5) < 1e-9, f'log backward at x=2 should be 0.5, got {v.grad}'\"",
+        "description": "log backward 梯度 = 1/x",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; v = Value(2.0); y = v.log(); z = y + y; z.backward(); assert abs(v.grad - 1.0) < 1e-9, f'multi-path: 2 * (1/2) = 1, got {v.grad}'\"",
+        "description": "多路径累积验证（catch stub = 而非 +=）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "现有 test/test_engine.py 全套通过",
+        "mustPass": true,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py", "test/test_engine.py"],
+    "additionsApprox": 18,
+    "mustContainPatterns": [
+      "def log\\(self\\)",
+      "math\\.log",
+      "1\\.?0?\\s*/\\s*self\\.data|self\\.data\\s*\\*\\*\\s*-1"
+    ]
+  },
+  "rubricNotes": "中等难度的 refactor 风格 task。grounding 价值：context 工具能展示 _backward 的 closure pattern 模板，避免 agent 用错（如 = 而不是 +=）。评分关注：closure pattern 一致性、边界处理、测试覆盖。"
+}

@@ -1,0 +1,53 @@
+{
+  "taskId": "T158-nanoGPT-5",
+  "description": "在 nanoGPT/model.py GPT class 重新实现 crop_block_size 方法（setup 已删除）；不同 target 的 caller graph + grounding 价值",
+  "target": "karpathy/nanoGPT",
+  "targetSubdir": "nanoGPT",
+  "startCommit": "3adf61e16ea3776c2dab37a78ec3e8d9d68aa019",
+  "estimatedLoc": "8-15",
+  "setupCommands": [
+    "python3 -c \"import re; p='model.py'; s=open(p).read(); pattern=r'(    def crop_block_size\\(self, block_size\\):.*?(?=\\n    @classmethod\\n    def from_pretrained))'; new=re.sub(pattern, '', s, count=1, flags=re.DOTALL); assert s != new and 'def crop_block_size' not in new, 'remove failed'; open(p,'w').write(new)\""
+  ],
+  "prompt": "nanoGPT/model.py 的 GPT class 缺少 `crop_block_size(block_size)` 方法。这个方法用于 fine-tuning 时裁剪预训练模型的 block_size（e.g. 把 GPT2 1024 切到 256）。\n\n请重新实现：\n1. 方法签名 `def crop_block_size(self, block_size):`\n2. 用 assert 保证 block_size <= self.config.block_size（不能放大）\n3. 更新 self.config.block_size = block_size\n4. 裁剪 self.transformer.wpe.weight（位置嵌入）：`self.transformer.wpe.weight = nn.Parameter(self.transformer.wpe.weight[:block_size])`\n5. 对每个 transformer block（self.transformer.h 中），如果 block.attn 有 bias 属性（说明 flash=False），裁剪 attn.bias 的 [:,:,:block_size,:block_size]\n\n请用 spectra context 工具看 GPT class 的其他方法（如 from_pretrained, configure_optimizers）的实现风格保持一致。",
+  "expectedSpectraToolCalls": ["context"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "用 AST 解析验证 crop_block_size 方法存在且 body 含必要 operations",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import ast; tree = ast.parse(open('model.py').read()); cls = next((n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'GPT'), None); assert cls is not None, 'GPT class not found'; m = next((m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name == 'crop_block_size'), None); assert m is not None, 'crop_block_size method missing'\"",
+        "description": "GPT.crop_block_size 方法存在",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import ast; tree = ast.parse(open('model.py').read()); cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'GPT'); m = next(m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name == 'crop_block_size'); src = ast.unparse(m); assert 'assert' in src and 'block_size' in src, f'crop_block_size missing assert: {src[:200]}'\"",
+        "description": "crop_block_size 含 assert 保护",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import ast; tree = ast.parse(open('model.py').read()); cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'GPT'); m = next(m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name == 'crop_block_size'); src = ast.unparse(m); assert 'self.config.block_size' in src and 'wpe' in src, f'must update config and crop wpe: {src[:300]}'\"",
+        "description": "crop_block_size 同时改 config 和 wpe.weight",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import ast; tree = ast.parse(open('model.py').read()); cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'GPT'); m = next(m for m in cls.body if isinstance(m, ast.FunctionDef) and m.name == 'crop_block_size'); src = ast.unparse(m); assert 'block.attn.bias' in src or 'attn.bias' in src, f'must crop attn.bias too: {src[:300]}'\"",
+        "description": "crop_block_size 处理每个 block 的 attn.bias 裁剪",
+        "mustPass": true,
+        "timeoutMs": 10000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["model.py"],
+    "additionsApprox": 10,
+    "mustContainPatterns": [
+      "def crop_block_size",
+      "self\\.config\\.block_size",
+      "wpe"
+    ]
+  },
+  "rubricNotes": "nanoGPT target 拓展 fixture 多样性。grounding 价值：context 让 agent 能看到 GPT class 其他方法的风格模板。不真跑 torch（spec 已确认 oracle.kind functional 含 AST 解析也算 functional）。评分关注：方法完整性 + AST 校验通过。"
+}

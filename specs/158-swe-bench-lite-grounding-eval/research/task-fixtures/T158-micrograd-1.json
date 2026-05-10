@@ -1,0 +1,56 @@
+{
+  "taskId": "T158-micrograd-1",
+  "description": "在 micrograd Value 类中新增 exp() 方法（自然指数函数），含正确的反向传播闭包；最简 baseline 难度",
+  "target": "karpathy/micrograd",
+  "targetSubdir": "micrograd",
+  "startCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
+  "estimatedLoc": "10-25",
+  "prompt": "在 micrograd/engine.py 的 Value 类中新增一个 `exp()` 方法（自然指数 e^x）。\n\n要求：\n1. exp(x) 数值正确（等于 math.exp(x)）\n2. 实现反向传播闭包（_backward），导数 = exp(x)（注意：复用 forward 计算结果到 backward）\n3. 风格与现有 relu() / __pow__() 等方法保持一致（用 closure pattern 写 _backward）\n4. 在 test/test_engine.py 中新增 1-2 个简单 unit test 验证（forward + backward）\n5. 不破坏现有任何测试\n6. 可使用 `import math`\n\n请直接修改文件并提交 commit；不要长篇 surface 计划，简短说明后直接做。",
+  "expectedSpectraToolCalls": ["impact"],
+  "primaryOracle": {
+    "kind": "functional",
+    "description": "真跑 exp() forward / backward 数值匹配 + 多路径累积 + 现有测试不退化；不依赖 grep",
+    "checks": [
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.exp(); assert abs(y.data - math.exp(0.5)) < 1e-9, f'forward fail: {y.data} vs {math.exp(0.5)}'\"",
+        "description": "exp forward 数值匹配 math.exp",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.exp(); y.backward(); expected = math.exp(0.5); assert abs(v.grad - expected) < 1e-9, f'backward fail: {v.grad} vs {expected}'\"",
+        "description": "exp backward 梯度 = exp(x)",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(-1.5); y = v.exp(); y.backward(); assert abs(y.data - math.exp(-1.5)) < 1e-9 and abs(v.grad - math.exp(-1.5)) < 1e-9\"",
+        "description": "负值场景验证（防止仅在 0.5 这一点拟合）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -c \"import sys; sys.path.insert(0, '.'); from micrograd.engine import Value; import math; v = Value(0.5); y = v.exp(); z = y + y; z.backward(); expected = 2 * math.exp(0.5); assert abs(v.grad - expected) < 1e-9, f'multi-path accumulation fail: {v.grad} vs {expected} (用 = 不是 += 写 _backward 会假阳性)'\"",
+        "description": "多路径累积：用 += 而非 = 写 _backward（catch stub 'self.grad = ...'）",
+        "mustPass": true,
+        "timeoutMs": 10000
+      },
+      {
+        "cmd": "python3 -m pytest test/test_engine.py -x -q 2>&1 | tail -3",
+        "description": "现有 test/test_engine.py 全套通过（regression check）",
+        "mustPass": true,
+        "timeoutMs": 30000
+      }
+    ]
+  },
+  "expectedDiff": {
+    "filesChanged": ["micrograd/engine.py", "test/test_engine.py"],
+    "additionsApprox": 15,
+    "mustContainPatterns": [
+      "def exp\\(self\\)",
+      "_backward",
+      "math\\.exp"
+    ]
+  },
+  "rubricNotes": "Feature 158 baseline 难度 task；评分关注：forward 数值正确、backward 梯度正确、复用 forward 中间结果、风格一致、测试覆盖、不破坏既有测试"
+}

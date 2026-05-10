@@ -29,7 +29,11 @@ import { loadTaskFixture, prepareWorktree, runPrimaryOracle } from './eval-task-
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const TASK_FIXTURES_DIR = path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures');
+// Feature 158 CR-2: 多目录扩展（specs/158 优先，向后兼容 specs/147）
+const TASK_FIXTURE_DIRS = [
+  path.join(PROJECT_ROOT, 'specs/158-swe-bench-lite-grounding-eval/research/task-fixtures'),
+  path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures'),
+];
 
 // ============================================================
 // argv
@@ -145,11 +149,20 @@ export function runSanityCheck(taskFixture, { keepWorktree = false } = {}) {
 }
 
 function listAllTaskFixtures() {
-  if (!fs.existsSync(TASK_FIXTURES_DIR)) return [];
-  return fs.readdirSync(TASK_FIXTURES_DIR)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => f.replace(/\.json$/, ''))
-    .sort();
+  // Feature 158 CR-2: 跨多目录列出 fixture（specs/158 + specs/147），同名以 specs/158 优先（loadTaskFixture 同序）
+  const seen = new Set();
+  const out = [];
+  for (const dir of TASK_FIXTURE_DIRS) {
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue;
+      const id = f.replace(/\.json$/, '');
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+    }
+  }
+  return out.sort();
 }
 
 // ============================================================
