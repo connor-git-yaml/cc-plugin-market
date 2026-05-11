@@ -225,10 +225,22 @@ function validateArgs(args) {
 // ───────────────────────────────────────────────────────────
 
 function loadFixtureByTaskId(taskId) {
-  // 文件名 stem 与 taskId 一致：SWE-L001-pytest-module-imported-twice-under.json
-  const fp = path.join(FIXTURES_DIR, `${taskId}.json`);
+  // 支持两种命名（Feature 162 T050 bug fix）：
+  //   (1) full stem: 'SWE-L001-pytest-module-imported-twice-under'（历史约定）
+  //   (2) short ID:  'SWE-L001'（calibration-fixture-list.json + spec FR-030 + pilot-27-batch.sh 用此）
+  // 优先匹配 (1) — 完整文件名存在即直读；否则 (2) prefix match
+  let fp = path.join(FIXTURES_DIR, `${taskId}.json`);
   if (!fs.existsSync(fp)) {
-    throw new Error(`fixture not found: ${fp}`);
+    const matches = fs
+      .readdirSync(FIXTURES_DIR)
+      .filter((f) => f.startsWith(`${taskId}-`) && f.endsWith('.json'));
+    if (matches.length === 0) {
+      throw new Error(`fixture not found: ${fp} (also tried prefix match for '${taskId}-*.json')`);
+    }
+    if (matches.length > 1) {
+      throw new Error(`ambiguous fixture for '${taskId}': matches ${matches.join(', ')}`);
+    }
+    fp = path.join(FIXTURES_DIR, matches[0]);
   }
   const raw = fs.readFileSync(fp, 'utf-8');
   let json;
