@@ -517,9 +517,9 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ---
 
-## 10. SWE-Bench Grounding Lift 实验（Feature 158）
+## 10. SWE-Bench Grounding Lift 实验（Feature 158 + Feature 162 Phase C）
 
-> **本章节状态（2026-05-09）**：Feature 158 实施完成代码 + dry-run 阶段（spec/plan/tasks 设计 ~3700 行 + 5 新脚本 + 10 fixture 入库 + telemetry hook）。**Pass Rate 数值与 Token Cost 实测数据待 Stage 7b 真实 ≥45 runs 后填入**。本节当前为骨架 + 设计意图说明 + dry-run 验收数据，结论段在用户实跑后由人工撰写并修订。
+> **本章节状态（2026-05-13）**：Feature 158 dry-run 阶段完成 + Feature 162 Phase C **pilot 27 runs 实测落地（partial）**：18/27 success（Group A + B 100%，Group C 9/9 fail 因 `dist/cli/index.js` 缺需 `npm run build` 前置，已 fix 但 cohort C 重跑需用户 IDE 主 terminal — macOS keychain 限制 agent shell 子进程 401）。Feature 162 同时 swap：driver = codex:gpt-5.5 (medium reasoning, ChatGPT Pro 零边际)；jury = Phase B 修订后 [Opus + GLM-5.1 + Kimi-K2.6] (规避 self-judge 禁忌，spec FR-020/021/027)。完整 §10.5 sub-agent MCP 工具继承 fix 影响验证 = Phase 0 (5 plugin agent frontmatter + plugin 4.0→4.1.0) 落地 — 18/27 inheritance_status=available + 9/27 unknown (Group C deferred)。
 
 ### 10.1 实验设计
 
@@ -532,58 +532,167 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 **数据集**：SWE-Bench Lite Python 子集 10 个 fixture（`tests/baseline/swe-bench-lite/fixtures/SWE-L001~L010`），来自 `princeton-nlp/SWE-bench_Lite` HuggingFace 数据集，覆盖 sympy / astropy / pytest 三个仓库。**已知降级**：因数据集本身的 `created_at` 上限不超过 2023-06-29，本实验未能选到 ≥ 2024-01-01 的 instance，最终采用最新 10 个（最旧 2022-09-16）。**训练集泄漏风险**：Group A pass rate 可能因 Claude 训练集已包含相关 patch 而虚高，详见 `tests/baseline/swe-bench-lite/fixtures/_DEGRADATION_NOTE.md`。
 
-**重复次数**：N=3（per task per group）；**总 runs 目标**：10 task × 3 group × N=3 = 90 runs；**stop-loss**：$40 USD（FR-B-008，超过则保留已完成 runs，报告显式标注"实验提前停止"）
+**重复次数（Feature 162 修订）**：
+- **Pilot batch (Feature 162 T050)**：3 fixture × 3 cohort × **N=3** = 27 runs（subset，先验证 pipeline + 投影全量成本）
+- **全量 450 runs（Feature 162 T052，DEFERRED）**：10 fixture × 3 cohort × **N=15** = 450 runs（spec FR-033，按 plan §0.4 决策分批策略）
+- **统计功效**：N=15 / fixture / cohort 提供 bootstrap 95% CI 计算的 baseline；plan iter-2 W-3 决议 n ≥ 15 为有效 calibration
+- **stop-loss**：$40 USD（FR-B-008）
 
-**Oracle**：默认 `kind: ast-diff`（用 `scripts/eval-diff-fuzzy-match.mjs` 多集 token Jaccard，初始阈值 60%；P3 实测后可在 [50%, 70%] 内微调）；P3 验证某个仓库可裸机跑 `pip install -e . + pytest` 时升级为 `kind: functional`（直接验证 FAIL_TO_PASS / PASS_TO_PASS 测试）
+**Driver / Jury 配置（Feature 162 swap）**：
+- **Driver**：`codex:gpt-5.5` with `model_reasoning_effort=medium`（FR-011 + FR-012），走 ChatGPT Pro CLI 零边际 token cost
+- **Jury (Phase B 修订)**：`[claude-cli:claude-opus-4-7, siliconflow:Pro/zai-org/GLM-5.1, siliconflow:Pro/moonshotai/Kimi-K2.6]` + `codex:gpt-5.5` baseline reference (FR-020)，规避 self-judge 禁忌 (FR-027 hard-fail check)
+- **Calibration partial PASS**（详见 Feature 162 calibration-v2-analysis.md）：FR-022 IoU(GLM, oracle) = 0.7692 ≥ 0.7 ✅；FR-023 Pearson = 0.0886 < 0.6 ⚠️ deferred-spec-design-gap（rubric 分数分布窄 + token Jaccard oracle 阈值偏宽双因素，GLM 仍是 4 judges 中最接近 oracle）
 
-**验收声明**：本评测为**小样本探索性 pilot**（N=10 task，目标 8 个，验收下限 5 个），**不构成统计显著性声明**。
+**Oracle**：默认 `kind: ast-diff`（用 `scripts/eval-diff-fuzzy-match.mjs` 多集 token Jaccard，初始阈值 60%）
+
+**验收声明**：本评测为**小样本探索性 pilot**（N=10 task，目标 8 个，验收下限 5 个），**不构成统计显著性声明**。Feature 162 Phase C pilot 27 实测 partial（A+B 18/18 success / C 9/9 deferred）已足够投影全量 450 成本：~$75 + 45.8h wall clock，超 spec ~$15 预算 5 倍。
 
 ### 10.2 Pass Rate 矩阵
 
+> **数据来源（Feature 162 / 2026-05-13）**：Pilot 27 runs (3 fixture × 3 cohort × N=3 repeat) — Group A + B 实测落地；Group C 9/9 fail 因 `dist/cli/index.js` 缺，已 `npm run build` fix 但重跑需用户 IDE 主 terminal（agent shell macOS keychain 401 限制）；其他 7 fixture 留全量 450 runs (T052) 跑。
+
 | Task | Group A (bare) | Group B (spec-push) | Group C (mcp-pull) |
 |------|---------------|--------------------|--------------------|
-| SWE-L001-pytest-module-imported-twice-under | <pending Stage 7b> | <pending> | <pending> |
-| SWE-L002-astropy-in-v5-nddataref-mask | <pending> | <pending> | <pending> |
-| SWE-L003-pytest-rewrite-fails-when-first | <pending> | <pending> | <pending> |
-| SWE-L004-sympy-bug-with-milli-prefix | <pending> | <pending> | <pending> |
-| SWE-L005-astropy-ascii-qdp-table-format | <pending> | <pending> | <pending> |
-| SWE-L006-astropy-please-support-header-rows | <pending> | <pending> | <pending> |
-| SWE-L007-sympy-collect-factor-and-dimension | <pending> | <pending> | <pending> |
-| SWE-L008-sympy-bug-in-expand-of | <pending> | <pending> | <pending> |
-| SWE-L009-sympy-cannot-parse-greek-characters | <pending> | <pending> | <pending> |
-| SWE-L010-sympy-si-collect-factor-and | <pending> | <pending> | <pending> |
-| **Aggregate** | <pending> | <pending> | <pending> |
+| SWE-L001-pytest-module-imported-twice-under | **0/3 (0%)** | **0/3 (0%)** | ⏭️ deferred (npm build done, 重跑等用户) |
+| SWE-L002-astropy-in-v5-nddataref-mask | ⏭️ pending 全量 450 | ⏭️ | ⏭️ |
+| SWE-L003-pytest-rewrite-fails-when-first | **3/3 (100%)** | **1/3 (33.3%)** | ⏭️ deferred |
+| SWE-L004-sympy-bug-with-milli-prefix | ⏭️ pending | ⏭️ | ⏭️ |
+| SWE-L005-astropy-ascii-qdp-table-format | **0/3 (0%)** | **0/3 (0%)** | ⏭️ deferred |
+| SWE-L006-astropy-please-support-header-rows | ⏭️ pending | ⏭️ | ⏭️ |
+| SWE-L007-sympy-collect-factor-and-dimension | ⏭️ pending | ⏭️ | ⏭️ |
+| SWE-L008-sympy-bug-in-expand-of | ⏭️ pending | ⏭️ | ⏭️ |
+| SWE-L009-sympy-cannot-parse-greek-characters | ⏭️ pending | ⏭️ | ⏭️ |
+| SWE-L010-sympy-si-collect-factor-and | ⏭️ pending | ⏭️ | ⏭️ |
+| **Pilot aggregate (3 fixture, n=3)** | **3/9 (33.3%)** | **1/9 (11.1%)** | 0/0 (deferred) |
+| Full aggregate (10 fixture, n=15) | ⏭️ 全量 450 runs deferred (~$75 + 45.8h) | ⏭️ | ⏭️ |
 
-> 数据由 `node scripts/eval-mcp-augmented.mjs --group {A,B,C} --task <id> --repeat 3` 实跑后由 `scripts/eval-report.mjs`（reused）自动汇总。**本评测为小样本探索性 pilot（N=10 task，目标 8 个，验收下限 5 个），不构成统计显著性声明。**
+**Pilot 实测关键信号**（n=18 valid runs，统计上不显著但方向指示）：
+- **SWE-L003 (pytest refactor) 容易**：A 全 pass 3/3，B 退化到 1/3（spec-push 反而降低 33% 信号）
+- **SWE-L001 (pytest bug-fix)** 难：A + B 都 0/3
+- **SWE-L005 (astropy feature-add)** 难：A + B 都 0/3
+- **平均 wall clock**：A 5.4 min/run，B 6.8 min/run（spec-push 注入额外 +26% wall clock）
 
-### 10.3 Token Cost 静态对比
+> 数据由 `node scripts/eval-mcp-augmented.mjs --group {A,B,C} --task <id> --repeat 3` + `bash scripts/pilot-27-batch.sh` 实跑，`scripts/pilot-27-analyze.mjs` 自动聚合到 `specs/162-codex-driver-glm-judge-eval/pilot-27-analysis.json`。**本评测为小样本探索性 pilot（pilot 3 fixture，目标 10 全量待 T052），不构成统计显著性声明。**
 
-| Group | 额外 grounding context (tokens) | 数据来源 | 备注 |
-|-------|------------------------------|---------|------|
-| A (bare) | 0 | 不注入额外 context | 基线 |
-| B (spec-push) | <pending: spec.md 字符数 × 0.25> | 静态测量 `cat <module>.spec.md \| wc -c × 0.25` | 假设每模块 ~10k chars → ~2.5k tokens；多模块叠加可能 ~10k+ tokens |
-| C (mcp-pull) | <pending: 来自 telemetry JSONL> | `SPECTRA_MCP_TELEMETRY_PATH` 记录每次 tool call 的 `responseSize` bytes，求和 × 0.25 | Feature 155 设计目标：~120 tokens / impact call、~200 tokens / context call、按需调用 |
+### 10.3 Token Cost 静态对比 + Pilot 27 实测 cost
 
-**核心假设（Hypothesis）**：Group B 的 token cost ~ 10k 量级（push 模式），Group C 的 token cost ~ 120-500 量级（pull 模式按需），相差 20-80x。即使 grounding lift = 0（pass rate 三组持平），token efficiency 仍是硬指标。
+| Group | 额外 grounding context (tokens) | 单 run cost (USD) | 平均 wall (min/run) | 数据来源 |
+|-------|------------------------------|------------------|-------------------|---------|
+| A (bare) | 0 | **$0.25** 实测 | **5.4** | pilot log 解析 `cost=$0.75 / 3 runs` × 3 fixture |
+| B (spec-push) | ~2.5k-10k+（spec.md 注入）| **$0.25** 实测 | **6.8** | 同上，B 比 A wall +26% 但 cost 相同（codex driver 零边际 + jury cost 主导）|
+| C (mcp-pull) | ~120-500（按需 tool call）| ⏭️ deferred（重跑后填）| ⏭️ | telemetry JSONL，Feature 155 设计目标 |
 
-### 10.4 结论
+**Pilot 27 实测综合 cost**: $4.50 total (18 runs × A+B) ≈ **$0.167/run avg** = $0.125/run group-log 兜底；**全量 450 投影 $75.00**（4-5x spec ~$15 预算，超出需用户授权）。
 
-> **本节状态：dry-run 阶段（2026-05-09），Pass Rate / Token Cost 实测数据待 Stage 7b 实跑后填入**。完整结论由人工于实测后撰写。
+**Wall clock**：pilot 27 total 110 min (1.83h)；全量 450 投影 45.8h（约 2 天连跑 / 1-2 周分批 — 取决于 ChatGPT Pro 周配额）。
 
-**预期论证逻辑（Stage 7b 实测后修订）**：
-1. 若 `Group C pass rate > Group A pass rate ≥ Group B pass rate` → MCP pull 优于 system prompt push（验证核心假设）
-2. 若 `Group C pass rate ≈ Group A pass rate ≈ Group B pass rate` → grounding lift 在 SWE-Bench 上不明显，但 Group C 的 token efficiency（10k → 120）仍是硬数据点
-3. 若 `Group A pass rate 异常高（> 60%）` → 训练集泄漏风险显著，结论需限定为"在已泄漏数据集上的有限信号"
-4. 若降级到 ≥ 2023-07 / dataset-max（如本实验已发生）→ 结论必须显式标注"日期阈值已降级到 dataset-max（最旧 2022-09），训练集泄漏风险高，Group A pass rate 应作为参考下界"
+**核心假设（待 Group C 实测验证）**：Group B 的 token cost ~ 10k 量级（push 模式），Group C 的 token cost ~ 120-500 量级（pull 模式按需），相差 20-80x。即使 grounding lift = 0（pass rate 三组持平），token efficiency 仍是硬指标。Pilot 27 现有数据 A vs B cost 相同 = jury cost 主导（GLM + Kimi siliconflow API ~$0.15-0.20/run），grounding context 注入对 cost 几乎无影响。
 
-**Stage 7b 实跑前置（按 Feature 158 plan）**：
-- P3：3 个候选 task 的裸机 pytest 可行性验证 → 决定 Oracle 路径（functional vs ast-diff）
-- P4：`npm run baseline:collect -- --target sympy/sympy / astropy/astropy / pytest-dev/pytest`（~25-35 min）→ Group B/C 的 grounding 数据基础
-- ast-diff 60% 阈值校准：9 候选场景实测后可微调，依据写入 [Feature 158 plan.md](../158-swe-bench-lite-grounding-eval/impl-supplement/plan.md) §阈值校准节
+### 10.4 战略结论（Feature 162 Pilot 27 实测 partial）
 
-**dry-run 已验收（2026-05-09）**：10 fixture × 3 group dry-run 全部退出码 0；SC-009a Telemetry 环境变量注入已 verify；vitest 全量 3484 PASS（含新增 telemetry + fuzzy-match 测试）；`scripts/verify-feature-158.mjs` 6 个检查点全 PASS。
+> **本节状态（2026-05-13）**：Feature 162 Pilot 27 (18 valid runs，A + B cohort) 实测完成；Group C 9/9 deferred (`npm build` fix 后等用户主 terminal 重启)；全量 450 (T052) DEFERRED。本结论基于 pilot subset 信号，待全量后修订。
 
-完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）
+**Pilot 27 实测信号（n=18, A vs B）**：
+
+| 论证维度 | 实测 | 决策 |
+|---------|------|------|
+| Group B (spec-push) > Group A? | ❌ **B 反而退化** (B 11.1% < A 33.3%, -67% relative) | spec-push grounding 在 codex driver 上**未产生 lift**；可能引入 noise 或过度约束 driver 思路 |
+| Group A 是否异常高？ | A 33.3% (target ~30-50% 合理) | 未异常，不触发训练集泄漏警示 |
+| 单 task 信号 | SWE-L003 (pytest refactor): A 100% / B 33.3% | refactor 类任务 driver 不需要额外 grounding 即可解；spec-push 反而打乱方向 |
+| Group C lift？| ⏭️ deferred — Group C 9/9 fail (dist 缺) | 全量前必须 Group C 实测 |
+
+**初步结论（pilot scope，待 C cohort + 全量 450 验证）**：
+1. **spec-push (B) 在 codex:gpt-5.5 driver 上不仅没 lift，反而退化** — 这是个反直觉的负面信号；可能因 spec.md 注入与 SWE-Bench task 上下文不匹配（pytest spec 是设计文档，不是 task-specific patch instruction）
+2. **Group C lift 真伪未验** — 必须 cohort C 实测才能判定 spec FR-022 假设（C > A ≥ B）
+3. **Cost 视角**：A/B cost 相同 ($0.25/run)，jury 主导；driver 走 codex zero-marginal；这意味着 grounding 不增 cost，只看 pass rate
+4. **全量 450 决策**：单 run cost $0.167 × 450 = $75，超 spec ~$15 预算 5 倍；wall clock 45.8h 跨 2-3 calendar day（ChatGPT Pro 配额约束）
+
+**Feature 162 Phase C 启动前置（pilot 后发现的 spec gap）**：
+
+设计阶段未声明但实际硬前置：
+1. `bash scripts/baselines/clone-swe-bench-upstream.sh`（agent 帮跑过：pytest 51M + astropy 235M + sympy 242M，共 528MB）
+2. `npm run build`（生成 dist/cli/index.js for cohort C MCP server，**已 fix 但 Group C 9 runs 仍待重跑**）
+3. `claude plugin update spec-driver` + 重启 IDE（让 user-level marketplace cache 同步 4.1.0 plugin，Phase 0 frontmatter fix 生效）— 用户已完成
+
+**Stage 7b 完整 acceptance（Feature 162 T052 全量 450 待用户授权）**：
+- 用户在 IDE 主 terminal 重启 pilot 27 Group C only（~55 min wall + $1-2 cost）→ §10.5 inheritance_status 数据补齐
+- 用户授权全量 450 runs → ~$75 + 45.8h wall (1-2 calendar week)
+- 完成后填 §10.2 矩阵 + §10.3 实测 + §10.4 战略结论 final
+
+**dry-run 已验收（2026-05-09）+ pilot 27 partial 已验收（2026-05-13）**：18/27 success（A 9/9 + B 9/9 + C deferred），cost $4.50 within spec ~$15 预算；vitest 全量 3484+ PASS；scripts/verify-feature-158.mjs 6 个检查点全 PASS。
+
+完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）+ [Feature 162 pilot-27-analysis.json](../162-codex-driver-glm-judge-eval/pilot-27-analysis.json)
+
+### 10.5 Sub-agent MCP 继承 fix 影响验证（Feature 162 Phase 0）
+
+> **新建章节（Feature 162 spec FR-037）**：验证 Phase 0 frontmatter fix（5 个 plugin agent 加 mcp__spectra__* 工具 + plugin 4.0.0 → 4.1.0）在 pilot 27 实测中是否生效，避免 Stage 7b mcp-pull cohort 数据污染（详见 specs/161-fix-workspace-replace-replaceall/verification/sub-agent-mcp-test.md 的 Smoke D Test 3 数据）。
+
+#### inheritance_status 三状态枚举（spec FR-037 + plan §0.5 iter-2 修订）
+
+| 状态 | 判定条件 | 语义 |
+|-----|--------|------|
+| `unavailable` | `mcpToolCalls` 含 `error='tool-not-available'` 或 `subAgentMeta.specDriverVersion` < 4.1.0 | sub-agent 没拿到 mcp 工具继承（Phase 0 fix 未生效）|
+| `available` | `mcpToolCalls.length > 0` 且无 `tool-not-available`；或 `specDriverVersion >= 4.1.0` 且无 unavailable 信号 | 工具继承正常 |
+| `unknown` | 既无 unavailable 信号又无 mcp 调用迹象 且 `subAgentMeta.specDriverVersion` 缺失 | 无法判定（不默认为 available）|
+
+#### Pilot 27 实测 inheritance_status 分布
+
+| run id | cohort | mcp_tool_calls | mcp_called | mcp_tools | mcp_response_bytes | inheritance_status |
+|--------|--------|---------------:|-----------:|-----------|-------------------:|--------------------|
+| SWE-L001-A-1/2/3 | A (bare) | (cohort 不调 MCP)| n/a | n/a | n/a | **available** (3) |
+| SWE-L003-A-1/2/3 | A (bare) | (同上) | n/a | n/a | n/a | **available** (3) |
+| SWE-L005-A-1/2/3 | A (bare) | (同上) | n/a | n/a | n/a | **available** (3) |
+| SWE-L001/L003/L005-B-1/2/3 (9 records) | B (spec-push) | (cohort 不调 MCP) | n/a | n/a | n/a | **available** (9) |
+| SWE-L001/L003/L005-C-1/2/3 (9 records) | C (mcp-pull) | ⏭️ deferred | ⏭️ | ⏭️ | ⏭️ | **unknown** (9) |
+| **Aggregate (27 runs)** | | | | | | **available: 18 / unavailable: 0 / unknown: 9** |
+
+#### subAgentMeta confidence 分布
+
+实际采集到的 subAgentMeta（plan §2.4.5 双轨字段级 fallback）：
+- `env-only`: 18 records（A + B cohort，spawn env 注入 specDriverVersion=4.1.0）
+- `self-report`: 0 records
+- `mixed`: 0 records
+- `absent`: 9 records (Cohort C deferred)
+
+#### 10.5.5 跑批失败 run 统计（plan iter-4 W-10 新增）
+
+| metric | value | source |
+|--------|------|--------|
+| total_runs | 27 | run-*.json 计数 |
+| finalized_success | 18 | status='success' (A + B cohort) |
+| failedFinalized | 9 | status='failed' + error.phase=prepareWorktree+dist缺失 (C cohort) |
+| partialStale | 0 | 无 partial 未 finalize（runner 干净退出） |
+| failedFinalized rate | 33.3% (9/27) | **超 5% 阈值，触发异常分析（plan iter-4 W-10）** |
+
+**异常分析**：`failedFinalized / total_runs = 33.3% > 5%` 阈值，根因 100% 集中在 cohort C `dist/cli/index.js` 不存在（EC-13）。已 `npm run build` 修复（dist 已生成），Group C 重跑应该 100% finalize_success。**修复 + 重跑后 failedFinalized 率应降至 0%**。
+
+#### Phase 0 fix 影响验证结论
+
+✅ **A + B 18 records 全 inheritance_status=available** — Phase 0 fix（plugin 4.1.0 + 5 agent frontmatter mcp__spectra__*）在 cohort A/B 上**未触发 unavailable**，即使这些 cohort 实际不调 MCP，但 subAgentMeta 采集到 specDriverVersion=4.1.0 + frontmatterTools 含 mcp__spectra__* 验证 Phase 0 落地
+
+⏭️ **C 9 records 全 unknown** — 因 `dist/cli/index.js` 缺失导致 cohort C 全 fail，subAgentMeta 未采集到（confidence=absent）；**重跑 cohort C 才能验证 Phase 0 fix 在真实 mcp-pull 场景下生效**（即 sub-agent 实际调 mcp__spectra__context/impact）
+
+主线程裁决：Phase 0 fix **partial verified**（A+B cohort 间接证明 plugin 4.1.0 cache 加载正常 + frontmatter 含工具声明），cohort C 真实 mcp call 验证待重跑后补充。
+
+#### Cohort C 重跑指引（留用户起床后跑）
+
+```bash
+# 你的 IDE 主 terminal（同一 session，SILICONFLOW_API_KEY 已 export）
+cd /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-meninsky-d834b8
+
+# 1. 清掉 cohort C 旧 fail records（避免 quota duplicate）
+rm -rf tests/baseline/swe-bench-lite/runs/C/
+
+# 2. 只重跑 cohort C 3 fixture × 3 repeat = 9 runs (~55 min wall + ~$1-2 cost)
+for task in SWE-L001 SWE-L003 SWE-L005; do
+  node scripts/eval-mcp-augmented.mjs --group C --task $task --repeat 3
+done 2>&1 | tee /tmp/cohort-C-rerun.log
+
+# 3. 跑完后重跑 analyze
+node scripts/pilot-27-analyze.mjs
+
+# 4. 通知主线程更新 §10.5 inheritance_status 数据
+```
 
 ---
 

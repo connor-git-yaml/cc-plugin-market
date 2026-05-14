@@ -1,0 +1,379 @@
+{
+  "runAt": "2026-05-13T08:49:23.899Z",
+  "schemaNote": "Actual schema 缺 tokensInput/Output / mcpToolCalls[] / judges.* (spec FR-037 canonical 未落地)；本分析用 wallMs + oracleResult + inheritance_status + costUsd (from group log)。",
+  "cohorts": {
+    "A": {
+      "total": 9,
+      "success": 9,
+      "failed": 0,
+      "avgWallMs": 324744,
+      "costUsd": 2.25,
+      "oraclePass": 3,
+      "oracleFail": 6,
+      "oracleError": 0,
+      "inheritance": {
+        "available": 9,
+        "unavailable": 0,
+        "unknown": 0
+      },
+      "runs": [
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 417099,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 900251,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 1205831,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 50038,
+          "oracleResult": "pass",
+          "filesChanged": 2,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 37643,
+          "oracleResult": "pass",
+          "filesChanged": 2,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 134950,
+          "oracleResult": "pass",
+          "filesChanged": 2,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 63453,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 56121,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 57312,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        }
+      ]
+    },
+    "B": {
+      "total": 9,
+      "success": 9,
+      "failed": 0,
+      "avgWallMs": 408257,
+      "costUsd": 2.25,
+      "oraclePass": 1,
+      "oracleFail": 8,
+      "oracleError": 0,
+      "inheritance": {
+        "available": 9,
+        "unavailable": 0,
+        "unknown": 0
+      },
+      "runs": [
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 1025269,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 398031,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L001-pytest-module-imported-twice-under",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 1800623,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 95691,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 112208,
+          "oracleResult": "fail",
+          "filesChanged": 3,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L003-pytest-rewrite-fails-when-first",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 58904,
+          "oracleResult": "pass",
+          "filesChanged": 2,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 1,
+          "status": "success",
+          "wallMs": 56492,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 2,
+          "status": "success",
+          "wallMs": 69358,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        },
+        {
+          "taskId": "SWE-L005-astropy-ascii-qdp-table-format",
+          "repeat": 3,
+          "status": "success",
+          "wallMs": 57736,
+          "oracleResult": "fail",
+          "filesChanged": 6,
+          "commits": 0,
+          "inheritance_status": "available",
+          "confidence": "env-only"
+        }
+      ]
+    },
+    "C": {
+      "total": 9,
+      "success": 0,
+      "failed": 9,
+      "avgWallMs": 0,
+      "costUsd": 0,
+      "oraclePass": 0,
+      "oracleFail": 0,
+      "oracleError": 9,
+      "inheritance": {
+        "available": 0,
+        "unavailable": 0,
+        "unknown": 9
+      },
+      "runs": [
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        },
+        {
+          "status": "failed",
+          "wallMs": 0,
+          "oracleResult": "unknown",
+          "filesChanged": 0,
+          "commits": 0,
+          "inheritance_status": "unknown",
+          "confidence": "absent"
+        }
+      ]
+    }
+  },
+  "overall": {
+    "totalRuns": 27,
+    "success": 18,
+    "failed": 9,
+    "avgWallMs": 366501,
+    "totalCostUsd": 4.5,
+    "oraclePass": 4,
+    "oracleFail": 14,
+    "oracleError": 9
+  },
+  "inheritance": {
+    "available": 18,
+    "unavailable": 0,
+    "unknown": 9
+  },
+  "confidence": {
+    "env-only": 18,
+    "self-report": 0,
+    "self-report-only": 0,
+    "merged": 0,
+    "mixed": 0,
+    "absent": 9
+  },
+  "failedReasons": [
+    "C/SWE-L001/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L001/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L001/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L003/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L003/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L003/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L005/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L005/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)",
+    "C/SWE-L005/r?: dist/cli/index.js 不存在；请先运行 `npm run build` (EC-13)"
+  ],
+  "fullProjection": {
+    "runsCount": 450,
+    "estWallClockH": "45.8",
+    "estTotalCostUsd": "75.00",
+    "avgWallSPerRun": "366.5",
+    "avgCostPerRunUsd": "0.1667",
+    "decision": "safe-1-shot-or-bg",
+    "decisionReason": "单 run < 15min (367s)，450 runs 可后台 1-shot 跑（est 45.8h wall clock）"
+  }
+}
