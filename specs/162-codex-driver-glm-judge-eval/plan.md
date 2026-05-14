@@ -143,6 +143,45 @@ review_history:
 判定优先级：unavailable 信号 > available 信号 > unknown 兜底。`unknown` 占比 > 10% 视为采集质量异常，须在异常分析章节解释。
 ```
 
+### 0.6 启动前置（Pilot 27 / Cohort C 运行前必须按序完成）
+
+> **iter-5 新增（Feature 163 修复）**：Pilot 27 实测发现 Cohort C 9/9 runs 因 `dist/cli/index.js` 缺失（EC-13）全部 prepareWorktree fail。以下 3 步为必须前置：
+>
+> - **Step 1/2 缺失** → **基础设施失败**：Cohort C runs 在 prepareWorktree 即报 EC-13 / clone 错误，exit ≠ 0，整批 fail，`oracleError` 计数
+> - **Step 3 缺失** → **数据有效性失败**：runs 可能 exit 0 但 `inheritance_status = unavailable`，科学结论无效（mcp-pull cohort 退化为 control 模式），须由 Smoke D 和 inheritance_status gate 阻断；不会触发 EC-13
+
+**Step 1 — clone 上游 repo**（幂等，已存在自动跳过）：
+
+```bash
+bash scripts/baselines/clone-swe-bench-upstream.sh
+```
+
+首次 clone pytest + astropy + sympy 共 ~528MB，预计 10-30 分钟；已 clone 则秒级跳过。
+Cohort A/B 也依赖此 clone（prepareWorktree 的 rsync + checkout 需要 baseline workspace）。
+
+**Step 2 — 构建 dist**（Cohort C 硬依赖）：
+
+```bash
+npm run build
+```
+
+Cohort C 的 eval-mcp-augmented.mjs 在 sub-agent worktree 内以 `dist/cli/index.js` 启动本地 MCP server（spec FR-006 / EC-13）。
+未构建则整批报 `[run-failure] dist/cli/index.js 不存在；请先运行 npm run build (EC-13)`。
+Cohort A/B 不依赖 dist，但统一先 build 可避免遗漏。
+
+**Step 3 — 更新 spec-driver plugin cache + 重启 IDE**：
+
+```bash
+claude plugin update spec-driver
+```
+
+然后**重启 IDE / Claude session（必须）**。
+spec-driver 4.1.0 在 5 个 sub-agent frontmatter 中显式声明了 `mcp__spectra__*` 工具；
+旧 cache（4.0.0）加载时工具继承静默失效，Cohort C mcp-pull 数据污染为 control 模式。
+若 `claude plugin update` 不可用，fallback：`rm -rf ~/.claude/plugins/cache/cc-plugin-market/spec-driver/4.0.0 && npm run repo:sync && claude /reload`。
+
+**顺序约束**：Step 1 独立可并行；Step 2 在 Step 1 之后（理论上独立，但惯例先确保 workspace 完整）；Step 3 最后（需 IDE 重启，重启后环境变化）。
+
 ---
 
 ## 1. 模块拓扑

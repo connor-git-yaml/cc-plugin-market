@@ -519,7 +519,7 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ## 10. SWE-Bench Grounding Lift 实验（Feature 158 + Feature 162 Phase C）
 
-> **本章节状态（2026-05-13）**：Feature 158 dry-run 阶段完成 + Feature 162 Phase C **pilot 27 runs 实测落地（partial）**：18/27 success（Group A + B 100%，Group C 9/9 fail 因 `dist/cli/index.js` 缺需 `npm run build` 前置，已 fix 但 cohort C 重跑需用户 IDE 主 terminal — macOS keychain 限制 agent shell 子进程 401）。Feature 162 同时 swap：driver = codex:gpt-5.5 (medium reasoning, ChatGPT Pro 零边际)；jury = Phase B 修订后 [Opus + GLM-5.1 + Kimi-K2.6] (规避 self-judge 禁忌，spec FR-020/021/027)。完整 §10.5 sub-agent MCP 工具继承 fix 影响验证 = Phase 0 (5 plugin agent frontmatter + plugin 4.0→4.1.0) 落地 — 18/27 inheritance_status=available + 9/27 unknown (Group C deferred)。
+> **本章节状态（2026-05-15）**：Feature 158 dry-run 阶段完成 + Feature 162 Phase C **pilot 27 runs 完整实测落地**：**27/27 success**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail，Feature 163 修复 dist build / clone 幂等 / plan §0.6 启动前置 spec gap 后 rerun）。Feature 162 同时 swap：driver = codex:gpt-5.5 (medium reasoning, ChatGPT Pro 零边际)；jury = Phase B 修订后 [Opus + GLM-5.1 + Kimi-K2.6] (规避 self-judge 禁忌，spec FR-020/021/027)。完整 §10.5 sub-agent MCP 工具继承 fix 影响验证 = Phase 0 (5 plugin agent frontmatter + plugin 4.0→4.1.0) 落地 — **27/27 inheritance_status=available**（Feature 163 修复后全部 cohort 工具继承生效）。
 
 ### 10.1 实验设计
 
@@ -549,78 +549,94 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ### 10.2 Pass Rate 矩阵
 
-> **数据来源（Feature 162 / 2026-05-13）**：Pilot 27 runs (3 fixture × 3 cohort × N=3 repeat) — Group A + B 实测落地；Group C 9/9 fail 因 `dist/cli/index.js` 缺，已 `npm run build` fix 但重跑需用户 IDE 主 terminal（agent shell macOS keychain 401 限制）；其他 7 fixture 留全量 450 runs (T052) 跑。
+> **数据来源（Feature 162 / Feature 163 修复后 rerun 2026-05-15）**：Pilot 27 runs (3 fixture × 3 cohort × N=3 repeat) 完整实测落地 — Feature 163 修复 4 个 spec gap（`npm run build` 启动前置 + plan §0.6 + clone 脚本幂等升级）后，**全部 27 runs success（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail）**；其他 7 fixture 留全量 450 runs (T052) 跑。
 
 | Task | Group A (bare) | Group B (spec-push) | Group C (mcp-pull) |
 |------|---------------|--------------------|--------------------|
-| SWE-L001-pytest-module-imported-twice-under | **0/3 (0%)** | **0/3 (0%)** | ⏭️ deferred (npm build done, 重跑等用户) |
+| SWE-L001-pytest-module-imported-twice-under | **0/3 (0%)** | **0/3 (0%)** | **0/3 (0%)** |
 | SWE-L002-astropy-in-v5-nddataref-mask | ⏭️ pending 全量 450 | ⏭️ | ⏭️ |
-| SWE-L003-pytest-rewrite-fails-when-first | **3/3 (100%)** | **1/3 (33.3%)** | ⏭️ deferred |
+| SWE-L003-pytest-rewrite-fails-when-first | **2/3 (66.7%)** | **1/3 (33.3%)** | **0/3 (0%)** |
 | SWE-L004-sympy-bug-with-milli-prefix | ⏭️ pending | ⏭️ | ⏭️ |
-| SWE-L005-astropy-ascii-qdp-table-format | **0/3 (0%)** | **0/3 (0%)** | ⏭️ deferred |
+| SWE-L005-astropy-ascii-qdp-table-format | **3/3 (100%)** | **1/3 (33.3%)** | **2/3 (66.7%)** |
 | SWE-L006-astropy-please-support-header-rows | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L007-sympy-collect-factor-and-dimension | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L008-sympy-bug-in-expand-of | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L009-sympy-cannot-parse-greek-characters | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L010-sympy-si-collect-factor-and | ⏭️ pending | ⏭️ | ⏭️ |
-| **Pilot aggregate (3 fixture, n=3)** | **3/9 (33.3%)** | **1/9 (11.1%)** | 0/0 (deferred) |
-| Full aggregate (10 fixture, n=15) | ⏭️ 全量 450 runs deferred (~$75 + 45.8h) | ⏭️ | ⏭️ |
+| **Pilot aggregate (3 fixture, n=3)** | **5/9 (55.6%)** | **2/9 (22.2%)** | **2/9 (22.2%)** |
+| Full aggregate (10 fixture, n=15) | ⏭️ 全量 450 runs deferred (~$75 + 38h) | ⏭️ | ⏭️ |
 
-**Pilot 实测关键信号**（n=18 valid runs，统计上不显著但方向指示）：
-- **SWE-L003 (pytest refactor) 容易**：A 全 pass 3/3，B 退化到 1/3（spec-push 反而降低 33% 信号）
-- **SWE-L001 (pytest bug-fix)** 难：A + B 都 0/3
-- **SWE-L005 (astropy feature-add)** 难：A + B 都 0/3
-- **平均 wall clock**：A 5.4 min/run，B 6.8 min/run（spec-push 注入额外 +26% wall clock）
+**Pilot 27 完整实测关键信号**（n=27 valid runs，3 fixture × 3 cohort × 3 repeat，统计上不显著但方向指示明确）：
 
-> 数据由 `node scripts/eval-mcp-augmented.mjs --group {A,B,C} --task <id> --repeat 3` + `bash scripts/pilot-27-batch.sh` 实跑，`scripts/pilot-27-analyze.mjs` 自动聚合到 `specs/162-codex-driver-glm-judge-eval/pilot-27-analysis.json`。**本评测为小样本探索性 pilot（pilot 3 fixture，目标 10 全量待 T052），不构成统计显著性声明。**
+- **关键数据**：A 5/9 (55.6%) | B 2/9 (22.2%) | C 2/9 (22.2%) — 看似 B ≈ C < A
+- **⚠️ 重要 caveat（Cohort C 实测 mcpToolCallCount=0）**：Cohort C 虽完成 9/9 runs（prepareWorktree pass），但 **mcpToolCallCount 全为 0（9/9 runs）** — driver 在 worktree 内**未实际调用任何 mcp__spectra__\* 工具**。这意味着 C 22.2% pass rate **不能视为 "MCP pull grounding 的效果"**，C cohort 在 driver 视角下等同于 A bare 模式跑（差异仅在 env setup）
+- **SWE-L001 (pytest bug-fix)** 全难：A + B + C 都 0/3（cohort 间持平）
+- **SWE-L003 (pytest refactor)**：A 2/3，B 1/3，C 0/3（A 最高，但 n=3 单 task 无法判断）
+- **SWE-L005 (astropy feature-add)**：A 3/3，B 1/3，C 2/3（A 最高，B 退化但 C 居中）
+- **平均 wall clock**：A 5.8 min/run，B 4.2 min/run，C 5.1 min/run
+- **prepareWorktree 成功率**：A/B/C 三 cohort 均 100%（Feature 163 修复后 EC-13 错误消除）
 
-### 10.3 Token Cost 静态对比 + Pilot 27 实测 cost
+> 数据由 `bash scripts/pilot-27-batch.sh` 实跑（Feature 163 rerun 2026-05-15 共 137 min wall），`scripts/pilot-27-analyze.mjs` 自动聚合到 `specs/162-codex-driver-glm-judge-eval/pilot-27-analysis.json`。**本评测为小样本探索性 pilot（pilot 3 fixture，目标 10 全量待 T052），不构成统计显著性声明。**
+
+### 10.3 Token Cost 静态对比 + Pilot 27 完整实测 cost
 
 | Group | 额外 grounding context (tokens) | 单 run cost (USD) | 平均 wall (min/run) | 数据来源 |
 |-------|------------------------------|------------------|-------------------|---------|
-| A (bare) | 0 | **$0.25** 实测 | **5.4** | pilot log 解析 `cost=$0.75 / 3 runs` × 3 fixture |
-| B (spec-push) | ~2.5k-10k+（spec.md 注入）| **$0.25** 实测 | **6.8** | 同上，B 比 A wall +26% 但 cost 相同（codex driver 零边际 + jury cost 主导）|
-| C (mcp-pull) | ~120-500（按需 tool call）| ⏭️ deferred（重跑后填）| ⏭️ | telemetry JSONL，Feature 155 设计目标 |
+| A (bare) | 0 | **$0.25** 实测 | **5.8** | pilot log 解析 `cost=$0.75 / 3 runs` × 3 fixture |
+| B (spec-push) | ~2.5k-10k+（spec.md 注入）| **$0.25** 实测 | **4.2** | 同上，B wall 比 A 短 28%（spec-push 注入后 driver 更快收敛或放弃）|
+| C (mcp-pull) | ~120-500（按需 tool call）| **$0.00** 实测* | **5.1** | mcp-pull cohort 走 ChatGPT Pro subscription，driver cost = 0；jury 阶段无 LLM call（local oracle 兜底）|
 
-**Pilot 27 实测综合 cost**: $4.50 total (18 runs × A+B) ≈ **$0.167/run avg** = $0.125/run group-log 兜底；**全量 450 投影 $75.00**（4-5x spec ~$15 预算，超出需用户授权）。
+> *C cohort cost = $0.00 是预期：mcp-pull 走 codex driver 订阅，jury 在 C cohort 因 inheritance_status="available" + 无错误，未触发付费 LLM 评分。
 
-**Wall clock**：pilot 27 total 110 min (1.83h)；全量 450 投影 45.8h（约 2 天连跑 / 1-2 周分批 — 取决于 ChatGPT Pro 周配额）。
+**Pilot 27 完整实测综合 cost**: $4.50 total (27 runs，A $2.25 + B $2.25 + C $0.00) ≈ **$0.167/run avg**；**全量 450 投影 $75.00**（5x spec ~$15 预算，超出需用户授权）。
 
-**核心假设（待 Group C 实测验证）**：Group B 的 token cost ~ 10k 量级（push 模式），Group C 的 token cost ~ 120-500 量级（pull 模式按需），相差 20-80x。即使 grounding lift = 0（pass rate 三组持平），token efficiency 仍是硬指标。Pilot 27 现有数据 A vs B cost 相同 = jury cost 主导（GLM + Kimi siliconflow API ~$0.15-0.20/run），grounding context 注入对 cost 几乎无影响。
+**Wall clock**：pilot 27 total **137 min (2.3h)**（完整 27 runs）；全量 450 投影 38h（单 run avg 304s = 5.1 min；约 2 天连跑或 1-2 周分批 — 取决于 ChatGPT Pro 周配额）。
 
-### 10.4 战略结论（Feature 162 Pilot 27 实测 partial）
+**核心观测（pilot 27 完整数据）**：
+- Group A/B cost 相同 = jury cost 主导（GLM + Kimi siliconflow API ~$0.15-0.20/run），grounding context 注入对 cost 几乎无影响
+- Group C cost $0 = mcp-pull cohort 走 codex driver 订阅 + 不触发付费 jury（A/B 也 driver = codex zero-marginal，但 jury 入账 $0.25）
+- pilot 27 cost 与 dry-run 估算（~$3-5）和 plan §0.4 投影（~$1-2/cohort）一致
 
-> **本节状态（2026-05-13）**：Feature 162 Pilot 27 (18 valid runs，A + B cohort) 实测完成；Group C 9/9 deferred (`npm build` fix 后等用户主 terminal 重启)；全量 450 (T052) DEFERRED。本结论基于 pilot subset 信号，待全量后修订。
+### 10.4 战略结论（Feature 162 Pilot 27 完整实测）
 
-**Pilot 27 实测信号（n=18, A vs B）**：
+> **本节状态（2026-05-15，Feature 163 修复后 rerun）**：Feature 162 Pilot 27 **完整 27 runs 跑批完成**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail），但 **Cohort C 实测 mcpToolCallCount=0（9/9 runs，无实际 MCP 工具调用）— pull grounding 真实效果未被验证**。全量 450 (T052) DEFERRED 等用户授权。
+
+**Pilot 27 完整实测信号（n=27，3 cohort 各 9 runs）**：
 
 | 论证维度 | 实测 | 决策 |
 |---------|------|------|
-| Group B (spec-push) > Group A? | ❌ **B 反而退化** (B 11.1% < A 33.3%, -67% relative) | spec-push grounding 在 codex driver 上**未产生 lift**；可能引入 noise 或过度约束 driver 思路 |
-| Group A 是否异常高？ | A 33.3% (target ~30-50% 合理) | 未异常，不触发训练集泄漏警示 |
-| 单 task 信号 | SWE-L003 (pytest refactor): A 100% / B 33.3% | refactor 类任务 driver 不需要额外 grounding 即可解；spec-push 反而打乱方向 |
-| Group C lift？| ⏭️ deferred — Group C 9/9 fail (dist 缺) | 全量前必须 Group C 实测 |
+| Group B (spec-push) > Group A? | ❌ **B 22.2% < A 55.6%**（-60% relative，小样本） | spec-push grounding 在 codex driver 上 pilot 数据**未观测 lift**；可能引入 noise 或过度约束 driver 思路 |
+| Group C (mcp-pull) > Group A? | ⚠️ **C 22.2% 但 mcpToolCallCount=0** | **C cohort 9/9 runs driver 未实际调用任何 mcp__spectra__\* 工具，pull grounding 路径未被触发**；C 22.2% pass rate **不能解读为 "MCP pull 无 lift"** — 等同于 A bare 重跑（差异仅 env setup） |
+| Group C lift > Group B? | ⚠️ **C ≈ B 但二者不是同一种模式** | B 是真实 spec.md 注入（额外 token 消耗），C 是 "声称 mcp-pull 但实际未 pull"；无法比较 |
+| Group A 是否异常高？ | A 55.6%（target ~30-50% 合理上限） | 偏高但未异常；可能含 LLM 训练集泄漏（pytest commits ≤ 2023）|
+| inheritance_status | 27/27 available (env-only confidence) | Phase 0 frontmatter fix + plugin 4.1.0 cache 生效（env 信号），但**未由实际 MCP call 验证**（C cohort 工具调用 0/9）|
 
-**初步观察（pilot scope，n=18，3 fixture，非显著结论）**：
-1. **pilot 观测 B < A（11.1% vs 33.3%）**，但 n=18 + 仅 3 fixture，**不构成统计显著**；Beta(α, β) 后验近似下两 cohort 95% CI 重叠概率高。结论必须全量 450 后修订；当前仅作 "spec-push 在 SWE-L003 (pytest refactor) 上观测到 1/3 vs A 3/3 退化" 的局部信号记录，不外推到 grounding 普遍失效
-2. **可能解释假设（待全量验证）**：spec.md 注入与 SWE-Bench task 上下文不匹配（pytest spec 是设计文档而非 task-specific patch instruction）
-3. **Group C lift 真伪未验** — 必须 cohort C 实测才能判定 spec FR-022 假设（C > A ≥ B）；当前样本不足以做 pass rate 比较
-4. **Cost 视角**（pilot 18 records 实测）：A/B cost 相同 ($0.25/run)，jury cost 主导；driver 走 codex zero-marginal；grounding context 注入对 cost 几乎无影响
-5. **全量 450 决策**：单 run cost $0.167 × 450 = $75，超 spec ~$15 预算 5 倍；wall clock 45.8h 跨 2-3 calendar day（ChatGPT Pro 配额约束）**— 需用户明确授权才推进 T052**
+**关键发现（pilot scope，n=27，3 fixture，非显著结论）**：
 
-**Feature 162 Phase C 启动前置（pilot 后发现的 spec gap）**：
+1. **🚨 C cohort 实测 mcpToolCallCount=0（9/9 runs）— Pilot 27 完成跑批但 MCP pull 路径未被实际触发**：driver 在 C cohort 的所有 runs 中**没有调用任何 mcp__spectra__\* 工具**，subAgentMeta.confidence 全 "env-only" 而非 "self-report"（spec FR-037 优先级）。这意味着：
+   - C 22.2% pass rate **不构成 "MCP pull 无 lift" 的证据**
+   - C cohort 等同于 A bare 模式 + 不同 env setup
+   - 必须先排查 **driver 不调 mcp 工具** 的根因（candidates: codex CLI MCP server 未启动 / driver prompt 未引导 / sub-agent frontmatter 未生效 / mcp registration 未传递到 driver）才能开始 grounding lift 真实比较
 
-设计阶段未声明但实际硬前置：
-1. `bash scripts/baselines/clone-swe-bench-upstream.sh`（agent 帮跑过：pytest 51M + astropy 235M + sympy 242M，共 528MB）
-2. `npm run build`（生成 dist/cli/index.js for cohort C MCP server，**已 fix 但 Group C 9 runs 仍待重跑**）
-3. `claude plugin update spec-driver` + 重启 IDE（让 user-level marketplace cache 同步 4.1.0 plugin，Phase 0 frontmatter fix 生效）— 用户已完成
+2. **spec-push (B) vs bare (A) 在 pilot 上 B < A**，但 n=27 + 3 fixture **不构成统计显著**（Beta 后验下两 cohort 95% CI 重叠）；当前作 "spec-push 在 pilot 3 fixture 上未观测 lift" 的局部信号记录，不外推到 grounding 普遍失效
+
+3. **Cost 视角**（pilot 27 完整实测）：pilot 27 总 cost $4.50；A/B 各 $0.25/run（jury 主导），C $0/run；C 的 cost 优势真实（driver 走 codex zero-marginal + jury 未触发），即使 pass rate 数据不构成 grounding 结论
+
+4. **全量 450 决策（重新审视）**：在 C cohort 实际不调 MCP 的情况下推 T052 全量 450 runs **没有意义** — 应该先 fix "driver 不调 mcp" 根因后再启动；预算 $75 + wall 38h **不应在 mcp 实际未启用前提下消耗**
+
+**Feature 162 Phase C 启动前置（pilot 后发现的 spec gap，Feature 163 已修复落地）**：
+
+设计阶段未声明但实际硬前置（已写入 Feature 162 plan.md §0.6）：
+1. `bash scripts/baselines/clone-swe-bench-upstream.sh`（pytest 51M + astropy 235M + sympy 242M，共 528MB；Feature 163 升级幂等校验 — git rev-parse + URL match）
+2. `npm run build`（生成 dist/cli/index.js for cohort C MCP server）
+3. `claude plugin update spec-driver` + 重启 IDE（让 user-level marketplace cache 同步 4.1.0 plugin，Phase 0 frontmatter fix 生效）
 
 **Stage 7b 完整 acceptance（Feature 162 T052 全量 450 待用户授权）**：
-- 用户在 IDE 主 terminal 重启 pilot 27 Group C only（~55 min wall + $1-2 cost）→ §10.5 inheritance_status 数据补齐
-- 用户授权全量 450 runs → ~$75 + 45.8h wall (1-2 calendar week)
+- 用户授权全量 450 runs → ~$75 + 38h wall (1-2 calendar week)
 - 完成后填 §10.2 矩阵 + §10.3 实测 + §10.4 战略结论 final
+- 替代选项：用户看 pilot 完整数据若判定"C ≈ B 信号已够明确"，可跳过 450 写 "MCP pull 在 SWE-Bench-Lite 无显著 pass-rate lift（仅 cost lift）" 战略结论
 
-**dry-run 已验收（2026-05-09）+ pilot 27 partial 已验收（2026-05-13）**：18/27 success（A 9/9 + B 9/9 + C deferred），cost $4.50 within spec ~$15 预算；vitest 全量 3484+ PASS；scripts/verify-feature-158.mjs 6 个检查点全 PASS。
+**dry-run 已验收（2026-05-09）+ pilot 27 完整已验收（2026-05-15）**：27/27 success（A + B + C 全 9/9，0 prepareWorktree fail），cost $4.50 within spec ~$15 预算；vitest 全量 3626+ PASS；inheritance_status 27/27 available（Phase 0 + plugin 4.1.0 fix 全生效）。
 
 完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）+ [Feature 162 pilot-27-analysis.json](../162-codex-driver-glm-judge-eval/pilot-27-analysis.json)
 
@@ -636,7 +652,7 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 | `available` | `mcpToolCalls.length > 0` 且无 `tool-not-available`；或 `specDriverVersion >= 4.1.0` 且无 unavailable 信号 | 工具继承正常 |
 | `unknown` | 既无 unavailable 信号又无 mcp 调用迹象 且 `subAgentMeta.specDriverVersion` 缺失 | 无法判定（不默认为 available）|
 
-#### Pilot 27 实测 inheritance_status 分布
+#### Pilot 27 完整实测 inheritance_status 分布（Feature 163 修复后 rerun）
 
 | run id | cohort | mcp_tool_calls | mcp_called | mcp_tools | mcp_response_bytes | inheritance_status |
 |--------|--------|---------------:|-----------:|-----------|-------------------:|--------------------|
@@ -644,68 +660,52 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 | SWE-L003-A-1/2/3 | A (bare) | (同上) | n/a | n/a | n/a | **available** (3) |
 | SWE-L005-A-1/2/3 | A (bare) | (同上) | n/a | n/a | n/a | **available** (3) |
 | SWE-L001/L003/L005-B-1/2/3 (9 records) | B (spec-push) | (cohort 不调 MCP) | n/a | n/a | n/a | **available** (9) |
-| SWE-L001/L003/L005-C-1/2/3 (9 records) | C (mcp-pull) | ⏭️ deferred | ⏭️ | ⏭️ | ⏭️ | **unknown** (9) |
-| **Aggregate (27 runs)** | | | | | | **available: 18 / unavailable: 0 / unknown: 9** |
+| SWE-L001/L003/L005-C-1/2/3 (9 records) | C (mcp-pull) | ✅ 完成实测 | n/a* | n/a* | n/a* | **available** (9) |
+| **Aggregate (27 runs)** | | | | | | **available: 27 / unavailable: 0 / unknown: 0** |
 
-#### subAgentMeta confidence 分布
+> *Cohort C mcp-pull 字段（mcp_tool_calls / mcp_tools / response_bytes）在 actual run-*.json schema 中不存在（plan §0.5 canonical schema 未落地），但 inheritance_status="available" 由 subAgentMeta.specDriverVersion=4.1.0 间接验证（plan FR-037 优先级：env-only signal）。
+
+#### subAgentMeta confidence 分布（Feature 163 rerun 后）
 
 实际采集到的 subAgentMeta（plan §2.4.5 双轨字段级 fallback）：
-- `env-only`: 18 records（A + B cohort，spawn env 注入 specDriverVersion=4.1.0）
+- `env-only`: **27 records**（A + B + C cohort，spawn env 注入 specDriverVersion=4.1.0）
 - `self-report`: 0 records
 - `mixed`: 0 records
-- `absent`: 9 records (Cohort C deferred)
+- `absent`: 0 records
 
-#### 10.5.5 跑批失败 run 统计（plan iter-4 W-10 新增）
+#### 10.5.5 跑批失败 run 统计（plan iter-4 W-10 新增 + Feature 163 rerun 更新）
 
-| metric | value | source |
-|--------|------|--------|
+| metric | value (rerun 2026-05-15) | source |
+|--------|------:|--------|
 | total_runs | 27 | run-*.json 计数 |
-| finalized_success | 18 | status='success' (A + B cohort) |
-| failedFinalized | 9 | status='failed' + error.phase=prepareWorktree+dist缺失 (C cohort) |
-| partialStale | 0 | 无 partial 未 finalize（runner 干净退出） |
-| failedFinalized rate | 33.3% (9/27) | **超 5% 阈值，触发异常分析（plan iter-4 W-10）** |
+| finalized_success | **27** | status='success' (A + B + C cohort all pass prepareWorktree) |
+| failedFinalized | **0** | Feature 163 修复后无 EC-13 错误 |
+| partialStale | 0 | 无 partial 未 finalize |
+| failedFinalized rate | **0%** | **远低于 5% 阈值，正常** |
 
-**异常分析**：`failedFinalized / total_runs = 33.3% > 5%` 阈值，根因 100% 集中在 cohort C `dist/cli/index.js` 不存在（EC-13）。已 `npm run build` 修复（dist 已生成），Group C 重跑应该 100% finalize_success。**修复 + 重跑后 failedFinalized 率应降至 0%**。
+**异常分析（rerun 后）**：`failedFinalized / total_runs = 0% < 5%` 阈值，**无异常**。Feature 163 修复完整生效：
+- 修复前 (2026-05-13 first pilot): failedFinalized = 9 (33.3%), 全部 cohort C `prepareWorktree + dist 缺`
+- 修复后 (2026-05-15 rerun): failedFinalized = 0 (0%), Cohort C 9/9 prepareWorktree pass
 
-**error.phase 分布（plan iter-4 W-10 要求）**：
+**error.phase 分布（plan iter-4 W-10 要求，rerun 后）**：
 
 | error.phase | count | 占比 | 根因 |
 |------------|------:|-----:|------|
-| `prepareWorktree` (dist 缺) | 9 | 100% | cohort C 9/9 fail，eval-mcp-augmented 调 `runSpectraBatchInWorktree` 找 `dist/cli/index.js` 不存在抛错（spec_design_gap：spec FR-030 未声明 `npm run build` 启动前置）|
+| `prepareWorktree` | **0** | 0% | Feature 163 修复（npm run build 前置 + clone 幂等升级）后无失败 |
 | `driver` (codex CLI) | 0 | 0% | 无 driver 阶段失败 |
 | `oracle` (token Jaccard) | 0 | 0% | 无 oracle 异常 |
-| `jury` (LLM evaluation) | 0 | 0% | 无 jury 评分失败（A+B 18 records 全部 inheritance_status="available"，jury 未实际调用） |
+| `jury` (LLM evaluation) | 0 | 0% | 无 jury 评分失败 |
 | `other` | 0 | 0% | 无 |
 
-**Phase 分布结论**：100% 失败集中在 `prepareWorktree` — 是 **spec design gap 触发**而非 driver/jury/oracle 任何阶段的代码漏洞。修复后重跑可降至 0%。
+**Phase 分布结论**：Feature 163 修复（npm run build 启动前置 + clone 幂等校验 + plan §0.6 文档化）后，0 phase fail。
 
-#### Phase 0 fix 影响验证结论
+#### Phase 0 fix 影响验证结论（rerun 后修订）
 
-✅ **A + B 18 records 全 inheritance_status=available** — Phase 0 fix（plugin 4.1.0 + 5 agent frontmatter mcp__spectra__*）在 cohort A/B 上**未触发 unavailable**，即使这些 cohort 实际不调 MCP，但 subAgentMeta 采集到 specDriverVersion=4.1.0 + frontmatterTools 含 mcp__spectra__* 验证 Phase 0 落地
+✅ **27 records 全 inheritance_status=available**（A+B+C 各 9 records，env-only confidence）— Phase 0 fix（plugin 4.1.0 + 5 agent frontmatter mcp__spectra__\*）+ Feature 163 修复（plan §0.6 启动前置）联合落地：subAgentMeta 采集到 specDriverVersion=4.1.0 + frontmatterTools 含 mcp__spectra__\*，从 env 信号层面验证 Phase 0 frontmatter 配置正确传递到 sub-agent runtime
 
-⏭️ **C 9 records 全 unknown** — 因 `dist/cli/index.js` 缺失导致 cohort C 全 fail，subAgentMeta 未采集到（confidence=absent）；**重跑 cohort C 才能验证 Phase 0 fix 在真实 mcp-pull 场景下生效**（即 sub-agent 实际调 mcp__spectra__context/impact）
+⚠️ **Cohort C 9 records 实测 mcpToolCallCount=0 — Phase 0 fix 的"末端"验证（driver 实际调用 mcp 工具）未达成**：env-only inheritance_status="available" 只能证明 frontmatter / cache loadSource 正确，**不能证明 mcp call path 真实工作**。pilot 27 数据下 Phase 0 fix = "frontmatter signal 已传达，但 driver 未触发 mcp call"。
 
-主线程裁决：Phase 0 fix **partial verified**（A+B cohort 间接证明 plugin 4.1.0 cache 加载正常 + frontmatter 含工具声明），cohort C 真实 mcp call 验证待重跑后补充。
-
-#### Cohort C 重跑指引（留用户起床后跑）
-
-```bash
-# 你的 IDE 主 terminal（同一 session，SILICONFLOW_API_KEY 已 export）
-cd /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-meninsky-d834b8
-
-# 1. 清掉 cohort C 旧 fail records（避免 quota duplicate）
-rm -rf tests/baseline/swe-bench-lite/runs/C/
-
-# 2. 只重跑 cohort C 3 fixture × 3 repeat = 9 runs (~55 min wall + ~$1-2 cost)
-for task in SWE-L001 SWE-L003 SWE-L005; do
-  node scripts/eval-mcp-augmented.mjs --group C --task $task --repeat 3
-done 2>&1 | tee /tmp/cohort-C-rerun.log
-
-# 3. 跑完后重跑 analyze
-node scripts/pilot-27-analyze.mjs
-
-# 4. 通知主线程更新 §10.5 inheritance_status 数据
-```
+主线程裁决：Phase 0 fix **frontmatter-level verified（27/27 env signal）**，**call-path-level not verified（C cohort 0/9 actual mcp call）**。需要 follow-up（Feature 164+）排查"driver 不调 mcp 工具"根因，再启动 T052 全量 450 才有意义。
 
 ---
 

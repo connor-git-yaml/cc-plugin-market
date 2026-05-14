@@ -69,8 +69,40 @@ clone_repo() {
   local target_dir="${SPECTRA_BASELINE_HOME}/${name}"
 
   if [ -d "$target_dir" ]; then
-    log_info "$name: 目标目录已存在，跳过 clone（dir=$target_dir）"
-    return 0
+    # 幂等校验：用 git rev-parse 判断 git 完整性（C-1 fix：比检 .git/config 更可靠）
+    if ! git -C "$target_dir" rev-parse --git-dir > /dev/null 2>&1; then
+      # 目录存在但不是合法 git repo（中断残留 / 空目录 / 非 git 目录）
+      # 安全性保护：只有目录非常小（< 10 文件/子目录）才自动清理；否则 hard fail
+      local item_count
+      # 2>/dev/null 防 pipefail 在权限不足时 abort；-maxdepth 1 结果含目录自身（空目录=1，有1个文件=2）
+      item_count=$(find "$target_dir" -maxdepth 1 2>/dev/null | wc -l) || item_count=0
+      if [ "$item_count" -lt 10 ]; then
+        log_warn "$name: 目标目录存在但 git 不完整（items=${item_count}（含目录自身），疑似中断残留），自动 rm -rf 重 clone"
+        rm -rf "$target_dir"
+        # fall through to clone
+      else
+        log_error "$name: 目标目录存在但 git 不完整，且文件数多（items=${item_count}），请手动检查后删除再重跑"
+        return 1
+      fi
+    else
+      # git 完整；校验 origin URL（C-2 fix：区分无 origin 和 URL 不匹配两种情形）
+      local actual_url
+      actual_url=$(git -C "$target_dir" remote get-url origin 2>/dev/null || echo "")
+      if [ -z "$actual_url" ]; then
+        # 无 origin remote：视同中断残留，rm -rf 重 clone
+        log_warn "$name: 目标目录 git 完整但无 origin remote，视为损坏 clone，自动 rm -rf 重 clone"
+        rm -rf "$target_dir"
+        # fall through to clone
+      elif [ "$actual_url" != "$repo_url" ]; then
+        # URL 不匹配：保留用户已有 clone，跳过但报 warning（不视为成功）
+        log_warn "$name: origin URL 不匹配（expected=$repo_url actual=$actual_url），跳过（保留现有 clone）"
+        log_warn "$name: 如需用正确 repo 重 clone，请手动 rm -rf ${target_dir} 后重跑"
+        return 0
+      else
+        log_info "$name: 目标目录已存在且 git 完整，跳过 clone (dir=${target_dir})"
+        return 0
+      fi
+    fi
   fi
 
   mkdir -p "$SPECTRA_BASELINE_HOME"
