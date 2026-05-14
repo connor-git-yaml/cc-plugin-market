@@ -601,11 +601,12 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 | 单 task 信号 | SWE-L003 (pytest refactor): A 100% / B 33.3% | refactor 类任务 driver 不需要额外 grounding 即可解；spec-push 反而打乱方向 |
 | Group C lift？| ⏭️ deferred — Group C 9/9 fail (dist 缺) | 全量前必须 Group C 实测 |
 
-**初步结论（pilot scope，待 C cohort + 全量 450 验证）**：
-1. **spec-push (B) 在 codex:gpt-5.5 driver 上不仅没 lift，反而退化** — 这是个反直觉的负面信号；可能因 spec.md 注入与 SWE-Bench task 上下文不匹配（pytest spec 是设计文档，不是 task-specific patch instruction）
-2. **Group C lift 真伪未验** — 必须 cohort C 实测才能判定 spec FR-022 假设（C > A ≥ B）
-3. **Cost 视角**：A/B cost 相同 ($0.25/run)，jury 主导；driver 走 codex zero-marginal；这意味着 grounding 不增 cost，只看 pass rate
-4. **全量 450 决策**：单 run cost $0.167 × 450 = $75，超 spec ~$15 预算 5 倍；wall clock 45.8h 跨 2-3 calendar day（ChatGPT Pro 配额约束）
+**初步观察（pilot scope，n=18，3 fixture，非显著结论）**：
+1. **pilot 观测 B < A（11.1% vs 33.3%）**，但 n=18 + 仅 3 fixture，**不构成统计显著**；Beta(α, β) 后验近似下两 cohort 95% CI 重叠概率高。结论必须全量 450 后修订；当前仅作 "spec-push 在 SWE-L003 (pytest refactor) 上观测到 1/3 vs A 3/3 退化" 的局部信号记录，不外推到 grounding 普遍失效
+2. **可能解释假设（待全量验证）**：spec.md 注入与 SWE-Bench task 上下文不匹配（pytest spec 是设计文档而非 task-specific patch instruction）
+3. **Group C lift 真伪未验** — 必须 cohort C 实测才能判定 spec FR-022 假设（C > A ≥ B）；当前样本不足以做 pass rate 比较
+4. **Cost 视角**（pilot 18 records 实测）：A/B cost 相同 ($0.25/run)，jury cost 主导；driver 走 codex zero-marginal；grounding context 注入对 cost 几乎无影响
+5. **全量 450 决策**：单 run cost $0.167 × 450 = $75，超 spec ~$15 预算 5 倍；wall clock 45.8h 跨 2-3 calendar day（ChatGPT Pro 配额约束）**— 需用户明确授权才推进 T052**
 
 **Feature 162 Phase C 启动前置（pilot 后发现的 spec gap）**：
 
@@ -665,6 +666,18 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 | failedFinalized rate | 33.3% (9/27) | **超 5% 阈值，触发异常分析（plan iter-4 W-10）** |
 
 **异常分析**：`failedFinalized / total_runs = 33.3% > 5%` 阈值，根因 100% 集中在 cohort C `dist/cli/index.js` 不存在（EC-13）。已 `npm run build` 修复（dist 已生成），Group C 重跑应该 100% finalize_success。**修复 + 重跑后 failedFinalized 率应降至 0%**。
+
+**error.phase 分布（plan iter-4 W-10 要求）**：
+
+| error.phase | count | 占比 | 根因 |
+|------------|------:|-----:|------|
+| `prepareWorktree` (dist 缺) | 9 | 100% | cohort C 9/9 fail，eval-mcp-augmented 调 `runSpectraBatchInWorktree` 找 `dist/cli/index.js` 不存在抛错（spec_design_gap：spec FR-030 未声明 `npm run build` 启动前置）|
+| `driver` (codex CLI) | 0 | 0% | 无 driver 阶段失败 |
+| `oracle` (token Jaccard) | 0 | 0% | 无 oracle 异常 |
+| `jury` (LLM evaluation) | 0 | 0% | 无 jury 评分失败（A+B 18 records 全部 inheritance_status="available"，jury 未实际调用） |
+| `other` | 0 | 0% | 无 |
+
+**Phase 分布结论**：100% 失败集中在 `prepareWorktree` — 是 **spec design gap 触发**而非 driver/jury/oracle 任何阶段的代码漏洞。修复后重跑可降至 0%。
 
 #### Phase 0 fix 影响验证结论
 

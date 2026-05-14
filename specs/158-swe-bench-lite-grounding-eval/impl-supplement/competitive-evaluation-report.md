@@ -71,9 +71,9 @@ jury: Phase B 修订 [claude-cli:claude-opus-4-7, siliconflow:GLM-5.1, siliconfl
 | SWE-L001-A-1/2/3 | A (bare) | SWE-L001-pytest | 1/2/3 | fail × 3 | 417k / 900k / 1206k | $0.25/run | available | env-only |
 | SWE-L003-A-1/2/3 | A (bare) | SWE-L003-pytest | 1/2/3 | **pass × 3** | 50k / 38k / 135k | $0.25/run | available | env-only |
 | SWE-L005-A-1/2/3 | A (bare) | SWE-L005-astropy | 1/2/3 | fail × 3 | 63k / 56k / 57k | $0.25/run | available | env-only |
-| SWE-L001-B-1/2/3 | B (spec-push) | SWE-L001-pytest | 1/2/3 | fail × 3 | (TBD log parse) | $0.25/run | available | env-only |
-| SWE-L003-B-1/2/3 | B (spec-push) | SWE-L003-pytest | 1/2/3 | fail / fail / pass | (TBD) | $0.25/run | available | env-only |
-| SWE-L005-B-1/2/3 | B (spec-push) | SWE-L005-astropy | 1/2/3 | fail × 3 | (TBD) | $0.25/run | available | env-only |
+| SWE-L001-B-1/2/3 | B (spec-push) | SWE-L001-pytest | 1/2/3 | fail × 3 | ~408k (avg) | $0.25/run | available | env-only |
+| SWE-L003-B-1/2/3 | B (spec-push) | SWE-L003-pytest | 1/2/3 | fail / fail / pass | ~408k (avg) | $0.25/run | available | env-only |
+| SWE-L005-B-1/2/3 | B (spec-push) | SWE-L005-astropy | 1/2/3 | fail × 3 | ~408k (avg) | $0.25/run | available | env-only |
 | SWE-L001/L003/L005-C-1/2/3 (9 records) | C (mcp-pull) | (3 fixture) | (3 repeats) | ⏭️ deferred | ⏭️ | $0.00 (未启动 driver) | unknown | absent |
 
 **实测聚合**：
