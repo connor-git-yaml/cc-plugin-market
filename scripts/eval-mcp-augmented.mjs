@@ -421,7 +421,7 @@ function buildMcpConfigFile({ runId, wtDir }) {
   return { cfgPath, telemetryPath };
 }
 
-function parseTelemetryJsonl(telemetryPath) {
+export function parseTelemetryJsonl(telemetryPath) {
   // Feature 162 plan §2.4.4：返回 canonical schema { mcpToolCalls: Array<{tool, success, error, responseBytes, timestamp}> }
   // legacy 派生字段（mcpToolCallCount / mcpResponseBytes）由调用方计算
   const mcpToolCalls = [];
@@ -437,10 +437,13 @@ function parseTelemetryJsonl(telemetryPath) {
     try {
       const j = JSON.parse(line);
       // canonical entry：{ tool, success, error, responseBytes, timestamp }
+      // W-3 修复（Feature 164）：writeTelemetry 写入 errorCode 而非 error；
+      // 需同时读取 errorCode 判断 success（j.error 在 TelemetryEntry 中不存在）
+      const errorVal = j.error ?? j.errorCode ?? null;
       mcpToolCalls.push({
         tool: typeof j.toolName === 'string' ? `mcp__spectra__${j.toolName}` : (j.tool ?? null),
-        success: typeof j.success === 'boolean' ? j.success : (j.error == null),
-        error: j.error ?? null,
+        success: typeof j.success === 'boolean' ? j.success : (errorVal == null),
+        error: errorVal,
         responseBytes: typeof j.responseSize === 'number' ? j.responseSize : 0,
         timestamp: j.timestamp ?? j.ts ?? null,
       });
@@ -530,16 +533,35 @@ function buildGroupBPrompt({ taskFixture, spectraContext }) {
   ].join('\n');
 }
 
-function buildGroupCPrompt(taskFixture) {
-  // FR-C-003 — mandatory tool use instruction
+export function buildGroupCPrompt(taskFixture) {
+  // FR-C-003 v2 — 修复 Feature 164：原 prompt 以 mcp__spectra__context 为首个强制调用，
+  // 但 context 需要 symbolId 参数；prompt 未提供 symbolId 推断指导，导致 Claude 跳过工具。
+  // 修复：改用 mcp__spectra__detect_changes（只需 baseRef，无需 symbolId）作为首个必须调用；
+  // 明确处理 graph-not-built 预期错误，告知 Claude 记录错误后继续。
   return [
-    '你有以下 MCP tools 可用：',
-    '- mcp__spectra__impact: 分析修改一个 symbol 的 blast radius',
-    '- mcp__spectra__context: 获取 symbol 的 360° 定义 / callers / callees',
-    '- mcp__spectra__detect_changes: 分析 diff 影响哪些 symbols',
+    '【MCP grounding 集成验证实验】',
     '',
-    '在开始修复前，**必须**先调用 mcp__spectra__context 确认要修改的 symbol 定义，',
-    '再调 mcp__spectra__impact 评估影响范围，最后再写代码修复并验证。',
+    '你有以下 spectra MCP tools 可调用（已通过 --mcp-config 挂载）：',
+    '- mcp__spectra__detect_changes：分析 git diff 影响哪些 symbols（参数：baseRef 或 diff 字符串）',
+    '- mcp__spectra__context：获取 symbol 360° 上下文（参数：symbolId, projectRoot）',
+    '- mcp__spectra__impact：分析 symbol 改动的 blast radius（参数：target, projectRoot）',
+    '',
+    '**【必须执行的前置步骤，不可跳过，即使工具返回错误也要完成调用】**',
+    '',
+    '步骤 1：调用 mcp__spectra__detect_changes，参数为 {"baseRef": "HEAD~1"}',
+    '  - 如果工具返回 "graph-not-built" 错误：记录错误信息后直接执行步骤 3',
+    '  - 如果工具成功但 changedSymbols 为空数组：直接执行步骤 3',
+    '  - 如果工具成功且 changedSymbols 非空：记录结果并执行步骤 2',
+    '',
+    '步骤 2（仅当步骤 1 成功且 changedSymbols 非空时）：',
+    '  对步骤 1 返回的第一个 changedSymbol 调用 mcp__spectra__context',
+    '  参数：{"symbolId": "<changedSymbols[0].symbols[0]，即第一个文件变更的第一个 symbol ID 字符串>"}',
+    '  即使返回错误，记录后继续步骤 3',
+    '',
+    '步骤 3：根据步骤 1/2 的信息（含错误信息）完成 Task 要求的代码修复',
+    '',
+    '**注意**：spectra 工具可能因目标仓库缺少预生成 graph 而返回 "graph-not-built"，',
+    '这是预期行为。**无论步骤 1 是否报错，都必须先执行调用再继续。**',
     '',
     '---',
     '',
