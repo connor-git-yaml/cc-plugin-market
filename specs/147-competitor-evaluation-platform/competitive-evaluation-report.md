@@ -519,7 +519,7 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ## 10. SWE-Bench Grounding Lift 实验（Feature 158 + Feature 162 Phase C）
 
-> **本章节状态（2026-05-15）**：Feature 158 dry-run 阶段完成 + Feature 162 Phase C **pilot 27 runs 完整实测落地**：**27/27 success**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail，Feature 163 修复 dist build / clone 幂等 / plan §0.6 启动前置 spec gap 后 rerun）。Feature 162 同时 swap：driver = codex:gpt-5.5 (medium reasoning, ChatGPT Pro 零边际)；jury = Phase B 修订后 [Opus + GLM-5.1 + Kimi-K2.6] (规避 self-judge 禁忌，spec FR-020/021/027)。完整 §10.5 sub-agent MCP 工具继承 fix 影响验证 = Phase 0 (5 plugin agent frontmatter + plugin 4.0→4.1.0) 落地 — **27/27 inheritance_status=available**（Feature 163 修复后全部 cohort 工具继承生效）。
+> **本章节状态（2026-05-15，Feature 163 + Feature 164 双修复后）**：Feature 158 dry-run 阶段完成 + Feature 162 Phase C **pilot 27 runs 完整实测落地**：**27/27 success**（A 9/9 + B 9/9 + C 9/9 rerun，0 prepareWorktree fail）。**Feature 163 修复 dist build / clone 幂等 / plan §0.6 启动前置 spec gap → Feature 164 修复 `buildGroupCPrompt`（detect_changes 作首个强制 tool）→ C cohort rerun 9/9 全 mcpToolCallCount > 0（100% MCP 调用路径触发率）**。Feature 162 同时 swap：driver = codex:gpt-5.5 (medium reasoning, ChatGPT Pro 零边际)；jury = Phase B 修订后 [Opus + GLM-5.1 + Kimi-K2.6] (规避 self-judge 禁忌，spec FR-020/021/027)。完整 §10.5 sub-agent MCP 工具继承 fix 影响验证 = Phase 0 (5 plugin agent frontmatter + plugin 4.0→4.1.0) 落地 — **27/27 inheritance_status=available**（Feature 163 + Feature 164 修复后全部 cohort 工具继承 + 实际 MCP call 路径生效）。
 
 ### 10.1 实验设计
 
@@ -528,7 +528,7 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 **对照组（3 组）**：
 - **Group A（baseline / bare）**：裸 claude，仅 fixture `prompt`（即 SWE-Bench `problem_statement`）；不附加任何 grounding context；不启用 MCP server
 - **Group B（spec.md push）**：在 system prompt 前注入 Spectra spec.md 内容（来自 `~/.spectra-baselines/<repo>-output/spectra-full/modules/`）；不启用 MCP；如目标仓库无 baseline，标 `specPushDegraded: true` 退化为 Group A 行为
-- **Group C（mcp pull）**：通过 `--mcp-config` 注册本地 Spectra MCP server；system prompt 含 mandatory tool use instruction 引导 agent 在修复前调 `mcp__spectra__context` / `mcp__spectra__impact`；用 server 侧 telemetry 记录每次 tool call 的 response payload bytes（Feature 158 FR-G）
+- **Group C（mcp pull）**：通过 `--mcp-config` 注册本地 Spectra MCP server；system prompt 含 mandatory tool use instruction 引导 agent 在修复前调 `mcp__spectra__detect_changes`（Feature 164 修复：原 prompt 引导 context/impact 但需 symbolId，未提供导致 driver 跳过；改为 detect_changes 只需 baseRef 后 mcpCalls 9/9 触发）；若 graph 已预生成且 detect_changes 返回 changedSymbols 非空，进一步调用 `mcp__spectra__context`；用 server 侧 telemetry 记录每次 tool call 的 response payload bytes（Feature 158 FR-G）
 
 **数据集**：SWE-Bench Lite Python 子集 10 个 fixture（`tests/baseline/swe-bench-lite/fixtures/SWE-L001~L010`），来自 `princeton-nlp/SWE-bench_Lite` HuggingFace 数据集，覆盖 sympy / astropy / pytest 三个仓库。**已知降级**：因数据集本身的 `created_at` 上限不超过 2023-06-29，本实验未能选到 ≥ 2024-01-01 的 instance，最终采用最新 10 个（最旧 2022-09-16）。**训练集泄漏风险**：Group A pass rate 可能因 Claude 训练集已包含相关 patch 而虚高，详见 `tests/baseline/swe-bench-lite/fixtures/_DEGRADATION_NOTE.md`。
 
@@ -545,7 +545,7 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 **Oracle**：默认 `kind: ast-diff`（用 `scripts/eval-diff-fuzzy-match.mjs` 多集 token Jaccard，初始阈值 60%）
 
-**验收声明**：本评测为**小样本探索性 pilot**（N=10 task，目标 8 个，验收下限 5 个），**不构成统计显著性声明**。Feature 162 Phase C pilot 27 实测 partial（A+B 18/18 success / C 9/9 deferred）已足够投影全量 450 成本：~$75 + 45.8h wall clock，超 spec ~$15 预算 5 倍。
+**验收声明**：本评测为**小样本探索性 pilot**（N=10 task，目标 8 个，验收下限 5 个），**不构成统计显著性声明**。Feature 162 Phase C pilot 27 实测完整（A 9/9 + B 9/9 + C 9/9，Feature 164 修复后 C cohort rerun 全 mcpToolCallCount > 0）已足够投影全量 450 成本：~$75 + 45.8h wall clock，超 spec ~$15 预算 5 倍。
 
 ### 10.2 Pass Rate 矩阵
 
@@ -555,28 +555,29 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 |------|---------------|--------------------|--------------------|
 | SWE-L001-pytest-module-imported-twice-under | **0/3 (0%)** | **0/3 (0%)** | **0/3 (0%)** |
 | SWE-L002-astropy-in-v5-nddataref-mask | ⏭️ pending 全量 450 | ⏭️ | ⏭️ |
-| SWE-L003-pytest-rewrite-fails-when-first | **2/3 (66.7%)** | **1/3 (33.3%)** | **0/3 (0%)** |
+| SWE-L003-pytest-rewrite-fails-when-first | **2/3 (66.7%)** | **1/3 (33.3%)** | **3/3 (100%)** |
 | SWE-L004-sympy-bug-with-milli-prefix | ⏭️ pending | ⏭️ | ⏭️ |
-| SWE-L005-astropy-ascii-qdp-table-format | **3/3 (100%)** | **1/3 (33.3%)** | **2/3 (66.7%)** |
+| SWE-L005-astropy-ascii-qdp-table-format | **3/3 (100%)** | **1/3 (33.3%)** | **1/3 (33.3%)** |
 | SWE-L006-astropy-please-support-header-rows | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L007-sympy-collect-factor-and-dimension | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L008-sympy-bug-in-expand-of | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L009-sympy-cannot-parse-greek-characters | ⏭️ pending | ⏭️ | ⏭️ |
 | SWE-L010-sympy-si-collect-factor-and | ⏭️ pending | ⏭️ | ⏭️ |
-| **Pilot aggregate (3 fixture, n=3)** | **5/9 (55.6%)** | **2/9 (22.2%)** | **2/9 (22.2%)** |
+| **Pilot aggregate (3 fixture, n=3)** | **5/9 (55.6%)** | **2/9 (22.2%)** | **4/9 (44.4%)** |
 | Full aggregate (10 fixture, n=15) | ⏭️ 全量 450 runs deferred (~$75 + 38h) | ⏭️ | ⏭️ |
 
-**Pilot 27 完整实测关键信号**（n=27 valid runs，3 fixture × 3 cohort × 3 repeat，统计上不显著但方向指示明确）：
+**Pilot 27 完整实测关键信号**（n=27 valid runs，A/B 9 + Feature 164 fix C cohort rerun 9 = 27，3 fixture × 3 cohort × 3 repeat，统计上不显著但方向指示明确）：
 
-- **关键数据**：A 5/9 (55.6%) | B 2/9 (22.2%) | C 2/9 (22.2%) — 看似 B ≈ C < A
-- **⚠️ 重要 caveat（Cohort C 实测 mcpToolCallCount=0）**：Cohort C 虽完成 9/9 runs（prepareWorktree pass），但 **mcpToolCallCount 全为 0（9/9 runs）** — driver 在 worktree 内**未实际调用任何 mcp__spectra__\* 工具**。这意味着 C 22.2% pass rate **不能视为 "MCP pull grounding 的效果"**，C cohort 在 driver 视角下等同于 A bare 模式跑（差异仅在 env setup）
-- **SWE-L001 (pytest bug-fix)** 全难：A + B + C 都 0/3（cohort 间持平）
-- **SWE-L003 (pytest refactor)**：A 2/3，B 1/3，C 0/3（A 最高，但 n=3 单 task 无法判断）
-- **SWE-L005 (astropy feature-add)**：A 3/3，B 1/3，C 2/3（A 最高，B 退化但 C 居中）
-- **平均 wall clock**：A 5.8 min/run，B 4.2 min/run，C 5.1 min/run
+- **关键数据**：A 5/9 (55.6%) | B 2/9 (22.2%) | C 4/9 (44.4%) — A > C > B
+- **✅ Cohort C 实测 mcpToolCallCount > 0（9/9 runs，Feature 164 修复后）**：driver 在 C cohort 全部 9 runs 中调用了 `mcp__spectra__detect_changes`（响应均为预期的 `graph-not-built` 错误，因目标 SWE-Bench-Lite 仓库未预生成 graph）— **MCP pull 调用路径已实际触发**，C cohort 不再等同于 "bare 重跑"
+- **⚠️ 后续 caveat（grounding 真实效果未验证）**：虽然 driver 实际调用了 MCP tool，但工具返回 `graph-not-built` → driver 未真实获得 grounding 信息；要验证 pull grounding 的真实 pass rate lift，需要先 pre-build spectra graph for SWE-Bench-Lite 三个仓库（T053 范围：pytest ~5min + astropy ~30min + sympy ~30min build wall，共 ~65min 一次性）
+- **SWE-L001 (pytest bug-fix)** 全难：A + B + C 都 0/3（cohort 间持平，任务本身困难）
+- **SWE-L003 (pytest refactor)**：A 2/3，B 1/3，C **3/3 (rerun 全 pass)** — C 在 rerun 中 SWE-L003 全 pass（n=3 不显著但方向相反）
+- **SWE-L005 (astropy feature-add)**：A 3/3，B 1/3，C 1/3 — C rerun 比之前低（2/3 → 1/3），方差大
+- **平均 wall clock**：A 5.8 min/run，B 4.2 min/run，C **5.1 min/run**（rerun 中 wall 跨任务方差大：SWE-L001 7.1min，SWE-L003 0.9min，SWE-L005 6.4min）
 - **prepareWorktree 成功率**：A/B/C 三 cohort 均 100%（Feature 163 修复后 EC-13 错误消除）
 
-> 数据由 `bash scripts/pilot-27-batch.sh` 实跑（Feature 163 rerun 2026-05-15 共 137 min wall），`scripts/pilot-27-analyze.mjs` 自动聚合到 `specs/162-codex-driver-glm-judge-eval/pilot-27-analysis.json`。**本评测为小样本探索性 pilot（pilot 3 fixture，目标 10 全量待 T052），不构成统计显著性声明。**
+> 数据由 `bash scripts/pilot-27-batch.sh` 实跑（A/B：Feature 163 rerun 2026-05-15 共 137 min wall）+ Feature 164 修复 `buildGroupCPrompt` 后 C cohort 9 runs rerun（2026-05-15 18:47-19:33 共 46 min wall），`scripts/pilot-27-analyze.mjs` 自动聚合到 `specs/162-codex-driver-glm-judge-eval/pilot-27-analysis.json`。**本评测为小样本探索性 pilot（pilot 3 fixture，目标 10 全量待 T052），不构成统计显著性声明。**
 
 ### 10.3 Token Cost 静态对比 + Pilot 27 完整实测 cost
 
@@ -597,32 +598,40 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 - Group C cost $0 = mcp-pull cohort 走 codex driver 订阅 + 不触发付费 jury（A/B 也 driver = codex zero-marginal，但 jury 入账 $0.25）
 - pilot 27 cost 与 dry-run 估算（~$3-5）和 plan §0.4 投影（~$1-2/cohort）一致
 
-### 10.4 战略结论（Feature 162 Pilot 27 完整实测）
+### 10.4 战略结论（Feature 162 Pilot 27 完整实测 + Feature 164 fix）
 
-> **本节状态（2026-05-15，Feature 163 修复后 rerun）**：Feature 162 Pilot 27 **完整 27 runs 跑批完成**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail），但 **Cohort C 实测 mcpToolCallCount=0（9/9 runs，无实际 MCP 工具调用）— pull grounding 真实效果未被验证**。全量 450 (T052) DEFERRED 等用户授权。
+> **本节状态（2026-05-15，Feature 164 修复 + C cohort rerun 后）**：Feature 162 Pilot 27 **完整 27 runs 跑批完成**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail），**Feature 164 修复 `buildGroupCPrompt` 后 C cohort rerun 9/9 全 mcpToolCallCount > 0（100% MCP 调用触发率）**。pull grounding 调用路径已验证；真实 grounding lift（pre-built graph 下）属 T053 范围。全量 450 (T052) DEFERRED 等用户授权。
 
-**Pilot 27 完整实测信号（n=27，3 cohort 各 9 runs）**：
+**Pilot 27 + Feature 164 rerun 完整实测信号（n=27）**：
 
 | 论证维度 | 实测 | 决策 |
 |---------|------|------|
 | Group B (spec-push) > Group A? | ❌ **B 22.2% < A 55.6%**（-60% relative，小样本） | spec-push grounding 在 codex driver 上 pilot 数据**未观测 lift**；可能引入 noise 或过度约束 driver 思路 |
-| Group C (mcp-pull) > Group A? | ⚠️ **C 22.2% 但 mcpToolCallCount=0** | **C cohort 9/9 runs driver 未实际调用任何 mcp__spectra__\* 工具，pull grounding 路径未被触发**；C 22.2% pass rate **不能解读为 "MCP pull 无 lift"** — 等同于 A bare 重跑（差异仅 env setup） |
-| Group C lift > Group B? | ⚠️ **C ≈ B 但二者不是同一种模式** | B 是真实 spec.md 注入（额外 token 消耗），C 是 "声称 mcp-pull 但实际未 pull"；无法比较 |
+| Group C (mcp-pull) > Group A? | ❌ **C 44.4% vs A 55.6%（-11.1pp，n=9 不显著）** | C rerun 后 pass rate 仍低于 A（注：C 相对前次 broken pilot 2/9 的 +22.2pp 不是 vs A，是 vs C 自己旧数据）；driver 触发 `detect_changes` 但 graph 未预生成 → 返回 `graph-not-built`，**真实 grounding 信息未注入**，C 接近"加了无效 tool call 的 bare 模式" |
+| Group C lift > Group B? | ⚠️ **C 44.4% > B 22.2%（+22.2pp，n=9 不显著）** | C 在 rerun 后超过 B，但 n=9 不能下结论；可能信号是 "spec-push 的 noise penalty > 无效 mcp-pull 的 overhead"，但同样可能是 LLM 随机性 |
+| mcpToolCallCount > 0 | ✅ **9/9 (100%)**，rerun 全部触发 mcp__spectra__detect_changes | Feature 164 修复 `buildGroupCPrompt`（detect_changes as first mandatory tool）成功；driver 不再跳过 MCP dispatch；W-3 telemetry errorCode parser 修复正确。**注**：所有 9 runs tool 返回 `graph-not-built` 错误，仅验证 MCP dispatch + error telemetry path，**不验证 semantic grounding 注入**（grounding 验证需 T053 pre-build graph） |
 | Group A 是否异常高？ | A 55.6%（target ~30-50% 合理上限） | 偏高但未异常；可能含 LLM 训练集泄漏（pytest commits ≤ 2023）|
-| inheritance_status | 27/27 available (env-only confidence) | Phase 0 frontmatter fix + plugin 4.1.0 cache 生效（env 信号），但**未由实际 MCP call 验证**（C cohort 工具调用 0/9）|
+| inheritance_status | 27/27 available (env-only confidence) | Phase 0 frontmatter fix + plugin 4.1.0 cache 生效（env 信号）；C cohort rerun 后 mcp call 触发但 graph 缺失，confidence 仍 "env-only"（self-report 需工具成功返回） |
 
-**关键发现（pilot scope，n=27，3 fixture，非显著结论）**：
+**关键发现（pilot scope + Feature 164 fix，n=27，3 fixture，非显著结论）**：
 
-1. **🚨 C cohort 实测 mcpToolCallCount=0（9/9 runs）— Pilot 27 完成跑批但 MCP pull 路径未被实际触发**：driver 在 C cohort 的所有 runs 中**没有调用任何 mcp__spectra__\* 工具**，subAgentMeta.confidence 全 "env-only" 而非 "self-report"（spec FR-037 优先级）。这意味着：
-   - C 22.2% pass rate **不构成 "MCP pull 无 lift" 的证据**
-   - C cohort 等同于 A bare 模式 + 不同 env setup
-   - 必须先排查 **driver 不调 mcp 工具** 的根因（candidates: codex CLI MCP server 未启动 / driver prompt 未引导 / sub-agent frontmatter 未生效 / mcp registration 未传递到 driver）才能开始 grounding lift 真实比较
+1. **✅ Feature 164 修复成功：C cohort mcpToolCallCount 9/9 (100%)** — Pilot 27 + Feature 164 rerun 实测 driver 在所有 C runs 中实际调用了 `mcp__spectra__detect_changes`。修复重点：
+   - `buildGroupCPrompt` 改为以 `detect_changes`（只需 baseRef，无需 symbolId）为首个强制调用，明确步骤序列 + `graph-not-built` 错误处理
+   - `parseTelemetryJsonl` W-3 fix：TelemetryEntry 写 `errorCode` 不写 `error`，原代码读 `j.error` 永远 null，修复后正确归一化
+   - W1/W4 fix：补充空 changedSymbols 分支处理 + 修正 symbolId 引用路径
 
-2. **spec-push (B) vs bare (A) 在 pilot 上 B < A**，但 n=27 + 3 fixture **不构成统计显著**（Beta 后验下两 cohort 95% CI 重叠）；当前作 "spec-push 在 pilot 3 fixture 上未观测 lift" 的局部信号记录，不外推到 grounding 普遍失效
+2. **C cohort pass rate 翻倍但仍未超 A**（22.2% → 44.4% vs A 55.6%）：rerun 后 C 在 SWE-L003 全 pass（3/3），SWE-L005 1/3，SWE-L001 0/3（与 A/B 持平）。**但此 lift 不能归因于 grounding 注入**，因 detect_changes 全部返回 `graph-not-built`（目标仓库未预生成 graph），driver 实际未获得 symbol 上下文。可能原因：
+   - 强制 tool call 步骤改变了 driver 的 reasoning 路径（结构化 prompt 效应）
+   - LLM 随机性（n=3 同 task 方差大，e.g. SWE-L005 旧 2/3 vs 新 1/3）
 
-3. **Cost 视角**（pilot 27 完整实测）：pilot 27 总 cost $4.50；A/B 各 $0.25/run（jury 主导），C $0/run；C 的 cost 优势真实（driver 走 codex zero-marginal + jury 未触发），即使 pass rate 数据不构成 grounding 结论
+3. **spec-push (B) vs bare (A) 在 pilot 上 B < A**：B 22.2% vs A 55.6%（-60% rel），但 n=27 + 3 fixture 不构成统计显著（95% CI 重叠）；信号方向："spec-push 在 codex driver 上未观测 lift"
 
-4. **全量 450 决策（重新审视）**：在 C cohort 实际不调 MCP 的情况下推 T052 全量 450 runs **没有意义** — 应该先 fix "driver 不调 mcp" 根因后再启动；预算 $75 + wall 38h **不应在 mcp 实际未启用前提下消耗**
+4. **Cost 视角**（pilot 27 + rerun 完整实测）：A/B 各 $0.25/run（jury 主导），C $0/run（zero-marginal codex driver + 无 jury 触发）；C 的 cost 优势真实
+
+5. **全量 450 决策**：C cohort 已确认 MCP 调用路径工作（9/9 mcpCalls > 0），但 grounding 真实 lift 需先 pre-build spectra graph（T053）。**T052 全量 450 仍 DEFERRED**：
+   - **若优先 T053**（pre-build graph for SWE-Bench-Lite 三个 Python repos）：pytest ~5min + astropy ~30min + sympy ~30min build wall（共 ~65min 一次性），再 rerun C 9 runs 看真实 grounding payload 是否注入（~$5）
+   - **若直接 T052**：在 graph 缺失情况下跑 450 runs，结果仍是"加无效 tool call 的 bare 模式"，$75 + 38h 投入产出比低
+   - **推荐路径**：T053 作为 "grounding payload 真实注入" 的 smoke test（验证 driver 收到 symbol 信息后行为变化），而非定量 lift gate（因 n=9 下 ±11pp 都算正常 LLM 方差）；T053 通过后再讨论 T052
 
 **Feature 162 Phase C 启动前置（pilot 后发现的 spec gap，Feature 163 已修复落地）**：
 
@@ -630,13 +639,14 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 1. `bash scripts/baselines/clone-swe-bench-upstream.sh`（pytest 51M + astropy 235M + sympy 242M，共 528MB；Feature 163 升级幂等校验 — git rev-parse + URL match）
 2. `npm run build`（生成 dist/cli/index.js for cohort C MCP server）
 3. `claude plugin update spec-driver` + 重启 IDE（让 user-level marketplace cache 同步 4.1.0 plugin，Phase 0 frontmatter fix 生效）
+4. **Feature 164 修复**：`scripts/eval-mcp-augmented.mjs` `buildGroupCPrompt` 必须以 `detect_changes` 为首个强制调用（不能用 context，因需 symbolId）+ 明确处理 `graph-not-built` 预期错误（详见 `specs/164-fix-mcp-pull-mcptoolcallcount-zero/`）
 
 **Stage 7b 完整 acceptance（Feature 162 T052 全量 450 待用户授权）**：
-- 用户授权全量 450 runs → ~$75 + 38h wall (1-2 calendar week)
+- **推荐路径**：先 T053 pre-build graph for SWE-Bench-Lite 三个 Python repos（pytest + astropy + sympy）→ C cohort 9 runs 重测看真实 grounding payload 是否注入（smoke test，非定量 gate）→ 通过后再讨论 T052
+- **直接路径**：用户授权全量 450 runs → ~$75 + 38h wall (1-2 calendar week)，但当前 graph 未预生成下 C cohort 结果仍受限
 - 完成后填 §10.2 矩阵 + §10.3 实测 + §10.4 战略结论 final
-- 替代选项：用户看 pilot 完整数据若判定"C ≈ B 信号已够明确"，可跳过 450 写 "MCP pull 在 SWE-Bench-Lite 无显著 pass-rate lift（仅 cost lift）" 战略结论
 
-**dry-run 已验收（2026-05-09）+ pilot 27 完整已验收（2026-05-15）**：27/27 success（A + B + C 全 9/9，0 prepareWorktree fail），cost $4.50 within spec ~$15 预算；vitest 全量 3626+ PASS；inheritance_status 27/27 available（Phase 0 + plugin 4.1.0 fix 全生效）。
+**dry-run 已验收（2026-05-09）+ pilot 27 完整已验收（2026-05-15）+ Feature 164 C cohort rerun 已验收（2026-05-15 19:33）**：27/27 success（A + B + C 全 9/9，0 prepareWorktree fail），cost $4.50 + C rerun $0.00 = $4.50 within spec ~$15 预算；C cohort **mcpToolCallCount 9/9 (100%)** ✅；vitest 全量 3635 PASS；inheritance_status 27/27 available（Phase 0 + plugin 4.1.0 + Feature 164 prompt fix 全生效）。
 
 完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）+ [Feature 162 pilot-27-analysis.json](../162-codex-driver-glm-judge-eval/pilot-27-analysis.json)
 
@@ -703,9 +713,9 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 ✅ **27 records 全 inheritance_status=available**（A+B+C 各 9 records，env-only confidence）— Phase 0 fix（plugin 4.1.0 + 5 agent frontmatter mcp__spectra__\*）+ Feature 163 修复（plan §0.6 启动前置）联合落地：subAgentMeta 采集到 specDriverVersion=4.1.0 + frontmatterTools 含 mcp__spectra__\*，从 env 信号层面验证 Phase 0 frontmatter 配置正确传递到 sub-agent runtime
 
-⚠️ **Cohort C 9 records 实测 mcpToolCallCount=0 — Phase 0 fix 的"末端"验证（driver 实际调用 mcp 工具）未达成**：env-only inheritance_status="available" 只能证明 frontmatter / cache loadSource 正确，**不能证明 mcp call path 真实工作**。pilot 27 数据下 Phase 0 fix = "frontmatter signal 已传达，但 driver 未触发 mcp call"。
+✅ **Cohort C 9 records 实测 mcpToolCallCount=9/9（Feature 164 修复后）— MCP dispatch + error telemetry path 已验证**：Feature 164 修复 `buildGroupCPrompt`（改 detect_changes 为首个强制 tool）后，C cohort rerun 9 runs 全部触发 `mcp__spectra__detect_changes` 调用。工具返回 `graph-not-built`（因目标仓库未预生成 graph），telemetry 写入成功（errorCode 字段 + W-3 parser 修复）— **仅验证 MCP dispatch + error telemetry path，不验证 semantic grounding payload 注入**（后者需 T053 pre-build graph 后实测）。
 
-主线程裁决：Phase 0 fix **frontmatter-level verified（27/27 env signal）**，**call-path-level not verified（C cohort 0/9 actual mcp call）**。需要 follow-up（Feature 164+）排查"driver 不调 mcp 工具"根因，再启动 T052 全量 450 才有意义。
+主线程裁决：Phase 0 fix **frontmatter-level verified（27/27 env signal）+ MCP dispatch-level verified（C cohort 9/9 actual mcp call after Feature 164 fix）**，**semantic grounding-level not yet verified**（all 9 returned graph-not-built）。剩余 follow-up：T053 pre-build spectra graph for pytest/astropy/sympy Python repos → 验证真实 grounding payload lift（带 symbol 信息回传）；只有 T053 完成后 T052 全量 450 的 grounding lift 数据才有完整解读基础。
 
 ---
 

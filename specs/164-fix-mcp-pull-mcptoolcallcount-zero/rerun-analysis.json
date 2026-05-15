@@ -1,0 +1,168 @@
+{
+  "feature": "164",
+  "description": "C cohort 9-run rerun after Feature 164 buildGroupCPrompt fix",
+  "runAt": "2026-05-15T11:33:26+08:00",
+  "rerunContext": "A/B cohort data from Feature 162 pilot 27 (commit c742f44); C cohort reran from this worktree after Feature 164 fix",
+  "acceptanceCriterion": "mcpToolCallCount > 0 >= 5/9 runs",
+  "result": {
+    "mcpCallCount_gt0": "9/9 (100%)",
+    "oraclePass": "4/9 (44.4%)",
+    "previousPilotOraclePass": "2/9 (22.2%)",
+    "verdict": "PASS \u2014 far exceeds 5/9 threshold"
+  },
+  "runs": [
+    {
+      "run_id": "SWE-L001-C-1",
+      "status": "success",
+      "oracleResult": "fail",
+      "wallMs": 641256,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 222,
+          "timestamp": "2026-05-15T10:47:40.165Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L001-C-2",
+      "status": "success",
+      "oracleResult": "fail",
+      "wallMs": 217796,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 222,
+          "timestamp": "2026-05-15T10:58:23.910Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L001-C-3",
+      "status": "success",
+      "oracleResult": "fail",
+      "wallMs": 568343,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 222,
+          "timestamp": "2026-05-15T11:02:01.702Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L003-C-1",
+      "status": "success",
+      "oracleResult": "pass",
+      "wallMs": 57123,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 219,
+          "timestamp": "2026-05-15T11:11:30.567Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L003-C-2",
+      "status": "success",
+      "oracleResult": "pass",
+      "wallMs": 55166,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 219,
+          "timestamp": "2026-05-15T11:12:27.584Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L003-C-3",
+      "status": "success",
+      "oracleResult": "pass",
+      "wallMs": 49717,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 219,
+          "timestamp": "2026-05-15T11:13:23.166Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L005-C-1",
+      "status": "success",
+      "oracleResult": "fail",
+      "wallMs": 1013742,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 218,
+          "timestamp": "2026-05-15T11:14:15.481Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L005-C-2",
+      "status": "success",
+      "oracleResult": "pass",
+      "wallMs": 87345,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 218,
+          "timestamp": "2026-05-15T11:31:14.929Z"
+        }
+      ],
+      "inheritance_status": "available"
+    },
+    {
+      "run_id": "SWE-L005-C-3",
+      "status": "success",
+      "oracleResult": "fail",
+      "wallMs": 52728,
+      "mcpToolCallCount": 1,
+      "mcpToolCalls": [
+        {
+          "tool": "mcp__spectra__detect_changes",
+          "success": false,
+          "error": "graph-not-built",
+          "responseBytes": 218,
+          "timestamp": "2026-05-15T11:32:41.739Z"
+        }
+      ],
+      "inheritance_status": "available"
+    }
+  ]
+}
