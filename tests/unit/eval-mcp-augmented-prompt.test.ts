@@ -20,7 +20,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 let buildGroupCPrompt: (fixture: { prompt: string }) => string;
-let parseTelemetryJsonl: (telemetryPath: string) => { mcpToolCalls: Array<{ tool: string | null; success: boolean; error: string | null; responseBytes: number; timestamp: string | null }> };
+type ParsedMcpCall = {
+  tool: string | null;
+  success: boolean;
+  error: string | null;
+  responseBytes: number;
+  timestamp: string | null;
+  responseSummary: Record<string, number> | null;
+};
+let parseTelemetryJsonl: (telemetryPath: string) => { mcpToolCalls: ParsedMcpCall[] };
 
 describe('buildGroupCPrompt (Feature 164 fix)', () => {
   beforeAll(async () => {
@@ -126,6 +134,50 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       expect(call.success).toBe(true);
       expect(call.error).toBeNull();
       expect(call.responseBytes).toBe(256);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
+  // Feature 165 FR-012 round 2 — responseSummary 解析（detect_changes changedSymbolsCount）
+  it('应解析 responseSummary 字段（detect_changes changedSymbolsCount）', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-16T00:00:00.000Z',
+      toolName: 'detect_changes',
+      requestSize: 10,
+      responseSize: 1024,
+      durationMs: 80,
+      runId: 'test-run-3',
+      responseSummary: { changedSymbolsCount: 5 },
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      expect(result.mcpToolCalls).toHaveLength(1);
+      const call = result.mcpToolCalls[0];
+      expect(call.responseSummary).not.toBeNull();
+      expect(call.responseSummary?.['changedSymbolsCount']).toBe(5);
+      expect(call.success).toBe(true);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
+  it('无 responseSummary 字段时 → responseSummary=null', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-16T00:00:00.000Z',
+      toolName: 'detect_changes',
+      requestSize: 10,
+      responseSize: 256,
+      durationMs: 42,
+      runId: 'test-run-4',
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      expect(result.mcpToolCalls[0].responseSummary).toBeNull();
     } finally {
       fs.unlinkSync(tmpFile);
     }

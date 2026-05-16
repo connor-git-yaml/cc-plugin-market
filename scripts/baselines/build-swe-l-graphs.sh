@@ -155,6 +155,40 @@ build_one_repo() {
     return 1
   fi
 
+  # Codex CRITICAL 修复（FR-008）—— dry-run 预估门控
+  # spectra batch --dry-run 生成 _meta/dry-run-estimate.md（无 LLM 调用）；
+  # 解析预估 input/output tokens → 按 Sonnet 单价估算 cost → 比对 budget 上限
+  # 失败时 (cost > budget 或解析失败) 不阻断，仅 log_warn —— 因为 spectra 内置
+  # --budget 是 hard gate（FR-008 软约束 + 校准要求）
+  log_info "[$repo] 执行 dry-run 预估（FR-008 校准）..."
+  if (cd "$repo_dir" && $SPECTRA_CLI batch . --mode full --dry-run --no-html 2>&1) > /tmp/f165-dryrun-$$.log; then
+    local dry_report="${repo_dir}/specs/_meta/dry-run-estimate.md"
+    if [ -s "$dry_report" ]; then
+      # parse markdown 表格：| 预估 input tokens | N | 和 | 预估 output tokens | M |
+      local input_tokens
+      local output_tokens
+      input_tokens=$(grep "^| 预估 input tokens |" "$dry_report" | awk -F'|' '{gsub(/[ ,]/,"",$3); print $3}')
+      output_tokens=$(grep "^| 预估 output tokens |" "$dry_report" | awk -F'|' '{gsub(/[ ,]/,"",$3); print $3}')
+      if [[ "$input_tokens" =~ ^[0-9]+$ ]] && [[ "$output_tokens" =~ ^[0-9]+$ ]]; then
+        # Sonnet 4.5/4.6 价格：input $3 / Mtoken, output $15 / Mtoken
+        # 转 cents 整数避免 bc 依赖：cost_cents = (input*300 + output*1500) / 1_000_000
+        local cost_cents=$(( (input_tokens * 300 + output_tokens * 1500) / 1000000 ))
+        local budget_cents=$(( budget * 100 ))
+        log_info "[$repo] dry-run 估算：input=${input_tokens}, output=${output_tokens}, cost≈\$0.$(printf "%02d" "$cost_cents") (budget=\$${budget})"
+        if [ "$cost_cents" -gt "$budget_cents" ]; then
+          log_warn "[$repo] dry-run 估算 cost (\$0.${cost_cents}) > budget (\$${budget})，但继续依赖 spectra --on-over-budget cancel 硬门控"
+        fi
+      else
+        log_warn "[$repo] dry-run markdown 解析失败（input=${input_tokens} output=${output_tokens}），跳过 cost gate"
+      fi
+    else
+      log_warn "[$repo] dry-run report 不存在或为空：${dry_report}，跳过 cost gate"
+    fi
+  else
+    log_warn "[$repo] dry-run 调用失败（退出码非零），跳过 cost gate（依赖 --on-over-budget cancel 兜底）"
+  fi
+  rm -f /tmp/f165-dryrun-$$.log
+
   # 真实生成（subshell cd 包装，Codex W-1 修复）
   log_info "[$repo] 调用 spectra batch . --mode full --budget ${budget} --concurrency 3 --on-over-budget cancel --no-html"
   if ! (cd "$repo_dir" && $SPECTRA_CLI batch . \

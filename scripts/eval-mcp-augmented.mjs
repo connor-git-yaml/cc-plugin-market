@@ -273,11 +273,14 @@ export function injectGraph({ taskFixture, wtDir, runtimeSpectraVersion }) {
   }
   const destValid = validateGraphSchema(destPath, runtimeSpectraVersion);
   if (!destValid.ok) {
+    // Codex W-4 修复：dest 二次校验失败统一返回 copy-integrity-failed，
+    // 原始 source-stage errorCode 放进 causeErrorCode 保留诊断信息
     return {
       status: 'failed',
       sourcePath,
       destPath,
-      errorCode: destValid.errorCode,
+      errorCode: 'copy-integrity-failed',
+      causeErrorCode: destValid.errorCode,
       reason: `dest re-validate: ${destValid.reason}`,
       spectraVersion: g.spectraVersion ?? null,
       graphSchemaVersion,
@@ -799,6 +802,8 @@ export function parseTelemetryJsonl(telemetryPath) {
         error: errorVal,
         responseBytes: typeof j.responseSize === 'number' ? j.responseSize : 0,
         timestamp: j.timestamp ?? j.ts ?? null,
+        // Feature 165 FR-012: 解析 detect_changes 写入的 responseSummary.changedSymbolsCount
+        responseSummary: (j.responseSummary && typeof j.responseSummary === 'object') ? j.responseSummary : null,
       });
     } catch {
       // 忽略坏行（telemetry 写入失败的部分行）
@@ -1230,20 +1235,29 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
   let mcpToolCallCount = null;
   let mcpResponseBytes = null;
   let detectChangesCallCount = 0;
+  let detectChangesSummaries = []; // Feature 165 FR-012 round 2：各次 detect_changes 的 changedSymbolsCount
   if (group === 'C' && telemetryPath) {
     const t = parseTelemetryJsonl(telemetryPath);
     mcpToolCalls = t.mcpToolCalls;
     mcpToolCallCount = deriveMcpToolCallCount(mcpToolCalls);
     mcpResponseBytes = deriveMcpResponseBytes(mcpToolCalls);
-    detectChangesCallCount = mcpToolCalls.filter(
+    const detectChangesCalls = mcpToolCalls.filter(
       (c) => c?.tool === 'mcp__spectra__detect_changes',
-    ).length;
+    );
+    detectChangesCallCount = detectChangesCalls.length;
+    // Feature 165 FR-012 round 2：聚合 responseSummary.changedSymbolsCount per call
+    detectChangesSummaries = detectChangesCalls
+      .filter((c) => c.success === true && c.responseSummary)
+      .map((c) => ({
+        changedSymbolsCount: typeof c.responseSummary.changedSymbolsCount === 'number'
+          ? c.responseSummary.changedSymbolsCount
+          : 0,
+      }));
   }
 
   // ── Feature 165 — Cohort C consumptionSignals 提取（FR-012）──
   // 注入成功且 telemetry 可读时，从 stdout + git diff 派生三类消费信号；
-  // 注入失败 / 非 C cohort 时跳过。changedSymbols 当前 telemetry 不记录响应体，
-  // 留空数组（M2 wire 合同）—— 信号提取主要基于 driver 输出文本和 patch。
+  // 注入失败 / 非 C cohort 时跳过。
   if (group === 'C' && graphInjection?.status === 'success') {
     let patchText = '';
     try {
@@ -1259,10 +1273,35 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       patchText,
     });
     graphInjection.detectChangesCallCount = detectChangesCallCount;
+    graphInjection.detectChangesSummaries = detectChangesSummaries; // FR-012 round 2
     graphInjection.consumptionSignals = signals;
     graphInjection.consumptionStatus = signals.length > 0
       ? 'consumed'
       : 'payload-injected-but-not-consumed';
+  }
+
+  // ── Feature 165 — t053Status 顶层字段（Codex W-5 修复）──
+  // SC-002 充要标准 5 条全满足 = pass；任一不满足 = fail；group != C = na
+  // 仅注入成功 + detect_changes 调用 ≥ 1 + 至少一次 changedSymbolsCount > 0 + 无 4 类错误码 = pass
+  let t053Status = 'na';
+  let t053FailReason = null;
+  if (group === 'C') {
+    if (graphInjection?.status !== 'success') {
+      t053Status = 'fail';
+      t053FailReason = `graphInjection.status=${graphInjection?.status} errorCode=${graphInjection?.errorCode ?? 'unknown'}`;
+    } else if (detectChangesCallCount < 1) {
+      t053Status = 'fail';
+      t053FailReason = 'detectChangesCallCount=0 (driver 未调用 detect_changes)';
+    } else if (!detectChangesSummaries.some((s) => s.changedSymbolsCount > 0)) {
+      t053Status = 'fail';
+      t053FailReason = 'no detect_changes call returned changedSymbolsCount > 0 (payload-empty 路径)';
+    } else {
+      t053Status = 'pass';
+    }
+  }
+  if (graphInjection) {
+    graphInjection.t053Status = t053Status;
+    if (t053FailReason) graphInjection.t053FailReason = t053FailReason;
   }
 
   // 清理 tmp（finally 语义）

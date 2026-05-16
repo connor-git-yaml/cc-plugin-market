@@ -90,6 +90,11 @@ export interface TelemetryEntry {
   durationMs: number; // handler 总耗时
   runId: string; // process.env.SPECTRA_MCP_RUN_ID ?? 'unknown'
   errorCode?: string; // 仅 isError=true 时填充（buildErrorResponse 的 code）
+  // Feature 165 — Cohort C grounding payload 校验（FR-012）
+  // responseSummary 是工具响应体的轻量摘要（不存完整 payload，避免 telemetry 膨胀）
+  // 当前定义字段：changedSymbolsCount（detect_changes 返回的 changedSymbols 数量）
+  // 其他工具可按需扩展（impact/context 不强制）
+  responseSummary?: Record<string, number>;
 }
 
 /**
@@ -142,6 +147,7 @@ export function recordAndReturn(
   startTimeMs: number,
   requestSize: number,
   result: ToolResult,
+  responseSummary?: Record<string, number>,
 ): ToolResult {
   const responseText = result.content?.[0]?.text ?? '';
   // 修 Codex W4：用 UTF-8 byte length 而非 char length（中文 / emoji 不会被低估）
@@ -156,6 +162,10 @@ export function recordAndReturn(
   };
   const errorCode = extractErrorCode(result);
   if (errorCode !== undefined) entry.errorCode = errorCode;
+  // Feature 165 — 仅 success 路径写 responseSummary（avoid 噪音字段）
+  if (responseSummary !== undefined && errorCode === undefined) {
+    entry.responseSummary = responseSummary;
+  }
   writeTelemetry(entry);
   return result;
 }
@@ -661,7 +671,14 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     };
     if (uniqWarnings.length > 0) data['warnings'] = uniqWarnings;
 
-    return recordAndReturn('detect_changes', _telStart, _telReqSize, buildSuccessResponse(data, ['affectedSymbols']));
+    // Feature 165 FR-012：success 路径写 responseSummary.changedSymbolsCount 到 telemetry
+    return recordAndReturn(
+      'detect_changes',
+      _telStart,
+      _telReqSize,
+      buildSuccessResponse(data, ['affectedSymbols']),
+      { changedSymbolsCount: totalChanged },
+    );
   } catch (err) {
     return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
       'internal-error',
