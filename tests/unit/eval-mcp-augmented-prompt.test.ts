@@ -182,4 +182,45 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       fs.unlinkSync(tmpFile);
     }
   });
+
+  // Codex round 2 类型安全：responseSummary 为 array / 非数字 / 嵌套对象时被拒绝
+  it('responseSummary 为数组时 → 拒绝（null）', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-16T00:00:00.000Z',
+      toolName: 'detect_changes',
+      responseSize: 10,
+      runId: 'r5',
+      responseSummary: [1, 2, 3] as unknown as Record<string, number>,
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      expect(result.mcpToolCalls[0].responseSummary).toBeNull();
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
+  it('responseSummary 含非数字值时 → 过滤掉非数字键', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-16T00:00:00.000Z',
+      toolName: 'detect_changes',
+      responseSize: 10,
+      runId: 'r6',
+      responseSummary: { changedSymbolsCount: 3, weird: 'string', nested: { x: 1 } } as unknown as Record<string, number>,
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      const summary = result.mcpToolCalls[0].responseSummary;
+      expect(summary).not.toBeNull();
+      expect(summary?.['changedSymbolsCount']).toBe(3);
+      expect(summary?.['weird']).toBeUndefined();
+      expect(summary?.['nested']).toBeUndefined();
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
 });

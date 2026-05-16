@@ -65,6 +65,18 @@ interface ExtractSignalsInput {
   patchText: string;
 }
 
+interface T053Input {
+  group: 'A' | 'B' | 'C';
+  graphInjection: { status: 'success' | 'failed'; errorCode?: string } | null;
+  detectChangesCallCount: number;
+  detectChangesSummaries: Array<{ changedSymbolsCount: number }>;
+}
+
+interface T053Result {
+  status: 'pass' | 'fail' | 'na';
+  failReason: string | null;
+}
+
 interface Mod {
   validateGraphSchema: (graphPath: string, runtimeVersion: string) => SchemaResult;
   computeFileHash: (filePath: string) => string;
@@ -75,6 +87,7 @@ interface Mod {
   }) => InjectionResult;
   assertNoGraphInWorktree: (wtDir: string) => void;
   extractConsumptionSignals: (input: ExtractSignalsInput) => ConsumptionSignal[];
+  computeT053Status: (input: T053Input) => T053Result;
   RUNTIME_SPECTRA_VERSION: string;
 }
 
@@ -435,5 +448,105 @@ describe('Feature 165 — RUNTIME_SPECTRA_VERSION 探测', () => {
   it('应导出非空 version 字符串（CLI 或 package.json fallback）', () => {
     expect(typeof mod.RUNTIME_SPECTRA_VERSION).toBe('string');
     expect(mod.RUNTIME_SPECTRA_VERSION.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Feature 165 Round 2 — computeT053Status helper（SC-002 4 条充要标准） ────
+
+describe('Feature 165 — computeT053Status (Codex W-5 round 2)', () => {
+  it('group !== "C" → status="na"', () => {
+    const r1 = mod.computeT053Status({
+      group: 'A',
+      graphInjection: null,
+      detectChangesCallCount: 0,
+      detectChangesSummaries: [],
+    });
+    expect(r1.status).toBe('na');
+    expect(r1.failReason).toBeNull();
+    const r2 = mod.computeT053Status({
+      group: 'B',
+      graphInjection: null,
+      detectChangesCallCount: 0,
+      detectChangesSummaries: [],
+    });
+    expect(r2.status).toBe('na');
+  });
+
+  it('group="C" + graphInjection.status="failed" → fail', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'failed', errorCode: 'graph-schema-mismatch' },
+      detectChangesCallCount: 1,
+      detectChangesSummaries: [{ changedSymbolsCount: 5 }],
+    });
+    expect(r.status).toBe('fail');
+    expect(r.failReason).toContain('graphInjection.status=failed');
+    expect(r.failReason).toContain('graph-schema-mismatch');
+  });
+
+  it('group="C" + graphInjection 缺失 → fail', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: null,
+      detectChangesCallCount: 1,
+      detectChangesSummaries: [{ changedSymbolsCount: 5 }],
+    });
+    expect(r.status).toBe('fail');
+    expect(r.failReason).toContain('undefined');
+  });
+
+  it('group="C" + 注入成功 + detectChangesCallCount=0 → fail', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'success' },
+      detectChangesCallCount: 0,
+      detectChangesSummaries: [],
+    });
+    expect(r.status).toBe('fail');
+    expect(r.failReason).toContain('detectChangesCallCount=0');
+  });
+
+  it('group="C" + 注入成功 + detect_changes 调用但 changedSymbolsCount=0 → fail', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'success' },
+      detectChangesCallCount: 2,
+      detectChangesSummaries: [{ changedSymbolsCount: 0 }, { changedSymbolsCount: 0 }],
+    });
+    expect(r.status).toBe('fail');
+    expect(r.failReason).toContain('changedSymbolsCount > 0');
+    expect(r.failReason).toContain('payload-empty');
+  });
+
+  it('group="C" + 全部充要标准满足 → pass', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'success' },
+      detectChangesCallCount: 1,
+      detectChangesSummaries: [{ changedSymbolsCount: 5 }],
+    });
+    expect(r.status).toBe('pass');
+    expect(r.failReason).toBeNull();
+  });
+
+  it('group="C" + 多次 detect_changes 至少一次 changedSymbolsCount > 0 → pass', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'success' },
+      detectChangesCallCount: 3,
+      detectChangesSummaries: [{ changedSymbolsCount: 0 }, { changedSymbolsCount: 7 }, { changedSymbolsCount: 0 }],
+    });
+    expect(r.status).toBe('pass');
+  });
+
+  it('detectChangesSummaries 非数组 → 视为无信号 → fail', () => {
+    const r = mod.computeT053Status({
+      group: 'C',
+      graphInjection: { status: 'success' },
+      detectChangesCallCount: 1,
+      detectChangesSummaries: undefined as unknown as Array<{ changedSymbolsCount: number }>,
+    });
+    expect(r.status).toBe('fail');
+    expect(r.failReason).toContain('changedSymbolsCount > 0');
   });
 });

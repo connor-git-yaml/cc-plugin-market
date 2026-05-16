@@ -305,6 +305,44 @@ export function injectGraph({ taskFixture, wtDir, runtimeSpectraVersion }) {
  * Cohort A/B 前置断言：worktree 中不得存在 specs/_meta/graph.json；
  * 发现残留即抛出，调用方应 return { ok: false, ... }。
  */
+/**
+ * computeT053Status — run-level T053 判定（Feature 165 SC-002 充要标准）
+ *
+ * 判定规则（仅 group === 'C' 适用；其他 group 始终 'na'）：
+ *   1. graphInjection.status !== 'success' → fail（注入失败）
+ *   2. detectChangesCallCount < 1 → fail（driver 未调用 detect_changes）
+ *   3. detectChangesSummaries 中无 changedSymbolsCount > 0 → fail（payload-empty）
+ *   4. 以上全过 → pass
+ *
+ * 注：9-run 层面 T053 判定（spec SC-002 a-e）在 post-hoc 聚合阶段汇总此 run-level 结果。
+ */
+export function computeT053Status({ group, graphInjection, detectChangesCallCount, detectChangesSummaries }) {
+  if (group !== 'C') {
+    return { status: 'na', failReason: null };
+  }
+  if (!graphInjection || graphInjection.status !== 'success') {
+    return {
+      status: 'fail',
+      failReason: `graphInjection.status=${graphInjection?.status ?? 'undefined'} errorCode=${graphInjection?.errorCode ?? 'unknown'}`,
+    };
+  }
+  if (detectChangesCallCount < 1) {
+    return {
+      status: 'fail',
+      failReason: 'detectChangesCallCount=0 (driver 未调用 detect_changes)',
+    };
+  }
+  const hasChangedSymbols = Array.isArray(detectChangesSummaries)
+    && detectChangesSummaries.some((s) => typeof s?.changedSymbolsCount === 'number' && s.changedSymbolsCount > 0);
+  if (!hasChangedSymbols) {
+    return {
+      status: 'fail',
+      failReason: 'no detect_changes call returned changedSymbolsCount > 0 (payload-empty 路径)',
+    };
+  }
+  return { status: 'pass', failReason: null };
+}
+
 export function assertNoGraphInWorktree(wtDir) {
   const dest = path.join(wtDir, GRAPH_FILENAME);
   if (fs.existsSync(dest)) {
@@ -796,14 +834,27 @@ export function parseTelemetryJsonl(telemetryPath) {
       // W-3 修复（Feature 164）：writeTelemetry 写入 errorCode 而非 error；
       // 需同时读取 errorCode 判断 success（j.error 在 TelemetryEntry 中不存在）
       const errorVal = j.error ?? j.errorCode ?? null;
+      // Feature 165 FR-012: 解析 detect_changes 写入的 responseSummary.changedSymbolsCount
+      // 类型校验（Codex round 2）：仅接受 plain object 且过滤掉非 number 值
+      let parsedSummary = null;
+      if (
+        j.responseSummary &&
+        typeof j.responseSummary === 'object' &&
+        !Array.isArray(j.responseSummary)
+      ) {
+        const cleaned = {};
+        for (const [k, v] of Object.entries(j.responseSummary)) {
+          if (typeof v === 'number' && Number.isFinite(v)) cleaned[k] = v;
+        }
+        if (Object.keys(cleaned).length > 0) parsedSummary = cleaned;
+      }
       mcpToolCalls.push({
         tool: typeof j.toolName === 'string' ? `mcp__spectra__${j.toolName}` : (j.tool ?? null),
         success: typeof j.success === 'boolean' ? j.success : (errorVal == null),
         error: errorVal,
         responseBytes: typeof j.responseSize === 'number' ? j.responseSize : 0,
         timestamp: j.timestamp ?? j.ts ?? null,
-        // Feature 165 FR-012: 解析 detect_changes 写入的 responseSummary.changedSymbolsCount
-        responseSummary: (j.responseSummary && typeof j.responseSummary === 'object') ? j.responseSummary : null,
+        responseSummary: parsedSummary,
       });
     } catch {
       // 忽略坏行（telemetry 写入失败的部分行）
@@ -1280,25 +1331,16 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       : 'payload-injected-but-not-consumed';
   }
 
-  // ── Feature 165 — t053Status 顶层字段（Codex W-5 修复）──
-  // SC-002 充要标准 5 条全满足 = pass；任一不满足 = fail；group != C = na
-  // 仅注入成功 + detect_changes 调用 ≥ 1 + 至少一次 changedSymbolsCount > 0 + 无 4 类错误码 = pass
-  let t053Status = 'na';
-  let t053FailReason = null;
-  if (group === 'C') {
-    if (graphInjection?.status !== 'success') {
-      t053Status = 'fail';
-      t053FailReason = `graphInjection.status=${graphInjection?.status} errorCode=${graphInjection?.errorCode ?? 'unknown'}`;
-    } else if (detectChangesCallCount < 1) {
-      t053Status = 'fail';
-      t053FailReason = 'detectChangesCallCount=0 (driver 未调用 detect_changes)';
-    } else if (!detectChangesSummaries.some((s) => s.changedSymbolsCount > 0)) {
-      t053Status = 'fail';
-      t053FailReason = 'no detect_changes call returned changedSymbolsCount > 0 (payload-empty 路径)';
-    } else {
-      t053Status = 'pass';
-    }
-  }
+  // ── Feature 165 — t053Status 顶层字段（Codex W-5 修复 + Round 2 重构）──
+  // 抽为 export 的 stateless helper 以便单测覆盖
+  const t053Result = computeT053Status({
+    group,
+    graphInjection,
+    detectChangesCallCount,
+    detectChangesSummaries,
+  });
+  const t053Status = t053Result.status;
+  const t053FailReason = t053Result.failReason;
   if (graphInjection) {
     graphInjection.t053Status = t053Status;
     if (t053FailReason) graphInjection.t053FailReason = t053FailReason;
@@ -1353,6 +1395,11 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       ...(group === 'B' ? { specPushDegraded } : {}),
       // Feature 165 — Cohort C 注入 telemetry（FR-013：每 run 写入，无论成功失败）
       ...(group === 'C' ? { graphInjection } : {}),
+      // Feature 165 — Codex W-5 修复：run-level T053 状态顶层字段
+      // 注：runLevel 命名说明本字段表达单 run 状态；9-run 层面 T053 判定在 post-hoc 聚合阶段
+      // 计算逻辑见上方 t053Status 块；非 C cohort 始终为 'na'
+      runLevelT053Status: t053Status,
+      ...(t053FailReason ? { runLevelT053FailReason: t053FailReason } : {}),
     },
   };
 }
