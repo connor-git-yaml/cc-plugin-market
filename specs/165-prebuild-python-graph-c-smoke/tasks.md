@@ -149,7 +149,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
 
 ---
 
-- [ ] T-008 [M2][P][TDD] 编写 `validateGraphSchema` 单测（先写，先确认失败）
+- [x] T-008 [M2][P][TDD] 编写 `validateGraphSchema` 单测（先写，先确认失败）
   - **类型**: 测试（TDD Red）
   - **前置**: M1 完成（T-007）
   - **文件**: `tests/unit/eval-mcp-augmented-prompt.test.ts`（追加）
@@ -163,7 +163,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
   - **预估**: 20 min
   - **关联 spec**: FR-011、EC-006
 
-- [ ] T-009 [M2][P][TDD] 编写 `injectGraph` / `assertNoGraphInWorktree` / `extractConsumptionSignals` 单测
+- [x] T-009 [M2][P][TDD] 编写 `injectGraph` / `assertNoGraphInWorktree` / `extractConsumptionSignals` 单测
   - **类型**: 测试（TDD Red）
   - **前置**: M1 完成（T-007）
   - **文件**: `tests/unit/eval-mcp-augmented-prompt.test.ts`（追加）
@@ -175,7 +175,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
   - **预估**: 30 min
   - **关联 spec**: FR-011、FR-012、FR-013、FR-014、EC-002、EC-007、EC-008
 
-- [ ] T-009a [M2][P][TDD] 编写 runOne() 注入 wire RED 测试（Codex W-4 修复）
+- [x] T-009a [M2][P][TDD] 编写 runOne() 注入 wire RED 测试（Codex W-4 修复）
   - **类型**: 测试（TDD Red — runOne 集成 wire）
   - **前置**: T-008、T-009 完成
   - **文件**: `tests/unit/eval-mcp-augmented-classic.test.ts`（追加，因 classic test 文件已涉及 runOne 路径）
