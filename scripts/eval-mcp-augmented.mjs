@@ -35,7 +35,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -98,6 +99,358 @@ const SWEBENCH_TARGET_MAP = {
   'astropy/astropy': 'astropy',
   'pytest-dev/pytest': 'pytest',
 };
+
+// ───────────────────────────────────────────────────────────
+// Feature 165 — Graph Injection（Cohort C）+ 前置断言（Cohort A/B）
+// ───────────────────────────────────────────────────────────
+
+// graph 文件在 baseline 仓库 + worktree 内部的统一相对路径
+export const GRAPH_FILENAME = 'specs/_meta/graph.json';
+
+/**
+ * RUNTIME_SPECTRA_VERSION
+ * 探测优先级：(1) spectra CLI --version 探测 →
+ *           (2) package.json.version fallback →
+ *           (3) 'unknown' safe-fail（所有 graph 注入会因 version mismatch 失败）
+ * 在文件顶层 IIFE 中执行一次，避免每 run 重复探测。
+ */
+export const RUNTIME_SPECTRA_VERSION = (() => {
+  // 优先 CLI 探测（代表当前 runtime）
+  try {
+    const out = execFileSync('node', [MCP_DIST_ENTRY, '--version'], {
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const m = out.trim().match(/(\d+\.\d+\.\d+)/);
+    if (m) return m[1];
+  } catch {
+    /* fallback below */
+  }
+  // fallback 1：package.json
+  try {
+    const pkgPath = path.join(PROJECT_ROOT, 'package.json');
+    return JSON.parse(fs.readFileSync(pkgPath, 'utf-8')).version;
+  } catch {
+    // fallback 2：safe-fail
+    return 'unknown';
+  }
+})();
+
+/**
+ * 计算文件的 SHA256 hex hash，用于 atomic copy 完整性校验
+ * @param {string} filePath
+ * @returns {string} hex 摘要
+ */
+export function computeFileHash(filePath) {
+  const buf = fs.readFileSync(filePath);
+  return createHash('sha256').update(buf).digest('hex');
+}
+
+/**
+ * validateGraphSchema(graphPath, runtimeSpectraVersion)
+ * 校验 graph.json 的 schema 合法性 + version 匹配。
+ * 用于注入前（source）和注入后（dest）两次校验，FR-011 双阶段合同。
+ * @returns {{ ok: true } | { ok: false, errorCode: string, reason: string }}
+ */
+export function validateGraphSchema(graphPath, runtimeSpectraVersion) {
+  let raw;
+  try {
+    raw = fs.readFileSync(graphPath, 'utf-8');
+  } catch (e) {
+    return { ok: false, errorCode: 'graph-not-built', reason: `read error: ${e.message}` };
+  }
+  let g;
+  try {
+    g = JSON.parse(raw);
+  } catch (e) {
+    return { ok: false, errorCode: 'graph-not-built', reason: `parse error: ${e.message}` };
+  }
+  if (!g || typeof g !== 'object') {
+    return { ok: false, errorCode: 'graph-schema-mismatch', reason: 'not an object' };
+  }
+  if (!g.nodes || !g.links || !g.callSites) {
+    return { ok: false, errorCode: 'graph-schema-mismatch', reason: 'missing nodes/links/callSites' };
+  }
+  if (!Array.isArray(g.callSites) || g.callSites.length === 0) {
+    return { ok: false, errorCode: 'payload-empty', reason: 'callSites empty' };
+  }
+  const gv = g.graphSchemaVersion ?? g.spectraVersion ?? null;
+  if (gv !== runtimeSpectraVersion) {
+    return {
+      ok: false,
+      errorCode: 'graph-schema-mismatch',
+      reason: `version mismatch: graph=${gv} runtime=${runtimeSpectraVersion}`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * injectGraph({ taskFixture, wtDir, runtimeSpectraVersion })
+ * Cohort C 注入：source 校验 → atomic copy（写 tmp + fsync(tmpFd) + rename +
+ * fsync(dirFd）→ dest 二次校验。返回 graphInjection telemetry 对象。
+ * @returns {object} 形如 { status, sourcePath, destPath, sourceHash, destHash?,
+ *                          spectraVersion, graphSchemaVersion, errorCode?, reason? }
+ */
+export function injectGraph({ taskFixture, wtDir, runtimeSpectraVersion }) {
+  const baselineHome = process.env.SPECTRA_BASELINE_HOME
+    ?? path.join(os.homedir(), '.spectra-baselines');
+  const baselineName = SWEBENCH_TARGET_MAP[taskFixture.target];
+
+  // 未知 target：source 不存在的特殊形式
+  const sourcePath = baselineName
+    ? path.join(baselineHome, baselineName, GRAPH_FILENAME)
+    : path.join(baselineHome, '__unknown__', GRAPH_FILENAME);
+  const destPath = path.join(wtDir, GRAPH_FILENAME);
+
+  // ── ① source schema validate ─────────────────────────────
+  const srcValid = validateGraphSchema(sourcePath, runtimeSpectraVersion);
+  if (!srcValid.ok) {
+    return {
+      status: 'failed',
+      sourcePath,
+      destPath,
+      errorCode: srcValid.errorCode,
+      reason: srcValid.reason,
+      spectraVersion: null,
+      graphSchemaVersion: null,
+      sourceHash: null,
+    };
+  }
+
+  const g = JSON.parse(fs.readFileSync(sourcePath, 'utf-8'));
+  const graphSchemaVersion = g.graphSchemaVersion ?? g.spectraVersion ?? runtimeSpectraVersion;
+  const sourceHash = computeFileHash(sourcePath);
+
+  // ── ② atomic copy（write tmp → fsync(tmpFd) → rename → fsync(dirFd)）─
+  const tmpPath = `${destPath}.tmp.${process.pid}`;
+  try {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    const buf = fs.readFileSync(sourcePath);
+    const tmpFd = fs.openSync(tmpPath, 'w');
+    try {
+      fs.writeSync(tmpFd, buf);
+      fs.fsyncSync(tmpFd);
+    } finally {
+      fs.closeSync(tmpFd);
+    }
+    fs.renameSync(tmpPath, destPath);
+    // POSIX 合同：父目录 fsync 确保 rename 元数据落盘
+    const dirFd = fs.openSync(path.dirname(destPath), 'r');
+    try {
+      fs.fsyncSync(dirFd);
+    } finally {
+      fs.closeSync(dirFd);
+    }
+  } catch (e) {
+    try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    return {
+      status: 'failed',
+      sourcePath,
+      destPath,
+      errorCode: 'copy-integrity-failed',
+      reason: `copy failed: ${e.message}`,
+      spectraVersion: g.spectraVersion ?? null,
+      graphSchemaVersion,
+      sourceHash,
+    };
+  }
+
+  // ── ③ dest 二次校验（hash + schema） ──────────────────────
+  const destHash = computeFileHash(destPath);
+  if (destHash !== sourceHash) {
+    return {
+      status: 'failed',
+      sourcePath,
+      destPath,
+      errorCode: 'copy-integrity-failed',
+      reason: `hash mismatch: src=${sourceHash} dest=${destHash}`,
+      spectraVersion: g.spectraVersion ?? null,
+      graphSchemaVersion,
+      sourceHash,
+    };
+  }
+  const destValid = validateGraphSchema(destPath, runtimeSpectraVersion);
+  if (!destValid.ok) {
+    return {
+      status: 'failed',
+      sourcePath,
+      destPath,
+      errorCode: destValid.errorCode,
+      reason: `dest re-validate: ${destValid.reason}`,
+      spectraVersion: g.spectraVersion ?? null,
+      graphSchemaVersion,
+      sourceHash,
+      destHash,
+    };
+  }
+
+  return {
+    status: 'success',
+    sourcePath,
+    destPath,
+    sourceHash,
+    destHash,
+    spectraVersion: g.spectraVersion ?? runtimeSpectraVersion,
+    graphSchemaVersion,
+  };
+}
+
+/**
+ * assertNoGraphInWorktree(wtDir)
+ * Cohort A/B 前置断言：worktree 中不得存在 specs/_meta/graph.json；
+ * 发现残留即抛出，调用方应 return { ok: false, ... }。
+ */
+export function assertNoGraphInWorktree(wtDir) {
+  const dest = path.join(wtDir, GRAPH_FILENAME);
+  if (fs.existsSync(dest)) {
+    throw new Error(
+      `[Cohort A/B] graph 污染检测：${dest} 已存在，请检查 worktree 隔离（EC-008）`,
+    );
+  }
+}
+
+/**
+ * extractConsumptionSignals({ changedSymbols, mcpToolCalls, stdout, patchText })
+ * 提取 driver 是否消费 detect_changes 返回的 changedSymbols 的三类机械化信号：
+ *   - patch-diff-literal：git patch 内含 symbolName 或 filePath
+ *   - derived-mcp-call：后续 mcp__spectra__context/impact 调用的 arguments 含 symbolId/filePath
+ *   - reasoning-trace-mention：stdout 内含 symbolName/filePath 或因果短语
+ * 同 signalType + evidenceLocation 去重（首次保留）。
+ * @returns {Array<{ signalType, matchedSymbol?, matchedFilePath?, evidenceLocation, evidenceTextSnippet? }>}
+ */
+export function extractConsumptionSignals({ changedSymbols, mcpToolCalls, stdout, patchText }) {
+  const signals = [];
+  if (!Array.isArray(changedSymbols) || changedSymbols.length === 0) return signals;
+
+  // 提取所有 symbolName / filePath（支持两种 symbols 表示：string 或 { symbolName }）
+  const symbolNames = [];
+  const filePaths = [];
+  for (const c of changedSymbols) {
+    if (c?.filePath) filePaths.push(c.filePath);
+    if (Array.isArray(c?.symbols)) {
+      for (const s of c.symbols) {
+        if (typeof s === 'string') {
+          symbolNames.push(s);
+        } else if (s && typeof s.symbolName === 'string') {
+          symbolNames.push(s.symbolName);
+        }
+      }
+    }
+  }
+  // 去重 — 同 symbolName 多次出现时避免重复扫描
+  const uniqueSymbols = Array.from(new Set(symbolNames));
+  const uniqueFilePaths = Array.from(new Set(filePaths));
+
+  // ── 类型 1：patch-diff-literal ───────────────────────────
+  if (typeof patchText === 'string' && patchText.length > 0) {
+    const patchLines = patchText.split('\n');
+    for (const sym of uniqueSymbols) {
+      const lineIdx = patchLines.findIndex((l) => l.includes(sym));
+      if (lineIdx >= 0) {
+        signals.push({
+          signalType: 'patch-diff-literal',
+          matchedSymbol: sym,
+          evidenceLocation: `patch:line ${lineIdx + 1}`,
+        });
+      }
+    }
+    for (const fp of uniqueFilePaths) {
+      const base = path.basename(fp);
+      const lineIdx = patchLines.findIndex((l) => l.includes(base));
+      if (lineIdx >= 0) {
+        signals.push({
+          signalType: 'patch-diff-literal',
+          matchedFilePath: fp,
+          evidenceLocation: `patch:line ${lineIdx + 1}`,
+        });
+      }
+    }
+  }
+
+  // ── 类型 2：derived-mcp-call ─────────────────────────────
+  const postCalls = (Array.isArray(mcpToolCalls) ? mcpToolCalls : []).filter((c) =>
+    c?.tool === 'mcp__spectra__context' || c?.tool === 'mcp__spectra__impact',
+  );
+  for (let idx = 0; idx < postCalls.length; idx += 1) {
+    const call = postCalls[idx];
+    const argStr = typeof call.arguments === 'string'
+      ? call.arguments
+      : JSON.stringify(call.arguments ?? {});
+    for (const sym of uniqueSymbols) {
+      if (argStr.includes(sym)) {
+        signals.push({
+          signalType: 'derived-mcp-call',
+          matchedSymbol: sym,
+          evidenceLocation: `mcpToolCalls[${idx}]`,
+        });
+      }
+    }
+    for (const fp of uniqueFilePaths) {
+      if (argStr.includes(fp)) {
+        signals.push({
+          signalType: 'derived-mcp-call',
+          matchedFilePath: fp,
+          evidenceLocation: `mcpToolCalls[${idx}]`,
+        });
+      }
+    }
+  }
+
+  // ── 类型 3：reasoning-trace-mention ──────────────────────
+  if (typeof stdout === 'string' && stdout.length > 0) {
+    const causalPhrases = [
+      '根据 detect_changes',
+      '按照 changedSymbols',
+      'changedSymbols',
+      'detect_changes 返回',
+    ];
+    const lines = stdout.split('\n');
+    for (let idx = 0; idx < lines.length; idx += 1) {
+      const line = lines[idx];
+      for (const sym of uniqueSymbols) {
+        if (line.includes(sym)) {
+          signals.push({
+            signalType: 'reasoning-trace-mention',
+            matchedSymbol: sym,
+            evidenceLocation: `messages[${idx}].content`,
+            evidenceTextSnippet: line.slice(0, 120),
+          });
+        }
+      }
+      for (const fp of uniqueFilePaths) {
+        if (line.includes(fp)) {
+          signals.push({
+            signalType: 'reasoning-trace-mention',
+            matchedFilePath: fp,
+            evidenceLocation: `messages[${idx}].content`,
+            evidenceTextSnippet: line.slice(0, 120),
+          });
+        }
+      }
+      for (const phrase of causalPhrases) {
+        if (line.includes(phrase)) {
+          signals.push({
+            signalType: 'reasoning-trace-mention',
+            matchedSymbol: null,
+            evidenceLocation: `messages[${idx}].content`,
+            evidenceTextSnippet: line.slice(0, 120),
+          });
+        }
+      }
+    }
+  }
+
+  // 去重：同 signalType + evidenceLocation 只保留第一个
+  const seen = new Set();
+  return signals.filter((s) => {
+    const key = `${s.signalType}::${s.evidenceLocation}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 // ───────────────────────────────────────────────────────────
 // argv 解析（T-040）

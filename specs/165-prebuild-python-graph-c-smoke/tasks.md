@@ -188,7 +188,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
   - **预估**: 30 min
   - **关联 spec**: FR-003、FR-004、FR-013、FR-014、EC-002、EC-008
 
-- [ ] T-010 [M2][CRITICAL] 在 `eval-mcp-augmented.mjs` 中实现四个新函数（exports）
+- [x] T-010 [M2][CRITICAL] 在 `eval-mcp-augmented.mjs` 中实现四个新函数（exports）
   - **类型**: 实施
   - **前置**: T-008、T-009、T-009a（三个 TDD Red 测试先写完）
   - **文件**: `scripts/eval-mcp-augmented.mjs`（修改）
