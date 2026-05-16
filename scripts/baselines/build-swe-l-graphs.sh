@@ -189,11 +189,16 @@ build_one_repo() {
   fi
   rm -f /tmp/f165-dryrun-$$.log
 
+  # USD → tokens 转换（spectra --budget 是 token 数，非 USD）
+  # 转换比例：Sonnet weighted avg ≈ $6.6/Mtoken（input 30% × $3 + output 70% × $15 ÷ 1M)；
+  # 取 ≈ 200_000 tokens / USD（含 30% 余量，避免 dry-run 偏差导致提前 cancel）
+  local budget_tokens=$(( budget * 200000 ))
+
   # 真实生成（subshell cd 包装，Codex W-1 修复）
-  log_info "[$repo] 调用 spectra batch . --mode full --budget ${budget} --concurrency 3 --on-over-budget cancel --no-html"
+  log_info "[$repo] 调用 spectra batch . --mode full --budget ${budget_tokens} tokens (≈\$${budget} USD) --concurrency 3 --on-over-budget cancel --no-html"
   if ! (cd "$repo_dir" && $SPECTRA_CLI batch . \
         --mode full \
-        --budget "$budget" \
+        --budget "$budget_tokens" \
         --concurrency 3 \
         --on-over-budget cancel \
         --no-html); then
@@ -207,35 +212,44 @@ build_one_repo() {
     return 1
   fi
 
-  # schema 校验（nodes / links / callSites + callSites.length > 0）
+  # schema 校验 + 派生 callSites + 注入 version 元数据
+  # spec FR-001 round 2 实测修正：
+  #   spectra graph.json v2.0 schema：calls 信息在 links[].relation === 'calls'，
+  #   没有顶层 callSites 字段。本步骤派生 callSites 字段并注入，保持 spec FR-001/011 合同
+  # version 元数据：
+  #   graphSchemaVersion 从 g.graph.schemaVersion（spectra graph schema 版本，如 "2.0"）派生
+  #   spectraVersion 从 package.json version 注入（4.1.1）
   if ! node -e "
-    const g = JSON.parse(require('fs').readFileSync('${graph_path}', 'utf-8'));
-    if (!g.nodes || !g.links || !g.callSites) throw new Error('schema missing fields (nodes/links/callSites)');
-    if (!Array.isArray(g.callSites) || g.callSites.length === 0) throw new Error('callSites empty');
-    process.stdout.write('callSites=' + g.callSites.length + '\n');
+    const fs = require('fs');
+    const p = '${graph_path}';
+    const g = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    if (!g.nodes || !g.links) throw new Error('missing nodes/links');
+    // 派生 callSites — 从 links 中 relation='calls' 提取
+    const callsLinks = g.links.filter(l => l.relation === 'calls');
+    if (callsLinks.length === 0) throw new Error('no calls relation links — graph 未含函数调用边');
+    if (!g.callSites) {
+      g.callSites = callsLinks.map(l => ({
+        source: l.source,
+        target: l.target,
+        confidence: l.confidence ?? null,
+        confidenceScore: l.confidenceScore ?? null,
+      }));
+    }
+    // 注入 version 元数据
+    if (!g.spectraVersion) g.spectraVersion = '${SPECTRA_PKG_VERSION}';
+    if (!g.graphSchemaVersion) {
+      // round 3 修正：使用 spectra package version 作为 graphSchemaVersion
+      // 与 RUNTIME_SPECTRA_VERSION IIFE 对齐（runtime 端校验同源）
+      // spectra graph format 内部版本（g.graph.schemaVersion='2.0'）保留不动，作为
+      // graph format 兼容性诊断字段（不参与 runtime 校验）
+      g.graphSchemaVersion = '${SPECTRA_PKG_VERSION}';
+    }
+    fs.writeFileSync(p, JSON.stringify(g, null, 2) + '\n', 'utf-8');
+    process.stdout.write('callSites=' + g.callSites.length + ' spectraVersion=' + g.spectraVersion + ' graphSchemaVersion=' + g.graphSchemaVersion + '\n');
   "; then
-    log_error "[$repo] graph.json schema 校验失败"
+    log_error "[$repo] graph.json schema 校验 / 派生 callSites / 注入 version 失败"
     return 1
   fi
-
-  # 注入 spectraVersion / graphSchemaVersion 元数据（若缺失）
-  node -e "
-    const p = '${graph_path}';
-    const fs = require('fs');
-    const g = JSON.parse(fs.readFileSync(p, 'utf-8'));
-    let changed = false;
-    if (!g.spectraVersion) { g.spectraVersion = '${SPECTRA_PKG_VERSION}'; changed = true; }
-    if (!g.graphSchemaVersion) { g.graphSchemaVersion = '${SPECTRA_PKG_VERSION}'; changed = true; }
-    if (changed) {
-      fs.writeFileSync(p, JSON.stringify(g, null, 2) + '\n', 'utf-8');
-      process.stdout.write('injected version metadata\n');
-    } else {
-      process.stdout.write('version metadata already present\n');
-    }
-  " || {
-    log_error "[$repo] 注入 version 元数据失败"
-    return 1
-  }
 
   log_info "[$repo] graph build 成功：${graph_path}"
   return 0
