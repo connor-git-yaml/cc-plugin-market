@@ -1123,6 +1123,29 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     };
   }
 
+  // ── Feature 165 — Cohort C graph injection / Cohort A/B 前置断言 ──
+  // 设计：在 prepareWorktree 返回之后、Group C build 检查之前执行；
+  // C 注入失败不阻断流程（fallback 路径），但 telemetry 标记 status='failed'，
+  // 该 run 视为 T053 单次失败（FR-004）。A/B 残留视为污染，fail-fast 返回。
+  let graphInjection = null;
+  if (group === 'C') {
+    graphInjection = injectGraph({
+      taskFixture,
+      wtDir: wt.wtDir,
+      runtimeSpectraVersion: RUNTIME_SPECTRA_VERSION,
+    });
+  } else {
+    try {
+      assertNoGraphInWorktree(wt.wtDir);
+    } catch (err) {
+      return {
+        ok: false,
+        costUsd: 0,
+        error: `graph 污染断言失败: ${err.message}`,
+      };
+    }
+  }
+
   // Group C build 检查
   let mcpConfigPath = null;
   let telemetryPath = null;
@@ -1206,11 +1229,40 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
   let mcpToolCalls = null;
   let mcpToolCallCount = null;
   let mcpResponseBytes = null;
+  let detectChangesCallCount = 0;
   if (group === 'C' && telemetryPath) {
     const t = parseTelemetryJsonl(telemetryPath);
     mcpToolCalls = t.mcpToolCalls;
     mcpToolCallCount = deriveMcpToolCallCount(mcpToolCalls);
     mcpResponseBytes = deriveMcpResponseBytes(mcpToolCalls);
+    detectChangesCallCount = mcpToolCalls.filter(
+      (c) => c?.tool === 'mcp__spectra__detect_changes',
+    ).length;
+  }
+
+  // ── Feature 165 — Cohort C consumptionSignals 提取（FR-012）──
+  // 注入成功且 telemetry 可读时，从 stdout + git diff 派生三类消费信号；
+  // 注入失败 / 非 C cohort 时跳过。changedSymbols 当前 telemetry 不记录响应体，
+  // 留空数组（M2 wire 合同）—— 信号提取主要基于 driver 输出文本和 patch。
+  if (group === 'C' && graphInjection?.status === 'success') {
+    let patchText = '';
+    try {
+      const diffR = spawnSync('git', ['-C', wt.wtDir, 'diff', 'HEAD~1'], { encoding: 'utf-8' });
+      patchText = diffR.stdout ?? '';
+    } catch {
+      /* patch 提取失败不阻断 */
+    }
+    const signals = extractConsumptionSignals({
+      changedSymbols: [],
+      mcpToolCalls: mcpToolCalls ?? [],
+      stdout: runOutcome.stdout ?? '',
+      patchText,
+    });
+    graphInjection.detectChangesCallCount = detectChangesCallCount;
+    graphInjection.consumptionSignals = signals;
+    graphInjection.consumptionStatus = signals.length > 0
+      ? 'consumed'
+      : 'payload-injected-but-not-consumed';
   }
 
   // 清理 tmp（finally 语义）
@@ -1260,6 +1312,8 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       claudeExit: runOutcome.exitCode,
       claudeTimedOut: runOutcome.timedOut,
       ...(group === 'B' ? { specPushDegraded } : {}),
+      // Feature 165 — Cohort C 注入 telemetry（FR-013：每 run 写入，无论成功失败）
+      ...(group === 'C' ? { graphInjection } : {}),
     },
   };
 }

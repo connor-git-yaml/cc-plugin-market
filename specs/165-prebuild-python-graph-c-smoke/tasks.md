@@ -205,7 +205,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
   - **预估**: 50 min
   - **关联 spec**: FR-003、FR-011、FR-012、FR-013、FR-014
 
-- [ ] T-011 [M2][CRITICAL] 在 `runOne()` 函数中插入 injection hook + Cohort A/B 断言 + telemetry 写入
+- [x] T-011 [M2][CRITICAL] 在 `runOne()` 函数中插入 injection hook + Cohort A/B 断言 + telemetry 写入
   - **类型**: 实施
   - **前置**: T-010
   - **文件**: `scripts/eval-mcp-augmented.mjs`（修改）
@@ -220,7 +220,7 @@ T-018（§10.5.1 填写）→ T-019（§10.4 更新）→ T-020（全量 vitest/
   - **预估**: 30 min
   - **关联 spec**: FR-003、FR-004、FR-013、FR-014、EC-002、EC-008
 
-- [ ] T-012 [M2] 全量单测验证 M2 实现
+- [x] T-012 [M2] 全量单测验证 M2 实现
   - **类型**: 验证
   - **前置**: T-011
   - **验证**: `npx vitest run` — 全部 ≥3635 条 PASS，零新增失败
