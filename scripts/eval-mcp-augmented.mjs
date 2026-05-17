@@ -317,6 +317,14 @@ export function injectGraph({ taskFixture, wtDir, runtimeSpectraVersion }) {
  *   4. 以上全过 → pass
  *
  * 注：9-run 层面 T053 判定（spec SC-002 a-e）在 post-hoc 聚合阶段汇总此 run-level 结果。
+ *
+ * NOTE (Codex GATE_VERIFY WARNING #4, accepted as documented limitation):
+ * 本 helper 不检查 detect_changes 调用本身的 errorCode（如个别 detect_changes call
+ * 失败但其他成功的情况）。原因：graphInjection.status='success' 路径下 errorCode
+ * 永远为 undefined（由 injectGraph 实现保证），因此不存在 "success path 同时有
+ * positive summary + errorCode" 的混合状态需要拦截。如未来 telemetry schema 演进
+ * 允许 success path 携带非阻断错误码（warning code），届时再扩展此函数读取
+ * detectChangesSummaries 中每次调用的 errorCode 状态。
  */
 export function computeT053Status({ group, graphInjection, detectChangesCallCount, detectChangesSummaries }) {
   if (group !== 'C') {
