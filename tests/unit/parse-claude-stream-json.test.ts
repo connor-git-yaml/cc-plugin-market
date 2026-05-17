@@ -307,6 +307,48 @@ describe('parseClaudeStreamJson (Feature 166 FR-010)', () => {
     expect(r3.events).toEqual([]);
   });
 
+  // Feature 167 T-003a: tail result 补救测试
+  it('(truncated + result in tail) 截断时 result event 仅在尾部 → events 末位保留', async () => {
+    await loadParser();
+    // 构造 > 50MB stdout：51 个 ~1MB assistant 行 + 1 个 result 行（在末尾，超出 50MB 截断点）
+    const bigLine = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'x'.repeat(1024 * 1024 - 100) }] },
+    });
+    const resultLine = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      total_cost_usd: 1.23,
+    });
+    const lines: string[] = [];
+    for (let i = 0; i < 51; i += 1) lines.push(bigLine);
+    lines.push(resultLine);
+    const stdout = lines.join('\n');
+    expect(stdout.length).toBeGreaterThan(50 * 1024 * 1024);
+    const r = parseClaudeStreamJson(stdout);
+    expect(r.truncated).toBe(true);
+    // tail scan 应找到 result event 并 push 到末位
+    const lastEvent = r.events[r.events.length - 1];
+    expect(lastEvent?.type).toBe('result');
+    expect(lastEvent?.total_cost_usd).toBe(1.23);
+    expect(lastEvent?.is_error).toBe(false);
+  });
+
+  it('(is_error result event) is_error=true result → 仍保留在 events（parser 不过滤语义）', async () => {
+    await loadParser();
+    const stdout = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      total_cost_usd: 0,
+    });
+    const r = parseClaudeStreamJson(stdout);
+    expect(r.events.length).toBe(1);
+    expect(r.events[0].is_error).toBe(true);
+    expect(r.events[0].total_cost_usd).toBe(0);
+  });
+
   it('(合法 JSON 但非 event object) 例如纯数字、纯字符串、缺 type 字段 → 计 malformed', async () => {
     await loadParser();
     const stdout = ['123', '"just a string"', '{"foo":"bar"}', '{"type":"assistant","message":{"content":[{"type":"text","text":"good"}]}}'].join('\n');

@@ -1301,6 +1301,42 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     return { ok: false, costUsd: 0, error: `spawn error: ${runOutcome.spawnError}` };
   }
 
+  // Feature 167 T-002：group-agnostic stream-json parse（所有 cohort 均解析）
+  // cohort C 用于 reasoningTrace + consumption signals；所有 cohort 用于 realCostUsd + is_error 检测。
+  // 放在 oracle 之前：is_error=true（如 401 auth failure）时 fail-fast，避免在未改动的 worktree 上跑 oracle。
+  const driverEventsRaw = parseClaudeStreamJson(runOutcome.stdout ?? '');
+  let driverEvents = null;
+  if (group === 'C') {
+    driverEvents = driverEventsRaw;
+  }
+
+  // realCostUsd：所有 group 均从 stream-json result event 派生（FR-019 扩展 A/B，防 stop-loss 5x 低估）
+  let realCostUsd = null;
+  const costResultEvent = driverEventsRaw?.events?.find((e) => e?.type === 'result');
+  if (costResultEvent) {
+    if (costResultEvent.is_error === true) {
+      // API 错误路径（如 401 auth failure：is_error=true，total_cost_usd=0，worktree 未改动）
+      // fail-fast：写入 failed-finalized artifact（由主流程 !result.ok 路径处理），不跑 oracle
+      cleanupTempFiles({
+        cfgPath: mcpConfigPath,
+        telemetryPath,
+        keepTemp: args.keepTemp,
+      });
+      // W2 修复（Codex）：保留事件实际成本（通常为 0，但非零时也正确传递）
+      const errCostRaw = costResultEvent.total_cost_usd;
+      const errCost =
+        typeof errCostRaw === 'number' && Number.isFinite(errCostRaw) ? errCostRaw : 0;
+      return {
+        ok: false,
+        costUsd: errCost,
+        error: `claude CLI error: is_error=true subtype=${costResultEvent.subtype ?? 'unknown'}`,
+      };
+    }
+    // W1 修复（Codex）：校验类型后赋值，防 string/object 污染 cumulativeCost
+    const rawCost = costResultEvent.total_cost_usd;
+    realCostUsd = typeof rawCost === 'number' && Number.isFinite(rawCost) ? rawCost : null;
+  }
+
   // oracle — 替换 <SPECTRA_REPO_ROOT> 占位符为绝对路径（修 Codex C1）
   let oracleResult;
   try {
@@ -1324,14 +1360,7 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
 
   const productMetrics = captureProductMetrics(wt.wtDir);
 
-  // ── Feature 166 FR-011：解析 stream-json driver events（cohort C 专用）──
-  // 在 telemetry 解析前，先把 runOutcome.stdout 解析为 driverEvents 结构
-  // 后续 cohort C 路径会用 driverEvents.reasoningTrace 替代原 stdout 给 extractConsumptionSignals
-  let driverEvents = null;
-  if (group === 'C') {
-    driverEvents = parseClaudeStreamJson(runOutcome.stdout ?? '');
-  }
-
+  // driverEvents 已在 oracle 前（Feature 167 T-002）由 driverEventsRaw 设置，此处不重复解析。
   // Group C telemetry 累计（child 已 exit，可安全读 JSONL）
   // Feature 162 plan §2.4.4：canonical schema 双写
   let mcpToolCalls = null;
@@ -1427,16 +1456,8 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     keepTemp: args.keepTemp,
   });
 
-  // Feature 166 FR-019：从 stream-json result event 派生 realCostUsd（cohort C 专用）
-  // Anthropic SDK stream-json `result` event 含 total_cost_usd 字段（Codex C-010 修复）；
-  // 非 cohort C 沿用 null（与之前一致，因为 cohort A/B 当前也走 stream-json 但本 Feature 不消费其 events）
-  let realCostUsd = null;
-  if (group === 'C' && driverEvents) {
-    const resultEvent = driverEvents.events.find((e) => e?.type === 'result');
-    if (resultEvent && typeof resultEvent.total_cost_usd === 'number') {
-      realCostUsd = resultEvent.total_cost_usd;
-    }
-  }
+  // realCostUsd 已在 oracle 前（Feature 167 T-002）从 costResultEvent 派生，此处不重复提取。
+  // 对所有 group 有效：cohort C 用真实 total_cost_usd；cohort A/B 同样从 stream-json 派生，防 stop-loss 5x 低估。
 
   const oracleResultMapped = oracleResult.passed ? 'pass' : 'fail';
 

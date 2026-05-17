@@ -82,6 +82,38 @@ export function parseClaudeStreamJson(stdout) {
     }
   }
 
+  // Feature 167 T-001：截断时尾部 result event 补救
+  // 50MB 截取头部时，尾部的 result event（含 total_cost_usd）会丢失。
+  // 反向扫描原始 stdout 的末尾（最多 64KB），找到最后一个完整 result 行并补入 events。
+  // 用 lastIndexOf 找行边界避免 slice 切半行（Q1 修复）。
+  if (truncated && !events.some((e) => e?.type === 'result')) {
+    const TAIL_SCAN_MAX = 64 * 1024;
+    let pos = stdout.length;
+    let scanned = 0;
+    while (pos > 0 && scanned < TAIL_SCAN_MAX) {
+      const newlinePos = stdout.lastIndexOf('\n', pos - 1);
+      const lineStart = newlinePos === -1 ? 0 : newlinePos + 1;
+      const line = stdout.slice(lineStart, pos).trim();
+      pos = newlinePos === -1 ? 0 : newlinePos;
+      scanned += line.length + 1;
+      if (!line) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          parsed.type === 'result'
+        ) {
+          events.push(parsed);
+          break;
+        }
+      } catch {
+        /* 不是合法 JSON，继续向上扫描 */
+      }
+    }
+  }
+
   // 聚合 reasoningTrace
   const reasoningParts = [];
   for (const event of events) {
