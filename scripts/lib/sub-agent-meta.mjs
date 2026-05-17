@@ -105,17 +105,84 @@ export function readEnvInjectedMeta({ env = process.env } = {}) {
 // ───────────────────────────────────────────────────────────
 
 /**
- * 从 sub-agent stdout（stream-json 或纯文本）解析 self-report。
+ * Feature 166：从 NDJSON 格式的 sub-agent stdout 中聚合可供 self-report regex 匹配的纯文本。
+ * 包含：
+ *   - 所有 type:'assistant' 事件的 text / thinking content blocks（已 unescape，无 JSON-escape）
+ *   - 所有 type:'user' 事件的 tool_result content（如 Read 工具回显的 plugin.json 内容）
+ * 不依赖 parseClaudeStreamJson 模块（避免跨模块依赖循环）；保持轻量内联实现。
+ */
+function aggregateNdjsonTextForSelfReport(stdout) {
+  const parts = [];
+  const lines = stdout.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    let event;
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (!event || typeof event !== 'object' || typeof event.type !== 'string') continue;
+    const content = event.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      if (!block || typeof block !== 'object') continue;
+      if (event.type === 'assistant') {
+        if (block.type === 'text' && typeof block.text === 'string') {
+          parts.push(block.text);
+        } else if (block.type === 'thinking' && typeof block.thinking === 'string') {
+          parts.push(block.thinking);
+        }
+      } else if (event.type === 'user') {
+        if (block.type === 'tool_result') {
+          // tool_result.content 可以是 string 或 Array<{type,text}>
+          if (typeof block.content === 'string') {
+            parts.push(block.content);
+          } else if (Array.isArray(block.content)) {
+            for (const sub of block.content) {
+              if (sub && typeof sub.text === 'string') parts.push(sub.text);
+            }
+          }
+        }
+      }
+    }
+  }
+  return parts.join('\n');
+}
+
+/**
+ * 从 sub-agent stdout（stream-json NDJSON 或纯文本）解析 self-report。
  * 期望：
  *   sub-agent 第一个 Read 调用读 plugin.json，输出含 "version": "<x.y.z>" 的内容
  *   可选：sub-agent 复述 frontmatterTools / loadSource
+ *
+ * Feature 166 Codex implement review WARNING 2 修复：
+ *   buildClaudeArgsWithMcp 升级到 --output-format stream-json --verbose 后，stdout 是 NDJSON 格式，
+ *   plugin.json 内容会被 JSON-escape（如 `\"version\": \"4.1.0\"`），原 regex `"version":...` 命中失败。
+ *   修复：检测首行是 NDJSON event → 用 parseClaudeStreamJson 提取 reasoningTrace + tool_result content
+ *   作为匹配文本；否则沿用原 text 模式（向后兼容旧 fixture / 非 stream-json 路径）。
  *
  * 返回：
  *   { specDriverVersion, frontmatterTools, loadSource } 或 null（全部缺失）
  */
 export function parseSubAgentSelfReport({ subAgentStdout }) {
   if (!subAgentStdout || typeof subAgentStdout !== 'string') return null;
-  const text = subAgentStdout;
+  let text = subAgentStdout;
+
+  // 检测 NDJSON：首个非空 trimmed 行能解析为 { type: string } event object
+  const firstNonEmpty = text.split('\n').find((l) => l.trim().length > 0);
+  if (firstNonEmpty) {
+    try {
+      const first = JSON.parse(firstNonEmpty.trim());
+      if (first && typeof first === 'object' && typeof first.type === 'string') {
+        // 是 NDJSON 格式：聚合 reasoningTrace + tool_result content 作为匹配文本（绕开 JSON-escape）
+        text = aggregateNdjsonTextForSelfReport(subAgentStdout);
+      }
+    } catch {
+      // 解析失败 → 按原 text 处理（pre-Feature 166 fixture / 非 stream-json 输出）
+    }
+  }
 
   // 优先尝试匹配 plugin.json 的 version 字段（被 Read 工具回显）
   let specDriverVersion = null;

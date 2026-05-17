@@ -88,6 +88,70 @@ load-source: marketplace
     expect(parseSubAgentSelfReport({ subAgentStdout: 'nothing here' })).toBeNull();
     expect(parseSubAgentSelfReport({ subAgentStdout: '' })).toBeNull();
   });
+
+  it('Feature 166 W-2: NDJSON 格式 stream-json stdout 中 tool_result 含 plugin.json → 提取 version', () => {
+    // 模拟 claude CLI --output-format stream-json --verbose 输出
+    // assistant 调 Read 工具 → user 事件中含 tool_result，content 是 plugin.json 内容（JSON-encoded）
+    const pluginJsonContent = JSON.stringify({
+      name: 'spec-driver',
+      version: '4.1.0',
+      description: '...',
+    }, null, 2);
+    const ndjsonLines = [
+      JSON.stringify({ type: 'system', subtype: 'init', session_id: 's1' }),
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '我会读取 plugin.json 检查版本' },
+            { type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: 'plugins/spec-driver/.claude-plugin/plugin.json' } },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 'tu1', content: pluginJsonContent }],
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'frontmatter-tools: Read, Edit, Bash\nload-source: marketplace' }] },
+      }),
+      JSON.stringify({ type: 'result', subtype: 'success', total_cost_usd: 0.5 }),
+    ];
+    const stdout = ndjsonLines.join('\n');
+    const result = parseSubAgentSelfReport({ subAgentStdout: stdout });
+    expect(result?.specDriverVersion).toBe('4.1.0');
+    expect(result?.frontmatterTools).toEqual(['Read', 'Edit', 'Bash']);
+    expect(result?.loadSource).toBe('marketplace');
+  });
+
+  it('Feature 166 W-2: NDJSON 中 tool_result content 是 array 形式（Anthropic SDK 兼容）→ 也能提取', () => {
+    const ndjsonLines = [
+      JSON.stringify({
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'tu1',
+              content: [{ type: 'text', text: '{"version": "5.0.0"}' }],
+            },
+          ],
+        },
+      }),
+    ];
+    const result = parseSubAgentSelfReport({ subAgentStdout: ndjsonLines.join('\n') });
+    expect(result?.specDriverVersion).toBe('5.0.0');
+  });
+
+  it('Feature 166 W-2: NDJSON 解析失败时降级为原文本匹配（向后兼容）', () => {
+    // 首行像 NDJSON 但解析失败 → 走原文本路径
+    const stdout = '{"type":"asst 不完整\n"version": "3.2.1"';
+    const result = parseSubAgentSelfReport({ subAgentStdout: stdout });
+    expect(result?.specDriverVersion).toBe('3.2.1');
+  });
 });
 
 describe('mergeSubAgentMeta confidence 状态机', () => {

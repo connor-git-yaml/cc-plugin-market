@@ -29,12 +29,14 @@ type ParsedMcpCall = {
   responseSummary: Record<string, number> | null;
 };
 let parseTelemetryJsonl: (telemetryPath: string) => { mcpToolCalls: ParsedMcpCall[] };
+let buildClaudeArgsWithMcp: (opts: { prompt: string; mcpConfigPath?: string | null }) => string[];
 
 describe('buildGroupCPrompt (Feature 164 fix)', () => {
   beforeAll(async () => {
     const mod = await import(pathToFileURL(resolve('scripts/eval-mcp-augmented.mjs')).href);
     buildGroupCPrompt = mod.buildGroupCPrompt;
     parseTelemetryJsonl = mod.parseTelemetryJsonl;
+    buildClaudeArgsWithMcp = mod.buildClaudeArgsWithMcp;
   });
 
   const mockFixture = { prompt: '## Test task\n\nFix a bug.' };
@@ -267,5 +269,74 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
     } finally {
       fs.unlinkSync(tmpFile);
     }
+  });
+});
+
+describe('buildClaudeArgsWithMcp (Feature 166 FR-004 / FR-007 / FR-018)', () => {
+  it('FR-004: args 包含 claude-opus-4-7 模型字符串（无 sonnet-4-6 残留）', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test prompt' });
+    const modelIdx = args.indexOf('--model');
+    expect(modelIdx).toBeGreaterThanOrEqual(0);
+    expect(args[modelIdx + 1]).toBe('claude-opus-4-7');
+    expect(args.join(' ')).not.toContain('claude-sonnet-4-6');
+  });
+
+  it('FR-007: args 包含 --output-format stream-json（无 text 残留）', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test prompt' });
+    const fmtIdx = args.indexOf('--output-format');
+    expect(fmtIdx).toBeGreaterThanOrEqual(0);
+    expect(args[fmtIdx + 1]).toBe('stream-json');
+    // 'text' 不应作为 --output-format 的值出现
+    // (仅检查紧跟 --output-format 的下一个元素)
+    expect(args.filter((a, i) => args[i - 1] === '--output-format' && a === 'text')).toHaveLength(0);
+  });
+
+  it('FR-018: args 包含 --verbose（stream-json 完整 dump tool_use 必需，沿用 eval-task-runner 决策）', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test prompt' });
+    expect(args).toContain('--verbose');
+  });
+
+  it('args 保留 --print / --permission-mode / --dangerously-skip-permissions', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test prompt' });
+    expect(args).toContain('--print');
+    expect(args).toContain('--permission-mode');
+    expect(args).toContain('bypassPermissions');
+    expect(args).toContain('--dangerously-skip-permissions');
+  });
+
+  it('args 最后一项始终是 prompt（参数顺序契约）', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'final prompt content' });
+    expect(args[args.length - 1]).toBe('final prompt content');
+  });
+
+  it('不传 mcpConfigPath 时不出现 --mcp-config / --strict-mcp-config', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test' });
+    expect(args).not.toContain('--mcp-config');
+    expect(args).not.toContain('--strict-mcp-config');
+  });
+
+  it('传 mcpConfigPath 时附加 --mcp-config 和 --strict-mcp-config', () => {
+    const args = buildClaudeArgsWithMcp({ prompt: 'test', mcpConfigPath: '/tmp/mcp.json' });
+    const mcpIdx = args.indexOf('--mcp-config');
+    expect(mcpIdx).toBeGreaterThanOrEqual(0);
+    expect(args[mcpIdx + 1]).toBe('/tmp/mcp.json');
+    expect(args).toContain('--strict-mcp-config');
+    // 顺序：--mcp-config / 路径 / --strict-mcp-config / prompt
+    expect(args[args.length - 1]).toBe('test');
+  });
+
+  it('dry-run 风格断言：args 整体结构稳定（snapshot 替代）', () => {
+    // Codex W-004 修复：补 dry-run snapshot 类断言，捕获将来误改 args 顺序的回归
+    const args = buildClaudeArgsWithMcp({ prompt: 'dryRun-test' });
+    // 关键 args 必须存在且顺序符合预期
+    expect(args.slice(0, 7)).toEqual([
+      '--print',
+      '--model',
+      'claude-opus-4-7',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--permission-mode',
+    ]);
   });
 });

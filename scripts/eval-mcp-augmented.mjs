@@ -47,6 +47,8 @@ import {
 // Feature 162 FR-027 入口位点 1/3：runForTaskList 之前 self-judge hard-fail 检查
 import { assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
 import { DEFAULT_JUDGES } from './eval-judge-jury.mjs';
+// Feature 166 FR-011：stream-json driver events 解析（cohort C 专用）
+import { parseClaudeStreamJson } from './lib/parse-claude-stream-json.mjs';
 
 // Feature 162 Phase C：quota state store + subAgentMeta 双轨采集（plan §2.3 / §2.4.5）
 import {
@@ -79,7 +81,7 @@ const MCP_DIST_ENTRY = path.join(PROJECT_ROOT, 'dist/cli/index.js');
 const MCP_SRC_DIR = path.join(PROJECT_ROOT, 'src/mcp');
 
 const DRY_RUN_COST_PER_RUN_USD = 0.25; // 估算（FR-B-005 / FR-B-008）
-const DEFAULT_TIMEOUT_MS = 1_800_000; // 30 min hard ceiling，沿用 runner 默认
+const DEFAULT_TIMEOUT_MS = 2_700_000; // Feature 166: 45 min hard ceiling（提升自 30 min，缓解 Feature 165 §10.5.1 3/9 SIGTERM）
 
 // Feature 162 Phase C：quota state store 路径（plan §2.3.1）
 const QUOTA_HOME = path.join(
@@ -917,15 +919,21 @@ function cleanupTempFiles({ cfgPath, telemetryPath, keepTemp }) {
 
 /**
  * 自实现而不修改 runner 的 buildClaudeArgs（runner 没有 mcp-config 参数）。
- * 与 runner 输出形态保持一致：[--print, --model, --output-format, --permission-mode, ..., prompt]
+ * 与 runner 输出形态保持一致：[--print, --model, --output-format, --verbose, --permission-mode, ..., prompt]
+ *
+ * Feature 166 改动：
+ *   - model: claude-sonnet-4-6 → claude-opus-4-7（GATE_DESIGN C-001=A，提升解题能力）
+ *   - output-format: text → stream-json（完整捕获 driver thinking + tool_use 事件）
+ *   - 新增 --verbose（沿用 eval-task-runner.mjs:224 决策：stream-json 需 verbose 才能完整 dump tool_use）
  */
-function buildClaudeArgsWithMcp({ prompt, mcpConfigPath = null }) {
+export function buildClaudeArgsWithMcp({ prompt, mcpConfigPath = null }) {
   const args = [
     '--print',
     '--model',
-    'claude-sonnet-4-6',
+    'claude-opus-4-7',
     '--output-format',
-    'text',
+    'stream-json',
+    '--verbose',
     '--permission-mode',
     'bypassPermissions',
     '--dangerously-skip-permissions',
@@ -1281,6 +1289,18 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     return { ok: false, costUsd: 0, error: `spawn failed: ${err.message}` };
   }
 
+  // Feature 166 Codex implement review CRITICAL 2 修复：
+  // spawnClaudeAndWait 的 child.on('error') 路径走 resolve(spawnError) 不抛错，
+  // 若不在此 fail-fast，会继续执行 oracle + 写入污染 cohort C 数据（claudeExit=null + 空 driverEvents）。
+  if (runOutcome.spawnError) {
+    cleanupTempFiles({
+      cfgPath: mcpConfigPath,
+      telemetryPath,
+      keepTemp: args.keepTemp,
+    });
+    return { ok: false, costUsd: 0, error: `spawn error: ${runOutcome.spawnError}` };
+  }
+
   // oracle — 替换 <SPECTRA_REPO_ROOT> 占位符为绝对路径（修 Codex C1）
   let oracleResult;
   try {
@@ -1303,6 +1323,14 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
   }
 
   const productMetrics = captureProductMetrics(wt.wtDir);
+
+  // ── Feature 166 FR-011：解析 stream-json driver events（cohort C 专用）──
+  // 在 telemetry 解析前，先把 runOutcome.stdout 解析为 driverEvents 结构
+  // 后续 cohort C 路径会用 driverEvents.reasoningTrace 替代原 stdout 给 extractConsumptionSignals
+  let driverEvents = null;
+  if (group === 'C') {
+    driverEvents = parseClaudeStreamJson(runOutcome.stdout ?? '');
+  }
 
   // Group C telemetry 累计（child 已 exit，可安全读 JSONL）
   // Feature 162 plan §2.4.4：canonical schema 双写
@@ -1363,7 +1391,10 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     const signals = extractConsumptionSignals({
       changedSymbols: aggregatedChangedSymbols,
       mcpToolCalls: mcpToolCalls ?? [],
-      stdout: runOutcome.stdout ?? '',
+      // Feature 166 FR-012：cohort C 用 driverEvents.reasoningTrace 替代原 runOutcome.stdout，
+      // 因 --output-format stream-json 后 stdout 是 NDJSON 而非纯文本；reasoningTrace 是从
+      // assistant text + thinking blocks 聚合的纯文本，对 reasoning-trace-mention 匹配更准
+      stdout: driverEvents?.reasoningTrace ?? '',
       patchText,
     });
     graphInjection.detectChangesCallCount = detectChangesCallCount;
@@ -1396,8 +1427,16 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     keepTemp: args.keepTemp,
   });
 
-  // 估算 cost：实跑暂置 null 待未来 LLM token usage 集成（FR-B-006）
-  const realCostUsd = null;
+  // Feature 166 FR-019：从 stream-json result event 派生 realCostUsd（cohort C 专用）
+  // Anthropic SDK stream-json `result` event 含 total_cost_usd 字段（Codex C-010 修复）；
+  // 非 cohort C 沿用 null（与之前一致，因为 cohort A/B 当前也走 stream-json 但本 Feature 不消费其 events）
+  let realCostUsd = null;
+  if (group === 'C' && driverEvents) {
+    const resultEvent = driverEvents.events.find((e) => e?.type === 'result');
+    if (resultEvent && typeof resultEvent.total_cost_usd === 'number') {
+      realCostUsd = resultEvent.total_cost_usd;
+    }
+  }
 
   const oracleResultMapped = oracleResult.passed ? 'pass' : 'fail';
 
@@ -1443,6 +1482,9 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
       // 计算逻辑见上方 t053Status 块；非 C cohort 始终为 'na'
       runLevelT053Status: t053Status,
       ...(t053FailReason ? { runLevelT053FailReason: t053FailReason } : {}),
+      // Feature 166 SC-004：cohort C 注入 driverEvents（events + reasoningTrace + 行计数）
+      // 非 cohort C 为 null（保持向后兼容；cohort A/B fixture 字段集合不变）
+      ...(group === 'C' ? { driverEvents } : {}),
     },
   };
 }
