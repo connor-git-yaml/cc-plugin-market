@@ -650,6 +650,48 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 
 完整明细 → [SWE-Bench Grounding Lift Detail Report](../158-swe-bench-lite-grounding-eval/impl-supplement/competitive-evaluation-report.md)（Feature 158 detail 报告）+ [Feature 162 pilot-27-analysis.json](../162-codex-driver-glm-judge-eval/pilot-27-analysis.json)
 
+#### 10.4.X T053 Smoke Test 战略结论（Feature 165，2026-05-17）
+
+> **本子节状态（2026-05-17）**：Feature 165 完成 T053 范围内 graph 生成 + 注入 mechanism 9/9 实测验证；E2E driver 消费证据因当前 shell session claude CLI subprocess 401 auth fail 而未取得（基础设施 blocker，非 grounding 设计问题）。详见 §10.5.1。
+
+**(a) T053 通过/失败判定（4 条充要标准）**
+
+| 标准 | 结果 | 证据 |
+|------|------|------|
+| ① graph 真实生成（schema + callSites + version） | ✅ PASS | 3/3 repos（pytest 1086 + astropy 6440 + sympy 38356 callSites） |
+| ② graph 真实注入 worktree（atomic copy + dest 二次校验） | ✅ PASS | 9/9 sourceHash===destHash + 4 类 errorCode 全 0 |
+| ③ driver 真实调用 detect_changes | ❌ FAIL | 0/9（401 auth fail，非 grounding 设计问题） |
+| ④ driver 消费 changedSymbols | ❌ N/A | 因 ③ 阻断 |
+
+**T053 整体 = Mechanism PASS / E2E FAIL-by-infra**。
+
+**(b) T052 全量 450 runs 启动操作前提评估**
+
+| 操作前提 | 验证状态 |
+|---------|---------|
+| 注入合同稳定性 | ✅ 9/9 mechanism success（atomic copy + fsync + dest 二次校验） |
+| Telemetry 可信度 | ✅ graphInjection 结构字段完整 + t053Status 顶层字段 + responseSummary 类型校验 |
+| Graph schema 一致性 | ✅ 9/9 graphSchemaVersion === runtimeSpectraVersion |
+| E2E driver 消费 grounding payload | ❓ **未验证**（401 auth 阻断；需用户修复 claude CLI auth 后重跑 ~$5 + 45-75min wall） |
+
+**T052 启动建议**：**部分操作前提具备但不充分** — 注入 mechanism 9/9 验证，但 driver 真实消费 grounding payload 的证据缺失。**强烈建议**用户先：
+
+1. 修复 claude CLI subprocess auth（运行 `claude /login` 或设置 `ANTHROPIC_API_KEY` env var）
+2. 重跑 T053 M3 9-run smoke（脚本已具备，~$5 cost + 45-75min wall）
+3. 取得充要标准 ③ + ④ 的证据后再启动 T052 全量 450（~$75 + 38h wall）
+
+直接启动 T052 而不补 ③ + ④ 证据的风险：所有 450 runs 可能因相同 401 auth 而失败，浪费时间和成本。
+
+**(c) 统计显著性显式声明（spec FR-007 要求）**
+
+⚠️ **T053 为 smoke test 而非 lift gate** — n=9 样本规模在 LLM 任务上 ±11pp 结果差异完全属于 LLM 方差范围，**不具备统计显著性**。本次 T053 验证目标是 grounding payload 注入 mechanism + E2E driver 消费证据，**不是 Pass Rate lift 量化判定**。
+
+T053 通过后取得的"driver 是否消费 grounding payload"信号亦只是定性观察（consumptionSignals 三类机械化识别），**不构成** lift 显著性证据。T052 全量 450（10 fixture × 3 cohort × N=15）才有可能在统计上区分 grounding lift 与 LLM 方差，但需在 T053 ③ + ④ 充要标准验证通过后启动。
+
+**T052 启动决策权归用户** — 编排器仅基于本次 T053 数据给出操作前提评估，不替代用户对 cost / wall / 信息价值的资源分配判断。
+
+---
+
 ### 10.5 Sub-agent MCP 继承 fix 影响验证（Feature 162 Phase 0）
 
 > **新建章节（Feature 162 spec FR-037）**：验证 Phase 0 frontmatter fix（5 个 plugin agent 加 mcp__spectra__* 工具 + plugin 4.0.0 → 4.1.0）在 pilot 27 实测中是否生效，避免 Stage 7b mcp-pull cohort 数据污染（详见 specs/161-fix-workspace-replace-replaceall/verification/sub-agent-mcp-test.md 的 Smoke D Test 3 数据）。
@@ -682,6 +724,94 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 - `self-report`: 0 records
 - `mixed`: 0 records
 - `absent`: 0 records
+
+#### 10.5.1 Cohort C Grounding Payload Smoke Test 结果（Feature 165，2026-05-17）
+
+> **新建子节（Feature 165 spec FR-006）**：T053 范围 grounding payload **真实注入** smoke test，验证 graph 注入 mechanism 在 Cohort C 9-run 实测中是否 end-to-end 工作。**T053 = smoke test，非 lift gate**（n=9 不构成统计显著性）。
+>
+> **本节状态（2026-05-17 实测后）**：**Feature 165 注入 mechanism 通过 9/9 实测验证**（M1 graph 生成 + M2 注入代码 + M3 9-run 实跑），但 **E2E driver 调用 MCP 因当前 shell session claude CLI subprocess 401 auth fail（基础设施层）而 0/9 触发**，semantic grounding 消费证据未取得。T053 整体 = **mechanism PASS / E2E blocked-by-infra**。
+
+##### 10.5.1.1 M1 Graph Build 实测数据
+
+| repo | wall (build script) | dry-run input tokens | dry-run output tokens | cost 估 | graph.json size | nodes | links | callSites | spectraVersion | graphSchemaVersion |
+|------|---------------------|---------------------|----------------------|---------|----------------|------:|------:|----------:|----------------|--------------------|
+| pytest  | ~6 min  |   990,676 |   297,203 |  $7.4 |  4.4 MB |  8,635 |  3,649 |  1,086 | 4.1.1 | 4.1.1 |
+| astropy | ~15 min | 2,112,357 |   633,707 | $15.8 | 13 MB   | 20,763 | 12,933 |  6,440 | 4.1.1 | 4.1.1 |
+| sympy   | ~25 min | 4,606,391 | 1,381,918 | $34.6 | 32 MB   | 36,834 | 55,607 | 38,356 | 4.1.1 | 4.1.1 |
+| **合计**| **~46 min** | **7.7M** | **2.3M** | **~$57.8** | **49.4 MB** | **66,232** | **72,189** | **45,882** | — | — |
+
+**关键发现（M1 实测发现，超 spec 软上限）**：
+
+- **总成本 $57.8 超过 spec FR-008 软上限 $25**（用户预授权接受）。归因：dry-run estimator 基于 panoramic context（6,500 tokens / module 固定开销）+ AST skeleton 拼接保守估算；sympy 单仓库 cost 已超总预算
+- **`callSites` 字段在 spectra graph.json v2.0 schema 中不是顶层字段**——calls 信息编码在 `links[].relation === 'calls'`。build script 从 links 派生 callSites 列表并注入顶层（保持 spec FR-001 合同）
+- **spectra `--budget` 是 token 数（非 USD）**——build script 内部转换 `budget_tokens = budget_usd × 200_000`（Sonnet weighted avg）
+- **`graphSchemaVersion` 注入为 spectra package version（4.1.1）**——spectra graph format 内部版本 `g.graph.schemaVersion = '2.0'` 保留为诊断字段，runtime 校验对齐 RUNTIME_SPECTRA_VERSION IIFE（CLI 探测 → package.json）
+
+##### 10.5.1.2 M3 9-run Smoke Test 数据汇总
+
+| run | target | injection.status | sourceHash === destHash | callSites in graph | detectChangesCallCount | changedSymbolsCount | mcpToolCallCount | claudeExit | t053Status |
+|-----|--------|------------------|-------------------------|--------------------:|------------------------:|---------------------:|------------------:|-----------:|------------|
+| SWE-L001-C-1 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L001-C-2 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L001-C-3 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L003-C-1 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L003-C-2 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L003-C-3 | pytest  | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L005-C-1 | astropy | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L005-C-2 | astropy | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| SWE-L005-C-3 | astropy | success | ✅ | ✅ | 0 | — | 0 | 1 | fail |
+| **Aggregate** | — | **9/9 success** | **9/9 match** | **9/9 present** | **0/9** | — | **0/9** | **9/9 = 1** | **9/9 fail** |
+
+**关键 errorCode 分布**：
+- `graph-not-built`: 0 / 9（与 Feature 164 baseline 9/9 graph-not-built 对比，注入完全消除该错误码）✅
+- `graph-schema-mismatch`: 0 / 9 ✅
+- `payload-empty`: 0 / 9 ✅
+- `copy-integrity-failed`: 0 / 9 ✅
+
+##### 10.5.1.3 `detect_changes` 响应摘录（spec FR-006 要求 ≥3 个）
+
+**E2E 阻断说明**：9/9 runs `detectChangesCallCount = 0` —— driver 未触发任何 `mcp__spectra__detect_changes` 调用。根因是 claude CLI subprocess 在当前 shell session 中遇到 **401 Invalid authentication credentials**（虽然 `claude auth status` 显示 `loggedIn: true` with claude.ai max subscription，但 OAuth keychain credential 在 child process 中无法访问）。
+
+因此 spec FR-006 (b) 要求的 "3-5 个真实 `detect_changes` 原始响应摘录" **无法在本次实测中提供**——所有 9 runs 的 `mcpToolCalls = []`、`subAgentStdout.length = 0`、`claudeExit = 1`。
+
+**预期形式（auth 修复后重跑应得到的样本）**：
+
+```jsonc
+// 期望样本（auth 修复后）
+{
+  "tool": "mcp__spectra__detect_changes",
+  "success": true,
+  "responseSize": ~3000,
+  "responseSummary": { "changedSymbolsCount": 5 },
+  "ts": "2026-05-17T..."
+}
+```
+
+##### 10.5.1.4 Driver Behavior Trace（spec FR-006 要求）
+
+**E2E 阻断说明**：driver 未执行，故 consumptionSignals (patch-diff-literal / derived-mcp-call / reasoning-trace-mention) 均空。
+
+**与 F164 broken 时的对比**：
+- F164（before）: detect_changes 触发 9/9，但全部返回 `graph-not-built` errorCode；driver 收到错误后继续执行（patch 路径与 cohort A bare 相同）
+- F165（after，本实测）: 注入 mechanism 9/9 success；但 driver 0/9 触发（无关 grounding，是 auth 基础设施 401）
+
+##### 10.5.1.5 T053 通过/失败判定（4 条充要标准）
+
+| 标准 | 验证项 | 结果 | 证据 |
+|------|--------|------|------|
+| ① graph 真实生成 | 3 repos schema 合法 + callSites 非空 + version 完整 | **✅ PASS** | 1,086 + 6,440 + 38,356 callSites |
+| ② graph 真实注入 worktree | 9 runs sourceHash === destHash + dest schema 校验 | **✅ PASS** | 9/9 match + 4 类 errorCode 全 0 |
+| ③ driver 真实调用 detect_changes | detectChangesCallCount ≥ 1 | **❌ FAIL** | 0/9（因 401 auth fail，非 grounding 设计问题） |
+| ④ driver 消费 changedSymbols | consumptionSignals 任一类 | **❌ N/A** | 因 ③ 阻断，无法验证 |
+
+**T053 整体判定**：
+
+- **Mechanism 层 PASS**（spec FR-001/003/011/013/014 注入合同 9/9 验证）
+- **E2E 层 FAIL**（充要标准 ③ + ④，根因 = 当前 shell session 的 claude CLI subprocess 401 auth，非 grounding 设计本身）
+
+**修复路径**：用户运行 `claude /login` 或设置 `ANTHROPIC_API_KEY` env var 后重跑 M3 9-run smoke（~$5 + 45-75min wall）即可补完充要标准 ③ + ④ 的验证证据。
+
+---
 
 #### 10.5.5 跑批失败 run 统计（plan iter-4 W-10 新增 + Feature 163 rerun 更新）
 
