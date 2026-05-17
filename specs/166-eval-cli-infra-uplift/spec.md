@@ -156,7 +156,9 @@ Cost 影响详见 SC-005 / FR-013 / EC-006。
 - **FR-010 [必须]**: 新增 `tests/unit/parse-claude-stream-json.test.ts`，至少 10 个测试用例（详见 User Story 3 Independent Test）。补充覆盖：(k) redacted_thinking block 保留在 events 但不进入 reasoningTrace、(l) partial last line（无换行结尾）容错、(m) 超大输出（mock 1 MB stdout）流式按行解析不 OOM。
 - **FR-011 [必须]**: `runOne()` 函数在 cohort C 分支（`group === 'C'`）调用 `parseClaudeStreamJson(runOutcome.stdout)`，并将结果挂载到 `runResult` 对象上的 `driverEvents` 字段（结构与 parser 返回值一致）。
 - **FR-012 [必须]**: `extractConsumptionSignals` 在 `runOne()` cohort C 分支中的调用 MUST 传入 parser 解析出的 `reasoningTrace`（而非原 `runOutcome.stdout`）作为 `stdout` 参数。函数签名保持向后兼容（参数名仍为 `stdout`，但语义升级为 reasoning trace）。
-- **FR-018 [必须，新增]**: implement 阶段 MUST 在 1 个真实 cohort C run 中验证 `--output-format stream-json` 的 CLI 参数矩阵（含 `--strict-mcp-config` + `--mcp-config` + `--print` 组合）兼容性：stdout 必须为每行 JSON 格式（grep 验证）；如发现需补充 `--verbose`，必须在 buildClaudeArgsWithMcp 中加上且更新单测。
+- **FR-018 [必须，新增]**: implement 阶段 MUST 在 1 个真实 cohort C run 中验证 `--output-format stream-json` 的 CLI 参数矩阵（含 `--strict-mcp-config` + `--mcp-config` + `--print` 组合）兼容性：stdout 必须为每行 JSON 格式（grep 验证）。**`--verbose` 已硬决策加入 buildClaudeArgsWithMcp**（依据 `scripts/eval-task-runner.mjs:224` 既有实证："stream-json 需要 --verbose 才能完整 dump tool_use block"），单测 MUST 断言 `--verbose` 出现在 args 中。
+
+- **FR-019 [必须，新增 Codex C-010 修复]**: `runOne()` cohort C 分支 MUST 从 `driverEvents.events` 中找到 `type === 'result'` 事件，提取 `total_cost_usd`（Anthropic SDK stream-json result event 标准字段），赋给 `realCostUsd`（替换 line 1399-1400 原 `const realCostUsd = null`）。非 cohort C 沿用 null（不变）。这是 SC-005 cost 验证的 ground truth 数据源。
 
 #### 验证
 
