@@ -169,10 +169,12 @@ export function validateGraphSchema(graphPath, runtimeSpectraVersion) {
   if (!g || typeof g !== 'object') {
     return { ok: false, errorCode: 'graph-schema-mismatch', reason: 'not an object' };
   }
-  if (!g.nodes || !g.links || !g.callSites) {
-    return { ok: false, errorCode: 'graph-schema-mismatch', reason: 'missing nodes/links/callSites' };
+  // Codex GATE_VERIFY WARNING #3 修复：除字段存在性外，必须验证 nodes/links/callSites 全是数组
+  // 防止 graph.json 把 nodes/links/callSites 写成 object/number/string 等非数组类型
+  if (!Array.isArray(g.nodes) || !Array.isArray(g.links) || !Array.isArray(g.callSites)) {
+    return { ok: false, errorCode: 'graph-schema-mismatch', reason: 'nodes/links/callSites must be arrays' };
   }
-  if (!Array.isArray(g.callSites) || g.callSites.length === 0) {
+  if (g.callSites.length === 0) {
     return { ok: false, errorCode: 'payload-empty', reason: 'callSites empty' };
   }
   const gv = g.graphSchemaVersion ?? g.spectraVersion ?? null;
@@ -848,6 +850,19 @@ export function parseTelemetryJsonl(telemetryPath) {
         }
         if (Object.keys(cleaned).length > 0) parsedSummary = cleaned;
       }
+      // Feature 165 FR-012 round 3 (GATE_VERIFY CRITICAL 修复)：
+      // 解析 responseSamples.{symbols, files} 给 consumption signal extractor 用
+      let parsedSamples = null;
+      if (j.responseSamples && typeof j.responseSamples === 'object' && !Array.isArray(j.responseSamples)) {
+        const samples = {};
+        if (Array.isArray(j.responseSamples.symbols)) {
+          samples.symbols = j.responseSamples.symbols.filter((s) => typeof s === 'string');
+        }
+        if (Array.isArray(j.responseSamples.files)) {
+          samples.files = j.responseSamples.files.filter((s) => typeof s === 'string');
+        }
+        if (Object.keys(samples).length > 0) parsedSamples = samples;
+      }
       mcpToolCalls.push({
         tool: typeof j.toolName === 'string' ? `mcp__spectra__${j.toolName}` : (j.tool ?? null),
         success: typeof j.success === 'boolean' ? j.success : (errorVal == null),
@@ -855,6 +870,7 @@ export function parseTelemetryJsonl(telemetryPath) {
         responseBytes: typeof j.responseSize === 'number' ? j.responseSize : 0,
         timestamp: j.timestamp ?? j.ts ?? null,
         responseSummary: parsedSummary,
+        responseSamples: parsedSamples,
       });
     } catch {
       // 忽略坏行（telemetry 写入失败的部分行）
@@ -1307,7 +1323,7 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
   }
 
   // ── Feature 165 — Cohort C consumptionSignals 提取（FR-012）──
-  // 注入成功且 telemetry 可读时，从 stdout + git diff 派生三类消费信号；
+  // 注入成功且 telemetry 可读时，从 stdout + git diff + telemetry samples 派生三类消费信号；
   // 注入失败 / 非 C cohort 时跳过。
   if (group === 'C' && graphInjection?.status === 'success') {
     let patchText = '';
@@ -1317,8 +1333,27 @@ async function runOne({ group, taskFixture, repeatIndex, args, claudeCliVersion 
     } catch {
       /* patch 提取失败不阻断 */
     }
+    // Feature 165 FR-012 round 3（GATE_VERIFY CRITICAL 修复）：
+    // 从 detect_changes telemetry 的 responseSamples 聚合 changedSymbols
+    // sample 已在 MCP server 端 bounded (N=10)，避免 telemetry 膨胀
+    const aggregatedChangedSymbols = [];
+    for (const call of (mcpToolCalls ?? [])) {
+      if (call?.tool !== 'mcp__spectra__detect_changes') continue;
+      if (!call.success || !call.responseSamples) continue;
+      const files = Array.isArray(call.responseSamples.files) ? call.responseSamples.files : [];
+      const symbols = Array.isArray(call.responseSamples.symbols) ? call.responseSamples.symbols : [];
+      // 每个 file 关联一个 entry，symbols 全部 attach 到 entry（简化结构 — 真实 spec 中 per-file 拆分）
+      if (files.length > 0) {
+        for (const f of files) {
+          aggregatedChangedSymbols.push({ filePath: f, symbols: symbols.map((s) => ({ symbolName: s })) });
+        }
+      } else if (symbols.length > 0) {
+        // 只有 symbols 没 files 的情况
+        aggregatedChangedSymbols.push({ filePath: null, symbols: symbols.map((s) => ({ symbolName: s })) });
+      }
+    }
     const signals = extractConsumptionSignals({
-      changedSymbols: [],
+      changedSymbols: aggregatedChangedSymbols,
       mcpToolCalls: mcpToolCalls ?? [],
       stdout: runOutcome.stdout ?? '',
       patchText,

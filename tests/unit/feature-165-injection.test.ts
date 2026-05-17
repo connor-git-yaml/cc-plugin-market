@@ -182,6 +182,38 @@ describe('Feature 165 T-008 — validateGraphSchema', () => {
     const r = mod.validateGraphSchema(fp, '4.1.1');
     expect(r.ok).toBe(true);
   });
+
+  // Codex GATE_VERIFY WARNING #3：nodes / links / callSites 必须是数组（非 object / number / string）
+  it('nodes 字段为非数组 (object) → graph-schema-mismatch', () => {
+    const fp = path.join(tmpDir, 'g.json');
+    const g = buildValidGraph('4.1.1');
+    (g as Record<string, unknown>).nodes = { malformed: 'object instead of array' };
+    writeJsonFixture(fp, g);
+    const r = mod.validateGraphSchema(fp, '4.1.1');
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('graph-schema-mismatch');
+    expect(r.reason).toContain('arrays');
+  });
+
+  it('links 字段为字符串 → graph-schema-mismatch', () => {
+    const fp = path.join(tmpDir, 'g.json');
+    const g = buildValidGraph('4.1.1');
+    (g as Record<string, unknown>).links = 'not-an-array';
+    writeJsonFixture(fp, g);
+    const r = mod.validateGraphSchema(fp, '4.1.1');
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('graph-schema-mismatch');
+  });
+
+  it('callSites 字段为 null → graph-schema-mismatch (而非 payload-empty)', () => {
+    const fp = path.join(tmpDir, 'g.json');
+    const g = buildValidGraph('4.1.1');
+    (g as Record<string, unknown>).callSites = null;
+    writeJsonFixture(fp, g);
+    const r = mod.validateGraphSchema(fp, '4.1.1');
+    expect(r.ok).toBe(false);
+    expect(r.errorCode).toBe('graph-schema-mismatch');
+  });
 });
 
 // ─── T-009：injectGraph / assertNoGraphInWorktree / extractConsumptionSignals ──

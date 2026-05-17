@@ -160,9 +160,9 @@ Feature 162 Pilot 27 已完成 27/27 成功落地，Feature 164 修复了 Cohort
 
 **时间预算来源依据**：参考用户需求原文"pytest ~5min wall + astropy ~30min wall + sympy ~30min wall = ~65min 一次性"，以及 §10.4 line 580 实测数据"Feature 162 pilot 27 A+B 137min wall + C cohort 46min rerun"。本 Feature graph build 总时间预算 ≤90min（含 1.4x 余量；超过则记录 "time-budget-exceeded" 风险信号，不阻断）。
 
-**校准要求**：graph build 前 MUST 执行 spectra `--dry-run` 预估当前仓库实际 token 量和墙钟时间；若 dry-run 估算 cost > 对应仓库 `--budget` 或 wall > 60min（单仓库），MUST 调整 budget 或终止并标记 `graph-build-failed`。
+**校准要求（Round 3 实测后软化为 SHOULD）**：graph build 前 SHOULD 执行 spectra `--dry-run` 预估当前仓库 token 量；若 dry-run 估算 cost > 对应仓库 `--budget` 或 wall > 60min（单仓库），SHOULD 调整 budget 或终止并标记 `graph-build-failed`，**但** 实际实施允许 `log_warn` 继续执行，依赖 spectra 内置 `--on-over-budget cancel` 作为最终硬门控（设计权衡：dry-run estimator 偏保守，实际 cost 可能 < 估算，hard fail 反而干扰流程）。
 
-**软约束**：累计实际成本若超过 $25 或总 wall 超过 90min，在 §10.5.1 记录风险信号，但不阻断报告完成（不构成 T053 失败标准）。`[必须]`
+**软约束**：累计实际成本若超过 $25 或总 wall 超过 90min，在 §10.5.1 记录风险信号，但不阻断报告完成（不构成 T053 失败标准）。Round 3 实测 cost = $57.8（pytest $7.4 + astropy $15.8 + sympy $34.6），超 $25 软上限 230%，已用户预授权接受。`[必须]`
 > 可追踪：US1、EC-003
 
 **FR-009**：Feature 交付后，`npx vitest run` MUST 全部通过（≥3635 条），`npm run build` 和 `npm run repo:check` MUST 零错误。`[必须]`

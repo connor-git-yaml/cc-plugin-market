@@ -223,4 +223,49 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       fs.unlinkSync(tmpFile);
     }
   });
+
+  // Feature 165 round 3 GATE_VERIFY CRITICAL — responseSamples 解析
+  it('应解析 responseSamples.{symbols, files}（detect_changes bounded sample）', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-17T00:00:00.000Z',
+      toolName: 'detect_changes',
+      responseSize: 100,
+      runId: 'r7',
+      responseSummary: { changedSymbolsCount: 3 },
+      responseSamples: { symbols: ['Foo', 'bar'], files: ['src/a.py'] },
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols: string[]; files: string[] } }).responseSamples;
+      expect(samples).not.toBeNull();
+      expect(samples.symbols).toEqual(['Foo', 'bar']);
+      expect(samples.files).toEqual(['src/a.py']);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
+
+  it('responseSamples 非数组 / 含非字符串值 → 过滤', () => {
+    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const entry = {
+      ts: '2026-05-17T00:00:00.000Z',
+      toolName: 'detect_changes',
+      responseSize: 50,
+      runId: 'r8',
+      responseSummary: { changedSymbolsCount: 1 },
+      responseSamples: { symbols: ['valid', 123, null], files: 'not-array' } as unknown as Record<string, unknown>,
+    };
+    fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
+    try {
+      const result = parseTelemetryJsonl(tmpFile);
+      const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols?: string[]; files?: string[] } }).responseSamples;
+      expect(samples).not.toBeNull();
+      expect(samples?.symbols).toEqual(['valid']);
+      expect(samples?.files).toBeUndefined();
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
+  });
 });

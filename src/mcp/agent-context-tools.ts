@@ -95,6 +95,12 @@ export interface TelemetryEntry {
   // 当前定义字段：changedSymbolsCount（detect_changes 返回的 changedSymbols 数量）
   // 其他工具可按需扩展（impact/context 不强制）
   responseSummary?: Record<string, number>;
+  // Feature 165 FR-012 round 2 — Cohort C consumption signal 提取需要 symbol/file 名样本
+  // sample 限 N=10，避免 telemetry 膨胀；post-hoc 用于 patch-diff-literal / reasoning-trace-mention 匹配
+  responseSamples?: {
+    symbols?: string[];
+    files?: string[];
+  };
 }
 
 /**
@@ -148,6 +154,7 @@ export function recordAndReturn(
   requestSize: number,
   result: ToolResult,
   responseSummary?: Record<string, number>,
+  responseSamples?: { symbols?: string[]; files?: string[] },
 ): ToolResult {
   const responseText = result.content?.[0]?.text ?? '';
   // 修 Codex W4：用 UTF-8 byte length 而非 char length（中文 / emoji 不会被低估）
@@ -162,9 +169,12 @@ export function recordAndReturn(
   };
   const errorCode = extractErrorCode(result);
   if (errorCode !== undefined) entry.errorCode = errorCode;
-  // Feature 165 — 仅 success 路径写 responseSummary（avoid 噪音字段）
+  // Feature 165 — 仅 success 路径写 responseSummary / responseSamples（avoid 噪音字段）
   if (responseSummary !== undefined && errorCode === undefined) {
     entry.responseSummary = responseSummary;
+  }
+  if (responseSamples !== undefined && errorCode === undefined) {
+    entry.responseSamples = responseSamples;
   }
   writeTelemetry(entry);
   return result;
@@ -671,13 +681,30 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     };
     if (uniqWarnings.length > 0) data['warnings'] = uniqWarnings;
 
-    // Feature 165 FR-012：success 路径写 responseSummary.changedSymbolsCount 到 telemetry
+    // Feature 165 FR-012 round 3：success 路径写 responseSummary + responseSamples 到 telemetry
+    // responseSummary 是 numeric counters；responseSamples 是 bounded symbol/file 样本 (N=10)
+    // 用于 post-hoc consumption signal 提取（Cohort C smoke test）
+    const sampleMaxN = 10;
+    const symbolSample: string[] = [];
+    for (const cf of changedSymbolsOut) {
+      for (const sym of cf.symbols) {
+        if (symbolSample.length >= sampleMaxN) break;
+        symbolSample.push(sym);
+      }
+      if (symbolSample.length >= sampleMaxN) break;
+    }
+    const fileSample: string[] = [];
+    for (const cf of changedSymbolsOut) {
+      if (fileSample.length >= sampleMaxN) break;
+      fileSample.push(cf.file);
+    }
     return recordAndReturn(
       'detect_changes',
       _telStart,
       _telReqSize,
       buildSuccessResponse(data, ['affectedSymbols']),
       { changedSymbolsCount: totalChanged },
+      { symbols: symbolSample, files: fileSample },
     );
   } catch (err) {
     return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
