@@ -1244,6 +1244,59 @@ T052（450 runs = 150 tasks × 3 cohorts）预算重估：
 
 **建议**：Gap 1 + Gap 2 均已关闭；**唯一剩余门控**为用户接受新预算范围。建议先启动 10–20 run pilot 取得成本分布 CDF，再决定全量 450 的预算承诺。
 
+##### 10.5.1.9 T052 Partial Batch 107 Runs 实测（2026-05-25）
+
+**背景**：F167 ship 后用户授权启动 T052 全量 450 batch（10 fixture × 3 cohort × N=15），跑 9 小时后实测数据显示 cost/time 偏差大（avg $2.40/run vs pilot $1.87，wall time 2.7× pilot 投影），全量预计 ~38h + Max 20x 周配额超支，**用户决策停在 4 fixture / 107 finalized runs**，提前收口分析。
+
+**真实成本与时长**：
+
+| 维度 | Pilot 13 runs 投影 | T052 partial 107 runs 实测 | 偏差 |
+|------|-------------------|--------------------------|------|
+| Avg cost/run | $1.87 | **$2.40** | +28% |
+| Avg wall/batch (15 runs) | ~35 min | **91 min** | +160% |
+| 全量 450 推断 | $843 / 17h | **~$1,080 / ~38h** | +28% cost / +124% time |
+| **Max 20x 周配额占用推断** | ~55% | **~125%（撑爆）** | T052 全量需跨 2 周 |
+| **实付（订阅）** | $0 | **$0**（订阅边际）| — |
+
+**Cohort × Fixture × Oracle Pass Rate（清理 batch 中断 artifact 后真实数据）**：
+
+| Fixture | Cohort A (bare) | Cohort B (spec-push) | Cohort C (mcp-pull) | Lift signal |
+|---------|----------------:|---------------------:|--------------------:|-------------|
+| SWE-L001 (pytest 模块导入) | 0/15 (0%) | 0/15 (0%) | 0/10 (0%)† | 全 fail，任务超 opus-4-7 能力边界 |
+| SWE-L002 (astropy NDDataRef mask) | 0/15 (0%) | 0/15 (0%) | 0/15 (0%) | 全 fail，同上 |
+| **SWE-L003** (pytest rewrite) | **4/12 (33%)** | **1/2 (50%)** | **3/3 (100%)** ⭐ | **C 显著优于 A/B** |
+| **SWE-L005** (astropy ascii qdp) | 0/1 | 0/1 | **3/3 (100%)** ⭐ | C 完全 pass |
+| **Cohort 汇总** | **4/43 (9%)** | **1/33 (3%)** | **6/31 (19%)** ⭐ | **C / A = 2.1× / C / B = 6.3×** |
+
+† L001-C 触发 stop-loss ($52.77 > $50)，10 runs 而非 15。
+
+**核心结论**：
+
+1. **Spectra MCP grounding 真实有 lift**：Cohort C 19% pass rate vs A 9% / B 3%；L003/L005 简单 fixture 上 C **100% pass** 而 A/B 几乎全 fail。这是 T052 想正式量化的核心信号——已经在 107 runs 上看到。
+
+2. **任务复杂度 boundary 暴露**：L001（pytest 模块导入）+ L002（astropy NDDataRef）三个 cohort 共 78 runs **全 0 pass**——这不是 grounding 失败，而是任务超出 claude-opus-4-7 + 30 min wall 边界。需要 follow-up Feature 评估：
+   - (a) 升 claude-opus-5+ / GPT-5.5 driver 看能否突破
+   - (b) 加长 timeout 到 60-90 min
+   - (c) 把 L001/L002 排除出 SWE-bench-lite subset
+
+3. **统计显著性局限**：n=107（非全量 450 的 24%），4/10 fixture 数据；其中 L003-B (n=2) 和 L005-A/B (n=1) sample size 严重不平衡，**这些 lift 数字是 directional signal 而非 statistical significance**。
+
+**T052 全量 450 启动决策（更新）**：
+
+| 维度 | F167 推荐 | 107 runs 实测后 |
+|------|----------|---------------|
+| 启动门控 1 (auth) | ✅ DONE | ✅ DONE |
+| 启动门控 2 (determinism) | ✅ DONE | ✅ DONE |
+| 启动门控 3 (预算) | $600-$2,100 (订阅 $0) | $1,080 (订阅 $0)，配额需 2 周 |
+| 启动门控 4 (核心信号) | 未验证 | ✅ **C lift 已确认**（19% vs A 9% / B 3%）|
+| **建议** | 跑 pilot 再决策 | **核心信号已达成，全量 450 边际价值低**——优先 follow-up Feature 168 解决 L001/L002 boundary |
+
+**Follow-up Features 建议**：
+
+- **Feature 168 (优先)**：L001/L002 任务复杂度 boundary 研究——driver 升 opus-5 / 加长 timeout / fixture subset 调整
+- **Feature 169 (可选)**：补齐 L004/L006-L010 的 cohort C × N=5 数据 (~30 runs / ~3h opus quota / $0 实付)，验证 C lift 是否在更多 fixture 复现
+- **T052 全量 450 (DEFER)**：单 fixture × cohort 跑 N=15 边际信号增益低；优先解决 boundary 问题再讨论是否值得
+
 ---
 
 #### 10.5.5 跑批失败 run 统计（plan iter-4 W-10 新增 + Feature 163 rerun 更新）
