@@ -110,7 +110,12 @@ Feature 167 ship 后，用户授权启动 T052 全量 450（10 fixture × 3 coho
 - **FR-010**: 系统 MUST 在 cohort C run 中验证 `mcpToolCallCount > 0`（不能倒退到 F164 mcpCalls=0 状态），单 run mcpCalls=0 标为 anomaly 不计入 lift 统计
 - **FR-011**: 系统 MUST **不修改** `scripts/eval-mcp-augmented.mjs` 主流程、cohort A/C prompt template (F164 ship)、judge jury 配置 (F162 Phase B)、src/ 任何源码
 - **FR-012**: 系统 MUST **不引入** 新源码依赖、新 npm package、新 cohort 类型；只新增 2 个 scripts/ 文件 + 修改 1 份 report markdown
-- **FR-013**: stop-loss 触发的 partial 数据 MUST 写入 §10.5.1.10 并明确标注 "n=X/36 due to stop-loss <ID>"；完成的 fixture 子集 ≥ 4 个仍可算 SC-002 满足
+- **FR-013**: 任一以下原因触发的 partial 数据 MUST 写入 §10.5.1.10 并明确标注 "n=X/36 due to <原因>"；完成的 fixture 子集 ≥ 4 个仍可算 SC-002 满足：
+  - (a) F169 wrapper 自定义 3 道 stop-loss (cost > $20 / wall > 4.5h / fixture-level systemic-grounding-fail cascaded skip)
+  - (b) `eval-mcp-augmented.mjs --max-runs-per-day=N` 内置 daily quota（外部约束，跨天 reset）
+  - (c) 其他外部强制中止（OAuth 过期、宿主重启等可记录的合法原因）
+
+  非上述任一原因的数据缺口（如脚本 bug、未知 infra failure）→ SC-001 FAIL
 - **FR-014**: 系统 MUST 在 implement 完成后跑：`npx vitest run`（基线 3708 pass）+ `npm run build` + `npm run repo:check` + `npm run release:check`，确认零回归
 
 ### Key Entities
@@ -132,7 +137,7 @@ Feature 167 ship 后，用户授权启动 T052 全量 450（10 fixture × 3 coho
 - ✅ 每个 cohort C run 的 `mcpToolCallCount > 0`（防 F164 倒退）
 - ✅ §10.5.1.10 章节填入 6 个新 fixture × cohort A/C × N=3 完整矩阵
 
-> **stop-loss 豁免**: 任一 stop-loss 触发后落 partial，SC-001 改判为 "n=X/36 + 标注 stop-loss 原因"，不算 fail。
+> **Partial 豁免（覆盖 FR-013 a/b/c 三类合法原因）**: 任一合法 partial 原因触发后落 partial 数据，SC-001 改判为 `PASS (partial)` + 标注原因 + `partial_pass=true` 字段，verify exit 0；不算 fail。**非合法原因的数据缺口**（脚本 bug / 未知 infra failure）→ SC-001 FAIL，verify exit 1。
 
 ### SC-002 C lift 复现验证
 

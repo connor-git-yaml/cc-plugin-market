@@ -1,0 +1,24 @@
+{
+  "feature": "F169",
+  "start_iso": "2026-05-25T06:05:32Z",
+  "start_ts": 1779689132,
+  "expected_runs": 36,
+  "fixtures": [
+  "SWE-L004-sympy-bug-with-milli-prefix",
+  "SWE-L006-astropy-please-support-header-rows",
+  "SWE-L007-sympy-collect-factor-and-dimension",
+  "SWE-L008-sympy-bug-in-expand-of",
+  "SWE-L009-sympy-cannot-parse-greek-characters",
+  "SWE-L010-sympy-si-collect-factor-and"
+],
+  "cohorts": [
+  "A",
+  "C"
+],
+  "repeat": 3,
+  "stop_loss": {
+    "cost_usd": 20,
+    "wall_min": 270,
+    "per_batch_usd": 10
+  }
+}

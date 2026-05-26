@@ -1,0 +1,208 @@
+{
+  "feature": "F169",
+  "timestamp": "2026-05-26T07:13:36.038Z",
+  "manifest_path": "/tmp/spectra-f169/manifest.json",
+  "runs_dir": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/tests/baseline/swe-bench-lite/runs",
+  "sc_001": {
+    "expected_runs": 36,
+    "total_runs_found": 34,
+    "completion_rate": 0.9444444444444444,
+    "stop_loss_triggered": null,
+    "eval_quota_exhausted": "SWE-L010-sympy-si-collect-factor-and-C.log",
+    "completed_fixtures": 6,
+    "mcp_zero_count": 0,
+    "pass": true,
+    "caveat": "partial: n=34/36 due to eval-mcp-augmented --max-runs-per-day=150 daily quota exhaustion (log: SWE-L010-sympy-si-collect-factor-and-C.log)",
+    "full_pass": false,
+    "partial_pass": true
+  },
+  "sc_002": {
+    "verdict": "weak",
+    "usable_fixtures": 5,
+    "partial_fixtures": [
+      "SWE-L010-sympy-si-collect-factor-and"
+    ],
+    "count_c_gt_a": 1,
+    "count_c_lt_a": 0,
+    "per_fixture": {
+      "SWE-L004-sympy-bug-with-milli-prefix": {
+        "a_passes": 0,
+        "a_total": 3,
+        "a_rate": 0,
+        "c_passes": 1,
+        "c_total": 3,
+        "c_rate": 0.3333333333333333,
+        "c_minus_a_passes": 1
+      },
+      "SWE-L006-astropy-please-support-header-rows": {
+        "a_passes": 0,
+        "a_total": 3,
+        "a_rate": 0,
+        "c_passes": 0,
+        "c_total": 3,
+        "c_rate": 0,
+        "c_minus_a_passes": 0
+      },
+      "SWE-L007-sympy-collect-factor-and-dimension": {
+        "a_passes": 2,
+        "a_total": 3,
+        "a_rate": 0.6666666666666666,
+        "c_passes": 2,
+        "c_total": 3,
+        "c_rate": 0.6666666666666666,
+        "c_minus_a_passes": 0
+      },
+      "SWE-L008-sympy-bug-in-expand-of": {
+        "a_passes": 0,
+        "a_total": 3,
+        "a_rate": 0,
+        "c_passes": 0,
+        "c_total": 3,
+        "c_rate": 0,
+        "c_minus_a_passes": 0
+      },
+      "SWE-L009-sympy-cannot-parse-greek-characters": {
+        "a_passes": 0,
+        "a_total": 3,
+        "a_rate": 0,
+        "c_passes": 0,
+        "c_total": 3,
+        "c_rate": 0,
+        "c_minus_a_passes": 0
+      },
+      "SWE-L010-sympy-si-collect-factor-and": {
+        "a_passes": 1,
+        "a_total": 3,
+        "a_rate": 0.3333333333333333,
+        "c_passes": 0,
+        "c_total": 1,
+        "c_rate": 0,
+        "c_minus_a_passes": -1
+      }
+    },
+    "aggregate": {
+      "a_passes": 2,
+      "a_total": 15,
+      "c_passes": 3,
+      "c_total": 15,
+      "a_rate": 0.13333333333333333,
+      "c_rate": 0.2
+    },
+    "aggregate_both_zero": false,
+    "disclaimer": "verdict 是 directional 启发式分类，不代表 statistical significance。每 cell n=3 → per_fixture pass rate ∈ {0, 1/3, 2/3, 1}；±1 pass 即整票漂移。aggregate n=15 vs 15 不足以做 95% CI 推断。 Partial fixtures (under-sampled, n<3): SWE-L010-sympy-si-collect-factor-and — 已从 verdict 计算（fixture-level counts + verdict-input aggregate）整体排除；descriptive 全 fixture aggregate（含 partial）见 §10.5.1.10 报告章节。"
+  },
+  "anomalies": [
+    {
+      "type": "claude-timeout",
+      "fixture": "SWE-L006-astropy-please-support-header-rows",
+      "cohort": "A",
+      "file": "run-SWE-L006-astropy-please-support-header-rows-A-3.json"
+    },
+    {
+      "type": "claude-timeout",
+      "fixture": "SWE-L006-astropy-please-support-header-rows",
+      "cohort": "C",
+      "file": "run-SWE-L006-astropy-please-support-header-rows-C-2.json"
+    }
+  ],
+  "total_cost_usd_from_runs": 0,
+  "final_summary_from_wrapper": {
+    "feature": "F169",
+    "start_iso": "2026-05-25T06:05:32Z",
+    "end_iso": "2026-05-25T08:33:18Z",
+    "wall_min": 147,
+    "expected_runs": 36,
+    "runs_done": 34,
+    "global_cost_usd": 0,
+    "batches_total": 12,
+    "batches_done": 12,
+    "stop_loss_triggered": null,
+    "skip_remaining_c_triggered": false
+  },
+  "matrix": {
+    "SWE-L004-sympy-bug-with-milli-prefix": {
+      "A": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 1,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    },
+    "SWE-L006-astropy-please-support-header-rows": {
+      "A": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    },
+    "SWE-L007-sympy-collect-factor-and-dimension": {
+      "A": {
+        "passes": 2,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 2,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    },
+    "SWE-L008-sympy-bug-in-expand-of": {
+      "A": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    },
+    "SWE-L009-sympy-cannot-parse-greek-characters": {
+      "A": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 0,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    },
+    "SWE-L010-sympy-si-collect-factor-and": {
+      "A": {
+        "passes": 1,
+        "total": 3,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      },
+      "C": {
+        "passes": 0,
+        "total": 1,
+        "mcpZeroCount": 0,
+        "costSum": 0
+      }
+    }
+  }
+}

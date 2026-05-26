@@ -1,0 +1,13 @@
+{
+  "feature": "F169",
+  "start_iso": "2026-05-25T06:05:32Z",
+  "end_iso": "2026-05-25T08:33:18Z",
+  "wall_min": 147,
+  "expected_runs": 36,
+  "runs_done": 34,
+  "global_cost_usd": 0,
+  "batches_total": 12,
+  "batches_done": 12,
+  "stop_loss_triggered": null,
+  "skip_remaining_c_triggered": false
+}

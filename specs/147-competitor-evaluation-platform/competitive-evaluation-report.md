@@ -69,6 +69,28 @@
 - **Speed disparity 极大**：Spectra 比 Graphify 慢 432×（self-dogfood）；spec.md 文档化 + LLM 增强是 cost 主因
 - ~~**Grounding 实证**：Spectra 的 spec.md 作为 LLM coding context 的 grounding 价值得到证明；纯 graph 节点列表（Graphify）不足以做编码上下文~~ — **Sprint 3 推翻**。当前 sonnet 4.6 在简单任务上不依赖 spec.md 也能写出正确代码（n=3 实测 delta=0）。spec.md 的差异化价值是人类可读性 + 长 horizon agent 语义 anchor，不是单 turn coding lift
 
+#### 1.1.1 SWE-Bench-Lite cohort C lift directional signal（Feature 162 → 169，2026-05-25）
+
+**Scope**：本结论仅适用于 **SWE-Bench-Lite Python 真实 issue 修复**（pytest/astropy/sympy 三 repo, 10 fixture），与 §1.1 / Sprint 3 micrograd-scale 单函数 task 的 grounding=0 结论 **共存且实验对象不同**（前者真实 multi-file caller graph 依赖的中等复杂度任务，后者设计严格 fixture 上的天花板效应）。两者方向不冲突——前者 control 远低于 100% 让 lift 有空间出现，后者 control 已 100% PASS 没有 lift 空间；本节信号是 directional observation，不构成 grounding-causes-lift 的 causal 证明。
+
+**核心 directional signal（10/10 fixture, n=143 (107+36), verify 实算）**:
+
+- **Cohort C** (MCP-pull grounding) aggregate: **19.1% pass rate** (9/47)
+- **Cohort A** (bare baseline) aggregate: **11.5% pass rate** (7/61)
+- **Cohort B** (spec-push) aggregate: 3.0% (1/33, §10.5.1.9 unchanged)
+- **C/A 倍率 = 1.66×** directional lift（**仅 directional signal，非 statistical significance** — per-cell n=3-15 不足以做 95% CI 推断；§10.5.1.9 partial 给的 2.1× 在更多 fixture 上回归到 1.66×）
+
+**L003/L005 100% C-pass 信号在 F169 6 个新 fixture 上**：
+- **未复现任何一个**：6 新 fixture 中最高 cohort C pass rate 仅 L007 2/3 (67%)，L004 1/3 (33%)，其余 4 个 fixture cohort C pass rate 全 0（L006/L008/L009 各 0/3，L010 cohort C 仅跑 0/1 partial 由 daily quota 触发）
+- 6 新 fixture aggregate C 18.8% vs A 16.7% (C/A = 1.12×) — directional 但量级显著弱于 L003/L005
+- **结论**：L003/L005 100% C-pass = cherry-pick outlier 已部分证实；C lift 在 SWE-Bench-Lite 整体上 directional 存在但量级弱化
+
+**Boundary fixture 数从 2 增至 4**：L008 (sympy expand-of) + L009 (sympy parse-greek-characters) 加入 L001/L002，共 4 个 boundary fixture 上 A/C 全 0 pass——任务复杂度超 claude-opus-4-7 + 30min timeout 边界，**留给 Feature 168** 解决（driver 升级 / timeout 加长 / fixture subset 调整）。
+
+**对 §1.1 grounding 叙事的影响**：本结论 **不替代** Sprint 3 在 micrograd-scale 简单 task 上 grounding=0 的结论（实验对象不同——micrograd 单函数补全 vs SWE-Bench-Lite 真实 issue）。在 **真实代码漂移 + multi-file caller graph 依赖的中等复杂度任务** 上，F162→F169 测得 cohort C aggregate 高于 cohort A directional 信号，但量级弱于 L003/L005 早期数据暗示的 2.1×。是 directional observation，不是 grounding-causes-lift 的 causal 证明（per-cell n=3-15 + LLM 方差范围内）。
+
+完整数据 / 矩阵 / verdict / 合并口径 / partial caveat → [§10.5.1.10](#10510-f169-6-fixture-c-lift-复现验证2026-05-25) | [§10.4](#104-战略结论feature-162-pilot-27-完整实测--feature-164-fix)
+
 ### 1.2 Spec Driver 类（spec-driven coding workflow）
 
 ⚠️ **本表已用 Sprint 3 cross-LLM jury 数据替代 Phase 5 单 T1 sonnet 评分**（旧表 control 6.5 / spec-driver 6 / SuperPowers 6 / GStack 6 是 single-judge artifact，已被 jury 推翻）。
@@ -601,6 +623,13 @@ npm run baseline:diff -- /tmp/old.json tests/baseline/self-dogfood/spectra/full.
 ### 10.4 战略结论（Feature 162 Pilot 27 完整实测 + Feature 164 fix）
 
 > **本节状态（2026-05-15，Feature 164 修复 + C cohort rerun 后）**：Feature 162 Pilot 27 **完整 27 runs 跑批完成**（A 9/9 + B 9/9 + C 9/9，0 prepareWorktree fail），**Feature 164 修复 `buildGroupCPrompt` 后 C cohort rerun 9/9 全 mcpToolCallCount > 0（100% MCP 调用触发率）**。pull grounding 调用路径已验证；真实 grounding lift（pre-built graph 下）属 T053 范围。全量 450 (T052) DEFERRED 等用户授权。
+
+> **F169 数据补强后修订（2026-05-25）**：本节上方表格基于 Pilot 27 (n=27) + T052 partial (n=107)，未含 F169 的 6 fixture × A/C × N=3 = 34 新 runs（详见 §10.5.1.10）。F169 完成 10/10 fixture 覆盖后：
+> - **cohort C 整体 pass rate 修订为 19.1% (n=47)**，vs A **11.5% (n=61)**，C/A = **1.66×**（vs §10.5.1.9 partial 给的 2.1×）
+> - **L003/L005 的 100% C-pass 信号 = cherry-pick outlier 已部分证实**：在 6 个新 fixture 上 cohort C 的 lift 显著弱化（仅 1/6 fixture L004 见严格 C > A，6-fixture aggregate C 18.8% vs A 16.7%，C/A 仅 1.12×），未在任何新 fixture 复现 100% C-pass
+> - **boundary fixture 数从 2 增至 4**：L008 (sympy expand-of) + L009 (sympy parse-greek) 上 A/C 全 0 pass，加入 L001/L002 共 4 个 boundary，F168 范围扩大
+> - **L007 (sympy collect-factor-and-dimension) 是 mid-difficulty 例外**：A/C 各 2/3 pass，说明 lift signal 对任务难度极敏感
+> - **结论维持 directional signal**：C lift 存在但量级弱于 §10.5.1.9 partial 暗示；n=143 + per-cell n=3-15 仍不足以做 95% CI 显著性推断
 
 **Pilot 27 + Feature 164 rerun 完整实测信号（n=27）**：
 
@@ -1296,6 +1325,79 @@ T052（450 runs = 150 tasks × 3 cohorts）预算重估：
 - **Feature 168 (优先)**：L001/L002 任务复杂度 boundary 研究——driver 升 opus-5 / 加长 timeout / fixture subset 调整
 - **Feature 169 (可选)**：补齐 L004/L006-L010 的 cohort C × N=5 数据 (~30 runs / ~3h opus quota / $0 实付)，验证 C lift 是否在更多 fixture 复现
 - **T052 全量 450 (DEFER)**：单 fixture × cohort 跑 N=15 边际信号增益低；优先解决 boundary 问题再讨论是否值得
+
+##### 10.5.1.10 F169 6-fixture C-lift 复现验证（2026-05-25）
+
+**背景**：§10.5.1.9 数据集中在 L001-L003 + L005 共 4/10 fixture，外部容易质疑 C 100% pass 是 L003/L005 cherry-pick outlier。F169 在剩余 6 个 fixture (L004 + L006-L010) 上跑 cohort A/C × N=3 = 36 runs，独立验证 C lift 复现性。详细 spec/plan/tasks 见 [specs/169-c-lift-rerun-9-fixtures/](../169-c-lift-rerun-9-fixtures/)。
+
+**真实成本与时长实测**：
+
+| 维度 | F169 预算 | 实测 |
+|------|--------|------|
+| Wall time | ~3.6h | **147 min (2.45h)** ✅ 远低于 4.5h 上限 |
+| Runs finalized | 36/36 | **34/36 (94.4%)** ⚠️ partial |
+| 实付 (SiliconFlow GLM+Kimi judge) | $5-10 | **未单独统计**（订阅边际 driver/judge $0；SiliconFlow API cost 由 eval-mcp 内部累积，单 batch summary 显示 ~$0.25-$0.75）|
+| **Partial 触发**：第 12 batch (C/SWE-L010) 跑 run-1 后撞 `eval-mcp-augmented.mjs --max-runs-per-day=150` 内置 daily quota，优雅退出。不是 F169 自定义 3 道 stop-loss（cost/wall/fixture-level）触发——后者全 armed 但全未触发。`scripts/verify-feature-169.mjs` 把此情况识别为合法 partial 豁免，SC-001 ✅ PASS |
+
+**Cohort × Fixture × Oracle Pass Rate（6 新 fixture，n=3 per cell 除 L010-C n=1）**：
+
+| Fixture | Cohort A | Cohort C | C vs A | 备注 |
+|---------|---------:|---------:|--------|------|
+| SWE-L004 (sympy bug-with-milli-prefix) | 0/3 (0%) | **1/3 (33%)** | C > A (+1) | F169 唯一 C 严格高 A |
+| SWE-L006 (astropy header-rows) | 0/3 (0%) | 0/3 (0%) | = | A/C 各 1 run timeout |
+| SWE-L007 (sympy collect-factor-and-dimension) | **2/3 (67%)** | **2/3 (67%)** | = | F169 最高 pass 率，A/C 持平 |
+| SWE-L008 (sympy expand-of) | 0/3 (0%) | 0/3 (0%) | = | 新 boundary fixture（类似 L001/L002）|
+| SWE-L009 (sympy parse-greek-characters) | 0/3 (0%) | 0/3 (0%) | = | 新 boundary fixture |
+| SWE-L010 (sympy si-collect-factor-and) | 1/3 (33%) | 0/1 (0%, partial) | A > C (partial) | C 仅 1 run，方差大不构成可比 |
+| **6-fixture aggregate** | **3/18 (16.7%)** | **3/16 (18.8%)** | **C ≈ A (+2pp)** | n=16 due to L010-C partial |
+
+**SC-002 Verdict（由 `scripts/verify-feature-169.mjs` 实算）**：`WEAK`
+
+- **Verdict 输入限定**：仅 5 个完整采样 fixture (L004/L006/L007/L008/L009) 参与 fixture-level count 计算；L010-C n=1 partial 排除出 count_c_gt_a/count_c_lt_a（避免单 run 失真），但仍计入 6-fixture descriptive aggregate
+- 5-fixture verdict-input aggregate: A 2/15 (13.3%) vs C 3/15 (20.0%), C/A = 1.50×
+- count_c_gt_a = 1 (仅 L004) < 3 → 不达 strong
+- aggregate C 20.0% ≥ aggregate A 13.3% (+6.7pp) → **weak** ✅
+- count_c_lt_a = 0 (L010 partial 排除后) < 4 → 不构成 negative
+
+**与 §10.5.1.9 合并 aggregate（10/10 fixture 覆盖，避免双重计数）**：
+
+| Scope | Cohort A | Cohort B | Cohort C |
+|---|---|---|---|
+| §10.5.1.9 (L001/L002/L003/L005, n=107) | 4/43 (9.3%) | 1/33 (3.0%) | 6/31 (19.4%) |
+| §10.5.1.10 (L004/L006-L010, n=34) | 3/18 (16.7%) | — (F169 不跑) | 3/16 (18.8%) |
+| **10/10 fixture 合并** | **7/61 (11.5%)** | 1/33 (3.0%, unchanged) | **9/47 (19.1%)** |
+| **C/A 倍率（10/10）** | — | — | **1.66×** (vs §10.5.1.9 partial 给的 2.1×) |
+
+> ⚠️ **合并口径声明**：本合并只对 cohort A 和 C 做（B 在 §10.5.1.9 已稳定结论 3.0%，F169 未跑）；L003/L005 数据不重复计入新 6 fixture aggregate，仅在 "10/10 合并" 行参与。L010-C n=1 partial 计入 16 总数但单 fixture 比较时标注 partial caveat。
+
+**核心结论**：
+
+1. **L003/L005 的 100% C-pass 信号 = cherry-pick outlier**（部分证实）：在 6 个新 fixture 上 cohort C 的 lift 显著弱化——仅 1/6 fixture (L004) 见到 C > A 严格优势，aggregate 仅高出 +2.1pp 而非 §10.5.1.9 partial 暗示的 +10pp。100% C-pass 在 6 新 fixture 上**未复现**任何一个，最高也仅 L007 的 2/3 持平。
+
+2. **C lift directional signal 仍存在，但量级显著弱化**：
+   - §10.5.1.9 partial C/A = 2.1× → 10/10 fixture 合并 C/A = **1.66×**
+   - 6 新 fixture aggregate C/A = **1.12×** (16.7% → 18.8%)
+   - C 仍 ≥ A 但差距在 LLM 方差范围（n=18 vs 16, 差 2pp）
+
+3. **新 boundary fixture 暴露**：L008 (sympy expand-of) + L009 (sympy parse-greek) 上 A/C 都 0/3 全 fail，类似 L001/L002，driver opus-4-7 + 30min timeout 边界。**F168 的 boundary 研究范围应扩到这 4 个 fixture**（L001/L002/L008/L009）。
+
+4. **L007 是 mid-difficulty 例外**：A/C 都拿到 2/3，是 F169 fixture 中唯一非 0% pass 的 cohort A 表现，说明任务难度对 lift signal 的影响极大——简单任务 A 已能拿分时 C 边际增益为 0。
+
+5. **统计 caveat（保持谨慎）**：n=143 (107+36) 跨 10 fixture 共 ~25 不同 (fixture, cohort) cell，per-cell n=3-15 仍不足以做 95% CI 显著性推断；本节结论维持 **directional signal**，不升级为 statistical significance。
+
+**stop-loss 触发记录**：无 F169 自定义 stop-loss 触发（cost/wall/fixture-level cascaded 全 armed 未触发）。partial 来自 `eval-mcp-augmented.mjs --max-runs-per-day=150` 内置 daily quota（合法外部约束）。
+
+**MCP 调用路径验证**：cohort C 16/16 runs `mcpToolCallCount > 0`，无 F164 倒退 anomaly。
+
+**Anomalies**：2 个 claude-timeout（L006-A-3, L006-C-2）——L006 (astropy header-rows) 任务对 driver 时间敏感；不影响 lift signal 判定。
+
+**完整 provenance**：[verify-report.json](../169-c-lift-rerun-9-fixtures/verification/verify-report.json) | [manifest.json](../169-c-lift-rerun-9-fixtures/verification/manifest.json) | [final-summary.json](../169-c-lift-rerun-9-fixtures/verification/final-summary.json)
+
+**Follow-up 建议（基于 F169 实测）**：
+
+- **F168 优先级 ↑**：boundary fixture 实际是 4 个（L001/L002/L008/L009），不止 2 个。driver 升 opus-5 / 加长 timeout 影响范围扩大
+- **T052 全量 450 maintained DEFER**：F169 数据已显示 6 新 fixture C lift 弱化，T052 N=15 per cell 也难以把 16.7% vs 18.8% (+2pp) 拉到 statistical significance；优先解决 boundary 后再讨论
+- **L007 sympy collect-factor-and-dimension** 可作为未来 mid-difficulty grounding benchmark fixture，A/C 各 2/3 pass 是难得的"两端都不在天花板/地板"任务
 
 ---
 

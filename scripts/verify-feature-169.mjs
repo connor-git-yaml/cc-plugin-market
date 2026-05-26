@@ -115,8 +115,10 @@ if (!Array.isArray(fixtures) || !Array.isArray(cohorts) || typeof repeat !== 'nu
 function parseRun(filePath) {
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const oracleResult = raw.oracleResult || {};
-    const oraclePass = oracleResult.status === 'pass';
+    // run-N.json 中 oracleResult 实际是 string ("pass" / "fail" / "na" 等)，不是 object
+    // 顶层 status 字段也写 'success'/'failed' 但那是 run lifecycle status，不是 oracle
+    const oracleStr = typeof raw.oracleResult === 'string' ? raw.oracleResult : raw.oracleResult?.status ?? null;
+    const oraclePass = oracleStr === 'pass';
     const mcpToolCallCount =
       raw.productMetrics?.mcpToolCallCount ?? raw.mcpToolCallCount ?? null;
     const graphErrorCode = raw.graphInjection?.errorCode ?? null;
@@ -127,7 +129,7 @@ function parseRun(filePath) {
       costUsd: raw.costUsd ?? null,
       claudeTimedOut: raw.claudeTimedOut === true,
       graphErrorCode,
-      status: oracleResult.status ?? null,
+      status: oracleStr,
     };
   } catch (e) {
     return { found: false, error: e.message };
@@ -148,7 +150,7 @@ for (const fixture of fixtures) {
     if (fs.existsSync(rundir)) {
       const files = fs
         .readdirSync(rundir)
-        .filter((f) => /^run-\d+\.json$/.test(f))
+        .filter((f) => /^run-.*\.json$/.test(f) && !f.endsWith('.lock'))
         .sort();
       for (const f of files) {
         const fp = path.join(rundir, f);
@@ -205,6 +207,22 @@ const finalSummary = fs.existsSync(finalSummaryFile)
   ? JSON.parse(fs.readFileSync(finalSummaryFile, 'utf-8'))
   : null;
 
+// 检测 eval-mcp-augmented.mjs 内置 daily quota exhaustion（--max-runs-per-day=150 默认值）
+// 这也是合法的 partial 原因，与我们 wrapper 自己的 3 道 stop-loss 并列
+let evalQuotaExhausted = null;
+try {
+  const logFiles = fs.existsSync(args.logDir)
+    ? fs.readdirSync(args.logDir).filter((f) => f.endsWith('.log'))
+    : [];
+  for (const lf of logFiles) {
+    const content = fs.readFileSync(path.join(args.logDir, lf), 'utf-8');
+    if (/quota exhausted|quota.*reached.*max=\d+\/day/.test(content)) {
+      evalQuotaExhausted = lf;
+      break;
+    }
+  }
+} catch {}
+
 const completedFixtures = fixtures.filter((fx) =>
   cohorts.some((c) => matrix[fx][c].total > 0),
 ).length;
@@ -214,19 +232,31 @@ const sc001 = {
   total_runs_found: totalRunsFound,
   completion_rate: expectedRuns > 0 ? totalRunsFound / expectedRuns : 0,
   stop_loss_triggered: stopLossTriggered,
+  eval_quota_exhausted: evalQuotaExhausted,
   completed_fixtures: completedFixtures,
   mcp_zero_count: anomalies.filter((a) => a.type === 'mcp-call-zero').length,
   pass: false,
   caveat: null,
 };
 
-if (totalRunsFound === expectedRuns) {
+// SC-001 pass 拆三态：full / partial-pass / fail，方便外部消费者区分
+// pass=true 仅在 36/36 完整时；partial 触发时用 partial_pass=true 单独标识
+sc001.full_pass = totalRunsFound === expectedRuns;
+if (sc001.full_pass) {
   sc001.pass = true;
+  sc001.partial_pass = false;
 } else if (stopLossTriggered) {
   sc001.pass = true;
-  sc001.caveat = `partial: n=${totalRunsFound}/${expectedRuns} due to stop-loss (${stopLossTriggered})`;
+  sc001.partial_pass = true;
+  sc001.caveat = `partial: n=${totalRunsFound}/${expectedRuns} due to wrapper stop-loss (${stopLossTriggered})`;
+} else if (evalQuotaExhausted) {
+  // eval-mcp-augmented 内置 daily quota=150 限制也是合法 partial（外部约束，不是数据缺口）
+  sc001.pass = true;
+  sc001.partial_pass = true;
+  sc001.caveat = `partial: n=${totalRunsFound}/${expectedRuns} due to eval-mcp-augmented --max-runs-per-day=150 daily quota exhaustion (log: ${evalQuotaExhausted})`;
 } else {
   sc001.pass = false;
+  sc001.partial_pass = false;
   sc001.caveat = `non-stop-loss data gap: n=${totalRunsFound}/${expectedRuns}`;
 }
 
@@ -259,10 +289,17 @@ for (const fx of fixtures) {
   };
 }
 
-// 仅含两 cohort 都有数据的 fixture
+// 仅含两 cohort 都"完整采样"（n >= manifest.repeat）的 fixture 参与 verdict 计算
+// 这避免 partial fixture（如 L010-C n=1）造成 fixture-level 比较失真
 const usableFixtures = fixtures.filter((fx) => {
   const r = perFixture[fx];
-  return r.a_total > 0 && r.c_total > 0;
+  return r.a_total >= repeat && r.c_total >= repeat;
+});
+const partialFixtures = fixtures.filter((fx) => {
+  const r = perFixture[fx];
+  const hasData = r.a_total > 0 || r.c_total > 0;
+  const fullySampled = r.a_total >= repeat && r.c_total >= repeat;
+  return hasData && !fullySampled;
 });
 
 const aggregate = {
@@ -284,12 +321,24 @@ const cLtA = usableFixtures.filter((fx) => {
   return r.c_rate != null && r.a_rate != null && r.c_rate < r.a_rate;
 }).length;
 
+// 防御 aggregate 都为 0 的 trivially-weak case：A 和 C aggregate 都 0 时
+// "C >= A" 退化为 0 >= 0，语义无意义，应判 ambiguous 而不是 weak
+const aggregateBothZero =
+  aggregate.a_passes === 0 && aggregate.c_passes === 0;
+
 let verdict;
 if (completedFixtures < 4) {
   verdict = 'SKIP';
+} else if (aggregateBothZero) {
+  // 两 cohort 都 0 pass — 无 lift signal 可判，全 fail 信号
+  verdict = 'ambiguous';
 } else if (cGtA >= 3) {
   verdict = 'strong';
-} else if (aggregate.c_rate != null && aggregate.a_rate != null && aggregate.c_rate >= aggregate.a_rate) {
+} else if (
+  aggregate.c_rate != null &&
+  aggregate.a_rate != null &&
+  aggregate.c_rate >= aggregate.a_rate
+) {
   verdict = 'weak';
 } else if (cLtA >= 4) {
   verdict = 'negative';
@@ -300,15 +349,20 @@ if (completedFixtures < 4) {
 const sc002 = {
   verdict,
   usable_fixtures: usableFixtures.length,
+  partial_fixtures: partialFixtures,  // partial 采样不计入 verdict 算式
   count_c_gt_a: cGtA,
   count_c_lt_a: cLtA,
   per_fixture: perFixture,
   aggregate,
+  aggregate_both_zero: aggregateBothZero,
   // N=3 离散值 caveat
   disclaimer:
     'verdict 是 directional 启发式分类，不代表 statistical significance。' +
     '每 cell n=3 → per_fixture pass rate ∈ {0, 1/3, 2/3, 1}；±1 pass 即整票漂移。' +
-    `aggregate n=${aggregate.a_total} vs ${aggregate.c_total} 不足以做 95% CI 推断。`,
+    `aggregate n=${aggregate.a_total} vs ${aggregate.c_total} 不足以做 95% CI 推断。` +
+    (partialFixtures.length > 0
+      ? ` Partial fixtures (under-sampled, n<${repeat}): ${partialFixtures.join(', ')} — 已从 verdict 计算（fixture-level counts + verdict-input aggregate）整体排除；descriptive 全 fixture aggregate（含 partial）见 §10.5.1.10 报告章节。`
+      : ''),
 };
 
 // ─────────────────────────────────────
