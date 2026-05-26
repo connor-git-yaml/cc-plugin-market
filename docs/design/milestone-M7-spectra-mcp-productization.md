@@ -79,40 +79,59 @@ F170a (修阻塞 Bug)  ← 必须先做，所有后续依赖
 
 ##### Phase 2: Namespace 修复（修 Gap 2）
 
-**决策**（用户 2026-05-25 confirmed）：选 🅲️ **项目级 .mcp.json 模板 + auto-detect 提示**
+**决策**（用户 2026-05-27 修正 confirmed）：选 🅰️ **修 spec-driver sub-agent frontmatter**
 
-理由：
-- 🅰️ 改 frontmatter 会 break F162-169 建立的 eval 链路（eval 用 `mcp__spectra__*`，frontmatter 改 plugin namespace 后两套分裂）
-- 🅱️ Verified plugin.json schema 当前**不支持** namespace control 字段，需要 Anthropic ship feature（短期不可行）
-- 🅲️ 唯一同时满足 **eval 一致性 + 短期可行 + fork 用户支持** 的方案
+⚠️ **决策修订记录**：2026-05-25 初版选 🅲，2026-05-27 用户重审用户体验后修正为 🅰，理由如下：
+
+1. **用户体验关键差异**：
+   - 🅰：用户 **2 步** 真·开箱即用（install plugin + 跑 spec-driver 直接 work）
+   - 🅲：用户首次需 **5-6 步含 1 次重启**（install + 跑 → 提示 → Y → 生成 → 重启 → 再跑）
+
+2. **eval 链路不受影响**（修正之前误判）：
+   - F162-F169 eval cohort C (mcp-pull) 是 **driver 顶层** 调用 MCP（`scripts/eval-mcp-augmented.mjs::buildGroupCPrompt` 给 driver prompt 直接说 `mcp__spectra__*`）
+   - **不走** spec-driver sub-agent
+   - 改 sub-agent frontmatter 完全不影响 cohort C
+   - F176 新 cohort 3 (`spec-driver-spectra-mcp`) 测产品真实部署形态，本就该用 plugin namespace
+
+3. **Cohort 路径职责清晰**：
+
+   | 路径 | namespace | 谁用 |
+   |------|-----------|------|
+   | Driver 顶层调用 | `mcp__spectra__*` (临时 .mcp.json 注入) | F162-169 eval cohort C |
+   | Sub-agent 调用 | `mcp__plugin_spectra_spectra__*` (plugin namespace) | 产品 spec-driver workflow + F176 cohort 3 |
+
+   两套不需要 namespace 一致，用途不同。
+
+4. **🅱️ Anthropic 长期方向不变**：M7 内提 RFC 推动 plugin namespace control，未来 ship 后可简化（不阻塞 M7）。
 
 实施细节：
 
-1. **新增 init 命令**：`plugins/spec-driver/scripts/init-mcp.mjs`
-   - 用户跑：`node plugins/spec-driver/scripts/init-mcp.mjs`
-   - 在项目根生成 `.mcp.json`:
-     ```json
-     {
-       "mcpServers": {
-         "spectra": {
-           "command": "spectra",
-           "args": ["mcp-server"]
-         }
-       }
-     }
-     ```
-   - 项目级 `.mcp.json` 不被 Claude Code 加 plugin 前缀，namespace 自动是 `mcp__spectra__*`，匹配 spec-driver 子代理 frontmatter ✅
+1. **修改 5 个 spec-driver agent frontmatter**：
+   ```diff
+   # plan.md / implement.md / verify.md / spec-review.md / quality-review.md
+   - tools: [Read, ..., mcp__spectra__context, mcp__spectra__impact]
+   + tools: [Read, ..., mcp__plugin_spectra_spectra__context, mcp__plugin_spectra_spectra__impact]
+   ```
 
-2. **auto-detect 提示**（核心 UX 改进）：
-   - spec-driver workflow 主编排器在 Phase 1 检查项目根 `.mcp.json` 是否含 `spectra` server
-   - 缺失时友好提示：「检测到本项目未配置 Spectra MCP server。是否一键生成 .mcp.json 启用 Spectra grounding？(Y/n)」
-   - Y → 自动跑 init script → 用户重启 Claude Code session → 子代理 `mcp__spectra__*` 可用
+2. **agent 文件清单**（具体改动列表）：
 
-3. **README 章节**：明确说明这一步为什么必要（namespace 限制），未来 Anthropic ship plugin namespace control 后可删除。
+   | Agent 文件 | 原工具 | 新工具 |
+   |-----------|--------|--------|
+   | `plan.md` | `mcp__spectra__context`, `mcp__spectra__impact` | `mcp__plugin_spectra_spectra__context`, `mcp__plugin_spectra_spectra__impact` |
+   | `implement.md` | `mcp__spectra__context`, `mcp__spectra__impact` | 同上 |
+   | `verify.md` | `mcp__spectra__detect_changes`, `mcp__spectra__impact` | `mcp__plugin_spectra_spectra__detect_changes`, `mcp__plugin_spectra_spectra__impact` |
+   | `spec-review.md` | `mcp__spectra__impact`, `mcp__spectra__context` | `mcp__plugin_spectra_spectra__impact`, `mcp__plugin_spectra_spectra__context` |
+   | `quality-review.md` | 同上 | 同上 |
 
-4. **长期 follow-up**（不在 M7 范围）：
+3. **bump spec-driver plugin 版本到 4.2.0**（与 spectra-cli 4.2.0 同步），让用户 `claude plugin update spec-driver` 拉到新 frontmatter。
+
+4. **README 文档化（与 Phase 3 合并）**：明确说明 spec-driver sub-agent 依赖官方 spectra plugin（`plugin_spectra_spectra` namespace）；fork 用户需自改 frontmatter（合理 trade-off）。
+
+5. **Fork 用户应急方案**：plugins/spec-driver/docs/customization.md 提供 frontmatter override 指引（让 fork 用户改成自己的 plugin namespace）。
+
+6. **长期 follow-up**（不在 M7 范围）：
    - 向 Anthropic 提 RFC 要求 plugin.json 支持 `namespaceStrategy: "none"`
-   - 一旦 ship，可弃用 🅲 init 命令（auto-detect 提示 → 改为提示用户卸载 init script，直接 plugin 即可工作）
+   - 一旦 ship，spec-driver sub-agent frontmatter 可改回简洁的 `mcp__spectra__*`
 
 ##### Phase 3: 文档化
 
@@ -523,7 +542,7 @@ refactor(17x): clean up implementation while keeping tests green
 | Bug ID | Feature | 描述 | E2E 验收 |
 |--------|---------|------|---------|
 | **Bug-1** Gap 1 npm 发布滞后 | F170a Phase 1 | spectra-cli@4.1.1 不含 Feature 155 | E2E: spectra binary 4.2.0 暴露 impact/context/detect_changes |
-| **Bug-2** Gap 2 namespace mismatch | F170a Phase 2 | `mcp__spectra__*` vs `mcp__plugin_spectra_spectra__*` | E2E: subagent 真实调用工具 success |
+| **Bug-2** Gap 2 namespace mismatch | F170a Phase 2 | `mcp__spectra__*` vs `mcp__plugin_spectra_spectra__*` — 🅰 修 sub-agent frontmatter 对齐 plugin namespace | E2E: 装两个 plugin **零额外配置**，subagent 真实调用 success（2 步开箱即用）|
 | **Bug-3** Gap 3 缺协同文档 | F170a Phase 3 | 用户不知道怎么 wire | docs review + smoke test |
 | **Bug-4** Tool description 弱 | F170c | driver 不知道何时调 impact | E2E: 主动调用率 ≥ 50% |
 | **Bug-5** Response 缺 next-step | F170c | driver chain 调用率低 | E2E: detect_changes → context chain rate ≥ 30% |
