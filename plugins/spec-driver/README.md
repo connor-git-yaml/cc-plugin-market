@@ -1,6 +1,6 @@
 # Spec Driver
 
-> 当前发布版本: v4.1.0
+> 当前发布版本: v4.2.0
 
 **自治研发编排器** — 支持 8 种模式（feature/implement/story/fix/resume/sync/doc/refactor），一键触发 Spec-Driven Development 全流程。基于 orchestration.yaml 配置驱动，含 6 个质量门禁和 15 个专业子代理。
 
@@ -395,6 +395,23 @@ Plugin 名称从 `speckitdriver` 更名为 `spec-driver`，技能名统一为 `s
 - `.claude/commands/spec-driver.*.md`：v3.x 仓库级项目 override；v4.0 起编排器不再读取，保留该目录仅用于历史兼容
 
 所有 Codex wrapper 都会写入 `Wrapper Source Contract` 头部，并通过 `validate-wrapper-sources.mjs` 校验是否仍与 canonical source 一致。
+
+## Spectra MCP 集成
+
+Spec Driver v4.2.0 起，5 个核心 sub-agent（`plan` / `implement` / `verify` / `spec-review` / `quality-review`）已预置 spectra MCP 工具的正确 plugin namespace，实现 **2 步开箱即用**：
+
+```bash
+# Step 1: 安装两个 plugin
+claude plugin install spectra
+claude plugin install spec-driver
+
+# Step 2: 直接使用（无需额外配置）
+/spec-driver:spec-driver-feature 描述需求
+```
+
+sub-agent 会自动调用 `mcp__plugin_spectra_spectra__context` / `impact` / `detect_changes` 工具。
+
+详情见 [docs/spectra-mcp-integration.md](./docs/spectra-mcp-integration.md)，fork 用户应急方案见 [docs/customization.md](./docs/customization.md)。
 
 ## 许可证
 

@@ -1,6 +1,6 @@
 {
   "name": "spec-driver",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "自治研发编排器——支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式自动执行 Spec-Driven Development 全流程，基于 orchestration.yaml 配置驱动编排，含 6 个质量门禁、sync 确定性合并引擎，以及项目级 orchestration overrides 分层定制",
   "author": {
     "name": "Connor Lu"

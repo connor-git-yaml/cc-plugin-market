@@ -7,7 +7,7 @@ marketplace:
 products:
   spectra:
     displayName: "Spectra"
-    version: "4.1.1"
+    version: "4.2.0"
     packageManifestPath: "package.json"
     packageLockPath: "package-lock.json"
     pluginManifestPath: "plugins/spectra/.claude-plugin/plugin.json"
@@ -16,10 +16,10 @@ products:
     productMappingKey: "spectra"
     pluginDescription: "把任意代码库变成可查询、可视化、可按场景伸缩的代码阅读平台。AST + LLM 混合 pipeline 生成分层 Spec、知识图谱、技术债清单、自然语言问答与交互式 graph.html"
     marketplaceDescription: "把代码库变成可查询、可视化的阅读平台 — 分层 Spec / 知识图谱 / 技术债 / 自然语言问答 / 交互式 graph.html"
-    productMappingDescription: "Spectra v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）。(1) PythonLanguageAdapter 新增 extractSymbolNodes()，graph.json 含函数/类符号节点（kind=component）和 containment 边；(2) designDocAbsPaths 磁盘优先合并策略，hyperedge 首次运行即生效；(3) debt-intelligence-pipeline 诊断日志增强；(4) budget-gate 加入 SYSTEM_PROMPT_TOKEN_OVERHEAD=2000 和 CONTEXT_ASSEMBLY_MULTIPLIER=1.35 常量，压缩 dry-run 偏差。v4.1.1（Feature 146）— LLM 并发优化器：默认并发 1→3（Sonnet 单请求 15-30s，大项目总耗时降 ~60-65%）+ p-limit ^6.1.0 替换手写信号量（移除 ~30 行含 H2 死锁补丁的实现）+ 三级配置链 BatchOptions.concurrency > SPECTRA_CONCURRENCY env > 默认 3"
+    productMappingDescription: "Spectra v4.2.0（Feature 170a）— NPM 发布同步：包含 Feature 155 agent-context MCP tools（impact / context / detect_changes）。修复 npm publish 滞后导致全局安装 binary 缺工具的 Bug-1。v4.1.1（Feature 146）— LLM 并发优化器：默认并发 1→3（Sonnet 单请求 15-30s，大项目总耗时降 ~60-65%）+ p-limit ^6.1.0 替换手写信号量（移除 ~30 行含 H2 死锁补丁的实现）+ 三级配置链 BatchOptions.concurrency > SPECTRA_CONCURRENCY env > 默认 3。v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）"
   spec-driver:
     displayName: "Spec Driver"
-    version: "4.1.0"
+    version: "4.2.0"
     pluginManifestPath: "plugins/spec-driver/.claude-plugin/plugin.json"
     pluginReadmePath: "plugins/spec-driver/README.md"
     currentSpecPath: "specs/products/spec-driver/current-spec.md"
@@ -27,4 +27,4 @@ products:
     postinstallPath: "plugins/spec-driver/scripts/postinstall.sh"
     pluginDescription: "自治研发编排器——支持 feature/implement/story/fix/resume/sync/doc/refactor 八种模式自动执行 Spec-Driven Development 全流程，基于 orchestration.yaml 配置驱动编排，含 6 个质量门禁、sync 确定性合并引擎，以及项目级 orchestration overrides 分层定制"
     marketplaceDescription: "自治研发编排器——八种模式 + 6 Gate 质量门禁 + 确定性 sync 合并 + 项目级 orchestration overrides 分层定制"
-    productMappingDescription: "Spec Driver v4.1.0 — Feature 162 Phase 0：5 个核心 sub-agent (plan / implement / verify / quality-review / spec-review) frontmatter tools 列表追加 mcp__spectra__context / mcp__spectra__impact / mcp__spectra__detect_changes，使 sub-agent 能在 Stage 7b 等 MCP 增强场景下实际调用 spectra MCP 工具（修复 Feature 161 commit 77bf166 揭示的 sub-agent 工具继承机制盲点：sub-agent tools 不自动继承 session --allowedTools，必须在 frontmatter 显式声明）。v4.0.0 — 删除 9 个遗留原子 skill（统一编排器入口）+ Feature 133 项目级 orchestration overrides。八种模式 / 6 个质量门禁 / sync-merge-engine 确定性合并 / 15 个专业子代理。详见 docs/migrations/skill-deprecation.md + docs/migrations/orchestration-overrides.md"
+    productMappingDescription: "Spec Driver v4.2.0（Feature 170a）— 修复 5 个 sub-agent frontmatter namespace mismatch（mcp__spectra__* → mcp__plugin_spectra_spectra__*），确保 Claude Code plugin 环境下 sub-agent 2 步开箱即用调到 spectra MCP 工具。新增 spectra-mcp-integration.md + customization.md 部署指引。v4.1.0 — Feature 162 Phase 0：5 个核心 sub-agent (plan / implement / verify / quality-review / spec-review) frontmatter 首次追加 spectra MCP 工具声明。v4.0.0 — 删除 9 个遗留原子 skill（统一编排器入口）+ Feature 133 项目级 orchestration overrides。八种模式 / 6 个质量门禁 / sync-merge-engine 确定性合并 / 15 个专业子代理"

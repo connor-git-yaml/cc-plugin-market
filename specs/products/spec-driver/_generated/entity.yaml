@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-05-10T12:28:38.987Z"
+generatedAt: "2026-05-27T02:55:12.131Z"
 id: "spec-driver"
 name: "Spec Driver"
 kind: "plugin"
-description: "Spec Driver v4.1.0 — Feature 162 Phase 0：5 个核心 sub-agent (plan / implement / verify / quality-review / spec-review) frontmatter tools 列表追加 mcp__spectra__context / mcp__spectra__impact / mcp__spectra__detect_changes，使 sub-agent 能在 Stage 7b 等 MCP 增强场景下实际调用 spectra MCP 工具（修复 Feature 161 commit 77bf166 揭示的 sub-agent 工具继承机制盲点：sub-agent tools 不自动继承 session --allowedTools，必须在 frontmatter 显式声明）。v4.0.0 — 删除 9 个遗留原子 skill（统一编排器入口）+ Feature 133 项目级 orchestration overrides。八种模式 / 6 个质量门禁 / sync-merge-engine 确定性合并 / 15 个专业子代理。详见 docs/migrations/skill-deprecation.md + docs/migrations/orchestration-overrides.md"
+description: "Spec Driver v4.2.0（Feature 170a）— 修复 5 个 sub-agent frontmatter namespace mismatch（mcp__spectra__* → mcp__plugin_spectra_spectra__*），确保 Claude Code plugin 环境下 sub-agent 2 步开箱即用调到 spectra MCP 工具。新增 spectra-mcp-integration.md + customization.md 部署指引。v4.1.0 — Feature 162 Phase 0：5 个核心 sub-agent (plan / implement / verify / quality-review / spec-review) frontmatter 首次追加 spectra MCP 工具声明。v4.0.0 — 删除 9 个遗留原子 skill（统一编排器入口）+ Feature 133 项目级 orchestration overrides。八种模式 / 6 个质量门禁 / sync-merge-engine 确定性合并 / 15 个专业子代理"
 owner:
   value: "unknown"
   source: "unknown"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spec-driver/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-05-10T12:28:39.025Z"
+    generatedAt: "2026-05-27T02:55:12.170Z"
   scorecard:
     path: "specs/products/spec-driver/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-05-10T12:28:39.026Z"
+    generatedAt: "2026-05-27T02:55:12.171Z"
 workflowRefs:
   - "spec-driver-doc"
   - "spec-driver-feature"

@@ -239,6 +239,21 @@ Anthropic / OpenAI 公布的 **70% SOTA 都是在 Verified 上**。Verified 是"
 - 4 个 boundary fixture 现象 → 建议跟踪 driver model 升级（Opus-5 / GPT-5.5+）后能否突破
 - LLM 方差 ±10-20pp 是真实约束 → 大样本验证（>= n=50 per cell）需要 ~$300+ SiliconFlow 实付预算
 
+### 6.3 spec-driver-spectra-mcp 真实部署（v4.2.0 更新）
+
+**2 步开箱即用**（Feature 170a 修复后，无需额外配置）：
+
+```bash
+claude plugin install spectra      # Step 1
+claude plugin install spec-driver  # Step 2
+# → 直接运行 /spec-driver:spec-driver-feature，sub-agent 自动调用 spectra MCP 工具
+```
+
+- ✅ spectra-cli@4.2.0 包含 Feature 155 agent-context tools（impact / context / detect_changes）
+- ✅ 5 个 sub-agent frontmatter 已对齐 `mcp__plugin_spectra_spectra__*` plugin namespace
+- ✅ 部署指引详见 [plugins/spec-driver/docs/spectra-mcp-integration.md](../../plugins/spec-driver/docs/spectra-mcp-integration.md)
+- ⚠️ v4.1.x 存在 namespace mismatch（Bug-2），升级到 v4.2.0 修复
+
 ### 6.3 数据扩展（可选 follow-up）
 
 | Follow-up | 价值 | 成本 |
