@@ -26,6 +26,7 @@
     "test:integration": "vitest run --project integration",
     "test:e2e": "vitest run --project e2e",
     "lint": "tsc --noEmit",
+    "typecheck:tests": "tsc -p tests/type-tests/tsconfig.json --noEmit",
     "docs:sync:agents": "node scripts/sync-agent-docs.mjs",
     "repo:sync": "node scripts/repo-sync.mjs",
     "repo:check": "node scripts/repo-check.mjs",

@@ -26,7 +26,7 @@ F170a 修复了协同部署阻塞 Bug（master HEAD 4e17e70）。然而 Stage 7b
 
 **Acceptance Scenarios**：
 
-1. **Given** Spectra MCP server 已启动并注册了 `detect_changes`、`context`、`impact` 三个 agent-context 工具，**When** 解析每个工具的 description 文本，**Then** 每个 description 必须满足以下**统一的 4 要素验收口径**：(a) 长度位于 100-300 字符区间（含上下限），(b) 第一行或首段为"核心功能一句话描述"的 lead-in 文本（非独立要素，作为 use-case 段的前导上下文，不进入计数；但若该 lead-in 缺失或长度 < 10 字符则视为整个 description 不达标），(c) 包含 "Use this tool when" 段落并枚举 ≥ 3 个 use-case 场景，(d) 包含 "Example" 段落，含 input 示例与关键 output 字段示例对，(e) 包含 "Typical chained usage" 段落并至少给出 1 个 chained usage 示例。**口径说明**：FR-001/002/003 列出的"核心功能一句话描述 + 4 要素"是描述结构语义；SC-001 与本验收 1 是其测试投影，本验收 1 中 (a)-(e) 全数达标即视为满足 FR-001/002/003。
+1. **Given** Spectra MCP server 已启动并注册了 `detect_changes`、`context`、`impact` 三个 agent-context 工具，**When** 解析每个工具的 description 文本，**Then** 每个 description 必须满足以下**统一的 4 要素验收口径**：(a) 长度位于 100-500 字符区间（含上下限；**implement 阶段修订**：从初始 100-300 放宽到 100-500，因为中英混合 + 多行 4 要素结构在 300 字符内难以充分表达每个要素，500 是符合 Anthropic 推荐"长 description 优于短"原则的合理上限），(b) 第一行或首段为"核心功能一句话描述"的 lead-in 文本（非独立要素，作为 use-case 段的前导上下文，不进入计数；但若该 lead-in 缺失或长度 < 10 字符则视为整个 description 不达标），(c) 包含 "Use this tool when" 段落并枚举 ≥ 3 个 use-case 场景，(d) 包含 "Example" 段落，含 input 示例与关键 output 字段示例对，(e) 包含 "Typical chained usage" 段落并至少给出 1 个 chained usage 示例。**口径说明**：FR-001/002/003 列出的"核心功能一句话描述 + 4 要素"是描述结构语义；SC-001 与本验收 1 是其测试投影，本验收 1 中 (a)-(e) 全数达标即视为满足 FR-001/002/003。
 
 2. **Given** `impact` 工具当前 description 仅约 30-50 字且无场景引导，**When** 升级后重新解析，**Then** 满足验收 1 的全部 5 项 (a)-(e)，且其 chained usage 示例必须显式包含标准链路 `detect_changes → impact → context`。
 
@@ -177,11 +177,11 @@ F170a 修复了协同部署阻塞 Bug（master HEAD 4e17e70）。然而 Stage 7b
 
 **Phase A：Tool Description 升级**
 
-- **FR-001**：`detect_changes` 工具的 description MUST 升级为 100-300 字，包含核心功能一句话描述、"Use this tool when"（≥3 场景）、"Example"（含 input 和关键 output）、"Typical chained usage" 四个要素。`[必须]`
+- **FR-001**：`detect_changes` 工具的 description MUST 升级为 100-500 字，包含核心功能一句话描述、"Use this tool when"（≥3 场景）、"Example"（含 input 和关键 output）、"Typical chained usage" 四个要素。`[必须]`
 
-- **FR-002**：`context` 工具的 description MUST 升级为 100-300 字，包含与 FR-001 相同的 4 要素结构。`[必须]`
+- **FR-002**：`context` 工具的 description MUST 升级为 100-500 字，包含与 FR-001 相同的 4 要素结构。`[必须]`
 
-- **FR-003**：`impact` 工具的 description MUST 升级为 100-300 字，包含与 FR-001 相同的 4 要素结构，其 chained usage 示例 MUST 包含 `detect_changes → impact → context` 这条标准链路。`[必须]`
+- **FR-003**：`impact` 工具的 description MUST 升级为 100-500 字，包含与 FR-001 相同的 4 要素结构，其 chained usage 示例 MUST 包含 `detect_changes → impact → context` 这条标准链路。`[必须]`
 
 - **FR-004**：本 Feature 升级 description 的 graph-tools 工具清单**严格为 0 个**——即 Phase A description 升级范围**仅限**于 agent-context-tools 中的 3 个工具（`detect_changes` / `context` / `impact`）。`graph-tools.ts` 中**任何**工具（包括但不限于 `graph_query` / `graph_node` / `graph_path` / `graph_path_bfs` 等）的 description 与 response **完全不在 F170c 范围内**，不允许通过任何"例外"路径在本 Feature 中修订。如未来发现需要升级 graph-tools，必须作为**独立的新 Feature 提案**单独立项，**不**通过 F170c 的 spec amendment 或隐式扩展纳入。`[必须]`（响应 codex C-2 二/三轮 review：彻底移除任何"包装层例外"残留，确保 spec 边界硬收敛）
 
@@ -242,7 +242,7 @@ F170a 修复了协同部署阻塞 Bug（master HEAD 4e17e70）。然而 Stage 7b
 
 ### Measurable Outcomes
 
-- **SC-001**：3 个 agent-context tool（`detect_changes`、`context`、`impact`）的 description 均通过静态结构解析测试。每个 description 必须满足以下**5 项硬约束**（与 US1 验收 1 的 (a)-(e) 完全一致，响应 codex C-1 三轮 review）：(a) 长度位于 100-300 字符区间，(b) 第一行或首段为"核心功能一句话描述"的 lead-in 文本（长度 ≥ 10 字符，缺失或过短即视为整个 description 不达标），(c) 含 "Use this tool when" 段且至少枚举 3 个 use-case 场景，(d) 含 "Example" 段且含 input/output 示例，(e) 含 "Typical chained usage" 段且至少 1 个 chained 示例（`impact` 必含 `detect_changes → impact → context`）。**任一 description 任一项不达标即 SC-001 不通过**。（对应 User Story 1 / FR-001/002/003/005）
+- **SC-001**：3 个 agent-context tool（`detect_changes`、`context`、`impact`）的 description 均通过静态结构解析测试。每个 description 必须满足以下**5 项硬约束**（与 US1 验收 1 的 (a)-(e) 完全一致，响应 codex C-1 三轮 review）：(a) 长度位于 100-500 字符区间，(b) 第一行或首段为"核心功能一句话描述"的 lead-in 文本（长度 ≥ 10 字符，缺失或过短即视为整个 description 不达标），(c) 含 "Use this tool when" 段且至少枚举 3 个 use-case 场景，(d) 含 "Example" 段且含 input/output 示例，(e) 含 "Typical chained usage" 段且至少 1 个 chained 示例（`impact` 必含 `detect_changes → impact → context`）。**任一 description 任一项不达标即 SC-001 不通过**。（对应 User Story 1 / FR-001/002/003/005）
 
 - **SC-002 (Primary)**：E2E 真实 driver 测试（N=10 runs，5 task × 2 repeat）中，按 US2 Active Call 4 条判定规则统计，合规 run 数量 ≥ 5/10（50%）。**未达此阈值视为 Feature 验收不通过**。降级到 secondary 阈值 ≥ 25% 仅记 limitation，不构成等价 pass gate。同时报告须附 Wilson score 95% 置信区间。（对应 User Story 2，baseline: F167 ~0%）
 

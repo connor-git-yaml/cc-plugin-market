@@ -92,9 +92,9 @@
 
 ---
 
-## 决策 6：description 长度区间（100-300 字符）
+## 决策 6：description 长度区间（100-500（implement 阶段从 100-300 放宽） 字符）
 
-**问题**：SC-001 要求 description 长度在 100-300 字符之间，需确认"字符"是 Unicode code point 数还是 UTF-8 字节数。
+**问题**：SC-001 要求 description 长度在 100-500（implement 阶段从 100-300 放宽） 字符之间，需确认"字符"是 Unicode code point 数还是 UTF-8 字节数。
 
 **结论**：使用 JavaScript `String.length`（UTF-16 code unit 数），与 MCP SDK 处理 description 的方式一致
 

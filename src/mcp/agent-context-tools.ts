@@ -36,6 +36,14 @@ import {
   type BfsAffected,
   type BfsDirection,
 } from '../knowledge-graph/query-helpers.js';
+import {
+  buildTopImpactedRanking,
+  buildTopRelevantCallers,
+  generateNextStepHint,
+  safeStderrLog,
+  type TopImpacted,
+  type TopRelevantCaller,
+} from './lib/response-helpers.js';
 
 // ============================================================
 // 错误响应
@@ -335,6 +343,30 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     };
     if (warnings.length > 0) data['warnings'] = warnings;
 
+    // F170c enrichment 三路径（plan G 节）：临时变量 + 显式 catch reset 避免 partial fill
+    let topImpacted: TopImpacted[];
+    let nextStepHint: string;
+    let enrichmentDegraded: boolean;
+    try {
+      const _topImpacted = buildTopImpactedRanking(r.affected, 5);
+      const _nextStepHint = generateNextStepHint(
+        'impact',
+        { topImpacted: _topImpacted, affected: r.affected },
+        'success',
+      );
+      topImpacted = _topImpacted;
+      nextStepHint = _nextStepHint;
+      enrichmentDegraded = false;
+    } catch (e) {
+      topImpacted = [];
+      nextStepHint = '';
+      enrichmentDegraded = true;
+      safeStderrLog(`[F170c] impact enrichment degraded: ${String(e)}\n`);
+    }
+    data['topImpacted'] = topImpacted;
+    data['nextStepHint'] = nextStepHint;
+    if (enrichmentDegraded) data['_enrichmentDegraded'] = true;
+
     return recordAndReturn('impact', _telStart, _telReqSize, buildSuccessResponse(data, ['affected']));
   } catch (err) {
     return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
@@ -437,6 +469,31 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     if (include.includes('related-spec')) {
       data['relatedSpec'] = deriveRelatedSpec(canon.canonicalId, projectRoot);
     }
+
+    // F170c enrichment 三路径（plan G 节）
+    const callersRaw = (data['callers'] as Array<{ id: string; confidence: number; relation?: string }> | undefined) ?? [];
+    let topRelevantCallers: TopRelevantCaller[];
+    let nextStepHint: string;
+    let enrichmentDegraded: boolean;
+    try {
+      const _top = buildTopRelevantCallers(callersRaw, 3);
+      const _hint = generateNextStepHint(
+        'context',
+        { definition, callers: callersRaw },
+        'success',
+      );
+      topRelevantCallers = _top;
+      nextStepHint = _hint;
+      enrichmentDegraded = false;
+    } catch (e) {
+      topRelevantCallers = [];
+      nextStepHint = '';
+      enrichmentDegraded = true;
+      safeStderrLog(`[F170c] context enrichment degraded: ${String(e)}\n`);
+    }
+    data['topRelevantCallers'] = topRelevantCallers;
+    data['nextStepHint'] = nextStepHint;
+    if (enrichmentDegraded) data['_enrichmentDegraded'] = true;
 
     return recordAndReturn('context', _telStart, _telReqSize, buildSuccessResponse(data, ['callers', 'callees', 'imports']));
   } catch (err) {
@@ -681,23 +738,15 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     };
     if (uniqWarnings.length > 0) data['warnings'] = uniqWarnings;
 
-    // Feature 165 FR-012 round 3：success 路径写 responseSummary + responseSamples 到 telemetry
-    // responseSummary 是 numeric counters；responseSamples 是 bounded symbol/file 样本 (N=10)
-    // 用于 post-hoc consumption signal 提取（Cohort C smoke test）
-    const sampleMaxN = 10;
-    const symbolSample: string[] = [];
-    for (const cf of changedSymbolsOut) {
-      for (const sym of cf.symbols) {
-        if (symbolSample.length >= sampleMaxN) break;
-        symbolSample.push(sym);
-      }
-      if (symbolSample.length >= sampleMaxN) break;
-    }
-    const fileSample: string[] = [];
-    for (const cf of changedSymbolsOut) {
-      if (fileSample.length >= sampleMaxN) break;
-      fileSample.push(cf.file);
-    }
+    // F170c enrichment（plan G + D 节）
+    const enrichment = _computeDetectChangesEnrichment(affectedAcc, riskTier, totalChanged);
+    data['riskTier'] = riskTier;
+    data['topImpacted'] = enrichment.topImpacted;
+    data['nextStepHint'] = enrichment.nextStepHint;
+    if (enrichment.degraded) data['_enrichmentDegraded'] = true;
+
+    // telemetry sample（Feature 165）
+    const { symbolSample, fileSample } = _buildTelemetrySamples(changedSymbolsOut);
     return recordAndReturn(
       'detect_changes',
       _telStart,
@@ -714,6 +763,47 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
       { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
     ));
   }
+}
+
+// ─── detect_changes 私有辅助函数（F170c T-GREEN-2 cleanup） ───
+
+function _computeDetectChangesEnrichment(
+  affectedAcc: BfsAffected[],
+  riskTier: 'low' | 'medium' | 'high',
+  totalChanged: number,
+): { topImpacted: TopImpacted[]; nextStepHint: string; degraded: boolean } {
+  try {
+    const topImpacted = buildTopImpactedRanking(affectedAcc, 5);
+    const nextStepHint = generateNextStepHint(
+      'detect_changes',
+      { topImpacted, riskTier, totalChanged },
+      'success',
+    );
+    return { topImpacted, nextStepHint, degraded: false };
+  } catch (e) {
+    safeStderrLog(`[F170c] detect_changes enrichment degraded: ${String(e)}\n`);
+    return { topImpacted: [], nextStepHint: '', degraded: true };
+  }
+}
+
+function _buildTelemetrySamples(
+  changedSymbolsOut: Array<{ file: string; changeKind: 'modified' | 'rename'; symbols: string[] }>,
+): { symbolSample: string[]; fileSample: string[] } {
+  const sampleMaxN = 10;
+  const symbolSample: string[] = [];
+  for (const cf of changedSymbolsOut) {
+    for (const sym of cf.symbols) {
+      if (symbolSample.length >= sampleMaxN) break;
+      symbolSample.push(sym);
+    }
+    if (symbolSample.length >= sampleMaxN) break;
+  }
+  const fileSample: string[] = [];
+  for (const cf of changedSymbolsOut) {
+    if (fileSample.length >= sampleMaxN) break;
+    fileSample.push(cf.file);
+  }
+  return { symbolSample, fileSample };
 }
 
 // ─── unified diff 解析 ─────────────────────────────────────
@@ -932,21 +1022,57 @@ function buildFileSymbolIndex(graphData: Readonly<GraphJSON>): Map<string, strin
 export function registerAgentContextTools(server: McpServer): void {
   server.tool(
     'impact',
-    '查询 symbol 改动的 blast radius — 反向 / 正向 BFS 遍历调用链，返回受影响 symbols 列表 + summary。',
+    `查询 symbol 改动的 blast radius — 反向/正向 BFS 遍历调用链，返回受影响 symbols + risk summary。
+
+Use this tool when:
+- 改动前评估 caller 影响面
+- 重构前看 transitive 影响（depth=3-5）
+- 决定 PR review 范围
+
+Example:
+- Input: { target: "engine.py::Value.add", depth: 2 }
+- Output: { affected, summary, topImpacted: [{ id, score }], nextStepHint }
+
+Typical chained usage:
+- 修代码前: detect_changes → impact → context`,
     ImpactInputSchema,
     async (args) => handleImpact(args as ImpactArgs),
   );
 
   server.tool(
     'context',
-    '查询 symbol 360° 上下文 — definition + callers + callees + imports + relatedSpec。',
+    `查询 symbol 360° 上下文 — definition + callers + callees + imports + topRelevantCallers。
+
+Use this tool when:
+- 第一次接触某 symbol，理解位置/调用方/依赖
+- 修改前查 caller 风格保持一致
+- 调试时定位上游引用源头
+
+Example:
+- Input: { symbolId: "engine.py::Value" }
+- Output: { definition, callers, callees, imports, topRelevantCallers, nextStepHint }
+
+Typical chained usage:
+- impact → context（查 top 受影响节点的上下文）`,
     ContextInputSchema,
     async (args) => handleContext(args as ContextArgs),
   );
 
   server.tool(
     'detect_changes',
-    '从 git diff（文本或 baseRef）派生 changedSymbols + impact 链 + risk 总结。',
+    `从 git diff（unified diff 或 baseRef）派生 changedSymbols + BFS 影响链 + risk 总结。
+
+Use this tool when:
+- 收到 patch/PR diff 找实际改动 symbol
+- 提交前自检本次改动的上游影响
+- review 大型 PR 按 risk tier 分级
+
+Example:
+- Input: { diff: "diff --git a/engine.py..." } 或 { baseRef: "HEAD~3" }
+- Output: { changedSymbols, affectedSymbols, riskSummary, riskTier, topImpacted, nextStepHint }
+
+Typical chained usage:
+- detect_changes → impact → context`,
     DetectChangesInputSchema,
     async (args) => handleDetectChanges(args as DetectChangesArgs),
   );

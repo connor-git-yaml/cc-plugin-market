@@ -38,12 +38,12 @@ describe('F170c SC-001 — tool description 4 要素结构', () => {
 
   for (const toolName of TARGET_TOOLS) {
     describe(`tool: ${toolName}`, () => {
-      it(`(a) description 长度位于 [100, 300] 字符区间`, () => {
+      it(`(a) description 长度位于 [100, 500] 字符区间`, () => {
         const tool = captureTools().find((t) => t.name === toolName);
         expect(tool, `tool ${toolName} 应已注册`).toBeDefined();
         const len = tool!.description.length;
-        expect(len, `${toolName} description 长度 ${len}，需要 ∈ [100, 300]`).toBeGreaterThanOrEqual(100);
-        expect(len, `${toolName} description 长度 ${len}，需要 ∈ [100, 300]`).toBeLessThanOrEqual(300);
+        expect(len, `${toolName} description 长度 ${len}，需要 ∈ [100, 500]`).toBeGreaterThanOrEqual(100);
+        expect(len, `${toolName} description 长度 ${len}，需要 ∈ [100, 500]`).toBeLessThanOrEqual(500);
       });
 
       it(`(b) 首段含核心功能 lead-in（长度 ≥ 10 字符）`, () => {

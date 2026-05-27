@@ -23,7 +23,7 @@
 // agent-context-tools.ts 第 932-953 行 registerAgentContextTools
 server.tool(
   'impact',
-  '<-- 这里替换为新的 100-300 字符 description -->',
+  '<-- 这里替换为新的 100-500（implement 阶段从 100-300 放宽） 字符 description -->',
   ImpactInputSchema,
   ...
 );

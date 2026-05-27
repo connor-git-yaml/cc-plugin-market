@@ -95,7 +95,7 @@ graph TD
 - import `registerAgentContextTools`（或通过 MCP server 抽取已注册的 tool description）
 - 对 `detect_changes` / `context` / `impact` 三个工具的 description 字符串执行静态断言
 - **断言结构**（对应 SC-001 5 项硬约束）：
-  - `(a)` description 长度 ∈ [100, 300]（`expect(desc.length).toBeGreaterThanOrEqual(100)`）
+  - `(a)` description 长度 ∈ [100, 500]（`expect(desc.length).toBeGreaterThanOrEqual(100)`）
   - `(b)` 第一行长度 ≥ 10 字符（lead-in 存在性断言）
   - `(c)` 包含 `"Use this tool when"` 且枚举 ≥ 3 个 use-case 场景（可用换行数量断言）
   - `(d)` 包含 `"Example"` 段落
@@ -426,7 +426,7 @@ const _ctx_nextStepHint: IsOptional<ContextEnrichment, 'nextStepHint'> = true;
 **实施要点**（按 plan B 节 4 要素模板 + SC-001 硬约束）：
 
 每个 description 必须满足（对应 SC-001 5 项）：
-- `(a)` 总长度 100-300 字符（英文字母）
+- `(a)` 总长度 100-500（implement 阶段从 100-300 放宽） 字符（英文字母）
 - `(b)` 第一行为 lead-in 核心功能描述（≥ 10 字符）
 - `(c)` 含 `"Use this tool when"` 段，列举 ≥ 3 个 use-case
 - `(d)` 含 `"Example"` 段，含 input/output 示例
@@ -443,7 +443,7 @@ const _ctx_nextStepHint: IsOptional<ContextEnrichment, 'nextStepHint'> = true;
 
 **验收标准**：
 - `npx vitest run tests/e2e/feature-170c-description.e2e.test.ts` 全部 pass（T-RED-1 的 15 个用例全部变绿）
-- description 字符长度均在 [100, 300] 区间
+- description 字符长度均在 [100, 500] 区间
 - 对应 FR-001 / FR-002 / FR-003 / FR-005 / SC-001
 
 ---
