@@ -21,6 +21,11 @@ const mocks = vi.hoisted(() => ({
   spawnSync: vi.fn(),
   existsSync: vi.fn(),
   statSync: vi.fn(),
+  // F170c: response-helpers mocks（用于 partial fill / degraded 路径注入）
+  buildTopImpactedRanking: vi.fn(),
+  generateNextStepHint: vi.fn(),
+  buildTopRelevantCallers: vi.fn(),
+  safeStderrLog: vi.fn(),
 }));
 
 vi.mock('../../../src/mcp/graph-tools.js', () => ({
@@ -35,6 +40,18 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
   return { ...actual, existsSync: mocks.existsSync, statSync: mocks.statSync };
+});
+
+// F170c: mock response-helpers 允许 partial fill 失败注入
+vi.mock('../../../src/mcp/lib/response-helpers.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/mcp/lib/response-helpers.js')>('../../../src/mcp/lib/response-helpers.js');
+  return {
+    ...actual,
+    buildTopImpactedRanking: mocks.buildTopImpactedRanking,
+    generateNextStepHint: mocks.generateNextStepHint,
+    buildTopRelevantCallers: mocks.buildTopRelevantCallers,
+    safeStderrLog: mocks.safeStderrLog,
+  };
 });
 
 import {
@@ -534,5 +551,226 @@ describe('通用 / payload', () => {
     expect(e.code).toBe('internal-error');
     expect(typeof e.context?.['stack']).toBe('string');
     expect((e.context!['stack'] as string).length).toBeLessThanOrEqual(200);
+  });
+});
+
+// ============================================================
+// F170c SC-003 — 三路径 (success / enrichment degraded / handler error)
+// 修订（响应 codex C1/C2）：mock helper 触发 degraded + 用真实 diff 参数
+// ============================================================
+
+// 真实 unified diff fixture，能被 parseUnifiedDiff 正确解析（响应 codex C2）
+const VALID_DIFF = `diff --git a/fixture/engine.py b/fixture/engine.py
+index abc..def 100644
+--- a/fixture/engine.py
++++ b/fixture/engine.py
+@@ -10,3 +10,3 @@
+-old line
++new line
+ unchanged
+`;
+
+describe('F170c SC-003 — 三路径', () => {
+  // 默认 helper mock 实现（success path）
+  beforeEach(() => {
+    mocks.buildTopImpactedRanking.mockImplementation((affected: unknown[], maxItems: number) => {
+      return (affected as Array<{ id: string }>).slice(0, maxItems).map((a) => ({ id: a.id, score: 1.0 }));
+    });
+    mocks.generateNextStepHint.mockImplementation((toolName: string) => `建议接下来调相关工具（${toolName} success default mock）`);
+    mocks.buildTopRelevantCallers.mockImplementation((callers: unknown[], maxItems: number) => {
+      return (callers as Array<{ id: string; confidence: number }>).slice(0, maxItems).map((c) => ({ id: c.id, confidence: c.confidence, score: c.confidence }));
+    });
+    mocks.safeStderrLog.mockImplementation(() => {
+      /* no-op */
+    });
+  });
+
+  // ─── impact handler ───────────────────────────────────────
+  describe('handleImpact', () => {
+    it('success 路径：response 含 topImpacted (≤5) + nextStepHint (≥5 字符) + _enrichmentDegraded 缺失', async () => {
+      setMockGraph();
+      const r = await handleImpact({
+        target: 'fixture/engine.py::Value',
+        depth: 2,
+        minConfidence: 0,
+        direction: 'upstream',
+        budget: 200,
+      });
+      const data = parseSuccess(r);
+      expect(Array.isArray(data['topImpacted']), 'topImpacted 必须为数组').toBe(true);
+      expect((data['topImpacted'] as unknown[]).length).toBeLessThanOrEqual(5);
+      expect(typeof data['nextStepHint'], 'nextStepHint 必须为字符串').toBe('string');
+      expect((data['nextStepHint'] as string).length).toBeGreaterThanOrEqual(5);
+      expect(data['_enrichmentDegraded'], 'success 路径 _enrichmentDegraded 必须缺失').toBeUndefined();
+    });
+
+    it('enrichment degraded 路径（mock ranking 抛错）：topImpacted=[]、nextStepHint=""、_enrichmentDegraded=true，affected 完整（响应 codex C1）', async () => {
+      setMockGraph();
+      // 触发 enrichment degraded：让 ranking helper 抛错
+      mocks.buildTopImpactedRanking.mockImplementationOnce(() => {
+        throw new Error('synthetic ranking crash');
+      });
+      const r = await handleImpact({
+        target: 'fixture/engine.py::Value',
+        depth: 2,
+        minConfidence: 0,
+        direction: 'upstream',
+        budget: 200,
+      });
+      const data = parseSuccess(r);
+      // 精确断言 fallback 全量字段（响应 codex C1）
+      expect(data['topImpacted'], 'degraded: topImpacted 必须为 []').toEqual([]);
+      expect(data['nextStepHint'], 'degraded: nextStepHint 必须为 ""').toBe('');
+      expect(data['_enrichmentDegraded'], 'degraded: 标志必须为 true').toBe(true);
+      // 旧字段完整性
+      expect(data).toHaveProperty('affected');
+      expect(data).toHaveProperty('summary');
+    });
+
+    it('partial fill 失败注入（ranking 成功 + hint 抛错）：topImpacted=[]、nextStepHint=""、affected 真实（响应 codex C1）', async () => {
+      setMockGraph();
+      // ranking 成功，但 hint 抛错 — 验证 catch 显式 reset topImpacted（plan G 节关键约束）
+      mocks.generateNextStepHint.mockImplementationOnce(() => {
+        throw new Error('synthetic hint crash');
+      });
+      const r = await handleImpact({
+        target: 'fixture/engine.py::Value',
+        depth: 2,
+        minConfidence: 0,
+        direction: 'upstream',
+        budget: 200,
+      });
+      const data = parseSuccess(r);
+      // 关键断言：partial fill 不泄露 — topImpacted 必须被 catch 重置为 []
+      expect(data['topImpacted'], 'partial fill: topImpacted 必须被 reset 为 []').toEqual([]);
+      expect(data['nextStepHint']).toBe('');
+      expect(data['_enrichmentDegraded']).toBe(true);
+      expect(data).toHaveProperty('affected');
+    });
+
+    it('handler error 路径（baseline 不变性）：response 不含 topImpacted / nextStepHint / _enrichmentDegraded', async () => {
+      mocks.getCachedGraphData.mockImplementation(() => {
+        throw new Error('synthetic crash');
+      });
+      const r = await handleImpact({ target: 'fixture/engine.py::Value' });
+      const e = parseError(r);
+      expect(e.code).toBe('internal-error');
+      expect(e).not.toHaveProperty('topImpacted');
+      expect(e).not.toHaveProperty('nextStepHint');
+      expect(e).not.toHaveProperty('_enrichmentDegraded');
+    });
+  });
+
+  // ─── context handler ──────────────────────────────────────
+  describe('handleContext', () => {
+    it('success 路径：response 含 topRelevantCallers (≤3) + nextStepHint (≥5 字符) + _enrichmentDegraded 缺失', async () => {
+      setMockGraph();
+      const r = await handleContext({ symbolId: 'fixture/engine.py::Value' });
+      const data = parseSuccess(r);
+      expect(Array.isArray(data['topRelevantCallers'])).toBe(true);
+      expect((data['topRelevantCallers'] as unknown[]).length).toBeLessThanOrEqual(3);
+      expect(typeof data['nextStepHint']).toBe('string');
+      expect((data['nextStepHint'] as string).length).toBeGreaterThanOrEqual(5);
+      expect(data['_enrichmentDegraded']).toBeUndefined();
+    });
+
+    it('enrichment degraded 路径（mock callers ranking 抛错）：topRelevantCallers=[]、nextStepHint=""、_enrichmentDegraded=true（响应 codex C1）', async () => {
+      setMockGraph();
+      mocks.buildTopRelevantCallers.mockImplementationOnce(() => {
+        throw new Error('synthetic callers ranking crash');
+      });
+      const r = await handleContext({ symbolId: 'fixture/engine.py::Value' });
+      const data = parseSuccess(r);
+      expect(data['topRelevantCallers']).toEqual([]);
+      expect(data['nextStepHint']).toBe('');
+      expect(data['_enrichmentDegraded']).toBe(true);
+      // 旧字段完整性
+      expect(data).toHaveProperty('definition');
+    });
+
+    it('partial fill 失败注入（callers ranking 成功 + hint 抛错）：全 fallback（响应 codex C1）', async () => {
+      setMockGraph();
+      mocks.generateNextStepHint.mockImplementationOnce(() => {
+        throw new Error('synthetic hint crash');
+      });
+      const r = await handleContext({ symbolId: 'fixture/engine.py::Value' });
+      const data = parseSuccess(r);
+      expect(data['topRelevantCallers'], 'partial fill: 必须 reset 为 []').toEqual([]);
+      expect(data['nextStepHint']).toBe('');
+      expect(data['_enrichmentDegraded']).toBe(true);
+    });
+
+    it('handler error 路径（baseline 不变性）：error response 不含 M7 新字段', async () => {
+      mocks.getCachedGraphData.mockImplementation(() => {
+        throw new Error('synthetic crash');
+      });
+      const r = await handleContext({ symbolId: 'fixture/engine.py::Value' });
+      const e = parseError(r);
+      expect(e.code).toBe('internal-error');
+      expect(e).not.toHaveProperty('topRelevantCallers');
+      expect(e).not.toHaveProperty('nextStepHint');
+      expect(e).not.toHaveProperty('_enrichmentDegraded');
+    });
+  });
+
+  // ─── detect_changes handler ──────────────────────────────
+  describe('handleDetectChanges', () => {
+    it('success 路径：response 含顶层 riskTier (mirror riskSummary.riskTier) + topImpacted + nextStepHint（响应 codex C2: 用真实 diff 参数）', async () => {
+      setMockGraph();
+      const r = await handleDetectChanges({ diff: VALID_DIFF });
+      // 真实 diff + 真实 mock graph 应进入 success path（响应 codex C2）
+      expect(r.isError, '不应为 error response（valid diff + mock graph 完整）').toBeUndefined();
+      const data = parseSuccess(r);
+      expect(['low', 'medium', 'high']).toContain(data['riskTier']);
+      // 关键断言：顶层 riskTier 必须 mirror riskSummary.riskTier（FR-008 + plan D 节）
+      const riskSummary = data['riskSummary'] as Record<string, unknown>;
+      expect(riskSummary, 'riskSummary 必须存在').toBeDefined();
+      expect(data['riskTier'], '顶层 riskTier 必须等于 riskSummary.riskTier（mirror 断言）').toBe(riskSummary['riskTier']);
+      expect(Array.isArray(data['topImpacted'])).toBe(true);
+      expect(typeof data['nextStepHint']).toBe('string');
+    });
+
+    it('enrichment degraded 路径（mock ranking 抛错）：顶层 riskTier 仍 mirror（不走 "low" fallback）、topImpacted=[]、nextStepHint=""', async () => {
+      setMockGraph();
+      mocks.buildTopImpactedRanking.mockImplementationOnce(() => {
+        throw new Error('synthetic ranking crash');
+      });
+      const r = await handleDetectChanges({ diff: VALID_DIFF });
+      expect(r.isError).toBeUndefined();
+      const data = parseSuccess(r);
+      // 关键：顶层 riskTier 不允许走 "low" fallback，仍 mirror 真实值
+      const riskSummary = data['riskSummary'] as Record<string, unknown>;
+      expect(data['riskTier'], 'degraded: 顶层 riskTier 仍 mirror（plan D 修订）').toBe(riskSummary['riskTier']);
+      expect(data['topImpacted']).toEqual([]);
+      expect(data['nextStepHint']).toBe('');
+      expect(data['_enrichmentDegraded']).toBe(true);
+    });
+
+    it('partial fill 失败注入（ranking 成功 + hint 抛错）：topImpacted=[]、nextStepHint=""、riskTier 仍真实', async () => {
+      setMockGraph();
+      mocks.generateNextStepHint.mockImplementationOnce(() => {
+        throw new Error('synthetic hint crash');
+      });
+      const r = await handleDetectChanges({ diff: VALID_DIFF });
+      expect(r.isError).toBeUndefined();
+      const data = parseSuccess(r);
+      const riskSummary = data['riskSummary'] as Record<string, unknown>;
+      expect(data['topImpacted'], 'partial fill: 必须 reset').toEqual([]);
+      expect(data['nextStepHint']).toBe('');
+      expect(data['riskTier']).toBe(riskSummary['riskTier']);
+    });
+
+    it('handler error 路径（baseline 不变性）：error response 不含任何 M7 新字段', async () => {
+      mocks.getCachedGraphData.mockImplementation(() => {
+        throw new Error('synthetic crash');
+      });
+      const r = await handleDetectChanges({ diff: VALID_DIFF });
+      const e = parseError(r);
+      expect(e.code, '必须返回 internal-error code').toBe('internal-error');
+      expect(e).not.toHaveProperty('riskTier');
+      expect(e).not.toHaveProperty('topImpacted');
+      expect(e).not.toHaveProperty('nextStepHint');
+      expect(e).not.toHaveProperty('_enrichmentDegraded');
+    });
   });
 });
