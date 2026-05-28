@@ -33,6 +33,9 @@ Thumbs.db
 # Generated output (managed by reverse-spec)
 drift-logs/
 
+# MCP server config (动态生成 by SC-002/SC-004 driver eval harness)
+.mcp.json
+
 # Checkpoint files
 specs/.reverse-spec-checkpoint.json
 .claude/settings.local.json
