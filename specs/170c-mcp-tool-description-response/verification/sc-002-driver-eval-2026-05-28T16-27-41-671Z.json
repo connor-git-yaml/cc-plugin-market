@@ -1,0 +1,158 @@
+{
+  "feature": "F170c",
+  "scenario": "SC-002",
+  "timestamp": "2026-05-28T16:27:41.672Z",
+  "config": {
+    "driverModel": "claude-sonnet-4-6",
+    "tasks": 5,
+    "repeats": 2,
+    "totalRuns": 10,
+    "mcpServerCommand": "node /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/dist/cli/index.js mcp-server",
+    "allowedTools": "mcp__spectra__impact,mcp__spectra__context,mcp__spectra__detect_changes,Read,Grep,Glob"
+  },
+  "summary": {
+    "compliantRuns": 0,
+    "totalRuns": 10,
+    "complianceRate": 0,
+    "wilsonCI": {
+      "lower": 0,
+      "upper": 0.2775401687666165,
+      "level": 0.95
+    },
+    "primaryPassGate": false,
+    "degraded": false,
+    "outcomeType": "below-secondary"
+  },
+  "runs": [
+    {
+      "runIndex": 1,
+      "taskId": "T1-canonicalizeSymbolId",
+      "target": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+      "repeat": 1,
+      "durationMs": 137425,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 2,
+      "taskId": "T2-handleDetectChanges",
+      "target": "src/mcp/agent-context-tools.ts::handleDetectChanges",
+      "repeat": 1,
+      "durationMs": 108722,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 3,
+      "taskId": "T3-bfsTraverse",
+      "target": "src/knowledge-graph/query-helpers.ts::bfsTraverse",
+      "repeat": 1,
+      "durationMs": 138681,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 4,
+      "taskId": "T4-getCachedGraphData",
+      "target": "src/mcp/graph-tools.ts::getCachedGraphData",
+      "repeat": 1,
+      "durationMs": 182398,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 5,
+      "taskId": "T5-computeRiskTier",
+      "target": "src/knowledge-graph/query-helpers.ts::computeRiskTier",
+      "repeat": 1,
+      "durationMs": 85100,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 6,
+      "taskId": "T1-canonicalizeSymbolId",
+      "target": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+      "repeat": 2,
+      "durationMs": 108868,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 7,
+      "taskId": "T2-handleDetectChanges",
+      "target": "src/mcp/agent-context-tools.ts::handleDetectChanges",
+      "repeat": 2,
+      "durationMs": 97619,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 8,
+      "taskId": "T3-bfsTraverse",
+      "target": "src/knowledge-graph/query-helpers.ts::bfsTraverse",
+      "repeat": 2,
+      "durationMs": 111968,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 9,
+      "taskId": "T4-getCachedGraphData",
+      "target": "src/mcp/graph-tools.ts::getCachedGraphData",
+      "repeat": 2,
+      "durationMs": 117755,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    },
+    {
+      "runIndex": 10,
+      "taskId": "T5-computeRiskTier",
+      "target": "src/knowledge-graph/query-helpers.ts::computeRiskTier",
+      "repeat": 2,
+      "durationMs": 92040,
+      "claudeExitStatus": 0,
+      "claudeError": null,
+      "totalImpactCalls": 0,
+      "distinctActiveCallCount": 0,
+      "isCompliant": false,
+      "nonCompliantReasons": []
+    }
+  ]
+}
