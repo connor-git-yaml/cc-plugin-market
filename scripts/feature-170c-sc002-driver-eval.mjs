@@ -203,7 +203,9 @@ function ensureGraphAndValidateTargets(wtDir) {
 // claude --print harness
 // ============================================================
 
-function buildClaudeArgs(prompt, wtDir) {
+// 关键 fix：claude CLI 的 `--allowedTools` 是 variadic，会吞掉后面的 prompt argument。
+// 解决方式：prompt 通过 stdin 传入，args 中不放 prompt（避免被任何 flag 吸收）。
+function buildClaudeArgs(wtDir) {
   return [
     '--print',
     '--model', 'claude-sonnet-4-6',
@@ -213,12 +215,11 @@ function buildClaudeArgs(prompt, wtDir) {
     '--permission-mode', 'acceptEdits',
     '--mcp-config', path.join(wtDir, '.mcp.json'),
     '--allowedTools', 'mcp__spectra__impact,mcp__spectra__context,mcp__spectra__detect_changes,Read,Grep,Glob',
-    prompt,
   ];
 }
 
 function spawnClaude(prompt, wtDir, timeoutMs = 300000) {
-  const args = buildClaudeArgs(prompt, wtDir);
+  const args = buildClaudeArgs(wtDir);
   const env = { ...process.env };
   if (env.ANTHROPIC_API_KEY === '') delete env.ANTHROPIC_API_KEY;
   const start = Date.now();
@@ -227,6 +228,7 @@ function spawnClaude(prompt, wtDir, timeoutMs = 300000) {
     encoding: 'utf-8',
     timeout: timeoutMs,
     maxBuffer: 64 * 1024 * 1024,
+    input: prompt, // 通过 stdin 传 prompt，避免被 --allowedTools variadic 吞掉
     env,
   });
   return {
