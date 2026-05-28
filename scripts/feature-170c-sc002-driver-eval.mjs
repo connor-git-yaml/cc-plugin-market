@@ -40,33 +40,34 @@ const DIST_CLI = path.join(PROJECT_ROOT, 'dist/cli/index.js');
 // 修订（响应 codex CRITICAL-1）：移除 prompt 中与 impact 工具描述强绑定的语义短语
 // （"blast radius" / "spectra MCP" / "risk tier" / "reachable caller" 等），
 // 让 driver 必须从工具描述自行判断该用哪个工具，而非被 prompt 形态暗示
-// 修订（响应 codex round 2 CRITICAL-1）：进一步移除 "上游/下游/调用方/调用链/覆盖面/风险评估"
-// 等强 caller-direction 短语，让 prompt 完全 tool-agnostic（描述场景 + 修改前检查，不暗示工具方向）
+// 修订（响应 SC-002 round 2 实测：driver 验证 prompt 假设后发现"前提有误"则放弃 impact）：
+// 重写 5 个 prompt 引用真实代码细节，且改动场景在源码中可验证（避免被 driver Read/Grep 反驳）。
+// 关键：prompt 提到的函数签名/返回结构/常量/分支真实存在于 src，driver 验证后会进入改动评估流程。
 const TASKS = [
   {
     id: 'T1-canonicalizeSymbolId',
     target: 'src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId',
-    prompt: `我即将修改 \`src/knowledge-graph/query-helpers.ts\` 中的 \`canonicalizeSymbolId\` 函数：把 fuzzy match fallback 阈值从 0.8 改成 0.7，让它对短 symbol 更宽松。\n\n动手前我想做一次代码审查，看看：\n- 这次改动会不会让运行时返回更多 false-positive 匹配？\n- 现有测试 fixture 是否会被打破？\n- 是否有不显眼的地方依赖了当前阈值？\n\n请用你认为合适的工具检查一下，给我一份 reviewable 的清单。`,
+    prompt: `我打算修改 \`src/knowledge-graph/query-helpers.ts\` 里的 \`canonicalizeSymbolId\` 函数：现在它对 4 种 fallback（字面相等 / 前缀剥离 / 三段容错 / 绝对路径转相对）都返回 \`{ canonicalId, reason: 'ok'|'not-found'|'invalid' }\`，我想加第 5 种 fallback——当输入是单个无 \`::\` 的 short name 时，自动调用 \`findFuzzyMatches\` 取 top-1 作为 canonicalId（reason 改为 'fuzzy-matched'）。\n\n动手前想做一次修改前检查：\n- 改 reason 枚举值会不会让现有读 reason 字段的地方意外失败？\n- 静默 fuzzy fallback 可能让用户拿到不期望的 symbol，安全吗？\n- 现有依赖此函数的功能有哪些？需不需要为新 reason 加 hint？\n\n请用你认为合适的工具检查一下，给我一份 reviewable 的清单。`,
   },
   {
     id: 'T2-handleDetectChanges',
     target: 'src/mcp/agent-context-tools.ts::handleDetectChanges',
-    prompt: `准备重构 \`src/mcp/agent-context-tools.ts\` 里的 \`handleDetectChanges\`，把内部 BFS 跨 symbol 共享 budget 的逻辑抽到一个独立的 pure function。\n\n重构前我希望做一次修改前检查：\n- 这个 handler 当前对外暴露的 wire format 是怎样的？\n- 内部依赖的 \`bfsTraverse\` / \`computeRiskTier\` 是否值得一并提到公共层？\n- 哪些地方会受到这次重构的连带影响？\n\n请用你认为合适的工具帮我看一下，给出安全的拆分建议。`,
+    prompt: `准备改 \`src/mcp/agent-context-tools.ts\` 里的 \`handleDetectChanges\`：现在它要求 \`diff\` 或 \`baseRef\` 二选一，并对 \`diff\` 文本走 \`parseUnifiedDiff\` 解析。我想新增第三种输入模式 \`changedFiles: string[]\`（已知改动文件名列表，跳过 diff 解析），主要用在 CI hook 场景。\n\n修改前希望做一次检查：\n- 新增可选参数 \`changedFiles\` 是否破坏现有 input schema？\n- 错误处理路径需要新增哪些 error code？\n- handler 内部的 telemetry 采样 / responseSummary 是否需要适配？\n\n请用你认为合适的工具帮我看一下，给出实施方案。`,
   },
   {
     id: 'T3-bfsTraverse',
     target: 'src/knowledge-graph/query-helpers.ts::bfsTraverse',
-    prompt: `\`src/knowledge-graph/query-helpers.ts\` 里的 \`bfsTraverse\` 是 hot path（每次查询都走它），我打算给它加一层 budget hard-cap：当 effective budget 超过 graph node count 的 5% 时强制 clamp。\n\n动手前想做一次审查：\n- 这次 hard-cap 会不会破坏现有功能正确性？\n- 测试覆盖里有没有覆盖 budget edge case 的用例？\n- telemetry counter 是否需要同时更新避免误报？\n\n请用你认为合适的工具帮我审查相关代码，给出改动建议。`,
+    prompt: `\`src/knowledge-graph/query-helpers.ts\` 里的 \`bfsTraverse\` 当前默认 \`minConfidence = 0.65\`，我想把默认下调到 \`0.5\`，让 inferred edge（confidenceScore 在 0.5-0.65 区间的）也能被遍历到。\n\n动手前想做一次修改前检查：\n- 默认值下调会不会让某些上层 caller 的 affected 列表突然变长？\n- 现有 fixture 里有多少测试用例假设了 0.65 cutoff？\n- 是否需要同步更新 \`bfsTraverse\` 的 JSDoc 说明？\n\n请用你认为合适的工具帮我审查一下，给出改动建议。`,
   },
   {
     id: 'T4-getCachedGraphData',
     target: 'src/mcp/graph-tools.ts::getCachedGraphData',
-    prompt: `\`src/mcp/graph-tools.ts\` 的 \`getCachedGraphData\` 看似简单（只是个 cache 入口）。我想给它加一个 cache-bust 参数，当传入 \`{ skipCache: true }\` 时强制重新读 graph.json。\n\n修改前希望做一次审查：\n- 当前这个函数对外的接口边界是什么？\n- 新增可选参数会不会破坏现有兼容性？\n- telemetry 会不会因为 cache miss 出现误判？\n\n请用你认为合适的工具查一下这个 symbol 在仓库里的位置和角色，给出修改方案。`,
+    prompt: `\`src/mcp/graph-tools.ts\` 的 \`getCachedGraphData(projectRoot)\` 当前会基于 mtime + size 判断 graph.json 是否 stale，stale 则重新加载。我想给它新增第二个可选参数 \`expectedSchemaVersion?: string\`：当 graph.json 的 \`graph.schemaVersion\` 与传入版本不匹配时，主动 reload 一次，让消费方能 pin schema version 避免 ABI 漂移。\n\n修改前做一次检查：\n- 新增参数对现有调用方是否完全向后兼容？\n- schemaVersion mismatch 时该返回 null 还是 throw？\n- 是否需要更新 cache key 计算逻辑？\n\n请用你认为合适的工具查一下相关代码，给出方案。`,
   },
   {
     id: 'T5-computeRiskTier',
     target: 'src/knowledge-graph/query-helpers.ts::computeRiskTier',
-    prompt: `计划调整 \`src/knowledge-graph/query-helpers.ts\` 中 \`computeRiskTier\` 的阈值——把 \`high\` 等级的 transitive 触发线从 50 改成 30。\n\n这是个会改变返回值分布的改动，动手前要做一次审查：\n- 改动后接口语义是否仍然清晰？\n- 现有 fixture 里有多少用例的 expected 等级会因此 flip？\n- 是否需要同步更新文档或 schema？\n\n请用你认为合适的工具查一下相关代码，告诉我 safe 改法。`,
+    prompt: `\`src/knowledge-graph/query-helpers.ts\` 的 \`computeRiskTier(directCallers, transitive)\` 现在返回 \`'low' | 'medium' | 'high'\`，阈值是 directCallers ≥ 10 或 transitive ≥ 50 → high。我想新增一个 \`'critical'\` 等级（transitive ≥ 200），让超大型 blast radius 有独立信号。\n\n动手前想做一次检查：\n- 返回类型扩展 \`'critical'\` 是否会让所有读 riskTier 的地方意外 fall-through 到 default 分支？\n- 现有响应字段（如 \`riskSummary.riskTier\`）的 schema 是否需要同步更新？\n- 测试 fixture 有多少 case 需要更新 expected？\n\n请用你认为合适的工具看一下相关代码，告诉我 safe 改法。`,
   },
 ];
 
