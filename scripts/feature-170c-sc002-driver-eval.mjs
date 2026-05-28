@@ -132,8 +132,21 @@ function runSpectraBatch(wtDir, graphPath) {
   console.log(`[setup] graph.json 生成完成 (${(fs.statSync(graphPath).size / 1024).toFixed(0)} KB)`);
 }
 
-// 修订（响应 codex WARNING-1）：预 resolve 5 个 task target，确保 graph 含真实 symbol
-// stale graph 或错误 worktree 会让合规调用全被判失败
+// 修订（响应 codex WARNING-1 + bug fix: graph node id 用绝对路径）
+// graph 中 node id 是 absolute path（如 `/Users/.../src/foo.ts::Bar`），
+// 但 task.target 用 relative path（如 `src/foo.ts::Bar`），driver 引用时
+// canonicalizeSymbolId 会做 path-suffix 解析。setup 阶段也用 endsWith 匹配。
+function resolveTargetInGraph(nodeIds, target) {
+  // 1. 完全匹配
+  if (nodeIds.has(target)) return target;
+  // 2. endsWith 匹配（abs path 节点 用 relative target 引用）
+  for (const id of nodeIds) {
+    if (typeof id !== 'string') continue;
+    if (id.endsWith('/' + target) || id.endsWith(target)) return id;
+  }
+  return null;
+}
+
 function ensureGraphAndValidateTargets(wtDir) {
   const graphPath = path.join(wtDir, 'specs/_meta/graph.json');
   if (!fs.existsSync(graphPath)) {
@@ -155,13 +168,13 @@ function ensureGraphAndValidateTargets(wtDir) {
 
   const missingTargets = [];
   for (const task of TASKS) {
-    // 严格匹配 + repo-relative path 形式（spectra graph 用 `${filePath}::${exp.name}` 格式）
-    if (!nodeIds.has(task.target)) {
+    const resolved = resolveTargetInGraph(nodeIds, task.target);
+    if (resolved === null) {
       missingTargets.push(task);
     }
   }
   if (missingTargets.length > 0) {
-    console.log('[setup] 某些 task target 不在 graph 中，尝试 rebuild graph ...');
+    console.log(`[setup] ${missingTargets.length} 个 task target 不在 graph 中，尝试 rebuild graph ...`);
     runSpectraBatch(wtDir, graphPath);
     const graph2 = JSON.parse(fs.readFileSync(graphPath, 'utf-8'));
     const nodeIds2 = new Set();
@@ -170,11 +183,10 @@ function ensureGraphAndValidateTargets(wtDir) {
         if (typeof n.id === 'string') nodeIds2.add(n.id);
       }
     }
-    // 修订（响应 codex round 2 WARNING-1）：rebuild 后必须重新验证全部 5 个 task target，
-    // 因为 rebuild 可能让原本 OK 的 target 不再存在
+    // 修订（响应 codex round 2 WARNING-1）：rebuild 后必须重新验证全部 5 个 task target
     const stillMissing = [];
     for (const task of TASKS) {
-      if (!nodeIds2.has(task.target)) stillMissing.push(task);
+      if (resolveTargetInGraph(nodeIds2, task.target) === null) stillMissing.push(task);
     }
     if (stillMissing.length > 0) {
       throw new Error(
@@ -183,7 +195,7 @@ function ensureGraphAndValidateTargets(wtDir) {
       );
     }
   }
-  console.log(`[setup] 5 个 task target 全部在 graph 中验证通过`);
+  console.log(`[setup] 5 个 task target 全部在 graph 中验证通过（endsWith 匹配）`);
   return graphPath;
 }
 
