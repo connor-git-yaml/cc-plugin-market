@@ -36,6 +36,9 @@ drift-logs/
 # MCP server config (动态生成 by SC-002/SC-004 driver eval harness)
 .mcp.json
 
+# Spectra batch checkpoint (动态生成 by spectra batch / prepare)
+specs/.spectra-checkpoint.json
+
 # Checkpoint files
 specs/.reverse-spec-checkpoint.json
 .claude/settings.local.json
