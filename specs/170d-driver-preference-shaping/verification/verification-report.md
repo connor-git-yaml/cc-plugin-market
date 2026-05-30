@@ -16,13 +16,13 @@ F170d 达到 **`primary-pass`**：Primary Outcome SC-002（guided active-call ra
 |----|------|------|------|------|
 | SC-001 | 5 agent 含按 tools 过滤的规则块（每 agent 恰 3 行符合矩阵） | Hard | ✅ PASS | `feature-170d-preference-rules.test.ts` SC-001（含「恰好 3 行」断言；plan/implement/spec-review/quality-review=R1/R2/R3，verify=R1/R2/R4）|
 | SC-002 (Primary) | guided active-call rate ≥ 50%（≥5/10） | Primary（host） | ✅ **PASS（8/10 = 80%）** | host 实测 N=10（driver=claude-sonnet-4-6，--append-system-prompt 注入 implement 渲染块，--strict-mcp-config）：impactResolvedSuccessRate 8/10，Wilson [49.0%,94.3%]，primaryPassGate=true。report JSON（gitignored）`sc-002-driver-eval-2026-05-30T10-04-54-062Z.json`。vs F170c baseline 0/10 |
-| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⏸️ host-pending | harness `--simulate-graph-missing` 模式就绪；本轮未单独跑 |
+| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⏸️ host-pending（OAuth 受阻） | harness `--simulate-graph-missing` 模式就绪；补跑尝试遇 Claude OAuth 401，需 `claude /login` 重授权后再跑 |
 | SC-004 (Secondary) | chained call rate ≥ 30% | 不阻塞（host） | ⏸️ deferred | 需复用 F167 cohort C 独立流程；本 harness 不实现 chain，e2e 显式 .skip |
 | SC-005 | 5 SKILL.md 含子代理调度优先级提示块 | Hard | ✅ PASS | SC-005 测（section 内含 template 路径 + namespace + 优先语义 + 位置在工作流/委派章节之前）|
 | SC-006 | 块内容与 template 单一源一致（ruleId 比对）+ 工具 ⊆ frontmatter | Hard | ✅ PASS | SC-006 测 + `repo:check` `preference-rules:agent-block-sync` 双重守护 |
 | SC-007 | 零回归：vitest + build + repo:check + release:check | Hard | ✅ PASS | clean full `vitest run`：323 files / 3838 passed / 0 failed；build(tsc) 0 err；repo:check status=pass；release:check valid |
 | SC-008 | 不动 tool description / response format / frontmatter tools | Hard | ✅ PASS | `git diff --name-only ffc2cbb..HEAD` 未触碰任何 src/mcp 文件；agent frontmatter 无 `tools:` 行增删；SC-008 冻结快照单测 pass |
-| SC-009 | over-call 负控 ≤ 1/3 | Soft（host） | ⏸️ host-pending | harness `--negative-control` 模式就绪；本轮未单独跑（建议补） |
+| SC-009 | over-call 负控 ≤ 1/3 | Soft（host） | ⏸️ host-pending（OAuth 受阻） | harness `--negative-control` 模式就绪；补跑尝试遇 Claude OAuth 401，需 `claude /login` 重授权后再跑 |
 
 ## US2 实测结果（SC-002，host shell + Claude Max OAuth）
 
@@ -94,5 +94,10 @@ graph.json 预生成（4997 nodes）+ harness `--strict-mcp-config` 后，一次
 
 ## 建议下一步
 
-1.（可选 soft gate 补全）host shell 跑 `--negative-control`（SC-009 over-call）+ `--simulate-graph-missing`（SC-003 fallback）补全两个 soft gate 数据。
+1.（soft gate 补全，OAuth 恢复后）先 `claude /login` 重授权（本轮补跑遇 401），再 host shell 跑：
+   ```bash
+   node scripts/feature-170d-driver-preference.mjs --negative-control --repeats 2 --delay-ms 15000   # SC-009
+   node scripts/feature-170d-driver-preference.mjs --simulate-graph-missing --repeats 1 --delay-ms 15000  # SC-003
+   ```
+   两者均为 soft gate，不阻塞 Primary 验收；harness 已就绪（graph-missing 模式有 try/finally 保证 graph.json 恢复）。
 2. rebase 最新 master + 重跑确定性验证 → 列 deliverable report 等用户确认 → push origin master（CLAUDE.local 约定）。
