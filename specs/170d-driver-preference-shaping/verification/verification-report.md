@@ -36,11 +36,13 @@ graph 预生成后的一轮 US2，前 7 个 run 全部 `exit=0`，逐 run 信号
 | `mcpCalls` (production NS) | 0 | 但调用没落到 production 命名的 server |
 | `resolved` | false | 故 SC-002 主指标（success envelope）未达成 |
 
-### 根因（已定位 + 已修）
+### 根因（假设，待 host 验证 — 不主张已确认）
 
-`impactAttempt=true` 但 `mcpCalls=0`（仅数 `mcp__plugin_spectra_spectra__` 前缀）的矛盾，说明 **driver 调的是旧命名 `mcp__spectra__impact`**。根因：`~/.claude.json` 全局配置存在 ambient `spectra` MCP server（`global mcpServers: spectra` 已确认），driver 优先用它；而 harness 的 `--allowedTools` 只放行 production 命名 → 旧命名调用被拦截 → 无 tool_result → `resolved=false`。
+`impactAttempt=true` 但 `mcpCalls=0`（仅数 `mcp__plugin_spectra_spectra__` 前缀）+ `resolved=false` 的矛盾，可靠事实是：**driver 试图调 impact，但调用没接到 production 命名的 server**。
 
-**修复**：harness `buildClaudeArgs` 增加 **`--strict-mcp-config`**（已确认该 flag 存在），只用 harness 写的 `.mcp.json`（server key=`plugin_spectra_spectra`），屏蔽 ambient `spectra`。修复后 driver 只能调 production 命名、且在 allowedTools 内 → 应能 resolve。harness 单测新增 `--strict-mcp-config` 断言守护。
+**归因更正**：初次 commit message 曾写「根因 = `~/.claude.json` ambient `spectra` server」，但随后实测 `global mcpServers: openrouter-perplexity`（**无 spectra**），故该具体归因**不成立、已撤回**。`mcpCalls=0` 的真正原因**尚未确证**，候选假设：(a) harness 的 `.mcp.json`（server key=`plugin_spectra_spectra`）未被 driver 正确加载/注册；(b) driver 调了非 production 命名（如裸 `impact` 或旧 `mcp__spectra__impact`）→ 不被 `--allowedTools` 放行 → 无 tool_result；(c) MCP server 启动失败（dist/cli mcp-server 在该会话未就绪）。
+
+**已采取的加固（非"确认的修复"）**：harness `buildClaudeArgs` 增加 **`--strict-mcp-config`**（flag 存在已确认），强制只用 harness 写的 `.mcp.json`。这能排除"外部 ambient server 干扰"这一类，但**是否就是 `mcpCalls=0` 的解药需 host 重跑验证**（预期 `mcpCalls>0`；若仍 0 则按上述 (a)/(c) 进一步诊断，例如先 `node dist/cli/index.js mcp-server` 手测 server 可达性）。harness 单测新增 `--strict-mcp-config` 断言守护。
 
 ### 诚实结论
 
