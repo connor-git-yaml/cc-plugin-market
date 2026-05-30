@@ -19,6 +19,7 @@ import {
   buildClaudeArgs,
   assertInjectionSubsetOfAllowed,
 } from '../../../scripts/feature-170d-driver-preference.mjs';
+import { extractCanonicalBlock } from '../../../plugins/spec-driver/lib/preference-rules.mjs';
 
 const IMPACT = 'mcp__plugin_spectra_spectra__impact';
 const CONTEXT = 'mcp__plugin_spectra_spectra__context';
@@ -212,6 +213,23 @@ describe('F170d T001 — driver-eval-core 纯函数', () => {
       expect(block).toContain(DETECT);
       expect(block).not.toContain(CONTEXT);
       expect(block).toContain('PR review 范围');
+    });
+  });
+
+  describe('extractCanonicalBlock — fail-loud（codex C3）', () => {
+    it('block-start 无 block-end → throw（拒绝静默截断到 EOF）', () => {
+      const broken = '前言\n<!-- preference-rules:block-start -->\n## 规则\n（缺 block-end）\n更多文档';
+      expect(() => extractCanonicalBlock(broken)).toThrow(/block-end/);
+    });
+    it('无 block-start → 原样返回（兼容仅传 block 内容）', () => {
+      expect(extractCanonicalBlock('## 规则\n内容')).toContain('## 规则');
+    });
+    it('block-start + block-end → 仅取其间', () => {
+      const t = 'doc\n<!-- preference-rules:block-start -->\nINNER\n<!-- preference-rules:block-end -->\nfooter';
+      const b = extractCanonicalBlock(t);
+      expect(b).toContain('INNER');
+      expect(b).not.toContain('footer');
+      expect(b).not.toContain('doc');
     });
   });
 });

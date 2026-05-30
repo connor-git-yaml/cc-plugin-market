@@ -39,6 +39,9 @@ drift-logs/
 # Spectra batch checkpoint (动态生成 by spectra batch / prepare)
 specs/.spectra-checkpoint.json
 
+# Driver eval raw run JSON (F170d host 实测产物；含 LLM 随机性，不入库；只 track verification-report.md)
+specs/*/verification/sc-002-driver-eval-*.json
+
 # Checkpoint files
 specs/.reverse-spec-checkpoint.json
 .claude/settings.local.json

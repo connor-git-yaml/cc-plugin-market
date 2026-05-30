@@ -10,6 +10,7 @@ import { generateProductQualityReports } from '../../plugins/spec-driver/scripts
 import { generateProductScorecards } from '../../plugins/spec-driver/scripts/generate-product-scorecards.mjs';
 import { generateProjectContextSuggestions } from '../../plugins/spec-driver/scripts/generate-project-context-suggestions.mjs';
 import { validateWrapperSources } from '../../plugins/spec-driver/scripts/validate-wrapper-sources.mjs';
+import { validatePreferenceRules, syncPreferenceRules } from '../../plugins/spec-driver/scripts/sync-preference-rules.mjs';
 import { generateWorkflowRegistry } from '../../plugins/spec-driver/scripts/generate-workflow-registry.mjs';
 import { syncSharedAgentDocs, validateSharedAgentDocs } from '../sync-agent-docs.mjs';
 import { syncReleaseContract, validateReleaseContract } from './release-contract-core.mjs';
@@ -184,6 +185,7 @@ export function syncRepository(projectRoot) {
   };
 
   runStep('agent-docs', '同步 AGENTS/CLAUDE 共享区块', () => syncSharedAgentDocs(resolvedRoot));
+  runStep('preference-rules', '同步 5 agent 工具优先使用规则块', () => syncPreferenceRules({ projectRoot: resolvedRoot }));
   runStep('release-contract', '同步版本与发布合同', () => syncReleaseContract(resolvedRoot));
   runStep('spectra-skills', '同步 spectra compatibility mirrors', () => syncSpectraSkillMirrors({ projectRoot: resolvedRoot }));
   runStep('spec-driver-codex-wrappers', '再生成 spec-driver Codex wrappers', () => runSpecDriverCodexInstall(resolvedRoot));
@@ -256,6 +258,13 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'orchestration-overrides',
     await validateOrchestrationOverrides({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  aggregateValidation(
+    'preference-rules',
+    validatePreferenceRules({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

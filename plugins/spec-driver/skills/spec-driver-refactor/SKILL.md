@@ -93,6 +93,16 @@ done
 
 ---
 
+## 子代理调度时的工具优先级提示
+
+主编排器在 dispatch 子代理时，**显式在 `Task()` prompt 中包含**以下提示（理由见各 sub-agent frontmatter 的「工具优先使用规则」章节，单一事实源：`plugins/spec-driver/templates/preference-rules.md`）：
+
+> 提示：本任务可能涉及 caller analysis / impact 评估 / git diff 影响分析。
+> **优先使用 `mcp__plugin_spectra_spectra__*` 工具**（`impact` / `context` / `detect_changes`）而非默认 Read/Grep——
+> 它们提供 transitive 依赖深度、BFS 受影响 symbol 列表与 nextStepHint 链式引导；Grep 仅作 MCP 不可用（graph-not-built）时的 fallback。
+
+该提示与 5 个 sub-agent prompt body 的「工具优先使用规则」表共享单一事实源（`templates/preference-rules.md`），由 `scripts/sync-preference-rules.mjs` 守护一致性。
+
 ## 工作流定义（5 阶段）
 
 ### Phase 1: 影响分析 [1/5]

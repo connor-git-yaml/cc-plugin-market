@@ -122,8 +122,44 @@ spectra run .
 
 ---
 
-## 六、相关资源
+## 七、Driver 偏好引导设计（F170d）
+
+### 为什么需要这层引导
+
+F170c 实测（host shell N=10×4 轮）发现：driver（Claude Sonnet 4.6）在「评估 symbol 改动影响」类任务上 **0/10 主动调用** spectra `impact`，而是默认 1 Read + 6 Grep。即使把 tool description 升级到 100-500 字 + 4 要素 + 显式 chained usage，主动调用率仍是 **0%**。
+
+**业务洞察**：tool description 只提供「理论可用性」（这个工具能做什么），不能改变 driver 的工具选择**偏好**。Grep 是 Anthropic 训练数据中 caller-analysis 的默认工具，cognitive overhead 更低。要改变偏好，必须在 **prompt level** 提供「任务匹配性」引导——明确告诉 driver「什么任务该用什么工具」。
+
+F170d 因此在两处注入引导：
+1. **5 个 sub-agent**（plan / implement / verify / spec-review / quality-review）的 prompt body 内嵌「工具优先使用规则」表（按各 agent frontmatter `tools` 过滤）。agent body 即 Claude Code 子代理的 system prompt，故引导随子代理上下文抵达 driver。
+2. **5 个主编排器 SKILL.md** 的「子代理调度时的工具优先级提示」块，要求编排器 dispatch 时在 `Task()` prompt 中显式带上工具优先级提示。
+
+### 单一事实源与一致性守护
+
+引导文案的 canonical source 是 [`templates/preference-rules.md`](../templates/preference-rules.md)（R1-R4 规则 + 关键原则，anchor 标记）。三处消费方（agent 文件 / SKILL 提示 / F170d harness 注入）都从它派生：
+
+- **生成**：`node plugins/spec-driver/scripts/sync-preference-rules.mjs --write` 按各 agent `tools` 过滤渲染并写入 `<!-- BEGIN/END preference-rules -->` 之间。
+- **守护**：`npm run repo:check` 的 `preference-rules:agent-block-sync` 检测漂移（同 `--check`），保证 5 个 agent 块永不与单一源脱节。
+
+### 度量诚实声明（guided vs spontaneous）
+
+F170d 的 SC-002 度量命名为 **guided active-call rate**：它测的是「引导送达 driver 后，driver 是否遵循引导改用 MCP」，**不等于** F170c 测的「spontaneous preference（内在偏好）」。0%（无引导）→ ≥50%（有引导）的对比意义是 **「prompt 层引导能驱动 driver 改用 MCP」**，不宣称「模型内在偏好被改变」。
+
+### fork 用户自定义（override 机制）
+
+fork 用户想调整引导文案（增删规则行、改语气 SHOULD↔MUST、换工具优先级）：
+
+1. 编辑 `plugins/spec-driver/templates/preference-rules.md` 的 `block-start`/`block-end` 之间内容（保持 anchor 契约 `<!-- preference-rules:R# tool=xxx -->`）。
+2. 跑 `node plugins/spec-driver/scripts/sync-preference-rules.mjs --write` 重新生成 5 个 agent 块（按各自 tools 自动过滤）。
+3. 跑 `npm run repo:check` 确认 `preference-rules:agent-block-sync` 通过。
+
+无需改任何脚本逻辑——template 是唯一需要编辑的文件。
+
+---
+
+## 八、相关资源
 
 - [Spectra MCP Server 源码](../../src/mcp/server.ts)
 - [fork 用户定制指引](./customization.md)
 - [Milestone M7 设计文档](../../docs/design/milestone-M7-spectra-mcp-productization.md)
+- [F170d spec](../../specs/170d-driver-preference-shaping/spec.md) · [preference-rules 单一源](../templates/preference-rules.md)

@@ -48,12 +48,12 @@ d('F170d SC-003 — Grep fallback（host shell only）', () => {
   }, HOST_TIMEOUT);
 });
 
-d('F170d SC-004 — chained call rate ≥ 30%（host shell only，secondary 不阻塞）', () => {
-  it('cohort C N=3 中 ≥ 1 个出现 detect_changes → impact → context chain', () => {
-    // T032：复用 F167 cohort C；secondary，记录即可
-    const { stdout } = runHarness(['--mode', 'chain', '--repeats', '1']);
-    expect(stdout).toMatch(/chain/i);
-  }, HOST_TIMEOUT);
+// SC-004（chained call rate ≥30%，Secondary）：本 harness 不实现 chain 编排——需复用 F167
+// cohort C setup（独立 host 流程）。保持 .skip 占位 + 显式说明，避免假覆盖（codex W3）。
+describe.skip('F170d SC-004 — chained call rate ≥ 30%（手动 cohort C，本 harness 不覆盖）', () => {
+  it('T032：复用 F167 cohort C 手动跑，统计 detect_changes → impact → context chain（secondary 不阻塞验收）', () => {
+    throw new Error('manual cohort C only — 本 harness 不实现 chain 模式，见 tasks.md T032');
+  });
 });
 
 d('F170d SC-009 — negative-control over-call ≤ 1/3（host shell only，soft）', () => {
