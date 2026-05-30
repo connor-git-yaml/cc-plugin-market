@@ -1,60 +1,72 @@
 # Feature 170d — Verification Report
 
 **Feature**: 170d Driver Preference Shaping | **模式**: spec-driver-feature
-**验收状态**: 🟡 **`host-pending`**（hard gate SC-001/005/006/007/008 全过；**Primary Outcome SC-002 尚无 authoritative report JSON**——见「US2 跑批状态」；SC-003/009 待跑，SC-004 secondary deferred）
-**日期**: 2026-05-30 | **commits**: spec `8fa60b6` → plan `d8bce07` → tasks `2d346bf` → RED `c313258` → GREEN `e7efc97` → verify `83b3f27`
+**验收状态**: 🟢 **`primary-pass`**（SC-002 host 实测 **8/10 = 80%**，outcomeType=primary-pass；hard gate SC-001/005/006/007/008 全过；SC-003/009 见下，SC-004 secondary deferred）
+**日期**: 2026-05-30 | **commits**: spec `8fa60b6` → plan `d8bce07` → tasks `2d346bf` → RED `c313258` → GREEN `e7efc97` → verify `83b3f27` → fix `d340b53` → docs `93fa84f`
 
 ## 验收状态级别说明
 
-F170d 处于 **`host-pending`**：所有 sandbox hard gate（SC-001/005/006/007/008）通过。**Primary Outcome SC-002（guided active-call rate ≥50%）尚未取得 authoritative report JSON**（见下「US2 跑批状态」）→ **不得标 full PASS**。需在稳定 host shell 一次性完整跑通后，以 harness 写出的 report JSON 为准升级状态。
+F170d 达到 **`primary-pass`**：Primary Outcome SC-002（guided active-call rate ≥50%）host 实测 **8/10（80%）**，point estimate 远超 50% 门槛，落在 spec 🟢 strong signal 区间（7-10/10），harness 判定 `primaryPassGate=true / outcomeType=primary-pass`。所有 hard gate（SC-001/005/006/007/008）通过。
+
+> **诚实标注**：Wilson 95% CI = [49.0%, 94.3%]，**下界 49.0% 略低于 50%**。这是 N=10 小样本的正常特征——point estimate 与 count 判定（8/10 ≥ 5/10）均明确 pass，但若要求「总体率 ≥50% 有 95% 置信」则下界紧贴阈值，更大 N 才能收窄。本验收按 spec 定义的 **count-based gate（≥5/10）+ point estimate（≥50%）** 判 pass，CI 作为辅助统计如实记录。
 
 ## Success Criteria 逐项结果
 
 | SC | 标准 | Gate | 结果 | 证据 |
 |----|------|------|------|------|
 | SC-001 | 5 agent 含按 tools 过滤的规则块（每 agent 恰 3 行符合矩阵） | Hard | ✅ PASS | `feature-170d-preference-rules.test.ts` SC-001（含「恰好 3 行」断言；plan/implement/spec-review/quality-review=R1/R2/R3，verify=R1/R2/R4）|
-| SC-002 (Primary) | guided active-call rate ≥ 50%（≥5/10） | Primary（host） | ⏸️ **host-pending（无 authoritative JSON）** | harness 就绪 + 40 单测验证调用装配；跑批过程见下，**当前 verification/ 下无 sc-002-driver-eval JSON**，不主张数值结果 |
-| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⏸️ host-pending | harness `--simulate-graph-missing` 模式就绪；未完成 |
+| SC-002 (Primary) | guided active-call rate ≥ 50%（≥5/10） | Primary（host） | ✅ **PASS（8/10 = 80%）** | host 实测 N=10（driver=claude-sonnet-4-6，--append-system-prompt 注入 implement 渲染块，--strict-mcp-config）：impactResolvedSuccessRate 8/10，Wilson [49.0%,94.3%]，primaryPassGate=true。report JSON（gitignored）`sc-002-driver-eval-2026-05-30T10-04-54-062Z.json`。vs F170c baseline 0/10 |
+| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⏸️ host-pending | harness `--simulate-graph-missing` 模式就绪；本轮未单独跑 |
 | SC-004 (Secondary) | chained call rate ≥ 30% | 不阻塞（host） | ⏸️ deferred | 需复用 F167 cohort C 独立流程；本 harness 不实现 chain，e2e 显式 .skip |
 | SC-005 | 5 SKILL.md 含子代理调度优先级提示块 | Hard | ✅ PASS | SC-005 测（section 内含 template 路径 + namespace + 优先语义 + 位置在工作流/委派章节之前）|
 | SC-006 | 块内容与 template 单一源一致（ruleId 比对）+ 工具 ⊆ frontmatter | Hard | ✅ PASS | SC-006 测 + `repo:check` `preference-rules:agent-block-sync` 双重守护 |
 | SC-007 | 零回归：vitest + build + repo:check + release:check | Hard | ✅ PASS | clean full `vitest run`：323 files / 3838 passed / 0 failed；build(tsc) 0 err；repo:check status=pass；release:check valid |
 | SC-008 | 不动 tool description / response format / frontmatter tools | Hard | ✅ PASS | `git diff --name-only ffc2cbb..HEAD` 未触碰任何 src/mcp 文件；agent frontmatter 无 `tools:` 行增删；SC-008 冻结快照单测 pass |
-| SC-009 | over-call 负控 ≤ 1/3 | Soft（host） | ⏸️ host-pending | harness `--negative-control` 模式就绪；未完成 |
+| SC-009 | over-call 负控 ≤ 1/3 | Soft（host） | ⏸️ host-pending | harness `--negative-control` 模式就绪；本轮未单独跑（建议补） |
 
-## US2 跑批状态 + 关键发现（诚实记录）
+## US2 实测结果（SC-002，host shell + Claude Max OAuth）
 
-本会话 host 跑 SC-002 未取得最终 report JSON，但**取得了可靠的部分实测数据**，并据此发现并修复了一个真实 harness bug：
+graph.json 预生成（4997 nodes）+ harness `--strict-mcp-config` 后，一次性完整跑通 N=10：
 
-### 部分实测数据（来自 harness 日志，可靠）
+| 指标 | 值 |
+|------|-----|
+| impactAttemptRate | **8/10** |
+| impactResolvedSuccessRate（= SC-002 主指标） | **8/10（80%）** |
+| fallbackAfterImpactFailureRate | 0/10 |
+| Wilson 95% CI | [49.0%, 94.3%]（下界紧贴 50%，见上诚实标注） |
+| outcomeType | **primary-pass** |
+| driver / 注入 | claude-sonnet-4-6 / `--append-system-prompt`（implement 渲染块，sha256 `f66af464ac63e7e0…`） |
+| namespace | `plugin_spectra_spectra`（= production，与 allowedTools 一致）+ `--strict-mcp-config` |
+| 对照 baseline | F170c spontaneous **0/10** |
 
-graph 预生成后的一轮 US2，前 7 个 run 全部 `exit=0`，逐 run 信号：
+### 逐 run 信号（authoritative，来自 report JSON）
 
-| 信号 | 观察 | 含义 |
-|------|------|------|
-| `impactAttempt` | **5/7 run = true** | **driver 主动尝试调用 impact 工具** — 引导生效的真实证据（vs F170c baseline 连 attempt 都 0）|
-| `mcpCalls` (production NS) | 0 | 但调用没落到 production 命名的 server |
-| `resolved` | false | 故 SC-002 主指标（success envelope）未达成 |
+| run | task | mcpCalls | resolved | grep | 说明 |
+|-----|------|---------|----------|------|------|
+| 1 | T1-canonicalizeSymbolId | 3 | ✅ | 5 | impact + grep 混用 |
+| 2 | T2-handleDetectChanges | 2 | ✅ | 3 | |
+| 3 | T3-bfsTraverse | 1 | ✅ | 2 | |
+| 4 | T4-getCachedGraphData | 0 | ❌ | 8 | **driver 选纯 Grep，未调 impact** |
+| 5 | T5-computeRiskTier | 1 | ✅ | 2 | |
+| 6 | T1-canonicalizeSymbolId | 1 | ✅ | 2 | |
+| 7 | T2-handleDetectChanges | 1 | ✅ | 1 | |
+| 8 | T3-bfsTraverse | 1 | ✅ | 2 | |
+| 9 | T4-getCachedGraphData | 0 | ❌ | 3 | **同 T4，driver 再次选纯 Grep** |
+| 10 | T5-computeRiskTier | 2 | ✅ | 15 | |
 
-### 根因（假设，待 host 验证 — 不主张已确认）
+**观察**：2 个未达成 run **都是 T4-getCachedGraphData**（repeat 1 + 2 一致）。driver 对该 task 系统性偏好纯 Grep——可能因 task 描述（cache 失效逻辑 + 新增可选参数向后兼容性）更像"读单文件内部实现"而非"caller analysis"，引导的任务匹配触发较弱。其余 4 个 task（8 run）全部 resolved。这是真实的 driver 行为信号，非 harness 缺陷。
 
-`impactAttempt=true` 但 `mcpCalls=0`（仅数 `mcp__plugin_spectra_spectra__` 前缀）+ `resolved=false` 的矛盾，可靠事实是：**driver 试图调 impact，但调用没接到 production 命名的 server**。
+### `--strict-mcp-config` 修复确认有效
 
-**归因更正**：初次 commit message 曾写「根因 = `~/.claude.json` ambient `spectra` server」，但随后实测 `global mcpServers: openrouter-perplexity`（**无 spectra**），故该具体归因**不成立、已撤回**。`mcpCalls=0` 的真正原因**尚未确证**，候选假设：(a) harness 的 `.mcp.json`（server key=`plugin_spectra_spectra`）未被 driver 正确加载/注册；(b) driver 调了非 production 命名（如裸 `impact` 或旧 `mcp__spectra__impact`）→ 不被 `--allowedTools` 放行 → 无 tool_result；(c) MCP server 启动失败（dist/cli mcp-server 在该会话未就绪）。
-
-**已采取的加固（非"确认的修复"）**：harness `buildClaudeArgs` 增加 **`--strict-mcp-config`**（flag 存在已确认），强制只用 harness 写的 `.mcp.json`。这能排除"外部 ambient server 干扰"这一类，但**是否就是 `mcpCalls=0` 的解药需 host 重跑验证**（预期 `mcpCalls>0`；若仍 0 则按上述 (a)/(c) 进一步诊断，例如先 `node dist/cli/index.js mcp-server` 手测 server 可达性）。harness 单测新增 `--strict-mcp-config` 断言守护。
-
-### 诚实结论
-
-- **引导生效有真实证据**（impactAttempt 5/7 vs F170c 0），但 **SC-002 主指标（impactResolvedSuccess）尚无 authoritative JSON**——`--strict-mcp-config` 修复需在稳定 host shell 重跑验证。
-- 会话中曾两度把不可靠的后台日志读取误写成「10/10 PASS」，**均已撤回**；本报告以 harness 日志可核实的信号为准，SC-002 维持 **host-pending**。
-- 环境约束：本会话工具输出管道间歇丢失 + self-dogfood batch 缓慢 + 一次清理误杀自身 harness 进程，叠加导致无法在此会话完成最终 JSON。
+- **修复前**（上一轮）：`mcpCalls=0` 全 10 run，`resolved=false`——driver impactAttempt=true 但工具调用没接到 production server。
+- **修复后**（本轮）：`mcpCalls` = 3/2/1/0/1/1/1/1/0/2（8/10 run >0），`resolved` 8/10。
+- **结论**：`--strict-mcp-config`（强制只用 harness 的 `.mcp.json`，server key=`plugin_spectra_spectra`）经 host 重跑**确认是有效修复**。注：上一轮误把根因归到「ambient spectra server」已撤回；真正机制是 strict 模式确保 driver 只能用 harness 注册的 production-命名 server（之前非 strict 下工具调用未落到该 server）。
 
 ## 测试证据（sandbox，确定性，可靠）
 
 - **170d 单测**: `tests/unit/spec-driver/` → **40 passed**（多次稳定复现）
   - core: parseToolEvents / computeMetrics 三层指标（含 fallback 因果顺序正反例）/ wilsonCI / renderInjectionBlock 按 tools 过滤 / extractCanonicalBlock fail-loud
-  - harness builder: buildMcpConfig（server key=plugin_spectra_spectra + 可执行）/ buildClaudeArgs（--append-system-prompt 值紧随 + production allowedTools）/ assertInjectionSubsetOfAllowed
+  - harness builder: buildMcpConfig（server key=plugin_spectra_spectra + 可执行）/ buildClaudeArgs（--append-system-prompt 值紧随 + production allowedTools + --strict-mcp-config）/ assertInjectionSubsetOfAllowed
   - 静态: SC-001（恰 3 行）/ SC-005（块位置）/ SC-006 / SC-008
 - **零回归**: clean full `vitest run` 3838 passed / 0 failed；`npm run build`（tsc 0 错）；`npm run repo:check` status=pass（含 `preference-rules:agent-block-sync`）；`npm run release:check` valid
 
@@ -67,25 +79,20 @@ graph 预生成后的一轮 US2，前 7 个 run 全部 `exit=0`，逐 run 信号
 | Tasks | 4 CRITICAL / 8 WARNING / 2 INFO | 全处置：CLI guard idiom、buildInjectionBlock 纯度拆分、ruleId/toolKey 分离、US2 sandbox 代理测 |
 | RED | 2 CRITICAL / 2 WARNING / 3 INFO | 全处置：fallback 因果 seq、builder false-green、SC-005 强化、e2e HOST_E2E gate；自查修 SC-006 vacuous pass |
 | GREEN | 3 CRITICAL / 3 WARNING / 4 INFO | 全处置：try/finally 恢复 graph、模式分别退出语义、extractCanonicalBlock fail-loud、移除 --mode chain 假覆盖 |
-| Verify | 2 CRITICAL / 2 WARNING / 3 INFO | 处置：SC-007 补 clean full run、SC-001 恰 3 行 + SC-005 位置断言；**纠正 US2 结果误报（无 JSON 不主张数值）** |
+| Verify | 2 CRITICAL / 2 WARNING / 3 INFO | 处置：SC-007 补 clean full run、SC-001 恰 3 行 + SC-005 位置断言；纠正会话中 US2 结果误报（最终以 host JSON 为准）|
 
 ## Limitation（诚实声明）
 
-- **SC-002 无有效实测**：本会话环境受限（输出管道丢失 + batch 缓慢 + 清理误杀进程），未取得 authoritative report JSON。需在稳定 host shell 重跑（graph.json 已预生成，harness 会跳过 batch；务必让 harness 完整写出 JSON、**勿中途 kill**）。
-- **度量语义边界**：SC-002 测 **guided active-call rate**（引导是否生效），非 spontaneous preference（内在偏好）；harness 只注入引导块（模拟 Phase A system-prompt 投递通道），不外推完整 agent body 行为。
-- **SC-003 / SC-009 未完成**；**SC-004 deferred**（secondary）。
+- **Wilson CI 下界 49.0% < 50%**：point + count 判定 pass，但 N=10 小样本下 CI 下界紧贴阈值。若需更强统计置信，可加跑至 N=20+ 收窄区间（非验收必需，spec gate 已满足）。
+- **T4-getCachedGraphData 系统性未触发**：2/10 未达成 run 全集中于该 task，driver 对"读单文件内部实现"型描述偏好 Grep。说明引导是**任务匹配触发**而非无条件强制（符合 SHOULD 设计；与 SC-009 over-call 负控意图一致）。
+- **度量语义边界**：SC-002 测 **guided active-call rate**（引导是否生效），非 spontaneous preference（内在偏好）。80% 表示「引导经 system-prompt 投递后，Sonnet 4.6 在多数 caller-analysis 任务上遵循引导改用 MCP」，**不外推**「模型内在偏好被改变」，也**不外推**「完整 agent body 共存其它 spec-driver 指令时同样 80%」（harness 只注入引导块，模拟 Phase A system-prompt 投递通道；N=10）。
+- **SC-003 / SC-009 本轮未单独跑**：均为 soft gate，建议后续补（harness 模式已就绪）。**SC-004 deferred**（secondary）。
 
 ## 交付物清单
 
-基础设施完整交付（不依赖 SC-002 实测）：单一事实源 template + 渲染核心（plugin 自包含）+ sync 生成/校验 + 5 agent 块 + 5 SKILL 提示 + harness（guided/negative-control/graph-missing 三模式 + 三层指标 + --delay-ms 限速）+ docs §七 + repo:check 漂移守护。
+单一事实源 template + 渲染核心（plugin 自包含）+ sync 生成/校验 + 5 agent 块 + 5 SKILL 提示 + harness（guided/negative-control/graph-missing 三模式 + 三层指标 + --delay-ms 限速 + --strict-mcp-config）+ docs §七 + repo:check 漂移守护。SC-002 80%（vs F170c 0%）验证 prompt 层引导设计有效；为未来 driver model 升级保留 leverage。
 
-## 建议下一步（稳定 host shell）
+## 建议下一步
 
-1. graph.json 已存在（3.8MB）+ harness 已加 `--strict-mcp-config` → 直接前台跑（约 10 min，勿 kill）：
-   ```bash
-   node scripts/feature-170d-driver-preference.mjs --repeats 2 --delay-ms 15000
-   ```
-   等它打印 `Report:` + `outcomeType:` 并落地 `verification/sc-002-driver-eval-*.json`。预期 `--strict-mcp-config` 后 `mcpCalls>0` + `resolved=true`。
-2. 以该 JSON 为准更新本报告（≥5/10 primary-pass / 3-4 degraded / 0-2 fail）。
-3. （可选）`node scripts/feature-170d-driver-preference.mjs --negative-control --repeats 2 --delay-ms 15000` 验 SC-009。
-4. SC-002 取得 authoritative 结果后再 push origin master（CLAUDE.local 约定：push 前列 report 等用户确认）。
+1.（可选 soft gate 补全）host shell 跑 `--negative-control`（SC-009 over-call）+ `--simulate-graph-missing`（SC-003 fallback）补全两个 soft gate 数据。
+2. rebase 最新 master + 重跑确定性验证 → 列 deliverable report 等用户确认 → push origin master（CLAUDE.local 约定）。
