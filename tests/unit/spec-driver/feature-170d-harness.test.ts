@@ -255,6 +255,9 @@ describe('F170d T001 — harness args/config builder（US2 机制代理测）', 
     expect(args).toContain('--output-format');
     expect(args).toContain('stream-json');
     expect(args).toContain('--mcp-config');
+    // 必须 --strict-mcp-config：屏蔽 ambient `spectra` server，否则 driver 调旧命名被拦截
+    // （US2 实测发现 mcpCalls=0 + impactAttempt=true 的根因）
+    expect(args).toContain('--strict-mcp-config');
     // --append-system-prompt 的值必须紧随其后（位置正确，非散落）
     const sysIdx = args.indexOf('--append-system-prompt');
     expect(sysIdx).toBeGreaterThanOrEqual(0);

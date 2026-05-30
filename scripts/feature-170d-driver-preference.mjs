@@ -74,6 +74,10 @@ export function buildClaudeArgs(wtDir, systemPrompt) {
     '--verbose',
     '--permission-mode', 'acceptEdits',
     '--mcp-config', path.join(wtDir, '.mcp.json'),
+    // 只用本 harness 写的 .mcp.json（server key=plugin_spectra_spectra），屏蔽用户全局
+    // 的 ambient `spectra` server——否则 driver 会调旧命名 mcp__spectra__impact（不在
+    // allowedTools 中 → 被拦截 → resolved=false，US2 实测据此发现）。
+    '--strict-mcp-config',
     '--append-system-prompt', systemPrompt,
     '--allowedTools', ALLOWED_TOOLS,
   ];
@@ -185,16 +189,19 @@ function spawnClaude(prompt, wtDir, systemPrompt, timeoutMs = 300000) {
 
 function parseArgs() {
   const a = process.argv.slice(2);
-  const opts = { repeats: 2, agent: 'implement', negativeControl: false, simulateGraphMissing: false, out: null };
+  const opts = { repeats: 2, agent: 'implement', negativeControl: false, simulateGraphMissing: false, out: null, delayMs: 0 };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--repeats') opts.repeats = parseInt(a[++i], 10);
     else if (a[i] === '--agent') opts.agent = a[++i];
     else if (a[i] === '--negative-control') opts.negativeControl = true;
     else if (a[i] === '--simulate-graph-missing') opts.simulateGraphMissing = true;
+    else if (a[i] === '--delay-ms') opts.delayMs = parseInt(a[++i], 10); // run 间限速，控制 API rate
     else if (a[i] === '--out') opts.out = a[++i];
   }
   return opts;
 }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
   const opts = parseArgs();
@@ -237,6 +244,10 @@ async function main() {
     for (let r = 0; r < opts.repeats; r++) {
       for (const task of tasks) {
         idx++;
+        if (idx > 1 && opts.delayMs > 0) {
+          console.log(`  [rate-control] sleep ${opts.delayMs}ms`);
+          await sleep(opts.delayMs);
+        }
         console.log(`\n[run ${idx}/${total}] task=${task.id} repeat=${r + 1}`);
         const res = spawnClaude(task.prompt, wtDir, systemPrompt);
         console.log(`  ${(res.durationMs / 1000).toFixed(1)}s exit=${res.status} stdout=${(res.stdout.length / 1024).toFixed(1)}KB`);
