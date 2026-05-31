@@ -15,6 +15,7 @@ import { generateWorkflowRegistry } from '../../plugins/spec-driver/scripts/gene
 import { syncSharedAgentDocs, validateSharedAgentDocs } from '../sync-agent-docs.mjs';
 import { syncReleaseContract, validateReleaseContract } from './release-contract-core.mjs';
 import { validateRuntimeBoundaries } from './runtime-boundary-core.mjs';
+import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -265,6 +266,13 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'preference-rules',
     validatePreferenceRules({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  aggregateValidation(
+    'namespace-consistency',
+    validateNamespaceConsistency(resolvedRoot),
     warnings,
     errors,
     checks,

@@ -35,32 +35,51 @@ const AGENT_FILES = [
   'quality-review.md',
 ];
 
-// 正确的 plugin namespace 前缀（方案 🅰）
-const CORRECT_NAMESPACE = 'mcp__plugin_spectra_spectra__';
+// 从单一源派生 CORRECT_NAMESPACE（plugin.json name + .mcp.json server key）
+// 防止硬编码与实际配置漂移。用 try-catch 防止文件缺失时 suite setup 阶段崩溃。
+function deriveCorrectNamespace(): string {
+  const pluginJsonPath = join(PROJECT_ROOT, 'plugins/spectra/.claude-plugin/plugin.json');
+  const mcpJsonPath = join(PROJECT_ROOT, 'plugins/spectra/.mcp.json');
+  if (!existsSync(pluginJsonPath) || !existsSync(mcpJsonPath)) {
+    throw new Error(
+      `namespace 派生失败：plugin.json 或 .mcp.json 不存在（${pluginJsonPath}, ${mcpJsonPath}）`,
+    );
+  }
+  const pluginJson = JSON.parse(readFileSync(pluginJsonPath, 'utf-8')) as { name: string };
+  const mcpJson = JSON.parse(readFileSync(mcpJsonPath, 'utf-8')) as {
+    mcpServers: Record<string, unknown>;
+  };
+  const pluginName = pluginJson.name;
+  const serverKey = Object.keys(mcpJson.mcpServers)[0];
+  return `mcp__plugin_${pluginName}_${serverKey}__`;
+}
+
+// 正确的 plugin namespace 前缀（从单一源派生）
+const CORRECT_NAMESPACE = deriveCorrectNamespace();
 // 已废弃的旧 namespace 前缀
 const OLD_NAMESPACE = 'mcp__spectra__';
 
-// 每个 agent 文件应包含的 plugin namespace 工具名
+// 每个 agent 文件应包含的 plugin namespace 工具名（从派生 namespace 构建，防止漂移）
 const EXPECTED_TOOLS: Record<string, string[]> = {
   'plan.md': [
-    'mcp__plugin_spectra_spectra__context',
-    'mcp__plugin_spectra_spectra__impact',
+    `${CORRECT_NAMESPACE}context`,
+    `${CORRECT_NAMESPACE}impact`,
   ],
   'implement.md': [
-    'mcp__plugin_spectra_spectra__context',
-    'mcp__plugin_spectra_spectra__impact',
+    `${CORRECT_NAMESPACE}context`,
+    `${CORRECT_NAMESPACE}impact`,
   ],
   'verify.md': [
-    'mcp__plugin_spectra_spectra__detect_changes',
-    'mcp__plugin_spectra_spectra__impact',
+    `${CORRECT_NAMESPACE}detect_changes`,
+    `${CORRECT_NAMESPACE}impact`,
   ],
   'spec-review.md': [
-    'mcp__plugin_spectra_spectra__impact',
-    'mcp__plugin_spectra_spectra__context',
+    `${CORRECT_NAMESPACE}impact`,
+    `${CORRECT_NAMESPACE}context`,
   ],
   'quality-review.md': [
-    'mcp__plugin_spectra_spectra__impact',
-    'mcp__plugin_spectra_spectra__context',
+    `${CORRECT_NAMESPACE}impact`,
+    `${CORRECT_NAMESPACE}context`,
   ],
 };
 
@@ -185,7 +204,10 @@ describe('Bug-3 fix: spec-driver docs 目录与 onboarding 文档', () => {
 
   it('plugins/spec-driver/docs/spectra-mcp-integration.md 应包含 plugin namespace 说明', () => {
     const docPath = join(DOCS_DIR, 'spectra-mcp-integration.md');
-    if (!existsSync(docPath)) return; // 未创建时跳过内容断言
+    expect(
+      existsSync(docPath),
+      `期望 ${docPath} 存在（文件缺失应 fail，不应 silent pass）`,
+    ).toBe(true);
     const content = readFileSync(docPath, 'utf-8');
     expect(content).toContain('mcp__plugin_spectra_spectra__');
   });
