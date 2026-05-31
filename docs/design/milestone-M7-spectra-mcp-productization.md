@@ -5,6 +5,8 @@ created: 2026-05-25
 estimated_weeks: 5-6
 features_planned: F170a / F170c / F171 / F174 / F175 / F176
 scope_decision: complete (vs minimal / extended) — 用户 confirmed 2026-05-25
+amendment_2026-05-30: 新增 F170b（闭合 F170a CRITICAL：npm publish 4.2.0 未执行 + namespace guard + E2E 修复）+ F170d（已 ship，SC-002 8/10）；详见 M7-execution-blueprint.md
+execution_blueprint: M7-execution-blueprint.md (workflow wf_00c688f4-3b9 产出)
 related_design_doc: spectra-mcp-evolution.md
 verification_principle: TDD + E2E per feature
 gate: 每个 feature 必须有 E2E 用例验证用户场景才算 ship
