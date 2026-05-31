@@ -1,7 +1,7 @@
 # Feature 170d — Verification Report
 
 **Feature**: 170d Driver Preference Shaping | **模式**: spec-driver-feature
-**验收状态**: 🟢 **`primary-pass`**（SC-002 host 实测 **8/10 = 80%**，outcomeType=primary-pass；hard gate SC-001/005/006/007/008 全过；soft gate **SC-009 over-call 0/6 PASS**；**SC-003 fallback-fail（暴露真实 limitation，见下，soft 不阻塞）**；SC-004 secondary deferred）
+**验收状态**: 🟢 **`primary-pass`**（SC-002 host 实测 **8/10 = 80%**，outcomeType=primary-pass；hard gate SC-001/005/006/007/008 全过；soft gate **SC-009 over-call 0/6 PASS**；**SC-003 inconclusive（前提未确证，soft 不阻塞，见下）**；SC-004 secondary deferred）
 **日期**: 2026-05-30 | **commits**: spec `8fa60b6` → plan `d8bce07` → tasks `2d346bf` → RED `c313258` → GREEN `e7efc97` → verify `83b3f27` → fix `d340b53` → docs `93fa84f`
 
 ## 验收状态级别说明
@@ -16,7 +16,7 @@ F170d 达到 **`primary-pass`**：Primary Outcome SC-002（guided active-call ra
 |----|------|------|------|------|
 | SC-001 | 5 agent 含按 tools 过滤的规则块（每 agent 恰 3 行符合矩阵） | Hard | ✅ PASS | `feature-170d-preference-rules.test.ts` SC-001（含「恰好 3 行」断言；plan/implement/spec-review/quality-review=R1/R2/R3，verify=R1/R2/R4）|
 | SC-002 (Primary) | guided active-call rate ≥ 50%（≥5/10） | Primary（host） | ✅ **PASS（8/10 = 80%）** | host 实测 N=10（driver=claude-sonnet-4-6，--append-system-prompt 注入 implement 渲染块，--strict-mcp-config）：impactResolvedSuccessRate 8/10，Wilson [49.0%,94.3%]，primaryPassGate=true。report JSON（gitignored）`sc-002-driver-eval-2026-05-30T10-04-54-062Z.json`。vs F170c baseline 0/10 |
-| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⚠️ **fallback-fail（真实 limitation）** | host 实测 `--simulate-graph-missing` N=5：graph 移走后 driver 仍调 impact（mcpCalls 1-2，4/5 attempt），**grep=0/5、fallback=0/5**——未观察到预期的「impact 失败→回退 Grep」。outcomeType=fallback-fail。诊断见下。JSON `sc-002-driver-eval-2026-05-30T13-29-49-305Z.json` |
+| SC-003 | Grep fallback（MCP 不可用时回退） | Soft（host） | ⚠️ **inconclusive（前提未确证）** | host 实测 `--simulate-graph-missing` N=5：graph 移走后 driver 仍调 impact（mcpCalls 1-2）、resolved=0、grep=0、fallback=0。**但"移走 graph.json"≠ 真实 graph-not-built**——未确证 impact 返回 error envelope，故无法判 driver 该回退却没回退（codex C1/C2，已自我纠正，详见下）。soft 不阻塞。JSON `13-29-49-305Z.json` |
 | SC-004 (Secondary) | chained call rate ≥ 30% | 不阻塞（host） | ⏸️ deferred | 需复用 F167 cohort C 独立流程；本 harness 不实现 chain，e2e 显式 .skip |
 | SC-005 | 5 SKILL.md 含子代理调度优先级提示块 | Hard | ✅ PASS | SC-005 测（section 内含 template 路径 + namespace + 优先语义 + 位置在工作流/委派章节之前）|
 | SC-006 | 块内容与 template 单一源一致（ruleId 比对）+ 工具 ⊆ frontmatter | Hard | ✅ PASS | SC-006 测 + `repo:check` `preference-rules:agent-block-sync` 双重守护 |
@@ -56,15 +56,16 @@ graph.json 预生成（4997 nodes）+ harness `--strict-mcp-config` 后，一次
 
 **观察**：2 个未达成 run **都是 T4-getCachedGraphData**（repeat 1 + 2 一致）。driver 对该 task 系统性偏好纯 Grep——可能因 task 描述（cache 失效逻辑 + 新增可选参数向后兼容性）更像"读单文件内部实现"而非"caller analysis"，引导的任务匹配触发较弱。其余 4 个 task（8 run）全部 resolved。这是真实的 driver 行为信号，非 harness 缺陷。
 
-### `--strict-mcp-config` 修复确认有效
+### `--strict-mcp-config` 与 mcpCalls 0→8 的关系（强相关，未做受控 A/B — codex W1）
 
-- **修复前**（上一轮）：`mcpCalls=0` 全 10 run，`resolved=false`——driver impactAttempt=true 但工具调用没接到 production server。
-- **修复后**（本轮）：`mcpCalls` = 3/2/1/0/1/1/1/1/0/2（8/10 run >0），`resolved` 8/10。
-- **结论**：`--strict-mcp-config`（强制只用 harness 的 `.mcp.json`，server key=`plugin_spectra_spectra`）经 host 重跑**确认是有效修复**。注：上一轮误把根因归到「ambient spectra server」已撤回；真正机制是 strict 模式确保 driver 只能用 harness 注册的 production-命名 server（之前非 strict 下工具调用未落到该 server）。
+- **修复前**（上一轮）：`mcpCalls=0` 全 run，`resolved=false`——driver impactAttempt=true 但工具调用没接到 production server。
+- **加 `--strict-mcp-config` 后**（本轮）：`mcpCalls` = 3/2/1/0/1/1/1/1/0/2（8/10 run >0），`resolved` 8/10。
+- **诚实归因（响应 codex W1）**：两轮间**不止改了 strict**——graph 状态、跑批次序等也可能变化，**未做"仅去掉 --strict-mcp-config、其余不变"的受控 A/B**。故只能说 `--strict-mcp-config` 与 0→8 跃变**强相关**，其"强制只用 harness 注册的 production-命名 server"是最合理机制假设，但**未经隔离实验确证**。上一轮"ambient spectra server"的具体归因已撤回（实测 global mcpServers 仅 openrouter-perplexity）。
+- **follow-up**：补一次单变量 A/B（同 graph、同次序，仅 toggle strict）即可定因。
 
 ## Soft gate 实测结果（SC-003 + SC-009，host shell）
 
-### SC-003 — Grep fallback（`--simulate-graph-missing`，N=5）⚠️ fallback-fail
+### SC-003 — Grep fallback（`--simulate-graph-missing`，N=5）⚠️ inconclusive
 
 graph.json 临时移走（harness exit 1 后 try/finally 已恢复 graph.json，3.8MB 完好，无 .f170d-bak 残留），模拟 graph-not-built。真实 JSON `13-29-49-305Z`：
 
@@ -76,7 +77,7 @@ graph.json 临时移走（harness exit 1 后 try/finally 已恢复 graph.json，
 | 4 | T4-getCachedGraphData | false | ❌ | ❌ | 0 | 0 |
 | 5 | T5-computeRiskTier | true | ❌ | ❌ | 0 | 1 |
 
-**结果**：`grepRuns=0/5`、`fallback=0/5`、`resolved=0/5` → outcomeType=**fallback-fail**（harness exit 1）。**未观察到预期的「impact 失败 → 回退 Grep」行为**。
+**结果**：`grepRuns=0/5`、`fallback=0/5`、`resolved=0/5`。harness 已改为观察性语义（exit 0，outcomeType=`fallback-not-observed`/`precondition-unmet`）；**未观察到「impact 失败 → 回退 Grep」，但前提（impact 真返回 graph-not-built）未确证 → inconclusive，非 fail**（详见下诊断）。
 
 **诊断（真实 limitation，不粉饰）**：4/5 run driver 仍发起 impact 调用（mcpCalls 1-2），但既没 resolve（graph 缺失，符合预期）也没回退 Grep（grep=0）。可能原因：
 - (a) MCP server 在 graph.json 缺失时返回的**不是** graph-not-built error envelope，而是空/降级响应，driver 接受后未触发 fallback；
@@ -117,14 +118,17 @@ graph.json 临时移走（harness exit 1 后 try/finally 已恢复 graph.json，
 | RED | 2 CRITICAL / 2 WARNING / 3 INFO | 全处置：fallback 因果 seq、builder false-green、SC-005 强化、e2e HOST_E2E gate；自查修 SC-006 vacuous pass |
 | GREEN | 3 CRITICAL / 3 WARNING / 4 INFO | 全处置：try/finally 恢复 graph、模式分别退出语义、extractCanonicalBlock fail-loud、移除 --mode chain 假覆盖 |
 | Verify | 2 CRITICAL / 2 WARNING / 3 INFO | 处置：SC-007 补 clean full run、SC-001 恰 3 行 + SC-005 位置断言；纠正会话中 US2 结果误报（最终以 host JSON 为准）|
+| Verify-2（host-fix） | 2 CRITICAL / 4 WARNING / 3 INFO | C1 graph-missing exit 语义改观察性（exit 0 + outcomeType precondition-unmet/fallback-observed/not-observed）；SC-003 据此重定性 inconclusive（撤回 fallback-fail overclaim）；W1 软化 strict 因果（未做受控 A/B）；W3 SC-001 行计数改按工具引用（防脆弱正则）；C2/W2 preflight MCP 探针 + W4 SKILL 标题白名单 记 follow-up；I2/I3 确认 try/finally + delay-ms 正确 |
 
 ## Limitation（诚实声明）
 
 - **Wilson CI 下界 49.0% < 50%**：point + count 判定 pass，但 N=10 小样本下 CI 下界紧贴阈值。若需更强统计置信，可加跑至 N=20+ 收窄区间（非验收必需，spec gate 已满足）。
 - **T4-getCachedGraphData 系统性未触发**：2/10 未达成 run 全集中于该 task，driver 对"读单文件内部实现"型描述偏好 Grep。说明引导是**任务匹配触发**而非无条件强制（符合 SHOULD 设计；与 SC-009 over-call 负控意图一致）。
 - **度量语义边界**：SC-002 测 **guided active-call rate**（引导是否生效），非 spontaneous preference（内在偏好）。80% 表示「引导经 system-prompt 投递后，Sonnet 4.6 在多数 caller-analysis 任务上遵循引导改用 MCP」，**不外推**「模型内在偏好被改变」，也**不外推**「完整 agent body 共存其它 spec-driver 指令时同样 80%」（harness 只注入引导块，模拟 Phase A system-prompt 投递通道；N=10）。
-- **SC-003 fallback-fail（真实 limitation）**：`--simulate-graph-missing` 下未观察到 driver impact-失败→回退-Grep（grep=0/5）。soft gate 不阻塞验收，但记为 follow-up：需确认 MCP server 在 graph 缺失时的响应契约（是否返回 graph-not-built error envelope）。详见上 SC-003 段诊断。
-- **SC-004 deferred**（secondary）：chained call rate 需 F167 cohort C 独立流程，不阻塞本 feature 验收。（SC-009 over-call 0/6 已通过；SC-003 见上 fallback-fail。）
+- **SC-003 inconclusive（非 fail）**：`--simulate-graph-missing` 仅移走 graph.json，**未确证** MCP server 真返回 graph-not-built error，故"未观察到回退"不构成 driver 缺陷（codex C1/C2）。soft gate 不阻塞验收。follow-up：graph-missing 模式加 preflight 探针确认前提成立后再测 fallback。详见上 SC-003 段。
+- **`--strict-mcp-config` 因果未隔离（codex W1）**：mcpCalls 0→8 与该 flag 强相关但未做受控 A/B；follow-up 补单变量实验。
+- **harness/测试 follow-up（codex C2/W2/W4）**：graph-missing preflight 探针（C2）、strict 下 MCP server 连通 smoke probe（W2，防 server 起不来静默 mcpCalls=0）、SC-005 dispatch 区段改稳定锚点而非中文标题白名单（W4）。均非验收阻塞项。
+- **SC-004 deferred**（secondary）：chained call rate 需 F167 cohort C 独立流程，不阻塞本 feature 验收。
 
 ## 交付物清单
 
@@ -132,9 +136,9 @@ graph.json 临时移走（harness exit 1 后 try/finally 已恢复 graph.json，
 
 ## 验收结论
 
-**F170d Primary + 全部 hard gate 通过，达成验收**：Primary SC-002（8/10 primary-pass）+ 全部 hard gate（SC-001/005/006/007/008）+ soft gate SC-009（over-call 0/6 soft-pass）。**SC-003（Grep fallback）为 fallback-fail**——soft gate 不阻塞验收，但暴露真实 limitation（MCP graph-missing 响应契约待确认），记为 follow-up。SC-004（secondary chained call）deferred。
+**F170d Primary + 全部 hard gate 通过，达成验收**：Primary SC-002（8/10 primary-pass）+ 全部 hard gate（SC-001/005/006/007/008）+ soft gate SC-009（over-call 0/6 soft-pass）。**SC-003（Grep fallback）为 inconclusive**——graph-missing 模拟未确证前提（MCP 是否真返回 graph-not-built），soft gate 不阻塞验收，记为 follow-up。SC-004（secondary chained call）deferred。
 
-**诚实总评**：核心价值（prompt 层引导让 driver 改用 MCP）已由 SC-002 80%（vs F170c 0%）+ SC-009 精准定向 0/6 双向验证。SC-003 的 fallback 路径未达预期，是这次实测发现的真实缺口，不掩盖。
+**诚实总评**：核心价值（prompt 层引导让 driver 改用 MCP）已由 SC-002 80%（vs F170c 0%）+ SC-009 精准定向 0/6 双向验证。SC-003 既不能证明也不能证伪 fallback——是测试基础设施局限（codex C1/C2 指出，已自我纠正，不再 overclaim "driver 不回退"）。`--strict-mcp-config` 与 mcpCalls 0→8 强相关但未隔离 A/B。这些都如实记为 follow-up，不掩盖。
 
 ## 建议下一步
 

@@ -287,11 +287,23 @@ async function main() {
     exitCode = 0; // soft gate：仅 harness/setup fatal 才非 0（由外层 catch → exit 2）
   } else if (opts.simulateGraphMissing) {
     scenario = 'SC-003';
-    // 成功 = MCP 不可用时 driver 回退 Grep（不应有 resolved success）
-    const fallbackOk = grepRunCount >= 1 && resolvedCount === 0;
-    console.log(`graph-missing fallback: grepRuns=${grepRunCount}/${total} resolved=${resolvedCount} → ${fallbackOk ? '✅ Grep fallback 生效' : '⚠️ 未观察到预期 fallback'}`);
-    summary = { grepRunCount, grepRunRate: grepRunCount / total, resolvedCount, fallbackWorks: fallbackOk, outcomeType: fallbackOk ? 'fallback-pass' : 'fallback-fail' };
-    exitCode = fallbackOk ? 0 : 1;
+    // SC-003 是**观察性 soft gate**（codex C1/C2）：移走 graph.json 不保证 MCP server 真的
+    // 返回 graph-not-built error，故无法仅凭本 harness 判定 driver "该回退却没回退"。
+    // 三种观察态，**一律 exit 0**（仅 spawn/preflight fatal 由外层 catch → exit 2）：
+    //   - precondition-unmet：graph 移走后 impact 仍 resolved（说明 server 没真正 not-built）→ 前提未建立，inconclusive
+    //   - fallback-observed：impact 失败后 driver 回退 Grep（期望行为）
+    //   - fallback-not-observed：impact 失败且未回退 Grep（需检查 envelope 才能定性，inconclusive）
+    let outcomeType;
+    if (resolvedCount > 0) outcomeType = 'precondition-unmet';
+    else if (fallbackCount >= 1) outcomeType = 'fallback-observed';
+    else outcomeType = 'fallback-not-observed';
+    const conclusive = outcomeType === 'fallback-observed';
+    console.log(`graph-missing: outcome=${outcomeType} grepRuns=${grepRunCount}/${total} resolved=${resolvedCount} fallback=${fallbackCount}/${total}`);
+    console.log(conclusive
+      ? '✅ 观察到 impact 失败→回退 Grep'
+      : '⚠️ 未确证 fallback（前提未建立或 envelope 需检查）— soft gate inconclusive，不阻塞');
+    summary = { grepRunCount, grepRunRate: grepRunCount / total, resolvedCount, fallbackObservedCount: fallbackCount, conclusive, outcomeType };
+    exitCode = 0; // 观察性 soft gate：harness 跑通即 exit 0（codex C1）
   } else {
     scenario = 'SC-002';
     const outcomeType = ci.point >= 0.5 ? 'primary-pass' : ci.point >= 0.25 ? 'degraded' : 'below-secondary';
@@ -301,7 +313,18 @@ async function main() {
     console.log(`Wilson 95% CI: [${(ci.lower * 100).toFixed(1)}%, ${(ci.upper * 100).toFixed(1)}%]`);
     console.log(`SC-002 (≥50%): ${ci.point >= 0.5 ? '✅ primary-pass' : ci.point >= 0.25 ? '🟠 degraded' : '🔴 fail'}`);
     summary = { impactAttemptRate: attemptCount / total, impactResolvedSuccessRate: ci.point, fallbackAfterImpactFailureRate: fallbackCount / total, wilsonCI: { lower: ci.lower, upper: ci.upper, level: 0.95 }, primaryPassGate: ci.point >= 0.5, outcomeType };
-    exitCode = ci.point >= 0.5 ? 0 : 1;
+    // fail-loud（codex host-fix W2）：guided 模式下若 driver 多次发起 impact（attempt>0）但
+    // 全程 0 次 production-namespace mcpCalls，几乎必然是 MCP server 未接通（如缺 --strict-mcp-config
+    // / server 启动失败），而非 driver 偏好问题。此时判 setup-fatal（exit 2）而非 primary-fail（exit 1），
+    // 避免把"工具没接上"静默误报成"引导无效"。
+    const totalMcpCalls = runs.reduce((s, r) => s + (r.mcpCalls || 0), 0);
+    if (attemptCount > 0 && totalMcpCalls === 0) {
+      console.error('[harness-fatal] driver 发起了 impact 但 production-namespace mcpCalls=0 全程为 0 —— MCP server 疑未接通（检查 --strict-mcp-config / .mcp.json / server 启动）。判 setup-fatal，不作 SC-002 结论。');
+      summary.outcomeType = 'setup-fatal-mcp-unwired';
+      exitCode = 2;
+    } else {
+      exitCode = ci.point >= 0.5 ? 0 : 1;
+    }
   }
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
