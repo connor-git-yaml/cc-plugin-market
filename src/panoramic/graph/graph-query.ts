@@ -653,6 +653,9 @@ export class GraphQueryEngine {
     const truncated = finalNodes.length < communityNodes.length;
 
     // 尝试从 specs/_meta/GRAPH_REPORT.md 读取 cohesion（graceful degrade）
+    // 三条 degrade 路径必须都返回相同的 message，否则不同环境（cwd 状态差异）会让
+    // snapshot 测试结果与本机状态绑定（F170b 修复：原代码只在 catch 路径设 message，
+    // 导致"文件存在但 cluster 不在表中"时 message=undefined，host vs worktree 结果不一致）
     let cohesion: number | null = null;
     let cohesionMessage: string | undefined;
     try {
@@ -665,7 +668,14 @@ export class GraphQueryEngine {
       const match = reportContent.match(regex);
       if (match?.[1]) {
         const parsed = parseFloat(match[1]);
-        if (!isNaN(parsed)) cohesion = parsed;
+        if (!isNaN(parsed)) {
+          cohesion = parsed;
+        } else {
+          cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
+        }
+      } else {
+        // 文件存在但 communityId 不在表中 — 同样属于"cohesion 数据不可用"语义
+        cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
       }
     } catch {
       // graph-report.md 不存在或读取失败，graceful degrade

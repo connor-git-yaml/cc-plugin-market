@@ -15,7 +15,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 import { GraphQueryEngine } from '../../src/panoramic/graph/graph-query.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
@@ -129,8 +131,27 @@ function buildLayerBEngine(): GraphQueryEngine {
 // Layer A — Legacy 子图必须 1:1（FR-9 + SC-004 Layer A）
 // ───────────────────────────────────────────────────────────
 
+// F170b 修复：getCommunity 内部用 process.cwd() 读 specs/_meta/GRAPH_REPORT.md，
+// 让 snapshot 测试结果与运行目录的 GRAPH_REPORT.md 状态绑定（worktree 无文件 → catch
+// 分支；host 有文件但 cluster 不在表里 → snapshot mismatch）。在 beforeAll 切到一个
+// 不含 GRAPH_REPORT.md 的空临时目录，确保 snapshot 在任何环境下都走稳定路径。
+// 长期方案见 F170e：把 projectRoot 注入 GraphQueryEngine constructor，
+// 让 getCommunity 不再依赖 process.cwd()。
 describe('graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1)', () => {
   const engine = buildLayerAEngine();
+  let savedCwd: string;
+  let isolatedCwd: string;
+
+  beforeAll(() => {
+    savedCwd = process.cwd();
+    isolatedCwd = mkdtempSync(path.join(tmpdir(), 'graph-mcp-snapshot-'));
+    process.chdir(isolatedCwd);
+  });
+
+  afterAll(() => {
+    process.chdir(savedCwd);
+    rmSync(isolatedCwd, { recursive: true, force: true });
+  });
 
   it('graph_query keyword=greet — Layer A 子图稳定', () => {
     const result = engine.query('greet', { budget: 10 });
