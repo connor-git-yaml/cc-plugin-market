@@ -14,6 +14,7 @@
  *   Step 7：llm-caller（budget-gate + Anthropic SDK 调用）
  * - 结构化日志（F-015 LOW）：BFS 命中数、fallbackMode、各步耗时、总 durationMs
  */
+import { resolve } from 'node:path';
 import { GraphQueryEngine } from '../graph/graph-query.js';
 import { resolveGraphJsonPath } from '../graph/graph-paths.js';
 import { retrieveGraphContext } from './graph-retriever.js';
@@ -42,12 +43,18 @@ const engineCache = new Map<string, GraphQueryEngine>();
  * 图谱文件不存在时抛出 Error（明确告知用户需要先生成图谱）
  */
 function getEngine(projectRoot: string, graphJsonPath?: string): GraphQueryEngine {
-  const graphPath = graphJsonPath ?? resolveGraphJsonPath(projectRoot);
-  const cacheKey = graphPath;
+  // F170e：规范化 projectRoot，并把它纳入 cache key。否则当显式 graphJsonPath 相同
+  // 但 projectRoot 不同时，会复用首次请求的 engine（projectRoot 已固化）→ 读错
+  // GRAPH_REPORT.md。
+  const resolvedRoot = resolve(projectRoot);
+  const graphPath = graphJsonPath ?? resolveGraphJsonPath(resolvedRoot);
+  // 用 NUL（\0）作分隔符：合法文件路径不含 \0，杜绝 "graphPath::root" 拼接在
+  // 路径含 :: 时的 key 碰撞（Codex 复审 WARNING）。
+  const cacheKey = `${graphPath}\0${resolvedRoot}`;
 
   let engine = engineCache.get(cacheKey);
   if (!engine) {
-    engine = GraphQueryEngine.loadFromFile(graphPath);
+    engine = GraphQueryEngine.loadFromFile(graphPath, resolvedRoot);
     engineCache.set(cacheKey, engine);
   }
   return engine;

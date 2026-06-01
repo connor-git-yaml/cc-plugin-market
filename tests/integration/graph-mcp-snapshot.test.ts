@@ -117,9 +117,10 @@ function filterOutCallEdges(json: GraphJSON): GraphJSON {
 // Engine 构造（双层，Codex C-1 修订）
 // ───────────────────────────────────────────────────────────
 
-function buildLayerAEngine(): GraphQueryEngine {
+function buildLayerAEngine(projectRoot?: string): GraphQueryEngine {
   // Layer A — 过滤掉 calls 边后构造 engine（adjacency 不含 calls 影响）
-  return GraphQueryEngine.fromJSON(filterOutCallEdges(MVP_GRAPH_WITH_CALLS));
+  // projectRoot 注入用于 getCommunity 的 GRAPH_REPORT.md 定位（F170e）
+  return GraphQueryEngine.fromJSON(filterOutCallEdges(MVP_GRAPH_WITH_CALLS), projectRoot);
 }
 
 function buildLayerBEngine(): GraphQueryEngine {
@@ -131,26 +132,21 @@ function buildLayerBEngine(): GraphQueryEngine {
 // Layer A — Legacy 子图必须 1:1（FR-9 + SC-004 Layer A）
 // ───────────────────────────────────────────────────────────
 
-// F170b 修复：getCommunity 内部用 process.cwd() 读 specs/_meta/GRAPH_REPORT.md，
-// 让 snapshot 测试结果与运行目录的 GRAPH_REPORT.md 状态绑定（worktree 无文件 → catch
-// 分支；host 有文件但 cluster 不在表里 → snapshot mismatch）。在 beforeAll 切到一个
-// 不含 GRAPH_REPORT.md 的空临时目录，确保 snapshot 在任何环境下都走稳定路径。
-// 长期方案见 F170e：把 projectRoot 注入 GraphQueryEngine constructor，
-// 让 getCommunity 不再依赖 process.cwd()。
+// F170e：getCommunity 通过注入的 projectRoot 定位 GRAPH_REPORT.md（不再用 process.cwd()）。
+// 这里把 engine 的 projectRoot 指向一个不含 GRAPH_REPORT.md 的临时目录，让 getCommunity
+// 走确定性的 "not-found" 路径，与运行环境的真实 GRAPH_REPORT.md 状态完全解耦——
+// 无需再用 process.chdir 全局 mutation（替换 F170b 的 isolatedCwd workaround）。
 describe('graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1)', () => {
-  const engine = buildLayerAEngine();
-  let savedCwd: string;
-  let isolatedCwd: string;
+  let engine: GraphQueryEngine;
+  let isolatedRoot: string;
 
   beforeAll(() => {
-    savedCwd = process.cwd();
-    isolatedCwd = mkdtempSync(path.join(tmpdir(), 'graph-mcp-snapshot-'));
-    process.chdir(isolatedCwd);
+    isolatedRoot = mkdtempSync(path.join(tmpdir(), 'graph-mcp-snapshot-'));
+    engine = buildLayerAEngine(isolatedRoot);
   });
 
   afterAll(() => {
-    process.chdir(savedCwd);
-    rmSync(isolatedCwd, { recursive: true, force: true });
+    rmSync(isolatedRoot, { recursive: true, force: true });
   });
 
   it('graph_query keyword=greet — Layer A 子图稳定', () => {

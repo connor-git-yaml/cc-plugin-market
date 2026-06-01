@@ -5,6 +5,7 @@
  */
 
 import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
@@ -48,7 +49,9 @@ const engineCache = new Map<string, CachedEngineEntry>();
  * @throws 文件不存在或格式错误时抛出 Error
  */
 function getEngine(projectRoot?: string): GraphQueryEngine {
-  const root = projectRoot ?? process.cwd();
+  // 规范化为绝对路径：避免相对路径（如 "."）作为 cache key 时随进程 cwd 漂移，
+  // 重新引入 F170e 要消除的 cwd 耦合。
+  const root = resolve(projectRoot ?? process.cwd());
   const graphPath = resolveGraphJsonPath(root);
   const stat = statSync(graphPath);
   const cached = engineCache.get(root);
@@ -60,7 +63,9 @@ function getEngine(projectRoot?: string): GraphQueryEngine {
   ) {
     return cached.engine;
   }
-  const engine = GraphQueryEngine.loadFromFile(graphPath);
+  // F170e：透传 root 作为 projectRoot，让 getCommunity 从目标项目的
+  // specs/_meta/GRAPH_REPORT.md 读 cohesion，而非 MCP server 进程的 cwd。
+  const engine = GraphQueryEngine.loadFromFile(graphPath, root);
   engineCache.set(root, {
     engine,
     graphPath,
@@ -105,7 +110,7 @@ export function getCachedGraphData(projectRoot?: string): {
   sizeBytes: number;
 } | null {
   try {
-    const root = projectRoot ?? process.cwd();
+    const root = resolve(projectRoot ?? process.cwd());
     const graphPath = resolveGraphJsonPath(root);
     if (!existsSync(graphPath)) {
       return null;

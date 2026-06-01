@@ -5,9 +5,9 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { GraphJSON, GraphNode, GraphEdge, Hyperedge, SemanticEdgeRelation } from './graph-types.js';
 import { SEMANTIC_EDGE_RELATIONS } from './graph-types.js';
+import { resolveGraphReportPath } from './graph-paths.js';
 
 // ============================================================
 // 查询结果类型定义
@@ -162,6 +162,13 @@ export class GraphQueryEngine {
   private nodeMap: Map<string, GraphNode>;
   /** 邻接表：节点 ID → 相邻节点及连接边的数组 */
   private adjacency: Map<string, Array<{ node: string; edge: GraphEdge }>>;
+  /**
+   * 目标项目根目录（绝对路径），用于定位 GRAPH_REPORT.md 等项目内文件。
+   * 未注入时 getCommunity 回退 process.cwd()（向后兼容 CLI 单进程场景）。
+   * F170e：MCP server 进程 cwd 与目标项目可能不同，注入 projectRoot 后
+   * getCommunity 不再依赖 process.cwd()，避免读错/读不到目标项目的 GRAPH_REPORT.md。
+   */
+  private readonly projectRoot?: string;
 
   // ──────────────────────────────────────────────────────────
   // 构造函数与静态工厂方法
@@ -170,9 +177,11 @@ export class GraphQueryEngine {
   /**
    * 从 GraphJSON 构建查询引擎，同时建立内存索引
    * @param graph - 符合 NetworkX node-link 格式的图谱 JSON
+   * @param projectRoot - 可选，目标项目根目录绝对路径；用于定位 GRAPH_REPORT.md
    */
-  constructor(graph: GraphJSON) {
+  constructor(graph: GraphJSON, projectRoot?: string) {
     this.graph = graph;
+    this.projectRoot = projectRoot;
     this.nodeMap = new Map();
     this.adjacency = new Map();
 
@@ -207,9 +216,10 @@ export class GraphQueryEngine {
   /**
    * 从磁盘文件加载图谱，返回初始化完成的查询引擎
    * @param graphPath - graph.json 文件的绝对路径
+   * @param projectRoot - 可选，目标项目根目录绝对路径；透传给 engine 用于定位 GRAPH_REPORT.md
    * @throws 文件不存在或 JSON 格式不合法时抛出含明确原因的 Error
    */
-  static loadFromFile(graphPath: string): GraphQueryEngine {
+  static loadFromFile(graphPath: string, projectRoot?: string): GraphQueryEngine {
     let content: string;
     try {
       content = readFileSync(graphPath, 'utf-8');
@@ -229,7 +239,7 @@ export class GraphQueryEngine {
       );
     }
 
-    return GraphQueryEngine.fromJSON(parsed);
+    return GraphQueryEngine.fromJSON(parsed, projectRoot);
   }
 
   /**
@@ -253,9 +263,10 @@ export class GraphQueryEngine {
    * 2. 测试 fixture 直接传 mock GraphJSON 不需写入磁盘
    *
    * @param parsed - 已解析的对象（来自 readFile + JSON.parse 或测试 mock）
+   * @param projectRoot - 可选，目标项目根目录绝对路径；透传给 constructor
    * @throws 缺少必要字段 nodes/links 时抛出 Error
    */
-  static fromJSON(parsed: unknown): GraphQueryEngine {
+  static fromJSON(parsed: unknown, projectRoot?: string): GraphQueryEngine {
     // 宽松 schema 校验：仅检查 nodes/links 数组存在（避免因字段扩展导致加载失败）
     if (
       typeof parsed !== 'object' ||
@@ -265,7 +276,7 @@ export class GraphQueryEngine {
     ) {
       throw new Error('图谱 JSON 格式不合法：缺少必要字段 nodes 或 links 数组');
     }
-    return new GraphQueryEngine(parsed as GraphJSON);
+    return new GraphQueryEngine(parsed as GraphJSON, projectRoot);
   }
 
   // ──────────────────────────────────────────────────────────
@@ -652,34 +663,32 @@ export class GraphQueryEngine {
     const finalNodes = communityNodes.slice(0, effectiveBudget);
     const truncated = finalNodes.length < communityNodes.length;
 
-    // 尝试从 specs/_meta/GRAPH_REPORT.md 读取 cohesion（graceful degrade）
-    // 三条 degrade 路径必须都返回相同的 message，否则不同环境（cwd 状态差异）会让
-    // snapshot 测试结果与本机状态绑定（F170b 修复：原代码只在 catch 路径设 message，
-    // 导致"文件存在但 cluster 不在表中"时 message=undefined，host vs worktree 结果不一致）
+    // 从 GRAPH_REPORT.md 读取 cohesion（graceful degrade）。
+    // F170e：路径基于注入的 projectRoot（而非 process.cwd()），确保 MCP server 进程
+    // cwd 与目标项目不同时仍读取目标项目的 GRAPH_REPORT.md。
+    // 三条 degrade 路径各自给出准确诊断 message（F170b W-1 修复：不再笼统说"不存在"）；
+    // snapshot 测试通过注入空 projectRoot 锁定到稳定的 not-found 路径，与本机 cwd 解耦。
+    const reportPath = resolveGraphReportPath(this.projectRoot ?? process.cwd());
     let cohesion: number | null = null;
     let cohesionMessage: string | undefined;
     try {
-      const reportPath = join(process.cwd(), 'specs', '_meta', 'GRAPH_REPORT.md');
       const reportContent = readFileSync(reportPath, 'utf-8');
-      // 匹配格式如：| communityId | 0.85 | 或类似表格行
-      // 转义 communityId 中的正则特殊字符，防止 ReDoS
+      // 匹配格式如：| communityId | size | 0.85 |（cohesion 在第三列，GRAPH_REPORT.md
+      // 生成时为 toFixed(3)）。转义 communityId 中的正则特殊字符防止 ReDoS；
+      // 内聚度列用 \d+(?:\.\d+)? 严格匹配十进制数，只解析一次。
       const escaped = communityId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`\\|\\s*${escaped}\\s*\\|[^|]*\\|\\s*([\\d.]+)`, 'i');
-      const match = reportContent.match(regex);
-      if (match?.[1]) {
-        const parsed = parseFloat(match[1]);
-        if (!isNaN(parsed)) {
-          cohesion = parsed;
-        } else {
-          cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
-        }
+      const regex = new RegExp(`\\|\\s*${escaped}\\s*\\|[^|]*\\|\\s*(\\d+(?:\\.\\d+)?)`, 'i');
+      const captured = reportContent.match(regex)?.[1];
+      const parsed = captured !== undefined ? Number(captured) : NaN;
+      if (!Number.isNaN(parsed)) {
+        cohesion = parsed;
       } else {
-        // 文件存在但 communityId 不在表中 — 同样属于"cohesion 数据不可用"语义
-        cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
+        // 文件存在但 communityId 不在表中（或内聚度列非法）
+        cohesionMessage = `内聚度不可用（GRAPH_REPORT.md 中无社区 ${communityId} 的内聚度记录）`;
       }
     } catch {
-      // graph-report.md 不存在或读取失败，graceful degrade
-      cohesionMessage = '内聚度不可用（specs/_meta/GRAPH_REPORT.md 不存在）';
+      // GRAPH_REPORT.md 不存在或读取失败
+      cohesionMessage = '内聚度不可用（未找到 specs/_meta/GRAPH_REPORT.md，请先运行 spectra graph）';
     }
 
     return {

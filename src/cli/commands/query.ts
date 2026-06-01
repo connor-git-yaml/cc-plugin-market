@@ -66,9 +66,11 @@ export async function runQueryCommand(command: CLICommand): Promise<void> {
   }
 
   // 加载图谱并执行查询
+  // F170e：透传 process.cwd() 作为 projectRoot（与 graphPath 同源），
+  // 让 engine 内部文件定位与 CLI 运行目录一致。
   let engine: GraphQueryEngine;
   try {
-    engine = GraphQueryEngine.loadFromFile(graphPath);
+    engine = GraphQueryEngine.loadFromFile(graphPath, process.cwd());
   } catch (err) {
     console.error(
       `[query] 加载图谱失败：${err instanceof Error ? err.message : String(err)}`,
