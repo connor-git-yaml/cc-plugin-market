@@ -100,16 +100,16 @@
 **目标 User Stories**: US1, US2, US5  
 **覆盖 FR**: FR-001, FR-002, FR-011
 
-- [ ] T013 `[US1][US2][US5]` 修改 `src/batch/regen-plan.ts`：**仅将规则 (4)（undefined 默认分支）** 的 `incremental` 从 `false` **翻转为 `true`**（FR-001）——规则 (2) 显式 incremental=true 已返回 true、规则 (1) full/force 优先，均不改。同步把 T004 中规则 (4) 的默认断言改为 incremental:true（见 T009）
+- [x] T013 `[US1][US2][US5]` 修改 `src/batch/regen-plan.ts`：**仅将规则 (4)（undefined 默认分支）** 的 `incremental` 从 `false` **翻转为 `true`**（FR-001）——规则 (2) 显式 incremental=true 已返回 true、规则 (1) full/force 优先，均不改。同步把 T004 中规则 (4) 的默认断言改为 incremental:true（见 T009）
   - 文件: `src/batch/regen-plan.ts`
 
-- [ ] T014 `[US5]` 修改 `src/cli/commands/batch.ts`（现有 config 合并点 `:47`）：在合并 config 后调用 `resolveRegenPlan({ incremental, full, force })`，结果写入传给 `runBatch` 的 options；删除原有的 incremental 默认值硬编码（FR-002）
+- [x] T014 `[US5]` 修改 `src/cli/commands/batch.ts`（现有 config 合并点 `:47`）：在合并 config 后调用 `resolveRegenPlan({ incremental, full, force })`，结果写入传给 `runBatch` 的 options；删除原有的 incremental 默认值硬编码（FR-002）
   - 文件: `src/cli/commands/batch.ts`
 
-- [ ] T015 `[US5]` 修改 `src/mcp/server.ts`：在现有 `incremental ?? fileConfig.incremental`、`force ?? fileConfig.force` 合并后，连同新增 `full` 参数传入 `resolveRegenPlan({ incremental, full, force })`；删除原有 incremental 默认值漂移逻辑（FR-002）
+- [x] T015 `[US5]` 修改 `src/mcp/server.ts`：在现有 `incremental ?? fileConfig.incremental`、`force ?? fileConfig.force` 合并后，连同新增 `full` 参数传入 `resolveRegenPlan({ incremental, full, force })`；删除原有 incremental 默认值漂移逻辑（FR-002）
   - 文件: `src/mcp/server.ts`
 
-- [ ] T016 `[US5]` 修改 `src/batch/batch-orchestrator.ts`：删除 `:388` 行的 `incremental = false` 硬编码，改为接收已解析的 `RegenPlan`（或对直接调用方兜底调用一次 `resolveRegenPlan`）；`runBatch` options 类型新增 `full?: boolean` 字段（FR-002）。**并在 `BatchResult` 接口新增 `deltaReport?: DeltaReport` 字段并在 return（`:1721`）填入**——现状只返回 `deltaReportPath`（文件），E2E（SC-001/002/005、场景9 fallbackReason、FR-013/018）需断言 `deltaReport.{mode,directChanges,propagatedChanges,regenerateTargets,fallbackReason}`，必须把对象暴露在返回值上。RED 测试先断言该字段（undefined→RED），本 task 使其 GREEN
+- [x] T016 `[US5]` 修改 `src/batch/batch-orchestrator.ts`：删除 `:388` 行的 `incremental = false` 硬编码，改为接收已解析的 `RegenPlan`（或对直接调用方兜底调用一次 `resolveRegenPlan`）；`runBatch` options 类型新增 `full?: boolean` 字段（FR-002）。**并在 `BatchResult` 接口新增 `deltaReport?: DeltaReport` 字段并在 return（`:1721`）填入**——现状只返回 `deltaReportPath`（文件），E2E（SC-001/002/005、场景9 fallbackReason、FR-013/018）需断言 `deltaReport.{mode,directChanges,propagatedChanges,regenerateTargets,fallbackReason}`，必须把对象暴露在返回值上。RED 测试先断言该字段（undefined→RED），本 task 使其 GREEN
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.2：`--full` flag + MCP full 参数（FR-003/FR-004）
@@ -117,10 +117,10 @@
 **目标 User Stories**: US4  
 **覆盖 FR**: FR-003, FR-004
 
-- [ ] T017 `[US4]` 新增 `--full` flag（**C4 修订：解析与 help 在不同文件，两处都要改**）：(a) `src/cli/utils/parse-args.ts` 新增 `--full` 解析（`argv.includes('--full')`）+ 在 `CLICommand` 接口（`:7-14`，当前无 `full` 字段）新增 `full?: boolean`，`--force` 保留为等义别名；(b) `src/cli/index.ts`（真实 `spectra --help` 输出在 `:37-43` 和 `:87-98`）新增 `--full` 的 help 文案 + usage 行，明确区分 regen 轴与 `--mode` 质量维度（见 contracts/cli-flags-contract.md）
+- [x] T017 `[US4]` 新增 `--full` flag（**C4 修订：解析与 help 在不同文件，两处都要改**）：(a) `src/cli/utils/parse-args.ts` 新增 `--full` 解析（`argv.includes('--full')`）+ 在 `CLICommand` 接口（`:7-14`，当前无 `full` 字段）新增 `full?: boolean`，`--force` 保留为等义别名；(b) `src/cli/index.ts`（真实 `spectra --help` 输出在 `:37-43` 和 `:87-98`）新增 `--full` 的 help 文案 + usage 行，明确区分 regen 轴与 `--mode` 质量维度（见 contracts/cli-flags-contract.md）
   - 文件: `src/cli/utils/parse-args.ts`, `src/cli/index.ts`
 
-- [ ] T018 [P] `[US4]` 修改 `src/mcp/server.ts`：在 batch tool schema 新增 `full: z.boolean().optional()` 参数（向后兼容扩展）；更新 `incremental`、`force`、`full`、`mode` 四个字段的 `.describe()` 文案（见 contracts/mcp-batch-schema.md）
+- [x] T018 [P] `[US4]` 修改 `src/mcp/server.ts`：在 batch tool schema 新增 `full: z.boolean().optional()` 参数（向后兼容扩展）；更新 `incremental`、`force`、`full`、`mode` 四个字段的 `.describe()` 文案（见 contracts/mcp-batch-schema.md）
   - 文件: `src/mcp/server.ts`
 
 ### Step 2.3：checkpoint × regen 交互修复（FR-016/EC-007）
@@ -128,13 +128,13 @@
 **目标 User Stories**: US4  
 **覆盖 FR**: FR-016
 
-- [ ] T019 `[US4]` 修改 `src/batch/batch-orchestrator.ts`（checkpoint 加载阶段 `:612-637`）：`regenPlan.full === true` 时调用 `completedPaths.clear()`，丢弃已加载的 checkpoint completed state，防止 full 路径被残留 checkpoint 绕过（C-3 修订：加载时清空，不在 processOneModule 内"忽略"）
+- [x] T019 `[US4]` 修改 `src/batch/batch-orchestrator.ts`（checkpoint 加载阶段 `:612-637`）：`regenPlan.full === true` 时调用 `completedPaths.clear()`，丢弃已加载的 checkpoint completed state，防止 full 路径被残留 checkpoint 绕过（C-3 修订：加载时清空，不在 processOneModule 内"忽略"）
   - 文件: `src/batch/batch-orchestrator.ts`
 
-- [ ] T020 `[US4]` 修改 `src/batch/batch-orchestrator.ts` 的 `processOneModule` 函数（`:711` 附近）：将 target 计算（`resolveSourceTarget` 调用）前移到 checkpoint 判定之前；增量 resume 时若 checkpoint 已完成模块在本轮 delta 中命中变更（`regenerateTargets.has(moduleSourceTarget)`），则使 checkpoint 失效并重跑（FR-016 第二部分）
+- [x] T020 `[US4]` 修改 `src/batch/batch-orchestrator.ts` 的 `processOneModule` 函数（`:711` 附近）：将 target 计算（`resolveSourceTarget` 调用）前移到 checkpoint 判定之前；增量 resume 时若 checkpoint 已完成模块在本轮 delta 中命中变更（`regenerateTargets.has(moduleSourceTarget)`），则使 checkpoint 失效并重跑（FR-016 第二部分）
   - 文件: `src/batch/batch-orchestrator.ts`
 
-- [ ] T021 `[US4]` 修改 `src/batch/batch-orchestrator.ts`（**W-2 修订：去掉 [P]，与 T019/T020 同文件且共享 regen/checkpoint 上下文，须串行**）：在 full 路径（`regenPlan.full === true`）入口处打一条可观测日志（W-1 取舍：`[regen] full regeneration (source=${regenPlan.source})`），替代原有被合并掉的 `fallbackReason='force-enabled'` 信号
+- [x] T021 `[US4]` 修改 `src/batch/batch-orchestrator.ts`（**W-2 修订：去掉 [P]，与 T019/T020 同文件且共享 regen/checkpoint 上下文，须串行**）：在 full 路径（`regenPlan.full === true`）入口处打一条可观测日志（W-1 取舍：`[regen] full regeneration (source=${regenPlan.source})`），替代原有被合并掉的 `fallbackReason='force-enabled'` 信号
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.4：normalizeGraphForWrite 完整实现 + inputHash 稳定化（FR-006/FR-007）
@@ -142,13 +142,13 @@
 **目标 User Stories**: US3  
 **覆盖 FR**: FR-006, FR-007
 
-- [ ] T022 `[US3]` 修改 `src/panoramic/graph/graph-builder.ts`：将 T003 的占位实现替换为完整的 `normalizeGraphForWrite` 实现，包含：(a) `options?.stripTimestamps` 时剥除顶层 `generatedAt`；(b) nodes 按 `id` 字典序排序（in-place）；(c) links 按 `source + target + relation` 三元组字典序排序（in-place）；(d) hyperedges（若有）按 `id` 字典序排序（in-place）
+- [x] T022 `[US3]` 修改 `src/panoramic/graph/graph-builder.ts`：将 T003 的占位实现替换为完整的 `normalizeGraphForWrite` 实现，包含：(a) `options?.stripTimestamps` 时剥除顶层 `generatedAt`；(b) nodes 按 `id` 字典序排序（in-place）；(c) links 按 `source + target + relation` 三元组字典序排序（in-place）；(d) hyperedges（若有）按 `id` 字典序排序（in-place）
   - 文件: `src/panoramic/graph/graph-builder.ts`
 
-- [ ] T023 `[US3]` 修改 `src/panoramic/graph/graph-builder.ts`（`buildKnowledgeGraph` 的 `inputHash` 计算段 `:412-425`）：实现 `stripVolatileFields`（深拷贝并移除 `generatedAt` 等非确定性字段，保留全部语义内容）和 `stableStringify`（key 有序 JSON.stringify）；将原 `hashParts.push(dg.generatedAt)` 替换为 `hashParts.push(\`docGraph:${sha256(stableStringify(stripVolatileFields(dg)))}\`)`（FR-006/C-1 修订：保留内容敏感性，禁用 count 替代）
+- [x] T023 `[US3]` 修改 `src/panoramic/graph/graph-builder.ts`（`buildKnowledgeGraph` 的 `inputHash` 计算段 `:412-425`）：实现 `stripVolatileFields`（深拷贝并移除 `generatedAt` 等非确定性字段，保留全部语义内容）和 `stableStringify`（key 有序 JSON.stringify）；将原 `hashParts.push(dg.generatedAt)` 替换为 `hashParts.push(\`docGraph:${sha256(stableStringify(stripVolatileFields(dg)))}\`)`（FR-006/C-1 修订：保留内容敏感性，禁用 count 替代）
   - 文件: `src/panoramic/graph/graph-builder.ts`
 
-- [ ] T024 `[US3]` 修改 `src/batch/batch-orchestrator.ts`：在社区分析完成后、`writeKnowledgeGraph` 调用前，插入 `normalizeGraphForWrite(graphJson)` 调用（归一化面覆盖全部追加边后的完整 graphJson）（FR-007 要求调用在 batch 追加 semantic edges 之后）
+- [x] T024 `[US3]` 修改 `src/batch/batch-orchestrator.ts`：在社区分析完成后、`writeKnowledgeGraph` 调用前，插入 `normalizeGraphForWrite(graphJson)` 调用（归一化面覆盖全部追加边后的完整 graphJson）（FR-007 要求调用在 batch 追加 semantic edges 之后）
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.5：孤儿 spec 删除 + ownership 边界（FR-017/EC-009）
@@ -156,10 +156,10 @@
 **目标 User Stories**: US3  
 **覆盖 FR**: FR-017, EC-009
 
-- [ ] T025 `[US3]` 修改 `src/panoramic/builders/doc-graph-builder.ts`（**C1 修订：StoredModuleSpecSummary 定义在 `:32`、scanStoredModuleSpecs 在 `:123`、frontmatter 读取在 `:387-398`/`:485-542`，均在此文件，非 spec-store.ts**）：将 `generatedByMode` 字段纳入 `StoredModuleSpecSummary` 接口（`extractStoredModuleSpecSummary` + `scanStoredModuleSpecs` 读取并传递）；新增 `isBatchGenerated(summary): boolean` 判定函数 = **`summary.generatedByMode != null`**（**C2 修订：不能用 `generatedBy`——`generateFrontmatter`（`src/generator/frontmatter.ts:93-98`）对所有 spectra 生成的 spec 都写 `generatedBy`，会把单文件 generate 产物也误判为 batch 产物；batch 特有标记是 `generatedByMode`，由 runBatch 写入 `batch-orchestrator.ts:792-794`**）。`isBatchGenerated` 可放 doc-graph-builder.ts 或 spec-store.ts，导出供 T026 使用
+- [x] T025 `[US3]` 修改 `src/panoramic/builders/doc-graph-builder.ts`（**C1 修订：StoredModuleSpecSummary 定义在 `:32`、scanStoredModuleSpecs 在 `:123`、frontmatter 读取在 `:387-398`/`:485-542`，均在此文件，非 spec-store.ts**）：将 `generatedByMode` 字段纳入 `StoredModuleSpecSummary` 接口（`extractStoredModuleSpecSummary` + `scanStoredModuleSpecs` 读取并传递）；新增 `isBatchGenerated(summary): boolean` 判定函数 = **`summary.generatedByMode != null`**（**C2 修订：不能用 `generatedBy`——`generateFrontmatter`（`src/generator/frontmatter.ts:93-98`）对所有 spectra 生成的 spec 都写 `generatedBy`，会把单文件 generate 产物也误判为 batch 产物；batch 特有标记是 `generatedByMode`，由 runBatch 写入 `batch-orchestrator.ts:792-794`**）。`isBatchGenerated` 可放 doc-graph-builder.ts 或 spec-store.ts，导出供 T026 使用
   - 文件: `src/panoramic/builders/doc-graph-builder.ts`（+ 可选 `src/spec-store/spec-store.ts` 导出 helper）
 
-- [ ] T026 `[US3]` 修改 `src/batch/batch-orchestrator.ts`：在所有模块处理完成后、构建 `SpecStore` 处新增孤儿删除逻辑：(a) `const orphans = specStore.orphanSpecs()`；(b) 对每个 orphan，先 `isBatchGenerated(orphan)`（必要条件1：`generatedByMode != null`），再 `isInManagedOutputDir(absPath, modulesDir)`（必要条件2），两者均满足才删除；(c) 删除前打 `logger.info('[orphan-cleanup] 删除孤儿 spec: ...')` 日志；(d) `isInManagedOutputDir` 辅助函数（**C3 修订：用 `path.relative` 防目录穿越，禁用字符串 startsWith——否则 `specs/modules-old/...` sibling 会被误判**）：`const rel = path.relative(modulesDir, path.resolve(absPath)); return !rel.startsWith('..') && !path.isAbsolute(rel) && absPath.endsWith('.spec.md')`，其中 `modulesDir` 取自 `src/panoramic/output-filenames.ts:49-52` 的常量
+- [x] T026 `[US3]` 修改 `src/batch/batch-orchestrator.ts`：在所有模块处理完成后、构建 `SpecStore` 处新增孤儿删除逻辑：(a) `const orphans = specStore.orphanSpecs()`；(b) 对每个 orphan，先 `isBatchGenerated(orphan)`（必要条件1：`generatedByMode != null`），再 `isInManagedOutputDir(absPath, modulesDir)`（必要条件2），两者均满足才删除；(c) 删除前打 `logger.info('[orphan-cleanup] 删除孤儿 spec: ...')` 日志；(d) `isInManagedOutputDir` 辅助函数（**C3 修订：用 `path.relative` 防目录穿越，禁用字符串 startsWith——否则 `specs/modules-old/...` sibling 会被误判**）：`const rel = path.relative(modulesDir, path.resolve(absPath)); return !rel.startsWith('..') && !path.isAbsolute(rel) && absPath.endsWith('.spec.md')`，其中 `modulesDir` 取自 `src/panoramic/output-filenames.ts:49-52` 的常量
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.6：resolveSourceTarget 接入 DeltaRegenerator（FR-019）
@@ -167,22 +167,22 @@
 **目标 User Stories**: US1  
 **覆盖 FR**: FR-019
 
-- [ ] T027 `[US1]` 修改 `src/batch/delta-regenerator.ts`（`collectCurrentSnapshots` 方法 `:217-244`）：将 `group.dirPath` 的内联 target 计算替换为调用 `resolveSourceTarget(group, conflictingDirPaths, isRoot)`（从 `src/batch/regen-plan.ts` 导入），消除与 `processOneModule` 的 target 口径错位（FR-019）
+- [x] T027 `[US1]` 修改 `src/batch/delta-regenerator.ts`（`collectCurrentSnapshots` 方法 `:217-244`）：将 `group.dirPath` 的内联 target 计算替换为调用 `resolveSourceTarget(group, conflictingDirPaths, isRoot)`（从 `src/batch/regen-plan.ts` 导入），消除与 `processOneModule` 的 target 口径错位（FR-019）
   - 文件: `src/batch/delta-regenerator.ts`
 
-- [ ] T028 `[US1]` 修改 `src/batch/batch-orchestrator.ts`（`processOneModule` 函数）：将内联的 target 计算替换为调用 `resolveSourceTarget(group, conflictingDirPaths, isRoot)`（FR-019 共享函数统一口径）；确认此调用已在 T020 中前移到 checkpoint 判定之前
+- [x] T028 `[US1]` 修改 `src/batch/batch-orchestrator.ts`（`processOneModule` 函数）：将内联的 target 计算替换为调用 `resolveSourceTarget(group, conflictingDirPaths, isRoot)`（FR-019 共享函数统一口径）；确认此调用已在 T020 中前移到 checkpoint 判定之前
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.7：baseline-collect 脚本显式全量（FR-014/OQ-4）
 
 **覆盖 FR**: FR-014
 
-- [ ] T029 修改 `scripts/baseline-collect.mjs`（`runBatchAndCapture` 函数 `:431-448`）：在 args 数组中追加 `'--full'` flag，使"基线永远全量"自文档化，与清理逻辑解耦（OQ-4 决议：防御性加入，防止将来清理逻辑变更导致基线失真）；同步更新 dry-run 校验路径（`:486`）
+- [x] T029 修改 `scripts/baseline-collect.mjs`（`runBatchAndCapture` 函数 `:431-448`）：在 args 数组中追加 `'--full'` flag，使"基线永远全量"自文档化，与清理逻辑解耦（OQ-4 决议：防御性加入，防止将来清理逻辑变更导致基线失真）；同步更新 dry-run 校验路径（`:486`）
   - 文件: `scripts/baseline-collect.mjs`
 
 **Checkpoint — Phase 2 完成标准**:
-- [ ] T030 运行 `npx vitest run`，确认所有 T008 ~ T011 的 RED 测试全部变为 GREEN，N_baseline 个存量测试零失败
-- [ ] T031 [P] 运行 `npm run build`，确认 TypeScript 零错误（类型契约变更：`runBatch` options 新增 `full?`, CLICommand 新增 `full?`，MCP schema 新增 `full` 参数）
+- [x] T030 运行 `npx vitest run`，确认所有 T008 ~ T011 的 RED 测试全部变为 GREEN，N_baseline 个存量测试零失败
+- [x] T031 [P] 运行 `npm run build`，确认 TypeScript 零错误（类型契约变更：`runBatch` options 新增 `full?`, CLICommand 新增 `full?`，MCP schema 新增 `full` 参数）
 
 ---
 

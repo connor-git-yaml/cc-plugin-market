@@ -18,7 +18,7 @@ import type { ModuleGroup } from './module-grouper.js';
 export type RegenPlanSource =
   | 'full' // full 或 force（已合并）
   | 'incremental-explicit' // 显式给出 incremental（true 或 false 皆属显式选择）
-  | 'default'; // 未传任何参数 → 默认路径（Phase 0=false，GREEN=true）
+  | 'default'; // 未传任何参数 → 默认增量路径（FR-001）
 
 /**
  * resolveRegenPlan 的扁平输入。
@@ -51,12 +51,10 @@ export interface RegenPlan {
  *   (1) full===true || force===true → { incremental:false, full:true, source:'full' }
  *   (2) incremental===true（显式 opt-in，未给 full/force）→ { incremental:true, full:false, source:'incremental-explicit' }
  *   (3) incremental===false（显式 opt-out）→ { incremental:false, full:false, source:'incremental-explicit' }
- *   (4) 全 undefined（默认）→ Phase 0: incremental:false；GREEN(T013): incremental:true
+ *   (4) 全 undefined（默认）→ { incremental:true, full:false }（FR-001 默认翻转）
  *
- * ⚠️ Phase 0 行为不变约定：**仅规则 (4)（undefined 默认）** 在本阶段实现为 `incremental:false`，
- * 与翻转前现状一致；GREEN(T013) 只翻转这一个默认分支为 `true`。
- * 显式 incremental===true（规则 2）在任何阶段都返回 `incremental:true`——这与旧 runBatch
- * 尊重显式 incremental=true 的行为一致，不属于 Phase 0 的"行为变更"（本函数 Phase 0 无调用点）。
+ * 显式 incremental===true（规则 2）与显式 incremental===false（规则 3）都尊重调用方意图；
+ * 仅在未给出任何 regen 轴参数时（规则 4）落默认增量（FR-001）。
  */
 export function resolveRegenPlan(input: RegenPlanInput): RegenPlan {
   // 规则 (1)：full 或 force 优先（force 是 full 的等义别名）
@@ -75,8 +73,8 @@ export function resolveRegenPlan(input: RegenPlanInput): RegenPlan {
   }
 
   // 规则 (4)：undefined 默认路径
-  // Phase 0 行为不变：默认 incremental=false（保持现状，GREEN T013 翻转为 true）
-  return { incremental: false, full: false, source: 'default' };
+  // FR-001 默认翻转：未传任何 regen 轴参数时走增量（DeltaRegenerator）。
+  return { incremental: true, full: false, source: 'default' };
 }
 
 // ============================================================

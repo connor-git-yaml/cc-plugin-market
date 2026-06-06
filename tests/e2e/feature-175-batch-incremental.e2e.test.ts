@@ -19,6 +19,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -181,12 +182,19 @@ async function runBatchOn(root: string, opts: BatchOptionsWithFull = {}): Promis
   return result as BatchResultWithDelta;
 }
 
-/** 列出 modules 目录下所有 *.spec.md 的 { name → mtimeMs } */
+/**
+ * 列出 modules 目录下所有【模块级】*.spec.md 的 { name → mtimeMs }。
+ *
+ * 排除 `_` 前缀的项目级聚合文件（如 `_index.spec.md`）——它属于项目级聚合层，
+ * 每轮 batch 无条件重写（OQ-5 决议：SC-002 门禁口径仅为"无模块级 LLM 调用"，
+ * 项目级聚合开销不纳入 FR-005 module-level mtime 稳定性断言）。沿用仓库 README 逻辑
+ * 对 `_` 前缀文件的同一区分约定。
+ */
 function specMtimes(modulesDir: string): Map<string, number> {
   const out = new Map<string, number>();
   if (!existsSync(modulesDir)) return out;
   for (const entry of readdirSync(modulesDir)) {
-    if (entry.endsWith('.spec.md')) {
+    if (entry.endsWith('.spec.md') && !entry.startsWith('_')) {
       out.set(entry, statSync(join(modulesDir, entry)).mtimeMs);
     }
   }
@@ -198,9 +206,40 @@ function srcModule(exportName: string, body: string, imports = ''): string {
   return `${imports}export function ${exportName}(n: number): number {\n  ${body}\n}\n`;
 }
 
+/**
+ * 读取并归一化 graph.json，剥除每次运行必变的非确定性字段，供 byte-stable deepEqual 比较。
+ *
+ * 剥除项：
+ *   - graph.generatedAt：写盘时间戳（normalizeGraphForWrite 在 batch 路径未传 stripTimestamps，
+ *     磁盘上保留真实时间戳，故测试侧剥除）。
+ *   - graph.inputHash：含 docGraph 派生内容，full vs incremental 两路语义等价时应一致，
+ *     但保守起见不纳入断言核心（仍保留，下方仅显式剥 generatedAt + currentRun 类运行态字段）。
+ *   - 节点 metadata.currentRun（C-1）：本轮运行态字段，已由 normalizeGraphForWrite 在写盘前剥除，
+ *     此处兜底再剥一次，确保即便实现回归测试也能定位差异。
+ */
+function readNormalizedGraph(root: string): Record<string, unknown> {
+  const graphPath = join(root, 'specs', '_meta', 'graph.json');
+  const raw = JSON.parse(readFileSync(graphPath, 'utf-8')) as Record<string, unknown>;
+  const graphMeta = raw['graph'] as Record<string, unknown> | undefined;
+  if (graphMeta) {
+    delete graphMeta['generatedAt'];
+  }
+  const nodes = raw['nodes'] as Array<{ metadata?: Record<string, unknown> }> | undefined;
+  if (Array.isArray(nodes)) {
+    for (const node of nodes) {
+      if (node.metadata && typeof node.metadata === 'object') {
+        delete node.metadata['currentRun'];
+      }
+    }
+  }
+  return raw;
+}
+
 // ─── 测试套件 ─────────────────────────────────────────────────────────────────
 
-describe('F175 Batch Incremental Wrapper E2E（9 场景，Phase 1 全部 RED）', () => {
+// 每个场景跑 1-2 次真实 batch（含首轮 transformers.js embedding 模型加载，可能 10s+），
+// 默认 5000ms testTimeout 偏紧，套件级放宽至 60s（仅 timeout 调整，不改断言语义）。
+describe('F175 Batch Incremental Wrapper E2E（10 场景）', { timeout: 60_000 }, () => {
   // W-3：保存并在 afterAll 恢复 ANTHROPIC_API_KEY，避免污染同进程其他测试
   let savedApiKey: string | undefined;
 
@@ -429,21 +468,23 @@ describe('F175 Batch Incremental Wrapper E2E（9 场景，Phase 1 全部 RED）'
   // （不出现"deltaReport 标记却被跳过"或"未标记却被生成"的错位），未改模块进 skipped。
   it('场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）', async () => {
     const proj = makeTempProject();
-    proj.write('src/config/index.ts', srcModule('config', 'return n;'));
+    // 注：模块名须避开 directory-classifier 的保留类别（如 'config' 会被归为 config 类而非 source，
+    // 不进入 moduleOrder）；用 'loader'/'store' 两个 source 类目录确保聚合为 2 个独立模块。
+    proj.write('src/loader/index.ts', srcModule('loader', 'return n;'));
     proj.write('src/store/index.ts', srcModule('store', 'return n + 2;'));
     gitInit(proj.root);
 
     await runBatchOn(proj.root);
 
-    // 改 config，第二轮默认增量
+    // 改 loader，第二轮默认增量
     mocks.mockCreate.mockClear();
-    proj.write('src/config/index.ts', srcModule('config', 'return n + 50;'));
+    proj.write('src/loader/index.ts', srcModule('loader', 'return n + 50;'));
     const r2 = await runBatchOn(proj.root);
 
     expect(r2.deltaReport, 'BatchResult 应暴露 deltaReport 对象').toBeDefined();
-    // 口径自洽：deltaReport 标记重生成的非空，且 config 重生成、store 跳过（未改）。
+    // 口径自洽：deltaReport 标记重生成的非空，且 loader 重生成、store 跳过（未改）。
     expect(r2.deltaReport!.regenerateTargets.length, 'regenerateTargets 不应为空').toBeGreaterThan(0);
-    expect(r2.successful, 'config 被改 → 必须重生成').toContain('config');
+    expect(r2.successful, 'loader 被改 → 必须重生成').toContain('loader');
     expect(r2.skipped, 'store 未改 → 必须跳过（口径正确则不误重生成）').toContain('store');
     expect(r2.successful, 'store 未改 → 不应在重生成集合').not.toContain('store');
   });
@@ -489,5 +530,47 @@ describe('F175 Batch Incremental Wrapper E2E（9 场景，Phase 1 全部 RED）'
     const cycModules = new Set(rCyc.successful);
     expect(cycModules.has('x'), 'cycle: 改 x → x 重生成').toBe(true);
     expect(cycModules.has('y'), 'cycle: 改 x → 传播到 y 重生成').toBe(true);
+  });
+
+  // ── 场景 10 [US3]：full vs 无改动 incremental 产物 byte-stable（SC-003，捕获 C-1/C-2）──
+  // P1 验收缺口补全：同一临时项目跑两次——(a) full=true 得基线产物 A；(b) 无改动默认增量得产物 B。
+  // 断言：模块级 *.spec.md 字节相同（FR-005）+ graph.json 剥 generatedAt/currentRun 后 deepEqual。
+  // 该场景必须在 C-1（currentRun 不入盘）+ C-2（孤儿/SpecStore 视图一致）修复后才能真正 deepEqual 通过。
+  it('场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）', async () => {
+    const proj = makeTempProject();
+    proj.write('src/loader/index.ts', srcModule('loader', 'return n + 1;'));
+    proj.write('src/store/index.ts', srcModule('store', 'return n - 1;'));
+    gitInit(proj.root);
+
+    const modulesDir = proj.modulesDir();
+
+    // (a) full=true 建立基线产物 A
+    mocks.mockCreate.mockClear();
+    await runBatchOn(proj.root, { full: true });
+    const specsAfterFull = new Map<string, string>();
+    for (const entry of readdirSync(modulesDir)) {
+      if (entry.endsWith('.spec.md') && !entry.startsWith('_')) {
+        specsAfterFull.set(entry, readFileSync(join(modulesDir, entry), 'utf-8'));
+      }
+    }
+    expect(specsAfterFull.size, 'full 轮应至少生成 1 个模块 spec').toBeGreaterThan(0);
+    const graphAfterFull = readNormalizedGraph(proj.root);
+
+    // (b) 无改动默认增量得产物 B（cache-hit 路径，全部模块应 skip）
+    mocks.mockCreate.mockClear();
+    const rIncr = await runBatchOn(proj.root);
+    expect(rIncr.successful.length, '无改动增量轮不应重生成任何模块').toBe(0);
+
+    // (c) 模块级 *.spec.md 字节逐字相同（cache hit 不改写）
+    for (const [name, fullBytes] of specsAfterFull) {
+      const incrBytes = readFileSync(join(modulesDir, name), 'utf-8');
+      expect(incrBytes, `${name} 在 full 与无改动增量两路应字节相同`).toBe(fullBytes);
+    }
+
+    // (d) graph.json 剥 generatedAt + currentRun 后 deepEqual（C-1/C-2 修复后成立）
+    const graphAfterIncr = readNormalizedGraph(proj.root);
+    expect(graphAfterIncr, 'full vs 无改动增量的 graph.json 归一化后应 deepEqual').toEqual(
+      graphAfterFull,
+    );
   });
 });

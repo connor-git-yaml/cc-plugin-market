@@ -46,6 +46,11 @@ function undirectedEdgeKey(source: string, target: string, relation: string): st
   return `${s}|${t}|${relation}`;
 }
 
+/** 完整 SHA-256 hex（供 inputHash 的内容子哈希使用，最终 inputHash 再统一截 16 位） */
+function sha256Hex(input: string): string {
+  return crypto.createHash('sha256').update(input).digest('hex');
+}
+
 /**
  * 生成有向图边 key（保留方向性）
  */
@@ -409,14 +414,16 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
   // --------------------------------------------------------
   // 步骤 5：计算 inputHash
   // --------------------------------------------------------
+  // F175 FR-006/C-1：对"剥时间戳后的内容"做稳定 SHA-256（保留内容敏感性，禁退化为 count）。
+  // 仅 generatedAt 变 → hash 不变（byte-stable）；语义内容变 → hash 变（cache 正确失效）。
   const hashParts: string[] = [];
   if (options.docGraph) {
     const dg = options.docGraph as DocGraph;
-    if (dg.generatedAt) hashParts.push(dg.generatedAt);
+    hashParts.push(`docGraph:${sha256Hex(stableStringify(stripVolatileFields(dg)))}`);
   }
   if (options.architectureIR) {
     const ir = options.architectureIR as ArchitectureIR;
-    if (ir.generatedAt) hashParts.push(ir.generatedAt);
+    hashParts.push(`architectureIR:${sha256Hex(stableStringify(stripVolatileFields(ir)))}`);
   }
   let inputHash: string | undefined;
   if (hashParts.length > 0) {
@@ -496,6 +503,12 @@ export function writeKnowledgeGraph(graphJson: GraphJSON, outputDir: string): st
 // 写盘前归一化（normalizeGraphForWrite）— byte-stable 支撑
 // ============================================================
 
+/**
+ * 节点 metadata 中属于"本轮运行态"的字段名——这些字段由生成流程内部使用（如
+ * buildDocGraph 的 relevance/unlinked 计算），不代表持久化语义，写盘前一律剥除（C-1）。
+ */
+const RUNTIME_NODE_METADATA_FIELDS = ['currentRun'] as const;
+
 /** normalizeGraphForWrite 选项 */
 export interface NormalizeGraphOptions {
   /** 为 true 时剥除 graph.generatedAt 等易变时间戳字段（byte-stable 比较场景使用） */
@@ -503,38 +516,105 @@ export interface NormalizeGraphOptions {
 }
 
 /**
- * 写盘前原地归一化 GraphJSON，使同一语义输入产出逐字节稳定的磁盘文件。
+ * 写盘前原地归一化 GraphJSON，使同一语义输入产出逐字节稳定的磁盘文件（FR-006/FR-007）。
  *
- * Phase 0 占位实现：纯 no-op（不做任何排序/剥除），保持现状行为不变。
- * GREEN 阶段（T022）才补全 nodes/links/hyperedges 排序与时间戳剥除逻辑。
- *
- * 注意：本函数原地修改传入对象（返回 void），调用前后对象引用保持相同。
+ * 归一化面（in-place，调用前后对象/数组引用保持相同——仅 sort 改变元素顺序）：
+ *   (a) options.stripTimestamps 时把 graph.generatedAt 剥为固定 epoch
+ *   (b) nodes 按 id 字典序排序
+ *   (c) links 按 source + target + relation 三元组字典序排序
+ *   (d) hyperedges（若有）按 id 字典序排序
+ *   (e) 剥除节点 metadata 中的本轮运行态字段（currentRun 等）——该字段仅供
+ *       buildDocGraph 内部 relevance/unlinked 计算使用，不应进入持久化 graph.json，
+ *       否则 full 路径（currentRun:true）与无改动增量路径（cache-hit 的 currentRun:false）
+ *       会在结构上不可能 deepEqual，破坏 SC-003 byte-stable（C-1）。
  */
 export function normalizeGraphForWrite(
-  _graphJson: GraphJSON,
-  _options?: NormalizeGraphOptions,
+  graphJson: GraphJSON,
+  options?: NormalizeGraphOptions,
 ): void {
-  // Phase 0 占位：no-op，不在任何写盘序列中调用。
+  if (options?.stripTimestamps) {
+    // 固定 epoch，使 byte-stable 比较不受真实生成时间影响
+    graphJson.graph.generatedAt = '1970-01-01T00:00:00.000Z';
+  }
+
+  // 剥除节点 metadata 的运行态字段（无论是否 stripTimestamps 都剥——运行态字段
+  // 不属于持久化语义，且在 full vs incremental 两路取值不同会破坏 byte-stable）
+  for (const node of graphJson.nodes) {
+    if (node.metadata && typeof node.metadata === 'object') {
+      for (const field of RUNTIME_NODE_METADATA_FIELDS) {
+        if (field in node.metadata) {
+          delete (node.metadata as Record<string, unknown>)[field];
+        }
+      }
+    }
+  }
+
+  // in-place 排序（不替换数组引用，保持调用方持有的引用稳定）
+  graphJson.nodes.sort((a, b) => a.id.localeCompare(b.id));
+  graphJson.links.sort((a, b) => {
+    const ka = `${a.source}\x1f${a.target}\x1f${a.relation}`;
+    const kb = `${b.source}\x1f${b.target}\x1f${b.relation}`;
+    return ka.localeCompare(kb);
+  });
+  if (graphJson.hyperedges) {
+    graphJson.hyperedges.sort((a, b) => a.id.localeCompare(b.id));
+  }
 }
 
 /**
- * 深拷贝并剥除非确定性字段（如 generatedAt），保留全部语义内容，供稳定 hash 计算使用。
+ * 每次运行必变的非确定性字段名（深拷贝时递归剥除），保留全部语义内容。
  *
- * Phase 0 占位实现：原样深拷贝返回（不剥除任何字段）。
- * GREEN 阶段（T023）补全剥除逻辑。
+ * 含两类：
+ *   - 时间戳类（generatedAt/lastUpdated/timestamp）：每次运行墙钟必变。
+ *   - 运行态类（currentRun）：full 路径下为 true、cache-hit 增量路径下为 false（C-1）。
+ *     若不剥除，full vs 无改动增量的 docGraph 序列化串不同 → inputHash 不同 →
+ *     graph.json 在结构上不可能 deepEqual（破坏 SC-003 byte-stable）。
+ */
+const VOLATILE_FIELD_NAMES = new Set(['generatedAt', 'lastUpdated', 'timestamp', 'currentRun']);
+
+/**
+ * 深拷贝并递归剥除非确定性字段（如 generatedAt），保留全部语义内容，供稳定 hash 计算使用。
+ *
+ * C-1：仅移除时间戳类易变字段，**不**退化为 count 摘要——必须保留内容敏感性，
+ * 否则两个内容不同但 node/edge 数相同的 docGraph 会撞 hash → 静默返回 stale cache。
  */
 export function stripVolatileFields<T>(value: T): T {
-  // Phase 0 占位：原样返回深拷贝。
-  return structuredClone(value);
+  return stripVolatileRec(value) as T;
+}
+
+function stripVolatileRec(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripVolatileRec(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (VOLATILE_FIELD_NAMES.has(key)) continue;
+      out[key] = stripVolatileRec(val);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
  * key 有序的稳定 JSON 序列化，使内容相同的对象产出相同字符串（不受 key 插入顺序影响）。
- *
- * Phase 0 占位实现：退化为标准 JSON.stringify（key 顺序未稳定化）。
- * GREEN 阶段（T023）补全 key 有序序列化。
+ * 递归对所有对象 key 排序；数组保留原顺序（语义有序）。
  */
 export function stableStringify(value: unknown): string {
-  // Phase 0 占位：标准序列化。
-  return JSON.stringify(value);
+  return JSON.stringify(sortKeysRec(value));
+}
+
+function sortKeysRec(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sortKeysRec(item));
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>).sort((a, b) => a.localeCompare(b))) {
+      out[key] = sortKeysRec((value as Record<string, unknown>)[key]);
+    }
+    return out;
+  }
+  return value;
 }

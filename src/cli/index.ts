@@ -40,7 +40,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 用法:
   spectra generate <target> [--deep] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
+  spectra batch [--full] [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
   spectra diff <spec-file> <source> [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
@@ -90,12 +90,13 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --target       目标平台: claude | codex | both（仅 init，默认按当前运行时自动选择）
   --verify       在线验证认证凭证（仅 auth-status）
   --deep         包含函数体进行深度分析（generate / prepare）
-  --force        强制重新生成所有 Spec（仅 batch）
-  --incremental  仅重生成受影响的 Spec（仅 batch）
+  --full         全量重生成所有模块（regen 轴，绕过增量 cache + checkpoint，仅 batch）。注：与 --mode full（文档质量维度）无关，二者正交可同时指定
+  --force        同 --full（向后兼容别名，仅 batch）
+  --incremental  仅重生成受影响的 Spec（仅 batch）。注：未指定任何 regen 轴参数时默认即走增量
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
   --include-docs 启用 Markdown 文档和 OpenAPI/AsyncAPI 规范提取（仅 batch）
   --include-images 启用图像/图表 Vision 提取（仅 batch）
-  --mode         批处理运行模式: full（默认，完整文档，LLM 全量）| reading（省约 38% 时间，模块级 LLM 仍运行，跳过架构叙事/ADR/产品文档层）| code-only（纯 AST，< 30s，无 LLM，最快）（仅 batch）
+  --mode         批处理运行模式（spec 文档质量维度，与 --full regen 轴正交）: full（默认，完整文档，LLM 全量）| reading（省约 38% 时间，模块级 LLM 仍运行，跳过架构叙事/ADR/产品文档层）| code-only（纯 AST，< 30s，无 LLM，最快）（仅 batch）
   --hyperedges   启用 hyperedge LLM 提取（仅 batch + mode=full 生效，默认 false；可用 env SPECTRA_HYPEREDGES_ENABLED=true 等价开启）
   --enable-adr   显式启用 ADR pipeline（v4.0.1 临时禁用，将在 v4.1 evidence-binding 重构后恢复；默认 false）（仅 batch）
   --concurrency  最大并发模块数（仅 batch，默认 3；优先级 CLI > spec-driver.config.yaml batch.concurrency > 默认 3；≤0 / 非整数会规范化为 1 并打印 warn）

@@ -13,6 +13,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.js';
 import { runBatch } from '../batch/batch-orchestrator.js';
+import { resolveRegenPlan } from '../batch/regen-plan.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
 import { bootstrapRuntime } from '../runtime-bootstrap.js';
@@ -142,11 +143,18 @@ export function createMcpServer(): McpServer {
         .string()
         .optional()
         .describe('项目根目录（默认为当前工作目录）'),
-      force: z.boolean().optional().describe('强制重新生成所有 spec'),
+      full: z
+        .boolean()
+        .optional()
+        .describe('显式全量重生成（regen 轴逃生口，绕过增量 cache + checkpoint）；与 --mode full 质量维度正交'),
+      force: z
+        .boolean()
+        .optional()
+        .describe('强制重新生成所有 spec（full 的等义别名，向后兼容）'),
       incremental: z
         .boolean()
         .optional()
-        .describe('仅重生成受影响的 spec（增量模式）'),
+        .describe('仅重生成受影响的 spec（增量模式）；未指定时默认走增量（FR-001）'),
       languages: z
         .array(z.string())
         .optional()
@@ -155,9 +163,9 @@ export function createMcpServer(): McpServer {
       mode: z
         .enum(['full', 'reading', 'code-only'])
         .optional()
-        .describe('运行模式：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）'),
+        .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）'),
     },
-    async ({ projectRoot, force, incremental, languages, mode }) => {
+    async ({ projectRoot, full, force, incremental, languages, mode }) => {
       try {
         const root = projectRoot ?? process.cwd();
 
@@ -168,9 +176,15 @@ export function createMcpServer(): McpServer {
 
         // 加载项目配置作为 fallback（MCP 显式参数优先）
         const fileConfig = loadProjectConfig(root);
-        const result = await runBatch(root, {
-          force: force ?? fileConfig.force,
+        // F175 FR-002：合并 config fallback 后统一解析 regen 计划（唯一默认值来源）。
+        const regenPlan = resolveRegenPlan({
           incremental: incremental ?? fileConfig.incremental,
+          full,
+          force: force ?? fileConfig.force,
+        });
+        const result = await runBatch(root, {
+          incremental: regenPlan.incremental,
+          full: regenPlan.full,
           languages: languages ?? fileConfig.languages,
           mode: effectiveMode,
         });

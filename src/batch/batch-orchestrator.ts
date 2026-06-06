@@ -38,6 +38,7 @@ import {
 import { decideModelOverride } from './model-override-decision.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
+import { resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
 import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
@@ -45,6 +46,7 @@ import type { ModuleGraph, ModuleNode, ModuleEdge } from '../knowledge-graph/mod
 import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
 import {
   buildDocGraph,
+  isBatchGenerated,
   runAnchorIntegration,
   runHyperedgeIntegration,
   scanStoredModuleSpecs,
@@ -73,7 +75,7 @@ import {
 import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/design-docs/llm-topic-inferrer.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
-import { buildKnowledgeGraph, writeKnowledgeGraph } from '../panoramic/graph/index.js';
+import { buildKnowledgeGraph, writeKnowledgeGraph, normalizeGraphForWrite } from '../panoramic/graph/index.js';
 import {
   buildUnifiedGraph,
   setCurrentUnifiedGraph,
@@ -117,10 +119,12 @@ const ESTIMATED_FAILED_CALL_INPUT = 15_000;
 // ============================================================
 
 export interface BatchOptions {
-  /** 即使 spec 已存在也重新生成 */
+  /** 即使 spec 已存在也重新生成（--full 的等义别名，FR-003） */
   force?: boolean;
   /** 仅重生成受影响的 spec */
   incremental?: boolean;
+  /** 显式全量重生成（regen 轴逃生口，绕过增量 cache + checkpoint，FR-003） */
+  full?: boolean;
   /** 输出目录（默认 'specs'，相对路径基于 projectRoot） */
   outputDir?: string;
   /** 进度回调 */
@@ -213,6 +217,11 @@ export interface BatchResult {
   coverageReportPath?: string;
   /** 049 输出的差量分析 Markdown */
   deltaReportPath?: string;
+  /**
+   * F175：本轮增量决策的 DeltaReport 对象（增量路径生成；全量/兼容路径为 undefined）。
+   * 供调用方与 E2E 断言 mode / directChanges / propagatedChanges / regenerateTargets / fallbackReason。
+   */
+  deltaReport?: DeltaReport;
   /** 053 输出的项目级文档 Markdown 列表 */
   projectDocs?: string[];
   /** 055 输出的 bundle manifest 路径 */
@@ -246,6 +255,17 @@ const logger = createLogger('batch-orchestrator');
 // ============================================================
 // 内部辅助函数
 // ============================================================
+
+/**
+ * F175 FR-017/EC-009：判定 absPath 是否位于受管 modules/ 输出目录内（孤儿删除 ownership 必要条件2）。
+ *
+ * 用 path.relative 判定目录归属，禁用字符串 startsWith——否则 `specs/modules-old/...` 这类
+ * sibling 目录会被前缀匹配误判为受管目录（目录穿越）。同时校验 .spec.md 后缀。
+ */
+function isInManagedOutputDir(absPath: string, modulesDir: string): boolean {
+  const rel = path.relative(modulesDir, path.resolve(absPath));
+  return !rel.startsWith('..') && !path.isAbsolute(rel) && absPath.endsWith('.spec.md');
+}
 
 /**
  * 合并多个语言的 ModuleGraph 用于全局拓扑排序
@@ -384,11 +404,17 @@ export async function runBatch(
   logger.info(`[info] batch mode: ${effectiveMode}`);
 
   const {
-    force = false,
-    incremental = false,
     maxRetries = 3,
     outputDir = 'specs',
   } = options;
+
+  // F175 FR-002：唯一默认值来源——对直接调用方兜底解析 RegenPlan（CLI/MCP 已在各自入口解析后传入有效值）。
+  // 删除原 `incremental = false` 硬编码，默认增量（regenPlan.incremental）由 resolveRegenPlan 决定（FR-001）。
+  const regenPlan: RegenPlan = resolveRegenPlan({
+    incremental: options.incremental,
+    full: options.full,
+    force: options.force,
+  });
 
   const startTime = Date.now();
   const resolvedRoot = path.resolve(projectRoot);
@@ -466,41 +492,32 @@ export async function runBatch(
   const existingStoredSpecs = scanStoredModuleSpecs(resolvedOutputDir, resolvedRoot);
   const storedSpecByTarget = new Map(existingStoredSpecs.map((spec) => [spec.sourceTarget, spec]));
 
+  // F175：全量逃生口（--full / --force 合并为 regenPlan.full）打可观测日志，
+  // 替代原 fallbackReason='force-enabled' 内部信号（W-1 取舍）。
+  if (regenPlan.full) {
+    logger.info(`[regen] full regeneration (source=${regenPlan.source})`);
+  }
+
+  // F175：仅增量路径（regenPlan.incremental）调用 DeltaRegenerator；full 路径直接走全量。
   let deltaReport: DeltaReport | undefined;
-  if (incremental) {
-    if (force) {
-      deltaReport = {
-        title: 'Delta Regeneration Report',
-        generatedAt: new Date().toISOString(),
-        projectRoot: resolvedRoot,
-        mode: 'full',
-        totalTargets: groupResult.groups.reduce((sum, group) => {
-          const isRootGroup = group.name === rootModuleName || group.name.startsWith(`${rootModuleName}--`);
-          return sum + (isRootGroup ? group.files.length : 1);
-        }, 0),
-        regenerateTargets: [],
-        directChanges: [],
-        propagatedChanges: [],
-        unchangedTargets: [],
-        fallbackReason: 'force-enabled',
-      };
-    } else {
-      const deltaRegenerator = new DeltaRegenerator();
-      deltaReport = await deltaRegenerator.plan({
-        projectRoot: resolvedRoot,
-        dependencyGraph: mergedGraph,
-        moduleGroups: groupResult.groups,
-        storedSpecs: existingStoredSpecs,
-        // Bug 142：传入 effectiveMode 启用 mode-aware cache，
-        // 旧 spec（无 generatedByMode）或 mode 不匹配时强制 cache miss。
-        effectiveMode,
-      });
-    }
+  if (regenPlan.incremental) {
+    const deltaRegenerator = new DeltaRegenerator();
+    deltaReport = await deltaRegenerator.plan({
+      projectRoot: resolvedRoot,
+      dependencyGraph: mergedGraph,
+      moduleGroups: groupResult.groups,
+      storedSpecs: existingStoredSpecs,
+      // Bug 142：传入 effectiveMode 启用 mode-aware cache，
+      // 旧 spec（无 generatedByMode）或 mode 不匹配时强制 cache miss。
+      effectiveMode,
+    });
   }
 
   const regenerateTargets = new Set(deltaReport?.regenerateTargets ?? []);
-  const forceFullRegeneration = force || (incremental && deltaReport?.mode === 'full');
-  const shouldUseIncrementalPlan = incremental && !force && deltaReport?.mode === 'incremental';
+  // EC-001 force/full 优先：regenPlan.full 直接全量；增量路径 deltaReport.mode==='full'
+  //（首次运行 / 无历史 spec / mode 切换）退化全量仍走 forceFullRegeneration。
+  const forceFullRegeneration = regenPlan.full || (regenPlan.incremental && deltaReport?.mode === 'full');
+  const shouldUseIncrementalPlan = regenPlan.incremental && deltaReport?.mode === 'incremental';
 
   console.log(`发现 ${mergedGraph.modules.length} 个文件，聚合为 ${processingOrder.length} 个模块`);
   if (isMultiLang) {
@@ -611,6 +628,24 @@ export async function runBatch(
 
   // 步骤 3：检查是否存在检查点
   let state: BatchState | null = loadCheckpoint(checkpointPath);
+
+  // F175 FR-016/EC-007：full/force 启动时丢弃已加载的 checkpoint completed + failed state，
+  // 防止残留 checkpoint 命中导致全量语义被绕过（必须在 completedPaths 构建前清空——
+  // 加载时即清，而非在 processOneModule 内"忽略"，避免中途崩溃 resume 复用脏 set）。
+  // W-1：必须同时清空 failedModules——否则 full 后 summary（:1749 起用 checkedState.failedModules）
+  // 仍混入上一轮的旧失败详情，与"full 是干净全量"语义矛盾。
+  if (
+    state &&
+    regenPlan.full &&
+    (state.completedModules.length > 0 || state.failedModules.length > 0)
+  ) {
+    logger.info(
+      `[regen] full regeneration 丢弃残留 checkpoint state（completed ${state.completedModules.length} / failed ${state.failedModules.length} 模块）`,
+    );
+    state = { ...state, completedModules: [], failedModules: [] };
+    saveCheckpoint(state, checkpointPath);
+  }
+
   const isResume = state !== null;
 
   if (!state) {
@@ -623,7 +658,7 @@ export async function runBatch(
       processingOrder,
       completedModules: [],
       failedModules: [],
-      forceRegenerate: force,
+      forceRegenerate: regenPlan.full,
       // 多语言扩展字段
       languageGroups: isMultiLang
         ? Object.fromEntries(languageGroupsList.map((g) => [g.adapterId, g.files]))
@@ -708,16 +743,30 @@ export async function runBatch(
     const group = moduleGroups.get(moduleName);
     if (!group) return;
 
-    if (completedPaths.has(moduleName)) return;
-
     const isRoot = moduleName === rootModuleName || moduleName.startsWith(`${rootModuleName}--`);
     const specPath = path.join(modulesDir, `${moduleName}.spec.md`);
-    // H4 修复：文件级降级场景下 moduleSourceTarget 须与 targetPath 保持一致（文件路径）
-    // 否则 --incremental 的 regenerateTargets 查询和 storedSpecByTarget 查询全部错位
-    const hasDirPathConflict = !isRoot && group.files.length === 1 && conflictingDirPaths.has(group.dirPath);
-    const moduleSourceTarget = hasDirPathConflict
-      ? normalizeProjectPath(group.files[0]!)
-      : normalizeProjectPath(group.dirPath);
+    // FR-019：target 口径与 DeltaRegenerator 共用 resolveSourceTarget（文件级降级分支一致），
+    // 否则 --incremental 的 regenerateTargets 查询和 storedSpecByTarget 查询全部错位。
+    // T020：target 计算前移到 checkpoint 判定之前，供增量 resume 失效判定使用。
+    const moduleSourceTarget = resolveSourceTarget(group, conflictingDirPaths, isRoot);
+
+    // F175 FR-016：checkpoint 判定。full 路径已在加载时清空 completedPaths（必为干净）；
+    // 增量 resume 下若 checkpoint 命中但本轮 delta 要求重生成该 target，则失效重跑。
+    // C-3：root 模块的 regenerateTargets 是文件级（DeltaRegenerator 对 root 按每个文件
+    // 产出 snapshot），但 moduleSourceTarget（root 时为 group.dirPath）不在文件级集合里，
+    // 用 dirPath 查永远 miss → mustRegen=false → root 文件变更时 checkpoint 命中被错误跳过。
+    // 故 root 模块改判 group.files 中任一文件 target 是否命中 regenerateTargets。
+    if (completedPaths.has(moduleName)) {
+      const mustRegen =
+        shouldUseIncrementalPlan &&
+        (isRoot
+          ? group.files.some((filePath) =>
+              regenerateTargets.has(normalizeProjectPath(filePath)),
+            )
+          : regenerateTargets.has(moduleSourceTarget));
+      if (!mustRegen) return;
+    }
+
     const rootTargetsToGenerate = isRoot
       ? group.files
         .map((filePath) => normalizeProjectPath(filePath))
@@ -859,13 +908,9 @@ export async function runBatch(
             completedAt: new Date().toISOString(),
           });
         } else {
-          // BUG-A 修复：同一 dirPath 下有多个单文件模块时（如 graphify/ 下有 a.py/b.py），
-          // 使用文件路径避免多个模块覆盖同一个 {dirName}.spec.md；
-          // 否则仍使用目录路径（每个目录只有一个文件时，目录名才是有意义的模块标识）
-          // 注意：hasDirPathConflict 已在上方计算（H4 修复）
-          const targetPath = hasDirPathConflict
-            ? path.join(resolvedRoot, group.files[0]!)
-            : path.join(resolvedRoot, group.dirPath);
+          // BUG-A / H4 修复：targetPath 直接由 moduleSourceTarget 推导（FR-019：resolveSourceTarget
+          // 已处理"同一 dirPath 多单文件冲突走文件路径"的降级分支），与 sourceTarget 口径保持一致。
+          const targetPath = path.join(resolvedRoot, moduleSourceTarget);
           // genOptions.skipEnrichment 已在 L648 处理 reading/code-only 模式分派
           const result = await generateSpec(targetPath, {
             ...genOptions,
@@ -1049,13 +1094,55 @@ export async function runBatch(
   let projectDocsResult: BatchProjectDocsResult | undefined;
   let docsBundleManifestPath: string | undefined;
   let docsBundleProfiles: DocsBundleProfileSummary[] | undefined;
-  // SpecStore 统一查询入口：所有消费方（README、graph、coverage、index、cross-ref）共享此源
+  // F175 FR-017/EC-008/EC-009：删除孤儿 spec（源文件已删除的 batch 产物），使增量产物文件集与全量一致。
+  // 必须在构造 SpecStore 之前执行 + 从 storedSpecs 集合中剔除已删项（C-2）——否则后续
+  // 所有聚合（index/graph/coverage/cross-ref）仍引用陈旧的已删 spec 视图，产生 stale 输出。
+  // 仅在增量/全量路径执行；ownership 边界缺一不删：(1) generatedByMode 存在（batch 专属标记）+
+  // (2) 位于受管 modules/ 输出目录内（path.relative 防目录穿越，禁字符串 startsWith）+
+  // (3) sourceTarget 已无任何在库源文件（EC-008：删除模块最后一个源文件后，空目录仍 existsSync=true，
+  //     故不能仅靠目录存在性判定——以当前扫描到的源文件集合为准）。
+  let storedSpecsForStore = existingStoredSpecs;
+  if (regenPlan.incremental || regenPlan.full) {
+    // 当前扫描到的源文件（项目相对，正斜杠口径），用于判定 sourceTarget 是否仍有活跃源文件
+    const liveSourceFiles = new Set(scanResult.files.map((f) => normalizeProjectPath(f)));
+    const hasLiveSource = (sourceTarget: string): boolean => {
+      const prefix = `${sourceTarget}/`;
+      for (const f of liveSourceFiles) {
+        if (f === sourceTarget || f.startsWith(prefix)) return true;
+      }
+      return false;
+    };
+    // 已确认删除的孤儿 outputPath 集合，用于从 storedSpecs 中剔除，使 SpecStore 不持有陈旧视图。
+    const deletedOrphanPaths = new Set<string>();
+    for (const orphan of existingStoredSpecs) {
+      if (!isBatchGenerated(orphan)) continue; // 必要条件1：无 generatedByMode → 跳过（防误删手写 / 单文件 generate 产物）
+      if (hasLiveSource(orphan.sourceTarget)) continue; // 必要条件3：仍有活跃源文件 → 非孤儿
+      const absPath = path.isAbsolute(orphan.outputPath)
+        ? orphan.outputPath
+        : path.join(resolvedRoot, orphan.outputPath);
+      if (!isInManagedOutputDir(absPath, modulesDir)) continue; // 必要条件2：受管 modules/ 目录外 → 跳过
+      // 即便磁盘文件已被本轮其它逻辑清理，仍要从 storedSpecs 集合剔除（保持内存视图与磁盘一致）。
+      deletedOrphanPaths.add(orphan.outputPath);
+      if (!fs.existsSync(absPath)) continue;
+      logger.info(`[orphan-cleanup] 删除孤儿 spec: ${orphan.outputPath}`);
+      fs.rmSync(absPath, { force: true });
+    }
+    if (deletedOrphanPaths.size > 0) {
+      storedSpecsForStore = existingStoredSpecs.filter(
+        (spec) => !deletedOrphanPaths.has(spec.outputPath),
+      );
+    }
+  }
+
+  // SpecStore 统一查询入口：所有消费方（README、graph、coverage、index、cross-ref）共享此源。
+  // 使用已剔除孤儿的 storedSpecsForStore，确保后续聚合不引用已删 spec（C-2）。
   const specStore = new SpecStore({
     currentSpecs: collectedModuleSpecs,
-    storedSpecs: existingStoredSpecs,
+    storedSpecs: storedSpecsForStore,
     projectRoot: resolvedRoot,
     toProjectPath,
   });
+
   const projectDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.PROJECT);
   const metaDir = path.join(resolvedOutputDir, BATCH_OUTPUT_SUBDIRS.META);
   try {
@@ -1462,6 +1549,10 @@ export async function runBatch(
         logger.warn(`community-analysis: 社区分析失败，跳过报告生成: ${communityErr instanceof Error ? communityErr.message : String(communityErr)}`);
       }
 
+      // F175 FR-006/FR-007：写盘前归一化（byte-stable）——nodes/links/hyperedges 确定性排序，
+      // 在追加 semantic edges + 社区分析之后调用，覆盖完整边集。
+      normalizeGraphForWrite(graphJson);
+
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
       docGraphPath = toProjectPath(graphWrittenPath);
@@ -1732,6 +1823,7 @@ export async function runBatch(
     docGraphPath,
     coverageReportPath,
     deltaReportPath,
+    deltaReport,
     projectDocs,
     docsBundleManifestPath,
     docsBundleProfiles,

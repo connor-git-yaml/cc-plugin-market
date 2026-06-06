@@ -13,6 +13,7 @@ import {
 } from '../panoramic/builders/doc-graph-builder.js';
 import { loadTemplate } from '../panoramic/utils/template-loader.js';
 import type { ModuleGroup } from './module-grouper.js';
+import { resolveSourceTarget } from './regen-plan.js';
 
 const ROOT_MODULE_RE = /^root(?:--.+)?$/;
 
@@ -220,6 +221,18 @@ async function collectCurrentSnapshots(
 ): Promise<CurrentTargetSnapshot[]> {
   const snapshots: CurrentTargetSnapshot[] = [];
 
+  // FR-019：与 batch-orchestrator:673-684 同口径计算目录冲突集合（单文件模块共享 dirPath 时
+  // 走文件级降级），供 resolveSourceTarget 判定 sourceTarget，消除与 processOneModule 的口径错位。
+  const dirPathGroupCount = new Map<string, number>();
+  for (const group of moduleGroups) {
+    if (group.files.length === 1) {
+      dirPathGroupCount.set(group.dirPath, (dirPathGroupCount.get(group.dirPath) ?? 0) + 1);
+    }
+  }
+  const conflictingDirPaths = new Set(
+    [...dirPathGroupCount.entries()].filter(([, count]) => count > 1).map(([dirPath]) => dirPath),
+  );
+
   for (const group of moduleGroups) {
     if (ROOT_MODULE_RE.test(group.name)) {
       for (const filePath of group.files) {
@@ -234,7 +247,7 @@ async function collectCurrentSnapshots(
     }
 
     snapshots.push({
-      sourceTarget: normalizeProjectPath(group.dirPath),
+      sourceTarget: resolveSourceTarget(group, conflictingDirPaths, false),
       sourceFiles: group.files.map((filePath) => normalizeProjectPath(filePath)).sort((a, b) => a.localeCompare(b)),
       currentHash: await computeSkeletonHash(projectRoot, group.files),
     });

@@ -76,4 +76,17 @@ master HEAD: bb97d70 ✓
         - W-3 env delete 无恢复→save/restore
     - fix 后复跑：场景6 loadCheckpoint 通过、失败于真实 full-bypass 断言；场景7 失败于 deltaReport undefined（均为正确 RED）
 - [commit] (pending) test(175): [RED]
-- ⏸ 下一步: Phase 2 [GREEN] T013-T031（破坏性默认翻转 + --full + byte-stable + checkpoint/孤儿/target，进入前向用户确认）→ Phase 3 → verify
+- [GATE 破坏性确认] 用户问破坏性影响 → 主线给完整分析（手编覆盖/孤儿删/MCP需显式full/老项目首次全量一次性）→ 用户"按原设计推进"
+- [phase 6 implement] Phase 2 [GREEN] (T013-T031): COMPLETED | model=opus
+    - 默认翻转三入口 + --full + checkpoint clear + byte-stable normalize + 孤儿删除 + target 统一
+    - 改 10 生产文件；25 RED→绿；full suite 3898 passed / 0 failed / build 0
+    - 主线收口核查：regenPlan wiring 保 3-way 语义 / 孤儿 3 条件保守 / inputHash 内容哈希(Read 验证) / T027 同口径
+    - CODEX 对抗审查: 3 CRITICAL + 3 WARNING（深层真 bug）全修：
+        - C-1 currentRun 运行态字段污染 graph.json + inputHash → 节点 metadata 剥除 + 入 VOLATILE_FIELD_NAMES（byte-stable 结构性破坏）
+        - C-2 孤儿删除在 SpecStore 构造后→陈旧视图 → 前移 + 过滤 storedSpecsForStore
+        - C-3 root checkpoint 用 dirPath 错位 file-level target → group.files.some
+        - W-1 full 不清 failedModules / W-2 源码真实 NUL 破坏 grep→\x1f / W-3 补 byte-stable E2E 场景10
+    - CODEX 复审: 全 CLOSED + 无新问题；场景10 byte-stable deepEqual 实跑通过（exit 0）
+    - W-2 NUL 解释了本轮 grep 静默失效之谜
+- [commit] (pending) feat(175): [GREEN]
+- ⏸ 下一步: Phase 3 [REFACTOR] T032-T039（接入审查 + help 文案 + repo:check）→ verify(6.5/7a/7b/7c)

@@ -44,6 +44,16 @@ export interface StoredModuleSpecSummary extends ExistingSpecDocument {
   generatedByMode?: 'full' | 'reading' | 'code-only';
 }
 
+/**
+ * F175 FR-017/EC-009：判定一个 spec 是否为 batch 自身生成的产物（孤儿删除的 ownership 必要条件）。
+ *
+ * 必须用 `generatedByMode`（runBatch 写入）而非 `generatedBy`——后者对所有 spectra 生成的 spec
+ * （含 `spectra generate` 单文件产物）都写入，会把非 batch 产物误判为 batch 产物。
+ */
+export function isBatchGenerated(summary: StoredModuleSpecSummary): boolean {
+  return summary.generatedByMode != null;
+}
+
 export interface DocGraphSpecNode {
   specPath: string;
   sourceTarget: string;

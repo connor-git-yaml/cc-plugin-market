@@ -442,6 +442,9 @@ export function runBatchAndCapture({ targetPath, mode, outputDir }) {
     cliPath,
     'batch',
     targetPath,
+    // F175/OQ-4：显式 --full 使"基线永远全量"自文档化，与 outputDir 清理逻辑解耦
+    //（默认翻转后不传 regen 轴会走增量，须显式声明全量以保证基线不被增量 cache 污染）。
+    '--full',
     '--mode',
     mode,
     '--output-dir',
@@ -483,7 +486,7 @@ export function runBatchAndCapture({ targetPath, mode, outputDir }) {
 export function runDryRun({ targetPath, mode }) {
   const cliPath = path.join(PROJECT_ROOT, 'dist/cli/index.js');
   if (!fs.existsSync(cliPath)) return { estimatedTokens: null, note: 'cli-not-built' };
-  const r = spawnSync('node', [cliPath, 'batch', targetPath, '--mode', mode, '--dry-run'], {
+  const r = spawnSync('node', [cliPath, 'batch', targetPath, '--full', '--mode', mode, '--dry-run'], {
     encoding: 'utf-8',
     maxBuffer: 16 * 1024 * 1024,
   });

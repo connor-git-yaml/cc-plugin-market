@@ -173,10 +173,13 @@ describe('CLI 命令执行器', () => {
       '2.0.0',
     );
 
+    // F175 FR-002：--force 经 resolveRegenPlan 解析为 { incremental:false, full:true }（force 是 full 等义别名），
+    // 不再原样透传 force 字段——runBatch options 改收已解析的 incremental/full 真值。
     expect(mocks.runBatch).toHaveBeenCalledWith(
       process.cwd(),
       expect.objectContaining({
-        force: true,
+        full: true,
+        incremental: false,
         outputDir: 'custom-specs',
       }),
     );

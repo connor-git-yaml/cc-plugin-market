@@ -5,6 +5,7 @@
 
 import { resolve } from 'node:path';
 import { runBatch } from '../../batch/batch-orchestrator.js';
+import { resolveRegenPlan } from '../../batch/regen-plan.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
 import { readBatchConcurrency } from '../../config/spec-driver-config.js';
@@ -57,6 +58,14 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       command._explicitFlags ?? new Set(),
     );
 
+    // F175 FR-002：合并后统一解析 regen 计划（唯一默认值来源，消除三处漂移）。
+    // --full（regen 轴逃生口）仅来自 CLI，不参与 config 合并；--force 为等义别名（已合并）。
+    const regenPlan = resolveRegenPlan({
+      incremental: merged.incremental,
+      full: command.full,
+      force: merged.force,
+    });
+
     // Feature 135 Bug 4：reading 模式 TTY hint
     // 避免用户误以为 reading 模式是"快速模式"——模块级 LLM 仍会运行
     if (command.batchMode === 'reading' && process.stdout.isTTY) {
@@ -67,8 +76,9 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     }
 
     const result = await runBatch(projectRoot, {
-      force: merged.force,
-      incremental: merged.incremental,
+      // F175：传入已解析的 RegenPlan 真值（runBatch 内对直接调用方仍会兜底解析，幂等）。
+      incremental: regenPlan.incremental,
+      full: regenPlan.full,
       languages: merged.languages,
       outputDir: merged.outputDir,
       concurrency: resolveBatchConcurrency(command.concurrency, projectRoot),

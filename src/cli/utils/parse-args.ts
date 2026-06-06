@@ -10,6 +10,8 @@ export interface CLICommand {
   specFile?: string;
   deep: boolean;
   force: boolean;
+  /** 显式全量重生成（regen 轴逃生口，绕过增量 cache + checkpoint，仅 batch）；--force 为等义别名 */
+  full?: boolean;
   incremental?: boolean;
   /** 语言过滤（如 ['typescript', 'python']），仅处理指定语言（仅 batch） */
   languages?: string[];
@@ -701,6 +703,8 @@ export function parseArgs(argv: string[]): ParseResult {
   // 提取选项
   const deep = argv.includes('--deep');
   const force = argv.includes('--force');
+  // F175 FR-003：--full 显式全量逃生口（regen 轴）；--force 为等义别名（向后兼容）
+  const full = argv.includes('--full');
   const incremental = argv.includes('--incremental');
   const outputDirIdx = argv.indexOf('--output-dir');
   const outputDir = outputDirIdx !== -1 ? argv[outputDirIdx + 1] : undefined;
@@ -742,6 +746,7 @@ export function parseArgs(argv: string[]): ParseResult {
   if (sub === 'batch') {
     const explicitFlags = new Set<string>();
     if (argv.includes('--force')) explicitFlags.add('force');
+    if (argv.includes('--full')) explicitFlags.add('full');
     if (argv.includes('--incremental')) explicitFlags.add('incremental');
     if (languagesIdx !== -1) explicitFlags.add('languages');
     if (outputDirIdx !== -1) explicitFlags.add('outputDir');
@@ -867,6 +872,7 @@ export function parseArgs(argv: string[]): ParseResult {
         target: positional[0], // batch 目标目录（可选，默认 cwd）
         deep: false,
         force,
+        full: full || undefined,
         incremental,
         languages,
         outputDir,
