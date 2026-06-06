@@ -606,4 +606,20 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
     expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
   });
+
+  it('R-019 [W-2]: 旧 `#` 分隔符格式 → partial-name 正确提取 symbol 段（防回归）', () => {
+    // 旧 panoramic 格式 <file>#<symbol>；query bare 'Widget' 应 partial-name 唯一命中
+    const legacy = {
+      nodes: [
+        { id: 'old/ui.py#Widget', kind: 'component', label: 'Widget', metadata: {} },
+        { id: 'old/ui.py#Button', kind: 'component', label: 'Button', metadata: {} },
+      ],
+      links: [],
+      metadata: {},
+    } as unknown as GraphJSON;
+    const r = resolveSymbolFuzzy(legacy, 'Widget');
+    expect(r.candidates[0]?.matchKind).toBe('partial-name');
+    expect(r.candidates[0]?.id).toBe('old/ui.py#Widget');
+    expect(r.autoResolved).toBe(true);
+  });
 });

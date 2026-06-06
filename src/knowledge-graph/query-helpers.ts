@@ -247,6 +247,162 @@ export interface FuzzyResolveOptions {
   autoResolveThreshold?: number;
 }
 
+/** path-suffix 层锁定的精确常量（FR-003 边界规则：恰好满足 >= 0.9） */
+const PATH_SUFFIX_CONFIDENCE = 0.9;
+/** autoResolve 阈值下限（production floor，FR-012） */
+const AUTO_RESOLVE_FLOOR = 0.9;
+/** Levenshtein 相对距离阈值（distance/maxLen ≤ 0.35 才纳入候选） */
+const LEVENSHTEIN_RATIO = 0.35;
+/** 超过此长度跳过 Levenshtein 层，防 O(m×n) 退化（FR-010） */
+const LEVENSHTEIN_MAX_QUERY_LEN = 512;
+
+/**
+ * 取 nodeId 文件分隔符之后的 symbol 段（无分隔符则返回整个 nodeId）。
+ *
+ * 兼容两种分隔符（与 moduleFileFromId 取最早分隔符一致）：
+ *   - Feature 151 格式 `<file>::<symbolName>`（例 `engine.py::Value.__add__`）
+ *   - 旧 panoramic 格式 `<file>#<symbolName>`（例 `engine.py#Value`）
+ * 兼容 `#` 避免对旧格式 graph 的 partial-name 回归（Codex GREEN W-2）。
+ */
+function symbolSeg(nodeId: string): string {
+  const idxColon = nodeId.indexOf('::');
+  const idxHash = nodeId.indexOf('#');
+  let cut = -1;
+  let sepLen = 0;
+  if (idxColon >= 0 && (idxHash < 0 || idxColon <= idxHash)) {
+    cut = idxColon;
+    sepLen = 2;
+  } else if (idxHash >= 0) {
+    cut = idxHash;
+    sepLen = 1;
+  }
+  return cut >= 0 ? nodeId.slice(cut + sepLen) : nodeId;
+}
+
+/**
+ * 生成 typo 比对用的多种表示集合（Feature 174 C-1 修复）。
+ *
+ * 不能只对完整 node.id 算 Levenshtein —— `micrograd/` 等 package 前缀会把 typo 距离
+ * 推到阈值之外。这里额外提供去前缀的 `basename(file)::symbol` 与纯 symbol 表示，
+ * 让拼写错误的相对距离回落到可命中范围。
+ */
+function nodeMatchReps(nodeId: string): string[] {
+  const reps = new Set<string>([nodeId]);
+  const seg = symbolSeg(nodeId);
+  reps.add(seg);
+  const filePart = moduleFileFromId(nodeId);
+  const base = filePart.split('/').pop() ?? filePart;
+  if (nodeId.includes('::')) {
+    reps.add(base + '::' + seg);
+  } else {
+    reps.add(base);
+  }
+  return [...reps];
+}
+
+/** 层 (b) path-suffix：query 含路径语义（`::` 或 `/`）时，按 `/`+query 后缀匹配 */
+function layerPathSuffix(graphData: Readonly<GraphJSON>, query: string): SymbolCandidate[] {
+  // C-2 修复：bare 单 token（无 `::` 无 `/`）必须落到 partial-name 层，
+  // 否则可能误匹配某个 `*/Value` 文件节点并以 0.9 抢先 autoResolve。
+  if (!query.includes('::') && !query.includes('/')) return [];
+  const lowerQuery = query.toLowerCase();
+  const results: SymbolCandidate[] = [];
+  for (const node of graphData.nodes) {
+    const lowerId = node.id.toLowerCase();
+    if (lowerId === lowerQuery || lowerId.endsWith('/' + lowerQuery)) {
+      results.push({ id: node.id, confidence: PATH_SUFFIX_CONFIDENCE, matchKind: 'path-suffix' });
+    }
+  }
+  return results;
+}
+
+/**
+ * 层 (c) partial-name：query 仅含方法名/类名时按唯一性加权。
+ *
+ * 匹配条件：symbolSeg(node) === query 或 symbolSeg(node).endsWith('.' + query)（大小写不敏感）。
+ * 打分（Open Question A 决策）：
+ *   - 唯一命中（matchCount === 1）：qualified `Class.method` → 0.95，bare 单 token → 0.90
+ *   - 多义（matchCount > 1）：max(0.70, 0.85 - rank * (0.15 / (matchCount - 1)))，按相对唯一性递减
+ */
+function layerPartialName(graphData: Readonly<GraphJSON>, query: string): SymbolCandidate[] {
+  const lowerQuery = query.toLowerCase();
+  const isQualified = query.includes('.');
+  const matched: string[] = [];
+  for (const node of graphData.nodes) {
+    const seg = symbolSeg(node.id).toLowerCase();
+    if (seg === lowerQuery || seg.endsWith('.' + lowerQuery)) {
+      matched.push(node.id);
+    }
+  }
+  const matchCount = matched.length;
+  if (matchCount === 0) return [];
+  return matched.map((id, rank) => {
+    let confidence: number;
+    if (matchCount === 1) {
+      confidence = isQualified ? 0.95 : 0.9;
+    } else {
+      confidence = Math.max(0.7, 0.85 - rank * (0.15 / (matchCount - 1)));
+    }
+    return { id, confidence, matchKind: 'partial-name' as MatchKind };
+  });
+}
+
+/**
+ * 层 (d) Levenshtein：对每个 node 的多种表示取相对距离最小者（C-1 修复）。
+ *
+ * 仅纳入相对编辑距离 ≤ LEVENSHTEIN_RATIO 的候选；confidence 线性映射到 [0.50, 0.75]。
+ */
+function layerLevenshtein(graphData: Readonly<GraphJSON>, query: string): SymbolCandidate[] {
+  const lowerQuery = query.toLowerCase();
+  const results: SymbolCandidate[] = [];
+  for (const node of graphData.nodes) {
+    let bestRatio = Infinity;
+    let bestConf = 0;
+    for (const rep of nodeMatchReps(node.id)) {
+      const r = rep.toLowerCase();
+      const threshold = Math.ceil(Math.max(lowerQuery.length, r.length) * LEVENSHTEIN_RATIO);
+      if (threshold === 0) continue;
+      // 长度差剪枝（Codex GREEN W-1）：|len(a)-len(b)| 是编辑距离的精确下界，
+      // 超阈值必然不命中，跳过 DP 计算——结果不变，避免长 nodeId 上的性能退化。
+      if (Math.abs(lowerQuery.length - r.length) > threshold) continue;
+      const dist = levenshtein(lowerQuery, r);
+      if (dist > threshold) continue;
+      const ratio = dist / threshold;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        bestConf = Math.max(0.5, Math.min(0.75, 0.75 - ratio * 0.25));
+      }
+    }
+    if (bestRatio !== Infinity) {
+      results.push({ id: node.id, confidence: bestConf, matchKind: 'levenshtein' });
+    }
+  }
+  return results;
+}
+
+/** 去重：同 id 保留最高 confidence */
+function deduplicateCandidates(raw: SymbolCandidate[]): SymbolCandidate[] {
+  const best = new Map<string, SymbolCandidate>();
+  for (const c of raw) {
+    const prev = best.get(c.id);
+    if (prev === undefined || c.confidence > prev.confidence) best.set(c.id, c);
+  }
+  return [...best.values()];
+}
+
+/**
+ * 去重 → 按 confidence 降序 → 判定 autoResolved → top-N。
+ *
+ * C-3 修复：autoResolved 用**去重后、slice 之前**的 deduped.length 判唯一，
+ * 不能用 slice(0,limit) 后的长度，否则 limit=1 会把多候选误判为唯一候选。
+ */
+function buildResult(raw: SymbolCandidate[], limit: number, threshold: number): FuzzyResolveResult {
+  const deduped = deduplicateCandidates(raw);
+  deduped.sort((a, b) => b.confidence - a.confidence);
+  const autoResolved = deduped.length === 1 && deduped[0]!.confidence >= threshold;
+  return { candidates: deduped.slice(0, limit), autoResolved };
+}
+
 /**
  * 分层 fuzzy 解析 symbol id（Feature 174）。
  *
@@ -254,17 +410,74 @@ export interface FuzzyResolveOptions {
  *   (a) exact      — 复用 canonicalizeSymbolId，confidence 1.0
  *   (b) path-suffix — 文件路径后缀匹配，confidence 0.9
  *   (c) partial-name — 仅方法名/类名，按唯一性加权（唯一 ≥0.9 / 多义 0.7~0.85）
- *   (d) levenshtein — 拼写相似，confidence 0.5~0.75
+ *   (d) levenshtein — 拼写相似，confidence 0.5~0.75（query > 512 跳过）
  *
- * NOTE(174 RED-T002a): 当前为 stub 实现，GREEN 阶段（T005~T011）替换为真实分层逻辑。
- * stub 让测试文件可编译收集，使断言在"返回空"处真红（而非整文件收集失败）。
+ * autoResolved = 去重后唯一候选 且 confidence ≥ max(0.9, opts.autoResolveThreshold)。
+ * 空 / 纯空白 / 含控制字符 query → { candidates: [], autoResolved: false }（不抛异常）。
+ * graphData 只读。
  */
 export function resolveSymbolFuzzy(
-  _graphData: Readonly<GraphJSON>,
-  _query: string,
-  _opts: FuzzyResolveOptions = {},
+  graphData: Readonly<GraphJSON>,
+  query: string,
+  opts: FuzzyResolveOptions = {},
 ): FuzzyResolveResult {
+  const limit = opts.limit ?? 10;
+  // floor：production 阈值不得低于 0.9（FR-012，防绕过 FR-003 硬阈值）
+  const threshold = Math.max(AUTO_RESOLVE_FLOOR, opts.autoResolveThreshold ?? AUTO_RESOLVE_FLOOR);
+
+  // 前置 guard：空 / 纯空白 / 控制字符
+  if (typeof query !== 'string') return { candidates: [], autoResolved: false };
+  const trimmed = query.trim();
+  if (trimmed.length === 0 || CONTROL_CHAR_RE.test(query)) {
+    return { candidates: [], autoResolved: false };
+  }
+
+  // 层 (a) exact —— 复用 canonicalizeSymbolId
+  const canon = canonicalizeSymbolId(query, graphData, { projectRoot: opts.projectRoot });
+  if (canon.reason === 'ok' && canon.canonicalId !== null) {
+    return {
+      candidates: [{ id: canon.canonicalId, confidence: 1.0, matchKind: 'exact' }],
+      autoResolved: true, // exact 必然唯一且 1.0 >= threshold
+    };
+  }
+
+  // 层 (b) path-suffix
+  const pathSuffix = layerPathSuffix(graphData, query);
+  if (pathSuffix.length > 0) return buildResult(pathSuffix, limit, threshold);
+
+  // 层 (c) partial-name
+  const partialName = layerPartialName(graphData, query);
+  if (partialName.length > 0) return buildResult(partialName, limit, threshold);
+
+  // 层 (d) Levenshtein（query 过长跳过，防性能退化）
+  if (query.length <= LEVENSHTEIN_MAX_QUERY_LEN) {
+    const lev = layerLevenshtein(graphData, query);
+    if (lev.length > 0) return buildResult(lev, limit, threshold);
+  }
+
   return { candidates: [], autoResolved: false };
+}
+
+/**
+ * Levenshtein 编辑距离 — 标准 DP 滚动数组（O(min(m,n)) 空间）。
+ * 实现照搬 src/panoramic/pipelines/adr-evidence-verifier.ts 的私有实现（Feature 174 FR-011）。
+ */
+function levenshtein(a: string, b: string): number {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  const sm = shorter.length;
+  const ln = longer.length;
+  let prev: number[] = Array.from({ length: sm + 1 }, (_, i) => i);
+  for (let i = 1; i <= ln; i++) {
+    const curr: number[] = [i];
+    for (let j = 1; j <= sm; j++) {
+      const cost = longer[i - 1] === shorter[j - 1] ? 0 : 1;
+      curr.push(Math.min(prev[j]! + 1, curr[j - 1]! + 1, prev[j - 1]! + cost));
+    }
+    prev = curr;
+  }
+  return prev[sm]!;
 }
 
 /**

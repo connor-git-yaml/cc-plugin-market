@@ -9,7 +9,7 @@
  * 数据流：
  *   getCachedGraphData(projectRoot)  // 来自 graph-tools.ts，含 mtime/size stale 检测
  *     ↓
- *   query-helpers.ts (bfsTraverse / canonicalizeSymbolId / findFuzzyMatches / ...)
+ *   query-helpers.ts (bfsTraverse / canonicalizeSymbolId / resolveSymbolFuzzy / ...)
  *     ↓
  *   tool handler 输出 JSON envelope
  *
@@ -29,7 +29,7 @@ import {
   bfsTraverse,
   canonicalizeSymbolId,
   computeRiskTier,
-  findFuzzyMatches,
+  resolveSymbolFuzzy,
   findNode,
   moduleFileFromId,
   resolveEdgeConfidence,
@@ -126,16 +126,26 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     if (canon.reason === 'invalid') {
       return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `target 含非法字符或格式: ${args.target}`));
     }
+    // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
+    let startId: string;
+    let fuzzyResolved: { from: string; to: string; confidence: number } | null = null;
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
-      const fuzzy = findFuzzyMatches(graphData, args.target, 5);
-      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
-        'symbol-not-found',
-        `target 在 graph 中未找到: ${args.target}`,
-        '请检查 symbol id 格式或参考 fuzzyMatches 候选',
-        { fuzzyMatches: fuzzy },
-      ));
+      const fuzzy = resolveSymbolFuzzy(graphData, args.target, { projectRoot });
+      if (fuzzy.autoResolved && fuzzy.candidates[0] !== undefined) {
+        startId = fuzzy.candidates[0].id;
+        fuzzyResolved = { from: args.target, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
+        warnings.push('fuzzy-resolved');
+      } else {
+        return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
+          'symbol-not-found',
+          `target 在 graph 中未找到: ${args.target}`,
+          '请检查 symbol id 格式或参考 fuzzyMatches 候选',
+          { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
+        ));
+      }
+    } else {
+      startId = canon.canonicalId;
     }
-    const startId = canon.canonicalId;
 
     // BFS
     const r = bfsTraverse(graphData, startId, {
@@ -168,6 +178,12 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
       effectiveDirection: direction,
     };
     if (warnings.length > 0) data['warnings'] = warnings;
+    // F174：autoResolved 时附加 resolve 溯源字段
+    if (fuzzyResolved !== null) {
+      data['resolvedFrom'] = fuzzyResolved.from;
+      data['resolvedTo'] = fuzzyResolved.to;
+      data['resolvedConfidence'] = fuzzyResolved.confidence;
+    }
 
     // F170c enrichment 三路径（plan G 节）：临时变量 + 显式 catch reset 避免 partial fill
     let topImpacted: TopImpacted[];
@@ -251,37 +267,51 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
 
     const include = args.include ?? ['callers', 'callees', 'imports'];
 
+    // F174：context handler 引入 warnings 数组（原本无此字段），承载 'fuzzy-resolved' 等
+    const warnings: string[] = [];
+
     const canon = canonicalizeSymbolId(args.symbolId, graphData, { projectRoot });
     if (canon.reason === 'invalid') {
       return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `symbolId 含非法字符: ${args.symbolId}`));
     }
+    // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
+    let resolvedId: string;
+    let fuzzyResolved: { from: string; to: string; confidence: number } | null = null;
     if (canon.reason === 'not-found' || canon.canonicalId === null) {
-      const fuzzy = findFuzzyMatches(graphData, args.symbolId, 5);
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
-        'symbol-not-found',
-        `symbolId 在 graph 中未找到: ${args.symbolId}`,
-        '请检查 id 格式或参考 fuzzyMatches 候选',
-        { fuzzyMatches: fuzzy },
-      ));
+      const fuzzy = resolveSymbolFuzzy(graphData, args.symbolId, { projectRoot });
+      if (fuzzy.autoResolved && fuzzy.candidates[0] !== undefined) {
+        resolvedId = fuzzy.candidates[0].id;
+        fuzzyResolved = { from: args.symbolId, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
+        warnings.push('fuzzy-resolved');
+      } else {
+        return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
+          'symbol-not-found',
+          `symbolId 在 graph 中未找到: ${args.symbolId}`,
+          '请检查 id 格式或参考 fuzzyMatches 候选',
+          { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
+        ));
+      }
+    } else {
+      resolvedId = canon.canonicalId;
     }
 
-    const node = findNode(graphData, canon.canonicalId);
+    const node = findNode(graphData, resolvedId);
     if (node === null) {
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('symbol-not-found', `节点对象未找到: ${canon.canonicalId}`));
+      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('symbol-not-found', `节点对象未找到: ${resolvedId}`));
     }
 
     const definition = buildDefinition(node);
     const data: Record<string, unknown> = { definition };
 
     if (include.includes('callers')) {
-      data['callers'] = collectNeighbors(graphData, canon.canonicalId, 'inbound', 'calls');
+      data['callers'] = collectNeighbors(graphData, resolvedId, 'inbound', 'calls');
     }
     if (include.includes('callees')) {
-      data['callees'] = collectNeighbors(graphData, canon.canonicalId, 'outbound', 'calls');
+      data['callees'] = collectNeighbors(graphData, resolvedId, 'outbound', 'calls');
     }
     if (include.includes('imports')) {
       // imports 来自 module 节点的 outbound depends-on / cross-module
-      const moduleId = moduleFileFromId(canon.canonicalId);
+      const moduleId = moduleFileFromId(resolvedId);
       const importEntries = collectNeighbors(graphData, moduleId, 'outbound', 'depends-on').concat(
         collectNeighbors(graphData, moduleId, 'outbound', 'cross-module'),
       );
@@ -293,8 +323,15 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
       }));
     }
     if (include.includes('related-spec')) {
-      data['relatedSpec'] = deriveRelatedSpec(canon.canonicalId, projectRoot);
+      data['relatedSpec'] = deriveRelatedSpec(resolvedId, projectRoot);
     }
+    // F174：autoResolved 时附加 resolve 溯源字段 + warnings
+    if (fuzzyResolved !== null) {
+      data['resolvedFrom'] = fuzzyResolved.from;
+      data['resolvedTo'] = fuzzyResolved.to;
+      data['resolvedConfidence'] = fuzzyResolved.confidence;
+    }
+    if (warnings.length > 0) data['warnings'] = warnings;
 
     // F170c enrichment 三路径（plan G 节）
     const callersRaw = (data['callers'] as Array<{ id: string; confidence: number; relation?: string }> | undefined) ?? [];
