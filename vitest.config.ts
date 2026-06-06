@@ -67,6 +67,19 @@ export default defineConfig({
           lines: 95,
           statements: 95,
         },
+        // Feature 171 SC-005：file-nav 两模块 per-file ≥ 95%
+        'src/mcp/file-nav-tools.ts': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
+        'src/mcp/lib/file-nav-helpers.ts': {
+          branches: 95,
+          functions: 95,
+          lines: 95,
+          statements: 95,
+        },
       },
     },
 

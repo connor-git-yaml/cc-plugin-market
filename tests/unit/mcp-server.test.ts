@@ -79,7 +79,10 @@ describe('createMcpServer', () => {
       'batch', 'context', 'detect_changes', 'diff', 'generate',
       'graph_community', 'graph_god_nodes', 'graph_hyperedges', 'graph_node', 'graph_path', 'graph_query',
       'impact',
+      'list_directory',
       'panoramic-query', 'prepare',
+      'search_in_file',
+      'view_file',
     ]);
   });
 

@@ -83,7 +83,7 @@ describe.skipIf(SHOULD_SKIP)(
       if (tempRoot) rmSync(tempRoot, { recursive: true, force: true });
     });
 
-    it('T-A1: tools/list 返回 ≥ 9 个 tool（含 impact / context / detect_changes）', async () => {
+    it('T-A1: tools/list 返回 ≥ 12 个 tool（含 agent-context + file-nav）', async () => {
       const result = await client.listTools();
       const names = result.tools.map((t) => t.name);
 
@@ -92,14 +92,19 @@ describe.skipIf(SHOULD_SKIP)(
       expect(names).toContain('context');
       expect(names).toContain('detect_changes');
 
+      // file-navigation tools（Feature 171）
+      expect(names).toContain('view_file');
+      expect(names).toContain('search_in_file');
+      expect(names).toContain('list_directory');
+
       // 基础工具
       expect(names).toContain('prepare');
       expect(names).toContain('generate');
       expect(names).toContain('batch');
       expect(names).toContain('diff');
 
-      // 总数 ≥ 9
-      expect(names.length).toBeGreaterThanOrEqual(9);
+      // 总数 ≥ 12
+      expect(names.length).toBeGreaterThanOrEqual(12);
     }, 15_000);
 
     it('T-A2: impact tool — graph-not-built 错误（tempRoot 无 graph, 绝对 projectRoot 指向有 graph 的 tempRoot）', async () => {

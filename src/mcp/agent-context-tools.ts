@@ -19,7 +19,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -46,193 +46,19 @@ import {
 } from './lib/response-helpers.js';
 
 // ============================================================
-// 错误响应
+// 共享响应原语 + Telemetry（Feature 171 抽到 lib/ 复用，解 C-4 / TELEMETRY-COUPLING）
 // ============================================================
 
-type ErrorCode =
-  | 'graph-not-built'
-  | 'symbol-not-found'
-  | 'invalid-symbol-id'
-  | 'invalid-input'
-  | 'invalid-diff'
-  | 'payload-too-large'
-  | 'git-spawn-failed'
-  | 'git-timeout'
-  | 'internal-error';
+import {
+  buildErrorResponse,
+  buildSuccessResponse,
+  type ErrorCode,
+  type ToolResult,
+} from './lib/tool-response.js';
+import { recordAndReturn } from './lib/telemetry.js';
 
-interface ToolResult {
-  [key: string]: unknown;
-  content: Array<{ type: 'text'; text: string; [key: string]: unknown }>;
-  isError?: true;
-}
-
-function buildErrorResponse(
-  code: ErrorCode,
-  message: string,
-  hint?: string,
-  context?: Record<string, unknown>,
-): ToolResult {
-  const payload: Record<string, unknown> = { code, message };
-  if (hint !== undefined) payload['hint'] = hint;
-  if (context !== undefined) payload['context'] = context;
-  return {
-    isError: true,
-    content: [{ type: 'text', text: JSON.stringify(payload) }],
-  };
-}
-
-// ============================================================
-// Feature 158 — Telemetry Hook（FR-G-001 / FR-G-002）
-// ============================================================
-
-/**
- * Telemetry entry — 单次 handler 调用的可观测数据，按行写入 JSONL。
- * 由 Group C MCP-augmented 评测脚本通过 SPECTRA_MCP_TELEMETRY_PATH 注入路径，
- * SPECTRA_MCP_RUN_ID 标识本次 run，handler 不解析也不消费这两个 env，仅透传。
- */
-export interface TelemetryEntry {
-  ts: string; // ISO timestamp
-  toolName: string; // 'impact' | 'context' | 'detect_changes'
-  requestSize: number; // JSON.stringify(args).length
-  responseSize: number; // 序列化后 response text length
-  durationMs: number; // handler 总耗时
-  runId: string; // process.env.SPECTRA_MCP_RUN_ID ?? 'unknown'
-  errorCode?: string; // 仅 isError=true 时填充（buildErrorResponse 的 code）
-  // Feature 165 — Cohort C grounding payload 校验（FR-012）
-  // responseSummary 是工具响应体的轻量摘要（不存完整 payload，避免 telemetry 膨胀）
-  // 当前定义字段：changedSymbolsCount（detect_changes 返回的 changedSymbols 数量）
-  // 其他工具可按需扩展（impact/context 不强制）
-  responseSummary?: Record<string, number>;
-  // Feature 165 FR-012 round 2 — Cohort C consumption signal 提取需要 symbol/file 名样本
-  // sample 限 N=10，避免 telemetry 膨胀；post-hoc 用于 patch-diff-literal / reasoning-trace-mention 匹配
-  responseSamples?: {
-    symbols?: string[];
-    files?: string[];
-  };
-}
-
-/**
- * 写入 telemetry JSONL —— 静默降级：
- *   - env 未设置 → no-op
- *   - 写入失败 → 静默吞，不影响 MCP response
- *
- * 实现说明（Codex W5 评估）：使用 appendFileSync 而非 async appendFile。
- *   - eval 场景每 tool call 一次（非高频），SSD 上 sync write < 5ms 不构成瓶颈
- *   - sync 保证测试可重现（async fire-and-forget 在测试 readFileSync 时可能 race）
- *   - 如未来高频调用场景出现（生产 long-running MCP server），可切换到 async
- *
- * Feature 155 input/output schema 不变（FR-G 合同保护）。
- */
-export function writeTelemetry(entry: TelemetryEntry): void {
-  const telPath = process.env['SPECTRA_MCP_TELEMETRY_PATH'];
-  if (telPath === undefined || telPath.length === 0) return;
-  try {
-    appendFileSync(telPath, JSON.stringify(entry) + '\n', 'utf-8');
-  } catch {
-    // FR-G-002: silent degrade — 写入失败时不抛异常，不影响 handler 返回
-  }
-}
-
-/**
- * 从 ToolResult 中提取 errorCode（仅 isError=true 时存在）。
- * 解析失败时返回 undefined（telemetry 字段缺省）。
- */
-function extractErrorCode(result: ToolResult): string | undefined {
-  if (result.isError !== true) return undefined;
-  const text = result.content?.[0]?.text;
-  if (typeof text !== 'string') return undefined;
-  try {
-    const parsed = JSON.parse(text) as { code?: unknown };
-    return typeof parsed.code === 'string' ? parsed.code : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Wrapper：记录 handler 调用 telemetry 后返回原 result。
- * 包裹所有 return 路径（含 buildErrorResponse 早 return）。
- *
- * 设计：调用前先采样 startTime + requestSize，handler 完成后调本函数。
- * 不破坏 Feature 155 的 input/output schema：result 原样返回。
- */
-export function recordAndReturn(
-  toolName: string,
-  startTimeMs: number,
-  requestSize: number,
-  result: ToolResult,
-  responseSummary?: Record<string, number>,
-  responseSamples?: { symbols?: string[]; files?: string[] },
-): ToolResult {
-  const responseText = result.content?.[0]?.text ?? '';
-  // 修 Codex W4：用 UTF-8 byte length 而非 char length（中文 / emoji 不会被低估）
-  const responseSize = typeof responseText === 'string' ? Buffer.byteLength(responseText, 'utf-8') : 0;
-  const entry: TelemetryEntry = {
-    ts: new Date().toISOString(),
-    toolName,
-    requestSize,
-    responseSize,
-    durationMs: Date.now() - startTimeMs,
-    runId: process.env['SPECTRA_MCP_RUN_ID'] ?? 'unknown',
-  };
-  const errorCode = extractErrorCode(result);
-  if (errorCode !== undefined) entry.errorCode = errorCode;
-  // Feature 165 — 仅 success 路径写 responseSummary / responseSamples（avoid 噪音字段）
-  if (responseSummary !== undefined && errorCode === undefined) {
-    entry.responseSummary = responseSummary;
-  }
-  if (responseSamples !== undefined && errorCode === undefined) {
-    entry.responseSamples = responseSamples;
-  }
-  writeTelemetry(entry);
-  return result;
-}
-
-const PAYLOAD_CAP_BYTES = 1_000_000;
-
-/**
- * 把响应序列化并应用 1 MB 上限（FR-053）。
- * 超限时优先 truncate `affected` / `affectedSymbols` 列表（在 dataMutator 中执行）。
- */
-function buildSuccessResponse(
-  data: Record<string, unknown>,
-  truncatableArrayKeys: string[] = [],
-  warningsKey: string = 'warnings',
-): ToolResult {
-  let text = JSON.stringify(data);
-  let bytes = Buffer.byteLength(text, 'utf-8');
-  if (bytes > PAYLOAD_CAP_BYTES && truncatableArrayKeys.length > 0) {
-    let truncated = false;
-    let safety = 0;
-    while (bytes > PAYLOAD_CAP_BYTES && safety < 8) {
-      safety++;
-      let progressed = false;
-      for (const key of truncatableArrayKeys) {
-        const arr = data[key];
-        if (!Array.isArray(arr) || arr.length === 0) continue;
-        // 按比例 0.7 收缩，至少减 1
-        const ratio = PAYLOAD_CAP_BYTES / bytes;
-        const newLen = Math.max(0, Math.min(arr.length - 1, Math.floor(arr.length * ratio * 0.7)));
-        if (newLen < arr.length) {
-          data[key] = arr.slice(0, newLen);
-          truncated = true;
-          progressed = true;
-        }
-      }
-      if (!progressed) break;
-      text = JSON.stringify(data);
-      bytes = Buffer.byteLength(text, 'utf-8');
-    }
-    if (truncated) {
-      const warnings = (data[warningsKey] as string[] | undefined) ?? [];
-      if (!warnings.includes('payload-truncated')) {
-        data[warningsKey] = [...warnings, 'payload-truncated'];
-        text = JSON.stringify(data);
-      }
-    }
-  }
-  return { content: [{ type: 'text', text }] };
-}
+// 向后兼容 re-export：既有 tests/unit/mcp/telemetry.test.ts 从本模块 import 这些符号
+export { recordAndReturn, writeTelemetry, type TelemetryEntry } from './lib/telemetry.js';
 
 // ============================================================
 // impact tool

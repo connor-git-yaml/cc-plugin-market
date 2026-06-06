@@ -1,7 +1,8 @@
 /**
  * MCP Server 定义
- * 注册 14 个工具（prepare、generate、batch、diff、panoramic-query +
- * 6 个 graph 查询工具 + 3 个 agent-context 工具 impact / context / detect_changes）
+ * 注册 17 个工具（prepare、generate、batch、diff、panoramic-query +
+ * 6 个 graph 查询工具 + 3 个 agent-context 工具 impact / context / detect_changes +
+ * 3 个 file-navigation 工具 view_file / search_in_file / list_directory）
  * 供 Claude Code 通过 MCP 协议调用。
  */
 
@@ -19,6 +20,7 @@ import { scanFiles } from '../utils/file-scanner.js';
 import { queryPanoramic } from '../panoramic/query.js';
 import { registerGraphTools } from './graph-tools.js';
 import { registerAgentContextTools } from './agent-context-tools.js';
+import { registerFileNavTools } from './file-nav-tools.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -267,6 +269,9 @@ export function createMcpServer(): McpServer {
 
   // ─── Feature 155 — Agent-Context tools（impact / context / detect_changes） ───
   registerAgentContextTools(server);
+
+  // ─── Feature 171 — File Navigation tools（view_file / search_in_file / list_directory） ───
+  registerFileNavTools(server);
 
   return server;
 }
