@@ -61,7 +61,7 @@
 
 ### E2E 测试（核心路径，9 个场景）
 
-- [ ] T008 新建 `tests/e2e/feature-175-batch-incremental.e2e.test.ts`，沿用 `tests/e2e/batch-pipeline.e2e.test.ts` 范式（`vi.hoisted` + `vi.mock('@anthropic-ai/sdk')` + `mkdtempSync` + **`git init`**），实现以下 9 个测试场景（全部预期 RED）：
+- [x] T008 新建 `tests/e2e/feature-175-batch-incremental.e2e.test.ts`，沿用 `tests/e2e/batch-pipeline.e2e.test.ts` 范式（`vi.hoisted` + `vi.mock('@anthropic-ai/sdk')` + `mkdtempSync` + **`git init`**），实现以下 9 个测试场景（全部预期 RED）：
   - **场景 1** `[US1]` 改文件→仅受影响模块重生成（FR-018 独立断言：构造 A→B 依赖图改 B，验证 A 和 B 被重生成、未依赖的 C 未被调用；`generateSpec` 调用次数 == deltaReport.regenerateTargets.size，且通过预期 target 集合比对而非仅计数）。**W-1：同时快照未受影响模块（C）的 `*.spec.md` mtime，断言两轮后逐字节 + mtime 完全不变（FR-005，仅看调用次数不足以证明文件未被后续流程改写）**
   - **场景 2** `[US2]` 无改动→零模块级调用（SC-002：第二轮 batch 的 `generateSpec` 调用次数 == 0，`deltaReport.directChanges` 空，`deltaReport.propagatedChanges` 空）。**W-1：断言所有模块级 `specs/**/modules/*.spec.md` 的 mtime 与第一轮后一致（FR-005）**
   - **场景 9** `[US1]` 首次运行（无历史 spec）退化全量（**C6 修订：FR-012 专属可测场景，非"隐含"**）：在**无任何 `*.spec.md`** 的全新临时项目上以默认参数运行 batch，断言：所有模块被生成、`deltaReport.mode === 'full'`、`deltaReport.fallbackReason === 'no-existing-specs'`（实现路径 `delta-regenerator.ts:87-105`），且不报错/不空跑
@@ -75,17 +75,17 @@
 
 ### 单测（补充 RED 断言）
 
-- [ ] T009 [P] 扩展 `tests/unit/batch/regen-plan.test.ts`（**C5 修订：明确替换关系，避免 T004 旧断言在 Phase 2 翻转后永久变红**）：(a) **将 T004 中"全 undefined → incremental=false"的默认断言原地改写为"全 undefined → incremental=true"，并预期此断言在当前（Phase 0 实现 default=false）为 RED**（不要新增第二条互斥断言并存）；(b) 覆盖 force+incremental 同时传入 force 优先（EC-001/FR-011）；(c) 三入口默认值一致矩阵（US-5/SC-004）。注：T004 的 `resolveSourceTarget` 等价性断言保持不变（与默认值无关）
+- [x] T009 [P] 扩展 `tests/unit/batch/regen-plan.test.ts`（**C5 修订：明确替换关系，避免 T004 旧断言在 Phase 2 翻转后永久变红**）：(a) **将 T004 中"全 undefined → incremental=false"的默认断言原地改写为"全 undefined → incremental=true"，并预期此断言在当前（Phase 0 实现 default=false）为 RED**（不要新增第二条互斥断言并存）；(b) 覆盖 force+incremental 同时传入 force 优先（EC-001/FR-011）；(c) 三入口默认值一致矩阵（US-5/SC-004）。注：T004 的 `resolveSourceTarget` 等价性断言保持不变（与默认值无关）
   - 文件: `tests/unit/batch/regen-plan.test.ts`
 
-- [ ] T010 [P] 新建 `tests/unit/batch/batch-orchestrator-incremental.test.ts`：默认翻转验证（不传 incremental 时 runBatch 实际走 DeltaRegenerator 路径）+ mode×incremental 正交矩阵（3 种 mode × 2 种 regen 路径 = 6 组合，各验证调用链路正确）；使用 vi.mock 隔离 LLM 调用，断言 DeltaRegenerator 是否被实例化/调用
+- [x] T010 [P] 新建 `tests/unit/batch/batch-orchestrator-incremental.test.ts`：默认翻转验证（不传 incremental 时 runBatch 实际走 DeltaRegenerator 路径）+ mode×incremental 正交矩阵（3 种 mode × 2 种 regen 路径 = 6 组合，各验证调用链路正确）；使用 vi.mock 隔离 LLM 调用，断言 DeltaRegenerator 是否被实例化/调用
   - 文件: `tests/unit/batch/batch-orchestrator-incremental.test.ts`
 
-- [ ] T011 [P] 扩展 `tests/unit/graph/graph-builder-normalize.test.ts`（在 T005 基础上追加 RED 断言）：byte-stable deepEqual 验证（归一化后 nodes 按 id 字典序、links 按 source+target+relation 字典序）；inputHash 内容敏感性验证（内容改变 → inputHash 改变；仅时间戳 generatedAt 改变 → inputHash 不变，此为 FR-006/FR-007 核心）；时间戳剥除验证（generatedAt 在 stripVolatileFields 后不参与 hash 计算）
+- [x] T011 [P] 扩展 `tests/unit/graph/graph-builder-normalize.test.ts`（在 T005 基础上追加 RED 断言）：byte-stable deepEqual 验证（归一化后 nodes 按 id 字典序、links 按 source+target+relation 字典序）；inputHash 内容敏感性验证（内容改变 → inputHash 改变；仅时间戳 generatedAt 改变 → inputHash 不变，此为 FR-006/FR-007 核心）；时间戳剥除验证（generatedAt 在 stripVolatileFields 后不参与 hash 计算）
   - 文件: `tests/unit/graph/graph-builder-normalize.test.ts`
 
 **Checkpoint — Phase 1 完成标准**:
-- [ ] T012 运行 `npx vitest run`，确认：(a) T008 ~ T011 新增测试全部 RED（失败原因为功能未实现，非语法错误）；(b) 现有 N_baseline 个测试全部 GREEN
+- [x] T012 运行 `npx vitest run`，确认：(a) T008 ~ T011 新增测试全部 RED（失败原因为功能未实现，非语法错误）；(b) 现有 N_baseline 个测试全部 GREEN
 
 ---
 
@@ -109,7 +109,7 @@
 - [ ] T015 `[US5]` 修改 `src/mcp/server.ts`：在现有 `incremental ?? fileConfig.incremental`、`force ?? fileConfig.force` 合并后，连同新增 `full` 参数传入 `resolveRegenPlan({ incremental, full, force })`；删除原有 incremental 默认值漂移逻辑（FR-002）
   - 文件: `src/mcp/server.ts`
 
-- [ ] T016 `[US5]` 修改 `src/batch/batch-orchestrator.ts`：删除 `:388` 行的 `incremental = false` 硬编码，改为接收已解析的 `RegenPlan`（或对直接调用方兜底调用一次 `resolveRegenPlan`）；`runBatch` options 类型新增 `full?: boolean` 字段（FR-002）
+- [ ] T016 `[US5]` 修改 `src/batch/batch-orchestrator.ts`：删除 `:388` 行的 `incremental = false` 硬编码，改为接收已解析的 `RegenPlan`（或对直接调用方兜底调用一次 `resolveRegenPlan`）；`runBatch` options 类型新增 `full?: boolean` 字段（FR-002）。**并在 `BatchResult` 接口新增 `deltaReport?: DeltaReport` 字段并在 return（`:1721`）填入**——现状只返回 `deltaReportPath`（文件），E2E（SC-001/002/005、场景9 fallbackReason、FR-013/018）需断言 `deltaReport.{mode,directChanges,propagatedChanges,regenerateTargets,fallbackReason}`，必须把对象暴露在返回值上。RED 测试先断言该字段（undefined→RED），本 task 使其 GREEN
   - 文件: `src/batch/batch-orchestrator.ts`
 
 ### Step 2.2：`--full` flag + MCP full 参数（FR-003/FR-004）

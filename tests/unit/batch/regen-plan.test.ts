@@ -58,10 +58,41 @@ describe('resolveRegenPlan — 三条解析规则（Phase 0 行为不变）', ()
     });
   });
 
-  describe('规则 (4)：undefined 默认路径（Phase 0 默认 incremental=false）', () => {
-    it('全 undefined → { incremental:false, full:false, source:default }（Phase 0 行为，GREEN T013 才翻 true）', () => {
+  describe('规则 (4)：undefined 默认路径（默认翻转 incremental=true，FR-001）', () => {
+    // C5 修订：将 T004 的"全 undefined → incremental=false"原地改写为
+    // "全 undefined → incremental=true"。此断言在 Phase 1 为 RED（当前实现 default=false），
+    // GREEN T013 翻转规则 (4) 后转绿。不新增第二条互斥断言并存。
+    it('全 undefined → { incremental:true, full:false, source:default }（默认翻转）', () => {
       expect(resolveRegenPlan({})).toEqual({
+        incremental: true,
+        full: false,
+        source: 'default',
+      });
+    });
+  });
+
+  describe('EC-001：force 与 incremental 同时传入 → force 优先（全量）', () => {
+    it('force=true + incremental=true → { incremental:false, full:true, source:full }', () => {
+      // force 是 full 的等义别名，优先级高于 incremental（规则 1 先于规则 2）。
+      // 翻转默认值不得破坏此优先级语义（FR-011）。
+      expect(resolveRegenPlan({ force: true, incremental: true })).toEqual({
         incremental: false,
+        full: true,
+        source: 'full',
+      });
+    });
+  });
+
+  describe('SC-004：三入口默认值一致矩阵（均不传 regen 轴 → incremental=true）', () => {
+    // CLI / MCP / config 三入口合并后都把"未给出"表示为 undefined，
+    // 进入 resolveRegenPlan 后应得到同一默认真值（incremental=true）。此为默认翻转后行为，Phase 1 RED。
+    it.each([
+      ['CLI（无 flag）', {}],
+      ['MCP（无参数）', {}],
+      ['config（未指定 incremental 字段）', {}],
+    ] as const)('%s → incremental=true', (_label, input) => {
+      expect(resolveRegenPlan(input)).toEqual({
+        incremental: true,
         full: false,
         source: 'default',
       });

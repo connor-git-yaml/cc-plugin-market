@@ -56,4 +56,24 @@ master HEAD: bb97d70 ✓
     - C2 关键修正跨 4 制品传播：spec FR-017/EC-009 + plan + data-model + tasks 全改 generatedBy→generatedByMode
 - [phase 5] CODEX 复审 + 跨制品一致性: 6 CRITICAL 全 CLOSED；查出 5 处多轮编辑残留（T025 并行说明文件名、T021 [P]、tasks:221 generatedBy、plan E2E 清单缺场景9、plan/spec 残留 3859）→ 全修
 - [phase 5.5 analyze/GATE_ANALYSIS] on_failure：折叠进 codex 复审，跨 4 制品一致性 PASS（generatedByMode/RegenPlanInput/FR 覆盖/path.relative 全一致）
-- [GATE_TASKS] behavior=always → **PAUSE 等用户确认**（设计制品全就绪：spec 19FR/9EC/7SC + plan + tasks 39task/4Phase + data-model + research + contracts；4 轮 codex 全闭合）
+- [GATE_TASKS] behavior=always → PAUSE → 用户 **先 commit 设计，再实现**
+- [commit] d198404 docs(175): 设计制品全套（3459 行）
+- [phase 6 implement] Phase 0 [CLEANUP] (T001-T007): COMPLETED | model=opus
+    - 新增 regen-plan.ts（resolveRegenPlan 4 规则 + resolveSourceTarget）+ graph normalize 占位 + 2 单测
+    - N_baseline = 3871 passed（3 pre-existing flake 经 clean-baseline 确证无关）+ build 0
+    - CODEX 审查: 0 CRITICAL；W-1（显式 incremental=true 应返回 true、source 语义）主线修正 + 传播 data-model/tasks
+    - 零产物变更确证：batch-orchestrator/delta-regenerator 未改，无生产调用点
+- [commit] 38cde19 chore(175): [CLEANUP] 纯函数提取（零产物变更）
+- [phase 6 implement] Phase 1 [RED] (T008-T012): COMPLETED | model=opus
+    - 新增 E2E feature-175（9 场景，动态 mkdtemp 项目 + git init + 类型扩展 RED-without-compile-error）
+    - 扩展 regen-plan（规则4 默认翻转断言 RED）+ 新增 batch-orchestrator-incremental + 扩展 graph-normalize
+    - 25 RED（9 E2E + 16 单测）全部"为功能缺失而失败"；存量 3875 GREEN，无 src/ 改动
+    - 主线发现：BatchResult 未暴露 deltaReport 对象 → 补 T016（GREEN 须新增 deltaReport 字段）
+    - CODEX 审查: 2 CRITICAL + 3 WARNING 全修
+        - C-1 场景6 checkpoint JSON 不合 BatchStateSchema→loadCheckpoint null→改 saveCheckpoint 合法 state + 前置断言
+        - C-2 场景7 src/config+src/store 不同 dirPath 不触发冲突→重构为口径自洽可观测断言（冲突分支由 T004 oracle 单测覆盖）
+        - W-1 mockCreate 计数==模块数（enrich 多调用会破）→改用 successful 集合断言
+        - W-3 env delete 无恢复→save/restore
+    - fix 后复跑：场景6 loadCheckpoint 通过、失败于真实 full-bypass 断言；场景7 失败于 deltaReport undefined（均为正确 RED）
+- [commit] (pending) test(175): [RED]
+- ⏸ 下一步: Phase 2 [GREEN] T013-T031（破坏性默认翻转 + --full + byte-stable + checkpoint/孤儿/target，进入前向用户确认）→ Phase 3 → verify
