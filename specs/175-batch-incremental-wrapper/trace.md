@@ -96,4 +96,12 @@ master HEAD: bb97d70 ✓
     - T037 vitest 3898 passed/0 failed；T038 build 0；T039 repo:check + release:check pass
 - [commit] (pending) refactor(175): [REFACTOR]
 - ✅ implement 阶段（Phase 0-3）全部完成
-- ⏸ 下一步: verify(6.5 verify_independent / 7a spec-review / 7b quality-review / 7c verify) + GATE_VERIFY → push report
+- [phase 7 verify] VERIFY_GROUP (7a spec-review + 7b quality-review 并行 → 7c verify): COMPLETED
+    - spec-review: 19/19 FR / 7 SC / 9 EC 真实满足（带 file:line + 测试证据），0 CRITICAL，3 INFO
+    - quality-review: 0 CRITICAL / 3 WARNING（W-1 rmSync try/catch / W-2 双实例化 / W-3 dup normalizeProjectPath）GOOD
+    - W-1 主线修复：孤儿 rmSync 加 try/catch（失败 warn+跳过，不误标删除）；W-2/W-3 记录为风格项不改
+    - verify: Layer1 100% FR / Layer1.5 COMPLIANT / Layer1.8 残留 CLEAN / Layer2 build+test+repo+release 全 pass → READY FOR REVIEW
+    - CODEX verify 终审（跨模型）: 0 CRITICAL，READY FOR COMMIT；抽查 SC-003 byte-stable REAL / FR-001 翻转 SAFE / FR-017 ownership CORRECT
+        - W-1 残留取舍：rmSync 失败+源亦不存在 → 磁盘留游离文件但 views 正确剔除 → 接受（视图正确 + byte-stable 不破，commit 注明）
+- [commit] (pending) test(175): verify 闭环（spec-review/quality-review/verification-report + W-1 fix）
+- ⏸ 下一步: GATE_VERIFY → push deliverable report 等用户确认

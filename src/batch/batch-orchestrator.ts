@@ -1121,11 +1121,23 @@ export async function runBatch(
         ? orphan.outputPath
         : path.join(resolvedRoot, orphan.outputPath);
       if (!isInManagedOutputDir(absPath, modulesDir)) continue; // 必要条件2：受管 modules/ 目录外 → 跳过
-      // 即便磁盘文件已被本轮其它逻辑清理，仍要从 storedSpecs 集合剔除（保持内存视图与磁盘一致）。
-      deletedOrphanPaths.add(orphan.outputPath);
-      if (!fs.existsSync(absPath)) continue;
-      logger.info(`[orphan-cleanup] 删除孤儿 spec: ${orphan.outputPath}`);
-      fs.rmSync(absPath, { force: true });
+      // 磁盘文件已被本轮其它逻辑清理：视为已删除，从内存视图剔除（保持内存与磁盘一致）。
+      if (!fs.existsSync(absPath)) {
+        deletedOrphanPaths.add(orphan.outputPath);
+        continue;
+      }
+      // W-1（quality-review）：rmSync 是破坏性新操作，权限/OS 错误不应让整个 batch 崩溃。
+      // 失败时 warn + 跳过，且【不】加入 deletedOrphanPaths——文件仍在磁盘，内存视图须保留它，
+      // 避免"内存说已删、磁盘还在"的不一致。仅删除成功才剔除内存视图。
+      try {
+        logger.info(`[orphan-cleanup] 删除孤儿 spec: ${orphan.outputPath}`);
+        fs.rmSync(absPath, { force: true });
+        deletedOrphanPaths.add(orphan.outputPath);
+      } catch (err) {
+        logger.warn(
+          `[orphan-cleanup] 删除孤儿 spec 失败，保守跳过: ${orphan.outputPath}（${(err as Error).message}）`,
+        );
+      }
     }
     if (deletedOrphanPaths.size > 0) {
       storedSpecsForStore = existingStoredSpecs.filter(
