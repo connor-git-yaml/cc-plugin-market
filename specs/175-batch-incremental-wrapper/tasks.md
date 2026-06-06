@@ -28,26 +28,26 @@
 
 ### 新建核心纯函数模块
 
-- [ ] T001 新建 `src/batch/regen-plan.ts`：定义 `RegenPlanInput` / `RegenPlan` / `RegenPlanSource` 类型（来自 `data-model.md`），实现 `resolveRegenPlan`（**此阶段默认值实现为 `incremental=false`，保持行为不变**，GREEN 阶段再翻转）
+- [x] T001 新建 `src/batch/regen-plan.ts`：定义 `RegenPlanInput` / `RegenPlan` / `RegenPlanSource` 类型（来自 `data-model.md`），实现 `resolveRegenPlan`（**此阶段默认值实现为 `incremental=false`，保持行为不变**，GREEN 阶段再翻转）
   - 文件: `src/batch/regen-plan.ts`
 
-- [ ] T002 在 `src/batch/regen-plan.ts` 实现 `resolveSourceTarget(group, conflictingDirPaths, isRoot): string`（提取自 `batch-orchestrator.ts:713-720` 的 target 口径逻辑，含目录冲突分支），调用方暂**不替换**，保留内联逻辑以维持行为不变
+- [x] T002 在 `src/batch/regen-plan.ts` 实现 `resolveSourceTarget(group, conflictingDirPaths, isRoot): string`（提取自 `batch-orchestrator.ts:713-720` 的 target 口径逻辑，含目录冲突分支），调用方暂**不替换**，保留内联逻辑以维持行为不变
   - 文件: `src/batch/regen-plan.ts`
 
-- [ ] T003 [P] 在 `src/panoramic/graph/graph-builder.ts` 新增 `normalizeGraphForWrite(graphJson, options?): void` 函数定义及占位实现（返回不做任何排序），同时新增辅助函数 `stripVolatileFields` 和 `stableStringify`；从 `src/panoramic/graph/index.ts` 导出 `normalizeGraphForWrite`（当前仅导出 3 个函数）。**不在任何写盘序列中调用**
+- [x] T003 [P] 在 `src/panoramic/graph/graph-builder.ts` 新增 `normalizeGraphForWrite(graphJson, options?): void` 函数定义及占位实现（返回不做任何排序），同时新增辅助函数 `stripVolatileFields` 和 `stableStringify`；从 `src/panoramic/graph/index.ts` 导出 `normalizeGraphForWrite`（当前仅导出 3 个函数）。**不在任何写盘序列中调用**
   - 文件: `src/panoramic/graph/graph-builder.ts`, `src/panoramic/graph/index.ts`
 
 ### Phase 0 单测（验证提取等价性）
 
-- [ ] T004 新建 `tests/unit/batch/regen-plan.test.ts`：覆盖 `resolveRegenPlan` 的三条解析规则（full/force→全量、incremental=false→兼容路径、全 undefined→默认 incremental=false（Phase 0 行为））；覆盖 `resolveSourceTarget` 含目录冲突 + 非冲突的两种场景，断言与原内联逻辑输出一致
+- [x] T004 新建 `tests/unit/batch/regen-plan.test.ts`：覆盖 `resolveRegenPlan` 的三条解析规则（full/force→全量、incremental=false→兼容路径、全 undefined→默认 incremental=false（Phase 0 行为））；覆盖 `resolveSourceTarget` 含目录冲突 + 非冲突的两种场景，断言与原内联逻辑输出一致
   - 文件: `tests/unit/batch/regen-plan.test.ts`
 
-- [ ] T005 [P] 新建 `tests/unit/graph/graph-builder-normalize.test.ts`：Phase 0 版本验证 `normalizeGraphForWrite` 占位实现不改变输出（in-place void，调用前后对象引用相同，nodes/links 顺序不变）；预留 GREEN 阶段的 byte-stable 测试用例（先写为 `it.todo` 占位）
+- [x] T005 [P] 新建 `tests/unit/graph/graph-builder-normalize.test.ts`：Phase 0 版本验证 `normalizeGraphForWrite` 占位实现不改变输出（in-place void，调用前后对象引用相同，nodes/links 顺序不变）；预留 GREEN 阶段的 byte-stable 测试用例（先写为 `it.todo` 占位）
   - 文件: `tests/unit/graph/graph-builder-normalize.test.ts`
 
 **Checkpoint — Phase 0 完成标准**:
-- [ ] T006 运行 `npx vitest run`，确认 N_baseline + T004/T005 新单测全部通过，零失败
-- [ ] T007 [P] 运行 `npm run build`，确认 TypeScript 零错误
+- [x] T006 运行 `npx vitest run`，确认 N_baseline + T004/T005 新单测全部通过，零失败
+- [x] T007 [P] 运行 `npm run build`，确认 TypeScript 零错误
 
 ---
 
@@ -100,7 +100,7 @@
 **目标 User Stories**: US1, US2, US5  
 **覆盖 FR**: FR-001, FR-002, FR-011
 
-- [ ] T013 `[US1][US2][US5]` 修改 `src/batch/regen-plan.ts`：将 `resolveRegenPlan` 的默认值从 `incremental=false` **翻转为 `incremental=true`**（FR-001）；同时确保 force+incremental 同时传入时 force 优先逻辑正确（FR-011/EC-001）
+- [ ] T013 `[US1][US2][US5]` 修改 `src/batch/regen-plan.ts`：**仅将规则 (4)（undefined 默认分支）** 的 `incremental` 从 `false` **翻转为 `true`**（FR-001）——规则 (2) 显式 incremental=true 已返回 true、规则 (1) full/force 优先，均不改。同步把 T004 中规则 (4) 的默认断言改为 incremental:true（见 T009）
   - 文件: `src/batch/regen-plan.ts`
 
 - [ ] T014 `[US5]` 修改 `src/cli/commands/batch.ts`（现有 config 合并点 `:47`）：在合并 config 后调用 `resolveRegenPlan({ incremental, full, force })`，结果写入传给 `runBatch` 的 options；删除原有的 incremental 默认值硬编码（FR-002）

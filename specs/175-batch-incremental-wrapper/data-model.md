@@ -64,10 +64,11 @@ export interface RegenPlan {
 }
 ```
 
-**解析规则**（在 resolveRegenPlan 内，输入已是各入口合并后的有效值）：
-1. `full===true || force===true` → `{ incremental:false, full:true }`（全量，绕 DeltaRegenerator + 绕 checkpoint）
-2. `incremental===false`（显式 opt-out，未给 full/force）→ `{ incremental:false, full:false }`（旧"仅看文件存在"兼容路径）
-3. 其余（含全 undefined）→ `{ incremental:true, full:false }`（默认翻转 FR-001）
+**解析规则**（在 resolveRegenPlan 内，输入已是各入口合并后的有效值；优先级自上而下）：
+1. `full===true || force===true` → `{ incremental:false, full:true, source:'full' }`（全量，绕 DeltaRegenerator + 绕 checkpoint）
+2. `incremental===true`（显式 opt-in）→ `{ incremental:true, full:false, source:'incremental-explicit' }`（任何阶段都尊重显式 true）
+3. `incremental===false`（显式 opt-out）→ `{ incremental:false, full:false, source:'incremental-explicit' }`（旧"仅看文件存在"兼容路径）
+4. 全 undefined（默认）→ `{ incremental:true, full:false, source:'default' }`（**默认翻转 FR-001；GREEN T013 仅翻转此分支**，Phase 0 为 false）
 
 **config 不新增 `full` 字段**（C-2）：`ProjectConfig` 现有 `force`/`incremental` 已够——`--force` 即 `--full` 别名，config 用户用 `force: true` 表达全量。**本 Feature 不改 `project-config.ts` schema**。
 

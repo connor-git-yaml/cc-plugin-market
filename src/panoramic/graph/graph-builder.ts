@@ -491,3 +491,50 @@ export function writeKnowledgeGraph(graphJson: GraphJSON, outputDir: string): st
   writeAtomicJson(graphJsonPath, graphJson);
   return path.resolve(graphJsonPath);
 }
+
+// ============================================================
+// 写盘前归一化（normalizeGraphForWrite）— byte-stable 支撑
+// ============================================================
+
+/** normalizeGraphForWrite 选项 */
+export interface NormalizeGraphOptions {
+  /** 为 true 时剥除 graph.generatedAt 等易变时间戳字段（byte-stable 比较场景使用） */
+  stripTimestamps?: boolean;
+}
+
+/**
+ * 写盘前原地归一化 GraphJSON，使同一语义输入产出逐字节稳定的磁盘文件。
+ *
+ * Phase 0 占位实现：纯 no-op（不做任何排序/剥除），保持现状行为不变。
+ * GREEN 阶段（T022）才补全 nodes/links/hyperedges 排序与时间戳剥除逻辑。
+ *
+ * 注意：本函数原地修改传入对象（返回 void），调用前后对象引用保持相同。
+ */
+export function normalizeGraphForWrite(
+  _graphJson: GraphJSON,
+  _options?: NormalizeGraphOptions,
+): void {
+  // Phase 0 占位：no-op，不在任何写盘序列中调用。
+}
+
+/**
+ * 深拷贝并剥除非确定性字段（如 generatedAt），保留全部语义内容，供稳定 hash 计算使用。
+ *
+ * Phase 0 占位实现：原样深拷贝返回（不剥除任何字段）。
+ * GREEN 阶段（T023）补全剥除逻辑。
+ */
+export function stripVolatileFields<T>(value: T): T {
+  // Phase 0 占位：原样返回深拷贝。
+  return structuredClone(value);
+}
+
+/**
+ * key 有序的稳定 JSON 序列化，使内容相同的对象产出相同字符串（不受 key 插入顺序影响）。
+ *
+ * Phase 0 占位实现：退化为标准 JSON.stringify（key 顺序未稳定化）。
+ * GREEN 阶段（T023）补全 key 有序序列化。
+ */
+export function stableStringify(value: unknown): string {
+  // Phase 0 占位：标准序列化。
+  return JSON.stringify(value);
+}
