@@ -84,9 +84,16 @@ prepublishOnly 当前状态：
 
 **prepublishOnly 不再阻塞，可执行 npm publish**。
 
-## 尚需完成（host shell）
+## host shell 真机验收（2026-05-30 完成）
 
-- [ ] `npm publish`（用户确认 push 后在 host shell 执行）
-- [ ] `npm view spectra-cli versions` 确认含 4.2.0
-- [ ] `npm view spectra-cli dist-tags.latest` = 4.2.0
-- [ ] （可选）`npm i -g spectra-cli@4.2.0 && spectra mcp-server` 验证 3 工具可用
+原始 CRITICAL（用户 `npm i -g spectra-cli` 拿到缺工具的 4.1.1 旧 binary）**已彻底闭合**：
+
+- [x] `npm publish` — spectra-cli@4.2.0 已发布
+- [x] `npm view spectra-cli versions` → `['4.1.1', '4.2.0']` ✅
+- [x] `npm view spectra-cli dist-tags.latest` → `4.2.0` ✅
+- [x] `npm i -g spectra-cli@4.2.0 && spectra --version` → `spectra v4.2.0` ✅
+- [x] 全局 binary 注册 3 工具 — volta 实际安装路径 `~/.volta/tools/image/packages/spectra-cli/` 含 `dist/mcp/agent-context-tools.js`，确认注册 `impact / context / detect_changes` ✅
+
+**排障小结**：publish 反复失败不是代码问题，是主仓库 checkout 卡在 170c 旧代码（7ef3ce8），`git pull --ff-only` 被一个 untracked eval JSON 文件碰撞静默挡住。清除阻塞 + ff 到 10aa2c4 + 主仓库真机 gate 全绿后，`npm login + npm publish` 成功。
+
+**F170b CRITICAL（npm publish）+ F170e CRITICAL-2（cwd→projectRoot）系列彻底闭合。**

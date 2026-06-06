@@ -174,7 +174,7 @@ handler 接线：canonicalize not-found 时调 resolveSymbolFuzzy；autoResolved
 
 **核心风险**:
 - 🔴 **cohort3 lift 不达 1.5× 高概率**：F170c 实测 driver 0% 主动调 MCP，F170d guided 仅 50% → cohort3 即使引导也可能 lift<1.5×，直接威胁 M7-SC-006。缓解：强制 protocol(MUST-call) + F170d 引导块双管齐下 + spec 写 falsification path
-- 🔴 **GStack 本机不是工作流框架**（已 verify：~/.claude/skills/gstack 是 QA browser skill）→ **决策 3.A：找/装真正的 GStack 工作流框架**
+- 🟢 **GStack 真框架已在本机**（workflow wf_68cd7a26 推翻上次误判 + verify：git remote=github.com/garrytan/gstack v1.21.1.0，README "Twenty-three specialists"，60 skill 目录）→ **决策 3.A 修正：不是"去找/装"，而是修激活机制** —— gstack 是 flat skill-pack 非 plugin，`--plugin-dir` 无效，需 `cd ~/.claude/skills/gstack && ./setup`（symlink fan-out）+ wrapper 改用 slash-command 触发（详见 §5.1 决策 1）
 - SuperPowers --plugin-dir 路径漂移（findSuperPowersDir 找空目录 ~/.claude/plugins/installed/，实际在 ~/.claude/plugins/local/superpowers）→ wrapper 显式参数化 + preflight 断言
 - 训练集泄漏 + oracle 口径：Verified goldPatch 可能在训练集内 → baseline 虚高；本设施用 ast-diff fuzzy(threshold 60) 非真实 failToPass/passToPass → 报告显式声明口径差异
 - 150 runs 配额：opus driver 订阅边际 $0 但占 30-50% weekly；jury(SiliconFlow) 实付可能 $30-50
@@ -194,6 +194,30 @@ handler 接线：canonicalize not-found 时调 resolveSymbolFuzzy；autoResolved
 6. driver 锁 opus-4-7 还是允许升级（Lite 4 boundary task 暴露 ceiling）？
 7. 报告形态：新建 PUBLISH-REPORT-M7.md + Lite §11 交叉引用，还是合并？
 8. N=3 是否够 5-cohort ranking（per-cell ±1 pass 整票漂移）？关键 cohort(1 vs 3) 是否加 N？
+
+### 5.1 F176 决策清单（workflow wf_68cd7a26 调研后，5 个 high-confidence 推荐）
+
+5 个 research agent 并行调研（web research + 代码调研，522k tokens / 5 min）。全部 high confidence，只有决策 3（cohort3 触发）标 blocksLaunch=true。
+
+| # | open question | 推荐（high confidence）| 工期影响 | blocks? |
+|---|--------------|----------------------|---------|---------|
+| **1** GStack 接入 | **方案 A 修正版**：真框架已在本机（garrytan/gstack v1.21.1.0），跑 `./setup` 激活（symlink fan-out，非 --plugin-dir）+ wrapper 用真实 slash-command 触发（`/autoplan ... /ship`）+ preflight 断言 symlink 存在否则 fail-loud。version pin commit 454423a | 1d | ❌ |
+| **1b** SuperPowers 接入 | findSuperPowersDir 改**多路径探测**（local 优先 + env 覆盖 + 兼容 installed）+ 校验 `.claude-plugin/plugin.json` + `skills/*/SKILL.md` + **fail-fast 不静默降级**（杜绝重蹈 F147 prompt-only 覆辙）。本机 verify：local/superpowers v5.0.7 含 14 SKILL.md | 0.5d | ❌ |
+| **2** Verified 10-task 选择 | **混合策略 Stage 1**（零新 build graph，~5 行改动）：从 Verified split 筛 sympy/astropy/pytest 三 repo（已有 graph），按官方 difficulty 列分层选 10（6 medium + 3 easy + 1 hard），跨 ≥3 子模块避同质。Stage 2 扩 django 留 follow-up | 1.5d | ❌ |
+| **3** cohort3 触发方式 | **option B（F170d SHOULD 引导块）**，不用强制 protocol，不叠加。理由：忠实产品形态是 SC-006 语义内核；option A 已被 F162-169 实证「救 smoke 不救 lift 反污染」（cohort C MUST-call 16/16 mcpCalls 但 lift WEAK→1.12×）。配套：**双指标分离报告**（mcpAdoptionRate + lift 分开）+ 关键 cohort1/3 加 N=5 + 补单变量 strict A/B 闭合因果。**✅ 用户 2026-05-30 拍板采纳 option B（接受可能 lift<1.5× 的诚实结论，不强行抬数，falsification path 已预埋）** | 1.5d | ✅ 已决 |
+| **4** oracle 口径 | **方案 B 强化版**：沿用 ast-diff fuzzy(threshold 60) + 报告**三段强制声明**（口径差异 / leakage caveat / 结论限定 internal-cohort-only）。真实 harness 拆独立 follow-up（+9-14d）。理由：即使贴官方口径，leakage 已使绝对数不可比（OpenAI 停报 Verified，Verified→Pro 掉 50pt），唯一站得住是 cohort 间相对 lift | 0d | ❌ |
+
+**关键洞察**:
+- ⭐ **决策 3.A 前提被推翻**：上次 review 误判 gstack 是 QA skill，本次四方交叉验证（git remote + README + 60 目录 + web）证明是真框架，问题从"高不确定性找新框架"降级为"低风险修激活机制"
+- ⭐ **cohort 接入层整体加固**：GStack(--plugin-dir 无效需 ./setup) + SuperPowers(installed→local 路径漂移) 两个 cohort 都有静默降级 bug，必须 preflight fail-fast，否则名义测框架实际只喂一句文案（F147 覆辙）
+- ⭐ **绝对数不可比是硬约束**：5 个调研一致指向"F176 唯一可对外的产物是同 scaffolding 下 cohort 间相对 lift"，绝对 pass rate 必须标 internal-only，oracle 选 fuzzy 完全够用（cohort 共用同一把尺）
+
+**仍需用户后续拍板的 3 个（workflow 未调研，优先级低）**:
+- OQ5 是否跑 jury（功能 oracle 已是 SWE-Bench 标准 → 倾向不跑省 $30-50）
+- OQ6 driver 锁 opus-4-7（建议锁，保与 Lite 纵向可比）
+- OQ7 报告形态（建议新建 PUBLISH-REPORT-M7.md + Lite §11 交叉引用）
+
+**F176 估时修正**: 决策相关工作 4.5d 含在原 11d 内；oracle 选 B 省掉真 harness 的 9-14d（拆 follow-up）。
 
 ---
 
