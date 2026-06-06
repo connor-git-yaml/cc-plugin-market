@@ -103,5 +103,9 @@ master HEAD: bb97d70 ✓
     - verify: Layer1 100% FR / Layer1.5 COMPLIANT / Layer1.8 残留 CLEAN / Layer2 build+test+repo+release 全 pass → READY FOR REVIEW
     - CODEX verify 终审（跨模型）: 0 CRITICAL，READY FOR COMMIT；抽查 SC-003 byte-stable REAL / FR-001 翻转 SAFE / FR-017 ownership CORRECT
         - W-1 残留取舍：rmSync 失败+源亦不存在 → 磁盘留游离文件但 views 正确剔除 → 接受（视图正确 + byte-stable 不破，commit 注明）
-- [commit] (pending) test(175): verify 闭环（spec-review/quality-review/verification-report + W-1 fix）
-- ⏸ 下一步: GATE_VERIFY → push deliverable report 等用户确认
+- [commit] 5c8e59d→rebase→ fix(175): verify 闭环 + W-1 fix
+- [GATE_VERIFY] always → 制品就绪 READY FOR REVIEW
+- [交付准备] origin/master 已前进 bb97d70→31da67d（F174 symbol fuzzy match 已 ship）
+    - git rebase origin/master：6 commit 干净 replay，**无冲突**（F174/F175 正交）
+    - rebase 后全量验证：build 0 / vitest 4055 passed 0 failed / repo:check pass / release:check valid
+- ⏸ GATE: push origin master 需用户明确"确认 push"（破坏性 + 不可回滚，CLAUDE.local.md 约束）→ 已列 deliverable report 等确认
