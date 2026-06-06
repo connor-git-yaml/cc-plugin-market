@@ -4,7 +4,7 @@
  * 暴露给 src/mcp/agent-context-tools.ts 的工具函数：
  *   - bfsTraverse：反向 / 正向 BFS，遍历前 budget 截断（FR-012）
  *   - canonicalizeSymbolId：把用户传入的 symbol id 归一到 graph 实际 id
- *   - findFuzzyMatches：symbol-not-found 时返回最多 N 个候选
+ *   - resolveSymbolFuzzy：symbol-not-found 时分层 fuzzy 解析 + 高置信度自动 resolve（Feature 174）
  *   - computeRiskTier：按 directCallers + transitive 判定 low / medium / high
  *   - getReverseAdjacency：反向邻接表 lazy 构建 + LRU 缓存
  *
@@ -131,7 +131,7 @@ export function resolveEdgeConfidence(edge: GraphEdge): number | null {
  *   3. 三段输入 `A::B::C` 容错为 `A::B.C` → 再查（Codex round-1 C-1 修订）
  *   4. 把绝对路径 → 仓库相对路径（按 graphData.graph?.metadata 或 projectRoot 选项）→ 再查
  *
- * 失败返回 null，调用方按 symbol-not-found 处理（建议同时调 findFuzzyMatches 提候选）。
+ * 失败返回 null，调用方按 symbol-not-found 处理（建议同时调 resolveSymbolFuzzy 提候选/自动 resolve）。
  *
  * 控制字符 / 非 UTF-8 / 空字符串段输入返回 null（调用方按 invalid-symbol-id 处理）。
  */
@@ -421,7 +421,9 @@ export function resolveSymbolFuzzy(
   query: string,
   opts: FuzzyResolveOptions = {},
 ): FuzzyResolveResult {
-  const limit = opts.limit ?? 10;
+  // limit 至少为 1：display cap 不应小于 1，否则 autoResolved=true 时 candidates 被
+  // slice 成空数组、与 autoResolved 语义矛盾（Codex REFACTOR review）。
+  const limit = Math.max(1, opts.limit ?? 10);
   // floor：production 阈值不得低于 0.9（FR-012，防绕过 FR-003 硬阈值）
   const threshold = Math.max(AUTO_RESOLVE_FLOOR, opts.autoResolveThreshold ?? AUTO_RESOLVE_FLOOR);
 
@@ -478,48 +480,6 @@ function levenshtein(a: string, b: string): number {
     prev = curr;
   }
   return prev[sm]!;
-}
-
-/**
- * 当 symbolId 找不到时，返回最多 limit 个相似候选。
- *
- * 算法（轻量、无外部依赖）：
- *   - 把 query 拆 token（按 `::` `/` `.` `-` `_` 拆分，过滤空 token）
- *   - 给每个 graph node id 打分：
- *       * 命中 token 数 +1 / token
- *       * id 含 query 子串 +0.5
- *   - 按分数降序，取前 limit 个 id
- *
- * 不实现 Levenshtein（避免引入新依赖）；substring + token 命中已足够给 LLM agent
- * 第二次正确输入的提示。
- */
-export function findFuzzyMatches(
-  graphData: Readonly<GraphJSON>,
-  queryId: string,
-  limit: number,
-): string[] {
-  if (limit <= 0 || queryId.length === 0) return [];
-  const tokens = queryId
-    .toLowerCase()
-    .split(/[:/.\-_]+/)
-    .filter((t) => t.length > 0);
-  if (tokens.length === 0) return [];
-  const lowerQuery = queryId.toLowerCase();
-
-  const scored: Array<{ id: string; score: number }> = [];
-  for (const node of graphData.nodes) {
-    const lowerId = node.id.toLowerCase();
-    let score = 0;
-    for (const t of tokens) {
-      if (lowerId.includes(t)) score += 1;
-    }
-    if (lowerId.includes(lowerQuery)) score += 0.5;
-    if (score > 0) {
-      scored.push({ id: node.id, score });
-    }
-  }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((x) => x.id);
 }
 
 // ============================================================

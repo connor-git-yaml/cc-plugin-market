@@ -1,7 +1,7 @@
 /**
  * Feature 155 T-006 — query-helpers.ts 单测
  *
- * 覆盖：bfsTraverse / canonicalizeSymbolId / findFuzzyMatches / computeRiskTier /
+ * 覆盖：bfsTraverse / canonicalizeSymbolId / resolveSymbolFuzzy / computeRiskTier /
  *      getReverseAdjacency / resolveEdgeConfidence
  *
  * 合同重点：
@@ -18,7 +18,6 @@ import type { GraphJSON, GraphEdge } from '../../../src/panoramic/graph/graph-ty
 import {
   bfsTraverse,
   canonicalizeSymbolId,
-  findFuzzyMatches,
   computeRiskTier,
   getReverseAdjacency,
   resolveEdgeConfidence,
@@ -92,33 +91,6 @@ describe('canonicalizeSymbolId', () => {
     const r = canonicalizeSymbolId('fixture/nonexistent.py::Foo', graph);
     expect(r.canonicalId).toBeNull();
     expect(r.reason).toBe('not-found');
-  });
-});
-
-describe('findFuzzyMatches', () => {
-  const graph = loadFixture();
-
-  it('C-009a: substring 命中返回候选', () => {
-    const matches = findFuzzyMatches(graph, 'Value', 5);
-    expect(matches).toContain('fixture/engine.py::Value');
-  });
-
-  it('C-009b: token 命中（拆 :: . _ /）', () => {
-    const matches = findFuzzyMatches(graph, 'engine.py::Val', 5);
-    expect(matches).toContain('fixture/engine.py::Value');
-  });
-
-  it('C-009c: limit=2 截断', () => {
-    const matches = findFuzzyMatches(graph, 'fixture', 2);
-    expect(matches.length).toBeLessThanOrEqual(2);
-  });
-
-  it('C-009d: limit=0 返回空', () => {
-    expect(findFuzzyMatches(graph, 'Value', 0)).toEqual([]);
-  });
-
-  it('C-009e: 空查询返回空', () => {
-    expect(findFuzzyMatches(graph, '', 5)).toEqual([]);
   });
 });
 
@@ -605,6 +577,14 @@ describe('resolveSymbolFuzzy (Feature 174)', () => {
     expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
     expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
     expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
+  });
+
+  it('R-020: limit=0 被 clamp 到 ≥1（autoResolved 时 candidates 不为空，契约一致）', () => {
+    const r = resolveSymbolFuzzy(graph, 'Value.__add__', { limit: 0 });
+    // limit=0 不应让 autoResolved=true 却 candidates 为空
+    expect(r.autoResolved).toBe(true);
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.__add__');
   });
 
   it('R-019 [W-2]: 旧 `#` 分隔符格式 → partial-name 正确提取 symbol 段（防回归）', () => {
