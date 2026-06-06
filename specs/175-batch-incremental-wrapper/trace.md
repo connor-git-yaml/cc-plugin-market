@@ -88,5 +88,12 @@ master HEAD: bb97d70 ✓
         - W-1 full 不清 failedModules / W-2 源码真实 NUL 破坏 grep→\x1f / W-3 补 byte-stable E2E 场景10
     - CODEX 复审: 全 CLOSED + 无新问题；场景10 byte-stable deepEqual 实跑通过（exit 0）
     - W-2 NUL 解释了本轮 grep 静默失效之谜
-- [commit] (pending) feat(175): [GREEN]
-- ⏸ 下一步: Phase 3 [REFACTOR] T032-T039（接入审查 + help 文案 + repo:check）→ verify(6.5/7a/7b/7c)
+- [commit] dc42d4b feat(175): [GREEN]
+- [phase 6 implement] Phase 3 [REFACTOR] (T032-T039): COMPLETED（验证为主，refactor 已前置到 Phase 0）
+    - T032 三入口接入 resolveRegenPlan + :388 硬编码已删 ✓；T033 delta-regenerator resolveSourceTarget ✓
+    - T034 help 文案 --full/--force/--mode 正交清晰 ✓；T035 无残留 Phase 0 占位注释（GREEN 已清）✓
+    - T036 eval-task-runner 未改（code-only + 临时目录退化全量）✓
+    - T037 vitest 3898 passed/0 failed；T038 build 0；T039 repo:check + release:check pass
+- [commit] (pending) refactor(175): [REFACTOR]
+- ✅ implement 阶段（Phase 0-3）全部完成
+- ⏸ 下一步: verify(6.5 verify_independent / 7a spec-review / 7b quality-review / 7c verify) + GATE_VERIFY → push report

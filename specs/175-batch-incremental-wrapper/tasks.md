@@ -194,34 +194,34 @@
 
 ### 接入完整性确认
 
-- [ ] T032 审查 `src/batch/batch-orchestrator.ts`：确认 `:388` 原 `incremental = false` 硬编码已完全移除；确认三处入口（CLI/MCP/runBatch 直调）均通过 `resolveRegenPlan` 获得默认值，无遗漏漂移点
+- [x] T032 审查 `src/batch/batch-orchestrator.ts`：确认 `:388` 原 `incremental = false` 硬编码已完全移除；确认三处入口（CLI/MCP/runBatch 直调）均通过 `resolveRegenPlan` 获得默认值，无遗漏漂移点
   - 文件: `src/batch/batch-orchestrator.ts`
 
-- [ ] T033 [P] 审查 `src/batch/delta-regenerator.ts`：确认 `resolveSourceTarget` 被 `DeltaRegenerator.collectCurrentSnapshots` 调用（T027 完成），target 口径与 `processOneModule` 一致（FR-019 最终验证）
+- [x] T033 [P] 审查 `src/batch/delta-regenerator.ts`：确认 `resolveSourceTarget` 被 `DeltaRegenerator.collectCurrentSnapshots` 调用（T027 完成），target 口径与 `processOneModule` 一致（FR-019 最终验证）
   - 文件: `src/batch/delta-regenerator.ts`
 
 ### 帮助文案与可观测性
 
-- [ ] T034 审查 `src/cli/index.ts`（真实 help 输出处 `:37-43`/`:87-98`）+ `src/cli/utils/parse-args.ts`：确认 `--help` 文案中 `--full`（regen 轴）与 `--mode full`（质量维度）的描述各自独立，无语义重叠（见 contracts/cli-flags-contract.md 的 help 模板）；`--force` 标注为别名；`--mode` 描述明确与 regen 轴正交
+- [x] T034 审查 `src/cli/index.ts`（真实 help 输出处 `:37-43`/`:87-98`）+ `src/cli/utils/parse-args.ts`：确认 `--help` 文案中 `--full`（regen 轴）与 `--mode full`（质量维度）的描述各自独立，无语义重叠（见 contracts/cli-flags-contract.md 的 help 模板）；`--force` 标注为别名；`--mode` 描述明确与 regen 轴正交
   - 文件: `src/cli/index.ts`, `src/cli/utils/parse-args.ts`
 
-- [ ] T035 [P] 清理 Phase 0 在 `src/batch/regen-plan.ts` 和 `src/panoramic/graph/graph-builder.ts` 中遗留的临时注释（标注"Phase 0 行为不变"的注释），更新为正式实现说明
+- [x] T035 [P] 清理 Phase 0 在 `src/batch/regen-plan.ts` 和 `src/panoramic/graph/graph-builder.ts` 中遗留的临时注释（标注"Phase 0 行为不变"的注释），更新为正式实现说明
   - 文件: `src/batch/regen-plan.ts`, `src/panoramic/graph/graph-builder.ts`
 
 ### eval 脚本评估记录
 
-- [ ] T036 审查 `scripts/eval-task-runner.mjs`：确认调用方式（`spectra batch --mode code-only`，未传 incremental），翻转后走 DeltaRegenerator，但 eval worktree 为临时目录/新 clone 无历史 spec → DeltaRegenerator 退化全量（EC-006 路径），行为等效。**无需修改**，记录此评估结论为注释或 commit message（OQ-2/OQ-4 决议）
+- [x] T036 审查 `scripts/eval-task-runner.mjs`：确认调用方式（`spectra batch --mode code-only`，未传 incremental），翻转后走 DeltaRegenerator，但 eval worktree 为临时目录/新 clone 无历史 spec → DeltaRegenerator 退化全量（EC-006 路径），行为等效。**无需修改**，记录此评估结论为注释或 commit message（OQ-2/OQ-4 决议）
   - 文件: `scripts/eval-task-runner.mjs`（只读审查，不改动）
 
 ### 全量验收
 
-- [ ] T037 运行 `npx vitest run`（含新 E2E `tests/e2e/feature-175-batch-incremental.e2e.test.ts` 和全部单测），确认：(a) 所有测试零失败；(b) `tests/e2e/batch-pipeline.e2e.test.ts`（存量 E2E）无回归；(c) 新增测试覆盖 FR-018 的 BFS 传播独立断言（非同义反复断言）
+- [x] T037 运行 `npx vitest run`（含新 E2E `tests/e2e/feature-175-batch-incremental.e2e.test.ts` 和全部单测），确认：(a) 所有测试零失败；(b) `tests/e2e/batch-pipeline.e2e.test.ts`（存量 E2E）无回归；(c) 新增测试覆盖 FR-018 的 BFS 传播独立断言（非同义反复断言）
   - 验收指令: `npx vitest run`
 
-- [ ] T038 [P] 运行 `npm run build`，确认零 TypeScript 编译错误（含新增类型 `RegenPlan`、`RegenPlanInput`、`RegenPlanSource`、`StoredModuleSpecSummary.generatedByMode` 扩展、MCP schema `full` 参数）
+- [x] T038 [P] 运行 `npm run build`，确认零 TypeScript 编译错误（含新增类型 `RegenPlan`、`RegenPlanInput`、`RegenPlanSource`、`StoredModuleSpecSummary.generatedByMode` 扩展、MCP schema `full` 参数）
   - 验收指令: `npm run build`
 
-- [ ] T039 [P] 运行 `npm run repo:check`，确认仓库级同步检查零错误（release contract、plugin metadata、shared helper 同步链路不受影响）
+- [x] T039 [P] 运行 `npm run repo:check`，确认仓库级同步检查零错误（release contract、plugin metadata、shared helper 同步链路不受影响）
   - 验收指令: `npm run repo:check`
 
 ---
