@@ -213,8 +213,59 @@ function hasNode(graphData: Readonly<GraphJSON>, id: string): boolean {
 }
 
 // ============================================================
-// fuzzy match
+// fuzzy match — 分层解析（Feature 174）
 // ============================================================
+
+/** fuzzy match 命中层次 */
+export type MatchKind = 'exact' | 'path-suffix' | 'partial-name' | 'levenshtein';
+
+/** 单个 fuzzy match 候选结果 */
+export interface SymbolCandidate {
+  /** canonical symbol id */
+  id: string;
+  /** 置信度 0~1（各层规则见 resolveSymbolFuzzy 注释） */
+  confidence: number;
+  /** 命中层次 */
+  matchKind: MatchKind;
+}
+
+/** resolveSymbolFuzzy 返回值 */
+export interface FuzzyResolveResult {
+  /** 按 confidence 降序、长度 ≤ limit 的候选；去重后唯一且高分时触发 autoResolved */
+  candidates: SymbolCandidate[];
+  /** 去重后唯一候选且 confidence ≥ autoResolveThreshold(默认 0.9) 时为 true */
+  autoResolved: boolean;
+}
+
+/** resolveSymbolFuzzy 选项 */
+export interface FuzzyResolveOptions {
+  /** 透传给 canonicalizeSymbolId 做绝对↔相对路径归一 */
+  projectRoot?: string;
+  /** 纯函数内部候选上限（默认 10，测试可设更大值；handler 层另行 clamp 到 top-3） */
+  limit?: number;
+  /** 自动 resolve 阈值（默认 0.9；production handler floor 不得低于 0.9） */
+  autoResolveThreshold?: number;
+}
+
+/**
+ * 分层 fuzzy 解析 symbol id（Feature 174）。
+ *
+ * 四层命中即停（分数递减）：
+ *   (a) exact      — 复用 canonicalizeSymbolId，confidence 1.0
+ *   (b) path-suffix — 文件路径后缀匹配，confidence 0.9
+ *   (c) partial-name — 仅方法名/类名，按唯一性加权（唯一 ≥0.9 / 多义 0.7~0.85）
+ *   (d) levenshtein — 拼写相似，confidence 0.5~0.75
+ *
+ * NOTE(174 RED-T002a): 当前为 stub 实现，GREEN 阶段（T005~T011）替换为真实分层逻辑。
+ * stub 让测试文件可编译收集，使断言在"返回空"处真红（而非整文件收集失败）。
+ */
+export function resolveSymbolFuzzy(
+  _graphData: Readonly<GraphJSON>,
+  _query: string,
+  _opts: FuzzyResolveOptions = {},
+): FuzzyResolveResult {
+  return { candidates: [], autoResolved: false };
+}
 
 /**
  * 当 symbolId 找不到时，返回最多 limit 个相似候选。

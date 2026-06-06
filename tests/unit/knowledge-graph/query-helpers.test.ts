@@ -25,6 +25,7 @@ import {
   clearReverseAdjacencyCache,
   moduleFileFromId,
   findNode,
+  resolveSymbolFuzzy,
 } from '../../../src/knowledge-graph/query-helpers.js';
 
 const FIXTURE_PATH = resolve(__dirname, '../../fixtures/graph-fixtures/synthetic-budget.json');
@@ -409,5 +410,200 @@ describe('moduleFileFromId / findNode', () => {
   it('C-016: findNode 找到 + 找不到都正确', () => {
     expect(findNode(graph, 'fixture/engine.py::Value')?.label).toBe('Value');
     expect(findNode(graph, 'nonexistent')).toBeNull();
+  });
+});
+
+// ============================================================
+// Feature 174 — resolveSymbolFuzzy 分层 fuzzy 解析
+// 合同：四层命中即停（exact 1.0 / path-suffix 0.9 / partial-name 唯一性加权 /
+//       levenshtein 0.5~0.75）+ 去重后唯一且 ≥0.9 → autoResolved
+// ============================================================
+
+/** 构造 fuzzy 测试用合成 micrograd 图（含 cohort C 节点 + 多义 relu + 路径后缀多义） */
+function makeFuzzyGraph(): GraphJSON {
+  const node = (id: string, label: string, kind: 'component' | 'module' = 'component') => ({
+    id,
+    kind,
+    label,
+    metadata: {},
+  });
+  return {
+    nodes: [
+      node('micrograd/engine.py::Value', 'Value'),
+      node('micrograd/engine.py::Value.__add__', '__add__'),
+      node('micrograd/engine.py::Value.__mul__', '__mul__'),
+      node('micrograd/engine.py::Value.__neg__', '__neg__'),
+      node('micrograd/engine.py::Value.__pow__', '__pow__'),
+      node('micrograd/engine.py::Value.__repr__', '__repr__'),
+      node('micrograd/engine.py::Value.backward', 'backward'),
+      node('micrograd/engine.py::Value.relu', 'relu'),
+      // 第二个 relu（不同 module）→ partial-name 多义
+      node('micrograd/nn.py::Module.relu', 'relu'),
+      node('micrograd/nn.py::Linear', 'Linear'),
+      node('micrograd/nn.py::ReLU', 'ReLU'),
+      // path-suffix 多义（两个 package 同后缀）→ 平票 / C-3
+      node('a/util.py::Helper', 'Helper'),
+      node('b/util.py::Helper', 'Helper'),
+      // module 节点（无 ::）
+      node('micrograd/engine.py', 'engine.py', 'module'),
+      node('micrograd/nn.py', 'nn.py', 'module'),
+    ],
+    links: [],
+    metadata: { schemaVersion: '2.0' },
+  } as unknown as GraphJSON;
+}
+
+describe('resolveSymbolFuzzy (Feature 174)', () => {
+  const graph = makeFuzzyGraph();
+
+  // ---- 层 (a) exact ----
+  it('R-001: 层 (a) exact 命中 → confidence 1.0 + autoResolved', () => {
+    const r = resolveSymbolFuzzy(graph, 'micrograd/engine.py::Value');
+    expect(r.candidates[0]?.matchKind).toBe('exact');
+    expect(r.candidates[0]?.confidence).toBe(1.0);
+    expect(r.autoResolved).toBe(true);
+  });
+
+  // ---- 层 (b) path-suffix ----
+  it('R-002: 层 (b) path-suffix 唯一命中 → confidence 0.9 + autoResolved', () => {
+    const r = resolveSymbolFuzzy(graph, 'engine.py::Value');
+    expect(r.candidates[0]?.matchKind).toBe('path-suffix');
+    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.autoResolved).toBe(true);
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
+  });
+
+  it('R-003: 层 (b) path-suffix 多命中 → 不 autoResolved + ≥2 候选', () => {
+    const r = resolveSymbolFuzzy(graph, 'util.py::Helper');
+    expect(r.autoResolved).toBe(false);
+    expect(r.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(r.candidates.every((c) => c.matchKind === 'path-suffix')).toBe(true);
+  });
+
+  // ---- 层 (c) partial-name ----
+  it('R-004: 层 (c) partial-name qualified 唯一 → 0.95 + autoResolved', () => {
+    const r = resolveSymbolFuzzy(graph, 'Value.__add__');
+    expect(r.candidates[0]?.matchKind).toBe('partial-name');
+    expect(r.candidates[0]?.confidence).toBe(0.95);
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.__add__');
+    expect(r.autoResolved).toBe(true);
+  });
+
+  it('R-005: 层 (c) partial-name bare 唯一 → 0.90 + autoResolved', () => {
+    const r = resolveSymbolFuzzy(graph, 'backward');
+    expect(r.candidates[0]?.matchKind).toBe('partial-name');
+    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value.backward');
+    expect(r.autoResolved).toBe(true);
+  });
+
+  it('R-006: 层 (c) partial-name 多义（2 节点）→ 不 autoResolved + top 候选 0.7~0.85', () => {
+    const r = resolveSymbolFuzzy(graph, 'relu');
+    expect(r.autoResolved).toBe(false);
+    expect(r.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.85);
+    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.7); // 合同下限
+    expect(r.candidates.every((c) => c.matchKind === 'partial-name')).toBe(true);
+  });
+
+  // ---- 层 (d) levenshtein ----
+  it('R-007: 层 (d) Levenshtein typo 命中 → matchKind levenshtein + confidence [0.5,0.75]', () => {
+    const r = resolveSymbolFuzzy(graph, 'egnine.py::Value');
+    expect(r.candidates[0]?.matchKind).toBe('levenshtein');
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
+    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
+  });
+
+  it('R-008: 层 (d) 超编辑距离阈值 → 无候选', () => {
+    const r = resolveSymbolFuzzy(graph, 'zzzzzzzzzzzzzzzzzz');
+    expect(r.candidates).toEqual([]);
+    expect(r.autoResolved).toBe(false);
+  });
+
+  it('R-009: query > 512 字符 → 跳过层 d，返回前三层结果（此处为空）', () => {
+    const longQuery = 'z'.repeat(513);
+    const r = resolveSymbolFuzzy(graph, longQuery);
+    expect(r.candidates).toEqual([]);
+    expect(r.autoResolved).toBe(false);
+  });
+
+  // ---- 边界 ----
+  it('R-010: 空 query → {candidates:[], autoResolved:false}', () => {
+    expect(resolveSymbolFuzzy(graph, '')).toEqual({ candidates: [], autoResolved: false });
+    expect(resolveSymbolFuzzy(graph, '   ')).toEqual({ candidates: [], autoResolved: false });
+  });
+
+  it('R-011: 控制字符 query → {candidates:[], autoResolved:false}', () => {
+    expect(resolveSymbolFuzzy(graph, 'Value\x00')).toEqual({ candidates: [], autoResolved: false });
+  });
+
+  it('R-012: 空 graph → {candidates:[], autoResolved:false}', () => {
+    const empty = { nodes: [], links: [], metadata: {} } as unknown as GraphJSON;
+    expect(resolveSymbolFuzzy(empty, 'Value')).toEqual({ candidates: [], autoResolved: false });
+  });
+
+  it('R-013: 平票（两候选等分）→ 不 autoResolved', () => {
+    // util.py::Helper 在 a/ 与 b/ 两 package 下均为 path-suffix 0.9 → 平票
+    const r = resolveSymbolFuzzy(graph, 'util.py::Helper');
+    expect(r.autoResolved).toBe(false);
+    expect(r.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(r.candidates.every((c) => c.matchKind === 'path-suffix')).toBe(true);
+    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.candidates[1]?.confidence).toBe(0.9);
+    expect(r.candidates.map((c) => c.id).sort()).toEqual(['a/util.py::Helper', 'b/util.py::Helper']);
+  });
+
+  it('R-014: graphData 只读（Object.freeze）→ 不抛异常', () => {
+    const frozen = Object.freeze(makeFuzzyGraph());
+    Object.freeze(frozen.nodes);
+    expect(() => resolveSymbolFuzzy(frozen, 'Value.__add__')).not.toThrow();
+  });
+
+  it('R-015: autoResolveThreshold floor ≥0.9（传 0.5 不得让 levenshtein 自动 resolve）', () => {
+    // 单节点图：egnine.py::Value 唯一 levenshtein 命中（confidence ~0.67）
+    const single = {
+      nodes: [{ id: 'pkg/engine.py::Value', kind: 'component', label: 'Value', metadata: {} }],
+      links: [],
+      metadata: {},
+    } as unknown as GraphJSON;
+    const r = resolveSymbolFuzzy(single, 'egnine.py::Value', { autoResolveThreshold: 0.5 });
+    // 唯一 levenshtein 候选，confidence 0.5~0.75（< 0.9）
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]?.matchKind).toBe('levenshtein');
+    expect(r.candidates[0]?.id).toBe('pkg/engine.py::Value');
+    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.confidence).toBeLessThan(0.9);
+    // 即使传入阈值 0.5，floor 强制 ≥0.9 → 候选 <0.9 → 不 autoResolve（floor 语义保护）
+    expect(r.autoResolved).toBe(false);
+  });
+
+  // ---- codex 风险回归用例 ----
+  it('R-016 [C-3]: limit=1 + 2 候选不应误 autoResolve（用 deduped.length 判唯一）', () => {
+    const r = resolveSymbolFuzzy(graph, 'util.py::Helper', { limit: 1 });
+    // candidates 被 slice 到 limit=1，但 autoResolved 必须基于去重后真实候选数（2）判定
+    expect(r.candidates.length).toBe(1);
+    expect(r.candidates[0]?.matchKind).toBe('path-suffix');
+    expect(['a/util.py::Helper', 'b/util.py::Helper']).toContain(r.candidates[0]?.id);
+    expect(r.candidates[0]?.confidence).toBe(0.9);
+    expect(r.autoResolved).toBe(false);
+  });
+
+  it('R-017 [C-2]: bare 单 token 不走 path-suffix（落 partial-name 唯一 0.90 autoResolve）', () => {
+    // 'Linear' 是 bare token（无 :: 无 /）→ 必须 partial-name 命中，而非 path-suffix
+    const r = resolveSymbolFuzzy(graph, 'Linear');
+    expect(r.candidates[0]?.matchKind).toBe('partial-name');
+    expect(r.candidates[0]?.id).toBe('micrograd/nn.py::Linear');
+    expect(r.candidates[0]?.confidence).toBe(0.9); // bare 唯一加权
+    expect(r.autoResolved).toBe(true);
+  });
+
+  it('R-018 [C-1]: typo 对 basename::symbol 多表示命中（去 package 前缀）', () => {
+    // 完整 id 含 micrograd/ 前缀会让距离超阈值；多表示取 basename::symbol 后命中
+    const r = resolveSymbolFuzzy(graph, 'egnine.py::Value');
+    expect(r.candidates[0]?.matchKind).toBe('levenshtein');
+    expect(r.candidates[0]?.id).toBe('micrograd/engine.py::Value');
+    expect(r.candidates[0]?.confidence).toBeGreaterThanOrEqual(0.5);
+    expect(r.candidates[0]?.confidence).toBeLessThanOrEqual(0.75);
   });
 });

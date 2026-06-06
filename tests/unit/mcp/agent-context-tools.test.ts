@@ -158,12 +158,41 @@ describe('impact tool', () => {
     expect(data['effectiveDirection']).toBe('upstream');
   });
 
-  it('C-102 target 不存在 → symbol-not-found + fuzzyMatches', async () => {
+  it('C-102 target 不存在 → symbol-not-found + 结构化 fuzzyMatches（F174 breaking change）', async () => {
     setMockGraph();
-    const r = await handleImpact({ target: 'fixture/engine.py::DoesNotExist' });
+    // 'Linea'（Linear 的 typo）→ 不 exact、不 autoResolve（levenshtein <0.9）→ 结构化 top-3 候选
+    const r = await handleImpact({ target: 'Linea' });
     const e = parseError(r);
     expect(e.code).toBe('symbol-not-found');
-    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; confidence: number; matchKind: string }>;
+    expect(Array.isArray(fz)).toBe(true);
+    expect(fz.length).toBeGreaterThan(0);
+    expect(fz.length).toBeLessThanOrEqual(3);
+    // F174：每项必须是 {id, confidence, matchKind} 结构（不再是 string[]）
+    for (const c of fz) {
+      expect(typeof c).toBe('object');
+      expect(typeof c.id).toBe('string');
+      expect(typeof c.confidence).toBe('number');
+      expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
+    }
+    // 算法合同：'Linea' levenshtein 命中 Linear，confidence <0.9（故不 autoResolve 走 error 路径）
+    expect(fz[0]?.id).toBe('fixture/nn.py::Linear');
+    expect(fz[0]?.matchKind).toBe('levenshtein');
+    expect(fz[0]?.confidence).toBeLessThan(0.9);
+  });
+
+  it('C-110 [F174] impact autoResolved=true → 用 resolvedTo 继续 + resolvedFrom/resolvedTo/warnings', async () => {
+    setMockGraph();
+    // 'Value'（bare，无 path）→ partial-name 唯一加权 0.90 ≥0.9 → autoResolve 到 fixture/engine.py::Value
+    const r = await handleImpact({ target: 'Value' });
+    const data = parseSuccess(r);
+    expect(data['resolvedFrom']).toBe('Value');
+    expect(data['resolvedTo']).toBe('fixture/engine.py::Value');
+    expect(typeof data['resolvedConfidence']).toBe('number');
+    expect((data['resolvedConfidence'] as number)).toBeGreaterThanOrEqual(0.9);
+    expect(data['warnings'] as string[]).toContain('fuzzy-resolved');
+    // 仍返回正常 impact 数据（affected 来自 fixture/engine.py::Value 的 callers）
+    expect(Array.isArray(data['affected'])).toBe(true);
   });
 
   it('C-103 depth=10 clamp 到 5 + warnings depth-clamped', async () => {
@@ -330,12 +359,40 @@ describe('context tool', () => {
     expect((data['relatedSpec'] as Record<string, unknown>)['kind']).toBe('unknown');
   });
 
-  it('C-206 symbolId 不存在 → symbol-not-found + fuzzy', async () => {
+  it('C-206 symbolId 不存在 → symbol-not-found + 结构化 fuzzyMatches（F174 breaking change）', async () => {
     setMockGraph();
-    const r = await handleContext({ symbolId: 'fixture/engine.py::Nonexistent' });
+    // 'Linea'（Linear 的 typo）→ 不 autoResolve → 结构化 top-3 候选（非旧 string[]）
+    const r = await handleContext({ symbolId: 'Linea' });
     const e = parseError(r);
     expect(e.code).toBe('symbol-not-found');
-    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+    const fz = e.context?.['fuzzyMatches'] as Array<{ id: string; confidence: number; matchKind: string }>;
+    expect(Array.isArray(fz)).toBe(true);
+    expect(fz.length).toBeGreaterThan(0);
+    expect(fz.length).toBeLessThanOrEqual(3);
+    for (const c of fz) {
+      expect(typeof c).toBe('object');
+      expect(typeof c.id).toBe('string');
+      expect(typeof c.confidence).toBe('number');
+      expect(['exact', 'path-suffix', 'partial-name', 'levenshtein']).toContain(c.matchKind);
+    }
+    // 算法合同：'Linea' levenshtein 命中 Linear，confidence <0.9
+    expect(fz[0]?.id).toBe('fixture/nn.py::Linear');
+    expect(fz[0]?.matchKind).toBe('levenshtein');
+    expect(fz[0]?.confidence).toBeLessThan(0.9);
+  });
+
+  it('C-209 [F174] context autoResolved=true → resolvedFrom/resolvedTo/resolvedConfidence + warnings', async () => {
+    setMockGraph();
+    // 'Value'（bare）→ partial-name 唯一加权 0.90 → autoResolve 到 fixture/engine.py::Value
+    const r = await handleContext({ symbolId: 'Value' });
+    const data = parseSuccess(r);
+    expect(data['resolvedFrom']).toBe('Value');
+    expect(data['resolvedTo']).toBe('fixture/engine.py::Value');
+    expect(typeof data['resolvedConfidence']).toBe('number');
+    expect((data['resolvedConfidence'] as number)).toBeGreaterThanOrEqual(0.9);
+    expect(data['warnings'] as string[]).toContain('fuzzy-resolved');
+    // 仍返回正常 context 数据（definition 来自 resolve 后的节点）
+    expect((data['definition'] as Record<string, unknown>)['id']).toBe('fixture/engine.py::Value');
   });
 
   it('C-207 invalid-symbol-id 含控制字符', async () => {
