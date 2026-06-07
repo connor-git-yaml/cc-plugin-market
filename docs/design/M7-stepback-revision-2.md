@@ -75,7 +75,7 @@ decisions:
 | 9 | batch 工具 MCP 路径：传 incremental/full/force 冲突组合，断言 `resolveRegenPlan` 在 MCP 路径正确解析（full 逃生口绕 cache）+ 返回 deltaReport + config fallback 合并（175 全 in-process 直调 runBatch）| medium | 第二轮 |
 | 10 | 子代理 namespace 路由：带 `mcp__plugin_spectra_spectra__impact` 前缀经 stdio callTool，断言正确路由到底层 impact handler（170a 仅文件断言 frontmatter，无真实调用）| medium | 第二轮 |
 | 11 | F174 fuzzy 经 stdio 端到端：传模糊 symbol（无 path 简短名 / typo / path-suffix）调 context/impact，断言 fuzzy resolve 在进程边界生效（warnings 含 fuzzy-resolved、resolvedFrom/resolvedTo 透传；174 全 mock + in-process）| medium | 第二轮 |
-| 12 | full batch reproducibility（同 commit 两次 full → 归一化 deepEqual）| medium | 第一轮 |
+| 12 | full batch reproducibility（同 commit 两次 full）：**原始 graph.json 文件直接 deepEqual**（不经 readNormalizedGraph 归一化——F179 落盘侧 byte-stable 闭合后应成立，最强护栏）+ 归一化 deepEqual 作兜底 | medium | 第一轮 + F179 体检 |
 | 13 | F170d driver preference sandbox 决策代理（stub driver 把"引导→选择"拉进 CI，真实 LLM 仍走 HOST_E2E）| low→可选 | 第一轮 |
 
 **defer 到 M8**（low，非 stdio 系统补齐核心）：graph.json stale 自动失效（外部覆盖后 re-callTool 拿新图）、超大 payload 截断（PAYLOAD_CAP_BYTES + payload-truncated/too-large 在 JSON-RPC 下成立）。
