@@ -61,6 +61,55 @@ import { recordAndReturn } from './lib/telemetry.js';
 export { recordAndReturn, writeTelemetry, type TelemetryEntry } from './lib/telemetry.js';
 
 // ============================================================
+// Feature 177 — agent-context 三工具共享骨架（对标 file-nav 的 runFileNavTool）
+// ============================================================
+
+/** body 返回值：result 必填；summary/samples 可选（仅 detect_changes 成功路径填充） */
+interface AgentContextBodyOut {
+  result: ToolResult;
+  /** Feature 165 responseSummary（轻量响应摘要） */
+  summary?: Record<string, number>;
+  /** Feature 165 responseSamples（symbol / file 抽样） */
+  samples?: { symbols?: string[]; files?: string[] };
+}
+
+/**
+ * 统一 impact / context / detect_changes 三工具的 telemetry 采样 + 顶层 internal-error catch +
+ * recordAndReturn 透传，消除三处复制的 _telStart / _telReqSize / 散落 recordAndReturn 样板。
+ *
+ * 不变量（spec AD-1）：agent-context 属"自采样组"——telemetry 在本骨架内（handler 内部）发射，
+ * 注册层**不**再包 withTelemetry，故每次调用恰 1 行。
+ *
+ * 顶层 catch 行为保持与重构前**逐字一致**（behavior-preserve）：internal-error 携带 err.message
+ * 与截断 stack。该 message/stack 形态属 agent-context 既有行为，不在 F177 C-4 重新脱敏范围
+ * （spec 遗留-2）。
+ */
+async function runAgentContextTool(
+  toolName: string,
+  args: object,
+  body: () => AgentContextBodyOut | Promise<AgentContextBodyOut>,
+): Promise<ToolResult> {
+  const _telStart = Date.now();
+  let _telReqSize = 0;
+  try {
+    _telReqSize = JSON.stringify(args).length;
+  } catch {
+    _telReqSize = 0;
+  }
+  try {
+    const out = await body();
+    return recordAndReturn(toolName, _telStart, _telReqSize, out.result, out.summary, out.samples);
+  } catch (err) {
+    return recordAndReturn(toolName, _telStart, _telReqSize, buildErrorResponse(
+      'internal-error',
+      err instanceof Error ? err.message : String(err),
+      undefined,
+      { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
+    ));
+  }
+}
+
+// ============================================================
 // impact tool
 // ============================================================
 
@@ -83,28 +132,19 @@ interface ImpactArgs {
 }
 
 export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
-  // Feature 158 telemetry: 入口采样
-  const _telStart = Date.now();
-  const _telReqSize = (() => {
-    try {
-      return JSON.stringify(args).length;
-    } catch {
-      return 0;
-    }
-  })();
-  try {
+  return runAgentContextTool('impact', args, () => {
     if (typeof args.target !== 'string' || args.target.length === 0) {
-      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse('invalid-input', 'target 必填且为非空字符串'));
+      return { result: buildErrorResponse('invalid-input', 'target 必填且为非空字符串') };
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
+      return { result: buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在或加载失败 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
-      ));
+      ) };
     }
     const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
 
@@ -124,7 +164,7 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     // canonicalize symbol id
     const canon = canonicalizeSymbolId(args.target, graphData, { projectRoot });
     if (canon.reason === 'invalid') {
-      return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `target 含非法字符或格式: ${args.target}`));
+      return { result: buildErrorResponse('invalid-symbol-id', `target 含非法字符或格式: ${args.target}`) };
     }
     // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
     let startId: string;
@@ -136,12 +176,12 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
         fuzzyResolved = { from: args.target, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
         warnings.push('fuzzy-resolved');
       } else {
-        return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
+        return { result: buildErrorResponse(
           'symbol-not-found',
           `target 在 graph 中未找到: ${args.target}`,
           '请检查 symbol id 格式或参考 fuzzyMatches 候选',
           { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
-        ));
+        ) };
       }
     } else {
       startId = canon.canonicalId;
@@ -209,15 +249,8 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     data['nextStepHint'] = nextStepHint;
     if (enrichmentDegraded) data['_enrichmentDegraded'] = true;
 
-    return recordAndReturn('impact', _telStart, _telReqSize, buildSuccessResponse(data, ['affected']));
-  } catch (err) {
-    return recordAndReturn('impact', _telStart, _telReqSize, buildErrorResponse(
-      'internal-error',
-      err instanceof Error ? err.message : String(err),
-      undefined,
-      { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    ));
-  }
+    return { result: buildSuccessResponse(data, ['affected']) };
+  });
 }
 
 // ============================================================
@@ -240,28 +273,19 @@ interface ContextArgs {
 }
 
 export async function handleContext(args: ContextArgs): Promise<ToolResult> {
-  // Feature 158 telemetry: 入口采样
-  const _telStart = Date.now();
-  const _telReqSize = (() => {
-    try {
-      return JSON.stringify(args).length;
-    } catch {
-      return 0;
-    }
-  })();
-  try {
+  return runAgentContextTool('context', args, () => {
     if (typeof args.symbolId !== 'string' || args.symbolId.length === 0) {
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('invalid-input', 'symbolId 必填且为非空字符串'));
+      return { result: buildErrorResponse('invalid-input', 'symbolId 必填且为非空字符串') };
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
+      return { result: buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 生成图谱',
-      ));
+      ) };
     }
     const { graphData } = cached;
 
@@ -272,7 +296,7 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
 
     const canon = canonicalizeSymbolId(args.symbolId, graphData, { projectRoot });
     if (canon.reason === 'invalid') {
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('invalid-symbol-id', `symbolId 含非法字符: ${args.symbolId}`));
+      return { result: buildErrorResponse('invalid-symbol-id', `symbolId 含非法字符: ${args.symbolId}`) };
     }
     // F174：canonicalize not-found 时走分层 fuzzy（autoResolved → 用 resolvedTo 继续；否则结构化 top-3）
     let resolvedId: string;
@@ -284,12 +308,12 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
         fuzzyResolved = { from: args.symbolId, to: fuzzy.candidates[0].id, confidence: fuzzy.candidates[0].confidence };
         warnings.push('fuzzy-resolved');
       } else {
-        return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
+        return { result: buildErrorResponse(
           'symbol-not-found',
           `symbolId 在 graph 中未找到: ${args.symbolId}`,
           '请检查 id 格式或参考 fuzzyMatches 候选',
           { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
-        ));
+        ) };
       }
     } else {
       resolvedId = canon.canonicalId;
@@ -297,7 +321,7 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
 
     const node = findNode(graphData, resolvedId);
     if (node === null) {
-      return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse('symbol-not-found', `节点对象未找到: ${resolvedId}`));
+      return { result: buildErrorResponse('symbol-not-found', `节点对象未找到: ${resolvedId}`) };
     }
 
     const definition = buildDefinition(node);
@@ -358,15 +382,8 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     data['nextStepHint'] = nextStepHint;
     if (enrichmentDegraded) data['_enrichmentDegraded'] = true;
 
-    return recordAndReturn('context', _telStart, _telReqSize, buildSuccessResponse(data, ['callers', 'callees', 'imports']));
-  } catch (err) {
-    return recordAndReturn('context', _telStart, _telReqSize, buildErrorResponse(
-      'internal-error',
-      err instanceof Error ? err.message : String(err),
-      undefined,
-      { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    ));
-  }
+    return { result: buildSuccessResponse(data, ['callers', 'callees', 'imports']) };
+  });
 }
 
 function buildDefinition(node: GraphNode): Record<string, unknown> {
@@ -459,25 +476,16 @@ interface ChangedFile {
 }
 
 export async function handleDetectChanges(args: DetectChangesArgs): Promise<ToolResult> {
-  // Feature 158 telemetry: 入口采样
-  const _telStart = Date.now();
-  const _telReqSize = (() => {
-    try {
-      return JSON.stringify(args).length;
-    } catch {
-      return 0;
-    }
-  })();
-  try {
+  return runAgentContextTool('detect_changes', args, () => {
     const hasDiff = typeof args.diff === 'string' && args.diff.length > 0;
     const hasBaseRef = typeof args.baseRef === 'string' && args.baseRef.length > 0;
     if (!hasDiff && !hasBaseRef) {
-      return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
+      return { result: buildErrorResponse(
         'invalid-input',
         '必须提供 diff 或 baseRef 之一',
         undefined,
         { reason: 'diff-or-baseref-required' },
-      ));
+      ) };
     }
 
     const warnings: string[] = [];
@@ -488,11 +496,11 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     const projectRoot = args.projectRoot ?? process.cwd();
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
-      return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
+      return { result: buildErrorResponse(
         'graph-not-built',
         `graph.json 不存在 (projectRoot=${projectRoot})`,
         '请先运行 `spectra batch` 生成图谱',
-      ));
+      ) };
     }
     const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
 
@@ -502,23 +510,23 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     if (hasDiff) {
       // 5MB 上限校验前置（CRITICAL fix：返回 payload-too-large 而非 invalid-diff）
       if (Buffer.byteLength(args.diff!, 'utf-8') > MAX_DIFF_BYTES) {
-        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
+        return { result: buildErrorResponse(
           'payload-too-large',
           `diff 超过上限 ${MAX_DIFF_BYTES} 字节`,
           undefined,
           { limitBytes: MAX_DIFF_BYTES },
-        ));
+        ) };
       }
       const parsed = parseUnifiedDiff(args.diff!);
       if (parsed.error !== undefined) {
-        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse('invalid-diff', parsed.error));
+        return { result: buildErrorResponse('invalid-diff', parsed.error) };
       }
       changedFiles = parsed.changed;
       unmappedFromInput = parsed.unmapped;
     } else {
       const r = runGitDiffNameStatus(args.baseRef!, projectRoot);
       if (!r.ok) {
-        return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(r.code, r.message, undefined, r.context));
+        return { result: buildErrorResponse(r.code, r.message, undefined, r.context) };
       }
       changedFiles = r.changed;
       unmappedFromInput = r.unmapped;
@@ -610,22 +618,12 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
 
     // telemetry sample（Feature 165）
     const { symbolSample, fileSample } = _buildTelemetrySamples(changedSymbolsOut);
-    return recordAndReturn(
-      'detect_changes',
-      _telStart,
-      _telReqSize,
-      buildSuccessResponse(data, ['affectedSymbols']),
-      { changedSymbolsCount: totalChanged },
-      { symbols: symbolSample, files: fileSample },
-    );
-  } catch (err) {
-    return recordAndReturn('detect_changes', _telStart, _telReqSize, buildErrorResponse(
-      'internal-error',
-      err instanceof Error ? err.message : String(err),
-      undefined,
-      { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
-    ));
-  }
+    return {
+      result: buildSuccessResponse(data, ['affectedSymbols']),
+      summary: { changedSymbolsCount: totalChanged },
+      samples: { symbols: symbolSample, files: fileSample },
+    };
+  });
 }
 
 // ─── detect_changes 私有辅助函数（F170c T-GREEN-2 cleanup） ───
