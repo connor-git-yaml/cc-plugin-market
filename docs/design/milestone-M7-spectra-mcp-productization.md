@@ -7,6 +7,8 @@ features_planned: F170a / F170c / F171 / F174 / F175 / F176
 scope_decision: complete (vs minimal / extended) — 用户 confirmed 2026-05-25
 amendment_2026-05-30: 新增 F170b（闭合 F170a CRITICAL：npm publish 4.2.0 未执行 + namespace guard + E2E 修复）+ F170d（已 ship，SC-002 8/10）；详见 M7-execution-blueprint.md
 execution_blueprint: M7-execution-blueprint.md (workflow wf_00c688f4-3b9 产出)
+stepback_revision: M7-stepback-revision.md (workflow wf_3b106574-ce7；用户拍板新增 F177-F180 + F176 6 处报告增强 + M8 旗舰 AST-anchored drift detection)
+amendment_2026-06: F170-175 全 ship；step-back review 后新增 current-M7 收尾 F177(统一MCP契约+telemetry)/F178(纯函数去重)/F179(byte-stable+eval一致性)/F180(E2E协同补口)，执行顺序 F177→F178→F179→F180→F176
 related_design_doc: spectra-mcp-evolution.md
 verification_principle: TDD + E2E per feature
 gate: 每个 feature 必须有 E2E 用例验证用户场景才算 ship
