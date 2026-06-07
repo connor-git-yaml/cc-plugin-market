@@ -71,7 +71,7 @@ decisions:
 | 5 | **F177 server 5 工具 stdio 错误 envelope**：`prepare/generate/batch/diff/panoramic-query` 对失败入参断言返回统一 `{code}`（internal-error/invalid-input）+ `isError=true` + 不泄露绝对路径/stack；**顺带覆盖 graph-query-failed**（F177 warning #2）| **high** | 第二轮（验 F177 `{code}` 迁移）|
 | 6 | panoramic-query 4 operation stdio（cross-package/architecture-ir/overview/natural-language）：natural-language 缺 question 报 invalid-input、非 monorepo 报 invalid-input、成功返回 data（唯一多态工具零 e2e）| medium | 第二轮 |
 | 7 | file-nav 3 工具 stdio（view_file 行段切片省 token + symbolId→lineRange + 越界拒绝在 JSON-RPC 链路成立；171 全 in-process）| medium | 第二轮 |
-| 8 | `client.listTools()` 断言恰 **18** 工具集合，且各 `inputSchema`（必填/enum/默认）经 SDK 暴露与源码 Zod 一致（合并第一轮「tools/list ≥12→精确工具集」）| medium | 第二轮+第一轮 |
+| 8 | `client.listTools()` 断言恰 **17** 工具集合（F180 实测 2026-06-08 校正：原写 18 有误，真值 = 5 server + 6 graph + 3 agent-context + 3 file-nav = 17），且各 `inputSchema`（必填/enum/默认）经 SDK 暴露与源码 Zod 一致（合并第一轮「tools/list ≥12→精确工具集」）| medium | 第二轮+第一轮 |
 | 9 | batch 工具 MCP 路径：传 incremental/full/force 冲突组合，断言 `resolveRegenPlan` 在 MCP 路径正确解析（full 逃生口绕 cache）+ 返回 deltaReport + config fallback 合并（175 全 in-process 直调 runBatch）| medium | 第二轮 |
 | 10 | 子代理 namespace 路由：带 `mcp__plugin_spectra_spectra__impact` 前缀经 stdio callTool，断言正确路由到底层 impact handler（170a 仅文件断言 frontmatter，无真实调用）| medium | 第二轮 |
 | 11 | F174 fuzzy 经 stdio 端到端：传模糊 symbol（无 path 简短名 / typo / path-suffix）调 context/impact，断言 fuzzy resolve 在进程边界生效（warnings 含 fuzzy-resolved、resolvedFrom/resolvedTo 透传；174 全 mock + in-process）| medium | 第二轮 |
