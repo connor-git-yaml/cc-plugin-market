@@ -11,6 +11,7 @@ decisions:
   - "C=同意 M8 旗舰立项 AST-anchored spec drift detection"
   - "D=🅰️ F177-F180 先做再 F176（加固 MCP 工具层 + token 指标完整）"
 执行顺序: F177 → F178 → F179 → F180 → F176（F177-F180 写入路径多 disjoint，部分可多 worktree 并行）
+second_round_revision: M7-stepback-revision-2.md (2026-06-07；F177/F178 已 ship 后第二轮——本文 §1 F180 的 scope 已被第二轮取代为系统性 stdio 补齐，并新增 F181 import-resolver 收口；执行顺序更新为 F179→F181→F180→F176)
 ---
 
 # M7 Step-Back 修订
