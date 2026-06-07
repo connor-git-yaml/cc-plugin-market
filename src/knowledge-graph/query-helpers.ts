@@ -29,6 +29,7 @@ import type {
   ConfidenceLevel,
 } from '../panoramic/graph/graph-types.js';
 import { CONFIDENCE_SCORES } from '../panoramic/graph/confidence-mapper.js';
+import { levenshtein } from '../utils/string-distance.js';
 
 // ============================================================
 // 类型定义
@@ -458,28 +459,6 @@ export function resolveSymbolFuzzy(
   }
 
   return { candidates: [], autoResolved: false };
-}
-
-/**
- * Levenshtein 编辑距离 — 标准 DP 滚动数组（O(min(m,n)) 空间）。
- * 实现照搬 src/panoramic/pipelines/adr-evidence-verifier.ts 的私有实现（Feature 174 FR-011）。
- */
-function levenshtein(a: string, b: string): number {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
-  const sm = shorter.length;
-  const ln = longer.length;
-  let prev: number[] = Array.from({ length: sm + 1 }, (_, i) => i);
-  for (let i = 1; i <= ln; i++) {
-    const curr: number[] = [i];
-    for (let j = 1; j <= sm; j++) {
-      const cost = longer[i - 1] === shorter[j - 1] ? 0 : 1;
-      curr.push(Math.min(prev[j]! + 1, curr[j - 1]! + 1, prev[j - 1]! + cost));
-    }
-    prev = curr;
-  }
-  return prev[sm]!;
 }
 
 // ============================================================

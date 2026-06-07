@@ -14,6 +14,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { levenshtein } from '../../utils/string-distance.js';
 
 // ============================================================
 // 类型定义
@@ -159,38 +160,4 @@ function snippetMatches(llmSnippet: string, fileSnippet: string): boolean {
 
 function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Levenshtein 距离（编辑距离）— 标准 DP 实现。
- * 复杂度 O(m*n)。snippet 通常 < 200 字符，性能可接受。
- */
-function levenshtein(a: string, b: string): number {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  // 滚动数组优化：只需保留 prev 行（O(min(m, n)) 空间）
-  const m = a.length;
-  const n = b.length;
-  // 选短的一边作内层循环，长的作外层（减少内层数组大小）
-  const [shorter, longer] = m <= n ? [a, b] : [b, a];
-  const sm = shorter.length;
-  const ln = longer.length;
-
-  let prev: number[] = Array.from({ length: sm + 1 }, (_, i) => i);
-  for (let i = 1; i <= ln; i++) {
-    const curr: number[] = [i];
-    for (let j = 1; j <= sm; j++) {
-      const cost = longer[i - 1] === shorter[j - 1] ? 0 : 1;
-      curr.push(
-        Math.min(
-          prev[j]! + 1,        // 删除
-          curr[j - 1]! + 1,    // 插入
-          prev[j - 1]! + cost, // 替换 / 匹配
-        ),
-      );
-    }
-    prev = curr;
-  }
-  return prev[sm]!;
 }

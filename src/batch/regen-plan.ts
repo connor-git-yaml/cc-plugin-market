@@ -81,8 +81,14 @@ export function resolveRegenPlan(input: RegenPlanInput): RegenPlan {
 // resolveSourceTarget：统一 module → sourceTarget 口径
 // ============================================================
 
-/** 把系统路径分隔符归一化为正斜杠（与 batch-orchestrator / delta-regenerator 一致） */
-function normalizeProjectPath(inputPath: string): string {
+/**
+ * 把系统路径分隔符归一化为正斜杠。
+ *
+ * Feature 178：batch 内单参口径的唯一来源（delta-regenerator / batch-orchestrator import 此处），
+ * 消除三份逐字副本。注意与 panoramic 的双参变体 `(inputPath, projectRoot)`（先 path.relative）
+ * 语义不同，不在此合并范围。
+ */
+export function normalizeProjectPath(inputPath: string): string {
   return inputPath.split(path.sep).join('/');
 }
 

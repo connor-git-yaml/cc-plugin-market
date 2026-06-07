@@ -38,7 +38,7 @@ import {
 import { decideModelOverride } from './model-override-decision.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
-import { resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
+import { normalizeProjectPath, resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
 import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
@@ -431,7 +431,6 @@ export async function runBatch(
     const rel = path.relative(resolvedRoot, absPath);
     return rel.startsWith('..') ? absPath : rel;
   };
-  const normalizeProjectPath = (inputPath: string): string => inputPath.split(path.sep).join('/');
 
   // 步骤 1：扫描文件获取 languageStats
   const scanResult = scanFiles(resolvedRoot, { projectRoot: resolvedRoot });

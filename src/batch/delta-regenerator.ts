@@ -13,7 +13,7 @@ import {
 } from '../panoramic/builders/doc-graph-builder.js';
 import { loadTemplate } from '../panoramic/utils/template-loader.js';
 import type { ModuleGroup } from './module-grouper.js';
-import { resolveSourceTarget } from './regen-plan.js';
+import { normalizeProjectPath, resolveSourceTarget } from './regen-plan.js';
 
 const ROOT_MODULE_RE = /^root(?:--.+)?$/;
 
@@ -394,8 +394,4 @@ function buildReport(input: {
     unchangedTargets: input.unchangedTargets,
     fallbackReason: input.fallbackReason,
   };
-}
-
-function normalizeProjectPath(inputPath: string): string {
-  return inputPath.split(path.sep).join('/');
 }

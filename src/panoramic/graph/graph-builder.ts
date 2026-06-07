@@ -59,6 +59,53 @@ function directedEdgeKey(source: string, target: string, relation: string): stri
 }
 
 // ============================================================
+// 内部辅助：边 / 节点 upsert（Feature 178 — 五路数据源去重）
+// ============================================================
+
+/**
+ * 按 directed 选择有向 / 无向 key 派生。
+ *
+ * Feature 178：五路数据源统一经此派生 edge key（含 unifiedGraph 路，其 directed 实参为
+ * 该边自身的 isDirectional）。收敛原先逐字复制 5 次的 `directed?directedEdgeKey:undirectedEdgeKey` 三元。
+ */
+function edgeKey(source: string, target: string, relation: string, directed: boolean): string {
+  return directed
+    ? directedEdgeKey(source, target, relation)
+    : undirectedEdgeKey(source, target, relation);
+}
+
+/**
+ * 边 upsert（confidence-max-wins）。
+ *
+ * 同 key 仅当新边 confidenceScore 严格更高时覆盖。供 DocGraph / ArchitectureIR /
+ * CrossReference / Extraction 四路同质边写入统一调用（Feature 178）。
+ * unifiedGraph 第五路 directional 合并语义不同，不走此 helper。
+ */
+export function upsertEdge(edgeMap: Map<string, GraphEdge>, edge: GraphEdge, directed: boolean): void {
+  const key = edgeKey(edge.source, edge.target, edge.relation, directed);
+  const existing = edgeMap.get(key);
+  if (!existing || edge.confidenceScore > existing.confidenceScore) {
+    edgeMap.set(key, edge);
+  }
+}
+
+/**
+ * 节点 upsert（last-write-wins + metadata 合并）。
+ *
+ * 同 id 时后写覆盖先写，但保留先写 metadata 中后写没有的键（`{...existing, ...new}`）。
+ * 供 DocGraph specs / ArchitectureIR elements / Extraction nodes 三路统一调用（Feature 178）。
+ * DocGraph 为首路 existing 恒 undefined（buildDocGraph 已按 specPath 去重），合并退化为裸 set。
+ * unifiedGraph 第五路 first-write-wins + callSitesCount 扩展语义不同，不走此 helper。
+ */
+export function upsertNode(nodeMap: Map<string, GraphNode>, node: GraphNode): void {
+  const existing = nodeMap.get(node.id);
+  if (existing) {
+    node.metadata = { ...existing.metadata, ...node.metadata };
+  }
+  nodeMap.set(node.id, node);
+}
+
+// ============================================================
 // 核心构建函数
 // ============================================================
 
@@ -106,7 +153,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             sourceTag: 'doc-graph',
           },
         };
-        nodeMap.set(id, node);
+        upsertNode(nodeMap, node);
       }
 
       // 遍历引用边
@@ -121,14 +168,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           confidence,
           confidenceScore,
         };
-        const key = directed
-          ? directedEdgeKey(edge.source, edge.target, edge.relation)
-          : undirectedEdgeKey(edge.source, edge.target, edge.relation);
-        // 取高 confidenceScore 的边
-        const existing = edgeMap.get(key);
-        if (!existing || confidenceScore > existing.confidenceScore) {
-          edgeMap.set(key, edge);
-        }
+        upsertEdge(edgeMap, edge, directed);
       }
     } catch (err) {
       skippedSources.push({
@@ -166,11 +206,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           },
         };
         // last-write-wins + metadata 合并：后写覆盖先写，但保留先写的 metadata 字段
-        const existingNode = nodeMap.get(element.id);
-        if (existingNode) {
-          node.metadata = { ...existingNode.metadata, ...node.metadata };
-        }
-        nodeMap.set(element.id, node);
+        upsertNode(nodeMap, node);
       }
 
       // 遍历关系边
@@ -195,13 +231,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           });
         }
 
-        const key = directed
-          ? directedEdgeKey(edge.source, edge.target, edge.relation)
-          : undirectedEdgeKey(edge.source, edge.target, edge.relation);
-        const existing = edgeMap.get(key);
-        if (!existing || confidenceScore > existing.confidenceScore) {
-          edgeMap.set(key, edge);
-        }
+        upsertEdge(edgeMap, edge, directed);
       }
     } catch (err) {
       skippedSources.push({
@@ -231,13 +261,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           confidence,
           confidenceScore,
         };
-        const key = directed
-          ? directedEdgeKey(edge.source, edge.target, edge.relation)
-          : undirectedEdgeKey(edge.source, edge.target, edge.relation);
-        const existing = edgeMap.get(key);
-        if (!existing || confidenceScore > existing.confidenceScore) {
-          edgeMap.set(key, edge);
-        }
+        upsertEdge(edgeMap, edge, directed);
       }
     } catch (err) {
       skippedSources.push({
@@ -271,11 +295,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             },
           };
           // last-write-wins：提取节点覆盖同 ID 的前序节点，但合并 metadata
-          const existingNode = nodeMap.get(node.id);
-          if (existingNode) {
-            graphNode.metadata = { ...existingNode.metadata, ...graphNode.metadata };
-          }
-          nodeMap.set(node.id, graphNode);
+          upsertNode(nodeMap, graphNode);
         }
 
         for (const edge of result.edges) {
@@ -287,13 +307,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             confidence: edge.confidence,
             confidenceScore,
           };
-          const key = directed
-            ? directedEdgeKey(graphEdge.source, graphEdge.target, graphEdge.relation)
-            : undirectedEdgeKey(graphEdge.source, graphEdge.target, graphEdge.relation);
-          const existing = edgeMap.get(key);
-          if (!existing || confidenceScore > existing.confidenceScore) {
-            edgeMap.set(key, graphEdge);
-          }
+          upsertEdge(edgeMap, graphEdge, directed);
         }
       }
     } catch (err) {
@@ -372,12 +386,12 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
         const confidenceScore = CONFIDENCE_SCORES[confidence];
         const isDirectional =
           ugEdge.directional !== undefined ? ugEdge.directional : DIRECTIONAL_RELATIONS.has(ugEdge.relation);
-        const edgeKey = isDirectional
-          ? directedEdgeKey(ugEdge.source, ugEdge.target, ugEdge.relation)
-          : undirectedEdgeKey(ugEdge.source, ugEdge.target, ugEdge.relation);
-        const existingEdge = edgeMap.get(edgeKey);
+        // Feature 178：key 派生统一走共享 edgeKey()（第五路 directed 实参为本边 isDirectional）；
+        // 下方 directional 升级合并语义与前四路 confidence-max-wins 不同，保留内联不走 upsertEdge。
+        const key = edgeKey(ugEdge.source, ugEdge.target, ugEdge.relation, isDirectional);
+        const existingEdge = edgeMap.get(key);
         if (!existingEdge) {
-          edgeMap.set(edgeKey, {
+          edgeMap.set(key, {
             source: ugEdge.source,
             target: ugEdge.target,
             relation: ugEdge.relation,
