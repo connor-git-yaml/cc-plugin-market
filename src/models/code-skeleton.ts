@@ -123,7 +123,8 @@ export const ImportReferenceSchema = z.object({
   isTypeOnly: z.boolean(),
   /**
    * 语法类型（Feature 156 W1.0 新增；可选，向后兼容）。
-   * 由 import-resolver.detectImportType 派生；写入 CodeSkeleton.imports[].importType；
+   * 由各 analyzer 在抽取 import 时行内派生（ast-analyzer 据 ts-morph 节点、
+   * tree-sitter 路径据 isTypeOnly）；写入 CodeSkeleton.imports[].importType；
    * deriveImportEdges 把此值写入 UnifiedGraphEdge.evidence；
    * module-derivation 在重建 ModuleEdge.importType 时读取此字段。
    */

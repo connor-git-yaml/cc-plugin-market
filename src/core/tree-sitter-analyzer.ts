@@ -22,7 +22,10 @@ import { PythonMapper } from './query-mappers/python-mapper.js';
 import { GoMapper } from './query-mappers/go-mapper.js';
 import { JavaMapper } from './query-mappers/java-mapper.js';
 import { TypeScriptMapper } from './query-mappers/typescript-mapper.js';
-import { resolveTsJsImport } from './import-resolver.js';
+import {
+  resolveTsJsImportToAbsolute,
+  type TsConfigResolutionContext,
+} from './import-resolver.js';
 
 // ════════════════════════ 类型 ════════════════════════
 
@@ -33,8 +36,8 @@ export interface TreeSitterAnalyzeOptions {
   extractCallSites?: boolean;
   /** 项目根目录（Feature 156 W1.0，FR-28；用于 import-resolver 解析 alias / 跨包路径） */
   projectRoot?: string;
-  /** tsconfig path alias 映射（Feature 156 W1.0） */
-  pathAliases?: Record<string, string>;
+  /** tsconfig 解析上下文（Feature 181 收口：替代历史 pathAliases；承载 alias / baseUrl） */
+  tsConfigContext?: TsConfigResolutionContext | null;
 }
 
 // ════════════════════════ 扩展名到语言映射 ════════════════════════
@@ -188,7 +191,7 @@ export class TreeSitterAnalyzer {
           imports,
           filePath,
           options?.projectRoot ?? '',
-          options?.pathAliases,
+          options?.tsConfigContext,
         );
       }
       const parseErrors = mapper.extractParseErrors(tree);
@@ -300,7 +303,7 @@ export class TreeSitterAnalyzer {
 // ════════════════════════ TS/JS import 后处理（Feature 156 W1.0） ════════════════════════
 
 /**
- * 给定 typescript-mapper 输出的 imports 列表，逐项调用 resolveTsJsImport 填 resolvedPath；
+ * 给定 typescript-mapper 输出的 imports 列表，逐项调用 import-resolver 填 resolvedPath；
  * 同时根据 isTypeOnly 推断 importType。
  *
  * 注：当前 typescript-mapper.extractImports 只覆盖 `import_statement`（不含动态 import / require），
@@ -310,12 +313,11 @@ function postProcessTsJsImports(
   imports: ImportReference[],
   filePath: string,
   projectRoot: string,
-  pathAliases?: Record<string, string>,
+  tsConfigContext?: TsConfigResolutionContext | null,
 ): ImportReference[] {
-  const resolverOpts = pathAliases ? { pathAliases } : undefined;
   return imports.map((imp) => {
     const resolvedPath = imp.resolvedPath
-      ?? resolveTsJsImport(imp.moduleSpecifier, filePath, projectRoot, resolverOpts);
+      ?? resolveTsJsImportToAbsolute(imp.moduleSpecifier, filePath, projectRoot, tsConfigContext);
     return {
       ...imp,
       resolvedPath: resolvedPath ?? null,

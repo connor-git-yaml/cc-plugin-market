@@ -9,6 +9,7 @@
 import type { CodeSkeleton, Language } from '../models/code-skeleton.js';
 import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
+import type { TsConfigResolutionContext } from '../core/import-resolver.js';
 
 export type { CommentRegion };
 
@@ -42,20 +43,14 @@ export interface AnalyzeFileOptions {
    */
   projectRoot?: string;
   /**
-   * tsconfig path alias 映射（Feature 156 W1.0；W1.2 v2 / CRIT-2 扩展为多候选）。
+   * tsconfig 解析上下文（Feature 181 收口：统一替代历史 pathAliases + baseUrl 双字段）。
    *
-   * 形如 `{ '@/star': './src/star' }`（单值，向后兼容；star 表示通配符）
-   * 或   `{ '@app/star': ['./packages/app/star', './apps/star/src'] }`（多候选，CRIT-2 v2）；
-   * 交由 import-resolver.resolveTsJsImport 处理。
+   * 由 import-resolver.findNearestTsConfig + buildTsConfigContext 生成，承载
+   * tsconfig.compilerOptions 的 baseUrl + paths（含 extends 链），交由
+   * 单一权威 import-resolver.resolveTsJsImport 解析 alias / baseUrl。
+   * 缺失时仍可解析相对路径，但 alias / baseUrl 会失效。
    */
-  pathAliases?: Record<string, string | readonly string[]>;
-  /**
-   * tsconfig.compilerOptions.baseUrl 解析后的绝对路径（Feature 156 W1.2 v2 / CRIT-2 新增）。
-   *
-   * 提供时，未命中 alias 的非相对 import specifier 会基于 baseUrl 尝试解析
-   * （如 baseUrl='/proj/src', specifier='utils/foo' → 尝试 /proj/src/utils/foo.{ts,tsx,...}）。
-   */
-  baseUrl?: string;
+  tsConfigContext?: TsConfigResolutionContext | null;
 }
 
 /**

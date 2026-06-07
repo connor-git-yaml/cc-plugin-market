@@ -19,7 +19,10 @@ import type {
   Language,
 } from '../models/code-skeleton.js';
 import { TreeSitterAnalyzer } from './tree-sitter-analyzer.js';
-import { resolveTsJsImport } from './import-resolver.js';
+import {
+  resolveTsJsImportToAbsolute,
+  type TsConfigResolutionContext,
+} from './import-resolver.js';
 
 // ════════════════════════ 正则降级（最终兜底） ════════════════════════
 
@@ -89,18 +92,17 @@ function extractExportsFromText(content: string): ExportSymbol[] {
 /**
  * 基于正则的简易导入提取（TS/JS）。
  *
- * Feature 156 W1.0 修订（FR-28）：
- *   - 接受 filePath / projectRoot / pathAliases，调用 resolveTsJsImport 填 resolvedPath
+ * Feature 156 W1.0 修订（FR-28）/ Feature 181 收口：
+ *   - 接受 filePath / projectRoot / tsConfigContext，调用 import-resolver 填 resolvedPath
  *   - 同时识别 require('x') 与 import('x') 形态，写入对应的 importType
  */
 function extractImportsFromText(
   content: string,
   filePath: string,
   projectRoot: string,
-  pathAliases?: Record<string, string>,
+  tsConfigContext?: TsConfigResolutionContext | null,
 ): ImportReference[] {
   const imports: ImportReference[] = [];
-  const resolverOpts = pathAliases ? { pathAliases } : undefined;
   // WARN-2 修订：在纯正则降级路径下，先剥离行注释 / 块注释 / 字符串字面量，
   // 防止 `// require('./x')` 或 `"require('./x')"` 这类形态误命中 dynamic / require 正则。
   // WARN-2 v3：static `import ... from '...'` 路径同样改用 sanitized 文本，
@@ -125,7 +127,12 @@ function extractImportsFromText(
       : undefined;
 
     const defaultImport = match[2] ?? match[3] ?? null;
-    const resolvedPath = resolveTsJsImport(moduleSpecifier, filePath, projectRoot, resolverOpts);
+    const resolvedPath = resolveTsJsImportToAbsolute(
+      moduleSpecifier,
+      filePath,
+      projectRoot,
+      tsConfigContext,
+    );
 
     imports.push({
       moduleSpecifier,
@@ -143,7 +150,7 @@ function extractImportsFromText(
   let dyn: RegExpExecArray | null;
   while ((dyn = dynamicRe.exec(sanitized)) !== null) {
     const moduleSpecifier = dyn[1]!;
-    addCallExpressionImport(imports, moduleSpecifier, 'dynamic', filePath, projectRoot, resolverOpts);
+    addCallExpressionImport(imports, moduleSpecifier, 'dynamic', filePath, projectRoot, tsConfigContext);
   }
 
   // CommonJS require('x')（限定为 require 标识符调用，避免误匹配 .require()）
@@ -157,7 +164,7 @@ function extractImportsFromText(
       'commonjs-require',
       filePath,
       projectRoot,
-      resolverOpts,
+      tsConfigContext,
     );
   }
 
@@ -255,10 +262,10 @@ function addCallExpressionImport(
   importType: ImportSemanticType,
   filePath: string,
   projectRoot: string,
-  resolverOpts: { pathAliases: Record<string, string> } | undefined,
+  tsConfigContext: TsConfigResolutionContext | null | undefined,
 ): void {
   const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
-  const resolvedPath = resolveTsJsImport(moduleSpecifier, filePath, projectRoot, resolverOpts);
+  const resolvedPath = resolveTsJsImportToAbsolute(moduleSpecifier, filePath, projectRoot, tsConfigContext);
   imports.push({
     moduleSpecifier,
     isRelative,
@@ -555,13 +562,17 @@ function getLanguage(filePath: string): Language {
  * 2. tree-sitter 失败时降级到正则提取
  *
  * @param filePath - 文件路径
- * @param options - Feature 156 W1.0 新增可选项：projectRoot / pathAliases，
+ * @param options - Feature 156 W1.0 / Feature 181 收口可选项：projectRoot / tsConfigContext，
  *                  仅 TS/JS 正则降级路径会用到（用于 import-resolver 解析 resolvedPath）
  * @returns CodeSkeleton，parserUsed 为 'tree-sitter'
+ *
+ * 注（Feature 181 / Codex W#3）：ast-analyzer 的 ts-morph 失败降级调用 analyzeFallback(filePath)
+ * **不传 options**——即 ts-morph 失败路径下 alias / projectRoot 本就失效（历史现状保留，
+ * 非本次改善点）。保持现状以护 graph.json byte-identical。
  */
 export async function analyzeFallback(
   filePath: string,
-  options?: { projectRoot?: string; pathAliases?: Record<string, string> },
+  options?: { projectRoot?: string; tsConfigContext?: TsConfigResolutionContext | null },
 ): Promise<CodeSkeleton> {
   const language = getLanguage(filePath);
 
@@ -571,7 +582,7 @@ export async function analyzeFallback(
     if (analyzer.isLanguageSupported(language)) {
       return await analyzer.analyze(filePath, language, {
         projectRoot: options?.projectRoot,
-        pathAliases: options?.pathAliases,
+        tsConfigContext: options?.tsConfigContext,
       });
     }
   } catch {
@@ -579,7 +590,7 @@ export async function analyzeFallback(
   }
 
   // 第二级降级：正则提取（最终兜底）
-  return regexFallback(filePath, language, options?.projectRoot ?? '', options?.pathAliases);
+  return regexFallback(filePath, language, options?.projectRoot ?? '', options?.tsConfigContext);
 }
 
 /**
@@ -589,7 +600,7 @@ function regexFallback(
   filePath: string,
   language: Language,
   projectRoot: string,
-  pathAliases?: Record<string, string>,
+  tsConfigContext?: TsConfigResolutionContext | null,
 ): CodeSkeleton {
   let content: string;
   try {
@@ -618,7 +629,7 @@ function regexFallback(
       ? extractGoImportsFromText(content)
       : language === 'java'
         ? extractJavaImportsFromText(content)
-        : extractImportsFromText(content, filePath, projectRoot, pathAliases);
+        : extractImportsFromText(content, filePath, projectRoot, tsConfigContext);
 
   const parseErrors: ParseError[] = [
     {

@@ -18,7 +18,10 @@ import type {
 import { analyzeFallback } from './tree-sitter-fallback.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { AnalyzeFileOptions } from '../adapters/language-adapter.js';
-import { resolveTsJsImport } from './import-resolver.js';
+import {
+  resolveTsJsImportToAbsolute,
+  type TsConfigResolutionContext,
+} from './import-resolver.js';
 
 // ============================================================
 // 选项类型（统一使用 adapters 层定义的 AnalyzeFileOptions）
@@ -371,21 +374,15 @@ function extractMember(member: Node): MemberInfo | null {
  * @param sourceFile - ts-morph SourceFile
  * @param filePath - 当前分析的文件路径（绝对或相对均可，传给 resolver 作 fromFile）
  * @param projectRoot - 项目根目录（可空字符串；空时 alias 失效）
- * @param pathAliases - tsconfig path alias 映射（可选）
+ * @param tsConfigContext - tsconfig 解析上下文（可选；承载 alias / baseUrl）
  */
 function extractImports(
   sourceFile: SourceFile,
   filePath: string,
   projectRoot: string,
-  pathAliases?: Record<string, string | readonly string[]>,
-  baseUrl?: string,
+  tsConfigContext?: TsConfigResolutionContext | null,
 ): ImportReference[] {
   const imports: ImportReference[] = [];
-  // CRIT-2 v2：resolverOpts 同时透传 pathAliases 与 baseUrl
-  const resolverOpts =
-    pathAliases || baseUrl
-      ? { ...(pathAliases ? { pathAliases } : {}), ...(baseUrl ? { baseUrl } : {}) }
-      : undefined;
 
   // 1. 静态 import / import type
   for (const decl of sourceFile.getImportDeclarations()) {
@@ -414,11 +411,11 @@ function extractImports(
       }
     }
 
-    const resolvedPath = resolveTsJsImport(
+    const resolvedPath = resolveTsJsImportToAbsolute(
       moduleSpecifier,
       filePath,
       projectRoot,
-      resolverOpts,
+      tsConfigContext,
     );
 
     imports.push({
@@ -455,11 +452,11 @@ function extractImports(
     if (!moduleSpecifier) continue;
 
     const isRelative = moduleSpecifier.startsWith('.') || moduleSpecifier.startsWith('/');
-    const resolvedPath = resolveTsJsImport(
+    const resolvedPath = resolveTsJsImportToAbsolute(
       moduleSpecifier,
       filePath,
       projectRoot,
-      resolverOpts,
+      tsConfigContext,
     );
 
     imports.push({
@@ -515,13 +512,12 @@ export async function analyzeFileInternal(
     // 提取导出和导入
     const exports = extractExports(sourceFile, options);
     // Feature 156 W1.0：传入 projectRoot 让 import-resolver 解析 alias / 跨包路径
-    // CRIT-2 v2：透传 baseUrl（tsconfig.compilerOptions.baseUrl 解析后的绝对路径）
+    // Feature 181 收口：统一透传 tsConfigContext（替代历史 pathAliases + baseUrl）
     const imports = extractImports(
       sourceFile,
       filePath,
       options.projectRoot ?? '',
-      options.pathAliases,
-      options.baseUrl,
+      options.tsConfigContext,
     );
 
     const skeleton: CodeSkeleton = {

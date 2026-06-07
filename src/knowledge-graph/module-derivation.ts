@@ -17,7 +17,7 @@
 import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { ts } from 'ts-morph';
+import { buildTsConfigContext } from '../core/import-resolver.js';
 import type { UnifiedGraph } from './unified-graph.js';
 import type { CodeSkeleton } from '../models/code-skeleton.js';
 import { detectSCCs, topologicalSort } from '../graph/topological-sort.js';
@@ -345,22 +345,20 @@ export async function buildModuleGraphForProject(
     return createEmptyModuleGraph(resolvedRoot);
   }
 
-  // ── 2. 解析 tsconfig path alias + baseUrl ──
+  // ── 2. 解析 tsconfig（Feature 181 收口：统一 loader buildTsConfigContext，
+  //       含 extends 链；root tsconfig 选取策略保持现状，不改为 per-file nearest）──
   const tsConfigPath = options.tsConfigPath
     ?? (fs.existsSync(path.join(resolvedRoot, 'tsconfig.json'))
       ? path.join(resolvedRoot, 'tsconfig.json')
       : undefined);
-  const tsConfigInfo = tsConfigPath ? loadTsconfigAliases(tsConfigPath) : undefined;
-  const pathAliases = tsConfigInfo?.paths;
-  const baseUrl = tsConfigInfo?.baseUrl;
+  const tsConfigContext = tsConfigPath ? buildTsConfigContext(tsConfigPath) : null;
 
   // ── 3. 调用 ast-analyzer 提取每个文件的 CodeSkeleton ──
   const codeSkeletons = new Map<string, CodeSkeleton>();
   const ANALYZE_CONCURRENCY = 8;
   const analyzerOpts = {
     projectRoot: resolvedRoot,
-    ...(pathAliases ? { pathAliases } : {}),
-    ...(baseUrl ? { baseUrl } : {}),
+    ...(tsConfigContext ? { tsConfigContext } : {}),
   };
   for (let i = 0; i < tsJsFiles.length; i += ANALYZE_CONCURRENCY) {
     const batch = tsJsFiles.slice(i, i + ANALYZE_CONCURRENCY);
@@ -453,48 +451,4 @@ function normalizeSkeletonPaths(
     return { ...imp, resolvedPath: rel.startsWith('..') ? imp.resolvedPath : rel };
   });
   return { ...sk, filePath: callerRel, imports: newImports };
-}
-
-/**
- * 解析 tsconfig.json（用 ts.parseJsonConfigFileContent，自动处理 extends 链 / baseUrl / paths）。
- *
- * 失败时返回 undefined（不阻断，按未配置 alias 处理）。
- */
-function loadTsconfigAliases(tsconfigPath: string): {
-  paths?: Record<string, readonly string[]>;
-  baseUrl?: string;
-} | undefined {
-  try {
-    const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-    if (configFile.error || !configFile.config) {
-      return undefined;
-    }
-    const parsedConfig = ts.parseJsonConfigFileContent(
-      configFile.config,
-      ts.sys,
-      path.dirname(tsconfigPath),
-    );
-    const compilerOptions = parsedConfig.options;
-    const out: { paths?: Record<string, readonly string[]>; baseUrl?: string } = {};
-    if (compilerOptions.baseUrl) {
-      out.baseUrl = compilerOptions.baseUrl;
-    }
-    if (compilerOptions.paths) {
-      const paths: Record<string, readonly string[]> = {};
-      for (const [k, v] of Object.entries(compilerOptions.paths)) {
-        if (Array.isArray(v) && v.length > 0) {
-          const baseForPaths = compilerOptions.baseUrl ?? path.dirname(tsconfigPath);
-          paths[k] = v
-            .filter((s): s is string => typeof s === 'string')
-            .map((s) => (path.isAbsolute(s) ? s : path.resolve(baseForPaths, s)));
-        }
-      }
-      if (Object.keys(paths).length > 0) {
-        out.paths = paths;
-      }
-    }
-    return Object.keys(out).length > 0 ? out : undefined;
-  } catch {
-    return undefined;
-  }
 }

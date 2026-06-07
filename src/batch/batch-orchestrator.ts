@@ -86,13 +86,13 @@ import { buildHtmlTemplate } from '../panoramic/exporters/html-template.js';
 import { SpecStore } from '../spec-store/index.js';
 import { createRequire } from 'node:module';
 import type { BatchMode } from '../panoramic/qa/types.js';
+import { resolvePythonImport } from '../knowledge-graph/import-resolver.js';
 import {
-  resolvePythonImport,
   resolveTsJsImport,
   findNearestTsConfig,
   buildTsConfigContext,
   type TsConfigResolutionContext,
-} from '../knowledge-graph/import-resolver.js';
+} from '../core/import-resolver.js';
 
 // 从 package.json 读取版本号（避免硬编码）
 const _require = createRequire(import.meta.url);
@@ -2287,14 +2287,14 @@ export async function collectTsJsCodeSkeletons(
         extractCallSites: options?.extractCallSites,
       });
 
-      // T-021a：查找最近的 tsconfig.json 并缓存 context
-      const nearest = findNearestTsConfig(filePath, resolvedProjectRoot);
+      // T-021a：查找最近的 tsconfig.json 并缓存 context（Feature 181：loader 收口为 configPath 单参）
+      const configPath = findNearestTsConfig(filePath, resolvedProjectRoot);
       let tsConfigContext: TsConfigResolutionContext | null = null;
-      if (nearest) {
-        if (!tsConfigCache.has(nearest.configDir)) {
-          tsConfigCache.set(nearest.configDir, buildTsConfigContext(nearest.rawConfig, nearest.configDir));
+      if (configPath) {
+        if (!tsConfigCache.has(configPath)) {
+          tsConfigCache.set(configPath, buildTsConfigContext(configPath));
         }
-        tsConfigContext = tsConfigCache.get(nearest.configDir) ?? null;
+        tsConfigContext = tsConfigCache.get(configPath) ?? null;
       }
 
       // 解析 imports[].resolvedPath（EC-10：转绝对路径）
