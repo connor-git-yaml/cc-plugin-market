@@ -30,22 +30,6 @@ export function validateTargetPath(target: string): boolean {
 }
 
 /**
- * 检查 ANTHROPIC_API_KEY 环境变量
- * @deprecated 使用 checkAuth() 替代，支持 API Key 和 CLI 代理两种认证方式
- * @returns 如果缺失则输出错误信息并返回 false
- */
-export function checkApiKey(): boolean {
-  if (!process.env['ANTHROPIC_API_KEY']) {
-    printError(
-      '未设置 ANTHROPIC_API_KEY 环境变量\n' +
-      '  请设置后重试: export ANTHROPIC_API_KEY=your-key-here',
-    );
-    return false;
-  }
-  return true;
-}
-
-/**
  * 检查是否有可用的认证方式（API Key 或 Claude CLI）
  * @returns 如果无可用方式则输出错误信息并返回 false
  */

@@ -13,7 +13,6 @@ vi.mock('../../src/auth/auth-detector.js', () => ({
 
 import {
   validateTargetPath,
-  checkApiKey,
   checkAuth,
   handleError,
   EXIT_CODES,
@@ -24,24 +23,12 @@ describe('error-handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env['ANTHROPIC_API_KEY'];
   });
 
   it('validateTargetPath: 路径不存在返回 false', () => {
     const result = validateTargetPath('/definitely/not/exist');
     expect(result).toBe(false);
     expect(errorSpy).toHaveBeenCalled();
-  });
-
-  it('checkApiKey: 未设置环境变量返回 false', () => {
-    const result = checkApiKey();
-    expect(result).toBe(false);
-    expect(errorSpy).toHaveBeenCalled();
-  });
-
-  it('checkApiKey: 已设置环境变量返回 true', () => {
-    process.env['ANTHROPIC_API_KEY'] = 'sk-test';
-    expect(checkApiKey()).toBe(true);
   });
 
   it('checkAuth: 有可用认证方式返回 true', () => {
