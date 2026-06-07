@@ -47,7 +47,7 @@ const TASKS = [
   {
     id: 'T1-canonicalizeSymbolId',
     target: 'src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId',
-    prompt: `我打算修改 \`src/knowledge-graph/query-helpers.ts\` 里的 \`canonicalizeSymbolId\` 函数：现在它对 4 种 fallback（字面相等 / 前缀剥离 / 三段容错 / 绝对路径转相对）都返回 \`{ canonicalId, reason: 'ok'|'not-found'|'invalid' }\`，我想加第 5 种 fallback——当输入是单个无 \`::\` 的 short name 时，自动调用 \`findFuzzyMatches\` 取 top-1 作为 canonicalId（reason 改为 'fuzzy-matched'）。\n\n动手前想做一次修改前检查：\n- 改 reason 枚举值会不会让现有读 reason 字段的地方意外失败？\n- 静默 fuzzy fallback 可能让用户拿到不期望的 symbol，安全吗？\n- 现有依赖此函数的功能有哪些？需不需要为新 reason 加 hint？\n\n请用你认为合适的工具检查一下，给我一份 reviewable 的清单。`,
+    prompt: `我打算修改 \`src/knowledge-graph/query-helpers.ts\` 里的 \`canonicalizeSymbolId\` 函数：现在它对 4 种 fallback（字面相等 / 前缀剥离 / 三段容错 / 绝对路径转相对）都返回 \`{ canonicalId, reason: 'ok'|'not-found'|'invalid' }\`，我想加第 5 种 fallback——当输入是单个无 \`::\` 的 short name 时，自动调用 \`resolveSymbolFuzzy\` 取 top-1 作为 canonicalId（reason 改为 'fuzzy-matched'）。\n\n动手前想做一次修改前检查：\n- 改 reason 枚举值会不会让现有读 reason 字段的地方意外失败？\n- 静默 fuzzy fallback 可能让用户拿到不期望的 symbol，安全吗？\n- 现有依赖此函数的功能有哪些？需不需要为新 reason 加 hint？\n\n请用你认为合适的工具检查一下，给我一份 reviewable 的清单。`,
   },
   {
     id: 'T2-handleDetectChanges',
@@ -117,8 +117,8 @@ function writeMcpConfig(wtDir) {
 }
 
 function runSpectraBatch(wtDir, graphPath) {
-  console.log(`[setup] 跑 spectra batch --mode code-only ...`);
-  const r = spawnSync('node', [DIST_CLI, 'batch', '--mode', 'code-only', '--no-html'], {
+  console.log(`[setup] 跑 spectra batch --mode code-only --full ...`);
+  const r = spawnSync('node', [DIST_CLI, 'batch', '--mode', 'code-only', '--no-html', '--full'], {
     cwd: wtDir,
     encoding: 'utf-8',
     timeout: 600000,

@@ -1562,7 +1562,9 @@ export async function runBatch(
 
       // F175 FR-006/FR-007：写盘前归一化（byte-stable）——nodes/links/hyperedges 确定性排序，
       // 在追加 semantic edges + 社区分析之后调用，覆盖完整边集。
-      normalizeGraphForWrite(graphJson);
+      // F179：stripTimestamps:true 使 graph.generatedAt 固定为 epoch，落盘 graph.json 真 byte-stable
+      // （此前 F175 仅在测试读取侧 delete generatedAt，是 over-claim；现在落盘侧直接固定）。
+      normalizeGraphForWrite(graphJson, { stripTimestamps: true });
 
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);

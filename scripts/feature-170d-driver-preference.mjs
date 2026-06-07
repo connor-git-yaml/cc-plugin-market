@@ -141,8 +141,8 @@ function writeMcpConfig(wtDir) {
 }
 
 function runSpectraBatch(wtDir) {
-  console.log('[setup] 跑 spectra batch --mode code-only ...');
-  const r = spawnSync('node', [DIST_CLI, 'batch', '--mode', 'code-only', '--no-html'], {
+  console.log('[setup] 跑 spectra batch --mode code-only --full ...');
+  const r = spawnSync('node', [DIST_CLI, 'batch', '--mode', 'code-only', '--no-html', '--full'], {
     cwd: wtDir, encoding: 'utf-8', timeout: 600000, maxBuffer: 32 * 1024 * 1024,
   });
   if (r.status !== 0) {

@@ -283,7 +283,7 @@ export function runSpectraBatchInWorktree(wtDir, { timeoutMs = 600000 } = {}) {
   if (!fs.existsSync(distCli)) {
     throw new Error(`[spectra-batch] spectra dist/cli/index.js 不存在；请先 npm run build。`);
   }
-  const r = spawnSync('node', [distCli, 'batch', '--mode', 'code-only', '--no-html'], {
+  const r = spawnSync('node', [distCli, 'batch', '--mode', 'code-only', '--no-html', '--full'], {
     cwd: wtDir,
     encoding: 'utf-8',
     timeout: timeoutMs,

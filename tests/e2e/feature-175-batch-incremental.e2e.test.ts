@@ -210,8 +210,9 @@ function srcModule(exportName: string, body: string, imports = ''): string {
  * 读取并归一化 graph.json，剥除每次运行必变的非确定性字段，供 byte-stable deepEqual 比较。
  *
  * 剥除项：
- *   - graph.generatedAt：写盘时间戳（normalizeGraphForWrite 在 batch 路径未传 stripTimestamps，
- *     磁盘上保留真实时间戳，故测试侧剥除）。
+ *   - graph.generatedAt：F179 修复后，batch-orchestrator 已传 { stripTimestamps: true }，
+ *     落盘侧固定为 epoch '1970-01-01T00:00:00.000Z'（真 byte-stable）。此处 delete 保留
+ *     作防御兜底，对固定 epoch 的 delete 是幂等操作，不影响断言语义。
  *   - graph.inputHash：含 docGraph 派生内容，full vs incremental 两路语义等价时应一致，
  *     但保守起见不纳入断言核心（仍保留，下方仅显式剥 generatedAt + currentRun 类运行态字段）。
  *   - 节点 metadata.currentRun（C-1）：本轮运行态字段，已由 normalizeGraphForWrite 在写盘前剥除，
@@ -554,6 +555,17 @@ describe('F175 Batch Incremental Wrapper E2E（10 场景）', { timeout: 60_000 
       }
     }
     expect(specsAfterFull.size, 'full 轮应至少生成 1 个模块 spec').toBeGreaterThan(0);
+
+    // F179 落盘侧 byte-stable 护栏：raw graph.json 中 generatedAt 必须是固定 epoch
+    // （batch-orchestrator 已传 stripTimestamps:true，此断言防止回归）。
+    const graphRawAfterFull = JSON.parse(
+      readFileSync(join(proj.root, 'specs', '_meta', 'graph.json'), 'utf-8'),
+    ) as { graph?: { generatedAt?: string } };
+    expect(
+      graphRawAfterFull.graph?.generatedAt,
+      'F179: 落盘 graph.json 的 graph.generatedAt 应为固定 epoch（byte-stable）',
+    ).toBe('1970-01-01T00:00:00.000Z');
+
     const graphAfterFull = readNormalizedGraph(proj.root);
 
     // (b) 无改动默认增量得产物 B（cache-hit 路径，全部模块应 skip）
