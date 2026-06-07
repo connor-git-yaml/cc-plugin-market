@@ -212,8 +212,31 @@ describe('Feature 177 — 17 工具统一错误响应契约', () => {
     expect(env!['code']).toBe('graph-not-built');
   });
 
-  it('view_file 非法 path 错误响应含 code（已有契约，回归保护）', async () => {
-    const result = await tool('view_file').handler({ path: '', projectRoot: emptyRoot });
+  it('context 缺图错误响应含 code（已有契约，回归保护）', async () => {
+    const result = await tool('context').handler({ symbolId: 'x', projectRoot: emptyRoot });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env!['code']).toBe('graph-not-built');
+    expect(env!['error']).toBeUndefined();
+  });
+
+  it('detect_changes 缺 diff/baseRef 错误响应含 code（invalid-input，已有契约）', async () => {
+    const result = await tool('detect_changes').handler({ projectRoot: emptyRoot });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env!['code']).toBe('invalid-input');
+    expect(env!['error']).toBeUndefined();
+  });
+
+  it('search_in_file 非法 path 错误响应含 code（已有契约，回归保护）', async () => {
+    const result = await tool('search_in_file').handler({ path: '', pattern: 'y', projectRoot: emptyRoot });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env!['code']).toBe('invalid-input');
+  });
+
+  it('list_directory 非法 path 错误响应含 code（已有契约，回归保护）', async () => {
+    const result = await tool('list_directory').handler({ path: '', projectRoot: emptyRoot });
     expect(result.isError).toBe(true);
     const env = parseEnvelope(result);
     expect(env!['code']).toBe('invalid-input');
