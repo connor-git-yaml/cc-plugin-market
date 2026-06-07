@@ -1,0 +1,290 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildKnowledgeGraph — byte-stable 回归（Feature 178） > 无向图：五路合并产物逐字节稳定 1`] = `
+"{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 5,
+    "edgeCount": 6,
+    "sources": [
+      "doc-graph",
+      "architecture-ir",
+      "cross-reference",
+      "extraction",
+      "unified-graph"
+    ],
+    "inputHash": "84c4093aac5507eb",
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "comp-x",
+      "kind": "component",
+      "label": "component-x",
+      "metadata": {
+        "description": "x",
+        "technology": "TypeScript",
+        "tags": [],
+        "sourceTags": [
+          "workspace-index"
+        ],
+        "sourceTag": "extraction",
+        "extra": "from-extraction",
+        "sourceFile": "src/x.ts",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "engine.py::Mul",
+      "kind": "component",
+      "label": "Mul",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "engine.py"
+      }
+    },
+    {
+      "id": "engine.py::Value",
+      "kind": "symbol",
+      "label": "Value",
+      "metadata": {
+        "lang": "python",
+        "sourceTag": "extraction",
+        "sourceFile": "engine.py",
+        "confidence": "high",
+        "callSitesCount": 3
+      }
+    },
+    {
+      "id": "specs/alpha.spec.md",
+      "kind": "module",
+      "label": "alpha-module",
+      "metadata": {
+        "sourceTarget": "src/alpha",
+        "relatedFiles": [
+          "src/alpha/index.ts"
+        ],
+        "confidence": "medium",
+        "sourceTag": "architecture-ir",
+        "description": "alpha 容器",
+        "technology": "TypeScript",
+        "tags": [
+          "core"
+        ],
+        "sourceTags": [
+          "workspace-index"
+        ],
+        "tech": "TypeScript"
+      }
+    },
+    {
+      "id": "specs/beta.spec.md",
+      "kind": "spec",
+      "label": "beta",
+      "metadata": {
+        "sourceTarget": "src/beta",
+        "relatedFiles": [],
+        "confidence": "high",
+        "sourceTag": "doc-graph"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "engine.py::Mul",
+      "target": "comp-x",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": false
+    },
+    {
+      "source": "engine.py::Value",
+      "target": "comp-x",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "engine.py::Value",
+      "target": "engine.py::Mul",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "Value() 调用 Mul()"
+    },
+    {
+      "source": "specs/alpha.spec.md",
+      "target": "comp-x",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "metadata": {
+        "originalDirection": "specs/alpha.spec.md→comp-x"
+      }
+    },
+    {
+      "source": "specs/alpha.spec.md",
+      "target": "specs/beta.spec.md",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "specs/beta.spec.md",
+      "target": "specs/alpha.spec.md",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    }
+  ]
+}"
+`;
+
+exports[`buildKnowledgeGraph — byte-stable 回归（Feature 178） > 有向图：五路合并产物逐字节稳定 1`] = `
+"{
+  "directed": true,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 5,
+    "edgeCount": 6,
+    "sources": [
+      "doc-graph",
+      "architecture-ir",
+      "cross-reference",
+      "extraction",
+      "unified-graph"
+    ],
+    "inputHash": "84c4093aac5507eb",
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "comp-x",
+      "kind": "component",
+      "label": "component-x",
+      "metadata": {
+        "description": "x",
+        "technology": "TypeScript",
+        "tags": [],
+        "sourceTags": [
+          "workspace-index"
+        ],
+        "sourceTag": "extraction",
+        "extra": "from-extraction",
+        "sourceFile": "src/x.ts",
+        "confidence": "medium"
+      }
+    },
+    {
+      "id": "engine.py::Mul",
+      "kind": "component",
+      "label": "Mul",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "engine.py"
+      }
+    },
+    {
+      "id": "engine.py::Value",
+      "kind": "symbol",
+      "label": "Value",
+      "metadata": {
+        "lang": "python",
+        "sourceTag": "extraction",
+        "sourceFile": "engine.py",
+        "confidence": "high",
+        "callSitesCount": 3
+      }
+    },
+    {
+      "id": "specs/alpha.spec.md",
+      "kind": "module",
+      "label": "alpha-module",
+      "metadata": {
+        "sourceTarget": "src/alpha",
+        "relatedFiles": [
+          "src/alpha/index.ts"
+        ],
+        "confidence": "medium",
+        "sourceTag": "architecture-ir",
+        "description": "alpha 容器",
+        "technology": "TypeScript",
+        "tags": [
+          "core"
+        ],
+        "sourceTags": [
+          "workspace-index"
+        ],
+        "tech": "TypeScript"
+      }
+    },
+    {
+      "id": "specs/beta.spec.md",
+      "kind": "spec",
+      "label": "beta",
+      "metadata": {
+        "sourceTarget": "src/beta",
+        "relatedFiles": [],
+        "confidence": "high",
+        "sourceTag": "doc-graph"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "engine.py::Mul",
+      "target": "comp-x",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": false
+    },
+    {
+      "source": "engine.py::Value",
+      "target": "comp-x",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "engine.py::Value",
+      "target": "engine.py::Mul",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "Value() 调用 Mul()"
+    },
+    {
+      "source": "specs/alpha.spec.md",
+      "target": "comp-x",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "specs/alpha.spec.md",
+      "target": "specs/beta.spec.md",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    },
+    {
+      "source": "specs/beta.spec.md",
+      "target": "specs/alpha.spec.md",
+      "relation": "cross-module",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65
+    }
+  ]
+}"
+`;
