@@ -22,7 +22,10 @@ export interface PanoramicQueryOptions {
 
 export type PanoramicQueryResult =
   | { ok: true; data: unknown }
-  | { ok: false; error: string };
+  // F177：error 路径加 kind 判别（向后兼容，可选）。MCP 层据此区分
+  // 预期输入失败（invalid-input，error 文案安全可回传）与内部异常
+  // （internal，error 可能含绝对路径，MCP 层脱敏后不回传原文，spec C-4 + Codex CRITICAL-D）。
+  | { ok: false; error: string; kind: 'invalid-input' | 'internal' };
 
 /**
  * 执行 panoramic 架构分析查询
@@ -45,6 +48,7 @@ export async function queryPanoramic(
         return {
           ok: false,
           error: 'operation=natural-language 时 question 参数必填，且不能为空字符串',
+          kind: 'invalid-input',
         };
       }
 
@@ -75,6 +79,7 @@ export async function queryPanoramic(
           return {
             ok: false,
             error: '当前项目不是 monorepo，cross-package 分析不可用',
+            kind: 'invalid-input',
           };
         }
         const input = await analyzer.extract(context);
@@ -98,9 +103,12 @@ export async function queryPanoramic(
       }
     }
   } catch (err) {
+    // 内部异常：error 可能含绝对路径（如 buildProjectContext 透传 projectRoot），
+    // 标记 kind='internal'，由 MCP 层脱敏（不回传原文，spec C-4 / Codex CRITICAL-D）。
     return {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
+      kind: 'internal',
     };
   }
 }

@@ -3,6 +3,15 @@
 **Feature Branch**: `009-plugin-marketplace`
 **Date**: 2026-02-14
 
+> **⚠️ F177 修订（2026-06-07）— 错误响应 envelope 已统一**
+> 本文档下方各工具的"错误响应"示例（如 `text: "prepare 失败: <错误详情>"` 纯文本、
+> 以及错误处理表的"栈信息"列）记录的是 009 时的旧形态，**已过时**。
+> 自 Feature 177 起，全部 17 个 MCP 工具的错误响应统一为 `lib/tool-response.ts` 的
+> `{ code, message, hint?, context? }` envelope（`isError: true`），错误 message 脱敏
+> （不含绝对路径 / stack）。错误码为 `ErrorCode` union（`internal-error` / `invalid-input` /
+> `graph-not-built` / `graph-query-failed` / `symbol-not-found` / …）。
+> 详见 `specs/177-unify-mcp-response-telemetry/spec.md`。
+
 ---
 
 ## 1. Server 信息

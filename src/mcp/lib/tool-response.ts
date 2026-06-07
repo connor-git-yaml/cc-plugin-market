@@ -25,7 +25,10 @@ export type ErrorCode =
   // Feature 171 新增
   | 'path-outside-root'
   | 'binary-file'
-  | 'file-not-found';
+  | 'file-not-found'
+  // Feature 177 新增：graph 工具查询期异常（engine 已加载成功后的业务异常；
+  // 缺图/坏图走既有 'graph-not-built'，见 graph-tools.ts 拆 engine 加载边界）
+  | 'graph-query-failed';
 
 /** MCP tool 统一响应 envelope */
 export interface ToolResult {

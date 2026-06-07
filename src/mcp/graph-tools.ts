@@ -11,6 +11,8 @@ import { z } from 'zod';
 import { GraphQueryEngine } from '../panoramic/graph/graph-query.js';
 import type { GraphJSON } from '../panoramic/graph/graph-types.js';
 import { resolveGraphJsonPath } from '../panoramic/graph/graph-paths.js';
+import { buildErrorResponse, type ToolResult } from './lib/tool-response.js';
+import { withTelemetry } from './lib/telemetry.js';
 
 // ──────────────────────────────────────────────────────────
 // 模块级缓存（按 projectRoot 多实例）
@@ -129,28 +131,43 @@ export function getCachedGraphData(projectRoot?: string): {
 }
 
 // ──────────────────────────────────────────────────────────
-// 统一错误响应构建器
+// Feature 177 — 统一错误契约骨架（拆 engine 加载边界）
+//
+// 删除原本地 buildErrorResponse（返回旧 {error,hint} 契约），改用
+// lib/tool-response.ts 的统一 {code,message,hint?} 契约。
 // ──────────────────────────────────────────────────────────
 
 /**
- * 构建 MCP 错误响应
- * @param err - 错误对象或消息字符串
- * @param hint - 附加提示（可选）
+ * 6 个 graph 工具共享的执行骨架，拆分两类错误边界（spec AD-3 / Codex CRITICAL-1）：
+ *   - getEngine 失败（缺图 statSync ENOENT / 坏图 loadFromFile 解析失败）→ graph-not-built
+ *   - 加载成功后的查询期异常 → graph-query-failed
+ *
+ * 不靠 error message 内容猜分类（不稳定且可能泄露路径）。查询方法（query/getNode/
+ * findPath/getCommunity/getGodNodes/getHyperedges）操作纯内存 rawGraph：getCommunity
+ * 唯一的文件 IO（读 GRAPH_REPORT.md）已在 engine 内部 try/catch graceful 降级，不外抛，
+ * 故查询期 err.message 不含路径，保留以利诊断（与删除前的本地实现行为一致）。
+ *
+ * success 路径由 query 回调直接构造 envelope（保持原 JSON.stringify 形态，byte 兼容 AC-5）。
  */
-function buildErrorResponse(err: unknown, hint?: string) {
-  const errorMessage = err instanceof Error ? err.message : String(err);
-  return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify({
-          error: errorMessage,
-          hint: hint ?? '运行 `spectra graph` 先生成图谱',
-        }),
-      },
-    ],
-    isError: true as const,
-  };
+function runGraphTool(
+  projectRoot: string | undefined,
+  query: (engine: GraphQueryEngine) => ToolResult,
+): ToolResult {
+  let engine: GraphQueryEngine;
+  try {
+    engine = getEngine(projectRoot);
+  } catch {
+    return buildErrorResponse(
+      'graph-not-built',
+      '图谱未构建或加载失败',
+      '运行 `spectra graph` 先生成图谱',
+    );
+  }
+  try {
+    return query(engine);
+  } catch (err) {
+    return buildErrorResponse('graph-query-failed', err instanceof Error ? err.message : String(err));
+  }
 }
 
 // ──────────────────────────────────────────────────────────
@@ -186,17 +203,18 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ question, budget, mode, depth, projectRoot }) => {
-      try {
-        const engine = getEngine(projectRoot);
-        const result = engine.query(question, { budget, mode, depth });
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+    withTelemetry('graph_query', (args) => {
+      const { question, budget, mode, depth, projectRoot } = args as {
+        question: string;
+        budget?: number;
+        mode?: 'bfs' | 'dfs';
+        depth?: number;
+        projectRoot?: string;
+      };
+      return runGraphTool(projectRoot, (engine) => ({
+        content: [{ type: 'text' as const, text: JSON.stringify(engine.query(question, { budget, mode, depth })) }],
+      }));
+    }),
   );
 
   // ─── 工具 2: graph_node — 单节点详情查询 ───
@@ -221,26 +239,22 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ id, keyword, budget, projectRoot }) => {
-      try {
-        const engine = getEngine(projectRoot);
+    withTelemetry('graph_node', (args) => {
+      const { id, keyword, budget, projectRoot } = args as {
+        id?: string;
+        keyword?: string;
+        budget?: number;
+        projectRoot?: string;
+      };
+      return runGraphTool(projectRoot, (engine) => {
         const result = engine.getNode({ id, keyword, budget });
-
         // 追加语义边列表（schema v2.0 新字段，向后兼容现有字段）
         const semanticEdges = engine.getSemanticEdges(result.node?.id);
-
         return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({ ...result, semanticEdges }),
-            },
-          ],
+          content: [{ type: 'text' as const, text: JSON.stringify({ ...result, semanticEdges }) }],
         };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+      });
+    }),
   );
 
   // ─── 工具 3: graph_path — 最短路径查询 ───
@@ -255,17 +269,16 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ source, target, projectRoot }) => {
-      try {
-        const engine = getEngine(projectRoot);
-        const result = engine.findPath(source, target);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+    withTelemetry('graph_path', (args) => {
+      const { source, target, projectRoot } = args as {
+        source: string;
+        target: string;
+        projectRoot?: string;
+      };
+      return runGraphTool(projectRoot, (engine) => ({
+        content: [{ type: 'text' as const, text: JSON.stringify(engine.findPath(source, target)) }],
+      }));
+    }),
   );
 
   // ─── 工具 4: graph_community — 社区节点查询 ───
@@ -283,17 +296,16 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ communityId, budget, projectRoot }) => {
-      try {
-        const engine = getEngine(projectRoot);
-        const result = engine.getCommunity(communityId, budget);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+    withTelemetry('graph_community', (args) => {
+      const { communityId, budget, projectRoot } = args as {
+        communityId: string;
+        budget?: number;
+        projectRoot?: string;
+      };
+      return runGraphTool(projectRoot, (engine) => ({
+        content: [{ type: 'text' as const, text: JSON.stringify(engine.getCommunity(communityId, budget)) }],
+      }));
+    }),
   );
 
   // ─── 工具 6: graph_hyperedges — 超边查询 ───
@@ -318,59 +330,33 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ label, node_id, limit, projectRoot }) => {
-      // 额外校验：label 或 node_id 为空字符串时返回明确错误
+    withTelemetry('graph_hyperedges', (args) => {
+      const { label, node_id, limit, projectRoot } = args as {
+        label?: string;
+        node_id?: string;
+        limit?: number;
+        projectRoot?: string;
+      };
+      // 额外校验：label 或 node_id 为空字符串时返回明确错误（统一 invalid-input）
       if (label !== undefined && label.trim().length === 0) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({
-                error: 'label 参数不能为空字符串，请传入有效的过滤词或省略此参数',
-              }),
-            },
-          ],
-          isError: true as const,
-        };
+        return buildErrorResponse('invalid-input', 'label 参数不能为空字符串，请传入有效的过滤词或省略此参数');
       }
       if (node_id !== undefined && node_id.trim().length === 0) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({
-                error: 'node_id 参数不能为空字符串，请传入有效的节点 ID 或省略此参数',
-              }),
-            },
-          ],
-          isError: true as const,
-        };
+        return buildErrorResponse('invalid-input', 'node_id 参数不能为空字符串，请传入有效的节点 ID 或省略此参数');
       }
-
-      try {
-        const engine = getEngine(projectRoot);
-        const hyperedges = engine.getHyperedges({
-          label,
-          nodeId: node_id,
-          limit,
-        });
+      return runGraphTool(projectRoot, (engine) => {
+        const hyperedges = engine.getHyperedges({ label, nodeId: node_id, limit });
         const filtered = (label !== undefined && label.length > 0) || (node_id !== undefined && node_id.length > 0);
         return {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify(
-                { hyperedges, total: hyperedges.length, filtered },
-                null,
-                2,
-              ),
+              text: JSON.stringify({ hyperedges, total: hyperedges.length, filtered }, null, 2),
             },
           ],
         };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+      });
+    }),
   );
 
   // ─── 工具 5: graph_god_nodes — 枢纽节点识别 ───
@@ -387,16 +373,11 @@ export function registerGraphTools(server: McpServer): void {
         .optional()
         .describe('目标项目根目录绝对路径（默认使用当前工作目录）'),
     },
-    async ({ limit, projectRoot }) => {
-      try {
-        const engine = getEngine(projectRoot);
-        const result = engine.getGodNodes(limit);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
-      } catch (err) {
-        return buildErrorResponse(err);
-      }
-    },
+    withTelemetry('graph_god_nodes', (args) => {
+      const { limit, projectRoot } = args as { limit?: number; projectRoot?: string };
+      return runGraphTool(projectRoot, (engine) => ({
+        content: [{ type: 'text' as const, text: JSON.stringify(engine.getGodNodes(limit)) }],
+      }));
+    }),
   );
 }

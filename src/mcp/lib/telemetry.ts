@@ -9,7 +9,7 @@
  */
 
 import { appendFileSync } from 'node:fs';
-import type { ToolResult } from './tool-response.js';
+import { buildErrorResponse, type ToolResult } from './tool-response.js';
 
 /**
  * Telemetry entry — 单次 handler 调用的可观测数据，按行写入 JSONL。
@@ -94,4 +94,51 @@ export function recordAndReturn(
   }
   writeTelemetry(entry);
   return result;
+}
+
+/**
+ * Feature 177 — 注册层 telemetry 装饰器。
+ *
+ * 把 F158 telemetry 采样从"handler 内部自调 recordAndReturn"推广到**注册层**，
+ * 用于无富采样需求（responseSummary/responseSamples）的工具（graph 6 + server 5 共 11 个）。
+ *
+ * 职责：
+ *   1. 入口记 start / requestSize
+ *   2. 出口经 recordAndReturn 透传（含 errorCode 提取）
+ *   3. 顶层未预期异常 → 脱敏 internal-error 安全网（不泄漏 err.message/stack，spec C-4）
+ *
+ * 不变量（spec AD-1 双源分区）：被本装饰器包裹的工具**不得**在 handler 内再调 recordAndReturn；
+ * 已在 handler 内自采样的工具（agent-context / file-nav）**不得**被本装饰器包裹。
+ * → 每个到达 handler 的调用恰写 1 行 telemetry（锁死双发射 EC-1）。
+ *
+ * 范围（spec EC-10）：MCP SDK 在 handler 前的 schema 校验失败走 SDK 自身错误，
+ * 不进入本装饰器，不在 F177 telemetry 覆盖范围内。
+ *
+ * 不接受泛型（YAGNI）：args 用 unknown；SDK 传入的 extra 形参被忽略（17 工具均不用 extra）。
+ */
+export function withTelemetry(
+  toolName: string,
+  handler: (args: unknown) => Promise<ToolResult> | ToolResult,
+): (args: unknown) => Promise<ToolResult> {
+  return async (args: unknown): Promise<ToolResult> => {
+    const startTimeMs = Date.now();
+    let requestSize = 0;
+    try {
+      requestSize = JSON.stringify(args).length;
+    } catch {
+      // 循环引用等无法序列化 → requestSize 记 0
+    }
+    try {
+      const result = await handler(args);
+      return recordAndReturn(toolName, startTimeMs, requestSize, result);
+    } catch {
+      // 顶层未预期异常 → 脱敏 internal-error（不回传 err.message/stack）
+      return recordAndReturn(
+        toolName,
+        startTimeMs,
+        requestSize,
+        buildErrorResponse('internal-error', `${toolName} 内部错误`),
+      );
+    }
+  };
 }

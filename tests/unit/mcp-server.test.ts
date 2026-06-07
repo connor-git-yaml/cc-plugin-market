@@ -103,7 +103,8 @@ describe('createMcpServer', () => {
 
     const result = await tool.handler({ targetPath: 'src', deep: false });
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('prepare 失败');
+    // F177：错误 envelope 统一为 {code,message}，顶层异常脱敏为 internal-error
+    expect(JSON.parse(result.content[0]!.text).code).toBe('internal-error');
   });
 
   it('generate handler 成功返回关键字段', async () => {
@@ -137,7 +138,7 @@ describe('createMcpServer', () => {
       outputDir: 'specs',
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('generate 失败');
+    expect(JSON.parse(result.content[0]!.text).code).toBe('internal-error');
   });
 
   it('batch handler 成功时返回结果', async () => {
@@ -166,7 +167,7 @@ describe('createMcpServer', () => {
 
     const result = await tool.handler({ projectRoot: '/tmp/p', force: true });
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('batch 失败');
+    expect(JSON.parse(result.content[0]!.text).code).toBe('internal-error');
   });
 
   // ────────────────────────────────────────────────────────────
@@ -251,6 +252,6 @@ describe('createMcpServer', () => {
       sourcePath: 'src/a.ts',
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('diff 失败');
+    expect(JSON.parse(result.content[0]!.text).code).toBe('internal-error');
   });
 });

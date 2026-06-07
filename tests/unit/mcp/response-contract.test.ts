@@ -8,7 +8,7 @@
  * RED 阶段：graph 6 工具返回旧 `{error}`、server 5 工具返回纯文本 → 断言失败。
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -89,8 +89,8 @@ describe('Feature 177 — 17 工具统一错误响应契约', () => {
     mocks.generateSpec.mockRejectedValue(new Error('boom'));
     mocks.runBatch.mockRejectedValue(new Error('boom'));
     mocks.detectDrift.mockRejectedValue(new Error('boom'));
-    // panoramic 预期失败路径（!result.ok）
-    mocks.queryPanoramic.mockResolvedValue({ ok: false, error: '缺少 question 参数' });
+    // panoramic 预期输入失败路径（!result.ok + kind=invalid-input）
+    mocks.queryPanoramic.mockResolvedValue({ ok: false, error: '缺少 question 参数', kind: 'invalid-input' });
     server = createMcpServer() as unknown as typeof server;
   });
 
@@ -126,6 +126,21 @@ describe('Feature 177 — 17 工具统一错误响应契约', () => {
       expect(env!['error']).toBeUndefined();
     });
   }
+
+  it('graph 坏图（损坏 graph.json）→ graph-not-built 固定文案，不泄露绝对路径（CRITICAL-1 脱敏边界）', async () => {
+    // loadFromFile 抛错信息含绝对 graphPath；runGraphTool 须映射为固定 graph-not-built 文案
+    const metaDir = join(emptyRoot, 'specs', '_meta');
+    mkdirSync(metaDir, { recursive: true });
+    const graphPath = join(metaDir, 'graph.json');
+    writeFileSync(graphPath, '{ this is : not valid json');
+    const result = await tool('graph_query').handler({ question: 'x', projectRoot: emptyRoot });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env!['code']).toBe('graph-not-built');
+    // 脱敏：响应不含绝对路径（graphPath / emptyRoot）
+    expect(JSON.stringify(env)).not.toContain(graphPath);
+    expect(JSON.stringify(env)).not.toContain(emptyRoot);
+  });
 
   it('graph_hyperedges 空串 label 错误响应含 code（invalid-input）', async () => {
     const result = await tool('graph_hyperedges').handler({ label: '', projectRoot: emptyRoot });
@@ -169,12 +184,24 @@ describe('Feature 177 — 17 工具统一错误响应契约', () => {
     expect(env!['code']).toBe('internal-error');
   });
 
-  it('panoramic-query 预期失败（!result.ok）含 code（invalid-input）+ isError', async () => {
+  it('panoramic-query 预期输入失败（kind=invalid-input）含 code（invalid-input）+ isError', async () => {
     const result = await tool('panoramic-query').handler({ operation: 'natural-language', projectRoot: emptyRoot });
     expect(result.isError).toBe(true); // 旧实现此路径未置 isError → RED
     const env = parseEnvelope(result);
     expect(env).not.toBeNull();
     expect(env!['code']).toBe('invalid-input');
+  });
+
+  it('panoramic-query 内部异常（kind=internal）脱敏为 internal-error（不回传含路径的 error 原文，C-4）', async () => {
+    const leakyPath = join(emptyRoot, 'leaky', 'absolute', 'path.ts');
+    mocks.queryPanoramic.mockResolvedValueOnce({ ok: false, error: `boom at ${leakyPath}`, kind: 'internal' });
+    const result = await tool('panoramic-query').handler({ operation: 'overview', projectRoot: emptyRoot });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env).not.toBeNull();
+    expect(env!['code']).toBe('internal-error');
+    // 脱敏：不回传含绝对路径的 err.message 原文
+    expect(JSON.stringify(env)).not.toContain(leakyPath);
   });
 
   // ── agent-context + file-nav 6 工具：已是 code 契约（回归保护） ──

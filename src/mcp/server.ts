@@ -22,6 +22,8 @@ import { queryPanoramic } from '../panoramic/query.js';
 import { registerGraphTools } from './graph-tools.js';
 import { registerAgentContextTools } from './agent-context-tools.js';
 import { registerFileNavTools } from './file-nav-tools.js';
+import { buildErrorResponse } from './lib/tool-response.js';
+import { withTelemetry } from './lib/telemetry.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,47 +50,37 @@ export function createMcpServer(): McpServer {
       targetPath: z.string().describe('目标文件或目录路径（绝对或相对于 cwd）'),
       deep: z.boolean().default(false).describe('深度分析模式（包含函数体）'),
     },
-    async ({ targetPath, deep }) => {
+    withTelemetry('prepare', async (args) => {
+      const { targetPath, deep } = args as { targetPath: string; deep: boolean };
+      // 顶层异常由 withTelemetry 捕获 → 脱敏 internal-error（F177）
+      const result = await prepareContext(targetPath, {
+        deep,
+        projectRoot: process.cwd(),
+      });
+
+      // 提取 detectedLanguages（Feature 031）—— 局部失败不影响主流程
+      let detectedLanguages: string[] | undefined;
       try {
-        const result = await prepareContext(targetPath, {
-          deep,
-          projectRoot: process.cwd(),
-        });
-
-        // 提取 detectedLanguages（Feature 031）
-        let detectedLanguages: string[] | undefined;
-        try {
-          const resolvedTarget = require('node:path').resolve(targetPath);
-          const fs = require('node:fs');
-          if (fs.statSync(resolvedTarget).isDirectory()) {
-            const sr = scanFiles(resolvedTarget, { projectRoot: process.cwd() });
-            if (sr.languageStats && sr.languageStats.size > 0) {
-              detectedLanguages = Array.from(sr.languageStats.keys());
-            }
+        const resolvedTarget = require('node:path').resolve(targetPath);
+        const fs = require('node:fs');
+        if (fs.statSync(resolvedTarget).isDirectory()) {
+          const sr = scanFiles(resolvedTarget, { projectRoot: process.cwd() });
+          if (sr.languageStats && sr.languageStats.size > 0) {
+            detectedLanguages = Array.from(sr.languageStats.keys());
           }
-        } catch {
-          // 语言检测失败不影响主流程
         }
-
-        const responseData = detectedLanguages
-          ? { ...result, detectedLanguages }
-          : result;
-
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(responseData) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `prepare 失败: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
+      } catch {
+        // 语言检测失败不影响主流程
       }
-    },
+
+      const responseData = detectedLanguages
+        ? { ...result, detectedLanguages }
+        : result;
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(responseData) }],
+      };
+    }),
   );
 
   // ─── 工具 2: generate — 完整 Spec 生成流水线 ───
@@ -100,38 +92,27 @@ export function createMcpServer(): McpServer {
       deep: z.boolean().default(false).describe('深度分析模式'),
       outputDir: z.string().default('specs').describe('输出目录'),
     },
-    async ({ targetPath, deep, outputDir }) => {
-      try {
-        const result = await generateSpec(targetPath, {
-          deep,
-          outputDir,
-          projectRoot: process.cwd(),
-        });
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({
-                specPath: result.specPath,
-                tokenUsage: result.tokenUsage,
-                confidence: result.confidence,
-                warnings: result.warnings,
-              }),
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `generate 失败: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+    withTelemetry('generate', async (args) => {
+      const { targetPath, deep, outputDir } = args as { targetPath: string; deep: boolean; outputDir: string };
+      const result = await generateSpec(targetPath, {
+        deep,
+        outputDir,
+        projectRoot: process.cwd(),
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              specPath: result.specPath,
+              tokenUsage: result.tokenUsage,
+              confidence: result.confidence,
+              warnings: result.warnings,
+            }),
+          },
+        ],
+      };
+    }),
   );
 
   // ─── 工具 3: batch — 批量 Spec 生成 ───
@@ -165,44 +146,40 @@ export function createMcpServer(): McpServer {
         .optional()
         .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）'),
     },
-    async ({ projectRoot, full, force, incremental, languages, mode }) => {
-      try {
-        const root = projectRoot ?? process.cwd();
+    withTelemetry('batch', async (args) => {
+      const { projectRoot, full, force, incremental, languages, mode } = args as {
+        projectRoot?: string;
+        full?: boolean;
+        force?: boolean;
+        incremental?: boolean;
+        languages?: string[];
+        mode?: 'full' | 'reading' | 'code-only';
+      };
+      const root = projectRoot ?? process.cwd();
 
-        // F5：F-009 修复 — MCP 路径 mode 日志输出（FR-006）
-        const effectiveMode = mode ?? 'full';
-        const mcpLogger = { info: (msg: string) => console.error(msg) };
-        mcpLogger.info(`[info] batch mode=${effectiveMode}`);
+      // F5：F-009 修复 — MCP 路径 mode 日志输出（FR-006）
+      const effectiveMode = mode ?? 'full';
+      const mcpLogger = { info: (msg: string) => console.error(msg) };
+      mcpLogger.info(`[info] batch mode=${effectiveMode}`);
 
-        // 加载项目配置作为 fallback（MCP 显式参数优先）
-        const fileConfig = loadProjectConfig(root);
-        // F175 FR-002：合并 config fallback 后统一解析 regen 计划（唯一默认值来源）。
-        const regenPlan = resolveRegenPlan({
-          incremental: incremental ?? fileConfig.incremental,
-          full,
-          force: force ?? fileConfig.force,
-        });
-        const result = await runBatch(root, {
-          incremental: regenPlan.incremental,
-          full: regenPlan.full,
-          languages: languages ?? fileConfig.languages,
-          mode: effectiveMode,
-        });
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `batch 失败: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+      // 加载项目配置作为 fallback（MCP 显式参数优先）
+      const fileConfig = loadProjectConfig(root);
+      // F175 FR-002：合并 config fallback 后统一解析 regen 计划（唯一默认值来源）。
+      const regenPlan = resolveRegenPlan({
+        incremental: incremental ?? fileConfig.incremental,
+        full,
+        force: force ?? fileConfig.force,
+      });
+      const result = await runBatch(root, {
+        incremental: regenPlan.incremental,
+        full: regenPlan.full,
+        languages: languages ?? fileConfig.languages,
+        mode: effectiveMode,
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      };
+    }),
   );
 
   // ─── 工具 4: diff — Spec 漂移检测 ───
@@ -213,27 +190,16 @@ export function createMcpServer(): McpServer {
       specPath: z.string().describe('Spec 文件路径（.spec.md）'),
       sourcePath: z.string().describe('源代码文件或目录路径'),
     },
-    async ({ specPath, sourcePath }) => {
-      try {
-        const report = await detectDrift(
-          resolve(specPath),
-          resolve(sourcePath),
-        );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(report) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `diff 失败: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    },
+    withTelemetry('diff', async (args) => {
+      const { specPath, sourcePath } = args as { specPath: string; sourcePath: string };
+      const report = await detectDrift(
+        resolve(specPath),
+        resolve(sourcePath),
+      );
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(report) }],
+      };
+    }),
   );
 
   // ─── 工具 5: panoramic-query — panoramic 架构分析 ───
@@ -253,29 +219,26 @@ export function createMcpServer(): McpServer {
         .optional()
         .describe('问题文本（operation=natural-language 时必填，其他 operation 忽略）'),
     },
-    async ({ operation, projectRoot, question }) => {
-      try {
-        const result = await queryPanoramic({ operation, projectRoot, question });
-        if (!result.ok) {
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({ error: result.error }) }],
-          };
+    withTelemetry('panoramic-query', async (args) => {
+      const { operation, projectRoot, question } = args as {
+        operation: 'cross-package' | 'architecture-ir' | 'overview' | 'natural-language';
+        projectRoot: string;
+        question?: string;
+      };
+      const result = await queryPanoramic({ operation, projectRoot, question });
+      if (!result.ok) {
+        // F177（修隐性 bug EC-6：旧实现此路径未置 isError，且用旧 {error} 形态）：
+        // 按 query 层判别区分——预期输入失败回传安全文案；内部异常脱敏为 internal-error
+        // （result.error 可能含绝对路径，不回传原文，spec C-4 / Codex CRITICAL-D）。
+        if (result.kind === 'invalid-input') {
+          return buildErrorResponse('invalid-input', result.error);
         }
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result.data) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `panoramic-query 失败: ${err instanceof Error ? err.message : String(err)}`,
-            },
-          ],
-          isError: true,
-        };
+        return buildErrorResponse('internal-error', 'panoramic-query 内部错误');
       }
-    },
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result.data) }],
+      };
+    }),
   );
 
   // ─── 注册图谱查询工具（graph_query / graph_node / graph_path / graph_community / graph_god_nodes） ───
