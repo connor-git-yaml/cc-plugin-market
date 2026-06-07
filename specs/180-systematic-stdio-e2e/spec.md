@@ -43,7 +43,9 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** micrograd baseline graph.json 存在 + dist 已构建，**When** `client.callTool({ name: 'graph_query', arguments: { query: ... } })` 经 StdioClientTransport，**Then** 响应 JSON 可解析，`isError` 不为 true，schema 关键字段非 undefined
+1. **Given** micrograd baseline graph.json 存在 + dist 已构建，**When** `client.callTool({ name: 'graph_query', arguments: { question: '...' } })` 经 StdioClientTransport（Codex 核对真实必填入参是 **`question`** 不是 `query`），**Then** 响应 JSON 可解析，`isError` 不为 true，schema 关键字段非 undefined
+
+> **graph 6 工具真实入参名（Codex Plan 阶段核对 graph-tools.ts）**：`graph_query.question`(必) / `graph_node.id`|`keyword` / `graph_path.source`+`target` / `graph_community.communityId` / `graph_god_nodes.limit?` / `graph_hyperedges.label?`|`node_id?`|`limit?`。实现阶段以 `client.listTools()` 暴露的 inputSchema 为准复核。
 2. **Given** 同上，**When** 对其余 5 个 graph 工具（graph_node/graph_path/graph_community/graph_god_nodes/graph_hyperedges）各发出合法调用，**Then** 每个工具均返回 JSON 可解析响应，且关键输出字段（工具定义 Zod schema 中 REQUIRED 的字段）存在
 
 ---
@@ -331,7 +333,7 @@ scope 文档写 18，源码分析为 5（server）+ 6（graph）+ 3（agent-cont
 
 - **SC-006**：telemetry JSONL 落盘用例（FR-004）在有 baseline 的环境中 PASS，明确验证「恰写 1 行」不变量与「能进入 handler 的失败含 errorCode」两个场景。
 
-- **SC-007**：reproducibility 用例（FR-013）通过 byte-stable 原始 deepEqual 断言（第一级），确认 F179 byte-stable 修复在 stdio E2E 层面守住。
+- **SC-007**：reproducibility 用例（FR-013）通过 byte-stable 原始 deepEqual 断言（第一级），确认 F179 byte-stable 修复在 stdio E2E 层面守住。**注**：因真实 stdio batch 依赖 LLM 可用（runBatch 始终调 callLLM，Codex Plan-W3），该用例 gate 在 `HAS_LLM_E2E` skipIf 之后——在 LLM 可用环境（dev-machine）跑并 PASS 为达成；keyless CI 自动 skip 不算 fail。byte-stable 的进程内深测仍由 F179 既有测试覆盖。
 
 - **SC-008**：所有「实现阶段需实测确认」的点（工具真值、namespace 前缀支持性）在实现 PR 中必须有明确注释记录实测结论，不允许留白。
 
