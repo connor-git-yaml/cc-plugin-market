@@ -49,6 +49,11 @@ export const sectionConfigs = [
     sourcePath: resolve(rootDir, 'docs/shared/agent-eval-credentials-policy.md'),
     targets: ['AGENTS.md', 'CLAUDE.md'],
   },
+  {
+    key: 'dogfooding-policy',
+    sourcePath: resolve(rootDir, 'docs/shared/agent-dogfooding-policy.md'),
+    targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {
