@@ -59,14 +59,25 @@ node scripts/spike-cohort3-plugin-mcp.mjs --stock-plugin
 
 > 把 `spike-result.md` 回传给 sandbox agent，由其据真实结果决定继续 Phase C 还是走升级路径。**synthetic / dry-run 结果不算 PASS。**
 
-## 步骤 3 — Verified 数据集 import + 预注册冻结（Phase A 落地后补全）
+## 步骤 3 — Verified 数据集 import + 预注册冻结
+
+importer 已参数化（同一脚本，Lite 默认不变；传 Verified 参数即切数据集）：
 
 ```bash
-# 待 T-A2 importer 落地：
-# pip install datasets   # 若未装
-# python3 scripts/swe-bench-verified-fixture-import.py --dry-run   # 列候选
-# python3 scripts/swe-bench-verified-fixture-import.py ...         # 真实 import
-# 冻结预注册（task id + seed + filter → verification/preregistration.md）
+pip install datasets   # 若未装（sandbox 无此库，故 import 是 host 步骤）
+
+# Verified 子集 import（repos/min-date 按可解性挑；先小 limit 试）
+python3 scripts/swe-bench-fixture-import.py \
+  --dataset princeton-nlp/SWE-bench_Verified \
+  --task-prefix SWE-V --dataset-tag verified --fixtures-subdir swe-bench-verified \
+  --repos <owner/repo,...> --min-date 2024-01-01 --max-patch-files 3 --limit 10 \
+  --output-dir tests/baseline/swe-bench-verified/fixtures/
+
+# oracle 可执行性 smoke（T-A2 C-1）：对 ≥3 个导入 task 装依赖跑 runPrimaryOracle，
+# 通过率 ≥ 阈值（≥8/10）才允许冻结预注册；否则换 task。
+
+# 冻结预注册：把实际 10 个 task id 填 verification/preregistration.md，
+# 用 computeTaskSetHash 算 taskSetHash，frozen 改 true（见该文件内联说明）
 ```
 
 ## 步骤 4 — smoke（5 cohort × 1 task × N=1）  〔待 Phase C-E〕

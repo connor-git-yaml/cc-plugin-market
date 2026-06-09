@@ -100,6 +100,10 @@ tests/baseline/swe-bench-lite/runs/
 # （事实源是 specs/176/.../preregistration.md 记录的 task id + 筛选规则 + seed，fixture 重生）
 tests/baseline/swe-bench-verified/
 
+# Python bytecode（Feature 176 引入 Verified importer 后 py_compile 会产生）
+__pycache__/
+*.pyc
+
 # Feature 147 aider repomap 副作用产物（aider --show-repo-map 在 cwd 创建）
 .aider.chat.history.md
 .aider.tags.cache.v*
