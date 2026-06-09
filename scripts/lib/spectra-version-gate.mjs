@@ -20,6 +20,9 @@ import { PROJECT_ROOT } from './swe-bench-verified-paths.mjs';
 
 export const BUILD_META_NAME = '.spectra-build-meta.json';
 
+/** tsc 编译 dist 的输入：sourceDirty 只看这些路径（再生 doc 脏不算）。 */
+export const BUILD_INPUT_PATHS = ['src', 'tsconfig.json', 'tsconfig.build.json', 'package.json', 'package-lock.json'];
+
 /**
  * F177-F181 的 sentinel commit（master 已 ship，用 40 位完整 SHA 避免 ambiguous）。
  * 门禁要求它们都是 build 源 commit 的祖先；可经 opts.sentinels 覆盖。
@@ -65,17 +68,21 @@ function git(args, cwd = PROJECT_ROOT) {
 export function stampBuild(distDir = path.join(PROJECT_ROOT, 'dist'), builtAtIso) {
   const head = git(['rev-parse', 'HEAD']);
   if (head.status !== 0) throw new Error(`[version-gate] git rev-parse HEAD 失败: ${head.stderr}`);
-  const status = git(['status', '--porcelain']);
-  const dirty = status.stdout.length > 0;
+  const dirty = git(['status', '--porcelain']).stdout.length > 0;
+  // sourceDirty 只看 build 输入（tsc 编译 dist 的源）。理由：评测要求"dist 可由某 commit 的源复现"，
+  // 这只取决于 src/ + tsconfig + package；像 specs/src.spec.md 这类再生 doc 脏不影响 dist 复现性，
+  // 不应阻断 spike/batch（CON-2 明确该 doc 保持未提交）。
+  const sourceDirty = git(['status', '--porcelain', '--', ...BUILD_INPUT_PATHS]).stdout.length > 0;
   // 在写 meta 前算 dist 内容指纹（meta 自身是 .json 不计入 .js 指纹）
   const distHash = hashDistTree(distDir);
   const meta = {
     commit: head.stdout,
     dirty,
+    sourceDirty,
     distSha256: distHash.sha256,
     distFileCount: distHash.fileCount,
     builtAtIso: builtAtIso ?? new Date().toISOString(),
-    note: 'F176 版本门禁凭据；勿手改。distSha256 绑定 dist 内容，重 tsc 不重盖章会被识破。',
+    note: 'F176 版本门禁凭据；勿手改。distSha256 绑定 dist 内容；sourceDirty 只看 build 输入。',
   };
   fs.mkdirSync(distDir, { recursive: true });
   fs.writeFileSync(path.join(distDir, BUILD_META_NAME), JSON.stringify(meta, null, 2) + '\n', 'utf-8');
@@ -169,10 +176,13 @@ export function verifySpectraVersion(distCli, opts = {}) {
     return { ok: false, reason: `build-meta 缺 distSha256（旧格式/被篡改）。请 node scripts/build-spectra-stamped.mjs。`, meta, checks };
   }
 
-  // (3) dirty
+  // (3) dirty — 只看 build 输入（sourceDirty）。再生 doc（如 specs/src.spec.md）脏不阻断。
+  //     旧 meta 无 sourceDirty 时回退到全树 dirty（向后兼容）。
+  const effectiveDirty = meta.sourceDirty ?? meta.dirty;
   checks.dirty = meta.dirty;
-  if (meta.dirty && !allowDirty) {
-    return { ok: false, reason: `build 源 tree 有未提交改动（dirty），且 allowDirty=false（评测要求 clean committed build）`, meta, checks };
+  checks.sourceDirty = effectiveDirty;
+  if (effectiveDirty && !allowDirty) {
+    return { ok: false, reason: `build 输入源（src/tsconfig/package）有未提交改动，且 allowDirty=false（评测要求 src clean committed build）`, meta, checks };
   }
 
   // (4) staleness：dist 不得早于关键 src

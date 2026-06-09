@@ -13,7 +13,7 @@ import {
   runCombDir,
   VERIFIED_ROOT_REL,
 } from '../../scripts/lib/swe-bench-verified-paths.mjs';
-import { verifySpectraVersion, BUILD_META_NAME } from '../../scripts/lib/spectra-version-gate.mjs';
+import { verifySpectraVersion, BUILD_META_NAME, BUILD_INPUT_PATHS } from '../../scripts/lib/spectra-version-gate.mjs';
 
 describe('parsePluginMcpCalls', () => {
   it('区分 plugin-namespace 与 driver-namespace 调用', () => {
@@ -109,5 +109,12 @@ describe('spectra-version-gate 守卫路径', () => {
 
   it('BUILD_META_NAME 是 .spectra-build-meta.json', () => {
     expect(BUILD_META_NAME).toBe('.spectra-build-meta.json');
+  });
+
+  it('BUILD_INPUT_PATHS 只含 build 输入（src/tsconfig/package），不含 specs 等再生 doc', () => {
+    // sourceDirty 只看这些；再生 doc 脏不阻断 spike/batch（CON-2: specs/src.spec.md 保持未提交）
+    expect(BUILD_INPUT_PATHS).toContain('src');
+    expect(BUILD_INPUT_PATHS).toContain('package.json');
+    expect(BUILD_INPUT_PATHS.some((p: string) => p.startsWith('specs'))).toBe(false);
   });
 });
