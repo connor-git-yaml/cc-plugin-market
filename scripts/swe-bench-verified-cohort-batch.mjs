@@ -286,10 +286,16 @@ function smokeAssertions(results, matrix) {
     c3McpCalls = Array.isArray(trace) ? trace.reduce((s, t) => s + (t.callCount ?? 0), 0) : 0;
   }
   const pass = broken.length === 0 && (c3McpCalls ?? 0) > 0;
+  // frontmatter 含机器可读断言字段 + source 标记（codex CRITICAL：verify 不能只看 status，
+  // 需交叉核对计数；synthetic 防线 = 本文件仅由真实 batch 跑写出 + git 历史 + 人工 review）
   const body = `---
 feature: 176
 artifact: smoke-result
 status: ${pass ? 'PASS' : 'FAIL'}
+source: host(batch)
+runCount: ${results.length}
+brokenCount: ${broken.length}
+c3McpCallCount: ${c3McpCalls ?? 'null'}
 generatedAtIso: ${new Date().toISOString()}
 ---
 
@@ -376,9 +382,14 @@ async function main() {
   const records = loadRunRecords(taskIds, 3);
   const agg = aggregateCohorts(records);
   fs.mkdirSync(aggregateDir(), { recursive: true });
+  // taskSetHash 把 aggregate 绑回预注册（codex WARNING：防旧/手写 aggregate 纸面通过 verify）
+  const { computeTaskSetHash } = await import('./lib/preregistration-check.mjs');
   atomicWriteJson(path.join(aggregateDir(), 'cohort-aggregate.json'), {
     generatedAtIso: new Date().toISOString(),
+    source: 'host(batch--full)',
     spectraVersionGate: gate ? { commit: gate.meta.commit, distSha256: gate.meta.distSha256 } : null,
+    taskSetHash: computeTaskSetHash(taskIds),
+    expectedRunCount: taskIds.length * COHORT_IDS.length * 3,
     runCount: records.length,
     ...agg,
   });

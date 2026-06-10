@@ -314,10 +314,29 @@ F158 基础设施 ship
 
 ---
 
-## 11. 一句话定位
+## 11. M7 章节：SWE-Bench Verified 5-cohort 横向对比（F176）
 
-> Spectra MCP 在 **medium-complexity multi-file 真实修复任务** 上观察到 directional lift（C/A = 1.66× on SWE-Bench-Lite, n=143），按需 pull 优于 spec 全文 push（C/B = 6.3×）。**简单任务无需启用**，**driver task ceiling 任务无法补偿**。
+M7 把 Spectra 从"AST spec 生成器"产品化为"Claude Code 子代理可开箱即用的 MCP 代码智能层"（F170a/F170c + F177-F181 收口），F176 是验收性横向评测：**5 cohort（裸 Claude / Spec Driver / Spec Driver+Spectra MCP / SuperPowers / GStack）× SWE-Bench Verified 10 task × N=3**，driver 统一 claude-opus-4-7，pass/fail 真值=functional oracle，3-judge jury 仅质量叠加。
+
+与本报告早期章节（Lite 时代）的关键差异：
+
+| | §1-10（SWE-Bench-Lite，F158-F169）| §11（Verified，F176）|
+|--|--|--|
+| MCP 形态 | driver 顶层 `.mcp.json`（`mcp__spectra__*`）| **产品 plugin namespace**（`mcp__plugin_spectra_spectra__*`，子代理可达——spike 实证）|
+| 数据集 | Lite 简化 fixture | Verified 子集（预注册冻结防跑后换 task）|
+| 完整性护栏 | 基础 | 版本门禁（commit 盖章+dist sha256）/ repeat 隔离 / oracle-jury 分离 / blinding / 禁用词扫描 |
+| 可比性立场 | internal directional | 同左，且依据 2026 leakage 共识（OpenAI 2026-02-23 停报 Verified）显式立论 |
+
+**结果摘要**：<!-- TODO: host full 跑完后填 lift / c3_vs_c4 / token-per-completed-task 三个数字 + falsification 结论 -->
+
+完整报告（实验设计 / 锚点 / dogfooding / falsification）：[PUBLISH-REPORT-M7.md](./PUBLISH-REPORT-M7.md)。
 
 ---
 
-*Generated: 2026-05-25 / Sources: F147-F169 / 实付 ~$30 / 日历跨度 12 天*
+## 12. 一句话定位
+
+> Spectra MCP 在 **medium-complexity multi-file 真实修复任务** 上观察到 directional lift（C/A = 1.66× on SWE-Bench-Lite, n=143），按需 pull 优于 spec 全文 push（C/B = 6.3×）。**简单任务无需启用**，**driver task ceiling 任务无法补偿**。M7（Verified, F176）的产品形态验证见 §11。
+
+---
+
+*Generated: 2026-05-25 / Sources: F147-F169 / 实付 ~$30 / 日历跨度 12 天 / §11 M7 增补: 2026-06-10（F176）*
