@@ -17,14 +17,21 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+// Feature 176: cohort3（spec-driver-spectra-mcp）派发依赖
+import { writeLocalSpectraPluginDir, globalSpectraPluginPresent } from './lib/local-spectra-plugin.mjs';
+import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SCHEMA_VERSION = '1.3'; // Feature 162: rename perf.mcpToolCallTrace → perf.mcpToolCalls (canonical)；保留旧字段名兼容读取（plan §2.4.3）
 const COLLECTOR_VERSION = '0.4.0';
-export const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'mcp-pull'];
+// Feature 176: cohort3 = spec-driver workflow + plugin-namespace spectra MCP（区别于
+// 'spec-driver-spectra' 的 spec.md push 注入、'mcp-pull' 的 driver 顶层 .mcp.json）
+export const COHORT3_TOOL = 'spec-driver-spectra-mcp';
+export const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'mcp-pull', COHORT3_TOOL];
 
 // Feature 158 CR-2：fixture 查找多目录优先序（specs/158 优先，向后兼容 specs/147）
 const TASK_FIXTURE_DIRS = [
@@ -54,6 +61,7 @@ export function parseArgs(argv) {
     skipSanity: false, // 跳过 fixture sanity check（oracle 在 setup 后立即 PASS 即视为 fixture invalid）
     bypassPermissions: false, // Sprint 3 Phase D: dangerously-skip-permissions 让 agent 能 git commit + 跑 pytest
     fixtureSuffix: '', // Sprint 3 Phase D: 把结果写到 tasks/<task>/<tool>-<suffix>/full.json，避免覆盖 sprint2 single-turn 数据
+    repeatIndex: null, // Feature 176（FR-A-006b）：worktree 路径加 r<i> 隔离，三 repeat 不共享状态
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -66,6 +74,7 @@ export function parseArgs(argv) {
       case '--skip-sanity': args.skipSanity = true; break;
       case '--bypass-permissions': args.bypassPermissions = true; break;
       case '--fixture-suffix': args.fixtureSuffix = argv[++i]; break;
+      case '--repeat-index': args.repeatIndex = Number(argv[++i]); break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
@@ -73,6 +82,10 @@ export function parseArgs(argv) {
   if (!args.task) throw new Error('--task required');
   if (!SUPPORTED_TOOLS.includes(args.tool)) {
     throw new Error(`--tool must be one of ${SUPPORTED_TOOLS.join('|')}`);
+  }
+  // Feature 176 codex INFO 修复：防 --repeat-index abc → rNaN 路径
+  if (args.repeatIndex != null && (!Number.isInteger(args.repeatIndex) || args.repeatIndex < 1)) {
+    throw new Error(`--repeat-index 必须是 ≥1 的整数，收到 ${args.repeatIndex}`);
   }
   return args;
 }
@@ -96,8 +109,12 @@ export function loadTaskFixture(taskId) {
 // Worktree 准备
 // ============================================================
 
-export function prepareWorktree({ taskId, tool, target, startCommit }) {
-  const wtDir = path.join(getBenchHome(), taskId, tool);
+export function prepareWorktree({ taskId, tool, target, startCommit, repeatIndex = null }) {
+  // Feature 176（FR-A-006b repeat 隔离）：传 repeatIndex 时 worktree 路径含 r<i>，
+  // 三次 repeat 互不共享 worktree/patch/cache；不传保持既有路径（F147/F149 向后兼容）
+  const wtDir = repeatIndex == null
+    ? path.join(getBenchHome(), taskId, tool)
+    : path.join(getBenchHome(), taskId, tool, `r${repeatIndex}`);
   if (fs.existsSync(wtDir)) {
     fs.rmSync(wtDir, { recursive: true, force: true });
   }
@@ -143,6 +160,11 @@ export function buildDriverPrompt({ tool, taskPrompt, spectraContext }) {
       // 不在 prompt 末尾加 hint（Codex review 1 CRITICAL 5 修复）
       return taskPrompt;
     case 'spec-driver':
+      return `请使用 spec-driver-fix workflow（specify → plan → implement → verify）完成以下任务，包括严格的 spec-driven discipline + 测试覆盖：\n\n${taskPrompt}`;
+    case COHORT3_TOOL:
+      // Feature 176 cohort3：prompt 与 'spec-driver' **逐字一致**（FR-A-003 confound 控制：
+      // cohort2/3 唯一差异 = plugin-namespace spectra MCP 是否注册，不注入 spec.md context、
+      // 不加 MCP 使用提示 —— agent 是否主动调 MCP 正是被测变量）
       return `请使用 spec-driver-fix workflow（specify → plan → implement → verify）完成以下任务，包括严格的 spec-driven discipline + 测试覆盖：\n\n${taskPrompt}`;
     case 'spec-driver-spectra':
       // 关键对照组：spec-driver workflow + 预先注入 spectra spec.md 作为项目理解 context
@@ -206,11 +228,50 @@ export function findSuperPowersDir() {
   return match ? path.join(SUPERPOWERS_PLUGIN_DIR, match) : null;
 }
 
-export function buildClaudeArgs({ tool, prompt, wtDir = null, bypassPermissions = false }) {
+// Feature 176 cohort3 allowedTools：server 级 token（若 CLI 支持则放行全部 17 工具）+ 显式核心三件
+// （spike 已验证显式名可用，双保险）+ 标准工具 + Task（spec-driver workflow spawn 子代理必需）
+export const COHORT3_ALLOWED_TOOLS = [
+  'mcp__plugin_spectra_spectra',
+  'mcp__plugin_spectra_spectra__context',
+  'mcp__plugin_spectra_spectra__impact',
+  'mcp__plugin_spectra_spectra__detect_changes',
+  'Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write', 'Task',
+].join(',');
+
+export function buildClaudeArgs({
+  tool, prompt, wtDir = null, bypassPermissions = false,
+  // Feature 176（KD-7/T-C3）：model / outputFormat 参数化。默认值保持既有行为
+  // （sonnet + text）以不破坏 F147/F158/F170 调用方与单测；F176 batch 显式传 opus + stream-json。
+  model = null, outputFormat = null,
+  // Feature 176 cohort3：本地 spectra plugin 目录（writeLocalSpectraPluginDir 产物）
+  spectraPluginDir = null,
+  // Feature 176：prompt 走 stdin（spike 实证 --allowedTools 是 variadic 会吃掉位置 prompt → exit 1）。
+  // cohort3 强制 stdin；其余 cohort 可由 batch 显式开启。
+  promptViaStdin = false,
+}) {
   // 注意：--add-dir / --allowed-tools 都是 variadic（<...>），把后续 prompt 吞掉。
   // 改用 cwd: wtDir 已让 claude 访问目标目录；--allowedTools 写在 plugin-dir 之前并明确分隔。
   // Sprint 3 Phase D: 加 bypassPermissions 模式，用于 multi-turn 实跑（让 agent 能 git commit + 跑 pytest），
   // 仅在 ephemeral worktree 内安全（CLAUDE.local.md 已确认）
+  // Feature 176 cohort3：spec-driver workflow（全局已装 plugin）+ plugin-namespace spectra（--plugin-dir 本地 build）
+  if (tool === COHORT3_TOOL) {
+    if (!spectraPluginDir) {
+      throw new Error(`buildClaudeArgs: ${COHORT3_TOOL} 必须传入 spectraPluginDir（writeLocalSpectraPluginDir 产物，版本门禁后）`);
+    }
+    const args = [
+      '--print',
+      '--model', model ?? 'claude-opus-4-7', // spec/milestone §3：F176 driver = opus-4-7
+      '--output-format', 'stream-json', // cohort3 必须 stream-json（mcp trace + token 解析依赖）
+      '--include-partial-messages',
+      '--verbose',
+      '--permission-mode', bypassPermissions ? 'bypassPermissions' : 'acceptEdits',
+      '--plugin-dir', spectraPluginDir,
+      '--allowedTools', COHORT3_ALLOWED_TOOLS,
+    ];
+    if (bypassPermissions) args.push('--dangerously-skip-permissions');
+    // 不 push prompt：cohort3 一律 stdin（variadic 防吃）。runTask 负责 input: prompt。
+    return args;
+  }
   // Feature 158: mcp-pull cohort 走 stream-json + --mcp-config 路径（与 spike-T2 一致）
   if (tool === 'mcp-pull') {
     if (!wtDir) {
@@ -218,7 +279,7 @@ export function buildClaudeArgs({ tool, prompt, wtDir = null, bypassPermissions 
     }
     const mcpArgs = [
       '--print',
-      '--model', 'claude-sonnet-4-6',
+      '--model', model ?? 'claude-sonnet-4-6',
       '--output-format', 'stream-json',
       '--include-partial-messages',
       '--verbose', // stream-json 需要 --verbose 才能完整 dump tool_use block
@@ -227,15 +288,18 @@ export function buildClaudeArgs({ tool, prompt, wtDir = null, bypassPermissions 
       '--allowedTools', 'mcp__spectra__impact,mcp__spectra__context,mcp__spectra__detect_changes,Read,Grep,Glob,Bash,Edit,Write',
     ];
     if (bypassPermissions) mcpArgs.push('--dangerously-skip-permissions');
-    mcpArgs.push(prompt);
+    if (!promptViaStdin) mcpArgs.push(prompt);
     return mcpArgs;
   }
+  const effectiveFormat = outputFormat ?? 'text';
   const baseArgs = [
     '--print',
-    '--model', 'claude-sonnet-4-6',
-    '--output-format', 'text',
-    '--permission-mode', bypassPermissions ? 'bypassPermissions' : 'acceptEdits',
+    '--model', model ?? 'claude-sonnet-4-6',
+    '--output-format', effectiveFormat,
   ];
+  // stream-json 需要 --verbose + partial 才能完整 dump tool_use / usage（FR-B-003a token 采集）
+  if (effectiveFormat === 'stream-json') baseArgs.push('--include-partial-messages', '--verbose');
+  baseArgs.push('--permission-mode', bypassPermissions ? 'bypassPermissions' : 'acceptEdits');
   if (bypassPermissions) baseArgs.push('--dangerously-skip-permissions');
   if (tool === 'superpowers') {
     const dir = findSuperPowersDir();
@@ -243,7 +307,7 @@ export function buildClaudeArgs({ tool, prompt, wtDir = null, bypassPermissions 
   } else if (tool === 'gstack') {
     if (fs.existsSync(GSTACK_SKILLS_DIR)) baseArgs.push('--plugin-dir', GSTACK_SKILLS_DIR);
   }
-  baseArgs.push(prompt);
+  if (!promptViaStdin) baseArgs.push(prompt);
   return baseArgs;
 }
 
@@ -364,7 +428,11 @@ export function parseMcpToolCallTrace(stdout, expectedSpectraToolCalls = null) {
       turnIndex++;
       const content = evt.message?.content || [];
       for (const block of content) {
-        if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name.startsWith('mcp__spectra__')) {
+        // Feature 176（T-C2）：同时匹配 driver 顶层 namespace（mcp__spectra__*，F158 mcp-pull）
+        // 与 plugin namespace（mcp__plugin_spectra_spectra__*，cohort3 产品形态）；
+        // 子代理事件也是 type=assistant（带 parent_tool_use_id），天然计入
+        if (block?.type === 'tool_use' && typeof block.name === 'string'
+          && (block.name.startsWith('mcp__spectra__') || block.name.startsWith('mcp__plugin_spectra_spectra__'))) {
           events.push({ name: block.name, id: block.id, turn: turnIndex, ts: Date.parse(evt.timestamp || '') || null });
         }
       }
@@ -423,9 +491,15 @@ export function parseMcpToolCallTrace(stdout, expectedSpectraToolCalls = null) {
 // 跑 task
 // ============================================================
 
-export function runTask({ tool, prompt, wtDir, timeoutMs, bypassPermissions = false }) {
+export function runTask({
+  tool, prompt, wtDir, timeoutMs, bypassPermissions = false,
+  // Feature 176：model/outputFormat 覆盖（KD-7）+ cohort3 本地 plugin 目录 + stdin 喂 prompt
+  model = null, outputFormat = null, spectraPluginDir = null, promptViaStdin = null,
+}) {
+  // cohort3 强制 stdin（buildClaudeArgs 该分支不接受位置 prompt）；其余按显式入参（默认 false 保持既有）
+  const useStdin = tool === COHORT3_TOOL ? true : (promptViaStdin ?? false);
   // Feature 158: mcp-pull 必须把 wtDir 透传给 buildClaudeArgs（用于定位 .mcp.json）
-  const args = buildClaudeArgs({ tool, prompt, wtDir, bypassPermissions });
+  const args = buildClaudeArgs({ tool, prompt, wtDir, bypassPermissions, model, outputFormat, spectraPluginDir, promptViaStdin: useStdin });
   const start = process.hrtime.bigint();
   // 不主动设 ANTHROPIC_API_KEY；让 claude CLI fallback 到 OAuth credentials
   // （之前设为 '' 会覆盖 OAuth 导致 401 auth error）
@@ -437,6 +511,7 @@ export function runTask({ tool, prompt, wtDir, timeoutMs, bypassPermissions = fa
     maxBuffer: 64 * 1024 * 1024,
     timeout: timeoutMs,
     env,
+    ...(useStdin ? { input: prompt } : {}),
   });
   const wallMs = Number((process.hrtime.bigint() - start) / 1_000_000n);
   return {
@@ -445,6 +520,9 @@ export function runTask({ tool, prompt, wtDir, timeoutMs, bypassPermissions = fa
     stderr: r.stderr ?? '',
     exitCode: r.status,
     claudeArgs: args, // Sprint 3 Phase D codex fix: 让真实传给 claude 的 args 可入 fixture（含 --bypass-permissions / --plugin-dir 等 flag）
+    promptViaStdin: useStdin,
+    // Feature 176（FR-A-003b prompt 审计）：effective prompt 的 sha256，cohort 间 diff/一致性核验用
+    promptSha256: crypto.createHash('sha256').update(prompt ?? '').digest('hex'),
     timedOut: r.signal === 'SIGTERM' || (r.error && r.error.code === 'ETIMEDOUT'),
   };
 }
@@ -542,9 +620,14 @@ export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResul
   const nowIso = new Date().toISOString();
   const staleAfterDate = new Date(Date.now() + 6 * 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   // Sprint 3 Phase D codex review fix: 把真实传给 claude 的 args 入库（不含 prompt 本身），让 bypass-permissions / plugin-dir 等 flag 可审计
+  // Feature 176 codex fix：仅当 prompt 是位置参数（非 stdin）时去掉末尾项；cohort3 走 stdin、
+  // 末尾是 allowedTools 值，旧 filter 逻辑会把它误删（且 filter 删所有相等项，改用 slice 只删末位）
   const recordedArgs = claudeArgs
-    ? claudeArgs.filter((a) => a !== claudeArgs[claudeArgs.length - 1]) // 去掉末尾 prompt（变长 + 含敏感任务描述）
+    ? (runResult?.promptViaStdin ? [...claudeArgs] : claudeArgs.slice(0, -1))
     : ['--print', '--model', 'claude-sonnet-4-6'];
+  // Feature 176 codex fix：meta.model 取实际 --model 值（cohort3=opus-4-7），不再硬编码 sonnet
+  const modelFlagIdx = recordedArgs.indexOf('--model');
+  const actualModel = modelFlagIdx >= 0 && recordedArgs[modelFlagIdx + 1] ? recordedArgs[modelFlagIdx + 1] : 'claude-sonnet-4-6';
   return {
     schemaVersion: SCHEMA_VERSION,
     meta: {
@@ -557,7 +640,7 @@ export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResul
       targetLocEstimate: null,
       spectraModuleCount: null,
       mode: 'task',
-      model: 'claude-sonnet-4-6',
+      model: actualModel,
       runTimestampUtc: nowIso,
       runHostOs: process.platform,
       command: 'claude',
@@ -653,11 +736,33 @@ async function main() {
   }
 
   console.log(`[task-runner] task=${args.task} tool=${args.tool} timeout=${args.timeoutMs}ms`);
+  // Feature 176 cohort3 preflight（codex CRITICAL/INFO 修复）：版本门禁 + 全局 plugin 检查
+  // 前移到 worktree 准备之前 —— 失败 fail-fast 不浪费准备时间；全局 plugin 并存时实际加载哪个
+  // build 有歧义，会让 fixture 的版本审计字段失真，默认 hard-fail（F176_ALLOW_GLOBAL_SPECTRA=1 显式放行）
+  let cohort3VersionGate = null;
+  if (args.tool === COHORT3_TOOL) {
+    const distCli = path.join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
+    const gate = verifySpectraVersion(distCli, { allowDirty: false }); // 评测要求 src clean committed build
+    if (!gate.ok) {
+      throw new Error(`[task-runner] cohort3 版本门禁未过（FR-A-004b hard-fail）: ${gate.reason}`);
+    }
+    cohort3VersionGate = { commit: gate.meta.commit, distSha256: gate.meta.distSha256, sourceDirty: gate.meta.sourceDirty ?? gate.meta.dirty };
+    console.log(`[task-runner] cohort3 版本门禁: ${gate.reason}`);
+    if (globalSpectraPluginPresent() && process.env.F176_ALLOW_GLOBAL_SPECTRA !== '1') {
+      throw new Error(
+        '[task-runner] cohort3 检测到全局 spectra plugin —— 与本地同名 plugin 加载歧义，' +
+        '版本审计将失真（codex CRITICAL）。按 host-runbook 禁用全局 spectra 后重跑，' +
+        '或 F176_ALLOW_GLOBAL_SPECTRA=1 显式放行并自担歧义。'
+      );
+    }
+  }
+
   const wt = prepareWorktree({
     taskId: args.task,
     tool: args.tool,
     target: taskFixture.target,
     startCommit: taskFixture.startCommit,
+    repeatIndex: args.repeatIndex,
   });
   console.log(`[task-runner] worktree prepared: ${wt.wtDir} (branch ${wt.branchName})`);
 
@@ -711,9 +816,35 @@ async function main() {
     console.log(`[task-runner] mcp-pull: .mcp.json written, spectra MCP server registered`);
   }
 
+  // Feature 176 cohort3 准备（第二段）：wtDir spectra graph + 本地 plugin 目录
+  // （版本门禁/全局 plugin 检查已在 worktree 准备前 hard-fail，见 cohort3Preflight）
+  let cohort3PluginDir = null;
+  if (args.tool === COHORT3_TOOL) {
+    const distCli = path.join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
+    const graphPath = path.join(wt.wtDir, 'specs', '_meta', 'graph.json');
+    if (!fs.existsSync(graphPath)) {
+      console.log(`[task-runner] cohort3: running spectra batch in worktree (~3 min)...`);
+      runSpectraBatchInWorktree(wt.wtDir);
+      // codex WARNING 修复：git add/commit 必须检查状态——graph 未提交会污染 diff/uncommitted 指标
+      const addR = spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
+      if (addR.status !== 0) throw new Error(`[task-runner] cohort3 graph git add 失败: ${addR.stderr}`);
+      const commitR = spawnSync('git', ['-C', wt.wtDir, '-c', 'user.email=eval@f176', '-c', 'user.name=eval-bench', 'commit', '-m', 'eval-bench: spectra graph for cohort3'], { encoding: 'utf-8' });
+      if (commitR.status !== 0) throw new Error(`[task-runner] cohort3 graph git commit 失败: ${commitR.stderr || commitR.stdout}`);
+      const porcelain = spawnSync('git', ['-C', wt.wtDir, 'status', '--porcelain'], { encoding: 'utf-8' });
+      if ((porcelain.stdout ?? '').trim() !== '') throw new Error('[task-runner] cohort3 graph commit 后 worktree 仍 dirty（会污染 agent diff 指标）');
+    } else {
+      console.log(`[task-runner] cohort3: spectra graph already at ${path.relative(wt.wtDir, graphPath)}`);
+    }
+    cohort3PluginDir = writeLocalSpectraPluginDir(distCli);
+    console.log(`[task-runner] cohort3: local spectra plugin (F177-F181 build) → ${cohort3PluginDir}`);
+  }
+
   const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt, spectraContext });
   console.log(`[task-runner] running claude (${args.tool})...`);
-  const runResult = runTask({ tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs, bypassPermissions: args.bypassPermissions });
+  const runResult = runTask({
+    tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs, bypassPermissions: args.bypassPermissions,
+    spectraPluginDir: cohort3PluginDir,
+  });
   console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);
 
   // 持久化 stdout/stderr
@@ -728,10 +859,11 @@ async function main() {
   console.log(`[task-runner] product: commits=${productMetrics.commits}, files=${productMetrics.filesChanged}, uncommitted=${productMetrics.uncommittedChanges}`);
 
   // Feature 158/162: mcp-pull cohort 解析 stream-json，提取 mcpToolCalls (canonical) + w3Flag + cost/tokens
+  // Feature 176: cohort3 同样走 stream-json，解析逻辑共用（parseMcpToolCallTrace 已扩展 plugin namespace）
   let mcpTrace = null;
   let w3Flag = null;
   let usage = null;
-  if (args.tool === 'mcp-pull') {
+  if (args.tool === 'mcp-pull' || args.tool === COHORT3_TOOL) {
     const expected = Array.isArray(taskFixture.expectedSpectraToolCalls) ? taskFixture.expectedSpectraToolCalls : null;
     const parsed = parseMcpToolCallTrace(runResult.stdout, expected);
     mcpTrace = parsed.trace;
@@ -749,6 +881,14 @@ async function main() {
     w3Flag,
     usage,
   });
+  // Feature 176 cohort3 审计字段（FR-A-004 记录 spectra 版本 / FR-A-003b prompt hash）
+  if (args.tool === COHORT3_TOOL) {
+    fixture.meta.spectraVersionGate = cohort3VersionGate;
+    fixture.meta.spectraPluginDir = cohort3PluginDir;
+    fixture.meta.globalSpectraPluginPresent = globalSpectraPluginPresent();
+  }
+  fixture.meta.promptSha256 = runResult.promptSha256;
+  fixture.meta.promptViaStdin = runResult.promptViaStdin;
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
   console.log(`[task-runner] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);
 

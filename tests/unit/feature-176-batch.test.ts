@@ -1,0 +1,115 @@
+/**
+ * Feature 176 — batch 编排器单测（tasks T-E1 [sandbox] 部分）。
+ * 真实跑批（smoke/full）是 host artifact（交接合同 C-3），此处只测纯逻辑：
+ * run 矩阵 / oracle 三分类 / spike gate 读取 / resume 状态闭环 / cohort 映射。
+ */
+import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {
+  parseArgs,
+  buildRunMatrix,
+  classifyOracle,
+  readSpikeStatus,
+  COHORT_TO_TOOL,
+} from '../../scripts/swe-bench-verified-cohort-batch.mjs';
+import { COHORT_IDS } from '../../scripts/lib/cohort-aggregate.mjs';
+import { SUPPORTED_TOOLS } from '../../scripts/eval-task-runner.mjs';
+import { classifyRuns, writeRunStarted, writeRunFinalizedSuccess, writeRunFinalizedFailed } from '../../scripts/lib/eval-quota-store.mjs';
+
+describe('parseArgs', () => {
+  it('--smoke 默认 skip jury；--full 默认跑 jury', () => {
+    expect(parseArgs(['--smoke']).skipJury).toBe(true);
+    expect(parseArgs(['--full']).skipJury).toBe(false);
+  });
+  it('缺 mode / 非法 on-quota 抛错', () => {
+    expect(() => parseArgs([])).toThrow();
+    expect(() => parseArgs(['--full', '--on-quota', 'ask'])).toThrow();
+  });
+  it('默认 on-quota=pause（非交互可无人值守）', () => {
+    expect(parseArgs(['--full']).onQuota).toBe('pause');
+  });
+});
+
+describe('buildRunMatrix', () => {
+  const tasks = ['SWE-V001', 'SWE-V002'];
+  it('smoke = 5 cohort × 1 task × 1', () => {
+    const m = buildRunMatrix('smoke', tasks);
+    expect(m.length).toBe(5);
+    expect(new Set(m.map((x) => x.cohort)).size).toBe(5);
+    expect(new Set(m.map((x) => x.taskId))).toEqual(new Set(['SWE-V001']));
+  });
+  it('full = task × 5 cohort × 3', () => {
+    const m = buildRunMatrix('full', tasks);
+    expect(m.length).toBe(2 * 5 * 3);
+    expect(m.filter((x) => x.repeatIndex === 3).length).toBe(10);
+  });
+  it('无 task 抛错', () => {
+    expect(() => buildRunMatrix('full', [])).toThrow();
+  });
+});
+
+describe('classifyOracle（FR-A-001b 三分类）', () => {
+  it('passed=true → pass', () => {
+    expect(classifyOracle({ passed: true, details: [] })).toBe('pass');
+  });
+  it('正常测试失败（exit 1）→ fail', () => {
+    expect(classifyOracle({ passed: false, details: [{ exitCode: 1 }] })).toBe('fail');
+  });
+  it('全部 check 是环境信号（exit 127 命令不存在）→ unavailable（剔除分母不算 fail）', () => {
+    expect(classifyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 126 }] })).toBe('unavailable');
+  });
+  it('部分环境信号 + 部分真实失败 → fail（保守，不轻易剔除）', () => {
+    expect(classifyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 1 }] })).toBe('fail');
+  });
+  it('全 timedOut → unavailable', () => {
+    expect(classifyOracle({ passed: false, details: [{ exitCode: null, timedOut: true }] })).toBe('unavailable');
+  });
+  it('oracleResult 缺失 → unavailable', () => {
+    expect(classifyOracle(null)).toBe('unavailable');
+  });
+});
+
+describe('readSpikeStatus（FR-A-007b gate 输入）', () => {
+  it('解析 frontmatter status', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f176-spike-'));
+    const p = path.join(dir, 'spike-result.md');
+    fs.writeFileSync(p, '---\nfeature: 176\nstatus: PASS_SUBAGENT\n---\n# x\n');
+    expect(readSpikeStatus(p)).toBe('PASS_SUBAGENT');
+  });
+  it('文件缺失 → null（gate 拒绝）', () => {
+    expect(readSpikeStatus('/nonexistent/spike.md')).toBeNull();
+  });
+});
+
+describe('COHORT_TO_TOOL 映射完整性', () => {
+  it('5 个 cohort 全部映射到 SUPPORTED_TOOLS', () => {
+    for (const cohort of COHORT_IDS) {
+      const tool = COHORT_TO_TOOL[cohort];
+      expect(tool, `cohort ${cohort} 缺映射`).toBeTruthy();
+      expect(SUPPORTED_TOOLS).toContain(tool);
+    }
+  });
+  it('cohort1=control（裸 claude）/ cohort3=spec-driver-spectra-mcp', () => {
+    expect(COHORT_TO_TOOL['baseline-claude']).toBe('control');
+    expect(COHORT_TO_TOOL['spec-driver-spectra-mcp']).toBe('spec-driver-spectra-mcp');
+  });
+});
+
+describe('resume 状态闭环（quota-store run-*.json 合同）', () => {
+  it('writeRunFinalizedSuccess 后 classifyRuns.finalized 含该 id；failed 不在 finalized', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f176-state-'));
+    const okId = 'SWE-V001__baseline-claude__r1';
+    const badId = 'SWE-V001__GStack__r1';
+    writeRunStarted({ runFilePath: path.join(dir, `run-${okId}.json`), runId: okId });
+    writeRunFinalizedSuccess({ runFilePath: path.join(dir, `run-${okId}.json`), runId: okId, startedAt: new Date().toISOString(), payload: { oracleState: 'pass' } });
+    writeRunStarted({ runFilePath: path.join(dir, `run-${badId}.json`), runId: badId });
+    writeRunFinalizedFailed({ runFilePath: path.join(dir, `run-${badId}.json`), runId: badId, startedAt: new Date().toISOString(), errorPhase: 'run', error: 'boom' });
+
+    const cls = classifyRuns({ runDir: dir });
+    expect(cls.finalized.map((f: any) => f.id)).toContain(okId);
+    expect(cls.finalized.map((f: any) => f.id)).not.toContain(badId);
+    expect(cls.failedFinalized.map((f: any) => f.id)).toContain(badId); // failed 可重跑
+  });
+});
