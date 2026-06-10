@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 // Feature 176: cohort3（spec-driver-spectra-mcp）派发依赖
 import { writeLocalSpectraPluginDir, globalSpectraPluginPresent } from './lib/local-spectra-plugin.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
+import { fixturesDir as verifiedFixturesDir } from './lib/swe-bench-verified-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -34,9 +35,11 @@ export const COHORT3_TOOL = 'spec-driver-spectra-mcp';
 export const SUPPORTED_TOOLS = ['spec-driver', 'superpowers', 'gstack', 'control', 'spec-driver-spectra', 'mcp-pull', COHORT3_TOOL];
 
 // Feature 158 CR-2：fixture 查找多目录优先序（specs/158 优先，向后兼容 specs/147）
-const TASK_FIXTURE_DIRS = [
+export const TASK_FIXTURE_DIRS = [
   path.join(PROJECT_ROOT, 'specs/158-swe-bench-lite-grounding-eval/research/task-fixtures'),
   path.join(PROJECT_ROOT, 'specs/147-competitor-evaluation-platform/research/task-fixtures'),
+  // Feature 176：SWE-Bench Verified fixture（host importer 产物，gitignored；SWE-V* id 无碰撞）
+  verifiedFixturesDir(),
 ];
 
 function getBenchHome() {
@@ -531,7 +534,18 @@ export function runTask({
 // Oracle 验证
 // ============================================================
 
-export function runPrimaryOracle({ wtDir, oracle }) {
+export function runPrimaryOracle({ wtDir, oracle: rawOracle }) {
+  // Feature 176：<SPECTRA_REPO_ROOT> 占位符替换下沉到权威函数（原仅 eval-mcp-augmented 私有
+  // resolveOracleChecksPaths 做替换 → 经 eval-task-runner/batch 路径跑 Verified fixture 时
+  // 占位符原样进 bash 必败）。替换幂等，已替换过的调用方不受影响。
+  const subst = (s) => (typeof s === 'string' ? s.replaceAll('<SPECTRA_REPO_ROOT>', PROJECT_ROOT) : s);
+  const oracle = rawOracle && Array.isArray(rawOracle.checks)
+    ? {
+        ...rawOracle,
+        checks: rawOracle.checks.map((c) =>
+          typeof c === 'string' ? subst(c) : (c && typeof c.cmd === 'string' ? { ...c, cmd: subst(c.cmd) } : c)),
+      }
+    : (rawOracle && typeof rawOracle.command === 'string' ? { ...rawOracle, command: subst(rawOracle.command) } : rawOracle);
   // ast-diff 和 stop-condition 共享 checks 数组语义（每个 check 是 bash 命令，status=0 视为 PASS）
   if (oracle.kind === 'ast-diff' || oracle.kind === 'stop-condition') {
     let allPassed = true;

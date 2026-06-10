@@ -18,12 +18,16 @@ import {
   COHORT3_TOOL,
   COHORT3_ALLOWED_TOOLS,
   SUPPORTED_TOOLS,
+  TASK_FIXTURE_DIRS,
   buildClaudeArgs,
   buildDriverPrompt,
   parseMcpToolCallTrace,
   parseArgs,
   prepareWorktree,
+  loadTaskFixture,
+  runPrimaryOracle,
 } from '../../scripts/eval-task-runner.mjs';
+import { fixturesDir } from '../../scripts/lib/swe-bench-verified-paths.mjs';
 
 const TASK_PROMPT = '修复 src/foo.py 的 off-by-one bug';
 
@@ -125,6 +129,40 @@ describe('T-C2 parseMcpToolCallTrace plugin namespace', () => {
   it('0 调用 → w3Flag=true（W-3 trap）', () => {
     const { w3Flag } = parseMcpToolCallTrace(evt('Read', 'c1'), ['context']);
     expect(w3Flag).toBe(true);
+  });
+});
+
+describe('Verified fixture 装载（host smoke 首跑暴露的接线缺口）', () => {
+  it('TASK_FIXTURE_DIRS 含 Verified fixtures 目录（共享路径常量）', () => {
+    expect(TASK_FIXTURE_DIRS).toContain(fixturesDir());
+  });
+
+  it('loadTaskFixture 能从 Verified 目录装载 SWE-V* fixture（写入唯一名临时 fixture 闭环）', () => {
+    const dir = fixturesDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const id = 'SWE-VTEST-loader-roundtrip';
+    const p = path.join(dir, `${id}.json`);
+    fs.writeFileSync(p, JSON.stringify({ taskId: id, target: 'sympy/sympy', prompt: 'x' }));
+    try {
+      expect(loadTaskFixture(id).target).toBe('sympy/sympy');
+    } finally {
+      fs.rmSync(p, { force: true });
+    }
+  });
+
+  it('runPrimaryOracle 替换 <SPECTRA_REPO_ROOT> 占位符（Verified oracle 引用 fuzzy-match 脚本）', () => {
+    // 占位符指向真实仓库根：test -d 应 PASS；若未替换，bash 会把 < 当重定向而失败
+    const r = runPrimaryOracle({
+      wtDir: os.tmpdir(),
+      oracle: { kind: 'ast-diff', checks: ['test -d "<SPECTRA_REPO_ROOT>/scripts"'] },
+    });
+    expect(r.passed).toBe(true);
+    // unit-test kind 的 command 同样替换
+    const u = runPrimaryOracle({
+      wtDir: os.tmpdir(),
+      oracle: { kind: 'unit-test', command: 'test -f "<SPECTRA_REPO_ROOT>/package.json"', expectedExit: 0 },
+    });
+    expect(u.passed).toBe(true);
   });
 });
 
