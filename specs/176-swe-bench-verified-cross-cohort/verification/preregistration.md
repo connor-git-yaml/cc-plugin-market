@@ -1,20 +1,23 @@
 ---
 feature: 176
 artifact: preregistration
-frozen: false
-taskSetHash: TBD_AFTER_IMPORT
+frozen: true
+taskSetHash: 6c5ed1c0709eb94350588e1bc692acf09e79034f00ee8078ab8040e119741668
 seed: 176
-count: 0
-gitCommit: TBD
-# host import 后填：把实际 10 个 task id 列入 taskIds，并用 freezeBlock() 算 taskSetHash，frozen 改 true
-taskIds: []
-filterRule:
-  dataset: princeton-nlp/SWE-bench_Verified
-  repos: TBD
-  minDate: TBD
-  maxPatchFiles: 3
-  limit: 10
-  minFixtures: 8
+count: 10
+gitCommit: 55696abf82526920d7eeb5d24c9c11d362fa3283
+frozenAtIso: 2026-06-10T07:31:11.605Z
+taskIds:
+  - SWE-V001-sympy-the-evaluate-false-parameter
+  - SWE-V002-sympy-rational-calc-value-error
+  - SWE-V003-sympy-polyelement-as-expr-not
+  - SWE-V004-sympy-check-homomorphism-is-broken
+  - SWE-V005-sympy-collect-factor-and-dimension
+  - SWE-V006-pytest-consider-mro-when-obtaining
+  - SWE-V007-sympy-si-collect-factor-and
+  - SWE-V008-sympy-contains-as-set-returns
+  - SWE-V009-sympy-physics-hep-kahane-simplify
+  - SWE-V010-pytest-unittest-testcase-teardown-exe
 ---
 
 # F176 预注册（防 falsification 规避 — spec FR-A-002b）
