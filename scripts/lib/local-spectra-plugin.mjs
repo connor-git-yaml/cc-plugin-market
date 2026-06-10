@@ -58,21 +58,35 @@ export function writeLocalSpectraPluginDir(distCli) {
  *   - 未安装 → false
  * 注意：只看 user scope —— 评测 claude 跑在临时 worktree cwd，project-scope override 不影响。
  */
-export function globalSpectraPluginPresent() {
-  const PLUGIN_KEY = 'spectra@cc-plugin-market';
+export function globalPluginEnabled(pluginKey, cacheDirName) {
   try {
     const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
     if (fs.existsSync(settingsPath)) {
-      const enabled = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))?.enabledPlugins?.[PLUGIN_KEY];
+      const enabled = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))?.enabledPlugins?.[pluginKey];
       if (enabled === false) return false;
       if (enabled === true) return true;
     }
     const installedPath = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
     if (!fs.existsSync(installedPath)) return false;
-    const entries = JSON.parse(fs.readFileSync(installedPath, 'utf-8'))?.plugins?.[PLUGIN_KEY];
+    const entries = JSON.parse(fs.readFileSync(installedPath, 'utf-8'))?.plugins?.[pluginKey];
     return Array.isArray(entries) && entries.some((e) => e?.scope === 'user');
   } catch {
     // 配置不可读时保守告警（宁可误拦也不放歧义进评测）
-    return fs.existsSync(path.join(os.homedir(), '.claude/plugins/cache/cc-plugin-market/spectra'));
+    return fs.existsSync(path.join(os.homedir(), '.claude/plugins/cache/cc-plugin-market', cacheDirName));
   }
+}
+
+export function globalSpectraPluginPresent() {
+  return globalPluginEnabled('spectra@cc-plugin-market', 'spectra');
+}
+
+/**
+ * 全局 spec-driver plugin 启用检测（与 spectra 同款歧义逻辑）。
+ * 背景（host smoke 实测，2026-06-10）：已发布的 spec-driver 4.1.0 agents frontmatter
+ * 用旧 namespace（mcp__spectra__*），不含 F170a 修复 → 子代理 tools 白名单里没有
+ * mcp__plugin_spectra_spectra__* → cohort3 子代理物理上调不到 spectra。评测必须用
+ * 仓内源 plugins/spec-driver（--plugin-dir 注入），全局同名 plugin 须禁用防加载歧义。
+ */
+export function globalSpecDriverPluginPresent() {
+  return globalPluginEnabled('spec-driver@cc-plugin-market', 'spec-driver');
 }

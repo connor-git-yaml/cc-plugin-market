@@ -39,14 +39,17 @@ F176 driver=claude-opus-4-7（Claude Max OAuth），**不用 codex**。
 
 > 注意：spike 用的是 **global-stock plugin（旧 build）**，只证明 Q1 传播链路；F177-F181 build 接线（Q2）由下方 smoke 的版本门禁 + 本地 plugin 收口。
 
-## 步骤 3 — 禁用全局 spectra plugin ✅（sandbox agent 已于 2026-06-10 替你完成）
+## 步骤 3 — 禁用全局 spectra + spec-driver plugin ✅（sandbox agent 已于 2026-06-10 替你完成）
 
-已执行 `claude plugin disable spectra@cc-plugin-market --scope user`（落盘 `~/.claude/settings.json` → `enabledPlugins["spectra@cc-plugin-market"]: false`）。检测逻辑同步修正为查真实启用状态（cache 目录存在不再误拦）。
+已执行（落盘 `~/.claude/settings.json` enabledPlugins）：
+- `claude plugin disable spectra@cc-plugin-market --scope user`（cohort3 用 `--plugin-dir` 本地 F177-F181 build）
+- `claude plugin disable spec-driver@cc-plugin-market --scope user`（**smoke 首轮发现：已发布 4.1.0 agents 是旧 namespace、无 F170a** → cohort2/3 用 `--plugin-dir` 仓内源 plugins/spec-driver）
 
-> 影响：评测期间你机器上**新开**的 claude 会话不加载全局 spectra plugin（cohort 3 用 `--plugin-dir` 本地 build，无歧义）。**评测完成后恢复**：
+> 影响：评测期间你机器上**新开**的 claude 会话不加载这两个全局 plugin。**评测完成后恢复**：
 >
 > ```bash
 > claude plugin enable spectra@cc-plugin-market --scope user
+> claude plugin enable spec-driver@cc-plugin-market --scope user
 > ```
 
 ## 步骤 4 — Verified 数据集 import + oracle smoke + 预注册冻结

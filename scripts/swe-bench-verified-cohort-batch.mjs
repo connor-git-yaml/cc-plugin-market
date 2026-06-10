@@ -31,7 +31,7 @@ import { PROJECT_ROOT, VERIFIED_ROOT, fixturesDir, runFixturePath, aggregateDir,
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { checkPreregistration, parsePreregistration } from './lib/preregistration-check.mjs';
 import { aggregateCohorts, COHORT_IDS } from './lib/cohort-aggregate.mjs';
-import { globalSpectraPluginPresent } from './lib/local-spectra-plugin.mjs';
+import { globalSpectraPluginPresent, globalSpecDriverPluginPresent } from './lib/local-spectra-plugin.mjs';
 import { classifyRuns, writeRunStarted, writeRunFinalizedSuccess, writeRunFinalizedFailed, atomicWriteJson } from './lib/eval-quota-store.mjs';
 import { anonymizeFixture } from './eval-judge.mjs';
 
@@ -125,10 +125,13 @@ function entryValidation(args) {
   const claudeOk = spawnSync('claude', ['--version'], { encoding: 'utf-8' }).status === 0;
   if (!claudeOk) problems.push('claude CLI 不可用（driver 必需，host OAuth）');
 
-  // 5. 全局 spectra plugin 歧义（cohort3 用 --plugin-dir 本地 build；全局同名并存 → 加载歧义，
+  // 5. 全局 plugin 歧义（cohort 用 --plugin-dir 注入本地/仓内源；全局同名并存 → 加载歧义，
   //    版本审计失真，codex CRITICAL）。smoke/full 同规则：默认 hard-fail，--allow-global-spectra 显式放行
   if (globalSpectraPluginPresent() && !args.allowGlobalSpectra) {
-    problems.push('全局 spectra plugin 存在 — 与 cohort3 本地 plugin 同名加载歧义（版本审计失真）。按 host-runbook 禁用后再跑，或 --allow-global-spectra 显式放行并自担歧义');
+    problems.push('全局 spectra plugin 启用 — 与 cohort3 本地 plugin 同名加载歧义（版本审计失真）。claude plugin disable spectra@cc-plugin-market --scope user 后再跑，或 --allow-global-spectra 显式放行并自担歧义');
+  }
+  if (globalSpecDriverPluginPresent() && !args.allowGlobalSpectra) {
+    problems.push('全局 spec-driver plugin 启用 — 已发布 4.1.0 agents 是旧 namespace（无 F170a），与仓内源同名加载歧义。claude plugin disable spec-driver@cc-plugin-market --scope user 后再跑');
   }
 
   if (problems.length > 0) {
@@ -199,6 +202,12 @@ function runOne({ taskId, cohort, repeatIndex }, args) {
     '--repeat-index', String(repeatIndex),
     '--fixture-suffix', suffix,
     '--bypass-permissions', '--cleanup', 'on-success',
+    // F176 driver 统一（KD-7 + smoke 迭代实测）：全 cohort opus-4-7 + stream-json（token 采集）
+    // + stdin（variadic 防吃）+ 真实 skill 调用（prompt 提及 workflow 不触发真实机制）
+    '--model', 'claude-opus-4-7',
+    '--output-format', 'stream-json',
+    '--prompt-via-stdin',
+    '--skill-invocation',
   ];
   if (args.dryRun) {
     console.log(`[batch][dry-run] node ${runnerArgs.map((a) => path.basename(a)).join(' ')}`);

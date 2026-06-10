@@ -75,12 +75,43 @@ describe('T-C1 buildClaudeArgs cohort3', () => {
 });
 
 describe('T-C1 buildDriverPrompt cohort3 confound 控制', () => {
-  it('与 spec-driver 逐字一致（唯一差异=MCP 注册，FR-A-003）', () => {
+  it('legacy 模式：与 spec-driver 逐字一致（唯一差异=MCP 注册，FR-A-003）', () => {
     const c2 = buildDriverPrompt({ tool: 'spec-driver', taskPrompt: TASK_PROMPT });
     const c3 = buildDriverPrompt({ tool: COHORT3_TOOL, taskPrompt: TASK_PROMPT });
     expect(c3).toBe(c2);
     expect(c3).not.toContain('mcp'); // 不得注入任何 MCP 使用提示
     expect(c3).not.toContain('spectra');
+  });
+
+  it('skill 调用模式（F176 batch 实跑形态）：c2/c3 同为真实 slash 调用且逐字一致', () => {
+    const c2 = buildDriverPrompt({ tool: 'spec-driver', taskPrompt: TASK_PROMPT, skillInvocation: true });
+    const c3 = buildDriverPrompt({ tool: COHORT3_TOOL, taskPrompt: TASK_PROMPT, skillInvocation: true });
+    expect(c3).toBe(c2);
+    expect(c3.startsWith('/spec-driver:spec-driver-fix ')).toBe(true);
+    expect(c3).toContain(TASK_PROMPT);
+    expect(c3).not.toContain('mcp'); // 仍不得注入 MCP 提示
+  });
+});
+
+describe('skill 调用模式的 plugin-dir 注入（smoke 迭代：已发布 4.1.0 无 F170a）', () => {
+  it('cohort3 含 spectra + spec-driver 两个 --plugin-dir', () => {
+    const a = buildClaudeArgs({
+      tool: COHORT3_TOOL, prompt: TASK_PROMPT, spectraPluginDir: '/tmp/sp', specDriverPluginDir: '/repo/plugins/spec-driver',
+    });
+    const dirs = a.flatMap((x: string, i: number) => (x === '--plugin-dir' ? [a[i + 1]] : []));
+    expect(dirs).toEqual(['/tmp/sp', '/repo/plugins/spec-driver']);
+  });
+
+  it('spec-driver cohort 含仓内源 plugin-dir（传入时）', () => {
+    const a = buildClaudeArgs({ tool: 'spec-driver', prompt: TASK_PROMPT, specDriverPluginDir: '/repo/plugins/spec-driver', promptViaStdin: true });
+    expect(a[a.indexOf('--plugin-dir') + 1]).toBe('/repo/plugins/spec-driver');
+    expect(a).not.toContain(TASK_PROMPT);
+  });
+
+  it('不传 specDriverPluginDir 时 spec-driver 行为不变（F147 legacy）', () => {
+    const a = buildClaudeArgs({ tool: 'spec-driver', prompt: TASK_PROMPT });
+    expect(a).not.toContain('--plugin-dir');
+    expect(a[a.length - 1]).toBe(TASK_PROMPT);
   });
 });
 
