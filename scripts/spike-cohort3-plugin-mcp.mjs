@@ -29,7 +29,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { prepareSpikeFixture, SPIKE_TASK_PROMPT } from './lib/spike-fixture-prep.mjs';
+import { prepareSpikeFixture } from './lib/spike-fixture-prep.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,46 +49,77 @@ export function parsePluginMcpCalls(stdout) {
   const pluginCalls = [];
   const driverCalls = [];
   const taskCalls = [];
-  // 记录调用出现顺序，用于"plugin MCP 是否在 Task 之后出现"的弱归因
-  const order = []; // 'task' | 'plugin' | 'driver'
+  // 子代理归因（强信号，替代脆弱的"顺序"启发）：plugin MCP 调用所在事件带非空
+  // parent_tool_use_id ⇒ 该调用发生在 Task 子代理上下文里（claude stream-json 用
+  // parent_tool_use_id 把子代理活动挂到父 Task）。
+  let subagentPluginCallCount = 0;
+  // codex CRITICAL 修复：调用"被发起"≠"成功返回"。跟踪 plugin tool_use 的 id，
+  // 匹配后续 tool_result：is_error!==true 且 content 非空才算一次成功返回。
+  const pluginToolUseIds = new Set();
+  let pluginResultOkCount = 0;
+  let pluginResultErrorCount = 0;
+  // result 事件（权威成功判定，不要正则扫整段 stdout）
+  let resultEvent = null;
   for (const line of String(stdout).split('\n')) {
     const t = line.trim();
     if (!t.startsWith('{')) continue;
     let evt;
     try { evt = JSON.parse(t); } catch { continue; }
-    for (const name of collectToolUseNames(evt)) {
-      if (name.startsWith(PLUGIN_NS_PREFIX)) { pluginCalls.push(name); order.push('plugin'); }
-      else if (name.startsWith(DRIVER_NS_PREFIX)) { driverCalls.push(name); order.push('driver'); }
-      else if (name === 'Task') { taskCalls.push(name); order.push('task'); }
+    if (evt.type === 'result') {
+      resultEvent = { subtype: evt.subtype ?? null, isError: evt.is_error ?? null, apiErrorStatus: evt.api_error_status ?? null };
+    }
+    const lineHasParent = typeof evt.parent_tool_use_id === 'string' && evt.parent_tool_use_id.length > 0;
+    for (const node of collectToolNodes(evt)) {
+      if (node.kind === 'tool_use') {
+        const name = node.name;
+        if (name.startsWith(PLUGIN_NS_PREFIX)) {
+          pluginCalls.push(name);
+          if (node.id) pluginToolUseIds.add(node.id);
+          if (lineHasParent) subagentPluginCallCount++;
+        } else if (name.startsWith(DRIVER_NS_PREFIX)) {
+          driverCalls.push(name);
+        } else if (name === 'Task') {
+          taskCalls.push(name);
+        }
+      } else if (node.kind === 'tool_result' && node.toolUseId && pluginToolUseIds.has(node.toolUseId)) {
+        if (node.isError === true || node.contentEmpty) pluginResultErrorCount++;
+        else pluginResultOkCount++;
+      }
     }
   }
-  const firstTaskIdx = order.indexOf('task');
-  const firstPluginIdx = order.indexOf('plugin');
-  const pluginAfterTask = firstTaskIdx >= 0 && firstPluginIdx > firstTaskIdx;
   return {
     pluginCalls, driverCalls, taskCalls,
     pluginCallCount: pluginCalls.length,
     driverCallCount: driverCalls.length,
     taskCallCount: taskCalls.length,
-    pluginAfterTask,
+    subagentPluginCallCount,
+    pluginResultOkCount,
+    pluginResultErrorCount,
+    resultEvent,
     anySpectra: pluginCalls.length + driverCalls.length > 0,
   };
 }
 
-/** 全递归：遍历事件里任意层级的 object/array，收集所有 type==='tool_use' 的 name。 */
-function collectToolUseNames(evt) {
-  const names = [];
+/** 全递归：遍历事件任意层级，收集 tool_use（name+id）与 tool_result（tool_use_id+is_error+content 空判）。 */
+function collectToolNodes(evt) {
+  const nodes = [];
   const seen = new Set();
   const visit = (node) => {
     if (!node || typeof node !== 'object' || seen.has(node)) return;
     seen.add(node);
-    if (node.type === 'tool_use' && typeof node.name === 'string') names.push(node.name);
+    if (node.type === 'tool_use' && typeof node.name === 'string') {
+      nodes.push({ kind: 'tool_use', name: node.name, id: typeof node.id === 'string' ? node.id : null });
+    } else if (node.type === 'tool_result' && typeof node.tool_use_id === 'string') {
+      const c = node.content;
+      const contentEmpty = c == null || (typeof c === 'string' && c.trim() === '') || (Array.isArray(c) && c.length === 0);
+      nodes.push({ kind: 'tool_result', toolUseId: node.tool_use_id, isError: node.is_error === true, contentEmpty });
+    }
     for (const v of Array.isArray(node) ? node : Object.values(node)) {
       if (v && typeof v === 'object') visit(v);
     }
   };
   visit(evt);
-  return names;
+  return nodes;
 }
 
 /**
@@ -133,16 +164,24 @@ generatedAtIso: ${result.generatedAtIso}
 
 - **status**: ${result.status}
 - **pluginMcpCallCount**: ${result.pluginCallCount}
+- **pluginResultOk/Error（tool_result 真实返回校验）**: ${result.pluginResultOkCount ?? 'n/a'} / ${result.pluginResultErrorCount ?? 'n/a'}
 - **taskCallCount（spawn 的子代理数）**: ${result.taskCallCount ?? 'n/a'}
 - **driverMcpCallCount**: ${result.driverCallCount}
 - **subagentAttributable（plugin 调用在 Task 之后）**: ${result.subagentAttributable ?? 'n/a'}
 - **globalSpectraPluginPresent（命名冲突风险）**: ${result.globalConflict ?? 'n/a'}
+- **spectraSource（spike 实际用的 plugin）**: ${result.spectraSource ?? 'n/a'}
 - **claudeVersion**: ${result.claudeVersion ?? 'n/a'}
 - **source**: ${result.source}  ← synthetic/dry-run 不算真实验收 PASS（交接合同 C-3）
+- **exitStatus**: ${result.exitStatus ?? 'n/a'}  **exitSignal**: ${result.exitSignal ?? 'n/a'}
 ${result.rootCause ? `- **rootCause**: ${result.rootCause}\n` : ''}
+## claude stderr 样本（诊断关键，截断末 1500）
+\`\`\`
+${(result.stderrSample ?? '').slice(-1500) || '(空)'}
+\`\`\`
+
 ## stdout 样本（截断）
 \`\`\`
-${(result.stdoutSample ?? '').slice(0, 1500)}
+${(result.stdoutSample ?? '').slice(0, 1200)}
 \`\`\`
 
 ## 判定（状态语义）
@@ -203,59 +242,93 @@ async function main() {
   console.error('[spike] 准备 fixture（wtDir + spectra graph）…');
   const { wtDir } = prepareSpikeFixture({ distCli });
 
-  const spectraPluginDir = STOCK ? STOCK_SPECTRA_PLUGIN : makeLocalSpectraPlugin(distCli);
+  // 重名冲突规避（首跑 ERROR_INFRA status=1 根因假设）：spectra + spec-driver 都已全局安装，
+  // 再用 --plugin-dir 加同名 plugin 会重名冲突让 claude 崩溃。策略：
+  //   - 默认：若全局已装 spectra（已启用，其 hook 已触发）→ 直接用全局，不加 --plugin-dir（无冲突）。
+  //     这测的是 Q1「plugin-namespace MCP 是否传播到 --print sub-agent」（用旧 build 也成立）。
+  //   - --local-spectra：强制用本地 F177-F181 临时 plugin（需先禁用全局 spectra，否则仍冲突）。
+  //   - spec-driver 不需要：spike 用通用 Task 子代理测传播，不跑 spec-driver workflow（再去掉一个冲突源）。
   const globalConflict = detectGlobalSpectraPlugin();
-  console.error(`[spike] spectra plugin: ${STOCK ? 'STOCK(已装,可能旧版)' : 'LOCAL(F177-F181 build)'} → ${spectraPluginDir}`);
-  if (globalConflict && !STOCK) {
-    console.error('[spike] ⚠️ 检测到全局已装 spectra plugin —— 与本地同名 "spectra" plugin 可能加载歧义（结果须结合此警示判读）。');
+  const FORCE_LOCAL = process.argv.includes('--local-spectra');
+  const pluginDirArgs = [];
+  let spectraSource;
+  if (FORCE_LOCAL || !globalConflict) {
+    const dir = makeLocalSpectraPlugin(distCli);
+    pluginDirArgs.push('--plugin-dir', dir);
+    spectraSource = 'local-build(F177-F181)';
+    console.error(`[spike] spectra: LOCAL build → ${dir}`);
+    if (globalConflict && FORCE_LOCAL) {
+      console.error('[spike] ⚠️ --local-spectra 但全局 spectra 仍在 → 仍可能重名冲突；建议先禁用全局 spectra plugin 再跑。');
+    }
+  } else {
+    spectraSource = 'global-stock(可能旧build；仅验 Q1 传播)';
+    console.error('[spike] spectra: 用全局已启用 plugin（避免重名冲突）。验 Q1 传播，非 F177-F181 build；新 build 接线留待 Phase C。');
   }
 
   // CRITICAL-3：spike 目标是验证 SUB-AGENT 能否调 plugin MCP，不是 driver。
   // 故 prompt 显式要求：driver 自己不要调 spectra，必须 spawn 一个 Task 子代理，由子代理调用 MCP 工具。
   const prompt =
-    `这是一个隔离的连通性测试。请严格按下面做，不要做别的：\n` +
-    `1. **不要**自己直接调用任何 mcp__plugin_spectra_spectra__* 工具。\n` +
-    `2. 用 Task 工具 spawn 一个 general-purpose 子代理。\n` +
-    `3. 在子代理的指令里，要求它调用 mcp__plugin_spectra_spectra__context（参数指向 src/math.ts 或整库）` +
-    `并把返回的结构化结果原样汇报回来。\n` +
-    `4. 等子代理返回后，把子代理是否成功调用到该 MCP 工具、以及返回内容摘要告诉我。\n` +
-    `（任务背景：${SPIKE_TASK_PROMPT}）`;
+    `这是一个**专门测试 Task 子代理机制**的隔离连通性测试。测试目标：验证你 spawn 的子代理能否访问 ` +
+    `mcp__plugin_spectra_spectra__* 这组 MCP 工具。规则（违反即测试无效）：\n` +
+    `1. 你（主代理）**绝对不要**自己直接调用任何 mcp__plugin_spectra_spectra__* / Read / Grep 工具。` +
+    `如果你自己做了，本测试就失败——必须通过子代理完成。\n` +
+    `2. 你唯一要做的：用 **Task 工具** spawn 一个 general-purpose 子代理（这一步是被测对象，必须真的调用 Task 工具）。\n` +
+    `3. 子代理的指令写明：调用 mcp__plugin_spectra_spectra__context 查询本仓库 src/math.ts 里的 add 符号` +
+    `（该 MCP 入参是 symbolId，形如 "src/math.ts::add"，可先在子代理里 Read 确认），把返回结构原样带回。\n` +
+    `4. 子代理返回后，你只转述：子代理是否成功调到该 MCP、返回了哪些字段。\n` +
+    `再次强调：主代理不得自己调 MCP，必须委派给 Task 子代理——这正是本测试要验证的链路。`;
+  // prompt 走 stdin（不作位置参数）——因为 --allowedTools 是 variadic，会把末尾 prompt 当成 tool 名吃掉，
+  // 导致 "Input must be provided through stdin or as a prompt argument"。能跑通的 1-liner 也是 stdin 喂 prompt。
   const args = [
     '--print', '--model', 'claude-opus-4-7',
     '--output-format', 'stream-json', '--include-partial-messages', '--verbose',
     '--permission-mode', 'bypassPermissions', '--dangerously-skip-permissions',
-    '--plugin-dir', spectraPluginDir,
-    '--plugin-dir', SPEC_DRIVER_PLUGIN,
+    ...pluginDirArgs,
     '--allowedTools',
     'mcp__plugin_spectra_spectra__context,mcp__plugin_spectra_spectra__impact,mcp__plugin_spectra_spectra__detect_changes,Read,Grep,Glob,Bash,Edit,Write,Task',
-    prompt,
   ];
-  console.error('[spike] 调 claude --print（强制 Task 子代理 → 子代理调 plugin spectra）…');
-  const r = spawnSync('claude', args, { cwd: wtDir, encoding: 'utf-8', timeout: 1200000, maxBuffer: 64 * 1024 * 1024 });
+  console.error('[spike] 调 claude --print（prompt 走 stdin；强制 Task 子代理 → 子代理调 plugin spectra）…');
+  console.error(`[spike] args: claude ${args.join(' ')} (prompt via stdin)`);
+  const r = spawnSync('claude', args, { cwd: wtDir, input: prompt, encoding: 'utf-8', timeout: 1200000, maxBuffer: 64 * 1024 * 1024 });
   const stdout = r.stdout ?? '';
+  const stderr = r.stderr ?? '';
   const parsed = parsePluginMcpCalls(stdout);
   const verRun = spawnSync('claude', ['--version'], { encoding: 'utf-8' });
+  // 把完整 stdout/stderr 落到 gitignored 评测树，便于诊断（不入库）
+  try {
+    const diagDir = path.join(PROJECT_ROOT, 'tests/baseline/swe-bench-verified/spike-diag');
+    fs.mkdirSync(diagDir, { recursive: true });
+    fs.writeFileSync(path.join(diagDir, 'spike-stdout.log'), stdout);
+    fs.writeFileSync(path.join(diagDir, 'spike-stderr.log'), stderr);
+    console.error(`[spike] 完整 stdout/stderr → ${path.relative(PROJECT_ROOT, diagDir)}/`);
+  } catch { /* 诊断落盘失败不阻断 */ }
+  if (stderr.trim()) console.error(`[spike] claude stderr（末 800）:\n${stderr.slice(-800)}`);
 
-  // CRITICAL-2：先判进程是否真的成功，再看调用计数。401/timeout/maxBuffer 溢出归为 ERROR_INFRA，不混入 FAIL。
-  const procOk = r.status === 0 && !r.signal && !r.error;
-  const looks401 = /401|invalid authentication|unauthor/i.test(stdout + ' ' + (r.stderr ?? ''));
+  // CRITICAL-2：用权威 result 事件判进程成功（不再正则扫 stdout —— 之前 UUID 里的 "401"
+  // 子串导致误判 ERROR_INFRA）。result.subtype=success & !is_error & api_error_status=null 才算成功。
+  const res = parsed.resultEvent;
+  const procOk = r.status === 0 && !r.signal && !r.error
+    && res && res.subtype === 'success' && res.isError === false && !res.apiErrorStatus;
   let status, rootCause = null, subagentAttributable = false;
-  if (!procOk || looks401) {
+  if (!procOk) {
     status = 'ERROR_INFRA';
-    rootCause = looks401
-      ? 'claude 401 鉴权失败（host OAuth 未生效）—— 非 wiring 问题，先解决鉴权再重跑'
-      : `claude 进程异常退出：status=${r.status} signal=${r.signal ?? ''} error=${r.error?.message ?? ''}（超时/maxBuffer/崩溃）`;
-  } else if (parsed.pluginCallCount > 0 && parsed.taskCallCount > 0) {
-    // 既有 Task 又有 plugin MCP 调用 → 子代理路径成立（弱归因：pluginAfterTask 更强）
+    if (!res) rootCause = `无 result 事件（进程未正常产出）：exitStatus=${r.status} signal=${r.signal ?? ''} error=${r.error?.message ?? ''}`;
+    else if (res.isError || res.apiErrorStatus) rootCause = `result 报错：is_error=${res.isError} api_error_status=${res.apiErrorStatus}`;
+    else rootCause = `进程异常：exitStatus=${r.status} signal=${r.signal ?? ''}`;
+  } else if (parsed.pluginCallCount > 0 && parsed.subagentPluginCallCount > 0 && parsed.pluginResultOkCount > 0) {
+    // plugin MCP 调用带 parent_tool_use_id（Task 子代理上下文）且 ≥1 次 tool_result 成功返回
+    // （codex CRITICAL：调用被发起≠成功，必须校验 tool_result 非 error 非空）→ 强证 sub-agent 可达
     status = 'PASS_SUBAGENT';
-    subagentAttributable = parsed.pluginAfterTask;
-    rootCause = parsed.pluginAfterTask
-      ? 'plugin MCP 调用出现在 Task 之后 → 归因子代理较可靠'
-      : 'plugin MCP 与 Task 都出现但顺序不确定 → 建议 host 查子代理 .jsonl transcript 做确证';
-  } else if (parsed.pluginCallCount > 0 && parsed.taskCallCount === 0) {
-    // 有 plugin MCP 但没 spawn 子代理 → 只证明 driver 能访问，未证明 sub-agent（cohort3 真命题未达）
+    subagentAttributable = true;
+    rootCause = `plugin MCP 子代理上下文调用 ${parsed.subagentPluginCallCount} 次，tool_result 成功 ${parsed.pluginResultOkCount} 次（error ${parsed.pluginResultErrorCount} 次）→ 子代理可达且真实返回数据（强归因）`;
+  } else if (parsed.pluginCallCount > 0 && parsed.subagentPluginCallCount > 0) {
+    // 子代理上下文调用了但没有任何成功 tool_result → 工具被调到但全部报错/空返回，不算通
+    status = 'FAIL';
+    rootCause = `plugin MCP 在子代理上下文被调用 ${parsed.subagentPluginCallCount} 次但 tool_result 成功 0 次（error ${parsed.pluginResultErrorCount} 次）→ 工具可被发起但未真实返回数据（检查 MCP server 启动/工具实现）`;
+  } else if (parsed.pluginCallCount > 0) {
+    // plugin MCP 可达但无 parent_tool_use_id → driver 直接调，未证明 sub-agent
     status = 'PASS_DRIVER_ONLY';
-    rootCause = 'driver 直接调了 plugin MCP 但未 spawn Task 子代理 → 只证明 driver 层可达，未证明 sub-agent；需调整 prompt 重跑或查 transcript';
+    rootCause = `plugin MCP 在 --print 下可达（tool_result 成功 ${parsed.pluginResultOkCount} 次），但调用无 parent_tool_use_id${parsed.taskCallCount > 0 ? `（虽见 Task 调用 ${parsed.taskCallCount} 次，plugin 调用不在其上下文）` : '、未见 Task'} ⇒ 是 driver 直接调，未证明 sub-agent（模型自述"子代理"不可信，Codex CRITICAL-3）。最大风险（plugin MCP 在 --print 完全不可用）已排除；sub-agent 路径建议用真实 spec-driver workflow 验证（smoke 即覆盖）。`;
   } else {
     status = 'FAIL';
     rootCause = parsed.driverCallCount > 0
@@ -265,11 +338,17 @@ async function main() {
 
   const result = {
     status,
-    source: STOCK ? 'host(stock-plugin)' : 'host(local-build)',
+    // codex WARNING 修复：source 只表达"真实 host 跑"（vs synthetic）；实际用的 plugin 看 spectraSource，
+    // 之前 source 由 --stock-plugin flag 推导会与默认分支实际用全局 plugin 时矛盾
+    source: 'host',
     generatedAtIso: new Date().toISOString(),
     pluginCallCount: parsed.pluginCallCount, driverCallCount: parsed.driverCallCount, taskCallCount: parsed.taskCallCount,
-    subagentAttributable, globalConflict,
-    claudeVersion: (verRun.stdout ?? '').trim(), stdoutSample: stdout, rootCause,
+    subagentPluginCallCount: parsed.subagentPluginCallCount,
+    pluginResultOkCount: parsed.pluginResultOkCount, pluginResultErrorCount: parsed.pluginResultErrorCount,
+    subagentAttributable, globalConflict, spectraSource,
+    resultSubtype: parsed.resultEvent?.subtype ?? null,
+    exitStatus: r.status, exitSignal: r.signal ?? null,
+    claudeVersion: (verRun.stdout ?? '').trim(), stdoutSample: stdout, stderrSample: stderr, rootCause,
   };
   const outPath = writeResult(result);
   console.error(`[spike] 结果: ${status} (plugin=${parsed.pluginCallCount}, task=${parsed.taskCallCount}, driver=${parsed.driverCallCount}) → ${outPath}`);

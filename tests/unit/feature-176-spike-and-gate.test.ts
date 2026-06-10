@@ -48,24 +48,69 @@ describe('parsePluginMcpCalls', () => {
     expect(parsePluginMcpCalls(stdout).pluginCallCount).toBe(1);
   });
 
-  it('统计 Task 子代理调用 + pluginAfterTask（子代理归因）', () => {
+  it('plugin 调用带 parent_tool_use_id ⇒ 计入 subagentPluginCallCount（强归因子代理）', () => {
     const stdout = [
-      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Task' }] } }),
-      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'mcp__plugin_spectra_spectra__context' }] } }),
+      JSON.stringify({ type: 'assistant', parent_tool_use_id: 'toolu_task_1', message: { content: [{ type: 'tool_use', name: 'mcp__plugin_spectra_spectra__context' }] } }),
     ].join('\n');
     const r = parsePluginMcpCalls(stdout);
-    expect(r.taskCallCount).toBe(1);
     expect(r.pluginCallCount).toBe(1);
-    expect(r.pluginAfterTask).toBe(true);
+    expect(r.subagentPluginCallCount).toBe(1);
   });
 
-  it('plugin 在 Task 之前 → pluginAfterTask=false（仅 driver 可达）', () => {
+  it('plugin 调用无 parent_tool_use_id ⇒ subagentPluginCallCount=0（driver 直接调）', () => {
+    const stdout = JSON.stringify({ type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', name: 'mcp__plugin_spectra_spectra__context' }] } });
+    const r = parsePluginMcpCalls(stdout);
+    expect(r.pluginCallCount).toBe(1);
+    expect(r.subagentPluginCallCount).toBe(0);
+  });
+
+  it('tool_result 成功返回计入 pluginResultOkCount（codex CRITICAL：发起≠成功）', () => {
     const stdout = [
-      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'mcp__plugin_spectra_spectra__context' }] } }),
-      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Task' }] } }),
+      JSON.stringify({ type: 'assistant', parent_tool_use_id: 'toolu_task', message: { content: [{ type: 'tool_use', id: 'tu_1', name: 'mcp__plugin_spectra_spectra__context' }] } }),
+      JSON.stringify({ type: 'user', parent_tool_use_id: 'toolu_task', message: { content: [{ type: 'tool_result', tool_use_id: 'tu_1', content: [{ type: 'text', text: '{"definition":{}}' }] }] } }),
     ].join('\n');
     const r = parsePluginMcpCalls(stdout);
-    expect(r.pluginAfterTask).toBe(false);
+    expect(r.pluginResultOkCount).toBe(1);
+    expect(r.pluginResultErrorCount).toBe(0);
+  });
+
+  it('tool_result is_error=true 或空 content 计入 error（不得当成功）', () => {
+    const stdout = [
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu_e', name: 'mcp__plugin_spectra_spectra__impact' }] } }),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu_e', is_error: true, content: [{ type: 'text', text: 'MCP error' }] }] } }),
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu_empty', name: 'mcp__plugin_spectra_spectra__context' }] } }),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu_empty', content: [] }] } }),
+    ].join('\n');
+    const r = parsePluginMcpCalls(stdout);
+    expect(r.pluginResultOkCount).toBe(0);
+    expect(r.pluginResultErrorCount).toBe(2);
+  });
+
+  it('非 plugin 调用的 tool_result 不计入（id 不匹配则忽略）', () => {
+    const stdout = [
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu_read', name: 'Read' }] } }),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu_read', content: [{ type: 'text', text: 'file content' }] }] } }),
+    ].join('\n');
+    const r = parsePluginMcpCalls(stdout);
+    expect(r.pluginResultOkCount).toBe(0);
+    expect(r.pluginResultErrorCount).toBe(0);
+  });
+
+  it('解析权威 result 事件（成功判定不靠正则扫 stdout）', () => {
+    const stdout = [
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read' }] } }),
+      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, api_error_status: null }),
+    ].join('\n');
+    const r = parsePluginMcpCalls(stdout);
+    expect(r.resultEvent).toEqual({ subtype: 'success', isError: false, apiErrorStatus: null });
+  });
+
+  it('UUID 里的 401 子串不应被误判（无 result 401 字段）', () => {
+    // 回归：之前 /401/ 正则扫 stdout 把 uuid "...f401c" 误判成鉴权失败
+    const stdout = JSON.stringify({ type: 'result', subtype: 'success', is_error: false, api_error_status: null, uuid: 'be5ae08f401c' });
+    const r = parsePluginMcpCalls(stdout);
+    expect(r.resultEvent.subtype).toBe('success');
+    expect(r.resultEvent.isError).toBe(false);
   });
 
   it('全递归：tool_use 藏在非 content 包装层（delta/start）也能抓到', () => {
