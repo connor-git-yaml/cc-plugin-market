@@ -28,3 +28,9 @@ user_decision: smoke 取证后用户拍板"先修产品再评测"（三选一升
 ## 验证
 - repo:sync 后 codex wrapper 含硬约束 ✓；repo:check pass ✓；全量 vitest 4237 全绿 ✓
 - 行为验证 = cohort3 单 run 探针（Task>0 且 mcpToolCallCount>0）→ smoke（见 host 执行记录）
+
+## 附录：第二轮迭代（probe2 证伪 prompt 路线 → frontmatter model 修正）
+- probe2（硬约束生效后）实测：约束**确认进入上下文**（首轮 cache 36650 vs 旧 35952，+698 ≈ 新增 block 体积），sonnet 编排器**仍然 0 派发**且复述被禁理由（"1个文件"）→ prompt 强度路线对 sonnet 证伪。
+- 根因升级：SKILL frontmatter `model: sonnet` 与文档化模型策略相悖（agent-code-quality 共享段："诊断阶段（fix-report 5-Why）使用 Opus（spec-driver-fix 已默认如此）"）——frontmatter 才是实际生效层，文档声称的默认从未落地。修正 `model: opus`（带注释）。
+- probe3（opus 编排器）实测：**mcpToolCalls=4（impact×3 + context×1），全部 parent_tool_use_id 归因子代理，w3Flag=false** → 委派链 + F170a/d/c 全链路端到端打通。结论：委派契约成立的前提是编排器用 opus；sonnet 编排器即使面对 MUST 也会 collapse（已记 m8：若要 sonnet 编排器省成本，需 hook 级机制强制而非 prompt）。
+- 连带数据层修正（host 实测字段形态）：fixture 的 oracle 结果实际落盘在 `taskExecution.primaryOracle` 且 `details` 是 JSON 字符串 → batch 的 readOracleResult 权威路径 + classifyOracle 字符串解析（真实 fixture 回归：control→pass / probe3→fail ✓）。

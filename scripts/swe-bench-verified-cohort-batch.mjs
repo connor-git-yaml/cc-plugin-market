@@ -179,12 +179,22 @@ export function buildRunMatrix(mode, taskIds, smokeTask = null) {
 export function classifyOracle(oracleResult) {
   if (!oracleResult) return 'unavailable';
   if (oracleResult.passed === true) return 'pass';
-  const details = Array.isArray(oracleResult.details) ? oracleResult.details : [];
+  // fixture 落盘时 details 可能被 JSON.stringify 成字符串（assembleTaskFixture 行为）——安全解析
+  let details = oracleResult.details;
+  if (typeof details === 'string') {
+    try { details = JSON.parse(details); } catch { details = []; }
+  }
+  if (!Array.isArray(details)) details = [];
   if (details.length > 0) {
     const envSignals = details.filter((d) => d.exitCode === 126 || d.exitCode === 127 || d.timedOut === true);
     if (envSignals.length === details.length) return 'unavailable'; // 全部是环境信号才判 unavailable（保守）
   }
   return 'fail';
+}
+
+/** fixture 里 oracle 结果的权威路径：taskExecution.primaryOracle（assembleTaskFixture 实际落盘位置） */
+export function readOracleResult(fixture) {
+  return fixture?.taskExecution?.primaryOracle ?? fixture?.taskExecution?.oracleResult ?? fixture?.oracleResult ?? null;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -225,7 +235,7 @@ function runOne({ taskId, cohort, repeatIndex }, args) {
   fs.copyFileSync(runnerFixture, destFixture);
 
   const fixture = JSON.parse(fs.readFileSync(destFixture, 'utf-8'));
-  const oracleState = classifyOracle(fixture.taskExecution?.oracleResult ?? fixture.oracleResult);
+  const oracleState = classifyOracle(readOracleResult(fixture));
 
   // jury 质量叠加（blinding：jury 内部 anonymize；此处记 blindingHash 供审计 FR-A-008b）
   if (!args.skipJury) {
@@ -271,7 +281,7 @@ export function loadRunRecords(taskIds, repeats) {
         const p = runFixturePath(taskId, cohort, r);
         if (!fs.existsSync(p)) continue;
         const fx = JSON.parse(fs.readFileSync(p, 'utf-8'));
-        const oracleState = classifyOracle(fx.taskExecution?.oracleResult ?? fx.oracleResult);
+        const oracleState = classifyOracle(readOracleResult(fx));
         const tokens = (fx.perf?.tokensInput ?? null) != null && (fx.perf?.tokensOutput ?? null) != null
           ? fx.perf.tokensInput + fx.perf.tokensOutput : null;
         records.push({

@@ -11,6 +11,7 @@ import {
   parseArgs,
   buildRunMatrix,
   classifyOracle,
+  readOracleResult,
   readSpikeStatus,
   COHORT_TO_TOOL,
 } from '../../scripts/swe-bench-verified-cohort-batch.mjs';
@@ -68,6 +69,24 @@ describe('classifyOracle（FR-A-001b 三分类）', () => {
   });
   it('oracleResult 缺失 → unavailable', () => {
     expect(classifyOracle(null)).toBe('unavailable');
+  });
+
+  it('details 是 JSON 字符串（assembleTaskFixture 实际落盘形态）→ 正确解析分类', () => {
+    // host smoke 实测：fixture.taskExecution.primaryOracle.details 是 stringify 后的字符串
+    expect(classifyOracle({ passed: false, details: JSON.stringify([{ exitCode: 127 }]) })).toBe('unavailable');
+    expect(classifyOracle({ passed: false, details: JSON.stringify([{ exitCode: 1 }]) })).toBe('fail');
+    expect(classifyOracle({ passed: false, details: '{bad json' })).toBe('fail'); // 解析失败保守 fail
+  });
+});
+
+describe('readOracleResult（权威字段路径 — host smoke 实测修正）', () => {
+  it('优先 taskExecution.primaryOracle（assembleTaskFixture 实际位置）', () => {
+    const fx = { taskExecution: { primaryOracle: { passed: true } } };
+    expect(readOracleResult(fx)?.passed).toBe(true);
+  });
+  it('回退 oracleResult 路径 + 全缺 → null', () => {
+    expect(readOracleResult({ oracleResult: { passed: false } })?.passed).toBe(false);
+    expect(readOracleResult({})).toBeNull();
   });
 });
 

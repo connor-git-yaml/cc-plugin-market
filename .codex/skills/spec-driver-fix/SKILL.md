@@ -3,7 +3,10 @@ name: spec-driver-fix
 description: "快速问题修复 — 4 阶段完成：诊断-规划-修复-验证"
 disable-model-invocation: false
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
-model: sonnet
+# 编排器=opus：与模型选择策略一致（诊断阶段/fix 5-Why 默认 Opus，见 agent-code-quality 共享段）。
+# F176 实测：sonnet 编排器会无视"委派硬约束"（MUST 委派仍 inline 化，0 Task），opus 元指令服从性是
+# 委派契约成立的前提；阶段子代理模型仍由 config.agents.* 控制，不受此行影响。
+model: opus
 effort: medium
 ---
 
