@@ -56,13 +56,18 @@ F176 driver=claude-opus-4-7（Claude Max OAuth），**不用 codex**。
 4a. 装依赖 + import Verified 子集（repos/min-date 按可解性挑；`<owner/repo,...>` 须替换，建议从 django/django、sympy/sympy、pytest-dev/pytest、psf/requests 等 Verified 高频 repo 里选依赖轻的）：
 
 ```bash
+python3 -m venv ~/.spectra-baselines/f176-venv
+source ~/.spectra-baselines/f176-venv/bin/activate
 pip install datasets
 python3 scripts/swe-bench-fixture-import.py \
   --dataset princeton-nlp/SWE-bench_Verified \
   --task-prefix SWE-V --dataset-tag verified --fixtures-subdir swe-bench-verified \
   --repos <owner/repo,...> --min-date 2024-01-01 --max-patch-files 3 --limit 10 \
   --output-dir tests/baseline/swe-bench-verified/fixtures/
+deactivate
 ```
+
+（macOS Homebrew Python 有 PEP 668 externally-managed 限制，系统级 `pip install` 会被拒；venv 放 `~/.spectra-baselines/` 跨 worktree 共享，import 后续的 node 步骤不依赖它。）
 
 4b. oracle 可执行性 smoke（T-A2 C-1）：对 ≥3 个导入 task 装依赖跑 oracle 命令，确认 FAIL_TO_PASS 测试在 goldpatch 后转绿；通过率 ≥8/10 才冻结。不达标就换 task（重跑 4a 调 repos）或用 4c 的 `--task-ids` 只冻结可跑子集。
 
