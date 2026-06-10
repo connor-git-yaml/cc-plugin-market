@@ -39,74 +39,77 @@ F176 driver=claude-opus-4-7（Claude Max OAuth），**不用 codex**。
 
 > 注意：spike 用的是 **global-stock plugin（旧 build）**，只证明 Q1 传播链路；F177-F181 build 接线（Q2）由下方 smoke 的版本门禁 + 本地 plugin 收口。
 
-## 步骤 3 — 🆕 禁用全局 spectra plugin（cohort 3 数据有效性前提）
+## 步骤 3 — 禁用全局 spectra plugin ✅（sandbox agent 已于 2026-06-10 替你完成）
 
-cohort 3 用 `--plugin-dir` 注入**本地 F177-F181 build** 的 "spectra" plugin；若全局同名 plugin 并存，实际加载哪个 build 有歧义 → 版本审计失真（codex CRITICAL）。runner/batch 默认 **hard-fail**。
+已执行 `claude plugin disable spectra@cc-plugin-market --scope user`（落盘 `~/.claude/settings.json` → `enabledPlugins["spectra@cc-plugin-market"]: false`）。检测逻辑同步修正为查真实启用状态（cache 目录存在不再误拦）。
 
-```bash
-# 在 claude 交互式里禁用（或编辑 ~/.claude.json 的 enabledPlugins）：
-claude plugin disable spectra    # 若该命令不可用：claude → /plugin → disable spectra
-# 评测完成后恢复：claude plugin enable spectra
-```
-
-> 不想禁用时可 `--allow-global-spectra`（batch）/ `F176_ALLOW_GLOBAL_SPECTRA=1`（单 run）显式放行，但 cohort3 的版本归属将不可证，报告须标注。
+> 影响：评测期间你机器上**新开**的 claude 会话不加载全局 spectra plugin（cohort 3 用 `--plugin-dir` 本地 build，无歧义）。**评测完成后恢复**：
+>
+> ```bash
+> claude plugin enable spectra@cc-plugin-market --scope user
+> ```
 
 ## 步骤 4 — Verified 数据集 import + oracle smoke + 预注册冻结
 
-```bash
-pip install datasets   # 若未装（sandbox 无此库，故 import 是 host 步骤）
+> 提示：以下代码块可整段粘贴（无 `#` 注释行）；说明都在块外。
 
-# 4a. Verified 子集 import（repos/min-date 按可解性挑；先小 limit 试）
+4a. 装依赖 + import Verified 子集（repos/min-date 按可解性挑；`<owner/repo,...>` 须替换，建议从 django/django、sympy/sympy、pytest-dev/pytest、psf/requests 等 Verified 高频 repo 里选依赖轻的）：
+
+```bash
+pip install datasets
 python3 scripts/swe-bench-fixture-import.py \
   --dataset princeton-nlp/SWE-bench_Verified \
   --task-prefix SWE-V --dataset-tag verified --fixtures-subdir swe-bench-verified \
   --repos <owner/repo,...> --min-date 2024-01-01 --max-patch-files 3 --limit 10 \
   --output-dir tests/baseline/swe-bench-verified/fixtures/
-
-# 4b. oracle 可执行性 smoke（T-A2 C-1）：对 ≥3 个导入 task 装依赖跑 oracle 命令，
-#     确认 FAIL_TO_PASS 测试在 goldpatch 后转绿；通过率 ≥8/10 才允许冻结预注册。
-
-# 4c. 冻结预注册（FR-A-002b，--full 的硬前提）：
-#     把实际 10 个 task id 填 verification/preregistration.md frontmatter taskIds，
-#     算 hash 填 taskSetHash，frozen 改 true：
-node --input-type=module -e "
-import { computeTaskSetHash } from './scripts/lib/preregistration-check.mjs';
-console.log(computeTaskSetHash(['SWE-V001-...','SWE-V002-...']));  // ← 替换为实际 id
-"
-# 冻结后 git commit preregistration.md（git 历史是 anti-tamper 锚）
 ```
+
+4b. oracle 可执行性 smoke（T-A2 C-1）：对 ≥3 个导入 task 装依赖跑 oracle 命令，确认 FAIL_TO_PASS 测试在 goldpatch 后转绿；通过率 ≥8/10 才冻结。不达标就换 task（重跑 4a 调 repos）或用 4c 的 `--task-ids` 只冻结可跑子集。
+
+4c. 一键冻结预注册（FR-A-002b，`--full` 的硬前提）：
+
+```bash
+node scripts/freeze-preregistration.mjs --dry-run
+node scripts/freeze-preregistration.mjs
+git add specs/176-swe-bench-verified-cross-cohort/verification/preregistration.md
+git commit -m "docs(176): 冻结预注册（host import + oracle smoke 后）"
+node scripts/build-spectra-stamped.mjs
+```
+
+（`--task-ids a,b,c` 可显式指定子集；commit 后必须重新盖章 build，否则版本门禁会因 meta.commit 过期拦截。）
 
 ## 步骤 5 — smoke（5 cohort × 1 task × N=1；SC-001 闸门）
 
 ```bash
 node scripts/swe-bench-verified-cohort-batch.mjs --smoke
-# 入口校验：spike=PASS_SUBAGENT + 版本门禁 + 凭据 + 无全局 spectra（hard-fail 任一不满足）
-# 期望: [batch] smoke PASS ✅ → verification/smoke-result.md
-#   断言1: 5/5 runs success（无 broken）
-#   断言2: cohort3 mcpToolCallCount > 0
-# smoke 默认 --skip-jury（省成本）；产物含 smoke-result.md（回传 sandbox agent）
 ```
 
-smoke FAIL → 看 smoke-result.md 的 broken 明细；cohort3 mcp=0 → 按 spec FR-A-007c 分流（回报 sandbox agent）。
+入口校验（任一不满足 hard-fail）：spike=PASS_SUBAGENT + 版本门禁 + claude CLI + 全局 spectra 已禁用。期望末行 `[batch] smoke PASS ✅`，产物 `verification/smoke-result.md`（断言：5/5 success + cohort3 mcpToolCallCount>0；默认 --skip-jury 省成本）。
+smoke FAIL → 看 smoke-result.md broken 明细；cohort3 mcp=0 → 按 spec FR-A-007c 分流（回报 sandbox agent）。
 
-## 步骤 6 — full（150 runs，N=3；先冻结预注册）
+## 步骤 6 — full（150 runs，N=3；先完成步骤 4c 冻结）
 
 ```bash
 node scripts/swe-bench-verified-cohort-batch.mjs --full
-# = 10 task × 5 cohort × N=3；每 run: runner → fixture 归位 Verified 路径 → jury（opus+GLM+Kimi）
-# 每 6 runs 配额检查点：默认打印人工提醒（可配 --quota-check-cmd "<cmd>" 自动判）
-# ≥60% weekly → Ctrl-C 或 --on-quota=pause 自动写 checkpoint 退出，隔日续：
-node scripts/swe-bench-verified-cohort-batch.mjs --full --resume
-# 完成输出: aggregate/cohort-aggregate.json + lift/c3_vs_c4/tokenRatio 摘要
 ```
 
-预算提示：实付 ≈ 仅 SiliconFlow jury token（~$15-30 / 150 runs × 2 judge）；driver/judge1 走订阅边际 $0；Claude Max 周配额是真实约束（150 × opus run）。
-
-## 步骤 7 — verify + 报告
+= 10 task × 5 cohort × N=3；每 run：runner → fixture 归位 Verified 路径 → jury（opus+GLM+Kimi，blindingHash）。每 6 runs 配额检查点（默认打印人工提醒；可 `--quota-check-cmd "<cmd>"` 自动判）。配额吃紧（≥60% weekly）→ 中断后隔日续跑：
 
 ```bash
-node scripts/verify-feature-176.mjs        # SC-001..008 逐条断言（拒 synthetic）
-# 然后把 aggregate/cohort-aggregate.json + smoke-result.md 回传 sandbox agent，
-# 由其写 PUBLISH-REPORT-M7.md + PUBLISH-REPORT.md §11（含 falsification 如实记录）
-# 最后：claude plugin enable spectra（恢复全局 plugin）
+node scripts/swe-bench-verified-cohort-batch.mjs --full --resume
+```
+
+完成输出 `aggregate/cohort-aggregate.json` + lift/c3_vs_c4/tokenRatio 摘要。
+预算：实付 ≈ 仅 SiliconFlow jury token（~$15-30）；driver/judge1 订阅边际 $0；Claude Max 周配额是真实约束（150 × opus run）。
+
+## 步骤 7 — verify + 报告 + 恢复
+
+```bash
+node scripts/verify-feature-176.mjs
+```
+
+然后把 `verification/smoke-result.md` + `tests/baseline/swe-bench-verified/aggregate/cohort-aggregate.json` 回传 sandbox agent → 回填 PUBLISH-REPORT-M7.md（falsification 如实记录）→ 最终 verify → deliverable report 等确认 push。最后恢复全局 plugin：
+
+```bash
+claude plugin enable spectra@cc-plugin-market --scope user
 ```

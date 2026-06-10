@@ -44,7 +44,35 @@ export function writeLocalSpectraPluginDir(distCli) {
   return dir;
 }
 
-/** 全局 spectra plugin（cache）是否存在 —— 存在时实际加载哪个 build 有歧义，须警示/禁用。 */
+/**
+ * 全局 spectra plugin 是否**启用**（启用时与本地同名 plugin 加载歧义，须禁用/显式放行）。
+ *
+ * 判定依据（host 实测 ground truth，2026-06-10）：
+ *   `claude plugin disable spectra@cc-plugin-market --scope user` 写入
+ *   `~/.claude/settings.json` → `enabledPlugins["spectra@cc-plugin-market"]: false`。
+ * 故：
+ *   - settings 显式 false → 已禁用，无歧义 → false
+ *   - settings 显式 true → 启用 → true
+ *   - settings 无条目但 installed_plugins.json 有 user-scope 安装 → 默认启用 → true
+ *     （spike 实测：未列于 enabledPlugins 时 plugin hooks 照常触发）
+ *   - 未安装 → false
+ * 注意：只看 user scope —— 评测 claude 跑在临时 worktree cwd，project-scope override 不影响。
+ */
 export function globalSpectraPluginPresent() {
-  return fs.existsSync(path.join(os.homedir(), '.claude/plugins/cache/cc-plugin-market/spectra'));
+  const PLUGIN_KEY = 'spectra@cc-plugin-market';
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const enabled = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))?.enabledPlugins?.[PLUGIN_KEY];
+      if (enabled === false) return false;
+      if (enabled === true) return true;
+    }
+    const installedPath = path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json');
+    if (!fs.existsSync(installedPath)) return false;
+    const entries = JSON.parse(fs.readFileSync(installedPath, 'utf-8'))?.plugins?.[PLUGIN_KEY];
+    return Array.isArray(entries) && entries.some((e) => e?.scope === 'user');
+  } catch {
+    // 配置不可读时保守告警（宁可误拦也不放歧义进评测）
+    return fs.existsSync(path.join(os.homedir(), '.claude/plugins/cache/cc-plugin-market/spectra'));
+  }
 }

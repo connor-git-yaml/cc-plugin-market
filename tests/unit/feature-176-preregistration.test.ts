@@ -69,3 +69,34 @@ describe('freezeBlock', () => {
     expect(b.count).toBe(2);
   });
 });
+
+describe('freeze-preregistration 脚本（runbook 4c 自动化）', async () => {
+  const { renderFrozenPrereg, listFixtureTaskIds } = await import('../../scripts/freeze-preregistration.mjs');
+
+  it('渲染→解析→校验 round-trip（多行 taskIds 列表）', () => {
+    const original = '---\nfrozen: false\ntaskSetHash: TBD\n---\n\n# 正文保留\n不变量段落。\n';
+    const block = freezeBlock(['SWE-V002-b', 'SWE-V001-a'], { seed: 176 });
+    const next = renderFrozenPrereg(original, block, 'abc123def456');
+    // 正文保留
+    expect(next).toContain('# 正文保留');
+    // 解析回来与冻结块一致
+    const parsed = parsePreregistration(next);
+    expect(parsed.frozen).toBe(true);
+    expect(parsed.taskIds).toEqual(['SWE-V001-a', 'SWE-V002-b']);
+    expect(parsed.hash).toBe(block.taskSetHash);
+    // checkPreregistration 闭环
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f176-freeze-'));
+    const p = path.join(dir, 'preregistration.md');
+    fs.writeFileSync(p, next);
+    expect(checkPreregistration(['SWE-V002-b', 'SWE-V001-a'], p).ok).toBe(true);
+    expect(checkPreregistration(['SWE-V001-a', 'tampered'], p).ok).toBe(false);
+  });
+
+  it('listFixtureTaskIds 过滤 _ 前缀与非 json', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f176-fx-'));
+    fs.writeFileSync(path.join(dir, 'SWE-V001-a.json'), '{}');
+    fs.writeFileSync(path.join(dir, 'SWE-V001-a.goldpatch.diff'), '');
+    fs.writeFileSync(path.join(dir, '_DEGRADATION_NOTE.md'), '');
+    expect(listFixtureTaskIds(dir)).toEqual(['SWE-V001-a']);
+  });
+});
