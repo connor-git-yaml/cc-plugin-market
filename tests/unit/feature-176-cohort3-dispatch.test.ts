@@ -55,9 +55,13 @@ describe('T-C1 buildClaudeArgs cohort3', () => {
     expect(allowed).toContain('Task');
   });
 
-  it('不含位置 prompt（stdin 喂，variadic --allowedTools 防吃）', () => {
-    expect(args).not.toContain(TASK_PROMPT);
-    expect(args[args.length - 1]).not.toBe(TASK_PROMPT);
+  it('stdin 模式不含位置 prompt；位置模式用 -- 分隔（variadic --allowedTools 防吃 + slash 展开）', () => {
+    const viaStdin = buildClaudeArgs({ tool: COHORT3_TOOL, prompt: TASK_PROMPT, spectraPluginDir: '/p', promptViaStdin: true });
+    expect(viaStdin).not.toContain(TASK_PROMPT);
+    // 位置模式（skill 调用实跑形态）：'--' 后跟 prompt（probe 实测：stdin 不展开 slash，位置参数才展开）
+    const positional = buildClaudeArgs({ tool: COHORT3_TOOL, prompt: TASK_PROMPT, spectraPluginDir: '/p', promptViaStdin: false });
+    expect(positional[positional.length - 2]).toBe('--');
+    expect(positional[positional.length - 1]).toBe(TASK_PROMPT);
   });
 
   it('缺 spectraPluginDir 抛错（版本门禁产物必传）', () => {

@@ -294,7 +294,10 @@ export function buildClaudeArgs({
     if (specDriverPluginDir) args.push('--plugin-dir', specDriverPluginDir);
     args.push('--allowedTools', COHORT3_ALLOWED_TOOLS);
     if (bypassPermissions) args.push('--dangerously-skip-permissions');
-    // 不 push prompt：cohort3 一律 stdin（variadic 防吃）。runTask 负责 input: prompt。
+    // prompt 传递（host probe 实测，2026-06-10）：
+    //   - slash prompt 必须走**位置参数**才会被 CLI 展开成 skill（stdin 不展开，模型只看到纯文本）；
+    //   - 位置参数必须用 `--` 分隔，否则被 variadic --allowedTools 吃掉（首跑 exit 1 真因）。
+    if (!promptViaStdin) args.push('--', prompt);
     return args;
   }
   // Feature 158: mcp-pull cohort 走 stream-json + --mcp-config 路径（与 spike-T2 一致）
@@ -523,9 +526,14 @@ export function runTask({
   tool, prompt, wtDir, timeoutMs, bypassPermissions = false,
   // Feature 176：model/outputFormat 覆盖（KD-7）+ cohort3 本地 plugin 目录 + stdin 喂 prompt
   model = null, outputFormat = null, spectraPluginDir = null, specDriverPluginDir = null, promptViaStdin = null,
+  skillInvocation = false,
 }) {
-  // cohort3 强制 stdin（buildClaudeArgs 该分支不接受位置 prompt）；其余按显式入参（默认 false 保持既有）
-  const useStdin = tool === COHORT3_TOOL ? true : (promptViaStdin ?? false);
+  // prompt 通道选择（host 实测）：
+  //   - skill 模式的 c2/c3：slash 必须**位置参数**才展开（stdin 不展开）→ 强制非 stdin；
+  //   - 非 skill 的 cohort3：强制 stdin（variadic 防吃）；
+  //   - 其余按显式入参（默认 false 保持既有行为）。
+  const isSkillTool = skillInvocation && (tool === 'spec-driver' || tool === COHORT3_TOOL);
+  const useStdin = isSkillTool ? false : (tool === COHORT3_TOOL ? true : (promptViaStdin ?? false));
   // Feature 158: mcp-pull 必须把 wtDir 透传给 buildClaudeArgs（用于定位 .mcp.json）
   const args = buildClaudeArgs({ tool, prompt, wtDir, bypassPermissions, model, outputFormat, spectraPluginDir, specDriverPluginDir, promptViaStdin: useStdin });
   const start = process.hrtime.bigint();
@@ -895,7 +903,7 @@ async function main() {
   const runResult = runTask({
     tool: args.tool, prompt, wtDir: wt.wtDir, timeoutMs: args.timeoutMs, bypassPermissions: args.bypassPermissions,
     model: args.model, outputFormat: args.outputFormat, promptViaStdin: args.promptViaStdin || undefined,
-    spectraPluginDir: cohort3PluginDir, specDriverPluginDir,
+    spectraPluginDir: cohort3PluginDir, specDriverPluginDir, skillInvocation: args.skillInvocation,
   });
   console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);
 
