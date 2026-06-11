@@ -162,7 +162,7 @@ F176 全程每 phase 跑 Codex 对抗审查（spec/plan/tasks/implement×4），
 
 - 样本量 N=3/任务、10 task：CI 宽，directional 而非显著性结论。
 - 预注册外的唯一剔除是 ORACLE-UNAVAILABLE（实际=0）；TOKENS-UNAVAILABLE 同（=0）。
-- judge jury 仅质量叠加层；其分歧/偏好不影响 pass/fail。jury 写回缺陷在全量后发现（task fixture 多目录解析缺口），分数经修复后 sweep 补评 —— blinding（anonymize + blindingHash）在原 run 时已生效，补评不影响 oracle 真值与任何 pass-rate 结论。
+- judge jury 仅质量叠加层；其分歧/偏好不影响 pass/fail。jury 写回缺陷在全量后发现（task fixture 多目录解析缺口 + worktree 缺 openai 依赖），修复后 3-judge 全量补评：**150/150 覆盖，opus 150 + GLM/Kimi 298/300（2 个 GLM 超时 → 该 2 run 为 2-judge 多数，spec 降级条款内）**；blinding（anonymize + blindingHash）在原 run 时已生效，补评不影响 oracle 真值与任何 pass-rate 结论。jury overlay 信号（仅参考）：c3 尝试质量分最高（median 均值 1.97）但完成率最低 —— "方案有模有样但没修对"，与 token 11.7× 共同指向流程产出与小任务收敛的不匹配。
 - spike 验证用 global-stock plugin（Q1 传播）；F177-F181 build 接线（Q2）由版本门禁 + smoke 收口。
 - **任务集形态偏窄（核心限制）**：可解性筛选（max-patch-files≤3）+ Verified 数据集天然分布 + 降级到 dataset-max-date（全部 ≤2023-02，泄漏风险见 `_DEGRADATION_NOTE`）→ 10 任务全为 **1 文件、9-68 行**的小修复。本报告结论的适用边界即此形态；对 multi-file / 大改动任务**不可外推**（fixture-level 的 V004 反向信号正提示边界另一侧存在不同行为）。
 - 预注册偏离记录：V005×cohort3×r2 因 infra error（fixture 落盘缺失）按预注册条款重跑 1 次（≤1 次上限内，原因已记），其余 149 runs 一次成形。
