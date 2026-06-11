@@ -33,6 +33,8 @@ import { assertNoSelfJudge } from './lib/llm-backend-dispatcher.mjs';
 // Feature 162 Phase B2 (C-4 修复)：buildAdversarialPrompt 抽到共享模块，
 // 让 calibration runner 与生产 jury 使用同一份 prompt，避免漂移
 import { buildAdversarialPrompt as buildAdversarialPromptShared } from './lib/judge-prompt-builder.mjs';
+// Feature 176：task fixture 多目录查找与 runner 同源（Verified fixture 不在 147 单目录）
+import { TASK_FIXTURE_DIRS as RUNNER_TASK_FIXTURE_DIRS } from './eval-task-runner.mjs';
 
 // ============================================================
 // async spawn helper (for true parallelism with subprocess CLI calls)
@@ -522,8 +524,14 @@ export async function runJuryOnFixture({
   const taskId = fixture.taskExecution?.taskId ?? fixture.meta?.taskId;
   if (!taskId) throw new Error(`fixture ${fixturePath} has no taskId`);
 
-  const taskFixturePath = path.join(taskFixturesDir, `${taskId}.json`);
-  if (!fs.existsSync(taskFixturePath)) throw new Error(`task fixture not found: ${taskFixturePath}`);
+  // Feature 176：多目录查找（与 runner TASK_FIXTURE_DIRS 同源）——Verified task 定义在
+  // tests/baseline/swe-bench-verified/fixtures/，原单目录写死会 throw。显式传入非默认
+  // taskFixturesDir 时尊重单目录（保持既有调用方/测试合同）。
+  const candidateDirs = taskFixturesDir !== TASK_FIXTURES_DIR ? [taskFixturesDir] : RUNNER_TASK_FIXTURE_DIRS;
+  const taskFixturePath = candidateDirs.map((d) => path.join(d, `${taskId}.json`)).find((p) => fs.existsSync(p));
+  if (!taskFixturePath) {
+    throw new Error(`task fixture not found in any of: ${candidateDirs.map((d) => path.join(d, taskId + '.json')).join(', ')}`);
+  }
   const taskFx = JSON.parse(fs.readFileSync(taskFixturePath, 'utf-8'));
 
   const wtDir = fixture.meta?.outputDir;

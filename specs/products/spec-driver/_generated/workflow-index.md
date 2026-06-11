@@ -1,6 +1,6 @@
 # Spec Driver Workflow Registry
 
-- Generated At: 2026-05-27T02:55:12.125Z
+- Generated At: 2026-06-10T15:53:03.402Z
 - Source Dir: plugins/spec-driver/workflows
 - Override Dir: .specify/workflows
 - Workflows: 7
