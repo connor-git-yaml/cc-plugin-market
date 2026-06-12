@@ -11,6 +11,8 @@ import { generateProductScorecards } from '../../plugins/spec-driver/scripts/gen
 import { generateProjectContextSuggestions } from '../../plugins/spec-driver/scripts/generate-project-context-suggestions.mjs';
 import { validateWrapperSources } from '../../plugins/spec-driver/scripts/validate-wrapper-sources.mjs';
 import { validatePreferenceRules, syncPreferenceRules } from '../../plugins/spec-driver/scripts/sync-preference-rules.mjs';
+import { syncDelegationContract, validateDelegationContract } from '../../plugins/spec-driver/scripts/sync-delegation-contract.mjs';
+import { validateOrchestratorModels } from '../../plugins/spec-driver/scripts/validate-orchestrator-models.mjs';
 import { generateWorkflowRegistry } from '../../plugins/spec-driver/scripts/generate-workflow-registry.mjs';
 import { syncSharedAgentDocs, validateSharedAgentDocs } from '../sync-agent-docs.mjs';
 import { syncReleaseContract, validateReleaseContract } from './release-contract-core.mjs';
@@ -187,6 +189,9 @@ export function syncRepository(projectRoot) {
 
   runStep('agent-docs', '同步 AGENTS/CLAUDE 共享区块', () => syncSharedAgentDocs(resolvedRoot));
   runStep('preference-rules', '同步 5 agent 工具优先使用规则块', () => syncPreferenceRules({ projectRoot: resolvedRoot }));
+  // delegation-contract 必须置于 spec-driver-codex-wrappers 再生**之前**：
+  // wrapper 逐行复制源 SKILL body，须先注入约束块再复制，保证 .codex 双层同步。
+  runStep('delegation-contract', '注入 5 SKILL 委派硬约束块', () => syncDelegationContract({ projectRoot: resolvedRoot }));
   runStep('release-contract', '同步版本与发布合同', () => syncReleaseContract(resolvedRoot));
   runStep('spectra-skills', '同步 spectra compatibility mirrors', () => syncSpectraSkillMirrors({ projectRoot: resolvedRoot }));
   runStep('spec-driver-codex-wrappers', '再生成 spec-driver Codex wrappers', () => runSpecDriverCodexInstall(resolvedRoot));
@@ -266,6 +271,20 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'preference-rules',
     validatePreferenceRules({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  aggregateValidation(
+    'delegation-contract',
+    validateDelegationContract({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  aggregateValidation(
+    'orchestrator-model',
+    validateOrchestratorModels({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

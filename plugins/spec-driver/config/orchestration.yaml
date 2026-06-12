@@ -368,21 +368,21 @@ modes:
         is_critical: true
 
   # ─────────────────────────────────────────────────────────────
-  # Story 模式：故事式快速迭代（7 阶段）
+  # Story 模式：故事式快速迭代（5 阶段）
   # ─────────────────────────────────────────────────────────────
   story:
-    name: "Story 模式（7 阶段快速迭代）"
+    name: "Story 模式（5 阶段：宪法-规范-规划-实现-验证）"
     description: "基于 product-research 快速迭代小功能"
     phases:
       - id: "1"
-        name: clarify
-        display_name: 需求澄清
-        agent: clarify
+        name: constitution
+        display_name: Constitution 检查
+        agent: null
         agent_mode: single
         gates_before: null
         gates_after: null
         conditional: null
-        skip_if_exists: "spec.md"
+        skip_if_exists: null
         is_critical: false
 
       - id: "2"
@@ -399,29 +399,18 @@ modes:
 
       - id: "3"
         name: plan
-        display_name: 技术规划
+        display_name: 技术规划+任务分解
         agent: plan
         agent_mode: single
         gates_before:
           - GATE_DESIGN
-        gates_after: null
+        gates_after:
+          - GATE_TASKS
         conditional: null
         skip_if_exists: "plan.md"
         is_critical: true
 
       - id: "4"
-        name: tasks
-        display_name: 任务分解
-        agent: tasks
-        agent_mode: single
-        gates_before: null
-        gates_after:
-          - GATE_TASKS
-        conditional: null
-        skip_if_exists: "tasks.md"
-        is_critical: true
-
-      - id: "5"
         name: implement
         display_name: 代码实现
         agent: implement
@@ -432,9 +421,9 @@ modes:
         skip_if_exists: null
         is_critical: true
 
-      - id: "6"
+      - id: "5"
         name: verify
-        display_name: 验证与交付
+        display_name: 验证闭环
         agent: verify
         agent_mode: single
         gates_before: null
@@ -523,16 +512,27 @@ modes:
         is_critical: true
 
   # ─────────────────────────────────────────────────────────────
-  # Fix 模式：修复流程（3 阶段最小化）
+  # Fix 模式：修复流程（4 阶段）
   # ─────────────────────────────────────────────────────────────
   fix:
-    name: "Fix 模式（3 阶段修复流程）"
+    name: "Fix 模式（4 阶段：诊断-规划-修复-验证）"
     description: "快速处理 bug 和小型修复"
     phases:
       - id: "1"
-        name: specify
-        display_name: 需求规范
-        agent: specify
+        name: diagnose
+        display_name: 问题诊断
+        agent: null
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "2"
+        name: plan
+        display_name: 修复规划
+        agent: plan
         agent_mode: single
         gates_before: null
         gates_after:
@@ -541,9 +541,9 @@ modes:
         skip_if_exists: null
         is_critical: true
 
-      - id: "2"
+      - id: "3"
         name: implement
-        display_name: 代码实现
+        display_name: 代码修复
         agent: implement
         agent_mode: single
         gates_before: null
@@ -552,9 +552,9 @@ modes:
         skip_if_exists: null
         is_critical: true
 
-      - id: "3"
+      - id: "4"
         name: verify
-        display_name: 验证与交付
+        display_name: 验证闭环
         agent: verify
         agent_mode: single
         gates_before: null

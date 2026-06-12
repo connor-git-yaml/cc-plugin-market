@@ -13,6 +13,31 @@ description: >
 
 canonical_schema: "plugins/spec-driver/contracts/orchestration-schema.mjs"
 
+runtime_consumption_caveat:
+  summary: >
+    重要：当前只有 feature 模式在运行时消费 orchestration 的 phase 序列（经
+    orchestrator-cli get-phases 驱动动态编排）。fix / story / implement / refactor / resume
+    等模式的 phase 序列由各自 SKILL.md 正文**固定编排**，运行时不读取 yaml 的 phases。
+  user_impact: >
+    因此对这些非 feature 模式的 modes.<mode> 做 phase 序列覆盖（整段替换 phases），
+    **当前不会改变该模式实际跑的阶段** —— 例如改写 modes.fix 的 phases，fix 实际仍按
+    spec-driver-fix SKILL.md 的 4 阶段（诊断-规划-修复-验证）执行，yaml 仅作文档性描述。
+  scope: >
+    orchestration.yaml 中 fix / story / implement 等段的 phase 序列是对应 SKILL.md 真实流程的
+    **文档性摘要**（phase 计数与主干顺序、GATE 卡点对齐），而非逐字等价：yaml 一阶段一 agent 的
+    结构**无法表达** SKILL 正文里的复合委派（如 fix「修复规划」阶段实际依次调 plan + tasks 两个
+    子代理、story「技术规划+任务分解」同理）与条件委派（如 story 的 clarify 在 skip_if_exists 命中
+    时跳过）。读 yaml 了解"跑哪几个阶段、什么顺序、卡哪些 GATE"即可；阶段内部的子代理编排细节
+    以 SKILL.md 为准。phase 序列单源化（让所有模式运行时统一消费 yaml）视成本拆后续 milestone。
+  affected_modes:
+    - fix
+    - story
+    - implement
+    - refactor
+    - resume
+  runtime_consuming_modes:
+    - feature
+
 vs_spec_driver_config:
   description: >
     orchestration-overrides.yaml 与 spec-driver.config.yaml 职责分工说明
@@ -31,6 +56,8 @@ supported_overrides:
     notes: >
       overrides 中出现同名 mode 时，整段 phases 数组替换 base 对应 mode；
       base 的其余 phase 字段不保留。无法局部 patch 单个 phase，需完整声明 phases 数组。
+      ⚠️ 见 runtime_consumption_caveat：仅 feature 模式运行时消费 phase 序列；对
+      fix/story/implement/refactor/resume 的 phase 序列覆盖当前不改变其实际执行阶段。
     reserved_modes:
       - feature
       - story
