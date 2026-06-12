@@ -23,6 +23,7 @@ import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallb
 import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
 import { buildModuleGraphFromCodeSkeletons } from '../knowledge-graph/module-derivation.js';
+import { createGitignoreFilter } from '../utils/file-scanner.js';
 
 export class PythonLanguageAdapter implements LanguageAdapter {
   readonly id = 'python';
@@ -113,15 +114,23 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       ...this.defaultIgnoreDirs,
       'test', 'tests', 'dist', 'node_modules', '.git',
     ]);
+    // F194：叠加 .gitignore 过滤层（只叠加不替换硬编码集）。
+    // 基准 = resolvedRoot（与 file-scanner walkDir 的 path.relative(baseDir, fullPath) 同口径，不做 sep 转换）。
+    const isGitignored = createGitignoreFilter(resolvedRoot);
     const pyFiles: string[] = [];
     function walk(dir: string): void {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const relPath = path.relative(resolvedRoot, path.join(dir, entry.name));
         if (entry.isDirectory()) {
-          if (!ignoreNames.has(entry.name) && !entry.name.startsWith('.')) {
+          // 目录命中 .gitignore 则剪枝（保留硬编码集与点前缀剪枝不变）
+          if (!ignoreNames.has(entry.name) && !entry.name.startsWith('.') && !isGitignored(relPath)) {
             walk(path.join(dir, entry.name));
           }
         } else if (entry.isFile() && entry.name.endsWith('.py')) {
-          pyFiles.push(path.join(dir, entry.name));
+          // 文件命中 .gitignore 则跳过
+          if (!isGitignored(relPath)) {
+            pyFiles.push(path.join(dir, entry.name));
+          }
         }
       }
     }

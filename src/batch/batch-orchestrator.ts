@@ -40,7 +40,7 @@ import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { buildSpecCacheKey, normalizeProjectPath, resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
-import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
+import { scanFiles, createGitignoreFilter, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { ModuleGraph, ModuleNode, ModuleEdge } from '../knowledge-graph/module-derivation.js';
 import type { BatchState, CompletedModule, FailedModule, ModuleSpec } from '../models/module-spec.js';
@@ -2188,8 +2188,11 @@ export async function collectPythonCodeSkeletons(
   // → call-resolver buildImportIndex lookup miss
   const resolvedProjectRoot = path.resolve(projectRoot);
 
+  // F194：构建 .gitignore 过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  const isGitignored = createGitignoreFilter(resolvedProjectRoot);
+
   const pyFiles: string[] = [];
-  walkPyFiles(resolvedProjectRoot, pyFiles);
+  walkPyFiles(resolvedProjectRoot, pyFiles, isGitignored, resolvedProjectRoot);
 
   // Feature 152 P3 T-017：大文件 size guard 提前到 parse 之前（避免 tree-sitter 解析阻塞）
   // 1MB 阈值与 PythonMapper.CALLSITES_MAX_FILE_BYTES 对齐（EC-14）
@@ -2271,7 +2274,16 @@ export async function collectPythonCodeSkeletons(
   return out;
 }
 
-function walkPyFiles(dir: string, out: string[]): void {
+/**
+ * F194：isGitignored 与 resolvedRoot 由 collectPythonCodeSkeletons 构建并通过参数传入，
+ * 在自写 walk 上叠加 .gitignore 过滤层（保留 PY_SKELETON_IGNORE_DIRS 与点前缀剪枝不变）。
+ */
+function walkPyFiles(
+  dir: string,
+  out: string[],
+  isGitignored: (relativePath: string) => boolean,
+  resolvedRoot: string,
+): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -2279,11 +2291,15 @@ function walkPyFiles(dir: string, out: string[]): void {
     return;
   }
   for (const entry of entries) {
+    // 基准 = resolvedRoot，path.relative 输出不做 sep 转换（与 file-scanner walkDir 一致）
+    const relPath = path.relative(resolvedRoot, path.join(dir, entry.name));
     if (entry.isDirectory()) {
       if (entry.name.startsWith('.')) continue;
       if (PY_SKELETON_IGNORE_DIRS.has(entry.name)) continue;
-      walkPyFiles(path.join(dir, entry.name), out);
+      if (isGitignored(relPath)) continue; // 目录命中 .gitignore → 剪枝
+      walkPyFiles(path.join(dir, entry.name), out, isGitignored, resolvedRoot);
     } else if (entry.isFile() && (entry.name.endsWith('.py') || entry.name.endsWith('.pyi'))) {
+      if (isGitignored(relPath)) continue; // 文件命中 .gitignore → 跳过
       out.push(path.join(dir, entry.name));
     }
   }
@@ -2322,8 +2338,11 @@ export async function collectTsJsCodeSkeletons(
   // 避免调用方传相对路径 → Map key 与 imports[].resolvedPath 形态不一致
   const resolvedProjectRoot = path.resolve(projectRoot);
 
+  // F194：构建 .gitignore 过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  const isGitignored = createGitignoreFilter(resolvedProjectRoot);
+
   const tsJsFiles: string[] = [];
-  walkTsJsFiles(resolvedProjectRoot, tsJsFiles);
+  walkTsJsFiles(resolvedProjectRoot, tsJsFiles, isGitignored, resolvedProjectRoot);
 
   // T-021a：tsconfig context 缓存（by configDir），避免每个文件重复读
   const tsConfigCache = new Map<string, TsConfigResolutionContext | null>();
@@ -2389,8 +2408,16 @@ export async function collectTsJsCodeSkeletons(
 /**
  * 递归扫描 .ts/.tsx/.js/.jsx 文件（排除产物目录）。
  * 复用 walkPyFiles 的扫描模式，扩展 TS/JS 扩展名集合。
+ *
+ * F194：isGitignored 与 resolvedRoot 由 collectTsJsCodeSkeletons 构建并通过参数传入，
+ * 在自写 walk 上叠加 .gitignore 过滤层（保留 TSJS_SKELETON_IGNORE_DIRS 与点前缀剪枝不变）。
  */
-function walkTsJsFiles(dir: string, out: string[]): void {
+function walkTsJsFiles(
+  dir: string,
+  out: string[],
+  isGitignored: (relativePath: string) => boolean,
+  resolvedRoot: string,
+): void {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -2398,10 +2425,13 @@ function walkTsJsFiles(dir: string, out: string[]): void {
     return;
   }
   for (const entry of entries) {
+    // 基准 = resolvedRoot，path.relative 输出不做 sep 转换（与 file-scanner walkDir 一致）
+    const relPath = path.relative(resolvedRoot, path.join(dir, entry.name));
     if (entry.isDirectory()) {
       if (entry.name.startsWith('.')) continue;
       if (TSJS_SKELETON_IGNORE_DIRS.has(entry.name)) continue;
-      walkTsJsFiles(path.join(dir, entry.name), out);
+      if (isGitignored(relPath)) continue; // 目录命中 .gitignore → 剪枝
+      walkTsJsFiles(path.join(dir, entry.name), out, isGitignored, resolvedRoot);
     } else if (entry.isFile()) {
       const name = entry.name;
       if (
@@ -2410,6 +2440,7 @@ function walkTsJsFiles(dir: string, out: string[]): void {
         name.endsWith('.js') ||
         name.endsWith('.jsx')
       ) {
+        if (isGitignored(relPath)) continue; // 文件命中 .gitignore → 跳过
         out.push(path.join(dir, entry.name));
       }
     }

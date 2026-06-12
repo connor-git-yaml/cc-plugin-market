@@ -1,0 +1,18 @@
+{
+  "target": "/Users/connorlu/.spectra-baselines/micrograd",
+  "moduleCount": 4,
+  "moduleSources": [
+    "micrograd/__init__.py",
+    "micrograd/engine.py",
+    "micrograd/nn.py",
+    "setup.py"
+  ],
+  "edgeCount": 0,
+  "symbolResultCount": 4,
+  "symbolFiles": [
+    "micrograd/__init__.py",
+    "micrograd/engine.py",
+    "micrograd/nn.py",
+    "setup.py"
+  ]
+}

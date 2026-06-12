@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { PythonLanguageAdapter } from '../../src/adapters/python-adapter.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
+import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
 
 // ════════════════════════ Fixture 路径 ════════════════════════
 
@@ -385,6 +386,151 @@ describe('PythonLanguageAdapter.extractSymbolNodes() (Feature 145)', () => {
       // a.py#forward 和 b.py#forward 均存在
       expect(uniqueIds.has('a.py#forward')).toBe(true);
       expect(uniqueIds.has('b.py#forward')).toBe(true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+// ════════════════════════ scanPyFiles 遵循 .gitignore (F194) ════════════════════════
+
+describe('scanPyFiles 遵循 .gitignore (F194)', () => {
+  /**
+   * 从 extractSymbolNodes 结果中收集所有 module 节点的 id（= 相对 POSIX 路径）。
+   * scanPyFiles 是私有方法，通过其唯一调用方 extractSymbolNodes 间接验证文件集。
+   */
+  function collectModuleIds(
+    results: Awaited<ReturnType<PythonLanguageAdapter['extractSymbolNodes']>>,
+  ): Set<string> {
+    const ids = new Set<string>();
+    for (const r of results) {
+      for (const n of r.nodes) {
+        if (n.kind === 'module') ids.add(n.id);
+      }
+    }
+    return ids;
+  }
+
+  function makeAdapter(): PythonLanguageAdapter {
+    const adapter = new PythonLanguageAdapter();
+    // mock analyzeFile 返回空 skeleton，避免 TreeSitter 真实解析依赖
+    const emptySkeleton: CodeSkeleton = {
+      language: 'python',
+      filePath: 'mock.py',
+      loc: 1,
+      parserUsed: 'tree-sitter',
+      exports: [],
+      imports: [],
+      hash: '0'.repeat(64),
+      analyzedAt: new Date().toISOString(),
+    };
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue(emptySkeleton);
+    return adapter;
+  }
+
+  it('T-GITIGNORE-01: 目录模式 generated/ → 含 keep 文件，不含被忽略目录下文件', async () => {
+    const adapter = makeAdapter();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f193-py-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'generated/\n', 'utf-8');
+      fs.mkdirSync(path.join(tmpDir, 'pkg'), { recursive: true });
+      fs.mkdirSync(path.join(tmpDir, 'generated'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'pkg', 'core.py'), 'def f(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'generated', 'auto_stub.py'), 'def g(): pass\n', 'utf-8');
+
+      const ids = collectModuleIds(await adapter.extractSymbolNodes(tmpDir));
+
+      // 正向：keep 文件存在（防空结果假绿）
+      expect(ids.has('pkg/core.py')).toBe(true);
+      // 负向：被忽略目录下文件不存在
+      expect(ids.has('generated/auto_stub.py')).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T-GITIGNORE-02: 通配模式 local_*.py → 含 keep 文件，命中文件被跳过', async () => {
+    const adapter = makeAdapter();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f193-py-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'local_*.py\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'core.py'), 'def f(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'local_scratch.py'), 'def g(): pass\n', 'utf-8');
+
+      const ids = collectModuleIds(await adapter.extractSymbolNodes(tmpDir));
+
+      expect(ids.has('core.py')).toBe(true);
+      expect(ids.has('local_scratch.py')).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T-GITIGNORE-03a: negation 最后匹配优先 local_*.py + !local_important.py', async () => {
+    const adapter = makeAdapter();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f193-py-'));
+    try {
+      // 单独 !pattern 是 no-op，需 local_*.py + !local_important.py 两行（最后匹配优先）
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'local_*.py\n!local_important.py\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'core.py'), 'def f(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'local_scratch.py'), 'def g(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'local_important.py'), 'def h(): pass\n', 'utf-8');
+
+      const ids = collectModuleIds(await adapter.extractSymbolNodes(tmpDir));
+
+      // negation 生效：local_important.py 被重新包含
+      expect(ids.has('local_important.py')).toBe(true);
+      // keep 文件存在
+      expect(ids.has('core.py')).toBe(true);
+      // 其余 local_*.py 仍被排除
+      expect(ids.has('local_scratch.py')).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T-GITIGNORE-03b: 已剪枝目录内 negation 不放宽 generated/ + !generated/keep.py', async () => {
+    const adapter = makeAdapter();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f193-py-'));
+    try {
+      // 目录被剪枝后，其下文件不可达——negation 不放宽（与 file-scanner walkDir / git 语义一致）
+      fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'generated/\n!generated/keep.py\n', 'utf-8');
+      fs.mkdirSync(path.join(tmpDir, 'generated'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'core.py'), 'def f(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'generated', 'keep.py'), 'def g(): pass\n', 'utf-8');
+
+      const ids = collectModuleIds(await adapter.extractSymbolNodes(tmpDir));
+
+      // keep 文件存在
+      expect(ids.has('core.py')).toBe(true);
+      // 目录剪枝优先：generated/keep.py 仍被剪掉
+      expect(ids.has('generated/keep.py')).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('T-GITIGNORE-04: 无 .gitignore → 行为等同修复前（无回归）', async () => {
+    const adapter = makeAdapter();
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f193-py-'));
+    try {
+      fs.mkdirSync(path.join(tmpDir, 'pkg'), { recursive: true });
+      fs.mkdirSync(path.join(tmpDir, 'generated'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'pkg', 'core.py'), 'def f(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'generated', 'auto_stub.py'), 'def g(): pass\n', 'utf-8');
+      fs.writeFileSync(path.join(tmpDir, 'local_scratch.py'), 'def h(): pass\n', 'utf-8');
+
+      const ids = collectModuleIds(await adapter.extractSymbolNodes(tmpDir));
+
+      // 无 .gitignore：全部非硬编码忽略文件都在结果中
+      expect(ids.has('pkg/core.py')).toBe(true);
+      expect(ids.has('generated/auto_stub.py')).toBe(true);
+      expect(ids.has('local_scratch.py')).toBe(true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
       vi.restoreAllMocks();

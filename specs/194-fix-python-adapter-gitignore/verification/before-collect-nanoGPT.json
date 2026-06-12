@@ -1,0 +1,21 @@
+{
+  "target": "/Users/connorlu/.spectra-baselines/nanoGPT",
+  "pyFileCount": 15,
+  "pyFiles": [
+    "bench.py",
+    "config/eval_gpt2.py",
+    "config/eval_gpt2_large.py",
+    "config/eval_gpt2_medium.py",
+    "config/eval_gpt2_xl.py",
+    "config/finetune_shakespeare.py",
+    "config/train_gpt2.py",
+    "config/train_shakespeare_char.py",
+    "configurator.py",
+    "data/openwebtext/prepare.py",
+    "data/shakespeare/prepare.py",
+    "data/shakespeare_char/prepare.py",
+    "model.py",
+    "sample.py",
+    "train.py"
+  ]
+}

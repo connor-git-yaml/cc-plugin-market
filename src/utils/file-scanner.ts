@@ -183,6 +183,24 @@ function parseGitignore(gitignorePath: string): (relativePath: string) => boolea
 }
 
 /**
+ * 创建 .gitignore 过滤器（单一事实源）
+ * 供 python-adapter 及 batch-orchestrator 的自写 walk 叠加接入。
+ *
+ * 基准契约：返回的过滤函数期望输入**相对 projectRoot 的路径**
+ * （即 .gitignore 所在根 = 相对路径基准，二者必须一致，由调用方保证）。
+ * 注意 scanFiles 现状存在 scanRoot != projectRoot 时基准错位的既有怪癖
+ * （gitignore 取自 projectRoot 而 relativePath 相对 resolvedDir，
+ * 如 module-derivation.ts scanRoot=src 的调用）——该怪癖属 file-scanner
+ * 既有行为，本 fix 不修也不放大；三处新接入 walk 的扫描根 = gitignore 根，无错位。
+ *
+ * @param projectRoot - 项目根目录（用于定位 .gitignore，亦是相对路径基准）
+ * @returns 过滤函数：接受相对 projectRoot 的路径，返回 true 表示命中 gitignore 应跳过
+ */
+export function createGitignoreFilter(projectRoot: string): (relativePath: string) => boolean {
+  return parseGitignore(path.resolve(projectRoot, '.gitignore'));
+}
+
+/**
  * 将简单 glob 模式转换为正则表达式
  */
 function globToRegex(pattern: string, isDirPattern: boolean): string {

@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { scanFiles } from '../../src/utils/file-scanner.js';
+import { scanFiles, createGitignoreFilter } from '../../src/utils/file-scanner.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 
@@ -307,5 +307,29 @@ describe('file-scanner', () => {
     expect(result.languageStats).toBeDefined();
     expect(result.languageStats!.has('go')).toBe(true);
     expect(result.languageStats!.get('go')!.fileCount).toBe(1);
+  });
+
+  // ============================================================
+  // F194: createGitignoreFilter 导出冒烟测试
+  // ============================================================
+
+  it('createGitignoreFilter: 有 .gitignore → 命中路径返回 true，未命中返回 false', () => {
+    createFile(tmpDir, '.gitignore', 'generated/\n*.stub.py\n');
+
+    const isIgnored = createGitignoreFilter(tmpDir);
+
+    // 目录模式命中
+    expect(isIgnored('generated/auto.py')).toBe(true);
+    // 通配模式命中
+    expect(isIgnored('pkg/foo.stub.py')).toBe(true);
+    // 未命中文件返回 false
+    expect(isIgnored('pkg/core.py')).toBe(false);
+  });
+
+  it('createGitignoreFilter: 无 .gitignore → 始终返回 false', () => {
+    const isIgnored = createGitignoreFilter(tmpDir);
+
+    expect(isIgnored('anything.py')).toBe(false);
+    expect(isIgnored('generated/x.py')).toBe(false);
   });
 });
