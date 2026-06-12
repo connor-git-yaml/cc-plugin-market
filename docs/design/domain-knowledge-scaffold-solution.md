@@ -50,6 +50,25 @@ related:
 - **llms.txt 现状**：~844k 站点采用、devtools 圈事实约定（Anthropic/Stripe/Vercel/Mintlify 自动生成），但无官方平台承诺（Google 明确不用）→ **作为一等输入格式支持，但方案不押注它**（输入抽象为"Markdown 文档集 + 可选 llms.txt 索引"，无索引时退化为目录扫描）
 - 交付边界参考业界：**厂商自助 CLI 构建**（我们提供工具与模板，厂商跑构建、拥有并分发其定制 plugin），我们不做托管
 
+### 1.2.5 形态对比：离线 vs 在线 vs LLM Wiki（组合决策，2026-06-12 用户确认）
+
+「离线/在线」是*知识放哪*的轴，「检索式/Wiki 式」是*知识长什么样*的轴——三者非互斥可组合：
+
+| 维度 | 离线打包（本方案）| 在线托管（Kapa/Context7 式 remote MCP）| LLM Wiki（DeepWiki 式预整编）|
+|------|------|------|------|
+| 网络依赖 | ✅ 零（行业集成商常在内网/现场，近硬约束）| ❌ 断网即废 + 限流/认证 | 取决于部署（产物可离线打包）|
+| 项目侧机密 | ✅ 永不出本地 | ❌ 客户纪要传云端不可接受 | 同部署 |
+| 知识新鲜度 | ⚠️ 随 plugin 发版（月度节奏可接受）| ✅ 即时 | ❌ 更新=整本重生成 |
+| 精确查询（API/错误码）| ✅ 检索原文 | ✅ | ❌ 预消化摘要，长尾细节弱 |
+| 全局理解类（入门/架构/迁移）| ⚠️ 拼 chunk 费 token 且碎 | ⚠️ 同左 | ✅ **强项**，读一页顶检索十次 |
+| 运维/商业边界 | ✅ 厂商自助 CLI、零服务 | ❌ 托管=另一种商业模式 | 一次性离线生成 |
+| 厂商使用遥测 | ❌ | ✅ 独有优势 | — |
+
+**组合决策**：
+1. **离线分发底座不动摇**（内网/机密/零运维三条硬需求，在线全踩雷；在线真实优势在月度更新节奏下不构成翻盘）
+2. **LLM Wiki 是该吸收的知识形态而非竞争形态**——Spectra batch 本就是"代码库 → LLM wiki"（9-section spec + 蓝图），把范式扩到外部文档 = Phase 2 在实体层旁加 **LLM 整编概述层**（快速上手/架构总览/常见任务 howto 预生成页），恰好填补检索式在全局理解类问题的弱项，也是被降级的 GraphRAG 优势区间的便宜替代；"厂商侧成本不限"预算正该花在这
+3. **在线留接口不做实现**：`kb_sources` 分层天然可容纳 remote source kind（同一 MCP 工具接口换后端），厂商真要实时更新+遥测时加适配器即可
+
 ### 1.3 三方异构导入：轻量三档管线
 
 | 来源 | 方案（调研推荐组合）| 档位 |
@@ -118,7 +137,7 @@ System-prompt 静态注入仅承载一句顶层策略（"涉及 SDK 细节先查
 |------|------|------|------|
 | **Phase 1 = F190（M8 轨道 C，MVP）** | scaffold-kb CLI（llms.txt/目录 → doc-graph + FTS sqlite，**含 CJK tokenizer 决策**）；KB MCP server 2 工具（`kb_search` / `kb_doc_lookup` 文档锚点版——codex 校正：不叫 kb_api_lookup，那个名字留给 Phase 2 实体版，避免暗示能校验参数/deprecated）；plugin 打包验证（demo 厂商 plugin 用真实公开 SDK 文档构建，中文/英文各一套 fixture）| spec-driver 预查注入（→Phase 1.5，codex 校正：project-context schema 是固定字段白名单、未知字段被忽略——`knowledge_sources` 需先扩 schema+resolver，非小接线；且 MVP 调试面要小）；实体图谱 LLM 抽取、三方导入、门禁 | 检索质量门禁（codex 强化）：**recall@k 测试集**（中文查询 + 同义改写 + 短错误码 + 含 `.`/`-`/`_` 的 API 符号）；E2E："集成商装 demo plugin → 问 SDK API 问题 → kb_search 命中并引用来源"；**质量不达标 → 触发向量 rerank 升级路径评估** |
 | **Phase 1.5（M8 内或 M9 初）** | spec-driver research phase 预查注入：project-context schema 扩 `knowledge_sources` 字段（schema+resolver+注入块三处）+ 编排器预查 | 门禁集成 | E2E："spec-driver feature 流程 research phase 自动注入相关文档（标注 untrusted evidence envelope）" |
-| **Phase 2（M9，与 F189 锚定引擎合流）** | API 实体 LLM 抽取（离线，效果优先预算）；文档实体↔SDK 符号锚定（共用 F189 引擎；`kb_api_lookup` 实体版落地）；三方导入自动档（URL/办公文档 + 预览确认 + 质量护栏）；version/time/source 共同决策的冲突仲裁 | 会议纪要深加工 | 锚定准确率门禁；导入 E2E（真实行业网站样本）|
+| **Phase 2（M9，与 F189 锚定引擎合流）** | API 实体 LLM 抽取 + **LLM 整编概述层**（Wiki 式预生成页：快速上手/架构总览/常见任务，填补检索式全局理解弱项，见 §1.2.5；同一笔离线效果优先预算双产物）；文档实体↔SDK 符号锚定（共用 F189 引擎；`kb_api_lookup` 实体版落地）；三方导入自动档（URL/办公文档 + 预览确认 + 质量护栏）；version/time/source 共同决策的冲突仲裁 | 会议纪要深加工 | 锚定准确率门禁；导入 E2E（真实行业网站样本）；Wiki 层立项前先用 Phase 1 查询日志判断全局类问题占比 |
 | **Phase 3（M9+，按需）** | 会议纪要/口述四步流水线；质量门禁深度集成（API 误用机械校验入 gate）；触发率 A/B（复用 F184 设施）；embedding rerank（若 Phase 1 质量门已触发则提前）| — | 门禁 E2E + adoption 指标 |
 
 ## 4. 风险与反方案审视（诚实记录）
