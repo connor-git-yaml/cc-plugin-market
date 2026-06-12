@@ -14,7 +14,8 @@ decisions:
   - "README 更新 = 事实校正（17 工具/M7 行）+ 诚实成绩（五组打平 + 触发率发现）"
 amendment_2026-06-12b: 新增轨道 C（F190 领域知识 AI 脚手架 Phase 1 MVP）——厂商 SDK 知识内化 + 三方知识导入 + 工作流双库联查的通用方案，调研与完整设计见 domain-knowledge-scaffold-solution.md；Phase 2/3 列 M9（与 F189 锚定引擎合流）
 amendment_2026-06-12c: 增补收尾质量门（§2.6）——F191 全期架构/代码 review（M7 wf_a084e2f1 模式正式化）+ F192 文档收口（含坐实漂移 agent-mainline-focus.md 仍停 panoramic Phase 1）；F192 完成 = M8 收官
-执行顺序: F182 → F183/F185(并行) → F184 → F186 → F187 → F188∥F191 → F192(收官)；F189(旗舰)/F190(轨道 C) 与 F187 并行（写入路径 disjoint）
+amendment_2026-06-13: ① F182✅/F185✅ ship（体检通过：skeleton-hash 单一权威+测试假绿根因同修；repo:check 49→57 项守护）② 计划外衍生 F194✅（F182 Codex Phase 3 抓出上游 critical：三处自写 walk 不解析 .gitignore 污染 graph，单调收紧修法，与 M8 defer 的 walker 统一不冲突）③ 新增 F193（dogfooding 阻塞转化：worktree graph 开箱可用+增量保活+id 相对化；"graph 不入库"已裁决——共享缓存+保活三件套替代；设计阶段已收口）④ 执行顺序修订：F183 改为等 F193（两者同改 writeKnowledgeGraph：F193 加 portable 守卫 vs F183 归一化内聚，撞车）
+执行顺序: F182✅ → F185✅ → F184 → F193(in-flight) → F183(等 F193) → F186 → F187 → F188∥F191 → F192(收官)；F189(旗舰)/F190(轨道 C) 与 F187 并行（写入路径 disjoint）
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
