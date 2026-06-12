@@ -103,6 +103,12 @@ export const SpecFrontmatterSchema = z.object({
   fallbackReason: z.string().nullable().optional(),
   /** 生成本 spec 时的批处理模式（Bug 142 修复）；旧 spec 缺失此字段时视为 cache miss */
   generatedByMode: z.enum(['full', 'reading', 'code-only']).optional(),
+  /**
+   * 增量缓存 key（Feature 182）；仅同目录多语言拆分组写入（`${sourceTarget}::${language}`）。
+   * sourceTarget 保持纯路径，本字段独立承载带语言后缀的 cache key，消除同目录多语言组键碰撞。
+   * 由 batch-orchestrator 在 languageSplit 组的 frontmatter 装饰点写入。
+   */
+  sourceTargetKey: z.string().optional(),
   /** spec 身份类型（Feature 128）；缺失时应用层默认视为 'canonical'（向后兼容历史 spec） */
   sourceKind: z.enum(['canonical', 'derived', 'bundle_copy']).optional(),
   /** 派生来源 spec 的 outputPath（Feature 128，相对于 projectRoot）；canonical 时为 null 或 undefined */

@@ -12,16 +12,17 @@
  * 8. effectiveMode='code-only' + stored=undefined → mode-changed
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
-import { analyzeFiles } from '../../src/core/ast-analyzer.js';
 import type { ModuleGraph } from '../../src/knowledge-graph/module-derivation.js';
 import type { StoredModuleSpecSummary } from '../../src/panoramic/builders/doc-graph-builder.js';
 import { DeltaRegenerator } from '../../src/batch/delta-regenerator.js';
+// Feature 182：删除本地 computeHashFor 私有复刻（曾逐字复刻读侧 localeCompare 公式造成假绿），
+// 改用唯一权威 computeModuleSkeletonHash，保证测试与生产共用同一 hash 实现。
+import { computeModuleSkeletonHash } from '../../src/core/skeleton-hash.js';
 
 describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   let projectRoot: string;
@@ -50,7 +51,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 1：stored=reading + effectiveMode=full → mode-changed', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -72,7 +73,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 2：stored=full + effectiveMode=reading → mode-changed', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -92,7 +93,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 3：同模式 + hash 未变 → unchanged', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -113,7 +114,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
 
   it('场景 4：同模式 + hash 变化 → skeleton-changed（mode 检查不应屏蔽 hash 检查）', async () => {
     // 先写入 stored hash 用旧文件计算
-    const oldHash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const oldHash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: oldHash,
@@ -140,7 +141,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 5：旧 spec 无 generatedByMode + effectiveMode 传入 → mode-changed（安全降级）', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -160,7 +161,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 6：effectiveMode 不传 + 旧 spec 无 generatedByMode → unchanged（向后兼容不退化）', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -179,7 +180,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 7：effectiveMode 不传 + stored 有 generatedByMode → unchanged（向后兼容）', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -197,7 +198,7 @@ describe('DeltaRegenerator — mode-aware cache (Bug 142)', () => {
   });
 
   it('场景 8：effectiveMode=code-only + stored.generatedByMode=undefined → mode-changed', async () => {
-    const hash = await computeHashFor(projectRoot, ['src/auth/service.ts']);
+    const hash = await computeModuleSkeletonHash(projectRoot, ['src/auth/service.ts']);
     const stored = makeStoredSpec({
       sourceTarget: 'src/auth',
       skeletonHash: hash,
@@ -253,18 +254,3 @@ function makeGraph(projectRoot: string): ModuleGraph {
   };
 }
 
-async function computeHashFor(projectRoot: string, relatedFiles: string[]): Promise<string> {
-  const analyzed = await analyzeFiles(relatedFiles.map((file) => path.join(projectRoot, file)));
-  if (analyzed.length === 1) {
-    return analyzed[0]!.hash;
-  }
-  return createHash('sha256')
-    .update(
-      analyzed
-        .slice()
-        .sort((a, b) => a.filePath.localeCompare(b.filePath))
-        .map((s) => s.hash)
-        .join(''),
-    )
-    .digest('hex');
-}

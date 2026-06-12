@@ -38,12 +38,12 @@ import {
 import { decideModelOverride } from './model-override-decision.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
-import { normalizeProjectPath, resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
+import { buildSpecCacheKey, normalizeProjectPath, resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
 import { groupFilesByLanguage, type LanguageGroup } from './language-grouper.js';
 import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { ModuleGraph, ModuleNode, ModuleEdge } from '../knowledge-graph/module-derivation.js';
-import type { BatchState, FailedModule, ModuleSpec } from '../models/module-spec.js';
+import type { BatchState, CompletedModule, FailedModule, ModuleSpec } from '../models/module-spec.js';
 import {
   buildDocGraph,
   isBatchGenerated,
@@ -255,6 +255,31 @@ const logger = createLogger('batch-orchestrator');
 // ============================================================
 // 内部辅助函数
 // ============================================================
+
+/**
+ * Feature 182 修复面 4：checkpoint replace 语义（completed/failed 互斥去重）。
+ *
+ * 背景：F175 给 checkpoint 加了「mustRegen 失效重跑」（fall-through）语义，但 completedModules
+ * 仍沿用 append-only 写法——已完成 module 被重跑后会二次 push，导致 resume 进度超 totalModules，
+ * 且 completed / failed 可能交叉污染（同一 module 同时出现在两个集合）。
+ *
+ * 本 helper 以 path 为身份键先剔除两个集合中的同名旧条目，再 push 到目标集合，保证：
+ *   (1) 同一 module 在每个集合最多出现一次；(2) completed 与 failed 互斥。
+ *
+ * 注意：helper 内不得有 await——JS 单线程下同步段不被 pLimit 并发交错，
+ * 保持纯同步可防未来插入 await 后语义退化为「读-改-写」竞态。
+ */
+function upsertCompletedModule(state: BatchState, entry: CompletedModule): void {
+  state.completedModules = state.completedModules.filter((m) => m.path !== entry.path);
+  state.failedModules = state.failedModules.filter((m) => m.path !== entry.path);
+  state.completedModules.push(entry);
+}
+
+function recordFailedModule(state: BatchState, entry: FailedModule): void {
+  state.failedModules = state.failedModules.filter((m) => m.path !== entry.path);
+  state.completedModules = state.completedModules.filter((m) => m.path !== entry.path);
+  state.failedModules.push(entry);
+}
 
 /**
  * F175 FR-017/EC-009：判定 absPath 是否位于受管 modules/ 输出目录内（孤儿删除 ownership 必要条件2）。
@@ -489,7 +514,11 @@ export async function runBatch(
   const moduleGroups = new Map(groupResult.groups.map((g) => [g.name, g]));
   const rootModuleName = options.grouping?.rootModuleName ?? 'root';
   const existingStoredSpecs = scanStoredModuleSpecs(resolvedOutputDir, resolvedRoot);
-  const storedSpecByTarget = new Map(existingStoredSpecs.map((spec) => [spec.sourceTarget, spec]));
+  // Feature 182：以 cache key 入索引（languageSplit 组带 `::language` 后缀），与 processOneModule
+  // 的 moduleCacheKey 口径对齐；旧 spec 无 sourceTargetKey 时回落纯路径 sourceTarget。
+  const storedSpecByTarget = new Map(
+    existingStoredSpecs.map((spec) => [spec.sourceTargetKey ?? spec.sourceTarget, spec]),
+  );
 
   // F175：全量逃生口（--full / --force 合并为 regenPlan.full）打可观测日志，
   // 替代原 fallbackReason='force-enabled' 内部信号（W-1 取舍）。
@@ -515,8 +544,9 @@ export async function runBatch(
   const regenerateTargets = new Set(deltaReport?.regenerateTargets ?? []);
   // EC-001 force/full 优先：regenPlan.full 直接全量；增量路径 deltaReport.mode==='full'
   //（首次运行 / 无历史 spec / mode 切换）退化全量仍走 forceFullRegeneration。
-  const forceFullRegeneration = regenPlan.full || (regenPlan.incremental && deltaReport?.mode === 'full');
-  const shouldUseIncrementalPlan = regenPlan.incremental && deltaReport?.mode === 'incremental';
+  // Feature 182：改为 let——full-resume 时序修复需在 checkpoint 加载后回写（见下方 isResume 块）。
+  let forceFullRegeneration = regenPlan.full || (regenPlan.incremental && deltaReport?.mode === 'full');
+  let shouldUseIncrementalPlan = regenPlan.incremental && deltaReport?.mode === 'incremental';
 
   console.log(`发现 ${mergedGraph.modules.length} 个文件，聚合为 ${processingOrder.length} 个模块`);
   if (isMultiLang) {
@@ -668,6 +698,17 @@ export async function runBatch(
 
   if (isResume) {
     console.log(`恢复断点: 已完成 ${state.completedModules.length}/${state.totalModules} 模块`);
+    // Feature 182 修复面 5：恢复中断的 --full run 意图。
+    // 背景：首轮 --full 把 forceRegenerate=true 落盘到 checkpoint（:660），但 runtime 仅用本轮
+    // regenPlan 重算的 forceFullRegeneration——裸增量 resume 时为 false，剩余模块静默降级为增量，
+    // 产出半新半旧混合产物。此处从 checkpoint 恢复 full 意图，剩余模块继续全量。
+    // 时序安全：两变量消费点全在 processOneModule 内（在此回写之后才被调用）。
+    // 注意：full-resume 不清空 completed（:636 清空条件用 regenPlan.full 而非本变量），正是 resume 语义。
+    if (state.forceRegenerate && !forceFullRegeneration) {
+      forceFullRegeneration = true;
+      shouldUseIncrementalPlan = false;
+      logger.info('[resume] 检测到中断的 full run，剩余模块继续全量');
+    }
   }
 
   // 步骤 4：按模块级拓扑顺序处理
@@ -748,6 +789,10 @@ export async function runBatch(
     // 否则 --incremental 的 regenerateTargets 查询和 storedSpecByTarget 查询全部错位。
     // T020：target 计算前移到 checkpoint 判定之前，供增量 resume 失效判定使用。
     const moduleSourceTarget = resolveSourceTarget(group, conflictingDirPaths, isRoot);
+    // Feature 182：cache key（languageSplit 组带 `::language` 后缀），用于 regenerateTargets /
+    // storedSpecByTarget / existingVersion 查询，消除同目录多语言组键碰撞；targetPath 与
+    // frontmatter 继续用纯路径 moduleSourceTarget（statSync 路径 + panoramic 匹配口径不变）。
+    const moduleCacheKey = buildSpecCacheKey(moduleSourceTarget, group);
 
     // F175 FR-016：checkpoint 判定。full 路径已在加载时清空 completedPaths（必为干净）；
     // 增量 resume 下若 checkpoint 命中但本轮 delta 要求重生成该 target，则失效重跑。
@@ -762,7 +807,7 @@ export async function runBatch(
           ? group.files.some((filePath) =>
               regenerateTargets.has(normalizeProjectPath(filePath)),
             )
-          : regenerateTargets.has(moduleSourceTarget));
+          : regenerateTargets.has(moduleCacheKey));
       if (!mustRegen) return;
     }
 
@@ -786,7 +831,7 @@ export async function runBatch(
     } else {
       const shouldGenerate = forceFullRegeneration
         || (shouldUseIncrementalPlan
-          ? regenerateTargets.has(moduleSourceTarget)
+          ? regenerateTargets.has(moduleCacheKey)
           : !fs.existsSync(specPath));
       if (!shouldGenerate) {
         skipped.push(moduleName);
@@ -901,7 +946,8 @@ export async function runBatch(
 
           successful.push(moduleName);
           reporter.complete(moduleName, 'success');
-          checkedState.completedModules.push({
+          // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
+          upsertCompletedModule(checkedState, {
             path: moduleName,
             specPath: generatedRootSpecs[0]!,
             completedAt: new Date().toISOString(),
@@ -913,7 +959,18 @@ export async function runBatch(
           // genOptions.skipEnrichment 已在 L648 处理 reading/code-only 模式分派
           const result = await generateSpec(targetPath, {
             ...genOptions,
-            existingVersion: storedSpecByTarget.get(moduleSourceTarget)?.version,
+            // Feature 182：注入 group.files（语言限定子集，绝对路径），使写侧只分析本语言文件，
+            // 与读侧 group.files 文件集口径一致（消除混语言 hash 分叉 + 双倍分析）。
+            files: group.files.map((f) => path.join(resolvedRoot, f)),
+            existingVersion: storedSpecByTarget.get(moduleCacheKey)?.version,
+            // Feature 182 修复 1：仅 languageSplit 组按 moduleName 显式命名输出文件，
+            // 避免同目录多语言组(ts / py)都派生为同名 `<dir>.spec.md` 互相覆盖；
+            // 非拆分组不传 → basename 派生，存量单语言仓库命名零变化。
+            ...(group.languageSplit ? { outputFileName: `${moduleName}.spec.md` } : {}),
+            // Feature 182 修复 2：languageSplit 组首写即落入 frontmatter.sourceTargetKey，
+            // 消除「post-mutation 依赖 doc-graph re-render 落盘晚于 checkpoint save」崩溃窗口；
+            // in-memory moduleSpec.frontmatter 由 generateFrontmatter 返回自然带上。
+            sourceTargetKey: group.languageSplit ? moduleCacheKey : undefined,
           });
           // Bug 142：非 root 分支累积 input token，供 catch 块统一做预算检查。
           if (result.costMetadata?.tokenUsage.input) {
@@ -947,7 +1004,8 @@ export async function runBatch(
             reporter.complete(moduleName, 'success');
           }
 
-          checkedState.completedModules.push({
+          // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
+          upsertCompletedModule(checkedState, {
             path: moduleName,
             specPath: toProjectPath(path.resolve(result.specPath)),
             completedAt: new Date().toISOString(),
@@ -1006,7 +1064,8 @@ export async function runBatch(
             reason: 'retry-budget-exceeded',
           };
           failed.push(failedModule);
-          checkedState.failedModules.push(failedModule);
+          // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
+          recordFailedModule(checkedState, failedModule);
           reporter.complete(moduleName, 'failed');
           break;
         }
@@ -1021,7 +1080,8 @@ export async function runBatch(
             degradedToAstOnly: false,
           };
           failed.push(failedModule);
-          checkedState.failedModules.push(failedModule);
+          // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
+          recordFailedModule(checkedState, failedModule);
           reporter.complete(moduleName, 'failed');
         }
       }
@@ -1073,7 +1133,8 @@ export async function runBatch(
           reason: 'unhandled-exception',
         };
         failed.push(failedModule);
-        checkedState.failedModules.push(failedModule);
+        // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
+        recordFailedModule(checkedState, failedModule);
         try {
           reporter.complete(moduleName, 'failed');
         } catch {

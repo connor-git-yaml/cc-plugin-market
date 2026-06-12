@@ -15,6 +15,7 @@ import { redact } from './secret-redactor.js';
 import { assembleContext, type AssembledContext } from './context-assembler.js';
 import { estimateFast } from './token-counter.js';
 import { callLLM, parseLLMResponse, type LLMResponse, type RetryCallback, LLMUnavailableError } from './llm-client.js';
+import { combineSkeletonHashes, type SkeletonHashEntry } from './skeleton-hash.js';
 import { extractCodeSlices } from './code-slice-extractor.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { generateFrontmatter } from '../generator/frontmatter.js';
@@ -86,6 +87,27 @@ export interface GenerateSpecOptions {
    * 用于后续 mode-aware 增量缓存判定；单文件 generate 不传，frontmatter 中不写入该字段。
    */
   generatedByMode?: 'full' | 'reading' | 'code-only';
+  /**
+   * 显式注入的待分析文件列表（绝对路径）（Feature 182）。
+   * batch 路径传入 group.files（语言限定子集），替代 prepareContext 内的目录重扫，
+   * 既消除写读两侧文件集来源分叉（混语言 cache miss 根因），又避免混语言目录双倍分析。
+   * 不传时（如 CLI 单文件 generate）维持原有 scanFiles 行为（向后兼容）。
+   */
+  files?: string[];
+  /**
+   * 显式输出文件名（含 .spec.md 后缀的纯文件名，不含目录）（Feature 182 修复 1）。
+   * batch 的 languageSplit 组传入 `${moduleName}.spec.md`（如 utils--ts-js.spec.md），
+   * 避免同目录多语言组都按 basename(targetPath) 派生为同名 `<dir>.spec.md` 互相覆盖。
+   * 不传时维持 basename 派生（零行为变化）。
+   */
+  outputFileName?: string;
+  /**
+   * 持久化到 frontmatter 的增量缓存 key（Feature 182 修复 2）。
+   * batch 的 languageSplit 组传入 moduleCacheKey（`${sourceTarget}::${language}`），
+   * 在首次写盘时即写入 frontmatter.sourceTargetKey，消除「post-mutation 依赖 doc-graph
+   * re-render 落盘晚于 checkpoint save」的崩溃窗口。不传时 frontmatter 不含该字段。
+   */
+  sourceTargetKey?: string;
 }
 
 export interface GenerateSpecResult {
@@ -211,21 +233,30 @@ export async function prepareContext(
   const resolvedTarget = path.resolve(targetPath);
   let filePaths: string[];
 
-  const stat = fs.statSync(resolvedTarget);
-  if (stat.isFile()) {
-    filePaths = [resolvedTarget];
-  } else {
-    // 单文件时跳过 scan 阶段的独立进度行
-    const scanStart = Date.now();
-    onStageProgress?.({ stage: 'scan', message: '文件扫描中...' });
-
-    const scanResult = scanFiles(resolvedTarget, { projectRoot });
-    filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
+  if (options.files) {
+    // Feature 182：batch 路径注入语言限定文件子集，跳过目录重扫。
+    // 注入文件统一归一化为绝对路径，保证 AST 分析与 hash 口径与目录扫描路径一致。
+    filePaths = options.files.map((f) => path.resolve(f));
     if (filePaths.length === 0) {
-      throw new Error(`目标路径中未找到支持的源文件: ${targetPath}`);
+      throw new Error(`注入的文件列表为空: ${targetPath}`);
     }
+  } else {
+    const stat = fs.statSync(resolvedTarget);
+    if (stat.isFile()) {
+      filePaths = [resolvedTarget];
+    } else {
+      // 单文件时跳过 scan 阶段的独立进度行
+      const scanStart = Date.now();
+      onStageProgress?.({ stage: 'scan', message: '文件扫描中...' });
 
-    onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });
+      const scanResult = scanFiles(resolvedTarget, { projectRoot });
+      filePaths = scanResult.files.map((f) => path.join(resolvedTarget, f));
+      if (filePaths.length === 0) {
+        throw new Error(`目标路径中未找到支持的源文件: ${targetPath}`);
+      }
+
+      onStageProgress?.({ stage: 'scan', message: '文件扫描完成', duration: Date.now() - scanStart });
+    }
   }
 
   // 步骤 2：AST 分析
@@ -669,14 +700,28 @@ ${sections.businessLogic}
         llmReasoning: costOutputTokens,
       };
 
+  // Feature 182：skeletonHash 改由唯一权威 combineSkeletonHashes 计算，
+  // 复用已有 skeletons（不二次 analyzeFiles），sortKey = 项目相对 POSIX 路径，
+  // 与读侧 delta-regenerator 的 computeModuleSkeletonHash 口径单点对齐。
+  const skeletonHashEntries: SkeletonHashEntry[] = skeletons.map((skeleton) => ({
+    sortKey: path.relative(baseDir, skeleton.filePath).split(path.sep).join('/'),
+    hash: skeleton.hash,
+  }));
+  const skeletonHash = combineSkeletonHashes(skeletonHashEntries);
+
   // 生成 frontmatter
   const frontmatter = generateFrontmatter({
     sourceTarget: path.relative(baseDir, resolvedTarget),
     displayName,
     relatedFiles: filePaths.map((f) => path.relative(baseDir, f)),
     confidence,
-    skeletonHash: mergedSkeleton.hash,
+    skeletonHash,
     existingVersion,
+    // Feature 182 修复 2：languageSplit 组首写即落入 sourceTargetKey（消除崩溃窗口）；
+    // 未传时 generateFrontmatter 不写该字段（单语言 / 单文件零行为变化）。
+    ...(options.sourceTargetKey !== undefined
+      ? { sourceTargetKey: options.sourceTargetKey }
+      : {}),
     tokenUsage: costMetadata.tokenUsage,
     durationMs: costMetadata.durationMs,
     llmModel: costMetadata.llmModel,
@@ -715,8 +760,12 @@ ${sections.businessLogic}
   });
 
   // 构建 ModuleSpec
-  const specName = path.basename(targetPath).replace(/\.[^.]+$/, '');
-  const outputPath = path.join(outputDir, `${specName}.spec.md`);
+  // Feature 182 修复 1：languageSplit 组显式传入 outputFileName（如 utils--ts-js.spec.md），
+  // 避免同目录多语言组都按 basename(targetPath) 派生为同名 `<dir>.spec.md` 互相覆盖；
+  // 未传时维持 basename 派生（per-file root 命名 + 单语言目录命名零变化）。
+  const outputFileName =
+    options.outputFileName ?? `${path.basename(targetPath).replace(/\.[^.]+$/, '')}.spec.md`;
+  const outputPath = path.join(outputDir, outputFileName);
 
   // 收集所有 Mermaid 图表
   const diagrams: Array<{ type: 'classDiagram' | 'flowchart' | 'graph'; source: string; title: string }> = [];

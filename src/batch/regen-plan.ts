@@ -114,3 +114,30 @@ export function resolveSourceTarget(
     ? normalizeProjectPath(group.files[0]!)
     : normalizeProjectPath(group.dirPath);
 }
+
+/**
+ * 从纯路径 sourceTarget 派生增量缓存 key（Feature 182）。
+ *
+ * 修复同目录多语言组 Map 键碰撞：同一 dirPath 被 language-split 成两个 ModuleGroup 时，
+ * resolveSourceTarget 对两组返回相同纯路径，导致 storedSpecByTarget / regenerateTargets
+ * 键碰撞、后写覆盖前写、增量永久 miss。
+ *
+ * 本 helper 仅在 languageSplit 组追加 `::language` 后缀派生唯一 cache key；
+ * 单语言目录维持纯路径（最小化存量缓存失效面）。
+ *
+ * 关键不变量：frontmatter 的 sourceTarget 保持纯路径不变（panoramic / spec-store 路径
+ * 匹配消费方零改动）；cache key 只存在于 src/batch/ 内的 Map/Set 与新增 frontmatter
+ * 字段 sourceTargetKey。
+ *
+ * @param sourceTarget resolveSourceTarget 返回的纯路径
+ * @param group 仅需 language / languageSplit 两字段
+ * @returns 单语言：原路径；语言拆分组：`${sourceTarget}::${language}`
+ */
+export function buildSpecCacheKey(
+  sourceTarget: string,
+  group: Pick<ModuleGroup, 'language' | 'languageSplit'>,
+): string {
+  return group.languageSplit && group.language
+    ? `${sourceTarget}::${group.language}`
+    : sourceTarget;
+}

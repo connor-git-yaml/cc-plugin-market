@@ -2,9 +2,7 @@
  * DeltaRegenerator
  * 基于当前源码骨架哈希、既有 module spec 摘要和依赖图，推导增量重生成计划。
  */
-import { createHash } from 'node:crypto';
-import * as path from 'node:path';
-import { analyzeFiles } from '../core/ast-analyzer.js';
+import { computeModuleSkeletonHash } from '../core/skeleton-hash.js';
 import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import {
   buildDocGraph,
@@ -13,7 +11,7 @@ import {
 } from '../panoramic/builders/doc-graph-builder.js';
 import { loadTemplate } from '../panoramic/utils/template-loader.js';
 import type { ModuleGroup } from './module-grouper.js';
-import { normalizeProjectPath, resolveSourceTarget } from './regen-plan.js';
+import { buildSpecCacheKey, normalizeProjectPath, resolveSourceTarget } from './regen-plan.js';
 
 const ROOT_MODULE_RE = /^root(?:--.+)?$/;
 
@@ -238,51 +236,26 @@ async function collectCurrentSnapshots(
       for (const filePath of group.files) {
         const normalizedFile = normalizeProjectPath(filePath);
         snapshots.push({
+          // root 模块按文件展开，sourceTarget 维持纯文件路径（不加语言后缀）
           sourceTarget: normalizedFile,
           sourceFiles: [normalizedFile],
-          currentHash: await computeSkeletonHash(projectRoot, [filePath]),
+          currentHash: await computeModuleSkeletonHash(projectRoot, [filePath]),
         });
       }
       continue;
     }
 
     snapshots.push({
-      sourceTarget: resolveSourceTarget(group, conflictingDirPaths, false),
+      // Feature 182：snapshot 的键改为 cache key（languageSplit 组带 `::language` 后缀），
+      // 与 batch-orchestrator 的 moduleCacheKey 口径一致，消除同目录多语言组键碰撞。
+      sourceTarget: buildSpecCacheKey(resolveSourceTarget(group, conflictingDirPaths, false), group),
       sourceFiles: group.files.map((filePath) => normalizeProjectPath(filePath)).sort((a, b) => a.localeCompare(b)),
-      currentHash: await computeSkeletonHash(projectRoot, group.files),
+      // Feature 182：读侧 hash 改调唯一权威 computeModuleSkeletonHash（code-unit 排序）
+      currentHash: await computeModuleSkeletonHash(projectRoot, group.files),
     });
   }
 
   return snapshots.sort((a, b) => a.sourceTarget.localeCompare(b.sourceTarget));
-}
-
-async function computeSkeletonHash(
-  projectRoot: string,
-  files: string[],
-): Promise<string | undefined> {
-  if (files.length === 0) {
-    return undefined;
-  }
-
-  const analyzed = await analyzeFiles(
-    files.map((filePath) => path.join(projectRoot, filePath)),
-  );
-
-  if (analyzed.length === 0) {
-    return undefined;
-  }
-
-  if (analyzed.length === 1) {
-    return analyzed[0]?.hash;
-  }
-
-  const combinedContent = analyzed
-    .slice()
-    .sort((left, right) => left.filePath.localeCompare(right.filePath))
-    .map((skeleton) => skeleton.hash)
-    .join('');
-
-  return createHash('sha256').update(combinedContent).digest('hex');
 }
 
 function detectDirectChanges(
@@ -290,7 +263,9 @@ function detectDirectChanges(
   storedSpecs: StoredModuleSpecSummary[],
   effectiveMode?: 'full' | 'reading' | 'code-only',
 ): DeltaTargetState[] {
-  const storedByTarget = new Map(storedSpecs.map((spec) => [spec.sourceTarget, spec]));
+  // Feature 182：stored spec 以 cache key 入索引（languageSplit 组带 `::language` 后缀），
+  // 与 snapshot.sourceTarget（已是 cache key）口径对齐；旧 spec 无 sourceTargetKey 时回落纯路径。
+  const storedByTarget = new Map(storedSpecs.map((spec) => [spec.sourceTargetKey ?? spec.sourceTarget, spec]));
 
   return snapshots
     .flatMap<DeltaTargetState>((snapshot) => {

@@ -53,6 +53,11 @@ export interface FrontmatterInput {
   llmModel?: string;
   /** 降级原因（Feature 127）；未降级时为 null，未知时不传 */
   fallbackReason?: string | null;
+  /**
+   * 增量缓存 key（Feature 182）；仅同目录多语言拆分组传入（`${sourceTarget}::${language}`）。
+   * 在首次写盘的 frontmatter 中即落入 sourceTargetKey 字段，消除崩溃窗口。
+   */
+  sourceTargetKey?: string;
   /** spec 身份类型（Feature 128，canonical / derived / bundle_copy） */
   sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
   /** 派生来源 spec 的 outputPath（Feature 128）；canonical 时为 null 或 undefined */
@@ -123,6 +128,11 @@ export function generateFrontmatter(data: FrontmatterInput): SpecFrontmatter {
     frontmatter.llmModel = typeof data.llmModel === 'string' ? data.llmModel : '';
     frontmatter.fallbackReason =
       data.fallbackReason === undefined ? null : data.fallbackReason;
+  }
+
+  // 增量缓存 key（Feature 182）；仅 languageSplit 组传入，单语言 / 单文件 generate 不写入
+  if (data.sourceTargetKey !== undefined) {
+    frontmatter.sourceTargetKey = data.sourceTargetKey;
   }
 
   // spec 身份字段（Feature 128，bundle_copy / derived 时由调用方注入）

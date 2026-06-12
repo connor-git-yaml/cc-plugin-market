@@ -42,6 +42,12 @@ export interface StoredModuleSpecSummary extends ExistingSpecDocument {
   derivedFrom?: string | null;
   /** 生成本 spec 时的批处理模式（Bug 142）；旧 spec 缺失时为 undefined */
   generatedByMode?: 'full' | 'reading' | 'code-only';
+  /**
+   * 增量缓存 key（Feature 182）；仅同目录多语言拆分组的 spec 写入（`${sourceTarget}::${language}`），
+   * 单语言目录与旧 spec 缺失。查询侧一律 `stored.sourceTargetKey ?? stored.sourceTarget`。
+   * 注意：sourceTarget 自身保持纯路径，本字段独立承载带语言后缀的 cache key。
+   */
+  sourceTargetKey?: string;
 }
 
 /**
@@ -173,6 +179,8 @@ export function scanStoredModuleSpecs(
         sourceKind: metadata.sourceKind,
         derivedFrom: metadata.derivedFrom,
         generatedByMode: metadata.generatedByMode,
+        // Feature 182：cache key 是字面 key（可能含 `::language` 后缀），非路径，不归一化
+        sourceTargetKey: metadata.sourceTargetKey,
       };
       return [document];
     })
@@ -405,6 +413,7 @@ function extractStoredModuleSpecSummary(content: string): {
   sourceKind?: 'canonical' | 'derived' | 'bundle_copy';
   derivedFrom?: string | null;
   generatedByMode?: 'full' | 'reading' | 'code-only';
+  sourceTargetKey?: string;
   intentSummary: string;
 } | null {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/m.exec(content);
@@ -422,6 +431,7 @@ function extractStoredModuleSpecSummary(content: string): {
   let sourceKind: 'canonical' | 'derived' | 'bundle_copy' | undefined;
   let derivedFrom: string | null | undefined;
   let generatedByMode: 'full' | 'reading' | 'code-only' | undefined;
+  let sourceTargetKey: string | undefined;
   const relatedFiles: string[] = [];
   const crossLanguageRefs: string[] = [];
   let inRelatedFiles = false;
@@ -438,6 +448,14 @@ function extractStoredModuleSpecSummary(content: string): {
 
     if (line.startsWith('version:')) {
       version = stripYamlScalar(line.slice('version:'.length).trim());
+      inRelatedFiles = false;
+      inCrossLanguageRefs = false;
+      continue;
+    }
+
+    if (line.startsWith('sourceTargetKey:')) {
+      // Feature 182：cache key（可能含 `::language` 后缀），独立于纯路径 sourceTarget
+      sourceTargetKey = stripYamlScalar(line.slice('sourceTargetKey:'.length).trim());
       inRelatedFiles = false;
       inCrossLanguageRefs = false;
       continue;
@@ -550,6 +568,7 @@ function extractStoredModuleSpecSummary(content: string): {
     sourceKind,
     derivedFrom,
     generatedByMode,
+    sourceTargetKey,
     intentSummary,
   };
 }

@@ -24,6 +24,13 @@ export interface ModuleGroup {
   files: string[];
   /** 该模块的主要语言（仅语言感知分组模式下设置） */
   language?: string;
+  /**
+   * 标记本组为「同目录多语言拆分」产物（Feature 182）。
+   * 仅当同一 dirPath 下存在 ≥2 语言、被拆分为多个带语言后缀的子模块时设为 true；
+   * 单语言目录不设此字段。供 buildSpecCacheKey 判定是否给 cache key 加 `::language` 后缀，
+   * 替代 group.name 后缀嗅探（避免目录字面名含 `--python` 误判）。
+   */
+  languageSplit?: boolean;
 }
 
 /** 分组结果 */
@@ -137,6 +144,8 @@ export function groupFilesToModules(
             dirPath,
             files: langFiles.sort(),
             language: langId,
+            // Feature 182：显式标记语言拆分组，供 buildSpecCacheKey 加语言后缀去碰撞
+            languageSplit: true,
           });
         }
       }
