@@ -53,6 +53,10 @@
 | **M-100** Spectra Evolution | ✅ Delivered | reverse-spec → Spectra rebrand · panoramic Phase 1（多语言索引、跨包依赖、LLM 语义增强、多格式输出） | [blueprint](specs/M-100-spectra-evolution/blueprint.md) |
 | **M-101** Phase 2 — Reading Platform | ✅ Delivered | Graph schema v2.0 + Hyperedges · LLM cost transparency · SpecStore + sourceKind · TODO/Open Questions extraction · Natural language Q&A + interactive `graph.html` · Default model upgrade to Sonnet 4.6 / Opus 4.7 1M | [blueprint](specs/M-101-phase2-reading-platform/blueprint.md) · [postmortem](specs/M-101-phase2-reading-platform/postmortem.md) |
 | **M-102 / M-103** Phase 3 | 🟡 In Progress | Python AST function-level graph (v4.1) · E2E fixture infrastructure · large-project baseline · LLM concurrency optimizer | [proposal](specs/M-102-phase3/proposal.md) |
+| **M7** Spectra MCP Productization | ✅ Delivered | 17 MCP tools（统一 `{code}` 响应契约 + 全工具 telemetry）· file navigation + symbol fuzzy match · batch 默认增量 + byte-stable graph.json · 44 stdio E2E · spec-driver 4.2.1（委派硬约束）· SWE-Bench Verified 5-cohort 评测 | [milestone](docs/design/milestone-M7-spectra-mcp-productization.md) · [评测报告](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md) |
+| **M8** Trust Repair + Drift Flagship | 📋 Planning | 增量缓存正确性 · MCP 触发率工程 · FAIL_TO_PASS 评测 oracle · AST-anchored spec drift 旗舰启动 | [milestone](docs/design/milestone-M8-trust-repair-and-drift-flagship.md) |
+
+> **Honest benchmark note (M7, 2026-06)** — We ran a 150-run SWE-Bench Verified comparison (bare Claude Code vs Spec Driver vs Spec Driver + Spectra MCP vs SuperPowers vs GStack). After correcting a one-sided oracle bias (the fuzzy-match scorer penalized frameworks for writing tests — see [report §4.5](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md)), **all five cohorts tie on completion rate** within N=30 noise. Two honest signals: structured workflows cost **4-12× more tokens with no completion gain on single-file fixes**, and Spectra MCP's real gap is *adoption, not quality* — runs that actually called the MCP tools passed at 43% vs 12% for those that didn't, with the heaviest MCP usage producing the strongest single fix in the dataset. M8 targets exactly these: trigger-rate engineering + a real FAIL_TO_PASS execution oracle.
 
 ## Quick Start
 
@@ -75,7 +79,7 @@ spectra batch --mode reading --html       # ~2-5 min for typical project
 /spec-driver:spec-driver-feature  Add OAuth2 login flow
 ```
 
-After step 4, AI coding assistants (Claude Code, Cursor, Codex with MCP) can query your codebase architecture via 6 MCP tools — **see [How AI Coding Assistants Use Spectra](#-how-ai-coding-assistants-use-spectra) below**.
+After step 4, AI coding assistants (Claude Code, Cursor, Codex with MCP) can query your codebase architecture via **17 MCP tools** (6 graph queries + 3 agent-context + 3 file-navigation + 5 pipeline) — **see [How AI Coding Assistants Use Spectra](#-how-ai-coding-assistants-use-spectra) below**.
 
 ---
 
@@ -89,7 +93,7 @@ A hybrid AST + LLM pipeline that reverse-engineers source code into structured S
 
 - 📝 **9-section module specs** — AST-extracted intent / interface / data / dependencies / quality / lifecycle / etc. (TS/JS interface 100% AST-extracted)
 - 🌐 **Knowledge graph schema v2.0** — `references` / `conceptually_related_to` / `rationale_for` edges + multi-node hyperedges
-- 🔍 **6 MCP query tools** — natural language graph queries that AI assistants can call directly
+- 🔍 **17 MCP tools** — graph queries (community / god-nodes / hyperedges / path) + agent context (impact / context / detect_changes with unified `{code}` error contract + per-call telemetry) + file navigation (token-efficient line-range reads, symbol fuzzy match) + pipeline (prepare / generate / batch / diff / panoramic-query)
 - 📊 **Interactive `graph.html`** — D3-force visualization with hyperedge convex hulls (self-contained, no server)
 - 💰 **LLM cost transparency** — `--dry-run` cost preview + `--budget N` enforcement + `tokenUsage` in every spec frontmatter
 - ⚡ **Lightweight modes** — `--mode reading` (skip product docs) / `--mode code-only` (skip all LLM, AST-only)

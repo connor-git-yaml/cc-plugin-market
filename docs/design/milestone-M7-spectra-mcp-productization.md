@@ -1,6 +1,6 @@
 ---
 title: Milestone M7 — Spectra MCP 产品化 + 业界横向对比
-status: planning (user decision 1.A confirmed — 完整 M7 scope)
+status: ✅ completed 2026-06-12 (F170a-e/F171/F174/F175/F177-F181/F176 全 ship + spec-driver 4.2.1 发布；F176 评测结论与 oracle 翻案见 specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md；后继 milestone-M8-trust-repair-and-drift-flagship.md)
 created: 2026-05-25
 estimated_weeks: 5-6
 features_planned: F170a / F170c / F171 / F174 / F175 / F176
