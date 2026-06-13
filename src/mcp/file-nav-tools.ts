@@ -225,13 +225,16 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
       // projectRoot 已在 resolveSafePath 成功 realpath，此处直接复用（不会抛）
       const reqRel = path.relative(realpathSync.native(projectRoot), realPath);
       if (sym.file !== null && fileMismatch(reqRel, sym.file)) {
-        // F184：fuzzy 解析到另一文件导致的不一致，把解析溯源放进 error.context 帮助诊断
-        // （warning 在 error envelope 会丢，故改放 context；sym.file 是仓内相对路径，非绝对路径泄露）
+        // F184：fuzzy 解析到另一文件导致的不一致，用 context.fuzzyResolved 布尔保留诊断
+        // （warning 在 error envelope 会丢，故改放 context）。
+        // 🔴 不回传 sym.file：graph metadata 的 sourceFile 可能是绝对路径（实测 baseline graph 存在
+        // 绝对路径 node），回传会破坏 file-nav 脱敏红线（FR-014）。布尔已足够提示"symbolId 模糊命中了
+        // 与 path 不同的文件"，调用方据此二选一即可。
         return buildErrorResponse(
           'invalid-input',
           'path 与 symbolId 所属文件不一致',
           '二选一：去掉 path 用 symbolId，或去掉 symbolId 用 path',
-          sym.fuzzyResolved === true ? { fuzzyResolved: true, resolvedFile: sym.file } : undefined,
+          sym.fuzzyResolved === true ? { fuzzyResolved: true } : undefined,
         );
       }
       if (typeof sym.start === 'number') {

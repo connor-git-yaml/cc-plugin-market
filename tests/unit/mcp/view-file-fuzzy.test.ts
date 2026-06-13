@@ -114,9 +114,10 @@ describe('F184 FR-003 — view_file fuzzy symbol 解析', () => {
     const r = await handleViewFile({ path: 'a.ts', symbolId: 'b.ts::fooXyz', projectRoot: root });
     const data = parse(r);
     expect(data['code']).toBe('invalid-input');
-    // fuzzy-resolved 诊断在 error envelope 不能丢：经 context 保留（warning 在错误响应会丢）
+    // fuzzy-resolved 诊断在 error envelope 不能丢：经 context.fuzzyResolved 布尔保留
     const ctx = data['context'] as { fuzzyResolved?: boolean; resolvedFile?: string } | undefined;
     expect(ctx?.fuzzyResolved).toBe(true);
-    expect(ctx?.resolvedFile).toBe('sub/b.ts');
+    // 🔴 脱敏红线（FR-014）：错误 context 不得回传文件路径（graph metadata 可能含绝对路径）
+    expect(ctx).not.toHaveProperty('resolvedFile');
   });
 });
