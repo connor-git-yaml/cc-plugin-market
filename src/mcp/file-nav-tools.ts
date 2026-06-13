@@ -17,7 +17,12 @@ import * as path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { getCachedGraphData, isGraphFormatStaleError } from './graph-tools.js';
-import { canonicalizeSymbolId, findNode, moduleFileFromId } from '../knowledge-graph/query-helpers.js';
+import {
+  canonicalizeSymbolId,
+  findNode,
+  moduleFileFromId,
+  resolveSymbolFuzzy,
+} from '../knowledge-graph/query-helpers.js';
 import {
   buildErrorResponse,
   buildSuccessResponse,
@@ -81,12 +86,39 @@ const ViewFileInputSchema = {
   // 内部/测试经 handler 的 args.projectRoot 注入。
 };
 
-/** 用 symbolId 解析 graph node 的 file + lineRange；失败返回错误 ToolResult */
+/** getCachedGraphData 解出的只读 graph 数据类型（避免显式 import GraphJSON） */
+type CachedGraph = NonNullable<ReturnType<typeof getCachedGraphData>>['graphData'];
+
+/** symbol range 成功结构：canonical 与 fuzzy-resolved 路径共用 */
+type SymbolRange = { ok: true; file: string | null; start?: number; end?: number; fuzzyResolved?: boolean };
+
+/** 从已解析的 canonicalId 取 file + lineRange（canonical 与 fuzzy-resolved 路径共用，消除重复） */
+function nodeToRange(
+  graphData: CachedGraph,
+  id: string,
+): SymbolRange | { ok: false; result: ToolResult } {
+  const node = findNode(graphData, id);
+  /* v8 ignore next 3 — 防御性：调用方已确认 id 命中（canon ok 或 fuzzy autoResolved），findNode 不应为 null */
+  if (node === null) {
+    return { ok: false, result: buildErrorResponse('symbol-not-found', 'symbol 节点对象未找到') };
+  }
+  const md = node.metadata;
+  const file = ((md['sourceFile'] as string | undefined) ?? (md['sourcePath'] as string | undefined) ?? moduleFileFromId(node.id)) || null;
+  const lineRange = md['lineRange'] as { start?: number; end?: number } | undefined;
+  return { ok: true, file, start: lineRange?.start, end: lineRange?.end };
+}
+
+/**
+ * 用 symbolId 解析 graph node 的 file + lineRange；失败返回错误 ToolResult。
+ * F184 FR-003：canonicalize not-found 时接入分层 fuzzy（镜像 agent-context-tools 的 F174 写法）——
+ * autoResolved 唯一高分候选自动采用（fuzzyResolved=true，调用方 push 'fuzzy-resolved' warning）；
+ * 否则错误响应经 context.fuzzyMatches 回传 top-3 候选（含 matchKind），修复 context→view_file 链自断。
+ */
 function resolveSymbolRange(
   projectRoot: string,
   symbolId: string,
-): { ok: true; file: string | null; start?: number; end?: number } | { ok: false; result: ToolResult } {
-  // Codex implement-C2：捕获 graph-format-stale，给明确重建指引，
+): SymbolRange | { ok: false; result: ToolResult } {
+  // F193 Codex implement-C2：捕获 graph-format-stale，给明确重建指引，
   // 不让 stale error 冒泡到外层 catch-all 转成 internal-error。
   let cached: ReturnType<typeof getCachedGraphData>;
   try {
@@ -113,20 +145,23 @@ function resolveSymbolRange(
     return { ok: false, result: buildErrorResponse('invalid-symbol-id', 'symbolId 格式非法') };
   }
   if (canon.reason === 'not-found' || canon.canonicalId === null) {
+    const fuzzy = resolveSymbolFuzzy(graphData, symbolId, { projectRoot });
+    if (fuzzy.autoResolved && fuzzy.candidates[0] !== undefined) {
+      const range = nodeToRange(graphData, fuzzy.candidates[0].id);
+      if (!range.ok) return range;
+      return { ...range, fuzzyResolved: true };
+    }
     return {
       ok: false,
-      result: buildErrorResponse('symbol-not-found', 'symbolId 在 graph 中未找到', '请检查 id，或先调 context 确认 symbol，或改用 startLine/endLine'),
+      result: buildErrorResponse(
+        'symbol-not-found',
+        'symbolId 在 graph 中未找到',
+        '请检查 id，参考 fuzzyMatches 候选，或先调 context 确认 symbol，或改用 startLine/endLine',
+        { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
+      ),
     };
   }
-  const node = findNode(graphData, canon.canonicalId);
-  /* v8 ignore next 3 — 防御性：canon 返回 ok 已隐含 hasNode 命中，findNode 不应为 null */
-  if (node === null) {
-    return { ok: false, result: buildErrorResponse('symbol-not-found', 'symbol 节点对象未找到') };
-  }
-  const md = node.metadata;
-  const file = ((md['sourceFile'] as string | undefined) ?? (md['sourcePath'] as string | undefined) ?? moduleFileFromId(node.id)) || null;
-  const lineRange = md['lineRange'] as { start?: number; end?: number } | undefined;
-  return { ok: true, file, start: lineRange?.start, end: lineRange?.end };
+  return nodeToRange(graphData, canon.canonicalId);
 }
 
 /**
@@ -184,10 +219,20 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
     if (typeof args.symbolId === 'string' && args.symbolId.length > 0) {
       const sym = resolveSymbolRange(projectRoot, args.symbolId);
       if (!sym.ok) return sym.result;
+      // F184：fuzzy 自动 resolve 命中时记 warning（顺序在 symbolId-overrides-lines 之前；
+      // warnings 为无序集合语义，测试用 toContain/arrayContaining）
+      if (sym.fuzzyResolved === true) warnings.push('fuzzy-resolved');
       // projectRoot 已在 resolveSafePath 成功 realpath，此处直接复用（不会抛）
       const reqRel = path.relative(realpathSync.native(projectRoot), realPath);
       if (sym.file !== null && fileMismatch(reqRel, sym.file)) {
-        return buildErrorResponse('invalid-input', 'path 与 symbolId 所属文件不一致', '二选一：去掉 path 用 symbolId，或去掉 symbolId 用 path');
+        // F184：fuzzy 解析到另一文件导致的不一致，把解析溯源放进 error.context 帮助诊断
+        // （warning 在 error envelope 会丢，故改放 context；sym.file 是仓内相对路径，非绝对路径泄露）
+        return buildErrorResponse(
+          'invalid-input',
+          'path 与 symbolId 所属文件不一致',
+          '二选一：去掉 path 用 symbolId，或去掉 symbolId 用 path',
+          sym.fuzzyResolved === true ? { fuzzyResolved: true, resolvedFile: sym.file } : undefined,
+        );
       }
       if (typeof sym.start === 'number') {
         // FR-003：symbolId 与显式行区间同存 → 以 symbolId 为准并 warning

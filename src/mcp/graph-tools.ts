@@ -204,7 +204,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 1: graph_query — 关键词子图查询 ───
   server.tool(
     'graph_query',
-    '查询知识图谱中与问题相关的模块和依赖关系子图。适用于探索代码库结构、查找相关模块时调用。',
+    `查询知识图谱中与问题相关的模块和依赖关系子图，探索代码库结构、查找相关模块。
+
+Use when:
+- 不清楚结构、想按关键词找相关模块子图
+- 需要某主题（如"认证"）的依赖关系概览
+
+Typical chained usage:
+- batch → graph_query → graph_node（子图定位后看单节点详情）`,
     {
       question: z.string().describe('自然语言查询词，例如"认证模块"、"数据库连接"'),
       budget: z
@@ -241,7 +248,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 2: graph_node — 单节点详情查询 ───
   server.tool(
     'graph_node',
-    '精确查找节点详情和邻居，适用于已知节点 ID 或名称关键词的场景。id 参数优先于 keyword。返回结果包含关联的语义边（references / conceptually_related_to / rationale_for）列表。',
+    `精确查找节点详情和邻居，适用于已知节点 ID 或名称关键词的场景。id 优先于 keyword，返回含语义边（references / conceptually_related_to / rationale_for）列表。
+
+Use when:
+- 已知 symbol id 或 label 关键词，要看其邻居与语义边
+- graph_query 命中后深入单节点
+
+Typical chained usage:
+- graph_query → graph_node → graph_path（节点详情后查调用路径）`,
     {
       id: z
         .string()
@@ -281,7 +295,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 3: graph_path — 最短路径查询 ───
   server.tool(
     'graph_path',
-    '查找两个节点间的最短调用路径，适用于理解模块依赖链、追踪调用关系。',
+    `查找两个节点间的最短调用路径，适用于理解模块依赖链、追踪调用关系。
+
+Use when:
+- 想知道 A 如何调用到 B
+- 追踪跨模块依赖链路
+
+Typical chained usage:
+- graph_node → graph_path（确定两端节点后查路径）`,
     {
       source: z.string().describe('源节点 ID（路径起点）'),
       target: z.string().describe('目标节点 ID（路径终点）'),
@@ -305,7 +326,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 4: graph_community — 社区节点查询 ───
   server.tool(
     'graph_community',
-    '获取指定社区的节点列表，用于识别代码聚类和模块边界。需要先运行 spectra graph 生成含社区信息的图谱。',
+    `获取指定社区的节点列表，用于识别代码聚类和模块边界。需先运行 spectra graph 生成含社区信息的图谱。
+
+Use when:
+- 想识别代码的自然聚类 / 模块边界
+- 分析高内聚低耦合结构
+
+Typical chained usage:
+- batch → graph_community → graph_node（聚类后看具体节点）`,
     {
       communityId: z.string().describe('社区 ID（来自 graph.json 中节点的 metadata.community 字段）'),
       budget: z
@@ -332,7 +360,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 6: graph_hyperedges — 超边查询 ───
   server.tool(
     'graph_hyperedges',
-    '查询知识图谱中的超边（Hyperedges），每条超边连接 3 个以上节点，表达命名流程或跨模块协作关系。支持按 label 模糊过滤和按节点 ID 精确过滤。',
+    `查询知识图谱中的超边（Hyperedges），每条连接 3+ 节点，表达命名流程或跨模块协作。支持按 label 模糊过滤和节点 ID 精确过滤。
+
+Use when:
+- 想看跨多模块的协作流程
+- 按 label 找某命名流程
+
+Typical chained usage:
+- graph_query → graph_hyperedges（子图后看多节点协作）`,
     {
       label: z
         .string()
@@ -383,7 +418,14 @@ export function registerGraphTools(server: McpServer): void {
   // ─── 工具 5: graph_god_nodes — 枢纽节点识别 ───
   server.tool(
     'graph_god_nodes',
-    '识别知识图谱中度数最高的枢纽节点，用于定位过度耦合的核心模块、分析架构瓶颈。',
+    `识别知识图谱中度数最高的枢纽节点，用于定位过度耦合的核心模块、分析架构瓶颈。
+
+Use when:
+- 找过度耦合的"上帝模块"
+- 架构瓶颈 / 重构优先级分析
+
+Typical chained usage:
+- graph_god_nodes → impact（枢纽节点再做影响面评估）`,
     {
       limit: z
         .number()

@@ -31,21 +31,62 @@ const pkgPath = resolve(__dirname, '..', '..', 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
 
 /**
+ * MCP server 级 instructions（F184 FR-002）：经 SDK `ServerOptions` 注入 initialize result，
+ * 给 driver / 子代理在无明确指令时一份工具分组导览 + 典型链路 + 恢复流，提升 MCP 工具采用率。
+ *
+ * 约束：
+ * - 控制在 ≤1600 字符（server 级一次性导览，避免上下文膨胀；F184 Codex Plan W-004）
+ * - 不硬编码工具总数（用分组描述，降工具增减时的漂移；新增/删除工具时同步本文）
+ * - 必含典型链路串 `detect_changes → impact → context → view_file` 与 `graph-not-built` 恢复流
+ */
+export const TOOL_GUIDE = [
+  'Spectra 把代码库变成可查询的知识图谱，工具分四组：',
+  '• 上下文导航（最常用）：detect_changes（git diff→受影响 symbol）、impact（某 symbol 的 BFS 影响面与 caller 链）、context（symbol 360°：定义+caller+callee+import）。',
+  '• 文件查看：view_file（按行区间或 symbolId 看片段，省 token 替代全文 Read）、search_in_file（文件内 pattern 搜索）、list_directory（列目录）。',
+  '• 图谱查询：graph_query（关键词子图）、graph_node（节点详情+邻居）、graph_path（两节点最短调用路径）、graph_community（模块聚类）、graph_god_nodes（高耦合枢纽）、graph_hyperedges（跨模块协作超边）。',
+  '• Spec 生成：prepare、generate、batch、diff、panoramic-query。',
+  '',
+  '典型链路：detect_changes → impact → context → view_file（改动评估→影响面→symbol 上下文→定位代码行）。',
+  '按任务选工具：评估改动影响/blast radius → impact；找 caller/谁调用了 X → impact(direction=upstream)；看某 symbol 定义+依赖 → context；定位某段代码行 → view_file；不清楚结构先探索 → graph_query。',
+  '',
+  '恢复流：工具返回 graph-not-built 时，先运行 `spectra batch` 生成图谱再重试。symbol 入参类工具（context/impact/view_file）支持 fuzzy——名字有偏差会自动 resolve（warnings: fuzzy-resolved）或回传候选（context.fuzzyMatches），不必精确。',
+].join('\n');
+
+/**
  * 创建并配置 MCP Server 实例
  */
 export function createMcpServer(): McpServer {
   // 单一 runtime 初始化（FR-10）：注册语言适配器 / 文档生成器 / 制品解析器
   bootstrapRuntime();
 
-  const server = new McpServer({
-    name: 'spectra',
-    version: pkg.version,
-  });
+  // F184 FR-002：instructions 属于 SDK 第二个 ServerOptions 参数（非 serverInfo 对象），
+  // 写错位置不会进入 initialize result。
+  const server = new McpServer(
+    {
+      name: 'spectra',
+      version: pkg.version,
+    },
+    {
+      instructions: TOOL_GUIDE,
+    },
+  );
 
   // ─── 工具 1: prepare — AST 预处理 + 上下文组装 ───
   server.tool(
     'prepare',
-    'AST 预处理 + 上下文组装',
+    `AST 预处理 + 上下文组装：对文件/目录抽取 CodeSkeleton 结构，供后续 spec 生成。
+
+Use this tool when:
+- 想先看某目录的 AST 结构与语言分布
+- generate 前的轻量预处理
+- 只要结构化骨架、不需要 LLM 推断时
+
+Example:
+- Input: { targetPath: "src/auth", deep: false }
+- Output: { skeletons, mergedSkeleton, detectedLanguages }
+
+Typical chained usage:
+- prepare → generate（预处理后生成完整 spec）`,
     {
       targetPath: z.string().describe('目标文件或目录路径（绝对或相对于 cwd）'),
       deep: z.boolean().default(false).describe('深度分析模式（包含函数体）'),
@@ -86,7 +127,19 @@ export function createMcpServer(): McpServer {
   // ─── 工具 2: generate — 完整 Spec 生成流水线 ───
   server.tool(
     'generate',
-    '完整 Spec 生成流水线',
+    `完整 Spec 生成流水线：对目标文件/目录跑 AST + LLM 推断，产出 .spec.md 文档。
+
+Use this tool when:
+- 要为某模块生成可读的规范文档
+- 单文件/单目录的一次性 spec 生成
+- prepare 之后要落地完整文档
+
+Example:
+- Input: { targetPath: "src/auth/login.ts", deep: true }
+- Output: { specPath, tokenUsage, confidence, warnings }
+
+Typical chained usage:
+- prepare → generate；大范围生成改用 batch`,
     {
       targetPath: z.string().describe('目标文件或目录路径'),
       deep: z.boolean().default(false).describe('深度分析模式'),
@@ -118,7 +171,19 @@ export function createMcpServer(): McpServer {
   // ─── 工具 3: batch — 批量 Spec 生成 ───
   server.tool(
     'batch',
-    '批量 Spec 生成',
+    `批量 Spec 生成：对整个项目按语言/增量批量产出 spec，带 checkpoint 与增量 cache，并生成 graph.json。
+
+Use this tool when:
+- 首次为项目生成全套 spec
+- 代码改动后增量重生成受影响 spec
+- 需要图谱工具的前置 graph.json
+
+Example:
+- Input: { projectRoot: ".", mode: "full" }
+- Output: { successful, skipped, failed, indexGenerated }
+
+Typical chained usage:
+- batch → graph_query / context / impact（先建图再查询）`,
     {
       projectRoot: z
         .string()
@@ -185,7 +250,19 @@ export function createMcpServer(): McpServer {
   // ─── 工具 4: diff — Spec 漂移检测 ───
   server.tool(
     'diff',
-    'Spec 漂移检测',
+    `Spec 漂移检测：比对 .spec.md 与源码，找出文档与实现的偏差、新增行为、过期条目。
+
+Use this tool when:
+- 代码改动后检查 spec 是否过时
+- 重构前确认 spec 与实现一致
+- 审查 spec 文档准确性
+
+Example:
+- Input: { specPath: "src/auth.spec.md", sourcePath: "src/auth.ts" }
+- Output: { summary, items, recommendation }
+
+Typical chained usage:
+- batch → diff（生成 spec 后检查漂移）`,
     {
       specPath: z.string().describe('Spec 文件路径（.spec.md）'),
       sourcePath: z.string().describe('源代码文件或目录路径'),
@@ -205,7 +282,19 @@ export function createMcpServer(): McpServer {
   // ─── 工具 5: panoramic-query — panoramic 架构分析 ───
   server.tool(
     'panoramic-query',
-    '运行 panoramic 架构分析，支持 cross-package / architecture-ir / overview / natural-language 四种操作',
+    `panoramic 架构分析：cross-package / architecture-ir / overview / natural-language 四种操作，做架构级查询。
+
+Use this tool when:
+- 想要 monorepo 跨包依赖全景
+- 问架构级自然语言问题（operation=natural-language）
+- 需要项目 overview 而非单 symbol 上下文
+
+Example:
+- Input: { operation: "natural-language", projectRoot: ".", question: "认证流程怎么走" }
+- Output: { answer, citations, tokenUsage }（其他 operation 返回各自结构，如 architecture-ir 返回 IR、overview 返回分层视图）
+
+Typical chained usage:
+- batch → panoramic-query（建图后做架构级查询）`,
     {
       operation: z
         .enum(['cross-package', 'architecture-ir', 'overview', 'natural-language'])
