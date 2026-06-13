@@ -29,3 +29,16 @@
 [GATE_DESIGN] PAUSE→APPROVED | HARD GATE | 用户裁决 Q1=分阶段判定 / Q2=冻结oracle语义
 [design-codex] codex review: COMPLETED | 4 CRITICAL+4 WARNING+1 INFO 全部认定真实，spec 已修订落实
 [2-rev] specify(修订): COMPLETED | spec.md 重写 — 穷尽式决策表14行/failureSource分阶段归因/候选patch合同/语义冻结/可执行护栏/16 SC
+
+## Plan 阶段输入（主线实测）
+[empirical] arm64 镜像可用性：10/10 SWE-L fixture 全部命中 Epoch AI arm64 原生镜像
+  命名约定：ghcr.io/epoch-research/swe-bench.eval.arm64.<instanceId>（__ 保留，非 _1776_）
+  实例：pytest-11148/11143, astropy-14995/14365/14182, sympy-24909/24213/24152/24102/24066 全 ✅
+  → 自测 smoke 全程 arm64 native，无需 Rosetta；Rosetta 回退降为 F188 规模的次要关切
+[3] plan: STARTED | model=sonnet
+[4] plan: COMPLETED | model=sonnet | 制品=plan.md+research.md+data-model.md+quickstart.md | 10 决策 + 4 Phase 实施序列 | 风险=MEDIUM
+[plan-codex] codex adversarial review of plan: STARTED (background) | 重点=F176旧测固化bug/oracleSpecHash漏覆盖swebench-oracle.mjs打点逻辑/marker缺失反向污染/本地JSONL塌方
+[主线核查] F176 feature-176-batch.test.ts:54-78 确认断言旧语义(timedOut→unavailable,line68)，与 Q1 矛盾；但 classifyOracle(旧) 与 classifySwebenchResult(新) 是两个函数 → 需锁定"排名用新分类器，旧降级 secondary"
+[plan-codex] codex review(foreground 重试成功): COMPLETED | 6 CRITICAL 全认定真实 + 代码核验(runPrimaryOracle sync/7调用方/:289 error漏判/:741截断)
+[4-rev] plan(修订): COMPLETED | spawnSync 收敛 C-5/C-6；Phase0 数据源 hard gate(C-4)；ranking classifier(C-1)；oracleSpecHash 覆盖3语义模块(C-2)；evidence-based marker(C-3)
+[plan commit] 准备提交 plan 阶段
