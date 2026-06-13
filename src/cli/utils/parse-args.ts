@@ -84,8 +84,8 @@ export interface CLICommand {
   batchBudget?: number;
   /** Feature 127: 超预算时的非交互策略（仅 batch 子命令） */
   onOverBudget?: 'continue' | 'cheaper-model' | 'skip-enrichment' | 'cancel';
-  /** F5：批处理运行模式（full | reading | code-only，默认 full） */
-  batchMode?: 'full' | 'reading' | 'code-only';
+  /** F5：批处理运行模式（full | reading | code-only，默认 full）；F195 新增 graph-only（纯 AST / 零 LLM 建图） */
+  batchMode?: 'full' | 'reading' | 'code-only' | 'graph-only';
   /** F5 Story 3：是否在知识图谱写盘后生成 graph.html 可视化文件 */
   generateHtml?: boolean;
   /** Feature 133（adversarial-review post-fix）：是否启用 hyperedge LLM 提取（--hyperedges） */
@@ -784,35 +784,38 @@ export function parseArgs(argv: string[]): ParseResult {
       explicitFlags.add('concurrency');
     }
 
-    // F5：--mode flag 解析（full | reading | code-only）
+    // F5：--mode flag 解析（full | reading | code-only）；F195 新增 graph-only
     // 支持两种写法：--mode reading 和 --mode=reading
+    const isValidBatchMode = (
+      value: string,
+    ): value is NonNullable<CLICommand['batchMode']> =>
+      value === 'full' ||
+      value === 'reading' ||
+      value === 'code-only' ||
+      value === 'graph-only';
+    const INVALID_MODE_MSG = (raw: string) =>
+      `--mode 值必须是 full | reading | code-only | graph-only，实际: ${raw}`;
     let batchMode: CLICommand['batchMode'] | undefined;
     const modeIdxSpace = argv.indexOf('--mode');
     const modeEqArg = argv.find((a) => a.startsWith('--mode='));
     if (modeIdxSpace !== -1 && argv[modeIdxSpace + 1] !== undefined) {
       const rawMode = argv[modeIdxSpace + 1]!;
-      if (rawMode === 'full' || rawMode === 'reading' || rawMode === 'code-only') {
+      if (isValidBatchMode(rawMode)) {
         batchMode = rawMode;
       } else {
         return {
           ok: false,
-          error: {
-            type: 'invalid_option',
-            message: `--mode 值必须是 full | reading | code-only，实际: ${rawMode}`,
-          },
+          error: { type: 'invalid_option', message: INVALID_MODE_MSG(rawMode) },
         };
       }
     } else if (modeEqArg !== undefined) {
       const rawMode = modeEqArg.slice('--mode='.length);
-      if (rawMode === 'full' || rawMode === 'reading' || rawMode === 'code-only') {
+      if (isValidBatchMode(rawMode)) {
         batchMode = rawMode;
       } else {
         return {
           ok: false,
-          error: {
-            type: 'invalid_option',
-            message: `--mode 值必须是 full | reading | code-only，实际: ${rawMode}`,
-          },
+          error: { type: 'invalid_option', message: INVALID_MODE_MSG(rawMode) },
         };
       }
     }

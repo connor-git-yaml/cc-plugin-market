@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   runBatch: vi.fn(),
+  buildAstGraphOnly: vi.fn(),
   checkAuth: vi.fn(),
   loadProjectConfig: vi.fn(),
   mergeConfig: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/batch/batch-orchestrator.js', () => ({
   runBatch: mocks.runBatch,
+  buildAstGraphOnly: mocks.buildAstGraphOnly,
 }));
 vi.mock('../../src/cli/utils/error-handler.js', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;

@@ -3,7 +3,9 @@
  *
  * 校正 code-only 描述，移除误导文案（「无 LLM」「< 30s」「最快」「纯 AST」）。
  * 用静态源码断言验证文案不含误导字符串（Codex W-1：纯定性，不写具体耗时数字）。
- * 红线：不新增 graph-only 描述行（归 F195）。
+ *
+ * F195 起：graph-only 描述行已落地（SC-003c），下方断言由「不得新增」翻转为
+ * 「必须含 graph-only / 纯 AST / 零 LLM」。
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,8 +32,10 @@ describe('CLI 帮助文本不含误导文案（T-04）', () => {
     expect(src).not.toContain('< 30s');
   });
 
-  it('cli/index.ts 不新增 graph-only 描述行（归 F195）', () => {
+  it('cli/index.ts 的 --mode 帮助文本含 graph-only / 纯 AST / 零 LLM（F195 SC-003c）', () => {
     const src = readFileSync(join(root, 'src/cli/index.ts'), 'utf8');
-    expect(src).not.toContain('graph-only');
+    expect(src).toContain('graph-only');
+    expect(src).toContain('纯 AST');
+    expect(src).toContain('零 LLM');
   });
 });

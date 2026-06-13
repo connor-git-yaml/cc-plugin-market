@@ -175,13 +175,13 @@ function runGraphTool(
       return buildErrorResponse(
         'graph-format-stale',
         msg,
-        '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+        '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。优先运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · <2min）在当前 worktree 重建图；或 `spectra batch` 重建完整图。',
       );
     }
     return buildErrorResponse(
       'graph-not-built',
       '图谱未构建或加载失败',
-      '运行 `spectra graph` 先生成图谱',
+      '优先运行 `spectra batch --mode graph-only` 快速建图（纯 AST · 零 LLM · 无需认证 · <2min）；需要完整 spec 关系图再跑 `spectra batch`',
     );
   }
   try {

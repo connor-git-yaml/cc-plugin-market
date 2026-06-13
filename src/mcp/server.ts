@@ -49,7 +49,7 @@ export const TOOL_GUIDE = [
   '典型链路：detect_changes → impact → context → view_file（改动评估→影响面→symbol 上下文→定位代码行）。',
   '按任务选工具：评估改动影响/blast radius → impact；找 caller/谁调用了 X → impact(direction=upstream)；看某 symbol 定义+依赖 → context；定位某段代码行 → view_file；不清楚结构先探索 → graph_query。',
   '',
-  '恢复流：工具返回 graph-not-built 时，先运行 `spectra batch` 生成图谱再重试。symbol 入参类工具（context/impact/view_file）支持 fuzzy——名字有偏差会自动 resolve（warnings: fuzzy-resolved）或回传候选（context.fuzzyMatches），不必精确。',
+  '恢复流：工具返回 graph-not-built 时，优先运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · 无需认证 · <2min）快速建图再重试；需要完整 spec 关系图再跑 `spectra batch`。symbol 入参类工具（context/impact/view_file）支持 fuzzy——名字有偏差会自动 resolve（warnings: fuzzy-resolved）或回传候选（context.fuzzyMatches），不必精确。',
 ].join('\n');
 
 /**
@@ -209,7 +209,7 @@ Typical chained usage:
       mode: z
         .enum(['full', 'reading', 'code-only'])
         .optional()
-        .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（纯 AST，跳过所有 LLM 推断）'),
+        .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（仅跳 enrichment 层，仍逐模块调 spec-gen LLM，非零成本）。注：纯 AST / 零 LLM 建图请用 CLI `spectra batch --mode graph-only`（MCP batch 暂不支持 graph-only）'),
     },
     withTelemetry('batch', async (args) => {
       const { projectRoot, full, force, incremental, languages, mode } = args as {

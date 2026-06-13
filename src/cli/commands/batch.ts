@@ -4,7 +4,7 @@
  */
 
 import { resolve } from 'node:path';
-import { runBatch } from '../../batch/batch-orchestrator.js';
+import { runBatch, buildAstGraphOnly } from '../../batch/batch-orchestrator.js';
 import { resolveRegenPlan } from '../../batch/regen-plan.js';
 import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
@@ -36,11 +36,6 @@ function resolveBatchConcurrency(
 export async function runBatchCommand(command: CLICommand, version: string): Promise<void> {
   console.log(`spectra v${version} — 批量生成`);
 
-  if (!checkAuth()) {
-    process.exitCode = EXIT_CODES.API_ERROR;
-    return;
-  }
-
   try {
     // 解析目标路径：优先使用 CLI 传入的 target，其次使用 cwd
     const projectRoot = resolve(command.target ?? process.cwd());
@@ -57,6 +52,33 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       fileConfig,
       command._explicitFlags ?? new Set(),
     );
+
+    // F195：graph-only 零 LLM 建图——在 checkAuth 之前拦截并 dispatch 到姊妹管线。
+    // why 不调 checkAuth：graph-only 纯 AST、不调任何 LLM，行为对齐 prepare（FR-005）。
+    // why 放在 projectRoot + config merge 之后：buildAstGraphOnly 需要 projectRoot 与 outputDir。
+    if (command.batchMode === 'graph-only') {
+      if (command.languages?.length) {
+        console.warn('⚠ graph-only 不支持 --languages 过滤，将构建全仓 AST 图');
+      }
+      const graphResult = await buildAstGraphOnly(projectRoot, {
+        outputDir: merged.outputDir,
+      });
+      console.log('  模式: graph-only（纯 AST · 零 LLM）');
+      console.log(
+        `  节点: ${graphResult.nodeCount} | 边: ${graphResult.edgeCount} ` +
+          `(calls ${graphResult.callEdgeCount}, depends-on ${graphResult.dependsOnEdgeCount}) ` +
+          `| Python 符号: ${graphResult.pythonSymbolCount} | 耗时: ${(graphResult.durationMs / 1000).toFixed(1)}s`,
+      );
+      console.log(`✓ 知识图谱: ${graphResult.graphPath}`);
+      process.exitCode = EXIT_CODES.SUCCESS;
+      return;
+    }
+
+    // 非 graph-only 路径：spec-gen 需要认证
+    if (!checkAuth()) {
+      process.exitCode = EXIT_CODES.API_ERROR;
+      return;
+    }
 
     // F175 FR-002：合并后统一解析 regen 计划（唯一默认值来源，消除三处漂移）。
     // --full（regen 轴逃生口）仅来自 CLI，不参与 config 合并；--force 为等义别名（已合并）。

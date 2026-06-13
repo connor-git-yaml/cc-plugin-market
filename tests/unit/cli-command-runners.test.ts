@@ -9,6 +9,7 @@ import type { CLICommand } from '../../src/cli/utils/parse-args.js';
 const mocks = vi.hoisted(() => ({
   generateSpec: vi.fn(),
   runBatch: vi.fn(),
+  buildAstGraphOnly: vi.fn(),
   detectDrift: vi.fn(),
   prepareContext: vi.fn(),
   startMcpServer: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('../../src/core/single-spec-orchestrator.js', () => ({
 
 vi.mock('../../src/batch/batch-orchestrator.js', () => ({
   runBatch: mocks.runBatch,
+  buildAstGraphOnly: mocks.buildAstGraphOnly,
 }));
 
 vi.mock('../../src/diff/drift-orchestrator.js', () => ({
