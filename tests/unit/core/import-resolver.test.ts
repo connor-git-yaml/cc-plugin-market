@@ -449,8 +449,8 @@ describe('T-005 集成：buildUnifiedGraph 在 4 类 fixture 上产出 depends-o
     const dependsOn = unified.edges.filter((e) => e.relation === 'depends-on');
     expect(dependsOn.length).toBeGreaterThanOrEqual(4);
     for (const f of fixtures) {
-      const fp = path.join(FIXTURE_DIR, f);
-      expect(dependsOn.filter((e) => e.source === fp).length).toBeGreaterThanOrEqual(1);
+      // Feature 193：buildUnifiedGraph 出口相对化，edge.source = repo-relative POSIX（= basename）
+      expect(dependsOn.filter((e) => e.source === f).length).toBeGreaterThanOrEqual(1);
     }
   });
 
@@ -469,8 +469,8 @@ describe('T-005 集成：buildUnifiedGraph 在 4 类 fixture 上产出 depends-o
       expect(e.evidence).toBeDefined();
       expect(e.evidence!).not.toMatch(/^(static|dynamic|type-only|commonjs-require):/);
     }
-    const dynFile = path.join(FIXTURE_DIR, 'dynamic-import.ts');
-    const dynEdge = dependsOn.find((e) => e.source === dynFile);
+    // Feature 193：edge.source 相对化为 repo-relative POSIX（= basename）
+    const dynEdge = dependsOn.find((e) => e.source === 'dynamic-import.ts');
     expect(dynEdge).toBeDefined();
     expect(dynEdge!.metadata?.importType).toBe('dynamic');
     expect(dynEdge!.evidence).toBe('./baz');

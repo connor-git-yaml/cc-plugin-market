@@ -24,7 +24,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { GraphEdge, GraphJSON, GraphNode } from '../panoramic/graph/graph-types.js';
-import { getCachedGraphData } from './graph-tools.js';
+import { getCachedGraphData, isGraphFormatStaleError } from './graph-tools.js';
 import {
   bfsTraverse,
   canonicalizeSymbolId,
@@ -109,6 +109,49 @@ async function runAgentContextTool(
   }
 }
 
+/**
+ * Feature 193 FR-006 — 加载 graph，区分三态：
+ *   - 成功 → { data }
+ *   - graph-format-stale（旧绝对格式，copy 自其他 worktree）→ { error: stale 响应 }
+ *   - 缺图 / 其他加载失败 → { error: graph-not-built 响应 }
+ *
+ * 让 impact/context/detect_changes 对旧格式图给明确重建指引，不静默退化为 graph-not-built。
+ */
+function loadGraphOrError(projectRoot: string):
+  | { data: NonNullable<ReturnType<typeof getCachedGraphData>>; error?: undefined }
+  | { data?: undefined; error: ToolResult } {
+  try {
+    const cached = getCachedGraphData(projectRoot);
+    if (cached === null) {
+      return {
+        error: buildErrorResponse(
+          'graph-not-built',
+          `graph.json 不存在或加载失败 (projectRoot=${projectRoot})`,
+          '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
+        ),
+      };
+    }
+    return { data: cached };
+  } catch (err) {
+    if (isGraphFormatStaleError(err)) {
+      return {
+        error: buildErrorResponse(
+          'graph-format-stale',
+          err.message,
+          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+        ),
+      };
+    }
+    return {
+      error: buildErrorResponse(
+        'graph-not-built',
+        `graph.json 加载失败 (projectRoot=${projectRoot})`,
+        '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
+      ),
+    };
+  }
+}
+
 // ============================================================
 // impact tool
 // ============================================================
@@ -138,15 +181,11 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
-    const cached = getCachedGraphData(projectRoot);
-    if (cached === null) {
-      return { result: buildErrorResponse(
-        'graph-not-built',
-        `graph.json 不存在或加载失败 (projectRoot=${projectRoot})`,
-        '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
-      ) };
+    const loaded = loadGraphOrError(projectRoot);
+    if (loaded.error) {
+      return { result: loaded.error };
     }
-    const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
+    const { graphData, graphPath, mtimeMs, sizeBytes } = loaded.data;
 
     // 入参 clamp（FR-015）— handler 层负责 clamp 并附 warning，不依赖 zod max
     const warnings: string[] = [];
@@ -279,15 +318,13 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
-    const cached = getCachedGraphData(projectRoot);
-    if (cached === null) {
-      return { result: buildErrorResponse(
-        'graph-not-built',
-        `graph.json 不存在 (projectRoot=${projectRoot})`,
-        '请先运行 `spectra batch` 生成图谱',
-      ) };
+    // Codex implement-C2：复用 loadGraphOrError，使 graph-format-stale 明确上抛
+    // （旧绝对格式图给重建指引），不被外层 catch-all 吞成 internal-error。
+    const loaded = loadGraphOrError(projectRoot);
+    if (loaded.error) {
+      return { result: loaded.error };
     }
-    const { graphData } = cached;
+    const { graphData } = loaded.data;
 
     const include = args.include ?? ['callers', 'callees', 'imports'];
 
@@ -494,15 +531,13 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     }
 
     const projectRoot = args.projectRoot ?? process.cwd();
-    const cached = getCachedGraphData(projectRoot);
-    if (cached === null) {
-      return { result: buildErrorResponse(
-        'graph-not-built',
-        `graph.json 不存在 (projectRoot=${projectRoot})`,
-        '请先运行 `spectra batch` 生成图谱',
-      ) };
+    // Codex implement-C2：复用 loadGraphOrError，使 graph-format-stale 明确上抛
+    // （旧绝对格式图给重建指引），不被外层 catch-all 吞成 internal-error。
+    const loaded = loadGraphOrError(projectRoot);
+    if (loaded.error) {
+      return { result: loaded.error };
     }
-    const { graphData, graphPath, mtimeMs, sizeBytes } = cached;
+    const { graphData, graphPath, mtimeMs, sizeBytes } = loaded.data;
 
     // 1) 拿改动文件列表
     let changedFiles: ChangedFile[];

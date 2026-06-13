@@ -151,7 +151,8 @@ describe('buildUnifiedGraph (FR-3)', () => {
     // schema 校验
     expect(() => UnifiedGraphSchema.parse(graph)).not.toThrow();
     expect(graph.metadata.schemaVersion).toBe(UNIFIED_GRAPH_SCHEMA_VERSION);
-    expect(graph.metadata.projectRoot).toBe('/repo');
+    // Feature 193 决策 1：metadata.projectRoot 持久化为相对标记 '.'（可移植）
+    expect(graph.metadata.projectRoot).toBe('.');
 
     // 边类型分组
     const callEdges = graph.edges.filter((e) => e.relation === 'calls');

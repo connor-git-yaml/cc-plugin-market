@@ -25,6 +25,7 @@ import {
   type UnifiedGraph,
   type UnifiedNode,
 } from './unified-graph.js';
+import { relativizePosix, relativizeSymbolId } from './relativize.js';
 
 // ───────────────────────────────────────────────────────────
 // Public types & API
@@ -53,13 +54,60 @@ export function buildUnifiedGraph(input: BuildUnifiedGraphInput): UnifiedGraph {
   const callEdges = resolveCalls(callSites, input.codeSkeletons);
   const importEdges = deriveImportEdges(input.codeSkeletons);
   const nodes = input.preBuiltNodes ?? deriveNodesFromSkeletons(input.codeSkeletons);
+  // Feature 193 决策 1：出口统一相对化 pass。
+  // 覆盖全部四条值来源（deriveNodesFromSkeletons 节点、resolveCalls calls 边、
+  // deriveImportEdges 边、preBuiltNodes 注入），把绝对路径前缀相对化为 POSIX 相对路径，
+  // 使 graph + 快照跨 worktree byte 可移植。call-resolver.ts 零改动（其输出在此被覆盖）。
+  // projectRoot 持久化为 '.'（相对标记）。pass 幂等：已相对的输入原样保留。
+  return relativizeGraph(
+    {
+      nodes: [...nodes],
+      edges: [...callEdges, ...importEdges],
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        projectRoot: input.projectRoot,
+        schemaVersion: UNIFIED_GRAPH_SCHEMA_VERSION,
+      },
+    },
+    input.projectRoot,
+  );
+}
+
+/**
+ * Feature 193 决策 1 — 对装配完的 UnifiedGraph 做统一相对化（in-place 返回新对象）。
+ *
+ * - node.id / node.filePath：relativizeSymbolId / relativizePosix 相对化；projectRoot 外的
+ *   节点保留绝对路径并标 metadata.external=true（FR-004）。
+ * - edge.source / edge.target：relativizeSymbolId 相对化（含 calls 边与 import 边）。
+ * - metadata.projectRoot：持久化为 '.'（schema 要求 min(1)，'.' 满足）。
+ *
+ * 幂等：已相对的 id / 路径原样返回（relativizePosix 对非绝对输入直接 POSIX 化返回）。
+ */
+export function relativizeGraph(graph: UnifiedGraph, projectRoot: string): UnifiedGraph {
+  const nodes: UnifiedNode[] = graph.nodes.map((n) => {
+    const idR = relativizeSymbolId(n.id, projectRoot);
+    const next: UnifiedNode = { ...n, id: idR.value };
+    if (n.filePath !== undefined) {
+      next.filePath = relativizePosix(n.filePath, projectRoot).value;
+    }
+    if (idR.external) {
+      next.metadata = { ...next.metadata, external: true };
+    }
+    return next;
+  });
+
+  const edges: UnifiedEdge[] = graph.edges.map((e) => ({
+    ...e,
+    source: relativizeSymbolId(e.source, projectRoot).value,
+    target: relativizeSymbolId(e.target, projectRoot).value,
+  }));
+
   return {
-    nodes: [...nodes],
-    edges: [...callEdges, ...importEdges],
+    nodes,
+    edges,
     metadata: {
-      generatedAt: new Date().toISOString(),
-      projectRoot: input.projectRoot,
-      schemaVersion: UNIFIED_GRAPH_SCHEMA_VERSION,
+      ...graph.metadata,
+      projectRoot: '.',
     },
   };
 }

@@ -5,9 +5,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import type { GraphJSON, GraphNode, GraphEdge, Hyperedge, SemanticEdgeRelation } from './graph-types.js';
 import { SEMANTIC_EDGE_RELATIONS } from './graph-types.js';
 import { resolveGraphReportPath } from './graph-paths.js';
+import { isAbsoluteForeignPath, isPathContainedUnder } from '../../knowledge-graph/relativize.js';
 
 // ============================================================
 // 查询结果类型定义
@@ -148,6 +150,52 @@ export function tokenize(q: string): string[] {
 }
 
 // ============================================================
+// Feature 193 — graph-format-stale 检测（决策 1c）
+// ============================================================
+
+/**
+ * 取节点 id 的文件路径部分（第一个 `::` 之前；module 节点无 `::` 则取整个 id）。
+ */
+function nodeIdFilePart(id: string): string {
+  const idx = id.indexOf('::');
+  return idx >= 0 ? id.slice(0, idx) : id;
+}
+
+/**
+ * 加载期检测旧绝对格式图（Feature 193 决策 1c / FR-006）。
+ *
+ * 判定规则：node.id 的 file part 跨平台绝对/异源 且 非当前 projectRoot 段级包含
+ * → graph-format-stale（典型：copy 自主仓的旧绝对图前缀 ≠ 当前 worktree）。
+ *
+ * - **全量扫描** node ids（命中首个违例即短路），不抽样（前 N 节点恰为相对/doc 形态时
+ *   抽样 100% 漏判，Codex plan-W3）。
+ * - 跨平台绝对判定 + 段级包含判定复用 relativize.ts 共享 helper（Codex implement-C1，
+ *   三处调用点单一事实源）：POSIX/Windows 盘符路径都识别；`/repo/app-old` 不误匹配 `/repo/app`；
+ *   `..foo` 同名子目录不误判越界。
+ * - 不依赖 canonicalize（canonicalize 对非 projectRoot 前缀的绝对 id 无能为力）。
+ * - external 节点（metadata.external=true）的绝对 id 是 FR-004 合法保留，豁免判定。
+ * - 检测到 → 抛 Error（消息含 'graph-format-stale' + 重建指引），不静默 not-found。
+ */
+export function assertGraphFormatNotStale(
+  graph: Readonly<GraphJSON>,
+  projectRoot: string,
+): void {
+  const root = path.resolve(projectRoot);
+  for (const node of graph.nodes) {
+    // external 节点的绝对路径合法（node_modules / 跨仓引用），跳过
+    if (node.metadata && node.metadata['external'] === true) continue;
+    const filePart = nodeIdFilePart(node.id);
+    if (isAbsoluteForeignPath(filePart) && !isPathContainedUnder(root, filePart)) {
+      throw new Error(
+        `graph-format-stale: 图节点 id 含非当前项目根的绝对路径（${node.id}）。` +
+          `\n该图可能 copy 自其他 worktree / 主仓的旧绝对格式。` +
+          `\n请运行 \`spectra index\` 或 \`spectra batch\` 在当前 worktree 重建图。`,
+      );
+    }
+  }
+}
+
+// ============================================================
 // GraphQueryEngine 核心类
 // ============================================================
 
@@ -276,7 +324,14 @@ export class GraphQueryEngine {
     ) {
       throw new Error('图谱 JSON 格式不合法：缺少必要字段 nodes 或 links 数组');
     }
-    return new GraphQueryEngine(parsed as GraphJSON, projectRoot);
+    const graph = parsed as GraphJSON;
+    // Feature 193 决策 1c：加载期 graph-format-stale 检测。
+    // 旧绝对 id 图（典型：copy 自主仓的图）前缀 ≠ 当前 worktree → 抛明确错误，
+    // 不让 exact nodeMap 工具（graph_node / graph_path）静默退化为 not-found。
+    if (projectRoot !== undefined) {
+      assertGraphFormatNotStale(graph, projectRoot);
+    }
+    return new GraphQueryEngine(graph, projectRoot);
   }
 
   // ──────────────────────────────────────────────────────────

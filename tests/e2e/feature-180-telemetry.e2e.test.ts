@@ -30,7 +30,7 @@ import {
   spawnMcpClient,
   buildSkipCondition,
   buildSkipReason,
-  BASELINE_GRAPH,
+  installRelativizedBaseline,
   type McpClientHandle,
 } from './helpers/stdio-client.js';
 
@@ -50,7 +50,7 @@ describe.skipIf(SHOULD_SKIP)(
       tempRoot = mkdtempSync(join(tmpdir(), 'spectra-180-tel-1-'));
       telemetryPath = join(tempRoot, 'telemetry.jsonl');
       mkdirSync(join(tempRoot, 'specs', '_meta'), { recursive: true });
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      installRelativizedBaseline(join(tempRoot, 'specs', '_meta', 'graph.json'));
 
       handle = await spawnMcpClient({
         cwd: tempRoot,
@@ -129,7 +129,7 @@ describe.skipIf(SHOULD_SKIP)(
       // emptyRoot：无 graph，触发 graph-not-built（进 handler 后失败）
       emptyRoot = mkdtempSync(join(tmpdir(), 'spectra-180-tel-2-empty-'));
       mkdirSync(join(tempRoot, 'specs', '_meta'), { recursive: true });
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      installRelativizedBaseline(join(tempRoot, 'specs', '_meta', 'graph.json'));
 
       handle = await spawnMcpClient({
         cwd: tempRoot,
@@ -196,7 +196,7 @@ describe.skipIf(SHOULD_SKIP)(
     beforeAll(async () => {
       tempRoot = mkdtempSync(join(tmpdir(), 'spectra-180-tel-3-'));
       mkdirSync(join(tempRoot, 'specs', '_meta'), { recursive: true });
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      installRelativizedBaseline(join(tempRoot, 'specs', '_meta', 'graph.json'));
 
       // 显式清空 telemetry env（防止继承父进程 SPECTRA_MCP_TELEMETRY_PATH 导致写到外部文件而假绿，
       // Codex Impl-C2；telemetry.ts 把空串当 no-op）

@@ -14,9 +14,10 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { relativizeSymbolId } from '../../src/knowledge-graph/relativize.js';
 
 const PROJECT_ROOT = resolve('.');
 const DIST_CLI = join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
@@ -39,9 +40,34 @@ const SKIP_REASON = [
   !HAS_BASELINE ? `micrograd baseline 不存在 (${BASELINE_GRAPH})` : '',
 ].filter(Boolean).join('; ');
 
-// micrograd 真实 symbol IDs（绝对路径形式，与 baseline 输出一致）
-const ABS_VALUE_RELU = `${MICROGRAD_SOURCE}/micrograd/engine.py::Value.relu`;
-const ABS_MLP = `${MICROGRAD_SOURCE}/micrograd/nn.py::MLP`;
+// Feature 193：baseline graph 在 copy 时相对化为 repo-relative POSIX id（producer 侧新格式）。
+// 旧绝对 baseline 经 relativizeGraphFixture 转换后，query 也用相对 id（与节点 id 同形，
+// 验证 17 工具在新相对 id 格式下零回归 + graph exact 工具相对 id 匹配，W5 矩阵）。
+const REL_VALUE_RELU = `micrograd/engine.py::Value.relu`;
+const REL_MLP = `micrograd/nn.py::MLP`;
+
+/**
+ * Feature 193 — 把旧绝对 id baseline graph 相对化为 repo-relative POSIX，
+ * 使其符合新格式（避免加载期 graph-format-stale），写入 tempRoot。
+ * 模拟「主仓 copy 的图已是新相对格式」场景。
+ */
+function writeRelativizedBaseline(srcGraphPath: string, destGraphPath: string, base: string): void {
+  const raw = JSON.parse(readFileSync(srcGraphPath, 'utf-8')) as {
+    nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
+    links: Array<{ source: string; target: string }>;
+    [k: string]: unknown;
+  };
+  for (const n of raw.nodes) {
+    const r = relativizeSymbolId(n.id, base);
+    n.id = r.value;
+    if (r.external) n.metadata = { ...n.metadata, external: true };
+  }
+  for (const l of raw.links) {
+    l.source = relativizeSymbolId(l.source, base).value;
+    l.target = relativizeSymbolId(l.target, base).value;
+  }
+  writeFileSync(destGraphPath, JSON.stringify(raw, null, 2), 'utf-8');
+}
 
 describe.skipIf(SHOULD_SKIP)(
   `Feature 160 Smoke A — MCP server stdio 子进程 E2E${SHOULD_SKIP ? ` [skip: ${SKIP_REASON}]` : ''}`,
@@ -54,7 +80,12 @@ describe.skipIf(SHOULD_SKIP)(
       // 准备 temp projectRoot：<temp>/specs/_meta/graph.json
       tempRoot = mkdtempSync(join(tmpdir(), 'spectra-160-smoke-a-'));
       mkdirSync(join(tempRoot, 'specs', '_meta'), { recursive: true });
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      // Feature 193：相对化 baseline 后写入（新相对 id 格式），而非直接 copy 旧绝对图
+      writeRelativizedBaseline(
+        BASELINE_GRAPH,
+        join(tempRoot, 'specs', '_meta', 'graph.json'),
+        MICROGRAD_SOURCE,
+      );
 
       transport = new StdioClientTransport({
         command: 'node',
@@ -114,7 +145,7 @@ describe.skipIf(SHOULD_SKIP)(
         const result = await client.callTool({
           name: 'impact',
           arguments: {
-            target: ABS_VALUE_RELU,
+            target: REL_VALUE_RELU,
             depth: 2,
             projectRoot: emptyDir,
           },
@@ -135,7 +166,7 @@ describe.skipIf(SHOULD_SKIP)(
       const result = await client.callTool({
         name: 'impact',
         arguments: {
-          target: ABS_VALUE_RELU,
+          target: REL_VALUE_RELU,
           depth: 2,
           direction: 'upstream',
           projectRoot: tempRoot,
@@ -164,7 +195,7 @@ describe.skipIf(SHOULD_SKIP)(
       const result = await client.callTool({
         name: 'context',
         arguments: {
-          symbolId: ABS_MLP,
+          symbolId: REL_MLP,
           projectRoot: tempRoot,
         },
       });

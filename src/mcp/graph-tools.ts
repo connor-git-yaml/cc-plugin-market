@@ -125,9 +125,20 @@ export function getCachedGraphData(projectRoot?: string): {
       mtimeMs: stat.mtimeMs,
       sizeBytes: stat.size,
     };
-  } catch {
+  } catch (err) {
+    // Feature 193 FR-006：graph-format-stale 必须显式上抛，不得静默退化为 null
+    // （否则 impact/context/detect_changes 把"旧绝对格式图"误报成"缺图 graph-not-built"，
+    // agent 无法区分应重建 vs 应首次构建）。其余加载失败仍按既有契约返回 null。
+    if (err instanceof Error && err.message.includes('graph-format-stale')) {
+      throw err;
+    }
     return null;
   }
+}
+
+/** 判定一个 caught error 是否为加载期 graph-format-stale 信号（Feature 193 FR-006） */
+export function isGraphFormatStaleError(err: unknown): err is Error {
+  return err instanceof Error && err.message.includes('graph-format-stale');
 }
 
 // ──────────────────────────────────────────────────────────
@@ -156,7 +167,17 @@ function runGraphTool(
   let engine: GraphQueryEngine;
   try {
     engine = getEngine(projectRoot);
-  } catch {
+  } catch (err) {
+    // Feature 193 FR-006：旧绝对格式图（copy 自其他 worktree）必须给明确 stale 信号，
+    // 不得静默退化为通用 graph-not-built（否则 agent 不知道是格式问题还是缺图）。
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('graph-format-stale')) {
+      return buildErrorResponse(
+        'graph-format-stale',
+        msg,
+        '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+      );
+    }
     return buildErrorResponse(
       'graph-not-built',
       '图谱未构建或加载失败',

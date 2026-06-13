@@ -28,7 +28,10 @@ export type ErrorCode =
   | 'file-not-found'
   // Feature 177 新增：graph 工具查询期异常（engine 已加载成功后的业务异常；
   // 缺图/坏图走既有 'graph-not-built'，见 graph-tools.ts 拆 engine 加载边界）
-  | 'graph-query-failed';
+  | 'graph-query-failed'
+  // Feature 193 新增：加载期检出旧绝对路径格式图（copy 自其他 worktree/主仓），
+  // 区别于 'graph-not-built'（缺图）——明确提示需在当前 worktree 重建（FR-006）
+  | 'graph-format-stale';
 
 /** MCP tool 统一响应 envelope */
 export interface ToolResult {

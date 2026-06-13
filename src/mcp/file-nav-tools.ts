@@ -16,7 +16,7 @@ import { readFileSync, statSync, realpathSync } from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { getCachedGraphData } from './graph-tools.js';
+import { getCachedGraphData, isGraphFormatStaleError } from './graph-tools.js';
 import { canonicalizeSymbolId, findNode, moduleFileFromId } from '../knowledge-graph/query-helpers.js';
 import {
   buildErrorResponse,
@@ -86,7 +86,24 @@ function resolveSymbolRange(
   projectRoot: string,
   symbolId: string,
 ): { ok: true; file: string | null; start?: number; end?: number } | { ok: false; result: ToolResult } {
-  const cached = getCachedGraphData(projectRoot);
+  // Codex implement-C2：捕获 graph-format-stale，给明确重建指引，
+  // 不让 stale error 冒泡到外层 catch-all 转成 internal-error。
+  let cached: ReturnType<typeof getCachedGraphData>;
+  try {
+    cached = getCachedGraphData(projectRoot);
+  } catch (err) {
+    if (isGraphFormatStaleError(err)) {
+      return {
+        ok: false,
+        result: buildErrorResponse(
+          'graph-format-stale',
+          err.message,
+          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+        ),
+      };
+    }
+    throw err;
+  }
   if (cached === null) {
     return { ok: false, result: buildErrorResponse('graph-not-built', 'graph 未构建', '请先运行 `spectra batch` 生成图谱') };
   }

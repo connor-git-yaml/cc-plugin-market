@@ -39,7 +39,7 @@ import {
   spawnMcpClient,
   buildSkipCondition,
   buildSkipReason,
-  BASELINE_GRAPH,
+  installRelativizedBaseline,
   MICROGRAD_SOURCE,
   type McpClientHandle,
 } from './helpers/stdio-client.js';
@@ -91,7 +91,7 @@ describe.skipIf(SHOULD_SKIP)(
 
       // 拷贝 baseline graph.json 并对 micrograd/nn.py#MLP patch lineRange
       const graphPath = join(tempRoot, 'specs', '_meta', 'graph.json');
-      copyFileSync(BASELINE_GRAPH, graphPath);
+      installRelativizedBaseline(graphPath);
 
       const graphData = JSON.parse(readFileSync(graphPath, 'utf-8')) as {
         nodes: Array<{
@@ -284,7 +284,7 @@ describe.skipIf(SHOULD_SKIP)(
       const engSrc = join(MICROGRAD_SOURCE, 'micrograd', 'engine.py');
       if (existsSync(nnSrc)) copyFileSync(nnSrc, join(tempRoot, 'micrograd', 'nn.py'));
       if (existsSync(engSrc)) copyFileSync(engSrc, join(tempRoot, 'micrograd', 'engine.py'));
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      installRelativizedBaseline(join(tempRoot, 'specs', '_meta', 'graph.json'));
 
       handle = await spawnMcpClient({ cwd: tempRoot });
     }, 30_000);

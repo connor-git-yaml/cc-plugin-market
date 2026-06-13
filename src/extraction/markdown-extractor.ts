@@ -223,7 +223,9 @@ export async function extractMarkdown(
       id: nodeId,
       label: title,
       kind: 'document',
-      source_file: filePath,
+      // Feature 193 plan-C5：source_file 持久化为相对 POSIX 路径（最终落 graph.json
+      // metadata.sourceFile），避免内嵌绝对路径破坏跨 worktree byte 一致。
+      source_file: relPath,
       confidence: 'EXTRACTED',
       metadata: {
         frontmatter,

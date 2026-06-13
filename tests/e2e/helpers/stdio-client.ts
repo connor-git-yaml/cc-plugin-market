@@ -8,9 +8,10 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { relativizeSymbolId } from '../../../src/knowledge-graph/relativize.js';
 
 // ── 路径常量（所有测试文件复用这些值）──
 export const PROJECT_ROOT = resolve('.');
@@ -24,6 +25,35 @@ export const BASELINE_GRAPH = join(
   'graph.json',
 );
 export const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd');
+
+/**
+ * Feature 193 — 把旧绝对 id baseline graph 相对化为 repo-relative POSIX 后写入目标路径。
+ *
+ * 旧 baseline（micrograd-output）含 MICROGRAD_SOURCE 前缀的绝对 node id；Feature 193
+ * 起 producer 侧产出相对 id，加载期对非当前 projectRoot 前缀的绝对 id 报 graph-format-stale。
+ * E2E 测试不再直接 copyFileSync 旧绝对图，改用本 helper 转成新相对格式（模拟主仓 copy
+ * 的图已是新格式），让 17 工具在**相对 id 格式**下验证零回归（FR-017 + W5 矩阵）。
+ *
+ * @param destGraphPath 目标 graph.json 路径
+ * @param base 相对化基准（= MICROGRAD_SOURCE）
+ */
+export function installRelativizedBaseline(destGraphPath: string, base: string = MICROGRAD_SOURCE): void {
+  const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
+    nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
+    links: Array<{ source: string; target: string }>;
+    [k: string]: unknown;
+  };
+  for (const n of raw.nodes) {
+    const r = relativizeSymbolId(n.id, base);
+    n.id = r.value;
+    if (r.external) n.metadata = { ...n.metadata, external: true };
+  }
+  for (const l of raw.links) {
+    l.source = relativizeSymbolId(l.source, base).value;
+    l.target = relativizeSymbolId(l.target, base).value;
+  }
+  writeFileSync(destGraphPath, JSON.stringify(raw, null, 2), 'utf-8');
+}
 
 // ── skip 条件工具 ──
 export function buildSkipCondition(requireBaseline: boolean): boolean {

@@ -52,7 +52,7 @@ describe('Feature 156 W4 T-039 — AC-11：4 类 import baseline', () => {
     const graph = await buildFixtureGraph();
 
     // 仅 main.ts 出口的 depends-on 边
-    const mainPath = path.join(FIXTURE, 'main.ts');
+    const mainPath = 'main.ts'; // Feature 193：edge.source 相对化为 repo-relative POSIX
     const dependsOnFromMain: UnifiedEdge[] = graph.edges.filter(
       (e) => e.relation === 'depends-on' && e.source === mainPath,
     );
@@ -75,7 +75,7 @@ describe('Feature 156 W4 T-039 — AC-11：4 类 import baseline', () => {
 
   it('每条 depends-on 边的 metadata.importType 必填（buildUnifiedGraph 派生路径不丢字段）', async () => {
     const graph = await buildFixtureGraph();
-    const mainPath = path.join(FIXTURE, 'main.ts');
+    const mainPath = 'main.ts'; // Feature 193：edge.source 相对化为 repo-relative POSIX
     const dependsOnFromMain = graph.edges.filter(
       (e) => e.relation === 'depends-on' && e.source === mainPath,
     );
@@ -90,7 +90,7 @@ describe('Feature 156 W4 T-039 — AC-11：4 类 import baseline', () => {
 
   it('四类 import 各自指向正确的 target 文件', async () => {
     const graph = await buildFixtureGraph();
-    const mainPath = path.join(FIXTURE, 'main.ts');
+    const mainPath = 'main.ts'; // Feature 193：edge.source 相对化为 repo-relative POSIX
     const dependsOnFromMain = graph.edges.filter(
       (e) => e.relation === 'depends-on' && e.source === mainPath,
     );

@@ -22,7 +22,7 @@ import {
   spawnMcpClient,
   buildSkipCondition,
   buildSkipReason,
-  BASELINE_GRAPH,
+  installRelativizedBaseline,
   type McpClientHandle,
 } from './helpers/stdio-client.js';
 
@@ -61,7 +61,7 @@ describe.skipIf(SHOULD_SKIP)(
       // 准备 tempRoot：拷贝 baseline graph
       tempRoot = mkdtempSync(join(tmpdir(), 'spectra-180-graph-tools-'));
       mkdirSync(join(tempRoot, 'specs', '_meta'), { recursive: true });
-      copyFileSync(BASELINE_GRAPH, join(tempRoot, 'specs', '_meta', 'graph.json'));
+      installRelativizedBaseline(join(tempRoot, 'specs', '_meta', 'graph.json'));
 
       handle = await spawnMcpClient({ cwd: tempRoot });
     }, 30_000);

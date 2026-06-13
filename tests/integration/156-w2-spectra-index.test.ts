@@ -101,7 +101,8 @@ describe('Feature 156 W2 — spectra index 全量路径', () => {
     // (4) loadSnapshot 也能正常返回
     const loaded = await loadSnapshot(workspaceRoot);
     expect(loaded).not.toBeNull();
-    expect(loaded!.schemaVersion).toBe('1.0');
+    // Feature 193：SNAPSHOT_WRAPPER_VERSION bump '1.0' → '2.0'
+    expect(loaded!.schemaVersion).toBe('2.0');
 
     // (5) graph 含 depends-on 边（main.ts → lib.mjs / legacy.cjs）
     const dependsOnEdges = loaded!.graph.edges.filter(
@@ -109,13 +110,12 @@ describe('Feature 156 W2 — spectra index 全量路径', () => {
     );
     expect(dependsOnEdges.length).toBeGreaterThanOrEqual(1);
 
-    // (6) projectRoot 字段正确写入
-    expect(loaded!.graph.metadata.projectRoot).toBe(path.resolve(workspaceRoot));
+    // (6) Feature 193：metadata.projectRoot 持久化为相对标记 '.'（可移植）
+    expect(loaded!.graph.metadata.projectRoot).toBe('.');
 
-    // (7) fileHashes 含 main.ts
-    const mainAbs = path.join(workspaceRoot, 'main.ts');
-    expect(loaded!.fileHashes[mainAbs]).toBeDefined();
-    expect(loaded!.fileHashes[mainAbs]).toMatch(/^[0-9a-f]{64}$/);
+    // (7) Feature 193：fileHashes key 为 repo-relative POSIX（持久化域）
+    expect(loaded!.fileHashes['main.ts']).toBeDefined();
+    expect(loaded!.fileHashes['main.ts']).toMatch(/^[0-9a-f]{64}$/);
   }, 30_000);
 
   it('--watch + --incremental 互斥：同时传入 → exit 1（FR-30）', async () => {

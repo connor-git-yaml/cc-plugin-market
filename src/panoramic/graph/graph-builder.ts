@@ -16,6 +16,7 @@ import type { DocGraph, DocGraphSpecNode, DocGraphReference } from '../builders/
 import type { CrossReferenceLink } from '../../models/module-spec.js';
 import { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
 import type { BuildGraphOptions, ConfidenceLevel, GraphEdge, GraphJSON, GraphNode } from './graph-types.js';
+import { isAbsoluteForeignPath } from '../../knowledge-graph/relativize.js';
 
 // ============================================================
 // ArchitectureIRElementKind → GraphNode.kind 映射表
@@ -363,6 +364,9 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
         // module / package / spec 等其他 kind 直接保留（与 GraphNode kind 范围对齐）
         const ugKind = ugNode.kind ?? 'module';
         const mappedKind: GraphNode['kind'] = ugKind === 'symbol' ? 'component' : (ugKind as GraphNode['kind']);
+        // Feature 193 决策 1d：透传 producer 侧 external 标记，使 portable 守卫与
+        // 加载期 stale 检测能豁免 projectRoot 外的节点（node_modules / 跨仓引用，FR-004）。
+        const isExternal = ugNode.metadata?.['external'] === true;
         nodeMap.set(ugNode.id, {
           id: ugNode.id,
           kind: mappedKind,
@@ -372,6 +376,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             unifiedKind: ugKind,
             ...(ugNode.filePath ? { sourcePath: ugNode.filePath } : {}),
             ...(callSitesCount !== undefined ? { callSitesCount } : {}),
+            ...(isExternal ? { external: true } : {}),
           },
         });
       }
@@ -507,10 +512,101 @@ export function enrichNodeDegrees(graphJson: GraphJSON, godNodes: Array<{ id: st
  * @returns 实际写入的绝对路径
  */
 export function writeKnowledgeGraph(graphJson: GraphJSON, outputDir: string): string {
+  // Feature 193 决策 1d：写入边界 portable 守卫 tripwire。
+  // 扫描全部 path-like 字段，发现绝对路径 → console warning（不抛错、不转换——
+  // 转换责任在 producer）。覆盖 batch / CLI graph / CLI community 三条写盘路径
+  // （后两路不经 normalizeGraphForWrite）。守卫无需 projectRoot，故不碰 batch-orchestrator 签名。
+  const violations = scanGraphPortabilityViolations(graphJson);
+  if (violations.count > 0) {
+    console.warn(
+      `[portable-guard] graph.json 含 ${violations.count} 个绝对路径泄漏（producer 侧应已相对化）：` +
+        `${violations.samples.join(', ')}${violations.count > violations.samples.length ? ' …' : ''}`,
+    );
+  }
   const graphJsonPath = path.join(outputDir, '_meta', 'graph.json');
   // 同步调用，无需 await
   writeAtomicJson(graphJsonPath, graphJson);
   return path.resolve(graphJsonPath);
+}
+
+/** scanGraphPortabilityViolations 结果 */
+export interface PortabilityScanResult {
+  /** 绝对路径泄漏总数 */
+  count: number;
+  /** 前若干个泄漏样本（诊断用，最多 5 个） */
+  samples: string[];
+}
+
+/**
+ * Feature 193 决策 1d — 扫描 GraphJSON 中残留的绝对路径（portable 守卫 tripwire）。
+ *
+ * 扫描面（isAbsoluteForeignPath 跨平台判定，无需 projectRoot；Codex implement-new2：
+ * 与 graph-query 加载期检测共用同一 helper，POSIX 运行时也能识别 Windows 盘符泄漏）：
+ *   - node.id（symbol id 的 file part）
+ *   - link.source / link.target（symbol id 的 file part）
+ *   - node.metadata.sourcePath / sourceFile / sourceTarget
+ *   - hyperedge.nodes 引用
+ *
+ * external 节点（metadata.external=true）的绝对路径是 FR-004 合法保留，**不计入违例**。
+ * 守卫不做转换，仅计数 + 取样，供 writeKnowledgeGraph 告警与测试态断言（应为 0）。
+ */
+export function scanGraphPortabilityViolations(graphJson: GraphJSON): PortabilityScanResult {
+  let count = 0;
+  const samples: string[] = [];
+  const record = (value: string): void => {
+    count += 1;
+    if (samples.length < 5) samples.push(value);
+  };
+
+  // id 的 file part = 第一个 `::` 之前（symbol id）或整个 id（module id）
+  const filePartOf = (id: string): string => {
+    const idx = id.indexOf('::');
+    return idx >= 0 ? id.slice(0, idx) : id;
+  };
+
+  // 标了 external 的节点集合（其绝对 id / 绝对 source-target 为 FR-004 合法保留）
+  const externalIds = new Set<string>();
+  for (const node of graphJson.nodes) {
+    if (node.metadata && node.metadata['external'] === true) {
+      externalIds.add(node.id);
+    }
+  }
+
+  for (const node of graphJson.nodes) {
+    const isExternal = externalIds.has(node.id);
+    // Codex implement-W2：external 豁免只覆盖 id 与 sourcePath（节点自身在 node_modules/跨仓的
+    // 合法绝对身份与文件路径，FR-004）；sourceFile / sourceTarget 代表不同关系映射，仍须 portable，
+    // 不随整节点跳过——否则 external 标记可掩盖真实路径泄漏。
+    if (!isExternal && isAbsoluteForeignPath(filePartOf(node.id))) record(node.id);
+    const meta = node.metadata ?? {};
+    for (const key of ['sourcePath', 'sourceFile', 'sourceTarget'] as const) {
+      if (isExternal && key === 'sourcePath') continue;
+      const v = meta[key];
+      if (typeof v === 'string' && isAbsoluteForeignPath(v)) record(`${node.id}.metadata.${key}=${v}`);
+    }
+  }
+
+  for (const link of graphJson.links) {
+    // external 端点豁免（端点 id 在 externalIds 中）
+    if (!externalIds.has(link.source) && isAbsoluteForeignPath(filePartOf(link.source))) {
+      record(`edge.source=${link.source}`);
+    }
+    if (!externalIds.has(link.target) && isAbsoluteForeignPath(filePartOf(link.target))) {
+      record(`edge.target=${link.target}`);
+    }
+  }
+
+  if (graphJson.hyperedges) {
+    for (const he of graphJson.hyperedges) {
+      for (const nid of he.nodes) {
+        if (!externalIds.has(nid) && isAbsoluteForeignPath(filePartOf(nid))) {
+          record(`hyperedge[${he.id}].node=${nid}`);
+        }
+      }
+    }
+  }
+
+  return { count, samples };
 }
 
 // ============================================================

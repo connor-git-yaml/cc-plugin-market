@@ -96,12 +96,14 @@ describe('persistence — P-1 save/load roundtrip', () => {
 
     const loaded = await loadSnapshot(tmpRoot);
     expect(loaded).not.toBeNull();
-    expect(loaded!.schemaVersion).toBe('1.0');
+    // Feature 193：SNAPSHOT_WRAPPER_VERSION bump '1.0' → '2.0'
+    expect(loaded!.schemaVersion).toBe('2.0');
     expect(loaded!.fileHashes).toEqual(fileHashes);
     expect(loaded!.graph.nodes).toHaveLength(2);
     expect(loaded!.graph.edges).toHaveLength(1);
     expect(loaded!.graph.edges[0]!.source).toBe('/proj/a.ts');
     expect(loaded!.graph.edges[0]!.target).toBe('/proj/b.ts');
+    // 内嵌 graph.metadata.schemaVersion 是 UnifiedGraph 自身版本（解耦于 wrapper 版本），仍 '1.0'
     expect(loaded!.graph.metadata.schemaVersion).toBe('1.0');
 
     // 文件确实被写到 .spectra/unified-graph.json
@@ -167,23 +169,26 @@ describe('persistence — P-2 corruption 降级', () => {
 // ───────────────────────────────────────────────────────────
 
 describe('persistence — P-3 stale 检测', () => {
+  // Feature 193 决策 1b：snapshot.fileHashes key = repo-relative POSIX（持久化域）；
+  // detectStaleFiles 入参 currentFiles = 绝对（IO 域），返回 = 绝对。第三参 = projectRoot。
   it('文件内容修改后 detectStaleFiles 返回该文件路径', async () => {
     const fileA = path.join(tmpRoot, 'a.ts');
     await fsp.writeFile(fileA, 'export const a = 1;\n', 'utf-8');
     const hashV1 = await computeFileHash(fileA);
     expect(hashV1).not.toBeNull();
 
+    // 持久化域 key（相对 tmpRoot）
     const snapshot: SnapshotWrapper = buildSnapshotWrapper(mkGraph(), {
-      [fileA]: hashV1!,
+      'a.ts': hashV1!,
     });
 
     // 未修改 → 不 stale
-    const stale1 = await detectStaleFiles(snapshot, [fileA]);
+    const stale1 = await detectStaleFiles(snapshot, [fileA], tmpRoot);
     expect(stale1).toEqual([]);
 
     // 修改文件内容
     await fsp.writeFile(fileA, 'export const a = 2;\n', 'utf-8');
-    const stale2 = await detectStaleFiles(snapshot, [fileA]);
+    const stale2 = await detectStaleFiles(snapshot, [fileA], tmpRoot);
     expect(stale2).toContain(fileA);
   });
 
@@ -192,13 +197,14 @@ describe('persistence — P-3 stale 检测', () => {
     await fsp.writeFile(fileA, 'x', 'utf-8');
     const hash = await computeFileHash(fileA);
     const snapshot: SnapshotWrapper = buildSnapshotWrapper(mkGraph(), {
-      [fileA]: hash!,
+      'deleted.ts': hash!,
     });
 
     // 模拟 rename / delete
     await fsp.rm(fileA);
 
-    const stale = await detectStaleFiles(snapshot, []);
+    const stale = await detectStaleFiles(snapshot, [], tmpRoot);
+    // deleted 旧相对 key 转回绝对路径返回（IO 域）
     expect(stale).toContain(fileA);
   });
 
@@ -207,7 +213,7 @@ describe('persistence — P-3 stale 检测', () => {
     await fsp.writeFile(fileNew, 'export const x = 1;', 'utf-8');
     const snapshot: SnapshotWrapper = buildSnapshotWrapper(mkGraph(), {});
 
-    const stale = await detectStaleFiles(snapshot, [fileNew]);
+    const stale = await detectStaleFiles(snapshot, [fileNew], tmpRoot);
     expect(stale).toContain(fileNew);
   });
 });

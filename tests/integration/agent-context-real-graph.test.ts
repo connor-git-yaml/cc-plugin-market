@@ -8,14 +8,16 @@
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handleImpact, handleContext, handleDetectChanges } from '../../src/mcp/agent-context-tools.js';
 import { reloadGraph } from '../../src/mcp/graph-tools.js';
 import { clearReverseAdjacencyCache } from '../../src/knowledge-graph/query-helpers.js';
+import { relativizeSymbolId } from '../../src/knowledge-graph/relativize.js';
 
 const BASELINE_GRAPH = join(homedir(), '.spectra-baselines', 'micrograd-output', 'spectra-full', '_meta', 'graph.json');
+const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd');
 const HAS_BASELINE = existsSync(BASELINE_GRAPH);
 
 const skipMessage = HAS_BASELINE
@@ -38,7 +40,22 @@ beforeAll(() => {
     // 因此把 baseline 的 graph.json 复制到 <temp>/specs/_meta/graph.json 让 helper 找到。
     TEMP_ROOT = mkdtempSync(join(tmpdir(), 'spectra-155-int-'));
     mkdirSync(join(TEMP_ROOT, 'specs', '_meta'), { recursive: true });
-    copyFileSync(BASELINE_GRAPH, join(TEMP_ROOT, 'specs', '_meta', 'graph.json'));
+    // Feature 193：相对化 baseline 绝对 id 后写入（新相对格式），避免加载期 graph-format-stale
+    const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
+      nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
+      links: Array<{ source: string; target: string }>;
+      [k: string]: unknown;
+    };
+    for (const n of raw.nodes) {
+      const rel = relativizeSymbolId(n.id, MICROGRAD_SOURCE);
+      n.id = rel.value;
+      if (rel.external) n.metadata = { ...n.metadata, external: true };
+    }
+    for (const l of raw.links) {
+      l.source = relativizeSymbolId(l.source, MICROGRAD_SOURCE).value;
+      l.target = relativizeSymbolId(l.target, MICROGRAD_SOURCE).value;
+    }
+    writeFileSync(join(TEMP_ROOT, 'specs', '_meta', 'graph.json'), JSON.stringify(raw, null, 2), 'utf-8');
     MICROGRAD_ROOT = TEMP_ROOT;
   }
 });
@@ -50,10 +67,10 @@ afterAll(() => {
   reloadGraph();
 });
 
-// graph 内真实存在的绝对路径 id（baseline 输出的 unified-graph 节点 id 是绝对路径形式）
-const ABS_VALUE_RELU = '/Users/connorlu/.spectra-baselines/micrograd/micrograd/engine.py::Value.relu';
-const ABS_MLP = '/Users/connorlu/.spectra-baselines/micrograd/micrograd/nn.py::MLP';
-const ABS_LAYER = '/Users/connorlu/.spectra-baselines/micrograd/micrograd/nn.py::Layer';
+// Feature 193：baseline 相对化后 id 为 repo-relative POSIX（相对 MICROGRAD_SOURCE）
+const ABS_VALUE_RELU = 'micrograd/engine.py::Value.relu';
+const ABS_MLP = 'micrograd/nn.py::MLP';
+const ABS_LAYER = 'micrograd/nn.py::Layer';
 
 describe.skipIf(!HAS_BASELINE)('Feature 155 集成测试 — micrograd 真实 graph', () => {
   it('C-201 GraphJSON 字段名 links（不是 edges）— 通过 impact 调用确认', async () => {

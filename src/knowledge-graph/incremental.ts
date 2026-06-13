@@ -29,12 +29,13 @@ import {
   computeAllFileHashes,
   computeFileHash,
   detectStaleFiles,
-  loadSnapshot,
+  loadSnapshotDetailed,
   saveSnapshot,
   SnapshotWrapperSchema,
   type SnapshotWrapper,
 } from './persistence.js';
 import { buildUnifiedGraph } from './index.js';
+import { relativizePosix } from './relativize.js';
 import type { UnifiedGraph, UnifiedNode } from './unified-graph.js';
 
 // ───────────────────────────────────────────────────────────
@@ -146,26 +147,41 @@ export interface ExpandCallersOptions {
   snapshot: SnapshotWrapper;
   /** 反向扩展深度，默认 1（FR-7）；>1 时执行 BFS */
   depth?: number;
+  /**
+   * 路径域转换基准（Feature 193 决策 1b）。
+   * snapshot 内 node.filePath = 相对（持久化域），changedFiles = 绝对（IO 域）；
+   * 匹配前在相对域比对。提供则启用域转换，缺省（旧调用方 / 已相对快照）退回直接匹配。
+   */
+  projectRoot?: string;
 }
 
 /**
  * 从 changed files 反向扩展直接（或 N 跳）caller 文件。
  *
  * 算法（plan §2.2 端点 → owning file 映射）：
- *   1. 按 node.filePath 字段建 file → node ids 索引
- *   2. 当前 frontier = changed files；每跳：
+ *   1. 按 node.filePath 字段建 file → node ids 索引（相对持久化域）
+ *   2. 当前 frontier = changed files（相对化到持久化域比对）；每跳：
  *      a) 取 frontier 文件的所有 owning node ids
  *      b) 找出 edge.target 命中这些 ids 的 edges → 取 edge.source
  *      c) 反查 source node 的 owning file，加入下一跳 frontier（去重）
  *   3. 累积所有跳的文件并集（含 changed 自身）
+ *
+ * Feature 193 决策 1b：内部比对在**相对持久化域**进行（snapshot.node.filePath 已相对），
+ * **返回值统一为绝对路径**（IO 域，供 buildIncremental analyzeFile）。
  */
 export function expandCallers(opts: ExpandCallersOptions): string[] {
   const depth = opts.depth ?? 1;
   const { snapshot } = opts;
+  const root = opts.projectRoot;
 
-  // 索引：file → node ids
+  // 相对持久化域 ↔ 绝对 IO 域转换 helper（无 projectRoot 时退回原值，兼容旧调用方）
+  const toRel = (abs: string): string => (root ? relativizePosix(abs, root).value : abs);
+  const toAbs = (rel: string): string =>
+    root && !path.isAbsolute(rel) ? path.join(path.resolve(root), rel) : rel;
+
+  // 索引：file（相对域）→ node ids
   const fileToNodeIds = new Map<string, Set<string>>();
-  // 索引：node id → owning file
+  // 索引：node id → owning file（相对域）
   const nodeIdToFile = new Map<string, string>();
   for (const n of snapshot.graph.nodes) {
     if (!n.filePath) continue;
@@ -178,8 +194,9 @@ export function expandCallers(opts: ExpandCallersOptions): string[] {
     s.add(n.id);
   }
 
-  const result = new Set<string>(opts.changedFiles);
-  let frontier = new Set<string>(opts.changedFiles);
+  // result / frontier 在相对域累积；返回时转绝对
+  const result = new Set<string>(opts.changedFiles.map(toRel));
+  let frontier = new Set<string>(opts.changedFiles.map(toRel));
 
   for (let hop = 0; hop < depth; hop += 1) {
     // 当前跳的所有 owning node ids
@@ -205,7 +222,7 @@ export function expandCallers(opts: ExpandCallersOptions): string[] {
     frontier = nextFrontier;
   }
 
-  return Array.from(result);
+  return Array.from(result).map(toAbs);
 }
 
 // ───────────────────────────────────────────────────────────
@@ -218,8 +235,17 @@ export interface MergeIncrementalOptions {
   changedSet: Set<string>;
   /** 仅 changed files 范围内的局部 graph */
   newPartialGraph: UnifiedGraph;
-  /** 当前文件 hash 表（changedSet 内**仍存在**的文件，由 buildIncremental 计算） */
+  /**
+   * 当前文件 hash 表（changedSet 内**仍存在**的文件，由 buildIncremental 计算）。
+   * key 已是相对持久化域（computeAllFileHashes 输出，Feature 193 决策 1b）。
+   */
   newFileHashes: Record<string, string>;
+  /**
+   * 路径域转换基准（Feature 193 决策 1b）。
+   * changedSet = 绝对 IO 域，snapshot.node.filePath / fileHashes key = 相对持久化域；
+   * 比对前把 changedSet 相对化。缺省时退回直接匹配（兼容已相对的旧调用方 / 测试）。
+   */
+  projectRoot?: string;
 }
 
 /**
@@ -228,21 +254,28 @@ export interface MergeIncrementalOptions {
  *   - 移除以这些节点为 source 或 target 的所有 edges（deletion 不留孤儿，EC-9）
  *   - 把 newPartialGraph.nodes / .edges 追加（按 node.id 去重）
  *   - fileHashes 三态更新：删除 changedSet 中已不存在的文件 key；写入新 hash
+ *
+ * Feature 193 决策 1b：比对统一在**相对持久化域**进行（node.filePath / fileHashes key
+ * 已相对；changedSet 绝对 → 相对化后比对）。
  */
 export function mergeIncremental(opts: MergeIncrementalOptions): SnapshotWrapper {
   const { oldSnapshot, changedSet, newPartialGraph, newFileHashes } = opts;
+  const root = opts.projectRoot;
+  const toRel = (abs: string): string => (root ? relativizePosix(abs, root).value : abs);
+  // changedSet 相对化（持久化域），与 node.filePath / fileHashes key 同域比对
+  const changedRelSet = new Set<string>(Array.from(changedSet).map(toRel));
 
   // 1. 找出旧图中需要被替换的 owning node id 集合
   const owningIds = new Set<string>();
   for (const n of oldSnapshot.graph.nodes) {
-    if (n.filePath && changedSet.has(n.filePath)) {
+    if (n.filePath && changedRelSet.has(n.filePath)) {
       owningIds.add(n.id);
     }
   }
 
   // 2. 保留：filePath 不在 changedSet 的旧节点
   const retainedNodes = oldSnapshot.graph.nodes.filter(
-    (n) => !(n.filePath && changedSet.has(n.filePath)),
+    (n) => !(n.filePath && changedRelSet.has(n.filePath)),
   );
 
   // 3. 保留：source / target 都不命中 owningIds 的旧边
@@ -256,8 +289,9 @@ export function mergeIncremental(opts: MergeIncrementalOptions): SnapshotWrapper
   for (const n of newPartialGraph.nodes) nodeMap.set(n.id, n);
 
   // 5. 合并 fileHashes：删除 changedSet 中不在 newFileHashes 的（= deleted）；新增 / 更新存在的
+  //    （key 全部为相对持久化域）
   const mergedHashes: Record<string, string> = { ...oldSnapshot.fileHashes };
-  for (const f of changedSet) {
+  for (const f of changedRelSet) {
     delete mergedHashes[f];
   }
   for (const [f, h] of Object.entries(newFileHashes)) {
@@ -286,6 +320,7 @@ export function mergeIncremental(opts: MergeIncrementalOptions): SnapshotWrapper
 
 export type IncrementalFallbackReason =
   | 'no-snapshot'
+  | 'snapshot-format-stale'
   | 'shallow-clone'
   | 'corruption'
   | 'no-diff';
@@ -341,16 +376,20 @@ export async function buildIncremental(
   const projectRoot = path.resolve(opts.projectRoot);
   const callerDepth = opts.callerDepth ?? 1;
 
-  // ── 1. load snapshot ──
-  const oldSnapshot = await loadSnapshot(projectRoot);
+  // ── 1. load snapshot（带原因，区分 not-found vs format-stale）──
+  const { snapshot: oldSnapshot, reason: loadReason } = await loadSnapshotDetailed(projectRoot);
   if (!oldSnapshot) {
+    // Feature 193 决策 1c：format-stale（旧绝对 key 快照）安全退化 full reindex，
+    // fallbackReason 区别于 no-snapshot，不静默产生错误增量。
+    const fallbackReason: IncrementalFallbackReason =
+      loadReason === 'format-stale' ? 'snapshot-format-stale' : 'no-snapshot';
     const snapshot = await runFullReindex(projectRoot);
     return {
       snapshot,
       changedFiles: [],
       origChangedFilesCount: 0,
       fallbackToFull: true,
-      fallbackReason: 'no-snapshot',
+      fallbackReason,
       durationMs: Date.now() - t0,
     };
   }
@@ -364,7 +403,7 @@ export async function buildIncremental(
     );
     // chokidar / watch 路径用 detectStaleFiles 二次确认 hash 真变了，避免编辑器
     // 触摸文件（mtime 变但内容未变）触发不必要的重索引
-    const stale = await detectStaleFiles(oldSnapshot, normalized);
+    const stale = await detectStaleFiles(oldSnapshot, normalized, projectRoot);
     const staleSet = new Set(stale);
     // 保留原 override 中真正 stale 的，加上 detectStaleFiles 发现的 deleted 旧路径
     changedFiles = Array.from(new Set([...normalized.filter((f) => staleSet.has(f)), ...stale]));
@@ -415,6 +454,7 @@ export async function buildIncremental(
     changedFiles,
     snapshot: oldSnapshot,
     depth: callerDepth,
+    projectRoot,
   });
   const changedSet = new Set(expanded);
 
@@ -455,6 +495,7 @@ export async function buildIncremental(
     changedSet,
     newPartialGraph,
     newFileHashes,
+    projectRoot,
   });
 
   // W3 WARN-1：merge 出口前 safeParse 验证；失败视为 corruption 降级（不让坏 snapshot 写盘）
