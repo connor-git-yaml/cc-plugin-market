@@ -42,3 +42,6 @@
 [plan-codex] codex review(foreground 重试成功): COMPLETED | 6 CRITICAL 全认定真实 + 代码核验(runPrimaryOracle sync/7调用方/:289 error漏判/:741截断)
 [4-rev] plan(修订): COMPLETED | spawnSync 收敛 C-5/C-6；Phase0 数据源 hard gate(C-4)；ranking classifier(C-1)；oracleSpecHash 覆盖3语义模块(C-2)；evidence-based marker(C-3)
 [plan commit] 准备提交 plan 阶段
+[5] tasks: COMPLETED | model=sonnet | 制品=tasks.md | 35 任务(Phase0×3 BLOCKING/A×11/B×4/C×9/D×8) | FR 100% + Codex CRITICAL 6/6 落地映射
+[tasks-review] 目视审查（纯 markdown 制品，按 CLAUDE.local.md"纯文档可简化"条款；TDD配对/依赖链/覆盖全核验通过）
+[GATE_TASKS] always/critical → PAUSE 呈报用户（FR-006 范围 + 实施推进方式）
