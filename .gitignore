@@ -108,3 +108,7 @@ __pycache__/
 .aider.chat.history.md
 .aider.tags.cache.v*
 .aider.input.history
+
+# F187 评测设施 v2：Python venv + patch 持久化产物不入库
+scripts/.swebench-venv/
+run_artifacts/

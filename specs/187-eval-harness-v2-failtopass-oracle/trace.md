@@ -45,3 +45,7 @@
 [5] tasks: COMPLETED | model=sonnet | 制品=tasks.md | 35 任务(Phase0×3 BLOCKING/A×11/B×4/C×9/D×8) | FR 100% + Codex CRITICAL 6/6 落地映射
 [tasks-review] 目视审查（纯 markdown 制品，按 CLAUDE.local.md"纯文档可简化"条款；TDD配对/依赖链/覆盖全核验通过）
 [GATE_TASKS] always/critical → PAUSE 呈报用户（FR-006 范围 + 实施推进方式）
+[GATE_TASKS] APPROVED | 用户裁决: FR-006 一起做掉 / 全程自主推进(Phase0→D，最终 verify 汇报)
+[6] implement: STARTED (主线驱动 Phase 0 真实执行 gate)
+[Phase0] GATE PASSED ✓ | 真跑 run_evaluation 42s/resolved=1 | 方案A(本地JSONL)确认 | x86_64镜像+Rosetta透明运行无QEMU退化 | W1 10/10字段match官方 | 制品=verification/phase0-gate-result.md
+[PhaseA-core] classify-oracle.mjs(14行决策表+ranking) + phase-markers.mjs(evidence-based) + oracle-pipeline 集成测试 | 47 tests pass | C-1/C-3/C-6 核心落地
