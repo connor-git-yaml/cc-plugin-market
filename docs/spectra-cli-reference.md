@@ -135,6 +135,45 @@ spectra watch
 spectra install
 ```
 
+### Worktree Bootstrap & Keepalive (Feature 193)
+
+In a **multi-worktree workflow** (one git worktree per feature), each new worktree starts
+without a `specs/_meta/graph.json`, so the 17 Spectra MCP tools (`impact` / `context` / …)
+are unavailable until a graph exists. Since Feature 193, graph node/edge ids and the
+incremental snapshot are **relative + POSIX-normalized**, making the graph portable across
+worktrees. This enables two things:
+
+**1. Open-box bootstrap (no rebuild).** The worktree-init hook copies the graph (and the
+`.spectra/unified-graph.json` snapshot, when present) from the primary repo:
+
+```bash
+# Run inside a fresh worktree — copies graph + snapshot from the primary repo if absent.
+# copy-if-absent + atomic: never overwrites a worktree's locally-evolved graph.
+bash scripts/sync-worktree-local-state.sh
+```
+
+After this the MCP tools work immediately against the copied graph. A
+`specs/_meta/.graph-source-commit` sidecar records the source commit; if the worktree HEAD
+later diverges, re-running the hook prints a non-blocking *stale* hint.
+
+> The bootstrap only works once the **primary repo's graph is itself in the relative-id
+> format** (i.e. rebuilt with Feature 193+). A pre-F193 absolute-id graph copied in is
+> detected at load time and reported as `graph-format-stale` (with a rebuild hint) rather
+> than silently returning wrong results — rebuild the primary once with `spectra batch`.
+
+**2. Keepalive (incremental freshness).** To keep the bootstrapped graph fresh as you edit,
+activate one of the existing incremental paths:
+
+```bash
+spectra install        # post-commit hook → incremental graph update after each commit
+# or
+spectra watch          # debounced incremental rebuild on file save
+```
+
+Because the snapshot is portable (relative `fileHashes` keys), incremental updates resume
+correctly in the new worktree. If no snapshot was bootstrapped, the first commit safely
+falls back to a full reindex (then keepalive is incremental from there on).
+
 ## Architecture
 
 ```text

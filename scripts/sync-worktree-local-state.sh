@@ -208,6 +208,121 @@ for relative_path in "${COPY_TARGETS[@]}"; do
     "$relative_path"
 done
 
+# ─────────────────────────────────────────────────────────────
+# Feature 193 — graph bootstrap（🅑 / spec FR-007~FR-009 / plan 决策 5）
+# ─────────────────────────────────────────────────────────────
+# 新 worktree 缺图时从主仓 copy graph.json + 增量快照，使 MCP 工具开箱即用（US1）。
+#
+# 关键语义（区别于上方 COPY_TARGETS 的每次覆盖）：
+# - copy-if-absent 原子（Codex W4）：worktree 增量改图后绝不被 sync 重跑写穿覆盖
+# - copy 单元 = specs/_meta/graph.json + .spectra/unified-graph.json 快照（决策 1b；
+#   两者均在 .gitignore，属 worktree 本地态）
+# - 源优先级：主仓 →（共享缓存 ~/.spectra-graph-cache 为二期）→ 均无则提示构建（不报错）
+# - copy 后写 specs/_meta/.graph-source-commit sidecar（源 commit），供 stale 检查
+# - 前提：id 相对化（🅐）已使图跨 worktree 可移植，copy 来即可用
+GRAPH_REL="specs/_meta/graph.json"
+SNAPSHOT_REL=".spectra/unified-graph.json"
+SOURCE_COMMIT_REL="specs/_meta/.graph-source-commit"
+
+# 原子 copy（仅当 target 不存在）：temp + mv，避免与 post-commit 增量竞态产生半成品。
+# 通过全局 COPY_RESULT 回传结果："copied" | "skipped"（已有真实文件 / 异常类型 / 源不存在）。
+# 不用返回码区分（避免 set -e 下 return 1 误触发退出，Codex W）；调用方读 COPY_RESULT。
+COPY_RESULT="skipped"
+copy_if_absent_atomic() {
+  local source_path="$1"
+  local target_path="$2"
+  local label="$3"
+  COPY_RESULT="skipped"
+
+  # 已有真实文件（非 symlink）→ 跳过不覆盖（Codex W：symlink/目录不算"已有真实图"）
+  if [[ -f "$target_path" && ! -L "$target_path" ]]; then
+    log "graph bootstrap: 跳过 ${label}（worktree 已有真实文件，不覆盖本地增量）"
+    return 0
+  fi
+  # symlink / 目录等异常类型 → warn，不静默当作已有，也不 bootstrap copy（人工处置）
+  if [[ -L "$target_path" || -d "$target_path" ]]; then
+    warn "graph bootstrap: ${label} 目标为 symlink/目录（非预期），跳过 copy，请人工检查 ${target_path}"
+    return 0
+  fi
+  # 源不存在视为非错误（FR-008：无可用源不报错），COPY_RESULT 保持 skipped
+  if [[ ! -e "$source_path" ]]; then
+    log "graph bootstrap: 跳过 ${label}（源不存在: ${source_path}）"
+    return 0
+  fi
+  local target_dir tmp
+  target_dir="$(dirname "$target_path")"
+  run mkdir -p "$target_dir"
+  tmp="${target_path}.bootstrap.$$.tmp"
+  run cp -p "$source_path" "$tmp"
+  # 竞态收窄（Codex W）：mv 前再确认 target 仍不存在（post-commit/另一 sync 可能刚生成）；
+  # 不用 mv -f——已确认目标不存在，避免覆盖他人刚写入的新图。
+  if [[ -e "$target_path" ]]; then
+    log "graph bootstrap: ${label} 期间目标已被其他进程生成，保留对方版本（清理 tmp）"
+    run rm -f "$tmp"
+    return 0
+  fi
+  run mv "$tmp" "$target_path"
+  COPY_RESULT="copied"
+  log "$(action_word) ${label}（bootstrap copy）: $target_path <- $source_path"
+  return 0
+}
+
+# stale 检查：sidecar 记录的源 commit 与当前 worktree HEAD 不一致 → 提示，不阻断。
+# sidecar 缺失（图为本地构建非 bootstrap）→ no-op。
+check_graph_source_stale() {
+  local sidecar="$CURRENT_ROOT/$SOURCE_COMMIT_REL"
+  [[ -f "$sidecar" ]] || return 0
+  local recorded current
+  recorded="$(cat "$sidecar" 2>/dev/null || true)"
+  current="$(git -C "$CURRENT_ROOT" rev-parse HEAD 2>/dev/null || true)"
+  if [[ -n "$recorded" && -n "$current" && "$recorded" != "$current" ]]; then
+    warn "graph 可能 stale：图来自 commit ${recorded:0:8}，当前 worktree 在 ${current:0:8}。建议增量更新（spectra watch / spectra install --git）或重建（spectra batch）。"
+  fi
+  return 0
+}
+
+bootstrap_graph() {
+  local graph_target="$CURRENT_ROOT/$GRAPH_REL"
+  local snapshot_target="$CURRENT_ROOT/$SNAPSHOT_REL"
+
+  # graph 与 snapshot 各自独立 copy-if-absent（Codex W：已有 graph 时仍补齐缺失 snapshot，
+  # 避免"只有 graph 无 snapshot"的 worktree 永久退化 full reindex）。
+  # MVP 源 = 主仓（共享缓存 ~/.spectra-graph-cache 为二期，见 plan 决策 5）。
+  copy_if_absent_atomic "$PRIMARY_ROOT/$GRAPH_REL" "$graph_target" "graph.json"
+  local graph_copied="$COPY_RESULT"
+  copy_if_absent_atomic "$PRIMARY_ROOT/$SNAPSHOT_REL" "$snapshot_target" "unified-graph 快照"
+  if [[ ! -e "$snapshot_target" ]]; then
+    log "graph bootstrap: 无快照（首次 commit 将走 full reindex，非阻塞）"
+  fi
+
+  # 既无 worktree 本地图、也未从主仓 copy 到 → 提示构建（FR-008，不报错）
+  if [[ ! -e "$graph_target" ]]; then
+    log "graph bootstrap: 主仓与 worktree 均无图（${PRIMARY_ROOT}/${GRAPH_REL}）。请在当前 worktree 运行 \`spectra batch\` 或 \`spectra index\` 构建图。"
+    return 0
+  fi
+
+  # 仅当本次确实从主仓 copy 了图，才写/更新 sidecar（记录源=主仓 HEAD）；
+  # 本地构建的图无"源 commit"概念，不写 sidecar（stale 检查对其 no-op）。
+  if [[ "$graph_copied" == "copied" ]]; then
+    local src_commit
+    if src_commit="$(git -C "$PRIMARY_ROOT" rev-parse HEAD 2>/dev/null)"; then
+      if [[ "$DRY_RUN" == "true" ]]; then
+        log "graph bootstrap: [dry-run] 计划记录源 commit ${src_commit:0:8} → $SOURCE_COMMIT_REL"
+      else
+        printf '%s\n' "$src_commit" > "$CURRENT_ROOT/$SOURCE_COMMIT_REL"
+        log "graph bootstrap: 记录源 commit ${src_commit:0:8} → $SOURCE_COMMIT_REL"
+      fi
+    fi
+  fi
+
+  # stale 检查：首次 bootstrap 与 rerun 都查（Codex CRITICAL：新 worktree HEAD 若已 ≠ 源 commit，
+  # 首次 copy 后也须立即提示，不静默拿 stale 图）。
+  check_graph_source_stale
+  return 0
+}
+
+bootstrap_graph
+
 # Claude 项目级 memory：仅在目标 memory 尚不存在时建立软链接。
 CLAUDE_PROJECTS_DIR="${HOME}/.claude/projects"
 if [[ -d "$CLAUDE_PROJECTS_DIR" ]]; then
