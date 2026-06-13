@@ -96,7 +96,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --languages    仅处理指定语言，逗号分隔（如 typescript,python）（仅 batch）
   --include-docs 启用 Markdown 文档和 OpenAPI/AsyncAPI 规范提取（仅 batch）
   --include-images 启用图像/图表 Vision 提取（仅 batch）
-  --mode         批处理运行模式（spec 文档质量维度，与 --full regen 轴正交）: full（默认，完整文档，LLM 全量）| reading（省约 38% 时间，模块级 LLM 仍运行，跳过架构叙事/ADR/产品文档层）| code-only（纯 AST，< 30s，无 LLM，最快）（仅 batch）
+  --mode         批处理运行模式（spec 文档质量维度，与 --full regen 轴正交）: full（默认，完整文档，LLM 全量）| reading（省约 38% 时间，模块级 LLM 仍运行，跳过架构叙事/ADR/产品文档层）| code-only（仅跳 enrichment 层，仍逐模块调 spec-gen LLM，非零成本/非最快，耗时随模块数增长）（仅 batch）
   --hyperedges   启用 hyperedge LLM 提取（仅 batch + mode=full 生效，默认 false；可用 env SPECTRA_HYPEREDGES_ENABLED=true 等价开启）
   --enable-adr   显式启用 ADR pipeline（v4.0.1 临时禁用，将在 v4.1 evidence-binding 重构后恢复；默认 false）（仅 batch）
   --concurrency  最大并发模块数（仅 batch，默认 3；优先级 CLI > spec-driver.config.yaml batch.concurrency > 默认 3；≤0 / 非整数会规范化为 1 并打印 warn）

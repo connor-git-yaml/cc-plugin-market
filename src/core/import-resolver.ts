@@ -27,6 +27,21 @@ import * as path from 'node:path';
 // 复用 ts-morph 再导出的 typescript 命名空间（避免新增对 'typescript' 的直接运行时依赖；
 // ts-morph 已是本仓运行时依赖）
 import { ts } from 'ts-morph';
+import { createLogger } from '../panoramic/utils/logger.js';
+
+// F183 修复 2：buildTsConfigContext 失败时不再静默——warn 出 configPath + error 摘要。
+const logger = createLogger('import-resolver');
+// 仅缓存已 warn 的 configPath 做 emission 限频（monorepo 同一损坏 tsconfig 会被每个
+// import-resolve 循环触发，造成日志洪泛）。注意：仅限频 warn，绝不跳过解析——
+// buildTsConfigContext 始终尝试解析，失败仍 return null。
+const warnedConfigPaths = new Set<string>();
+
+/** 同一 configPath 仅发一次 warn（emission 限频，不影响解析）。 */
+function warnTsConfigFailureOnce(configPath: string, errorSummary: string): void {
+  if (warnedConfigPaths.has(configPath)) return;
+  logger.warn(`[import-resolver] buildTsConfigContext 失败（${configPath}）：${errorSummary}`);
+  warnedConfigPaths.add(configPath);
+}
 
 // ───────────────────────────────────────────────────────────
 // Public Types（Feature 181：由 knowledge-graph/import-resolver 迁入）
@@ -441,6 +456,11 @@ export function buildTsConfigContext(configPath: string): TsConfigResolutionCont
   try {
     const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
     if (configFile.error || !configFile.config) {
+      // 解析失败仍 return null（行为不变），但不再静默——首次为该 configPath 发一次 warn
+      const errorSummary = configFile.error
+        ? ts.flattenDiagnosticMessageText(configFile.error.messageText, ' ')
+        : 'config 为空';
+      warnTsConfigFailureOnce(configPath, errorSummary);
       return null;
     }
     const configDir = path.dirname(configPath);
@@ -461,7 +481,10 @@ export function buildTsConfigContext(configPath: string): TsConfigResolutionCont
     }
 
     return { configDir, baseUrl, paths };
-  } catch {
+  } catch (err) {
+    // 解析抛错仍 return null（行为不变），但不再静默——首次为该 configPath 发一次 warn
+    const errorSummary = err instanceof Error ? err.message : String(err);
+    warnTsConfigFailureOnce(configPath, errorSummary);
     return null;
   }
 }

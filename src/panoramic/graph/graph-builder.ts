@@ -509,13 +509,22 @@ export function enrichNodeDegrees(graphJson: GraphJSON, godNodes: Array<{ id: st
  *
  * @param graphJson - buildKnowledgeGraph() 的返回值
  * @param outputDir - 项目输出根目录（graph.json 写入 {outputDir}/_meta/graph.json）
+ * @param options - 归一化选项（默认 undefined，等价 stripTimestamps:false）；透传 normalizeGraphForWrite
  * @returns 实际写入的绝对路径
  */
-export function writeKnowledgeGraph(graphJson: GraphJSON, outputDir: string): string {
-  // Feature 193 决策 1d：写入边界 portable 守卫 tripwire。
-  // 扫描全部 path-like 字段，发现绝对路径 → console warning（不抛错、不转换——
-  // 转换责任在 producer）。覆盖 batch / CLI graph / CLI community 三条写盘路径
-  // （后两路不经 normalizeGraphForWrite）。守卫无需 projectRoot，故不碰 batch-orchestrator 签名。
+export function writeKnowledgeGraph(
+  graphJson: GraphJSON,
+  outputDir: string,
+  options?: NormalizeGraphOptions,
+): string {
+  // F183 修复 1：将 normalizeGraphForWrite 内聚进写盘出口，使 graph / community / batch
+  // 三路写盘自动经过同一归一化，消除「CLI graph/community 未归一化 → 跨写盘点形态不一致」。
+  //
+  // 执行顺序严格为：① portable 守卫扫描 → ② normalizeGraphForWrite → ③ writeAtomicJson。
+  // why 此序：portable 守卫只读、不改 graphJson，置于归一化前后均不影响其扫描结果；
+  // 当前 normalizeGraphForWrite 仅做排序/字段剥除、不做路径转换，故先扫后归一化无副作用。
+  // I-1 备注：若未来 normalizeGraphForWrite 增加「绝对路径 → 相对路径」转换，则守卫必须移到
+  // 归一化「之后」（否则守卫会对未转换的绝对路径误报），届时需重排此处顺序。
   const violations = scanGraphPortabilityViolations(graphJson);
   if (violations.count > 0) {
     console.warn(
@@ -523,8 +532,10 @@ export function writeKnowledgeGraph(graphJson: GraphJSON, outputDir: string): st
         `${violations.samples.join(', ')}${violations.count > violations.samples.length ? ' …' : ''}`,
     );
   }
+  // ② 内聚归一化（in-place）：默认 options=undefined → stripTimestamps:false，保留各路时间戳
+  normalizeGraphForWrite(graphJson, options);
   const graphJsonPath = path.join(outputDir, '_meta', 'graph.json');
-  // 同步调用，无需 await
+  // ③ 同步原子写盘，无需 await
   writeAtomicJson(graphJsonPath, graphJson);
   return path.resolve(graphJsonPath);
 }

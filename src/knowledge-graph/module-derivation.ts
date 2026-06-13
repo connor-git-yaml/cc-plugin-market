@@ -30,6 +30,9 @@ import { createLogger } from '../panoramic/utils/logger.js';
 
 const logger = createLogger('module-derivation');
 
+/** workspace 约定目录（monorepo per-package tsconfig 常驻于此） */
+const MONOREPO_WORKSPACE_DIRS = ['packages', 'apps', 'libs'] as const;
+
 // ───────────────────────────────────────────────────────────
 // ModuleGraph schema
 // ───────────────────────────────────────────────────────────
@@ -262,6 +265,41 @@ export function createEmptyModuleGraph(projectRoot: string): ModuleGraph {
   };
 }
 
+/**
+ * F183 修复 3（Codex W1 修正）：探测 monorepo per-package tsconfig。
+ * 仅扫 workspace 约定目录的直接子目录是否含 tsconfig.json——batch per-file nearest 会命中、
+ * 而 module-derivation root-only 会漏的子包配置信号。不再误判根级 tsconfig.base.json 等单包 config-split。
+ * fs 探针通过 io 参数注入，便于零全局 mock 单测（避免污染 scanFiles 的 Dirent 调用，Codex C-2）。
+ * 返回命中的子包相对路径（如 ['packages/core','apps/web']）。
+ */
+export function findMonorepoPackageTsConfigDirs(
+  root: string,
+  io: {
+    readdirSync: (p: string) => Array<{ name: string; isDirectory: () => boolean }>;
+    existsSync: (p: string) => boolean;
+  } = {
+    readdirSync: (p) => fs.readdirSync(p, { withFileTypes: true }),
+    existsSync: fs.existsSync,
+  },
+): string[] {
+  const hits: string[] = [];
+  for (const ws of MONOREPO_WORKSPACE_DIRS) {
+    const wsPath = path.join(root, ws);
+    let entries: Array<{ name: string; isDirectory: () => boolean }>;
+    try {
+      entries = io.readdirSync(wsPath);
+    } catch {
+      continue; // workspace 目录不存在/不可读 → 跳过
+    }
+    for (const e of entries) {
+      if (e.isDirectory() && io.existsSync(path.join(wsPath, e.name, 'tsconfig.json'))) {
+        hits.push(`${ws}/${e.name}`);
+      }
+    }
+  }
+  return hits;
+}
+
 // ───────────────────────────────────────────────────────────
 // 工程入口：TS/JS 项目全量构建（取代 legacy buildGraph）
 // ───────────────────────────────────────────────────────────
@@ -351,6 +389,18 @@ export async function buildModuleGraphForProject(
     ?? (fs.existsSync(path.join(resolvedRoot, 'tsconfig.json'))
       ? path.join(resolvedRoot, 'tsconfig.json')
       : undefined);
+
+  // F183 修复 3（双口径可观测性）：探测 monorepo per-package tsconfig（workspace 约定目录的
+  // 子包 tsconfig.json）。存在则说明 batch per-file nearest 会命中、而 module-derivation
+  // root-only 会漏的子包 alias 可能漏解析，发 warn 提示该已知限制。
+  const monorepoPkgs = findMonorepoPackageTsConfigDirs(resolvedRoot);
+  if (monorepoPkgs.length >= 1) {
+    logger.warn(
+      `[module-derivation] 检测到 monorepo 子包 tsconfig（${monorepoPkgs.join(', ')}）。` +
+        `module-derivation 使用 root-only tsconfig，batch 使用 per-file nearest tsconfig，子包 alias 可能漏解析。详见 F183 已知限制。`,
+    );
+  }
+
   const tsConfigContext = tsConfigPath ? buildTsConfigContext(tsConfigPath) : null;
 
   // ── 3. 调用 ast-analyzer 提取每个文件的 CodeSkeleton ──

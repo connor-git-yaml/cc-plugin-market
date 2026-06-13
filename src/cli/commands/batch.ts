@@ -71,7 +71,7 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     if (command.batchMode === 'reading' && process.stdout.isTTY) {
       console.log(
         '提示：reading 模式省约 38% 时间，但模块级 LLM 仍运行（非快速模式）。\n' +
-        '如需最快分析（< 30s），请使用 --mode code-only',
+        '如需进一步跳过 enrichment 层，可使用 --mode code-only（注：仍逐模块调 spec-gen LLM，非零成本）',
       );
     }
 
