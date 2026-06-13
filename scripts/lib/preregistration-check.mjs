@@ -9,12 +9,56 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 
 /** 顺序无关的 task 集指纹。 */
 export function computeTaskSetHash(taskIds) {
   const sorted = [...new Set(taskIds)].sort();
   return crypto.createHash('sha256').update(sorted.join('\n')).digest('hex');
+}
+
+/** Feature 187 freezeBlock schema 版本（oracleSpecHash 规则变更时升版）。 */
+export const FREEZE_SCHEMA_VERSION = '1.0';
+
+/** 判分语义模块（Codex C-2：任一变更都改判分，必须纳入 oracleSpecHash）。 */
+export const SEMANTIC_MODULES = ['classify-oracle.mjs', 'phase-markers.mjs', 'swebench-oracle.mjs'];
+
+/** 递归 sort key 的稳定序列化（不依赖第三方；固定 key 顺序 → 跨平台稳定 hash 输入）。 */
+export function stableStringify(obj) {
+  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return `[${obj.map(stableStringify).join(',')}]`;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
+}
+
+/** 读判分语义模块源码摘要 {模块名: sha256}（libDir 默认本模块同目录 scripts/lib）。 */
+export function readSemanticModuleShas(libDir) {
+  const dir = libDir || path.dirname(new URL(import.meta.url).pathname);
+  const out = {};
+  for (const name of SEMANTIC_MODULES) {
+    const src = fs.readFileSync(path.join(dir, name), 'utf-8');
+    out[name] = crypto.createHash('sha256').update(src).digest('hex');
+  }
+  return out;
+}
+
+/**
+ * oracleSpecHash（Codex C-2 / Q2「冻结 oracle 语义」）：覆盖运行时配置 + 判分语义模块源码摘要
+ * + swebench 版本。canonical = stableStringify → sha256。改分类逻辑/marker/runner 任一 → hash 变化。
+ * @param {object} spec {kind, timeout, arch, datasetSource, swebenchVersion, semanticModuleShas}
+ */
+export function computeOracleSpecHash(spec = {}) {
+  const canonical = stableStringify({
+    schemaVersion: FREEZE_SCHEMA_VERSION,
+    kind: spec.kind ?? null,
+    timeout: spec.timeout ?? null,
+    arch: spec.arch ?? null,
+    datasetSource: spec.datasetSource ?? null,
+    swebenchVersion: spec.swebenchVersion ?? null,
+    semanticModuleShas: spec.semanticModuleShas ?? {},
+  });
+  return crypto.createHash('sha256').update(canonical).digest('hex');
 }
 
 /**
@@ -31,10 +75,19 @@ export function parsePreregistration(mdText) {
   let hash = null;
   let frozen = false;
   let taskIds = [];
+  let oracleSpecHash = null;
+  let fixtureContentHash = null;
+  let schemaVersion = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const hashM = line.match(/^\s*taskSetHash:\s*["']?([0-9a-fA-F]{64})["']?\s*$/);
     if (hashM) hash = hashM[1].toLowerCase();
+    const oracleM = line.match(/^\s*oracleSpecHash:\s*["']?([0-9a-fA-F]{64})["']?\s*$/);
+    if (oracleM) oracleSpecHash = oracleM[1].toLowerCase();
+    const fixM = line.match(/^\s*fixtureContentHash:\s*["']?([0-9a-fA-F]{64})["']?\s*$/);
+    if (fixM) fixtureContentHash = fixM[1].toLowerCase();
+    const svM = line.match(/^\s*schemaVersion:\s*["']?([\w.]+)["']?\s*$/);
+    if (svM) schemaVersion = svM[1];
     const frozenM = line.match(/^\s*frozen:\s*(true|false)\b/);
     if (frozenM) frozen = frozenM[1] === 'true';
     const inlineM = line.match(/^\s*taskIds:\s*\[([^\]]*)\]\s*$/);
@@ -49,7 +102,7 @@ export function parsePreregistration(mdText) {
       }
     }
   }
-  return { hash, frozen, taskIds };
+  return { hash, frozen, taskIds, oracleSpecHash, fixtureContentHash, schemaVersion };
 }
 
 /**
@@ -61,14 +114,18 @@ export function parsePreregistration(mdText) {
  *   3. 可选外部锚 expectedHash（来自 env/manifest/CI，非同文件）—— 传入则必须三者一致；
  *   4. 真正的 anti-tamper 是 git：prereg.md 入库且在全量前冻结，报告记录其 commit/blob，
  *      事后篡改在 git 历史可见（见 preregistration.md 说明 + 报告记录）。
- * @param {object} [opts] { expectedHash }
+ * @param {object} [opts] { expectedHash, oracleKind, oracleSpecInput, manifest }
+ *   oracleKind='swebench-execution' 时（Codex C-2 / Q2 冻结 oracle 语义）：
+ *     - prereg 缺 oracleSpecHash → hard-fail（不允许语义不明跑批）；
+ *     - 传 oracleSpecInput 时重算 computeOracleSpecHash 并比对 prereg 值，不一致 → fail（疑似跑前换判分/改分类代码）。
+ *   其他 kind 缺 oracleSpecHash → warn（向后兼容旧 prereg，不 hard-fail）。
  */
 export function checkPreregistration(actualTaskIds, preregPath, opts = {}) {
   const actualHash = computeTaskSetHash(actualTaskIds);
   if (!fs.existsSync(preregPath)) {
     return { ok: false, reason: `preregistration.md 不存在: ${preregPath}（先冻结预注册）`, expectedHash: null, actualHash };
   }
-  const { hash, frozen, taskIds } = parsePreregistration(fs.readFileSync(preregPath, 'utf-8'));
+  const { hash, frozen, taskIds, oracleSpecHash } = parsePreregistration(fs.readFileSync(preregPath, 'utf-8'));
   if (!frozen) return { ok: false, reason: 'preregistration 未冻结（frozen!=true）', expectedHash: hash, actualHash };
   if (!hash) return { ok: false, reason: 'preregistration 缺 taskSetHash', expectedHash: null, actualHash };
 
@@ -91,13 +148,34 @@ export function checkPreregistration(actualTaskIds, preregPath, opts = {}) {
       expectedHash: hash, actualHash,
     };
   }
-  return { ok: true, reason: `OK：task 集与预注册一致（${actualTaskIds.length} task）`, expectedHash: hash, actualHash };
+  // (4) oracle 语义冻结校验（Codex C-2 / Q2）
+  const warnings = [];
+  if (opts.oracleKind === 'swebench-execution') {
+    if (!oracleSpecHash) {
+      return { ok: false, reason: 'swebench-execution kind 要求 oracleSpecHash，但 preregistration 缺该字段（请用扩展后 freeze 脚本重新冻结）', expectedHash: hash, actualHash };
+    }
+    if (opts.oracleSpecInput) {
+      const live = computeOracleSpecHash(opts.oracleSpecInput);
+      if (live !== oracleSpecHash) {
+        return { ok: false, reason: `oracleSpecHash 不符（疑似跑前换判分/改分类逻辑代码）。frozen=${oracleSpecHash.slice(0, 12)} live=${live.slice(0, 12)}`, expectedHash: hash, actualHash, oracleSpecHash, liveOracleSpecHash: live };
+      }
+    }
+  } else if (!oracleSpecHash) {
+    warnings.push('preregistration 缺 oracleSpecHash（非 swebench-execution kind，向后兼容放行；建议重新冻结）');
+  }
+  return { ok: true, reason: `OK：task 集与预注册一致（${actualTaskIds.length} task）`, expectedHash: hash, actualHash, warnings };
 }
 
-/** 冻结辅助：给定 taskIds 算 hash，供 host import 后写入 preregistration.md。 */
-export function freezeBlock(taskIds, { seed, filterRule, gitCommit } = {}) {
+/**
+ * 冻结辅助：给定 taskIds 算 hash，供 host import 后写入 preregistration.md。
+ * Feature 187 扩展（向后兼容）：传 oracleSpecInput / fixtureContentHash / promptSha256 /
+ * datasetSourceDigest 时一并冻结；oracleSpecInput 现算 oracleSpecHash（Q2 冻结 oracle 语义）。
+ */
+export function freezeBlock(taskIds, opts = {}) {
+  const { seed, filterRule, gitCommit, oracleSpecInput, fixtureContentHash, promptSha256, datasetSourceDigest } = opts;
   const hash = computeTaskSetHash(taskIds);
-  return {
+  const block = {
+    schemaVersion: FREEZE_SCHEMA_VERSION,
     taskSetHash: hash,
     frozen: true,
     count: taskIds.length,
@@ -106,4 +184,9 @@ export function freezeBlock(taskIds, { seed, filterRule, gitCommit } = {}) {
     gitCommit: gitCommit ?? null,
     taskIds: [...taskIds].sort(),
   };
+  if (oracleSpecInput) block.oracleSpecHash = computeOracleSpecHash(oracleSpecInput);
+  if (fixtureContentHash) block.fixtureContentHash = fixtureContentHash;
+  if (promptSha256) block.promptSha256 = promptSha256;
+  if (datasetSourceDigest) block.datasetSourceDigest = datasetSourceDigest;
+  return block;
 }

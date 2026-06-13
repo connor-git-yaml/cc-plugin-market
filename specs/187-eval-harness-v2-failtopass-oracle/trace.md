@@ -49,3 +49,6 @@
 [6] implement: STARTED (主线驱动 Phase 0 真实执行 gate)
 [Phase0] GATE PASSED ✓ | 真跑 run_evaluation 42s/resolved=1 | 方案A(本地JSONL)确认 | x86_64镜像+Rosetta透明运行无QEMU退化 | W1 10/10字段match官方 | 制品=verification/phase0-gate-result.md
 [PhaseA-core] classify-oracle.mjs(14行决策表+ranking) + phase-markers.mjs(evidence-based) + oracle-pipeline 集成测试 | 47 tests pass | C-1/C-3/C-6 核心落地
+[PhaseA-complete] cohort-registry.mjs(委托 buildDriverPrompt 逐字一致+golden) + preregistration 扩展(oracleSpecHash 覆盖3语义模块+checkPreregistration swebench-execution门禁) | F187 共 59 默认测试 + F176 零回归(156 pass)
+[PhaseB-core] swebench-dataset-build.mjs(W1逐字段校验+emit) + swebench_fetch_rows.py + swebench-oracle.mjs(spawnSync同步/predictions候选patch/report解析/SIGSEGV重试/容器清理) | 真实 smoke 验证：goldPatch→pass, 空patch→fail/candidate, 环境信号→error
+[剩余] T017 runner 接入 + Phase C(cohort-batch迁移/manifest/jury/重冻结) + Phase D(护栏+全量验证) + 完整 codex 复审
