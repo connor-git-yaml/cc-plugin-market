@@ -2,7 +2,7 @@
 title: 领域知识 AI 脚手架 — 通用解决方案（厂商 SDK 知识内化 + 三方知识导入 + 工作流双库联查）
 status: proposal (调研完成，方案综合于主线程；Phase 1 拟入 M8 轨道 C = F190，Phase 2/3 列 M9)
 created: 2026-06-12
-origin_requirement: 厂商 PaaS SDK 类业务（如无人机行业 SDK）希望基于我们的 CC plugin 体系构建"精通其 SDK 的 AI 脚手架"，集成商开箱即用；本方案做通用化抽象，不依赖任何具体厂商的文档/代码
+origin_requirement: SDK 厂商（基于云 API 的行业开发套件 / PaaS SDK 类业务）希望基于我们的 CC plugin 体系构建"精通其 SDK 的 AI 脚手架"，集成商开箱即用；本方案做通用化抽象，不依赖任何具体厂商、行业或客户的文档 / 代码 / 信息（开源产物保持通用定位）
 research: 主线程经 Perplexity 4 域调研（知识内化选型 / 产品形态先例 / 异构 ingestion / 工作流注入模式）+ 仓内资产盘点（原计划 workflow 5-agent 因订阅月度限额失败，降级主线程亲自执行，结论质量未受影响）
 adversarial_review: codex exec 直调（2026-06-12，5 critical / 6 warning 全采纳）——CJK tokenizer 硬课题、GraphRAG 否决措辞降级为"非 Phase 1 默认"+反例边界、估时 4-5d→5-7d、spec-driver 注入移出 MVP（schema 白名单实证）、kb_api_lookup 改名 kb_doc_lookup、untrusted-evidence 信任边界、recall@k 验收门禁、vendor>project 固定仲裁改双呈现
 related:

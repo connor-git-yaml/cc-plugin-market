@@ -28,6 +28,7 @@ TypeScript 5.x + Node.js 20.x+ 项目，详见 package.json。跨任务稳定的
 - 不要把 prompt 或规范写成无结构长段；原因：目标、约束、验证要模块化
 - 不要优先用通用工具；原因：先用仓内脚本、skill、contract 和 shared helper，再退回 shell
 - 不要用学术或实现术语堆砌让用户拍板的问题；原因：决策权在用户，提问要从产品 / 用户视角通俗讲清这个选择对用户的实际影响，少纠缠实现细节，不假定用户读过你引用的代码或文档（确实复杂讲不清时再请其去看）；通俗达意即可、不必刻意大白话或堆砌口语，否则用户只能凭感觉选或被动接受
+- 不要在开源代码或入库文档（specs / docs / README / CLAUDE / AGENTS 等一切进 git 的产物）里写入具体客户 / 公司名、行业绑定或客户专属信息；原因：产品定位是通用的 codebase→agent context 与 spec-driven 工具，绑定具体客户 / 行业会污染开源叙事、误导通用用户；具体客户需求只在不入库的宣传 / 沟通材料（PPT / 邮件等）里出现，入库产物一律做通用化抽象（把客户当"某厂商"的一个实例）
 <!-- END SHARED SECTION: behavior-rules -->
 
 以下区块由 `npm run docs:sync:agents` 从 `docs/shared/agent-context-layering.md` 同步，请勿手动编辑区块内容。
