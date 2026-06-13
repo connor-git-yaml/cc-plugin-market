@@ -19,7 +19,7 @@ import {
   spawnMcpClient,
   buildSkipCondition,
   buildSkipReason,
-  BASELINE_GRAPH,
+  installRelativizedBaseline,
   MICROGRAD_SOURCE,
   type McpClientHandle,
 } from './helpers/stdio-client.js';
@@ -58,7 +58,9 @@ describe.skipIf(SHOULD_SKIP)(
       copyFileSync(join(MICROGRAD_SOURCE, 'micrograd', 'engine.py'), join(tempRoot, 'micrograd', 'engine.py'));
 
       const graphPath = join(tempRoot, 'specs', '_meta', 'graph.json');
-      copyFileSync(BASELINE_GRAPH, graphPath);
+      // F193：baseline 是旧绝对路径格式，加载期 stale 检测会 reject——用 relativize helper 安装
+      // （与 feature-180 系列同款），写入相对化 id 的图后再注入测试节点。
+      installRelativizedBaseline(graphPath);
       const graphData = JSON.parse(readFileSync(graphPath, 'utf-8')) as {
         nodes: Array<{ id: string; kind?: string; label?: string; metadata?: { sourceFile?: string; lineRange?: { start: number; end: number } } }>;
       };

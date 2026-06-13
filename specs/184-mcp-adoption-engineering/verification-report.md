@@ -1,7 +1,9 @@
 # F184 验证报告 — 子代理 MCP 触发率工程
 
 **Feature**: 184-mcp-adoption-engineering
-**Commit**: c2cc41e（基于 master@5f5a1f3，delivery 时 rebase 到最新 master@3a169fb）
+**Commit**: 已 rebase 到 master@3a169fb（含 F193 worktree graph bootstrap）；本地 3 commit：feat + verify-fix + rebase 适配
+
+> **Rebase 记录（F193 已 ship 的交互）**：开发期 F193 从 in-flight 变为已 ship（d5c2ae4+3a169fb）。F193 改了 `resolveSymbolRange`（加 `graph-format-stale` try/catch）+ graph node id 相对化 + 加载期 stale 检测。rebase 冲突已手工合并：我的 fuzzy 逻辑（not-found 分支）与 F193 的 stale 处理（getCachedGraphData 包裹）在同一函数但关注点 disjoint。post-rebase 复测暴露 view-fuzzy E2E 因 copy 旧绝对格式 baseline graph 触发 F193 新 stale 检测，已改用 F193 的 `installRelativizedBaseline` helper 修复。全量复测 vitest 4342 pass / 0 failed。FR-008 deferred 的"F193 冲突"前提现已落地——graph_node fuzzy 后续 fix 可在 F193 已 ship 的干净基础上做。
 **日期**: 2026-06-13
 **Mode**: spec-driver-feature
 
