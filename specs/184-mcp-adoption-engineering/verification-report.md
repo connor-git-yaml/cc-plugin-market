@@ -42,7 +42,7 @@
 | FR-007 graph 6 工具 description | SHOULD | ✅ PASS | `description-completeness.test.ts` graph 6：Use when + chained usage + ∈[100,500] |
 | FR-008 graph_node fuzzy | MAY | ⏸️ **DEFERRED** | 见下方专节 |
 | FR-009 任务→工具映射 | MAY | ✅ PASS | TOOL_GUIDE 含 impact/影响、context/定义、view_file/定位 映射；T001 断言 ≥2 映射线索 |
-| FR-010 A/B 评测设施复用 | SHOULD | ⏳ 待用户确认成本后执行 | 见下方 A/B 节 |
+| FR-010 A/B 评测设施复用 | SHOULD | ⏳ 归 F188 复测（用户决议） | 见下方 A/B 节（pipeline 已验证就绪，host 全局 plugin 隔离前置→F188） |
 | FR-011 现有测试套件零回归 | MUST | ✅ PASS | 见验收门总览 |
 
 ## SC 逐条验收
@@ -51,11 +51,11 @@
 |----|------|------|
 | SC-001 view_file fuzzy auto-resolve | ✅ PASS | unit + E2E：path-suffix 0.9 唯一 → 成功 + warnings:fuzzy-resolved |
 | SC-002 fuzzy 失败带候选 | ✅ PASS | unit('relu' 多候选) + E2E(裸名 'MLP' 0.85<0.9) → context.fuzzyMatches |
-| SC-003 instructions 传播性有结论 | ⏳ 待 A/B | 协议层传播已证（E2E）；Task 子代理模型上下文传播待 A/B（EC-005） |
-| SC-004 触发率方向性提升 | ⏳ 待 A/B | 见 A/B 节（最小规模只判方向性信号，确证留 F188） |
+| SC-003 instructions 传播性有结论 | ⏳ 归 F188 | 协议层传播已证（stdio E2E `getInstructions()`）；Task 子代理模型上下文传播结论归 F188（EC-005） |
+| SC-004 触发率方向性提升 | ⏳ 归 F188 | 触发率数据统一在 F188 出（proper cohort + host 隔离） |
 | SC-005 description 4 要素满格 | ✅ PASS | description-completeness.test.ts 全绿 |
 | SC-006 全量测试零回归 | ✅ PASS | vitest 4300 / build / repo:check |
-| SC-007 A/B 成本可控 | ⏳ 待 A/B | 跑批前列预估成本等用户确认 |
+| SC-007 A/B 成本可控 | ✅ 零消耗 | 本次 A/B 尝试 hard-fail 在 spawn driver 前，零 token/配额消耗；正式复测成本随 F188 |
 
 ---
 
@@ -78,9 +78,17 @@
 
 ---
 
-## A/B 评测（FR-010 / SC-003/004/007）— 待用户确认成本
+## A/B 评测（FR-010 / SC-003/004/007）— 决议：归 F188 复测
 
-代码改动已稳定交付，A/B 评测为独立后续步骤，**需用户明确确认成本后才跑批**（spec FR-010 既有约束）。详见交付报告中的 A/B 成本预估与凭据三件套 verify。
+代码改动已稳定交付。A/B trigger-rate 评测经用户决议**归 F188 复测**（M8 设计本就把触发率复测放 F188：最小 c1/c3 两 cohort × 10 task × N=3，proper cohort 纪律）。
+
+**本次 A/B 尝试记录（pipeline 已验证就绪，零配额消耗）**：
+- F184 stamped build（commit dd59f1f6）过 `spectra-version-gate`（含 F177+F181 sentinel）✅
+- F176 V-series fixture 可从 sibling worktree 取（gitignored，10 个）✅
+- **阻塞点**：host 装了全局 spectra plugin（`~/.claude/plugins/cache/.../spectra/{4.1.0,4.1.1,4.2.0}`），`eval-task-runner` 的 cohort3 写本地 `.mcp.json`→F184 dist 但**未传 `--strict-mcp-config`**，与全局同名 `spectra` server 冲突 → 触发率数据会被全局 4.2.0 污染，无法确证是 F184。runner 因此 hard-fail（在 spawn claude driver 前，**零 token/配额消耗**）。
+- 干净复跑前置：host 禁用全局 spectra plugin（host-runbook 步骤），或给 cohort3 加 `--strict-mcp-config`（可作 F188/评测设施改进的输入）。
+
+**结论**：SC-003（instructions 传播性）/ SC-004（触发率方向性）/ SC-007（A/B 成本）三项的**数据结论统一在 F188 出**；F184 本体（代码 + 协议层 instructions 传播 E2E + view_file fuzzy E2E + 全量回归）已独立验证通过，不被 A/B 阻塞。
 
 ---
 
