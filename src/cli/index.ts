@@ -40,7 +40,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 用法:
   spectra generate <target> [--deep] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--full] [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
+  spectra batch [--full] [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only|graph-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
   spectra diff <spec-file> <source> [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
