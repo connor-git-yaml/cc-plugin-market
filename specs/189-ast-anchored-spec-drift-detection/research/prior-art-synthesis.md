@@ -42,7 +42,9 @@
 ### 1.4 与我们资产的映射关系（关键）
 Fiberplane 的 **symbol 锚点机制**（`file#Symbol`）与我们 **F181 symbol id + F174 canonicalize/fuzzy**（`src/knowledge-graph/query-helpers.ts`）思路一致，可直接复用。**但指纹层有关键差距**：Fiberplane 用 **normalized AST**（忽略空白/位置/注释）→ XxHash3，而我们现成的 **F182 `skeletonHash` 实为文件级 raw-content SHA-256**（`createHash('sha256').update(sourceFile.getFullText())`，见 [src/core/ast-analyzer.ts:507](../../../src/core/ast-analyzer.ts)、[src/core/tree-sitter-analyzer.ts:200](../../../src/core/tree-sitter-analyzer.ts)）——名为 skeleton，实际哈希全文，**格式化/注释会改 hash**。
 
-因此准确表述：**我们已有可复用的 graph id（F181）+ canonicalize/fuzzy（F174）+ 文件级 content hash（F182），足以验证「粗粒度点锚 prototype」**；normalized-AST 指纹 + symbol 级粒度是**缺口**（M9-C follow-up）。prototype 的最小闭环 = 在 graph-id/content-hash 基座上加「binding 存储 + check 命令」薄壳，并显式接受「文件级 + 格式化敏感」的粗粒度局限。**不可声称「与 Fiberplane 同构 / 零件已全部具备」。**
+因此准确表述：**我们已有可复用的 graph id（F181）+ canonicalize/fuzzy（F174）+ 文件级 content hash（F182），足以验证「粗粒度点锚 prototype」**；normalized-AST 指纹 + symbol 级粒度是**缺口**（M9-C follow-up）。prototype 的最小闭环 = 在 graph-id/content-hash 基座上加「binding 存储 + check 命令」薄壳。**不可声称「与 Fiberplane 同构 / 零件已全部具备」。**
+
+> 📌 **research-phase 视角更新**：以上为调研阶段对「最省事路径」的判断（复用 F182 文件级 hash）。GATE_DESIGN 后用户拍板「prototype 内现写 symbol 级指纹」，故实际 prototype 没用 F182 文件级 hash，而是自实现 symbol 级源切片 + 逐行空白归一化（介于 F182 文件级与 Fiberplane 全 AST 之间的中间档）——已消除「文件级同文件连累」误报、达成「缩进/空行不敏感」。详见 [../spec.md](../spec.md) Gate 决策修订 与 [../decision/route-selection.md](../decision/route-selection.md) §7。
 
 ---
 

@@ -20,6 +20,15 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 - 产**路线选型决策文档**（点锚 vs 全仓，给选型 + 理由 + M9 ship 路径草案）
 - **不**并入 master 生产路径、**不**改现有 MCP 工具契约、**不**改 `src/panoramic`/`src/knowledge-graph` 生产代码（只读复用）
 
+### Gate 决策修订（GATE_DESIGN 后，用户拍板）
+
+| 决策 | 用户选择 | 对 scope 的影响 |
+|------|---------|----------------|
+| prototype 验证哪条路线 | **两条都做最小 demo**（点锚 + 全仓） | 新增 US4（全仓最小 demo）；全仓从「M9+ 非目标」提为「本期 demo 级闭环」，但仍非生产实现 |
+| prototype 指纹粒度 | **prototype 内现写 symbol 级** | FR-002/FR-007 升级：指纹改为 **symbol 级源切片 hash（带空白归一化）**，不再用 F182 文件级 hash；这消除「同文件他处改动连累」误报，并实现**空白不敏感**（注释/全 AST 不敏感仍属 M9-C） |
+
+> ⚠️ symbol 级指纹仍是 prototype 内**独立只读实现**（调 `analyzeFiles` 取 `ExportSymbol.startLine/endLine` 切片再 hash），**不改** `src/core/skeleton-hash.ts` 等生产 hash 逻辑。
+
 ---
 
 ## Prior Art 深读综合（立项弹药）
@@ -28,7 +37,7 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 
 ### 两条已核验路线
 
-1. **Fiberplane Drift（点锚路线）[已核验]** —— `github.com/fiberplane/drift`。tree-sitter 解析 → **normalized AST**（node kinds + token text，**忽略空白/位置/注释**）→ XxHash3 得 `sig`；binding 存版本化 TOML `drift.lock`（doc path + code target `file#Symbol` + `sig`）；`drift link` 建锚、`drift check` 验锚（stale 则 exit 1，可作 CI gate）。**与我们 F181 symbol id + F174 canonicalize/fuzzy 思路一致，可直接复用；但关键差距：Fiberplane 用 normalized-AST 指纹（格式化不触发），而我们现成的 F182 `skeletonHash` 实为文件级 raw-content SHA-256（`getFullText()`，见 [ast-analyzer.ts:507](../../src/core/ast-analyzer.ts)），格式化/注释会改 hash。因此 MVP prototype 是「文件级 raw-content 指纹」粗粒度版本，normalized-AST + symbol 级指纹是缺口（M9-C follow-up），不能声称「与 Fiberplane 同构」。**
+1. **Fiberplane Drift（点锚路线）[已核验]** —— `github.com/fiberplane/drift`。tree-sitter 解析 → **normalized AST**（node kinds + token text，**忽略空白/位置/注释**）→ XxHash3 得 `sig`；binding 存版本化 TOML `drift.lock`（doc path + code target `file#Symbol` + `sig`）；`drift link` 建锚、`drift check` 验锚（stale 则 exit 1，可作 CI gate）。**与我们 F181 symbol id + F174 canonicalize/fuzzy 思路一致，可直接复用。指纹层有谱系差异（三档由粗到细）：F182 `skeletonHash` = 文件级 raw-content SHA-256（`getFullText()`，见 [ast-analyzer.ts:507](../../src/core/ast-analyzer.ts)，格式化/注释都改 hash，最粗）< 本 prototype = symbol 级源切片 + 逐行空白归一化（GATE 决策，缩进/空行不敏感，中）< Fiberplane = 完整 normalized-AST（忽略全部格式化与注释，最细，= 我们的 M9-C 目标）。故本 prototype 既不复用 F182 文件级 hash，也未达 Fiberplane 全 AST 归一——是中间档，不能声称「与 Fiberplane 同构」。**
 
 2. **OpenLore（全仓/图节点路线）[已核验]** —— `github.com/clay-good/OpenLore`。代码库建成 SQLite 知识图谱（functions/routes/DB schema），OpenSpec living spec 与之 co-equal；`openlore drift` 把 git diff × spec 映射比对，分 Gap/Stale/Uncovered/ADR-gap 四类。锚点粒度偏 file/domain 级（靠 `Source files` header + 目录启发式）。**与我们 F193/F183 封闭图链 + `specs/` 形态契合，但我们的图节点已下到 symbol 级，理论上能给更细的锚点。**
 
@@ -63,14 +72,15 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 
 **Why this priority**：这是本 Feature 的核心价值与 SC-006 验收点——"给定一个 spec 引用 + 一次 symbol 变化，能标出 stale"。
 
-**Independent Test**：建锚后修改该 symbol 所在文件使其内容指纹变化，重跑 check，验证该锚 `status: 'stale'` 且 `reason` 指出指纹失配；对**完全未改动**的锚验证保持 `fresh`。
+**Independent Test**：建锚后修改被锚 **symbol 自身函数体**使其源切片变化，重跑 check，验证该锚 `status: 'stale'` 且 `reason` 指出指纹失配；对**仅空白重排**的同一 symbol 验证保持 `fresh`；对**同文件内其他 symbol 改动**验证本锚保持 `fresh`（symbol 级粒度不连累）。
 
 **Acceptance Scenarios**:
-1. **Given** 一条 fresh 锚，**When** 被锚 symbol 所在文件实质变化（内容指纹改变）后重跑 check，**Then** 该锚标 `stale`，输出含 `expectedFingerprint`/`actualFingerprint`
-2. **Given** 一条 fresh 锚，**When** 被锚文件完全未改动后重跑 check，**Then** 该锚保持 `fresh`
-3. **Given** 被锚 symbol 在 graph 中已消失（删除/重命名），**When** 重跑 check，**Then** 该锚标 `orphaned`（区别于 stale）
+1. **Given** 一条 fresh 锚，**When** 被锚 symbol 函数体实质变化（源切片改变）后重跑 check，**Then** 该锚标 `stale`，输出含 `expectedFingerprint`/`actualFingerprint`
+2. **Given** 一条 fresh 锚，**When** 被锚 symbol 仅空白/缩进重排（语义不变）后重跑 check，**Then** 该锚保持 `fresh`（symbol 级指纹做了空白归一化）
+3. **Given** 一条 fresh 锚，**When** **同文件内另一个** symbol 改动、被锚 symbol 自身不变，**Then** 本锚保持 `fresh`（symbol 级粒度，不被同文件他处连累）
+4. **Given** 被锚 symbol 在 graph 中已消失（删除/重命名），**When** 重跑 check，**Then** 该锚标 `orphaned`（区别于 stale）
 
-> ⚠️ **已知 MVP 局限（不在本期验收内，登记给 M9-C）**：MVP 指纹是文件级 raw-content SHA-256，**无法区分格式化/注释变化与语义变化**——纯格式化改动也会触发 `stale`（false-positive）。formatting-insensitivity 需要 normalized-AST 指纹（Fiberplane 式），是 M9-C follow-up，**不在 MVP 闭环**。本期不声称「格式化不误报」。
+> ⚠️ **指纹粒度与局限**（GATE_DESIGN 升级后）：prototype 指纹 = symbol 源切片（`startLine..endLine`）经**逐行空白归一化**（保留换行）后的 SHA-256，自实现、只读、不改生产 hash。已达成：symbol 级（不连累同文件）+ 缩进/行内空白/空行不敏感。**刻意不做**跨行折叠（避免 `return\n1` 这类 ASI 语义漏报）。**仍未达成（M9-C）**：注释/字面值/完整 normalized-AST 不敏感——改注释/改字面值仍会触发 stale。本期只声称「缩进/行内空白/空行不敏感」。
 
 ### User Story 3 — repo:check 集成草案（Priority: P2，本期仅草案不接线）
 
@@ -80,21 +90,35 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 
 **Independent Test**：prototype CLI 以独立命令运行，对含 stale 锚的 fixture 输出**退出码 1** + 结构化报告；草案文档描述挂入 `repo:check` 时如何把 stale **映射为 warning（贡献 `warnings` 而非 `status='fail'`）**，且不实际修改 `package.json` / `repo-maintenance-core.mjs`。
 
+### User Story 4 — 全仓路线最小 demo（Priority: P2，GATE_DESIGN 决策新增）
+
+为给 M9 路线选型提供对照，prototype 额外做一个**全仓（OpenLore 式）最小 demo**：给定一组「改动文件」+ spec 的「Source files 映射」，分类出 drift 类别，与点锚路线并列展示差异。
+
+**Why this priority**：用户在 GATE_DESIGN 选择「两条都做最小 demo」，全仓 demo 用于实证两条路线的覆盖面/误报差异，喂给决策文档定稿。**仅 demo 级**（不建生产分类引擎、不接 git 真实 diff，用 fixture 模拟改动文件集）。
+
+**Independent Test**：构造「改动文件列表」+「spec→Source files 映射」fixture，跑全仓 demo，验证能正确分出 `gap`（文件在映射内且改动但 spec 未动）/ `uncovered`（改动文件无任何映射）/ `stale-ref`（spec 映射指向已删除文件）三类，并输出与点锚 demo 对照的结构化报告。
+
+**Acceptance Scenarios**:
+1. **Given** 文件 `X` 在 domain D 的 Source files 内且被改动、D 的 spec 未改，**When** 跑全仓 demo，**Then** 报 `gap`（X→D）
+2. **Given** 改动文件 `Y` 不在任何 domain 映射内，**When** 跑全仓 demo，**Then** 报 `uncovered`（Y）
+3. **Given** domain D 的 Source files 列了已删除的 `Z`，**When** 跑全仓 demo，**Then** 报 `stale-ref`（D→Z）
+
 ---
 
 ## Functional Requirements
 
-- **FR-001**：系统 MUST 把 spec 引用经 `canonicalizeSymbolId`（失败时 `resolveSymbolFuzzy`）解析为 graph canonical symbol id；解析失败标 `unresolved`，多候选标 `ambiguous`（附 top-3），不自动误绑。
-- **FR-002**：系统 MUST 为每条成功锚定的引用计算并存储**内容指纹**。本期指纹 = symbol 所在文件经 `computeModuleSkeletonHash`（F182，文件级 raw-content SHA-256）得到的值，**复用现成实现、不新造 hash**；该函数对空/全失败文件返回 `undefined`，此时锚 MUST 标 `fingerprint-unavailable`（reason 说明），不写入伪指纹。
+- **FR-001**：系统 MUST 把 spec 引用经 `canonicalizeSymbolId`（失败时 `resolveSymbolFuzzy`）解析为 graph canonical symbol id；解析失败标 `unresolved`，多候选标 `ambiguous`（附 top-3），不自动误绑。**解析目标 MUST 限 symbol 节点**（id 含 `::`）——ref 命中同名 module 路径（无 `::`）不得作为锚（防 module/symbol 混淆误绑）。
+- **FR-002**：系统 MUST 为每条成功锚定的引用计算并存储 **symbol 级内容指纹**（GATE_DESIGN 升级）。指纹 = 调 `analyzeFiles([filePath])` 取该 symbol 的 `ExportSymbol.startLine/endLine`，切片源码后**空白归一化**再 SHA-256；为 prototype 内独立只读实现，**不改** `src/core/skeleton-hash.ts`。symbol 在文件中找不到（span 缺失/解析失败）时锚 MUST 标 `fingerprint-unavailable`（reason 说明），不写伪指纹。
 - **FR-003**：锚记录 MUST 持久化为可 diff 的 lock 制品（参照 Fiberplane `drift.lock` schema：引用位置 + canonical symbolId + fingerprint + resolvedFrom + matchKind + status），本期落在 `specs/189-*/prototype/` 内，**不写仓库根、不入生产路径**。
 - **FR-004**：check 时系统 MUST 重算指纹与存储值比对，分类为 `fresh`（一致）/ `stale`（失配）/ `orphaned`（symbol 已不存在）/ `ambiguous`（多候选）/ `unresolved`（解析失败）/ `fingerprint-unavailable` / `graph-unavailable`（见 FR-010）。
-- **FR-005**：check MUST 输出结构化报告（每条锚的 status + reason + expected/actual 指纹）。**standalone prototype CLI** 在含 `stale`/`orphaned` 时 MUST 返回退出码 1（CI gate 友好）；挂入 `repo:check` 的映射语义见 US3 / FR-008（stale → warning，不强制 fail）。
+- **FR-005**：check MUST 输出结构化报告（每条锚的 status + reason + expected/actual 指纹）。**standalone prototype CLI 退出码语义**：`stale`/`orphaned`（已确认 drift）→ **1**；`graph-unavailable`/`fingerprint-unavailable`（无法验证）→ **2**（CI 不得把"无法验证"误读为通过）；全 `fresh` → 0。优先级：graph 整体不可用 > 确认型 drift > 单锚无法验证。挂入 `repo:check` 的映射语义见 US3 / FR-008（stale → warning，不强制 fail）。
 - **FR-006**：系统 MUST 对所有复用的 graph/symbol/skeletonHash 资产保持**只读**——不修改 `src/knowledge-graph`、`src/panoramic/graph`、`src/core/skeleton-hash` 任何生产代码。
-- **FR-007**：指纹比对 MUST 仅依赖存储指纹与重算指纹的字面相等，不引入与 F182 口径不一致的归一化。⚠️ 本期 raw-content 指纹**不具备** formatting-insensitivity（纯格式化会触发 stale，已记录为 MVP 局限）；normalized-AST 指纹是 M9-C follow-up，本期 spec **不**对「格式化不误报」做任何承诺。
+- **FR-007**：symbol 级指纹 MUST 对源切片做**逐行空白归一化**（折叠每行内空格/Tab、去行首尾、丢弃空行，**但保留换行结构**）后再 hash，使缩进/行内空白/空行重排**不触发** stale。⚠️ **保留换行**是刻意设计——折叠换行会把 `return\n1`（ASI 下返回 undefined）与 `return 1` 误判为相同（语义漏报）。本期承诺「缩进/行内空白/空行不敏感」，**不**承诺跨行重排不敏感，也**不**承诺注释/字面值/完整 normalized-AST 不敏感（M9-C follow-up）。
 - **FR-008**：prototype MUST 可独立运行并在 README/决策文档中给出 `repo:check` 集成草案（命令形态 + standalone-exit-1 与 repo:check-warning 两种退出码映射 + 建议 gate 严重度），但**不实际接入**生产 `repo:check`（不改 `package.json` / `repo-maintenance-core.mjs`）。
 - **FR-009**：决策文档 MUST 完成点锚 vs 全仓路线选型，含：选哪条 + 排序理由 + M9 ship 路径草案（支撑 SC-005）。
 - **FR-010**：graph 不可用（未构建/加载失败）时 check MUST 优雅降级——所有锚标 `graph-unavailable` 并在报告中显式给出 `degraded: true` + reason；standalone CLI 此时 MUST 返回**专用退出码（非 0，区别于 stale 的 1，如 2）**，避免 graph 缺失被误读为「全部 fresh、check 通过」。
 - **FR-011**：本期 prototype 的 **spec 引用输入采用显式契约**（MVP 不做 Markdown 自由文本的引用抽取——那是 ship 前才定的 NLP/语法问题，见 follow-up）。最小输入 = 一个 JSON/YAML fixture，每条引用记 `{ ref: string, docPath: string, line: number }`；`ref` 是要解析的 symbol 表达式（如裸名或 `file::Symbol`）。lock 制品据此记录引用位置（docPath + line）。从 Markdown 正文自动抽取引用的语法是 **ship 前 follow-up**，不在 MVP 闭环。
+- **FR-012**（GATE_DESIGN 新增）：prototype MUST 额外提供**全仓路线最小 demo**——输入「改动文件列表」+「spec→Source files 映射」fixture，输出 `gap` / `uncovered` / `stale-ref` 分类（US4）。**仅 demo 级**：用 fixture 模拟改动文件集，不接真实 git diff、不建生产分类引擎、不接 `repo:check`。其报告 MUST 与点锚 demo 并列，供决策文档实证两路线差异。
 
 ---
 
@@ -134,10 +158,10 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 ## 非目标（Non-Goals）—— 必须钉死的边界
 
 1. **不自动生成额外的产品/spec 覆盖文档**。本 Feature 的目的是**证伪并标出不真实的 spec 引用**，使 spec 保持「精简且真实」，**绝不**是自动产出更多 spec/注释/覆盖文档。（本 feature 自身的 spec.md / prototype README / 决策文档属于立项制品，不在此列。）依据：AGENTbench 实证（synthesis §5）证明**冗余** context 主动拉低 agent 成功率——故 drift 检测服务于「删/修不真实引用」而非「增覆盖」。
-2. **不做全仓语义矛盾推理**。本期只做点对点的「锚点 staleness」（指纹失配），不做 constraint-graph 级的 doc-vs-doc / doc-vs-code contradiction 推理（那是更远期、误报面更大的形态）。
+2. **不做全仓语义矛盾推理**。全仓路线本期**仅 demo 级**（US4/FR-012：fixture 模拟改动文件 × Source files 映射的分类），**不**建生产分类引擎、不接真实 git diff、不做 constraint-graph 级 doc-vs-doc/doc-vs-code contradiction 推理（那是更远期、误报面更大的形态，M9+）。
 3. **不并入 master 生产路径**。不改 MCP 工具契约、不改 `repo:check` 实际脚本、不改任何 `src/` 生产代码（与并行 F195 graph-only 不撞车）。
 4. **不追求语言全覆盖**。prototype 锚定依赖现有 graph 已支持的语言/symbol 抽取，不新增 parser。
-5. **不做 symbol 级指纹与 rename-follow**（M9+ 增强，本期写进决策文档 follow-up，不在闭环内）。
+5. **symbol 级指纹本期已做（demo 级，空白归一化），但不做完整 normalized-AST 等价与 rename-follow**（注释/AST 不敏感 = M9-C，rename-follow = M9-D，写进决策文档 follow-up）。
 
 ---
 
@@ -148,7 +172,8 @@ Spec-driven 研发的核心资产是 spec/plan 文档对代码实体的引用（
 - **SC-003**：锚定能解析无前缀裸名引用到 canonical id 并记录 matchKind，多候选时不误绑（US1 AC-1/AC-2）。
 - **SC-004**：复用资产全程只读，`src/` 生产代码零改动（FR-006），`git diff --stat src/` 为空。
 - **SC-005**：决策文档完成点锚 vs 全仓路线选型——明确选哪条 + 理由 + M9 ship 路径草案（FR-009）。
-- **SC-006（顶层验收）**：上述四项制品（spec / 可运行 prototype / 只读约束 / 决策文档）齐备，构成"立项闭环"，为 M9 ship 决策提供可执行依据。
+- **SC-007**（GATE_DESIGN 新增）：prototype 含全仓路线最小 demo，能从 fixture 正确分出 `gap`/`uncovered`/`stale-ref`（US4），并与点锚 demo 并列对照（FR-012）。
+- **SC-006（顶层验收）**：上述制品（spec / 可运行 prototype【点锚 + 全仓双 demo】/ 只读约束 / 决策文档）齐备，构成"立项闭环"，为 M9 ship 决策提供可执行依据。
 
 ---
 

@@ -122,9 +122,14 @@ M9-B 集成方式：在 `scripts/lib/repo-maintenance-core.mjs` 的 `validateRep
 
 ---
 
-## 7. 待 prototype 验证补充
-> 以下在 prototype 跑通后回填：
-- [ ] 点锚最小闭环实测：建锚 → 改 symbol → 标 stale 是否如设计工作
-- [ ] 确认纯格式化变化**会**触发 stale（验证 MVP 文件级 content hash 的已知格式化敏感局限，为 M9-C 立项提供实测依据）
-- [ ] 文件级粒度 false-positive 的实际严重度（同文件多 symbol 场景）
-- [ ] check 退出码 + 结构化报告形态是否适合 M9-B 集成
+## 7. Prototype 验证结果（已回填）
+
+prototype 跑通 11/11 验收场景（`npx tsx specs/189-.../prototype/demo.ts` → exit 0），实测结论：
+
+- [x] **点锚最小闭环成立**：建锚（裸名 `add` → `math.ts::add` + symbol 级指纹）→ 改 symbol 体 → 标 `stale`（exit 1，expected≠actual），如设计工作。
+- [x] **GATE 决策升级生效——缩进/空行不敏感成立**：`add` 仅缩进/空行重排 → 保持 `fresh`。symbol 级源切片 + 逐行空白归一化（保留换行，避免 ASI 漏报）达成点锚 MVP 的「缩进/行内空白/空行不敏感」（比原 file-level 方案强；GATE 选 symbol 级的直接收益）。
+- [x] **symbol 级消除「同文件连累」误报**：改 `multiply`、`add` 不变 → `add` 保持 `fresh`。原 file-level 方案在此会误报 stale，symbol 级实测已消除。
+- [x] **check 退出码 + 报告适合 M9-B**：standalone exit 0/1/2（fresh / stale·orphaned / graph-unavailable）+ 结构化 `DriftReport`，可直接映射到 repo:check 的 warning 语境（见 prototype/README §repo:check 集成草案）。
+- [x] **全仓 demo 成立**：gap/uncovered/stale-ref 分类正确，与点锚并列对照——实证全仓覆盖广但靠映射启发式、点锚精准但需建锚，支撑「点锚先行、全仓 M9+ 叠加」选型。
+
+**残留待 M9 项**（prototype 已显式暴露，非阻塞立项）：注释/字面值变化仍触发 stale（需 M9-C normalized-AST）；`Class.method` 回退到 Class span（member 无 span）；rename → orphaned 不跟随（M9-D）。
