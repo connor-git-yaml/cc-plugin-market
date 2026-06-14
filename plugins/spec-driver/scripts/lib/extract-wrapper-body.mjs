@@ -16,19 +16,29 @@
 
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 /**
  * 剥除 SKILL.md 首个 frontmatter 块（awk write_skill_body 等价）。
  *
  * awk 语义：NR==1 且 $0=="---" 进入 frontmatter；其后遇到下一个 "---" 退出 frontmatter
  * 且该 "---" 行本身也被跳过（next）；frontmatter 外的行原样 print。
- * 注意：awk 按行处理，print 的每行末尾补 \n；源文件末尾换行行为由 split('\n') 还原。
+ *
+ * 与 awk 逐字节对齐的两个关键点（WARNING-1）：
+ *  1. CRLF 规范化：awk 以 RS=\n 切记录，CRLF 文件的 "---\r" 不会等于 "---"，故先把
+ *     \r\n → \n（否则 frontmatter 匹配失败、frontmatter 不被剥除）。
+ *  2. 尾换行（ORS）：awk 对每条 print 的记录补 ORS=\n，故 N 行输出 = 各行 join('\n') + 末尾 '\n'。
+ *     同时 awk 以 RS 切记录时，文件末尾的 \n 不产生额外空记录；而 JS split('\n') 会在尾随 \n
+ *     处留一个空串元素，须丢弃以避免多出一行。
  */
 function stripFrontmatter(content) {
-  const lines = content.split('\n');
+  // CRLF → LF（对齐 awk 的 RS=\n 行切分）
+  const normalized = content.replace(/\r\n/g, '\n');
+  // 丢弃尾随 \n 产生的空记录（awk 不会为文件末尾 \n 生成额外空行）
+  const body = normalized.endsWith('\n') ? normalized.slice(0, -1) : normalized;
+  const lines = body.split('\n');
   const out = [];
   let inFrontmatter = false;
-  let frontmatterDone = false;
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (i === 0 && line === '---') {
@@ -39,17 +49,18 @@ function stripFrontmatter(content) {
     if (inFrontmatter) {
       if (line === '---') {
         inFrontmatter = false;
-        frontmatterDone = true;
       }
       // frontmatter 内（含闭合 ---）全部跳过
       continue;
     }
     out.push(line);
   }
-  // 无 frontmatter（首行非 ---）时 out 含全部行，行为与 awk 一致（frontmatterDone 仅作语义标记）
-  void frontmatterDone;
-  // awk 以行为单位 print，每行尾随 \n；用 \n join 后补一个尾 \n 还原管道输出
-  return out.join('\n');
+  // 空输出（全部为 frontmatter）时 awk 不 print 任何记录 → 空串；
+  // 非空时还原 awk ORS：每条记录补 \n，等价 join('\n') + '\n'。
+  if (out.length === 0) {
+    return '';
+  }
+  return `${out.join('\n')}\n`;
 }
 
 /**
@@ -101,7 +112,10 @@ export function computeWrapperBodySha256(sourceSkillPath) {
 function isDirectExecution() {
   if (!process.argv[1]) return false;
   try {
-    return fs.realpathSync(process.argv[1]) === fs.realpathSync(new URL(import.meta.url).pathname);
+    // CRITICAL-1：用 fileURLToPath 而非 new URL(...).pathname——后者在安装路径含空格/非 ASCII 时
+    // 保留 %20/%E4... 转义，与 process.argv[1] 比对失败 → main() 不执行 → 静默生成空 wrapper。
+    // 与 validate-wrapper-sources.mjs 的 isDirectExecution 保持同一实现。
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

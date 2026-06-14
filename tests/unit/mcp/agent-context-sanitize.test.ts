@@ -135,4 +135,11 @@ describe('F186 T4 — agent-context-tools 错误响应脱敏', () => {
     expect(parsed.message).toBe('graph 未构建');
     assertNoAbsolutePath(serialized);
   });
+
+  // 把「有意豁免」与「测试遗漏」区分开（quality-review INFO）：
+  // stale 分支按 FINAL 设计回传含外来绝对路径的 err.message——是故意保留的诊断信号，非脱敏遗漏。
+  // 豁免依据见 specs/186.../plan.md Codex 处置表 CRITICAL-1。
+  it.todo(
+    'stale 分支按设计回传含外来绝对路径的 err.message——故意诊断信号，豁免见 specs/186 plan.md Codex 处置表 CRITICAL-1',
+  );
 });

@@ -26,12 +26,28 @@ const mocks = vi.hoisted(() => ({
   generateNextStepHint: vi.fn(),
   buildTopRelevantCallers: vi.fn(),
   safeStderrLog: vi.fn(),
+  // WARNING-2 修复：bfsTraverse / canonicalizeSymbolId 默认委派真实实现，
+  // handler-error 用例单独覆盖为抛错以确定性命中顶层 catch（不再依赖 mock 缺项副作用）。
+  bfsTraverse: vi.fn(),
+  canonicalizeSymbolId: vi.fn(),
 }));
 
 vi.mock('../../../src/mcp/graph-tools.js', () => ({
   getCachedGraphData: mocks.getCachedGraphData,
   reloadGraph: vi.fn(),
+  // WARNING-2：显式提供 stale 判定（恒 false），使 C-401 命中顶层 catch 的路径意图明确，
+  // 不再依赖「mock 缺 isGraphFormatStaleError → 调 undefined 抛 TypeError」的脆弱副作用。
+  isGraphFormatStaleError: () => false,
 }));
+
+// WARNING-2：mock query-helpers，bfsTraverse 路由到可覆盖的 vi.fn（默认委派真实实现），
+// 使 C-401 能直接令 bfsTraverse 抛错命中顶层 catch（参考 agent-context-sanitize.test.ts 用例 1）。
+vi.mock('../../../src/knowledge-graph/query-helpers.js', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/knowledge-graph/query-helpers.js')>(
+    '../../../src/knowledge-graph/query-helpers.js',
+  );
+  return { ...actual, bfsTraverse: mocks.bfsTraverse, canonicalizeSymbolId: mocks.canonicalizeSymbolId };
+});
 
 vi.mock('node:child_process', () => ({
   spawnSync: mocks.spawnSync,
@@ -60,6 +76,12 @@ import {
   handleDetectChanges,
 } from '../../../src/mcp/agent-context-tools.js';
 import { clearReverseAdjacencyCache } from '../../../src/knowledge-graph/query-helpers.js';
+
+// WARNING-2：取真实 bfsTraverse 作为 mock 默认实现（绝大多数用例依赖真实 BFS）。
+const { bfsTraverse: actualBfsTraverse, canonicalizeSymbolId: actualCanonicalizeSymbolId } =
+  await vi.importActual<typeof import('../../../src/knowledge-graph/query-helpers.js')>(
+    '../../../src/knowledge-graph/query-helpers.js',
+  );
 
 // ─── 合成 fixture 工厂 ─────────────────────────────────────
 
@@ -130,6 +152,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearReverseAdjacencyCache();
   mocks.existsSync.mockReturnValue(false);
+  // WARNING-2：默认委派真实实现；handler-error 用例单独覆盖为抛错
+  mocks.bfsTraverse.mockImplementation(actualBfsTraverse);
+  mocks.canonicalizeSymbolId.mockImplementation(actualCanonicalizeSymbolId);
 });
 
 afterEach(() => {
@@ -599,13 +624,15 @@ Binary files a/asset.png and b/asset.png differ
 
 describe('通用 / payload', () => {
   it('C-401 internal-error: 顶层 catch 脱敏（固定文案，drop stack）（F186 T4）', async () => {
-    // 本用例 mock 的 graph-tools 未提供 isGraphFormatStaleError → loadGraphOrError catch 内
-    // 调用 undefined 抛 TypeError，传播到 runAgentContextTool 顶层 catch。
+    // WARNING-2 修复：不再依赖「mock 缺 isGraphFormatStaleError → 调 undefined 抛 TypeError」的脆弱副作用，
+    // 改为 graph 加载成功后让 bfsTraverse 抛错，确定性命中 runAgentContextTool 顶层 catch
+    // （参考 agent-context-sanitize.test.ts 用例 1）。
     // F186 T4 起：顶层 catch 不再回传 err.message/stack，固定文案 '内部错误，请稍后重试'。
-    mocks.getCachedGraphData.mockImplementation(() => {
+    setMockGraph();
+    mocks.bfsTraverse.mockImplementation(() => {
       throw new Error('synthetic crash with stack');
     });
-    const r = await handleImpact({ target: 'x' });
+    const r = await handleImpact({ target: 'fixture/engine.py::Value' });
     const e = parseError(r);
     expect(e.code).toBe('internal-error');
     expect(e.message).toBe('内部错误，请稍后重试');
@@ -710,7 +737,10 @@ describe('F170c SC-003 — 三路径', () => {
     });
 
     it('handler error 路径（baseline 不变性）：response 不含 topImpacted / nextStepHint / _enrichmentDegraded', async () => {
-      mocks.getCachedGraphData.mockImplementation(() => {
+      // WARNING-2：graph 加载成功后让 bfsTraverse 抛错，确定性命中顶层 catch
+      // （不再依赖 mock 缺 isGraphFormatStaleError 的脆弱副作用）。
+      setMockGraph();
+      mocks.bfsTraverse.mockImplementation(() => {
         throw new Error('synthetic crash');
       });
       const r = await handleImpact({ target: 'fixture/engine.py::Value' });
@@ -762,7 +792,10 @@ describe('F170c SC-003 — 三路径', () => {
     });
 
     it('handler error 路径（baseline 不变性）：error response 不含 M7 新字段', async () => {
-      mocks.getCachedGraphData.mockImplementation(() => {
+      // WARNING-2：graph 加载成功后让 canonicalizeSymbolId 抛错，确定性命中顶层 catch
+      // （不再依赖 mock 缺 isGraphFormatStaleError 的脆弱副作用）。
+      setMockGraph();
+      mocks.canonicalizeSymbolId.mockImplementation(() => {
         throw new Error('synthetic crash');
       });
       const r = await handleContext({ symbolId: 'fixture/engine.py::Value' });
@@ -822,7 +855,10 @@ describe('F170c SC-003 — 三路径', () => {
     });
 
     it('handler error 路径（baseline 不变性）：error response 不含任何 M7 新字段', async () => {
-      mocks.getCachedGraphData.mockImplementation(() => {
+      // WARNING-2：graph 加载成功后让 bfsTraverse 抛错，确定性命中顶层 catch
+      // （VALID_DIFF 命中 fixture/engine.py → 有 changedSymbol → 进入 BFS）。
+      setMockGraph();
+      mocks.bfsTraverse.mockImplementation(() => {
         throw new Error('synthetic crash');
       });
       const r = await handleDetectChanges({ diff: VALID_DIFF });

@@ -130,6 +130,13 @@ write_wrapper_source_contract() {
   local body_sha
   body_sha="$(node "$PLUGIN_DIR/scripts/lib/extract-wrapper-body.mjs" "$source_skill_path" --sha256)"
 
+  # CRITICAL-1：helper 在安装路径含空格/非 ASCII 时若 isDirectExecution 误判会输出空 stdout 但退出码 0，
+  # 静默生成空 sha → 空 wrapper。此处对非 64 位十六进制 sha 做 hard fail，杜绝静默降级。
+  if [[ ! "$body_sha" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "[错误] extract-wrapper-body.mjs 未产出合法 sha256（got: '${body_sha}'），source: $source_skill_path" >&2
+    exit 1
+  fi
+
   cat <<EOF_CONTRACT
 ## Wrapper Source Contract
 
@@ -148,7 +155,16 @@ write_skill_body() {
 
   # F186 T2：frontmatter 剥除 + runtime text 替换改由单一 Node helper 产出，
   # 与 validate-wrapper-sources.mjs 共用同一提取逻辑（防双实现逐字节漂移）。
-  node "$PLUGIN_DIR/scripts/lib/extract-wrapper-body.mjs" "$source_skill_path"
+  local body
+  body="$(node "$PLUGIN_DIR/scripts/lib/extract-wrapper-body.mjs" "$source_skill_path")"
+
+  # CRITICAL-1：helper 误判 isDirectExecution（含空格/非 ASCII 安装路径）时会输出空 body 但退出码 0，
+  # 静默生成空正文 wrapper。source skill 正文恒非空，故空 body 必为 helper 故障 → hard fail。
+  if [[ -z "$body" ]]; then
+    echo "[错误] extract-wrapper-body.mjs 产出空 body，source: $source_skill_path" >&2
+    exit 1
+  fi
+  printf '%s\n' "$body"
 }
 
 write_wrapper() {

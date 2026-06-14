@@ -81,6 +81,37 @@ describe('F186 T2 — extract-wrapper-body helper', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
+  it('CRITICAL-1：helper 脚本路径含空格/非 ASCII 时直接执行仍产出非空 body + 64 位 sha', () => {
+    // 复现「安装路径含空格/非 ASCII → isDirectExecution 误判 → main() 不跑 → 空 stdout 退出码 0」回归。
+    // 把 helper copy 到含空格 + 非 ASCII 的临时目录，以子进程方式 `node extract-wrapper-body.mjs <src>` 调用。
+    const tmp = mkdtempSync(join(tmpdir(), 'wrapper-spacepath-'));
+    const weirdDir = join(tmp, '有 空格 dir', 'lib');
+    mkdirSync(weirdDir, { recursive: true });
+    const helperCopy = join(weirdDir, 'extract-wrapper-body.mjs');
+    cpSync(
+      join(REPO_ROOT, 'plugins', 'spec-driver', 'scripts', 'lib', 'extract-wrapper-body.mjs'),
+      helperCopy,
+    );
+    const src = join(tmp, 'SKILL.md');
+    writeFileSync(src, '---\nname: x\nmodel: opus\n---\n\n# 标题\n正文 body 行\n', 'utf-8');
+
+    // body 输出非空
+    const bodyOut = execFileSync('node', [helperCopy, src], { encoding: 'utf-8', timeout: 30_000 });
+    expect(bodyOut.length).toBeGreaterThan(0);
+    expect(bodyOut).toContain('正文 body 行');
+    expect(bodyOut).not.toContain('name: x');
+
+    // sha 输出为 64 位十六进制，且与 in-process computeWrapperBodySha256 一致
+    const shaOut = execFileSync('node', [helperCopy, src, '--sha256'], {
+      encoding: 'utf-8',
+      timeout: 30_000,
+    });
+    expect(shaOut).toMatch(/^[0-9a-f]{64}$/);
+    expect(shaOut).toBe(computeWrapperBodySha256(src));
+
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
   it('source 改一行 → sha 改变', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'wrapper-helper-drift-'));
     const src = join(tmp, 'SKILL.md');
@@ -89,6 +120,43 @@ describe('F186 T2 — extract-wrapper-body helper', () => {
     writeFileSync(src, '---\nname: x\n---\n\nline B\n', 'utf-8');
     const sha2 = computeWrapperBodySha256(src);
     expect(sha1).not.toBe(sha2);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('WARNING-1：source 无尾换行 → helper body 仍以单个 \\n 收尾（对齐 awk ORS）', () => {
+    // awk 对每条 print 的记录补 ORS=\n，故即便 source 末尾无 \n，提取出的 body 也应以 \n 收尾。
+    const tmp = mkdtempSync(join(tmpdir(), 'wrapper-noeol-'));
+    const withEol = join(tmp, 'with.md');
+    const noEol = join(tmp, 'no.md');
+    writeFileSync(withEol, '---\nname: x\n---\n\nline A\nlast line\n', 'utf-8');
+    writeFileSync(noEol, '---\nname: x\n---\n\nline A\nlast line', 'utf-8'); // 无尾换行
+    const bodyWith = extractWrapperBody(withEol);
+    const bodyNo = extractWrapperBody(noEol);
+    // 尾换行被规范化：两者 body 完全一致（sha 相等）
+    expect(bodyNo.endsWith('\n')).toBe(true);
+    expect(bodyNo).toBe(bodyWith);
+    expect(computeWrapperBodySha256(noEol)).toBe(computeWrapperBodySha256(withEol));
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('WARNING-1：CRLF source → frontmatter 正确剥除且 body 与 LF 版逐字节一致', () => {
+    // CRLF 文件的 "---\r" 不等于 "---"，旧实现会导致 frontmatter 完全不剥除；
+    // 规范化 \r\n→\n 后应与等价 LF 文件 sha 相等。
+    const tmp = mkdtempSync(join(tmpdir(), 'wrapper-crlf-'));
+    const lf = join(tmp, 'lf.md');
+    const crlf = join(tmp, 'crlf.md');
+    const lines = ['---', 'name: x', 'model: opus', '---', '', '# 标题', '正文行'];
+    writeFileSync(lf, lines.join('\n') + '\n', 'utf-8');
+    writeFileSync(crlf, lines.join('\r\n') + '\r\n', 'utf-8');
+    const bodyCrlf = extractWrapperBody(crlf);
+    // frontmatter 已剥除
+    expect(bodyCrlf).not.toContain('name: x');
+    expect(bodyCrlf).not.toContain('model: opus');
+    // 正文保留且无残留 \r
+    expect(bodyCrlf).toContain('正文行');
+    expect(bodyCrlf).not.toContain('\r');
+    // 与 LF 版逐字节一致
+    expect(computeWrapperBodySha256(crlf)).toBe(computeWrapperBodySha256(lf));
     rmSync(tmp, { recursive: true, force: true });
   });
 });
