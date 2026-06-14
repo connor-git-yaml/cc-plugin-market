@@ -29,7 +29,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PROJECT_ROOT, VERIFIED_ROOT, fixturesDir, runFixturePath, aggregateDir, smokeDir } from './lib/swe-bench-verified-paths.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
-import { checkPreregistration, parsePreregistration } from './lib/preregistration-check.mjs';
+import { checkPreregistration, parsePreregistration, readSemanticModuleShas } from './lib/preregistration-check.mjs';
 import { aggregateCohorts, COHORT_IDS } from './lib/cohort-aggregate.mjs';
 import { classifyRunForRanking } from './lib/classify-oracle.mjs'; // Feature 187 C-1：error→null 剔除分母
 import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs'; // Feature 187 FR-004-b：cohort 映射单一来源
@@ -52,12 +52,68 @@ export { COHORT_TO_TOOL };
 // argv
 // ───────────────────────────────────────────────────────────
 
+// Feature 187（FR-006）：experiment manifest 去 F176 焊死的 ~6 处硬编码参数。manifest 未提供的字段
+// 保留既有默认（向后兼容，不 break 已有跑批脚本）。
+export const MANIFEST_DEFAULTS = {
+  model: 'claude-opus-4-7',
+  outputFormat: 'stream-json',
+  cleanup: 'on-success',
+  repeat: null, // null → 沿用 mode 默认（smoke=1 / full=3）
+  skipJury: null, // null → 沿用 mode 默认（smoke 省 jury）
+  quotaCheckInterval: 6,
+  swebenchOracle: false, // 真实 FAIL_TO_PASS oracle（需 docker/venv）
+  swebenchTimeoutMs: 300000,
+};
+
+/** 读 experiment manifest（JSON 或 YAML），与 MANIFEST_DEFAULTS 合并。文件不存在/解析失败 → throw。 */
+export function loadExperimentManifest(manifestPath) {
+  if (!manifestPath) return { ...MANIFEST_DEFAULTS };
+  if (!fs.existsSync(manifestPath)) throw new Error(`experiment manifest 不存在: ${manifestPath}`);
+  const raw = fs.readFileSync(manifestPath, 'utf-8');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // 非 JSON → 极简 YAML（顶层 key: value，# 注释）；复杂结构请用 JSON
+    parsed = {};
+    for (const line of raw.split('\n')) {
+      const m = line.match(/^\s*([A-Za-z][\w]*)\s*:\s*(.+?)\s*(?:#.*)?$/);
+      if (!m) continue;
+      let v = m[2].replace(/^["']|["']$/g, '');
+      if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^-?\d+$/.test(v)) v = Number(v);
+      parsed[m[1]] = v;
+    }
+  }
+  return { ...MANIFEST_DEFAULTS, ...parsed };
+}
+
+/**
+ * Feature 187（C-2）：构造 live oracleSpecHash 输入 —— 判分语义模块当前源码摘要 + 运行时配置 +
+ * swebench 版本（从 venv best-effort 读）。freeze 与 check 共用，保证"改判分代码→hash 变→拦截"。
+ */
+export function buildLiveOracleSpecInput(manifest = MANIFEST_DEFAULTS, venvPath = 'scripts/.swebench-venv') {
+  let swebenchVersion = null;
+  try {
+    const r = spawnSync(path.join(venvPath, 'bin', 'python'), ['-c', 'import swebench;print(swebench.__version__)'], { encoding: 'utf-8', timeout: 15000 });
+    if (r.status === 0) swebenchVersion = (r.stdout || '').trim() || null;
+  } catch { /* best-effort：venv 不在时留 null */ }
+  return {
+    kind: 'swebench-execution',
+    timeout: manifest.swebenchTimeoutMs ?? MANIFEST_DEFAULTS.swebenchTimeoutMs,
+    arch: 'arm64-first',
+    datasetSource: 'local-jsonl',
+    swebenchVersion,
+    semanticModuleShas: readSemanticModuleShas(),
+  };
+}
+
 export function parseArgs(argv) {
   const args = {
     mode: null, // 'smoke' | 'full'
     dryRun: false, resume: false, skipJury: null,
     onQuota: 'pause', quotaCheckCmd: process.env.SPECTRA_QUOTA_CHECK_CMD ?? null,
     allowGlobalSpectra: false, task: null,
+    manifestPath: null, manifest: { ...MANIFEST_DEFAULTS },
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -71,12 +127,15 @@ export function parseArgs(argv) {
       case '--quota-check-cmd': args.quotaCheckCmd = argv[++i]; break;
       case '--allow-global-spectra': args.allowGlobalSpectra = true; break;
       case '--task': args.task = argv[++i]; break;
+      case '--manifest': args.manifestPath = argv[++i]; break;
       default: if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
   }
   if (!args.mode) throw new Error('--smoke 或 --full 必选其一');
   if (!['pause', 'continue'].includes(args.onQuota)) throw new Error('--on-quota 须为 pause|continue');
-  if (args.skipJury == null) args.skipJury = args.mode === 'smoke'; // smoke 默认省 jury 成本
+  args.manifest = loadExperimentManifest(args.manifestPath); // FR-006：加载并合并默认
+  // manifest.skipJury 优先；否则 --skip-jury；否则 mode 默认（smoke 省 jury）
+  if (args.skipJury == null) args.skipJury = args.manifest.skipJury != null ? args.manifest.skipJury : args.mode === 'smoke';
   return args;
 }
 
@@ -107,7 +166,10 @@ function entryValidation(args) {
   // 3. 预注册：--full 必须冻结一致；--smoke 仅提示
   const taskIds = listTaskIds(args);
   if (args.mode === 'full') {
-    const check = checkPreregistration(taskIds, PREREG);
+    // Feature 187（FR-005 / C-2）：swebench-execution 模式下额外冻结 oracle 语义 —— 传 oracleKind +
+    // live oracleSpecInput，prereg 缺 oracleSpecHash 或与 live 不符（改了分类代码/marker）→ 拦截。
+    const preregOpts = args.manifest?.swebenchOracle ? { oracleKind: 'swebench-execution', oracleSpecInput: buildLiveOracleSpecInput(args.manifest) } : {};
+    const check = checkPreregistration(taskIds, PREREG, preregOpts);
     if (!check.ok) problems.push(`预注册校验未过: ${check.reason}（FR-A-002b：全量前必须冻结且一致）`);
   } else if (!fs.existsSync(PREREG) || !parsePreregistration(fs.readFileSync(PREREG, 'utf-8')).frozen) {
     console.warn('[batch] ⚠️ 预注册未冻结 — smoke 可跑，但 --full 前必须冻结（FR-A-002b）');
@@ -155,8 +217,9 @@ function listTaskIds(args) {
   return fs.readdirSync(dir).filter((n) => n.endsWith('.json') && !n.startsWith('_')).map((n) => n.replace(/\.json$/, '')).sort();
 }
 
-export function buildRunMatrix(mode, taskIds, smokeTask = null) {
-  const repeats = mode === 'smoke' ? 1 : 3;
+export function buildRunMatrix(mode, taskIds, smokeTask = null, repeatOverride = null) {
+  // Feature 187 FR-006：manifest.repeat 覆盖 mode 默认（smoke=1 / full=3）
+  const repeats = repeatOverride != null ? repeatOverride : (mode === 'smoke' ? 1 : 3);
   const tasks = mode === 'smoke' ? [smokeTask ?? taskIds[0]].filter(Boolean) : taskIds;
   if (tasks.length === 0) throw new Error('无可跑 task（先跑 Verified importer + 预注册）');
   const matrix = [];
@@ -218,17 +281,20 @@ function runOne({ taskId, cohort, repeatIndex }, args) {
   const runnerFixture = path.join(PROJECT_ROOT, 'tests/baseline/tasks', taskId, `${tool}-${suffix}`, 'full.json');
   const destFixture = runFixturePath(taskId, cohort, repeatIndex);
 
+  // Feature 187 FR-006：model / output-format / cleanup 由 manifest 参数化（去 F176 焊死）
+  const mf = args.manifest ?? MANIFEST_DEFAULTS;
   const runnerArgs = [
     RUNNER, '--task', taskId, '--tool', tool,
     '--repeat-index', String(repeatIndex),
     '--fixture-suffix', suffix,
-    '--bypass-permissions', '--cleanup', 'on-success',
-    // F176 driver 统一（KD-7 + smoke 迭代实测）：全 cohort opus-4-7 + stream-json（token 采集）
-    // + stdin（variadic 防吃）+ 真实 skill 调用（prompt 提及 workflow 不触发真实机制）
-    '--model', 'claude-opus-4-7',
-    '--output-format', 'stream-json',
+    '--bypass-permissions', '--cleanup', mf.cleanup,
+    // driver 统一参数（manifest 可覆盖 model/output-format）+ stdin（variadic 防吃）+ 真实 skill 调用
+    '--model', mf.model,
+    '--output-format', mf.outputFormat,
     '--prompt-via-stdin',
     '--skill-invocation',
+    // Feature 187：opt-in 真实 FAIL_TO_PASS oracle（manifest swebenchOracle）
+    ...(mf.swebenchOracle ? ['--swebench-oracle', '--swebench-timeout-ms', String(mf.swebenchTimeoutMs)] : []),
   ];
   if (args.dryRun) {
     console.log(`[batch][dry-run] node ${runnerArgs.map((a) => path.basename(a)).join(' ')}`);
@@ -267,7 +333,8 @@ function runOne({ taskId, cohort, repeatIndex }, args) {
 // ───────────────────────────────────────────────────────────
 
 function quotaCheckpoint(completedCount, args) {
-  if (completedCount === 0 || completedCount % 6 !== 0) return 'ok';
+  const quotaInterval = args.manifest?.quotaCheckInterval ?? 6; // FR-006：配额检查倍数可参数化
+  if (completedCount === 0 || completedCount % quotaInterval !== 0) return 'ok';
   if (args.quotaCheckCmd) {
     const r = spawnSync('bash', ['-c', args.quotaCheckCmd], { encoding: 'utf-8', timeout: 60000 });
     if (r.status !== 0) {
@@ -359,7 +426,7 @@ async function main() {
   if (args.dryRun) console.error('[batch] --dry-run：跳过入口校验的 hard-fail（仅列计划）');
 
   const taskIds = listTaskIds(args);
-  const matrix = buildRunMatrix(args.mode, taskIds, args.task);
+  const matrix = buildRunMatrix(args.mode, taskIds, args.task, args.manifest?.repeat); // FR-006：repeat 参数化
   console.error(`[batch] 计划：${matrix.length} runs（${args.mode}; jury=${args.skipJury ? 'skip' : 'on'}; resume=${args.resume}）`);
   if (args.dryRun) {
     for (const m of matrix) console.log(`[plan] ${m.taskId} × ${m.cohort} × r${m.repeatIndex}`);
