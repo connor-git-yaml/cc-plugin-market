@@ -99,12 +99,12 @@ async function runAgentContextTool(
   try {
     const out = await body();
     return recordAndReturn(toolName, _telStart, _telReqSize, out.result, out.summary, out.samples);
-  } catch (err) {
+  } catch {
+    // F186 T4：脱敏回传给 MCP 客户端的错误响应——不外漏 err.message / stack（可能含绝对路径）。
+    // 保留 internal-error code（客户端只消费 code）；telemetry 经 recordAndReturn 仍记录该 code。
     return recordAndReturn(toolName, _telStart, _telReqSize, buildErrorResponse(
       'internal-error',
-      err instanceof Error ? err.message : String(err),
-      undefined,
-      { stack: err instanceof Error && err.stack ? err.stack.slice(0, 200) : undefined },
+      '内部错误，请稍后重试',
     ));
   }
 }
@@ -124,10 +124,11 @@ function loadGraphOrError(projectRoot: string):
     const cached = getCachedGraphData(projectRoot);
     if (cached === null) {
       return {
+        // F186 T4：去掉 projectRoot 内插（避免回传绝对路径），固定文案 + 可执行 hint
         error: buildErrorResponse(
           'graph-not-built',
-          `graph.json 不存在或加载失败 (projectRoot=${projectRoot})`,
-          '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
+          'graph 未构建',
+          '请先运行 `spectra batch` 生成图谱',
         ),
       };
     }
@@ -143,10 +144,11 @@ function loadGraphOrError(projectRoot: string):
       };
     }
     return {
+      // F186 T4：其他加载失败同样脱敏——不回传 projectRoot 绝对路径
       error: buildErrorResponse(
         'graph-not-built',
-        `graph.json 加载失败 (projectRoot=${projectRoot})`,
-        '请先运行 `spectra batch` 或 `spectra prepare` 生成图谱',
+        'graph 未构建',
+        '请先运行 `spectra batch` 生成图谱',
       ),
     };
   }

@@ -598,16 +598,20 @@ Binary files a/asset.png and b/asset.png differ
 // ============================================================
 
 describe('通用 / payload', () => {
-  it('C-401 internal-error: 异常情况下兜底 + stack 截断', async () => {
-    // 让 getCachedGraphData 抛错（非 null 路径）
+  it('C-401 internal-error: 顶层 catch 脱敏（固定文案，drop stack）（F186 T4）', async () => {
+    // 本用例 mock 的 graph-tools 未提供 isGraphFormatStaleError → loadGraphOrError catch 内
+    // 调用 undefined 抛 TypeError，传播到 runAgentContextTool 顶层 catch。
+    // F186 T4 起：顶层 catch 不再回传 err.message/stack，固定文案 '内部错误，请稍后重试'。
     mocks.getCachedGraphData.mockImplementation(() => {
       throw new Error('synthetic crash with stack');
     });
     const r = await handleImpact({ target: 'x' });
     const e = parseError(r);
     expect(e.code).toBe('internal-error');
-    expect(typeof e.context?.['stack']).toBe('string');
-    expect((e.context!['stack'] as string).length).toBeLessThanOrEqual(200);
+    expect(e.message).toBe('内部错误，请稍后重试');
+    // 脱敏：不再携带 stack（避免泄露绝对路径）
+    expect(e.context).toBeUndefined();
+    expect(r.content[0].text as string).not.toContain('stack');
   });
 });
 
