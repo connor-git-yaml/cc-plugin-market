@@ -11,6 +11,9 @@ codexWrappers:
   generator:
     script: "plugins/spec-driver/scripts/codex-skills.sh"
     command: "npm run codex:spec-driver:install"
+    # F186 T2：每个 wrapper header 内嵌 `- Source SHA256: <hash>`（source body 的 sha256，
+    # 由 scripts/lib/extract-wrapper-body.mjs 计算，shell 生成端与 JS 校验端共用同一 helper）。
+    # validate-wrapper-sources.mjs 重算比对：不匹配 / 缺 sha 行 → fail（防 source 漂移或 wrapper 被手改）。
   entries:
     - id: "spec-driver-constitution"
       source: "plugins/spec-driver/skills/spec-driver-constitution/SKILL.md"

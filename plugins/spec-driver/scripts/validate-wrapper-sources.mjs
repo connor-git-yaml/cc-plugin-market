@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseYamlDocument } from './lib/simple-yaml.mjs';
+import { computeWrapperBodySha256 } from './lib/extract-wrapper-body.mjs';
 
 function parseArgs(argv) {
   const options = {
@@ -69,6 +70,9 @@ function validateWrapperMarkers(projectRoot, entries, errors) {
   const checked = [];
   const missingFiles = [];
   const invalidMarkers = [];
+  // F186 T2：wrapper body sha256 漂移检测
+  const shaMismatches = [];
+  const missingSha = [];
 
   for (const entry of entries) {
     const targetPath = path.resolve(projectRoot, entry.target);
@@ -96,6 +100,25 @@ function validateWrapperMarkers(projectRoot, entries, errors) {
       continue;
     }
 
+    // F186 T2：解析 wrapper 内嵌的 Source SHA256，对 source 用同一 helper 重算比对。
+    // 缺 `Source SHA256:` 行 → fail（FINAL CRITICAL-2：缺 sha 即视为漂移/被手改，不是 warn）。
+    const shaMatch = content.match(/^- Source SHA256:\s*([0-9a-f]{64})\s*$/m);
+    if (!shaMatch) {
+      missingSha.push(entry.target);
+      continue;
+    }
+    const sourcePath = path.resolve(projectRoot, entry.source);
+    if (!fs.existsSync(sourcePath)) {
+      // source 缺失由 source-skills check 单独报；此处不重复，但 sha 无法校验 → 视为不通过
+      shaMismatches.push({ target: entry.target, expected: shaMatch[1], actual: '<source-missing>' });
+      continue;
+    }
+    const actualSha = computeWrapperBodySha256(sourcePath);
+    if (actualSha !== shaMatch[1]) {
+      shaMismatches.push({ target: entry.target, expected: shaMatch[1], actual: actualSha });
+      continue;
+    }
+
     checked.push(entry.target);
   }
 
@@ -113,14 +136,36 @@ function validateWrapperMarkers(projectRoot, entries, errors) {
     );
   }
 
+  if (missingSha.length > 0) {
+    errors.push(
+      `以下 Codex 包装技能缺少 \`Source SHA256:\` 行（疑似漂移/被手改，请重新运行 npm run codex:spec-driver:install）：${missingSha.join(', ')}`,
+    );
+  }
+
+  if (shaMismatches.length > 0) {
+    errors.push(
+      `以下 Codex 包装技能 body sha256 不匹配（source 已变更但 wrapper 未重生成）：${shaMismatches
+        .map((item) => `${item.target}（期望 ${item.expected.slice(0, 12)}…，实际 ${item.actual.slice(0, 12)}…）`)
+        .join(', ')}`,
+    );
+  }
+
+  const ok =
+    missingFiles.length === 0 &&
+    invalidMarkers.length === 0 &&
+    missingSha.length === 0 &&
+    shaMismatches.length === 0;
+
   return createCheck(
     'codex-wrapper-markers',
     'Codex 包装技能 source-of-truth 标记',
-    missingFiles.length === 0 && invalidMarkers.length === 0 ? 'pass' : 'fail',
+    ok ? 'pass' : 'fail',
     {
       checkedCount: checked.length,
       missingFiles,
       invalidMarkers,
+      missingSha,
+      shaMismatches,
     },
   );
 }
