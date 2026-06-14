@@ -198,12 +198,16 @@ export function checkPreregistration(actualTaskIds, preregPath, opts = {}) {
       return { ok: false, reason: `fixtureContentHash 不符（fixture 内容在冻结后换版）。frozen=${frozenFCH.slice(0, 12)} live=${opts.fixtureContentHash.slice(0, 12)}`, expectedHash: hash, actualHash };
     }
     // F197 W3：gitState 外锚比对（仅 swebench-execution kind；caller 注入 trackedClean/codeMatchesFrozen）
+    // W-2（fail-closed 契约）：opts.gitState 一旦存在（swebench-execution 已注入），即按 fail-closed 校验 ——
+    // trackedClean 必须显式 ===true 才放行；缺字段/undefined 视为未证明 clean → 拦截，而非静默跳过。
+    // codeMatchesFrozen 仅在 prereg 有 frozenGitCommit 时校验，但此时同样要求 ===true（缺字段也拦截）。
+    // opts.gitState 整体缺省（非 swebench / 旧路径）则跳过整块，保持向后兼容。
     if (opts.gitState) {
-      if (!opts.gitState.trackedClean) {
-        return { ok: false, reason: 'worktree 有未提交改动（git 外锚失效，拒绝跑批）', expectedHash: hash, actualHash };
+      if (opts.gitState.trackedClean !== true) {
+        return { ok: false, reason: 'worktree 有未提交改动或 git 状态未证实 clean（git 外锚失效，拒绝跑批）', expectedHash: hash, actualHash };
       }
-      if (frozenGitCommit && opts.gitState.codeMatchesFrozen === false) {
-        return { ok: false, reason: `代码自冻结 commit(${frozenGitCommit.slice(0, 8)}) 起已漂移（git 外锚拦截）`, expectedHash: hash, actualHash };
+      if (frozenGitCommit && opts.gitState.codeMatchesFrozen !== true) {
+        return { ok: false, reason: `代码自冻结 commit(${frozenGitCommit.slice(0, 8)}) 起已漂移或未证实匹配（git 外锚拦截）`, expectedHash: hash, actualHash };
       }
     }
   } else if (!oracleSpecHash) {

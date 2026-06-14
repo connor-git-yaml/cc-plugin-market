@@ -222,6 +222,33 @@ describe('W3 gitState外锚', () => {
     const r = checkPreregistration(ids, p, { oracleKind: 'ast-diff', gitState: { trackedClean: false, codeMatchesFrozen: false } });
     expect(r.ok).toBe(true);
   });
+
+  // W-2 fail-closed 契约：gitState 已注入但字段缺失（undefined）不能静默放行。
+  it('W-2: gitState 注入但缺 trackedClean（undefined）→ ok=false（fail-closed，不静默跳过）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f197-w2-'));
+    const p = writeSwebenchPrereg(dir, ids, [`gitCommit: ${frozenCommit}`]);
+    // codeMatchesFrozen=true 但 trackedClean 缺失 → 未证实 clean → 拦截
+    const r = checkPreregistration(ids, p, { oracleKind: 'swebench-execution', oracleSpecInput: SWEBENCH_SPEC, gitState: { codeMatchesFrozen: true } });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/未提交|未证实|外锚/);
+  });
+
+  it('W-2: prereg 含 gitCommit 但 gitState 缺 codeMatchesFrozen（undefined）→ ok=false（fail-closed）', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f197-w2-'));
+    const p = writeSwebenchPrereg(dir, ids, [`gitCommit: ${frozenCommit}`]);
+    // trackedClean=true 但 codeMatchesFrozen 缺失 + prereg 有 frozenGitCommit → 未证实匹配 → 拦截
+    const r = checkPreregistration(ids, p, { oracleKind: 'swebench-execution', oracleSpecInput: SWEBENCH_SPEC, gitState: { trackedClean: true } });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/漂移|未证实|外锚/);
+  });
+
+  it('W-2: prereg 无 gitCommit + gitState 缺 codeMatchesFrozen → 仅靠 trackedClean=true 放行', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f197-w2-'));
+    // 无 gitCommit 行 → frozenGitCommit 缺省 → codeMatchesFrozen 不校验，仅 trackedClean 守门
+    const p = writeSwebenchPrereg(dir, ids, []);
+    const r = checkPreregistration(ids, p, { oracleKind: 'swebench-execution', oracleSpecInput: SWEBENCH_SPEC, gitState: { trackedClean: true } });
+    expect(r.ok).toBe(true);
+  });
 });
 
 // ───────────────────────────────────────────────────────────

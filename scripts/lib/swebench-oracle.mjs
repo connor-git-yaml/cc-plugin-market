@@ -134,7 +134,11 @@ export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidat
     // W1 次级诊断（Codex C-2）：实例确不在其标签 dataset 时 fetch helper 抛 DATASET_MISMATCH →
     // 归 fixture 级"数据集错配"（应人工修 fixture 标签），区别于真 infra（venv 缺/网络）。
     // W-3：未知/缺失 dataset tag（datasetTagToHfId 抛 "未知 dataset tag"）同属 fixture 配置错误 → 一并归 fixture。
-    const isDatasetMismatch = /DATASET_MISMATCH|不在|未知 dataset|unknown dataset/.test(String(e.message));
+    // W-1（归因正确性）：只匹配两个显式机读标记，不用裸 "不在" 等宽泛词 —— 后者会把任何含 "不在"
+    // 的真 infra 错误（中文 FileNotFoundError / Python traceback）误归 fixture，掩盖真实故障。
+    // 两标记覆盖所有真实错配来源：Python 侧 swebench_fetch_rows.py 写死 "DATASET_MISMATCH:" 前缀；
+    // datasetTagToHfId 对未知 tag 抛 "未知 dataset tag: ..."。
+    const isDatasetMismatch = /DATASET_MISMATCH|未知 dataset tag/.test(String(e.message));
     return baseResult({ instanceId, candidatePatch, classification: 'error',
       failureSource: isDatasetMismatch ? 'fixture' : 'infra',
       reason: isDatasetMismatch ? `数据集错配（W1）：${e.message}` : `dataset build 失败: ${e.message}`,

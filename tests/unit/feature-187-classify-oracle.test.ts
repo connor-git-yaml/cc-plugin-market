@@ -70,10 +70,14 @@ describe('classifySwebenchResult — 14 行穷尽决策表', () => {
     expect(r.reason.length).toBeGreaterThan(0);
   });
 
-  it('C1: report.completed=true × resolved=null → fall through（不被强判 pass）', () => {
-    // resolved 非 true/false 时不能用 report 强判 pass，须 fall through 到启发式/fallback。
+  it('C1: report.completed=true × resolved=null → fall through 到 fallback，归 fail/candidate（计入分母）', () => {
+    // resolved 非 true/false 时不能用 report 强判 pass，须 fall through。
+    // phaseReached='done' 已过 test_exec 且 report 非 null（行 13 不触发）→ 行 14 fallback → fail/candidate。
+    // W-3：钉死语义为 fail/candidate（非仅 !=pass），防将来分类调整悄悄改变 resolved=null 的排名分母归属。
     const r = classifySwebenchResult({ report: { completed: true, resolved: null }, harnessExitCode: 0, phaseReached: 'done', logText: '' });
     expect(r.classification).not.toBe('pass');
+    expect(r.classification).toBe('fail');
+    expect(r.failureSource).toBe('candidate');
   });
 
   it('pass 必须同时满足 exit0 + completed + resolved（仅 exit0 不够）', () => {
