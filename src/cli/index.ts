@@ -9,6 +9,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from './utils/parse-args.js';
 import { printError } from './utils/error-handler.js';
+import { resolveVersionString } from './version-meta.js';
 import { runGenerate } from './commands/generate.js';
 import { runBatchCommand } from './commands/batch.js';
 import { runDiff } from './commands/diff.js';
@@ -33,6 +34,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = resolve(__dirname, '..', '..', 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
 const version = pkg.version;
+
+/**
+ * 组装 `--version` 实际输出。
+ * __dirname 在 dist 编译产物中为 dist/cli/，故 meta 在上一级 dist/.spectra-build-meta.json。
+ */
+function formatVersion(): string {
+  return resolveVersionString(resolve(__dirname, '..', '.spectra-build-meta.json'), version);
+}
 
 // 帮助文本
 const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
@@ -134,7 +143,7 @@ async function main(): Promise<void> {
   const { command } = result;
 
   if (command.version) {
-    console.log(`spectra v${version}`);
+    console.log(formatVersion());
     return;
   }
 

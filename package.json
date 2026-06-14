@@ -19,6 +19,7 @@
   "scripts": {
     "prebuild": "tsx scripts/inline-d3.ts",
     "build": "tsc",
+    "postbuild": "node scripts/postbuild-stamp.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
