@@ -11,6 +11,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolResult } from '../../mcp/lib/tool-response.js';
 import { withTelemetry } from '../../mcp/lib/telemetry.js';
 import { searchKbCore } from '../../scaffold-kb/search-core.js';
+import { buildEvidenceEnvelope as envelope, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
 import { mergeResults, type MergedResult, type SourceKind } from '../lib/result-merger.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
 import type { KbContext } from '../lib/kb-locator.js';
@@ -27,30 +28,6 @@ export interface KbSearchParams {
   sdk_version?: string;
 }
 
-/** envelope 属性值编码：去除可破坏头部的 `]` `"` 换行（修 Codex CRITICAL：注入逃逸） */
-function safeAttr(v: string): string {
-  return v.replace(/[\]"\r\n]/g, ' ');
-}
-
-/** 中和正文内的 envelope sentinel，防止提前闭合把注入文本放到 envelope 外（trust boundary） */
-function defangSentinel(content: string): string {
-  return content
-    .replace(/\[\s*\/\s*KB-EVIDENCE\s*\]/gi, '[ /KB-EVIDENCE ]')
-    .replace(/\[\s*KB-EVIDENCE/gi, '[ KB-EVIDENCE');
-}
-
-/** 按 UTF-16 code unit 截断但不切开代理对（修 Codex WARNING：孤立 surrogate） */
-function safeTruncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  let end = max;
-  const code = s.charCodeAt(end - 1);
-  if (code >= 0xd800 && code <= 0xdbff) end -= 1; // 末位是高代理 → 回退一位
-  return s.slice(0, end);
-}
-
-function envelope(content: string, docId: string, src: SourceKind, builtAt: string): string {
-  return `[KB-EVIDENCE doc_id="${safeAttr(docId)}" src="${src}" built_at="${safeAttr(builtAt)}"]\n${defangSentinel(content)}\n[/KB-EVIDENCE]`;
-}
 
 /**
  * 执行 kb_search（可测核心，不含 MCP 注册）。

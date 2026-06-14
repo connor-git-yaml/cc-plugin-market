@@ -31,12 +31,15 @@ function quoteToken(token: string): string {
 /**
  * 把用户查询构造为 FTS5 MATCH 表达式。
  * @param mode OR（召回优先，默认）| AND（精确优先）
+ * @param preTokenized true 时按空白切分（不再过 tokenize 二次 CJK 展开）——
+ *   用于已由 extractKeywords 规范化的关键词串，避免重复展开抵消单字降权（修 Codex W5）
  */
 export function sanitizeQuery(
   query: string,
   mode: 'OR' | 'AND' = 'OR',
+  preTokenized = false,
 ): SanitizedQuery | SanitizeError {
-  const raw = tokenize(query);
+  const raw = preTokenized ? query.split(/\s+/).filter((t) => t.length > 0) : tokenize(query);
   // 去重保序
   const seen = new Set<string>();
   const tokens: string[] = [];

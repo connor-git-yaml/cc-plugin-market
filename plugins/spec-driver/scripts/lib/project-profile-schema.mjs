@@ -20,6 +20,8 @@ export const ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'workflow_preferences',
   'forbidden_changes',
   'notes',
+  // F191：scaffold-kb 预查注入配置（加入白名单避免 unknown-field 警告）
+  'knowledge_sources',
 ]);
 
 // schema 求值必须全部包进 zodAvailable 守卫：缺 zod 时模块体完全不触碰 z，
@@ -87,6 +89,17 @@ if (zodAvailable) {
     }),
     forbiddenChanges: z.array(z.string().trim().min(1)),
     notes: z.array(z.string().trim().min(1)),
+    // F191：scaffold-kb 预查注入配置。OPTIONAL —— 仅 yaml 路径设置；md/fallback 路径省略仍合法，
+    // 避免新增 required 字段触发 safeParse 失败 → whole-profile fallback 清空旧字段（Codex 零回归关注点）
+    knowledgeSources: z
+      .object({
+        enabled: z.boolean(),
+        vendorKb: z.string().nullable(),
+        projectKb: z.string().nullable(),
+        topK: z.number().int().positive(),
+        maxInjectChars: z.number().int().positive(),
+      })
+      .optional(),
   });
 }
 

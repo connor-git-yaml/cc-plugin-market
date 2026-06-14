@@ -515,6 +515,8 @@ function normalizeLegacyMarkdown(content, projectRoot, diagnostics) {
         .map((line) => line.replace(/^[-*]\s*/, '').trim())
         .filter(Boolean),
     ),
+    // F191：legacy-md 不支持 knowledge_sources → 稳定默认形态（修 Codex W1）
+    knowledgeSources: defaultKnowledgeSources(),
   };
 }
 
@@ -554,6 +556,46 @@ function normalizeYamlInput(raw, projectRoot, diagnostics) {
     workflowPreferences: normalizeWorkflowPreferences(raw.workflow_preferences),
     forbiddenChanges: normalizeStringList(raw.forbidden_changes),
     notes: normalizeStringList(raw.notes),
+    // F191：scaffold-kb 预查注入配置（仅 yaml 路径设置；schema optional，其他路径省略合法）
+    knowledgeSources: normalizeKnowledgeSources(raw.knowledge_sources, projectRoot, diagnostics),
+  };
+}
+
+/**
+ * F191 — 归一化 knowledge_sources（scaffold-kb 预查注入配置）。
+ * 缺省/非对象 → 默认形态（enabled:false）；路径相对 projectRoot 解析为绝对路径（不校验存在性，
+ * 存在性降级交给 kb-prequery/query，FR-005）；非法 top_k/max_inject_chars → 回落默认 + diagnostics。
+ */
+/** F191 — knowledgeSources 稳定默认形态（4 条 resolver 路径共用，修 Codex W1） */
+function defaultKnowledgeSources() {
+  return { enabled: false, vendorKb: null, projectKb: null, topK: 3, maxInjectChars: 6000 };
+}
+
+function normalizeKnowledgeSources(raw, projectRoot, diagnostics) {
+  if (!raw || typeof raw !== 'object') return defaultKnowledgeSources();
+
+  const resolvePath = (p) =>
+    typeof p === 'string' && p.trim().length > 0 ? path.resolve(projectRoot, p.trim()) : null;
+
+  const posInt = (value, fallback, field) => {
+    if (value === undefined) return fallback;
+    if (Number.isInteger(value) && value > 0) return value;
+    diagnostics.push(
+      createDiagnostic(
+        'warning',
+        'project-context.knowledge-sources-invalid',
+        `knowledge_sources.${field} 必须为正整数，已回落默认 ${fallback}`,
+      ),
+    );
+    return fallback;
+  };
+
+  return {
+    enabled: raw.enabled === true,
+    vendorKb: resolvePath(raw.vendor_kb),
+    projectKb: resolvePath(raw.project_kb),
+    topK: posInt(raw.top_k, 3, 'top_k'),
+    maxInjectChars: posInt(raw.max_inject_chars, 6000, 'max_inject_chars'),
   };
 }
 
@@ -608,6 +650,7 @@ export function resolveProjectContext({ projectRoot }) {
     },
     forbiddenChanges: [],
     notes: [],
+    knowledgeSources: defaultKnowledgeSources(),
   };
 
   if (yamlExists && markdownExists) {
@@ -690,6 +733,7 @@ export function resolveProjectContext({ projectRoot }) {
         },
         forbiddenChanges: [],
         notes: [],
+        knowledgeSources: defaultKnowledgeSources(),
       });
     } else {
       normalized = parsedProfile.data;

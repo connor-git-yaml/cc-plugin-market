@@ -7,8 +7,10 @@
  */
 
 import type { CoreResult } from '../../scaffold-kb/search-core.js';
+import type { SourceKind } from '../../scaffold-kb/types.js';
 
-export type SourceKind = 'vendor' | 'project';
+// SourceKind 下沉到 scaffold-kb/types（供 evidence-envelope 复用、避免反向依赖）；此处 re-export 保持现有 import 兼容
+export type { SourceKind };
 
 export interface MergedResult extends CoreResult {
   sourceKind: SourceKind;

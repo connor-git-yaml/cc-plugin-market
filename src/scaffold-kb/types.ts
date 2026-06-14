@@ -2,6 +2,9 @@
  * F190 scaffold-kb — 共享类型（构建流水线各模块的契约单一事实源）
  */
 
+/** 知识库来源种类（厂商库 / 项目库）；下沉到 scaffold-kb 供 evidence-envelope 复用，避免反向依赖 kb-mcp */
+export type SourceKind = 'vendor' | 'project';
+
 /** ingester 解析出的单篇文档 */
 export interface ParsedDoc {
   /** 文档唯一 id（URL path 或文件相对路径），同一 KB 内稳定唯一 */

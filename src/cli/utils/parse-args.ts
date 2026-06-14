@@ -104,8 +104,8 @@ export interface CLICommand {
    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
    */
   indexGitRange?: string;
-  /** F190 scaffold-kb 子操作（build | serve） */
-  scaffoldKbOperation?: 'build' | 'serve';
+  /** F190/F191 scaffold-kb 子操作（build | serve | query） */
+  scaffoldKbOperation?: 'build' | 'serve' | 'query';
   /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
   scaffoldKbLlmsTxt?: string;
   /** F190 scaffold-kb build：--dir 本地文档目录 */
@@ -120,6 +120,16 @@ export interface CLICommand {
   scaffoldKbVendorKb?: string;
   /** F190 scaffold-kb serve：--project-kb 项目库路径（缺省 cwd/.spectra/kb） */
   scaffoldKbProjectKb?: string;
+  /** F191 scaffold-kb query：--requirement 需求文本（关键词提取入口） */
+  scaffoldKbRequirement?: string;
+  /** F191 scaffold-kb query：--top-k 返回条数 */
+  scaffoldKbTopK?: number;
+  /** F191 scaffold-kb query：--format 注入块格式 */
+  scaffoldKbFormat?: 'markdown' | 'json';
+  /** F191 scaffold-kb query：--max-inject-chars 注入总字符上限 */
+  scaffoldKbMaxInjectChars?: number;
+  /** F191 scaffold-kb query：--probe 仅打印能力 sentinel */
+  scaffoldKbProbe?: boolean;
 }
 
 /** 解析错误 */
@@ -681,12 +691,12 @@ export function parseArgs(argv: string[]): ParseResult {
       };
     }
     const op = argv[1];
-    if (op !== 'build' && op !== 'serve') {
+    if (op !== 'build' && op !== 'serve' && op !== 'query') {
       return {
         ok: false,
         error: {
           type: 'invalid_subcommand',
-          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve）`,
+          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query）`,
         },
       };
     }
@@ -698,6 +708,27 @@ export function parseArgs(argv: string[]): ParseResult {
       if (val === undefined || val.startsWith('--')) return undefined;
       return val;
     };
+    // 正整数严格校验（修 Codex W3：拒绝 0/负数/"3abc"，参数错误返回 invalid_option 非零退出）
+    let intErr: string | undefined;
+    const readPosIntFlag = (name: string): number | undefined => {
+      const raw = readFlag(name);
+      if (raw === undefined) return undefined;
+      if (!/^\d+$/.test(raw) || parseInt(raw, 10) <= 0) {
+        intErr = `${name} 必须为正整数，收到: ${raw}`;
+        return undefined;
+      }
+      return parseInt(raw, 10);
+    };
+    const scaffoldKbTopK = readPosIntFlag('--top-k');
+    const scaffoldKbMaxInjectChars = readPosIntFlag('--max-inject-chars');
+    const fmtRaw = readFlag('--format');
+    if (fmtRaw !== undefined && fmtRaw !== 'json' && fmtRaw !== 'markdown') {
+      return { ok: false, error: { type: 'invalid_option', message: `--format 必须是 markdown|json，收到: ${fmtRaw}` } };
+    }
+    if (intErr !== undefined) {
+      return { ok: false, error: { type: 'invalid_option', message: intErr } };
+    }
+    const scaffoldKbFormat = fmtRaw === 'json' ? 'json' : fmtRaw === 'markdown' ? 'markdown' : undefined;
     return {
       ok: true,
       command: {
@@ -710,6 +741,11 @@ export function parseArgs(argv: string[]): ParseResult {
         scaffoldKbLang: readFlag('--lang'),
         scaffoldKbVendorKb: readFlag('--vendor-kb'),
         scaffoldKbProjectKb: readFlag('--project-kb'),
+        scaffoldKbRequirement: readFlag('--requirement'),
+        scaffoldKbTopK,
+        scaffoldKbFormat,
+        scaffoldKbMaxInjectChars,
+        scaffoldKbProbe: argv.includes('--probe'),
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },

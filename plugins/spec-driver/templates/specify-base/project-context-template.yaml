@@ -38,3 +38,13 @@ workflow_preferences:
 
 forbidden_changes: []
 notes: []
+
+# F191 — scaffold-kb 知识库预查注入（可选；默认关闭）。
+# 配置后，spec-driver 在 specify 阶段前自动用需求关键词检索 KB，把命中文档作为
+# untrusted-evidence 注入设计上下文（需已安装 spectra 且 KB 已构建；不可用则静默降级）。
+# knowledge_sources:
+#   enabled: true
+#   vendor_kb: "plugins/<vendor-plugin>/kb"   # 厂商库 kb/ 路径（相对项目根或绝对）
+#   project_kb: ".spectra/kb"                 # 项目库 kb/ 路径（可选）
+#   top_k: 3                                  # 注入条数（默认 3）
+#   max_inject_chars: 6000                    # 注入总字符上限（默认 6000）

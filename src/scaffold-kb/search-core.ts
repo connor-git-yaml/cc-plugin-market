@@ -79,8 +79,9 @@ export function searchKbCore(
   query: string,
   topK: number,
   sdkVersion?: string,
+  preTokenized = false,
 ): SearchCoreOk | SearchCoreError {
-  const sanitized = sanitizeQuery(query);
+  const sanitized = sanitizeQuery(query, 'OR', preTokenized);
   if (!sanitized.ok) {
     return { ok: false, code: 'INVALID_QUERY' };
   }
