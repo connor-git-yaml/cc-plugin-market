@@ -1,4 +1,7 @@
-import { z } from 'zod';
+import { loadZod } from './load-zod.mjs';
+
+// 经共享 helper 同步加载 zod；缺失时 zodAvailable=false，模块加载不崩
+const { z, available: zodAvailable } = loadZod();
 
 export const EXCLUDED_EXECUTION_FIELDS = new Set([
   'phase_focus',
@@ -19,60 +22,78 @@ export const ALLOWED_TOP_LEVEL_FIELDS = new Set([
   'notes',
 ]);
 
-export const referenceEntryObjectSchema = z.object({
-  label: z.string().trim().min(1).optional(),
-  path: z.string().trim().min(1).optional(),
-  url: z.string().trim().url().optional(),
-  required: z.boolean().optional(),
-  purpose: z.string().trim().min(1).optional(),
-});
+// schema 求值必须全部包进 zodAvailable 守卫：缺 zod 时模块体完全不触碰 z，
+// 否则会从 MODULE_NOT_FOUND 退化为 ReferenceError —— 等于没修。
+// ESM 语法限制 export const 不能进 if 块，故用 let 顶层声明 + 守卫内赋值 + 末尾统一 export。
+let referenceEntryObjectSchema = null;
+let referenceEntrySchema = null;
+let resolvedReferenceEntrySchema = null;
+let resolvedProjectProfileSchema = null;
 
-export const referenceEntrySchema = referenceEntryObjectSchema.refine(
-  (value) => Boolean(value.path || value.url),
-  {
-    message: 'reference entry requires either path or url',
-  },
-);
+if (zodAvailable) {
+  referenceEntryObjectSchema = z.object({
+    label: z.string().trim().min(1).optional(),
+    path: z.string().trim().min(1).optional(),
+    url: z.string().trim().url().optional(),
+    required: z.boolean().optional(),
+    purpose: z.string().trim().min(1).optional(),
+  });
 
-export const resolvedReferenceEntrySchema = referenceEntryObjectSchema.extend({
-  exists: z.boolean().optional(),
-  resolvedPath: z.string().trim().min(1).optional(),
-  source: z.enum(['yaml', 'markdown']).optional(),
-});
+  referenceEntrySchema = referenceEntryObjectSchema.refine(
+    (value) => Boolean(value.path || value.url),
+    {
+      message: 'reference entry requires either path or url',
+    },
+  );
 
-export const resolvedProjectProfileSchema = z.object({
-  product: z
-    .object({
-      name: z.string().trim().min(1).optional(),
-      summary: z.string().trim().min(1).optional(),
-    })
-    .nullable(),
-  owner: z
-    .object({
-      name: z.string().trim().min(1).optional(),
-      team: z.string().trim().min(1).optional(),
-      email: z.string().trim().email().optional(),
-    })
-    .nullable(),
-  references: z.array(resolvedReferenceEntrySchema),
-  architectureConstraints: z.array(z.string().trim().min(1)),
-  verificationPolicy: z.object({
-    requireRealExecution: z.boolean(),
-    requiredCommands: z.array(z.string().trim().min(1)),
+  resolvedReferenceEntrySchema = referenceEntryObjectSchema.extend({
+    exists: z.boolean().optional(),
+    resolvedPath: z.string().trim().min(1).optional(),
+    source: z.enum(['yaml', 'markdown']).optional(),
+  });
+
+  resolvedProjectProfileSchema = z.object({
+    product: z
+      .object({
+        name: z.string().trim().min(1).optional(),
+        summary: z.string().trim().min(1).optional(),
+      })
+      .nullable(),
+    owner: z
+      .object({
+        name: z.string().trim().min(1).optional(),
+        team: z.string().trim().min(1).optional(),
+        email: z.string().trim().email().optional(),
+      })
+      .nullable(),
+    references: z.array(resolvedReferenceEntrySchema),
+    architectureConstraints: z.array(z.string().trim().min(1)),
+    verificationPolicy: z.object({
+      requireRealExecution: z.boolean(),
+      requiredCommands: z.array(z.string().trim().min(1)),
+      notes: z.array(z.string().trim().min(1)),
+    }),
+    researchPolicy: z.object({
+      onlineRequired: z.boolean(),
+      minPoints: z.number().int().min(0),
+      maxPoints: z.number().int().min(0),
+      preferredTools: z.array(z.string().trim().min(1)),
+      notes: z.array(z.string().trim().min(1)),
+    }),
+    workflowPreferences: z.object({
+      defaultMode: z.string().trim().min(1).nullable(),
+      preferredPreset: z.string().trim().min(1).nullable(),
+      notes: z.array(z.string().trim().min(1)),
+    }),
+    forbiddenChanges: z.array(z.string().trim().min(1)),
     notes: z.array(z.string().trim().min(1)),
-  }),
-  researchPolicy: z.object({
-    onlineRequired: z.boolean(),
-    minPoints: z.number().int().min(0),
-    maxPoints: z.number().int().min(0),
-    preferredTools: z.array(z.string().trim().min(1)),
-    notes: z.array(z.string().trim().min(1)),
-  }),
-  workflowPreferences: z.object({
-    defaultMode: z.string().trim().min(1).nullable(),
-    preferredPreset: z.string().trim().min(1).nullable(),
-    notes: z.array(z.string().trim().min(1)),
-  }),
-  forbiddenChanges: z.array(z.string().trim().min(1)),
-  notes: z.array(z.string().trim().min(1)),
-});
+  });
+}
+
+export {
+  zodAvailable,
+  referenceEntryObjectSchema,
+  referenceEntrySchema,
+  resolvedReferenceEntrySchema,
+  resolvedProjectProfileSchema,
+};

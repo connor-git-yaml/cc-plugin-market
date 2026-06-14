@@ -6,6 +6,7 @@ import {
   EXCLUDED_EXECUTION_FIELDS,
   referenceEntrySchema,
   resolvedProjectProfileSchema,
+  zodAvailable,
 } from './project-profile-schema.mjs';
 
 function createDiagnostic(level, code, message) {
@@ -69,19 +70,51 @@ function normalizeReferenceEntry(entry, source, projectRoot, diagnostics) {
     return null;
   }
 
-  const parsed = referenceEntrySchema.safeParse(entry);
-  if (!parsed.success) {
-    diagnostics.push(
-      createDiagnostic(
-        'warning',
-        'project-context.invalid-reference',
-        `reference 条目无效：${parsed.error.issues.map((issue) => issue.message).join('; ')}`,
-      ),
-    );
-    return null;
+  let normalized;
+  if (zodAvailable) {
+    // zod 在场：保持原有 schema 校验逻辑逐字节不变
+    const parsed = referenceEntrySchema.safeParse(entry);
+    if (!parsed.success) {
+      diagnostics.push(
+        createDiagnostic(
+          'warning',
+          'project-context.invalid-reference',
+          `reference 条目无效：${parsed.error.issues.map((issue) => issue.message).join('; ')}`,
+        ),
+      );
+      return null;
+    }
+    normalized = { ...parsed.data, source };
+  } else {
+    // 缺 zod 降级：手写构造已知字段。必须复现 referenceEntrySchema 的 .trim() 语义，
+    // 否则 `path: " docs/a.md "` 在降级路径会带空格、与正常路径 shape 分叉（W1）。
+    // 不浅拷贝 entry（会绕过 trim），逐字段 trim；空串视为缺省（不带入）。
+    // 这 4 个字段在 zod schema 里均为 z.string()，非字符串值（如 simple-yaml 把
+    // `path: 123` 强转成 number）本就应被拒绝；故仅接受 string 且 trim 后非空，
+    // 不再原样带入非字符串值（否则后续 path.resolve 会因 number 抛 ERR_INVALID_ARG_TYPE）。
+    normalized = { source };
+    for (const key of ['label', 'path', 'url', 'purpose']) {
+      const raw = entry[key];
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed) normalized[key] = trimmed;
+      }
+    }
+    if (typeof entry.required === 'boolean') {
+      normalized.required = entry.required;
+    }
+    // 有效性判定基于 trim 后的 path/url（与 referenceEntrySchema.refine 等价）
+    if (!normalized.path && !normalized.url) {
+      diagnostics.push(
+        createDiagnostic(
+          'warning',
+          'project-context.invalid-reference',
+          'reference 条目无效：reference entry requires either path or url',
+        ),
+      );
+      return null;
+    }
   }
-
-  const normalized = { ...parsed.data, source };
   if (normalized.path) {
     normalized.resolvedPath = path.resolve(projectRoot, normalized.path);
     normalized.exists = fs.existsSync(normalized.resolvedPath);
@@ -529,6 +562,16 @@ export function resolveProjectContext({ projectRoot }) {
   const yamlPath = path.join(specifyDir, 'project-context.yaml');
   const markdownPath = path.join(specifyDir, 'project-context.md');
   const diagnostics = [];
+  // 缺 zod 降级：仅在入口 push 一条 warning（避免 reference 多条目时重复）
+  if (!zodAvailable) {
+    diagnostics.push(
+      createDiagnostic(
+        'warning',
+        'project-context.zod-unavailable',
+        '未能加载 zod，已跳过 project-context schema 校验并使用手写归一化结果；如需完整校验请在已安装依赖的目录运行（npm i）或从仓内源路径运行 spec-driver 脚本',
+      ),
+    );
+  }
   const sourceLayers = [
     'user-input',
     'skill-contract',
@@ -610,45 +653,50 @@ export function resolveProjectContext({ projectRoot }) {
     );
   }
 
-  const parsedProfile = resolvedProjectProfileSchema.safeParse(normalized);
-  if (!parsedProfile.success) {
-    diagnostics.push(
-      createDiagnostic(
-        'warning',
-        'project-context.schema-fallback',
-        `project-context 解析结果存在结构问题，已回退到安全默认值：${parsedProfile.error.issues
-          .map((issue) => issue.message)
-          .join('; ')}`,
-      ),
-    );
-    normalized = resolvedProjectProfileSchema.parse({
-      product: null,
-      owner: null,
-      references: [],
-      architectureConstraints: [],
-      verificationPolicy: {
-        requireRealExecution: true,
-        requiredCommands: [],
+  if (zodAvailable) {
+    // zod 在场：保持原有 safeParse + schema-fallback 兜底逻辑逐字节不变
+    const parsedProfile = resolvedProjectProfileSchema.safeParse(normalized);
+    if (!parsedProfile.success) {
+      diagnostics.push(
+        createDiagnostic(
+          'warning',
+          'project-context.schema-fallback',
+          `project-context 解析结果存在结构问题，已回退到安全默认值：${parsedProfile.error.issues
+            .map((issue) => issue.message)
+            .join('; ')}`,
+        ),
+      );
+      normalized = resolvedProjectProfileSchema.parse({
+        product: null,
+        owner: null,
+        references: [],
+        architectureConstraints: [],
+        verificationPolicy: {
+          requireRealExecution: true,
+          requiredCommands: [],
+          notes: [],
+        },
+        researchPolicy: {
+          onlineRequired: false,
+          minPoints: 0,
+          maxPoints: 5,
+          preferredTools: [],
+          notes: [],
+        },
+        workflowPreferences: {
+          defaultMode: null,
+          preferredPreset: null,
+          notes: [],
+        },
+        forbiddenChanges: [],
         notes: [],
-      },
-      researchPolicy: {
-        onlineRequired: false,
-        minPoints: 0,
-        maxPoints: 5,
-        preferredTools: [],
-        notes: [],
-      },
-      workflowPreferences: {
-        defaultMode: null,
-        preferredPreset: null,
-        notes: [],
-      },
-      forbiddenChanges: [],
-      notes: [],
-    });
-  } else {
-    normalized = parsedProfile.data;
+      });
+    } else {
+      normalized = parsedProfile.data;
+    }
   }
+  // 缺 zod 降级：跳过 safeParse（normalized 由手写 normalizeYamlInput / normalizeLegacyMarkdown
+  // 构建，结构可信），直接沿用 normalized —— 等价于 zod 在场时 parse 成功分支的效果。
 
   const existingReferences = normalized.references.filter((entry) => entry.exists !== false || entry.url);
   const missingReferences = normalized.references.filter((entry) => entry.exists === false);

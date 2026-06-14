@@ -11,101 +11,110 @@
  *   - resolveEffectiveConfig() effective config 合并
  */
 
-import { z } from 'zod';
+import { loadZod } from './load-zod.mjs';
+
+// 经共享 helper 同步加载 zod；缺失时 zodAvailable=false，模块加载不崩
+const { z, available: zodAvailable } = loadZod();
 
 // ────────────────────────────────────────
-// 子 Schema
+// 子 Schema + 顶层 Schema
 // ────────────────────────────────────────
+//
+// 全部 schema 求值必须包进 zodAvailable 守卫：缺 zod 时模块体完全不触碰 z，
+// 否则会从 MODULE_NOT_FOUND 退化为 ReferenceError —— 等于没修。
+// ESM 语法限制 export const 不能进 if 块，故 specDriverConfigSchema 用 let + 末尾 export。
 
-const modelNameSchema = z.enum(['opus', 'sonnet', 'haiku'])
-  .or(z.string().min(1));
+let specDriverConfigSchema = null;
 
-const agentOverrideSchema = z.object({
-  model: modelNameSchema.optional(),
-}).strict();
+if (zodAvailable) {
+  const modelNameSchema = z.enum(['opus', 'sonnet', 'haiku'])
+    .or(z.string().min(1));
 
-const agentsSchema = z.record(
-  z.string(),
-  agentOverrideSchema,
-).optional();
+  const agentOverrideSchema = z.object({
+    model: modelNameSchema.optional(),
+  }).strict();
 
-const aliasMapSchema = z.record(z.string(), z.string());
+  const agentsSchema = z.record(
+    z.string(),
+    agentOverrideSchema,
+  ).optional();
 
-const modelCompatSchema = z.object({
-  runtime: z.enum(['auto', 'claude', 'codex']).default('auto'),
-  aliases: z.object({
-    codex: aliasMapSchema.optional(),
-    claude: aliasMapSchema.optional(),
-  }).optional(),
-  defaults: z.object({
-    codex: z.string().optional(),
-    claude: z.string().optional(),
-  }).optional(),
-}).optional();
+  const aliasMapSchema = z.record(z.string(), z.string());
 
-const codexSchema = z.object({
-  service_tier: z.enum(['fast', 'standard', 'flex']).default('fast'),
-}).optional();
+  const modelCompatSchema = z.object({
+    runtime: z.enum(['auto', 'claude', 'codex']).default('auto'),
+    aliases: z.object({
+      codex: aliasMapSchema.optional(),
+      claude: aliasMapSchema.optional(),
+    }).optional(),
+    defaults: z.object({
+      codex: z.string().optional(),
+      claude: z.string().optional(),
+    }).optional(),
+  }).optional();
 
-const codexThinkingSchema = z.object({
-  default_level: z.enum(['low', 'medium', 'high', 'xhigh']).default('xhigh'),
-  level_map: z.record(z.string(), z.enum(['low', 'medium', 'high', 'xhigh'])).optional(),
-}).optional();
+  const codexSchema = z.object({
+    service_tier: z.enum(['fast', 'standard', 'flex']).default('fast'),
+  }).optional();
 
-const researchSchema = z.object({
-  default_mode: z.enum([
-    'auto', 'full', 'tech-only', 'product-only',
-    'codebase-scan', 'skip', 'custom',
-  ]).default('auto'),
-  custom_steps: z.array(z.string()).default([]),
-}).optional();
+  const codexThinkingSchema = z.object({
+    default_level: z.enum(['low', 'medium', 'high', 'xhigh']).default('xhigh'),
+    level_map: z.record(z.string(), z.enum(['low', 'medium', 'high', 'xhigh'])).optional(),
+  }).optional();
 
-const verificationSchema = z.object({
-  commands: z.record(z.string(), z.record(z.string(), z.string())).default({}),
-  monorepo: z.object({
-    enabled: z.boolean().default(true),
-  }).optional(),
-  timeout: z.number().int().positive().optional().default(300),
-}).optional();
+  const researchSchema = z.object({
+    default_mode: z.enum([
+      'auto', 'full', 'tech-only', 'product-only',
+      'codebase-scan', 'skip', 'custom',
+    ]).default('auto'),
+    custom_steps: z.array(z.string()).default([]),
+  }).optional();
 
-const gatePauseSchema = z.object({
-  pause: z.enum(['always', 'auto', 'on_failure']),
-});
+  const verificationSchema = z.object({
+    commands: z.record(z.string(), z.record(z.string(), z.string())).default({}),
+    monorepo: z.object({
+      enabled: z.boolean().default(true),
+    }).optional(),
+    timeout: z.number().int().positive().optional().default(300),
+  }).optional();
 
-const gatesSchema = z.record(z.string(), gatePauseSchema).optional();
+  const gatePauseSchema = z.object({
+    pause: z.enum(['always', 'auto', 'on_failure']),
+  });
 
-const qualityGatesSchema = z.object({
-  auto_continue_on_warning: z.boolean().default(true),
-  pause_on_critical: z.boolean().default(true),
-}).optional();
+  const gatesSchema = z.record(z.string(), gatePauseSchema).optional();
 
-const retrySchema = z.object({
-  max_attempts: z.number().int().min(0).max(10).default(2),
-}).optional();
+  const qualityGatesSchema = z.object({
+    auto_continue_on_warning: z.boolean().default(true),
+    pause_on_critical: z.boolean().default(true),
+  }).optional();
 
-const progressSchema = z.object({
-  show_stage_progress: z.boolean().default(true),
-  show_stage_summary: z.boolean().default(true),
-}).optional();
+  const retrySchema = z.object({
+    max_attempts: z.number().int().min(0).max(10).default(2),
+  }).optional();
 
-// ────────────────────────────────────────
-// 顶层 Schema
-// ────────────────────────────────────────
+  const progressSchema = z.object({
+    show_stage_progress: z.boolean().default(true),
+    show_stage_summary: z.boolean().default(true),
+  }).optional();
 
-export const specDriverConfigSchema = z.object({
-  preset: z.enum(['balanced', 'quality-first', 'cost-efficient']).default('balanced'),
-  agents: agentsSchema,
-  model_compat: modelCompatSchema,
-  codex: codexSchema,
-  codex_thinking: codexThinkingSchema,
-  research: researchSchema,
-  verification: verificationSchema,
-  quality_gates: qualityGatesSchema,
-  gate_policy: z.enum(['strict', 'balanced', 'autonomous']).default('balanced'),
-  gates: gatesSchema,
-  retry: retrySchema,
-  progress: progressSchema,
-}).strict();
+  specDriverConfigSchema = z.object({
+    preset: z.enum(['balanced', 'quality-first', 'cost-efficient']).default('balanced'),
+    agents: agentsSchema,
+    model_compat: modelCompatSchema,
+    codex: codexSchema,
+    codex_thinking: codexThinkingSchema,
+    research: researchSchema,
+    verification: verificationSchema,
+    quality_gates: qualityGatesSchema,
+    gate_policy: z.enum(['strict', 'balanced', 'autonomous']).default('balanced'),
+    gates: gatesSchema,
+    retry: retrySchema,
+    progress: progressSchema,
+  }).strict();
+}
+
+export { specDriverConfigSchema, zodAvailable };
 
 // ────────────────────────────────────────
 // 常量
@@ -247,6 +256,21 @@ export function validateConfig(parsedYaml) {
   // 空对象视为合法（全用默认值）
   if (parsedYaml === null || parsedYaml === undefined) {
     return { success: true, data: {}, diagnostics };
+  }
+
+  // 缺 zod 降级：无法做 schema 校验，best-effort 接受原样配置并标 degraded。
+  // success=true 保证 validate-config.mjs 不误判为校验失败退非 0（其退出码只看 error 级诊断）。
+  if (!zodAvailable) {
+    return {
+      success: true,
+      data: (parsedYaml && typeof parsedYaml === 'object') ? parsedYaml : {},
+      degraded: true,
+      diagnostics: [{
+        level: 'warning',
+        code: 'config.zod-unavailable',
+        message: '未能加载 zod，已跳过 spec-driver.config.yaml schema 校验并 best-effort 接受配置；如需完整校验请在已安装依赖的目录运行（npm i）或从仓内源路径运行',
+      }],
+    };
   }
 
   const result = specDriverConfigSchema.safeParse(parsedYaml);
