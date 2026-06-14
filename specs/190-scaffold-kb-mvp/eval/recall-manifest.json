@@ -1,0 +1,46 @@
+{
+  "manifest_version": "1.0",
+  "created": "2026-06-14",
+  "description": "F190 recall@k 冻结评测清单。query→expected_doc_ids 由判定脚本机械计算 recall@5。反过拟合：tokenizer/检索实现不得针对此处具体 query 文本做特例分支；冻结后修改须在 commit message 说明理由。fixture 来源：demo-kb-en（Hono/MIT）、demo-kb-zh（ECharts/Apache-2.0）。",
+  "entries": [
+    { "id": "zh-cw-01", "query": "初始化", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["getting-started.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-02", "query": "坐标轴", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["option-xaxis.md", "option-yaxis.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-03", "query": "提示框", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["option-tooltip.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-04", "query": "视觉映射", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["visual-map.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-05", "query": "数据集", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["dataset.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-06", "query": "图例", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["option-legend.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-07", "query": "折线图", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["option-series-line.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-08", "query": "事件", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["event.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-09", "query": "渲染", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["renderer.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-10", "query": "样式", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["styling.md"], "expected_chunk_ids": null },
+    { "id": "zh-cw-11", "query": "异步数据", "fixture": "zh", "category": "chinese_word", "expected_doc_ids": ["dynamic-data.md"], "expected_chunk_ids": null },
+
+    { "id": "zh-mx-01", "query": "tooltip 提示框", "fixture": "zh", "category": "mixed", "expected_doc_ids": ["option-tooltip.md"], "expected_chunk_ids": null },
+    { "id": "zh-mx-02", "query": "xAxis x轴", "fixture": "zh", "category": "mixed", "expected_doc_ids": ["option-xaxis.md"], "expected_chunk_ids": null },
+    { "id": "zh-mx-03", "query": "series 折线图", "fixture": "zh", "category": "mixed", "expected_doc_ids": ["option-series-line.md"], "expected_chunk_ids": null },
+    { "id": "zh-mx-04", "query": "legend 图例", "fixture": "zh", "category": "mixed", "expected_doc_ids": ["option-legend.md"], "expected_chunk_ids": null },
+    { "id": "zh-mx-05", "query": "dataset 数据集", "fixture": "zh", "category": "mixed", "expected_doc_ids": ["dataset.md"], "expected_chunk_ids": null },
+
+    { "id": "api-01", "query": "HTTPException", "fixture": "en", "category": "api_symbol", "expected_doc_ids": ["exception-error-handling.md"], "expected_chunk_ids": null },
+    { "id": "api-02", "query": "c.req.param", "fixture": "en", "category": "api_symbol", "expected_doc_ids": ["request.md"], "expected_chunk_ids": null },
+    { "id": "api-03", "query": "c.json", "fixture": "en", "category": "api_symbol", "expected_doc_ids": ["context.md"], "expected_chunk_ids": null },
+    { "id": "api-04", "query": "xAxis.axisLabel.formatter", "fixture": "zh", "category": "api_symbol", "expected_doc_ids": ["option-xaxis.md"], "expected_chunk_ids": null },
+    { "id": "api-05", "query": "tooltip.formatter", "fixture": "zh", "category": "api_symbol", "expected_doc_ids": ["option-tooltip.md"], "expected_chunk_ids": null },
+    { "id": "api-06", "query": "echarts.init", "fixture": "zh", "category": "api_symbol", "expected_doc_ids": ["getting-started.md"], "expected_chunk_ids": null },
+    { "id": "api-07", "query": "setOption", "fixture": "zh", "category": "api_symbol", "expected_doc_ids": ["dynamic-data.md", "getting-started.md"], "expected_chunk_ids": null },
+
+    { "id": "ec-01", "query": "404", "fixture": "en", "category": "error_code", "expected_doc_ids": ["app-hono-object.md", "routing.md"], "expected_chunk_ids": null },
+    { "id": "ec-02", "query": "401", "fixture": "en", "category": "error_code", "expected_doc_ids": ["exception-error-handling.md"], "expected_chunk_ids": null },
+    { "id": "ec-03", "query": "500", "fixture": "en", "category": "error_code", "expected_doc_ids": ["exception-error-handling.md", "app-hono-object.md"], "expected_chunk_ids": null },
+    { "id": "ec-04", "query": "400", "fixture": "en", "category": "error_code", "expected_doc_ids": ["validation.md"], "expected_chunk_ids": null },
+    { "id": "ec-05", "query": "200", "fixture": "en", "category": "error_code", "expected_doc_ids": ["context.md"], "expected_chunk_ids": null },
+
+    { "id": "syn-01", "query": "图表初始化方法", "fixture": "zh", "category": "synonym", "expected_doc_ids": ["getting-started.md"], "expected_chunk_ids": null },
+    { "id": "syn-02", "query": "坐标轴标签", "fixture": "zh", "category": "synonym", "expected_doc_ids": ["option-xaxis.md"], "expected_chunk_ids": null },
+    { "id": "syn-03", "query": "鼠标悬浮提示", "fixture": "zh", "category": "synonym", "expected_doc_ids": ["option-tooltip.md"], "expected_chunk_ids": null },
+    { "id": "syn-04", "query": "加载远程数据", "fixture": "zh", "category": "synonym", "expected_doc_ids": ["dynamic-data.md"], "expected_chunk_ids": null },
+    { "id": "syn-05", "query": "handle errors", "fixture": "en", "category": "synonym", "expected_doc_ids": ["exception-error-handling.md"], "expected_chunk_ids": null },
+    { "id": "syn-06", "query": "parse request body", "fixture": "en", "category": "synonym", "expected_doc_ids": ["request.md"], "expected_chunk_ids": null },
+    { "id": "syn-07", "query": "cross origin", "fixture": "en", "category": "synonym", "expected_doc_ids": ["cors-middleware.md"], "expected_chunk_ids": null }
+  ]
+}

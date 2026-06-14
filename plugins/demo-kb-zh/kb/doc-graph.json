@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0",
+  "source": "directory",
+  "built_at": "2026-06-14T15:11:21.466Z",
+  "sdk_version": "5.x",
+  "nodes": [
+    {
+      "id": "basic-concepts.md",
+      "title": "ECharts 基础概念概览",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/basic-concepts.md"
+    },
+    {
+      "id": "dataset.md",
+      "title": "使用 dataset 管理数据",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/dataset.md"
+    },
+    {
+      "id": "dynamic-data.md",
+      "title": "异步数据加载和更新",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/dynamic-data.md"
+    },
+    {
+      "id": "event.md",
+      "title": "ECharts 中的事件和行为",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/event.md"
+    },
+    {
+      "id": "getting-started.md",
+      "title": "5 分钟上手 ECharts",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/getting-started.md"
+    },
+    {
+      "id": "option-legend.md",
+      "title": "配置项：图例组件（legend）",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/option-legend.md"
+    },
+    {
+      "id": "option-series-line.md",
+      "title": "配置项：折线图系列（series-line）",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/option-series-line.md"
+    },
+    {
+      "id": "option-tooltip.md",
+      "title": "配置项：提示框组件（tooltip）",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/option-tooltip.md"
+    },
+    {
+      "id": "option-xaxis.md",
+      "title": "配置项：直角坐标系 X 轴（xAxis）",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/option-xaxis.md"
+    },
+    {
+      "id": "option-yaxis.md",
+      "title": "配置项：直角坐标系 Y 轴（yAxis）",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/option-yaxis.md"
+    },
+    {
+      "id": "renderer.md",
+      "title": "使用 Canvas 或者 SVG 渲染",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/renderer.md"
+    },
+    {
+      "id": "styling.md",
+      "title": "个性化图表的样式",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/styling.md"
+    },
+    {
+      "id": "visual-map.md",
+      "title": "数据的视觉映射",
+      "summary": null,
+      "tags": [],
+      "lang": "zh",
+      "source_url": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/frosty-jepsen-b346c5/plugins/demo-kb-zh/source-docs/visual-map.md"
+    }
+  ],
+  "edges": []
+}

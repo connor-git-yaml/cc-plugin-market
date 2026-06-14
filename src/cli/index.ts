@@ -27,6 +27,7 @@ import { runInstall } from './commands/install.js';
 import { runExportCommand } from './commands/export.js';
 import { runDirectionAuditCommand } from './commands/direction-audit.js';
 import { runIndexCommand } from './commands/index.js';
+import { runScaffoldKb } from './commands/scaffold-kb.js';
 import { bootstrapRuntime } from '../runtime-bootstrap.js';
 
 // 读取 package.json 版本号
@@ -65,6 +66,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra direction-audit --snapshot <path>
   spectra direction-audit --compare-snapshot <path>
   spectra index [--watch] [--incremental] [--caller-depth <N>] [--project-root <dir>]
+  spectra scaffold-kb build (--dir <path> | --llms-txt <url>) [--output <kb/>] [--sdk-version <ver>] [--lang <code>]
+  spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
   spectra mcp-server
   spectra --version / --help
 
@@ -85,6 +88,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   export        将知识图谱导出为 Obsidian Vault 或 HTML 交互式可视化
   direction-audit 依赖方向自查工具（SC-006 CI regression guard）
   index         构建并持久化 UnifiedGraph snapshot 到 .spectra/unified-graph.json（Feature 156）
+  scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:
@@ -200,6 +204,9 @@ async function main(): Promise<void> {
       break;
     case 'index':
       await runIndexCommand(command);
+      break;
+    case 'scaffold-kb':
+      await runScaffoldKb(command);
       break;
     case 'mcp-server':
       await runMcpServer(command);

@@ -67,6 +67,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "chokidar": "^4.0.3",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",

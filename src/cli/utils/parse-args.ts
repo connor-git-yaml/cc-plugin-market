@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit' | 'index';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit' | 'index' | 'scaffold-kb';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -104,6 +104,22 @@ export interface CLICommand {
    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
    */
   indexGitRange?: string;
+  /** F190 scaffold-kb 子操作（build | serve） */
+  scaffoldKbOperation?: 'build' | 'serve';
+  /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
+  scaffoldKbLlmsTxt?: string;
+  /** F190 scaffold-kb build：--dir 本地文档目录 */
+  scaffoldKbDir?: string;
+  /** F190 scaffold-kb build：--output kb/ 产物目录（默认 ./kb） */
+  scaffoldKbOutput?: string;
+  /** F190 scaffold-kb build：--sdk-version 写入产物元数据 */
+  scaffoldKbSdkVersion?: string;
+  /** F190 scaffold-kb build：--lang 文档语言标记（默认 en） */
+  scaffoldKbLang?: string;
+  /** F190 scaffold-kb serve：--vendor-kb 厂商库路径（必需） */
+  scaffoldKbVendorKb?: string;
+  /** F190 scaffold-kb serve：--project-kb 项目库路径（缺省 cwd/.spectra/kb） */
+  scaffoldKbProjectKb?: string;
 }
 
 /** 解析错误 */
@@ -652,6 +668,54 @@ export function parseArgs(argv: string[]): ParseResult {
     };
   }
 
+  // F190 scaffold-kb 子命令（build | serve）
+  if (sub === 'scaffold-kb') {
+    if (argv.includes('--help') || argv.includes('-h') || argv.length === 1) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'scaffold-kb',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const op = argv[1];
+    if (op !== 'build' && op !== 'serve') {
+      return {
+        ok: false,
+        error: {
+          type: 'invalid_subcommand',
+          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve）`,
+        },
+      };
+    }
+    const readFlag = (name: string): string | undefined => {
+      const idx = argv.indexOf(name);
+      if (idx === -1) return undefined;
+      const val = argv[idx + 1];
+      // 缺值或下一个 token 是另一个 flag → 视为未提供（修 Codex WARNING）
+      if (val === undefined || val.startsWith('--')) return undefined;
+      return val;
+    };
+    return {
+      ok: true,
+      command: {
+        subcommand: 'scaffold-kb',
+        scaffoldKbOperation: op,
+        scaffoldKbLlmsTxt: readFlag('--llms-txt'),
+        scaffoldKbDir: readFlag('--dir'),
+        scaffoldKbOutput: readFlag('--output'),
+        scaffoldKbSdkVersion: readFlag('--sdk-version'),
+        scaffoldKbLang: readFlag('--lang'),
+        scaffoldKbVendorKb: readFlag('--vendor-kb'),
+        scaffoldKbProjectKb: readFlag('--project-kb'),
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
   // --global/--remove/--target 仅在 init 子命令下有效
   if (argv.includes('--global') || argv.includes('-g')) {
     return {
@@ -936,7 +1000,7 @@ function extractPositionalArgs(args: string[]): string[] {
   for (let i = 0; i < args.length; i++) {
     if (args[i]!.startsWith('--')) {
       // 跳过带值的选项（如 --output-dir <dir>, --target <value>）
-      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot' || args[i] === '--mode' || args[i] === '--caller-depth' || args[i] === '--git-range') {
+      if (args[i] === '--output-dir' || args[i] === '--target' || args[i] === '--languages' || args[i] === '--project-root' || args[i] === '--generator' || args[i] === '--debounce' || args[i] === '--min-size' || args[i] === '--budget' || args[i] === '--format' || args[i] === '--concurrency' || args[i] === '--on-over-budget' || args[i] === '--graph' || args[i] === '--output' || args[i] === '--snapshot' || args[i] === '--compare-snapshot' || args[i] === '--mode' || args[i] === '--caller-depth' || args[i] === '--git-range' || args[i] === '--llms-txt' || args[i] === '--dir' || args[i] === '--sdk-version' || args[i] === '--lang' || args[i] === '--vendor-kb' || args[i] === '--project-kb') {
         i++; // 跳过选项值
       }
       continue;

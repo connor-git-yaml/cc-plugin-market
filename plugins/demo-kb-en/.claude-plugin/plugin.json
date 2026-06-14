@@ -1,0 +1,11 @@
+{
+  "name": "demo-kb-en",
+  "version": "0.1.0",
+  "description": "英文 SDK 知识库 demo fixture（测试用途，验证 scaffold-kb 构建与 KB MCP 分发路径）。基于某公开开源 SDK 的公开文档构建。",
+  "author": {
+    "name": "scaffold-kb-mvp-test"
+  },
+  "license": "MIT",
+  "keywords": ["kb", "demo", "scaffold-kb", "test-fixture"],
+  "_testOnly": true
+}

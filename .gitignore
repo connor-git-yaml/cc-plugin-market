@@ -112,3 +112,7 @@ __pycache__/
 # F187 评测设施 v2：Python venv + patch 持久化产物不入库
 scripts/.swebench-venv/
 run_artifacts/
+
+# F190 demo fixture 原始第三方文档（Hono/ECharts）— 只提交构建产物 kb/ + FIXTURE.md，原文按 FIXTURE.md URL 可重建
+plugins/demo-kb-*/source-docs/
+specs/190-scaffold-kb-mvp/trace.md
