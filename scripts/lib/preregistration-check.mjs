@@ -21,8 +21,11 @@ export function computeTaskSetHash(taskIds) {
 /** Feature 187 freezeBlock schema 版本（oracleSpecHash 规则变更时升版）。 */
 export const FREEZE_SCHEMA_VERSION = '1.0';
 
-/** 判分语义模块（Codex C-2：任一变更都改判分，必须纳入 oracleSpecHash）。 */
-export const SEMANTIC_MODULES = ['classify-oracle.mjs', 'phase-markers.mjs', 'swebench-oracle.mjs'];
+/**
+ * 判分语义模块（Codex C-2/C3：任一变更都改判分，必须纳入 oracleSpecHash）。
+ * 含 dataset builder + fetch helper —— W1 校验/官方行获取逻辑变更同样影响判分（执行的测试集）。
+ */
+export const SEMANTIC_MODULES = ['classify-oracle.mjs', 'phase-markers.mjs', 'swebench-oracle.mjs', 'swebench-dataset-build.mjs', 'swebench_fetch_rows.py'];
 
 /** 递归 sort key 的稳定序列化（不依赖第三方；固定 key 顺序 → 跨平台稳定 hash 输入）。 */
 export function stableStringify(obj) {

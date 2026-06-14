@@ -44,10 +44,10 @@ function readHarnessArtifacts({ cwd, runId, instanceId }) {
     else if (inAny('empty_patch_ids')) { completed = true; resolved = false; emptyPatch = true; }
     else if (inAny('completed_ids') || inAny('resolved_ids') || inAny('unresolved_ids')) { completed = true; resolved = inAny('resolved_ids'); }
   }
-  // per-instance report 兜底/精化
+  // per-instance report 仅「补」top-level 缺失项，不「翻」已定结论（Codex W1：top-level id 列表最权威）
   const instEntry = instReport && instReport[instanceId];
   if (instEntry) {
-    if (typeof instEntry.resolved === 'boolean') resolved = instEntry.resolved;
+    if (resolved == null && typeof instEntry.resolved === 'boolean') resolved = instEntry.resolved;
     if (completed == null) completed = true;
   }
   const ts = instEntry?.tests_status || {};
@@ -79,13 +79,15 @@ function runHarnessOnce({ datasetPath, predPath, instanceId, runId, cwd, timeout
     '--instance_ids', instanceId, '--run_id', runId, '--max_workers', '1', '--cache_level', 'env'];
   const res = spawnSync(py, args, { cwd, encoding: 'utf-8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
   const timedOut = res.error && (res.error.code === 'ETIMEDOUT');
+  const bufferOverflow = res.error && (res.error.code === 'ENOBUFS'); // maxBuffer 溢出 = 采集器问题，非候选（Codex W5）
   if (timedOut) cleanupContainer(instanceId, runId);
-  // spawn 自身失败（ENOENT/权限等）：surface 到 stderr，避免静默 status=null 被误判
+  // spawn 自身失败（ENOENT/ENOBUFS/权限等）：surface 到 stderr，避免静默 status=null 被误判
   const spawnErr = res.error && !timedOut ? `[spawn error] ${res.error.code || ''} ${res.error.message || ''}` : '';
   return {
     harnessExitCode: typeof res.status === 'number' ? res.status : null,
     signal: res.signal || null,
     timedOut: Boolean(timedOut),
+    bufferOverflow: Boolean(bufferOverflow),
     stdout: res.stdout || '',
     stderr: [res.stderr || '', spawnErr].filter(Boolean).join('\n'),
     cmd: `${py} ${args.join(' ')}`,
@@ -116,7 +118,14 @@ export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidat
 
   // 1) 合成本地 dataset（含 W1 逐字段校验；不一致 → fixture 级 error，不跑 harness）
   const datasetPath = path.join(cwd, 'dataset.json');
-  const built = buildLocalDataset({ fixtures: [fixture], outPath: datasetPath, venvPath: absVenv });
+  let built;
+  try {
+    built = buildLocalDataset({ fixtures: [fixture], outPath: datasetPath, venvPath: absVenv });
+  } catch (e) {
+    // venv 缺失 / 官方行 fetch 失败等：返回 error/infra OracleResult，不让 runner 整体崩（Codex W3）
+    return baseResult({ instanceId, candidatePatch, classification: 'error', failureSource: 'infra',
+      reason: `dataset build 失败: ${e.message}`, cmd: '(skipped: dataset build error)', stderrTail: tail(String(e.stack || e.message)) });
+  }
   if (built.mismatches.length > 0) {
     return baseResult({ instanceId, candidatePatch, classification: 'error', failureSource: 'fixture',
       reason: `W1 字段不一致：${JSON.stringify(built.mismatches)}`, cmd: '(skipped: W1 mismatch)' });
@@ -144,15 +153,21 @@ export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidat
   // 不用 test_output 正则启发式（会在成功输出里误命中 → 把 pass 误判 error）。
   // 空 patch（候选未产出修复）走 report 行 10 → fail/candidate，不算"未收集到测试"的 fixture error。
   // noTestsCollected 仅在 patch 非空但 fixture 期望的 failToPass 一个都没跑（testPatch/node id 错配）时成立。
+  // noTestsCollected（pytest exit 5 / E-04）：仅当 harness completed 且 resolved=false（明确未解）且
+  // fixture 期望的 failToPass 一个都没执行。加 resolved===false 门（Codex W2）：resolved=true 时测试
+  // 必跑过，纵使 per-instance report.json 缺失也不把 pass 洗成 error。空 patch 另走 emptyPatch 分支。
   const expectF2P = normalizeIds(fixture.swebenchMeta.failToPass);
-  const noTestsCollected = !art.emptyPatch && art.report?.completed === true && expectF2P.length > 0 && art.failToPassExecuted.length === 0;
+  const noTestsCollected = !art.emptyPatch && art.report?.completed === true && art.report?.resolved === false
+    && expectF2P.length > 0 && art.failToPassExecuted.length === 0;
   const pytestExitCode = noTestsCollected ? 5 : null;
 
   // 5) 三分类
-  const verdict = classifySwebenchResult({
+  let verdict = classifySwebenchResult({
     harnessExitCode: run.harnessExitCode, signal: run.signal, timedOut: run.timedOut,
     phaseReached, logText, report: art.report, pytestExitCode,
   });
+  // Codex W5：maxBuffer 溢出（ENOBUFS）= 采集器问题，归 error/infra，不让部分日志误判候选 fail
+  if (run.bufferOverflow) verdict = { classification: 'error', failureSource: 'infra', reason: 'spawnSync ENOBUFS（harness 输出超 maxBuffer，采集器问题）' };
 
   // 6) W1 执行集校验（SC-014）：实际跑的 failToPass 须覆盖 fixture 期望（不一致告警，不改判但记录）
   const executedF2P = normalizeIds(art.failToPassExecuted);

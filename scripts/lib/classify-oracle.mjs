@@ -63,9 +63,11 @@ export function classifySwebenchResult(input = {}) {
   if (/BuildImageError|ImagePullError/.test(log)) return verdict('error', 'infra', 'log 含镜像层失败标志');
   // 行 4：segfault（arm64/QEMU 伪影）—— 即使在 test_exec 也判 infra（高于 Q1 行 8）
   if (harnessExitCode === 139 || signal === 'SIGSEGV') return verdict('error', 'infra', 'exit139/SIGSEGV segfault（arm64 仿真伪影）');
-  // 行 5：候选/test patch 无法应用（test_exec 之前）= 数据/输入层问题
-  if (!reachedTestExec(phaseReached) && /patch (?:does not apply|failed)|error: patch failed|git apply.*fail/i.test(log)) {
-    return verdict('error', 'fixture', 'patch apply 失败（test_exec 前）');
+  // 行 5（Codex C1 修正）：仅当 harness 未产出 report 时，才凭 log 判 patch apply 失败为 fixture/infra。
+  // 若 harness 出了 report（含 patch_successfully_applied），交给行 9-11 按 report 判 ——
+  // 候选 model_patch 自身无法应用 = 候选 fail（resolved=false→行10），不能洗成 error/fixture 剔出分母。
+  if (report == null && !reachedTestExec(phaseReached) && /patch (?:does not apply|failed)|error: patch failed|git apply.*fail/i.test(log)) {
+    return verdict('error', 'fixture', 'patch apply 失败（test_exec 前，无 harness report）');
   }
   // 行 6：pytest 未收集到测试
   if (pytestExitCode === 5) return verdict('error', 'fixture', 'pytest exit 5 未收集到测试（node id/testPatch 错配）');
@@ -77,8 +79,9 @@ export function classifySwebenchResult(input = {}) {
   if ((timedOut || killed || isOOM) && reachedTestExec(phaseReached)) {
     return verdict('fail', 'candidate', `测试执行中中止/OOM（候选 patch 责任，phase=${phaseReached}）`);
   }
-  // 行 9/10/11：harness 正常退出，看 report
-  if (harnessExitCode === 0 && report) {
+  // 行 9/10/11（Codex W4 修正）：有 report 即按 report 判，不强求 exitCode===0
+  // （行 1-8 已捕获 125/126/127/139 等 error code；非 0 exit 但 harness 写出有效 report 时仍信 report）。
+  if (report) {
     if (report.completed === true && report.resolved === true) return verdict('pass', 'none', 'harness completed + resolved');
     if (report.completed === true && report.resolved === false) return verdict('fail', 'candidate', 'harness completed 但 resolved=false（测试真实失败/passToPass 回归）');
     if (report.completed === false) return verdict('error', 'infra', 'harness completed=false（未正常完成）');

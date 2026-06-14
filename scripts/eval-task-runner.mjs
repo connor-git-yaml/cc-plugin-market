@@ -923,7 +923,11 @@ async function main() {
   let candidatePatch = null;
   if (args.swebenchOracle && taskFixture.swebenchMeta) {
     spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
-    const diffR = spawnSync('git', ['-C', wt.wtDir, 'diff', '--cached', preDriverCommit], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
+    // Codex C2：pathspec 排除 eval scaffolding（mcp-pull 的 .mcp.json / spectra graph / runner 日志），
+    // 否则会混进候选 patch 污染判分。preDriverCommit 之前 commit 的 scaffolding 已天然排除，此处兜未提交的。
+    const diffR = spawnSync('git', ['-C', wt.wtDir, 'diff', '--cached', preDriverCommit, '--',
+      '.', ':(exclude).mcp.json', ':(exclude)specs/_meta/**', ':(exclude)task-runner-stdout.log', ':(exclude)task-runner-stderr.log',
+    ], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
     candidatePatch = diffR.stdout || '';
   }
 

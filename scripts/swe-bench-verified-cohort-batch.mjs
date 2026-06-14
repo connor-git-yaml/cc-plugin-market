@@ -80,7 +80,10 @@ export function loadExperimentManifest(manifestPath) {
       const m = line.match(/^\s*([A-Za-z][\w]*)\s*:\s*(.+?)\s*(?:#.*)?$/);
       if (!m) continue;
       let v = m[2].replace(/^["']|["']$/g, '');
-      if (v === 'true') v = true; else if (v === 'false') v = false; else if (/^-?\d+$/.test(v)) v = Number(v);
+      if (v === 'null' || v === '~') v = null; // Codex W6：识别 YAML null（否则 repeat: null 变 "null" 致 matrix=0）
+      else if (v === 'true') v = true;
+      else if (v === 'false') v = false;
+      else if (/^-?\d+$/.test(v)) v = Number(v);
       parsed[m[1]] = v;
     }
   }
@@ -92,11 +95,17 @@ export function loadExperimentManifest(manifestPath) {
  * swebench 版本（从 venv best-effort 读）。freeze 与 check 共用，保证"改判分代码→hash 变→拦截"。
  */
 export function buildLiveOracleSpecInput(manifest = MANIFEST_DEFAULTS, venvPath = 'scripts/.swebench-venv') {
+  // 路径锚定 PROJECT_ROOT（Codex W8：相对 cwd 会致不同目录算出不同 hash）
+  const absVenv = path.isAbsolute(venvPath) ? venvPath : path.join(PROJECT_ROOT, venvPath);
   let swebenchVersion = null;
   try {
-    const r = spawnSync(path.join(venvPath, 'bin', 'python'), ['-c', 'import swebench;print(swebench.__version__)'], { encoding: 'utf-8', timeout: 15000 });
+    const r = spawnSync(path.join(absVenv, 'bin', 'python'), ['-c', 'import swebench;print(swebench.__version__)'], { encoding: 'utf-8', timeout: 15000 });
     if (r.status === 0) swebenchVersion = (r.stdout || '').trim() || null;
-  } catch { /* best-effort：venv 不在时留 null */ }
+  } catch { /* 下方 hard-fail */ }
+  // Codex W8：swebench 模式必须读到确定版本，否则 oracleSpecHash 在有/无 venv 间漂移 → 误拦截或假放行
+  if (!swebenchVersion) {
+    throw new Error(`无法从 venv 读取 swebench 版本（${absVenv}）；swebench-execution 模式需先 bash scripts/setup-swebench-venv.sh`);
+  }
   return {
     kind: 'swebench-execution',
     timeout: manifest.swebenchTimeoutMs ?? MANIFEST_DEFAULTS.swebenchTimeoutMs,
@@ -488,7 +497,8 @@ async function main() {
     source: 'host(batch--full)',
     spectraVersionGate: gate ? { commit: gate.meta.commit, distSha256: gate.meta.distSha256 } : null,
     taskSetHash: computeTaskSetHash(taskIds),
-    expectedRunCount: taskIds.length * COHORT_IDS.length * 3,
+    // Codex W7：用 effective repeats（manifest.repeat 覆盖 full 默认 3），否则 repeat 调整后报告失真
+    expectedRunCount: taskIds.length * COHORT_IDS.length * (args.manifest?.repeat ?? 3),
     runCount: records.length,
     ...agg,
   });
