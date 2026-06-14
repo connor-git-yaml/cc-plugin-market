@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { writeLocalSpectraPluginDir, globalSpectraPluginPresent, globalSpecDriverPluginPresent } from './lib/local-spectra-plugin.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { fixturesDir as verifiedFixturesDir } from './lib/swe-bench-verified-paths.mjs';
+import { runSwebenchInstance } from './lib/swebench-oracle.mjs'; // Feature 187：真实 FAIL_TO_PASS oracle（opt-in --swebench-oracle）
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -69,6 +70,9 @@ export function parseArgs(argv) {
     outputFormat: null, // Feature 176：F176 batch 传 stream-json（全 cohort token 采集）
     promptViaStdin: false, // Feature 176：variadic flag 防吃 prompt
     skillInvocation: false, // Feature 176 smoke 迭代：prompt 提及 workflow 不触发真实机制 → 改真实 skill 调用
+    swebenchOracle: false, // Feature 187：opt-in 用真实 FAIL_TO_PASS 测试执行作 primary oracle（fixture 须含 swebenchMeta + docker/venv 就绪）；fuzzy 降 secondary
+    swebenchTimeoutMs: 300000, // Feature 187：swebench-execution 外层 watchdog（默认 5 min；F188 可经 manifest 调 900s）
+    artifactsDir: 'run_artifacts', // Feature 187：patch/log 持久化 + harness 产物根目录（.gitignore）
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -87,6 +91,9 @@ export function parseArgs(argv) {
       case '--output-format': args.outputFormat = argv[++i]; break;
       case '--prompt-via-stdin': args.promptViaStdin = true; break;
       case '--skill-invocation': args.skillInvocation = true; break;
+      case '--swebench-oracle': args.swebenchOracle = true; break;
+      case '--swebench-timeout-ms': args.swebenchTimeoutMs = Number(argv[++i]); break;
+      case '--artifacts-dir': args.artifactsDir = argv[++i]; break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown flag: ${a}`);
     }
@@ -204,7 +211,9 @@ export function buildDriverPrompt({ tool, taskPrompt, spectraContext, skillInvoc
     case 'gstack':
       return `请使用 GStack 风格的 plan → build → review → test → ship 工作流完成以下任务：\n\n${taskPrompt}`;
     default:
-      return taskPrompt;
+      // Feature 187（FR-004-a）：default 不再裸回退 taskPrompt（漏接的新 cohort 会静默跑成对照组 =
+      // 隐性错配）。未知 tool 直接 throw；新增 cohort 必须在此显式声明分支 + cohort-registry 注册。
+      throw new Error(`buildDriverPrompt: 未知 tool '${tool}'（漏接配置？请在 buildDriverPrompt 与 cohort-registry.mjs 显式声明，禁止裸回退对照组）`);
   }
 }
 
@@ -663,7 +672,7 @@ function readSpectraVersion() {
   return pkg.version;
 }
 
-export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResult, oracleResult, productMetrics, claudeArgs = null, mcpTrace = null, w3Flag = null, usage = null }) {
+export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResult, oracleResult, secondaryOracle = null, productMetrics, claudeArgs = null, mcpTrace = null, w3Flag = null, usage = null }) {
   const nowIso = new Date().toISOString();
   const staleAfterDate = new Date(Date.now() + 6 * 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
   // Sprint 3 Phase D codex review fix: 把真实传给 claude 的 args 入库（不含 prompt 本身），让 bypass-permissions / plugin-dir 等 flag 可审计
@@ -738,11 +747,10 @@ export function assembleTaskFixture({ taskId, tool, taskFixture, wtDir, runResul
       commits: productMetrics.commits,
       filesChanged: productMetrics.filesChanged,
       uncommittedChanges: productMetrics.uncommittedChanges,
-      primaryOracle: {
-        kind: oracleResult.kind,
-        passed: oracleResult.passed,
-        details: typeof oracleResult.details === 'string' ? oracleResult.details : JSON.stringify(oracleResult.details).slice(0, 1000),
-      },
+      // Feature 187（FR-002）：持久化完整 OracleResult，details 结构化不截断（修旧 .slice(0,1000) 破坏 JSON）。
+      // legacy oracle 只有 {kind,passed,details}，swebench-execution 含 classification/failureSource/phaseReached 等。
+      primaryOracle: { ...oracleResult },
+      secondaryOracle: secondaryOracle ? { ...secondaryOracle } : null,
       testsPassed: null, testsFailed: null, testsBroken: null,
       rubricJudgeScore: null, // Phase 4 由 eval-judge 填
       rubricJudgeRationale: null,
@@ -898,6 +906,10 @@ async function main() {
     );
   }
 
+  // Feature 187：记录 driver 运行前的 commit（已含 setup + 任何 cohort scaffolding 如 graph commit），
+  // 用于事后隔离"候选 patch = driver 的解"，排除 scaffolding 污染（confound）。
+  const preDriverCommit = spawnSync('git', ['-C', wt.wtDir, 'rev-parse', 'HEAD'], { encoding: 'utf-8' }).stdout.trim();
+
   const prompt = buildDriverPrompt({ tool: args.tool, taskPrompt: taskFixture.prompt, spectraContext, skillInvocation: args.skillInvocation });
   console.log(`[task-runner] running claude (${args.tool})...`);
   const runResult = runTask({
@@ -907,12 +919,34 @@ async function main() {
   });
   console.log(`[task-runner] claude done: wall=${(runResult.wallMs/1000).toFixed(1)}s, exit=${runResult.exitCode}, timedOut=${runResult.timedOut}, output=${runResult.stdout.length}B`);
 
+  // Feature 187：在写入 eval 日志「之前」抓候选 patch（add -A 后 diff preDriverCommit），避免日志污染候选 diff。
+  let candidatePatch = null;
+  if (args.swebenchOracle && taskFixture.swebenchMeta) {
+    spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
+    const diffR = spawnSync('git', ['-C', wt.wtDir, 'diff', '--cached', preDriverCommit], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
+    candidatePatch = diffR.stdout || '';
+  }
+
   // 持久化 stdout/stderr
   fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stdout.log'), runResult.stdout, 'utf-8');
   fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stderr.log'), runResult.stderr, 'utf-8');
 
-  // 跑 oracle
-  const oracleResult = runPrimaryOracle({ wtDir: wt.wtDir, oracle: taskFixture.primaryOracle });
+  // 跑 oracle。Feature 187（FR-001-c）：opt-in --swebench-oracle 且 fixture 含 swebenchMeta 时，
+  // primary = 真实 FAIL_TO_PASS 测试执行，fuzzy/ast-diff 降为 secondary 对照；否则保留 legacy 行为。
+  const legacyOracle = runPrimaryOracle({ wtDir: wt.wtDir, oracle: taskFixture.primaryOracle });
+  let oracleResult = legacyOracle;
+  let secondaryOracle = null;
+  let runId = null;
+  if (args.swebenchOracle && taskFixture.swebenchMeta) {
+    runId = `${args.task}__${args.tool}__r${args.repeatIndex ?? 0}`;
+    oracleResult = runSwebenchInstance({
+      fixture: taskFixture, candidatePatch,
+      artifactsDir: path.resolve(PROJECT_ROOT, args.artifactsDir), runId,
+      timeoutMs: args.swebenchTimeoutMs,
+    });
+    secondaryOracle = legacyOracle; // fuzzy 旁路对照，并列存储不覆盖
+    console.log(`[task-runner] swebench-oracle: ${oracleResult.classification}/${oracleResult.failureSource} (passed=${oracleResult.passed})`);
+  }
   console.log(`[task-runner] oracle ${oracleResult.kind}: ${oracleResult.passed ? 'PASS' : 'FAIL'}`);
 
   const productMetrics = captureProductMetrics(wt.wtDir);
@@ -939,7 +973,7 @@ async function main() {
 
   const fixture = assembleTaskFixture({
     taskId: args.task, tool: args.tool, taskFixture, wtDir: wt.wtDir,
-    runResult, oracleResult, productMetrics,
+    runResult, oracleResult, secondaryOracle, productMetrics,
     claudeArgs: runResult.claudeArgs, // Sprint 3 Phase D codex fix: bypass-permissions / plugin-dir flags 入 meta.args
     mcpTrace,
     w3Flag,
@@ -956,12 +990,49 @@ async function main() {
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
   console.log(`[task-runner] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);
 
-  // Cleanup
-  if (args.cleanup === 'always' || (args.cleanup === 'on-success' && oracleResult.passed)) {
+  // Feature 187（FR-003）：cleanup 销毁 worktree「之前」原子持久化 patch.diff + 日志到 artifactsDir，
+  // 使 jury 在 PASS run cleanup 后仍能读真实 diff（不再只靠截断 diffStat）。写盘失败则不 cleanup，保留现场。
+  let persistOk = true;
+  if (args.swebenchOracle && runId) {
+    persistOk = persistRunArtifacts({
+      artifactsDir: path.resolve(PROJECT_ROOT, args.artifactsDir), runId,
+      patchDiff: candidatePatch, stdout: runResult.stdout, stderr: runResult.stderr,
+    });
+  }
+
+  // Cleanup（持久化成功才允许销毁；FR-003-b 写盘失败保留现场）
+  const wantCleanup = args.cleanup === 'always' || (args.cleanup === 'on-success' && oracleResult.passed);
+  if (wantCleanup && persistOk) {
     fs.rmSync(wt.wtDir, { recursive: true, force: true });
     console.log(`[task-runner] worktree cleaned up`);
+  } else if (wantCleanup && !persistOk) {
+    console.warn(`[task-runner] ⚠️ 产物持久化失败，保留 worktree 现场（不 cleanup）: ${wt.wtDir}`);
   } else {
     console.log(`[task-runner] worktree retained for debug: ${wt.wtDir}`);
+  }
+}
+
+/**
+ * Feature 187 FR-003：原子写 patch.diff + stdout.log + stderr.log 到 <artifactsDir>/<runId>/。
+ * temp file + rename 保证原子性；任一写失败返回 false（调用方据此保留 worktree 现场）。
+ */
+export function persistRunArtifacts({ artifactsDir, runId, patchDiff, stdout, stderr }) {
+  try {
+    const dir = path.join(artifactsDir, String(runId).replace(/[^A-Za-z0-9._-]/g, '_'));
+    fs.mkdirSync(dir, { recursive: true });
+    const atomicWrite = (name, content) => {
+      const target = path.join(dir, name);
+      const tmp = `${target}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, content ?? '', 'utf-8');
+      fs.renameSync(tmp, target);
+    };
+    if (patchDiff != null) atomicWrite('patch.diff', patchDiff);
+    atomicWrite('stdout.log', stdout);
+    atomicWrite('stderr.log', stderr);
+    return true;
+  } catch (e) {
+    console.error(`[task-runner] persistRunArtifacts 失败: ${e.message}`);
+    return false;
   }
 }
 

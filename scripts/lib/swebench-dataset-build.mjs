@@ -55,9 +55,12 @@ function fetchOfficialRows({ datasetName, instanceIds, venvPath }) {
  * 从一组 fixture 合成本地 dataset JSON 文件。
  * @returns {{outPath: string, digest: string, rows: object[], mismatches: Array<{instanceId, fields}>}}
  */
-export function buildLocalDataset({ fixturePaths, outPath, datasetName = DEFAULT_DATASET, venvPath = 'scripts/.swebench-venv' }) {
-  const fixtures = fixturePaths.map((p) => ({ p, json: JSON.parse(fs.readFileSync(p, 'utf-8')) }));
-  const metas = fixtures.map((f) => f.json.swebenchMeta);
+export function buildLocalDataset({ fixturePaths, fixtures: fixtureObjs, outPath, datasetName = DEFAULT_DATASET, venvPath = 'scripts/.swebench-venv' }) {
+  // 接受 fixture 路径或已加载的 fixture 对象（runner 集成时直接传 taskFixture，避免重读盘）
+  const loaded = fixtureObjs
+    ? fixtureObjs.map((json) => ({ json }))
+    : (fixturePaths || []).map((p) => ({ json: JSON.parse(fs.readFileSync(p, 'utf-8')) }));
+  const metas = loaded.map((f) => f.json.swebenchMeta);
   const instanceIds = metas.map((m) => m.instanceId);
   const official = fetchOfficialRows({ datasetName, instanceIds, venvPath });
   const byId = Object.fromEntries(official.map((r) => [r.instance_id, r]));

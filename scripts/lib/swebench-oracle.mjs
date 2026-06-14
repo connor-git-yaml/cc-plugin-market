@@ -104,8 +104,9 @@ function runHarnessOnce({ datasetPath, predPath, instanceId, runId, cwd, timeout
  * @param {string} [opts.venvPath]
  * @returns {object} OracleResult（统一合同）
  */
-export function runSwebenchInstance({ fixturePath, candidatePatch, artifactsDir, runId, timeoutMs = DEFAULT_TIMEOUT_MS, venvPath = 'scripts/.swebench-venv' }) {
-  const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidatePatch, artifactsDir, runId, timeoutMs = DEFAULT_TIMEOUT_MS, venvPath = 'scripts/.swebench-venv' }) {
+  // 接受已加载 fixture 对象（runner 集成）或 fixturePath（CLI/smoke）
+  const fixture = fixtureObj || JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   const instanceId = fixture.swebenchMeta.instanceId;
   const safeRunId = String(runId).replace(/[^A-Za-z0-9._-]/g, '_');
   const cwd = path.resolve(artifactsDir, safeRunId);
@@ -115,7 +116,7 @@ export function runSwebenchInstance({ fixturePath, candidatePatch, artifactsDir,
 
   // 1) 合成本地 dataset（含 W1 逐字段校验；不一致 → fixture 级 error，不跑 harness）
   const datasetPath = path.join(cwd, 'dataset.json');
-  const built = buildLocalDataset({ fixturePaths: [fixturePath], outPath: datasetPath, venvPath: absVenv });
+  const built = buildLocalDataset({ fixtures: [fixture], outPath: datasetPath, venvPath: absVenv });
   if (built.mismatches.length > 0) {
     return baseResult({ instanceId, candidatePatch, classification: 'error', failureSource: 'fixture',
       reason: `W1 字段不一致：${JSON.stringify(built.mismatches)}`, cmd: '(skipped: W1 mismatch)' });
