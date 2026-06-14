@@ -88,12 +88,12 @@ const EXPECTED_TOOLS: Record<string, string[]> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('US-1: spectra-cli 4.2.0 包含 agent-context tools', () => {
-  it('release-contract.yaml 中 spectra 版本应为 4.2.0', () => {
+  it('release-contract.yaml 中 spectra 版本应为 4.3.0（F186 重发）', () => {
     expect(existsSync(RELEASE_CONTRACT)).toBe(true);
     const content = readFileSync(RELEASE_CONTRACT, 'utf-8');
-    // 断言 release-contract 包含 spectra section 且 version 为 4.2.0
+    // 断言 release-contract 包含 spectra section 且 version 已 bump 到 4.3.0（F186）
     // YAML 结构：products.spectra.displayName 先于 version，故用独立行匹配
-    expect(content).toContain('version: "4.2.0"');
+    expect(content).toContain('version: "4.3.0"');
   });
 
   it('src/mcp/server.ts 应导入 registerAgentContextTools', () => {

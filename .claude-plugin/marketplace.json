@@ -14,7 +14,7 @@
       "name": "spectra",
       "source": "./plugins/spectra",
       "description": "把代码库变成可查询、可视化的阅读平台 — 分层 Spec / 知识图谱 / 技术债 / 自然语言问答 / 交互式 graph.html",
-      "version": "4.2.0",
+      "version": "4.3.0",
       "category": "documentation",
       "tags": [
         "spectra",
