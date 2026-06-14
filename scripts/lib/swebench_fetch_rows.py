@@ -21,7 +21,8 @@ def main(argv):
     by_id = {r["instance_id"]: r for r in ds if r["instance_id"] in wanted}
     missing = wanted - set(by_id)
     if missing:
-        print(f"instance_id 不在 {dataset_name}: {sorted(missing)}", file=sys.stderr)
+        # W1：稳定机读标记，JS 层 catch 据此把"数据集错配"区分于真 infra（DATASET_MISMATCH 前缀）。
+        print(f"DATASET_MISMATCH: instance_id 不在 {dataset_name}: {sorted(missing)}", file=sys.stderr)
         return 1
     # 仅输出 harness 与校验所需字段，避免巨大无关列
     out = []

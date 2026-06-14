@@ -76,6 +76,8 @@ deactivate
 
 4c. 一键冻结预注册（FR-A-002b，`--full` 的硬前提）：
 
+普通（legacy / 非 swebench-execution oracle）冻结：
+
 ```bash
 node scripts/freeze-preregistration.mjs --dry-run
 node scripts/freeze-preregistration.mjs
@@ -84,7 +86,22 @@ git commit -m "docs(176): 冻结预注册（host import + oracle smoke 后）"
 node scripts/build-spectra-stamped.mjs
 ```
 
-（`--task-ids a,b,c` 可显式指定子集；commit 后必须重新盖章 build，否则版本门禁会因 meta.commit 过期拦截。）
+swebench-execution oracle（F188 真跑 FAIL_TO_PASS oracle，`manifest.swebenchOracle=true`）冻结
+（F197）—— 必须加 `--swebench-oracle`，额外冻结 `oracleSpecHash`（判分语义）/`fixtureContentHash`
+（fixture 内容）/`promptSha256`（prompt 模板）三字段：
+
+```bash
+# 前提：先 bash scripts/setup-swebench-venv.sh（无 venv 会以 exit 2 + 可读错误中止，不裸崩）
+node scripts/freeze-preregistration.mjs --swebench-oracle --manifest <experiment.json> --dry-run
+node scripts/freeze-preregistration.mjs --swebench-oracle --manifest <experiment.json>
+git add specs/176-swe-bench-verified-cross-cohort/verification/preregistration.md
+git commit -m "docs(176): 冻结 swebench-execution 预注册（oracleSpec+fixture+prompt 三字段）"
+node scripts/build-spectra-stamped.mjs
+```
+
+（`--task-ids a,b,c` 可显式指定子集；commit 后必须重新盖章 build，否则版本门禁会因 meta.commit 过期拦截。
+**注意**：旧 F176 prereg 无 `oracleSpecHash`，不可复用于 swebench-execution 模式 —— C1/W1 改动判分语义后
+oracleSpecHash 必变，F188 跑前需用 `--swebench-oracle` 重新 fresh-freeze。）
 
 ## 步骤 5 — smoke（5 cohort × 1 task × N=1；SC-001 闸门）
 

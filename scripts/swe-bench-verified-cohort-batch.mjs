@@ -29,7 +29,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PROJECT_ROOT, VERIFIED_ROOT, fixturesDir, runFixturePath, aggregateDir, smokeDir } from './lib/swe-bench-verified-paths.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
-import { checkPreregistration, parsePreregistration, readSemanticModuleShas } from './lib/preregistration-check.mjs';
+import { checkPreregistration, parsePreregistration, readSemanticModuleShas, computeFixtureContentHash } from './lib/preregistration-check.mjs';
+// C-3：静态 import（side-effect-free，与 cohort-registry.mjs 既有先例一致）→ entryValidation 保持 sync。
+import { computeDriverPromptSha256 } from './eval-task-runner.mjs';
 import { aggregateCohorts, COHORT_IDS } from './lib/cohort-aggregate.mjs';
 import { classifyRunForRanking } from './lib/classify-oracle.mjs'; // Feature 187 C-1：error→null 剔除分母
 import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs'; // Feature 187 FR-004-b：cohort 映射单一来源
@@ -116,6 +118,38 @@ export function buildLiveOracleSpecInput(manifest = MANIFEST_DEFAULTS, venvPath 
   };
 }
 
+/**
+ * F197 W3（Codex W-2）：计算预注册 git 外锚状态 —— 纯函数化，gitRun 可注入（默认 spawnSync 包装）便于单测。
+ *   - trackedClean：tracked 文件无未提交改动（`git diff --quiet` && `git diff --cached --quiet`），
+ *     忽略 gitignore 的评测产物（venv/harness 日志）。
+ *   - codeMatchesFrozen：自冻结 commit 起，除 prereg 文件本身外无任何代码漂移
+ *     （`git diff <frozenGitCommit> HEAD -- . ':(exclude)<preregRel>'`）。
+ *     Codex W-3：必须 git exit 0 且 stdout 为空才算 match；frozen commit 不存在/歧义/git 报错（exit≠0）
+ *     → NOT match → 拦截（不可因 stdout 空而误放行）。
+ * @param {object} p
+ * @param {string} p.projectRoot
+ * @param {string} p.preregRel  PREREG 相对 projectRoot 的路径（Codex W2：绝对路径致 :(exclude) pathspec 失效）
+ * @param {string|null} p.frozenGitCommit  冻结时记录的 commit；缺则 codeMatchesFrozen=true（无锚可比）
+ * @param {(args: string[]) => {status: number|null, stdout: string}} [p.gitRun]
+ * @returns {{ trackedClean: boolean, codeMatchesFrozen: boolean }}
+ */
+export function computePreregGitState({ projectRoot, preregRel, frozenGitCommit, gitRun }) {
+  const run = gitRun || ((args) => {
+    const r = spawnSync('git', ['-C', projectRoot, ...args], { encoding: 'utf-8' });
+    return { status: typeof r.status === 'number' ? r.status : null, stdout: r.stdout || '' };
+  });
+  const diffClean = run(['diff', '--quiet']);
+  const diffCached = run(['diff', '--cached', '--quiet']);
+  const trackedClean = diffClean.status === 0 && diffCached.status === 0;
+  let codeMatchesFrozen = true;
+  if (frozenGitCommit) {
+    const drift = run(['diff', frozenGitCommit, 'HEAD', '--', '.', `:(exclude)${preregRel}`]);
+    // W-3：仅 exit 0 且 stdout 为空才 match；git 报错（exit≠0，含 commit 不存在/歧义）→ NOT match → 拦截
+    codeMatchesFrozen = drift.status === 0 && (drift.stdout || '').trim() === '';
+  }
+  return { trackedClean, codeMatchesFrozen };
+}
+
 export function parseArgs(argv) {
   const args = {
     mode: null, // 'smoke' | 'full'
@@ -175,11 +209,36 @@ function entryValidation(args) {
   // 3. 预注册：--full 必须冻结一致；--smoke 仅提示
   const taskIds = listTaskIds(args);
   if (args.mode === 'full') {
-    // Feature 187（FR-005 / C-2）：swebench-execution 模式下额外冻结 oracle 语义 —— 传 oracleKind +
-    // live oracleSpecInput，prereg 缺 oracleSpecHash 或与 live 不符（改了分类代码/marker）→ 拦截。
-    const preregOpts = args.manifest?.swebenchOracle ? { oracleKind: 'swebench-execution', oracleSpecInput: buildLiveOracleSpecInput(args.manifest) } : {};
-    const check = checkPreregistration(taskIds, PREREG, preregOpts);
-    if (!check.ok) problems.push(`预注册校验未过: ${check.reason}（FR-A-002b：全量前必须冻结且一致）`);
+    // Feature 187（FR-005 / C-2）+ F197（W2/W3/CRITICAL）：swebench-execution 模式下额外冻结+比对
+    // oracle 语义（oracleSpecHash）、prompt 模板（promptSha256）、fixture 内容（fixtureContentHash）、
+    // git 外锚（gitState）。任一漂移 → 拦截，杜绝跑前换判分/改 prompt/换 fixture/dirty worktree。
+    let preregOpts = {};
+    let liveOptsOk = true;
+    if (args.manifest?.swebenchOracle) {
+      // W2：PREREG 读盘（fs.readFileSync/parsePreregistration）+ git 外锚状态（computePreregGitState）+
+      // live 指纹计算（oracleSpecInput/promptSha256/fixtureContentHash）均含读盘裸 throw 路径
+      // （如 PREREG 缺失/损坏、fixture 缺失）。全部兜进 try → structured problem + 走统一 exit 2，而非顶层崩 exit 1。
+      try {
+        // W3：git 外锚状态（纯函数 computePreregGitState，内部 spawnSync 包装）
+        const frozenGitCommit = parsePreregistration(fs.readFileSync(PREREG, 'utf-8')).gitCommit;
+        const preregRel = path.relative(PROJECT_ROOT, PREREG); // 必须相对路径（绝对路径致 :(exclude) 失效）
+        const gitState = computePreregGitState({ projectRoot: PROJECT_ROOT, preregRel, frozenGitCommit });
+        preregOpts = {
+          oracleKind: 'swebench-execution',
+          oracleSpecInput: buildLiveOracleSpecInput(args.manifest),
+          promptSha256: computeDriverPromptSha256(),
+          fixtureContentHash: computeFixtureContentHash(taskIds, fixturesDir()),
+          gitState,
+        };
+      } catch (e) {
+        liveOptsOk = false;
+        problems.push(`预注册 live 指纹计算失败: ${e.message}（检查 PREREG/fixture/prompt/manifest 是否完整）`);
+      }
+    }
+    if (liveOptsOk) {
+      const check = checkPreregistration(taskIds, PREREG, preregOpts);
+      if (!check.ok) problems.push(`预注册校验未过: ${check.reason}（FR-A-002b：全量前必须冻结且一致）`);
+    }
   } else if (!fs.existsSync(PREREG) || !parsePreregistration(fs.readFileSync(PREREG, 'utf-8')).frozen) {
     console.warn('[batch] ⚠️ 预注册未冻结 — smoke 可跑，但 --full 前必须冻结（FR-A-002b）');
   }

@@ -80,6 +80,8 @@ export function parsePreregistration(mdText) {
   let taskIds = [];
   let oracleSpecHash = null;
   let fixtureContentHash = null;
+  let promptSha256 = null;
+  let gitCommit = null;
   let schemaVersion = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -89,6 +91,12 @@ export function parsePreregistration(mdText) {
     if (oracleM) oracleSpecHash = oracleM[1].toLowerCase();
     const fixM = line.match(/^\s*fixtureContentHash:\s*["']?([0-9a-fA-F]{64})["']?\s*$/);
     if (fixM) fixtureContentHash = fixM[1].toLowerCase();
+    // F197 W2：promptSha256（prompt 模板指纹）
+    const promptM = line.match(/^\s*promptSha256:\s*["']?([0-9a-fA-F]{64})["']?\s*$/);
+    if (promptM) promptSha256 = promptM[1].toLowerCase();
+    // F197 W3：gitCommit（冻结时 HEAD，git 外锚比对基线）
+    const gcM = line.match(/^\s*gitCommit:\s*["']?([0-9a-fA-F]{7,40})["']?\s*$/);
+    if (gcM) gitCommit = gcM[1].toLowerCase();
     const svM = line.match(/^\s*schemaVersion:\s*["']?([\w.]+)["']?\s*$/);
     if (svM) schemaVersion = svM[1];
     const frozenM = line.match(/^\s*frozen:\s*(true|false)\b/);
@@ -105,7 +113,25 @@ export function parsePreregistration(mdText) {
       }
     }
   }
-  return { hash, frozen, taskIds, oracleSpecHash, fixtureContentHash, schemaVersion };
+  return { hash, frozen, taskIds, oracleSpecHash, fixtureContentHash, promptSha256, gitCommit, schemaVersion };
+}
+
+/**
+ * F197 CRITICAL：fixtureContentHash —— taskIds 排序去重后，逐个读 <fixturesDir>/<id>.json 原始内容
+ * 算 sha256，stableStringify({id: sha}) → 整体 sha256。任一 fixture 内容变更（即便 taskId 不变换版）
+ * → hash 变 → 预注册比对拦截。Verified fixture 不入库 → git 外锚覆盖不到，需此内容级指纹兜住。
+ * @param {string[]} taskIds
+ * @param {string} fixturesDir
+ * @returns {string} 64-hex
+ */
+export function computeFixtureContentHash(taskIds, fixturesDir) {
+  const sorted = [...new Set(taskIds)].sort();
+  const perFile = {};
+  for (const id of sorted) {
+    const raw = fs.readFileSync(path.join(fixturesDir, `${id}.json`), 'utf-8');
+    perFile[id] = crypto.createHash('sha256').update(raw).digest('hex');
+  }
+  return crypto.createHash('sha256').update(stableStringify(perFile)).digest('hex');
 }
 
 /**
@@ -128,7 +154,7 @@ export function checkPreregistration(actualTaskIds, preregPath, opts = {}) {
   if (!fs.existsSync(preregPath)) {
     return { ok: false, reason: `preregistration.md 不存在: ${preregPath}（先冻结预注册）`, expectedHash: null, actualHash };
   }
-  const { hash, frozen, taskIds, oracleSpecHash } = parsePreregistration(fs.readFileSync(preregPath, 'utf-8'));
+  const { hash, frozen, taskIds, oracleSpecHash, promptSha256: frozenPromptSha, gitCommit: frozenGitCommit, fixtureContentHash: frozenFCH } = parsePreregistration(fs.readFileSync(preregPath, 'utf-8'));
   if (!frozen) return { ok: false, reason: 'preregistration 未冻结（frozen!=true）', expectedHash: hash, actualHash };
   if (!hash) return { ok: false, reason: 'preregistration 缺 taskSetHash', expectedHash: null, actualHash };
 
@@ -161,6 +187,23 @@ export function checkPreregistration(actualTaskIds, preregPath, opts = {}) {
       const live = computeOracleSpecHash(opts.oracleSpecInput);
       if (live !== oracleSpecHash) {
         return { ok: false, reason: `oracleSpecHash 不符（疑似跑前换判分/改分类逻辑代码）。frozen=${oracleSpecHash.slice(0, 12)} live=${live.slice(0, 12)}`, expectedHash: hash, actualHash, oracleSpecHash, liveOracleSpecHash: live };
+      }
+    }
+    // F197 W2：promptSha256 比对（prereg present + opts 传 live 才比对，向后兼容）
+    if (frozenPromptSha && opts.promptSha256 != null && opts.promptSha256 !== frozenPromptSha) {
+      return { ok: false, reason: `promptSha256 不符（prompt 模板已漂移）。frozen=${frozenPromptSha.slice(0, 12)} live=${opts.promptSha256.slice(0, 12)}`, expectedHash: hash, actualHash };
+    }
+    // F197 CRITICAL：fixtureContentHash 比对（taskId 不变但 fixture 内容换版被拦）
+    if (frozenFCH && opts.fixtureContentHash != null && opts.fixtureContentHash !== frozenFCH) {
+      return { ok: false, reason: `fixtureContentHash 不符（fixture 内容在冻结后换版）。frozen=${frozenFCH.slice(0, 12)} live=${opts.fixtureContentHash.slice(0, 12)}`, expectedHash: hash, actualHash };
+    }
+    // F197 W3：gitState 外锚比对（仅 swebench-execution kind；caller 注入 trackedClean/codeMatchesFrozen）
+    if (opts.gitState) {
+      if (!opts.gitState.trackedClean) {
+        return { ok: false, reason: 'worktree 有未提交改动（git 外锚失效，拒绝跑批）', expectedHash: hash, actualHash };
+      }
+      if (frozenGitCommit && opts.gitState.codeMatchesFrozen === false) {
+        return { ok: false, reason: `代码自冻结 commit(${frozenGitCommit.slice(0, 8)}) 起已漂移（git 外锚拦截）`, expectedHash: hash, actualHash };
       }
     }
   } else if (!oracleSpecHash) {

@@ -13,6 +13,18 @@ import * as crypto from 'node:crypto';
 
 const DEFAULT_DATASET = 'SWE-bench/SWE-bench_Lite';
 
+/**
+ * 从 fixture.swebenchMeta.dataset 标签映射 HF dataset id（W1 单一来源，freeze/oracle 共用）。
+ * verified 用同 org `SWE-bench/SWE-bench_Verified` 保持 builder 内部一致（Codex W5：镜像等价性）。
+ * @param {string|null|undefined} tag
+ * @returns {string}
+ */
+export function datasetTagToHfId(tag) {
+  if (tag === 'lite' || tag == null) return 'SWE-bench/SWE-bench_Lite';
+  if (tag === 'verified') return 'SWE-bench/SWE-bench_Verified';
+  throw new Error(`未知 dataset tag: ${JSON.stringify(tag)}（支持 lite / verified）`);
+}
+
 /** FAIL_TO_PASS/PASS_TO_PASS 可能是 JSON 字符串或数组 → 归一为排序后数组（顺序无关比较）。 */
 export function normalizeTestList(v) {
   let arr = v;
@@ -55,21 +67,32 @@ function fetchOfficialRows({ datasetName, instanceIds, venvPath }) {
  * 从一组 fixture 合成本地 dataset JSON 文件。
  * @returns {{outPath: string, digest: string, rows: object[], mismatches: Array<{instanceId, fields}>}}
  */
-export function buildLocalDataset({ fixturePaths, fixtures: fixtureObjs, outPath, datasetName = DEFAULT_DATASET, venvPath = 'scripts/.swebench-venv' }) {
+export function buildLocalDataset({ fixturePaths, fixtures: fixtureObjs, outPath, datasetName = DEFAULT_DATASET, venvPath = 'scripts/.swebench-venv', fetchRows = fetchOfficialRows }) {
   // 接受 fixture 路径或已加载的 fixture 对象（runner 集成时直接传 taskFixture，避免重读盘）
   const loaded = fixtureObjs
     ? fixtureObjs.map((json) => ({ json }))
     : (fixturePaths || []).map((p) => ({ json: JSON.parse(fs.readFileSync(p, 'utf-8')) }));
   const metas = loaded.map((f) => f.json.swebenchMeta);
   const instanceIds = metas.map((m) => m.instanceId);
-  const official = fetchOfficialRows({ datasetName, instanceIds, venvPath });
+  // fetchRows 默认 fetchOfficialRows；测试可注入 fake（Codex W-4，免跑真 venv/Python）
+  const official = fetchRows({ datasetName, instanceIds, venvPath });
   const byId = Object.fromEntries(official.map((r) => [r.instance_id, r]));
 
   const rows = [];
   const mismatches = [];
   for (const m of metas) {
     const row = byId[m.instanceId];
-    if (!row) { mismatches.push({ instanceId: m.instanceId, fields: ['<missing-in-official>'] }); continue; }
+    if (!row) {
+      // W1：实例不在其标签 dataset = fixture 级"数据集错配"（应人工修 swebenchMeta.dataset 标签），
+      // 区别于真 infra（venv 缺/网络）；不笼统归 error/infra 静默剔分母。
+      mismatches.push({
+        instanceId: m.instanceId,
+        fields: ['<missing-in-official>'],
+        failureSource: 'fixture',
+        reason: `数据集错配：实例 ${m.instanceId} 不在 ${datasetName}（检查 fixture.swebenchMeta.dataset 标签）`,
+      });
+      continue;
+    }
     const fields = diffOfficialVsFixture(row, m);
     if (fields.length > 0) mismatches.push({ instanceId: m.instanceId, fields });
     rows.push(row); // 官方行（已校验等价 fixture）即 harness 输入
@@ -101,7 +124,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.error('usage: swebench-dataset-build.mjs --fixture <path>... --out <path> [--venv <dir>]');
     process.exit(2);
   }
-  const r = buildLocalDataset({ fixturePaths, outPath, venvPath });
+  // W1：从 fixture.swebenchMeta.dataset 标签推导 datasetName（默认 Lite 会让 Verified 实例取不到行 →
+  // 静默剔分母）。混合 dataset 标签禁止同批构建（harness dataset 单一）→ 报错退出。
+  const tags = fixturePaths.map((p) => JSON.parse(fs.readFileSync(p, 'utf-8')).swebenchMeta?.dataset ?? null);
+  const uniqueTags = [...new Set(tags.map((t) => t ?? 'lite'))];
+  if (uniqueTags.length > 1) {
+    console.error(`✗ fixture 的 dataset 标签不一致（禁止混 dataset 构建）：${JSON.stringify(uniqueTags)}`);
+    process.exit(2);
+  }
+  let datasetName;
+  try {
+    datasetName = datasetTagToHfId(tags[0]);
+  } catch (e) {
+    console.error(`✗ ${e.message}`);
+    process.exit(2);
+  }
+  const r = buildLocalDataset({ fixturePaths, outPath, venvPath, datasetName });
   if (r.mismatches.length > 0) {
     console.error(`⚠️ W1 字段不一致（fixture vs 官方）：${JSON.stringify(r.mismatches)}`);
     process.exit(1);

@@ -218,6 +218,16 @@ export function buildDriverPrompt({ tool, taskPrompt, spectraContext, skillInvoc
 }
 
 /**
+ * F197 W2：promptSha256 = sha256(buildDriverPrompt 函数源码字符串)。供预注册冻结 + 跑前比对。
+ * buildDriverPrompt 任一 cohort 的措辞改动 → 函数源变 → hash 变 → checkPreregistration 拦截。
+ * 不改 buildDriverPrompt 本身（SC-013 cohort golden 逐字守护）；toString() 在 Node.js ESM 返回函数源码。
+ * @returns {string} 64-hex
+ */
+export function computeDriverPromptSha256() {
+  return crypto.createHash('sha256').update(buildDriverPrompt.toString()).digest('hex');
+}
+
+/**
  * 加载 spectra spec.md 作为 context（spec-driver-spectra 对照组用）
  * 按任务相关性排序选择 spec.md：与 taskTargetFiles 名匹配的 spec.md 优先；其次 _index.spec.md；
  * 最后 fallback 到字母序前 N 个。避免 T2 改 train.py 但加载 bench/configurator spec 的 bug (Codex WARN)。

@@ -13,6 +13,7 @@ import {
   classifyLegacyOracle,
   readOracleResult,
   readSpikeStatus,
+  computePreregGitState,
   COHORT_TO_TOOL,
 } from '../../scripts/swe-bench-verified-cohort-batch.mjs';
 import { COHORT_IDS } from '../../scripts/lib/cohort-aggregate.mjs';
@@ -130,5 +131,56 @@ describe('resume 状态闭环（quota-store run-*.json 合同）', () => {
     expect(cls.finalized.map((f: any) => f.id)).toContain(okId);
     expect(cls.finalized.map((f: any) => f.id)).not.toContain(badId);
     expect(cls.failedFinalized.map((f: any) => f.id)).toContain(badId); // failed 可重跑
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F197 W3：computePreregGitState 纯函数（注入 fake gitRun，覆盖 clean/dirty/drift）
+// ───────────────────────────────────────────────────────────
+
+describe('computePreregGitState — git 外锚状态（注入 fake gitRun）', () => {
+  const base = { projectRoot: '/repo', preregRel: 'specs/176/prereg.md', frozenGitCommit: '55696ab' };
+
+  it('worktree clean + 代码无漂移 → trackedClean=true, codeMatchesFrozen=true', () => {
+    const gitRun = (args: string[]) => {
+      if (args.includes('--quiet')) return { status: 0, stdout: '' };
+      return { status: 0, stdout: '' }; // drift diff 空
+    };
+    const r = computePreregGitState({ ...base, gitRun });
+    expect(r.trackedClean).toBe(true);
+    expect(r.codeMatchesFrozen).toBe(true);
+  });
+
+  it('worktree dirty（diff --quiet exit≠0）→ trackedClean=false', () => {
+    const gitRun = (args: string[]) => {
+      if (args.includes('--quiet')) return { status: 1, stdout: '' };
+      return { status: 0, stdout: '' };
+    };
+    const r = computePreregGitState({ ...base, gitRun });
+    expect(r.trackedClean).toBe(false);
+  });
+
+  it('代码自冻结后漂移（drift diff 非空）→ codeMatchesFrozen=false', () => {
+    const gitRun = (args: string[]) => {
+      if (args.includes('--quiet')) return { status: 0, stdout: '' };
+      return { status: 0, stdout: 'diff --git a/x b/x\n+changed' };
+    };
+    const r = computePreregGitState({ ...base, gitRun });
+    expect(r.codeMatchesFrozen).toBe(false);
+  });
+
+  it('W-3：drift diff git 报错（exit≠0，含 frozen commit 不存在）→ codeMatchesFrozen=false（不因 stdout 空误放行）', () => {
+    const gitRun = (args: string[]) => {
+      if (args.includes('--quiet')) return { status: 0, stdout: '' };
+      return { status: 128, stdout: '' }; // git 报错，stdout 空
+    };
+    const r = computePreregGitState({ ...base, gitRun });
+    expect(r.codeMatchesFrozen).toBe(false);
+  });
+
+  it('无 frozenGitCommit → codeMatchesFrozen=true（无锚可比，仅靠 trackedClean）', () => {
+    const gitRun = (args: string[]) => ({ status: 0, stdout: '' });
+    const r = computePreregGitState({ ...base, frozenGitCommit: null, gitRun });
+    expect(r.codeMatchesFrozen).toBe(true);
   });
 });

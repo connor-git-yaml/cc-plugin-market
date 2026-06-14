@@ -48,6 +48,11 @@ const CASES: Array<[string, Record<string, unknown>, string, string]> = [
   ['unknown combo at test_exec', { harnessExitCode: 1, phaseReached: 'test_exec', logText: 'weird unparseable' }, 'fail', 'candidate'],
   // 行 14 fallback：phase<test_exec（含 unknown）未知组合 → error
   ['unknown combo at unknown phase', { harnessExitCode: 1, phaseReached: 'unknown', logText: '' }, 'error', 'infra'],
+  // C1 三交叉（F197）：report.completed===true + resolved===true 必须权威优先于 timeout/OOM 启发式，
+  // 不被 log 含 "Killed"/"OOMKilled"/exit137 误洗成 fail（排名污染根因）。
+  ['C1: resolved=true × log 含 "Killed"', { report: { completed: true, resolved: true }, logText: 'process Killed', phaseReached: 'done' }, 'pass', 'none'],
+  ['C1: resolved=true × log 含 "OOMKilled" × exit137', { report: { completed: true, resolved: true }, logText: 'Container OOMKilled', harnessExitCode: 137, phaseReached: 'done' }, 'pass', 'none'],
+  ['C1: resolved=true × harnessExitCode=137', { report: { completed: true, resolved: true }, harnessExitCode: 137, phaseReached: 'done', logText: '' }, 'pass', 'none'],
 ];
 
 describe('classifySwebenchResult — 14 行穷尽决策表', () => {
@@ -63,6 +68,12 @@ describe('classifySwebenchResult — 14 行穷尽决策表', () => {
     const r = classifySwebenchResult({ harnessExitCode: 1, phaseReached: 'test_exec', logText: 'x' });
     expect(typeof r.reason).toBe('string');
     expect(r.reason.length).toBeGreaterThan(0);
+  });
+
+  it('C1: report.completed=true × resolved=null → fall through（不被强判 pass）', () => {
+    // resolved 非 true/false 时不能用 report 强判 pass，须 fall through 到启发式/fallback。
+    const r = classifySwebenchResult({ report: { completed: true, resolved: null }, harnessExitCode: 0, phaseReached: 'done', logText: '' });
+    expect(r.classification).not.toBe('pass');
   });
 
   it('pass 必须同时满足 exit0 + completed + resolved（仅 exit0 不够）', () => {

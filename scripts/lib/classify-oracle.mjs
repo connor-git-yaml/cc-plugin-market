@@ -75,15 +75,23 @@ export function classifySwebenchResult(input = {}) {
   if ((timedOut || killed) && PRE_TEST_PHASES.has(phaseReached)) {
     return verdict('error', 'infra', `测试开跑前中止（phase=${phaseReached}, timedOut=${timedOut}, signal=${signal}）`);
   }
+  // 行 7.5（F197 C1 修正）：harness report.completed===true 时，report.resolved 是判分权威，
+  // 必须优先于下方 timeout/OOM 启发式 —— 否则成功 run 日志里残留的 "Killed"/"OOMKilled"/exit137
+  // （docker 子进程正常生命周期、OOM-reaper 历史行、依赖编译期 OOM 重试等）会把 resolved=true 的
+  // PASS 误洗成 fail，单向污染竞品完成率排名（C1 根因）。
+  // resolved 非 true/false（null/undefined）：不 return，fall through 到下方启发式/fallback（Codex C-1）。
+  if (report && report.completed === true) {
+    if (report.resolved === true) return verdict('pass', 'none', 'harness completed + resolved（C1 权威优先于启发式）');
+    if (report.resolved === false) return verdict('fail', 'candidate', 'harness completed 但 resolved=false（C1 权威优先于启发式）');
+  }
   // 行 8：测试开跑后 timeout/OOM/被杀 → candidate fail（Q1 核心）
   if ((timedOut || killed || isOOM) && reachedTestExec(phaseReached)) {
     return verdict('fail', 'candidate', `测试执行中中止/OOM（候选 patch 责任，phase=${phaseReached}）`);
   }
   // 行 9/10/11（Codex W4 修正）：有 report 即按 report 判，不强求 exitCode===0
   // （行 1-8 已捕获 125/126/127/139 等 error code；非 0 exit 但 harness 写出有效 report 时仍信 report）。
+  // 注：completed===true 的两分支已上移至行 7.5（C1）成死代码删除；此处仅保留 completed===false。
   if (report) {
-    if (report.completed === true && report.resolved === true) return verdict('pass', 'none', 'harness completed + resolved');
-    if (report.completed === true && report.resolved === false) return verdict('fail', 'candidate', 'harness completed 但 resolved=false（测试真实失败/passToPass 回归）');
     if (report.completed === false) return verdict('error', 'infra', 'harness completed=false（未正常完成）');
   }
   // 行 12：pytest 自身异常（中断/内部错/用法错）

@@ -113,3 +113,62 @@ describe('checkPreregistration — swebench-execution oracleSpecHash 门禁（SC
     expect(r.warnings.some((w: string) => /oracleSpecHash/.test(w))).toBe(true);
   });
 });
+
+// ───────────────────────────────────────────────────────────
+// F197 C2：freeze 端到端三字段（oracleSpecHash/fixtureContentHash/promptSha256/schemaVersion）
+// ───────────────────────────────────────────────────────────
+
+describe('C2 freeze端到端三字段', async () => {
+  const { renderFrozenPrereg } = await import('../../scripts/freeze-preregistration.mjs');
+  const ids = ['SWE-V001-a', 'SWE-V002-b'];
+  // parsePreregistration 仅解析 64-hex 值 → placeholder 须用 hex 字符（'x'/'y' 非 hex 会被解析为 null）
+  const fch = 'a'.repeat(64);
+  const psha = 'b'.repeat(64);
+
+  it('freezeBlock 含三字段', () => {
+    const b = freezeBlock(ids, { seed: 176, oracleSpecInput: BASE_SPEC, fixtureContentHash: fch, promptSha256: psha });
+    expect(b.oracleSpecHash).toBe(computeOracleSpecHash(BASE_SPEC));
+    expect(b.fixtureContentHash).toBe(fch);
+    expect(b.promptSha256).toBe(psha);
+  });
+
+  it('renderFrozenPrereg 产物 frontmatter 含四扩展字段', () => {
+    const b = freezeBlock(ids, { seed: 176, oracleSpecInput: BASE_SPEC, fixtureContentHash: fch, promptSha256: psha });
+    const original = '---\nfrozen: false\ntaskSetHash: TBD\n---\n\n# 正文\n';
+    const next = renderFrozenPrereg(original, b, 'abc123def456');
+    expect(next).toMatch(/oracleSpecHash:/);
+    expect(next).toMatch(/fixtureContentHash:/);
+    expect(next).toMatch(/promptSha256:/);
+    expect(next).toMatch(/schemaVersion:/);
+    expect(next).toContain('# 正文');
+  });
+
+  it('renderFrozenPrereg → parsePreregistration round-trip 三字段不丢', () => {
+    const b = freezeBlock(ids, { seed: 176, oracleSpecInput: BASE_SPEC, fixtureContentHash: fch, promptSha256: psha });
+    const next = renderFrozenPrereg('---\nfrozen: false\n---\nbody\n', b, 'abc123def456');
+    const parsed = parsePreregistration(next);
+    expect(parsed.oracleSpecHash).toBe(b.oracleSpecHash);
+    expect(parsed.fixtureContentHash).toBe(fch);
+    expect(parsed.promptSha256).toBe(psha);
+  });
+
+  it('重跑 renderFrozenPrereg（相同 block 再渲染）字段不丢', () => {
+    const b = freezeBlock(ids, { seed: 176, oracleSpecInput: BASE_SPEC, fixtureContentHash: fch, promptSha256: psha });
+    const once = renderFrozenPrereg('---\nfrozen: false\n---\nbody\n', b, 'abc123def456');
+    const twice = renderFrozenPrereg(once, b, 'abc123def456');
+    const parsed = parsePreregistration(twice);
+    expect(parsed.oracleSpecHash).toBe(b.oracleSpecHash);
+    expect(parsed.fixtureContentHash).toBe(fch);
+    expect(parsed.promptSha256).toBe(psha);
+  });
+
+  it('freeze 端到端 → checkPreregistration(swebench-execution, 同一 oracleSpecInput) → ok', () => {
+    const b = freezeBlock(ids, { seed: 176, oracleSpecInput: BASE_SPEC, fixtureContentHash: fch, promptSha256: psha });
+    const next = renderFrozenPrereg('---\nfrozen: false\n---\nbody\n', b, 'abc123def456');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f197-c2-'));
+    const p = path.join(dir, 'preregistration.md');
+    fs.writeFileSync(p, next);
+    const r = checkPreregistration(ids, p, { oracleKind: 'swebench-execution', oracleSpecInput: BASE_SPEC });
+    expect(r.ok).toBe(true);
+  });
+});

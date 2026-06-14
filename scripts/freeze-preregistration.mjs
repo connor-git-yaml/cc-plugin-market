@@ -45,6 +45,12 @@ export function renderFrozenPrereg(mdText, block, gitCommit) {
     `seed: ${block.seed}`,
     `count: ${block.count}`,
     `gitCommit: ${gitCommit}`,
+    // F197 C2：swebench-execution 冻结的扩展字段（仅 block 含该字段时渲染，向后兼容非 swebench 冻结）。
+    // 条件渲染保证"复跑 freeze 不丢字段"（block 已含字段即输出）。
+    ...(block.oracleSpecHash ? [`oracleSpecHash: ${block.oracleSpecHash}`] : []),
+    ...(block.fixtureContentHash ? [`fixtureContentHash: ${block.fixtureContentHash}`] : []),
+    ...(block.promptSha256 ? [`promptSha256: ${block.promptSha256}`] : []),
+    ...(block.schemaVersion ? [`schemaVersion: ${block.schemaVersion}`] : []),
     `frozenAtIso: ${new Date().toISOString()}`,
     'taskIds:',
     ...block.taskIds.map((id) => `  - ${id}`),
@@ -53,35 +59,64 @@ export function renderFrozenPrereg(mdText, block, gitCommit) {
   return `${fm}\n${body}`;
 }
 
-function main() {
-  const argv = process.argv.slice(2);
-  const dryRun = argv.includes('--dry-run');
-  const idsFlag = argv.indexOf('--task-ids');
-  const taskIds = idsFlag >= 0
-    ? argv[idsFlag + 1].split(',').map((s) => s.trim()).filter(Boolean)
-    : listFixtureTaskIds();
+async function main() {
+  try {
+    const argv = process.argv.slice(2);
+    const dryRun = argv.includes('--dry-run');
+    const idsFlag = argv.indexOf('--task-ids');
+    const taskIds = idsFlag >= 0
+      ? argv[idsFlag + 1].split(',').map((s) => s.trim()).filter(Boolean)
+      : listFixtureTaskIds();
+    // F197 C2：swebench-execution 冻结模式 —— 额外算 oracleSpecHash / fixtureContentHash / promptSha256
+    const swebenchOracle = argv.includes('--swebench-oracle');
+    const manifestIdx = argv.indexOf('--manifest');
+    const manifestPath = manifestIdx >= 0 ? argv[manifestIdx + 1] : null;
 
-  if (taskIds.length === 0) {
-    console.error('[freeze-prereg] 无 task：先跑 Verified importer（runbook 4a）或 --task-ids 指定');
-    process.exit(2);
-  }
-  if (taskIds.length < 10) {
-    console.error(`[freeze-prereg] ⚠️ 仅 ${taskIds.length} 个 task（目标 10）；不足时报告须在显著性章节标注`);
-  }
+    if (taskIds.length === 0) {
+      console.error('[freeze-prereg] 无 task：先跑 Verified importer（runbook 4a）或 --task-ids 指定');
+      process.exit(2);
+    }
+    if (taskIds.length < 10) {
+      console.error(`[freeze-prereg] ⚠️ 仅 ${taskIds.length} 个 task（目标 10）；不足时报告须在显著性章节标注`);
+    }
 
-  const head = spawnSync('git', ['-C', PROJECT_ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf-8' });
-  const gitCommit = (head.stdout ?? 'unknown').trim();
-  const block = freezeBlock(taskIds, { seed: 176 });
-  const next = renderFrozenPrereg(fs.readFileSync(PREREG, 'utf-8'), block, gitCommit);
+    const head = spawnSync('git', ['-C', PROJECT_ROOT, 'rev-parse', 'HEAD'], { encoding: 'utf-8' });
+    const gitCommit = (head.stdout ?? 'unknown').trim();
 
-  if (dryRun) {
-    console.log(next.split('\n').slice(0, 20).join('\n'));
-    console.error(`[freeze-prereg] --dry-run：未写盘（${taskIds.length} task, hash=${block.taskSetHash.slice(0, 12)}…）`);
-    return;
+    // F197 C2：swebench 模式复用 cohort-batch 的 buildLiveOracleSpecInput 算 oracleSpecInput，
+    // 保证 freeze↔check 口径逐字一致（杜绝算法分叉致永久 mismatch）。无 venv 时 throw → 下方 catch。
+    let oracleSpecInput = null;
+    let fixtureContentHash = null;
+    let promptSha256 = null;
+    if (swebenchOracle) {
+      const { buildLiveOracleSpecInput, loadExperimentManifest } = await import('./swe-bench-verified-cohort-batch.mjs');
+      const { computeDriverPromptSha256 } = await import('./eval-task-runner.mjs');
+      const { computeFixtureContentHash } = await import('./lib/preregistration-check.mjs');
+      const manifest = manifestPath ? loadExperimentManifest(manifestPath) : undefined;
+      oracleSpecInput = buildLiveOracleSpecInput(manifest);
+      fixtureContentHash = computeFixtureContentHash(taskIds, fixturesDir());
+      promptSha256 = computeDriverPromptSha256();
+    }
+    const block = freezeBlock(taskIds, { seed: 176, gitCommit, oracleSpecInput, fixtureContentHash, promptSha256 });
+    const next = renderFrozenPrereg(fs.readFileSync(PREREG, 'utf-8'), block, gitCommit);
+
+    if (dryRun) {
+      console.log(next.split('\n').slice(0, 24).join('\n'));
+      console.error(`[freeze-prereg] --dry-run：未写盘（${taskIds.length} task, hash=${block.taskSetHash.slice(0, 12)}…）`);
+      return;
+    }
+    fs.writeFileSync(PREREG, next, 'utf-8');
+    console.error(`[freeze-prereg] ✅ 已冻结：${taskIds.length} task, hash=${block.taskSetHash.slice(0, 12)}…, commit=${gitCommit.slice(0, 8)}${swebenchOracle ? '（swebench-execution：oracleSpecHash+fixtureContentHash+promptSha256 已冻结）' : ''}`);
+    console.error('[freeze-prereg] 下一步：git add + commit preregistration.md（git 历史=anti-tamper 锚），然后跑 batch --smoke');
+  } catch (e) {
+    // W4 Codex 处置：无 venv 时 buildLiveOracleSpecInput throw，给可读错误 + exit 2，不裸崩
+    if (/无法从 venv 读取 swebench 版本/.test(e.message)) {
+      console.error('[freeze-prereg] ❌ swebench-execution 冻结需先 bash scripts/setup-swebench-venv.sh');
+      process.exit(2);
+    }
+    console.error('[freeze-prereg] ❌ 冻结失败:', e.message);
+    process.exit(1);
   }
-  fs.writeFileSync(PREREG, next, 'utf-8');
-  console.error(`[freeze-prereg] ✅ 已冻结：${taskIds.length} task, hash=${block.taskSetHash.slice(0, 12)}…, commit=${gitCommit.slice(0, 8)}`);
-  console.error('[freeze-prereg] 下一步：git add + commit preregistration.md（git 历史=anti-tamper 锚），然后跑 batch --smoke');
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

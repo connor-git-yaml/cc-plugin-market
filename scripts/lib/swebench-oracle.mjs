@@ -11,7 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
-import { buildLocalDataset } from './swebench-dataset-build.mjs';
+import { buildLocalDataset, datasetTagToHfId } from './swebench-dataset-build.mjs';
 import { parsePhaseFromLog } from './phase-markers.mjs';
 import { classifySwebenchResult } from './classify-oracle.mjs';
 
@@ -104,9 +104,11 @@ function runHarnessOnce({ datasetPath, predPath, instanceId, runId, cwd, timeout
  * @param {string} opts.runId          run 标识（文件系统安全）
  * @param {number} [opts.timeoutMs]    外层超时（spawnSync timeout = watchdog）
  * @param {string} [opts.venvPath]
+ * @param {Function} [opts.fetchRows]  注入官方行获取器（默认真实 fetchOfficialRows）；仅测试用，
+ *                                     模拟 DATASET_MISMATCH 等 throw 链路免跑 docker/venv（W-3）。
  * @returns {object} OracleResult（统一合同）
  */
-export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidatePatch, artifactsDir, runId, timeoutMs = DEFAULT_TIMEOUT_MS, venvPath = 'scripts/.swebench-venv' }) {
+export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidatePatch, artifactsDir, runId, timeoutMs = DEFAULT_TIMEOUT_MS, venvPath = 'scripts/.swebench-venv', fetchRows }) {
   // 接受已加载 fixture 对象（runner 集成）或 fixturePath（CLI/smoke）
   const fixture = fixtureObj || JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
   const instanceId = fixture.swebenchMeta.instanceId;
@@ -120,11 +122,23 @@ export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidat
   const datasetPath = path.join(cwd, 'dataset.json');
   let built;
   try {
-    built = buildLocalDataset({ fixtures: [fixture], outPath: datasetPath, venvPath: absVenv });
+    // W1：从 fixture.swebenchMeta.dataset 标签映射 HF dataset id（verified 实例从 Verified dataset 取，
+    // 否则默认 Lite 取不到 Verified 行 → 整批 fetch fail → 静默剔分母，违反 FR-A-002b）。
+    // W-3：datasetTagToHfId 对未知/坏 tag 裸 throw —— 必须在 try 内调用，否则逃出 runSwebenchInstance
+    // 致 runner 级崩（与 CLI exit 2 的 structured 行为不一致）。坏 tag = fixture 配置错误 → failureSource:'fixture'。
+    const datasetName = datasetTagToHfId(fixture.swebenchMeta?.dataset);
+    // fetchRows 默认透传给 buildLocalDataset 的真实 fetchOfficialRows；测试可注入 fake
+    // 模拟 py exit1 + DATASET_MISMATCH（W-3）—— buildLocalDataset 在 harness spawn 之前调用，throw 即提前返回。
+    built = buildLocalDataset({ fixtures: [fixture], outPath: datasetPath, datasetName, venvPath: absVenv, ...(fetchRows ? { fetchRows } : {}) });
   } catch (e) {
-    // venv 缺失 / 官方行 fetch 失败等：返回 error/infra OracleResult，不让 runner 整体崩（Codex W3）
-    return baseResult({ instanceId, candidatePatch, classification: 'error', failureSource: 'infra',
-      reason: `dataset build 失败: ${e.message}`, cmd: '(skipped: dataset build error)', stderrTail: tail(String(e.stack || e.message)) });
+    // W1 次级诊断（Codex C-2）：实例确不在其标签 dataset 时 fetch helper 抛 DATASET_MISMATCH →
+    // 归 fixture 级"数据集错配"（应人工修 fixture 标签），区别于真 infra（venv 缺/网络）。
+    // W-3：未知/缺失 dataset tag（datasetTagToHfId 抛 "未知 dataset tag"）同属 fixture 配置错误 → 一并归 fixture。
+    const isDatasetMismatch = /DATASET_MISMATCH|不在|未知 dataset|unknown dataset/.test(String(e.message));
+    return baseResult({ instanceId, candidatePatch, classification: 'error',
+      failureSource: isDatasetMismatch ? 'fixture' : 'infra',
+      reason: isDatasetMismatch ? `数据集错配（W1）：${e.message}` : `dataset build 失败: ${e.message}`,
+      cmd: '(skipped: dataset build error)', stderrTail: tail(String(e.stack || e.message)) });
   }
   if (built.mismatches.length > 0) {
     return baseResult({ instanceId, candidatePatch, classification: 'error', failureSource: 'fixture',
