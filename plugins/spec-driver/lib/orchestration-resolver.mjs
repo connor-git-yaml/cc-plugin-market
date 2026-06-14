@@ -23,6 +23,7 @@ import {
   orchestrationOverridesSchema,
   orchestrationMergedSchema,
   formatZodIssue,
+  zodAvailable,
 } from '../contracts/orchestration-schema.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -207,6 +208,54 @@ export async function resolveOrchestrationConfig({ projectRoot, _loadBase, _load
       isBaseInvalid: true,
     };
   }
+
+  // ── zod 缺失短路（步骤 1 成功之后、步骤 2 safeParse 之前）────────
+  // 缺 zod 时全部 schema 为 null，无法 safeParse；此处 best-effort 信任 base、
+  // 跳过项目级 overrides（用户输入无法校验），返回结构化结果而非硬崩。
+  if (!zodAvailable) {
+    // 纯对象检查（复用既有 isPlainObject 守卫模式）
+    const isBaseRawPlainObject =
+      rawBase !== null &&
+      rawBase !== undefined &&
+      Object.prototype.toString.call(rawBase) === '[object Object]';
+
+    if (!isBaseRawPlainObject) {
+      // base 解析结果不是纯对象 → 视为 base 损坏，退 generateFallbackConfig
+      diagnostics.push(createDiagnostic(
+        'error',
+        'orchestration.base-invalid',
+        '[orchestration] base 配置不是合法对象（zod 缺失 + base 非纯对象）',
+      ));
+      const fallbackConfig = generateFallbackConfig();
+      return {
+        mergedConfig: fallbackConfig,
+        baseConfig: fallbackConfig,
+        fieldSources: {},
+        diagnostics,
+        isFallback: true,
+        isBaseInvalid: true,
+      };
+    }
+
+    // base 是纯对象 → best-effort 信任，跳过 overrides（无法校验用户输入）
+    diagnostics.push(createDiagnostic(
+      'warning',
+      'orchestration.zod-unavailable',
+      '[orchestration] 未能加载 zod，已跳过 orchestration schema 校验并 best-effort 信任 base 配置；' +
+      '项目级 orchestration-overrides 在缺 zod 时不被应用。' +
+      '如需完整校验请在已安装依赖的目录运行（npm i）或从仓内源路径运行 spec-driver 脚本',
+    ));
+    const baseFieldSources = buildBaseOnlyFieldSources(rawBase);
+    return {
+      mergedConfig: rawBase,
+      baseConfig: rawBase,
+      fieldSources: baseFieldSources,
+      diagnostics,
+      isFallback: true,
+      isBaseInvalid: false,
+    };
+  }
+  // ── zod 缺失短路结束 ─────────────────────────────────────────────
 
   // ── 步骤 2：base Zod 校验 ──────────────────────────────────
   const baseParseResult = orchestrationBaseSchema.safeParse(rawBase);

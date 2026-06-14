@@ -10,7 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 import { generateFallbackConfig } from './orchestrator-fallback.mjs';
-import { orchestrationBaseSchema, formatZodIssue } from '../contracts/orchestration-schema.mjs';
+import { orchestrationBaseSchema, formatZodIssue, zodAvailable } from '../contracts/orchestration-schema.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +57,34 @@ export class Orchestrator {
 
       const content = fs.readFileSync(configPath, 'utf-8');
       const parsed = parseYamlDocument(content);
+
+      // ── zod 缺失守卫（YAML 解析成功之后、safeParse 之前）────────────
+      // 缺 zod 时 orchestrationBaseSchema 为 null，调用 .safeParse 会抛 TypeError 被外层
+      // catch 误判为加载失败并丢弃真实配置。显式守卫在此 best-effort 信任已解析 YAML。
+      if (!zodAvailable) {
+        const isParsedPlainObject =
+          parsed !== null &&
+          parsed !== undefined &&
+          Object.prototype.toString.call(parsed) === '[object Object]';
+
+        if (isParsedPlainObject) {
+          // parsed 是纯对象 → best-effort 信任已解析的 YAML
+          this.logger.warn(
+            '[ORCHESTRATOR] zod 未加载，已跳过 orchestration schema 校验并 best-effort 信任已解析配置',
+          );
+          this.config = parsed;
+          this.isFallback = false;   // 真实配置，非最小桩
+        } else {
+          // parsed 不是纯对象（YAML 解析为 null/数组/标量等）→ 退 generateFallbackConfig
+          this.logger.warn(
+            '[ORCHESTRATOR] zod 未加载且 YAML 解析结果非纯对象，使用 fallback 配置',
+          );
+          this.config = generateFallbackConfig();
+          this.isFallback = true;
+        }
+        return;   // 跳过 safeParse，退出 loadAndValidateConfig
+      }
+      // ── zod 缺失守卫结束 ─────────────────────────────────────────────
 
       // 使用 orchestrationBaseSchema.safeParse 替代手写校验（CL-016，T-011）
       const zodResult = orchestrationBaseSchema.safeParse(parsed);
