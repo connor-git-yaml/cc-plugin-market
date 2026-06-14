@@ -987,6 +987,10 @@ async function main() {
   }
   fixture.meta.promptSha256 = runResult.promptSha256;
   fixture.meta.promptViaStdin = runResult.promptViaStdin;
+  // Feature 187（FR-003-a）：记录持久化产物目录，供 jury extractDiff 优先读 patch.diff
+  if (args.swebenchOracle && runId) {
+    fixture.meta.runArtifactsDir = path.join(path.resolve(PROJECT_ROOT, args.artifactsDir), runId);
+  }
   fs.writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n', 'utf-8');
   console.log(`[task-runner] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);
 

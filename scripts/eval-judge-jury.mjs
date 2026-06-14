@@ -194,8 +194,15 @@ export function parseArgs(argv) {
 // Diff 提取 + 匿名化
 // ============================================================
 
-export function extractDiff({ wtDir, fallbackDiffStat, maxBytes }) {
+export function extractDiff({ wtDir, fallbackDiffStat, maxBytes, persistedPatchPath }) {
   let diff;
+  // Feature 187（FR-003-a）：优先读 runner 持久化的 patch.diff（PASS run cleanup 后 wtDir 已删，
+  // 此前 jury 只能靠截断 diffStat → 证据不对称）。存在即用，保证 jury 看到真实候选 diff。
+  if (persistedPatchPath && fs.existsSync(persistedPatchPath)) {
+    diff = fs.readFileSync(persistedPatchPath, 'utf-8');
+    if (diff.length > maxBytes) diff = diff.slice(0, maxBytes) + `\n... (truncated, original ${diff.length} bytes)`;
+    return diff;
+  }
   if (wtDir && fs.existsSync(wtDir)) {
     // Try HEAD~1 first, fallback to all commits ahead of master
     const r1 = spawnSync('git', ['-C', wtDir, 'diff', 'HEAD~1..HEAD'], { encoding: 'utf-8' });
@@ -535,7 +542,11 @@ export async function runJuryOnFixture({
   const taskFx = JSON.parse(fs.readFileSync(taskFixturePath, 'utf-8'));
 
   const wtDir = fixture.meta?.outputDir;
-  const rawDiff = extractDiff({ wtDir, fallbackDiffStat: fixture.taskExecution?.diffStat, maxBytes: maxDiffBytes });
+  // Feature 187（FR-003-a）：runner 持久化的 patch.diff 路径（swebench-execution run 记在 meta），优先于 wtDir/diffStat
+  const persistedPatchPath = fixture.meta?.runArtifactsDir
+    ? path.join(fixture.meta.runArtifactsDir, 'patch.diff')
+    : undefined;
+  const rawDiff = extractDiff({ wtDir, fallbackDiffStat: fixture.taskExecution?.diffStat, maxBytes: maxDiffBytes, persistedPatchPath });
   const { reverseMap } = anonymizeFixture(fixture);
   const anonymizedDiff = anonymizeDiff(rawDiff, reverseMap);
 

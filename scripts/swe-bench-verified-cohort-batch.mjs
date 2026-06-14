@@ -31,6 +31,8 @@ import { PROJECT_ROOT, VERIFIED_ROOT, fixturesDir, runFixturePath, aggregateDir,
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { checkPreregistration, parsePreregistration } from './lib/preregistration-check.mjs';
 import { aggregateCohorts, COHORT_IDS } from './lib/cohort-aggregate.mjs';
+import { classifyRunForRanking } from './lib/classify-oracle.mjs'; // Feature 187 C-1：error→null 剔除分母
+import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs'; // Feature 187 FR-004-b：cohort 映射单一来源
 import { globalSpectraPluginPresent, globalSpecDriverPluginPresent } from './lib/local-spectra-plugin.mjs';
 import { classifyRuns, writeRunStarted, writeRunFinalizedSuccess, writeRunFinalizedFailed, atomicWriteJson } from './lib/eval-quota-store.mjs';
 import { anonymizeFixture } from './eval-judge.mjs';
@@ -42,14 +44,9 @@ const SPIKE_RESULT = path.join(PROJECT_ROOT, 'specs/176-swe-bench-verified-cross
 const PREREG = path.join(PROJECT_ROOT, 'specs/176-swe-bench-verified-cross-cohort/verification/preregistration.md');
 const STATE_DIR = path.join(VERIFIED_ROOT, 'runs-state');
 
-// cohort id（报告/聚合）→ runner --tool 值（cohort1=control 即裸 claude）
-export const COHORT_TO_TOOL = {
-  'baseline-claude': 'control',
-  'spec-driver': 'spec-driver',
-  'spec-driver-spectra-mcp': 'spec-driver-spectra-mcp',
-  'SuperPowers': 'superpowers',
-  'GStack': 'gstack',
-};
+// cohort id → runner --tool 值：单一来源 cohort-registry.mjs（FR-004-b）。此处 re-export 保持
+// 既有 import 兼容（F176 测试从本模块取 COHORT_TO_TOOL），内部用上方 import 的同一绑定。
+export { COHORT_TO_TOOL };
 
 // ───────────────────────────────────────────────────────────
 // argv
@@ -175,8 +172,11 @@ export function buildRunMatrix(mode, taskIds, smokeTask = null) {
 // oracle 三分类（FR-A-001b：环境不可用 ≠ 测试失败）
 // ───────────────────────────────────────────────────────────
 
-/** exit 126/127（命令不可执行/不存在）或全 check timedOut → 环境不可用，剔除分母 */
-export function classifyOracle(oracleResult) {
+/**
+ * Legacy oracle 三分类（ast-diff/fuzzy/functional），仅服务 legacy/secondary 路径（Feature 187 C-1：
+ * 改名 classifyLegacyOracle，不再是排名权威）。exit 126/127 或全 check timedOut → unavailable 剔除分母。
+ */
+export function classifyLegacyOracle(oracleResult) {
   if (!oracleResult) return 'unavailable';
   if (oracleResult.passed === true) return 'pass';
   // fixture 落盘时 details 可能被 JSON.stringify 成字符串（assembleTaskFixture 行为）——安全解析
@@ -190,6 +190,17 @@ export function classifyOracle(oracleResult) {
     if (envSignals.length === details.length) return 'unavailable'; // 全部是环境信号才判 unavailable（保守）
   }
   return 'fail';
+}
+
+/**
+ * 排名口径的 oracle 状态（Feature 187 C-1）：
+ * - swebench-execution（primaryOracle.classification 存在）→ 直接用其三分类（pass/fail/error）；
+ * - legacy oracle（无 classification）→ classifyLegacyOracle（pass/fail/unavailable）。
+ * 返回字符串状态；'error'/'unavailable' 都会在 oraclePassed 映射处剔除分母。
+ */
+export function classifyOracleState(oracleResult) {
+  if (oracleResult && typeof oracleResult.classification === 'string') return oracleResult.classification;
+  return classifyLegacyOracle(oracleResult);
 }
 
 /** fixture 里 oracle 结果的权威路径：taskExecution.primaryOracle（assembleTaskFixture 实际落盘位置） */
@@ -235,7 +246,7 @@ function runOne({ taskId, cohort, repeatIndex }, args) {
   fs.copyFileSync(runnerFixture, destFixture);
 
   const fixture = JSON.parse(fs.readFileSync(destFixture, 'utf-8'));
-  const oracleState = classifyOracle(readOracleResult(fixture));
+  const oracleState = classifyOracleState(readOracleResult(fixture));
 
   // jury 质量叠加（blinding：jury 内部 anonymize；此处记 blindingHash 供审计 FR-A-008b）
   if (!args.skipJury) {
@@ -281,12 +292,14 @@ export function loadRunRecords(taskIds, repeats) {
         const p = runFixturePath(taskId, cohort, r);
         if (!fs.existsSync(p)) continue;
         const fx = JSON.parse(fs.readFileSync(p, 'utf-8'));
-        const oracleState = classifyOracle(readOracleResult(fx));
+        const oracleState = classifyOracleState(readOracleResult(fx));
         const tokens = (fx.perf?.tokensInput ?? null) != null && (fx.perf?.tokensOutput ?? null) != null
           ? fx.perf.tokensInput + fx.perf.tokensOutput : null;
         records.push({
           cohort, taskId, repeatIndex: r,
-          oraclePassed: oracleState === 'unavailable' ? null : oracleState === 'pass',
+          // Feature 187 C-1：error（swebench 环境故障）与 legacy unavailable 都剔除分母（null），
+          // 不再把 error 当 oracleState!=='pass' → false 误计入 fail 分母（旧 :289 漏判）。
+          oraclePassed: classifyRunForRanking({ classification: oracleState }),
           tokens,
         });
       }

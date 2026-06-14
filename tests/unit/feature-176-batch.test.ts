@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import {
   parseArgs,
   buildRunMatrix,
-  classifyOracle,
+  classifyLegacyOracle,
   readOracleResult,
   readSpikeStatus,
   COHORT_TO_TOOL,
@@ -51,31 +51,31 @@ describe('buildRunMatrix', () => {
   });
 });
 
-describe('classifyOracle（FR-A-001b 三分类）', () => {
+describe('classifyLegacyOracle（FR-A-001b 三分类）', () => {
   it('passed=true → pass', () => {
-    expect(classifyOracle({ passed: true, details: [] })).toBe('pass');
+    expect(classifyLegacyOracle({ passed: true, details: [] })).toBe('pass');
   });
   it('正常测试失败（exit 1）→ fail', () => {
-    expect(classifyOracle({ passed: false, details: [{ exitCode: 1 }] })).toBe('fail');
+    expect(classifyLegacyOracle({ passed: false, details: [{ exitCode: 1 }] })).toBe('fail');
   });
   it('全部 check 是环境信号（exit 127 命令不存在）→ unavailable（剔除分母不算 fail）', () => {
-    expect(classifyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 126 }] })).toBe('unavailable');
+    expect(classifyLegacyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 126 }] })).toBe('unavailable');
   });
   it('部分环境信号 + 部分真实失败 → fail（保守，不轻易剔除）', () => {
-    expect(classifyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 1 }] })).toBe('fail');
+    expect(classifyLegacyOracle({ passed: false, details: [{ exitCode: 127 }, { exitCode: 1 }] })).toBe('fail');
   });
   it('全 timedOut → unavailable', () => {
-    expect(classifyOracle({ passed: false, details: [{ exitCode: null, timedOut: true }] })).toBe('unavailable');
+    expect(classifyLegacyOracle({ passed: false, details: [{ exitCode: null, timedOut: true }] })).toBe('unavailable');
   });
   it('oracleResult 缺失 → unavailable', () => {
-    expect(classifyOracle(null)).toBe('unavailable');
+    expect(classifyLegacyOracle(null)).toBe('unavailable');
   });
 
   it('details 是 JSON 字符串（assembleTaskFixture 实际落盘形态）→ 正确解析分类', () => {
     // host smoke 实测：fixture.taskExecution.primaryOracle.details 是 stringify 后的字符串
-    expect(classifyOracle({ passed: false, details: JSON.stringify([{ exitCode: 127 }]) })).toBe('unavailable');
-    expect(classifyOracle({ passed: false, details: JSON.stringify([{ exitCode: 1 }]) })).toBe('fail');
-    expect(classifyOracle({ passed: false, details: '{bad json' })).toBe('fail'); // 解析失败保守 fail
+    expect(classifyLegacyOracle({ passed: false, details: JSON.stringify([{ exitCode: 127 }]) })).toBe('unavailable');
+    expect(classifyLegacyOracle({ passed: false, details: JSON.stringify([{ exitCode: 1 }]) })).toBe('fail');
+    expect(classifyLegacyOracle({ passed: false, details: '{bad json' })).toBe('fail'); // 解析失败保守 fail
   });
 });
 

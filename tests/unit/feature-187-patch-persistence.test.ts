@@ -9,6 +9,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { persistRunArtifacts } from '../../scripts/eval-task-runner.mjs';
+import { extractDiff } from '../../scripts/eval-judge-jury.mjs';
 
 describe('persistRunArtifacts（FR-003 / SC-012）', () => {
   let dir: string;
@@ -45,5 +46,24 @@ describe('persistRunArtifacts（FR-003 / SC-012）', () => {
     fs.writeFileSync(filePath, 'x');
     const ok = persistRunArtifacts({ artifactsDir: filePath, runId: 'r', patchDiff: 'd', stdout: '', stderr: '' });
     expect(ok).toBe(false);
+  });
+});
+
+describe('jury extractDiff 优先读持久化 patch.diff（FR-003-a / SC-006）', () => {
+  let dir: string;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'f187-diff-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it('persistedPatchPath 存在 → 读它，不回退 diffStat（PASS run cleanup 后 wtDir 已删）', () => {
+    const patchPath = path.join(dir, 'patch.diff');
+    fs.writeFileSync(patchPath, 'diff --git a/real b/real\n+candidate fix\n');
+    const diff = extractDiff({ wtDir: undefined, fallbackDiffStat: 'STALE diffStat', maxBytes: 30000, persistedPatchPath: patchPath });
+    expect(diff).toContain('candidate fix');
+    expect(diff).not.toContain('STALE');
+  });
+
+  it('persistedPatchPath 不存在 → 回退 diffStat', () => {
+    const diff = extractDiff({ wtDir: undefined, fallbackDiffStat: 'FALLBACK', maxBytes: 30000, persistedPatchPath: path.join(dir, 'nope.diff') });
+    expect(diff).toContain('FALLBACK');
   });
 });

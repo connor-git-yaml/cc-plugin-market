@@ -53,3 +53,4 @@
 [PhaseB-core] swebench-dataset-build.mjs(W1逐字段校验+emit) + swebench_fetch_rows.py + swebench-oracle.mjs(spawnSync同步/predictions候选patch/report解析/SIGSEGV重试/容器清理) | 真实 smoke 验证：goldPatch→pass, 空patch→fail/candidate, 环境信号→error
 [剩余] T017 runner 接入 + Phase C(cohort-batch迁移/manifest/jury/重冻结) + Phase D(护栏+全量验证) + 完整 codex 复审
 [T017] eval-task-runner 接入: swebench-oracle 作 opt-in primary(--swebench-oracle) + fuzzy secondary 并列；preDriverCommit 隔离候选 patch 排 scaffolding 污染；assembleTaskFixture 完整持久化(修 :741 截断);persistRunArtifacts 原子写+写败保留现场(FR-003);buildDriverPrompt default→throw(FR-004-a) | 156+4 tests pass，F176 零回归
+[PhaseC-1] cohort-batch 迁移(T019-T023): classifyOracle→classifyLegacyOracle + classifyOracleState(swebench走classification) + :289 改 classifyRunForRanking(error剔除分母 C-1核心) + COHORT_TO_TOOL/COHORT_IDS 从 registry 派生(FR-004-b) + jury extractDiff 优先读持久化 patch.diff(FR-003-a) + F176 测试改名 | 162 tests pass 零回归

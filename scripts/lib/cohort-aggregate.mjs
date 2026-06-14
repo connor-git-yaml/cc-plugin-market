@@ -13,8 +13,10 @@
  */
 
 import { createSeededRng } from './bootstrap-ci.mjs';
+// Feature 187 FR-004-b：cohort id 单一来源 cohort-registry.mjs（再从此 re-export 保持既有 import 兼容）。
+import { COHORT_IDS } from './cohort-registry.mjs';
 
-export const COHORT_IDS = ['baseline-claude', 'spec-driver', 'spec-driver-spectra-mcp', 'SuperPowers', 'GStack'];
+export { COHORT_IDS };
 
 /**
  * proportion 的 percentile bootstrap CI（codex CRITICAL：passRate 是比例，必须每次重采样取
