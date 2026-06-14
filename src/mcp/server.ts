@@ -8,7 +8,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.js';
@@ -102,9 +102,8 @@ Typical chained usage:
       // 提取 detectedLanguages（Feature 031）—— 局部失败不影响主流程
       let detectedLanguages: string[] | undefined;
       try {
-        const resolvedTarget = require('node:path').resolve(targetPath);
-        const fs = require('node:fs');
-        if (fs.statSync(resolvedTarget).isDirectory()) {
+        const resolvedTarget = resolve(targetPath);
+        if (statSync(resolvedTarget).isDirectory()) {
           const sr = scanFiles(resolvedTarget, { projectRoot: process.cwd() });
           if (sr.languageStats && sr.languageStats.size > 0) {
             detectedLanguages = Array.from(sr.languageStats.keys());
