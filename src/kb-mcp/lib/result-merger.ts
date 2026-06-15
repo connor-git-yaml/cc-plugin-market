@@ -47,6 +47,35 @@ function topOf(list: MergedResult[]): MergedResult {
  * - top_k ≤ 1：返回全局最高 1 条（双呈现不适用，合法降级）
  * - top_k ≥ 2 且两库均非空：先各预留 1 条最高分（每库下限），再按全局归一分补足
  */
+/** 档 B 时效提示（F192 §3.4 / FR-007）：仅时效，不出推荐、不判矛盾 */
+export interface FreshnessHint {
+  newer: boolean;
+  builtAt: string;
+  groupId: string;
+}
+
+/**
+ * 对 kb_search 合并结果附加 freshness_hint：仅当同 doc_id 在两库均命中时，
+ * 按 ingestedAt/builtAt 标注哪条更新（newer）。保持 Phase 1 双呈现，不产 recommended。
+ */
+export function annotateFreshness(
+  results: MergedResult[],
+): Array<MergedResult & { freshnessHint?: FreshnessHint }> {
+  const byDoc = new Map<string, MergedResult[]>();
+  for (const r of results) {
+    const g = byDoc.get(r.docId) ?? [];
+    g.push(r);
+    byDoc.set(r.docId, g);
+  }
+  const ts = (x: MergedResult): string => x.ingestedAt ?? x.builtAt ?? '';
+  return results.map((r) => {
+    const group = byDoc.get(r.docId);
+    if (!group || new Set(group.map((x) => x.sourceKind)).size < 2) return r;
+    const newest = group.reduce((a, b) => (ts(b) > ts(a) ? b : a));
+    return { ...r, freshnessHint: { newer: ts(r) === ts(newest), builtAt: ts(r), groupId: r.docId } };
+  });
+}
+
 export function mergeResults(
   vendor: CoreResult[],
   project: CoreResult[],

@@ -12,7 +12,7 @@ import type { ToolResult } from '../../mcp/lib/tool-response.js';
 import { withTelemetry } from '../../mcp/lib/telemetry.js';
 import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { buildEvidenceEnvelope as envelope, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
-import { mergeResults, type MergedResult, type SourceKind } from '../lib/result-merger.js';
+import { mergeResults, annotateFreshness, type SourceKind } from '../lib/result-merger.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
 import type { KbContext } from '../lib/kb-locator.js';
 
@@ -77,7 +77,7 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
 
   const vendorResults = vendorHits && vendorHits.ok ? vendorHits.results : [];
   const projectResults = projectHits && projectHits.ok ? projectHits.results : [];
-  const merged: MergedResult[] = mergeResults(vendorResults, projectResults, topK);
+  const merged = annotateFreshness(mergeResults(vendorResults, projectResults, topK));
 
   // token cap（字符口径）+ evidence envelope
   let truncated = false;
@@ -95,7 +95,7 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
       break;
     }
     totalChars += content.length;
-    results.push({
+    const entry: Record<string, unknown> = {
       chunk_id: r.chunkId,
       doc_id: r.docId,
       doc_title: r.docTitle,
@@ -104,7 +104,12 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
       source_kind: r.sourceKind,
       sdk_version: r.sdkVersion,
       built_at: r.builtAt,
-    });
+      ingest_source_type: r.ingestSourceType,
+      ingest_origin: r.ingestOrigin,
+      ingested_at: r.ingestedAt,
+    };
+    if (r.freshnessHint) entry['freshness_hint'] = r.freshnessHint;
+    results.push(entry);
   }
 
   const payload: Record<string, unknown> = {

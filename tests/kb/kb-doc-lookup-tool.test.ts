@@ -26,7 +26,7 @@ beforeAll(async () => {
   writeFileSync(join(vDocs, 'init.md'), '# 初始化\n\n调用 sdk.Init()。详见 [鉴权](auth.md)。\n');
   writeFileSync(join(vDocs, 'auth.md'), '# 鉴权\n\n鉴权失败返回 ERR_AUTH_FAILED。\n');
   vendorKb = join(workdir, 'vkb');
-  await buildKb({ dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
   const loaded = await loadKbContext({ vendorKbPath: vendorKb });
   if (!loaded.ok) throw new Error(loaded.code);
   ctx = loaded.context;

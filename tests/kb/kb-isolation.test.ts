@@ -31,14 +31,14 @@ describe('KB 产物隔离（SC-013）', () => {
   it('buildKb 前后 _meta/graph.json 哈希不变', async () => {
     const graphPath = join(workdir, '_meta', 'graph.json');
     const before = hashFile(graphPath);
-    await buildKb({ dirPath: join(workdir, 'docs'), outputPath: join(workdir, 'kb'), builtAt: 'B' });
+    await buildKb({ noLlm: true, dirPath: join(workdir, 'docs'), outputPath: join(workdir, 'kb'), builtAt: 'B' });
     const after = hashFile(graphPath);
     expect(after).toBe(before);
   });
 
   it('chunks.sqlite 产物路径在 kb/ 内（不与现有产物路径重叠）', async () => {
     const out = join(workdir, 'kb');
-    await buildKb({ dirPath: join(workdir, 'docs'), outputPath: out, builtAt: 'B' });
+    await buildKb({ noLlm: true, dirPath: join(workdir, 'docs'), outputPath: out, builtAt: 'B' });
     const sqlitePath = join(out, 'chunks.sqlite');
     expect(existsSync(sqlitePath)).toBe(true);
     // 路径在 kb/ 内，且不等于 _meta/graph.json

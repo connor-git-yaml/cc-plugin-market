@@ -30,14 +30,14 @@ beforeAll(async () => {
   );
   writeFileSync(join(vDocs, 'long.md'), `# 长文档\n\n${'错误码说明。'.repeat(500)}\n`);
   const vendorKb = join(workdir, 'vkb');
-  await buildKb({ dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
 
   // 项目库文档（与厂商库 API X 冲突）
   const pDocs = join(workdir, 'pdocs');
   mkdirSync(pDocs, { recursive: true });
   writeFileSync(join(pDocs, 'apix-patch.md'), '# API X 适配\n\nAPI X 某版本适配后返回 object 类型结果。\n');
   const projectKb = join(workdir, 'pkb');
-  await buildKb({ dirPath: pDocs, outputPath: projectKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: pDocs, outputPath: projectKb, builtAt: 'B' });
 
   const loaded = await loadKbContext({ vendorKbPath: vendorKb, projectKbPath: projectKb });
   if (!loaded.ok) throw new Error(`load failed: ${loaded.code}`);

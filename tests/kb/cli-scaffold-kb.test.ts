@@ -57,10 +57,11 @@ describe('runScaffoldKb — build handler', () => {
   it('build 产出 kb/ 产物', async () => {
     const out = join(workdir, 'kb');
     await runScaffoldKb(
-      cmd({ scaffoldKbOperation: 'build', scaffoldKbDir: join(workdir, 'docs'), scaffoldKbOutput: out }),
+      cmd({ scaffoldKbOperation: 'build', scaffoldKbDir: join(workdir, 'docs'), scaffoldKbOutput: out, scaffoldKbNoLlm: true }),
     );
     expect(existsSync(join(out, 'doc-graph.json'))).toBe(true);
     expect(existsSync(join(out, 'chunks.sqlite'))).toBe(true);
+    expect(existsSync(join(out, 'api-entities.json'))).toBe(true);
   });
 
   it('build 缺输入 → 设 exitCode 1（不抛）', async () => {

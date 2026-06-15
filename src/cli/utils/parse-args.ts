@@ -116,6 +116,8 @@ export interface CLICommand {
   scaffoldKbSdkVersion?: string;
   /** F190 scaffold-kb build：--lang 文档语言标记（默认 en） */
   scaffoldKbLang?: string;
+  /** F192 scaffold-kb build：--no-llm 跳过 LLM 抽取只走 heuristic（FR-001） */
+  scaffoldKbNoLlm?: boolean;
   /** F190 scaffold-kb serve：--vendor-kb 厂商库路径（必需） */
   scaffoldKbVendorKb?: string;
   /** F190 scaffold-kb serve：--project-kb 项目库路径（缺省 cwd/.spectra/kb） */
@@ -739,6 +741,7 @@ export function parseArgs(argv: string[]): ParseResult {
         scaffoldKbOutput: readFlag('--output'),
         scaffoldKbSdkVersion: readFlag('--sdk-version'),
         scaffoldKbLang: readFlag('--lang'),
+        scaffoldKbNoLlm: argv.includes('--no-llm'),
         scaffoldKbVendorKb: readFlag('--vendor-kb'),
         scaffoldKbProjectKb: readFlag('--project-kb'),
         scaffoldKbRequirement: readFlag('--requirement'),

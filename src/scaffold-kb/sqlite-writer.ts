@@ -21,6 +21,7 @@ const CREATE_CHUNKS = `CREATE VIRTUAL TABLE chunks USING fts5(
   tokenize = 'unicode61 remove_diacritics 1'
 )`;
 
+// F192：新建/项目库的 chunk_meta 含 provenance 三列（F190 旧库无，读取走 schema-compat）
 const CREATE_META = `CREATE TABLE chunk_meta (
   chunk_id TEXT PRIMARY KEY,
   doc_id TEXT NOT NULL,
@@ -28,7 +29,10 @@ const CREATE_META = `CREATE TABLE chunk_meta (
   source_url TEXT,
   anchor TEXT,
   sdk_version TEXT,
-  built_at TEXT NOT NULL
+  built_at TEXT NOT NULL,
+  ingest_source_type TEXT,
+  ingest_origin TEXT,
+  ingested_at TEXT
 )`;
 
 /**
@@ -52,8 +56,19 @@ export async function buildChunksDbBytes(
     }
     for (const m of meta) {
       db.exec({
-        sql: 'INSERT INTO chunk_meta(chunk_id, doc_id, doc_title, source_url, anchor, sdk_version, built_at) VALUES(?,?,?,?,?,?,?)',
-        bind: [m.chunkId, m.docId, m.docTitle, m.sourceUrl, m.anchor, m.sdkVersion, m.builtAt],
+        sql: 'INSERT INTO chunk_meta(chunk_id, doc_id, doc_title, source_url, anchor, sdk_version, built_at, ingest_source_type, ingest_origin, ingested_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+        bind: [
+          m.chunkId,
+          m.docId,
+          m.docTitle,
+          m.sourceUrl,
+          m.anchor,
+          m.sdkVersion,
+          m.builtAt,
+          m.ingestSourceType ?? null,
+          m.ingestOrigin ?? null,
+          m.ingestedAt ?? null,
+        ],
       });
     }
     return exportDb(sqlite3, db);

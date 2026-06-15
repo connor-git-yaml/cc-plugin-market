@@ -19,13 +19,13 @@ beforeAll(async () => {
   mkdirSync(vDocs, { recursive: true });
   writeFileSync(join(vDocs, 'a.md'), '# A\n\n厂商文档内容。\n');
   vendorKb = join(workdir, 'vkb');
-  await buildKb({ dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
 
   const pDocs = join(workdir, 'pdocs');
   mkdirSync(pDocs, { recursive: true });
   writeFileSync(join(pDocs, 'p.md'), '# P\n\n项目文档内容。\n');
   projectKb = join(workdir, 'pkb');
-  await buildKb({ dirPath: pDocs, outputPath: projectKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: pDocs, outputPath: projectKb, builtAt: 'B' });
 });
 
 afterAll(() => rmSync(workdir, { recursive: true, force: true }));

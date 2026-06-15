@@ -9,8 +9,10 @@
  */
 
 import type { SqliteDb } from './sqlite-engine.js';
+import type { IngestSourceType } from './types.js';
 import { queryRows } from './sqlite-engine.js';
 import { sanitizeQuery } from './query-sanitizer.js';
+import { provenanceSelectFragment } from './schema-compat.js';
 
 export interface CoreResult {
   chunkId: string;
@@ -21,6 +23,10 @@ export interface CoreResult {
   sourceUrl: string | null;
   sdkVersion: string | null;
   builtAt: string;
+  /** F192 provenance（旧库 / 厂商构建为 null，经 schema-compat 投影，C-1） */
+  ingestSourceType: IngestSourceType | null;
+  ingestOrigin: string | null;
+  ingestedAt: string | null;
   /** 原始 bm25 分（越负越相关）；LIKE 兜底命中记为 1.0（最不相关） */
   score: number;
   via: 'fts' | 'like';
@@ -59,6 +65,10 @@ function rowToResult(row: unknown[], score: number, via: 'fts' | 'like'): CoreRe
     sourceUrl: strOrNull(row[5]),
     sdkVersion: strOrNull(row[6]),
     builtAt: str(row[7]),
+    // provenance（schema-compat 片段固定产出 3 列：索引 8/9/10）
+    ingestSourceType: strOrNull(row[8]) as IngestSourceType | null,
+    ingestOrigin: strOrNull(row[9]),
+    ingestedAt: strOrNull(row[10]),
     score,
     via,
   };
@@ -86,10 +96,14 @@ export function searchKbCore(
     return { ok: false, code: 'INVALID_QUERY' };
   }
 
+  // provenance 投影片段（始终 3 列，旧库 NULL AS；C-1 兼容）
+  const prov = provenanceSelectFragment(db);
+
   // 可选 sdk_version 过滤（FR-007，修 Codex WARNING：原 sdk_version 暴露但未用）
   const versionClause = sdkVersion !== undefined ? ' AND chunk_meta.sdk_version = ?' : '';
 
-  const ftsSql = `SELECT ${SELECT_COLS}, bm25(chunks) AS score
+  // 列顺序：SELECT_COLS(0-7) + prov(8-10) + bm25 score(11)
+  const ftsSql = `SELECT ${SELECT_COLS}${prov}, bm25(chunks) AS score
 FROM chunks JOIN chunk_meta ON chunk_meta.chunk_id = chunks.chunk_id
 WHERE chunks MATCH ?${versionClause}
 ORDER BY bm25(chunks)
@@ -97,12 +111,12 @@ LIMIT ?`;
   const ftsBind: unknown[] =
     sdkVersion !== undefined ? [sanitized.match, sdkVersion, topK] : [sanitized.match, topK];
   const ftsRows = queryRows(db, ftsSql, ftsBind);
-  const results: CoreResult[] = ftsRows.map((row) => rowToResult(row, Number(row[8] ?? 0), 'fts'));
+  const results: CoreResult[] = ftsRows.map((row) => rowToResult(row, Number(row[11] ?? 0), 'fts'));
 
   // EC-001：短 CJK 查询（≤2 字）且 FTS 命中不足 → content_raw LIKE 兜底（转义通配符），合并去重
   const hanCount = countHan(query);
   if (hanCount > 0 && hanCount <= 2 && results.length < LIKE_FALLBACK_FLOOR) {
-    const likeSql = `SELECT ${SELECT_COLS}
+    const likeSql = `SELECT ${SELECT_COLS}${prov}
 FROM chunks JOIN chunk_meta ON chunk_meta.chunk_id = chunks.chunk_id
 WHERE chunks.content_raw LIKE ? ESCAPE '\\'${versionClause}
 LIMIT ?`;

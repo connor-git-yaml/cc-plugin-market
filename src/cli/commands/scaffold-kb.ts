@@ -89,10 +89,12 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
     if (command.scaffoldKbOutput !== undefined) opts.outputPath = command.scaffoldKbOutput;
     if (command.scaffoldKbSdkVersion !== undefined) opts.sdkVersion = command.scaffoldKbSdkVersion;
     if (command.scaffoldKbLang !== undefined) opts.lang = command.scaffoldKbLang;
+    if (command.scaffoldKbNoLlm === true) opts.noLlm = true;
 
     const res = await buildKb(opts);
     console.log(
-      `[scaffold-kb] 构建完成：${res.docCount} 文档 / ${res.chunkCount} chunk → ${res.outputPath}`,
+      `[scaffold-kb] 构建完成：${res.docCount} 文档 / ${res.chunkCount} chunk / ` +
+        `${res.entityCount} 实体（${res.extractionMethod}）→ ${res.outputPath}`,
     );
     return;
   }

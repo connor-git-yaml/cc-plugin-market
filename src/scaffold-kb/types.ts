@@ -33,6 +33,16 @@ export interface Chunk {
   anchor: string | null;
 }
 
+/** 三方导入来源种类（F192 §3.3 provenance）；null/缺省 = F190 旧库或厂商构建 */
+export type IngestSourceType =
+  | 'llms-txt'
+  | 'markdown-dir'
+  | 'url'
+  | 'office-docx'
+  | 'office-pptx'
+  | 'office-pdf'
+  | 'minutes';
+
 /** chunk_meta 表的一行（关联检索结果到来源） */
 export interface ChunkMeta {
   chunkId: string;
@@ -43,6 +53,66 @@ export interface ChunkMeta {
   anchor: string | null;
   sdkVersion: string | null;
   builtAt: string;
+  /** F192 provenance（仅新建/项目库写入；F190 旧库读取时为 null，见 R-COMPAT-1） */
+  ingestSourceType?: IngestSourceType | null;
+  ingestOrigin?: string | null;
+  ingestedAt?: string | null;
+}
+
+/** API 实体单条（F192 §3.2；文档自抽取，证据级，非代码级） */
+export interface ApiEntity {
+  /** 稳定唯一 id：qualified_name + kind + overload_key 归一 */
+  id: string;
+  name: string;
+  /** 文档侧限定名（含 namespace/容器路径）；无则等于 name */
+  qualifiedName: string;
+  /** 所属 class/module/namespace（可选） */
+  container?: string | null;
+  /** 同名重载消歧键（可选） */
+  overloadKey?: string | null;
+  kind: 'function' | 'method' | 'class' | 'constant' | 'type' | 'endpoint' | 'error_code' | 'event';
+  signature?: string | null;
+  params?: Array<{ name: string; type?: string | null; required?: boolean; doc?: string | null }>;
+  returns?: string | null;
+  deprecated?: { isDeprecated: boolean; since?: string | null; replacement?: string | null };
+  sinceVersion?: string | null;
+  sourceDocId: string;
+  /** primary 证据 chunk id（chunks.sqlite，仅同一次 build 内可回溯） */
+  sourceChunkId: string;
+  /** 证据链跨多 chunk 时的全部 chunk id（可选） */
+  sourceChunkIds?: string[];
+  sourceAnchor?: string | null;
+  /** 抽取依据的原文片段（截断，可选） */
+  evidenceQuote?: string | null;
+  lang: string;
+  /** [0,1]，读取越界 clamp、非数值视为缺失 */
+  confidence: number;
+  extractionMethod: 'llm' | 'heuristic';
+}
+
+/**
+ * 抽取输入单元（section 窗口，W-4）：同 docId+anchor 的相邻 chunk 聚合，
+ * 防 API 签名/参数跨 chunk 被切碎。LLM 与 heuristic 抽取共享此输入契约。
+ */
+export interface ExtractionSection {
+  docId: string;
+  anchor: string | null;
+  lang: string;
+  /** 窗口内全部 chunk id（primary = chunkIds[0]） */
+  chunkIds: string[];
+  /** 聚合后的原文文本 */
+  text: string;
+}
+
+/** api-entities.json 结构契约（F192 §3.2） */
+export interface ApiEntityFile {
+  schemaVersion: '1.0';
+  builtAt: string;
+  sdkVersion: string | null;
+  sourceKind: SourceKind;
+  entities: ApiEntity[];
+  /** 成本护栏：抽取覆盖率元字段（超预算截断时记录，FR-001） */
+  coverage?: { totalSections: number; extractedSections: number };
 }
 
 /** doc-graph.json 节点 */
@@ -86,4 +156,8 @@ export interface BuildKbOptions {
   lang?: string;
   /** 注入的时间戳（ISO 8601）；幂等比较时排除（不传则由 build 决定，测试可固定） */
   builtAt?: string;
+  /** 跳过 LLM 抽取，只走 heuristic（CLI --no-llm，FR-001） */
+  noLlm?: boolean;
+  /** 产物 source_kind（厂商构建=vendor，项目导入=project）；默认 vendor */
+  sourceKind?: SourceKind;
 }

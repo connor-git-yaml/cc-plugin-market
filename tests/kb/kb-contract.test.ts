@@ -25,7 +25,7 @@ beforeAll(async () => {
   mkdirSync(vDocs, { recursive: true });
   writeFileSync(join(vDocs, 'a.md'), '# A\n\n错误码 ERR_X 说明。\n');
   const vendorKb = join(workdir, 'vkb');
-  await buildKb({ dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
+  await buildKb({ noLlm: true, dirPath: vDocs, outputPath: vendorKb, builtAt: 'B' });
   const loaded = await loadKbContext({ vendorKbPath: vendorKb });
   if (!loaded.ok) throw new Error(loaded.code);
   ctx = loaded.context;

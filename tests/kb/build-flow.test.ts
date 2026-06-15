@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('buildKb', () => {
   it('从 --dir 产出 doc-graph.json + chunks.sqlite', async () => {
-    const res = await buildKb({ dirPath: docsDir, outputPath: outDir, builtAt: 'B1' });
+    const res = await buildKb({ noLlm: true, dirPath: docsDir, outputPath: outDir, builtAt: 'B1' });
     expect(res.docCount).toBe(2);
     expect(res.chunkCount).toBeGreaterThan(0);
 
@@ -58,8 +58,8 @@ describe('buildKb', () => {
   it('幂等：doc-graph.json 去 built_at 后两次一致；sqlite chunk 集合一致', async () => {
     const out1 = join(workdir, 'kb1');
     const out2 = join(workdir, 'kb2');
-    await buildKb({ dirPath: docsDir, outputPath: out1, builtAt: 'X' });
-    await buildKb({ dirPath: docsDir, outputPath: out2, builtAt: 'Y' });
+    await buildKb({ noLlm: true, dirPath: docsDir, outputPath: out1, builtAt: 'X' });
+    await buildKb({ noLlm: true, dirPath: docsDir, outputPath: out2, builtAt: 'Y' });
 
     const g1 = JSON.parse(readFileSync(join(out1, 'doc-graph.json'), 'utf-8'));
     const g2 = JSON.parse(readFileSync(join(out2, 'doc-graph.json'), 'utf-8'));
@@ -77,7 +77,7 @@ describe('buildKb', () => {
   });
 
   it('两种输入都未提供 → 抛错（不落盘）', async () => {
-    await expect(buildKb({ outputPath: outDir })).rejects.toThrow();
+    await expect(buildKb({ noLlm: true, outputPath: outDir })).rejects.toThrow();
     expect(existsSync(join(outDir, 'doc-graph.json'))).toBe(false);
   });
 });

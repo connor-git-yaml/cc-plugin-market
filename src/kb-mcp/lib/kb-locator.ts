@@ -11,6 +11,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadDbFromBytes, type SqliteDb } from '../../scaffold-kb/sqlite-engine.js';
+import { deserializeApiEntities } from '../../scaffold-kb/api-entities-serializer.js';
+import type { ApiEntityFile } from '../../scaffold-kb/types.js';
 import type { KbErrorCode } from './kb-error.js';
 import type { SourceKind } from './result-merger.js';
 
@@ -26,6 +28,8 @@ export interface DocGraphFile {
 export interface KbHandle {
   db: SqliteDb;
   graph: DocGraphFile | null;
+  /** F192：api-entities.json（缺失/损坏 → null，kb_api_lookup 降级 document_fallback） */
+  entities: ApiEntityFile | null;
 }
 
 export interface KbContext {
@@ -64,7 +68,17 @@ async function loadHandle(kbDir: string): Promise<KbHandle | { corrupt: true }> 
   } catch {
     graph = null; // doc-graph 损坏 → 仅 kb_doc_lookup 降级，不影响 kb_search
   }
-  return { db, graph };
+  // F192：api-entities.json（可选，同 graph 降级语义）
+  let entities: ApiEntityFile | null = null;
+  try {
+    const entitiesPath = join(kbDir, 'api-entities.json');
+    if (existsSync(entitiesPath)) {
+      entities = deserializeApiEntities(JSON.parse(readFileSync(entitiesPath, 'utf-8')));
+    }
+  } catch {
+    entities = null; // 缺失/损坏 → kb_api_lookup 降级 document_fallback（W-3）
+  }
+  return { db, graph, entities };
 }
 
 /**
