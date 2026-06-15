@@ -297,7 +297,7 @@ MUST 提供版本化冻结评测清单 `specs/192-scaffold-kb-entity-and-ingest/
 - **kb_api_lookup recall**：冻结 {api 查询, 期望命中实体 id}，机械计算命中率
 - **仲裁评测**：冻结 {冲突 fixture, 期望推荐项 id}，机械断言推荐正确（含 tie/缺失/单维场景，见 §3.4 R-ARB-2）
 - **W-5 修正（spec 级固化门槛，不留 plan）**：
-  - 实体抽取 **precision ≥ 0.80、recall ≥ 0.70**（heuristic fallback 路径门槛可低一档，但 MUST 在 manifest 单列、不得用 LLM 路径的数字充数）
+  - 实体抽取：**LLM 路径 precision ≥ 0.80、recall ≥ 0.70**；**heuristic fallback 路径 spec 固化低档 floor：precision ≥ 0.60、recall ≥ 0.50**。两路径门槛均 **spec 级固化（不留 plan）**、均在冻结 fixture 上 **CI 阻塞断言**；heuristic MUST 在 manifest 单列、不得用 LLM 路径数字充数。（real-world 非 fixture 文档上的达标度是后续优化信号，与此 fixture 门禁无关）
   - `kb_api_lookup` 命中率 **≥ 0.80**（精确查询）
   - 仲裁推荐正确率 **= 1.00**（冻结冲突集是确定性判定，不允许错）
 - **W-5 修正（反过拟合可机械执行，不止"口头不许"）**：
@@ -342,7 +342,7 @@ MUST 提供版本化冻结评测清单 `specs/192-scaffold-kb-entity-and-ingest/
 - **SC-006（预览确认）**：`--dry-run` 不写库；默认预览展示计数；`--yes` 落库且原子
 - **SC-007（导入安全护栏，完整攻击矩阵机械化）**：FR-011 的 8 项（zip bomb / XXE-DTD / path traversal / 外部关系引用 / PDF object stream bomb / 内嵌动作文件 / 解析器联网读盘 / 超大）+ 加密损坏 + prompt 注入，**各至少一用例**机械验收"拒绝或 defang、不崩、不外联"
 - **SC-007a（URL SSRF 防护 C-5，覆盖 FR-010 全部 6 项边界，一一对应）**：(1) 协议白名单、(2) localhost/私网/link-local 封锁、(3) **DNS rebinding（解析后 IP 落入封锁段则拒绝）**、(4) 重定向限制（**跨协议拒绝** + **超最大跳数拒绝**）、(5) **连接/读取超时** + 超大响应流式截断、(6) **content-type 校验（非 HTML/text 拒绝）** 各一用例机械验收"拒绝抓取/中断、不发起内网请求"
-- **SC-008（抽取准确率达门槛）**：实体抽取 precision **≥ 0.80**、recall **≥ 0.70**（LLM 路径；heuristic fallback 单列、门槛可低一档但不得用 LLM 数字充数，FR-018）；holdout + mutation fixture 通过；反过拟合 hash 扫描通过
+- **SC-008（抽取准确率达门槛）**：LLM 路径 precision **≥ 0.80**/recall **≥ 0.70**；heuristic 路径 **floor precision ≥ 0.60/recall ≥ 0.50**（单列、spec 固化、CI 阻塞，不得用 LLM 数字充数，FR-018）；holdout + mutation fixture 通过；反过拟合 hash 扫描通过
 - **SC-009（诚实边界）**：产物与工具 description 无代码级断言措辞；extraction_method/confidence 全程标注（机械 grep + 断言）
 - **SC-010（MCP 零回归）**：Spectra 17 工具 + `kb_search`/`kb_doc_lookup` 全部不回归；新增 `kb_api_lookup` 注册成功，工具总数与命名无冲突
 - **SC-011（产物隔离）**：api-entities + 导入产物不污染 graph.json/specs/厂商库；厂商库字节不变机械校验

@@ -8,7 +8,7 @@ spec: ./spec.md
 
 # F192 实施计划（Plan）
 
-> 本计划落实 spec 的 20 FR / 17 SC，遵 GATE_DESIGN 决策 D-001~D-004。**架构原则：最大化复用 F190/F191 既有模块，新增能力以新模块旁挂，不分叉既有实现。**
+> 本计划落实 spec 的 19 FR / 17 SC，遵 GATE_DESIGN 决策 D-001~D-004。**架构原则：最大化复用 F190/F191 既有模块，新增能力以新模块旁挂，不分叉既有实现。**
 
 ## 0. 架构概览（新增 vs 扩展）
 
@@ -183,12 +183,12 @@ src/cli/
 ## 8. 测试策略（TDD）
 - 单元（tests/kb/）：entity-extractor heuristic、arbitration（tie/缺失/单维/时效不翻盘 全断言）、entity-matcher（消歧/模糊）、url-fetcher SSRF（mock DNS/redirect）、office-parser 攻击矩阵（造 zip bomb/XXE/path-traversal/损坏 fixture）、defang 全字段、compat 列探测
 - 集成（tests/integration/）：build→api-entities E2E、ingest 四格式 E2E、kb_api_lookup 双层+仲裁+降级、旧库兼容
-- 冻结评测（specs/192/eval/）：entity-manifest（precision/recall + holdout + mutation + hash 扫描）、api-lookup recall、arbitration 推荐正确
+- 冻结评测（specs/192-scaffold-kb-entity-and-ingest/eval/）：entity-manifest（precision/recall + holdout + mutation + hash 扫描）、api-lookup recall、arbitration 推荐正确
 - 所有外部 IO（网络/文件）走注入式 mock（复用 ingester 的 fetchImpl 模式），保证确定性
 
 ## 9. 风险与回退
 - **pdfjs-dist 体积/兼容**：若批② 审计判定不可接受 → 切 unpdf 或降级"仅文本层简单抽取"，但**不砍** PDF（D-004）；走备选列
-- **LLM 抽取质量不稳**：heuristic fallback 保底；门槛不达标记录为后续优化信号（非阻塞，类比 F190 recall 弱项处理）
+- **LLM 抽取质量不稳**：heuristic fallback 保底。**冻结 fixture 上两路径门槛均阻塞**（LLM ≥0.80/0.70；heuristic floor ≥0.60/0.50，spec 固化）；不达标即 fail，不放行。"后续优化信号（非阻塞）"仅指 **real-world 非 fixture 文档**上的达标度（类比 F190 recall 弱项），与 fixture 门禁两回事
 - **依赖足迹增大**：批② 审计实测三平台；任一原生编译/license 不兼容即换备选
 - **F189 缺位**：实体证据级边界已 spec 锁定；不做 AST 锚定，不 over-claim
 
