@@ -6,7 +6,7 @@ source: host(batch)
 runCount: 5
 brokenCount: 0
 c3McpCallCount: 3
-generatedAtIso: 2026-06-10T17:04:29.631Z
+generatedAtIso: 2026-06-15T11:54:15.238Z
 ---
 
 # F176 smoke 结果（5 cohort × 1 task × N=1）
