@@ -94,7 +94,8 @@ kb/
       "deprecated": { "is_deprecated": false, "since": "<可选>", "replacement": "<可选>" },
       "since_version": "<起始版本，可选>",
       "source_doc_id": "<doc-graph 节点 id>",
-      "source_chunk_id": "<chunks.sqlite 中证据 chunk 的 id（用于回溯原文 + token cap）>",
+      "source_chunk_id": "<primary 证据 chunk id（chunks.sqlite 中，用于回溯原文 + token cap）>",
+      "source_chunk_ids": ["<证据链跨多 chunk 时的全部 chunk id，可选；签名/参数跨段时用>"],
       "source_anchor": "<段落/章节锚点，可选>",
       "evidence_quote": "<抽取依据的原文片段，截断至 token cap 内，可选>",
       "lang": "zh | en | ...",
@@ -109,7 +110,7 @@ kb/
 >
 > - **C-3 修正**：`extraction_method` 本期**仅** `llm | heuristic` 两值；**不含** `ast-fallback`——读取代码图谱/AST 即引入 F189 耦合，与"本期文档自抽取、不依赖 F189"硬边界冲突。未来 F189 落地后通过 `schema_version` 升级新增 `ast-anchored`。
 > - **W-2 修正**：实体身份由 `qualified_name`（文档侧限定名）+ `kind` + `overload_key` 共同确定，使同名方法/多语言重载在**不依赖 F189**的前提下也能区分；`id` 是三者归一后的稳定串。
-> - **W-9 修正**：每条实体 MUST 携带 `source_chunk_id`（指向 chunks.sqlite 中的证据 chunk），使 `kb_api_lookup` 能回溯原始证据并复用 chunk 级 token cap；`evidence_quote` 为可选的截断原文片段。`source_chunk_id` 是 KB 内部引用，**不**指向 `_meta/graph.json`，不破坏隔离。
+> - **W-9 修正**：每条实体 MUST 携带 `source_chunk_id`（primary 证据 chunk），使 `kb_api_lookup` 能回溯原始证据并复用 chunk 级 token cap；证据链跨多 chunk（签名/参数跨段，见 plan §1.1 window 抽取）时**可选** `source_chunk_ids[]` 列全部证据 chunk；`evidence_quote` 为可选截断原文。chunk id **仅承诺同一次 KB build 内可回溯**（依赖切分，rebuild 可能变）。均为 KB 内部引用，**不**指向 `_meta/graph.json`，不破坏隔离。
 > - **I-1 修正**：`confidence` 取值域 `0.0 ≤ confidence ≤ 1.0`；读取时越界值 MUST clamp 到 [0,1]，非数值 MUST 视为缺失（按缺失默认处理，见 §3.4）。
 > - 每条实体 MUST 携带 `confidence` + `extraction_method`，消费侧据此判断可信度。
 
@@ -246,8 +247,8 @@ KB MCP server MUST 注册 `kb_api_lookup`（名称由 F190 AR-001 预留）：
   2. **XXE / DTD**：docx/pptx 内部 XML 解析 MUST 禁用 external entity、DTD、external DTD subset
   3. **zip path traversal**：拒绝含 `../`、绝对路径、盘符的 zip entry 名（防写出容器外）
   4. **Office 外部关系引用**：docx/pptx 的 relationships（`.rels`）中指向远程/本地文件的 external target MUST 忽略，不得触发抓取/读盘
-  5. **PDF 对象流炸弹 / 超深嵌套**：PDF object stream 解压与对象引用深度设上限；超限拒绝
-  6. **PDF 内嵌动作 / 文件**：`/Launch`、`/OpenAction`、`/JavaScript`、embedded file MUST 不执行、不外联，仅抽文本层
+  5. **PDF 对象流炸弹 / 超深嵌套**：输入字节上限（解析前）+ **外层超时 + 内存上限 + worker 隔离**兜底（PDF 解析库通常无公开"对象深度上限"API，故以资源边界 + 超时拦截恶意超深嵌套，而非声称库内 depth limit）；超限即中断拒绝
+  6. **PDF 内嵌动作 / 文件**：仅 text-layer 抽取（`data`-only、禁 url/range/autoFetch、不渲染）；`/Launch`、`/OpenAction`、`/JavaScript`、embedded file MUST 不执行、不外联——通过轻量结构预扫描检出即拒绝/剥离 + 测试断言"不执行动作"（不空口依赖库行为）
   7. **解析器联网 / 读本地文件禁令**：所有 office 解析 MUST 在无网络、无任意本地文件读取的前提下完成（只读目标文件本身）
   8. **超大文件**：输入字节上限；超限拒绝
 - 触发任一项即拒绝该源并报具体原因，不崩、不阻断其他源
