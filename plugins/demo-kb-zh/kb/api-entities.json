@@ -1,0 +1,990 @@
+{
+  "schema_version": "1.0",
+  "built_at": "2026-06-16T06:31:35.885Z",
+  "sdk_version": "5.5.0",
+  "source_kind": "vendor",
+  "entities": [
+    {
+      "id": "document.getelementbyid#function",
+      "name": "document.getElementById",
+      "qualified_name": "document.getElementById",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "document.getElementById('dom-id')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "basic-concepts.md",
+      "source_chunk_id": "basic-concepts.md#用-option-描述图表",
+      "source_chunk_ids": [
+        "basic-concepts.md#用-option-描述图表"
+      ],
+      "source_anchor": "用-option-描述图表",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "echarts.init#function",
+      "name": "echarts.init",
+      "qualified_name": "echarts.init",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "echarts.init(dom)",
+      "params": [
+        {
+          "name": "dom"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "basic-concepts.md",
+      "source_chunk_id": "basic-concepts.md#用-option-描述图表",
+      "source_chunk_ids": [
+        "basic-concepts.md#用-option-描述图表"
+      ],
+      "source_anchor": "用-option-描述图表",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "chart.setoption#function",
+      "name": "chart.setOption",
+      "qualified_name": "chart.setOption",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "chart.setOption(option)",
+      "params": [
+        {
+          "name": "option"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "basic-concepts.md",
+      "source_chunk_id": "basic-concepts.md#用-option-描述图表",
+      "source_chunk_ids": [
+        "basic-concepts.md#用-option-描述图表"
+      ],
+      "source_anchor": "用-option-描述图表",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "$.get#function",
+      "name": "$.get",
+      "qualified_name": "$.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "$.get('data.json')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#异步加载",
+      "source_chunk_ids": [
+        "dynamic-data.md#异步加载"
+      ],
+      "source_anchor": "异步加载",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "done#function",
+      "name": "done",
+      "qualified_name": "done",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "done(function (data)",
+      "params": [
+        {
+          "name": "function (data"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#异步加载",
+      "source_chunk_ids": [
+        "dynamic-data.md#异步加载"
+      ],
+      "source_anchor": "异步加载",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.setoption#function",
+      "name": "myChart.setOption",
+      "qualified_name": "myChart.setOption",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.setOption({\n        title: {\n            text: '异步数据加载示例'\n        },\n        tooltip: {},\n        legend: {\n            data:['销量']\n        },\n        xAxis: {\n            data: data.categories\n        },\n        yAxis: {},\n        series: [{\n            name: '销量',\n            type: 'bar',\n            data: data.data\n        }]\n    })",
+      "params": [
+        {
+          "name": "tooltip",
+          "type": "{}"
+        },
+        {
+          "name": "legend",
+          "type": "{\n            data:['销量']\n        }"
+        },
+        {
+          "name": "xAxis",
+          "type": "{\n            data: data.categories\n        }"
+        },
+        {
+          "name": "yAxis",
+          "type": "{}"
+        },
+        {
+          "name": "series",
+          "type": "[{\n            name: '销量'"
+        },
+        {
+          "name": "type",
+          "type": "'bar'"
+        },
+        {
+          "name": "data",
+          "type": "data.data\n        }]\n    }"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#异步加载",
+      "source_chunk_ids": [
+        "dynamic-data.md#异步加载"
+      ],
+      "source_anchor": "异步加载",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.showloading#function",
+      "name": "myChart.showLoading",
+      "qualified_name": "myChart.showLoading",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.showLoading()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#loading-动画",
+      "source_chunk_ids": [
+        "dynamic-data.md#loading-动画"
+      ],
+      "source_anchor": "loading-动画",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.hideloading#function",
+      "name": "myChart.hideLoading",
+      "qualified_name": "myChart.hideLoading",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.hideLoading()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#loading-动画",
+      "source_chunk_ids": [
+        "dynamic-data.md#loading-动画"
+      ],
+      "source_anchor": "loading-动画",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "data.push#function",
+      "name": "data.push",
+      "qualified_name": "data.push",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "data.push(value)",
+      "params": [
+        {
+          "name": "value"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "dynamic-data.md",
+      "source_chunk_id": "dynamic-data.md#数据的动态更新",
+      "source_chunk_ids": [
+        "dynamic-data.md#数据的动态更新"
+      ],
+      "source_anchor": "数据的动态更新",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.on#function",
+      "name": "myChart.on",
+      "qualified_name": "myChart.on",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.on('click', function (params)",
+      "params": [
+        {
+          "name": "function (params"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#_1",
+      "source_chunk_ids": [
+        "event.md#_1"
+      ],
+      "source_anchor": null,
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "console.log#function",
+      "name": "console.log",
+      "qualified_name": "console.log",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "console.log(params.name)",
+      "params": [
+        {
+          "name": "params.name"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#_1",
+      "source_chunk_ids": [
+        "event.md#_1"
+      ],
+      "source_anchor": null,
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "window.open#function",
+      "name": "window.open",
+      "qualified_name": "window.open",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "window.open('https://www.baidu.com/s?wd=' + encodeURIComponent(params.name)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#鼠标事件的处理",
+      "source_chunk_ids": [
+        "event.md#鼠标事件的处理",
+        "event.md#鼠标事件的处理-2",
+        "event.md#鼠标事件的处理-3"
+      ],
+      "source_anchor": "鼠标事件的处理",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "chart.on#function",
+      "name": "chart.on",
+      "qualified_name": "chart.on",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "chart.on(eventName, query, handler)",
+      "params": [
+        {
+          "name": "eventName"
+        },
+        {
+          "name": "query"
+        },
+        {
+          "name": "handler"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#鼠标事件的处理",
+      "source_chunk_ids": [
+        "event.md#鼠标事件的处理",
+        "event.md#鼠标事件的处理-2",
+        "event.md#鼠标事件的处理-3"
+      ],
+      "source_anchor": "鼠标事件的处理",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.dispatchaction#function",
+      "name": "myChart.dispatchAction",
+      "qualified_name": "myChart.dispatchAction",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.dispatchAction({ type: '' })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#代码触发-echarts-中组件的行为",
+      "source_chunk_ids": [
+        "event.md#代码触发-echarts-中组件的行为"
+      ],
+      "source_anchor": "代码触发-echarts-中组件的行为",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mychart.getzr#function",
+      "name": "myChart.getZr",
+      "qualified_name": "myChart.getZr",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "myChart.getZr()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#监听空白处的事件",
+      "source_chunk_ids": [
+        "event.md#监听空白处的事件"
+      ],
+      "source_anchor": "监听空白处的事件",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "on#function",
+      "name": "on",
+      "qualified_name": "on",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "on('click', function (event)",
+      "params": [
+        {
+          "name": "function (event"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "event.md",
+      "source_chunk_id": "event.md#监听空白处的事件",
+      "source_chunk_ids": [
+        "event.md#监听空白处的事件"
+      ],
+      "source_anchor": "监听空白处的事件",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "grid#function",
+      "name": "grid",
+      "qualified_name": "grid",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "grid(cartesian2d)",
+      "params": [
+        {
+          "name": "cartesian2d"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-series-line.md",
+      "source_chunk_id": "option-series-line.md#optionseriescoordinatesystem",
+      "source_chunk_ids": [
+        "option-series-line.md#optionseriescoordinatesystem",
+        "option-series-line.md#optionseriescoordinatesystem-2"
+      ],
+      "source_anchor": "optionseriescoordinatesystem",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "date#function",
+      "name": "Date",
+      "qualified_name": "Date",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "Date('2012-01-01')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-series-line.md",
+      "source_chunk_id": "option-series-line.md#optionseriesdata",
+      "source_chunk_ids": [
+        "option-series-line.md#optionseriesdata",
+        "option-series-line.md#optionseriesdata-2"
+      ],
+      "source_anchor": "optionseriesdata",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "ts#function",
+      "name": "ts",
+      "qualified_name": "ts",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "ts(value: Array|number, params: Object)",
+      "params": [
+        {
+          "name": "value",
+          "type": "Array|number"
+        },
+        {
+          "name": "params",
+          "type": "Object"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-series-line.md",
+      "source_chunk_id": "option-series-line.md#optionseriessymbol",
+      "source_chunk_ids": [
+        "option-series-line.md#optionseriessymbol"
+      ],
+      "source_anchor": "optionseriessymbol",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "echarts.format.encodehtml#function",
+      "name": "echarts.format.encodeHTML",
+      "qualified_name": "echarts.format.encodeHTML",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "echarts.format.encodeHTML(name)",
+      "params": [
+        {
+          "name": "name"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-tooltip.md",
+      "source_chunk_id": "option-tooltip.md#optiontooltipformatter",
+      "source_chunk_ids": [
+        "option-tooltip.md#optiontooltipformatter",
+        "option-tooltip.md#optiontooltipformatter-2",
+        "option-tooltip.md#optiontooltipformatter-3",
+        "option-tooltip.md#optiontooltipformatter-4"
+      ],
+      "source_anchor": "optiontooltipformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "callback#function",
+      "name": "callback",
+      "qualified_name": "callback",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "callback(ticket, toHTML(content)",
+      "params": [
+        {
+          "name": "ticket"
+        },
+        {
+          "name": "toHTML(content"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-tooltip.md",
+      "source_chunk_id": "option-tooltip.md#optiontooltipformatter",
+      "source_chunk_ids": [
+        "option-tooltip.md#optiontooltipformatter",
+        "option-tooltip.md#optiontooltipformatter-2",
+        "option-tooltip.md#optiontooltipformatter-3",
+        "option-tooltip.md#optiontooltipformatter-4"
+      ],
+      "source_anchor": "optiontooltipformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "date.getmonth#function",
+      "name": "date.getMonth",
+      "qualified_name": "date.getMonth",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "date.getMonth()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "date.getdate#function",
+      "name": "date.getDate",
+      "qualified_name": "date.getDate",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "date.getDate()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "texts.unshift#function",
+      "name": "texts.unshift",
+      "qualified_name": "texts.unshift",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "texts.unshift(date.getFullYear()",
+      "params": [
+        {
+          "name": "date.getFullYear("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "texts.join#function",
+      "name": "texts.join",
+      "qualified_name": "texts.join",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "texts.join('/')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "echarts.time.format#function",
+      "name": "echarts.time.format",
+      "qualified_name": "echarts.time.format",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "echarts.time.format(value, '{yyyy}-{MM}-{dd} {hh}:{mm}:{ss}')",
+      "params": [
+        {
+          "name": "value"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.setmonth#function",
+      "name": "yearStart.setMonth",
+      "qualified_name": "yearStart.setMonth",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setMonth(0)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.setdate#function",
+      "name": "yearStart.setDate",
+      "qualified_name": "yearStart.setDate",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setDate(1)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.sethours#function",
+      "name": "yearStart.setHours",
+      "qualified_name": "yearStart.setHours",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setHours(0)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.setminutes#function",
+      "name": "yearStart.setMinutes",
+      "qualified_name": "yearStart.setMinutes",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setMinutes(0)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.setseconds#function",
+      "name": "yearStart.setSeconds",
+      "qualified_name": "yearStart.setSeconds",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setSeconds(0)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.setmilliseconds#function",
+      "name": "yearStart.setMilliseconds",
+      "qualified_name": "yearStart.setMilliseconds",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.setMilliseconds(0)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "yearstart.gettime#function",
+      "name": "yearStart.getTime",
+      "qualified_name": "yearStart.getTime",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "yearStart.getTime()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "date.getfullyear#function",
+      "name": "date.getFullYear",
+      "qualified_name": "date.getFullYear",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "date.getFullYear()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "option-xaxis.md",
+      "source_chunk_id": "option-xaxis.md#optionxaxisaxislabelformatter",
+      "source_chunk_ids": [
+        "option-xaxis.md#optionxaxisaxislabelformatter",
+        "option-xaxis.md#optionxaxisaxislabelformatter-2",
+        "option-xaxis.md#optionxaxisaxislabelformatter-3",
+        "option-xaxis.md#optionxaxisaxislabelformatter-4"
+      ],
+      "source_anchor": "optionxaxisaxislabelformatter",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "rgba#function",
+      "name": "rgba",
+      "qualified_name": "rgba",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "rgba(0, 0, 0, 0.5)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "styling.md",
+      "source_chunk_id": "styling.md#阴影的配置",
+      "source_chunk_ids": [
+        "styling.md#阴影的配置"
+      ],
+      "source_anchor": "阴影的配置",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "setoption#function",
+      "name": "setOption",
+      "qualified_name": "setOption",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "setOption({\n    backgroundColor: '#2c343c'\n})",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "styling.md",
+      "source_chunk_id": "styling.md#深色背景和浅色标签",
+      "source_chunk_ids": [
+        "styling.md#深色背景和浅色标签"
+      ],
+      "source_anchor": "深色背景和浅色标签",
+      "evidence_quote": null,
+      "lang": "zh",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    }
+  ],
+  "coverage": {
+    "total_sections": 100,
+    "extracted_sections": 100
+  }
+}

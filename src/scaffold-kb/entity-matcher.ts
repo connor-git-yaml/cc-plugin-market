@@ -51,7 +51,8 @@ export function matchEntities(entities: ApiEntity[], q: MatchQuery): EntityMatch
       scored.push({ e, matchType: 'exact', rank: 0 });
       continue;
     }
-    const substr = name.includes(qn) || qualified.includes(qn) || (name.length >= 2 && qn.includes(name));
+    // qn.includes(name) 仅在 name 足够长时启用，避免短名（on/api/get）成为乱串查询的误命中
+    const substr = name.includes(qn) || qualified.includes(qn) || (name.length >= 4 && qn.includes(name));
     const eTokens = new Set([...tokenize(e.name), ...tokenize(e.qualifiedName)].map(norm));
     let overlap = 0;
     for (const t of qTokens) if (t.length > 0 && eTokens.has(t)) overlap++;

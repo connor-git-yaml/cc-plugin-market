@@ -4,6 +4,8 @@
 
 > 本 fixture 仅作通用「开源 SDK 文档」演示用途，不绑定任何客户、行业或专属场景。Hono 是一个公开的 MIT 开源项目，在此作为「某个公开 SDK」的一个实例呈现。
 
+> **F192 更新**：`kb/` 现额外含 **`api-entities.json`**（API 实体层，heuristic 抽取，供 `kb_api_lookup` 据文档查签名/参数/废弃，证据级非代码级）；`ingest-samples/meeting-notes.md` 是**三方导入演示用合成纪要**（`scaffold-kb ingest --minutes`，纯虚构无客户内容）；来源清单见机械可检的 `FIXTURE.json`。
+
 ## 来源
 
 - 上游项目：Hono（Web Standards 上的轻量 Web 框架）

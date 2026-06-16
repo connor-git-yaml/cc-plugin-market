@@ -1,0 +1,23 @@
+{
+  "manifest_version": "1.0",
+  "plugin": "demo-kb-zh",
+  "note": "F192 demo fixture 来源清单（机械可检，W-6）。每条 source MUST 有 license 或 synthetic:true；'无真实客户内容'以此承载，非空声称。",
+  "sources": [
+    {
+      "id": "vendor-docs",
+      "kind": "vendor-doc",
+      "origin": "https://echarts.apache.org/zh + apache/echarts-doc",
+      "license": "Apache-2.0",
+      "synthetic": false,
+      "note": "公开开源 SDK 文档（13 页）→ kb/ (doc-graph + chunks.sqlite FTS5 + api-entities.json)"
+    },
+    {
+      "id": "ingest-sample-minutes",
+      "kind": "minutes",
+      "origin": "ingest-samples/meeting-notes.md",
+      "license": null,
+      "synthetic": true,
+      "note": "F192 三方导入（scaffold-kb ingest --minutes）演示用合成纪要，纯虚构、无真实客户/公司/项目信息"
+    }
+  ]
+}

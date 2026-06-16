@@ -1,0 +1,3445 @@
+{
+  "schema_version": "1.0",
+  "built_at": "2026-06-16T06:31:36.714Z",
+  "sdk_version": "4.6.0",
+  "source_kind": "vendor",
+  "entities": [
+    {
+      "id": "hono#function",
+      "name": "Hono",
+      "qualified_name": "Hono",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "Hono()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#_1",
+      "source_chunk_ids": [
+        "app-hono-object.md#_1"
+      ],
+      "source_anchor": null,
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.notfound#function",
+      "name": "app.notFound",
+      "qualified_name": "app.notFound",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.notFound((c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#not-found",
+      "source_chunk_ids": [
+        "app-hono-object.md#not-found"
+      ],
+      "source_anchor": "not-found",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.text#function",
+      "name": "c.text",
+      "qualified_name": "c.text",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.text('Custom 404 Message', 404)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#not-found",
+      "source_chunk_ids": [
+        "app-hono-object.md#not-found"
+      ],
+      "source_anchor": "not-found",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.onerror#function",
+      "name": "app.onError",
+      "qualified_name": "app.onError",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.onError((err, c)",
+      "params": [
+        {
+          "name": "c"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#error-handling",
+      "source_chunk_ids": [
+        "app-hono-object.md#error-handling"
+      ],
+      "source_anchor": "error-handling",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "console.error#function",
+      "name": "console.error",
+      "qualified_name": "console.error",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "console.error(`${err}`)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#error-handling",
+      "source_chunk_ids": [
+        "app-hono-object.md#error-handling"
+      ],
+      "source_anchor": "error-handling",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "fire#function",
+      "name": "fire",
+      "qualified_name": "fire",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "fire()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fire",
+      "source_chunk_ids": [
+        "app-hono-object.md#fire"
+      ],
+      "source_anchor": "fire",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.fire#function",
+      "name": "app.fire",
+      "qualified_name": "app.fire",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.fire()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fire",
+      "source_chunk_ids": [
+        "app-hono-object.md#fire"
+      ],
+      "source_anchor": "fire",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "addeventlistener#function",
+      "name": "addEventListener",
+      "qualified_name": "addEventListener",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "addEventListener('fetch', (event: FetchEventLike)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fire",
+      "source_chunk_ids": [
+        "app-hono-object.md#fire"
+      ],
+      "source_anchor": "fire",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "event.respondwith#function",
+      "name": "event.respondWith",
+      "qualified_name": "event.respondWith",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "event.respondWith(this.dispatch(...)",
+      "params": [
+        {
+          "name": "this.dispatch(..."
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fire",
+      "source_chunk_ids": [
+        "app-hono-object.md#fire"
+      ],
+      "source_anchor": "fire",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "fetch#function",
+      "name": "fetch",
+      "qualified_name": "fetch",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "fetch()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fetch",
+      "source_chunk_ids": [
+        "app-hono-object.md#fetch"
+      ],
+      "source_anchor": "fetch",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.fetch#function",
+      "name": "app.fetch",
+      "qualified_name": "app.fetch",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.fetch(request, env, ctx)",
+      "params": [
+        {
+          "name": "request"
+        },
+        {
+          "name": "env"
+        },
+        {
+          "name": "ctx"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#fetch",
+      "source_chunk_ids": [
+        "app-hono-object.md#fetch"
+      ],
+      "source_anchor": "fetch",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "request#function",
+      "name": "request",
+      "qualified_name": "request",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "request()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#request",
+      "source_chunk_ids": [
+        "app-hono-object.md#request"
+      ],
+      "source_anchor": "request",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "test#function",
+      "name": "test",
+      "qualified_name": "test",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "test('GET /hello is ok', async ()",
+      "params": [
+        {
+          "name": "async ("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#request",
+      "source_chunk_ids": [
+        "app-hono-object.md#request"
+      ],
+      "source_anchor": "request",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.request#function",
+      "name": "app.request",
+      "qualified_name": "app.request",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.request('/hello')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#request",
+      "source_chunk_ids": [
+        "app-hono-object.md#request"
+      ],
+      "source_anchor": "request",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "expect#function",
+      "name": "expect",
+      "qualified_name": "expect",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "expect(res.status)",
+      "params": [
+        {
+          "name": "res.status"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#request",
+      "source_chunk_ids": [
+        "app-hono-object.md#request"
+      ],
+      "source_anchor": "request",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "tobe#function",
+      "name": "toBe",
+      "qualified_name": "toBe",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "toBe(200)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#request",
+      "source_chunk_ids": [
+        "app-hono-object.md#request"
+      ],
+      "source_anchor": "request",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "mount#function",
+      "name": "mount",
+      "qualified_name": "mount",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "mount()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#mount",
+      "source_chunk_ids": [
+        "app-hono-object.md#mount"
+      ],
+      "source_anchor": "mount",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "ittyrouter#function",
+      "name": "IttyRouter",
+      "qualified_name": "IttyRouter",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "IttyRouter()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#mount",
+      "source_chunk_ids": [
+        "app-hono-object.md#mount"
+      ],
+      "source_anchor": "mount",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "ittyrouter.get#function",
+      "name": "ittyRouter.get",
+      "qualified_name": "ittyRouter.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "ittyRouter.get('/hello', ()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#mount",
+      "source_chunk_ids": [
+        "app-hono-object.md#mount"
+      ],
+      "source_anchor": "mount",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "response#function",
+      "name": "Response",
+      "qualified_name": "Response",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "Response('Hello from itty-router')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#mount",
+      "source_chunk_ids": [
+        "app-hono-object.md#mount"
+      ],
+      "source_anchor": "mount",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.mount#function",
+      "name": "app.mount",
+      "qualified_name": "app.mount",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.mount('/itty-router', ittyRouter.handle)",
+      "params": [
+        {
+          "name": "ittyRouter.handle"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#mount",
+      "source_chunk_ids": [
+        "app-hono-object.md#mount"
+      ],
+      "source_anchor": "mount",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.get#function",
+      "name": "app.get",
+      "qualified_name": "app.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.get('/hello')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#strict-mode",
+      "source_chunk_ids": [
+        "app-hono-object.md#strict-mode"
+      ],
+      "source_anchor": "strict-mode",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.use#function",
+      "name": "app.use",
+      "qualified_name": "app.use",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.use('/auth/*', async (c, next)",
+      "params": [
+        {
+          "name": "async (c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#generics",
+      "source_chunk_ids": [
+        "app-hono-object.md#generics"
+      ],
+      "source_anchor": "generics",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.set#function",
+      "name": "c.set",
+      "qualified_name": "c.set",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.set('user', user)",
+      "params": [
+        {
+          "name": "user"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#generics",
+      "source_chunk_ids": [
+        "app-hono-object.md#generics"
+      ],
+      "source_anchor": "generics",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "next#function",
+      "name": "next",
+      "qualified_name": "next",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "next()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "app-hono-object.md",
+      "source_chunk_id": "app-hono-object.md#generics",
+      "source_chunk_ids": [
+        "app-hono-object.md#generics"
+      ],
+      "source_anchor": "generics",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.json#function",
+      "name": "c.json",
+      "qualified_name": "c.json",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.json({ message: 'You are authorized' })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.post#function",
+      "name": "app.post",
+      "qualified_name": "app.post",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.post('/api/page', bearerAuth({ token })",
+      "params": [
+        {
+          "name": "bearerAuth({ token }"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "tokens#function",
+      "name": "tokens",
+      "qualified_name": "tokens",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "tokens(E.g., any valid token can read but create/update/delete are restricted to a privileged token)",
+      "params": [
+        {
+          "name": "E.g."
+        },
+        {
+          "name": "any valid token can read but create/update/delete are restricted to a privileged token"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.on#function",
+      "name": "app.on",
+      "qualified_name": "app.on",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.on('GET', '/api/page/*', async (c, next)",
+      "params": [
+        {
+          "name": "async (c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "bearerauth#function",
+      "name": "bearerAuth",
+      "qualified_name": "bearerAuth",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "bearerAuth({ token: [readToken, privilegedToken] })",
+      "params": [
+        {
+          "name": "privilegedToken] }"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "bearer#function",
+      "name": "bearer",
+      "qualified_name": "bearer",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "bearer(c, next)",
+      "params": [
+        {
+          "name": "c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#usage",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "prefix#function",
+      "name": "prefix",
+      "qualified_name": "prefix",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "prefix(or known as `schema`)",
+      "params": [
+        {
+          "name": "or known as `schema`"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "bearer-auth-middleware.md",
+      "source_chunk_id": "bearer-auth-middleware.md#badge-typeinfo-textoptional-prefix-string",
+      "source_chunk_ids": [
+        "bearer-auth-middleware.md#badge-typeinfo-textoptional-prefix-string"
+      ],
+      "source_anchor": "badge-typeinfo-textoptional-prefix-string",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.param#function",
+      "name": "c.req.param",
+      "qualified_name": "c.req.param",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.param('id')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#dont-make-controllers-when-possible",
+      "source_chunk_ids": [
+        "best-practices.md#dont-make-controllers-when-possible"
+      ],
+      "source_anchor": "dont-make-controllers-when-possible",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "factory.createhandlers#function",
+      "name": "factory.createHandlers",
+      "qualified_name": "factory.createHandlers",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "factory.createHandlers()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#factorycreatehandlers-in-honofactory",
+      "source_chunk_ids": [
+        "best-practices.md#factorycreatehandlers-in-honofactory"
+      ],
+      "source_anchor": "factorycreatehandlers-in-honofactory",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "createfactory#function",
+      "name": "createFactory",
+      "qualified_name": "createFactory",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "createFactory()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#factorycreatehandlers-in-honofactory",
+      "source_chunk_ids": [
+        "best-practices.md#factorycreatehandlers-in-honofactory"
+      ],
+      "source_anchor": "factorycreatehandlers-in-honofactory",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "factory.createmiddleware#function",
+      "name": "factory.createMiddleware",
+      "qualified_name": "factory.createMiddleware",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "factory.createMiddleware(async (c, next)",
+      "params": [
+        {
+          "name": "async (c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#factorycreatehandlers-in-honofactory",
+      "source_chunk_ids": [
+        "best-practices.md#factorycreatehandlers-in-honofactory"
+      ],
+      "source_anchor": "factorycreatehandlers-in-honofactory",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.route#function",
+      "name": "app.route",
+      "qualified_name": "app.route",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.route()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#building-a-larger-application",
+      "source_chunk_ids": [
+        "best-practices.md#building-a-larger-application"
+      ],
+      "source_anchor": "building-a-larger-application",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "get#function",
+      "name": "get",
+      "qualified_name": "get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "get('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#if-you-want-to-use-rpc-features",
+      "source_chunk_ids": [
+        "best-practices.md#if-you-want-to-use-rpc-features"
+      ],
+      "source_anchor": "if-you-want-to-use-rpc-features",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "post#function",
+      "name": "post",
+      "qualified_name": "post",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "post('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#if-you-want-to-use-rpc-features",
+      "source_chunk_ids": [
+        "best-practices.md#if-you-want-to-use-rpc-features"
+      ],
+      "source_anchor": "if-you-want-to-use-rpc-features",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "getusers#function",
+      "name": "getUsers",
+      "qualified_name": "getUsers",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "getUsers()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#do-use-get-routes-for-head-requests",
+      "source_chunk_ids": [
+        "best-practices.md#do-use-get-routes-for-head-requests"
+      ],
+      "source_anchor": "do-use-get-routes-for-head-requests",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.header#function",
+      "name": "c.header",
+      "qualified_name": "c.header",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.header('X-Total-Count', users.length.toString()",
+      "params": [
+        {
+          "name": "users.length.toString("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#do-use-get-routes-for-head-requests",
+      "source_chunk_ids": [
+        "best-practices.md#do-use-get-routes-for-head-requests"
+      ],
+      "source_anchor": "do-use-get-routes-for-head-requests",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "body#function",
+      "name": "body",
+      "qualified_name": "body",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "body(null)",
+      "params": [
+        {
+          "name": "null"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#do-use-get-routes-for-head-requests",
+      "source_chunk_ids": [
+        "best-practices.md#do-use-get-routes-for-head-requests"
+      ],
+      "source_anchor": "do-use-get-routes-for-head-requests",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.head#function",
+      "name": "app.head",
+      "qualified_name": "app.head",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.head('/api/users', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#dont-try-to-create-dedicated-head-handlers",
+      "source_chunk_ids": [
+        "best-practices.md#dont-try-to-create-dedicated-head-handlers"
+      ],
+      "source_anchor": "dont-try-to-create-dedicated-head-handlers",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "on#function",
+      "name": "on",
+      "qualified_name": "on",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "on()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#dont-try-to-create-dedicated-head-handlers",
+      "source_chunk_ids": [
+        "best-practices.md#dont-try-to-create-dedicated-head-handlers"
+      ],
+      "source_anchor": "dont-try-to-create-dedicated-head-handlers",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "middleware#function",
+      "name": "middleware",
+      "qualified_name": "middleware",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "middleware(like compression)",
+      "params": [
+        {
+          "name": "like compression"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#performance-considerations",
+      "source_chunk_ids": [
+        "best-practices.md#performance-considerations"
+      ],
+      "source_anchor": "performance-considerations",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "it#function",
+      "name": "it",
+      "qualified_name": "it",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "it('handles HEAD requests correctly', async ()",
+      "params": [
+        {
+          "name": "async ("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#testing-head-requests",
+      "source_chunk_ids": [
+        "best-practices.md#testing-head-requests"
+      ],
+      "source_anchor": "testing-head-requests",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "runtimes#function",
+      "name": "runtimes",
+      "qualified_name": "runtimes",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "runtimes(Cloudflare Workers, Deno, Bun, Node.js)",
+      "params": [
+        {
+          "name": "Cloudflare Workers"
+        },
+        {
+          "name": "Deno"
+        },
+        {
+          "name": "Bun"
+        },
+        {
+          "name": "Node.js"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "best-practices.md",
+      "source_chunk_id": "best-practices.md#notes",
+      "source_chunk_ids": [
+        "best-practices.md#notes"
+      ],
+      "source_anchor": "notes",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.header#function",
+      "name": "c.req.header",
+      "qualified_name": "c.req.header",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.header('User-Agent')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#req",
+      "source_chunk_ids": [
+        "context.md#req"
+      ],
+      "source_anchor": "req",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "status#function",
+      "name": "status",
+      "qualified_name": "status",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "status()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#status",
+      "source_chunk_ids": [
+        "context.md#status"
+      ],
+      "source_anchor": "status",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.status#function",
+      "name": "c.status",
+      "qualified_name": "c.status",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.status()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#status",
+      "source_chunk_ids": [
+        "context.md#status"
+      ],
+      "source_anchor": "status",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "header#function",
+      "name": "header",
+      "qualified_name": "header",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "header()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#header",
+      "source_chunk_ids": [
+        "context.md#header"
+      ],
+      "source_anchor": "header",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.html#function",
+      "name": "c.html",
+      "qualified_name": "c.html",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.html()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#body",
+      "source_chunk_ids": [
+        "context.md#body"
+      ],
+      "source_anchor": "body",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.body#function",
+      "name": "c.body",
+      "qualified_name": "c.body",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.body('Thank you for coming')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#body",
+      "source_chunk_ids": [
+        "context.md#body"
+      ],
+      "source_anchor": "body",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "text#function",
+      "name": "text",
+      "qualified_name": "text",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "text()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#text",
+      "source_chunk_ids": [
+        "context.md#text"
+      ],
+      "source_anchor": "text",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "json#function",
+      "name": "json",
+      "qualified_name": "json",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "json()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#json",
+      "source_chunk_ids": [
+        "context.md#json"
+      ],
+      "source_anchor": "json",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "html#function",
+      "name": "html",
+      "qualified_name": "html",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "html()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#html",
+      "source_chunk_ids": [
+        "context.md#html"
+      ],
+      "source_anchor": "html",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "notfound#function",
+      "name": "notFound",
+      "qualified_name": "notFound",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "notFound()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#notfound",
+      "source_chunk_ids": [
+        "context.md#notfound"
+      ],
+      "source_anchor": "notfound",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.notfound#function",
+      "name": "c.notFound",
+      "qualified_name": "c.notFound",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.notFound()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#notfound",
+      "source_chunk_ids": [
+        "context.md#notfound"
+      ],
+      "source_anchor": "notfound",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "redirect#function",
+      "name": "redirect",
+      "qualified_name": "redirect",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "redirect()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#redirect",
+      "source_chunk_ids": [
+        "context.md#redirect"
+      ],
+      "source_anchor": "redirect",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.redirect#function",
+      "name": "c.redirect",
+      "qualified_name": "c.redirect",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.redirect('/')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#redirect",
+      "source_chunk_ids": [
+        "context.md#redirect"
+      ],
+      "source_anchor": "redirect",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.res.headers.append#function",
+      "name": "c.res.headers.append",
+      "qualified_name": "c.res.headers.append",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.res.headers.append('X-Debug', 'Debug message')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#res",
+      "source_chunk_ids": [
+        "context.md#res"
+      ],
+      "source_anchor": "res",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "set#function",
+      "name": "set",
+      "qualified_name": "set",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "set()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#set-get",
+      "source_chunk_ids": [
+        "context.md#set-get"
+      ],
+      "source_anchor": "set-get",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.get#function",
+      "name": "c.get",
+      "qualified_name": "c.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.get('message')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#set-get",
+      "source_chunk_ids": [
+        "context.md#set-get"
+      ],
+      "source_anchor": "set-get",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.var.client.onemethod#function",
+      "name": "c.var.client.oneMethod",
+      "qualified_name": "c.var.client.oneMethod",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.var.client.oneMethod()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#var",
+      "source_chunk_ids": [
+        "context.md#var"
+      ],
+      "source_anchor": "var",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "render#function",
+      "name": "render",
+      "qualified_name": "render",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "render()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#render-setrenderer",
+      "source_chunk_ids": [
+        "context.md#render-setrenderer"
+      ],
+      "source_anchor": "render-setrenderer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "setrenderer#function",
+      "name": "setRenderer",
+      "qualified_name": "setRenderer",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "setRenderer()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#render-setrenderer",
+      "source_chunk_ids": [
+        "context.md#render-setrenderer"
+      ],
+      "source_anchor": "render-setrenderer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.setrenderer#function",
+      "name": "c.setRenderer",
+      "qualified_name": "c.setRenderer",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.setRenderer()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#render-setrenderer",
+      "source_chunk_ids": [
+        "context.md#render-setrenderer"
+      ],
+      "source_anchor": "render-setrenderer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.render#function",
+      "name": "c.render",
+      "qualified_name": "c.render",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.render()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#render-setrenderer",
+      "source_chunk_ids": [
+        "context.md#render-setrenderer"
+      ],
+      "source_anchor": "render-setrenderer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.executionctx.waituntil#function",
+      "name": "c.executionCtx.waitUntil",
+      "qualified_name": "c.executionCtx.waitUntil",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.executionCtx.waitUntil(c.env.KV.put(key, data)",
+      "params": [
+        {
+          "name": "c.env.KV.put(key"
+        },
+        {
+          "name": "data"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#executionctx",
+      "source_chunk_ids": [
+        "context.md#executionctx"
+      ],
+      "source_anchor": "executionctx",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "object#function",
+      "name": "object",
+      "qualified_name": "object",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "object(only set when using Service Worker syntax)",
+      "params": [
+        {
+          "name": "only set when using Service Worker syntax"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#event",
+      "source_chunk_ids": [
+        "context.md#event"
+      ],
+      "source_anchor": "event",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.event.waituntil#function",
+      "name": "c.event.waitUntil",
+      "qualified_name": "c.event.waitUntil",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.event.waitUntil(c.env.MY_KV.put(key, data)",
+      "params": [
+        {
+          "name": "c.env.MY_KV.put(key"
+        },
+        {
+          "name": "data"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#event",
+      "source_chunk_ids": [
+        "context.md#event"
+      ],
+      "source_anchor": "event",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.env.my_kv.get#function",
+      "name": "c.env.MY_KV.get",
+      "qualified_name": "c.env.MY_KV.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.env.MY_KV.get('my-key')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#env",
+      "source_chunk_ids": [
+        "context.md#env"
+      ],
+      "source_anchor": "env",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "createmiddleware#function",
+      "name": "createMiddleware",
+      "qualified_name": "createMiddleware",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "createMiddleware(async (c, next)",
+      "params": [
+        {
+          "name": "async (c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "context.md",
+      "source_chunk_id": "context.md#contextvariablemap",
+      "source_chunk_ids": [
+        "context.md#contextvariablemap"
+      ],
+      "source_anchor": "contextvariablemap",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.all#function",
+      "name": "app.all",
+      "qualified_name": "app.all",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.all('/api/abc', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "cors-middleware.md",
+      "source_chunk_id": "cors-middleware.md#usage",
+      "source_chunk_ids": [
+        "cors-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "origin.endswith#function",
+      "name": "origin.endsWith",
+      "qualified_name": "origin.endsWith",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "origin.endsWith('.example.com')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "cors-middleware.md",
+      "source_chunk_id": "cors-middleware.md#usage",
+      "source_chunk_ids": [
+        "cors-middleware.md#usage"
+      ],
+      "source_anchor": "usage",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "cors#function",
+      "name": "cors",
+      "qualified_name": "cors",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "cors({\n    origin: c.env.CORS_ORIGIN,\n  })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "cors-middleware.md",
+      "source_chunk_id": "cors-middleware.md#environment-dependent-cors-configuration",
+      "source_chunk_ids": [
+        "cors-middleware.md#environment-dependent-cors-configuration"
+      ],
+      "source_anchor": "environment-dependent-cors-configuration",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "corsmiddlewarehandler#function",
+      "name": "corsMiddlewareHandler",
+      "qualified_name": "corsMiddlewareHandler",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "corsMiddlewareHandler(c, next)",
+      "params": [
+        {
+          "name": "c"
+        },
+        {
+          "name": "next"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "cors-middleware.md",
+      "source_chunk_id": "cors-middleware.md#environment-dependent-cors-configuration",
+      "source_chunk_ids": [
+        "cors-middleware.md#environment-dependent-cors-configuration"
+      ],
+      "source_anchor": "environment-dependent-cors-configuration",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "defineconfig#function",
+      "name": "defineConfig",
+      "qualified_name": "defineConfig",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "defineConfig({\n  server: {\n    cors: false, // disable Vite's built-in CORS setting\n  },\n  plugins: [cloudflare()",
+      "params": [
+        {
+          "name": "plugins",
+          "type": "[cloudflare("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "cors-middleware.md",
+      "source_chunk_id": "cors-middleware.md#using-with-vite",
+      "source_chunk_ids": [
+        "cors-middleware.md#using-with-vite"
+      ],
+      "source_anchor": "using-with-vite",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "httpexception#function",
+      "name": "HTTPException",
+      "qualified_name": "HTTPException",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "HTTPException(401, { message: 'Unauthorized' })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "exception-error-handling.md",
+      "source_chunk_id": "exception-error-handling.md#custom-message",
+      "source_chunk_ids": [
+        "exception-error-handling.md#custom-message"
+      ],
+      "source_anchor": "custom-message",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "authorize#function",
+      "name": "authorize",
+      "qualified_name": "authorize",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "authorize(c)",
+      "params": [
+        {
+          "name": "c"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "exception-error-handling.md",
+      "source_chunk_id": "exception-error-handling.md#cause",
+      "source_chunk_ids": [
+        "exception-error-handling.md#cause"
+      ],
+      "source_anchor": "cause",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "err.getresponse#function",
+      "name": "err.getResponse",
+      "qualified_name": "err.getResponse",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "err.getResponse()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "exception-error-handling.md",
+      "source_chunk_id": "exception-error-handling.md#handling-httpexceptions",
+      "source_chunk_ids": [
+        "exception-error-handling.md#handling-httpexceptions"
+      ],
+      "source_anchor": "handling-httpexceptions",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.query#function",
+      "name": "c.req.query",
+      "qualified_name": "c.req.query",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.query('page')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "getting-started.md",
+      "source_chunk_id": "getting-started.md#request-and-response",
+      "source_chunk_ids": [
+        "getting-started.md#request-and-response"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.delete#function",
+      "name": "app.delete",
+      "qualified_name": "app.delete",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.delete('/posts/:id', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "getting-started.md",
+      "source_chunk_id": "getting-started.md#request-and-response",
+      "source_chunk_ids": [
+        "getting-started.md#request-and-response"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "sign#function",
+      "name": "sign",
+      "qualified_name": "sign",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "sign()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "jwt-helper.md",
+      "source_chunk_id": "jwt-helper.md#sign",
+      "source_chunk_ids": [
+        "jwt-helper.md#sign"
+      ],
+      "source_anchor": "sign",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "math.floor#function",
+      "name": "Math.floor",
+      "qualified_name": "Math.floor",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "Math.floor(Date.now()",
+      "params": [
+        {
+          "name": "Date.now("
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "jwt-helper.md",
+      "source_chunk_id": "jwt-helper.md#example",
+      "source_chunk_ids": [
+        "jwt-helper.md#example",
+        "jwt-helper.md#example-2",
+        "jwt-helper.md#example-3"
+      ],
+      "source_anchor": "example",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "verify#function",
+      "name": "verify",
+      "qualified_name": "verify",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "verify(tokenToVerify, secretKey, 'HS256')",
+      "params": [
+        {
+          "name": "tokenToVerify"
+        },
+        {
+          "name": "secretKey"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "jwt-helper.md",
+      "source_chunk_id": "jwt-helper.md#example",
+      "source_chunk_ids": [
+        "jwt-helper.md#example",
+        "jwt-helper.md#example-2",
+        "jwt-helper.md#example-3"
+      ],
+      "source_anchor": "example",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "console.log#function",
+      "name": "console.log",
+      "qualified_name": "console.log",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "console.log(decodedPayload)",
+      "params": [
+        {
+          "name": "decodedPayload"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "jwt-helper.md",
+      "source_chunk_id": "jwt-helper.md#example",
+      "source_chunk_ids": [
+        "jwt-helper.md#example",
+        "jwt-helper.md#example-2",
+        "jwt-helper.md#example-3"
+      ],
+      "source_anchor": "example",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "decode#function",
+      "name": "decode",
+      "qualified_name": "decode",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "decode(tokenToDecode)",
+      "params": [
+        {
+          "name": "tokenToDecode"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "jwt-helper.md",
+      "source_chunk_id": "jwt-helper.md#example",
+      "source_chunk_ids": [
+        "jwt-helper.md#example",
+        "jwt-helper.md#example-2",
+        "jwt-helper.md#example-3"
+      ],
+      "source_anchor": "example",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "performance.now#function",
+      "name": "performance.now",
+      "qualified_name": "performance.now",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "performance.now()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "middleware-concept.md",
+      "source_chunk_id": "middleware-concept.md#_1",
+      "source_chunk_ids": [
+        "middleware-concept.md#_1"
+      ],
+      "source_anchor": null,
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.res.headers.set#function",
+      "name": "c.res.headers.set",
+      "qualified_name": "c.res.headers.set",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.res.headers.set('X-Response-Time', `${end - start}`)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "middleware-concept.md",
+      "source_chunk_id": "middleware-concept.md#_1",
+      "source_chunk_ids": [
+        "middleware-concept.md#_1"
+      ],
+      "source_anchor": null,
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "param#function",
+      "name": "param",
+      "qualified_name": "param",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "param()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#param",
+      "source_chunk_ids": [
+        "request.md#param"
+      ],
+      "source_anchor": "param",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "query#function",
+      "name": "query",
+      "qualified_name": "query",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "query()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#query",
+      "source_chunk_ids": [
+        "request.md#query"
+      ],
+      "source_anchor": "query",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "queries#function",
+      "name": "queries",
+      "qualified_name": "queries",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "queries()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#queries",
+      "source_chunk_ids": [
+        "request.md#queries"
+      ],
+      "source_anchor": "queries",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.queries#function",
+      "name": "c.req.queries",
+      "qualified_name": "c.req.queries",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.queries('tags')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#queries",
+      "source_chunk_ids": [
+        "request.md#queries"
+      ],
+      "source_anchor": "queries",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "parsebody#function",
+      "name": "parseBody",
+      "qualified_name": "parseBody",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "parseBody()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#parsebody",
+      "source_chunk_ids": [
+        "request.md#parsebody"
+      ],
+      "source_anchor": "parsebody",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.parsebody#function",
+      "name": "c.req.parseBody",
+      "qualified_name": "c.req.parseBody",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.parseBody()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#parsebody",
+      "source_chunk_ids": [
+        "request.md#parsebody"
+      ],
+      "source_anchor": "parsebody",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "formdata#function",
+      "name": "FormData",
+      "qualified_name": "FormData",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "FormData()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#dot-notation",
+      "source_chunk_ids": [
+        "request.md#dot-notation"
+      ],
+      "source_anchor": "dot-notation",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "data.append#function",
+      "name": "data.append",
+      "qualified_name": "data.append",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "data.append('obj.key1', 'value1')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#dot-notation",
+      "source_chunk_ids": [
+        "request.md#dot-notation"
+      ],
+      "source_anchor": "dot-notation",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.json#function",
+      "name": "c.req.json",
+      "qualified_name": "c.req.json",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.json()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#json",
+      "source_chunk_ids": [
+        "request.md#json"
+      ],
+      "source_anchor": "json",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.text#function",
+      "name": "c.req.text",
+      "qualified_name": "c.req.text",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.text()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#text",
+      "source_chunk_ids": [
+        "request.md#text"
+      ],
+      "source_anchor": "text",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "arraybuffer#function",
+      "name": "arrayBuffer",
+      "qualified_name": "arrayBuffer",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "arrayBuffer()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#arraybuffer",
+      "source_chunk_ids": [
+        "request.md#arraybuffer"
+      ],
+      "source_anchor": "arraybuffer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.arraybuffer#function",
+      "name": "c.req.arrayBuffer",
+      "qualified_name": "c.req.arrayBuffer",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.arrayBuffer()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#arraybuffer",
+      "source_chunk_ids": [
+        "request.md#arraybuffer"
+      ],
+      "source_anchor": "arraybuffer",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "blob#function",
+      "name": "blob",
+      "qualified_name": "blob",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "blob()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#blob",
+      "source_chunk_ids": [
+        "request.md#blob"
+      ],
+      "source_anchor": "blob",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.blob#function",
+      "name": "c.req.blob",
+      "qualified_name": "c.req.blob",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.blob()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#blob",
+      "source_chunk_ids": [
+        "request.md#blob"
+      ],
+      "source_anchor": "blob",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.formdata#function",
+      "name": "c.req.formData",
+      "qualified_name": "c.req.formData",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.formData()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#formdata",
+      "source_chunk_ids": [
+        "request.md#formdata"
+      ],
+      "source_anchor": "formdata",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "valid#function",
+      "name": "valid",
+      "qualified_name": "valid",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "valid()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#valid",
+      "source_chunk_ids": [
+        "request.md#valid"
+      ],
+      "source_anchor": "valid",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.valid#function",
+      "name": "c.req.valid",
+      "qualified_name": "c.req.valid",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.valid('form')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#valid",
+      "source_chunk_ids": [
+        "request.md#valid"
+      ],
+      "source_anchor": "valid",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "routepath#function",
+      "name": "routePath",
+      "qualified_name": "routePath",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "routePath()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#routepath",
+      "source_chunk_ids": [
+        "request.md#routepath"
+      ],
+      "source_anchor": "routepath",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "matchedroutes#function",
+      "name": "matchedRoutes",
+      "qualified_name": "matchedRoutes",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "matchedRoutes()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#matchedroutes",
+      "source_chunk_ids": [
+        "request.md#matchedroutes"
+      ],
+      "source_anchor": "matchedroutes",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "c.req.matchedroutes.foreach#function",
+      "name": "c.req.matchedRoutes.forEach",
+      "qualified_name": "c.req.matchedRoutes.forEach",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "c.req.matchedRoutes.forEach(({ handler, method, path }, i)",
+      "params": [
+        {
+          "name": "method"
+        },
+        {
+          "name": "path }"
+        },
+        {
+          "name": "i"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#matchedroutes",
+      "source_chunk_ids": [
+        "request.md#matchedroutes"
+      ],
+      "source_anchor": "matchedroutes",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "clonerawrequest#function",
+      "name": "cloneRawRequest",
+      "qualified_name": "cloneRawRequest",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "cloneRawRequest()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#clonerawrequest",
+      "source_chunk_ids": [
+        "request.md#clonerawrequest"
+      ],
+      "source_anchor": "clonerawrequest",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "clonedreq.json#function",
+      "name": "clonedReq.json",
+      "qualified_name": "clonedReq.json",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "clonedReq.json()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "request.md",
+      "source_chunk_id": "request.md#clonerawrequest",
+      "source_chunk_ids": [
+        "request.md#clonerawrequest"
+      ],
+      "source_anchor": "clonerawrequest",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "app.put#function",
+      "name": "app.put",
+      "qualified_name": "app.put",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "app.put('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#basic",
+      "source_chunk_ids": [
+        "routing.md#basic"
+      ],
+      "source_anchor": "basic",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "delete#function",
+      "name": "delete",
+      "qualified_name": "delete",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "delete((c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#chained-route",
+      "source_chunk_ids": [
+        "routing.md#chained-route"
+      ],
+      "source_anchor": "chained-route",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "book.get#function",
+      "name": "book.get",
+      "qualified_name": "book.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "book.get('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping",
+      "source_chunk_ids": [
+        "routing.md#grouping"
+      ],
+      "source_anchor": "grouping",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "book.post#function",
+      "name": "book.post",
+      "qualified_name": "book.post",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "book.post('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping",
+      "source_chunk_ids": [
+        "routing.md#grouping"
+      ],
+      "source_anchor": "grouping",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "basepath#function",
+      "name": "basePath",
+      "qualified_name": "basePath",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "basePath('/user')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-without-changing-base",
+      "source_chunk_ids": [
+        "routing.md#grouping-without-changing-base"
+      ],
+      "source_anchor": "grouping-without-changing-base",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "user.get#function",
+      "name": "user.get",
+      "qualified_name": "user.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "user.get('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-without-changing-base",
+      "source_chunk_ids": [
+        "routing.md#grouping-without-changing-base"
+      ],
+      "source_anchor": "grouping-without-changing-base",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "user.post#function",
+      "name": "user.post",
+      "qualified_name": "user.post",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "user.post('/', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-without-changing-base",
+      "source_chunk_ids": [
+        "routing.md#grouping-without-changing-base"
+      ],
+      "source_anchor": "grouping-without-changing-base",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "api.get#function",
+      "name": "api.get",
+      "qualified_name": "api.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "api.get('/book', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#base-path",
+      "source_chunk_ids": [
+        "routing.md#base-path"
+      ],
+      "source_anchor": "base-path",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "req.url.replace#function",
+      "name": "req.url.replace",
+      "qualified_name": "req.url.replace",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "req.url.replace(/^https?:\\/([^?]+)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#routing-with-hostname",
+      "source_chunk_ids": [
+        "routing.md#routing-with-hostname"
+      ],
+      "source_anchor": "routing-with-hostname",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "getpath#function",
+      "name": "getPath",
+      "qualified_name": "getPath",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "getPath()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#routing-with-host-header-value",
+      "source_chunk_ids": [
+        "routing.md#routing-with-host-header-value"
+      ],
+      "source_anchor": "routing-with-host-header-value",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "req.headers.get#function",
+      "name": "req.headers.get",
+      "qualified_name": "req.headers.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "req.headers.get('host')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#routing-with-host-header-value",
+      "source_chunk_ids": [
+        "routing.md#routing-with-host-header-value"
+      ],
+      "source_anchor": "routing-with-host-header-value",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "route#function",
+      "name": "route",
+      "qualified_name": "route",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "route()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-ordering",
+      "source_chunk_ids": [
+        "routing.md#grouping-ordering"
+      ],
+      "source_anchor": "grouping-ordering",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "argument#function",
+      "name": "argument",
+      "qualified_name": "argument",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "argument(such as `three` or `two`)",
+      "params": [
+        {
+          "name": "such as `three` or `two`"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-ordering",
+      "source_chunk_ids": [
+        "routing.md#grouping-ordering"
+      ],
+      "source_anchor": "grouping-ordering",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "own#function",
+      "name": "own",
+      "qualified_name": "own",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "own(`two` or `app`)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-ordering",
+      "source_chunk_ids": [
+        "routing.md#grouping-ordering"
+      ],
+      "source_anchor": "grouping-ordering",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "three.get#function",
+      "name": "three.get",
+      "qualified_name": "three.get",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "three.get('/hi', (c)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-ordering",
+      "source_chunk_ids": [
+        "routing.md#grouping-ordering"
+      ],
+      "source_anchor": "grouping-ordering",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "two.route#function",
+      "name": "two.route",
+      "qualified_name": "two.route",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "two.route('/three', three)",
+      "params": [
+        {
+          "name": "three"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "routing.md",
+      "source_chunk_id": "routing.md#grouping-ordering",
+      "source_chunk_ids": [
+        "routing.md#grouping-ordering"
+      ],
+      "source_anchor": "grouping-ordering",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "describe#function",
+      "name": "describe",
+      "qualified_name": "describe",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "describe('Example', ()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "testing.md",
+      "source_chunk_id": "testing.md#request-and-response",
+      "source_chunk_ids": [
+        "testing.md#request-and-response",
+        "testing.md#request-and-response-2"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "toequal#function",
+      "name": "toEqual",
+      "qualified_name": "toEqual",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "toEqual({\n    message: 'Created',\n  })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "testing.md",
+      "source_chunk_id": "testing.md#request-and-response",
+      "source_chunk_ids": [
+        "testing.md#request-and-response",
+        "testing.md#request-and-response-2"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "headers#function",
+      "name": "Headers",
+      "qualified_name": "Headers",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "Headers({ 'Content-Type': 'application/json' })",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "testing.md",
+      "source_chunk_id": "testing.md#request-and-response",
+      "source_chunk_ids": [
+        "testing.md#request-and-response",
+        "testing.md#request-and-response-2"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "formdata.append#function",
+      "name": "formData.append",
+      "qualified_name": "formData.append",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "formData.append('message', 'hello')",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "testing.md",
+      "source_chunk_id": "testing.md#request-and-response",
+      "source_chunk_ids": [
+        "testing.md#request-and-response",
+        "testing.md#request-and-response-2"
+      ],
+      "source_anchor": "request-and-response",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "res.json#function",
+      "name": "res.json",
+      "qualified_name": "res.json",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "res.json()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#manual-validator",
+      "source_chunk_ids": [
+        "validation.md#manual-validator",
+        "validation.md#manual-validator-2"
+      ],
+      "source_anchor": "manual-validator",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "validator#function",
+      "name": "validator",
+      "qualified_name": "validator",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "validator('query', ...)",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#multiple-validators",
+      "source_chunk_ids": [
+        "validation.md#multiple-validators"
+      ],
+      "source_anchor": "multiple-validators",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "z.object#function",
+      "name": "z.object",
+      "qualified_name": "z.object",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "z.object({\n  body: z.string()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-zod",
+      "source_chunk_ids": [
+        "validation.md#with-zod",
+        "validation.md#with-zod-2"
+      ],
+      "source_anchor": "with-zod",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "schema.safeparse#function",
+      "name": "schema.safeParse",
+      "qualified_name": "schema.safeParse",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "schema.safeParse(value)",
+      "params": [
+        {
+          "name": "value"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-zod",
+      "source_chunk_ids": [
+        "validation.md#with-zod",
+        "validation.md#with-zod-2"
+      ],
+      "source_anchor": "with-zod",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "z.number#function",
+      "name": "z.number",
+      "qualified_name": "z.number",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "z.number()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-zod",
+      "source_chunk_ids": [
+        "validation.md#with-zod",
+        "validation.md#with-zod-2"
+      ],
+      "source_anchor": "with-zod",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "v.object#function",
+      "name": "v.object",
+      "qualified_name": "v.object",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "v.object({\n  name: v.string()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-valibot",
+      "source_chunk_ids": [
+        "validation.md#with-valibot"
+      ],
+      "source_anchor": "with-valibot",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "v.number#function",
+      "name": "v.number",
+      "qualified_name": "v.number",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "v.number()",
+      "params": [],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-valibot",
+      "source_chunk_ids": [
+        "validation.md#with-valibot"
+      ],
+      "source_anchor": "with-valibot",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    },
+    {
+      "id": "type#function",
+      "name": "type",
+      "qualified_name": "type",
+      "container": null,
+      "overload_key": null,
+      "kind": "function",
+      "signature": "type({\n  name: 'string',\n  age: 'number',\n})",
+      "params": [
+        {
+          "name": "age",
+          "type": "'number'"
+        }
+      ],
+      "returns": null,
+      "deprecated": null,
+      "since_version": null,
+      "source_doc_id": "validation.md",
+      "source_chunk_id": "validation.md#with-arktype",
+      "source_chunk_ids": [
+        "validation.md#with-arktype"
+      ],
+      "source_anchor": "with-arktype",
+      "evidence_quote": null,
+      "lang": "en",
+      "confidence": 0.5,
+      "extraction_method": "heuristic"
+    }
+  ],
+  "coverage": {
+    "total_sections": 142,
+    "extracted_sections": 142
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "manifest_version": "1.0",
+  "content_hash": "1ec20b37899fb3faf0c24892dbb43d4a0d57e419c1d20f9bdf2e2963fc7fe1a2",
+  "note": "F192 FR-018/SC-008 冻结实体抽取评测。heuristic 路径机械计 precision/recall（确定性）；含 holdout 子集 + 故意 prose-only 实体（无 paren 签名）使 recall < 1.0、floor 为真门。content_hash = sha256(JSON.stringify(entries))，CI 校验防误改。anti-overfit：①抽取源码禁出现 entries/mutation 的实体名字面量（含小写变体）②mutation_entries 用从未在源码出现的新名，验证 heuristic 泛化（非背答案）。lookup_cases 冻结 kb_api_lookup recall。",
+  "thresholds": { "llm": { "precision": 0.8, "recall": 0.7 }, "heuristic": { "precision": 0.6, "recall": 0.5 }, "lookup_recall": 0.8 },
+  "entries": [
+    {
+      "id": "doc-chart",
+      "holdout": false,
+      "doc": "# Chart API\n\n调用 `createChart(dom, options)` 创建图表实例。\n\n错误码 E1001 表示初始化失败。",
+      "expected": [
+        { "name": "createChart", "kind": "function" },
+        { "name": "E1001", "kind": "error_code" }
+      ]
+    },
+    {
+      "id": "doc-option",
+      "holdout": false,
+      "doc": "# 配置\n\n通过 `setOption(option, notMerge)` 更新图表配置项。",
+      "expected": [{ "name": "setOption", "kind": "function" }]
+    },
+    {
+      "id": "doc-dispose",
+      "holdout": false,
+      "doc": "# 生命周期\n\n`dispose()` 释放实例；之后任何调用返回 INVALID_STATE_ERROR。",
+      "expected": [
+        { "name": "dispose", "kind": "function" },
+        { "name": "INVALID_STATE_ERROR", "kind": "error_code" }
+      ]
+    },
+    {
+      "id": "doc-event",
+      "holdout": false,
+      "doc": "# 事件\n\n用 `addEventListener(type, listener)` 注册事件监听器。",
+      "expected": [{ "name": "addEventListener", "kind": "function" }]
+    },
+    {
+      "id": "doc-prose-miss",
+      "holdout": false,
+      "doc": "# 工厂\n\n`getVersion()` 返回版本号。另外工厂方法 createInstance 也可用于构造实例（文中未给显式签名）。",
+      "expected": [
+        { "name": "getVersion", "kind": "function" },
+        { "name": "createInstance", "kind": "function" }
+      ]
+    },
+    {
+      "id": "doc-resize-holdout",
+      "holdout": true,
+      "doc": "# 重绘\n\n`resize(opts)` 在容器尺寸变化后重绘图表。",
+      "expected": [{ "name": "resize", "kind": "function" }]
+    },
+    {
+      "id": "doc-errcode-holdout",
+      "holdout": true,
+      "doc": "# 错误码\n\n请求超时返回 E2002，鉴权失败返回 TIMEOUT_ERROR 或 AUTH_FAILED_ERROR。",
+      "expected": [
+        { "name": "E2002", "kind": "error_code" },
+        { "name": "TIMEOUT_ERROR", "kind": "error_code" },
+        { "name": "AUTH_FAILED_ERROR", "kind": "error_code" }
+      ]
+    }
+  ],
+  "mutation_entries": [
+    {
+      "id": "mut-novel",
+      "doc": "# 新接口\n\n`zzqProcessRecord(input, options)` 处理一条记录并返回结果。失败时返回 ZZQ_FATAL_ERROR。",
+      "expected": [
+        { "name": "zzqProcessRecord", "kind": "function" },
+        { "name": "ZZQ_FATAL_ERROR", "kind": "error_code" }
+      ]
+    }
+  ],
+  "lookup_cases": [
+    { "query": "createChart", "expected_name": "createChart", "expected_kind": "function", "mode": "exact" },
+    { "query": "setOption", "expected_name": "setOption", "expected_kind": "function", "mode": "exact" },
+    { "query": "dispose", "expected_name": "dispose", "expected_kind": "function", "mode": "exact" },
+    { "query": "addEventListener", "expected_name": "addEventListener", "expected_kind": "function", "mode": "exact" }
+  ]
+}
