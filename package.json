@@ -70,7 +70,6 @@
     "@mozilla/readability": "^0.6.0",
     "@sqlite.org/sqlite-wasm": "^3.53.0-build1",
     "chokidar": "^4.0.3",
-    "fast-xml-parser": "^5.9.0",
     "fflate": "^0.8.3",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",

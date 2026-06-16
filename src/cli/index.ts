@@ -66,7 +66,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra direction-audit --snapshot <path>
   spectra direction-audit --compare-snapshot <path>
   spectra index [--watch] [--incremental] [--caller-depth <N>] [--project-root <dir>]
-  spectra scaffold-kb build (--dir <path> | --llms-txt <url>) [--output <kb/>] [--sdk-version <ver>] [--lang <code>]
+  spectra scaffold-kb build (--dir <path> | --llms-txt <url>) [--output <kb/>] [--sdk-version <ver>] [--lang <code>] [--no-llm]
+  spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) [--project-kb <path>] [--yes|--dry-run] [--no-llm]
   spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
   spectra scaffold-kb query --requirement "<需求>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
   spectra mcp-server

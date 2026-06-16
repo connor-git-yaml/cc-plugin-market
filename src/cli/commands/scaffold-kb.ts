@@ -5,6 +5,7 @@
  * serve：启动 KB MCP server（Phase B 接入，demo plugin .mcp.json 调用此路径）
  */
 
+import { join } from 'node:path';
 import type { CLICommand } from '../utils/parse-args.js';
 import { buildKb } from '../../scaffold-kb/index.js';
 import { extractKeywords } from '../../scaffold-kb/keyword-extract.js';
@@ -12,6 +13,7 @@ import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { formatInjectionBlock, type EvidenceResult } from '../../scaffold-kb/injection-format.js';
 import { loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
 import { mergeResults } from '../../kb-mcp/lib/result-merger.js';
+import { prepareIngest, commitIngest, IngestError, type IngestSource } from '../../scaffold-kb/ingest/ingest-core.js';
 
 const QUERY_PROBE_SENTINEL = 'scaffold-kb-query:1';
 
@@ -70,6 +72,62 @@ async function runQuery(command: CLICommand): Promise<void> {
   if (block.length > 0) process.stdout.write(block + '\n');
 }
 
+/** scaffold-kb ingest：三方源（url/file/minutes）→ 预览 → --yes 落项目库（FR-009/013） */
+async function runIngest(command: CLICommand): Promise<void> {
+  const sources: IngestSource[] = [];
+  if (command.scaffoldKbUrl) sources.push({ kind: 'url', value: command.scaffoldKbUrl });
+  if (command.scaffoldKbFile) sources.push({ kind: 'file', value: command.scaffoldKbFile });
+  if (command.scaffoldKbMinutes) sources.push({ kind: 'minutes', value: command.scaffoldKbMinutes });
+  if (sources.length === 0) {
+    console.error(
+      '用法: spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) ' +
+        '[--project-kb <path>] [--yes | --dry-run] [--no-llm]',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const projectKb = command.scaffoldKbProjectKb ?? join(process.cwd(), '.spectra', 'kb');
+  const opts: Parameters<typeof prepareIngest>[2] = {};
+  if (command.scaffoldKbNoLlm === true) opts.noLlm = true;
+
+  let plan;
+  try {
+    plan = await prepareIngest(sources, projectKb, opts);
+  } catch (e) {
+    // 既有项目库读取失败等 fail-closed → 拒绝导入（C-2）
+    console.error(`[scaffold-kb ingest] 失败：${e instanceof IngestError ? e.message : String(e)}`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log('[scaffold-kb ingest] 预览:');
+  for (const s of plan.sources) {
+    console.log(`  ${s.ok ? '✓' : '✗'} ${s.origin}${s.ok ? ` (${s.type})` : ` — ${s.reason ?? ''}`}`);
+  }
+  console.log(
+    `  新增 ${plan.newDocs} 文档 / ${plan.newChunks} chunk / ${plan.newEntities} 实体` +
+      `（合并后共 ${plan.totalChunks} chunk / ${plan.totalEntities} 实体）`,
+  );
+  const okCount = plan.sources.filter((s) => s.ok).length;
+  // 全部源失败 → 拒绝落库 + exit 1（W-4）
+  if (okCount === 0) {
+    console.error('  所有源均失败，未落库');
+    process.exitCode = 1;
+    return;
+  }
+  if (command.scaffoldKbDryRun === true) {
+    console.log('  --dry-run：仅预览，不落库');
+    return;
+  }
+  if (command.scaffoldKbYes !== true) {
+    console.log('  预览模式：加 --yes 落库，或 --dry-run 仅预览');
+    return;
+  }
+  commitIngest(projectKb, plan);
+  console.log(`  ✓ 已落库 → ${projectKb}`);
+  // 部分源失败 → exit 2（信号，已落成功的部分，W-4）
+  if (okCount < plan.sources.length) process.exitCode = 2;
+}
+
 export async function runScaffoldKb(command: CLICommand): Promise<void> {
   const op = command.scaffoldKbOperation;
 
@@ -101,6 +159,11 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
 
   if (op === 'query') {
     await runQuery(command);
+    return;
+  }
+
+  if (op === 'ingest') {
+    await runIngest(command);
     return;
   }
 

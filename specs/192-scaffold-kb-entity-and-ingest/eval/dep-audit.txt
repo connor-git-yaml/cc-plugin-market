@@ -5,12 +5,14 @@ Node 运行时：>=20（本仓 engines）；审计环境 node v24
 
 | 包 | version | license | 原生编译? | engines.node | 用途 |
 |----|---------|---------|-----------|--------------|------|
-| fflate              | 0.8.3   | MIT        | 否 | （无约束）   | docx/pptx zip streaming 解压 |
-| fast-xml-parser     | 5.9.0   | MIT        | 否 | （无约束）   | Office XML 解析（禁 DTD/entity）|
+| fflate              | 0.8.3   | MIT        | 否 | （无约束）   | docx/pptx streaming Unzip 解压（逐 entry + 累计字节限额）|
 | unpdf               | 1.6.2   | MIT        | 否（serverless pdfjs，无 canvas）| （无约束）| PDF text-layer 抽取 |
 | linkedom            | 0.18.12 | ISC        | 否 | >=16         | readability 的 DOM（不跑 script）|
 | @mozilla/readability| 0.6.0   | Apache-2.0 | 否 | （无约束）   | URL 主内容抽取 |
 | turndown            | 7.2.4   | MIT        | 否 | （无约束）   | HTML→Markdown |
+| @types/turndown(dev)| —       | MIT        | 否 | —            | turndown 类型 |
+
+注：原计划的 `fast-xml-parser` 已**移除**——OOXML `<w:t>`/`<a:t>` 文本抽取改用 **regex + 手动实体解码 + DOCTYPE/ENTITY 预拒**，零 XML 解析器攻击面（codex 安全审查 endorsed 备选，比 XML 解析器更安全）。
 
 结论（SC-012 验收）：
 - 许可：全部宽松（MIT/ISC/Apache-2.0），均可随 plugin 再分发 ✓

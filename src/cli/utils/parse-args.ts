@@ -104,8 +104,8 @@ export interface CLICommand {
    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
    */
   indexGitRange?: string;
-  /** F190/F191 scaffold-kb 子操作（build | serve | query） */
-  scaffoldKbOperation?: 'build' | 'serve' | 'query';
+  /** F190/F191/F192 scaffold-kb 子操作（build | serve | query | ingest） */
+  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest';
   /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
   scaffoldKbLlmsTxt?: string;
   /** F190 scaffold-kb build：--dir 本地文档目录 */
@@ -118,6 +118,16 @@ export interface CLICommand {
   scaffoldKbLang?: string;
   /** F192 scaffold-kb build：--no-llm 跳过 LLM 抽取只走 heuristic（FR-001） */
   scaffoldKbNoLlm?: boolean;
+  /** F192 scaffold-kb ingest：--url 抓取网页 */
+  scaffoldKbUrl?: string;
+  /** F192 scaffold-kb ingest：--file 办公文档路径（docx/pptx/pdf/md） */
+  scaffoldKbFile?: string;
+  /** F192 scaffold-kb ingest：--minutes 会议纪要/自由文本路径 */
+  scaffoldKbMinutes?: string;
+  /** F192 scaffold-kb ingest：--yes 跳过确认直接落库 */
+  scaffoldKbYes?: boolean;
+  /** F192 scaffold-kb ingest：--dry-run 只预览永不落库 */
+  scaffoldKbDryRun?: boolean;
   /** F190 scaffold-kb serve：--vendor-kb 厂商库路径（必需） */
   scaffoldKbVendorKb?: string;
   /** F190 scaffold-kb serve：--project-kb 项目库路径（缺省 cwd/.spectra/kb） */
@@ -693,12 +703,12 @@ export function parseArgs(argv: string[]): ParseResult {
       };
     }
     const op = argv[1];
-    if (op !== 'build' && op !== 'serve' && op !== 'query') {
+    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest') {
       return {
         ok: false,
         error: {
           type: 'invalid_subcommand',
-          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query）`,
+          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest）`,
         },
       };
     }
@@ -742,6 +752,11 @@ export function parseArgs(argv: string[]): ParseResult {
         scaffoldKbSdkVersion: readFlag('--sdk-version'),
         scaffoldKbLang: readFlag('--lang'),
         scaffoldKbNoLlm: argv.includes('--no-llm'),
+        scaffoldKbUrl: readFlag('--url'),
+        scaffoldKbFile: readFlag('--file'),
+        scaffoldKbMinutes: readFlag('--minutes'),
+        scaffoldKbYes: argv.includes('--yes'),
+        scaffoldKbDryRun: argv.includes('--dry-run'),
         scaffoldKbVendorKb: readFlag('--vendor-kb'),
         scaffoldKbProjectKb: readFlag('--project-kb'),
         scaffoldKbRequirement: readFlag('--requirement'),
