@@ -1,0 +1,26 @@
+F192 批② 三方导入依赖审计（T013 / SC-012 / FR-016）
+==================================================
+审计日期口径：见 git commit 时间（不内嵌动态时间戳）
+Node 运行时：>=20（本仓 engines）；审计环境 node v24
+
+| 包 | version | license | 原生编译? | engines.node | 用途 |
+|----|---------|---------|-----------|--------------|------|
+| fflate              | 0.8.3   | MIT        | 否 | （无约束）   | docx/pptx zip streaming 解压 |
+| fast-xml-parser     | 5.9.0   | MIT        | 否 | （无约束）   | Office XML 解析（禁 DTD/entity）|
+| unpdf               | 1.6.2   | MIT        | 否（serverless pdfjs，无 canvas）| （无约束）| PDF text-layer 抽取 |
+| linkedom            | 0.18.12 | ISC        | 否 | >=16         | readability 的 DOM（不跑 script）|
+| @mozilla/readability| 0.6.0   | Apache-2.0 | 否 | （无约束）   | URL 主内容抽取 |
+| turndown            | 7.2.4   | MIT        | 否 | （无约束）   | HTML→Markdown |
+
+结论（SC-012 验收）：
+- 许可：全部宽松（MIT/ISC/Apache-2.0），均可随 plugin 再分发 ✓
+- 原生编译：`npm ls @napi-rs/canvas canvas node-gyp` → (empty)，无任何原生包 ✓
+  （unpdf 走 serverless pdfjs build，确认不拉 canvas；守 F190 WASM-only/无原生立场）
+- engines：linkedom node>=16、其余无约束，均 ≤ 本仓 node>=20，不抬高下限 ✓
+- 安全 CVE：`npm audit` 的 21 项漏洞（3 critical/12 high/6 moderate）经逐包核对，
+  **全部来自仓库既有 dev/build/test 依赖**（vitest/esbuild/vite/rollup/handlebars/hono/
+  protobufjs/express-rate-limit/postcss/tsx 等），**本批 6 个新依赖引入 0 新漏洞** ✓
+  （既有漏洞属仓库存量，非 F192 责任范围，不在本批 npm audit fix）
+
+跨平台 smoke：批② 实现完成后在 CI 跑（mac/linux/win × arm64/x64）；本地 node v24 安装+解析通过。
+linkedom vs jsdom：默认 linkedom（更轻）；若 readability 主内容抽取质量不足，回退 jsdom（仍纯 JS）。
