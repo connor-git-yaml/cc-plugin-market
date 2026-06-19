@@ -34,7 +34,7 @@ amendment_2026-06-19: 大批量 ship + 🔴编号漂移校正 + 调研沉淀。
 - ③ 计划外 ship：**F198✅/F199✅**（spec-driver/orchestration zod 缺失优雅降级，共享 load-zod helper）；**F176✅** swebench-execution 预注册冻结 + 5 cohort smoke PASS（F188 跑批前置已就位）
 - ④ 剩余收尾重新认定（原 F191/F192 号已被 KB 占用）：**F188**（eval 重判+复测，前置 F176 冻结 + F197 公正性修复均就位，可跑·烧配额派发前确认）；**全期架构 review** 由 milestone-next 每轮对抗审查 workflow 替代（上轮 6 维度 wf_c4c0461a + 本轮 spot-check），如需正式收口报告另立新号；**doc 收口**（npm 4.3.0 / KB 新 CLI+MCP / 委派契约 / agent-mainline-focus.md 漂移）另立新号
 - ⑤ 调研沉淀（2026-06-19 三方向 detailed 调研，见 §5 M9 候选）：路线确认「站在风口」，新增 3 增强方向 + Goal 自主推进可行性判断
-执行顺序: …→ F195✅ → F187✅ → F189✅ → F197✅(公正性收口) → F186✅(npm 4.3.0 staged·未 publish) → F190✅/F191✅/F192✅(KB Phase1+2) → F198✅/F199✅ → F176✅(F188 前置) → **F188(eval 复测·就绪待派)** → 收尾(全期 review 循环式已做 + doc 收口另立号)
+执行顺序: …→ F197✅(公正性收口) → F186✅(npm 4.3.0 staged·未 publish) → F190✅/F191✅/F192✅(KB Phase1+2) → F198✅/F199✅ → F176✅(F188 前置) → **F200(M8 doc 收口)∥F201(goal_loop pilot·M9 开篇)** → 〔近期 feature 完成后〕**F188(eval 复测) + npm publish 4.3.0**（用户 2026-06-19 拍板：排最后，近期规划 feature 全完成再推）→ 收尾(全期 review 由 milestone-next 循环式对抗审查已做)
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
