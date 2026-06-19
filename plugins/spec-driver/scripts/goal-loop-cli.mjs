@@ -17,6 +17,7 @@
  *   node goal-loop-cli.mjs select-verify-mode <round> <max> <aboutToExit:true|false>
  *   node goal-loop-cli.mjs decide-dispatch <phaseId> <agentMode>
  *   node goal-loop-cli.mjs interpret-impact <mcpResultJsonFile>
+ *   node goal-loop-cli.mjs format-iteration-log-entry <entryJsonFile>  # 输出 markdown 块到 stdout
  *   node goal-loop-cli.mjs acquire-lock <lockPath>
  *   node goal-loop-cli.mjs release-lock <lockPath>
  */
@@ -32,6 +33,7 @@ import {
   planRollbackCommands,
   parseReport,
   interpretImpactResult,
+  formatIterationLogEntry,
 } from './lib/goal-loop-core.mjs';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -239,6 +241,13 @@ function main(argv) {
     }
     case 'interpret-impact': {
       output(interpretImpactResult(readJsonFile(args[0])));
+      break;
+    }
+    case 'format-iteration-log-entry': {
+      // 输出 markdown 块（含内嵌 ```json 围栏）到 stdout，供编排器直接追加写入 iteration-log.md。
+      // 与其它子命令不同：本子命令输出原始 markdown 文本，而非 JSON.stringify 包裹（散文直接拼日志）。
+      if (!args[0]) fail('format-iteration-log-entry 需要 <entryJsonFile>');
+      process.stdout.write(formatIterationLogEntry(readJsonFile(args[0])));
       break;
     }
     case 'acquire-lock': {

@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   classifyCommand,
@@ -33,6 +34,12 @@ import { acquireLock, releaseLock } from '../scripts/goal-loop-cli.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'goal-loop');
+
+// W5（环境健壮性）：受限/只读沙箱里 os.tmpdir() 可能 EPERM（如 Codex 审查沙箱）。
+// 允许通过 TEST_TMPDIR 指向可写目录；未设则退回 os.tmpdir()。仅影响测试落点，不改锁逻辑。
+const TMP_ROOT = process.env.TEST_TMPDIR || os.tmpdir();
+// 确保 TMP_ROOT 父目录存在（TEST_TMPDIR 指向尚未创建的路径时 mkdtemp 会 ENOENT）。
+fs.mkdirSync(TMP_ROOT, { recursive: true });
 
 function loadFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, name), 'utf-8'));
@@ -587,6 +594,48 @@ describe('decideStop (FR-004 优先级)', () => {
     assert.equal(result.action, 'goto_gate_verify');
   });
 
+  // ── Codex C1：escalate 非递归不变量（full 报告永不返回 escalate_full）──
+  it('C1: full 报告 metric 满足 → REACHED_GOAL，action 永不为 escalate_full（堵死递归升级）', () => {
+    // 核心不变量：escalate_full 只在 verify_mode!=full 时返回。
+    // forced full verify 回到 decideStop 后，full 报告必走 REACHED_GOAL，无法再 escalate → 不可递归。
+    const fullPass = loadFixture('report-full-pass.json');
+    assert.equal(fullPass.verify_mode, 'full', '前置：fixture 为 full 模式');
+    // 跨多个 round / prevReports 组合都不应出现 escalate_full
+    for (const round of [1, 2, 5]) {
+      for (const prev of [[], [loadFixture('report-smoke-pass.json')]]) {
+        const result = decideStop({
+          report: fullPass,
+          round,
+          config: { ...DEFAULT_CONFIG, max_iterations: 5 },
+          prevReports: prev,
+          rollbackResult: null,
+        });
+        assert.notEqual(
+          result.action,
+          'escalate_full',
+          `full 报告（round=${round}）绝不应返回 escalate_full（递归风险）`,
+        );
+        assert.equal(result.exit_reason, 'REACHED_GOAL');
+      }
+    }
+  });
+
+  it('C1: full 报告即使未达标（含 FAIL）也永不返回 escalate_full（仅 smoke 满足才触发）', () => {
+    // escalate_full 唯一触发条件 = verify_mode!=full 且 metric 满足。
+    // full 报告无论达标与否都不会落入 escalate_full 分支。
+    const fullFail = loadFixture('report-fail-regression.json'); // full，未达标
+    assert.equal(fullFail.verify_mode, 'full');
+    assert.equal(evaluateMetric(fullFail), false, '前置：该 full 报告不达标');
+    const result = decideStop({
+      report: fullFail,
+      round: 2,
+      config: { ...DEFAULT_CONFIG, max_iterations: 5 },
+      prevReports: [], // 无同模式前轮 → 不触发 regression
+      rollbackResult: null,
+    });
+    assert.notEqual(result.action, 'escalate_full');
+  });
+
   it('C2: smoke escalate_full 优先于 max_iterations（末轮 smoke 满足也先升级 full）', () => {
     // 防御性：即使 round===max，smoke 满足也不能直接 REACHED_GOAL；escalate_full 让编排器升 full
     const smokePass = loadFixture('report-smoke-pass.json');
@@ -701,7 +750,7 @@ describe('decideStop (FR-004 优先级)', () => {
 // ──────────────────────────────────────────────────────────────────────────
 describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   it('T-GL-18: acquire → true；二次 acquire → false/lock_exists；release → 锁消失；再 acquire → true', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       const first = acquireLock(lockPath);
@@ -725,7 +774,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   });
 
   it('锁文件内容含 pid 与 start_time', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       acquireLock(lockPath);
@@ -751,7 +800,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   }
 
   it('W3: 持锁进程已不存在（ESRCH）→ stale 锁可被接管', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       const deadPid = findDeadPid();
@@ -772,7 +821,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   });
 
   it('W3/Phase B 修正: 存活 PID + 锁年龄远超 TTL（31min 前）→ 仍 lock_exists 不接管（FR-018 单实例保证）', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       const oldTime = new Date(Date.now() - 31 * 60 * 1000).toISOString(); // 31min 前（曾超 TTL）
@@ -790,7 +839,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   });
 
   it('W3/Phase B 修正: 死 PID + 锁很新（刚建）→ 仍可接管（接管只看存活性不看锁龄）', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       const deadPid = findDeadPid();
@@ -808,7 +857,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   });
 
   it('W3: 持锁进程存活（刚建锁）→ lock_exists（不可接管，含 holderPid）', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       // 当前进程持锁、刚建 → 非 stale
@@ -825,7 +874,7 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
   });
 
   it('W3: 锁内容损坏（非法 JSON）→ 视为 stale 可接管', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'goal-loop-lock-'));
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-lock-'));
     const lockPath = path.join(tmpDir, '.lock');
     try {
       fs.writeFileSync(lockPath, '{ 损坏的非法 JSON');
@@ -835,5 +884,248 @@ describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// Phase C golden-text 校验：SKILL.md 散文含必需步骤 + CLI 子命令名对齐（T024 / T025）
+//   读真实 SKILL.md / goal-loop-cli.mjs 文件，断言散文契约与 core/CLI 实际一致，
+//   防 implement 期接口漂移（T025）与迭代日志接线缺失（T024）。
+// ──────────────────────────────────────────────────────────────────────────
+
+const SKILL_MD_PATH = path.join(
+  __dirname,
+  '..',
+  'skills',
+  'spec-driver-feature',
+  'SKILL.md',
+);
+const CLI_PATH = path.join(__dirname, '..', 'scripts', 'goal-loop-cli.mjs');
+
+/**
+ * 从 goal-loop-cli.mjs 源码提取真实注册的子命令名（`case '<name>':` 字面量），
+ * 作为 golden-text 校验散文 CLI 调用的权威清单 —— 防散文调用了不存在的子命令（漂移）。
+ */
+function extractCliSubcommands() {
+  const src = fs.readFileSync(CLI_PATH, 'utf-8');
+  const names = new Set();
+  const re = /case\s+'([a-z-]+)'\s*:/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    names.add(m[1]);
+  }
+  return names;
+}
+
+describe('goal_loop SKILL.md golden-text 校验（T025）', () => {
+  const skillMd = fs.readFileSync(SKILL_MD_PATH, 'utf-8');
+
+  it('SKILL.md 含 goal_loop 分派分支（decide-dispatch）', () => {
+    assert.ok(skillMd.includes('goal_loop'), '散文应含 goal_loop');
+    assert.ok(skillMd.includes('decide-dispatch'), '分派应调 decide-dispatch');
+  });
+
+  it('SKILL.md 含步骤 1：建立 snapshot（plan-snapshot）', () => {
+    assert.ok(skillMd.includes('plan-snapshot'));
+    assert.ok(skillMd.includes('snapshot'));
+  });
+
+  it('SKILL.md 含步骤 2：Spectra impact 注入（interpret-impact）', () => {
+    assert.ok(skillMd.includes('Spectra MCP') || skillMd.includes('impact'));
+    assert.ok(skillMd.includes('interpret-impact'));
+  });
+
+  it('SKILL.md 含步骤 4：select-verify-mode（smoke/full 分层）', () => {
+    assert.ok(skillMd.includes('select-verify-mode'));
+  });
+
+  it('SKILL.md 含步骤 5：verify GOAL_LOOP_MODE 注入 + parse-report', () => {
+    assert.ok(skillMd.includes('GOAL_LOOP_MODE'));
+    assert.ok(skillMd.includes('parse-report'));
+  });
+
+  it('SKILL.md 含步骤 6：decide-stop 决策', () => {
+    assert.ok(skillMd.includes('decide-stop'));
+  });
+
+  it('SKILL.md 含 escalate_full 消费分支（Codex C2 修正的关键落地）', () => {
+    // smoke 全绿不得直接达标 → 必须有 escalate_full → 强制 full verify 重判 的分支
+    assert.ok(skillMd.includes('escalate_full'), '散文必须显式消费 escalate_full action');
+    assert.ok(
+      skillMd.includes('REACHED_GOAL'),
+      'escalate_full 后 full 轮才可能 REACHED_GOAL',
+    );
+  });
+
+  it('SKILL.md 含回滚分支（plan-rollback + REGRESSION_ROLLBACK）', () => {
+    assert.ok(skillMd.includes('plan-rollback'));
+    assert.ok(skillMd.includes('REGRESSION_ROLLBACK'));
+  });
+
+  it('SKILL.md 含单实例锁 acquire-lock / release-lock（FR-018）', () => {
+    assert.ok(skillMd.includes('acquire-lock'));
+    assert.ok(skillMd.includes('release-lock'));
+  });
+
+  it('SKILL.md 含 reward hacking 护栏诚实说明（FR-023）', () => {
+    assert.ok(
+      skillMd.includes('reward hacking') || skillMd.includes('测试过拟合'),
+      '应含 reward hacking / 测试过拟合 诚实标注',
+    );
+    assert.ok(skillMd.includes('GATE_VERIFY'), '应说明 GATE_VERIFY 是真正强护栏');
+  });
+
+  it('散文调用的每个 goal-loop-cli 子命令名都在真实 CLI 清单内（防接口漂移）', () => {
+    const realSubcommands = extractCliSubcommands();
+    // sanity：CLI 至少注册了核心子命令，提取逻辑有效
+    assert.ok(realSubcommands.size >= 9, `CLI 子命令提取应 ≥ 9，实得 ${realSubcommands.size}`);
+
+    // 散文中出现的 `goal-loop-cli.mjs <subcommand>` 调用
+    const calledInProse = new Set();
+    const callRe = /goal-loop-cli\.mjs"?\s+([a-z-]+)/g;
+    let mm;
+    while ((mm = callRe.exec(skillMd)) !== null) {
+      calledInProse.add(mm[1]);
+    }
+    assert.ok(calledInProse.size > 0, '散文应至少调用一个 goal-loop-cli 子命令');
+
+    for (const sub of calledInProse) {
+      assert.ok(
+        realSubcommands.has(sub),
+        `散文调用的子命令 "${sub}" 不在 CLI 真实清单 [${[...realSubcommands].join(', ')}] 内（接口漂移）`,
+      );
+    }
+  });
+
+  // ── W4：golden-text 精化（消除"includes 一个词"假绿）──
+
+  it('W4: 必需 CLI 子命令全集都在散文出现（不止子集校验，反向锁定缺失）', () => {
+    // 散文必须真实接线这些子命令名（format-iteration-log-entry 为 W3 新增的真实可执行入口）
+    const REQUIRED = [
+      'acquire-lock',
+      'release-lock',
+      'plan-snapshot',
+      'interpret-impact',
+      'select-verify-mode',
+      'parse-report',
+      'decide-stop',
+      'plan-rollback',
+      'format-iteration-log-entry',
+    ];
+    const realSubcommands = extractCliSubcommands();
+    for (const sub of REQUIRED) {
+      // 既要散文出现，也要确实是 CLI 真实子命令（双向锁定，防散文写了 CLI 没有的名字）
+      assert.ok(skillMd.includes(sub), `散文缺必需 CLI 子命令调用 "${sub}"`);
+      assert.ok(
+        realSubcommands.has(sub),
+        `必需子命令 "${sub}" 不在 CLI 真实清单（实现漂移）`,
+      );
+    }
+  });
+
+  it('W4: decide-stop payload 五字段均在散文出现（report/round/config/prevReports/rollbackResult）', () => {
+    for (const field of ['report', 'round', 'config', 'prevReports', 'rollbackResult']) {
+      assert.ok(skillMd.includes(field), `散文缺 decide-stop payload 字段 "${field}"`);
+    }
+  });
+
+  it('W4: escalate 用 select-verify-mode {i} {max_iterations} true（aboutToExit=true）', () => {
+    // escalate_full 分支强制 full：select-verify-mode 第三参 aboutToExit 必须为 true
+    assert.ok(
+      /select-verify-mode \{i\} \{max_iterations\} true/.test(skillMd),
+      '散文 escalate 分支应以 aboutToExit=true 调 select-verify-mode 强制 full',
+    );
+    // 同时存在循环体内 aboutToExit=false 的常规调用（smoke/full 分层）
+    assert.ok(
+      /select-verify-mode \{i\} \{max_iterations\} false/.test(skillMd),
+      '散文循环体应有 aboutToExit=false 的常规 select-verify-mode 调用',
+    );
+  });
+
+  it('W4: post-full 不可再 escalate（散文含"escalate 不可递归"/"不再升级"语义，Codex C1）', () => {
+    assert.ok(
+      skillMd.includes('escalate 不可递归'),
+      '散文必须显式声明 escalate 不可递归（C1 非递归硬约束）',
+    );
+    // forced full 后须先校验 verify_mode === 'full'（C1 第 1 道防护）
+    assert.ok(
+      skillMd.includes("verify_mode === 'full'") || skillMd.includes('verify_mode!=full'),
+      '散文应在 forced full 后校验 curReportFull.verify_mode === full',
+    );
+  });
+
+  it('W4: rollback planning failure 路径（plan-rollback CLI 退出码检查，Codex W2）', () => {
+    // 散文须先查 plan-rollback CLI 自身退出码，非零 → ROLLBACK_FAILED
+    assert.ok(
+      skillMd.includes('plan-rollback CLI 退出码') || /plan-rollback.*退出码/.test(skillMd),
+      '散文应先检查 plan-rollback CLI 自身退出码',
+    );
+    assert.ok(skillMd.includes('ROLLBACK_FAILED'), '回滚规划/执行失败应导向 ROLLBACK_FAILED');
+  });
+});
+
+describe('goal_loop 迭代日志接线 golden-text 校验（T024 / T-GL-21b）', () => {
+  const skillMd = fs.readFileSync(SKILL_MD_PATH, 'utf-8');
+
+  it('T-GL-21b: 散文调用 formatIterationLogEntry 并写 iteration-log', () => {
+    assert.ok(
+      skillMd.includes('formatIterationLogEntry') || skillMd.includes('迭代日志'),
+      '散文应接线 formatIterationLogEntry / 迭代日志',
+    );
+    assert.ok(skillMd.includes('iteration-log'), '散文应写 iteration-log.md');
+  });
+
+  it('W3: 散文经 format-iteration-log-entry CLI 子命令格式化（真实可执行入口，非"调 core"）', () => {
+    assert.ok(
+      skillMd.includes('format-iteration-log-entry'),
+      '散文应调 format-iteration-log-entry CLI 子命令（编排器经 Bash 可执行），而非笼统"调 core"',
+    );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// W3：format-iteration-log-entry CLI 子命令集成测试（真实 spawn CLI，验证 stdout）
+//   编排器经 Bash 调该子命令把 entry → markdown 块；这里直接 spawn 校验真实 I/O。
+// ──────────────────────────────────────────────────────────────────────────
+describe('format-iteration-log-entry CLI 子命令集成（W3）', () => {
+  it('W3: spawn CLI format-iteration-log-entry → stdout 为含内嵌 ```json 围栏的 markdown 块且可解析', () => {
+    const tmpDir = fs.mkdtempSync(path.join(TMP_ROOT, 'goal-loop-cli-'));
+    const entryFile = path.join(tmpDir, 'entry.json');
+    try {
+      const entry = {
+        round: 3,
+        verify_mode: 'full',
+        metric: true,
+        delta: [1, 0, 0, 0, 12],
+        exit_reason: 'REACHED_GOAL',
+        injection_status: 'injected',
+        snapshot: { clean: false, ref: 'a'.repeat(40) },
+        timestamp: '2026-06-20T10:05:00Z',
+      };
+      fs.writeFileSync(entryFile, JSON.stringify(entry));
+      const stdout = execFileSync('node', [CLI_PATH, 'format-iteration-log-entry', entryFile], {
+        encoding: 'utf-8',
+      });
+      // 输出为原始 markdown（非 JSON.stringify 包裹）：含标题 + ```json 围栏
+      assert.ok(/round|轮/i.test(stdout), 'stdout 应含轮次标题');
+      assert.ok(stdout.includes('```json'), 'stdout 应含 ```json 围栏');
+      const match = stdout.match(/```json\s*([\s\S]*?)```/);
+      assert.ok(match, '必须含可提取的 ```json 围栏');
+      const parsed = JSON.parse(match[1]);
+      assert.equal(parsed.round, 3);
+      assert.equal(parsed.exit_reason, 'REACHED_GOAL');
+      assert.deepEqual(parsed.snapshot, { clean: false, ref: 'a'.repeat(40) });
+      // CLI 输出应与 core 纯函数完全一致（薄包装不引入差异）
+      assert.equal(stdout, formatIterationLogEntry(entry));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('W3: format-iteration-log-entry 缺 entryJsonFile 参数 → 非零退出', () => {
+    assert.throws(
+      () => execFileSync('node', [CLI_PATH, 'format-iteration-log-entry'], { encoding: 'utf-8' }),
+      /Command failed|status/,
+    );
   });
 });

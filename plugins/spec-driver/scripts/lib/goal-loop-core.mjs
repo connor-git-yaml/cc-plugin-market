@@ -160,6 +160,14 @@ export function decideStop({ report, round, config, prevReports, rollbackResult 
   //   - full 轮 metric 满足 → REACHED_GOAL（真正退出）
   //   - smoke 轮 metric 满足 → 不得 REACHED_GOAL；返回 escalate_full 信号，
   //     由编排器升级到 full verify 重判（tasks T022 步骤 6c）。堵死"smoke 假达标"。
+  //
+  // **escalate 非递归不变量（Codex C1，最高风险）**：escalate_full 只在
+  // `verify_mode !== 'full'` 时返回。因此一旦 forced full verify 产出 verify_mode==='full'
+  // 的报告且 metric 满足，本函数**必然**走 REACHED_GOAL 分支，**永不**再次返回 escalate_full
+  // —— 从纯函数层面就不存在"full 报告 → escalate_full"的路径，无法递归升级。
+  // 散文层（SKILL.md 步骤 6c）另有两道兜底：
+  //   (1) forced full 后先校验 curReportFull.verify_mode === 'full'，否则按 infra-failure 转 GATE_VERIFY；
+  //   (2) 重 decide 后若仍意外得到 escalate_full（契约违反），MUST NOT 再升级，直接转 GATE_VERIFY。
   if (!isDegraded && evaluateMetric(report)) {
     if (report.verify_mode === 'full') {
       return { stop: true, exit_reason: 'REACHED_GOAL', action: 'goto_gate_verify' };

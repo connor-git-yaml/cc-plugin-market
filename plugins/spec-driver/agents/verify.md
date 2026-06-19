@@ -208,6 +208,59 @@ effort: medium
 ### 总体结果: ✅ READY / ❌ NEEDS FIX
 ```
 
+### goal_loop JSON 输出模式（Feature 201）
+
+当编排器在你的 Task prompt 中注入 `GOAL_LOOP_MODE=round-{i}` 时，除常规 Markdown 验证报告（`verification-report.md`）外，你 **MUST 额外**产出一份结构化 JSON 文件，供 goal_loop 闭环编排器机器消费：
+
+**文件路径**：`{feature_dir}/goal-loop/verification-report-round-{i}.json`（`{i}` 从 prompt 的 `GOAL_LOOP_MODE=round-{i}` 提取）
+
+**必须字段**（schema 权威定义见 plan.md §2 verification-report schema）：
+
+```jsonc
+{
+  "round": 1,                         // 从 GOAL_LOOP_MODE=round-{i} 提取
+  "timestamp": "2026-06-20T10:00:00Z",// ISO 8601
+  "verify_mode": "smoke",             // 从 prompt 的 verify_mode= 提取（smoke | full）
+  "wall_seconds": 42.3,               // 本轮 verify 实际耗时（秒）
+  "layer2_commands": [                // Layer 2 每条命令一项
+    {
+      "name": "npx vitest run",
+      "exit_code": 0,                 // 真实执行退出码，MUST NOT 缺省
+      "status": "PASS",               // PASS | FAIL | SKIPPED | UNKNOWN
+      "duration_seconds": 8.1,
+      "output_summary": "...",
+      "skipped_reason": null          // 非 null 时 status=SKIPPED
+    }
+  ],
+  "layer1_fr_coverage": {             // 复用 Layer 1 FR 覆盖统计
+    "p1_total": 12, "p1_covered": 10,
+    "p1_coverage_pct": 83.3, "uncovered_fr_ids": ["FR-018"]
+  },
+  "layer1_5_evidence": {              // 复用 Layer 1.5 证据状态
+    "status": "COMPLIANT",            // COMPLIANT | PARTIAL | EVIDENCE_MISSING
+    "detail": "..."
+  },
+  "regression_check": {
+    "previously_passing_commands": ["npx vitest run"],
+    "now_failing": [], "regression_detected": false
+  },
+  "delta_inputs": {                   // 供编排器计算五维 delta
+    "layer2_pass_count": 3, "p1_fr_coverage_pct": 83.3,
+    "layer1_5_status_score": 2,       // COMPLIANT=2 / PARTIAL=1 / EVIDENCE_MISSING=0
+    "regression_count": 0, "net_loc_delta": 42
+  }
+}
+```
+
+**重要约束（职责分离，防 reward-hacking，FR-010）**：
+
+- `layer2_commands[].exit_code` **MUST 为命令真实执行的退出码**，**MUST NOT** 基于 implement 子代理的任何声明填写。
+- 缺退出码或无法验证真实执行的条目，`status` **MUST** 填 `UNKNOWN`（goal_loop core `parseReport` 会把缺 `exit_code` 的非 SKIPPED 条目强制降级为 infra-failure）。
+- **不改动** Layer 1 / 1.5 / 2 现有验证逻辑，本模式仅在既有验证数据之上**额外**结构化落盘一份 JSON。
+- `smoke` 模式 Layer 2 = `tsc --noEmit` + `npx vitest run`；`full` 模式 Layer 2 = `npm run build` + lint + `repo:check`。
+
+**降级（由 goal_loop core 处理，非本子代理职责）**：若本轮无法产出合法 JSON（输出截断 / schema 非法 / 命令集为空），goal_loop core `parseReport` 将该轮标 `infra-failure`，编排器据此计入无进展/早停判定，绝不静默当达标。
+
 ## 约束
 
 - **不修改源代码**：验证是只读操作（Bash 命令仅为构建/测试，不含写操作）
