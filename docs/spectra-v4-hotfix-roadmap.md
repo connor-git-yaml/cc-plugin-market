@@ -1,5 +1,7 @@
 # Spectra v4.0.0 → v4.x 修复路线图
 
+> ✅ **历史归档（v4.x 时点）**：本路线图描述的 v4.0→v4.x 修复项均已完成并合入。保留作历史记录，**非当前活跃路线**。当前主线见 [milestone-M8](design/milestone-M8-trust-repair-and-drift-flagship.md)。
+
 > **来源**：Spectra v4.0.0 三方对比实测（micrograd + nanoGPT 双数据点）暴露的关键 bug
 > **创建日期**：2026-04-27
 > **状态**：Feature A 待启动 / Feature B、C 排期中

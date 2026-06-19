@@ -54,7 +54,9 @@
 | **M-101** Phase 2 — Reading Platform | ✅ Delivered | Graph schema v2.0 + Hyperedges · LLM cost transparency · SpecStore + sourceKind · TODO/Open Questions extraction · Natural language Q&A + interactive `graph.html` · Default model upgrade to Sonnet 4.6 / Opus 4.7 1M | [blueprint](specs/M-101-phase2-reading-platform/blueprint.md) · [postmortem](specs/M-101-phase2-reading-platform/postmortem.md) |
 | **M-102 / M-103** Phase 3 | 🟡 In Progress | Python AST function-level graph (v4.1) · E2E fixture infrastructure · large-project baseline · LLM concurrency optimizer | [proposal](specs/M-102-phase3/proposal.md) |
 | **M7** Spectra MCP Productization | ✅ Delivered | 17 MCP tools（统一 `{code}` 响应契约 + 全工具 telemetry）· file navigation + symbol fuzzy match · batch 默认增量 + byte-stable graph.json · 44 stdio E2E · spec-driver 4.2.1（委派硬约束）· SWE-Bench Verified 5-cohort 评测 | [milestone](docs/design/milestone-M7-spectra-mcp-productization.md) · [评测报告](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md) |
-| **M8** Trust Repair + Drift Flagship | 📋 Planning | 增量缓存正确性 · MCP 触发率工程 · FAIL_TO_PASS 评测 oracle · AST-anchored spec drift 旗舰启动 | [milestone](docs/design/milestone-M8-trust-repair-and-drift-flagship.md) |
+| **M8** Trust Repair + Drift Flagship | ✅ Delivered | 增量缓存正确性（混合大小写/混语言）· MCP 触发率工程 · 委派契约全 skill 单源化（F185）· FAIL_TO_PASS 评测 oracle（评测设施 v2）· `batch --mode graph-only`（纯 AST·零 LLM 建图）· `spectra --version` build 元数据 · **领域知识脚手架** `scaffold-kb` + KB MCP（doc-graph + FTS5 双层联查）· AST-anchored spec drift 原型（spec + prototype） | [milestone](docs/design/milestone-M8-trust-repair-and-drift-flagship.md) |
+
+> **M8 note** — Spectra release contract is bumped to **4.3.0** (F186: build-stamped `--version`, wrapper sha256 gate); the npm `spectra-cli` publish of 4.3.0 is staged pending explicit authorization. The M7 eval re-judge on the new FAIL_TO_PASS oracle is wired and ready to run.
 
 > **Honest benchmark note (M7, 2026-06)** — We ran a 150-run SWE-Bench Verified comparison (bare Claude Code vs Spec Driver vs Spec Driver + Spectra MCP vs SuperPowers vs GStack). After correcting a one-sided oracle bias (the fuzzy-match scorer penalized frameworks for writing tests — see [report §4.5](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md)), **all five cohorts tie on completion rate** within N=30 noise. Two honest signals: structured workflows cost **4-12× more tokens with no completion gain on single-file fixes**, and Spectra MCP's real gap is *adoption, not quality* — runs that actually called the MCP tools passed at 43% vs 12% for those that didn't, with the heaviest MCP usage producing the strongest single fix in the dataset. M8 targets exactly these: trigger-rate engineering + a real FAIL_TO_PASS execution oracle.
 
@@ -96,7 +98,7 @@ A hybrid AST + LLM pipeline that reverse-engineers source code into structured S
 - 🔍 **17 MCP tools** — graph queries (community / god-nodes / hyperedges / path) + agent context (impact / context / detect_changes with unified `{code}` error contract + per-call telemetry) + file navigation (token-efficient line-range reads, symbol fuzzy match) + pipeline (prepare / generate / batch / diff / panoramic-query)
 - 📊 **Interactive `graph.html`** — D3-force visualization with hyperedge convex hulls (self-contained, no server)
 - 💰 **LLM cost transparency** — `--dry-run` cost preview + `--budget N` enforcement + `tokenUsage` in every spec frontmatter
-- ⚡ **Lightweight modes** — `--mode reading` (skip product docs) / `--mode code-only` (skip all LLM, AST-only)
+- ⚡ **Lightweight modes** — `--mode reading` (skip product docs) / `--mode code-only` (skip enrichment, still per-module spec-gen LLM) / `--mode graph-only` (pure AST, zero LLM, no auth)
 - 🚧 **Technical debt extraction** — TODO/FIXME/HACK code comments + design-doc Open Questions
 - 🔄 **Continuous sync** — `spectra watch` (file watcher) or `spectra install` (post-commit hook)
 - 🌍 **Multi-language** — TS/JS (ts-morph) + Python (AST + tree-sitter) + Go/Java/Rust (tree-sitter)
@@ -167,7 +169,7 @@ This is **AI-for-AI architecture memory**: the AI never has to re-read your code
 - **Token economics** — Querying a 50K-token graph instead of re-reading 500K LOC saves 90%+ tokens per session
 - **Cross-session memory** — `_meta/graph.json` persists between Claude Code sessions; AI can ask "what changed since last time?"
 - **Multi-IDE compatible** — Same MCP server works for Claude Code, Cursor, Codex, Aider, OpenCode, etc.
-- **Hook-driven freshness** — `spectra install` registers a post-commit hook that incrementally rebuilds the graph; AI always queries the latest
+- **Hook-driven freshness** — `spectra install --git` registers a post-commit hook that incrementally rebuilds the graph; AI always queries the latest
 
 #### Trigger via auto-injection (PreToolUse hook)
 
@@ -322,6 +324,7 @@ Notes:
 ## Documentation
 
 - 📘 **[Spectra CLI Reference](docs/spectra-cli-reference.md)** — full command list, knowledge graph workflows, architecture pipeline diagram
+- 📚 **[Domain Knowledge Scaffold Guide](docs/scaffold-kb-guide.md)** — build a vendor doc KB (`scaffold-kb`), ship it as a plugin, query via KB MCP tools
 - 🎼 **[Spec Driver Modes](docs/spec-driver-modes.md)** — 8 modes detailed, sub-agents, generated artifacts, quality gates
 - ⚙️ **[Configuration](docs/configuration.md)** — model presets (`spec-driver.config.yaml`) + project-level orchestration overrides (`.specify/orchestration-overrides.yaml`)
 - 🏛️ **[Repository Architecture](docs/repository-architecture.md)** — `src/` layout, tech stack, testing, sync contracts

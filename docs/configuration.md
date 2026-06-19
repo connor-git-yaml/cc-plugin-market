@@ -120,6 +120,17 @@ plugins/spec-driver/              .specify/orchestration-overrides    on every s
 | `gates.<GATE_ID>` | Field-level merge | Override `default_behavior` / `severity` / `hard_gate_modes` per gate |
 | `parallel_scheduling.<field>` | Scalar replace | Tune `max_concurrent_tasks` etc. |
 
+> ⚠️ **`modes.<mode>.phases` runtime caveat (M8, Feature 185)**: a `modes.<mode>.phases`
+> override is **only consumed at runtime by `feature` mode**, which dynamically reads the
+> merged phase list via `get-phases`. The `fix` / `story` / `refactor` / `implement` skills
+> currently execute a phase sequence baked into their `SKILL.md`, so a phase override for those
+> modes **merges into the effective config (and shows up in `effective-orchestration`) but does
+> not yet change runtime execution**. `gates.*` overrides apply across modes via the gate
+> behavior lookup; `parallel_scheduling.*` currently only affects the dynamically orchestrated
+> `feature` mode (other modes follow the parallel groups baked into their `SKILL.md`).
+> Single-sourcing the non-feature modes' phase execution is tracked as follow-up work — until
+> then, treat phase overrides outside `feature` as advisory.
+
 ### 4-step workflow
 
 **Step 1** — Create the file in your project root:

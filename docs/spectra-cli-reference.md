@@ -17,8 +17,13 @@ spectra batch --force
 # Lightweight reading mode — skip product-doc generators, faster batch (F5)
 spectra batch --mode=reading
 
-# Pure AST mode — skip all LLM inference (F5)
+# Pure AST mode — skip enrichment layer (still calls per-module spec-gen LLM)
 spectra batch --mode=code-only
+
+# Graph-only mode — pure AST, zero LLM, no auth required, <2min scale (F195)
+# Builds call graph + knowledge graph → graph.json only; skips ALL spec-gen LLM.
+# Fastest way to bootstrap a graph in a fresh worktree.
+spectra batch --mode=graph-only
 
 # Generate interactive graph.html visualization after batch (F5)
 spectra batch --html
@@ -62,12 +67,21 @@ spectra export --format html --output docs/graph.html
 spectra watch
 
 # Cache management
-spectra cache --list
-spectra cache --clear
+spectra cache stats
+spectra cache clear
 
 # Dry-run cost estimation (Phase 2 F1)
 spectra batch --dry-run
 spectra batch --budget 50000 --on-over-budget cancel   # CI-friendly budget gate
+
+# Domain knowledge scaffold — build / query a vendor doc knowledge base (F190/F192)
+spectra scaffold-kb build (--dir <path> | --llms-txt <url>) [--output <kb/>] [--sdk-version <ver>] [--lang <code>] [--no-llm]
+spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) [--project-kb <path>] [--yes|--dry-run] [--no-llm]
+spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
+spectra scaffold-kb query --requirement "<need>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
+
+# Version (includes build commit suffix when build metadata is present — F186)
+spectra --version
 ```
 
 ## Knowledge Graph & Visualization
@@ -131,8 +145,10 @@ Keep docs and graph fresh automatically:
 # Watch mode — debounced incremental rebuild on file change
 spectra watch
 
-# Or install post-commit hook (triggers after every git commit)
-spectra install
+# Install the PreToolUse auto-injection hook (Claude Code), and add --git for the
+# git post-commit hook that incrementally rebuilds on every commit.
+spectra install          # PreToolUse hook only
+spectra install --git    # also installs the post-commit graph-rebuild hook
 ```
 
 ### Worktree Bootstrap & Keepalive (Feature 193)
@@ -165,7 +181,7 @@ later diverges, re-running the hook prints a non-blocking *stale* hint.
 activate one of the existing incremental paths:
 
 ```bash
-spectra install        # post-commit hook → incremental graph update after each commit
+spectra install --git  # post-commit hook → incremental graph update after each commit
 # or
 spectra watch          # debounced incremental rebuild on file save
 ```
@@ -173,6 +189,64 @@ spectra watch          # debounced incremental rebuild on file save
 Because the snapshot is portable (relative `fileHashes` keys), incremental updates resume
 correctly in the new worktree. If no snapshot was bootstrapped, the first commit safely
 falls back to a full reindex (then keepalive is incremental from there on).
+
+## Domain Knowledge Scaffold (`scaffold-kb`, Feature 190/192)
+
+While the knowledge graph above captures the **source-code side** of a project, `scaffold-kb`
+captures the **vendor-documentation side** (API reference, quick-start, error-code tables,
+version changelogs) — so an AI assistant can cite vendor docs as well as code.
+
+It builds a self-contained knowledge base under `kb/` (`doc-graph.json` document-structure
+graph + `chunks.sqlite` FTS5 full-text layer; F192 adds `api-entities.json` for structured
+API lookup), which a vendor can **package into a Claude Code plugin** and ship to integrators.
+
+### Build a KB from docs
+
+```bash
+# From a documentation directory…
+spectra scaffold-kb build --dir path/to/docs --output kb/
+
+# …or from an llms.txt URL
+spectra scaffold-kb build --llms-txt https://example.com/llms.txt --output kb/
+```
+
+`--no-llm` skips the optional LLM entity-extraction pass (heuristic-only). `--lang <code>`
+hints the tokenizer (CJK doc sets need this — `unicode61` does not word-segment Chinese).
+
+### Serve as an MCP server
+
+```bash
+spectra scaffold-kb serve --vendor-kb kb/ [--project-kb .spectra-kb/]
+```
+
+This exposes three KB MCP tools (reusing the Spectra MCP `{code}` contract + telemetry):
+
+| Tool | Purpose |
+|------|---------|
+| `kb_search` | Full-text search over doc chunks (vendor + project KB joined); returns chunks tagged with `[KB-EVIDENCE]` source/version provenance |
+| `kb_doc_lookup` | Document navigation by doc id / title keyword (title / summary / cross-references) |
+| `kb_api_lookup` | Structured API entity lookup by name (signature / params / deprecation / since-version) |
+
+> **Untrusted-evidence boundary**: KB content is consumed as *untrusted evidence* — every
+> result carries a source/version trace and a token cap. `kb_api_lookup` validates params and
+> deprecation **against the docs** (evidence-grade), not against the actually-installed SDK
+> code/version. Treat it as "what the docs say", not a code-level guarantee.
+
+### Ingest project-level knowledge
+
+```bash
+# Add a page / file / meeting-notes into the writable project KB
+spectra scaffold-kb ingest --url https://… --project-kb .spectra-kb/ --yes
+spectra scaffold-kb ingest --file notes.md --project-kb .spectra-kb/ --dry-run
+```
+
+The **vendor KB is read-only** (frozen at package time); the **project KB is read-write**
+(maintained by integrators). `kb_search` joins both layers and adds a freshness hint when the
+same doc appears in both (both results are always shown — no silent pick); structured conflict
+arbitration is at the API-entity level via `kb_api_lookup`.
+
+> Full how-to (build → package as a plugin → integrator open-box query): see
+> [Domain Knowledge Scaffold Guide](scaffold-kb-guide.md).
 
 ## Architecture
 
@@ -239,17 +313,27 @@ Use this to debug "why is module X so expensive" — typically the `contextAssem
 
 ## Authentication
 
-Two modes, auto-detected:
+Three modes, auto-detected (priority ordered dynamically by runtime):
 
 | Mode | Setup | Use case |
 |------|-------|----------|
-| **API Key** | `export ANTHROPIC_API_KEY=sk-...` | Direct API access, takes priority |
-| **Claude CLI proxy** | `claude auth login` | Subscription-based, no API key required |
+| **API Key** | `export ANTHROPIC_API_KEY=sk-...` | Direct SDK access |
+| **Claude Code CLI** | `claude auth login` | Claude subscription, no API key required (CLI proxy) |
+| **Codex CLI** | `codex login` | Codex subscription login state (CLI proxy) |
 
 Verify with `spectra auth-status --verify`.
+
+## Version & build metadata
+
+`spectra --version` reports the package version with a **build commit suffix** when build
+metadata (`.spectra-build-meta.json`) is present (Feature 186) — this lets you tell two
+binaries of the same package version apart (e.g. a stale global install vs. a fresh build).
+In a dev environment that has not run the build-stamping step, it gracefully falls back to the
+bare version string.
 
 ## See Also
 
 - [Knowledge Graph & MCP Tools (in main README)](../README.md#-how-ai-coding-assistants-use-spectra)
+- [Domain Knowledge Scaffold Guide](scaffold-kb-guide.md) — build & ship a vendor KB plugin
 - [Spec Driver Configuration](configuration.md)
 - [Repository Architecture](repository-architecture.md)

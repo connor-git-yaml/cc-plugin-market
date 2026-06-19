@@ -1,5 +1,7 @@
 # Spectra v4.1 — MapReduce 架构设计
 
+> ✅ **历史归档（v4.1 时点）**：本架构已在 Feature 140（v4.1.0）落地。保留作历史设计记录，**非当前活跃计划**。当前主线见 [milestone-M8](design/milestone-M8-trust-repair-and-drift-flagship.md)。
+
 > **状态**：设计定稿，作为 Feature 140 的技术架构基础
 > **创建**：2026-04-28
 > **配套文档**：[Feature 140 规划](./spectra-v4.1-feature-b-plan.md)（业务范围）

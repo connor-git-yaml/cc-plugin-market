@@ -175,9 +175,30 @@ Customize gate behavior per project via [orchestration overrides](configuration.
 /spec-driver:spec-driver-feature --preset quality-first "..."   # temp model preset override
 ```
 
-## v4.0 Breaking Changes
+## Delegation contract (M8, Feature 185)
 
-The 9 atomic commands (`/spec-driver.specify` etc.) have been removed in v4.0. See [migration guide](migrations/skill-deprecation.md).
+Every **output-producing phase** (specify / plan / tasks / implement / verify, and any phase
+that generates a code or doc artifact) **must** be delegated to its sub-agent via the Task
+tool. The orchestrator is forbidden from inlining these phases for any reason — "small impact",
+"simple fix", "saving time", "user didn't ask for multi-agent" are explicitly not exemptions.
+Sub-agents carry tool configurations and scoped prompts (e.g. the implement sub-agent's
+code-intelligence MCP tools) that inline execution would silently lose.
+
+The orchestrator may only execute, in-line, a fixed set of non-producing steps that are
+**statically declared in each skill's source**: problem diagnosis, requirement/context scans,
+constitution & spec/plan contract pre-checks, the **decision** at a named `GATE_*` checkpoint,
+and steps each skill marks "此阶段由编排器亲自执行" (e.g. story's constitution check and
+orchestrator-side verification). The only degradation path is a **real, failed Task call**
+(error evidence must be retained), which is then flagged `[DEGRADED: inline-execution …]` in
+the final report.
+
+Feature 185 hardened this into a single source of truth — `plugins/spec-driver/templates/delegation-contract.md`
+is injected into all five orchestrator skills (`fix` / `story` / `feature` / `implement` /
+`resume`) by `sync-delegation-contract.mjs`, and `repo:check` enforces both block-sync drift
+detection and an "orchestrator frontmatter model must be `opus`" assertion across every mode
+(including `resume`, whose orchestrator was previously `sonnet` and had no contract block at all).
+The machine-enforced set is exactly these five orchestrator skills; `refactor` is not yet in the
+injected/checked list (its delegation guidance lives in its own `SKILL.md`).
 
 ## See Also
 

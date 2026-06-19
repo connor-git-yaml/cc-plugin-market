@@ -1,5 +1,7 @@
 # Feature 140 — Spectra v4.1.0 文档生产线质量重构
 
+> ✅ **历史归档（v4.1 时点）**：Feature 140（v4.1.0 MapReduce 文档生产线）已实现并发布。本文档保留作历史设计记录，**非当前活跃计划**。当前主线见 [milestone-M8](design/milestone-M8-trust-repair-and-drift-flagship.md)。
+
 > **状态**：规划已定稿（Open Questions Q1-Q15 全部决议完毕，可随时启动 `/spec-driver-feature`）
 > **创建**：2026-04-27 | **最后更新**：2026-04-28（v3 — MapReduce 架构升级）
 > **前置**：Feature 135（v4.0.1 hotfix）已合入 master
