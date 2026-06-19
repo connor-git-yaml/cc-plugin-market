@@ -22,7 +22,19 @@ amendment_2026-06-14: ① F195✅/F187✅/F189✅ ship（三线并行合入，me
 - **F189✅** 点锚 prototype 11/11 场景，symbol 级指纹（升级 file-level）消除同文件连累，路线选型诚实（不 over-claim 低误报）。遗留 W：**前导 JSDoc/注释变更静默判 fresh**（span 自 export 声明行起，ts-morph getStartLineNumber 排除前导 trivia），与"注释变化仍触发 stale"三处文案矛盾（实为 under-report，方向反）→ 修文案
 - **F187✅** oracle 真实执行（SWE-L003 docker 42s）+ 三分类 error→null 剔分母 + registry 单源 throw + golden 锁竞品方法论。⚠️ **审查挖出 6 真实缺陷（2C+4W），全部"休眠"——仅 F188 真跑 swebench-execution oracle（默认 gated off）时咬人**：🔴[3] classify-oracle:79 OOM/`\bKilled\b` 启发式短路在 report 权威判定:84 前 → 日志含"Killed"/exit137 的真实 resolved=true PASS 被洗成 fail/candidate，跨 cohort 不对称污染排名；🔴[5] freeze-preregistration.mjs（唯一生产冻结工具）从不写 oracleSpecHash/fixtureContentHash/promptSha256 → swebench 预注册门禁:157 必 hard-fail（校验侧焊死/生产侧无法满足，T026 未做）；W[4] swebench-oracle:123 硬编码 Lite，Verified 8/10 实例不在 Lite → 静默剔分母缩 N → lift/CI 失真；W[6] promptSha256 write-only 不比对；W[7] FR-005-d（gitCommit==HEAD/worktree-clean）未实现；W[8] oracleSpecHash 不覆盖 runner 候选-patch 抽取:922 →"改判分输入 hash 不变"反例
 - **处置**：6 个 F187 缺陷 = **F188 前置阻断**（F187 verify 报告本已声明 freeze/全量跑批留 F188）→ 立 **F197 评测公正性收口（spec-driver-fix，仅 scripts/，~1-2d）必须先于 F188**；F195 synopsis 修复并入 F186（同碰 cli/index.ts）；F189 文案修并入 F189 残留/M9；cli-e2e dist/ write-read race flake 列 test-infra 候选（非回归）
-执行顺序: …→ F195✅(graph-only) → F187✅(eval v2) → F189✅(drift 原型) → **F197(F187 公正性收口·先于 F188)** → F186(npm+synopsis) → F190(KB) → F188(需 F197)∥F191 → F192(收官)
+amendment_2026-06-19: 大批量 ship + 🔴编号漂移校正 + 调研沉淀。
+- ① 上轮派发三线全 ship + 体检（spot-check 两最高风险件，均高质量）：
+  - **F197✅** 评测公正性收口——6 缺陷（C1-C2/W1-W4）+ fixtureContentHash critical 全闭合；spot-check 确认 classify-oracle.mjs:83-86 report 权威已上移到 OOM/`\bKilled\b` 启发式(:88)前（我上轮挖的 C1 排名污染真修了）；4522 测绿
+  - **F186✅** 分发可靠性——contract bump 4.3.0 + wrapper body-sha256 + --version build 元数据 + 3 脱敏 + ESM 死代码修 + F195 synopsis 修；⚠️ **实际 npm publish 未做**（对外不可逆操作，待显式授权才发）
+  - **F190✅** scaffold-kb MVP（doc-graph + FTS5 + KB MCP 双层联查）
+- ② 🔴 **编号漂移校正**：实际 ship 的 F191/F192 ≠ 本 plan 原定 F191(全期 review)/F192(doc 收口)——KB 轨道扩张占用了这两个号：
+  - **F191✅** = scaffold-kb research 预查注入 Phase 1.5（kb-prequery.mjs 跨插件确定性注入 spec-driver feature/story flow），**非**全期 review
+  - **F192✅** = scaffold-kb Phase 2（API 实体层 + 三方导入[office-parser + SSRF url-fetcher] + 冲突仲裁 + kb_api_lookup，1941 行新码），**非**doc 收口；spot-check：url-fetcher SSRF 防线完备（协议白名单 + IP literal 显式校验防经典绕过 + 逐跳 redirect 重校验）
+  - **KB 轨道（Track C）实形态**：F190 MVP → F191 注入 → F192 Phase2 = domain-knowledge-scaffold 方案 Phase 1+2 全落地（远超原 plan 单 feature「Phase 1 MVP」，是 M8 最大计划外扩张）
+- ③ 计划外 ship：**F198✅/F199✅**（spec-driver/orchestration zod 缺失优雅降级，共享 load-zod helper）；**F176✅** swebench-execution 预注册冻结 + 5 cohort smoke PASS（F188 跑批前置已就位）
+- ④ 剩余收尾重新认定（原 F191/F192 号已被 KB 占用）：**F188**（eval 重判+复测，前置 F176 冻结 + F197 公正性修复均就位，可跑·烧配额派发前确认）；**全期架构 review** 由 milestone-next 每轮对抗审查 workflow 替代（上轮 6 维度 wf_c4c0461a + 本轮 spot-check），如需正式收口报告另立新号；**doc 收口**（npm 4.3.0 / KB 新 CLI+MCP / 委派契约 / agent-mainline-focus.md 漂移）另立新号
+- ⑤ 调研沉淀（2026-06-19 三方向 detailed 调研，见 §5 M9 候选）：路线确认「站在风口」，新增 3 增强方向 + Goal 自主推进可行性判断
+执行顺序: …→ F195✅ → F187✅ → F189✅ → F197✅(公正性收口) → F186✅(npm 4.3.0 staged·未 publish) → F190✅/F191✅/F192✅(KB Phase1+2) → F198✅/F199✅ → F176✅(F188 前置) → **F188(eval 复测·就绪待派)** → 收尾(全期 review 循环式已做 + doc 收口另立号)
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
@@ -228,3 +240,13 @@ F192 文档收口 (1-1.5d)                  ← F191 后（吸收文档类发现
 - projectRoot 信任模型统一（11 工具 client-settable vs file-nav pinned）：对抗验证判安全危害有限，M9 做一次性决策
 - aider personalized PageRank / Spec Kit analyze gate / Conductor 条件路由 / Codanna RRF / Augment 时间维度 / live watching（M7-stepback 既定，维持 defer）
 - graph_hyperedges pretty-print 等 envelope 细碎不一致（info 级，攒批处理）
+
+### 5.1 调研沉淀（2026-06-19 三方向 detailed 调研 → M9 候选）
+
+三方向调研（Perplexity detailed）结论：**Spectra（AST 图谱）+ Spec Driver（spec→plan→tasks→implement→verify）双线均"站在风口"**，业界共识与我们路线一致；无需方向性调整，但浮现 3 个**增强**方向值得列 M9 候选：
+
+- **M9 候选 · GraphRAG 排序 + 语义检索叠加**：业界共识 = AST 图谱是 repo-level 理解的 source-of-truth（覆盖率/可验证/多跳 grounding 压倒 embedding RAG），但单纯图谱 + 单纯 agentic grep 各有短板；前沿是在图谱基座上叠加 **symbol-level 语义检索 + GraphRAG 排序**（Sourcegraph Cody / Graph-Code / Omnigrep 路线）。我们已有图基座，缺语义检索层——与 F190 KB 的 FTS5/向量 rerank 升级路径同构，可合流。参照：Omnigrep 在 CodeSearchEval 以 agentic+图混合刷 SOTA（F0.5 +33%）
+- **M9 候选 · context-grounding hooks（对齐 Spec Kit Agents 2026）**：业界最新 = GitHub **Spec Kit Agents**（32 repo/128 feature 实证）在 spec→design→verify 各阶段加 "discovery + validation context-grounding hooks"（Agent 显式浏览仓库结构/现有实现作为约束），review 质量显著提升、~100% 测试通过。这正是 **Spectra×Spec Driver 的协同点**——把 Spectra impact/context 作为 spec-driver 各 phase 的 grounding 注入（F191 KB 预查注入已开此路，可泛化到 graph context）
+- **M9 候选 · tests-as-spec 强化验收**：业界共识 = 验收标准应可执行（observable/atomic/bounded + repo anchor + assertion anchor），且 **TDAD 实证：仅"先写测试"prompt 而无依赖图上下文会让回归率 6.08%→9.94%（更糟）**——结构化 impact 上下文是自主 TDD 不退化的前提。我们的 graph impact 恰好提供此上下文 → 强协同（详见 Goal 自主推进可行性，下）
+
+**Goal 自主推进可行性判断**（回应"用测试集 + Goal loop 推进 Milestone"）：可行且对我们**特别**契合——治理共识 = "分支内无人值守自主迭代 + 人在环最终把关 + 沙箱/审计/最小权限/kill switch"；我们已具备最难的两半（Spec Driver = 护栏+gate，Spectra impact = TDAD 证明必需的结构化上下文），缺的只是 Goal loop driver（autoresearch skill）+ 每任务可执行测试集。边界：适合**有界**任务（well-bounded fix / 测试补齐），不适合烧钱评测（F188）或架构级 feature（F192 类）；风险 = reward hacking/测试过拟合/长程局部最优，用我们既有的 Codex 对抗审查 + verify 阶段兜底。建议 M9 做**单任务 pilot** 验证收敛性，不直接全自动化 Milestone
