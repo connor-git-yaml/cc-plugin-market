@@ -27,7 +27,6 @@ import { runInstall } from './commands/install.js';
 import { runExportCommand } from './commands/export.js';
 import { runDirectionAuditCommand } from './commands/direction-audit.js';
 import { runIndexCommand } from './commands/index.js';
-import { runScaffoldKb } from './commands/scaffold-kb.js';
 import { bootstrapRuntime } from '../runtime-bootstrap.js';
 
 // 读取 package.json 版本号
@@ -207,9 +206,11 @@ async function main(): Promise<void> {
     case 'index':
       await runIndexCommand(command);
       break;
-    case 'scaffold-kb':
+    case 'scaffold-kb': {
+      const { runScaffoldKb } = await import('./commands/scaffold-kb.js');
       await runScaffoldKb(command);
       break;
+    }
     case 'mcp-server':
       await runMcpServer(command);
       break;
