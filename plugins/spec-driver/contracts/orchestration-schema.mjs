@@ -96,7 +96,7 @@ if (zodAvailable) {
    *
    * 关键观察（来自 orchestration.yaml 实际字段）：
    *   - agent: null | string | string[]（三种形态）
-   *   - agent_mode: inline | single | parallel_group | gate | orchestrator_verify | batch_loop
+   *   - agent_mode: inline | single | parallel_group | gate | orchestrator_verify | batch_loop | goal_loop
    *   - gates_before / gates_after: null | string[]（nullable，非 optional）
    *   - conditional / skip_if_exists: null | string（nullable）
    *   - is_critical: boolean
@@ -112,6 +112,8 @@ if (zodAvailable) {
       z.array(z.string()),
     ]),
     // agent_mode 枚举——来自 orchestration.yaml 实际值
+    // goal_loop（Feature 201）：feature mode implement phase 的可迭代闭环模式，
+    // base 默认不启用（feature implement 仍为 single），仅经 overrides 整段替换激活
     agent_mode: z.enum([
       'inline',
       'single',
@@ -119,11 +121,12 @@ if (zodAvailable) {
       'gate',
       'orchestrator_verify',
       'batch_loop',
+      'goal_loop',
     ], {
       error_map: (issue) => {
         if (issue.code === 'invalid_enum_value') {
           return {
-            message: `agent_mode 不合法：期望 [inline|single|parallel_group|gate|orchestrator_verify|batch_loop]，实际为 "${issue.received}"`,
+            message: `agent_mode 不合法：期望 [inline|single|parallel_group|gate|orchestrator_verify|batch_loop|goal_loop]，实际为 "${issue.received}"`,
           };
         }
         return { message: issue.message };

@@ -1,0 +1,46 @@
+{
+  "round": 1,
+  "timestamp": "2026-06-20T10:00:00Z",
+  "verify_mode": "full",
+  "wall_seconds": 30.1,
+  "layer2_commands": [
+    {
+      "name": "npm run build",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 18.0,
+      "output_summary": "Build succeeded, 0 errors",
+      "skipped_reason": null
+    },
+    {
+      "name": "npm run lint",
+      "exit_code": null,
+      "status": "SKIPPED",
+      "duration_seconds": 0,
+      "output_summary": "lint 工具未安装，跳过",
+      "skipped_reason": "tool_not_installed"
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 12,
+    "p1_covered": 12,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": []
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "P1 FR 证据齐备，但 layer2 含 SKIPPED 命令"
+  },
+  "regression_check": {
+    "previously_passing_commands": ["npm run build"],
+    "now_failing": [],
+    "regression_detected": false
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 1,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "net_loc_delta": 12
+  }
+}

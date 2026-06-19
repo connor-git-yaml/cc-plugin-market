@@ -1,0 +1,268 @@
+# ═══════════════════════════════════════════════════════════════
+# goal_loop golden override 模板（Feature 201，FR-016）
+# ═══════════════════════════════════════════════════════════════
+#
+# 【使用方法】
+#   1. 把本文件**整段内容**复制到项目根的 `.specify/orchestration-overrides.yaml`
+#   2. 该 override 会激活 feature mode implement phase 的 goal_loop 闭环
+#      （metric 驱动的 implement→verify 自主迭代，详见 feature SKILL.md「goal_loop 闭环编排」）
+#   3. 验证生效：
+#        node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration feature --annotate
+#      预期：implement phase 的 agent_mode 为 goal_loop。
+#      注意（W6 修正）：本模板内容与 base 等价，但因 resolver 对 modes.feature 是**整段替换**语义，
+#      解析后所有 phase 的 source 均标注为 overrides（**非部分继承 base**）——不要误以为只有 implement 一处来自 overrides。
+#   4. goal_loop 预算/迭代参数（max_iterations 等）在 spec-driver.config.yaml 的 goal_loop 段配置。
+#
+# 【激活边界（W7）】
+#   本模板仅声明 implement phase 的 agent_mode=goal_loop **标签**；goal_loop 的 runtime dispatch
+#   分支（实际的 implement→verify 自主迭代闭环）在 feature SKILL.md（Feature 201 Phase B/C 实现）。
+#   在 Phase B/C 落地前，复制本模板只改变 effective config 的标签，不会触发闭环行为。
+#
+# 【整段替换语义（重要）】
+#   resolver 对 modes.<mode> 是**整段替换**、**不继承 base**（见 orchestration-resolver.mjs）。
+#   因此本模板必须携带 feature mode 的**完整 phase 列表**（与 base orchestration.yaml 逐字段一致），
+#   仅把 implement phase（id="6"）的 agent_mode 从 single 改为 goal_loop。
+#   若删减任何 phase，feature 编排会缺步骤；若改动其他字段，会偏离 base 行为。
+#
+# 【漂移风险（FR-016 诚实标注）】
+#   整段替换是 MVP 折中：当 base orchestration.yaml 的 feature phase 序列未来变更时，
+#   已复制的本 override 会**静默漂移**（仍跑旧 phase 序列）。两道防线：
+#     - 本模板携带 version 字段（须与 base orchestration.yaml 的 version 一致）；
+#       version 不一致时 resolver 发出 orchestration-overrides.version-mismatch warning 并降级回 base。
+#     - CI 测试（T-GL-03b）直接 parse **本模板文件本体**，断言除 implement.agent_mode 外与 base
+#       逐字段等价；base 改了而本模板没跟会失败（守护模板本体，非仅守护测试 fixture）。
+#   phase 序列单源化（消除整段替换漂移）留后续 milestone（spec Out of Scope #2）。
+#   base feature phase 序列变更后，请重新依据最新 base 生成本模板（或运行 generate-template feature 后改 implement）。
+#
+# 【reward hacking 残留风险声明（FR-023）】
+#   goal_loop 的职责分离（独立 verify 子代理实跑命令、不接受 implement 自报达标）堵死了
+#   "implement 自证达标"通道，但**无法阻止 implement 子代理篡改测试本身使其 trivially 变绿**
+#   （测试过拟合 / 长程局部最优）。这是诚实记录的残留风险，缓解依赖：
+#     - GATE_VERIFY（always / critical）人工终局收口（每次都看到完整迭代日志和最终改动）
+#     - Layer 1.5 证据状态（COMPLIANT 要求实际执行证据）
+#     - Codex 对抗审查（每 phase commit 前运行）
+#   GATE_IMPLEMENT_MID 默认 on_failure / non_critical（仅 implement mode），goal_loop 不把它
+#   当作护栏；如未来要依赖它须在 override 中显式升级为 always / critical，否则不得当强护栏宣称。
+#
+# version 必须与 base orchestration.yaml 的 version 一致（当前 base = "1.0"）
+version: "1.0"
+
+modes:
+  feature:
+    name: "Spec-Driven Development（完整 10 阶段）"
+    description: "包含完整的调研、规范、规划、实现、验证流程"
+    phases:
+      # Phase 0: 宪法检查
+      - id: "0"
+        name: constitution_check
+        display_name: 项目宪法检查
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 0.5: 调研模式确定
+      - id: "0.5"
+        name: research_mode_determination
+        display_name: 调研模式确定
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 1a: 产品调研（RESEARCH_GROUP 成员）
+      - id: "1a"
+        name: product_research
+        display_name: 产品调研
+        agent: product-research
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: "research_mode in [full, product-only]"
+        skip_if_exists: "research/product-research.md"
+        is_critical: false
+
+      # Phase 1b: 技术调研（RESEARCH_GROUP 成员）
+      - id: "1b"
+        name: tech_research
+        display_name: 技术调研
+        agent: tech-research
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: "research_mode in [full, tech-only, codebase-scan, custom]"
+        skip_if_exists: "research/tech-research.md"
+        is_critical: false
+
+      # Phase 1c: 产研汇总（RESEARCH_GROUP 汇合点）
+      - id: "1c"
+        name: research_synthesis
+        display_name: 产研汇总
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after:
+          - GATE_RESEARCH
+        conditional: "research_mode in [full]"
+        skip_if_exists: "research/research-synthesis.md"
+        is_critical: false
+
+      # Phase 1d: 在线调研补充
+      - id: "1d"
+        name: online_research
+        display_name: 在线调研补充
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: "online_research_required == true"
+        skip_if_exists: "research/online-research.md"
+        is_critical: false
+
+      # Phase 2: 需求规范
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before:
+          - GATE_RESEARCH
+        gates_after: null
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      # Phase 3: 需求澄清 + 质量检查（并行 DESIGN_PREP_GROUP）
+      - id: "3"
+        name: clarify_and_checklist
+        display_name: 需求澄清 + 质量检查
+        agent:
+          - clarify
+          - quality_checklist
+        agent_mode: parallel_group
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 3.5: GATE_DESIGN（编排器执行）
+      - id: "3.5"
+        name: gate_design
+        display_name: 规范质量门禁
+        agent: null
+        agent_mode: gate
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 4: 技术规划
+      - id: "4"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      # Phase 5: 任务分解
+      - id: "5"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      # Phase 5.5: 一致性分析 + GATE_ANALYSIS
+      - id: "5.5"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 6: 代码实现 —— goal_loop 激活点（本模板唯一与 base 不同的字段）
+      # base 默认 agent_mode: single；此处改为 goal_loop 以启用 implement→verify 自主迭代闭环。
+      - id: "6"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: goal_loop
+        gates_before:
+          - GATE_TASKS
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 6.5: 编排器独立验证
+      - id: "6.5"
+        name: verify_independent
+        display_name: 编排器独立验证
+        agent: null
+        agent_mode: orchestrator_verify
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7a: Spec 合规审查（VERIFY_GROUP 成员）
+      - id: "7a"
+        name: spec_review
+        display_name: Spec 合规审查
+        agent: spec-review
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7b: 代码质量审查（VERIFY_GROUP 成员）
+      - id: "7b"
+        name: quality_review
+        display_name: 代码质量审查
+        agent: quality-review
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7c: 工具链验证 + 证据核查（VERIFY_GROUP 汇合点）
+      - id: "7c"
+        name: verify
+        display_name: 工具链验证 + 证据核查
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: "verification/verification-report.md"
+        is_critical: true

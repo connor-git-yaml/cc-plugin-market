@@ -1,0 +1,225 @@
+# 测试 fixture（Feature 201 T-GL-02/03/04）：goal_loop override —— modes.feature 整段替换。
+# 因 resolver 整段替换语义不继承 base，fixture 必须含完整 feature phase 列表；
+# 仅 implement phase（id="6"）agent_mode 改为 goal_loop，其余与 base orchestration.yaml 逐字段等价。
+# version 与 base 一致（"1.0"），供 T-GL-04 测 version 一致路径。
+version: "1.0"
+
+modes:
+  feature:
+    name: "Spec-Driven Development（完整 10 阶段）"
+    description: "包含完整的调研、规范、规划、实现、验证流程"
+    phases:
+      # Phase 0: 宪法检查
+      - id: "0"
+        name: constitution_check
+        display_name: 项目宪法检查
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 0.5: 调研模式确定
+      - id: "0.5"
+        name: research_mode_determination
+        display_name: 调研模式确定
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 1a: 产品调研（RESEARCH_GROUP 成员）
+      - id: "1a"
+        name: product_research
+        display_name: 产品调研
+        agent: product-research
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: "research_mode in [full, product-only]"
+        skip_if_exists: "research/product-research.md"
+        is_critical: false
+
+      # Phase 1b: 技术调研（RESEARCH_GROUP 成员）
+      - id: "1b"
+        name: tech_research
+        display_name: 技术调研
+        agent: tech-research
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: "research_mode in [full, tech-only, codebase-scan, custom]"
+        skip_if_exists: "research/tech-research.md"
+        is_critical: false
+
+      # Phase 1c: 产研汇总（RESEARCH_GROUP 汇合点）
+      - id: "1c"
+        name: research_synthesis
+        display_name: 产研汇总
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after:
+          - GATE_RESEARCH
+        conditional: "research_mode in [full]"
+        skip_if_exists: "research/research-synthesis.md"
+        is_critical: false
+
+      # Phase 1d: 在线调研补充
+      - id: "1d"
+        name: online_research
+        display_name: 在线调研补充
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: "online_research_required == true"
+        skip_if_exists: "research/online-research.md"
+        is_critical: false
+
+      # Phase 2: 需求规范
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before:
+          - GATE_RESEARCH
+        gates_after: null
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      # Phase 3: 需求澄清 + 质量检查（并行 DESIGN_PREP_GROUP）
+      - id: "3"
+        name: clarify_and_checklist
+        display_name: 需求澄清 + 质量检查
+        agent:
+          - clarify
+          - quality_checklist
+        agent_mode: parallel_group
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 3.5: GATE_DESIGN（编排器执行）
+      - id: "3.5"
+        name: gate_design
+        display_name: 规范质量门禁
+        agent: null
+        agent_mode: gate
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 4: 技术规划
+      - id: "4"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      # Phase 5: 任务分解
+      - id: "5"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      # Phase 5.5: 一致性分析 + GATE_ANALYSIS
+      - id: "5.5"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 6: 代码实现 —— goal_loop 激活点（本模板唯一与 base 不同的字段）
+      # base 默认 agent_mode: single；此处改为 goal_loop 以启用 implement→verify 自主迭代闭环。
+      - id: "6"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: goal_loop
+        gates_before:
+          - GATE_TASKS
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      # Phase 6.5: 编排器独立验证
+      - id: "6.5"
+        name: verify_independent
+        display_name: 编排器独立验证
+        agent: null
+        agent_mode: orchestrator_verify
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7a: Spec 合规审查（VERIFY_GROUP 成员）
+      - id: "7a"
+        name: spec_review
+        display_name: Spec 合规审查
+        agent: spec-review
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7b: 代码质量审查（VERIFY_GROUP 成员）
+      - id: "7b"
+        name: quality_review
+        display_name: 代码质量审查
+        agent: quality-review
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      # Phase 7c: 工具链验证 + 证据核查（VERIFY_GROUP 汇合点）
+      - id: "7c"
+        name: verify
+        display_name: 工具链验证 + 证据核查
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: "verification/verification-report.md"
+        is_critical: true

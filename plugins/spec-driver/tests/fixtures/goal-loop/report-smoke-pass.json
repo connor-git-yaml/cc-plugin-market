@@ -1,0 +1,46 @@
+{
+  "round": 1,
+  "timestamp": "2026-06-20T10:00:00Z",
+  "verify_mode": "smoke",
+  "wall_seconds": 38.5,
+  "layer2_commands": [
+    {
+      "name": "tsc --noEmit",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 6.2,
+      "output_summary": "类型检查通过，0 errors",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 31.0,
+      "output_summary": "All tests passed: 312 passed",
+      "skipped_reason": null
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 12,
+    "p1_covered": 12,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": []
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "smoke 轮 P1 FR 证据齐备（达标前仍需 full 重判）"
+  },
+  "regression_check": {
+    "previously_passing_commands": ["tsc --noEmit", "npx vitest run"],
+    "now_failing": [],
+    "regression_detected": false
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 2,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "net_loc_delta": 24
+  }
+}

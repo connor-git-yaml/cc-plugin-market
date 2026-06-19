@@ -306,6 +306,14 @@ modes:
         is_critical: false
 
       # Phase 6: 代码实现
+      # agent_mode: single 为 base 默认 —— 单次委派 implement 子代理（Feature 201 默认关闭 goal_loop）。
+      # 可选 goal_loop（Feature 201）：把单次 implement→verify 包装成 metric 驱动的自主迭代闭环。
+      #   - 默认关闭：base 此处保持 single；goal_loop 不在 base 启用（FR-015）。
+      #   - 激活方式：仅经 .specify/orchestration-overrides.yaml 的 modes.feature 整段替换，
+      #     把本 implement phase 的 agent_mode 改为 goal_loop（feature 是唯一运行时消费 YAML phases 的 mode）。
+      #   - golden 模板：见 plugins/spec-driver/templates/goal-loop-override-template.yaml
+      #     （含完整 feature phase 列表，仅本 phase 改 goal_loop；整段替换语义不继承 base）。
+      #   - 循环逻辑在 feature SKILL.md 的「goal_loop 闭环编排」小节（声明性标签 + 散文编排）。
       - id: "6"
         name: implement
         display_name: 代码实现

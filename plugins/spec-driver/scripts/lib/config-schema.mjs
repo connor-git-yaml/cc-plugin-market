@@ -98,6 +98,22 @@ if (zodAvailable) {
     show_stage_summary: z.boolean().default(true),
   }).optional();
 
+  // goal_loop 段（Feature 201）：feature mode goal_loop agent_mode 的预算/迭代配置。
+  // 用 .default({}) 而非 .optional()：省略该段时 z.object 会用四项各自 default 填全，
+  // 使 validateConfig 输出始终含 goal_loop.* 全默认值（W2 修复——避免运行时读到 undefined 而非 5）。
+  // 四项均带 default —— 不破坏现有 config 校验（未声明该段的现有 config 仍通过，只是补默认）。
+  // 仅在 .specify/orchestration-overrides.yaml 启用 goal_loop 时被编排器读取（FR-005/006/007）。
+  const goalLoopSchema = z.object({
+    // 最大迭代轮数上限（FR-005），到顶且未达标则停止进 GATE_VERIFY
+    max_iterations: z.number().int().min(1).default(5),
+    // 连续无进展（五维 delta 全 0）轮数触发早停（FR-006）
+    no_progress_max_rounds: z.number().int().min(1).default(2),
+    // 单轮 verify 墙钟上限（秒，FR-007）——timeout 强制、可机器校验，主预算
+    max_verify_seconds: z.number().positive().default(300),
+    // 单轮编排器可见委派/调用数上限（FR-007）——best-effort 粗粒度安全网，辅助上限
+    max_tool_invocations: z.number().int().min(1).default(50),
+  }).default({});
+
   specDriverConfigSchema = z.object({
     preset: z.enum(['balanced', 'quality-first', 'cost-efficient']).default('balanced'),
     agents: agentsSchema,
@@ -111,6 +127,7 @@ if (zodAvailable) {
     gates: gatesSchema,
     retry: retrySchema,
     progress: progressSchema,
+    goal_loop: goalLoopSchema,
   }).strict();
 }
 
@@ -136,6 +153,12 @@ export const BUILTIN_DEFAULTS = {
   'model_compat.runtime': 'auto',
   'codex.service_tier': 'fast',
   'codex_thinking.default_level': 'xhigh',
+  // goal_loop 默认值（Feature 201，W2 修复）——与 goalLoopSchema 各项 default 一致，
+  // 使 resolveEffectiveConfig 在 config 省略 goal_loop 段时也 surface 默认值。
+  'goal_loop.max_iterations': 5,
+  'goal_loop.no_progress_max_rounds': 2,
+  'goal_loop.max_verify_seconds': 300,
+  'goal_loop.max_tool_invocations': 50,
 };
 
 /** preset 默认值表 */
@@ -242,7 +265,7 @@ export function suggestField(unknown, knownFields) {
 const KNOWN_TOP_LEVEL_FIELDS = [
   'preset', 'agents', 'model_compat', 'codex', 'codex_thinking',
   'research', 'verification', 'quality_gates', 'gate_policy',
-  'gates', 'retry', 'progress',
+  'gates', 'retry', 'progress', 'goal_loop',
 ];
 
 /**
@@ -326,11 +349,13 @@ export function validateConfig(parsedYaml) {
         path,
       });
     } else if (issue.code === 'too_small' && issue.type === 'number') {
-      // 正整数校验（如 timeout）
+      // 数值下界校验（如 timeout / goal_loop.* 预算项）。
+      // 部分字段允许小数（如 goal_loop.max_verify_seconds 用 z.number().positive()），
+      // 故文案统一用"正数"而非"正整数"，避免误导（W3 修复）。
       diagnostics.push({
         level: 'error',
         code: 'config.invalid-positive-int',
-        message: `\`${path}\` 必须为正整数，当前值: ${issue.minimum !== undefined ? `< ${issue.minimum}` : '非法'}`,
+        message: `\`${path}\` 必须为正数，当前值: ${issue.minimum !== undefined ? `< ${issue.minimum}` : '非法'}`,
         path,
       });
     } else {
@@ -413,6 +438,10 @@ export function resolveEffectiveConfig(options) {
     'model_compat.runtime',
     'codex.service_tier',
     'codex_thinking.default_level',
+    'goal_loop.max_iterations',
+    'goal_loop.no_progress_max_rounds',
+    'goal_loop.max_verify_seconds',
+    'goal_loop.max_tool_invocations',
   ];
 
   for (const dotPath of nestedKeys) {

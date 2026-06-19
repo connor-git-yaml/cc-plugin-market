@@ -19,7 +19,8 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { resolveOrchestrationConfig } from '../lib/orchestration-resolver.mjs';
-import { orchestrationBaseSchema, orchestrationMergedSchema } from '../contracts/orchestration-schema.mjs';
+import { orchestrationBaseSchema, orchestrationMergedSchema, phaseSchema } from '../contracts/orchestration-schema.mjs';
+import { validateConfig, resolveEffectiveConfig } from '../scripts/lib/config-schema.mjs';
 import { Orchestrator } from '../lib/orchestrator.mjs';
 import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 
@@ -682,5 +683,227 @@ gates:
       // 清理 tmp dir
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// T-GL — Feature 201 goal_loop 声明层测试（schema + opt-in + golden 等价 + 字段锁）
+// 归属：orchestration-resolver.test.mjs（schema/resolver 设施所在）
+// 注意：本组依赖 zod 可用（phaseSchema/resolver override 合并需 safeParse）。
+// ═════════════════════════════════════════════════════════════
+
+describe('T-GL goal_loop 声明层（Feature 201）', () => {
+  const ORCH_YAML_PATH = path.join(__dirname, '..', 'config', 'orchestration.yaml');
+  const GOAL_LOOP_TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'goal-loop-override-template.yaml');
+
+  /** 构造一个合法的 base phase 对象，便于按字段改写做 enum 校验 */
+  function makePhase(overrides = {}) {
+    return {
+      id: '6',
+      name: 'implement',
+      display_name: '代码实现',
+      agent: 'implement',
+      agent_mode: 'single',
+      gates_before: ['GATE_TASKS'],
+      gates_after: null,
+      conditional: null,
+      skip_if_exists: null,
+      is_critical: true,
+      ...overrides,
+    };
+  }
+
+  // ── T-GL-01：goal_loop 通过 schema + 非法值 error 文案含 goal_loop（FR-001）──
+  it('T-GL-01: agent_mode=goal_loop 通过 phaseSchema；非法值 error 文案含 goal_loop', () => {
+    // goal_loop 合法
+    const ok = phaseSchema.safeParse(makePhase({ agent_mode: 'goal_loop' }));
+    assert.equal(ok.success, true, `goal_loop 应通过 schema 校验，失败原因: ${JSON.stringify(ok.error?.issues)}`);
+
+    // 非法值报错，且 error_map 文案列出 goal_loop（对用户可见合法枚举）
+    const bad = phaseSchema.safeParse(makePhase({ agent_mode: 'invalid_xyz' }));
+    assert.equal(bad.success, false, '非法 agent_mode 应校验失败');
+    const messages = bad.error.issues.map((i) => i.message).join(' | ');
+    assert.match(messages, /goal_loop/, `非法值 error 文案应含 goal_loop，实际: ${messages}`);
+  });
+
+  // ── T-GL-02：base 无 override → feature implement agent_mode=single（FR-002/015）──
+  it('T-GL-02: base 配置 + 无 override → feature implement phase agent_mode=single', async () => {
+    const tmpDir = createTempProjectDir(null);
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(result.isFallback, false, '无 override 时 isFallback 应为 false');
+      const implPhase = result.mergedConfig.modes?.feature?.phases?.find((p) => p.name === 'implement');
+      assert.ok(implPhase, 'feature mode 应有 implement phase');
+      assert.equal(implPhase.agent_mode, 'single', 'base 默认 implement.agent_mode 应为 single（goal_loop 默认关闭）');
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  // ── T-GL-03：golden fixture 经 resolver 后仅 implement.agent_mode 变化，其余逐字段等价（FR-016）──
+  it('T-GL-03: goal_loop override 后 implement.agent_mode=goal_loop，其余 phase 与 base 逐字段等价', async () => {
+    // base（无 override）feature phases
+    const baseResult = await resolveOrchestrationConfig({ projectRoot: '/tmp/no-overrides-gl' });
+    const basePhases = baseResult.mergedConfig.modes.feature.phases;
+
+    // 应用 goal_loop override fixture（走文件路径，与生产路径一致）
+    const tmpDir = createTempProjectDir('valid-overrides-goal-loop.yaml');
+    try {
+      const ovrResult = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(ovrResult.isFallback, false, 'goal_loop override 不应降级（isFallback=false）');
+      // 不应有 warning/error 级 diagnostic（mode-overridden 为 info，允许）
+      const warnOrErr = ovrResult.diagnostics.filter((d) => d.level === 'warning' || d.level === 'error');
+      assert.equal(warnOrErr.length, 0, `不应有 warning/error diagnostic，实际: ${JSON.stringify(warnOrErr)}`);
+
+      const ovrPhases = ovrResult.mergedConfig.modes.feature.phases;
+
+      // phase 数量必须一致（整段替换须覆盖完整 phase 列表）
+      assert.equal(ovrPhases.length, basePhases.length,
+        `override 后 feature phase 数应与 base 一致（base=${basePhases.length}，override=${ovrPhases.length}）`);
+
+      // 逐 phase 逐字段比对：仅 implement.agent_mode 不同
+      const diffs = [];
+      for (let i = 0; i < basePhases.length; i++) {
+        const b = basePhases[i];
+        const o = ovrPhases[i];
+        const keys = new Set([...Object.keys(b), ...Object.keys(o)]);
+        for (const k of keys) {
+          if (JSON.stringify(b[k]) !== JSON.stringify(o[k])) {
+            diffs.push({ index: i, phase: b.name ?? o.name, field: k, base: b[k], override: o[k] });
+          }
+        }
+      }
+      assert.equal(diffs.length, 1,
+        `应恰有 1 处字段差异（implement.agent_mode），实际差异: ${JSON.stringify(diffs)}`);
+      assert.equal(diffs[0].phase, 'implement', `唯一差异应在 implement phase，实际: ${diffs[0].phase}`);
+      assert.equal(diffs[0].field, 'agent_mode', `唯一差异字段应为 agent_mode，实际: ${diffs[0].field}`);
+      assert.equal(diffs[0].base, 'single', 'base implement.agent_mode 应为 single');
+      assert.equal(diffs[0].override, 'goal_loop', 'override implement.agent_mode 应为 goal_loop');
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  // ── T-GL-03b：直接守护**模板本体**（非 fixture）—— 模板经 resolver 后与 base 仅 implement.agent_mode 差异（W4 / FR-016）──
+  // T-GL-03 测的是 valid-overrides-goal-loop.yaml fixture；用户实际拿到的是 goal-loop-override-template.yaml。
+  // 若模板本体与 base 漂移而 fixture 没漂移，T-GL-03 仍绿但产物错误。本测试直接 parse 模板文件守护其本体。
+  it('T-GL-03b: goal-loop-override-template.yaml 模板本体经 resolver 后仅 implement.agent_mode 与 base 差异', async () => {
+    // base（无 override）feature phases
+    const baseResult = await resolveOrchestrationConfig({ projectRoot: '/tmp/no-overrides-gl-tpl' });
+    const basePhases = baseResult.mergedConfig.modes.feature.phases;
+
+    // 把模板文件**本体**写入临时项目的 .specify/orchestration-overrides.yaml（与生产复制路径一致）
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gl-tpl-'));
+    try {
+      const specifyDir = path.join(tmpDir, '.specify');
+      fs.mkdirSync(specifyDir, { recursive: true });
+      fs.copyFileSync(GOAL_LOOP_TEMPLATE_PATH, path.join(specifyDir, 'orchestration-overrides.yaml'));
+
+      const ovrResult = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(ovrResult.isFallback, false,
+        `模板本体不应触发降级（isFallback=false），diagnostics: ${JSON.stringify(ovrResult.diagnostics)}`);
+      const warnOrErr = ovrResult.diagnostics.filter((d) => d.level === 'warning' || d.level === 'error');
+      assert.equal(warnOrErr.length, 0,
+        `模板本体不应有 warning/error diagnostic（含 version-mismatch），实际: ${JSON.stringify(warnOrErr)}`);
+
+      const ovrPhases = ovrResult.mergedConfig.modes.feature.phases;
+      assert.equal(ovrPhases.length, basePhases.length,
+        `模板 phase 数应与 base 一致（base=${basePhases.length}，template=${ovrPhases.length}）—— base 改了模板没跟会在此失败`);
+
+      // 与 T-GL-03 相同的逐字段 diff 逻辑
+      const diffs = [];
+      for (let i = 0; i < basePhases.length; i++) {
+        const b = basePhases[i];
+        const o = ovrPhases[i];
+        const keys = new Set([...Object.keys(b), ...Object.keys(o)]);
+        for (const k of keys) {
+          if (JSON.stringify(b[k]) !== JSON.stringify(o[k])) {
+            diffs.push({ index: i, phase: b.name ?? o.name, field: k, base: b[k], override: o[k] });
+          }
+        }
+      }
+      assert.equal(diffs.length, 1,
+        `模板本体应恰有 1 处字段差异（implement.agent_mode），实际差异: ${JSON.stringify(diffs)}`);
+      assert.equal(diffs[0].phase, 'implement', `唯一差异应在 implement phase，实际: ${diffs[0].phase}`);
+      assert.equal(diffs[0].field, 'agent_mode', `唯一差异字段应为 agent_mode，实际: ${diffs[0].field}`);
+      assert.equal(diffs[0].base, 'single', 'base implement.agent_mode 应为 single');
+      assert.equal(diffs[0].override, 'goal_loop', '模板 implement.agent_mode 应为 goal_loop');
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  // ── T-GL-04：version 不一致 → version-mismatch；一致 → 无 version-mismatch（FR-016）──
+  it('T-GL-04: version 不一致触发 version-mismatch；一致则无该 diagnostic', async () => {
+    // 复用已有 fixture：version-mismatch-overrides.yaml（version="2.0"，base="1.0"）
+    const mismatchDir = createTempProjectDir('version-mismatch-overrides.yaml');
+    try {
+      const r = await resolveOrchestrationConfig({ projectRoot: mismatchDir });
+      const vDiag = r.diagnostics.find((d) => d.code === 'orchestration-overrides.version-mismatch');
+      assert.ok(vDiag, 'version 不一致应含 version-mismatch diagnostic');
+      assert.equal(vDiag.level, 'warning', 'version-mismatch 应为 warning 级');
+    } finally {
+      cleanupTempDir(mismatchDir);
+    }
+
+    // W5：goal_loop **专属** version-mismatch 覆盖 —— fixture 含 goal_loop override 内容且 version="2.0"。
+    // 区别于上面复用的通用 version-mismatch fixture（无 goal_loop 内容），验证 goal_loop override 自身
+    // version 错误也走 version-mismatch 路径（而非误降级到其他 diagnostic）。
+    const glMismatchDir = createTempProjectDir('goal-loop-version-mismatch.yaml');
+    try {
+      const r = await resolveOrchestrationConfig({ projectRoot: glMismatchDir });
+      const vDiag = r.diagnostics.find((d) => d.code === 'orchestration-overrides.version-mismatch');
+      assert.ok(vDiag, 'goal_loop override version 不一致应含 version-mismatch diagnostic');
+      assert.equal(vDiag.level, 'warning', 'goal_loop version-mismatch 应为 warning 级');
+      // 不应被误判为 schema-fallback
+      const schemaFallback = r.diagnostics.find((d) => d.code === 'orchestration-overrides.schema-fallback');
+      assert.equal(schemaFallback, undefined, 'goal_loop version-mismatch 不应触发 schema-fallback');
+    } finally {
+      cleanupTempDir(glMismatchDir);
+    }
+
+    // version 一致（goal_loop fixture，version="1.0"）→ 无 version-mismatch
+    const matchDir = createTempProjectDir('valid-overrides-goal-loop.yaml');
+    try {
+      const r = await resolveOrchestrationConfig({ projectRoot: matchDir });
+      const vDiag = r.diagnostics.find((d) => d.code === 'orchestration-overrides.version-mismatch');
+      assert.equal(vDiag, undefined, 'version 一致时不应有 version-mismatch diagnostic');
+    } finally {
+      cleanupTempDir(matchDir);
+    }
+  });
+
+  // ── T-GL-05：goal_loop 默认值注入（W2 / FR-005/006/007）──
+  // 空 config（无 goal_loop 段）经 validateConfig 后应 surface 全部 goal_loop.* 默认值，
+  // 否则运行时读 goal_loop.max_iterations 得 undefined 而非 5。两条读取路径都要验证。
+  it('T-GL-05: 空 config（无 goal_loop 段）经 validateConfig 后 goal_loop 全默认值注入', () => {
+    const result = validateConfig({});
+    assert.equal(result.success, true, `空 config 应校验通过，diagnostics: ${JSON.stringify(result.diagnostics)}`);
+    assert.ok(result.data.goal_loop, 'validateConfig 输出应含 goal_loop 段（.default({}) 填充）');
+    assert.equal(result.data.goal_loop.max_iterations, 5, 'goal_loop.max_iterations 默认应为 5');
+    assert.equal(result.data.goal_loop.no_progress_max_rounds, 2, 'no_progress_max_rounds 默认应为 2');
+    assert.equal(result.data.goal_loop.max_verify_seconds, 300, 'max_verify_seconds 默认应为 300');
+    assert.equal(result.data.goal_loop.max_tool_invocations, 50, 'max_tool_invocations 默认应为 50');
+  });
+
+  it('T-GL-05b: resolveEffectiveConfig 对省略 goal_loop 段的 config 也 surface 默认值（W2 第二条路径）', () => {
+    const entries = resolveEffectiveConfig({ configYaml: {} });
+    const byKey = Object.fromEntries(entries.map((e) => [e.key, e]));
+    assert.equal(byKey['goal_loop.max_iterations']?.value, 5, 'resolveEffectiveConfig 应 surface goal_loop.max_iterations=5');
+    assert.equal(byKey['goal_loop.max_iterations']?.source, '内置默认', 'goal_loop.max_iterations 来源应为内置默认');
+    assert.equal(byKey['goal_loop.no_progress_max_rounds']?.value, 2);
+    assert.equal(byKey['goal_loop.max_verify_seconds']?.value, 300);
+    assert.equal(byKey['goal_loop.max_tool_invocations']?.value, 50);
+  });
+
+  // ── T-GL-15：GATE_VERIFY 字段锁（FR-021）──
+  it('T-GL-15: orchestration.yaml 中 GATE_VERIFY default_behavior=always 且 severity=critical', () => {
+    const raw = parseYamlDocument(fs.readFileSync(ORCH_YAML_PATH, 'utf-8'));
+    const gateVerify = raw?.gates?.GATE_VERIFY;
+    assert.ok(gateVerify, 'orchestration.yaml 应定义 GATE_VERIFY');
+    assert.equal(gateVerify.default_behavior, 'always',
+      `GATE_VERIFY.default_behavior 应锁定为 always，实际: ${gateVerify.default_behavior}`);
+    assert.equal(gateVerify.severity, 'critical',
+      `GATE_VERIFY.severity 应锁定为 critical，实际: ${gateVerify.severity}`);
   });
 });

@@ -1,0 +1,54 @@
+{
+  "round": 3,
+  "timestamp": "2026-06-20T10:12:00Z",
+  "verify_mode": "full",
+  "wall_seconds": 88.0,
+  "layer2_commands": [
+    {
+      "name": "npm run build",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 17.9,
+      "output_summary": "Build succeeded, 0 errors",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run",
+      "exit_code": 1,
+      "status": "FAIL",
+      "duration_seconds": 40.3,
+      "output_summary": "2 failed | 310 passed",
+      "skipped_reason": null
+    },
+    {
+      "name": "npm run repo:check",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 9.4,
+      "output_summary": "repo:check clean",
+      "skipped_reason": null
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 12,
+    "p1_covered": 11,
+    "p1_coverage_pct": 91.7,
+    "uncovered_fr_ids": ["FR-013"]
+  },
+  "layer1_5_evidence": {
+    "status": "PARTIAL",
+    "detail": "FR-013 缺回归测试证据"
+  },
+  "regression_check": {
+    "previously_passing_commands": ["npm run build", "npx vitest run", "npm run repo:check"],
+    "now_failing": ["npx vitest run"],
+    "regression_detected": true
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 2,
+    "p1_fr_coverage_pct": 91.7,
+    "layer1_5_status_score": 1,
+    "regression_count": 1,
+    "net_loc_delta": 55
+  }
+}

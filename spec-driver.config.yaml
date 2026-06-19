@@ -123,3 +123,15 @@ retry:
 progress:
   show_stage_progress: true
   show_stage_summary: true
+
+# ═══════════════════════════════════════
+# goal_loop 配置（Feature 201）
+# ═══════════════════════════════════════
+# 仅在 .specify/orchestration-overrides.yaml 为 feature mode implement phase
+# 启用 agent_mode: goal_loop 时才被编排器读取；默认全部注释掉（不激活）。
+# 示例值与 config-schema.mjs 的 Zod default 一致。
+# goal_loop:
+#   max_iterations: 5          # 最大迭代轮数（FR-005），默认 5
+#   no_progress_max_rounds: 2  # 连续无进展轮数触发早停（FR-006），默认 2
+#   max_verify_seconds: 300    # 单轮 verify 墙钟上限（秒，FR-007，timeout 强制），默认 300
+#   max_tool_invocations: 50   # 单轮编排器可见调用数上限（FR-007，best-effort），默认 50

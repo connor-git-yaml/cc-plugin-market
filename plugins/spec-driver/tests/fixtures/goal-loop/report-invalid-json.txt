@@ -1,0 +1,6 @@
+{
+  "round": 1,
+  "verify_mode": "full",
+  "layer2_commands": [
+    { "name": "npm run build", "exit_code": 0, "status": "PASS"
+  ]   // 故意截断/非法：缺右花括号、含注释、数组未闭合 —— 用于测 parseReport 降级为 infra-failure
