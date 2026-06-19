@@ -460,12 +460,14 @@ npm run repo:check                      # 零告警
 export function decideStop({ report, round, config, prevReports, rollbackResult }) { ... }
 ```
 
-**regression 输入契约（修正 Codex C-01）**：`decideStop` **内部自行调用** `detectRegression(prevReports[last] ?? null, report)` 计算 regression，**不依赖外部传入 regression 参数、也不信任 report 自带的 regression_check 字段**（后者由 verify 子代理产出，职责分离下不作为编排器的权威判据）。这样 decideStop 的入参保持 `{report, round, config, prevReports, rollbackResult}`，regression 由 core 内部确定性推导，单测可完全覆盖。
+**regression 输入契约（修正 Codex C-01 + W1）**：`decideStop` **内部自行调用** `detectRegression(prevSameMode, report)` 计算 regression，**不依赖外部传入 regression 参数、也不信任 report 自带的 regression_check 字段**（后者由 verify 子代理产出，职责分离下不作为编排器的权威判据）。**W1 修正**：`prevSameMode` 不是 `prevReports[last]`，而是在 `prevReports` 中**从后向前找 verify_mode 与本轮相同的最近一条**（degraded 报告跳过）——否则 full→smoke→full FAIL 序列里，当前 full 与中间 smoke 跨桶比较会漏判 full 回归。decideStop 的入参保持 `{report, round, config, prevReports, rollbackResult}`，regression 由 core 内部确定性推导，单测可完全覆盖。
 
 **优先级（FR-004，严格顺序）**：
 1. `rollbackResult !== null && !rollbackResult.success` → `stop=true, exit_reason='ROLLBACK_FAILED', action='goto_gate_verify'`
-2. `detectRegression(...).regression === true` → `action='rollback'`；`stop=false`（视剩余预算 continue）或 `stop=true`（预算耗尽），`exit_reason='REGRESSION_ROLLBACK'`
-3. `evaluateMetric(report) === true`（**无论是否 round===maxIterations**，达标优先）→ `stop=true, exit_reason='REACHED_GOAL', action='goto_gate_verify'`
+2. `detectRegression(prevSameMode, report).regression === true` → `action='rollback'`；`stop=false`（视剩余预算 continue）或 `stop=true`（预算耗尽），`exit_reason='REGRESSION_ROLLBACK'`
+3. `evaluateMetric(report) === true`（**无论是否 round===maxIterations**，达标优先）：
+   - `report.verify_mode === 'full'` → `stop=true, exit_reason='REACHED_GOAL', action='goto_gate_verify'`
+   - `report.verify_mode === 'smoke'`（**Codex C2 修正**：smoke 全绿不得直接达标，plan §OQ-03 要求达标退出前经一次 full verify）→ `stop=false, exit_reason=null, action='escalate_full'`（编排器据此升级到 full verify 重判）
 4. `round >= config.max_iterations` → `stop=true, exit_reason='MAX_ITERATIONS', action='goto_gate_verify'`
 5. infra-failure（本轮 report.degraded 或超预算）/ `computeDelta` 连续 `no_progress_max_rounds` 轮全 0 → `stop=true, exit_reason='NO_PROGRESS', action='goto_gate_verify'`
 6. 否则 → `stop=false, exit_reason=null, action='continue'`
@@ -648,8 +650,8 @@ npm run repo:check                      # 零告警
     - 按 decide-stop 输出处置：
       a. exit_reason=ROLLBACK_FAILED → 立即进 GATE_VERIFY，输出失败详情（FR-014）
       b. exit_reason=REGRESSION_ROLLBACK → 调 plan-rollback → 执行回滚命令序列 → 逐条检查退出码（非零→标回滚失败→re-decide）→ 记日志 → 视预算 continue/stop
-      c. exit_reason=REACHED_GOAL（但当前为 smoke 轮）→ 强制触发 full verify 一次（plan OQ-03）→ 重跑步骤 4-6（aboutToExit=true，select-verify-mode 返回 full）
-      d. exit_reason=REACHED_GOAL（full 模式已确认）→ 退出 loop（成功），进 GATE_VERIFY
+      c. action=escalate_full（smoke 轮 metric 满足，stop=false、exit_reason=null；Codex C2 修正：smoke 全绿绝不直接判 REACHED_GOAL）→ 强制触发 full verify 一次（plan OQ-03）→ 重跑步骤 4-6（aboutToExit=true，select-verify-mode 返回 full）；full 轮再判达标
+      d. exit_reason=REACHED_GOAL（full 模式已确认达标）→ 退出 loop（成功），进 GATE_VERIFY
       e. exit_reason=MAX_ITERATIONS / NO_PROGRESS → 退出 loop（fallback），进 GATE_VERIFY，输出摘要
       f. action=continue → i++，循环
 

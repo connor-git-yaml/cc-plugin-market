@@ -27,3 +27,11 @@ jobs:
       - name: Test
         run: npm test
 
+      # 独立门禁：plugin mjs 测试。npm test 内部用 `vitest run && npm run test:plugins`，
+      # 若 vitest 因仓库预存 dist-staleness flaky 失败会短路跳过 test:plugins，
+      # 导致 162 个 mjs 测试在 CI 实际不跑。此步骤无论上一步成败都独立运行并报告，
+      # 确保 plugin mjs 测试始终被 gate（Feature 201 Phase B 复审修正）。
+      - name: Test Plugins (mjs gate)
+        if: ${{ always() }}
+        run: npm run test:plugins
+
