@@ -1,0 +1,46 @@
+{
+  "round": 1,
+  "timestamp": "2026-06-20T14:03:09Z",
+  "verify_mode": "smoke",
+  "wall_seconds": 208,
+  "layer2_commands": [
+    {
+      "name": "npx tsc --noEmit",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 2,
+      "output_summary": "零类型错误，无任何 TS 编译告警",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run",
+      "exit_code": 1,
+      "status": "FAIL",
+      "duration_seconds": 204,
+      "output_summary": "4853 passed / 2 failed / 75 skipped (4951 total). 2 failures in tests/e2e/feature-170a-spectra-spec-driver-integration.e2e.test.ts: dist/mcp/agent-context-tools.js 不存在（需要先 npm run build）。本 Feature 202 新增用例 mcp-server.test.ts(19) 和 mcp-batch-graph-only.test.ts(1) 全部通过。失败为预存 build 依赖缺陷，非 Feature 202 回归。watch-command.test.ts 本轮 6 tests 全绿。timeout/gtimeout 均不可用（macOS 无 GNU coreutils），跳过超时保护直接执行。",
+      "skipped_reason": null
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 10,
+    "p1_covered": 10,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": []
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "verify 子代理独立实跑所有验证命令，捕获真实退出码（tsc=0, vitest=1）。无推测性表述。失败如实记录为 FAIL 而非声称通过。"
+  },
+  "regression_check": {
+    "previously_passing_commands": ["npx vitest run"],
+    "now_failing": ["npx vitest run — 但 2 个失败为预存 dist 依赖失败（feature-170a），与 master 基线一致，非新增回归"],
+    "regression_detected": false
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 1,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "net_loc_delta": null
+  }
+}

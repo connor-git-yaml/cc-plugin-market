@@ -12,7 +12,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.js';
-import { runBatch } from '../batch/batch-orchestrator.js';
+import { runBatch, buildAstGraphOnly } from '../batch/batch-orchestrator.js';
 import { resolveRegenPlan } from '../batch/regen-plan.js';
 import { loadProjectConfig } from '../config/project-config.js';
 import { detectDrift } from '../diff/drift-orchestrator.js';
@@ -206,9 +206,9 @@ Typical chained usage:
         .describe('仅处理指定语言（如 ["typescript", "python"]）'),
       // F5：运行模式参数（FR-007）
       mode: z
-        .enum(['full', 'reading', 'code-only'])
+        .enum(['full', 'reading', 'code-only', 'graph-only'])
         .optional()
-        .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（仅跳 enrichment 层，仍逐模块调 spec-gen LLM，非零成本）。注：纯 AST / 零 LLM 建图请用 CLI `spectra batch --mode graph-only`（MCP batch 暂不支持 graph-only）'),
+        .describe('spec 文档质量维度（与 regen 轴正交）：full（默认，完整文档）| reading（轻量，跳过产品文档层）| code-only（仅跳 enrichment 层，仍逐模块调 spec-gen LLM，非零成本）| graph-only（纯 AST · 零 LLM · 无需认证 · 仅建图不生成 spec 文档，可作为 impact/context 工具的前置步骤）'),
     },
     withTelemetry('batch', async (args) => {
       const { projectRoot, full, force, incremental, languages, mode } = args as {
@@ -217,7 +217,7 @@ Typical chained usage:
         force?: boolean;
         incremental?: boolean;
         languages?: string[];
-        mode?: 'full' | 'reading' | 'code-only';
+        mode?: 'full' | 'reading' | 'code-only' | 'graph-only';
       };
       const root = projectRoot ?? process.cwd();
 
@@ -225,6 +225,17 @@ Typical chained usage:
       const effectiveMode = mode ?? 'full';
       const mcpLogger = { info: (msg: string) => console.error(msg) };
       mcpLogger.info(`[info] batch mode=${effectiveMode}`);
+
+      // graph-only 提前拦截：纯 AST 零 LLM，不走 runBatch/regen 轴（复用 buildAstGraphOnly，对齐 CLI 范式）
+      if (effectiveMode === 'graph-only') {
+        if (languages?.length) {
+          mcpLogger.info('[warn] graph-only 不支持 languages 过滤，将全仓建图');
+        }
+        const graphResult = await buildAstGraphOnly(root);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(graphResult) }],
+        };
+      }
 
       // 加载项目配置作为 fallback（MCP 显式参数优先）
       const fileConfig = loadProjectConfig(root);

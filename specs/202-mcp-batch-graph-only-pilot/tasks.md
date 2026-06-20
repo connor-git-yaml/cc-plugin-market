@@ -24,48 +24,48 @@
 
 ---
 
-- [ ] T001 [US1] **mock 补全**：在 `tests/unit/mcp-server.test.ts` 的 `vi.hoisted` `mocks` 对象（约 :7-12）追加 `buildAstGraphOnly: vi.fn()`；在 `vi.mock('../../src/batch/batch-orchestrator.js', ...)` 块（约 :48-50）追加 `buildAstGraphOnly: mocks.buildAstGraphOnly`
+- [x] T001 [US1] **mock 补全**：在 `tests/unit/mcp-server.test.ts` 的 `vi.hoisted` `mocks` 对象（约 :7-12）追加 `buildAstGraphOnly: vi.fn()`；在 `vi.mock('../../src/batch/batch-orchestrator.js', ...)` 块（约 :48-50）追加 `buildAstGraphOnly: mocks.buildAstGraphOnly`
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-004（为测试 dispatch 路由做 mock 桩）
   - 并行：否（后续所有单元用例依赖此步骤的 mock 存在）
 
-- [ ] T002 [US1] **写用例 A**（graph-only dispatch 路由）：在 `tests/unit/mcp-server.test.ts` 现有 T094-05 测试后（约 :230）新增用例 A —— 断言 `buildAstGraphOnly` 被调用 1 次、`runBatch` 未被调用、返回体 `JSON.parse` 后含 `graphPath`/`nodeCount`
+- [x] T002 [US1] **写用例 A**（graph-only dispatch 路由）：在 `tests/unit/mcp-server.test.ts` 现有 T094-05 测试后（约 :230）新增用例 A —— 断言 `buildAstGraphOnly` 被调用 1 次、`runBatch` 未被调用、返回体 `JSON.parse` 后含 `graphPath`/`nodeCount`
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-004、FR-005
   - 对应 SC：SC-载体-001
   - 并行：否（依赖 T001）
 
-- [ ] T003 [US1] **写用例 A2**（Zod schema 枚举断言）：新增用例 A2 —— 取 `batchTool.schema.mode` 的 `safeParse`，断言 `'graph-only'` 为 true、`'full'` 仍为 true、`'bogus'` 为 false
+- [x] T003 [US1] **写用例 A2**（Zod schema 枚举断言）：新增用例 A2 —— 取 `batchTool.schema.mode` 的 `safeParse`，断言 `'graph-only'` 为 true、`'full'` 仍为 true、`'bogus'` 为 false
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-001
   - 对应 SC：SC-载体-003
   - 并行：可与 T002 并行（同文件，但需在 T001 之后）
 
-- [ ] T004 [US1] **写用例 B**（regen 参数隔离）：新增用例 B —— 同时传入 `incremental: true, force: true`，断言 `buildAstGraphOnly.mock.calls[0]` 长度为 1（只传 projectRoot），`runBatch` 未被调用
+- [x] T004 [US1] **写用例 B**（regen 参数隔离）：新增用例 B —— 同时传入 `incremental: true, force: true`，断言 `buildAstGraphOnly.mock.calls[0]` 长度为 1（只传 projectRoot），`runBatch` 未被调用
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-009（regen 轴参数不透传）
   - 对应 SC：EC-003
   - 并行：可与 T002/T003 并行（T001 完成后）
 
-- [ ] T005 [US1] **写用例 C**（describe 文案一致性）：新增用例 C —— 断言 `batchTool.schema.mode.description` 不含"暂不支持 graph-only"，且匹配 `/纯 AST|零 LLM/`
+- [x] T005 [US1] **写用例 C**（describe 文案一致性）：新增用例 C —— 断言 `batchTool.schema.mode.description` 不含"暂不支持 graph-only"，且匹配 `/纯 AST|零 LLM/`
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-002
   - 对应 SC：SC-载体-001b
   - 并行：可与 T002/T003/T004 并行（T001 完成后）
 
-- [ ] T006 [US1] **写用例 D**（三旧 mode 回归基线）：新增用例 D —— `it.each(['full', 'reading', 'code-only'])` 各自断言 `runBatch` 被调用 1 次且 mode 透传、`buildAstGraphOnly` 未被调用
+- [x] T006 [US1] **写用例 D**（三旧 mode 回归基线）：新增用例 D —— `it.each(['full', 'reading', 'code-only'])` 各自断言 `runBatch` 被调用 1 次且 mode 透传、`buildAstGraphOnly` 未被调用
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-007
   - 对应 SC：SC-载体-002
   - 并行：可与 T002-T005 并行（T001 完成后）
 
-- [ ] T007 [US1] **写用例 E**（languages warn 行为）：新增用例 E —— 传入 `languages: ['typescript']`，spyOn `console.error`，断言 `result.isError` 为 undefined、`buildAstGraphOnly` 调用参数长度为 1、日志含 `/graph-only.*languages|languages.*graph-only/`
+- [x] T007 [US1] **写用例 E**（languages warn 行为）：新增用例 E —— 传入 `languages: ['typescript']`，spyOn `console.error`，断言 `result.isError` 为 undefined、`buildAstGraphOnly` 调用参数长度为 1、日志含 `/graph-only.*languages|languages.*graph-only/`
   - 改动文件：`tests/unit/mcp-server.test.ts`
   - 对应 FR：FR-010
   - 对应 SC：EC-001
   - 并行：可与 T002-T005 并行（T001 完成后）
 
-- [ ] T008 [US1] **红态确认**：运行单元测试，确认预期红态成立
+- [x] T008 [US1] **红态确认**：运行单元测试，确认预期红态成立
   - 验收命令：`npx vitest run tests/unit/mcp-server.test.ts`
   - 预期结果：用例 A、A2、B、C、E 失败（红）；用例 D 通过（绿，回归基线确认）
   - 对应 SC：SC-载体-001（红态必须先独立确认）
@@ -82,7 +82,7 @@
 
 ---
 
-- [ ] T009 [US1] **新建集成测试文件**：新建 `tests/integration/mcp-batch-graph-only.test.ts`
+- [x] T009 [US1] **新建集成测试文件**：新建 `tests/integration/mcp-batch-graph-only.test.ts`
   - 不 `vi.mock('../../src/batch/batch-orchestrator.js')`（真实 `buildAstGraphOnly`）
   - 仍 mock `@modelcontextprotocol/sdk/server/mcp.js`（FakeMcpServer 范式，复用 mcp-server.test.ts 的 hoisted mock 结构）
   - `beforeEach`：`fs.mkdtemp` 创建临时目录，写入 1-2 个最小 `.ts` 文件（如 `export function a(){ return b(); } export function b(){ return 1; }`）
@@ -98,7 +98,7 @@
   - 对应 SC：SC-载体-001（核心 oracle）
   - 并行：可与 T001-T007 并行（不依赖单元测试）
 
-- [ ] T010 [US1] **集成红态确认**：运行集成测试，确认改动前测试红
+- [x] T010 [US1] **集成红态确认**：运行集成测试，确认改动前测试红
   - 验收命令：`npx vitest run tests/integration/mcp-batch-graph-only.test.ts`
   - 预期结果（Codex W-002 澄清）：测试失败。**注意**：FakeMcpServer 不跑 Zod 校验，故红态**不一定**表现为"schema 拒绝"；改动前更可能是 handler 无 graph-only 分支 → 落入 runBatch(mode='graph-only') → runBatch validModes 抛错 / 或 buildAstGraphOnly 从未被调用 → graphPath 读取失败。接受任一形态的红（核心判据：**集成断言未通过**，即未产出 schemaVersion=2.0 的 portable graph）。
   - 并行：否（依赖 T009 完成）
@@ -115,13 +115,13 @@
 
 ---
 
-- [ ] T011 [US1] **追加 import**：修改 `src/mcp/server.ts` 约 :15 行，将 `import { runBatch }` 改为 `import { runBatch, buildAstGraphOnly }`
+- [x] T011 [US1] **追加 import**：修改 `src/mcp/server.ts` 约 :15 行，将 `import { runBatch }` 改为 `import { runBatch, buildAstGraphOnly }`
   - 改动文件：`src/mcp/server.ts`
   - 对应 FR：FR-004（复用现有 buildAstGraphOnly）
   - 对应 NFR：NFR-002（复用不重写）
   - 并行：否（后续子步骤依赖此 import 存在）
 
-- [ ] T012 [US1] **Zod schema 枚举新增 `'graph-only'`**：修改 `src/mcp/server.ts` 约 :208-209 的 `z.enum([...])` 和 `.describe(...)` 文本
+- [x] T012 [US1] **Zod schema 枚举新增 `'graph-only'`**：修改 `src/mcp/server.ts` 约 :208-209 的 `z.enum([...])` 和 `.describe(...)` 文本
   - 枚举：`['full', 'reading', 'code-only', 'graph-only']`
   - describe：移除"MCP batch 暂不支持 graph-only"旧文案，新增 `graph-only（纯 AST · 零 LLM · 无需认证 · 仅建图不生成 spec 文档，可作为 impact/context 工具的前置步骤）`
   - 改动文件：`src/mcp/server.ts`
@@ -129,13 +129,13 @@
   - 对应 SC：SC-载体-001b、SC-载体-003
   - 并行：可与 T013 并行（T011 完成后）
 
-- [ ] T013 [US1] **TypeScript type union 同步新增 `'graph-only'`**：修改 `src/mcp/server.ts` 约 :220 的局部 handler 参数类型 `mode?: 'full' | 'reading' | 'code-only'` 改为 `mode?: 'full' | 'reading' | 'code-only' | 'graph-only'`
+- [x] T013 [US1] **TypeScript type union 同步新增 `'graph-only'`**：修改 `src/mcp/server.ts` 约 :220 的局部 handler 参数类型 `mode?: 'full' | 'reading' | 'code-only'` 改为 `mode?: 'full' | 'reading' | 'code-only' | 'graph-only'`
   - 改动文件：`src/mcp/server.ts`
   - 对应 FR：FR-003
   - 对应 SC：SC-载体-003（Zod/TS union/describe 三者一致性）
   - 并行：可与 T012 并行（T011 完成后）
 
-- [ ] T014 [US1] **handler 新增 graph-only 提前分支**：在 `src/mcp/server.ts` handler 内 `const effectiveMode = ...` 日志行之后、`const fileConfig = loadProjectConfig(root)` 之前插入提前拦截分支：
+- [x] T014 [US1] **handler 新增 graph-only 提前分支**：在 `src/mcp/server.ts` handler 内 `const effectiveMode = ...` 日志行之后、`const fileConfig = loadProjectConfig(root)` 之前插入提前拦截分支：
   ```typescript
   if (effectiveMode === 'graph-only') {
     if (languages?.length) {
@@ -162,33 +162,33 @@
 
 ---
 
-- [ ] T015 [US1] **单元绿态确认**：运行单元测试，确认 A、A2、B、C、D、E 全绿
+- [x] T015 [US1] **单元绿态确认**：运行单元测试，确认 A、A2、B、C、D、E 全绿
   - 验收命令：`npx vitest run tests/unit/mcp-server.test.ts`
   - 预期结果：6 个新用例全部通过，现有用例无回归
   - 对应 SC：SC-载体-001（绿态确认）
   - 并行：否（依赖 T014 完成）
 
-- [ ] T016 [US1] **集成绿态确认**：运行集成测试，确认真实 portable graph 端到端通过
+- [x] T016 [US1] **集成绿态确认**：运行集成测试，确认真实 portable graph 端到端通过
   - 验收命令：`npx vitest run tests/integration/mcp-batch-graph-only.test.ts`
   - 预期结果：schemaVersion=2.0、绝对路径节点数=0、nodeCount>0、isError 为 undefined
   - 对应 FR：FR-006
   - 对应 SC：SC-载体-001（集成 oracle 绿态）
   - 并行：可与 T015 并行（均依赖 T014 完成）
 
-- [ ] T017 [US1] **mock 实证 + 补全**：运行全量 vitest，检查 `response-contract.test.ts`、`telemetry-coverage.test.ts`、`graph-only-cli.test.ts`、`batch-command-exit-code.test.ts`、`cli-command-runners.test.ts`、`watch-command.test.ts` 等 mock `batch-orchestrator.js` 的文件是否因新增 `buildAstGraphOnly` import 而报缺失 export 错误；若有，在对应文件 mock 块补 `buildAstGraphOnly: vi.fn()`
+- [x] T017 [US1] **mock 实证 + 补全**：运行全量 vitest，检查 `response-contract.test.ts`、`telemetry-coverage.test.ts`、`graph-only-cli.test.ts`、`batch-command-exit-code.test.ts`、`cli-command-runners.test.ts`、`watch-command.test.ts` 等 mock `batch-orchestrator.js` 的文件是否因新增 `buildAstGraphOnly` import 而报缺失 export 错误；若有，在对应文件 mock 块补 `buildAstGraphOnly: vi.fn()`
   - 改动文件（可能）：`tests/unit/mcp/response-contract.test.ts`、`tests/unit/mcp/telemetry-coverage.test.ts` 等（仅当全量 vitest 报错时按需补充）
   - 验收命令：`npx vitest run`
   - 预期结果：零失败（含 watch-command 若在 worktree 偶发 flaky 可隔离重跑确认非回归）
   - 对应 NFR：NFR-001（零回归约束）
   - 并行：否（依赖 T015 + T016 均绿后执行全量）
 
-- [ ] T018 [US1] **TypeScript 类型零错误确认**
+- [x] T018 [US1] **TypeScript 类型零错误确认**
   - 验收命令：`npm run build`
   - 预期结果：0 type errors
   - 对应 NFR：NFR-001
   - 并行：可与 T017 并行（T014 完成后即可执行）
 
-- [ ] T019 [US1] **F196 守卫 + 仓库同步检查**：确认 batch 工具顶层 `description` 的 `Output:` 示例区文本未变（目视 `src/mcp/server.ts` 的 batch `description` 字符串），F196 守卫绿
+- [x] T019 [US1] **F196 守卫 + 仓库同步检查**：确认 batch 工具顶层 `description` 的 `Output:` 示例区文本未变（目视 `src/mcp/server.ts` 的 batch `description` 字符串），F196 守卫绿
   - 验收命令：`npm run repo:check`
   - 预期结果：零报错；batch 工具顶层 description 的 `Output:` 示例区保持 `{ successful, skipped, failed, indexGenerated }`，graph-only 专属字段不出现在该区
   - 对应 FR：FR-008
@@ -207,14 +207,14 @@
 
 ---
 
-- [ ] T020 [US2] **仅验证 goal_loop override 已生效（绝不修改 / 绝不 commit）**：🔴 Codex C-001 —— override 已在 pilot Step 0 启用，本任务**只读验证**，**不得修改 `.specify/orchestration-overrides.yaml`，更不得提交它**（它是 pilot 验证态，收尾要 `git checkout --` 还原）。若验证发现 override 缺失/失效，**停止并报告"pilot 环境未准备"，不要自行补写文件**。
+- [x] T020 [US2] **仅验证 goal_loop override 已生效（绝不修改 / 绝不 commit）**：🔴 Codex C-001 —— override 已在 pilot Step 0 启用，本任务**只读验证**，**不得修改 `.specify/orchestration-overrides.yaml`，更不得提交它**（它是 pilot 验证态，收尾要 `git checkout --` 还原）。若验证发现 override 缺失/失效，**停止并报告"pilot 环境未准备"，不要自行补写文件**。
   - 改动文件：无（只读验证）
   - 验收命令：`node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration feature --annotate`
   - 预期结果：feature mode 的 implement phase `agent_mode: goal_loop`，来源 overrides；diagnostics 无 error
   - 对应 SC：US2 Acceptance Scenario 1
   - 并行：可与 Phase 1-4 并行（只读）
 
-- [ ] T021 [US2] **撰写 goal_loop 遥测节**：在 verify 报告中专列「goal_loop 遥测」节，按以下字段逐轮如实记录（不美化、不省略失败轮次）：
+- [x] T021 [US2] **撰写 goal_loop 遥测节**：在 verify 报告中专列「goal_loop 遥测」节，按以下字段逐轮如实记录（不美化、不省略失败轮次）：
   - `iteration`（轮号）
   - `changed`（本轮改了什么）
   - `verifyExitCodes`（build/lint/test 退出码）
@@ -237,12 +237,12 @@
 
 ---
 
-- [ ] T022 **注释清理**：确认 `src/mcp/server.ts` 中"MCP batch 暂不支持 graph-only"相关旧注释段（plan.md 提及 `:170–247` 区间已有此注释待清）已随 T012/T014 的文案替换而清除，无残留旧注释
+- [x] T022 **注释清理**：确认 `src/mcp/server.ts` 中"MCP batch 暂不支持 graph-only"相关旧注释段（plan.md 提及 `:170–247` 区间已有此注释待清）已随 T012/T014 的文案替换而清除，无残留旧注释
   - 改动文件：`src/mcp/server.ts`（目视确认，若 T012/T014 未覆盖则补删）
   - 对应 FR：FR-002（describe 文案更新完整性）
   - 并行：可与 T017-T019 并行（T014 完成后）
 
-- [ ] T023 **最终全量门禁汇总确认**：在所有任务完成后执行完整门禁序列，留存零失败证据
+- [x] T023 **最终全量门禁汇总确认**：在所有任务完成后执行完整门禁序列，留存零失败证据
   - 验收命令（顺序执行）：
     1. `npx vitest run`
     2. `npm run build`

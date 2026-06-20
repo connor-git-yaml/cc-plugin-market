@@ -49,6 +49,8 @@ vi.mock('../../../src/core/single-spec-orchestrator.js', () => ({
 }));
 vi.mock('../../../src/batch/batch-orchestrator.js', () => ({
   runBatch: mocks.runBatch,
+  // F202：server.ts 新增 import buildAstGraphOnly，mock 补全该具名导出（本文件不调 graph-only，仅防缺失 export）
+  buildAstGraphOnly: vi.fn(),
 }));
 vi.mock('../../../src/diff/drift-orchestrator.js', () => ({
   detectDrift: mocks.detectDrift,

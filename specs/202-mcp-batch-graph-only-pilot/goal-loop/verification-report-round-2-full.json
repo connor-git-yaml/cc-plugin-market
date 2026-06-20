@@ -1,0 +1,80 @@
+{
+  "round": 2,
+  "timestamp": "2026-06-20T22:40:00Z",
+  "verify_mode": "full",
+  "wall_seconds": 45,
+  "layer2_commands": [
+    {
+      "name": "npm run build",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 8,
+      "output_summary": "prebuild(inline-d3 跳过写入) + tsc 零错误 + postbuild:stamp(commit=26e0cc20 dirty)。零类型错误，零编译告警。",
+      "skipped_reason": null
+    },
+    {
+      "name": "npm run lint",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 3,
+      "output_summary": "tsc --noEmit 零错误。lint script 存在（映射到 tsc --noEmit），正常执行。",
+      "skipped_reason": null
+    },
+    {
+      "name": "npm run repo:check",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 4,
+      "output_summary": "status=pass。全 57 项守卫全绿，含：orchestration-overrides(file-exists/schema-validation/version-match)、release-contract 18 项、F196 description-output-drift（含于 spec-driver-wrappers）、preference-rules、delegation-contract、orchestrator-model 6 项、namespace-consistency 5 项。零报错。",
+      "skipped_reason": null
+    }
+  ],
+  "timeout_protection": {
+    "timeout_cmd_available": false,
+    "gtimeout_cmd_available": false,
+    "note": "macOS 未安装 coreutils/gtimeout，跳过超时前缀，直接执行。Bash tool 自带 120-300s 超时兜底。"
+  },
+  "layer1_fr_coverage": {
+    "p1_total": 10,
+    "p1_covered": 10,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": [],
+    "coverage_basis": "tasks.md checkbox 状态 + Layer 2 命令实证（tsc 零错误 + 全量 vitest Pass + F196 守卫绿）"
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "verify 子代理 full 模式独立实跑三条命令（build/lint/repo:check），获取真实退出码（均为 0）。无推测性表述，无引用 implement 声明，无 'should pass'/'looks correct' 等表述。",
+    "commands_with_evidence": ["npm run build", "npm run lint", "npm run repo:check"],
+    "speculative_statements_detected": []
+  },
+  "regression_check": {
+    "previously_passing_commands": ["npx tsc --noEmit", "npx vitest run"],
+    "now_failing": [],
+    "regression_detected": false,
+    "note": "round-2 smoke 已通过 vitest=0；full 模式 build/lint/repo:check 新增三项，均通过。无新引入回归。"
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 3,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "smoke_vs_full": {
+      "smoke_commands": ["npx tsc --noEmit", "npx vitest run"],
+      "full_additional_commands": ["npm run build", "npm run lint", "npm run repo:check"],
+      "build_exit_code": 0,
+      "lint_exit_code": 0,
+      "repo_check_exit_code": 0,
+      "all_full_guards_pass": true
+    }
+  },
+  "goal_loop_telemetry": {
+    "total_iterations": 1,
+    "final_decision": "REACHED_GOAL",
+    "impact_injection_mode": "degraded",
+    "fallback_triggered": false,
+    "rollback_triggered": false,
+    "f201_unverified_conclusion_status": "部分坐实：goal_loop 在真实 feature 中自主运行并单轮收敛；impact 注入始终降级（图谱 stale），印证 F201 报告预期"
+  },
+  "overall_result": "READY FOR REVIEW",
+  "gate_verify": "PASS — build/lint/repo:check 全部退出码 0，无质量门触发"
+}
