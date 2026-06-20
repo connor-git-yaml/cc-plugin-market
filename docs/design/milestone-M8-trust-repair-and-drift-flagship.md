@@ -34,7 +34,13 @@ amendment_2026-06-19: 大批量 ship + 🔴编号漂移校正 + 调研沉淀。
 - ③ 计划外 ship：**F198✅/F199✅**（spec-driver/orchestration zod 缺失优雅降级，共享 load-zod helper）；**F176✅** swebench-execution 预注册冻结 + 5 cohort smoke PASS（F188 跑批前置已就位）
 - ④ 剩余收尾重新认定（原 F191/F192 号已被 KB 占用）：**F188**（eval 重判+复测，前置 F176 冻结 + F197 公正性修复均就位，可跑·烧配额派发前确认）；**全期架构 review** 由 milestone-next 每轮对抗审查 workflow 替代（上轮 6 维度 wf_c4c0461a + 本轮 spot-check），如需正式收口报告另立新号；**doc 收口**（npm 4.3.0 / KB 新 CLI+MCP / 委派契约 / agent-mainline-focus.md 漂移）另立新号
 - ⑤ 调研沉淀（2026-06-19 三方向 detailed 调研，见 §5 M9 候选）：路线确认「站在风口」，新增 3 增强方向 + Goal 自主推进可行性判断
-执行顺序: …→ F197✅(公正性收口) → F186✅(npm 4.3.0 staged·未 publish) → F190✅/F191✅/F192✅(KB Phase1+2) → F198✅/F199✅ → F176✅(F188 前置) → **F200(M8 doc 收口)∥F201(goal_loop pilot·M9 开篇)** → 〔近期 feature 完成后〕**F188(eval 复测) + npm publish 4.3.0**（用户 2026-06-19 拍板：排最后，近期规划 feature 全完成再推）→ 收尾(全期 review 由 milestone-next 循环式对抗审查已做)
+amendment_2026-06-20: 近期批（F200/F201）+ 衍生 fix 全 ship + 体检（均诚实零 over-claim）：
+- **F200✅** M8 doc 收口：`agent-mainline-focus.md` 活漂移**修正**（不再写 panoramic Phase 1 为唯一主线，改 M8 三轨；panoramic 降为"既有稳定能力"）；README npm 协调护栏生效（4.3.0 标注 "staged pending explicit authorization"，不声称已在 npm 可装）
+- **F201✅ goal_loop**（本会话设计的 feature）：**机制层 READY**（声明层 + goal-loop-core 12 纯函数[1131 测] + SKILL 闭环散文 + verify JSON 模式 + opt-in 模板；vitest 4895/repo:check 57/release:check/FR 23/23/Codex CRITICAL 全闭合）；**opt-in default-off 实证**（get-phases feature=single，仅 override 启 goal_loop；8 mode + batch_loop 零回归）；**诚实留 e2e 缺口不 over-claim**：SC-001/002/003（真实自治闭环红→绿 + max_iter/无进展 fallback + git 回滚）的"编排器真实执行正确"需一次受控 feature-mode + override 端到端 run 才能验（散文是 LLM 解释层，单测 core ≠ 真实编排正确）；人工 GATE_VERIFY + Layer 1.5 + Codex 兜底，reward hacking 列诚实残留风险
+- **F201-fix✅** scaffold-kb 命令惰性 import（解 CLI 冷启动 sqlite-wasm 硬依赖，与 goal_loop 共用 201 号）；**config-schema✅ ×2**（batch 段 zod schema 补全解 F146 误报 + --show-effective concurrency；计划外维护 fix）
+- **🆕 衍生洞察 → M9 候选**：goal_loop 的 Spectra impact 注入（FR-011）实践高频命中降级路径——loop 迭代的是刚改的新代码（预建图谱不含）+ 缺 graph-only 刷新致图谱 stale；单测降级使其"安全"但 **TDAD 协同价值（结构化 impact 压回归 6%→10%）依赖图谱新鲜度** → **goal_loop 每轮 implement 前 graph-only 增量刷图**，使 impact 注入对本轮改动有效
+- **处置**：近期批 done → 用户排最后的 F188 + npm publish 解锁；**F201 goal_loop e2e 验证（= 此前提的 Goal pilot）= F201 诚实收口候选**
+执行顺序: …→ F176✅(F188 前置) → **F200✅(doc 收口)∥F201✅(goal_loop 机制·e2e 待验)** → 〔近期批 done〕→ **F201 goal_loop e2e 验证 pilot / F188(eval 复测) / npm publish 4.3.0**（用户 2026-06-19 定 F188+npm 排最后；e2e 验证为 F201 诚实收口）→ 收尾(全期 review 循环式已做)
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
