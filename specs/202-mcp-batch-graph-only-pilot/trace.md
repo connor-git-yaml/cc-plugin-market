@@ -34,3 +34,15 @@
 - checklist：18 项全过（requirements.md）；关键 CHK-015 红→绿 oracle / CHK-018 三 mode 零回归 / CHK-017 遥测可审计
 - 设计阶段产物（纯文档，spec 本体已 Codex 审过）→ 目视审查通过，未单独跑 codex
 - GATE_DESIGN（hard gate / always / critical）→ 待用户确认
+
+### Phase: Plan
+- plan 子代理产出 plan.md（4 步实现 + 测试策略 + 风险 + 复杂度自检）
+- Codex 对抗审查：CRITICAL×3 + WARNING×3 + INFO×2（INFO 均为假阳性排除，确认 plan 正确点）
+- 处置（全部修订入 plan）：
+  - C1 spec↔plan 测试 gap 真实 → 新增集成测试 mcp-batch-graph-only.test.ts（不 mock，真跑小 fixture 读 graphPath 验 schemaVersion=2.0 + 0 绝对路径节点）坐实 SC-载体-001
+  - C2 用例 B 断言 bug（callArgs[1] undefined）→ 改 toHaveLength(1)
+  - C3 跨文件 mock export → server.ts 加 import 后全量 vitest 实证，缺则补 vi.fn()
+  - W1 红态判据澄清（FakeMcpServer 不跑 Zod 校验）+ 新增 A2 schema safeParse 枚举断言
+  - W2 新增用例 D：三旧 mode 参数化回归（runBatch 透传 mode / buildAstGraphOnly 不调）
+  - W3 新增用例 E：graph-only + languages warn 不透传
+- 关键风险点：goal_loop 红态识别——red 不是"Zod 拒绝"而是"runBatch 被非法 mode 调 / buildAstGraphOnly 未调"
