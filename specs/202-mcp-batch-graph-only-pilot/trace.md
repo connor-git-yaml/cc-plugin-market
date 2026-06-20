@@ -28,3 +28,9 @@
   - C-3 → 软化"无需认证"，oracle = 零 LLM
   - W-2 → FR-003 明确不动 BatchMode
   - W-6 → SC-载体-001 明确读 graphPath 文件断言 schemaVersion/绝对路径计数
+
+### Phase: Clarify + Checklist（DESIGN_PREP_GROUP 并行）
+- clarify：0 阻塞歧义（spec 经 Codex 审查后已充分明确），追加 Clarifications 段
+- checklist：18 项全过（requirements.md）；关键 CHK-015 红→绿 oracle / CHK-018 三 mode 零回归 / CHK-017 遥测可审计
+- 设计阶段产物（纯文档，spec 本体已 Codex 审过）→ 目视审查通过，未单独跑 codex
+- GATE_DESIGN（hard gate / always / critical）→ 待用户确认
