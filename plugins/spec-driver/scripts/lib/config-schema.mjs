@@ -469,6 +469,24 @@ export function resolveEffectiveConfig(options) {
     }
   }
 
+  // Spectra batch 子系统旋钮（Feature 146）——刻意与上方编排器 nestedKeys 分开处理。
+  // why 单独成块、且只在用户显式配置时才展示：
+  //   1) batch.concurrency 虽落在同一份 spec-driver.config.yaml，却由 Spectra batch 运行时消费，
+  //      而非 spec-driver 编排器；标注子系统来源以免被误读成编排器并发旋钮
+  //      （编排器并发是 orchestration-overrides.yaml 的 parallel_scheduling.max_concurrent_tasks）。
+  //   2) 其默认值 3 的 canonical source 在 src/ 运行时侧（cli/commands/batch.ts:resolveBatchConcurrency
+  //      与 batch-orchestrator.ts 的 `?? 3`），不在本插件脚本；故刻意不进 BUILTIN_DEFAULTS——
+  //      在此 hardcode 3 会与运行时默认形成双源，一旦运行时漂移就显示过期值，比"不展示"更误导
+  //      （见 111423f Codex R1 WARNING 2 的取舍）。
+  const batchConcurrency = getNestedValue(configYaml, 'batch.concurrency');
+  if (batchConcurrency !== undefined) {
+    entries.push({
+      key: 'batch.concurrency',
+      value: batchConcurrency,
+      source: 'config.yaml (spectra batch)',
+    });
+  }
+
   // preset 默认值提供的 agent 模型配置
   const presetDefaults = PRESET_DEFAULTS[effectivePreset] || {};
   const agents = configYaml.agents || {};

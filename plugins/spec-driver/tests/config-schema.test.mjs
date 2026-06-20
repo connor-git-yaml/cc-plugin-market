@@ -15,7 +15,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { validateConfig, zodAvailable } from '../scripts/lib/config-schema.mjs';
+import { validateConfig, resolveEffectiveConfig, BUILTIN_DEFAULTS, zodAvailable } from '../scripts/lib/config-schema.mjs';
 import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 
 // 测试文件位于 plugins/spec-driver/tests/，向上三级即仓库根
@@ -89,5 +89,71 @@ describe('config-schema: batch 段（Feature 146）', () => {
     const result = validateConfig({ batch: { concurrency: 3, unknown_knob: true } });
     assert.equal(result.success, false);
     assert.ok(errorsOf(result).length > 0, '未知子字段应产生 error');
+  });
+});
+
+// resolveEffectiveConfig 不依赖 zod（纯对象合并），故以下用例无需 zod 守卫。
+describe('config-schema: resolveEffectiveConfig 展示 batch.concurrency（111423f R1 WARNING 2 follow-up）', () => {
+  function findBatchEntry(entries) {
+    return entries.find((e) => e.key === 'batch.concurrency');
+  }
+
+  it('显式配置时展示该行，且来源标注 spectra batch 子系统', () => {
+    const entries = resolveEffectiveConfig({ configYaml: { batch: { concurrency: 3 } } });
+    const entry = findBatchEntry(entries);
+    assert.ok(entry, '应展示 batch.concurrency 行');
+    assert.equal(entry.value, 3, '生效值应为配置值');
+    assert.equal(
+      entry.source,
+      'config.yaml (spectra batch)',
+      '来源应标注 spectra batch 子系统，避免被误读为编排器并发旋钮',
+    );
+  });
+
+  it('quoted 字符串 "3" 原样流经展示（与运行时 readBatchConcurrency 接受集一致）', () => {
+    const entries = resolveEffectiveConfig({ configYaml: { batch: { concurrency: '3' } } });
+    const entry = findBatchEntry(entries);
+    assert.ok(entry, '字符串数字也应展示');
+    assert.equal(entry.value, '3', '原样保留字符串值（整数化交运行时 normalizeConcurrency）');
+    assert.equal(entry.source, 'config.yaml (spectra batch)');
+  });
+
+  it('未配置 batch 时不展示 batch.concurrency 行（不伪造运行时默认 3）', () => {
+    const entries = resolveEffectiveConfig({ configYaml: {} });
+    assert.equal(findBatchEntry(entries), undefined, '未配置时不应有 batch.concurrency 行');
+  });
+
+  it('batch 段存在但 concurrency 缺失时不展示（仅 batch:{}）', () => {
+    const entries = resolveEffectiveConfig({ configYaml: { batch: {} } });
+    assert.equal(findBatchEntry(entries), undefined);
+  });
+
+  it('回归护栏：batch.concurrency 不得进入 BUILTIN_DEFAULTS（守住单源 — 默认 canonical 在 src/ 运行时）', () => {
+    // 真护栏（数据结构层）：直接断言 BUILTIN_DEFAULTS 不含 batch.concurrency。
+    // why 不能只查 resolveEffectiveConfig 输出——那是假绿：batch.concurrency 不在 nestedKeys，
+    // 即便有人污染 BUILTIN_DEFAULTS，输出也不会冒出"内置默认"来源的 batch 行，行为层察觉不到
+    // （codex follow-up 审查 WARNING：脚本动态注入 BUILTIN_DEFAULTS['batch.concurrency']=3 后输出仍不变）。
+    assert.equal(
+      Object.hasOwn(BUILTIN_DEFAULTS, 'batch.concurrency'),
+      false,
+      'batch.concurrency 不应出现在 BUILTIN_DEFAULTS（避免与 src/ 运行时默认 3 形成双源）',
+    );
+    // 行为层兜底：当前展示逻辑对任何配置都不应产出"内置默认"来源的 batch.concurrency 行。
+    for (const configYaml of [{}, { batch: {} }, { batch: { concurrency: 3 } }]) {
+      const entries = resolveEffectiveConfig({ configYaml });
+      const builtinBatch = entries.find(
+        (e) => e.key === 'batch.concurrency' && e.source === '内置默认',
+      );
+      assert.equal(builtinBatch, undefined, '展示逻辑不应产出内置默认来源的 batch.concurrency');
+    }
+  });
+
+  it('未触动编排器字段：未配置时 retry.max_attempts 仍以内置默认展示', () => {
+    // 确认新增 batch 块未干扰既有 nestedKeys 通用回退逻辑。
+    const entries = resolveEffectiveConfig({ configYaml: {} });
+    const retry = entries.find((e) => e.key === 'retry.max_attempts');
+    assert.ok(retry, '编排器字段应照常展示');
+    assert.equal(retry.source, '内置默认');
+    assert.equal(retry.value, 2);
   });
 });
