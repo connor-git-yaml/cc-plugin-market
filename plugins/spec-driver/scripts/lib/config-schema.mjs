@@ -114,8 +114,24 @@ if (zodAvailable) {
     max_tool_invocations: z.number().int().min(1).default(50),
   }).default({});
 
+  // Spectra batch 并发配置（Feature 146）。concurrency 的接受集与运行时
+  // src/config/spec-driver-config.ts:readBatchConcurrency 对齐：有限 number 或可解析为
+  // 有限数字的字符串（如 quoted "3"）。整数化与越界裁剪交由运行时 normalizeConcurrency
+  // 统一处理，故此处不加 int()/positive()，避免 validate gate 与运行时对同一配置判定相反。
+  const concurrencySchema = z.union([
+    z.number().finite(),
+    z.string().refine(
+      (s) => { const t = s.trim(); return t.length > 0 && Number.isFinite(Number(t)); },
+      { message: '必须是可解析为有限数字的字符串（如 "3"）' },
+    ),
+  ]);
+  const batchSchema = z.object({
+    concurrency: concurrencySchema.optional(),
+  }).strict().optional();
+
   specDriverConfigSchema = z.object({
     preset: z.enum(['balanced', 'quality-first', 'cost-efficient']).default('balanced'),
+    batch: batchSchema,
     agents: agentsSchema,
     model_compat: modelCompatSchema,
     codex: codexSchema,
@@ -263,7 +279,7 @@ export function suggestField(unknown, knownFields) {
 
 /** 顶层 Schema 合法字段名列表 */
 const KNOWN_TOP_LEVEL_FIELDS = [
-  'preset', 'agents', 'model_compat', 'codex', 'codex_thinking',
+  'preset', 'batch', 'agents', 'model_compat', 'codex', 'codex_thinking',
   'research', 'verification', 'quality_gates', 'gate_policy',
   'gates', 'retry', 'progress', 'goal_loop',
 ];
