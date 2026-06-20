@@ -46,3 +46,16 @@
   - W2 新增用例 D：三旧 mode 参数化回归（runBatch 透传 mode / buildAstGraphOnly 不调）
   - W3 新增用例 E：graph-only + languages warn 不透传
 - 关键风险点：goal_loop 红态识别——red 不是"Zod 拒绝"而是"runBatch 被非法 mode 调 / buildAstGraphOnly 未调"
+
+### Phase: Tasks + Analyze
+- tasks 子代理产出 tasks.md（23 任务，6 phase，12/12 FR 覆盖）
+- analyze（一致性 PASS）：0 critical/high，2 medium（F-001 override 缺失边界—本 pilot override 已 present 故 moot / F-002 mcpLogger.info→console.error 路由—已 verify server.ts:226 正确）+ 1 low
+- Codex 对抗审查（tasks phase）：CRITICAL×1 + WARNING×5 + INFO×2，全部修订：
+  - C-001 T020 改"仅验证 override，绝不修改/commit"（堵 pilot 验证态误入 commit）
+  - W-001 依赖图补 T010：T008+T010→T011（两个红态都要先建立）
+  - W-002 T010 红态判据澄清（FakeMcpServer 不跑 Zod，红=未产 portable graph）
+  - W-003 T009/T016 补零 LLM oracle（无凭据跑通 + runBatch 未调双向证据）
+  - W-004 T017 移到 T015+T016 之后
+  - W-005 T021 指定 verify 报告入库路径 + 7 字段 grep 验收
+  - I-002 同文件测试任务并行措辞改"逻辑独立但建议顺序写"
+- GATE_ANALYSIS / GATE_TASKS（always）→ 待用户确认
