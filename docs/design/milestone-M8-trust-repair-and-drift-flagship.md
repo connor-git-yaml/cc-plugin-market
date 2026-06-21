@@ -51,7 +51,7 @@ amendment_2026-06-20b: goal_loop e2e pilot 链（F202/F203/F204）全 ship + 体
 - **F203✅** goal_loop core 两缺陷修：snapshot pathspec 排除 PRESERVED_CONFIG_PATHS（含 CRITICAL-7 git status 折叠漏网根因 + staged 态 preflight 硬失败兜底）+ smoke 假阴性区分 feature/环境失败；全链路零回归
 - **F204✅** 堵 CRITICAL-8：full_required_kinds 校验，缺 kind→INCOMPLETE_FULL_VERIFY（AC-5 直证漏洞 payload）；7/7 AC。诚实残留：对抗误标在通用插件内无法彻底关（core 不试图全关）
 - **处置**：goal_loop **验证 + 加固完成**（happy-path 坐实 + 3 缺陷修 + reward-hack 堵）；**近期 feature 全 done → 用户排最后的 F188 + npm publish 真正轮到**；backlog: SC-002/003 对抗验证 + M9 条件刷图
-执行顺序: …→ F201✅(goal_loop 机制) → F202✅(pilot·e2e 坐实闭环+暴露 3 缺陷) → F203✅(2 core 修)/F204✅(CRITICAL-8 reward-hack 堵) → 〔goal_loop 验证+加固 done〕→ **F188(eval 复测) + npm publish 4.3.0**（用户排最后·现真正轮到）→ 收尾；backlog: SC-002/003 对抗验证 + M9 条件刷图
+执行顺序: …→ F201✅(goal_loop 机制) → F202✅(pilot·e2e 坐实闭环+暴露 3 缺陷) → F203✅(2 core 修)/F204✅(CRITICAL-8 reward-hack 堵) → **F205✅(scaffold-kb 实战 guide 已 ship：文档导入 ingest 示例 + worked example，b6e6ecc；office ingest 实为 docx/pptx/pdf)** → 〔另窗并行已 ship、**完整体检待下轮 milestone-next**：F206✅(/goal 第二战役·全池 c3 81.8% 反超裸 Claude)/F207✅(init gitignore 自举)/F208✅(fix 依从性 Stop hook 三层判定·v4.3.0)/F209✅(dataset-build 测试去 venv 耦合)/F210✅(eval-validate oracle-infra 假报剔分母)/F211✅(fix-compliance 额度自愈)〕→ **F188(eval 复测) + npm publish 4.3.0**（用户排最后·仍待推）→ 收尾；backlog: SC-002/003 对抗验证 + M9 条件刷图
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
