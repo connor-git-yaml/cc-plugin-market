@@ -61,6 +61,9 @@ const DEFAULT_CONFIG = {
   no_progress_max_rounds: 2,
   max_verify_seconds: 300,
   max_tool_invocations: 50,
+  // 显式默认 []（与 config-schema BUILTIN_DEFAULTS 对齐）：AC-1 零回归用例靠此显式声明
+  // "默认跳过命令集校验"，而非隐式依赖 decideStop 的 || [] 兜底（quality-review INFO-4）。
+  full_required_kinds: [],
 };
 
 // ──────────────────────────────────────────────────────────────────────────
