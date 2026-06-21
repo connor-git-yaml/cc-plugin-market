@@ -157,3 +157,53 @@ describe('config-schema: resolveEffectiveConfig 展示 batch.concurrency（11142
     assert.equal(retry.value, 2);
   });
 });
+
+describe('config-schema: goal_loop.full_required_kinds（F204）', () => {
+  it('AC-7: 省略 full_required_kinds → validateConfig 通过，data 补默认 []', () => {
+    const result = validateConfig({ goal_loop: { max_iterations: 5 } });
+    assert.equal(result.success, true);
+    assert.deepEqual(errorsOf(result), []);
+    assert.deepEqual(
+      result.data.goal_loop.full_required_kinds,
+      [],
+      '省略时应被 zod default 填为 []',
+    );
+  });
+
+  it('AC-7: 声明合法枚举 ["build","test"] → 通过且保留', () => {
+    const result = validateConfig({ goal_loop: { full_required_kinds: ['build', 'test'] } });
+    assert.equal(result.success, true);
+    assert.deepEqual(errorsOf(result), []);
+    assert.deepEqual(result.data.goal_loop.full_required_kinds, ['build', 'test']);
+  });
+
+  it('AC-7 变体: 非法枚举值 ["invalid"] → validateConfig 报 error', {
+    skip: !zodAvailable && '缺 zod 时降级为 best-effort，不做枚举校验',
+  }, () => {
+    const result = validateConfig({ goal_loop: { full_required_kinds: ['invalid'] } });
+    assert.equal(result.success, false);
+    assert.ok(errorsOf(result).length > 0, '非法枚举应产生 error 级诊断');
+  });
+
+  it('W-2: resolveEffectiveConfig 展示 goal_loop.full_required_kinds（未配置→内置默认 []）', () => {
+    const entries = resolveEffectiveConfig({ configYaml: {} });
+    const entry = entries.find((e) => e.key === 'goal_loop.full_required_kinds');
+    assert.ok(entry, '应展示 goal_loop.full_required_kinds 行');
+    assert.deepEqual(entry.value, []);
+    assert.equal(entry.source, '内置默认');
+  });
+
+  it('W-2: 显式配置时 resolveEffectiveConfig 展示配置值', () => {
+    const entries = resolveEffectiveConfig({
+      configYaml: { goal_loop: { full_required_kinds: ['build', 'test', 'lint', 'check'] } },
+    });
+    const entry = entries.find((e) => e.key === 'goal_loop.full_required_kinds');
+    assert.ok(entry);
+    assert.deepEqual(entry.value, ['build', 'test', 'lint', 'check']);
+    assert.equal(entry.source, 'config.yaml');
+  });
+
+  it('W-2: BUILTIN_DEFAULTS 含 goal_loop.full_required_kinds=[]', () => {
+    assert.deepEqual(BUILTIN_DEFAULTS['goal_loop.full_required_kinds'], []);
+  });
+});

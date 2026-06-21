@@ -128,10 +128,19 @@ progress:
 # goal_loop 配置（Feature 201）
 # ═══════════════════════════════════════
 # 仅在 .specify/orchestration-overrides.yaml 为 feature mode implement phase
-# 启用 agent_mode: goal_loop 时才被编排器读取；默认全部注释掉（不激活）。
+# 启用 agent_mode: goal_loop 时才被编排器读取。本仓库 dogfood：显式声明
+# full_required_kinds 闭合 F204 实际敞口（裸搜该段而不声明 = 显式放弃该护栏）。
 # 示例值与 config-schema.mjs 的 Zod default 一致。
-# goal_loop:
-#   max_iterations: 5          # 最大迭代轮数（FR-005），默认 5
-#   no_progress_max_rounds: 2  # 连续无进展轮数触发早停（FR-006），默认 2
-#   max_verify_seconds: 300    # 单轮 verify 墙钟上限（秒，FR-007，timeout 强制），默认 300
-#   max_tool_invocations: 50   # 单轮编排器可见调用数上限（FR-007，best-effort），默认 50
+goal_loop:
+  max_iterations: 5          # 最大迭代轮数（FR-005），默认 5
+  no_progress_max_rounds: 2  # 连续无进展轮数触发早停（FR-006），默认 2
+  max_verify_seconds: 300    # 单轮 verify 墙钟上限（秒，FR-007，timeout 强制），默认 300
+  max_tool_invocations: 50   # 单轮编排器可见调用数上限（FR-007，best-effort），默认 50
+  # F204：full 轮必须出现这些 kind 类别的 PASS 命令才能 REACHED_GOAL；缺则 INCOMPLETE_FULL_VERIFY。
+  # 默认 []（跳过校验）；本仓库 dogfood opt-in 设全四类，闭合 reward-hacking 敞口。
+  # 注：本仓库 simple-yaml parser 只认 block-sequence（每行 - item），不认 inline flow ['a','b']。
+  full_required_kinds:
+    - build
+    - test
+    - lint
+    - check

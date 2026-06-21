@@ -71,6 +71,50 @@ export function evaluateMetric(report) {
 }
 
 /**
+ * 校验 full 报告的 PASS 命令是否覆盖全部必需 kind 类别（F204）
+ *
+ * 纯函数：无 I/O、无副作用、幂等。对 verify_mode:full 报告取其 PASS 命令的 kind 集合，
+ * 校验是否 ⊇ requiredKinds。requiredKinds 为空 → complete:true（优雅降级到现状）。
+ *
+ * **保护边界（诚实说明）**：kind 由 verify 子代理自报（与 exit_code 同源、同层级）。能挡遗漏/
+ * 截断（漏跑 lint、输出被截断少命令），不能挡对抗性自我误标（把 echo ok 标 kind:'test'）。
+ * 后者残留与 dist_not_built 校验同层级，由人工 GATE_VERIFY + Codex 对抗审查兜底。
+ *
+ * **类型守卫（Codex C-3）**：requiredKinds/cmd.kind 可能畸形（payload 由编排器构造、report 由
+ * 可错 LLM 产出）。非数组 requiredKinds → 视同 []；非字符串元素/非字符串 cmd.kind → 过滤、不贡献，
+ * 绝不 .toLowerCase() 崩——decideStop 须 total/stable，崩溃会破坏"稳定转 GATE"的承诺。
+ *
+ * @param {Object} report - parseReport 解析后的有效 report 对象（非降级态、verify_mode='full'）
+ * @param {string[]} requiredKinds - 期望必须出现的 kind 枚举数组，来自 config.full_required_kinds
+ * @returns {{ complete: boolean, missing: string[] }}
+ */
+export function validateFullCommandKinds(report, requiredKinds) {
+  // kind 归一化（Codex Phase3 W-3）：trim + 小写——容忍 LLM 产出的 ' build ' 等前后空白，
+  // 否则 ' build '.toLowerCase() !== 'build' 会把合法命令误判缺失 → false INCOMPLETE_FULL_VERIFY。
+  const normKind = (k) => k.trim().toLowerCase();
+  // requiredKinds 类型守卫（C-3）：非数组→[]；仅取字符串元素，归一化、去重
+  const required = new Set(
+    (Array.isArray(requiredKinds) ? requiredKinds : [])
+      .filter((k) => typeof k === 'string')
+      .map(normKind),
+  );
+  // 空期望集 → 直接通过（优雅降级，AC-4），不读任何 report 字段
+  if (required.size === 0) return { complete: true, missing: [] };
+
+  // PASS 命令的 kind 集合：仅取 status===PASS 且 kind 为字符串的命令
+  //   - FAIL/SKIPPED/UNKNOWN 不计入（防 reward-hacking：FAIL 命令不能"代缴"完整性）
+  //   - 非字符串 kind（123/null/对象）不贡献、绝不 .toLowerCase() 崩（C-3）
+  const passKinds = new Set(
+    (report && Array.isArray(report.layer2_commands) ? report.layer2_commands : [])
+      .filter((cmd) => classifyCommand(cmd) === 'PASS' && typeof cmd.kind === 'string')
+      .map((cmd) => normKind(cmd.kind)),
+  );
+
+  const missing = [...required].filter((k) => !passKinds.has(k));
+  return { complete: missing.length === 0, missing };
+}
+
+/**
  * 判定 smoke 报告是否满足 escalate_full 条件（非权威触发，F203 缺陷 2）
  *
  * 与权威门禁 evaluateMetric 的区别：smoke 轮跑全量 vitest 但不先 build，含 build 依赖的 e2e
@@ -394,6 +438,16 @@ export function decideStop({ report, round, config, prevReports, rollbackResult 
   if (!isDegraded) {
     if (report.verify_mode === 'full') {
       if (evaluateMetric(report)) {
+        // F204：metric 满足后、REACHED_GOAL 之前校验命令集完整性（W-1：之后不是之前）。
+        // requiredKinds 从 config 读（命令名/类别由项目配置，core 零硬编码命令名）；缺省/空 → 跳过。
+        const requiredKinds = (config && config.full_required_kinds) || [];
+        const kindCheck = validateFullCommandKinds(report, requiredKinds);
+        if (!kindCheck.complete) {
+          // 命令集缺必需 kind → 拒绝认证，交人工 GATE_VERIFY（fail-loud）。
+          // 语义差异：REACHED_GOAL 是机器确认达标；INCOMPLETE_FULL_VERIFY 是"metric 满足但命令集
+          // 缺必需类别"，由人工决定是否接受。不复用 infra-failure（那会计入 NO_PROGRESS 迭代）。
+          return { stop: true, exit_reason: 'INCOMPLETE_FULL_VERIFY', action: 'goto_gate_verify' };
+        }
         return { stop: true, exit_reason: 'REACHED_GOAL', action: 'goto_gate_verify' };
       }
       // full 未达标 → 落入后续优先级（绝不 escalate，C1 不变量从结构层面保证）

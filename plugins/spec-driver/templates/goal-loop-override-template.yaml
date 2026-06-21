@@ -13,6 +13,22 @@
 #      解析后所有 phase 的 source 均标注为 overrides（**非部分继承 base**）——不要误以为只有 implement 一处来自 overrides。
 #   4. goal_loop 预算/迭代参数（max_iterations 等）在 spec-driver.config.yaml 的 goal_loop 段配置。
 #
+# 【goal_loop 命令集完整性校验（F204）】
+#   full_required_kinds 声明 full 轮必须出现的命令类别（build/test/lint/check）。缺则 core
+#   decideStop 返回 INCOMPLETE_FULL_VERIFY、止步 GATE_VERIFY，不 REACHED_GOAL。
+#   默认 []（跳过校验）；推荐配置如下（适用于大多数 TypeScript 项目，写入 spec-driver.config.yaml）：
+#
+#     goal_loop:
+#       full_required_kinds:
+#         - build
+#         - test
+#         - lint
+#         - check
+#
+#   注意：verify 子代理必须在 layer2_commands 每条命令上标注 kind 字段，否则即使 kind 实际覆盖，
+#   校验也会视为缺失（漏标 kind = 不贡献 = 视为缺失）。
+#   注意：本仓库 simple-yaml parser 只认 block-sequence（每行 - item），不认 inline flow ['a','b']。
+#
 # 【激活边界（W7）】
 #   本模板仅声明 implement phase 的 agent_mode=goal_loop **标签**；goal_loop 的 runtime dispatch
 #   分支（实际的 implement→verify 自主迭代闭环）在 feature SKILL.md（Feature 201 Phase B/C 实现）。

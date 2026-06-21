@@ -112,6 +112,9 @@ if (zodAvailable) {
     max_verify_seconds: z.number().positive().default(300),
     // 单轮编排器可见委派/调用数上限（FR-007）——best-effort 粗粒度安全网，辅助上限
     max_tool_invocations: z.number().int().min(1).default(50),
+    // 命令集完整性校验（F204）：full 报告必须包含这些 kind 类别的 PASS 命令才能 REACHED_GOAL。
+    // 默认 []（跳过校验，保向后兼容）；项目级 opt-in：['build','test','lint','check']。
+    full_required_kinds: z.array(z.enum(['build', 'test', 'lint', 'check'])).default([]),
   }).default({});
 
   // Spectra batch 并发配置（Feature 146）。concurrency 的接受集与运行时
@@ -175,6 +178,8 @@ export const BUILTIN_DEFAULTS = {
   'goal_loop.no_progress_max_rounds': 2,
   'goal_loop.max_verify_seconds': 300,
   'goal_loop.max_tool_invocations': 50,
+  // F204：full 轮必需命令 kind 类别，默认 []（跳过校验，保向后兼容）。
+  'goal_loop.full_required_kinds': [],
 };
 
 /** preset 默认值表 */
@@ -458,6 +463,7 @@ export function resolveEffectiveConfig(options) {
     'goal_loop.no_progress_max_rounds',
     'goal_loop.max_verify_seconds',
     'goal_loop.max_tool_invocations',
+    'goal_loop.full_required_kinds',
   ];
 
   for (const dotPath of nestedKeys) {

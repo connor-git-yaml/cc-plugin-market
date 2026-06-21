@@ -33,6 +33,7 @@ import {
   parsePreservedConfigStates,
   isCleanExcludingPreserved,
   evaluateSmokeReadiness,
+  validateFullCommandKinds,
   PRESERVED_CONFIG_PATHSPECS,
 } from '../scripts/lib/goal-loop-core.mjs';
 import { acquireLock, releaseLock } from '../scripts/goal-loop-cli.mjs';
@@ -983,6 +984,246 @@ describe('decideStop (FR-004 优先级)', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// F204：validateFullCommandKinds（命令集完整性校验）—— 纯函数单元
+// ──────────────────────────────────────────────────────────────────────────
+describe('validateFullCommandKinds (F204)', () => {
+  // 含 build/test/lint/check 四条全 PASS 带 kind 的 full 报告
+  const withKinds = () => loadFixture('report-full-pass-with-kinds.json');
+
+  it('AC-4: requiredKinds=[] → { complete:true, missing:[] }（优雅降级，不读 report）', () => {
+    assert.deepEqual(validateFullCommandKinds(withKinds(), []), { complete: true, missing: [] });
+  });
+
+  it('AC-4: requiredKinds=null → 视同 []，complete:true（防御性）', () => {
+    assert.deepEqual(validateFullCommandKinds(withKinds(), null), { complete: true, missing: [] });
+  });
+
+  it('requiredKinds 非数组（对象）→ 视同 []，complete:true（防御性）', () => {
+    assert.deepEqual(validateFullCommandKinds(withKinds(), { bad: 1 }), { complete: true, missing: [] });
+  });
+
+  it('requiredKinds 含非字符串元素（123）→ 该元素被过滤、不抛异常（C-3）', () => {
+    // 123 被过滤，剩 'test' 已覆盖 → complete:true
+    const result = validateFullCommandKinds(withKinds(), [123, 'test']);
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.missing, []);
+  });
+
+  it('AC-3: PASS 命令含全部 required kinds → complete:true, missing:[]', () => {
+    assert.deepEqual(
+      validateFullCommandKinds(withKinds(), ['build', 'test', 'lint', 'check']),
+      { complete: true, missing: [] },
+    );
+  });
+
+  it('AC-2: PASS 命令缺 lint → complete:false, missing:["lint"]', () => {
+    const r = withKinds();
+    r.layer2_commands = r.layer2_commands.filter((c) => c.kind !== 'lint');
+    const result = validateFullCommandKinds(r, ['build', 'test', 'lint', 'check']);
+    assert.equal(result.complete, false);
+    assert.deepEqual(result.missing, ['lint']);
+  });
+
+  it('AC-2 变体: 命令全无 kind 字段 + required=["test"] → missing=["test"]', () => {
+    const r = loadFixture('report-full-pass.json'); // 无 kind 字段
+    const result = validateFullCommandKinds(r, ['test']);
+    assert.equal(result.complete, false);
+    assert.deepEqual(result.missing, ['test']);
+  });
+
+  it('AC-2 变体: FAIL 命令有 kind + PASS 命令无该 kind → 缺失（FAIL 不代缴）', () => {
+    const r = withKinds();
+    // 把 lint 命令转 FAIL（仍带 kind:lint），required 仍要求 lint
+    r.layer2_commands = r.layer2_commands.map((c) =>
+      c.kind === 'lint' ? { ...c, exit_code: 1, status: 'FAIL' } : c,
+    );
+    const result = validateFullCommandKinds(r, ['lint']);
+    assert.equal(result.complete, false, 'FAIL 命令的 kind 不计入有效集合');
+    assert.deepEqual(result.missing, ['lint']);
+  });
+
+  it('C-3: 命令 kind 为非字符串（123）→ 不贡献 kind、不抛异常', () => {
+    const r = withKinds();
+    r.layer2_commands = r.layer2_commands.map((c) =>
+      c.kind === 'test' ? { ...c, kind: 123 } : c,
+    );
+    // test 的 kind 被畸形成 123 → 不贡献 → 要求 test 时缺失，但绝不抛
+    let result;
+    assert.doesNotThrow(() => {
+      result = validateFullCommandKinds(r, ['test']);
+    });
+    assert.equal(result.complete, false);
+    assert.deepEqual(result.missing, ['test']);
+  });
+
+  it('边界: kind 大小写变体（"Build"）匹配 "build"', () => {
+    const r = withKinds();
+    r.layer2_commands = r.layer2_commands.map((c) =>
+      c.kind === 'build' ? { ...c, kind: 'Build' } : c,
+    );
+    const result = validateFullCommandKinds(r, ['build']);
+    assert.equal(result.complete, true);
+  });
+
+  it('边界: requiredKinds 含重复元素 ["test","test"] → 去重后正常比较', () => {
+    const result = validateFullCommandKinds(withKinds(), ['test', 'test']);
+    assert.deepEqual(result, { complete: true, missing: [] });
+  });
+
+  it('Codex Phase3 W-3: kind 含前后空白 "  build  " + required ["build"] → trim 后匹配 complete:true', () => {
+    const r = withKinds();
+    r.layer2_commands = r.layer2_commands.map((c) =>
+      c.kind === 'build' ? { ...c, kind: '  build  ' } : c,
+    );
+    const result = validateFullCommandKinds(r, ['build']);
+    assert.equal(result.complete, true, 'trim 应消除空白，避免合法命令被误判缺失 → false INCOMPLETE');
+  });
+
+  it('Codex Phase3 W-3: required 含空白 "  test  " 也 trim 归一', () => {
+    const result = validateFullCommandKinds(withKinds(), ['  test  ']);
+    assert.equal(result.complete, true);
+  });
+
+  it('AC-5 基础: echo-ok 单条命令（无 kind）+ required=["test"] → complete:false', () => {
+    const echoOnly = {
+      verify_mode: 'full',
+      layer2_commands: [{ name: 'echo ok', exit_code: 0, status: 'PASS', skipped_reason: null }],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+    };
+    const result = validateFullCommandKinds(echoOnly, ['build', 'test', 'lint', 'check']);
+    assert.equal(result.complete, false);
+    assert.deepEqual(result.missing, ['build', 'test', 'lint', 'check']);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// F204：decideStop 命令集完整性集成（full 权威门禁）
+// ──────────────────────────────────────────────────────────────────────────
+describe('decideStop 命令集完整性 (F204)', () => {
+  const REQUIRED = ['build', 'test', 'lint', 'check'];
+
+  it('AC-1 零回归: report-full-pass.json + full_required_kinds:[]（默认）→ REACHED_GOAL 不变', () => {
+    const result = decideStop({
+      report: loadFixture('report-full-pass.json'),
+      round: 2,
+      config: DEFAULT_CONFIG, // 无 full_required_kinds → 等价默认 []
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.exit_reason, 'REACHED_GOAL');
+    assert.equal(result.stop, true);
+    assert.equal(result.action, 'goto_gate_verify');
+  });
+
+  it('AC-3: with-kinds 报告 + 全部 required kinds → REACHED_GOAL', () => {
+    const result = decideStop({
+      report: loadFixture('report-full-pass-with-kinds.json'),
+      round: 2,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: REQUIRED },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.exit_reason, 'REACHED_GOAL');
+  });
+
+  it('AC-2: full 报告缺 lint kind + required 含 lint → INCOMPLETE_FULL_VERIFY（不 REACHED_GOAL）', () => {
+    const r = loadFixture('report-full-pass-with-kinds.json');
+    r.layer2_commands = r.layer2_commands.filter((c) => c.kind !== 'lint');
+    const result = decideStop({
+      report: r,
+      round: 2,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: REQUIRED },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.stop, true);
+    assert.equal(result.exit_reason, 'INCOMPLETE_FULL_VERIFY');
+    assert.equal(result.action, 'goto_gate_verify');
+    assert.notEqual(result.exit_reason, 'REACHED_GOAL');
+  });
+
+  it('AC-5 CRITICAL-8 直证: echo-ok full（无 kind）+ required kinds → 不 REACHED_GOAL', () => {
+    // 构造 reward-hacking 报告：verify_mode:full、仅 echo ok 一条、覆盖 100、COMPLIANT
+    const echoOk = {
+      round: 2,
+      verify_mode: 'full',
+      layer2_commands: [
+        { name: 'echo ok', exit_code: 0, status: 'PASS', skipped_reason: null },
+      ],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+      delta_inputs: { layer2_pass_count: 1, p1_fr_coverage_pct: 100, layer1_5_status_score: 2, regression_count: 0, net_loc_delta: 0 },
+    };
+    // 前置：evaluateMetric 自身放行（单命令全 PASS + 覆盖 100 + COMPLIANT）
+    assert.equal(evaluateMetric(echoOk), true, '前置：echo-ok 在 metric 层是放行的（漏洞前提）');
+    const result = decideStop({
+      report: echoOk,
+      round: 2,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: REQUIRED },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.notEqual(result.exit_reason, 'REACHED_GOAL', '漏洞必须被堵死');
+    assert.equal(result.exit_reason, 'INCOMPLETE_FULL_VERIFY');
+    assert.equal(result.stop, true);
+  });
+
+  it('AC-4: full_required_kinds:[] + echo-ok full → 跳过校验 → REACHED_GOAL（降级同现状）', () => {
+    const echoOk = {
+      round: 2,
+      verify_mode: 'full',
+      layer2_commands: [
+        { name: 'echo ok', exit_code: 0, status: 'PASS', skipped_reason: null },
+      ],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+      delta_inputs: { layer2_pass_count: 1, p1_fr_coverage_pct: 100, layer1_5_status_score: 2, regression_count: 0, net_loc_delta: 0 },
+    };
+    const result = decideStop({
+      report: echoOk,
+      round: 2,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: [] },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.exit_reason, 'REACHED_GOAL', '空 required → 跳过校验，行为同现状');
+  });
+
+  it('AC-6: smoke 报告 + 任意 full_required_kinds → 不受影响（走 smoke 分支 escalate_full）', () => {
+    const result = decideStop({
+      report: loadFixture('report-smoke-pass.json'),
+      round: 2,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: REQUIRED },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.action, 'escalate_full', 'smoke 不进 full kind 校验');
+    assert.notEqual(result.exit_reason, 'INCOMPLETE_FULL_VERIFY');
+  });
+
+  it('Codex Phase3 W-1 变异守卫: full metric=false（含 FAIL）+ required 非空 → 不得 INCOMPLETE_FULL_VERIFY（守卫仅在 metric 为真后生效）', () => {
+    // 翻一条命令为 FAIL → evaluateMetric=false。若守卫被误挪到 evaluateMetric 之前（W-1 反向），
+    // 这种 metric 未达标的 full（且缺 build kind）会被错判 INCOMPLETE。锁定守卫只在 metric 为真后触发。
+    const r = loadFixture('report-full-pass-with-kinds.json');
+    r.layer2_commands = r.layer2_commands.map((c, i) =>
+      i === 0 ? { ...c, exit_code: 1, status: 'FAIL' } : c,
+    );
+    assert.equal(evaluateMetric(r), false, '前置：含 FAIL → metric 不达标');
+    const result = decideStop({
+      report: r,
+      round: 5,
+      config: { ...DEFAULT_CONFIG, full_required_kinds: REQUIRED, max_iterations: 5 },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.notEqual(result.exit_reason, 'INCOMPLETE_FULL_VERIFY', 'metric 未达标的 full 绝不能走完整性校验分支');
+    assert.notEqual(result.exit_reason, 'REACHED_GOAL');
+    assert.equal(result.exit_reason, 'MAX_ITERATIONS', 'round>=max → 落 MAX_ITERATIONS（守卫未误触）');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // T-GL-18：文件锁 I/O 集成测试（FR-018）—— 非纯函数，temp-dir
 // ──────────────────────────────────────────────────────────────────────────
 describe('文件锁 I/O 集成（FR-018，非纯函数）', () => {
@@ -1191,6 +1432,19 @@ describe('goal_loop SKILL.md golden-text 校验（T025）', () => {
     assert.ok(
       skillMd.includes('REACHED_GOAL'),
       'escalate_full 后 full 轮才可能 REACHED_GOAL',
+    );
+  });
+
+  it('SKILL.md 含 F204 命令集完整性接线（C-1 读 full_required_kinds + C-2 INCOMPLETE_FULL_VERIFY 路由）', () => {
+    // 锁定 C-1/C-2 散文接线存在——这是不可单测的编排接线的唯一自动护栏（Codex Phase3 W-2）：
+    // 删 C-1 → step1 不读 config → 校验空转、漏洞真实运行时复活；删 C-2 → 新 exit_reason 失配。
+    assert.ok(
+      skillMd.includes('full_required_kinds'),
+      'step1 必须读 full_required_kinds 进 config，否则不进 decide-stop payload、漏洞空转（C-1）',
+    );
+    assert.ok(
+      skillMd.includes('INCOMPLETE_FULL_VERIFY'),
+      'dispatch（branch e + escalate 二次路由 branch c）必须覆盖 INCOMPLETE_FULL_VERIFY（C-2）',
     );
   });
 

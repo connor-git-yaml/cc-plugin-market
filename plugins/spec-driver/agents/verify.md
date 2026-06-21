@@ -225,6 +225,8 @@ effort: medium
   "layer2_commands": [                // Layer 2 每条命令一项
     {
       "name": "npx vitest run",
+      "kind": "test",                 // F204：命令类别。枚举 build | test | lint | check
+                                      // 可选；旧报告不含此字段时不影响行为（full_required_kinds=[] 默认跳过校验）
       "exit_code": 0,                 // 真实执行退出码，MUST NOT 缺省
       "status": "PASS",               // PASS | FAIL | SKIPPED | UNKNOWN
       "duration_seconds": 8.1,
@@ -260,10 +262,14 @@ effort: medium
 
 **full 轮 Layer 2 命令集（必须按此顺序，每条各加 `timeout {max_verify_seconds}s` 前缀）**：
 
-1. `npm run build` → dist 就位
-2. `npx vitest run` → 含 e2e（dist 已就位，无 build 依赖 SKIPPED）
-3. `npm run lint`（如适用）
-4. `npm run repo:check`
+1. `npm run build`          → kind: `"build"` → dist 就位
+2. `npx vitest run`         → kind: `"test"`  → 含 e2e（dist 已就位，无 build 依赖 SKIPPED）
+3. `npm run lint`（如适用）→ kind: `"lint"`
+4. `npm run repo:check`     → kind: `"check"`
+
+> **F204 — 每条命令 MUST 标注 `kind`**：full 轮每条 `layer2_commands[]` 必须带 `kind` 字段（build/test/lint/check）。
+> 若 `config.goal_loop.full_required_kinds` 声明了必需类别而报告缺对应 kind（漏标或漏跑），goal_loop core
+> `decideStop` 会返回 `INCOMPLETE_FULL_VERIFY`、止步 GATE_VERIFY，**不** REACHED_GOAL。**漏标 kind = 不贡献 = 视为缺失**。
 
 > **timeout 口径（F203 修订 #6）**：`max_verify_seconds` 为 **per-command** 墙钟上限（非整轮共享）。full 补 `npx vitest run` 后最坏耗时 ≈ Σ(build, vitest, lint, repo:check) 各自上限，full 轮总时长较 smoke 显著上升，需确认单实例锁 TTL（已移除超龄接管，存活 PID 永不被抢）与 NO_PROGRESS no-progress 预算可接受。
 
@@ -281,7 +287,12 @@ effort: medium
 - 该 report 被 core `decideStop` 识别为 infra-failure，**不视为普通 continue**，绝不静默当达标
 - smoke 轮的 `dist_not_built` SKIPPED 是预期行为（smoke 不 build），正常放行
 - **关于命令集完整性（F203 WARNING #3a，有意权衡）**：core 不做 smoke 命令名校验——smoke readiness 仅触发非权威 escalate，full 轮严格门禁（先 build + 跑全量 vitest）才是权威，退化 smoke 至多多一次 full verify，绝不假 REACHED_GOAL。命令集完整性由本 verify.md 契约（mandate smoke 必跑上述命令集）负责，不让 core 耦合命令名。
-- **关于 full 命令集完整性（F203 CRITICAL-8，有意不在 core 校验）**：core 同样**不**校验 full 报告是否含全部 mandated 命令（build / vitest / lint / repo:check）。spec-driver 是通用插件，命令集随项目可配，把 `vitest` / `build` 命令名硬编码进 core 是错的；且这与既有"信任 verify 子代理 exit_code"信任模型一致。**full 报告缺 mandated 命令属 verify 子代理契约违反，由本契约（上方 full 轮命令集 mandate）负责，非 core 职责**。后续可加 config 驱动的命令集契约校验，单列 follow-up，当前 core/evaluateMetric 不做命令名校验。
+- **关于 full 命令集完整性（F203 CRITICAL-8 → F204 已实现）**：F204 在 `decideStop` 的 full 路径引入纯函数 `validateFullCommandKinds`，校验 PASS 命令的 `kind` 集合是否覆盖 `config.goal_loop.full_required_kinds`（默认 `[]`，项目级 opt-in）。缺必需类别 → `exit_reason: 'INCOMPLETE_FULL_VERIFY'`，止步于 GATE_VERIFY，**不** REACHED_GOAL。core 校验的是 **kind 枚举**（语言无关、由 config 驱动），**不**硬编码 `vitest` / `build` 命令名——避免 F203 警告的同类耦合。
+
+  **保护边界（诚实说明）**：`kind` 由 verify 子代理自报，与 `exit_code` 同源（同层级），**不是**硬结构不变量。
+  - **能挡**：遗漏 / 截断（LLM 漏跑 lint、输出被截断少了命令）——这是把散文 mandate 升级为机器校验真正新增的保护。
+  - **不能挡**：对抗性自我误标（把 `echo ok` 标 `kind:'test'`）。此残留与现有 `dist_not_built` 校验同层级，由人工 GATE_VERIFY + Codex 对抗审查兜底。
+  - 显著缩小 CRITICAL-8 敞口（挡住遗漏/截断主路径），不声称完全消除。
 
 **降级（由 goal_loop core 处理，非本子代理职责）**：若本轮无法产出合法 JSON（输出截断 / schema 非法 / 命令集为空），goal_loop core `parseReport` 将该轮标 `infra-failure`，编排器据此计入无进展/早停判定，绝不静默当达标。
 

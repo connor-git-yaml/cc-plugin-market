@@ -24,7 +24,7 @@
 
 ## T001 — TDD 红：fixture + 桩 + 全部测试骨架（Codex C-4/W-4 修正）
 
-- [ ] **T001** 写入 fixture、throwing 桩、全部新测试，并确认红态
+- [x] **T001** 写入 fixture、throwing 桩、全部新测试，并确认红态
   - **改动文件**：
     1. 新增 `plugins/spec-driver/tests/fixtures/goal-loop/report-full-pass-with-kinds.json`（**fixture 是 test infra，必须在此创建**，否则 AC-3 用例不可达——Codex C-4）。内容见 plan.md §6.1（build/test/lint/check 四条带 `kind` 全 PASS）
     2. `plugins/spec-driver/scripts/lib/goal-loop-core.mjs`：加 **throwing 桩** `export function validateFullCommandKinds(report, requiredKinds) { throw new Error('NotImplemented'); }`（F201 同款 TDD 约定——否则 goal-loop-core.test.mjs 的静态 named import 会整文件链接失败而非逐用例红，Codex W-4）
@@ -44,7 +44,7 @@
 
 ## T002 — schema 字段 + effective-config 同步（AC-7 绿，Codex W-2）
 
-- [ ] **T002** [P] `config-schema.mjs` 新增 `full_required_kinds` 字段并同步 effective-config 机制
+- [x] **T002** [P] `config-schema.mjs` 新增 `full_required_kinds` 字段并同步 effective-config 机制
   - **改动文件**：`plugins/spec-driver/scripts/lib/config-schema.mjs`，**三处**：
     1. `goalLoopSchema`（L106 附近，`max_tool_invocations` 之后）：
        ```js
@@ -61,7 +61,7 @@
 
 ## T003 — 纯函数实现（含类型守卫，AC-2/3/4 绿，Codex C-3）
 
-- [ ] **T003** 用 plan.md §2.4 的**类型守卫版**实现替换 `validateFullCommandKinds` 桩
+- [x] **T003** 用 plan.md §2.4 的**类型守卫版**实现替换 `validateFullCommandKinds` 桩
   - **改动文件**：`plugins/spec-driver/scripts/lib/goal-loop-core.mjs`
   - **改动内容**：按 plan.md §2.4 参考实现（**含 `Array.isArray(requiredKinds)` + `typeof k==='string'` + `typeof cmd.kind==='string'` 守卫，Codex C-3**），放在 `evaluateMetric` 附近，复用既有 `classifyCommand`
   - **红→绿**：T001 的 9 个 validateFullCommandKinds 单元用例转绿（含 kind:123 不崩、非数组 requiredKinds 等边界）
@@ -72,7 +72,7 @@
 
 ## T004 — decideStop 接入（AC-2/5/6 集成绿）
 
-- [ ] **T004** 在 `decideStop` full 分支接入 `validateFullCommandKinds`
+- [x] **T004** 在 `decideStop` full 分支接入 `validateFullCommandKinds`
   - **改动文件**：`plugins/spec-driver/scripts/lib/goal-loop-core.mjs`
   - **改动位置**：`decideStop` 优先级 3「达标」分支，`report.verify_mode === 'full'` 块内，**`evaluateMetric(report)` 为 true 之后、`return REACHED_GOAL` 之前**（plan.md §3.3；**注意是"之后"不是"之前"——W-1**）
   - **改动内容**：按 plan.md §3.3 插入；缺必需 kind → `{ stop:true, exit_reason:'INCOMPLETE_FULL_VERIFY', action:'goto_gate_verify' }`；读 `(config && config.full_required_kinds) || []`
@@ -84,7 +84,7 @@
 
 ## T005 — 零回归验证门禁（AC-1 绿）
 
-- [ ] **T005** 确认 AC-1 零回归：`report-full-pass.json` + 默认 `full_required_kinds:[]` → REACHED_GOAL 不变
+- [x] **T005** 确认 AC-1 零回归：`report-full-pass.json` + 默认 `full_required_kinds:[]` → REACHED_GOAL 不变
   - **改动文件**：无（只跑测试）
   - **验证**：`node --test plugins/spec-driver/tests/goal-loop-core.test.mjs`
   - **绿判据**：AC-1 用例（report-full-pass.json+默认[]）绿；原有 11+ 引用该 fixture 的用例全绿；141+ pass / 0 fail。若红 → T004 接入逻辑误伤空[]短路，必须回修 T004 再继续
@@ -95,7 +95,7 @@
 
 ## T006 — 文档更新 verify.md
 
-- [ ] **T006** 更新 `plugins/spec-driver/agents/verify.md`：layer2_commands schema 加 kind + full mandate 标注 + CRITICAL-8 段改写
+- [x] **T006** 更新 `plugins/spec-driver/agents/verify.md`：layer2_commands schema 加 kind + full mandate 标注 + CRITICAL-8 段改写
   - **改动文件**：`plugins/spec-driver/agents/verify.md`，三处（plan.md §4.2~§4.4）：
     - L225-234 schema JSON：每条命令加 `"kind": "test"` + 注释（枚举 build|test|lint|check）
     - L261-266 full mandate：每条命令标注 kind（build/test/lint/check）
@@ -108,7 +108,7 @@
 
 ## T007 — dogfood opt-in（spec-driver.config.yaml）
 
-- [ ] **T007** [P] 更新 `spec-driver.config.yaml`：取消注释 goal_loop 段 + 设 full_required_kinds
+- [x] **T007** [P] 更新 `spec-driver.config.yaml`：取消注释 goal_loop 段 + 设 full_required_kinds
   - **改动文件**：`spec-driver.config.yaml`（plan.md §5.1）
   - **改动内容**：goal_loop 段取消注释，设 `full_required_kinds: ['build', 'test', 'lint', 'check']`（dogfood opt-in，闭合实际敞口）+ 注释说明行
   - **注意**：取消注释后 `validateConfig` 实际解析该段；goal_loop 有 `.default({})` 兜底，显式声明只是补覆盖，不应破坏现有 config 测试——T010 全量验证确认
@@ -120,7 +120,7 @@
 
 ## T008 — 模板 opt-in 兜底（goal-loop-override-template.yaml）
 
-- [ ] **T008** [P] 更新 `plugins/spec-driver/templates/goal-loop-override-template.yaml`：补 full_required_kinds 示例
+- [x] **T008** [P] 更新 `plugins/spec-driver/templates/goal-loop-override-template.yaml`：补 full_required_kinds 示例
   - **改动文件**：`plugins/spec-driver/templates/goal-loop-override-template.yaml`（plan.md §5.2）
   - **改动内容**：goal_loop 说明段后补 `full_required_kinds` 示例注释块 + 注意事项（verify 子代理必须标注 kind，否则视为缺失）
   - **绿判据**：人工 review 示例格式正确
@@ -131,7 +131,7 @@
 
 ## T009 — SKILL.md 3 处修正 + repo:sync（Codex C-1/C-2，编排器修正）
 
-- [ ] **T009** 修正 `plugins/spec-driver/skills/spec-driver-feature/SKILL.md`（3 处 + 1 一致性）并同步镜像
+- [x] **T009** 修正 `plugins/spec-driver/skills/spec-driver-feature/SKILL.md`（3 处 + 1 一致性）并同步镜像
   - **改动文件**：`plugins/spec-driver/skills/spec-driver-feature/SKILL.md`（plan.md §3.6）
   - **编辑 1（C-1 最紧要）**：前置 step1（L296-298）读取键加 `full_required_kinds`（缺省 `[]`）——否则不进 decide-stop payload、漏洞空转
   - **编辑 2（branch e，L490）**：exit_reason 集合加 `INCOMPLETE_FULL_VERIFY` + 一行语义注释
@@ -146,7 +146,7 @@
 
 ## T010 — 全量门禁（最终验收）
 
-- [ ] **T010** 全量门禁：core 单测 + vitest + build + repo:check
+- [x] **T010** 全量门禁：core 单测 + vitest + build + repo:check
   - **改动文件**：无（只跑命令）
   - **验证序列**：
     1. `node --test plugins/spec-driver/tests/goal-loop-core.test.mjs`（core 快速反馈）
