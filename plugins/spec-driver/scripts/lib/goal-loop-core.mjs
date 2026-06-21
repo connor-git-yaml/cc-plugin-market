@@ -15,6 +15,17 @@
  */
 
 /**
+ * goal_loop 循环配置路径——跨快照保留，不得被 stash/clean 触碰（F203 缺陷 1）
+ *
+ * goal_loop 验证态会临时写 .specify/orchestration-overrides.yaml（刻意不入 commit），
+ * 早期 planSnapshotCommands 的 `git stash push -u` 与 planRollbackCommands 的 `git clean -fd`
+ * 会把它当普通工作树变更卷走/删除，导致循环中途配置自毁。该常量驱动命令生成的 pathspec 排除。
+ */
+export const PRESERVED_CONFIG_PATHSPECS = [
+  '.specify/orchestration-overrides.yaml',
+];
+
+/**
  * 分类单条命令结果（FR-009）
  * @param {{ exit_code?: number|null, skipped_reason?: string|null }} cmdResult
  * @returns {'PASS'|'FAIL'|'SKIPPED'|'UNKNOWN'}
@@ -57,6 +68,214 @@ export function evaluateMetric(report) {
   const evidence = report.layer1_5_evidence;
   if (!evidence || evidence.status !== 'COMPLIANT') return false;
   return true;
+}
+
+/**
+ * 判定 smoke 报告是否满足 escalate_full 条件（非权威触发，F203 缺陷 2）
+ *
+ * 与权威门禁 evaluateMetric 的区别：smoke 轮跑全量 vitest 但不先 build，含 build 依赖的 e2e
+ * 会被源头标 SKIPPED。evaluateMetric 严格要求全量 PASS（SKIPPED 即不达标），smoke 永不达标。
+ * evaluateSmokeReadiness 放宽——允许 SKIPPED，只要非 SKIPPED 命令全 PASS 且至少有一条非 SKIPPED
+ * 命令（vacuous-truth 防护）。满足即触发 escalate_full（升级 full verify 重判，绝非直接 REACHED_GOAL）。
+ * @param {Object} report
+ * @returns {boolean}
+ */
+export function evaluateSmokeReadiness(report) {
+  if (!report || !Array.isArray(report.layer2_commands)) {
+    return false;
+  }
+  // 条件 1：P1 FR 覆盖率 100%
+  const cov = report.layer1_fr_coverage;
+  if (!cov || cov.p1_coverage_pct !== 100) return false;
+  // 条件 2：Layer 1.5 证据 COMPLIANT
+  const evidence = report.layer1_5_evidence;
+  if (!evidence || evidence.status !== 'COMPLIANT') return false;
+  // 条件 3 + vacuous 防护：取非 SKIPPED 命令，要求 ≥1 条且全 PASS
+  //   UNKNOWN（非 SKIPPED 且非 PASS）即不满足；FAIL 即不满足。
+  const nonSkipped = report.layer2_commands.filter((cmd) => classifyCommand(cmd) !== 'SKIPPED');
+  if (nonSkipped.length === 0) return false; // 全 SKIPPED → vacuous，不放行（C3）
+  return nonSkipped.every((cmd) => classifyCommand(cmd) === 'PASS');
+}
+
+/**
+ * 从单行 porcelain v1 输出提取受影响路径集合（F203 修订 #1，DRY helper）
+ *
+ * porcelain v1 固定列：前两字符 XY（X=index 列，Y=工作区列）+ 空格 + 路径。
+ * 由 parsePreservedConfigStates 与 isCleanExcludingPreserved 共用，统一行→路径解析。
+ *   - `??`（untracked）→ unquote(rest)
+ *   - rename/copy（X='R'/'C'）→ 两端路径（from + to）
+ *   - 其余 → unquote(rest)（单路径）
+ * 空行返回空数组。
+ * @param {string} line - 单行 porcelain 文本（不含换行符）
+ * @returns {string[]}
+ */
+function extractPorcelainPaths(line) {
+  if (!line || line.length === 0) return [];
+  const xy = line.slice(0, 2);
+  const rest = line.slice(3);
+  const x = xy[0];
+  if (xy === '??') {
+    return [unquotePorcelainPath(rest)];
+  }
+  if (x === 'R' || x === 'C') {
+    const { from, to } = splitRenameArrow(rest);
+    return [unquotePorcelainPath(from), unquotePorcelainPath(to)];
+  }
+  return [unquotePorcelainPath(rest)];
+}
+
+/**
+ * 判定"排除 preserved 路径后"工作区是否干净（F203 修订 #1 / CRITICAL-7）
+ *
+ * 危险场景：工作区唯一 dirty 是 untracked preserved override 时，若按全仓 porcelain 判
+ * isClean=false，则 planSnapshotCommands(false) 的 stash push 排除了 override → "没有要保存的
+ * 本地修改"（无新 stash）→ 随后 `git rev-parse stash@{0}` 抓到**仓库里已有的无关旧 stash** →
+ * `stash apply --index` 套用无关改动污染工作区。修复：isClean 必须排除 preserved 后再判。
+ *
+ * 语义：解析**全仓** porcelain 文本，逐行提取路径——若存在任一行其路径**不全属于** preservedPaths
+ * （rename 两端只要有一端非 preserved 即算非 preserved 变更）→ 返回 false；所有 dirty 行都是
+ * preserved（或无 dirty 行）→ true。
+ *
+ * 输入契约：porcelainText MUST 来自 `git status --porcelain --untracked-files=all`。默认 porcelain
+ * （无 -uall）会把整个 untracked 目录折叠成单行 `?? .specify/`（而非展开到 `?? .specify/orchestration-overrides.yaml`）；
+ * 折叠形式下 `.specify/` ≠ preserved 文件路径 → 被判为非 preserved 变更 → 误判 false（CRITICAL-7 漏网根因）。
+ * 本函数对折叠输入保守判脏（返回 false）——这是正确的防御性行为，但前提是调用方喂入 -uall 展开形式才能拿到 true。
+ * @param {string} porcelainText - 全仓 `git status --porcelain --untracked-files=all` 原始 stdout
+ * @param {string[]} preservedPaths - 视为可忽略的保留路径（默认 PRESERVED_CONFIG_PATHSPECS）
+ * @returns {boolean}
+ */
+export function isCleanExcludingPreserved(porcelainText, preservedPaths = PRESERVED_CONFIG_PATHSPECS) {
+  const text = typeof porcelainText === 'string' ? porcelainText : '';
+  const preserved = new Set(preservedPaths || []);
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.length === 0) continue;
+    const paths = extractPorcelainPaths(rawLine);
+    if (paths.length === 0) continue;
+    // 该行只要有任一路径不属于 preserved → 存在非 preserved 变更 → 不干净
+    if (paths.some((p) => !preserved.has(p))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 解析 `git status --porcelain -- <paths>` 文本为 preserved config 状态数组（F203 精化 #2）
+ *
+ * porcelain v1 固定列：前两字符 XY（X=index 列，Y=工作区列）+ 空格 + 路径。
+ * 把脆弱的文本解析放进可单测 core，SKILL.md 散文只负责跑命令并把原文管道给 CLI，不自行解析。
+ * @param {string} porcelainText - git status --porcelain 原始 stdout
+ * @param {string[]} preservedPaths - 需检查的路径（如 PRESERVED_CONFIG_PATHSPECS）
+ * @returns {{ path: string, state: 'absent'|'untracked'|'tracked-clean'|'tracked-modified'|'staged' }[]}
+ */
+export function parsePreservedConfigStates(porcelainText, preservedPaths) {
+  const text = typeof porcelainText === 'string' ? porcelainText : '';
+  // path → 最强状态（staged > tracked-modified > untracked），同一路径多行时取最不安全的
+  const byPath = new Map();
+  const rank = { untracked: 1, 'tracked-modified': 2, staged: 3 };
+  const assign = (p, state) => {
+    if (!p) return;
+    const prev = byPath.get(p);
+    if (!prev || rank[state] > rank[prev]) byPath.set(p, state);
+  };
+
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.length === 0) continue;
+    // porcelain v1：第 0-1 字符为 XY 状态码，第 2 字符为空格，其后为路径。
+    // 路径提取复用 extractPorcelainPaths（DRY，与 isCleanExcludingPreserved 同源）；
+    // 本函数额外按 XY 列推断 state（untracked / staged / tracked-modified）。
+    const xy = rawLine.slice(0, 2);
+    const x = xy[0];
+    const y = xy[1];
+    const paths = extractPorcelainPaths(rawLine);
+
+    if (xy === '??') {
+      assign(paths[0], 'untracked');
+      continue;
+    }
+    // rename/copy 行：`R  old -> new`（X='R'/'C'）—— 两端路径命中任一即归类 staged
+    if (x === 'R' || x === 'C') {
+      for (const p of paths) assign(p, 'staged');
+      continue;
+    }
+    const p = paths[0];
+    // index 列（X）非空非空格 → staged（含 M /A /MM/AM 等，index 有暂存即 staged 优先）
+    if (x && x !== ' ' && x !== '?') {
+      assign(p, 'staged');
+      continue;
+    }
+    // 仅工作区列（Y）非空、index 列为空格 → tracked-modified（如 " M"/" D"）
+    if (y && y !== ' ') {
+      assign(p, 'tracked-modified');
+    }
+  }
+
+  // 对每个 preserved path：命中则用解析出的 state，未命中则 absent（含 tracked-clean，统一按安全归类）
+  return (preservedPaths || []).map((path) => ({
+    path,
+    state: byPath.get(path) ?? 'absent',
+  }));
+}
+
+/**
+ * 拆分 porcelain rename/copy 行的 `old -> new` 两端（F203 修订 #3）
+ * @param {string} rest - 状态码之后的内容
+ * @returns {{ from: string, to: string }}
+ */
+function splitRenameArrow(rest) {
+  const idx = rest.indexOf(' -> ');
+  if (idx === -1) {
+    return { from: rest, to: rest };
+  }
+  return { from: rest.slice(0, idx), to: rest.slice(idx + 4) };
+}
+
+/**
+ * 去除 porcelain 对含特殊字符路径加的双引号 + C-style 转义（F203 修订 #3）
+ *
+ * porcelain 对含空格/特殊字符的路径用双引号包裹并做 C-style 转义。我们的 preserved path 是简单
+ * ASCII 不会被引号化，但 parser 须健壮处理引号包裹形式，避免误判 absent。
+ * @param {string} raw
+ * @returns {string}
+ */
+function unquotePorcelainPath(raw) {
+  const s = (raw || '').trim();
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+    const inner = s.slice(1, -1);
+    // 反转义常见 C-style 序列（\" \\ \t \n 等）；八进制 \nnn 转回字节
+    return inner
+      .replace(/\\([\\"abfnrtv])/g, (_, c) => {
+        const map = { '\\': '\\', '"': '"', a: '\x07', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
+        return map[c] ?? c;
+      })
+      .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
+  }
+  return s;
+}
+
+/**
+ * 检查 preserved config 路径是否处于安全状态（preflight 守护，F203 缺陷 1）
+ *
+ * pathspec 排除只保护 untracked 的 preserved config；staged/tracked-modified 态会被
+ * `git reset --hard` 摧毁，pathspec 拦不住，故由本 preflight 提前拦截（硬失败优于静默数据丢失）。
+ * @param {{ path: string, state: 'absent'|'untracked'|'tracked-clean'|'tracked-modified'|'staged' }[]} entries
+ *   由编排器调 `git status --porcelain -- <paths>` 经 parsePreservedConfigStates 解析后传入
+ * @returns {{ safe: boolean, unsafe: { path: string, state: string, reason: string }[] }}
+ */
+export function assessPreservedConfigSafety(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  const UNSAFE_STATES = new Set(['staged', 'tracked-modified']);
+  const unsafe = [];
+  for (const entry of list) {
+    if (entry && UNSAFE_STATES.has(entry.state)) {
+      unsafe.push({
+        path: entry.path,
+        state: entry.state,
+        reason: `preserved config 处于 ${entry.state} 态，会被 git reset --hard HEAD 摧毁；goal_loop 期望其 untracked，中止防数据丢失`,
+      });
+    }
+  }
+  return { safe: unsafe.length === 0, unsafe };
 }
 
 /**
@@ -168,11 +387,25 @@ export function decideStop({ report, round, config, prevReports, rollbackResult 
   // 散文层（SKILL.md 步骤 6c）另有两道兜底：
   //   (1) forced full 后先校验 curReportFull.verify_mode === 'full'，否则按 infra-failure 转 GATE_VERIFY；
   //   (2) 重 decide 后若仍意外得到 escalate_full（契约违反），MUST NOT 再升级，直接转 GATE_VERIFY。
-  if (!isDegraded && evaluateMetric(report)) {
+  //
+  // **干净结构（F203 精化 #1）**：full→只调 evaluateMetric；smoke→只调 evaluateSmokeReadiness。
+  //   full 权威门禁严格（全量 PASS + p1=100 + COMPLIANT，SKIPPED 即不达标，evaluateMetric 不放宽）；
+  //   smoke 用 evaluateSmokeReadiness（允许 SKIPPED，非 SKIPPED 全 PASS 且 ≥1 非 SKIPPED）触发 escalate。
+  if (!isDegraded) {
     if (report.verify_mode === 'full') {
-      return { stop: true, exit_reason: 'REACHED_GOAL', action: 'goto_gate_verify' };
+      if (evaluateMetric(report)) {
+        return { stop: true, exit_reason: 'REACHED_GOAL', action: 'goto_gate_verify' };
+      }
+      // full 未达标 → 落入后续优先级（绝不 escalate，C1 不变量从结构层面保证）
+    } else if (report.verify_mode === 'smoke') {
+      // smoke 分支（C1 不变量：escalate_full 仅此路径可能返回）。
+      // 防御纵深（F203 修订 #2 / WARNING-1）：收紧为显式 'smoke' —— 非 full 非 smoke 的报告
+      // 已被 parseReport 降级为 infra-failure，但此处再设一道防线，绝不让非法 verify_mode escalate。
+      if (evaluateSmokeReadiness(report)) {
+        return { stop: false, exit_reason: null, action: 'escalate_full' };
+      }
+      // smoke 未满足 → 落入后续优先级
     }
-    return { stop: false, exit_reason: null, action: 'escalate_full' };
   }
 
   // 优先级 4：达到最大迭代轮数
@@ -295,17 +528,26 @@ export function selectVerifyMode(round, maxIterations, aboutToExit) {
 /**
  * 规划建立 snapshot 的 git 命令序列（FR-013）
  * @param {boolean} isClean
+ * @param {string[]} preservedPaths - 跨快照保留、不入 stash 的路径（F203 缺陷 1，默认常量；
+ *   多 path 展开为多个独立 ':(exclude)<p>' token，禁止 join 成单字符串）
  * @returns {string[]}
  */
-export function planSnapshotCommands(isClean) {
+export function planSnapshotCommands(isClean, preservedPaths = PRESERVED_CONFIG_PATHSPECS) {
   // 干净工作区：无 stash entry，锚点 = HEAD，无需任何命令
   if (isClean) {
     return [];
   }
+  // F203 修订 #3（WARNING-5）：preserved path 会被原样拼进 `'...'` 引号的 shell 命令，
+  // 含单引号会破坏引号闭合形成注入面。与 isValidGitSha 防注入风格一致，含单引号即拒绝。
+  assertNoSingleQuote(preservedPaths);
   // 非干净：全量捕获 tracked+staged+untracked → 捕获 SHA → 立即原样还原继续本轮
   // {i} / {stash_ref} 为占位符，编排器执行时替换
+  // F203：每个 preserved path 展开为独立 ':(exclude)<p>' pathspec token（多 path 不 join），
+  // 使 untracked preserved config 不被 stash push -u 卷走。
+  const excludeTokens = (preservedPaths || []).map((p) => `':(exclude)${p}'`);
+  const stashPush = ['git stash push --include-untracked -m "goal_loop-S{i}" -- .', ...excludeTokens].join(' ');
   return [
-    'git stash push --include-untracked -m "goal_loop-S{i}"',
+    stashPush,
     'git rev-parse stash@{0}',
     'git stash apply --index {stash_ref}',
   ];
@@ -314,12 +556,19 @@ export function planSnapshotCommands(isClean) {
 /**
  * 规划回滚到 S_i 的 git 命令序列（FR-013）
  * @param {{ clean: boolean, ref: string }} S_i
+ * @param {string[]} preservedPaths - 跨快照保留、不被 clean 删除的路径（F203 缺陷 1，默认常量；
+ *   多 path 展开为多个独立 `-e <p>` token，禁止 join）
  * @returns {string[]}
  */
-export function planRollbackCommands(S_i) {
+export function planRollbackCommands(S_i, preservedPaths = PRESERVED_CONFIG_PATHSPECS) {
+  // F203 修订 #3（WARNING-5）：preserved path 拼入 `-e '<p>'` 引号，含单引号会破坏引号闭合。
+  assertNoSingleQuote(preservedPaths);
   // base：复位 tracked+index 到 HEAD + 删全部 untracked
   // git clean -fd 安全性：不带 -x（保留 .gitignore 文件）、单 -f 非 -ff（拒删嵌套 git 仓库）
-  const base = ['git reset --hard HEAD', 'git clean -fd'];
+  // F203：每个 preserved path 展开为独立 `-e '<p>'` token（多 path 不 join），保护 untracked preserved config。
+  const excludeTokens = (preservedPaths || []).map((p) => `-e '${p}'`);
+  const cleanCmd = ['git clean -fd', ...excludeTokens].join(' ');
+  const base = ['git reset --hard HEAD', cleanCmd];
   if (S_i && S_i.clean) {
     // 干净基线：reset + clean 即回到 S_i
     return base;
@@ -342,6 +591,21 @@ export function planRollbackCommands(S_i) {
  */
 function isValidGitSha(ref) {
   return typeof ref === 'string' && /^[0-9a-f]{40}$/.test(ref);
+}
+
+/**
+ * 校验 preserved path 列表不含单引号（F203 修订 #3 / WARNING-5 防注入）
+ *
+ * 默认常量安全，但 injectable 第二参可能传入含单引号的路径，会破坏 planSnapshot/planRollback
+ * 生成命令里的 `'...'` 引号闭合形成 shell 注入面。含单引号即抛错，拒绝拼入命令。
+ * @param {string[]} preservedPaths
+ */
+function assertNoSingleQuote(preservedPaths) {
+  for (const p of preservedPaths || []) {
+    if (typeof p === 'string' && p.includes("'")) {
+      throw new Error('preserved path 含非法字符（单引号），拒绝拼入 shell 命令');
+    }
+  }
 }
 
 /**
@@ -384,6 +648,29 @@ export function parseReport(jsonText) {
       return {
         degraded: 'infra-failure',
         reason: `命令 "${cmd && cmd.name}" 缺 exit_code，无法证明真实退出码`,
+      };
+    }
+  }
+  // verify_mode 合法性校验（F203 修订 #2 / WARNING-1）：decideStop 重构后"非 full 一律走 smoke
+  // readiness"，verify_mode=undefined/typo 的报告（可能带 SKIPPED）会被误 escalate。在 full 契约
+  // 校验之前先拦截非法 verify_mode，降级 infra-failure，绝不进入达标/escalate 判定。
+  if (report.verify_mode !== 'smoke' && report.verify_mode !== 'full') {
+    return {
+      degraded: 'infra-failure',
+      reason: 'verify_mode 非法（须 smoke|full）',
+    };
+  }
+  // full 轮契约校验（F203 修订 #2）：full verify 必须先 build，dist 已就位故不应出现
+  // dist_not_built SKIPPED。一旦出现即 verify 契约违反——降级 infra-failure，绝不当普通 continue。
+  // smoke 轮的 dist_not_built SKIPPED 是预期行为（不 build），正常放行。
+  if (report.verify_mode === 'full') {
+    const distSkipped = report.layer2_commands.some(
+      (cmd) => cmd && cmd.skipped_reason === 'dist_not_built',
+    );
+    if (distSkipped) {
+      return {
+        degraded: 'infra-failure',
+        reason: 'full verify 不应出现 dist_not_built SKIPPED（full 必须先 build）',
       };
     }
   }

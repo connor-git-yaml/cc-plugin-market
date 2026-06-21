@@ -29,6 +29,11 @@ import {
   parseReport,
   interpretImpactResult,
   formatIterationLogEntry,
+  assessPreservedConfigSafety,
+  parsePreservedConfigStates,
+  isCleanExcludingPreserved,
+  evaluateSmokeReadiness,
+  PRESERVED_CONFIG_PATHSPECS,
 } from '../scripts/lib/goal-loop-core.mjs';
 import { acquireLock, releaseLock } from '../scripts/goal-loop-cli.mjs';
 
@@ -176,6 +181,49 @@ describe('parseReport (FR-010)', () => {
     const b = parseReport(text);
     assert.deepEqual(a, b);
   });
+
+  // ── F203 修订 #2：full 轮 dist_not_built SKIPPED → infra-failure（契约违反真闭合）──
+  it('F203: full 轮含 dist_not_built SKIPPED → degraded=infra-failure（不是只判非达标）', () => {
+    const result = parseReport(readFixtureText('report-full-skipped-dist.json'));
+    assert.equal(result.degraded, 'infra-failure');
+    assert.ok(
+      typeof result.reason === 'string' && /dist_not_built/.test(result.reason),
+      'reason 应说明 full 不应出现 dist_not_built',
+    );
+    assert.equal(result.report, undefined);
+  });
+
+  it('F203: smoke 轮含 dist_not_built SKIPPED → 正常放行（不降级，返回 { report }）', () => {
+    const result = parseReport(readFixtureText('report-smoke-skipped-e2e.json'));
+    assert.ok(result.report, 'smoke 的 dist_not_built 应正常放行');
+    assert.equal(result.report.verify_mode, 'smoke');
+    assert.equal(result.degraded, undefined);
+  });
+
+  // ── F203 修订 #2 / WARNING-1：非法/缺失 verify_mode → infra-failure（防绕过 escalate）──
+  it('WARNING-1: verify_mode 缺失 → infra-failure（防 decideStop 误 escalate）', () => {
+    const base = loadFixture('report-full-pass.json');
+    delete base.verify_mode;
+    const result = parseReport(JSON.stringify(base));
+    assert.equal(result.degraded, 'infra-failure');
+    assert.ok(/verify_mode/.test(result.reason));
+    assert.equal(result.report, undefined);
+  });
+
+  it('WARNING-1: verify_mode="xxx"（typo）→ infra-failure', () => {
+    const base = loadFixture('report-full-pass.json');
+    base.verify_mode = 'xxx';
+    const result = parseReport(JSON.stringify(base));
+    assert.equal(result.degraded, 'infra-failure');
+    assert.ok(/verify_mode/.test(result.reason));
+  });
+
+  it('WARNING-1: 既有合法 full fixture 不回归（仍返回 { report }）', () => {
+    const result = parseReport(readFixtureText('report-full-pass.json'));
+    assert.ok(result.report);
+    assert.equal(result.report.verify_mode, 'full');
+    assert.equal(result.degraded, undefined);
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -299,13 +347,86 @@ describe('planSnapshotCommands (FR-013)', () => {
     assert.deepEqual(planSnapshotCommands(true), []);
   });
 
-  it('T-GL-19: isClean=false → stash push -u + rev-parse + apply --index 完整序列（W4 完整 deepEqual）', () => {
+  it('T-GL-19: isClean=false → stash push -u + pathspec 排除 + rev-parse + apply --index 完整序列（W4 完整 deepEqual）', () => {
     // W4：从弱断言（逐条 regex/includes）强化为完整命令序列 deepEqual，锁定字面值与顺序
+    // F203 缺陷 1：stash push 必须用 pathspec 排除 preserved config，避免误卷 untracked override
     assert.deepEqual(planSnapshotCommands(false), [
-      'git stash push --include-untracked -m "goal_loop-S{i}"',
+      'git stash push --include-untracked -m "goal_loop-S{i}" -- . \':(exclude).specify/orchestration-overrides.yaml\'',
       'git rev-parse stash@{0}',
       'git stash apply --index {stash_ref}',
     ]);
+  });
+
+  it('F203: 多 preserved path 注入 → 多个独立 :(exclude) token（不 join）', () => {
+    const cmds = planSnapshotCommands(false, [
+      '.specify/orchestration-overrides.yaml',
+      '.other/keep.yaml',
+    ]);
+    assert.deepEqual(cmds, [
+      'git stash push --include-untracked -m "goal_loop-S{i}" -- . \':(exclude).specify/orchestration-overrides.yaml\' \':(exclude).other/keep.yaml\'',
+      'git rev-parse stash@{0}',
+      'git stash apply --index {stash_ref}',
+    ]);
+  });
+
+  // ── F203 修订 #3 / WARNING-5：injectable preservedPaths 含单引号 → 抛错防注入 ──
+  it('WARNING-5: planSnapshotCommands(preserved 含单引号) → 抛错，拒绝拼入', () => {
+    assert.throws(() => planSnapshotCommands(false, ["a'b.yaml"]), /单引号/);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// F203 CRITICAL-7：isCleanExcludingPreserved —— 排除 preserved 后判 isClean
+// ──────────────────────────────────────────────────────────────────────────
+describe('isCleanExcludingPreserved (F203 CRITICAL-7)', () => {
+  const OVERRIDE = '.specify/orchestration-overrides.yaml';
+
+  it('only-preserved（唯一 dirty 是 untracked override）→ true（杜绝空 stash 抓旧 stash）', () => {
+    assert.equal(isCleanExcludingPreserved(`?? ${OVERRIDE}\n`), true);
+  });
+
+  it('preserved + other dirty → false', () => {
+    assert.equal(isCleanExcludingPreserved(`?? ${OVERRIDE}\n M src/foo.ts\n`), false);
+  });
+
+  it('空输入（全仓干净）→ true', () => {
+    assert.equal(isCleanExcludingPreserved(''), true);
+  });
+
+  it('only-other（无 preserved，有普通 dirty）→ false', () => {
+    assert.equal(isCleanExcludingPreserved(' M src/foo.ts\n'), false);
+  });
+
+  it('多 preserved 均 dirty → true', () => {
+    const p2 = '.other/keep.yaml';
+    assert.equal(
+      isCleanExcludingPreserved(`?? ${OVERRIDE}\n?? ${p2}\n`, [OVERRIDE, p2]),
+      true,
+    );
+  });
+
+  it('rename 一端非 preserved → false（两端只要一端非 preserved 即算非 preserved 变更）', () => {
+    // R 行：old -> new，old=preserved 但 new=普通文件 → 非 preserved 变更
+    assert.equal(
+      isCleanExcludingPreserved(`R  ${OVERRIDE} -> src/renamed.ts\n`),
+      false,
+    );
+  });
+
+  // F203 CRITICAL-7 漏网根因守护：折叠形式 vs 展开形式
+  it('折叠目录输入 `?? .specify/` → false（保守判脏；故调用方 MUST 用 --untracked-files=all 喂入展开形式）', () => {
+    // 默认 `git status --porcelain`（无 -uall）把整个 untracked 目录折叠成 `?? .specify/`，
+    // 折叠路径 `.specify/` ≠ preserved 文件路径 → 被判非 preserved 变更 → false。
+    // 这是正确的防御性行为：函数对非展开输入保守判脏，逼迫调用方喂入 -uall 展开形式。
+    assert.equal(isCleanExcludingPreserved('?? .specify/\n', [OVERRIDE]), false);
+  });
+
+  it('展开文件输入 `?? .specify/orchestration-overrides.yaml`（-uall 形式）→ true', () => {
+    // --untracked-files=all 展开到文件级，路径精确命中 preserved → 排除后 isClean=true。
+    assert.equal(
+      isCleanExcludingPreserved(`?? ${OVERRIDE}\n`, [OVERRIDE]),
+      true,
+    );
   });
 });
 
@@ -317,25 +438,40 @@ describe('planRollbackCommands (FR-013)', () => {
   const VALID_SHA = 'a'.repeat(40);
   const VALID_SHA_2 = '0123456789abcdef0123456789abcdef01234567';
 
-  it('T-GL-12b: clean 分支 → [reset --hard HEAD, clean -fd]（无 stash apply，clean 不校验 ref）', () => {
+  it('T-GL-12b: clean 分支 → [reset --hard HEAD, clean -fd -e <preserved>]（无 stash apply，clean 不校验 ref）', () => {
     // clean 分支不拼 ref，故即使 ref 非法也不应抛错
+    // F203 缺陷 1：clean -fd 必须用 -e 排除 preserved config
     const cmds = planRollbackCommands({ clean: true, ref: 'abc123' });
-    assert.deepEqual(cmds, ['git reset --hard HEAD', 'git clean -fd']);
+    assert.deepEqual(cmds, [
+      'git reset --hard HEAD',
+      "git clean -fd -e '.specify/orchestration-overrides.yaml'",
+    ]);
   });
 
-  it('T-GL-12b: 非 clean 分支 → [reset --hard HEAD, clean -fd, stash apply --index <ref>] 完整有序', () => {
+  it('T-GL-12b: 非 clean 分支 → [reset --hard HEAD, clean -fd -e <preserved>, stash apply --index <ref>] 完整有序', () => {
     const cmds = planRollbackCommands({ clean: false, ref: VALID_SHA_2 });
     assert.deepEqual(cmds, [
       'git reset --hard HEAD',
-      'git clean -fd',
+      "git clean -fd -e '.specify/orchestration-overrides.yaml'",
       `git stash apply --index ${VALID_SHA_2}`,
+    ]);
+  });
+
+  it('F203: 多 preserved path 注入 → 多个独立 -e token（不 join）', () => {
+    const cmds = planRollbackCommands(
+      { clean: true, ref: 'abc123' },
+      ['.specify/orchestration-overrides.yaml', '.other/keep.yaml'],
+    );
+    assert.deepEqual(cmds, [
+      'git reset --hard HEAD',
+      "git clean -fd -e '.specify/orchestration-overrides.yaml' -e '.other/keep.yaml'",
     ]);
   });
 
   it('clean -fd 不带 -x（保留 .gitignore 文件），不带 -ff（不删嵌套仓库）', () => {
     const cmds = planRollbackCommands({ clean: false, ref: VALID_SHA });
     const cleanCmd = cmds.find((c) => c.startsWith('git clean'));
-    assert.equal(cleanCmd, 'git clean -fd');
+    assert.equal(cleanCmd, "git clean -fd -e '.specify/orchestration-overrides.yaml'");
     assert.ok(!/-x/.test(cleanCmd));
     assert.ok(!/-ff/.test(cleanCmd));
   });
@@ -366,6 +502,14 @@ describe('planRollbackCommands (FR-013)', () => {
   it('W2: ref 非字符串（null/数字）→ 抛错', () => {
     assert.throws(() => planRollbackCommands({ clean: false, ref: null }), /非法 snapshot ref/);
     assert.throws(() => planRollbackCommands({ clean: false, ref: 123 }), /非法 snapshot ref/);
+  });
+
+  // ── F203 修订 #3 / WARNING-5：injectable preservedPaths 含单引号 → 抛错防注入 ──
+  it('WARNING-5: planRollbackCommands(preserved 含单引号) → 抛错，拒绝拼入', () => {
+    assert.throws(
+      () => planRollbackCommands({ clean: true, ref: 'unused' }, ["a'b.yaml"]),
+      /单引号/,
+    );
   });
 });
 
@@ -742,6 +886,99 @@ describe('decideStop (FR-004 优先级)', () => {
     });
     assert.equal(result.stop, true);
     assert.equal(result.exit_reason, 'NO_PROGRESS');
+  });
+
+  // ── F203 缺陷 2：smoke escalate（evaluateSmokeReadiness）+ C1 回归 ──
+  it('F203: smoke 含 SKIPPED e2e + 非 e2e 全 PASS → escalate_full', () => {
+    const result = decideStop({
+      report: loadFixture('report-smoke-skipped-e2e.json'),
+      round: 2,
+      config: DEFAULT_CONFIG,
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.action, 'escalate_full');
+    assert.equal(result.stop, false);
+    assert.equal(result.exit_reason, null);
+  });
+
+  it('F203: smoke 全 SKIPPED → 不 escalate（vacuous 防护 C3）', () => {
+    const allSkipped = {
+      verify_mode: 'smoke',
+      layer2_commands: [
+        { name: 'tsc --noEmit', exit_code: null, status: 'SKIPPED', skipped_reason: 'dist_not_built' },
+        { name: 'npx vitest run --project e2e', exit_code: null, status: 'SKIPPED', skipped_reason: 'dist_not_built' },
+      ],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+      delta_inputs: { layer2_pass_count: 0, p1_fr_coverage_pct: 100, layer1_5_status_score: 2, regression_count: 0, net_loc_delta: 0 },
+    };
+    const result = decideStop({
+      report: allSkipped,
+      round: 2,
+      config: DEFAULT_CONFIG,
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.notEqual(result.action, 'escalate_full');
+  });
+
+  it('F203: full 含 SKIPPED 命令（非 dist_not_built）→ 永不 REACHED_GOAL', () => {
+    // 用一个 full 报告，其中含一条 SKIPPED（skipped_reason 非 dist_not_built，绕过 parseReport 降级，
+    // 直接喂 decideStop 验证 evaluateMetric 严格门禁：SKIPPED 即不达标）
+    const fullWithSkipped = {
+      verify_mode: 'full',
+      layer2_commands: [
+        { name: 'npm run build', exit_code: 0, status: 'PASS', skipped_reason: null },
+        { name: 'npm run lint', exit_code: null, status: 'SKIPPED', skipped_reason: 'tool_not_installed' },
+      ],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+      delta_inputs: { layer2_pass_count: 1, p1_fr_coverage_pct: 100, layer1_5_status_score: 2, regression_count: 0, net_loc_delta: 0 },
+    };
+    const result = decideStop({
+      report: fullWithSkipped,
+      round: 2,
+      config: DEFAULT_CONFIG,
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.notEqual(result.exit_reason, 'REACHED_GOAL');
+  });
+
+  it('F203: full 报告全 PASS+p1=100+COMPLIANT → REACHED_GOAL，永不 escalate_full（C1 回归）', () => {
+    const result = decideStop({
+      report: loadFixture('report-full-pass.json'),
+      round: 2,
+      config: DEFAULT_CONFIG,
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.exit_reason, 'REACHED_GOAL');
+    assert.notEqual(result.action, 'escalate_full');
+  });
+
+  it('F203 不回归: 既有 report-smoke-pass.json（全 PASS）仍 escalate_full（修订 Codex#2）', () => {
+    const result = decideStop({
+      report: loadFixture('report-smoke-pass.json'),
+      round: 2,
+      config: DEFAULT_CONFIG,
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.action, 'escalate_full');
+  });
+
+  it('F203 不回归: round==max 的 smoke pass 仍 escalate（escalate 优先于 MAX_ITERATIONS，修订 Codex#2）', () => {
+    const result = decideStop({
+      report: loadFixture('report-smoke-pass.json'),
+      round: 5,
+      config: { ...DEFAULT_CONFIG, max_iterations: 5 },
+      prevReports: [],
+      rollbackResult: null,
+    });
+    assert.equal(result.action, 'escalate_full');
+    assert.notEqual(result.exit_reason, 'MAX_ITERATIONS');
   });
 });
 
@@ -1127,5 +1364,194 @@ describe('format-iteration-log-entry CLI 子命令集成（W3）', () => {
       () => execFileSync('node', [CLI_PATH, 'format-iteration-log-entry'], { encoding: 'utf-8' }),
       /Command failed|status/,
     );
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// F203 缺陷 1：assessPreservedConfigSafety（preflight 守护）—— T205
+// ──────────────────────────────────────────────────────────────────────────
+const PRESERVED_PATH = '.specify/orchestration-overrides.yaml';
+const OTHER_PATH = '.other/keep.yaml';
+
+describe('assessPreservedConfigSafety (F203 缺陷 1)', () => {
+  it('absent → 安全', () => {
+    assert.deepEqual(assessPreservedConfigSafety([{ path: PRESERVED_PATH, state: 'absent' }]), {
+      safe: true,
+      unsafe: [],
+    });
+  });
+
+  it('untracked → 安全', () => {
+    assert.deepEqual(assessPreservedConfigSafety([{ path: PRESERVED_PATH, state: 'untracked' }]), {
+      safe: true,
+      unsafe: [],
+    });
+  });
+
+  it('tracked-clean → 安全', () => {
+    assert.deepEqual(assessPreservedConfigSafety([{ path: PRESERVED_PATH, state: 'tracked-clean' }]), {
+      safe: true,
+      unsafe: [],
+    });
+  });
+
+  it('staged → 不安全（含 path/state/reason）', () => {
+    const r = assessPreservedConfigSafety([{ path: PRESERVED_PATH, state: 'staged' }]);
+    assert.equal(r.safe, false);
+    assert.equal(r.unsafe.length, 1);
+    assert.equal(r.unsafe[0].path, PRESERVED_PATH);
+    assert.equal(r.unsafe[0].state, 'staged');
+    assert.ok(typeof r.unsafe[0].reason === 'string' && r.unsafe[0].reason.length > 0);
+  });
+
+  it('tracked-modified → 不安全（含 path/state/reason）', () => {
+    const r = assessPreservedConfigSafety([{ path: PRESERVED_PATH, state: 'tracked-modified' }]);
+    assert.equal(r.safe, false);
+    assert.equal(r.unsafe.length, 1);
+    assert.equal(r.unsafe[0].state, 'tracked-modified');
+    assert.ok(typeof r.unsafe[0].reason === 'string' && r.unsafe[0].reason.length > 0);
+  });
+
+  it('多 path 全安全 → safe=true, unsafe=[]', () => {
+    const r = assessPreservedConfigSafety([
+      { path: PRESERVED_PATH, state: 'untracked' },
+      { path: OTHER_PATH, state: 'absent' },
+    ]);
+    assert.deepEqual(r, { safe: true, unsafe: [] });
+  });
+
+  it('多 path 一个不安全 → safe=false, unsafe 仅含 staged 项', () => {
+    const r = assessPreservedConfigSafety([
+      { path: PRESERVED_PATH, state: 'untracked' },
+      { path: OTHER_PATH, state: 'staged' },
+    ]);
+    assert.equal(r.safe, false);
+    assert.equal(r.unsafe.length, 1);
+    assert.equal(r.unsafe[0].path, OTHER_PATH);
+    assert.equal(r.unsafe[0].state, 'staged');
+  });
+
+  it('空数组 → 安全', () => {
+    assert.deepEqual(assessPreservedConfigSafety([]), { safe: true, unsafe: [] });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// F203 主线程精化 #2：parsePreservedConfigStates（raw porcelain → entries）—— T205b
+// ──────────────────────────────────────────────────────────────────────────
+describe('parsePreservedConfigStates (F203 精化 #2)', () => {
+  it('未跟踪 ?? → untracked', () => {
+    const r = parsePreservedConfigStates(`?? ${PRESERVED_PATH}\n`, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'untracked' }]);
+  });
+
+  it('路径不在输出（空 porcelain）→ absent', () => {
+    const r = parsePreservedConfigStates('', [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'absent' }]);
+  });
+
+  it('路径不在输出（仅含其他路径）→ absent', () => {
+    const r = parsePreservedConfigStates(' M src/foo.ts\n', [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'absent' }]);
+  });
+
+  it('index 暂存修改 M  → staged', () => {
+    const r = parsePreservedConfigStates(`M  ${PRESERVED_PATH}\n`, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'staged' }]);
+  });
+
+  it('新增已暂存 A  → staged', () => {
+    const r = parsePreservedConfigStates(`A  ${PRESERVED_PATH}\n`, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'staged' }]);
+  });
+
+  it('暂存+工作区均改 MM → staged（index 列非空优先）', () => {
+    const r = parsePreservedConfigStates(`MM ${PRESERVED_PATH}\n`, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'staged' }]);
+  });
+
+  it('仅工作区修改（未暂存）" M" → tracked-modified', () => {
+    const r = parsePreservedConfigStates(` M ${PRESERVED_PATH}\n`, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'tracked-modified' }]);
+  });
+
+  it('多 path 混合状态 → 各自正确 state', () => {
+    const text = `?? ${PRESERVED_PATH}\nM  ${OTHER_PATH}\n`;
+    const r = parsePreservedConfigStates(text, [PRESERVED_PATH, OTHER_PATH]);
+    assert.deepEqual(r, [
+      { path: PRESERVED_PATH, state: 'untracked' },
+      { path: OTHER_PATH, state: 'staged' },
+    ]);
+  });
+
+  it('含引号路径（porcelain 对含空格路径加引号）→ 正确去引号匹配', () => {
+    const spacePath = '.specify/has space.yaml';
+    const r = parsePreservedConfigStates(`?? "${spacePath}"\n`, [spacePath]);
+    assert.deepEqual(r, [{ path: spacePath, state: 'untracked' }]);
+  });
+
+  it('rename 行 R  old -> new：new 端命中 preserved → staged（修订 #3）', () => {
+    const text = `R  src/old.yaml -> ${PRESERVED_PATH}\n`;
+    const r = parsePreservedConfigStates(text, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'staged' }]);
+  });
+
+  it('rename 行 R  old -> new：old 端命中 preserved → staged（两端都查，修订 #3）', () => {
+    const text = `R  ${PRESERVED_PATH} -> src/new.yaml\n`;
+    const r = parsePreservedConfigStates(text, [PRESERVED_PATH]);
+    assert.deepEqual(r, [{ path: PRESERVED_PATH, state: 'staged' }]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// F203 缺陷 2：evaluateSmokeReadiness（smoke escalate 非权威触发）—— T206
+// ──────────────────────────────────────────────────────────────────────────
+describe('evaluateSmokeReadiness (F203 缺陷 2)', () => {
+  it('全 SKIPPED（vacuous 防护 C3）→ false', () => {
+    const r = {
+      verify_mode: 'smoke',
+      layer2_commands: [
+        { name: 'a', exit_code: null, status: 'SKIPPED', skipped_reason: 'dist_not_built' },
+        { name: 'b', exit_code: null, status: 'SKIPPED', skipped_reason: 'dist_not_built' },
+      ],
+      layer1_fr_coverage: { p1_coverage_pct: 100 },
+      layer1_5_evidence: { status: 'COMPLIANT' },
+    };
+    assert.equal(evaluateSmokeReadiness(r), false);
+  });
+
+  it('非 SKIPPED 有 FAIL → false', () => {
+    assert.equal(evaluateSmokeReadiness(loadFixture('report-smoke-fail-real.json')), false);
+  });
+
+  it('≥1 非 SKIPPED PASS + 其余 SKIPPED → true（fixture report-smoke-skipped-e2e）', () => {
+    assert.equal(evaluateSmokeReadiness(loadFixture('report-smoke-skipped-e2e.json')), true);
+  });
+
+  it('p1_coverage_pct !== 100 → false', () => {
+    const r = loadFixture('report-smoke-skipped-e2e.json');
+    r.layer1_fr_coverage.p1_coverage_pct = 80;
+    assert.equal(evaluateSmokeReadiness(r), false);
+  });
+
+  it('layer1_5 非 COMPLIANT → false', () => {
+    const r = loadFixture('report-smoke-skipped-e2e.json');
+    r.layer1_5_evidence.status = 'UNKNOWN';
+    assert.equal(evaluateSmokeReadiness(r), false);
+  });
+
+  it('UNKNOWN 命令存在（非 SKIPPED 且非 PASS）→ false', () => {
+    const r = loadFixture('report-smoke-skipped-e2e.json');
+    // 把一条非 SKIPPED 命令变成 UNKNOWN（去掉 exit_code）
+    r.layer2_commands[0] = { name: 'tsc --noEmit', exit_code: null, status: 'UNKNOWN', skipped_reason: null };
+    assert.equal(evaluateSmokeReadiness(r), false);
+  });
+});
+
+// 引用导入常量做 sanity（确保 PRESERVED_CONFIG_PATHSPECS 导出可用）
+describe('PRESERVED_CONFIG_PATHSPECS 常量', () => {
+  it('导出含 .specify/orchestration-overrides.yaml', () => {
+    assert.ok(Array.isArray(PRESERVED_CONFIG_PATHSPECS));
+    assert.ok(PRESERVED_CONFIG_PATHSPECS.includes('.specify/orchestration-overrides.yaml'));
   });
 });

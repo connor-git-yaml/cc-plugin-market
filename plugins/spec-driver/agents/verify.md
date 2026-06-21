@@ -257,7 +257,31 @@ effort: medium
 - `layer2_commands[].exit_code` **MUST 为命令真实执行的退出码**，**MUST NOT** 基于 implement 子代理的任何声明填写。
 - 缺退出码或无法验证真实执行的条目，`status` **MUST** 填 `UNKNOWN`（goal_loop core `parseReport` 会把缺 `exit_code` 的非 SKIPPED 条目强制降级为 infra-failure）。
 - **不改动** Layer 1 / 1.5 / 2 现有验证逻辑，本模式仅在既有验证数据之上**额外**结构化落盘一份 JSON。
-- `smoke` 模式 Layer 2 = `tsc --noEmit` + `npx vitest run`；`full` 模式 Layer 2 = `npm run build` + lint + `repo:check`。
+
+**full 轮 Layer 2 命令集（必须按此顺序，每条各加 `timeout {max_verify_seconds}s` 前缀）**：
+
+1. `npm run build` → dist 就位
+2. `npx vitest run` → 含 e2e（dist 已就位，无 build 依赖 SKIPPED）
+3. `npm run lint`（如适用）
+4. `npm run repo:check`
+
+> **timeout 口径（F203 修订 #6）**：`max_verify_seconds` 为 **per-command** 墙钟上限（非整轮共享）。full 补 `npx vitest run` 后最坏耗时 ≈ Σ(build, vitest, lint, repo:check) 各自上限，full 轮总时长较 smoke 显著上升，需确认单实例锁 TTL（已移除超龄接管，存活 PID 永不被抢）与 NO_PROGRESS no-progress 预算可接受。
+
+**smoke 轮 Layer 2 命令集 + SKIPPED 约定（F203 修订 #1）**：
+
+- `tsc --noEmit`（必跑，记真实 exit_code）
+- `npx vitest run --project unit --project integration --project golden-master --project self-hosting`（**四个非 e2e project 都要跑，不能只 unit+integration**；用 vitest project selector 真正排除 e2e 实跑其余，不得只口头标 SKIPPED 而不实跑）
+- 检测 `dist/` 缺失时，对 build 依赖 e2e（`tests/e2e/**`，即 vitest `e2e` project）记 `status:"SKIPPED", skipped_reason:"dist_not_built"`
+- 其余命令记真实 exit_code
+
+**full 轮出现 `dist_not_built` SKIPPED → infra-failure（F203 修订 #2）**：
+
+- full 轮已先 build，dist 必就位，**不应**出现 `skipped_reason="dist_not_built"` 命令；一旦出现即 verify 契约违反
+- goal_loop core `parseReport` 检测到 full 轮含 `dist_not_built` SKIPPED → 标 `degraded:"infra-failure", reason:"full verify 不应出现 dist_not_built SKIPPED（full 必须先 build）"`
+- 该 report 被 core `decideStop` 识别为 infra-failure，**不视为普通 continue**，绝不静默当达标
+- smoke 轮的 `dist_not_built` SKIPPED 是预期行为（smoke 不 build），正常放行
+- **关于命令集完整性（F203 WARNING #3a，有意权衡）**：core 不做 smoke 命令名校验——smoke readiness 仅触发非权威 escalate，full 轮严格门禁（先 build + 跑全量 vitest）才是权威，退化 smoke 至多多一次 full verify，绝不假 REACHED_GOAL。命令集完整性由本 verify.md 契约（mandate smoke 必跑上述命令集）负责，不让 core 耦合命令名。
+- **关于 full 命令集完整性（F203 CRITICAL-8，有意不在 core 校验）**：core 同样**不**校验 full 报告是否含全部 mandated 命令（build / vitest / lint / repo:check）。spec-driver 是通用插件，命令集随项目可配，把 `vitest` / `build` 命令名硬编码进 core 是错的；且这与既有"信任 verify 子代理 exit_code"信任模型一致。**full 报告缺 mandated 命令属 verify 子代理契约违反，由本契约（上方 full 轮命令集 mandate）负责，非 core 职责**。后续可加 config 驱动的命令集契约校验，单列 follow-up，当前 core/evaluateMetric 不做命令名校验。
 
 **降级（由 goal_loop core 处理，非本子代理职责）**：若本轮无法产出合法 JSON（输出截断 / schema 非法 / 命令集为空），goal_loop core `parseReport` 将该轮标 `infra-failure`，编排器据此计入无进展/早停判定，绝不静默当达标。
 

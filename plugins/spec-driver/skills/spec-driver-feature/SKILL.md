@@ -287,7 +287,7 @@ Task(...phase1...) && Task(...phase2...)
 
 > **委派硬约束（不可豁免）**：本闭环每轮的 **implement 与 verify 都 MUST 委派子代理**（`Task` 工具），编排器**不得 inline** 替代。编排器亲自执行的范围仅限：调 `goal-loop-cli.mjs` 拿决策（snapshot/decide/回滚命令规划）、执行 core 规划出的 git 命令、发起 Spectra MCP `impact` 调用、维护单实例锁、追加迭代日志。**所有确定性判断（停止/五维 delta/metric/回归/回滚命令）都在可执行 core 里**，编排器只是触发并执行 core 的输出，绝不在散文里手写 stop/delta/回滚逻辑。
 
-> **CLI 契约**：本小节调用的每个 `goal-loop-cli.mjs <子命令>` 都来自其真实子命令清单：`parse-report` / `classify-command` / `decide-stop` / `plan-snapshot` / `plan-rollback` / `select-verify-mode` / `decide-dispatch` / `interpret-impact` / `format-iteration-log-entry` / `acquire-lock` / `release-lock`。复杂结构入参一律以**单个 JSON payload 文件**传入（编排器先把对象写临时文件再传路径），简单标量用位置参数。
+> **CLI 契约**：本小节调用的每个 `goal-loop-cli.mjs <子命令>` 都来自其真实子命令清单：`parse-report` / `classify-command` / `decide-stop` / `plan-snapshot` / `plan-rollback` / `select-verify-mode` / `decide-dispatch` / `interpret-impact` / `format-iteration-log-entry` / `assess-preserved-config-safety` / `is-clean-excluding-preserved` / `acquire-lock` / `release-lock`。复杂结构入参一律以**单个 JSON payload 文件**传入（编排器先把对象写临时文件再传路径），简单标量用位置参数。`assess-preserved-config-safety` 与 `is-clean-excluding-preserved` 都接受原始 porcelain 文本（文件或 `-` stdin），解析全在 core；**输入 MUST 来自 `git status --porcelain --untracked-files=all`**（带 `-uall`，避免 untracked 目录折叠成 `?? .specify/` 漏检 preserved 文件，CRITICAL-7）。
 
 ### 前置（进入循环体前一次性执行）
 
@@ -324,16 +324,54 @@ Task(...phase1...) && Task(...phase2...)
 **步骤 1：建立轮次 snapshot（FR-013）**
 
 ```text
-a. isClean = ( `git status --porcelain` 输出为空 ? true : false )
+a0. preflight：保护 preserved config 不被 stash/clean 误删（F203 缺陷 1，编排器零解析——解析全在 core）
+   1. git status --porcelain --untracked-files=all -- .specify/orchestration-overrides.yaml > {tmp}.porcelain
+      #  --untracked-files=all：展开 untracked 目录，避免默认 porcelain 把整目录折叠成 `?? .specify/`
+      #  （而非 `?? .specify/orchestration-overrides.yaml`），否则 preserved override 状态会被漏检。
+   2. SAFE=$(node "$PLUGIN_DIR/scripts/goal-loop-cli.mjs" assess-preserved-config-safety {tmp}.porcelain)
+      # CLI 内部 parsePreservedConfigStates(porcelain, PRESERVED_CONFIG_PATHSPECS) → assessPreservedConfigSafety
+      # porcelain → state 的解析全在已单测的 core 函数；散文 MUST NOT 自行解析 XY 列
+   3. 若 SAFE.safe == false（preserved config 处于 staged / tracked-modified 态，会被 git reset --hard 摧毁）
+      → 硬失败，输出指引："preserved config <path> 处于 <state> 态，goal_loop 期望其 untracked；中止防数据丢失"，
+        不进入 stash，释放锁，转 GATE_VERIFY
+   4. 若 SAFE.safe == true（untracked / absent / tracked-clean）→ 继续 a
+a. isClean 判定 MUST 排除 preserved config（F203 CRITICAL-7，编排器零解析）：
+   1. git status --porcelain --untracked-files=all > {tmp}.porcelain-all   # 全仓状态，不带 -- pathspec
+      #  --untracked-files=all 必须带：默认 porcelain 对整个 untracked 目录折叠成单行 `?? .specify/`
+      #  （而非展开到 `?? .specify/orchestration-overrides.yaml`）。折叠形式喂进
+      #  is-clean-excluding-preserved 时，`.specify/` ≠ preserved 文件路径 → 被判为非 preserved 变更
+      #  → isClean 误判 false（CRITICAL-7 漏网根因）。-uall 展开后逐文件行才能正确归类为 preserved。
+   2. isClean = $(node "$PLUGIN_DIR/scripts/goal-loop-cli.mjs" is-clean-excluding-preserved {tmp}.porcelain-all).isClean
+      # CLI 内部 isCleanExcludingPreserved(porcelain, PRESERVED_CONFIG_PATHSPECS)：
+      #   排除 PRESERVED_CONFIG_PATHSPECS 后逐行判，全部 dirty 行都是 preserved（或无 dirty）→ true
+   # 关键：唯一 dirty 是 preserved override（untracked）→ isClean=true → plan-snapshot true → SNAP.commands=[]
+   #   （锚点 = HEAD，**不**执行任何 stash）。杜绝"按全仓判 false → stash push 排除 override 后空 stash →
+   #   rev-parse stash@{0} 抓到仓库里无关旧 stash → stash apply --index 套用无关改动污染工作区"的危险路径。
+   #   MUST NOT 用裸 `git status --porcelain 输出为空` 判 isClean（会把 preserved-only dirty 误判 false）；
+   #   也 MUST NOT 省略 --untracked-files=all（折叠目录会让 isClean 误判 false → 同样的空 stash 抓旧 stash 路径）。
 b. 调 core 拿命令序列：
    SNAP=$(node "$PLUGIN_DIR/scripts/goal-loop-cli.mjs" plan-snapshot $isClean)
    # isClean=true → SNAP.commands = []（锚点 = HEAD，无 stash）
-   # isClean=false → ["git stash push --include-untracked -m \"goal_loop-S{i}\"",
+   # isClean=false → ["git stash push --include-untracked -m \"goal_loop-S{i}\" -- . ':(exclude).specify/orchestration-overrides.yaml'",
    #                   "git rev-parse stash@{0}", "git stash apply --index {stash_ref}"]
+   #   （F203 缺陷 1：stash push 用 pathspec 排除 preserved config，untracked override 不被卷走）
 c. 逐条执行 SNAP.commands（替换 {i} / {stash_ref} 占位符），MUST 检查每条退出码：
    - 任一非零 → 记录失败到迭代日志，释放锁，转 GATE_VERIFY（不继续）
+   # 防御纵深（F203 CRITICAL-7 兜底，语言无关，防任何 isClean 漏判导致的空 stash 抓旧 stash）：
+   # SNAP.commands 非空（isClean=false）时，stash push 前后比对 stash 栈顶 ref，确认确有新 stash 创建。
+   c1. 执行 SNAP.commands[0]（`git stash push ...`）之前：
+       STASH_BEFORE=$(git rev-parse -q --verify refs/stash || echo none)
+   c2. 执行 SNAP.commands[0] 之后、执行 `git rev-parse stash@{0}` / `git stash apply` 之前：
+       STASH_AFTER=$(git rev-parse -q --verify refs/stash || echo none)
+   c3. 若 STASH_AFTER == STASH_BEFORE（push 为空——无新 stash 创建）：
+       → **MUST NOT** 执行 SNAP.commands[1..]（`git rev-parse stash@{0}` / `git stash apply --index`），
+         否则会抓到仓库里无关旧 stash 并 apply 污染工作区。
+       → 视为本轮无需快照：按 isClean=true 处理（锚点 = HEAD，clean=true，不入 stashRefs），
+         记一行日志 snapshot_empty_stash_fallback=true。
+       → 跳过 d 的 stash 分支，按 clean 轮记录 S_i = { clean: true, ref: <HEAD SHA> }。
+   c4. 若 STASH_AFTER != STASH_BEFORE（确有新 stash）→ 正常继续 SNAP.commands[1..] 与 d。
 d. 记录 S_i = { clean: isClean, ref: <HEAD SHA 或 rev-parse 捕获的 stash SHA> }；
-   非 clean 轮把 S_i.ref 追加到 stashRefs
+   非 clean 轮把 S_i.ref 追加到 stashRefs（c3 兜底命中时按 clean 轮处理，不追加）
 ```
 
 **步骤 2：注入 Spectra impact 上下文（FR-011/012）**
@@ -364,8 +402,12 @@ Task(
 
 ```text
 MODE=$(node "$PLUGIN_DIR/scripts/goal-loop-cli.mjs" select-verify-mode {i} {max_iterations} false)
-# round < max_iterations → smoke（tsc --noEmit + npx vitest run，快速反馈）
-# round == max_iterations → full（npm run build + lint + repo:check）
+# round < max_iterations → smoke：tsc --noEmit
+#   + npx vitest run --project unit --project integration --project golden-master --project self-hosting
+#     （排除 e2e project、覆盖全部非 e2e，F203 修订 #1）；检测 dist/ 缺失时对 e2e 标 SKIPPED，不 build
+# round == max_iterations → full：先 npm run build（使 dist/ 就位），再 npx vitest run（含 e2e），
+#   再 lint，再 repo:check（次序不可乱：先 build 后 vitest 才能权威跑 e2e，F203 缺陷 2）
+#   full 轮若仍出现 dist_not_built SKIPPED → parse-report 标 infra-failure（契约违反，非普通 continue）
 ```
 
 **步骤 5：委派 verify 子代理（FR-010）**

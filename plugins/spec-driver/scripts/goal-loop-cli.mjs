@@ -18,6 +18,15 @@
  *   node goal-loop-cli.mjs decide-dispatch <phaseId> <agentMode>
  *   node goal-loop-cli.mjs interpret-impact <mcpResultJsonFile>
  *   node goal-loop-cli.mjs format-iteration-log-entry <entryJsonFile>  # 输出 markdown 块到 stdout
+ *   node goal-loop-cli.mjs assess-preserved-config-safety <porcelainFile|-（stdin）>
+ *     # 输入 = `git status --porcelain --untracked-files=all -- <PRESERVED_CONFIG_PATHSPECS>` 原始 stdout
+ *     #   （MUST 带 --untracked-files=all：避免 untracked 目录折叠成 `?? .specify/` 漏检 preserved 文件）
+ *     # CLI 内部 parsePreservedConfigStates(porcelain, PRESERVED_CONFIG_PATHSPECS) → assessPreservedConfigSafety
+ *   node goal-loop-cli.mjs is-clean-excluding-preserved <porcelainFile|-（stdin）>
+ *     # 输入 = **全仓** `git status --porcelain --untracked-files=all` 原始 stdout（不带 -- pathspec）
+ *     #   （MUST 带 --untracked-files=all：默认会把 untracked 目录折叠成 `?? .specify/`，折叠形式喂入
+ *     #    会使 isClean 误判 false → 空 stash 抓无关旧 stash，CRITICAL-7 漏网根因）
+ *     # 输出 {isClean:boolean}：排除 PRESERVED_CONFIG_PATHSPECS 后是否干净（F203 CRITICAL-7）
  *   node goal-loop-cli.mjs acquire-lock <lockPath>
  *   node goal-loop-cli.mjs release-lock <lockPath>
  */
@@ -34,6 +43,10 @@ import {
   parseReport,
   interpretImpactResult,
   formatIterationLogEntry,
+  assessPreservedConfigSafety,
+  parsePreservedConfigStates,
+  isCleanExcludingPreserved,
+  PRESERVED_CONFIG_PATHSPECS,
 } from './lib/goal-loop-core.mjs';
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -181,6 +194,11 @@ function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 }
 
+/** 同步读取 stdin（fd 0）全部内容为 UTF-8 文本 */
+function readStdin() {
+  return fs.readFileSync(0, 'utf-8');
+}
+
 function parseBool(value, name) {
   if (value === 'true') return true;
   if (value === 'false') return false;
@@ -248,6 +266,24 @@ function main(argv) {
       // 与其它子命令不同：本子命令输出原始 markdown 文本，而非 JSON.stringify 包裹（散文直接拼日志）。
       if (!args[0]) fail('format-iteration-log-entry 需要 <entryJsonFile>');
       process.stdout.write(formatIterationLogEntry(readJsonFile(args[0])));
+      break;
+    }
+    case 'assess-preserved-config-safety': {
+      // 吃原始 `git status --porcelain` 文本（解析在 core，编排器零解析）：
+      // porcelain → state 由 parsePreservedConfigStates；state → 安全 由 assessPreservedConfigSafety。
+      if (!args[0]) fail('assess-preserved-config-safety 需要 <porcelainFile|-（stdin）>');
+      const porcelain = args[0] === '-' ? readStdin() : fs.readFileSync(args[0], 'utf-8');
+      const entries = parsePreservedConfigStates(porcelain, PRESERVED_CONFIG_PATHSPECS);
+      output(assessPreservedConfigSafety(entries));
+      break;
+    }
+    case 'is-clean-excluding-preserved': {
+      // 吃**全仓** `git status --porcelain` 文本（不带 pathspec），排除 PRESERVED_CONFIG_PATHSPECS
+      // 后判 isClean——杜绝"唯一 dirty 是 preserved override 却按全仓判 false → 空 stash 抓无关旧
+      // stash"的 CRITICAL-7 危险路径。解析全在已单测 core。
+      if (!args[0]) fail('is-clean-excluding-preserved 需要 <porcelainFile|-（stdin）>');
+      const porcelainAll = args[0] === '-' ? readStdin() : fs.readFileSync(args[0], 'utf-8');
+      output({ isClean: isCleanExcludingPreserved(porcelainAll, PRESERVED_CONFIG_PATHSPECS) });
       break;
     }
     case 'acquire-lock': {

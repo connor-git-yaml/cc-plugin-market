@@ -39,7 +39,7 @@
 
 ---
 
-- [ ] T201 [P] 新建 fixture `report-smoke-skipped-e2e.json`
+- [x] T201 [P] 新建 fixture `report-smoke-skipped-e2e.json`
 
   **动作**: 新建文件，内容为 smoke 模式 report，layer2_commands 包含：
   - `tsc --noEmit`（exit_code=0, status=PASS）
@@ -59,7 +59,7 @@
 
 ---
 
-- [ ] T202 [P] 新建 fixture `report-smoke-fail-real.json`
+- [x] T202 [P] 新建 fixture `report-smoke-fail-real.json`
 
   **动作**: 新建文件，内容为 smoke 模式 report，layer2_commands 包含：
   - `tsc --noEmit`（exit_code=1, status=FAIL）
@@ -78,7 +78,7 @@
 
 ---
 
-- [ ] T202b [P] 新建 fixture `report-full-skipped-dist.json`（修订 #2，full 契约违反）
+- [x] T202b [P] 新建 fixture `report-full-skipped-dist.json`（修订 #2，full 契约违反）
 
   **动作**: 新建 full 模式 report，layer2_commands 含一条 `{name:"npx vitest run --project e2e", exit_code:null, status:"SKIPPED", skipped_reason:"dist_not_built"}`（full 轮不应出现，用于验证 parseReport 降级为 infra-failure），其余字段（npm run build PASS 等）齐全合法。
 
@@ -102,7 +102,7 @@
 
 ---
 
-- [ ] T203 更新 `planSnapshotCommands` 的 deepEqual 断言（T-GL-19 对应）
+- [x] T203 更新 `planSnapshotCommands` 的 deepEqual 断言（T-GL-19 对应）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 中找到 `planSnapshotCommands` isClean=false 的 deepEqual 断言，更新为含 pathspec 排除的期望序列：
   ```js
@@ -126,7 +126,7 @@
 
 ---
 
-- [ ] T204 更新 `planRollbackCommands` 的 deepEqual 断言（T-GL-12b 对应）
+- [x] T204 更新 `planRollbackCommands` 的 deepEqual 断言（T-GL-12b 对应）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 中找到 `planRollbackCommands` clean=false 和 clean=true 的 deepEqual 断言，更新为含 `-e` 排除的期望序列：
 
@@ -158,7 +158,7 @@
 
 ---
 
-- [ ] T205 新增 `assessPreservedConfigSafety` 单测（8 个用例，porcelain 解析各状态）
+- [x] T205 新增 `assessPreservedConfigSafety` 单测（8 个用例，porcelain 解析各状态）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 末尾新增 `describe('assessPreservedConfigSafety', ...)` 块，覆盖以下用例（entries 形式：`[{path, state}]`，state 值由调用方从 porcelain 解析后传入）：
 
@@ -187,7 +187,7 @@
 
 ---
 
-- [ ] T205b 新增 `parsePreservedConfigStates` 单测（raw porcelain → entries，主线程精化 #2）
+- [x] T205b 新增 `parsePreservedConfigStates` 单测（raw porcelain → entries，主线程精化 #2）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 新增 `describe('parsePreservedConfigStates', ...)` 块。**输入为真实 `git status --porcelain` 文本字符串**（非预解析对象），验证解析到正确 state 枚举。覆盖 porcelain v1 各状态行：
 
@@ -216,7 +216,7 @@
 
 ---
 
-- [ ] T206 新增 `evaluateSmokeReadiness` 单测（6 个用例）
+- [x] T206 新增 `evaluateSmokeReadiness` 单测（6 个用例）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 新增 `describe('evaluateSmokeReadiness', ...)` 块，覆盖：
 
@@ -241,7 +241,7 @@
 
 ---
 
-- [ ] T207 新增 `decideStop` 新场景单测（含 C1 回归保护，4 个用例）
+- [x] T207 新增 `decideStop` 新场景单测（含 C1 回归保护，4 个用例）
 
   **动作**: 在 `plugins/spec-driver/tests/goal-loop-core.test.mjs` 的 `decideStop` describe 块中追加以下用例：
 
@@ -276,7 +276,7 @@
 
 ---
 
-- [ ] T208 引入 `PRESERVED_CONFIG_PATHSPECS` 常量（缺陷 1 前置）
+- [x] T208 引入 `PRESERVED_CONFIG_PATHSPECS` 常量（缺陷 1 前置）
 
   **动作**: 在 `plugins/spec-driver/scripts/lib/goal-loop-core.mjs` 顶部导出区域新增模块级常量：
   ```js
@@ -299,7 +299,7 @@
 
 ---
 
-- [ ] T209 修改 `planSnapshotCommands`——加 pathspec 排除（缺陷 1）
+- [x] T209 修改 `planSnapshotCommands`——加 pathspec 排除（缺陷 1）
 
   **动作**: 修改 `plugins/spec-driver/scripts/lib/goal-loop-core.mjs` 中的 `planSnapshotCommands(isClean, preservedPaths = PRESERVED_CONFIG_PATHSPECS)`（**新增可选第二参，默认常量，生产行为不变，仅供测试注入多路径——修订 #5**）：
   - isClean=true 仍返回 `[]`（不变）
@@ -322,7 +322,7 @@
 
 ---
 
-- [ ] T210 修改 `planRollbackCommands`——加 `-e` 排除（缺陷 1）
+- [x] T210 修改 `planRollbackCommands`——加 `-e` 排除（缺陷 1）
 
   **动作**: 修改 `plugins/spec-driver/scripts/lib/goal-loop-core.mjs` 中的 `planRollbackCommands(S_i, preservedPaths = PRESERVED_CONFIG_PATHSPECS)`（**新增可选第二参，默认常量，生产行为不变——修订 #5**）：
   - `git clean -fd` 替换为展开 `preservedPaths` 的多个独立 `-e <path>` argv，例如：
@@ -343,7 +343,7 @@
 
 ---
 
-- [ ] T211 新增 `assessPreservedConfigSafety` 纯函数并导出（缺陷 1 preflight）
+- [x] T211 新增 `assessPreservedConfigSafety` 纯函数并导出（缺陷 1 preflight）
 
   **动作**: 在 `plugins/spec-driver/scripts/lib/goal-loop-core.mjs` 中新增并导出函数：
   ```js
@@ -396,7 +396,7 @@
 
 ---
 
-- [ ] T212 新增 `evaluateSmokeReadiness` 并重构 `decideStop` 优先级 3（缺陷 2）
+- [x] T212 新增 `evaluateSmokeReadiness` 并重构 `decideStop` 优先级 3（缺陷 2）
 
   **动作**: 在 `plugins/spec-driver/scripts/lib/goal-loop-core.mjs` 中：
 
@@ -461,7 +461,7 @@
 
 ---
 
-- [ ] T213 新建 `goal-loop-snapshot-rollback-integration.test.mjs`（8 个集成用例）
+- [x] T213 新建 `goal-loop-snapshot-rollback-integration.test.mjs`（8 个集成用例）
 
   **动作**: 新建 `plugins/spec-driver/tests/goal-loop-snapshot-rollback-integration.test.mjs`，包含以下 8 个用例（每个用例独立 temp dir，用 `node:os.tmpdir()` + unique subdir，`finally` 块 `fs.rmSync(tmpDir, {recursive:true, force:true})`，命令用 `node:child_process.execFileSync` 执行，超时 10s）：
 
@@ -503,7 +503,7 @@
 
 ---
 
-- [ ] T214 在 `goal-loop-cli.mjs` 新增 `assess-preserved-config-safety` 子命令
+- [x] T214 在 `goal-loop-cli.mjs` 新增 `assess-preserved-config-safety` 子命令
 
   **动作**: 修改 `plugins/spec-driver/scripts/goal-loop-cli.mjs`，让 CLI **吃原始 `git status --porcelain` 文本**（解析在 core，编排器零解析）：
   1. 顶部注释 `Usage` 节追加：
@@ -552,7 +552,7 @@
 
 ---
 
-- [ ] T215 [P] 修改 `verify.md`——补全 full 命令集 + smoke SKIPPED 约定 + infra-failure 约定
+- [x] T215 [P] 修改 `verify.md`——补全 full 命令集 + smoke SKIPPED 约定 + infra-failure 约定
 
   **动作**: 修改 `plugins/spec-driver/agents/verify.md`，覆盖以下三点：
 
@@ -592,7 +592,7 @@
 
 ---
 
-- [ ] T216 [P] 修改 `SKILL.md`——full/smoke build 次序 + preflight 调用点 + assessPreservedConfigSafety 接线
+- [x] T216 [P] 修改 `SKILL.md`——full/smoke build 次序 + preflight 调用点 + assessPreservedConfigSafety 接线
 
   **动作**: 修改 `plugins/spec-driver/skills/spec-driver-feature/SKILL.md`，覆盖以下三点：
 
@@ -637,7 +637,7 @@
 
 ---
 
-- [ ] T217 全量单测绿态验证（core 单测）
+- [x] T217 全量单测绿态验证（core 单测）
 
   **动作**: 运行全量 goal-loop core 单测，确认零失败。
 
@@ -651,7 +651,7 @@
 
 ---
 
-- [ ] T218 集成测试绿态验证
+- [x] T218 集成测试绿态验证
 
   **动作**: 运行真实 git 集成测试，确认 8 个场景全部 PASS。
 
@@ -665,7 +665,7 @@
 
 ---
 
-- [ ] T219 [P] `npm run build` 通过（类型检查 + 构建）
+- [x] T219 [P] `npm run build` 通过（类型检查 + 构建）
 
   **依赖**: T218
 
@@ -677,7 +677,7 @@
 
 ---
 
-- [ ] T220 [P] `npm run repo:check` 通过
+- [x] T220 [P] `npm run repo:check` 通过
 
   **依赖**: T218
 
@@ -693,7 +693,7 @@
 
 ---
 
-- [ ] T221 `npm run release:check` 通过（如触发 release contract 变更）
+- [x] T221 `npm run release:check` 通过（如触发 release contract 变更）
 
   **动作**: 确认 release contract 未被意外改动。
 

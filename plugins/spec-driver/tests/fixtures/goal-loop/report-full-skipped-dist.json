@@ -1,0 +1,54 @@
+{
+  "round": 5,
+  "timestamp": "2026-06-21T10:10:00Z",
+  "verify_mode": "full",
+  "wall_seconds": 60.0,
+  "layer2_commands": [
+    {
+      "name": "npm run build",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 18.0,
+      "output_summary": "Build succeeded, 0 errors",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run --project e2e",
+      "exit_code": null,
+      "status": "SKIPPED",
+      "duration_seconds": 0,
+      "output_summary": "dist/ 未构建（full 轮契约违反，full 应已 build）",
+      "skipped_reason": "dist_not_built"
+    },
+    {
+      "name": "npm run repo:check",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 9.0,
+      "output_summary": "repo:check clean",
+      "skipped_reason": null
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 12,
+    "p1_covered": 12,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": []
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "full 轮但出现 dist_not_built SKIPPED，属契约违反"
+  },
+  "regression_check": {
+    "previously_passing_commands": [],
+    "now_failing": [],
+    "regression_detected": false
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 2,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "net_loc_delta": 5
+  }
+}

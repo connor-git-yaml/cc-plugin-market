@@ -1,0 +1,54 @@
+{
+  "round": 1,
+  "timestamp": "2026-06-21T10:00:00Z",
+  "verify_mode": "smoke",
+  "wall_seconds": 41.0,
+  "layer2_commands": [
+    {
+      "name": "tsc --noEmit",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 6.4,
+      "output_summary": "类型检查通过，0 errors",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run --project unit --project integration --project golden-master --project self-hosting",
+      "exit_code": 0,
+      "status": "PASS",
+      "duration_seconds": 28.7,
+      "output_summary": "非 e2e project 全绿",
+      "skipped_reason": null
+    },
+    {
+      "name": "npx vitest run --project e2e",
+      "exit_code": null,
+      "status": "SKIPPED",
+      "duration_seconds": 0,
+      "output_summary": "dist/ 未构建，跳过 build 依赖 e2e",
+      "skipped_reason": "dist_not_built"
+    }
+  ],
+  "layer1_fr_coverage": {
+    "p1_total": 12,
+    "p1_covered": 12,
+    "p1_coverage_pct": 100,
+    "uncovered_fr_ids": []
+  },
+  "layer1_5_evidence": {
+    "status": "COMPLIANT",
+    "detail": "smoke 轮 P1 FR 证据齐备（达标前仍需 full 重判）"
+  },
+  "regression_check": {
+    "previously_passing_commands": [],
+    "now_failing": [],
+    "regression_detected": false
+  },
+  "delta_inputs": {
+    "layer2_pass_count": 2,
+    "p1_fr_coverage_pct": 100,
+    "layer1_5_status_score": 2,
+    "regression_count": 0,
+    "net_loc_delta": 30
+  }
+}
