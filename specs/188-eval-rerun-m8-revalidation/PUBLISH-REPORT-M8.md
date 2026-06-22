@@ -65,7 +65,7 @@ M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-RE
 **fuzzy 翻案核心主张**（M7 §4.5）：预注册 fuzzy oracle 对"修复+补测试"形态有结构性惩罚（额外 diff 稀释 Jaccard），单向打击 workflow cohort；core-files-only 重判后"五组真实修复能力无显著差异"。**F188 真 oracle（跑真实 FAIL_TO_PASS 测试，补测试无害）是这一翻案的权威裁决者。**
 
 ### 2.2 真 oracle per-cohort 通过率（133/133 完成）
-总分布：**84 pass / 47 fail / 2 error**（error_rate 1.5%，2 个 infra 散落 spec-driver V009r2 + superpowers V010r1，非系统性，已剔分母）。
+总分布：**84 pass / 47 fail / 2 error**（error_rate 1.5%，2 个 infra 散落 spec-driver V009r2 + superpowers V010r1，非系统性，已剔分母）。剔分母**对称受益**（非偏向单一 cohort）：c2 15/28→15/27（53.6%→55.6%）、c4 22/29→22/28（75.9%→78.6%），两组各因自己的 1 个 error 被剔而小幅上升，不影响排序结论。
 
 | cohort（c#）| n_total | n_valid | n_pass | passRate | error | rankEligible |
 |------------|---------|---------|--------|----------|-------|--------------|
@@ -91,7 +91,9 @@ M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-RE
 
 ### 2.4 结论 — fuzzy 翻案【成立，且强化】
 
-**M7 fuzzy 的核心结论被真 oracle 定性推翻**：fuzzy primary 断言"workflow cohort 完成率灾难性低于裸 Claude（c3 3.3% vs c1 33%）→ 重流程显著降低完成率"。F188 真 FAIL_TO_PASS oracle（跑真实测试，补测试无害）显示 **workflow / framework cohort 全部追平或反超裸 Claude**（c4 78.6% / c5 66.7% / c3 62.1% 均 > c1 55.0%；c2 55.6% ≈ c1）。**fuzzy "重流程降低完成率"是测量伪影**（对"修复+补测试"形态的结构性惩罚），M7 §4.5 的翻案诊断**成立**，且真 oracle 比 core-files 修正（27-37%）揭示更高的真实修复率 —— 印证 F187/F197 评测设施修复给出了与 fuzzy 根本不同、更可信的答案（**价值传导链"评测可信度"这一环修复有效**）。
+**M7 fuzzy 的核心结论被真 oracle 定性推翻**：fuzzy primary 断言"workflow cohort 完成率灾难性低于裸 Claude（c3 3.3% vs c1 33%）→ 重流程显著降低完成率"。F188 真 FAIL_TO_PASS oracle（跑真实测试，补测试无害）显示 **在这 10 个经可解性筛选的任务上**，workflow / framework cohort 追平或反超裸 Claude（c4 78.6% / c5 66.7% / c3 62.1% 均 > c1 55.0%；c2 55.6% ≈ c1）——**此排序仅在该非代表性任务子集内成立，绝对率不可外推到 Verified 全集（见 §2.4 局限 1）**。**fuzzy "重流程降低完成率"是测量伪影**（对"修复+补测试"形态的结构性惩罚），M7 §4.5 的翻案诊断**成立**。
+
+**关于"评测设施修复有效"的克制表述（codex W3/W4）**：真 oracle 给出了与 fuzzy **根本不同**的答案，且 2 个跨 cohort 抽验确认其**判分机制正确**（candidate patch 真应用 + FAIL_TO_PASS 测试真 fail→pass + PASS_TO_PASS 全过）。但"真 oracle 比 fuzzy **更可信**"这一步——虽有强先验（FAIL_TO_PASS 执行是 SWE-bench 正统、fuzzy 退化 oracle 的结构性偏差有 M7 §4.5 法医证据）——**仍只由 2 个抽验支撑，未做全 133 份判分的人工复核**，故属 **directional 结论**：评测设施修复**方向正确**（给出可信度更高维度的证据），但"逐份判分零误判"待更大样本核验。
 
 **c3（spectra-mcp，SC-002 完成率维度）**：62.1% > c1 55.0%，**lift = 1.13**（vs fuzzy 0.10 / core-files 0.80），方向转正。
 

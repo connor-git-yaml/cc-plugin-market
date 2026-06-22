@@ -65,7 +65,23 @@ export const MANIFEST_DEFAULTS = {
   quotaCheckInterval: 6,
   swebenchOracle: false, // 真实 FAIL_TO_PASS oracle（需 docker/venv）
   swebenchTimeoutMs: 300000,
+  cohorts: null, // F188：cohort 子集（如 ["baseline-claude","spec-driver-spectra-mcp"] 跑 c1/c3 最小集）；null → 全 5。仅裁剪跑哪些组，不改任一组的设置/判分/jury（非方法论变更）。
 };
+
+/**
+ * F188：解析 manifest.cohorts 为有效 cohort 子集（保持 COHORT_IDS 顺序）。
+ * null/缺省 → 全 5 cohort（向后兼容）；非法 cohort id → throw（拒绝静默跑错子集）。
+ */
+export function resolveCohorts(manifest) {
+  const requested = manifest?.cohorts;
+  if (requested == null) return COHORT_IDS;
+  if (!Array.isArray(requested) || requested.length === 0) {
+    throw new Error(`manifest.cohorts 须为非空数组（如 ["baseline-claude","spec-driver-spectra-mcp"]），收到 ${JSON.stringify(requested)}`);
+  }
+  const invalid = requested.filter((c) => !COHORT_IDS.includes(c));
+  if (invalid.length) throw new Error(`manifest.cohorts 含非法 cohort：${invalid.join(',')}；合法值：${COHORT_IDS.join(',')}`);
+  return COHORT_IDS.filter((c) => requested.includes(c)); // 保持 registry 顺序
+}
 
 /** 读 experiment manifest（JSON 或 YAML），与 MANIFEST_DEFAULTS 合并。文件不存在/解析失败 → throw。 */
 export function loadExperimentManifest(manifestPath) {
@@ -285,14 +301,14 @@ function listTaskIds(args) {
   return fs.readdirSync(dir).filter((n) => n.endsWith('.json') && !n.startsWith('_')).map((n) => n.replace(/\.json$/, '')).sort();
 }
 
-export function buildRunMatrix(mode, taskIds, smokeTask = null, repeatOverride = null) {
+export function buildRunMatrix(mode, taskIds, smokeTask = null, repeatOverride = null, cohortIds = COHORT_IDS) {
   // Feature 187 FR-006：manifest.repeat 覆盖 mode 默认（smoke=1 / full=3）
   const repeats = repeatOverride != null ? repeatOverride : (mode === 'smoke' ? 1 : 3);
   const tasks = mode === 'smoke' ? [smokeTask ?? taskIds[0]].filter(Boolean) : taskIds;
   if (tasks.length === 0) throw new Error('无可跑 task（先跑 Verified importer + 预注册）');
   const matrix = [];
   for (const taskId of tasks) {
-    for (const cohort of COHORT_IDS) {
+    for (const cohort of cohortIds) { // F188：cohortIds 默认全 5，manifest.cohorts 可裁剪为 c1/c3 子集
       for (let r = 1; r <= repeats; r++) matrix.push({ taskId, cohort, repeatIndex: r });
     }
   }
@@ -419,10 +435,10 @@ function quotaCheckpoint(completedCount, args) {
 // 聚合 + smoke 断言
 // ───────────────────────────────────────────────────────────
 
-export function loadRunRecords(taskIds, repeats) {
+export function loadRunRecords(taskIds, repeats, cohortIds = COHORT_IDS) {
   const records = [];
   for (const taskId of taskIds) {
-    for (const cohort of COHORT_IDS) {
+    for (const cohort of cohortIds) { // F188：默认全 5；cohort 子集时只载跑过的组
       for (let r = 1; r <= repeats; r++) {
         const p = runFixturePath(taskId, cohort, r);
         if (!fs.existsSync(p)) continue;
@@ -452,7 +468,9 @@ function smokeAssertions(results, matrix) {
     const trace = fx.perf?.mcpToolCalls ?? fx.perf?.mcpToolCallTrace ?? [];
     c3McpCalls = Array.isArray(trace) ? trace.reduce((s, t) => s + (t.callCount ?? 0), 0) : 0;
   }
-  const pass = broken.length === 0 && (c3McpCalls ?? 0) > 0;
+  // F188（codex W1）：c3 MCP 调用断言仅在 c3 在本次 cohort 子集内时适用；排除 c3 的合法子集（如 c1/c2）
+  // 不应因"无 c3 调用"误判 smoke 失败。c1/c3 子集含 c3，断言照常生效。
+  const pass = broken.length === 0 && (c3 ? (c3McpCalls ?? 0) > 0 : true);
   // frontmatter 含机器可读断言字段 + source 标记（codex CRITICAL：verify 不能只看 status，
   // 需交叉核对计数；synthetic 防线 = 本文件仅由真实 batch 跑写出 + git 历史 + 人工 review）
   const body = `---
@@ -494,8 +512,9 @@ async function main() {
   if (args.dryRun) console.error('[batch] --dry-run：跳过入口校验的 hard-fail（仅列计划）');
 
   const taskIds = listTaskIds(args);
-  const matrix = buildRunMatrix(args.mode, taskIds, args.task, args.manifest?.repeat); // FR-006：repeat 参数化
-  console.error(`[batch] 计划：${matrix.length} runs（${args.mode}; jury=${args.skipJury ? 'skip' : 'on'}; resume=${args.resume}）`);
+  const cohortIds = resolveCohorts(args.manifest); // F188：cohort 子集（默认全 5；c1/c3 最小集见 manifest.cohorts）
+  const matrix = buildRunMatrix(args.mode, taskIds, args.task, args.manifest?.repeat, cohortIds); // FR-006：repeat 参数化
+  console.error(`[batch] 计划：${matrix.length} runs（${args.mode}; cohorts=${cohortIds.length}/${COHORT_IDS.length}; jury=${args.skipJury ? 'skip' : 'on'}; resume=${args.resume}）`);
   if (args.dryRun) {
     for (const m of matrix) console.log(`[plan] ${m.taskId} × ${m.cohort} × r${m.repeatIndex}`);
     return;
@@ -546,8 +565,9 @@ async function main() {
   }
 
   // --full 完成：聚合（oracle-only pass rate / lift / c3_vs_c4 / token）
-  const records = loadRunRecords(taskIds, 3);
-  const agg = aggregateCohorts(records);
+  const effectiveRepeats = args.manifest?.repeat ?? 3;
+  const records = loadRunRecords(taskIds, effectiveRepeats, cohortIds); // F188：cohort 子集（缺组 fixture 本就跳过，显式传保口径一致）
+  const agg = aggregateCohorts(records, { cohortIds }); // F188：只聚合跑过的 cohort，避免空 c2/c4/c5 统计
   fs.mkdirSync(aggregateDir(), { recursive: true });
   // taskSetHash 把 aggregate 绑回预注册（codex WARNING：防旧/手写 aggregate 纸面通过 verify）
   const { computeTaskSetHash } = await import('./lib/preregistration-check.mjs');
@@ -556,8 +576,10 @@ async function main() {
     source: 'host(batch--full)',
     spectraVersionGate: gate ? { commit: gate.meta.commit, distSha256: gate.meta.distSha256 } : null,
     taskSetHash: computeTaskSetHash(taskIds),
-    // Codex W7：用 effective repeats（manifest.repeat 覆盖 full 默认 3），否则 repeat 调整后报告失真
-    expectedRunCount: taskIds.length * COHORT_IDS.length * (args.manifest?.repeat ?? 3),
+    // F188（codex W2）：仅 cohort 子集时附 cohortSubset 字段；全量跑不写此 key → aggregate 输出与改动前严格等价
+    ...(cohortIds.length < COHORT_IDS.length ? { cohortSubset: cohortIds } : {}),
+    // Codex W7：用 effective repeats（manifest.repeat 覆盖 full 默认 3）+ effective cohorts，否则 repeat/cohort 调整后报告失真
+    expectedRunCount: taskIds.length * cohortIds.length * effectiveRepeats,
     runCount: records.length,
     ...agg,
   });
