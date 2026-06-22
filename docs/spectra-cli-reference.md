@@ -235,10 +235,16 @@ This exposes three KB MCP tools (reusing the Spectra MCP `{code}` contract + tel
 ### Ingest project-level knowledge
 
 ```bash
-# Add a page / file / meeting-notes into the writable project KB
+# Add a web page / office file / meeting-notes into the writable project KB
 spectra scaffold-kb ingest --url https://… --project-kb .spectra-kb/ --yes
-spectra scaffold-kb ingest --file notes.md --project-kb .spectra-kb/ --dry-run
+spectra scaffold-kb ingest --file vendor-spec.docx --project-kb .spectra-kb/ --dry-run
+spectra scaffold-kb ingest --minutes notes.md --project-kb .spectra-kb/ --yes
 ```
+
+Three source kinds: `--url` (SSRF-guarded fetch), `--file` (office `docx/pptx/pdf` via
+`office-parser`, or Markdown), `--minutes` (free-form notes). Always **preview → confirm**:
+a bare run or `--dry-run` only previews; `--yes` commits. `--project-kb` defaults to `.spectra/kb`.
+Exit codes: `0` success/preview · `1` all sources failed (nothing committed) · `2` partial success.
 
 The **vendor KB is read-only** (frozen at package time); the **project KB is read-write**
 (maintained by integrators). `kb_search` joins both layers and adds a freshness hint when the
