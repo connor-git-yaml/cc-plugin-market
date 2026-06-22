@@ -1,0 +1,130 @@
+# PUBLISH-REPORT-M8 — M8 评测复测：真 oracle 离线重判 + 触发率工程复测
+
+**Feature**: 188-eval-rerun-m8-revalidation
+**日期**: 2026-06-22
+**状态**: 🚧 草稿（P1 结果回填中 / P2 触发率待 `claude /login` 后跑）
+**交叉链接**: [F176 预注册](../176-swe-bench-verified-cross-cohort/verification/preregistration.md) · [M7 收官报告](../147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md) · [F176 m8-fix-candidates](../176-swe-bench-verified-cross-cohort/verification/m8-fix-candidates.md)
+
+> **定位**：F188 是 M8 Track A 价值传导链修复（增量正确性 / 触发率工程 F184 / 评测设施 v2 F187+F197）的**闭环验证**，为"trust-repair 是否真有效"提供两个新证据维度（真 oracle 排名 + 触发率实测），**非单点定论**。结论强度严格受样本量与方法局限约束，诚实标注、不外推。
+
+---
+
+## 0. TL;DR
+
+- **子任务 1（离线重判，SC-004）✅ 完成**: 真 FAIL_TO_PASS oracle 重判 133/133（84 pass / 47 fail / 2 error）。**fuzzy 翻案【成立且强化】**：真 oracle 下 workflow/framework cohort 全部追平或反超裸 Claude（c4 79% / c5 67% / c3 62% > c1 55% / c2 56%），**M7 fuzzy "重流程降低完成率"被定性推翻**（系测试稀释测量伪影）；c3/c1 完成率 lift=1.13（vs fuzzy 0.10 / core-files 0.80）。**但**任务经可解性筛选（非难度代表样本，绝对率不可外推）+ 小样本（n=20-29，control 仅 20/30），cohort 次序与 lift 均为 **directional 噪声带内信号**，非统计显著强断言。
+- **子任务 2（触发率复测，SC-002）**: F184 触发率工程后 c1/c3 × 10 × N=3 复测，对照 F176 基线（1.77 调用/run，阈值 ≥2）。〔Claude OAuth 已恢复可用；待用户决策 cohort 子集后跑〕
+
+---
+
+## 1. 方法论与可信度护栏
+
+### 1.1 零方法论改动
+oracle 语义（`swebench-oracle` / `classify-oracle` / `phase-markers` / `swebench-dataset-build` / `swebench_fetch_rows`）、importer、fuzzy 算法、cohort 注册表、jury 全部**零改动复用**。F188 唯一新增 tracked 代码是薄离线重判驱动 `scripts/eval-offline-rejudge.mjs`（reuse `runSwebenchInstance`，不碰其语义）。
+
+### 1.2 fixture 同源确认（C2）
+P1 的 10 个 Verified fixtures 从 F176 原始产物（worktree `suspicious-sinoussi-d41c88`）恢复，**`computeFixtureContentHash` 精确等于 F176 冻结值 `19d8d42187d98235c4fa5369b898ac7308eb21e6ddc3b0788f0787cef53a71e0`** → 字节级同源，零 re-import 漂移风险。10 个 instanceId：
+`sympy__sympy-{24661,24562,24539,24443,24213,24066,23950,23824}` + `pytest-dev__pytest-{10356,10081}`（sympy×8 + pytest×2）。
+
+### 1.3 oracle 语义零漂移核验（FR-013）
+5 个 oracle 语义模块自 F176 冻结提交 `538498740659551289c93029dcfd07f0f5797307`（2026-06-14）起 **git 比对零变动（含未提交工作区）** → P1 判分 oracle 与 F176 冻结口径字节一致，无"跑中换判分"。`taskSetHash` 一致 `6c5ed1c0…`。
+
+### 1.4 candidatePatch 构造（CL-1 经验退化）
+CL-1 拍板策略 = 排除候选自写测试、并入非测试新建源码。**经验抽检 133 份 `untracked.tgz`：零候选源码 / 零候选测试**（全是 `.specify/` 脚手架、runner 日志、spec-driver 自身在目标 repo 生成的 `specs/NNN-*` workflow 产物、pytest `changelog/*.rst` 文档）→ **CL-1 退化为 `candidatePatch = patch.diff` 原文**，Codex 担忧的 C3 合成偏置 / W2 分类歧义对本数据集**实际不存在**（驱动仍保留防御逻辑 + ambiguous 人工复核桶）。
+
+### 1.5 判分口径与有效性（FR-002/012）
+`pass→分子+分母`、`fail→分母`、`error/缺失→剔分母`（`classifyRunForRanking`）。每 cohort 同报 `n_total/n_valid/error_rate`；`error_rate > 30%` 标 `lowConfidence` 且 `rankEligible=false`，不入翻案排名（防剔分母虚高）。
+
+### 1.6 跨轨不可比红线（C1，FR-015）
+P1（M7-era 已存答卷重判）与 P2（post-F184 全新 runs）是**不同 epoch + 不同 candidatePatch 构造**（P1=patch.diff 原文；P2=live runner `git add -A` 全量 diff）。**禁横向比 P1-c3 与 P2-c3 的 passRate**；P1 只对 M7 fuzzy，P2 只对 F176 telemetry。
+
+### 1.7 运行环境与操作发现
+- 执行根 = 本 worktree（主仓库 stale 于 F171、缺 F187/F197 脚本）。docker + `scripts/.swebench-venv`（swebench 4.1.0）。
+- **超时操作发现**：harness `--cache_level env` 下首个 sympy/pytest 实例需冷建 conda env 镜像（~8-9min），超 oracle 默认 300s watchdog → smoke 实测误判 infra。驱动加 `--timeout-ms`（默认 20min）容纳冷建；env 镜像建一次缓存复用，后续 instance run 快。
+
+---
+
+## 2. 子任务 1 — 离线重判 133 份（SC-004）
+
+### 2.1 答卷构成与覆盖
+133 份 `{task}/{cohort}/r{N}/patch.diff`（control 20 / gstack 27 / spec-driver 28 / spec-driver-spectra-mcp 29 / superpowers 29）。其中 **42/133 为空 patch**（候选未产出修复 → oracle 判 fail）。
+
+**⚠️ 覆盖率限制（诚实标注）**：M7 共 150 runs（5 cohort × 10 × N=3），F188 只重判**留存了 patch.diff 的 133 份**（17 份缺答卷未捕获，主要在 control：20/30）。故 F188 per-cohort N 为 20-29（非满 30），与 M7 的 /30 口径**不完全可比**，对照取**方向性**（排名次序），不做绝对 passRate 等值比较。
+
+### 2.0 M7 双基线（待 F188 真 oracle 裁决）
+M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md) §4.1/§4.5）给出两套相互矛盾的 cohort 排名，F188 真 FAIL_TO_PASS oracle 用来裁决哪套成立：
+
+| cohort | M7 fuzzy primary（预注册 token-Jaccard）| M7 core-files-only 修正（"翻案"）|
+|--------|------------------------------------------|----------------------------------|
+| c1 control | 10/30 = 33.3% | 33.3% |
+| c2 spec-driver | 2/30 = 6.7% | 33.3% |
+| c3 spec-driver-spectra-mcp | 1/30 = 3.3% | 26.7% |
+| c4 superpowers | 1/30 = 3.3% | 30.0% |
+| c5 gstack | 3/30 = 10.0% | 36.7% |
+| **lift c3/c1** | **0.10**（SC-006 在此口径证伪）| **0.80**（N=30 噪声带内，"五组打平"）|
+
+**fuzzy 翻案核心主张**（M7 §4.5）：预注册 fuzzy oracle 对"修复+补测试"形态有结构性惩罚（额外 diff 稀释 Jaccard），单向打击 workflow cohort；core-files-only 重判后"五组真实修复能力无显著差异"。**F188 真 oracle（跑真实 FAIL_TO_PASS 测试，补测试无害）是这一翻案的权威裁决者。**
+
+### 2.2 真 oracle per-cohort 通过率（133/133 完成）
+总分布：**84 pass / 47 fail / 2 error**（error_rate 1.5%，2 个 infra 散落 spec-driver V009r2 + superpowers V010r1，非系统性，已剔分母）。
+
+| cohort（c#）| n_total | n_valid | n_pass | passRate | error | rankEligible |
+|------------|---------|---------|--------|----------|-------|--------------|
+| control (c1) | 20 | 20 | 11 | **55.0%** | 0 | ✅ |
+| spec-driver (c2) | 28 | 27 | 15 | **55.6%** | 1 | ✅ |
+| spec-driver-spectra-mcp (c3) | 29 | 29 | 18 | **62.1%** | 0 | ✅ |
+| superpowers (c4) | 29 | 28 | 22 | **78.6%** | 1 | ✅ |
+| gstack (c5) | 27 | 27 | 18 | **66.7%** | 0 | ✅ |
+
+抽验真实性（排除"恒 pass" bug）：superpowers V001r1（FAIL_TO_PASS `test_issue_24288` 真转绿 + PASS_TO_PASS 全过）、control V002r1（`test_issue_24543` 真转绿）—— 均 `patch_applied:true, resolved:true`，且 47 个 fail 证明 oracle 有区分度。
+
+### 2.3 三套 oracle 排名对照
+
+| cohort | M7 fuzzy primary | M7 核心文件修正（翻案）| **F188 真 oracle** |
+|--------|------------------|------------------------|--------------------|
+| c1 control | 33.3% | 33.3% | **55.0%** |
+| c2 spec-driver | 6.7% | 33.3% | **55.6%** |
+| c3 spectra-mcp | 3.3% | 26.7% | **62.1%** |
+| c4 superpowers | 3.3% | 30.0% | **78.6%** |
+| c5 gstack | 10.0% | 36.7% | **66.7%** |
+| **lift c3/c1** | **0.10** | **0.80** | **1.13** |
+| 排序 | c1≫其余 | 大体打平 | c4>c5>c3>c2≈c1 |
+
+### 2.4 结论 — fuzzy 翻案【成立，且强化】
+
+**M7 fuzzy 的核心结论被真 oracle 定性推翻**：fuzzy primary 断言"workflow cohort 完成率灾难性低于裸 Claude（c3 3.3% vs c1 33%）→ 重流程显著降低完成率"。F188 真 FAIL_TO_PASS oracle（跑真实测试，补测试无害）显示 **workflow / framework cohort 全部追平或反超裸 Claude**（c4 78.6% / c5 66.7% / c3 62.1% 均 > c1 55.0%；c2 55.6% ≈ c1）。**fuzzy "重流程降低完成率"是测量伪影**（对"修复+补测试"形态的结构性惩罚），M7 §4.5 的翻案诊断**成立**，且真 oracle 比 core-files 修正（27-37%）揭示更高的真实修复率 —— 印证 F187/F197 评测设施修复给出了与 fuzzy 根本不同、更可信的答案（**价值传导链"评测可信度"这一环修复有效**）。
+
+**c3（spectra-mcp，SC-002 完成率维度）**：62.1% > c1 55.0%，**lift = 1.13**（vs fuzzy 0.10 / core-files 0.80），方向转正。
+
+**⚠️ 必须同时声明的局限（否则 over-claim）**：
+1. **任务可解性偏置**：10 task 在 F176 import 时按"可解性 / 依赖轻"筛选（host-runbook 4a），**非 Verified 难度代表样本** → 55-79% 绝对率显著高于 Verified 全集典型解出率（~40-55%），**只有 cohort 间次序有意义，绝对率不可外推**。
+2. **小样本 + 覆盖缺口**：每 cohort n=20-29（control 仅 20/30，全局 133/150），CI 宽；**lift 1.13 与 cohort 次序均为 directional，落在 N≈20-30 噪声带内，不构成统计显著的"workflow 优于 baseline"强断言**。
+3. 2 个 infra error 剔分母（已标注），不影响定性结论。
+
+**一句话**：trust-repair 在"评测可信度"维度**成了** —— 真 oracle 推翻了 fuzzy 的误导性结论，workflow/MCP cohort 不再被冤判为"拖累完成率"；但受任务筛选 + 小样本所限，"workflow 显著优于 baseline"仍是待规模化验证的方向性信号，不是定论。
+
+---
+
+## 3. 子任务 2 — 触发率复测（SC-002）〔待跑〕
+
+### 3.1 设计
+c1（control，零 MCP 基线）+ c3（spec-driver-spectra-mcp，唯一注入 MCP）× 10 task × N=3 = 60 runs。前置：用户 `claude /login`（Claude Max OAuth，judge1）+ codex OAuth + SiliconFlow key（judge2/3）。配额每 6 runs 查，≥60% weekly 暂停。
+
+### 3.2 双指标〔回填〕
+- 指标 1 — 触发率：c3 均值 + bootstrap 95% CI；机判 "显著提升 vs F176" ⟺ CI 下界 > 1.77、"达标" ⟺ CI 下界 ≥ 2.0。
+- 指标 2 — 完成率 lift：c3/c1 真 oracle passRate lift。
+
+### 3.3 结论〔回填〕
+
+---
+
+## 4. 综合结论与 M9/Fix 候选〔回填〕
+
+〔trust-repair 两维度证据汇总（各自范围内）+ 后续候选〕
+
+---
+
+## 5. Falsification 附录（偏离如实记录）
+
+- P1 fixture 来源：F176 原始产物恢复（hash 同源），非重新 HF import。
+- P1 candidatePatch：经验全 = patch.diff（untracked 零候选代码）。
+- 〔其余偏离回填〕
