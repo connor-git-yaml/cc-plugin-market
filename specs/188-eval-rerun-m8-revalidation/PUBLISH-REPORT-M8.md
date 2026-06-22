@@ -12,7 +12,7 @@
 ## 0. TL;DR
 
 - **子任务 1（离线重判，SC-004）✅ 完成**: 真 FAIL_TO_PASS oracle 重判 133/133（84 pass / 47 fail / 2 error）。**fuzzy 翻案【成立且强化】**：真 oracle 下 workflow/framework cohort 全部追平或反超裸 Claude（c4 79% / c5 67% / c3 62% > c1 55% / c2 56%），**M7 fuzzy "重流程降低完成率"被定性推翻**（系测试稀释测量伪影）；c3/c1 完成率 lift=1.13（vs fuzzy 0.10 / core-files 0.80）。**但**任务经可解性筛选（非难度代表样本，绝对率不可外推）+ 小样本（n=20-29，control 仅 20/30），cohort 次序与 lift 均为 **directional 噪声带内信号**，非统计显著强断言。
-- **子任务 2（触发率复测，SC-002）**: F184 触发率工程后 c1/c3 × 10 × N=3 复测，对照 F176 基线（1.77 调用/run，阈值 ≥2）。〔Claude OAuth 已恢复可用；待用户决策 cohort 子集后跑〕
+- **子任务 2（触发率复测，SC-002）⏳ setup-ready，launch-pending**: 范围定为 **c1/c3 最小集 60 runs**（用户拍板，定为日后标准）。能力已就绪（cohort 子集 commit `0e10310` + manifest + 凭据 + prereg/spike/版本门禁全绿）；**唯一 launch 阻塞 = 全局 spectra plugin 需先 disable**（否则污染 c3 MCP 测量）；执行 ~9-12hr 烧 Claude 周配额，待用户配额窗口启动。
 
 ---
 
@@ -106,27 +106,60 @@ M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-RE
 
 ---
 
-## 3. 子任务 2 — 触发率复测（SC-002）〔待跑〕
+## 3. 子任务 2 — 触发率复测（SC-002）【setup-ready，launch-pending】
 
-### 3.1 设计
-c1（control，零 MCP 基线）+ c3（spec-driver-spectra-mcp，唯一注入 MCP）× 10 task × N=3 = 60 runs。前置：用户 `claude /login`（Claude Max OAuth，judge1）+ codex OAuth + SiliconFlow key（judge2/3）。配额每 6 runs 查，≥60% weekly 暂停。
+### 3.1 设计与范围（用户拍板：c1/c3 最小集，定为日后标准）
+c1（control，零 MCP 基线）+ c3（spec-driver-spectra-mcp，唯一注入 MCP）× 10 task × N=3 = **60 runs**（**非**全 5 cohort 150 runs——全跑 = 重跑整个 M7，~10-20hr 多天 + 重 Claude Max 周配额，用户明确"太多"；c1/c3 定为日后 cohort 对比默认标准）。
 
-### 3.2 双指标〔回填〕
-- 指标 1 — 触发率：c3 均值 + bootstrap 95% CI；机判 "显著提升 vs F176" ⟺ CI 下界 > 1.77、"达标" ⟺ CI 下界 ≥ 2.0。
+driver = `claude-opus-4-7`（**非** codex——cohort-batch 用 claude OAuth），judge jury = claude-opus + GLM-5.1 + Kimi-K2.6（SiliconFlow 实付）。
+
+### 3.2 已就绪 / launch 前置
+- ✅ **c1/c3 cohort 子集能力**：cohort-batch 加 `manifest.cohorts`（commit `0e10310`，7 单测）；manifest 写好（`swebenchOracle:true, swebenchTimeoutMs:300000` 匹配 F176 冻结 oracleSpecHash `f4fbd0f9`, `cohorts:[c1,c3]`），dry-run 确认 60-run 计划。
+- ✅ 凭据：SiliconFlow key、`claude --print`（OAuth 已恢复）、`claude --version` 全绿。
+- ✅ prereg 三 hash 不受 cohort 子集影响；spike gate PASS；spectra 版本门禁 PASS（build 含 F177+F181）；env 镜像经 P1 暖缓存。
+- ❌ **唯一 launch 阻塞**：全局 spectra plugin（`spectra@cc-plugin-market`）启用 → entryValidation hard-fail（与 cohort3 本地 plugin 同名加载歧义，污染 MCP 版本审计 → 触发率测量失真）。**launch 前须 `claude plugin disable spectra@cc-plugin-market --scope user`**（干净）或 `--allow-global-spectra`（自担 c3 测量歧义风险，不推荐）。
+- ⏳ 执行成本：~9-12hr 多 session（claude opus 现场生成每 run 是完整 workflow 执行），烧 Claude Max 周配额，每 6 runs 人工查配额 dashboard，≥60% weekly 暂停。建议用户有配额窗口 + 能盯时启动；loop 看门狗自动续跑抗进程夭折。
+
+### 3.3 双指标〔待跑回填〕
+- 指标 1 — 触发率：c3 均值 + bootstrap 95% CI；机判 "显著提升 vs F176（1.77）" ⟺ CI 下界 > 1.77、"达标" ⟺ CI 下界 ≥ 2.0。
 - 指标 2 — 完成率 lift：c3/c1 真 oracle passRate lift。
 
-### 3.3 结论〔回填〕
+### 3.4 结论〔待跑回填〕
 
 ---
 
-## 4. 综合结论与 M9/Fix 候选〔回填〕
+## 4. 综合结论与 M9/Fix 候选
 
-〔trust-repair 两维度证据汇总（各自范围内）+ 后续候选〕
+**trust-repair 两维度（各自范围内）**：
+- **维度 1（评测可信度，P1/SC-004）✅ 成立**：真 FAIL_TO_PASS oracle 定性推翻 M7 fuzzy 的"重流程降低完成率"误判（系测试稀释伪影）；评测设施 F187/F197 修复**方向正确**（给出可信度更高维度的证据，2 抽验确认判分机制正确）。结论受任务筛选 + 小样本限制为 directional。
+- **维度 2（触发率工程，P2/SC-002）⏳ 待测**：setup-ready，launch 阻塞于全局 spectra plugin + 9-12hr 配额窗口（见 §3.2）。
+
+**M9/后续候选**：
+1. **触发率复测落地**（P2）：disable 全局 plugin 后跑 c1/c3 60 runs（本轮已备 capability + manifest）。
+2. **真 oracle 全量复核**（提升 P1 结论从 directional → 强）：人工复核 133 份判分（当前仅 2 抽验），或扩任务集到难度代表样本。
+3. **fuzzy oracle 退役**：M7 §4.5 + F188 双重证据表明 token-Jaccard 退化 oracle 对"修复+测试"形态系统性误判，建议非 swebench-execution 路径弃用或限定适用边界。
 
 ---
 
 ## 5. Falsification 附录（偏离如实记录）
 
-- P1 fixture 来源：F176 原始产物恢复（hash 同源），非重新 HF import。
-- P1 candidatePatch：经验全 = patch.diff（untracked 零候选代码）。
-- 〔其余偏离回填〕
+- **P1 fixture 来源**：F176 原始产物（worktree `suspicious-sinoussi-d41c88`）恢复，`fixtureContentHash` 字节同源 `19d8d42`，**非**重新 HF import（规避 import 启发式选 task 不可复现风险）。
+- **P1 candidatePatch**：经验全 = `patch.diff`（实测 133 份 untracked.tgz 零候选源码/测试，CL-1"并入非测试源码"分支 vacuous）。
+- **P1 覆盖**：133/150（缺 17，control 仅 20/30）；per-cohort N=20-29。
+- **P1 timeout**：离线重判驱动用 1.2M ms（容冷建 env 镜像）；**与 F176 冻结的 oracleSpecHash timeout（300000）不同**——但 P1 驱动走自有 git-module-drift 前置（非 manifest oracleSpecHash 重算），5 语义模块自 F176 commit `538498740` 零漂移，判分语义一致。P2 用 300000 匹配冻结 hash。
+- **P1 process 事故**：后台进程反复夭折（nohup 存活但 tracker 误报 killed）→ 一次并发双实例污染 5 个假 infra（已加 PID 锁修复 + 隔离污染 checkpoint + clean 重跑）。
+- **2 infra error**：剔分母对称受益 c2+c4，非偏向。
+- **P2 driver**：claude-opus-4-7（cohort-batch 设计），**非** task 列的 codex——codex 用于其他 eval 路径。
+
+---
+
+## 6. Dogfooding 反馈（Spectra / Spec Driver 自用，四维度）
+
+本需求用 `/spec-driver:spec-driver-feature` 全流程编排（spec→plan→tasks→implement→verify + gates + 每 phase codex 对抗审查）。
+
+- **MCP 可用性**：Spectra MCP 本需求**几乎未用**——F188 是评测执行任务，不需代码库结构化上下文（依赖/影响面/symbol）；研究阶段用 Explore agent + grep 测绘 eval 脚本更直接。**非问题，是任务形态不匹配**（评测任务 ≠ 代码理解任务）。Spec Driver 编排 MCP（gate/phase CLI）全程可用。
+- **返回信息够用**：spec-driver orchestrator-cli（get-phases/get-gate-behavior）字段完整；preregistration-check / cohort-aggregate 的导出函数契约清晰，离线重判驱动复用 `runSwebenchInstance` 零障碍。
+- **流程顺畅**：5 phase + 6 gate 编排对评测任务**偏重**（评测无"生产代码"产物，spec/plan/tasks 部分仪式化）；但 **GATE_DESIGN 硬门禁 + 每 phase codex 审查价值极高**——codex 在 spec/plan/driver 三轮共抓 1 个 no-op 校验 bug（taskSetHash 字段名）、并发污染隐患、untracked 处理盲区等真缺陷，"设计阶段抓 bug 比 implement 后便宜 100×"再次验证。
+- **结果准确**：离线重判真 oracle 判分准确（2 抽验 fail→pass 真转绿）；fuzzy-match 退化 oracle 的结构性偏差被真 oracle 证实（评测设施自身的准确性问题，正是本需求要复证的）。
+
+**转化为后续候选**：评测类任务可考虑 spec-driver 的轻量编排变体（跳过部分生产代码导向的 gate）；Spectra MCP 在评测任务中天然低频，非缺陷。
