@@ -62,6 +62,9 @@ F184 触发率工程后的增量验证：跑 c1（control）+ c3（spec-driver-s
 - **error 态污染排名（两面）**：基础设施失败（docker/venv/超时在测试开跑前）必须判 `error` 并剔分母，不可误计 fail 拉低某 cohort；**反向**，剔分母会让高 error cohort 的 passRate 虚高 → 必须同时报 `n_valid / error_rate`，error_rate > 30% 的 cohort passRate 标低置信、不参与排名（见 FR-012）。
 - **候选 untracked 含非测试源码（C-1 关键陷阱）**：`untracked.tgz` 不一定只有测试 —— 若候选的修复落在**新建非测试源码文件**，只喂 `patch.diff` 会漏掉修复主体、系统性低估该 cohort（fuzzy 结构性惩罚换皮）。跑前 MUST 抽检 133 份 untracked 内容分类（FR-011），按 CL-1 拍板策略构造 candidatePatch（默认：排除候选自写测试文件、并入非测试新建源码），并在报告披露各 cohort untracked 非测试源码占比。
 - **缺 docker/venv 环境**：离线重判依赖本地 swebench harness（docker + `scripts/.swebench-venv`）；环境缺失 → 判分前置失败，需先 `setup-swebench-venv.sh`，非评测结论。
+- **fixture 重建 hash 不匹配（C2）**：HF `SWE-bench_Verified` 未 pin revision，重建 `fixtureContentHash` 未必等于 F176 冻结值 `19d8d42…`。处置：hash 匹配=确认同源（最佳）；不匹配 → **不 dead-block**，转而校验 10 个 instanceId 正确（判分有效性的真不变量，harness 按 instanceId 从 HF 拉官方测试），用重建 fixtures 继续并在报告披露 hash delta + 为 F188 重冻结自身 fixtureContentHash。
+- **合成 candidatePatch 不可应用（C3）**：CL-1 合成 diff 若格式错（驱动 bug）→ 阻断修驱动；候选 patch 本身不可应用 → 记 fail，**禁**剔分母（否则系统性高估 passRate）。
+- **跨轨 passRate 误比（C1）**：P1/P2 不同 epoch + 不同构造，禁横向比 c3 passRate（见 FR-015）。
 
 ## Requirements *(mandatory)*
 
@@ -75,9 +78,14 @@ F184 触发率工程后的增量验证：跑 c1（control）+ c3（spec-driver-s
 - **FR-006（双指标）**: 系统 MUST 报：指标 1 = c3 触发率均值 + bootstrap 95% CI（锚 1.77 基线、≥2 阈值）；指标 2 = c3/c1 真 oracle 完成率 lift。触发率维度**不报 lift**（c1=0 退化）。
 - **FR-007（凭据前提）**: 系统 MUST 走订阅 OAuth（codex driver / claude judge1 边际 $0）+ SiliconFlow key（judge2/3 真实扣费）；**MUST NOT** 把 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` 写作启动前提。
 - **FR-008（配额护栏）**: 跑批 ≥30 runs 时 MUST 每 6 runs 检查周配额；≥60% weekly MUST 暂停问用户。
-- **FR-009（产物边界 + 机器校验）**: 评测产物（fixture/patch/auto-report/run_artifacts/.swebench-venv）MUST 不入库（已 gitignore）；仅 `PUBLISH-REPORT-M8.md`（manual）+ spec/plan/tasks 入库，用显式路径提交，**禁 `git add -A`**；`specs/src.spec.md` 排除。提交前 MUST 机器校验：拟提交文件集 ⊆ 白名单路径（`specs/188-eval-rerun-m8-revalidation/**` 且不含 verification 下的 run 产物），违规即中止。
+- **FR-009（产物边界 + 机器校验，单一 allowlist+denylist，W4）**: 提交前 MUST 机器校验 staged 文件集，以**单一来源**的 allow/deny 规则为准（本 FR 是唯一定义，plan/tasks 引用不另立）：
+  - **ALLOW**（精确枚举）: `specs/188-eval-rerun-m8-revalidation/{spec,plan,tasks}.md`、`specs/188-eval-rerun-m8-revalidation/PUBLISH-REPORT-M8.md`、`specs/188-eval-rerun-m8-revalidation/research/**`、`specs/188-eval-rerun-m8-revalidation/verification/*.md`（仅 .md 结论文档）、`scripts/eval-offline-rejudge.mjs` + 其单测文件。
+  - **DENY**（即便落在 specs/188 下也拒）: `run_artifacts/**`、`tests/baseline/**`、任何 `*.tgz`/`*.patch`/`patch.diff`/`*.jsonl`、`verification/` 下的 run 产物（result.json/原始判分 dump）、`specs/src.spec.md`、`.swebench-venv/**`。
+  - staged 集合命中任一 DENY 或越出 ALLOW → **中止提交**；**禁 `git add -A`**，只显式 `git add <allowlisted path>`。
 - **FR-010（报告）**: 系统 MUST 产出 `specs/188-eval-rerun-m8-revalidation/PUBLISH-REPORT-M8.md`，增补 M8 章节并交叉链接 F176 报告 / M7 PUBLISH-REPORT。
-- **FR-011（candidatePatch 构造，C-1）**: 跑前 MUST 解包抽检 133 份 `untracked.tgz`，按文件路径分类为"候选自写测试" vs "非测试源码"；按 CL-1 拍板策略构造喂入 oracle 的 candidatePatch（默认 = `patch.diff` + untracked 非测试源码，排除候选自写测试），并统计各 cohort 非测试 untracked 文件占比写入报告。
+- **FR-011（candidatePatch 构造 + 可应用校验，C-1/C3/W2）**: 跑前 MUST 解包抽检 133 份 `untracked.tgz`，按文件路径分类为"候选自写测试" vs "非测试源码" vs "**ambiguous**"（`sympy/*/tests/`、`sympy/testing/`、非 `.py` test data、候选写进 `tests/` 路径的修复等 repo-specific 盲区 → 进人工复核桶，输出 133 份分类清单）；按 CL-1 策略构造 candidatePatch（默认 = `patch.diff` + untracked 非测试源码，排除候选自写测试）。**合成后 MUST `git apply --check` 校验可应用**：合成格式错误（驱动 bug）→ 阻断修驱动，不喂 oracle；候选 patch 本身确不可应用 → 记 **fail**（候选产出不可用），**禁**落入 oracle 的 error/fixture 而被剔分母（C3 防 passRate 虚高）。各 cohort 非测试 untracked 占比 + ambiguous 计数写入报告。
+- **FR-014（离线驱动前置拦截，W1）**: `eval-offline-rejudge` 启动 MUST 硬执行与 batch runner（`swe-bench-verified-cohort-batch.mjs:214`）同等的三重前置：`checkPreregistration` + `oracleSpecHash` 比对（FR-013）+ `fixtureContentHash` 校验；任一不通过即 exit 非 0 中止，不绕过 F176 抗污染保护。
+- **FR-015（跨轨不可比，C1）**: P1（M7-era 已存答卷重判）与 P2（post-F184 全新 runs）是**不同 epoch + 不同 candidatePatch 构造**（P1=CL-1 合成；P2=live runner `git add -A` 全量 diff）。报告 MUST 各轨 passRate 只与**本轨基线**对照（P1 vs M7 fuzzy；P2 vs F176 telemetry），**禁**把 P1-c3 passRate 与 P2-c3 passRate 横向比较；各轨内部 5 cohort（P1）/ c1-c3（P2）用**统一构造**保证轨内排名公平。
 - **FR-012（error 有效性，C-2）**: 系统 MUST 对每 cohort 计算 `error_rate = n_error / n_total`；`error_rate > 30%` 的 cohort，其 passRate MUST 标注"低置信、不参与翻案排名"，避免剔分母虚高。
 - **FR-013（冻结漂移核验，W-3）**: 重冻结前 MUST 把当前 oracleSpecHash 与 F176/F197 既冻结的 oracleSpecHash 比对；若不一致 MUST 在报告披露语义模块 delta 与原因（区分"F197 后正常演进"vs"意外漂移"），不静默用新 hash 覆盖既冻结锚。
 
