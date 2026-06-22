@@ -375,10 +375,10 @@ async function main() {
     }
     perAnswer.push({ ...base, classification: res.classification, failureSource: res.failureSource, reason: res.reason, applyOk: true });
     processed++;
-    if (processed % 10 === 0) {
-      console.error(`[rejudge] 进度 ${processed}/${sheets.length - done.size}`);
-      writeOut(args.out, perAnswer, taskIds, fixturesDir); // 增量落盘（断点保护）
-    }
+    // 每个实例都增量落盘（断点保护）：多小时跑易被休眠/中断杀，逐个 checkpoint 确保零进度丢失，
+    // --resume 可从任意 kill 点续跑。writeOut 成本 O(n) 每次、n≤133，可忽略。
+    console.error(`[rejudge] 进度 ${perAnswer.length}/${sheets.length} (${s.task}/${s.cohort}/${s.repeat} → ${res.classification})`);
+    writeOut(args.out, perAnswer, taskIds, fixturesDir);
   }
 
   writeOut(args.out, perAnswer, taskIds, fixturesDir);
