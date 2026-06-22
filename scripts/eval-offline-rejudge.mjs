@@ -264,6 +264,28 @@ function expandHome(p) {
   return p && p.startsWith('~') ? path.join(process.env.HOME || '', p.slice(1)) : p;
 }
 
+/**
+ * 单实例锁（防并发）：后台跑被"killed"通知误导而重复 launch → 两实例对同一 runId 抢同名 docker
+ * 容器 `sweb.eval.<instance>.<runId>` → 互相把对方判分洗成 infra error，污染结果。锁住唯一实例。
+ * lock 内存 PID；若 PID 已死（stale lock）则夺锁继续。
+ */
+function acquireLock(lockPath) {
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  if (fs.existsSync(lockPath)) {
+    const oldPid = Number(fs.readFileSync(lockPath, 'utf-8').trim());
+    let alive = false;
+    try { process.kill(oldPid, 0); alive = true; } catch { alive = false; }
+    if (alive) throw new Error(`[lock] 已有离线重判实例在跑（PID ${oldPid}）。先 kill 或等其完成，禁并发（防 docker 容器名冲突污染）。`);
+    console.error(`[lock] 发现 stale lock（PID ${oldPid} 已死），夺锁继续`);
+  }
+  fs.writeFileSync(lockPath, String(process.pid), 'utf-8');
+  const release = () => { try { if (fs.existsSync(lockPath) && fs.readFileSync(lockPath, 'utf-8').trim() === String(process.pid)) fs.unlinkSync(lockPath); } catch { /* noop */ } };
+  process.on('exit', release);
+  process.on('SIGINT', () => { release(); process.exit(130); });
+  process.on('SIGTERM', () => { release(); process.exit(143); });
+  return release;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
@@ -273,6 +295,8 @@ async function main() {
     console.error('用法: --patches-root <dir> --fixtures-dir <dir> --out <json> [--prereg <md>] [--resume] [--dry-run] [--limit N]');
     process.exit(64);
   }
+  // 单实例锁（dry-run 不锁，纯本地无 docker）
+  if (!args.dryRun) acquireLock(path.join(path.dirname(args.out), '.rejudge.lock'));
 
   // C2：FR-014 前置拦截**强制**。正式跑（非 dry-run）必须传 --prereg，否则 fail-closed 拒绝裸跑。
   const sheets0 = discoverAnswerSheets(patchesRoot);
