@@ -240,7 +240,10 @@ export function runPreflight({ taskIds, fixturesDir, preregPath, repoRoot }) {
 // ════════════════════════ 主流程 ════════════════════════
 
 function parseArgs(argv) {
-  const a = { patchesRoot: null, fixturesDir: null, preregPath: null, out: null, resume: false, dryRun: false, limit: null };
+  // timeoutMs 默认 20min：离线重判镜像未预缓存，首个 sympy / pytest run 需冷建 env 镜像（~8-9min），
+  // 远超 oracle 默认 300s watchdog（实测 smoke 因此超时误判 infra）。cache_level=env 下 env 镜像建一次即缓存，
+  // 后续 instance run 快（~1-3min），故 20min 上限既容冷建又防真挂死。可 --timeout-ms 覆盖。
+  const a = { patchesRoot: null, fixturesDir: null, preregPath: null, out: null, resume: false, dryRun: false, limit: null, timeoutMs: 1_200_000 };
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case '--patches-root': a.patchesRoot = argv[++i]; break;
@@ -250,6 +253,7 @@ function parseArgs(argv) {
       case '--resume': a.resume = true; break;
       case '--dry-run': a.dryRun = true; break;
       case '--limit': a.limit = Number(argv[++i]); break;
+      case '--timeout-ms': a.timeoutMs = Number(argv[++i]); break;
       default: break;
     }
   }
@@ -365,7 +369,7 @@ async function main() {
     const runId = `188rj-${key.replace(/[^A-Za-z0-9._-]/g, '_')}`;
     let res;
     try {
-      res = runSwebenchInstance({ fixture: loadFixture(s.task), candidatePatch, artifactsDir, runId });
+      res = runSwebenchInstance({ fixture: loadFixture(s.task), candidatePatch, artifactsDir, runId, timeoutMs: args.timeoutMs });
     } catch (e) {
       res = { classification: 'error', failureSource: 'driver', reason: `驱动捕获异常: ${String(e.message)}` };
     }
