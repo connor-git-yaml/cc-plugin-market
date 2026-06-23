@@ -953,10 +953,15 @@ async function main() {
   // **不**主动 rmSync worktree（codex W5/W6）：保留生成日志供 resume/forensic 复盘；broken run 由 cohort-batch
   // 重跑时 rsync+git reset 覆盖现场，不依赖此处清理（cleanup 策略仍由下方正常路径统一处置）。
   const genInfra = isGenerationInfraFailure(runResult.stdout);
-  if (genInfra.failed || runResult.timedOut) {
-    const why = genInfra.failed ? genInfra.marker : 'timeout（无 stream-json 产出）';
-    console.error(`[task-runner] ❌ 生成阶段 infra 失败（${why}）→ 退出 3（broken，cohort-batch 可 --resume 重跑），保留 worktree 日志供复盘`);
+  if (genInfra.failed) {
+    // exit 3 = infra 失败（OAuth/API 401/429/5xx）→ 剔分母，cohort-batch 可 --resume 重跑（F206 C0 也复用此语义）
+    console.error(`[task-runner] ❌ 生成阶段 infra 失败（${genInfra.marker}）→ 退出 3（broken，可重跑）`);
     process.exit(3);
+  }
+  if (runResult.timedOut) {
+    // exit 4 = 生成超时 = 能力 fail（CR-3）→ 计入分母算 fail，不剔（F206 C0 parallel-pool 语义分明）
+    console.error(`[task-runner] ❌ 生成超时（无 stream-json 产出）→ 退出 4（能力 fail，不剔分母）`);
+    process.exit(4);
   }
 
   // 跑 oracle。Feature 187（FR-001-c）：opt-in --swebench-oracle 且 fixture 含 swebenchMeta 时，
