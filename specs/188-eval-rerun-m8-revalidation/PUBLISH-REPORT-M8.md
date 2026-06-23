@@ -11,7 +11,10 @@
 
 ## 0. TL;DR
 
-- **子任务 1（离线重判，SC-004）✅ 完成**: 真 FAIL_TO_PASS oracle 重判 133/133（84 pass / 47 fail / 2 error）。**fuzzy 翻案【成立且强化】**：真 oracle 下 workflow/framework cohort 全部追平或反超裸 Claude（c4 79% / c5 67% / c3 62% > c1 55% / c2 56%），**M7 fuzzy "重流程降低完成率"被定性推翻**（系测试稀释测量伪影）；c3/c1 完成率 lift=1.13（vs fuzzy 0.10 / core-files 0.80）。**但**任务经可解性筛选（非难度代表样本，绝对率不可外推）+ 小样本（n=20-29，control 仅 20/30），cohort 次序与 lift 均为 **directional 噪声带内信号**，非统计显著强断言。
+- **子任务 1（离线重判，SC-004）✅ 完成**: 真 FAIL_TO_PASS oracle 重判 133/133。**fuzzy 翻案【成立且强化】**：fuzzy 说 workflow cohort 3-10%，真 oracle（OAuth 校正后）显示 83-100%，**M7 fuzzy "重流程降低完成率"被定性推翻**。
+  - **🔴 二次发现 + 校正**：raw 口径又被**第二层缺陷**污染——M7 跑批 OAuth 过期致 **42/133（32%）run 空 patch**被当能力 fail（生成层 infra 伪影，分布不均 22-45%/cohort）。修复后**校正率**：c1 100% / c2 83% / **c3 我们 85.7%** / c4 SuperPowers 100% / c5 85.7%（详见 §2.2b）。
+  - **竞争位置（诚实）**：我们旗舰 c3 校正后 **85.7%，低于 SuperPowers/裸 Claude（100%）**；raw "62% 输 16.5pt" 大部分是 OAuth 伪影，校正后差距 14.3pt 多落噪声带，残留**一个 non-OAuth 能力落点线索 V008（n=2 初步）**（重流程跑成功却没修出 SuperPowers 一行 fix）。**与 SuperPowers 无统计显著整体差距；简单修复上可能有劣势，但 n=2 需复现坐实。**
+  - 局限：任务经可解性筛选（绝对率不可外推）+ 校正后存活 N 更小（c1 仅 11），均 directional。
 - **子任务 2（触发率复测，SC-002）⏳ setup-ready，launch-pending**: 范围定为 **c1/c3 最小集 60 runs**（用户拍板，定为日后标准）。能力已就绪（cohort 子集 commit `0e10310` + manifest + 凭据 + prereg/spike/版本门禁全绿）；**唯一 launch 阻塞 = 全局 spectra plugin 需先 disable**（否则污染 c3 MCP 测量）；执行 ~9-12hr 烧 Claude 周配额，待用户配额窗口启动。
 
 ---
@@ -77,6 +80,29 @@ M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-RE
 
 抽验真实性（排除"恒 pass" bug）：superpowers V001r1（FAIL_TO_PASS `test_issue_24288` 真转绿 + PASS_TO_PASS 全过）、control V002r1（`test_issue_24543` 真转绿）—— 均 `patch_applied:true, resolved:true`，且 47 个 fail 证明 oracle 有区分度。
 
+### 2.2b 🔴 OAuth-401 污染发现 + 校正（第二层测量缺陷）
+
+§2.2 的 raw 通过率本身被**第二个测量缺陷**污染：**M7 跑批时 `claude --print` 生成驱动的 OAuth 过期/限流，导致 42/133（32%）的 run 产出空 patch**，被 raw 口径当成"候选 fail"——但这是**生成阶段 infra 失败，非工具能力差**。这与 fuzzy 是同一类病（把测量故障当能力信号），只是从判分层移到了生成层。
+
+**污染严重且分布不均**（按 cohort 计算的生成失败率）：
+
+| cohort | OAuth/infra 剔除 | 占比 | raw 率（空=fail）| **OAuth-校正率**（剔 infra 空 patch）|
+|--------|------------------|------|------------------|---------------------------------------|
+| c1 control 裸Claude | 9 | **45%** | 55% | **100%** (11/11) ⚠️低置信 |
+| c2 spec-driver | 9+1 docker | 36% | 56% | **83.3%** (15/18) ⚠️低置信 |
+| **c3 我们 (MCP)** | 8 | 28% | 62% | **85.7%** (18/21) |
+| **c4 SuperPowers** | 6+1 docker | 24% | 79% | **100%** (22/22) |
+| c5 GStack | 6 | 22% | 67% | **85.7%** (18/21) |
+
+**修复**：离线重判驱动加 `isGenerationInfraFailure`——空 patch 先验生成日志，`api_error_status:4xx/5xx` 或 `authentication_failed` → 剔分母（像 docker infra）；**生成成功却空 patch（`is_error:false`）→ 留作能力 fail**（精确区分 infra vs 能力）。
+
+**对竞争结论的影响（诚实，三层）**：
+1. **raw "我们 62% 输 SuperPowers 16.5pt" 大部分是 OAuth 伪影**：我们撞 8 次、SuperPowers 撞 6 次，且全场被 22-45% 的生成失败稀释。
+2. **校正后差距缩小但未消失**：c3 85.7% vs c4 100%（14.3pt）。**我们有 3 个能力 fail（2 个 V008 跑成功却没修出 + 1 个改错），SuperPowers 0 个。**
+3. **V008 是一个非 OAuth 的真能力落点（初步迹象，n=2，非定论）**：SuperPowers 3/3 解出 `contains.py` 的一行修复（`raise NotImplementedError()` → `return self.args[1]`）；我们的 spec-driver+MCP 重流程 r2/r3 跑满 12-22 轮、`is_error:false` 正常结束，**却没产出任何修复**。看起来像重流程"想太多没收敛到简单解"，与 M7 "流程开销在小任务无法摊销"同源——但**仅 2 个 run，是值得在 held-out 集上复现/优化的方向性线索，不是已坐实的能力差**。
+
+⚠️ **置信度**：OAuth 剔除后存活 N 更小（c1 仅 11、c2 仅 18），c1/c2 生成失败率 >30% 标低置信；全部仍是 directional，3-vs-0 能力 fail 在 N≈20 噪声带内，**不构成"SuperPowers 显著强于我们"定论，但 V008 是值得追的具体落点**。
+
 ### 2.3 三套 oracle 排名对照
 
 | cohort | M7 fuzzy primary | M7 核心文件修正（翻案）| **F188 真 oracle** |
@@ -94,6 +120,10 @@ M7 报告（[PUBLISH-REPORT-M7](../147-competitor-evaluation-platform/PUBLISH-RE
 **M7 fuzzy 的核心结论被真 oracle 定性推翻**：fuzzy primary 断言"workflow cohort 完成率灾难性低于裸 Claude（c3 3.3% vs c1 33%）→ 重流程显著降低完成率"。F188 真 FAIL_TO_PASS oracle（跑真实测试，补测试无害）显示 **在这 10 个经可解性筛选的任务上**，workflow / framework cohort 追平或反超裸 Claude（c4 78.6% / c5 66.7% / c3 62.1% 均 > c1 55.0%；c2 55.6% ≈ c1）——**此排序仅在该非代表性任务子集内成立，绝对率不可外推到 Verified 全集（见 §2.4 局限 1）**。**fuzzy "重流程降低完成率"是测量伪影**（对"修复+补测试"形态的结构性惩罚），M7 §4.5 的翻案诊断**成立**。
 
 **关于"评测设施修复有效"的克制表述（codex W3/W4）**：真 oracle 给出了与 fuzzy **根本不同**的答案，且 2 个跨 cohort 抽验确认其**判分机制正确**（candidate patch 真应用 + FAIL_TO_PASS 测试真 fail→pass + PASS_TO_PASS 全过）。但"真 oracle 比 fuzzy **更可信**"这一步——虽有强先验（FAIL_TO_PASS 执行是 SWE-bench 正统、fuzzy 退化 oracle 的结构性偏差有 M7 §4.5 法医证据）——**仍只由 2 个抽验支撑，未做全 133 份判分的人工复核**，故属 **directional 结论**：评测设施修复**方向正确**（给出可信度更高维度的证据），但"逐份判分零误判"待更大样本核验。
+
+**我们的真实竞争位置（OAuth 校正后，诚实摆出不利事实）**：见 §2.2b。我们的旗舰 c3（spec-driver + Spectra MCP）校正率 **85.7%**，**低于** SuperPowers / 裸 Claude（均 100%），与 GStack 持平，略高于 spec-driver-alone。raw "62% 中游"主要是 OAuth 伪影；校正后**我们与竞品的差距缩小到 14.3pt 且大部分落在噪声带内，残留一个 non-OAuth 的能力落点线索 = V008（n=2，初步非定论）**（重流程跑成功却没修出 SuperPowers 一行搞定的 fix）。**结论：我们与 SuperPowers 无统计显著的整体能力差距；V008 提示重流程在"简单修复"上可能有劣势，但仅 2 个 run，需 held-out 集复现才能坐实**——这是值得卷的方向（不是卷这个被污染 + 饱和的冻结集）。
+
+**⚠️ 测量缺陷"套娃"教训**：本需求先用真 oracle 揭穿 fuzzy 的判分层伪影，又在分析中揭穿生成层的 OAuth 伪影——**两层测量故障都曾被当成能力信号**。这正印证 M8 trust-repair 的必要性：得分对比前，先确保测量的是能力而非基础设施。
 
 **c3（spectra-mcp，SC-002 完成率维度）**：62.1% > c1 55.0%，**lift = 1.13**（vs fuzzy 0.10 / core-files 0.80），方向转正。
 
@@ -148,7 +178,8 @@ driver = `claude-opus-4-7`（**非** codex——cohort-batch 用 claude OAuth）
 - **P1 覆盖**：133/150（缺 17，control 仅 20/30）；per-cohort N=20-29。
 - **P1 timeout**：离线重判驱动用 1.2M ms（容冷建 env 镜像）；**与 F176 冻结的 oracleSpecHash timeout（300000）不同**——但 P1 驱动走自有 git-module-drift 前置（非 manifest oracleSpecHash 重算），5 语义模块自 F176 commit `538498740` 零漂移，判分语义一致。P2 用 300000 匹配冻结 hash。
 - **P1 process 事故**：后台进程反复夭折（nohup 存活但 tracker 误报 killed）→ 一次并发双实例污染 5 个假 infra（已加 PID 锁修复 + 隔离污染 checkpoint + clean 重跑）。
-- **2 infra error**：剔分母对称受益 c2+c4，非偏向。
+- **2 docker infra error**：剔分母对称受益 c2+c4，非偏向。
+- **🔴 OAuth-401 生成层污染（用户复盘竞品对比时发现）**：M7 跑批 `claude --print` 驱动 OAuth 过期/限流 → 42/133（32%）run 空 patch，初版离线重判（无 OAuth 检测）当能力 fail，污染竞争结论（raw 我们 62% / SuperPowers 79%）。修复：驱动加 `isGenerationInfraFailure`，按生成日志 `api_error_status:4xx/5xx`/`authentication_failed` 剔分母，生成成功却空（`is_error:false`）留作能力 fail。校正后 c3 85.7% / c4 100%。**初版 raw 表（§2.2）保留作偏差对照，§2.2b 校正口径为竞争结论的准据。**
 - **P2 driver**：claude-opus-4-7（cohort-batch 设计），**非** task 列的 codex——codex 用于其他 eval 路径。
 
 ---

@@ -26,6 +26,10 @@ import {
   parsePreregistration,
   SEMANTIC_MODULES,
 } from './lib/preregistration-check.mjs';
+import { isGenerationInfraFailure } from './lib/generation-infra.mjs';
+
+// 共享判定 re-export（既有单测从本模块导入；单一事实源在 ./lib/generation-infra.mjs）
+export { isGenerationInfraFailure };
 
 // ════════════════════════ 纯函数（单测覆盖） ════════════════════════
 
@@ -146,6 +150,16 @@ const round4 = (x) => Math.round(x * 1e4) / 1e4;
 const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
 
 // ════════════════════════ I/O 辅助 ════════════════════════
+
+/** 从 untracked.tgz 抽 task-runner 生成日志（stdout+stderr）文本，用于 infra-failure 判定。 */
+function readRunnerLog(tgzPath) {
+  if (!fs.existsSync(tgzPath)) return '';
+  let out = '';
+  for (const name of ['task-runner-stdout.log', './task-runner-stdout.log', 'task-runner-stderr.log', './task-runner-stderr.log']) {
+    try { out += execFileSync('tar', ['xzf', tgzPath, '-O', name], { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 }); } catch { /* 文件不在 tar 内 → 跳过 */ }
+  }
+  return out;
+}
 
 /** 列 untracked.tgz 内文件路径（不解包内容）。 */
 function listUntracked(tgzPath) {
@@ -346,7 +360,6 @@ async function main() {
   let processed = 0;
   for (const s of sheets) {
     const key = `${s.task}/${s.cohort}/${s.repeat}`;
-    if (done.has(key)) { perAnswer.push(done.get(key)); continue; }
 
     const base = { task: s.task, cohort: s.cohort, repeat: s.repeat,
       untrackedSourceCount: 0, untrackedAmbiguousCount: 0 };
@@ -359,6 +372,33 @@ async function main() {
     }
 
     const patchDiff = fs.readFileSync(s.patchPath, 'utf-8');
+
+    // OAuth/API-infra 校正（用户反馈 + 法医发现）：空 patch 先查生成阶段是否 infra 失败（401/限流/过载）。
+    // infra 失败 → 该 run 无有效候选 → error 剔分母（不冤判工具能力差）；真空（无 infra 标记）→ 能力 fail。
+    // 空 patch 判分确定（空→必 fail），故**不喂 oracle**（省 docker），且**始终重判**（不进 resume 缓存，
+    // 因为分类逻辑可能随本修复变化）——非空判分才走 resume 缓存。
+    if (patchDiff.trim() === '') {
+      // codex W4 守卫：空 patch.diff 也查 untracked source——若候选把修复写进新建源码文件，不能当"空"误判。
+      const emptyUntrackedSource = listUntracked(s.tgzPath).filter((rel) => classifyUntrackedPath(rel) === 'source');
+      if (emptyUntrackedSource.length > 0) {
+        perAnswer.push({ ...base, untrackedSourceCount: emptyUntrackedSource.length, classification: 'error', failureSource: 'untracked-source-manual',
+          reason: `空 patch.diff 但 untracked 含 ${emptyUntrackedSource.length} 非测试源码 → 人工抽取并入，不当空 patch 处理`, applyOk: false });
+        continue;
+      }
+      const gen = isGenerationInfraFailure(readRunnerLog(s.tgzPath));
+      if (gen.failed) {
+        perAnswer.push({ ...base, classification: 'error', failureSource: 'generation-infra',
+          reason: `生成阶段 infra 失败（${gen.marker}）→ 无有效候选，剔分母（OAuth/API 错误非能力，不冤判工具）`, applyOk: false });
+      } else {
+        perAnswer.push({ ...base, classification: 'fail', failureSource: 'candidate-empty',
+          reason: '空 patch 且生成无 infra 标记 → 候选未产出修复（能力 fail）', applyOk: true });
+      }
+      continue;
+    }
+
+    // 非空 patch：resume 缓存命中则复用既有 oracle 判分（省重跑 docker）。
+    if (done.has(key)) { perAnswer.push(done.get(key)); continue; }
+
     // untracked 分类（本数据集经验全 tooling；保留 source 并入分支忠实 CL-1）
     const untracked = listUntracked(s.tgzPath).map((rel) => ({ rel, cls: classifyUntrackedPath(rel) }));
     const sourceFiles = untracked.filter((u) => u.cls === 'source');

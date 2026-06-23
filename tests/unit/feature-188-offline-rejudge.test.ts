@@ -20,6 +20,7 @@ import {
   buildCandidatePatch,
   aggregateByCohort,
   discoverAnswerSheets,
+  isGenerationInfraFailure,
 } from '../../scripts/eval-offline-rejudge.mjs';
 
 describe('classifyUntrackedPath（W2 四分类）', () => {
@@ -159,6 +160,41 @@ describe('aggregateByCohort（FR-002 排名口径 + FR-012 低置信）', () => 
     const out = aggregateByCohort(per);
     expect(out.find((x) => x.cohort === 'good')!.rankEligible).toBe(true);
     expect(out.find((x) => x.cohort === 'bad')!.rankEligible).toBe(false); // error_rate 66%
+  });
+});
+
+describe('isGenerationInfraFailure（OAuth/API-infra vs 能力空 patch；仅最终 result 行）', () => {
+  it('最终 result 行 is_error:true + api_error_status:401 → infra（剔分母）', () => {
+    const log = '{"type":"result","subtype":"success","is_error":true,"api_error_status":401,"result":"Failed to authenticate"}';
+    const r = isGenerationInfraFailure(log);
+    expect(r.failed).toBe(true);
+    expect(r.marker).toContain('401');
+  });
+  it('authentication_failed 文本（最终行 is_error:true）→ infra', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"result":"API Error: 401 Invalid authentication credentials"}').failed).toBe(true);
+  });
+  it('白名单 429 限流 / 529 过载 / 503 → infra', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":429}').failed).toBe(true);
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":529}').failed).toBe(true);
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":503}').failed).toBe(true);
+  });
+  it('W1：瞬时重试后恢复（中间 error_status:401，最终 is_error:false）→ 非 infra（生成成功）', () => {
+    const log = [
+      '{"type":"system","subtype":"api_retry","attempt":1,"error_status":401}',
+      '{"type":"result","subtype":"success","is_error":false,"api_error_status":null,"num_turns":12}',
+    ].join('\n');
+    expect(isGenerationInfraFailure(log).failed).toBe(false);
+  });
+  it('W3：非白名单状态码（如 404）→ 非 infra（不滥剔分母）', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":404}').failed).toBe(false);
+  });
+  it('干净日志（生成成功但空 diff）→ 非 infra（留作能力 fail）', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":false,"num_turns":12}').failed).toBe(false);
+    expect(isGenerationInfraFailure('').failed).toBe(false);
+    expect(isGenerationInfraFailure(null as unknown as string).failed).toBe(false);
+  });
+  it('error_max_turns（is_error:true 但无 api_error_status）→ 非 infra（能力/效率问题）', () => {
+    expect(isGenerationInfraFailure('{"type":"result","subtype":"error_max_turns","is_error":true,"api_error_status":null}').failed).toBe(false);
   });
 });
 

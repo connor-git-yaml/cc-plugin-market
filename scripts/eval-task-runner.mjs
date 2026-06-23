@@ -25,6 +25,7 @@ import { writeLocalSpectraPluginDir, globalSpectraPluginPresent, globalSpecDrive
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { fixturesDir as verifiedFixturesDir } from './lib/swe-bench-verified-paths.mjs';
 import { runSwebenchInstance } from './lib/swebench-oracle.mjs'; // Feature 187：真实 FAIL_TO_PASS oracle（opt-in --swebench-oracle）
+import { isGenerationInfraFailure } from './lib/generation-infra.mjs'; // Feature 188：生成 infra 失败（OAuth/限流）检测
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -944,6 +945,19 @@ async function main() {
   // 持久化 stdout/stderr
   fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stdout.log'), runResult.stdout, 'utf-8');
   fs.writeFileSync(path.join(wt.wtDir, 'task-runner-stderr.log'), runResult.stderr, 'utf-8');
+
+  // Feature 188（OAuth 污染防治，fix B）：生成 driver infra 失败 → **退出 3（broken，可 --resume 重跑）**，
+  // 不写"空 patch 当 success"的 fixture，避免把基础设施故障当能力 fail 污染 cohort 对比（M7 实测 42/133 被此污染）。
+  // 判据：最终 result 行 API/auth 错误（401/限流/过载，codex W1/W3）**或** 纯 timeout（无 stream-json，codex W2）。
+  // 瞬时重试后恢复 / error_max_turns 不在此列——真实生成结果，照常产出 fixture。
+  // **不**主动 rmSync worktree（codex W5/W6）：保留生成日志供 resume/forensic 复盘；broken run 由 cohort-batch
+  // 重跑时 rsync+git reset 覆盖现场，不依赖此处清理（cleanup 策略仍由下方正常路径统一处置）。
+  const genInfra = isGenerationInfraFailure(runResult.stdout);
+  if (genInfra.failed || runResult.timedOut) {
+    const why = genInfra.failed ? genInfra.marker : 'timeout（无 stream-json 产出）';
+    console.error(`[task-runner] ❌ 生成阶段 infra 失败（${why}）→ 退出 3（broken，cohort-batch 可 --resume 重跑），保留 worktree 日志供复盘`);
+    process.exit(3);
+  }
 
   // 跑 oracle。Feature 187（FR-001-c）：opt-in --swebench-oracle 且 fixture 含 swebenchMeta 时，
   // primary = 真实 FAIL_TO_PASS 测试执行，fuzzy/ast-diff 降为 secondary 对照；否则保留 legacy 行为。
