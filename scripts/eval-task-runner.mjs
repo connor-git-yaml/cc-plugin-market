@@ -389,16 +389,21 @@ export function writeMcpConfig(wtDir) {
 }
 
 /**
- * 在 wtDir 内跑 spectra batch --mode code-only 生成 specs/_meta/graph.json（mcp-pull cohort 必需）。
- * 用 dist/cli/index.js 绝对路径绕过 volta；
- * --mode code-only 跳过 LLM 增强（baseline 只测 grounding，不需 spec.md，src/cli/commands/batch.ts:65 注释 "最快分析 < 30s"）。
+ * 在 wtDir 内跑 spectra batch --mode graph-only 生成 specs/_meta/graph.json（mcp-pull / cohort3 grounding 必需）。
+ * 用 dist/cli/index.js 绝对路径绕过 volta。
+ *
+ * 🔴 模式选择（dogfooding 实跑修正）：grounding 只需 graph.json（MCP 从图谱供上下文，不需 spec.md）。
+ * 旧实现用 `--mode code-only --full` —— 但 code-only **仍逐模块调 spec-gen LLM**（CLI --help 原文："仅跳
+ * enrichment 层，仍逐模块调 spec-gen LLM，耗时随模块数增长"），在大 repo（sympy 877 文件/4 模块）上做 LLM
+ * 调用 + 600k token 装配 → 超 10min 超时被杀、且烧配额/需认证。改用 `graph-only`（F195：纯 AST · 零 LLM ·
+ * 无需认证），同一 sympy 8.4s 出 31774 节点图谱。--full（regen 轴）对 graph-only 无意义，去掉。
  */
 export function runSpectraBatchInWorktree(wtDir, { timeoutMs = 600000 } = {}) {
   const distCli = path.join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
   if (!fs.existsSync(distCli)) {
     throw new Error(`[spectra-batch] spectra dist/cli/index.js 不存在；请先 npm run build。`);
   }
-  const r = spawnSync('node', [distCli, 'batch', '--mode', 'code-only', '--no-html', '--full'], {
+  const r = spawnSync('node', [distCli, 'batch', '--mode', 'graph-only', '--no-html'], {
     cwd: wtDir,
     encoding: 'utf-8',
     timeout: timeoutMs,
@@ -870,7 +875,7 @@ async function main() {
   if (args.tool === 'mcp-pull') {
     const graphPath = path.join(wt.wtDir, 'specs', '_meta', 'graph.json');
     if (!fs.existsSync(graphPath)) {
-      console.log(`[task-runner] mcp-pull: running spectra batch in worktree (~3 min)...`);
+      console.log(`[task-runner] mcp-pull: building spectra graph in worktree (graph-only · 零 LLM · ~秒级)...`);
       runSpectraBatchInWorktree(wt.wtDir);
       // 把 batch 产物 commit 进 worktree（保证 graph.json 在后续 git operations 中保留）
       spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
@@ -889,7 +894,7 @@ async function main() {
     const distCli = path.join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
     const graphPath = path.join(wt.wtDir, 'specs', '_meta', 'graph.json');
     if (!fs.existsSync(graphPath)) {
-      console.log(`[task-runner] cohort3: running spectra batch in worktree (~3 min)...`);
+      console.log(`[task-runner] cohort3: building spectra graph in worktree (graph-only · 零 LLM · ~秒级)...`);
       runSpectraBatchInWorktree(wt.wtDir);
       // codex WARNING 修复：git add/commit 必须检查状态——graph 未提交会污染 diff/uncommitted 指标
       const addR = spawnSync('git', ['-C', wt.wtDir, 'add', '-A'], { encoding: 'utf-8' });
