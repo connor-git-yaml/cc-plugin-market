@@ -62,14 +62,16 @@ export function instanceIdOf(fixture) {
  * @param {object[]} fixtures  -- 须含 swebenchMeta.instanceId
  * @param {object} [opts]
  * @param {string} [opts.venvPath]
+ * @param {string} [opts.datasetName]  -- 查对的 HF 数据集（须与 fixture 来源一致；缺省走 buildLocalDataset 默认 Lite）
  * @param {Function} [opts.fetchRows]  -- 注入官方行获取器（测试用，免跑真 venv/Python）
  * @returns {Map<string, string>}  instanceId → envKey
  */
 export function resolveEnvKeysViaDataset(fixtures, opts = {}) {
-  const { venvPath, fetchRows } = opts;
+  const { venvPath, datasetName, fetchRows } = opts;
   const { rows } = buildLocalDataset({
     fixtures,
     venvPath: venvPath ?? 'scripts/.swebench-venv',
+    ...(datasetName ? { datasetName } : {}),
     ...(fetchRows ? { fetchRows } : {}),
   });
   const map = new Map();
@@ -94,6 +96,7 @@ export function resolveEnvKeysViaDataset(fixtures, opts = {}) {
  * @param {string[]} [opts.extraArgs=['--swebench-oracle']]
  * @param {Function} [opts.resolveEnvKeys]  -- (fixtures) => Map<instanceId, envKey>；默认走 dataset 批量解析
  * @param {string}  [opts.venvPath]
+ * @param {string}  [opts.datasetName]      -- 透传给默认 resolver：查对的 HF 数据集（须与 fixture 来源一致）
  * @param {Function} [opts.fetchRows]       -- 透传给默认 resolver（测试用）
  * @param {Function} [opts.onDegrade]       -- (err) => void：env 解析失败、降级 repo-only 去重时回调
  * @returns {{ task:string, tool:string, cohort:string, repeatNo:number, fixtureDir?:string, extraArgs:string[], envKey:string }[]}
@@ -106,6 +109,7 @@ export function planWarmupJobs(fixtures, opts = {}) {
     extraArgs = ['--swebench-oracle'],
     resolveEnvKeys,
     venvPath,
+    datasetName,
     fetchRows,
     onDegrade,
   } = opts;
@@ -115,7 +119,7 @@ export function planWarmupJobs(fixtures, opts = {}) {
   try {
     const resolved = resolveEnvKeys
       ? resolveEnvKeys(fixtures)
-      : resolveEnvKeysViaDataset(fixtures, { venvPath, fetchRows });
+      : resolveEnvKeysViaDataset(fixtures, { venvPath, datasetName, fetchRows });
     if (!(resolved instanceof Map)) throw new Error('resolveEnvKeys 未返回 Map');
     envByInstance = resolved;
   } catch (err) {

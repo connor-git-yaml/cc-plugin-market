@@ -51,7 +51,7 @@ export function classifyExitStatus(exitCode, signal) {
  * @property {string} tool        -- eval-task-runner --tool
  * @property {string} cohort      -- eval-task-runner --cohort（c1/c3/…）
  * @property {number} repeatNo    -- 同 task/tool/cohort 的第几次重复（1-indexed）
- * @property {string} [fixtureDir] -- eval-task-runner --fixture-dir（可选）
+ * @property {string} [fixtureDir] -- 保留字段，当前不透传给 runner（eval-task-runner 无 --fixture-dir flag，codex W-3）
  * @property {string[]} [extraArgs] -- 追加到 runner 的额外参数
  */
 
@@ -83,6 +83,8 @@ export function classifyExitStatus(exitCode, signal) {
  * @param {number} [opts.runTimeoutMs=20*60*1000] -- 单 run 超时（传给 runner --swebench-timeout-ms）
  * @param {boolean} [opts.dryRun=false]        -- dry-run：不 spawn runner，仅返回计划
  * @param {Function} [opts.onProgress]         -- (result: RunResult, done: number, total: number) => void
+ * @param {string} [opts.driverModel='claude-sonnet-4-6'] -- driver 模型（eval 用 Sonnet 省 token）
+ * @param {string} [opts.outputFormat='stream-json']      -- claude --print 输出格式（token 采集）
  */
 export class ParallelRunPool {
   constructor({
@@ -91,12 +93,16 @@ export class ParallelRunPool {
     runTimeoutMs = 20 * 60 * 1000,
     dryRun = false,
     onProgress = null,
+    driverModel = 'claude-sonnet-4-6',
+    outputFormat = 'stream-json',
   } = {}) {
     this.concurrency = Math.max(1, concurrency);
     this.budgetMs = budgetMs;
     this.runTimeoutMs = runTimeoutMs;
     this.dryRun = dryRun;
     this.onProgress = onProgress;
+    this.driverModel = driverModel;
+    this.outputFormat = outputFormat;
   }
 
   /**
@@ -237,15 +243,24 @@ export class ParallelRunPool {
     // --repeat-index：影响 worktree 路径（rN）+ oracle runId（防容器名冲突，C-3/C-4）
     // 用 seqNo 作为 repeatIndex 保证并发槽唯一（同一 task 的不同并发槽不共享 worktree）
     const repeatIdx = seqNo + 1; // 1-indexed，符合 eval-task-runner 校验
+    // 驱动参数与 canonical cohort-batch runOne 逐项对齐：cohort 经 job.tool 体现（不传 --cohort，
+    // eval-task-runner 无此 flag），真实 skill 调用 + stdin 传 prompt + 免交互权限 + 成功即清理。
+    // 缺这些会让 spec-driver cohort 退化成"提示词"模式（Task spawn=0）或卡权限确认。
     const args = [
       '--task', job.task,
       '--tool', job.tool,
-      '--cohort', job.cohort,
       '--repeat-index', String(repeatIdx),
       '--fixture-suffix', uniqueSuffix, // 防 fixture 互覆盖（C-3）
       '--swebench-timeout-ms', String(this.runTimeoutMs),
+      '--bypass-permissions',
+      '--cleanup', 'on-success',
+      '--prompt-via-stdin',
+      '--skill-invocation',
+      '--model', this.driverModel,
+      '--output-format', this.outputFormat,
     ];
-    if (job.fixtureDir) args.push('--fixture-dir', job.fixtureDir);
+    // 注：不传 --fixture-dir —— eval-task-runner 无此 flag（会 unknown-flag throw）；
+    // fixture 路径由 runner 按 <task>/<tool>-<suffix> 自定，job.fixtureDir 字段保留但不透传（codex W-3）。
     if (job.extraArgs) args.push(...job.extraArgs);
     return args;
   }
@@ -299,6 +314,10 @@ export async function serialWarmup(warmupJobs, opts = {}) {
  *   - status='infra'   → 剔出分母（不算 pass/fail）
  *   - status='gen_timeout'/'error' → 计入分母算 fail
  *   - status='success' → oracle 结果 passed 决定 pass/fail
+ *
+ * ⚠️ 语义差异：校准主流程（eval-calibrate 的 aggregateRunResults）把 `error` 也剔分母
+ * （error=runner 基础设施错误，非能力 fail，codex CRITICAL-2）。本 helper 保留 FR-006 原语义
+ * （error 入分母）。**校准路径勿引用本 helper**；二者口径不同需有意对齐时再统一（validate 侧待评估）。
  *
  * @param {RunResult[]} results
  * @param {Function} [getOraclePassed]  -- (result: RunResult) => boolean|null

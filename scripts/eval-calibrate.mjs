@@ -23,6 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { bootstrapProportionCi } from './lib/cohort-aggregate.mjs';
 import { ParallelRunPool, serialWarmup } from './lib/parallel-run-pool.mjs';
 import { planWarmupJobs, taskIdOf } from './lib/warmup-planner.mjs';
+import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs';
+import { datasetTagToHfId } from './lib/swebench-dataset-build.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -49,6 +51,21 @@ const CALIBRATION_PARAMS = {
 
 /** 支持的校准 cohort（spec CL-1：{c1, c3}） */
 const CALIBRATION_COHORTS = ['c1', 'c3'];
+
+/**
+ * 校准 cohort 标签 → runner --tool（经 canonical cohort-registry 单一来源 COHORT_TO_TOOL）。
+ * c1 = baseline-claude（裸 control 对照），c3 = spec-driver-spectra-mcp（我们的工具：
+ * eval-task-runner 内部建本地 spectra plugin + 注册 MCP，无需额外 flag）。
+ * 旧实现硬编码 tool='spec-driver' 且传不存在的 --cohort flag → 每个 run unknown-flag 报错（已修）。
+ */
+const CALIBRATION_COHORT_TO_TOOL = {
+  c1: COHORT_TO_TOOL['baseline-claude'],
+  c3: COHORT_TO_TOOL['spec-driver-spectra-mcp'],
+};
+
+/** 候选 fixture 所属 SWE-bench 数据集 HF id（经 canonical datasetTagToHfId，与 builder 内部口径一致；
+ *  非默认 Lite，否则 Verified 实例取不到官方行 → DATASET_MISMATCH 降级 repo-only，codex W-2）。 */
+const CALIBRATION_DATASET = datasetTagToHfId('verified');
 
 // ── 命令行参数解析 ────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -252,7 +269,8 @@ async function main() {
   if (candidates.length > 0) {
     const warmupJobs = planWarmupJobs(candidates, {
       cohort: CALIBRATION_COHORTS[0], // 预热只建 env 镜像，与 cohort 无关，取首个
-      tool: 'spec-driver',
+      tool: 'control', // 预热只为建 Docker env 镜像，用最便宜的 control（裸跑），不烧 spec-driver 多轮
+      datasetName: CALIBRATION_DATASET, // Verified（非默认 Lite）：env-key 版本解析须查对数据集，否则 DATASET_MISMATCH 降级 repo-only
       onDegrade: (err) =>
         console.warn(`[calibrate] ⚠️  env 解析降级 repo-only（同 repo 多 version 仍可能 cold-build race）：${err.message}`),
     });
@@ -288,6 +306,8 @@ async function main() {
   // 逐候选 early-stop 跑（非一次性全 dispatch）
   const calibratedPool = [];
   let discriminatingCount = 0;
+  let consecutiveBroken = 0; // 连续高 error 率候选计数（系统性 harness 故障 fail-closed，codex CRITICAL-2）
+  let abortReason = null;    // 非 null = 提前中止；中止前仍写盘已跑数据，不丢配额（codex round-2 CRITICAL）
 
   for (const candidate of candidates) {
     if (discriminatingCount >= args.target) {
@@ -297,33 +317,42 @@ async function main() {
     const taskId = taskIdOf(candidate);
     const jobs = CALIBRATION_COHORTS.flatMap((cohort) =>
       Array.from({ length: CALIBRATION_PARAMS.REPEATS }, (_, i) => ({
-        task: taskId, tool: 'spec-driver', cohort, repeatNo: i + 1,
+        task: taskId, tool: CALIBRATION_COHORT_TO_TOOL[cohort], cohort, repeatNo: i + 1,
         extraArgs: ['--swebench-oracle'],
       }))
     );
     const results = await pool.run(jobs);
 
-    // 按 cohort 聚合 pass/fail
-    const cohortPasses = new Map();
-    for (const cohort of CALIBRATION_COHORTS) cohortPasses.set(cohort, []);
-    let infraCount = 0;
-    for (const r of results) {
-      if (r.status === 'infra') { infraCount++; continue; }
-      // 从 fixture 读 oracle 结果（passed）
-      const passed = r.fixturePath && fs.existsSync(r.fixturePath)
-        ? readOraclePassed(r.fixturePath) : false;
-      cohortPasses.get(r.cohort)?.push(passed ? 1 : 0);
-    }
+    // 按 cohort 聚合 pass/fail：infra + error 剔分母（非能力 fail，codex CRITICAL-2），success/gen_timeout 入分母
+    const resolvePass = (r) => Boolean(r.fixturePath && fs.existsSync(r.fixturePath) && readOraclePassed(r.fixturePath));
+    const { cohortPasses, infraCount, errorCount, excludedRate } = aggregateRunResults(results, CALIBRATION_COHORTS, resolvePass);
     const infraRate = infraCount / results.length;
-    const { discriminating, weakSeparation, reason, perCohort } = isDiscriminating(cohortPasses);
+    const errorRate = errorCount / results.length;
 
+    // 系统性 harness 故障 fail-closed：error 多为 runner flag 错配 / dist 版本门禁 / 全局 spectra plugin 冲突
+    // 等系统性问题（非单任务能力 fail）。连续 2 个候选 error 率 ≥ 50% → 整批中止，避免烧数小时跑全错的批。
+    if (errorRate >= 0.5) {
+      consecutiveBroken++;
+      console.warn(`[calibrate] ⚠️  ${taskId}: errorRate=${errorRate.toFixed(2)}（基础设施错误，非能力 fail；查 calibrate.log 的 [task-runner] error 行）`);
+      if (consecutiveBroken >= 2) {
+        // break（非 throw）：先让循环后写盘逻辑保存已跑候选，再以非零码退出 —— 否则丢弃所有已花配额跑出的数据（codex round-2 CRITICAL）
+        abortReason = `连续 ${consecutiveBroken} 个候选 error 率 ≥ 50% — 疑似系统性 harness 故障（runner flag 错配 / dist 版本门禁失败 / 全局 spectra plugin 冲突），中止校准。修复后重跑。`;
+        console.error(`[calibrate] ❌ ${abortReason}`);
+        break;
+      }
+    } else {
+      consecutiveBroken = 0;
+    }
+
+    const { discriminating, weakSeparation, reason, perCohort } = isDiscriminating(cohortPasses);
     const entry = {
-      taskId, discriminating, weakSeparation, reason, infraRate, perCohort,
-      lowConfidence: infraRate > CALIBRATION_PARAMS.INFRA_FAIL_RATE_CEIL,
+      taskId, discriminating, weakSeparation, reason, infraRate, errorRate, perCohort,
+      // 剔除率（infra+error）过高 → 该候选证据不足，标 lowConfidence（不计入 discriminating 池）
+      lowConfidence: excludedRate > CALIBRATION_PARAMS.INFRA_FAIL_RATE_CEIL,
     };
     calibratedPool.push(entry);
     if (discriminating && !entry.lowConfidence) discriminatingCount++;
-    console.log(`[calibrate] ${taskId}: discriminating=${discriminating}${weakSeparation ? ' (弱分离)' : ''}, infraRate=${infraRate.toFixed(2)}, reason=${reason}`);
+    console.log(`[calibrate] ${taskId}: discriminating=${discriminating}${weakSeparation ? ' (弱分离)' : ''}, infraRate=${infraRate.toFixed(2)}, errorRate=${errorRate.toFixed(2)}, reason=${reason}`);
   }
 
   // 写 calibrated pool（不入库）
@@ -336,21 +365,59 @@ async function main() {
     totalCandidates: candidates.length,
     params: CALIBRATION_PARAMS,
     cohorts: CALIBRATION_COHORTS,
+    aborted: Boolean(abortReason),     // 提前中止标记（fail-closed）；pool 为 partial，勿直接 split
+    abortReason,
   }}, null, 2));
-  console.log(`[calibrate] 校准产物: ${poolPath} (${discriminatingCount} discriminating / ${calibratedPool.length} total)`);
+  console.log(`[calibrate] 校准产物: ${poolPath} (${discriminatingCount} discriminating / ${calibratedPool.length} total)${abortReason ? ' [PARTIAL — 提前中止]' : ''}`);
   if (weakSeparationCount > 0) {
     console.warn(`[calibrate] ⚠️  ${weakSeparationCount} 个 discriminating 任务为弱分离（退化小样本 CI，N=${CALIBRATION_PARAMS.REPEATS}）。若占比高建议提高 REPEATS 或人工复核。`);
   }
+  // fail-closed 中止：已跑数据已落盘（partial），以非零码退出让调用方/CI 感知系统性故障
+  if (abortReason) {
+    console.error(`[calibrate] ❌ 校准提前中止（已保存 ${calibratedPool.length} 个已跑候选到 partial pool）：${abortReason}`);
+    process.exit(2);
+  }
 }
 
-/** 从 fixture JSON 读 oracle passed 状态 */
+/**
+ * 从已解析 fixture 对象取 oracle passed（纯函数，便于单测）。
+ * F187 runner 把 OracleResult 写到 `taskExecution.primaryOracle`（eval-task-runner.mjs:749/763）——
+ * 旧实现误读 swebenchResult/oracleResult/result（均不存在）致所有 pass 恒判 false（codex CRITICAL-1）。
+ * 保留 legacy 路径作向后兼容 fallback。
+ */
+export function oraclePassedFromFixture(fix) {
+  const oracle = fix?.taskExecution?.primaryOracle
+    ?? fix?.swebenchResult ?? fix?.oracleResult ?? fix?.result ?? {};
+  return oracle?.passed === true;
+}
+
+/** 从 fixture JSON 文件读 oracle passed 状态。 */
 function readOraclePassed(fixturePath) {
   try {
-    const fix = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
-    // F187 oracle 存储位置（swebench result）
-    const sr = fix.swebenchResult ?? fix.oracleResult ?? fix.result ?? {};
-    return sr.passed === true;
+    return oraclePassedFromFixture(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
   } catch { return false; }
+}
+
+/**
+ * 把一批 run 结果按 cohort 聚合为 pass/fail samples。
+ * 剔除类（不入分母，非能力 fail）：`infra`（OAuth/API 错误）+ `error`（基础设施错误：runner flag 错配 /
+ * dist 门禁 / 全局 plugin 冲突等，codex CRITICAL-2）。能力类：`success`（读 oracle）+ `gen_timeout`（无 fixture → fail）。
+ * @param {object[]} results
+ * @param {string[]} cohorts
+ * @param {(r:object)=>boolean} resolvePass  -- 注入式取 pass（默认读 fixture oracle；测试可 mock）
+ * @returns {{ cohortPasses: Map<string, number[]>, infraCount: number, errorCount: number, excludedRate: number }}
+ */
+export function aggregateRunResults(results, cohorts, resolvePass) {
+  const cohortPasses = new Map(cohorts.map((c) => [c, []]));
+  let infraCount = 0;
+  let errorCount = 0;
+  for (const r of results) {
+    if (r.status === 'infra') { infraCount++; continue; }
+    if (r.status === 'error') { errorCount++; continue; }
+    cohortPasses.get(r.cohort)?.push(resolvePass(r) ? 1 : 0);
+  }
+  const excludedRate = results.length ? (infraCount + errorCount) / results.length : 0;
+  return { cohortPasses, infraCount, errorCount, excludedRate };
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────

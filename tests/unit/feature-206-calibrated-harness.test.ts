@@ -17,6 +17,8 @@ import {
   heuristicDifficultyScore,
   heuristicPrefilter,
   isDiscriminating,
+  oraclePassedFromFixture,
+  aggregateRunResults,
 } from '../../scripts/eval-calibrate.mjs';
 
 // ── T-C2 eval-split-sets ──────────────────────────────────────────────────────
@@ -99,6 +101,41 @@ describe('T-C0b classifyExitStatus', () => {
 // T-C0: parallel-run-pool
 // ─────────────────────────────────────────────────────────────────────────────
 describe('T-C0 ParallelRunPool', () => {
+  // 回归契约（dogfooding 实跑捕获）：旧实现传 eval-task-runner 不存在的 --cohort flag →
+  // "unknown flag: --cohort" 致每个 run error；且漏 6 个驱动参数使 spec-driver 退化提示词模式 / 卡权限。
+  describe('_buildRunnerArgs 契约（回归：曾传不存在的 --cohort + 漏驱动参数）', () => {
+    it('不含 --cohort（eval-task-runner 无此 flag）', () => {
+      const pool = new ParallelRunPool({});
+      const args = pool._buildRunnerArgs(
+        { task: 't1', tool: 'spec-driver-spectra-mcp', cohort: 'c3', repeatNo: 1, extraArgs: ['--swebench-oracle'] },
+        0, 'c3-r1',
+      );
+      expect(args).not.toContain('--cohort');
+    });
+
+    it('--tool 取 job.tool（cohort→tool 由调用方映射，非裸 --cohort）', () => {
+      const pool = new ParallelRunPool({});
+      const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1', repeatNo: 1 }, 0, 'c1-r1');
+      expect(args[args.indexOf('--tool') + 1]).toBe('control');
+    });
+
+    it('含 canonical runOne 全部驱动参数（缺则 spec-driver 退化提示词模式 / 卡权限）', () => {
+      const pool = new ParallelRunPool({ driverModel: 'claude-sonnet-4-6', outputFormat: 'stream-json' });
+      const args = pool._buildRunnerArgs({ task: 't1', tool: 'spec-driver-spectra-mcp', cohort: 'c3', repeatNo: 1 }, 0, 'c3-r1');
+      for (const flag of ['--bypass-permissions', '--cleanup', '--prompt-via-stdin', '--skill-invocation', '--model', '--output-format']) {
+        expect(args).toContain(flag);
+      }
+      expect(args[args.indexOf('--model') + 1]).toBe('claude-sonnet-4-6');
+      expect(args[args.indexOf('--output-format') + 1]).toBe('stream-json');
+    });
+
+    it('extraArgs（如 --swebench-oracle）透传追加', () => {
+      const pool = new ParallelRunPool({});
+      const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1', repeatNo: 1, extraArgs: ['--swebench-oracle'] }, 0, 'c1-r1');
+      expect(args).toContain('--swebench-oracle');
+    });
+  });
+
   describe('dry-run 模式（不 spawn）', () => {
     it('返回等长结果数组，每项 status=success', async () => {
       const pool = new ParallelRunPool({ dryRun: true });
@@ -214,6 +251,69 @@ describe('T-C1 eval-calibrate — 启发式难度打分', () => {
       expect(score).toBeGreaterThanOrEqual(0);
       expect(score).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T-C7: oracle 读取 + run 结果聚合（codex CRITICAL-1/2 回归，dogfooding 实跑捕获）
+// ─────────────────────────────────────────────────────────────────────────────
+describe('T-C7 oraclePassedFromFixture（回归：曾误读字段致所有 pass 恒计 false）', () => {
+  it('runner 真实结构 taskExecution.primaryOracle.passed=true → true', () => {
+    expect(oraclePassedFromFixture({ taskExecution: { primaryOracle: { passed: true } } })).toBe(true);
+  });
+  it('taskExecution.primaryOracle.passed=false → false', () => {
+    expect(oraclePassedFromFixture({ taskExecution: { primaryOracle: { passed: false } } })).toBe(false);
+  });
+  it('legacy swebenchResult.passed=true → true（向后兼容 fallback）', () => {
+    expect(oraclePassedFromFixture({ swebenchResult: { passed: true } })).toBe(true);
+  });
+  it('无 oracle 字段 / null → false（不抛）', () => {
+    expect(oraclePassedFromFixture({})).toBe(false);
+    expect(oraclePassedFromFixture(null)).toBe(false);
+  });
+  it('passed 非严格 true（如 "true" / 1）→ false（避免误判）', () => {
+    expect(oraclePassedFromFixture({ taskExecution: { primaryOracle: { passed: 'true' } } })).toBe(false);
+    expect(oraclePassedFromFixture({ taskExecution: { primaryOracle: { passed: 1 } } })).toBe(false);
+  });
+});
+
+describe('T-C7 aggregateRunResults（codex CRITICAL-2：error 剔分母，不当能力 fail）', () => {
+  const cohorts = ['c1', 'c3'];
+  const passAll = () => true;
+
+  it('infra + error 都剔分母（不进 cohortPasses）', () => {
+    const results = [
+      { status: 'infra', cohort: 'c1' },
+      { status: 'error', cohort: 'c1' },
+      { status: 'success', cohort: 'c1', fixturePath: '/x' },
+    ];
+    const { cohortPasses, infraCount, errorCount, excludedRate } = aggregateRunResults(results, cohorts, passAll);
+    expect(infraCount).toBe(1);
+    expect(errorCount).toBe(1);
+    expect(cohortPasses.get('c1')).toEqual([1]); // 只 success 入分母
+    expect(excludedRate).toBeCloseTo(2 / 3, 5);
+  });
+
+  it('success → 读 resolvePass；gen_timeout → 入分母算 fail（能力 fail，非剔）', () => {
+    const results = [
+      { status: 'success', cohort: 'c3', fixturePath: '/x' },
+      { status: 'gen_timeout', cohort: 'c3' },
+    ];
+    const { cohortPasses, errorCount } = aggregateRunResults(results, cohorts, (r) => r.status === 'success');
+    expect(errorCount).toBe(0);
+    expect(cohortPasses.get('c3')).toEqual([1, 0]); // success=pass, gen_timeout=fail
+  });
+
+  it('全 error → cohortPasses 空 + excludedRate=1（下游 isDiscriminating 判 non-discriminating）', () => {
+    const results = [
+      { status: 'error', cohort: 'c1' },
+      { status: 'error', cohort: 'c3' },
+    ];
+    const { cohortPasses, errorCount, excludedRate } = aggregateRunResults(results, cohorts, passAll);
+    expect(errorCount).toBe(2);
+    expect(cohortPasses.get('c1')).toEqual([]);
+    expect(cohortPasses.get('c3')).toEqual([]);
+    expect(excludedRate).toBe(1);
   });
 });
 
