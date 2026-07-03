@@ -83,9 +83,12 @@ export function classifyExitStatus(exitCode, signal) {
  * @param {number} [opts.runTimeoutMs=20*60*1000] -- 单 run 超时（传给 runner --swebench-timeout-ms）
  * @param {boolean} [opts.dryRun=false]        -- dry-run：不 spawn runner，仅返回计划
  * @param {Function} [opts.onProgress]         -- (result: RunResult, done: number, total: number) => void
- * @param {string} [opts.driverModel='claude-sonnet-4-6'] -- driver 模型（eval 用 Sonnet 省 token）
+ * @param {string} [opts.driverModel=DEFAULT_DRIVER_MODEL] -- driver 模型（eval 用 Sonnet 省 token）
  * @param {string} [opts.outputFormat='stream-json']      -- claude --print 输出格式（token 采集）
  */
+/** 校准/验证批默认 driver 模型（单一事实源：preflight 连接门禁必须测同一模型，codex W-2） */
+export const DEFAULT_DRIVER_MODEL = 'claude-sonnet-4-6';
+
 export class ParallelRunPool {
   constructor({
     concurrency = 4,
@@ -93,7 +96,7 @@ export class ParallelRunPool {
     runTimeoutMs = 20 * 60 * 1000,
     dryRun = false,
     onProgress = null,
-    driverModel = 'claude-sonnet-4-6',
+    driverModel = DEFAULT_DRIVER_MODEL,
     outputFormat = 'stream-json',
   } = {}) {
     this.concurrency = Math.max(1, concurrency);

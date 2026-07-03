@@ -196,6 +196,34 @@ describe('isGenerationInfraFailure（OAuth/API-infra vs 能力空 patch；仅最
   it('error_max_turns（is_error:true 但无 api_error_status）→ 非 infra（能力/效率问题）', () => {
     expect(isGenerationInfraFailure('{"type":"result","subtype":"error_max_turns","is_error":true,"api_error_status":null}').failed).toBe(false);
   });
+
+  // ── F206 fix B：连接级失败（无 HTTP 状态码，api_error_status:null）──────────────
+  it('ConnectionRefused（真实事故行：api_error_status:null + 零产出）→ infra marker=connection_failure', () => {
+    // 2026-06-29 校准批 106/106 run 实际最终行（Surge 代理未运行）——曾漏判为能力 fail
+    const log = '{"type":"result","subtype":"success","is_error":true,"api_error_status":null,"duration_ms":172497,"num_turns":1,"result":"API Error: Unable to connect to API (ConnectionRefused)","total_cost_usd":0}';
+    const r = isGenerationInfraFailure(log);
+    expect(r.failed).toBe(true);
+    expect(r.marker).toBe('connection_failure');
+  });
+  it('网络 errno（CLI "API Error: " 前缀 + ECONNREFUSED / ENOTFOUND 等）→ infra', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":null,"result":"API Error: connect ECONNREFUSED 127.0.0.1:6152"}').failed).toBe(true);
+    expect(isGenerationInfraFailure('{"type":"result","is_error":true,"api_error_status":null,"result":"API Error: getaddrinfo ENOTFOUND api.anthropic.com"}').failed).toBe(true);
+  });
+  it('agent 正常完成时复述连接错误文本（is_error:false）→ 非 infra（不误伤）', () => {
+    expect(isGenerationInfraFailure('{"type":"result","is_error":false,"num_turns":8,"result":"修复了工具里的 API Error: Unable to connect to API (ConnectionRefused) 处理"}').failed).toBe(false);
+  });
+  it('error_max_turns 且 agent 最终消息复述 errno（result 不以 "API Error: " 开头）→ 非 infra（锚定不误伤能力失败）', () => {
+    // 任务本身是修网络库时，agent 文本里出现 ECONNREFUSED 很常见——必须留在分母算能力 fail
+    const log = '{"type":"result","subtype":"error_max_turns","is_error":true,"api_error_status":null,"num_turns":12,"result":"测试仍失败：connect ECONNREFUSED 127.0.0.1:8080，我未能在轮次内修复"}';
+    expect(isGenerationInfraFailure(log).failed).toBe(false);
+  });
+  it('中途连接失败后恢复（早先 result 行含 ConnectionRefused，最终行 is_error:false）→ 非 infra（只看最终行）', () => {
+    const log = [
+      '{"type":"result","is_error":true,"api_error_status":null,"result":"API Error: Unable to connect to API (ConnectionRefused)"}',
+      '{"type":"result","subtype":"success","is_error":false,"num_turns":12}',
+    ].join('\n');
+    expect(isGenerationInfraFailure(log).failed).toBe(false);
+  });
 });
 
 describe('discoverAnswerSheets（C4 缺 patch.diff 不丢弃）', () => {

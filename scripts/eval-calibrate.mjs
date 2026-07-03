@@ -21,10 +21,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootstrapProportionCi } from './lib/cohort-aggregate.mjs';
-import { ParallelRunPool, serialWarmup } from './lib/parallel-run-pool.mjs';
+import { ParallelRunPool, serialWarmup, DEFAULT_DRIVER_MODEL } from './lib/parallel-run-pool.mjs';
 import { planWarmupJobs, taskIdOf } from './lib/warmup-planner.mjs';
 import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs';
 import { datasetTagToHfId } from './lib/swebench-dataset-build.mjs';
+import { preflightClaudeConnectivity } from './lib/generation-infra.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -76,6 +77,7 @@ function parseArgs(argv) {
     concurrency: 4,
     candidatePool: null,   // 已有候选 pool json 路径（跳过启发式预筛）
     outputDir: path.join(PROJECT_ROOT, '.calibration-output'),
+    skipPreflight: false,  // 跳过起批前 API 连接门禁（仅调试用，不建议）
   };
   for (let i = 2; i < argv.length; i++) {
     switch (argv[i]) {
@@ -85,6 +87,7 @@ function parseArgs(argv) {
       case '--concurrency': args.concurrency = Number(argv[++i]); break;
       case '--candidate-pool': args.candidatePool = argv[++i]; break;
       case '--output-dir': args.outputDir = argv[++i]; break;
+      case '--skip-preflight': args.skipPreflight = true; break;
     }
   }
   return args;
@@ -260,6 +263,22 @@ async function main() {
     return;
   }
 
+  // 起批硬门禁（F206 fix B）：以与 pool→runner→claude 相同的 env 继承真连一次 API。
+  // 背景：host shell HTTPS_PROXY 指向未运行的本地代理（Surge 127.0.0.1:6152）曾使 106/106 run
+  // 全 ConnectionRefused 静默烧 ~10hr 却报"0 discriminating"——连接失败必须在这里拒绝启动。
+  if (!args.skipPreflight) {
+    // 测真实 driver 模型（非 haiku）：连接 + 该模型配额/访问权一次验清（codex W-2）
+    console.log(`[calibrate] 起批前 API 连接门禁（claude --print 真连一次 ${DEFAULT_DRIVER_MODEL}，~秒级）...`);
+    const pf = await preflightClaudeConnectivity({ model: DEFAULT_DRIVER_MODEL });
+    if (!pf.ok) {
+      console.error(`[calibrate] ❌ API 连接门禁失败：${pf.detail}`);
+      console.error('[calibrate]    常见原因：HTTPS_PROXY 指向的本地代理（如 Surge 127.0.0.1:6152）未运行 / claude 未登录（claude /login）。');
+      console.error('[calibrate]    修复后重跑本命令；确需跳过用 --skip-preflight（不建议：连接坏时整批为废数据）。');
+      process.exit(3);
+    }
+    console.log('[calibrate] 连接门禁 OK');
+  }
+
   // 创建输出目录
   fs.mkdirSync(args.outputDir, { recursive: true });
 
@@ -329,21 +348,6 @@ async function main() {
     const infraRate = infraCount / results.length;
     const errorRate = errorCount / results.length;
 
-    // 系统性 harness 故障 fail-closed：error 多为 runner flag 错配 / dist 版本门禁 / 全局 spectra plugin 冲突
-    // 等系统性问题（非单任务能力 fail）。连续 2 个候选 error 率 ≥ 50% → 整批中止，避免烧数小时跑全错的批。
-    if (errorRate >= 0.5) {
-      consecutiveBroken++;
-      console.warn(`[calibrate] ⚠️  ${taskId}: errorRate=${errorRate.toFixed(2)}（基础设施错误，非能力 fail；查 calibrate.log 的 [task-runner] error 行）`);
-      if (consecutiveBroken >= 2) {
-        // break（非 throw）：先让循环后写盘逻辑保存已跑候选，再以非零码退出 —— 否则丢弃所有已花配额跑出的数据（codex round-2 CRITICAL）
-        abortReason = `连续 ${consecutiveBroken} 个候选 error 率 ≥ 50% — 疑似系统性 harness 故障（runner flag 错配 / dist 版本门禁失败 / 全局 spectra plugin 冲突），中止校准。修复后重跑。`;
-        console.error(`[calibrate] ❌ ${abortReason}`);
-        break;
-      }
-    } else {
-      consecutiveBroken = 0;
-    }
-
     const { discriminating, weakSeparation, reason, perCohort } = isDiscriminating(cohortPasses);
     const entry = {
       taskId, discriminating, weakSeparation, reason, infraRate, errorRate, perCohort,
@@ -353,6 +357,24 @@ async function main() {
     calibratedPool.push(entry);
     if (discriminating && !entry.lowConfidence) discriminatingCount++;
     console.log(`[calibrate] ${taskId}: discriminating=${discriminating}${weakSeparation ? ' (弱分离)' : ''}, infraRate=${infraRate.toFixed(2)}, errorRate=${errorRate.toFixed(2)}, reason=${reason}`);
+
+    // 系统性 harness 故障 fail-closed：剔除类（infra=OAuth/API/连接失败 + error=runner flag 错配 /
+    // dist 版本门禁 / 全局 plugin 冲突）都不是单任务能力 fail。连续 2 个候选剔除率 ≥ 50% → 整批中止，
+    // 避免烧数小时跑全废的批。（F206 fix B：原只看 errorRate，代理死时 ConnectionRefused 全落 infra
+    // 桶 → errorRate=0 不触发，批静默跑完假报 0 discriminating —— 现按 excludedRate=infra+error 判。）
+    // 判定必须在 entry push 之后：触发中止的候选已花 6 run 配额，须随 partial pool 落盘（codex W-1）。
+    if (excludedRate >= 0.5) {
+      consecutiveBroken++;
+      console.warn(`[calibrate] ⚠️  ${taskId}: excludedRate=${excludedRate.toFixed(2)}（infra=${infraRate.toFixed(2)} + error=${errorRate.toFixed(2)}，非能力 fail；查 calibrate.log 的 [task-runner] 行）`);
+      if (consecutiveBroken >= 2) {
+        // break（非 throw）：先让循环后写盘逻辑保存已跑候选，再以非零码退出 —— 否则丢弃所有已花配额跑出的数据（codex round-2 CRITICAL）
+        abortReason = `连续 ${consecutiveBroken} 个候选剔除率（infra+error）≥ 50% — 疑似系统性 harness 故障（API 连接失败：代理未运行 / OAuth 过期；或 runner flag 错配 / dist 版本门禁 / 全局 plugin 冲突），中止校准。修复后重跑。`;
+        console.error(`[calibrate] ❌ ${abortReason}`);
+        break;
+      }
+    } else {
+      consecutiveBroken = 0;
+    }
   }
 
   // 写 calibrated pool（不入库）

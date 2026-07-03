@@ -34,6 +34,10 @@ import {
   compareWithBaseline,
 } from '../../scripts/eval-validate.mjs';
 
+// ── T-C8 generation-infra 连接门禁（F206 fix B）──────────────────────────────
+import { EventEmitter } from 'node:events';
+import { preflightClaudeConnectivity } from '../../scripts/lib/generation-infra.mjs';
+
 // ── T-C0 parallel-run-pool ───────────────────────────────────────────────────
 import {
   ParallelRunPool,
@@ -314,6 +318,116 @@ describe('T-C7 aggregateRunResults（codex CRITICAL-2：error 剔分母，不当
     expect(cohortPasses.get('c1')).toEqual([]);
     expect(cohortPasses.get('c3')).toEqual([]);
     expect(excludedRate).toBe(1);
+  });
+
+  it('全 infra（ConnectionRefused 类，F206 fix B）→ excludedRate=1，供 fail-closed 判系统性故障', () => {
+    // 代理死时所有 run 落 infra 桶（error=0）——fail-closed 必须按 excludedRate 而非 errorRate 判
+    const results = [
+      { status: 'infra', cohort: 'c1' },
+      { status: 'infra', cohort: 'c1' },
+      { status: 'infra', cohort: 'c3' },
+      { status: 'infra', cohort: 'c3' },
+    ];
+    const { infraCount, errorCount, excludedRate, cohortPasses } = aggregateRunResults(results, cohorts, passAll);
+    expect(infraCount).toBe(4);
+    expect(errorCount).toBe(0);
+    expect(excludedRate).toBe(1);
+    expect(cohortPasses.get('c1')).toEqual([]);
+    expect(cohortPasses.get('c3')).toEqual([]);
+  });
+});
+
+// ── T-C8 preflightClaudeConnectivity（F206 fix B：起批前连接门禁，fake spawn 不真连网）──
+describe('T-C8 preflightClaudeConnectivity', () => {
+  type FakeChild = EventEmitter & {
+    stdout: EventEmitter;
+    stderr: EventEmitter;
+    stdin: { end: (s?: string) => void };
+    kill: (sig?: string) => void;
+  };
+  const makeFakeChild = (opts: { code?: number; stdout?: string; neverExit?: boolean; onKill?: () => void } = {}): FakeChild => {
+    const child = new EventEmitter() as FakeChild;
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = { end: () => {} };
+    child.kill = () => { opts.onKill?.(); };
+    if (!opts.neverExit) {
+      setImmediate(() => {
+        if (opts.stdout) child.stdout.emit('data', opts.stdout);
+        child.emit('close', opts.code ?? 0);
+      });
+    }
+    return child;
+  };
+  const asSpawn = (fn: () => FakeChild) => fn as unknown as typeof import('node:child_process').spawn;
+
+  it('exit 0 + 非空输出 → ok', async () => {
+    const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => makeFakeChild({ code: 0, stdout: 'ok\n' })) });
+    expect(r.ok).toBe(true);
+  });
+
+  it('ConnectionRefused 文案（真实事故输出）→ not ok，detail 指向连接失败', async () => {
+    const r = await preflightClaudeConnectivity({
+      spawnImpl: asSpawn(() => makeFakeChild({ code: 1, stdout: 'API Error: Unable to connect to API (ConnectionRefused)' })),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('连接失败');
+  });
+
+  it('exit 0 但输出含连接失败标记 → not ok（不被退出码骗过）', async () => {
+    const r = await preflightClaudeConnectivity({
+      spawnImpl: asSpawn(() => makeFakeChild({ code: 0, stdout: 'API Error: Unable to connect to API (ConnectionRefused)' })),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('连接失败');
+  });
+
+  it('非零退出（非连接类）→ not ok，detail 带退出码', async () => {
+    const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => makeFakeChild({ code: 1, stdout: 'some other failure' })) });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('退出码 1');
+  });
+
+  it('exit 0 但零输出 → not ok（异常态不放行）', async () => {
+    const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => makeFakeChild({ code: 0, stdout: '' })) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('超时 → kill 子进程 + not ok（detail 指向超时）', async () => {
+    let killed = false;
+    const r = await preflightClaudeConnectivity({
+      timeoutMs: 30,
+      spawnImpl: asSpawn(() => makeFakeChild({ neverExit: true, onKill: () => { killed = true; } })),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('超时');
+    expect(killed).toBe(true);
+  });
+
+  it('spawn 同步抛错（如 claude 不存在）→ not ok 不崩', async () => {
+    const throwingSpawn = (() => { throw new Error('ENOENT: claude not found'); }) as unknown as typeof import('node:child_process').spawn;
+    const r = await preflightClaudeConnectivity({ spawnImpl: throwingSpawn });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('spawn claude 失败');
+  });
+
+  it("child 'error' 后又 'close' → 只 resolve 一次（settled 守卫），取 error 结论", async () => {
+    const child = makeFakeChild({ neverExit: true });
+    setImmediate(() => {
+      child.emit('error', new Error('spawn EACCES'));
+      child.emit('close', 0); // error 后 close 再触发——不得二次 resolve / 不得翻转结论
+    });
+    const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => child) });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('spawn claude 失败');
+  });
+
+  it('stdin.end 抛错（子进程秒挂管道破裂）→ 仍经 close 正常 resolve', async () => {
+    const child = makeFakeChild({ code: 1, stdout: 'API Error: Unable to connect to API (ConnectionRefused)' });
+    child.stdin = { end: () => { throw new Error('EPIPE'); } };
+    const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => child) });
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain('连接失败');
   });
 });
 
