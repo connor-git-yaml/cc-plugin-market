@@ -59,14 +59,15 @@ const CALIBRATION_COHORTS = ['c1', 'c3'];
  * eval-task-runner 内部建本地 spectra plugin + 注册 MCP，无需额外 flag）。
  * 旧实现硬编码 tool='spec-driver' 且传不存在的 --cohort flag → 每个 run unknown-flag 报错（已修）。
  */
-const CALIBRATION_COHORT_TO_TOOL = {
+export const CALIBRATION_COHORT_TO_TOOL = {
   c1: COHORT_TO_TOOL['baseline-claude'],
   c3: COHORT_TO_TOOL['spec-driver-spectra-mcp'],
 };
 
 /** 候选 fixture 所属 SWE-bench 数据集 HF id（经 canonical datasetTagToHfId，与 builder 内部口径一致；
- *  非默认 Lite，否则 Verified 实例取不到官方行 → DATASET_MISMATCH 降级 repo-only，codex W-2）。 */
-const CALIBRATION_DATASET = datasetTagToHfId('verified');
+ *  非默认 Lite，否则 Verified 实例取不到官方行 → DATASET_MISMATCH 降级 repo-only，codex W-2）。
+ *  与 CALIBRATION_COHORT_TO_TOOL 一起导出：eval-validate（/goal Verify 腿）须与校准同一 cohort 合同。 */
+export const CALIBRATION_DATASET = datasetTagToHfId('verified');
 
 // ── 命令行参数解析 ────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -406,10 +407,15 @@ async function main() {
  * F187 runner 把 OracleResult 写到 `taskExecution.primaryOracle`（eval-task-runner.mjs:749/763）——
  * 旧实现误读 swebenchResult/oracleResult/result（均不存在）致所有 pass 恒判 false（codex CRITICAL-1）。
  * 保留 legacy 路径作向后兼容 fallback。
+ *
+ * 三态返回（codex validate 轮 W-1）：true=pass / false=跑了但 fail / **null=fixture 里找不到任何
+ * oracle 字段**（runner schema 回归等异常）——缺失≠能力 fail，由调用方分桶：calibrate 的 resolvePass
+ * 经 Boolean() 归 fail 分母（保守），validate 归 oracle_missing 桶参与 infraFailRate fail-closed。
  */
 export function oraclePassedFromFixture(fix) {
   const oracle = fix?.taskExecution?.primaryOracle
-    ?? fix?.swebenchResult ?? fix?.oracleResult ?? fix?.result ?? {};
+    ?? fix?.swebenchResult ?? fix?.oracleResult ?? fix?.result;
+  if (oracle == null) return null;
   return oracle?.passed === true;
 }
 

@@ -1078,7 +1078,9 @@ export function persistRunArtifacts({ artifactsDir, runId, patchDiff, stdout, st
   }
 }
 
-const isCliEntry = process.argv[1]?.endsWith('eval-task-runner.mjs');
+// 精确入口判定（codex：endsWith 宽松匹配会让"路径恰以 eval-task-runner.mjs 结尾"的包装脚本
+// 在 import 本模块（经 cohort-registry 传递依赖）时误触发 main）
+const isCliEntry = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (isCliEntry) {
   main().catch((err) => {
     console.error(`[task-runner] error: ${err.message}`);

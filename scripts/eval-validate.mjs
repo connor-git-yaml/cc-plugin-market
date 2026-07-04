@@ -19,8 +19,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootstrapProportionCi } from './lib/cohort-aggregate.mjs';
-import { ParallelRunPool, serialWarmup } from './lib/parallel-run-pool.mjs';
+import { ParallelRunPool, serialWarmup, DEFAULT_DRIVER_MODEL } from './lib/parallel-run-pool.mjs';
 import { planWarmupJobs } from './lib/warmup-planner.mjs';
+import { preflightClaudeConnectivity } from './lib/generation-infra.mjs';
+// 与校准同一 cohort 合同（单一事实源）：cohort→runner --tool 映射 + oracle 读取 + 数据集 id。
+// 旧实现硬编码 tool='spec-driver'（c2，不带 Spectra）且 readOraclePassed 读不存在的字段
+// （swebenchResult/...）→ /goal 度量恒 0、跑错 cohort——与校准侧 codex CRITICAL-1 同病，一并修正。
+import { oraclePassedFromFixture, CALIBRATION_COHORT_TO_TOOL, CALIBRATION_DATASET } from './eval-calibrate.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -56,6 +61,7 @@ function parseArgs(argv) {
     baseline: null,             // 前版本结果 json（比较纪律）
     output: null,               // 结果 json 输出路径
     minDelta: VALIDATE_PARAMS.MIN_DELTA,
+    skipPreflight: false,       // 跳过起批前 API 连接门禁（仅调试用，不建议）
   };
   for (let i = 2; i < argv.length; i++) {
     switch (argv[i]) {
@@ -70,6 +76,7 @@ function parseArgs(argv) {
       case '--baseline': args.baseline = argv[++i]; break;
       case '--output': args.output = argv[++i]; break;
       case '--min-delta': args.minDelta = Number(argv[++i]); break;
+      case '--skip-preflight': args.skipPreflight = true; break;
     }
   }
   return args;
@@ -153,19 +160,38 @@ export function compareWithBaseline(current, baseline, minDelta) {
   };
 }
 
-/** 从 fixture JSON 读 oracle passed 状态（与 calibrate.mjs 一致） */
-function readOraclePassed(fixturePath) {
+/**
+ * 从 fixture JSON 文件读 oracle passed（经 canonical oraclePassedFromFixture：
+ * runner 实写 taskExecution.primaryOracle.passed）。读失败返回 null（→ oracle_missing 桶，
+ * 参与 fail-closed 统计），与 calibrate 的 false-on-error 口径不同是有意的：
+ * validate 需区分"跑了但 fail"与"结果不可读"。导出供单测钉死读取路径（防再回退到死字段）。
+ */
+export function readOraclePassed(fixturePath) {
   try {
-    const fix = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
-    const sr = fix.swebenchResult ?? fix.oracleResult ?? fix.result ?? {};
-    return sr.passed === true;
+    return oraclePassedFromFixture(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
   } catch { return null; }
+}
+
+/**
+ * 构建验证 jobs（纯函数，T-C9 钉死接线）：tool 必须经 CALIBRATION_COHORT_TO_TOOL 映射——
+ * 旧实现硬编码 'spec-driver'（c2，不带 Spectra）→ --cohort 只是标签、实际跑错 cohort。
+ */
+export function buildValidationJobs(tasks, cohort) {
+  return tasks.map((t, i) => ({
+    task: t.taskId ?? t, tool: CALIBRATION_COHORT_TO_TOOL[cohort], cohort,
+    repeatNo: i + 1, extraArgs: ['--swebench-oracle'],
+  }));
 }
 
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.sets) {
     console.error('[validate] 必须传 --sets <sets.json>');
+    process.exit(1);
+  }
+  // cohort → runner --tool 必须走校准同一合同映射；未知 cohort 早失败，不烧任何配额
+  if (!CALIBRATION_COHORT_TO_TOOL[args.cohort]) {
+    console.error(`[validate] 未知 cohort "${args.cohort}"（支持: ${Object.keys(CALIBRATION_COHORT_TO_TOOL).join(', ')}）`);
     process.exit(1);
   }
 
@@ -195,6 +221,20 @@ async function main() {
     return;
   }
 
+  // 起批硬门禁（F206 fix B，与 eval-calibrate 同款）：真连一次 driver 模型。
+  // /goal 循环反复调本脚本，代理（Surge）中途挂掉时必须当场拒绝而非烧完一批再作废。
+  if (!args.skipPreflight) {
+    console.log(`[validate] 起批前 API 连接门禁（claude --print 真连一次 ${DEFAULT_DRIVER_MODEL}，~秒级）...`);
+    const pf = await preflightClaudeConnectivity({ model: DEFAULT_DRIVER_MODEL });
+    if (!pf.ok) {
+      console.error(`[validate] ❌ API 连接门禁失败：${pf.detail}`);
+      console.error('[validate]    常见原因：HTTPS_PROXY 指向的本地代理（如 Surge）未运行 / claude 未登录（claude /login）。');
+      console.error('[validate]    修复后重跑；确需跳过用 --skip-preflight（不建议）。');
+      process.exit(2); // 与 infra 作废同码：/goal 侧识别为"本轮无效，非 0 进步"
+    }
+    console.log('[validate] 连接门禁 OK');
+  }
+
   // 串行 env 预热（C-2 合同）：按 (repo,version) 去重，每 unique env 串行建一次镜像。
   // validation 集条目仅含 taskId（无 swebenchMeta），需从 fixture 目录回载以解析 env key。
   // 稳态（calibration 已暖缓存）下预热快；首次冷启按 ~9min/env。
@@ -208,7 +248,8 @@ async function main() {
     });
     const warmupJobs = planWarmupJobs(warmupFixtures, {
       cohort: args.cohort,
-      tool: 'spec-driver',
+      tool: 'control', // 预热只为建 Docker env 镜像，用最便宜的 control（与 calibrate 同款）
+      datasetName: CALIBRATION_DATASET, // Verified：env-key 版本解析须查对数据集，否则 DATASET_MISMATCH 降级 repo-only
       onDegrade: (err) =>
         console.warn(`[validate] ⚠️  env 解析降级 repo-only（同 repo 多 version 仍可能 cold-build race）：${err.message}`),
     });
@@ -237,10 +278,7 @@ async function main() {
     },
   });
 
-  const jobs = tasks.map((t, i) => ({
-    task: t.taskId ?? t, tool: 'spec-driver', cohort: args.cohort,
-    repeatNo: i + 1, extraArgs: ['--swebench-oracle'],
-  }));
+  const jobs = buildValidationJobs(tasks, args.cohort);
   const wallStart = Date.now();
   const results = await pool.run(jobs);
   const wallMs = Date.now() - wallStart;

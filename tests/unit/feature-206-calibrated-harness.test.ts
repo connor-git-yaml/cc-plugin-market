@@ -11,6 +11,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as nodePath from 'node:path';
 
 // ── T-C1 eval-calibrate ────────────────────────────────────────────────────────
 import {
@@ -19,6 +22,7 @@ import {
   isDiscriminating,
   oraclePassedFromFixture,
   aggregateRunResults,
+  CALIBRATION_COHORT_TO_TOOL,
 } from '../../scripts/eval-calibrate.mjs';
 
 // ── T-C2 eval-split-sets ──────────────────────────────────────────────────────
@@ -32,6 +36,8 @@ import {
 import {
   computeValidationStats,
   compareWithBaseline,
+  readOraclePassed,
+  buildValidationJobs,
 } from '../../scripts/eval-validate.mjs';
 
 // ── T-C8 generation-infra 连接门禁（F206 fix B）──────────────────────────────
@@ -271,9 +277,10 @@ describe('T-C7 oraclePassedFromFixture（回归：曾误读字段致所有 pass 
   it('legacy swebenchResult.passed=true → true（向后兼容 fallback）', () => {
     expect(oraclePassedFromFixture({ swebenchResult: { passed: true } })).toBe(true);
   });
-  it('无 oracle 字段 / null → false（不抛）', () => {
-    expect(oraclePassedFromFixture({})).toBe(false);
-    expect(oraclePassedFromFixture(null)).toBe(false);
+  it('无 oracle 字段 / null 入参 → null（缺失≠fail；calibrate 经 Boolean 归 fail，validate 归 oracle_missing）', () => {
+    expect(oraclePassedFromFixture({})).toBe(null);
+    expect(oraclePassedFromFixture(null)).toBe(null);
+    expect(oraclePassedFromFixture({ taskExecution: {} })).toBe(null); // 有 taskExecution 但无 primaryOracle
   });
   it('passed 非严格 true（如 "true" / 1）→ false（避免误判）', () => {
     expect(oraclePassedFromFixture({ taskExecution: { primaryOracle: { passed: 'true' } } })).toBe(false);
@@ -428,6 +435,51 @@ describe('T-C8 preflightClaudeConnectivity', () => {
     const r = await preflightClaudeConnectivity({ spawnImpl: asSpawn(() => child) });
     expect(r.ok).toBe(false);
     expect(r.detail).toContain('连接失败');
+  });
+});
+
+// ── T-C9 validate 接线合同（/goal Verify 腿；回归：曾硬编码 tool='spec-driver' + 读死字段）──
+describe('T-C9 eval-validate 接线合同', () => {
+  it('CALIBRATION_COHORT_TO_TOOL：c1=control / c3=spec-driver-spectra-mcp（validate 与 calibrate 共用单源）', () => {
+    expect(CALIBRATION_COHORT_TO_TOOL.c1).toBe('control');
+    expect(CALIBRATION_COHORT_TO_TOOL.c3).toBe('spec-driver-spectra-mcp');
+  });
+
+  it('buildValidationJobs：tool 经映射（c3→spec-driver-spectra-mcp），非硬编码（钉死调用点接线）', () => {
+    const jobs = buildValidationJobs([{ taskId: 'SWE-X1' }, 'SWE-X2'], 'c3');
+    expect(jobs).toEqual([
+      { task: 'SWE-X1', tool: 'spec-driver-spectra-mcp', cohort: 'c3', repeatNo: 1, extraArgs: ['--swebench-oracle'] },
+      { task: 'SWE-X2', tool: 'spec-driver-spectra-mcp', cohort: 'c3', repeatNo: 2, extraArgs: ['--swebench-oracle'] },
+    ]);
+    expect(buildValidationJobs([{ taskId: 'SWE-X1' }], 'c1')[0].tool).toBe('control');
+  });
+
+  describe('readOraclePassed（回归：曾读 swebenchResult/oracleResult/result 死字段 → /goal 度量恒 0）', () => {
+    const tmpFixture = (obj: object): string => {
+      const p = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-')), 'full.json');
+      fs.writeFileSync(p, JSON.stringify(obj));
+      return p;
+    };
+
+    it('canonical 路径 taskExecution.primaryOracle.passed=true → true', () => {
+      expect(readOraclePassed(tmpFixture({ taskExecution: { primaryOracle: { passed: true } } }))).toBe(true);
+    });
+    it('canonical 路径 passed=false → false（跑了但 fail，非缺失）', () => {
+      expect(readOraclePassed(tmpFixture({ taskExecution: { primaryOracle: { passed: false } } }))).toBe(false);
+    });
+    it('legacy fallback swebenchResult.passed=true → true（向后兼容）', () => {
+      expect(readOraclePassed(tmpFixture({ swebenchResult: { passed: true } }))).toBe(true);
+    });
+    it('文件不存在 / JSON 损坏 → null（oracle_missing 桶，参与 fail-closed）', () => {
+      expect(readOraclePassed('/nonexistent/f206/full.json')).toBe(null);
+      const bad = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-')), 'full.json');
+      fs.writeFileSync(bad, '{not json');
+      expect(readOraclePassed(bad)).toBe(null);
+    });
+    it('fixture 可读但无任何 oracle 字段（schema 回归）→ null 而非 fail（codex W-1）', () => {
+      expect(readOraclePassed(tmpFixture({ taskExecution: { wallMs: 123 } }))).toBe(null);
+      expect(readOraclePassed(tmpFixture({}))).toBe(null);
+    });
   });
 });
 
