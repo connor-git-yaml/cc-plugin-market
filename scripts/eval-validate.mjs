@@ -115,17 +115,23 @@ export function computeValidationStats(results, getOraclePassed) {
       else { passSamples.push(0); }
       continue;
     }
-    // gen_timeout / error 都入分母算 fail（W-6：分开计数）
-    n_valid++;
-    passSamples.push(0);
-    if (r.status === 'gen_timeout') n_gen_timeout++;
-    else n_error++;
+    if (r.status === 'gen_timeout') {
+      // gen_timeout 入分母算 fail（能力/流程效率问题，CR-3）
+      n_valid++;
+      passSamples.push(0);
+      n_gen_timeout++;
+      continue;
+    }
+    // error = runner 基础设施错误（版本门禁 / flag 错配 / plugin 冲突），非能力 fail → 剔分母
+    // （与 calibrate aggregateRunResults 同口径；原实现入分母曾在 dist 门禁失败时假报
+    //  passRate=0.0 exit 0，而非 n_valid=0 → exit 2 "本轮无效"——/goal 会把假 0 当真实退步）
+    n_error++;
   }
 
   const passRate = n_valid > 0 ? n_pass / n_valid : null;
   const ci = passSamples.length >= 2 ? bootstrapProportionCi(passSamples) : null;
-  // oracle_missing 同 infra 计入"无法评估"分子（FR-006 floor + W-4 fail-closed）
-  const infraFailRate = results.length > 0 ? (n_infra + n_oracle_missing) / results.length : 0;
+  // infra / error / oracle_missing 都计入"无法评估"分子（FR-006 floor + W-4 fail-closed）
+  const infraFailRate = results.length > 0 ? (n_infra + n_error + n_oracle_missing) / results.length : 0;
 
   return { passRate, ci, n_valid, n_pass, n_infra, n_gen_timeout, n_error, n_oracle_missing, infraFailRate,
            n_total: results.length };

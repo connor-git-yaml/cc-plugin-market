@@ -1,9 +1,9 @@
 schemaVersion: 1
-generatedAt: "2026-06-10T15:53:03.408Z"
+generatedAt: "2026-07-04T05:56:33.870Z"
 id: "spectra"
 name: "Spectra"
 kind: "library-tooling"
-description: "Spectra v4.2.0（Feature 170a）— NPM 发布同步：包含 Feature 155 agent-context MCP tools（impact / context / detect_changes）。修复 npm publish 滞后导致全局安装 binary 缺工具的 Bug-1。v4.1.1（Feature 146）— LLM 并发优化器：默认并发 1→3（Sonnet 单请求 15-30s，大项目总耗时降 ~60-65%）+ p-limit ^6.1.0 替换手写信号量（移除 ~30 行含 H2 死锁补丁的实现）+ 三级配置链 BatchOptions.concurrency > SPECTRA_CONCURRENCY env > 默认 3。v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）"
+description: "Spectra v4.3.0（Feature 186 分发可靠性）— npm 重发 + 防漂移门禁：(1) Codex wrapper body sha256 指纹校验（生成端/校验端共用单一 Node helper，缺 sha 即 fail，挡 source 漂移与手改）；(2) spectra --version 输出 build commit 后缀（复用 F176 盖章，区分新旧 binary）；(3) prepare MCP 工具 ESM 死代码修复（裸 require→静态 import，detectedLanguages 真实注入）；(4) agent-context 3 处错误响应脱敏（不外漏绝对路径/stack）；(5) batch --help synopsis 补 graph-only 并加定点断言护栏。汇总自 F175-F196 修复链。v4.2.0（Feature 170a）— NPM 发布同步：包含 Feature 155 agent-context MCP tools（impact / context / detect_changes）。修复 npm publish 滞后导致全局安装 binary 缺工具的 Bug-1。v4.1.1（Feature 146）— LLM 并发优化器：默认并发 1→3（Sonnet 单请求 15-30s，大项目总耗时降 ~60-65%）+ p-limit ^6.1.0 替换手写信号量（移除 ~30 行含 H2 死锁补丁的实现）+ 三级配置链 BatchOptions.concurrency > SPECTRA_CONCURRENCY env > 默认 3。v4.1.0 — Python AST 函数级 Graph + Phase 2 Bug 修复（Feature 143）"
 owner:
   value: "unknown"
   source: "unknown"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spectra/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-06-10T15:53:03.442Z"
+    generatedAt: "2026-07-04T05:56:33.907Z"
   scorecard:
     path: "specs/products/spectra/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-06-10T15:53:03.443Z"
+    generatedAt: "2026-07-04T05:56:33.908Z"
 workflowRefs:
   - "spectra.init"
   - "spectra.generate"

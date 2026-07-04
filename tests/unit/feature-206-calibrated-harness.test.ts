@@ -806,7 +806,7 @@ describe('T-C3 computeValidationStats', () => {
     expect(stats.n_pass).toBe(2);
   });
 
-  it('W-6：error 与 gen_timeout 分开计数，均入分母算 fail', () => {
+  it('W-6（口径对齐 calibrate）：gen_timeout 入分母算 fail；error 剔分母计 infraFailRate', () => {
     const results: MockResult[] = [
       { task: 't1', cohort: 'c3', status: 'gen_timeout' },
       { task: 't2', cohort: 'c3', status: 'error' },
@@ -815,9 +815,22 @@ describe('T-C3 computeValidationStats', () => {
     const stats = computeValidationStats(results, oracle);
     expect(stats.n_gen_timeout).toBe(1);
     expect(stats.n_error).toBe(1);
-    expect(stats.n_valid).toBe(3);          // gen_timeout + error + success 都入分母
+    expect(stats.n_valid).toBe(2);          // gen_timeout + success 入分母；error 剔除
     expect(stats.n_pass).toBe(1);
-    expect(stats.passRate).toBeCloseTo(1 / 3, 5);
+    expect(stats.passRate).toBeCloseTo(1 / 2, 5);
+    expect(stats.infraFailRate).toBeCloseTo(1 / 3, 5); // error 计入"无法评估"率
+  });
+
+  it('全 error（如 dist 版本门禁失败）→ n_valid=0（调用方 W-4 fail-closed exit 2，不假报 passRate=0）', () => {
+    const results: MockResult[] = [
+      { task: 't1', cohort: 'c3', status: 'error' },
+      { task: 't2', cohort: 'c3', status: 'error' },
+      { task: 't3', cohort: 'c3', status: 'error' },
+    ];
+    const stats = computeValidationStats(results, oracle);
+    expect(stats.n_valid).toBe(0);
+    expect(stats.passRate).toBe(null);
+    expect(stats.infraFailRate).toBe(1);
   });
 
   it('W-4：success 但 oracle=null → 计 n_oracle_missing，剔分母（不算 fail）', () => {
