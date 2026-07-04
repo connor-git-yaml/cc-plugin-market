@@ -72,6 +72,32 @@ function cleanupContainer(instanceId, runId) {
   } catch { /* best-effort */ }
 }
 
+/**
+ * F206 仪器修复：起评前清空本 run 工作目录下的历史评测日志子树（logs/run_evaluation/**）。
+ *
+ * 背景：swebench harness 对"report.json 已存在"的 instance 会**跳过评测直接复用旧结论**
+ * （run_evaluation.py `if report_file.exists(): ... "N instances already run, skipping..."`）。
+ * runId 跨批复用（task__tool__rN 每批重置）时，新批的候选 patch 根本不会被评——
+ * 2026-07-04 校准批 25/25 个 c3 oracle 结论全部被 6-28/6-29 陈旧 report 顶替（c3=0.0 全假，
+ * 57KB 真实修复从未进过容器）。/goal 循环若不修此点：baseline 写 report 后每轮 validate
+ * 同 runId 全吃 baseline 陈货，度量永久冻结。
+ *
+ * 本次评测自己的日志在评测时重新生成，不受影响（forensic 保留的是"最新一次"评测的日志）。
+ *
+ * 缓存有**两层**，都要清（实测单清第一层不够）：
+ *   1. instance 层：logs/run_evaluation/<runId>/<model>/<instance>/report.json
+ *      —— run_evaluation 起批时把有 report 的 instance 从 dataset 过滤掉（"skipping..."）。
+ *   2. run 汇总层：<cwd>/<model>.<runId>.json
+ *      —— run_instance 开头命中即直接返回 cached {completed,resolved}，连 eval.sh 都不生成，
+ *         且本仓 parse 也会把这份陈汇总当结果喂给分类器（合成 pytest-exit-5 假象）。
+ */
+export function purgeStaleEvaluationLogs(runCwd, safeRunId) {
+  fs.rmSync(path.join(runCwd, 'logs', 'run_evaluation'), { recursive: true, force: true });
+  if (safeRunId) {
+    fs.rmSync(path.join(runCwd, `${MODEL_NAME}.${safeRunId}.json`), { force: true });
+  }
+}
+
 function runHarnessOnce({ datasetPath, predPath, instanceId, runId, cwd, timeoutMs, venvPath }) {
   const py = path.join(venvPath, 'bin', 'python');
   const args = ['-m', 'swebench.harness.run_evaluation',
@@ -114,7 +140,15 @@ export function runSwebenchInstance({ fixture: fixtureObj, fixturePath, candidat
   const instanceId = fixture.swebenchMeta.instanceId;
   const safeRunId = String(runId).replace(/[^A-Za-z0-9._-]/g, '_');
   const cwd = path.resolve(artifactsDir, safeRunId);
+  // codex W-1：拒绝退化 runId（''/'.'/'..'），并确保 cwd 严格位于 artifactsDir 之下——
+  // 下方 purge 会 rmSync logs 子树，路径逃逸 = 误删面扩大（生产入口 runId 形状安全，这里防未来调用方）
+  const artifactsRoot = path.resolve(artifactsDir);
+  if (!safeRunId || safeRunId === '.' || safeRunId === '..' || cwd === artifactsRoot || !cwd.startsWith(artifactsRoot + path.sep)) {
+    throw new Error(`[swebench-oracle] 非法 runId "${runId}"（解析后逃逸 artifactsDir，purge 保护拒绝）`);
+  }
   fs.mkdirSync(cwd, { recursive: true });
+  purgeStaleEvaluationLogs(cwd, safeRunId); // 陈旧 report（两层缓存）会让 harness 跳过评测复用旧结论（见函数 doc）
+
   // venv 必须解析为绝对路径：harness 以 cwd=artifactsDir 运行，相对 venv 路径会 ENOENT（spawn 静默失败）
   const absVenv = path.resolve(venvPath);
 

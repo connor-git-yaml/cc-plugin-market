@@ -44,6 +44,9 @@ import {
 import { EventEmitter } from 'node:events';
 import { preflightClaudeConnectivity } from '../../scripts/lib/generation-infra.mjs';
 
+// ── T-C10 swebench-oracle 陈旧 report 清理（F206 仪器修复）───────────────────
+import { purgeStaleEvaluationLogs, runSwebenchInstance } from '../../scripts/lib/swebench-oracle.mjs';
+
 // ── T-C0 parallel-run-pool ───────────────────────────────────────────────────
 import {
   ParallelRunPool,
@@ -964,5 +967,53 @@ describe('T-C5 planWarmupJobs — env 去重', () => {
   it('extraArgs 默认 --swebench-oracle（预热须真建 env 镜像）', () => {
     const jobs = planWarmupJobs(fixtures, { cohort: 'c3', resolveEnvKeys: () => new Map() });
     expect(jobs.every((j) => j.extraArgs.includes('--swebench-oracle'))).toBe(true);
+  });
+});
+
+// ── T-C10 purgeStaleEvaluationLogs（F206 仪器修复：陈旧 report 让 harness 跳过评测复用旧结论）──
+describe('T-C10 purgeStaleEvaluationLogs', () => {
+  it('两层缓存都清（instance report 子树 + run 级汇总）；本 run 其他产物（predictions 等）保留', () => {
+    const cwd = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-purge-'));
+    const staleInstDir = nodePath.join(cwd, 'logs', 'run_evaluation', 'rid', 'spectra-f187', 'inst');
+    fs.mkdirSync(staleInstDir, { recursive: true });
+    fs.writeFileSync(nodePath.join(staleInstDir, 'report.json'), '{"inst":{"resolved":false}}');
+    fs.writeFileSync(nodePath.join(cwd, 'spectra-f187.rid.json'), '{"resolved_ids":[]}'); // run 级汇总（第二层缓存）
+    fs.writeFileSync(nodePath.join(cwd, 'predictions.jsonl'), '{}');
+    purgeStaleEvaluationLogs(cwd, 'rid');
+    expect(fs.existsSync(nodePath.join(cwd, 'logs', 'run_evaluation'))).toBe(false);
+    expect(fs.existsSync(nodePath.join(cwd, 'spectra-f187.rid.json'))).toBe(false);
+    expect(fs.existsSync(nodePath.join(cwd, 'predictions.jsonl'))).toBe(true);
+  });
+  it('无 logs 目录 / 无汇总文件时幂等不抛', () => {
+    const cwd = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-purge-'));
+    expect(() => purgeStaleEvaluationLogs(cwd, 'rid')).not.toThrow();
+    expect(() => purgeStaleEvaluationLogs(cwd)).not.toThrow();
+  });
+
+  it('runSwebenchInstance 起评即 purge（钉死调用点：fetchRows 注入 throw 免跑 docker，陈旧两层已被清）', () => {
+    const artifactsDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-call-'));
+    const runId = 'task__tool__r1';
+    const cwd = nodePath.join(artifactsDir, runId);
+    const staleInst = nodePath.join(cwd, 'logs', 'run_evaluation', runId, 'spectra-f187', 'inst');
+    fs.mkdirSync(staleInst, { recursive: true });
+    fs.writeFileSync(nodePath.join(staleInst, 'report.json'), '{"inst":{"resolved":false}}');
+    fs.writeFileSync(nodePath.join(cwd, `spectra-f187.${runId}.json`), '{"resolved_ids":[]}');
+    const fixture = { swebenchMeta: { instanceId: 'inst', dataset: 'verified', failToPass: [], passToPass: [] } };
+    const r = runSwebenchInstance({
+      fixture, candidatePatch: 'diff --git a/x b/x', artifactsDir, runId,
+      fetchRows: () => { throw new Error('DATASET_MISMATCH: 测试注入'); },
+    });
+    expect(r.classification).toBe('error'); // dataset 阶段被注入中断（purge 之后才走到）
+    expect(fs.existsSync(nodePath.join(cwd, 'logs', 'run_evaluation'))).toBe(false);
+    expect(fs.existsSync(nodePath.join(cwd, `spectra-f187.${runId}.json`))).toBe(false);
+  });
+
+  it('退化 runId（.. / 空）→ 拒绝执行（purge 路径逃逸防护，codex W-1）', () => {
+    const artifactsDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f206-oracle-guard-'));
+    const fixture = { swebenchMeta: { instanceId: 'inst', dataset: 'verified' } };
+    for (const badId of ['..', '.', '']) {
+      expect(() => runSwebenchInstance({ fixture, candidatePatch: '', artifactsDir, runId: badId }))
+        .toThrow(/非法 runId/);
+    }
   });
 });
