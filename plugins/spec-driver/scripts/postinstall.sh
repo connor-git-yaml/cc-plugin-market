@@ -14,7 +14,7 @@ BOLD='\033[1m'
 
 # Plugin 信息
 PLUGIN_NAME="Spec Driver"
-PLUGIN_VERSION="4.2.1"
+PLUGIN_VERSION="4.2.2"
 MIN_CLAUDE_VERSION="1.0.0"
 
 # 推算插件根目录
@@ -42,6 +42,18 @@ write_plugin_path() {
   # 幂等写入路径文件
   if [[ -d "$PROJECT_DIR/.specify" ]]; then
     echo -n "$PLUGIN_DIR" > "$PROJECT_DIR/.specify/.spec-driver-path"
+
+    # 确保 ignore 规则就位，避免绝对路径泄漏进用户 git diff（Feature 207）。
+    # SessionStart hook 只写 .git/info/exclude（非 tracked，零 diff）——伦理面：hook 不应
+    # 静默修改用户 tracked 的 .gitignore；.gitignore 注入交由 init-project.sh（显式初始化）。
+    # 非 git repo 时 exclude 注入自动 skip（无 .git 目录）；但注意上方 .spec-driver-path 落盘
+    # 是路径发现机制的本职行为（7 个 SKILL 依赖此文件定位插件），不在 ignore 注入范围——
+    # 非 git 场景无 git diff 概念，该文件的 ignore 保护要等用户后续 git init + 跑 init-project 才补上。
+    # postinstall 先于 init 触发，须静默执行；全程 || true 防御 set -euo pipefail 下的连锁失败
+    if [[ -f "$SCRIPT_DIR/lib/ensure-gitignore.sh" ]]; then
+      source "$SCRIPT_DIR/lib/ensure-gitignore.sh"
+      ensure_spec_driver_git_exclude "$PROJECT_DIR" >/dev/null 2>&1 || true
+    fi
   else
     echo "[警告] 无法创建 $PROJECT_DIR/.specify/ 目录，跳过路径写入" >&2
   fi

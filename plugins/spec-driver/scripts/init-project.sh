@@ -46,6 +46,7 @@ ALT_CONFIG_FILE="${SPECIFY_DIR}/spec-driver.config.yaml"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 source "${SCRIPT_DIR}/lib/init-project-output.sh"
+source "${SCRIPT_DIR}/lib/ensure-gitignore.sh"
 SPECIFY_BASE_TEMPLATES_DIR="${PLUGIN_DIR}/templates/specify-base"
 FALLBACK_SPECIFY_TEMPLATES_DIR="${PLUGIN_DIR}/../../.specify/templates"
 DEFAULT_SCORECARD_DIR="${PLUGIN_DIR}/scorecards"
@@ -291,8 +292,63 @@ detect_spec_driver_skills() {
   fi
 }
 
+# 步骤 1a: 确保 Spec Driver 落盘产物的 ignore 规则就位（Feature 207，分层防线）
+# 分两条防线：
+#   (1) .git/info/exclude — 非 tracked 的主防线（零 diff 污染），仅 .git 为目录时执行
+#   (2) .gitignore        — 团队共享配置（.git/info/exclude 无法共享的兜底，覆盖 worktree/非 git 场景）
+# 防御：吞掉共享库的非零返回（极端只读文件系统等），只记录信号，绝不 exit 中断初始化
+ensure_gitignore_step() {
+  # 主防线：.git/info/exclude（非 git / worktree 场景返回 skipped）
+  local exclude_result
+  exclude_result="$(ensure_spec_driver_git_exclude "$PROJECT_ROOT")" || {
+    INIT_RESULTS+=("git_exclude:skip_error")
+    exclude_result="__handled__"
+  }
+  if [[ "$exclude_result" != "__handled__" ]]; then
+    case "$exclude_result" in
+      created:*)   INIT_RESULTS+=("git_exclude:created:${exclude_result#created:}") ;;
+      appended:*)  INIT_RESULTS+=("git_exclude:injected:${exclude_result#appended:}") ;;
+      ready:*)     INIT_RESULTS+=("git_exclude:ready") ;;
+      failed:*)    INIT_RESULTS+=("git_exclude:skip_error") ;;
+      skipped:*)   INIT_RESULTS+=("git_exclude:skipped") ;;
+      *)           INIT_RESULTS+=("git_exclude:unknown") ;;
+    esac
+  fi
+
+  # 兜底防线：.gitignore（团队共享配置）
+  local result
+  result="$(ensure_spec_driver_gitignore "$PROJECT_ROOT")" || {
+    INIT_RESULTS+=("gitignore:skip_error")
+    return 0
+  }
+
+  case "$result" in
+    created:*)
+      INIT_RESULTS+=("gitignore:created:${result#created:}")
+      ;;
+    appended:*)
+      INIT_RESULTS+=("gitignore:injected:${result#appended:}")
+      ;;
+    ready:*)
+      INIT_RESULTS+=("gitignore:ready")
+      ;;
+    failed:*)
+      # 写入失败（只读 FS 等）→ 复用既有 skip_error 文本分支
+      INIT_RESULTS+=("gitignore:skip_error")
+      ;;
+    skipped:*)
+      # 并发会话持锁 → 本次跳过检查，下次会话自然补齐（不等同 ready，勿撒谎为已就位）
+      INIT_RESULTS+=("gitignore:lock_skipped")
+      ;;
+    *)
+      INIT_RESULTS+=("gitignore:unknown")
+      ;;
+  esac
+}
+
 run_init_checks() {
   init_specify_dir
+  ensure_gitignore_step
   sync_specify_templates
   sync_scorecard_defaults
   ensure_project_context

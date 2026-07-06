@@ -120,6 +120,34 @@ print_init_text_result() {
         echo -e "  ⚠️  ${YELLOW}.specify/templates 仍缺少模板: ${missing}${NC}"
       fi
       ;;
+    git_exclude)
+      if [[ "$value" == ready ]]; then
+        echo -e "  ✅ .git/info/exclude 已含 Spec Driver 忽略规则"
+      elif [[ "$value" == created:* ]]; then
+        echo -e "  ✅ 已创建 .git/info/exclude 并写入 Spec Driver 忽略规则（非 tracked，零 diff）"
+      elif [[ "$value" == injected:* ]]; then
+        local n="${value#injected:}"
+        echo -e "  ✅ 已向 .git/info/exclude 追加 ${n} 条 Spec Driver 忽略规则（非 tracked，零 diff）"
+      elif [[ "$value" == skipped ]]; then
+        echo -e "  ℹ️  非标准 git 目录（非 git / worktree / submodule），跳过 .git/info/exclude 注入（由 .gitignore 覆盖）"
+      elif [[ "$value" == skip_error ]]; then
+        echo -e "  ⚠️  ${YELLOW}.git/info/exclude 注入失败，已跳过（不影响初始化）${NC}"
+      fi
+      ;;
+    gitignore)
+      if [[ "$value" == ready ]]; then
+        echo -e "  ✅ .gitignore 已含 Spec Driver 忽略规则"
+      elif [[ "$value" == created:* ]]; then
+        echo -e "  ✅ 已创建 .gitignore 并写入 Spec Driver 忽略规则"
+      elif [[ "$value" == injected:* ]]; then
+        local n="${value#injected:}"
+        echo -e "  ✅ 已向 .gitignore 追加 ${n} 条 Spec Driver 忽略规则"
+      elif [[ "$value" == skip_error ]]; then
+        echo -e "  ⚠️  ${YELLOW}.gitignore 注入失败，已跳过（不影响初始化）${NC}"
+      elif [[ "$value" == lock_skipped ]]; then
+        echo -e "  ⏭️  ${YELLOW}.gitignore 注入被并发会话锁定，本次跳过（下次会话自动补齐）${NC}"
+      fi
+      ;;
   esac
 }
 

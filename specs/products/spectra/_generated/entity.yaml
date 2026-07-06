@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-07-04T05:56:33.870Z"
+generatedAt: "2026-07-06T07:40:40.057Z"
 id: "spectra"
 name: "Spectra"
 kind: "library-tooling"
@@ -33,12 +33,12 @@ quality:
     path: "specs/products/spectra/_generated/quality-report.json"
     status: "pass"
     score: 100
-    generatedAt: "2026-07-04T05:56:33.907Z"
+    generatedAt: "2026-07-06T07:40:40.093Z"
   scorecard:
     path: "specs/products/spectra/_generated/scorecard-report.json"
     status: "warn"
     score: 90
-    generatedAt: "2026-07-04T05:56:33.908Z"
+    generatedAt: "2026-07-06T07:40:40.095Z"
 workflowRefs:
   - "spectra.init"
   - "spectra.generate"

@@ -1,6 +1,6 @@
 # Spec Driver Adoption Report
 
-- Generated At: 2026-07-04T05:56:33.906Z
+- Generated At: 2026-07-06T07:40:40.093Z
 - Status: insufficient-data
 - Total Runs: 0
 - Active Workflows: 0
