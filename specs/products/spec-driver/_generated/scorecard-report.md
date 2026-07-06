@@ -2,7 +2,7 @@
 
 > **Product**: spec-driver
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-07-06T06:21:42.605Z
+> **Generated**: 2026-07-06T14:49:58.187Z
 > **Status**: WARN
 > **Score**: 90/100
 
