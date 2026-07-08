@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FixComplianceVerdictEvent",
+  "description": "写入 .specify/runs/YYYY-MM.jsonl 的新增审计事件类型，与既有 workflow-run-summary 事件共存于同一月度文件。仅在不合规（block/warn）或判定异常/降级放行时写入；合规放行不写入。",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "eventType",
+    "recordedAt",
+    "sessionId",
+    "enforcement",
+    "closureForm",
+    "compliant",
+    "missing",
+    "degraded",
+    "diagnostics"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "eventType": { "type": "string", "const": "fix-compliance-verdict" },
+    "recordedAt": { "type": "string", "format": "date-time" },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "enforcement": { "type": "string", "enum": ["block", "warn"] },
+    "closureForm": { "type": "string", "enum": ["repair", "no-op", "undetermined"] },
+    "compliant": {
+      "type": ["boolean", "null"],
+      "description": "null 表示 FR-013 fail-open 场景——判定过程异常导致未能得出合规结论，仅携带 diagnostics 落盘"
+    },
+    "missing": { "type": "array", "items": { "type": "string" } },
+    "blockCount": { "type": ["integer", "null"], "description": "仅 enforcement=block 时有意义；warn 档恒为 null" },
+    "degraded": { "type": "boolean", "description": "true 表示本次为达到阻断上限后的降级放行" },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "transcript-unavailable",
+          "transcript-too-large",
+          "parse-timeout",
+          "internal-error",
+          "config-degraded",
+          "state-storage-unavailable",
+          "payload-invalid"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}
