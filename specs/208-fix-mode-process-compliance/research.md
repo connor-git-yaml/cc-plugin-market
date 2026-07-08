@@ -172,3 +172,14 @@ stdin payload 中的 `stop_hook_active` 字段**不参与**核心判定（阻断
 
 - transcript JSONL 单行 envelope 的确切字段路径（`message.content[].type === 'tool_use'` 等）沿用 Claude Code 标准会话日志格式的通行认知，尚未在本次 plan 阶段读取一份完整真实样本逐字段核对（`trace.md` 记录的实测只锚定了展开痕迹文本与 `Agent` 委派工具名两个具体事实，未逐字段核对完整 envelope 结构）。**implement 阶段第一项任务应读取一份真实 fix 会话 transcript 样本，逐字段核对解析器假设**，若结构有出入及时修正 `fix-compliance-io.mjs` 的解析逻辑，不应等到测试失败才发现。
 - `MAX_TRANSCRIPT_BYTES` 与性能 p95 目标的具体数值需要实测校准（见 D6）。
+
+## 实测校准记录（T001，2026-07-09，主编排器基于真实 F206 headless 评测 transcript 完成）
+
+样本源：`~/.claude/projects/-Users-connorlu--spec-driver-bench-worktrees-SWE-V008-*-r1/` 与 `SWE-V009-*-r1/`（F206 真实评测留存 transcript 文件，非 stream-json），逐字段核对结论：
+
+1. **headless 评测的 transcript 文件真实落盘**且路径按 cwd slug 组织；同一 slug 目录含多个 session 文件（runId 跨批复用 + 子代理 sidechain 独立成文件）——hook 消费 payload 的 `transcript_path` 指向当前会话单文件，多文件共存不影响判定。
+2. **envelope 结构确认**：顶层 `type: "user"|"assistant"`；`message.content` 为字符串（部分 user 消息）或内容块数组；文本块 `{type:"text", text}`；工具调用块 `{type:"tool_use", name, input}`；工具结果在 user 角色消息的 `{type:"tool_result", ...}` 块中（反伪造过滤的排除对象，D1 修订成立）。解析器须同时容纳 `content` 字符串与数组两种形态。
+3. **展开痕迹**：合规与坍塌 fix 会话均恰好 1 个锚点（user 文本块，前缀 `Base directory for this skill: <worktree 插件路径>/skills/spec-driver-fix`）——headless `--plugin-dir` 场景锚点路径指向 worktree 源码目录，检测正则（路径尾 `/skills/spec-driver-<mode>`）命中。
+4. **委派记录**：合规 V009 r1 三个 fix 会话 = 4-6 次 `name:"Agent"` tool_use，`input.subagent_type` **稳定存在**（`spec-driver:plan/tasks/implement/verify`，完整路径另有 `spec-driver:spec-review`/`spec-driver:quality-review`）→ 修复收口角色配额（implement≥1 + verify≥1）天然满足；V008 r1 坍塌会话 = 0 委派 → 判定器将拦截。desc 存在模型改写现象（见 premise_verification 2），subagent_type 权威层设计必要。
+5. **体积分布**：fix 会话 transcript 0.09-0.31MB；同目录最大非 fix 会话 7.6MB。`MAX_TRANSCRIPT_BYTES=20MB` 上限保守合理（≈实测 fix 会话的 60 倍），维持 20MB 不变；p95 实测归 T030。
+6. **对实现的影响**：D1/D3/D6 假设全部成立，无需修正；`readTranscriptEntries` 须支持 `content` 字符串形态（见第 2 条）——此点已并入 T009 实现要求。
