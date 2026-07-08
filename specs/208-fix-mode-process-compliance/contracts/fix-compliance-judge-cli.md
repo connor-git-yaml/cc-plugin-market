@@ -31,7 +31,7 @@ EOF
 | `enforcement=warn` 且不合规 | 0 | （空） | `[FIX-COMPLIANCE][WARN] {反馈文本}` |
 | `enforcement=block` 且不合规，`blockCount < 2` | **2** | （空） | `[FIX-COMPLIANCE] {反馈文本：缺失项 + 补救指引}` |
 | `enforcement=block` 且不合规，`blockCount >= 2`（降级） | 0 | （空） | `[FIX-COMPLIANCE][GATE-DEGRADED] {反馈文本}` |
-| 判定过程异常（transcript 缺失/超限/解析失败/内部异常） | 0 | （空） | （可选诊断，非强制） |
+| 判定过程异常（transcript 缺失/超限/解析失败/payload 非法/内部异常） | 0 | （空） | （可选诊断，非强制）；**必须** best-effort 落盘一条 `fix-compliance-verdict` 事件（`compliant: null` + 具体 diagnostics，FR-013 loud 半边）；仅 `enforcement=off` 例外（零接触优先，off 短路发生在任何 transcript 读取与 fail-open 分支之前——FR-015 判定顺序第 2 步） |
 
 stderr 反馈文本前缀 `[FIX-COMPLIANCE]` 用于与既有非阻断型 `stop-task-check.sh` 的 `[提醒]` 前缀相区分（FR-010）。
 

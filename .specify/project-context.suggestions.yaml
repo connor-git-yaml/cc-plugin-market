@@ -1,5 +1,5 @@
 schemaVersion: 1
-generatedAt: "2026-07-06T14:49:58.203Z"
+generatedAt: "2026-07-08T18:25:08.082Z"
 status: "advisory"
 contextSource:
   state: "yaml"
@@ -73,14 +73,14 @@ suggestions:
     suggestedChanges:
       - field: "workflow_preferences.default_workflow"
         action: "set"
-        value: "spec-driver-doc"
+        value: "spec-driver-fix"
       - field: "workflow_preferences.mature_spec_workflow"
         action: "set"
         value: "spec-driver-implement"
     evidence:
       - sourceType: "adoption-report"
         path: "specs/products/spec-driver/_generated/adoption-report.json"
-        note: "最近 run summary 中最常使用的 workflow 是 spec-driver-doc（0 次）。"
+        note: "最近 run summary 中最常使用的 workflow 是 spec-driver-fix（1 次）。"
       - sourceType: "workflow-index"
         path: "specs/products/spec-driver/_generated/workflow-index.json"
         note: "workflow registry 已包含成熟 spec 专用入口 spec-driver-implement。"

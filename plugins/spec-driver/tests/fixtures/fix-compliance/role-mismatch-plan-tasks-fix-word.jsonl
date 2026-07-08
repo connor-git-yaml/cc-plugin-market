@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复登录超时问题"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"spec-driver:plan","description":"规划修复方案"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"spec-driver:tasks","description":"生成修复任务"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"修复方案已规划。"}]}}

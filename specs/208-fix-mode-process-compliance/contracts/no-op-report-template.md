@@ -44,3 +44,5 @@ no-op 收口的最低委派要求 = ≥1 条 **no-op 核实类**委派：对 `su
 | no-op 收口 | `{feature_dir}/fix-report.md`（no-op 变体） | `/^##\s*判定依据\s*$/m`（本契约新增） |
 
 **判定器如何区分"这是修复收口的 fix-report.md 还是 no-op 收口的 fix-report.md"**：文件路径相同（均为 `{feature_dir}/fix-report.md`），区分依据是**内容特征**而非路径——若文件内容命中 `## 判定依据` 标题，判定为 no-op 变体走 no-op 判据集；否则按修复收口判据集（`Root Cause` 章节 + 委派角色匹配）校验。两种模板的标题集合刻意设计为互斥（修复收口模板不含 `## 判定依据` 标题，no-op 模板不含 `Root Cause` 字样），避免误判。
+
+**双锚点取严规则（codex implement 审查 W-1 处置）**：若 fix-report.md 同时命中 `Root Cause` 与 `## 判定依据` 两个锚点（模板被混写），closureForm 判为 **repair**（取更严的修复收口判据集）——既声称完成根因分析就必须满足 verification-report + implement/verify 双角色配额，不允许借 no-op 的更低门槛绕过。

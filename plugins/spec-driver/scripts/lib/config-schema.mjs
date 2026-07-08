@@ -132,6 +132,15 @@ if (zodAvailable) {
     concurrency: concurrencySchema.optional(),
   }).strict().optional();
 
+  // fix_compliance 段（Feature 208，FR-015）：fix 模式流程依从性强制程度。
+  // 用 .default({}) 而非 .optional()：省略该段时 enforcement 被 default 填为 'block'，
+  // 使 validateConfig 输出始终含 fix_compliance.enforcement（与 goal_loop 同惯例）。
+  // 注意：Stop hook 判定路径刻意不 import 本模块（走 simple-yaml 非抛出式读取，见
+  // contracts/fix-compliance-config-field.md）；本 schema 只服务 validate-config 声明式校验。
+  const fixComplianceSchema = z.object({
+    enforcement: z.enum(['block', 'warn', 'off']).default('block'),
+  }).default({});
+
   specDriverConfigSchema = z.object({
     preset: z.enum(['balanced', 'quality-first', 'cost-efficient']).default('balanced'),
     batch: batchSchema,
@@ -147,6 +156,7 @@ if (zodAvailable) {
     retry: retrySchema,
     progress: progressSchema,
     goal_loop: goalLoopSchema,
+    fix_compliance: fixComplianceSchema,
   }).strict();
 }
 
@@ -180,6 +190,8 @@ export const BUILTIN_DEFAULTS = {
   'goal_loop.max_tool_invocations': 50,
   // F204：full 轮必需命令 kind 类别，默认 []（跳过校验，保向后兼容）。
   'goal_loop.full_required_kinds': [],
+  // fix_compliance 默认值（Feature 208，FR-015）——block 为缺省强制程度。
+  'fix_compliance.enforcement': 'block',
 };
 
 /** preset 默认值表 */
@@ -286,7 +298,7 @@ export function suggestField(unknown, knownFields) {
 const KNOWN_TOP_LEVEL_FIELDS = [
   'preset', 'batch', 'agents', 'model_compat', 'codex', 'codex_thinking',
   'research', 'verification', 'quality_gates', 'gate_policy',
-  'gates', 'retry', 'progress', 'goal_loop',
+  'gates', 'retry', 'progress', 'goal_loop', 'fix_compliance',
 ];
 
 /**
@@ -464,6 +476,7 @@ export function resolveEffectiveConfig(options) {
     'goal_loop.max_verify_seconds',
     'goal_loop.max_tool_invocations',
     'goal_loop.full_required_kinds',
+    'fix_compliance.enforcement',
   ];
 
   for (const dotPath of nestedKeys) {

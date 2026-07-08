@@ -207,3 +207,58 @@ describe('config-schema: goal_loop.full_required_kinds（F204）', () => {
     assert.deepEqual(BUILTIN_DEFAULTS['goal_loop.full_required_kinds'], []);
   });
 });
+
+describe('config-schema: fix_compliance 段（Feature 208 FR-015）', () => {
+  it('合法三值（block/warn/off）均通过校验', () => {
+    for (const value of ['block', 'warn', 'off']) {
+      const result = validateConfig({ fix_compliance: { enforcement: value } });
+      assert.equal(result.success, true, `enforcement=${value} 应通过`);
+      assert.deepEqual(errorsOf(result), [], `enforcement=${value} 不应有 error`);
+    }
+  });
+
+  it('非法 enforcement 值报 error', {
+    skip: !zodAvailable && '缺 zod 时降级为 best-effort，不做枚举校验',
+  }, () => {
+    const result = validateConfig({ fix_compliance: { enforcement: 'strict' } });
+    assert.equal(result.success, false);
+    assert.ok(errorsOf(result).length > 0, '非法枚举应产生 error 级诊断');
+  });
+
+  it('省略 fix_compliance → 通过，data 补默认 block', () => {
+    const result = validateConfig({ preset: 'balanced' });
+    assert.equal(result.success, true);
+    assert.deepEqual(errorsOf(result), []);
+    assert.equal(result.data.fix_compliance.enforcement, 'block', '省略时应被 zod default 填为 block');
+  });
+
+  it('近似拼写 fix_complianc 会建议 fix_compliance（确认已登记为已知顶层字段）', {
+    skip: !zodAvailable && '缺 zod 时降级为 best-effort 接受，不产生未知字段诊断',
+  }, () => {
+    const result = validateConfig({ fix_complianc: { enforcement: 'block' } });
+    assert.equal(result.success, false);
+    const err = errorsOf(result).find((d) => d.code === 'config.unknown-field');
+    assert.ok(err, '应报未知字段错误');
+    assert.equal(err.suggestion, 'fix_compliance', '应建议 fix_compliance');
+  });
+
+  it('resolveEffectiveConfig 缺省得内置默认 block', () => {
+    const entries = resolveEffectiveConfig({ configYaml: {} });
+    const entry = entries.find((e) => e.key === 'fix_compliance.enforcement');
+    assert.ok(entry, '应展示 fix_compliance.enforcement 行');
+    assert.equal(entry.value, 'block');
+    assert.equal(entry.source, '内置默认');
+  });
+
+  it('resolveEffectiveConfig 显式配置时展示配置值', () => {
+    const entries = resolveEffectiveConfig({ configYaml: { fix_compliance: { enforcement: 'warn' } } });
+    const entry = entries.find((e) => e.key === 'fix_compliance.enforcement');
+    assert.ok(entry);
+    assert.equal(entry.value, 'warn');
+    assert.equal(entry.source, 'config.yaml');
+  });
+
+  it('BUILTIN_DEFAULTS 含 fix_compliance.enforcement=block', () => {
+    assert.equal(BUILTIN_DEFAULTS['fix_compliance.enforcement'], 'block');
+  });
+});

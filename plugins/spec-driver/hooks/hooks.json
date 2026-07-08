@@ -42,6 +42,15 @@
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/stop-task-check.sh"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/stop-fix-compliance-check.sh"
+          }
+        ]
       }
     ],
     "WorktreeCreate": [

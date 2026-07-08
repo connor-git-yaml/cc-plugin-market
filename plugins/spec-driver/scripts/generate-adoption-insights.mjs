@@ -18,6 +18,14 @@ import { readJsonArtifact, writeJsonArtifact, writeMarkdownArtifact } from './li
 const SCHEMA_VERSION = 1;
 const PRODUCT_ID = 'spec-driver';
 
+/**
+ * 已知的非 summary 事件类型白名单（Feature 208，data-model.md §9）。
+ * 这些事件与 workflow-run-summary 共存于同一 .specify/runs/*.jsonl，但不参与 adoption 统计。
+ * why 需要白名单：normalizeRunEvent 对非 summary 行返回 null → 原逻辑会计入 invalidLineCount 并
+ * 产生"忽略无效 run event"warning，污染 adoption 报告 invalid 统计。白名单命中者静默 skip。
+ */
+const KNOWN_NON_SUMMARY_EVENT_TYPES = new Set(['fix-compliance-verdict']);
+
 function parseArgs(argv) {
   const args = {
     projectRoot: process.cwd(),
@@ -126,6 +134,10 @@ function readRunLogs(projectRoot) {
       const line = lines[index];
       try {
         const parsed = JSON.parse(line);
+        // 已知非 summary 事件类型（如 fix-compliance-verdict）静默 skip：不计 invalid、不产生 warning
+        if (isObject(parsed) && KNOWN_NON_SUMMARY_EVENT_TYPES.has(parsed.eventType)) {
+          continue;
+        }
         const normalized = normalizeRunEvent(parsed);
         if (normalized) {
           events.push(normalized);

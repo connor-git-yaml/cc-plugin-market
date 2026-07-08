@@ -25,6 +25,14 @@ function parseArgs(argv) {
     artifacts: [],
     warnings: [],
     json: false,
+    complianceVerdict: null,
+  };
+
+  // FR-014：仅当出现任意 --compliance-* flag 时才实例化 complianceVerdict 对象，
+  // 未传参时保持 null → 事件对象不含该键（向后兼容，字节级不变）。
+  const ensureComplianceVerdict = () => {
+    if (!args.complianceVerdict) args.complianceVerdict = {};
+    return args.complianceVerdict;
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -89,6 +97,26 @@ function parseArgs(argv) {
         args.warnings.push(...splitList(argv[index + 1]));
         index += 1;
         break;
+      case '--compliance-closure-form':
+        ensureComplianceVerdict().closureForm = argv[index + 1] ?? null;
+        index += 1;
+        break;
+      case '--compliance-compliant':
+        ensureComplianceVerdict().compliant = parseBooleanFlag(argv[index + 1]);
+        index += 1;
+        break;
+      case '--compliance-missing':
+        ensureComplianceVerdict().missing = splitList(argv[index + 1]);
+        index += 1;
+        break;
+      case '--compliance-degraded':
+        ensureComplianceVerdict().degraded = parseBooleanFlag(argv[index + 1]);
+        index += 1;
+        break;
+      case '--compliance-block-count':
+        ensureComplianceVerdict().blockCount = parseOptionalNumber(argv[index + 1]);
+        index += 1;
+        break;
       case '--json':
         args.json = true;
         break;
@@ -147,6 +175,12 @@ export function recordWorkflowRun(options = {}) {
     warnings,
   };
 
+  // FR-014：仅当调用方显式提供 complianceVerdict 时才追加该键（未提供 → 事件字节级不变）。
+  const complianceVerdict = normalizeComplianceVerdict(options.complianceVerdict);
+  if (complianceVerdict) {
+    event.complianceVerdict = complianceVerdict;
+  }
+
   const runsDir = path.join(projectRoot, '.specify', 'runs');
   fs.mkdirSync(runsDir, { recursive: true });
   const targetFile = path.join(runsDir, `${finishedAt.slice(0, 7)}.jsonl`);
@@ -180,6 +214,47 @@ function resolveDurationMs(durationMs, startedAt, finishedAt) {
   }
   const delta = Date.parse(finishedAt) - Date.parse(startedAt);
   return Number.isFinite(delta) && delta >= 0 ? delta : null;
+}
+
+function parseBooleanFlag(rawValue) {
+  const value = normalizeString(rawValue);
+  if (value === null) {
+    return null;
+  }
+  if (value.toLowerCase() === 'true') {
+    return true;
+  }
+  if (value.toLowerCase() === 'false') {
+    return false;
+  }
+  return null;
+}
+
+/**
+ * 归一化 complianceVerdict（FR-014）。传入 null/undefined/非对象 → 返回 null（不追加事件键）。
+ * 仅保留契约字段（closureForm/compliant/missing/degraded/blockCount），忽略未知字段。
+ */
+function normalizeComplianceVerdict(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const verdict = {};
+  if (typeof raw.closureForm === 'string') {
+    verdict.closureForm = raw.closureForm;
+  }
+  if (typeof raw.compliant === 'boolean') {
+    verdict.compliant = raw.compliant;
+  }
+  if (Array.isArray(raw.missing)) {
+    verdict.missing = raw.missing.map((entry) => normalizeString(entry)).filter(Boolean);
+  }
+  if (typeof raw.degraded === 'boolean') {
+    verdict.degraded = raw.degraded;
+  }
+  if (typeof raw.blockCount === 'number' && Number.isFinite(raw.blockCount)) {
+    verdict.blockCount = raw.blockCount;
+  }
+  return Object.keys(verdict).length > 0 ? verdict : null;
 }
 
 function parseOptionalNumber(rawValue) {

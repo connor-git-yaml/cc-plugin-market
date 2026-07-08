@@ -183,3 +183,9 @@ stdin payload 中的 `stop_hook_active` 字段**不参与**核心判定（阻断
 4. **委派记录**：合规 V009 r1 三个 fix 会话 = 4-6 次 `name:"Agent"` tool_use，`input.subagent_type` **稳定存在**（`spec-driver:plan/tasks/implement/verify`，完整路径另有 `spec-driver:spec-review`/`spec-driver:quality-review`）→ 修复收口角色配额（implement≥1 + verify≥1）天然满足；V008 r1 坍塌会话 = 0 委派 → 判定器将拦截。desc 存在模型改写现象（见 premise_verification 2），subagent_type 权威层设计必要。
 5. **体积分布**：fix 会话 transcript 0.09-0.31MB；同目录最大非 fix 会话 7.6MB。`MAX_TRANSCRIPT_BYTES=20MB` 上限保守合理（≈实测 fix 会话的 60 倍），维持 20MB 不变；p95 实测归 T030。
 6. **对实现的影响**：D1/D3/D6 假设全部成立，无需修正；`readTranscriptEntries` 须支持 `content` 字符串形态（见第 2 条）——此点已并入 T009 实现要求。
+
+### 复核补充（T006/T009 实现期，2026-07-09）
+
+实现前抽查 1 份含 spec-driver-fix 展开的真实 transcript（`~/.claude/projects/...SWE-V003...r3/*.jsonl`）复核，前六条结论全部再确认成立。补记一项原记录未显式覆盖的字段形态：
+
+7. **顶层 `type` 非二元**：除 `user`/`assistant` 外，真实 transcript 还存在 `queue-operation`/`attachment`/`last-prompt` 等其他顶层 `type` 条目（这些条目无 `message.content` 或结构不同）。对实现的影响：`normalizeTranscriptEntry` 须对非 `user`/`assistant` 角色与缺失 `message.content` 的条目做**空集容错**（`textBlocks`/`toolUseBlocks` 归空数组，不抛错），并在语义上——展开痕迹只认 `role==='user'` 文本块、委派只认 `role==='assistant'` 的 `tool_use` 块——天然排除这些噪声条目。此容错已落入 T006 core `normalizeTranscriptEntry` 与 T009 io `readTranscriptEntries`。

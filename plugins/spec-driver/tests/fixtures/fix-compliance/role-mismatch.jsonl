@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复登录超时问题"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"spec-driver:tech-research","description":"调研相关技术方案"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Write","input":{"file_path":"specs/301-fix-sample-bug/fix-report.md","content":"# Fix Report"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"修复完成。"}]}}

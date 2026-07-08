@@ -1,6 +1,6 @@
 # Spec Driver
 
-> 当前发布版本: v4.2.2
+> 当前发布版本: v4.3.0
 
 **自治研发编排器** — 支持 8 种模式（feature/implement/story/fix/resume/sync/doc/refactor），一键触发 Spec-Driven Development 全流程。基于 orchestration.yaml 配置驱动，含 6 个质量门禁和 15 个专业子代理。
 
@@ -211,6 +211,38 @@ codex_thinking:
 ```
 
 说明：在 Codex 执行时，`opus/sonnet/haiku` 语义会先映射到 `gpt-5.4`，再通过 `codex_thinking` 选择思考等级，`codex.service_tier` 用于控制服务层级。
+
+## fix 模式流程依从性（fix_compliance）
+
+fix 模式默认挂载一个阻断型 `Stop` hook（`stop-fix-compliance-check.sh`），在 fix 会话结束时机械校验本次修复是否真正走完了标准流程——防止"直接输出一句『已修复』就收口"这类流程坍塌。判定完全基于 transcript 客观记录与磁盘制品状态（零 LLM、零子代理委派），不采信模型自陈。
+
+通过 `spec-driver.config.yaml` 配置强制程度：
+
+```yaml
+fix_compliance:
+  enforcement: block  # block（默认）| warn | off
+```
+
+| 取值 | 语义 |
+|------|------|
+| `block`（默认） | 不合规收口 → 阻断（exit 2）并向模型回注具体补救指引，驱动其补齐流程或走合法 no-op 出口 |
+| `warn` | 不合规收口 → 不阻断，仅在 stderr 输出 `[FIX-COMPLIANCE][WARN]` 提示 |
+| `off` | 完全关闭该判定，fix 会话零接触 |
+
+**两条合法收口路径**（满足其一即判合规）：
+
+- **完整修复路径**：诊断（`fix-report.md` 含 Root Cause）→ 委派 implement 子代理修复 → 委派 verify 子代理验证（产出 `verification/verification-report.md`）。
+- **确认无需改动路径**（no-op 一等公民出口）：当诊断结论是"问题已不存在/无需代码改动"时，写入含 `## 判定依据` 章节（具体证据、非占位）的 `fix-report.md`，并至少委派 1 次 verify 类子代理交叉核实该判断。0 委派的"无需改动"仍会被判不合规——防止把"懒得修"伪装成"不需要修"。
+
+**stderr 前缀含义**：
+
+| 前缀 | 含义 |
+|------|------|
+| `[FIX-COMPLIANCE]` | block 档不合规阻断，附缺失项 + 补救指引 |
+| `[FIX-COMPLIANCE][WARN]` | warn 档不合规提示（不阻断） |
+| `[FIX-COMPLIANCE][GATE-DEGRADED]` | 降级放行——同一会话不合规阻断达上限（2 次）后自动放行，避免死循环，并落盘可追溯的降级审计记录 |
+
+阻断次数在单个会话内有上限（2 次），达到上限后即使仍不合规也会降级放行（`[GATE-DEGRADED]`），确保不会产生死循环；该机制仅对 fix 会话生效，feature/story 模式与普通会话零触发。
 
 ## 子代理列表
 
