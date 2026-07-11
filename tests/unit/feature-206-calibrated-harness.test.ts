@@ -37,6 +37,7 @@ import {
   computeValidationStats,
   compareWithBaseline,
   readOraclePassed,
+  readOracleOutcome,
   buildValidationJobs,
 } from '../../scripts/eval-validate.mjs';
 
@@ -854,6 +855,162 @@ describe('T-C3 computeValidationStats', () => {
     expect(stats.n_valid).toBe(0);
     expect(stats.passRate).toBeNull();
     expect(stats.n_oracle_missing).toBe(1);
+    expect(stats.infraFailRate).toBe(1);
+  });
+
+  // ── F210：oracle-error 第四态（仪器坏了，非候选 fail）─────────────────────────
+  // 回调返回 'oracle_error' 哨兵 → 剔分母、单独计数，不伪装成 passRate=0.0
+  const outcomeOracle = (r: MockResult) => {
+    if (r.fixturePath === '/pass') return true;
+    if (r.fixturePath === '/fail') return false;
+    if (r.fixturePath === '/oracle_error') return 'oracle_error';
+    return null;
+  };
+
+  it('F210：success + getOraclePassed 返回 oracle_error → 计入 n_oracle_error，剔分母（不算 fail）', () => {
+    const results: MockResult[] = [
+      { task: 't1', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+      { task: 't2', cohort: 'c3', status: 'success', fixturePath: '/pass' },
+    ];
+    const stats = computeValidationStats(results, outcomeOracle);
+    expect(stats.n_oracle_error).toBe(1);
+    expect(stats.n_valid).toBe(1);           // 仅 t2 入分母
+    expect(stats.n_pass).toBe(1);
+    expect(stats.passRate).toBe(1);          // 未被 oracle_error 拉低成 0.5
+    expect(stats.infraFailRate).toBeCloseTo(0.5, 5);
+  });
+
+  it('F210：全 oracle_error → n_valid=0 + passRate=null（fail-closed 触发条件），infraFailRate=1', () => {
+    const results: MockResult[] = [
+      { task: 't1', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+      { task: 't2', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+    ];
+    const stats = computeValidationStats(results, outcomeOracle);
+    expect(stats.n_oracle_error).toBe(2);
+    expect(stats.n_valid).toBe(0);
+    expect(stats.passRate).toBeNull();
+    expect(stats.infraFailRate).toBe(1);
+  });
+
+  it('F210：oracle_error 与 error/infra-status/oracle_missing 混合 → 四桶互不覆盖', () => {
+    const results: MockResult[] = [
+      { task: 't1', cohort: 'c3', status: 'infra' },
+      { task: 't2', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+      { task: 't3', cohort: 'c3', status: 'success', fixturePath: '/unknown' }, // oracle null
+      { task: 't4', cohort: 'c3', status: 'error' },
+    ];
+    const stats = computeValidationStats(results, outcomeOracle);
+    expect(stats.n_infra).toBe(1);
+    expect(stats.n_oracle_error).toBe(1);
+    expect(stats.n_oracle_missing).toBe(1);
+    expect(stats.n_error).toBe(1);
+    expect(stats.n_valid).toBe(0);
+  });
+
+  it('F210 truthy 哨兵防御：oracle_error 是 truthy 字符串但绝不计 pass（锁定分支顺序，codex W-4）', () => {
+    const results: MockResult[] = [
+      { task: 't1', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+      { task: 't2', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+      { task: 't3', cohort: 'c3', status: 'success', fixturePath: '/oracle_error' },
+    ];
+    // 回调恒返 'oracle_error'（truthy）：若哨兵分支被挪到 if (passed) 之后会被误计 pass
+    const stats = computeValidationStats(results, () => 'oracle_error');
+    expect(stats.n_pass).toBe(0);
+    expect(stats.n_valid).toBe(0);
+    expect(stats.n_oracle_error).toBe(3);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F210: eval-validate — readOracleOutcome 四态读取（oracle-error 假报修复）
+// ─────────────────────────────────────────────────────────────────────────────
+describe('F210 readOracleOutcome（classification 四态：pass/fail/oracle_error/null）', () => {
+  const tmpFixture = (obj: object): string => {
+    const p = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f210-outcome-')), 'full.json');
+    fs.writeFileSync(p, JSON.stringify(obj));
+    return p;
+  };
+
+  it('classification=pass → true', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { classification: 'pass', passed: true } } }))).toBe(true);
+  });
+
+  it('classification=fail → false（跑了但 fail，候选真挂）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { classification: 'fail', passed: false } } }))).toBe(false);
+  });
+
+  it('classification=error + failureSource=infra（venv 缺失等）→ oracle_error（核心回归用例）', () => {
+    expect(readOracleOutcome(tmpFixture({
+      taskExecution: { primaryOracle: { classification: 'error', failureSource: 'infra', passed: false } },
+    }))).toBe('oracle_error');
+  });
+
+  it('classification=error + failureSource=fixture（dataset mismatch）→ oracle_error（codex W-1：夹具错同桶）', () => {
+    expect(readOracleOutcome(tmpFixture({
+      taskExecution: { primaryOracle: { classification: 'error', failureSource: 'fixture', passed: false } },
+    }))).toBe('oracle_error');
+  });
+
+  it('classification=unavailable（legacy）→ null（codex W-2：与 classifyRunForRanking 同口径剔分母）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { classification: 'unavailable' } } }))).toBe(null);
+  });
+
+  it('classification 为未知漂移值（weird-future-value）→ null（codex W-2 fail-closed）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { classification: 'weird-future-value' } } }))).toBe(null);
+  });
+
+  it('legacy 无 classification 字段（仅 {kind,passed:true}）→ true（向后兼容回退二值）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { kind: 'swebench', passed: true } } }))).toBe(true);
+  });
+
+  it('legacy 无 classification 字段（仅 {kind,passed:false}）→ false（向后兼容回退二值）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: { kind: 'swebench', passed: false } } }))).toBe(false);
+  });
+
+  it('文件不存在 / JSON 损坏 → null', () => {
+    expect(readOracleOutcome('/nonexistent/f210/full.json')).toBe(null);
+    const bad = nodePath.join(fs.mkdtempSync(nodePath.join(os.tmpdir(), 'f210-outcome-')), 'full.json');
+    fs.writeFileSync(bad, '{not json');
+    expect(readOracleOutcome(bad)).toBe(null);
+  });
+
+  it('fixture 无任何 oracle 字段（{} / {taskExecution:{}}）→ null', () => {
+    expect(readOracleOutcome(tmpFixture({}))).toBe(null);
+    expect(readOracleOutcome(tmpFixture({ taskExecution: {} }))).toBe(null);
+  });
+
+  it('codex W-1：primaryOracle 为数组 → null（malformed shape 不可评估，不误判 legacy false）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: [] } }))).toBe(null);
+  });
+
+  it('codex W-1：primaryOracle 为空对象（无 classification 无 passed）→ null（fail-closed，不误判 false）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: {} } }))).toBe(null);
+  });
+
+  it('codex W-1：primaryOracle 为 primitive 字符串 → null（malformed shape）', () => {
+    expect(readOracleOutcome(tmpFixture({ taskExecution: { primaryOracle: 'weird-string' } }))).toBe(null);
+  });
+
+  it('take1 复现场景：3 条 success + classification=error(infra) → n_oracle_error=3 / n_valid=0 / passRate=null / infraFailRate=1', () => {
+    // 钉死 fix-report 的故障复现语义：修复前此场景假报 n_valid=3 / n_infra=0 / passRate=0.0；
+    // 修复后 3/3 oracle-error → n_valid=0，main 层由 FR-006 floor exit 2 拦截，不再让 /goal 拿到假 0
+    const errorFixture = {
+      taskExecution: {
+        primaryOracle: {
+          classification: 'error', failureSource: 'infra', passed: false,
+          cmd: '(skipped: dataset build error)',
+        },
+      },
+    };
+    const results = [
+      { task: 't1', cohort: 'c3', status: 'success', fixturePath: tmpFixture(errorFixture) },
+      { task: 't2', cohort: 'c3', status: 'success', fixturePath: tmpFixture(errorFixture) },
+      { task: 't3', cohort: 'c3', status: 'success', fixturePath: tmpFixture(errorFixture) },
+    ];
+    const stats = computeValidationStats(results, (r) => r.fixturePath ? readOracleOutcome(r.fixturePath) : null);
+    expect(stats.n_oracle_error).toBe(3);
+    expect(stats.n_valid).toBe(0);
+    expect(stats.passRate).toBeNull();
     expect(stats.infraFailRate).toBe(1);
   });
 });

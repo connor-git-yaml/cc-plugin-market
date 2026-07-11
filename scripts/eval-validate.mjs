@@ -87,24 +87,34 @@ function parseArgs(argv) {
  * 语义（CR-3 / W-4 / W-6）：
  *   - infra（exit 3）          → 剔分母（可重跑）
  *   - oracle 不可用（success 但 oracle=null）→ 剔分母，单独计 n_oracle_missing（fail-closed 依据）
+ *   - oracle-error（success 但 getOraclePassed 返回 'oracle_error' 哨兵）→ 剔分母，单独计
+ *     n_oracle_error（oracle 因基建/夹具问题未真正执行——"仪器坏了"，非候选 fail；不混入 fail
+ *     分母避免伪装成 passRate=0.0，本次修复核心）
  *   - gen_timeout（exit 4）    → 入分母算 fail
  *   - error（其他非零）        → 入分母算 fail（W-6：与 gen_timeout 分开计数）
  *   - success + oracle 有效    → oracle passed 决定 pass/fail
  *
- * infraFailRate 含 oracle_missing：二者都是"无法评估"，共同决定本批是否可信（FR-006 floor）。
+ * infraFailRate 含 oracle_missing + oracle_error：三者都是"无法评估"，共同决定本批是否可信
+ * （FR-006 floor）。
  *
  * @param {import('./lib/parallel-run-pool.mjs').RunResult[]} results
- * @param {Function} getOraclePassed  (result) => boolean|null
- * @returns {{ passRate: number|null, ci: {low:number|null,high:number|null,samples:number,method:string}|null, n_valid: number, n_pass: number, n_infra: number, n_gen_timeout: number, n_error: number, n_oracle_missing: number, infraFailRate: number, n_total: number }}
+ * @param {Function} getOraclePassed  (result) => boolean|null|'oracle_error'
+ * @returns {{ passRate: number|null, ci: {low:number|null,high:number|null,samples:number,method:string}|null, n_valid: number, n_pass: number, n_infra: number, n_gen_timeout: number, n_error: number, n_oracle_missing: number, n_oracle_error: number, infraFailRate: number, n_total: number }}
  */
 export function computeValidationStats(results, getOraclePassed) {
-  let n_infra = 0, n_gen_timeout = 0, n_error = 0, n_pass = 0, n_valid = 0, n_oracle_missing = 0;
+  let n_infra = 0, n_gen_timeout = 0, n_error = 0, n_pass = 0, n_valid = 0, n_oracle_missing = 0, n_oracle_error = 0;
   const passSamples = []; // 0/1 for bootstrap CI
 
   for (const r of results) {
     if (r.status === 'infra') { n_infra++; continue; } // 剔分母
     if (r.status === 'success') {
       const passed = getOraclePassed ? getOraclePassed(r) : null;
+      if (passed === 'oracle_error') {
+        // oracle 因基建/夹具问题未真正执行（仪器坏了，非候选 fail）→ 剔分母，单独计数。
+        // 哨兵是 truthy 字符串，必须先于下方 if (passed) truthy 判断分流（顺序由单测锁定）。
+        n_oracle_error++;
+        continue;
+      }
       if (passed === null) {
         // oracle 不可用 → 剔分母，单独计数（W-4 fail-closed 依据）
         n_oracle_missing++;
@@ -130,10 +140,10 @@ export function computeValidationStats(results, getOraclePassed) {
 
   const passRate = n_valid > 0 ? n_pass / n_valid : null;
   const ci = passSamples.length >= 2 ? bootstrapProportionCi(passSamples) : null;
-  // infra / error / oracle_missing 都计入"无法评估"分子（FR-006 floor + W-4 fail-closed）
-  const infraFailRate = results.length > 0 ? (n_infra + n_error + n_oracle_missing) / results.length : 0;
+  // infra / error / oracle_missing / oracle_error 都计入"无法评估"分子（FR-006 floor + W-4 fail-closed）
+  const infraFailRate = results.length > 0 ? (n_infra + n_error + n_oracle_missing + n_oracle_error) / results.length : 0;
 
-  return { passRate, ci, n_valid, n_pass, n_infra, n_gen_timeout, n_error, n_oracle_missing, infraFailRate,
+  return { passRate, ci, n_valid, n_pass, n_infra, n_gen_timeout, n_error, n_oracle_missing, n_oracle_error, infraFailRate,
            n_total: results.length };
 }
 
@@ -175,6 +185,52 @@ export function compareWithBaseline(current, baseline, minDelta) {
 export function readOraclePassed(fixturePath) {
   try {
     return oraclePassedFromFixture(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
+  } catch { return null; }
+}
+
+/**
+ * 从 fixture JSON 文件读 oracle 结果的四态 outcome（true=pass / false=候选 fail /
+ * null=不可评估（fixture 不可读、无 oracle 字段、oracle 值 malformed（非对象/数组）、
+ * classification 为 unavailable/未知漂移值、或 legacy 结构缺 passed 字段）/
+ * 'oracle_error'=oracle 因基建/夹具问题未真正执行（primaryOracle.classification==='error'，
+ * failureSource 可为 'infra' 如 venv 缺失 → dataset build 失败，或 'fixture' 如 dataset
+ * mismatch；同 classifyRunForRanking 的 error 口径，但单独分桶保留诊断信息）。
+ *
+ * why 单独分桶而非并入 oracle_missing：oracle-error 是"仪器坏了未评估候选"，若混入普通 fail
+ * 会把 infra 故障伪装成"候选全挂"（passRate=0.0 假报）——这正是本次修复的根因。
+ *
+ * classification 穷尽映射（codex W-2）：'pass'→true / 'fail'→false / 'error'→'oracle_error' /
+ * 其他已知外值（legacy 'unavailable'、未知漂移）→null 剔分母（与 classifyRunForRanking 同口径，
+ * 保守 fail-closed）。仅当 classification 字段**不存在**（legacy {kind,passed} 结构 /
+ * swebenchResult fallback）才回退 passed===true 二值，行为与 readOraclePassed 一致；且仅当
+ * `passed` 字段**存在**才回退（codex W-1：malformed legacy shape 如 `{}` 无 passed 字段 →
+ * null 归 missing，不静默判 false 伪装成候选 fail）。
+ *
+ * 字段提取链与 oraclePassedFromFixture（eval-calibrate.mjs）一致（primaryOracle ??
+ * swebenchResult ?? oracleResult ?? result）——两处维护主体不同，故重复书写而非跨文件复用，
+ * 此注释作为可追溯锚点。
+ *
+ * @param {string} fixturePath
+ * @returns {boolean|null|'oracle_error'}
+ */
+export function readOracleOutcome(fixturePath) {
+  try {
+    const fix = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'));
+    const oracle = fix?.taskExecution?.primaryOracle
+      ?? fix?.swebenchResult ?? fix?.oracleResult ?? fix?.result;
+    // malformed shape（非对象 / 数组 / null）→ 不可评估，不让 'classification' in oracle
+    // 靠抛异常兜底（codex W-1：数组等某些畸形值不抛错，会静默滑入下方 legacy 回退误判 fail）
+    if (oracle == null || typeof oracle !== 'object' || Array.isArray(oracle)) return null;
+    if ('classification' in oracle) {
+      const c = oracle.classification;
+      if (c === 'pass') return true;
+      if (c === 'fail') return false;
+      if (c === 'error') return 'oracle_error';
+      return null; // legacy 'unavailable' / 未知漂移值 → 剔分母（fail-closed）
+    }
+    // legacy {kind,passed}：无 classification 字段才走二值，且仅当 passed 字段真实存在
+    // （codex W-1：空对象等无 passed 的畸形 legacy shape → null 归 missing，不误判 false）
+    return 'passed' in oracle ? oracle.passed === true : null;
   } catch { return null; }
 }
 
@@ -290,18 +346,18 @@ async function main() {
   const wallMs = Date.now() - wallStart;
 
   // 聚合
-  const stats = computeValidationStats(results, (r) => r.fixturePath ? readOraclePassed(r.fixturePath) : null);
+  const stats = computeValidationStats(results, (r) => r.fixturePath ? readOracleOutcome(r.fixturePath) : null);
 
   // spec FR-006：infra（含 oracle_missing）失败率过高 → 作废本次结果
   if (stats.infraFailRate > VALIDATE_PARAMS.INFRA_FAIL_RATE_FLOOR) {
-    console.error(`[validate] ❌ infraFailRate=${(stats.infraFailRate * 100).toFixed(0)}% > ${VALIDATE_PARAMS.INFRA_FAIL_RATE_FLOOR * 100}% 上限（infra=${stats.n_infra} oracle_missing=${stats.n_oracle_missing}）→ 本次结果作废，请重跑`);
+    console.error(`[validate] ❌ infraFailRate=${(stats.infraFailRate * 100).toFixed(0)}% > ${VALIDATE_PARAMS.INFRA_FAIL_RATE_FLOOR * 100}% 上限（infra=${stats.n_infra} oracle_missing=${stats.n_oracle_missing} oracle_error=${stats.n_oracle_error}）→ 本次结果作废，请重跑`);
     process.exit(2); // 非 0，可被 /goal 识别为 infra 失败
   }
 
   // W-4 fail-closed：无有效样本（全 infra / oracle 全缺失）→ 非 0 退出，
   // 绝不让 /goal 拿到 PASSRATE=null + exit 0 误当"0 进步"信号。
   if (stats.n_valid === 0) {
-    console.error(`[validate] ❌ 无有效样本 n_valid=0（infra=${stats.n_infra} oracle_missing=${stats.n_oracle_missing} gen_timeout=${stats.n_gen_timeout} error=${stats.n_error}）→ 无法判定 passRate，请重跑`);
+    console.error(`[validate] ❌ 无有效样本 n_valid=0（infra=${stats.n_infra} oracle_missing=${stats.n_oracle_missing} oracle_error=${stats.n_oracle_error} gen_timeout=${stats.n_gen_timeout} error=${stats.n_error}）→ 无法判定 passRate，请重跑`);
     process.exit(2);
   }
 
@@ -316,6 +372,7 @@ async function main() {
     n_gen_timeout: stats.n_gen_timeout,
     n_error: stats.n_error,
     n_oracle_missing: stats.n_oracle_missing,
+    n_oracle_error: stats.n_oracle_error,
     infraFailRate: stats.infraFailRate,
     wallClockMs: wallMs,
     cohort: args.cohort,
@@ -333,7 +390,7 @@ async function main() {
   // 摘要
   const passRateStr = stats.passRate != null ? (stats.passRate * 100).toFixed(1) + '%' : 'N/A';
   const ciStr = stats.ci && stats.ci.low !== null && stats.ci.high !== null ? `[${(stats.ci.low * 100).toFixed(1)},${(stats.ci.high * 100).toFixed(1)}]%` : '[N/A]';
-  console.log(`[validate] passRate=${passRateStr} CI=${ciStr} n=${stats.n_valid} infra=${stats.n_infra} wall=${(wallMs/60000).toFixed(1)}min`);
+  console.log(`[validate] passRate=${passRateStr} CI=${ciStr} n=${stats.n_valid} infra=${stats.n_infra} oracle_error=${stats.n_oracle_error} wall=${(wallMs/60000).toFixed(1)}min`);
   if (args.milestoneFrozen) console.log('[validate] ⚠️  frozen set — 勿用于 /goal 迭代');
 
   // 比较纪律（C-4，--baseline）
