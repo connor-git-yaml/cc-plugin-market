@@ -193,12 +193,47 @@ function normalizeRunEvent(entry) {
   };
 }
 
+// 同一 (workflowId, runId) 可能出现多条终态事件：Feature 211 的 compliant-reset 语义下，
+// 同一 session 后续再次耗尽额度降级会重写 workflow-run-summary 终态事件（每个"阻断周期"一条）。
+// JSONL 是 append-only 审计日志，原始事件全部保留；此处仅在统计聚合前按 (workflowId, runId)
+// 去重，取时间最晚的一条作为该 run 的最终结果，避免同一 run 被重复计入 totalRuns 等指标。
+// runId 缺失的事件在 normalizeRunEvent 阶段已被判为无效（不进入本函数），故无需在此特殊处理。
+function dedupeRunEvents(events) {
+  const latestByRun = new Map();
+  const order = [];
+  for (const event of events) {
+    const key = `${event.workflowId}\u0000${event.runId}`;
+    const existing = latestByRun.get(key);
+    if (!existing) {
+      latestByRun.set(key, event);
+      order.push(key);
+      continue;
+    }
+    // 时间可比时取更晚者；时间相等或缺失时取文件内后出现者（append-only 天然有序）
+    const newMs = eventRecencyMs(event);
+    const existingMs = eventRecencyMs(existing);
+    if (newMs === null || existingMs === null || newMs >= existingMs) {
+      latestByRun.set(key, event);
+    }
+  }
+  return order.map((key) => latestByRun.get(key));
+}
+
+// 终态事件的"新近度"：取 recordedAt / finishedAt 中可解析的最晚时间戳（ms），均缺失则返回 null
+function eventRecencyMs(event) {
+  const candidates = [event.recordedAt, event.finishedAt]
+    .map((value) => (value ? Date.parse(value) : Number.NaN))
+    .filter((value) => !Number.isNaN(value));
+  return candidates.length > 0 ? Math.max(...candidates) : null;
+}
+
 function calculateMetrics(events, workflowDefs) {
   const workflowMap = new Map(
     (Array.isArray(workflowDefs) ? workflowDefs : [])
       .filter((workflow) => isObject(workflow) && typeof workflow.id === 'string')
       .map((workflow) => [workflow.id, workflow]),
   );
+  const dedupedEvents = dedupeRunEvents(events);
   const grouped = new Map();
   const rerunPhaseCounts = new Map();
   const gatePauseCounts = new Map();
@@ -206,7 +241,7 @@ function calculateMetrics(events, workflowDefs) {
   const phaseDurationCounts = new Map();
   let runsWithPhaseDurations = 0;
 
-  for (const event of events) {
+  for (const event of dedupedEvents) {
     if (!grouped.has(event.workflowId)) {
       grouped.set(event.workflowId, []);
     }

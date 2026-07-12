@@ -110,6 +110,8 @@
 
 **`degradedRecorded` 字段语义**（research.md D4 幂等修订的落地）：默认 `false`；首次降级放行并成功写入 `workflow-run-summary` 终态事件后置 `true`；后续同会话再次触发降级路径时读到 `true` → 只输出 `[GATE-DEGRADED]` reason 与轻量 `fix-compliance-verdict` 审计事件，跳过重复的终态事件写入。历史状态文件缺该字段 → 按 `false` 处理（向后兼容）。存储不可用（state-storage-unavailable）场景下无法读写该标记 → 允许重复写终态事件（宁可重复可审计，不可静默丢失），由事件的 `diagnostics: ['state-storage-unavailable']` 提示消费方去重。
 
+**同一 `runId` 多条终态事件的预期语义**（Feature 211 compliant-reset 落地补充）：当同一会话内合规收口成功时会触发 `resetBlockState`，将 `blockCount` 与 `degradedRecorded` 一并归位（详见 specs/211-fix-block-count-reset）。归位后该会话后续若再次耗尽额度降级，会再写入一条 `workflow-run-summary` 终态事件——因此**同一 `(workflowId, runId)` 出现多条终态事件是预期语义**（每个"阻断周期"一条），并非仅限 state-storage-unavailable 一种异常场景。消费方（`generate-adoption-insights.mjs`）按 `(workflowId, runId)` 去重，取时间最晚（`recordedAt`/`finishedAt`）的一条作为该 run 的最终结果，run 计数按唯一 `runId` 计；原始事件在 JSONL 审计日志中全部保留。
+
 ---
 
 ## 9. FixComplianceVerdictEvent（审计落盘格式，新增 JSONL eventType）

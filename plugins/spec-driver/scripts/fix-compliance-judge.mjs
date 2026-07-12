@@ -38,6 +38,7 @@ import {
   readArtifactFile,
   loadBlockState,
   saveBlockState,
+  resetBlockState,
 } from './lib/fix-compliance-io.mjs';
 import { recordWorkflowRun } from './record-workflow-run.mjs';
 
@@ -322,10 +323,15 @@ function runHook(projectRoot, payload) {
     tryAppendFailOpenEvent(projectRoot, payload.session_id, cfg.enforcement, result.transcriptDiagnostics, cfg.diagnostics);
     return 0;
   }
-  // 非 fix 会话 → 零接触放行（US5：健康路径不产生任何落盘）
+  // 非 fix 会话 → 零接触放行（US5：健康路径不产生任何落盘），不 reset 保持零落盘语义
   if (!result.isFix || !result.verdict) return 0;
-  // 合规 → 静默放行
-  if (result.verdict.compliant) return 0;
+  // 合规 → 重置该 session 阻断状态（补救成功清零转移，FR-006 增补）后静默放行。
+  // 无条件调用（不区分 block/warn）：warn 档从不 bump 计数、其状态文件本就不存在，
+  // reset 对其为空操作；off 档已在函数入口短路，永不触达此分支。
+  if (result.verdict.compliant) {
+    resetBlockState(projectRoot, payload.session_id);
+    return 0;
+  }
 
   const sessionId = payload.session_id;
 

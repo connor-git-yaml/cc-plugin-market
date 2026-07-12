@@ -308,3 +308,28 @@ export function saveBlockState(projectRoot, sessionId, state) {
   }
   return { ok: false, path: null, degraded: true, diagnostics: ['state-storage-unavailable'] };
 }
+
+/**
+ * 重置阻断计数状态（FR-006 增补：补救成功后的清零转移）。
+ * 删除两级存储（主路径 + tmpdir 回落）中该 session 对应的状态文件，
+ * 与"从未被阻断"状态同构——blockCount 与 degradedRecorded 一并归位，无字段级歧义。
+ * 尽力而为、非抛出式：文件不存在（本就未阻断过）或删除失败均静默忽略，
+ * 不产生可失败传播的下游（与 sweep 同为旁路维护语义，不同于 saveBlockState 需暴露
+ * state-storage-unavailable 诊断——reset 失败的最坏后果只是"旧计数残留"，
+ * 不影响本次放行判定，无需诊断落盘）。
+ * @param {string} projectRoot
+ * @param {string} sessionId
+ * @returns {void}
+ */
+export function resetBlockState(projectRoot, sessionId) {
+  const sanitizedId = sanitizeSessionId(sessionId);
+  // 两级都无条件尝试删除：不因主路径删除失败就跳过 tmpdir，否则 load 会回落读到
+  // tmpdir 残留旧计数导致清零失效（fix-report 影响范围扫描：重置必须两级都清）。
+  for (const filePath of [primaryStatePath(projectRoot, sanitizedId), tmpStatePath(sanitizedId)]) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      // 文件不存在 / 不可删 → 忽略（尽力而为，缺一级不影响另一级清除）
+    }
+  }
+}

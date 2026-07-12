@@ -24,6 +24,7 @@ import {
   readArtifactFile,
   loadBlockState,
   saveBlockState,
+  resetBlockState,
   sanitizeSessionId,
 } from '../scripts/lib/fix-compliance-io.mjs';
 
@@ -289,6 +290,55 @@ describe('loadBlockState / saveBlockState：读写 + 降级 + 幂等', () => {
       if (prev === undefined) delete process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
       else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
     }
+  });
+});
+
+describe('resetBlockState：补救成功清零（两级存储均清）', () => {
+  it('删除主路径状态文件，load 回到初始态', () => {
+    // 先写入非零计数到主路径
+    const w = saveBlockState(tmp, 'sess-reset-1', { blockCount: 2, degradedRecorded: true });
+    assert.equal(w.ok, true);
+    assert.equal(w.degraded, false);
+    const before = loadBlockState(tmp, 'sess-reset-1');
+    assert.equal(before.blockCount, 2);
+    assert.equal(before.degradedRecorded, true);
+    // 重置后应回初始态且主路径文件不复存在
+    resetBlockState(tmp, 'sess-reset-1');
+    const after = loadBlockState(tmp, 'sess-reset-1');
+    assert.equal(after.blockCount, 0);
+    assert.equal(after.degradedRecorded, false);
+    const stateFile = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'sess-reset-1.json');
+    assert.equal(fs.existsSync(stateFile), false);
+  });
+
+  it('主路径不可写、状态已降级写入 tmpdir 时，重置后 tmpdir 残留同样被清除', () => {
+    // 占据主路径子目录位置迫使降级写 tmpdir；env 指向一个可写的隔离 tmpdir
+    fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), 'blocker');
+    const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'fc-reset-tmp-'));
+    const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+    process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = tmpBase;
+    try {
+      const w = saveBlockState(tmp, 'sess-reset-2', { blockCount: 2, degradedRecorded: false });
+      assert.equal(w.ok, true);
+      assert.equal(w.degraded, true); // 确认走了 tmpdir 降级
+      assert.equal(loadBlockState(tmp, 'sess-reset-2').blockCount, 2);
+      // 重置必须两级都清 → load 不得回落读到 tmpdir 残留旧计数
+      resetBlockState(tmp, 'sess-reset-2');
+      const after = loadBlockState(tmp, 'sess-reset-2');
+      assert.equal(after.blockCount, 0);
+      assert.equal(after.degradedRecorded, false);
+    } finally {
+      if (prev === undefined) delete process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+      else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
+      fs.rmSync(tmpBase, { recursive: true, force: true });
+    }
+  });
+
+  it('文件不存在（从未阻断过的 session）→ 不抛出', () => {
+    // 两级文件均不存在，尽力而为重置应静默返回 void
+    assert.doesNotThrow(() => resetBlockState(tmp, 'sess-never-blocked'));
+    assert.equal(resetBlockState(tmp, 'sess-never-blocked'), undefined);
   });
 });
 

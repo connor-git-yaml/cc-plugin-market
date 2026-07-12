@@ -327,6 +327,49 @@ describe('阻断有界化（FR-006）', () => {
     assert.equal(rB.status, 2); // B 是各自的第 1 次，仍应阻断
   });
 
+  it('补救成功清零：阻断×2 → compliant 收口 → 额度恢复，再次不合规从第 1 次重新计数', () => {
+    // bad 与 good 必须落在不同 transcript 文件（collapsed/compliant 默认复用同一 transcript.jsonl，
+    // 同测试内先后调用会互相覆盖）；bad 无 feature dir 提名 → 恒非合规，磁盘制品是否存在不影响判定。
+    const bad = path.join(tmp, 'bad.jsonl');
+    fs.writeFileSync(bad, [SKILL_EXPANSION_LINE('fix'), ASSISTANT_TEXT('已完成修复，一切正常。')].map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+    const good = compliantTranscript();
+    // 第一轮：bad×2 均硬阻断（exit 2），第 3 次 bad 降级放行（exit 0 + GATE-DEGRADED）
+    assert.equal(runCli({ transcriptPath: bad, sessionId: 'sess-R1' }).status, 2);
+    assert.equal(runCli({ transcriptPath: bad, sessionId: 'sess-R1' }).status, 2);
+    // 补救成功收口：合规 → exit 0 静默，且重置该 session 的阻断状态
+    const goodRun = runCli({ transcriptPath: good, sessionId: 'sess-R1' });
+    assert.equal(goodRun.status, 0);
+    assert.equal(goodRun.stderr.trim(), '');
+    // 额度已恢复：再次不合规应重新进入完整 2→2→降级 周期，而非直接沿用旧计数当场降级
+    const again1 = runCli({ transcriptPath: bad, sessionId: 'sess-R1' });
+    const again2 = runCli({ transcriptPath: bad, sessionId: 'sess-R1' });
+    const again3 = runCli({ transcriptPath: bad, sessionId: 'sess-R1' });
+    assert.equal(again1.status, 2); // 若未重置，此处会因 count>=2 直接 exit 0 降级
+    assert.equal(again2.status, 2);
+    assert.equal(again3.status, 0);
+    assert.ok(again3.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), again3.stderr);
+  });
+
+  it('降级放行后补救成功：degradedRecorded 随重置归位，同一 session 可再次产生新的降级终态事件', () => {
+    const bad = path.join(tmp, 'bad.jsonl');
+    fs.writeFileSync(bad, [SKILL_EXPANSION_LINE('fix'), ASSISTANT_TEXT('已完成修复，一切正常。')].map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+    const good = compliantTranscript();
+    // 第一轮：bad×3 → 第 3 次降级并写第 1 条 workflow-run-summary
+    runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    assert.equal(readRunsEvents().filter((e) => e.eventType === 'workflow-run-summary').length, 1);
+    // 补救成功：重置 blockCount 与 degradedRecorded
+    assert.equal(runCli({ transcriptPath: good, sessionId: 'sess-R2' }).status, 0);
+    // 第二轮：bad×3 → 应再次降级并写第 2 条终态事件（证伪旧幂等标记吞掉第二轮终态）
+    runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    const last = runCli({ transcriptPath: bad, sessionId: 'sess-R2' });
+    assert.equal(last.status, 0);
+    assert.ok(last.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), last.stderr);
+    assert.equal(readRunsEvents().filter((e) => e.eventType === 'workflow-run-summary').length, 2);
+  });
+
   it('state-storage-unavailable → 降级放行 + 审计事件含 state-storage-unavailable', () => {
     // 主路径不可写：用文件占据 .fix-compliance-state 子目录位置
     fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
