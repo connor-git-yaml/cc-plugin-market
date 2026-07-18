@@ -51,7 +51,13 @@ amendment_2026-06-20b: goal_loop e2e pilot 链（F202/F203/F204）全 ship + 体
 - **F203✅** goal_loop core 两缺陷修：snapshot pathspec 排除 PRESERVED_CONFIG_PATHS（含 CRITICAL-7 git status 折叠漏网根因 + staged 态 preflight 硬失败兜底）+ smoke 假阴性区分 feature/环境失败；全链路零回归
 - **F204✅** 堵 CRITICAL-8：full_required_kinds 校验，缺 kind→INCOMPLETE_FULL_VERIFY（AC-5 直证漏洞 payload）；7/7 AC。诚实残留：对抗误标在通用插件内无法彻底关（core 不试图全关）
 - **处置**：goal_loop **验证 + 加固完成**（happy-path 坐实 + 3 缺陷修 + reward-hack 堵）；**近期 feature 全 done → 用户排最后的 F188 + npm publish 真正轮到**；backlog: SC-002/003 对抗验证 + M9 条件刷图
-执行顺序: …→ F201✅(goal_loop 机制) → F202✅(pilot·e2e 坐实闭环+暴露 3 缺陷) → F203✅(2 core 修)/F204✅(CRITICAL-8 reward-hack 堵) → **F205✅(scaffold-kb 实战 guide 已 ship：文档导入 ingest 示例 + worked example，b6e6ecc；office ingest 实为 docx/pptx/pdf)** → 〔另窗并行已 ship、**完整体检待下轮 milestone-next**：F206✅(/goal 第二战役·全池 c3 81.8% 反超裸 Claude)/F207✅(init gitignore 自举)/F208✅(fix 依从性 Stop hook 三层判定·v4.3.0)/F209✅(dataset-build 测试去 venv 耦合)/F210✅(eval-validate oracle-infra 假报剔分母)/F211✅(fix-compliance 额度自愈)〕→ **F188(eval 复测) + npm publish 4.3.0**（用户排最后·仍待推）→ 收尾；backlog: SC-002/003 对抗验证 + M9 条件刷图
+amendment_2026-07-12: F206-F211 六 feature 体检完成（inline spot-check，零证伪）：
+- **F206✅ /goal 第二战役**（深读终报）：全池 c3 27/33=81.8%（+6pp，**反超裸 Claude 77.4%**）；GStack 90.9% 拆解——其"机器没转"（33 run 0 次编码 skill 调用 = 裸 Claude + 咒语，+13.5pp 系 prompt 功效），真实差距仅 3 分（V008×2 结构性 + V010×1 墙钟）；R3 期望行为合同被"流程遗弃"绕过（20-30% run 仪式坍塌 = opus freestyle）→ 催生 F208；R4 轻量路径 untracked 预算化 KEEP；运维沉淀三条（codex-rescue 禁 resume / runId 复用覆盖现场 / 慢验窗口禁改 plugins）
+- **F208✅ fix 依从性 Stop hook**（最大生产件，spot-check 实证）：hooks.json Stop 段双 hook 挂载（stop-task-check 并存不破坏）+ fix-compliance-judge 三前缀（BLOCK/WARN/GATE-DEGRADED）+ 有界降级（同 sid 第 3 次放行防锁死）；439 plugin 测 + 5067 vitest + 16/16 手工沙箱 + **真实 haiku headless E2E 实锤阻断→反馈→补救→放行闭环**；慢验 N=6 坍塌 0/6；v4.3.0
+- **F207✅** init 脚手架防污染：`.git/info/exclude` 主防线（:297，零 diff 污染）+ .gitignore 兜底（worktree/非 git）实证；**F209✅** dataset-build 测试注入 fetchRows/不存在 venv → 确定性快速失败零 docker 依赖；**F210✅** eval-validate `oracle_error` 哨兵剔分母 + n_oracle_error 桶（:90-115 实证），⚠️ 已知残留：**calibrate 侧同病未修**（F188 走 validate 路径不受阻，列 fix 候选）；**F211✅** `resetBlockState` 补救成功清零阻断计数（交互式额度自愈，堵 F208 C5 边界）
+- **判定**：未跑审查 workflow——6 件中 F206 为评测产物（深读）、F207-F211 各带多轮 Codex 审查且 F208 verify 为本 milestone 最严（真模型 E2E），spot-check 全证实，workflow 边际收益低
+- **格局**：F206 后续路径 #1(F208)/#2(F207) 均已 ship → **~88% 预测已可测**，F188 全池复测升级为 headline 目标
+执行顺序: …→ F205✅ → F206✅-F211✅(体检完·零证伪) → **F188(eval 复测·headline=F208 后全池复测验证 ~88% + 133 重判 + 触发率 A/B) + npm publish 4.3.0**（用户既定顺序：F188 先 → npm 后）→ M8 收官；backlog: F210 calibrate 侧同病 / SC-002/003 对抗验证 / M9 条件刷图
 ---
 
 # Milestone M8 — 可信度修复 + Spec Drift 旗舰启动
