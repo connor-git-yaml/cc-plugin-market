@@ -14,10 +14,13 @@
  *     --cohort c3 --repeats 3 --concurrency 1 \
  *     --output .pool-rerun/f208-headline.json [--resume] [--dry-run]
  *
- * 断点续跑（--resume）：读 --output 既有结果，(task,repeat) 已达能力终态
- * （success / gen_timeout / error）的跳过，仅重跑 infra（可重试类）与缺失项。
- * fail-closed：连续 2 个 task 的 run 全部剔除类（infra+error+oracle_error）→ 中止，
- * 已跑数据落盘（partial 标记），exit 2 —— 同 eval-calibrate F206 fix B 语义。
+ * 断点续跑（--resume）：读 --output 既有结果并**硬校验 meta**（poolTaskSetHash/cohort/tool/
+ * repeats/driverModel 全匹配，防错拿别的批的 output 交叉污染）；(task,tool,cohort,repeat)
+ * 已达能力终态（success / gen_timeout）的跳过，infra 与 error（均为聚合剔分母的基础设施类）
+ * 与缺失项重跑。fail-closed：连续 2 个 task 的 run 全部剔除类（infra+error+oracle_error+
+ * oracle_missing）→ 中止，已跑数据落盘（partial 标记），exit 2 —— 同 eval-calibrate F206
+ * fix B 语义。起批前跑 F197 同款 prereg 三重门（oracleSpecHash/promptSha256/
+ * fixtureContentHash/gitState + F176 taskSet 锚），任一不符拒跑。
  */
 
 import * as fs from 'node:fs';
@@ -86,32 +89,45 @@ export function buildTaskJobs(taskId, cohort, repeats) {
   }));
 }
 
+/** resume/重跑用的 run 身份键：task__tool__cohort__rN（codex HIGH：只有 task__rN 会被
+ * 错 output 里的异 cohort/tool 条目冒名跳过）。 */
+export function runKey(r) {
+  return `${r.task}__${r.tool}__${r.cohort}__r${r.repeatNo}`;
+}
+
 /**
  * --resume 过滤：能力终态（success/gen_timeout）跳过；infra 与 error（两者在聚合里都
  * 剔分母、均属可修复的基础设施类：OAuth/代理 vs flag 错配/dist 门禁）与缺失项重跑。
- * key = task__rN。返回 { skip: Map<key, priorResult>, rerunKeys: Set<key> }
+ * key = runKey（含 tool/cohort）。返回 { skip: Map<key, priorResult>, rerunKeys: Set<key> }
  */
-export function partitionResumed(priorResults, taskId, repeats) {
+export function partitionResumed(priorResults, taskId, cohort, tool, repeats) {
   const skip = new Map();
   const CAPABILITY_FINAL = new Set(['success', 'gen_timeout']);
   for (const r of priorResults ?? []) {
-    if (r.task !== taskId) continue;
-    if (CAPABILITY_FINAL.has(r.status)) skip.set(`${r.task}__r${r.repeatNo}`, r);
+    if (r.task !== taskId || r.cohort !== cohort || r.tool !== tool) continue;
+    if (CAPABILITY_FINAL.has(r.status)) skip.set(runKey(r), r);
   }
   const rerunKeys = new Set();
   for (let i = 1; i <= repeats; i++) {
-    const k = `${taskId}__r${i}`;
+    const k = runKey({ task: taskId, tool, cohort, repeatNo: i });
     if (!skip.has(k)) rerunKeys.add(k);
   }
   return { skip, rerunKeys };
 }
 
-/** 单 task 的 run 结果是否"全剔除类"（infra/error 或 oracle_error），供 fail-closed 计数。 */
+/**
+ * 单 task 的 run 结果是否"全剔除类"（infra/error/oracle_error/oracle_missing(null)），
+ * 供 fail-closed 计数。codex MED：oracle_missing 也计剔除——系统性 oracle 读不到
+ * （runner schema 回归类）时应尽早中止，而非烧完整批最后 n_valid=0。
+ */
 export function isTaskFullyExcluded(taskResults, resolveOutcome) {
   if (taskResults.length === 0) return false;
   return taskResults.every((r) => {
     if (r.status === 'infra' || r.status === 'error') return true;
-    if (r.status === 'success') return resolveOutcome(r) === 'oracle_error';
+    if (r.status === 'success') {
+      const o = resolveOutcome(r);
+      return o === 'oracle_error' || o === null;
+    }
     return false; // gen_timeout = 能力 fail，非剔除
   });
 }
@@ -123,20 +139,23 @@ export function perTaskRows(results, resolveOutcome) {
     if (!byTask.has(r.task)) byTask.set(r.task, []);
     byTask.get(r.task).push(r);
   }
-  // 分桶口径与 computeValidationStats 严格一致：infra/error/oracle_error 剔除、
-  // null(oracle_missing) 剔分母单列、gen_timeout 计 fail 入分母。
+  // 分桶口径与 computeValidationStats 严格一致，且五桶独立成列（codex MED：合并 excluded
+  // 会让诊断分不清 runner error vs oracle 仪器坏）：infra / error / oracleError 剔除、
+  // oracleMissing(null) 剔分母单列、genTimeout 计 fail 入分母。excluded 为派生和（显示用）。
   return [...byTask.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([task, rs]) => {
-    let pass = 0, fail = 0, genTimeout = 0, excluded = 0, oracleMissing = 0;
+    let pass = 0, fail = 0, genTimeout = 0, infra = 0, error = 0, oracleError = 0, oracleMissing = 0;
     for (const r of rs) {
-      if (r.status === 'infra' || r.status === 'error') { excluded++; continue; }
+      if (r.status === 'infra') { infra++; continue; }
+      if (r.status === 'error') { error++; continue; }
       if (r.status === 'gen_timeout') { genTimeout++; fail++; continue; }
       const o = resolveOutcome(r);
-      if (o === 'oracle_error') { excluded++; continue; }
+      if (o === 'oracle_error') { oracleError++; continue; }
       if (o === null) { oracleMissing++; continue; }
       if (o === true) pass++; else fail++;
     }
     const denom = pass + fail;
-    return { task, nRuns: rs.length, pass, fail, genTimeout, excluded, oracleMissing,
+    return { task, nRuns: rs.length, pass, fail, genTimeout, infra, error, oracleError, oracleMissing,
+             excluded: infra + error + oracleError,
              score: denom > 0 ? `${pass}/${denom}` : 'n/a' };
   });
 }
@@ -176,7 +195,53 @@ async function main() {
     }
     console.log(`[pool-rerun] F176 子集内容锚比对 ✅ (${f176Ids.length} fixtures == ${frozenHash.slice(0, 12)}…)`);
   }
+  // pool-11 自身锚：F176 taskSetHash + frozen/validation 集合锚前缀 + 成员（防池清单被篡改后跑分）
+  const ref = poolSpec.frozenRef ?? {};
   console.log(`[pool-rerun] 池 taskSetHash: ${computeTaskSetHash(taskIds).slice(0, 16)}… (${taskIds.length} tasks)`);
+  {
+    const { computeTaskSetHash: preregTaskSetHash } = await import('./lib/preregistration-check.mjs');
+    const frozenSet = ['SWE-V005-sympy-collect-factor-and-dimension', 'SWE-V001-sympy-the-evaluate-false-parameter', 'SWE-V003-sympy-polyelement-as-expr-not'];
+    const validationSet = ['SWE-VB003-astropy-in-v5-nddataref-mask', 'SWE-V008-sympy-contains-as-set-returns', 'SWE-V009-sympy-physics-hep-kahane-simplify'];
+    const tOk = !ref.f176TaskSetHash || preregTaskSetHash(f176Ids) === ref.f176TaskSetHash;
+    const fOk = !ref.frozenSetAnchorPrefix || computeTaskSetHash(frozenSet).startsWith(ref.frozenSetAnchorPrefix);
+    const vOk = !ref.validationSetAnchorPrefix || computeTaskSetHash(validationSet).startsWith(ref.validationSetAnchorPrefix);
+    const memberOk = [...frozenSet, ...validationSet].every((t) => taskIds.includes(t));
+    if (!tOk || !fOk || !vOk || !memberOk) {
+      console.error(`[pool-rerun] ❌ 池锚校验失败（f176TaskSet=${tOk} frozen=${fOk} validation=${vOk} member=${memberOk}）→ 池清单疑似被改，拒跑`);
+      process.exit(2);
+    }
+    console.log('[pool-rerun] F176 taskSet 锚 + frozen/validation 集合锚 + 池成员校验 ✅');
+  }
+
+  // ── F197 同款 prereg 三重门（codex HIGH：oracleSpecHash/promptSha256/gitState 全比对）────
+  // 注：oracleSpecHash 冻结输入含 swebenchTimeoutMs=300000（cohort-batch 链口径）；本 pool 链
+  // runner 实际 --swebench-timeout-ms = runTimeoutMs（与 F206 全池结算同值 —— 188 P1 已归档的
+  // 同款 lineage deviation）——语义模块/prompt/fixture 三锚不受影响，meta 里显式记录。
+  if (!args.dryRun) {
+    const [{ checkPreregistration, parsePreregistration }, cb, { computeDriverPromptSha256 }] = await Promise.all([
+      import('./lib/preregistration-check.mjs'),
+      import('./swe-bench-verified-cohort-batch.mjs'),
+      import('./eval-task-runner.mjs'),
+    ]);
+    const preregRel = 'specs/176-swe-bench-verified-cross-cohort/verification/preregistration.md';
+    const preregPath = path.join(PROJECT_ROOT, preregRel);
+    const manifest = cb.loadExperimentManifest(path.join(PROJECT_ROOT, 'specs/212-eval-rerun-m8-closeout/ab-manifest.json'));
+    const pre = parsePreregistration(fs.readFileSync(preregPath, 'utf-8'));
+    const gitState = cb.computePreregGitState({ projectRoot: PROJECT_ROOT, preregRel, frozenGitCommit: pre.gitCommit });
+    const check = checkPreregistration(pre.taskIds, preregPath, {
+      oracleKind: 'swebench-execution',
+      oracleSpecInput: cb.buildLiveOracleSpecInput(manifest),
+      manifest,
+      promptSha256: computeDriverPromptSha256(),
+      fixtureContentHash: computeFixtureContentHash(pre.taskIds, fixturesDir),
+      gitState,
+    });
+    if (!check.ok) {
+      console.error(`[pool-rerun] ❌ prereg 三重门失败：${check.reason} → 拒跑（禁跑前换判分/带脏树跑批）`);
+      process.exit(2);
+    }
+    console.log('[pool-rerun] prereg 三重门（oracleSpec/prompt/fixture/gitState/taskSet）✅');
+  }
 
   const totalRuns = taskIds.length * args.repeats;
   console.log(`[pool-rerun] 计划 ${taskIds.length} task × cohort=${args.cohort}(${CALIBRATION_COHORT_TO_TOOL[args.cohort]}) × N=${args.repeats} = ${totalRuns} runs, budget=${(args.budgetMs / 3600000).toFixed(1)}h, driver=${DEFAULT_DRIVER_MODEL}`);
@@ -191,17 +256,36 @@ async function main() {
     return;
   }
 
-  // --resume：装载既有结果
+  // --resume：装载既有结果 + meta 硬校验（codex HIGH：错拿别的批的 output 会交叉污染——
+  // 用 c1 的 success 冒名跳过 c3、写出 c3 meta + c1 results）
   const outPath = path.resolve(PROJECT_ROOT, args.output);
+  const expectedTool = CALIBRATION_COHORT_TO_TOOL[args.cohort];
   let priorResults = [];
   if (args.resume && fs.existsSync(outPath)) {
+    let prior;
     try {
-      priorResults = JSON.parse(fs.readFileSync(outPath, 'utf-8')).results ?? [];
-      console.log(`[pool-rerun] --resume：载入 ${priorResults.length} 条既有结果`);
+      prior = JSON.parse(fs.readFileSync(outPath, 'utf-8'));
     } catch (e) {
       console.error(`[pool-rerun] ❌ --resume 但 output 不可读（${e.message}）——拒绝静默覆盖，请检查或换 --output`);
       process.exit(2);
     }
+    const m = prior.meta ?? {};
+    const mismatches = [];
+    if (m.poolTaskSetHash !== computeTaskSetHash(taskIds)) mismatches.push('poolTaskSetHash');
+    if (m.cohort !== args.cohort) mismatches.push('cohort');
+    if (m.tool !== expectedTool) mismatches.push('tool');
+    if (m.repeats !== args.repeats) mismatches.push('repeats');
+    if (m.driverModel !== DEFAULT_DRIVER_MODEL) mismatches.push('driverModel');
+    if (mismatches.length > 0) {
+      console.error(`[pool-rerun] ❌ --resume meta 不匹配 [${mismatches.join(', ')}]——这不是本批的 output，拒绝续跑（防交叉污染）`);
+      process.exit(2);
+    }
+    priorResults = (prior.results ?? []).filter((r) => r.cohort === args.cohort && r.tool === expectedTool);
+    if (priorResults.length !== (prior.results ?? []).length) {
+      console.error(`[pool-rerun] ❌ output 内含异 cohort/tool 条目（${(prior.results ?? []).length - priorResults.length} 条）——output 被污染，拒绝续跑`);
+      process.exit(2);
+    }
+    console.log(`[pool-rerun] --resume：meta 校验 ✅，载入 ${priorResults.length} 条既有结果`);
   } else if (!args.resume && fs.existsSync(outPath)) {
     console.error(`[pool-rerun] ❌ output 已存在且未传 --resume——拒绝覆盖取证现场（F206 血泪：runId 复用覆盖 run_artifacts）`);
     process.exit(2);
@@ -228,7 +312,9 @@ async function main() {
     onDegrade: (err) => console.warn(`[pool-rerun] ⚠️  env 解析降级 repo-only：${err.message}`),
   });
   console.log(`[pool-rerun] 串行预热 ${warmupJobs.length} 个 unique env：${warmupJobs.map((j) => j.envKey).join(', ')}`);
+  const warmupStart = Date.now();
   const warmupResults = await serialWarmup(warmupJobs, { budgetMs: 40 * 60 * 1000, runTimeoutMs: 25 * 60 * 1000 });
+  const warmupMs = Date.now() - warmupStart;
   const safeWarmup = Array.isArray(warmupResults) ? warmupResults : [];
   const warmupFailed = safeWarmup.filter((r) => r && r.status !== 'success');
   if (warmupFailed.length > 0 || safeWarmup.length === 0) {
@@ -238,7 +324,8 @@ async function main() {
   const resolveOutcome = (r) => (r.fixturePath ? readOracleOutcome(r.fixturePath) : null);
   const allResults = [...priorResults];
   const wallStart = Date.now();
-  let spentMs = 0;
+  // codex HIGH：warmup 计入总预算（否则 8h 变 8h40m）
+  let spentMs = warmupMs;
   let completedNew = 0;
   let consecutiveBroken = 0;
   let abortReason = null;
@@ -252,29 +339,37 @@ async function main() {
         pool: args.pool, poolTaskSetHash: computeTaskSetHash(taskIds),
         cohort: args.cohort, tool: CALIBRATION_COHORT_TO_TOOL[args.cohort],
         repeats: args.repeats, driverModel: DEFAULT_DRIVER_MODEL,
-        generatedAt: new Date().toISOString(), wallMs: Date.now() - wallStart,
+        // lineage deviation 显式记录：pool 链 runner 实际 --swebench-timeout-ms = runTimeoutMs
+        // （F206 全池结算同值）；prereg 冻结 oracleSpecHash 的 timeout=300000 是 cohort-batch 链口径
+        swebenchTimeoutMsActual: args.runTimeoutMs,
+        swebenchTimeoutNote: 'pool 链沿 F206 结算口径（runTimeoutMs 透传 --swebench-timeout-ms）；prereg 冻结 300000 属 cohort-batch 链（188 P1 同款 lineage deviation）',
+        preregGatePassed: !args.dryRun,
+        generatedAt: new Date().toISOString(), wallMs: Date.now() - wallStart, warmupMs,
         partial, abortReason,
       },
       stats, perTask: rows, results: allResults,
     }, null, 2));
   };
 
+  // 预算护栏余量（codex HIGH：chunk 内 run 被 pool budget SIGKILL 会被 classifyExitStatus
+  // 伪装成 gen_timeout 入分母算 fail——要求 chunk 全额预算 + 5min guard，杜绝 mid-chunk 预算杀）
+  const CHUNK_BUDGET_GUARD_MS = 5 * 60 * 1000;
   for (const taskId of taskIds) {
-    const { skip, rerunKeys } = partitionResumed(allResults, taskId, args.repeats);
-    // 从 allResults 中移除本 task 将被重跑的 infra 旧条目（避免双计）
+    const { skip, rerunKeys } = partitionResumed(allResults, taskId, args.cohort, expectedTool, args.repeats);
+    // 从 allResults 中移除本 task 将被重跑的 infra/error 旧条目（避免双计）
     for (let i = allResults.length - 1; i >= 0; i--) {
-      const r = allResults[i];
-      if (r.task === taskId && rerunKeys.has(`${r.task}__r${r.repeatNo}`)) allResults.splice(i, 1);
+      if (rerunKeys.has(runKey(allResults[i]))) allResults.splice(i, 1);
     }
     const jobs = buildTaskJobs(taskId, args.cohort, args.repeats)
-      .filter((j) => rerunKeys.has(`${j.task}__r${j.repeatNo}`));
+      .filter((j) => rerunKeys.has(runKey(j)));
     if (jobs.length === 0) {
       console.log(`[pool-rerun] ${taskId}: 已完成（resume 跳过 ${skip.size} run）`);
       continue;
     }
     const remainingMs = args.budgetMs - spentMs;
-    if (remainingMs <= args.runTimeoutMs) {
-      abortReason = `整批预算耗尽（已用 ${(spentMs / 3600000).toFixed(1)}h）——已跑数据保留，--resume 续跑`;
+    const chunkWorstMs = jobs.length * args.runTimeoutMs + CHUNK_BUDGET_GUARD_MS;
+    if (remainingMs < chunkWorstMs) {
+      abortReason = `整批预算不足以完整跑下一 task（余 ${(remainingMs / 60000).toFixed(0)}min < 需 ${(chunkWorstMs / 60000).toFixed(0)}min）——已跑数据保留，--resume 续跑`;
       console.error(`[pool-rerun] ⏸  ${abortReason}`);
       break;
     }

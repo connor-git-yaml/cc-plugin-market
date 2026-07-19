@@ -11,7 +11,9 @@ import {
   partitionResumed,
   isTaskFullyExcluded,
   perTaskRows,
+  runKey,
 } from '../../scripts/eval-pool-rerun.mjs';
+import { ParallelRunPool } from '../../scripts/lib/parallel-run-pool.mjs';
 
 describe('F212 buildTaskJobs（job 矩阵与 calibrate 形状一致）', () => {
   it('c3 → tool=spec-driver-spectra-mcp，repeatNo 1..N，带 --swebench-oracle', () => {
@@ -29,26 +31,49 @@ describe('F212 buildTaskJobs（job 矩阵与 calibrate 形状一致）', () => {
   });
 });
 
-describe('F212 partitionResumed（能力终态跳过 / infra 重跑）', () => {
+describe('F212 partitionResumed（能力终态跳过 / infra+error 重跑 / 键含 tool+cohort）', () => {
+  const T = 'spec-driver-spectra-mcp';
   const prior = [
-    { task: 'A', repeatNo: 1, status: 'success' },
-    { task: 'A', repeatNo: 2, status: 'infra' },      // 可重试 → 重跑
-    { task: 'A', repeatNo: 3, status: 'gen_timeout' }, // 能力终态 → 跳过
-    { task: 'B', repeatNo: 1, status: 'success' },     // 他 task，不影响 A
+    { task: 'A', tool: T, cohort: 'c3', repeatNo: 1, status: 'success' },
+    { task: 'A', tool: T, cohort: 'c3', repeatNo: 2, status: 'infra' },      // 可重试 → 重跑
+    { task: 'A', tool: T, cohort: 'c3', repeatNo: 3, status: 'gen_timeout' }, // 能力终态 → 跳过
+    { task: 'B', tool: T, cohort: 'c3', repeatNo: 1, status: 'success' },     // 他 task，不影响 A
   ];
   it('success/gen_timeout 跳过，infra 与缺失重跑', () => {
-    const { skip, rerunKeys } = partitionResumed(prior, 'A', 3);
-    expect([...skip.keys()].sort()).toEqual(['A__r1', 'A__r3']);
-    expect([...rerunKeys]).toEqual(['A__r2']);
+    const { skip, rerunKeys } = partitionResumed(prior, 'A', 'c3', T, 3);
+    expect([...skip.keys()].sort()).toEqual([`A__${T}__c3__r1`, `A__${T}__c3__r3`]);
+    expect([...rerunKeys]).toEqual([`A__${T}__c3__r2`]);
   });
-  it('error 状态（基础设施类，validate 口径剔分母）→ 重跑，不永久固化', () => {
-    const { rerunKeys } = partitionResumed([{ task: 'A', repeatNo: 1, status: 'error' }], 'A', 1);
-    expect([...rerunKeys]).toEqual(['A__r1']);
+  it('error 状态（基础设施类，聚合剔分母）→ 重跑，不永久固化', () => {
+    const { rerunKeys } = partitionResumed([{ task: 'A', tool: T, cohort: 'c3', repeatNo: 1, status: 'error' }], 'A', 'c3', T, 1);
+    expect([...rerunKeys]).toEqual([`A__${T}__c3__r1`]);
+  });
+  it('codex HIGH：异 cohort/tool 的 success 不得冒名跳过（c1 结果不遮 c3 重跑）', () => {
+    const alien = [{ task: 'A', tool: 'control', cohort: 'c1', repeatNo: 1, status: 'success' }];
+    const { skip, rerunKeys } = partitionResumed(alien, 'A', 'c3', T, 1);
+    expect(skip.size).toBe(0);
+    expect([...rerunKeys]).toEqual([`A__${T}__c3__r1`]);
   });
   it('无 prior → 全部重跑', () => {
-    const { skip, rerunKeys } = partitionResumed([], 'A', 2);
+    const { skip, rerunKeys } = partitionResumed([], 'A', 'c3', T, 2);
     expect(skip.size).toBe(0);
-    expect([...rerunKeys]).toEqual(['A__r1', 'A__r2']);
+    expect(rerunKeys.size).toBe(2);
+  });
+  it('runKey 含 task/tool/cohort/repeat 四元', () => {
+    expect(runKey({ task: 'A', tool: T, cohort: 'c3', repeatNo: 2 })).toBe(`A__${T}__c3__r2`);
+  });
+});
+
+describe('F212 ParallelRunPool._buildRunnerArgs repeat-index（codex HIGH：resume 部分重跑防错位）', () => {
+  it('优先用 job.repeatNo（resume 只剩 r2 时 --repeat-index 必须是 2，不得回落 seqNo+1=1 覆盖 r1 现场）', () => {
+    const pool = new ParallelRunPool({});
+    const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1', repeatNo: 2 }, 0, 'c1-r2');
+    expect(args[args.indexOf('--repeat-index') + 1]).toBe('2');
+  });
+  it('无 repeatNo 的 legacy job 回退 seqNo+1（旧行为保持）', () => {
+    const pool = new ParallelRunPool({});
+    const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1' }, 4, 'c1-r5');
+    expect(args[args.indexOf('--repeat-index') + 1]).toBe('5');
   });
 });
 
@@ -68,6 +93,13 @@ describe('F212 isTaskFullyExcluded（fail-closed 判定）', () => {
   it('含真 success → false', () => {
     expect(isTaskFullyExcluded([{ status: 'success', fixturePath: '/pass' }], oe)).toBe(false);
   });
+  it('codex MED：success + outcome=null(oracle_missing) 也计剔除（系统性 oracle 读不到应尽早中止）', () => {
+    const nullOracle = () => null;
+    expect(isTaskFullyExcluded([
+      { status: 'success', fixturePath: '/whatever' },
+      { status: 'infra' },
+    ], nullOracle)).toBe(true);
+  });
   it('空结果 → false（不误触发中止）', () => {
     expect(isTaskFullyExcluded([], oe)).toBe(false);
   });
@@ -80,7 +112,7 @@ describe('F212 perTaskRows（分桶与 computeValidationStats 同口径）', () 
     if (r.fixturePath === '/oe') return 'oracle_error';
     return null;
   };
-  it('pass/fail/gen_timeout/oracle_error/oracle_missing 各归各桶，score 分母 = pass+fail', () => {
+  it('五桶独立成列（infra/error/oracleError/oracleMissing/genTimeout），score 分母 = pass+fail', () => {
     const rows = perTaskRows([
       { task: 'T', status: 'success', fixturePath: '/pass' },
       { task: 'T', status: 'success', fixturePath: '/fail' },
@@ -88,15 +120,21 @@ describe('F212 perTaskRows（分桶与 computeValidationStats 同口径）', () 
       { task: 'T', status: 'success', fixturePath: '/oe' },
       { task: 'T', status: 'success', fixturePath: '/missing' },
       { task: 'T', status: 'infra' },
+      { task: 'T', status: 'error' },
     ], outcome);
     expect(rows).toHaveLength(1);
     const row = rows[0];
     expect(row.pass).toBe(1);
-    expect(row.fail).toBe(2);         // /fail + gen_timeout
+    expect(row.fail).toBe(2);          // /fail + gen_timeout
     expect(row.genTimeout).toBe(1);
-    expect(row.excluded).toBe(2);     // oracle_error + infra
+    expect(row.infra).toBe(1);
+    expect(row.error).toBe(1);
+    expect(row.oracleError).toBe(1);
     expect(row.oracleMissing).toBe(1);
+    expect(row.excluded).toBe(3);      // infra + error + oracleError（派生和）
     expect(row.score).toBe('1/3');
+    // 七桶完备性：pass+fail(含 genTimeout)+infra+error+oracleError+oracleMissing == nRuns
+    expect(row.pass + row.fail + row.infra + row.error + row.oracleError + row.oracleMissing).toBe(row.nRuns);
   });
   it('多 task 按 id 排序', () => {
     const rows = perTaskRows([

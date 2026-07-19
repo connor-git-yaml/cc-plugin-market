@@ -19,14 +19,15 @@
 - [ ] P2-DECISION 用户裁：(A) 引用 188 P1 结论（推荐，T0 正交/已答）/ (B) 重建 env 全量 re-run 求新鲜复现（数小时）
 - [ ] P2-2/3/4 仅在选 (B) 时执行
 
-## Phase PREP · 批勘验（$0，不真跑）— 部分勘验完成
-- [x] PR-1 全局 spectra plugin 状态：**`spectra@cc-plugin-market` 当前 enabled（launch 阻塞在）** → RUN 前须 `claude plugin disable spectra@cc-plugin-market --scope user`
-- [x] 凭据勘验：SiliconFlow key ✅ / Claude OAuth ❌ **401 已过期**（RUN 前须 `claude /login`）/ Codex ✅（但 CLI 0.142 须 `-m gpt-5.5`，config 默认 gpt-5.6-sol 太新）
-- [x] 基线：cc-plugin-market master = origin/master = 4d1fb05 ✅（≥ 要求）；worktree m8-closeout-212 off 4d1fb05
-- [ ] PR-2 `freeze-preregistration.mjs` 三 hash 冻结/比对（RUN 前跑；T0 已确认不扰 oracleSpecHash）
-- [ ] PR-3 fixtures + `.swebench-venv` 重建（`setup-swebench-venv.sh`）—— **当前 fixtures 未 materialize / 无 venv**，headline+A/B 判分与 133 re-run 都依赖
-- [ ] PR-4 cohort-batch manifest（c1/c3）+ F208 enforcement=block 定位（在 specs/208 / fix-compliance plugin config）+ dry-run run 计划
-- [ ] 🚦 **交用户 go/no-go**（当前状态：见本轮报告）
+## Phase PREP · 批勘验 ✅ 全部完成（用户"继续推进到做完"授权后升级为 full-prep）
+- [x] PR-1 全局 plugin：**须 disable 两个**（spec-driver + spectra，c3 preflight 硬 fail 无 bypass）——发射器自动 disable + trap 恢复
+- [x] 凭据：SiliconFlow ✅ / Codex ✅（CLI 0.142 用 `-m gpt-5.5`）/ Claude OAuth ❌ 401（**唯一剩余人工步骤 `claude /login`**）
+- [x] 基线 4d1fb05 ✅；Docker 已拉起 ✅；Surge 6152 在监听 ✅（HTTPS_PROXY 陷阱活门禁进发射器）
+- [x] **PR-3 基座重建**：venv（swebench 4.1.0）+ **F206 全池 11 task 从转录三角恢复**（POOL-RECOVERY.md）+ fixtures 30 个双批重导入**字节级命中 F176 锚 19d8d42** + frozen/validation 集合锚前缀命中（298cf127/b7b961ed）
+- [x] **PR-2 oracle 语义 re-freeze**：frozen f4fbd0f9→live f4044f21（漂移源唯一=415e46e 陈旧缓存修复；**T0 零贡献实证**——5 语义模块 sha T0 前后一致）；re-freeze 后三 hash 门 PASS；taskSetHash/fixtureContentHash/promptSha256 零变化
+- [x] PR-4 headline 驱动 `eval-pool-rerun.mjs`（15 单测 + dry-run 33 计划 + 锚校验）+ A/B `ab-manifest.json`（cohort-batch dry-run 60 计划 ✓）+ F208 enforcement=block 确认为 eval 环境默认（208 W-1/FR-015 无需开关）
+- [x] 发射器 f212-launch.sh（preflight→stamped build→plugin disable/trap→headline→A/B→标记文件）
+- [x] 🚦 go 已由用户"继续推进直到 Feature 整个做完"给出；执行阻塞仅剩 OAuth 登录（监视器自动点火）
 
 ## Phase RUN · 付费批（用户 go 后，另起会话）
 - [ ] RUN-1 OAuth `claude /login` preflight + 全局 spectra disable
