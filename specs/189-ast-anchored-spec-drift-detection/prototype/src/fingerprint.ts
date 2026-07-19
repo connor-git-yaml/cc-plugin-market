@@ -9,7 +9,9 @@
  *   - check 时按 symbol **名字** 重新分析定位 span（不依赖 lock 里存的旧行号），
  *     因此同文件他处增删行导致 span 平移**不影响**指纹（symbol 级、不连累）
  *   - 仅空白/缩进重排 → 归一化后相同 → fresh（本期承诺「空白不敏感」）
- *   - 注释/字面值/结构变化 → 仍 stale（注释与全 AST 不敏感 = M9-C，本期不承诺）
+ *   - span 内注释/字面值/结构变化 → 仍 stale（与全 AST 不敏感 = M9-C，本期不承诺）
+ *   - ⚠️ 前导 JSDoc/注释在 span 外（ts-morph getStartLineNumber 默认排除前导 trivia）：
+ *     其变化**静默判 fresh**——这是 under-report 盲区（非保守残留，方向与上一条相反），M9-C 一并修
  *   - 只读：不改任何 src/ 生产代码，analyzeFiles 当库调用
  */
 import { createHash } from 'node:crypto';

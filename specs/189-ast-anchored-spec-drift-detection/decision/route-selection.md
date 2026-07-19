@@ -132,4 +132,4 @@ prototype 跑通 11/11 验收场景（`npx tsx specs/189-.../prototype/demo.ts` 
 - [x] **check 退出码 + 报告适合 M9-B**：standalone exit 0/1/2（fresh / stale·orphaned / graph-unavailable）+ 结构化 `DriftReport`，可直接映射到 repo:check 的 warning 语境（见 prototype/README §repo:check 集成草案）。
 - [x] **全仓 demo 成立**：gap/uncovered/stale-ref 分类正确，与点锚并列对照——实证全仓覆盖广但靠映射启发式、点锚精准但需建锚，支撑「点锚先行、全仓 M9+ 叠加」选型。
 
-**残留待 M9 项**（prototype 已显式暴露，非阻塞立项）：注释/字面值变化仍触发 stale（需 M9-C normalized-AST）；`Class.method` 回退到 Class span（member 无 span）；rename → orphaned 不跟随（M9-D）。
+**残留待 M9 项**（prototype 已显式暴露，非阻塞立项）：span 内注释/字面值变化仍触发 stale，而**前导 JSDoc/注释在 span 外、变化静默判 fresh**（后者是 under-report 盲区而非保守残留，方向相反；两向均需 M9-C normalized-AST）；`Class.method` 回退到 Class span（member 无 span）；rename → orphaned 不跟随（M9-D）。
