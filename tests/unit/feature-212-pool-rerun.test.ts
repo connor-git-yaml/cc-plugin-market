@@ -41,9 +41,9 @@ describe('F212 partitionResumed（能力终态跳过 / infra 重跑）', () => {
     expect([...skip.keys()].sort()).toEqual(['A__r1', 'A__r3']);
     expect([...rerunKeys]).toEqual(['A__r2']);
   });
-  it('error 状态也是能力终态（与 validate error 入分母口径一致），跳过', () => {
+  it('error 状态（基础设施类，validate 口径剔分母）→ 重跑，不永久固化', () => {
     const { rerunKeys } = partitionResumed([{ task: 'A', repeatNo: 1, status: 'error' }], 'A', 1);
-    expect(rerunKeys.size).toBe(0);
+    expect([...rerunKeys]).toEqual(['A__r1']);
   });
   it('无 prior → 全部重跑', () => {
     const { skip, rerunKeys } = partitionResumed([], 'A', 2);

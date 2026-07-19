@@ -87,12 +87,13 @@ export function buildTaskJobs(taskId, cohort, repeats) {
 }
 
 /**
- * --resume 过滤：能力终态（success/gen_timeout/error）跳过；infra（可重试）与缺失项重跑。
+ * --resume 过滤：能力终态（success/gen_timeout）跳过；infra 与 error（两者在聚合里都
+ * 剔分母、均属可修复的基础设施类：OAuth/代理 vs flag 错配/dist 门禁）与缺失项重跑。
  * key = task__rN。返回 { skip: Map<key, priorResult>, rerunKeys: Set<key> }
  */
 export function partitionResumed(priorResults, taskId, repeats) {
   const skip = new Map();
-  const CAPABILITY_FINAL = new Set(['success', 'gen_timeout', 'error']);
+  const CAPABILITY_FINAL = new Set(['success', 'gen_timeout']);
   for (const r of priorResults ?? []) {
     if (r.task !== taskId) continue;
     if (CAPABILITY_FINAL.has(r.status)) skip.set(`${r.task}__r${r.repeatNo}`, r);
