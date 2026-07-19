@@ -21,6 +21,7 @@ import {
   heuristicPrefilter,
   isDiscriminating,
   oraclePassedFromFixture,
+  oracleOutcomeFromFixture,
   aggregateRunResults,
   CALIBRATION_COHORT_TO_TOOL,
 } from '../../scripts/eval-calibrate.mjs';
@@ -292,6 +293,54 @@ describe('T-C7 oraclePassedFromFixture（回归：曾误读字段致所有 pass 
   });
 });
 
+describe('T0/F212 oracleOutcomeFromFixture（calibrate 侧 classification 四态，镜像 F210 readOracleOutcome）', () => {
+  it('classification=pass → true', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { classification: 'pass', passed: true } } })).toBe(true);
+  });
+  it('classification=fail → false（跑了但候选真挂）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { classification: 'fail', passed: false } } })).toBe(false);
+  });
+  it('classification=error + failureSource=infra（venv 缺失等）→ oracle_error（核心：仪器坏了剔分母）', () => {
+    expect(oracleOutcomeFromFixture({
+      taskExecution: { primaryOracle: { classification: 'error', failureSource: 'infra', passed: false } },
+    })).toBe('oracle_error');
+  });
+  it('classification=error + failureSource=fixture（dataset mismatch）→ oracle_error（夹具错同桶）', () => {
+    expect(oracleOutcomeFromFixture({
+      taskExecution: { primaryOracle: { classification: 'error', failureSource: 'fixture', passed: false } },
+    })).toBe('oracle_error');
+  });
+  it('classification=unavailable（legacy）→ null（剔分母 fail-closed）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { classification: 'unavailable' } } })).toBe(null);
+  });
+  it('classification 未知漂移值 → null（fail-closed）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { classification: 'weird-future-value' } } })).toBe(null);
+  });
+  it('legacy 无 classification（{kind,passed:true}）→ true（向后兼容回退二值）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { kind: 'swebench', passed: true } } })).toBe(true);
+  });
+  it('legacy 无 classification（{kind,passed:false}）→ false（向后兼容回退二值）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: { kind: 'swebench', passed: false } } })).toBe(false);
+  });
+  it('legacy swebenchResult fallback（无 classification，passed:true）→ true', () => {
+    expect(oracleOutcomeFromFixture({ swebenchResult: { passed: true } })).toBe(true);
+  });
+  it('无任何 oracle 字段 / null 入参 → null', () => {
+    expect(oracleOutcomeFromFixture({})).toBe(null);
+    expect(oracleOutcomeFromFixture(null)).toBe(null);
+    expect(oracleOutcomeFromFixture({ taskExecution: {} })).toBe(null);
+  });
+  it('malformed shape：primaryOracle 为数组 → null（不误判 legacy false）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: [] } })).toBe(null);
+  });
+  it('malformed shape：primaryOracle 空对象（无 classification 无 passed）→ null（不误判 false）', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: {} } })).toBe(null);
+  });
+  it('malformed shape：primaryOracle 为 primitive 字符串 → null', () => {
+    expect(oracleOutcomeFromFixture({ taskExecution: { primaryOracle: 'weird-string' } })).toBe(null);
+  });
+});
+
 describe('T-C7 aggregateRunResults（codex CRITICAL-2：error 剔分母，不当能力 fail）', () => {
   const cohorts = ['c1', 'c3'];
   const passAll = () => true;
@@ -345,6 +394,64 @@ describe('T-C7 aggregateRunResults（codex CRITICAL-2：error 剔分母，不当
     expect(excludedRate).toBe(1);
     expect(cohortPasses.get('c1')).toEqual([]);
     expect(cohortPasses.get('c3')).toEqual([]);
+  });
+
+  // ── T0/F212：oracle_error 第四态剔分母（镜像 F210 validate 侧）─────────────────
+  // resolvePass 返回 'oracle_error' 哨兵（oracle 仪器坏了）→ 剔 cohortPasses 分母 + 单独计
+  // oracleErrorCount + 计入 excludedRate，不伪装成 passRate=0（不 push 0 进分母）。
+  it('T0：resolvePass 返回 oracle_error → 计 oracleErrorCount，剔分母（不算 fail）', () => {
+    const results = [
+      { status: 'success', cohort: 'c3', fixturePath: '/oracle_error' },
+      { status: 'success', cohort: 'c3', fixturePath: '/pass' },
+    ];
+    const resolve = (r: { fixturePath?: string }) => r.fixturePath === '/oracle_error' ? 'oracle_error' : true;
+    const { cohortPasses, oracleErrorCount, excludedRate } = aggregateRunResults(results, cohorts, resolve);
+    expect(oracleErrorCount).toBe(1);
+    expect(cohortPasses.get('c3')).toEqual([1]); // 仅 /pass 入分母，未被 oracle_error 拉低
+    expect(excludedRate).toBeCloseTo(0.5, 5);
+  });
+
+  it('T0：全 oracle_error → cohortPasses 空 + oracleErrorCount 全 + excludedRate=1（供 fail-closed）', () => {
+    const results = [
+      { status: 'success', cohort: 'c1', fixturePath: '/oe' },
+      { status: 'success', cohort: 'c3', fixturePath: '/oe' },
+    ];
+    const { cohortPasses, oracleErrorCount, infraCount, errorCount, excludedRate } =
+      aggregateRunResults(results, cohorts, () => 'oracle_error');
+    expect(oracleErrorCount).toBe(2);
+    expect(infraCount).toBe(0);
+    expect(errorCount).toBe(0);
+    expect(excludedRate).toBe(1);
+    expect(cohortPasses.get('c1')).toEqual([]);
+    expect(cohortPasses.get('c3')).toEqual([]);
+  });
+
+  it('T0：oracle_error 与 infra/error 混合 → 三剔除桶互不覆盖', () => {
+    const results = [
+      { status: 'infra', cohort: 'c3' },
+      { status: 'error', cohort: 'c3' },
+      { status: 'success', cohort: 'c3', fixturePath: '/oe' },
+      { status: 'success', cohort: 'c3', fixturePath: '/pass' },
+    ];
+    const resolve = (r: { fixturePath?: string }) => r.fixturePath === '/oe' ? 'oracle_error' : true;
+    const { infraCount, errorCount, oracleErrorCount, cohortPasses, excludedRate } =
+      aggregateRunResults(results, cohorts, resolve);
+    expect(infraCount).toBe(1);
+    expect(errorCount).toBe(1);
+    expect(oracleErrorCount).toBe(1);
+    expect(cohortPasses.get('c3')).toEqual([1]); // 仅 /pass
+    expect(excludedRate).toBeCloseTo(3 / 4, 5);
+  });
+
+  it('T0 truthy 哨兵防御：oracle_error 是 truthy 字符串但绝不计 pass（锁定分支顺序先于 ? 1 : 0）', () => {
+    const results = [
+      { status: 'success', cohort: 'c3', fixturePath: '/oe' },
+      { status: 'success', cohort: 'c3', fixturePath: '/oe' },
+    ];
+    // 恒返 'oracle_error'（truthy）：若哨兵分支被挪到 push(p ? 1 : 0) 之后会被误计 pass(=1)
+    const { cohortPasses, oracleErrorCount } = aggregateRunResults(results, cohorts, () => 'oracle_error');
+    expect(oracleErrorCount).toBe(2);
+    expect(cohortPasses.get('c3')).toEqual([]); // 绝无 1 混入
   });
 });
 

@@ -343,21 +343,25 @@ async function main() {
     );
     const results = await pool.run(jobs);
 
-    // 按 cohort 聚合 pass/fail：infra + error 剔分母（非能力 fail，codex CRITICAL-2），success/gen_timeout 入分母
-    const resolvePass = (r) => Boolean(r.fixturePath && fs.existsSync(r.fixturePath) && readOraclePassed(r.fixturePath));
-    const { cohortPasses, infraCount, errorCount, excludedRate } = aggregateRunResults(results, CALIBRATION_COHORTS, resolvePass);
+    // 按 cohort 聚合 pass/fail：infra + error + oracle_error 剔分母（非能力 fail），success/gen_timeout 入分母。
+    // resolvePass 返回 tri-state（true/false/'oracle_error'）：oracle classification==='error'（venv 缺失/
+    // dataset build 失败 = 仪器坏了）→ 哨兵剔分母；缺 fixture / null(oracle_missing/malformed) → false=fail，
+    // 保留 calibrate 保守口径（188 §5 记为有意；T0/F212 仅对齐 oracle_error 剔分母，不动 null 口径）。
+    const resolvePass = (r) => (r.fixturePath && fs.existsSync(r.fixturePath)) ? readOracleOutcome(r.fixturePath) : false;
+    const { cohortPasses, infraCount, errorCount, oracleErrorCount, excludedRate } = aggregateRunResults(results, CALIBRATION_COHORTS, resolvePass);
     const infraRate = infraCount / results.length;
     const errorRate = errorCount / results.length;
+    const oracleErrorRate = oracleErrorCount / results.length;
 
     const { discriminating, weakSeparation, reason, perCohort } = isDiscriminating(cohortPasses);
     const entry = {
-      taskId, discriminating, weakSeparation, reason, infraRate, errorRate, perCohort,
-      // 剔除率（infra+error）过高 → 该候选证据不足，标 lowConfidence（不计入 discriminating 池）
+      taskId, discriminating, weakSeparation, reason, infraRate, errorRate, oracleErrorRate, perCohort,
+      // 剔除率（infra+error+oracle_error）过高 → 该候选证据不足，标 lowConfidence（不计入 discriminating 池）
       lowConfidence: excludedRate > CALIBRATION_PARAMS.INFRA_FAIL_RATE_CEIL,
     };
     calibratedPool.push(entry);
     if (discriminating && !entry.lowConfidence) discriminatingCount++;
-    console.log(`[calibrate] ${taskId}: discriminating=${discriminating}${weakSeparation ? ' (弱分离)' : ''}, infraRate=${infraRate.toFixed(2)}, errorRate=${errorRate.toFixed(2)}, reason=${reason}`);
+    console.log(`[calibrate] ${taskId}: discriminating=${discriminating}${weakSeparation ? ' (弱分离)' : ''}, infraRate=${infraRate.toFixed(2)}, errorRate=${errorRate.toFixed(2)}, oracleErrorRate=${oracleErrorRate.toFixed(2)}, reason=${reason}`);
 
     // 系统性 harness 故障 fail-closed：剔除类（infra=OAuth/API/连接失败 + error=runner flag 错配 /
     // dist 版本门禁 / 全局 plugin 冲突）都不是单任务能力 fail。连续 2 个候选剔除率 ≥ 50% → 整批中止，
@@ -366,10 +370,10 @@ async function main() {
     // 判定必须在 entry push 之后：触发中止的候选已花 6 run 配额，须随 partial pool 落盘（codex W-1）。
     if (excludedRate >= 0.5) {
       consecutiveBroken++;
-      console.warn(`[calibrate] ⚠️  ${taskId}: excludedRate=${excludedRate.toFixed(2)}（infra=${infraRate.toFixed(2)} + error=${errorRate.toFixed(2)}，非能力 fail；查 calibrate.log 的 [task-runner] 行）`);
+      console.warn(`[calibrate] ⚠️  ${taskId}: excludedRate=${excludedRate.toFixed(2)}（infra=${infraRate.toFixed(2)} + error=${errorRate.toFixed(2)} + oracle_error=${oracleErrorRate.toFixed(2)}，非能力 fail；查 calibrate.log 的 [task-runner] 行）`);
       if (consecutiveBroken >= 2) {
         // break（非 throw）：先让循环后写盘逻辑保存已跑候选，再以非零码退出 —— 否则丢弃所有已花配额跑出的数据（codex round-2 CRITICAL）
-        abortReason = `连续 ${consecutiveBroken} 个候选剔除率（infra+error）≥ 50% — 疑似系统性 harness 故障（API 连接失败：代理未运行 / OAuth 过期；或 runner flag 错配 / dist 版本门禁 / 全局 plugin 冲突），中止校准。修复后重跑。`;
+        abortReason = `连续 ${consecutiveBroken} 个候选剔除率（infra+error+oracle_error）≥ 50% — 疑似系统性 harness 故障（API 连接失败：代理未运行 / OAuth 过期；runner flag 错配 / dist 版本门禁 / 全局 plugin 冲突；或 oracle 仪器故障：venv 缺失 / dataset build 失败 / 夹具 mismatch），中止校准。修复后重跑。`;
         console.error(`[calibrate] ❌ ${abortReason}`);
         break;
       }
@@ -419,33 +423,77 @@ export function oraclePassedFromFixture(fix) {
   return oracle?.passed === true;
 }
 
-/** 从 fixture JSON 文件读 oracle passed 状态。 */
-function readOraclePassed(fixturePath) {
+/**
+ * 从已解析 fixture 对象取 oracle 四态 outcome（纯函数，便于单测）——镜像 eval-validate.mjs
+ * `readOracleOutcome` 的 classification 语义（F210），calibrate 侧对齐（T0/F212）。
+ *
+ * 返回：true=pass / false=跑了但候选 fail / 'oracle_error'=oracle 因基建/夹具问题未真正执行
+ * （primaryOracle.classification==='error'，如 venv 缺失致 dataset build 失败——"仪器坏了"，
+ * 非候选 fail，调用方剔分母单独计数，避免 infra 故障伪装成 passRate=0.0）/ null=不可评估
+ * （malformed shape / 无 classification 且无 passed 的 legacy 畸形 / 未知漂移值）。
+ *
+ * classification 穷尽映射（镜像 F210 codex W-2）：'pass'→true / 'fail'→false / 'error'→'oracle_error' /
+ * 其他已知外值（legacy 'unavailable'、未知漂移）→null 剔分母。仅当 classification 字段**不存在**
+ * （legacy {kind,passed} / swebenchResult fallback）才回退 passed===true 二值，且仅当 `passed`
+ * 字段**存在**才回退（codex W-1：空对象等无 passed 的畸形 legacy shape → null，不静默判 false）。
+ *
+ * @param {object} fix
+ * @returns {boolean|null|'oracle_error'}
+ */
+export function oracleOutcomeFromFixture(fix) {
+  const oracle = fix?.taskExecution?.primaryOracle
+    ?? fix?.swebenchResult ?? fix?.oracleResult ?? fix?.result;
+  if (oracle == null || typeof oracle !== 'object' || Array.isArray(oracle)) return null;
+  if ('classification' in oracle) {
+    const c = oracle.classification;
+    if (c === 'pass') return true;
+    if (c === 'fail') return false;
+    if (c === 'error') return 'oracle_error';
+    return null; // legacy 'unavailable' / 未知漂移值 → 剔分母（fail-closed）
+  }
+  return 'passed' in oracle ? oracle.passed === true : null;
+}
+
+/**
+ * 从 fixture JSON 文件读 oracle 四态 outcome（文件包装；读失败 → null 归不可评估，经
+ * aggregateRunResults 归 fail 分母，仅 'oracle_error' 哨兵剔分母）。
+ * @param {string} fixturePath
+ * @returns {boolean|null|'oracle_error'}
+ */
+export function readOracleOutcome(fixturePath) {
   try {
-    return oraclePassedFromFixture(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
-  } catch { return false; }
+    return oracleOutcomeFromFixture(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
+  } catch { return null; }
 }
 
 /**
  * 把一批 run 结果按 cohort 聚合为 pass/fail samples。
  * 剔除类（不入分母，非能力 fail）：`infra`（OAuth/API 错误）+ `error`（基础设施错误：runner flag 错配 /
- * dist 门禁 / 全局 plugin 冲突等，codex CRITICAL-2）。能力类：`success`（读 oracle）+ `gen_timeout`（无 fixture → fail）。
+ * dist 门禁 / 全局 plugin 冲突等，codex CRITICAL-2）+ **`oracle_error`**（resolvePass 返回哨兵：oracle
+ * 因基建/夹具问题未真正执行，仪器坏了，T0/F212 对齐 F210）。能力类：`success`（读 oracle）+ `gen_timeout`（无 fixture → fail）。
  * @param {object[]} results
  * @param {string[]} cohorts
- * @param {(r:object)=>boolean} resolvePass  -- 注入式取 pass（默认读 fixture oracle；测试可 mock）
- * @returns {{ cohortPasses: Map<string, number[]>, infraCount: number, errorCount: number, excludedRate: number }}
+ * @param {(r:object)=>boolean|null|'oracle_error'} resolvePass  -- 注入式取 outcome（默认读 fixture oracle；测试可 mock）
+ * @returns {{ cohortPasses: Map<string, number[]>, infraCount: number, errorCount: number, oracleErrorCount: number, excludedRate: number }}
  */
 export function aggregateRunResults(results, cohorts, resolvePass) {
   const cohortPasses = new Map(cohorts.map((c) => [c, []]));
   let infraCount = 0;
   let errorCount = 0;
+  let oracleErrorCount = 0;
   for (const r of results) {
     if (r.status === 'infra') { infraCount++; continue; }
     if (r.status === 'error') { errorCount++; continue; }
-    cohortPasses.get(r.cohort)?.push(resolvePass(r) ? 1 : 0);
+    const p = resolvePass(r);
+    // 'oracle_error' 哨兵（oracle 仪器坏了未评估候选）剔分母，单独计数——分流**必须先于**
+    // 下方 truthy 判断（哨兵是 truthy 字符串，否则会被误判成 pass；顺序由单测锁定，镜像 F210）。
+    if (p === 'oracle_error') { oracleErrorCount++; continue; }
+    cohortPasses.get(r.cohort)?.push(p ? 1 : 0);
   }
-  const excludedRate = results.length ? (infraCount + errorCount) / results.length : 0;
-  return { cohortPasses, infraCount, errorCount, excludedRate };
+  // excludedRate 含 oracle_error：infra + error + oracle_error 三者都是"无法评估"，共同供
+  // fail-closed 判系统性故障（对齐 validate 的 infraFailRate 口径）。
+  const excludedRate = results.length ? (infraCount + errorCount + oracleErrorCount) / results.length : 0;
+  return { cohortPasses, infraCount, errorCount, oracleErrorCount, excludedRate };
 }
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
