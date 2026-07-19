@@ -274,3 +274,13 @@ F192 文档收口 (1-1.5d)                  ← F191 后（吸收文档类发现
 - **M9 候选 · tests-as-spec 强化验收**：业界共识 = 验收标准应可执行（observable/atomic/bounded + repo anchor + assertion anchor），且 **TDAD 实证：仅"先写测试"prompt 而无依赖图上下文会让回归率 6.08%→9.94%（更糟）**——结构化 impact 上下文是自主 TDD 不退化的前提。我们的 graph impact 恰好提供此上下文 → 强协同（详见 Goal 自主推进可行性，下）
 
 **Goal 自主推进可行性判断**（回应"用测试集 + Goal loop 推进 Milestone"）：可行且对我们**特别**契合——治理共识 = "分支内无人值守自主迭代 + 人在环最终把关 + 沙箱/审计/最小权限/kill switch"；我们已具备最难的两半（Spec Driver = 护栏+gate，Spectra impact = TDAD 证明必需的结构化上下文），缺的只是 Goal loop driver（autoresearch skill）+ 每任务可执行测试集。边界：适合**有界**任务（well-bounded fix / 测试补齐），不适合烧钱评测（F188）或架构级 feature（F192 类）；风险 = reward hacking/测试过拟合/长程局部最优，用我们既有的 Codex 对抗审查 + verify 阶段兜底。建议 M9 做**单任务 pilot** 验证收敛性，不直接全自动化 Milestone
+
+### 5.2 调研沉淀（2026-07-19 三方向 detailed：LLM Wiki / 文档 KB 格局 / SuperPowers 脑爆）→ M9 候选增补
+
+**① Wiki 消费形态（vs DeepWiki/Komment/Repowise/DeepWiki-Open）**：核心判断——**我们已拥有 DeepWiki 后端的 ~80%**（AST 图谱/模块 spec/架构叙事/mermaid/graph.html/panoramic-query 问答），缺的是**消费表面**：可浏览分层 wiki 站（总览→模块→符号导航）、**行级引用体系**（回答/页面可点击回源码行——业界缓解幻觉口碑的关键，我们 AST-grounded 路线天然适配）、每页 freshness 评分（Repowise 按 git 历史）、配置驱动页面规划（`.devin/wiki.json` 的 repo_notes+pages 模式）、Fast/Deep 双模式查询。MCP 暴露（DeepWiki mcp.deepwiki.com 刚做）我们反而领先。行业教训：纯自动生成口碑两极（幻觉+自信语气），方向是"可审阅+可核查引用+人机协作 overlay"。→ **M9 候选：wiki 输出形态**（从既有产物生成本地/私有可浏览 wiki 站 + 行锚引用 + freshness 徽标；差异化 = local/private vs DeepWiki hosted-public）
+**② scaffold-kb 缺口（vs Context7/Kapa/Inkeep/Mintlify）**：底座（doc-graph+FTS5+实体层+双层联查+溯源+token cap+plugin 分发）已是前沿形态；三个行业基线能力缺失，按优先级：
+  1. 🔴 **coverage-gap 分析**（Kapa/Inkeep 杀手锏：**未命中查询聚合 = 文档缺口 backlog**；我们 KB MCP 已有 telemetry，聚合 no-hit 即可——高价值低成本，M9 候选首位）
+  2. 🟡 **版本 pinning**（Context7 `/lib@version` + lockfile 自动检测项目版本；我们仅 build 时 sdk-version 标签，无查询时多版本选择）
+  3. 🟡 **freshness 分级同步**（Context7 按热度分级刷新 Top100 每日/Top1000 半月；我们建后静止靠手动重建）+ no-hit 诚实表面（明确"KB 无此内容"而非静默空）
+  4. ✅ embedding+rerank 混合：F190 spec 已预留"recall 不达标→向量 rerank 评估"触发器，与行业结论一致，维持
+**③ SuperPowers 脑爆借鉴（14+ skill 谱系拆解）**：诚实结论——其七阶段（brainstorm→worktree→plan→TDD→review→finish）我们**几乎全覆盖且执法更强**（Stop hook 依从性/goal_loop/verify 证据检查 vs 其 prompt 级约束；systematic-debugging≈fix 5-Why；receiving-review 反表演式同意≈Codex 处置三档；parallel dispatch≈workflow）。**唯一真缺口 = brainstorm 发散阶段**：苏格拉底式逐问澄清（一次一问）+ **多方案发散→trade-off→收敛**（我们 specify→plan 纯收敛，无"生成 2-3 候选方案+权衡对比让用户拍板"段）+ YAGNI 无情裁剪。与既有 AskUserQuestion 决策点惯例、judge-panel 结论（宽解空间多方案>单方案迭代）同构。→ **M9 候选：spec-driver brainstorm phase**（opt-in 前置发散段，feature mode specify 前）
