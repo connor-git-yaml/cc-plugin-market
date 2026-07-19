@@ -225,7 +225,7 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs generate-template fix > .s
 
 | 角色 | 模型 | 凭据来源 | 说明 |
 |------|------|---------|------|
-| Driver | `codex:gpt-5.5` | **ChatGPT Pro / Pro Max 订阅 OAuth** (`~/.codex/auth.json`) | 订阅边际 $0 实付；按周配额管理 |
+| Driver | `codex:gpt-5.6-sol`（2026-07-19 升级；⚠️ **对比复测类 study 的 driver 模型按该 study 预注册冻结口径选择，勿中途换型**——与旧基线对比必须沿用基线当时的模型） | **ChatGPT Pro / Pro Max 订阅 OAuth** (`~/.codex/auth.json`) | 订阅边际 $0 实付；按周配额管理 |
 | Judge 1 | `claude-cli:claude-opus-4-7` | **Claude Max 订阅 OAuth** (macOS Keychain) | 订阅边际 $0 实付；按周配额管理 |
 | Judge 2 | `siliconflow:Pro/zai-org/GLM-5.1` | `SILICONFLOW_API_KEY`（仓库根 `.env.local`）| **真实扣费**，按 token 计算 |
 | Judge 3 | `siliconflow:Pro/moonshotai/Kimi-K2.6` | `SILICONFLOW_API_KEY`（同上）| 同上 |
@@ -259,7 +259,7 @@ ls -la ~/.codex/auth.json
 
 订阅模式下 cost 不是钱（$0 实付），但**周配额**是真实约束：
 
-- ChatGPT Pro Max 20x 配额：driver = codex:gpt-5.5 主消耗源
+- ChatGPT Pro Max 20x 配额：driver = codex:gpt-5.6-sol 主消耗源
 - Claude Max 配额：judge = claude-opus-4-7 主消耗源
 - 跑批 ≥ 30 runs 时，每 6 runs 检查一次配额 dashboard，≥ 60% weekly → 警告 / 询问继续 / 分日跑
 
