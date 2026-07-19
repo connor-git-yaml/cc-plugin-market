@@ -15,13 +15,13 @@
 ## Table of Contents
 
 - [What's inside](#whats-inside)
-- [Project Milestones](#project-milestones)
 - [Quick Start](#quick-start)
 - [Spectra](#spectra)
   - [Highlights](#spectra-highlights)
   - [🤖 How AI Coding Assistants Use Spectra](#-how-ai-coding-assistants-use-spectra)
 - [Spec Driver](#spec-driver)
   - [Highlights](#spec-driver-highlights)
+- [Domain Knowledge Scaffold](#domain-knowledge-scaffold)
 - [Plugin Installation](#plugin-installation)
 - [Documentation](#documentation)
 - [Contributing](#contributing) · [License](#license)
@@ -45,20 +45,6 @@
 └──────────────────────────┘    └──────────────────────────────┘
 ```
 <!-- spec-driver:section:plugins-overview:end -->
-
-## Project Milestones
-
-| Milestone | Status | Highlights | Docs |
-|-----------|--------|------------|------|
-| **M-100** Spectra Evolution | ✅ Delivered | reverse-spec → Spectra rebrand · panoramic Phase 1（多语言索引、跨包依赖、LLM 语义增强、多格式输出） | [blueprint](specs/M-100-spectra-evolution/blueprint.md) |
-| **M-101** Phase 2 — Reading Platform | ✅ Delivered | Graph schema v2.0 + Hyperedges · LLM cost transparency · SpecStore + sourceKind · TODO/Open Questions extraction · Natural language Q&A + interactive `graph.html` · Default model upgrade to Sonnet 4.6 / Opus 4.7 1M | [blueprint](specs/M-101-phase2-reading-platform/blueprint.md) · [postmortem](specs/M-101-phase2-reading-platform/postmortem.md) |
-| **M-102 / M-103** Phase 3 | 🟡 In Progress | Python AST function-level graph (v4.1) · E2E fixture infrastructure · large-project baseline · LLM concurrency optimizer | [proposal](specs/M-102-phase3/proposal.md) |
-| **M7** Spectra MCP Productization | ✅ Delivered | 17 MCP tools（统一 `{code}` 响应契约 + 全工具 telemetry）· file navigation + symbol fuzzy match · batch 默认增量 + byte-stable graph.json · 44 stdio E2E · spec-driver 4.2.1（委派硬约束）· SWE-Bench Verified 5-cohort 评测 | [milestone](docs/design/milestone-M7-spectra-mcp-productization.md) · [评测报告](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md) |
-| **M8** Trust Repair + Drift Flagship | ✅ Delivered | 增量缓存正确性（混合大小写/混语言）· MCP 触发率工程 · 委派契约全 skill 单源化（F185）· FAIL_TO_PASS 评测 oracle（评测设施 v2）· `batch --mode graph-only`（纯 AST·零 LLM 建图）· `spectra --version` build 元数据 · **领域知识脚手架** `scaffold-kb` + KB MCP（doc-graph + FTS5 双层联查）· AST-anchored spec drift 原型（spec + prototype） | [milestone](docs/design/milestone-M8-trust-repair-and-drift-flagship.md) |
-
-> **M8 note** — Spectra **4.3.0 is published to npm** (first release since 4.2.0; includes F175-F211: incremental-cache correctness, graph-only zero-LLM build, MCP trigger-rate engineering, build-stamped `--version`, wrapper sha256 gate, scaffold-kb). The M7 eval re-judge on the new FAIL_TO_PASS oracle is wired and ready to run.
-
-> **Honest benchmark note (M7, 2026-06)** — We ran a 150-run SWE-Bench Verified comparison (bare Claude Code vs Spec Driver vs Spec Driver + Spectra MCP vs SuperPowers vs GStack). After correcting a one-sided oracle bias (the fuzzy-match scorer penalized frameworks for writing tests — see [report §4.5](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md)), **all five cohorts tie on completion rate** within N=30 noise. Two honest signals: structured workflows cost **4-12× more tokens with no completion gain on single-file fixes**, and Spectra MCP's real gap is *adoption, not quality* — runs that actually called the MCP tools passed at 43% vs 12% for those that didn't, with the heaviest MCP usage producing the strongest single fix in the dataset. M8 targets exactly these: trigger-rate engineering + a real FAIL_TO_PASS execution oracle.
 
 ## Quick Start
 
@@ -218,6 +204,20 @@ When `spectra install` is active, Claude Code's PreToolUse hook automatically in
 
 ---
 
+## Domain Knowledge Scaffold
+
+Beyond your own codebase (Spectra) and your dev workflow (Spec Driver), the marketplace ships a third capability: turn **external vendor docs into a queryable knowledge base** your AI assistant can cite — and distribute it as a plugin so integrators get it out of the box.
+
+| Capability | What you get |
+| --- | --- |
+| **Build a KB** | `spectra scaffold-kb build (--dir <docs> \| --llms-txt <url>)` → `kb/` — a doc-structure graph (`doc-graph.json`) + SQLite FTS5 full-text layer, single-file portable |
+| **Import third-party docs** | `spectra scaffold-kb ingest (--url \| --file \| --minutes)` — web pages (SSRF-guarded fetcher), office files (docx / pptx / pdf), meeting notes; preview first, commit with `--yes` |
+| **Query via MCP** | `kb_search` · `kb_doc_lookup` · `kb_api_lookup` — vendor KB (read-only, shipped with the plugin) + project KB (writable, yours) federated in one query |
+| **Workflow injection** | Spec Driver's research phase pre-queries the KB and injects matched evidence before `specify` — your specs start grounded in vendor facts |
+| **Safety model** | KB content is consumed as *untrusted evidence*: every hit carries source/version provenance (`[KB-EVIDENCE]`) plus a token cap — resistant to prompt injection from imported docs |
+
+Typical end-to-end path: `build` a vendor KB from public SDK docs → `ingest` a partner spec (docx) into your project layer → ask your assistant an API question — `kb_search` answers with cited sources. Full walkthrough with worked examples: **[Domain Knowledge Scaffold Guide](docs/scaffold-kb-guide.md)**.
+
 <!-- spec-driver:section:plugin-installation -->
 
 ## Plugin Installation
@@ -330,7 +330,7 @@ Notes:
 - 🏛️ **[Repository Architecture](docs/repository-architecture.md)** — `src/` layout, tech stack, testing, sync contracts
 - 🤝 **[Contributor Guide](docs/contributor-guide.md)** — full contribution flow
 - 📜 **[Migration Guides](docs/migrations/)** — v4.0 atomic skill removal, orchestration overrides
-- 🎯 **[Project Milestones](specs/)** — M-100 / M-101 / M-102+ blueprints and postmortems
+- 📊 **[SWE-Bench Evaluation Report](specs/147-competitor-evaluation-platform/PUBLISH-REPORT-M7.md)** — honest 150-run 5-cohort comparison; after correcting a one-sided oracle bias, completion rates tie within noise — the real gap is MCP *adoption*, not quality (runs that called the tools passed 43% vs 12%)
 
 <!-- spec-driver:section:contributing -->
 
