@@ -1,8 +1,10 @@
 ## 当前主线焦点
 
-- 当前 `master` 的活跃研发重心是 **Milestone M8 — 可信度修复 + Spec Drift 旗舰启动**，分三条轨道推进，而非早期的 panoramic 蓝图链路（panoramic 多语言索引 / 跨包依赖 / LLM 语义增强 / 多格式输出已是**既有稳定能力**，不再是活跃焦点）
-- **轨道 A 可信度修复**：增量缓存正确性（混合大小写 / 混语言项目）、子代理 MCP 触发率工程、spec-driver 委派契约与编排单源化、分发可靠性（contract 4.3.0 + `spectra --version` build 元数据，npm publish 待显式授权）、评测设施 v2（FAIL_TO_PASS 真实测试执行 oracle）
-- **轨道 B 旗舰启动**：AST-anchored Spec Drift Detection（当前仅 spec + prototype，不求 ship；symbol 级指纹 + 点锚路线）
-- **轨道 C 领域知识 AI 脚手架**：`scaffold-kb`（厂商文档 → doc-graph + SQLite FTS5）+ KB MCP（`kb_search` / `kb_doc_lookup` / `kb_api_lookup` 厂商库与项目库双层联查）+ spec-driver research 预查注入；KB 内容按 **untrusted evidence** 消费（带 source/version trace + token cap）
-- 计划外但已落地的关键能力：`batch --mode graph-only`（纯 AST · 零 LLM · 无需认证的快速建图，新 worktree 首次建图优先用它）、graph node/edge id 相对化（跨 worktree 可移植 + 开箱 bootstrap）、graph 写盘归一化内聚
-- 处理 Spectra / 知识图谱相关任务时，优先沿用现有抽象：`ProjectContext`、`GeneratorRegistry`、`ParserRegistry`、`AbstractRegistry`、`AbstractConfigParser`；输出合同已覆盖 Markdown + JSON + Mermaid `.mmd`，涉及 LLM 增强时保留 AST-only 的静默降级路径
+- 当前 `master` 正处于 **M8 收官 + Milestone M9 规划启动**：F188 仍是 M8 最后门禁，M9 的正式实施不得绕过它；M9 路线图见 `docs/design/milestone-M9-codex-trusted-live-graph.md`。
+- **M9 主题**：Codex 一等支持 + 可信活图 + Spec Drift 首次生产发布；先修分发、worktree/local、图拓扑/新鲜度，再做上层体验。
+- **轨道 A Codex First-Class**：`.codex-plugin` 一体分发 Spectra MCP / skills / hooks，补齐 `spec-driver-refactor` wrapper，hooks 做 Codex payload E2E，全局路径尊重 `CODEX_HOME`，模型配置采用 runtime-neutral quality tier。
+- **轨道 B Trusted Live Graph**：补 module→symbol `contains`、统一 `#`/`::` symbol ID，新增 duplicate/orphan/dangling/ignored/freshness 质量门；Codex-managed worktree 通过 `.worktreeinclude`、`AGENTS.override.md` 与显式 setup 开箱保活。
+- **轨道 C Spec Drift Ship**：把 F189 prototype 推到 `drift link/check` + `repo:check` warning + normalized symbol AST hash；rename-follow 与全仓推断留 M10。
+- **轨道 D/E 收口**：拆解 2,561 行 `batch-orchestrator.ts` 的 stage 职责；KB 先做 no-hit coverage gap、版本自动识别与 freshness 状态，再跑一个有界 Spectra→Spec Driver grounding pilot。
+- **M10 明确延后**：Wiki 消费面、GraphRAG/symbol semantic retrieval、KB 分级刷新/条件 rerank、brainstorm 扩展、goal_loop 扩面；除非它实际是在修 M9 的 P0 底座缺口。
+- 处理 Spectra / 知识图谱任务时继续沿用 `ProjectContext`、`GeneratorRegistry`、`ParserRegistry`、`AbstractRegistry`、`AbstractConfigParser`；保留 AST-only 静默降级，不创建平行 registry、graph 或 retrieval kernel。
