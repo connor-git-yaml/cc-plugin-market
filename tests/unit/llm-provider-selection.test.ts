@@ -86,7 +86,7 @@ describe('llm provider selection', () => {
 
     expect(mocks.callLLMviaCodex).toHaveBeenCalledTimes(1);
     const [, config] = mocks.callLLMviaCodex.mock.calls[0]!;
-    expect(config.model).toBe('gpt-5.4');
+    expect(config.model).toBe('gpt-5.6-sol');
     expect(config.reasoningEffort).toBe('xhigh');
     expect(config.serviceTier).toBe('fast');
     expect(mocks.anthropicCreate).not.toHaveBeenCalled();
