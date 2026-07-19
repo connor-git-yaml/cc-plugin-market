@@ -247,9 +247,11 @@ export class ParallelRunPool {
     // F212 codex HIGH：优先用 job.repeatNo —— 原 seqNo+1 在"部分重跑"（resume 过滤后 jobs
     // 只剩 r2/r3）时会把 r2 以 repeat-index=1 跑，oracle runId 落到 …__r1 → purge/覆盖已跳过
     // r1 的 run_evaluation 现场（fixture 路径仍 r2，stats 看似正常但取证被污染）。唯一性契约
-    // 移交调用方：(task,tool,repeatNo) 必须唯一（calibrate/validate/pool-rerun 均满足）；
-    // 无 repeatNo 的 legacy job 回退 seqNo+1 保持旧行为。
-    const repeatIdx = job.repeatNo ?? (seqNo + 1); // 1-indexed，符合 eval-task-runner 校验
+    // 移交调用方：(task,tool,repeatNo) 必须唯一（calibrate/validate/pool-rerun 均满足）。
+    // 仅接受 ≥1 的 repeatNo：warmup-planner 刻意发 repeatNo:0（round-2 codex HIGH——0 会被
+    // eval-task-runner 的 --repeat-index ≥1 校验拒掉，预热全断）与无 repeatNo 的 legacy job
+    // 一样回退 seqNo+1 保持旧行为。
+    const repeatIdx = (Number.isInteger(job.repeatNo) && job.repeatNo >= 1) ? job.repeatNo : (seqNo + 1);
     // 驱动参数与 canonical cohort-batch runOne 逐项对齐：cohort 经 job.tool 体现（不传 --cohort，
     // eval-task-runner 无此 flag），真实 skill 调用 + stdin 传 prompt + 免交互权限 + 成功即清理。
     // 缺这些会让 spec-driver cohort 退化成"提示词"模式（Task spawn=0）或卡权限确认。

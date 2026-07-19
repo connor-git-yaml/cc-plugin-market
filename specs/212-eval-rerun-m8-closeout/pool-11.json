@@ -5,7 +5,11 @@
     "f176FixtureContentHash": "19d8d42187d98235c4fa5369b898ac7308eb21e6ddc3b0788f0787cef53a71e0",
     "f176TaskSetHash": "6c5ed1c0709eb94350588e1bc692acf09e79034f00ee8078ab8040e119741668",
     "frozenSetAnchorPrefix": "298cf1279245ce17",
-    "validationSetAnchorPrefix": "b7b961edf3d92cff"
+    "validationSetAnchorPrefix": "b7b961edf3d92cff",
+    "extraFixtureSha256": {
+      "_note": "非 F176 池成员的字节锚（round-2 codex MED）：VB003 无 F206 时代内容锚可比（POOL-RECOVERY 诚实边界），此 sha 铸于 F212 确定性重导入（importer 确定性已被 F176 子集 19d8d42 字节级命中实证），此后任何漂移被门拦。",
+      "SWE-VB003-astropy-in-v5-nddataref-mask": "978942f2b000b341b79314733c3cd571b0ce532188a1a1aa51eb4f36857a1243"
+    }
   },
   "priorFullPool": { "c3_after_campaign2": "27/33 = 81.8%", "c1_bare": "24/31 = 77.4% (7月)", "c5_gstack": "30/33 = 90.9%", "c4_superpowers": "22/33 = 66.7%" },
   "taskIds": [

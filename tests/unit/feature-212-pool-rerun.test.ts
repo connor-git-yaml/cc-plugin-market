@@ -12,6 +12,7 @@ import {
   isTaskFullyExcluded,
   perTaskRows,
   runKey,
+  resumeMetaMismatches,
 } from '../../scripts/eval-pool-rerun.mjs';
 import { ParallelRunPool } from '../../scripts/lib/parallel-run-pool.mjs';
 
@@ -74,6 +75,32 @@ describe('F212 ParallelRunPool._buildRunnerArgs repeat-index（codex HIGH：resu
     const pool = new ParallelRunPool({});
     const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1' }, 4, 'c1-r5');
     expect(args[args.indexOf('--repeat-index') + 1]).toBe('5');
+  });
+  it('round-2 codex HIGH：warmup 的 repeatNo:0 回退 seqNo+1（0 会被 runner --repeat-index ≥1 校验拒掉，预热不得全断）', () => {
+    const pool = new ParallelRunPool({});
+    const args = pool._buildRunnerArgs({ task: 't1', tool: 'control', cohort: 'c1', repeatNo: 0 }, 0, 'warmup');
+    expect(args[args.indexOf('--repeat-index') + 1]).toBe('1');
+  });
+});
+
+describe('F212 resumeMetaMismatches（round-2 codex HIGH：含 runTimeoutMs 防混 timeout lineage）', () => {
+  const expected = {
+    poolTaskSetHash: 'h1', cohort: 'c3', tool: 'spec-driver-spectra-mcp',
+    repeats: 3, driverModel: 'claude-sonnet-4-6', runTimeoutMs: 1200000,
+  };
+  it('全匹配 → 空数组', () => {
+    expect(resumeMetaMismatches({ ...expected }, expected)).toEqual([]);
+  });
+  it('runTimeoutMs 不同 → 报 mismatch（不同 timeout 预算下旧 gen_timeout 不得当能力终态保留）', () => {
+    expect(resumeMetaMismatches({ ...expected, runTimeoutMs: 300000 }, expected)).toEqual(['runTimeoutMs']);
+  });
+  it('meta 缺失/为空 → 全字段 mismatch（旧版 output 无 runTimeoutMs 也拒）', () => {
+    expect(resumeMetaMismatches(undefined, expected)).toHaveLength(6);
+    expect(resumeMetaMismatches({}, expected)).toContain('runTimeoutMs');
+  });
+  it('多字段不匹配逐一列出', () => {
+    const out = resumeMetaMismatches({ ...expected, cohort: 'c1', repeats: 1 }, expected);
+    expect(out.sort()).toEqual(['cohort', 'repeats']);
   });
 });
 

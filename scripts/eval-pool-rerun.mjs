@@ -96,6 +96,22 @@ export function runKey(r) {
 }
 
 /**
+ * --resume meta 硬校验（纯函数，round-2 codex HIGH：补 runTimeoutMs——不同 timeout 预算下
+ * 的旧 gen_timeout 行不得作为能力终态被保留）。返回不匹配字段名数组（空 = 通过）。
+ */
+export function resumeMetaMismatches(meta, expected) {
+  const m = meta ?? {};
+  const mismatches = [];
+  if (m.poolTaskSetHash !== expected.poolTaskSetHash) mismatches.push('poolTaskSetHash');
+  if (m.cohort !== expected.cohort) mismatches.push('cohort');
+  if (m.tool !== expected.tool) mismatches.push('tool');
+  if (m.repeats !== expected.repeats) mismatches.push('repeats');
+  if (m.driverModel !== expected.driverModel) mismatches.push('driverModel');
+  if (m.runTimeoutMs !== expected.runTimeoutMs) mismatches.push('runTimeoutMs');
+  return mismatches;
+}
+
+/**
  * --resume 过滤：能力终态（success/gen_timeout）跳过；infra 与 error（两者在聚合里都
  * 剔分母、均属可修复的基础设施类：OAuth/代理 vs flag 错配/dist 门禁）与缺失项重跑。
  * key = runKey（含 tool/cohort）。返回 { skip: Map<key, priorResult>, rerunKeys: Set<key> }
@@ -206,11 +222,21 @@ async function main() {
     const fOk = !ref.frozenSetAnchorPrefix || computeTaskSetHash(frozenSet).startsWith(ref.frozenSetAnchorPrefix);
     const vOk = !ref.validationSetAnchorPrefix || computeTaskSetHash(validationSet).startsWith(ref.validationSetAnchorPrefix);
     const memberOk = [...frozenSet, ...validationSet].every((t) => taskIds.includes(t));
-    if (!tOk || !fOk || !vOk || !memberOk) {
-      console.error(`[pool-rerun] ❌ 池锚校验失败（f176TaskSet=${tOk} frozen=${fOk} validation=${vOk} member=${memberOk}）→ 池清单疑似被改，拒跑`);
+    // round-2 codex MED：非 F176 池成员（VB003）的字节锚——F176 子集有 fixtureContentHash，
+    // VB 任务此前只有 id 锚；extraFixtureSha256 逐文件 sha256 补上（漂移即拦）。
+    const { createHash } = await import('node:crypto');
+    const extra = ref.extraFixtureSha256 ?? {};
+    const extraBad = Object.entries(extra).filter(([tid, sha]) => {
+      if (tid.startsWith('_')) return false; // _note 等注释键
+      const p = path.join(fixturesDir, `${tid}.json`);
+      if (!fs.existsSync(p)) return true;
+      return createHash('sha256').update(fs.readFileSync(p)).digest('hex') !== sha;
+    }).map(([tid]) => tid);
+    if (!tOk || !fOk || !vOk || !memberOk || extraBad.length > 0) {
+      console.error(`[pool-rerun] ❌ 池锚校验失败（f176TaskSet=${tOk} frozen=${fOk} validation=${vOk} member=${memberOk}${extraBad.length ? ` extraFixture 漂移: ${extraBad.join(',')}` : ''}）→ 池清单/fixture 疑似被改，拒跑`);
       process.exit(2);
     }
-    console.log('[pool-rerun] F176 taskSet 锚 + frozen/validation 集合锚 + 池成员校验 ✅');
+    console.log('[pool-rerun] F176 taskSet 锚 + frozen/validation 集合锚 + 池成员 + VB 字节锚校验 ✅');
   }
 
   // ── F197 同款 prereg 三重门（codex HIGH：oracleSpecHash/promptSha256/gitState 全比对）────
@@ -269,13 +295,10 @@ async function main() {
       console.error(`[pool-rerun] ❌ --resume 但 output 不可读（${e.message}）——拒绝静默覆盖，请检查或换 --output`);
       process.exit(2);
     }
-    const m = prior.meta ?? {};
-    const mismatches = [];
-    if (m.poolTaskSetHash !== computeTaskSetHash(taskIds)) mismatches.push('poolTaskSetHash');
-    if (m.cohort !== args.cohort) mismatches.push('cohort');
-    if (m.tool !== expectedTool) mismatches.push('tool');
-    if (m.repeats !== args.repeats) mismatches.push('repeats');
-    if (m.driverModel !== DEFAULT_DRIVER_MODEL) mismatches.push('driverModel');
+    const mismatches = resumeMetaMismatches(prior.meta, {
+      poolTaskSetHash: computeTaskSetHash(taskIds), cohort: args.cohort, tool: expectedTool,
+      repeats: args.repeats, driverModel: DEFAULT_DRIVER_MODEL, runTimeoutMs: args.runTimeoutMs,
+    });
     if (mismatches.length > 0) {
       console.error(`[pool-rerun] ❌ --resume meta 不匹配 [${mismatches.join(', ')}]——这不是本批的 output，拒绝续跑（防交叉污染）`);
       process.exit(2);
@@ -341,6 +364,7 @@ async function main() {
         repeats: args.repeats, driverModel: DEFAULT_DRIVER_MODEL,
         // lineage deviation 显式记录：pool 链 runner 实际 --swebench-timeout-ms = runTimeoutMs
         // （F206 全池结算同值）；prereg 冻结 oracleSpecHash 的 timeout=300000 是 cohort-batch 链口径
+        runTimeoutMs: args.runTimeoutMs,
         swebenchTimeoutMsActual: args.runTimeoutMs,
         swebenchTimeoutNote: 'pool 链沿 F206 结算口径（runTimeoutMs 透传 --swebench-timeout-ms）；prereg 冻结 300000 属 cohort-batch 链（188 P1 同款 lineage deviation）',
         preregGatePassed: !args.dryRun,
@@ -394,7 +418,7 @@ async function main() {
 
     if (isTaskFullyExcluded(chunkResults, resolveOutcome)) {
       consecutiveBroken++;
-      console.warn(`[pool-rerun] ⚠️  ${taskId}: 本 task 全剔除类（infra/error/oracle_error）`);
+      console.warn(`[pool-rerun] ⚠️  ${taskId}: 本 task 全剔除类（infra/error/oracle_error/oracle_missing）`);
       if (consecutiveBroken >= POOL_RERUN_PARAMS.CONSECUTIVE_BROKEN_ABORT) {
         abortReason = `连续 ${consecutiveBroken} 个 task 全剔除 — 疑似系统性故障（代理挂 / OAuth 过期 / docker 僵死 / dist 门禁），中止。修复后 --resume。`;
         console.error(`[pool-rerun] ❌ ${abortReason}`);
