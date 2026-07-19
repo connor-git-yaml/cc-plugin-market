@@ -5,12 +5,12 @@ frozen: true
 taskSetHash: 6c5ed1c0709eb94350588e1bc692acf09e79034f00ee8078ab8040e119741668
 seed: 176
 count: 10
-gitCommit: 538498740659551289c93029dcfd07f0f5797307
-oracleSpecHash: f4fbd0f91ca94a94a8aeae974967bb5d3f889779ab2cb175b79b2a6a10b2a274
+gitCommit: 2ea6efc33bf428bb940dc24b3ad4b98c20df6b29
+oracleSpecHash: f4044f212eedb16adb72c9d8342e748511b6665b74361d21739e571c5f73166a
 fixtureContentHash: 19d8d42187d98235c4fa5369b898ac7308eb21e6ddc3b0788f0787cef53a71e0
 promptSha256: a06fd18a7671f49ec300608949c20bb89cff646099ea9385bf714ae00eedcff0
 schemaVersion: 1.0
-frozenAtIso: 2026-06-14T15:29:23.248Z
+frozenAtIso: 2026-07-19T05:10:55.881Z
 taskIds:
   - SWE-V001-sympy-the-evaluate-false-parameter
   - SWE-V002-sympy-rational-calc-value-error

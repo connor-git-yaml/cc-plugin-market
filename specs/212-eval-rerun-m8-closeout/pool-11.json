@@ -1,0 +1,24 @@
+{
+  "name": "F206 全池（11 task）— F212 headline 复测用",
+  "provenance": "从会话转录三角恢复（POOL-RECOVERY.md）：__gstack__ runId 枚举（c5 仅 h2h 全池批跑过，恰 11 个）× 校准日志（6 discriminating / 11 候选，VB003 第 6 个触发早停）× Docker 镜像残留（8 sympy + pytest-10081 + astropy-14995）。fixtures 重导入字节级命中 F176 冻结锚 19d8d42…；frozen/validation taskSetHash 前缀命中 goal-prompt.md 锚（298cf1279245ce17… / b7b961edf3d92cff…）。",
+  "frozenRef": {
+    "f176FixtureContentHash": "19d8d42187d98235c4fa5369b898ac7308eb21e6ddc3b0788f0787cef53a71e0",
+    "f176TaskSetHash": "6c5ed1c0709eb94350588e1bc692acf09e79034f00ee8078ab8040e119741668",
+    "frozenSetAnchorPrefix": "298cf1279245ce17",
+    "validationSetAnchorPrefix": "b7b961edf3d92cff"
+  },
+  "priorFullPool": { "c3_after_campaign2": "27/33 = 81.8%", "c1_bare": "24/31 = 77.4% (7月)", "c5_gstack": "30/33 = 90.9%", "c4_superpowers": "22/33 = 66.7%" },
+  "taskIds": [
+    "SWE-V001-sympy-the-evaluate-false-parameter",
+    "SWE-V002-sympy-rational-calc-value-error",
+    "SWE-V003-sympy-polyelement-as-expr-not",
+    "SWE-V004-sympy-check-homomorphism-is-broken",
+    "SWE-V005-sympy-collect-factor-and-dimension",
+    "SWE-V006-pytest-consider-mro-when-obtaining",
+    "SWE-V007-sympy-si-collect-factor-and",
+    "SWE-V008-sympy-contains-as-set-returns",
+    "SWE-V009-sympy-physics-hep-kahane-simplify",
+    "SWE-V010-pytest-unittest-testcase-teardown-exe",
+    "SWE-VB003-astropy-in-v5-nddataref-mask"
+  ]
+}

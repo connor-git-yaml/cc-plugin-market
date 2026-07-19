@@ -1,0 +1,8 @@
+{
+  "_comment": "F212 触发率 A/B（完成 188 遗留 P2）：c1/c3 × 10 task(F176 冻结) × N=3 = 60 runs。字段匹配 F176 冻结 oracleSpecHash（swebenchOracle+swebenchTimeoutMs 与 prereg f4fbd0f9 对齐）；driver 沿 MANIFEST_DEFAULTS claude-opus-4-7（F176/188 epoch 口径）。",
+  "cohorts": ["baseline-claude", "spec-driver-spectra-mcp"],
+  "swebenchOracle": true,
+  "swebenchTimeoutMs": 300000,
+  "repeat": 3,
+  "quotaCheckInterval": 6
+}
