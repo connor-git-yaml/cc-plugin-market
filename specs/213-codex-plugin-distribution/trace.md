@@ -26,3 +26,14 @@
 [spec-annotation] STARTED | specify agent 写回决议 + Status→Approved
 [spec-annotation] COMPLETED | Status→Approved, 决议记录章节落盘, 全文引用同步
 [commit:specify-phase] STARTED | 显式路径提交 6 制品 (spec/clarifications/checklists/trace/_grounding/verification-review)
+[commit:specify-phase] COMPLETED | 41ff697 (6 files +383, pre-commit repo-check pass)
+[plan] STARTED | agent=spec-driver:plan model=sonnet | 7 项设计决策 (wrapper落位/中立性扫描/矩阵模块/收窄改法/测试策略/文件清单/护栏对齐)
+[plan] COMPLETED | plan.md 476行 7决策 + research/spectra-skill-neutrality-scan.md | OQ-004推荐案A(copy-after-generate→skills-codex/) | Spectra中立性零污染 | 新增18/修改12
+[codex-review:plan] STARTED (background, PATH配方) | 编排器自查双疑点已随prompt交办
+[orchestrator-verify] 疑点(b)实锤: spec-driver-codex-skills.test.ts 用 cwd=tempDir 调真实脚本, $PLUGIN_DIR=真实仓库 → plan §3.1 copy步骤会让测试重写/rm -rf 真实tracked skills-codex/ → copy必须opt-in(flag/env, repo:sync专属)
+[orchestrator-verify] 疑点(a)实锤: plan §3.5 e2e afterAll 只有 plugin remove, 缺 marketplace remove → 全局 ~/.codex 状态泄漏 + worktree删除后悬空注册; 应用mkdtemp fixture副本作marketplace源
+[codex-review:plan] PARTIAL (poller stall-window 7.5min 过紧, 在最终组稿前1min误取消 — 教训: 末事件为assistant message时组稿期应放宽) | 回收4项实锤: E2E全局泄漏(缺marketplace remove) / wrapper双写污染真实工作树 / release:check未真接入矩阵(FR-009字面不满足) / YAML内联数组超simple-yaml解析边界(release-contract-core.mjs:3与validate-wrapper-sources.mjs:4同用该解析器,已核实)
+[plan-revision] STARTED | 4项修法+FR↔check↔测试三向覆盖对照交plan代理
+[plan-revision] 4次Task委派API断连(evidence: Connection closed mid-response ×4); 第4次前代理已落C2/C3/C4(476→545行); 剩余C1+三向对照+收尾由编排器inline完成 [DEGRADED: inline-execution — plan修订收尾 — 连续4次Task API断连] → 终版573行, 5标记齐全
+[codex-review:plan] 归档 verification/codex-adversarial-review-plan.md (4 CRITICAL 全修复, 2缺口补齐, 2候选缺口论证不设)
+[commit:plan-phase] STARTED
