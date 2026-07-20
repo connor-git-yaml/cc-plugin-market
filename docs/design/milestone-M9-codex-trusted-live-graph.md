@@ -116,6 +116,7 @@ M9 只承诺 P0 全部和经容量确认的 P1；M10 候选不得反向挤占 P0
 - TypeScript/JavaScript、Python、Java、Go fixture 都进入回归矩阵。
 
 > **现实基线（2026-07-20 graph-only 4.3.0 实测，5723 节点/2784 边）**：孤立节点率 **72.9%**（symbol 级 4036/4881 = 82.7%）——主因即 B1 缺 module→symbol contains 边。B1 落地后此数应大幅收敛；B2 门禁上线以本基线为回归对照，验收 ≤5%。
+> **B1 后实测（2026-07-21，F214 dist 重建本仓图）**：边 2784→**7689**（+4880 contains）；孤立率 **1.9%** ✅（symbol 级 **0.0%**，contains 覆盖 100%）；`#` ID 节点 **0** ✅；耗时 3.2s 无劣化——**B2 三项核心指标已被 B1 打到达标位，B2 剩余工作 = 把指标机器门禁化（quality/status/doctor + duplicate/dangling/ignored/freshness）+ 四语言 fixture 回归矩阵**，非修数据。
 
 ### B3. Worktree 与 Local 状态
 
@@ -195,6 +196,20 @@ F190-F192 已实现 doc-graph、FTS5、API 实体、异构 ingest、双库联查
 Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 收官，SC-002/004 闭合）
   （2026-07-20 用户拍板：A/B 两线开发与收官评测并行启动——worktree 隔离 + 三护栏；
    C/D/E 仍按下方顺序在 A/B P0 门禁后接力）
+  （2026-07-21 进度：**A1✅ F213** ship——.codex-plugin 双 manifest + 一次安装真 codex
+   CLI E2E 实证〔`mcp list` 见 spectra〕+ 一致性矩阵 4 check 入 repo:check + 漂移拦截
+   100% 实证；SC-002 按 waiver 8/9 skill〔refactor wrapper 缺口 = A2 设计内，合同显式
+   登记〕；SC-004 曾 PARTIAL〔仓外共享 baseline 被 B1 ID 改格式波及〕→ **计划外衍生
+   F215✅**〔E2E 图输入解耦：in-repo pinned fixture + skip 语义拆分，结构性消除跨
+   worktree 测试耦合〕后完全闭合。**B1✅ F214** ship——contains 边 + canonical ID 收敛
+   + 三层合同 + graph-semantic-diff 工具；本仓 F214 dist 实测：孤立率 **72.9%→1.9%**、
+   symbol contains 覆盖 **100%**、`#` 节点 **0**、耗时 3.2s 无劣化（见 §4 B2 实测注）；
+   5145 测绿。W1 ".agents 原子过渡+双写" 经查为 A1 一体分发必要管线非越界，其 Codex
+   审查另抓 1 CRITICAL〔遗留软链沿父链可删主仓 skills，已 fail-loud 修复〕。
+   **判定：A/B P0 门禁通过 → C/D 解锁**〔A2-A4/B2-B4 继续按轨〕；
+   下一批派发：**F216 V008 双向对账 ∥ F217 B2 质量门机器化**〔写入路径 disjoint：
+   plugins/spec-driver fix 链 vs src/panoramic/graph+checks；C 排 F217 后——C2 与 B2
+   同碰 repo:check 集成面；D 待下批〕）
 
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
