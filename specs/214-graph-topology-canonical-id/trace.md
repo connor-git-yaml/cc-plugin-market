@@ -39,3 +39,12 @@ worktree 分支: claude/graph-topology-canonical-id-1de3ab
 [14:50:52] spec-amend(C3/C5/W2): COMPLETED | SC-005(1)类区分Python顶层/member边 + SC-004按工具断言矩阵 + SC-002语言scope声明
 [14:59:09] plan-revision: COMPLETED(经2次API中断resume) | 12条发现全落实 | 新测试 9→13 (T10/T11 round-trip, T12 Python byte, T13 SC-001 oracle)
 [14:59:09] plan(4): COMMIT | plan.md + spec.md 修订(C3/C5/W2) + trace
+[14:59:40] tasks(5): STARTED | agent=spec-driver:tasks model=sonnet | plan commit=e105160
+[16:14:24] tasks(5): COMPLETED | artifacts=tasks.md | 40任务 关键路径21节点 [P]×15 | R-1原子组T002-T013 版本组T018-T022
+[16:14:24] codex-review(tasks): STARTED | gpt-5.6-sol 重点: 承接完整性/依赖图/RED可跑红性/原子组边界/收尾覆盖
+[16:27:05] codex-review(tasks): COMPLETED | 8 critical + 5 warning + 3 info | 判定: 需先修订 | 承接无漏项/依赖无环/无越界, 缺陷在验收语义: 原子组边界失效(C3)/TDD倒置(C4)/SC-005归因不可产出(C6)/修复后无终门禁(C7)/graph-only性能无测量(C8)
+[16:27:05] tasks-revision: STARTED | 8C+5W 拍板方向已下发 tasks agent
+[16:34:18] tasks-revision: RETRY | 原 tasks agent 连续2次 API 中断(Write 未落盘), 改派 fresh agent 紧凑上下文重试
+[16:41:56] tasks-revision: DEGRADED→INLINE | 3次委派全败(resume×2+fresh×1, 均 API Error: Connection closed mid-response, Write 零落盘) | 按委派合同唯一降级通道转编排器 inline 小步 Edit 执行
+[16:48:44] tasks-revision: COMPLETED [DEGRADED: inline-execution — tasks 修订 — 3次委派均 API Connection closed mid-response] | 8C+5W 全落实 | 40→45 任务(+T001a/T004a/T034a/T036a/T039a) 关键路径21→26节点
+[16:48:44] tasks(5): COMMIT
