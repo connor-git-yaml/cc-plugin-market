@@ -192,11 +192,20 @@ F190-F192 已实现 doc-graph、FTS5、API 实体、异构 ingest、双库联查
 ## 8. 执行顺序与 Gate
 
 ```
-Gate 0: M8 F188 收官 + master 全绿
-  （2026-07-20 用户拍板：A/B 两线开发与收官评测〔F212 worktree 跑批中〕并行启动——
-   worktree 隔离 + 三护栏：不触 F212 worktree/评测链脚本、标准多 worktree 纪律、
-   Gate 0 语义保留为「M9 正式收官/宣布」前提并在 F212 出分后设吸收点〔若结果
-   翻车回调 M9 优先级〕；C/D/E 仍按下方顺序在 A/B P0 门禁后接力）
+Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 收官，SC-002/004 闭合）
+  （2026-07-20 用户拍板：A/B 两线开发与收官评测并行启动——worktree 隔离 + 三护栏；
+   C/D/E 仍按下方顺序在 A/B P0 门禁后接力）
+
+**Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
+
+1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**
+   - 病理（F212 取证）：fix 流程的"先核实是否已修"步骤把 base 态误读为"已历史修复"→ 产出**穿 F208 合规外衣的自信 no-op**（流程制品齐全、结构化出口、fix-report 引行号断言"已修正"）；两 run MCP×0 未进代码分析；**裸 opus 无此步骤反而 V008 3/3**——流程步骤本身制造了这类失败
+   - 已证伪路线：prompt 级对账合同（F206-R3 三版全被绕过）；F208 依从层（坍塌 0/29 但 V008 纹丝不动）
+   - 候选机制（spec 阶段选型，均为结构化门非 prompt）：(a) 终报 §9-1 "issue 期望行为 vs 工作树现状"双向对账合同；(b) **red-repro-first**——修复前必须先写复现症状的红测试，红测试失败即证伪"已修复"（= M10 TDD 引擎化卡的 fix 模式切片**前移**，两机制或可合一：红测试就是最强的双向对账）
+   - 排期：可与 A/B 轨并行（碰 plugins/spec-driver fix skill/agents；注意与 A2 wrapper 再生成的先后顺序）
+2. **lift 负向信号（不显著但方向明确）强化两张既有卡的优先级论据**：强 driver（opus-4-8）上流程呈净开销方向 + 平均触发率 2.2× 达标但 V008 关键 run MCP×0——"自适应流程裁剪"（M8-deferred）与"任务级流程深度路由"的价值随 driver 变强而上升；§9-5 driver×流程交互研究列 M10 eval 候选（同链 c1/c3 对照才可下结论）
+3. **评测 infra 三小件 + plugin 守卫内建 + upstream 上报**（终报 §9-2/3/4）→ backlog 小卡，不占 M9 轨道
+4. 触发率工程（F184 路线）经预注册机判验证 → A 轨 instructions/description 方法论可信，继续沿用
   ├─ Track A Codex First-Class
   └─ Track B Trusted Live Graph
              ↓ A/B P0 门禁同时通过
