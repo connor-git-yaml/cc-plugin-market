@@ -56,3 +56,12 @@
 - [01:50] 全部 53 任务勾选；specs/src.spec.md 产物还原（按并行 feature 排除约定）；specs/_meta/graph.json 确认 gitignored
 - [01:52] codex_review(implement): STARTED（后台，全改动面对抗审查）
 - [01:53] origin/master 复核：仍 39e4055，0 behind / 3 ahead，无需 rebase
+- [02:20] codex_review(implement): COMPLETED | 2 CRITICAL + 11 WARNING + 大量 INFO 正面确认（fixture 手推值独立复算一致 / micrograd 纯 metadata / FR-026 / CONSTRAINT-003 / 无注入）
+  - C1: GraphJSON 结构校验过浅（links:[{}] 误判强失败 exit 1，违 FR-027 方向）；C2: spawnSync 默认 1MiB maxBuffer 可把大规模强失败降级 warning（硬门禁绕过）
+- [02:25] fix batch: 9 项必修 TDD 红绿（结构深校验/maxBuffer 64MiB×2/porcelain 失败保守判 dirty/dirty 扩展名镜像生产者/oracle 按语言分派/duplicate Windows 归一/schemaVersion 数值双向/stdout 纯净+写失败语义/两测试缺口）+ 3 项记录不修（submodule/--help 全局截获/spec FR-025 措辞澄清）
+- [02:45] fix batch: COMPLETED | 5397 全绿四门通过
+- [02:50] commit 0f72d4a: implement 全量入库（79 文件 +6405/-115）；pre-commit hook 里 graph-quality 六项子检查首跑全 pass（门禁自举）
+- [02:55] verify(独立): COMPLETED → verification-report.md | READY-FOR-GATE 无阻塞；四门独立实跑全绿（vitest 两次 5397 零失败）；14 SC 逐条核验；SC-010 验证者独立 mktemp 复现 HEAD-forward stale；commit 后 repo:check freshness=warn(stale) —— 门禁在自己交付上活体演示"HEAD 前进非静默"
+  - non-blocker：duplicate-id-check.ts/source-commit.ts 含字面 NUL 字节触发 git 二进制启发式
+- [03:00] NUL micro-fix: 7 处字面 NUL → \x00 转义（行为等价），45/45 目标测试绿 + build 零错误
+- [03:02] GATE_VERIFY: 交付报告待用户确认 push
