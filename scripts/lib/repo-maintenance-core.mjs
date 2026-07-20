@@ -40,7 +40,9 @@ function relativePath(projectRoot, targetPath) {
 
 function runSpecDriverCodexInstall(projectRoot) {
   const scriptPath = path.join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'codex-skills.sh');
-  execFileSync('bash', [scriptPath, 'install'], {
+  // Feature 213（A1）：repo:sync 是唯一驱动 tracked skills-codex/ 重写的入口，
+  // 显式带 --sync-plugin-distribution flag（opt-in 双写）；普通/测试 install 不传，零触发。
+  execFileSync('bash', [scriptPath, 'install', '--sync-plugin-distribution'], {
     cwd: projectRoot,
     stdio: 'pipe',
     encoding: 'utf-8',

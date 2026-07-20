@@ -1,0 +1,32 @@
+{
+  "name": "cc-plugin-market",
+  "interface": {
+    "displayName": "Spectra / Spec Driver"
+  },
+  "plugins": [
+    {
+      "name": "spectra",
+      "source": {
+        "source": "local",
+        "path": "./plugins/spectra"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "development"
+    },
+    {
+      "name": "spec-driver",
+      "source": {
+        "source": "local",
+        "path": "./plugins/spec-driver"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "development"
+    }
+  ]
+}

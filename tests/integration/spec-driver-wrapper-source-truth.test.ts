@@ -89,6 +89,99 @@ describe('validate-wrapper-sources.mjs', () => {
     );
   });
 
+  it('[Feature 213] codex-wrapper-markers 与 codex-plugin-distribution-markers 同过', () => {
+    // 带 flag 安装：同时生成 .codex/skills 与 tracked 的 plugins/spec-driver/skills-codex/
+    const install = runCommand(
+      'bash',
+      [
+        join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'codex-skills.sh'),
+        'install',
+        '--sync-plugin-distribution',
+      ],
+      projectRoot,
+    );
+    expect(install.exitCode).toBe(0);
+
+    const result = runCommand(
+      'node',
+      [
+        join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'validate-wrapper-sources.mjs'),
+        '--project-root',
+        projectRoot,
+        '--json',
+      ],
+      projectRoot,
+    );
+
+    expect(result.exitCode).toBe(0);
+    const payload = JSON.parse(result.stdout) as {
+      status: string;
+      checks: Array<{ id: string; status: string }>;
+      errors: string[];
+    };
+
+    expect(payload.status).toBe('pass');
+    expect(payload.errors).toEqual([]);
+    expect(payload.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'codex-wrapper-markers', status: 'pass' }),
+        expect.objectContaining({ id: 'codex-plugin-distribution-markers', status: 'pass' }),
+      ]),
+    );
+  });
+
+  it('[Feature 213] 仅篡改 skills-codex wrapper → distribution check fail 而 .codex check pass（证明两 check 看不同目录）', () => {
+    const install = runCommand(
+      'bash',
+      [
+        join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'codex-skills.sh'),
+        'install',
+        '--sync-plugin-distribution',
+      ],
+      projectRoot,
+    );
+    expect(install.exitCode).toBe(0);
+
+    // 仅篡改 skills-codex 中某个 wrapper（删除该文件；.codex/skills 保持原样）
+    const distWrapper = join(
+      projectRoot,
+      'plugins',
+      'spec-driver',
+      'skills-codex',
+      'spec-driver-feature',
+      'SKILL.md',
+    );
+    rmSync(distWrapper, { force: true });
+
+    const result = runCommand(
+      'node',
+      [
+        join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'validate-wrapper-sources.mjs'),
+        '--project-root',
+        projectRoot,
+        '--json',
+      ],
+      projectRoot,
+    );
+
+    expect(result.exitCode).toBe(1);
+    const payload = JSON.parse(result.stdout) as {
+      status: string;
+      checks: Array<{ id: string; status: string }>;
+      errors: string[];
+    };
+    expect(payload.status).toBe('fail');
+    // .codex/skills 未动 → codex-wrapper-markers 仍 pass；仅分发目录被篡改 → distribution check fail
+    expect(payload.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'codex-wrapper-markers', status: 'pass' }),
+        expect.objectContaining({ id: 'codex-plugin-distribution-markers', status: 'fail' }),
+      ]),
+    );
+    // 修复提示应为 repo:sync（普通 install 无法修分发目录）
+    expect(payload.errors.join('\n')).toContain('repo:sync');
+  });
+
   it('在 wrapper 缺少 source contract 标记时返回 fail', () => {
     runCommand(
       'bash',

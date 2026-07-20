@@ -96,6 +96,12 @@ describe('repo maintenance sync/check', () => {
 
     rmSync(join(projectRoot, 'skills', 'spectra'), { recursive: true, force: true });
 
+    // Feature 213（WARNING 3）：删除 tracked skills-codex/，真守护 repo:sync 的
+    // --sync-plugin-distribution flag 接线（防未来有人删 flag 而测试仍绿）。
+    const distDir = join(projectRoot, 'plugins', 'spec-driver', 'skills-codex');
+    rmSync(distDir, { recursive: true, force: true });
+    expect(existsSync(distDir)).toBe(false);
+
     const sync = runNode(join(projectRoot, 'scripts', 'repo-sync.mjs'), projectRoot);
     expect(sync.exitCode).toBe(0);
 
@@ -114,6 +120,25 @@ describe('repo maintenance sync/check', () => {
 
     expect(existsSync(join(projectRoot, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'))).toBe(true);
     expect(existsSync(join(projectRoot, 'skills', 'spectra', 'SKILL.md'))).toBe(true);
+
+    // Feature 213（WARNING 3）：skills-codex/ 被 repo:sync 重新生成 8 项，且与 .codex/skills 逐字节一致
+    const SPEC_DRIVER_SKILLS = [
+      'spec-driver-constitution',
+      'spec-driver-feature',
+      'spec-driver-implement',
+      'spec-driver-story',
+      'spec-driver-fix',
+      'spec-driver-resume',
+      'spec-driver-sync',
+      'spec-driver-doc',
+    ];
+    const codexDir = join(projectRoot, '.codex', 'skills');
+    for (const skill of SPEC_DRIVER_SKILLS) {
+      const distFile = join(distDir, skill, 'SKILL.md');
+      const codexFile = join(codexDir, skill, 'SKILL.md');
+      expect(existsSync(distFile)).toBe(true);
+      expect(readFileSync(distFile)).toEqual(readFileSync(codexFile));
+    }
 
     const check = runNode(join(projectRoot, 'scripts', 'repo-check.mjs'), projectRoot);
     expect(check.exitCode).toBe(0);

@@ -4,10 +4,93 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  rmSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  cpSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 
 const SCRIPT_PATH = resolve('plugins/spec-driver/scripts/codex-skills.sh');
+
+// Feature 213（T003）：8 个 Spec Driver Codex 适配 skill id（与 wrapper-source-of-truth.yaml entries 对齐）
+const SPEC_DRIVER_SKILLS = [
+  'spec-driver-constitution',
+  'spec-driver-feature',
+  'spec-driver-implement',
+  'spec-driver-story',
+  'spec-driver-fix',
+  'spec-driver-resume',
+  'spec-driver-sync',
+  'spec-driver-doc',
+];
+
+// 真实仓库内 tracked 的 Codex 分发目录（无 flag 守护用例锚定其零变化）
+const REPO_SKILLS_CODEX = resolve('plugins/spec-driver/skills-codex');
+
+// 计算目录确定性快照：不存在返回 '<absent>'，存在则递归拼接 sorted 相对路径 + 内容
+function snapshotDir(dir: string): string {
+  if (!existsSync(dir)) {
+    return '<absent>';
+  }
+  const entries: string[] = [];
+  const walk = (current: string, rel: string): void => {
+    for (const name of readdirSync(current).sort()) {
+      const full = join(current, name);
+      const relPath = rel ? `${rel}/${name}` : name;
+      if (statSync(full).isDirectory()) {
+        walk(full, relPath);
+      } else {
+        entries.push(`${relPath}\n${readFileSync(full, 'utf-8')}`);
+      }
+    }
+  };
+  walk(dir, '');
+  return entries.join('\n---ENTRY---\n');
+}
+
+// 在 tempDir 内建立 plugins/spec-driver 的 fixture 副本（$PLUGIN_DIR 由脚本物理位置派生，
+// 用副本脚本可让 skills-codex/ 落在 tempDir 内而非真实仓库）
+function copyPluginFixture(root: string): string {
+  mkdirSync(join(root, 'plugins'), { recursive: true });
+  cpSync(resolve('plugins/spec-driver'), join(root, 'plugins', 'spec-driver'), {
+    recursive: true,
+  });
+  return join(root, 'plugins', 'spec-driver', 'scripts', 'codex-skills.sh');
+}
+
+// 运行任意路径脚本（catch 非零退出，用于 TDD 红用例断言 exitCode）
+function runFixtureScript(
+  scriptPath: string,
+  args: string[],
+  root: string,
+): { stdout: string; exitCode: number } {
+  try {
+    const stdout = execFileSync('bash', [scriptPath, ...args], {
+      encoding: 'utf-8',
+      timeout: 20_000,
+      cwd: root,
+      env: {
+        ...process.env,
+        HOME: process.env['HOME'],
+        CODEX_SKILL_PROJECT_ROOT: root,
+      },
+    });
+    return { stdout, exitCode: 0 };
+  } catch (err: unknown) {
+    const error = err as { stdout?: string; stderr?: string; status?: number };
+    return {
+      stdout: (error.stdout ?? '') + (error.stderr ?? ''),
+      exitCode: error.status ?? 1,
+    };
+  }
+}
 
 function runScript(
   args: string[],
@@ -172,5 +255,70 @@ describe('Spec Driver Codex skills script', () => {
     expect(
       existsSync(join(repoRoot, '.codex', 'skills', 'spec-driver-feature', 'SKILL.md')),
     ).toBe(true);
+  });
+
+  // Feature 213 T003：opt-in 双写机制（一红两绿）
+  describe('Feature 213 — --sync-plugin-distribution opt-in 双写', () => {
+    it('[红] install --sync-plugin-distribution 生成 skills-codex/ 8 目录且与 .codex/skills 字节相同', () => {
+      const fixtureScript = copyPluginFixture(tempDir);
+      const install = runFixtureScript(
+        fixtureScript,
+        ['install', '--sync-plugin-distribution'],
+        tempDir,
+      );
+      // 实现前：脚本无该 flag → 未知参数 exit 1 → 本断言失败（红）
+      expect(install.exitCode).toBe(0);
+
+      const distDir = join(tempDir, 'plugins', 'spec-driver', 'skills-codex');
+      const codexDir = join(tempDir, '.codex', 'skills');
+      expect(existsSync(distDir)).toBe(true);
+      expect(readdirSync(distDir).filter((n) => statSync(join(distDir, n)).isDirectory()).sort())
+        .toHaveLength(8);
+      for (const skill of SPEC_DRIVER_SKILLS) {
+        const distFile = join(distDir, skill, 'SKILL.md');
+        const codexFile = join(codexDir, skill, 'SKILL.md');
+        expect(existsSync(distFile)).toBe(true);
+        expect(existsSync(codexFile)).toBe(true);
+        // copy-after-generate 保证逐字节相同（Buffer 相等）
+        expect(readFileSync(distFile).equals(readFileSync(codexFile))).toBe(true);
+      }
+    });
+
+    // sentinel 不在 SKILLS 列表内：任何 rm -rf 重建（哪怕字节相同重写）都会丢掉它，
+    // 故 sentinel 存活是比"快照字节相同"更强的守护（防"删了又重建相同字节"骗过快照）。
+    it('[绿a·characterization] 无 flag 的 install 不触碰 distribution 目录（sentinel 存活 + 真实仓库快照不变）', () => {
+      const fixtureScript = copyPluginFixture(tempDir);
+      const distDir = join(tempDir, 'plugins', 'spec-driver', 'skills-codex');
+      mkdirSync(distDir, { recursive: true });
+      const sentinel = join(distDir, '.sentinel-do-not-touch');
+      writeFileSync(sentinel, 'SENTINEL');
+
+      const repoBefore = snapshotDir(REPO_SKILLS_CODEX);
+      const install = runFixtureScript(fixtureScript, ['install'], tempDir);
+      expect(install.exitCode).toBe(0);
+
+      // sentinel 存活（若 sync_plugin_distribution_copy 的 rm -rf 误触发会删掉它）
+      expect(existsSync(sentinel)).toBe(true);
+      expect(readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+      // 第二道防线：真实仓库 skills-codex 快照不变
+      expect(snapshotDir(REPO_SKILLS_CODEX)).toBe(repoBefore);
+    });
+
+    it('[绿b·characterization] remove 不触碰 distribution 目录（sentinel 存活 + 真实仓库快照不变）', () => {
+      const fixtureScript = copyPluginFixture(tempDir);
+      const distDir = join(tempDir, 'plugins', 'spec-driver', 'skills-codex');
+      mkdirSync(distDir, { recursive: true });
+      const sentinel = join(distDir, '.sentinel-do-not-touch');
+      writeFileSync(sentinel, 'SENTINEL');
+
+      const repoBefore = snapshotDir(REPO_SKILLS_CODEX);
+      runFixtureScript(fixtureScript, ['install'], tempDir);
+      const remove = runFixtureScript(fixtureScript, ['remove'], tempDir);
+      expect(remove.exitCode).toBe(0);
+
+      expect(existsSync(sentinel)).toBe(true);
+      expect(readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
+      expect(snapshotDir(REPO_SKILLS_CODEX)).toBe(repoBefore);
+    });
   });
 });

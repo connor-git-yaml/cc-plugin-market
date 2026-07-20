@@ -8,6 +8,9 @@ plugin:
 codexWrappers:
   sourceRoot: "plugins/spec-driver/skills"
   targetRoot: ".codex/skills"
+  # Feature 213（A1）：随插件包分发的 tracked Codex 适配目录；与 targetRoot 共用同一份 entries id 列表。
+  # copy-after-generate 保证与 .codex/skills 逐字节相同（含内嵌 Source SHA256 行）。
+  pluginDistributionRoot: "plugins/spec-driver/skills-codex"
   generator:
     script: "plugins/spec-driver/scripts/codex-skills.sh"
     command: "npm run codex:spec-driver:install"

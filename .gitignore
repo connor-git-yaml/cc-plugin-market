@@ -56,8 +56,11 @@ CLAUDE.local.md
 .spectra/
 .specify/scorecards/
 .specify/templates/
-.agents
-.agents/
+# Feature 213 — .agents/plugins/ 收窄放行（tracked Codex marketplace catalog）
+# 其余 .agents 内容（如 .agents/skills/ 本地个人资源）继续忽略
+.agents/*
+!.agents/plugins/
+!.agents/plugins/**
 
 # Worktree 本地态（由 sync-worktree-local-state.sh 管理，绝对路径符号链接，机器相关）
 _reference

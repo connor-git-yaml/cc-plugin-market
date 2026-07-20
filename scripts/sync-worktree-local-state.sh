@@ -141,7 +141,9 @@ log "  primary = $PRIMARY_ROOT"
 # === SYMLINK_TARGETS：软链同步（修改实时 reflect 到所有 worktree）===
 # - .claude/settings.local.json    Claude Code 项目级 local settings（设计上共享）
 # - .specify/.spec-driver-path     spec-driver plugin 路径解析缓存
-# - .agents                        agents config（spec-driver / spectra / codex）
+# - .agents/skills                 agents 本地 skills（Feature 213：由整目录 .agents 收窄为
+#                                   .agents/skills 子目录，让 tracked 的 .agents/plugins/ 在
+#                                   worktree 内保持为真实目录，不被 symlink 穿透污染主仓）
 # - node_modules                   npm 依赖（避免每个 worktree 重 install）
 # - _reference                     调研参考代码 (graphify / GitNexus / khoj 等)
 # - CLAUDE.local.md                本地开发规则；开发约定按设计应跨 worktree 共享
@@ -149,7 +151,7 @@ log "  primary = $PRIMARY_ROOT"
 SYMLINK_TARGETS=(
   ".claude/settings.local.json"
   ".specify/.spec-driver-path"
-  ".agents"
+  ".agents/skills"
   "node_modules"
   "_reference"
   "CLAUDE.local.md"
@@ -169,6 +171,46 @@ COPY_TARGETS=(
 #                                   lock 更安全。如果未来需要全局 lock，由 lock
 #                                   消费方实现 TTL + owner 校验，不通过 sync 脚本。
 # - .claire/                       Claude Code 内部 worktree state，per-worktree 独立。
+
+# Feature 213（A1）：旧 worktree 迁移守护。
+# 收窄前的旧 worktree 仍是整目录软链 `.agents -> $PRIMARY_ROOT/.agents`。
+# 若不先迁移，后续对收窄后子链 `.agents/skills` 的处理会沿父级软链解析进主仓：
+#   - source 非空 → link_path 判"目标已有非空目录"跳过 → 整目录旧链存续，`.agents/plugins` 继续写穿主仓
+#   - source 空/仅隐藏 → entry_count==0 分支 `rm -rf` 沿链删除主仓 `.agents/skills`（数据破坏）
+# 因此在处理 `.agents/skills` 之前，必须先把整目录旧链迁移为真实目录（仅删链接本身，不触碰主仓内容）。
+# 解析为物理路径（存在则 cd+pwd -P 归一化 symlink，如 macOS /var→/private/var；不存在则原样返回）
+resolve_physical_path() {
+  local p="$1"
+  if [[ -e "$p" ]]; then
+    ( cd "$p" 2>/dev/null && pwd -P ) || printf '%s' "$p"
+  else
+    printf '%s' "$p"
+  fi
+}
+
+migrate_legacy_agents_symlink() {
+  local agents_path="$CURRENT_ROOT/.agents"
+  # 非 symlink（已迁移的真实目录 / 不存在）无需处理
+  if [[ ! -L "$agents_path" ]]; then
+    return 0
+  fi
+  local current_target expected_target
+  current_target="$(readlink "$agents_path")"
+  expected_target="$PRIMARY_ROOT/.agents"
+  # 归一化后比较（防 raw 字符串因 /var↔/private/var 等 symlink 归一化差异误判为"非预期软链"）
+  if [[ "$current_target" == "$expected_target" ]] \
+    || [[ "$(resolve_physical_path "$current_target")" == "$(resolve_physical_path "$expected_target")" ]]; then
+    log "迁移旧 .agents 整目录软链 → 真实目录（Feature 213 收窄，仅删链接本身，不触碰主仓内容）"
+    run rm -- "$agents_path"
+    run mkdir -p "$agents_path"
+  else
+    warn "检测到 .agents 是非预期软链（$agents_path -> $current_target），拒绝自动处理以免误删/写穿。"
+    warn "请人工确认后手动移除该软链（rm -- \"$agents_path\"），再重跑本脚本。"
+    exit 1
+  fi
+}
+
+migrate_legacy_agents_symlink
 
 for relative_path in "${SYMLINK_TARGETS[@]}"; do
   link_path \

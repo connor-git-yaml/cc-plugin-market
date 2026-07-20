@@ -59,3 +59,13 @@
 [GATE_ANALYSIS] AUTO_CONTINUE (on_failure, 无CRITICAL失败信号; HIGH/MEDIUM为文档回填项已处理)
 [plan-backfill] COMPLETED (haiku代理) | 4处: §3.6 修改文件13→14+新行 / §3.3 补2 check行 / §3.5 FR-004/005锚点补齐
 [implement] Wave 1 (T000-T007) STARTED | agent=spec-driver:implement model=opus(生产代码质量优先策略覆盖balanced默认)
+[implement:wave1] 代理2次断连(第8/9次)后主体完成; 编排器inline接管收尾核验(属复核职权): T002后置条件✓(.agents真实dir+skills收窄symlink+marketplace.json可追踪??) / 主仓零污染✓(.agents/plugins不存在) / 3测试文件27/27✓(一红两绿结构在) / skills-codex 8目录字节一致✓ / .codex/skills零diff=F186字节稳定✓ / repo:check pass✓(含新双root校验) / repo:sync时间戳噪声已还原(specs/products+src.spec.md+suggestions)
+[codex-review:implement-wave1] STARTED 直发companion (task-mrsznuhl-pc61py) | 9审查点含rm -rf空变量/gitignore否定陷阱/测试自欺
+[codex-review:implement-wave1] 完整返回: 1 CRITICAL + 4 WARNING, 判定未修复前不commit
+  C1(严重): 旧worktree遗留整目录.agents软链 → 新脚本沿父链解析: 非空跳过=写穿存续 / 空则rm -rf删主仓.agents/skills(数据破坏); 需旧链迁移检测+fail-loud+3类回归测试
+  W1: codex-wrapper-markers不再读entry.target(零变化承诺回归) W2: 守护用例可被删后重建同字节骗过(需sentinel) W3: sync-check fixture预复制skills-codex无法锚定flag接线 W4: distribution修复提示错(应repo:sync)+双绿测试不辨向
+  INFO亮点: rm -rf空变量风险证伪(set -euo下PLUGIN_DIR不空) / gitignore实测正确 / 8 wrapper sha抽查过 / marketplace schema全对
+[implement:wave1-fix] STARTED | 5项修法交回implement代理
+[implement:wave1-fix] COMPLETED | 1C+4W全修(行级锚点): migrate_legacy_agents_symlink+resolve_physical_path+fail-loud / entry.target恢复 / sentinel守护 / fixture先删再断言重生 / repo:sync修复提示+单侧篡改辨向测试 | +7测试用例
+[implement:wave1] 编排器独立复核: 4测试文件32/32绿 / 迁移守护+fail-loud抽查在位 / repo:check pass | Wave 1 commit-ready
+[commit:implement-wave1] STARTED

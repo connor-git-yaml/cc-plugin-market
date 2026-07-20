@@ -80,17 +80,88 @@ describe('sync-worktree-local-state.sh', () => {
       expect(fs.readFileSync(targetFile, 'utf-8')).toBe('# 本地开发约定\ntest content');
     });
 
-    it('.agents 目录应软链到父仓库', () => {
-      const sourceDir = path.join(repo.primaryDir, '.agents');
-      fs.mkdirSync(sourceDir);
+    it('.agents/skills 子目录应软链到父仓库（.agents/plugins 保留为 tracked 真实目录，Feature 213 收窄）', () => {
+      // Feature 213：SYMLINK_TARGETS 由整目录 `.agents` 收窄为子目录 `.agents/skills`，
+      // 让 tracked 的 `.agents/plugins/marketplace.json` 在 worktree 内为真实目录而非 symlink 穿透。
+      const sourceDir = path.join(repo.primaryDir, '.agents', 'skills');
+      fs.mkdirSync(sourceDir, { recursive: true });
       fs.writeFileSync(path.join(sourceDir, 'config.json'), '{}');
 
       const r = runSync(repo.worktreeDir);
       expect(r.status).toBe(0);
 
-      const targetDir = path.join(repo.worktreeDir, '.agents');
+      const targetDir = path.join(repo.worktreeDir, '.agents', 'skills');
       const stat = fs.lstatSync(targetDir);
       expect(stat.isSymbolicLink()).toBe(true);
+    });
+
+    // Feature 213 CRITICAL：旧 worktree 整目录 .agents 软链迁移守护
+    it('(a) 旧整目录 .agents 软链 + 主仓 .agents/skills 非空 → 迁移为真实 .agents + skills 子链，主仓逐字节不变', () => {
+      const primaryAgents = path.join(repo.primaryDir, '.agents');
+      const primarySkills = path.join(primaryAgents, 'skills');
+      fs.mkdirSync(primarySkills, { recursive: true });
+      fs.writeFileSync(path.join(primarySkills, 'gen.md'), 'PRIMARY-CONTENT');
+      // 模拟旧 worktree：.agents 为指向主仓的整目录软链
+      const wtAgents = path.join(repo.worktreeDir, '.agents');
+      fs.symlinkSync(primaryAgents, wtAgents);
+      expect(fs.lstatSync(wtAgents).isSymbolicLink()).toBe(true);
+
+      const r = runSyncVerbose(repo.worktreeDir);
+      expect(r.status).toBe(0);
+
+      // worktree .agents 迁移为真实目录，skills 为子链
+      expect(fs.lstatSync(wtAgents).isSymbolicLink()).toBe(false);
+      expect(fs.statSync(wtAgents).isDirectory()).toBe(true);
+      expect(fs.lstatSync(path.join(wtAgents, 'skills')).isSymbolicLink()).toBe(true);
+      // 主仓内容逐字节不变，主仓 .agents 仍是真实目录（未被链接/删除）
+      expect(fs.readFileSync(path.join(primarySkills, 'gen.md'), 'utf-8')).toBe('PRIMARY-CONTENT');
+      expect(fs.lstatSync(primaryAgents).isSymbolicLink()).toBe(false);
+    });
+
+    it('(b) 旧整目录 .agents 软链 + 主仓 .agents 仅隐藏内容 → 主仓 .agents/skills 未被沿链删除', () => {
+      const primaryAgents = path.join(repo.primaryDir, '.agents');
+      const primarySkills = path.join(primaryAgents, 'skills');
+      fs.mkdirSync(primarySkills, { recursive: true });
+      // 仅隐藏文件（触发旧脚本 entry_count==0 的 rm -rf 危险分支）
+      fs.writeFileSync(path.join(primarySkills, '.keep'), '');
+      const wtAgents = path.join(repo.worktreeDir, '.agents');
+      fs.symlinkSync(primaryAgents, wtAgents);
+
+      const r = runSyncVerbose(repo.worktreeDir);
+      expect(r.status).toBe(0);
+
+      // 主仓 .agents/skills 与其隐藏文件仍存在（未被 rm -rf 沿链删除）
+      expect(fs.existsSync(primarySkills)).toBe(true);
+      expect(fs.existsSync(path.join(primarySkills, '.keep'))).toBe(true);
+      expect(fs.lstatSync(path.join(repo.worktreeDir, '.agents')).isSymbolicLink()).toBe(false);
+    });
+
+    it('(c) worktree 已有真实 .agents/plugins/marketplace.json → 重跑脚本原样保留', () => {
+      // 模拟已迁移 worktree：真实 .agents/plugins/marketplace.json（tracked 内容）
+      const wtMarketplace = path.join(
+        repo.worktreeDir,
+        '.agents',
+        'plugins',
+        'marketplace.json',
+      );
+      fs.mkdirSync(path.dirname(wtMarketplace), { recursive: true });
+      fs.writeFileSync(wtMarketplace, '{"name":"cc-plugin-market"}');
+      // 主仓有 .agents/skills 供子链
+      fs.mkdirSync(path.join(repo.primaryDir, '.agents', 'skills'), { recursive: true });
+
+      const r = runSync(repo.worktreeDir);
+      expect(r.status).toBe(0);
+
+      // marketplace.json 原样保留（真实文件，内容不变）
+      expect(fs.lstatSync(wtMarketplace).isFile()).toBe(true);
+      expect(fs.readFileSync(wtMarketplace, 'utf-8')).toBe('{"name":"cc-plugin-market"}');
+      // skills 建为子链，plugins 保持真实目录
+      expect(
+        fs.lstatSync(path.join(repo.worktreeDir, '.agents', 'skills')).isSymbolicLink(),
+      ).toBe(true);
+      expect(
+        fs.lstatSync(path.join(repo.worktreeDir, '.agents', 'plugins')).isSymbolicLink(),
+      ).toBe(false);
     });
 
     it('已存在的相同软链 idempotent 不重复创建', () => {

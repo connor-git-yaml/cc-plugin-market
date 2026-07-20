@@ -1,0 +1,2950 @@
+# Baseline pre-implement — Feature 213 Wave 1
+# commit anchor: 0b17a6e982cf4b70b82c0035cb798dcd95559186
+# note: HEAD 已含 2466905（origin/master@2466905 为 ancestor），worktree 分支基线
+# captured: 2026-07-20T08:40:43Z
+---
+
+ RUN  v3.2.4 /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/codex-plugin-distribution-2940d3
+
+stderr | tests/self-hosting/self-host.test.ts > 自举测试：spectra 分析自身 > 扫描项目 src/ 目录应发现所有模块
+⚠ 跳过 3 个 .md 文件（不支持）
+
+stderr | tests/self-hosting/self-host.test.ts > 自举测试：spectra 分析自身 > AST 分析项目所有源文件应成功
+⚠ 跳过 3 个 .md 文件（不支持）
+
+ ✓ |unit| tests/unit/eval-report.test.ts (36 tests) 689ms
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .md 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）
+
+stdout | tests/integration/batch-singlelang.test.ts > runBatch 单语言非 TS/JS 路径 > 纯 'python' 项目 batch 不再返回 0 个模块
+发现 5 个文件，聚合为 1 个模块
+
+[1/1] root ... success (24ms)
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-singlelang.test.ts > runBatch 单语言非 TS/JS 路径 > 纯 'python' 项目 batch 不再返回 0 个模块
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/self-hosting/self-host.test.ts > 自举测试：spectra 分析自身 > 所有骨架的导出签名非空
+⚠ 跳过 3 个 .md 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+发现 2 个文件，聚合为 1 个模块
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+发现 3 个文件，聚合为 3 个模块
+
+stdout | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+发现 1 个文件，聚合为 1 个模块
+
+[1/1] mod ... failed
+stdout | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+发现 2 个文件，聚合为 1 个模块
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+发现 3 个文件，聚合为 3 个模块
+
+stdout | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+发现 3 个文件，聚合为 3 个模块
+
+stdout | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+发现 12 个文件，聚合为 12 个模块
+
+stdout | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+发现 3 个文件，聚合为 3 个模块
+
+[1/3] auth ... success (9ms)
+[2/3] api ... success (3ms)
+[3/3] jobs ... success (2ms)
+[auth] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[jobs] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[1/3] events ... success (16ms)
+[2/3] models ... success (13ms)
+[3/3] api ... success (12ms)
+[events] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[models] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）
+
+[1/1] components ... success (26ms)
+[components] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[1/2] api ... success (21ms)
+[2/2] models ... success (15ms)
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[models] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .md 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+[1/3] events ... success (24ms)
+[2/3] models ... success (22ms)
+[events] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[models] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[3/3] api ... success (21ms)
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .md 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .md 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+⚠ 跳过 1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）、1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）、1 个 .yml 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.4s
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.4s
+stderr | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 3 个子目录（_meta, docs, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-product-ux-docs.test.ts > runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-01] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+[c] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.5s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-bundle-orchestration.test.ts > runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/e2e/batch-pipeline.e2e.test.ts > Spectra batch pipeline E2E（fixture-based）
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[mod-02] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.8s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[mod-03] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 1.1s
+[mod-04] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 0.8s
+[mod-05] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 0.8s
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 0
+失败: 1
+跳过: 0
+降级: 0
+耗时: 2.1s
+[mod-06] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[mod-07] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 0.7s
+stdout | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined
+发现 1 个文件，聚合为 1 个模块
+
+[1/1] mod ... failed (1ms)
+[mod-08] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-09] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 0.7s
+Top 5 input token 消费模块：
+  1. src/components: 193 tokens
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 3.2s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[mod-10] AST: 0.0s | context: 0.0s | LLM#1: 0.8s | enrich: - | render: 0.0s | total: 0.8s
+[mod-11] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[mod-12] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+⚠ 跳过 2 个 .json 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 0
+失败: 1
+跳过: 0
+降级: 0
+耗时: 1.0s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 3 模块
+成功: 3
+失败: 0
+跳过: 0
+降级: 0
+耗时: 3.5s
+stderr | tests/self-hosting/self-host.test.ts > 自举测试：spectra 分析自身 > 可以为每个骨架生成 Mermaid 类图
+⚠ 跳过 3 个 .md 文件（不支持）
+
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+发现 2 个文件，聚合为 1 个模块
+
+[1/1] components ... skipped
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stdout | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）
+发现 1 个文件，聚合为 1 个模块
+
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+发现 3 个文件，聚合为 3 个模块
+
+[1/1] mod ... success
+[mod] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[1/3] jobs ... skipped
+[2/3] auth ... success (3ms)
+[auth] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[3/3] api ... success (2ms)
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental.test.ts > runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 1.2s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/sync-worktree-local-state.test.ts (18 tests) 5457ms
+   ✓ sync-worktree-local-state.sh > COPY_TARGETS (Codex CRITICAL 修订: .env.local 用 copy 不用软链) > 遗留的 .env.local 软链应被替换为 copy (迁移路径)  302ms
+   ✓ sync-worktree-local-state.sh > 在主工作区跑脚本应 no-op > 在父仓库根目录跑应直接退出不创建任何软链  339ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > worktree 缺图时从主仓 copy graph.json + 快照（非软链）+ 写 source-commit sidecar  391ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > 主仓快照缺失时不阻断（仅 copy graph，首次 commit 退化 full reindex）  347ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > source-commit ≠ worktree HEAD 时 rerun 给出 stale 提示（不阻断）  481ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > 首次 bootstrap 时 worktree HEAD 已 ≠ 主仓 HEAD → 立即 stale 提示（Codex CRITICAL）  400ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > 已有 graph 但缺 snapshot 时 rerun 补齐 snapshot（Codex WARNING：两者独立 copy-if-absent）  364ms
+   ✓ sync-worktree-local-state.sh > graph bootstrap (Feature 193 🅑) > graph 目标是 symlink 时不静默当作"已有真实图"，warn 且不 copy（Codex WARNING）  395ms
+   ✓ sync-worktree-local-state.sh > Codex WARNING #1: scheduled_tasks.lock 不在同步列表 > 父仓库有 scheduled_tasks.lock 时 worktree 不创建软链/copy  355ms
+Top 5 input token 消费模块：
+  1. src/b: 124 tokens
+  2. src/a: 85 tokens
+  3. src/c: 85 tokens
+ ✓ |integration| tests/integration/cli-coldstart.test.ts (8 tests | 6 skipped) 1ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段
+发现 1 个文件，聚合为 1 个模块
+
+[1/1] mod ... failed
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |integration| tests/integration/spec-driver-kb-prequery.test.ts (4 tests) 6707ms
+   ✓ kb-prequery 端到端 > SC-003：配 knowledge_sources + good bin → 输出注入块（非指令前导 + envelope + 来源）  6109ms
+   ✓ kb-prequery 端到端 > SC-006a：旧版 bin（能跑但无 --probe sentinel）→ 降级 spectra-too-old，exit 0 空 stdout  451ms
+Top 5 input token 消费模块：
+  1. src/index.ts: 435 tokens
+  2. src/utils.ts: 400 tokens
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+发现 3 个文件，聚合为 3 个模块
+
+ ✓ |e2e| tests/e2e/batch-pipeline.e2e.test.ts (4 tests) 6913ms
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 0
+失败: 1
+跳过: 0
+降级: 0
+耗时: 0.9s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries
+发现 1 个文件，聚合为 1 个模块
+
+[1/1] mod ... failed
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch-orchestrator-retry.test.ts > runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 0
+失败: 1
+跳过: 0
+降级: 0
+耗时: 0.9s
+ ✓ |unit| tests/unit/batch-orchestrator-retry.test.ts (5 tests) 6372ms
+   ✓ runBatch — retry token budget 短路 (Bug 142) > 场景 1：generateSpec 持续抛错 → 第 2 次失败时 forecast 触发 break，reason=retry-budget-exceeded  2160ms
+   ✓ runBatch — retry token budget 短路 (Bug 142) > 场景 2：maxRetries=1 → 1 次失败 forecast 不触发（cum=15k, 15+15=30 not >40）→ maxRetries 路径，reason=undefined  1062ms
+   ✓ runBatch — retry token budget 短路 (Bug 142) > 场景 3：第 1 次 reject 第 2 次成功 → 模块标 success（成功路径累积 token 不影响）  1314ms
+   ✓ runBatch — retry token budget 短路 (Bug 142) > 场景 4：失败 spec 含 retry-budget-exceeded → batch-summary markdown 含 reason 字段  900ms
+   ✓ runBatch — retry token budget 短路 (Bug 142) > 场景 5（regression）：default config 下 budget 必须真的省 LLM 调用，调用次数 < default maxRetries  935ms
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 6.6s
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/integration/batch-singlelang.test.ts > runBatch 单语言非 TS/JS 路径 > 纯 'go' 项目 batch 不再返回 0 个模块
+发现 5 个文件，聚合为 1 个模块
+
+[1/1] root ... success (7ms)
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+发现 2 个文件，聚合为 2 个模块
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[1/2] auth ... success
+[auth] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[2/2] api ... success (1ms)
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 0.1s
+stdout | tests/integration/batch-singlelang.test.ts > runBatch 单语言非 TS/JS 路径 > 纯 'java' 项目 batch 不再返回 0 个模块
+发现 5 个文件，聚合为 1 个模块
+
+[1/1] root ... success (8ms)
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 0.1s
+ ✓ |integration| tests/integration/batch-singlelang.test.ts (3 tests) 7093ms
+   ✓ runBatch 单语言非 TS/JS 路径 > 纯 'python' 项目 batch 不再返回 0 个模块  6639ms
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+发现 1 个文件，聚合为 1 个模块
+
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+[1/1] root ... success (60ms)
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.1s | total: 0.1s
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+⚠ 跳过 1 个 .json 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 7.4s
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |integration| tests/integration/batch-product-ux-docs.test.ts (1 test) 7481ms
+   ✓ runBatch product UX docs integration > 在 batch 中输出产品概览、用户旅程与 feature briefs，并进入 docs bundle / quality report  7480ms
+[postbuild:stamp] 盖章: commit=0b17a6e9 (dirty)
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stderr | tests/self-hosting/self-host.test.ts > 自举测试：spectra 分析自身 > 可以为骨架渲染完整 spec Markdown
+⚠ 跳过 3 个 .md 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 0
+失败: 0
+跳过: 1
+降级: 0
+耗时: 4.8s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+⚠ 跳过 1 个 .py 文件（不支持）
+
+[postbuild:stamp] 盖章: commit=0b17a6e9 (dirty)
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+发现 2 个文件，聚合为 2 个模块
+检测到 2 种语言: ts-js, python
+
+[1/2] utils--ts-js ... success (4ms)
+[utils--ts-js] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+[2/2] utils--python ... success (4ms)
+[utils--python] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+⚠ 跳过 1 个 .toml 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 3 模块
+成功: 2
+失败: 0
+跳过: 1
+降级: 0
+耗时: 4.9s
+ ✓ |integration| tests/integration/batch-incremental.test.ts (1 test) 8689ms
+   ✓ runBatch 增量重生成接入 > 仅重生成直接命中和传播命中的 spec，无关 spec mtime 不变  8688ms
+
+--- 批处理完成 ---
+总计: 3 模块
+成功: 3
+失败: 0
+跳过: 0
+降级: 0
+耗时: 8.7s
+
+--- 批处理完成 ---
+总计: 3 模块
+成功: 3
+失败: 0
+跳过: 0
+降级: 0
+耗时: 8.8s
+stdout | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+发现 3 个文件，聚合为 1 个模块
+
+ ✓ |integration| tests/integration/batch-doc-bundle-orchestration.test.ts (1 test) 8891ms
+   ✓ runBatch docs bundle orchestration > batch 在项目级文档之后继续产出 docs bundle 与阅读路径导航  8891ms
+[1/1] sample_sdk ... success (19ms)
+[sample_sdk] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+⚠ 跳过 1 个 .toml 文件（不支持）
+
+stderr | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+⚠ 跳过 1 个 .toml 文件（不支持）
+
+stderr | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+⚠ 跳过 1 个 .toml 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/ingest-flow.test.ts > 三方导入 E2E（SC-005） > 损坏 PDF 源 → 该源失败，不崩
+Warning: Indexing all PDF objects
+
+stderr | tests/integration/batch-interface-surface.test.ts > runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stdout | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative
+发现 3 个文件，聚合为 3 个模块
+
+[1/3] events ... success (4ms)
+[events] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[2/3] models ... success (3ms)
+[models] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[3/3] api ... success (3ms)
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）
+
+stderr | tests/integration/batch-panoramic-doc-suite.test.ts > runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative
+⚠ 跳过 2 个 .json 文件（不支持）、1 个 .example 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 2.6s
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 2.1s
+ ✓ |unit| tests/unit/eval-llm-backend-dispatcher.test.ts (18 tests) 4008ms
+   ✓ callBackend — 8 基础 case > siliconflow-error：HTTP 503 抛错被分类为 transient（max retry 1 后仍 fail）  2002ms
+   ✓ callBackend — retry matrix (FR-014) > RM-1 transient → success：第一次 503，第二次 200，retried=1  2001ms
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/integration/batch-paths.test.ts > runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot
+发现 1 个文件，聚合为 1 个模块
+
+[1/1] root ... success (3ms)
+[root] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot
+⚠ 跳过 2 个 .json 文件（不支持）、2 个 .md 文件（不支持）
+
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot
+⚠ 跳过 2 个 .json 文件（不支持）、2 个 .md 文件（不支持）
+
+stderr | tests/integration/batch-paths.test.ts > runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot
+⚠ 跳过 2 个 .json 文件（不支持）、2 个 .md 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stdout | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率
+发现 2 个文件，聚合为 2 个模块
+
+[1/2] auth ... success (1ms)
+[auth] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[2/2] api ... success
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |integration| tests/integration/ingest-flow.test.ts (7 tests) 1402ms
+   ✓ 三方导入 E2E（SC-005） > W-3 doc-level replace：同源更新内容 → 替换不重复、不撞 chunk_id  358ms
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-coverage-report.test.ts > runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/utils/service.ts: 98 tokens
+  2. src/utils/worker.py: 88 tokens
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 2.2s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+⚠ 跳过 1 个 .py 文件（不支持）
+
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+发现 2 个文件，聚合为 2 个模块
+检测到 2 种语言: ts-js, python
+
+[1/2] utils--python ... skipped
+[2/2] utils--ts-js ... skipped
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/python-mapper-callsite.test.ts (16 tests) 3483ms
+   ✓ PythonMapper.extractCallSites — Edge Cases (CL-04 + EC-12/14/15) > EC-14: 大文件 (>1MB) skip — callSites 为空  3442ms
+Top 5 input token 消费模块：
+  1. src/b: 124 tokens
+  2. src/a: 87 tokens
+stderr | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+⚠ 跳过 1 个 .json 文件（不支持）
+
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 1.7s
+ ✓ |integration| tests/integration/batch-paths.test.ts (2 tests) 4167ms
+   ✓ runBatch 路径基准 > cwd 与 projectRoot 不同时，输出仍写入 projectRoot/specs  2404ms
+   ✓ runBatch 路径基准 > outputDir 为相对路径时，基准应仍然是 projectRoot  1763ms
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 1.9s
+ ✓ |integration| tests/integration/batch-coverage-report.test.ts (2 tests) 4896ms
+   ✓ runBatch 覆盖率审计接入 > batch 完成后输出 coverage markdown/json 报告  3001ms
+   ✓ runBatch 覆盖率审计接入 > low-confidence 模块仍计入已文档化覆盖率  1894ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+发现 3 个文件，聚合为 2 个模块
+
+[1/2] auth ... success (1ms)
+[auth] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+[2/2] api ... success
+[api] AST: - | context: - | LLM#1: - | enrich: - | render: - | total: 0.0s
+stderr | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/spec-driver/wrapper-sha256.test.ts (9 tests) 2384ms
+   ✓ F186 T2 — validateWrapperSources body sha256 门禁 > 用例 2（正常）：install 后立即校验 → pass，且 codex-wrapper-markers pass  791ms
+   ✓ F186 T2 — validateWrapperSources body sha256 门禁 > 用例 1（漂移）：改 source 一行 → fail（sha 不匹配）  715ms
+   ✓ F186 T2 — validateWrapperSources body sha256 门禁 > 用例 3（缺 sha）：删 wrapper 的 Source SHA256 行 → fail  721ms
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+ ✓ |self-hosting| tests/self-hosting/self-host.test.ts (5 tests) 12401ms
+   ✓ 自举测试：spectra 分析自身 > AST 分析项目所有源文件应成功  1208ms
+   ✓ 自举测试：spectra 分析自身 > 所有骨架的导出签名非空  3236ms
+   ✓ 自举测试：spectra 分析自身 > 可以为每个骨架生成 Mermaid 类图  4352ms
+   ✓ 自举测试：spectra 分析自身 > 可以为骨架渲染完整 spec Markdown  3593ms
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+✗ 错误: 未知子命令: invalid
+stderr | tests/integration/batch-doc-graph.test.ts > runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json
+dtype not specified for "model". Using the default dtype (fp32) for this device (cpu).
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+发现 2 个文件，聚合为 2 个模块
+
+
+--- 批处理完成 ---
+总计: 1 模块
+成功: 1
+失败: 0
+跳过: 0
+降级: 0
+耗时: 3.3s
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+ ✓ |integration| tests/integration/batch-interface-surface.test.ts (1 test) 3386ms
+   ✓ runBatch interface-surface integration > 对 Python SDK 项目产出 interface-surface 并用它满足 quality gate  3385ms
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |integration| tests/integration/spec-driver-codex-skills.test.ts (3 tests) 2237ms
+   ✓ Spec Driver Codex skills script > project 安装并移除 codex 包装技能  802ms
+   ✓ Spec Driver Codex skills script > global 模式写入 HOME/.codex/skills（隔离 HOME）  677ms
+   ✓ Spec Driver Codex skills script > project 模式在 git 子目录执行时安装到 git 根目录  757ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |e2e| tests/e2e/feature-180-telemetry.e2e.test.ts (3 tests) 3572ms
+✗ 错误: generate 命令需要指定目标路径，例如: spectra generate src/
+
+--- 批处理完成 ---
+总计: 3 模块
+成功: 3
+失败: 0
+跳过: 0
+降级: 0
+耗时: 3.8s
+ ✓ |integration| tests/integration/batch-panoramic-doc-suite.test.ts (2 tests) 12773ms
+   ✓ runBatch panoramic 项目级文档套件接入 > batch 自动写出 applicable panoramic 文档与 architecture narrative  8908ms
+   ✓ runBatch panoramic 项目级文档套件接入 > 无 runtime/workspace 时仍生成 architecture narrative  3864ms
+ ✓ |integration| tests/integration/spec-driver-wrapper-source-truth.test.ts (2 tests) 1779ms
+   ✓ validate-wrapper-sources.mjs > 在 source、wrapper 与 override 同步时返回 pass  967ms
+   ✓ validate-wrapper-sources.mjs > 在 wrapper 缺少 source contract 标记时返回 fail  812ms
+ ✓ |integration| tests/integration/repo-maintenance-sync-check.test.ts (1 test) 1285ms
+   ✓ repo maintenance sync/check > repo:sync 会重建受控产物，repo:check 随后通过  1284ms
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/batch-orchestrator-python-resolve.test.ts (6 tests) 1229ms
+   ✓ collectPythonCodeSkeletons + import-resolver 集成 (T-017/T-018) > Case 1：绝对包路径 from pkg.engine import Value → resolvedPath 为绝对路径  1148ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+stdout | tests/e2e/feature-180-panoramic-ns.e2e.test.ts > 用户故事: panoramic-query 4 种 operation 和 namespace 前缀路由边界 > T-008-3: panoramic-query overview → 响应 JSON 可解析（成功或失败均记录结论）
+[T-008-3 实测] overview 返回: {"title":"架构概览: spectra-180-panoramic-0B7MQx","generatedAt":"2026-07-20","model":{"projectName":"spectra-180-panoramic-0B7MQx","sections":[{"kind":"system-conte
+
+stdout | tests/e2e/feature-180-panoramic-ns.e2e.test.ts > 用户故事: panoramic-query 4 种 operation 和 namespace 前缀路由边界 > T-008-4: panoramic-query architecture-ir → 成功返回 ArchitectureIR（projectName + 降级 warnings）
+[T-008-4 实测] architecture-ir 返回: {"projectName":"spectra-180-panoramic-0B7MQx","generatedAt":"2026-07-20T08:40:59.472Z","sourceTags":["architecture-overview"],"warnings":["Workspace 结构不可用，分层视图已
+
+stdout | tests/e2e/feature-180-panoramic-ns.e2e.test.ts > 用户故事: panoramic-query 4 种 operation 和 namespace 前缀路由边界 > T-008-5: 带 namespace 前缀 mcp__plugin_spectra_spectra__impact → isError=true, text 含 not found（已知边界）
+[T-008-5 实测] namespace 前缀路由结果: MCP error -32602: Tool mcp__plugin_spectra_spectra__impact not found
+
+ ✓ |e2e| tests/e2e/feature-180-panoramic-ns.e2e.test.ts (5 tests) 1113ms
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 2.4s
+ ✓ |integration| tests/integration/batch-doc-graph.test.ts (1 test) 2537ms
+   ✓ runBatch 文档图谱接入 > 批量生成后会回写相关 Spec 链接并输出 doc graph json  2537ms
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+✗ 错误: 目标路径不存在: /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/codex-plugin-distribution-2940d3/nonexistent/path
+ ✓ |e2e| tests/e2e/feature-180-symbol-chain.e2e.test.ts (8 tests) 2082ms
+ ✓ |unit| tests/unit/go-mapper-callsite.test.ts (20 tests) 1599ms
+   ✓ GoMapper.extractCallSites — 边界用例 > case 9 — 大文件 size guard (source > 1MB) → []  1412ms
+ ✓ |e2e| tests/e2e/feature-180-error-envelope.e2e.test.ts (6 tests) 2121ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.4s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.4s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+发现 2 个文件，聚合为 2 个模块
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |unit| tests/unit/batch-mode.test.ts (17 tests) 935ms
+   ✓ runBatch 无效 mode 错误提示（FR-005） > 无效 mode 时 runBatch 应抛出包含枚举值的错误  920ms
+stderr | tests/unit/eval-judge-jury.test.ts > eval-judge-jury > runJuryOnFixture (integration with mocked SDK) > writes juryScores + median + spread back to fixture
+[jury] siliconflow:zai-org/GLM-4.6: score=7
+[jury] siliconflow:moonshotai/Kimi-K2-Instruct-0905: score=8
+
+stderr | tests/unit/eval-judge-jury.test.ts > eval-judge-jury > runJuryOnFixture (integration with mocked SDK) > continues when 1 judge fails (records null score)
+[jury] claude-sonnet-4-6 FAILED: rate limit
+
+stderr | tests/unit/eval-judge-jury.test.ts > eval-judge-jury > runJuryOnFixture (integration with mocked SDK) > continues when 1 judge fails (records null score)
+[jury] claude-opus-4-7: score=6
+
+ ✓ |e2e| tests/e2e/feature-180-graph-tools.e2e.test.ts (9 tests) 1066ms
+ ✓ |unit| tests/unit/eval-judge-jury.test.ts (55 tests) 876ms
+   ✓ eval-judge-jury > spawnAsync (CLI subprocess helper) > respects timeout for genuine hang  631ms
+ ✓ |unit| tests/unit/feature-165-injection.test.ts (35 tests) 954ms
+ ✓ |e2e| tests/e2e/feature-180-symlink-security.e2e.test.ts (2 tests) 933ms
+ ✓ |e2e| tests/e2e/feature-180-file-nav-stdio.e2e.test.ts (6 tests) 1004ms
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 0
+失败: 0
+跳过: 2
+降级: 0
+耗时: 4.4s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+⚠ 跳过 1 个 .py 文件（不支持）
+
+ ✓ |e2e| tests/e2e/feature-180-batch-repro.e2e.test.ts (5 tests | 4 skipped) 973ms
+ ✓ |integration| tests/integration/build-api-entities.test.ts (4 tests) 459ms
+ ✓ |unit| tests/kb/build-flow.test.ts (3 tests) 1011ms
+   ✓ buildKb > 幂等：doc-graph.json 去 built_at 后两次一致；sqlite chunk 集合一致  722ms
+ ✓ |integration| tests/integration/spec-driver-init-project.test.ts (5 tests) 675ms
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+发现 3 个文件，聚合为 2 个模块
+检测到 2 种语言: ts-js, python
+
+[1/2] utils--python ... success (4ms)
+[utils--python] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+[2/2] utils--ts-js ... success (4ms)
+[utils--ts-js] AST: 0.0s | context: 0.0s | LLM#1: 0.0s | enrich: - | render: 0.0s | total: 0.0s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |e2e| tests/e2e/feature-184-view-file-fuzzy.e2e.test.ts (2 tests) 1045ms
+ ✓ |unit| tests/unit/batch-orchestrator-mode.test.ts (6 tests) 1040ms
+   ✓ runBatch mode 校验（FR-005） > 传入 undefined mode 不报错（默认 full）  1038ms
+ ✓ |e2e| tests/e2e/feature-184-instructions.e2e.test.ts (3 tests) 1094ms
+[quota] 清理孤儿 lock: pid=99999999, age=90s, path=/var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/quota-store-test-XqQPJi/feature-162.lock
+[quota] EPERM 探测 pid=12345: PID 存在但跨用户无权限，不清理 lock=/var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/quota-store-test-YFn7s2/feature-162.lock
+[classify] PID 88888888 存在但无权限探测（EPERM），保守视为 active
+ ✓ |unit| tests/unit/eval-quota-store.test.ts (15 tests) 295ms
+ ✓ |integration| tests/integration/eval-entity-manifest.test.ts (6 tests) 235ms
+ ✓ |integration| tests/integration/mcp-server-stdio.test.ts (5 tests) 1026ms
+ ✓ |unit| tests/unit/feature-176-cohort3-dispatch.test.ts (22 tests) 617ms
+   ✓ T-D1 repeatIndex 隔离 > 3 个 repeat 产生 3 个互不相同的独立 worktree（FR-A-006b）  514ms
+ ✓ |unit| tests/unit/eval-mcp-augmented-prompt.test.ts (23 tests) 1094ms
+ ✓ |unit| tests/panoramic/adapter-is-applicable.test.ts (13 tests) 781ms
+   ✓ bootstrapGenerators 注册数量验证 > bootstrapGenerators() 后 Registry 包含 19 个 Generator  778ms
+ ✓ |unit| tests/kb/kb-search-tool.test.ts (10 tests) 603ms
+stdout | tests/kb/cli-scaffold-kb.test.ts > runScaffoldKb — build handler > build 产出 kb/ 产物
+[scaffold-kb] 构建完成：1 文档 / 1 chunk / 1 实体（heuristic）→ /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/kb-cli-zFxoCX/kb
+
+stderr | tests/kb/cli-scaffold-kb.test.ts > runScaffoldKb — build handler > build 缺输入 → 设 exitCode 1（不抛）
+用法: spectra scaffold-kb build (--dir <路径> | --llms-txt <URL>) [--output <kb/>] [--sdk-version <版本>]
+
+ ✓ |unit| tests/kb/cli-scaffold-kb.test.ts (5 tests) 236ms
+ ✓ |unit| tests/kb/kb-doc-lookup-tool.test.ts (7 tests) 322ms
+ ✓ |unit| tests/kb/kb-contract.test.ts (5 tests) 228ms
+stdout | tests/integration/watch-command.test.ts > watch 子命令集成测试 > runBatch 被调用时包含配置文件中的 outputDir 和 languages
+[watch] 正在启动文件监听...
+[watch] 项目根目录: /Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/codex-plugin-distribution-2940d3
+[watch] Debounce 时长: 3 秒
+
+stdout | tests/integration/watch-command.test.ts > watch 子命令集成测试 > runBatch 被调用时包含配置文件中的 outputDir 和 languages
+[watch] 注意：请勿同时运行 spectra batch，两者会竞争同一 checkpoint 文件
+[watch] 已就绪，监听文件变更中... (Ctrl+C 停止)
+
+stdout | tests/integration/watch-command.test.ts > watch 子命令集成测试 > runBatch 被调用时包含配置文件中的 outputDir 和 languages
+
+[watch] 检测到 1 个文件变更：
+  [代码变更] /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/watch-integration-AhbibC/src/app.ts
+[watch] 触发增量更新...
+
+stdout | tests/integration/watch-command.test.ts > watch 子命令集成测试 > runBatch 被调用时包含配置文件中的 outputDir 和 languages
+[watch] 增量更新完成（0.0s）：成功 2 / 总计 2
+
+stderr | tests/integration/156-w1.2-v2.test.ts > Feature 156 W1.2 v2 — CRIT-3：.mjs / .cjs 文件作为 module node 进图 > main.ts 引用 ./lib.mjs 与 ./legacy.cjs 应产生 2 条 import 边
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |unit| tests/utils/git-blame.test.ts (6 tests) 252ms
+stderr | tests/integration/156-w1.2-v2.test.ts > Feature 156 W1.2 v2 — CRIT-2：tsconfig baseUrl + 多候选 paths > 多候选 alias 的回退候选命中、最长前缀优先、baseUrl fallback 全部生效
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/156-w1.2-v2.test.ts > Feature 156 W1.4 — CRIT-1 + WARN-1：真实 adapter.buildModuleGraph 集成 > 真实跑 ts-js adapter.buildModuleGraph 输出端点字段正确（B-1 升级版）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |integration| tests/integration/watch-command.test.ts (6 tests) 314ms
+stdout | shutdown (/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/codex-plugin-distribution-2940d3/src/cli/commands/watch.ts:57:13)
+
+[watch] 收到停止信号，等待当前更新完成...
+
+ ✓ |unit| tests/kb/kb-isolation.test.ts (2 tests) 865ms
+   ✓ KB 产物隔离（SC-013） > buildKb 前后 _meta/graph.json 哈希不变  560ms
+   ✓ KB 产物隔离（SC-013） > chunks.sqlite 产物路径在 kb/ 内（不与现有产物路径重叠）  304ms
+ ✓ |unit| tests/kb/kb-degradation.test.ts (5 tests) 857ms
+ ✓ |integration| tests/integration/spec-driver-project-context-resolver.test.ts (9 tests) 519ms
+ ✓ |unit| tests/unit/eval-task-runner.test.ts (45 tests) 519ms
+ ✓ |integration| tests/integration/spec-driver-orchestration-zod-degradation.test.ts (6 tests) 287ms
+{"event":"snapshot-load-fallback","fallbackReason":"json-parse-error","error":"SyntaxError: Expected property name or '}' in JSON at position 2 (line 1 column 3)"}
+stderr | tests/unit/knowledge-graph/incremental.test.ts > buildIncremental fallback > I-5：snapshot 文件被损坏（无效 JSON）→ fallbackReason="no-snapshot"（loadSnapshot 返回 null）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/knowledge-graph/incremental.test.ts (10 tests) 366ms
+ ✓ |unit| tests/panoramic/data-model-generator.test.ts (48 tests) 455ms
+Top 5 input token 消费模块：
+  1. src/utils: 177 tokens
+  2. src/utils: 88 tokens
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 2
+失败: 0
+跳过: 0
+降级: 0
+耗时: 2.2s
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+⚠ 跳过 1 个 .py 文件（不支持）
+
+[cluster-orchestrator] WARN: sharedHeader() 失败 → fail-closed：Error: mock sharedHeader failure
+[cluster-orchestrator] WARN: telemetry hook onClusterPlanned 抛出异常已忽略：Error: mock onClusterPlanned failure
+[cluster-orchestrator] WARN: telemetry hook onMapStart[0] 抛出异常已忽略：Error: mock onMapStart failure
+[cluster-orchestrator] WARN: telemetry hook onMapStart[1] 抛出异常已忽略：Error: mock onMapStart failure
+[cluster-orchestrator] WARN: telemetry hook onMapFailed[0] 抛出异常已忽略：Error: mock onMapFailed failure
+[cluster-orchestrator] WARN: telemetry hook onMapComplete[1] 抛出异常已忽略：Error: mock onMapComplete failure
+[cluster-orchestrator] WARN: telemetry hook onReduceStart 抛出异常已忽略：Error: mock onReduceStart failure
+[cluster-orchestrator] WARN: telemetry hook onReduceComplete 抛出异常已忽略：Error: mock onReduceComplete failure
+[cluster-orchestrator] WARN: telemetry hook onClusterPlanned async rejection 已忽略：Error: async onClusterPlanned rejection
+[cluster-orchestrator] WARN: telemetry hook onMapComplete[0] async rejection 已忽略：Error: async onMapComplete rejection
+[cluster-orchestrator] WARN: telemetry hook onMapComplete[1] async rejection 已忽略：Error: async onMapComplete rejection
+[cluster-orchestrator] WARN: telemetry hook onReduceComplete async rejection 已忽略：Error: async onReduceComplete rejection
+stderr | tests/integration/156-w1.2-v2.test.ts > Feature 156 W4 T-038 — batch-orchestrator 真链路 ModuleGraph e2e > mergeGraphsForTopologicalSort + groupFilesToModules 在 ts-mjs-cjs fixture 全链路通过
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |integration| tests/integration/156-w1.2-v2.test.ts (8 tests) 801ms
+   ✓ Feature 156 W4 T-038 — batch-orchestrator 真链路 ModuleGraph e2e > mergeGraphsForTopologicalSort + groupFilesToModules 在 ts-mjs-cjs fixture 全链路通过  646ms
+[cluster-orchestrator] WARN: 检测到 1 个 input 单独超过 tokenBudget=85000；已按"零模块丢失"策略保留它们，但 Map 调用可能因超 token 失败。建议 caller 对这些 input 自身做截断或拒绝。
+ ✓ |unit| tests/panoramic/cluster-orchestrator-dispatch.test.ts (13 tests) 250ms
+ ✓ |integration| tests/integration/spec-driver-adoption-insights.test.ts (2 tests) 240ms
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-1：incremental 在小 fixture 上 < 30 sec（AC-2b budget；预期实际 < 1 sec）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":48,"nodes":5,"edges":2}
+ ✓ |unit| tests/unit/mcp/file-nav-helpers.test.ts (70 tests) 408ms
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":5}
+{"phase":"done","mode":"full","total_ms":100,"changedFiles":-1}
+Top 5 input token 消费模块：
+  1. src/mod-01: 290 tokens
+  2. src/mod-02: 290 tokens
+  3. src/mod-03: 290 tokens
+  4. src/mod-04: 290 tokens
+  5. src/mod-05: 290 tokens
+ ✓ |integration| tests/integration/release-contract-sync.test.ts (2 tests) 237ms
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-1：incremental 在小 fixture 上 < 30 sec（AC-2b budget；预期实际 < 1 sec）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+{"phase":"fallback","reason":"shallow-clone"}
+{"phase":"build","duration_ms":30,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101}
+{"phase":"done","mode":"incremental","total_ms":30,"changedFiles":0,"fallbackToFull":true}
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-2：full vs incremental 三类边 canonical sort diff = 0（AC-3a/3b）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":3,"nodes":5,"edges":2}
+[import-resolver] WARN: [import-resolver] buildTsConfigContext 失败（/private/var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/f181-resolver-kk5Imr/tsconfig.json）：',' expected.
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":1}
+{"phase":"done","mode":"full","total_ms":5,"changedFiles":-1}
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-2：full vs incremental 三类边 canonical sort diff = 0（AC-3a/3b）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":5,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":1}
+{"phase":"done","mode":"full","total_ms":7,"changedFiles":-1}
+stdout | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+发现 3 个文件，聚合为 2 个模块
+检测到 2 种语言: ts-js, python
+
+[1/2] utils--python ... skipped
+[2/2] utils--ts-js ... skipped
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-2：full vs incremental 三类边 canonical sort diff = 0（AC-3a/3b）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":3,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":1}
+{"phase":"done","mode":"full","total_ms":5,"changedFiles":-1}
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-incremental-cache.test.ts > Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成
+⚠ 跳过 1 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-2：full vs incremental 三类边 canonical sort diff = 0（AC-3a/3b）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+{"phase":"fallback","reason":"shallow-clone"}
+{"phase":"build","duration_ms":43,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101}
+{"phase":"done","mode":"incremental","total_ms":43,"changedFiles":0,"fallbackToFull":true}
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-3：第二次 spectra index --incremental 无变更时 changedFiles=0（AC-4 跨 run 复用）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":2,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":4}
+{"phase":"done","mode":"full","total_ms":13,"changedFiles":-1}
+ ✓ |integration| tests/integration/reverse-spec-skill-source-truth.test.ts (2 tests) 189ms
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-3：第二次 spectra index --incremental 无变更时 changedFiles=0（AC-4 跨 run 复用）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+{"phase":"fallback","reason":"shallow-clone"}
+{"phase":"build","duration_ms":30,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101}
+{"phase":"done","mode":"incremental","total_ms":30,"changedFiles":0,"fallbackToFull":true}
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-4（EC-11 跨 worktree）：两个独立项目互不污染
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":3,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":0}
+{"phase":"done","mode":"full","total_ms":3,"changedFiles":-1}
+{"phase":"scan","files":3}
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-4（EC-11 跨 worktree）：两个独立项目互不污染
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":2,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":1}
+{"phase":"done","mode":"full","total_ms":5,"changedFiles":-1}
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/integration/156-w3-incremental.test.ts > Feature 156 W3 — incremental e2e > E2E-4（EC-11 跨 worktree）：两个独立项目互不污染
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: [Feature 195] 未发现可建图的源码（将产出空图）
+{"phase":"fallback","reason":"shallow-clone"}
+{"phase":"build","duration_ms":56,"nodes":5,"edges":0}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":1545}
+{"phase":"done","mode":"incremental","total_ms":56,"changedFiles":0,"fallbackToFull":true}
+ ✓ |integration| tests/integration/156-w3-incremental.test.ts (4 tests) 344ms
+ ✓ |unit| tests/unit/core/import-resolver-warn.test.ts (3 tests) 502ms
+   ✓ buildTsConfigContext 失败分支 warn 限频（T-03） > configFile.error 分支：语法损坏 tsconfig → warn 一次且含 configPath；二次调用不重复；仍 return null  450ms
+ ✓ |unit| tests/kb/entity-extractor.test.ts (9 tests) 270ms
+ ✓ |unit| tests/batch/graph-only-pipeline.test.ts (10 tests) 324ms
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/core/import-resolver.test.ts (42 tests) 314ms
+ ✓ |unit| tests/panoramic/export-command.test.ts (12 tests) 150ms
+ ✓ |unit| tests/panoramic/docs-bundle-orchestrator.test.ts (6 tests) 272ms
+stdout | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+发现 12 个文件，聚合为 12 个模块
+
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |unit| tests/debt-scanner/language-filter.test.ts (4 tests) 189ms
+ ✓ |unit| tests/unit/product-quality-core.test.ts (3 tests) 49ms
+ ✓ |integration| tests/integration/spec-driver-product-entity-catalog.test.ts (2 tests) 182ms
+ ✓ |unit| tests/unit/parse-claude-stream-json.test.ts (21 tests) 200ms
+ ✓ |unit| tests/unit/feature-187-dataset-build.test.ts (9 tests) 130ms
+ ✓ |integration| tests/integration/spec-driver-product-scorecards.test.ts (1 test) 177ms
+ ✓ |unit| tests/unit/eval-batch-repeat.test.ts (24 tests) 182ms
+ ✓ |unit| tests/unit/spec-driver-config-schema.test.ts (6 tests) 73ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |integration| tests/integration/pipeline.test.ts (8 tests) 181ms
+ ✓ |unit| tests/unit/graph-accuracy.test.ts (4 tests) 104ms
+[mod-01] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+ ✓ |integration| tests/integration/spec-driver-project-context-suggestions.test.ts (2 tests) 103ms
+ ✓ |unit| tests/unit/file-watcher.test.ts (22 tests) 11ms
+ ✓ |integration| tests/integration/runtime-boundary-contract.test.ts (2 tests) 86ms
+ ✓ |unit| tests/panoramic/api-surface-generator.test.ts (4 tests) 82ms
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）
+发现 2 个文件，聚合为 2 个模块
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=reading（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/tree-sitter-fallback.test.ts (7 tests) 50ms
+[mod-02] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+ ✓ |unit| tests/panoramic/product-ux-docs.test.ts (12 tests) 70ms
+ ✓ |unit| tests/panoramic/pipelines/debt-intelligence-pipeline.test.ts (5 tests) 200ms
+ ✓ |integration| tests/integration/drift-detection.test.ts (8 tests) 111ms
+ ✓ |unit| tests/unit/ts-js-adapter-callsite.test.ts (9 tests) 155ms
+ ✓ |unit| tests/unit/mcp/file-nav-tools.test.ts (41 tests) 61ms
+ ✓ |unit| tests/unit/batch-orchestrator-tsjs-resolve.test.ts (4 tests) 77ms
+stderr | tests/integration/batch-project-docs-reading-mode.test.ts > generateBatchProjectDocs reading 模式（Feature 133 adversarial post-fix） > reading 模式：返回值 architectureNarrative 为 undefined
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"scan","files":3}
+stderr | tests/integration/batch-project-docs-reading-mode.test.ts > generateBatchProjectDocs reading 模式（Feature 133 adversarial post-fix） > reading 模式：不写硬编码 pipeline 产出（architecture-narrative / component-view / 等）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-project-docs-reading-mode.test.ts > generateBatchProjectDocs reading 模式（Feature 133 adversarial post-fix） > code-only 模式：与 reading 模式同样不写产品文档
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/integration/batch-project-docs-reading-mode.test.ts > generateBatchProjectDocs reading 模式（Feature 133 adversarial post-fix） > full 模式：仍然写出硬编码 pipeline 产出（行为不变）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+stderr | tests/integration/batch-project-docs-reading-mode.test.ts > generateBatchProjectDocs reading 模式（Feature 133 adversarial post-fix） > full 模式：仍然写出硬编码 pipeline 产出（行为不变）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/batch-orchestrator-gitignore.test.ts (6 tests) 56ms
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=reading（非 full）（保持 graph.json 仅含静态边）
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+ ✓ |integration| tests/integration/init-e2e.test.ts (10 tests) 20188ms
+   ✓ init 端到端测试 > init 默认安装到当前目录的 .claude/skills/  1110ms
+   ✓ init 端到端测试 > Codex 运行时默认安装到当前目录的 .codex/skills/  1017ms
+   ✓ init 端到端测试 > init --target codex 安装到当前目录的 .codex/skills/  1217ms
+   ✓ init 端到端测试 > init --target both 同时安装到 .claude 和 .codex  992ms
+   ✓ init 端到端测试 > init 安装的 SKILL.md 包含 CLI 调用逻辑  1106ms
+   ✓ init 端到端测试 > init --remove 清理已安装 skill  1660ms
+   ✓ init 端到端测试 > init --remove 无 skill 时退出码 0  1019ms
+   ✓ init 端到端测试 > --help 包含 init 信息  963ms
+   ✓ init 端到端测试 > --version 正常工作  876ms
+   ✓ init 端到端测试 > init 重复执行显示 已更新  1218ms
+stderr | tests/integration/156-w2-spectra-index.test.ts > Feature 156 W2 — spectra index 全量路径 > 在 ts-mjs-cjs fixture 上执行 spectra index 后产出有效 snapshot
+⚠ 跳过 1 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+{"phase":"build","duration_ms":41,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101,"duration_ms":1}
+{"phase":"done","mode":"full","total_ms":44,"changedFiles":-1}
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stderr | tests/integration/156-w2-spectra-index.test.ts > Feature 156 W2 — spectra index 全量路径 > --watch + --incremental 互斥：同时传入 → exit 1（FR-30）
+[index] --watch 与 --incremental 互斥，不能同时传入
+
+stderr | tests/integration/156-w2-spectra-index.test.ts > Feature 156 W2 — spectra index 全量路径 > --incremental 无 baseline snapshot 时降级为全量索引（fallbackToFull + exit 0）
+⚠ 跳过 1 个 .json 文件（不支持）
+
+{"phase":"fallback","reason":"no-snapshot"}
+{"phase":"build","duration_ms":10,"nodes":5,"edges":2}
+{"phase":"save","path":".spectra/unified-graph.json","size_bytes":2101}
+{"phase":"done","mode":"incremental","total_ms":10,"changedFiles":0,"fallbackToFull":true}
+ ✓ |integration| tests/integration/156-w2-spectra-index.test.ts (3 tests) 81ms
+[mod-03] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+ ✓ |unit| tests/unit/feature-206-calibrated-harness.test.ts (122 tests) 91ms
+ ✓ |unit| tests/unit/graph-builder.test.ts (13 tests) 122ms
+ ✓ |unit| tests/panoramic/pattern-hints-generator.test.ts (7 tests) 165ms
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+{"event":"snapshot-load-fallback","fallbackReason":"snapshot-format-stale","snapshotVersion":"1.0","expectedVersion":"2.0"}
+{"event":"snapshot-load-fallback","fallbackReason":"snapshot-format-stale","snapshotVersion":"1.0","expectedVersion":"2.0"}
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |integration| tests/integration/batch-project-docs-reading-mode.test.ts (4 tests) 270ms
+stderr | tests/unit/knowledge-graph/snapshot-portability.test.ts > Feature 193 T021 — 旧绝对 key 快照触发 format-stale > buildIncremental 遇旧格式快照 → fallbackToFull + reason=snapshot-format-stale
+⚠ 跳过 1 个 .json 文件（不支持）
+
+ ✓ |integration| tests/integration/spec-driver-workflow-registry.test.ts (1 test) 51ms
+ ✓ |unit| tests/unit/knowledge-graph/snapshot-portability.test.ts (5 tests) 186ms
+ ✓ |unit| tests/kb/kb-api-lookup-tool.test.ts (9 tests) 129ms
+[mod-04] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+ ✓ |integration| tests/integration/spec-driver-product-quality-reports.test.ts (1 test) 54ms
+ ✓ |unit| tests/kb/search-core.test.ts (12 tests) 53ms
+ ✓ |integration| tests/integration/181-import-resolver-consolidation.test.ts (3 tests) 173ms
+stderr | tests/kb/scaffold-kb-query.test.ts > scaffold-kb query CLI > KB 不可用 → 降级（不设 exitCode=1，stdout 空）
+[scaffold-kb query] kb-missing: KB_NOT_FOUND
+
+stderr | tests/kb/scaffold-kb-query.test.ts > scaffold-kb query CLI > 缺 --requirement → exitCode 1
+用法: spectra scaffold-kb query --requirement "<需求>" --vendor-kb <path> [--project-kb <path>] [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
+
+ ✓ |unit| tests/kb/scaffold-kb-query.test.ts (5 tests) 112ms
+[mod-05] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stdout | tests/kb/recall.test.ts
+[recall@5] chinese_word=1.00(11/11) mixed=1.00(5/5) api_symbol=1.00(7/7) error_code=1.00(5/5) synonym=1.00(7/7)
+
+ ✓ |unit| tests/kb/recall.test.ts (8 tests) 87ms
+ ✓ |unit| tests/unit/delta-regenerator-mode.test.ts (8 tests) 143ms
+ ✓ |unit| tests/unit/include-docs-pipeline.test.ts (12 tests) 34ms
+ ✓ |unit| tests/panoramic/delta-regenerator.test.ts (4 tests) 191ms
+ ✓ |unit| tests/unit/tree-sitter-analyzer.test.ts (18 tests) 162ms
+ ✓ |unit| tests/adapters/python-adapter.test.ts (38 tests) 84ms
+stderr | tests/unit/java-mapper-callsite.test.ts > JavaMapper.extractCallSites — 14 case 测试矩阵（T-2.0 骨架） > case 9 大文件字节兜底（UTF-8 多字节）
+[java-mapper] extractCallSites 大文件跳过：byteLength=1200040 > 1048576
+
+ ✓ |unit| tests/unit/java-mapper-callsite.test.ts (23 tests) 157ms
+ ✓ |unit| tests/panoramic/workspace-index-generator.test.ts (44 tests) 81ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.8s | enrich: - | render: 0.0s | total: 0.8s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.8s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=reading（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/kb/schema-compat.test.ts (3 tests) 104ms
+ ✓ |unit| tests/adapters/java-extract-comments.test.ts (3 tests) 19ms
+ ✓ |unit| tests/adapters/ts-js-adapter-equivalence.test.ts (4 tests) 190ms
+[mod-06] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+ ✓ |unit| tests/kb/e2e-integration.test.ts (8 tests) 61ms
+ ✓ |unit| tests/unit/lib/java-call-extractor.test.ts (118 tests) 56ms
+ ✓ |unit| tests/unit/single-spec-orchestrator.test.ts (28 tests) 131ms
+ ✓ |unit| tests/unit/spec-driver-orchestration-schema.test.ts (8 tests) 104ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+[mod-07] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+ ✓ |unit| tests/panoramic/event-surface-generator.test.ts (8 tests) 67ms
+ ✓ |unit| tests/kb/sqlite-writer.test.ts (3 tests) 39ms
+ ✓ |unit| tests/unit/ast-analyzer.test.ts (12 tests) 73ms
+ ✓ |integration| tests/integration/debt-no-design-doc.test.ts (1 test) 97ms
+ ✓ |integration| tests/integration/156-ac-11-import-types.test.ts (3 tests) 126ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/lib/go-call-extractor.test.ts (123 tests) 55ms
+stderr | tests/kb/office-parser.test.ts > parseOfficeFile > 损坏 PDF（无文本层/非法）→ OfficeParseError
+Warning: Indexing all PDF objects
+
+ ✓ |unit| tests/panoramic/adr-decision-pipeline.test.ts (2 tests) 103ms
+ ✓ |unit| tests/kb/office-parser.test.ts (15 tests) 43ms
+ ✓ |unit| tests/kb/recall-eval.test.ts (4 tests) 44ms
+ ✓ |unit| tests/unit/typescript-mapper-callsite.test.ts (25 tests) 67ms
+ ✓ |unit| tests/kb/hardening.test.ts (7 tests) 47ms
+ ✓ |unit| tests/panoramic/troubleshooting-generator.test.ts (7 tests) 40ms
+ ✓ |golden-master| tests/golden-master/golden-master.test.ts (9 tests) 61ms
+
+--- 批处理完成 ---
+总计: 2 模块
+成功: 0
+失败: 0
+跳过: 2
+降级: 0
+耗时: 3.6s
+ ✓ |integration| tests/integration/batch-incremental-cache.test.ts (3 tests) 20640ms
+   ✓ Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 含混合大小写文件名的目录增量第二轮零重生成  8115ms
+   ✓ Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录 Python + TypeScript 混语言增量第二轮零重生成  6659ms
+   ✓ Feature 182 — 增量缓存正确性 E2E（真实写侧产物对账） > 用户故事: 同目录多文件混语言（目录级分组）增量第二轮零重生成  5866ms
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+发现 2 个文件，聚合为 2 个模块
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=reading（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/panoramic/coverage-auditor.test.ts (1 test) 28ms
+ ✓ |unit| tests/kb/sqlite-engine.test.ts (4 tests) 39ms
+ ✓ |unit| tests/panoramic/runtime-topology-generator.test.ts (4 tests) 46ms
+[mod-08] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.6s
+ ✓ |unit| tests/unit/baseline-collect.test.ts (28 tests) 55ms
+ ✓ |unit| tests/unit/lib/ts-call-extractor.test.ts (53 tests) 46ms
+ ✓ |unit| tests/panoramic/component-view-builder.test.ts (1 test) 33ms
+ ✓ |unit| tests/unit/spec-driver-load-zod.test.ts (5 tests) 47ms
+ ✓ |unit| tests/adapters/python-extract-comments.test.ts (3 tests) 25ms
+ ✓ |unit| tests/adapters/go-extract-comments.test.ts (3 tests) 18ms
+ ✓ |unit| tests/panoramic/architecture-narrative.test.ts (2 tests) 27ms
+ ✓ |integration| tests/integration/demo-kb-api-lookup.test.ts (8 tests) 38ms
+stderr | tests/integration/mcp-batch-graph-only.test.ts > MCP batch 工具 graph-only 集成测试（T009） > graph-only 模式产出合法 portable graph（schemaVersion=2.0，零绝对路径节点，nodeCount>0）
+[info] batch mode=graph-only
+
+ ✓ |unit| tests/unit/skeleton-hash.test.ts (7 tests) 38ms
+ ✓ |unit| tests/panoramic/dynamic-scenarios-builder.test.ts (1 test) 35ms
+ ✓ |integration| tests/integration/mcp-batch-graph-only.test.ts (1 test) 53ms
+ ✓ |unit| tests/unit/eval-mcp-augmented-classic.test.ts (13 tests) 38ms
+ ✓ |unit| tests/unit/repo-check-namespace-guard.test.ts (13 tests) 34ms
+ ✓ |unit| tests/unit/lib/extractor-helpers.test.ts (20 tests) 34ms
+ ✓ |unit| tests/unit/eval-mcp-parse-trace.test.ts (12 tests) 23ms
+ ✓ |unit| tests/unit/knowledge-graph/module-derivation-warn.test.ts (7 tests) 35ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |unit| tests/panoramic/architecture-overview-generator.test.ts (4 tests) 38ms
+ ✓ |unit| tests/panoramic/docs-quality-evaluator.test.ts (5 tests) 35ms
+ ✓ |unit| tests/panoramic/cache/manifest-manager.test.ts (10 tests) 20ms
+ ✓ |unit| tests/panoramic/config-reference-generator.test.ts (46 tests) 43ms
+ ✓ |unit| tests/adapters/java-adapter.test.ts (31 tests) 28ms
+[mod-09] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+ ✓ |unit| tests/adapters/go-adapter.test.ts (25 tests) 26ms
+ ✓ |unit| tests/unit/eval-mcp-classic-cohort.test.ts (10 tests) 27ms
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > settings.json 不存在时自动创建目录并写入合法 JSON（FR-002）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > .claude/ 目录不存在时自动递归创建（FR-002）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > 合法 JSON 深度合并，enabledPlugins 等已有字段完整保留
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > 幂等安装：重复调用两次后 PreToolUse 数组长度 = 1（FR-004）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+[spectra] hook already installed, skipping.
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > 生成 spectra-context.sh 并 chmod +x（FR-005）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+ ✓ |unit| tests/unit/product-scorecard-core.test.ts (3 tests) 27ms
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > PreToolUse 为非数组值时安全降级为空数组并正常安装
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > installClaudeHook() > 写入前创建 .bak 备份
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > removeClaudeHook() > 只删除 spectra 条目，其他 PreToolUse 条目完整保留（FR-011）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+[spectra] PreToolUse hook removed from .claude/settings.json
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > removeClaudeHook() > settings.json 不存在时静默退出并打印 hook not found 提示
+[spectra] hook not found, nothing to remove.
+
+stdout | tests/unit/hook-installer.test.ts > hook-installer > removeClaudeHook() > settings.json 中无 spectra 条目时静默退出
+[spectra] hook not found, nothing to remove.
+
+ ✓ |unit| tests/unit/hook-installer.test.ts (18 tests) 24ms
+ ✓ |unit| tests/unit/mcp/agent-context-tools-snapshots.test.ts (12 tests) 47ms
+{"event":"snapshot-load-fallback","fallbackReason":"json-parse-error","error":"SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)"}
+{"event":"snapshot-load-fallback","fallbackReason":"snapshot-format-stale","snapshotVersion":"1.0","expectedVersion":"2.0"}
+{"event":"snapshot-load-fallback","fallbackReason":"snapshot-format-stale","snapshotVersion":"0.9","expectedVersion":"2.0"}
+ ✓ |unit| tests/adapters/ts-js-extract-comments.test.ts (6 tests) 16ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.8s | enrich: - | render: 0.0s | total: 0.8s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.8s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/knowledge-graph/persistence.test.ts (11 tests) 52ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+ ✓ |unit| tests/panoramic/graph-persistence.test.ts (14 tests) 24ms
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+⚠ 跳过 3 个 .md 文件（不支持）
+[context-assembler] token 用量 467,509/500,000 (skeleton:185303 + knowledgeFiles:3312 + callerContext:146 + readmeContext:11812 + codeSlices:266936)
+⚠ 章节 "意图" 未在 LLM 响应中找到
+⚠ 章节 "业务逻辑" 未在 LLM 响应中找到
+⚠ 章节 "接口定义" 未在 LLM 响应中找到
+⚠ 章节 "数据结构" 未在 LLM 响应中找到
+⚠ 章节 "约束条件" 未在 LLM 响应中找到
+⚠ 章节 "边界条件" 未在 LLM 响应中找到
+⚠ 章节 "技术债务" 未在 LLM 响应中找到
+⚠ 章节 "测试覆盖" 未在 LLM 响应中找到
+⚠ 章节 "依赖关系" 未在 LLM 响应中找到
+ ✓ |unit| tests/panoramic/cache/cache-manager.test.ts (8 tests) 65ms
+stderr | tests/unit/file-scanner.test.ts > file-scanner > 应发现 .ts/.tsx/.js/.jsx 文件
+⚠ 跳过 1 个 .json 文件（不支持）、1 个 .md 文件（不支持）
+
+[mod-10] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stderr | tests/unit/file-scanner.test.ts > file-scanner > 应提供正确的统计信息
+⚠ 跳过 1 个 .json 文件（不支持）、1 个 .md 文件（不支持）
+
+stderr | tests/unit/file-scanner.test.ts > file-scanner > 混合目录：ScanResult.files 包含 TS/JS、Python、Go 和 Java 文件
+⚠ 跳过 1 个 .css 文件（不支持）
+
+stderr | tests/unit/file-scanner.test.ts > file-scanner > 仅含不支持语言文件的目录：files 为空
+⚠ 跳过 1 个 .rb 文件（Ruby，不支持）、1 个 .rs 文件（Rust，不支持）
+
+stderr | tests/unit/file-scanner.test.ts > file-scanner > T016: 无扩展名文件和非代码文件不纳入 languageStats
+⚠ 跳过 1 个 .yaml 文件（不支持）、1 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/file-scanner.test.ts (23 tests) 29ms
+ ✓ |unit| tests/panoramic/interface-surface-generator.test.ts (3 tests) 146ms
+ ✓ |unit| tests/unit/calibrate-glm-judge-integrity-fallback.test.ts (10 tests) 20ms
+ ✓ |unit| tests/unit/eval-task-fixture-check.test.ts (12 tests) 52ms
+ ✓ |integration| tests/integration/hyperedge-first-run.test.ts (11 tests | 4 skipped) 42ms
+ ✓ |integration| tests/integration/debt-on-graphify.test.ts (1 test) 162ms
+ ✓ |unit| tests/panoramic/html-exporter.test.ts (42 tests) 29ms
+ ✓ |unit| tests/unit/eval-judge-jury-prompt-builder.test.ts (3 tests) 21ms
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > installGitHook() > post-commit 不存在时创建带 #!/bin/sh 头部的可执行文件（FR-009）
+[spectra] git post-commit hook installed.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > installGitHook() > 已存在非 spectra 内容时追加，原内容完整保留（FR-009）
+[spectra] git post-commit hook installed.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > installGitHook() > 幂等：标记已存在时跳过，不重复追加（FR-009）
+[spectra] git post-commit hook installed.
+[spectra] git hook already installed, skipping.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > installGitHook() > 安装后文件具有可执行权限
+[spectra] git post-commit hook installed.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > removeGitHook() > 精确删除标记段落，非 spectra 内容完整保留（FR-012）
+[spectra] git post-commit hook installed.
+[spectra] git post-commit hook removed.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > removeGitHook() > removeGitHook 后文件保持可执行权限（FR-012）
+[spectra] git post-commit hook installed.
+[spectra] git post-commit hook removed.
+
+stdout | tests/unit/git-hook-installer.test.ts > git-hook-installer > worktree 场景下 installGitHook / removeGitHook > worktree 场景下安装和卸载 hook 正确写入 gitdir 指向的 hooks 目录
+[spectra] git post-commit hook installed.
+[spectra] git post-commit hook removed.
+
+ ✓ |unit| tests/unit/git-hook-installer.test.ts (18 tests) 22ms
+ ✓ |integration| tests/integration/direction-audit.test.ts (16 tests) 29ms
+ ✓ |unit| tests/unit/skill-installer.test.ts (21 tests) 27ms
+ ✓ |unit| tests/panoramic/dockerfile-parser.test.ts (15 tests) 10ms
+ ✓ |unit| tests/batch/budget-gate.test.ts (20 tests) 20ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.7s | enrich: - | render: 0.0s | total: 0.7s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.7s
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=code-only（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/panoramic/project-context.test.ts > detectLanguages > 无已知语言文件返回空数组
+⚠ 跳过 1 个 .txt 文件（不支持）
+
+stderr | tests/panoramic/project-context.test.ts > buildProjectContext 集成 > 标准项目返回完整 ProjectContext 对象
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/panoramic/architecture-ir-generator.test.ts (2 tests) 30ms
+ ✓ |unit| tests/panoramic/project-context.test.ts (30 tests) 26ms
+ ✓ |unit| tests/kb/url-fetcher.test.ts (13 tests) 28ms
+ ✓ |unit| tests/unit/llm-pricing.test.ts (5 tests) 12ms
+ ✓ |unit| tests/unit/spec-driver-script-platform.test.ts (5 tests) 23ms
+ ✓ |unit| tests/panoramic/cross-package-analyzer.test.ts (20 tests) 32ms
+ ✓ |unit| tests/panoramic/cache/integration.test.ts (5 tests) 19ms
+ ✓ |unit| tests/unit/mcp/agent-context-tools.test.ts (50 tests) 22ms
+[mod-11] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.6s
+ ✓ |unit| tests/unit/baseline-diff.test.ts (15 tests) 18ms
+ ✓ |unit| tests/panoramic/cache/content-hasher.test.ts (9 tests) 16ms
+ ✓ |unit| tests/unit/mcp/tool-response.test.ts (11 tests) 19ms
+ ✓ |unit| tests/unit/index-generator.test.ts (9 tests) 18ms
+stdout | tests/integration/install-e2e.test.ts > install-e2e > 完整安装：settings.json 存在 PreToolUse 条目，脚本文件存在且可执行（SC-001）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+stdout | tests/integration/install-e2e.test.ts > install-e2e > 卸载：PreToolUse 条目清除，其他字段完整保留（SC-006）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+[spectra] PreToolUse hook removed from .claude/settings.json
+
+stdout | tests/integration/install-e2e.test.ts > install-e2e > git hook 完整流程：安装后 post-commit 含标记段落，卸载后段落清除（SC-005）
+[spectra] git post-commit hook installed.
+[spectra] git post-commit hook removed.
+
+stdout | tests/integration/install-e2e.test.ts > install-e2e > 幂等性：连续调用 installClaudeHook 三次，PreToolUse 数组长度始终 = 1（SC-004）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+[spectra] hook already installed, skipping.
+[spectra] hook already installed, skipping.
+
+ ✓ |unit| tests/unit/mcp/lib/response-helpers.test.ts (21 tests) 12ms
+stdout | tests/integration/install-e2e.test.ts > install-e2e > settings.json 不存在场景：安装后文件为合法 JSON 且包含 hooks 字段（FR-002）
+[spectra] PreToolUse hook installed to .claude/settings.json
+[spectra] Hook script written to specs/_meta/hooks/spectra-context.sh
+
+ ✓ |integration| tests/integration/install-e2e.test.ts (6 tests) 14ms
+ ✓ |unit| tests/unit/batch-readme-generator-debt.test.ts (3 tests) 14ms
+ ✓ |unit| tests/unit/feature-176-preregistration.test.ts (29 tests) 16ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+发现 2 个文件，聚合为 2 个模块
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=code-only（非 full）（保持 graph.json 仅含静态边）
+ ✓ |unit| tests/unit/codex-proxy.test.ts (7 tests) 9ms
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/workflow-registry-core.test.ts (2 tests) 19ms
+ ✓ |integration| tests/integration/adr-supersede.test.ts (9 tests) 18ms
+ ✓ |unit| tests/spec-store/spec-store.test.ts (18 tests) 11ms
+ ✓ |unit| tests/unit/chunk-splitter.test.ts (9 tests) 24ms
+stderr | tests/unit/mcp/response-contract.test.ts > Feature 177 — 17 工具统一错误响应契约 > batch 顶层异常错误响应含 code（internal-error）
+[info] batch mode=full
+
+ ✓ |unit| tests/unit/design-doc-paths.test.ts (16 tests) 63ms
+ ✓ |unit| tests/unit/mcp/response-contract.test.ts (19 tests) 28ms
+ ✓ |unit| tests/panoramic/obsidian-exporter.test.ts (29 tests) 17ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |unit| tests/unit/init-command.test.ts (20 tests) 16ms
+ ✓ |unit| tests/panoramic/utils/text-segmenter.test.ts (31 tests) 14ms
+ ✓ |unit| tests/unit/project-config.test.ts (17 tests) 13ms
+ ✓ |unit| tests/kb/doc-graph-builder.test.ts (25 tests) 10ms
+[mod-12] AST: 0.0s | context: 0.0s | LLM#1: 0.5s | enrich: - | render: 0.0s | total: 0.5s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+ ✓ |unit| tests/batch/cost-aggregation.test.ts (11 tests) 14ms
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[extraction-image] WARN: Vision API 调用失败，跳过: /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/image-extractor-test-4MGQVI/arch.png — Error: API Error: rate limit
+[extraction-image] WARN: 图像文件过大（10.0 MB），跳过: /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/image-extractor-test-Ou1Wh8/large.png
+ ✓ |unit| tests/extraction/image-extractor.test.ts (10 tests) 11ms
+ ✓ |unit| tests/unit/feature-188-offline-rejudge.test.ts (44 tests) 12ms
+ ✓ |unit| tests/panoramic/doc-graph-builder.test.ts (4 tests) 33ms
+ ✓ |unit| tests/unit/baseline-quality.test.ts (7 tests) 11ms
+ ✓ |unit| tests/unit/mcp/view-file-fuzzy.test.ts (5 tests) 16ms
+stderr | tests/unit/mcp/telemetry-coverage.test.ts > Feature 177 — telemetry 17/17 覆盖矩阵 > batch 每次调用恰写 1 行 telemetry（toolName 匹配）
+[info] batch mode=full
+
+ ✓ |unit| tests/unit/mcp/telemetry-coverage.test.ts (18 tests) 19ms
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > prepare handler 成功返回 JSON 文本
+⚠ 跳过 3 个 .md 文件（不支持）
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler 成功时返回结果
+[info] batch mode=full
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler 失败时返回 isError=true
+[info] batch mode=full
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > T091: batch handler 接受 languages 参数并传递给 runBatch
+[info] batch mode=full
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > T094-05: batch handler 接受 incremental 参数并传递给 runBatch
+[info] batch mode=full
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler graph-only 模式 dispatch 到 buildAstGraphOnly，不调用 runBatch
+[info] batch mode=graph-only
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > graph-only 模式 buildAstGraphOnly 调用签名不含 regen 轴参数
+[info] batch mode=graph-only
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler full 模式仍 dispatch 到 runBatch，不调用 buildAstGraphOnly
+[info] batch mode=full
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler reading 模式仍 dispatch 到 runBatch，不调用 buildAstGraphOnly
+[info] batch mode=reading
+
+stderr | tests/unit/mcp-server.test.ts > createMcpServer > batch handler code-only 模式仍 dispatch 到 runBatch，不调用 buildAstGraphOnly
+[info] batch mode=code-only
+
+ ✓ |unit| tests/extraction/extraction-cache.test.ts (13 tests) 13ms
+ ✓ |unit| tests/unit/mcp-server.test.ts (19 tests) 22ms
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+ ✓ |unit| tests/panoramic/utils/llm-enricher.test.ts (20 tests) 15ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+ ✓ |unit| tests/unit/auth-status.test.ts (6 tests) 18ms
+ ✓ |unit| tests/unit/graph/graph-builder-normalize.test.ts (11 tests) 24ms
+ ✓ |unit| tests/unit/graph/cross-worktree-byte.test.ts (6 tests) 11ms
+ ✓ |integration| tests/integration/cli-e2e.test.ts (8 tests) 24513ms
+   ✓ CLI 端到端测试 > --version > 输出版本号并退出码为 0  1047ms
+   ✓ CLI 端到端测试 > --help > 输出帮助信息并退出码为 0  1156ms
+   ✓ CLI 端到端测试 > 无效子命令 > 输出错误信息并退出码为 1  1171ms
+   ✓ CLI 端到端测试 > generate 缺少 target > 输出错误并退出码为 1  1039ms
+   ✓ CLI 端到端测试 > generate 目标不存在 > 输出目标路径不存在并退出码为 1  870ms
+   ✓ CLI 端到端测试 > generate 无 API Key > 根据环境认证状态输出相应结果  7843ms
+   ✓ CLI 端到端测试 > 无参数 > 输出帮助信息  684ms
+   ✓ CLI 端到端测试 > -v 短选项 > 输出版本号  864ms
+ ✓ |unit| tests/panoramic/utils/multi-format-writer.test.ts (10 tests) 14ms
+ ✓ |unit| tests/unit/model-selection.test.ts (14 tests) 27ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.7s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.7s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=code-only（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |unit| tests/unit/specify-template-sync.test.ts (3 tests) 19ms
+ ✓ |unit| tests/panoramic/toml-config-parser.test.ts (13 tests) 10ms
+ ✓ |unit| tests/panoramic/docs-bundle-manifest-reader.test.ts (2 tests) 10ms
+ ✓ |unit| tests/panoramic/adr-evidence-verifier.test.ts (12 tests) 15ms
+ ✓ |unit| tests/unit/skill-registrar.test.ts (7 tests) 13ms
+ ✓ |unit| tests/unit/context-assembler.test.ts (9 tests) 4ms
+ ✓ |unit| tests/unit/bootstrap-ci.test.ts (15 tests) 17ms
+ ✓ |unit| tests/unit/knowledge-graph/module-derivation.test.ts (12 tests) 5ms
+ ✓ |unit| tests/unit/spec-driver-config.test.ts (14 tests) 11ms
+ ✓ |unit| tests/unit/surprising-edges.test.ts (6 tests) 5ms
+ ✓ |unit| tests/models/code-skeleton-compat.test.ts (18 tests) 5ms
+ ✓ |unit| tests/unit/cache-command.test.ts (4 tests) 9ms
+ ✓ |unit| tests/kb/ingester.test.ts (27 tests) 13ms
+stderr | tests/unit/batch-orchestrator.test.ts > batch-orchestrator 单元测试 > T066: 多语言项目扫描后 languageStats 包含多种语言，groupFilesByLanguage 正确分组
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/unit/batch-orchestrator.test.ts > batch-orchestrator 单元测试 > T068: languages 过滤仅保留指定语言，Python/Go 被跳过
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/unit/batch-orchestrator.test.ts > batch-orchestrator 单元测试 > T069: 不存在的语言过滤产生警告
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/unit/batch-orchestrator.test.ts > batch-orchestrator 单元测试 > T075: 多语言扫描结果包含完整的语言信息用于 BatchResult
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+ ✓ |integration| tests/integration/design-doc-anchoring.test.ts (8 tests) 7ms
+ ✓ |unit| tests/unit/batch-orchestrator.test.ts (16 tests) 18ms
+ ✓ |unit| tests/unit/cli-proxy.test.ts (13 tests) 12ms
+ ✓ |unit| tests/unit/feature-187-freeze-block.test.ts (17 tests) 7ms
+[extraction-pipeline] WARN: 提取结果 Zod 验证失败，丢弃: /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/pipeline-test-M2aEzv/doc.md
+[extraction-pipeline] WARN: 提取失败，降级为空结果: /var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/pipeline-test-4LThpX/bad.md — Error: Extraction failed
+ ✓ |unit| tests/extraction/extraction-pipeline.test.ts (9 tests) 12ms
+ ✓ |unit| tests/unit/graph/graph-builder-bytestable.test.ts (2 tests) 12ms
+[html-template] WARN: [warn] graph.html 预估体积 0.0 MB 超过 9.5367431640625e-7 MB 阈值，生成不阻断
+[html-template] WARN: [warn] graph.html 预估体积 0.0 MB 超过 9.5367431640625e-7 MB 阈值，生成不阻断
+ ✓ |unit| tests/panoramic/html-template.test.ts (42 tests) 8ms
+stdout | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |e2e| tests/e2e/feature-171-file-navigation.e2e.test.ts (8 tests | 1 skipped) 8ms
+stderr | tests/panoramic/hyperedges/extractor.test.ts > extractHyperedges > Zod 校验失败处理 > LLM 返回非法结构（Zod 校验失败）时，返回空数组 + failedSamples，不抛出异常
+[hyperedges/extractor] Zod 校验失败: hyperedges.0.label: hyperedge label 最多 8 个 Unicode 字符
+[hyperedges/extractor] 原始输出: {"hyperedges":[{"id":"he-001","label":"超长标签超过八个字符真的很长","nodes":["src/a.ts","src/b.ts","src/c.ts"],"rationale":"设计文档描述","confidence":"INFERRED"}]}
+
+stderr | tests/panoramic/hyperedges/extractor.test.ts > extractHyperedges > Zod 校验失败处理 > LLM 返回超过 10 个 hyperedge 时，Zod schema 拒绝，返回空数组
+[hyperedges/extractor] Zod 校验失败: hyperedges: 每 batch 最多 10 个 hyperedge
+[hyperedges/extractor] 原始输出: {"hyperedges":[{"id":"he-001","label":"流程1","nodes":["src/a.ts","src/b.ts","src/c.ts"],"rationale":"设计文档描述了该流程","confidence":"INFERRED"},{"id":"he-002","label":"流程2","nodes":["src/a.ts","src/b.ts","src/c.ts"],"rationale":"设计文档描述了该流程","confidence":"INFERRED"},{"id":"he-003","label":"流程3","nodes":["sr
+
+stderr | tests/panoramic/hyperedges/extractor.test.ts > extractHyperedges > 语义校验（FR-020） > 所有 hyperedge.nodes 均为文档类节点时，语义校验过滤后返回空数组
+[hyperedges/extractor] hyperedge "he-001" (label: "设计流程") 语义校验失败：nodes 中无代码节点，已丢弃
+
+ ✓ |unit| tests/panoramic/hyperedges/extractor.test.ts (11 tests) 9ms
+ ✓ |unit| tests/kb/keyword-extract.test.ts (8 tests) 9ms
+ ✓ |unit| tests/batch/readme-graph-summary.test.ts (13 tests) 9ms
+ ✓ |unit| tests/panoramic/env-config-parser.test.ts (13 tests) 9ms
+ ✓ |unit| tests/unit/mcp/graph-tools-cache.test.ts (6 tests) 10ms
+ ✓ |unit| tests/unit/batch-mode-integration.test.ts (13 tests) 9ms
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T095/SC-001: 多语言项目扫描检测到多种语言
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T097/SC-002: 架构索引的语言分布统计准确
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T098/SC-005: languages 过滤仅保留指定语言
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T099/SC-007: 混合语言目录被正确拆分为双连字符子模块
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T101/SC-006: 语言检测结果与实际文件匹配
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+stderr | tests/integration/multilang-batch.test.ts > 多语言混合项目集成 > T102: 多语言批量中断后恢复正确还原状态
+⚠ 跳过 1 个 .rs 文件（Rust，不支持）、1 个 .cpp 文件（C++，不支持）
+
+ ✓ |integration| tests/integration/multilang-batch.test.ts (9 tests) 13ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[adr-mapreduce] WARN: Reduce 使用 claude-opus-4-7 失败，降级到 claude-sonnet-4-6: Error: opus quota exceeded
+[adr-mapreduce] WARN: ADR candidate "X 设计决策" 被丢弃：仅 0/2 条 evidence 通过验证（< 2 条门槛）
+ ✓ |unit| tests/panoramic/adr-mapreduce.test.ts (6 tests) 10ms
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |unit| tests/unit/mcp/telemetry.test.ts (10 tests) 10ms
+ ✓ |unit| tests/unit/knowledge-graph/query-helpers.test.ts (53 tests) 8ms
+ ✓ |unit| tests/panoramic/narrative-provenance-adapter.test.ts (1 test) 9ms
+ ✓ |unit| tests/panoramic/cluster-orchestrator-telemetry.test.ts (9 tests) 8ms
+ ✓ |integration| tests/integration/graph-community-projectroot.test.ts (2 tests) 9ms
+ ✓ |unit| tests/debt-scanner/doc-discoverer.test.ts (8 tests) 8ms
+ ✓ |unit| tests/panoramic/yaml-config-parser.test.ts (16 tests) 10ms
+ ✓ |integration| tests/integration/adr-cross-fixture.test.ts (7 tests | 4 skipped) 8ms
+ ✓ |unit| tests/unit/spec-driver/feature-170d-preference-rules.test.ts (21 tests) 13ms
+ ✓ |unit| tests/panoramic/skill-md-parser.test.ts (13 tests) 9ms
+ ✓ |unit| tests/unit/knowledge-graph/consumer-shim.test.ts (7 tests) 5ms
+[narrative-mapreduce] WARN: Refine LLM 调用失败（attempt 1），保留 critique 失败状态: Error: LLM 输出 Zod schema 校验失败: paragraphs.3: String must contain at least 20 character(s)
+[narrative-mapreduce] WARN: Critique LLM 调用失败，记录为 passed=false: Error: Critique LLM 不可用
+[narrative-mapreduce] WARN: Refine LLM 调用失败（attempt 1），保留 critique 失败状态: Error: unexpected
+ ✓ |unit| tests/panoramic/narrative-mapreduce.test.ts (12 tests) 6ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.6s | enrich: - | render: 0.0s | total: 0.6s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/unit/batch/batch-orchestrator-incremental.test.ts > F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=code-only（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 86 tokens
+  2. src/b: 86 tokens
+ ✓ |unit| tests/panoramic/behavior-yaml-parser.test.ts (12 tests) 31ms
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应返回包含 text、citations、tokenUsage 的 QnAAnswer
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应返回包含 text、citations、tokenUsage 的 QnAAnswer
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应返回包含 text、citations、tokenUsage 的 QnAAnswer
+[info] qa: llm_ms=0, total_ms=1, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应依次调用 retrieveGraphContext、rerankWithEmbedding、injectDebtContext、buildCitations、buildQnAPrompt、callQnALlm
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应依次调用 retrieveGraphContext、rerankWithEmbedding、injectDebtContext、buildCitations、buildQnAPrompt、callQnALlm
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应依次调用 retrieveGraphContext、rerankWithEmbedding、injectDebtContext、buildCitations、buildQnAPrompt、callQnALlm
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应包含 durationMs 字段（>= 0）
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应包含 durationMs 字段（>= 0）
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 正常 7 步串联 > 应包含 durationMs 字段（>= 0）
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — 超长查询截断 > > 2000 字符的查询应截断到 2000 字符
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — 超长查询截断 > > 2000 字符的查询应截断到 2000 字符
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — 超长查询截断 > > 2000 字符的查询应截断到 2000 字符
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — 空图谱 > BFS 命中 0 节点时应返回"图谱为空"提示
+[info] qa: 图谱为空，bfs_hits=0, duration_retriever=0ms, total=0ms
+
+stderr | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — 空图谱 > 图谱文件不存在时应返回友好提示
+[warn] qa/index: 图谱加载失败，返回空图谱提示。原因：无法读取图谱文件
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — LLM 调用失败 > LLM 调用失败时应抛出 Error
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — LLM 调用失败 > LLM 调用失败时应抛出 Error
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stderr | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — LLM 调用失败 > LLM 调用失败时应抛出 Error
+[error] qa/index: LLM 调用失败。原因：API 调用超时
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级 > fallbackMode=rag-only 且 rankedChunks 为空时应返回"图谱数据不足"提示，不调用 LLM
+[info] qa: bfs_hits=1, hyperedges=0, fallback=rag-only, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级 > fallbackMode=rag-only 且 rankedChunks 为空时应返回"图谱数据不足"提示，不调用 LLM
+[info] qa: embedding_chunks=0, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级 > fallbackMode=bfs-only 时即使 rankedChunks 为空也继续正常流程
+[info] qa: bfs_hits=1, hyperedges=0, fallback=bfs-only, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级 > fallbackMode=bfs-only 时即使 rankedChunks 为空也继续正常流程
+[info] qa: embedding_chunks=0, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-002：BFS<3 且 RAG 0 chunks 二级降级 > fallbackMode=bfs-only 时即使 rankedChunks 为空也继续正常流程
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > LLM parsedCitations 为空且 buildCitations 也为空时 answer 前应加注"[注意：本答案无引用"
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > LLM parsedCitations 为空且 buildCitations 也为空时 answer 前应加注"[注意：本答案无引用"
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > LLM parsedCitations 为空且 buildCitations 也为空时 answer 前应加注"[注意：本答案无引用"
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > finalCitations 非空时 answer 不加注无引用警告
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > finalCitations 非空时 answer 不加注无引用警告
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > 边界条件 — W-004：finalCitations 为空时加注无引用警告 > finalCitations 非空时 answer 不加注无引用警告
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 解析的 citations 非空时应优先使用
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 解析的 citations 非空时应优先使用
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 解析的 citations 非空时应优先使用
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 返回空 citations 时应 fallback 到 buildCitations 的结果
+[info] qa: bfs_hits=3, hyperedges=0, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 返回空 citations 时应 fallback 到 buildCitations 的结果
+[info] qa: embedding_chunks=1, embedding_ms=0
+
+stdout | tests/panoramic/qa/index.test.ts > answerQuestion > citations 合并 > LLM 返回空 citations 时应 fallback 到 buildCitations 的结果
+[info] qa: llm_ms=0, total_ms=0, input_tokens=100, output_tokens=50, over_budget=false
+
+ ✓ |unit| tests/unit/batch/batch-orchestrator-incremental.test.ts (7 tests) 25704ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > 默认翻转：不传 incremental → runBatch 走 DeltaRegenerator 路径并暴露 deltaReport  4728ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴  7321ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=full + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）  6391ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴  1253ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=reading + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）  1958ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + 默认增量 → deltaReport 暴露且 mode 轴不污染 regen 轴  1672ms
+   ✓ F175 batch-orchestrator 默认翻转 + mode×incremental 正交矩阵（Phase 1 RED） > mode × regen 正交矩阵（3 mode × 2 regen 路径） > mode=code-only + full=true → 绕 DeltaRegenerator 全量重生成（regen 与 mode 正交）  1871ms
+ ✓ |unit| tests/panoramic/architecture-ir-builder.test.ts (1 test) 10ms
+ ✓ |unit| tests/unit/cli-command-runners.test.ts (8 tests) 8ms
+ ✓ |unit| tests/panoramic/qa/index.test.ts (15 tests) 8ms
+ ✓ |unit| tests/panoramic/graph-query-community-cohesion.test.ts (6 tests) 8ms
+ ✓ |unit| tests/unit/feature-176-batch.test.ts (25 tests) 8ms
+ ✓ |unit| tests/panoramic/parser-registry.test.ts (21 tests) 6ms
+ ✓ |unit| tests/unit/graph/graph-format-stale.test.ts (7 tests) 4ms
+ ✓ |unit| tests/unit/logger.test.ts (14 tests) 4ms
+ ✓ |unit| tests/panoramic/obsidian-collision.test.ts (3 tests) 6ms
+ ✓ |integration| tests/integration/graph-mcp-snapshot.test.ts (13 tests | 2 skipped) 4ms
+ ✓ |unit| tests/unit/mcp/server-prepare-languages.test.ts (2 tests) 11ms
+ ✓ |unit| tests/panoramic/cluster-orchestrator-clustering.test.ts (16 tests) 6ms
+ ✓ |unit| tests/extraction/openapi-extractor.test.ts (9 tests) 6ms
+ ✓ |integration| tests/integration/agent-context-real-graph.test.ts (6 tests) 7ms
+ ✓ |unit| tests/panoramic/community-analysis.test.ts (4 tests) 25908ms
+   ✓ runCommunityAnalysis 端到端 > 5000 节点算法复杂度不退化（CI 宽松阈值）  25903ms
+ ✓ |unit| tests/unit/sub-agent-meta.test.ts (24 tests) 5ms
+ ✓ |unit| tests/unit/code-slice-extractor.test.ts (19 tests) 5ms
+ ✓ |integration| tests/integration/include-docs-integration.test.ts (7 tests | 3 skipped) 29ms
+ ✓ |unit| tests/unit/directory-graph.test.ts (13 tests) 7ms
+ ✓ |unit| tests/unit/knowledge-graph/unified-graph.test.ts (20 tests) 7ms
+ ✓ |unit| tests/unit/community-detector.test.ts (9 tests) 5ms
+ ✓ |integration| tests/integration/cross-project-isolation.test.ts (11 tests | 5 skipped) 4ms
+ ✓ |unit| tests/unit/feature-187-manifest.test.ts (6 tests) 4ms
+ ✓ |unit| tests/unit/module-graph-model.test.ts (5 tests) 3ms
+ ✓ |integration| tests/integration/debt-empty-project.test.ts (1 test) 8ms
+ ✓ |unit| tests/panoramic/anchoring/providers/local-provider.test.ts (7 tests) 3ms
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > 应返回至少 1 条 Citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > 应返回至少 1 条 Citation
+[info] qa: embedding_chunks=2, embedding_ms=1
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > 应返回至少 1 条 Citation
+[info] qa: llm_ms=0, total_ms=2, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > Citation 应包含合法的 specPath
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > Citation 应包含合法的 specPath
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 1：调用关系查询（"什么调用了 X"） > Citation 应包含合法的 specPath
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > 应返回至少 1 条 Citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > 应返回至少 1 条 Citation
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > 应返回至少 1 条 Citation
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > Citation 的 lineRange 字段应合法
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > Citation 的 lineRange 字段应合法
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 2：调用路径查询（"从 A 到 B 的路径"） > Citation 的 lineRange 字段应合法
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 3：设计决策映射（"X 的设计决策"） > 应返回至少 1 条 Citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 3：设计决策映射（"X 的设计决策"） > 应返回至少 1 条 Citation
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 3：设计决策映射（"X 的设计决策"） > 应返回至少 1 条 Citation
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 应返回至少 1 条 Citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 应返回至少 1 条 Citation
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 应返回至少 1 条 Citation
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 技术债 Citation 的 specPath 应指向源码文件
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 技术债 Citation 的 specPath 应指向源码文件
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 4：技术债（"最老的 TODO"） > 技术债 Citation 的 specPath 应指向源码文件
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 应返回至少 1 条 Citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 应返回至少 1 条 Citation
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 应返回至少 1 条 Citation
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 流程类问题可能包含 hyperedge citation
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 流程类问题可能包含 hyperedge citation
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 类型 5：流程归属（"Y 流程涉及哪些模块"） > 流程类问题可能包含 hyperedge citation
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 溯源正确性验证（R6 缓解） > 所有 Citation 应包含 specPath、lineRange、excerpt 三个必填字段
+[info] qa: bfs_hits=3, hyperedges=1, fallback=none, retriever_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 溯源正确性验证（R6 缓解） > 所有 Citation 应包含 specPath、lineRange、excerpt 三个必填字段
+[info] qa: embedding_chunks=2, embedding_ms=0
+
+stdout | tests/panoramic/qa/qa-integration.test.ts > qa 集成测试 — 5 类问题 × Citation 覆盖 > 溯源正确性验证（R6 缓解） > 所有 Citation 应包含 specPath、lineRange、excerpt 三个必填字段
+[info] qa: llm_ms=0, total_ms=0, input_tokens=200, output_tokens=100, over_budget=false
+
+ ✓ |unit| tests/panoramic/qa/qa-integration.test.ts (10 tests) 8ms
+ ✓ |unit| tests/unit/feature-176-aggregate.test.ts (11 tests) 11ms
+ ✓ |e2e| tests/e2e/feature-174-symbol-fuzzy-match.e2e.test.ts (11 tests) 7ms
+ ✓ |unit| tests/unit/context-assembler-token.test.ts (11 tests) 4ms
+ ✓ |unit| tests/unit/feature135-codex-followup.test.ts (13 tests) 6ms
+ ✓ |unit| tests/unit/mcp/description-output-drift.test.ts (16 tests) 6ms
+ ✓ |unit| tests/unit/eval-judge.test.ts (9 tests) 9ms
+ ✓ |unit| tests/unit/progress-reporter.test.ts (15 tests) 13ms
+ ✓ |unit| tests/panoramic/anchoring/chunker.test.ts (7 tests) 7ms
+ ✓ |unit| tests/unit/feature-187-swebench-oracle.test.ts (5 tests | 2 skipped) 7ms
+stderr | tests/unit/feature-187-patch-persistence.test.ts > persistRunArtifacts（FR-003 / SC-012） > 写盘失败（artifactsDir 指向一个文件）→ 返回 false（调用方保留现场）
+[task-runner] persistRunArtifacts 失败: ENOTDIR: not a directory, mkdir '/var/folders/38/ryfq5rt572vgkm2vpq61jtwc0000gn/T/f187-persist-KOKZH8/not-a-dir/r'
+
+ ✓ |unit| tests/unit/feature-187-patch-persistence.test.ts (6 tests) 9ms
+ ✓ |unit| tests/unit/directory-classifier.test.ts (22 tests) 6ms
+ ✓ |unit| tests/unit/panoramic-query-natural-language.test.ts (17 tests) 5ms
+ ✓ |unit| tests/panoramic/qa/graph-retriever.test.ts (9 tests) 6ms
+ ✓ |unit| tests/unit/enrichment-cost-accounting.test.ts (2 tests) 8ms
+ ✓ |unit| tests/kb/chunk-splitter.test.ts (26 tests) 5ms
+ ✓ |unit| tests/unit/spec-driver/feature-170d-harness.test.ts (19 tests) 6ms
+ ✓ |unit| tests/unit/knowledge-graph/build-unified-graph.test.ts (7 tests) 5ms
+ ✓ |unit| tests/unit/module-grouper.test.ts (28 tests) 8ms
+ ✓ |unit| tests/debt-scanner/readme-indexer.test.ts (4 tests) 3ms
+ ✓ |unit| tests/unit/noise-filter.test.ts (19 tests) 3ms
+ ✓ |unit| tests/unit/topological-sort.test.ts (11 tests) 3ms
+ ✓ |unit| tests/debt-scanner/quality-report-patcher.test.ts (6 tests) 6ms
+ ✓ |unit| tests/unit/graph-query-tokenize.test.ts (14 tests) 4ms
+ ✓ |unit| tests/panoramic/anchoring/providers/openai-provider.test.ts (8 tests) 4ms
+ ✓ |unit| tests/kb/entity-heuristic.test.ts (11 tests) 5ms
+ ✓ |unit| tests/panoramic/schemas.test.ts (17 tests) 4ms
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 正常成功 → exit 0
+spectra v3.0.1 — 批量生成
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 正常成功 → exit 0
+  模块总数: 3 | 成功: 3 | 降级: 0 | 失败: 0 | 跳过: 0
+✓ specs/_index.spec.md 已生成
+✓ 日志: _meta/batch-summary.md
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 有失败模块 → exit 1 (TARGET_ERROR)
+spectra v3.0.1 — 批量生成
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 有失败模块 → exit 1 (TARGET_ERROR)
+  模块总数: 2 | 成功: 1 | 降级: 0 | 失败: 1 | 跳过: 0
+✓ specs/_index.spec.md 已生成
+✓ 日志: _meta/batch-summary.md
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 预算决策 cancel + 无失败 → exit 3 (BUDGET_EXCEEDED)
+spectra v3.0.1 — 批量生成
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 预算决策 cancel + 无失败 → exit 3 (BUDGET_EXCEEDED)
+  模块总数: 5 | 成功: 0 | 降级: 0 | 失败: 0 | 跳过: 5
+✓ 预算决策: cancel（超预算，自动取消）
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 预算决策 continue + 无失败 → exit 0
+spectra v3.0.1 — 批量生成
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 预算决策 continue + 无失败 → exit 0
+  模块总数: 3 | 成功: 3 | 降级: 0 | 失败: 0 | 跳过: 0
+✓ specs/_index.spec.md 已生成
+✓ 日志: _meta/batch-summary.md
+✓ 预算决策: continue（预估在预算内）
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 失败模块 + 预算 cancel 同时存在 → exit 1（优先 TARGET_ERROR）
+spectra v3.0.1 — 批量生成
+
+stdout | tests/unit/batch-command-exit-code.test.ts > runBatchCommand exit code (Feature 127) > 失败模块 + 预算 cancel 同时存在 → exit 1（优先 TARGET_ERROR）
+  模块总数: 2 | 成功: 0 | 降级: 0 | 失败: 1 | 跳过: 0
+✓ 预算决策: cancel（先失败后取消）
+
+ ✓ |unit| tests/unit/batch-command-exit-code.test.ts (5 tests) 6ms
+ ✓ |unit| tests/unit/feature-176-spike-and-gate.test.ts (19 tests) 4ms
+ ✓ |unit| tests/unit/knowledge-graph/call-resolver.test.ts (21 tests) 5ms
+stderr | tests/panoramic/qa/llm-caller.test.ts > callQnALlm > overBudget 标记 > 超额时 LLM 调用不应被阻断（应继续返回结果）
+[warn] qna token cost over hardcode limit, recorded only. estimate=6500 tokens, limit=6000 tokens
+
+stderr | tests/panoramic/qa/llm-caller.test.ts > callQnALlm > 响应解析 > 应从 JSON 响应中解析 parsedCitations
+[warn] qna token cost over hardcode limit, recorded only. estimate=6500 tokens, limit=6000 tokens
+
+stderr | tests/panoramic/qa/llm-caller.test.ts > callQnALlm > 响应解析 > LLM 返回非 JSON 文本时应 fallback 到原始文本作为 answer
+[warn] qna token cost over hardcode limit, recorded only. estimate=6500 tokens, limit=6000 tokens
+
+ ✓ |unit| tests/panoramic/qa/llm-caller.test.ts (8 tests) 4ms
+ ✓ |unit| tests/models/frontmatter-cost.test.ts (9 tests) 5ms
+ ✓ |e2e| tests/e2e/feature-170a-spectra-spec-driver-integration.e2e.test.ts (28 tests) 4ms
+ ✓ |unit| tests/unit/llm-provider-selection.test.ts (2 tests) 5ms
+ ✓ |unit| tests/adapters/language-adapter-registry.test.ts (11 tests) 3ms
+stderr | tests/unit/graph-only-cli.test.ts > runBatchCommand — graph-only 路径（FR-005/008） > graph-only + buildAstGraphOnly 抛错 → 非 0 退出（落入 handleError）
+✗ 错误: boom: write failed
+
+ ✓ |unit| tests/unit/graph-only-cli.test.ts (11 tests) 5ms
+ ✓ |unit| tests/unit/batch-orchestrator-anchor-hyperedge-wiring.test.ts (9 tests) 4ms
+ ✓ |unit| tests/panoramic/generator-registry.test.ts (18 tests) 11ms
+stderr | tests/adapters/registry-integration.test.ts > Registry 集成测试（Mock 适配器） > file-scanner 扫描含 .mock 文件的目录时，.mock 文件出现在结果中
+⚠ 跳过 1 个 .md 文件（不支持）
+
+ ✓ |unit| tests/adapters/registry-integration.test.ts (3 tests) 6ms
+ ✓ |unit| tests/unit/auth-detector.test.ts (8 tests) 4ms
+ ✓ |unit| tests/unit/secret-redactor.test.ts (12 tests) 4ms
+ ✓ |unit| tests/unit/drift-orchestrator.test.ts (5 tests) 5ms
+ ✓ |unit| tests/panoramic/graph-tools-v2.test.ts (11 tests) 4ms
+ ✓ |unit| tests/unit/llm-client.test.ts (18 tests) 8ms
+ ✓ |unit| tests/unit/string-distance.test.ts (10 tests) 5ms
+ ✓ |unit| tests/debt-scanner/llm-topic-inferrer.test.ts (10 tests) 3ms
+ ✓ |unit| tests/unit/atomic-write.test.ts (4 tests) 5ms
+ ✓ |unit| tests/panoramic/community-persist.test.ts (3 tests) 4ms
+ ✓ |unit| tests/unit/parse-args-cache.test.ts (6 tests) 16ms
+ ✓ |integration| tests/integration/graph-html-generation.test.ts (8 tests | 4 skipped) 3ms
+stderr | tests/panoramic/qa/rag-reranker.test.ts > rerankWithEmbedding > embedding 加载失败降级 > embed() 失败时应降级为 bfs-only，不抛出异常
+[warn] qa/rag-reranker: embedding 计算失败，降级为 bfs-only。原因：模拟 embedding 计算失败
+
+ ✓ |unit| tests/panoramic/qa/rag-reranker.test.ts (9 tests) 4ms
+ ✓ |unit| tests/panoramic/hyperedges/schema.test.ts (16 tests) 3ms
+ ✓ |integration| tests/integration/pure-code-degradation.test.ts (6 tests) 4ms
+ ✓ |unit| tests/unit/cli-commands.test.ts (27 tests) 4ms
+ ✓ |unit| tests/unit/feature-187-classify-oracle.test.ts (32 tests) 4ms
+ ✓ |unit| tests/unit/agent-doc-sync.test.ts (1 test) 41ms
+ ✓ |unit| tests/extraction/markdown-extractor.test.ts (12 tests) 8ms
+ ✓ |unit| tests/unit/mermaid-class-diagram.test.ts (9 tests) 4ms
+ ✓ |unit| tests/unit/cli/version.test.ts (5 tests) 3ms
+ ✓ |unit| tests/unit/drift-orchestrator-old-spec.test.ts (11 tests) 4ms
+ ✓ |unit| tests/panoramic/utils/html-sanitizer.test.ts (20 tests) 5ms
+ ✓ |unit| tests/kb/query-sanitizer.test.ts (8 tests) 4ms
+ ✓ |unit| tests/unit/scripts/graph-accuracy-dispatch.test.ts (12 tests) 5ms
+ ✓ |unit| tests/batch/concurrency-normalization.test.ts (8 tests) 4ms
+ ✓ |unit| tests/unit/knowledge-graph/import-resolver.test.ts (10 tests) 2ms
+stderr | tests/panoramic/qa/debt-context.test.ts > injectDebtContext > scanProjectDebt 失败时 > 应返回 triggered=true 但 citations 为空，不抛出异常
+[warn] qa/debt-context: scanProjectDebt 失败，跳过债务上下文注入。原因：磁盘 IO 错误
+
+ ✓ |unit| tests/panoramic/qa/debt-context.test.ts (13 tests) 3ms
+ ✓ |unit| tests/debt-scanner/debt-classifier.test.ts (10 tests) 5ms
+ ✓ |unit| tests/unit/structural-diff.test.ts (10 tests) 12ms
+ ✓ |unit| tests/extraction/extraction-types.test.ts (15 tests) 4ms
+ ✓ |unit| tests/panoramic/qa/citation.test.ts (5 tests) 6ms
+ ✓ |unit| tests/unit/eval-self-judge-hard-fail.test.ts (5 tests) 3ms
+ ✓ |unit| tests/unit/frontmatter-generator.test.ts (18 tests) 11ms
+ ✓ |unit| tests/kb/entity-matcher.test.ts (9 tests) 3ms
+ ✓ |unit| tests/unit/mcp/agent-context-sanitize.test.ts (4 tests | 1 skipped) 5ms
+ ✓ |unit| tests/unit/semantic-diff.test.ts (4 tests) 4ms
+ ✓ |unit| tests/panoramic/cross-reference-index.test.ts (3 tests) 4ms
+ ✓ |unit| tests/unit/feature-187-oracle-pipeline.test.ts (6 tests) 6ms
+ ✓ |unit| tests/unit/god-node-analyzer.test.ts (6 tests) 4ms
+ ✓ |unit| tests/unit/mcp/description-completeness.test.ts (22 tests) 6ms
+ ✓ |unit| tests/kb/injection-format.test.ts (7 tests) 2ms
+ ✓ |unit| tests/unit/feature-187-cohort-registry.test.ts (10 tests) 3ms
+ ✓ |unit| tests/kb/tokenizer.test.ts (15 tests) 6ms
+ ✓ |unit| tests/panoramic/sanitize-filename.test.ts (18 tests) 3ms
+ ✓ |unit| tests/debt-scanner/symbol-resolver.test.ts (4 tests) 2ms
+ ✓ |unit| tests/debt-scanner/report-builder.test.ts (5 tests) 2ms
+ ✓ |unit| tests/panoramic/anchoring/edge-builder.test.ts (12 tests) 3ms
+ ✓ |unit| tests/unit/knowledge-graph/relativize.test.ts (16 tests) 3ms
+ ✓ |e2e| tests/e2e/feature-170c-description.e2e.test.ts (17 tests) 3ms
+ ✓ |unit| tests/panoramic/mock-generator.test.ts (14 tests) 2ms
+ ✓ |unit| tests/unit/feature-188-cohort-subset.test.ts (7 tests) 2ms
+ ✓ |unit| tests/spec-store/spec-identity.test.ts (11 tests) 2ms
+ ✓ |unit| tests/unit/language-grouper.test.ts (6 tests) 4ms
+ ✓ |unit| tests/panoramic/graph-types-v2.test.ts (7 tests) 4ms
+ ✓ |unit| tests/unit/feature135-adr-guard-hyperedges-warning.test.ts (15 tests) 2ms
+ ✓ |unit| tests/unit/parse-args-html-flag.test.ts (6 tests) 23ms
+ ✓ |unit| tests/unit/feature-176-forbidden-claims.test.ts (5 tests) 3ms
+ ✓ |unit| tests/unit/feature-187-phase-markers.test.ts (13 tests) 31ms
+ ✓ |unit| tests/extraction/artifact-classifier.test.ts (32 tests) 3ms
+ ✓ |unit| tests/panoramic/anchoring/similarity.test.ts (10 tests) 5ms
+ ✓ |unit| tests/unit/llm-client-token-extraction.test.ts (4 tests) 3ms
+ ✓ |unit| tests/unit/token-counter.test.ts (11 tests) 3ms
+ ✓ |unit| tests/unit/eval-pearson.test.ts (5 tests) 2ms
+ ✓ |unit| tests/kb/arbitration.test.ts (9 tests) 2ms
+ ✓ |unit| tests/unit/mermaid-dependency-graph.test.ts (3 tests) 3ms
+ ✓ |unit| tests/kb/result-merger.test.ts (6 tests) 2ms
+ ✓ |unit| tests/unit/parse-args-batch-budget.test.ts (7 tests) 2ms
+ ✓ |unit| tests/panoramic/anchoring/providers/factory.test.ts (6 tests) 3ms
+ ✓ |unit| tests/kb/kb-error.test.ts (5 tests) 4ms
+ ✓ |unit| tests/unit/eval/fuzzy-match.test.ts (15 tests) 2ms
+ ✓ |unit| tests/unit/batch/regen-plan.test.ts (14 tests) 2ms
+ ✓ |unit| tests/panoramic/qa/prompt-builder.test.ts (14 tests) 2ms
+ ✓ |unit| tests/unit/init-runner.test.ts (4 tests) 2ms
+ ✓ |unit| tests/unit/verify-feature-154.test.ts (18 tests) 2ms
+ ✓ |unit| tests/unit/cli/helptext.test.ts (5 tests) 2ms
+ ✓ |unit| tests/unit/batch-project-docs-mode.test.ts (21 tests) 5ms
+ ✓ |unit| tests/unit/confidence-mapper.test.ts (12 tests) 22ms
+ ✓ |unit| tests/debt-scanner/rule-detector.test.ts (15 tests) 3ms
+ ✓ |unit| tests/unit/graph-accuracy-fill-rate.test.ts (6 tests) 2ms
+ ✓ |unit| tests/debt-scanner/default-llm-client.test.ts (2 tests) 2ms
+ ✓ |unit| tests/unit/graph/graph-builder-upsert.test.ts (7 tests) 2ms
+ ✓ |unit| tests/panoramic/graph-query-budget.test.ts (3 tests) 2ms
+ ✓ |unit| tests/unit/error-handler.test.ts (6 tests) 2ms
+ ✓ |unit| tests/unit/batch-orchestrator-reading-mode-wiring.test.ts (3 tests) 1ms
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+ ✓ |unit| tests/panoramic/graph-paths.test.ts (4 tests) 3ms
+ ↓ |e2e| tests/e2e/feature-170c-driver.e2e.test.ts (2 tests | 2 skipped)
+ ✓ |unit| tests/unit/feature135-frontmatter-version.test.ts (5 tests) 2ms
+ ↓ |integration| tests/integration/eval-judge-jury-sdk.test.ts (2 tests | 2 skipped)
+ ✓ |unit| tests/batch/model-override-decision.test.ts (8 tests) 2ms
+ ↓ |e2e| tests/e2e/feature-170d-driver-preference.e2e.test.ts (4 tests | 4 skipped)
+ ✓ |unit| tests/adapters/ts-js-adapter.test.ts (6 tests) 3ms
+ ↓ |integration| tests/integration/llm-token-extraction.test.ts (1 test | 1 skipped)
+[dev-mode] disabled by CI env
+[dev-mode] disabled by CI env
+[dev-mode] disabled by SPECTRA_DEV_DISABLE=1
+[dev-mode] disabled by SPECTRA_DEV_DISABLE=1
+[dev-mode] disabled by CI env
+ ✓ |unit| tests/cli/dev-reload.test.ts (13 tests) 3ms
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+发现 2 个文件，聚合为 2 个模块
+
+ ✓ |unit| tests/unit/mcp/server-instructions.test.ts (5 tests) 2ms
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.3s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+发现 2 个文件，聚合为 2 个模块
+
+Top 5 input token 消费模块：
+  1. src/mod-01: 290 tokens
+  2. src/mod-02: 290 tokens
+  3. src/mod-03: 290 tokens
+  4. src/mod-04: 290 tokens
+  5. src/mod-05: 290 tokens
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+发现 12 个文件，聚合为 12 个模块
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-orchestrator] WARN: semantic-integration: 跳过 anchor + hyperedge 集成 — mode=reading（非 full）（保持 graph.json 仅含静态边）
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+发现 2 个文件，聚合为 2 个模块
+
+[mod-01] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-02] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.4s
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-03] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+[mod-04] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-05] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+发现 1 个文件，聚合为 1 个模块
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-06] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-07] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-08] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-09] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-10] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-11] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+发现 2 个文件，聚合为 2 个模块
+
+[mod-12] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+发现 2 个文件，聚合为 2 个模块
+恢复断点: 已完成 0/2 模块
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）
+⚠ 跳过 3 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/a: 85 tokens
+  2. src/b: 85 tokens
+Top 5 input token 消费模块：
+  1. src/mod-01: 290 tokens
+  2. src/mod-02: 290 tokens
+  3. src/mod-03: 290 tokens
+  4. src/mod-04: 290 tokens
+  5. src/mod-05: 290 tokens
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）
+发现 12 个文件，聚合为 12 个模块
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+发现 2 个文件，聚合为 2 个模块
+
+[loader] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[store] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-01] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+Top 5 input token 消费模块：
+  1. src/store: 89 tokens
+  2. src/loader: 88 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-03] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.5s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+发现 2 个文件，聚合为 2 个模块
+
+[mod-04] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[loader] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.1s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-05] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-06] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+Top 5 input token 消费模块：
+  1. src/loader: 92 tokens
+[mod-07] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-08] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+发现 4 个文件，聚合为 4 个模块
+
+[mod-09] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-10] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-11] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[mod-12] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.1s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.3s
+[c] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.3s
+[d] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.1s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/d: 144 tokens
+  2. src/c: 124 tokens
+  3. src/b: 121 tokens
+  4. src/a: 85 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+发现 4 个文件，聚合为 4 个模块
+
+[a] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+[b] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.4s
+[c] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.4s
+Top 5 input token 消费模块：
+  1. src/mod-01: 290 tokens
+  2. src/mod-03: 290 tokens
+  3. src/mod-04: 290 tokens
+  4. src/mod-05: 290 tokens
+  5. src/mod-06: 290 tokens
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[d] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.1s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+stdout | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）
+发现 12 个文件，聚合为 12 个模块
+
+[mod-01] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.4s
+[mod-02] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.5s
+Top 5 input token 消费模块：
+  1. src/d: 144 tokens
+  2. src/c: 124 tokens
+  3. src/b: 121 tokens
+  4. src/a: 87 tokens
+[mod-03] AST: 0.0s | context: 0.0s | LLM#1: 0.4s | enrich: - | render: 0.0s | total: 0.6s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-04] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+发现 2 个文件，聚合为 2 个模块
+
+[mod-05] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-06] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[x] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[y] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[mod-07] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-08] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+Top 5 input token 消费模块：
+  1. src/x: 134 tokens
+  2. src/y: 134 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[mod-09] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+发现 2 个文件，聚合为 2 个模块
+
+[mod-10] AST: 0.0s | context: 0.0s | LLM#1: 0.3s | enrich: - | render: 0.0s | total: 0.3s
+[mod-11] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[mod-12] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.1s
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/batch-concurrency.e2e.test.ts > Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+[x] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[y] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/x: 134 tokens
+  2. src/y: 134 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+发现 2 个文件，聚合为 2 个模块
+
+[loader] AST: 0.0s | context: 0.0s | LLM#1: 0.2s | enrich: - | render: 0.0s | total: 0.2s
+[store] AST: 0.0s | context: 0.0s | LLM#1: 0.1s | enrich: - | render: 0.0s | total: 0.2s
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+Top 5 input token 消费模块：
+  1. src/mod-01: 290 tokens
+  2. src/mod-02: 290 tokens
+  3. src/mod-03: 290 tokens
+  4. src/mod-04: 290 tokens
+  5. src/mod-05: 290 tokens
+ ✓ |e2e| tests/e2e/batch-concurrency.e2e.test.ts (4 tests) 38706ms
+   ✓ Spectra batch 并发 E2E（Feature 146） > SC-003: concurrency=3 时同时活跃 LLM 调用 ≤ 3 且 > 1  18246ms
+   ✓ Spectra batch 并发 E2E（Feature 146） > SC-006: 并行加速 — concurrency=3 下 LLM 阶段总耗时显著小于顺序执行下限  14228ms
+   ✓ Spectra batch 并发 E2E（Feature 146） > SC-004: 单模块失败不阻塞其他模块（Promise.allSettled + p-limit catch）  2857ms
+   ✓ Spectra batch 并发 E2E（Feature 146） > SC-005: tokenUsage 跨模块累加正确（JS 单线程 += 安全）  2882ms
+Top 5 input token 消费模块：
+  1. src/loader: 91 tokens
+  2. src/store: 89 tokens
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stdout | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+发现 2 个文件，聚合为 2 个模块
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+stderr | tests/e2e/feature-175-batch-incremental.e2e.test.ts > F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）
+⚠ 跳过 2 个 .json 文件（不支持）
+
+[batch-project-docs] WARN: ADR pipeline 已临时禁用（v4.0.1）。如需生成 ADR，请用 --enable-adr 显式开启（注意：当前版本 ADR 内容质量尚未保证）。
+[batch-project-docs] WARN: ADR pipeline 已禁用（未发现遗留 ADR 目录，无需中和）
+[batch-orchestrator] WARN: hyperedge: outputDir/project/ 下检测到 2 个子目录（_meta, feature-briefs），其中嵌套的 .md 文件未被 anchor/hyperedge 集成扫描。当前实现只支持扁平 project 目录；如需支持嵌套，请在 spec 中提交需求。
+ ✓ |e2e| tests/e2e/feature-175-batch-incremental.e2e.test.ts (10 tests) 39268ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景1 [US1] 改 a → 仅 a + 依赖 a 的 b 重生成，无关 c 不动（FR-005/FR-018/SC-001）  12091ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景2 [US2] 无改动 → 第二轮零模块级 generateSpec 调用（SC-002/FR-008）  6591ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景9 [US1] 全新无 spec 项目默认参数 → deltaReport.mode=full + fallbackReason=no-existing-specs（FR-012）  2418ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景3 [US3/US4] 第二轮显式 full=true → 即使有 cache 也全量重生成（SC-005/FR-016）  7355ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景4 [US1] 第二轮切 mode（full→reading）→ 所有模块 cache miss 重生成（FR-013/EC-003）  1198ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景5 [US3] 删源文件 → batch 产物孤儿被删；混入无 generatedByMode 手写 spec 不被删（FR-017/EC-009）  1063ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景6 [US4] 残留 checkpoint 命中某模块 + full=true → 该模块仍被重生成（FR-016/EC-007）  1719ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景7 [US1] 改一个模块 → deltaReport.regenerateTargets 与实际重生成模块自洽，未改模块跳过（FR-019）  1224ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景8 [US1] diamond 依赖改 a → 传播到 b/c/d；cycle X↔Y 改 x → BFS 终止且 x/y 重生成（FR-018）  3945ms
+   ✓ F175 Batch Incremental Wrapper E2E（10 场景） > 场景10 [US3] full 与无改动增量产物 byte-stable：模块 spec 字节相同 + graph.json deepEqual（SC-003）  1196ms
+
+ Test Files  428 passed | 4 skipped (432)
+      Tests  5079 passed | 24 skipped | 21 todo (5124)
+   Start at  16:40:44
+   Duration  39.68s (transform 9.07s, setup 0ms, collect 87.27s, tests 358.26s, environment 42ms, prepare 19.58s)
+
+exit=0

@@ -5,19 +5,25 @@ set -euo pipefail
 
 MODE="project"
 ACTION="install"
+# Feature 213（A1）：opt-in 双写开关，默认关闭；仅显式 --sync-plugin-distribution 时置 true。
+# 只有 repo:sync 的 runStep 传该 flag，避免测试/用户普通 install 误重写 tracked skills-codex/。
+SYNC_PLUGIN_DIST="false"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
   cat <<'USAGE'
 用法:
-  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" install [--global]
+  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" install [--global] [--sync-plugin-distribution]
   bash "\$PLUGIN_DIR/scripts/codex-skills.sh" remove [--global]
 
 说明:
-  install   安装 Spec Driver 的 Codex 包装技能到 .codex/skills
-  remove    移除已安装的 Spec Driver Codex 包装技能
-  --global  目标目录改为 ~/.codex/skills
+  install                     安装 Spec Driver 的 Codex 包装技能到 .codex/skills
+  remove                      移除已安装的 Spec Driver Codex 包装技能
+  --global                    目标目录改为 ~/.codex/skills
+  --sync-plugin-distribution  额外把生成结果 copy 到 tracked 的
+                              plugins/spec-driver/skills-codex/（随插件包分发）；
+                              仅供 npm run repo:sync 使用，普通安装无需该 flag
 
 环境变量:
   CODEX_SKILL_PROJECT_ROOT  覆盖 project 模式的目标项目根目录
@@ -31,6 +37,9 @@ for arg in "$@"; do
       ;;
     --global|-g)
       MODE="global"
+      ;;
+    --sync-plugin-distribution)
+      SYNC_PLUGIN_DIST="true"
       ;;
     --help|-h)
       usage
@@ -187,6 +196,19 @@ write_wrapper() {
   } > "$target_file"
 }
 
+# Feature 213（A1）：copy-after-generate 把已生成的 $TARGET_DIR 内各 skill 目录复制到
+# tracked 的 $PLUGIN_DIR/skills-codex/，保证与 .codex/skills 逐字节相同（含内嵌 Source SHA256 行）。
+# 选 copy 而非二次 write_wrapper：避免未来单独改一处生成逻辑造成漂移，也少一半子进程调用。
+sync_plugin_distribution_copy() {
+  local dist_dir="$PLUGIN_DIR/skills-codex"
+  rm -rf "$dist_dir"
+  mkdir -p "$dist_dir"
+  for skill in "${SKILLS[@]}"; do
+    cp -R "$TARGET_DIR/$skill" "$dist_dir/$skill"
+  done
+  echo "Spec Driver Codex skills 已同步到分发目录: $dist_dir"
+}
+
 install_all() {
   write_wrapper "spec-driver-constitution" "spec-driver-constitution"
   write_wrapper "spec-driver-feature" "spec-driver-feature"
@@ -196,6 +218,12 @@ install_all() {
   write_wrapper "spec-driver-resume" "spec-driver-resume"
   write_wrapper "spec-driver-sync" "spec-driver-sync"
   write_wrapper "spec-driver-doc" "spec-driver-doc"
+
+  # opt-in：仅显式 --sync-plugin-distribution 时才重写 tracked skills-codex/，
+  # 避免测试套件以 cwd=tempDir 反复调用真实脚本时误删/重写真实工作树内容。
+  if [[ "$SYNC_PLUGIN_DIST" == "true" ]]; then
+    sync_plugin_distribution_copy
+  fi
 
   echo "Spec Driver Codex skills 安装完成: $TARGET_DIR"
 }
