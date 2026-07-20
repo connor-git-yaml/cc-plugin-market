@@ -1,0 +1,28 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-01-01T00:00:00.000Z",
+    "nodeCount": 3,
+    "edgeCount": 1,
+    "sources": ["unified-graph"],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    { "id": "src/svc.ts::Alpha", "kind": "component", "label": "Alpha", "metadata": { "unifiedKind": "symbol", "sourcePath": "src/svc.ts" } },
+    { "id": "src/svc.ts::Beta", "kind": "component", "label": "Beta", "metadata": { "unifiedKind": "symbol", "sourcePath": "src/svc.ts" } },
+    { "id": "src/svc.ts::Orphaned", "kind": "component", "label": "Orphaned", "metadata": { "unifiedKind": "symbol", "sourcePath": "src/svc.ts" } }
+  ],
+  "links": [
+    {
+      "source": "src/svc.ts::Alpha",
+      "target": "src/svc.ts::Beta",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 1,
+      "directional": true
+    }
+  ]
+}

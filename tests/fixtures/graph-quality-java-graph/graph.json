@@ -1,0 +1,339 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 18,
+    "edgeCount": 13,
+    "sources": [
+      "unified-graph"
+    ],
+    "skippedSources": [
+      {
+        "source": "doc-graph",
+        "reason": "未提供 DocGraph 数据源"
+      },
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      },
+      {
+        "source": "cross-reference",
+        "reason": "未提供 CrossReferenceLinks 数据源或为空数组"
+      },
+      {
+        "source": "extraction",
+        "reason": "未提供 extractionResults 或为空数组"
+      }
+    ],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    {
+      "id": "src/main/java/com/acme/Broken.java",
+      "kind": "module",
+      "label": "Broken.java",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "src/main/java/com/acme/Broken.java",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Broken.java::Broken",
+      "kind": "component",
+      "label": "Broken",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Broken.java",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Broken.java::Broken.broken",
+      "kind": "component",
+      "label": "Broken.broken",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Broken.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Broken.java::Broken.valid",
+      "kind": "component",
+      "label": "Broken.valid",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Broken.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Processor.java",
+      "kind": "module",
+      "label": "Processor.java",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "src/main/java/com/acme/Processor.java",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Processor.java::Processor",
+      "kind": "component",
+      "label": "Processor",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Processor.java",
+        "exportKind": "interface"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Processor.java::Processor.getLabel",
+      "kind": "component",
+      "label": "Processor.getLabel",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Processor.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Processor.java::Processor.process",
+      "kind": "component",
+      "label": "Processor.process",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Processor.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Service.java",
+      "kind": "module",
+      "label": "Service.java",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "src/main/java/com/acme/Service.java",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Service.java::Service",
+      "kind": "component",
+      "label": "Service",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Service.java",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Service.java::Service.getName",
+      "kind": "component",
+      "label": "Service.getName",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Service.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Service.java::Service.Service",
+      "kind": "component",
+      "label": "Service.Service",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Service.java",
+        "memberKind": "constructor"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Service.java::Service.setName",
+      "kind": "component",
+      "label": "Service.setName",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Service.java",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Status.java",
+      "kind": "module",
+      "label": "Status.java",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "src/main/java/com/acme/Status.java",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "src/main/java/com/acme/Status.java::Status",
+      "kind": "component",
+      "label": "Status",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/main/java/com/acme/Status.java",
+        "exportKind": "enum"
+      }
+    },
+    {
+      "id": "src/test/java/com/acme/ServiceTest.java",
+      "kind": "module",
+      "label": "ServiceTest.java",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "src/test/java/com/acme/ServiceTest.java",
+        "callSitesCount": 3
+      }
+    },
+    {
+      "id": "src/test/java/com/acme/ServiceTest.java::ServiceTest",
+      "kind": "component",
+      "label": "ServiceTest",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/test/java/com/acme/ServiceTest.java",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "src/test/java/com/acme/ServiceTest.java::ServiceTest.testGetName",
+      "kind": "component",
+      "label": "ServiceTest.testGetName",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "src/test/java/com/acme/ServiceTest.java",
+        "memberKind": "method"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "src/main/java/com/acme/Broken.java::Broken",
+      "target": "src/main/java/com/acme/Broken.java::Broken.broken",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Broken.java::Broken",
+      "target": "src/main/java/com/acme/Broken.java::Broken.valid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Broken.java",
+      "target": "src/main/java/com/acme/Broken.java::Broken",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Processor.java::Processor",
+      "target": "src/main/java/com/acme/Processor.java::Processor.getLabel",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Processor.java::Processor",
+      "target": "src/main/java/com/acme/Processor.java::Processor.process",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Processor.java",
+      "target": "src/main/java/com/acme/Processor.java::Processor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Service.java::Service",
+      "target": "src/main/java/com/acme/Service.java::Service.getName",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Service.java::Service",
+      "target": "src/main/java/com/acme/Service.java::Service.Service",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Service.java::Service",
+      "target": "src/main/java/com/acme/Service.java::Service.setName",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Service.java",
+      "target": "src/main/java/com/acme/Service.java::Service",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/main/java/com/acme/Status.java",
+      "target": "src/main/java/com/acme/Status.java::Status",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/test/java/com/acme/ServiceTest.java::ServiceTest",
+      "target": "src/test/java/com/acme/ServiceTest.java::ServiceTest.testGetName",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "src/test/java/com/acme/ServiceTest.java",
+      "target": "src/test/java/com/acme/ServiceTest.java::ServiceTest",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    }
+  ]
+}

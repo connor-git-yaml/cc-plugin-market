@@ -75,6 +75,8 @@ import {
 import type { SimpleLLMClient as DebtSimpleLLMClient } from '../debt-scanner/design-docs/llm-topic-inferrer.js';
 import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-types.js';
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
+import { collectGenericLanguageCodeSkeletons } from './generic-language-skeleton-collector.js';
+import { resolveSourceCommit } from '../panoramic/graph/source-commit.js';
 import { buildKnowledgeGraph, writeKnowledgeGraph, normalizeGraphForWrite } from '../panoramic/graph/index.js';
 import {
   buildUnifiedGraph,
@@ -1286,8 +1288,10 @@ export async function runBatch(
       const tsJsSkeletons = await collectTsJsCodeSkeletons(resolvedRoot, {
         extractCallSites: true,
       });
-      // 合并两个 Map（projectRoot 都已 normalize 为绝对路径，key 形态一致）
-      const earlyCodeSkeletons = new Map([...pythonSkeletons, ...tsJsSkeletons]);
+      // F217 决策 1：Java/Go 通用采集器接入（默认 adapters = [Java, Go]）
+      const genericSkeletons = await collectGenericLanguageCodeSkeletons(resolvedRoot);
+      // 合并三个 Map（projectRoot 都已 normalize 为绝对路径，key 形态一致）
+      const earlyCodeSkeletons = new Map([...pythonSkeletons, ...tsJsSkeletons, ...genericSkeletons]);
       if (earlyCodeSkeletons.size > 0) {
         const earlyUg = buildUnifiedGraph({
           projectRoot: resolvedRoot,
@@ -1297,7 +1301,7 @@ export async function runBatch(
         const callEdges = earlyUg.edges.filter((e) => e.relation === 'calls').length;
         logger.info(
           `[Feature 151+152] 早期 UnifiedGraph 构建：${earlyUg.nodes.length} 节点 / ${callEdges} calls 边 ` +
-          `(${pythonSkeletons.size} .py + ${tsJsSkeletons.size} .ts/.tsx/.js/.jsx 文件)`,
+          `(${pythonSkeletons.size} .py + ${tsJsSkeletons.size} .ts/.tsx/.js/.jsx + ${genericSkeletons.size} .java/.go 文件)`,
         );
       }
     } catch (ugErr) {
@@ -1626,6 +1630,10 @@ export async function runBatch(
       // F179：stripTimestamps:true 使 graph.generatedAt 固定为 epoch，落盘 graph.json 真 byte-stable
       // （此前 F175 仅在测试读取侧 delete generatedAt，是 over-claim；现在落盘侧直接固定）。
       normalizeGraphForWrite(graphJson, { stripTimestamps: true });
+
+      // F217 FR-009：runBatch 主链基于当前工作树 AST 重新分析源码，写盘前注入 sourceCommit
+      // （非 git 仓库 / rev-parse 失败时 resolveSourceCommit 返回 null，不抛异常）
+      graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot);
 
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
@@ -2160,7 +2168,9 @@ function collectMdRecursive(dir: string, out: string[]): void {
 // Feature 151 — Python CodeSkeleton 收集（含 callSites 抽取）
 // ============================================================
 
-const PY_SKELETON_IGNORE_DIRS = new Set([
+// F217 T004：加 export（零行为变化）——供 src/panoramic/graph/quality/ignore-oracle.ts
+// 一致性单测断言 PY_SKELETON_IGNORE_DIRS ⊆ 共享内置忽略集合，防止未来三处定义漂移。
+export const PY_SKELETON_IGNORE_DIRS = new Set([
   'node_modules', '.git', '__pycache__', '.venv', 'venv',
   'build', 'dist', 'coverage', 'out', 'target', '.tox',
 ]);
@@ -2309,8 +2319,11 @@ function walkPyFiles(
 // Feature 152 — TypeScript/JavaScript CodeSkeleton 收集
 // ============================================================
 
-/** T-020：TS/JS 文件扫描时忽略的目录集合（与 Python 对齐，增加 .next / .nuxt 等前端产物目录） */
-const TSJS_SKELETON_IGNORE_DIRS = new Set([
+/**
+ * T-020：TS/JS 文件扫描时忽略的目录集合（与 Python 对齐，增加 .next / .nuxt 等前端产物目录）
+ * F217 T004：加 export（零行为变化），理由同 PY_SKELETON_IGNORE_DIRS。
+ */
+export const TSJS_SKELETON_IGNORE_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'coverage', 'out', 'target',
   '.next', '.nuxt', '.turbo', '.cache', 'tmp', '.tmp',
   '__pycache__', '.pytest_cache', '.tox',
@@ -2497,12 +2510,14 @@ export async function buildAstGraphOnly(
 
   logger.info('[Feature 195] graph-only 建图：纯 AST / 零 LLM');
 
-  // 步骤 1：AST 采集（与 batch unifiedGraph 同款采集器，合并 Python + TS/JS）
+  // 步骤 1：AST 采集（与 batch unifiedGraph 同款采集器，合并 Python + TS/JS + Java/Go）
   const pythonSkeletons = await collectPythonCodeSkeletons(resolvedRoot);
   const tsJsSkeletons = await collectTsJsCodeSkeletons(resolvedRoot, {
     extractCallSites: true,
   });
-  const codeSkeletons = new Map([...pythonSkeletons, ...tsJsSkeletons]);
+  // F217 决策 1：Java/Go 通用采集器接入（默认 adapters = [Java, Go]）
+  const genericSkeletons = await collectGenericLanguageCodeSkeletons(resolvedRoot);
+  const codeSkeletons = new Map([...pythonSkeletons, ...tsJsSkeletons, ...genericSkeletons]);
 
   if (codeSkeletons.size === 0) {
     // EC-001：无可解析源码 → 仍产出 schema 合法的空图，不崩溃
@@ -2535,6 +2550,10 @@ export async function buildAstGraphOnly(
     ...(unifiedGraph ? { unifiedGraph } : {}),
     ...(pythonSymbolResults.length > 0 ? { extractionResults: pythonSymbolResults } : {}),
   });
+
+  // F217 FR-009：graph-only 基于当前工作树 AST 重新分析源码，写盘前注入 sourceCommit
+  // （非 git 仓库 / rev-parse 失败时 resolveSourceCommit 返回 null，不抛异常）
+  graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot);
 
   // 步骤 5：复用 F183 写盘出口（内部 portable 守卫扫描 → normalizeGraphForWrite → 原子写）
   const graphPath = writeKnowledgeGraph(graphJson, resolvedOutputDir, {

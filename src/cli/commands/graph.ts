@@ -195,6 +195,9 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
       crossReferenceLinks,
       directed: command.directed ?? false,
     });
+    // F217 FR-009：本命令从缓存 architectureIR / 已生成 spec / crossRefs 三路合并产出，
+    // 不解析源码，MUST 显式写 null（盖当前 HEAD 属于 provenance 伪造）。
+    graphJson.graph.sourceCommit = null;
     const writtenPath = writeKnowledgeGraph(graphJson, outputDir);
     console.log(`✓ graph.json 已写入: ${writtenPath}`);
   } catch (err) {

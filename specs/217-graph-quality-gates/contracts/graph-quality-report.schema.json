@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "$id": "https://spectra.local/schemas/graph-quality-report/1.0.0",
+  "title": "GraphQualityReport",
+  "description": "graph-quality 命令 --json 输出结构的完整契约（Feature 217）。六项质量指标（duplicateCanonicalId / containsCoverage / orphanRatio / danglingEdges / legacyAndIgnoredNodes / freshness）+ 总体 verdict + next-step 建议。",
+  "type": "object",
+  "required": [
+    "graphPath",
+    "generatedAt",
+    "schemaVersion",
+    "duplicateCanonicalId",
+    "containsCoverage",
+    "orphanRatio",
+    "danglingEdges",
+    "legacyAndIgnoredNodes",
+    "freshness",
+    "overallVerdict",
+    "nextSteps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "graphPath": {
+      "type": "string",
+      "description": "被检测的 graph.json 绝对路径"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "本次检测执行时刻（ISO 8601）"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "description": "被检测图产物的 schemaVersion（cannot-assess 场景下可能为 'unknown'）"
+    },
+    "duplicateCanonicalId": {
+      "type": "object",
+      "required": ["status", "groups"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail"] },
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DuplicateCanonicalIdGroup" }
+        }
+      }
+    },
+    "containsCoverage": {
+      "type": "object",
+      "required": ["status", "total", "covered", "ratio", "uncoveredIds"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/CheckStatus" },
+        "total": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "ratio": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "uncoveredIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "orphanRatio": {
+      "type": "object",
+      "required": [
+        "status",
+        "totalSymbolNodes",
+        "rawOrphanCount",
+        "exemptedByCategory",
+        "offendingRatio",
+        "offendingIds",
+        "allNodeZeroDegreeRatio"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/CheckStatus" },
+        "totalSymbolNodes": { "type": "integer", "minimum": 0 },
+        "rawOrphanCount": { "type": "integer", "minimum": 0 },
+        "exemptedByCategory": {
+          "type": "object",
+          "required": ["entrypoint", "pure-type", "test-export"],
+          "additionalProperties": false,
+          "properties": {
+            "entrypoint": { "type": "integer", "minimum": 0 },
+            "pure-type": { "type": "integer", "minimum": 0 },
+            "test-export": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "offendingRatio": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "offendingIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allNodeZeroDegreeRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "danglingEdges": {
+      "type": "object",
+      "required": ["status", "edges"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail"] },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DanglingEdgeRecord" }
+        }
+      }
+    },
+    "legacyAndIgnoredNodes": {
+      "type": "object",
+      "required": ["status", "legacyHashNodeIds", "ignoredPathNodeIds"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail"] },
+        "legacyHashNodeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ignoredPathNodeIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "freshness": { "$ref": "#/$defs/GraphFreshnessVerdict" },
+    "overallVerdict": {
+      "type": "string",
+      "enum": ["pass", "pass-with-warnings", "fail-strong-invariant", "cannot-assess"]
+    },
+    "cannotAssessReason": {
+      "type": "string",
+      "enum": [
+        "graph-missing",
+        "json-parse-error",
+        "schema-too-old",
+        "schema-newer-than-supported"
+      ],
+      "description": "overallVerdict==='cannot-assess' 时的具体原因分类"
+    },
+    "nextSteps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "面向维护者的下一步修复建议文本（SC-011）"
+    }
+  },
+  "$defs": {
+    "CheckStatus": {
+      "type": "string",
+      "enum": ["pass", "fail", "not-applicable"]
+    },
+    "DuplicateCanonicalIdGroup": {
+      "type": "object",
+      "required": ["filePath", "symbolName", "kind", "ids"],
+      "additionalProperties": false,
+      "properties": {
+        "filePath": { "type": "string" },
+        "symbolName": { "type": "string" },
+        "kind": { "type": "string" },
+        "ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "DanglingEdgeRecord": {
+      "type": "object",
+      "required": ["source", "target", "relation"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "relation": { "type": "string" }
+      }
+    },
+    "GraphFreshnessVerdict": {
+      "type": "object",
+      "required": ["state", "recordedSourceCommit", "currentHead"],
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": ["fresh", "dirty", "stale", "unknown-provenance"]
+        },
+        "recordedSourceCommit": {
+          "type": ["string", "null"]
+        },
+        "currentHead": {
+          "type": ["string", "null"]
+        },
+        "dirtyFiles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "porcelainReadFailed": {
+          "type": "boolean",
+          "description": "FIX-3：git status --porcelain 读取失败时保守判 dirty 的标记"
+        }
+      }
+    }
+  }
+}

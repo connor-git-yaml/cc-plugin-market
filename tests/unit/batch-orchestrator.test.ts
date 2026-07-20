@@ -3,21 +3,39 @@
  * 验证多语言编排核心功能：图合并、跨语言检测、跨语言提示、断点恢复（T066-T075）
  * Feature 145 T016-T017：designDocAbsPaths 磁盘优先合并策略
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+
+// F217 T029：runBatch 早期 UnifiedGraph 段集成测试需要跑真实文件 I/O 但不触发 LLM 调用——
+// 复用 tests/integration/batch-paths.test.ts 已确立的 detectAuth mock 模式，强制 AST-only 降级。
+vi.mock('../../src/auth/auth-detector.js', () => ({
+  detectAuth: vi.fn(() => ({
+    methods: [
+      { type: 'api-key', provider: 'anthropic', available: false, details: '未设置' },
+      { type: 'cli-proxy', provider: 'codex', available: false, details: '测试中禁用' },
+      { type: 'cli-proxy', provider: 'claude', available: false, details: '测试中禁用' },
+    ],
+    preferred: null,
+    diagnostics: ['unit test forces AST-only fallback'],
+  })),
+}));
+
 import {
   mergeGraphsForTopologicalSort,
   detectCrossLanguageRefs,
   generateCrossLanguageHint,
   buildDesignDocAbsPaths,
+  runBatch,
 } from '../../src/batch/batch-orchestrator.js';
 import { loadCheckpoint, saveCheckpoint, clearCheckpoint } from '../../src/batch/checkpoint.js';
 import { groupFilesByLanguage } from '../../src/batch/language-grouper.js';
 import { scanFiles } from '../../src/utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { resolveSourceCommit } from '../../src/panoramic/graph/source-commit.js';
+import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 import type { ModuleGraph, ModuleEdge } from '../../src/knowledge-graph/module-derivation.js';
 import type { BatchState } from '../../src/models/module-spec.js';
 
@@ -496,4 +514,54 @@ describe('buildDesignDocAbsPaths (Feature 145 P1)', () => {
       expect(paths).toHaveLength(0);
     }).not.toThrow();
   });
+});
+
+// ============================================================
+// F217 T029: runBatch 早期 UnifiedGraph 段 — generic collector 接入 + sourceCommit 注入
+// ============================================================
+
+describe('runBatch — F217 T029: generic collector 接入 + sourceCommit 注入', () => {
+  let projectRoot: string;
+
+  beforeEach(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+    projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'batch-orchestrator-f217-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+    LanguageAdapterRegistry.resetInstance();
+  });
+
+  function readGraph(dir: string): GraphJSON {
+    return JSON.parse(
+      fs.readFileSync(path.join(dir, 'specs', '_meta', 'graph.json'), 'utf-8'),
+    ) as GraphJSON;
+  }
+
+  it('接入 collectGenericLanguageCodeSkeletons：Java/Go 节点进入 runBatch 主写盘产物，且 sourceCommit 已注入', async () => {
+    fs.mkdirSync(path.join(projectRoot, 'src', 'main', 'java', 'com', 'acme'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, 'src', 'main', 'java', 'com', 'acme', 'Widget.java'),
+      'package com.acme;\n\npublic class Widget {\n    public String name() {\n        return "widget";\n    }\n}\n',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, 'server.go'),
+      'package server\n\nfunc NewServer() *Server {\n\treturn &Server{}\n}\n\ntype Server struct {}\n',
+      'utf-8',
+    );
+
+    const result = await runBatch(projectRoot, { force: false });
+    expect(result.failed).toHaveLength(0);
+
+    const graph = readGraph(projectRoot);
+    expect(graph.nodes.some((n) => n.id.endsWith('Widget.java'))).toBe(true);
+    expect(graph.nodes.some((n) => n.id.endsWith('server.go'))).toBe(true);
+
+    // 非 git 临时目录 → resolveSourceCommit 应为 null，与写盘产物一致
+    expect(graph.graph.sourceCommit).toBe(resolveSourceCommit(projectRoot));
+    expect(graph.graph.sourceCommit).toBeNull();
+  }, 30_000);
 });

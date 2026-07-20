@@ -5,7 +5,7 @@
 
 /** CLI 命令结构 */
 export interface CLICommand {
-  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit' | 'index' | 'scaffold-kb';
+  subcommand: 'generate' | 'batch' | 'diff' | 'init' | 'prepare' | 'auth-status' | 'mcp-server' | 'panoramic' | 'cache' | 'watch' | 'graph' | 'community' | 'query' | 'install' | 'export' | 'direction-audit' | 'index' | 'scaffold-kb' | 'graph-quality';
   target?: string;
   specFile?: string;
   deep: boolean;
@@ -142,6 +142,16 @@ export interface CLICommand {
   scaffoldKbMaxInjectChars?: number;
   /** F191 scaffold-kb query：--probe 仅打印能力 sentinel */
   scaffoldKbProbe?: boolean;
+  /** F217 graph-quality 子命令：graph.json 路径（默认: specs/_meta/graph.json） */
+  graphQualityGraph?: string;
+  /** F217 graph-quality 子命令：以结构化 JSON 输出完整报告 */
+  graphQualityJson?: boolean;
+  /** F217 graph-quality 子命令：轻量模式，仅输出 graphExists/freshness/overallVerdict 三字段（FR-013） */
+  graphQualityStatus?: boolean;
+  /** F217 graph-quality 子命令：报告写入路径（可选，默认仅 stdout） */
+  graphQualityOutput?: string;
+  /** F217 graph-quality 子命令：写入 --output 文件时的格式 json|text（默认 text，与 --json 独立） */
+  graphQualityFormat?: 'json' | 'text';
 }
 
 /** 解析错误 */
@@ -491,6 +501,42 @@ export function parseArgs(argv: string[]): ParseResult {
         directionAuditFormat,
         directionAuditSnapshot,
         directionAuditCompareSnapshot,
+        deep: false, force: false, version: false, help: false,
+        global: false, remove: false, skillTarget: defaultSkillTarget(),
+      },
+    };
+  }
+
+  // graph-quality 子命令（F217）
+  if (sub === 'graph-quality') {
+    if (argv.includes('--help') || argv.includes('-h')) {
+      return {
+        ok: true,
+        command: {
+          subcommand: 'graph-quality',
+          deep: false, force: false, version: false, help: true,
+          global: false, remove: false, skillTarget: defaultSkillTarget(),
+        },
+      };
+    }
+    const graphIdx = argv.indexOf('--graph');
+    const graphQualityGraph = graphIdx !== -1 ? argv[graphIdx + 1] : undefined;
+    const graphQualityJson = argv.includes('--json');
+    const graphQualityStatus = argv.includes('--status');
+    const outputIdx = argv.indexOf('--output');
+    const graphQualityOutput = outputIdx !== -1 ? argv[outputIdx + 1] : undefined;
+    const formatIdx = argv.indexOf('--format');
+    const formatRaw = formatIdx !== -1 ? argv[formatIdx + 1] : undefined;
+    const graphQualityFormat = formatRaw === 'json' ? 'json' : formatRaw === 'text' ? 'text' : undefined;
+    return {
+      ok: true,
+      command: {
+        subcommand: 'graph-quality',
+        graphQualityGraph,
+        graphQualityJson,
+        graphQualityStatus,
+        graphQualityOutput,
+        graphQualityFormat,
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },

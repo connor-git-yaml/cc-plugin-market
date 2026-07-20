@@ -1,0 +1,26 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-01-01T00:00:00.000Z",
+    "nodeCount": 1,
+    "edgeCount": 1,
+    "sources": ["unified-graph"],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    { "id": "src/a.ts::Foo", "kind": "component", "label": "Foo", "metadata": {} }
+  ],
+  "links": [
+    {
+      "source": "src/a.ts::Foo",
+      "target": "src/missing.ts::Bar",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 1,
+      "directional": true
+    }
+  ]
+}

@@ -1,0 +1,252 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 13,
+    "edgeCount": 9,
+    "sources": [
+      "unified-graph"
+    ],
+    "skippedSources": [
+      {
+        "source": "doc-graph",
+        "reason": "未提供 DocGraph 数据源"
+      },
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      },
+      {
+        "source": "cross-reference",
+        "reason": "未提供 CrossReferenceLinks 数据源或为空数组"
+      },
+      {
+        "source": "extraction",
+        "reason": "未提供 extractionResults 或为空数组"
+      }
+    ],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    {
+      "id": "handler.go",
+      "kind": "module",
+      "label": "handler.go",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "handler.go",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "handler.go::Handler",
+      "kind": "component",
+      "label": "Handler",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "handler.go",
+        "exportKind": "interface"
+      }
+    },
+    {
+      "id": "handler.go::Handler.Handle",
+      "kind": "component",
+      "label": "Handler.Handle",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "handler.go",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "handler.go::HandlerFunc",
+      "kind": "component",
+      "label": "HandlerFunc",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "handler.go",
+        "exportKind": "type"
+      }
+    },
+    {
+      "id": "server_test.go",
+      "kind": "module",
+      "label": "server_test.go",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "server_test.go",
+        "callSitesCount": 1
+      }
+    },
+    {
+      "id": "server_test.go::TestNewServer",
+      "kind": "component",
+      "label": "TestNewServer",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "server_test.go",
+        "exportKind": "function"
+      }
+    },
+    {
+      "id": "server.go",
+      "kind": "module",
+      "label": "server.go",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "server.go",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "server.go::NewServer",
+      "kind": "component",
+      "label": "NewServer",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "server.go",
+        "exportKind": "function"
+      }
+    },
+    {
+      "id": "server.go::Server",
+      "kind": "component",
+      "label": "Server",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "server.go",
+        "exportKind": "struct"
+      }
+    },
+    {
+      "id": "server.go::Server.Start",
+      "kind": "component",
+      "label": "Server.Start",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "server.go",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "server.go::Server.Stop",
+      "kind": "component",
+      "label": "Server.Stop",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "server.go",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "syntax-error.go",
+      "kind": "module",
+      "label": "syntax-error.go",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "syntax-error.go",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "syntax-error.go::ValidFunc",
+      "kind": "component",
+      "label": "ValidFunc",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "syntax-error.go",
+        "exportKind": "function"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "handler.go::Handler",
+      "target": "handler.go::Handler.Handle",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "handler.go",
+      "target": "handler.go::Handler",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "handler.go",
+      "target": "handler.go::HandlerFunc",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "server_test.go",
+      "target": "server_test.go::TestNewServer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "server.go::Server",
+      "target": "server.go::Server.Start",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "server.go::Server",
+      "target": "server.go::Server.Stop",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "server.go",
+      "target": "server.go::NewServer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "server.go",
+      "target": "server.go::Server",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "syntax-error.go",
+      "target": "syntax-error.go::ValidFunc",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    }
+  ]
+}

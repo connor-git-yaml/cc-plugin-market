@@ -88,7 +88,10 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['tests/unit/**/*.test.ts', 'tests/adapters/**/*.test.ts', 'tests/models/**/*.test.ts', 'tests/panoramic/**/*.test.ts', 'tests/extraction/**/*.test.ts', 'tests/batch/**/*.test.ts', 'tests/spec-store/**/*.test.ts', 'tests/cli/**/*.test.ts', 'tests/utils/**/*.test.ts', 'tests/debt-scanner/**/*.test.ts', 'tests/kb/**/*.test.ts'],
+          // F217：quality-engine 六指标判定函数按 plan.md/tasks.md 约定与源码同目录共置
+          // （src/panoramic/graph/quality/*.test.ts），需显式纳入 include 才能被 `npx vitest run`
+          // 实际执行——否则 TDD 红/绿验证形同虚设（zero-execution 测试无验证价值）。
+          include: ['tests/unit/**/*.test.ts', 'tests/adapters/**/*.test.ts', 'tests/models/**/*.test.ts', 'tests/panoramic/**/*.test.ts', 'tests/extraction/**/*.test.ts', 'tests/batch/**/*.test.ts', 'tests/spec-store/**/*.test.ts', 'tests/cli/**/*.test.ts', 'tests/utils/**/*.test.ts', 'tests/debt-scanner/**/*.test.ts', 'tests/kb/**/*.test.ts', 'src/panoramic/graph/**/*.test.ts', 'src/batch/**/*.test.ts'],
         },
       },
       {

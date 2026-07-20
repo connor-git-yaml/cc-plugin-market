@@ -236,6 +236,9 @@ function deriveNodesFromSkeletons(
         kind: 'symbol',
         language: sk.language,
         filePath,
+        // F217 决策 2 增补：透传 exp.kind，供 orphan-check.ts pure-type 例外分类
+        // （metadata.exportKind === 'interface' | 'type'）判定依据。
+        metadata: { exportKind: exp.kind },
       });
       if (exp.members) {
         for (const m of exp.members) {
@@ -245,6 +248,8 @@ function deriveNodesFromSkeletons(
             kind: 'symbol',
             language: sk.language,
             filePath,
+            // F217 决策 2 增补：透传 m.kind（member 级 kind，如 method/property）。
+            metadata: { memberKind: m.kind },
           });
         }
       }

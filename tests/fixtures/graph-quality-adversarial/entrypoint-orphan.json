@@ -1,0 +1,18 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "2026-01-01T00:00:00.000Z",
+    "nodeCount": 2,
+    "edgeCount": 0,
+    "sources": ["unified-graph"],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    { "id": "src/index.ts::bootstrap", "kind": "component", "label": "bootstrap", "metadata": { "unifiedKind": "symbol", "sourcePath": "src/index.ts" } },
+    { "id": "src/util.ts::helper", "kind": "component", "label": "helper", "metadata": { "unifiedKind": "symbol", "sourcePath": "src/util.ts" } }
+  ],
+  "links": []
+}

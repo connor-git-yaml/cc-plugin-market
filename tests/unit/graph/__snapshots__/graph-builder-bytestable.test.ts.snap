@@ -56,6 +56,7 @@ exports[`buildKnowledgeGraph — byte-stable 回归（Feature 178） > 无向图
         "sourceTag": "extraction",
         "sourceFile": "engine.py",
         "confidence": "high",
+        "unifiedKind": "symbol",
         "callSitesCount": 3
       }
     },
@@ -202,6 +203,7 @@ exports[`buildKnowledgeGraph — byte-stable 回归（Feature 178） > 有向图
         "sourceTag": "extraction",
         "sourceFile": "engine.py",
         "confidence": "high",
+        "unifiedKind": "symbol",
         "callSitesCount": 3
       }
     },

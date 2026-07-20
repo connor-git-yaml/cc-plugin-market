@@ -176,6 +176,19 @@ export interface GraphJSON {
      * schema v2.0 扩展为联合类型，'1.0' 文件仍可赋值给此接口
      */
     schemaVersion: '1.0' | '2.0';
+    /**
+     * F217 新增（FR-009）：写盘时基于 AST 重新分析源码的建图链路记录的源码 commit
+     * （`git rev-parse HEAD`，在被分析项目根目录执行）。
+     *
+     * - `string`：真实 commit SHA（含 detached HEAD 场景）
+     * - `null`：非 git 仓库 / `git rev-parse` 执行失败 / 非 AST 重建的写盘路径（如
+     *   `spectra graph`，不解析源码，禁止盖当前 HEAD——provenance 诚实降级）
+     * - `undefined`：字段缺失（本 Feature 上线前生成的旧图产物），与显式 `null` 同等
+     *   判定为 `unknown-provenance`（FR-010），非异常
+     *
+     * 不 bump schemaVersion（决策 5：纯可选新增字段，向后兼容）。
+     */
+    sourceCommit?: string | null;
   };
   /** 节点数组 */
   nodes: GraphNode[];

@@ -421,3 +421,125 @@ describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
     expect(pairs.filter((p) => p === 'x.py=>x.py::foo')).toHaveLength(1);
   });
 });
+
+// ============================================================
+// F217 T023: UnifiedGraph→GraphNode 合并段 exportKind/memberKind/unifiedKind/
+// sourcePath metadata 透传（决策 2 增补 4）
+// ============================================================
+
+describe('F217 T023: UnifiedGraph 合并段 - 新节点分支 metadata 透传', () => {
+  it('新节点（nodeMap 中不存在同 id）透传 exportKind/memberKind', () => {
+    const graphJson = buildKnowledgeGraph({
+      unifiedGraph: {
+        nodes: [
+          { id: 'src/a.ts', kind: 'module', label: 'a' },
+          {
+            id: 'src/a.ts::IFoo',
+            kind: 'symbol',
+            label: 'IFoo',
+            filePath: 'src/a.ts',
+            metadata: { exportKind: 'interface' },
+          },
+          {
+            id: 'src/a.ts::Foo.bar',
+            kind: 'symbol',
+            label: 'Foo.bar',
+            filePath: 'src/a.ts',
+            metadata: { memberKind: 'method' },
+          },
+        ],
+        edges: [],
+      },
+    });
+    const ifooNode = graphJson.nodes.find((n) => n.id === 'src/a.ts::IFoo');
+    expect(ifooNode?.metadata?.['exportKind']).toBe('interface');
+    expect(ifooNode?.metadata?.['unifiedKind']).toBe('symbol');
+    expect(ifooNode?.metadata?.['sourcePath']).toBe('src/a.ts');
+
+    const memberNode = graphJson.nodes.find((n) => n.id === 'src/a.ts::Foo.bar');
+    expect(memberNode?.metadata?.['memberKind']).toBe('method');
+  });
+});
+
+describe('F217 T023: UnifiedGraph 合并段 - 既有节点合并分支（existing 命中）补齐', () => {
+  it('Python extraction 第四路先写入的顶层 symbol 节点，unifiedGraph 第五路补齐 unifiedKind/sourcePath/exportKind/memberKind，不覆盖 extraction provenance 字段', () => {
+    const extraction: ExtractionResult = {
+      nodes: [
+        { id: 'x.py', kind: 'module', label: 'x', source_file: 'x.py', confidence: 'EXTRACTED' },
+        {
+          id: 'x.py::foo',
+          kind: 'component',
+          label: 'foo',
+          source_file: 'x.py',
+          confidence: 'EXTRACTED',
+          metadata: { symbolKind: 'function', signature: 'def foo():' },
+        },
+      ],
+      edges: [
+        { source: 'x.py', target: 'x.py::foo', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+    const graphJson = buildKnowledgeGraph({
+      extractionResults: [extraction],
+      unifiedGraph: {
+        nodes: [
+          { id: 'x.py', kind: 'module', label: 'x' },
+          { id: 'x.py::foo', kind: 'symbol', label: 'foo', filePath: 'x.py' },
+        ],
+        edges: [
+          { source: 'x.py', target: 'x.py::foo', relation: 'contains', confidence: 'high', directional: true },
+        ],
+      },
+    });
+    const fooNode = graphJson.nodes.find((n) => n.id === 'x.py::foo');
+    expect(fooNode).toBeDefined();
+    // 新增补齐字段（决策 2 增补 4：contains-coverage/orphan 分母判定依据）
+    expect(fooNode?.metadata?.['unifiedKind']).toBe('symbol');
+    expect(fooNode?.metadata?.['sourcePath']).toBe('x.py');
+    // 不覆盖 extraction provenance 字段
+    expect(fooNode?.metadata?.['sourceTag']).toBe('extraction');
+    expect(fooNode?.metadata?.['sourceFile']).toBe('x.py');
+    expect(fooNode?.metadata?.['symbolKind']).toBe('function');
+    expect(fooNode?.metadata?.['confidence']).toBe('EXTRACTED');
+  });
+
+  it('既有节点合并分支同样透传 exportKind/memberKind（当 unifiedGraph 侧节点携带该 metadata 时）', () => {
+    const extraction: ExtractionResult = {
+      nodes: [
+        { id: 'y.py', kind: 'module', label: 'y', source_file: 'y.py', confidence: 'EXTRACTED' },
+        {
+          id: 'y.py::Bar',
+          kind: 'component',
+          label: 'Bar',
+          source_file: 'y.py',
+          confidence: 'EXTRACTED',
+          metadata: { symbolKind: 'class' },
+        },
+      ],
+      edges: [
+        { source: 'y.py', target: 'y.py::Bar', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+    const graphJson = buildKnowledgeGraph({
+      extractionResults: [extraction],
+      unifiedGraph: {
+        nodes: [
+          { id: 'y.py', kind: 'module', label: 'y' },
+          {
+            id: 'y.py::Bar',
+            kind: 'symbol',
+            label: 'Bar',
+            filePath: 'y.py',
+            metadata: { exportKind: 'class' },
+          },
+        ],
+        edges: [
+          { source: 'y.py', target: 'y.py::Bar', relation: 'contains', confidence: 'high', directional: true },
+        ],
+      },
+    });
+    const barNode = graphJson.nodes.find((n) => n.id === 'y.py::Bar');
+    expect(barNode?.metadata?.['exportKind']).toBe('class');
+    expect(barNode?.metadata?.['symbolKind']).toBe('class'); // provenance 字段未被覆盖
+  });
+});

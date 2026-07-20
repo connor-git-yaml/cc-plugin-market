@@ -42,3 +42,17 @@
 - [23:15] tasks(revision) 首次 SendMessage 恢复因 API connection error 三次中断（零编辑）→ 新代理携带自包含 13 条清单重派
 - [23:30] tasks(revision): COMPLETED | 46→54 任务；主线程 grep 复核 mktemp/sourceCommit===null/五项/休眠 标记全命中 ✅
 - [23:32] GATE_TASKS: AUTO_CONTINUE | tasks 过 Codex 审查修订闭环；进入 implement（P1→P4 顺序执行）
+- [23:35] commit 1445edf: tasks phase 入库
+- [23:40] implement P1: STARTED（Setup+Foundational T001-T032）
+- [00:25] implement P1: COMPLETED | 32 任务 TDD 红绿；全量 5318 绿 + build 零错；两个正当自主决策：vitest include 补 glob（防死测试）/ Java fixture com/acme（绕 BUILTIN 'example'）
+- [00:27] implement P2: STARTED（US1 CLI + US2 repo:check）；首 dispatch 37s API 中断（零改动）→ SendMessage 恢复成功
+- [00:58] implement P2: COMPLETED | CLI 三形态 + repo:check 第 12 族 + prepublishOnly 重排；5340 绿；🔴 首个真实信号：本仓旧图 551 ignored-path 节点
+- [01:00] 主编排器根因裁定：551=oracle 错用 spec 扫描器 BUILTIN_IGNORE_DIRS（含 'specs'）判图，而图生产者有意扫 specs/**/*.ts → 永久假阳性（重建不消）。修正设计=oracle 切 GRAPH_COLLECTOR_IGNORE_DIRS（TSJS∪PY collector 集合）+ file-scanner 回退零净改动
+- [01:02] implement P0修正+P3: STARTED；中途 API 中断一次（90 tool 后，README 步骤）→ SendMessage 恢复成功
+- [01:30] implement P0+P3: COMPLETED | 551→0（legacy-ignored 转 pass，repo:check graph-quality 6/6 全绿）；TS fixture + 三 pinned graph（sourceCommit===null 验证）+ 10 对抗/豁免 fixture + 矩阵 8 绿 + 对抗 18 绿；5367 全绿
+- [01:32] implement P4: STARTED（T049-T054 收尾）
+- [01:45] implement P4: COMPLETED | micrograd 重生成（33/37 计数不变，纯 metadata 增富逐行归因，byte-stable 复核两跑 identical）；F215 七消费文件逐文件全过零断言改动；graph-mcp-snapshot 休眠语义未变；Python 腿断言翻新（28 symbol 全 unifiedKind）；self-dogfood 重建 5928 节点/7919 边六指标全绿 freshness=dirty（FR-026 真实验证：repo:check 零 warning）；writeKnowledgeGraph 4 调用点勾验；四门全绿（5367/build/repo:check/release:check）
+  - dogfooding 发现（未来 Feature 候选）：graph-only calls 边跨文件召回缺口（buildKnowledgeGraph MCP 0 caller vs grep 3；buildUnifiedGraph MCP 5 caller 漏 runIndexCommand）
+- [01:50] 全部 53 任务勾选；specs/src.spec.md 产物还原（按并行 feature 排除约定）；specs/_meta/graph.json 确认 gitignored
+- [01:52] codex_review(implement): STARTED（后台，全改动面对抗审查）
+- [01:53] origin/master 复核：仍 39e4055，0 behind / 3 ahead，无需 rebase

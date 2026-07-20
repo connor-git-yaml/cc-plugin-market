@@ -42,6 +42,7 @@ vi.mock('../../src/panoramic/anchoring/providers/factory.js', async (orig) => {
 });
 
 import { buildAstGraphOnly } from '../../src/batch/batch-orchestrator.js';
+import { resolveSourceCommit } from '../../src/panoramic/graph/source-commit.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 
 const tmpDirs: string[] = [];
@@ -61,6 +62,15 @@ function readGraph(dir: string): GraphJSON {
   const graphPath = path.join(dir, 'specs', '_meta', 'graph.json');
   return JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
 }
+
+const JAVA_FIXTURE: Record<string, string> = {
+  'src/main/java/com/acme/Widget.java':
+    'package com.acme;\n\npublic class Widget {\n    public String name() {\n        return "widget";\n    }\n}\n',
+};
+const GO_FIXTURE: Record<string, string> = {
+  'server.go':
+    'package server\n\nfunc NewServer() *Server {\n\treturn &Server{}\n}\n\ntype Server struct {}\n',
+};
 
 const TS_FIXTURE: Record<string, string> = {
   'src/a.ts': 'export function foo(): number {\n  return 1;\n}\n',
@@ -190,6 +200,29 @@ describe('buildAstGraphOnly — 三语言矩阵（EC-002）', () => {
     expect(graph.nodes.some((n) => n.id.endsWith('.ts'))).toBe(true);
     expect(graph.nodes.some((n) => n.id.includes('.py'))).toBe(true);
     expect(result.pythonSymbolCount).toBeGreaterThan(0);
+  });
+});
+
+describe('buildAstGraphOnly — F217 T029: generic collector 接入 + sourceCommit 注入', () => {
+  it('接入 collectGenericLanguageCodeSkeletons：Java/Go 节点进入 graph-only 产物', async () => {
+    const dir = makeProject({ ...JAVA_FIXTURE, ...GO_FIXTURE });
+    await buildAstGraphOnly(dir);
+    const graph = readGraph(dir);
+
+    expect(graph.nodes.some((n) => n.id.endsWith('Widget.java'))).toBe(true);
+    expect(graph.nodes.some((n) => n.id.endsWith('server.go'))).toBe(true);
+    // Java class 顶层符号节点也应进入图（module→symbol contains 边语言无关派生）
+    expect(graph.nodes.some((n) => n.id.endsWith('Widget.java::Widget'))).toBe(true);
+  });
+
+  it('写盘前注入 graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot)', async () => {
+    // makeProject 产出的临时目录非 git 仓库 → resolveSourceCommit 应为 null
+    const dir = makeProject(TS_FIXTURE);
+    await buildAstGraphOnly(dir);
+    const graph = readGraph(dir);
+
+    expect(graph.graph.sourceCommit).toBe(resolveSourceCommit(dir));
+    expect(graph.graph.sourceCommit).toBeNull();
   });
 });
 

@@ -1,0 +1,236 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 10,
+    "edgeCount": 11,
+    "sources": [
+      "unified-graph"
+    ],
+    "skippedSources": [
+      {
+        "source": "doc-graph",
+        "reason": "未提供 DocGraph 数据源"
+      },
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      },
+      {
+        "source": "cross-reference",
+        "reason": "未提供 CrossReferenceLinks 数据源或为空数组"
+      },
+      {
+        "source": "extraction",
+        "reason": "未提供 extractionResults 或为空数组"
+      }
+    ],
+    "schemaVersion": "2.0",
+    "sourceCommit": null
+  },
+  "nodes": [
+    {
+      "id": "greeter-service.test.ts",
+      "kind": "module",
+      "label": "greeter-service.test.ts",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "greeter-service.test.ts",
+        "callSitesCount": 7
+      }
+    },
+    {
+      "id": "greeter-service.ts",
+      "kind": "module",
+      "label": "greeter-service.ts",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "greeter-service.ts",
+        "callSitesCount": 3
+      }
+    },
+    {
+      "id": "greeter-service.ts::formatGreeting",
+      "kind": "component",
+      "label": "formatGreeting",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "exportKind": "function"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreeterService",
+      "kind": "component",
+      "label": "GreeterService",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreeterService.buildMessage",
+      "kind": "component",
+      "label": "GreeterService.buildMessage",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreeterService.greet",
+      "kind": "component",
+      "label": "GreeterService.greet",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreeterService.lastMessage",
+      "kind": "component",
+      "label": "GreeterService.lastMessage",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreetingOptions",
+      "kind": "component",
+      "label": "GreetingOptions",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "exportKind": "interface"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreetingOptions.loud",
+      "kind": "component",
+      "label": "GreetingOptions.loud",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "greeter-service.ts::GreetingResult",
+      "kind": "component",
+      "label": "GreetingResult",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "greeter-service.ts",
+        "exportKind": "type"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "greeter-service.test.ts",
+      "target": "greeter-service.ts",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "./greeter-service"
+    },
+    {
+      "source": "greeter-service.ts::GreeterService.buildMessage",
+      "target": "greeter-service.ts::formatGreeting",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts::GreeterService.greet",
+      "target": "greeter-service.ts::GreeterService.buildMessage",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts::GreeterService",
+      "target": "greeter-service.ts::GreeterService.buildMessage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts::GreeterService",
+      "target": "greeter-service.ts::GreeterService.greet",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts::GreeterService",
+      "target": "greeter-service.ts::GreeterService.lastMessage",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts::GreetingOptions",
+      "target": "greeter-service.ts::GreetingOptions.loud",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts",
+      "target": "greeter-service.ts::formatGreeting",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts",
+      "target": "greeter-service.ts::GreeterService",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts",
+      "target": "greeter-service.ts::GreetingOptions",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "greeter-service.ts",
+      "target": "greeter-service.ts::GreetingResult",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    }
+  ]
+}

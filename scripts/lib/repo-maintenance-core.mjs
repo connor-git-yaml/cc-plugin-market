@@ -19,6 +19,7 @@ import { syncReleaseContract, validateReleaseContract } from './release-contract
 import { validateRuntimeBoundaries } from './runtime-boundary-core.mjs';
 import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
 import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.mjs';
+import { validateGraphQuality } from './graph-quality-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -303,6 +304,16 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'namespace-consistency',
     validateNamespaceConsistency(resolvedRoot),
+    warnings,
+    errors,
+    checks,
+  );
+  // F217（M9 轨道 B）— 第 12 个子检查族：图质量门（六指标 + freshness）。
+  // 未来 M9 轨道 C 的 spec drift 检测接入 repo:check 时，照抄本行的三段式契约
+  // （validate<Feature>({projectRoot}) → aggregateValidation(...)），见 plan §6。
+  aggregateValidation(
+    'graph-quality',
+    validateGraphQuality({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

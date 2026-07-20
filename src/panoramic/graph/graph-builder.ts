@@ -351,18 +351,38 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
         const callSitesCount = typeof ugNode.metadata?.['callSitesCount'] === 'number'
           ? (ugNode.metadata['callSitesCount'] as number)
           : undefined;
+        // UnifiedGraph 'symbol' kind 映射到 GraphNode 'component'（function/class 是组件级符号）
+        const ugKind = ugNode.kind ?? 'module';
+        // F217 决策 2 增补 4：exportKind/memberKind 透传（orphan-check pure-type 例外分类、
+        // deriveNodesFromSkeletons 已在 metadata 写入的字段，此处沿路透传到 GraphNode）
+        const exportKind = typeof ugNode.metadata?.['exportKind'] === 'string'
+          ? (ugNode.metadata['exportKind'] as string)
+          : undefined;
+        const memberKind = typeof ugNode.metadata?.['memberKind'] === 'string'
+          ? (ugNode.metadata['memberKind'] as string)
+          : undefined;
 
         if (existing) {
-          // 已有节点：仅扩展 metadata.callSitesCount（不覆盖 kind / label / 其他 sourceTag）
-          if (callSitesCount !== undefined) {
-            existing.metadata = { ...existing.metadata, callSitesCount };
-          }
+          // F217 决策 2 增补 4：已有节点（典型场景：Python extractSymbolNodes 第四路先写入
+          // 的顶层 symbol，sourceTag='extraction'）补齐 unifiedKind/sourcePath/exportKind/
+          // memberKind——contains-coverage-check.ts / orphan-check.ts 均依赖
+          // metadata.unifiedKind==='symbol' 判定分母，若不补齐会导致这些顶层符号在 FR-003/
+          // FR-005 判定中分母缩水（假绿）。
+          // 不覆盖 extraction provenance 字段（sourceTag/sourceFile/symbolKind 等）——
+          // 以下四个 key 是 existing.metadata 里原本不存在的新增 key，spread existing.metadata
+          // 在前、新 key 在后，不会触碰已存在的 provenance 字段。
+          existing.metadata = {
+            ...existing.metadata,
+            unifiedKind: ugKind,
+            ...(ugNode.filePath ? { sourcePath: ugNode.filePath } : {}),
+            ...(callSitesCount !== undefined ? { callSitesCount } : {}),
+            ...(exportKind !== undefined ? { exportKind } : {}),
+            ...(memberKind !== undefined ? { memberKind } : {}),
+          };
           continue;
         }
 
-        // 新节点：UnifiedGraph 'symbol' kind 映射到 GraphNode 'component'（function/class 是组件级符号）
-        // module / package / spec 等其他 kind 直接保留（与 GraphNode kind 范围对齐）
-        const ugKind = ugNode.kind ?? 'module';
+        // 新节点：module / package / spec 等其他 kind 直接保留（与 GraphNode kind 范围对齐）
         const mappedKind: GraphNode['kind'] = ugKind === 'symbol' ? 'component' : (ugKind as GraphNode['kind']);
         // Feature 193 决策 1d：透传 producer 侧 external 标记，使 portable 守卫与
         // 加载期 stale 检测能豁免 projectRoot 外的节点（node_modules / 跨仓引用，FR-004）。
@@ -377,6 +397,8 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             ...(ugNode.filePath ? { sourcePath: ugNode.filePath } : {}),
             ...(callSitesCount !== undefined ? { callSitesCount } : {}),
             ...(isExternal ? { external: true } : {}),
+            ...(exportKind !== undefined ? { exportKind } : {}),
+            ...(memberKind !== undefined ? { memberKind } : {}),
           },
         });
       }
