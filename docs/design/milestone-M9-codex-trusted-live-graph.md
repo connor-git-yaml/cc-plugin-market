@@ -189,6 +189,10 @@ F190-F192 已实现 doc-graph、FTS5、API 实体、异构 ingest、双库联查
 
 ```
 Gate 0: M8 F188 收官 + master 全绿
+  （2026-07-20 用户拍板：A/B 两线开发与收官评测〔F212 worktree 跑批中〕并行启动——
+   worktree 隔离 + 三护栏：不触 F212 worktree/评测链脚本、标准多 worktree 纪律、
+   Gate 0 语义保留为「M9 正式收官/宣布」前提并在 F212 出分后设吸收点〔若结果
+   翻车回调 M9 优先级〕；C/D/E 仍按下方顺序在 A/B P0 门禁后接力）
   ├─ Track A Codex First-Class
   └─ Track B Trusted Live Graph
              ↓ A/B P0 门禁同时通过
