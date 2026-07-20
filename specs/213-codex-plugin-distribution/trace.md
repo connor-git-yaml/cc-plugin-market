@@ -88,3 +88,5 @@
 [commit:implement-wave3] STARTED
 [quality-fix] COMPLETED | 薄壳warnings合并(+15行): payload.warnings字段+文本输出+可见性断言, 两链对称 | 编排器复核: 8/8测试+release:check exit0
 [commit:verify-phase-artifacts] STARTED
+[verify] COMPLETED | READY-FOR-GATE | build/repo:check/release:check/9测试文件(79/79含真实E2E) 四门exit0 | 全量exit1: 8失败(feature-180×3+feature-184), verify修正: 基线时该簇为pass, fixture在基线后被套件内测试覆写; 归因不变(F213八commit对src/零diff, 失败依赖仓外~/.spectra-baselines状态+M9-B #/::待办) | SC-003漂移拦截实证过(mv→fail精确报错→恢复pass) | 全局态干净
+[GATE_VERIFY] 准备 PAUSE | SC-004裁决+push授权一并交用户
