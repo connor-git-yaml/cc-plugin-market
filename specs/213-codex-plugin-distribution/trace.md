@@ -90,3 +90,7 @@
 [commit:verify-phase-artifacts] STARTED
 [verify] COMPLETED | READY-FOR-GATE | build/repo:check/release:check/9测试文件(79/79含真实E2E) 四门exit0 | 全量exit1: 8失败(feature-180×3+feature-184), verify修正: 基线时该簇为pass, fixture在基线后被套件内测试覆写; 归因不变(F213八commit对src/零diff, 失败依赖仓外~/.spectra-baselines状态+M9-B #/::待办) | SC-003漂移拦截实证过(mv→fail精确报错→恢复pass) | 全局态干净
 [GATE_VERIFY] 准备 PAUSE | SC-004裁决+push授权一并交用户
+[rebase] origin/master 前移16 commit(F212收官批+M8正式收官+M9文档+F215 fixture解耦=用户并行启动的follow-up已ship) | rebase 9 commit零冲突
+[verify:post-rebase] build=0 / repo:check=0 / release:check=0 / 全量vitest: 433 files passed, 5180 passed 0 failed — SC-004完全闭合(F215解耦消除8失败簇), 无需豁免
+[T022] PARTIAL→完成 (post-rebase证据)
+[GATE_VERIFY] PAUSE | 7字段report交用户等待push确认

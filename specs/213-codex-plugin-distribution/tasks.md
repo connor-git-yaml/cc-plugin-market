@@ -363,7 +363,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 ## Phase 8: Polish — 收尾双运行时回归验证
 
-- [ ] **T022** 全量回归验证 + Claude 侧既有测试结果比对（FR-011, SC-004, SC-005）⚠️ **PARTIAL（编排器撤回完成态, codex 审查 C2）**：build/repo:check/release:check 三命令 exit 0，但 `npx vitest run` exit 1——8 个失败已实证为预存共享 home fixture 污染（隔离单跑仍败 + `~/.spectra-baselines/micrograd-output` mtime 17:33 跑批期间被套件内测试改写 + 本 feature 改动零触碰 Spectra graph 链），非本 feature 回归；SC-004「零失败」硬门不能由编排器自行归因豁免，**豁免/修复裁决交 GATE_VERIFY 用户**（follow-up chip task_d0f4b48f 已立：隔离污染测试 + 重建 fixture）
+- [x] **T022** 全量回归验证 + Claude 侧既有测试结果比对（FR-011, SC-004, SC-005）✅ **rebase F215 后闭合**：build/repo:check/release:check 三命令 exit 0，但 `npx vitest run` exit 1——8 个失败已实证为预存共享 home fixture 污染（隔离单跑仍败 + `~/.spectra-baselines/micrograd-output` mtime 17:33 跑批期间被套件内测试改写 + 本 feature 改动零触碰 Spectra graph 链），非本 feature 回归；SC-004「零失败」硬门不能由编排器自行归因豁免，**豁免/修复裁决交 GATE_VERIFY 用户**（follow-up chip task_d0f4b48f 已立：隔离污染测试 + 重建 fixture）
   - **FR/plan 章节**: FR-011；plan §3.5 双运行时回归段、§7 步骤8
   - **改动文件**: 无代码改动；产出 `specs/213-codex-plugin-distribution/verification/verification-report.md`（追加收尾章节，与 T021 共用同一文件）
   - **验收断言**:
