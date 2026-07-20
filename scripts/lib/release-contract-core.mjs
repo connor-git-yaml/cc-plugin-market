@@ -144,6 +144,17 @@ export function syncReleaseContract(projectRoot) {
       touchedPaths.push(path.relative(projectRoot, pluginManifestPath));
     }
 
+    if (product.codexPluginManifestPath) {
+      // Codex 侧 .codex-plugin/plugin.json 的 version/description 与 Claude 侧对称，
+      // 由同一份 release-contract 驱动，禁手改（初稿无该二键，sync 首次写入）
+      const codexManifestPath = path.resolve(projectRoot, product.codexPluginManifestPath);
+      const codexManifest = readJson(codexManifestPath);
+      codexManifest.version = product.version;
+      codexManifest.description = product.pluginDescription;
+      writeJson(codexManifestPath, codexManifest);
+      touchedPaths.push(path.relative(projectRoot, codexManifestPath));
+    }
+
     if (product.pluginReadmePath) {
       const pluginReadmePath = path.resolve(projectRoot, product.pluginReadmePath);
       const pluginReadme = readFileSync(pluginReadmePath, 'utf8');
@@ -264,6 +275,22 @@ export function validateReleaseContract(projectRoot) {
         `plugin-description:${productId}`,
         `${productId} plugin manifest description`,
         manifest.description,
+        product.pluginDescription,
+      );
+    }
+
+    if (product.codexPluginManifestPath) {
+      const codexManifest = readJson(path.resolve(projectRoot, product.codexPluginManifestPath));
+      expectEqual(
+        `codex-plugin-version:${productId}`,
+        `${productId} codex plugin manifest version`,
+        codexManifest.version,
+        product.version,
+      );
+      expectEqual(
+        `codex-plugin-description:${productId}`,
+        `${productId} codex plugin manifest description`,
+        codexManifest.description,
         product.pluginDescription,
       );
     }

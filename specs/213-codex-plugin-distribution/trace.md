@@ -69,3 +69,11 @@
 [implement:wave1-fix] COMPLETED | 1C+4W全修(行级锚点): migrate_legacy_agents_symlink+resolve_physical_path+fail-loud / entry.target恢复 / sentinel守护 / fixture先删再断言重生 / repo:sync修复提示+单侧篡改辨向测试 | +7测试用例
 [implement:wave1] 编排器独立复核: 4测试文件32/32绿 / 迁移守护+fail-loud抽查在位 / repo:check pass | Wave 1 commit-ready
 [commit:implement-wave1] STARTED
+[implement:wave2] COMPLETED (无断连) | T008-T012 5/5, TDD序(T012红→T011绿), 3层验证pass | 编排器独立复核: manifest断言OK / 4测试绿 / 双check exit0
+[codex-review:implement-wave2] 完整返回: 0 CRITICAL + 2 WARNING
+  W1: 中立性扫描漏 /spectra slash示例与$ARGUMENTS, "零Claude专属引用"过强 → 修证据文档分级表述(不改FR-004复用决策), warn check pattern保持硬标记不扩
+  W2: sync测试只破坏spectra manifest(spec-driver fixture已含正确值假验) + description漂移无负例 → 4字段全破坏重写回+desc负例
+  INFO亮点: skills路径语义有官方文档背书(./开头相对插件根) / 对称块与旧product跳过验证过 / 通用定位零客户信息
+[implement:wave2-fix] STARTED
+[implement:wave2-fix] COMPLETED | W1: 9处slash/$ARGUMENTS如实入档+分级结论+pattern边界说明; W2: 4字段全破坏+desc漂移负例(4→5测试)+失实注释修正 | 编排器复核: 5/5测试+release:check OK
+[commit:implement-wave2] STARTED

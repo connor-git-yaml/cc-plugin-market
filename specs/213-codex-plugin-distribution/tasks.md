@@ -146,7 +146,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 **独立测试**：干净 fixture 目录先注册 marketplace 再 `codex plugin add spectra@<market>`，结构性断言 `mcpServers` 字段正确引用、`skills/` 目录 3 个 skill 均可发现（对应 Phase 6 T019 的结构性测试与 Phase 7 可选 E2E）。
 
-- [ ] **T008** [P] [US1] 复跑验证既有 Spectra skill 中立性扫描证据并修正命令记录（CRITICAL #4：该 task 不是"新建证据文档"，`research/spectra-skill-neutrality-scan.md` 在 plan 阶段已留存，本 task 是复跑校正）
+- [x] **T008** [P] [US1] 复跑验证既有 Spectra skill 中立性扫描证据并修正命令记录（CRITICAL #4：该 task 不是"新建证据文档"，`research/spectra-skill-neutrality-scan.md` 在 plan 阶段已留存，本 task 是复跑校正）
   - **FR/plan 章节**: FR-004；plan §3.2 决策2、clarifications 澄清点1
   - **改动文件**: `specs/213-codex-plugin-distribution/research/spectra-skill-neutrality-scan.md`（**修改**，非新建；流程制品，豁免红线约束）
   - **验收断言**: 文档现有扫描命令记录为 `grep -rn "Task tool|mcp__plugin_|AskUserQuestion|Task\(" plugins/spectra/skills/`，需订正为与本 task 实际复跑一致的命令：
@@ -157,7 +157,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **依赖**: T000
   - **风险标注**: 无
 
-- [ ] **T009** [US1] `plugins/spectra/.codex-plugin/plugin.json` 初稿创建（**不含受控字段**，CRITICAL #7）
+- [x] **T009** [US1] `plugins/spectra/.codex-plugin/plugin.json` 初稿创建（**不含受控字段**，CRITICAL #7）
   - **FR/plan 章节**: FR-001, FR-003, FR-004, FR-006；plan §3.1 架构图 CX1 节点
   - **改动文件**: `plugins/spectra/.codex-plugin/plugin.json`
   - **验收断言**（WARNING #9：node:assert 机械化）:
@@ -186,7 +186,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 **独立测试**：干净 fixture 目录安装后机械枚举 Codex 侧可发现 skill 数量与 `wrapper-source-of-truth.yaml` entries（8）比对一致，refactor 缺口经 waiver 呈现（对应 Phase 6 T014/T015）。
 
-- [ ] **T010** [US2] `plugins/spec-driver/.codex-plugin/plugin.json` 初稿创建（与 T009 对称，CRITICAL #7 + WARNING #9）
+- [x] **T010** [US2] `plugins/spec-driver/.codex-plugin/plugin.json` 初稿创建（与 T009 对称，CRITICAL #7 + WARNING #9）
   - **FR/plan 章节**: FR-002, FR-005, FR-006；plan §3.1 架构图 CX2 节点
   - **改动文件**: `plugins/spec-driver/.codex-plugin/plugin.json`
   - **验收断言**（与 T009 对称的具体命令）:
@@ -212,14 +212,14 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 **目标**：两份 Codex manifest 的 `version`/`description` 纳入 `release-contract.yaml` 驱动链。**T012（测试先行）在 T011（实现）之前**（CRITICAL #3：TDD 红绿序修正）。
 
-- [ ] **T012** [P] 扩展 `release-contract-sync` 集成测试——manifest 字段同步/漂移部分（**test-first，先见红**，CRITICAL #3）
+- [x] **T012** [P] 扩展 `release-contract-sync` 集成测试——manifest 字段同步/漂移部分（**test-first，先见红**，CRITICAL #3）
   - **FR/plan 章节**: FR-008；plan §3.5 结构性测试#7
   - **改动文件**: `tests/integration/release-contract-sync.test.ts`
   - **验收断言**: 新增用例断言 `syncReleaseContract`/`validateReleaseContract` 覆盖 `codexPluginManifestPath` 字段——同步场景（fixture 手工改错版本 → 跑 sync → 断言纠正为 contract 值）+ 漂移检出场景（fixture 手工改错版本 → 跑 validate → 断言报 `codex-plugin-version:<product>` error）；跑 `npx vitest run tests/integration/release-contract-sync.test.ts -t codexPluginManifestPath`，此刻应**失败**（红——`contracts/release-contract.yaml` 尚无该字段，两份 manifest 也无 `version` 键）
   - **依赖**: T009, T010（manifest 文件需存在，即便无 version 键，测试才能引用其路径）
   - **风险标注**: 无
 
-- [ ] **T011** Release Contract `codexPluginManifestPath` 字段接线 + `npm run release:sync` 正式化两份 manifest（转绿）
+- [x] **T011** Release Contract `codexPluginManifestPath` 字段接线 + `npm run release:sync` 正式化两份 manifest（转绿）
   - **FR/plan 章节**: FR-008；plan §3.3、§3.7 决策7（版本号策略：不 bump，直接对齐当前 contract 版本 4.3.0）
   - **改动文件**: `contracts/release-contract.yaml`（`products.spectra`/`products.spec-driver` 新增 `codexPluginManifestPath`）、`scripts/lib/release-contract-core.mjs`（`syncReleaseContract`/`validateReleaseContract` 各新增一段，对称既有 `pluginManifestPath` 处理块）
   - **验收断言**（CRITICAL #7：Node 断言精确相等，非 git diff 目测）:
