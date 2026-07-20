@@ -28,3 +28,14 @@ worktree 分支: claude/graph-topology-canonical-id-1de3ab
 [13:15:20] research-revision(tech-research): COMPLETED | 三处修正: 三层命名统一 / #唯一生产者收窄+锚点11†(fastapi/express) / full-only 数据源补全3行
 [13:15:20] checklist-rerun(3b): STARTED | 对修订版 spec 重评 + 修正 W8 计数错误 + 重评 CHK-006/008/011/021
 [13:18:47] checklist-rerun(3b): COMPLETED | v2: 30项 26 PASS / 4 PARTIAL / 0 FAIL 计数一致 | PARTIAL归属: plan×2(SC测试文件绑定/F182核实) 非阻断×2
+[14:06:34] GATE_DESIGN: PAUSE→APPROVED | 用户批准进入 Plan | design commit=c609d45
+[14:06:34] plan(4): STARTED | agent=spec-driver:plan model=opus(复杂架构决策临时升级)
+[14:21:11] plan(4): COMPLETED(经1次API中断resume) | artifacts=plan.md | 4核实项全闭: edgeKey天然去重/F182天然兼容/无graph.html硬编码/deriveModuleGraph天然过滤contains | 改动面: 8源文件+9新测试+6类适配+3 baseline重采 | 新风险R-7: NFR-008口径统一致Python基线漂移
+[14:21:11] spec-amend(SC-005): STARTED | R-7 allowlist 三类预期变化定向修订
+[14:29:04] spec-amend(SC-005): COMPLETED(经2次API中断后 fresh agent 落盘) | SC-005 三类 allowlist + NFR-008 现状说明(R-7)
+[14:29:04] codex-review(plan): STARTED | gpt-5.6-sol 重点证伪 4 个'天然兼容'结论 + 改动面完整性 + R-7 过滤位置对 US1 可查询性的影响
+[14:47:58] codex-review(plan): COMPLETED | 5 critical + 7 warning + 6 info | 判定: 需先修订 | 4个天然兼容结论主体成立(I1-I4), 缺陷在其周边: C1 UnifiedGraph member 不去重 / C2 legacy 谓词误杀 doc-anchor # 节点 / C3 SC-005措辞冲突 / C4 round-trip 是 mock / C5 SC-004 不可执行
+[14:47:58] plan-revision: STARTED | [并行] spec 三处定向修订(C3/C5/W2, 轻量 agent) + plan 修订(C1/C2/C4/C5落地+W1-W7, plan agent resume)
+[14:50:52] spec-amend(C3/C5/W2): COMPLETED | SC-005(1)类区分Python顶层/member边 + SC-004按工具断言矩阵 + SC-002语言scope声明
+[14:59:09] plan-revision: COMPLETED(经2次API中断resume) | 12条发现全落实 | 新测试 9→13 (T10/T11 round-trip, T12 Python byte, T13 SC-001 oracle)
+[14:59:09] plan(4): COMMIT | plan.md + spec.md 修订(C3/C5/W2) + trace
