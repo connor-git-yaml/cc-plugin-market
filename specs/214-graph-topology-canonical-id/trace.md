@@ -69,3 +69,4 @@ worktree 分支: claude/graph-topology-canonical-id-1de3ab
 [19:45:16] GATE_VERIFY: APPROVED | 用户接受两项 SC-005 裁定(baseline:diff 归因/+45% 阈内) 批准交付
 [19:45:16] delivery: rebase onto origin/master (15 commits, 零重叠) + 全量重验
 [19:49:02] delivery-reverify: COMPLETED | rebase onto 35b285d 零冲突 | build0错 repo:check pass | vitest run1 1失败(load-flaky)→隔离7/7绿+全量重跑440文件/5187测试全绿定性非回归
+[20:05:22] F215-reconcile: COMPLETED | rebase 冲突1处合成解(缺失fail-fast泛化+srcGraphPath保留) | pinned fixture 按 F215 README F214交接注记用新 dist 重生成(38/14→33/37, #=0, contains 28条全带directional, 已知偏差自然消除) | 7消费文件逐个跑 39/39 绿
