@@ -43,3 +43,12 @@
 [03:06] codex_review(plan-narrow): STARTED | 7 项闭合验证清单
 [03:30] codex_review(plan-narrow): COMPLETED | 7/7 PASS → GO 进 tasks
 [03:31] plan phase COMMIT
+[03:35] tasks: STARTED | model=sonnet
+[04:20] tasks: COMPLETED | artifacts=tasks.md(23任务/7 phase/FR-SC全覆盖映射/关键路径T001→T003→T005→T008→T011→T014→T019→T020→T021→T023)
+[04:21] analyze + codex_review(tasks): STARTED [并行] | analyze=三件套交叉一致性 codex=可执行性/TDD链/依赖图攻击
+[04:45] analyze: COMPLETED | 0 CRITICAL/2 MEDIUM(T021 vitest flag 错误/EC-003+007 缺具名 fixture)/3 LOW | 结论=可进 GATE_TASKS,建议先修 F216-01
+[05:35] codex_review(tasks): COMPLETED | NO-GO 4C(T002 Codex合同不可达/runner全错配node:test≠vitest/T005改错文件core≠io/时序#3期望写反)+6W+3I
+[05:36] 合同同步编辑(编排器,审查处置落账): plan×7处(io归属修正/Phase0 Codex降级schema记录/Phase1落点core/flatten前移/test:plugins补门禁/fixture表/runtime边界预检) + spec Out of Scope 补 Codex runtime 边界
+[05:37] tasks(revision): STARTED | 合并 codex 7 项最低修订集 + analyze F216-01~04
+[06:20] tasks(revision): COMPLETED | 24任务(+T006 io集成回归) | 4C 落点验证:vitest残留0/node --test×18/T002非阻断/时序#3=result-missing/EC映射表@L372/test:plugins入门禁
+[06:21] tasks phase COMMIT
