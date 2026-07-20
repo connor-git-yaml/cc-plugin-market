@@ -86,3 +86,5 @@
 [implement:wave3-fix] COMPLETED (断连重试×2) | C1+W1-W5全修(行级锚点): afterAll无条件汇总断言+顺序修正 / waiver唯一性+陈旧waiver warn+{skillId,waiverId}证据 / matrix-internal-error+contract-shape稳定fail / skipIf+SHA checkout / error文本辨向+薄壳exit两例 / SC-002三方联合证据 | 测试42→48, 双check exit0, 全局态零残留
 [trace-note] 本文件曾被wave3-fix代理误当噪声还原(fb601ae态), 以上6条为编排器依据会话记录重建
 [commit:implement-wave3] STARTED
+[quality-fix] COMPLETED | 薄壳warnings合并(+15行): payload.warnings字段+文本输出+可见性断言, 两链对称 | 编排器复核: 8/8测试+release:check exit0
+[commit:verify-phase-artifacts] STARTED

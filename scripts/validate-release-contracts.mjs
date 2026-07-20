@@ -18,16 +18,28 @@ payload.errors = [
   ...(payload.errors ?? []),
   ...codexResult.errors.map((e) => `[codex-plugin-consistency] ${e}`),
 ];
+// 矩阵 warnings（如陈旧 waiver 提示）也并入，保持 repo:check / release:check 两链可见性对称。
+// validateReleaseContract 自身当前不产出 warnings，缺失时以空数组起底。
+payload.warnings = [
+  ...(payload.warnings ?? []),
+  ...codexResult.warnings.map((w) => `[codex-plugin-consistency] ${w}`),
+];
 payload.status = payload.errors.length > 0 ? 'fail' : payload.status;
 
 if (args.json) {
   console.log(JSON.stringify(payload, null, 2));
 } else if (payload.status === 'pass') {
   console.log(`Release contract valid (${payload.contractPath})`);
+  for (const warning of payload.warnings) {
+    console.warn(`! ${warning}`);
+  }
 } else {
   console.error(`Release contract invalid (${payload.contractPath})`);
   for (const error of payload.errors) {
     console.error(`- ${error}`);
+  }
+  for (const warning of payload.warnings) {
+    console.warn(`! ${warning}`);
   }
 }
 

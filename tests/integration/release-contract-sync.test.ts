@@ -328,12 +328,15 @@ describe('release contract sync', () => {
         status: string;
         checks: { id: string; status: string }[];
         errors: string[];
+        warnings: string[];
       };
       expect(payload.status).toBe('pass');
       // gap check 仍 pass（真实缺口仍被覆盖），无 codex error 混入
       const gapCheck = payload.checks.find((c) => c.id === 'codex-plugin-consistency:canonical-vs-codex-gap:spec-driver');
       expect(gapCheck?.status).toBe('pass');
       expect(payload.errors.some((e) => e.includes('[codex-plugin-consistency]'))).toBe(false);
+      // 可见性：矩阵 warning（陈旧 waiver）并入 payload.warnings，两链对称可见
+      expect(payload.warnings.some((w) => w.includes('[codex-plugin-consistency]') && w.includes('陈旧 waiver'))).toBe(true);
     });
   });
 });
