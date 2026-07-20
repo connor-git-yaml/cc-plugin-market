@@ -35,9 +35,9 @@
 | V010 | 2/3 | 3/3 | +1 | R4 墙钟尾巴清了 |
 | VB003 | 3/3 | 2/3（timeout×1）| −1 | 新超时（单发，噪声带）|
 
-**坍塌率：战役期 20-30% → 0/30（✅ F208 依从性目标达成）**。全部完成 run（含 V008 fail）带完整 `.specify` 流程制品；F206 定义的"opus freestyle 坍塌"（无制品+行内 cosplay 报告）绝迹。注：老"0 委派=坍塌"代理指标在轻量路径（第一战役 a'：≤3 文件小修复单代理设计）下已失效，本判定以流程制品存在性为准。
+**坍塌率：战役期 20-30% → 0/29（✅ F208 依从性目标达成）**。分母口径（可审计，对 `f212-headline.json` n_total=33 − n_gen_timeout=4）：**完成生成的 29 个 run**（27 oracle pass + V008 两个 oracle fail）全部带完整 `.specify` 流程制品；4 个 gen_timeout（V006×3 + VB003×1）中途被杀、无从判定坍塌（V006 历史上所有 cohort 同死于墙钟）。F206 定义的"opus freestyle 坍塌"（无制品+行内 cosplay 报告）在 29 个可判定 run 中绝迹。注：老"0 委派=坍塌"代理指标在轻量路径（第一战役 a'：≤3 文件小修复单代理设计）下已失效，本判定以流程制品存在性为准。
 
-**V008 未转化的失败形态（取证）**：r1/r2 patch **零源码改动**（r1=gitignore+project-context+fix-report；r2=仅 fix-report），fix-report 原文自信断言 *"对当前工作树的核实表明，报告中的两个症状均已被历史修复消除，无需任何代码改动"* 并引 `contains.py:50` "已修正"——**方向误读（把 base 态当已修复）原样复现，只是穿上 F208 合规外衣**（流程完整、结构化 no-op 出口）。两 run MCP 引用 ×0（未进入代码分析）。**结论：预测因果链"消坍塌→V008 转化"前半兑现、后半证伪——V008 根因不是坍塌，是核实方向反转，prompt/依从层都够不到它**（与 F208 verification-report 的 V008 0/2 观察一致，本轮 N=3 复确认）。
+**V008 未转化的失败形态（取证）**：r1/r2 patch **零源码改动**（r1=gitignore+project-context+fix-report；r2=仅 fix-report），fix-report 原文自信断言 *"对当前工作树的核实表明，报告中的两个症状均已被历史修复消除，无需任何代码改动"* 并引 `contains.py:50` "已修正"——**方向误读（把 base 态当已修复）原样复现，只是穿上 F208 合规外衣**（流程完整、结构化 no-op 出口）。两 run MCP 引用 ×0（未进入代码分析）。**结论：预测因果链"消坍塌→V008 转化"前半兑现、后半未获支持（V008 仍 1/3，N=3）——证据指向 V008 根因不是坍塌而是核实方向反转，prompt/依从层都够不到它**（与 F208 verification-report 的 V008 0/2 观察一致，本轮复确认）。
 
 **测量质量**：infra=0 / error=0 / oracle_error=0 / oracle_missing=0（**首个零剔除全池批**）。口径：driver=claude-sonnet-4-6（F206 pool 链同源）；oracle timeout=1.2M ms（pool 链沿 F206 结算口径，≠ prereg 冻结 300000 的 cohort-batch 链口径——188 P1 同款 lineage deviation，结果 meta 显式记录）。
 
@@ -56,7 +56,7 @@ c1/c3 × 10 task（F176 冻结集）× N=3 = 60 run 全部生成完成。driver 
 - c1（裸 opus-4-8）= **27/30 = 90.0%**；c3 = **23/30 = 76.7%**
 - **lift = 0.852**，bootstrap 95% CI **[0.655, 1.043]**（差值 −13.3pp，CI [−33.3pp, +3.3pp]）——**CI 含 1.0 → 噪声带内不显著**，方向为负
 - 逐任务：c3 失分 V006 0/3（c1 也仅 1/3，坟场）+ V007 1/3（c1 2/3）+ V008 2/3（c1 3/3）+ V010 2/3（c1 3/3）
-- **诚实解读**：在强驱动（opus-4-8）+ 可解性筛选过的 F176 10 任务上，工具流程呈**净开销方向**（不显著）；与 sonnet 链 F206 全池的 c3>c1（81.8 vs 77.4）方向相反——driver 强度 × 流程收益存在交互，N=30/臂不足以定论，禁跨链外推（C1 红线）。值得记：**裸 opus-4-8 的 V008 3/3**（方向误读病不困扰裸驱动——它不做"先核实是否已修"的流程步骤）。
+- **诚实解读**：在强驱动（opus-4-8）+ 可解性筛选过的 F176 10 任务上，工具流程呈**净开销方向**（不显著）。按 C1 红线，本结果**不与** sonnet 链/F206 数据做解释性比较（"driver 强度 × 流程收益是否交互"是开放问题，需同链对照数据才可回答，登记 §9-5）。同批内值得记：**裸 opus-4-8 的 V008 3/3**（方向误读病不困扰裸驱动——它不做"先核实是否已修"的流程步骤）。
 
 **oracle docker 死窗事故与修复**：跑批后段 Docker daemon 死亡（07-20 晨），19 个 run（12 c1 + 7 c3）oracle 判 `error/infra`——**T0 冻结语义正确分桶**（oracle_error 剔分母不混 fail，正是本 feature 修的病在真实故障中的首次实战）。patch 全存（31 c1 + 32 c3 核验）→ 按 188 先例**离线重判**（`runSwebenchInstance` 复用、语义模块零改动、全新 runId 零覆盖、timeout 1.2M）。重判前 per-cohort oracle_error 率 c1 40% / c3 23%（c1 超 30% 低置信线，重判后按终值报）。
 
@@ -75,7 +75,7 @@ c1/c3 × 10 task（F176 冻结集）× N=3 = 60 run 全部生成完成。driver 
 
 - **SC-002（触发率 ≥2/run）**：✅ **闭合** —— c3 = 3.87 [3.10, 4.60]，双门（显著提升 vs 1.77 + 达标 ≥2.0）预注册机判全过，全量 N=30。
 - **SC-004（评测可信度）**：✅ **闭合** —— 188 P1 裁定成立（directional）+ 本轮补齐：T0 判分口径对齐、全池批零剔除测量、docker 死窗在冻结语义下正确分桶并经离线重判恢复——可信度链条端到端演练了一次真实基础设施故障并守住口径。
-- **headline 结论（诚实）**：F208 依从性达成（坍塌 0/30）但 c3 分数持平 81.8%；~88% 预测证伪；剩余差距定位到 V008 方向误读（非依从问题），转产品候补（§9-1）。
+- **headline 结论（诚实）**：F208 依从性达成（坍塌 0/29）但 c3 分数持平 81.8%；**~88% 预测在点估计上未兑现**（预测的 +2 未出现；88% 仍在 CI [69.7,93.9] 带内，N=33 不构成统计否证）；剩余差距定位到 V008 方向误读（非依从问题），转产品候补（§9-1）。
 - **C1 红线**（承 188 FR-015）：133（M7-era）/ headline（sonnet 链）/ A/B（opus 链）三个 epoch **互不横比 c3 绝对率**；133 只对 M7 fuzzy，headline 只对 F206 全池，A/B 只对 F176 telemetry。
 
 ## 7. Falsification 附录（运维实录，逐条如实）
@@ -87,6 +87,7 @@ c1/c3 × 10 task（F176 冻结集）× N=3 = 60 run 全部生成完成。driver 
 5. **驱动版本漂移**：A/B manifest 默认 claude-opus-4-7，CLI 实际解析 claude-opus-4-8；以实测为准（同批内一致，within-batch 比较有效）。
 6. **直播误报更正**：headline 跑批直播中按 runner `success` 状态报了 "V008 3/3"——runner success ≠ oracle pass，终表 V008 = 1/3。教训：逐 run 播报必须以 oracle 判分为准。
 7. **重启杀批 ×2 与 resume 三连对账**：单层 nohup 子进程随 app 重启死（进程组清杀）；setsid 后免疫。headline 27/33 与 A/B 60/60 均经 (task,tool,repeat) 级幂等 resume 无损衔接，三次实战全对账。
+8. **oracle timeout 谱系 deviation（跨链不一致，如实并置）**：headline（pool 链）oracle timeout=1.2M ms（沿 F206 结算口径）≠ prereg 冻结 oracleSpecHash 内的 300000（cohort-batch 链口径）；A/B 生成期用 300000、离线重判用 1.2M（容 docker 冷拉，188 P1 同款先例）。判分语义模块两侧同一冻结版本，timeout 差异只影响"慢 oracle 是否被判 error"，重判环节已将其影响清零（终值零残余 E）。
 
 ## 8. Dogfooding 四维度反馈（政策必附）
 
@@ -101,3 +102,4 @@ c1/c3 × 10 task（F176 冻结集）× N=3 = 60 run 全部生成完成。driver 
 2. 评测 infra 三小件：pool 链 runId 加后缀（防跨链覆盖）；cohort-batch fixture 内嵌 mcpToolCalls；runner oracle 前 docker healthcheck + 有界重试。
 3. plugin 守卫升级为 harness 内建（batch 生命周期钩子，替代外挂 sidecar）。
 4. 上报 Claude Code upstream：app 重启重新 enable user-scope plugin（评测场景测量污染源）。
+5. **driver 强度 × 流程收益交互**（开放问题）：opus 链 lift 0.85（不显著负向）与 sonnet 链历史观察方向不同——是否真有交互只能用**同链 c1/c3 对照**回答（如 sonnet 链补 c1 全池），本报告按 C1 不下结论。
