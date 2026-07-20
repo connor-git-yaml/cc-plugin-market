@@ -25,7 +25,7 @@
 ### 实现基座约定
 
 - **transport**：`@modelcontextprotocol/sdk` `Client` + `StdioClientTransport`，spawn `node dist/cli/index.js mcp-server`
-- **baseline gate**：micrograd graph（`~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json`）缺失则 `skipIf`，CI 友好
+- **baseline gate**：micrograd graph（`~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json`）缺失则 `skipIf`，CI 友好（**F215 已修订，见文末 Amendment**）
 - **测试文件后缀**：`*.e2e.test.ts`，放置于 `tests/e2e/` 目录
 - **测试规范**：vitest；不用 `any`；Mock 标类型；异步用 `async/await`；每用例独立
 
@@ -271,7 +271,7 @@ scope 文档写 18，源码分析为 5（server）+ 6（graph）+ 3（agent-cont
 
 ### EC-7：micrograd baseline 缺失时的 CI 行为
 
-所有需要 micrograd graph.json 的用例使用 `describe.skipIf(SHOULD_SKIP)` 包裹，条件为 `!existsSync(BASELINE_GRAPH) || !existsSync(DIST_CLI)`。skip 时打印明确的 skip reason 消息，不静默跳过。
+所有需要 micrograd graph.json 的用例使用 `describe.skipIf(SHOULD_SKIP)` 包裹，条件为 `!existsSync(BASELINE_GRAPH) || !existsSync(DIST_CLI)`。skip 时打印明确的 skip reason 消息，不静默跳过。**（F215 已修订，见文末 Amendment）**
 
 ---
 
@@ -307,7 +307,7 @@ scope 文档写 18，源码分析为 5（server）+ 6（graph）+ 3（agent-cont
 
 ### 基础设施要求
 
-- **FR-014** [必须]：所有需要 micrograd baseline graph.json 的测试 MUST 使用 `describe.skipIf(!existsSync(BASELINE_GRAPH) || !existsSync(DIST_CLI))` 包裹，skip 时打印明确 reason。
+- **FR-014** [必须]：所有需要 micrograd baseline graph.json 的测试 MUST 使用 `describe.skipIf(!existsSync(BASELINE_GRAPH) || !existsSync(DIST_CLI))` 包裹，skip 时打印明确 reason。**（F215 已修订，见文末 Amendment）**
 
 - **FR-015** [必须]：测试文件后缀 MUST 为 `*.e2e.test.ts`，放置于 `tests/e2e/` 目录。
 
@@ -398,3 +398,16 @@ scope 文档写 18，源码分析为 5（server）+ 6（graph）+ 3（agent-cont
 | W-6 | WARNING | typo 置信度 ≤0.75 < 阈值 0.9，不应硬断言 fuzzy-resolved | ✅ 已修 FR-012 / Story #11 |
 | I-1 | INFO | telemetry「恰写 1 行」+ SDK 校验失败不写 有源码支撑 | 保留，不改 |
 | I-2 | INFO | namespace 前缀可降级处理诚实 | 保留，不改 |
+
+---
+
+## Amendment — F215（2026-07-20）
+
+**背景**：F215（`specs/215-fix-e2e-baseline-decouple`）修复了 4 个 E2E 测试文件（经共享 helper）+ 2 个集成测试文件把跨 worktree 共享可变的 `~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json` 当稳定 fixture 直读的问题（无 pin、无版本、无形状校验，导致并行 baseline 重采集会打穿本 feature 的测试套件）。原文 FR-014 / EC-7 / 背景段"实现基座约定"中把 `BASELINE_GRAPH` 字面定义为该共享 home 路径，此处不改写原文语义（保持可考古），仅记录以下变更：
+
+1. **`BASELINE_GRAPH` repoint**：自 F215 起，`tests/e2e/helpers/stdio-client.ts`、`tests/integration/mcp-server-stdio.test.ts`、`tests/integration/agent-context-real-graph.test.ts` 中的 `BASELINE_GRAPH` 常量已从 `~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json` repoint 到 **in-repo pinned fixture** `tests/fixtures/micrograd-baseline-graph/graph.json`（随 git 提交，跨 worktree/CI 一致可达，不受任何并行 baseline 采集影响）。
+2. **skip 条件语义收窄**：`buildSkipCondition`/`buildSkipReason`（及 2 个集成测试的本地复制逻辑）判断依据从"`BASELINE_GRAPH` 存在"改为"`MICROGRAD_SOURCE`（micrograd 源 clone，`~/.spectra-baselines/micrograd`）存在"。原因：in-repo fixture 恒存在（随仓库提交），真正的外部依赖收窄为源 clone（部分测试需要拷贝其 `.py` 源文件）。
+3. **原 home 路径不再是测试输入**：`~/.spectra-baselines/micrograd-output/**` 自 F215 起不再被本 feature 任何测试读取或写入；FR-014 / EC-7 原文描述的路径与判断条件已是历史实现细节，当前实现以本节为准。
+4. **交接**：F214（`graph-topology-canonical-id`）落地 canonical `::` symbol id 统一时，需用其新 dist 重新生成 `tests/fixtures/micrograd-baseline-graph/graph.json` 并同步翻转相关 E2E 断言（详见 `tests/fixtures/micrograd-baseline-graph/README.md` 的 F214 交接注记）。
+
+详见 `specs/215-fix-e2e-baseline-decouple/fix-report.md`（5-Why 根因）与 `specs/215-fix-e2e-baseline-decouple/plan.md`（变更清单）。

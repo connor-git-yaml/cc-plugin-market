@@ -7,7 +7,7 @@
  * 注意：这验证的是 **MCP 协议层传播**；"Task 子代理是否在模型上下文里看到 instructions"
  * 是另一个问题（spec EC-005），由 A/B 评测回答，不在本测试范围。
  *
- * 不需要 baseline graph（instructions 在 server 启动握手即回传，与图谱无关）→ requireBaseline=false。
+ * 不需要 micrograd 源 clone（instructions 在 server 启动握手即回传，与图谱无关）→ requireMicrogradSource=false。
  */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';

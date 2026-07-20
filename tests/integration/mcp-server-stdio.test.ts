@@ -6,7 +6,10 @@
  *
  * skip 条件（CI 友好）：
  *   - dist/cli/index.js 不存在（需先 npm run build）
- *   - micrograd baseline graph.json 不存在
+ * 本文件不拷贝 `.py` 源文件；`MICROGRAD_SOURCE` 仅作 `relativizeSymbolId` 的相对化基准字符串。
+ * `graph.json` 读自 in-repo pinned fixture `tests/fixtures/micrograd-baseline-graph/graph.json`
+ * （随 git 提交恒存在，F215 起 repoint），因此不参与 skip 判定；缺失会在读取处 fail-fast 抛错
+ * （检出不完整/漏提交问题，非环境未就绪，不应被 skip 掩盖）。
  *
  * 现有 agent-context-real-graph.test.ts 是 in-process import，本测试补齐 stdio 协议链路。
  */
@@ -22,22 +25,19 @@ import { relativizeSymbolId } from '../../src/knowledge-graph/relativize.js';
 const PROJECT_ROOT = resolve('.');
 const DIST_CLI = join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
 const BASELINE_GRAPH = join(
-  homedir(),
-  '.spectra-baselines',
-  'micrograd-output',
-  'spectra-full',
-  '_meta',
+  PROJECT_ROOT,
+  'tests',
+  'fixtures',
+  'micrograd-baseline-graph',
   'graph.json',
 );
 const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd');
 
 const HAS_DIST = existsSync(DIST_CLI);
-const HAS_BASELINE = existsSync(BASELINE_GRAPH);
-const SHOULD_SKIP = !HAS_DIST || !HAS_BASELINE;
+const SHOULD_SKIP = !HAS_DIST;
 
 const SKIP_REASON = [
   !HAS_DIST ? `dist/cli/index.js 不存在（先 npm run build）` : '',
-  !HAS_BASELINE ? `micrograd baseline 不存在 (${BASELINE_GRAPH})` : '',
 ].filter(Boolean).join('; ');
 
 // Feature 193：baseline graph 在 copy 时相对化为 repo-relative POSIX id（producer 侧新格式）。
@@ -50,8 +50,19 @@ const REL_MLP = `micrograd/nn.py::MLP`;
  * Feature 193 — 把旧绝对 id baseline graph 相对化为 repo-relative POSIX，
  * 使其符合新格式（避免加载期 graph-format-stale），写入 tempRoot。
  * 模拟「主仓 copy 的图已是新相对格式」场景。
+ *
+ * @throws {Error} `srcGraphPath`（in-repo pinned fixture）缺失时立即抛错——该 fixture
+ *   随 git 提交恒存在，缺失说明检出不完整或漏提交，不应被 skip 机制掩盖
+ *   （F215 Codex 对抗审查 CRITICAL-1 修复，与 stdio-client.ts 的 installRelativizedBaseline 同款）
  */
 function writeRelativizedBaseline(srcGraphPath: string, destGraphPath: string, base: string): void {
+  if (!existsSync(srcGraphPath)) {
+    throw new Error(
+      `pinned fixture 缺失: ${srcGraphPath} —— 该文件应随 git 提交恒存在，` +
+      `缺失说明检出不完整或漏提交，非"baseline 未采集"的可 skip 场景。` +
+      `参见 tests/fixtures/micrograd-baseline-graph/README.md 的再生步骤重新生成。`,
+    );
+  }
   const raw = JSON.parse(readFileSync(srcGraphPath, 'utf-8')) as {
     nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
     links: Array<{ source: string; target: string }>;

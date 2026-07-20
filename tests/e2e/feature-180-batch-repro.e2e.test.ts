@@ -40,9 +40,9 @@ import {
   type McpClientHandle,
 } from './helpers/stdio-client.js';
 
-// batch 测试仅需 dist（micrograd source 从 MICROGRAD_SOURCE 拷入 tempRoot）
-const SHOULD_SKIP = buildSkipCondition(false);
-const SKIP_REASON = buildSkipReason(false);
+// batch 测试需要 dist + micrograd 源 clone（copyDirShallow 从 MICROGRAD_SOURCE 拷贝到 tempRoot）
+const SHOULD_SKIP = buildSkipCondition(true);
+const SKIP_REASON = buildSkipReason(true);
 
 // LLM E2E gate：HAS_LLM_E2E=1 时才跑真实 batch（依赖 LLM）
 const HAS_LLM_E2E = process.env['HAS_LLM_E2E'] === '1';

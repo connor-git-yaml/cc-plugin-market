@@ -26,8 +26,9 @@ import {
   type McpClientHandle,
 } from './helpers/stdio-client.js';
 
-const SHOULD_SKIP = buildSkipCondition(true);
-const SKIP_REASON = buildSkipReason(true);
+// 纯图套件：只读 in-repo fixture（installRelativizedBaseline），不拷贝 clone 源文件
+const SHOULD_SKIP = buildSkipCondition(false);
+const SKIP_REASON = buildSkipReason(false);
 
 // 实测确认的 17 个工具名（排序后）
 // 实测时间：2026-06-08；若工具集合有变更，此处断言会立即失败并暴露漂移

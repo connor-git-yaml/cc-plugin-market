@@ -34,9 +34,9 @@ import {
   type McpClientHandle,
 } from './helpers/stdio-client.js';
 
-// telemetry 需要 baseline（用 graph 工具进入 handler）
-const SHOULD_SKIP = buildSkipCondition(true);
-const SKIP_REASON = buildSkipReason(true);
+// telemetry 需要 in-repo fixture（用 graph 工具进入 handler）；只读 fixture 不拷贝 clone 源文件
+const SHOULD_SKIP = buildSkipCondition(false);
+const SKIP_REASON = buildSkipReason(false);
 
 // ── describe 1: 成功调用写 JSONL（T-006-1）──
 describe.skipIf(SHOULD_SKIP)(

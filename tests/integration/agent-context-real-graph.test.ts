@@ -1,28 +1,28 @@
 /**
  * Feature 155 T-008 — 集成测试：用真实 micrograd graph.json 验证 3 个 tool。
  *
- * 不 mock graph，直接读 ~/.spectra-baselines/micrograd-output/spectra-full/_meta/graph.json
- * 验证 GraphJSON 字段名（links 不是 edges）+ 契约一致。
+ * 不 mock graph，读 in-repo pinned fixture tests/fixtures/micrograd-baseline-graph/graph.json
+ * （F215 起 repoint，随仓库提交，跨 worktree/CI 一致可达，不受跨 worktree 共享可变
+ * ~/.spectra-baselines/micrograd-output 影响）验证 GraphJSON 字段名（links 不是 edges）+
+ * 契约一致；`MICROGRAD_SOURCE` 仅作 relativizeSymbolId 的相对化基准字符串（本文件 in-process
+ * 直调 handler，不 spawn dist、也不拷贝 `.py` 源文件）。
  *
- * baseline 不存在 → skip 而非 fail（CI 友好）。
+ * fixture 随 git 提交恒存在，不设 skip 条件——缺失属检出不完整/提交遗漏，在 beforeAll 中
+ * fail-fast 抛错（F215 Codex 对抗审查 CRITICAL-1 修复），不应被 skip 掩盖成"环境未就绪"。
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { handleImpact, handleContext, handleDetectChanges } from '../../src/mcp/agent-context-tools.js';
 import { reloadGraph } from '../../src/mcp/graph-tools.js';
 import { clearReverseAdjacencyCache } from '../../src/knowledge-graph/query-helpers.js';
 import { relativizeSymbolId } from '../../src/knowledge-graph/relativize.js';
 
-const BASELINE_GRAPH = join(homedir(), '.spectra-baselines', 'micrograd-output', 'spectra-full', '_meta', 'graph.json');
+const PROJECT_ROOT = resolve('.');
+const BASELINE_GRAPH = join(PROJECT_ROOT, 'tests', 'fixtures', 'micrograd-baseline-graph', 'graph.json');
 const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd');
-const HAS_BASELINE = existsSync(BASELINE_GRAPH);
-
-const skipMessage = HAS_BASELINE
-  ? null
-  : `[skip] micrograd baseline 不存在 (${BASELINE_GRAPH})，请先运行 npm run baseline:collect -- --target karpathy/micrograd --mode full`;
 
 let MICROGRAD_ROOT = '';
 let TEMP_ROOT = '';
@@ -35,29 +35,34 @@ function parseSuccess(r: { content: Array<{ text: string }>; isError?: true }): 
 beforeAll(() => {
   reloadGraph();
   clearReverseAdjacencyCache();
-  if (HAS_BASELINE) {
-    // 临时 projectRoot：resolveGraphJsonPath 约定 <root>/specs/_meta/graph.json，
-    // 因此把 baseline 的 graph.json 复制到 <temp>/specs/_meta/graph.json 让 helper 找到。
-    TEMP_ROOT = mkdtempSync(join(tmpdir(), 'spectra-155-int-'));
-    mkdirSync(join(TEMP_ROOT, 'specs', '_meta'), { recursive: true });
-    // Feature 193：相对化 baseline 绝对 id 后写入（新相对格式），避免加载期 graph-format-stale
-    const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
-      nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
-      links: Array<{ source: string; target: string }>;
-      [k: string]: unknown;
-    };
-    for (const n of raw.nodes) {
-      const rel = relativizeSymbolId(n.id, MICROGRAD_SOURCE);
-      n.id = rel.value;
-      if (rel.external) n.metadata = { ...n.metadata, external: true };
-    }
-    for (const l of raw.links) {
-      l.source = relativizeSymbolId(l.source, MICROGRAD_SOURCE).value;
-      l.target = relativizeSymbolId(l.target, MICROGRAD_SOURCE).value;
-    }
-    writeFileSync(join(TEMP_ROOT, 'specs', '_meta', 'graph.json'), JSON.stringify(raw, null, 2), 'utf-8');
-    MICROGRAD_ROOT = TEMP_ROOT;
+  if (!existsSync(BASELINE_GRAPH)) {
+    throw new Error(
+      `pinned fixture 缺失: ${BASELINE_GRAPH} —— 该文件应随 git 提交恒存在，` +
+      `缺失说明检出不完整或漏提交，非"baseline 未采集"的可 skip 场景。` +
+      `参见 tests/fixtures/micrograd-baseline-graph/README.md 的再生步骤重新生成。`,
+    );
   }
+  // 临时 projectRoot：resolveGraphJsonPath 约定 <root>/specs/_meta/graph.json，
+  // 因此把 baseline 的 graph.json 复制到 <temp>/specs/_meta/graph.json 让 helper 找到。
+  TEMP_ROOT = mkdtempSync(join(tmpdir(), 'spectra-155-int-'));
+  mkdirSync(join(TEMP_ROOT, 'specs', '_meta'), { recursive: true });
+  // Feature 193：相对化 baseline 绝对 id 后写入（新相对格式），避免加载期 graph-format-stale
+  const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
+    nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
+    links: Array<{ source: string; target: string }>;
+    [k: string]: unknown;
+  };
+  for (const n of raw.nodes) {
+    const rel = relativizeSymbolId(n.id, MICROGRAD_SOURCE);
+    n.id = rel.value;
+    if (rel.external) n.metadata = { ...n.metadata, external: true };
+  }
+  for (const l of raw.links) {
+    l.source = relativizeSymbolId(l.source, MICROGRAD_SOURCE).value;
+    l.target = relativizeSymbolId(l.target, MICROGRAD_SOURCE).value;
+  }
+  writeFileSync(join(TEMP_ROOT, 'specs', '_meta', 'graph.json'), JSON.stringify(raw, null, 2), 'utf-8');
+  MICROGRAD_ROOT = TEMP_ROOT;
 });
 
 afterAll(() => {
@@ -72,7 +77,7 @@ const ABS_VALUE_RELU = 'micrograd/engine.py::Value.relu';
 const ABS_MLP = 'micrograd/nn.py::MLP';
 const ABS_LAYER = 'micrograd/nn.py::Layer';
 
-describe.skipIf(!HAS_BASELINE)('Feature 155 集成测试 — micrograd 真实 graph', () => {
+describe('Feature 155 集成测试 — micrograd 真实 graph', () => {
   it('C-201 GraphJSON 字段名 links（不是 edges）— 通过 impact 调用确认', async () => {
     const r = await handleImpact({
       target: ABS_VALUE_RELU,
@@ -187,11 +192,3 @@ index a1..b2 100644
     // 严格的 budget-truncated 验证在合成 fixture 上完成（SC-002a / C-002）
   });
 });
-
-if (skipMessage !== null) {
-  describe('Feature 155 集成测试 — baseline 不存在', () => {
-    it.skip(skipMessage, () => {
-      /* skipped */
-    });
-  });
-}

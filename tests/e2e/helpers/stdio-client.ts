@@ -17,11 +17,10 @@ import { relativizeSymbolId } from '../../../src/knowledge-graph/relativize.js';
 export const PROJECT_ROOT = resolve('.');
 export const DIST_CLI = join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
 export const BASELINE_GRAPH = join(
-  homedir(),
-  '.spectra-baselines',
-  'micrograd-output',
-  'spectra-full',
-  '_meta',
+  PROJECT_ROOT,
+  'tests',
+  'fixtures',
+  'micrograd-baseline-graph',
   'graph.json',
 );
 export const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd');
@@ -36,8 +35,18 @@ export const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd
  *
  * @param destGraphPath 目标 graph.json 路径
  * @param base 相对化基准（= MICROGRAD_SOURCE）
+ * @throws {Error} `BASELINE_GRAPH`（in-repo pinned fixture）缺失时立即抛错——该 fixture
+ *   随 git 提交，理论上恒存在；缺失只可能是检出不完整（浅 clone/稀疏检出漏了 tests/fixtures/）
+ *   或提交遗漏，不应被 skip 机制掩盖成"环境未就绪"的静默跳过
  */
 export function installRelativizedBaseline(destGraphPath: string, base: string = MICROGRAD_SOURCE): void {
+  if (!existsSync(BASELINE_GRAPH)) {
+    throw new Error(
+      `pinned fixture 缺失: ${BASELINE_GRAPH} —— 该文件应随 git 提交恒存在，` +
+      `缺失说明检出不完整或漏提交，非"baseline 未采集"的可 skip 场景。` +
+      `参见 tests/fixtures/micrograd-baseline-graph/README.md 的再生步骤重新生成。`,
+    );
+  }
   const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
     nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
     links: Array<{ source: string; target: string }>;
@@ -56,17 +65,31 @@ export function installRelativizedBaseline(destGraphPath: string, base: string =
 }
 
 // ── skip 条件工具 ──
-export function buildSkipCondition(requireBaseline: boolean): boolean {
+// F215 起两条件语义拆分（Codex 对抗审查 CRITICAL-1 修复）：
+//   - dist（DIST_CLI）：硬前置，所有 stdio 子进程用例都需要，缺失必 skip
+//   - requireMicrogradSource：仅当套件需要从 MICROGRAD_SOURCE 源 clone 里拷贝 .py 源文件
+//     （如 file-nav-stdio / symbol-chain / view-file-fuzzy / batch-repro）才传 true；
+//     `BASELINE_GRAPH`（in-repo pinned fixture）不参与 skip 判定——它随 git 提交恒存在，
+//     缺失属检出/提交问题，由 installRelativizedBaseline 的 fail-fast 直接抛错，
+//     不应被这里的 skip 逻辑掩盖
+/**
+ * @param requireMicrogradSource 套件是否需要从 `~/.spectra-baselines/micrograd` 源 clone
+ *   拷贝 `.py` 源文件；仅读 in-repo fixture（`BASELINE_GRAPH`）的纯图套件应传 `false`
+ */
+export function buildSkipCondition(requireMicrogradSource: boolean): boolean {
   if (!existsSync(DIST_CLI)) return true;
-  if (requireBaseline && !existsSync(BASELINE_GRAPH)) return true;
+  if (requireMicrogradSource && !existsSync(MICROGRAD_SOURCE)) return true;
   return false;
 }
 
-export function buildSkipReason(requireBaseline: boolean): string {
+/**
+ * @param requireMicrogradSource 同 {@link buildSkipCondition}
+ */
+export function buildSkipReason(requireMicrogradSource: boolean): string {
   const reasons: string[] = [];
   if (!existsSync(DIST_CLI)) reasons.push(`dist/cli/index.js 不存在（先 npm run build）`);
-  if (requireBaseline && !existsSync(BASELINE_GRAPH)) {
-    reasons.push(`micrograd baseline 不存在 (${BASELINE_GRAPH})`);
+  if (requireMicrogradSource && !existsSync(MICROGRAD_SOURCE)) {
+    reasons.push(`micrograd source clone 不存在 (${MICROGRAD_SOURCE})`);
   }
   return reasons.join('; ');
 }
