@@ -1006,16 +1006,20 @@ describe('F216 T014 classifyReproEvidence：E 非空条件并行决策表（单/
     assert.deepEqual(await reproKeysFromFixture('noop-contradiction-fail-sentinel.jsonl'), ['noop:repro-contradiction']);
   });
 
-  it('F216 T014 双键同现：result-missing + tool-error', async () => {
+  it('F216 T014 双键同现：result-missing + tool-error（排序后精确比对，杜绝杂键混入）', async () => {
     const keys = await reproKeysFromFixture('noop-multikey-missing-and-error.jsonl');
-    assert.ok(keys.includes('noop:repro-result-missing'));
-    assert.ok(keys.includes('noop:repro-tool-error'));
+    assert.deepEqual([...keys].sort(), [
+      'noop:repro-result-missing',
+      'noop:repro-tool-error',
+    ]);
   });
 
-  it('F216 T014 双键同现：tool-error + output-mismatch', async () => {
+  it('F216 T014 双键同现：tool-error + output-mismatch（排序后精确比对，杜绝杂键混入）', async () => {
     const keys = await reproKeysFromFixture('noop-multikey-error-and-output-mismatch.jsonl');
-    assert.ok(keys.includes('noop:repro-tool-error'));
-    assert.ok(keys.includes('noop:repro-output-mismatch'));
+    assert.deepEqual([...keys].sort(), [
+      'noop:repro-output-mismatch',
+      'noop:repro-tool-error',
+    ]);
   });
 
   it('F216 T014 三键同现：result-missing + tool-error + output-mismatch（W3 排序后精确比对，杜绝多/漏键）', async () => {

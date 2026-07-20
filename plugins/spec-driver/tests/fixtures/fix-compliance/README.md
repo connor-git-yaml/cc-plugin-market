@@ -121,7 +121,7 @@ envelope 结构参照 research.md「实测校准记录（T001）」：顶层 `ty
 
 - **裁决**：**分支 (b)**（SKILL wrapper 形态 + sentinel + `is_error`，非直接观测数字退出码）。
 - **证据**：本次 Claude transcript **未暴露任何数字退出码字段**——57/57 真实 Bash `tool_result` block 内无 `exitCode`/`returnCode`/`code`/`status` 数字字段；`toolUseResult` sidecar（`stdout/stderr/interrupted/isImage/noOutputExpected/backgroundTaskId/gitOperation`）同样无退出码；工具级失败仅由 `is_error`（boolean）表达。故非零退出的 INCONCLUSIVE 判定须经 SKILL 强制 wrapper（`<断言> && printf 'SPEC-DRIVER-REPRO: PASS\n' || printf 'SPEC-DRIVER-REPRO: FAIL\n'`）转译，judge 侧可观测面 = sentinel + `is_error`。
-- **能力边界补注状态**：落 (b) → plan.md / spec.md 的能力边界一句注记（"非零退出的 INCONCLUSIVE 判定依赖 wrapper 转译正确性"）**待编排器补写**；本任务按红线未改动 plan.md / spec.md。
+- **能力边界补注状态**：落 (b) → plan.md / spec.md 的能力边界一句注记（"非零退出的 INCONCLUSIVE 判定依赖 wrapper 转译正确性"）**待编排器补写**（已于 spec.md 能力边界声明节落地）；本任务按红线未改动 plan.md / spec.md。
 
 ### (c) Codex schema 差异记录（一句）
 
