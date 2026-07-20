@@ -25,3 +25,21 @@
 [23:45] checklist(rerun): COMPLETED | PASS 47/PARTIAL 2/FAIL 0 | 逐行核对 judge 源码,2 PARTIAL=诚实未验证假设(FR-017 前置)
 [23:50] GATE_DESIGN: PAUSE→用户拍板 | is_hard_gate=true | 决议:变体2(A+对账骨架)/Q2不开例外通道/Q3沿用fail-open/继续进plan
 [23:52] 决议回写: spec.md(推荐结论+EC-003+EC-010+Q3节) + clarifications.md(决议表+Q1/C2被codex取代说明)
+[23:58] specify phase COMMIT: 269271a | 5 files +668 | pre-commit repo-check pass
+[23:59] plan: STARTED | model=opus
+[00:15] plan: COMPLETED | artifacts=plan.md(293行:ExecutionRecord合同/sentinel受控断言/4 AD/7 phases/7 fixture计划) | opus | 编排器结构复核通过
+[00:16] codex_adversarial_review(plan): STARTED | 攻击面=regex鲁棒性/sentinel边界/多执行采信/io回归/F208矩阵/Phase0可行性/SKILL时序/over-engineer+FR traceability
+[00:50] codex_adversarial_review(plan): COMPLETED | 5C/4W/3I 判 NO-GO | FR traceability: FR-014/016/018 FAIL, 6 PARTIAL
+  C1=regex 无损表示不了 Bash→单行 JSON C2=sentinel 截断噪声→完整内容先判+整行末行 C3=同命令多执行→证据集合全绿
+  C4=双锚点不可达→正交 flags C5=missing key 违 FR-016→6 键互斥表
+[00:51] plan(revision): STARTED | 续接 plan 子代理
+[01:30] plan(revision): COMPLETED | 336行 | 12 项全落地:单行JSON对账/assertionStatus完整内容先判/证据集合全绿/正交flags/6键互斥7行决策表/双runtime provenance/W9精确窗口/legacy×2/SKILL安全边界/io防御/分支覆盖fixture/FR-015并入文案 | 子代理Edit不可用改整文件Write(已复核未丢节)
+[01:31] spec FR-019 同步微编辑: 4 示例键→6 键定稿(更严格履行 FR-016,非静默降级)
+[01:32] codex_adversarial_review(plan-rerun): STARTED | 验证 5C 闭合
+[02:20] codex_adversarial_review(plan-rerun): COMPLETED | NO-GO 但收敛:C3/C4/W6-W9/I10-I12 确认闭合;剩 4C(io预截断矛盾/first-match压键/JSON候选行未冻结/FR-014条件削弱)+3W(sentinel换行装饰/Phase5过时+spec旧键/反馈JSON示例非法)
+[02:21] spec EC-001 旧键同步: repro-execution→repro-command-mismatch(编排器合同同步)
+[02:22] plan(revision-2): STARTED
+[03:05] plan(revision-2): COMPLETED | 344行 | 4C 落点验证:io不预截断/并行判定表/expected字面量冻结/exitCode分支门禁 | 无旧语义残留(编排器grep复核)
+[03:06] codex_review(plan-narrow): STARTED | 7 项闭合验证清单
+[03:30] codex_review(plan-narrow): COMPLETED | 7/7 PASS → GO 进 tasks
+[03:31] plan phase COMMIT
