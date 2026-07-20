@@ -29,14 +29,14 @@
 - [x] 发射器 f212-launch.sh（preflight→stamped build→plugin disable/trap→headline→A/B→标记文件）
 - [x] 🚦 go 已由用户"继续推进直到 Feature 整个做完"给出；执行阻塞仅剩 OAuth 登录（监视器自动点火）
 
-## Phase RUN · 付费批（用户 go 后，另起会话）
-- [ ] RUN-1 OAuth `claude /login` preflight + 全局 spectra disable
-- [ ] RUN-2 全池 33-run headline（每 6 run 查配额，≥60% weekly 停）
-- [ ] RUN-3 A/B 60-run（c1/c3×10×3，telemetry 采集）
+## Phase RUN · 付费批 ✅（2026-07-19 21:06 起，历 3 次 app 重启/1 次 docker 死窗，resume 三连无损）
+- [x] RUN-1 preflight（OAuth 意外已有效——旧 volta CLI 凭证链问题非 token 过期）+ 双 plugin disable + 守卫 sidecar（scratchpad 清除事故后迁稳定路径 + setsid）
+- [x] RUN-2 headline 33-run：**c3 = 27/33 = 81.8%**（零剔除；坍塌 0/30；V008 未转化=方向误读合规 no-op；~88% 预测证伪）
+- [x] RUN-3 A/B 60-run 全生成（driver 实测 opus-4-8）；docker 死窗 19 oracle_error → 188 先例离线重判恢复
 
 ## Phase REPORT
-- [ ] RP-1 四方终表更新 + 坍塌率对照
-- [ ] RP-2 133 重判结论 + 触发率 A/B 双指标
-- [ ] RP-3 PUBLISH-REPORT-M8（交叉链接 188/F176/F206）+ M8-SC-002/004 闭合裁定
-- [ ] RP-4 dogfooding 四维度反馈节
-- [ ] RP-5 push 前列 report 等用户确认
+- [x] RP-1 四方终表 + 坍塌率对照（20-30% → 0/30）
+- [x] RP-2 133 引用 188 + 触发率 **3.87 [3.10,4.60] 双门 PASS**（指标 2 重判后终填）
+- [x] RP-3 PUBLISH-REPORT-M8 终版 + **SC-002 ✅ / SC-004 ✅ 闭合**
+- [x] RP-4 dogfooding 四维度
+- [ ] RP-5 Codex 终审 + push 前列 report 等用户确认
