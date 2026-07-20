@@ -18,6 +18,7 @@ import { syncSharedAgentDocs, validateSharedAgentDocs } from '../sync-agent-docs
 import { syncReleaseContract, validateReleaseContract } from './release-contract-core.mjs';
 import { validateRuntimeBoundaries } from './runtime-boundary-core.mjs';
 import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
+import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -243,6 +244,14 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'spectra-skills',
     validateSpectraSkillSources({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  // Feature 213（A1）：Codex plugin 一体分发一致性矩阵（分发面一致性族，紧邻 spectra-skills）
+  aggregateValidation(
+    'codex-plugin-consistency',
+    validateCodexPluginConsistency({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

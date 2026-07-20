@@ -71,6 +71,10 @@ describe('repo maintenance sync/check', () => {
     copyFile(projectRoot, 'package.json');
     copyFile(projectRoot, 'package-lock.json');
     copyFile(projectRoot, '.gitignore');
+    // Feature 213（T016）：codex-plugin-consistency 矩阵接入 validateRepository() 后，
+    // marketplace-entries check 需要 tracked 的 Codex marketplace catalog 存在，否则隔离
+    // fixture 会因缺文件报 error，使既有 status==='pass' 断言假失败。
+    copyFile(projectRoot, '.agents/plugins/marketplace.json');
 
     rmSync(join(projectRoot, '.codex'), { recursive: true, force: true });
 
@@ -157,6 +161,10 @@ describe('repo maintenance sync/check', () => {
         expect.objectContaining({ id: 'marketplace:marketplace-plugin-entries', status: 'pass' }),
         expect.objectContaining({ id: 'runtime-boundaries:ignored-runtime-paths', status: 'pass' }),
         expect.objectContaining({ id: 'release-contract:plugin-version:spec-driver', status: 'pass' }),
+        // Feature 213（T016）：codex-plugin-consistency 矩阵经 aggregateValidation 进入聚合 checks[]
+        expect.objectContaining({ id: 'codex-plugin-consistency:manifest-exists:spectra', status: 'pass' }),
+        expect.objectContaining({ id: 'codex-plugin-consistency:skills-reference:spec-driver', status: 'pass' }),
+        expect.objectContaining({ id: 'codex-plugin-consistency:marketplace-entries', status: 'pass' }),
       ]),
     );
 

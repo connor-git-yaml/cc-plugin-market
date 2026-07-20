@@ -254,7 +254,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 **独立测试**：人为制造漂移（改 skill 数量不同步 manifest / 缺失 marketplace 条目），跑 `npm run repo:check` 确认报错并指出差异；恢复后确认零失败。
 
-- [ ] **T013** [P] [US3] `codex-plugin-consistency-core` 单元测试编写（test-first，先见红；CRITICAL #5/#6 补充负例）
+- [x] **T013** [P] [US3] `codex-plugin-consistency-core` 单元测试编写（test-first，先见红；CRITICAL #5/#6 补充负例）
   - **FR/plan 章节**: FR-007, FR-012；plan §3.3、§3.5 结构性测试#1
   - **改动文件**: `tests/unit/codex-plugin-consistency-core.test.ts`
   - **验收断言**: 覆盖用例——
@@ -270,21 +270,21 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **依赖**: T000（fixture 自包含，不依赖真实 manifest 文件）
   - **风险标注**: 无
 
-- [ ] **T014** [P] [US3] `contracts/codex-plugin-consistency.yaml` 编写
+- [x] **T014** [P] [US3] `contracts/codex-plugin-consistency.yaml` 编写
   - **FR/plan 章节**: FR-012；plan §3.3、§5 Complexity Tracking、CRITICAL 修订#4（simple-yaml 块级序列约束）
   - **改动文件**: `contracts/codex-plugin-consistency.yaml`
   - **验收断言**: 内容含 `schemaVersion`、`manifests.spectra`/`manifests.spec-driver`、`marketplace.expectedPlugins`、`waivers[0]`（`id: spec-driver-refactor-codex-wrapper-gap`，`missingSkillIds` 用**块级序列**写法，非内联数组）；**机械验证**：`node -e "import('./plugins/spec-driver/scripts/lib/simple-yaml.mjs').then(async m=>{const fs=await import('node:fs');const doc=m.parseYamlDocument(fs.readFileSync('contracts/codex-plugin-consistency.yaml','utf8'));const arr=doc.waivers[0].missingSkillIds;console.log(Array.isArray(arr), arr.length, arr[0])})"` 输出 `true 1 spec-driver-refactor`
   - **依赖**: T000
   - **风险标注**: 无
 
-- [ ] **T015** [US3] `scripts/lib/codex-plugin-consistency-core.mjs` 实现（含 `skills-reference` check，CRITICAL #5）
+- [x] **T015** [US3] `scripts/lib/codex-plugin-consistency-core.mjs` 实现（含 `skills-reference` check，CRITICAL #5）
   - **FR/plan 章节**: FR-007, FR-012；plan §3.3 全部 check id 列表
   - **改动文件**: `scripts/lib/codex-plugin-consistency-core.mjs`（导出 `validateCodexPluginConsistency({projectRoot})`，实现 `manifest-exists`/`no-hooks-field`/`mcp-servers-reference`/`skill-count:spectra`/`spectra-skill-neutrality`/`skill-count:spec-driver-codex-dir`/`canonical-vs-codex-gap:spec-driver`/`marketplace-entries`，**新增** `skills-reference:spectra`（`manifest.skills === './skills/'`）与 `skills-reference:spec-driver`（`manifest.skills === './skills-codex/'`），并校验引用目录存在且其内 skill id 集合与预期一致）
   - **验收断言**: `npx vitest run tests/unit/codex-plugin-consistency-core.test.ts` 全绿（T013 全部用例含新增负例通过）
   - **依赖**: T013, T014
   - **风险标注**: 无
 
-- [ ] **T016** [US3] 接入 `validateRepository()`（`repo:check`）——**test-red → implementation-green 两步**（CRITICAL #3/#1）
+- [x] **T016** [US3] 接入 `validateRepository()`（`repo:check`）——**test-red → implementation-green 两步**（CRITICAL #3/#1）
   - **FR/plan 章节**: FR-007, FR-009；plan §3.3（接入 `validateRepository()`）、§3.3 关联测试 fixture 缺口段
   - **改动文件**: `scripts/lib/repo-maintenance-core.mjs`（新增 import + `validateRepository()` 内一行 `aggregateValidation('codex-plugin-consistency', ...)`，**是继 T007 之后对该文件的第二次编辑，必须串行**）、`tests/integration/repo-maintenance-sync-check.test.ts`（`beforeEach` 的 `mkdtempSync` fixture 补齐 `.codex-plugin/plugin.json`、`.agents/plugins/marketplace.json` 等必要文件）
   - **验收断言**:
@@ -293,7 +293,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **依赖**: T007, T011, T015, T018（CRITICAL #1：真实 `repo:check` 需 `skills-codex/`、两份 manifest 正式版本、matrix 实现、marketplace 内容全部就位才能真正跑通全绿；测试断言本身（步骤 a）可在 T015 完成后即写，但"转绿"验证必须等全部依赖就位）
   - **风险标注**: 无
 
-- [ ] **T017** [US3] `release:check` 薄壳直调矩阵（扁平合并）——**test-red → implementation-green 两步**（CRITICAL #3/#1）
+- [x] **T017** [US3] `release:check` 薄壳直调矩阵（扁平合并）——**test-red → implementation-green 两步**（CRITICAL #3/#1）
   - **FR/plan 章节**: FR-009；plan §3.3 CRITICAL 修订#3（release:check 薄壳直调）
   - **改动文件**: `scripts/validate-release-contracts.mjs`（追加 `import { validateCodexPluginConsistency } from './lib/codex-plugin-consistency-core.mjs'`，扁平合并 `payload.checks`/`payload.errors`/`payload.status`，check id 前缀 `codex-plugin-consistency:${c.id}`）、`tests/integration/release-contract-sync.test.ts`（在 T012 已有编辑基础上追加新断言）
   - **验收断言**:
@@ -302,7 +302,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **依赖**: T012, T015, T018（CRITICAL #1：新增 `+T018`，因薄壳合并的矩阵结果需 marketplace 内容已存在才能产出真实 pass/fail 全貌）
   - **风险标注**: 无
 
-- [ ] **T018** [US3] `codex-plugin-marketplace` 验证测试——schema 断言 + fresh-clone 验证（**内容已由 T002 落地，本 task 转为纯验证**，CRITICAL #2）
+- [x] **T018** [US3] `codex-plugin-marketplace` 验证测试——schema 断言 + fresh-clone 验证（**内容已由 T002 落地，本 task 转为纯验证**，CRITICAL #2）
   - **FR/plan 章节**: FR-013；plan §3.3 check `marketplace-entries`、§3.5 结构性测试#3
   - **改动文件**: `tests/integration/codex-plugin-marketplace.test.ts`（新增；`.agents/plugins/marketplace.json` **不在本 task 创建**，已在 T002 落地）
   - **验收断言**:
@@ -321,7 +321,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **风险标注**: 关联风险1缓解链（T002 已解除 symlink 风险，本 task 是该缓解的下游落地验证）
   - **执行前提说明**: fresh-clone 验证要求 T002/T009/T010 的改动已 commit 到本 feature 分支（遵循项目"每个 task 完成后建议独立 commit"约定），若尚未 commit，该子断言暂时以 `it.skip`（记录原因）方式跳过，待相关 commit 落地后补跑，不得静默通过
 
-- [ ] **T019** [US3] `codex-plugin-manifest` 结构性集成测试（对真实两份 manifest，FR-010(a) 必选层）——**先红后绿 + FR-006 hooks 断言**（CRITICAL #3/#6(b)）
+- [x] **T019** [US3] `codex-plugin-manifest` 结构性集成测试（对真实两份 manifest，FR-010(a) 必选层）——**先红后绿 + FR-006 hooks 断言**（CRITICAL #3/#6(b)）
   - **FR/plan 章节**: FR-010(a), FR-006；plan §3.5 结构性测试#2
   - **改动文件**: `tests/integration/codex-plugin-manifest.test.ts`
   - **验收断言**:
@@ -340,7 +340,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 **目标**：结构性测试无法暴露"manifest 路径解析假设本身错误"这类风险（plan §6 风险3），需本机真实 CLI 复核。**条件语义明确**（WARNING #11）：本机已确认具备 codex 0.142.0 / 0.145.0-alpha.18，因此 T020/T021 在本次实施中为**必跑**（非"可选跳过"），仅当在缺乏 binary 的其他环境（如 CI）复跑时才降级为 skip。
 
-- [ ] **T020** [P] `tests/e2e/feature-213-codex-plugin-install.e2e.test.ts` 编写
+- [x] **T020** [P] `tests/e2e/feature-213-codex-plugin-install.e2e.test.ts` 编写
   - **FR/plan 章节**: FR-010(b)；plan §3.5 可选真实 CLI E2E 全部 7 步、§6 风险3/风险4
   - **改动文件**: `tests/e2e/feature-213-codex-plugin-install.e2e.test.ts`
   - **验收断言**:
@@ -350,7 +350,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
   - **依赖**: T009, T010, T011（CRITICAL #1：防止复制未经 T011 同步版本的占位 manifest 作为 fixture 源）, T018
   - **风险标注**: **风险3 + 风险4（plan §6 #3/#4）**
 
-- [ ] **T021** 本机手动跑通真实 CLI 全链路一次 + 记录进 verification-report.md
+- [x] **T021** 本机手动跑通真实 CLI 全链路一次 + 记录进 verification-report.md
   - **FR/plan 章节**: FR-010(b)；plan §6 风险3
   - **改动文件**: `specs/213-codex-plugin-distribution/verification/verification-report.md`（**归位说明，CRITICAL #8**：本文件是 spec-driver 标准流程制品，路径对齐仓库既有惯例 `specs/<NNN>-*/verification/verification-report.md`，豁免 plan §3.6 源码红线清单约束，不视为"新增源码文件"）
   - **验收断言**: 文档记录在本机实际执行 `codex plugin marketplace add` → `codex plugin add spectra@<market>` / `codex plugin add spec-driver@<market>` → `codex plugin list --json`（贴出真实输出，含 `installed` 状态）→ `codex mcp list --json`（贴出真实输出，含 `spectra` server）→ 完整清理链（`codex plugin remove` ×2 → `codex plugin marketplace remove` → 临时目录清理）的**真实命令与真实输出**
@@ -363,7 +363,7 @@ description: "Feature 213 — Codex Plugin 一体分发（A1）任务分解（v2
 
 ## Phase 8: Polish — 收尾双运行时回归验证
 
-- [ ] **T022** 全量回归验证 + Claude 侧既有测试结果比对（FR-011, SC-004, SC-005）
+- [ ] **T022** 全量回归验证 + Claude 侧既有测试结果比对（FR-011, SC-004, SC-005）⚠️ **PARTIAL（编排器撤回完成态, codex 审查 C2）**：build/repo:check/release:check 三命令 exit 0，但 `npx vitest run` exit 1——8 个失败已实证为预存共享 home fixture 污染（隔离单跑仍败 + `~/.spectra-baselines/micrograd-output` mtime 17:33 跑批期间被套件内测试改写 + 本 feature 改动零触碰 Spectra graph 链），非本 feature 回归；SC-004「零失败」硬门不能由编排器自行归因豁免，**豁免/修复裁决交 GATE_VERIFY 用户**（follow-up chip task_d0f4b48f 已立：隔离污染测试 + 重建 fixture）
   - **FR/plan 章节**: FR-011；plan §3.5 双运行时回归段、§7 步骤8
   - **改动文件**: 无代码改动；产出 `specs/213-codex-plugin-distribution/verification/verification-report.md`（追加收尾章节，与 T021 共用同一文件）
   - **验收断言**:

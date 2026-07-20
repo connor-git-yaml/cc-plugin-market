@@ -72,6 +72,17 @@ describe('release contract sync', () => {
     copyFile(projectRoot, 'specs/products/product-mapping.yaml');
     copyFile(projectRoot, 'specs/products/spectra/current-spec.md');
     copyFile(projectRoot, 'specs/products/spec-driver/current-spec.md');
+
+    // Feature 213（T017）：validate-release-contracts.mjs 薄壳直调 codex-plugin-consistency 矩阵，
+    // 该矩阵需读多份分发制品；隔离 fixture 若不补齐这些文件，矩阵会因文件缺失报 error，
+    // 使既有 status==='pass' 断言假失败（plan §3.3 关联测试 fixture 缺口）。
+    copyFile(projectRoot, 'plugins/spectra/.mcp.json');
+    copyTree(projectRoot, 'plugins/spectra/skills');
+    copyTree(projectRoot, 'plugins/spectra/contracts');
+    copyTree(projectRoot, 'plugins/spec-driver/skills');
+    copyTree(projectRoot, 'plugins/spec-driver/skills-codex');
+    copyTree(projectRoot, 'plugins/spec-driver/contracts');
+    copyFile(projectRoot, '.agents/plugins/marketplace.json');
   });
 
   afterEach(() => {
@@ -246,6 +257,83 @@ describe('release contract sync', () => {
         (c) => c.id === 'codex-plugin-description:spec-driver',
       );
       expect(descCheck?.status).toBe('fail');
+    });
+  });
+
+  // Feature 213（T017）：release:check 薄壳直调 codex-plugin-consistency 矩阵并扁平合并输出
+  describe('codex-plugin-consistency 矩阵接入 release:check 薄壳', () => {
+    it('validate-release-contracts.mjs --json 输出含 codex-plugin-consistency: 前缀条目且全 pass', () => {
+      const validate = runNode(
+        join(projectRoot, 'scripts', 'validate-release-contracts.mjs'), projectRoot,
+      );
+      expect(validate.exitCode).toBe(0);
+
+      const payload = JSON.parse(validate.stdout) as {
+        status: string;
+        checks: { id: string; status: string }[];
+        errors: string[];
+      };
+      const codexChecks = payload.checks.filter((c) => c.id.startsWith('codex-plugin-consistency:'));
+      // 矩阵 12 条 check 全部经薄壳前缀合并进 checks[]
+      expect(codexChecks.length).toBeGreaterThanOrEqual(12);
+      expect(codexChecks.every((c) => c.status === 'pass')).toBe(true);
+      // 具体锚点：manifest-exists / skills-reference / marketplace-entries 均在
+      const ids = codexChecks.map((c) => c.id);
+      expect(ids).toContain('codex-plugin-consistency:manifest-exists:spectra');
+      expect(ids).toContain('codex-plugin-consistency:skills-reference:spec-driver');
+      expect(ids).toContain('codex-plugin-consistency:marketplace-entries');
+    });
+
+    it('矩阵 error（manifest 含 hooks）→ 薄壳 exit 1，error 含 codex-plugin-consistency 前缀', () => {
+      // 给 spectra codex manifest 注入 hooks 字段 → 矩阵 no-hooks-field:spectra fail
+      const spectraCodexPath = join(projectRoot, 'plugins', 'spectra', '.codex-plugin', 'plugin.json');
+      const manifest = JSON.parse(readFileSync(spectraCodexPath, 'utf-8')) as Record<string, unknown>;
+      manifest.hooks = './hooks/hooks.json';
+      writeFileSync(spectraCodexPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
+
+      const validate = runNode(
+        join(projectRoot, 'scripts', 'validate-release-contracts.mjs'), projectRoot,
+      );
+      expect(validate.exitCode).toBe(1);
+
+      const payload = JSON.parse(validate.stdout) as {
+        status: string;
+        checks: { id: string; status: string }[];
+        errors: string[];
+      };
+      expect(payload.status).toBe('fail');
+      expect(payload.errors.join('\n')).toContain('[codex-plugin-consistency]');
+      const noHooks = payload.checks.find((c) => c.id === 'codex-plugin-consistency:no-hooks-field:spectra');
+      expect(noHooks?.status).toBe('fail');
+    });
+
+    it('矩阵 warning-only（陈旧 waiver）→ 薄壳 exit 0（warning 不阻断 release:check）', () => {
+      // 让契约 waiver 多覆盖一个非 gap skill → 矩阵产 warning、无 error → 薄壳 exit 0
+      const contractPath = join(projectRoot, 'contracts', 'codex-plugin-consistency.yaml');
+      const original = readFileSync(contractPath, 'utf-8');
+      const patched = original.replace(
+        '      - "spec-driver-refactor"',
+        '      - "spec-driver-refactor"\n      - "spec-driver-implement"',
+      );
+      expect(patched).not.toBe(original);
+      writeFileSync(contractPath, patched, 'utf-8');
+
+      const validate = runNode(
+        join(projectRoot, 'scripts', 'validate-release-contracts.mjs'), projectRoot,
+      );
+      // warning-only：无 matrix error → exit 0
+      expect(validate.exitCode).toBe(0);
+
+      const payload = JSON.parse(validate.stdout) as {
+        status: string;
+        checks: { id: string; status: string }[];
+        errors: string[];
+      };
+      expect(payload.status).toBe('pass');
+      // gap check 仍 pass（真实缺口仍被覆盖），无 codex error 混入
+      const gapCheck = payload.checks.find((c) => c.id === 'codex-plugin-consistency:canonical-vs-codex-gap:spec-driver');
+      expect(gapCheck?.status).toBe('pass');
+      expect(payload.errors.some((e) => e.includes('[codex-plugin-consistency]'))).toBe(false);
     });
   });
 });

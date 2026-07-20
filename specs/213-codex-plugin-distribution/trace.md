@@ -77,3 +77,12 @@
 [implement:wave2-fix] STARTED
 [implement:wave2-fix] COMPLETED | W1: 9处slash/$ARGUMENTS如实入档+分级结论+pattern边界说明; W2: 4字段全破坏+desc漂移负例(4→5测试)+失实注释修正 | 编排器复核: 5/5测试+release:check OK
 [commit:implement-wave2] STARTED
+[commit:implement-wave2] COMPLETED | fb601ae
+[implement:wave3] COMPLETED (T013-T022, 断连重试×3) | 矩阵core 12check/契约YAML/双链接入/fresh-clone/真实codex 0.144.6 E2E闭环/verification-report | TDD诚实标注(T013回填式, T016/17真红绿)
+[orchestrator-verify:wave3] 6测试文件42/42 | codex全局态: 注册干净+无spectra残留, 7个e2e缓存空壳(marketplace remove不清cache)→手工清+agent补finally清理
+[env-note] Homebrew codex 0.142.0→0.144.6 (Caskroom mtime 12:54, 非编排器操作, 疑自更新; 对F212无害)
+[attribution-verified] 8个全量vitest失败=预存共享home fixture污染(隔离单跑仍败+~/.spectra-baselines/micrograd-output mtime 17:33被套件内测试改写)+M9-B #/::漂移, 非本feature回归 | follow-up chip task_d0f4b48f(用户已在独立会话启动)
+[codex-review:implement-wave3] 2 CRITICAL + 5 WARNING: C1 e2e清理遮蔽+顺序错 / C2 T022自行豁免硬门(编排器撤回完成态,豁免交GATE_VERIFY) / W1 waiver审计缺口 / W2 畸形输入崩溃 / W3 detached HEAD+假passed / W4 负例不辨向+薄壳exit缺口 / W5 SC-002证据链断裂
+[implement:wave3-fix] COMPLETED (断连重试×2) | C1+W1-W5全修(行级锚点): afterAll无条件汇总断言+顺序修正 / waiver唯一性+陈旧waiver warn+{skillId,waiverId}证据 / matrix-internal-error+contract-shape稳定fail / skipIf+SHA checkout / error文本辨向+薄壳exit两例 / SC-002三方联合证据 | 测试42→48, 双check exit0, 全局态零残留
+[trace-note] 本文件曾被wave3-fix代理误当噪声还原(fb601ae态), 以上6条为编排器依据会话记录重建
+[commit:implement-wave3] STARTED

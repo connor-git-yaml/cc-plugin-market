@@ -1,0 +1,47 @@
+# Feature 213（A1）— Codex Plugin 一体分发一致性矩阵合同
+#
+# 唯一事实源：由 scripts/lib/codex-plugin-consistency-core.mjs 消费，接入 repo:check（validateRepository）
+# 与 release:check（validate-release-contracts.mjs 薄壳直调）双链。
+#
+# YAML 语法约束（simple-yaml 解析器边界）：序列字段一律使用块级 `- ` 写法，
+# 禁止带元素的内联数组（`[]`/`{}` 空字面量除外）——parseYamlScalar 只识别空数组/空对象字面量，
+# 带元素的 `["x"]` 会退化为字符串标量，导致 .includes()/.length 判定静默出错。
+schemaVersion: 1
+manifests:
+  spectra:
+    codexManifestPath: "plugins/spectra/.codex-plugin/plugin.json"
+    mcpConfigPath: "plugins/spectra/.mcp.json"
+    mcpServerName: "spectra"
+    # skills-reference check：manifest.skills 必须精确等于此值（spectra 直接复用 canonical skills/）
+    skillsReference: "./skills/"
+    skillsRoot: "plugins/spectra/skills"
+    skillSourceContract: "plugins/spectra/contracts/skill-source-of-truth.yaml"
+  spec-driver:
+    codexManifestPath: "plugins/spec-driver/.codex-plugin/plugin.json"
+    # skills-reference check：manifest.skills 必须精确等于此值（spec-driver 指向 Codex 适配目录）
+    skillsReference: "./skills-codex/"
+    skillsRoot: "plugins/spec-driver/skills-codex"
+    canonicalSkillsRoot: "plugins/spec-driver/skills"
+    wrapperSourceContract: "plugins/spec-driver/contracts/wrapper-source-of-truth.yaml"
+marketplace:
+  path: ".agents/plugins/marketplace.json"
+  expectedPlugins:
+    - name: "spectra"
+      sourcePath: "./plugins/spectra"
+    - name: "spec-driver"
+      sourcePath: "./plugins/spec-driver"
+# spectra-skill-neutrality warn check 说明：
+# pattern 只覆盖四类"硬阻断"标记（Task tool / mcp__ 前缀 / AskUserQuestion / Task(）——
+# 会让技能在 Codex 运行时调不动工具的硬绑定。
+# 已知接受项（不入告警 pattern）：`/spectra` 系列 slash 示例、`$ARGUMENTS` 占位符
+# 属 Claude 侧调用语法的示例文本，非运行时工具依赖，Codex 按 frontmatter description 选技能、
+# 按 body 文本理解行为，可优雅降级。存证见
+# specs/213-codex-plugin-distribution/research/spectra-skill-neutrality-scan.md 第二轮扫描。
+waivers:
+  - id: "spec-driver-refactor-codex-wrapper-gap"
+    scope: "spec-driver"
+    missingSkillIds:
+      - "spec-driver-refactor"
+    description: "spec-driver-refactor 尚无 Codex wrapper（9 canonical skill 对 8 codex 适配 wrapper 的已知缺口）。补齐属 M9 轨道 A2 范围，本 feature（213/A1）不处理。"
+    tracking: "docs/design/milestone-M9-codex-trusted-live-graph.md §3 A2"
+    removalCondition: "A2 落地新增 spec-driver-refactor 的 Codex wrapper 后删除本条目"
