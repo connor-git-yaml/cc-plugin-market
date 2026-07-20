@@ -32,3 +32,13 @@
 - [22:22] plan(revision) 首次 SendMessage 恢复因 API connection error 二次中断（零编辑落盘，grep 证实 v1 原样）→ 换新代理携带自包含 19 条修订清单重派
 - [22:40] plan(revision): COMPLETED | 449→481 行，19 条全应用；主线程 grep 复核 9 标记全命中、dirname(outputDir) 零残留、注入表 runGraphCommand=显式写 null ✅
 - [22:42] GATE_DESIGN: AUTO_CONTINUE | spec+plan 均过 Codex 对抗审查并修订闭环；用户拍板决策 D1-D4 已固化；进入 tasks
+- [22:44] commit 2b82bd3: plan phase 入库（pre-commit repo:check pass）
+- [22:50] tasks: COMPLETED v1 | 46 任务 / P1-P4 骨架 / FR·SC 覆盖映射表
+- [22:52] codex_review(tasks): STARTED（后台，同 pattern 主线程直连回收）
+- [23:10] codex_review(tasks): COMPLETED | 7 CRITICAL + 6 WARNING：dist 构建依赖缺失 / fixture 仓内建图会写入真实 HEAD /
+  ignore 常量私有不可测 / graph-mcp-snapshot 空更新链 / 五项 vs 六项聚合矛盾 / SC-002·007·010·011 过度声明 / TDD 两处违反
+- [23:12] 主编排器补充查证：self-dogfood-graph.json 由 F159 入库、F158(f9edd13) 刻意删除 → snapshot 测试有意休眠是既定状态，
+  裁定任务合同=验证 skip 语义 + 报告记录，不复活 fixture
+- [23:15] tasks(revision) 首次 SendMessage 恢复因 API connection error 三次中断（零编辑）→ 新代理携带自包含 13 条清单重派
+- [23:30] tasks(revision): COMPLETED | 46→54 任务；主线程 grep 复核 mktemp/sourceCommit===null/五项/休眠 标记全命中 ✅
+- [23:32] GATE_TASKS: AUTO_CONTINUE | tasks 过 Codex 审查修订闭环；进入 implement（P1→P4 顺序执行）
