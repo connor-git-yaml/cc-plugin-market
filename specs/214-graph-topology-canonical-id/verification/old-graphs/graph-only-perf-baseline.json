@@ -1,0 +1,27 @@
+{
+  "micrograd": {
+    "runs_ms": [
+      246,
+      239,
+      240
+    ],
+    "p50_ms": 240
+  },
+  "nanoGPT": {
+    "runs_ms": [
+      264,
+      255,
+      251
+    ],
+    "p50_ms": 255
+  },
+  "self-dogfood": {
+    "runs_ms": [
+      3301,
+      3199,
+      3200
+    ],
+    "p50_ms": 3200
+  },
+  "note": "graph-only cold-start wall clock (rm -rf .spectra before each run), 3 runs, p50=median. Captured at HEAD cd94eaf before source changes (T001a)."
+}

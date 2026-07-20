@@ -304,14 +304,15 @@ describe('PythonLanguageAdapter.extractSymbolNodes() (Feature 145)', () => {
 
       const componentNode = result.nodes.find(n => n.kind === 'component');
       expect(componentNode).toBeDefined();
-      expect(componentNode!.id).toBe('math.py#add');
+      // Feature 214：Python symbol ID 收敛为 canonical :: 分隔符（原 hash 分隔符已弃用）
+      expect(componentNode!.id).toBe('math.py::add');
       expect(componentNode!.label).toBe('add');
 
       // 应含 containment 边
       const containsEdge = result.edges.find(e => e.relation === 'contains');
       expect(containsEdge).toBeDefined();
       expect(containsEdge!.source).toBe('math.py');
-      expect(containsEdge!.target).toBe('math.py#add');
+      expect(containsEdge!.target).toBe('math.py::add');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
       vi.restoreAllMocks();
@@ -383,9 +384,9 @@ describe('PythonLanguageAdapter.extractSymbolNodes() (Feature 145)', () => {
       const uniqueIds = new Set(allIds);
       expect(uniqueIds.size).toBe(allIds.length);
 
-      // a.py#forward 和 b.py#forward 均存在
-      expect(uniqueIds.has('a.py#forward')).toBe(true);
-      expect(uniqueIds.has('b.py#forward')).toBe(true);
+      // Feature 214：a.py::forward 和 b.py::forward 均存在（canonical :: 分隔符）
+      expect(uniqueIds.has('a.py::forward')).toBe(true);
+      expect(uniqueIds.has('b.py::forward')).toBe(true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
       vi.restoreAllMocks();

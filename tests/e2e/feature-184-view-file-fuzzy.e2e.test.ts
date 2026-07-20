@@ -93,21 +93,21 @@ describe.skipIf(SHOULD_SKIP)(
       expect(data.endLine).toBe(7);
     });
 
-    it('SC-002: view_file(symbolId="MLP") 裸名多候选 0.85 → symbol-not-found + context.fuzzyMatches（含 matchKind）', async () => {
+    // Feature 214 行为漂移：ID 收敛消除 nn.py#MLP/nn.py::MLP 成对重复 → bare-name 'MLP' 唯一命中 auto-resolve
+    // （旧图 bare-name 多候选 0.85 → symbol-not-found；ID 统一后唯一 canonical 节点 → auto-resolve，US2 场景 2）
+    it('SC-002: view_file(symbolId="MLP") → 唯一 canonical 节点 auto-resolve（ID 收敛消除重复后）', async () => {
       const data = await callViewFile(handle, {
         path: 'micrograd/nn.py',
         symbolId: 'MLP',
         projectRoot: tempRoot,
       });
-      expect(data.code).toBe('symbol-not-found');
-      const fuzzyMatches = data.context?.fuzzyMatches ?? [];
-      expect(fuzzyMatches.length).toBeGreaterThan(0);
-      expect(fuzzyMatches.length).toBeLessThanOrEqual(3);
-      expect(fuzzyMatches[0]!.confidence).toBeLessThan(0.9);
-      // 完整 SymbolCandidate 三字段
-      expect(fuzzyMatches[0]).toHaveProperty('id');
-      expect(fuzzyMatches[0]).toHaveProperty('confidence');
-      expect(fuzzyMatches[0]).toHaveProperty('matchKind');
+      // 唯一命中 auto-resolve：无 symbol-not-found，warnings 含 fuzzy-resolved
+      expect(data.code, `应 auto-resolve，实际 code=${data.code}`).toBeUndefined();
+      expect(data.warnings ?? []).toEqual(expect.arrayContaining(['fuzzy-resolved']));
+      // 成功返回文件片段（行区间为正整数）
+      expect(typeof data.startLine).toBe('number');
+      expect(data.startLine!).toBeGreaterThanOrEqual(1);
+      expect(data.endLine!).toBeGreaterThanOrEqual(data.startLine!);
     });
   },
 );

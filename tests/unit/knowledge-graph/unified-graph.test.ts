@@ -189,7 +189,9 @@ describe('UnifiedGraph schema', () => {
 
   describe('schemaVersion 验证（FR-1 + Feature 156 持久化 anchor）', () => {
     it('schemaVersion 必须存在且符合 X.Y 格式', () => {
-      expect(UNIFIED_GRAPH_SCHEMA_VERSION).toBe('1.0');
+      // Feature 214 W4 例外：直接验证版本常量本身的断言保留字面合同值，
+      // 使 FR-010 的 bump 有独立看护（禁改成 CONST===CONST 恒真）。
+      expect(UNIFIED_GRAPH_SCHEMA_VERSION).toBe('1.1');
       expect(UNIFIED_GRAPH_SCHEMA_VERSION).toMatch(/^\d+\.\d+$/);
     });
 

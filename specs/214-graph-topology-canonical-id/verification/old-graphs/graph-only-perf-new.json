@@ -1,0 +1,14 @@
+{
+  "micrograd": {
+    "runs_ms": [
+      249,
+      244,
+      245
+    ],
+    "p50_ms": 245
+  },
+  "old_p50_ms": 240,
+  "threshold_1_5x_ms": 360,
+  "verdict": "PASS",
+  "note": "T036a 证据落盘：新代码 graph-only micrograd 冷启动 p50（每次 rm -rf 输出后计时），对照 T001a 旧 p50。NFR-004。"
+}

@@ -2,7 +2,7 @@
   "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
-    "spectraVersion": "4.1.1",
+    "spectraVersion": "4.3.0",
     "collectorVersion": "0.3.0",
     "targetProject": "karpathy/micrograd",
     "targetCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685",
@@ -11,21 +11,22 @@
       "tsx": 0,
       "py": 5,
       "md": 7,
-      "other": 12
+      "other": 14
     },
     "targetLocEstimate": 248,
     "spectraModuleCount": 4,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-05-09T13:54:11.821Z",
+    "runTimestampUtc": "2026-07-20T10:19:43.251Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
       "-l",
       "node",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/elated-chebyshev-ac33b6/dist/cli/index.js",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/graph-topology-canonical-id-1de3ab/dist/cli/index.js",
       "batch",
       "/Users/connorlu/.spectra-baselines/micrograd",
+      "--full",
       "--mode",
       "full",
       "--output-dir",
@@ -38,37 +39,37 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/micrograd-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-05-09T13:54:11.821Z",
-    "staleAfterDate": "2026-11-05",
-    "upstreamVersion": "4.1.1",
+    "pinnedAt": "2026-07-20T10:19:43.251Z",
+    "staleAfterDate": "2027-01-16",
+    "upstreamVersion": "4.3.0",
     "frozenFixture": false
   },
   "dryRun": {
     "estimatedTokens": 35534,
-    "actualTokens": 114543,
-    "biasRatio": 3.22
+    "actualTokens": 168461,
+    "biasRatio": 4.74
   },
   "perf": {
-    "totalWallMs": 191128,
+    "totalWallMs": 145652,
     "llmCallCount": 4,
     "llmCallDurationsMs": {
-      "p50": 94000,
-      "p95": 101800,
-      "min": 87200,
-      "max": 101800,
+      "p50": 79200,
+      "p95": 144100,
+      "min": 28500,
+      "max": 144100,
       "samplesCount": 4
     },
-    "tokensInput": 91422,
-    "tokensOutput": 23121,
+    "tokensInput": 157162,
+    "tokensOutput": 11299,
     "tokensCacheRead": null,
-    "estimatedCostUsd": 0.62,
-    "memoryPeakKb": 289312
+    "estimatedCostUsd": 0.64,
+    "memoryPeakKb": 557776
   },
   "output": {
-    "graphNodeCount": 46,
-    "graphEdgeCount": 15,
+    "graphNodeCount": 37,
+    "graphEdgeCount": 39,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 20042,
+    "graphSizeBytes": 19884,
     "specModuleCount": 4,
     "specSuccessCount": 4,
     "specSkippedCount": 0,
@@ -90,21 +91,22 @@
       "modulesWithDataModel": 4,
       "modulesWithAllFour": 4,
       "modulesWithInputsOutputs": 4,
-      "averageSpecLines": 257,
-      "shorterThan100Lines": 1,
+      "averageSpecLines": 182,
+      "shorterThan100Lines": 2,
       "longerThan1000Lines": 0,
       "outlierFiles": [
+        "__init__.spec.md (78 lines, too short)",
         "_index.spec.md (46 lines, too short)"
       ],
       "moduleCount": 5
     },
     "graphSanity": {
-      "isolatedNodes": 24,
+      "isolatedNodes": 4,
       "selfLoops": 0,
       "edgesWithMissingTarget": 0,
-      "averageDegree": 0.7,
-      "maxDegree": 4,
-      "edgesWithoutType": 15
+      "averageDegree": 2.1,
+      "maxDegree": 13,
+      "edgesWithoutType": 39
     },
     "crossLinks": {
       "totalLinks": 5,

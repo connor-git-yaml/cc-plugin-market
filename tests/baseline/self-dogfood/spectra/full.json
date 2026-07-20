@@ -2,30 +2,31 @@
   "schemaVersion": "1.1",
   "meta": {
     "tool": "spectra",
-    "spectraVersion": "4.1.1",
+    "spectraVersion": "4.3.0",
     "collectorVersion": "0.3.0",
     "targetProject": "self-dogfood",
-    "targetCommit": "cf0a131d5145d48b43885fc702dd74768a0d4abf",
+    "targetCommit": "cd94eaf73cd167e1d9eb19b8ddbaa6836ae0a796",
     "targetFileCountsByType": {
-      "ts": 618,
+      "ts": 822,
       "tsx": 0,
-      "py": 29,
-      "md": 1145,
-      "other": 319
+      "py": 31,
+      "md": 1527,
+      "other": 511
     },
-    "targetLocEstimate": 149887,
-    "spectraModuleCount": 20,
+    "targetLocEstimate": 185195,
+    "spectraModuleCount": 22,
     "mode": "full",
     "model": "claude-sonnet-4-6",
-    "runTimestampUtc": "2026-05-09T15:31:59.213Z",
+    "runTimestampUtc": "2026-07-20T10:17:17.236Z",
     "runHostOs": "darwin",
     "command": "/usr/bin/time",
     "args": [
       "-l",
       "node",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/elated-chebyshev-ac33b6/dist/cli/index.js",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/graph-topology-canonical-id-1de3ab/dist/cli/index.js",
       "batch",
-      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/elated-chebyshev-ac33b6",
+      "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/graph-topology-canonical-id-1de3ab",
+      "--full",
       "--mode",
       "full",
       "--output-dir",
@@ -38,39 +39,39 @@
     "outputDir": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full",
     "stdoutLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stdout.log",
     "stderrLogPath": "/Users/connorlu/.spectra-baselines/self-dogfood-output/spectra-full/spectra-stderr.log",
-    "pinnedAt": "2026-05-09T15:31:59.213Z",
-    "staleAfterDate": "2026-11-05",
-    "upstreamVersion": "4.1.1",
+    "pinnedAt": "2026-07-20T10:17:17.236Z",
+    "staleAfterDate": "2027-01-16",
+    "upstreamVersion": "4.3.0",
     "frozenFixture": false
   },
   "dryRun": {
-    "estimatedTokens": 1275043,
-    "actualTokens": 2594923,
-    "biasRatio": 2.04
+    "estimatedTokens": 1441256,
+    "actualTokens": 2530802,
+    "biasRatio": 1.76
   },
   "perf": {
-    "totalWallMs": 2686539,
-    "llmCallCount": 20,
+    "totalWallMs": 1796697,
+    "llmCallCount": 22,
     "llmCallDurationsMs": {
-      "p50": 162300,
-      "p95": 737100,
-      "min": 81900,
-      "max": 737100,
-      "samplesCount": 20
+      "p50": 166800,
+      "p95": 286200,
+      "min": 58400,
+      "max": 327600,
+      "samplesCount": 22
     },
-    "tokensInput": 2186609,
-    "tokensOutput": 408314,
+    "tokensInput": 2340877,
+    "tokensOutput": 189925,
     "tokensCacheRead": null,
-    "estimatedCostUsd": 12.68,
-    "memoryPeakKb": 2159744
+    "estimatedCostUsd": 9.87,
+    "memoryPeakKb": 2438304
   },
   "output": {
-    "graphNodeCount": 4887,
-    "graphEdgeCount": 2373,
+    "graphNodeCount": 5748,
+    "graphEdgeCount": 8799,
     "graphHyperedgeCount": 0,
-    "graphSizeBytes": 3795975,
-    "specModuleCount": 20,
-    "specSuccessCount": 20,
+    "graphSizeBytes": 4872957,
+    "specModuleCount": 22,
+    "specSuccessCount": 22,
     "specSkippedCount": 0,
     "specFailedCount": 0
   },
@@ -84,35 +85,36 @@
   },
   "quality": {
     "specStructure": {
-      "modulesWithIntent": 20,
-      "modulesWithBehavior": 20,
-      "modulesWithApi": 20,
-      "modulesWithDataModel": 20,
-      "modulesWithAllFour": 20,
-      "modulesWithInputsOutputs": 20,
-      "averageSpecLines": 883,
-      "shorterThan100Lines": 0,
+      "modulesWithIntent": 24,
+      "modulesWithBehavior": 24,
+      "modulesWithApi": 24,
+      "modulesWithDataModel": 24,
+      "modulesWithAllFour": 24,
+      "modulesWithInputsOutputs": 24,
+      "averageSpecLines": 719,
+      "shorterThan100Lines": 1,
       "longerThan1000Lines": 5,
       "outlierFiles": [
-        "batch.spec.md (1440 lines, too long)",
-        "core.spec.md (1448 lines, too long)",
-        "debt-scanner.spec.md (1294 lines, too long)",
-        "knowledge-graph.spec.md (1087 lines, too long)",
-        "panoramic.spec.md (4331 lines, too long)"
+        "batch.spec.md (1443 lines, too long)",
+        "core.spec.md (1354 lines, too long)",
+        "knowledge-graph.spec.md (1046 lines, too long)",
+        "panoramic.spec.md (4363 lines, too long)",
+        "python-call-extractor.spec.md (95 lines, too short)",
+        "scaffold-kb.spec.md (1086 lines, too long)"
       ],
-      "moduleCount": 21
+      "moduleCount": 25
     },
     "graphSanity": {
-      "isolatedNodes": 3590,
-      "selfLoops": 22,
-      "edgesWithMissingTarget": 0,
-      "averageDegree": 1,
-      "maxDegree": 71,
-      "edgesWithoutType": 2373
+      "isolatedNodes": 104,
+      "selfLoops": 24,
+      "edgesWithMissingTarget": 977,
+      "averageDegree": 3.1,
+      "maxDegree": 974,
+      "edgesWithoutType": 8799
     },
     "crossLinks": {
-      "totalLinks": 164,
-      "brokenLinks": 2,
+      "totalLinks": 181,
+      "brokenLinks": 3,
       "externalLinks": 0
     },
     "codingContextGrounding": null,

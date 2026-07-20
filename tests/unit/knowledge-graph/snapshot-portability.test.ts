@@ -18,6 +18,7 @@ import {
   snapshotPath,
   buildSnapshotWrapper,
   computeAllFileHashes,
+  SNAPSHOT_WRAPPER_VERSION,
 } from '../../../src/knowledge-graph/persistence.js';
 import { buildUnifiedGraph } from '../../../src/knowledge-graph/index.js';
 import { buildIncremental } from '../../../src/knowledge-graph/incremental.js';
@@ -135,10 +136,10 @@ describe('Feature 193 T021 — 旧绝对 key 快照触发 format-stale', () => {
     expect(result.fallbackToFull).toBe(true);
     expect(result.fallbackReason).toBe('snapshot-format-stale');
 
-    // full reindex 重建为 2.0 + 相对快照
+    // full reindex 重建为当前 wrapper 版本 + 相对快照（Feature 214 W1：引用常量防漂）
     const { snapshot: rebuilt, reason } = await loadSnapshotDetailed(tmpRoot);
     expect(reason).toBe('ok');
-    expect(rebuilt!.schemaVersion).toBe('2.0');
+    expect(rebuilt!.schemaVersion).toBe(SNAPSHOT_WRAPPER_VERSION);
     expect(Object.keys(rebuilt!.fileHashes).some((k) => path.isAbsolute(k))).toBe(false);
   });
 });

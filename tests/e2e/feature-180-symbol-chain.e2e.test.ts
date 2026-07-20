@@ -3,7 +3,7 @@
  *
  * 验证 detect_changes → context → view_file 在 stdio 链路下 symbolId 透传完整：
  *   1. detect_changes 传 diff → changedSymbols 非空
- *   2. 显式选 component symbol micrograd/nn.py#MLP（不取 symbols[0]，可能是模块节点）
+ *   2. 显式选 component symbol micrograd/nn.py::MLP（不取 symbols[0]，可能是模块节点）
  *   3. context(symbolId) → definition.lineStart/lineEnd 与 patch 值一致
  *   4. view_file(path, symbolId) → startLine/endLine 等于 context.definition 行号（round-trip）
  *   5. fuzzy：裸名 'MLP' → symbol-not-found + fuzzyMatches（confidence=0.85 < 0.9 不 auto-resolve）
@@ -11,7 +11,7 @@
  * tempRoot 布局（Codex Plan C-1/C-2/C-3）：
  *   micrograd/nn.py         （从 MICROGRAD_SOURCE 拷入）
  *   micrograd/engine.py
- *   specs/_meta/graph.json  （baseline 拷贝 + patch micrograd/nn.py#MLP lineRange）
+ *   specs/_meta/graph.json  （baseline 拷贝 + patch micrograd/nn.py::MLP lineRange）
  *
  * 实测复核（T-011）：
  *   - detect_changes 响应结构：{changedSymbols:[{file,changeKind,symbols:string[]}]}
@@ -89,7 +89,7 @@ describe.skipIf(SHOULD_SKIP)(
         join(tempRoot, 'micrograd', 'engine.py'),
       );
 
-      // 拷贝 baseline graph.json 并对 micrograd/nn.py#MLP patch lineRange
+      // 拷贝 baseline graph.json 并对 micrograd/nn.py::MLP patch lineRange
       const graphPath = join(tempRoot, 'specs', '_meta', 'graph.json');
       installRelativizedBaseline(graphPath);
 
@@ -99,7 +99,7 @@ describe.skipIf(SHOULD_SKIP)(
           metadata?: { lineRange?: { start: number; end: number } };
         }>;
       };
-      const mlpNode = graphData.nodes.find((n) => n.id === 'micrograd/nn.py#MLP');
+      const mlpNode = graphData.nodes.find((n) => n.id === 'micrograd/nn.py::MLP');
       if (mlpNode) {
         if (!mlpNode.metadata) mlpNode.metadata = {};
         mlpNode.metadata.lineRange = { start: MLP_LINE_START, end: MLP_LINE_END };
@@ -137,8 +137,8 @@ describe.skipIf(SHOULD_SKIP)(
       expect(hasAnySymbol).toBe(true);
     }, 20_000);
 
-    // T-004-2: 显式选 component symbol micrograd/nn.py#MLP（不取 symbols[0]）
-    it('T-004-2: 从 changedSymbols 显式选 micrograd/nn.py#MLP（非 symbols[0] 的模块节点）', async () => {
+    // T-004-2: 显式选 component symbol micrograd/nn.py::MLP（不取 symbols[0]）
+    it('T-004-2: 从 changedSymbols 显式选 micrograd/nn.py::MLP（非 symbols[0] 的模块节点）', async () => {
       const result = await handle.client.callTool({
         name: 'detect_changes',
         arguments: {
@@ -153,16 +153,16 @@ describe.skipIf(SHOULD_SKIP)(
       };
       const allSymbols = (data.changedSymbols ?? []).flatMap((e) => e.symbols);
       // 显式选 component 级 symbol（不取 symbols[0]，可能是无 lineRange 的模块节点）
-      const mlpSymbol = allSymbols.find((id) => id === 'micrograd/nn.py#MLP');
-      expect(mlpSymbol).toBe('micrograd/nn.py#MLP');
+      const mlpSymbol = allSymbols.find((id) => id === 'micrograd/nn.py::MLP');
+      expect(mlpSymbol).toBe('micrograd/nn.py::MLP');
     }, 20_000);
 
     // T-004-3: context 返回 definition.lineStart/lineEnd（数字）
-    it('T-004-3: context(micrograd/nn.py#MLP) → definition.lineStart/lineEnd 等于 patch 值', async () => {
+    it('T-004-3: context(micrograd/nn.py::MLP) → definition.lineStart/lineEnd 等于 patch 值', async () => {
       const result = await handle.client.callTool({
         name: 'context',
         arguments: {
-          symbolId: 'micrograd/nn.py#MLP',
+          symbolId: 'micrograd/nn.py::MLP',
           projectRoot: tempRoot,
         },
       });
@@ -178,7 +178,7 @@ describe.skipIf(SHOULD_SKIP)(
       expect(data.definition?.lineEnd).toBe(MLP_LINE_END);
     }, 20_000);
 
-    // T-004-4: view_file(path=micrograd/nn.py, symbolId=micrograd/nn.py#MLP) → startLine/endLine 与 context 一致
+    // T-004-4: view_file(path=micrograd/nn.py, symbolId=micrograd/nn.py::MLP) → startLine/endLine 与 context 一致
     it('T-004-4: view_file symbolId 路径返回 startLine/endLine 与 context.definition 行号一致', async () => {
       const result = await handle.client.callTool({
         name: 'view_file',
@@ -186,7 +186,7 @@ describe.skipIf(SHOULD_SKIP)(
           // 传 tempRoot 相对路径，绝不传 definition.file 绝对路径（Codex Plan C-2）
           path: 'micrograd/nn.py',
           // 完整相对形式 symbolId（不传裸 MLP，Codex Plan C-1）
-          symbolId: 'micrograd/nn.py#MLP',
+          symbolId: 'micrograd/nn.py::MLP',
           projectRoot: tempRoot,
         },
       });
@@ -202,8 +202,10 @@ describe.skipIf(SHOULD_SKIP)(
       expect(data.endLine).toBe(MLP_LINE_END);
     }, 20_000);
 
-    // T-004-5: fuzzy：裸名 'MLP' → symbol-not-found + context.fuzzyMatches
-    it('T-004-5: context(symbolId="MLP") → symbol-not-found + context.fuzzyMatches（confidence<0.9 不 auto-resolve）', async () => {
+    // T-004-5: fuzzy：裸名 'MLP' → 唯一 canonical 节点 auto-resolve（Feature 214 行为漂移）
+    // Feature 214 前：旧图含 nn.py#MLP + nn.py::MLP 成对重复 → bare-name 命中≥2 候选 → symbol-not-found。
+    // Feature 214 后：ID 收敛消除重复，仅剩单一 nn.py::MLP → 唯一命中 auto-resolve（US2 验收场景 2）。
+    it('T-004-5: context(symbolId="MLP") → 唯一 canonical 节点 auto-resolve（ID 收敛消除重复后）', async () => {
       const result = await handle.client.callTool({
         name: 'context',
         arguments: {
@@ -211,35 +213,30 @@ describe.skipIf(SHOULD_SKIP)(
           projectRoot: tempRoot,
         },
       });
+      expect(result.isError).not.toBe(true);
       const content = result.content as Array<{ type: string; text: string }>;
-      const text = content[0]?.text ?? '';
-      // 实测响应结构：{"code":"symbol-not-found","message":"...","context":{"fuzzyMatches":[...]}}
-      // fuzzyMatches 在 data.context.fuzzyMatches（不在顶层），须从嵌套字段读取
-      const data = JSON.parse(text) as {
+      const data = JSON.parse(content[0]?.text ?? '{}') as {
         code?: string;
-        context?: {
-          fuzzyMatches?: Array<{ id: string; confidence: number; matchKind: string }>;
-        };
+        warnings?: string[];
+        resolvedFrom?: string;
+        resolvedTo?: string;
+        definition?: { id?: string };
       };
-      // 实测：裸名 'MLP' confidence<0.9 阈值，返回 symbol-not-found + fuzzyMatches
-      // （不自动 resolve，需更精确的输入才能触发 warnings.fuzzy-resolved）
-      expect(data.code).toBe('symbol-not-found');
-      const fuzzyMatches = data.context?.fuzzyMatches ?? [];
-      expect(Array.isArray(fuzzyMatches)).toBe(true);
-      expect(fuzzyMatches.length).toBeGreaterThan(0);
-      // 每个 fuzzyMatch 含 id/confidence/matchKind（证明 fuzzy 机制经 stdio 完整透传）
-      const firstMatch = fuzzyMatches[0];
-      expect(typeof firstMatch.id).toBe('string');
-      expect(typeof firstMatch.confidence).toBe('number');
-      expect(typeof firstMatch.matchKind).toBe('string');
+      // 唯一命中 auto-resolve：无 symbol-not-found，warnings 含 fuzzy-resolved，解析到 canonical :: 节点
+      expect(data.code).toBeUndefined();
+      expect(Array.isArray(data.warnings)).toBe(true);
+      expect(data.warnings).toContain('fuzzy-resolved');
+      expect(data.resolvedFrom).toBe('MLP');
+      expect(data.resolvedTo).toBe('micrograd/nn.py::MLP');
+      expect(data.definition?.id).toBe('micrograd/nn.py::MLP');
     }, 20_000);
 
     // T-004-6: impact typo 变体 → symbol-not-found+context.fuzzyMatches 或 fuzzy-resolved（两种均合法）
-    it('T-004-6: impact(target="micrograd/nn.py#MLPxxx") → symbol-not-found+context.fuzzyMatches 或 fuzzy-resolved（二选一）', async () => {
+    it('T-004-6: impact(target="micrograd/nn.py::MLPxxx") → symbol-not-found+context.fuzzyMatches 或 fuzzy-resolved（二选一）', async () => {
       const result = await handle.client.callTool({
         name: 'impact',
         arguments: {
-          target: 'micrograd/nn.py#MLPxxx',
+          target: 'micrograd/nn.py::MLPxxx',
           projectRoot: tempRoot,
         },
       });
@@ -294,31 +291,26 @@ describe.skipIf(SHOULD_SKIP)(
       if (tempRoot) rmSync(tempRoot, { recursive: true, force: true });
     });
 
-    it('T-011-1: context 传裸名 MLP → symbol-not-found + context.fuzzyMatches 非空（fuzzy 机制经 stdio 透传完整）', async () => {
+    // Feature 214 行为漂移：ID 收敛消除 nn.py#MLP/nn.py::MLP 成对重复 → bare-name 'MLP' 唯一命中 auto-resolve
+    it('T-011-1: context 传裸名 MLP → auto-resolve 到 canonical 节点（fuzzy 机制经 stdio 透传完整）', async () => {
       const result = await handle.client.callTool({
         name: 'context',
         arguments: { symbolId: 'MLP', projectRoot: tempRoot },
       });
+      expect(result.isError).not.toBe(true);
       const content = result.content as Array<{ type: string; text: string }>;
-      // 实测响应结构：{"code":"symbol-not-found","context":{"fuzzyMatches":[{id,confidence,matchKind}]}}
-      // fuzzyMatches 嵌套在 data.context.fuzzyMatches，不在顶层（实测确认）
       const data = JSON.parse(content[0]?.text ?? '{}') as {
         code?: string;
-        context?: {
-          fuzzyMatches?: Array<{ id: string; confidence: number; matchKind: string }>;
-        };
+        warnings?: string[];
+        resolvedFrom?: string;
+        resolvedTo?: string;
       };
-      // 裸名 'MLP' confidence<0.9，不 auto-resolve，返回 symbol-not-found + fuzzyMatches
-      expect(data.code).toBe('symbol-not-found');
-      const fuzzyMatches = data.context?.fuzzyMatches ?? [];
-      expect(Array.isArray(fuzzyMatches)).toBe(true);
-      expect(fuzzyMatches.length).toBeGreaterThan(0);
-      // 检查每个 fuzzyMatch 含 id/confidence/matchKind（证明 fuzzy 机制经 stdio 完整透传）
-      for (const match of fuzzyMatches) {
-        expect(typeof match.id).toBe('string');
-        expect(typeof match.confidence).toBe('number');
-        expect(typeof match.matchKind).toBe('string');
-      }
+      // 唯一命中 auto-resolve：warnings.fuzzy-resolved 经 stdio 完整透传（fuzzy 机制未被破坏）
+      expect(data.code).toBeUndefined();
+      expect(Array.isArray(data.warnings)).toBe(true);
+      expect(data.warnings).toContain('fuzzy-resolved');
+      expect(data.resolvedFrom).toBe('MLP');
+      expect(data.resolvedTo).toBe('micrograd/nn.py::MLP');
     }, 20_000);
 
     // T-011-2: fuzzy auto-resolve 成功路径（confidence≥0.9）→ warnings.fuzzy-resolved + resolvedFrom/To 透传

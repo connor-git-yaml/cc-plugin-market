@@ -88,25 +88,57 @@ export function relativizePosix(absPath: string, projectRoot: string): Relativiz
   return { value: toPosix(path.relative(root, resolved)), external: false };
 }
 
+/** parseCanonicalSymbolId 解析结果（FR-006） */
+export interface CanonicalSymbolIdParts {
+  /** canonical id 的路径部分（第一个 `::` 之前；无 `::` 时为整 id） */
+  filePart: string;
+  /** symbol 部分（第一个 `::` 之后的剩余，含 `Class.member` 的点号；无 `::` 时 undefined） */
+  symbolPart: string | undefined;
+}
+
+/**
+ * Feature 214 FR-006 — canonical symbol ID 单点解析工具。
+ *
+ * 收敛此前分散在 relativizeSymbolId / graph-builder.filePartOf /
+ * graph-query.nodeIdFilePart 三处几乎相同、各自独立的「取 file part」字符串切分，
+ * 作为「转换只允许发生在一个兼容边界」约束在代码层的落地对象。
+ *
+ * 规则：以**首个** `::` 切分。
+ * - `file::sym` → filePart=file, symbolPart=sym
+ * - `file::Class.m` → filePart=file, symbolPart=Class.m（成员点号保留在 symbolPart）
+ * - `file::A::b`（罕见）→ filePart=file, symbolPart=A::b（只切首个 ::）
+ * - `file` / `file#legacy`（无 ::）→ filePart=整 id, symbolPart=undefined
+ *   （`#` 不是 canonical 分隔符，不参与切分——旧格式识别由 FR-008 legacy 检测承担）
+ */
+export function parseCanonicalSymbolId(id: string): CanonicalSymbolIdParts {
+  const sepIdx = id.indexOf('::');
+  if (sepIdx < 0) {
+    return { filePart: id, symbolPart: undefined };
+  }
+  return {
+    filePart: id.slice(0, sepIdx),
+    symbolPart: id.slice(sepIdx + 2), // 跳过 '::'
+  };
+}
+
 /**
  * 相对化一个 symbol id（形如 `<path>::<name>` / `<path>::<name>.<member>` / 纯 `<path>`）。
  *
  * 只相对化第一个 `::` 之前的路径部分，保留 `::` / `.` 结构分隔符与 symbol 段不变。
+ * FR-006：file part 切分复用 parseCanonicalSymbolId 单点解析。
  *
  * @param id 原始 symbol id（路径部分可能绝对）
  * @param projectRoot 相对化基准
  * @returns 相对化后的 id + 路径部分是否 external
  */
 export function relativizeSymbolId(id: string, projectRoot: string): RelativizeResult {
-  const sepIdx = id.indexOf('::');
-  if (sepIdx < 0) {
+  const { filePart, symbolPart } = parseCanonicalSymbolId(id);
+  if (symbolPart === undefined) {
     // 纯路径节点（module id）或非路径逻辑 id
     return relativizePosix(id, projectRoot);
   }
-  const filePart = id.slice(0, sepIdx);
-  const rest = id.slice(sepIdx); // 含 `::` 起的剩余结构（symbol 段）
   const r = relativizePosix(filePart, projectRoot);
-  return { value: r.value + rest, external: r.external };
+  return { value: `${r.value}::${symbolPart}`, external: r.external };
 }
 
 /** Windows 反斜杠统一为 POSIX 正斜杠（FR-003 跨平台 byte 一致） */

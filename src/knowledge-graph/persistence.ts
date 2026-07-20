@@ -34,8 +34,13 @@ import { relativizePosix } from './relativize.js';
  * Feature 193 决策 1b：'1.0' → '2.0' bump。
  * 2.0 语义变更：fileHashes key + 内嵌 graph 全部相对化为 repo-relative POSIX 路径
  * （持久化域）；旧 1.0 快照（绝对 key）加载时按 format-stale 退化 full reindex。
+ *
+ * Feature 214 FR-010：'2.0' → '3.0' bump。
+ * 3.0 语义变更：Python symbol ID 收敛为 canonical `::` + 新增 contains 边；旧 2.0 快照
+ * （`#` 格式 Python symbol）加载时经 schema z.literal 与嗅探（:218，单点引用本常量）
+ * 判为 format-stale → 触发全量重建（复用 F193 机制，零新迁移代码）。
  */
-export const SNAPSHOT_WRAPPER_VERSION = '2.0' as const;
+export const SNAPSHOT_WRAPPER_VERSION = '3.0' as const;
 
 /**
  * SnapshotWrapper schema — `.spectra/unified-graph.json` 的顶层结构。

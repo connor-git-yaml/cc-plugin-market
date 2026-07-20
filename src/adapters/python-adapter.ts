@@ -144,7 +144,7 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    * Feature 145 P0：桥接 Python AST（CodeSkeleton.exports）到知识图谱 ExtractionResult 第四路数据源。
    * 每个 .py 文件产出一个 ExtractionResult，包含：
    * - 文件级 module 节点（id = relPath, kind = 'module'）
-   * - 每个 export 符号的 component 节点（id = {relPath}#{name}, kind = 'component'）
+   * - 每个 export 符号的 component 节点（id = {relPath}::{name}, kind = 'component'；Feature 214 canonical :: 分隔符）
    * - module → component 的 containment 边（relation = 'contains'）
    *
    * NF-004：处理完每个文件后 skeleton 立即丢弃，不集中持有全量数据，避免内存压力。
@@ -200,7 +200,10 @@ export class PythonLanguageAdapter implements LanguageAdapter {
 
       // 每个导出符号（函数/类）产出 component 节点 + containment 边
       for (const symbol of skeleton.exports) {
-        const symbolId = `${relPath}#${symbol.name}`;
+        // Feature 214（方案 A）：Python symbol ID 收敛为 canonical :: 分隔符，
+        // 与 TS/JS symbol ID 统一，使 F193 三处 ::-only 护栏自然生效。
+        // :217/:221 contains 边 target 复用 symbolId 变量，自动同步。
+        const symbolId = `${relPath}::${symbol.name}`;
         nodes.push({
           id: symbolId,
           kind: 'component',

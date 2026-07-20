@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import type { GraphJSON, GraphNode, GraphEdge, Hyperedge, SemanticEdgeRelation } from './graph-types.js';
 import { SEMANTIC_EDGE_RELATIONS } from './graph-types.js';
 import { resolveGraphReportPath } from './graph-paths.js';
-import { isAbsoluteForeignPath, isPathContainedUnder } from '../../knowledge-graph/relativize.js';
+import { isAbsoluteForeignPath, isPathContainedUnder, parseCanonicalSymbolId } from '../../knowledge-graph/relativize.js';
 
 // ============================================================
 // 查询结果类型定义
@@ -155,10 +155,44 @@ export function tokenize(q: string): string[] {
 
 /**
  * 取节点 id 的文件路径部分（第一个 `::` 之前；module 节点无 `::` 则取整个 id）。
+ * Feature 214 FR-006：复用 parseCanonicalSymbolId 单点解析，不再各自切分。
  */
 function nodeIdFilePart(id: string): string {
-  const idx = id.indexOf('::');
-  return idx >= 0 ? id.slice(0, idx) : id;
+  return parseCanonicalSymbolId(id).filePart;
+}
+
+/**
+ * Feature 214 FR-008【C2 正向谓词】— 识别 legacy `#` 分隔符的 **symbol 语义** 节点。
+ *
+ * 只认 symbol 语义节点，用于把旧 `#` 格式 Python symbol 图判为 legacy-id-format-stale：
+ * - `node.id.includes('#')`（含旧分隔符）
+ * - 且满足 symbol provenance 之一：
+ *   - `metadata.unifiedKind === 'symbol'`（graph-builder 第五路存的原始 UnifiedGraph kind）
+ *   - 或 `metadata.sourceTag === 'extraction'` 结合 Python provenance（file part 以 `.py` 结尾，
+ *     即 python-adapter 第四路产出的旧 `#` symbol）
+ *
+ * **MUST NOT 用负向过滤**（"includes('#') && kind !== api"）：design-doc-anchoring 存在
+ * kind='module' 且 id 含 `#` 的合法 doc-anchor 节点（如 `src/pipeline.ts#withRetry`），
+ * 负向谓词会误杀；api-surface 的 `#` api 节点同样须豁免（范围澄清 / FR-008）。
+ */
+export function isLegacySymbolNode(node: Readonly<GraphNode>): boolean {
+  // W-5 canonical 优先：id 含 canonical `::` 分隔符即为新格式，直接非 legacy
+  //（即使文件名本身恰含 `#`，如 `src/a#b.py::Foo`，也不误报）。
+  if (node.id.includes('::')) return false;
+  if (!node.id.includes('#')) return false;
+  const meta = node.metadata;
+  if (meta?.['unifiedKind'] === 'symbol') return true;
+  if (meta?.['sourceTag'] === 'extraction') {
+    // legacy python-adapter id = `${relPath}#${name}`：symbol 名在**最后一个** `#` 之后，
+    // file part = 最后一个 `#` 之前（relPath 理论上可含 `#`）。优先用 provenance 元数据的
+    // 源文件路径，缺失时退回 lastIndexOf('#') 切分（不对完整 id 用首个 split('#')）。
+    const rawSource = meta['sourceFile'] ?? meta['sourcePath'];
+    const filePart = typeof rawSource === 'string' && rawSource.length > 0
+      ? rawSource
+      : node.id.slice(0, node.id.lastIndexOf('#'));
+    if (filePart.endsWith('.py')) return true;
+  }
+  return false;
 }
 
 /**
@@ -182,6 +216,15 @@ export function assertGraphFormatNotStale(
 ): void {
   const root = path.resolve(projectRoot);
   for (const node of graph.nodes) {
+    // Feature 214 FR-008：内容级 legacy `#` symbol 检测（正向谓词，按 node kind/provenance 过滤）。
+    // 旧 `#` 格式 Python symbol 图 → format-stale 全量重建；doc-anchor / api-surface `#` 节点豁免。
+    if (isLegacySymbolNode(node)) {
+      throw new Error(
+        `graph-format-stale: 图含 legacy \`#\` 分隔符的 symbol 节点（${node.id}）。` +
+          `\n该图由旧版本 Spectra 建立（Python symbol 用 \`#\` 而非 canonical \`::\`）。` +
+          `\n请运行 \`spectra index\` 或 \`spectra batch\` 在当前 worktree 重建图。`,
+      );
+    }
     // external 节点的绝对路径合法（node_modules / 跨仓引用），跳过
     if (node.metadata && node.metadata['external'] === true) continue;
     const filePart = nodeIdFilePart(node.id);
@@ -845,9 +888,13 @@ export class GraphQueryEngine {
     const effectiveLimit = limit > 0 ? limit : 10;
 
     // 计算每个节点的度数
+    // Feature 214 C-1 / NFR-008：耦合度统计口径排除 contains（纯结构边），
+    // 与 community-detector loadGraph 一致；adjacency 本身保留 contains（graph_node
+    // 邻居遍历不受影响），仅在此度数统计时过滤，避免层级边膨胀 god-node 度数。
     const nodesWithDegree: Array<GraphNode & { degree: number }> = [];
     for (const [id, node] of this.nodeMap) {
-      const degree = this.adjacency.get(id)?.length ?? 0;
+      const adj = this.adjacency.get(id) ?? [];
+      const degree = adj.reduce((n, entry) => (entry.edge.relation === 'contains' ? n : n + 1), 0);
       nodesWithDegree.push({ ...node, degree });
     }
 

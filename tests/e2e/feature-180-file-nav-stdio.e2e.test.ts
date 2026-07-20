@@ -3,7 +3,7 @@
  *
  * 验证 view_file / search_in_file / list_directory 在真实 stdio 链路下：
  *   T-009-1: view_file 行段切片（startLine=1, endLine=10）→ 恰前 10 行
- *   T-009-2: view_file symbolId（micrograd/nn.py#MLP，patch 过 lineRange）→ startLine/endLine=patch 值
+ *   T-009-2: view_file symbolId（micrograd/nn.py::MLP，patch 过 lineRange）→ startLine/endLine=patch 值
  *   T-009-3: view_file endLine 超过总行数 → clamp（优雅截断，非 error），行数 ≤ 文件总行数
  *   T-009-4: view_file 越界路径 → path-outside-root 或 file-not-found
  *   T-009-5: search_in_file 有效 path + pattern → 含匹配结果（行号 + 片段）
@@ -12,7 +12,7 @@
  * tempRoot 布局（同 symbol-chain T-004，Codex Plan C-1/C-2）：
  *   micrograd/nn.py         （从 MICROGRAD_SOURCE 拷入）
  *   micrograd/engine.py
- *   specs/_meta/graph.json  （baseline 拷贝 + patch micrograd/nn.py#MLP lineRange）
+ *   specs/_meta/graph.json  （baseline 拷贝 + patch micrograd/nn.py::MLP lineRange）
  *
  * MLP 行号：class MLP 在 nn.py 第 45 行，最后行 60（实测 wc -l = 60）
  */
@@ -76,7 +76,7 @@ describe.skipIf(SHOULD_SKIP)(
           metadata?: { lineRange?: { start: number; end: number } };
         }>;
       };
-      const mlpNode = graphData.nodes.find((n) => n.id === 'micrograd/nn.py#MLP');
+      const mlpNode = graphData.nodes.find((n) => n.id === 'micrograd/nn.py::MLP');
       if (mlpNode) {
         if (!mlpNode.metadata) mlpNode.metadata = {};
         mlpNode.metadata.lineRange = { start: MLP_LINE_START, end: MLP_LINE_END };
@@ -130,14 +130,14 @@ describe.skipIf(SHOULD_SKIP)(
     }, 20_000);
 
     // T-009-2: view_file symbolId（patch 过 lineRange 的 node）→ startLine/endLine = patch 值
-    it('T-009-2: view_file symbolId=micrograd/nn.py#MLP（patch lineRange）→ startLine/endLine = patch 值', async () => {
+    it('T-009-2: view_file symbolId=micrograd/nn.py::MLP（patch lineRange）→ startLine/endLine = patch 值', async () => {
       // 完整相对形式 symbolId（不传裸 MLP，避免静默降级，Codex Plan C-1）
       // path 传 tempRoot 相对路径，绝不传绝对路径（Codex Plan C-2）
       const result = await handle.client.callTool({
         name: 'view_file',
         arguments: {
           path: 'micrograd/nn.py',
-          symbolId: 'micrograd/nn.py#MLP',
+          symbolId: 'micrograd/nn.py::MLP',
           projectRoot: tempRoot,
         },
       });

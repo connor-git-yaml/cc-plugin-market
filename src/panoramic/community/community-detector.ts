@@ -72,6 +72,10 @@ export function loadGraph(graphJson: GraphJSON): UndirectedGraph {
   }
 
   for (const edge of graphJson.links) {
+    // Feature 214 NFR-008 / GATE_DESIGN #4：contains 是纯结构边，不得计入耦合度/聚类度数统计。
+    // 在此剔除，使 community/god-node 口径不因新增 contains 边漂移（不改 GraphQueryEngine —
+    // graph_node 邻居仍须保留 contains 供 US1 层级遍历）。
+    if (edge.relation === 'contains') continue;
     // 跳过悬空边（source/target 不在节点集合中）
     if (!graph.hasNode(edge.source) || !graph.hasNode(edge.target)) continue;
     // 跳过已存在的边（无向图 a-b 与 b-a 等价）

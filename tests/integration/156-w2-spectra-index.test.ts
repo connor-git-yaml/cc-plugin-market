@@ -20,6 +20,7 @@ import {
   loadSnapshot,
   snapshotPath,
   SnapshotWrapperSchema,
+  SNAPSHOT_WRAPPER_VERSION,
 } from '../../src/knowledge-graph/persistence.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import type { CLICommand } from '../../src/cli/utils/parse-args.js';
@@ -101,8 +102,8 @@ describe('Feature 156 W2 — spectra index 全量路径', () => {
     // (4) loadSnapshot 也能正常返回
     const loaded = await loadSnapshot(workspaceRoot);
     expect(loaded).not.toBeNull();
-    // Feature 193：SNAPSHOT_WRAPPER_VERSION bump '1.0' → '2.0'
-    expect(loaded!.schemaVersion).toBe('2.0');
+    // Feature 214 W1：引用版本常量，避免下次 bump 再漂
+    expect(loaded!.schemaVersion).toBe(SNAPSHOT_WRAPPER_VERSION);
 
     // (5) graph 含 depends-on 边（main.ts → lib.mjs / legacy.cjs）
     const dependsOnEdges = loaded!.graph.edges.filter(

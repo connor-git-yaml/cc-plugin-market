@@ -206,5 +206,9 @@ export function defaultDirectionalForRelation(relation: UnifiedEdgeRelation): bo
 /**
  * 当前 UnifiedGraph schema 版本号。
  * 升级 schema 时需同步更新此常量并迁移 fixture / persistence 层。
+ *
+ * Feature 214 FR-010：'1.0' → '1.1'（SHOULD）—— 标识语义版本变化：新增
+ * module→symbol/class→member 的 contains 边 + Python symbol ID 收敛为 canonical `::`
+ * （zod schema 字面结构未变，故仅语义版本 bump）。
  */
-export const UNIFIED_GRAPH_SCHEMA_VERSION = '1.0';
+export const UNIFIED_GRAPH_SCHEMA_VERSION = '1.1';

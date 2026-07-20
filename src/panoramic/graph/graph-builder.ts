@@ -16,7 +16,7 @@ import type { DocGraph, DocGraphSpecNode, DocGraphReference } from '../builders/
 import type { CrossReferenceLink } from '../../models/module-spec.js';
 import { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
 import type { BuildGraphOptions, ConfidenceLevel, GraphEdge, GraphJSON, GraphNode } from './graph-types.js';
-import { isAbsoluteForeignPath } from '../../knowledge-graph/relativize.js';
+import { isAbsoluteForeignPath, parseCanonicalSymbolId } from '../../knowledge-graph/relativize.js';
 
 // ============================================================
 // ArchitectureIRElementKind → GraphNode.kind 映射表
@@ -570,10 +570,8 @@ export function scanGraphPortabilityViolations(graphJson: GraphJSON): Portabilit
   };
 
   // id 的 file part = 第一个 `::` 之前（symbol id）或整个 id（module id）
-  const filePartOf = (id: string): string => {
-    const idx = id.indexOf('::');
-    return idx >= 0 ? id.slice(0, idx) : id;
-  };
+  // Feature 214 FR-006：复用 parseCanonicalSymbolId 单点解析，不再各自切分。
+  const filePartOf = (id: string): string => parseCanonicalSymbolId(id).filePart;
 
   // 标了 external 的节点集合（其绝对 id / 绝对 source-target 为 FR-004 合法保留）
   const externalIds = new Set<string>();

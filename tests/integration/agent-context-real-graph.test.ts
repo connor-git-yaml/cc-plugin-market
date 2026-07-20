@@ -111,12 +111,13 @@ index a1..b2 100644
     });
     const detectData = parseSuccess(detectRes);
     const cs = detectData['changedSymbols'] as Array<{ file: string; symbols: string[] }>;
-    // 真实 graph 既含相对 id `micrograd/nn.py#Module` 也含绝对 id `.../nn.py::Module.parameters`
-    // moduleFileFromId 兼容两种分隔符（# / ::），detect_changes 应同时识别两类
+    // Feature 214：ID 收敛后真实 graph 的 Python symbol 统一为 canonical `::` 分隔符
+    // （如 micrograd/nn.py::Module、micrograd/nn.py::Module.parameters）；moduleFileFromId
+    // 仍保留 # 双格式兼容（R-6，服务旧图 fuzzy 兜底），但重采集后不再产出 # symbol 节点。
     const matchingFile = cs.find((c) => c.file === 'micrograd/nn.py');
     expect(matchingFile).toBeDefined();
     expect(matchingFile!.symbols.length).toBeGreaterThanOrEqual(2);
-    // 至少应命中 micrograd/nn.py#Module（panoramic 格式）和 .../nn.py::Module.parameters（unified 格式）
+    // 至少应命中 micrograd/nn.py::Module 层级下的 symbol（canonical 格式）
     expect(matchingFile!.symbols.some((s) => s.includes('Module'))).toBe(true);
   });
 

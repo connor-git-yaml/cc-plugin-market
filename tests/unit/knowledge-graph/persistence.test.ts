@@ -23,6 +23,7 @@ import {
   saveSnapshot,
   snapshotPath,
   SnapshotWrapperSchema,
+  SNAPSHOT_WRAPPER_VERSION,
   type SnapshotWrapper,
 } from '../../../src/knowledge-graph/persistence.js';
 import type { UnifiedGraph } from '../../../src/knowledge-graph/index.js';
@@ -96,8 +97,8 @@ describe('persistence — P-1 save/load roundtrip', () => {
 
     const loaded = await loadSnapshot(tmpRoot);
     expect(loaded).not.toBeNull();
-    // Feature 193：SNAPSHOT_WRAPPER_VERSION bump '1.0' → '2.0'
-    expect(loaded!.schemaVersion).toBe('2.0');
+    // Feature 214 W1：引用版本常量，避免下次 bump 再漂（SNAPSHOT_WRAPPER_VERSION 现为 '3.0'）
+    expect(loaded!.schemaVersion).toBe(SNAPSHOT_WRAPPER_VERSION);
     expect(loaded!.fileHashes).toEqual(fileHashes);
     expect(loaded!.graph.nodes).toHaveLength(2);
     expect(loaded!.graph.edges).toHaveLength(1);

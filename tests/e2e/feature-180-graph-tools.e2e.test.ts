@@ -143,7 +143,7 @@ describe.skipIf(SHOULD_SKIP)(
       const result = await handle.client.callTool({
         name: 'graph_node',
         arguments: {
-          id: 'micrograd/nn.py#MLP',
+          id: 'micrograd/nn.py::MLP',
           projectRoot: tempRoot,
         },
       });
@@ -153,7 +153,7 @@ describe.skipIf(SHOULD_SKIP)(
       const text = content[0]?.text ?? '';
       // 实测响应 keys：[node, neighbors, community, semanticEdges]
       const data = JSON.parse(text) as { node?: { id?: string }; semanticEdges?: unknown[] };
-      expect(data.node?.id).toBe('micrograd/nn.py#MLP');
+      expect(data.node?.id).toBe('micrograd/nn.py::MLP');
       expect(Array.isArray(data.semanticEdges)).toBe(true);
     }, 20_000);
 
@@ -162,8 +162,8 @@ describe.skipIf(SHOULD_SKIP)(
       const result = await handle.client.callTool({
         name: 'graph_path',
         arguments: {
-          source: 'micrograd/nn.py#MLP',
-          target: 'micrograd/engine.py#Value',
+          source: 'micrograd/nn.py::MLP',
+          target: 'micrograd/engine.py::Value',
           projectRoot: tempRoot,
         },
       });

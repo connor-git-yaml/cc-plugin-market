@@ -54,6 +54,13 @@ export function buildUnifiedGraph(input: BuildUnifiedGraphInput): UnifiedGraph {
   const callEdges = resolveCalls(callSites, input.codeSkeletons);
   const importEdges = deriveImportEdges(input.codeSkeletons);
   const nodes = input.preBuiltNodes ?? deriveNodesFromSkeletons(input.codeSkeletons);
+  // Feature 214 FR-001/002：语言无关派生 module→symbol / class→member 两级 contains 边。
+  // W-6：过滤到「两端点都存在于最终节点集合」，防 preBuiltNodes 路径下 symbol/member 节点
+  // 未被注入时产生悬空 contains 边（默认 deriveNodesFromSkeletons 路径下全部端点必然存在）。
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const containsEdges = deriveContainsEdges(input.codeSkeletons).filter(
+    (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
+  );
   // Feature 193 决策 1：出口统一相对化 pass。
   // 覆盖全部四条值来源（deriveNodesFromSkeletons 节点、resolveCalls calls 边、
   // deriveImportEdges 边、preBuiltNodes 注入），把绝对路径前缀相对化为 POSIX 相对路径，
@@ -62,7 +69,7 @@ export function buildUnifiedGraph(input: BuildUnifiedGraphInput): UnifiedGraph {
   return relativizeGraph(
     {
       nodes: [...nodes],
-      edges: [...callEdges, ...importEdges],
+      edges: [...callEdges, ...importEdges, ...containsEdges],
       metadata: {
         generatedAt: new Date().toISOString(),
         projectRoot: input.projectRoot,
@@ -175,6 +182,19 @@ function collectCallSites(
 }
 
 /**
+ * Feature 214 FR-006/C1 — canonical symbol / member 节点 ID 单点计算。
+ *
+ * deriveNodesFromSkeletons 与 deriveContainsEdges 共享同一 id 规则，
+ * 二者不各自拼串——同名 member 天然共享 canonical id，是 C1 去重的语义基础。
+ */
+function symbolNodeId(filePath: string, symbolName: string): string {
+  return `${filePath}::${symbolName}`;
+}
+function memberNodeId(symbolId: string, memberName: string): string {
+  return `${symbolId}.${memberName}`;
+}
+
+/**
  * 从 CodeSkeleton 派生 module + symbol 节点（默认行为）。
  *
  * 仅当 input.preBuiltNodes 未提供时使用。
@@ -182,13 +202,23 @@ function collectCallSites(
  * - 每个 CodeSkeleton 派生 1 个 module 节点（id = filePath）
  * - 每个 ExportSymbol 派生 1 个 symbol 节点（id = `${filePath}::${exp.name}`）
  * - class 的 members 进一步派生 symbol 节点（id = `${filePath}::${exp.name}.${m.name}`）
+ *
+ * 【C1 生产端去重】按 node id 去重。code-skeleton 允许同名 member（getter/setter、
+ * 重载），逐 member 写入会产生重复 UnifiedNode；UnifiedGraph snapshot 直接持久化此输出、
+ * 不过 GraphJSON nodeMap，故第五路合并去重救不了快照层重复，必须在生产端折叠（FR-011）。
  */
 function deriveNodesFromSkeletons(
   codeSkeletons: ReadonlyMap<string, CodeSkeleton>,
 ): UnifiedNode[] {
   const nodes: UnifiedNode[] = [];
+  const seen = new Set<string>();
+  const push = (node: UnifiedNode): void => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    nodes.push(node);
+  };
   for (const [filePath, sk] of codeSkeletons) {
-    nodes.push({
+    push({
       id: filePath,
       label: filePath.split(/[/\\]/).pop() ?? filePath,
       kind: 'module',
@@ -199,8 +229,8 @@ function deriveNodesFromSkeletons(
       },
     });
     for (const exp of sk.exports) {
-      const symbolId = `${filePath}::${exp.name}`;
-      nodes.push({
+      const symbolId = symbolNodeId(filePath, exp.name);
+      push({
         id: symbolId,
         label: exp.name,
         kind: 'symbol',
@@ -209,8 +239,8 @@ function deriveNodesFromSkeletons(
       });
       if (exp.members) {
         for (const m of exp.members) {
-          nodes.push({
-            id: `${symbolId}.${m.name}`,
+          push({
+            id: memberNodeId(symbolId, m.name),
             label: `${exp.name}.${m.name}`,
             kind: 'symbol',
             language: sk.language,
@@ -221,6 +251,49 @@ function deriveNodesFromSkeletons(
     }
   }
   return nodes;
+}
+
+/**
+ * Feature 214 FR-001/002 — 语言无关派生 contains 边（W2：无任何语言 gate）。
+ *
+ * 层级规则：
+ * - module → symbol/class 一级边（每个 export）
+ * - class → member 两级边（每个 member），不产生 module → member 扁平直连边
+ * - 无 class 包裹的顶层 symbol（含 Python 顶层函数）只产 module → symbol 一级边
+ *
+ * 【C1 生产端去重】边按 `(source,target,relation)` 去重；member id 复用 memberNodeId，
+ * 与 deriveNodesFromSkeletons 共享同一 id 计算 → 同名 member（getter/setter、重载）
+ * 天然折叠为单一 class → member 边。
+ */
+export function deriveContainsEdges(
+  codeSkeletons: ReadonlyMap<string, CodeSkeleton>,
+): UnifiedEdge[] {
+  const edges: UnifiedEdge[] = [];
+  const seen = new Set<string>();
+  const push = (source: string, target: string): void => {
+    const key = `${source}|${target}|contains`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({
+      source,
+      target,
+      relation: 'contains',
+      confidence: 'high',
+      directional: defaultDirectionalForRelation('contains'),
+    });
+  };
+  for (const [filePath, sk] of codeSkeletons) {
+    for (const exp of sk.exports) {
+      const symbolId = symbolNodeId(filePath, exp.name);
+      // module → symbol/class 一级
+      push(filePath, symbolId);
+      // class → member 两级（member 唯一入边来自其 class，无 module → member 扁平边）
+      for (const m of exp.members ?? []) {
+        push(symbolId, memberNodeId(symbolId, m.name));
+      }
+    }
+  }
+  return edges;
 }
 
 // ───────────────────────────────────────────────────────────

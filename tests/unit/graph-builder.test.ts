@@ -339,14 +339,15 @@ describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
    * 验证 buildKnowledgeGraph 输出中 kind='component' 节点 ≥ 3，containment 边 ≥ 3
    */
   it('3 个 .py fixture ExtractionResult 注入后，输出含 ≥ 3 个 component 节点和 ≥ 3 条 containment 边', () => {
+    // Feature 214：Python symbol ID 收敛为 canonical :: 分隔符（原 hash 分隔符已弃用）
     // 模拟 a.py：含函数 forward
     const resultA: ExtractionResult = {
       nodes: [
         { id: 'a.py', kind: 'module', label: 'a', source_file: 'a.py', confidence: 'EXTRACTED' },
-        { id: 'a.py#forward', kind: 'component', label: 'forward', source_file: 'a.py', confidence: 'EXTRACTED' },
+        { id: 'a.py::forward', kind: 'component', label: 'forward', source_file: 'a.py', confidence: 'EXTRACTED' },
       ],
       edges: [
-        { source: 'a.py', target: 'a.py#forward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+        { source: 'a.py', target: 'a.py::forward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
       ],
     };
 
@@ -354,10 +355,10 @@ describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
     const resultB: ExtractionResult = {
       nodes: [
         { id: 'b.py', kind: 'module', label: 'b', source_file: 'b.py', confidence: 'EXTRACTED' },
-        { id: 'b.py#backward', kind: 'component', label: 'backward', source_file: 'b.py', confidence: 'EXTRACTED' },
+        { id: 'b.py::backward', kind: 'component', label: 'backward', source_file: 'b.py', confidence: 'EXTRACTED' },
       ],
       edges: [
-        { source: 'b.py', target: 'b.py#backward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+        { source: 'b.py', target: 'b.py::backward', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
       ],
     };
 
@@ -365,12 +366,12 @@ describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
     const resultC: ExtractionResult = {
       nodes: [
         { id: 'c.py', kind: 'module', label: 'c', source_file: 'c.py', confidence: 'EXTRACTED' },
-        { id: 'c.py#Value', kind: 'component', label: 'Value', source_file: 'c.py', confidence: 'EXTRACTED' },
-        { id: 'c.py#add', kind: 'component', label: 'add', source_file: 'c.py', confidence: 'EXTRACTED' },
+        { id: 'c.py::Value', kind: 'component', label: 'Value', source_file: 'c.py', confidence: 'EXTRACTED' },
+        { id: 'c.py::add', kind: 'component', label: 'add', source_file: 'c.py', confidence: 'EXTRACTED' },
       ],
       edges: [
-        { source: 'c.py', target: 'c.py#Value', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
-        { source: 'c.py', target: 'c.py#add', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+        { source: 'c.py', target: 'c.py::Value', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+        { source: 'c.py', target: 'c.py::add', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
       ],
     };
 
@@ -388,5 +389,35 @@ describe('T013: Python ExtractionResult 注入 buildKnowledgeGraph', () => {
 
     // 验证 extraction 数据源被记录
     expect(graphJson.graph.sources).toContain('extraction');
+  });
+
+  // Feature 214 T011 / C1 — contains 边去重：同 (source,target,relation) 只保留一条
+  it('同一 contains 三元组重复注入（extraction + unified 双路）后 GraphJSON 无重复边对', () => {
+    const extraction: ExtractionResult = {
+      nodes: [
+        { id: 'x.py', kind: 'module', label: 'x', source_file: 'x.py', confidence: 'EXTRACTED' },
+        { id: 'x.py::foo', kind: 'component', label: 'foo', source_file: 'x.py', confidence: 'EXTRACTED' },
+      ],
+      edges: [
+        { source: 'x.py', target: 'x.py::foo', relation: 'contains', confidence: 'EXTRACTED', weight: 1.0 },
+      ],
+    };
+    const graphJson = buildKnowledgeGraph({
+      extractionResults: [extraction],
+      unifiedGraph: {
+        nodes: [
+          { id: 'x.py', kind: 'module', label: 'x' },
+          { id: 'x.py::foo', kind: 'symbol', label: 'foo', filePath: 'x.py' },
+        ],
+        edges: [
+          { source: 'x.py', target: 'x.py::foo', relation: 'contains', confidence: 'high', directional: true },
+        ],
+      },
+    });
+    const pairs = graphJson.links
+      .filter((l) => l.relation === 'contains')
+      .map((l) => `${l.source}=>${l.target}`);
+    // 两路注入同一 contains 三元组 → 合并后仅一条
+    expect(pairs.filter((p) => p === 'x.py=>x.py::foo')).toHaveLength(1);
   });
 });

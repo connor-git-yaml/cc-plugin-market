@@ -383,6 +383,20 @@ describe('moduleFileFromId / findNode', () => {
     expect(findNode(graph, 'fixture/engine.py::Value')?.label).toBe('Value');
     expect(findNode(graph, 'nonexistent')).toBeNull();
   });
+
+  // Feature 214 T012 / R-6 — query-helpers 处于 fuzzy 层，须保留 `#` 旧图/api 双格式降级兼容，
+  // 不随 FR-006 收敛为 `::`-only（收敛只作用于三处 `::`-only 硬护栏）。
+  it('T012 主路径：canonical `::` symbol id → 正确提取 file 段', () => {
+    expect(moduleFileFromId('src/svc.ts::AuthService.login')).toBe('src/svc.ts');
+    expect(moduleFileFromId('m.py::Model.forward')).toBe('m.py');
+  });
+
+  it('T012 降级分支（R-6）：legacy `#` symbol id 仍被 fuzzy 层识别，取最早分隔符切分', () => {
+    // 旧 panoramic 格式 <file>#<symbol> 不被误当作整体 file 段（fuzzy best-effort 兜底）
+    expect(moduleFileFromId('old/ui.py#Widget')).toBe('old/ui.py');
+    // `::` 与 `#` 并存时取最早出现者
+    expect(moduleFileFromId('a.py::Foo#bar')).toBe('a.py');
+  });
 });
 
 // ============================================================

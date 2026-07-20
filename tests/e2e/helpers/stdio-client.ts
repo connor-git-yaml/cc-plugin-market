@@ -12,6 +12,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { relativizeSymbolId } from '../../../src/knowledge-graph/relativize.js';
+import { isLegacySymbolNode } from '../../../src/panoramic/graph/graph-query.js';
+import type { GraphNode } from '../../../src/panoramic/graph/graph-types.js';
 
 // ── 路径常量（所有测试文件复用这些值）──
 export const PROJECT_ROOT = resolve('.');
@@ -39,19 +41,37 @@ export const MICROGRAD_SOURCE = join(homedir(), '.spectra-baselines', 'micrograd
  *   随 git 提交，理论上恒存在；缺失只可能是检出不完整（浅 clone/稀疏检出漏了 tests/fixtures/）
  *   或提交遗漏，不应被 skip 机制掩盖成"环境未就绪"的静默跳过
  */
-export function installRelativizedBaseline(destGraphPath: string, base: string = MICROGRAD_SOURCE): void {
-  if (!existsSync(BASELINE_GRAPH)) {
+export function installRelativizedBaseline(
+  destGraphPath: string,
+  base: string = MICROGRAD_SOURCE,
+  srcGraphPath: string = BASELINE_GRAPH,
+): void {
+  // F215：pinned fixture 随 git 提交恒存在，缺失=检出/提交问题，抛错不 skip（对默认
+  // BASELINE_GRAPH 与 F214 注入的自定义 srcGraphPath 同样适用）
+  if (!existsSync(srcGraphPath)) {
     throw new Error(
-      `pinned fixture 缺失: ${BASELINE_GRAPH} —— 该文件应随 git 提交恒存在，` +
+      `pinned fixture 缺失: ${srcGraphPath} —— 该文件应随 git 提交恒存在，` +
       `缺失说明检出不完整或漏提交，非"baseline 未采集"的可 skip 场景。` +
       `参见 tests/fixtures/micrograd-baseline-graph/README.md 的再生步骤重新生成。`,
     );
   }
-  const raw = JSON.parse(readFileSync(BASELINE_GRAPH, 'utf-8')) as {
-    nodes: Array<{ id: string; metadata?: Record<string, unknown> }>;
+  const raw = JSON.parse(readFileSync(srcGraphPath, 'utf-8')) as {
+    nodes: Array<{ id: string; kind?: string; label?: string; metadata?: Record<string, unknown> }>;
     links: Array<{ source: string; target: string }>;
     [k: string]: unknown;
   };
+  // Feature 214 W3 fail-fast：源 fixture 若含 legacy `#` symbol 节点（旧 baseline 未重采集），
+  // 立即抛错并给 recollect 指引，避免旧格式静默污染 e2e（复用 isLegacySymbolNode 正向判定）。
+  const legacy = raw.nodes.find((n) =>
+    isLegacySymbolNode({ id: n.id, kind: (n.kind ?? 'module'), label: n.label ?? n.id, metadata: n.metadata } as GraphNode),
+  );
+  if (legacy) {
+    throw new Error(
+      `installRelativizedBaseline: 源 baseline fixture 含 legacy \`#\` symbol 节点（${legacy.id}），` +
+        `\n该图由旧版本 Spectra 采集（Python symbol 用 \`#\` 而非 canonical \`::\`）。` +
+        `\n请重跑 \`npm run baseline:collect -- --target karpathy/micrograd --mode full\` 重生成 baseline 后再运行 e2e。`,
+    );
+  }
   for (const n of raw.nodes) {
     const r = relativizeSymbolId(n.id, base);
     n.id = r.value;

@@ -17,6 +17,7 @@ import {
   UNIFIED_GRAPH_SCHEMA_VERSION,
   UnifiedGraphSchema,
 } from '../../../src/knowledge-graph/index.js';
+import { buildKnowledgeGraph } from '../../../src/panoramic/graph/graph-builder.js';
 import type { CodeSkeleton } from '../../../src/models/code-skeleton.js';
 
 function mkSk(opts: Partial<CodeSkeleton> & { filePath: string }): CodeSkeleton {
@@ -201,6 +202,132 @@ describe('buildUnifiedGraph (FR-3)', () => {
     expect(graph.nodes).toEqual([]);
     expect(graph.edges).toEqual([]);
     expect(() => UnifiedGraphSchema.parse(graph)).not.toThrow();
+  });
+});
+
+describe('Feature 214 — contains 边并入 buildUnifiedGraph + B→C 字段级合同 (FR-005, FR-001, SC-003)', () => {
+  function classSkeletons(): Map<string, CodeSkeleton> {
+    return new Map<string, CodeSkeleton>([
+      [
+        'svc.ts',
+        mkSk({
+          filePath: 'svc.ts',
+          language: 'typescript',
+          parserUsed: 'ts-morph',
+          exports: [
+            {
+              name: 'AuthService',
+              kind: 'class',
+              signature: 'class AuthService',
+              isDefault: false,
+              startLine: 1,
+              endLine: 20,
+              members: [
+                { name: 'login', kind: 'method', signature: 'login()', isStatic: false },
+                { name: 'logout', kind: 'method', signature: 'logout()', isStatic: false },
+              ],
+            },
+          ],
+        }),
+      ],
+    ]);
+  }
+
+  it('buildUnifiedGraph 输出 edges 含 contains（module→class 与 class→member 两级）', () => {
+    const graph = buildUnifiedGraph({ projectRoot: '/repo', codeSkeletons: classSkeletons() });
+    const containsPairs = graph.edges
+      .filter((e) => e.relation === 'contains')
+      .map((e) => `${e.source}=>${e.target}`);
+    expect(containsPairs).toContain('svc.ts=>svc.ts::AuthService');
+    expect(containsPairs).toContain('svc.ts::AuthService=>svc.ts::AuthService.login');
+    expect(containsPairs).toContain('svc.ts::AuthService=>svc.ts::AuthService.logout');
+    // contains 边 directional=true（unified-graph 合同）
+    for (const e of graph.edges.filter((x) => x.relation === 'contains')) {
+      expect(e.directional).toBe(true);
+    }
+  });
+
+  it('B→C 字段级合同：真实 buildKnowledgeGraph 第五路（symbol→component / directional / filePath→sourcePath / language 丢弃）', () => {
+    const unified = buildUnifiedGraph({ projectRoot: '/repo', codeSkeletons: classSkeletons() });
+    const gj = buildKnowledgeGraph({ unifiedGraph: unified });
+
+    // kind 映射：symbol → component；unifiedKind 存 metadata
+    const clsNode = gj.nodes.find((n) => n.id === 'svc.ts::AuthService');
+    expect(clsNode).toBeDefined();
+    expect(clsNode!.kind).toBe('component');
+    expect(clsNode!.metadata?.unifiedKind).toBe('symbol');
+    // filePath 保留 → metadata.sourcePath
+    expect(clsNode!.metadata?.sourcePath).toBe('svc.ts');
+    // language 丢弃（不进 GraphNode 顶层）
+    expect((clsNode as Record<string, unknown>).language).toBeUndefined();
+
+    // contains 边保留 + directional + confidence 映射（high→EXTRACTED）
+    const containsLink = gj.links.find(
+      (l) => l.source === 'svc.ts::AuthService' && l.target === 'svc.ts::AuthService.login' && l.relation === 'contains',
+    );
+    expect(containsLink).toBeDefined();
+    expect(containsLink!.directional).toBe(true);
+    expect(containsLink!.confidence).toBe('EXTRACTED');
+    expect(typeof containsLink!.confidenceScore).toBe('number');
+  });
+
+  it('W-6：preBuiltNodes 路径下 contains 边过滤悬空端点（非空 exports 但节点未注入 symbol）', () => {
+    // skeleton 有 class + member（deriveContainsEdges 会产出 module→class / class→member），
+    // 但 preBuiltNodes 只注入 module 节点 → contains 边的 symbol/member 端点不存在 → 应被过滤，无悬空边。
+    const skeletons = new Map<string, CodeSkeleton>([
+      [
+        'svc.ts',
+        mkSk({
+          filePath: 'svc.ts',
+          language: 'typescript',
+          exports: [
+            {
+              name: 'AuthService', kind: 'class', signature: 'class AuthService', isDefault: false, startLine: 1, endLine: 20,
+              members: [{ name: 'login', kind: 'method', signature: 'login()', isStatic: false }],
+            },
+          ],
+        }),
+      ],
+    ]);
+    const graph = buildUnifiedGraph({
+      projectRoot: '.',
+      codeSkeletons: skeletons,
+      preBuiltNodes: [{ id: 'svc.ts', label: 'svc.ts', kind: 'module' }], // 只注入 module，不含 symbol/member
+    });
+    const nodeIds = new Set(graph.nodes.map((n) => n.id));
+    // 无悬空边：所有边端点都在节点集合中
+    for (const e of graph.edges) {
+      expect(nodeIds.has(e.source), `dangling source ${e.source}`).toBe(true);
+      expect(nodeIds.has(e.target), `dangling target ${e.target}`).toBe(true);
+    }
+    // symbol/member 端点未注入 → 对应 contains 边被过滤
+    expect(graph.edges.some((e) => e.relation === 'contains')).toBe(false);
+  });
+
+  it('B→C evidence 有损映射：evidence 截断至 200 字符（evidenceText）', () => {
+    const longEvidence = 'x'.repeat(500);
+    const gj = buildKnowledgeGraph({
+      unifiedGraph: {
+        nodes: [
+          { id: 'a.ts', kind: 'module', label: 'a' },
+          { id: 'a.ts::Foo', kind: 'symbol', label: 'Foo', filePath: 'a.ts' },
+        ],
+        edges: [
+          {
+            source: 'a.ts',
+            target: 'a.ts::Foo',
+            relation: 'contains',
+            confidence: 'high',
+            directional: true,
+            evidence: longEvidence,
+          },
+        ],
+      },
+    });
+    const link = gj.links.find((l) => l.relation === 'contains');
+    expect(link).toBeDefined();
+    expect(link!.evidenceText).toBeDefined();
+    expect(link!.evidenceText!.length).toBe(200);
   });
 });
 

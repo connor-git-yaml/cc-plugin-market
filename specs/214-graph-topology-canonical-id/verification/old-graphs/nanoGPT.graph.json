@@ -1,0 +1,1168 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 81,
+    "edgeCount": 37,
+    "sources": [
+      "extraction",
+      "unified-graph"
+    ],
+    "skippedSources": [
+      {
+        "source": "doc-graph",
+        "reason": "未提供 DocGraph 数据源"
+      },
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      },
+      {
+        "source": "cross-reference",
+        "reason": "未提供 CrossReferenceLinks 数据源或为空数组"
+      }
+    ],
+    "schemaVersion": "2.0"
+  },
+  "nodes": [
+    {
+      "id": "bench.py",
+      "kind": "module",
+      "label": "bench",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "bench.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 73
+      }
+    },
+    {
+      "id": "config/eval_gpt2_large.py",
+      "kind": "module",
+      "label": "eval_gpt2_large",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_large.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "config/eval_gpt2_medium.py",
+      "kind": "module",
+      "label": "eval_gpt2_medium",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_medium.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "config/eval_gpt2_xl.py",
+      "kind": "module",
+      "label": "eval_gpt2_xl",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2_xl.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "config/eval_gpt2.py",
+      "kind": "module",
+      "label": "eval_gpt2",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/eval_gpt2.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "config/finetune_shakespeare.py",
+      "kind": "module",
+      "label": "finetune_shakespeare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/finetune_shakespeare.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 3
+      }
+    },
+    {
+      "id": "config/train_gpt2.py",
+      "kind": "module",
+      "label": "train_gpt2",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/train_gpt2.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 1
+      }
+    },
+    {
+      "id": "config/train_shakespeare_char.py",
+      "kind": "module",
+      "label": "train_shakespeare_char",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "config/train_shakespeare_char.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "configurator.py",
+      "kind": "module",
+      "label": "configurator",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "configurator.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 14
+      }
+    },
+    {
+      "id": "data/openwebtext/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/openwebtext/prepare.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 21
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 43
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py::decode",
+      "kind": "component",
+      "label": "decode",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "data/shakespeare_char/prepare.py"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py::encode",
+      "kind": "component",
+      "label": "encode",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "data/shakespeare_char/prepare.py"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py#decode",
+      "kind": "component",
+      "label": "decode",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def decode(l)",
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare_char/prepare.py#encode",
+      "kind": "component",
+      "label": "encode",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def encode(s)",
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare_char/prepare.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "data/shakespeare/prepare.py",
+      "kind": "module",
+      "label": "prepare",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "data/shakespeare/prepare.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 28
+      }
+    },
+    {
+      "id": "model.py",
+      "kind": "module",
+      "label": "model",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 208
+      }
+    },
+    {
+      "id": "model.py::Block",
+      "kind": "component",
+      "label": "Block",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.__init__",
+      "kind": "component",
+      "label": "Block.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.attn",
+      "kind": "component",
+      "label": "Block.attn",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.forward",
+      "kind": "component",
+      "label": "Block.forward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.ln_1",
+      "kind": "component",
+      "label": "Block.ln_1",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.ln_2",
+      "kind": "component",
+      "label": "Block.ln_2",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::Block.mlp",
+      "kind": "component",
+      "label": "Block.mlp",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention",
+      "kind": "component",
+      "label": "CausalSelfAttention",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.__init__",
+      "kind": "component",
+      "label": "CausalSelfAttention.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.attn_dropout",
+      "kind": "component",
+      "label": "CausalSelfAttention.attn_dropout",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.c_attn",
+      "kind": "component",
+      "label": "CausalSelfAttention.c_attn",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.c_proj",
+      "kind": "component",
+      "label": "CausalSelfAttention.c_proj",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.dropout",
+      "kind": "component",
+      "label": "CausalSelfAttention.dropout",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.flash",
+      "kind": "component",
+      "label": "CausalSelfAttention.flash",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.forward",
+      "kind": "component",
+      "label": "CausalSelfAttention.forward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.n_embd",
+      "kind": "component",
+      "label": "CausalSelfAttention.n_embd",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.n_head",
+      "kind": "component",
+      "label": "CausalSelfAttention.n_head",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::CausalSelfAttention.resid_dropout",
+      "kind": "component",
+      "label": "CausalSelfAttention.resid_dropout",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT",
+      "kind": "component",
+      "label": "GPT",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.__init__",
+      "kind": "component",
+      "label": "GPT.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.config",
+      "kind": "component",
+      "label": "GPT.config",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.configure_optimizers",
+      "kind": "component",
+      "label": "GPT.configure_optimizers",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.crop_block_size",
+      "kind": "component",
+      "label": "GPT.crop_block_size",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.estimate_mfu",
+      "kind": "component",
+      "label": "GPT.estimate_mfu",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.forward",
+      "kind": "component",
+      "label": "GPT.forward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.from_pretrained",
+      "kind": "component",
+      "label": "GPT.from_pretrained",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.generate",
+      "kind": "component",
+      "label": "GPT.generate",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.get_num_params",
+      "kind": "component",
+      "label": "GPT.get_num_params",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.lm_head",
+      "kind": "component",
+      "label": "GPT.lm_head",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPT.transformer",
+      "kind": "component",
+      "label": "GPT.transformer",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig",
+      "kind": "component",
+      "label": "GPTConfig",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.bias",
+      "kind": "component",
+      "label": "GPTConfig.bias",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.block_size",
+      "kind": "component",
+      "label": "GPTConfig.block_size",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.dropout",
+      "kind": "component",
+      "label": "GPTConfig.dropout",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.n_embd",
+      "kind": "component",
+      "label": "GPTConfig.n_embd",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.n_head",
+      "kind": "component",
+      "label": "GPTConfig.n_head",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.n_layer",
+      "kind": "component",
+      "label": "GPTConfig.n_layer",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::GPTConfig.vocab_size",
+      "kind": "component",
+      "label": "GPTConfig.vocab_size",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::LayerNorm",
+      "kind": "component",
+      "label": "LayerNorm",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::LayerNorm.__init__",
+      "kind": "component",
+      "label": "LayerNorm.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::LayerNorm.bias",
+      "kind": "component",
+      "label": "LayerNorm.bias",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::LayerNorm.forward",
+      "kind": "component",
+      "label": "LayerNorm.forward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::LayerNorm.weight",
+      "kind": "component",
+      "label": "LayerNorm.weight",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP",
+      "kind": "component",
+      "label": "MLP",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.__init__",
+      "kind": "component",
+      "label": "MLP.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.c_fc",
+      "kind": "component",
+      "label": "MLP.c_fc",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.c_proj",
+      "kind": "component",
+      "label": "MLP.c_proj",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.dropout",
+      "kind": "component",
+      "label": "MLP.dropout",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.forward",
+      "kind": "component",
+      "label": "MLP.forward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py::MLP.gelu",
+      "kind": "component",
+      "label": "MLP.gelu",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "model.py"
+      }
+    },
+    {
+      "id": "model.py#Block",
+      "kind": "component",
+      "label": "Block",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Block(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#CausalSelfAttention",
+      "kind": "component",
+      "label": "CausalSelfAttention",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class CausalSelfAttention(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#GPT",
+      "kind": "component",
+      "label": "GPT",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class GPT(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#GPTConfig",
+      "kind": "component",
+      "label": "GPTConfig",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class GPTConfig",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#LayerNorm",
+      "kind": "component",
+      "label": "LayerNorm",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class LayerNorm(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "model.py#MLP",
+      "kind": "component",
+      "label": "MLP",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class MLP(nn.Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "model.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "sample.py",
+      "kind": "module",
+      "label": "sample",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "sample.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 45
+      }
+    },
+    {
+      "id": "train.py",
+      "kind": "module",
+      "label": "train",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED",
+        "callSitesCount": 150
+      }
+    },
+    {
+      "id": "train.py::estimate_loss",
+      "kind": "component",
+      "label": "estimate_loss",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "train.py"
+      }
+    },
+    {
+      "id": "train.py::get_batch",
+      "kind": "component",
+      "label": "get_batch",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "train.py"
+      }
+    },
+    {
+      "id": "train.py::get_lr",
+      "kind": "component",
+      "label": "get_lr",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "train.py"
+      }
+    },
+    {
+      "id": "train.py#estimate_loss",
+      "kind": "component",
+      "label": "estimate_loss",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def estimate_loss()",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py#get_batch",
+      "kind": "component",
+      "label": "get_batch",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def get_batch(split)",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    },
+    {
+      "id": "train.py#get_lr",
+      "kind": "component",
+      "label": "get_lr",
+      "metadata": {
+        "symbolKind": "function",
+        "signature": "def get_lr(it)",
+        "sourceTag": "extraction",
+        "sourceFile": "train.py",
+        "confidence": "EXTRACTED"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "bench.py",
+      "target": "model.py",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "model"
+    },
+    {
+      "source": "data/shakespeare_char/prepare.py",
+      "target": "data/shakespeare_char/prepare.py#decode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "data/shakespeare_char/prepare.py",
+      "target": "data/shakespeare_char/prepare.py#encode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py::Block.__init__",
+      "target": "model.py::CausalSelfAttention",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.__init__",
+      "target": "model.py::LayerNorm",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.__init__",
+      "target": "model.py::MLP",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.forward",
+      "target": "model.py::Block.attn",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.forward",
+      "target": "model.py::Block.ln_1",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.forward",
+      "target": "model.py::Block.ln_2",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::Block.forward",
+      "target": "model.py::Block.mlp",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::CausalSelfAttention.forward",
+      "target": "model.py::CausalSelfAttention.attn_dropout",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::CausalSelfAttention.forward",
+      "target": "model.py::CausalSelfAttention.c_attn",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::CausalSelfAttention.forward",
+      "target": "model.py::CausalSelfAttention.c_proj",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::CausalSelfAttention.forward",
+      "target": "model.py::CausalSelfAttention.resid_dropout",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.__init__",
+      "target": "model.py::Block",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.__init__",
+      "target": "model.py::GPT.get_num_params",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.__init__",
+      "target": "model.py::LayerNorm",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.estimate_mfu",
+      "target": "model.py::GPT.get_num_params",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.forward",
+      "target": "model.py::GPT.lm_head",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.from_pretrained",
+      "target": "model.py::GPT",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::GPT.from_pretrained",
+      "target": "model.py::GPTConfig",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::MLP.forward",
+      "target": "model.py::MLP.c_fc",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::MLP.forward",
+      "target": "model.py::MLP.c_proj",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::MLP.forward",
+      "target": "model.py::MLP.dropout",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py::MLP.forward",
+      "target": "model.py::MLP.gelu",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#Block",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#CausalSelfAttention",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#GPTConfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#GPT",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#LayerNorm",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "model.py",
+      "target": "model.py#MLP",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "sample.py",
+      "target": "model.py",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "model"
+    },
+    {
+      "source": "train.py::estimate_loss",
+      "target": "train.py::get_batch",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "train.py",
+      "target": "model.py",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "model"
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#estimate_loss",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#get_batch",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    },
+    {
+      "source": "train.py",
+      "target": "train.py#get_lr",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95
+    }
+  ]
+}

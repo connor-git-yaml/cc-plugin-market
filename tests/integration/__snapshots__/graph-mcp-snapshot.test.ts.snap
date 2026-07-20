@@ -54,7 +54,7 @@ exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1
 {
   "nodes": [
     {
-      "degree": 3,
+      "degree": 2,
       "id": "src/foo.ts::greet",
       "kind": "function",
       "label": "greet",
@@ -65,7 +65,7 @@ exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1
       "sourceFile": "src/foo.ts",
     },
     {
-      "degree": 2,
+      "degree": 1,
       "id": "src/foo.ts",
       "kind": "file",
       "label": "foo.ts",
@@ -76,7 +76,7 @@ exports[`graph MCP tools snapshot — Layer A (calls-filtered engine, 必须 1:1
       "sourceFile": "src/foo.ts",
     },
     {
-      "degree": 2,
+      "degree": 1,
       "id": "src/bar.ts",
       "kind": "file",
       "label": "bar.ts",
@@ -227,7 +227,7 @@ exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > gr
 {
   "nodes": [
     {
-      "degree": 4,
+      "degree": 3,
       "id": "src/foo.ts::greet",
       "kind": "function",
       "label": "greet",
@@ -238,7 +238,7 @@ exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > gr
       "sourceFile": "src/foo.ts",
     },
     {
-      "degree": 2,
+      "degree": 1,
       "id": "src/foo.ts",
       "kind": "file",
       "label": "foo.ts",
@@ -249,7 +249,7 @@ exports[`graph MCP tools snapshot — Layer B (calls-enabled, 首版基线) > gr
       "sourceFile": "src/foo.ts",
     },
     {
-      "degree": 2,
+      "degree": 1,
       "id": "src/bar.ts",
       "kind": "file",
       "label": "bar.ts",

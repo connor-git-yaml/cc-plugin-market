@@ -259,6 +259,80 @@ describe('S-4：isCircular 派生（A→B→A SCC 反查）', () => {
 });
 
 // ───────────────────────────────────────────────────────────
+// Feature 214 T014 — contains 边不污染 B→A 派生视图 + B→A 字段级合同（核实项④, SC-003）
+// ───────────────────────────────────────────────────────────
+
+describe('Feature 214 — deriveModuleGraph 对 contains 边/symbol 节点的 B→A 投影合同', () => {
+  it('输入含 contains 边 + symbol/member 节点时，module 依赖/SCC/拓扑与不含时完全一致', () => {
+    // baseline：仅 module + depends-on
+    const baseline = makeUnifiedGraph({
+      moduleIds: ['a.ts', 'b.ts', 'c.ts'],
+      edges: [
+        { source: 'a.ts', target: 'b.ts' },
+        { source: 'b.ts', target: 'c.ts' },
+      ],
+    });
+    // enriched：叠加 symbol/member 节点 + contains 边 + calls 边（Feature 214 新增数据）
+    const enriched: UnifiedGraph = {
+      nodes: [
+        ...baseline.nodes,
+        { id: 'a.ts::Foo', label: 'Foo', kind: 'symbol', language: 'typescript', filePath: 'a.ts' },
+        { id: 'a.ts::Foo.bar', label: 'Foo.bar', kind: 'symbol', language: 'typescript', filePath: 'a.ts' },
+      ],
+      edges: [
+        ...baseline.edges,
+        { source: 'a.ts', target: 'a.ts::Foo', relation: 'contains', confidence: 'high', directional: true },
+        { source: 'a.ts::Foo', target: 'a.ts::Foo.bar', relation: 'contains', confidence: 'high', directional: true },
+        { source: 'a.ts::Foo.bar', target: 'b.ts::Baz', relation: 'calls', confidence: 'medium', directional: true },
+      ],
+      metadata: baseline.metadata,
+    };
+
+    const base = deriveModuleGraph(baseline, '/proj');
+    const enr = deriveModuleGraph(enriched, '/proj');
+
+    // module 集合一致（symbol/member 节点被丢弃）
+    expect(new Set(enr.modules.map((m) => m.source))).toEqual(new Set(base.modules.map((m) => m.source)));
+    expect(enr.modules).toHaveLength(3);
+    // depends-on 边一致（contains/calls 边被丢弃，不进 ModuleEdge）
+    expect(enr.edges.map((e) => `${e.from}->${e.to}`).sort()).toEqual(
+      base.edges.map((e) => `${e.from}->${e.to}`).sort(),
+    );
+    // 拓扑序 / SCC 一致
+    expect(enr.topologicalOrder).toEqual(base.topologicalOrder);
+    expect(enr.sccs.length).toBe(base.sccs.length);
+    // 度数一致（contains 不膨胀 module 度数）
+    const enrA = enr.modules.find((m) => m.source === 'a.ts')!;
+    const baseA = base.modules.find((m) => m.source === 'a.ts')!;
+    expect(enrA.outDegree).toBe(baseA.outDegree);
+    expect(enrA.inDegree).toBe(baseA.inDegree);
+  });
+
+  it('B→A importType 映射保留（metadata.importType → ModuleEdge.importType）', () => {
+    const unified: UnifiedGraph = {
+      nodes: [
+        { id: 'a.ts', label: 'a.ts', kind: 'module', filePath: 'a.ts' },
+        { id: 'b.ts', label: 'b.ts', kind: 'module', filePath: 'b.ts' },
+        { id: 'a.ts::Foo', label: 'Foo', kind: 'symbol', filePath: 'a.ts' },
+      ],
+      edges: [
+        {
+          source: 'a.ts', target: 'b.ts', relation: 'depends-on',
+          confidence: 'high', directional: true, evidence: './b',
+          metadata: { importType: 'type-only' },
+        },
+        { source: 'a.ts', target: 'a.ts::Foo', relation: 'contains', confidence: 'high', directional: true },
+      ],
+      metadata: { generatedAt: '2026-07-20T10:00:00.000Z', projectRoot: '/proj', schemaVersion: UNIFIED_GRAPH_SCHEMA_VERSION },
+    };
+    const result = deriveModuleGraph(unified, '/proj');
+    // 唯一 ModuleEdge 来自 depends-on，importType 映射保留；contains 被丢弃
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0]!.importType).toBe('type-only');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
 // FR-31 合规：不调用 getCurrentUnifiedGraph
 // ───────────────────────────────────────────────────────────
 
