@@ -94,3 +94,6 @@
 [verify:post-rebase] build=0 / repo:check=0 / release:check=0 / 全量vitest: 433 files passed, 5180 passed 0 failed — SC-004完全闭合(F215解耦消除8失败簇), 无需豁免
 [T022] PARTIAL→完成 (post-rebase证据)
 [GATE_VERIFY] PAUSE | 7字段report交用户等待push确认
+[rebase-2] master又前移7 commit(F214 B1轨道: contains边+#/::收敛 ship) | rebase 10 commit零冲突(src.spec.md再生噪声已还原)
+[verify:post-rebase-2] build=0 / repo:check=0 / release:check=0 / 全量vitest 5240 passed 0 failed(含F214新增测试) | A1∥B1同日先后ship, 本feature为后交付方已按纪律双重rebase+重验
+[GATE_VERIFY] PAUSE | 最终7字段report交用户等待push确认
