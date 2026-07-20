@@ -1,4 +1,6 @@
 {"type":"user","message":{"role":"user","content":"Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复登录超时问题"}}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Write","input":{"file_path":"specs/301-fix-sample-bug/fix-report.md","content":"# 问题核实报告（无需改动）"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Write","input":{"file_path":"specs/301-fix-sample-bug/fix-report.md","content":"# 问题核实报告（无需改动）\n\n## 判定依据\n经复现确认历史 commit 已修复登录超时问题，当前代码路径无缺陷，无需改动。\n\n### 复现对账\n- {\"claim\":\"症状消除\",\"command\":\"bash m.sh\",\"expected\":\"PASS\"}\n"}}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_cnoop","name":"Bash","input":{"command":"bash m.sh"}}]}}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_cnoop","type":"tool_result","content":"checks pass\nSPEC-DRIVER-REPRO: PASS","is_error":false}]}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"spec-driver:verify","description":"交叉核实无需改动判定"}}]}}
 {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"诊断结论：无需代码改动，已交叉核实。"}]}}

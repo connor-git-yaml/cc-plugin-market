@@ -81,6 +81,62 @@ function runCli({ mode = 'hook', transcriptPath, sessionId = 's1', projectRoot =
 }
 
 // ────────────────────────────────────────
+// F216 · fixture 铺盘辅助（judge-cli 端到端）：fixture 文件直接作 transcript_path，
+// 把 Write 内嵌的 fix-report.md（及所需 verification-report.md）铺到 projectRoot 磁盘，
+// 因为 judge 的 fix-report/verification-report 判据走磁盘核验（readArtifactFile）而非 transcript 内容。
+// ────────────────────────────────────────
+
+const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
+const VERIFICATION_DOC = '# 验证报告\n\n所有单测通过，回归零失败。\n';
+const REPAIR_FIX_REPORT = '# 修复报告\n\n**Root Cause**: 会话超时阈值配置错误导致提前登出，已定位到 config 常量并修正。\n';
+
+/** 从 fixture 的 Write fix-report.md 抽取 input.content（与 core 测试 loadFixReport 同源逻辑） */
+function extractFixReportContent(fixtureName) {
+  const raw = fs.readFileSync(path.join(FIXTURE_DIR, fixtureName), 'utf8');
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let obj;
+    try { obj = JSON.parse(line); } catch { continue; }
+    const content = obj && obj.message && obj.message.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (b && b.type === 'tool_use' && b.name === 'Write'
+        && b.input && typeof b.input.file_path === 'string' && b.input.file_path.endsWith('fix-report.md')
+        && typeof b.input.content === 'string') return b.input.content;
+    }
+  }
+  return null;
+}
+
+/**
+ * 铺 fixture 所需磁盘制品到 projectRoot，返回 fixture 绝对路径（作 transcript_path）。
+ * fixReportContent 缺省时从 fixture Write 内嵌抽取；verification 非 null 时铺 verification-report.md。
+ * @param {string} fixtureName
+ * @param {{ fixReportContent?:string|null, verification?:string|null }} [opts]
+ */
+function stageFixture(fixtureName, { fixReportContent, verification } = {}) {
+  const dir = path.join(tmp, FEATURE_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const content = fixReportContent !== undefined ? fixReportContent : extractFixReportContent(fixtureName);
+  if (content != null) fs.writeFileSync(path.join(dir, 'fix-report.md'), content, 'utf8');
+  if (verification != null) {
+    fs.mkdirSync(path.join(dir, 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'verification', 'verification-report.md'), verification, 'utf8');
+  }
+  return path.join(FIXTURE_DIR, fixtureName);
+}
+
+/** 直接预置 blockState（W7 精确窗口：模拟旧合同缺口已产生的阻断计数） */
+function preinstallBlockState(sessionId, state) {
+  const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown-session';
+  const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
+  fs.mkdirSync(stateDir, { recursive: true });
+  const file = path.join(stateDir, `${safe}.json`);
+  fs.writeFileSync(file, `${JSON.stringify({ sessionId: safe, ...state })}\n`, 'utf8');
+  return file;
+}
+
+// ────────────────────────────────────────
 // 退出码矩阵（contracts/fix-compliance-judge-cli.md）
 // ────────────────────────────────────────
 
@@ -432,5 +488,225 @@ describe('codex W-2：fail-open 事件合并配置层诊断', () => {
     assert.ok(events[0].diagnostics.includes('transcript-unavailable'), JSON.stringify(events[0].diagnostics));
     assert.ok(events[0].diagnostics.includes('config-degraded'), JSON.stringify(events[0].diagnostics));
     assert.equal(events[0].enforcement, 'block');
+  });
+});
+
+// ────────────────────────────────────────
+// F216 T017：judge-cli 端到端 no-op 复现证据门（SC-001/SC-002/FR-011/FR-018/EC-003/EC-007 + report 模式）
+// 红：evaluate() 尚未透传 ExecutionRecord → 合法 no-op 被误判 command-mismatch（绿用例转 exit 2）
+// ────────────────────────────────────────
+
+describe('F216 T017 judge-cli 端到端：no-op 复现证据门', () => {
+  it('F216 T017 noop-unverified-citation → block exit 2 + 要求产出 repro 的 next-step（SC-001）', () => {
+    const t = stageFixture('noop-unverified-citation.jsonl');
+    const r = runCli({ transcriptPath: t, sessionId: 'sc001' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.ok(r.stderr.startsWith('[FIX-COMPLIANCE] '), r.stderr);
+    assert.ok(r.stderr.includes('SPEC-DRIVER-REPRO'), '反馈含 sentinel 断言骨架 next-step');
+    assert.ok(r.stderr.includes('printf'), '反馈含 printf 断言骨架');
+  });
+
+  it('F216 T017 compliant-noop-with-repro → 合规放行 exit 0（SC-002）', () => {
+    const t = stageFixture('compliant-noop-with-repro.jsonl');
+    const r = runCli({ transcriptPath: t, sessionId: 'sc002' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('F216 T017 升级后 compliant-noop.jsonl → 合规放行 exit 0（回归护栏不误伤）', () => {
+    const t = stageFixture('compliant-noop.jsonl');
+    const r = runCli({ transcriptPath: t, sessionId: 'cnoop' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('F216 T017 compliant-full.jsonl（真修复路径）→ 证据门零介入、继续绿（FR-007）', () => {
+    const t = stageFixture('compliant-full.jsonl', { fixReportContent: REPAIR_FIX_REPORT, verification: VERIFICATION_DOC });
+    const r = runCli({ transcriptPath: t, sessionId: 'cfull' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('F216 T017 legacy-noop-without-repro → block exit 2 + noop:repro-fields（FR-011）', () => {
+    const t = stageFixture('legacy-noop-without-repro.jsonl');
+    const r = runCli({ transcriptPath: t, sessionId: 'legnoop' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.ok(r.stderr.includes(MISSING_ACTION_TEXT['noop:repro-fields']), r.stderr);
+  });
+
+  it('F216 T017 legacy-repair-no-noop-anchor → 证据门零介入、绿（FR-007/W8）', () => {
+    const t = stageFixture('legacy-repair-no-noop-anchor.jsonl', { verification: VERIFICATION_DOC });
+    const r = runCli({ transcriptPath: t, sessionId: 'legrepair' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('F216 T017 双锚点 missing-repair：report missing 含 repair 键、无 repro 键（FR-018）', () => {
+    const t = stageFixture('noop-dual-anchor-missing-repair.jsonl');
+    const r = runCli({ mode: 'report', transcriptPath: t });
+    assert.equal(r.status, 0);
+    const v = JSON.parse(r.stdout);
+    assert.equal(v.compliant, false);
+    assert.ok(v.missing.includes('verification-report.md'), JSON.stringify(v.missing));
+    assert.ok(v.missing.includes('delegation:implement'));
+    assert.ok(v.missing.includes('delegation:verify'));
+    assert.ok(!v.missing.some((k) => k.startsWith('noop:repro-')), 'repro 满足不应有 repro 键');
+  });
+
+  it('F216 T017 双锚点 missing-repro：report missing 含 repro 键、无 repair 键（FR-018）', () => {
+    const t = stageFixture('noop-dual-anchor-missing-repro.jsonl', { verification: VERIFICATION_DOC });
+    const r = runCli({ mode: 'report', transcriptPath: t });
+    assert.equal(r.status, 0);
+    const v = JSON.parse(r.stdout);
+    assert.equal(v.compliant, false);
+    assert.ok(v.missing.includes('noop:repro-command-mismatch'), JSON.stringify(v.missing));
+    assert.ok(!v.missing.includes('verification-report.md'), 'repair 满足不应缺 verification');
+    assert.ok(!v.missing.includes('delegation:implement'));
+  });
+
+  it('F216 T017 双锚点 both-satisfied → 合规放行 exit 0（FR-018）', () => {
+    const t = stageFixture('noop-dual-anchor-both-satisfied.jsonl', { verification: VERIFICATION_DOC });
+    const r = runCli({ transcriptPath: t, sessionId: 'dualboth' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('F216 T017 noop-non-bash-tool-execution → noop:repro-command-mismatch（EC-007）', () => {
+    const t = stageFixture('noop-non-bash-tool-execution.jsonl');
+    const r = runCli({ mode: 'report', transcriptPath: t });
+    const v = JSON.parse(r.stdout);
+    assert.ok(v.missing.includes('noop:repro-command-mismatch'), JSON.stringify(v.missing));
+  });
+
+  it('F216 T017 noop-no-repro-claims → noop:repro-fields（EC-003）', () => {
+    const t = stageFixture('noop-no-repro-claims.jsonl');
+    const r = runCli({ mode: 'report', transcriptPath: t });
+    const v = JSON.parse(r.stdout);
+    assert.ok(v.missing.includes('noop:repro-fields'), JSON.stringify(v.missing));
+  });
+
+  it('F216 T017 --mode report：exit 0 + 合法 JSON + compliant:false + 精确新键 + 零阻断计数写入', () => {
+    const t = stageFixture('noop-unverified-citation.jsonl');
+    const r = runCli({ mode: 'report', transcriptPath: t });
+    assert.equal(r.status, 0);
+    const v = JSON.parse(r.stdout); // 合法 JSON
+    assert.equal(v.compliant, false);
+    assert.ok(v.missing.includes('noop:repro-command-mismatch'), JSON.stringify(v.missing));
+    // report 只读判定：不触碰 blockState
+    assert.equal(fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state')), false, 'report 模式零阻断计数写入');
+  });
+});
+
+// ────────────────────────────────────────
+// F216 T018：SC-003a 阻断→补证据→放行序列闭环（US3 Acceptance Scenario 1）
+// ────────────────────────────────────────
+
+describe('F216 T018 SC-003a：阻断→补证据→放行序列闭环', () => {
+  it('F216 T018 无证据 no-op 阻断 exit 2 → 补齐复现证据 → 放行 exit 0 + F211 清零', () => {
+    const sid = 'sess-seq-1';
+    // 步骤 1：无证据 no-op（unverified-citation）→ block exit 2 + 要求产出 repro
+    const bad = stageFixture('noop-unverified-citation.jsonl');
+    const r1 = runCli({ transcriptPath: bad, sessionId: sid });
+    assert.equal(r1.status, 2, r1.stderr);
+    assert.ok(r1.stderr.includes('SPEC-DRIVER-REPRO'), '含要求产出 repro 的 next-step');
+    // 步骤 2：补充主 transcript 可见复现执行记录（覆盖磁盘 fix-report + 带真实 Bash 的 transcript）
+    const good = stageFixture('compliant-noop-with-repro.jsonl');
+    const r2 = runCli({ transcriptPath: good, sessionId: sid });
+    assert.equal(r2.status, 0, r2.stderr);
+    assert.equal(r2.stderr.trim(), '');
+    // F211 清零：合规收口后阻断状态文件被移除
+    const stateFile = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', `${sid}.json`);
+    assert.equal(fs.existsSync(stateFile), false, '合规后 blockState 应清零');
+    // 反证清零：再次无证据应从第 1 次重新计数（exit 2 而非直接降级）
+    const badAgain = stageFixture('noop-unverified-citation.jsonl');
+    assert.equal(runCli({ transcriptPath: badAgain, sessionId: sid }).status, 2, '清零后重新从第 1 次阻断');
+  });
+});
+
+// ────────────────────────────────────────
+// F216 T019：SC-004 档位切换矩阵 + W7 精确窗口
+// ────────────────────────────────────────
+
+describe('F216 T019 SC-004 档位切换矩阵 + W7 精确窗口', () => {
+  /** 读取指定 session 的 blockState.blockCount（不存在则返回 null，W2 精确断言用） */
+  function readBlockCount(sessionId, root = tmp) {
+    const safe = sessionId.replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown-session';
+    const file = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${safe}.json`);
+    if (!fs.existsSync(file)) return null;
+    return JSON.parse(fs.readFileSync(file, 'utf8')).blockCount;
+  }
+
+  it('F216 T019 W2 block→warn→block：同一 session 计数轨迹精确（warn 不 bump、切回续阻断至降级）', () => {
+    const sid = 'sw-same'; // 全程同一 session，真正走 blockState 计数轨迹
+    const t = stageFixture('noop-unverified-citation.jsonl');
+    // 步 1 block：首次阻断 exit 2，count 0→1
+    assert.equal(runCli({ transcriptPath: t, sessionId: sid }).status, 2);
+    assert.equal(readBlockCount(sid), 1, 'block 首次 → count=1');
+    // 步 2 切 warn：判定照跑（非合规仍 [WARN]）但不 bump、不 reset，count 保持 1
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    const rw = runCli({ transcriptPath: t, sessionId: sid });
+    assert.equal(rw.status, 0);
+    assert.ok(rw.stderr.startsWith('[FIX-COMPLIANCE][WARN] '), rw.stderr);
+    assert.equal(readBlockCount(sid), 1, 'warn 不 bump → count 仍为 1');
+    // 步 3 切回 block：第二次阻断 exit 2，count 1→2
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: block\n');
+    assert.equal(runCli({ transcriptPath: t, sessionId: sid }).status, 2);
+    assert.equal(readBlockCount(sid), 2, 'block 第二次 → count=2');
+    // 步 4 第三次 block：已达上限 → 降级放行 exit 0 [GATE-DEGRADED]
+    const r4 = runCli({ transcriptPath: t, sessionId: sid });
+    assert.equal(r4.status, 0, r4.stderr);
+    assert.ok(r4.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), r4.stderr);
+  });
+
+  it('F216 T019 W2 block→off→block：off 零接触不改计数，切回续阻断（同一 session 精确 count）', () => {
+    const sid = 'so-same';
+    const t = stageFixture('noop-unverified-citation.jsonl');
+    // 步 1 先真实执行首个 block：exit 2，count 0→1
+    assert.equal(runCli({ transcriptPath: t, sessionId: sid }).status, 2);
+    assert.equal(readBlockCount(sid), 1, 'block 首次 → count=1');
+    // 步 2 切 off：transcript 读取前零接触放行，不改 blockState（count 仍 1）
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: off\n');
+    const roff = runCli({ transcriptPath: t, sessionId: sid });
+    assert.equal(roff.status, 0);
+    assert.equal(roff.stderr.trim(), '');
+    assert.equal(readBlockCount(sid), 1, 'off 零接触 → count 保持 1（不清零、不 bump）');
+    // 步 3 切回 block：从 count=1 续阻断至 count=2，exit 2
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: block\n');
+    assert.equal(runCli({ transcriptPath: t, sessionId: sid }).status, 2);
+    assert.equal(readBlockCount(sid), 2, 'block 切回续阻断 → count=2');
+  });
+
+  it('F216 T019 warn 下合规清零旧计数', () => {
+    const sid = 'sw-clear';
+    preinstallBlockState(sid, { blockCount: 1, degradedRecorded: false });
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    const t = stageFixture('compliant-noop-with-repro.jsonl');
+    const r = runCli({ transcriptPath: t, sessionId: sid });
+    assert.equal(r.status, 0, r.stderr);
+    // 合规收口无条件 resetBlockState → 旧计数文件移除
+    assert.equal(fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', `${sid}.json`)), false, 'warn 合规应清零旧计数');
+  });
+
+  it('F216 T019 W7 精确窗口：预装 count=2 + 仅缺新 repro 证据 → 首次降级放行 + 审计 missing 仅新键 → 补证据清零', () => {
+    const sid = 'sess-W7';
+    // 预装 blockState count=2（模拟旧合同缺口已产生两次阻断）
+    const stateFile = preinstallBlockState(sid, { blockCount: 2, degradedRecorded: false });
+    // 输入：旧合同全满足（判定依据非占位 + noopVerify 委派 + featureDir）、仅缺新 repro 证据的 no-op
+    const bad = stageFixture('noop-unverified-citation.jsonl');
+    const r1 = runCli({ transcriptPath: bad, sessionId: sid });
+    // count 已达上限 → 第 3 次降级放行 exit 0
+    assert.equal(r1.status, 0, r1.stderr);
+    assert.ok(r1.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), r1.stderr);
+    // 审计事件 missing[] 仅含新 repro 键（不误带旧合同键）
+    const degraded = readVerdictEvents().filter((e) => e.degraded === true);
+    assert.ok(degraded.length >= 1, '应有降级审计事件');
+    const w7 = degraded[degraded.length - 1];
+    assert.deepEqual(w7.missing, ['noop:repro-command-mismatch'], JSON.stringify(w7.missing));
+    // 补齐证据 → 合规且阻断计数清零（FR-009/F211）
+    const good = stageFixture('compliant-noop-with-repro.jsonl');
+    const r2 = runCli({ transcriptPath: good, sessionId: sid });
+    assert.equal(r2.status, 0, r2.stderr);
+    assert.equal(r2.stderr.trim(), '');
+    assert.equal(fs.existsSync(stateFile), false, '补证据合规后阻断计数清零');
   });
 });

@@ -24,6 +24,8 @@ import {
   detectFixSkillExpansion,
   extractDelegationsAfter,
   resolveFeatureDirCandidate,
+  classifyClosureForm,
+  extractExecutionRecordsAfter,
   judgeCompliance,
   MISSING_ACTION_TEXT,
   DUAL_PATH_GUIDANCE,
@@ -132,11 +134,23 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     ? readArtifactFile(projectRoot, `${candidate.path}/verification/verification-report.md`)
     : { exists: false, content: null, nonEmpty: false };
 
+  // F216：只分类一次 closure（AD-4 正交结构），据 hasNoopAnchor 决定是否提取执行证据，
+  // 并把 closure 透传 judgeCompliance 避免 evaluate/judge 重复分类（plan I8）。
+  const closure = fixReport.exists
+    ? classifyClosureForm(fixReport.content)
+    : { closureForm: 'undetermined', hasRepairAnchor: false, hasNoopAnchor: false };
+  // no-op 锚点分支才配对 fix 锚点后窗口的 Bash 执行证据；纯 repair（hasNoopAnchor=false）零介入（FR-007）
+  const executionRecords = closure.hasNoopAnchor
+    ? extractExecutionRecordsAfter(entries, anchor.anchorLineIndex)
+    : [];
+
   const verdict = judgeCompliance({
     delegations,
     featureDir: { path: candidate.path, existsOnDisk: featureDirCheck.existsOnDisk },
     fixReport: { exists: fixReport.exists, content: fixReport.content },
     verificationReport: { exists: verificationReport.exists, nonEmpty: verificationReport.nonEmpty },
+    closure,
+    executionRecords,
     enforcement,
     configDegraded,
     diagnostics: configDiagnostics,

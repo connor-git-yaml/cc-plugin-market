@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请确认该 issue 是否需要改动"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01Bash5entinelExampleAAA","name":"Bash","input":{"command":"printf 'SPEC-DRIVER-REPRO: PASS\\n'; claude --version","description":"复现命令 + sentinel"}}]}}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01Bash5entinelExampleAAA","type":"tool_result","content":"SPEC-DRIVER-REPRO: PASS\n2.1.215 (Claude Code)","is_error":false}]}}

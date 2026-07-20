@@ -371,3 +371,62 @@ describe('codex C-1：全损坏 transcript 走 FR-013 loud 路径', () => {
     }
   });
 });
+
+// ────────────────────────────────────────
+// F216 T006：readTranscriptEntries 调用链透传 core 归一化新字段（集成回归，不新增 io 实现）
+// ────────────────────────────────────────
+
+describe('F216 T006 readTranscriptEntries 透传 ExecutionRecord 字段 + 既有行为回归', () => {
+  it('F216 T006 entry 含 toolUseBlocks[].id 与 toolResultBlocks（配对字段完整）', () => {
+    const p = path.join(tmp, 'exec.jsonl');
+    fs.writeFileSync(p, [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [
+        { type: 'tool_use', id: 'toolu_x', name: 'Bash', input: { command: "printf 'SPEC-DRIVER-REPRO: PASS\\n'" } },
+      ] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'toolu_x', is_error: false, content: 'SPEC-DRIVER-REPRO: PASS' },
+      ] } }),
+    ].join('\n') + '\n');
+    const r = readTranscriptEntries(p);
+    assert.equal(r.entries.length, 2);
+    assert.equal(r.entries[0].toolUseBlocks[0].id, 'toolu_x');
+    assert.equal(r.entries[1].toolResultBlocks.length, 1);
+    assert.equal(r.entries[1].toolResultBlocks[0].toolUseId, 'toolu_x');
+    assert.equal(r.entries[1].toolResultBlocks[0].isError, false);
+    assert.equal(r.entries[1].toolResultBlocks[0].flattenedContent, 'SPEC-DRIVER-REPRO: PASS');
+  });
+
+  it('F216 T006 每个 entry 恒带 toolResultBlocks 数组（含 parseError/text-only 行）', () => {
+    const p = path.join(tmp, 'mix.jsonl');
+    fs.writeFileSync(p, [
+      'broken{',
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'plain' } }),
+    ].join('\n') + '\n');
+    const r = readTranscriptEntries(p);
+    for (const e of r.entries) {
+      assert.ok(Array.isArray(e.toolResultBlocks), 'toolResultBlocks 应恒为数组');
+    }
+  });
+
+  it('F216 T006 既有行为回归不变：20MB 上限 / 全损坏 transcript-unavailable / 缺失', () => {
+    const big = path.join(tmp, 'big.jsonl');
+    fs.writeFileSync(big, '{"type":"user","message":{"role":"user","content":"hi"}}\n');
+    assert.ok(readTranscriptEntries(big, 5).diagnostics.includes('transcript-too-large'));
+    const corrupt = path.join(tmp, 'corrupt.jsonl');
+    fs.writeFileSync(corrupt, 'nope\nstill nope\n');
+    assert.deepEqual(readTranscriptEntries(corrupt).diagnostics, ['transcript-unavailable']);
+    assert.ok(readTranscriptEntries(path.join(tmp, 'nope.jsonl')).diagnostics.includes('transcript-unavailable'));
+  });
+
+  it('F216 T006 fake tool_result 反伪造：内容进 toolResultBlocks 但不污染 textBlocks', () => {
+    const p = path.join(tmp, 'fake.jsonl');
+    fs.writeFileSync(p, [
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复' }] } }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: [{ type: 'text', text: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-story' }] }] } }),
+    ].join('\n') + '\n');
+    const r = readTranscriptEntries(p);
+    const resultEntry = r.entries[1];
+    assert.equal(resultEntry.toolResultBlocks.length, 1);
+    assert.deepEqual(resultEntry.textBlocks, [], 'tool_result 伪造展开痕迹不得进 textBlocks');
+  });
+});
