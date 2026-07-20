@@ -37,3 +37,18 @@
 [plan-revision] 4次Task委派API断连(evidence: Connection closed mid-response ×4); 第4次前代理已落C2/C3/C4(476→545行); 剩余C1+三向对照+收尾由编排器inline完成 [DEGRADED: inline-execution — plan修订收尾 — 连续4次Task API断连] → 终版573行, 5标记齐全
 [codex-review:plan] 归档 verification/codex-adversarial-review-plan.md (4 CRITICAL 全修复, 2缺口补齐, 2候选缺口论证不设)
 [commit:plan-phase] STARTED
+[tasks] COMPLETED (1次断连重试后) | tasks.md 356行 22task/8Phase
+[codex-review:tasks] rescue子代理断连(第6次)未发job → 改主线程直发companion(task-mrsx0vtf-0txqyy) → 完整返回: 8 CRITICAL + 4 WARNING, 判定暂不能进GATE_TASKS
+  C1 依赖图纸面成立但真实check过早跑(T016/T017缺T007/T011/T018边; T007必改repo-maintenance-core.mjs:41与T016同文件冲突)
+  C2 T002未承载原子七步(marketplace写入被推迟到T018自相矛盾)
+  C3 TDD红绿序违约(T012在实现后; T016/17/18测实同task; T019先天绿)
+  C4 T008 grep命令无-E报parentheses not balanced, 证据无效
+  C5 矩阵漏skills-reference check(manifest.skills值未校验, FR-007缺口)
+  C6 FR-012精确waiver删除模拟/FR-006 hooks ship文件断言/FR-013 fresh-clone 三缺口
+  C7 T009/T010手写占位version/description违反plan §3.7
+  C8 T021 verification-report.md超§3.6红线(归位为流程制品豁免)
+[tasks-revision] STARTED | 12项修法交tasks代理
+[tasks-revision] COMPLETED | v2: 22→23 task (+T000基线捕获), 8C+4W全落点, 关键路径重算唯一9长度链, 编排器抽查6项全过
+[codex-review:tasks] 归档 verification/codex-adversarial-review-tasks.md (首次完整分档返回; 通道=主线程直发companion)
+[commit:tasks-phase] STARTED
+[GATE_TASKS] 即将 PAUSE (behavior=always)
