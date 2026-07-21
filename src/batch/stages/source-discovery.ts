@@ -12,7 +12,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { findReadmePath } from '../../extraction/index.js';
-import { createGitignoreFilter } from '../../utils/file-scanner.js';
+import { scanFiles, createGitignoreFilter, type ScanResult, type LanguageFileStat } from '../../utils/file-scanner.js';
 import { resolvePythonImport } from '../../knowledge-graph/import-resolver.js';
 import {
   resolveTsJsImport,
@@ -21,6 +21,7 @@ import {
   type TsConfigResolutionContext,
 } from '../../core/import-resolver.js';
 import type { CodeSkeleton } from '../../models/code-skeleton.js';
+import { groupFilesByLanguage, type LanguageGroup } from '../language-grouper.js';
 
 // ============================================================
 // Feature 145 P1：designDocAbsPaths "磁盘优先"合并策略
@@ -518,3 +519,64 @@ function walkTsJsFiles(
   }
 }
 
+
+// ============================================================
+// F220 B6 seam — runBatch 步骤 1 / 1.5（源发现与语言分组）
+// ============================================================
+
+/**
+ * F220 B6：从 runBatch 提取的源发现 seam（逻辑逐字搬迁，仅把 `options.languages`
+ * 参数化为 `languages`）。扫描文件、按语言分组、输出过滤告警，并推导
+ * processedLanguages 的 fallback 与多语言判定。
+ *
+ * 行为合同由 G2 charter 语言矩阵快照冻结（纯 TS / 纯 Python / 多语言 /
+ * languages 过滤 / 无受支持语言 fallback）。
+ */
+export function discoverSourceLanguages(
+  resolvedRoot: string,
+  languages?: string[],
+): {
+  scanResult: ScanResult;
+  languageStats: Map<string, LanguageFileStat> | undefined;
+  detectedLanguages: string[];
+  languageGroups: LanguageGroup[];
+  processedLanguages: string[];
+  isMultiLang: boolean;
+  isSingleNonTsJs: boolean;
+} {
+  // 步骤 1：扫描文件获取 languageStats
+  const scanResult = scanFiles(resolvedRoot, { projectRoot: resolvedRoot });
+  const languageStats = scanResult.languageStats;
+  const detectedLanguages = languageStats
+    ? Array.from(languageStats.keys())
+    : [];
+
+  // 步骤 1.5：语言分组 + 过滤告警
+  const langGroupResult = groupFilesByLanguage(
+    scanResult.files,
+    languages,
+  );
+  const languageGroups = langGroupResult.groups;
+  let processedLanguages = langGroupResult.groups.map((g) => g.adapterId);
+
+  for (const warning of langGroupResult.warnings) {
+    console.warn(`\u26A0 ${warning}`);
+  }
+
+  if (processedLanguages.length === 0 && !languages?.length) {
+    processedLanguages = detectedLanguages;
+  }
+
+  const isMultiLang = processedLanguages.length >= 2;
+  const isSingleNonTsJs = processedLanguages.length === 1 && processedLanguages[0] !== 'ts-js';
+
+  return {
+    scanResult,
+    languageStats,
+    detectedLanguages,
+    languageGroups,
+    processedLanguages,
+    isMultiLang,
+    isSingleNonTsJs,
+  };
+}

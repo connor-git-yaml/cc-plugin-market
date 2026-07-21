@@ -15,6 +15,7 @@
 import * as path from 'node:path';
 import { createLogger } from '../../panoramic/utils/logger.js';
 import { LanguageAdapterRegistry } from '../../adapters/language-adapter-registry.js';
+import { buildModuleGraphForProject } from '../../knowledge-graph/module-derivation.js';
 import type { ModuleGraph, ModuleNode, ModuleEdge } from '../../knowledge-graph/module-derivation.js';
 import type { LanguageGroup } from '../language-grouper.js';
 import { collectGenericLanguageCodeSkeletons } from '../generic-language-skeleton-collector.js';
@@ -275,4 +276,46 @@ export async function buildAstGraphOnly(
     pythonSymbolCount,
     durationMs: Date.now() - startTime,
   };
+}
+
+// ============================================================
+// F220 B5 seam — runBatch 步骤 1.6 / 1.7（语言组合选择主依赖图）
+// ============================================================
+
+/**
+ * F220 B5：从 runBatch 提取的主依赖图选择 seam（逻辑逐字搬迁）。
+ * 多语言 → 逐语言组建图后合并拓扑；单一非 TS/JS → 语言专属图；
+ * 其余（纯 TS/JS 或未识别受支持语言）→ UnifiedGraph 派生路径（Feature 156）。
+ *
+ * 行为合同由 G2 charter 语言矩阵快照冻结（graph-only 路径不执行本函数，
+ * 故 charter 是本 seam 的主守护 —— Codex 设计审查 C5）。
+ */
+export async function selectPrimaryModuleGraph(args: {
+  languageGroups: LanguageGroup[];
+  resolvedRoot: string;
+  isMultiLang: boolean;
+  isSingleNonTsJs: boolean;
+}): Promise<ModuleGraph> {
+  const { languageGroups: languageGroupsList, resolvedRoot, isMultiLang, isSingleNonTsJs } = args;
+
+  // 步骤 1.6：根据语言组合选择主依赖图
+  let mergedGraph: ModuleGraph;
+  if (isMultiLang) {
+    const perLangGraphs: ModuleGraph[] = [];
+    for (const langGroup of languageGroupsList) {
+      perLangGraphs.push(await buildGraphForLanguageGroup(langGroup, resolvedRoot));
+    }
+
+    // 步骤 1.7：合并拓扑排序
+    mergedGraph = perLangGraphs.length > 0
+      ? mergeGraphsForTopologicalSort(perLangGraphs, resolvedRoot)
+      : await buildModuleGraphForProject(resolvedRoot);
+  } else if (isSingleNonTsJs && languageGroupsList[0]) {
+    mergedGraph = await buildGraphForLanguageGroup(languageGroupsList[0], resolvedRoot);
+  } else {
+    // 纯 TS/JS 或未识别受支持语言：走 UnifiedGraph 派生路径（Feature 156 删除 dependency-cruiser）
+    mergedGraph = await buildModuleGraphForProject(resolvedRoot);
+  }
+
+  return mergedGraph;
 }

@@ -8,7 +8,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import pLimit from 'p-limit';
 import { findReadmePath } from '../extraction/index.js';
-import { buildModuleGraphForProject } from '../knowledge-graph/module-derivation.js';
 import { generateSpec, type GenerateSpecOptions } from '../core/single-spec-orchestrator.js';
 import { generateIndex } from '../generator/index-generator.js';
 import { renderIndex, initRenderer } from '../generator/spec-renderer.js';
@@ -19,7 +18,7 @@ import {
   DEFAULT_CHECKPOINT_PATH,
 } from './checkpoint.js';
 import { DeltaRegenerator, type DeltaReport } from './delta-regenerator.js';
-import { createReporter, writeSummaryLog, type ProgressMode } from './progress-reporter.js';
+import { createReporter, type ProgressMode } from './progress-reporter.js';
 import {
   aggregateCostSummary,
   type CostSummary,
@@ -38,10 +37,8 @@ import { decideModelOverride } from './model-override-decision.js';
 import { createLogger } from '../panoramic/utils/logger.js';
 import { groupFilesToModules, type GroupingOptions } from './module-grouper.js';
 import { buildSpecCacheKey, normalizeProjectPath, resolveRegenPlan, resolveSourceTarget, type RegenPlan } from './regen-plan.js';
-import { groupFilesByLanguage } from './language-grouper.js';
-import { scanFiles, type LanguageFileStat } from '../utils/file-scanner.js';
+import type { LanguageFileStat } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
-import type { ModuleGraph } from '../knowledge-graph/module-derivation.js';
 import type { BatchState, CompletedModule, FailedModule, ModuleSpec } from '../models/module-spec.js';
 import {
   buildDocGraph,
@@ -95,14 +92,15 @@ import {
   collectPythonCodeSkeletons,
   collectTsJsCodeSkeletons,
   buildDesignDocAbsPaths,
+  discoverSourceLanguages,
 } from './stages/source-discovery.js';
 import {
-  mergeGraphsForTopologicalSort,
   detectCrossLanguageRefs,
   generateCrossLanguageHint,
-  buildGraphForLanguageGroup,
+  selectPrimaryModuleGraph,
 } from './stages/graph-assembly.js';
 import { normalizeConcurrency } from './stages/generation-scheduling.js';
+import { writeBatchReportingArtifacts } from './stages/artifact-reporting.js';
 
 // ============================================================
 // F220 五段拆分 — facade 导出契约（14 符号逐字保留，见 specs/220-*/refactor-plan.md §4）
@@ -338,50 +336,23 @@ export async function runBatch(
     return rel.startsWith('..') ? absPath : rel;
   };
 
-  // 步骤 1：扫描文件获取 languageStats
-  const scanResult = scanFiles(resolvedRoot, { projectRoot: resolvedRoot });
-  const languageStats = scanResult.languageStats;
-  const detectedLanguages = languageStats
-    ? Array.from(languageStats.keys())
-    : [];
+  // 步骤 1 / 1.5：源发现与语言分组（F220 B6 seam → stage ① source-discovery）
+  const {
+    scanResult,
+    languageStats,
+    languageGroups: languageGroupsList,
+    processedLanguages,
+    isMultiLang,
+    isSingleNonTsJs,
+  } = discoverSourceLanguages(resolvedRoot, options.languages);
 
-  // 步骤 1.5：语言分组 + 过滤告警
-  const langGroupResult = groupFilesByLanguage(
-    scanResult.files,
-    options.languages,
-  );
-  const languageGroupsList = langGroupResult.groups;
-  let processedLanguages = langGroupResult.groups.map((g) => g.adapterId);
-
-  for (const warning of langGroupResult.warnings) {
-    console.warn(`\u26A0 ${warning}`);
-  }
-
-  if (processedLanguages.length === 0 && !options.languages?.length) {
-    processedLanguages = detectedLanguages;
-  }
-
-  const isMultiLang = processedLanguages.length >= 2;
-  const isSingleNonTsJs = processedLanguages.length === 1 && processedLanguages[0] !== 'ts-js';
-
-  // 步骤 1.6：根据语言组合选择主依赖图
-  let mergedGraph: ModuleGraph;
-  if (isMultiLang) {
-    const perLangGraphs: ModuleGraph[] = [];
-    for (const langGroup of languageGroupsList) {
-      perLangGraphs.push(await buildGraphForLanguageGroup(langGroup, resolvedRoot));
-    }
-
-    // 步骤 1.7：合并拓扑排序
-    mergedGraph = perLangGraphs.length > 0
-      ? mergeGraphsForTopologicalSort(perLangGraphs, resolvedRoot)
-      : await buildModuleGraphForProject(resolvedRoot);
-  } else if (isSingleNonTsJs && languageGroupsList[0]) {
-    mergedGraph = await buildGraphForLanguageGroup(languageGroupsList[0], resolvedRoot);
-  } else {
-    // 纯 TS/JS 或未识别受支持语言：走 UnifiedGraph 派生路径（Feature 156 删除 dependency-cruiser）
-    mergedGraph = await buildModuleGraphForProject(resolvedRoot);
-  }
+  // 步骤 1.6 / 1.7：语言组合选择主依赖图（F220 B5 seam → stage ② graph-assembly）
+  const mergedGraph = await selectPrimaryModuleGraph({
+    languageGroups: languageGroupsList,
+    resolvedRoot,
+    isMultiLang,
+    isSingleNonTsJs,
+  });
 
   // 步骤 2：文件→模块聚合 + 模块级拓扑排序
   const groupingOptions: GroupingOptions = {
@@ -1729,41 +1700,21 @@ export async function runBatch(
     logger.warn(`Top 5 token 消费模块聚合失败，跳过: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  // 步骤 6：写入摘要日志（输出到 _meta/ 子目录）
+  // 步骤 6 / 7：摘要日志 + README 索引（F220 B7 seam → stage ⑤ artifact-reporting）
   const summary = reporter.finish();
-  fs.mkdirSync(metaDir, { recursive: true });
-  const summaryLogPathAbs = path.join(metaDir, `batch-summary-${Date.now()}.md`);
-  fs.mkdirSync(path.dirname(summaryLogPathAbs), { recursive: true });
-  // Bug 142：传入 failedModules，让 batch-summary markdown 含 "## 失败详情" 节，
-  // 用户能直接看到 reason（如 retry-budget-exceeded），不必翻 checkpoint。
-  writeSummaryLog(summary, summaryLogPathAbs, costSummary, checkedState.failedModules);
-
-  // 步骤 7：生成人类友好的 README.md 索引
-  try {
-    const { generateBatchReadme } = await import('./batch-readme-generator.js');
-    const readmeContent = generateBatchReadme({
-      projectName: path.basename(resolvedRoot),
-      version: SPECTRA_VERSION,
-      // 通过 SpecStore.allKnownSpecs() 获取：新生成 + 历史存储，已排除 orphan/bundle_copy/derived
-      // 精确匹配 modulesDir 前缀（相对于 resolvedRoot），避免将 bundles/*/docs/modules/ 误计入
-      moduleSpecs: (() => {
-        const modulesDirRel = path.relative(resolvedRoot, modulesDir).split(path.sep).join('/') + '/';
-        return specStore.allKnownSpecs()
-          .filter(s => {
-            const p = s.outputPath.replace(/\\/g, '/');
-            return p.startsWith(modulesDirRel) && !path.basename(s.outputPath).startsWith('_');
-          })
-          .map(s => path.basename(s.outputPath, '.spec.md'));
-      })(),
-      projectDocs: projectDocs ?? [],
-      bundles: docsBundleProfiles,
-      outputDir: resolvedOutputDir,
-    });
-    fs.writeFileSync(path.join(resolvedOutputDir, 'README.md'), readmeContent, 'utf-8');
-    logger.info('README.md 索引已生成');
-  } catch (err) {
-    logger.warn(`README.md 生成失败: ${String(err)}`);
-  }
+  const { summaryLogPathAbs } = await writeBatchReportingArtifacts({
+    summary,
+    metaDir,
+    costSummary,
+    failedModules: checkedState.failedModules,
+    resolvedRoot,
+    resolvedOutputDir,
+    modulesDir,
+    specStore,
+    projectDocs,
+    docsBundleProfiles,
+    spectraVersion: SPECTRA_VERSION,
+  });
 
   // 步骤 8：成功后清理检查点
   if (failed.length === 0) {
