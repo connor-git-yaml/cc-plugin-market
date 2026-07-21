@@ -37,6 +37,9 @@
  *     不依赖模型的自由发挥，从而让本 scenario 的期望 missing key 可重复观测。
  * 局限同上：--print 无法完美复刻 SKILL 展开，本 scenario 不验证编排器完整分支，
  * 仅验证 hook 对"已落盘 no-op 无证据制品"的机械判定与退出码转发。
+ * SC-003b 首跑观测：acceptEdits 权限模式下真实模型会自我补齐证据（含经允许的 cat 输出 sentinel 的
+ * declared-boundary 路径），把预置的无证据 fix-report 修成合规形态使门正确放行 exit 0、观测不到阻断；
+ * 故本 scenario 改用 default 权限模式（Write/Edit 被拒）钉住无证据态，配合 Bash(cat *) 白名单放行触发命令。
  */
 
 import fs from 'node:fs';
@@ -129,6 +132,7 @@ function buildPrompt(scenario) {
       '这是一次历史已修复的 no-op 收口：请只执行下面这一条 Bash 命令（原样执行，不要改写、不要新增其它工具调用、不要读取或修改其它文件）：',
       NOOP_TRIGGER_COMMAND,
       '执行完成后直接回复"已收口"，不要再调用任何其他工具，也不要做任何解释。',
+      '若任何工具调用被拒绝，直接回复"已收口"结束，不要重试其他方式。',
     ].join('\n');
   }
   return 'say only ok';
@@ -154,15 +158,19 @@ function main() {
   }
 
   const prompt = buildPrompt(args.scenario);
+  // noop-unverified 用 default（headless 下 Write/Edit 被拒，钉住预置的无证据态——见文件头局限段
+  // SC-003b 首跑观测）；collapsed/compliant 保持 acceptEdits 不变。
+  const permissionMode = args.scenario === 'noop-unverified' ? 'default' : 'acceptEdits';
   const claudeArgs = [
     '--print',
     '--model', args.model,
     '--plugin-dir', pluginDest,
-    '--permission-mode', 'acceptEdits',
+    '--permission-mode', permissionMode,
   ];
   if (args.scenario === 'noop-unverified') {
     // 本 scenario 需要模型实际执行一条 Bash 命令（触发 resolveFeatureDirCandidate 提名），
-    // 其余 scenario 刻意不调用工具，故仅在此处放行 Bash（窄范围：仅 cat，不放开任意命令）
+    // 其余 scenario 刻意不调用工具，故仅在此处放行 Bash（窄范围：仅 cat，不放开任意命令）。
+    // 配合 default 权限模式：Bash(cat *) 白名单使触发命令可执行，Write/Edit 仍被拒 → 预置报告保持无证据态。
     claudeArgs.push('--allowedTools', 'Bash(cat *)');
   }
   claudeArgs.push('--', prompt);

@@ -82,3 +82,5 @@
 [00:20] micro-fix: COMPLETED | 双键 deepEqual(实跑核验键集后收紧)+README 回填 | core 131/131
 [00:21] verify: COMPLETED | READY-FOR-GATE | 8 命令独立实跑全 exit 0(vitest 5240p/test:plugins 552p/build/repo:check/wrapper-sha 9) | SC 6/7 PASS+SC-003b PARTIAL(OAuth 待恢复,非门禁) | Layer 1.5 COMPLIANT
 [00:22] verify phase COMMIT → GATE_VERIFY
+[04:20] SC-003b 补跑: PASS | Run1(acceptEdits)=模型自发补证据获放行(绿路径) Run2/3(default)=阻断×2→委派缺口被补救→有界降级+审计(blockCount 2/degradedRecorded true) | spike 微调 +10/-4(权限模式条件化+prompt 拒绝即收口+局限注记) | SC-003b 从 PARTIAL→PASS
+[04:50] 交付准备: rebase origin/master(b2dc7a9,F217 已落,与 F216 零文件交集)无冲突 | 全量重验:vitest 5397p(F217 graph-quality 测试因本地 pre-F214 stale 图 fail→graph-only 3.5s 重建后 10/10)+test:plugins 552p+build 0err+repo:check pass(graph-quality 六项 pass)+release:check valid | 6 commit 就绪待用户确认 push

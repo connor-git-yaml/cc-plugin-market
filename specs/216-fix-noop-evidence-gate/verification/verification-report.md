@@ -84,3 +84,22 @@
 5. 未发现与本 feature 相关的回归、假阳性、假阴性或制品缺失。
 
 **唯一遗留待办**：环境恢复（`claude /login`）后手工补跑 SC-003b 一次，记录退出码与成本；`fix-compliance-core.mjs` 拆分作为 follow-up 立项，均不阻断本次交付。
+
+---
+
+## SC-003b 补跑取证（2026-07-21，OAuth 恢复后）
+
+真实模型（claude-haiku-4-5）headless spike 三跑，SC-003b 判定 **PASS**（全链路观测齐备）：
+
+**Run 1（acceptEdits 权限）**：exit 0——模型读到门禁反馈后**自发补齐证据**（执行 sentinel 命令 + 写逐字一致对账行 + 委派 verify），门正确放行合规 no-op。证明"反馈→补 repro→放行"绿路径在真实模型上成立；同时暴露 scenario 设计缺口（编辑权限使无证据态无法钉住），已修（noop-unverified 改 default 权限模式，spike +10/-4）。
+
+**Run 3（default 权限 + --keep 取证）**：exit 0 = F208 有界降级第 3 次放行。副本审计链（.specify/runs/2026-07.jsonl + blockState）机械证据：
+```
+阻断#1 count=1 missing=[delegation:noop-verify, noop:repro-fields]
+阻断#2 count=2 missing=[noop:repro-fields]   ← 模型按反馈补救了委派缺口
+终态 result=failed + 降级放行 degraded=true ×2（幂等）
+blockState: {"blockCount":2,"degradedRecorded":true}
+```
+模型最终输出逐条复述缺失证据清单（MISSING_ACTION_TEXT 措辞），证明 FR-005 next-step 反馈被真实模型接收理解。
+
+**结论**：阻断（×2 审计可证）→ 反馈理解（missing 键在两次阻断间收敛）→ 补证据放行（Run 1）→ 有界降级兜底+审计（Run 3）——SC-003 完整闭环在真实模型侧全部观测到。单跑成本 <$0.05×3。
