@@ -1,0 +1,723 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "name": "spectra-knowledge-graph",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "nodeCount": 33,
+    "edgeCount": 37,
+    "sources": [
+      "extraction",
+      "unified-graph"
+    ],
+    "skippedSources": [
+      {
+        "source": "doc-graph",
+        "reason": "未提供 DocGraph 数据源"
+      },
+      {
+        "source": "architecture-ir",
+        "reason": "未提供 ArchitectureIR 数据源"
+      },
+      {
+        "source": "cross-reference",
+        "reason": "未提供 CrossReferenceLinks 数据源或为空数组"
+      }
+    ],
+    "schemaVersion": "2.0",
+    "sourceCommit": "c911406e5ace8742e5841a7e0df113ecb5d54685"
+  },
+  "nodes": [
+    {
+      "id": "micrograd/__init__.py",
+      "kind": "module",
+      "label": "__init__",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/__init__.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "module",
+        "sourcePath": "micrograd/__init__.py",
+        "callSitesCount": 0
+      }
+    },
+    {
+      "id": "micrograd/engine.py",
+      "kind": "module",
+      "label": "engine",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/engine.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "module",
+        "sourcePath": "micrograd/engine.py",
+        "callSitesCount": 41
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value",
+      "kind": "component",
+      "label": "Value",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Value",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/engine.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value.__init__",
+      "kind": "component",
+      "label": "Value.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value._backward",
+      "kind": "component",
+      "label": "Value._backward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value._op",
+      "kind": "component",
+      "label": "Value._op",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value._prev",
+      "kind": "component",
+      "label": "Value._prev",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value.backward",
+      "kind": "component",
+      "label": "Value.backward",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value.data",
+      "kind": "component",
+      "label": "Value.data",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value.grad",
+      "kind": "component",
+      "label": "Value.grad",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/engine.py::Value.relu",
+      "kind": "component",
+      "label": "Value.relu",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/engine.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py",
+      "kind": "module",
+      "label": "nn",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "module",
+        "sourcePath": "micrograd/nn.py",
+        "callSitesCount": 30
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Layer",
+      "kind": "component",
+      "label": "Layer",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Layer(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Layer.__init__",
+      "kind": "component",
+      "label": "Layer.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Layer.neurons",
+      "kind": "component",
+      "label": "Layer.neurons",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Layer.parameters",
+      "kind": "component",
+      "label": "Layer.parameters",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::MLP",
+      "kind": "component",
+      "label": "MLP",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class MLP(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::MLP.__init__",
+      "kind": "component",
+      "label": "MLP.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::MLP.layers",
+      "kind": "component",
+      "label": "MLP.layers",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::MLP.parameters",
+      "kind": "component",
+      "label": "MLP.parameters",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Module",
+      "kind": "component",
+      "label": "Module",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Module",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Module.parameters",
+      "kind": "component",
+      "label": "Module.parameters",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Module.zero_grad",
+      "kind": "component",
+      "label": "Module.zero_grad",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron",
+      "kind": "component",
+      "label": "Neuron",
+      "metadata": {
+        "symbolKind": "class",
+        "signature": "class Neuron(Module)",
+        "sourceTag": "extraction",
+        "sourceFile": "micrograd/nn.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "exportKind": "class"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron.__init__",
+      "kind": "component",
+      "label": "Neuron.__init__",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron.b",
+      "kind": "component",
+      "label": "Neuron.b",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron.nonlin",
+      "kind": "component",
+      "label": "Neuron.nonlin",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron.parameters",
+      "kind": "component",
+      "label": "Neuron.parameters",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "method"
+      }
+    },
+    {
+      "id": "micrograd/nn.py::Neuron.w",
+      "kind": "component",
+      "label": "Neuron.w",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "micrograd/nn.py",
+        "memberKind": "property"
+      }
+    },
+    {
+      "id": "setup.py",
+      "kind": "module",
+      "label": "setup",
+      "metadata": {
+        "sourceTag": "extraction",
+        "sourceFile": "setup.py",
+        "confidence": "EXTRACTED",
+        "unifiedKind": "module",
+        "sourcePath": "setup.py",
+        "callSitesCount": 4
+      }
+    },
+    {
+      "id": "test/test_engine.py",
+      "kind": "module",
+      "label": "test_engine.py",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "module",
+        "sourcePath": "test/test_engine.py",
+        "callSitesCount": 95
+      }
+    },
+    {
+      "id": "test/test_engine.py::test_more_ops",
+      "kind": "component",
+      "label": "test_more_ops",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "test/test_engine.py",
+        "exportKind": "function"
+      }
+    },
+    {
+      "id": "test/test_engine.py::test_sanity_check",
+      "kind": "component",
+      "label": "test_sanity_check",
+      "metadata": {
+        "sourceTag": "unified-graph",
+        "unifiedKind": "symbol",
+        "sourcePath": "test/test_engine.py",
+        "exportKind": "function"
+      }
+    }
+  ],
+  "links": [
+    {
+      "source": "micrograd/engine.py::Value.relu",
+      "target": "micrograd/engine.py::Value",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value.__init__",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value._backward",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value._op",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value._prev",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value.backward",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value.data",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value.grad",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py::Value",
+      "target": "micrograd/engine.py::Value.relu",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py",
+      "target": "micrograd/engine.py::Value",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Layer.__init__",
+      "target": "micrograd/nn.py::Neuron",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Layer",
+      "target": "micrograd/nn.py::Layer.__init__",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Layer",
+      "target": "micrograd/nn.py::Layer.neurons",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Layer",
+      "target": "micrograd/nn.py::Layer.parameters",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::MLP.__init__",
+      "target": "micrograd/nn.py::Layer",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::MLP",
+      "target": "micrograd/nn.py::MLP.__init__",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::MLP",
+      "target": "micrograd/nn.py::MLP.layers",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::MLP",
+      "target": "micrograd/nn.py::MLP.parameters",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Module.zero_grad",
+      "target": "micrograd/nn.py::Module.parameters",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Module",
+      "target": "micrograd/nn.py::Module.parameters",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Module",
+      "target": "micrograd/nn.py::Module.zero_grad",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron.__init__",
+      "target": "micrograd/engine.py::Value",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron",
+      "target": "micrograd/nn.py::Neuron.__init__",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron",
+      "target": "micrograd/nn.py::Neuron.b",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron",
+      "target": "micrograd/nn.py::Neuron.nonlin",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron",
+      "target": "micrograd/nn.py::Neuron.parameters",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py::Neuron",
+      "target": "micrograd/nn.py::Neuron.w",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/engine.py",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "micrograd.engine"
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py::Layer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py::MLP",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py::Module",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/nn.py",
+      "target": "micrograd/nn.py::Neuron",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "test/test_engine.py::test_more_ops",
+      "target": "micrograd/engine.py::Value",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": true
+    },
+    {
+      "source": "test/test_engine.py::test_sanity_check",
+      "target": "micrograd/engine.py::Value",
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidenceScore": 0.65,
+      "directional": true
+    },
+    {
+      "source": "test/test_engine.py",
+      "target": "micrograd/engine.py",
+      "relation": "depends-on",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true,
+      "evidenceText": "micrograd.engine"
+    },
+    {
+      "source": "test/test_engine.py",
+      "target": "test/test_engine.py::test_more_ops",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "test/test_engine.py",
+      "target": "test/test_engine.py::test_sanity_check",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    }
+  ]
+}

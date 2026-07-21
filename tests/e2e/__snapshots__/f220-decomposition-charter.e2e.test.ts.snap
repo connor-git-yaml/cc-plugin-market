@@ -1,0 +1,4165 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景1：纯 TS 项目 默认 regen 路径行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "a.spec.md",
+      "b.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 7,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 6,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+        {
+          "reason": "未提供 extractionResults 或为空数组",
+          "source": "extraction",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/a.spec.md",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/b.spec.md",
+        "target": "specs/modules/a.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/b.spec.md",
+        "target": "src/b.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "specs/modules/a.spec.md",
+        "kind": "spec",
+        "label": "a",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src/a.ts",
+        },
+      },
+      {
+        "id": "specs/modules/b.spec.md",
+        "kind": "spec",
+        "label": "b",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src/b.ts",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:70130d69c22c2fe2",
+    "a.spec.md": "fd16759fc1d671b9",
+    "b.spec.md": "47b7d654d1ff6803",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [src/a.ts](specs/modules/a.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 1 |  |
+| [src/b.ts](specs/modules/b.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 | src/a.ts |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 1 |
+| 成功 | 1 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| root | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 66,667 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| root/a.ts | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| root/b.ts | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`specs/modules/b.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/a.spec.md\` | cross-module | 否 |
+| [\`specs/modules/b.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/b.ts\` | cross-module | 否 |
+| [\`specs/modules/a.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts\` | cross-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [a](modules/a.spec.md)
+- [b](modules/b.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": null,
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "root",
+    ],
+    "totalModules": 1,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景2：纯 Python 项目 默认 regen 路径行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "engine.spec.md",
+      "nn.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 11,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 9,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "engine.py::Value.double",
+        "target": "engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "engine.py::Value",
+        "target": "engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "engine.py::Value",
+        "target": "engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "engine.py::Value",
+        "target": "engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "engine.py",
+        "target": "engine.py::Value",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "nn.py::make",
+        "target": "engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "engine",
+        "relation": "depends-on",
+        "source": "nn.py",
+        "target": "engine.py",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "nn.py",
+        "target": "nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/engine.spec.md",
+        "target": "engine.py",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/nn.spec.md",
+        "target": "nn.py",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/nn.spec.md",
+        "target": "specs/modules/engine.spec.md",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "engine.py",
+          "sourcePath": "engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "engine.py",
+          "sourcePath": "engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "nn.py",
+          "sourcePath": "nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "nn.py",
+          "sourcePath": "nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/engine.spec.md",
+        "kind": "spec",
+        "label": "engine",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "engine.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "engine.py",
+        },
+      },
+      {
+        "id": "specs/modules/nn.spec.md",
+        "kind": "spec",
+        "label": "nn",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "nn.py",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:6318b399526f1bc3",
+    "engine.spec.md": "56d1f725d4a1facb",
+    "nn.spec.md": "5691178445c1792b",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 engine.py、nn.py 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [engine.py](specs/modules/engine.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 1 |  |
+| [nn.py](specs/modules/nn.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 | engine.py |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  engine_py["engine.py"]
+  nn_py["nn.py"]
+  nn_py --> engine_py
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 1 |
+| 成功 | 1 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| root | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 50,000 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| root/engine.py | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| root/nn.py | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`specs/modules/nn.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/engine.spec.md\` | cross-module | 否 |
+| [\`specs/modules/nn.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`nn.py\` | cross-module | 否 |
+| [\`specs/modules/engine.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`engine.py\` | cross-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [engine](modules/engine.spec.md)
+- [nn](modules/nn.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": null,
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "root",
+    ],
+    "totalModules": 1,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景3：TS+Python 多语言 默认 regen 路径行为冻结（合并拓扑） 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "py.spec.md",
+      "src.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 12,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 13,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "py/engine.py::Value.double",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/nn.py",
+        "target": "py/nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/py.spec.md",
+        "target": "specs/modules/py.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/src.spec.md",
+        "target": "specs/modules/src.spec.md",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "py/engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/py.spec.md",
+        "kind": "spec",
+        "label": "py",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "py/engine.py",
+            "py/nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py",
+        },
+      },
+      {
+        "id": "specs/modules/src.spec.md",
+        "kind": "spec",
+        "label": "src",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:275e9d61bbfc1b29",
+    "py.spec.md": "be5e05dbcec3b3d4",
+    "src.spec.md": "2fedd4a7e3050055",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 py、src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [py](specs/modules/py.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+| [src](specs/modules/src.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+| python | 2 | 1 | 50% | 是 |
+| ts-js | 2 | 1 | 50% | 是 |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  py_engine_py["py/engine.py"]
+  py_nn_py["py/nn.py"]
+  py_nn_py --> py_engine_py
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 2 |
+| 成功 | 2 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| py | success | <MS> |
+| src | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 28,571 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| py | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| src | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`src/b.ts::beta\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts::alpha\` | calls | 否 |
+| [\`specs/modules/py.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/py.spec.md\` | same-module | 否 |
+| [\`specs/modules/src.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/src.spec.md\` | same-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [py](modules/py.spec.md)
+- [src](modules/src.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": [
+      "python",
+      "ts-js",
+    ],
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "py",
+      "src",
+    ],
+    "totalModules": 2,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景4：languages 过滤（多语言项目仅处理 python）行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "engine.spec.md",
+      "nn.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 13,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 13,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "py/engine.py::Value.double",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/nn.py",
+        "target": "py/nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/engine.spec.md",
+        "target": "py/engine.py",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.780570518226505,
+        "evidenceSource": "specs/modules/nn.spec.md:28-32",
+        "evidenceText": "### 跨模块关联
+- [py/engine.py](engine.spec.md#module-spec) - 出站 1，入站 0；示例：py/nn.py -> py/engine.py",
+        "relation": "references",
+        "source": "specs/modules/nn.spec.md",
+        "target": "py/engine.py",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/nn.spec.md",
+        "target": "py/nn.py",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/nn.spec.md",
+        "target": "specs/modules/engine.spec.md",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "py/engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/engine.spec.md",
+        "kind": "spec",
+        "label": "engine",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "py/engine.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py/engine.py",
+        },
+      },
+      {
+        "id": "specs/modules/nn.spec.md",
+        "kind": "spec",
+        "label": "nn",
+        "metadata": {
+          "confidence": "high",
+          "degree": 3,
+          "relatedFiles": [
+            "py/nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py/nn.py",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:aa1f31028c4a8acc",
+    "engine.spec.md": "3faab9d08bf292f8",
+    "nn.spec.md": "8b77129f66d3f959",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 py 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [py/engine.py](specs/modules/engine.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 1 |  |
+| [py/nn.py](specs/modules/nn.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 | py/engine.py |
+
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+| python | 2 | 0 | 50% | 是 |
+| ts-js | 2 | 0 | 50% | 否 |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  py_engine_py["py/engine.py"]
+  py_nn_py["py/nn.py"]
+  py_nn_py --> py_engine_py
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 2 |
+| 成功 | 2 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| engine | success | <MS> |
+| nn | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 50,000 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| engine | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| nn | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+> 按图谱度数排序的 Top 1 节点，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#god-nodes)。
+
+| 节点 | 类型 | 度数 |
+|------|------|------|
+| [\`nn\`](_meta/GRAPH_REPORT.md#god-nodes) | spec | 3 |
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`specs/modules/nn.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`py/nn.py\` | cross-module | 否 |
+| [\`specs/modules/nn.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/engine.spec.md\` | cross-module | 否 |
+| [\`specs/modules/nn.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`py/engine.py\` | references | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [engine](modules/engine.spec.md)
+- [nn](modules/nn.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": null,
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "engine",
+      "nn",
+    ],
+    "totalModules": 2,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景5：无受支持语言 fallback（仅 .rb）行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 0,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 0,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+        {
+          "reason": "未提供 CrossReferenceLinks 数据源或为空数组",
+          "source": "cross-reference",
+        },
+        {
+          "reason": "未提供 extractionResults 或为空数组",
+          "source": "extraction",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+      ],
+    },
+    "links": [],
+    "multigraph": false,
+    "nodes": [],
+  },
+  "llmCalls": 0,
+  "moduleSpecs": {
+    "_index.spec.md": "full:072976b57ed9290a",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 0
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+待分析
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+
+## 依赖关系图
+
+\`\`\`mermaid
+
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 0 |
+| 成功 | 0 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+
+## LLM 成本汇总
+
+本次 batch 未调用 LLM（可能为 AST-only 或 dry-run 模式）。
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+_未检测到跨社区的意外连接（所有依赖都在同一模块聚类内）。_
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（6 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（3 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（3 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 0 个模块规范 + 5 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": null,
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": null,
+    "skipped": [],
+    "successful": [],
+    "totalModules": 0,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景6：增量第二轮（改一个 TS 文件）重生成范围冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "py.spec.md",
+      "src.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "deltaReport": {
+    "directChanges": [
+      {
+        "currentHash": "5150d15ba7de2fbe092f41816455bbf0b2ad882b3e2b3cc96ac2199ebe72383f",
+        "impactedBy": [],
+        "previousHash": "f5c25dcebc7d4d308d5e1cdb602937c0cb28c497d173cc9f75a0ecb2e5c3c2ba",
+        "reason": "skeleton-changed",
+        "sourceFiles": [
+          "src/a.ts",
+          "src/b.ts",
+        ],
+        "sourceTarget": "src",
+      },
+    ],
+    "fallbackReason": null,
+    "mode": "incremental",
+    "propagatedChanges": [],
+    "regenerateTargets": [
+      "src",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 12,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 13,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "py/engine.py::Value.double",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/nn.py",
+        "target": "py/nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/py.spec.md",
+        "target": "specs/modules/py.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/src.spec.md",
+        "target": "specs/modules/src.spec.md",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "py/engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/py.spec.md",
+        "kind": "spec",
+        "label": "py",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "py/engine.py",
+            "py/nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py",
+        },
+      },
+      {
+        "id": "specs/modules/src.spec.md",
+        "kind": "spec",
+        "label": "src",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 1,
+  "moduleSpecs": {
+    "_index.spec.md": "full:729c58ebc2fff4ac",
+    "py.spec.md": "be5e05dbcec3b3d4",
+    "src.spec.md": "8b803af3a3f42136",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 py、src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [py](specs/modules/py.spec.md) | py | 0 |  |
+| [src](specs/modules/src.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+| python | 2 | 1 | 50% | 是 |
+| ts-js | 2 | 1 | 50% | 是 |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  py_engine_py["py/engine.py"]
+  py_nn_py["py/nn.py"]
+  py_nn_py --> py_engine_py
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 2 |
+| 成功 | 1 |
+| 失败 | 0 |
+| 跳过 | 1 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| py | skipped | - |
+| src | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 100 |
+| 总 output tokens | 200 |
+| 总 token 数 | 300 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 33,333 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 1 | 100 | 200 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| src | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`src/b.ts::beta\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts::alpha\` | calls | 否 |
+| [\`specs/modules/py.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/py.spec.md\` | same-module | 否 |
+| [\`specs/modules/src.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/src.spec.md\` | same-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [py](modules/py.spec.md)
+- [src](modules/src.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": [
+      "python",
+      "ts-js",
+    ],
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [
+      "py",
+    ],
+    "successful": [
+      "src",
+    ],
+    "totalModules": 2,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景7：显式 full 第二轮 — cache 旁路全量重生成行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "py.spec.md",
+      "src.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 12,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 13,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "py/engine.py::Value.double",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/nn.py",
+        "target": "py/nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/py.spec.md",
+        "target": "specs/modules/py.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/src.spec.md",
+        "target": "specs/modules/src.spec.md",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "py/engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/py.spec.md",
+        "kind": "spec",
+        "label": "py",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "py/engine.py",
+            "py/nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py",
+        },
+      },
+      {
+        "id": "specs/modules/src.spec.md",
+        "kind": "spec",
+        "label": "src",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:275e9d61bbfc1b29",
+    "py.spec.md": "8a2caabf4345132a",
+    "src.spec.md": "2251225dc668194c",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 py、src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [py](specs/modules/py.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+| [src](specs/modules/src.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+| python | 2 | 1 | 50% | 是 |
+| ts-js | 2 | 1 | 50% | 是 |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  py_engine_py["py/engine.py"]
+  py_nn_py["py/nn.py"]
+  py_nn_py --> py_engine_py
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 2 |
+| 成功 | 2 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| py | success | <MS> |
+| src | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 28,571 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| py | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| src | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`src/b.ts::beta\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts::alpha\` | calls | 否 |
+| [\`specs/modules/py.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/py.spec.md\` | same-module | 否 |
+| [\`specs/modules/src.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/src.spec.md\` | same-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [py](modules/py.spec.md)
+- [src](modules/src.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": [
+      "python",
+      "ts-js",
+    ],
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "py",
+      "src",
+    ],
+    "totalModules": 2,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景8：失败→checkpoint 内容→resume 恢复链行为冻结 1`] = `
+{
+  "checkpoint": {
+    "batchId": "batch-<TS>",
+    "completedModules": [],
+    "failedModules": [
+      {
+        "degradedToAstOnly": false,
+        "error": "累计 input token 30000 已达预算上限 40000，下一次重试预计将超出预算，提前终止重试。原始错误：API 错误: F220 injected failure",
+        "failedAt": "<ISO-TS>",
+        "path": "root",
+        "reason": "retry-budget-exceeded",
+        "retryCount": 2,
+      },
+    ],
+    "forceRegenerate": false,
+    "lastUpdatedAt": "<ISO-TS>",
+    "processingOrder": [
+      "root",
+    ],
+    "projectRoot": "<ROOT>",
+    "startedAt": "<ISO-TS>",
+    "totalModules": 1,
+  },
+  "llmCalls": 2,
+  "result": {
+    "failed": [
+      {
+        "path": "root",
+        "reason": "retry-budget-exceeded",
+      },
+    ],
+    "skipped": [],
+    "successful": [],
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景8：失败→checkpoint 内容→resume 恢复链行为冻结 2`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "batch-summary-<TS>.md",
+      "docs-bundle.yaml",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "a.spec.md",
+      "b.spec.md",
+    ],
+    "project": [
+      "_coverage-report.md",
+      "_meta",
+      "architecture-narrative.md",
+      "data-model.md",
+      "feature-briefs",
+      "product-overview.md",
+      "quality-report.md",
+      "user-journeys.md",
+    ],
+    "root": [
+      "README.md",
+      "bundles",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 7,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 6,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+        {
+          "reason": "未提供 extractionResults 或为空数组",
+          "source": "extraction",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/a.spec.md",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/b.spec.md",
+        "target": "specs/modules/a.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "cross-module",
+        "source": "specs/modules/b.spec.md",
+        "target": "src/b.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "specs/modules/a.spec.md",
+        "kind": "spec",
+        "label": "a",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src/a.ts",
+        },
+      },
+      {
+        "id": "specs/modules/b.spec.md",
+        "kind": "spec",
+        "label": "b",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src/b.ts",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:70130d69c22c2fe2",
+    "a.spec.md": "fd16759fc1d671b9",
+    "b.spec.md": "47b7d654d1ff6803",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [src/a.ts](specs/modules/a.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 1 |  |
+| [src/b.ts](specs/modules/b.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 | src/a.ts |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 1 |
+| 成功 | 1 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| root | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 66,667 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| root/a.ts | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| root/b.ts | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 产品与使用
+
+- [产品定位与核心能力](project/product-overview.md)
+- [架构叙事与关键设计决策](project/architecture-narrative.md)
+- [用户旅程](project/user-journeys.md)
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`specs/modules/b.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/a.spec.md\` | cross-module | 否 |
+| [\`specs/modules/b.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/b.ts\` | cross-module | 否 |
+| [\`specs/modules/a.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts\` | cross-module | 否 |
+
+## 架构与接口
+
+- [数据模型](project/data-model.md)
+
+### 图查询能力（MCP）
+
+Spectra 提供 5 个 MCP 图查询工具，可在支持 MCP 的 AI 助手（Claude Code、Cline 等）中直接调用：
+
+- \`graph_query\`：按关键词查询相关模块和子图（"认证模块"、"数据库连接"）
+- \`graph_node\`：查询指定节点的详情和邻居
+- \`graph_path\`：查询两个节点之间的最短依赖路径
+- \`graph_community\`：列出某个社区（模块聚类）的所有节点
+- \`graph_god_nodes\`：识别图谱中度数最高的枢纽节点
+
+详见各插件的 [SKILL.md](../../plugins/spectra/skills/spectra-batch/SKILL.md)。
+
+## 模块规范
+
+- [a](modules/a.spec.md)
+- [b](modules/b.spec.md)
+
+## 质量审计
+
+- [质量报告（评分与改进建议）](project/quality-report.md)
+- [覆盖率审计](project/_coverage-report.md)
+
+## 决策记录
+
+- [Feature Briefs（从 Issues/PRs 生成）](project/feature-briefs/index.md)
+
+## 文档 Bundle（按角色）
+
+- [开发者入门](bundles/developer-onboarding/docs/index.md)（8 篇文档）
+- [架构评审](bundles/architecture-review/docs/index.md)（5 篇文档）
+- [API 消费者](bundles/api-consumer/docs/index.md)（4 篇文档）
+- [运维交接](bundles/ops-handover/docs/index.md)（1 篇文档）
+
+---
+
+*本索引包含 2 个模块规范 + 6 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": null,
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "root",
+    ],
+    "totalModules": 1,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景9：dry-run 零 LLM 预估路径行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "dry-run-estimate.md",
+    ],
+    "modules": [],
+    "project": [],
+    "root": [],
+  },
+  "dryRunReport": "# Dry-run Estimate
+
+> 自动生成于 <ISO-TS>
+
+**本次估算未调用 LLM，未生成任何 \`.spec.md\` 文件。**
+
+## 总估算
+
+| 指标 | 数值 |
+|------|------|
+| 模块数 | 2 |
+| 预估 input tokens | 13,094 |
+| 预估 output tokens | 3,928 |
+| 预估总 tokens | 17,022 |
+
+_估算假设：input ≈ estimateFast(源文件拼接文本) + 6500（system prompt + AST skeleton 固定开销 / 模块），output ≈ 0.3 × input。基于历史平均比率，首版不校准。_
+
+## 按模块明细
+
+| 模块 | 文件数 | LOC | 预估 input | 预估 output |
+|------|--------|-----|-----------|------------|
+| py | 2 | 12 | 6,550 | 1,965 |
+| src | 2 | 9 | 6,544 | 1,963 |
+",
+  "graph": null,
+  "llmCalls": 0,
+  "moduleSpecs": {},
+  "reporting": {
+    "indexSpec": null,
+    "latestSummary": null,
+    "readme": null,
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": [
+      "python",
+      "ts-js",
+    ],
+    "dryRunReportPath": "specs/_meta/dry-run-estimate.md",
+    "failed": [],
+    "indexGenerated": false,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [
+      "py",
+      "src",
+    ],
+    "successful": [],
+    "totalModules": 2,
+  },
+}
+`;
+
+exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM） > 场景10：mode=code-only 产物集行为冻结 1`] = `
+{
+  "artifacts": {
+    "_meta": [
+      "GRAPH_REPORT.md",
+      "_delta-report.md",
+      "batch-summary-<TS>.md",
+      "graph.json",
+    ],
+    "modules": [
+      "_index.spec.md",
+      "py.spec.md",
+      "src.spec.md",
+    ],
+    "project": [
+      "_meta",
+    ],
+    "root": [
+      "README.md",
+      "modules",
+      "project",
+    ],
+  },
+  "graph": {
+    "directed": false,
+    "graph": {
+      "edgeCount": 12,
+      "inputHash": "<HASH>",
+      "name": "spectra-knowledge-graph",
+      "nodeCount": 13,
+      "schemaVersion": "2.0",
+      "skippedSources": [
+        {
+          "reason": "未提供 ArchitectureIR 数据源",
+          "source": "architecture-ir",
+        },
+      ],
+      "sourceCommit": "<SHA>",
+      "sources": [
+        "doc-graph",
+        "cross-reference",
+        "extraction",
+        "unified-graph",
+      ],
+    },
+    "links": [
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "calls",
+        "source": "py/engine.py::Value.double",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.__init__",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.data",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py::Value",
+        "target": "py/engine.py::Value.double",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/engine.py",
+        "target": "py/engine.py::Value",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "py/nn.py",
+        "target": "py/nn.py::make",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/py.spec.md",
+        "target": "specs/modules/py.spec.md",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "relation": "same-module",
+        "source": "specs/modules/src.spec.md",
+        "target": "specs/modules/src.spec.md",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/a.ts",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true,
+        "relation": "calls",
+        "source": "src/b.ts::beta",
+        "target": "src/a.ts::alpha",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": "./a.js",
+        "relation": "depends-on",
+        "source": "src/b.ts",
+        "target": "src/a.ts",
+      },
+      {
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "relation": "contains",
+        "source": "src/b.ts",
+        "target": "src/b.ts::beta",
+      },
+    ],
+    "multigraph": false,
+    "nodes": [
+      {
+        "id": "py/engine.py",
+        "kind": "module",
+        "label": "engine",
+        "metadata": {
+          "callSitesCount": 2,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/engine.py::Value",
+        "kind": "component",
+        "label": "Value",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "class",
+          "signature": "class Value",
+          "sourceFile": "py/engine.py",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "extraction",
+          "symbolKind": "class",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.__init__",
+        "kind": "component",
+        "label": "Value.__init__",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.data",
+        "kind": "component",
+        "label": "Value.data",
+        "metadata": {
+          "memberKind": "property",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/engine.py::Value.double",
+        "kind": "component",
+        "label": "Value.double",
+        "metadata": {
+          "memberKind": "method",
+          "sourcePath": "py/engine.py",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "py/nn.py",
+        "kind": "module",
+        "label": "nn",
+        "metadata": {
+          "callSitesCount": 1,
+          "confidence": "EXTRACTED",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "py/nn.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "confidence": "EXTRACTED",
+          "exportKind": "function",
+          "signature": "def make(n)",
+          "sourceFile": "py/nn.py",
+          "sourcePath": "py/nn.py",
+          "sourceTag": "extraction",
+          "symbolKind": "function",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "specs/modules/py.spec.md",
+        "kind": "spec",
+        "label": "py",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "py/engine.py",
+            "py/nn.py",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "py",
+        },
+      },
+      {
+        "id": "specs/modules/src.spec.md",
+        "kind": "spec",
+        "label": "src",
+        "metadata": {
+          "confidence": "high",
+          "relatedFiles": [
+            "src/a.ts",
+            "src/b.ts",
+          ],
+          "sourceTag": "doc-graph",
+          "sourceTarget": "src",
+        },
+      },
+      {
+        "id": "src/a.ts",
+        "kind": "module",
+        "label": "a.ts",
+        "metadata": {
+          "callSitesCount": 0,
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/a.ts::alpha",
+        "kind": "component",
+        "label": "alpha",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/a.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+      {
+        "id": "src/b.ts",
+        "kind": "module",
+        "label": "b.ts",
+        "metadata": {
+          "callSitesCount": 1,
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "module",
+        },
+      },
+      {
+        "id": "src/b.ts::beta",
+        "kind": "component",
+        "label": "beta",
+        "metadata": {
+          "exportKind": "function",
+          "sourcePath": "src/b.ts",
+          "sourceTag": "unified-graph",
+          "unifiedKind": "symbol",
+        },
+      },
+    ],
+  },
+  "llmCalls": 2,
+  "moduleSpecs": {
+    "_index.spec.md": "full:275e9d61bbfc1b29",
+    "py.spec.md": "0264dda2dfcb3351",
+    "src.spec.md": "28856ed57df77e0f",
+  },
+  "reporting": {
+    "indexSpec": "---
+type: architecture-index
+version: v1
+generatedBy: spectra v4.3.0
+projectRoot: <ROOT>
+totalModules: 2
+lastUpdated: <ISO-TS>
+---
+
+# 架构索引
+
+## 系统目的
+
+本项目包含 2 个模块，涵盖 py、src 等功能域。
+
+## 架构模式
+
+模块间依赖为有向无环图（DAG），层次清晰
+
+## 模块映射
+
+| 模块 | 说明 | 拓扑层级 | 依赖 |
+|------|------|---------|------|
+| [py](specs/modules/py.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+| [src](specs/modules/src.spec.md) | F220 特征化 mock 模块，用于冻结拆分前 batch 编排行为。 | 0 |  |
+
+
+## 语言分布
+
+| 语言 | 文件数 | 模块数 | 占比 | 本次处理 |
+|------|--------|--------|------|---------|
+| python | 2 | 1 | 50% | 是 |
+| ts-js | 2 | 1 | 50% | 是 |
+
+## 依赖关系图
+
+\`\`\`mermaid
+graph TD
+  py_engine_py["py/engine.py"]
+  py_nn_py["py/nn.py"]
+  py_nn_py --> py_engine_py
+graph TD
+  a["a"]
+  b["b"]
+  b --> a
+\`\`\`
+
+## 横切关注点
+
+
+## 技术栈
+
+| 类别 | 技术 | 版本 | 用途 |
+|------|------|------|------|
+",
+    "latestSummary": "# 批处理摘要日志
+
+生成时间: <ISO-TS>
+总耗时: <SEC>
+
+## 统计
+
+| 指标 | 数值 |
+|------|------|
+| 总模块数 | 2 |
+| 成功 | 2 |
+| 失败 | 0 |
+| 跳过 | 0 |
+| 降级 | 0 |
+
+## 详情
+
+| 模块 | 状态 | 耗时 |
+|------|------|------|
+| py | success | <MS> |
+| src | success | <MS> |
+
+## LLM 成本汇总
+
+| 指标 | 数值 |
+|------|------|
+| 总 input tokens | 200 |
+| 总 output tokens | 400 |
+| 总 token 数 | 600 |
+| LLM 总耗时 | <SEC> |
+| tokens / kLOC | 28,571 |
+
+### 按生成器分组
+
+| 生成器 / Model | 模块数 | input | output | 占比 |
+|----------------|--------|-------|--------|------|
+| \`claude-sonnet-4-6-20261001\` | 2 | 200 | 400 | 100.0% |
+
+### 按模块分组（Top 20，从高到低）
+
+| 模块 | Model | input | output | 耗时 | 降级 |
+|------|-------|-------|--------|------|------|
+| py | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+| src | \`claude-sonnet-4-6-20261001\` | 100 | 200 | <SEC> | — |
+",
+    "readme": "# <PROJECT> — 技术文档索引
+
+> 由 spectra v4.3.0 自动生成 | 2026/7/21
+
+## 目录结构
+
+\`\`\`
+modules/     模块级技术规范
+project/     项目级文档（架构、产品、质量）
+bundles/     文档 Bundle（按角色组织）
+_meta/       系统元数据
+\`\`\`
+
+## 代码核心抽象
+
+_本项目规模较小，未识别到显著核心抽象节点。_
+
+## 意外连接
+
+> 跨社区或低置信度的关系，完整列表见 [架构图谱分析报告](_meta/GRAPH_REPORT.md#surprising-connections)。
+
+| 源 | 目标 | 关系 | 跨社区 |
+|----|------|------|--------|
+| [\`src/b.ts::beta\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`src/a.ts::alpha\` | calls | 否 |
+| [\`specs/modules/py.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/py.spec.md\` | same-module | 否 |
+| [\`specs/modules/src.spec.md\`](_meta/GRAPH_REPORT.md#surprising-connections) | \`specs/modules/src.spec.md\` | same-module | 否 |
+
+## 模块规范
+
+- [py](modules/py.spec.md)
+- [src](modules/src.spec.md)
+
+---
+
+*本索引包含 2 个模块规范 + 0 个项目级文档*",
+  },
+  "result": {
+    "degraded": [],
+    "detectedLanguages": [
+      "python",
+      "ts-js",
+    ],
+    "dryRunReportPath": null,
+    "failed": [],
+    "indexGenerated": true,
+    "languageStats": {
+      "python": {
+        "adapterId": "python",
+        "extensions": [
+          ".py",
+        ],
+        "fileCount": 2,
+      },
+      "ts-js": {
+        "adapterId": "ts-js",
+        "extensions": [
+          ".ts",
+        ],
+        "fileCount": 2,
+      },
+    },
+    "skipped": [],
+    "successful": [
+      "py",
+      "src",
+    ],
+    "totalModules": 2,
+  },
+}
+`;
