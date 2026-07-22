@@ -215,3 +215,21 @@
   profile bump v1->v2; dogfood lock 已 --refresh, 3 锚全 v2 全 fresh
   drift 312 passed(19文件) | 全量 5684 passed/0 failed | build 0 | repo:check PASS 无 warning
   主线程独立复核 24 组: 12 组须 DIFF 全 DIFF / 12 组须 SAME 全 SAME
+
+[rebase] 基线前移: origin/master 7b0d7b3 (F220 batch 拆分 + F221/F222/F223 落地)
+  rebase 6 提交无冲突; behind=0 ahead=6; 图重建(节点 6079/边 8050)
+[rebase-verify] 发现真实交互(非 flaky): spec-drift-check.test.ts 的"诚实边界"用例失败
+  根因 = F221(23ffc8f) 修复了 analyzeFiles 在单文件 noResolve Project 下静默丢弃 re-export
+  探针实证: analyzeFiles 现返回 {name:'reexportedSymbol', kind:'re-export', line:5}
+  => 符号可被找到 -> 不再 orphaned -> locateExportedNodes 正确返 reexport-unsupported
+     -> fingerprint-unavailable
+  判定: 行为改善而非回归 —— 旧行为违反本 Feature 自定义的状态语义
+    (orphaned=symbol 客观不存在; fingerprint-unavailable=存在但取不到指纹; re-export 属后者)
+  安全不变量未削弱: 两路径均不产出指纹, 新断言显式钉死 actualFingerprint===undefined
+  可观测契约变化(非 bug): re-export 锚 exitCode 1->2, 方向正确
+    (re-export 不是"代码漂移了", 报成 drift 才是误导)
+  已更新测试断言+标题+注释, plan §7.3/§12.2 补可达性依据, quickstart 与 fixture 注释同步
+[final-verify] 全量 5769 passed / 0 failed / 483 文件 exit 0
+  build exit 0 | repo:check status=pass 无 warning | release:check valid
+  SC-008: src/ plugins/ 零改动; 写入面 ⊆ allowlist; 未含 src.spec.md
+  dogfood 3 真锚全 fresh exit 0 (profile ts-morph-canonical-v2)

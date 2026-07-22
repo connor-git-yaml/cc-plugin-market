@@ -389,7 +389,13 @@ describe('T032 —— locateExportedNodes 三态映射到 fingerprint-unavailabl
     expect(result.reason).toMatch(/reexport-unsupported/);
   });
 
-  it('诚实边界记录：当前 analyzeFiles 不解析跨文件 re-export，故生产链路上该锚先判 orphaned', async () => {
+  // F221（spec 生成器识别 re-export）落地后，analyzeFiles 会把 `export { x } from './other'`
+  // 如实返回为 `{ name: 'reexportedSymbol', kind: 're-export' }`，符号不再"查不到"。
+  // 因此存在性判定不再落 orphaned，而是继续走到 locateExportedNodes——
+  // 该防御分支由此从"生产链路不可达"变为**真实可达**（上游行为变更带来的改善）。
+  // 本用例的守护价值：re-export 锚 MUST 落 fingerprint-unavailable(reexport-unsupported)，
+  // 绝不允许退化成对其他文件的声明算出一个错误归属的指纹。
+  it('生产链路端到端：re-export 锚 → fingerprint-unavailable(reexport-unsupported)，绝不产出跨文件错误归属指纹', async () => {
     const root = makeTmpProject({
       'other.ts': 'export function reexportedSymbol(): number {\n  return 1;\n}\n',
       'index.ts': "export { reexportedSymbol } from './other';\n",
@@ -411,7 +417,10 @@ describe('T032 —— locateExportedNodes 三态映射到 fingerprint-unavailabl
       ],
       { projectRoot: root },
     );
-    expect(report.anchors[0].status).toBe('orphaned');
+    expect(report.anchors[0].status).toBe('fingerprint-unavailable');
+    expect(report.anchors[0].locateFailure).toBe('reexport-unsupported');
+    expect(report.anchors[0].reason).toMatch(/reexport-unsupported/);
+    expect(report.anchors[0].actualFingerprint).toBeUndefined();
   });
 });
 

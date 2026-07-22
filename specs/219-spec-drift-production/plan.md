@@ -483,6 +483,8 @@ export function locateExportedNodes(sourceFile, exportName, expStartLine) {
   const local = all.filter((d) => d.getSourceFile().getFilePath() === sourceFile.getFilePath());
   if (local.length === 0) {
     // 声明全部来自其他文件 = re-export。首发**显式拒绝**（不定义跨文件指纹归属，见下方决策）
+    // 可达性：F221（spec 生成器识别 re-export）落地后，analyzeFiles 会把该导出如实返回为
+    // kind: 're-export'，存在性判定不再落 orphaned，本分支在生产链路上**已真实可达**。
     return { ok: false, reason: 'reexport-unsupported' };
   }
 
@@ -840,7 +842,7 @@ export async function validateSpecDrift({ projectRoot, strict = false }) {
 | `fingerprint-version-mismatch/` | 手工构造一条 `fingerprintVersion` 为旧值的 lock 条目 + 未变化的源文件 → anchor 级 `fingerprint-unavailable`（**非** lock-corrupt，C-7 已消解） |
 | `lock-corrupt-*/` | FR-015 全分支：非法 JSON / 顶层缺 `schemaVersion` 或 `anchors` 非数组 / `schemaVersion` 不兼容 / **条目缺十项必需字段中任一** / **条目含被禁字段（`status`/`stale`/`fresh`）** / 字段类型不符 / 残留 `*.tmp-*` |
 | `member-rejected/` | manifest 含 `Class.method` 形式 ref → link 阶段显式拒绝 |
-| `reexport-unsupported/` | `export { foo } from './other'` 形态 → `locateExportedNodes` 返回 `reexport-unsupported` → fingerprint-unavailable（C-3） |
+| `reexport-unsupported/` | `export { foo } from './other'` 形态 → `locateExportedNodes` 返回 `reexport-unsupported` → fingerprint-unavailable（C-3）。**F221 落地后该路径在生产链路上已可达**（依据：`analyzeFiles` 现返回 `{ name, kind: 're-export' }`，存在性判定通过，不再先落 orphaned），单测已按端到端形态断言 |
 | `unsupported-language/` | manifest 含指向 `.py`/`.go` 文件符号的 ref。**判据为规范化文件扩展名**，不是 `startLine === undefined`（C-4 实测反证：`ExportSymbolSchema` 要求 startLine 必填正整数，tree-sitter fallback 也确实填充行号，旧判据是死分支） |
 | `parser-degrade/` | **按 §9.1 步骤 4 新判据构造**：语法 diagnostic 非空（如 `export const foo = ;`——ts-morph 错误恢复**不抛异常**但 diagnostics 非空）或 parser 回退 tree-sitter。**MUST NOT** 设计成"让 `analyzeFiles` 抛异常"（不可达，C-4） |
 | `graph-unavailable/` | **此前缺失**：临时移除/改名 `dist/core/ast-analyzer.js` 模拟 dist 缺失 → report 级 `graph-unavailable`、`degraded: true`、exitCode 2；另含 `dist-load-failed`（写入语法错误的假 dist 模块）分支（W-1/W-5） |
