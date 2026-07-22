@@ -1,8 +1,8 @@
 /**
  * Spec Drift —— 顶层门面（plan §6.2：唯一横向协调点）。
  *
- * 对外三个操作：`linkReferences` / `checkAnchors` / `unlinkAnchor`。
- * `validateSpecDrift`（`repo:check` 第 13 检查族契约）属 C2 阶段（T023），本文件暂不实现。
+ * 对外四个操作：`linkReferences` / `checkAnchors` / `unlinkAnchor` / `validateSpecDrift`
+ * （最后一个是 `repo:check` 第 13 检查族契约，C2）。
  *
  * 依赖方向：core → lock-io / resolve / check（均不反向 import core）。
  */
@@ -14,8 +14,8 @@ import {
   checkAnchors as checkAnchorsInternal,
   buildReport,
   summarize,
-  computeReportExitCode,
   STATE_MATRIX,
+  PACKAGE_ROOT,
 } from './spec-drift-check.mjs';
 
 export const DEFAULT_LOCK_RELPATH = path.join('.specify', 'spec-drift.lock.json');
@@ -155,12 +155,12 @@ export async function linkReferences({
  */
 export async function checkAnchors({ projectRoot, distRoot, lockPath }) {
   const lock = readLock(lockPath);
-  if (lock.corrupt) {
-    return { ...lockCorruptResult('check', lock.reason), anchors: [], summary: {} };
-  }
+  // W-1：lock-corrupt 与空 lock 两条早退分支 MUST 同样经由 buildReport 产出
+  // 全零固定键 summary（FR-015）。手工覆盖成 `summary: {}` 会让消费方在这两条
+  // 分支上读不到状态键，被迫写"空 lock 特判"分支。
+  if (lock.corrupt) return lockCorruptResult('check', lock.reason);
   if (lock.anchors.length === 0) {
-    const empty = { reportStatus: 'ok', degraded: false, anchors: [], summary: {} };
-    return { command: 'check', ok: true, exitCode: computeReportExitCode(empty), ...empty };
+    return { command: 'check', ok: true, ...buildReport({ anchors: [] }), results: [] };
   }
 
   const report = await checkAnchorsInternal(lock.anchors, { projectRoot, distRoot });
@@ -190,5 +190,112 @@ export function unlinkAnchor({ lockPath, id }) {
     removedId: id,
     results: [],
     summary: { removed: 1, remaining: remaining.length },
+  };
+}
+
+/**
+ * `repo:check` 子检查项的形状，与 repo-maintenance-core.mjs::createCheck 保持一致
+ * （字段名 `status`，被 namespaceCheck 加 `spec-drift:` 前缀后进入 checks[]）。
+ */
+function createCheck(id, title, status, evidence) {
+  return { id, title, status, evidence };
+}
+
+/**
+ * `repo:check` 第 13 检查族（FR-006/007/008，plan §11.3）。
+ *
+ * 三段式契约（照抄 F217 第 12 族）：lock-corrupt 恒 fail → 空锚 pass →
+ * **先 report 级、后 anchor 级**判定。
+ *
+ * ⚠️ 本函数体内所有异步操作（动态 import / analyzeFiles）均已被 `await` 展开，
+ * 返回值是一个已完成的普通对象；调用方 MUST 同样 `await`——否则 `aggregateValidation`
+ * 拿到未展开的 Promise，`result.warnings ?? []` 会退化为空数组造成静默假通过（FR-008）。
+ */
+export async function validateSpecDrift({ projectRoot, strict = false, distRoot = PACKAGE_ROOT }) {
+  const lockPath = path.join(projectRoot, DEFAULT_LOCK_RELPATH);
+  const lock = readLock(lockPath);
+
+  // (1) lock 损坏恒 fail，不受 strict 影响（FR-007）
+  if (lock.corrupt) {
+    return {
+      status: 'fail',
+      checks: [
+        createCheck('lock-integrity', 'spec drift lock 可解析且 schema 兼容', 'fail', {
+          machineCode: STATE_MATRIX['lock-corrupt'].machineCode,
+          degraded: true,
+          reason: lock.reason,
+          nextStep: STATE_MATRIX['lock-corrupt'].nextStep,
+        }),
+      ],
+      warnings: [],
+      errors: [`lock 文件损坏：${lock.reason}`],
+    };
+  }
+
+  // (2) 无锚 → pass，不产生噪声
+  if (lock.anchors.length === 0) {
+    return {
+      status: 'pass',
+      checks: [
+        createCheck('anchors-status', 'spec drift 锚点全部 fresh', 'pass', {
+          anchorCount: 0,
+          nonFreshCount: 0,
+          summary: summarize([]),
+          exitCode: 0,
+        }),
+      ],
+      warnings: [],
+      errors: [],
+    };
+  }
+
+  const report = await checkAnchorsInternal(lock.anchors, { projectRoot, distRoot });
+  // 严重度提升单一定义（FR-007）：strict 把"非 fresh 且非 lock-corrupt"统一从 warn 提到 error。
+  const severity = strict ? 'error' : 'warn';
+
+  // (3) report 级状态 MUST 先于 anchor 级处理（C-5）。
+  // graph-unavailable 不属于任何单条 anchor：只遍历 report.anchors 时 nonFresh 可能为空，
+  // 整体会误贡献 pass。也 MUST NOT 把它伪造进每条 anchor 绕过（违反状态矩阵的作用域定义）。
+  if (report.reportStatus !== undefined && report.reportStatus !== 'ok') {
+    const meta = STATE_MATRIX[report.reportStatus];
+    const message = `${report.reportStatus}：${report.reason ?? ''}（${report.nextStep ?? meta?.nextStep ?? ''}）`;
+    return {
+      status: strict ? 'fail' : 'warn',
+      checks: [
+        createCheck('analysis-environment', 'spec drift AST 分析环境可用', strict ? 'fail' : 'warn', {
+          reportStatus: report.reportStatus,
+          machineCode: report.machineCode ?? meta?.machineCode,
+          degraded: true,
+          reason: report.reason,
+          nextStep: report.nextStep ?? meta?.nextStep,
+        }),
+      ],
+      warnings: severity === 'error' ? [] : [message],
+      errors: severity === 'error' ? [message] : [],
+    };
+  }
+
+  // (4) anchor 级判定
+  const nonFresh = (report.anchors ?? []).filter((anchor) => anchor.status !== 'fresh');
+  const messages = nonFresh.map(
+    (anchor) => `锚 ${anchor.id}（${anchor.symbolId ?? anchor.ref}）状态 ${anchor.status}：${anchor.reason ?? ''}`,
+  );
+
+  // W-3：子 check 的 status 必须随 strict 变化，不得恒为 'warn'——否则外部消费 checks[]
+  // 的工具会看到"子检查 warn 但整体 fail"的自相矛盾结果。
+  const checkStatus = nonFresh.length === 0 ? 'pass' : severity === 'error' ? 'fail' : 'warn';
+
+  return {
+    status: checkStatus,
+    checks: [
+      createCheck('anchors-status', 'spec drift 锚点全部 fresh', checkStatus, {
+        summary: report.summary,
+        exitCode: report.exitCode,
+        anchorCount: report.anchors.length,
+        nonFreshCount: nonFresh.length,
+      }),
+    ],
+    warnings: severity === 'error' ? [] : messages,
+    errors: severity === 'error' ? messages : [],
   };
 }

@@ -1,0 +1,326 @@
+{
+  "note": "T021 基线快照：接入 spec-drift 第 13 检查族之前，既有 12 族的 check id 与 status 逐项记录。新增/修改前 12 族的检查时须显式更新本文件。 不记录族数量：族计数在仓库内有历史口径歧义（前缀数 13 vs 文案 12），断言它只会引入无意义的维护噪声。",
+  "capturedAtCommit": "f9553eb (C1 完成态)",
+  "checks": [
+    {
+      "id": "agent-docs:shared-section:branch-sync-policy",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:mainline-focus",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:context-layering",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:release-contract",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:repo-maintenance",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:behavior-rules",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:code-quality",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:orchestration-overrides",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:eval-credentials-policy",
+      "status": "pass"
+    },
+    {
+      "id": "agent-docs:shared-section:dogfooding-policy",
+      "status": "pass"
+    },
+    {
+      "id": "marketplace:marketplace-plugin-entries",
+      "status": "pass"
+    },
+    {
+      "id": "marketplace:claude-enabled-plugins",
+      "status": "pass"
+    },
+    {
+      "id": "spec-driver-wrappers:source-skills",
+      "status": "pass"
+    },
+    {
+      "id": "spec-driver-wrappers:codex-wrapper-markers",
+      "status": "pass"
+    },
+    {
+      "id": "spec-driver-wrappers:codex-plugin-distribution-markers",
+      "status": "pass"
+    },
+    {
+      "id": "spec-driver-wrappers:claude-project-overrides",
+      "status": "pass"
+    },
+    {
+      "id": "spec-driver-wrappers:plugin-metadata-sync",
+      "status": "pass"
+    },
+    {
+      "id": "spectra-skills:canonical-source-skills",
+      "status": "pass"
+    },
+    {
+      "id": "spectra-skills:compatibility-mirrors",
+      "status": "pass"
+    },
+    {
+      "id": "spectra-skills:plugin-metadata-sync",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:manifest-exists:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:no-hooks-field:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:mcp-servers-reference:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:skill-count:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:skills-reference:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:spectra-skill-neutrality",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:manifest-exists:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:no-hooks-field:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:skill-count:spec-driver-codex-dir",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:skills-reference:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:canonical-vs-codex-gap:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "codex-plugin-consistency:marketplace-entries",
+      "status": "pass"
+    },
+    {
+      "id": "runtime-boundaries:ignored-runtime-paths",
+      "status": "pass"
+    },
+    {
+      "id": "runtime-boundaries:required-controlled-files",
+      "status": "pass"
+    },
+    {
+      "id": "runtime-boundaries:advisory-and-legacy-paths",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:marketplace-version",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:marketplace-plugin-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:marketplace-plugin-description:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:marketplace-plugin-version:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:marketplace-plugin-description:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:package-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:package-lock-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:package-lock-package-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-description:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:codex-plugin-version:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:codex-plugin-description:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:current-spec-release:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-readme-release:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-version:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-description:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:codex-plugin-version:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:codex-plugin-description:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:current-spec-release:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:plugin-readme-release:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:postinstall-version:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:root-readme-badge",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:product-mapping-description:spectra",
+      "status": "pass"
+    },
+    {
+      "id": "release-contract:product-mapping-description:spec-driver",
+      "status": "pass"
+    },
+    {
+      "id": "orchestration-overrides:overrides-file-exists",
+      "status": "pass"
+    },
+    {
+      "id": "preference-rules:agent-block-sync",
+      "status": "pass"
+    },
+    {
+      "id": "delegation-contract:skill-block-sync",
+      "status": "pass"
+    },
+    {
+      "id": "delegation-contract:codex-wrapper-block-sync",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-model-fix",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-model-story",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-model-feature",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-model-implement",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-model-resume",
+      "status": "pass"
+    },
+    {
+      "id": "orchestrator-model:orchestrator-task-coverage",
+      "status": "pass"
+    },
+    {
+      "id": "namespace-consistency:agent-frontmatter-plan",
+      "status": "pass"
+    },
+    {
+      "id": "namespace-consistency:agent-frontmatter-implement",
+      "status": "pass"
+    },
+    {
+      "id": "namespace-consistency:agent-frontmatter-verify",
+      "status": "pass"
+    },
+    {
+      "id": "namespace-consistency:agent-frontmatter-spec-review",
+      "status": "pass"
+    },
+    {
+      "id": "namespace-consistency:agent-frontmatter-quality-review",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:duplicate-canonical-id",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:dangling-edge",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:contains-coverage",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:orphan-ratio",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:legacy-ignored-nodes",
+      "status": "pass"
+    },
+    {
+      "id": "graph-quality:freshness",
+      "status": "warn"
+    }
+  ]
+}

@@ -54,6 +54,21 @@ const FORMAT_VALUES = Object.freeze(['json']);
 /** 各子命令允许的位置参数个数 */
 const POSITIONAL_ARITY = Object.freeze({ link: 0, check: 0, unlink: 1 });
 
+/** 三个子命令共享的通用 flag */
+const COMMON_FLAGS = Object.freeze(['--project-root', '--lock', '--format']);
+
+/**
+ * 每个子命令允许的 flag 全集（W-9）。
+ *
+ * 只做"全局 flag 表"级校验时，`check --manifest /missing` / `unlink --refresh` 会被
+ * **静默忽略并 exit 0**——用户以为限定了清单/刷新了锚，实际什么都没发生，且 CI 看不出来。
+ */
+const SUBCOMMAND_FLAGS = Object.freeze({
+  link: Object.freeze([...COMMON_FLAGS, '--manifest', '--refresh', '--id']),
+  check: Object.freeze([...COMMON_FLAGS, '--strict']),
+  unlink: Object.freeze([...COMMON_FLAGS]),
+});
+
 /**
  * 参数解析 + 严格校验。
  *
@@ -77,6 +92,7 @@ export function parseArgs(argv) {
     errors: [],
   };
   const rest = [...argv];
+  const seen = new Set();
   if (rest.length > 0 && SUBCOMMANDS.includes(rest[0])) {
     args.subcommand = rest.shift();
   }
@@ -88,10 +104,12 @@ export function parseArgs(argv) {
     }
     if (token === '--refresh') {
       args.refresh = true;
+      seen.add(token);
       continue;
     }
     if (token === '--strict') {
       args.strict = true;
+      seen.add(token);
       continue;
     }
     const field = VALUE_FLAGS[token];
@@ -104,6 +122,13 @@ export function parseArgs(argv) {
         continue;
       }
       rest.shift();
+      // 重复的取值型 flag MUST 报错而非后值覆盖：`--format xml --format json` 若按后值
+      // 覆盖，非法的 `xml` 会被静默吞掉并 exit 0，用户永远看不到自己写错过一次。
+      if (seen.has(token)) {
+        args.errors.push(`${token} 重复出现，取值型参数只允许指定一次`);
+        continue;
+      }
+      seen.add(token);
       args[field] = next;
       continue;
     }
@@ -117,6 +142,13 @@ export function parseArgs(argv) {
     args.errors.push(`--format 只接受 ${FORMAT_VALUES.join(' / ')}，收到 "${args.format}"`);
   }
   if (args.subcommand !== null) {
+    const allowed = SUBCOMMAND_FLAGS[args.subcommand];
+    const rejected = [...seen].filter((flag) => !allowed.includes(flag));
+    if (rejected.length > 0) {
+      args.errors.push(
+        `${args.subcommand} 不支持参数 ${rejected.join(', ')}（该子命令可用：${allowed.join(' ')}）`,
+      );
+    }
     const arity = POSITIONAL_ARITY[args.subcommand];
     if (args.positionals.length > arity) {
       args.errors.push(

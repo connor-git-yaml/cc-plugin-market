@@ -20,6 +20,7 @@ import { validateRuntimeBoundaries } from './runtime-boundary-core.mjs';
 import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
 import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.mjs';
 import { validateGraphQuality } from './graph-quality-core.mjs';
+import { validateSpecDrift } from './spec-drift-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -181,6 +182,34 @@ function aggregateValidation(prefix, result, warnings, errors, checks) {
   }
 }
 
+/**
+ * F219 第 13 族的兜底外壳。
+ *
+ * `repo:check` 是治理链路的总入口：spec-drift 侧任何未预期 reject（磁盘 I/O、dist 加载、
+ * 依赖升级引入的新异常）都不允许把整份报告变成一段栈——消费方会既拿不到 `spec-drift:*`
+ * 子检查、也拿不到其余 12 族的结论。因此这里把 reject 收敛成本族的 error 结果。
+ */
+async function validateSpecDriftSafely({ projectRoot, strict }) {
+  try {
+    return await validateSpecDrift({ projectRoot, strict });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      status: 'fail',
+      checks: [
+        {
+          id: 'anchors-status',
+          title: 'spec drift 锚点全部 fresh',
+          status: 'fail',
+          evidence: { degraded: true, reason: `spec drift 检测内部错误：${message}` },
+        },
+      ],
+      warnings: [],
+      errors: [`spec drift 检测内部错误：${message}`],
+    };
+  }
+}
+
 export function syncRepository(projectRoot) {
   const resolvedRoot = path.resolve(projectRoot);
   const steps = [];
@@ -215,7 +244,12 @@ export function syncRepository(projectRoot) {
   };
 }
 
-export async function validateRepository(projectRoot) {
+/**
+ * @param {string} projectRoot
+ * @param {{strict?: boolean}} [options] F219：可选参数，不传时行为与接入 spec-drift 之前完全一致。
+ */
+export async function validateRepository(projectRoot, options = {}) {
+  const { strict = false } = options;
   const resolvedRoot = path.resolve(projectRoot);
   const warnings = [];
   const errors = [];
@@ -314,6 +348,17 @@ export async function validateRepository(projectRoot) {
   aggregateValidation(
     'graph-quality',
     validateGraphQuality({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  // F219（M9 轨道 C）— 第 13 个子检查族：spec drift 锚点状态（默认 warn / --strict fail）。
+  // ⚠️ `await` MUST 保留：validateSpecDrift 是 async，漏掉 await 会让 aggregateValidation
+  // 拿到 Promise 对象，`result.warnings ?? []` 退化为空数组造成静默假通过（FR-008）。
+  // 未预期 reject 由 validateSpecDriftSafely 收敛为本族 error，repo:check 永不吐栈。
+  aggregateValidation(
+    'spec-drift',
+    await validateSpecDriftSafely({ projectRoot: resolvedRoot, strict }),
     warnings,
     errors,
     checks,

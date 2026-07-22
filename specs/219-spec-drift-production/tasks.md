@@ -153,42 +153,42 @@
 
 **独立测试**：构造含 stale 锚的仓库状态跑 `npm run repo:check`，验证 `checks` 数组含 `spec-drift` 记录（证明未被漏 `await` 静默跳过）、整体 `status` 为 `warn`；同场景加 `--strict` 后 `status` 变 `fail`；lock 损坏场景不论是否 `--strict` 都 `fail`。
 
-- [ ] T021 [P] 准备 repo:check 回归基线 fixture：(a) 记录当前 `npx vitest run tests/integration/repo-maintenance-sync-check.test.ts`（或等价既有测试）中 12 检查族的 `id` 集合与 `result` 快照，作为 T026 的回归对比基线；(b) 构造一个临时仓库 fixture（含 1 条 stale 锚的 lock 文件 + 对应源文件）供 T022/T026/T027 复用
+- [x] T021 [P] 准备 repo:check 回归基线 fixture：(a) 记录当前 `npx vitest run tests/integration/repo-maintenance-sync-check.test.ts`（或等价既有测试）中 12 检查族的 `id` 集合与 `result` 快照，作为 T026 的回归对比基线；(b) 构造一个临时仓库 fixture（含 1 条 stale 锚的 lock 文件 + 对应源文件）供 T022/T026/T027 复用
   **依赖**：T014（check 逻辑）、T006（lock-io）
   **验收标准**：基线快照文件存在，人工核对与当前 `repo:check` 实际输出一致
   **对应 FR/SC**：SC-007(c)
 
-- [ ] T022 [TEST] 编写 `validateSpecDrift` 三段式契约单测 `tests/unit/spec-drift-core-validate.test.ts`：`strict` 参数透传正确（`false`→warn，`true`→error）；`fresh` 不受 `strict` 影响（全 fresh 时 `--strict` 仍 `pass`，FR-007）；`lock-corrupt` 恒 `fail` 不受 `strict` 影响；**防静默 no-op 测试（FR-008 核心）**：构造含 1 条 stale 锚的 lock fixture，调用真实 `await validateRepository(projectRoot)`，断言 `checks.some(c => c.id.startsWith('spec-drift'))` 且该记录的 `warnings`/`errors` 内容非空数组（而非仅断言整体 `status`）——测试注释须说明"若未来有人误删 `await`，`aggregateValidation` 拿到未展开的 Promise 对象，`result.warnings ?? []` 会因 Promise 无 `warnings` 属性退化为空数组，本测试应真实失败"
+- [x] T022 [TEST] 编写 `validateSpecDrift` 三段式契约单测 `tests/unit/spec-drift-core-validate.test.ts`：`strict` 参数透传正确（`false`→warn，`true`→error）；`fresh` 不受 `strict` 影响（全 fresh 时 `--strict` 仍 `pass`，FR-007）；`lock-corrupt` 恒 `fail` 不受 `strict` 影响；**防静默 no-op 测试（FR-008 核心）**：构造含 1 条 stale 锚的 lock fixture，调用真实 `await validateRepository(projectRoot)`，断言 `checks.some(c => c.id.startsWith('spec-drift'))` 且该记录的 `warnings`/`errors` 内容非空数组（而非仅断言整体 `status`）——测试注释须说明"若未来有人误删 `await`，`aggregateValidation` 拿到未展开的 Promise 对象，`result.warnings ?? []` 会因 Promise 无 `warnings` 属性退化为空数组，本测试应真实失败"
   **依赖**：T021、T006
   **验收标准**：测试执行失败（`validateSpecDrift` 未实现），红态确认
   **对应 FR/SC**：FR-006、FR-007、FR-008
 
-- [ ] T023 实现 `scripts/lib/spec-drift-core.mjs::validateSpecDrift({projectRoot, strict})`：三段式契约（照抄 F217 第 12 族模式）——(1) lock-corrupt 分支恒 `fail`；(2) 空锚分支 `pass`；(3) **先处理 report 级状态（`graph-unavailable`）再处理 anchor 级**（C-5 收口，不得遍历 anchors 导致 report 级状态被静默吞掉，也不得伪造进每条 anchor）；(4) anchor 级严重度按 `strict` 计算，子 `checkResult` 随 `strict` 变化（W-3，不恒为 `warn`）
+- [x] T023 实现 `scripts/lib/spec-drift-core.mjs::validateSpecDrift({projectRoot, strict})`：三段式契约（照抄 F217 第 12 族模式）——(1) lock-corrupt 分支恒 `fail`；(2) 空锚分支 `pass`；(3) **先处理 report 级状态（`graph-unavailable`）再处理 anchor 级**（C-5 收口，不得遍历 anchors 导致 report 级状态被静默吞掉，也不得伪造进每条 anchor）；(4) anchor 级严重度按 `strict` 计算，子 `checkResult` 随 `strict` 变化（W-3，不恒为 `warn`）
   **依赖**：T022、T014
   **验收标准**：T022 全部用例转绿；`npx vitest run tests/unit/spec-drift-core-validate.test.ts` 零失败
   **对应 FR/SC**：FR-006、FR-007、FR-008
 
-- [ ] T024 改动 `scripts/lib/repo-maintenance-core.mjs`：新增 `import { validateSpecDrift } from './spec-drift-core.mjs'`；`validateRepository` 签名新增可选第二参数 `options={}`（默认值保证向后兼容，不传时行为与改动前完全一致）；在既有 12 族之后追加 `aggregateValidation('spec-drift', await validateSpecDrift({projectRoot: resolvedRoot, strict}), warnings, errors, checks)`（**严格 `await`**，不留旁路）
+- [x] T024 改动 `scripts/lib/repo-maintenance-core.mjs`：新增 `import { validateSpecDrift } from './spec-drift-core.mjs'`；`validateRepository` 签名新增可选第二参数 `options={}`（默认值保证向后兼容，不传时行为与改动前完全一致）；在既有 12 族之后追加 `aggregateValidation('spec-drift', await validateSpecDrift({projectRoot: resolvedRoot, strict}), warnings, errors, checks)`（**严格 `await`**，不留旁路）
   **依赖**：T023
   **验收标准**：`validateRepository(projectRoot)`（不传 options）行为与改动前完全一致（既有测试零回归）；传入 `{strict:true}` 时行为符合 T022 断言
   **对应 FR/SC**：FR-006
 
-- [ ] T025 改动 `scripts/repo-check.mjs`：手动解析 `--strict`（`process.argv.slice(2).includes('--strict')`，不改共享 `parseCommonProjectArgs`，因其位于 `plugins/spec-driver/`，不在 SC-008 allowlist），透传给 `await validateRepository(args.projectRoot, {strict})`
+- [x] T025 改动 `scripts/repo-check.mjs`：手动解析 `--strict`（`process.argv.slice(2).includes('--strict')`，不改共享 `parseCommonProjectArgs`，因其位于 `plugins/spec-driver/`，不在 SC-008 allowlist），透传给 `await validateRepository(args.projectRoot, {strict})`
   **依赖**：T024
   **验收标准**：`npm run repo:check -- --strict` 可执行，`--strict` 标志确实影响输出
   **对应 FR/SC**：FR-006
 
-- [ ] T026 [TEST] 编写 `repo:check` 集成回归测试 `tests/integration/spec-drift-repo-check-regression.test.ts`：跑真实 `validateRepository`，断言 (a) F217 六个 check id（duplicate/orphan/contains/dangling/ignored/freshness）**逐项** `result` 为 `pass`（不接受"整体 exit 0"作为代理证据）；(b) 既有 12 族 check id 集合与 result 与 T021 基线快照**逐项一致**；(c) 第 13 族（`id` 含 `spec-drift`）确实出现在 `checks` 中且不影响前 12 族
+- [x] T026 [TEST] 编写 `repo:check` 集成回归测试 `tests/integration/spec-drift-repo-check-regression.test.ts`：跑真实 `validateRepository`，断言 (a) F217 六个 check id（duplicate/orphan/contains/dangling/ignored/freshness）**逐项** `result` 为 `pass`（不接受"整体 exit 0"作为代理证据）；(b) 既有 12 族 check id 集合与 result 与 T021 基线快照**逐项一致**；(c) 第 13 族（`id` 含 `spec-drift`）确实出现在 `checks` 中且不影响前 12 族
   **依赖**：T021、T025
   **验收标准**：三项断言全部通过；此测试红态来自"改动前尚无第 13 族"，T025 完成后转绿
   **对应 FR/SC**：SC-007(b)(c)
 
-- [ ] T027 [TEST] 编写 US3 全部 5 条 Acceptance Scenario 端到端验证 `tests/integration/spec-drift-repo-check-modes.test.ts`：(1) 存在非 fresh 锚、lock 完好 → 默认模式整体 `status=warn`，`checks` 含 `spec-drift` 记录且 warnings 含具体锚信息；(2) 同场景 `--strict` → `status=fail`；(3) lock 损坏 → 默认与 `--strict` 均 `status=fail`；(4) 无锚或全 fresh → `spec-drift` 检查族贡献 `pass`，不产生噪声；(5) 遗漏 `await` 回归防线（复用 T022 的防静默断言逻辑，此处从 `repo:check` CLI 层面再验证一次）
+- [x] T027 [TEST] 编写 US3 全部 5 条 Acceptance Scenario 端到端验证 `tests/integration/spec-drift-repo-check-modes.test.ts`：(1) 存在非 fresh 锚、lock 完好 → 默认模式整体 `status=warn`，`checks` 含 `spec-drift` 记录且 warnings 含具体锚信息；(2) 同场景 `--strict` → `status=fail`；(3) lock 损坏 → 默认与 `--strict` 均 `status=fail`；(4) 无锚或全 fresh → `spec-drift` 检查族贡献 `pass`，不产生噪声；(5) 遗漏 `await` 回归防线（复用 T022 的防静默断言逻辑，此处从 `repo:check` CLI 层面再验证一次）
   **依赖**：T025、T023
   **验收标准**：`npx vitest run tests/integration/spec-drift-repo-check-modes.test.ts` 零失败
   **对应 FR/SC**：FR-006、FR-007、FR-008、SC-004
 
-- [ ] T028 C2 阶段收尾验证：跑 `npx vitest run`（全部 C1+C2 测试）确认零失败；跑 `npm run repo:check` 与 `npm run repo:check -- --strict` 人工核对输出符合预期；确认 SC-008 allowlist 内 `git diff --stat` 只涉及 `scripts/lib/repo-maintenance-core.mjs`、`scripts/repo-check.mjs`、`scripts/lib/spec-drift-*.mjs` 等既定文件；触发 Codex 对抗审查后再 commit
+- [x] T028 C2 阶段收尾验证：跑 `npx vitest run`（全部 C1+C2 测试）确认零失败；跑 `npm run repo:check` 与 `npm run repo:check -- --strict` 人工核对输出符合预期；确认 SC-008 allowlist 内 `git diff --stat` 只涉及 `scripts/lib/repo-maintenance-core.mjs`、`scripts/repo-check.mjs`、`scripts/lib/spec-drift-*.mjs` 等既定文件；触发 Codex 对抗审查后再 commit
   **依赖**：T026、T027
   **验收标准**：全部检查通过并记录于 commit message
   **对应 FR/SC**：SC-004、SC-007(c)、SC-008

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "c2-applyDiscount",
+    "ref": "src/target.ts::applyDiscount",
+    "docPath": "docs/pricing.md",
+    "line": 42
+  }
+]

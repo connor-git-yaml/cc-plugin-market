@@ -315,6 +315,28 @@ export async function checkAnchors(anchors, options) {
   return buildReport({ anchors: results });
 }
 
+/** 竞态重读的最大尝试次数：文件在检测窗口内被持续改写时不无限重试 */
+const MAX_ANALYSIS_ATTEMPTS = 3;
+
+/**
+ * 读取源码快照。
+ *
+ * MUST 捕获异常：analyzeFiles 之后的裸 `fs.readFileSync` 一旦抛出（并发删除 / EACCES /
+ * EISDIR / I/O 错误），异常会一路穿透 checkAnchors → validateSpecDrift → repo:check，
+ * 让整条治理链路吐栈而拿不到任何结构化结论。
+ *
+ * @returns {{ok:true, source:string} | {ok:false, missing:boolean, message:string}}
+ */
+function readSourceSnapshot(absFile) {
+  try {
+    return { ok: true, source: fs.readFileSync(absFile, 'utf8') };
+  } catch (err) {
+    const code = err?.code;
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, missing: code === 'ENOENT', message: `${code ?? 'IO_ERROR'}: ${message}` };
+  }
+}
+
 /** 组级（同一文件）检测：语言判定 → 文件存在性 → analyzeFiles → parser-health → 逐锚比对 */
 async function checkOneGroup({ filePart, members, projectRoot, analyzeFiles, project }) {
   const ext = path.extname(filePart).toLowerCase();
@@ -342,52 +364,101 @@ async function checkOneGroup({ filePart, members, projectRoot, analyzeFiles, pro
     );
   }
 
-  let skeleton;
-  try {
-    const skeletons = await analyzeFiles([absFile]);
-    skeleton = skeletons[0];
-  } catch (err) {
-    // existsSync 之后仍可能被并发删除：ENOENT 属竞态删除而非解析失败（C-4）
-    const message = err instanceof Error ? err.message : String(err);
-    const isMissing = err?.code === 'ENOENT' || /not exist|ENOENT|FileNotFound/i.test(message);
+  const outcome = await analyzeConsistentSnapshot({ absFile, filePart, analyzeFiles, project });
+  if (!outcome.ok) {
     return members.map(({ anchor }) =>
-      isMissing
-        ? anchorResult(anchor, 'orphaned', { reason: `文件已删除（解析期竞态）：${filePart}` })
-        : anchorResult(anchor, 'parser-degrade', { reason: `analyzeFiles 抛出异常：${message}` }),
+      anchorResult(anchor, outcome.status, { reason: outcome.reason }),
     );
   }
-  if (!skeleton) {
-    return members.map(({ anchor }) =>
-      anchorResult(anchor, 'parser-degrade', { reason: 'analyzeFiles 未返回 skeleton' }),
-    );
-  }
-
-  // 显式 parser-health 判定（plan §9.1 步骤 4）：
-  // (a) 走了 tree-sitter fallback；(b) ts-morph 语法诊断非空。
-  // ⚠️ ts-morph 采用错误恢复策略，普通语法错误**不抛异常**，因此 MUST NOT 只靠异常判定。
-  if (skeleton.parserUsed && skeleton.parserUsed !== 'ts-morph') {
-    return members.map(({ anchor }) =>
-      anchorResult(anchor, 'parser-degrade', {
-        reason: `parser 回退至 ${skeleton.parserUsed}（非 ts-morph），无法保证 symbol span 可靠`,
-      }),
-    );
-  }
-  const syntax = hasSyntacticErrors(project, absFile);
-  if (!syntax.ok) {
-    return members.map(({ anchor }) =>
-      anchorResult(anchor, 'parser-degrade', { reason: `语法诊断读取失败：${syntax.reason}` }),
-    );
-  }
-  if (syntax.hasErrors) {
-    return members.map(({ anchor }) =>
-      anchorResult(anchor, 'parser-degrade', { reason: `目标文件存在语法错误：${filePart}` }),
-    );
-  }
-
-  const source = fs.readFileSync(absFile, 'utf8');
   return members.map(({ anchor, parts }) =>
-    checkOneAnchor({ anchor, symbolName: parts.symbolPart, skeleton, source }),
+    checkOneAnchor({
+      anchor,
+      symbolName: parts.symbolPart,
+      skeleton: outcome.skeleton,
+      source: outcome.source,
+    }),
   );
+}
+
+/** 快照读取失败 → 状态映射：ENOENT = 竞态删除（orphaned），其余 I/O 失败 = parser-degrade */
+function snapshotFailure(snapshot, filePart) {
+  return snapshot.missing
+    ? { ok: false, status: 'orphaned', reason: `文件已删除（检测期竞态）：${filePart}` }
+    : { ok: false, status: 'parser-degrade', reason: `读取源码失败（${snapshot.message}）：${filePart}` };
+}
+
+/**
+ * 在**内容一致的快照**上完成 analyzeFiles + parser-health + 源码读取（TOCTOU 修复）。
+ *
+ * 问题：analyzeFiles 只接受路径、自己从磁盘读，无法注入内存快照；若随后另行
+ * `readFileSync` 取源码，两次读取之间文件被改写时，**旧 skeleton 的行号 span 会被套到
+ * 新源码上**，算出的指纹既非旧内容也非新内容——极端情况下甚至可能撞回 lock 里的旧指纹
+ * 而误判 fresh，违反 FR-004 对"按即时解析内容判定"的一致性预期。
+ *
+ * 因此采用 read-before / analyze / read-after 的内容校验：前后两次读到的字节完全一致时
+ * 才认为 skeleton 与 source 同源；不一致就整轮重试（有界 MAX_ANALYSIS_ATTEMPTS 次），
+ * 仍不一致则显式降级为 parser-degrade，绝不用不一致的组合产出 fresh/stale 结论。
+ *
+ * 导出仅为让竞态用例可注入 analyzeFiles（真实竞态无法在测试里稳定复现）；
+ * 生产路径只经由 checkOneGroup 调用。
+ *
+ * @returns {Promise<{ok:true, skeleton:object, source:string} | {ok:false, status:string, reason:string}>}
+ */
+export async function analyzeConsistentSnapshot({ absFile, filePart, analyzeFiles, project }) {
+  for (let attempt = 1; attempt <= MAX_ANALYSIS_ATTEMPTS; attempt += 1) {
+    const before = readSourceSnapshot(absFile);
+    if (!before.ok) return snapshotFailure(before, filePart);
+
+    let skeleton;
+    try {
+      const skeletons = await analyzeFiles([absFile]);
+      skeleton = skeletons[0];
+    } catch (err) {
+      // existsSync 之后仍可能被并发删除：ENOENT 属竞态删除而非解析失败（C-4）
+      const message = err instanceof Error ? err.message : String(err);
+      const isMissing = err?.code === 'ENOENT' || /not exist|ENOENT|FileNotFound/i.test(message);
+      return isMissing
+        ? { ok: false, status: 'orphaned', reason: `文件已删除（解析期竞态）：${filePart}` }
+        : { ok: false, status: 'parser-degrade', reason: `analyzeFiles 抛出异常：${message}` };
+    }
+    if (!skeleton) {
+      return { ok: false, status: 'parser-degrade', reason: 'analyzeFiles 未返回 skeleton' };
+    }
+
+    if (skeleton.parserUsed && skeleton.parserUsed !== 'ts-morph') {
+      return {
+        ok: false,
+        status: 'parser-degrade',
+        reason: `parser 回退至 ${skeleton.parserUsed}（非 ts-morph），无法保证 symbol span 可靠`,
+      };
+    }
+
+    // 一致性闸门 MUST 紧跟 analyzeFiles：文件在此窗口内被删除时结论是 orphaned，
+    // 若先做语法诊断会被 ts-morph 的 ENOENT 抢先降级成 parser-degrade（掩盖真实状态）。
+    const after = readSourceSnapshot(absFile);
+    if (!after.ok) return snapshotFailure(after, filePart);
+    if (after.source !== before.source) continue; // 内容变了 → 整轮重来
+
+    // 显式 parser-health 判定（plan §9.1 步骤 4）：
+    // (a) 走了 tree-sitter fallback（上面已判）；(b) ts-morph 语法诊断非空。
+    // ⚠️ ts-morph 采用错误恢复策略，普通语法错误**不抛异常**，因此 MUST NOT 只靠异常判定。
+    // 重试轮 MUST 刷新 ts-morph 缓存，否则拿上一轮的旧文本做诊断。
+    const syntax = hasSyntacticErrors(project, absFile, { refresh: attempt > 1 });
+    if (!syntax.ok) {
+      return { ok: false, status: 'parser-degrade', reason: `语法诊断读取失败：${syntax.reason}` };
+    }
+    if (syntax.hasErrors) {
+      return { ok: false, status: 'parser-degrade', reason: `目标文件存在语法错误：${filePart}` };
+    }
+
+    return { ok: true, skeleton, source: after.source };
+  }
+
+  return {
+    ok: false,
+    status: 'parser-degrade',
+    reason: `目标文件在检测期间被持续改写，${MAX_ANALYSIS_ATTEMPTS} 次重试后仍无法取得一致快照：${filePart}`,
+  };
 }
 
 /**

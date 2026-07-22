@@ -121,3 +121,40 @@
     已按指令实现并同步改 USAGE 保持文档行为一致; 放宽只需改 parseArgs 一行条件
   全量: 5563 passed / 2 failed(均已知负载 flaky: community-analysis perf, graph-quality-cli
         stdout 截断; 隔离复跑 21 passed 双绿) / build exit 0
+
+[implement:C2] T021-T028 完成: validateSpecDrift 三段式 + 第13族接线 + repo-check --strict
+  变异测试实证: 删 await -> AS1-AS5 五条红; 恢复 -> 6/6 绿 (守护真有咬合, 非声称)
+  代理反驳并给更优方案: 12族"集合相等"断言结构性脆弱(10条id由 docs/shared/*.md 文件名派生),
+    改为双向断言(基线项仍在且status不变 + 新增项必须全是 spec-drift:*)
+  报 plan 伪代码与真实签名 2 处漂移: checkAnchors 参数形态 / createCheck 字段是 status 非 result
+  drift 184 passed | 全量 5580 passed/1 known-flaky | repo:check 两模式均 spec-drift:anchors-status pass
+[codex-review:C1+C2] 复合轮 (task-mrvyae4s-u8neq3, session 019f8968)
+  C1: 8 CLOSED / 3 PARTIALLY / 0 NOT-CLOSED
+    W-1 PARTIAL: checkAnchors 公开层 lock-corrupt/空lock 分支仍手工 summary:{} 未走 buildReport
+    W-7 PARTIAL: paths 只做词法 resolve/relative 未比 realpath; 实测 node_modules/typescript
+        判 ok 但 realpath 在工作树外(本 worktree node_modules 本身即软链, 条件真实存在)
+    W-9 PARTIAL: 无子命令 flag allowlist 且不拒重复 value flag
+        (check --manifest /missing 静默 exit0; --format xml --format json 后值覆盖非法前值)
+  C2: 0 CRITICAL / 1 WARNING
+    TOCTOU: analyzeFiles 后的 readFileSync 无 try/catch -> 文件被删/权限变 -> validateSpecDrift
+      reject -> repo:check 吐栈无结构化输出; 且分析与重读间文件变化会把旧 span 套到新源码,
+      极端可误判 fresh (探针注入 EACCES 复现)
+  INFO: 基线断言改动理由不成立(新增 agent-docs:* 仍会在 added 检查失败仍需更新基线);
+    且允许任意/重复 spec-drift:* 项, familyCount 未被读取
+  验证边界: Codex 只读沙箱下 vitest 因 .vite-temp EPERM 无法执行, 测试数由主线程自跑覆盖
+
+[fix:C1-partial+C2] 5 项全闭合
+  TOCTOU: 采读前/读后字节级一致性闸门 + 有界重试(3次) — analyzeFiles 只收路径自行读盘,
+    dist API 无内存源码注入形态且禁改 src/**, "同一快照直传"在改动面内不可达;
+    不一致即整轮重来, 3 次仍不一致降级 parser-degrade, 绝不用不一致组合产出 fresh/stale
+    非显然排序约束: 一致性闸门必须紧跟 analyzeFiles 且先于语法诊断 —
+      否则"分析后删文件"会被 ts-morph ENOENT 抢先降级 parser-degrade 掩盖真实 orphaned
+      (第一版补丁踩坑测试红, 已重排)
+  W-7: realpathContained 比对 realpath; 实测本仓 node_modules/typescript 修复前 ok 修复后拒
+    (已触发条件非理论风险); 项目内合法软链仍放行未误伤
+  W-1: checkAnchors 公开层两分支改走 buildReport, 全11态零计数固定键 summary
+  W-9: SUBCOMMAND_FLAGS 白名单 + 重复取值 flag 报错(布尔 flag 不收紧, 无静默吞值失效模式)
+  INFO: check id 唯一性断言 + 新增项精确等于 [spec-drift:anchors-status] + 删死字段 familyCount
+    (按前缀实为13族与仓库"12族"文案不符, 断言任一数字都会固化历史口径歧义)
+  drift 227 passed(16文件) | 全量 5599 passed/1 known-flaky(cli-coldstart 隔离8/8绿) | build 0
+  主线程独立复核: symlink 探针 4 组 (node_modules 拒/项目内放行/../拒/绝对路径拒)

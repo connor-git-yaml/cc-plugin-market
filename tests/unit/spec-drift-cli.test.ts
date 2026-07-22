@@ -258,6 +258,52 @@ describe('W-9 参数严格校验（静默降级在 CI 里不可观测）', () =>
   });
 });
 
+describe('W-9 补齐：子命令 flag allowlist 与重复取值 flag', () => {
+  it('check 不接受 link 专属的 --manifest（原先静默忽略并 exit 0）', async () => {
+    const { code, out } = await run(withPaths(['check', '--manifest', '/definitely/missing.json']));
+    expect(code).toBe(2);
+    expect(out).toMatch(/--manifest/);
+  });
+
+  it('check 不接受 --refresh', async () => {
+    const { code, out } = await run(withPaths(['check', '--refresh']));
+    expect(code).toBe(2);
+    expect(out).toMatch(/--refresh/);
+  });
+
+  it('unlink 不接受 --refresh / --strict / --manifest（原先全部静默忽略）', async () => {
+    for (const flag of [['--refresh'], ['--strict'], ['--manifest', '/x.json']]) {
+      const { code, out } = await run(withPaths(['unlink', 'x1', ...flag]));
+      expect(code, flag.join(' ')).toBe(2);
+      expect(out).toMatch(/不支持参数/);
+    }
+  });
+
+  it('link 不接受 check 专属的 --strict', async () => {
+    const { code, out } = await run(withPaths(['link', '--manifest', manifestPath, '--strict']));
+    expect(code).toBe(2);
+    expect(out).toMatch(/--strict/);
+  });
+
+  it('重复取值 flag 报错，MUST NOT 用后值覆盖非法前值（`--format xml --format json`）', async () => {
+    const { code, out } = await run(withPaths(['check', '--format', 'xml', '--format', 'json']));
+    expect(code).toBe(2);
+    expect(out).toMatch(/重复出现/);
+  });
+
+  it('重复 --lock 同样报错（避免"以为写的是 A 实际读的是 B"）', async () => {
+    const { code, out } = await run(['check', '--project-root', root, '--lock', lockPath, '--lock', '/tmp/other.json']);
+    expect(code).toBe(2);
+    expect(out).toMatch(/重复出现/);
+  });
+
+  it('允许的 flag 组合不受影响：check --strict --format json 仍正常', async () => {
+    const { code, out } = await run(withPaths(['check', '--strict', '--format', 'json']));
+    expect(code).toBe(0);
+    expect(JSON.parse(out)).toMatchObject({ command: 'check' });
+  });
+});
+
 describe('C-1 未预期异常兜底（CLI 是 CI 消费入口，绝不吐栈）', () => {
   it('内部异常 → exit 2 且 json 模式输出结构化失败对象', async () => {
     // 触发方式：把 lock 的父目录指向一个已存在的普通文件，writeLockAtomic 的

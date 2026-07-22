@@ -88,12 +88,16 @@ export function createSharedProject() {
  * 实测语法错误(1109) 与纯类型错误(2322) 在后者中同为 category=Error，
  * 按 category 过滤会把「语法完全可解析、只是类型不完整」的文件误判成 parser-degrade。
  *
+ * `refresh=true` 时强制从磁盘重读已缓存的 SourceFile：竞态重试路径下文件内容已变，
+ * 复用 project 缓存会拿旧文本做诊断（TOCTOU 修复的一部分）。
+ *
  * @returns {{ok:true, hasErrors:boolean} | {ok:false, reason:string}}
  */
-export function hasSyntacticErrors(project, absFilePath) {
+export function hasSyntacticErrors(project, absFilePath, { refresh = false } = {}) {
   try {
-    const sourceFile =
-      project.getSourceFile(absFilePath) ?? project.addSourceFileAtPath(absFilePath);
+    let sourceFile = project.getSourceFile(absFilePath);
+    if (sourceFile !== undefined && refresh) sourceFile.refreshFromFileSystemSync();
+    sourceFile = sourceFile ?? project.addSourceFileAtPath(absFilePath);
     const diagnostics = project
       .getProgram()
       .compilerObject.getSyntacticDiagnostics(sourceFile.compilerNode);

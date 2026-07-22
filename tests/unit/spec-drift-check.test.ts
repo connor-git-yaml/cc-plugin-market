@@ -11,7 +11,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // @ts-expect-error —— .mjs 治理脚本无类型声明
-import { checkAnchors, computeReportExitCode, STATE_MATRIX } from '../../scripts/lib/spec-drift-check.mjs';
+import {
+  checkAnchors,
+  computeReportExitCode,
+  analyzeConsistentSnapshot,
+  STATE_MATRIX,
+} from '../../scripts/lib/spec-drift-check.mjs';
+// @ts-expect-error —— .mjs 治理脚本无类型声明
+import { createSharedProject } from '../../scripts/lib/spec-drift-fingerprint.mjs';
 // @ts-expect-error —— .mjs 治理脚本无类型声明
 import { resolveReferences } from '../../scripts/lib/spec-drift-resolve.mjs';
 
@@ -369,4 +376,94 @@ describe('C3 待补（T032）——locateExportedNodes 三态映射', () => {
   it.todo('node-locate-failed → fingerprint-unavailable（T032）');
   it.todo('node-locate-ambiguous → fingerprint-unavailable（T032）');
   it.todo('reexport-unsupported → fingerprint-unavailable（T032）');
+});
+
+/**
+ * TOCTOU（C2 审查项）：analyzeFiles 与源码读取之间存在窗口。
+ *
+ * 真实竞态无法在测试里稳定复现，故通过注入 analyzeFiles 在"分析已完成、源码尚未读取"
+ * 的确切时刻改动磁盘，等价复刻该窗口。
+ */
+describe('analyzeConsistentSnapshot —— 分析/重读竞态', () => {
+  function realSkeletonStub(absFile: string) {
+    return {
+      filePath: absFile,
+      parserUsed: 'ts-morph',
+      exports: [{ name: 'anchored', startLine: 1, endLine: 3 }],
+    };
+  }
+
+  it('分析完成后文件被删除 → orphaned，而不是抛异常穿透调用方', async () => {
+    const root = makeTmpProject({ 'a.ts': ORIGINAL });
+    const absFile = path.join(root, 'a.ts');
+    const outcome = await analyzeConsistentSnapshot({
+      absFile,
+      filePart: 'a.ts',
+      analyzeFiles: async () => {
+        fs.rmSync(absFile);
+        return [realSkeletonStub(absFile)];
+      },
+      project: createSharedProject(),
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.status).toBe('orphaned');
+    expect(outcome.reason).toMatch(/竞态/);
+  });
+
+  it('分析完成后文件被持续改写 → parser-degrade（绝不把旧 span 套到新源码上）', async () => {
+    const root = makeTmpProject({ 'a.ts': ORIGINAL });
+    const absFile = path.join(root, 'a.ts');
+    let writes = 0;
+    const outcome = await analyzeConsistentSnapshot({
+      absFile,
+      filePart: 'a.ts',
+      analyzeFiles: async () => {
+        writes += 1;
+        fs.writeFileSync(absFile, `${ORIGINAL}\n// mutation ${writes}\n`, 'utf8');
+        return [realSkeletonStub(absFile)];
+      },
+      project: createSharedProject(),
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.status).toBe('parser-degrade');
+    expect(outcome.reason).toMatch(/持续改写/);
+    expect(writes).toBeGreaterThan(1); // 有界重试确实发生过
+  });
+
+  it('只在首轮改写时，重试后取到一致快照并正常返回', async () => {
+    const root = makeTmpProject({ 'a.ts': ORIGINAL });
+    const absFile = path.join(root, 'a.ts');
+    let attempt = 0;
+    const outcome = await analyzeConsistentSnapshot({
+      absFile,
+      filePart: 'a.ts',
+      analyzeFiles: async () => {
+        attempt += 1;
+        if (attempt === 1) fs.writeFileSync(absFile, `${ORIGINAL}\n// once\n`, 'utf8');
+        return [realSkeletonStub(absFile)];
+      },
+      project: createSharedProject(),
+    });
+    expect(outcome.ok).toBe(true);
+    expect(outcome.source).toBe(fs.readFileSync(absFile, 'utf8'));
+  });
+
+  it('分析完成后源码不可读（EACCES 等 I/O 失败）→ parser-degrade，不抛异常', async () => {
+    const root = makeTmpProject({ 'a.ts': ORIGINAL });
+    const absFile = path.join(root, 'a.ts');
+    const outcome = await analyzeConsistentSnapshot({
+      absFile,
+      filePart: 'a.ts',
+      analyzeFiles: async () => {
+        // 用目录替换文件：readFileSync 抛 EISDIR，等价于非 ENOENT 的 I/O 失败
+        fs.rmSync(absFile);
+        fs.mkdirSync(absFile);
+        return [realSkeletonStub(absFile)];
+      },
+      project: createSharedProject(),
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.status).toBe('parser-degrade');
+    expect(outcome.reason).toMatch(/读取源码失败/);
+  });
 });
