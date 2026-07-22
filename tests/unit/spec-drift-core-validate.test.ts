@@ -104,6 +104,9 @@ describe('validateSpecDrift 三段式契约（FR-006/007/008）', () => {
     expect(result.errors).toEqual([]);
   });
 
+  // 显式放宽 timeout：writeFreshLock() 会真实 await import('dist/core/ast-analyzer.js') 并跑 AST 分析，
+  // 在 `npm run build` 之后的首跑属于冷文件缓存，实测可超过默认 5s（缓存转热后仅 ~700ms）。
+  // 这是 dist 冷导入的 I/O 成本，不是逻辑变慢，故只放宽时间上限、不改任何断言。
   it('全部锚 fresh → 默认 pass，且 --strict 仍 pass（FR-007：strict 不是"有锚就 fail"）', async () => {
     await writeFreshLock();
 
@@ -117,7 +120,7 @@ describe('validateSpecDrift 三段式契约（FR-006/007/008）', () => {
     expect(strict.warnings).toEqual([]);
     expect(strict.errors).toEqual([]);
     expect(strict.checks.every((c) => c.status === 'pass')).toBe(true);
-  });
+  }, 30000);
 
   it('存在 stale 锚 + 默认模式 → warn，warnings 非空且含锚 id', async () => {
     writeLock([anchorRecord(`sha256:${'a'.repeat(64)}`)]);

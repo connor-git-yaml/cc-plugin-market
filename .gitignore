@@ -76,6 +76,12 @@ specs/modules/
 specs/project/
 specs/bundles/
 
+# spec-drift graph-unavailable fixture 的 broken-dist/dist/ 必须入库：
+# 它不是构建产物，而是"dist 存在但语法非法 → dist-load-failed"分支的唯一输入。
+# 顶层 `dist/` 规则会在任意层级吞掉它（F219 漏提交的直接成因），故显式放行该目录。
+# 注意：必须先放行目录本身，git 不允许在被忽略的父目录内重新包含文件。
+!tests/fixtures/spec-drift/graph-unavailable/broken-dist/dist/
+
 # E2E fixture 运行时泄漏（panoramic pipeline 偶尔创建相对路径 var/folders/... 输出，
 # 与 mkdtempSync 临时目录一同清理；该模式由 Feature 144/146 测试触发，本质是 pipeline 兼容问题）
 tests/fixtures/e2e/*/var/
