@@ -758,6 +758,10 @@ export async function runBatch(
 
         if (isRoot) {
           const generatedRootSpecs: string[] = [];
+          // Feature 222：root 模块由多个文件各自生成一份 spec，任一文件降级即整模块记为
+          // 降级——否则扁平项目（只有 root 组）即使全量 AST-only，degraded 仍为空，
+          // 降级占比提示与 --require-llm 的事后校验双双失效。
+          let rootLlmDegraded = false;
           for (const file of group.files) {
             const sourceTarget = normalizeProjectPath(file);
             if (!rootTargetsToGenerate.includes(sourceTarget)) continue;
@@ -772,6 +776,9 @@ export async function runBatch(
             // short-circuit 在 root 路径无效（前次实施漏掉这里导致 review 发现 CRITICAL）。
             if (result.costMetadata?.tokenUsage.input) {
               cumulativeInputTokens += result.costMetadata.tokenUsage.input;
+            }
+            if (result.llmDegraded) {
+              rootLlmDegraded = true;
             }
             collectedModuleSpecs.push(result.moduleSpec);
             generatedRootSpecs.push(toProjectPath(path.resolve(result.specPath)));
@@ -796,8 +803,13 @@ export async function runBatch(
             continue;
           }
 
-          successful.push(moduleName);
-          reporter.complete(moduleName, 'success');
+          if (rootLlmDegraded) {
+            degraded.push(moduleName);
+            reporter.complete(moduleName, 'degraded');
+          } else {
+            successful.push(moduleName);
+            reporter.complete(moduleName, 'success');
+          }
           // Feature 182：replace 语义（失效重跑时去重 + completed/failed 互斥）
           upsertCompletedModule(checkedState, {
             path: moduleName,
@@ -848,7 +860,9 @@ export async function runBatch(
 
           collectedModuleSpecs.push(result.moduleSpec);
 
-          if (result.confidence === 'low' && result.warnings.some((w) => w.includes('降级'))) {
+          // Feature 222：改用 orchestrator 暴露的结构化 llmDegraded，与 root 分支同源，
+          // 不再依赖匹配中文 warning 子串（文案微调即静默失效且无测试能捕获）。
+          if (result.llmDegraded) {
             degraded.push(moduleName);
             reporter.complete(moduleName, 'degraded');
           } else {

@@ -6,7 +6,7 @@
 import { resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { runBatch } from '../../batch/batch-orchestrator.js';
-import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { resolveAuthGate, handleError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
 import { FileWatcher, CATEGORY_LABEL } from '../../watcher/index.js';
 import type { FileChangeEvent } from '../../watcher/index.js';
@@ -88,7 +88,9 @@ function printChangedFiles(events: FileChangeEvent[]): void {
  * 启动文件监听，变更触发后自动调用 runBatch({ incremental: true })
  */
 export async function runWatchCommand(command: CLICommand): Promise<void> {
-  if (!checkAuth()) {
+  // Feature 222：长驻进程退出码语义弱，只做入口检查；调用点在监听循环之外，
+  // 降级提示天然只在启动时打印一次。
+  if (!resolveAuthGate(command.requireLlm ?? false)) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }

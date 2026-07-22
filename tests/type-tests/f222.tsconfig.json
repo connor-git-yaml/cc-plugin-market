@@ -1,0 +1,16 @@
+{
+  "// why 独立于 tsconfig.json": "该断言需 import src/core/single-spec-orchestrator，其依赖树在 exactOptionalPropertyTypes:true 下大量报错；此处沿用生产 tsconfig 的严格度（与 f220.tsconfig.json 同款）",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "rootDir": "../.."
+  },
+  "include": ["./f222-llm-degraded-required.typecheck.ts"]
+}

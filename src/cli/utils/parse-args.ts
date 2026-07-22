@@ -42,6 +42,12 @@ export interface CLICommand {
   watchDebounce?: number;
   /** watch 详细日志模式（仅 watch 子命令） */
   watchVerbose?: boolean;
+  /**
+   * Feature 222：零认证时不再硬退而是降级为 AST-only，本 flag 为需要严格失败语义
+   * （如 CI）保留的逃生口；generate / batch / diff / watch 四个子命令消费，
+   * 未传时按 false 处理（即允许降级）。
+   */
+  requireLlm?: boolean;
   /** graph 命令操作类型 */
   graphOperation?: 'build';
   /** 是否生成有向图（仅 graph 命令） */
@@ -331,6 +337,7 @@ export function parseArgs(argv: string[]): ParseResult {
         subcommand: 'watch',
         watchDebounce,
         watchVerbose,
+        requireLlm: argv.includes('--require-llm'),
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },
@@ -898,6 +905,7 @@ export function parseArgs(argv: string[]): ParseResult {
         deep,
         force: false,
         outputDir,
+        requireLlm: argv.includes('--require-llm'),
         version: false,
         help: false,
         global: false,
@@ -1060,6 +1068,7 @@ export function parseArgs(argv: string[]): ParseResult {
         generateHtml,
         hyperedgesEnabled,
         enableAdr,
+        requireLlm: argv.includes('--require-llm'),
       },
     };
   }
@@ -1083,6 +1092,7 @@ export function parseArgs(argv: string[]): ParseResult {
       deep: false,
       force: false,
       outputDir,
+      requireLlm: argv.includes('--require-llm'),
       version: false,
       help: false,
       global: false,

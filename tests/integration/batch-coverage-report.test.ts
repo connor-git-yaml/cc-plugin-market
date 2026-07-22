@@ -75,6 +75,8 @@ export function authorize(value: string): string {
         confidence: 'high' as const,
         warnings: [],
         moduleSpec,
+        // Feature 222：必填字段；缺失时消费端 truthiness 判定会静默等价 false
+        llmDegraded: false,
       };
     });
   });
@@ -115,6 +117,8 @@ export function authorize(value: string): string {
         confidence: 'low' as const,
         warnings: [],
         moduleSpec,
+        // Feature 222：必填字段；缺失时消费端 truthiness 判定会静默等价 false
+        llmDegraded: false,
       };
     });
 

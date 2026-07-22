@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   runBatch: vi.fn(),
   buildAstGraphOnly: vi.fn(),
-  checkAuth: vi.fn(),
+  resolveAuthGate: vi.fn(),
   loadProjectConfig: vi.fn(),
   mergeConfig: vi.fn(),
 }));
@@ -21,7 +21,7 @@ vi.mock('../../src/cli/utils/error-handler.js', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>;
   return {
     ...actual,
-    checkAuth: mocks.checkAuth,
+    resolveAuthGate: mocks.resolveAuthGate,
   };
 });
 vi.mock('../../src/config/project-config.js', () => ({
@@ -46,7 +46,7 @@ const baseCommand: CLICommand = {
 describe('runBatchCommand exit code (Feature 127)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.checkAuth.mockReturnValue(true);
+    mocks.resolveAuthGate.mockReturnValue(true);
     mocks.loadProjectConfig.mockReturnValue({});
     mocks.mergeConfig.mockReturnValue({
       force: false,
@@ -129,6 +129,43 @@ describe('runBatchCommand exit code (Feature 127)', () => {
     });
     await runBatchCommand(baseCommand, '3.0.1');
     expect(process.exitCode).toBe(0);
+  });
+
+  // Feature 222：--require-llm 降级校验纳入优先级链
+  // （failed > require-llm-degraded > budget-cancel > success）
+  it('--require-llm + 降级模块 + 失败模块同时存在 → exit 1（优先 TARGET_ERROR）', async () => {
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 3,
+      successful: ['a'],
+      failed: [{ path: 'b', error: 'boom', failedAt: '', retryCount: 0, degradedToAstOnly: false }],
+      skipped: [],
+      degraded: ['c'],
+      duration: 100,
+      indexGenerated: false,
+      summaryLogPath: '',
+    });
+    await runBatchCommand({ ...baseCommand, requireLlm: true }, '3.0.1');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('--require-llm + 降级模块 + 预算 cancel（无失败）→ exit 2（优先 API_ERROR）', async () => {
+    mocks.runBatch.mockResolvedValue({
+      totalModules: 2,
+      successful: ['a'],
+      failed: [],
+      skipped: [],
+      degraded: ['b'],
+      duration: 100,
+      indexGenerated: false,
+      summaryLogPath: '',
+      budgetDecision: {
+        policy: 'cancel',
+        message: '超预算，自动取消',
+        interactive: false,
+      },
+    });
+    await runBatchCommand({ ...baseCommand, requireLlm: true }, '3.0.1');
+    expect(process.exitCode).toBe(2);
   });
 
   it('失败模块 + 预算 cancel 同时存在 → exit 1（优先 TARGET_ERROR）', async () => {

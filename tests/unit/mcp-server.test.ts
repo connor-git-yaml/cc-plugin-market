@@ -118,6 +118,8 @@ describe('createMcpServer', () => {
       tokenUsage: 321,
       confidence: 'medium',
       warnings: ['w1'],
+      // Feature 222：必填字段；缺失时消费端 truthiness 判定会静默等价 false
+      llmDegraded: false,
     });
     const tool = findTool(server, 'generate');
 

@@ -264,6 +264,9 @@ describe('single-spec-orchestrator', () => {
     expect(result.confidence).toBe('high');
     expect(result.tokenUsage).toBe(200);
     expect(result.warnings).toHaveLength(0);
+    // Feature 222：producer 侧防线——降级判定的唯一真值来源必须由本函数正确赋值，
+    // 下游（batch 降级统计 / --require-llm 校验）只做 truthiness 读取，漏赋值会静默为 false
+    expect(result.llmDegraded).toBe(false);
     expect(fs.existsSync(path.join(outputDir, 'module.spec.md'))).toBe(true);
     expect(stages.some((s) => s.stage === 'llm')).toBe(true);
     expect(stages.some((s) => s.stage === 'render')).toBe(true);
@@ -287,6 +290,9 @@ describe('single-spec-orchestrator', () => {
 
     expect(result.confidence).toBe('low');
     expect(result.warnings.some((w) => w.includes('AST-only'))).toBe(true);
+    // 与上一条对偶：LLMUnavailableError 路径必须把 llmDegraded 置真，
+    // 否则 --require-llm 会放行 AST-only 产物（warning 文案变更也不得影响该判定）
+    expect(result.llmDegraded).toBe(true);
   });
 
   it('generateSpec: 非 LLMUnavailableError 应向上抛出', async () => {

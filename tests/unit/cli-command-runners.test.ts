@@ -15,8 +15,9 @@ const mocks = vi.hoisted(() => ({
   startMcpServer: vi.fn(),
   ensureSpecifyTemplates: vi.fn(),
   validateTargetPath: vi.fn(),
-  checkAuth: vi.fn(),
+  resolveAuthGate: vi.fn(),
   handleError: vi.fn(),
+  printError: vi.fn(),
 }));
 
 vi.mock('../../src/core/single-spec-orchestrator.js', () => ({
@@ -53,8 +54,9 @@ vi.mock('../../src/cli/utils/error-handler.js', () => ({
     API_ERROR: 2,
   },
   validateTargetPath: mocks.validateTargetPath,
-  checkAuth: mocks.checkAuth,
+  resolveAuthGate: mocks.resolveAuthGate,
   handleError: mocks.handleError,
+  printError: mocks.printError,
 }));
 
 import { runGenerate } from '../../src/cli/commands/generate.js';
@@ -95,7 +97,7 @@ describe('CLI 命令执行器', () => {
     vi.clearAllMocks();
     process.exitCode = 0;
     mocks.validateTargetPath.mockReturnValue(true);
-    mocks.checkAuth.mockReturnValue(true);
+    mocks.resolveAuthGate.mockReturnValue(true);
     mocks.handleError.mockReturnValue(2);
     mocks.ensureSpecifyTemplates.mockReturnValue({ copied: [], missing: [] });
   });
@@ -116,6 +118,7 @@ describe('CLI 命令执行器', () => {
       confidence: 'high',
       warnings: [],
       moduleSpec: {},
+      llmDegraded: false,
     });
 
     await runGenerate(
@@ -152,6 +155,139 @@ describe('CLI 命令执行器', () => {
 
     expect(mocks.generateSpec).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
+  });
+
+  // Feature 222：零认证降级放行后，generate 仍须真正执行
+  it('runGenerate 认证门控放行（零认证降级）时仍调用 orchestrator 并退出 0', async () => {
+    mocks.generateSpec.mockResolvedValue({
+      specPath: 'specs/example.spec.md',
+      skeleton: {},
+      tokenUsage: 0,
+      confidence: 'low',
+      warnings: ['LLM 不可用，已降级为 AST-only Spec'],
+      moduleSpec: {},
+      llmDegraded: true,
+    });
+
+    await runGenerate(
+      makeCommand({ subcommand: 'generate', target: 'src/example.ts' }),
+      '2.0.0',
+    );
+
+    expect(mocks.resolveAuthGate).toHaveBeenCalledWith(false);
+    expect(mocks.generateSpec).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('runGenerate 认证门控阻断时不调用 orchestrator 且退出 2', async () => {
+    mocks.resolveAuthGate.mockReturnValue(false);
+
+    await runGenerate(
+      makeCommand({ subcommand: 'generate', target: 'src/example.ts', requireLlm: true }),
+      '2.0.0',
+    );
+
+    expect(mocks.resolveAuthGate).toHaveBeenCalledWith(true);
+    expect(mocks.generateSpec).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+  });
+
+  it('runGenerate --require-llm 且产物为 AST-only 降级时事后校验退出 2', async () => {
+    mocks.generateSpec.mockResolvedValue({
+      specPath: 'specs/example.spec.md',
+      skeleton: {},
+      tokenUsage: 0,
+      confidence: 'low',
+      warnings: ['LLM 不可用，已降级为 AST-only Spec'],
+      moduleSpec: {},
+      llmDegraded: true,
+    });
+
+    await runGenerate(
+      makeCommand({ subcommand: 'generate', target: 'src/example.ts', requireLlm: true }),
+      '2.0.0',
+    );
+
+    expect(mocks.generateSpec).toHaveBeenCalledTimes(1);
+    expect(mocks.printError).toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+  });
+
+  // 回归防线：事后校验必须读结构化 llmDegraded，不得回退成匹配 warning 中文子串
+  //（orchestrator 侧文案微调不应让 --require-llm 静默失效）
+  it('runGenerate --require-llm 在 warning 文案变更但 llmDegraded=true 时仍退出 2', async () => {
+    mocks.generateSpec.mockResolvedValue({
+      specPath: 'specs/example.spec.md',
+      skeleton: {},
+      tokenUsage: 0,
+      confidence: 'low',
+      warnings: ['LLM 不可用，已改用纯结构输出'],
+      moduleSpec: {},
+      llmDegraded: true,
+    });
+
+    await runGenerate(
+      makeCommand({ subcommand: 'generate', target: 'src/example.ts', requireLlm: true }),
+      '2.0.0',
+    );
+
+    expect(process.exitCode).toBe(2);
+  });
+
+  it('runDiff 认证门控放行（零认证降级）时仍调用 detectDrift', async () => {
+    mocks.detectDrift.mockResolvedValue({
+      specPath: '/tmp/a.spec.md',
+      sourcePath: '/tmp/src',
+      generatedAt: new Date().toISOString(),
+      specVersion: 'v1',
+      summary: {
+        totalChanges: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        additions: 0,
+        removals: 0,
+        modifications: 0,
+      },
+      items: [],
+      filteredNoise: 0,
+      recommendation: 'ok',
+      outputPath: 'drift-logs/a.md',
+    });
+
+    await runDiff(
+      makeCommand({ subcommand: 'diff', specFile: 'specs/a.spec.md', target: 'src/' }),
+      '2.0.0',
+    );
+
+    // diff 传入定制降级形态描述（它并不产出 AST-only spec），故断言第二个入参存在
+    expect(mocks.resolveAuthGate).toHaveBeenCalledWith(
+      false,
+      expect.stringContaining('结构漂移检测'),
+    );
+    expect(mocks.detectDrift).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('runDiff 认证门控阻断时不调用 detectDrift 且退出 2', async () => {
+    mocks.resolveAuthGate.mockReturnValue(false);
+
+    await runDiff(
+      makeCommand({
+        subcommand: 'diff',
+        specFile: 'specs/a.spec.md',
+        target: 'src/',
+        requireLlm: true,
+      }),
+      '2.0.0',
+    );
+
+    expect(mocks.resolveAuthGate).toHaveBeenCalledWith(
+      true,
+      expect.stringContaining('结构漂移检测'),
+    );
+    expect(mocks.detectDrift).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
   });
 
   it('runBatchCommand 透传 outputDir 并设置成功退出码', async () => {

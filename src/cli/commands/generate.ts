@@ -8,8 +8,9 @@ import { generateSpec } from '../../core/single-spec-orchestrator.js';
 import { ensureSpecifyTemplates } from '../../utils/specify-template-sync.js';
 import {
   validateTargetPath,
-  checkAuth,
+  resolveAuthGate,
   handleError,
+  printError,
   EXIT_CODES,
 } from '../utils/error-handler.js';
 import type { CLICommand } from '../utils/parse-args.js';
@@ -36,7 +37,7 @@ export async function runGenerate(command: CLICommand, version: string): Promise
     return;
   }
 
-  if (!checkAuth()) {
+  if (!resolveAuthGate(command.requireLlm ?? false)) {
     process.exitCode = EXIT_CODES.API_ERROR;
     return;
   }
@@ -53,6 +54,18 @@ export async function runGenerate(command: CLICommand, version: string): Promise
       for (const w of result.warnings) {
         console.warn(`⚠ ${w}`);
       }
+    }
+
+    // Feature 222：入口门控只能拦"整机零认证"，运行期 LLM 失败（OAuth 过期 / 重试耗尽）
+    // 同样会落入 AST-only 降级，因此 --require-llm 必须在拿到产物后再校验一次。
+    if (command.requireLlm && result.llmDegraded) {
+      printError(
+        '--require-llm 已指定，但本次产物为 AST-only 降级结果（LLM 未成功产出）。\n' +
+          `  注意：降级产物已写入 ${result.specPath}（校验发生在写盘之后），` +
+          '若它覆盖了此前更高质量的 Spec，请从 git 恢复旧版本。',
+      );
+      process.exitCode = EXIT_CODES.API_ERROR;
+      return;
     }
     process.exitCode = EXIT_CODES.SUCCESS;
   } catch (err) {

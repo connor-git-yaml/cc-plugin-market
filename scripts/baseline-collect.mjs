@@ -428,6 +428,39 @@ function getGitCommit(dir) {
 // 实跑 batch（包 /usr/bin/time）
 // ============================================================
 
+/**
+ * 真实 LLM batch 的 CLI 参数构造（纯函数，供单测锁定不变量）。
+ *
+ * 两个 flag 缺一不可，且必须只出现在真实调用路径：
+ *   --full：F175/OQ-4 起默认走增量，缺它则上一次失败写下的 AST-only 产物会被 cache 命中
+ *           跳过（记为 skipped 而非 degraded），严格校验读到空降级列表后放行 exit 0。
+ *   --require-llm：Feature 222 起零认证降级继续并 exit 0，仅靠退出码不再能证明产物是 LLM 增强。
+ * baseline fixture 是入库的跨版本 perf 对比锚点，被 AST-only 产物污染后果长期且难察觉。
+ */
+export function buildRealBatchArgs({ cliPath, targetPath, mode, outputDir }) {
+  return [
+    'node',
+    cliPath,
+    'batch',
+    targetPath,
+    '--full',
+    '--require-llm',
+    '--mode',
+    mode,
+    '--output-dir',
+    outputDir,
+  ];
+}
+
+/**
+ * dry-run 预估的 CLI 参数构造（纯函数）。
+ * 零 LLM 路径：估算的是"全量真实跑"的成本故保留 --full，但不得携带 --require-llm
+ * （批处理在 dry-run 分支提前返回，降级列表恒空，严格校验只会变成静默的假通过）。
+ */
+export function buildDryRunBatchArgs({ cliPath, targetPath, mode }) {
+  return ['node', cliPath, 'batch', targetPath, '--full', '--mode', mode, '--dry-run'];
+}
+
 export function runBatchAndCapture({ targetPath, mode, outputDir }) {
   const isMacOs = process.platform === 'darwin';
   const timeBin = isMacOs ? '/usr/bin/time' : '/usr/bin/time';
@@ -436,20 +469,7 @@ export function runBatchAndCapture({ targetPath, mode, outputDir }) {
   if (!fs.existsSync(cliPath)) {
     throw new Error(`spectra CLI not built (missing ${cliPath}); run "npm run build" first`);
   }
-  const args = [
-    timeFlag,
-    'node',
-    cliPath,
-    'batch',
-    targetPath,
-    // F175/OQ-4：显式 --full 使"基线永远全量"自文档化，与 outputDir 清理逻辑解耦
-    //（默认翻转后不传 regen 轴会走增量，须显式声明全量以保证基线不被增量 cache 污染）。
-    '--full',
-    '--mode',
-    mode,
-    '--output-dir',
-    outputDir,
-  ];
+  const args = [timeFlag, ...buildRealBatchArgs({ cliPath, targetPath, mode, outputDir })];
   const env = { ...process.env };
   const start = process.hrtime.bigint();
   const r = spawnSync(timeBin, args, {
@@ -486,7 +506,8 @@ export function runBatchAndCapture({ targetPath, mode, outputDir }) {
 export function runDryRun({ targetPath, mode }) {
   const cliPath = path.join(PROJECT_ROOT, 'dist/cli/index.js');
   if (!fs.existsSync(cliPath)) return { estimatedTokens: null, note: 'cli-not-built' };
-  const r = spawnSync('node', [cliPath, 'batch', targetPath, '--full', '--mode', mode, '--dry-run'], {
+  const [bin, ...args] = buildDryRunBatchArgs({ cliPath, targetPath, mode });
+  const r = spawnSync(bin, args, {
     encoding: 'utf-8',
     maxBuffer: 16 * 1024 * 1024,
   });

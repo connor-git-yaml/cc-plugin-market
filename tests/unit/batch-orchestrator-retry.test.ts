@@ -124,6 +124,8 @@ describe('runBatch — retry token budget 短路 (Bug 142)', { timeout: 30000 },
         confidence: 'high' as const,
         warnings: [],
         moduleSpec,
+        // Feature 222：必填字段；缺失时消费端 truthiness 判定会静默等价 false
+        llmDegraded: false,
         // 成功路径返回 5k input token；累积仍远低于 40k
         costMetadata: {
           tokenUsage: { input: 5_000, output: 1_000 },

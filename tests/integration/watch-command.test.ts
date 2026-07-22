@@ -29,9 +29,13 @@ vi.mock('../../src/batch/batch-orchestrator.js', () => ({
   }),
 }));
 
-// Mock 认证检查（始终返回 true，避免认证阻断）
+// Mock 认证门控（默认放行，避免认证阻断；个别用例按需覆盖返回值）
+const authMocks = vi.hoisted(() => ({
+  resolveAuthGate: vi.fn(),
+}));
+
 vi.mock('../../src/cli/utils/error-handler.js', () => ({
-  checkAuth: vi.fn().mockReturnValue(true),
+  resolveAuthGate: authMocks.resolveAuthGate,
   handleError: vi.fn().mockReturnValue(1),
   EXIT_CODES: { SUCCESS: 0, API_ERROR: 2, TARGET_ERROR: 1 },
 }));
@@ -52,6 +56,7 @@ describe('watch 子命令集成测试', () => {
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'watch-integration-'));
     vi.clearAllMocks();
+    authMocks.resolveAuthGate.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -129,6 +134,9 @@ describe('watch 子命令集成测试', () => {
     // 等待 runWatchCommand 执行到 watcher.start() 并返回
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    // Feature 222：未传 --require-llm 时门控须以 false 调用（否则 watch.ts 把入参写死也测不出来）
+    expect(authMocks.resolveAuthGate).toHaveBeenCalledWith(false);
+
     // 手动触发一次文件变更
     if (capturedOnChange) {
       capturedOnChange([{ path: join(tmpDir, 'src/app.ts'), category: 'code' }]);
@@ -152,6 +160,38 @@ describe('watch 子命令集成测试', () => {
     }
 
     await commandPromise.catch(() => { /* 忽略清理阶段可能的错误 */ });
+  });
+
+  // -------------------------------------------------------------------------
+  // Feature 222：--require-llm 透传 + 门控阻断
+  // -------------------------------------------------------------------------
+  it('--require-llm 以 true 调用门控，被阻断时不启动 watcher 且退出码为 API_ERROR', async () => {
+    const { FileWatcher } = await import('../../src/watcher/file-watcher.js');
+    const { runWatchCommand } = await import('../../src/cli/commands/watch.ts');
+
+    const startSpy = vi.spyOn(FileWatcher.prototype, 'start').mockResolvedValue(undefined);
+    authMocks.resolveAuthGate.mockReturnValue(false);
+    const previousExitCode = process.exitCode;
+
+    try {
+      await runWatchCommand({
+        subcommand: 'watch',
+        deep: false,
+        force: false,
+        version: false,
+        help: false,
+        global: false,
+        remove: false,
+        skillTarget: 'claude',
+        requireLlm: true,
+      });
+
+      expect(authMocks.resolveAuthGate).toHaveBeenCalledWith(true);
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(2);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
   });
 
   // -------------------------------------------------------------------------

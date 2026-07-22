@@ -6,7 +6,7 @@
 import { resolve } from 'node:path';
 import { runBatch, buildAstGraphOnly } from '../../batch/batch-orchestrator.js';
 import { resolveRegenPlan } from '../../batch/regen-plan.js';
-import { checkAuth, handleError, EXIT_CODES } from '../utils/error-handler.js';
+import { resolveAuthGate, handleError, printError, EXIT_CODES } from '../utils/error-handler.js';
 import { loadProjectConfig, mergeConfig } from '../../config/project-config.js';
 import { readBatchConcurrency } from '../../config/spec-driver-config.js';
 import type { CLICommand } from '../utils/parse-args.js';
@@ -53,12 +53,15 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       command._explicitFlags ?? new Set(),
     );
 
-    // F195：graph-only 零 LLM 建图——在 checkAuth 之前拦截并 dispatch 到姊妹管线。
-    // why 不调 checkAuth：graph-only 纯 AST、不调任何 LLM，行为对齐 prepare（FR-005）。
+    // F195：graph-only 零 LLM 建图——在认证门控之前拦截并 dispatch 到姊妹管线。
+    // why 不做认证门控：graph-only 纯 AST、不调任何 LLM，行为对齐 prepare（FR-005）。
     // why 放在 projectRoot + config merge 之后：buildAstGraphOnly 需要 projectRoot 与 outputDir。
     if (command.batchMode === 'graph-only') {
       if (command.languages?.length) {
         console.warn('⚠ graph-only 不支持 --languages 过滤，将构建全仓 AST 图');
+      }
+      if (command.requireLlm) {
+        console.warn('⚠ graph-only 不调用 LLM，--require-llm 对本次运行无效');
       }
       const graphResult = await buildAstGraphOnly(projectRoot, {
         outputDir: merged.outputDir,
@@ -74,8 +77,17 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       return;
     }
 
-    // 非 graph-only 路径：spec-gen 需要认证
-    if (!checkAuth()) {
+    // 非 graph-only 路径：spec-gen 需要认证；零认证时默认降级为 AST-only，
+    // 仅 --require-llm 才阻断（Feature 222）。
+    // why 排除 dry-run：runBatch 在 AST 聚合后即产出预估报告返回，与 graph-only 同属零 LLM
+    // 路径，既不会真的降级（提示会失实），也不该被 --require-llm 无意义阻断。
+    if (command.dryRun) {
+      // 对齐 graph-only：零 LLM 路径下 --require-llm 无从校验，静默 exit 0 会被误读成
+      // "认证已通过"，故必须显式声明该 flag 不适用（dry-run 不能当严格运行的预检）。
+      if (command.requireLlm) {
+        console.warn('⚠ --dry-run 不调用 LLM，--require-llm 对本次运行无效（认证未被校验）');
+      }
+    } else if (!resolveAuthGate(command.requireLlm ?? false)) {
       process.exitCode = EXIT_CODES.API_ERROR;
       return;
     }
@@ -122,6 +134,16 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
     });
     console.log(`  模块总数: ${result.totalModules} | 成功: ${result.successful.length} | 降级: ${result.degraded.length} | 失败: ${result.failed.length} | 跳过: ${result.skipped.length}`);
 
+    // Feature 222：降级不只是汇总行里的一个数字，质量降档要第一时间可见
+    if (result.degraded.length > 0) {
+      const pct = ((result.degraded.length / Math.max(result.totalModules, 1)) * 100).toFixed(0);
+      console.warn(
+        `⚠ ${result.degraded.length}/${result.totalModules} 个模块（${pct}%）因 LLM 未成功产出` +
+          '（未配置认证，或调用失败 / 重试耗尽）降级为 AST-only。' +
+          '如需完整 LLM 增强，请排查认证与网络后使用 --force 重新生成。',
+      );
+    }
+
     if (result.indexGenerated) {
       console.log(`✓ specs/_index.spec.md 已生成`);
     }
@@ -167,10 +189,34 @@ export async function runBatchCommand(command: CLICommand, version: string): Pro
       console.log('⚠ ADR pipeline 在 v4.0.1 临时禁用。可用 --enable-adr 显式开启（预计 v4.1 重构后恢复默认）');
     }
 
+    // Feature 222：入口门控只能拦"整机零认证"，运行期 LLM 失败同样会降级，
+    // 因此 --require-llm 必须在汇总后再校验一次真实产物质量。
+    // 提示无条件打印（用户始终需要知道降级发生了），退出码则交给下面的优先级链裁决。
+    //
+    // 已知边界（本次不修）：本校验只覆盖"本次真的生成了"的模块。增量 cache 命中的模块
+    // 记为 skipped 而非 degraded，且 delta-regenerator 仅比对 skeletonHash、不检查已有
+    // spec 是否为 AST-only 产物——因此「首次严格运行写下降级产物并 exit 2 → 第二次同命令
+    // 走增量 cache → exit 0」的路径依然存在。彻底修复需把 LLM 状态持久化进 cache 元数据
+    // 并让严格模式拒绝复用未证明为 LLM-enhanced 的缓存，改动面超出本次范围。
+    // 需要严格语义的 CI 请配合 --full / --force 使用。
+    const requireLlmViolated = Boolean(command.requireLlm) && result.degraded.length > 0;
+    if (requireLlmViolated) {
+      printError(
+        `--require-llm 已指定，但有 ${result.degraded.length} 个模块降级为 AST-only（LLM 未成功产出）。\n` +
+          '  注意：降级产物已写入磁盘（校验发生在写盘之后），' +
+          '若它们覆盖了此前更高质量的 Spec，请从 git 恢复旧版本。',
+      );
+    }
+
     // Feature 127（Codex review 修复）：预算 cancel 必须返回非零 exit 让 CI 能识别。
-    // 优先级：failed > budget-cancel > success。
+    // 优先级：failed > require-llm-degraded > budget-cancel > success。
+    // why require-llm 排在 failed 之后：模块根本没生成出来（failed）比"生成了但质量降档"
+    // （degraded）更根本，同时命中时 CI 应先看到 TARGET_ERROR，避免更严重的失败被
+    // API_ERROR 掩盖成"只是没认证"。
     if (result.failed.length > 0) {
       process.exitCode = EXIT_CODES.TARGET_ERROR;
+    } else if (requireLlmViolated) {
+      process.exitCode = EXIT_CODES.API_ERROR;
     } else if (result.budgetDecision?.policy === 'cancel') {
       process.exitCode = EXIT_CODES.BUDGET_EXCEEDED;
     } else {

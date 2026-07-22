@@ -20,10 +20,12 @@
 
 | 工具 | 说明 |
 |------|------|
-| `prepare` | AST 预处理 + 上下文组装（无需 API Key） |
+| `prepare` | AST 预处理 + 上下文组装（纯 AST，从不调用 LLM） |
 | `generate` | 完整 Spec 生成流水线 |
 | `batch` | 批量 Spec 生成 |
 | `diff` | Spec 漂移检测 |
+
+> 认证说明：以上工具在缺少 LLM 认证时均可运行 —— `generate` / `batch` / `diff` 会自动降级（无 LLM 语义增强）并继续产出结果；CLI 端可用 `--require-llm` 要求缺少认证时直接失败。
 
 ## 安装方式
 

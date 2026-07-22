@@ -123,6 +123,12 @@ export interface GenerateSpecResult {
   warnings: string[];
   /** 完整的 ModuleSpec 对象（用于索引生成） */
   moduleSpec: ModuleSpec;
+  /**
+   * Feature 222：本次产物是否因 LLM 不可用而降级为 AST-only。
+   * why 暴露为结构化字段：`--require-llm` 与 batch 的降级统计原先靠匹配中文 warning
+   * 子串判定，orchestrator 侧改一个字就会静默失效且无测试能捕获。
+   */
+  llmDegraded: boolean;
   /** 成本元数据（Feature 127，可选以兼容历史 mock） */
   costMetadata?: CostMetadata;
 }
@@ -802,6 +808,7 @@ ${sections.businessLogic}
     confidence,
     warnings,
     moduleSpec,
+    llmDegraded,
     costMetadata,
   };
 }

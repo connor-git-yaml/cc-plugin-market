@@ -48,15 +48,15 @@ function formatVersion(): string {
 const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
 
 用法:
-  spectra generate <target> [--deep] [--output-dir <dir>]
+  spectra generate <target> [--deep] [--require-llm] [--output-dir <dir>]
   spectra prepare <target> [--deep]
-  spectra batch [--full] [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only|graph-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--output-dir <dir>]
-  spectra diff <spec-file> <source> [--output-dir <dir>]
+  spectra batch [--full] [--force] [--incremental] [--languages <lang,...>] [--include-docs] [--include-images] [--mode <full|reading|code-only|graph-only>] [--hyperedges] [--concurrency <N>] [--no-html] [--require-llm] [--output-dir <dir>]
+  spectra diff <spec-file> <source> [--require-llm] [--output-dir <dir>]
   spectra init [--global] [--remove] [--target <claude|codex|both>]
   spectra auth-status [--verify]
   spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
   spectra cache <stats|clear> [--generator <id>] [--output-dir <dir>]
-  spectra watch [--debounce <seconds>] [--verbose]
+  spectra watch [--debounce <seconds>] [--verbose] [--require-llm]
   spectra graph [--directed] [--output-dir <dir>]
   spectra community [--min-size <N>] [--output-dir <dir>]
   spectra query "<问题>" [--budget <N>] [--format json|text]
@@ -76,15 +76,15 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra --version / --help
 
 子命令:
-  generate      对指定文件或目录生成 Spec（需要认证）
+  generate      对指定文件或目录生成 Spec（可选 LLM 增强，无认证时自动降级为 AST-only）
   prepare       AST 预处理 + 上下文组装，输出到 stdout（无需认证）
-  batch         批量生成当前项目所有模块的 Spec
-  diff          检测 Spec 与源代码之间的漂移
+  batch         批量生成当前项目所有模块的 Spec（可选 LLM 增强，无认证时自动降级为 AST-only）
+  diff          检测 Spec 与源代码之间的漂移（无认证时跳过 LLM 语义评估，仍完整产出结构漂移报告）
   init          安装 skills 到 Claude Code / Codex 的项目或全局目录
   auth-status   查看当前认证状态（API Key / Claude CLI / Codex CLI）
   panoramic     运行 panoramic 架构分析（cross-package / architecture-ir / overview）
   cache         管理内容哈希缓存（stats / clear）
-  watch         监听文件变更，自动触发增量文档同步
+  watch         监听文件变更，自动触发增量文档同步（可选 LLM 增强，无认证时自动降级为 AST-only）
   graph         构建知识图谱并输出 _meta/graph.json
   community     社区检测与架构洞察分析，输出 _meta/GRAPH_REPORT.md
   query         查询知识图谱，返回相关模块及依赖关系子图
@@ -125,6 +125,11 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   --generator    指定 generator ID（仅 cache clear）
   --debounce     文件变更静默等待时长（秒，默认 3，仅 watch）
   --verbose      打印详细变更日志（仅 watch）
+  --require-llm  仅 generate / batch / diff / watch：缺少可用认证方式时直接失败，而非降级。
+                 generate / batch 会额外校验本次产物是否真为 LLM 增强；diff / watch 只做入口检查。
+                 不覆盖增量 cache 命中的已有 spec（被记为 skipped，不参与降级判定），
+                 需要严格语义的 CI 请配合 --full / --force。
+                 对零 LLM 路径（--dry-run、--mode graph-only）不适用，仅打印提示后照常执行。
   --output-dir   自定义输出目录
   --directed     输出有向图（仅 graph 命令）
   --min-size     最小社区节点数过滤（仅 community 命令）

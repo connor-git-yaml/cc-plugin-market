@@ -116,6 +116,8 @@ describe('runBatch product UX docs integration', () => {
         confidence: 'high' as const,
         warnings: [],
         moduleSpec,
+        // Feature 222：必填字段；缺失时消费端 truthiness 判定会静默等价 false
+        llmDegraded: false,
       };
     });
   });

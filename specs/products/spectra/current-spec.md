@@ -245,6 +245,7 @@ Spectra 是一个面向代码与工程制品的 **结构化逆向文档与知识
 | FR-040 | 使用相对路径输出，避免泄露本机目录结构 | 008, 010 | 活跃 |
 | FR-041 | 批量输出包含 Markdown、JSON 与 Mermaid 文件族 | 051 | 活跃 |
 | FR-042 | `plugins/spectra/skills/**` 是 Spectra Skill 的 canonical source，`src/skills-global/**` 与 `skills/**` 通过同步脚本维护 compatibility mirrors | 079 | 活跃 |
+| FR-077 | `generate` / `batch` / `diff` / `watch` 零认证时默认提示后降级继续执行（`diff` 的降级形态是跳过 LLM 语义评估，仍产出完整结构漂移报告）；`--require-llm` 提供严格失败逃生口：四命令均在入口阻断，`generate` / `batch` 额外按 `GenerateSpecResult.llmDegraded` 事后校验产物是否真为 LLM 增强（`diff` / `watch` 因下游无降级痕迹仅能入口检查）。已知边界：`batch --dry-run` / `--mode graph-only` 属零 LLM 路径，该 flag 不适用；增量 cache 命中的模块记为 skipped、不参与降级判定，故该 flag 不覆盖「复用历史 AST-only 产物」场景，严格语义需配合 `--full` / `--force` | 222 | 活跃 |
 
 ### FR-GROUP-8: 多源文档系统与交付层
 

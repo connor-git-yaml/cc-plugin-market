@@ -33,6 +33,14 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SPECTRA_BASELINE_HOME="${SPECTRA_BASELINE_HOME:-$HOME/.spectra-baselines}"
 SPECTRA_CLI="${SPECTRA_CLI:-node ${PROJECT_ROOT}/dist/cli/index.js}"
 
+# Feature 222：真实 LLM 调用的"严格 + 全量"不变量，集中定义避免调用点分散漂移。
+#   --require-llm：CLI 零认证已改为降级继续并 exit 0，仅靠退出码不再能证明本次是 LLM 产物；
+#                  该 flag 让认证缺失 / 运行期 LLM 失败重新变成硬失败。
+#   --full：本脚本复用持久仓库目录，缺它则「首次严格运行写下 AST-only 产物并 exit 2 →
+#           重跑走增量 cache 全部 skip → degraded=[] → exit 0」，污染的 baseline 会被静默接受。
+# 二者缺一不可；dry-run 属零 LLM 路径，禁止携带这两个 flag。
+REAL_LLM_BATCH_FLAGS=(--full --require-llm)
+
 # 三个支持的目标仓库及默认 budget（USD）
 declare -A REPO_BUDGETS=(
   ["pytest"]="5"
@@ -195,9 +203,11 @@ build_one_repo() {
   local budget_tokens=$(( budget * 200000 ))
 
   # 真实生成（subshell cd 包装，Codex W-1 修复）
-  log_info "[$repo] 调用 spectra batch . --mode full --budget ${budget_tokens} tokens (≈\$${budget} USD) --concurrency 3 --on-over-budget cancel --no-html"
+  # 严格 + 全量语义见文件头 REAL_LLM_BATCH_FLAGS 注释。
+  log_info "[$repo] 调用 spectra batch . --mode full ${REAL_LLM_BATCH_FLAGS[*]} --budget ${budget_tokens} tokens (≈\$${budget} USD) --concurrency 3 --on-over-budget cancel --no-html"
   if ! (cd "$repo_dir" && $SPECTRA_CLI batch . \
         --mode full \
+        "${REAL_LLM_BATCH_FLAGS[@]}" \
         --budget "$budget_tokens" \
         --concurrency 3 \
         --on-over-budget cancel \
