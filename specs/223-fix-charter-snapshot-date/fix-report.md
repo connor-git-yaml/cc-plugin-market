@@ -1,9 +1,17 @@
-# 问题修复报告 — F220 charter 快照烤死生成日期
+# 问题修复报告 — F223 charter 快照烤死生成日期
 
-- **特性编号**: 223
+> 缺陷位于 F220 交付的守护资产 `tests/e2e/f220-decomposition-charter.e2e.test.ts`，
+> 但本次修复本身按 F223 立项交付。
+
+- **特性编号**: 223（原编 F222，交付前 fetch 发现并行 session 的 F222 已抢先落地 master
+  并占用 `specs/222-fix-cli-auth-hardgate`，故全量改号避免冲突）
 - **模式**: fix（快速问题修复）
 - **诊断日期**: 2026-07-22
-- **基线 commit**: `23ffc8f`（已 rebase 到 origin/master）
+- **诊断时基线**: `23ffc8f`（F221 tip）
+- **实际交付基线**: `a7f85e2`（并行 F222 tip）—— 交付前 rebase 至此并重跑全量验证；
+  该 commit 改过 `src/batch/batch-orchestrator.ts`，rebase 后 charter 12/12 复验通过，
+  确认未触碰本快照冻结的可观测行为
+- **交付 commit**: `26fe3a1`（已 ff push 到 origin/master）
 
 ## 问题描述
 
