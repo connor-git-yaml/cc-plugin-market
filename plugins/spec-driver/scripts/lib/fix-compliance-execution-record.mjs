@@ -24,24 +24,23 @@ export const NOOP_JUDGMENT_HEADING_REGEX = /^##\s*判定依据\s*$/m;
 export const NOOP_RECON_HEADING_REGEX = /^###\s*复现对账\s*$/;
 
 /**
- * 计算 fenced code block 掩码（F216 C4）。返回与 lines 等长的布尔数组，
- * true = 该行位于 ``` / ~~~ 围栏代码块内（含开/闭围栏行本身），MUST 不参与标题/锚点识别。
- * 目的：合规报告在附录 fenced code 里演示 `## 判定依据` / `Root Cause` 时不得被误判为真实锚点，
- * 否则会错误触发 no-op 证据门（FR-007：纯 repair 报告零介入被破坏）。
+ * 计算 fenced code block 掩码与未闭合围栏起点（F216 C4 + F228 R2-1 单一扫描器）。
+ * 唯一事实源：computeFenceMask 与 stripCodeRegions 均基于本函数，不得各自平行扫描。
  * 闭合规则遵循 CommonMark：同围栏字符、长度 ≥ 开围栏、且闭合行无 info string（trim 后仅围栏字符）。
  * @param {string[]} lines
- * @returns {boolean[]}
+ * @returns {{ mask:boolean[], unclosedFrom:number }} mask 语义与既有 computeFenceMask 逐字等价；
+ *   unclosedFrom = 开围栏行下标（该围栏直到 EOF 都未闭合），全部闭合时为 -1。
  */
-export function computeFenceMask(lines) {
+export function computeFenceRegions(lines) {
   const list = Array.isArray(lines) ? lines : [];
   const mask = new Array(list.length).fill(false);
-  let open = null; // { char:'`'|'~', len:number }
+  let open = null; // { char:'`'|'~', len:number, lineIndex:number }
   for (let i = 0; i < list.length; i += 1) {
     const trimmed = String(list[i]).trim();
     const fm = /^(`{3,}|~{3,})(.*)$/.exec(trimmed);
     if (open === null) {
       if (fm) {
-        open = { char: fm[1][0], len: fm[1].length };
+        open = { char: fm[1][0], len: fm[1].length, lineIndex: i };
         mask[i] = true; // 开围栏行本身算 fenced
       }
     } else {
@@ -51,7 +50,20 @@ export function computeFenceMask(lines) {
       }
     }
   }
-  return mask;
+  return { mask, unclosedFrom: open === null ? -1 : open.lineIndex };
+}
+
+/**
+ * 计算 fenced code block 掩码（F216 C4）。返回与 lines 等长的布尔数组，
+ * true = 该行位于 ``` / ~~~ 围栏代码块内（含开/闭围栏行本身），MUST 不参与标题/锚点识别。
+ * 目的：合规报告在附录 fenced code 里演示 `## 判定依据` / `Root Cause` 时不得被误判为真实锚点，
+ * 否则会错误触发 no-op 证据门（FR-007：纯 repair 报告零介入被破坏）。
+ * 实现委托给 computeFenceRegions（F228 R2-1 单一扫描器），本函数语义逐字不变。
+ * @param {string[]} lines
+ * @returns {boolean[]}
+ */
+export function computeFenceMask(lines) {
+  return computeFenceRegions(lines).mask;
 }
 
 /**

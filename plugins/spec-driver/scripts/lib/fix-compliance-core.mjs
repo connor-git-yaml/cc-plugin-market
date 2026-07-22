@@ -19,6 +19,7 @@
 import {
   flattenToolResultContent,        // normalizeTranscriptEntry 复用
   computeFenceMask,                // extractSectionBody / stripReconSubblock / classifyClosureForm 复用
+  computeFenceRegions,             // stripCodeRegions 复用（F228 R2-1：未闭合围栏不剥离）
   NOOP_JUDGMENT_HEADING_REGEX,     // classifyClosureForm / judgeCompliance 复用
   NOOP_RECON_HEADING_REGEX,        // stripReconSubblock 复用
   parseNoopReconLines,             // judgeCompliance 复用
@@ -134,8 +135,19 @@ export const INLINE_EDIT_INDICATOR_REGEXES = [
 /** 修复收口制品必填章节锚点（既有 Phase 1 模板固有 Root Cause 行） */
 export const ROOT_CAUSE_HEADING_REGEX = /Root Cause/i;
 
-/** 未替换花括号占位符探测（FR-012a 空壳判据） */
+/** 未替换花括号占位符探测（FR-012a 空壳判据）——代码区豁免（F228 剥离后文本上扫描） */
 const PLACEHOLDER_BRACE_REGEX = /\{[^}]*\}/;
+
+/**
+ * canonical 模板占位符（形如 `{根本原因一句话总结}`）：含中日韩表意文字、且不含 ASCII 冒号（F228 R2-2，
+ * 排除集收窄自协调方复审：ASCII 冒号才是"这是代码/JSON 字面量"的可靠标志——对象字面量与 JSON
+ * 必然靠键值 `:` 表达结构；ASCII 引号不是可靠标志，canonical 中文占位符本身也可能含引号
+ * （如 `{spec 文件列表，或"无需更新"}`），若继续排除引号会把这类合法占位符误判为代码而漏判）。
+ * 这类占位符是本仓 no-op/repair 模板固有的纯中文描述短语，即便被作者包进反引号 code span 也不构成
+ * 豁免理由——代码区豁免只应给"作者引用真实代码"的花括号（含 ASCII 冒号，或不含中文），
+ * 故本判据直接在**剥离代码区之前**的 proseBody 上扫描（见 checkArtifactSection），不吃 stripCodeRegions 的豁免。
+ */
+const CANONICAL_PLACEHOLDER_REGEX = /\{(?=[^}]*[一-鿿])[^}:]*\}/;
 
 /** 章节正文非占位所需的最小非空白字符数（no-op-report-template.md 合同：> 20） */
 const MIN_SECTION_BODY_CHARS = 20;
@@ -540,12 +552,20 @@ function extractSectionBody(content, requiredHeading) {
  * 复现对账走 parseNoopReconLines/classifyReproEvidence 机械 JSON 判据，其单行 JSON 花括号
  * MUST 不参与判定依据散文的占位符扫描——先摘除该子块（标题行 + 其下至下一个 H1/H2/H3 的行），
  * 再评估散文实质性与花括号残留。仅剔除复现对账，`### 直接原因` 等其他 H3 子节保留。
+ *
+ * F228 R3-3：改用 `computeFenceRegions` 并对 `unclosedFrom` 之后的行强制视为未 fenced——
+ * 与 `stripCodeRegions` 统一围栏语义。此前直接消费 `computeFenceMask` 时，若子块内出现
+ * 未闭合围栏，该围栏会被当成"直到 EOF 都在代码区内"，导致子块下方任何本该终止子块的
+ * H1/H2/H3 标题都被误判为"仍在 fenced 区、不算标题"，子块永不终止，把后续所有正文
+ * （含标题与模板占位符）一并当作子块内容剔除——两姊妹函数各持一套围栏语义正是本次修复
+ * 要消灭的根因模式，故收口为同一套。
  * @param {string} body
  * @returns {string}
  */
 function stripReconSubblock(body) {
   const lines = String(body).split('\n');
-  const fenceMask = computeFenceMask(lines);
+  const { mask: rawFenceMask, unclosedFrom } = computeFenceRegions(lines);
+  const fenceMask = rawFenceMask.map((v, i) => (unclosedFrom !== -1 && i >= unclosedFrom ? false : v));
   const out = [];
   let inRecon = false;
   for (let i = 0; i < lines.length; i += 1) {
@@ -561,7 +581,131 @@ function stripReconSubblock(body) {
 }
 
 /**
+ * 单行「反引号 run 长度精确配对」扫描剥离（F228 Q2 算法，不导出，仅供 stripCodeRegions 使用）。
+ *
+ * 规则：从左到右扫描一行，遇到反引号即读出连续反引号 run 的长度 N；从该 run 结束处继续向右找
+ * **长度恰好等于 N** 的下一个反引号 run（长度不符的 run 整体跳过、不消费、也不作为新的候选起点）；
+ * 找到即判定为一对 code span 定界符，把「起始 run + 中间内容 + 结束 run」整体替换为**单个空格**
+ * （不是删空，避免两侧文本被拼接出假匹配）；找不到则判定为未闭合，反引号字符原样保留，
+ * 从该 run 结束处继续扫描下一段。
+ *
+ * 逐行独立扫描（不跨行缓冲）——与本文件既有 fence-aware 判据（extractSectionBody /
+ * stripReconSubblock / classifyClosureForm）保持同一处理模型，架构一致。
+ * 显式 non-goal（见 plan.md Q3）：不处理跨行 code span（反引号跨两行不闭合时，
+ * 每一行各自独立判定，互不感知）。
+ *
+ * F228 R3-2：`\` 是 Markdown 转义反斜杠，`\\`` 使紧随的反引号变为字面量、根本不是 code span
+ * 定界符——旧实现把它当定界符用，会误把该反引号包裹的散文当成"代码区"剥离掉（codex 第二轮
+ * CRITICAL：转义反引号包一层模板占位符即可让占位符从扫描中消失）。判定规则：向左数该 run 起点
+ * 前连续的反斜杠个数，奇数即该 run 被转义（`\\\\` 是转义反斜杠自身，其后的反引号仍是定界符，
+ * 偶数个反斜杠不构成转义）。转义 run 按 run 级整体处理（不拆到单字符）——与本文件其余
+ * fence-aware 判据一致的简化取舍，足以覆盖单反引号转义的常见形态，不引入跨行/字符级复杂度。
+ * @param {string} line - 单行文本（调用方保证不含换行符）
+ * @returns {string}
+ */
+function stripInlineCodeSpans(line) {
+  const text = String(line);
+  const runRegex = /`+/g;
+  const runs = [];
+  let match;
+  while ((match = runRegex.exec(text)) !== null) {
+    let backslashCount = 0;
+    let k = match.index - 1;
+    while (k >= 0 && text[k] === '\\') { backslashCount += 1; k -= 1; }
+    runs.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      length: match[0].length,
+      escaped: backslashCount % 2 === 1,
+    });
+  }
+  if (runs.length === 0) return text;
+
+  let result = '';
+  let cursor = 0;
+  let i = 0;
+  while (i < runs.length) {
+    const openRun = runs[i];
+    if (openRun.escaped) {
+      // 转义 run 不作为候选起点：原样保留在输出中（cursor 不推进，交由后续非转义 run 或
+      // 循环结束时的尾部拼接统一带出），不参与开/闭配对
+      i += 1;
+      continue;
+    }
+    result += text.slice(cursor, openRun.start);
+    // 向右找长度恰好等于 openRun.length 的下一个**非转义** run；长度不符或已转义的 run 整体跳过、不消费
+    let closeIdx = -1;
+    for (let j = i + 1; j < runs.length; j += 1) {
+      if (runs[j].escaped) continue;
+      if (runs[j].length === openRun.length) { closeIdx = j; break; }
+    }
+    if (closeIdx === -1) {
+      // 未闭合：反引号原样保留，从该 run 结束处继续扫描
+      result += text.slice(openRun.start, openRun.end);
+      cursor = openRun.end;
+      i += 1;
+      continue;
+    }
+    // 配对成功：起始 run + 中间内容 + 结束 run 整体替换为单个空格
+    result += ' ';
+    cursor = runs[closeIdx].end;
+    i = closeIdx + 1;
+  }
+  result += text.slice(cursor);
+  return result;
+}
+
+/**
+ * 从文本中剥离代码区（F228 语义收口：代码区不参与散文占位符扫描）——fenced code 块与行内
+ * code span 均不再参与 `checkArtifactSection` 的花括号占位符判据。
+ *
+ * 语义边界（显式 non-goal，见 plan.md Q3，勿在此基础上扩展）：
+ * - **闭合**的 fenced 代码块（``` / ~~~）整体清空（含开/闭围栏行本身），复用 `computeFenceRegions`
+ *   （与 F216 C4 标题/锚点识别同一套 fence 语义，避免两套"什么算围栏"各自为政）
+ * - 未闭合的围栏（开围栏行直到 EOF 都没有匹配闭合）不剥离——F228 R2-2 CRITICAL-2 修复：
+ *   未闭合围栏在真实 markdown 渲染中不构成有效代码块，若仍整段清空，会把开围栏行之后**全部**
+ *   正文（含后续 H2 标题与其下的模板占位符）一并吞掉，制造可主动触发的门禁绕过
+ * - 非 fenced 行按 `stripInlineCodeSpans` 逐行剥离行内 code span，未闭合反引号原样保留
+ * - **不处理**缩进代码块（4 空格）——`computeFenceMask` 本身也不识别缩进代码块，为其单独加
+ *   特殊分支会制造"fence 识别"与"code-region 剥离"两套语义不一致，正是本次修复要消灭的根因模式
+ * - **不处理**跨行 code span——逐行独立扫描，反引号跨行不闭合时各行互不感知
+ * @param {string} text - 待剥离文本（通常是 `checkArtifactSection` 抽出的章节正文）
+ * @returns {string}
+ */
+export function stripCodeRegions(text) {
+  const value = typeof text === 'string' ? text : '';
+  const lines = value.split('\n');
+  const { mask: fenceMask, unclosedFrom } = computeFenceRegions(lines);
+  const out = lines.map((line, i) => {
+    // 未闭合围栏起点之后的行一律不剥离（原样保留，含开围栏行本身），使其中的花括号
+    // 继续参与占位符扫描（F228 R2-2 CRITICAL-2）
+    if (unclosedFrom !== -1 && i >= unclosedFrom) return line;
+    return fenceMask[i] ? '' : stripInlineCodeSpans(line);
+  });
+  return out.join('\n');
+}
+
+/**
  * 机械校验制品章节（FR-012a）。
+ *
+ * F228 语义收口：长度判据与占位符判据的输入来源**不同**——长度判据（`bodyChars`）继续吃
+ * `stripReconSubblock(body)`（即 `proseBody`）原文，逐字不变；占位符判据改吃「再剥离代码区」
+ * 之后的 `placeholderScanText`（见 `stripCodeRegions`）。这一分离是刻意的：若长度判据也改用
+ * 剥离后的文本，"散文简短但有实质 fenced code 证据"的合规章节会被误判为占位空壳，等于按下
+ * 葫芦浮起瓢（详见 plan.md「为何长度判据必须留在未剥代码的文本上」）。
+ *
+ * F228 R2-2：占位符判据本身细分两段 OR——canonical 中文模板占位符（`CANONICAL_PLACEHOLDER_REGEX`）
+ * 直接在剥离前的 `proseBody` 上扫描、代码区不豁免（堵 CRITICAL-1：模板占位符包一层反引号
+ * 就能同时"贡献长度"又"从占位扫描中消失"的绕过）；通用花括号（`PLACEHOLDER_BRACE_REGEX`）
+ * 仍在剥离后的 `placeholderScanText` 上扫描、代码区豁免（保留"作者引用真实代码字面量"的既有合规行为）。
+ *
+ * F228 R3-1：代码区豁免新增第 4 段边界判据——原文有花括号、但剥离代码区后实质散文不足阈值，
+ * 说明这些花括号只是被代码区包着"充数"，整段正文实质就是包在代码里的占位符（而非"作者在实质
+ * 散文之外另行引用代码"），此时豁免不成立，仍判占位空壳。这堵住 codex 第二轮对抗审查发现的三个
+ * 绕过变体：中文占位符里塞 ASCII 冒号躲开 canonical 判据、纯 ASCII 模板字段（本就不含中文）、
+ * 转义反引号（`\\\`` 在 Markdown 里不是 code span 定界符，见 stripInlineCodeSpans 的 R3-2 修复）
+ * ——三者共同点都是"整段正文被代码区形态包裹、剥完之后所剩无几"，与"作者在长散文之外顺带引用
+ * 一段代码"的合法形态在"剥离后剩余散文量"这一维度上截然不同，故用 strippedChars 作判别锚点。
  * @param {string} content - 制品文件内容
  * @param {RegExp} requiredHeading - 必填章节锚点正则
  * @returns {{ nonEmpty:boolean, hasRequiredSection:boolean, placeholderResidue:boolean }}
@@ -577,9 +721,18 @@ export function checkArtifactSection(content, requiredHeading) {
   const body = extractSectionBody(text, requiredHeading);
   // F216 C1：复现对账子块的单行 JSON 花括号不参与散文占位符扫描——先定向剔除该子块再评估
   const proseBody = stripReconSubblock(body);
+  // 长度判据：输入逐字不变（仍是 proseBody），MIN_SECTION_BODY_CHARS 不被放宽
   const bodyChars = proseBody.replace(/\s/g, '').length;
-  // 占位空壳 = 散文正文过短（≤20 非空白字符）或残留未替换花括号占位符
-  const placeholderResidue = bodyChars <= MIN_SECTION_BODY_CHARS || PLACEHOLDER_BRACE_REGEX.test(proseBody);
+  // 占位符判据：额外剥离代码区（fenced code + 行内 code span）后再扫花括号（F228）
+  const placeholderScanText = stripCodeRegions(proseBody);
+  const strippedChars = placeholderScanText.replace(/\s/g, '').length;
+  // 占位空壳 = 散文正文过短（≤20 非空白字符），或 canonical 中文模板占位符残留（代码区不豁免，F228 R2-2），
+  // 或残留未替换的通用花括号占位符（代码区豁免），或原文有花括号但剥离代码区后散文不足阈值（F228 R3-1：
+  // 代码区豁免的边界——豁免只服务于"作者在实质散文之外引用代码"，不服务于"整段正文就是包在代码里的占位符"）
+  const placeholderResidue = bodyChars <= MIN_SECTION_BODY_CHARS
+    || CANONICAL_PLACEHOLDER_REGEX.test(proseBody)
+    || PLACEHOLDER_BRACE_REGEX.test(placeholderScanText)
+    || (PLACEHOLDER_BRACE_REGEX.test(proseBody) && strippedChars <= MIN_SECTION_BODY_CHARS);
   return { nonEmpty, hasRequiredSection: true, placeholderResidue };
 }
 
@@ -754,5 +907,5 @@ export {
   flattenToolResultContent, deriveAssertionStatus, extractExecutionRecordsAfter,
   normalizeCommandConservative, parseNoopReconLines, classifyReproEvidence,
   SENTINEL_PASS, SENTINEL_FAIL, EXECUTION_OUTPUT_SUMMARY_LIMIT,
-  NOOP_RECON_HEADING_REGEX, computeFenceMask, NOOP_JUDGMENT_HEADING_REGEX,
+  NOOP_RECON_HEADING_REGEX, computeFenceMask, computeFenceRegions, NOOP_JUDGMENT_HEADING_REGEX,
 } from './fix-compliance-execution-record.mjs';

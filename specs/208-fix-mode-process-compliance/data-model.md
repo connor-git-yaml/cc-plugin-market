@@ -77,7 +77,7 @@
 | `exists` | boolean | 文件是否存在 |
 | `nonEmpty` | boolean | 内容非空（去除空白后长度 > 0） |
 | `hasRequiredSection` | boolean \| null | 是否含指定标题的机械可判必填章节（`null` 表示该制品类型无此要求，如 `verification-report.md`） |
-| `placeholderResidue` | boolean | 章节内容是否仍含未替换的 `{...}` 模板占位符（FR-012a 空壳检测） |
+| `placeholderResidue` | boolean | 章节内容是否仍含未替换占位符（FR-012a 空壳检测，F228 四段判据）：正文去空白 **≤ 20** 字符；**或** canonical 中文模板占位符（`{根本原因一句话总结}` 形态）跨代码区一律命中；**或**通用花括号占位符仅在剥离**闭合**围栏与行内 code span 之后的文本上扫描命中（未闭合围栏不剥离，转义反引号不作 code span 定界符）；**或**正文原文含花括号、但剥离代码区后的实质散文（去空白）仍 **≤ 20** 字符（代码区豁免的边界：豁免只服务"引用代码"，不服务"整段正文包在代码里的占位符"） |
 
 ---
 

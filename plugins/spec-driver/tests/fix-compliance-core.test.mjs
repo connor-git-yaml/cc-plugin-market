@@ -19,11 +19,13 @@ import {
   classifyDelegationRole,
   resolveFeatureDirCandidate,
   checkArtifactSection,
+  stripCodeRegions,
   classifyClosureForm,
   judgeCompliance,
   resolveEnforcementFromConfig,
   MISSING_ACTION_TEXT,
   ENFORCEMENT_VALUES,
+  ROOT_CAUSE_HEADING_REGEX,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
@@ -1900,4 +1902,435 @@ describe('F224 回归：既有 fixture 判定结果不受本次改动影响', ()
       assert.equal(resolveFromFixture(name).ambiguous, false);
     });
   }
+});
+
+// ────────────────────────────────────────
+// F228 · stripCodeRegions / checkArtifactSection 代码区豁免
+// （行内 code span + fenced code 不参与占位符扫描）
+// ────────────────────────────────────────
+
+describe('F228 · stripCodeRegions / checkArtifactSection 代码区豁免（行内 code span + fenced code 不参与占位符扫描）', () => {
+  describe('stripCodeRegions 单元测试', () => {
+    it('1. 行内单反引号 code span 含花括号 → 返回文本不含 `{`', () => {
+      const line = 'text `{x}` more';
+      const result = stripCodeRegions(line);
+      assert.ok(!result.includes('{'), result);
+    });
+
+    it('2. 行内双反引号 code span（内部含单个反引号）含花括号 → 正确剥离', () => {
+      const line = 'shape is ``{a: `x`}`` here.';
+      const result = stripCodeRegions(line);
+      assert.ok(!result.includes('{'), result);
+    });
+
+    it('3. fenced（```）代码块含花括号 → 整块清空', () => {
+      const text = ['prefix', '```', '{"a":1}', '```', 'suffix'].join('\n');
+      const result = stripCodeRegions(text);
+      assert.ok(!result.includes('{'), result);
+      assert.ok(result.includes('prefix') && result.includes('suffix'));
+    });
+
+    it('4. fenced（~~~）代码块含花括号 → 整块清空（验证围栏字符切换仍走同一 computeFenceMask）', () => {
+      const text = ['prefix', '~~~', '{"a":1}', '~~~', 'suffix'].join('\n');
+      const result = stripCodeRegions(text);
+      assert.ok(!result.includes('{'), result);
+      assert.ok(result.includes('prefix') && result.includes('suffix'));
+    });
+
+    it('5. 4 个反引号围栏且内部含 3 个反引号字面量 → 按长度精确配对剥离，不误配', () => {
+      // 第一个 4-反引号 run 须找长度恰为 4 的下一个 run 才闭合；中间的 3-反引号 run 长度不符须被跳过、不消费
+      const line = 'x ````{a} ``` b```` y';
+      const result = stripCodeRegions(line);
+      assert.ok(!result.includes('{'), result);
+      assert.ok(!result.includes('`'), '反引号应被完整替换，不应残留');
+    });
+
+    it('6. 未闭合反引号后紧跟花括号 → 反引号原样保留，花括号不被剥离', () => {
+      const line = '`{x} more text';
+      const result = stripCodeRegions(line);
+      assert.equal(result, line, '未闭合反引号场景应恒等（不剥离）');
+      assert.ok(result.includes('{'));
+    });
+
+    it('7. 表格行内 code span 含花括号 → 正确剥离', () => {
+      const line = '| shape | `{x}` |';
+      const result = stripCodeRegions(line);
+      assert.ok(!result.includes('{'), result);
+    });
+
+    it('8. 跨行"code span"（反引号跨两行不闭合）→ 按行独立处理，非缺陷（已知 non-goal）', () => {
+      // 第一行反引号视为未闭合（同行无闭合 run）；第二行反引号视为新的独立起点，同样在本行内未闭合。
+      // 两行各自恒等保留，非跨行配对——这是文档化的 non-goal（plan.md Q3），不是缺陷。
+      const text = 'a `open\nclose` b';
+      const result = stripCodeRegions(text);
+      assert.equal(result, text, '逐行独立扫描不做跨行配对，结果应恒等');
+    });
+  });
+
+  describe('checkArtifactSection 集成测试（对应 fix-report 复现证据表 R1/A/B/C/D/E + 2 个新增边界）', () => {
+    it('R1（用户硬性验收①）：还原 F227 报告写法，Root Cause Chain 正文含行内 code span 花括号描述返回值形状 → placeholderResidue=false', () => {
+      // 反事实还原：作者原本自然的写法是用行内 code span 描述对象字面量返回值形状
+      // （真实生产场景见 specs/227-fix-compliance-candidate-disk-filter/fix-report.md L35，
+      // 作者当时被迫改写为不含花括号的 `path=null/ambiguous=true` 绕开写法）
+      const content = [
+        '# 问题修复报告（F227）',
+        '',
+        '**Root Cause**: 候选特性目录的解析是"纯文本层 last-writer-wins 的单值状态机"，磁盘核验被排在其后、且只对唯一幸存者执行。',
+        '',
+        '**Root Cause Chain**: 合规会话被阻断 → judge 收到 `{path: null, ambiguous: true}` → trackedDir 停在非规范名，该值来自会话自身 fixture 文本的 mv 误解析。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+
+    it('A：锚点后散文里含行内 code span 花括号 → false', () => {
+      const content = [
+        '# 问题修复报告',
+        '',
+        '**Root Cause**: 候选目录解析在改名场景下返回空候选，判定器整体 fail-open 放行。',
+        '',
+        '**Root Cause Chain**: 合规会话被阻断 → `resolveFeatureDirCandidate` 返回 `{path: null, ambiguous: true}` → 调用方未区分两种 null 语义 → 候选目录解析静默失败。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+
+    it('B：fenced code 块含花括号（同源第二形态）→ false', () => {
+      const content = [
+        '# 问题修复报告',
+        '',
+        '**Root Cause**: 判定器把示例 JSON 当成未替换模板占位符，误判制品为占位空壳，阻断合规收口。',
+        '',
+        '对账行形如：',
+        '',
+        '```json',
+        '{"claim":"症状已消除","command":"npx vitest run","expected":"PASS"}',
+        '```',
+        '',
+        '该 JSON 是真实证据而非模板残留。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+
+    it('C（用户硬性验收②，回归锁定）：散文裸花括号、真实未替换占位符 → true', () => {
+      const content = '# 报告\n\n**Root Cause**: {根本原因一句话总结}，此处仍是模板占位没有替换成真实内容呢。';
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    it('D（回归锁定）：正文过短（≤20 非空白字符）→ true', () => {
+      const content = '# 报告\n\n**Root Cause**: 待补';
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    it('E：散文空洞但 fenced code 撑长度（既有行为）→ false', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**: 见下',
+        '',
+        '```js',
+        'const evidence = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";',
+        '```',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+
+    it('新增边界 1：未闭合反引号后紧跟裸花括号（伪装成半个 code span）→ 仍判 true，证明伪装不构成绕过', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**: `未闭合反引号伪装 {真实占位符未替换} 内容。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    it('新增边界 2：行内 code span 与散文裸花括号在同一章节正文中共存 → true（code span 部分豁免，裸花括号部分仍命中，二者不互相污染）', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**: 示例代码 `{a: 1}` 描述实现，但本节仍有真实占位符 {待补充的原因说明} 尚未替换。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+  });
+
+  describe('MIN_SECTION_BODY_CHARS 与代码剥离交互专项断言（分离契约：长度判据吃剥离前文本，占位符判据吃剥离后文本）', () => {
+    // 本组用例锁定 F228 的核心分离契约：checkArtifactSection 内部
+    //   - 长度判据（bodyChars）计算源 = proseBody（stripReconSubblock(body) 原文，逐字不变）
+    //   - 占位符判据计算源 = placeholderScanText（stripCodeRegions(proseBody) 剥离后文本）
+    // 若未来有人把两者误改为共用同一份输入（例如都改用剥离后文本），下面第一个用例会从
+    // false 翻成 true（散文简短但有实质 fenced code 证据的合规章节被误判为占位空壳），
+    // 从而暴露回归——这正是 fix-report.md「为何长度判据必须留在未剥代码的文本上」的护栏。
+    it('散文不足 20 字符 + fenced code 块含大量字符但不含花括号 → false（未过短、非占位）', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**: 见下',
+        '',
+        '```js',
+        'const evidence = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";',
+        '```',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+
+    it('对照组：同样散文 + 同样字符总量但用不含围栏的纯散文填充 → 效果一致（false）', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**: 见下，该证据已经在历史提交中被详细记录并通过完整回归测试确认修复无误无遗漏。',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+    });
+  });
+
+  describe('R2 · Codex 对抗审查回归修复反向断言（CRITICAL-1a/1b 模板占位符代码区不豁免；CRITICAL-2 未闭合围栏不剥离）', () => {
+    it('CRITICAL-1a：repair 形态模板占位符包进行内 code span → 仍判 residue=true（代码区不豁免 canonical 占位符）', () => {
+      const content = [
+        '# 问题修复报告',
+        '',
+        '**Root Cause**: `{根本原因一句话总结}`',
+        '**Root Cause Chain**: `{症状} → {Why 1} → {Why 2} → {根因}`',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    it('CRITICAL-1b：no-op 形态模板占位符包进行内 code span → 仍判 residue=true', async () => {
+      const { NOOP_JUDGMENT_HEADING_REGEX } = await import(CORE_MODULE_URL);
+      const content = [
+        '# 报告', '', '## 判定依据',
+        '`{为何判断问题已不存在/无需代码改动的具体证据：如指向已生效的历史修复 commit、实际复现测试结果}`',
+      ].join('\n');
+      const r = checkArtifactSection(content, NOOP_JUDGMENT_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    describe('CANONICAL_PLACEHOLDER_REGEX 判别边界（表驱动，协调方复审收窄排除集为「不含 ASCII 冒号」）', () => {
+      // 新增模板占位符或新增代码字面量形态时，先在此表补例——保持判别边界的单一事实源。
+      // 判别原则：ASCII 冒号才是"这是代码/JSON 字面量"的可靠标志（对象字面量/JSON 必靠键值 `:` 表达结构）；
+      // ASCII 引号不是可靠标志（canonical 中文占位符本身也可能含引号），故排除集不含引号。
+      const canonicalPlaceholderCases = [
+        // ── 应命中：canonical 中文模板占位符 ──
+        { text: '{根本原因一句话总结}', shouldMatch: true },
+        { text: '{症状}', shouldMatch: true },
+        { text: '{根因}', shouldMatch: true },
+        { text: '{理由}', shouldMatch: true },
+        { text: '{为何判断问题已不存在/无需代码改动的具体证据：如指向已生效的历史修复 commit、实际复现测试结果}', shouldMatch: true },
+        { text: '{spec 文件列表，或"无需更新"}', shouldMatch: true }, // 含 ASCII 引号仍应命中（协调方复审核心用例）
+        { text: '{委派的子代理角色 + 核实结论摘要}', shouldMatch: true },
+        { text: '{用户原始描述}', shouldMatch: true },
+        // ── 应豁免：真实代码/JSON 字面量（含 ASCII 冒号，判为代码） ──
+        { text: '{path: null, ambiguous: true}', shouldMatch: false },
+        { text: '{"claim":"症状已消除","command":"npx vitest run","expected":"PASS"}', shouldMatch: false },
+        { text: '{ ok: true }', shouldMatch: false },
+        { text: '{x}', shouldMatch: false }, // 无中文表意文字，规则前置条件不满足
+        { text: '{ ...rest }', shouldMatch: false }, // 无中文表意文字
+        { text: '{path, ambiguous}', shouldMatch: false }, // 无中文表意文字
+      ];
+      for (const { text, shouldMatch } of canonicalPlaceholderCases) {
+        it(`${shouldMatch ? '命中' : '豁免'}：\`${text}\``, () => {
+          // 借道 checkArtifactSection 的真实消费路径验证（而非直接 import 内部未导出的正则）：
+          // 用例包进行内 code span（反引号）——这样通用花括号判据（PLACEHOLDER_BRACE_REGEX，扫描
+          // 剥离代码区之后的文本）不会对"应豁免"用例误报；而 canonical 判据（扫描剥离前的 proseBody）
+          // 不受代码区豁免，"应命中"用例仍会被捕获——精确隔离出 CANONICAL_PLACEHOLDER_REGEX 自身的判别力。
+          const content = [
+            '# 报告',
+            '',
+            `**Root Cause**: 占位符判别边界用例 \`${text}\` 附带填充文字以越过最小长度门槛。`,
+          ].join('\n');
+          const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+          assert.equal(r.placeholderResidue, shouldMatch, JSON.stringify(r));
+        });
+      }
+    });
+
+    it('CRITICAL-2：未闭合 fence 吞掉整段（含后续 H2 与其后模板占位符）→ 仍判 residue=true', () => {
+      const content = [
+        '# 报告',
+        '',
+        '**Root Cause**:',
+        '```text',
+        '{根本原因一句话总结}',
+        '**Root Cause Chain**: {症状} → {Why 1} → {根因}',
+        '## 影响范围扫描',
+        '{仍未填写的模板内容}',
+      ].join('\n');
+      const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+      assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+    });
+
+    describe('computeFenceRegions 单测（F228 R2-1 单一扫描器）', () => {
+      it('全部闭合 → unclosedFrom === -1，mask 与 computeFenceMask 返回一致', async () => {
+        const { computeFenceRegions, computeFenceMask } = await import(CORE_MODULE_URL);
+        const lines = ['前言', '```bash', 'echo hi', '```', '尾声'];
+        const { mask, unclosedFrom } = computeFenceRegions(lines);
+        assert.equal(unclosedFrom, -1);
+        assert.deepEqual(mask, computeFenceMask(lines));
+      });
+
+      it('未闭合围栏 → unclosedFrom 等于开围栏行下标，mask 仍与 computeFenceMask 一致', async () => {
+        const { computeFenceRegions, computeFenceMask } = await import(CORE_MODULE_URL);
+        const lines = ['前言', '```text', '第一行', '第二行'];
+        const { mask, unclosedFrom } = computeFenceRegions(lines);
+        assert.equal(unclosedFrom, 1);
+        assert.deepEqual(mask, computeFenceMask(lines));
+        assert.deepEqual(mask, [false, true, true, true]);
+      });
+    });
+
+    describe('存量行为（非本次 F228 R2 回归，改动需另立 feature，逐条钉住不动）', () => {
+      // F228 R3-4：以下三条断言为 characterization test——记录 checkArtifactSection **当前**的
+      // 真实输出，不代表这是"期望的正确行为"。三者均为已知存量缺口（PLACEHOLDER_BRACE_REGEX
+      // 要求闭合花括号、stripCodeRegions 不做跨行 code span 配对、computeFenceMask 不识别
+      // 4 空格缩进代码块），修复需要独立评估各自的误判/漏判权衡再另立 feature 处理，
+      // 本轮 R3 明确不动这三处判据本身，钉住是为了让未来任何改动都会被本测试显式感知到。
+      it('存量绕过（characterization，非期望行为）：缺右花括号（`{未闭合的占位文本`）→ 当前判 residue=false', async () => {
+        const { NOOP_JUDGMENT_HEADING_REGEX } = await import(CORE_MODULE_URL);
+        const content = [
+          '# 报告', '', '## 判定依据',
+          '{为何判断问题已不存在/无需代码改动的具体证据：请填写真实 commit 与复现结果',
+        ].join('\n');
+        const r = checkArtifactSection(content, NOOP_JUDGMENT_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+      });
+
+      it('存量误报（characterization，非期望行为）：跨行 code span（反引号跨两行不闭合）→ 当前判 residue=true', async () => {
+        const { NOOP_JUDGMENT_HEADING_REGEX } = await import(CORE_MODULE_URL);
+        const content = [
+          '# 报告', '', '## 判定依据',
+          '经实际复现确认返回值为 `',
+          '{ path: null, ambiguous: true }',
+          '`，调用方会正确走降级分支，因此当前代码路径无缺陷。',
+        ].join('\n');
+        const r = checkArtifactSection(content, NOOP_JUDGMENT_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+
+      it('存量误报（characterization，非期望行为）：4 空格缩进代码块 → 当前判 residue=true', async () => {
+        const { NOOP_JUDGMENT_HEADING_REGEX } = await import(CORE_MODULE_URL);
+        const content = [
+          '# 报告', '', '## 判定依据',
+          '经实际复现得到以下输出，证明当前路径行为正确，无需任何代码改动。',
+          '    const result = { ok: true };',
+        ].join('\n');
+        const r = checkArtifactSection(content, NOOP_JUDGMENT_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+    });
+
+    describe('F228 R3 · Codex 第二轮对抗审查修复反向断言', () => {
+      it('R3-1a：中文占位符里塞 ASCII 冒号绕开 canonical 判据，再包一层 code span → 仍判 residue=true', () => {
+        const content = [
+          '# 报告', '', '## 判定依据',
+          '`{为何判断问题已不存在/无需代码改动: 请填写真实 commit 与复现结果}`',
+        ].join('\n');
+        const r = checkArtifactSection(content, /^##\s*判定依据\s*$/m);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+
+      it('R3-1b：纯 ASCII 模板字段（本不含中文，canonical 判据天然不命中）包进 code span → 仍判 residue=true', () => {
+        const content = [
+          '# 报告',
+          '',
+          '**Root Cause**: `{path} {line} {pattern} {action} {field_name}`',
+        ].join('\n');
+        const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+
+      it('R3-2：转义反引号（Markdown 里不是 code span 定界符）包裹的模板字段 → 仍判 residue=true', () => {
+        const content = [
+          '# 报告',
+          '',
+          '**Root Cause**: \\`{path} {line} {pattern} {action} {field_name}\\`',
+        ].join('\n');
+        const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+
+      it('R3-2：stripCodeRegions 对转义反引号恒等保留（不当作定界符消费，花括号不被剥离）', () => {
+        const line = '\\`{path}\\` 后续文本';
+        const result = stripCodeRegions(line);
+        assert.equal(result, line, '转义反引号场景应恒等保留');
+        assert.ok(result.includes('{'), '花括号不应被误判为 code span 内容而剥离');
+      });
+
+      it('R3-2 对照：转义反斜杠自身（偶数个反斜杠）后的反引号仍是真实定界符 → 正常剥离', () => {
+        const line = 'text \\\\`{x}\\\\` more';
+        const result = stripCodeRegions(line);
+        assert.ok(!result.includes('{'), result);
+      });
+
+      it('R3-3：`### 复现对账` 子块内含未闭合围栏、其后有真实 H2 与模板占位符 → 仍判 residue=true（子块正确终止，不再吞掉后续正文）', () => {
+        const content = [
+          '# 报告',
+          '',
+          '## 判定依据',
+          '',
+          '散文证据充分详实，长度超过最短阈值不会触发过短判据，字数字数字数字数字数字数。',
+          '',
+          '### 复现对账',
+          '```text',
+          '未闭合围栏演示内容',
+          '## 影响范围扫描',
+          '{仍未填写的模板内容}',
+        ].join('\n');
+        const r = checkArtifactSection(content, /^##\s*判定依据\s*$/m);
+        assert.equal(r.placeholderResidue, true, JSON.stringify(r));
+      });
+
+      it('R3 回归保护：既有合法用例仍为 false —— 行内 code span 对象字面量 + 长散文', () => {
+        const content = [
+          '# 报告',
+          '',
+          '**Root Cause**: 候选目录解析在改名场景下返回空候选，判定器整体 fail-open 放行。',
+          '',
+          '**Root Cause Chain**: 合规会话被阻断 → `resolveFeatureDirCandidate` 返回 `{path: null, ambiguous: true}` → 调用方未区分两种 null 语义 → 候选目录解析静默失败。',
+        ].join('\n');
+        const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+      });
+
+      it('R3 回归保护：既有合法用例仍为 false —— fenced JSON + 真实散文', () => {
+        const content = [
+          '# 问题修复报告',
+          '',
+          '**Root Cause**: 判定器把示例 JSON 当成未替换模板占位符，误判制品为占位空壳，阻断合规收口。',
+          '',
+          '对账行形如：',
+          '',
+          '```json',
+          '{"claim":"症状已消除","command":"npx vitest run","expected":"PASS"}',
+          '```',
+          '',
+          '该 JSON 是真实证据而非模板残留。',
+        ].join('\n');
+        const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+      });
+
+      it('R3 回归保护：既有合法用例仍为 false —— 散文空洞但 fenced code 无花括号撑长度', () => {
+        const content = [
+          '# 报告',
+          '',
+          '**Root Cause**: 见下',
+          '',
+          '```js',
+          'const evidence = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";',
+          '```',
+        ].join('\n');
+        const r = checkArtifactSection(content, ROOT_CAUSE_HEADING_REGEX);
+        assert.equal(r.placeholderResidue, false, JSON.stringify(r));
+      });
+    });
+  });
 });
