@@ -2,8 +2,12 @@
  * drift-orchestrator 单元测试
  * 验证 loadBaselineSkeleton 和 detectDrift 核心逻辑（US3）
  */
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { loadBaselineSkeleton } from '../../src/diff/drift-orchestrator.js';
+import { bootstrapAdapters } from '../../src/adapters/index.js';
+import { detectDrift, loadBaselineSkeleton } from '../../src/diff/drift-orchestrator.js';
 
 describe('loadBaselineSkeleton', () => {
   it('从 HTML 注释中正确反序列化 CodeSkeleton', () => {
@@ -95,5 +99,62 @@ title: broken
 
     const result = loadBaselineSkeleton(specContent);
     expect(result.parserUsed).toBe('reconstructed');
+  });
+});
+
+// F221：目录级合并把 exports 按裸名压成 Map，facade 的 re-export 别名条目
+// 按文件路径排序后写覆盖同名真身时会掩盖真实实现变更；合并处过滤 re-export 后不再漏报。
+describe('detectDrift — re-export 别名不掩盖真身变更（F221）', () => {
+  it('facade 文件排序在真身之后时，真身签名变更仍被报告', async () => {
+    bootstrapAdapters();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f221-drift-'));
+    try {
+      // z-facade.ts 路径排序在 a-impl.ts 之后：不过滤 re-export 时后写覆盖真身条目
+      fs.writeFileSync(
+        path.join(tempDir, 'a-impl.ts'),
+        'export function foo(x: number): number { return x; }\n',
+      );
+      fs.writeFileSync(path.join(tempDir, 'z-facade.ts'), "export { foo } from './a-impl.js';\n");
+
+      const baseline = {
+        filePath: 'a-impl.ts',
+        language: 'typescript',
+        loc: 1,
+        exports: [
+          {
+            name: 'foo',
+            kind: 'function',
+            signature: 'function foo(x: string): string',
+            startLine: 1,
+            endLine: 1,
+            isDefault: false,
+          },
+        ],
+        imports: [],
+        hash: 'a'.repeat(64),
+        analyzedAt: '2026-07-22T00:00:00.000Z',
+        parserUsed: 'ts-morph',
+      };
+      const specPath = path.join(tempDir, 'mod.spec.md');
+      fs.writeFileSync(
+        specPath,
+        `---\nversion: v1\n---\n\n# 意图\n\n<!-- baseline-skeleton: ${JSON.stringify(baseline)} -->\n`,
+      );
+
+      const report = await detectDrift(specPath, tempDir, {
+        skipSemantic: true,
+        outputDir: path.join(tempDir, 'drift-out'),
+      });
+
+      const fooSignatureChange = report.items.find(
+        (item) =>
+          item.symbolName === 'foo' &&
+          item.oldValue?.includes('string') === true &&
+          item.newValue?.includes('number') === true,
+      );
+      expect(fooSignatureChange).toBeDefined();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });

@@ -152,6 +152,9 @@ function buildRankedComponents(
   const subsystem = inferSubsystem(module, packageMatch, groupMatch);
 
   for (const symbol of exports) {
+    // F221：re-export 是别名门面而非真身，名字信号评分会把它误提成独立组件
+    // （真身组件由目标模块自身贡献，且二者 sourceTarget 不同无法去重）
+    if (symbol.kind === 're-export') continue;
     const category = classifyComponentCategory(symbol.name, module.sourceTarget);
     const score = scoreExportSymbol(symbol, category, moduleRole, narrativeNames);
     const shouldKeep = CLASSLIKE_KINDS.has(symbol.kind) || score >= 7;

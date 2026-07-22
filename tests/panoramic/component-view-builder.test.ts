@@ -91,3 +91,52 @@ function findComponent(components: ComponentDescriptor[], name: string): Compone
   expect(component).toBeDefined();
   return component!;
 }
+
+// F221：re-export 别名不参与组件评分（真身组件由目标模块自身贡献，
+// 二者 sourceTarget 不同无法去重，评分提升会造出重复别名组件）。
+describe('component-view-builder — re-export 别名过滤（F221）', () => {
+  let fixture: ComponentDynamicFixture;
+
+  beforeEach(() => {
+    fixture = setupComponentDynamicFixture();
+  });
+
+  afterEach(() => {
+    cleanupComponentDynamicFixture(fixture);
+  });
+
+  it('re-export 条目不被提升为组件；同名真身 class 则会（阳性对照）', () => {
+    const target = fixture.storedModules.find((m) => m.baselineSkeleton);
+    expect(target).toBeDefined();
+    const aliasEntry = {
+      name: 'FacadeAliasClient',
+      kind: 're-export' as const,
+      signature: "export { FacadeAliasClient } from './real.js'",
+      isDefault: false,
+      startLine: 1,
+      endLine: 1,
+      reExportFrom: './real.js',
+    };
+    target!.baselineSkeleton!.exports.push(aliasEntry);
+
+    const withAlias = buildComponentView({
+      architectureIR: fixture.architectureIR,
+      storedModules: fixture.storedModules,
+      runtime: fixture.runtime,
+      eventSurface: fixture.eventSurface,
+    });
+    expect(withAlias.model.components.map((c) => c.name)).not.toContain('FacadeAliasClient');
+
+    // 阳性对照：同名条目改为 class 真身后经 CLASSLIKE 捷径成为组件，
+    // 证明上面的缺席来自 re-export 过滤而非评分不足
+    target!.baselineSkeleton!.exports.pop();
+    target!.baselineSkeleton!.exports.push({ ...aliasEntry, kind: 'class' as const, signature: 'class FacadeAliasClient {}' });
+    const withClass = buildComponentView({
+      architectureIR: fixture.architectureIR,
+      storedModules: fixture.storedModules,
+      runtime: fixture.runtime,
+      eventSurface: fixture.eventSurface,
+    });
+    expect(withClass.model.components.map((c) => c.name)).toContain('FacadeAliasClient');
+  });
+});

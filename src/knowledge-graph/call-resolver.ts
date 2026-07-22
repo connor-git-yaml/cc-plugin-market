@@ -98,6 +98,9 @@ export function buildModuleSymbolIndex(
   for (const [filePath, sk] of codeSkeletons) {
     const names = new Set<string>();
     for (const exp of sk.exports) {
+      // re-export 名放进模块符号索引会让经 facade import 的调用解析到被图派生过滤掉的节点，
+      // 造出 dangling call edge（F217 dangling 红线）；跳过后与修复前解析逐字一致，零回归。
+      if (exp.kind === 're-export') continue;
       names.add(exp.name);
     }
     idx.set(filePath, names);

@@ -878,3 +878,35 @@ describe('Feature 148: 大模块行数预算 sanity check', () => {
     expect(totalAstLines).toBeLessThan(1000);
   });
 });
+
+// F221：re-export 条目进入接口表后，`类型` 列（re-export）+ `签名` 列（含来源
+// specifier）即分层标注——接口表不再漏列 facade 导出面，也无需独立小节。
+describe('generateAstInterfaceDefinition — re-export 渲染（F221）', () => {
+  it('⑫ re-export 条目渲染 kind 列与来源签名', () => {
+    const skeletons = [createSkeleton('/project/src/facade.ts', {
+      exports: [
+        {
+          name: 'runBatch',
+          kind: 'function' as const,
+          signature: 'function runBatch(): void',
+          startLine: 1,
+          endLine: 3,
+          isDefault: false,
+        },
+        {
+          name: 'normalizeConcurrency',
+          kind: 're-export' as const,
+          signature: "export { normalizeConcurrency } from './stages/generation-scheduling.js'",
+          startLine: 5,
+          endLine: 5,
+          isDefault: false,
+          reExportFrom: './stages/generation-scheduling.js',
+        },
+      ],
+    })];
+    const result = generateAstInterfaceDefinition(skeletons);
+    expect(result).toContain('`normalizeConcurrency`');
+    expect(result).toContain('| re-export |');
+    expect(result).toContain('./stages/generation-scheduling.js');
+  });
+});

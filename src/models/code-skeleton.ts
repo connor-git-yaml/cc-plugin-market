@@ -24,6 +24,8 @@ export const ExportKindSchema = z.enum([
   'protocol',
   'data_class',
   'module',
+  // re-export 门面（`export { X } from './y'`）：别名条目，真身由目标文件贡献
+  're-export',
 ]);
 export type ExportKind = z.infer<typeof ExportKindSchema>;
 
@@ -91,6 +93,16 @@ export const ExportSymbolSchema = z.object({
   startLine: z.number().int().positive(),
   endLine: z.number().int().positive(),
   members: z.array(MemberInfoSchema).optional(),
+  /**
+   * re-export 来源 module specifier 原文（如 `'./stages/graph-assembly.js'`）。
+   * 仅 kind==='re-export' 条目携带；用于消费端识别别名并转发到真身文件。
+   */
+  reExportFrom: z.string().min(1).optional(),
+  /**
+   * type-only 标记：覆盖语句级 `export type {} from` 与说明符级 `export { type X } from` 两种形态。
+   * 仅 kind==='re-export' 条目携带。
+   */
+  isTypeOnly: z.boolean().optional(),
 });
 export type ExportSymbol = z.infer<typeof ExportSymbolSchema>;
 

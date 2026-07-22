@@ -599,7 +599,14 @@ export class TypeScriptMapper implements QueryMapper {
     return symbols;
   }
 
-  /** 提取 export_clause (re-export) */
+  /**
+   * 提取 export_clause (re-export)
+   *
+   * 已知限界（F221 裁决 1）：tree-sitter 降级路径把 re-export 产出为 kind='variable'
+   * 而非 ts-morph 主路径的 kind='re-export'（无 reExportFrom/isTypeOnly 标记），
+   * 因此不会被图派生 / call-resolver 的 re-export 过滤命中——该 parity gap 仅在
+   * ts-morph parse 失败（语法非法文件）时触发，修复前后行为一致，parity 修复单独立项。
+   */
   private _extractExportClause(
     clauseNode: Parser.SyntaxNode,
     exportNode: Parser.SyntaxNode,

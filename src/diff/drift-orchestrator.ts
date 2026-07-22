@@ -253,7 +253,11 @@ async function buildCurrentSkeleton(sourcePath: string): Promise<CodeSkeleton> {
   const skeletons = await analyzeFiles(absoluteFiles);
 
   // 合并所有骨架的导出和导入
-  const mergedExports = skeletons.flatMap((s) => s.exports);
+  // F221：目录级合并按裸名建 Map 比较（structural-diff），facade 的 re-export 别名条目
+  // 会按文件排序后写覆盖同名真身声明，掩盖真实实现变更（漏报）；别名不参与 drift 比较，
+  // 与修复前（提取端不识别 re-export）的 drift 口径逐字一致。facade 导出面自身的
+  // drift 呈现属 M9 轨道 C 能力，单独立项。
+  const mergedExports = skeletons.flatMap((s) => s.exports).filter((e) => e.kind !== 're-export');
   const mergedImports = skeletons.flatMap((s) => s.imports);
   const totalLoc = skeletons.reduce((sum, s) => sum + s.loc, 0);
 

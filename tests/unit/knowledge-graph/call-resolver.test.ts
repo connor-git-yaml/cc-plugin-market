@@ -576,3 +576,36 @@ describe('call-resolver edge cases', () => {
     expect(edges).toHaveLength(0);
   });
 });
+
+// F221：re-export 名若进模块符号索引，经 facade import 的调用会解析到
+// 被图派生过滤掉的别名节点 → dangling call edge；跳过保持与修复前解析口径一致。
+describe('buildModuleSymbolIndex re-export 过滤（F221）', () => {
+  it('⑪ re-export 条目名字不进入模块符号索引', () => {
+    const sk = mkSkeleton({
+      filePath: 'src/facade.ts',
+      language: 'typescript',
+      exports: [
+        {
+          name: 'localFn',
+          kind: 'function',
+          signature: 'function localFn(): void',
+          isDefault: false,
+          startLine: 1,
+          endLine: 2,
+        },
+        {
+          name: 'reFn',
+          kind: 're-export',
+          signature: "export { reFn } from './real.js'",
+          isDefault: false,
+          startLine: 3,
+          endLine: 3,
+          reExportFrom: './real.js',
+        },
+      ],
+    });
+    const idx = buildModuleSymbolIndex(mkSkeletonsMap([sk]));
+    expect(idx.get('src/facade.ts')?.has('localFn')).toBe(true);
+    expect(idx.get('src/facade.ts')?.has('reFn')).toBe(false);
+  });
+});

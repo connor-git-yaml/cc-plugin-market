@@ -51,6 +51,29 @@ function registerHelpers(): void {
 }
 
 /**
+ * 剥离每行行尾空白（space/tab）。
+ * 渲染出口是"生成文本"的唯一序列化边界，LLM 段落的尾随空格若直通落盘会触发 `git diff --check` 告警。
+ * 手写反向扫描而非 `/[ \t]+$/gm`（F221 Codex 对抗审查修订）：
+ * - 正则版对"长空格段后接非空白"的行存在平方级回溯退化（实测 32k 空格单行 ~800ms）
+ * - 正则 `$`（m 模式）把 U+2028/U+2029 也当行界，会误删字符串内容里的空格；split('\n') 只认 \n
+ * 仅剥行尾，不折叠空行、不动行内空白（本仓库模板从不使用 Markdown 双空格硬换行）。
+ */
+function stripTrailingWhitespace(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      let end = line.length;
+      while (end > 0) {
+        const ch = line[end - 1];
+        if (ch !== ' ' && ch !== '\t') break;
+        end--;
+      }
+      return end === line.length ? line : line.slice(0, end);
+    })
+    .join('\n');
+}
+
+/**
  * 一次性初始化：编译模板、注册 Helpers
  * 必须在首次调用 renderSpec() 之前执行
  */
@@ -98,7 +121,9 @@ export function renderSpec(moduleSpec: ModuleSpec): string {
   const baselineJson = JSON.stringify(moduleSpec.baselineSkeleton);
   const baselineComment = `\n\n<!-- baseline-skeleton: ${baselineJson} -->\n`;
 
-  return markdown + baselineComment;
+  // baseline JSON 不参与清洗：JSON.stringify 产物行尾本就无空白，而字符串值内可能
+  // 含 U+2028/U+2029 等行界字符，任何文本级处理都可能改写内容（baseline 字节保真是漂移检测前提）
+  return stripTrailingWhitespace(markdown) + baselineComment;
 }
 
 /**
@@ -108,7 +133,7 @@ export function renderIndex(data: Record<string, unknown>): string {
   if (!initialized || !indexSpecTemplate) {
     initRenderer();
   }
-  return indexSpecTemplate!(data);
+  return stripTrailingWhitespace(indexSpecTemplate!(data));
 }
 
 /**
@@ -118,7 +143,7 @@ export function renderDriftReport(data: Record<string, unknown>): string {
   if (!initialized || !driftReportTemplate) {
     initRenderer();
   }
-  return driftReportTemplate!(data);
+  return stripTrailingWhitespace(driftReportTemplate!(data));
 }
 
 /** 重置初始化状态（测试用） */

@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildUnifiedGraph,
+  deriveContainsEdges,
   setCurrentUnifiedGraph,
 } from '../../src/knowledge-graph/index.js';
 import type { CodeSkeleton } from '../../src/models/code-skeleton.js';
@@ -96,5 +97,49 @@ describe('deriveNodesFromSkeletons metadata 透传（间接经 buildUnifiedGraph
     expect(moduleNode).toBeDefined();
     expect(moduleNode?.metadata?.['callSitesCount']).toBe(0);
     expect(moduleNode?.metadata?.['exportKind']).toBeUndefined();
+  });
+});
+
+// F221：re-export 是别名门面而非真身（真身节点由目标文件贡献），
+// 若不过滤会产出重复别名节点/悬空 contains 边，触碰 F217 duplicate/orphan/dangling 门。
+describe('re-export 条目图派生过滤（F221）', () => {
+  const facadeSkeletons = new Map<string, CodeSkeleton>([
+    [
+      'src/facade.ts',
+      mkSk({
+        filePath: 'src/facade.ts',
+        exports: [
+          {
+            name: 'localFn',
+            kind: 'function',
+            signature: 'function localFn(): void',
+            isDefault: false,
+            startLine: 1,
+            endLine: 2,
+          },
+          {
+            name: 'reFn',
+            kind: 're-export',
+            signature: "export { reFn } from './real.js'",
+            isDefault: false,
+            startLine: 3,
+            endLine: 3,
+            reExportFrom: './real.js',
+          },
+        ],
+      }),
+    ],
+  ]);
+
+  it('⑩ deriveNodesFromSkeletons 不为 re-export 产出别名 symbol 节点', () => {
+    const graph = buildUnifiedGraph({ projectRoot: '/proj', codeSkeletons: facadeSkeletons });
+    expect(graph.nodes.find((n) => n.id === 'src/facade.ts::localFn')).toBeDefined();
+    expect(graph.nodes.find((n) => n.id === 'src/facade.ts::reFn')).toBeUndefined();
+  });
+
+  it('⑩ deriveContainsEdges 不为 re-export 产出 contains 边', () => {
+    const edges = deriveContainsEdges(facadeSkeletons);
+    expect(edges.some((e) => e.target === 'src/facade.ts::localFn')).toBe(true);
+    expect(edges.some((e) => e.target === 'src/facade.ts::reFn')).toBe(false);
   });
 });

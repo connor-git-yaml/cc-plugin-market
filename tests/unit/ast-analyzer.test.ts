@@ -230,4 +230,164 @@ export function add(a: number, b: number): number { return a + b; }
       }
     });
   });
+
+  // ── F221: re-export 门面语法级提取 ──────────────────────────
+  // why 单文件 Project：被 re-export 的目标文件不存在也应能识别，这正是修复本质
+  //（getExportedDeclarations 对跨文件目标静默丢符号，需语法级独立提取）。fixture 无需真的创建 './x.js'。
+  describe('re-export 提取（F221）', () => {
+    it('① named re-export 产出 kind=re-export 条目并携带 reExportFrom', async () => {
+      const filePath = createTempFile(`export { a, b } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(2);
+        expect(reExports.map((e) => e.name).sort()).toEqual(['a', 'b']);
+        for (const e of reExports) {
+          expect(e.reExportFrom).toBe('./x.js');
+          expect(e.members).toBeUndefined();
+          expect(e.startLine).toBeGreaterThan(0);
+          expect(e.endLine).toBeGreaterThan(0);
+        }
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('② alias re-export 取别名为 name 且签名含 `a as b`', async () => {
+      const filePath = createTempFile(`export { a as b } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(1);
+        expect(reExports[0]!.name).toBe('b');
+        expect(reExports[0]!.signature).toContain('a as b');
+        expect(reExports[0]!.reExportFrom).toBe('./x.js');
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('②b `as default` 重导出与 extractSymbol 的 isDefault 口径一致', async () => {
+      const filePath = createTempFile(`export { a as default } from './x.js';\nexport { b } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(2);
+        const asDefault = reExports.find((e) => e.name === 'default');
+        expect(asDefault?.isDefault).toBe(true);
+        expect(reExports.find((e) => e.name === 'b')?.isDefault).toBe(false);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑬ string-literal alias `as "default"` 取字面值且 isDefault=true', async () => {
+      const filePath = createTempFile(`export { foo as "default" } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(1);
+        expect(reExports[0]!.name).toBe('default');
+        expect(reExports[0]!.isDefault).toBe(true);
+        expect(reExports[0]!.signature).toContain('foo as "default"');
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑭ module specifier 含单引号时签名重建保持合法引号', async () => {
+      const filePath = createTempFile(`export { foo } from "./it's.js";`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(1);
+        expect(reExports[0]!.reExportFrom).toBe("./it's.js");
+        expect(reExports[0]!.signature).toContain(`from "./it's.js"`);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑮ 空 clause `export {} from` 不产条目', async () => {
+      const filePath = createTempFile(`export {} from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        expect(skeleton.exports.filter((e) => e.kind === 're-export')).toHaveLength(0);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('③ 语句级 type-only re-export 标记 isTypeOnly 且签名含 `export type {`', async () => {
+      const filePath = createTempFile(`export type { T } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(1);
+        expect(reExports[0]!.isTypeOnly).toBe(true);
+        expect(reExports[0]!.signature).toContain('export type {');
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('④ 说明符级 type 修饰仅标记该说明符', async () => {
+      const filePath = createTempFile(`export { type T, v } from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        const t = reExports.find((e) => e.name === 'T');
+        const v = reExports.find((e) => e.name === 'v');
+        expect(t?.isTypeOnly).toBe(true);
+        expect(v?.isTypeOnly).toBe(false);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑤ 本地 `export { localFn }`（无 specifier）不产 re-export 且不重复', async () => {
+      const filePath = createTempFile(`function localFn() {}\nexport { localFn };`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        expect(skeleton.exports.filter((e) => e.kind === 're-export')).toHaveLength(0);
+        expect(skeleton.exports.filter((e) => e.name === 'localFn')).toHaveLength(1);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑥ `export * from` 无法枚举（已知限界）不产条目', async () => {
+      const filePath = createTempFile(`export * from './x.js';`);
+      try {
+        const skeleton = await analyzeFile(filePath);
+        expect(skeleton.exports.filter((e) => e.kind === 're-export')).toHaveLength(0);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+
+    it('⑦ facade 集成：3 本地声明 + 11 named re-export（含 1 type-only）→ 14 符号', async () => {
+      const filePath = createTempFile(
+        [
+          'export function localA() {}',
+          'export const localB = 1;',
+          'export class LocalC {}',
+          "export { r1, r2, r3, r4, r5 } from './m1.js';",
+          "export { r6, r7, r8 } from './m2.js';",
+          "export type { R9 } from './m3.js';",
+          "export { r10, r11 } from './m4.js';",
+        ].join('\n'),
+      );
+      try {
+        const skeleton = await analyzeFile(filePath);
+        expect(skeleton.exports).toHaveLength(14);
+        const reExports = skeleton.exports.filter((e) => e.kind === 're-export');
+        expect(reExports).toHaveLength(11);
+        expect(reExports.filter((e) => e.isTypeOnly)).toHaveLength(1);
+        expect(reExports.find((e) => e.name === 'R9')?.isTypeOnly).toBe(true);
+      } finally {
+        cleanup(filePath);
+      }
+    });
+  });
 });

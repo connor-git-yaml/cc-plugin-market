@@ -3,7 +3,7 @@
  * 使用单 Project 实例提取 CodeSkeleton（FR-001, Constitution I）
  * 参见 research R1, contracts/core-pipeline.md
  */
-import { Project, SourceFile, SyntaxKind, Node } from 'ts-morph';
+import { Project, SourceFile, SyntaxKind, Node, type ExportSpecifier } from 'ts-morph';
 import { createHash } from 'node:crypto';
 import type {
   CodeSkeleton,
@@ -123,7 +123,84 @@ function extractExports(sourceFile: SourceFile, _options: AnalyzeOptions): Expor
     }
   }
 
+  // re-export 门面（`export { X } from './y'`）：单文件 Project + noResolve 下
+  // getExportedDeclarations() 对跨文件目标要么静默返回空、要么返回名字但解析出
+  // 无法分类的节点（extractSymbol 返回 null 被丢弃），符号无声丢失，需语法级独立提取。
+  // 去重针对「实际产出的本地声明名」而非上面循环的 seen——seen 会被 getExportedDeclarations
+  // 解析到却被丢弃的 re-export 名污染，用它去重会漏掉全部 re-export。
+  extractReExports(sourceFile, exports);
+
   return exports;
+}
+
+/**
+ * 语法级提取 named re-export（含 alias 与 type-only 形态）。
+ * 本地声明优先：已作为真身产出的同名符号不被 re-export 别名覆盖。
+ * 已知限界：`export * from` / `export * as ns from` 无解析不可枚举，不产条目。
+ */
+function extractReExports(sourceFile: SourceFile, exports: ExportSymbol[]): void {
+  const emitted = new Set(exports.map((e) => e.name));
+
+  for (const decl of sourceFile.getExportDeclarations()) {
+    const moduleSpecifier = decl.getModuleSpecifierValue();
+    // 无 module specifier 的本地 `export { x }` 已由 getExportedDeclarations 覆盖
+    if (!moduleSpecifier) continue;
+
+    const startLine = decl.getStartLineNumber();
+    const endLine = decl.getEndLineNumber();
+    const stmtTypeOnly = decl.isTypeOnly();
+
+    for (const spec of decl.getNamedExports()) {
+      const aliasNode = spec.getAliasNode();
+      const name = aliasNode ? specifierNodeName(aliasNode) : specifierNodeName(spec.getNameNode());
+      if (emitted.has(name)) continue;
+      emitted.add(name);
+
+      const isTypeOnly = stmtTypeOnly || spec.isTypeOnly();
+      exports.push({
+        name,
+        kind: 're-export',
+        signature: buildReExportSignature(spec, moduleSpecifier, stmtTypeOnly),
+        jsDoc: null,
+        // `export { X as default } from` 把目标重导出为本模块默认导出，
+        // 与 extractSymbol 的 name === 'default' 口径保持一致
+        isDefault: name === 'default',
+        startLine,
+        endLine,
+        reExportFrom: moduleSpecifier,
+        isTypeOnly,
+      });
+    }
+  }
+}
+
+/**
+ * 说明符名节点转规范名：string-literal 形态（TS 4.7+ arbitrary module namespace
+ * identifier，如 `export { foo as "default" }`）取字面值而非带引号原文，
+ * 保证 name 与 isDefault 判定语义正确。
+ */
+function specifierNodeName(node: Node): string {
+  return Node.isStringLiteral(node) ? node.getLiteralValue() : node.getText();
+}
+
+/**
+ * 为单条 named specifier 规范化重建单行签名。
+ * 每条目独立描述自身（不抄多名字语句原文），保证签名与该导出名一一对应。
+ * clause 取源码原样（含 alias / 说明符级 `type` / string-literal 名）；
+ * type 前缀只由语句级 type-only 驱动，避免产出 `export type { type T }` 非法双写。
+ */
+function buildReExportSignature(
+  spec: ExportSpecifier,
+  moduleSpecifier: string,
+  stmtTypeOnly: boolean,
+): string {
+  const clause = spec.getText();
+  const typeKeyword = stmtTypeOnly ? 'type ' : '';
+  // specifier 含单引号（如文件名带撇号）时改用 JSON.stringify 的双引号+转义形态，签名文本保持合法语法
+  const quoted = moduleSpecifier.includes("'")
+    ? JSON.stringify(moduleSpecifier)
+    : `'${moduleSpecifier}'`;
+  return `export ${typeKeyword}{ ${clause} } from ${quoted}`;
 }
 
 /**

@@ -229,6 +229,9 @@ function deriveNodesFromSkeletons(
       },
     });
     for (const exp of sk.exports) {
+      // re-export 是别名门面而非真身，真身节点由目标文件自身贡献；
+      // 造 `orchestrator::X` 别名节点会与 stages 真身重复，触碰 F217 duplicate/orphan 门与 F214 canonical ID 拓扑。
+      if (exp.kind === 're-export') continue;
       const symbolId = symbolNodeId(filePath, exp.name);
       push({
         id: symbolId,
@@ -289,6 +292,8 @@ export function deriveContainsEdges(
   };
   for (const [filePath, sk] of codeSkeletons) {
     for (const exp of sk.exports) {
+      // re-export 无对应真身节点（见 deriveNodesFromSkeletons 过滤），contains 边会悬空
+      if (exp.kind === 're-export') continue;
       const symbolId = symbolNodeId(filePath, exp.name);
       // module → symbol/class 一级
       push(filePath, symbolId);
