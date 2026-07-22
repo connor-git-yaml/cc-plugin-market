@@ -43,7 +43,7 @@ F189 已完成点锚路线（Fiberplane Drift 式）的立项闭环：spec + pro
 
 **Why this priority**：没有生产可用的建锚入口，C2/C3 的检测能力无从落地——这是本 Feature 价值链的第一环。
 
-**Independent Test**：对一份含真实引用条目（`{ id: "spec219-canonicalizeSymbolId", ref: "canonicalizeSymbolId", docPath: "...", line: 147 }`）的清单文件跑 `drift link`，验证 lock 制品新增一条记录，含 canonical `symbolId` + `fingerprint` + `fingerprintVersion` + `matchKind`（**不含** `status` 字段，见 FR-002/W1）；对已存在的锚重跑 `drift link --refresh`，验证指纹按当前代码重算；对指定 `id` 跑 `drift unlink <id>`，验证该条记录从 lock 移除、其余锚不受影响。
+**Independent Test**：对一份含真实引用条目（`{ id: "spec219-canonicalizeSymbolId", ref: "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId", docPath: "...", line: 147 }`）的清单文件跑 `drift link`，验证 lock 制品新增一条记录，含 canonical `symbolId` + `fingerprint` + `fingerprintVersion` + `matchKind`（**不含** `status` 字段，见 FR-002/W1）；对已存在的锚重跑 `drift link --refresh`，验证指纹按当前代码重算；对指定 `id` 跑 `drift unlink <id>`，验证该条记录从 lock 移除、其余锚不受影响。
 
 **Acceptance Scenarios**:
 1. **Given** 引用清单中一条尚未建锚的条目，且其 `ref` 在 graph 中唯一可解析，**When** 运行 `drift link`，**Then** lock 制品新增一条记录（`symbolId` + `fingerprint` + `fingerprintVersion` + `matchKind`，无 `status` 字段），CLI 输出建锚摘要（成功/歧义/未解析计数）
@@ -65,7 +65,7 @@ F189 已完成点锚路线（Fiberplane Drift 式）的立项闭环：spec + pro
 2. **Given** 被锚 symbol 的签名/操作符/字面值/控制结构等 AST 结构或 token 发生变化，**When** 运行 `drift check`，**Then** 该锚标 `stale`，报告含 `expectedFingerprint`/`actualFingerprint`
 3. **Given** 被锚 symbol 已从当前文件消失（删除或重命名，M9 不做 rename-follow），**When** 运行 `drift check`（对目标文件即时重新解析），**Then** 该锚标 `orphaned`
 4. **Given** 同文件内另一个未被锚定的 symbol 发生变化、被锚 symbol 本身不变，**When** 运行 `drift check`，**Then** 本锚保持 `fresh`（symbol 级粒度不连累）
-5. **Given** lock 制品文件损坏（非法 JSON/schema 不匹配/`fingerprintVersion` 与当前工具不兼容），**When** 运行 `drift check`，**Then** 整体判定为 `lock-corrupt`，报告明确区分"lock 损坏"与"内容 drift"，不误判为全 fresh
+5. **Given** lock 制品文件损坏（非法 JSON / schema 不匹配 / 缺失必需字段），**When** 运行 `drift check`，**Then** 整体判定为 `lock-corrupt`，报告明确区分"lock 损坏"与"内容 drift"，不误判为全 fresh
 6. **Given** 实现选择消费一份预构建/缓存的 graph 制品做 symbol 存在性判断，且该制品的生成时间早于当前工作树最新改动（制品内仍含磁盘上已删除的 symbol），**When** 运行 `drift check`，**Then** 该锚标 `graph-stale`（而非被误判 `fresh`），报告显式提示需重建 graph 制品
 
 ### User Story 3 — `repo:check` 集成（Priority: P1）
@@ -107,12 +107,12 @@ F189 已完成点锚路线（Fiberplane Drift 式）的立项闭环：spec + pro
 
 | 状态名 | 作用域 | machineCode | 单态 exitCode | 混合优先级（数字越小越先决定整体 exitCode） | `repo:check` 默认映射 | `repo:check` `--strict` 映射 | `degraded` | next-step 文案 |
 |--------|--------|-------------|---------------|----------------------------------------------|----------------------|-------------------------------|-----------|----------------|
-| lock-corrupt | report 级 | `DRIFT_LOCK_CORRUPT` | 3 | 1（最高） | error | error（已是最高，strict 不改变） | true | "lock 文件无法解析（JSON 语法错误 / schema 不兼容 / fingerprintVersion 不支持），先修复 `.specify/spec-drift.lock.json` 再继续" |
-| graph-unavailable | report 级 | `DRIFT_GRAPH_UNAVAILABLE` | 2 | 2 | warn | error | true | "graph 分析环境不可用，运行 `spectra batch --mode graph-only` 重建后重跑" |
+| lock-corrupt | report 级 | `DRIFT_LOCK_CORRUPT` | 3 | 1（最高） | error | error（已是最高，strict 不改变） | true | "lock 文件无法解析（JSON 语法错误 / schema 不兼容 / 缺失必需字段），先修复 `.specify/spec-drift.lock.json` 再继续" |
+| graph-unavailable | report 级 | `DRIFT_GRAPH_UNAVAILABLE` | 2 | 2 | warn | error | true | "AST 分析环境不可用（dist 编译产物缺失或模块加载失败），运行 `npm run build` 后重跑" |
 | stale | anchor 级 | `DRIFT_STALE` | 1 | 3 | warn | error | false | "AST 结构/token 已变化，确认 spec 引用是否仍准确：准确则 `drift link --refresh`，不准确则修订 spec 文案" |
 | orphaned | anchor 级 | `DRIFT_ORPHANED` | 1 | 3 | warn | error | false | "被锚 symbol 已消失（删除/重命名，M9 不做 rename-follow），`drift unlink` 清理旧锚，如有替代 symbol 重新 `drift link`" |
 | ambiguous | anchor 级 | `DRIFT_AMBIGUOUS` | 2 | 4 | warn | error | true | "引用命中多个候选，在引用清单里改写为更精确的 `file::Symbol` 形式后重新 `drift link`" |
-| unresolved | anchor 级 | `DRIFT_UNRESOLVED` | 2 | 4 | warn | error | true | "引用未能解析到任何 symbol，检查清单条目拼写或运行 `drift link --refresh`" |
+| unresolved | anchor 级 | `DRIFT_UNRESOLVED` | 2 | 4 | warn | error | true | "引用未能解析到任何 symbol：裸 symbol 名需补全为 `file::Symbol` 形式；已是 file-qualified 则检查拼写或运行 `drift link --refresh`" |
 | fingerprint-unavailable | anchor 级 | `DRIFT_FINGERPRINT_UNAVAILABLE` | 2 | 4 | warn | error | true | "symbol 已解析但取不到可用 span（含 member 粒度被拒绝、fingerprintVersion 不匹配两种子情形），reason 字段会指出具体原因与是否需要 relink" |
 | graph-stale | anchor 级 | `DRIFT_GRAPH_STALE` | 2 | 4 | warn | error | true | "消费的 graph 制品早于当前工作树，重建 graph（`spectra batch --mode graph-only`）后重跑" |
 | unsupported-language | anchor 级 | `DRIFT_UNSUPPORTED_LANGUAGE` | 2 | 4 | warn | error | true | "该语言本期不支持 symbol 级建锚（首发仅 TypeScript/JavaScript），等待语言支持扩展" |
@@ -136,14 +136,14 @@ F189 已完成点锚路线（Fiberplane Drift 式）的立项闭环：spec + pro
 
 ### C1 — `drift link` / `drift check` / `drift unlink`
 
-- **FR-001**：引用清单（CL-2）MUST 是独立的显式 JSON/YAML 文件，每条记录 MUST 含稳定 `id`（用户显式指定的唯一字符串，不由 `docPath+line` 派生——`docPath+line` 会因文档插行而漂移，不能作为主键，见 W1）、`ref`（引用表达式）、`docPath`、`line`。`drift link` MUST 只处理清单里显式列出的条目；MUST NOT 扫描 Markdown 正文自动发现引用（CL-2，spec 内标记自动扫描明确留 M10）。
+- **FR-001**：引用清单（CL-2）MUST 是独立的显式 JSON/YAML 文件，每条记录 MUST 含稳定 `id`（用户显式指定的唯一字符串，不由 `docPath+line` 派生——`docPath+line` 会因文档插行而漂移，不能作为主键，见 W1）、`ref`（引用表达式）、`docPath`、`line`。`drift link` MUST 只处理清单里显式列出的条目；MUST NOT 扫描 Markdown 正文自动发现引用（CL-2，spec 内标记自动扫描明确留 M10）。`ref` MUST 为 file-qualified 的 `<relPath>::<symbolName>` 形式（F214 canonical ID 形态，如 `src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId`）；不含 `::` 的裸 symbol 名 MUST 判 `unresolved`（next-step 指引补全为 file-qualified 形式）——这保证 link/check 都只需对 ref 指到的文件做即时解析，无需任何整仓 graph 制品（与 FR-004 graph 真值策略一致）。
 - **FR-002**：`drift link` MUST 支持三种操作且行为精确定义：
   - **新增**：`id` 在 lock 中不存在时建锚；解析走 `canonicalizeSymbolId` → `resolveSymbolFuzzy` 兜底（沿用 F189 不变量：多候选标 `ambiguous` + top-3、不自动误绑；解析目标 MUST 限定 symbol 节点，防 module/symbol 混淆误绑）。
   - **刷新**（`--refresh`）：`id` 已存在时重新解析 + 重算指纹并覆盖旧记录；若刷新过程重新解析出多候选（ambiguous）或无候选（unresolved），MUST **保留刷新前最后一次已知良好的 `symbolId`/`fingerprint`**，不得因刷新失败而丢弃既有可比对基线（W1）。
   - **删除**（`drift unlink <id>`）：按稳定 `id` 精确删除单条记录，MUST NOT 依赖 `ref`/`docPath` 反查（因清单中可能存在同 `ref`/`docPath` 的多条记录）。
   - 同一 `id` 未加 `--refresh` 重复 `link` 时 MUST 拒绝执行并提示"该 id 已存在，使用 --refresh 刷新或更换 id"，不静默覆盖。
   - 批处理一次 `drift link` 跑多条清单条目时，MUST 允许部分成功/部分失败（单条 ambiguous/unresolved 不阻断其余条目的建锚），但**最终落盘 MUST 走原子写**（临时文件 + rename），不允许出现"写到一半"的半成品 lock 文件。
-- **FR-003**：lock 制品（CL-1）MUST 持久化为 `.specify/spec-drift.lock.json`。schema MUST 只存**绑定与预期指纹**，不持久化运行时派生的 drift 状态——即 lock 条目字段集合为 `{ id, ref, docPath, line, symbolId, fingerprint, fingerprintVersion, normalizationProfile, resolvedFrom, matchKind, schemaVersion }`，**MUST NOT** 含 `status`/`stale`/`fresh` 等字段；status 永远由 `drift check` 在运行时按状态矩阵重新计算，不写回 lock。`fingerprintVersion`/`normalizationProfile`（如 `"ts-morph-canonical-v1"`）MUST 标识指纹算法版本，供 C3 升级后判断旧锚是否需要 relink（见 FR-009(b)、W2）。
+- **FR-003**：lock 制品（CL-1）MUST 持久化为 `.specify/spec-drift.lock.json`。schema MUST 只存**绑定与预期指纹**，不持久化运行时派生的 drift 状态——lock 顶层 MUST 含 `schemaVersion`（制品级 schema 版本，单一顶层字段）与 `anchors` 数组；每条 anchor 条目字段集合为 `{ id, ref, docPath, line, symbolId, fingerprint, fingerprintVersion, normalizationProfile, resolvedFrom, matchKind }`，**MUST NOT** 含 `status`/`stale`/`fresh` 等字段；status 永远由 `drift check` 在运行时按状态矩阵重新计算，不写回 lock。`fingerprintVersion`/`normalizationProfile`（如 `"ts-morph-canonical-v1"`）MUST 标识指纹算法版本，供 C3 升级后判断旧锚是否需要 relink（见 FR-009(b)、W2）。
 - **FR-004**：`drift check` MUST **仅按 lock 中已持久化的 canonical `symbolId` 做精确匹配查找**（直接在目标文件的即时（check-time）解析结果中按 id 命中/未命中判断存在性），**MUST NOT** 重新执行 `canonicalizeSymbolId`/`resolveSymbolFuzzy` 模糊解析——模糊重新解析只允许由 `drift link --refresh` 显式触发。这一约束防止 check 把"同名新 symbol"误洗成 fresh，也防止掩盖真正的 `orphaned`。
   - **graph 真值策略**：`drift check` 的 symbol 存在性判定与指纹重算 MUST 基于对该 `symbolId` 所在文件的**即时重新解析**（`analyzeFiles` 现场跑，只解析 lock 涉及的目标文件，不依赖任何预构建/缓存的整仓 graph 制品）。
   - 若实现在未来版本选择消费已持久化的 graph 制品做存在性判断，MUST 先比对该制品的生成时间戳/commit 与当前工作树状态；制品落后时该锚 MUST 标记为新增状态 `graph-stale`（而非被误判 `fresh`/`orphaned`），且该场景 MUST 有 fixture 覆盖（构造"旧 graph 制品仍含已删除 symbol，但磁盘文件已删除该 symbol"的场景，验证不被误判为 fresh）。
@@ -167,13 +167,13 @@ F189 已完成点锚路线（Fiberplane Drift 式）的立项闭环：spec + pro
 
 ### 降级与非目标边界
 
-- **FR-011**：graph 不可用（未构建/加载失败）或 lock 制品自身损坏时，`drift check` MUST 按§状态矩阵降级——分别标 `graph-unavailable` / `lock-corrupt`，`degraded: true`，MUST NOT 静默判全部 fresh。
+- **FR-011**：分析环境不可用（dist 编译产物缺失/模块动态加载失败）或 lock 制品自身损坏时，`drift check` MUST 按§状态矩阵降级——分别标 `graph-unavailable` / `lock-corrupt`，`degraded: true`，MUST NOT 静默判全部 fresh。
 - **FR-012**：`unsupported-language`、`parser-degrade` 两类场景 MUST 使用§状态矩阵中各自独立的 machineCode 与 next-step 文案，不得合并为同一泛化错误提示。
 - **FR-013**：本 Feature MUST 保持零 LLM 调用（drift link/check/unlink 全程基于 AST 解析与哈希比对，不依赖模型推理），且 MUST NOT 修改现有 graph/panoramic 的 schema 或输出格式。per-symbol 指纹**只存在于 drift lock 层**（`.specify/spec-drift.lock.json`），MUST NOT 挂载到 knowledge-graph 节点上（删除此前草案中"如需在图上挂 per-symbol hash"的例外分支——首发不存在该逃生口，与 SC-007/SC-010 的 `src/knowledge-graph` 零 diff 要求、与 F220 disjoint 护栏保持一致）。
 - **FR-014**（CLI 发布合同）：`drift link` / `drift check` / `drift unlink` MUST 通过统一的 CLI 入口脚本（`scripts/spec-drift-cli.mjs`）暴露，并在 `package.json` 注册 `drift:link` / `drift:check` / `drift:unlink` 三个 script（`npm run drift:check -- --strict` 形式传参）。每个子命令 MUST 支持 `--help`（打印用法与参数说明）与 `--format json`（输出遵循§状态矩阵字段的机器可读 `DriftReport`/操作摘要，供 CI 或其他工具消费）。三个子命令的进程退出码 MUST 遵循§状态矩阵定义（`link`/`unlink` 操作性失败退出非 0，具体码值在 plan 阶段细化，但 MUST 与 `check` 的 0/1/2/3 语义不冲突）。MUST 至少有一条端到端测试从**公开 CLI 入口**（如 spawn 子进程或调用 CLI 的 `main()` 导出）跑通"清单 → link → check（fresh）→ 修改代码 → check（stale）→ unlink"完整闭环，不能只测内部函数单元。
 - **FR-015**（lock 生命周期边界，W2）：
   - lock 文件不存在或 `anchors` 为空数组：`drift check` MUST 视为"无锚"，返回全零 summary、`exitCode 0`，MUST NOT 判 `lock-corrupt`（不存在 ≠ 损坏）；`drift link` 首次运行时 MUST 自动创建该文件。
-  - lock 数组中任意一条记录缺失必需字段或字段类型不符：MUST 整体判定 `lock-corrupt`（不做"跳过坏条目、继续处理好条目"式的部分容忍——数据完整性边界一旦不确定，不能自证"其余数据可信"）。
+  - lock 数组中任意一条记录缺失必需字段或字段类型不符：MUST 整体判定 `lock-corrupt`（不做"跳过坏条目、继续处理好条目"式的部分容忍——数据完整性边界一旦不确定，不能自证"其余数据可信"）。条目中出现被禁字段（`status`/`stale`/`fresh` 等运行时派生态）同样 MUST 判定 `lock-corrupt`——lock 的 schema 校验是全字段精确校验（必需字段齐全 + 类型正确 + 无被禁字段），不做宽松忽略。
   - lock 顶层 `schemaVersion` 与当前工具不兼容：MUST 判定 `lock-corrupt`，错误信息 MUST 指出版本不兼容且不得按旧 schema 静默继续解析。
   - 并发写入/写入中断：lock 写入 MUST 走原子写（临时文件 + rename）；若检测到残留的临时文件（写入中断的痕迹），`drift check`/`drift link` MUST 给出明确错误提示，不静默使用可能不完整的文件。
 - **FR-016**（W3 文档侧锚失效，显式非目标化）：本 Feature MUST NOT 验证引用清单条目自身的存活性——即不检查 `docPath` 对应的文档文件是否仍存在、`line` 处是否仍包含该引用文本。`drift check` 只验证**代码侧** symbol 的 AST 指纹是否漂移；文档被删除/移动、原行文字被改写但清单条目未同步更新，仍可能被判 `fresh`（因为验证对象是代码而非文档定位）。这是显式非目标（与 CL-2"独立清单、维护责任在人工"的形态一致），非实现疏漏；`source-reference-missing` 这类文档侧校验状态留 M10+ 评估。
