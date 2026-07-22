@@ -17,6 +17,9 @@
  * - mock '@anthropic-ai/sdk'（零付费、零网络），concurrency: 1（调度顺序确定化）
  * - 运行态噪声结构化清洗（路径/git SHA/ISO 时间戳/duration/batchId），token 计数与
  *   统计结构保留（mock 下确定，是调度行为的真信号）
+ * - F223 修复：README 首行本地化日期（`toLocaleDateString('zh-CN')`，产品既有行为）曾被当成
+ *   稳定内容冻结，跨系统日期必红；scrubRuntimeNoise 补 <DATE> 规则，.snap 做外科式定点替换
+ *   （9 处字面量，严禁 `vitest -u`）；生产代码零改动，详见 fix-report.md
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
@@ -160,6 +163,7 @@ function checkpointPathOf(root: string): string {
  * - 临时根路径与其 basename（README 标题 = basename(root)，mkdtemp 随机）
  * - 40-hex git SHA（临时仓库每次 init 必变；64-hex skeletonHash 不受影响）
  * - ISO-8601 时间戳（spec frontmatter lastUpdated / analyzedAt / checkpoint *At 等）
+ * - 本地化日期 `YYYY/M/D`（README 首行 `toLocaleDateString('zh-CN')` 产出，无补零；F223 新增）
  * - durationMs 数值（W1 修复：捕获组保引号结构，JSON 清洗后仍可 parse）
  * - batch-<Date.now()> 形态的 batchId 与 summary 文件名（10+ 位数字防误伤）
  * - "123ms" 形态的耗时文本（summary 人类可读行）
@@ -170,6 +174,7 @@ function scrubRuntimeNoise(text: string, root: string): string {
     .replaceAll(basename(root), '<PROJECT>')
     .replace(/\b[0-9a-f]{40}\b/g, '<SHA>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z/g, '<ISO-TS>')
+    .replace(/\b\d{4}\/\d{1,2}\/\d{1,2}\b/g, '<DATE>') // toLocaleDateString('zh-CN') 本地化日期（F223）
     .replace(/("?durationMs"?\s*:\s*)\d+/g, '$1"<N>"')
     .replace(/\bbatch-\d{10,}\b/g, 'batch-<TS>')
     .replace(/\b\d+(?:\.\d+)?\s*ms\b/g, '<MS>')
@@ -554,5 +559,29 @@ describe(DESCRIBE_TITLE, { timeout: 180_000 }, () => {
       return title.startsWith('场景8') ? [`${base} 1`, `${base} 2`] : [`${base} 1`];
     });
     expect(actualKeys.sort()).toEqual(expectedKeys.sort());
+  });
+
+  it('场景10b（F223 守护）：scrubRuntimeNoise 对本地化日期的清洗与系统日期无关（时间旅行防线）', () => {
+    const root = '/tmp/f220-guard-root';
+    const sample = (date: string): string =>
+      `> 由 spectra v4.3.0 自动生成 | ${date}\n40位SHA: ${'a'.repeat(40)}\n耗时: 12.3ms / 0.8s\n`;
+
+    // 覆盖：修复当天日期 / 跨日次日 / 跨年边界 / 补零形态 / 远古日期 —— 五个互不相同的日期变体
+    const dates = ['2026/7/21', '2026/7/22', '2027/1/1', '2026/07/22', '1999/1/1'];
+    const cleaned = dates.map((d) => scrubRuntimeNoise(sample(d), root));
+
+    // 不变量：无论输入哪个日期，清洗结果必须收敛到同一字符串 —— 证明与"系统当前日期"无关
+    expect(new Set(cleaned).size).toBe(1);
+    expect(cleaned[0]).toContain('<DATE>');
+    expect(cleaned[0]).not.toMatch(/\d{4}\/\d{1,2}\/\d{1,2}/);
+
+    // 回归防线：既有 ISO-8601 完整形态规则不受本次改动干扰
+    expect(scrubRuntimeNoise('lastUpdated: 2026-07-22T03:04:05.000Z', root)).toBe(
+      'lastUpdated: <ISO-TS>',
+    );
+
+    // 负例防线：短数字（版本号/比例）不得被误伤
+    const untouched = 'v4.3.0 spectra | specs/modules/_index.spec.md | 4/5 通过';
+    expect(scrubRuntimeNoise(untouched, root)).toBe(untouched);
   });
 });
