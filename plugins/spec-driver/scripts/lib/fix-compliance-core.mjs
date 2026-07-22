@@ -430,9 +430,30 @@ function hasBashWriteIndicator(segment) {
  * `candidate` 只在 trackedDir 命名规范时才等于它。故 `ambiguous` 是**可恢复**的——
  * `合法 → 非规范 → 合法` 的多跳改名链能一路续跟到最终态并恢复出确定候选，而不会停在中间态。
  * 若只用单一 candidate 变量，第一跳置 null 后 `src === candidate` 判断即失效，后续跳无法续跟。
+ *
+ * F227（方案 D）新增只读旁路字段 `candidates`——候选提名历史。**状态转移逻辑逐字不变**：
+ * 本函数不接受任何磁盘探针参数、不做任何 I/O，`path`/`ambiguous` 的计算路径与取值对任意输入
+ * 与改动前逐字相同；`candidates` 只是把状态机已经产生的序列旁路记录下来，供 judge 层在
+ * "主候选磁盘不可用"时按需兜底消费，不参与、不影响本函数内部任何判定。
+ * 不变量：
+ * - `candidates` 中每个元素都曾在某一时刻满足 `FIX_DIR_NAME_REGEX`
+ * - 顺序 = 最近一次被合法提名的先后顺序（move-to-end，非首次出现顺序）
+ * - `path` 非 null 时，`path === candidates[candidates.length - 1]`
+ * - `path` 为 null 时，`candidates` 仍保留此前全部合法提名历史，供调用方按需兜底
+ *
+ * 已知限界一（冒用已存在且制品齐全的历史特性目录）：用户已明确知情并接受。这在改动前已存在
+ * （只需把该提名放在最后一条使其成为 last-writer-wins 的赢家）；方案 D 的效果是让它在**主候选不可用**
+ * 这一分支里对提名位置不再敏感——不需要是最后一条，只要曾被合法提名过就可能被兜底选中。
+ * 真实案例（会话写入自己的目录）与该攻击构造（会话写入他人的目录）在 transcript 文本上完全同构，
+ * 判定器原理上无法区分意图；彻底关闭需要"制品确由本次会话创建"的带外证据（mtime/git 状态），
+ * 而这类证据在 commit/rebase/worktree 重新检出后会失准，代价超出本次修复范围。
+ *
+ * 已知限界二（F224 fail-open 降级通道可被 transcript 中伪造的 `mv` 文本触发）：改动前既有缺陷
+ * （编排器已在未修改源码 + 磁盘零目录场景下独立复现），方案 D **不引入、不修复、也不使其更易触发**——
+ * 状态机零改动意味着可触发该降级通道的 transcript 输入集合与改动前逐字相同。已另开独立跟进项。
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
  * @param {number|null} anchorLineIndex
- * @returns {{ path: string|null, ambiguous: boolean }}
+ * @returns {{ path: string|null, ambiguous: boolean, candidates: string[] }}
  */
 export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
   const list = Array.isArray(entries) ? entries : [];
@@ -442,6 +463,20 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
   let trackedDir = null;
   let candidate = null;
   let ambiguous = false;
+  // F227 D：候选历史只读旁路——move-to-end 去重，仅供 judge 层"主候选不可用时"兜底消费，
+  // 不参与、不影响本函数内部任何状态转移判定（状态机逻辑与改动前逐字一致）。
+  //
+  // 容器必须是 Map 而非数组：Map 保证插入序，`delete` 后 `set` 即 O(1) 的 move-to-end。
+  // **不要改回 `indexOf`+`splice` 的数组实现**——那是每次提名一次线性扫描、N 个不同候选累计 O(N²)。
+  // 实测（单条 Bash 命令内 N 个互不相同的合法 artifact 路径，体积远低于 20MB transcript 上限）：
+  //   数组版 N=20,000 → 3,034ms；N=40,000（1.26MB）→ 12,004ms；Map 版两者均为个位数 ms。
+  // 本判定器跑在**同步** Stop hook 里，几 MB 的合法 transcript 就足以把门禁推到分钟级或宿主超时，
+  // 导致门禁不可用或异常 fail-open。回归锚点见 fix-compliance-core.test.mjs 的 F227 性能用例。
+  const candidateHistory = new Map();
+  const pushCandidateHistory = (dir) => {
+    candidateHistory.delete(dir); // 已存在则先移除，保证重新 set 落到末尾（move-to-end）
+    candidateHistory.set(dir, true);
+  };
 
   const stripTrailingSlash = (p) => p.replace(/\/+$/, '');
 
@@ -450,6 +485,7 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
     if (trackedDir !== null && FIX_DIR_NAME_REGEX.test(trackedDir)) {
       candidate = trackedDir;
       ambiguous = false;
+      pushCandidateHistory(trackedDir); // F227 D：只在合法命名时记入候选历史
     } else {
       // 目录确定已搬走但新位置无法机械确定 → 转降级路径，而非继续用旧路径撞磁盘核验产生误报
       candidate = null;
@@ -500,7 +536,7 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
       }
     }
   }
-  return { path: candidate, ambiguous };
+  return { path: candidate, ambiguous, candidates: Array.from(candidateHistory.keys()) };
 }
 
 // F216 C4 · fence-aware 标题/锚点识别原语 computeFenceMask 已下沉到

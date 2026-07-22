@@ -125,18 +125,53 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   }
 
   const candidate = resolveFeatureDirCandidate(entries, anchor.anchorLineIndex);
+
+  // F227 D：主候选磁盘不可用时的只读兜底——状态机（core 层）逐字不变，
+  // 磁盘判据完全下沉到这里，且仅在 ambiguous 为假、且 candidate.path 不可用时才介入。
+  //
+  // **单调性不变量（本兜底的正确性根据，改动时必须逐条保住）**：兜底解析只可能把
+  // "改动前阻断"转为"改动后放行"，绝不可能把"改动前放行"转为"改动后阻断"。逐分支论证：
+  //   - ambiguous === true → 兜底完全不介入（连 usable() 探针都不调用），
+  //     F224 的 fail-open 降级通道（下方 FR-004 收窄段 → transcriptDiagnostics
+  //     feature-dir-unresolvable → runHook 见诊断即 exit 0）逐字保持；
+  //   - ambiguous === false 且主候选可用 → 循环体不执行，resolvedPath === candidate.path，
+  //     本函数剩余部分与改动前逐字等价；
+  //   - ambiguous === false 且主候选不可用 → 改动前必然是"特性目录/诊断报告缺失"类 exit 2 阻断，
+  //     兜底后要么仍阻断（missing 原因可能不同，仍是 exit 2），要么转为放行。
+  // 反面教训（必须保留此约束的原因）：若允许 ambiguous === true 时也兜底，被选中的历史候选
+  // 可能 usable（有 fix-report.md）却不足以通过完整合规判定（本仓库 48 个含 fix-report.md 的
+  // 历史 NNN-fix-* 目录中有 21 个没有 verification/verification-report.md），
+  // 于是 featureDirUndetermined 由真变假 → 不再早退 → compliant:false → routeBlock → exit 2，
+  // 把今天的 exit 0 放行反转为新增误阻断，正是本次要修的那类缺陷。
+  //
+  // 限界三（范围说明）：本次修复只覆盖"主候选被幽灵路径覆写、指向磁盘上不存在的目录"这一支。
+  // 由 transcript 中伪造的 `mv` 文本导致 ambiguous=true 从而落入 F224 fail-open 的另一支
+  // **不在本次范围**（介入它必然引入新的误阻断），已另开独立跟进项。
+  const usable = (dir) => dir !== null && readArtifactFile(projectRoot, `${dir}/fix-report.md`).exists;
+  let resolvedPath = candidate.path;
+  if (candidate.ambiguous === false && !usable(resolvedPath)) {
+    const history = Array.isArray(candidate.candidates) ? candidate.candidates : [];
+    for (let i = history.length - 1; i >= 0; i -= 1) {
+      if (usable(history[i])) {
+        resolvedPath = history[i];
+        break;
+      }
+    }
+    // 循环内一个都没命中 → resolvedPath 保持初值 candidate.path（含 null）：完全回落现状
+  }
+
   // F224 FR-004/FR-005：候选目录确已失效但新位置无法机械定位（如改名到非 NNN-fix-<name> 目录）。
   // 这只让**特性目录这一个维度**变得不确定，绝不意味着其余判据也无从判断——
   // 因此这里只记标记，不早退：委派抽取与 judgeCompliance 必须照常跑完（见下方 FR-004 收窄段）。
-  const featureDirUndetermined = candidate.path === null && candidate.ambiguous === true;
+  const featureDirUndetermined = resolvedPath === null && candidate.ambiguous === true;
 
   const delegations = extractDelegationsAfter(entries, anchor.anchorLineIndex);
-  const featureDirCheck = checkFeatureDirOnDisk(projectRoot, candidate.path);
-  const fixReport = candidate.path
-    ? readArtifactFile(projectRoot, `${candidate.path}/fix-report.md`)
+  const featureDirCheck = checkFeatureDirOnDisk(projectRoot, resolvedPath);
+  const fixReport = resolvedPath
+    ? readArtifactFile(projectRoot, `${resolvedPath}/fix-report.md`)
     : { exists: false, content: null, nonEmpty: false };
-  const verificationReport = candidate.path
-    ? readArtifactFile(projectRoot, `${candidate.path}/verification/verification-report.md`)
+  const verificationReport = resolvedPath
+    ? readArtifactFile(projectRoot, `${resolvedPath}/verification/verification-report.md`)
     : { exists: false, content: null, nonEmpty: false };
 
   // F216：只分类一次 closure（AD-4 正交结构），据 hasNoopAnchor 决定是否提取执行证据，
@@ -151,7 +186,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
 
   const verdict = judgeCompliance({
     delegations,
-    featureDir: { path: candidate.path, existsOnDisk: featureDirCheck.existsOnDisk },
+    featureDir: { path: resolvedPath, existsOnDisk: featureDirCheck.existsOnDisk },
     fixReport: { exists: fixReport.exists, content: fixReport.content },
     verificationReport: { exists: verificationReport.exists, nonEmpty: verificationReport.nonEmpty },
     closure,
