@@ -25,6 +25,21 @@
 | W-5 | 测试矩阵未覆盖全部 SC | ✅ 新增 11 态 table-driven 测试、F217 六指标逐项 + 12 族快照断言、`graph-unavailable` 独立 fixture、LLM 边界测试补传递闭包层 | §12.1/12.2 |
 | W-6 | 顶层 `schemaVersion` 未获 spec 修订；字段校验只查四项 | ✔️+✅ spec 已修订对齐；校验扩至 FR-003 全十项 + 被禁字段检测，并说明"漏校验会把 lock 损坏误报成代码漂移" | §8.1、§8.3 |
 
+### round-2 验证结论与增补（session 019f88c4）
+
+Codex 复核判定：**9 CLOSED / 4 PARTIALLY-CLOSED / 0 NOT-CLOSED**，并用 ts-morph@24 内存探针实测确认 C-2 四组漏报已全部区分（哈希两两不等）、C-3 无残留兜底、W-2 JSDoc 结论成立、C-6 驳回理由事实成立。以下为本轮增补修复：
+
+| 编号 | 问题 | 实测证据 | 处置 | 落点 |
+|------|------|---------|------|------|
+| **N-1** 🔴CRITICAL | `using` 被误序列化为 `var`（同序列漏报）；`await using` 因 flags 含 Const bit 被误标 `const` | 实测 flags：var=0 / let=1 / const=2 / **using=4** / **await using=65542**；且 `NodeFlags.AwaitUsing===6===Using\|Const`（位重叠）。朴素判定下 `using`→`var` 完全同序列 | ✅ 抽出 `declarationKeyword()`，判定顺序改 AwaitUsing→Using→Const→Let→var，AwaitUsing 用**全等**比较防 `const`(2&6=2 truthy) 误判 | §7.3 |
+| **N-2** | BigInt 数字分隔符仍误报 stale（`1000n` vs `1_000n`） | `BigIntLiteral` 在 TEXT_BEARING_KINDS 内但 `normalizedLiteralText()` 只归一 `NumericLiteral`，BigInt 回退 `getText()` | ✅ 补 BigIntLiteral 归一分支 | §7.3 |
+| **N-3** | `.mts/.cts` 被错误排除，仓内可解析的 TS 文件会被误标 unsupported-language | 已核对 `TsJsLanguageAdapter.extensions` 实为**八种**含 `.mts/.cts` | ✅ 支持集合对齐为八种并注明须与 adapter 一致 | §9.1 |
+| **N-4** | lock 示例仍用被 FR-001 禁止的裸 ref，会污染 tasks/quickstart/测试数据 | spec FR-001 已要求 `<relPath>::<symbolName>` | ✅ 示例改 file-qualified | §8.1 |
+| **C-4 残留** | "属 syntactic 范畴"判据未定义 | 实测语法错误(1109) 与类型错误(2322) 在 `getPreEmitDiagnostics()` 中**同为 category=Error**，仅按 category 过滤会把类型错误文件误判 parser-degrade | ✅ 改用 `program.getSyntacticDiagnostics(sourceFile.compilerNode)`（API 层即只返语法诊断，消除未定义判据） | §9.1 |
+| **W-1 残留** | 我写的缓解"drift 位于既有 build 校验之后"**是事实错误** | 核实 `validateRepository()` 内**无任何 build 步骤**，仅 `prepublishOnly` 保证先 build | ✅ 删除该虚构缓解并显式更正；dist 陈旧改判为**"已知未缓解"残留风险**（虚构缓解比无缓解更危险） | §7.2、§15 |
+| **W-5 残留** | SC-008 写入面校验、SC-007(d) 全量门禁只在散文中，无可执行落点 | — | ✅ 落成 §12 两个 verify 阶段显式校验项，并写明 merge-base 口径与 flaky 排除口径 | §12.1 |
+| **N-5** INFO | "完整 GraphJSON" 措辞不准确 | query helper 实际只读 `nodes[].id`；真实 `GraphJSON` 还需 `directed/multigraph/graph`，且 `GraphNode.kind` 无 `'symbol'` | ✅ 改称"满足 query helper 的最小只读视图" | §6.4 |
+
 ---
 
 ## 1. Summary
@@ -164,7 +179,9 @@ graph TD
 
 ### 6.4 `drift link` 的 graph 数据来源（C-1 收口）
 
-**问题**：`canonicalizeSymbolId` / `resolveSymbolFuzzy` 的既有签名都要求传入**完整 `GraphJSON`**（`src/knowledge-graph/query-helpers.ts`），不是只靠动态 import 就能调用。F189 prototype 由调用方先提供 `absFiles[]` 再经 `buildGraphFromFiles` 构造最小 graph；而本 CLI 的 manifest 条目只有 `{id, ref, docPath, line}`，既无源文件集合也无 `--graph` 参数——原 §6.3/§10.1 未定义任何 graph 构造步骤，导致 link 的解析链路**没有可执行的数据面**。
+**问题**：`canonicalizeSymbolId` / `resolveSymbolFuzzy` 的既有签名都要求传入一个 `GraphJSON` 形态的实参（`src/knowledge-graph/query-helpers.ts`），不是只靠动态 import 就能调用。
+
+> **[N-5 措辞精确化]** 实际运行时这两个 helper **只读取 `nodes[].id`**，因此我们构造的是"**满足 query helper 读取需求的最小只读视图**"，而非结构完整的 `GraphJSON`（后者还要求 `directed`/`multigraph`/`graph` 等字段，且 `GraphNode.kind` 并无 `'symbol'` 取值）。F189 prototype 同样是显式 cast 的最小结构。本文后续所称"最小 graph"均指此只读视图，不声称构造了完整 GraphJSON。F189 prototype 由调用方先提供 `absFiles[]` 再经 `buildGraphFromFiles` 构造最小 graph；而本 CLI 的 manifest 条目只有 `{id, ref, docPath, line}`，既无源文件集合也无 `--graph` 参数——原 §6.3/§10.1 未定义任何 graph 构造步骤，导致 link 的解析链路**没有可执行的数据面**。
 
 **采纳方案：从 ref 自带的文件路径就地构建最小 graph**（不读 `specs/_meta/graph.json`，不做全仓扫描）。
 
@@ -247,7 +264,17 @@ export async function loadDistModule(projectRoot, relDistPath) {
 
 状态矩阵中该状态的 next-step 已随 spec 修订为「AST 分析环境不可用（dist 编译产物缺失或模块加载失败），运行 `npm run build` 后重跑」——与本 Feature 的真实修复动作一致（此前指向 `spectra batch` 的误导性文案已在 spec 侧修正，W-1 第三点已消解）。`reason` 字段承载 per-report 动态诊断（区分 `dist-missing` 与 `dist-load-failed` 及具体模块路径），与静态 next-step 文案并存不冲突。
 
-**dist 陈旧（存在但落后于 `src/`）的处理边界**：本 Feature **不**引入 dist-vs-src 新鲜度校验，理由：(1) 无 FR 要求；(2) 仓库内既有全部 `scripts/*.mjs` 动态 import dist 的先例（`verify-feature-151/152`、`feature-165-replay-*`）均未做此校验，单独为 drift 加会造成治理脚本行为分裂；(3) 可靠实现需比对 mtime/内容哈希，成本与收益不匹配。**诚实标注残留风险**：dist 陈旧时 drift 会静默使用旧编译逻辑计算指纹，可能产生与当前源码不符的判定。缓解措施：`repo:check` 链路中 drift 位于既有 build 校验之后；quickstart.md 明确提示"改动 `src/` 后须先 `npm run build` 再跑 drift"。此风险记入 §15 风险表，不隐藏。
+**dist 陈旧（存在但落后于 `src/`）的处理边界**：本 Feature **不**引入 dist-vs-src 新鲜度校验，理由：(1) 无 FR 要求；(2) 仓库内既有全部 `scripts/*.mjs` 动态 import dist 的先例（`verify-feature-151/152`、`feature-165-replay-*`）均未做此校验，单独为 drift 加会造成治理脚本行为分裂；(3) 可靠实现需比对 mtime/内容哈希，成本与收益不匹配。
+
+**诚实标注残留风险（不隐藏、不虚构缓解）**：dist 陈旧时 drift 会静默使用旧编译逻辑计算指纹，可能产生与当前源码不符的判定。
+
+> ⚠️ **更正一处此前的错误表述**：早先版本曾写"缓解措施：`repo:check` 链路中 drift 位于既有 build 校验之后"——**该说法不成立**，已核实 `validateRepository()` 内部**没有任何 build 步骤**，只有 `prepublishOnly` 钩子保证先 build。用户直接跑 `npm run repo:check` 时**仍可能消费陈旧 dist**。虚构的缓解比没有缓解更危险，故删除该表述。
+
+**实际可用的缓解（仅此两项，均为提示性而非强制）**：
+1. quickstart.md 明确提示"改动 `src/` 后须先 `npm run build` 再跑 drift"；
+2. `graph-unavailable` 的 next-step 文案已指向 `npm run build`，dist **完全缺失**时能给出正确指引（但 dist **存在却陈旧**时无信号——这正是残留风险本体）。
+
+此风险以"已知未缓解"状态记入 §15 风险表；若后续实践中出现真实误判，再单独立 Feature 引入 dist 新鲜度门（不在 M9-C 范围）。
 
 `ts-morph` 本身**不**走 dist 动态 import——它是发布态 npm 依赖（`package.json` `dependencies.ts-morph`），`spec-drift-fingerprint.mjs` 直接 `import { Project, SyntaxKind } from 'ts-morph';`，零特殊处理、零新依赖。
 
@@ -298,6 +325,11 @@ function normalizedLiteralText(node) {
   if (kind === SyntaxKind.NumericLiteral) {
     return String(node.getLiteralValue());          // 1_000 / 0x3E8 / 1e3 归一为同一数值
   }
+  if (kind === SyntaxKind.BigIntLiteral) {
+    // N-2：BigIntLiteral 在 TEXT_BEARING_KINDS 内但此前未归一，
+    // 实测 `1000n` vs `1_000n` 走 getText() 会误报 stale（与 W-2 修复意图不一致）
+    return `${node.getLiteralValue()}n`;
+  }
   return node.getText();                            // 其余 text-bearing 节点保留原文
 }
 
@@ -343,15 +375,32 @@ function extraSemanticTokens(node) {
   if (kind === SyntaxKind.PrefixUnaryExpression || kind === SyntaxKind.PostfixUnaryExpression) {
     out.push(`op:${SyntaxKind[node.compilerNode.operator]}`);
   }
-  // (2) 变量声明：从父 VariableDeclarationList 的 NodeFlags 提取 const/let/var
+  // (2) 变量声明：从父 VariableDeclarationList 的 NodeFlags 提取声明类型
   if (kind === SyntaxKind.VariableDeclaration) {
     const listFlags = node.getParent()?.compilerNode?.flags ?? 0;
-    const declKeyword = (listFlags & NodeFlags.Const) ? 'const'
-                      : (listFlags & NodeFlags.Let)   ? 'let'
-                      : 'var';
-    out.push(`declKind:${declKeyword}`);
+    out.push(`declKind:${declarationKeyword(listFlags)}`);
   }
   return out;
+}
+
+/**
+ * NodeFlags → 声明关键字（N-1 CRITICAL 修复）。
+ *
+ * 【实测 flags（ts-morph@24）】var=0 / let=1 / const=2 / using=4 / await using=65542
+ * 【关键陷阱】`NodeFlags.AwaitUsing === 6 === Using(4) | Const(2)` —— 位有重叠：
+ *   - 朴素写法 `(flags & Const) ? 'const' : (flags & Let) ? 'let' : 'var'` 会让
+ *     `using`(4) 落到 `var`（**与真 var 完全同序列 → 资源释放语义变化被判 fresh**），
+ *     `await using`(65542) 因含 Const bit 被误标 `const`。
+ *   - 因此判定顺序 MUST 为 AwaitUsing → Using → Const → Let → var，
+ *     且 AwaitUsing MUST 用**全等**比较（`& AwaitUsing) === AwaitUsing`）而非真值判断，
+ *     否则普通 `const`(2 & 6 = 2，truthy) 会被误判成 await using。
+ */
+function declarationKeyword(flags) {
+  if ((flags & NodeFlags.AwaitUsing) === NodeFlags.AwaitUsing) return 'await using';
+  if (flags & NodeFlags.Using) return 'using';
+  if (flags & NodeFlags.Const) return 'const';
+  if (flags & NodeFlags.Let) return 'let';
+  return 'var';
 }
 
 /** 对单个已定位的 ts-morph Node 做 canonical token 序列化（CL-3 / FR-009c 落地） */
@@ -455,11 +504,12 @@ export function locateExportedNodes(sourceFile, exportName, expStartLine) {
   "anchors": [
     {
       "id": "spec219-canonicalizeSymbolId",     // 用户显式指定，稳定主键（W1，不由 docPath+line 派生）
-      "ref": "canonicalizeSymbolId",             // 原始引用表达式
+      // ref MUST 为 file-qualified 形式（FR-001）；裸 symbol 名一律判 unresolved
+      "ref": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
       "docPath": "specs/219-spec-drift-production/spec.md",
       "line": 147,
       "symbolId": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId", // canonical symbol id（link 时解析）
-      "resolvedFrom": "canonicalizeSymbolId",     // = ref，审计留痕
+      "resolvedFrom": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId", // = ref，审计留痕
       "matchKind": "exact",                       // exact/path-suffix/partial-name/levenshtein
       "fingerprint": "sha256:9f3a...",             // canonical AST 哈希（link/refresh 时写入）
       "fingerprintVersion": "1",                   // §7.4
@@ -520,7 +570,12 @@ id, ref, docPath, line, symbolId, fingerprint, fingerprintVersion, normalization
 输入：lock.anchors[]（每条含 symbolId）
 按 symbolId 的 filePart（parseCanonicalSymbolId）分组 → 每个唯一文件只调用一次 analyzeFiles（性能优化，见 §11）
 对每组：
-  1. 语言判定（先于一切解析）：按**规范化文件扩展名**判定是否首发支持（.ts/.tsx/.js/.jsx/.mjs/.cjs）
+  1. 语言判定（先于一切解析）：按**规范化文件扩展名**判定是否首发支持
+     支持集合 MUST 与仓内 `TsJsLanguageAdapter.extensions` **完全一致的八种**（N-3 实测核对）：
+       .ts / .tsx / .js / .jsx / .mjs / .cjs / .mts / .cts
+     ⚠️ 此前遗漏 .mts/.cts（TypeScript ESM/CJS 显式扩展），会把仓内 adapter 能正常解析的
+        TS 文件误标 unsupported-language；spec FR-009(a) 写的是 "TypeScript/JavaScript"
+        这一语言族，而非某个扩展子集
      → 不在首发集合 → 组内全部锚标 unsupported-language
      ⚠️ MUST NOT 用 `exp.startLine === undefined` 作为 unsupported-language 判据（C-4 实测反证：
         `ExportSymbolSchema` 把 startLine/endLine 定义为**必填正整数**，且 tree-sitter fallback 的
@@ -537,8 +592,14 @@ id, ref, docPath, line, symbolId, fingerprint, fingerprintVersion, normalization
         原设计的 parser fixture 无法稳定命中目标状态。
      判定规则（TS/JS 首发语言）：
        a. skeleton 标注的 parser 不是 ts-morph（即走了 tree-sitter fallback）→ parser-degrade
-       b. 在 fingerprint 侧的 ts-morph Project 上取 `sourceFile.getPreEmitDiagnostics()`，
-          存在**语法类** diagnostic（category=Error 且属 syntactic 范畴）→ parser-degrade
+       b. 在 fingerprint 侧的 ts-morph Project 上取**语法诊断**：
+          `project.getProgram().compilerObject.getSyntacticDiagnostics(sourceFile.compilerNode)`
+          返回非空 → parser-degrade
+          ⚠️ **MUST NOT 用 `getPreEmitDiagnostics()` + `category === Error` 过滤**（C-4 残留问题）：
+             实测语法错误（code 1109）与纯类型错误（code 2322）在该列表里**都是 category=Error**，
+             仅按 category 过滤会把"语法完全可解析、只是类型不完整"的文件误判为 parser-degrade。
+             `getSyntacticDiagnostics` 在 API 层面就只返回语法类诊断，无需自行分类，
+             消除了原设计"属 syntactic 范畴"这一未定义判据。
        （类型错误不算——drift 只关心语法结构可解析性，类型不完整不影响 AST 指纹）
   5. 正常返回 skeleton：
      对组内每个锚，按 symbolPart（= exp.name，member 已在 link 阶段拒绝，check 阶段不应再出现）：
@@ -740,11 +801,13 @@ export async function validateSpecDrift({ projectRoot, strict = false }) {
 | 模块 | 测试文件 | 覆盖点 |
 |------|---------|--------|
 | `spec-drift-lock-io.mjs` | `tests/unit/spec-drift-lock-io.test.ts` | 文件不存在自动创建/空 anchors/原子写(临时文件+rename)/残留 tmp 文件检测/schemaVersion 不兼容/缺字段判 lock-corrupt/字段类型不符判 lock-corrupt |
-| `spec-drift-fingerprint.mjs` | `tests/unit/spec-drift-fingerprint.test.ts` | **fresh 组**：仅行内/块注释改动、仅 JSDoc 改动、仅格式化/缩进改动、**`a+b`→`(a+b)` 加括号**、**`"x"`→`'x'` 引号风格**、**`1000`→`1_000` 数字分隔符**（后三项为 W-2 实测误报面，MUST 断言 fresh）；**stale 组**：标识符名/字面值/控制结构改动，外加 **C-2 四组实测漏报的强制 fixture**——`+a`vs`-a`、`++a`vs`--a`、`a++`vs`a--`、`export const foo=1`vs`export let foo=1`（原设计下四组序列完全相同，MUST 断言 stale，这是防 C-2 回归的核心资产）；**overload 聚合**：同名函数重载，改第二个 overload 签名或实现体 MUST stale（防"只取第一个声明"漏报）；JSDoc 断言方式 MUST 为"canonical token 序列中不含任何 `JSDoc` 前缀 token"，**MUST NOT** 断言"至少命中一次 JSDoc 跳过分支"（实测该分支为死代码，永不命中，W-2）；`normalizationProfile`/`fingerprintVersion` 不匹配路径 |
+| `spec-drift-fingerprint.mjs` | `tests/unit/spec-drift-fingerprint.test.ts` | **fresh 组**：仅行内/块注释改动、仅 JSDoc 改动、仅格式化/缩进改动、**`a+b`→`(a+b)` 加括号**、**`"x"`→`'x'` 引号风格**、**`1000`→`1_000` 数字分隔符**（后三项为 W-2 实测误报面，MUST 断言 fresh）；**stale 组**：标识符名/字面值/控制结构改动，外加 **C-2 四组 + N-1 两组实测漏报的强制 fixture**——`+a`vs`-a`、`++a`vs`--a`、`a++`vs`a--`、`export const foo=1`vs`export let foo=1`（C-2，原设计下序列完全相同）、**`var x=a()`vs`using x=a()`**、**`using x=a()`vs`await using x=a()`**（N-1，实测 `using` flags=4 会落到 `var` 分支产生同序列、`await using` flags 含 Const bit 被误标 const；资源释放语义变化不得判 fresh）。以上六组 MUST 逐组独立断言两变体哈希**不相等**，不得合并简化——这是防 C-2/N-1 回归的核心资产；**overload 聚合**：同名函数重载，改第二个 overload 签名或实现体 MUST stale（防"只取第一个声明"漏报）；JSDoc 断言方式 MUST 为"canonical token 序列中不含任何 `JSDoc` 前缀 token"，**MUST NOT** 断言"至少命中一次 JSDoc 跳过分支"（实测该分支为死代码，永不命中，W-2）；`normalizationProfile`/`fingerprintVersion` 不匹配路径 |
 | `spec-drift-resolve.mjs` | `tests/unit/spec-drift-resolve.test.ts` | exact/partial-name/levenshtein 命中；ambiguous top-3；unresolved；member（`Class.method`）显式拒绝 → fingerprint-unavailable；非 TS/JS 语言 → unsupported-language；`--refresh` 时 ambiguous/unresolved 保留刷新前基线（W1，Acceptance Scenario 5） |
 | `spec-drift-check.mjs` | `tests/unit/spec-drift-check.test.ts` | 精确匹配（不重 fuzzy，构造"同名新 symbol"场景验证不被误洗成 fresh）；orphaned（文件删除/symbol 改名消失）；同文件他 symbol 变动不误伤（SC-002）；`graph-stale` 合成 fixture（§9.3）；**`parser-degrade` 按 §9.1 步骤 4 的新判据构造**——MUST 用"语法 diagnostic 非空"或"parser 回退 tree-sitter"触发，**MUST NOT** 依赖 `analyzeFiles` 抛异常（实测 ts-morph 错误恢复不抛异常，旧 fixture 设计不可达，C-4）；`locateExportedNodes` 三类失败（node-locate-failed / node-locate-ambiguous / reexport-unsupported）各自映射 fingerprint-unavailable；**混合优先级专项**：`graph-unavailable + stale` 共存 MUST 得 exitCode 2（非 1），覆盖状态矩阵五层的代表性组合 |
 | **11 态状态矩阵（SC-003）** | `tests/unit/spec-drift-state-matrix.test.ts` | **table-driven 全覆盖**：对 11 个状态逐一断言状态矩阵**全部列**——`machineCode` 字面值、作用域（anchor/report）、单态 `exitCode`、`degraded` 标记、`repo:check` 默认映射、`repo:check` strict 映射、`next-step` 文案非空且非通用兜底。含 `graph-unavailable` 独立 fixture（此前缺失）与 `graph-stale` 的 next-step 断言（此前只测汇总/序列化） |
 | **F217 六指标 + 既有 12 族零回归（SC-007b/c）** | `tests/integration/spec-drift-repo-check-regression.test.ts` | 跑真实 `validateRepository`，断言：(a) F217 六个 check id（duplicate/orphan/contains/dangling/ignored/freshness）**逐项** result 为 pass——不接受"整体 exit 0"作为代理证据；(b) 既有 12 族的 check id 集合与 result 与基线快照**逐项一致**；(c) 第 13 族 `spec-drift:*` 确实出现在 `checks` 中 |
+| **写入面 allowlist（SC-008）** | verify 阶段显式校验步骤（非单测） | W-5 收口：此前 SC-008 的 merge-base 写入面校验只在 §13 散文提及，未落任何可执行落点。MUST 在 verify 阶段执行：<br>`git diff --stat $(git merge-base master HEAD) HEAD -- src/ plugins/` 结果为空（证明未越界改生产源码），<br>且实际改动路径集合 ⊆ allowlist（`scripts/spec-drift-*`、`scripts/lib/spec-drift-*`、`scripts/lib/repo-maintenance-core.mjs`、`scripts/repo-check.mjs`、`package.json`、`tests/**`、`specs/219-*/**`）。<br>⚠️ **MUST NOT 用工作树 `git diff`**（提交后恒为空 = 假通过） |
+| **全量门禁（SC-007d）** | verify 阶段最终 gate（非单测） | W-5 收口：`npx vitest run` + `npm run build` + `npm run repo:check` 三者零失败，作为 Feature 交付的**硬前置**。<br>已知噪声排除口径：`tests/integration/graph-quality-adversarial.test.ts` 在全量满载下存在 `runCLI` 子进程饿死导致 stdout 空的负载型 flaky（已于 implement 前基线复现并经隔离复跑 19/19 绿证伪），**若且仅若**隔离复跑通过方可判定为非回归，不得直接忽略 |
 | `spec-drift-core.mjs`（repo:check 接线） | `tests/unit/spec-drift-core-validate.test.ts` | `strict` 透传；严重度提升规则（全 warn→全 error，fresh 不受影响，lock-corrupt 恒 fail 不受 strict 影响）；**防静默 no-op 测试**（FR-008）：构造含 1 条 stale 锚的 lock fixture，调用真实 `await validateRepository(projectRoot)`，断言 `checks.some(c => c.id.startsWith('spec-drift:'))` 且 `warnings.some(w => w.startsWith('[spec-drift]'))` 非空——这一断言方式本身即是回归防线：未来若有人误删 `await`，`aggregateValidation` 拿到未展开的 Promise 对象，`result.warnings ?? []` 因 Promise 无 `warnings` 属性而退化为空数组，该测试会真实失败 |
 | 导入边界 / 零 LLM（SC-007a） | `tests/unit/spec-drift-no-llm-import.test.ts` | **两层**（原设计只有第一层，证明力不足）：<br>**L1 直接导入**——静态读取 `spec-drift-*.mjs`/`spec-drift-cli.mjs` 源码，正则断言不含 `@anthropic-ai/sdk`、`openai`、`@google/generative-ai` 等 provider 字面量。<br>**L2 传递闭包**——drift 动态 import 的 dist 模块是**有界集合**（`dist/core/ast-analyzer.js`、`dist/adapters/index.js`、`dist/knowledge-graph/query-helpers.js`、`dist/knowledge-graph/relativize.js`）；从这四个入口在 `dist/` 内递归解析 `import`/`export from` 语句构建可达模块集，断言该集合中无任何 provider 包引用。<br>**诚实边界**：L2 是静态可达性分析，不覆盖运行时 `eval`/字符串拼接构造的动态 import（本仓 dist 产物无此模式，但不做无根据的绝对声称） |
 
@@ -755,7 +818,9 @@ export async function validateSpecDrift({ projectRoot, strict = false }) {
 | `fresh-comment-only/` | 仅改行内/块注释的 before/after 文件对 |
 | `fresh-jsdoc-only/` | 仅改前导 JSDoc 的 before/after 文件对 |
 | `fresh-format-only/` | 仅改缩进/换行/空格的 before/after 文件对 |
-| `fresh-syntactic-noise/` | **W-2 实测误报面**：`a+b`→`(a+b)` 加括号、`"x"`→`'x'` 引号风格、`1000`→`1_000` 数字分隔符——三组均 MUST fresh |
+| `fresh-syntactic-noise/` | **W-2 + N-2 实测误报面**：`a+b`→`(a+b)` 加括号、`"x"`→`'x'` 引号风格、`1000`→`1_000` 数字分隔符、**`1000n`→`1_000n` BigInt 分隔符**（N-2：BigIntLiteral 此前未归一，走 `getText()` 会误报 stale）——四组均 MUST fresh |
+| `stale-using-vs-var/` / `stale-await-using/` | **N-1 实测漏报面（CRITICAL 防回归资产）**：`var x=a()` vs `using x=a()`（原判定同为 `var` → 同序列）、`using x=a()` vs `await using x=a()`（原判定误标 const）——两组 MUST stale |
+| `lang-mts-cts/` | **N-3**：`.mts` / `.cts` 文件各一，MUST 被判为**受支持**（不得标 unsupported-language）——防"支持集合漏列导致仓内可解析 TS 文件被误拒" |
 | `stale-identifier/` / `stale-literal/` / `stale-control-flow/` | 三类 AST 结构变化的 before/after 文件对 |
 | `stale-unary-prefix/` / `stale-unary-postfix/` / `stale-decl-kind/` | **C-2 实测漏报面（防回归核心资产）**：`+a`vs`-a`、`++a`vs`--a`、`a++`vs`a--`、`export const foo=1`vs`export let foo=1`——原设计下序列完全相同，MUST stale |
 | `stale-overload-second/` | 同名函数重载，仅改**第二个** overload 签名或实现体 → MUST stale（防"只取 declarations[0]"漏报，C-2） |
@@ -817,7 +882,7 @@ export async function validateSpecDrift({ projectRoot, strict = false }) {
 | ~~`schemaVersion` 字段归属歧义~~ **[已消解]** | — | spec FR-003 已修订为"顶层 `schemaVersion` + anchor 条目十字段"，与本 plan §8.1 完全一致，不再存在 SPEC-CONFLICT，无需 GATE_TASKS 二选一 |
 | **最小 graph 使 `resolveSymbolFuzzy` 跨文件兜底不可用** | link 时若 ref 的文件路径写错，不会被跨文件模糊匹配兜底命中，一律落 `unresolved` | 这是 file-qualified ref 合同（FR-001）的直接推论而非缺陷——ref 已显式声明文件，跨文件模糊搜索超出该合同语义。同文件内 partial-name/levenshtein 仍有效，`matchKind` 三值仍全部可产生。`unresolved` 的 next-step 文案已引导检查路径拼写（§6.4） |
 | ~~`forEachDescendant` 对 JSDoc 遍历行为的不确定性~~ **[已实测消解]** | — | **已用 ts-morph@24 内存探针实测**：`root.getJsDocs()` 非空时，`forEachDescendant()` 遍历到的 JSDoc 节点数**为 0**——JSDoc 属 trivia，天然不在遍历序列中。因此 `isJsDocNode` 跳过分支是**冗余防御层（死代码）**，正常路径永不命中。<br>⚠️ 原缓解措施"断言至少命中一次 JSDoc 分支"是**基于错误假设的必然失败断言**，MUST 删除。正确断言：canonical token 序列中不含任何 `JSDoc` 前缀 token（§12.1 已改）。保留该防御分支的理由仅为跨 ts-morph 版本的行为兜底，不为其编写命中型测试 |
-| **dist 陈旧（存在但落后于 `src/`）** | drift 静默使用旧编译逻辑计算指纹，可能产出与当前源码不符的 fresh/stale 判定 | 本 Feature **不**引入 dist-vs-src 新鲜度校验（无 FR 要求；仓内既有全部动态 import dist 的 `scripts/*.mjs` 先例均未做，单独为 drift 加会造成治理脚本行为分裂）。缓解：`repo:check` 链路中 drift 位于既有 build 校验之后；quickstart.md 明示"改 `src/` 后须先 `npm run build` 再跑 drift"。**此为诚实标注的残留风险，不隐藏**（W-1） |
+| **dist 陈旧（存在但落后于 `src/`）** ⚠️**已知未缓解** | drift 静默使用旧编译逻辑计算指纹，可能产出与当前源码不符的 fresh/stale 判定 | 本 Feature **不**引入 dist-vs-src 新鲜度校验（无 FR 要求；仓内既有全部动态 import dist 的 `scripts/*.mjs` 先例均未做，单独为 drift 加会造成治理脚本行为分裂）。<br>❌ **此前写的"drift 位于既有 build 校验之后"是错误表述，已删除**——实测 `validateRepository()` 内无任何 build 步骤，仅 `prepublishOnly` 保证先 build，用户直接跑 `npm run repo:check` 仍可能消费陈旧 dist。<br>✅ 实际缓解仅两项提示性措施：quickstart.md 明示"改 `src/` 后须先 `npm run build`"；dist **完全缺失**时 `graph-unavailable` next-step 指向 `npm run build`（但 dist **存在却陈旧**时无信号 = 风险本体）。<br>**以"已知未缓解"状态诚实记录**，若实践中出现真实误判再单独立 Feature（不在 M9-C 范围）（W-1） |
 | ~~dist 未构建导致的 `graph-unavailable` 误导性 next-step~~ **[已消解]** | — | spec 状态矩阵的 `graph-unavailable` next-step 已修订为「AST 分析环境不可用（dist 编译产物缺失或模块加载失败），运行 `npm run build` 后重跑」，与本 Feature 的真实修复动作一致；此前指向 `spectra batch` 的误导文案已移除。`reason` 字段继续承载 `dist-missing`/`dist-load-failed` 的动态诊断，与静态 next-step 并存（W-1） |
 
 ---

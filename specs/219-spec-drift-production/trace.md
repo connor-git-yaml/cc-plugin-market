@@ -56,3 +56,32 @@
   C-7+W-6 经 spec 侧修订消解
   plan 583->841 行; 新增 6.4 最小graph / 10.4 分发定位 / 修订记录表
 [spec:surgical] 7 处外科修订(US2-AC5/状态矩阵2行/FR-003/FR-015/FR-001 file-qualified ref/US1)
+
+[baseline:pre-implement] 建立 implement 前基线（commit d453f3f）
+  npm run build: PASS (exit 0, dist 就位 — drift 动态 import 前置条件满足)
+  npx vitest run: 5396 passed / 460 files passed / 1 failed
+    ^ 唯一失败 tests/integration/graph-quality-adversarial.test.ts
+      根因: runCLI 满载下子进程被饿死 → stdout 空 → JSON.parse 抛 SyntaxError
+      隔离复跑 19/19 PASS (4.3s) → 定性为负载型 flaky, 非回归
+      (与已知 cli-e2e --version 满载 flaky 同一模式)
+  repo:check: PASS (pre-commit 钩子跑过, 含 F217 六指标逐项 pass — SC-007b 基线)
+  => 任何 implement 后的新失败均可归因, 基线干净
+[tasks] tasks.md 39 任务 (T001-T039) / 5 阶段+Polish / TDD 红绿配对
+  C-2 四组防回归 fixture / 11 态矩阵 / npm run e2e / 零LLM两层 / 防静默no-op 全落任务
+
+[codex-review:plan] round-2 (task-mrvrvmwa-vfe5tq, session 019f88c4)
+  判定 9 CLOSED / 4 PARTIALLY-CLOSED / 0 NOT-CLOSED
+  实测确认已闭合: C-2 四组哈希两两不等 / C-3 无残留兜底 / W-2 JSDoc 结论成立 / C-6 驳回理由事实成立
+  新发现并已修:
+    N-1 CRITICAL using 误序列化为 var (flags: using=4 落 var 分支同序列; await using=65542 含 Const bit 误标 const)
+        -> declarationKeyword() 判定序 AwaitUsing->Using->Const->Let->var, AwaitUsing 全等比较
+    N-2 BigInt 分隔符仍误报 stale (1000n vs 1_000n) -> 补 BigIntLiteral 归一
+    N-3 .mts/.cts 漏列 (adapter 实为八种扩展) -> 支持集合对齐
+    N-4 lock 示例用裸 ref 违反 FR-001 -> 改 file-qualified
+    C-4 残留: getPreEmitDiagnostics 无法区分语法/类型错误(1109 与 2322 同为 Error)
+        -> 改用 program.getSyntacticDiagnostics()
+    W-1 残留: 我写的缓解"drift 位于既有 build 校验之后"是事实错误(validateRepository 无 build 步骤)
+        -> 删除虚构缓解, dist 陈旧改判"已知未缓解"残留风险
+    W-5 残留: SC-008 写入面/SC-007(d) 全量门禁无可执行落点 -> 落成 T036(a)(b)
+    N-5 措辞: "完整 GraphJSON" -> "满足 query helper 的最小只读视图"
+  独立复核: 本主线程自跑 ts-morph 探针确认 N-1 flags 与 N-3 扩展名属实, 未盲信
