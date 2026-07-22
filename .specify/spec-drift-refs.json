@@ -1,0 +1,20 @@
+[
+  {
+    "id": "f219-plan-canonicalize-symbol-id",
+    "ref": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+    "docPath": "specs/219-spec-drift-production/plan.md",
+    "line": 190
+  },
+  {
+    "id": "f219-plan-analyze-files",
+    "ref": "src/core/ast-analyzer.ts::analyzeFiles",
+    "docPath": "specs/219-spec-drift-production/plan.md",
+    "line": 238
+  },
+  {
+    "id": "f219-plan-relativize-symbol-id",
+    "ref": "src/knowledge-graph/relativize.ts::relativizeSymbolId",
+    "docPath": "specs/219-spec-drift-production/plan.md",
+    "line": 253
+  }
+]

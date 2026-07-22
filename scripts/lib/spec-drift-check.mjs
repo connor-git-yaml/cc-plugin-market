@@ -16,12 +16,34 @@ import { fileURLToPath } from 'node:url';
 import { loadDistModule } from './spec-drift-dist-loader.mjs';
 import { resolveWithinProject } from './spec-drift-paths.mjs';
 import {
-  computeCanonicalFingerprint,
+  computeSymbolFingerprint,
   createSharedProject,
   hasSyntacticErrors,
+  locateExportedNodes,
   FINGERPRINT_VERSION,
   NORMALIZATION_PROFILE,
 } from './spec-drift-fingerprint.mjs';
+
+// `locateExportedNodes` 的实现落在 fingerprint（叶子）而非 check：它操作 ts-morph Node，
+// 且 link 链路（resolve.mjs）同样需要，若放在 check 会迫使 resolve → check 产生横向 import，
+// 违反 plan §6.2「check / resolve 不互相 import」。此处 re-export 以保持 T032 的对外契约。
+export { locateExportedNodes };
+
+/**
+ * `locateExportedNodes` / `computeSymbolFingerprint` 的机器可读失败原因 → 人类可读说明。
+ * 三者一律映射 anchor 级 `fingerprint-unavailable`（plan §7.3 C-3：禁止 declarations[0] 兜底）。
+ */
+const LOCATE_FAILURE_TEXT = Object.freeze({
+  'node-locate-failed': '本地 AST 中找不到该导出声明（node-locate-failed），无法计算指纹',
+  'node-locate-ambiguous':
+    'analyzeFiles 与本地 AST 对目标声明的身份判断分叉（node-locate-ambiguous），拒绝基于错误节点产出结论',
+  'reexport-unsupported':
+    '该导出的全部声明都来自其他文件（reexport-unsupported），首发不定义跨文件指纹归属，请直接锚定声明所在文件',
+  'parse-failed': '目标文件无法被 ts-morph 解析（parse-failed），无法计算指纹',
+  'canonicalize-failed': 'canonical token 序列化过程异常（canonicalize-failed），无法计算指纹',
+  'ast-traversal-limit':
+    'AST 嵌套过深，遍历超出调用栈上限（ast-traversal-limit），无法计算指纹',
+});
 
 /** drift 脚本自身所在包根（dist 编译产物基准，与被检项目 projectRoot 无关） */
 export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -376,6 +398,8 @@ async function checkOneGroup({ filePart, members, projectRoot, analyzeFiles, pro
       symbolName: parts.symbolPart,
       skeleton: outcome.skeleton,
       source: outcome.source,
+      project,
+      absFile,
     }),
   );
 }
@@ -466,7 +490,7 @@ export async function analyzeConsistentSnapshot({ absFile, filePart, analyzeFile
  *
  * 判定顺序遵循 plan §9.2：先判 symbol 客观存在，存在之后才判指纹可用。
  */
-export function checkOneAnchor({ anchor, symbolName, skeleton, source }) {
+export function checkOneAnchor({ anchor, symbolName, skeleton, source, project, absFile }) {
   const exp = (skeleton.exports ?? []).find((e) => e.name === symbolName);
   if (!exp) {
     return anchorResult(anchor, 'orphaned', {
@@ -485,16 +509,22 @@ export function checkOneAnchor({ anchor, symbolName, skeleton, source }) {
     });
   }
 
-  const actualFingerprint = computeCanonicalFingerprint({
+  // canonical AST 指纹 MUST 建在与 skeleton 同源的内容快照上（source 已过 TOCTOU 一致性闸门），
+  // 不让 ts-morph 自行读盘，否则会重新打开「行号来自旧内容、指纹来自新内容」的窗口。
+  const computed = computeSymbolFingerprint({
+    project: project ?? createSharedProject(),
+    absFilePath: absFile ?? skeleton.filePath,
     sourceText: source,
-    startLine: exp.startLine,
-    endLine: exp.endLine,
+    exportName: symbolName,
+    expStartLine: exp.startLine,
   });
-  if (actualFingerprint === null) {
+  if (!computed.ok) {
     return anchorResult(anchor, 'fingerprint-unavailable', {
-      reason: `symbol span 越界（startLine=${exp.startLine}, endLine=${exp.endLine}）`,
+      reason: LOCATE_FAILURE_TEXT[computed.reason] ?? `指纹计算失败（${computed.reason}）`,
+      locateFailure: computed.reason,
     });
   }
+  const actualFingerprint = computed.fingerprint;
 
   if (actualFingerprint === anchor.fingerprint) {
     return anchorResult(anchor, 'fresh', { expectedFingerprint: anchor.fingerprint, actualFingerprint });

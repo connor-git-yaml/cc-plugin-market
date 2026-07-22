@@ -78,6 +78,14 @@ describe('repo maintenance sync/check', () => {
 
     rmSync(join(projectRoot, '.codex'), { recursive: true, force: true });
 
+    // F219 C3：`.specify` 整目录拷贝会把仓内真实的 spec drift lock 一起带进隔离 fixture，
+    // 但本 fixture **不拷贝 `dist/`**，于是 drift check 必然报 graph-unavailable（dist-missing）
+    // → `spec-drift:analysis-environment` 判 warn → 整份 repo:check status 退化为 'warn'。
+    // 本测试的主题是「repo:sync 重建受控产物后 repo:check 通过」，与 drift 锚点无关；
+    // drift 在 dist 缺失下的降级行为由 spec-drift-repo-check-fallback / -modes 专门覆盖。
+    // 故此处显式移除 lock，让 fixture 回到「无锚点」的中性状态（真实仓库 dist 存在时为 pass）。
+    rmSync(join(projectRoot, '.specify', 'spec-drift.lock.json'), { force: true });
+
     // 链接 node_modules 使外部依赖（如 zod）在临时目录下可解析（orchestration-schema.mjs 等模块依赖 zod）
     symlinkSync(join(REPO_ROOT, 'node_modules'), join(projectRoot, 'node_modules'));
   });

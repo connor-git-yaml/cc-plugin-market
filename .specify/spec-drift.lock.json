@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1",
+  "anchors": [
+    {
+      "id": "f219-plan-canonicalize-symbol-id",
+      "ref": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+      "docPath": "specs/219-spec-drift-production/plan.md",
+      "line": 190,
+      "symbolId": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+      "fingerprint": "sha256:0cbbb85fad60a0e92ec3e7d1fd8fea97227c8bbdf646cfed9c59eb9b22d90381",
+      "fingerprintVersion": "1",
+      "normalizationProfile": "ts-morph-canonical-v2",
+      "resolvedFrom": "src/knowledge-graph/query-helpers.ts::canonicalizeSymbolId",
+      "matchKind": "exact"
+    },
+    {
+      "id": "f219-plan-analyze-files",
+      "ref": "src/core/ast-analyzer.ts::analyzeFiles",
+      "docPath": "specs/219-spec-drift-production/plan.md",
+      "line": 238,
+      "symbolId": "src/core/ast-analyzer.ts::analyzeFiles",
+      "fingerprint": "sha256:8b35c93f8905b370c4edf470e0c141e85fc13c0658ed9dd384f3b618b7449e9c",
+      "fingerprintVersion": "1",
+      "normalizationProfile": "ts-morph-canonical-v2",
+      "resolvedFrom": "src/core/ast-analyzer.ts::analyzeFiles",
+      "matchKind": "exact"
+    },
+    {
+      "id": "f219-plan-relativize-symbol-id",
+      "ref": "src/knowledge-graph/relativize.ts::relativizeSymbolId",
+      "docPath": "specs/219-spec-drift-production/plan.md",
+      "line": 253,
+      "symbolId": "src/knowledge-graph/relativize.ts::relativizeSymbolId",
+      "fingerprint": "sha256:c3c0917d952ed578589b1fda75a272fb652ef6ecf92211de79871812ca86300b",
+      "fingerprintVersion": "1",
+      "normalizationProfile": "ts-morph-canonical-v2",
+      "resolvedFrom": "src/knowledge-graph/relativize.ts::relativizeSymbolId",
+      "matchKind": "exact"
+    }
+  ]
+}

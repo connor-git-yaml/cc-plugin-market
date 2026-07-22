@@ -158,3 +158,60 @@
     (按前缀实为13族与仓库"12族"文案不符, 断言任一数字都会固化历史口径歧义)
   drift 227 passed(16文件) | 全量 5599 passed/1 known-flaky(cli-coldstart 隔离8/8绿) | build 0
   主线程独立复核: symlink 探针 4 组 (node_modules 拒/项目内放行/../拒/绝对路径拒)
+
+[implement:C3] T029-T036 完成: 指纹升级 ts-morph-canonical-v1
+  drift 257 passed / 0 todo (3 条 it.todo 全部兑现为真实断言)
+  全量首轮 5654 passed / 0 failed; 次轮 1 failed(batch-concurrency 墙钟 flaky, 隔离 4/4 绿)
+  代理自查出 tasks 分解缺口: spec-drift-resolve.mjs(link 侧)也调旧指纹,
+    若只按 T032 字面改 check -> link 写旧算法指纹 check 用新算法比对 -> 每条新锚立刻误报 stale
+    已一并切换两侧共用 computeSymbolFingerprint (这是我 tasks 分解的真实遗漏)
+  代理诚实修正自身错误: fresh-format-only fixture 原写 "return\n value;" 当纯格式化,
+    但 ASI 下是真实语义变化(return; + value;), 算法判 DIFF 正确 -> 修 fixture 非改算法
+  reexport-unsupported 生产链路不可达(analyzeFiles 对 re-export 返回 exports:[] -> 先判 orphaned),
+    保留为防御层并显式记录边界, 未伪装成可达路径
+  locateExportedNodes 放 fingerprint 而非 check: 放 check 会迫使 resolve->check 横向 import
+    违反 plan §6.2; 已在 check 侧 re-export 保留对外契约
+  状态矩阵表迁移(非复制)到独立文件避免两处副本漂移
+[verify:主线程独立探针] 六组漏报全 DIFF / 七组误报全 SAME (含 BigInt 分隔符与前导 JSDoc)
+  注: 前三轮探针误报"回归"系我方探针缺陷(比较返回对象引用而非 .fingerprint), 已修正复测
+
+[verify] 全量 5654 passed / 0 failed / 480 文件 (SC-007d 达成)
+  graph-only 重建图 3.7s -> repo:check status=PASS (F217 六指标全绿含 freshness + spec-drift 第13族)
+[dogfood] 本仓真锚三条(plan 复用资产清单的真实引用) 全链路实测:
+  基线 3 fresh exit0 -> 纯格式化(加空行) 仍 3 fresh exit0
+  -> 语义变更(加语句) 该锚 STALE(附 expected/actual) 另两条保持 FRESH exit1 -> 还原回 3 fresh
+  = M9-C C轨验收第一二条在真实代码上取证
+[codex-review:C3] 3 CRITICAL(6 个可复现同哈希) + 4 WARNING (task-mrw2pqof-9f1ti6)
+  结构性判断: forEachDescendant 委托 forEachChild 不枚举 token 子节点 -> 关键字全隐形,
+    extraSemanticTokens 逐个补洞补的是开口洞集, 应改基于 getChildren() 的完整 token 流
+  C1 三类字段不在序列: HeritageClause.token(extends/implements) /
+     TypeOperatorNode.operator(keyof/readonly) / ImportTypeNode.isTypeOf
+  C2 只序列化导出声明节点丢父声明与 export edge:
+     export declare let vs export let (前者编译成 export{}) ;
+     export {foo} vs export type {foo} (后者完全擦除运行时导出) <- 最严重
+  C3 tagged template raw 被错误归一 (tag`A` vs tag`\x41` 运行时 strings.raw 不同)
+  W1 新误报面: 未 tagged 模板 `A${x}` vs `\x41${x}` 应 SAME 却 DIFF; 正则 flag 顺序 /a/gi vs /a/ig
+  W2 link 侧未做 parser-health: 能给语法错误文件成功建锚, 紧接着 check 判 parser-degrade
+  W3 深 AST(5000层) RangeError 逃出结构化错误合同 (createSourceFile catch 之外)
+  W4 测试缺口: 上述六组未覆盖; pair helper 未用同一 absFilePath 语义;
+     nextStep 只断言非空唯一(任意错误但唯一文案仍通过)
+  INFO 确认: 原六组漏报已封死 / 七组 fresh 稳固(另含 hex 指数 尾逗号 可选分号) /
+     locate overload member profile parser-check 路径正确 / C1C2 防线未被绕过
+
+[fix:C3] 3 CRITICAL + 4 WARNING 全闭合, 走结构性方案
+  遍历改 getChildren() 完整 token 流(非继续补洞) — forEachChild 不枚举 token 是根因
+  排除集: PUNCTUATION_KINDS(分号/逗号/三种括号/EOF) + ParenthesizedExpression + JSDoc 子树
+    剔分号安全: ASI 改变语义时 AST 结构本身已不同, 不依赖分号 token
+  代理自查出并封死自建盲区: 剔标点后 for(;;a++) 与 for(;a++;) token 流完全相同
+    -> 补 forClauses 位标记 (不在审查清单内, 是实施中自己发现的自伤)
+  代理证伪我指令中一处错误: 我称"一元运算符 getChildren 也拿不到"实测不成立(PlusPlusToken 在子流中)
+    仍保留补记作为 N-1 回归锚点(代价为零), 但明确标注我给的理由是错的
+  代理诚实披露自身探针假通过: using vs await using 首轮因 fixture 写坏(第二份无该导出)假通过, 已重测
+  精确诊断非 flaky: repo-maintenance-sync-check 失败经证伪(改回 v1 profile 逐字复现/移除 lock 消失)
+    根因 = untracked dogfood lock 被整目录拷进不含 dist 的 fixture, C3 引入; beforeEach 移除该 lock 修复
+    12 族既有断言逐字节未改, 信号未丢(fallback/-modes 专门覆盖 dist 缺失降级)
+  W3 定位修正: RangeError 实抛自 getExportedDeclarations(compiler 侧递归)非我方 canonicalize,
+    但原 catch 会压成语义错误的 node-locate-failed -> 新增 ast-traversal-limit 分类 + 遍历改迭代
+  profile bump v1->v2; dogfood lock 已 --refresh, 3 锚全 v2 全 fresh
+  drift 312 passed(19文件) | 全量 5684 passed/0 failed | build 0 | repo:check PASS 无 warning
+  主线程独立复核 24 组: 12 组须 DIFF 全 DIFF / 12 组须 SAME 全 SAME

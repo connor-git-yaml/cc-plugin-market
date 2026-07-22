@@ -13,12 +13,17 @@ import { fileURLToPath } from 'node:url';
 // @ts-expect-error —— .mjs 治理脚本无类型声明
 import {
   checkAnchors,
+  checkOneAnchor,
   computeReportExitCode,
   analyzeConsistentSnapshot,
   STATE_MATRIX,
 } from '../../scripts/lib/spec-drift-check.mjs';
 // @ts-expect-error —— .mjs 治理脚本无类型声明
-import { createSharedProject } from '../../scripts/lib/spec-drift-fingerprint.mjs';
+import {
+  createSharedProject,
+  FINGERPRINT_VERSION,
+  NORMALIZATION_PROFILE,
+} from '../../scripts/lib/spec-drift-fingerprint.mjs';
 // @ts-expect-error —— .mjs 治理脚本无类型声明
 import { resolveReferences } from '../../scripts/lib/spec-drift-resolve.mjs';
 
@@ -67,82 +72,9 @@ const ORIGINAL = [
 ].join('\n');
 
 /**
- * W-3：状态矩阵逐列字面值合同。
- *
- * 事实源是 `specs/219-spec-drift-production/spec.md` §状态矩阵（11 行 × 8 列）。
- * 只断言「machineCode 匹配 /^DRIFT_[A-Z_]+$/、exitCode ∈ {0,1,2,3}」这类形状断言
- * 会放过绝大多数写错：把 stale 的 exitCode 写成 2、把 ambiguous 的 degraded 写成 false、
- * 把 lock-corrupt 的 repoCheckStrict 写成 warn，形状断言全都照过。故逐列取字面值相等。
+ * 状态矩阵逐列字面值合同已迁移至 `tests/unit/spec-drift-state-matrix.test.ts`（T033），
+ * 该文件是 spec §状态矩阵在代码侧的唯一镜像；此处只保留 exitCode 混合优先级求值的用例。
  */
-interface StateRow {
-  scope: 'anchor' | 'report';
-  machineCode: string;
-  exitCode: 0 | 1 | 2 | 3;
-  priority: number;
-  repoCheck: 'pass' | 'warn' | 'error';
-  repoCheckStrict: 'pass' | 'warn' | 'error';
-  degraded: boolean;
-}
-
-const SPEC_STATE_MATRIX: Record<string, StateRow> = {
-  'lock-corrupt': { scope: 'report', machineCode: 'DRIFT_LOCK_CORRUPT', exitCode: 3, priority: 1, repoCheck: 'error', repoCheckStrict: 'error', degraded: true },
-  'graph-unavailable': { scope: 'report', machineCode: 'DRIFT_GRAPH_UNAVAILABLE', exitCode: 2, priority: 2, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  stale: { scope: 'anchor', machineCode: 'DRIFT_STALE', exitCode: 1, priority: 3, repoCheck: 'warn', repoCheckStrict: 'error', degraded: false },
-  orphaned: { scope: 'anchor', machineCode: 'DRIFT_ORPHANED', exitCode: 1, priority: 3, repoCheck: 'warn', repoCheckStrict: 'error', degraded: false },
-  ambiguous: { scope: 'anchor', machineCode: 'DRIFT_AMBIGUOUS', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  unresolved: { scope: 'anchor', machineCode: 'DRIFT_UNRESOLVED', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  'fingerprint-unavailable': { scope: 'anchor', machineCode: 'DRIFT_FINGERPRINT_UNAVAILABLE', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  'graph-stale': { scope: 'anchor', machineCode: 'DRIFT_GRAPH_STALE', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  'unsupported-language': { scope: 'anchor', machineCode: 'DRIFT_UNSUPPORTED_LANGUAGE', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  'parser-degrade': { scope: 'anchor', machineCode: 'DRIFT_PARSER_DEGRADE', exitCode: 2, priority: 4, repoCheck: 'warn', repoCheckStrict: 'error', degraded: true },
-  fresh: { scope: 'anchor', machineCode: 'DRIFT_FRESH', exitCode: 0, priority: 5, repoCheck: 'pass', repoCheckStrict: 'pass', degraded: false },
-};
-
-describe('STATE_MATRIX 逐列字面值合同（spec §状态矩阵为唯一权威表）', () => {
-  it('状态名集合与 spec 表 11 行完全一致（多一态/少一态都失败）', () => {
-    expect(Object.keys(STATE_MATRIX).sort()).toEqual(Object.keys(SPEC_STATE_MATRIX).sort());
-  });
-
-  it.each(Object.entries(SPEC_STATE_MATRIX))('%s —— 七列字面值逐一相等', (name, row) => {
-    const actual = STATE_MATRIX[name] as StateRow & { nextStep?: string };
-    expect(actual, `状态 ${name} 缺失`).toBeDefined();
-    expect({
-      scope: actual.scope,
-      machineCode: actual.machineCode,
-      exitCode: actual.exitCode,
-      priority: actual.priority,
-      repoCheck: actual.repoCheck,
-      repoCheckStrict: actual.repoCheckStrict,
-      degraded: actual.degraded,
-    }).toEqual(row);
-  });
-
-  it.each(Object.keys(SPEC_STATE_MATRIX))('%s —— next-step 文案非空且非占位', (name) => {
-    const nextStep = (STATE_MATRIX[name] as { nextStep?: unknown }).nextStep;
-    expect(typeof nextStep).toBe('string');
-    expect((nextStep as string).trim().length).toBeGreaterThan(0);
-    expect(nextStep as string).not.toMatch(/^(TODO|TBD|N\/A)$/i);
-  });
-
-  it('单态 exitCode 与混合优先级层级互相自洽（同 priority MUST 同 exitCode）', () => {
-    const byPriority = new Map<number, Set<number>>();
-    for (const row of Object.values(SPEC_STATE_MATRIX)) {
-      if (!byPriority.has(row.priority)) byPriority.set(row.priority, new Set());
-      byPriority.get(row.priority)!.add(row.exitCode);
-    }
-    for (const [priority, exitCodes] of byPriority) {
-      expect([...exitCodes], `priority ${priority}`).toHaveLength(1);
-    }
-  });
-
-  it('--strict 只把默认 warn 提升为 error，不改变 pass 与已是 error 的档', () => {
-    for (const [name, row] of Object.entries(SPEC_STATE_MATRIX)) {
-      const expectedStrict = row.repoCheck === 'warn' ? 'error' : row.repoCheck;
-      expect((STATE_MATRIX[name] as StateRow).repoCheckStrict, name).toBe(expectedStrict);
-    }
-  });
-});
-
 describe('computeReportExitCode —— 混合优先级严格分层（W-4）', () => {
   const report = (reportStatus: string, statuses: string[]) => ({
     reportStatus,
@@ -264,7 +196,7 @@ describe('checkAnchors —— 不可验证态', () => {
     const anchor = {
       id: 'py', ref: 'script.py::compute_total', docPath: 'd.md', line: 1,
       symbolId: 'script.py::compute_total', fingerprint: 'sha256:x',
-      fingerprintVersion: '1', normalizationProfile: 'source-slice-whitespace-v1',
+      fingerprintVersion: FINGERPRINT_VERSION, normalizationProfile: NORMALIZATION_PROFILE,
       resolvedFrom: 'script.py::compute_total', matchKind: 'exact',
     };
     const report = await checkAnchors([anchor], { projectRoot: path.join(FIXTURES, 'resolve') });
@@ -293,7 +225,7 @@ describe('checkAnchors —— 不可验证态', () => {
     const anchor = {
       id: 'p1', ref: 'broken.ts::brokenSymbol', docPath: 'd.md', line: 1,
       symbolId: 'broken.ts::brokenSymbol', fingerprint: 'sha256:x',
-      fingerprintVersion: '1', normalizationProfile: 'source-slice-whitespace-v1',
+      fingerprintVersion: FINGERPRINT_VERSION, normalizationProfile: NORMALIZATION_PROFILE,
       resolvedFrom: 'broken.ts::brokenSymbol', matchKind: 'exact',
     };
     const report = await checkAnchors([anchor], { projectRoot: root });
@@ -316,7 +248,7 @@ describe('W-7 check 侧路径 containment（lock 同属用户可写输入）', (
     const anchor = {
       id: 'esc', ref: '../leak.ts::anchored', docPath: 'd.md', line: 1,
       symbolId: '../leak.ts::anchored', fingerprint: 'sha256:x',
-      fingerprintVersion: '1', normalizationProfile: 'source-slice-whitespace-v1',
+      fingerprintVersion: FINGERPRINT_VERSION, normalizationProfile: NORMALIZATION_PROFILE,
       resolvedFrom: '../leak.ts::anchored', matchKind: 'exact',
     };
     const report = await checkAnchors([anchor], { projectRoot: inner });
@@ -331,7 +263,7 @@ describe('W-7 check 侧路径 containment（lock 同属用户可写输入）', (
     const anchor = {
       id: 'abs', ref: `${abs}::anchored`, docPath: 'd.md', line: 1,
       symbolId: `${abs}::anchored`, fingerprint: 'sha256:x',
-      fingerprintVersion: '1', normalizationProfile: 'source-slice-whitespace-v1',
+      fingerprintVersion: FINGERPRINT_VERSION, normalizationProfile: NORMALIZATION_PROFILE,
       resolvedFrom: `${abs}::anchored`, matchKind: 'exact',
     };
     const report = await checkAnchors([anchor], { projectRoot: root });
@@ -368,14 +300,119 @@ describe('checkAnchors —— report 级 graph-unavailable（FR-011）', () => {
   });
 });
 
-describe('C3 待补（T032）——locateExportedNodes 三态映射', () => {
-  // C1 过渡态指纹基于 ExportSymbol 的行号切片，尚未引入 ts-morph Node 定位，
-  // 因此 node-locate-failed / node-locate-ambiguous / reexport-unsupported
-  // 三类失败在本阶段无触发路径。fixture 已就位（reexport-unsupported/），
-  // 断言随 T032 切换 canonical AST 指纹时补齐。
-  it.todo('node-locate-failed → fingerprint-unavailable（T032）');
-  it.todo('node-locate-ambiguous → fingerprint-unavailable（T032）');
-  it.todo('reexport-unsupported → fingerprint-unavailable（T032）');
+/**
+ * T032：`locateExportedNodes` 三类失败 → anchor 级 `fingerprint-unavailable`。
+ *
+ * 三态的触发条件都是「analyzeFiles 认为该导出存在，本地 ts-morph AST 却给出不一致的答案」，
+ * 即两侧对目标 Node 身份的判断分叉。这种分叉在真实仓库里靠外部条件（dist 与源码版本错位、
+ * 竞态改写）触发，无法用一个静态 fixture 稳定复现，故在 `checkOneAnchor` 这一**生产函数**
+ * 边界上注入分叉的 skeleton 直测映射——被测的是真实映射代码，不是替身。
+ *
+ * ⚠️ 诚实边界：`reexport-unsupported` 在**当前生产链路上不可达**——实测 `analyzeFiles`
+ * 不解析跨文件 re-export（`export { x } from './other'` 的 skeleton.exports 为空），
+ * 于是 check 会先判 orphaned 而轮不到指纹计算（见本 describe 最后一条用例）。该分支仍保留
+ * 为防御层：一旦上游 adapter 将来支持跨文件解析，指纹 MUST NOT 归属到错误文件。
+ */
+describe('T032 —— locateExportedNodes 三态映射到 fingerprint-unavailable', () => {
+  const LOCAL_SOURCE = 'export function anchored(): number {\n  return 1;\n}\n';
+
+  function anchorStub(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'a1',
+      ref: 'a.ts::anchored',
+      docPath: 'docs/x.md',
+      line: 1,
+      symbolId: 'a.ts::anchored',
+      fingerprint: 'sha256:' + '0'.repeat(64),
+      fingerprintVersion: FINGERPRINT_VERSION,
+      normalizationProfile: NORMALIZATION_PROFILE,
+      resolvedFrom: 'manifest',
+      matchKind: 'exact',
+      ...overrides,
+    };
+  }
+
+  function runCheckOneAnchor(source: string, exportSymbol: Record<string, unknown>, symbolName: string) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'drift-locate-'));
+    tmpDirs.push(dir);
+    const absFile = path.join(dir, 'a.ts');
+    fs.writeFileSync(absFile, source, 'utf8');
+    return checkOneAnchor({
+      anchor: anchorStub(),
+      symbolName,
+      skeleton: { filePath: absFile, parserUsed: 'ts-morph', exports: [exportSymbol] },
+      source,
+      project: createSharedProject(),
+      absFile,
+    });
+  }
+
+  it('node-locate-failed（skeleton 报告的导出名在本地 AST 中不存在）→ fingerprint-unavailable', () => {
+    const result = runCheckOneAnchor(
+      LOCAL_SOURCE,
+      { name: 'ghost', startLine: 1, endLine: 3 },
+      'ghost',
+    );
+    expect(result.status).toBe('fingerprint-unavailable');
+    expect(result.machineCode).toBe('DRIFT_FINGERPRINT_UNAVAILABLE');
+    expect(result.locateFailure).toBe('node-locate-failed');
+    expect(result.degraded).toBe(true);
+    // MUST NOT 用 declarations[0] 兜底产出一个「看似有效」的指纹
+    expect(result.actualFingerprint).toBeUndefined();
+  });
+
+  it('node-locate-ambiguous（startLine 与本地 AST 分叉）→ fingerprint-unavailable，绝不猜', () => {
+    const result = runCheckOneAnchor(
+      LOCAL_SOURCE,
+      { name: 'anchored', startLine: 99, endLine: 101 },
+      'anchored',
+    );
+    expect(result.status).toBe('fingerprint-unavailable');
+    expect(result.locateFailure).toBe('node-locate-ambiguous');
+    expect(result.actualFingerprint).toBeUndefined();
+  });
+
+  it('reexport-unsupported（声明全部来自其他文件）→ fingerprint-unavailable', () => {
+    const source = fs.readFileSync(path.join(FIXTURES, 'reexport-unsupported/index.ts'), 'utf8');
+    const dir = path.join(FIXTURES, 'reexport-unsupported');
+    const result = checkOneAnchor({
+      anchor: anchorStub({ ref: 'index.ts::reexportedSymbol', symbolId: 'index.ts::reexportedSymbol' }),
+      symbolName: 'reexportedSymbol',
+      // 模拟「上游 adapter 已能解析跨文件 re-export」：startLine 指向 other.ts 里的声明
+      skeleton: { filePath: path.join(dir, 'index.ts'), parserUsed: 'ts-morph', exports: [{ name: 'reexportedSymbol', startLine: 2, endLine: 4 }] },
+      source,
+      project: createSharedProject(),
+      absFile: path.join(dir, 'index.ts'),
+    });
+    expect(result.status).toBe('fingerprint-unavailable');
+    expect(result.locateFailure).toBe('reexport-unsupported');
+    expect(result.reason).toMatch(/reexport-unsupported/);
+  });
+
+  it('诚实边界记录：当前 analyzeFiles 不解析跨文件 re-export，故生产链路上该锚先判 orphaned', async () => {
+    const root = makeTmpProject({
+      'other.ts': 'export function reexportedSymbol(): number {\n  return 1;\n}\n',
+      'index.ts': "export { reexportedSymbol } from './other';\n",
+    });
+    const report = await checkAnchors(
+      [
+        {
+          id: 'a1',
+          ref: 'index.ts::reexportedSymbol',
+          docPath: 'docs/x.md',
+          line: 1,
+          symbolId: 'index.ts::reexportedSymbol',
+          fingerprint: 'sha256:' + '0'.repeat(64),
+          fingerprintVersion: FINGERPRINT_VERSION,
+          normalizationProfile: NORMALIZATION_PROFILE,
+          resolvedFrom: 'manifest',
+          matchKind: 'exact',
+        },
+      ],
+      { projectRoot: root },
+    );
+    expect(report.anchors[0].status).toBe('orphaned');
+  });
 });
 
 /**

@@ -201,37 +201,37 @@
 
 **独立测试**：构造 (a) 仅改注释/JSDoc/格式化 fixture → 验证 `fresh`；(b) 改标识符/字面值/运算符/控制结构 fixture → 验证 `stale`；(c) member 引用 → `drift link` 显式拒绝；(d) 非首发语言引用 → `unsupported-language`。
 
-- [ ] T029 [P] 准备 C3 canonical AST fixture 全集（在 T001 已建骨架基础上补充内容）：`fresh-comment-only/`（before/after 仅行内/块注释差异）、`fresh-jsdoc-only/`（仅前导 JSDoc 差异）、`fresh-format-only/`（仅缩进/换行/空格差异）、`fresh-syntactic-noise/`（**四组子场景**：`a+b`→`(a+b)` 加括号、`"x"`→`'x'` 引号风格、`1000`→`1_000` 数字分隔符、**`1000n`→`1_000n` BigInt 分隔符**（N-2：BigIntLiteral 此前未归一），均 MUST fresh）、**`stale-using-vs-var/`**（`var x=a()` vs `using x=a()`）、**`stale-await-using/`**（`using x=a()` vs `await using x=a()`）（N-1 CRITICAL：实测 `using` flags=4 会落到 `var` 分支产生**完全相同序列**、`await using` flags=65542 含 Const bit 被误标 `const`；资源释放语义变化不得判 fresh）、**`lang-mts-cts/`**（`.mts`/`.cts` 各一，MUST 判为受支持——N-3 实测 adapter 支持八种扩展）、`stale-identifier/`/`stale-literal/`/`stale-control-flow/`（三类 AST 结构变化）、`stale-unary-prefix/`（`return +a` vs `return -a`）、`stale-unary-postfix/`（`return ++a` vs `return --a`、`a++` vs `a--`）、`stale-decl-kind/`（`export const foo=1` vs `export let foo=1`）、`stale-overload-second/`（同名函数重载，仅改**第二个** overload 签名或实现体）、`fingerprint-version-mismatch/`（手工构造 `fingerprintVersion` 为旧值的 lock 条目 + 未变化的源文件）
+- [x] T029 [P] 准备 C3 canonical AST fixture 全集（在 T001 已建骨架基础上补充内容）：`fresh-comment-only/`（before/after 仅行内/块注释差异）、`fresh-jsdoc-only/`（仅前导 JSDoc 差异）、`fresh-format-only/`（仅缩进/换行/空格差异）、`fresh-syntactic-noise/`（**四组子场景**：`a+b`→`(a+b)` 加括号、`"x"`→`'x'` 引号风格、`1000`→`1_000` 数字分隔符、**`1000n`→`1_000n` BigInt 分隔符**（N-2：BigIntLiteral 此前未归一），均 MUST fresh）、**`stale-using-vs-var/`**（`var x=a()` vs `using x=a()`）、**`stale-await-using/`**（`using x=a()` vs `await using x=a()`）（N-1 CRITICAL：实测 `using` flags=4 会落到 `var` 分支产生**完全相同序列**、`await using` flags=65542 含 Const bit 被误标 `const`；资源释放语义变化不得判 fresh）、**`lang-mts-cts/`**（`.mts`/`.cts` 各一，MUST 判为受支持——N-3 实测 adapter 支持八种扩展）、`stale-identifier/`/`stale-literal/`/`stale-control-flow/`（三类 AST 结构变化）、`stale-unary-prefix/`（`return +a` vs `return -a`）、`stale-unary-postfix/`（`return ++a` vs `return --a`、`a++` vs `a--`）、`stale-decl-kind/`（`export const foo=1` vs `export let foo=1`）、`stale-overload-second/`（同名函数重载，仅改**第二个** overload 签名或实现体）、`fingerprint-version-mismatch/`（手工构造 `fingerprintVersion` 为旧值的 lock 条目 + 未变化的源文件）
   **依赖**：T001
   **验收标准**：每组 fixture 均为可独立编译的 TS/JS 文件对，人工核对每组改动范围与命名意图精确匹配（尤其 `stale-unary-*`/`stale-decl-kind`/`stale-overload-second` 四组——C-2 实测这四组在过渡算法下序列完全相同，是防回归核心资产）
   **对应 FR/SC**：FR-009(c)、SC-001、SC-002
 
-- [ ] T030 [TEST] 重写/扩展 `scripts/lib/spec-drift-fingerprint.mjs` 单测 `tests/unit/spec-drift-fingerprint.test.ts`（替换 T010 的过渡态断言范围）为 canonical AST 语义全集：**fresh 组**——`fresh-comment-only`/`fresh-jsdoc-only`/`fresh-format-only`/`fresh-syntactic-noise`（三组）均 MUST 产生相同指纹；JSDoc 断言方式 MUST 为"canonical token 序列中不含任何 `JSDoc` 前缀 token"，**MUST NOT** 断言"至少命中一次 JSDoc 跳过分支"（该分支实测为死代码，永不命中，断言方式错误会导致必然失败）；**stale 组**——`stale-identifier`/`stale-literal`/`stale-control-flow` 产生不同指纹；**C-2 + N-1 强制回归组**（核心资产，逐组独立断言两变体哈希**不相等**，不得合并简化）——`stale-unary-prefix`（`+a` vs `-a`）、`stale-unary-postfix`（`++a` vs `--a`、`a++` vs `a--`）、`stale-decl-kind`（`const` vs `let`）、**`stale-using-vs-var`（`var` vs `using`）**、**`stale-await-using`（`using` vs `await using`）**五组 MUST 产生不同指纹；实现侧 `declarationKeyword()` 的判定顺序 MUST 为 AwaitUsing→Using→Const→Let→var 且 AwaitUsing 用**全等**比较（`NodeFlags.AwaitUsing===6===Using|Const` 位重叠，真值判断会让普通 `const`(2&6=2) 误判）；**overload 聚合**——`stale-overload-second` 改第二个 overload 签名或实现体 MUST 产生不同指纹（防"只取 `declarations[0]`"漏报）；`normalizationProfile`/`fingerprintVersion` 任一与当前工具常量不一致 → 上层 MUST 标 `fingerprint-unavailable`，不做部分兼容比较
+- [x] T030 [TEST] 重写/扩展 `scripts/lib/spec-drift-fingerprint.mjs` 单测 `tests/unit/spec-drift-fingerprint.test.ts`（替换 T010 的过渡态断言范围）为 canonical AST 语义全集：**fresh 组**——`fresh-comment-only`/`fresh-jsdoc-only`/`fresh-format-only`/`fresh-syntactic-noise`（三组）均 MUST 产生相同指纹；JSDoc 断言方式 MUST 为"canonical token 序列中不含任何 `JSDoc` 前缀 token"，**MUST NOT** 断言"至少命中一次 JSDoc 跳过分支"（该分支实测为死代码，永不命中，断言方式错误会导致必然失败）；**stale 组**——`stale-identifier`/`stale-literal`/`stale-control-flow` 产生不同指纹；**C-2 + N-1 强制回归组**（核心资产，逐组独立断言两变体哈希**不相等**，不得合并简化）——`stale-unary-prefix`（`+a` vs `-a`）、`stale-unary-postfix`（`++a` vs `--a`、`a++` vs `a--`）、`stale-decl-kind`（`const` vs `let`）、**`stale-using-vs-var`（`var` vs `using`）**、**`stale-await-using`（`using` vs `await using`）**五组 MUST 产生不同指纹；实现侧 `declarationKeyword()` 的判定顺序 MUST 为 AwaitUsing→Using→Const→Let→var 且 AwaitUsing 用**全等**比较（`NodeFlags.AwaitUsing===6===Using|Const` 位重叠，真值判断会让普通 `const`(2&6=2) 误判）；**overload 聚合**——`stale-overload-second` 改第二个 overload 签名或实现体 MUST 产生不同指纹（防"只取 `declarations[0]`"漏报）；`normalizationProfile`/`fingerprintVersion` 任一与当前工具常量不一致 → 上层 MUST 标 `fingerprint-unavailable`，不做部分兼容比较
   **依赖**：T029、T011（替换其过渡态实现）
   **验收标准**：测试改写后针对当前（过渡态）实现执行失败（红态确认，因过渡算法逐字节比较，对 fresh 组会误判 stale）
   **对应 FR/SC**：FR-009(b)(c)、SC-001、SC-005
 
-- [ ] T031 实现 `scripts/lib/spec-drift-fingerprint.mjs` canonical AST 升级：自建 `ts-morph.Project`（`createSharedProject()`，`skipFileDependencyResolution:true`/`skipAddingFilesFromTsConfig:true`/`allowJs:true`）；`canonicalizeNode(rootNode)`（`forEachDescendant` 遍历，剔除 `SYNTACTIC_NOISE_KINDS`——如 `ParenthesizedExpression`——但继续遍历其子节点；`TEXT_BEARING_KINDS` 节点走 `normalizedLiteralText()` 归一字面值书写差异；其余节点只记 `getKindName()`）；`extraSemanticTokens(node)`（补记 `forEachChild` 不枚举的一元运算符 `operator` 属性与 `VariableDeclarationList` 的 `NodeFlags` const/let/var，修复 C-2 四组漏报）；`canonicalizeDeclarationSet(nodes)`（按 `startLine` 升序聚合全部重载声明后拼接哈希，修复 overload 漏报）；`hashCanonicalSequence()`（SHA-256）；升级 `NORMALIZATION_PROFILE` 为 `'ts-morph-canonical-v1'`
+- [x] T031 实现 `scripts/lib/spec-drift-fingerprint.mjs` canonical AST 升级：自建 `ts-morph.Project`（`createSharedProject()`，`skipFileDependencyResolution:true`/`skipAddingFilesFromTsConfig:true`/`allowJs:true`）；`canonicalizeNode(rootNode)`（`forEachDescendant` 遍历，剔除 `SYNTACTIC_NOISE_KINDS`——如 `ParenthesizedExpression`——但继续遍历其子节点；`TEXT_BEARING_KINDS` 节点走 `normalizedLiteralText()` 归一字面值书写差异；其余节点只记 `getKindName()`）；`extraSemanticTokens(node)`（补记 `forEachChild` 不枚举的一元运算符 `operator` 属性与 `VariableDeclarationList` 的 `NodeFlags` const/let/var，修复 C-2 四组漏报）；`canonicalizeDeclarationSet(nodes)`（按 `startLine` 升序聚合全部重载声明后拼接哈希，修复 overload 漏报）；`hashCanonicalSequence()`（SHA-256）；升级 `NORMALIZATION_PROFILE` 为 `'ts-morph-canonical-v1'`
   **依赖**：T030
   **验收标准**：T030 全部用例转绿；`npx vitest run tests/unit/spec-drift-fingerprint.test.ts` 零失败
   **对应 FR/SC**：FR-009(b)(c)、SC-001、SC-005
 
-- [ ] T032 改动 `scripts/lib/spec-drift-check.mjs`：新增 `locateExportedNodes(sourceFile, exportName, expStartLine)`（exportName+startLine+sourceFile 三元组精确匹配定位 Node；本地声明为空 → `node-locate-failed`；全部声明来自其他文件（re-export）→ `reexport-unsupported`；本地声明存在但无一项 `startLine` 与 `analyzeFiles` 结果对齐 → `node-locate-ambiguous`；三者均映射 `fingerprint-unavailable`，**禁止**任何 `?? declarations[0]` 式静默兜底）；切换调用 T031 的 `canonicalizeDeclarationSet` + `hashCanonicalSequence` 替换过渡态哈希比对；C1 阶段产出的旧 `normalizationProfile='source-slice-whitespace-v1'` 锚在本次切换后统一转 `fingerprint-unavailable`（提示需 `drift link --refresh`），不与新算法混合比较
+- [x] T032 改动 `scripts/lib/spec-drift-check.mjs`：新增 `locateExportedNodes(sourceFile, exportName, expStartLine)`（exportName+startLine+sourceFile 三元组精确匹配定位 Node；本地声明为空 → `node-locate-failed`；全部声明来自其他文件（re-export）→ `reexport-unsupported`；本地声明存在但无一项 `startLine` 与 `analyzeFiles` 结果对齐 → `node-locate-ambiguous`；三者均映射 `fingerprint-unavailable`，**禁止**任何 `?? declarations[0]` 式静默兜底）；切换调用 T031 的 `canonicalizeDeclarationSet` + `hashCanonicalSequence` 替换过渡态哈希比对；C1 阶段产出的旧 `normalizationProfile='source-slice-whitespace-v1'` 锚在本次切换后统一转 `fingerprint-unavailable`（提示需 `drift link --refresh`），不与新算法混合比较
   **依赖**：T031、T014
   **验收标准**：既有 T013 check 测试仍全绿（无回归）；新增 `locateExportedNodes` 三态各自映射正确
   **对应 FR/SC**：FR-009(b)(d)、SC-002
 
-- [ ] T033 [TEST] 编写 11 态状态矩阵 table-driven 测试 `tests/unit/spec-drift-state-matrix.test.ts`：对 `fresh`/`stale`/`orphaned`/`ambiguous`/`unresolved`/`fingerprint-unavailable`/`graph-unavailable`/`graph-stale`/`lock-corrupt`/`unsupported-language`/`parser-degrade` 共 11 个状态**逐一**断言状态矩阵全部列——`machineCode` 字面值精确匹配（如 `DRIFT_STALE`）、作用域（anchor/report）、单态 `exitCode`、`degraded` 标记、`repo:check` 默认映射（warn/error/pass）、`--strict` 映射、`next-step` 文案非空且非通用兜底文本；含 `graph-unavailable` 独立 fixture（区别于其他状态）与 `graph-stale`（此状态无自然触发路径，用合成 `AnchorCheckResult[]` 手工构造 `status:'graph-stale'` 验证类型定义/汇总逻辑/`--format json` 序列化正确性）
+- [x] T033 [TEST] 编写 11 态状态矩阵 table-driven 测试 `tests/unit/spec-drift-state-matrix.test.ts`：对 `fresh`/`stale`/`orphaned`/`ambiguous`/`unresolved`/`fingerprint-unavailable`/`graph-unavailable`/`graph-stale`/`lock-corrupt`/`unsupported-language`/`parser-degrade` 共 11 个状态**逐一**断言状态矩阵全部列——`machineCode` 字面值精确匹配（如 `DRIFT_STALE`）、作用域（anchor/report）、单态 `exitCode`、`degraded` 标记、`repo:check` 默认映射（warn/error/pass）、`--strict` 映射、`next-step` 文案非空且非通用兜底文本；含 `graph-unavailable` 独立 fixture（区别于其他状态）与 `graph-stale`（此状态无自然触发路径，用合成 `AnchorCheckResult[]` 手工构造 `status:'graph-stale'` 验证类型定义/汇总逻辑/`--format json` 序列化正确性）
   **依赖**：T032、T012（复用 graph-unavailable fixture）
   **验收标准**：`npx vitest run tests/unit/spec-drift-state-matrix.test.ts` 零失败，11 态全部列均有断言（无遗漏行）
   **对应 FR/SC**：SC-003
 
-- [ ] T034 [TEST] 编写 C3 语义端到端测试 `tests/integration/spec-drift-canonical-ast-e2e.test.ts`（补充 T018 e2e 中标注为"C3 待补验"的部分）：基于真实 TS 文件与 T029 fixture，验证 (a) 改注释/改 JSDoc/纯格式化三类改动 `drift check` 一律判定 `fresh`（SC-001 收窄语义）；(b) 改标识符/字面值/运算符/控制结构判定 `stale`；(c) 同文件另一未锚定 symbol 变化、被锚 symbol 不变时保持 `fresh`，且 member 粒度锚点因显式拒绝不存在"回退 Class span 误伤"路径（SC-002）；(d) 模拟 `fingerprintVersion` 升级场景（T029 的 `fingerprint-version-mismatch` fixture）——旧锚不被批量误报 `stale`，而是标 `fingerprint-unavailable` 并提示需要 `--refresh`（SC-005）
+- [x] T034 [TEST] 编写 C3 语义端到端测试 `tests/integration/spec-drift-canonical-ast-e2e.test.ts`（补充 T018 e2e 中标注为"C3 待补验"的部分）：基于真实 TS 文件与 T029 fixture，验证 (a) 改注释/改 JSDoc/纯格式化三类改动 `drift check` 一律判定 `fresh`（SC-001 收窄语义）；(b) 改标识符/字面值/运算符/控制结构判定 `stale`；(c) 同文件另一未锚定 symbol 变化、被锚 symbol 不变时保持 `fresh`，且 member 粒度锚点因显式拒绝不存在"回退 Class span 误伤"路径（SC-002）；(d) 模拟 `fingerprintVersion` 升级场景（T029 的 `fingerprint-version-mismatch` fixture）——旧锚不被批量误报 `stale`，而是标 `fingerprint-unavailable` 并提示需要 `--refresh`（SC-005）
   **依赖**：T033、T018
   **验收标准**：`npx vitest run tests/integration/spec-drift-canonical-ast-e2e.test.ts` 零失败
   **对应 FR/SC**：SC-001、SC-002、SC-005
 
-- [ ] T035 生成 `specs/219-spec-drift-production/quickstart.md`：内容涵盖 manifest 编写示例（`{id,ref,docPath,line}[]`，`ref` 须为 file-qualified 形式）、三命令用法（`drift:link`/`drift:check`/`drift:unlink` 及 `--strict`/`--format json`/`--help`）、`graph-stale` 状态"当前版本不会在正常使用中产生此状态"的预留说明、dist 陈旧的已知边界提示（"改动 `src/` 后须先 `npm run build` 再跑 drift"）
+- [x] T035 生成 `specs/219-spec-drift-production/quickstart.md`：内容涵盖 manifest 编写示例（`{id,ref,docPath,line}[]`，`ref` 须为 file-qualified 形式）、三命令用法（`drift:link`/`drift:check`/`drift:unlink` 及 `--strict`/`--format json`/`--help`）、`graph-stale` 状态"当前版本不会在正常使用中产生此状态"的预留说明、dist 陈旧的已知边界提示（"改动 `src/` 后须先 `npm run build` 再跑 drift"）
   **依赖**：T034
   **验收标准**：文档存在，中文正文+英文技术术语，不含具体客户/公司名
   **对应 FR/SC**：无直接 FR，支撑 SC-006 的可用性
@@ -245,6 +245,26 @@
   **依赖**：T035、T033、T028、T020
   **验收标准**：`npx vitest run` + `npm run build` + `npm run repo:check` 全部零失败（SC-007d）
   **对应 FR/SC**：SC-007(d)、SC-008
+  **执行记录（C3 implement 实跑）**：(a) 已通过——全量 `npx vitest run` 跑了两轮：第 1 轮 exit 0 / 476 files passed + 4 skipped / **5654 passed、0 failed**、18 skipped、21 todo（`graph-quality-adversarial` 满载下直接通过，未触发已知负载型 flaky）；第 2 轮（仅一处测试文案清理后复跑）出现 1 例 `tests/e2e/batch-concurrency.e2e.test.ts > SC-006` 失败（`expected 13629 to be less than 13431`，即并行耗时比 5% 阈值差 1.5%），属该用例自身注释已声明的**墙钟负载型 flaky**，与 drift 代码路径完全 disjoint；隔离复跑 `npx vitest run tests/e2e/batch-concurrency.e2e.test.ts` **4/4 绿**证伪，按 W-5 口径判定非回归。`npm run build` exit 0；`npm run repo:check` exit 0（`spec-drift:anchors-status: pass`，唯一 warning 为既有 `graph-quality:freshness` 图产物 commit 陈旧，与本阶段改动无关）。(b) 已通过——`git diff --stat $(git merge-base master HEAD) HEAD -- src/ plugins/` 输出为空，改动路径集合 ⊆ allowlist。(c) Codex 对抗审查与 commit 由编排层执行，未在本阶段进行。
+
+  **执行记录（C3 Codex 对抗审查修复轮，NORMALIZATION_PROFILE bump v1 → v2）**：审查判定 T031 原实现的
+  `forEachDescendant` 口径存在**结构性缺陷**——它委托 compiler `forEachChild`，而后者**不枚举 token 子节点**，
+  导致全部关键字 / 修饰符对指纹隐形；已实证 6 组同哈希漏报（`extends`/`implements`、`keyof`/`readonly`、
+  `import()`/`typeof import()`、`declare let`/`let`、`export {}`/`export type {}`、tagged template raw）。
+  修复未沿用「`extraSemanticTokens` 逐个补洞」（补的是开口洞集），改为基于 `getChildren()` 的**完整 token 流**
+  + 纯标点剔除 + 父级 metadata（`VariableStatement` modifiers、export edge `isTypeOnly`/alias）。
+  同轮修复 4 项 WARNING：W-1 普通模板按 cooked / tagged 按 raw 分流 + 正则 flags 规范排序（消除新误报面）；
+  W-2 link 侧接入与 check 共用的 `hasSyntacticErrors` parser-health 闸门（消除 link 判 ok、check 判
+  parser-degrade 的自相矛盾）；W-3 canonicalize 改迭代式遍历 + locate/canonicalize/hash 全段纳入结构化错误
+  边界（新增 `ast-traversal-limit` 分类，深嵌套不再抛异常逃出 `{ok:false}` 合同）；W-4 测试 pair helper 固定
+  同一虚拟路径（模拟生产 overwrite 语义）+ 11 条 `nextStep` 字面值纳入 `SPEC_STATE_MATRIX` 逐条比对。
+  **自建盲区当场封死**：标点剔除会让 `for(;;a++)` 与 `for(;a++;)` token 流塌陷（实测相同），已补 `forClauses:` 位标记。
+  实测结论：`declarationKeyword()` **保留**（`VariableDeclaration.getChildren()` 流实测为
+  `VariableDeclaration|Identifier|EqualsToken|NumericLiteral`，**不含** `ConstKeyword`，非冗余）；
+  一元运算符补记已冗余（`getChildren()` 可枚举 `PlusPlusToken`）但**刻意保留**为回归锚点。
+  验证：drift 套 311 passed（原 257）；全量 `npx vitest run` **5684 passed / 0 failed** / 18 skipped / 21 todo；
+  `npm run build` exit 0；`npm run repo:check` status=pass（`spec-drift:anchors-status: pass`）。
+  `.specify/spec-drift.lock.json` 已 `drift link --refresh` 刷新为 v2，3 条 dogfood 锚全 fresh。
 
 ---
 
@@ -254,6 +274,13 @@
   **依赖**：T028
   **验收标准**：既有断言逐字节不变，仅追加新断言；测试零失败
   **对应 FR/SC**：SC-007(c)
+  **执行记录（审查修复轮补充）**：该测试的隔离 fixture 整目录拷贝 `.specify/`，会把仓内真实 drift lock 一起带入，
+  但 fixture **不拷贝 `dist/`** → drift check 必报 graph-unavailable(dist-missing) → `spec-drift:analysis-environment`
+  判 warn → 整份 repo:check status 退化为 `warn`，`status === 'pass'` 断言失败。**已证伪为本轮回归**：把 lock 的
+  profile 改回 v1 复跑，warning 一字不差地复现；移除 lock 后 warning 消失——即触发条件是「lock 存在」而非本轮算法改动
+  （lock 是 C3 dogfood 产物，untracked，`git show HEAD:` 不存在）。修复为在 `beforeEach` 显式移除该 lock，让 fixture
+  回到中性无锚状态；drift 在 dist 缺失下的降级行为由 `spec-drift-repo-check-fallback` / `-modes` 专门覆盖，未丢信号。
+  既有 12 族断言逐字节未改。
 
 - [ ] T038 [P] 清理与一致性复核：确认 `scripts/lib/spec-drift-*.mjs` 六模块间依赖方向单向无环（`spec-drift-fingerprint.mjs`/`spec-drift-dist-loader.mjs` 不 import 上层模块；`spec-drift-check.mjs`/`spec-drift-resolve.mjs` 不互相 import；`spec-drift-core.mjs` 是唯一横向协调点，对齐 plan §6.2 mermaid 图）；确认无死代码残留（如已删除的旧过渡态判据）
   **依赖**：T036

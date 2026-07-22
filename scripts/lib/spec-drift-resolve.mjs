@@ -25,7 +25,9 @@ import { fileURLToPath } from 'node:url';
 import { loadDistModule } from './spec-drift-dist-loader.mjs';
 import { resolveWithinProject } from './spec-drift-paths.mjs';
 import {
-  computeCanonicalFingerprint,
+  computeSymbolFingerprint,
+  createSharedProject,
+  hasSyntacticErrors,
   FINGERPRINT_VERSION,
   NORMALIZATION_PROFILE,
 } from './spec-drift-fingerprint.mjs';
@@ -236,6 +238,10 @@ export async function resolveReferences(entries, options) {
     groups.get(absFile).push({ entry, parts });
   }
 
+  // canonical AST 指纹需要一棵真实语法树：整批建锚共享同一个 ts-morph Project（性能）。
+  // 该 Project 同时承担 parser-health 判定，故 MUST 在解析循环之前创建。
+  const project = createSharedProject();
+
   // 每个唯一文件只解析一次
   const analyzed = new Map();
   for (const absFile of groups.keys()) {
@@ -246,6 +252,10 @@ export async function resolveReferences(entries, options) {
         skeleton,
         graph: skeleton ? buildMinimalGraph([skeleton], projectRoot) : null,
         source: fs.readFileSync(absFile, 'utf8'),
+        // W-2：link 与 check MUST 共用同一个 parser-health helper。此前 link 直接分析并
+        // 算指纹，对语法损坏文件返回 status:"ok" 并把锚写入 lock，紧接着 check 又把同一
+        // 文件判 parser-degrade —— 两条命令对同一输入给出互相矛盾的结论。
+        syntax: hasSyntacticErrors(project, absFile, { refresh: true }),
       });
     } catch (err) {
       analyzed.set(absFile, { error: err instanceof Error ? err.message : String(err) });
@@ -253,7 +263,18 @@ export async function resolveReferences(entries, options) {
   }
 
   for (const { entry, parts, absFile } of pending) {
-    results.push(resolveOne({ entry, parts, absFile, analyzed, canonicalizeSymbolId, resolveSymbolFuzzy, projectRoot }));
+    results.push(
+      resolveOne({
+        entry,
+        parts,
+        absFile,
+        analyzed,
+        canonicalizeSymbolId,
+        resolveSymbolFuzzy,
+        projectRoot,
+        project,
+      }),
+    );
   }
 
   // W1 / US1-AS5：refresh 时若重新解析落 ambiguous/unresolved，保留刷新前最后一次已知良好基线。
@@ -320,12 +341,29 @@ async function loadDistApis(distRoot) {
   return { ok: true, api };
 }
 
-function resolveOne({ entry, parts, absFile, analyzed, canonicalizeSymbolId, resolveSymbolFuzzy, projectRoot }) {
+function resolveOne({ entry, parts, absFile, analyzed, canonicalizeSymbolId, resolveSymbolFuzzy, projectRoot, project }) {
   const state = analyzed.get(absFile);
   if (!state || state.error || !state.skeleton) {
     return makeResult(entry, {
       status: 'fingerprint-unavailable',
       reason: `目标文件解析失败：${state?.error ?? 'analyzeFiles 未返回 skeleton'}`,
+    });
+  }
+
+  // W-2：parser-health 闸门 MUST 早于符号解析与指纹计算。语法损坏的文件上，ts-morph 的
+  // 错误恢复仍会产出一棵「看起来能算」的树，link 据此写入的锚是伪锚——下一次 check 会
+  // 对同一文件判 parser-degrade，形成 link/check 自相矛盾。
+  const syntax = state.syntax;
+  if (!syntax || !syntax.ok) {
+    return makeResult(entry, {
+      status: 'parser-degrade',
+      reason: `语法诊断读取失败：${syntax?.reason ?? '未执行 parser-health 判定'}`,
+    });
+  }
+  if (syntax.hasErrors) {
+    return makeResult(entry, {
+      status: 'parser-degrade',
+      reason: `目标文件存在语法错误：${entry.ref}`,
     });
   }
 
@@ -367,19 +405,22 @@ function resolveOne({ entry, parts, absFile, analyzed, canonicalizeSymbolId, res
     });
   }
 
-  const fingerprint = computeCanonicalFingerprint({
+  // 建锚与检测 MUST 走同一条 canonical AST 路径，否则新建的锚下一次 check 必判 stale
+  const computed = computeSymbolFingerprint({
+    project: project ?? createSharedProject(),
+    absFilePath: absFile,
     sourceText: state.source,
-    startLine: exp.startLine,
-    endLine: exp.endLine,
+    exportName: symbolName,
+    expStartLine: exp.startLine,
   });
-  if (fingerprint === null) {
+  if (!computed.ok) {
     return makeResult(entry, {
       status: 'fingerprint-unavailable',
       symbolId,
       matchKind,
-      reason: `symbol span 越界（startLine=${exp.startLine}, endLine=${exp.endLine}）`,
+      reason: `无法在本地 AST 上定位该导出声明并计算指纹（${computed.reason}）`,
     });
   }
 
-  return makeResult(entry, { status: 'ok', symbolId, matchKind, fingerprint });
+  return makeResult(entry, { status: 'ok', symbolId, matchKind, fingerprint: computed.fingerprint });
 }
