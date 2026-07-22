@@ -165,6 +165,12 @@ graph TD
 
 无反向依赖：`spec-drift-fingerprint.mjs` / `spec-drift-dist-loader.mjs` 不 import 任何上层模块；`spec-drift-check.mjs` / `spec-drift-resolve.mjs` 不互相 import；顶层 `spec-drift-core.mjs` 是唯一横向协调点。
 
+> **[C1 实施后补充两条真实边]**
+> 1. **新增 `RESOLVE --> FP`**：`link` 必须在建锚时产出指纹，故 `spec-drift-resolve.mjs` 也依赖 `spec-drift-fingerprint.mjs`（上图只画了 `CHECK --> FP`）。该边单向、无环，且不违反上述任一不变量。
+> 2. **`STATE_MATRIX` 常量落在 `spec-drift-check.mjs` 并导出**，由 `spec-drift-core.mjs` 复用——刻意不新建第 7 个模块，模块数维持 6 个。
+>
+> **`distRoot` vs `projectRoot` 正交（plan 原先混用，实施中发现必须区分）**：`dist/**` 的查找基准是 **drift 脚本自身所在的包根**（`PACKAGE_ROOT`），而 `--project-root` 指的是**被检项目**的根。二者混用会导致任何非本仓的 `projectRoot` 恒判 `graph-unavailable`（因为被检项目下并没有我们的 `dist/`）。实现中 `distRoot` 独立解析并可经 option 覆盖——`graph-unavailable` fixture 正是靠覆盖它来稳定触发。
+
 ### 6.3 各模块职责
 
 | 模块 | 职责 | 关键导出 |
@@ -172,7 +178,9 @@ graph TD
 | `spec-drift-cli.mjs` | 参数解析（`link`/`check`/`unlink` 子命令、`--help`、`--format json`、`--project-root`、`--lock`）、调用 core、格式化输出、映射退出码 | `main()`（供 e2e 测试以"公开入口"方式调用，FR-014） |
 | `spec-drift-core.mjs` | 门面：`linkReferences()` / `checkAnchors()` / `unlinkAnchor()`；`validateSpecDrift({projectRoot, strict})` 供 `repo:check` 消费 | `linkReferences`, `checkAnchors`, `unlinkAnchor`, `validateSpecDrift` |
 | `spec-drift-lock-io.mjs` | 读取/校验/原子写 `.specify/spec-drift.lock.json`；损坏判定（FR-015） | `readLock`, `writeLockAtomic`, `LOCK_SCHEMA_VERSION` |
-| `spec-drift-resolve.mjs` | manifest 解析（JSON/YAML）；ref → canonical symbolId（仅 link/`--refresh` 调用，`check` 不调用，FR-004） | `resolveReference`, `parseManifest` |
+| `spec-drift-resolve.mjs` | manifest 解析（**仅 JSON**，见下注）；ref → canonical symbolId（仅 link/`--refresh` 调用，`check` 不调用，FR-004） | `resolveReference`, `parseManifest` |
+
+> **[C1 实施后修正] manifest 只支持 JSON**：本表原写"JSON/YAML"，但 YAML 解析需引入新依赖，与"零新运行时依赖"护栏（非目标 #5）直接冲突。实施采纳：**任何扩展名一律按 JSON 解析**，解析失败返回 `manifest-parse-failed`。这与 CL-1（lock 用 JSON）也保持一致。
 | `spec-drift-check.mjs` | 按 symbolId 精确匹配（不重 fuzzy）；状态矩阵映射；混合优先级 exitCode 计算 | `checkOneAnchor`, `computeReportExitCode` |
 | `spec-drift-fingerprint.mjs` | C3 canonical AST 序列化 + SHA-256；`FINGERPRINT_VERSION` / `NORMALIZATION_PROFILE` 常量 | `computeCanonicalFingerprint`, `FINGERPRINT_VERSION`, `NORMALIZATION_PROFILE` |
 | `spec-drift-dist-loader.mjs` | 封装"动态 import `dist/xxx.js`，加载失败（缺失/语法错误/传递依赖失败/初始化抛错）时返回结构化失败对象"，避免各模块重复样板 | `loadDistModule(projectRoot, relDistPath)` |
@@ -205,7 +213,11 @@ graph TD
 2. 与 check 侧 FR-004"即时重新解析、不依赖缓存 graph 制品"的口径分裂，同一 Feature 内两条真值策略会造成 link 判 fresh / check 判 orphaned 的错位；
 3. 最小 graph 方案下 link 与 check 共享同一真值来源（现场 `analyzeFiles`），口径统一。
 
-**对 fuzzy 兜底能力的诚实影响**：最小 graph 只含 ref 指定的那一个文件，因此 `resolveSymbolFuzzy` 的"跨文件找相似 symbol"能力在本方案下**不可用**——同文件内的 partial-name / levenshtein 匹配仍有效，跨文件误拼写不会被兜底命中，一律落 `unresolved`。这是 file-qualified ref 合同（FR-001）的直接推论，非缺陷：ref 已显式声明文件，跨文件模糊搜索本就超出该合同语义。`matchKind` 的 `exact` / `partial-name` / `levenshtein` 三值在同文件范围内仍全部可产生。
+**对 fuzzy 兜底能力的诚实影响（C1 实施后按实测修正）**：最小 graph 只含 ref 指定的那一个文件，因此 `resolveSymbolFuzzy` 的"跨文件找相似 symbol"能力在本方案下**不可用**，跨文件误拼写不会被兜底命中，一律落 `unresolved`。这是 file-qualified ref 合同（FR-001）的直接推论，非缺陷。
+
+> ⚠️ **更正一处此前的错误断言**：本节早先写"`matchKind` 的 `exact`/`partial-name`/`levenshtein` 三值在同文件范围内仍全部可产生"——**该说法经 C1 实测被证伪**。实际行为：最小 graph 下 levenshtein 层的置信度上限为 0.75，低于 auto-resolve 阈值 0.9，**恒不自动绑定**；而 file-qualified ref 形态下 path-suffix / partial-name 层也不可达。因此 **C1 首发实际只有 `matchKind: 'exact'` 可达**，其余取值路径在代码中保留（未来若某层自动命中会如实记录），但当前不产生。
+>
+> 相应地，非 exact 的解析结果只会落到两态：多候选 → `ambiguous`（附 top-3，不自动绑）；单个低置信候选 → `unresolved`。测试按**实测行为**断言而非按此前的错误预期断言。
 
 ---
 

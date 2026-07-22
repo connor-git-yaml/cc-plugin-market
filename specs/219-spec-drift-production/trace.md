@@ -85,3 +85,39 @@
     W-5 残留: SC-008 写入面/SC-007(d) 全量门禁无可执行落点 -> 落成 T036(a)(b)
     N-5 措辞: "完整 GraphJSON" -> "满足 query helper 的最小只读视图"
   独立复核: 本主线程自跑 ts-morph 探针确认 N-1 flags 与 N-3 扩展名属实, 未盲信
+
+[GATE_TASKS] user 拍板: 三阶段一次做完(C1->C2->C3), 中间不交付不设门, 最后统一 verify + push report
+  编排策略: 拆三次子代理委派(每阶段一次)以规避单代理超载 API 断连; 不改变用户选择的交付节奏
+  graph freshness warn = 自身提交推进 HEAD 所致(specs/_meta/graph.json 未入库),
+    留 T036 用 spectra batch --mode graph-only 重建; 入库的 F215 钉库 fixture 不得重生成
+[implement:C1] 启动 T001-T020
+
+[implement:C1] T001-T020 完成 (95 passed/3 todo, 全量 5490 passed/2 known-flaky, build 绿, SC-008 空)
+  7 处 plan 偏差已回灌: matchKind 实测只 exact 可达(我 plan 原断言三值可产生=错误,已更正)
+  distRoot 与 projectRoot 必须正交 / 依赖图补 resolve->fingerprint / manifest 仅 JSON
+[codex-review:C1] 2 CRITICAL + 9 WARNING (task-mrvwq9dd-sw00yy)
+  C1 manifest 校验不足: 数值 ref 抛未捕获异常 exit1(违反 exit2+JSON 合同);
+     数值 id/对象 docPath/负 line 被写入 lock -> 工具自产 corrupt lock
+  C2 refresh 对所有非 ok 态保留旧基线(FR-002 只许 ambiguous/unresolved),
+     产生新失败 ref+旧 symbolId 混合记录 -> check 看旧 symbolId 可能报 fresh 掩盖失败;
+     且 --refresh 可创建不存在的 id
+  W1 report degraded 硬编码 false / 空 lock summary {} 
+  W2 防重绑测试抓不住 fuzzy 回归  W3 11 态测试宽泛自证非逐列合同
+  W4 原子写测试证明不了用 rename  W5 lock 不校验 id 唯一性与正整数 line
+  W6 endLine 越过 EOF 不返 null(1..999 与 1..2 同哈希)  W7 路径穿越: ../ 可逃出 projectRoot
+  W8 CLI 直执行判断 Windows 不成立  W9 CLI 参数校验松(--format xml 被接受等)
+
+[fix:C1] Codex 11 项处置完成 (2 CRITICAL + 9 WARNING)
+  源码: manifest 严格校验+写盘前 schema 自检 / refresh 仅 ambiguous|unresolved 保留且拒不存在 id
+        + 保留写回完整旧记录 / 新建 spec-drift-paths.mjs containment 挡穿越(两处调用点)
+        / endLine 越界返 null / line 正整数 + id 全局唯一 / 统一 buildReport 聚合 degraded
+        / CLI 最外层兜底 exit2 不吐栈 / pathToFileURL 跨平台入口 / 参数严格校验
+  测试(三条"抓不住回归"): W-2 静态依赖边界(含对照组证明有区分力)
+        W-3 11态x7列字面值 toEqual 钉死 + 3 条派生不变量
+        W-4 spy writeFileSync/renameSync 断言顺序与目标从未被直写 + EXDEV 残留 tmp 被判 corrupt
+  测试数: 95 -> 168 passed | 3 todo
+  主线程独立复核: 真实逃逸探针 ../outside.ts::secret -> fingerprint-unavailable(修复前为 fresh/exit0)
+  代理反驳 1 条并给依据: W-9 "--id 非 refresh 模式禁用" 未必是真缺陷(选择性建锚是合法用法),
+    已按指令实现并同步改 USAGE 保持文档行为一致; 放宽只需改 parseArgs 一行条件
+  全量: 5563 passed / 2 failed(均已知负载 flaky: community-analysis perf, graph-quality-cli
+        stdout 截断; 隔离复跑 21 passed 双绿) / build exit 0

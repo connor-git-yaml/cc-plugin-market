@@ -1,0 +1,9 @@
+[
+  { "id": "r-exact", "ref": "math-utils.ts::computeTotal", "docPath": "docs/a.md", "line": 1 },
+  { "id": "r-typo", "ref": "math-utils.ts::computeTotl", "docPath": "docs/a.md", "line": 2 },
+  { "id": "r-bare", "ref": "computeTotal", "docPath": "docs/a.md", "line": 3 },
+  { "id": "r-missing-file", "ref": "no-such-file.ts::computeTotal", "docPath": "docs/a.md", "line": 4 },
+  { "id": "r-member", "ref": "shapes.ts::Rectangle.area", "docPath": "docs/a.md", "line": 5 },
+  { "id": "r-python", "ref": "script.py::compute_total", "docPath": "docs/a.md", "line": 6 },
+  { "id": "r-lone-typo", "ref": "lone.ts::lonelyHelpr", "docPath": "docs/a.md", "line": 7 }
+]

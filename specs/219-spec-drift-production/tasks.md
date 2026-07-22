@@ -25,11 +25,11 @@
 
 ## Phase 1: Setup（项目初始化，无 User Story 归属）
 
-- [ ] T001 [P] 建立 fixture 目录骨架：创建 `tests/fixtures/spec-drift/` 及子目录占位（`.gitkeep`），子目录含 `fresh-comment-only/`、`fresh-jsdoc-only/`、`fresh-format-only/`、`fresh-syntactic-noise/`、`stale-identifier/`、`stale-literal/`、`stale-control-flow/`、`stale-unary-prefix/`、`stale-unary-postfix/`、`stale-decl-kind/`、`stale-overload-second/`、`sibling-symbol-unaffected/`、`fingerprint-version-mismatch/`、`lock-corrupt-*/`、`member-rejected/`、`reexport-unsupported/`、`unsupported-language/`、`parser-degrade/`、`graph-unavailable/`、**`stale-using-vs-var/`**、**`stale-await-using/`**、**`lang-mts-cts/`**（后三项为 Codex round-2 新增：N-1 CRITICAL 漏报面 + N-3 扩展名漏列面）
+- [x] T001 [P] 建立 fixture 目录骨架：创建 `tests/fixtures/spec-drift/` 及子目录占位（`.gitkeep`），子目录含 `fresh-comment-only/`、`fresh-jsdoc-only/`、`fresh-format-only/`、`fresh-syntactic-noise/`、`stale-identifier/`、`stale-literal/`、`stale-control-flow/`、`stale-unary-prefix/`、`stale-unary-postfix/`、`stale-decl-kind/`、`stale-overload-second/`、`sibling-symbol-unaffected/`、`fingerprint-version-mismatch/`、`lock-corrupt-*/`、`member-rejected/`、`reexport-unsupported/`、`unsupported-language/`、`parser-degrade/`、`graph-unavailable/`、**`stale-using-vs-var/`**、**`stale-await-using/`**、**`lang-mts-cts/`**（后三项为 Codex round-2 新增：N-1 CRITICAL 漏报面 + N-3 扩展名漏列面）
   **验收标准**：目录结构存在，`git status` 可见新增空目录占位文件；不含任何逻辑代码
   **对应 FR/SC**：无（测试基础设施）
 
-- [ ] T002 [P] 准备 C1 端到端公共 fixture：在 `tests/fixtures/spec-drift/e2e/` 下放置一个真实可编译的 TS 源文件（含至少一个 top-level 具名导出函数）与一份对应的引用清单 `manifest.json`（`{ id, ref, docPath, line }[]`，`ref` 为 `<relPath>::<symbolName>` 形式）
+- [x] T002 [P] 准备 C1 端到端公共 fixture：在 `tests/fixtures/spec-drift/e2e/` 下放置一个真实可编译的 TS 源文件（含至少一个 top-level 具名导出函数）与一份对应的引用清单 `manifest.json`（`{ id, ref, docPath, line }[]`，`ref` 为 `<relPath>::<symbolName>` 形式）
   **验收标准**：`node -e "require('ts-morph')"` 能正常解析该源文件；manifest JSON 校验通过（无语法错误）
   **对应 FR/SC**：FR-001、SC-006
 
@@ -37,22 +37,22 @@
 
 ## Phase 2: Foundational（阻塞性前置依赖，C1/C2/C3 共享）
 
-- [ ] T003 [TEST][P] 编写 `scripts/lib/spec-drift-dist-loader.mjs` 单测 `tests/unit/spec-drift-dist-loader.test.ts`：覆盖 (a) 目标 dist 文件不存在 → 返回 `{ ok:false, reason:'dist-missing' }`；(b) 目标文件存在但 import 时抛语法错误 → 返回 `{ ok:false, reason:'dist-load-failed' }`（用临时写入非法语法的假 dist 文件模拟）；(c) 传递依赖加载失败 → 同上 `dist-load-failed`；(d) 正常加载 → 返回 `{ ok:true, mod }`
+- [x] T003 [TEST][P] 编写 `scripts/lib/spec-drift-dist-loader.mjs` 单测 `tests/unit/spec-drift-dist-loader.test.ts`：覆盖 (a) 目标 dist 文件不存在 → 返回 `{ ok:false, reason:'dist-missing' }`；(b) 目标文件存在但 import 时抛语法错误 → 返回 `{ ok:false, reason:'dist-load-failed' }`（用临时写入非法语法的假 dist 文件模拟）；(c) 传递依赖加载失败 → 同上 `dist-load-failed`；(d) 正常加载 → 返回 `{ ok:true, mod }`
   **依赖**：T001
   **验收标准**：测试文件存在且执行失败（模块 `spec-drift-dist-loader.mjs` 尚不存在），红态确认
   **对应 FR/SC**：FR-011（W-1 全部失败模式覆盖）
 
-- [ ] T004 实现 `scripts/lib/spec-drift-dist-loader.mjs`：`loadDistModule(projectRoot, relDistPath)`，`existsSync` 检查 + `try/catch` 包裹 `await import(pathToFileURL(distPath).href)`，捕获全部失败模式（语法错误/传递依赖失败/初始化抛错）统一归为 `dist-load-failed`
+- [x] T004 实现 `scripts/lib/spec-drift-dist-loader.mjs`：`loadDistModule(projectRoot, relDistPath)`，`existsSync` 检查 + `try/catch` 包裹 `await import(pathToFileURL(distPath).href)`，捕获全部失败模式（语法错误/传递依赖失败/初始化抛错）统一归为 `dist-load-failed`
   **依赖**：T003
   **验收标准**：T003 全部用例转绿；`npx vitest run tests/unit/spec-drift-dist-loader.test.ts` 零失败
   **对应 FR/SC**：FR-011
 
-- [ ] T005 [TEST][P] 编写 `scripts/lib/spec-drift-lock-io.mjs` 单测 `tests/unit/spec-drift-lock-io.test.ts`：覆盖 (a) lock 文件不存在 → `drift link` 首次运行自动创建（`{schemaVersion, anchors:[]}`）；(b) `anchors` 空数组视为非损坏；(c) 原子写（临时文件+rename，写入后无残留 `*.tmp-*`）；(d) 检测到残留 `*.tmp-*` → 报错拒绝继续；(e) 非法 JSON → `lock-corrupt`；(f) 顶层缺 `schemaVersion` 或 `anchors` 非数组 → `lock-corrupt`；(g) `schemaVersion` 与当前工具 `LOCK_SCHEMA_VERSION` 不兼容 → `lock-corrupt`；(h) `anchors` 任一条目缺 FR-003 十项必需字段（`id/ref/docPath/line/symbolId/fingerprint/fingerprintVersion/normalizationProfile/resolvedFrom/matchKind`）中任一 → `lock-corrupt`；(i) 条目字段类型不符 → `lock-corrupt`；(j) 条目含被禁字段（`status`/`stale`/`fresh`）→ `lock-corrupt`
+- [x] T005 [TEST][P] 编写 `scripts/lib/spec-drift-lock-io.mjs` 单测 `tests/unit/spec-drift-lock-io.test.ts`：覆盖 (a) lock 文件不存在 → `drift link` 首次运行自动创建（`{schemaVersion, anchors:[]}`）；(b) `anchors` 空数组视为非损坏；(c) 原子写（临时文件+rename，写入后无残留 `*.tmp-*`）；(d) 检测到残留 `*.tmp-*` → 报错拒绝继续；(e) 非法 JSON → `lock-corrupt`；(f) 顶层缺 `schemaVersion` 或 `anchors` 非数组 → `lock-corrupt`；(g) `schemaVersion` 与当前工具 `LOCK_SCHEMA_VERSION` 不兼容 → `lock-corrupt`；(h) `anchors` 任一条目缺 FR-003 十项必需字段（`id/ref/docPath/line/symbolId/fingerprint/fingerprintVersion/normalizationProfile/resolvedFrom/matchKind`）中任一 → `lock-corrupt`；(i) 条目字段类型不符 → `lock-corrupt`；(j) 条目含被禁字段（`status`/`stale`/`fresh`）→ `lock-corrupt`
   **依赖**：T001
   **验收标准**：测试文件存在且执行失败（`readLock`/`writeLockAtomic` 尚未实现），红态确认
   **对应 FR/SC**：FR-003、FR-015
 
-- [ ] T006 实现 `scripts/lib/spec-drift-lock-io.mjs`：导出 `readLock(lockPath)`（返回 `{corrupt, reason?, anchors}` 或正常结构）、`writeLockAtomic(lockPath, data)`（临时文件+rename）、`LOCK_SCHEMA_VERSION` 常量、必需字段全集校验（十项）+ 被禁字段检测 + 残留 `*.tmp-*` glob 检测
+- [x] T006 实现 `scripts/lib/spec-drift-lock-io.mjs`：导出 `readLock(lockPath)`（返回 `{corrupt, reason?, anchors}` 或正常结构）、`writeLockAtomic(lockPath, data)`（临时文件+rename）、`LOCK_SCHEMA_VERSION` 常量、必需字段全集校验（十项）+ 被禁字段检测 + 残留 `*.tmp-*` glob 检测
   **依赖**：T005
   **验收标准**：T005 全部用例转绿；`npx vitest run tests/unit/spec-drift-lock-io.test.ts` 零失败
   **对应 FR/SC**：FR-003、FR-015
@@ -67,80 +67,80 @@
 
 ### Resolve（建锚解析）
 
-- [ ] T007 [P] 准备 resolve 单测所需 fixture：在 `tests/fixtures/spec-drift/resolve/` 下放置覆盖 exact/partial-name/levenshtein 命中、ambiguous（同文件多候选）、unresolved（裸 symbol 名/文件不存在）、member（`Class.method` 形式引用）、非 TS/JS 语言（`.py` 文件）各态的源文件 + manifest 条目
+- [x] T007 [P] 准备 resolve 单测所需 fixture：在 `tests/fixtures/spec-drift/resolve/` 下放置覆盖 exact/partial-name/levenshtein 命中、ambiguous（同文件多候选）、unresolved（裸 symbol 名/文件不存在）、member（`Class.method` 形式引用）、非 TS/JS 语言（`.py` 文件）各态的源文件 + manifest 条目
   **依赖**：T001
   **验收标准**：每类 fixture 至少一组 before/after 或独立源文件，人工核对与 spec Edge Cases 逐项对应
   **对应 FR/SC**：FR-001、FR-009(a)(d)
 
-- [ ] T008 [TEST] 编写 `scripts/lib/spec-drift-resolve.mjs` 单测 `tests/unit/spec-drift-resolve.test.ts`（基于 T007 fixture）：exact/partial-name/levenshtein 命中各自 `matchKind` 正确；ambiguous 返回 top-3 候选、不自动绑定；unresolved（裸 symbol 名与文件不存在两种子情形）；`Class.method` member 引用 MUST 被拒绝，返回 `fingerprint-unavailable` + reason "member 粒度锚点本期不支持，请锚定 top-level symbol"；非 TS/JS 语言引用 → `unsupported-language`，MUST NOT 有 fallback 指纹路径；`drift link --refresh` 重新解析出 ambiguous/unresolved 时 MUST 保留刷新前最后一次已知良好的 `symbolId`/`fingerprint`（US1 Acceptance Scenario 5, W1）
+- [x] T008 [TEST] 编写 `scripts/lib/spec-drift-resolve.mjs` 单测 `tests/unit/spec-drift-resolve.test.ts`（基于 T007 fixture）：exact/partial-name/levenshtein 命中各自 `matchKind` 正确；ambiguous 返回 top-3 候选、不自动绑定；unresolved（裸 symbol 名与文件不存在两种子情形）；`Class.method` member 引用 MUST 被拒绝，返回 `fingerprint-unavailable` + reason "member 粒度锚点本期不支持，请锚定 top-level symbol"；非 TS/JS 语言引用 → `unsupported-language`，MUST NOT 有 fallback 指纹路径；`drift link --refresh` 重新解析出 ambiguous/unresolved 时 MUST 保留刷新前最后一次已知良好的 `symbolId`/`fingerprint`（US1 Acceptance Scenario 5, W1）
   **依赖**：T007
   **验收标准**：测试执行失败（`spec-drift-resolve.mjs` 未实现），红态确认
   **对应 FR/SC**：FR-001、FR-002、FR-009(a)(d)、US1-AS5
 
-- [ ] T009 实现 `scripts/lib/spec-drift-resolve.mjs`：`parseManifest(path)`（JSON/YAML 解析）、`resolveReference(entry, projectRoot)`——按 plan §6.4 流程（`parseCanonicalSymbolId` 解析 file-qualified ref → 按 filePart 分组去重调用一次 `analyzeFiles` → `buildMinimalGraph()`（迁移自 F189 prototype `resolve.ts::buildGraphFromFiles`）构造仅含目标文件的最小 GraphJSON → 传入动态 import 的 `canonicalizeSymbolId`/`resolveSymbolFuzzy` 完成解析）；member（含 `.` 的 symbolId）显式拒绝；非 TS/JS 扩展名显式标 `unsupported-language`，不做 fallback；`--refresh` 分支保留刷新前基线（W1）
+- [x] T009 实现 `scripts/lib/spec-drift-resolve.mjs`：`parseManifest(path)`（JSON/YAML 解析）、`resolveReference(entry, projectRoot)`——按 plan §6.4 流程（`parseCanonicalSymbolId` 解析 file-qualified ref → 按 filePart 分组去重调用一次 `analyzeFiles` → `buildMinimalGraph()`（迁移自 F189 prototype `resolve.ts::buildGraphFromFiles`）构造仅含目标文件的最小 GraphJSON → 传入动态 import 的 `canonicalizeSymbolId`/`resolveSymbolFuzzy` 完成解析）；member（含 `.` 的 symbolId）显式拒绝；非 TS/JS 扩展名显式标 `unsupported-language`，不做 fallback；`--refresh` 分支保留刷新前基线（W1）
   **依赖**：T008、T004（依赖 dist-loader）
   **验收标准**：T008 全部用例转绿；`npx vitest run tests/unit/spec-drift-resolve.test.ts` 零失败
   **对应 FR/SC**：FR-001、FR-002、FR-009(a)(d)、US1-AS5
 
 ### Fingerprint（C1 过渡态，迁移 prototype）
 
-- [ ] T010 [TEST] 编写 `scripts/lib/spec-drift-fingerprint.mjs` 单测 `tests/unit/spec-drift-fingerprint.test.ts`（C1 过渡态范围）：验证同一 symbol 未改动时指纹稳定不变；任意字节级改动（含格式化）产生不同指纹（此阶段**不要求** CL-3 的"注释/JSDoc/格式化 → fresh"语义，该语义是 C3 验收目标，T030 会重写并扩展本测试）；`NORMALIZATION_PROFILE` 常量值为 `"source-slice-whitespace-v1"`
+- [x] T010 [TEST] 编写 `scripts/lib/spec-drift-fingerprint.mjs` 单测 `tests/unit/spec-drift-fingerprint.test.ts`（C1 过渡态范围）：验证同一 symbol 未改动时指纹稳定不变；任意字节级改动（含格式化）产生不同指纹（此阶段**不要求** CL-3 的"注释/JSDoc/格式化 → fresh"语义，该语义是 C3 验收目标，T030 会重写并扩展本测试）；`NORMALIZATION_PROFILE` 常量值为 `"source-slice-whitespace-v1"`
   **依赖**：T001
   **验收标准**：测试执行失败（模块未实现），红态确认
   **对应 FR/SC**：FR-003、FR-009(b)（版本字段声明）
 
-- [ ] T011 实现 `scripts/lib/spec-drift-fingerprint.mjs`（过渡版）：迁移 F189 prototype `fingerprint.ts` 的"symbol 源切片 + 逐行空白归一化"逻辑，导出 `computeCanonicalFingerprint`（此阶段内部实现为过渡算法）、`FINGERPRINT_VERSION='1'`、`NORMALIZATION_PROFILE='source-slice-whitespace-v1'`
+- [x] T011 实现 `scripts/lib/spec-drift-fingerprint.mjs`（过渡版）：迁移 F189 prototype `fingerprint.ts` 的"symbol 源切片 + 逐行空白归一化"逻辑，导出 `computeCanonicalFingerprint`（此阶段内部实现为过渡算法）、`FINGERPRINT_VERSION='1'`、`NORMALIZATION_PROFILE='source-slice-whitespace-v1'`
   **依赖**：T010
   **验收标准**：T010 全部用例转绿
   **对应 FR/SC**：FR-003、FR-009(b)
 
 ### Check（精确匹配 + 状态矩阵）
 
-- [ ] T012 [P] 准备 check 单测 fixture：`tests/fixtures/spec-drift/sibling-symbol-unaffected/`（同文件两 symbol，改动 A 不影响锚定 B）、`tests/fixtures/spec-drift/graph-unavailable/`（构造场景：临时移除/改名 `dist/core/ast-analyzer.js` 路径引用，及写入语法错误的假 dist 模块两种子场景）、`tests/fixtures/spec-drift/reexport-unsupported/`（`export { foo } from './other'` 形态）、`tests/fixtures/spec-drift/parser-degrade/`（如 `export const foo = ;` 语法错误但 ts-morph 错误恢复不抛异常）、`tests/fixtures/spec-drift/lock-corrupt-*/`（若 T005 尚未覆盖的边界补齐）
+- [x] T012 [P] 准备 check 单测 fixture：`tests/fixtures/spec-drift/sibling-symbol-unaffected/`（同文件两 symbol，改动 A 不影响锚定 B）、`tests/fixtures/spec-drift/graph-unavailable/`（构造场景：临时移除/改名 `dist/core/ast-analyzer.js` 路径引用，及写入语法错误的假 dist 模块两种子场景）、`tests/fixtures/spec-drift/reexport-unsupported/`（`export { foo } from './other'` 形态）、`tests/fixtures/spec-drift/parser-degrade/`（如 `export const foo = ;` 语法错误但 ts-morph 错误恢复不抛异常）、`tests/fixtures/spec-drift/lock-corrupt-*/`（若 T005 尚未覆盖的边界补齐）
   **依赖**：T001
   **验收标准**：每个 fixture 目录含最小可复现场景文件，注释说明触发的目标状态
   **对应 FR/SC**：FR-004、FR-009(a)、FR-011、FR-012、SC-002、SC-003
 
-- [ ] T013 [TEST] 编写 `scripts/lib/spec-drift-check.mjs` 单测 `tests/unit/spec-drift-check.test.ts`（基于 T012 fixture）：精确匹配（构造"同名新 symbol"场景，验证不被误洗成 fresh，MUST NOT 重新 fuzzy 解析）；orphaned（文件整体删除 / symbol 改名消失两种子场景）；同文件他 symbol 变动不误伤本锚（SC-002）；`graph-unavailable`（report 级，`degraded:true`，两种子场景：dist-missing 与 dist-load-failed）；`parser-degrade` 按 §9.1 步骤 4 新判据（语法 diagnostic 非空 或 parser 回退 tree-sitter）构造，**MUST NOT** 依赖 `analyzeFiles` 抛异常；`locateExportedNodes` 三类失败（`node-locate-failed`/`node-locate-ambiguous`/`reexport-unsupported`）各自映射 `fingerprint-unavailable`；**混合优先级专项**：`graph-unavailable` + `stale` 共存时整体 exitCode MUST 为 2（而非 1）
+- [x] T013 [TEST] 编写 `scripts/lib/spec-drift-check.mjs` 单测 `tests/unit/spec-drift-check.test.ts`（基于 T012 fixture）：精确匹配（构造"同名新 symbol"场景，验证不被误洗成 fresh，MUST NOT 重新 fuzzy 解析）；orphaned（文件整体删除 / symbol 改名消失两种子场景）；同文件他 symbol 变动不误伤本锚（SC-002）；`graph-unavailable`（report 级，`degraded:true`，两种子场景：dist-missing 与 dist-load-failed）；`parser-degrade` 按 §9.1 步骤 4 新判据（语法 diagnostic 非空 或 parser 回退 tree-sitter）构造，**MUST NOT** 依赖 `analyzeFiles` 抛异常；`locateExportedNodes` 三类失败（`node-locate-failed`/`node-locate-ambiguous`/`reexport-unsupported`）各自映射 `fingerprint-unavailable`；**混合优先级专项**：`graph-unavailable` + `stale` 共存时整体 exitCode MUST 为 2（而非 1）
   **依赖**：T012、T009（resolve 提供的 symbolId 供 check 消费）、T011（过渡态 fingerprint）
   **验收标准**：测试执行失败（`spec-drift-check.mjs` 未实现），红态确认
   **对应 FR/SC**：FR-004、FR-005、FR-009(a)、FR-011、FR-012、SC-002、SC-003
 
-- [ ] T014 实现 `scripts/lib/spec-drift-check.mjs`：按 plan §9.1 流程——语言判定（规范化扩展名，MUST NOT 用 `startLine===undefined` 判据）→ 文件存在性 → `analyzeFiles` 异常分流（`ENOENT`→orphaned，其他→parser-degrade）→ 显式 parser-health 判定（tree-sitter fallback 或语法 diagnostic 非空→parser-degrade）→ 逐锚 `locateExportedNodes` 三元组匹配（exportName+startLine+sourceFile）→ 指纹比对（fresh/stale）；导出 `checkOneAnchor`、`computeReportExitCode`（严格按混合优先级 5 层求值，不按数组出现顺序）
+- [x] T014 实现 `scripts/lib/spec-drift-check.mjs`：按 plan §9.1 流程——语言判定（规范化扩展名，MUST NOT 用 `startLine===undefined` 判据）→ 文件存在性 → `analyzeFiles` 异常分流（`ENOENT`→orphaned，其他→parser-degrade）→ 显式 parser-health 判定（tree-sitter fallback 或语法 diagnostic 非空→parser-degrade）→ 逐锚 `locateExportedNodes` 三元组匹配（exportName+startLine+sourceFile）→ 指纹比对（fresh/stale）；导出 `checkOneAnchor`、`computeReportExitCode`（严格按混合优先级 5 层求值，不按数组出现顺序）
   **依赖**：T013
   **验收标准**：T013 全部用例转绿；`npx vitest run tests/unit/spec-drift-check.test.ts` 零失败
   **对应 FR/SC**：FR-004、FR-005、FR-009(a)、FR-011、FR-012
 
 ### CLI 骨架
 
-- [ ] T015 [TEST] 编写 `scripts/spec-drift-cli.mjs` 单测 `tests/unit/spec-drift-cli.test.ts`：参数解析（`link`/`check`/`unlink` 子命令 dispatch、`--help` 打印用法后 exit 0、`--format json` 输出遵循 §状态矩阵字段的 `DriftReport`/操作摘要结构、`--lock`/`--project-root` 覆盖默认路径）；三命令退出码分别遵循 plan §10.2 退出码表（0/1/2/3 各态映射，`link`/`unlink` 不使用数值 1）
+- [x] T015 [TEST] 编写 `scripts/spec-drift-cli.mjs` 单测 `tests/unit/spec-drift-cli.test.ts`：参数解析（`link`/`check`/`unlink` 子命令 dispatch、`--help` 打印用法后 exit 0、`--format json` 输出遵循 §状态矩阵字段的 `DriftReport`/操作摘要结构、`--lock`/`--project-root` 覆盖默认路径）；三命令退出码分别遵循 plan §10.2 退出码表（0/1/2/3 各态映射，`link`/`unlink` 不使用数值 1）
   **依赖**：T001
   **验收标准**：测试执行失败（`spec-drift-cli.mjs` 未实现），红态确认
   **对应 FR/SC**：FR-014
 
-- [ ] T016 实现 `scripts/spec-drift-cli.mjs`：薄壳，解析子命令与参数后调用 `spec-drift-core.mjs` 的 `linkReferences`/`checkAnchors`/`unlinkAnchor`，格式化输出（人类可读 + `--format json`），按状态矩阵映射进程 `exitCode`；导出 `main()` 供 e2e 测试以"公开入口"方式调用
+- [x] T016 实现 `scripts/spec-drift-cli.mjs`：薄壳，解析子命令与参数后调用 `spec-drift-core.mjs` 的 `linkReferences`/`checkAnchors`/`unlinkAnchor`，格式化输出（人类可读 + `--format json`），按状态矩阵映射进程 `exitCode`；导出 `main()` 供 e2e 测试以"公开入口"方式调用
   **依赖**：T015、T009、T014、T006
   **验收标准**：T015 全部用例转绿
   **对应 FR/SC**：FR-014
 
-- [ ] T017 在 `package.json` 新增 3 条 script：`"drift:link": "node scripts/spec-drift-cli.mjs link"`、`"drift:check": "node scripts/spec-drift-cli.mjs check"`、`"drift:unlink": "node scripts/spec-drift-cli.mjs unlink"`
+- [x] T017 在 `package.json` 新增 3 条 script：`"drift:link": "node scripts/spec-drift-cli.mjs link"`、`"drift:check": "node scripts/spec-drift-cli.mjs check"`、`"drift:unlink": "node scripts/spec-drift-cli.mjs unlink"`
   **依赖**：T016
   **验收标准**：`npm run drift:check -- --help` 可执行且输出用法说明，退出码 0
   **对应 FR/SC**：FR-014
 
 ### C1 阶段验证
 
-- [ ] T018 [TEST] 编写 C1 端到端测试 `tests/integration/spec-drift-cli-e2e.test.ts`：**MUST 经 `npm run drift:*` 执行**（`spawnSync('npm', ['run','drift:check','--','--format','json'], {cwd: tmpRepo})`），而非仅 spawn 脚本路径。跑通步骤：(1) 准备临时目录+manifest+T002 fixture 源文件；(2) `drift link --manifest ...` → lock 新增记录、退出码 0；(3) 同 `id` 未加 `--refresh` 重复 `link` → 拒绝且退出码非 0（FR-002）；(4) `drift link --refresh` → 指纹按当前代码重算；(5) `drift check` → fresh（此阶段为过渡态语义，仅验证"未改动→fresh"）、退出码 0；(6) 修改源文件标识符 → `drift check` → stale、退出码 1；(7) `drift unlink <id>` → 记录移除、退出码 0；(8) `--help` 与 `--format json` 分别验证
+- [x] T018 [TEST] 编写 C1 端到端测试 `tests/integration/spec-drift-cli-e2e.test.ts`：**MUST 经 `npm run drift:*` 执行**（`spawnSync('npm', ['run','drift:check','--','--format','json'], {cwd: tmpRepo})`），而非仅 spawn 脚本路径。跑通步骤：(1) 准备临时目录+manifest+T002 fixture 源文件；(2) `drift link --manifest ...` → lock 新增记录、退出码 0；(3) 同 `id` 未加 `--refresh` 重复 `link` → 拒绝且退出码非 0（FR-002）；(4) `drift link --refresh` → 指纹按当前代码重算；(5) `drift check` → fresh（此阶段为过渡态语义，仅验证"未改动→fresh"）、退出码 0；(6) 修改源文件标识符 → `drift check` → stale、退出码 1；(7) `drift unlink <id>` → 记录移除、退出码 0；(8) `--help` 与 `--format json` 分别验证
   **依赖**：T017、T014、T009
   **验收标准**：全部步骤断言通过，`npx vitest run tests/integration/spec-drift-cli-e2e.test.ts` 零失败
   **对应 FR/SC**：FR-002、FR-014、SC-006
 
-- [ ] T019 [TEST][P] 编写零 LLM 导入边界测试 `tests/unit/spec-drift-no-llm-import.test.ts`：**两层**——L1 直接导入：静态读取全部 `scripts/spec-drift-*.mjs`/`scripts/lib/spec-drift-*.mjs` 源码，正则断言不含 `@anthropic-ai/sdk`/`openai`/`@google/generative-ai` 等 provider 包字面量；L2 传递闭包：从四个动态 import 入口（`dist/core/ast-analyzer.js`、`dist/adapters/index.js`、`dist/knowledge-graph/query-helpers.js`、`dist/knowledge-graph/relativize.js`）递归静态解析 `import`/`export from` 语句构建可达模块集，断言集合中无 provider 包引用；测试注释显式标注"L2 是静态可达性分析，不覆盖运行时 eval/字符串拼接构造的动态 import"（诚实边界）
+- [x] T019 [TEST][P] 编写零 LLM 导入边界测试 `tests/unit/spec-drift-no-llm-import.test.ts`：**两层**——L1 直接导入：静态读取全部 `scripts/spec-drift-*.mjs`/`scripts/lib/spec-drift-*.mjs` 源码，正则断言不含 `@anthropic-ai/sdk`/`openai`/`@google/generative-ai` 等 provider 包字面量；L2 传递闭包：从四个动态 import 入口（`dist/core/ast-analyzer.js`、`dist/adapters/index.js`、`dist/knowledge-graph/query-helpers.js`、`dist/knowledge-graph/relativize.js`）递归静态解析 `import`/`export from` 语句构建可达模块集，断言集合中无 provider 包引用；测试注释显式标注"L2 是静态可达性分析，不覆盖运行时 eval/字符串拼接构造的动态 import"（诚实边界）
   **依赖**：T016（源文件需已全部存在才能完整扫描）
   **验收标准**：`npx vitest run tests/unit/spec-drift-no-llm-import.test.ts` 零失败
   **对应 FR/SC**：FR-013、SC-007(a)
 
-- [ ] T020 C1 阶段收尾验证（非新增代码，验证性任务）：跑 `npx vitest run`（全部 C1 相关测试文件）确认零失败；跑 `git diff --stat $(git merge-base master HEAD) HEAD -- src/knowledge-graph src/core/skeleton-hash.ts src/core/ast-analyzer.ts src/panoramic src/batch` 确认为空（SC-008）；人工核对 US1/US2 全部 Acceptance Scenario 中"除 C3 canonical AST 语义外"的条目均已验证（US2-AS1 的完整 fresh/stale 语义留待 C3 收尾时补验）；触发 Codex 对抗审查（`codex:codex-rescue`）后再 commit（显式路径，禁 `git add -A`）
+- [x] T020 C1 阶段收尾验证（非新增代码，验证性任务）：跑 `npx vitest run`（全部 C1 相关测试文件）确认零失败；跑 `git diff --stat $(git merge-base master HEAD) HEAD -- src/knowledge-graph src/core/skeleton-hash.ts src/core/ast-analyzer.ts src/panoramic src/batch` 确认为空（SC-008）；人工核对 US1/US2 全部 Acceptance Scenario 中"除 C3 canonical AST 语义外"的条目均已验证（US2-AS1 的完整 fresh/stale 语义留待 C3 收尾时补验）；触发 Codex 对抗审查（`codex:codex-rescue`）后再 commit（显式路径，禁 `git add -A`）
   **依赖**：T018、T019、T009、T014
   **验收标准**：三项检查全部通过并记录于 commit message
   **对应 FR/SC**：FR-010、SC-007(a)、SC-008

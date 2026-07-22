@@ -1,0 +1,8 @@
+[
+  {
+    "id": "e2e-addNumbers",
+    "ref": "src/sample-module.ts::addNumbers",
+    "docPath": "docs/sample.md",
+    "line": 12
+  }
+]
