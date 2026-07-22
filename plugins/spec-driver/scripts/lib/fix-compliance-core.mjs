@@ -52,6 +52,85 @@ export const ARTIFACT_PATH_REGEX = /specs\/\d+-fix-[a-z0-9-]+\/(?:fix-report\.md
 /** Bash 提名额外要求命令含写入指示符（重定向/heredoc/tee），排除 echo/cat 纯提及旧路径的读形态 */
 export const BASH_WRITE_INDICATOR_REGEX = /(?:>>?|<<|\btee\b)/;
 
+/**
+ * 改名目标合法命名校验（F224 FR-001）：改名后的新目录必须仍满足 `specs/NNN-fix-<name>` 命名规范
+ * 才能被采信为新候选。否则说明候选已被移动到无法机械识别的位置（改名到非规范目录），
+ * 此时继续拿旧路径去撞磁盘核验只会产生误报，须转入 FR-004 降级路径。
+ * 整串锚定并允许尾随斜杠，与 ARTIFACT_PATH_REGEX 的目录前缀语义同源。
+ */
+export const FIX_DIR_NAME_REGEX = /^specs\/\d+-fix-[a-z0-9-]+\/?$/;
+
+/**
+ * 目录改名命令**段**识别（F224 FR-001 + Codex 复审保守化）：捕获 `mv` / `git mv` 之后、
+ * 到最近一个命令分隔符（换行 / `;` / `&` / `|`）之前的整段参数文本，交由 parseRenameOperands
+ * 做 token 级解析。全局匹配以支持同一条复合命令内串联的多次改名。
+ *
+ * 改为"先取段、再数操作数"是因为旧的"直接捕获相邻两 token 当 src/dst"写法会误解析异常形态：
+ * `mv A B C`（真实语义是把 A、B 移入目录 C）会被读成 `A → B` 的改名，进而误置 ambiguous 触发降级。
+ * 段捕获量词有界（≤ 400 字符）且字符类排除分隔符 → 单趟贪婪匹配，无灾难性回溯风险。
+ */
+export const RENAME_COMMAND_SEGMENT_REGEX = /(?:\bgit\s+mv\b|\bmv\b)([^\n;&|]{0,400})/g;
+
+/**
+ * 其后紧跟独立参数的 option（`mv -t DIR SRC` / `mv -S SUFFIX SRC DST`）。
+ * 这类形态下操作数位次与常规 `mv SRC DST` 错位，出现即整条跳过（保守化：宁可漏跟随，不可跟错）。
+ */
+const RENAME_ARG_TAKING_OPTIONS = new Set(['-t', '--target-directory', '-S', '--suffix']);
+
+/** option token 数量上界：超界视为无法可靠解析的异常形态，整条跳过（与既有有界量词语义等价） */
+const RENAME_MAX_OPTION_TOKENS = 8;
+
+/**
+ * 解析一段 `mv` 参数文本，仅在能**唯一确定** `<src> <dst>` 时返回二元组，否则返回 null（整条跳过）。
+ * 保守化规则（F224 Codex 复审）：
+ * - 非 option 操作数不恰好为 2 个 → null（覆盖 `mv A B C` 多操作数、含空格引号路径被拆散等形态）
+ * - 出现带参数 option（`-t` / `-S` / `--target-directory` / `--suffix`）→ null（位次错位）
+ * - option token 数超过上界 → null
+ * 引号仅剥除"首尾成对且内部无引号"的简单包裹；specs/NNN-fix-<name> 命名规范本身不含空格，
+ * 故刻意不解析 shell 转义/通配符——不匹配即退化为"不识别"，不会误跟随。
+ * 注意：本函数只决定"命令形态能否被识别"，**不**放宽"仅当 src 精确等于当前已跟踪目录才采信"这一安全约束。
+ * @param {string} segment
+ * @returns {[string, string]|null}
+ */
+export function parseRenameOperands(segment) {
+  const tokens = String(segment).trim().split(/\s+/).filter(Boolean);
+  const operands = [];
+  let optionCount = 0;
+  let endOfOptions = false;
+  for (const token of tokens) {
+    if (!endOfOptions && token === '--') {
+      endOfOptions = true;
+      optionCount += 1;
+      continue;
+    }
+    if (!endOfOptions && token.length > 1 && token.startsWith('-')) {
+      if (RENAME_ARG_TAKING_OPTIONS.has(token.split('=')[0])) return null;
+      optionCount += 1;
+      continue;
+    }
+    operands.push(token);
+  }
+  if (optionCount > RENAME_MAX_OPTION_TOKENS) return null;
+  if (operands.length !== 2) return null;
+  const unquote = (t) => (t.length >= 2 && (t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0]
+    && !t.slice(1, -1).includes(t[0])
+    ? t.slice(1, -1)
+    : t);
+  return [unquote(operands[0]), unquote(operands[1])];
+}
+
+/**
+ * 原地编辑命令识别（F224 FR-002/FR-003）：可追加的正则列表，当前覆盖 `sed -i` 与 `perl -i`。
+ * 这一组正则只放宽"这条 Bash 命令要不要进入路径扫描"的**准入**，绝不放宽"扫描到什么才算写入"的
+ * **判据**——命中后仍必须让命令文本完整匹配 ARTIFACT_PATH_REGEX 才会更新候选，避免把纯路径提及误判为写入。
+ * `.{0,40}?` 为有界惰性量词（杜绝长命令下的灾难性回溯），兼容 `sed -i ''` / `sed -i.bak` / `perl -i -pe` 等变体。
+ * FR-003 的可扩展性以"向本数组追加一条正则"这一最轻形式满足，不引入 handler 注册表或策略接口。
+ */
+export const INLINE_EDIT_INDICATOR_REGEXES = [
+  /\bsed\b.{0,40}?-i\b/,
+  /\bperl\b.{0,40}?-i\b/,
+];
+
 /** 修复收口制品必填章节锚点（既有 Phase 1 模板固有 Root Cause 行） */
 export const ROOT_CAUSE_HEADING_REGEX = /Root Cause/i;
 
@@ -296,13 +375,15 @@ function splitCommandTextSegments(command) {
 }
 
 /**
- * 单个子命令段是否含写入指示符（重定向/heredoc/tee）。
- * 收口为单一谓词，便于未来并入其它写入形态（如原地编辑）而无需改动分段循环。
+ * 单个子命令段是否含写入指示符（重定向/heredoc/tee，或 F224 的原地编辑 `sed -i` / `perl -i`）。
+ * 写入形态判定收口为单一谓词：新形态并入此处的 OR 分支即可自动获得 F225 的「同段共现」语义，
+ * 无需改动 resolveFeatureDirCandidate 的分段循环（F225 plan §合并预案指定的单点合并位）。
  * @param {string} segment
  * @returns {boolean}
  */
 function hasBashWriteIndicator(segment) {
-  return BASH_WRITE_INDICATOR_REGEX.test(segment);
+  return BASH_WRITE_INDICATOR_REGEX.test(segment)
+    || INLINE_EDIT_INDICATOR_REGEXES.some((re) => re.test(segment));
 }
 
 /**
@@ -319,23 +400,76 @@ function hasBashWriteIndicator(segment) {
  * 说明：诚实流程的 fix-report.md 由编排器亲自（Phase 1 inline 豁免）经 Write 写入主 transcript，
  * 提名可靠；verification-report.md 由 verify 子代理在 sidechain 写入、主 transcript 可能不可见，
  * 但目录前缀由 fix-report.md 提名即可，verification-report 的存在性走磁盘核验。
+ *
+ * F224 在上述语义之上补两处解析盲区（判据不放宽，只放宽准入与跟随）：
+ * - 盲区 A 改名跟随（FR-001）：`git mv`/`mv` 把已提名的候选目录搬走后，候选须跟随到新路径，
+ *   否则拿已不存在的旧路径去撞磁盘核验必然误报"未建立特性目录"。改名识别刻意**不受**写指示符门禁约束
+ *   （改名命令天然不含重定向符），但只在 src **精确等于**当前已知候选时才采信——不响应 transcript 中
+ *   任意无关的 mv，天然维持 FR-007 的锚定语义；与写入提名一样按段执行（见下方循环）。
+ * - 盲区 B 原地编辑准入（FR-002）：`sed -i` / `perl -i` 这类不含重定向符但确实写入制品的命令，
+ *   过去被写指示符门禁挡在扫描之外。现以 INLINE_EDIT_INDICATOR_REGEXES 拓宽门禁，命中后仍走同一条
+ *   ARTIFACT_PATH_REGEX 判据，写入证据的认定标准与改动前逐字一致。
+ *
+ * `ambiguous` 仅在"制品目录已被改名搬走、但当前目录名不满足 NNN-fix-<name> 从而无法机械确定位置"时置真，
+ * 供编排层转入 FR-004/FR-005 的 fail-open 降级 + 诊断留痕。刻意不为"只写了非制品文件"置真——
+ * 目录路径已知时磁盘检查足以裁决，该情形应继续交既有严格判据硬阻断，不得借降级通道放行。
+ *
+ * 实现上分离两个状态（Codex 复审订正，FR-008）：`trackedDir` 无论命名是否规范都跟踪制品当前所在目录，
+ * `candidate` 只在 trackedDir 命名规范时才等于它。故 `ambiguous` 是**可恢复**的——
+ * `合法 → 非规范 → 合法` 的多跳改名链能一路续跟到最终态并恢复出确定候选，而不会停在中间态。
+ * 若只用单一 candidate 变量，第一跳置 null 后 `src === candidate` 判断即失效，后续跳无法续跟。
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
  * @param {number|null} anchorLineIndex
- * @returns {{ path: string|null }}
+ * @returns {{ path: string|null, ambiguous: boolean }}
  */
 export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
   const list = Array.isArray(entries) ? entries : [];
   const anchor = typeof anchorLineIndex === 'number' ? anchorLineIndex : -1;
+  // trackedDir：制品当前实际所在目录，**无论命名是否规范**都持续跟踪，使多跳改名可续跟（FR-008）
+  // candidate：对外暴露的合法候选，仅当 trackedDir 命中 FIX_DIR_NAME_REGEX 时才等于 trackedDir
+  let trackedDir = null;
   let candidate = null;
+  let ambiguous = false;
+
+  const stripTrailingSlash = (p) => p.replace(/\/+$/, '');
+
+  /** 由当前 trackedDir 重算对外候选与降级标记（命名规范 ↔ 合法候选，非规范 ↔ ambiguous） */
+  const syncCandidateFromTrackedDir = () => {
+    if (trackedDir !== null && FIX_DIR_NAME_REGEX.test(trackedDir)) {
+      candidate = trackedDir;
+      ambiguous = false;
+    } else {
+      // 目录确定已搬走但新位置无法机械确定 → 转降级路径，而非继续用旧路径撞磁盘核验产生误报
+      candidate = null;
+      ambiguous = true;
+    }
+  };
+
   const scanArtifactPath = (text) => {
     if (typeof text !== 'string') return;
     let match;
     ARTIFACT_PATH_REGEX.lastIndex = 0;
     while ((match = ARTIFACT_PATH_REGEX.exec(text)) !== null) {
       // 取 artifact 路径的特性目录前缀（specs/NNN-fix-<name>）
-      candidate = match[0].replace(/\/(?:fix-report\.md|verification\/verification-report\.md)$/, '');
+      trackedDir = match[0].replace(/\/(?:fix-report\.md|verification\/verification-report\.md)$/, '');
+      syncCandidateFromTrackedDir();
     }
   };
+
+  const applyRename = (command) => {
+    if (trackedDir === null) return; // 尚无已跟踪目录时的改名与本次收口无关（FR-001 只跟随"已知"目录）
+    let match;
+    RENAME_COMMAND_SEGMENT_REGEX.lastIndex = 0;
+    while ((match = RENAME_COMMAND_SEGMENT_REGEX.exec(command)) !== null) {
+      const operands = parseRenameOperands(match[1]);
+      if (operands === null) continue; // 异常形态整条跳过（保守化：不跟随、也不置 ambiguous）
+      const src = stripTrailingSlash(operands[0]);
+      if (src !== trackedDir) continue;
+      trackedDir = stripTrailingSlash(operands[1]);
+      syncCandidateFromTrackedDir();
+    }
+  };
+
   for (const entry of list) {
     if (!entry || entry.role !== 'assistant' || entry.lineIndex <= anchor) continue;
     for (const block of entry.toolUseBlocks) {
@@ -343,15 +477,18 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
       if ((block.name === 'Write' || block.name === 'Edit') && typeof input.file_path === 'string') {
         scanArtifactPath(input.file_path);
       } else if (block.name === 'Bash' && typeof input.command === 'string') {
-        // 逐段判定并按段顺序推进 candidate（不提前 return），保持「取最后出现者」语义
+        // 逐段判定并按段顺序推进 candidate（不提前 return），保持「取最后出现者」语义。
+        // 段内先写入提名、再改名跟随：复合命令 `写制品 && mv 旧 新` 下，先提名才能让改名的 src 精确命中候选。
+        // applyRename 同样按段执行（F225 plan §合并预案指定方向）：若对整条命令一次性扫描，
+        // 「某段 mv」会与「另一段 artifact 提及」跨段误关联，与 F225 Root Cause 同构。
         for (const segment of splitCommandTextSegments(input.command)) {
-          if (!hasBashWriteIndicator(segment)) continue;
-          scanArtifactPath(segment);
+          if (hasBashWriteIndicator(segment)) scanArtifactPath(segment);
+          applyRename(segment); // 改名识别不受写指示符门禁约束（改名命令天然不含重定向符）
         }
       }
     }
   }
-  return { path: candidate };
+  return { path: candidate, ambiguous };
 }
 
 // F216 C4 · fence-aware 标题/锚点识别原语 computeFenceMask 已下沉到

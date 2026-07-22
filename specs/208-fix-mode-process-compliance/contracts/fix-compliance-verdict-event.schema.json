@@ -40,7 +40,8 @@
           "internal-error",
           "config-degraded",
           "state-storage-unavailable",
-          "payload-invalid"
+          "payload-invalid",
+          "feature-dir-unresolvable"
         ]
       }
     }

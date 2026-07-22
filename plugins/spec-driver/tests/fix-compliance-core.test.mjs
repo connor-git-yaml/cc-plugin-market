@@ -10,7 +10,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   normalizeTranscriptEntry,
@@ -1575,4 +1575,329 @@ describe('F216 C2 · SKILL 模板 JSON 示例的 \\n 编码必须过判据（模
     const execs = [{ command: parsedCmd, paired: true, isError: false, assertionStatus: 'PASS', ambiguous: false }];
     assert.deepEqual(classifyReproEvidence(parsed, execs), [], '模板教的写法必须过判据（空 missing）');
   });
+});
+
+// ────────────────────────────────────────
+// F224 · 候选目录解析盲区修复（改名跟随 / 原地编辑准入 / 降级安全阀）
+// ────────────────────────────────────────
+
+/** 定锚后解析候选（F224 用例统一入口，避免每处重复取 anchorLineIndex） */
+function resolveFromFixture(name) {
+  const entries = loadEntries(name);
+  return resolveFeatureDirCandidate(entries, detectFixSkillExpansion(entries).anchorLineIndex);
+}
+
+describe('F224 resolveFeatureDirCandidate：目录改名跟随（FR-001/US1）', () => {
+  it('git mv 改名后候选跟随到新路径（复现 F223 实例）', () => {
+    const cand = resolveFromFixture('resolve-rename-git-mv.jsonl');
+    assert.equal(cand.path, 'specs/322-fix-new');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('裸 mv 改名与 git mv 判定一致', () => {
+    const cand = resolveFromFixture('resolve-rename-mv-plain.jsonl');
+    assert.equal(cand.path, 'specs/324-fix-new');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('mv -f 改名（带 flag）候选跟随到新路径', () => {
+    const cand = resolveFromFixture('resolve-rename-mv-flag.jsonl');
+    assert.equal(cand.path, 'specs/352-fix-new');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('git mv -f 改名（带 flag）候选跟随到新路径', () => {
+    const cand = resolveFromFixture('resolve-rename-git-mv-flag.jsonl');
+    assert.equal(cand.path, 'specs/354-fix-new');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：改名命令 option token 形态（Phase 5 spec-review CRITICAL 订正）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  /** 改名前候选恒为 specs/360-fix-src，dst 恒为 specs/361-fix-dst */
+  const resolveWithRename = (command) => resolveFeatureDirCandidate([
+    user('x'),
+    write('specs/360-fix-src/fix-report.md', 1),
+    bash(command, 2),
+  ], 0);
+
+  // 订正前这四种形态会把 `-f`/`-v` 误捕获为 src，导致改名被整条忽略、候选停在已不存在的旧路径，
+  // 进而触发 missing:'feature-dir' 假阻断——正是 F224 立项要消灭的形态。
+  const FOLLOW_CASES = [
+    ['mv -f', 'mv -f specs/360-fix-src specs/361-fix-dst'],
+    ['mv -v', 'mv -v specs/360-fix-src specs/361-fix-dst'],
+    ['git mv -f', 'git mv -f specs/360-fix-src specs/361-fix-dst'],
+    ['多 flag mv -f -v', 'mv -f -v specs/360-fix-src specs/361-fix-dst'],
+    ['合并短 flag mv -fv', 'mv -fv specs/360-fix-src specs/361-fix-dst'],
+    ['长 flag mv --no-clobber', 'mv --no-clobber specs/360-fix-src specs/361-fix-dst'],
+    ['git mv 多 flag', 'git mv -f -v specs/360-fix-src specs/361-fix-dst'],
+  ];
+
+  for (const [label, command] of FOLLOW_CASES) {
+    it(`${label} → 候选跟随到 dst`, () => {
+      const cand = resolveWithRename(command);
+      assert.equal(cand.path, 'specs/361-fix-dst', `形态未被识别：${command}`);
+      assert.equal(cand.ambiguous, false);
+    });
+  }
+
+  it('带 flag 但 src 不等于当前候选 → 仍不采信（安全约束不得随形态放宽而失效）', () => {
+    const cand = resolveWithRename('mv -f specs/399-fix-unrelated specs/400-fix-other');
+    assert.equal(cand.path, 'specs/360-fix-src');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('带 flag 改名到非规范目录 → 与无 flag 形态一致地转降级（ambiguous）', () => {
+    const cand = resolveWithRename('git mv -f specs/360-fix-src specs/renamed-nonstandard');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('超长 option 串不触发灾难性回溯（有界量词保证，10ms 量级返回）', () => {
+    const flags = Array.from({ length: 200 }, (_, i) => `-a${i}`).join(' ');
+    const started = Date.now();
+    const cand = resolveWithRename(`mv ${flags} specs/360-fix-src specs/361-fix-dst`);
+    assert.ok(Date.now() - started < 1000, '解析耗时应远低于 1s');
+    // option token 段上界为 8 个 → 超界时不匹配（等价于"不识别"），安全侧退化而非误跟随
+    assert.equal(cand.path, 'specs/360-fix-src');
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：原地编辑命令识别（FR-002/US2）', () => {
+  it('sed -i 写 fix-report.md（无重定向符）→ 提名其特性目录', () => {
+    const cand = resolveFromFixture('resolve-inline-edit-sed.jsonl');
+    assert.equal(cand.path, 'specs/325-fix-inline');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('perl -i 写 fix-report.md（无重定向符）→ 提名其特性目录', () => {
+    const cand = resolveFromFixture('resolve-inline-edit-perl.jsonl');
+    assert.equal(cand.path, 'specs/326-fix-inline2');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：降级安全阀触发面收窄（FR-004/US3）', () => {
+  it('改名到非 NNN-fix-<name> 命名的 dst → 候选清空且标记 ambiguous（唯一降级触发面）', () => {
+    const cand = resolveFromFixture('resolve-ambiguous-rename-nonstandard.jsonl');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('同形态但含 implement+verify 委派 → 候选解析结果一致（委派不影响目录维度）', () => {
+    // 目录解析只看写入/改名指示符，与委派证据正交；降级与否的收窄裁决在 judge 编排层做（SC-005b）。
+    const cand = resolveFromFixture('resolve-ambiguous-rename-with-delegations.jsonl');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('只写非制品文件（plan.md/日志）→ 不得标记 ambiguous，维持既有硬阻断语义（反向回归）', () => {
+    // 这是本次修复刻意保留的严格面：目录路径可从磁盘裁决时不走 fail-open，
+    // 否则"建了目录、写了 plan.md、但从未写 fix-report.md"的坍塌会被放行。
+    const cand = resolveFromFixture('resolve-dir-only-plan-md.jsonl');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('零工具调用的真坍塌 → path=null 且 ambiguous=false（不得借降级通道放行）', () => {
+    const cand = resolveFromFixture('collapsed-zero-delegation.jsonl');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：多次改名/混用叠加取最终态（FR-008）', () => {
+  it('链式改名两次 → 取最后一环，不停留在中间路径', () => {
+    const cand = resolveFromFixture('resolve-multi-rename-chain.jsonl');
+    assert.equal(cand.path, 'specs/331-fix-c');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('改名后再原地编辑 → 最终候选为改名后目录', () => {
+    const cand = resolveFromFixture('resolve-mixed-rename-then-inline-edit.jsonl');
+    assert.equal(cand.path, 'specs/333-fix-renamed');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：ambiguous 可恢复（FR-008，Codex 复审订正）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  /** 首个 Write 恒提名 specs/900-fix-x，后续每条命令按序叠加 */
+  const resolveChain = (commands) => resolveFeatureDirCandidate([
+    user('x'),
+    write('specs/900-fix-x/fix-report.md', 1),
+    ...commands.map((c, i) => bash(c, i + 2)),
+  ], 0);
+
+  it('两跳 合法→非规范→合法 → 取最终态而非停在中间的 ambiguous', () => {
+    // 订正前：第一跳把 candidate 置 null 后 `src === candidate` 判断失效，第二跳无法续跟 → {null, true}
+    const cand = resolveChain([
+      'mv specs/900-fix-x specs/renamed-nonstandard',
+      'mv specs/renamed-nonstandard specs/901-fix-x',
+    ]);
+    assert.equal(cand.path, 'specs/901-fix-x');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('三跳以上 合法→非规范→非规范→合法 → 同样取最终态', () => {
+    const cand = resolveChain([
+      'mv specs/900-fix-x tmp/stage-a',
+      'git mv tmp/stage-a tmp/stage-b',
+      'mv -f tmp/stage-b specs/902-fix-final',
+    ]);
+    assert.equal(cand.path, 'specs/902-fix-final');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('改名链停在非规范中间态 → 仍为 ambiguous（降级语义未被放宽）', () => {
+    const cand = resolveChain([
+      'mv specs/900-fix-x tmp/stage-a',
+      'git mv tmp/stage-a tmp/stage-b',
+    ]);
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：mv 异常形态保守化跳过（Codex 复审订正）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWith = (command) => resolveFeatureDirCandidate([
+    user('x'), write('specs/900-fix-x/fix-report.md', 1), bash(command, 2),
+  ], 0);
+
+  // 共同期望：整条跳过 → 候选保持改名前的值、不触发降级（宁可漏跟随，不可跟错或误降级）
+  const SKIP_CASES = [
+    ['多操作数 mv A B C（真实语义是移入目录 C）', 'mv specs/900-fix-x specs/other specs/dest-dir'],
+    ['目标在前 mv -t DIR SRC', 'mv -t specs/900-fix-x specs/renamed-nonstandard'],
+    ['长形式 --target-directory', 'mv --target-directory specs/900-fix-x specs/renamed-nonstandard'],
+    ['带参数 option mv -S SUFFIX SRC DST', 'mv -S .bak specs/900-fix-x specs/renamed-nonstandard'],
+    ['含空格的引号路径（token 被拆散）', 'mv "specs/900-fix-x" "some dir/renamed nonstandard"'],
+    ['单操作数 mv SRC', 'mv specs/900-fix-x'],
+  ];
+
+  for (const [label, command] of SKIP_CASES) {
+    it(`${label} → 整条跳过`, () => {
+      const cand = resolveWith(command);
+      assert.equal(cand.path, 'specs/900-fix-x', `形态被误解析：${command}`);
+      assert.equal(cand.ambiguous, false, `形态被误降级：${command}`);
+    });
+  }
+
+  it('对照：恰好 2 操作数的常规形态仍正常跟随', () => {
+    const cand = resolveWith('mv specs/900-fix-x specs/901-fix-x');
+    assert.equal(cand.path, 'specs/901-fix-x');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('对照：`--` 结束符后的 2 操作数仍正常跟随', () => {
+    const cand = resolveWith('mv -- specs/900-fix-x specs/901-fix-x');
+    assert.equal(cand.path, 'specs/901-fix-x');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F224 resolveFeatureDirCandidate：与当前候选无关的 mv 不得改变候选（FR-007 锚定）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  it('mv 的 src 不等于当前候选 → 候选原样保留', () => {
+    const entries = [
+      user('x'),
+      write('specs/340-fix-current/fix-report.md', 1),
+      bash('mv specs/399-fix-unrelated specs/400-fix-other', 2),
+    ];
+    const cand = resolveFeatureDirCandidate(entries, 0);
+    assert.equal(cand.path, 'specs/340-fix-current');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('尚无候选时发生的改名 → 不产生任何信号（不得凭空提名）', () => {
+    const entries = [user('x'), bash('git mv specs/341-fix-a specs/342-fix-b', 1)];
+    const cand = resolveFeatureDirCandidate(entries, 0);
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('原地编辑准入放宽后判据不变：sed -i 命令未含制品全路径 → 不提名', () => {
+    const entries = [user('x'), bash("sed -i '' 's#a#b#' specs/343-fix-x/notes.txt", 1)];
+    const cand = resolveFeatureDirCandidate(entries, 0);
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('复合命令内先写制品再改名 → 同一条命令内叠加取最终路径', () => {
+    const entries = [
+      user('x'),
+      bash('cat > specs/344-fix-a/fix-report.md <<EOF\n...\nEOF\nmv specs/344-fix-a specs/345-fix-b', 1),
+    ];
+    assert.equal(resolveFeatureDirCandidate(entries, 0).path, 'specs/345-fix-b');
+  });
+});
+
+describe('F224×F225 共存：复合命令内读形态不再劫持候选（原 F224 已知限界，由 F225 关闭）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+
+  // 可追溯性：本 describe 的两条断言原是 F224 记录的「已知限界（本轮不修）」——当时写指示符门禁与
+  // artifact 路径扫描都对**整条命令文本**判定，故"前段有写指示符 + 后段仅 cat 读取无关特性目录制品"
+  // 会让后者被跨段背书提名为候选。该限界在 F224 改动前即存在（第二条对照组只用既有 `>` 门禁同样被劫持，
+  // 证明 F224 非引入者），F225（c483485）按 `&&`/`||`/`;`/换行 切段并要求写指示符与 artifact 路径
+  // **同段共现**后已关闭，故断言在此翻转为期望行为（不提名）。
+  it('sed -i 前段 + cat 读取无关制品后段 → 不提名被读取的目录（F224 原地编辑准入亦受同段共现约束）', () => {
+    const entries = [
+      user('x'),
+      bash("sed -i '' 's/x/y/' notes.txt; cat specs/999-fix-decoy/fix-report.md", 1),
+    ];
+    assert.equal(resolveFeatureDirCandidate(entries, 0).path, null);
+  });
+
+  it('重定向前段 + cat 读取无关制品后段 → 不提名（原 F224 改动前对照组）', () => {
+    // 本条完全不涉及 F224 新增的 sed/perl 准入，仅用既有 `>` 写指示符门禁。
+    const entries = [
+      user('x'),
+      bash('echo x > /tmp/y; cat specs/999-fix-decoy/fix-report.md', 1),
+    ];
+    assert.equal(resolveFeatureDirCandidate(entries, 0).path, null);
+  });
+});
+
+describe('F224 回归：既有 fixture 判定结果不受本次改动影响', () => {
+  const NEW_FIXTURE_PREFIX = 'resolve-';
+  const legacyFixtures = readdirSync(FIXTURE_DIR)
+    .filter((f) => f.endsWith('.jsonl') && !f.startsWith(NEW_FIXTURE_PREFIX));
+
+  it('存量 fixture 集合非空（防遍历失效导致本回归护栏空转）', () => {
+    assert.ok(legacyFixtures.length >= 20, `存量 fixture 数=${legacyFixtures.length}`);
+  });
+
+  for (const name of legacyFixtures) {
+    it(`${name} 不触达新增降级分支（ambiguous=false）`, () => {
+      assert.equal(resolveFromFixture(name).ambiguous, false);
+    });
+  }
 });

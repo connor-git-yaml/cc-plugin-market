@@ -1,0 +1,5 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复登录超时问题"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Write", "input": {"file_path": "specs/332-fix-orig/fix-report.md", "content": "# Fix Report"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "git mv specs/332-fix-orig specs/333-fix-renamed"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "sed -i '' 's#a#b#' specs/333-fix-renamed/fix-report.md"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "改名后原地修订。"}]}}

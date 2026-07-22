@@ -76,6 +76,25 @@ envelope 结构参照 research.md「实测校准记录（T001）」：顶层 `ty
 | `noop-non-bash-tool-execution.jsonl` | **EC-007**：复现"执行"经非 Bash 工具（`mcp__custom__run`）产生，无 Bash 痕迹 | `noop:repro-command-mismatch`（MVP 按缺 Bash 痕迹处理） |
 | `noop-no-repro-claims.jsonl` | **EC-003**：`## 判定依据` 存在但无任何 `### 复现对账` 子内容（症状因环境依赖无法复现） | `noop:repro-fields`（不开替代证据例外，GATE_DESIGN Q2） |
 
+## F224 候选目录解析 fixture 系列（`resolve-` 前缀，合成）
+
+> 只承载 transcript 侧的候选目录解析信号（改名 / 原地编辑 / 降级），不含制品内容；
+> `fix-compliance-core.test.mjs` 的 F224 回归护栏按 `resolve-` 前缀把本系列排除在存量遍历之外。
+
+| 文件 | 场景 | 期望解析结果 |
+|------|------|-------------|
+| `resolve-rename-git-mv.jsonl` | 制品写旧路径后 `git mv` 改名（复现 F223 实例） | `path='specs/322-fix-new'`、`ambiguous=false` |
+| `resolve-rename-mv-plain.jsonl` | 同上但用裸 `mv` | `path='specs/324-fix-new'` |
+| `resolve-rename-mv-flag.jsonl` | 带 flag 的裸 `mv -f` 改名（Phase 5 spec-review CRITICAL 订正） | `path='specs/352-fix-new'` |
+| `resolve-rename-git-mv-flag.jsonl` | 带 flag 的 `git mv -f` 改名（同上） | `path='specs/354-fix-new'` |
+| `resolve-inline-edit-sed.jsonl` | 唯一写入痕迹为 `sed -i`（无重定向符） | `path='specs/325-fix-inline'` |
+| `resolve-inline-edit-perl.jsonl` | 唯一写入痕迹为 `perl -i -pe`（无重定向符） | `path='specs/326-fix-inline2'` |
+| `resolve-dir-only-plan-md.jsonl` | 只写 `plan.md`/日志，从未出现制品全路径 | `path=null`、**`ambiguous=false`**（交既有严格判据硬阻断，不走 fail-open） |
+| `resolve-ambiguous-rename-nonstandard.jsonl` | 候选被改名到非 `NNN-fix-<name>` 目录，**零委派** | `path=null`、`ambiguous=true`（唯一降级触发面）；CLI 端到端 **exit 2**——委派证据已足以证明坍塌，不得因目录不确定被赦免（SC-005b） |
+| `resolve-ambiguous-rename-with-delegations.jsonl` | 同上改名，但含 implement + verify 收口委派 | `path=null`、`ambiguous=true`；CLI 端到端 **exit 0** + 落盘 `degraded:true` / `feature-dir-unresolvable`（唯一不确定的确实只是"制品落在哪个目录"） |
+| `resolve-multi-rename-chain.jsonl` | 同一会话链式改名两次 | `path='specs/331-fix-c'`（取最终态） |
+| `resolve-mixed-rename-then-inline-edit.jsonl` | 先 `git mv` 改名再 `sed -i` 修订 | `path='specs/333-fix-renamed'` |
+
 ## FR-017 真实 transcript 采集记录（Phase 0 / T001-T002）
 
 ### T001 · Claude Code Bash transcript（权威字段依据）

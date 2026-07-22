@@ -710,3 +710,204 @@ describe('F216 T019 SC-004 档位切换矩阵 + W7 精确窗口', () => {
     assert.equal(fs.existsSync(stateFile), false, '补证据合规后阻断计数清零');
   });
 });
+
+// ────────────────────────────────────────
+// F224 · 候选目录解析盲区修复（CLI 端到端）
+// ────────────────────────────────────────
+
+describe('F224 CLI 端到端：目录改名后仍合规收口（复现 F223 场景，FR-001）', () => {
+  const OLD_DIR = 'specs/350-fix-renamed-bug';
+  const NEW_DIR = 'specs/351-fix-renamed-bug';
+
+  /** 制品先写旧路径 → git mv 改名；磁盘上只存在改名后的新目录 */
+  function renamedTranscript() {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/verification/verification-report.md`, content: '# V' }),
+      TOOL_USE('Bash', { command: `git mv ${OLD_DIR} ${NEW_DIR}` }),
+      ASSISTANT_TEXT('编号撞车已改名，修复完成'),
+    ]);
+    fs.mkdirSync(path.join(tmp, NEW_DIR, 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, NEW_DIR, 'fix-report.md'), '# 修复报告\n\n**Root Cause**: 会话超时阈值配置错误导致提前登出，已定位到 config 常量并修正。\n', 'utf8');
+    fs.writeFileSync(path.join(tmp, NEW_DIR, 'verification', 'verification-report.md'), '# 验证报告\n\n所有单测通过，回归零失败。\n', 'utf8');
+    return p;
+  }
+
+  it('改名后制品齐全 → exit 0 静默放行（不再误报未建立特性目录）', () => {
+    const r = runCli({ transcriptPath: renamedTranscript() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+  });
+
+  it('report 模式确认候选已跟随到新路径且判定合规', () => {
+    const r = runCli({ mode: 'report', transcriptPath: renamedTranscript() });
+    const v = JSON.parse(r.stdout);
+    assert.equal(v.fixSession, true);
+    assert.equal(v.compliant, true, JSON.stringify(v.missing));
+    assert.deepEqual(v.missing, []);
+  });
+});
+
+describe('F224 CLI 端到端：候选目录存在但 fix-report.md 真实缺失仍阻断（SC-004 回归）', () => {
+  /** transcript 正常提名候选，但磁盘上只有空目录 */
+  function stagedMissingReport() {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      ASSISTANT_TEXT('修复完成'),
+    ]);
+    fs.mkdirSync(path.join(tmp, FEATURE_DIR), { recursive: true });
+    return p;
+  }
+
+  it('exit 2 硬阻断，且 missing 走制品缺失判据而非候选目录判据', () => {
+    const t = stagedMissingReport();
+    const r = runCli({ transcriptPath: t });
+    assert.equal(r.status, 2, r.stderr);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+    assert.ok(v.missing.includes('fix-report.md'), JSON.stringify(v.missing));
+    assert.ok(!v.missing.includes('feature-dir'), JSON.stringify(v.missing));
+  });
+});
+
+describe('F224 CLI 端到端：只写非制品文件仍阻断（降级触发面收窄的反向回归）', () => {
+  it('磁盘目录存在但只写了 plan.md → exit 2，不得借 fail-open 降级通道放行', () => {
+    // 这正是 F208 要抓的坍塌形态：走过场建目录写计划，但跳过诊断报告。
+    const t = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/plan.md`, content: '# Plan' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      ASSISTANT_TEXT('修复完成'),
+    ]);
+    fs.mkdirSync(path.join(tmp, FEATURE_DIR), { recursive: true });
+    const r = runCli({ transcriptPath: t });
+    assert.equal(r.status, 2, r.stderr);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+    assert.equal(v.compliant, false);
+    assert.ok(v.missing.includes('fix-report.md'), JSON.stringify(v.missing));
+    // 降级诊断不得出现——该场景由磁盘 + 既有严格判据裁决，非"无法定位候选"
+    assert.deepEqual(v.transcriptDiagnostics, []);
+  });
+});
+
+describe('F224 CLI 端到端：候选目录无法确定 → fail-open 降级 + 诊断留痕（SC-005）', () => {
+  /**
+   * 候选已被改名搬到非 NNN-fix-<name> 目录，新位置无法机械定位，
+   * 且会话确有 implement + verify 收口委派——即"唯一不确定的只是制品落在哪个目录"。
+   * 这是降级放行**唯一**成立的形态（见下方 SC-005b 收窄用例）。
+   */
+  function unresolvableTranscript() {
+    return writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Bash', { command: `git mv ${FEATURE_DIR} specs/renamed-nonstandard` }),
+      ASSISTANT_TEXT('已改名'),
+    ]);
+  }
+
+  it('exit 0 静默放行且落盘 compliant:null + feature-dir-unresolvable 诊断事件', () => {
+    const r = runCli({ transcriptPath: unresolvableTranscript() });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr.trim(), '');
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].compliant, null);
+    assert.equal(events[0].degraded, true);
+    assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
+  });
+
+  it('report 模式暴露 feature-dir-unresolvable 且不产出 compliant:false 结论', () => {
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: unresolvableTranscript() }).stdout);
+    assert.equal(v.fixSession, true);
+    assert.deepEqual(v.transcriptDiagnostics, ['feature-dir-unresolvable']);
+    assert.equal(v.compliant, undefined, JSON.stringify(v));
+  });
+});
+
+describe('F224 CRITICAL 收窄：改名到非规范目录不得赦免委派证据（SC-005b）', () => {
+  /**
+   * 反向回归：零委派坍塌会话 + 一条 `git mv <候选> <非规范名>`。
+   * 收窄前这条 Bash 会让整段判定短路成 fail-open，把硬阻断变成放行（1 条命令绕过阻断型门禁）；
+   * 收窄后目录不确定只作用于 featureDir 维度，委派证据照常裁决 → 必须维持 exit 2。
+   */
+  function zeroDelegationRenamedTranscript() {
+    return writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Bash', { command: `git mv ${FEATURE_DIR} specs/renamed-nonstandard` }),
+      ASSISTANT_TEXT('已改名'),
+    ]);
+  }
+
+  it('零委派 + 非规范改名 → exit 2 硬阻断，不落降级诊断', () => {
+    const t = zeroDelegationRenamedTranscript();
+    const r = runCli({ transcriptPath: t });
+    assert.equal(r.status, 2, r.stderr);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+    assert.equal(v.compliant, false, JSON.stringify(v));
+    assert.deepEqual(v.transcriptDiagnostics, []);
+    assert.deepEqual(v.delegationCounts, { implement: 0, verify: 0, other: 0 });
+    assert.ok(v.missing.includes('feature-dir'), JSON.stringify(v.missing));
+    assert.ok(v.missing.includes('fix-report.md'), JSON.stringify(v.missing));
+  });
+
+  it('仅 verify 类委派（no-op 收口形态）+ 非规范改名 → 仍走降级放行', () => {
+    // no-op 路径合法收口只需 1 次 verify 类交叉核实，不含 implement；
+    // 收窄口径是 implement 与 verify 同时为 0 才阻断，故此形态不得被误伤。
+    const t = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '交叉核实无需改动' }),
+      TOOL_USE('Bash', { command: `git mv ${FEATURE_DIR} specs/renamed-nonstandard` }),
+      ASSISTANT_TEXT('已改名'),
+    ]);
+    assert.equal(runCli({ transcriptPath: t }).status, 0);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+    assert.deepEqual(v.transcriptDiagnostics, ['feature-dir-unresolvable']);
+  });
+
+  // 入库 fixture 端到端复核：与主编排器实测的 A/C 对照构造逐字同源，
+  // 保证该绕过路径的回归护栏不依赖本文件内联 transcript 的写法。
+  const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
+
+  it('fixture resolve-ambiguous-rename-nonstandard（零委派）→ exit 2', () => {
+    const t = path.join(FIXTURE_DIR, 'resolve-ambiguous-rename-nonstandard.jsonl');
+    assert.equal(runCli({ transcriptPath: t }).status, 2);
+  });
+
+  it('fixture resolve-ambiguous-rename-with-delegations（有收口委派）→ exit 0 + 降级落盘', () => {
+    const t = path.join(FIXTURE_DIR, 'resolve-ambiguous-rename-with-delegations.jsonl');
+    assert.equal(runCli({ transcriptPath: t }).status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].degraded, true);
+    assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
+  });
+
+  // Codex 复审给出的两个绕过构造：零委派会话下无论如何构造改名信号都不得放行。
+  it('Codex 构造 A：sed -i 提名 decoy + 改名到非规范（零委派）→ exit 2', () => {
+    const t = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Bash', { command: "sed -i '' 's/x/y/' specs/999-fix-decoy/fix-report.md; mv specs/999-fix-decoy specs/renamed-nonstandard" }),
+      ASSISTANT_TEXT('已完成'),
+    ]);
+    assert.equal(runCli({ transcriptPath: t }).status, 2);
+  });
+
+  it('Codex 构造 B：注释形态 `true # mv <候选> <非规范>`（零委派）→ exit 2', () => {
+    const t = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Bash', { command: `true # mv ${FEATURE_DIR} specs/renamed-nonstandard` }),
+      ASSISTANT_TEXT('已完成'),
+    ]);
+    assert.equal(runCli({ transcriptPath: t }).status, 2);
+  });
+});

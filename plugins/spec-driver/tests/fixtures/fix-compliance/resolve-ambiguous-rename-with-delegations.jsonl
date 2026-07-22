@@ -1,0 +1,6 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix\n请修复登录超时问题"}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Write", "input": {"file_path": "specs/328-fix-old/fix-report.md", "content": "# Fix Report\n## Root Cause\n连接池超时配置错误。"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Agent", "input": {"subagent_type": "spec-driver:implement", "description": "执行代码修复"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Agent", "input": {"subagent_type": "spec-driver:verify", "description": "工具链验证"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "git mv specs/328-fix-old specs/renamed-nonstandard"}}]}}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "已改名到新命名。"}]}}

@@ -124,8 +124,13 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     };
   }
 
-  const delegations = extractDelegationsAfter(entries, anchor.anchorLineIndex);
   const candidate = resolveFeatureDirCandidate(entries, anchor.anchorLineIndex);
+  // F224 FR-004/FR-005：候选目录确已失效但新位置无法机械定位（如改名到非 NNN-fix-<name> 目录）。
+  // 这只让**特性目录这一个维度**变得不确定，绝不意味着其余判据也无从判断——
+  // 因此这里只记标记，不早退：委派抽取与 judgeCompliance 必须照常跑完（见下方 FR-004 收窄段）。
+  const featureDirUndetermined = candidate.path === null && candidate.ambiguous === true;
+
+  const delegations = extractDelegationsAfter(entries, anchor.anchorLineIndex);
   const featureDirCheck = checkFeatureDirOnDisk(projectRoot, candidate.path);
   const fixReport = candidate.path
     ? readArtifactFile(projectRoot, `${candidate.path}/fix-report.md`)
@@ -155,6 +160,22 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     configDegraded,
     diagnostics: configDiagnostics,
   });
+
+  // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路。
+  // 早前实现在 judge 之前直接 return，等于用"目录无法定位"一并赦免了与目录解析无关的委派证据要求，
+  // 于是只要多敲一条 `git mv <候选> <非规范名>`，零委派的坍塌会话也能把 exit 2 变成 exit 0——
+  // 直接击穿 F208 设立本门禁的目的。收窄口径：
+  //   委派证据本身已足以证明坍塌（implement 与 verify 均为 0，无论制品落在哪个目录都构不成一次合规收口）
+  //   → 维持阻断，按既有 missing 语义输出；
+  //   仅当存在收口类委派、唯一不确定的确实是"制品落在哪个目录"时 → 才走 degraded 放行。
+  const counts = verdict.delegationCounts;
+  const hasClosureDelegation = counts.implement > 0 || counts.verify > 0;
+  if (featureDirUndetermined && hasClosureDelegation) {
+    return {
+      enforcement, configDegraded, isFix: true, mode: anchor.mode,
+      transcriptDiagnostics: ['feature-dir-unresolvable'], verdict: null,
+    };
+  }
 
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
