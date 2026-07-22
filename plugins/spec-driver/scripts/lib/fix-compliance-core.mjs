@@ -255,10 +255,66 @@ export function extractDelegationsAfter(entries, anchorLineIndex) {
 // ────────────────────────────────────────
 
 /**
+ * 段分隔符（F225）：`&&` / `||` / `;` / 换行。
+ * alternation 中双字符 token 在前，落单的 `|` / `&` 不会被命中——裸管道与后台符刻意不作为分隔符
+ * （`... | tee <path>` 语义上不是独立动作边界，切开会产生失真分段）。
+ * 不带 `/g`：`String.prototype.split` 内部用带 `y` 的 species 克隆匹配，既不读也不写原正则的
+ * lastIndex，`/g` 在此无作用且会让读者误以为该常量有跨调用状态。
+ */
+const SEGMENT_SPLIT_REGEX = /&&|\|\||;|\r?\n/;
+
+/**
+ * 行连接（line continuation）：反斜杠 + 换行。
+ * alternation 第一支 `\\\\` 先吃掉成对的转义反斜杠，使 `\\`（字面反斜杠）后面的换行不会被
+ * 误判为续行；第二支才是真正的续行序列。
+ */
+const LINE_CONTINUATION_REGEX = /\\\\|\\\r?\n/g;
+
+/**
+ * 消解 shell 行连接：`\` + 换行会被 shell 整体删除、两侧拼成同一条逻辑行，
+ * 因此必须在切段**之前**还原，否则 `printf x > \<换行>specs/.../fix-report.md` 会被
+ * 换行分隔符拆成「有写指示符无路径」+「有路径无写指示符」两段而漏提名（F225 R-1）。
+ * 已知限界：不感知 quoted heredoc（`<<'EOF'`）——其 body 内的行尾反斜杠在真实 shell 中是字面量、
+ * 不构成续行，这里仍会被消解，效果是把该 body 的两行并成一段（合并而非划分）。
+ * @param {string} command
+ * @returns {string}
+ */
+function unfoldLineContinuations(command) {
+  return command.replace(LINE_CONTINUATION_REGEX, (match) => (match === '\\\\' ? match : ''));
+}
+
+/**
+ * 把一条 Bash 命令切成保序的文本片段序列（F225）。
+ * 只做字面分隔符切分，**不是**语法级解析：引号内、`$()` 内、heredoc body 内出现的 `;` / `&&`
+ * 同样会被切开，所以片段不保证等价于真正的 Bash 子命令。这对本模块够用——切分是**划分**而非合并，
+ * 只会让「写指示符与 artifact 路径共现」判据更严，不会新增劫持面（代价见「已知限界」测试用例）。
+ * @param {string} command
+ * @returns {string[]}
+ */
+function splitCommandTextSegments(command) {
+  return unfoldLineContinuations(command).split(SEGMENT_SPLIT_REGEX);
+}
+
+/**
+ * 单个子命令段是否含写入指示符（重定向/heredoc/tee）。
+ * 收口为单一谓词，便于未来并入其它写入形态（如原地编辑）而无需改动分段循环。
+ * @param {string} segment
+ * @returns {boolean}
+ */
+function hasBashWriteIndicator(segment) {
+  return BASH_WRITE_INDICATOR_REGEX.test(segment);
+}
+
+/**
  * 从锚点后的制品写入痕迹提名特性目录候选，取最后出现者（codex implement 审查 C-2 硬化）：
  * - Write/Edit：`input.file_path` 必须命中 required artifact 路径（fix-report.md / verification-report.md）
  * - Bash：`input.command` 命中 artifact 路径 **且** 含写入指示符（重定向/heredoc/tee）——
  *   排除 `echo specs/301-fix-old` / `cat .../fix-report.md` 等纯提及旧路径的读形态
+ * - Bash 同段共现（F225）：写入指示符与 artifact 路径必须落在**同一文本片段**（先消解 `\` 行连接，
+ *   再按 `&&`/`||`/`;`/换行 切分）才提名；跨段命中不再互相背书——否则
+ *   `echo x > /tmp/y; cat specs/999-fix-decoy/fix-report.md`
+ *   这类复合命令中，前段的无关写入会为后段纯读形态的历史合规目录背书，绕过 FR-007 判定窗口
+ *   （见 specs/225-fix-compound-command-hijack/fix-report.md R2-R4）。
  * 提名后取 artifact 路径的目录前缀作为候选；提名≠判据——磁盘核验（io 层）才采信。
  * 说明：诚实流程的 fix-report.md 由编排器亲自（Phase 1 inline 豁免）经 Write 写入主 transcript，
  * 提名可靠；verification-report.md 由 verify 子代理在 sidechain 写入、主 transcript 可能不可见，
@@ -286,9 +342,12 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
       const input = block.input || {};
       if ((block.name === 'Write' || block.name === 'Edit') && typeof input.file_path === 'string') {
         scanArtifactPath(input.file_path);
-      } else if (block.name === 'Bash' && typeof input.command === 'string'
-        && BASH_WRITE_INDICATOR_REGEX.test(input.command)) {
-        scanArtifactPath(input.command);
+      } else if (block.name === 'Bash' && typeof input.command === 'string') {
+        // 逐段判定并按段顺序推进 candidate（不提前 return），保持「取最后出现者」语义
+        for (const segment of splitCommandTextSegments(input.command)) {
+          if (!hasBashWriteIndicator(segment)) continue;
+          scanArtifactPath(segment);
+        }
       }
     }
   }
