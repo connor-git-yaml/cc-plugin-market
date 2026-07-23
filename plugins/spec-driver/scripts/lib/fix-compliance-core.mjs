@@ -135,8 +135,19 @@ export const INLINE_EDIT_INDICATOR_REGEXES = [
 /** 修复收口制品必填章节锚点（既有 Phase 1 模板固有 Root Cause 行） */
 export const ROOT_CAUSE_HEADING_REGEX = /Root Cause/i;
 
-/** 未替换花括号占位符探测（FR-012a 空壳判据）——代码区豁免（F228 剥离后文本上扫描） */
-const PLACEHOLDER_BRACE_REGEX = /\{[^}]*\}/;
+/**
+ * 未替换花括号占位符探测（FR-012a 空壳判据）——代码区豁免（F228 剥离后文本上扫描）。
+ * F229：锚点收窄为"存在**任何 ASCII U+007B**"，**不要求闭合**——闭合与否与"是否已替换为
+ * 真实内容"无关，把 canonical 模板的成对形态写进判据等于公开一条删掉一个 `}` 即可通过的逃逸路径。
+ * 措辞注意：本正则**不检查 Markdown 转义**（`\{` 同样命中），故不要表述为"未转义的起始标记"。
+ *
+ * 本常量有**两个消费点**（见 checkArtifactSection 的四段 OR，勿再写成"只作用于已剥离文本"）：
+ * - 第 3 段：作用在 `stripCodeRegions` 之后的 `placeholderScanText` 上。真实代码的花括号已被结构性
+ *   豁免清空，故这里可以退化为最朴素的 `/\{/`：剥完代码区还剩 `{`，就一定不是"作者引用的代码"。
+ * - 第 4 段：作用在**未剥离**的 `proseBody` 上，与 `strippedChars <= MIN_SECTION_BODY_CHARS` 取合取
+ *   （F228 R3-1 边界判据）。这一段不靠正则排除真实代码，靠"剥离后剩余散文量"作判别锚点。
+ */
+const PLACEHOLDER_OPEN_BRACE_REGEX = /\{/;
 
 /**
  * canonical 模板占位符（形如 `{根本原因一句话总结}`）：含中日韩表意文字、且不含 ASCII 冒号（F228 R2-2，
@@ -146,8 +157,29 @@ const PLACEHOLDER_BRACE_REGEX = /\{[^}]*\}/;
  * 这类占位符是本仓 no-op/repair 模板固有的纯中文描述短语，即便被作者包进反引号 code span 也不构成
  * 豁免理由——代码区豁免只应给"作者引用真实代码"的花括号（含 ASCII 冒号，或不含中文），
  * 故本判据直接在**剥离代码区之前**的 proseBody 上扫描（见 checkArtifactSection），不吃 stripCodeRegions 的豁免。
+ * F229：闭合边界从"必须是 `}`"放宽为"`}` 或**行尾**"——不成对花括号同样是未替换的模板起始
+ * 标记，不应因少一个 `}` 而豁免。判据由两个 alternation 分支组成，职责刻意分离：
+ * - 分支 1 `\{(?=[^}]*[一-鿿])[^}:]*\}`：**成对**形态，与 F229 之前逐字一致（含跨行成对占位符，
+ *   如 `{根本原因\n一句话总结}`），保证新判据是旧判据的严格超集，不削弱任何既有判别力。
+ * - 分支 2 `\{(?=[^}\n]*[一-鿿])[^}:\n]*$`（配合 `/m`，`$` = 行尾）：**不成对**形态，两处字符类
+ *   与 lookahead 都排除 `\n`，把匹配硬锚在**同一行**内。
+ *
+ * 分支 2 必须排除 `\n` 且必须带 `/m`（F229 R1 回归教训，勿合并回单分支的 `(?:\}|$)`）：不带 `/m` 时
+ * `$` 是**整段章节末尾**而非行尾，加上 `[^}:]*` 本身能跨换行，未闭合的 `{` 会一路吞过闭合围栏、
+ * 吞过段落，直到章节结束才判定——于是"合法 repair 报告引用一段被截断的代码（含未闭合 `{`）、
+ * 围栏之后再写中文说明"会被误判为占位空壳，违反 F228 已确立的代码区豁免语义。
+ *
+ * 因本判据作用在**未剥离**的原文上，无法借结构性豁免排除真实代码，故 CJK 前置断言与 ASCII 冒号
+ * 排除集两项判别力在**两个分支中都逐字保留**、不可删：例如 `{"claim":"症状已消除",...`
+ * （含 CJK 也含 ASCII 冒号）在遇到 `:` 时字符类被迫停止、停止点既非 `}` 也非行尾，两分支均失败，
+ * 放宽后依旧正确豁免。切勿按旧注释里"成对花括号"的措辞重新引入全局闭合要求。
+ *
+ * 但 ASCII 冒号排除**只是每个 `{` 起点的局部条件**，不是"整段文本含冒号即整体豁免"的全局性质——
+ * 某个 `{` 失败后引擎会从**后续每一个 `{`** 重新起匹配。反例 `{"claim":"{症状已消除`：第一个 `{`
+ * 被冒号挡住，第二个 `{` 之后是纯 CJK 直到行尾，不成对分支命中。可靠的 JSON 豁免仍靠 F216 的
+ * stripReconSubblock 结构性剔除与 F228 的代码区剥离，不要把本判据的局部条件当作 JSON 豁免保证。
  */
-const CANONICAL_PLACEHOLDER_REGEX = /\{(?=[^}]*[一-鿿])[^}:]*\}/;
+const CANONICAL_PLACEHOLDER_REGEX = /\{(?=[^}]*[一-鿿])[^}:]*\}|\{(?=[^}\n]*[一-鿿])[^}:\n]*$/m;
 
 /** 章节正文非占位所需的最小非空白字符数（no-op-report-template.md 合同：> 20） */
 const MIN_SECTION_BODY_CHARS = 20;
@@ -732,8 +764,14 @@ export function stripCodeRegions(text) {
  *
  * F228 R2-2：占位符判据本身细分两段 OR——canonical 中文模板占位符（`CANONICAL_PLACEHOLDER_REGEX`）
  * 直接在剥离前的 `proseBody` 上扫描、代码区不豁免（堵 CRITICAL-1：模板占位符包一层反引号
- * 就能同时"贡献长度"又"从占位扫描中消失"的绕过）；通用花括号（`PLACEHOLDER_BRACE_REGEX`）
+ * 就能同时"贡献长度"又"从占位扫描中消失"的绕过）；通用花括号（`PLACEHOLDER_OPEN_BRACE_REGEX`）
  * 仍在剥离后的 `placeholderScanText` 上扫描、代码区豁免（保留"作者引用真实代码字面量"的既有合规行为）。
+ *
+ * F229：两条花括号判据均不再要求闭合——通用判据退化为"存在裸 `{`"，canonical 判据的闭合边界放宽为
+ * "`}` 或**行尾**"（两个 alternation 分支：成对形态与不成对形态，后者锚定在同一行内、不跨行匹配，
+ * 详见 `CANONICAL_PLACEHOLDER_REGEX` 上方注释）。占位符的语义标志是"存在未替换的模板起始标记"，
+ * 与闭合无关；旧判据的闭合要求是
+ * 从 canonical 模板正例形态反推出的多余约束，构成删一个 `}` 即可通过的门禁绕过。
  *
  * F228 R3-1：代码区豁免新增第 4 段边界判据——原文有花括号、但剥离代码区后实质散文不足阈值，
  * 说明这些花括号只是被代码区包着"充数"，整段正文实质就是包在代码里的占位符（而非"作者在实质
@@ -767,8 +805,11 @@ export function checkArtifactSection(content, requiredHeading) {
   // 代码区豁免的边界——豁免只服务于"作者在实质散文之外引用代码"，不服务于"整段正文就是包在代码里的占位符"）
   const placeholderResidue = bodyChars <= MIN_SECTION_BODY_CHARS
     || CANONICAL_PLACEHOLDER_REGEX.test(proseBody)
-    || PLACEHOLDER_BRACE_REGEX.test(placeholderScanText)
-    || (PLACEHOLDER_BRACE_REGEX.test(proseBody) && strippedChars <= MIN_SECTION_BODY_CHARS);
+    || PLACEHOLDER_OPEN_BRACE_REGEX.test(placeholderScanText)
+    // 第 4 段：F229 后随 PLACEHOLDER_OPEN_BRACE_REGEX 的收口自动收紧（"原文含花括号"的判定由
+    // "必须闭合"放宽为"存在裸 `{`"），判据结构本身无需任何额外分支——语义仍是"整段正文被代码区
+    // 形态包裹、剥完所剩无几"，strippedChars 阈值门槛逐字不变。
+    || (PLACEHOLDER_OPEN_BRACE_REGEX.test(proseBody) && strippedChars <= MIN_SECTION_BODY_CHARS);
   return { nonEmpty, hasRequiredSection: true, placeholderResidue };
 }
 
