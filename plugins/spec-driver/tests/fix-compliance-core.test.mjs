@@ -18,6 +18,7 @@ import {
   extractDelegationsAfter,
   classifyDelegationRole,
   resolveFeatureDirCandidate,
+  scanRenameCommandEvents,
   checkArtifactSection,
   stripCodeRegions,
   classifyClosureForm,
@@ -1885,6 +1886,358 @@ describe('F224×F225 共存：复合命令内读形态不再劫持候选（原 F
       bash('echo x > /tmp/y; cat specs/999-fix-decoy/fix-report.md', 1),
     ];
     assert.equal(resolveFeatureDirCandidate(entries, 0).path, null);
+  });
+});
+
+describe('F230 改名跟随命令位锚定：伪造 mv 一律不得跟随（差分矩阵 A/D + Codex 审查发现的 F1-F4）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  // 本组钉的是同一个安全性质：**只有真正位于命令位（段首）的 mv/git mv 才算发生过改名**。
+  // 旧实现把 mv 当"段内任意位置的关键字"，于是任何把 mv 当普通文本写出来的命令都会被误读为真实改名，
+  // 把候选带到非规范名 → 打开 F224 的 fail-open 降级通道（fix-report 差分矩阵 A/D）。
+  // 期望一律为「候选保持原状」：path === 'specs/900-fix-x' 且 ambiguous === false，
+  // 即伪造文本既不改候选、也不置降级标记。
+  const FORGED_CASES = [
+    ['A  注释掉的 mv（用户原始复现）', 'true # mv specs/900-fix-x specs/renamed-nonstandard'],
+    ['D1 单引号包裹', "echo 'mv specs/900-fix-x specs/renamed-nonstandard'"],
+    ['D2 双引号包裹', 'echo "mv specs/900-fix-x specs/renamed-nonstandard"'],
+    ['F1 裸参数（既无注释也无引号）', 'echo mv specs/900-fix-x specs/renamed-nonstandard'],
+    ['F2 其他命令的参数位', 'grep mv specs/900-fix-x specs/renamed-nonstandard'],
+    ['F3 引号内藏分号（切段后落到后段段首，靠全命令引号跟踪拦）', "echo 'a;mv specs/900-fix-x specs/renamed-nonstandard'"],
+    ['F4 引号内藏 &&（同上）', "echo 'a&&mv specs/900-fix-x specs/renamed-nonstandard'"],
+    // F230 第 2 轮 Codex CRITICAL：以"引号字符出现次数奇偶"做配平判定可被转义引号凑成偶数，
+    // 重新打开 fail-open 降级通道。二者均须由 shell 语义级引号跟踪拦下。
+    ['F5 双引号内藏分号 + 尾部转义引号（凑偶数）', 'echo "a;mv specs/900-fix-x specs/renamed-nonstandard\\""'],
+    ['F6 单引号内藏分号 + `\'\\\'\'` 拼接（凑偶数）', "echo 'a;mv specs/900-fix-x specs/renamed-nonstandard'\\''x'"],
+    ['F7 引号内藏裸管道（分隔符不止 ; 与 &&）', "echo 'a|mv specs/900-fix-x specs/renamed-nonstandard'"],
+    // F230 第 3 轮 Codex CRITICAL：
+    // R3-C1 正则一次吞掉参数文本时，参数里的引号/转义不参与状态转移，引号内的 `;` 被当真实分隔符，
+    //       凭空多识别出一条并不存在的改名 → 参数须由同一状态机继续扫描收集。
+    ['F8 参数内引号藏 mv（R3-C1）', 'mv source "dest;mv specs/900-fix-x specs/renamed-nonstandard"'],
+    ['F9 参数内转义分号藏 mv（R3-C1）', 'mv source dest\\;mv specs/900-fix-x specs/renamed-nonstandard'],
+    // R3-C2 无 comment / redirection 状态时，注释里的 `;` 与重定向 `>&` 的 `&` 都会开启命令位。
+    ['F10 注释内藏分号（R3-C2）', 'true # ; mv specs/900-fix-x specs/renamed-nonstandard'],
+    ['F11 重定向 `>&` 的 & 不是控制操作符（R3-C2）', 'echo hi >& mv specs/900-fix-x specs/renamed-nonstandard'],
+    // R3-C3 `\b` 不是 shell token 边界，`mv-f` 会被读成 `mv -f`。
+    ['F12 mv-f 是另一个命令（R3-C3）', 'mv-f specs/900-fix-x specs/renamed-nonstandard'],
+    ['F13 git mv-f 同上（R3-C3）', 'git mv-f specs/900-fix-x specs/renamed-nonstandard'],
+  ];
+
+  for (const [label, command] of FORGED_CASES) {
+    it(`${label} → 候选保持原状、不进入降级通道`, () => {
+      const entries = [
+        user('x'),
+        write('specs/900-fix-x/fix-report.md', 1),
+        bash(command, 2),
+      ];
+      const cand = resolveFeatureDirCandidate(entries, 0);
+      assert.equal(cand.path, 'specs/900-fix-x', `command=${command}`);
+      assert.equal(cand.ambiguous, false, `command=${command}`);
+    });
+  }
+});
+
+describe('F230 命令位锚定不得误伤合法改名（防过度收紧的正向保住组）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWithCandidate = (command) => resolveFeatureDirCandidate([
+    user('x'),
+    write('specs/900-fix-x/fix-report.md', 1),
+    bash(command, 2),
+  ], 0);
+
+  // C1/C2 钉的是「真实改名到非规范名仍须降级」——F224 的合法 fail-open 设计意图不得被本次收窄误伤。
+  it('C1 真实 mv 到非规范名 → 仍转降级（ambiguous）', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/renamed-nonstandard');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('C2 真实 git mv 到非规范名 → 仍转降级（ambiguous）', () => {
+    const cand = resolveWithCandidate('git mv specs/900-fix-x specs/renamed-nonstandard');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('C3 mv -f 带 flag → 正常跟随', () => {
+    const cand = resolveWithCandidate('mv -f specs/900-fix-x specs/901-fix-y');
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('C4 前置命令 + && 后的 mv（切段后段首成立）→ 正常跟随', () => {
+    const cand = resolveWithCandidate('cd . && mv specs/900-fix-x specs/901-fix-y');
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('C5 heredoc 之后的 mv（F224 既有语义）→ 正常跟随', () => {
+    const entries = [
+      user('x'),
+      bash('cat > specs/900-fix-x/fix-report.md <<EOF\nbody\nEOF\nmv specs/900-fix-x specs/901-fix-y', 1),
+    ];
+    const cand = resolveFeatureDirCandidate(entries, 0);
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('C6 分号串联两跳改名 → 取最终态', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y; mv specs/901-fix-y specs/902-fix-z');
+    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  // W1（Codex 第 2 轮）：SEGMENT_SPLIT_REGEX 不切裸 `|` / `&`，若沿用分段语义只能识别第一跳。
+  // scanRenameCommandEvents 把这两个符号也计为控制操作符后，两跳均跟随到最终态——
+  // 与本 feature 硬化之前的全局匹配行为一致（characterization）。
+  it('C6b 裸管道串联两跳改名 → 跟随到最终态', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y | mv specs/901-fix-y specs/902-fix-z');
+    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('C6c 裸后台符 `&` 串联两跳改名 → 跟随到最终态', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y & mv specs/901-fix-y specs/902-fix-z');
+    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('C7 提名侧不受影响（scanArtifactPath 逐字未改，注释形态写入仍提名）', () => {
+    const entries = [
+      user('x'),
+      bash('echo "# 修复报告" > specs/902-fix-comment/fix-report.md', 1),
+    ];
+    const cand = resolveFeatureDirCandidate(entries, 0);
+    assert.equal(cand.path, 'specs/902-fix-comment');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F230 scanRenameCommandEvents：命令位判定的直接单测（引号/转义/注释/重定向/分隔符）', () => {
+  /** 断言用投影：只看 paramText（trim 后）保序列表 */
+  const params = (command) => scanRenameCommandEvents(command).map((e) => e.paramText.trim());
+
+  it('纯 mv → 抽出一条事件，含偏移与参数文本', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv specs/900-fix-x specs/901-fix-y'), [
+      { offset: 0, paramText: ' specs/900-fix-x specs/901-fix-y' },
+    ]);
+  });
+
+  it('git mv → 同样抽出（且 git 与 mv 之间只认空格/制表符）', () => {
+    assert.deepEqual(scanRenameCommandEvents('git mv a b'), [{ offset: 0, paramText: ' a b' }]);
+    assert.deepEqual(params('git\nmv a b'), ['a b'], '换行后的 mv 自身在命令位，抽的是 mv 的参数');
+  });
+
+  it('引号内的 mv 不出现在结果中（单引号 / 双引号 / 引号内藏分隔符）', () => {
+    assert.deepEqual(scanRenameCommandEvents("echo 'mv a b'"), []);
+    assert.deepEqual(scanRenameCommandEvents('echo "mv a b"'), []);
+    assert.deepEqual(scanRenameCommandEvents("echo 'a;mv a b'"), []);
+    assert.deepEqual(scanRenameCommandEvents("echo 'a|mv a b'"), []);
+  });
+
+  it('转义引号不得让引号状态错位（字符奇偶计数会被凑成偶数的构造）', () => {
+    assert.deepEqual(scanRenameCommandEvents('echo "a;mv a b\\""'), []);
+    assert.deepEqual(scanRenameCommandEvents("echo 'a;mv a b'\\''x'"), []);
+  });
+
+  // R3-C1：参数文本必须由同一状态机继续收集。若让正则一次吞掉参数，
+  // 参数里的开引号不参与状态转移，引号内的 `;` 会被当真实分隔符，凭空多出第二条事件。
+  it('参数内引号包裹的 mv 不产生第二条事件（R3-C1）', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv src "dst;mv a b"'), [
+      { offset: 0, paramText: ' src "dst;mv a b"' },
+    ]);
+  });
+
+  it('参数内转义分号不产生第二条事件（R3-C1）', () => {
+    assert.deepEqual(params('mv src dst\\;mv a b'), ['src dst\\;mv a b']);
+  });
+
+  // R3-C2：注释与重定向各自成状态，其中的 `;` / `&` 都不得开启命令位。
+  it('注释内的分隔符不开启命令位（R3-C2）', () => {
+    assert.deepEqual(scanRenameCommandEvents('true # ; mv a b'), []);
+    assert.deepEqual(params('true # ; mv a b\nmv c d'), ['c d'], '注释只到行尾，下一行仍正常识别');
+  });
+
+  it('重定向操作符中的 `&` 不是控制操作符（R3-C2）', () => {
+    assert.deepEqual(scanRenameCommandEvents('echo hi >& mv a b'), []);
+    assert.deepEqual(scanRenameCommandEvents('echo hi &> mv a b'), []);
+  });
+
+  // R3-C3：`\b` 不是 shell token 边界，`mv-f` 是另一个命令而非 `mv -f`。
+  it('命令名须以行尾或空白终止，`mv-f` / `git mv-f` 不算 mv（R3-C3）', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv-f a b'), []);
+    assert.deepEqual(scanRenameCommandEvents('git mv-f a b'), []);
+  });
+
+  it('`;` 串联两条命令位 mv → 抽出两项（偏移递增）', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv a b; mv b c'), [
+      { offset: 0, paramText: ' a b' },
+      { offset: 8, paramText: ' b c' },
+    ]);
+  });
+
+  it('`|` 串联两条命令位 mv → 抽出两项（SEGMENT_SPLIT_REGEX 不切裸管道，故必须在此层覆盖）', () => {
+    assert.deepEqual(params('mv a b | mv b c'), ['a b', 'b c']);
+  });
+
+  it('非命令位的 mv（注释 / 其他命令的参数位）→ 空结果', () => {
+    assert.deepEqual(scanRenameCommandEvents('true # mv a b'), []);
+    assert.deepEqual(scanRenameCommandEvents('echo mv a b'), []);
+    assert.deepEqual(scanRenameCommandEvents('grep mv a b'), []);
+  });
+});
+
+describe('F230 第 3 轮：改名事件按偏移归段，保持「段内先提名、再改名」的执行时序（R3-C4）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+
+  // 与 HEAD 逐字一致的时序语义 characterization：改名发生在提名**之前**，
+  // 此时尚无已跟踪目录（FR-001 只跟随"已知"目录），故该 mv 与本次收口无关、被整条忽略；
+  // 随后同一命令后段的重定向写入才提名出候选 specs/900-fix-x。
+  // 若实现改为「先跑完所有段的提名、再统一改名」，早于提名的改名会被倒灌到后来才出现的候选上，
+  // 把 path 带到 specs/renamed-nonstandard 并置 ambiguous —— 相对 HEAD 凭空新增一条 fail-open。
+  it('先改名后写入：改名早于提名，不得倒灌到后来才出现的候选', () => {
+    const cand = resolveFeatureDirCandidate([
+      user('x'),
+      bash('mv specs/900-fix-x specs/renamed-nonstandard; printf x > specs/900-fix-x/fix-report.md', 1),
+    ], 0);
+    assert.equal(cand.path, 'specs/900-fix-x');
+    assert.equal(cand.ambiguous, false);
+  });
+});
+
+describe('F230 第 3 轮行为变化 characterization：注释感知让「带尾注释的真实改名」被正确跟随', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWithCandidate = (command) => resolveFeatureDirCandidate([
+    user('x'),
+    write('specs/900-fix-x/fix-report.md', 1),
+    bash(command, 2),
+  ], 0);
+
+  // HEAD 把 `#` 与注释词当成多余操作数（3 个操作数）从而整条跳过，改名不被跟随。
+  // 引入注释状态后，注释被正确剥离，这是**正确性改进**而非放宽：
+  // 真实改名本就该被跟随，且目标名仍须符合 NNN-fix-<name> 规范才不触发降级（见下一条）。
+  it('`mv A B # 注释` → 跟随到 B（注释被正确剥离）', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y # 迁移');
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('`mv A <非规范名> # 注释` → 目标名不合规范，仍转降级（收窄未被放宽）', () => {
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/renamed-nonstandard # 迁移');
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+});
+
+describe('F230 R4 · shell 词法边界与长度上界（Codex 第 4 轮对抗审查 CRITICAL）', () => {
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWithCandidate = (command) => resolveFeatureDirCandidate([
+    user('x'),
+    write('specs/900-fix-x/fix-report.md', 1),
+    bash(command, 2),
+  ], 0);
+
+  /** 上界常量在 core 内部（RENAME_PARAM_MAX_LENGTH），此处按合同值钉死；改动上界须同步本测试 */
+  const PARAM_MAX_LENGTH = 400;
+
+  // 本组每条构造在真实 bash 下都**不会**产生一次到 specs/renamed-nonstandard 的改名，
+  // 期望一律为「候选保持原状」：path === 'specs/900-fix-x' 且 ambiguous === false。
+  const FORGED_CASES = [
+    [
+      'R4-1 `( : )#` 后的注释未被识别 → 注释内的 `;` 冒充命令位',
+      '( : )# ; mv specs/900-fix-x specs/renamed-nonstandard',
+      // 真实 shell 语义：`)` 是元字符，`#` 紧跟其后仍处于词首，整行 `# ...` 是注释，
+      // 注释内的 `;` 不是命令分隔符，mv 从不执行。旧 isWordStart 字符类漏了 `)`，
+      // 于是 `#` 被当普通字符、其后的 `;` 开启命令位，伪造 mv 被采信。
+    ],
+    [
+      'R4-2 `>|` 强制覆盖重定向中的 `|` 被误当管道控制符',
+      'echo hi >|mv specs/900-fix-x specs/renamed-nonstandard',
+      // 真实 shell 语义：`>|` 是"忽略 noclobber 强制覆盖"的单个重定向操作符，
+      // 其后的 `mv` 是**重定向目标文件名**，不是命令；只会创建一个名为 mv 的文件。
+      // 旧实现只识别 `>&`/`&>`，`|` 落到通用控制操作符分支上开启了命令位。
+    ],
+    [
+      'R4-3a 未闭合双引号 → bash 语法错误，命令根本不执行',
+      'mv specs/900-fix-x specs/renamed-nonstandard"',
+      // 真实 shell 语义：未闭合引号是 "unexpected EOF while looking for matching quote"，
+      // 整条命令不会被执行，其中的 mv 文本不构成任何一次真实改名，不得采信。
+    ],
+    [
+      'R4-3b 未闭合单引号 → 同上',
+      "mv specs/900-fix-x specs/renamed-nonstandard'",
+    ],
+    [
+      'R4-4 超长参数藏第三操作数：截断解析会让「多操作数整条跳过」失效',
+      `mv specs/900-fix-x specs/renamed-nonstandard${' '.repeat(PARAM_MAX_LENGTH)}specs/dest-dir`,
+      // 真实 shell 语义：连续空白只是分隔符，bash 收到的是 argc=3 的 `mv SRC DST DEST_DIR`，
+      // 语义为"把前两者移入目录 DEST_DIR"，并非一次 SRC→DST 改名。
+      // 保守化合同要求多操作数形态整条跳过；若参数先被截断到上界再解析，第三操作数被抹掉，
+      // 形态退化成看似合法的二操作数改名 —— 长度上限成了绕过保守化合同的通道。
+    ],
+  ];
+
+  for (const [label, command] of FORGED_CASES) {
+    it(`${label} → 候选保持原状、不进入降级通道`, () => {
+      const cand = resolveWithCandidate(command);
+      assert.equal(cand.path, 'specs/900-fix-x', `command=${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `command=${JSON.stringify(command)}`);
+    });
+  }
+
+  // ── 正向对照：防止上述收紧误伤合法形态 ──
+
+  it('P1 未闭合引号守卫不误伤正常命令：引号配平的普通 mv 仍抽出 1 条事件', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv specs/900-fix-x specs/901-fix-y'), [
+      { offset: 0, paramText: ' specs/900-fix-x specs/901-fix-y' },
+    ]);
+    const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y');
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('P2 参数长度恰好等于上界 → 仍正常解析（边界取 <=，不是 off-by-one）', () => {
+    const head = ' specs/900-fix-x specs/901-fix-y';
+    const param = head + ' '.repeat(PARAM_MAX_LENGTH - head.length); // 长度恰好 == 上界
+    assert.equal(param.length, PARAM_MAX_LENGTH);
+    const events = scanRenameCommandEvents(`mv${param}`);
+    assert.equal(events.length, 1, '等于上界不得作废');
+    assert.equal(events[0].paramText, param);
+    const cand = resolveWithCandidate(`mv${param}`);
+    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('P2b 参数长度超出上界 1 字符 → 整条事件作废（不再截断后解析）', () => {
+    const head = ' specs/900-fix-x specs/901-fix-y';
+    const param = head + ' '.repeat(PARAM_MAX_LENGTH + 1 - head.length);
+    assert.equal(param.length, PARAM_MAX_LENGTH + 1);
+    assert.deepEqual(scanRenameCommandEvents(`mv${param}`), []);
   });
 });
 

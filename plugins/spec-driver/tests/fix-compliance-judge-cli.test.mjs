@@ -1137,12 +1137,19 @@ function stageIsolatedRoot() {
 // (a) 不同时缺 feature-dir/fix-report、(b) hook exit 0。若截断内容退化成非 fix 会话，
 // 或 transcript 本身触发 fail-open，这两条断言**仍会通过**——它们是单调性护栏而非阳性覆盖。
 // 本次修复的核心回归覆盖来自上方合成的"幽灵覆写"用例（ambiguous=false 支），不要把本组当作充分证据。
-describe('F227 real transcript re-verification', () => {
-  // 范围说明（限界三）：该真实 transcript 在当前 worktree 源码下走的是 **ambiguous=true** 那一支
-  // （transcript 中的合成 `mv` 把候选带到非规范名目录）。按单调性不变量，兜底刻意不介入这一支——
-  // 介入必然引入新的误阻断。因此仍输出 feature-dir-unresolvable 是**预期行为，不是修复失败**；
-  // 本次真正修复的是 ambiguous=false 的幽灵覆写支，由上方"硬阻断支等价复现"用例钉住。
-  it('真实 transcript 仍走 F224 fail-open（ambiguous 支不在本次范围，且必须维持 exit 0）', (t) => {
+describe('F227 real transcript re-verification（F230 已闭合 F227 限界三）', () => {
+  // F227 交付时，该真实 transcript（session 67720241，F225 交付会话）在当时源码下走 **ambiguous=true**
+  // 那一支：transcript 里一段临时验证脚本内的合成 `mv` 文本被 applyRename 当真实改名跟随，把候选带到
+  // 非规范名目录 → ambiguous=true → feature-dir-unresolvable → fail-open 放行。F227 明确将这一支列为
+  // 「限界三」不予处理（它的兜底只覆盖 ambiguous=false 的幽灵覆写支）。
+  //
+  // F230（本次）恰好修的就是这一支：命令位锚定后，该合成 `mv` 不再被跟随，候选停在 ambiguous=false
+  // 的合成路径（specs/300-fix-old，磁盘不存在）→ **F227 的 usable() 兜底随即介入**，由候选历史回落到
+  // 真实的 specs/225-fix-compound-command-hijack（磁盘制品齐全）→ judgeCompliance 读到真实 fix-report.md
+  // 与 verification-report.md → **compliant:true**。两处修复在此协同：F230 使该会话脱离 ambiguous=true
+  // 死角，F227 兜底把它接回真实目录。单独任一都不够（F227 单独→仍 fail-open 降级；F230 单独→合成候选
+  // 磁盘不存在会误阻断）。这正是该会话本应有的结论——它确实完整合规（implement×2 / verify×3 / 四件制品齐全）。
+  it('真实 transcript → compliant:true（F230 解除 ambiguous 死角，F227 兜底回落真实目录）', (t) => {
     if (!fs.existsSync(F227_REAL_TRANSCRIPT)) {
       t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
       return;
@@ -1150,8 +1157,9 @@ describe('F227 real transcript re-verification', () => {
     const res = spawnSync('node', [CLI, '--mode', 'report', '--transcript-path', F227_REAL_TRANSCRIPT, '--project-root', REPO_ROOT], { encoding: 'utf8' });
     assert.equal(res.status, 0);
     const out = JSON.parse(res.stdout);
-    assert.deepEqual(out.transcriptDiagnostics, ['feature-dir-unresolvable'], JSON.stringify(out));
-    assert.equal(out.compliant, undefined, '不得由 fail-open 反转为 compliant:false 阻断');
+    // 单调性：改动前是 fail-open 放行（exit 0），改动后是合规放行（exit 0），仍是 exit 0，无新增误阻断。
+    assert.deepEqual(out.transcriptDiagnostics, [], JSON.stringify(out));
+    assert.equal(out.compliant, true, `合规会话应被正确识别为 compliant，而非仅靠 fail-open 放行：${JSON.stringify(out)}`);
   });
 
   it('截断到阻断时点（head -526）同样维持 exit 0，不因兜底新增误阻断', (t) => {
@@ -1178,5 +1186,105 @@ describe('F227 real transcript re-verification', () => {
       encoding: 'utf8',
     });
     assert.equal(hook.status, 0, hook.stderr);
+  });
+});
+
+describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () => {
+  /**
+   * 统一前缀：fix 展开锚点 + Write 提名 `specs/300-fix-decoy/fix-report.md`（**不落盘**，
+   * 复现"文件可以根本没写成功"）+ 1 次委派 + 末条 Bash。
+   * 差分点只有两处：委派构成（第 2 层判据）与末条 Bash 的改名文本形态（第 1 层判据）。
+   */
+  const DECOY_DIR = 'specs/300-fix-decoy';
+  const forgedTranscript = (agentInput, command) => writeTranscript([
+    SKILL_EXPANSION_LINE('fix'),
+    TOOL_USE('Write', { file_path: `${DECOY_DIR}/fix-report.md`, content: '# Fix' }),
+    TOOL_USE('Agent', agentInput),
+    TOOL_USE('Bash', { command }),
+    ASSISTANT_TEXT('已完成'),
+  ]);
+  const VERIFY_AGENT = { subagent_type: 'spec-driver:verify', description: '交叉核实无需改动' };
+
+  // ── 第 1 层（命令位锚定）：伪造 mv 不得把候选带到非规范名，故不得进入降级通道 ──
+  const FORGED_COMMANDS = [
+    ['A  注释假 mv', `true # mv ${DECOY_DIR} specs/renamed-nonstandard`],
+    ['D  引号内假 mv', `echo 'mv ${DECOY_DIR} specs/renamed-nonstandard'`],
+    ['F1 裸参数假 mv（无注释无引号）', `echo mv ${DECOY_DIR} specs/renamed-nonstandard`],
+    // F230 第 3 轮 Codex CRITICAL 的端到端反向用例（core 单测已覆盖判据，此处钉住整条 CLI 链路）
+    ['F8  参数内引号藏 mv（R3-C1）', `mv source "dest;mv ${DECOY_DIR} specs/renamed-nonstandard"`],
+    ['F10 注释内藏分号（R3-C2）', `true # ; mv ${DECOY_DIR} specs/renamed-nonstandard`],
+    // F230 第 4 轮 Codex CRITICAL（R4-4）：真实 bash 收到的是 argc=3 的 `mv SRC DST DEST_DIR`
+    // ——语义是"移入目录 DEST_DIR"，不是一次 SRC→DST 改名。若参数先按长度上界截断再解析，
+    // 第三操作数被抹掉，形态退化成看似合法的二操作数改名，绕过「多操作数整条跳过」的保守化合同。
+    // 选它做端到端用例是因为它最不像人为构造：超长参数在真实命令里天然可能出现。
+    ['R4-4 超长参数藏第三操作数', `mv ${DECOY_DIR} specs/renamed-nonstandard${' '.repeat(400)}specs/dest-dir`],
+  ];
+
+  for (const [label, command] of FORGED_COMMANDS) {
+    it(`${label} + verify 类委派 → 必须 exit 2（伪造文本不打开降级通道）`, () => {
+      const t = forgedTranscript(VERIFY_AGENT, command);
+      // 断死 exit 2（阻断）而非 notEqual(0)：后者在 CLI 崩溃返回 1 / status:null 时也会通过，
+      // 会把"门禁挂了"误读成"门禁生效了"。
+      const run = runCli({ transcriptPath: t });
+      assert.equal(run.status, 2, run.stderr);
+      const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+      assert.deepEqual(v.transcriptDiagnostics, [], JSON.stringify(v));
+      assert.ok(!v.transcriptDiagnostics.includes('feature-dir-unresolvable'), JSON.stringify(v));
+      assert.equal(v.compliant, false, JSON.stringify(v));
+    });
+  }
+
+  // ── 正向保住：F224 的合法降级设计意图不得被本次两层收窄误伤 ──
+  it('C 真实 mv + verify 类委派 → 继续 exit 0 + degraded（F224 合法降级不变）', () => {
+    const t = forgedTranscript(VERIFY_AGENT, `git mv ${DECOY_DIR} specs/renamed-nonstandard`);
+    assert.equal(runCli({ transcriptPath: t }).status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].degraded, true);
+    assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
+  });
+
+  // ── 第 2 层（降级下界取两收口合同交集）：零验证类委派的会话无论目录落在哪都不可能合规收口 ──
+  it('E implement-only 零验证类委派 + 真实 mv → 必须 exit 2', () => {
+    const t = forgedTranscript(
+      { subagent_type: 'spec-driver:implement', description: '执行代码修复' },
+      `git mv ${DECOY_DIR} specs/renamed-nonstandard`,
+    );
+    const run = runCli({ transcriptPath: t });
+    assert.equal(run.status, 2, run.stderr);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: t }).stdout);
+    assert.equal(v.compliant, false, JSON.stringify(v));
+    assert.ok(!v.transcriptDiagnostics.includes('feature-dir-unresolvable'), JSON.stringify(v));
+  });
+
+  it('E 对照 1：canonical no-op 委派（roleClass=other + noopVerify）+ 真实 mv → 仍走降级 exit 0', () => {
+    // 证明第 2 层没有过度收紧到"只认 roleClass==='verify'"：no-op 合同的合法收口文案
+    // 「交叉核实无需改动判定」只命中 NOOP_VERIFY_ROLE_REGEX，不得被误伤。
+    const t = forgedTranscript(
+      { subagent_type: null, description: '交叉核实无需改动判定' },
+      `git mv ${DECOY_DIR} specs/renamed-nonstandard`,
+    );
+    assert.equal(runCli({ transcriptPath: t }).status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].degraded, true);
+  });
+
+  it('E2 对照 2：描述含"确认"致 noopVerify=true（即便 roleClass=implement）+ 真实 mv → 仍走降级 exit 0', () => {
+    // 原先此处期望 exit 2（理由是"implement 只需加两个字即可重开降级"），该论证已被证伪：
+    // description='确认无需代码修复' 实测同时得到 roleClass='implement'（IMPLEMENT_ROLE_REGEX 的
+    // 「代码修复」命中了"无需代码修复"）与 noopVerify=true，而 judgeCompliance 的 no-op 分支只看
+    // noopVerify===true，会判这条**合规**。降级下界必须被合规合同蕴含，否则就成了
+    //「目录可定位时合规、改名后却不许降级」的状态依赖不一致，故改为正向期望。
+    const t = forgedTranscript(
+      { subagent_type: null, description: '确认无需代码修复' },
+      `git mv ${DECOY_DIR} specs/renamed-nonstandard`,
+    );
+    const run = runCli({ transcriptPath: t });
+    assert.equal(run.status, 0, run.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].degraded, true);
+    assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
   });
 });

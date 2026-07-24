@@ -62,15 +62,26 @@ export const BASH_WRITE_INDICATOR_REGEX = /(?:>>?|<<|\btee\b)/;
 export const FIX_DIR_NAME_REGEX = /^specs\/\d+-fix-[a-z0-9-]+\/?$/;
 
 /**
- * 目录改名命令**段**识别（F224 FR-001 + Codex 复审保守化）：捕获 `mv` / `git mv` 之后、
- * 到最近一个命令分隔符（换行 / `;` / `&` / `|`）之前的整段参数文本，交由 parseRenameOperands
- * 做 token 级解析。全局匹配以支持同一条复合命令内串联的多次改名。
+ * 改名命令名识别（F230 反伪造硬化，第 3 轮）：sticky 正则，只在游标恰好落在**命令位**时试匹配。
  *
- * 改为"先取段、再数操作数"是因为旧的"直接捕获相邻两 token 当 src/dst"写法会误解析异常形态：
- * `mv A B C`（真实语义是把 A、B 移入目录 C）会被读成 `A → B` 的改名，进而误置 ambiguous 触发降级。
- * 段捕获量词有界（≤ 400 字符）且字符类排除分隔符 → 单趟贪婪匹配，无灾难性回溯风险。
+ * 为何必须锚定命令位：把 `mv` 当关键字而非命令时，任何**把 mv 当作普通文本写出来**的命令都会被
+ * 误读为真实改名——`true # mv A B`（注释）、`echo 'mv A B'`（引号）、`echo mv A B`（裸参数）皆然。
+ * 这不是精度问题而是**可被主动构造的放行开关**：坍塌会话只需一句形似 mv 的文本就能把候选带到
+ * 非规范名、打开 F224 的 fail-open 降级通道。命令位判定见 scanRenameCommandEvents。
+ *
+ * 三处刻意的写法（均被对抗审查用具体构造证伪过更弱的版本）：
+ * - 用 `(?=$|[ \t])` 而非 `\b` 作终止判据：`\b` 在 `mv-f` 的 `v`/`-` 之间也成立，
+ *   会把自定义命令 `mv-f` / `git mv-f` 误读成 `mv -f`（R3-C3）。
+ * - `git` 与 `mv` 之间用 `[ \t]` 而非 `\s`：`\s` 含换行，会让一行末尾的 `git` 与下一条命令行首的
+ *   `mv` 跨命令拼成一条伪改名。
+ * - 只匹配命令名本身、**不吞参数**：若让正则一次吞掉参数文本，参数里的引号/转义就不参与状态转移，
+ *   `mv src "dst;mv <候选> <非规范名>"` 中引号内的 `;` 会被当成真实分隔符，凭空多识别一条改名（R3-C1）。
+ *   参数改由同一状态机继续扫描收集，见 scanRenameCommandEvents。
  */
-export const RENAME_COMMAND_SEGMENT_REGEX = /(?:\bgit\s+mv\b|\bmv\b)([^\n;&|]{0,400})/g;
+const RENAME_COMMAND_NAME_REGEX = /(?:git[ \t]+mv|mv)(?=$|[ \t])/y;
+
+/** 单条改名命令参数文本的长度上界（沿用改动前的有界量词口径） */
+const RENAME_PARAM_MAX_LENGTH = 400;
 
 /**
  * 其后紧跟独立参数的 option（`mv -t DIR SRC` / `mv -S SUFFIX SRC DST`）。
@@ -431,6 +442,111 @@ function hasBashWriteIndicator(segment) {
 }
 
 /**
+ * 从一条**完整** Bash 命令中扫出所有**真正处于命令位**的 mv / git mv 事件（F230）。
+ * 返回每条事件在（行连接消解后的）命令文本中的字符偏移与其参数文本，供调用方按偏移归段。
+ *
+ * 单趟线性扫描，状态包含：单引号（内部无转义）、双引号、反斜杠转义、`#` 注释、重定向操作符。
+ * 只有在**未被引用、未被转义、且不属于重定向**的控制操作符（`;` `|` `&` 换行，天然覆盖
+ * `&&` `||`）之后或文本开头，才认为进入新的命令位。
+ *
+ * 三条判据缺一不可（均由对抗审查用具体构造证伪过更弱的写法）：
+ * 1. **必须扫完整命令、不能逐段**——`splitCommandTextSegments` 不感知引号，
+ *    `echo 'a;mv <候选> <非规范名>'` 会被引号内的 `;` 切开，让文本碎片落到后段段首冒充命令位。
+ * 2. **参数文本必须由同一状态机继续扫描收集，不能让正则一次吞掉**——
+ *    `mv src "dst;mv <候选> <非规范名>"` 中参数里的开引号若不参与状态转移，
+ *    引号内的 `;` 会被当成真实分隔符，凭空多识别出一条并不存在的改名命令。
+ * 3. **注释与重定向必须各自成状态**——`true # ; mv ...` 的分号在注释里，
+ *    `echo hi >& mv ...` 的 `&` 是重定向而非控制操作符，二者都不得开启新的命令位。
+ *
+ * 控制操作符取 `;` `|` `&` 与换行：裸 `|` `&` 也计入，故 `mv A B | mv B C` 两跳都识别
+ * ——与改动前的全局匹配行为一致（`splitCommandTextSegments` 并不切这两个符号）。
+ * @param {string} command
+ * @returns {{ offset:number, paramText:string }[]} 按出现顺序排列
+ */
+export function scanRenameCommandEvents(command) {
+  const text = unfoldLineContinuations(String(command));
+  const events = [];
+  let quote = null;           // null | "'" | '"'
+  let atCommandPosition = true;
+  let paramStart = -1;        // >= 0 表示正在收集最后一条事件的参数文本
+  const closeParam = (end) => {
+    if (paramStart < 0) return;
+    // 超长参数**整条作废**而非截断：截断会把 `mv A B <大量空白> C` 的第三操作数藏起来，
+    // 让本应"多操作数整条跳过"的形态退化成看似合法的二操作数改名（保守化合同不得被长度上限绕过）。
+    if (end - paramStart > RENAME_PARAM_MAX_LENGTH) events.pop();
+    else events[events.length - 1].paramText = text.slice(paramStart, end);
+    paramStart = -1;
+  };
+  const isWordStart = (i) => i === 0 || /[\s;|&()]/.test(text[i - 1]);
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote === "'") {            // 单引号内没有转义，只有配对单引号能结束
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (ch === '\\') { i += 1; atCommandPosition = false; continue; }
+    if (quote === '"') {
+      if (ch === '"') quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') { quote = ch; atCommandPosition = false; continue; }
+    if (ch === '#' && isWordStart(i)) {   // 注释到行尾：其中的分隔符不得开启命令位
+      closeParam(i);
+      const nl = text.indexOf('\n', i);
+      if (nl === -1) break;
+      i = nl - 1;
+      continue;
+    }
+    // 重定向操作符 >& <& &> 中的 & 不是控制操作符
+    if ((ch === '>' || ch === '<') && (text[i + 1] === '&' || text[i + 1] === '|')) { i += 1; atCommandPosition = false; continue; }
+    if (ch === '&' && text[i + 1] === '>') { i += 1; atCommandPosition = false; continue; }
+    if (ch === ';' || ch === '|' || ch === '&' || ch === '\n' || ch === '\r') {
+      closeParam(i);
+      atCommandPosition = true;
+      continue;
+    }
+    if (ch === ' ' || ch === '\t') continue;   // 空白不改变命令位状态
+    if (!atCommandPosition) continue;
+    RENAME_COMMAND_NAME_REGEX.lastIndex = i;
+    const match = RENAME_COMMAND_NAME_REGEX.exec(text);
+    atCommandPosition = false;
+    if (match === null) continue;              // 命令位被别的命令占据（echo / grep / true / mv-f …）
+    closeParam(i);
+    events.push({ offset: i, paramText: '' });
+    paramStart = i + match[0].length;
+    i = paramStart - 1;
+  }
+  closeParam(text.length);
+  // 未闭合引号的命令在真实 shell 里是语法错误、根本不会执行，其中的 mv 文本一律不予采信
+  if (quote !== null) return [];
+  return events;
+}
+
+/**
+ * 与 `splitCommandTextSegments` 同源的分段，但额外给出每段在（行连接消解后）命令文本中的跨度。
+ * 供 `resolveFeatureDirCandidate` 把改名事件按偏移归回**它所属的那一段**，
+ * 从而在拥有完整命令词法上下文的同时，保持「逐段先提名、再改名」的原有执行时序
+ * ——若改为「先跑完所有段的提名、再统一改名」，早于提名发生的改名会被倒灌到后来才出现的候选上。
+ * @param {string} command
+ * @returns {{ text:string, start:number, end:number }[]}
+ */
+function splitCommandTextSegmentSpans(command) {
+  const text = unfoldLineContinuations(command);
+  const spans = [];
+  let cursor = 0;
+  const splitter = new RegExp(SEGMENT_SPLIT_REGEX.source, 'g');
+  let match;
+  while ((match = splitter.exec(text)) !== null) {
+    spans.push({ text: text.slice(cursor, match.index), start: cursor, end: match.index });
+    cursor = match.index + match[0].length;
+    if (match[0].length === 0) splitter.lastIndex += 1; // 防御空匹配死循环
+  }
+  spans.push({ text: text.slice(cursor), start: cursor, end: text.length });
+  return spans;
+}
+
+/**
  * 从锚点后的制品写入痕迹提名特性目录候选，取最后出现者（codex implement 审查 C-2 硬化）：
  * - Write/Edit：`input.file_path` 必须命中 required artifact 路径（fix-report.md / verification-report.md）
  * - Bash：`input.command` 命中 artifact 路径 **且** 含写入指示符（重定向/heredoc/tee）——
@@ -449,7 +565,8 @@ function hasBashWriteIndicator(segment) {
  * - 盲区 A 改名跟随（FR-001）：`git mv`/`mv` 把已提名的候选目录搬走后，候选须跟随到新路径，
  *   否则拿已不存在的旧路径去撞磁盘核验必然误报"未建立特性目录"。改名识别刻意**不受**写指示符门禁约束
  *   （改名命令天然不含重定向符），但只在 src **精确等于**当前已知候选时才采信——不响应 transcript 中
- *   任意无关的 mv，天然维持 FR-007 的锚定语义；与写入提名一样按段执行（见下方循环）。
+ *   任意无关的 mv，天然维持 FR-007 的锚定语义；与写入提名不同，改名事件在整条命令上扫出、
+ *   再按字符偏移归回所属段落（F230 第 3 轮，理由见 scanRenameCommandEvents 与 splitCommandTextSegmentSpans）。
  * - 盲区 B 原地编辑准入（FR-002）：`sed -i` / `perl -i` 这类不含重定向符但确实写入制品的命令，
  *   过去被写指示符门禁挡在扫描之外。现以 INLINE_EDIT_INDICATOR_REGEXES 拓宽门禁，命中后仍走同一条
  *   ARTIFACT_PATH_REGEX 判据，写入证据的认定标准与改动前逐字一致。
@@ -536,18 +653,14 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
     }
   };
 
-  const applyRename = (command) => {
+  const applyRenameEvent = (paramText) => {
     if (trackedDir === null) return; // 尚无已跟踪目录时的改名与本次收口无关（FR-001 只跟随"已知"目录）
-    let match;
-    RENAME_COMMAND_SEGMENT_REGEX.lastIndex = 0;
-    while ((match = RENAME_COMMAND_SEGMENT_REGEX.exec(command)) !== null) {
-      const operands = parseRenameOperands(match[1]);
-      if (operands === null) continue; // 异常形态整条跳过（保守化：不跟随、也不置 ambiguous）
-      const src = stripTrailingSlash(operands[0]);
-      if (src !== trackedDir) continue;
-      trackedDir = stripTrailingSlash(operands[1]);
-      syncCandidateFromTrackedDir();
-    }
+    const operands = parseRenameOperands(paramText);
+    if (operands === null) return; // 异常形态整条跳过（保守化：不跟随、也不置 ambiguous）
+    const src = stripTrailingSlash(operands[0]);
+    if (src !== trackedDir) return;
+    trackedDir = stripTrailingSlash(operands[1]);
+    syncCandidateFromTrackedDir();
   };
 
   for (const entry of list) {
@@ -557,13 +670,19 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
       if ((block.name === 'Write' || block.name === 'Edit') && typeof input.file_path === 'string') {
         scanArtifactPath(input.file_path);
       } else if (block.name === 'Bash' && typeof input.command === 'string') {
-        // 逐段判定并按段顺序推进 candidate（不提前 return），保持「取最后出现者」语义。
-        // 段内先写入提名、再改名跟随：复合命令 `写制品 && mv 旧 新` 下，先提名才能让改名的 src 精确命中候选。
-        // applyRename 同样按段执行（F225 plan §合并预案指定方向）：若对整条命令一次性扫描，
-        // 「某段 mv」会与「另一段 artifact 提及」跨段误关联，与 F225 Root Cause 同构。
-        for (const segment of splitCommandTextSegments(input.command)) {
-          if (hasBashWriteIndicator(segment)) scanArtifactPath(segment);
-          applyRename(segment); // 改名识别不受写指示符门禁约束（改名命令天然不含重定向符）
+        // 写入提名逐段判定并按段顺序推进 candidate（不提前 return），保持「取最后出现者」语义；
+        // 分段是 F225「写指示符与 artifact 路径须同段共现」判据的载体。
+        // 改名事件在**整条命令**上扫出（需要完整的引号 / 转义 / 注释 / 重定向上下文），
+        // 再按字符偏移归回所属段落——这样既有全命令词法上下文，又保持「段内先提名、再改名」的时序。
+        const renameEvents = scanRenameCommandEvents(input.command);
+        let eventCursor = 0;
+        for (const span of splitCommandTextSegmentSpans(input.command)) {
+          if (hasBashWriteIndicator(span.text)) scanArtifactPath(span.text);
+          // 单指针归并：spans 与 renameEvents 均按偏移升序，避免每段重扫全部事件的二次方开销
+          while (eventCursor < renameEvents.length && renameEvents[eventCursor].offset < span.end) {
+            applyRenameEvent(renameEvents[eventCursor].paramText);
+            eventCursor += 1;
+          }
         }
       }
     }

@@ -196,16 +196,30 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     diagnostics: configDiagnostics,
   });
 
-  // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路。
+  // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路（沿用不变）。
   // 早前实现在 judge 之前直接 return，等于用"目录无法定位"一并赦免了与目录解析无关的委派证据要求，
   // 于是只要多敲一条 `git mv <候选> <非规范名>`，零委派的坍塌会话也能把 exit 2 变成 exit 0——
-  // 直接击穿 F208 设立本门禁的目的。收窄口径：
-  //   委派证据本身已足以证明坍塌（implement 与 verify 均为 0，无论制品落在哪个目录都构不成一次合规收口）
-  //   → 维持阻断，按既有 missing 语义输出；
-  //   仅当存在收口类委派、唯一不确定的确实是"制品落在哪个目录"时 → 才走 degraded 放行。
-  const counts = verdict.delegationCounts;
-  const hasClosureDelegation = counts.implement > 0 || counts.verify > 0;
-  if (featureDirUndetermined && hasClosureDelegation) {
+  // 直接击穿 F208 设立本门禁的目的。
+  //
+  // F230 CRITICAL 第 2 层收窄：降级下界不得取「repair 合同」与「no-op 合同」两种收口形态各自要求的
+  // **并集**（F224 原判据 implement>0 || verify>0），而须取**交集**——repair 合同要求
+  // counts.verify ≥ 1、no-op 合同要求 noopVerifyCount ≥ 1，二者都不满足时，无论制品落在哪个目录，
+  // 该会话都不可能合规收口，故拒绝降级不会冤枉任何本可合规的会话。
+  // 只查 roleClass==='verify' 不够——canonical no-op 委派文案「交叉核实无需改动判定」只命中
+  // NOOP_VERIFY_ROLE_REGEX（含"核实"/"确认"）、不命中更窄的 VERIFY_ROLE_REGEX，
+  // 故必须显式补 `d.noopVerify === true` 分支，否则会误伤合法 no-op 收口。
+  //
+  // 谓词的下界必须**被合规合同蕴含**：凡 judgeCompliance 可能判合规的委派构成，降级都必须放行，
+  // 否则会出现「目录可定位时判合规、目录改名后却拒绝降级」的状态依赖不一致。judgeCompliance 的
+  // no-op 分支只看 `noopVerify === true`（不看 roleClass），故这里也只能取 repair 合同（verify ≥ 1）
+  // 与 no-op 合同（noopVerify ≥ 1）各自要求的并集形式，不得附加 roleClass 排除项。
+  // NOOP_VERIFY_ROLE_REGEX 偏宽（含「确认」「核实」，实测 description='确认无需代码修复' 会同时
+  // 得到 roleClass='implement' 与 noopVerify=true）是**既有 no-op 合同**的判据宽度；收紧它属独立取舍，
+  // 应连同 judgeCompliance 的 no-op 分支一起改，不在本次范围。
+  const hasVerifyClassDelegation = delegations.some(
+    (d) => d && (d.roleClass === 'verify' || d.noopVerify === true),
+  );
+  if (featureDirUndetermined && hasVerifyClassDelegation) {
     return {
       enforcement, configDegraded, isFix: true, mode: anchor.mode,
       transcriptDiagnostics: ['feature-dir-unresolvable'], verdict: null,
