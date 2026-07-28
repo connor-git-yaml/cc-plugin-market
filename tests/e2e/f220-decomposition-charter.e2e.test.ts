@@ -20,6 +20,10 @@
  * - F223 修复：README 首行本地化日期（`toLocaleDateString('zh-CN')`，产品既有行为）曾被当成
  *   稳定内容冻结，跨系统日期必红；scrubRuntimeNoise 补 <DATE> 规则，.snap 做外科式定点替换
  *   （9 处字面量，严禁 `vitest -u`）；生产代码零改动，详见 fix-report.md
+ * - F232 链 E 修复：语义边 confidenceScore 是 all-MiniLM-L6-v2 embedding 余弦相似度，
+ *   onnxruntime 跨 CPU 架构 float32 末位差异使其无法跨平台复现（macOS-arm64 0.780570518226505
+ *   vs Ubuntu-x64 0.7805705225965378）；改为在 edge-builder 出口量化到 4 位小数（产物侧治本），
+ *   .snap 外科式替换 1 处字面量（同样严禁 `vitest -u`）
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';

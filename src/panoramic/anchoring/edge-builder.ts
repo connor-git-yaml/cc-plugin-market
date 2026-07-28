@@ -52,6 +52,50 @@ const CONFIDENCE_PRIORITY: Record<ConfidenceLevel, number> = {
 };
 
 // ============================================================
+// confidenceScore 量化（跨平台可复现）
+// ============================================================
+
+/**
+ * 语义边 confidenceScore 写入图谱产物时保留的小数位。
+ *
+ * 为什么必须量化（F232 链 E）：本模块是**当前 anchoring / embedding 路径上**唯一一处把
+ * 非常量 confidenceScore 写进 `specs/_meta/graph.json` 的位置（该路径其余 relation 都取
+ * CONFIDENCE_SCORES 常量 0.65/0.95）。注意这不等于"全图唯一写入点"——
+ * `graph/graph-builder.ts` 的 `relationship.confidenceScore ?? CONFIDENCE_SCORES[confidence]`
+ * 是另一条持久化入口，`ArchitectureIRRelationship.confidenceScore` 可由调用方提供任意值；
+ * 当前内置 producer 均未赋该字段，故实际产物里只有本模块产生非常量值。
+ *
+ * 该值来自 all-MiniLM-L6-v2 的 embedding 余弦相似度，而 embedding 由 onnxruntime 在不同
+ * CPU 架构上用不同 SIMD/BLAS kernel 计算，float32 输出存在末位差异；实测同一输入在
+ * macOS-arm64 得 0.780570518226505、Ubuntu-x64 得 0.7805705225965378（差 4.4e-9），
+ * 使图谱产物无法跨平台字节复现。
+ *
+ * 为什么取 4 位：量化步长必须远大于该噪声底。float32 相对精度约 1.2e-7，传播到余弦上
+ * 约 1e-8 量级；步长 1e-4 留出约 4 个数量级余量。反之 6 位小数只有 4.2 倍余量——
+ * 恰好落在量化中点附近，换一个 transformers 版本就可能翻面，故不取。
+ * （4695 倍余量是对 F220 快照那一条边的**单点观测**：当前图里语义边仅 1 条，
+ * 样本量不足以推广为"所有语义边都有这么大余量"。）
+ * 语义上也无损：余弦相似度作为启发式置信度，有效精度本就只有 3-4 位，第 5 位起是数值噪声。
+ */
+const CONFIDENCE_SCORE_DECIMALS = 4;
+
+/**
+ * 把相似度量化到固定小数位，**显著降低**跨平台末位差异导致产物不可复现的风险。
+ *
+ * 量化后的 double 是「最接近 k / 10^4 的那个 double」，而 `Math.round` / 乘除法 /
+ * `Number::toString` 在 ECMAScript 中都是精确规定的 IEEE-754 行为，
+ * 因此序列化字节完全由整数 k 决定。
+ *
+ * 但这不是"消除"：落在量化中点邻域的值仍会翻面。以观测到的平台差 Δ≈4.4e-9 计，
+ * 每个中点附近可翻面区间宽约 2Δ≈8.74e-9，[0,1] 内一万个中点合计约 8.74e-5——
+ * 即约 0.0087% 的值域仍不可复现。彻底消灭需固定 embedding runtime 的数值行为，不在本次范围。
+ */
+function quantizeConfidenceScore(score: number): number {
+  const factor = 10 ** CONFIDENCE_SCORE_DECIMALS;
+  return Math.round(score * factor) / factor;
+}
+
+// ============================================================
 // 主函数
 // ============================================================
 
@@ -139,7 +183,12 @@ export function buildSemanticEdges(options: BuildEdgesOptions): GraphEdge[] {
     }
   }
 
-  return [...dedupeMap.values()];
+  // 量化只作用于最终写出的数值：去重比较仍用原始相似度，避免量化制造并列改变选中的
+  // 那条边（evidenceText 会随之变），保证本次改动对边的**选择**零影响。
+  return [...dedupeMap.values()].map((edge) => ({
+    ...edge,
+    confidenceScore: quantizeConfidenceScore(edge.confidenceScore),
+  }));
 }
 
 // ============================================================

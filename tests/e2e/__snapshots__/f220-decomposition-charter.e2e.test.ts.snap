@@ -1476,7 +1476,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
       },
       {
         "confidence": "INFERRED",
-        "confidenceScore": 0.780570518226505,
+        "confidenceScore": 0.7806,
         "evidenceSource": "specs/modules/nn.spec.md:28-32",
         "evidenceText": "### 跨模块关联
 - [py/engine.py](engine.spec.md#module-spec) - 出站 1，入站 0；示例：py/nn.py -> py/engine.py",

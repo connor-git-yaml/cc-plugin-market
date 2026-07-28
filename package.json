@@ -21,7 +21,7 @@
     "build": "tsc",
     "postbuild": "node scripts/postbuild-stamp.mjs",
     "test": "vitest run && npm run test:plugins",
-    "test:plugins": "node --test \"plugins/spec-driver/tests/**/*.test.mjs\"",
+    "test:plugins": "node scripts/run-plugin-tests.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest run --project unit",

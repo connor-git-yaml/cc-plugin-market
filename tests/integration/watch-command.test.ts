@@ -40,6 +40,30 @@ vi.mock('../../src/cli/utils/error-handler.js', () => ({
   EXIT_CODES: { SUCCESS: 0, API_ERROR: 2, TARGET_ERROR: 1 },
 }));
 
+// Mock execSync：隔离 isExternalBatchRunning() 对**宿主进程表**的真实依赖（F232 链 F）
+//
+// watch.ts 的 handleChange 第一步就调 isExternalBatchRunning()，其实现是
+// `execSync('pgrep -f "spectra batch"')`——直接查询运行主机上所有进程的命令行。
+// 只要主机上任意一个进程的 cmdline 含 "spectra batch" 子串，该函数就返回 true，
+// handleChange 走「变更入等待队列」的提前返回分支，runBatch **永远不会被调用**，
+// 下方 vi.waitFor 必然耗尽全部预算后失败。已本地实测复现：在主机上放一个 cmdline
+// 含该子串的诱饵进程后，本用例报出与真实 CI 日志同形的
+// `vi.waitFor.timeout ... AssertionError: expected "spy" to be called with arguments`。
+// 故这是**环境相关的确定性失败**（同链 D/E 的"主机属性"家族），不是负载 flaky——
+// 调大超时只会让它慢 15 秒再红。这里把该外部查询钉成"无外部 batch"，
+// 使本用例只验证它真正要验证的东西：变更事件 → runBatch 的参数透传。
+const childProcessMocks = vi.hoisted(() => ({
+  // 真实 pgrep 无匹配时以非 0 退出，execSync 随之抛错；watch.ts 的 catch 将其判为 false
+  execSync: vi.fn(() => {
+    throw new Error('Command failed: pgrep -f "spectra batch"');
+  }),
+}));
+
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
+  execSync: childProcessMocks.execSync,
+}));
+
 // Mock 项目配置加载，模拟有配置文件的场景（Task 7）
 vi.mock('../../src/config/project-config.js', () => ({
   loadProjectConfig: vi.fn().mockReturnValue({ outputDir: 'custom-specs', languages: ['typescript'] }),
@@ -142,7 +166,12 @@ describe('watch 子命令集成测试', () => {
       capturedOnChange([{ path: join(tmpDir, 'src/app.ts'), category: 'code' }]);
     }
 
+    // 先确认外部 batch 探测确实走了被 mock 的路径（否则本用例又会回到"看主机进程表脸色"的状态）
+    expect(childProcessMocks.execSync).toHaveBeenCalled();
+
     // 等待 runBatch 被调用（CI 环境慢，采用 vi.waitFor 主动轮询而非固定 sleep）
+    // 超时预算 20s：单纯为 CI 负载留余量。**它不是链 F 的修复手段**——链 F 的真实根因
+    // 是上方 execSync mock 所隔离的宿主进程表依赖，那条路径下再大的超时也救不回来。
     if (capturedOnChange) {
       await vi.waitFor(
         () => {
@@ -155,7 +184,7 @@ describe('watch 子命令集成测试', () => {
             }),
           );
         },
-        { timeout: 5000, interval: 50 },
+        { timeout: 20_000, interval: 50 },
       );
     }
 

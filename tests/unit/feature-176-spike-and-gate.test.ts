@@ -6,11 +6,13 @@
  *   - swe-bench-verified-paths：repeatIndex 隔离 + 校验
  *   - spectra-version-gate：缺 dist / 缺 build-meta 的 hard-fail 守卫
  */
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parsePluginMcpCalls } from '../../scripts/spike-cohort3-plugin-mcp.mjs';
 import {
   runFixturePath,
   runCombDir,
+  VERIFIED_ROOT,
   VERIFIED_ROOT_REL,
 } from '../../scripts/lib/swe-bench-verified-paths.mjs';
 import { verifySpectraVersion, BUILD_META_NAME, BUILD_INPUT_PATHS } from '../../scripts/lib/spectra-version-gate.mjs';
@@ -140,8 +142,23 @@ describe('swe-bench-verified-paths', () => {
   });
 
   it('runCombDir 不含 repeatIndex（combo 根）', () => {
-    expect(runCombDir('t', 'c')).toContain(`${VERIFIED_ROOT_REL}/tasks/t/c`);
-    expect(runCombDir('t', 'c')).not.toContain('/r');
+    const combDir = runCombDir('t', 'c');
+    expect(combDir).toContain(`${VERIFIED_ROOT_REL}/tasks/t/c`);
+
+    // 断言只看 VERIFIED_ROOT 之后的相对部分：runCombDir 返回绝对路径，
+    // 仓库所在目录本身可能含 "/r"（GitHub runner 工作区就是 /home/runner/work/...），
+    // 整串搜 "/r" 会在这类路径下必然误报（F232 链 D）。
+    // 用 path.relative 而非字符串 indexOf/slice：后者在路径中该子串出现多次时只截到第一次
+    // （反例 `/x/tests/baseline/swe-bench-verified/r9/nested/tests/baseline/swe-bench-verified/tasks/t/c`），
+    // 且 VERIFIED_ROOT_REL 用 "/" 分隔而 path.join 在 Windows 上返回 "\"。
+    const relFromRoot = path.relative(VERIFIED_ROOT, combDir);
+    expect(relFromRoot).toBe(path.join('tasks', 't', 'c'));
+    // 更精确地表达当前 `r<N>` 合同：相对段里不得出现 repeatIndex 形态
+    expect(relFromRoot).not.toMatch(/(?:^|[\\/])r\d+(?:[\\/]|$)/);
+
+    // 正向对照：combo 根必须恰好是 r<repeatIndex> 层的父目录——
+    // 这条等式才是"combo 根不带 repeatIndex"的完整表达（原断言的真实意图）。
+    expect(runFixturePath('t', 'c', 1)).toBe(path.join(combDir, 'r1', 'full.json'));
   });
 });
 
