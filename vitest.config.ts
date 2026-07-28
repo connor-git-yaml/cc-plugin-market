@@ -92,6 +92,12 @@ export default defineConfig({
           // （src/panoramic/graph/quality/*.test.ts），需显式纳入 include 才能被 `npx vitest run`
           // 实际执行——否则 TDD 红/绿验证形同虚设（zero-execution 测试无验证价值）。
           include: ['tests/unit/**/*.test.ts', 'tests/adapters/**/*.test.ts', 'tests/models/**/*.test.ts', 'tests/panoramic/**/*.test.ts', 'tests/extraction/**/*.test.ts', 'tests/batch/**/*.test.ts', 'tests/spec-store/**/*.test.ts', 'tests/cli/**/*.test.ts', 'tests/utils/**/*.test.ts', 'tests/debt-scanner/**/*.test.ts', 'tests/kb/**/*.test.ts', 'src/panoramic/graph/**/*.test.ts', 'src/batch/**/*.test.ts'],
+          // F233 链 G：vitest 3 的 projects[] 不继承根级 test.* 配置（实测根级
+          // globals=true 也传不进来），未声明即落回内置默认 5000ms。其余四个
+          // project 都已显式声明 testTimeout，唯独 unit 漏，导致 spawn 真实 CLI
+          // 子进程的用例在满载 CI（4 vCPU 跑 487 文件）上 5.3-7.3s 越界超时。
+          // 此处与根级 testTimeout: 30_000 的意图对齐。
+          testTimeout: 30_000,
         },
       },
       {
