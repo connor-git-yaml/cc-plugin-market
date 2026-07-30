@@ -8,9 +8,14 @@
  * 运行: node --test plugins/spec-driver/tests/fix-compliance-core.test.mjs
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import {
+  readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, symlinkSync,
+} from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   normalizeTranscriptEntry,
@@ -19,6 +24,7 @@ import {
   classifyDelegationRole,
   resolveFeatureDirCandidate,
   scanRenameCommandEvents,
+  parseRenameOperands,
   checkArtifactSection,
   stripCodeRegions,
   classifyClosureForm,
@@ -1639,7 +1645,10 @@ describe('F224 resolveFeatureDirCandidate：改名命令 option token 形态（P
     ['git mv -f', 'git mv -f specs/360-fix-src specs/361-fix-dst'],
     ['多 flag mv -f -v', 'mv -f -v specs/360-fix-src specs/361-fix-dst'],
     ['合并短 flag mv -fv', 'mv -fv specs/360-fix-src specs/361-fix-dst'],
-    ['长 flag mv --no-clobber', 'mv --no-clobber specs/360-fix-src specs/361-fix-dst'],
+    // F231 第 9/10 轮：严格 option 白名单——裸 `mv` 只接受短选项 `-f`/`-v`/`-fv`/`-vf`；
+    // 长选项是 GNU coreutils 专有（Darwin `/bin/mv --force` 实测 illegal option rc=64 无改名），
+    // 故 `--force`/`--verbose` 只对 `git mv` 有效（实测 rc=0 真改名）。`--no-clobber`/`--` 一律拒绝。
+    ['git mv 长 flag --force', 'git mv --force specs/360-fix-src specs/361-fix-dst'],
     ['git mv 多 flag', 'git mv -f -v specs/360-fix-src specs/361-fix-dst'],
   ];
 
@@ -1811,9 +1820,13 @@ describe('F224 resolveFeatureDirCandidate：mv 异常形态保守化跳过（Cod
     assert.equal(cand.ambiguous, false);
   });
 
-  it('对照：`--` 结束符后的 2 操作数仍正常跟随', () => {
+  // F231 第 9 轮翻转：`--` 不在严格 option 白名单内 → 不再跟随（旧期望 specs/901-fix-x）。
+  // 理由：白名单只收「确定保持真实改名语义」的 option；`--` 本身不保证改名发生，
+  // 且放行任意 option 形态曾让 dry-run / illegal option 命令被当成真实改名（第 9 轮 CRITICAL-2）。
+  // 方向 fail-closed（误阻断而非误放行），缓解=改名写成 `git mv specs/old specs/new`。
+  it('`--` 结束符 → 不再跟随（F231 第 9 轮：严格 option 白名单）', () => {
     const cand = resolveWith('mv -- specs/900-fix-x specs/901-fix-x');
-    assert.equal(cand.path, 'specs/901-fix-x');
+    assert.equal(cand.path, 'specs/900-fix-x');
     assert.equal(cand.ambiguous, false);
   });
 });
@@ -1851,12 +1864,15 @@ describe('F224 resolveFeatureDirCandidate：与当前候选无关的 mv 不得�
     assert.equal(cand.ambiguous, false);
   });
 
-  it('复合命令内先写制品再改名 → 同一条命令内叠加取最终路径', () => {
+  // F231 第 5 轮：该命令含 heredoc 与两条命令 → 非光杆改名 → 改名不跟随（旧期望 specs/345-fix-b）。
+  // 提名侧逐字未改：`cat > specs/344-fix-a/fix-report.md` 仍提名 specs/344-fix-a。
+  // 安全方向为误阻断；缓解=把改名单独写成一条 `git mv specs/344-fix-a specs/345-fix-b`。
+  it('复合命令内先写制品再改名 → 改名不跟随，提名仍成立（F231 第 5 轮）', () => {
     const entries = [
       user('x'),
       bash('cat > specs/344-fix-a/fix-report.md <<EOF\n...\nEOF\nmv specs/344-fix-a specs/345-fix-b', 1),
     ];
-    assert.equal(resolveFeatureDirCandidate(entries, 0).path, 'specs/345-fix-b');
+    assert.equal(resolveFeatureDirCandidate(entries, 0).path, 'specs/344-fix-a');
   });
 });
 
@@ -1975,40 +1991,47 @@ describe('F230 命令位锚定不得误伤合法改名（防过度收紧的正�
     assert.equal(cand.ambiguous, false);
   });
 
-  it('C4 前置命令 + && 后的 mv（切段后段首成立）→ 正常跟随', () => {
+  it('C4 `&&` 条件右侧改名不跟随（F231：白名单拒绝 && / ||）', () => {
+    // F231 变更：`cd . && mv …` 含 `&&` → 非「简单改名序列」子语言成员 → 白名单闸门拒绝 →
+    // 零改名事件 → 候选停在改名前的 specs/900-fix-x（ambiguous=false）。
+    // 方向保守（误阻断而非误放行）：真实的 `prep && mv` 链式改名会被误阻断，缓解手段是把改名
+    // 单独写成一条 `git mv specs/900-fix-x specs/901-fix-y`（裸顶层命令即照常跟随，见下方 C6 等）。
     const cand = resolveWithCandidate('cd . && mv specs/900-fix-x specs/901-fix-y');
-    assert.equal(cand.path, 'specs/901-fix-y');
-    assert.equal(cand.ambiguous, false);
+    assert.deepEqual(cand, { path: 'specs/900-fix-x', ambiguous: false, candidates: ['specs/900-fix-x'] });
   });
 
-  it('C5 heredoc 之后的 mv（F224 既有语义）→ 正常跟随', () => {
+  // F231 第 5 轮：整条命令须为光杆改名，以下四条形态改为不跟随。
+  // 旧期望分别为 specs/901-fix-y（C5）与 specs/902-fix-z（C6/C6b/C6c，多跳取最终态）。
+  // 为何安全：方向是**误阻断**（候选停在提名目录、ambiguous=false、绝不放行），
+  // 缓解=把改名单独写成一条 `git mv specs/old specs/new`。为何这么改：判据不再建模分隔符 /
+  // heredoc / 注释——前四轮的分隔符与 heredoc 建模被 Codex 逐轮击穿，每补一个缺口就暴露下一个。
+  it('C5 heredoc 之后的 mv → 不再跟随（F231 第 5 轮：整条命令须为光杆改名）', () => {
     const entries = [
       user('x'),
       bash('cat > specs/900-fix-x/fix-report.md <<EOF\nbody\nEOF\nmv specs/900-fix-x specs/901-fix-y', 1),
     ];
     const cand = resolveFeatureDirCandidate(entries, 0);
-    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.path, 'specs/900-fix-x', '提名仍成立，仅改名不跟随');
     assert.equal(cand.ambiguous, false);
   });
 
-  it('C6 分号串联两跳改名 → 取最终态', () => {
+  it('C6 分号串联两跳改名 → 不再跟随（F231 第 5 轮：整条命令须为光杆改名）', () => {
     const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y; mv specs/901-fix-y specs/902-fix-z');
-    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.path, 'specs/900-fix-x');
     assert.equal(cand.ambiguous, false);
   });
 
-  // W1（Codex 第 2 轮）：SEGMENT_SPLIT_REGEX 不切裸 `|` / `&`，若沿用分段语义只能识别第一跳。
-  // scanRenameCommandEvents 把这两个符号也计为控制操作符后，两跳均跟随到最终态——
-  // 与本 feature 硬化之前的全局匹配行为一致（characterization）。
-  it('C6b 裸管道串联两跳改名 → 跟随到最终态', () => {
+  // W1（Codex 第 2 轮）原 characterization：裸 `|` / `&` 也计为控制操作符，故两跳均跟随。
+  // F231 第 5 轮起判据不再有「控制操作符」概念——多命令一律非光杆形态。
+  it('C6b 裸管道串联两跳改名 → 不再跟随（F231 第 5 轮：整条命令须为光杆改名）', () => {
     const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y | mv specs/901-fix-y specs/902-fix-z');
-    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.path, 'specs/900-fix-x');
     assert.equal(cand.ambiguous, false);
   });
 
-  it('C6c 裸后台符 `&` 串联两跳改名 → 跟随到最终态', () => {
+  it('C6c 裸后台符 `&` 串联两跳改名 → 不再跟随（F231 第 5 轮：整条命令须为光杆改名）', () => {
     const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y & mv specs/901-fix-y specs/902-fix-z');
-    assert.equal(cand.path, 'specs/902-fix-z');
+    assert.equal(cand.path, 'specs/900-fix-x');
     assert.equal(cand.ambiguous, false);
   });
 
@@ -2033,9 +2056,10 @@ describe('F230 scanRenameCommandEvents：命令位判定的直接单测（引号
     ]);
   });
 
-  it('git mv → 同样抽出（且 git 与 mv 之间只认空格/制表符）', () => {
+  it('git mv → 同样抽出；`git\\nmv` 内部换行改为零事件（F231 第 5 轮）', () => {
     assert.deepEqual(scanRenameCommandEvents('git mv a b'), [{ offset: 0, paramText: ' a b' }]);
-    assert.deepEqual(params('git\nmv a b'), ['a b'], '换行后的 mv 自身在命令位，抽的是 mv 的参数');
+    // 旧期望 ['a b']（换行后的 mv 自身在命令位）。F231 第 5 轮：命令内部换行 = 多命令形态 = 非光杆。
+    assert.deepEqual(params('git\nmv a b'), [], '内部换行不再是光杆改名（方向：误阻断，安全）');
   });
 
   it('引号内的 mv 不出现在结果中（单引号 / 双引号 / 引号内藏分隔符）', () => {
@@ -2052,20 +2076,21 @@ describe('F230 scanRenameCommandEvents：命令位判定的直接单测（引号
 
   // R3-C1：参数文本必须由同一状态机继续收集。若让正则一次吞掉参数，
   // 参数里的开引号不参与状态转移，引号内的 `;` 会被当真实分隔符，凭空多出第二条事件。
-  it('参数内引号包裹的 mv 不产生第二条事件（R3-C1）', () => {
-    assert.deepEqual(scanRenameCommandEvents('mv src "dst;mv a b"'), [
-      { offset: 0, paramText: ' src "dst;mv a b"' },
-    ]);
+  // R3-C1 的收口目标（参数里的 `;` 不得凭空多出第二条事件）在 F231 第 5 轮由更强的判据达成：
+  // 引号与 `;` 都不在 <PATH> 字符集内，整条命令直接非光杆 → 零事件（旧期望是 1 条事件）。
+  it('参数内引号包裹的 mv → 零事件（F231 第 5 轮：引号不在 <PATH> 字符集内）', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv src "dst;mv a b"'), []);
   });
 
-  it('参数内转义分号不产生第二条事件（R3-C1）', () => {
-    assert.deepEqual(params('mv src dst\\;mv a b'), ['src dst\\;mv a b']);
+  it('参数内转义分号 → 零事件（F231 第 5 轮：`\\` 与 `;` 不在 <PATH> 字符集内）', () => {
+    assert.deepEqual(params('mv src dst\\;mv a b'), []);
   });
 
   // R3-C2：注释与重定向各自成状态，其中的 `;` / `&` 都不得开启命令位。
-  it('注释内的分隔符不开启命令位（R3-C2）', () => {
+  it('注释内的分隔符不开启命令位（R3-C2）；换行后的真实 mv 亦不再跟随（F231 第 5 轮）', () => {
     assert.deepEqual(scanRenameCommandEvents('true # ; mv a b'), []);
-    assert.deepEqual(params('true # ; mv a b\nmv c d'), ['c d'], '注释只到行尾，下一行仍正常识别');
+    // 旧期望 ['c d']（注释只到行尾，下一行正常识别）。第 5 轮：多命令形态 → 零事件（误阻断方向）。
+    assert.deepEqual(params('true # ; mv a b\nmv c d'), []);
   });
 
   it('重定向操作符中的 `&` 不是控制操作符（R3-C2）', () => {
@@ -2079,15 +2104,14 @@ describe('F230 scanRenameCommandEvents：命令位判定的直接单测（引号
     assert.deepEqual(scanRenameCommandEvents('git mv-f a b'), []);
   });
 
-  it('`;` 串联两条命令位 mv → 抽出两项（偏移递增）', () => {
-    assert.deepEqual(scanRenameCommandEvents('mv a b; mv b c'), [
-      { offset: 0, paramText: ' a b' },
-      { offset: 8, paramText: ' b c' },
-    ]);
+  // F231 第 5 轮：多命令一律零事件（旧期望是抽出两项、多跳取最终态）。
+  // 安全方向：误阻断而非误放行；缓解=改名单独写一条 `git mv`。
+  it('`;` 串联两条 mv → 零事件（F231 第 5 轮：整条命令须为光杆改名）', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv a b; mv b c'), []);
   });
 
-  it('`|` 串联两条命令位 mv → 抽出两项（SEGMENT_SPLIT_REGEX 不切裸管道，故必须在此层覆盖）', () => {
-    assert.deepEqual(params('mv a b | mv b c'), ['a b', 'b c']);
+  it('`|` 串联两条 mv → 零事件（F231 第 5 轮：整条命令须为光杆改名）', () => {
+    assert.deepEqual(params('mv a b | mv b c'), []);
   });
 
   it('非命令位的 mv（注释 / 其他命令的参数位）→ 空结果', () => {
@@ -2135,16 +2159,20 @@ describe('F230 第 3 轮行为变化 characterization：注释感知让「带尾
   // HEAD 把 `#` 与注释词当成多余操作数（3 个操作数）从而整条跳过，改名不被跟随。
   // 引入注释状态后，注释被正确剥离，这是**正确性改进**而非放宽：
   // 真实改名本就该被跟随，且目标名仍须符合 NNN-fix-<name> 规范才不触发降级（见下一条）。
-  it('`mv A B # 注释` → 跟随到 B（注释被正确剥离）', () => {
+  // F231 第 5 轮：`#` 不在 <PATH> 字符集内，带尾注释的命令不再是光杆形态 → 两条均改为零事件。
+  // 旧期望：第一条跟随到 901-fix-y（注释被剥离）、第二条转降级 ambiguous=true。
+  // 新语义在两个方向上都更严：真实改名不跟随（误阻断，缓解=改名单独一条 `git mv`），
+  // 伪造改名亦不再打开降级通道（安全侧收紧）。
+  it('`mv A B # 注释` → 不再跟随（F231 第 5 轮：`#` 使命令非光杆）', () => {
     const cand = resolveWithCandidate('mv specs/900-fix-x specs/901-fix-y # 迁移');
-    assert.equal(cand.path, 'specs/901-fix-y');
+    assert.equal(cand.path, 'specs/900-fix-x');
     assert.equal(cand.ambiguous, false);
   });
 
-  it('`mv A <非规范名> # 注释` → 目标名不合规范，仍转降级（收窄未被放宽）', () => {
+  it('`mv A <非规范名> # 注释` → 不再进入降级通道（F231 第 5 轮：更严，非放宽）', () => {
     const cand = resolveWithCandidate('mv specs/900-fix-x specs/renamed-nonstandard # 迁移');
-    assert.equal(cand.path, null);
-    assert.equal(cand.ambiguous, true);
+    assert.equal(cand.path, 'specs/900-fix-x');
+    assert.equal(cand.ambiguous, false);
   });
 });
 
@@ -2162,7 +2190,10 @@ describe('F230 R4 · shell 词法边界与长度上界（Codex 第 4 轮对抗�
     bash(command, 2),
   ], 0);
 
-  /** 上界常量在 core 内部（RENAME_PARAM_MAX_LENGTH），此处按合同值钉死；改动上界须同步本测试 */
+  /**
+   * F231 第 5 轮起 core 内已无长度上界常量（随参数收集状态机一并删除）。
+   * 这里保留 400 只作为"足够长的空白填充"量级，用来复现 R4-4 的超长空白构造，不再对应任何生产常量。
+   */
   const PARAM_MAX_LENGTH = 400;
 
   // 本组每条构造在真实 bash 下都**不会**产生一次到 specs/renamed-nonstandard 的改名，
@@ -2221,23 +2252,535 @@ describe('F230 R4 · shell 词法边界与长度上界（Codex 第 4 轮对抗�
     assert.equal(cand.ambiguous, false);
   });
 
-  it('P2 参数长度恰好等于上界 → 仍正常解析（边界取 <=，不是 off-by-one）', () => {
-    const head = ' specs/900-fix-x specs/901-fix-y';
-    const param = head + ' '.repeat(PARAM_MAX_LENGTH - head.length); // 长度恰好 == 上界
-    assert.equal(param.length, PARAM_MAX_LENGTH);
+  // F231 第 5 轮：长度上界 RENAME_PARAM_MAX_LENGTH 随参数收集状态机一并删除。
+  // R4-4 攻击（超长空白藏第三操作数）现由**锚定形态**关闭——形态只容纳恰好两个 <PATH> 操作数，
+  // 第三个操作数使整条命令不匹配（见上方 R4-4 用例仍绿），不再依赖长度上限。
+  // 故「大量尾随空白的两操作数改名」现在照常跟随（它在 bash 里就是一条合法光杆改名）。
+  it('P2 超长尾随空白的两操作数改名 → 照常跟随（长度上界已删，锚定形态自身保证操作数个数）', () => {
+    const param = ` specs/900-fix-x specs/901-fix-y${' '.repeat(PARAM_MAX_LENGTH)}`;
     const events = scanRenameCommandEvents(`mv${param}`);
-    assert.equal(events.length, 1, '等于上界不得作废');
-    assert.equal(events[0].paramText, param);
+    assert.equal(events.length, 1);
+    // 第 6 轮起首尾空白在匹配前被剥离，故 paramText 不含尾随空白（parseRenameOperands 按空白分词，语义等价）
+    assert.equal(events[0].paramText, ' specs/900-fix-x specs/901-fix-y');
+    assert.deepEqual(parseRenameOperands(events[0].paramText), ['specs/900-fix-x', 'specs/901-fix-y']);
     const cand = resolveWithCandidate(`mv${param}`);
     assert.equal(cand.path, 'specs/901-fix-y');
     assert.equal(cand.ambiguous, false);
   });
 
-  it('P2b 参数长度超出上界 1 字符 → 整条事件作废（不再截断后解析）', () => {
-    const head = ' specs/900-fix-x specs/901-fix-y';
-    const param = head + ' '.repeat(PARAM_MAX_LENGTH + 1 - head.length);
-    assert.equal(param.length, PARAM_MAX_LENGTH + 1);
-    assert.deepEqual(scanRenameCommandEvents(`mv${param}`), []);
+  it('P2b 超长空白后藏第三操作数 → 仍零事件（锚定形态只容纳两个操作数）', () => {
+    const cmd = `mv specs/900-fix-x specs/901-fix-y${' '.repeat(PARAM_MAX_LENGTH + 1)}specs/dest-dir`;
+    assert.deepEqual(scanRenameCommandEvents(cmd), []);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// F231 · 简单命令白名单闸门：只有整条命令是「简单改名序列」子语言成员才跟随改名
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('F231 白名单闸门：藏在非简单命令（控制流/替换/前缀/heredoc 正文）里的伪造 mv 一律不跟随', () => {
+  const S = 'specs/900-fix-x';
+  const D = 'specs/renamed-nonstandard';
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWith = (command) => resolveFeatureDirCandidate([
+    user('x'),
+    write(`${S}/fix-report.md`, 1),
+    bash(command, 2),
+  ], 0);
+
+  // A. 11 类 Codex 反例（对抗审查针对被否决的黑名单初稿构造；白名单结构性关闭）。
+  //   注：其中 C-ST1 / C-D1 / C-D2a / C-D2b 在 HEAD（F230）上因「保留字先占掉命令位」已返回 []，
+  //   属 pre-closed（本组作为永久 characterization 护栏保留，白名单以更本质的方式再关闭一次）；
+  //   其余 7 条在 HEAD 上是活体绕过（events 非空 → ambiguous → fail-open）。
+  const A_CASES = [
+    ['C-S1 短路续行 ||', `true ||\nmv ${S} ${D}`],
+    ['C-S2 |& + 短路 ||', `true || false |& mv ${S} ${D}`],
+    ['C-S3 exit 前置终止内建', `exit 0; mv ${S} ${D}`],
+    ['C-S4 heredoc 正文', `cat <<EOF\nmv ${S} ${D}\nEOF`],
+    ['C-ST1 case done) 伪模式（HEAD 已 pre-closed）', `case x in done) mv ${S} ${D} ;; esac`],
+    ['C-ST2 函数体 {}（参数位 }）', `f() { echo }\nmv ${S} ${D}\n}`],
+    ['C-ST3 heredoc 伪 fi + 死 if', `if false; then cat <<EOF\nfi\nEOF\nmv ${S} ${D}\nfi`],
+    ['C-ST4a 游离 closer )', `) ; mv ${S} ${D}`],
+    ['C-ST4b 未闭合关键字 if', `mv ${S} ${D}; if`],
+    ['C-D1 time 前缀（HEAD 已 pre-closed）', `time if false; then mv ${S} ${D}; fi`],
+    ['C-D2a for(( 算术（HEAD 已 pre-closed）', `for((i=0;i<0;i++)); do mv ${S} ${D}; done`],
+    ['C-D2b if</dev/null 边界（HEAD 已 pre-closed）', `if</dev/null false; then mv ${S} ${D}; fi`],
+    ['C-D3 alias 展开（shopt/alias 命令位）', `shopt -s expand_aliases; alias g="if false; then"; g :; mv ${S} ${D}; fi`],
+  ];
+
+  for (const [label, command] of A_CASES) {
+    it(`A ${label} → scanRenameCommandEvents=[] 且候选停在 ${S} 不 ambiguous`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `事件应为空：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选被伪造 mv 带走：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `伪造 mv 打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // B. 6 类原始构造（fix-report 问题描述表；HEAD 上逐条 fail-open，本次全部关闭）。
+  const B_CASES = [
+    ['B1 短路 RHS true || mv', `true || mv ${S} ${D}`],
+    ['B2 函数定义体（从未调用）', `f() {\nmv ${S} ${D}\n}; :`],
+    ['B3 死 if 分支', `if false; then\nmv ${S} ${D}\nfi`],
+    ['B4 未命中 case 分支', `case x in y)\nmv ${S} ${D}\n;; esac`],
+    ['B5 命令替换内 : $(false && mv)', `: $(false && mv ${S} ${D})`],
+    ['B6 零迭代循环体', `while false; do\nmv ${S} ${D}\ndone`],
+  ];
+
+  for (const [label, command] of B_CASES) {
+    it(`B ${label} → scanRenameCommandEvents=[] 且候选停在 ${S} 不 ambiguous`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `事件应为空：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选被伪造 mv 带走：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `伪造 mv 打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // V. `$'…'`（ANSI-C quoting）/ `$"…"`（locale 翻译）——F231 第 2 轮 CRITICAL。
+  // 本状态机的引号语义是 POSIX `'…'`（单引号内无转义），而 bash 在 `$'…'` 内把 `\'` 当转义的字面引号、
+  // 字符串继续。两套模型分歧使「bash 视角未闭合」的命令在扫描器看来引号已配平，绕过 F230 R4-3
+  // 「未闭合引号 → 不采信」保护（同族保护面）。修法按白名单精神 fail-closed：`$'` / `$"` 一律拒绝，
+  // 刻意不实现 ANSI-C 转义语义（避免与既有状态机漂移的第二套词法）。
+  // 三条构造均经真实 GNU Bash 5.3.9 byte-exact 文件实测 + mv shim 双证：mv 从不执行（mv_ran=NO）。
+  const V_CASES = [
+    // bash -n 报 SYNTAX ERROR「寻找匹配的 `'` 时遇到了未预期的 EOF」→ 整条命令根本不执行。
+    // 修复前：simple=true / events=1 / {path:null, ambiguous:true} —— fail-open 降级通道被重开。
+    ['V2 $\'…\' 转义引号凑配平（bash 语法错误）', `echo $'a\\'; mv ${S} ${D}\\'b''`],
+    // bash 语法 OK，但 mv 文本整体位于 ANSI-C 字符串内、从不执行。
+    // 修复前恰好因末尾引号不配平而 simple=false（安全但属**偶然**）；现由判据本身保证。
+    ['V1 $\'…\' 内藏 mv（bash 语法 OK 但 mv 不执行）', `echo $'a\\'; mv ${S} ${D}'`],
+    // locale-translation quoting 同族：同样无法用 POSIX 引号模型可靠建模。
+    ['V3 $"…" locale quoting', `echo $"a\\"; mv ${S} ${D}\\"b""`],
+  ];
+
+  for (const [label, command] of V_CASES) {
+    it(`V ${label} → scanRenameCommandEvents=[] 且候选停在 ${S} 不 ambiguous`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `事件应为空：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选被伪造 mv 带走：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `伪造 mv 打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // F231 第 5 轮：`mv A B # 注释` 与 `mv $OLD $NEW` 均非光杆形态（含 `#` / `$`，不在 <PATH> 字符集内）
+  // → 改为不跟随。原第 2 轮这两条是「$' 判据不得吃掉注释豁免 / 裸 $VAR 仍是白名单成员」的正向护栏，
+  // 在字面白名单下其护栏职责由「整条命令必须就是光杆 mv」直接承担，故翻转为反向断言。
+  // 安全性：方向为误阻断（候选停在提名目录、不 ambiguous、不放行），缓解=改名单独写一条 `git mv`。
+  it('V 第 5 轮翻转：`mv A B # 注释` 非光杆形态 → 不跟随', () => {
+    const command = `mv ${S} specs/901-fix-y # $'x'`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    const cand = resolveWith(command);
+    assert.equal(cand.path, S);
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('V 第 5 轮翻转：`mv $OLD $NEW` 变量路径不在 <PATH> 字符集内 → 不跟随', () => {
+    assert.deepEqual(scanRenameCommandEvents('mv $OLD $NEW'), []);
+  });
+
+  // W. heredoc **终止行**（定界词行）——F231 第 3 轮 CRITICAL。
+  // 引号定界词的值可含空格，而终止行必须逐字等于定界词值，于是被保留的终止行与一条真实的
+  // `mv <候选> <非规范名>` 命令**文本完全同形**：扫描器在其上扫出顶层改名事件、
+  // parseRenameOperands 正常解析出 src=候选/dst=非规范名 → 重开 fail-open 降级通道。
+  // 真实 bash 中终止行是 heredoc 语法构件、永不作为命令执行——四条构造均经 byte-exact 文件
+  // + mv shim 实测：`bash -n` SYNTAX OK 且 **mv_ran=NO**。
+  // 修法：终止行连同正文一并等长空白化（终止行任何情况下都不是可执行命令，空白化只消除误判）。
+  const W_CASES = [
+    ['W1 单引号定界词含空格（终止行同形于真实 mv）', `cat <<'mv ${S} ${D}'\nbody\nmv ${S} ${D}\n`],
+    ['W2 双引号定界词同构', `cat <<"mv ${S} ${D}"\nbody\nmv ${S} ${D}\n`],
+    ['W3 `<<-` + tab 缩进终止行', `cat <<-'mv ${S} ${D}'\nbody\n\tmv ${S} ${D}\n`],
+    ['W4 终止行位于命令文本末尾（无尾随换行）', `cat <<'mv ${S} ${D}'\nbody\nmv ${S} ${D}`],
+    ['W5 同行多 heredoc，各自终止行', `cat <<'mv ${S} ${D}' <<'EOF2'\nb\nmv ${S} ${D}\nx\nEOF2\n`],
+  ];
+
+  for (const [label, command] of W_CASES) {
+    it(`W ${label} → scanRenameCommandEvents=[] 且候选停在 ${S} 不 ambiguous`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `事件应为空：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选被终止行伪造 mv 带走：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `终止行伪造 mv 打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // F231 第 5 轮：原「终止行空白化的等长/换行不变量」直测 `blankHeredocBodies`，该 helper 已随
+  // heredoc 建模整体删除（字面白名单不需要剥离 heredoc——含 heredoc 的命令必然不是光杆 mv）。
+  // 等长不变量随之失去意义；其护栏职责（终止行不得被当命令）由上方 W1-W5 反向断言直接承担。
+});
+
+describe('F231 第 5 轮：多命令 / heredoc / 重定向形态一律不跟随（原第 4 轮 herestring 与注释感知用例翻转）', () => {
+  const S = 'specs/900-fix-x';
+  const Y = 'specs/901-fix-y';
+  const D = 'specs/renamed-nonstandard';
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWith = (command) => resolveFeatureDirCandidate([
+    user('x'), write(`${S}/fix-report.md`, 1), bash(command, 2),
+  ], 0);
+
+  // F231 第 5 轮：本组原是第 4 轮「herestring/注释感知修复让**真实执行**的 mv 恢复跟随」的正向用例
+  // （逐条经真实 bash 实测 mv_ran=YES）。字面白名单下它们全部**不再跟随**——整条命令不是光杆 mv
+  // （多命令 / 含 heredoc / 含重定向 / 含 `#`）。这是刻意的架构取舍：判据不再建模 heredoc、注释、
+  // 重定向与 herestring，从而不必再追 BUG-1/BUG-2 这类「幽灵 pending」缺陷，也就没有下一个缺口。
+  // 安全性：方向为**误阻断**（候选停在提名目录、`ambiguous=false`、绝不放行），
+  // 缓解=把改名单独写成一条 `git mv specs/old specs/new`（不与其他命令同处一次 Bash 调用）。
+  const NOT_FOLLOWED_CASES = [
+    ['X1 herestring `<<< hi` 换行 mv（真实执行但非光杆）', `cat <<< hi\nmv ${S} ${Y}`],
+    ['X2 注释行 `# <<EOF` 换行 mv（真实执行但非光杆）', `echo hi # <<EOF\nmv ${S} ${Y}`],
+    ['X3 herestring 无空格 `<<<hi` 换行 mv', `cat <<<hi\nmv ${S} ${Y}`],
+    ['X4 heredoc 引入行带尾注释 + 正文后 mv', `cat <<EOF # note\nbody\nEOF\nmv ${S} ${Y}`],
+    ['X5 引号内 `#` + 换行 mv', `echo "# <<EOF"\nmv ${S} ${Y}`],
+    ['X6 herestring 与 heredoc 混用 + 正文外 mv', `cat <<< hi\ncat <<EOF\nbody\nEOF\nmv ${S} ${Y}`],
+    ['Y 正向翻转 `>>` 追加 + 换行 mv', `echo hi >> log\nmv ${S} ${Y}`],
+    ['Y 正向翻转 `<>` 读写 + 换行 mv', `cat <> f\nmv ${S} ${Y}`],
+    ['Y 正向翻转 `2>&1` + 换行 mv', `echo hi 2>&1\nmv ${S} ${Y}`],
+    ['Y 正向翻转 `>|` 强制覆盖 + 换行 mv', `echo hi >| f\nmv ${S} ${Y}`],
+    ['`mv A B <<< x`（mv 自带 herestring，非光杆）', `mv ${S} ${Y} <<< x`],
+  ];
+
+  for (const [label, command] of NOT_FOLLOWED_CASES) {
+    it(`${label} → 零事件、候选停在 ${S}（第 5 轮翻转：整条命令须为光杆改名）`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选不应移动：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `不得进入降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // 反向护栏（第 4 轮既有，全部继续通过）：伪造 mv 藏在注释 / heredoc 正文 / bash 语法错误命令里。
+  const FORGED_CASES = [
+    ['heredoc 引入行带尾注释，正文藏伪 mv', `cat <<EOF # note\nmv ${S} ${D}\nEOF`],
+    ['注释内藏伪 mv', `echo hi # mv ${S} ${D}`],
+    ['`a#b` 词中 `#` + heredoc 正文藏伪 mv', `echo a#b <<EOF\nmv ${S} ${D}\nEOF`],
+    ['`<<<<` bash 语法错误（mv_ran=NO）', `cat <<<< x\nmv ${S} ${D}`],
+    ['`>>>` bash 语法错误（mv_ran=NO）', `cat >>> x\nmv ${S} ${D}`],
+    ['`><` bash 语法错误（mv_ran=NO）', `cat >< x\nmv ${S} ${D}`],
+  ];
+
+  for (const [label, command] of FORGED_CASES) {
+    it(`反向护栏 ${label} → 零事件、不进入降级通道`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `伪造 mv 被采信：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `伪造 mv 打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+});
+
+describe('F231 第 5 轮：光杆改名照常跟随 / 多命令形态不再跟随（唯一判据的正反两面）', () => {
+  const S = 'specs/900-fix-x';
+  const Y = 'specs/901-fix-y';
+  const Z = 'specs/902-fix-z';
+  const D = 'specs/renamed-nonstandard';
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+
+  const resolveWith = (command) => resolveFeatureDirCandidate([
+    user('x'), write(`${S}/fix-report.md`, 1), bash(command, 2),
+  ], 0);
+
+  // 正向：光杆形态（唯一被采信的形态）必须照常跟随，否则每次合法收口都被误阻断。
+  const FOLLOW_CASES = [
+    ['mv 光杆', `mv ${S} ${Y}`],
+    ['git mv 光杆', `git mv ${S} ${Y}`],
+    ['mv -f 单 flag（保 C3）', `mv -f ${S} ${Y}`],
+    ['git mv -f（保 F224）', `git mv -f ${S} ${Y}`],
+    ['mv -f -v 多 flag', `mv -f -v ${S} ${Y}`],
+    ['mv -fv 合并短 flag', `mv -fv ${S} ${Y}`],
+    // F231 第 10 轮 C4：长选项是 GNU coreutils 专有，裸 mv 在 Darwin 上是 illegal option
+    // → 移出正向组（见下方反向用例）；git mv 支持长选项，改列为 git 的正向。
+    ['git mv --force 长 flag', `git mv --force ${S} ${Y}`],
+    ['git mv --verbose 长 flag', `git mv --verbose ${S} ${Y}`],
+    ['mv -fv 捆绑短 flag', `mv -fv ${S} ${Y}`],
+    ['mv -vf 捆绑短 flag', `mv -vf ${S} ${Y}`],
+    ['git mv -f -v', `git mv -f -v ${S} ${Y}`],
+    ['前导空格', `   mv ${S} ${Y}`],
+    ['尾随空格', `mv ${S} ${Y}   `],
+    ['tab 分隔', `mv\t${S}\t${Y}`],
+    // F231 第 10 轮 C1：仅**源**尾随 `/` 是真实的 SRC→DST 改名（dst 尾随 `/` 见反向用例）
+    ['仅源尾随斜杠', `mv ${S}/ ${Y}`],
+    // F231 第 6 轮：首尾空白（空格 / tab / LF）不改变 bash 语义，剥离后仍是同一条光杆改名。
+    // 注意 **CRLF 不在此列**——CR 不是 bash 分隔符，已于第 9 轮翻为反向用例（见 CR_CASES）。
+    // 真实 transcript 的 Bash `command` 常带尾随换行，不修会白送一次误阻断。
+    ['尾随换行（第 6 轮）', `mv ${S} ${Y}\n`],
+    ['前导换行（第 6 轮）', `\nmv ${S} ${Y}`],
+    ['首尾混合空白 + 换行（第 6 轮）', `\n  mv ${S} ${Y} \t\n`],
+    ['git mv 尾随换行（第 6 轮）', `git mv ${S} ${Y}\n`],
+  ];
+
+  for (const [label, command] of FOLLOW_CASES) {
+    it(`正向 ${label} → 跟随到 ${Y}`, () => {
+      assert.equal(scanRenameCommandEvents(command).length, 1, `应恰好一条事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, Y, `未跟随：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `误降级：${JSON.stringify(command)}`);
+    });
+  }
+
+  // F231 第 5 轮翻转：以下形态在真实 bash 中改名**确实发生**，但整条命令不是光杆 mv，故不再跟随。
+  // 逐条理由同一条：判据收敛为「整条命令必须就是一条光杆改名」，不再建模分隔符 / heredoc / 注释
+  // ——正是这类建模在前四轮被 Codex 逐轮击穿（控制流 / exit / alias / ANSI-C / 赋值前缀 / 语法错误…）。
+  // 安全性：方向为**误阻断**（候选停在提名目录、`ambiguous=false`、绝不放行），
+  // 缓解=把改名单独写成一条 `git mv specs/old specs/new`。
+  const FLIPPED_MULTI_COMMAND_CASES = [
+    ['C6 `;` 分号链两跳（旧期望 902-fix-z）', `mv ${S} ${Y}; mv ${Y} ${Z}`],
+    ['C6b `|` 裸管道两跳（旧期望 902-fix-z）', `mv ${S} ${Y} | mv ${Y} ${Z}`],
+    ['C6c `&` 后台符两跳（旧期望 902-fix-z）', `mv ${S} ${Y} & mv ${Y} ${Z}`],
+    ['`|&` 原子管道两跳（旧期望 902-fix-z）', `mv ${S} ${Y} |& mv ${Y} ${Z}`],
+    ['`mv A B # 注释`（旧期望 901-fix-y）', `mv ${S} ${Y} # 迁移`],
+    ['C4 `cd . && mv`（第 1 轮已翻，仍不跟随）', `cd . && mv ${S} ${Y}`],
+    // 第 6 轮：首尾空白放宽后，**命令内部**换行仍一律拒绝（不变量未被削弱）
+    ['内部换行两条 mv（第 6 轮反向）', `mv ${S} ${Y}\nmv ${Y} ${Z}`],
+    ['内部换行 mv + rm（第 6 轮反向）', `mv ${S} ${Y}\nrm -rf x`],
+    ['内部换行 mv + 注释行（第 6 轮反向）', `mv ${S} ${Y}\n# note`],
+    ['3 操作数（移入目录语义）', `mv ${S} ${Y} extra`],
+    ['单操作数', `mv ${S}`],
+  ];
+
+  for (const [label, command] of FLIPPED_MULTI_COMMAND_CASES) {
+    it(`翻转/反向 ${label} → 零事件、候选停在 ${S}`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选不应移动：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `不得进入降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  it('C5 翻转：`cat > 制品 <<EOF … EOF` 换行 mv → 不再跟随，候选停在提名目录', () => {
+    // 旧期望 specs/901-fix-y（heredoc 后顶层 mv）。含 heredoc 与两条命令 → 非光杆 → 零事件。
+    // 提名侧不受影响：`cat > specs/900-fix-x/fix-report.md` 仍提名 specs/900-fix-x（scanArtifactPath 逐字未改）。
+    const command = `cat > ${S}/fix-report.md <<EOF\nbody\nEOF\nmv ${S} ${Y}`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    const cand = resolveFeatureDirCandidate([user('x'), bash(command, 1)], 0);
+    assert.equal(cand.path, S, '提名仍成立，仅改名不跟随');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  // F231 第 6 轮：offset 必须指向**原始**命令文本中命令名的真实下标（resolveFeatureDirCandidate
+  // 按 offset 归段，偏移错位会破坏 F230 R3-C4 的「段内先提名、再改名」时序语义）。
+  it('第 6 轮 offset：剥离前导空白后 offset 补回原文下标（`\\n   mv S Y` → 4）', () => {
+    const command = `\n   mv ${S} ${Y}`;
+    const events = scanRenameCommandEvents(command);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].offset, 4, `offset 应为原文中 mv 的下标 4，实际 ${events[0].offset}`);
+    assert.equal(command.slice(events[0].offset, events[0].offset + 2), 'mv', 'offset 处应恰为 mv');
+    const cand = resolveWith(command);
+    assert.equal(cand.path, Y, '归段后仍正确跟随');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('第 6 轮 offset：`git mv` 形态 offset 指向 `git` 起始处', () => {
+    const command = `  git mv ${S} ${Y}\n`;
+    const events = scanRenameCommandEvents(command);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].offset, 2);
+    assert.equal(command.slice(events[0].offset, events[0].offset + 6), 'git mv');
+  });
+
+  it('第 6 轮：真实改名到非规范名（带尾随换行）仍触发 F224 降级设计意图', () => {
+    const cand = resolveWith(`git mv ${S} specs/renamed-nonstandard\n`);
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
+  });
+
+  // ── F231 第 7 轮 CRITICAL：Unicode 空白 ≠ bash token 分隔符 ──
+  //
+  // 第 6 轮用 `raw.trim()` 剥首尾空白，但 JS `trim()` 剥的是**全部 Unicode 空白**，而 bash 只把
+  // 空格 / tab / LF 当 token 分隔符（**CR 不是**，见第 9 轮）。于是「bash 判 command not found、mv 根本不执行」的命令
+  // 被归一成一条合法光杆 mv → 候选被带到非规范名 → 重开 F224 fail-open（修复前 6 条全部
+  // `{path:null, ambiguous:true}`，且 offset=0 却不指向 `mv`，归段语义同时被破坏）。
+  // 修法：剥离与前导计数共用同一个 SHELL_WHITESPACE_CLASS 派生的正则，字符集由构造保证一致。
+  // 教训（本 Feature 第 4 次同型缺陷）：判定器凡做「归一化 / 剥离 / 豁免」的字符集必须对齐 bash
+  // 语义，不得用 JS 内建 Unicode 语义（`trim()` / `\s` / `\b`）近似 shell 语义。
+  //
+  // 6 个字符逐条经 GNU bash 5.3.9 + PATH `mv` shim 实测。
+  const UNICODE_WHITESPACE = [
+    ['VT 垂直制表 U+000B', ''],
+    ['FF 换页 U+000C', ''],
+    ['NBSP 不换行空格 U+00A0', ' '],
+    ['LS 行分隔符 U+2028', ' '],
+    ['BOM U+FEFF', '﻿'],
+    ['IDEOGRAPHIC SPACE U+3000', '　'],
+  ];
+
+  // 前导：真实 bash 报 `$'<char>mv': 未找到命令`，**mv 不执行**（实测 mv_ran=NO）
+  for (const [label, ch] of UNICODE_WHITESPACE) {
+    it(`第 7 轮 前导 ${label} → 零事件（真实 bash：未找到命令、mv 不执行）`, () => {
+      const command = `${ch}mv ${S} ${D}`;
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S, `候选被伪造 mv 带走：${JSON.stringify(command)}`);
+      assert.equal(cand.ambiguous, false, `打开降级通道：${JSON.stringify(command)}`);
+    });
+  }
+
+  // 尾随：真实 bash 里 mv **确实执行**（mv_ran=YES），但 dst 实测为 `specs/renamed-nonstandard<char>`
+  // ——与剥离后解析出的 dst **不是同一个目录**。按错误的 dst 跟随等于记录了一个从未存在的路径，
+  // 故一律不跟随（fail-closed，方向为误阻断）。
+  for (const [label, ch] of UNICODE_WHITESPACE) {
+    it(`第 7 轮 尾随 ${label} → 零事件（真实 bash 的 dst 带该字符，与解析结果不同）`, () => {
+      const command = `mv ${S} ${D}${ch}`;
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S);
+      assert.equal(cand.ambiguous, false);
+    });
+  }
+
+  // `\s` / `trim()` 反例护栏：VT 同时是「JS 认为是空白、bash 不认」的最短例证。
+  // 若将来有人把剥离改回 `trim()` 或把字符类写成 `\s`，本条与上面 12 条会立刻变红。
+  // ── F231 第 9 轮 CRITICAL-1：CR 不是 bash 的 token 分隔符 ──
+  // 第 7 轮把 `\r` 写进了剥离字符集，两个方向都错（均经 GNU bash 5.3.9 实测）：
+  // - 前导 `\rmv A B` → bash 报 `$'\rmv': 未找到命令`，**mv 不执行**，却被剥成合法光杆 mv → fail-open；
+  // - 尾随 `mv A B\r\n` → bash **确实执行**，但创建的目录名带 CR（`ls | cat -v` 显示 `901-fix-y^M`），
+  //   剥掉 CR 会把候选记录成**并不存在**的 `901-fix-y`。
+  // 修法：字符集去掉 `\r`；CR 既不参与剥离、也不在操作数字符集内 → 含 CR 的命令一律零事件。
+  const CR_CASES = [
+    ['前导 CR（bash：未找到命令）', `\rmv ${S} ${D}`],
+    ['前导 空格+tab+CR', ` \t\rmv ${S} ${D}`],
+    ['尾随 CRLF（bash 建的是带 CR 的目录名）', `mv ${S} ${Y}\r\n`],
+    ['尾随裸 CR', `mv ${S} ${Y}\r`],
+    ['操作数间 CR', `mv ${S}\r${Y}`],
+  ];
+  for (const [label, command] of CR_CASES) {
+    it(`第 9 轮 CR ${label} → 零事件`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S);
+      assert.equal(cand.ambiguous, false);
+    });
+  }
+
+  // ── F231 第 9 轮 CRITICAL-2：严格 option 白名单 ──
+  // `-[A-Za-z-]+` 放行一切 option，把「明确不改名」的命令当成真实改名（均实测）：
+  // - `git mv -n` / `git mv --dry-run`：git 只打印「检查 …」，目录**未变**；
+  //   注意 `-n` 对 mv 与 git mv 语义**不同**（coreutils=no-clobber，git=dry-run），
+  //   说明 option 语义是命令相关的，不能按「看起来像 flag」放行；
+  // - `mv -n`（coreutils）：结果**依赖 dst 是否已存在**（实测 dst 不存在时 rc=0 真改名，
+  //   dst 存在时静默跳过不改名）——判定器无法知道磁盘状态，故一律拒绝；
+  // - `mv --definitely-invalid` / `mv -vt` / `mv -tfoo`：实测 rc=64 `illegal option`、**无改名**，
+  //   且后两者能骗过 parseRenameOperands「整 token 等于 -t/-S 才拒绝」的判据（捆绑与附参形态）。
+  const REJECTED_OPTION_CASES = [
+    ['git mv -n（git=dry-run，实测目录未变）', `git mv -n ${S} ${Y}`],
+    ['git mv --dry-run', `git mv --dry-run ${S} ${Y}`],
+    ['mv -n（coreutils no-clobber，结果依赖磁盘状态）', `mv -n ${S} ${Y}`],
+    ['mv --definitely-invalid（rc=64 无改名）', `mv --definitely-invalid ${S} ${Y}`],
+    ['mv -vt（illegal option，捆绑带参）', `mv -vt ${S} ${Y}`],
+    ['mv -tfoo（illegal option，附参形态）', `mv -tfoo ${S} ${Y}`],
+    ['mv --no-clobber（第 8 轮正向，本轮翻转）', `mv --no-clobber ${S} ${Y}`],
+    ['mv --（第 8 轮正向，本轮翻转）', `mv -- ${S} ${Y}`],
+    ['mv --target-directory=X（=value 形态）', `mv --target-directory=${Y} ${S} ${Y}`],
+  ];
+  for (const [label, command] of REJECTED_OPTION_CASES) {
+    it(`第 9 轮 option ${label} → 零事件`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S);
+      assert.equal(cand.ambiguous, false);
+    });
+  }
+
+  // ── F231 第 9 轮 CRITICAL-3：非规范 path segment（规范化后可能与源同路径 = 实际没改名）──
+  // 实测 `mv specs/230-fix-x specs/./230-fix-x` → rc=1 `Invalid argument`、目录未变，
+  // 但判定器会解析出 dst=`specs/./230-fix-x`（不符合 NNN-fix-<name>）→ ambiguous → fail-open。
+  const NONCANONICAL_PATH_CASES = [
+    ['dst 含 `./`（实测 rc=1 Invalid argument）', 'mv specs/230-fix-x specs/./230-fix-x'],
+    ['dst 含 `//`', `mv ${S} specs//901-fix-y`],
+    ['dst 含 `../`', `mv ${S} specs/../specs/901-fix-y`],
+    ['src 含 `./`', `mv specs/./900-fix-x ${Y}`],
+    ['绝对路径 dst', `mv ${S} /tmp/901-fix-y`],
+    ['操作数只是 `/`', `mv ${S} /`],
+  ];
+  for (const [label, command] of NONCANONICAL_PATH_CASES) {
+    it(`第 9 轮 path ${label} → 零事件`, () => {
+      assert.deepEqual(scanRenameCommandEvents(command), [], `应零事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, S);
+      assert.equal(cand.ambiguous, false);
+    });
+  }
+
+  // ── F231 第 8 轮：性能回归锚点（禁止超线性）──
+  // 本判定器跑在**同步 Stop hook** 上：会话只需发一条含大段空白的 Bash 命令即可让门禁挂住数十秒
+  // → 门禁不可用 / 宿主超时 → 可能异常 fail-open（与 F227 候选历史 O(N²) 同类 DoS 面）。
+  // 第 8 轮前的锚定正则 `(?:[ \t]+-OPT)*[ \t]+…` 相邻空白量词歧义切分 → O(n²)：
+  // 10k=43ms / 20k=164ms / 40k=622ms / 80k=2.6s / 400k=**61s**，且「可匹配」形态同样慢（200k=15s）。
+  // token 化后每步都是锚定常数级判定或单趟扫描，实测三条均 < 1ms。
+  // **不得删除本组断言**——它是防回溯回归的唯一锚点。
+  //
+  // ── 预算按量级分档（F231 第 13 轮，依据 F233 链 H）──
+  // 这些锚点的目的是**捕获灾难性回溯 / 超线性回归**，不是微观性能门禁：历史事故是
+  // 400KB 空白耗时 **65 秒（65000ms）**，任何一档预算相对它都有数十倍判别力。
+  // F233 链 H 的教训是「墙钟 perf 断言在满载 CI runner 上不成立」——CI 是 4 vCPU 跑 487 个文件，
+  // 本地"更快"的路径在满载下可能被压慢数倍。故按各用例的实测余量分档，避免 CI 假红：
+  // - scanner-only 三条：本机 0.1–0.2ms，对 500ms 有 2500–4500× 余量 → 维持 500ms，足够稳。
+  // - 完整 resolver 一条：本机 55–71ms，对 500ms 仅 ~7× 余量，满载放大即越界 → 单独放宽到 3000ms
+  //   （相对 65 秒事故仍有 20× 判别力，回溯复发时照样立刻变红）。
+  const PERF_BUDGET_MS = 500;
+  const RESOLVER_PERF_BUDGET_MS = 3000;
+  const measure = (command) => {
+    const started = process.hrtime.bigint();
+    const events = scanRenameCommandEvents(command);
+    return { events, ms: Number(process.hrtime.bigint() - started) / 1e6 };
+  };
+
+  it('第 8 轮 perf：`mv` + 40 万空白 + `x`（不匹配路径）→ 零事件且有界', () => {
+    const { events, ms } = measure(`mv${' '.repeat(400000)}x`);
+    assert.deepEqual(events, []);
+    assert.ok(ms < PERF_BUDGET_MS, `疑似回溯回归：耗时 ${ms.toFixed(1)}ms（预算 ${PERF_BUDGET_MS}ms）`);
+  });
+
+  it('第 8 轮 perf：`mv` + 20 万 tab + `x` → 零事件且有界', () => {
+    const { events, ms } = measure(`mv${'\t'.repeat(200000)}x`);
+    assert.deepEqual(events, []);
+    assert.ok(ms < PERF_BUDGET_MS, `疑似回溯回归：耗时 ${ms.toFixed(1)}ms（预算 ${PERF_BUDGET_MS}ms）`);
+  });
+
+  it('第 8 轮 perf：`mv` + 20 万空白 + 两操作数（**可匹配**路径）→ 1 条事件且有界', () => {
+    const { events, ms } = measure(`mv${' '.repeat(200000)}specs/a specs/b`);
+    assert.equal(events.length, 1, '可匹配形态必须照常产出事件');
+    assert.ok(ms < PERF_BUDGET_MS, `疑似回溯回归：耗时 ${ms.toFixed(1)}ms（预算 ${PERF_BUDGET_MS}ms）`);
+  });
+
+  it('第 10 轮 perf：完整 resolver + 大量 flag token（1MiB）→ 有界', () => {
+    // Codex 观察：现有 perf 锚点只覆盖 scanner；resolver 走 splitCommandTextSegmentSpans 等链路，
+    // 常数偏大（实测 400KB≈13.7ms、1MiB≈33ms，线性）。本条把完整链路也钉在有界区间内。
+    const command = `mv ${'-f '.repeat(350000)}${S} ${Y}`;
+    const started = process.hrtime.bigint();
+    const cand = resolveWith(command);
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    // scanner 侧确实走完整条链路并产出事件（证明 perf 测的是热路径而非早退）……
+    assert.equal(scanRenameCommandEvents(command).length, 1);
+    // ……但候选不动：F224 的 RENAME_MAX_OPTION_TOKENS（8）上界让 parseRenameOperands 整条跳过。
+    // 两道判据叠加的既有保守化语义，与本轮无关，此处只作为「跑满链路仍有界」的锚点。
+    assert.equal(cand.path, S, 'option token 超上界 → parseRenameOperands 整条跳过，候选不动');
+    // 用更宽的 resolver 档预算（依据见上方分档说明：本条余量最小，满载 CI 下最易假红）
+    assert.ok(
+      ms < RESOLVER_PERF_BUDGET_MS,
+      `疑似超线性回归：耗时 ${ms.toFixed(1)}ms（预算 ${RESOLVER_PERF_BUDGET_MS}ms）`,
+    );
+  });
+
+  it('第 7 轮 护栏：`\\s` 认得但 bash 不认的空白（VT）不得被当分隔符——光杆判据对 JS Unicode 空白免疫', () => {
+    assert.ok(/\s/.test(''), '前提：JS `\\s` 认为 VT 是空白');
+    assert.equal('mv a b'.trim(), 'mv a b', '前提：JS trim() 会把 VT 剥成合法光杆 mv');
+    // 而判据必须拒绝它（与 bash「未找到命令」一致）
+    assert.deepEqual(scanRenameCommandEvents('mv a b'), []);
+    assert.deepEqual(scanRenameCommandEvents('mv a b'), []);
   });
 });
 
@@ -2838,8 +3381,12 @@ describe('F227 candidates history - basic semantics', () => {
       write('specs/900-fix-a/fix-report.md', 1),
       bash('mv specs/900-fix-a ../outside', 2),
     ], 0);
-    assert.equal(cand.path, null);
-    assert.equal(cand.ambiguous, true);
+    // F231 第 9 轮：`..` 是非规范 path segment → 整条不匹配光杆改名形态 → 零事件，
+    // 故改名根本不被跟随（旧期望 {path:null, ambiguous:true}）。本用例要钉的**安全性质**
+    // ——「`..` 穿越片段绝不进入 candidates」——在新语义下更强：`..` 连 trackedDir 都进不去。
+    // 方向变化为 ambiguous:true → false，即从 fail-open 降级通道改为交严格判据裁决（更严，安全侧）。
+    assert.equal(cand.path, 'specs/900-fix-a');
+    assert.equal(cand.ambiguous, false);
     assert.deepEqual(cand.candidates, ['specs/900-fix-a']);
     for (const dir of cand.candidates) {
       assert.ok(!dir.includes('..'), `candidates 不得含 .. 穿越片段：${dir}`);
@@ -3008,5 +3555,266 @@ describe('F227 candidate history complexity - anti-regression anchor', () => {
       `候选历史解析退化为二次复杂度（${N} 候选耗时 ${elapsedMs.toFixed(0)}ms ≥ 2000ms）：`
       + '容器很可能被改回 indexOf+splice 数组实现，同步 Stop hook 会因此超时',
     );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// F231 第 10 轮 · 真实文件系统差分测试
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('F231 真实文件系统差分：判定器说「改名」⟺ 真实 shell 里确实发生 SRC→DST', () => {
+  // why 这组测试必须存在：本模块此前只测纯函数、从不真跑 mv/git mv，于是「我们断言它是真实改名」
+  // 从未被真实工具验证过——已连栽三次（`mv S Y\r\n` 断言跟随到无 CR 的目录、`mv --force` 断言
+  // 必须跟随、`mv S/ Y/` 断言跟随到 Y），全绿反而把误放行固化进回归集。
+  // 本组把「判定器结论」与「磁盘事实」绑定：任何一侧漂移都会红。
+  const S = 'specs/900-fix-x';
+  const Y = 'specs/901-fix-y';
+  /** 写入制品的已知内容：改名后据此断言"确实是同一份文件被搬过去"，防 shim 造空壳假绿 */
+  const ARTIFACT_CONTENT = '# Fix\nF231-DIFF-SENTINEL\n';
+
+  const user = (text) => normalizeTranscriptEntry(
+    { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } }, 0, false);
+  const bash = (command, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Bash', input: { command } }] } }, idx, false);
+  const write = (filePath, idx) => normalizeTranscriptEntry(
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Write', input: { file_path: filePath } }] } }, idx, false);
+  const resolveWith = (command) => resolveFeatureDirCandidate([
+    user('x'), write(`${S}/fix-report.md`, 1), bash(command, 2),
+  ], 0);
+
+  /** 沙盒登记表：`mkdtemp` 一成功就登记，避免后续步骤抛错时泄漏目录 */
+  const sandboxes = [];
+  after(() => {
+    for (const dir of sandboxes) rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * 受控子进程环境：**不得**继承用户/CI 环境。
+   * why：`BASH_ENV` / `ENV` / `SHELLOPTS` / 导出的 shell 函数（`BASH_FUNC_*`）都能让
+   * `bash -c 'mv a b'` 跑到 shim 而非系统 `mv`——本组测试正是靠"真实工具行为"背书，
+   * 被 shim 劫持会让误放行**假绿**。PATH 固定为系统目录，只保留必要变量。
+   */
+  const CONTROLLED_ENV = {
+    PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+    HOME: os.tmpdir(),
+    LC_ALL: 'C',
+    // git 隔离：全局/系统配置一律不读（本机 commit.gpgsign=true 会让 commit 失败）
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_TERMINAL_PROMPT: '0',
+  };
+
+  /** 每条用例独立的隔离沙盒（`os.tmpdir()` 下，绝不碰工作区）；返回其绝对路径 */
+  const sandbox = ({ git = false } = {}) => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'f231-diff-'));
+    sandboxes.push(dir);                       // mkdtemp 成功即登记，后续任何抛错都不泄漏
+    mkdirSync(path.join(dir, S), { recursive: true });
+    writeFileSync(path.join(dir, S, 'fix-report.md'), ARTIFACT_CONTENT, 'utf8');
+    if (git) {
+      const git0 = (...args) => spawnSync('git', [
+        '-c', 'user.email=t@example.com', '-c', 'user.name=t',
+        '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null',
+        ...args,
+      ], { cwd: dir, encoding: 'utf8', env: CONTROLLED_ENV });
+      // 逐步断言：init/add/commit 任一失败都必须让用例红，而不是让后续 git mv 静默走空
+      for (const args of [['init', '-q', '.'], ['add', '-A'], ['commit', '-qm', 'init']]) {
+        const res = git0(...args);
+        assert.equal(res.status, 0, `git ${args[0]} 失败：${res.stderr || res.stdout}`);
+      }
+    }
+    return dir;
+  };
+
+  /** 在沙盒里用真实 bash 跑命令（受控 env），返回磁盘事实 */
+  const runReal = (dir, command) => {
+    const res = spawnSync('bash', ['-c', command], {
+      cwd: dir, encoding: 'utf8', env: CONTROLLED_ENV,
+    });
+    const dstReport = path.join(dir, Y, 'fix-report.md');
+    return {
+      status: res.status,
+      srcGone: !existsSync(path.join(dir, S)),
+      dstExists: existsSync(path.join(dir, Y)),
+      // 内容校验：只比路径形状会被"造壳"的 shim 骗过（建个空目录就能假绿）
+      dstContentIntact: existsSync(dstReport) && readFileSync(dstReport, 'utf8') === ARTIFACT_CONTENT,
+      // dst 目录内是否被塞进了 basename(SRC)（DST 已是目录时 `mv` 的真实落点）
+      nestedLanding: existsSync(path.join(dir, Y, '900-fix-x')),
+    };
+  };
+
+  /** 运行时探测：本机文件系统是否大小写不敏感（macOS 默认是，Linux ext4 不是） */
+  const caseInsensitiveFs = (() => {
+    const probeDir = mkdtempSync(path.join(os.tmpdir(), 'f231-case-'));
+    try {
+      mkdirSync(path.join(probeDir, 'probe'));
+      return existsSync(path.join(probeDir, 'PROBE'));
+    } finally {
+      rmSync(probeDir, { recursive: true, force: true });
+    }
+  })();
+
+  // ── 正向差分：判定器说跟随 ⟹ 磁盘上确实 SRC→DST ──
+  // 只收**跨平台交集**形态（裸 mv 仅短选项 -f/-v），故在 BSD/macOS 与 GNU/Linux 上都应通过。
+  const FOLLOW_CASES = [
+    ['mv S Y', `mv ${S} ${Y}`, false],
+    ['git mv S Y', `git mv ${S} ${Y}`, true],
+    ['mv -f S Y', `mv -f ${S} ${Y}`, false],
+    ['git mv -f S Y', `git mv -f ${S} ${Y}`, true],
+    ['mv -f -v S Y', `mv -f -v ${S} ${Y}`, false],
+    ['mv -vf S Y', `mv -vf ${S} ${Y}`, false],
+    ['git mv -fv S Y', `git mv -fv ${S} ${Y}`, true],
+    ['git mv -vf S Y', `git mv -vf ${S} ${Y}`, true],
+    ['git mv S/ Y（仅源尾随斜杠）', `git mv ${S}/ ${Y}`, true],
+    ['git mv --force S Y', `git mv --force ${S} ${Y}`, true],
+    ['git mv --verbose S Y', `git mv --verbose ${S} ${Y}`, true],
+    ['mv\\tS\\tY（tab 分隔）', `mv\t${S}\t${Y}`, false],
+    ['mv S/ Y（仅源尾随斜杠）', `mv ${S}/ ${Y}`, false],
+    ['mv S Y\\n（尾随换行）', `mv ${S} ${Y}\n`, false],
+    ['\\nmv S Y（前导换行）', `\nmv ${S} ${Y}`, false],
+    ['  mv S Y（前导空格）', `  mv ${S} ${Y}`, false],
+    ['mv S Y  （尾随空格）', `mv ${S} ${Y}  `, false],
+  ];
+
+  for (const [label, command, needGit] of FOLLOW_CASES) {
+    it(`正向差分 ${label}：判定器跟随 ⟺ 磁盘确实 SRC→DST`, () => {
+      // 1) 判定器侧
+      assert.equal(scanRenameCommandEvents(command).length, 1, `判定器应产出 1 条事件：${JSON.stringify(command)}`);
+      const cand = resolveWith(command);
+      assert.equal(cand.path, Y, `判定器应跟随到 ${Y}`);
+      assert.equal(cand.ambiguous, false);
+      // 2) 真实文件系统侧
+      const fact = runReal(sandbox({ git: needGit }), command);
+      assert.equal(fact.status, 0, `真实命令应成功（rc=${fact.status}）：${JSON.stringify(command)}`);
+      assert.ok(fact.dstExists, `磁盘上 ${Y} 应存在：${JSON.stringify(command)}`);
+      assert.ok(fact.srcGone, `磁盘上 ${S} 应已不存在：${JSON.stringify(command)}`);
+      assert.ok(!fact.nestedLanding, `不应落成 ${Y}/900-fix-x：${JSON.stringify(command)}`);
+      assert.ok(fact.dstContentIntact, `${Y}/fix-report.md 内容应与源逐字一致（防造壳假绿）`);
+    });
+  }
+
+  // ── 反向差分：判定器拒绝 ⟹ 真实执行也没有产生 SRC→DST ──
+  // 覆盖第 10 轮修的 4 类。平台差异见每条注释。
+  it('反向差分 C1 `mv S Y/`（dst 尾随斜杠）：判定器零事件，且磁盘落点不是 SRC→DST', () => {
+    const command = `mv ${S} ${Y}/`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    assert.equal(resolveWith(command).path, S);
+    // dst **已存在**时（跨平台一致）真实落点是 `Y/900-fix-x`，而非 `Y` 本身——
+    // 判定器若采信就会记录一个从未存在的路径。这里显式把 dst 预建出来复现该分支。
+    const dir = sandbox();
+    mkdirSync(path.join(dir, Y), { recursive: true });
+    const fact = runReal(dir, command);
+    assert.ok(fact.nestedLanding, `真实落点应是 ${Y}/900-fix-x（嵌套），实测未嵌套`);
+  });
+
+  it('反向差分 C2a `mv S specs`（dst 是 src 的父目录）：判定器零事件，且磁盘未改名', () => {
+    const command = `mv ${S} specs`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    assert.equal(resolveWith(command).path, S);
+    const fact = runReal(sandbox(), command);
+    assert.ok(!fact.srcGone, `真实执行不应改名（实测 rc≠0 且 ${S} 仍在）`);
+    assert.notEqual(fact.status, 0, '真实 mv 应报错（src/dst identical）');
+  });
+
+  it('反向差分 C2b `mv S S/child`（dst 是 src 的后代）：判定器零事件，且磁盘未改名', () => {
+    const command = `mv ${S} ${S}/child`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    assert.equal(resolveWith(command).path, S);
+    const dir = sandbox();
+    const fact = runReal(dir, command);
+    assert.ok(!fact.srcGone, `${S} 应仍在`);
+    assert.ok(!existsSync(path.join(dir, S, 'child')), '后代目标不应被创建');
+    assert.notEqual(fact.status, 0, '真实 mv 应报错（Invalid argument）');
+  });
+
+  it('反向差分 C3 `mv S SPECS/900-fix-x`（大小写别名）：判定器零事件；不敏感 FS 上磁盘亦未改名', (t) => {
+    const command = `mv ${S} SPECS/900-fix-x`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    assert.equal(resolveWith(command).path, S);
+    if (!caseInsensitiveFs) {
+      // 大小写**敏感**文件系统（如 Linux ext4）上 SPECS/ 是另一个目录，语义不同；
+      // 我们仍拒绝该形态属 fail-closed 取舍（最多误阻断），故此处只断言判定器侧。
+      t.diagnostic('大小写敏感 FS：跳过磁盘事实断言（判定器侧已断言）');
+      return;
+    }
+    const dir = sandbox();
+    const fact = runReal(dir, command);
+    assert.ok(!fact.srcGone, `大小写不敏感 FS 上 src/dst 是同一目录，${S} 应仍在`);
+    assert.notEqual(fact.status, 0, '真实 mv 应报错（same file）');
+  });
+
+  it('反向差分 C4 `mv --force S Y`（裸 mv 长选项）：判定器零事件（平台差异见注释）', () => {
+    const command = `mv --force ${S} ${Y}`;
+    assert.deepEqual(scanRenameCommandEvents(command), []);
+    assert.equal(resolveWith(command).path, S);
+    // **刻意不断言磁盘事实**：长选项是 GNU coreutils 专有——Darwin `/bin/mv --force` 是
+    // `illegal option` rc=64 无改名，而 GNU coreutils 支持 `--force` 会真的改名。
+    // 我们统一拒绝裸 mv 的长选项是 fail-closed 取舍（跨平台交集只保短选项），与平台无关，
+    // 故这里只钉判定器侧，避免测试在 GNU 平台假红。
+  });
+
+  // ── F231 第 12 轮：DST 运行时已是目录 → 真实落点是 `DST/basename(SRC)`（**已知限界**）──
+  //
+  // 本组是 **characterization（钉住当前行为）**，不是"反向回归/已关闭"——请勿据此以为该形态被拦下。
+  // 命令文本与合法改名**逐字相同**，静态不可判定。第 11 轮曾引入注入式磁盘探针试图关闭它，
+  // 第 12 轮实测**双向证伪**后整体回退（详见 specs/231-.../fix-report.md「第 12 轮」）：
+  //   - 假阴：探针读单一终态快照，而终态同样在攻击者控制下——嵌套后再把痕迹搬走即探不到，
+  //     fail-open 完全恢复（= F227「终态快照 ≠ 历史事件序列」，"否证方向"并不豁免）；
+  //   - 假阳：合法 `A→B` 后若 A 原含同名子目录 `A/A`，终态存在 `B/A` → 真实改名被误阻断。
+  // 且该形态**不提供新能力**：劫持既有规范目录纯提名即可（不需要 mv，= F227 已知限界一，用户已接受）；
+  // 打开 fail-open 用真实 `git mv SRC <不存在的非规范名>` 即可（= SC-005，F224 设计意图，须保住）。
+  it('已知限界 characterization：DST 预先存在为目录 → 真实嵌套落点，判定器仍按文本跟随', () => {
+    const dir = sandbox();
+    mkdirSync(path.join(dir, Y), { recursive: true });
+    const command = `mv ${S} ${Y}`;
+    const fact = runReal(dir, command);
+    // 真实层面：落点确实是嵌套，这条事实不随判定器实现变化
+    assert.equal(fact.status, 0, '真实 mv 成功（这正是隐蔽之处）');
+    assert.ok(fact.nestedLanding, `真实落点应是 ${Y}/900-fix-x（嵌套搬入）`);
+    // 判定器层面：按命令文本跟随到 Y（已知限界，非缺陷——理由见本组顶部注释）
+    const cand = resolveWith(command);
+    assert.equal(cand.path, Y, '当前行为：按文本跟随（已知限界）');
+    assert.equal(cand.ambiguous, false);
+  });
+
+  it('已知限界 characterization：DST 是已存在的规范特性目录 → 候选跟到该目录（= F227 已知限界一，纯提名即可复现）', () => {
+    const dir = sandbox();
+    const decoy = 'specs/999-fix-decoy';
+    mkdirSync(path.join(dir, decoy), { recursive: true });
+    writeFileSync(path.join(dir, decoy, 'fix-report.md'), '# 他人的历史制品\n', 'utf8');
+    const command = `mv ${S} ${decoy}`;
+    const fact = runReal(dir, command);
+    assert.equal(fact.status, 0);
+    assert.ok(existsSync(path.join(dir, decoy, '900-fix-x')), `真实落点应是 ${decoy}/900-fix-x`);
+    assert.equal(resolveWith(command).path, decoy, '当前行为：跟到 decoy（已知限界）');
+    // 关键对照：**不需要任何 mv**，仅一次 Write 提名即可得到逐字相同的结果
+    // ——证明本形态未提供超出 F227 已知限界一的新能力。
+    const byNominationOnly = resolveFeatureDirCandidate([
+      user('x'), write(`${decoy}/fix-report.md`, 1),
+    ], 0);
+    assert.equal(byNominationOnly.path, decoy, '纯提名路线结果与嵌套路线逐字相同');
+  });
+
+  it('已知限界 characterization：DST 是目录符号链接 → mv 跟随链接嵌套搬入', () => {
+    const dir = sandbox();
+    const linkName = 'specs/link-target';
+    mkdirSync(path.join(dir, 'real-target'), { recursive: true });
+    symlinkSync(path.join(dir, 'real-target'), path.join(dir, linkName));
+    const command = `mv ${S} ${linkName}`;
+    const fact = runReal(dir, command);
+    assert.equal(fact.status, 0);
+    assert.ok(existsSync(path.join(dir, 'real-target', '900-fix-x')), 'mv 跟随符号链接嵌套搬入 real-target');
+    // 当前行为：`specs/link-target` 不符合 NNN-fix-<name> → 与「真实改名到非规范名」同一支，
+    // 即 F224 SC-005 的降级设计意图（path=null / ambiguous=true），而非跟到 linkName。
+    // 该结果与用真实 `git mv SRC specs/任意非规范名` 逐字相同 → 未提供新能力（已知限界）。
+    const cand = resolveWith(command);
+    assert.equal(cand.path, null, '当前行为：走 F224 降级支（已知限界）');
+    assert.equal(cand.ambiguous, true);
+  });
+
+  it('对照：DST 不存在（SC-005 形态）→ 照常跟随并 ambiguous（F224 降级设计意图，须保住）', () => {
+    const nonstandard = 'specs/renamed-nonstandard';
+    const cand = resolveWith(`mv ${S} ${nonstandard}`);
+    assert.equal(cand.path, null);
+    assert.equal(cand.ambiguous, true);
   });
 });

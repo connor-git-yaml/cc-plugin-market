@@ -62,26 +62,168 @@ export const BASH_WRITE_INDICATOR_REGEX = /(?:>>?|<<|\btee\b)/;
 export const FIX_DIR_NAME_REGEX = /^specs\/\d+-fix-[a-z0-9-]+\/?$/;
 
 /**
- * 改名命令名识别（F230 反伪造硬化，第 3 轮）：sticky 正则，只在游标恰好落在**命令位**时试匹配。
+ * 「光杆改名命令」字面白名单的 token 化判据（F231 第 5 轮立判据 / 第 8 轮改线性实现）。
  *
- * 为何必须锚定命令位：把 `mv` 当关键字而非命令时，任何**把 mv 当作普通文本写出来**的命令都会被
- * 误读为真实改名——`true # mv A B`（注释）、`echo 'mv A B'`（引号）、`echo mv A B`（裸参数）皆然。
- * 这不是精度问题而是**可被主动构造的放行开关**：坍塌会话只需一句形似 mv 的文本就能把候选带到
- * 非规范名、打开 F224 的 fail-open 降级通道。命令位判定见 scanRenameCommandEvents。
+ * 语义：整条 Bash 命令必须**就是**一条带字面路径操作数的 `mv` / `git mv`，多一个 token 都不认——
+ * 等价形态 `^[ \t]*(git[ \t]+)?mv([ \t]+-OPT)*[ \t]+<PATH>[ \t]+<PATH>[ \t]*$`。
+ * 判定实现见 `scanRenameCommandEvents`：首尾空白剥离 → 拒绝内部换行 → 按 `[ \t]+` 切 token →
+ * 逐 token 锚定校验。**刻意不用单条大正则**：第 8 轮实测原正则里相邻空白量词
+ * （`(?:[ \t]+-OPT)*[ \t]+…`）存在歧义切分，回溯空间随空白长度**平方**增长——
+ * `mv` + 40 万空白 + `x` 耗时 61s，且「能匹配成功」的形态同样慢（20 万空白 15s）。
+ * 本判定器跑在**同步 Stop hook** 上，一条含大段空白的 Bash 命令即可让门禁挂住数十秒 →
+ * 门禁不可用 / 宿主超时 → 可能异常 fail-open（与 F227 候选历史 O(N²) 同类 DoS 面）。
+ * token 化后每步都是锚定的常数级判定或单趟扫描，**无嵌套量词、无回溯**。
+ * 回归锚点见 fix-compliance-core.test.mjs 的 F231 第 8 轮 perf 用例（禁止超线性）。
  *
- * 三处刻意的写法（均被对抗审查用具体构造证伪过更弱的版本）：
- * - 用 `(?=$|[ \t])` 而非 `\b` 作终止判据：`\b` 在 `mv-f` 的 `v`/`-` 之间也成立，
- *   会把自定义命令 `mv-f` / `git mv-f` 误读成 `mv -f`（R3-C3）。
- * - `git` 与 `mv` 之间用 `[ \t]` 而非 `\s`：`\s` 含换行，会让一行末尾的 `git` 与下一条命令行首的
- *   `mv` 跨命令拼成一条伪改名。
- * - 只匹配命令名本身、**不吞参数**：若让正则一次吞掉参数文本，参数里的引号/转义就不参与状态转移，
- *   `mv src "dst;mv <候选> <非规范名>"` 中引号内的 `;` 会被当成真实分隔符，凭空多识别一条改名（R3-C1）。
- *   参数改由同一状态机继续扫描收集，见 scanRenameCommandEvents。
+ * 首尾空白（空格 / tab / LF，**不含 CR**——见 isShellWhitespace 第 9 轮订正）在判定前剥离（第 6 轮）：
+ * 它不可能改变一条命令的 bash 语义（空行是 no-op），
+ * 而真实 transcript 的 Bash `command` 很常带尾随换行，判其「非光杆」会白送一次 exit 2 误阻断。
+ * 放宽**只**作用于首尾，不触碰「整条命令只有一条 mv」这一不变量：命令**内部**换行一律拒绝。
+ * 剥离字符集必须与 bash 对齐、且与前导计数同源——见 isShellWhitespace 的教训记录。
+ *
+ * `mv -t DIR SRC` 这类位次错位形态虽 token 形状合法，仍由 `parseRenameOperands` 的带参 option
+ * 判据整条拒绝（两道判据叠加，任一都不放宽）。
  */
-const RENAME_COMMAND_NAME_REGEX = /(?:git[ \t]+mv|mv)(?=$|[ \t])/y;
+/**
+ * 严格 option 白名单（F231 第 9 轮 CRITICAL-2）——只接受**确定保持「真实改名」语义**的短 option
+ * 捆绑：`-f` / `-v` / `-fv` / `-vf`（仅由 `f`、`v` 组成）。
+ *
+ * why 必须白名单而非 `-[A-Za-z-]+`：option 语义是**命令相关**的，宽泛放行会把「明确不改名」的
+ * 命令当成真实改名 → 候选被带到非规范名 → 重开 F224 fail-open。实测反例：
+ * - `git mv -n` / `git mv --dry-run`：git 保证**不改名**（dry-run 后目录仍是原名）；
+ *   注意 `-n` 对 `mv` 与 `git mv` 语义**不同**（coreutils 是 `--no-clobber`，git 是 `--dry-run`）
+ *   ——这正说明不能按「看起来像 flag」放行。
+ * - `mv --definitely-invalid` / `mv -vt` / `mv -tfoo`：真实 mv 报 illegal option、非零退出、**无改名**；
+ *   且后两者能骗过 `parseRenameOperands`「整 token 等于 `-t`/`-S` 才拒绝」的判据（捆绑与附参形态）。
+ * 未列入者一律拒绝：`-n`、`--dry-run`、`--no-clobber`、`--`、未知长 option、`--opt=value`、
+ * 含 `f`/`v` 之外字符的捆绑。方向 fail-closed（误阻断而非误放行）。
+ */
+const RENAME_SHORT_FLAG_TOKEN_REGEX = /^-[fv]+$/;
 
-/** 单条改名命令参数文本的长度上界（沿用改动前的有界量词口径） */
-const RENAME_PARAM_MAX_LENGTH = 400;
+/**
+ * 长选项白名单——**仅对 `git mv` 有效**（F231 第 10 轮 C4）。
+ * why 必须按命令类型拆分：长选项是 GNU coreutils 专有，本机 Darwin `/bin/mv` 实测
+ * `mv --force …` / `mv --verbose …` 均 `illegal option -- -`、rc=64、**无改名**；
+ * 而 `git mv --force` / `git mv --verbose` 实测 rc=0 真实改名。共用一张表会让裸 `mv` 的这两条
+ * 打开 fail-open。仓库无 GNU-only 平台合同，故裸 `mv` 一律不接受任何长选项（fail-closed）。
+ */
+const GIT_MV_LONG_FLAG_TOKENS = new Set(['--force', '--verbose']);
+
+/**
+ * option token 是否在白名单内（按命令类型分流，见 GIT_MV_LONG_FLAG_TOKENS）。
+ * @param {string} token
+ * @param {boolean} isGitMv
+ * @returns {boolean}
+ */
+function isAcceptedRenameOption(token, isGitMv) {
+  if (RENAME_SHORT_FLAG_TOKEN_REGEX.test(token)) return true;
+  return isGitMv && GIT_MV_LONG_FLAG_TOKENS.has(token);
+}
+
+/** ASCII-only 小写折叠：刻意不用 toLocaleLowerCase（locale 相关，土耳其语 I 等会引入不可控行为） */
+function asciiLowerCase(text) {
+  return text.replace(/[A-Z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 32));
+}
+
+/**
+ * 两个操作数是否构成一次**可信的 `SRC→DST` 改名**（F231 第 10 轮 C2/C3）。
+ * 以下三类在真实文件系统上都**不产生** `SRC→DST`，但文本上看着像光杆改名，故整条拒绝：
+ * - **同路径**（含仅大小写不同）：本机（大小写不敏感 FS）实测
+ *   `mv specs/230-fix-x SPECS/230-fix-x` → rc=1、`-ef` 同一 inode、**无改名**，
+ *   但 `SPECS/...` 不匹配小写 FIX_DIR_NAME_REGEX → 直接打开降级通道。
+ *   大小写敏感 FS 上这最多造成可接受的误阻断（fail-closed 方向）。
+ * - **dst 是 src 的祖先**：`mv specs/230-fix-x specs` 实测 rc=2 `are identical`、**无改名**。
+ * - **dst 是 src 的后代**：`mv X X/child` 实测 rc=1 `Invalid argument`、**无改名**。
+ * 前缀判定必须按 path segment 边界（`+ '/'`），裸 startsWith 会把
+ * `specs/900-fix-x` 与 `specs/900-fix-xyz` 误判成父子。
+ * @param {string} srcBody 已去尾随 `/`
+ * @param {string} dstBody 已去尾随 `/`
+ * @returns {boolean}
+ */
+function isDistinctRenameTarget(srcBody, dstBody) {
+  const s = asciiLowerCase(srcBody);
+  const d = asciiLowerCase(dstBody);
+  if (s === d) return false;                       // 同路径（含仅大小写不同）
+  if (s.startsWith(`${d}/`)) return false;         // dst 是 src 的祖先
+  if (d.startsWith(`${s}/`)) return false;         // dst 是 src 的后代
+  return true;
+}
+
+/**
+ * 单个操作数 token 的合法字符集——**判据的必要组成、不可放宽**。
+ * 排除空白、引号、`$`、反引号、`;` `|` `&` `(` `)` `{` `}` `<` `>` `#` `\` 与换行：
+ * 若允许元字符进入操作数，`mv A B;` 会解析出 dst=`B;` → 不符合 `NNN-fix-<name>` → `ambiguous=true`
+ * → 重开 F224 fail-open 降级通道。字符集本身就是防线。
+ * 锚定单字符类 + 无嵌套量词 → 无回溯。
+ */
+const RENAME_PATH_TOKEN_REGEX = /^[A-Za-z0-9._/-]+$/;
+
+/** token 分隔：一段连续的空格/tab（与 isShellWhitespace 同源语义，见其 JSDoc） */
+const SHELL_TOKEN_SEPARATOR_REGEX = /[ \t]+/;
+
+/**
+ * 操作数的 path segment 合法性（F231 第 9 轮 CRITICAL-3）：按 `/` 切分后，任一 segment 为
+ * `.`、`..` 或空串（`//`、绝对路径前导 `/`）即整条拒绝；允许**单个尾随斜杠**（`specs/X/`）。
+ *
+ * why：规范化后与源相同的 dst 意味着**实际没发生改名**——实测
+ * `mv specs/230-fix-x specs/./230-fix-x` → rc=1 `Invalid argument`、目录未变（`-ef` 确认同一目录），
+ * 但判定器会解析出 dst=`specs/./230-fix-x` → 不符合 `NNN-fix-<name>` → `ambiguous=true`
+ * → 重开 fail-open。`specs//X`、`specs/../specs/X` 同类。
+ * 选择「拒绝非规范 segment」而非「做 POSIX 规范化再比较」：前者简单、可人眼审计、方向 fail-closed，
+ * 且真实特性目录 `specs/NNN-fix-<name>` 永远不含这些 segment。
+ * 逐 segment 的常数级比较，无回溯。
+ * @param {string} operand
+ * @returns {boolean}
+ */
+function hasCanonicalPathSegments(operand) {
+  const body = operand.endsWith('/') ? operand.slice(0, -1) : operand;
+  if (body.length === 0) return false;                       // 操作数只是 `/`
+  return body.split('/').every((seg) => seg.length > 0 && seg !== '.' && seg !== '..');
+}
+
+/**
+ * bash 的 token 分隔空白字符集——**只有**空格 / tab / LF（F231 第 7 轮定 + 第 9 轮订正）。
+ *
+ * ## 为何不含 `\r`（第 9 轮 CRITICAL-1）
+ *
+ * CR 在 bash 里**不是**分隔符，而是普通字符：`<CR>mv A B` 是一条名为 `$'\rmv'` 的命令
+ * → 未找到命令、**mv 不执行**；`mv A B<CR><LF>` 则**确实执行**，但创建的目录名带 CR
+ * （实测 `ls | cat -v` 显示 `901-fix-y^M`）——若把 CR 当空白剥掉，就会记录一个**并不存在**的路径。
+ * 两个方向都错，故 CR 一律不剥离；它既不在本字符集、也不在操作数字符集内，
+ * 含 CR 的命令因此整条不匹配（fail-closed，与 bash 语义一致）。
+ *
+ * ## 为何必须自定义、绝不能用 JS 内建的 Unicode 语义
+ *
+ * `String.prototype.trim()` 剥除**全部 Unicode 空白**（`\v` `\f` NBSP U+2028 BOM U+3000 …），
+ * 正则 `\s` 同理。但 bash **不**把这些字符当 token 分隔符：`<VT>mv A B` 在真实 bash 里是一条名为
+ * `$'\vmv'` 的命令 → **未找到命令、mv 从不执行**（GNU bash 5.3.9 实测，6 个字符逐条确认）。
+ * 第 6 轮曾用 `raw.trim()` 做剥离、却用 `^[ \t\r\n]` 星号量词的正则计前导长度，两个字符集分叉，
+ * 后果有两层：
+ * 1. **误放行**：非分隔符的 Unicode 空白被剥掉后整条命令得以匹配光杆形态，凭空把 bash 根本不会
+ *    执行的命令当成真实改名 → 候选被带到非规范名 → 重开 F224 fail-open 降级通道；
+ * 2. **offset 错位**：`leading` 数不到被 `trim()` 剥掉的字符，offset 不再指向命令名，
+ *    破坏 `resolveFeatureDirCandidate` 的按偏移归段与 F230 R3-C4 时序语义。
+ *
+ * ## 本 Feature 的重复教训（第 4 次同型缺陷）
+ *
+ * 本 Feature 已**四次**因「判定器的某个模型与 bash 真实语义分歧」而重开 fail-open：
+ * (1) `$'…'` ANSI-C 引号配平（判定器按 POSIX `'…'` 建模，bash 在 `$'…'` 内把 `\'` 当字面引号）；
+ * (2) heredoc 终止行被保留（引号定界词可含空格，终止行与真实 mv 命令同形）；
+ * (3) `<<<` herestring 与注释内 `<<WORD` 的幽灵 heredoc；
+ * (4) 空白字符集分歧（含第 9 轮订正的 `\r`）。
+ * 故凡涉及「归一化 / 剥离 / 豁免」的字符集，必须与 bash 语义严格对齐，**不得**用 JS 内建的
+ * Unicode 语义（`trim()` / `\s` / `\b`）近似 shell 语义；且「剥什么」与「数什么」必须由**同一个
+ * 判定函数**决定，不能靠人记得两处同步。
+ *
+ * 实现为**字符判定函数**而非正则（第 8 轮 DoS）：`/[ \t\n]*$/` 这类未在串首锚定的尾随匹配，
+ * 引擎会在每个起始位置重试并回溯整段空白 → O(n²)（400KB 空白实测 60s+）。
+ * 双向线性扫描无此问题。
+ * @param {string} ch
+ * @returns {boolean}
+ */
+function isShellWhitespace(ch) {
+  return ch === ' ' || ch === '\t' || ch === '\n';
+}
 
 /**
  * 其后紧跟独立参数的 option（`mv -t DIR SRC` / `mv -S SUFFIX SRC DST`）。
@@ -442,85 +584,100 @@ function hasBashWriteIndicator(segment) {
 }
 
 /**
- * 从一条**完整** Bash 命令中扫出所有**真正处于命令位**的 mv / git mv 事件（F230）。
- * 返回每条事件在（行连接消解后的）命令文本中的字符偏移与其参数文本，供调用方按偏移归段。
+ * 从一条 Bash 命令中识别改名事件：**整条命令必须就是一条光杆 `mv` / `git mv`**（F231 第 5 轮）。
  *
- * 单趟线性扫描，状态包含：单引号（内部无转义）、双引号、反斜杠转义、`#` 注释、重定向操作符。
- * 只有在**未被引用、未被转义、且不属于重定向**的控制操作符（`;` `|` `&` 换行，天然覆盖
- * `&&` `||`）之后或文本开头，才认为进入新的命令位。
+ * 核心不变量（合同）：**产出改名事件 ⟺ 整条命令文本就是一条光杆改名**——首尾 shell 空白剥离后，
+ * 按 `[ \t]+` 切 token，须为 `(git )?mv` + 白名单 option* + 恰好两个合法 `<PATH>` 操作数，
+ * 且两操作数构成可信的 SRC→DST（见 isDistinctRenameTarget / dst 不得尾随 `/`）。
+ * 满足则产出**恰好一条**事件，否则返回 `[]`（零事件 = 候选停在改名前目录 = 交既有严格判据裁决）。
+ * 刻意**不做**行连接消解、**不做** heredoc 剥离——整条文本原样比对；判定为 token 化线性实现，无回溯。
  *
- * 三条判据缺一不可（均由对抗审查用具体构造证伪过更弱的写法）：
- * 1. **必须扫完整命令、不能逐段**——`splitCommandTextSegments` 不感知引号，
- *    `echo 'a;mv <候选> <非规范名>'` 会被引号内的 `;` 切开，让文本碎片落到后段段首冒充命令位。
- * 2. **参数文本必须由同一状态机继续扫描收集，不能让正则一次吞掉**——
- *    `mv src "dst;mv <候选> <非规范名>"` 中参数里的开引号若不参与状态转移，
- *    引号内的 `;` 会被当成真实分隔符，凭空多识别出一条并不存在的改名命令。
- * 3. **注释与重定向必须各自成状态**——`true # ; mv ...` 的分号在注释里，
- *    `echo hi >& mv ...` 的 `&` 是重定向而非控制操作符，二者都不得开启新的命令位。
+ * ## soundness 论证（为何这是可靠下界）
  *
- * 控制操作符取 `;` `|` `&` 与换行：裸 `|` `&` 也计入，故 `mv A B | mv B C` 两跳都识别
- * ——与改动前的全局匹配行为一致（`splitCommandTextSegments` 并不切这两个符号）。
+ * 若整条命令就是一条带字面路径操作数的 `mv`/`git mv`，则它是该 Bash 调用中**唯一**的命令，
+ * 必然被求值。于是判据**无需**推理执行可达性，也**无需**建模 heredoc / 引号 / 注释 / 内建 /
+ * 重定向 / 赋值前缀 / 语法合法性：任何多命令、任何元字符、任何引用构造、任何语法错误都不再匹配。
+ *
+ * 这是把 soundness 从「穷举坏形态」（黑名单）或「模拟 bash 语法」（前四轮的简单命令序列白名单）
+ * 改为「只认一个可人眼校验的字面形态」。前两种路线各自死于同一模式——每补一个缺口就暴露下一个：
+ * 控制流分支 / `exit` 终止 / alias 展开 / heredoc 正文与终止行 / ANSI-C `$'…'` 引号模型分歧 /
+ * 赋值前缀 `X=1 exit` / 重定向前缀 `>/dev/null exit` / 引号剥离 `'exit'` / `builtin`·`command`
+ * 前缀 / 转义 `ex\it` / `readonly` 只读赋值 / `bash -n` 语法错误命令，全部只能靠继续加判据关闭，
+ * 即「手写半个 bash 解析器」。本判据一次性关闭全部上述家族及其未知变体。
+ *
+ * `<PATH>` 字符集是判据的**必要组成**：若允许 `;` 等元字符进入操作数，`mv A B;` 会解析出
+ * dst=`B;` → 不符合 `NNN-fix-<name>` → `ambiguous=true` → 重开 F224 fail-open 降级通道。
+ *
+ * ## 已知限界（方向刻意保守：误阻断而非误放行）
+ *
+ * 非光杆形态的**真实**改名一律不跟随：`prep && mv`、`mv A B; mv B C` 多跳、`|`/`&`/`|&` 串联、
+ * `cat > 制品 <<EOF … EOF` 换行 `mv`（heredoc 后改名）、`mv A B # 注释`、含引号或变量的路径
+ * （`mv "$OLD" "$NEW"`）、带重定向（`mv A B 2>&1`）、带前缀（`time mv` / `sudo mv`）、
+ * `mv A B` 后跟 CR（`\r`，bash 会把 CR 计入目录名）、dst 尾随 `/`、src 与 dst 互为祖先/后代或仅大小写不同、
+ * 裸 `mv` 的长选项（Darwin 上是 illegal option）。后果是候选停在旧路径、撞磁盘核验报「未建立特性目录」exit 2。
+ * （**尾随 LF 例外**：`mv A B\n` 属首尾空白剥离范围，照常跟随——见第 6 轮。）
+ * 缓解：把改名**单独写成一条** `git mv specs/old specs/new`（不与任何其他命令同处一次 Bash 调用）。
+ * 刻意不为上述形态开例外——每一个例外都要重新引入被证否的 bash 语法建模。
+ *
+ * 返回值形状与调用方契约不变：`offset` 指向命令名（`git` 或 `mv`）起始处，供
+ * `resolveFeatureDirCandidate` 按偏移归段（光杆命令只有一段，恒落在首段）；`paramText` 为命令名
+ * 之后的剩余文本，仍交 `parseRenameOperands` 解析——后者的「多操作数 / 带参 option 整条拒绝」
+ * 保守化合同继续叠加生效（如 `mv -t DIR SRC` 形状匹配但仍被拒）。
  * @param {string} command
- * @returns {{ offset:number, paramText:string }[]} 按出现顺序排列
+ * @returns {{ offset:number, paramText:string }[]} 至多一条
  */
 export function scanRenameCommandEvents(command) {
-  const text = unfoldLineContinuations(String(command));
-  const events = [];
-  let quote = null;           // null | "'" | '"'
-  let atCommandPosition = true;
-  let paramStart = -1;        // >= 0 表示正在收集最后一条事件的参数文本
-  const closeParam = (end) => {
-    if (paramStart < 0) return;
-    // 超长参数**整条作废**而非截断：截断会把 `mv A B <大量空白> C` 的第三操作数藏起来，
-    // 让本应"多操作数整条跳过"的形态退化成看似合法的二操作数改名（保守化合同不得被长度上限绕过）。
-    if (end - paramStart > RENAME_PARAM_MAX_LENGTH) events.pop();
-    else events[events.length - 1].paramText = text.slice(paramStart, end);
-    paramStart = -1;
-  };
-  const isWordStart = (i) => i === 0 || /[\s;|&()]/.test(text[i - 1]);
+  const raw = String(command);
+  // 首尾空白剥离与前导计数**共用** isShellWhitespace，字符集由构造保证一致；
+  // 双向线性扫描（不用 `[ \t\n]*$` 之类未锚定尾随正则——那是 O(n²)，见 isShellWhitespace 的 DoS 说明）。
+  let leading = 0;
+  while (leading < raw.length && isShellWhitespace(raw[leading])) leading += 1;
+  let end = raw.length;
+  while (end > leading && isShellWhitespace(raw[end - 1])) end -= 1;
+  const stripped = raw.slice(leading, end);
+  // 内部换行 = 多命令形态；CR 不是 bash 分隔符（第 9 轮），两者出现即整条拒绝
+  if (stripped.includes('\n') || stripped.includes('\r')) return [];
 
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    if (quote === "'") {            // 单引号内没有转义，只有配对单引号能结束
-      if (ch === "'") quote = null;
-      continue;
-    }
-    if (ch === '\\') { i += 1; atCommandPosition = false; continue; }
-    if (quote === '"') {
-      if (ch === '"') quote = null;
-      continue;
-    }
-    if (ch === "'" || ch === '"') { quote = ch; atCommandPosition = false; continue; }
-    if (ch === '#' && isWordStart(i)) {   // 注释到行尾：其中的分隔符不得开启命令位
-      closeParam(i);
-      const nl = text.indexOf('\n', i);
-      if (nl === -1) break;
-      i = nl - 1;
-      continue;
-    }
-    // 重定向操作符 >& <& &> 中的 & 不是控制操作符
-    if ((ch === '>' || ch === '<') && (text[i + 1] === '&' || text[i + 1] === '|')) { i += 1; atCommandPosition = false; continue; }
-    if (ch === '&' && text[i + 1] === '>') { i += 1; atCommandPosition = false; continue; }
-    if (ch === ';' || ch === '|' || ch === '&' || ch === '\n' || ch === '\r') {
-      closeParam(i);
-      atCommandPosition = true;
-      continue;
-    }
-    if (ch === ' ' || ch === '\t') continue;   // 空白不改变命令位状态
-    if (!atCommandPosition) continue;
-    RENAME_COMMAND_NAME_REGEX.lastIndex = i;
-    const match = RENAME_COMMAND_NAME_REGEX.exec(text);
-    atCommandPosition = false;
-    if (match === null) continue;              // 命令位被别的命令占据（echo / grep / true / mv-f …）
-    closeParam(i);
-    events.push({ offset: i, paramText: '' });
-    paramStart = i + match[0].length;
-    i = paramStart - 1;
+  const tokens = stripped.split(SHELL_TOKEN_SEPARATOR_REGEX);
+  // 命令名：`mv` 或 `git mv`。nameEnd = 命令名在 stripped 中的结束下标，供切出逐字 paramText。
+  let idx;
+  let nameEnd;
+  if (tokens[0] === 'mv') {
+    idx = 1;
+    nameEnd = 2;
+  } else if (tokens[0] === 'git' && tokens[1] === 'mv') {
+    let k = 3;                                             // 'git'.length
+    while (k < stripped.length && (stripped[k] === ' ' || stripped[k] === '\t')) k += 1;
+    idx = 2;
+    nameEnd = k + 2;                                       // 跳过 'mv'
+  } else {
+    return [];
   }
-  closeParam(text.length);
-  // 未闭合引号的命令在真实 shell 里是语法错误、根本不会执行，其中的 mv 文本一律不予采信
-  if (quote !== null) return [];
-  return events;
+
+  // 严格 option 白名单：只放行确定保持「真实改名」语义的 option（拒绝 dry-run / 非法 / 捆绑带参）；
+  // 长选项按命令类型分流——裸 mv 在 Darwin 上 `--force` 即 illegal option（第 10 轮 C4）
+  const isGitMv = idx === 2;
+  while (idx < tokens.length && isAcceptedRenameOption(tokens[idx], isGitMv)) idx += 1;
+  const operands = tokens.slice(idx);
+  // 恰好两个操作数：多操作数（`mv A B C` 语义是"移入目录 C"）与单操作数均非改名，整条拒绝
+  if (operands.length !== 2) return [];
+  const [src, dst] = operands;
+  if (!RENAME_PATH_TOKEN_REGEX.test(src) || !RENAME_PATH_TOKEN_REGEX.test(dst)) return [];
+  // C1：**目标**操作数尾随 `/` 必然不是 SRC→DST——dst 已存在时真实落点是 `DST/basename(SRC)`
+  // （本机实测：`mv specs/230-fix-x specs/renamed-nonstandard/` 落到
+  // `specs/renamed-nonstandard/230-fix-x`，判定器却会记 dst=`specs/renamed-nonstandard`）。
+  // 判定器无法知道 dst 是否已存在，故一律拒绝。**源**操作数尾随 `/` 保持允许（`mv SRC/ DST` 是真改名）。
+  if (dst.endsWith('/')) return [];
+  // 非规范 path segment（`.` / `..` / `//` / 绝对路径）→ 规范化后可能与源同路径 = 实际没发生改名
+  if (!hasCanonicalPathSegments(src) || !hasCanonicalPathSegments(dst)) return [];
+  // C2/C3：同路径（含仅大小写不同）、dst 是 src 的祖先或后代 → 实际不发生 SRC→DST
+  if (!isDistinctRenameTarget(src.endsWith('/') ? src.slice(0, -1) : src, dst)) return [];
+
+  // paramText 取 stripped 中命令名之后的**原始子串**（保留其空白形态与 flag 段），不用 join 重建
+  // ——它要交 parseRenameOperands，且既有测试断言了其逐字值（如 tab 分隔形态）。
+  // offset 必须是**原始**文本中命令名的下标：剥掉几个前导字符就补回几个（命令名在 stripped 中恒起于 0）。
+  // resolveFeatureDirCandidate 按 offset 归段，偏移错位会破坏 F230 R3-C4 的提名/改名时序语义。
+  return [{ offset: leading, paramText: stripped.slice(nameEnd) }];
 }
 
 /**
@@ -581,9 +738,12 @@ function splitCommandTextSegmentSpans(command) {
  * 若只用单一 candidate 变量，第一跳置 null 后 `src === candidate` 判断即失效，后续跳无法续跟。
  *
  * F227（方案 D）新增只读旁路字段 `candidates`——候选提名历史。**状态转移逻辑逐字不变**：
- * 本函数不接受任何磁盘探针参数、不做任何 I/O，`path`/`ambiguous` 的计算路径与取值对任意输入
- * 与改动前逐字相同；`candidates` 只是把状态机已经产生的序列旁路记录下来，供 judge 层在
+ * `candidates` 只是把状态机已经产生的序列旁路记录下来，供 judge 层在
  * "主候选磁盘不可用"时按需兜底消费，不参与、不影响本函数内部任何判定。
+ *
+ * **本函数不接受任何磁盘探针参数、不做任何 I/O**（F227 冻结契约）：`path`/`ambiguous` 的计算路径
+ * 与取值只由 transcript 决定。F231 第 11 轮曾试图注入磁盘探针关闭「DST 已存在 → 嵌套搬入」形态，
+ * 第 12 轮实测双向证伪（假阴 + 假阳）后整体回退，本契约恢复原状。
  * 不变量：
  * - `candidates` 中每个元素都曾在某一时刻满足 `FIX_DIR_NAME_REGEX`
  * - 顺序 = 最近一次被合法提名的先后顺序（move-to-end，非首次出现顺序）
@@ -659,6 +819,16 @@ export function resolveFeatureDirCandidate(entries, anchorLineIndex) {
     if (operands === null) return; // 异常形态整条跳过（保守化：不跟随、也不置 ambiguous）
     const src = stripTrailingSlash(operands[0]);
     if (src !== trackedDir) return;
+    // 已知限界（F231 第 12 轮，经实测确认后如实保留）：`mv SRC DST` 在 DST **运行时已是目录**时，
+    // 真实落点是 `DST/basename(SRC)` 而非 DST，命令文本与合法改名逐字相同、**静态不可判定**。
+    // 第 11 轮曾引入「注入式磁盘探针」（探到 `DST/basename(SRC)` 就拒绝跟随），第 12 轮实测**双向证伪**：
+    //   - 假阴：探针读的是**单一终态快照**，而终态同样在攻击者控制下——嵌套后再把痕迹搬走，
+    //     探针即返回 false，fail-open 完全恢复。这正是 F227「终态快照 ≠ 历史事件序列」的教训，
+    //     「否证方向」并不豁免（曾以为可以，实测不行）。
+    //   - 假阳：合法 `A→B` 后若 A 原本含同名子目录 `A/A`，终态存在 `B/A` → 探针误判 → 真实改名被拒绝跟随。
+    // 且该形态**不提供新能力**：劫持既有规范目录纯提名即可（不需要 mv，= F227 已知限界一，用户已接受）；
+    // 打开 fail-open 用真实 `git mv SRC <不存在的非规范名>` 即可（= SC-005，F224 设计意图，须保住）。
+    // 故不作探测，维持纯状态机语义。详见 specs/231-.../fix-report.md「第 12 轮」。
     trackedDir = stripTrailingSlash(operands[1]);
     syncCandidateFromTrackedDir();
   };

@@ -1218,6 +1218,12 @@ describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () 
     // 第三操作数被抹掉，形态退化成看似合法的二操作数改名，绕过「多操作数整条跳过」的保守化合同。
     // 选它做端到端用例是因为它最不像人为构造：超长参数在真实命令里天然可能出现。
     ['R4-4 超长参数藏第三操作数', `mv ${DECOY_DIR} specs/renamed-nonstandard${' '.repeat(400)}specs/dest-dir`],
+    // F231 端到端反向回归（H1/H2/H3）：藏在不会执行的控制流 / 命令替换里的 mv 不得被采信为改名。
+    // HEAD 上这三条都会把候选带到非规范名 → ambiguous → feature-dir-unresolvable → exit 0 放行；
+    // 白名单闸门（&&/|| + $( + 保留字 一律拒绝）关闭后候选停在 DECOY_DIR（磁盘不存在）→ 走制品缺失判据 exit 2。
+    ['H1 短路 RHS 控制流藏 mv', `true || git mv ${DECOY_DIR} specs/renamed-nonstandard`],
+    ['H2 死 if 分支藏 mv', `if false; then git mv ${DECOY_DIR} specs/renamed-nonstandard; fi`],
+    ['H3 命令替换藏 mv', `: $(false && mv ${DECOY_DIR} specs/renamed-nonstandard)`],
   ];
 
   for (const [label, command] of FORGED_COMMANDS) {
