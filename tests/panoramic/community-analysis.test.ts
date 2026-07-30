@@ -36,6 +36,59 @@ function makeGraphJSON(nodes: GraphNode[], links: GraphEdge[]): GraphJSON {
   };
 }
 
+/**
+ * 构造规模缩放测试用的环形图：每个节点连出 2-4 条边
+ *
+ * 用确定性 LCG 而非 Math.random——缩放比判据要求两个规模的边密度严格同分布，
+ * 否则两次测量的差异里会混入随机边数波动，污染增长率信号。
+ */
+function buildScaleTestGraph(nodeCount: number, seed: number): GraphJSON {
+  let state = seed;
+  const nextRandom = (): number => {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    return state / 2147483648;
+  };
+
+  const nodes = Array.from({ length: nodeCount }, (_, i) => makeNode(`n${i}`));
+  const links: GraphEdge[] = [];
+  for (let i = 0; i < nodeCount; i++) {
+    const neighborCount = 2 + Math.floor(nextRandom() * 3);
+    for (let j = 0; j < neighborCount; j++) {
+      links.push(makeEdge(`n${i}`, `n${(i + j + 1) % nodeCount}`));
+    }
+  }
+  return makeGraphJSON(nodes, links);
+}
+
+/** 一次管道执行的耗时观测：cpu 为本进程实耗 CPU 时间，wall 为墙钟 */
+interface AnalysisCost {
+  /** 本进程 user+system CPU 时间（ms）——不含被其他进程抢占的等待，故抗宿主负载 */
+  cpu: number;
+  /** 墙钟耗时（ms）——仅用于兜底的挂死检测 */
+  wall: number;
+}
+
+/**
+ * 跑一次完整分析管道并同时记录 CPU 时间与墙钟
+ *
+ * 为什么 cpu 而非 wall 做主判据：墙钟包含被别的进程抢占 CPU 的等待，满载时两个规模
+ * 被抢占的比例并不相同（实测同一次全量 vitest 里 wall 比值在 1.44-10.85 之间乱跳，
+ * 而 cpu 比值稳定在 3.56-5.67）。process.cpuUsage() 只累计本进程实际占用的 CPU，
+ * 天然扣掉了这部分噪声。
+ *
+ * 前提：vitest 3 默认 pool='forks' + isolate=true，每个测试文件独占一个 fork 进程，
+ * 同进程内不会并发跑别的测试文件，故本进程 CPU 时间可归因于本用例。
+ * 若将来把 pool 改为 'threads'，同进程会混入其他文件的 CPU，该前提失效需重新设计。
+ */
+function measureAnalysis(graphJson: GraphJSON, outputDir: string): AnalysisCost {
+  const cpuBefore = process.cpuUsage();
+  const start = performance.now();
+  runCommunityAnalysis(graphJson, outputDir);
+  const wall = performance.now() - start;
+  const delta = process.cpuUsage(cpuBefore);
+  return { cpu: (delta.user + delta.system) / 1000, wall };
+}
+
 let tmpDir: string;
 
 beforeEach(() => {
@@ -98,29 +151,70 @@ describe('runCommunityAnalysis 端到端', () => {
     expect(content).toContain('未检测到有效社区');
   });
 
-  it('5000 节点算法复杂度不退化（CI 宽松阈值）', () => {
-    // 生成大图：5000 节点，每个节点连接 2-4 个邻居
-    const nodeCount = 5000;
-    const nodes = Array.from({ length: nodeCount }, (_, i) => makeNode(`n${i}`));
-    const links: GraphEdge[] = [];
+  it('1000→4000 节点算法复杂度不退化（负载无关的规模缩放比判据）', () => {
+    // ── 判据说明（F234）────────────────────────────────────────────────
+    // 本用例守护的是"算法复杂度不退化"——一个关于**增长率**的性质。旧版断言
+    // `expect(elapsed).toBeLessThan(30000)` 用单个规模的一次绝对耗时来验证它，
+    // 判据与守护目标错配：单点耗时不含任何增长率信息，实际测的只是"这台机器忙不忙"。
+    // 后果双向失效——宿主负载升高就误报（CI 实测 31851ms 越过 30000ms 阈值，同一
+    // 用例本地隔离重跑仅约 3.5s），而真出现复杂度退化时又抓不住（本次实测：把
+    // betweenness 的采样上限去掉这一真实退化，5000 节点耗时 19.2s，旧阈值照样放行）。
+    //
+    // 现判据：测 T(n) 与 T(4n) 的增长比。管道成本 = Louvain O(n log n) +
+    // betweenness 采样（源节点数被 sampleSize 上限 1000 钳住，故对 n≥1000 呈
+    // O(V+E) 线性）。因此 1000→4000 的预期比值约 4-5；退化为 O(n²) 时趋向 16。
+    // 取 8 作判别线，两侧各留约 1.6-2× 余量。
+    // 用 4× 而非 2× 跨度：跨度越大信号越强——2× 跨度下线性 2.2 / 二次 4，与噪声
+    // 区间几乎贴脸。
+    //
+    // 负载无关性实证（详见 verification 记录）：
+    //   - 空载 CPU 比值 4.01-4.88
+    //   - 全量 vitest（487 文件并行）下 CPU 比值 3.56-5.67，而同批次墙钟比值
+    //     1.44-10.85 —— 这正是不能用墙钟做主判据的直接证据
+    //   - 拉满 CPU（120 个 busy loop）使单次耗时膨胀约 10-21×，比值仍在同一区间
+    // 另加最多 3 轮重测：真实复杂度退化是确定性的（每轮都越界），而并发噪声是随机的，
+    // 连续 3 轮同时越界的概率可忽略。
+    // ──────────────────────────────────────────────────────────────────
+    const smallSize = 1000;
+    const largeSize = 4000;
+    /** 增长比判别线：线性实测 4-5.7，O(n²) 退化约 16 */
+    const maxGrowthRatio = 8;
+    /** 越界后的重测轮数上限——用于区分"确定性退化"与"一次性并发噪声" */
+    const maxAttempts = 3;
 
-    for (let i = 0; i < nodeCount; i++) {
-      // 连接到相邻节点
-      const neighborCount = 2 + Math.floor(Math.random() * 3);
-      for (let j = 0; j < neighborCount; j++) {
-        const target = (i + j + 1) % nodeCount;
-        links.push(makeEdge(`n${i}`, `n${target}`));
-      }
+    // JIT 预热：避免第一次测量额外承担热点函数的编译开销而虚高，从而扭曲比值
+    runCommunityAnalysis(buildScaleTestGraph(600, 7), path.join(tmpDir, 'warmup'));
+
+    const smallGraph = buildScaleTestGraph(smallSize, 1);
+    const largeGraph = buildScaleTestGraph(largeSize, 2);
+    const smallDir = path.join(tmpDir, 'scale-small');
+    const largeDir = path.join(tmpDir, 'scale-large');
+
+    let growthRatio = Infinity;
+    let lastLargeWall = 0;
+    const attemptLog: string[] = [];
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const small = measureAnalysis(smallGraph, smallDir);
+      const large = measureAnalysis(largeGraph, largeDir);
+      growthRatio = large.cpu / small.cpu;
+      lastLargeWall = large.wall;
+      attemptLog.push(
+        `#${attempt} cpu ${small.cpu.toFixed(0)}→${large.cpu.toFixed(0)}ms ratio=${growthRatio.toFixed(2)}`,
+      );
+      if (growthRatio < maxGrowthRatio) break;
     }
 
-    const graphJson = makeGraphJSON(nodes, links);
+    // 确认两次测量都真的跑完了整条管道——否则"耗时"可能测的是提前返回的空管道
+    expect(fs.existsSync(path.join(smallDir, '_meta', 'GRAPH_REPORT.md'))).toBe(true);
+    expect(fs.existsSync(path.join(largeDir, '_meta', 'GRAPH_REPORT.md'))).toBe(true);
 
-    const start = performance.now();
-    runCommunityAnalysis(graphJson, tmpDir);
-    const elapsed = performance.now() - start;
+    expect(
+      growthRatio,
+      `T(${smallSize})→T(${largeSize}) 缩放比连续越界：${attemptLog.join('; ')}`,
+    ).toBeLessThan(maxGrowthRatio);
 
-    // 阈值选择：本地 ~5s；CI GitHub Actions runner 慢约 2-4 倍。30s 上限保留捕捉
-    // 量级退化（如 O(n²) 回归）的能力，同时消化 CI 环境抖动。
-    expect(elapsed).toBeLessThan(30000);
-  }, 45000);
+    // 兜底上限仅在死循环/挂死时给出比"超时"更清晰的失败信息，**不承担复杂度判定
+    // 职责**（复杂度由上面的 growthRatio 判定）。故意留极大余量：满载实测曾达 71s。
+    expect(lastLargeWall).toBeLessThan(120_000);
+  }, 420_000);
 });

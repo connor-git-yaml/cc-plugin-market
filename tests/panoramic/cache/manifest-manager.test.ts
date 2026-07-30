@@ -207,7 +207,7 @@ describe('ManifestManagerImpl', () => {
   });
 
   describe('性能基准', () => {
-    it('1000 条 entry 的 load + flush < 100ms', async () => {
+    it('1000 条 entry 的 load + flush 不发生量级退化', async () => {
       const tmpDir = createTmpDir();
       tmpDirs.push(tmpDir);
       const manifestPath = path.join(tmpDir, 'perf-manifest.json');
@@ -235,7 +235,22 @@ describe('ManifestManagerImpl', () => {
       await mgr.flush(manifestPath);
       const elapsed = performance.now() - start;
 
-      expect(elapsed).toBeLessThan(100);
+      // ── 阈值说明（F234）──────────────────────────────────────────────
+      // 这里守护的**不是**性能指标，而是"量级退化下限"：load+flush 是一次
+      // readFile + JSON.parse + zod safeParse + 一次原子写，天然线性，本地实测
+      // 1000 条仅 1.9-4.8ms。真正要拦的回归是常数级爆炸——例如改成逐条 entry
+      // 同步落盘或 fsync，1000 条会涨到秒级。
+      //
+      // 原阈值 100ms 只有 20-50× 余量，在满载宿主上随时翻车：拉满 CPU 的实测中
+      // 同一操作单次尖峰可达 119ms（相对空载 20-40×），CI 本次也已逼近（同文件
+      // 最慢 113ms）。放宽到 1000ms 后对空载仍有约 300× 余量，对上述真实退化
+      // 场景（秒级）依然可判。
+      //
+      // 未改成 T(n)/T(2n) 缩放比（community-analysis 用的那套负载无关判据）的原因：
+      // 该路径本身就是线性的，不存在复杂度退化风险；且 2-6ms 量级的两次测量比值
+      // 完全被噪声主导——满载实测比值在 1.38-18.96 之间乱跳，做判据只会更不稳。
+      // ────────────────────────────────────────────────────────────────
+      expect(elapsed).toBeLessThan(1000);
       expect(mgr.stats().entryCount).toBe(1000);
     });
   });
