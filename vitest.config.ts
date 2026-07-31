@@ -1,5 +1,31 @@
 import { defineConfig } from 'vitest/config';
+import os from 'node:os';
 import path from 'path';
+
+// F235：显式约束测试并行度。
+//
+// 为什么需要：vitest 3 默认 pool='forks'，worker 数由 createForksPool 按
+// `max(availableParallelism() - 1, 1)` 推导。这个推导只看 CPU 核数，不知道本仓库
+// 487 个测试文件里有 ~49 个会 spawn 真实 node CLI 子进程——实际并发进程数是
+// `1 主进程 + N worker + 若干孙进程`，实测在 4 vCPU 上峰值达 12 个 node 进程。
+// worker↔主进程之间的 birpc 调用（onTaskUpdate 等）有 60s 硬超时，且该超时
+// **vitest 未开放配置**（node_modules/vitest/dist/chunks/index.*.js 的
+// DEFAULT_TIMEOUT = 6e4，worker 侧 createForksRpcOptions 不传 timeout），
+// 超时会抛 unhandled error 让进程退出码为 1——即使全部测试都通过。
+// 降低并发是唯一能在配置层收口的手段。
+//
+// 为什么是「一半」：每个 worker 平均要为自己 spawn 的孙进程和共享的主进程
+// （承担所有 worker 的 Vite transform RPC，单线程）让出算力，按 1:1 预留即取半。
+// 4 vCPU 的 CI → 2 个 worker（原 3 个），18 核开发机 → 9 个（原 17 个）。
+//
+// 为什么设上限 12：主进程是单线程瓶颈，worker 超过一定数量后只是加剧对它的争抢，
+// 换不来吞吐。上限同时限制内存占用（每个 fork 是独立 node 进程）。
+//
+// 依赖前提：availableParallelism() 返回的是**进程实际可用**的 CPU 数
+//（受 cgroup cpuset / CPU affinity 约束），在 GitHub runner 与容器里均成立；
+// 若运行时不支持该 API 则回落到 os.cpus().length。
+const availableCpus = os.availableParallelism?.() ?? os.cpus().length;
+const maxTestWorkers = Math.max(1, Math.min(12, Math.floor(availableCpus / 2)));
 
 export default defineConfig({
   resolve: {
@@ -18,6 +44,15 @@ export default defineConfig({
     globals: false,
     environment: 'node',
     testTimeout: 30_000,
+
+    // F235：maxWorkers / minWorkers 在 vitest 3 里属于 NonProjectOptions，
+    // **只能**声明在根级 test.*——写进 projects[] 无效。因此这里不受 F233 记录的
+    // 「projects 不继承根级配置」影响（testTimeout 那类才需要逐 project 重复声明）。
+    // 优先级：poolOptions.forks.maxForks > maxWorkers > 内置推导；本仓库不设
+    // poolOptions，用 maxWorkers 以便对 forks / threads 任一 pool 都生效。
+    // 不设 minWorkers：vitest 会取 min(推导值, maxWorkers) == maxWorkers，
+    // 与调整前「启动即拉满 worker」的行为一致，只是上限变小。
+    maxWorkers: maxTestWorkers,
 
     // 覆盖率报告
     coverage: {
