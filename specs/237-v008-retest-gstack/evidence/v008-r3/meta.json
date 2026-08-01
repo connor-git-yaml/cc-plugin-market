@@ -1,0 +1,22 @@
+{
+  "repeat": 3,
+  "fixturePath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/tests/baseline/tasks/SWE-V008-sympy-contains-as-set-returns/spec-driver-spectra-mcp-c3-r3/full.json",
+  "classification": "fail",
+  "failureSource": "candidate",
+  "classifyReason": "harness completed 但 resolved=false（C1 权威优先于启发式）",
+  "fixReportSource": "live-worktree",
+  "fixReportPath": "/Users/connorlu/.spec-driver-bench-worktrees/SWE-V008-sympy-contains-as-set-returns/spec-driver-spectra-mcp/r3/specs/001-fix-contains-as-set/fix-report.md",
+  "auditJsonlPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/.calibration-output/f237-live-forensics/SWE-V008-sympy-contains-as-set-returns/r3/.specify/runs/2026-08.jsonl",
+  "patchPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/run_artifacts/SWE-V008-sympy-contains-as-set-returns__spec-driver-spectra-mcp__r3/patch.diff",
+  "evidenceGate": {
+    "completedPhases": [
+      "diagnose",
+      "no-op-verify"
+    ],
+    "artifacts": [
+      "specs/001-fix-contains-as-set/fix-report.md"
+    ],
+    "workflowResult": "success",
+    "blockEvents": 0
+  }
+}

@@ -1,0 +1,43 @@
+# 问题核实报告（无需改动）
+
+## 问题描述
+`Contains(x, Reals).as_set()` 返回 `Contains(x, Reals)`，这是错误的——`Contains` 是布尔值而非集合（Set），没有 `as_relational` 方法。因此在下游会导致失败，例如：
+
+```pytb
+>>> Piecewise((6, Contains(x, Reals)), (7, True))
+AttributeError: 'Contains' object has no attribute 'as_relational'
+```
+
+来源：https://github.com/sympy/sympy/pull/14965#discussion_r205281989（对应 issue sympy/sympy#14971）。
+
+## 判定依据
+
+该问题在当前代码库中**已被上游历史修复解决**，无需任何代码改动。证据如下：
+
+1. **`Contains.as_set` 现状**：`sympy/sets/contains.py:47-48` 的实现为：
+
+   ```python
+   def as_set(self):
+       raise NotImplementedError()
+   ```
+
+   即 `as_set()` 不再返回 `Contains`（布尔值伪装成集合），而是显式抛出 `NotImplementedError`。这正是上游对本 issue 的采纳修复。
+
+2. **修复来源为真实上游 commit**：`git log -L 47,48:sympy/sets/contains.py` 显示，`return self`（buggy 版本，由 commit `91e958481e` 引入）已被 commit `c5fb611eed`（"some updates"，作者 czgdp1807，2019-06-27）改为 `raise NotImplementedError()`。`git merge-base --is-ancestor c5fb611eed HEAD` 确认该修复 commit 是当前 HEAD 的祖先，且工作树对 `contains.py` 无未提交改动（`git diff HEAD` 为空）。
+
+3. **下游 `Piecewise` 不再崩溃**：bug 报告中触发 `AttributeError` 的 `Piecewise.eval` 早期实现（`c.as_set().as_relational(x)`）已随 `c5fb611eed` 一并重写。当前 `sympy/functions/elementary/piecewise.py` 的 `eval`（L155 起）不再无条件对条件调用 `as_set().as_relational()`，因此 `Piecewise((6, Contains(x, Reals)), (7, True))` 现可正常构造，返回 `Piecewise((6, Contains(x, Reals)), (7, True))`。
+
+4. **既有回归测试锁定该行为**：`sympy/sets/tests/test_contains.py::test_as_set` 断言 `Contains(x, FiniteSet(y)).as_set()` 抛出 `NotImplementedError`；`python -c "import sympy; sympy.test('sympy/sets/tests/test_contains.py')"` 全部 6 项通过（pytest 因当前环境 Python 3.14 的 `ast.Str` 兼容问题不可用，改用 SymPy 自带 runner）。
+
+结论：两个原始症状（as_set 返回 Contains、Piecewise 抛 AttributeError）均已消除，任何代码改动都会与既有测试及上游修复冲突。
+
+### 复现对账
+- {"claim":"Piecewise((6, Contains(x, Reals)), (7, True)) 不再抛 AttributeError，可正常构造","command":"python -c \"import signal; signal.alarm(60); from sympy import Symbol, Contains, S, Piecewise; x=Symbol('x'); p=Piecewise((6, Contains(x, S.Reals)), (7, True)); assert p is not None\" && printf 'SPEC-DRIVER-REPRO: PASS\\n' || printf 'SPEC-DRIVER-REPRO: FAIL\\n'","expected":"PASS"}
+- {"claim":"Contains(x, Reals).as_set() 不再返回 Contains（而是抛 NotImplementedError）","command":"python -c \"import signal; signal.alarm(60); from sympy import Symbol, Contains, S; from sympy.testing.pytest import raises; x=Symbol('x'); raises(NotImplementedError, lambda: Contains(x, S.Reals).as_set())\" && printf 'SPEC-DRIVER-REPRO: PASS\\n' || printf 'SPEC-DRIVER-REPRO: FAIL\\n'","expected":"PASS"}
+
+## 交叉核实委派
+委派 `spec-driver:verify` 子代理独立核实"无需改动"判定。核实结论：**判定成立**。
+- 独立确认 `sympy/sets/contains.py:47-48` 的 `as_set` 为 `raise NotImplementedError()`。
+- 独立经 Bash 运行两条复现断言，均 `SPEC-DRIVER-REPRO: PASS`。
+- 独立运行 `sympy.test('sympy/sets/tests/test_contains.py')`：6 passed，含 `test_as_set` 锁定行为，无回归。
+- 额外健全性：全文搜索 `piecewise.py` 已无 `as_relational` 调用（原崩溃路径已被移除）；`p.subs(x,1)` 正确求值为 `6`；仅存的 2 处 `as_set()` 调用位于用户主动调用的可选方法（`as_expr_set_pairs`/`_eval_rewrite_as_ITE`），对含 Contains 条件会给出明确的 `NotImplementedError`（预期行为，非隐晦崩溃），不构成新缺陷。

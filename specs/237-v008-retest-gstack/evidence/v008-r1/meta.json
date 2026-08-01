@@ -1,0 +1,27 @@
+{
+  "repeat": 1,
+  "fixturePath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/tests/baseline/tasks/SWE-V008-sympy-contains-as-set-returns/spec-driver-spectra-mcp-c3-r1/full.json",
+  "classification": "pass",
+  "failureSource": "none",
+  "classifyReason": "harness completed + resolved（C1 权威优先于启发式）",
+  "fixReportSource": "watcher-copy",
+  "fixReportPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/.calibration-output/f237-live-forensics/SWE-V008-sympy-contains-as-set-returns/r1/specs/001-fix-contains-as-set/fix-report.md",
+  "auditJsonlPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/.calibration-output/f237-live-forensics/SWE-V008-sympy-contains-as-set-returns/r1/.specify/runs/2026-08.jsonl",
+  "patchPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/m8-closeout-212/run_artifacts/SWE-V008-sympy-contains-as-set-returns__spec-driver-spectra-mcp__r1/patch.diff",
+  "evidenceGate": {
+    "completedPhases": [
+      "diagnose",
+      "plan",
+      "implement",
+      "verify"
+    ],
+    "artifacts": [
+      "specs/001-fix-contains-as-set/fix-report.md",
+      "specs/001-fix-contains-as-set/plan.md",
+      "specs/001-fix-contains-as-set/tasks.md",
+      "specs/001-fix-contains-as-set/verification/verification-report.md"
+    ],
+    "workflowResult": "success",
+    "blockEvents": 0
+  }
+}
