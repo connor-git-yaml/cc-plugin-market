@@ -35,6 +35,7 @@
     "drift:link": "node scripts/spec-drift-cli.mjs link",
     "drift:check": "node scripts/spec-drift-cli.mjs check",
     "drift:unlink": "node scripts/spec-drift-cli.mjs unlink",
+    "judge:doctor": "node plugins/spec-driver/scripts/judge-snapshot-doctor.mjs",
     "release:sync": "node scripts/sync-release-contracts.mjs",
     "release:check": "node scripts/validate-release-contracts.mjs",
     "baseline:collect": "node scripts/baseline-collect.mjs",
