@@ -291,6 +291,30 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    **判定：图质量门通过 → Track E 解锁**；下一批：**F219 C 轨 drift ship ∥
    F220 D 轨 batch-orchestrator 拆解**〔disjoint：scripts/spec-drift+repo:check
    vs src/batch；E 与 V008 评测复测〔烧配额，验"超 GStack"〕待下批按用户节奏〕）
+  （2026-08-01 大记账〔F219-F236 十八件，各窗 ship、memory 沉淀，本轮补账 + 双 spot-check〕：
+   **C 轨✅ F219** drift ship〔835106d：drift link/check CLI + repo:check 第 13 族 +
+   canonical AST v2；forEachChild 不枚举 token 是漏报根因；lock 带 3 条真锚；
+   rename-follow 如期留 M10〕——C1/C2/C3 全落地；
+   **D 轨✅ F220** 五段拆分〔f7bd643..8092d1a：facade 1749 行 + stages @internal；
+   G1/G2/G3 守护资产勿 -u 再生；调度块留 facade 是有意决策〕；
+   衍生 fix 串：F221 specgen re-export 过滤 / F222 CLI 零认证降级 + --require-llm /
+   F223 charter 快照跨日 TZ 时间旅行 / F226 gitignore dist/ 吞 fixture 修复；
+   **门禁对抗硬化链 F224→F231**〔改名/原地编辑盲区→复合命令劫持→候选目录幽灵覆写
+   →占位符误报收口→不成对花括号绕过→伪造 mv fail-open→**F231 终局：改名跟随收敛为
+   光杆单命令字面白名单，闭合已知限界 0**；三条路线实测证伪存档：执行证据/结构黑名单/
+   结构白名单〕；
+   **CI 修复链 F232→F235**〔六重失效含"F201 mjs gate 从落地起零执行"→vitest projects
+   不继承根配置 + averageConcurrency 判据→墙钟断言改 process.cpuUsage()→worker RPC
+   超时 maxWorkers=CPU/2；**本轮 gh 实证 master CI+fixture-isolation 双 job 连续绿**〕；
+   **F236✅** judge:doctor 快照漂移诊断——**本轮 dogfood 实跑 status=drift**〔judge/core
+   两文件 mismatch + F218 execution-record 整个 missingInSnapshot〕= F216 证据门 +
+   九连修在本机安装版门禁上**零生效** → 触发本轮 plugin 4.4.0 发版收口。
+   **架构评估**：分发/激活链漂移已三次同构出现〔npm 停 4.2.0 / live MCP 旧编译 /
+   judge 旧快照〕——**A4"一致性诊断"从候选升格为核心验收**，F236 是其诊断件先行，
+   结构性收敛〔安装版 vs 源码版自动核对/提醒〕纳入 A4 scope；
+   门禁军备竞赛随 F231 收敛、F229 沉淀"异构对抗审查必备档位"方法论已入 M10 卡；
+   下一步：**plugin 4.4.0 发版〔本轮〕→ V008 评测复测〔preflight 新增 judge:doctor
+   ==match + 版本核对〕→ A2-A4/B3-B4/E 继续**）
 
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
