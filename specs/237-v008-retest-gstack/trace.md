@@ -74,7 +74,111 @@ worktree（编排）：`.claude/worktrees/modest-ellis-e4f0fe`
 
 ---
 
-## GATE_DESIGN — 暂停（硬门禁 + 硬阻塞并发）
+## GATE_DESIGN — 暂停 → 用户解除
 
-跑批被 **OAuth 过期**硬阻塞（只有用户能交互式 `claude /login` 解除），
-故在此暂停并向用户提交阻塞清单与执行方案，等待裁决。
+跑批被 **OAuth 过期**硬阻塞，暂停并向用户提交了阻塞清单 + spec 摘要 + 两个待拍板点
+（spec 方向 / 4.4.0 分发是否本轮处理）。
+用户回复「登录了」：解除 OAuth 阻塞，且对 spec 方向无异议 → 视为 GATE_DESIGN 通过，
+分发问题按 spec Non-Goals 默认（本轮不处理）。复验 `claude --print` haiku 探针回 `ok` ✓。
+
+---
+
+## Phase 2 — Plan 前置实证（编排器亲自执行：诊断/扫描类）
+
+### 评测链零漂移实证（re-freeze 合法性判据）
+
+自 F212 冻结基线 `4852bf1` 至本分支 HEAD，以下全部 `git diff` 为 0：
+- eval 链 12 文件（runner/pool-rerun/validate/calibrate/cohort-batch/split-sets/
+  parallel-run-pool/preregistration-check/generation-infra/warmup-planner/verified-paths/build-spectra-stamped）
+- oracle 语义 5 模块（`SEMANTIC_MODULES`：classify-oracle/phase-markers/swebench-oracle/
+  swebench-dataset-build/swebench_fetch_rows.py）
+- 判分周边 6 文件（eval-quota-store/cohort-aggregate/cohort-registry/local-spectra-plugin/eval-judge/eval-judge-jury）
+- 数据文件：ab-manifest.json / pool-11.json / preregistration.md
+- package.json dependencies 段零变化（仅 version 字符串与 scripts 段）→ eval worktree node_modules 免重装（实测 tsc/vitest/zod 可用）
+
+→ 三 hash（oracleSpecHash `f4044f21…` / promptSha256 `a06fd18a…` / fixtureContentHash `19d8d42…`）
+输入源全部不变，**re-freeze 仅需更新 prereg `gitCommit` 锚**（当前锚 `9fb3f89`），与 F212 先例同构。
+
+### F237 前提成立性核验（F212 是否已含 F216）
+
+- `git merge-base --is-ancestor c318351 4852bf1` → **NO**（4852bf1 早于 F216）
+- `git merge-base --is-ancestor c318351 9fb3f89` → **NO**（F212 headline prereg 锚早于 F216）
+→ F212 的 81.8% 确实测于 **pre-F216** 判定器，"F216 后复测"前提成立。
+
+**归因诚实性备忘（写进最终报告）**：本轮 treatment 不是纯 F216——从 F212 基线到本轮基线，
+`plugins/spec-driver` 累计含 F213–F236 全部变更（判定器直接相关：F216 证据门 + F218 拆分[行为保持] +
+F228 占位符误报收口 + F229/F230/F231 绕过闭合）。headline 归因指向 F216（V008 病根的设计机制），
+但报告须注明 treatment 是累计判定器 delta。
+
+### F212 headline 实跑口径确认（`f212-headline.json` meta）
+
+driver=`claude-sonnet-4-6` / runTimeoutMs=1200000 / swebenchTimeoutMsActual=1200000（透传口径，
+prereg 冻结 300000 属 cohort-batch 链的已归档 lineage deviation）/ preregGatePassed=true /
+wallMs=25.97M（约 7.2h，含 warmup 32min）→ 本轮 8h 预算够但不宽裕。
+`DEFAULT_DRIVER_MODEL='claude-sonnet-4-6'`（parallel-run-pool.mjs:90）与口径一致。
+
+### run 现场三层结构与撞名覆盖面（存档方案判据）
+
+1. `tests/baseline/swe-bench-verified/tasks/<task>/<tool>/r<N>/full.json` — 判分 fixture，同键覆盖
+2. `<eval-wt>/run_artifacts/<task>__<tool>__r<N>/` — patch.diff/stdout.log/stderr.log/oracle logs，同键覆盖
+3. `~/.spec-driver-bench-worktrees/<task>/<tool>/r<N>/` — 完整 task worktree
+   （含 `specs/001-fix-*/fix-report.md`、`.specify/runs/YYYY-MM.jsonl` 审计事件、task-runner-*.log），
+   `prepareWorktree` 同键 **rm -rf** 重建（eval-task-runner.mjs:138-140）
+- F212 V008 bench-worktrees 现存 r1/r2/r4/r5/r6（r3 已被覆盖——撞名事故实证）
+- **F216 审计事件落盘**：`appendAuditEvent`（fix-compliance-io.mjs:146-157）写
+  `<projectRoot=driver cwd=task worktree>/.specify/runs/YYYY-MM.jsonl` → V008 取证的审计源
+
+### 其他
+
+- `claude plugin disable/enable` 语法确认：`claude plugin disable <plugin> -s user`
+- `SPEC_DRIVER_BENCH_HOME` UNSET → 默认 `~/.spec-driver-bench-worktrees` 与 F212 现场一致
+- eval worktree `.specify/.spec-driver-path` 指 4.3.0 缓存：不入 driver 链路
+  （driver cwd 是 bench worktree，非 eval worktree；且 SessionStart postinstall 会按 `--plugin-dir` 源重写）
+
+---
+
+## Phase 3 — Plan（委派 `spec-driver:plan`）+ Codex 对抗审查
+
+- 初版 plan.md 产出（462 行，10 章）；plan 子代理补 5 个 spec 未定决策：
+  re-freeze 锚 H=发射时编排分支 HEAD 且 anchor commit 永不合流 / 发射器进 `.calibration-output/bin/`（F212 教训）/
+  取证两层边界（入库 evidence/ 精简版 vs 本地全量 tar）/ 审计事件按月 JSONL 现场 ls 防呆 / headline 无 jury 实付 ≈$0
+- F212 发射器实物出土：`.calibration-output/bin/f212-launch-ab.sh`（`set -uo pipefail` 无 -e + trap restore）
+  与 `f212-plugin-guard.sh`（独立脚本 + 状态机 + 6h deadline + 30s 节拍）——implement 按实物模式融合
+
+### Codex plan 审查（task-msa5x5fb-iqqjrq，~15m）：7 CRITICAL + 7 WARNING
+
+编排器盘上复核后全部采纳，关键实证：
+
+| 条目 | 实证 | 修法 |
+|------|------|------|
+| C1 setsid 不存在 | `command -v setsid` 空（Darwin） | nohup + & + disown → reparent launchd |
+| C2 set -e 吞 aborted 状态 | bash errexit 语义；F212 实物正是无 -e | 沿 F212 `set -uo pipefail` + `$?` |
+| C3 fixture 路径写错链 | **盘上实证** pool 链在 `tests/baseline/tasks/<task>/<tool>-c3-r<N>/`（`_fixturePath` + `--fixture-suffix`）；`swe-bench-verified/tasks/` 是 A/B 链的树 | 存档/取证全改 + 现场 ls 确认 |
+| C4 cp --parents 不可用 | BSD cp 实测 illegal option | rsync -aR 白名单抽取 |
+| C5 **on-success 即删现场** | `--cleanup on-success` 硬编码（pool:258）+ runner oracle PASS 即 rmSync；**F212 V008 r3 缺失真因是 cleanup 而非撞名**（此前误判，更正） | **取证 watcher sidecar**：15s 节拍 rsync 全 11 task 文本核心到 `f237-live-forensics/`，零 eval 链改动零口径漂移；cleanup 前有 oracle docker 分钟级窗口 |
+| C6 evidence 跨 worktree 断链 | Phase D 在评测 wt、git add 在编排 wt | 取证直接写编排 wt 绝对路径 |
+| C7 claudeArgs 发射前不可得 | dry-run 不跑 runner；fixture 仅真 run 后落盘 | P-6 重构为**首 run 早期门**：首 fixture 落盘即验 `meta.args` 的 --plugin-dir，不符 kill 止损（只烧 1 run） |
+| W1-W7 | trap 不杀子进程/守卫竞态/配额无硬门/re-freeze 触发 pre-commit/收尾 tar 无守卫/报告缺成本节/预核验 tee 吞码 | 逐条修；W3 诚实化为 advisory 人工模式（无 dashboard API，F212 同款）；W4 anchor commit 用 --no-verify（永不合流，理由入 plan） |
+
+Codex I1-I6 正面确认：dry-run 边界表述诚实、re-freeze H/H+1 数学成立、存档体积可行（文本核心 ~25MiB + run_artifacts ~40MiB）、host shell 声明足够、SC-005/SC-009 落点明确。
+
+### 修订落地 + 编排器复读残余（留给 implement 修）
+
+- 14 处修复全部落进 plan（463→612 行），§10 可追溯表同步更新。
+- 编排器复读发射器骨架发现残余（plan 明示骨架是伪代码，正式脚本 implement 落地时修）：
+  **plugin 原始状态探测两处失真** —— `claude plugin list` 无 `--scope` 选项（实测 unknown option），
+  且输出为多行块（`❯ <name>` 与 `Status: ✔ enabled` 分行），单行 grep `'<name>.*enabled'` 永不匹配
+  → ORIG 状态恒为 disabled → 批后不会恢复用户插件。
+  implement 修法：直接 `node` 读 `~/.claude/settings.json` 的 `enabledPlugins`（与 runner 门禁
+  `globalPluginEnabled` 同源，权威且可机械断言）。
+
+### F212 V008 基线明细（取证表对照基线，编排器从 pool 链 fixture 实测）
+
+| repeat | runner status | oracle classification | bench worktree 现状 |
+|--------|---------------|----------------------|---------------------|
+| r1 | success | **fail** | 存活（fail 不清理） |
+| r2 | success | **fail** | 存活 |
+| r3 | success | **pass** | **已被 on-success 清理删除**（C5 实证闭环） |
+
+→ F212 V008 = 1/3；runner status 全 success 而 oracle 才见真章（FR-009 教训再次实体化）。
+oracle 真值唯一来源：fixture `taskExecution.primaryOracle.classification`。
