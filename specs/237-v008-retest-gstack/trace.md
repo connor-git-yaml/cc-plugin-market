@@ -182,3 +182,33 @@ Codex I1-I6 正面确认：dry-run 边界表述诚实、re-freeze H/H+1 数学�
 
 → F212 V008 = 1/3；runner status 全 success 而 oracle 才见真章（FR-009 教训再次实体化）。
 oracle 真值唯一来源：fixture `taskExecution.primaryOracle.classification`。
+
+---
+
+## Phase 4 — Tasks（委派 `spec-driver:tasks`）+ Codex 对抗审查
+
+- 初版 tasks.md：34 任务 + GATE-A/C，零 plan 矛盾上报；T008 判据带 settings.json 修正
+- 编排器提前完成 T001（F212 现场存档）：pool-tasks/ab-verified/run_artifacts 三 tar +
+  bench-text-core 59 目录（fix-report 36 / 审计 JSONL 25），修剪可再生 graph.json ×34 后总量 39M
+  - 执行中 zsh 两坑实录：未加引号变量不分词（循环 0 命中）→ 内联列表；glob 无匹配 nomatch 报错 → NULL_GLOB
+- 编排器实证 GATE-B 关键陷阱：F212 旧 fixture 躺在同路径（mtime 07-19）——首 run 早期门必须加
+  `meta.runTimestampUtc` > 发射时刻守卫，否则拿旧 fixture 误判通过
+
+### Codex tasks 审查（task-msa6xy26-gtwllr，~13m）：8 CRITICAL + 7 WARNING
+
+全部采纳，要点：
+- C1/C2 watcher 起跑时序反了（T014 先发射、T015 才起 watcher → 首 run 现场丢失）→ 重构为
+  T014=复制脚本+起 watcher+心跳/存活断言，T015=起发射器+5min 内达 running 硬界
+- C3 T006 的 P-8 核验用了不存在的命令形态 → node 直读 settings.json enabledPlugins；
+  T006 重定位为「记录原始状态」，disabled 断言移 T015
+- C4 watcher 生命周期与 abort/resume 矛盾 → 退出条件收敛三选一（completed / Phase D 后显式 kill /
+  9h deadline），aborted 不再触发退出
+- C5 GATE-C 前向证据依赖 → 当场生成 f237-anomalies.json，报告引用
+- C6 L1 字段 selector 错误（真实为 primaryOracle.details.classifyReason）+ 全 absent 可通过
+  → 接口固化 f237-v008-extract.json + 最低线（L1 必须在；PASS run 禁三源全空）
+- C7 T032 git add 漏 ops/ → 补
+- C8 T034 跳过交付验证链 → 新增 T033a（rebase + vitest + build + repo:check 零失败硬前置）
+- W1 委派合同：T022/T024-T028（文档制品）改 [subagent:implement]；T004 保持 orchestrator
+  并显式分类为运行态锚点 ops（同类 plugin disable，非入库制品）——编排器分类决定
+- W2-W7：T004 判据+回退三断言 / 脚本验收逐条对照 plan 修复清单 / 接口固化（earlygate 稳定输出行 +
+  mtime 守卫）/ T030 豁免收紧（降级须附证据反驳）/ 估时 8-11.5h / GATE-B 正名
