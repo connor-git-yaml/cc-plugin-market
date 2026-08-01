@@ -212,3 +212,32 @@ oracle 真值唯一来源：fixture `taskExecution.primaryOracle.classification`
   并显式分类为运行态锚点 ops（同类 plugin disable，非入库制品）——编排器分类决定
 - W2-W7：T004 判据+回退三断言 / 脚本验收逐条对照 plan 修复清单 / 接口固化（earlygate 稳定输出行 +
   mtime 守卫）/ T030 豁免收紧（降级须附证据反驳）/ 估时 8-11.5h / GATE-B 正名
+
+---
+
+## Phase 5 — Implement：T008-T013 ops 脚本（委派 `spec-driver:implement`）+ Codex 对抗审查
+
+- 6 脚本落 `specs/237-v008-retest-gstack/ops/`（732 行），子代理自测含真实功能模拟
+  （earlygate 三场景 PASS/WAIT/FAIL；precheck 经 symlink 沙盒端到端跑通全链路）
+- 子代理关键微决策（编排器采纳）：
+  1. **c3 实际传两个 `--plugin-dir`**（spectra 在前、spec-driver 在后，runner:311/314）——
+     `indexOf` 取首个会拿到 spectra 目录 → 永假阴性；已改全量扫描任一命中即 PASS
+  2. archive 子命令名从 post 改 v008（tasks.md 字面断言为准）
+  3. watcher rsync 用白名单模式（与 F212 存档同构）
+
+### Codex 脚本审查（task-msa847e9-e52c6n，~18m）：6 CRITICAL + 5 WARNING
+
+| 条目 | 要点 | 修法 |
+|------|------|------|
+| C-1 | **INT/TERM 只杀父 node**：runner 以 `detached:true` 独立进程组 spawn（pool:197），
+杀父后孤儿续跑续烧配额，止损语义不成立 | on_interrupt 补 `pgrep -f 'eval-task-runner.mjs.*--fixture-suffix c3-r'` 逐组 TERM→10s→KILL |
+| C-2 | earlygate 40min 上限 < 合法最坏 60min（warmup 预算 40min——F212 实测 32min——+首 run 20min） | 上限改 75min |
+| C-3 | 「只烧 1 run」不成立：串行调度下 r2 在 gate 轮询间隙已起跑 | 措辞改「≤2 run」；杀伤由 C-1 进程组补杀承担 |
+| C-4 | archive v008 无完成态守卫却会杀 watcher | status=completed 硬守卫 + extract JSON 存在校验 + watcher 仅成功路径尾部 kill + --force 人工旁路 |
+| C-5 | 归档失败被吞、无条件「归档完成」 | FAIL_COUNT 传播，>0 则 exit 4 |
+| C-6 | v008 非幂等：旧证据与旧 .absent 共存串档 | 逐 run 目标目录 rm -rf 重建 + 双向清理 |
+| W-3 | **rsync 首匹配定胜负**：graph.json exclude 排在 `--include='*.json'` 之后永不生效（73 万行图会进 live-forensics）| 过滤链重排：全部 exclude 前置 |
+| W-1/2/4/5 | RESTORED 过早置位 / 守卫无活性确认 / v008 glob 猜测 / pre 幂等无完整性验证 | 逐条修（v008 改消费 f237-v008-extract.json 权威路径） |
+
+Codex 正面确认：guard/launch 状态字段同名、11 task 完整、macOS openrsync 支持 -R/--prune-empty-dirs、
+precheck 与正式门逐项同构（cwd=评测 worktree 根时无分裂）、meta.args 双 plugin-dir 解析实测正确。
