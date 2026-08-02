@@ -172,7 +172,7 @@ M9 轨道 A2 要求把 Spec Driver 的 Codex 适配从"能用但不完整、文�
 ## Success Criteria
 
 - **SC-001**：`contracts/codex-plugin-consistency.yaml` 无 `spec-driver-refactor-codex-wrapper-gap`（或任何）waiver，一致性检查判定 spec-driver skillsRoot 9/9 完整
-- **SC-002**：真实本机 `codex` CLI（0.144.6+）E2E 验证 `spec-driver-refactor` wrapper 可被 Codex 发现并调用；验证方式固定为一次最小只读触发（`codex exec --sandbox read-only` + 固定 prompt），保存本次 CLI 版本、执行命令、成功输出作为验收证据；该验证会消耗一次 ChatGPT 订阅推理配额，禁止改用 API-key 付费 fallback 代替
+- **SC-002**：真实本机 `codex` CLI（0.144.6+）E2E 验证 `spec-driver-refactor` wrapper 可被 Codex **发现并加载**（discovery/load 口径：Codex 能列出该 skill 并按其 frontmatter description 正确响应；不要求真实执行 refactor 工作流——执行级 E2E 属 M10 增强）；验证方式固定为一次最小只读触发（`codex exec --sandbox read-only` + 固定 prompt），保存本次 CLI 版本、执行命令、成功输出作为验收证据；该验证会消耗一次 ChatGPT 订阅推理配额，禁止改用 API-key 付费 fallback 代替
 - **SC-003**：capability 探测在真实/模拟场景下均实测通过：(a) `multi_agent` effective=true 环境，sidecar 记录 `Subagent Capability: native`，wrapper 三份产物正文保持 capability-neutral 文案不变；(b) 探测不可用环境（可用 mock/stub 命令模拟），至少覆盖 FR-203 七类 reason 中的 3 类不同 reason，sidecar 各自记录对应 `reason`，wrapper 正文同样保持 capability-neutral 文案不变。措辞验证仅确认 sidecar 记录与静态文案本身，不宣称验证过真实并行 dispatch 行为
 - **SC-004**：模型版本字面量 grep 门禁在改造完成后，对 FR-310「Grep 门禁定义」列举的固定扫描路径清单（豁免清单路径除外）扫描结果为零命中；对豁免清单路径内故意保留的字面量不误报
 - **SC-005**：`tests/integration/spec-driver-codex-skills.test.ts` 及一致性矩阵相关测试全部更新到 9-skill 口径并通过
@@ -203,3 +203,4 @@ M9 轨道 A2 要求把 Spec Driver 的 Codex 适配从"能用但不完整、文�
 - **I2**（"9 个 mode"表述不精确，未区分 execution mode 与 constitution）→ 采纳：全文改为"9 个 canonical skill（8 个 execution mode + constitution）"
 - **I3**（FR-301 与审计行是否冲突）→ 无需改动：审查已确认不冲突，且审计行现落 sidecar，与 wrapper 正文（FR-301 所指范围）分离，更不存在冲突
 - **编排器预检修正**：FR-205 初稿误写"shell 生成端 `rewrite_codex_runtime_text` 与 JS 校验端逐字节相等"——F186 T2 后该 shell 函数已删除，生成端直接调用 `extract-wrapper-body.mjs` 单一 helper，两端天然同源；已修正表述为"改 helper 一处即两端同步"
+- **Plan 阶段审查回流（W8）**：SC-002 措辞由"发现并调用"收窄为"发现并加载"（discovery/load 口径）——其固定验收命令本就是只读 discovery prompt，原措辞与验收方式不自洽；执行级 E2E 显式划出为 M10 增强

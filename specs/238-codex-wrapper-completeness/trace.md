@@ -21,3 +21,16 @@
 - [17:32] specify(修订): COMPLETED | spec.md v2（sidecar 架构 / FR-201~209 + FR-301~310 / 七源决策矩阵 / Review Log 13 条）
 - [17:34] orchestrator 预检: FR-205 事实误差修正（rewrite_codex_runtime_text 已被 F186 T2 移除，两端共用单 helper）
 - [17:35] GATE_RESEARCH+specify commit: spec.md + research + trace 入库
+- [17:56] plan: COMPLETED | artifacts=plan.md（401 行：Q3 裁决 Node helper / 5 slices / 两处隐性测试耦合挖出 / delegated: 前缀烘焙设计）
+- [17:58] codex-review(plan): STARTED
+- [18:14] codex-review(plan): COMPLETED | 6 CRITICAL / 9 WARNING / 5 INFO | 判定：需先修 plan
+  - C1 preset 分支不读 aliases.codex（标 required 却传内建默认，FR-309 假绿）→ 原子 resolver 三元组
+  - C2 model+modelFlagMode 可矛盾组合 + FR-306 测错层 → modelFlagMode 不暴露给 caller，锁 llm-client 层
+  - C3 FR-305 日志义务无落点 → delegate 分支 stderr 诊断行
+  - C4 合成 fixture 遗漏 skill-count 污染与重复 waiver/waivers[0] 两处耦合 → synthesizeGap helper 五类用例
+  - C5 baseline 集合逻辑矛盾（进 baseline 不可能在 added）→ baseline 不动，added 期望双 id
+  - C6 Slice 3 独立绿不成立（skills-codex 旧 sha 失配）→ 验证改跑 repo:sync，撤销任意 revert 声明
+  - W1-W9 全采纳；W6 裁决 FR-308 本 Feature 延后（follow-up 显式记录）；W7 模板段注释化；W8 已回流 spec SC-002 措辞
+- [18:16] plan(修订): STARTED
+- [18:28] plan(修订): COMPLETED | plan.md v2（455 行）| 原子 resolveCodexModelDecision 三元组 / modelFlagMode 不暴露 caller / FR-305 stderr 落点 / synthesizeGap 五类用例 / baseline 不动 added 双 id / Slice3 改 repo:sync / FR-308 延后
+- [18:29] Phase 2 commit: plan.md + spec SC-002 措辞回流 + trace 入库
