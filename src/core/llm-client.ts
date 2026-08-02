@@ -11,6 +11,7 @@ import type { AssembledContext } from './context-assembler.js';
 import { detectAuth } from '../auth/auth-detector.js';
 import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 import { callLLMviaCodex as codexProxyCall } from '../auth/codex-proxy.js';
+import type { CodexCLIProxyConfig } from '../auth/codex-proxy.js';
 import type { CodexModelFlagMode } from './model-selection.js';
 import { resolveCodexExecutionConfig, resolveReverseSpecModel } from './model-selection.js';
 
@@ -306,7 +307,7 @@ export async function callLLM(
   }
 
   if (authResult.preferred.provider === 'codex') {
-    return callLLMviaCodexProxy(context, cfg, onRetry);
+    return callLLMviaCodexProxy(context, cfg, modelFlagMode, onRetry);
   }
 
   // Claude CLI proxy 策略
@@ -475,10 +476,27 @@ async function callLLMviaCliProxy(
 async function callLLMviaCodexProxy(
   context: AssembledContext,
   cfg: LLMConfig,
+  modelFlagMode: CodexModelFlagMode | undefined,
   onRetry?: RetryCallback,
 ): Promise<LLMResponse> {
   const systemPrompt = buildSystemPrompt('spec-generation', cfg.languageTerminology);
   const fullPrompt = `${systemPrompt}\n\n---\n\n${context.prompt}`;
+
+  // Codex implement 审查修复轮 C1：delegate 场景（调用方未显式传 model 且
+  // resolveCodexExecutionConfig 判 delegate）不得向 proxy 转发 model —— `cfg.model`
+  // 此时已被 mergeConfig 填充为 `delegated:<hint>` 展示串，若原样透传给
+  // callLLMviaCodex()，其 `config.model !== undefined` 判定会误把这次调用识别为
+  // "调用方显式传入"，从而恒 required 传出该展示串当真实模型名，delegate 语义失效。
+  // 省略该字段（不设置 key），让 proxy 走自身 getDefaultCodexCLIProxyConfig() 的
+  // delegate 判定路径。required 场景（modelFlagMode !== 'delegate'）照常传具体 model。
+  const codexCallConfig: Partial<CodexCLIProxyConfig> = {
+    timeout: cfg.timeout,
+    reasoningEffort: cfg.reasoningEffort,
+    serviceTier: cfg.serviceTier,
+  };
+  if (modelFlagMode !== 'delegate') {
+    codexCallConfig.model = cfg.model;
+  }
 
   const maxAttempts = 3;
   let lastError: Error | undefined;
@@ -489,12 +507,7 @@ async function callLLMviaCodexProxy(
     }
 
     try {
-      return await codexProxyCall(fullPrompt, {
-        model: cfg.model,
-        timeout: cfg.timeout,
-        reasoningEffort: cfg.reasoningEffort,
-        serviceTier: cfg.serviceTier,
-      });
+      return await codexProxyCall(fullPrompt, codexCallConfig);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 

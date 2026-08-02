@@ -130,9 +130,10 @@ function runScript(
 // bash（脚本自身解释器）、node（extract-wrapper-body.mjs ×2 + detect-codex-capability.mjs）、
 // dirname（$SCRIPT_DIR/$PLUGIN_DIR/sidecar_path 派生）、mkdir（write_wrapper 建目录）、
 // awk（write_frontmatter）、cat（heredoc 生成 adapter/contract 段）、rm/cp（--sync-plugin-distribution
-// 分支，本文件部分用例会触发）。cd/pwd/local/printf 均为 bash 内建，无需额外 symlink。
+// 分支，本文件部分用例会触发）、mv（W5 sidecar 原子写：临时文件写成功后 `mv -f` 落地）。
+// cd/pwd/local/printf 均为 bash 内建，无需额外 symlink。
 // project 模式借由测试统一显式传 CODEX_SKILL_PROJECT_ROOT，跳过 `git rev-parse` 分支，故不需要 git。
-const CONTROLLED_BIN_COMMANDS = ['bash', 'node', 'dirname', 'mkdir', 'awk', 'cat', 'rm', 'cp'] as const;
+const CONTROLLED_BIN_COMMANDS = ['bash', 'node', 'dirname', 'mkdir', 'awk', 'cat', 'rm', 'cp', 'mv'] as const;
 
 // 少量对 shell/Node 运行时稳定性有意义、与"codex 版本抢先命中"风险无关的环境变量原样透传，
 // 其余全部清空——PATH 本身严格只指向受控 bin 目录（不含真实系统 PATH 任何片段）。
@@ -390,6 +391,18 @@ describe('Spec Driver Codex skills script', () => {
     expect(wrapperContent).not.toContain(
       resolve('plugins/spec-driver/skills/spec-driver-feature/SKILL.md'),
     );
+
+    // Codex implement 审查修复轮 W4：全局安装的 sidecar 必须落在 $HOME/.codex/
+    // 下（而非 project-local .codex/），与 write_codex_adapter 的两位置指针文案
+    // 「.codex/spec-driver-capability.md（全局安装则为 ~/.codex/spec-driver-capability.md）」一致。
+    const sidecarPath = join(fakeHome, '.codex', 'spec-driver-capability.md');
+    expect(existsSync(sidecarPath)).toBe(true);
+    expect(readFileSync(sidecarPath, 'utf-8')).toMatch(
+      /Subagent Capability: (native|degraded\(reason=[a-z-]+\))/,
+    );
+    // W5：原子写不留 .tmp 残留
+    const codexDirEntries = readdirSync(join(fakeHome, '.codex'));
+    expect(codexDirEntries.some((name) => name.includes('.tmp.'))).toBe(false);
   });
 
   it('project 模式在 git 子目录执行时安装到 git 根目录', () => {
@@ -561,6 +574,9 @@ describe('Spec Driver Codex skills script', () => {
       expect(install.exitCode).toBe(0);
 
       const neutralPointer = '.codex/spec-driver-capability.md';
+      // Codex implement 审查修复轮 W4：中性指针文案须为两位置表述（project-local +
+      // 全局安装路径），非单一 project-local 路径的固化措辞。
+      const globalNeutralPointer = '~/.codex/spec-driver-capability.md';
 
       for (const distPath of [
         join(tempDir, '.codex', 'skills', SAMPLE_SKILL, 'SKILL.md'),
@@ -568,6 +584,7 @@ describe('Spec Driver Codex skills script', () => {
       ]) {
         const content = readFileSync(distPath, 'utf-8');
         expect(content).toContain(neutralPointer);
+        expect(content).toContain(globalNeutralPointer);
         expect(content).not.toContain('Subagent Capability: native');
         expect(content).not.toMatch(/Subagent Capability: degraded/);
       }
@@ -654,6 +671,67 @@ describe('Spec Driver Codex skills script', () => {
       expect(modelLine).toBeDefined();
       expect(modelLine).not.toMatch(/gpt-5/);
       expect(modelLine).toContain('由 Codex CLI');
+    });
+
+    it('[W5] capability 探测 helper 失败（detect-codex-capability.mjs 不存在）→ sidecar 不落地、无 .tmp 残留、install 仍 exit 0', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      writeFakeCodex(binDir, 'native', join(tempDir, 'codex-calls.log'));
+
+      // 伪造 helper 失败：直接删掉探测 helper 本体，node 调用会以非零退出失败
+      // （MODULE_NOT_FOUND），驱动 codex-skills.sh 的原子写 else 分支。
+      const helperPath = join(
+        tempDir,
+        'plugins',
+        'spec-driver',
+        'scripts',
+        'lib',
+        'detect-codex-capability.mjs',
+      );
+      rmSync(helperPath, { force: true });
+
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      // 探测 helper 失败只降级告警（写到 stderr），不阻断 install 主流程退出码。
+      expect(install.exitCode).toBe(0);
+
+      const sidecarPath = join(tempDir, '.codex', 'spec-driver-capability.md');
+      expect(existsSync(sidecarPath)).toBe(false);
+
+      // 无 .tmp 残留（若 .codex 目录本身因其他产物存在则遍历，不存在则视为通过）
+      const codexDir = join(tempDir, '.codex');
+      if (existsSync(codexDir)) {
+        const entries = readdirSync(codexDir);
+        expect(entries.some((name) => name.includes('.tmp.'))).toBe(false);
+      }
+
+      // 9 个 tracked wrapper 仍正常生成——sidecar 失败不阻断 install 主流程
+      for (const skill of SPEC_DRIVER_SKILLS) {
+        expect(existsSync(join(tempDir, '.codex', 'skills', skill, 'SKILL.md'))).toBe(true);
+      }
+    });
+
+    it('[W5] 第二次 install 探测 helper 失败 → 清除第一次成功写入的旧 sidecar（不留陈旧内容）', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      const callLog = join(tempDir, 'codex-calls.log');
+      const sidecarPath = join(tempDir, '.codex', 'spec-driver-capability.md');
+
+      writeFakeCodex(binDir, 'native', callLog);
+      const first = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(first.exitCode).toBe(0);
+      expect(existsSync(sidecarPath)).toBe(true);
+
+      const helperPath = join(
+        tempDir,
+        'plugins',
+        'spec-driver',
+        'scripts',
+        'lib',
+        'detect-codex-capability.mjs',
+      );
+      rmSync(helperPath, { force: true });
+
+      const second = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(second.exitCode).toBe(0);
+      expect(existsSync(sidecarPath)).toBe(false);
     });
   });
 });

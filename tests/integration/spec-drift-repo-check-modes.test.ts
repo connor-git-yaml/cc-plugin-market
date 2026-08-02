@@ -55,6 +55,11 @@ const COPY_FILES = [
   'package-lock.json',
   '.gitignore',
   '.agents/plugins/marketplace.json',
+  // Codex implement 审查修复轮 W2（model-literal-gate fail-open 修复后的必需扫描面）：
+  // `docs/configuration.md` 是 model-literal-gate 的 5 个 required 目标之一，
+  // 未拷贝到沙箱会被新的 required-missing 判定拖累整体 status（与本测试主题
+  // spec-drift 无关的噪声）。
+  'docs/configuration.md',
 ];
 
 let sandbox: string;

@@ -15,7 +15,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { detectAuth } from '../../auth/auth-detector.js';
 import { callLLMviaCli } from '../../auth/cli-proxy.js';
 import { callLLMviaCodex } from '../../auth/codex-proxy.js';
-import { resolveReverseSpecModel } from '../../core/model-selection.js';
+import { resolveCodexExecutionConfig, resolveReverseSpecModel } from '../../core/model-selection.js';
 
 // ============================================================
 // 接口定义
@@ -74,9 +74,29 @@ export async function callLLM(
       : 'claude';
 
   // PANORAMIC_LLM_MODEL 环境变量优先级最高
-  const model =
-    process.env['PANORAMIC_LLM_MODEL'] ??
-    resolveReverseSpecModel({ provider: providerRuntime }).model;
+  //
+  // W1（Codex implement 审查修复轮，与 llm-client.ts 的 C1 同一模式）：codex 分支
+  // 不能无条件退化为固定字面量——`resolveReverseSpecModel({ provider: 'codex' })`
+  // 对 preset-only（无任何显式覆盖）场景恒返回具体 gpt-5.x 字面量，这正是
+  // model-selection.ts FR-304 决策矩阵试图杜绝的"冒充已验证具体版本"问题。
+  // 因此 codex 分支改走 `resolveCodexExecutionConfig()`：`PANORAMIC_LLM_MODEL`
+  // 显式设置 → required，原样传给 proxy；未设置 → 是否省略 model 交给该函数的
+  // `modelFlagMode` 判定（'delegate' 时不向 proxy 传 model，交还 Codex CLI 自身
+  // 按其配置分层解析）。Claude 分支行为不变。
+  const envModel = process.env['PANORAMIC_LLM_MODEL'];
+  let model: string;
+  let omitCodexModel = false;
+  if (providerRuntime === 'codex') {
+    if (envModel) {
+      model = envModel;
+    } else {
+      const codexExecution = resolveCodexExecutionConfig();
+      model = codexExecution.model;
+      omitCodexModel = codexExecution.modelFlagMode === 'delegate';
+    }
+  } else {
+    model = envModel ?? resolveReverseSpecModel({ provider: providerRuntime }).model;
+  }
 
   const timeout = options?.timeout ?? 60_000;
   const maxTokens = options?.maxTokens ?? 4096;
@@ -118,7 +138,7 @@ export async function callLLM(
 
     const cliResponse =
       authResult.preferred.provider === 'codex'
-        ? await callLLMviaCodex(fullPrompt, { model, timeout })
+        ? await callLLMviaCodex(fullPrompt, omitCodexModel ? { timeout } : { model, timeout })
         : await callLLMviaCli(fullPrompt, { model, timeout });
 
     return cliResponse.content || null;

@@ -371,5 +371,34 @@ JWT 过期时间默认 24 小时
         rmSync(tempDir, { recursive: true, force: true });
       }
     });
+
+    // Codex implement 审查修复轮 C1 — 攻击用例：REVERSE_SPEC_MODEL 本身携带
+    // `delegated:` 前缀伪装字面量。旧实现只认 `cfg.model.startsWith('delegated:')`
+    // 判定 delegate，这个字符串信号完全由外部输入（env/config/调用方参数）控制，
+    // 可被伪装绕过——env 显式设置本应恒 required（决策矩阵第 1 行），但若 proxy
+    // 侧只看字符串前缀，`delegated:pin` 会被误判为 delegate 场景静默省略 --model，
+    // 导致本应生效的显式 pin 被吞掉。修复后必须仍在 spawn args 中原样体现。
+    it('C1 攻击用例：REVERSE_SPEC_MODEL="delegated:pin" 伪装 → env required 判定不被绕过，spawn args 含 --model delegated:pin', async () => {
+      const originalEnv = process.env;
+      process.env = { ...originalEnv, REVERSE_SPEC_MODEL: 'delegated:pin' };
+
+      try {
+        mockedDetectAuth.mockReturnValue(CODEX_AUTH_RESULT);
+        const mockChild = createMockChild();
+        mockedSpawn.mockReturnValue(mockChild);
+
+        const promise = callLLM(TEST_CONTEXT);
+        emitSuccessfulCodexRun(mockChild);
+        const result = await promise;
+
+        const spawnCall = mockedSpawn.mock.calls[0]!;
+        const args = spawnCall[1] as string[];
+        expect(args).toContain('--model');
+        expect(args[args.indexOf('--model') + 1]).toBe('delegated:pin');
+        expect(result.model).toBe('delegated:pin');
+      } finally {
+        process.env = originalEnv;
+      }
+    });
   });
 });

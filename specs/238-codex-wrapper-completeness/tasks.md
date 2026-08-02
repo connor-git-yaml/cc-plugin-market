@@ -79,33 +79,33 @@ plan: plan.md
 
 > 不接线到 `codex-skills.sh`，独立可验证；与 Slice 1 无编辑面重叠，可并行开发。
 
-- [ ] T2.1 [红] `tests/unit/spec-driver/detect-codex-capability.test.ts`（新）：`parseFeaturesListOutput('multi_agent   stable   true\n...')` → `{capability:'native', reason:null}`
+- [x] T2.1 [红] `tests/unit/spec-driver/detect-codex-capability.test.ts`（新）：`parseFeaturesListOutput('multi_agent   stable   true\n...')` → `{capability:'native', reason:null}`
   涉及文件：`tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-203，plan T2.1
 
-- [ ] T2.2 [红] 同文件：覆盖七类 reason 的 fixture 组（**Tasks 审查轮"其他"修正**：原"7 组 fixture"表述与实际列举的六个非 native fixture 不对齐——native 已由 T2.1 单独覆盖，本任务与 T2.1 合计覆盖 FR-203 定义的全部七类 reason，故改称"覆盖七类 reason 的 fixture 组"，不再声称本任务单独包含 7 组）：`no-feature-row`（无首 token 精确等于 `multi_agent` 的行）/ `malformed-effective`（行末非空 token 非 `true`/`false`）/ `effective-false`（行末非空 token 为 `false`）/ `multi_agent_mode`、`multi_agent_v2` 干扰行不被误判（首 token 精确匹配非前缀/子串）/ `multi_agent under development true`（stage 列多词变体，验证"取行末最后一个非空 token"而非固定列位裁切）
+- [x] T2.2 [红] 同文件：覆盖七类 reason 的 fixture 组（**Tasks 审查轮"其他"修正**：原"7 组 fixture"表述与实际列举的六个非 native fixture 不对齐——native 已由 T2.1 单独覆盖，本任务与 T2.1 合计覆盖 FR-203 定义的全部七类 reason，故改称"覆盖七类 reason 的 fixture 组"，不再声称本任务单独包含 7 组）：`no-feature-row`（无首 token 精确等于 `multi_agent` 的行）/ `malformed-effective`（行末非空 token 非 `true`/`false`）/ `effective-false`（行末非空 token 为 `false`）/ `multi_agent_mode`、`multi_agent_v2` 干扰行不被误判（首 token 精确匹配非前缀/子串）/ `multi_agent under development true`（stage 列多词变体，验证"取行末最后一个非空 token"而非固定列位裁切）
   涉及文件：`tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-203/209，plan T2.2（含 W5 修订）
 
-- [ ] T2.3 [红] 同文件：`vi.mock('node:child_process')` 模拟 `execFileSync` 抛 `{code:'ENOENT'}` → `binary-missing`；抛 `{killed:true, signal:'SIGTERM'}` → `timeout`；stderr 含 `unrecognized subcommand` → `unsupported-command`；其余非零退出 → `command-failed`
+- [x] T2.3 [红] 同文件：`vi.mock('node:child_process')` 模拟 `execFileSync` 抛 `{code:'ENOENT'}` → `binary-missing`；抛 `{killed:true, signal:'SIGTERM'}` → `timeout`；stderr 含 `unrecognized subcommand` → `unsupported-command`；其余非零退出 → `command-failed`
   涉及文件：`tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-201/202/203，plan T2.3
 
-- [ ] T2.3b [红]（**Tasks 审查轮 W3 新增**）同文件：`vi.mock('node:child_process')` 模拟 `detectCodexVersion()` 内部 `execFileSync('codex', ['--version'])` 调用 → 正常输出解析为版本字符串；调用失败（ENOENT/非零退出）→ 返回 `null`（不抛异常，不阻断 sidecar 写入）
+- [x] T2.3b [红]（**Tasks 审查轮 W3 新增**）同文件：`vi.mock('node:child_process')` 模拟 `detectCodexVersion()` 内部 `execFileSync('codex', ['--version'])` 调用 → 正常输出解析为版本字符串；调用失败（ENOENT/非零退出）→ 返回 `null`（不抛异常，不阻断 sidecar 写入）
   涉及文件：`tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-207/208，plan T2.4（W3 拆分）
 
-- [ ] T2.3c [红]（**Tasks 审查轮 W3 新增**）同文件：`renderCapabilityMarkdown(result)` 输出 schema 断言——含 capability 行、ISO 8601 时间戳行、`codex --version` 结果行三要素；`degraded` 结果额外含 reason 字段
+- [x] T2.3c [红]（**Tasks 审查轮 W3 新增**）同文件：`renderCapabilityMarkdown(result)` 输出 schema 断言——含 capability 行、ISO 8601 时间戳行、`codex --version` 结果行三要素；`degraded` 结果额外含 reason 字段
   涉及文件：`tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-206/207，plan T2.4（W3 拆分）
 
-- [ ] T2.4 [绿实现]（**Tasks 审查轮 W3 修订：仅保留实现，红测试拆至 T2.3b/T2.3c**）`plugins/spec-driver/scripts/lib/detect-codex-capability.mjs`（新）：导出 `parseFeaturesListOutput(stdout)`（首 token 精确匹配 + 取行末非空 token 解析规则）、`detectCodexCapability(opts?)`（`execFileSync` 5s 超时 + try/catch 四类边界分支）、`detectCodexVersion(opts?)`、`renderCapabilityMarkdown(result)`（拼出 sidecar 完整 Markdown：capability/reason 三要素 + ISO 8601 时间戳 + `codex --version`）；CLI 直跑入口支持默认单行 JSON 与 `--markdown` 两种输出模式
+- [x] T2.4 [绿实现]（**Tasks 审查轮 W3 修订：仅保留实现，红测试拆至 T2.3b/T2.3c**）`plugins/spec-driver/scripts/lib/detect-codex-capability.mjs`（新）：导出 `parseFeaturesListOutput(stdout)`（首 token 精确匹配 + 取行末非空 token 解析规则）、`detectCodexCapability(opts?)`（`execFileSync` 5s 超时 + try/catch 四类边界分支）、`detectCodexVersion(opts?)`、`renderCapabilityMarkdown(result)`（拼出 sidecar 完整 Markdown：capability/reason 三要素 + ISO 8601 时间戳 + `codex --version`）；CLI 直跑入口支持默认单行 JSON 与 `--markdown` 两种输出模式
   涉及文件：`plugins/spec-driver/scripts/lib/detect-codex-capability.mjs`
   依赖：T2.1/T2.2/T2.3/T2.3b/T2.3c（先红后绿）
   验收命令：`npx vitest run tests/unit/spec-driver/detect-codex-capability.test.ts`
   关联：FR-201/202/203/207/208/209，plan §0 Q3 裁决
 
-- [ ] T2.5【Slice 2 验收检查点】
+- [x] T2.5【Slice 2 验收检查点】
   验收命令：`npx vitest run tests/unit/spec-driver/detect-codex-capability.test.ts`
   依赖：T2.1~T2.4 全部完成
   关联：SC-003（unit 层）
@@ -355,11 +355,11 @@ plan: plan.md
 
 ## 收尾组（Final — 跨 Slice 收口）
 
-- [ ] T6.1 **FR-308 follow-up 记录（不实现，仅记录）**（**Tasks 审查轮 W9 修正**：证据位置固定，不再泛指"团队待办渠道"）：`DEFAULT_CODEX_MODEL` 常量兜底值"惰性读取本机 `~/.codex/config.toml` 的 `model` 字段"已在 plan 阶段裁决延后（W6），本任务在 feature 收尾时新建 `specs/238-codex-wrapper-completeness/follow-ups.md`，写入该决策的可追踪 follow-up 条目，退出条件严格按 spec FR-308 原文（逐字摘录）："惰性读取本机 `~/.codex/config.toml` 的 `model` 字段，读取失败时退回现有硬编码兜底值，复用 `model-selection.ts` 已有的 `try/catch` 容错模式"，不由本任务自行降低标准。不修改任何源码
+- [x] T6.1 **FR-308 follow-up 记录（不实现，仅记录）**（**Tasks 审查轮 W9 修正**：证据位置固定，不再泛指"团队待办渠道"）：`DEFAULT_CODEX_MODEL` 常量兜底值"惰性读取本机 `~/.codex/config.toml` 的 `model` 字段"已在 plan 阶段裁决延后（W6），本任务在 feature 收尾时新建 `specs/238-codex-wrapper-completeness/follow-ups.md`，写入该决策的可追踪 follow-up 条目，退出条件严格按 spec FR-308 原文（逐字摘录）："惰性读取本机 `~/.codex/config.toml` 的 `model` 字段，读取失败时退回现有硬编码兜底值，复用 `model-selection.ts` 已有的 `try/catch` 容错模式"，不由本任务自行降低标准。不修改任何源码
   验收命令：`test -f specs/238-codex-wrapper-completeness/follow-ups.md && grep -q "FR-308" specs/238-codex-wrapper-completeness/follow-ups.md`
   关联：FR-308，plan §3.5"FR-308 延后决策记录"、Review W6，Tasks 审查轮 W9
 
-- [ ] T6.2 **全量验证矩阵**
+- [x] T6.2 **全量验证矩阵**
   验收命令：
   ```bash
   npx vitest run
@@ -370,7 +370,7 @@ plan: plan.md
   依赖：Slice 1~5 全部完成
   关联：SC-006
 
-- [ ] T6.3 **SC-002 真实 E2E**（消耗一次 ChatGPT 订阅推理配额，禁止改用 `OPENAI_API_KEY` 付费 fallback）（**Tasks 审查轮 W8 修正**：命令占位符固定为本仓库根，非泛化占位符——T1.9 完成后 wrapper 已通过 `npm run codex:spec-driver:install` 安装到本仓库 `.codex/skills/`，无需另建外部项目）
+- [x] T6.3 **SC-002 真实 E2E**（消耗一次 ChatGPT 订阅推理配额，禁止改用 `OPENAI_API_KEY` 付费 fallback）（**Tasks 审查轮 W8 修正**：命令占位符固定为本仓库根，非泛化占位符——T1.9 完成后 wrapper 已通过 `npm run codex:spec-driver:install` 安装到本仓库 `.codex/skills/`，无需另建外部项目）
   验收命令：
   ```bash
   codex --version
@@ -383,7 +383,7 @@ plan: plan.md
   依赖：T1.9（Slice 1 完成，wrapper 已生成于本仓库 `.codex/skills/`）
   关联：SC-002
 
-- [ ] T6.4 **SC-008 Claude 侧 diff 白名单人工复核**
+- [x] T6.4 **SC-008 Claude 侧 diff 白名单人工复核**
   验收命令：
   ```bash
   npx vitest run --project unit --project integration
@@ -393,7 +393,7 @@ plan: plan.md
   依赖：T5.8（skill body 改动完成）
   关联：SC-008
 
-- [ ] T6.5 **插件版本 SemVer 评估**（建议但非本 Feature 强制）：判断是否将版本从 `4.4.0` bump 到 `4.5.0`（新增 skill 覆盖 + 新 sidecar 能力 = 功能性增强）；若 implement 阶段判断该 bump 应归入独立发布收口 Feature，则在此明确记录为 follow-up，不在本 Feature 内顺手做
+- [x] T6.5 **插件版本 SemVer 评估**（建议但非本 Feature 强制）：判断是否将版本从 `4.4.0` bump 到 `4.5.0`（新增 skill 覆盖 + 新 sidecar 能力 = 功能性增强）；若 implement 阶段判断该 bump 应归入独立发布收口 Feature，则在此明确记录为 follow-up，不在本 Feature 内顺手做
   依赖：Slice 1~5 全部完成
   关联：plan §6 Rollout 步骤3
 

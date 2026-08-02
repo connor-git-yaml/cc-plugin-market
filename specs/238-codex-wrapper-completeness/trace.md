@@ -53,3 +53,19 @@
 - [20:13] Slice 4 commit
 - [20:35] implement Slice 5: COMPLETED | grep 门禁（core+CLI+repo:check 第14族）+ 文案清理 33→0 offender | 52 tests 全绿 | 偏差：模板整段 model_compat 注释化（aliases.claude 同段字面量，T5.3 事实源指引）
 - [20:36] Slice 5 commit
+- [20:52] 收尾组: follow-ups.md（FR-308/豁免粒度/执行级E2E 三条）+ SC-002 真机 E2E 证据落盘（16.7k tokens，附带侧证未传 --model 时 CLI 自选 gpt-5.6-sol）
+- [20:55] 全量矩阵: vitest 485 文件 5826 tests 零失败 / build 零错误 / repo:check status=pass 零警告（graph-only 重建闭 stale warn）/ release:check pass
+- [21:00] quality-review: COMPLETED | PASS（0 critical / 0 warning / 3 info）
+- [21:05] spec-review: COMPLETED | COMPLIANT（24/24 MUST PASS + FR-308 SHOULD 合法延后）| WARNING: tasks checkbox 滞后（已修）| INFO: T6.5 版本评估（已裁决 FU-4：延后发布收口，防三层版本漂移）
+- [21:07] 编排器逐 hunk 白名单机械核验: canonical SKILL diff = 3 文件×各 1 行，全部为"模型字面→tier 语义"，SC-008 闭环
+- [21:20] codex-review(implement): COMPLETED | 1 CRITICAL / 5 WARNING / 3 INFO | 判定：需先修
+  - C1 delegated: 前缀=用户可控控制信号（F229 教训重演，tasks 轮前缀裁决引入的逃逸面）：REVERSE_SPEC_MODEL=delegated:pin 可静默绕过显式 pin → 裁决：proxy 两级结构化判定（caller 传 model 恒 required 原样透传 fail-loud；未传 model 走 defaultCfg.modelFlagMode），前缀降为纯展示标签；llm-client delegate 不向 proxy 传 model（同一把钥匙打通 C2 生产链+堵死 C1）
+  - W1 panoramic llm-facade 绕过 resolver 恒传 --model → 同模式改造
+  - W2 门禁 fail-open（错误 project-root 仍 pass + scannedFiles 虚报）→ required/optional 分层 + 四字段报告
+  - W3 execFileSync timeout 非硬上限 + ETIMEDOUT 错分 → killSignal SIGKILL + ETIMEDOUT 优先
+  - W4 global 模式 sidecar 在 ~/.codex 但 wrapper 指针写死项目相对路径 → 双位置文案
+  - W5 重定向先截断后执行，helper 失败留零字节第三态 → 临时文件+非空校验+原子 mv，失败删除
+  - I2 顺手：effective token lowercase（TRUE 不再假降级）；I1 Unicode 变体记 FU-2；I3 其余回归面零缺陷（sha/双写/矩阵/白名单全数复核过）
+- [21:22] implement(修复轮): STARTED
+- [21:45] implement(修复轮): COMPLETED | C1+5W+I2 全落地 | 攻击用例红→绿（delegated:pin 伪装被 fail-loud 拦截）| 全量 486 文件 5842 tests 零失败 / repo:check pass / build 零错误 | 协同收获：W2 fail-open 修复暴露两个既有测试沙箱缺口（旧 bug 掩盖），一并修复
+- [21:46] 修复轮 commit

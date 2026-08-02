@@ -44,7 +44,11 @@ export function parseFeaturesListOutput(stdout) {
     if (tokens.length === 0) continue;
     if (tokens[0] !== 'multi_agent') continue;
 
-    const effective = tokens[tokens.length - 1];
+    // I2（Codex implement 审查修复轮，顺手修复）：effective token 统一 lowercase
+    // 后再比较——`codex features list` 输出的大小写惯例未做机械保证，`TRUE`/`FALSE`
+    // 不应被误判为 malformed-effective（保守方向 not affected：非 true/false 变体
+    // 仍归 malformed-effective）。
+    const effective = tokens[tokens.length - 1].toLowerCase();
     if (effective === 'true') {
       return { capability: 'native', reason: null };
     }
@@ -70,9 +74,13 @@ function classifySubprocessError(err) {
     return { capability: 'degraded', reason: 'binary-missing' };
   }
 
-  const killed = /** @type {{killed?: boolean, signal?: string}} */ (err)?.killed;
-  const signal = /** @type {{signal?: string}} */ (err)?.signal;
-  if (killed === true || signal === 'SIGTERM') {
+  // W3（Codex implement 审查修复轮，timeout 分类硬化）：`err.code === 'ETIMEDOUT'`
+  // 必须最优先判为 timeout。实测 macOS 上 `execFileSync` 的 `timeout` 选项真实
+  // 触发的超时形态是 `code === 'ETIMEDOUT'`，且 `signal` 可能为 `null`、
+  // `status` 可能为 `0`（子进程被 timeout 机制杀死后未必带 killed/SIGTERM 标记）。
+  // 旧实现按 `killed === true || signal === 'SIGTERM'` 判定会把这类真实超时
+  // 错分为 command-failed。
+  if (code === 'ETIMEDOUT') {
     return { capability: 'degraded', reason: 'timeout' };
   }
 
@@ -87,6 +95,8 @@ function classifySubprocessError(err) {
     return { capability: 'degraded', reason: 'unsupported-command' };
   }
 
+  // signal === 'SIGTERM' 但无 ETIMEDOUT：子进程自身收到 SIGTERM 终止（如被外部
+  // 信号杀死），并非本次探测的超时，归为 command-failed 而非误判为 timeout。
   return { capability: 'degraded', reason: 'command-failed' };
 }
 
@@ -104,6 +114,9 @@ export function detectCodexCapability(opts = {}) {
   try {
     stdout = execFileSync('codex', ['features', 'list'], {
       timeout,
+      // W3：显式 SIGKILL——`execFileSync` 默认用 SIGTERM 杀超时子进程，子进程可
+      // 忽略/屏蔽 SIGTERM，导致 5 秒超时上限实际失真（进程继续挂起）。
+      killSignal: 'SIGKILL',
       encoding: 'utf-8',
       ...(env !== undefined ? { env } : {}),
       ...(cwd !== undefined ? { cwd } : {}),
@@ -127,6 +140,7 @@ export function detectCodexVersion(opts = {}) {
   try {
     const stdout = execFileSync('codex', ['--version'], {
       timeout,
+      killSignal: 'SIGKILL',
       encoding: 'utf-8',
       ...(env !== undefined ? { env } : {}),
       ...(cwd !== undefined ? { cwd } : {}),

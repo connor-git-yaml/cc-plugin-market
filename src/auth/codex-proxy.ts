@@ -35,10 +35,10 @@ export interface CodexCLIProxyConfig {
 
 /**
  * `getDefaultCodexCLIProxyConfig()` 的返回类型（Feature 238 FR-304）。
- * `modelFlagMode`/`modelSource` 仅供日志/测试断言消费——`callLLMviaCodex()`
- * 内部的 delegate 判定只认 `model` 字符串是否以 `delegated:` 开头（见下方
- * 该函数实现注释与 Tasks 审查轮 C2 回流），不消费这两个字段做二次判定，也
- * 因此它们**不**出现在 `CodexCLIProxyConfig`（callLLMviaCodex 的公共入参类型）里。
+ * `modelFlagMode`/`modelSource` 供日志/测试断言消费，且在 Codex implement 审查
+ * 修复轮 C1 起也是 `callLLMviaCodex()` 内部两级判定的第二级依据（见下方该函数
+ * 实现注释）——不再消费 `model` 字符串前缀做判定，杜绝调用方传入
+ * `delegated:xxx` 字面量伪装成 delegate 场景从而绕过显式 `--model` pin 的逃逸面。
  */
 export interface ResolvedCodexCLIProxyConfig extends CodexCLIProxyConfig {
   modelFlagMode: CodexModelFlagMode;
@@ -87,7 +87,13 @@ export function callLLMviaCodex(
   prompt: string,
   config: Partial<CodexCLIProxyConfig> = {},
 ): Promise<LLMResponse> {
-  const cfg: CodexCLIProxyConfig = { ...getDefaultCodexCLIProxyConfig(), ...config };
+  // Codex implement 审查修复轮 C1：调用方是否显式传入 model 必须在合并默认值*之前*
+  // 单独记录下来——一旦合并进 `cfg`，`cfg.model` 恒非空，再也无法区分"调用方显式
+  // pin"与"落到 default 兜底"，这正是旧实现只能靠 `delegated:` 字符串前缀判定、
+  // 从而被参数逃逸（调用方直接传 `model: 'delegated:x'`）绕过的根因。
+  const modelExplicit = config.model !== undefined;
+  const defaultCfg = getDefaultCodexCLIProxyConfig();
+  const cfg: CodexCLIProxyConfig = { ...defaultCfg, ...config };
   const cliPath = cfg.cliPath ?? 'codex';
   const outputLastMessagePath = path.join(
     os.tmpdir(),
@@ -114,11 +120,17 @@ export function callLLMviaCodex(
       '--output-last-message', outputLastMessagePath,
     ];
 
-    // FR-304/306（Tasks 审查轮 C2 回流：proxy 判定单一化为 model 字符串前缀）：
-    // delegate 判定只认一个信号——`cfg.model` 是否以 `delegated:` 开头。
-    // 不消费 modelFlagMode 字段（该字段已不是 CodexCLIProxyConfig 的可传入项），
-    // 单一事实源即 `model` 字符串本身，非法状态空间为零。
-    if (!cfg.model.startsWith('delegated:')) {
+    // FR-304/306（Codex implement 审查修复轮 C1：两级结构化判定，model 字符串
+    // 前缀降级为纯展示标签，不再参与 spawn 判定）：
+    // 1) 调用方显式传入 model（`config.model !== undefined`）→ 恒 required，原样
+    //    传给 CLI，即便字面值带 `delegated:` 前缀——fail loud（让 Codex CLI 对非法
+    //    模型名报错）优于静默吞掉调用方的显式 pin。
+    // 2) 调用方未传 model → 落到 `getDefaultCodexCLIProxyConfig()` 自身的
+    //    `modelFlagMode` 判定：'delegate' 省略 flag（`cfg.model` 此时的
+    //    `delegated:<hint>` 前缀串仅供展示与 getTimeoutForModel 超时分档消费），
+    //    'required' 携带该 defaultCfg.model。
+    // 全链路不存在任何"用户可控字符串参与 spawn 判定"的路径。
+    if (modelExplicit || defaultCfg.modelFlagMode === 'required') {
       args.push('--model', cfg.model);
     }
 

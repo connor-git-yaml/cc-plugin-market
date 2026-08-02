@@ -240,5 +240,28 @@ model_compat:
       expect(result.modelFlagMode).toBe('delegate');
       expect(result.timeout).toBe(300_000);
     });
+
+    // Codex implement 审查修复轮 C1 — proxy 判定去前缀化攻击用例：
+    // 调用方（无论经由 env REVERSE_SPEC_MODEL 还是直接传参）显式传入一个带
+    // `delegated:` 前缀的字面串，必须仍被当作 required 显式 pin 原样传给 CLI，
+    // 而不是被旧实现的 `cfg.model.startsWith('delegated:')` 判定误吞掉 `--model` flag。
+    it('C1 攻击用例：直接调用 callLLMviaCodex 且显式传入 model="delegated:x" → spawn args 含 --model delegated:x（不被当作 delegate 静默省略）', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+      mockedExistsSync.mockReturnValue(true);
+      mockedReadFileSync.mockReturnValue('ok');
+
+      const promise = callLLMviaCodex('伪装 delegate 攻击', { model: 'delegated:x', timeout: 5000 });
+
+      mockChild.stdout.emit('data', Buffer.from('{"type":"result","is_error":false}\n'));
+      mockChild.emit('close', 0);
+
+      await promise;
+
+      const spawnCall = mockedSpawn.mock.calls[0]!;
+      const args = spawnCall[1] as string[];
+      expect(args).toContain('--model');
+      expect(args[args.indexOf('--model') + 1]).toBe('delegated:x');
+    });
   });
 });

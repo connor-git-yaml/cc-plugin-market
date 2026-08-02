@@ -71,6 +71,11 @@ describe('repo maintenance sync/check', () => {
     copyFile(projectRoot, 'package.json');
     copyFile(projectRoot, 'package-lock.json');
     copyFile(projectRoot, '.gitignore');
+    // Codex implement 审查修复轮 W2（model-literal-gate fail-open 修复后的必需扫描面）：
+    // `docs/configuration.md` 是 model-literal-gate 的 5 个 required 目标之一，
+    // 未拷贝到隔离 fixture 会被新的 required-missing 判定为 fail，污染本测试主题
+    // （repo:sync 重建受控产物）之外的断言。
+    copyFile(projectRoot, 'docs/configuration.md');
     // Feature 213（T016）：codex-plugin-consistency 矩阵接入 validateRepository() 后，
     // marketplace-entries check 需要 tracked 的 Codex marketplace catalog 存在，否则隔离
     // fixture 会因缺文件报 error，使既有 status==='pass' 断言假失败。

@@ -123,7 +123,7 @@ write_codex_adapter() {
 此 Skill 在安装时直接同步自 \`\$PLUGIN_DIR/skills/$source_skill_name/SKILL.md\` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
 - 命令别名：正文中的 \`$source_command\` 在 Codex 中等价于 \`\$$skill_name\`
-- 子代理执行能力：以 install-time 探测记录为准（\`.codex/spec-driver-capability.md\`）；记录缺失或 degraded 时，正文中的 \`Task(...)\` / \`Task tool\` 一律按当前会话内联/串行降级执行
+- 子代理执行能力：以 install-time 探测记录为准（\`.codex/spec-driver-capability.md\`，全局安装则为 \`~/.codex/spec-driver-capability.md\`）；记录缺失或 degraded 时，正文中的 \`Task(...)\` / \`Task tool\` 一律按当前会话内联/串行降级执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 \`[回退:串行]\`
 - 模型兼容：遵循 \`model_compat.aliases.codex\` tier 映射优先级（\`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\`）；未显式 pin 时由 Codex CLI 自身按其配置分层（\`-c\` override > profile > \`~/.codex/config.toml\` 的 \`model\` 字段 > CLI 内建默认）决定当前默认模型，不冒充为已验证的具体版本
 - 质量门与产物：所有质量门、制品路径、写入边界与 source skill 完全一致，不得弱化或越界
@@ -224,10 +224,19 @@ install_all() {
   # Feature 238（Slice 3/FR-201/206/208）：单次 capability 探测 + sidecar 写入。
   # sidecar 是本地运行态诊断产物（gitignored，见 .gitignore），与上面 9 个 tracked
   # wrapper 生成逻辑彻底解耦——探测/写入失败仅告警，不阻断 install（FR-202/E1/E2）。
-  local sidecar_path
+  #
+  # W5（Codex implement 审查修复轮，sidecar 原子写）：先写临时文件，成功且非空才
+  # `mv -f` 覆盖正式路径；任一环节失败则清理临时文件并删除旧 sidecar（而非保留
+  # 陈旧/半截内容），回到 wrapper 文案已定义的"记录缺失→降级为内联/串行执行"语义，
+  # 杜绝直接重定向可能产生的零字节/半截文件第三态。
+  local sidecar_path sidecar_tmp
   sidecar_path="$(dirname "$TARGET_DIR")/spec-driver-capability.md"
-  if ! node "$PLUGIN_DIR/scripts/lib/detect-codex-capability.mjs" --markdown > "$sidecar_path" 2>/dev/null; then
-    echo "[警告] capability 探测/sidecar 写入失败，跳过（不阻断 install）" >&2
+  sidecar_tmp="${sidecar_path}.tmp.$$"
+  if node "$PLUGIN_DIR/scripts/lib/detect-codex-capability.mjs" --markdown > "$sidecar_tmp" 2>/dev/null && [[ -s "$sidecar_tmp" ]]; then
+    mv -f "$sidecar_tmp" "$sidecar_path"
+  else
+    rm -f "$sidecar_tmp" "$sidecar_path"
+    echo "[警告] capability 探测/sidecar 写入失败，已清除记录（降级为记录缺失语义），不阻断 install" >&2
   fi
 
   # opt-in：仅显式 --sync-plugin-distribution 时才重写 tracked skills-codex/，

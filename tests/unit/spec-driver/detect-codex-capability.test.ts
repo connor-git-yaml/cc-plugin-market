@@ -120,6 +120,28 @@ describe('detect-codex-capability', () => {
       expect(parseFeaturesListOutput(stdout)).toEqual({ capability: 'native', reason: null });
     });
 
+    // Codex implement 审查修复轮 I2：effective token 大小写不敏感
+    it('I2：effective token 为大写 TRUE → 判定为 native（非 malformed-effective）', () => {
+      const stdout = 'multi_agent   stable   TRUE';
+      expect(parseFeaturesListOutput(stdout)).toEqual({ capability: 'native', reason: null });
+    });
+
+    it('I2：effective token 为大写 FALSE → 判定为 effective-false（非 malformed-effective）', () => {
+      const stdout = 'multi_agent   stable   FALSE';
+      expect(parseFeaturesListOutput(stdout)).toEqual({
+        capability: 'degraded',
+        reason: 'effective-false',
+      });
+    });
+
+    it('I2：非 true/false 的大小写变体（保守方向不受影响）仍归 malformed-effective', () => {
+      const stdout = 'multi_agent   stable   Maybe';
+      expect(parseFeaturesListOutput(stdout)).toEqual({
+        capability: 'degraded',
+        reason: 'malformed-effective',
+      });
+    });
+
     it('研究附 2 真实四行样例：完整 codex features list 输出解析出 native', () => {
       const stdout = [
         'multi_agent                          stable             true',
@@ -142,11 +164,39 @@ describe('detect-codex-capability', () => {
       expect(detectCodexCapability()).toEqual({ capability: 'degraded', reason: 'binary-missing' });
     });
 
-    it('execFileSync 抛 killed/SIGTERM → timeout', () => {
+    // Codex implement 审查修复轮 W3（timeout 分类硬化）：
+    // err.code === 'ETIMEDOUT' 最优先判 timeout（macOS 实测真实超时形态，signal
+    // 可能为 null、status 可能为 0）；signal=SIGTERM 但无 ETIMEDOUT 归为
+    // command-failed（子进程自收 SIGTERM 终止，非探测超时）。
+    it('W3：execFileSync 抛 code=ETIMEDOUT（signal=null, status=0）→ timeout（最高优先级判据）', () => {
       mockedExecFileSync.mockImplementation(() => {
-        throw Object.assign(new Error('timeout'), { killed: true, signal: 'SIGTERM' });
+        throw Object.assign(new Error('timeout'), { code: 'ETIMEDOUT', signal: null, status: 0 });
       });
       expect(detectCodexCapability()).toEqual({ capability: 'degraded', reason: 'timeout' });
+    });
+
+    it('W3：execFileSync 抛 killed/SIGTERM 但无 ETIMEDOUT → command-failed（非探测超时误判）', () => {
+      mockedExecFileSync.mockImplementation(() => {
+        throw Object.assign(new Error('terminated'), { killed: true, signal: 'SIGTERM' });
+      });
+      expect(detectCodexCapability()).toEqual({ capability: 'degraded', reason: 'command-failed' });
+    });
+
+    it('W3：execFileSync 抛 signal=SIGTERM（无 killed 字段、无 ETIMEDOUT）→ command-failed', () => {
+      mockedExecFileSync.mockImplementation(() => {
+        throw Object.assign(new Error('terminated'), { signal: 'SIGTERM' });
+      });
+      expect(detectCodexCapability()).toEqual({ capability: 'degraded', reason: 'command-failed' });
+    });
+
+    it('W3：execFileSync options 显式携带 killSignal=SIGKILL（防子进程忽略 SIGTERM 致超时失真）', () => {
+      mockedExecFileSync.mockReturnValue('multi_agent   stable   true\n');
+      detectCodexCapability();
+      expect(mockedExecFileSync).toHaveBeenCalledWith(
+        'codex',
+        ['features', 'list'],
+        expect.objectContaining({ killSignal: 'SIGKILL' }),
+      );
     });
 
     it('stderr 含 unrecognized subcommand → unsupported-command', () => {
