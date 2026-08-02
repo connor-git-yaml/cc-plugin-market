@@ -72,3 +72,21 @@
 | 1-18 | `loadKbContext` | impact | （重复 1-13，M-3 包）| 1 caller 部分漏报 |
 | 1-19 | `tokenizer.ts::tokenize` | context | `hit` | 4 callers；图快照早于批 2 新增调用方，相对快照非错 |
 | 1-20 | `src/scaffold-kb/tokenizer.ts::tokenize` | impact | `hit` | M-3 整改：抽 `normalizeUnicode` 前查 `tokenize` 上游 blast radius。`directCallers:4 / transitive:7`（`matchEntities` / `extractKeywords` / `sanitizeQuery` / `normalizeForIndex` → `executeKbApiLookup` / `searchKbCore` / `buildChunksDbBytes`）；与 grep 交叉核对一致，据此判定「纯提取重构、零行为变化」，并由全量 6139 用例覆盖这些消费方 |
+
+### 分段 1 续：implement 批 3 子代理的调用（continuous capture，当下即记）
+
+图状态：`fresh` @ `bc3bfb5`（**批 2 新增代码首次进入图快照**）。
+
+| # | target | 工具 | 类别 | 备注 |
+|---|--------|------|------|------|
+| 1-21 | `src/kb-mcp/tools/kb-search.ts::executeKbSearch` | impact | `miss-empty`（**已证错误**）| T063 改 payload 前查影响面。`affected:[]`；grep 核对同文件 `:162` `registerKbSearchTool` 确有生产调用 —— O-7 **第四次**复现，跨到第三版图（`fresh@bc3bfb5`）仍同错 |
+| 1-22 | `src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` | impact | `miss-empty`（**已证错误**）| T064 改 payload 前查影响面。`affected:[]`；grep 核对同文件 `:282` 确有生产调用。与 1-21 同形态 |
+| 1-23 | `src/scaffold-kb/nohit-recorder.ts::recordNoHit` | impact | `hit`（**部分漏报**）| **批 2 新代码入图覆盖检验**。`directCallers:2`（`executeKbSearch` / `executeKbApiLookup`）——批 2 新模块本体 + 其跨文件被调边**已正确建图**，说明「新写模块能否被图覆盖」答案是**能**；漏的两处（`documentFallback` / `runQuery`）均为 file-private 非 export 函数，属 O-5 已知结构性盲区，非新形态 |
+| 1-24 | `src/scaffold-kb/schema-compat.ts::hasProvenanceColumns` | context | `hit` | T056 直接 import 前查 360°。`callers:[provenanceSelectFragment]` / `callees:[queryRows]` / `imports:[sqlite-engine]`，与 grep 完全一致。**这是对 O-7 的反证**：同文件 export→export 调用在此**建了边** |
+
+> **O-7 的形态收窄（批 3 新增观测，进报告）**：1-24 证明「同文件两个 export 互调」本身**会**建边。
+> 1-11/1-12/1-21/1-22 四次 `miss-empty` 的真实共因是调用点位于**嵌套箭头函数闭包内**
+> （`withTelemetry('kb_search', async (args) => executeKbSearch(...))`），调用未归属到外层
+> export symbol。O-7 应由「同文件 export 互调不建边」修正为「**嵌套闭包内的调用不归属其外层 symbol**」——
+> 这是一个更窄、更可行动的缺陷描述（对应的修法是 callee 归属沿 AST 向上找最近的 named symbol，
+> 而非在遇到函数表达式时中断）。

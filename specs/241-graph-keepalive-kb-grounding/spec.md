@@ -577,6 +577,10 @@ freshness 的**唯一权威计算源**是 D8 canonical 模块 `plugins/spec-driv
 }
 ```
 
+`dbExists` 与 `schemaCompat` 是**两个独立信号**：前者只回答「库文件在不在磁盘上」，后者回答「能不能读」。
+**库文件存在但加载失败**（损坏 / 非 sqlite / schema 探测抛错）→ `dbExists: true` + `schemaCompat: "unreadable"`；
+只有文件确实不存在才 `dbExists: false`。二者压成一个信号会把「要修库」误报成「要建库」。
+
 MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersions` / `freshness`），纯新增。
 
 ---

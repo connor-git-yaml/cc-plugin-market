@@ -265,3 +265,61 @@ describe('kb_search freshness_hint（T010 档 B）', () => {
     expect(JSON.stringify(out)).not.toMatch(/recommended/);
   });
 });
+
+/**
+ * F241 T062（FR-021 / SC-014 / P-W4）—— kb_api_lookup 全部成功 envelope 含 kb_status，
+ * 其中 `document_fallback` 与 `not_found:true` 两条早返回路径是重点（它们同样是成功响应）。
+ */
+describe('kb_api_lookup — kb_status 治理字段（F241 FR-021）', () => {
+  const SUBSET_KEYS = ['activityAgeDays', 'freshness', 'sourceVersions'];
+
+  it('常规匹配成功 envelope 含 kb_status', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
+    expect(Object.keys(out['kb_status'] as object).sort()).toEqual(SUBSET_KEYS);
+  });
+
+  it('document_fallback 分支（allEnts.length===0）含 kb_status', async () => {
+    const h = await handle([], 'vendor');
+    const ctx: KbContext = { vendor: { ...h, entities: null }, project: null, ...EMPTY_CTX_BASE };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
+    expect(out['mode']).toBe('document_fallback');
+    expect(Object.keys(out['kb_status'] as object).sort()).toEqual(SUBSET_KEYS);
+  });
+
+  it('not_found:true 早返回分支含 kb_status', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyzApi' }));
+    expect(out['not_found']).toBe(true);
+    expect(Object.keys(out['kb_status'] as object).sort()).toEqual(SUBSET_KEYS);
+  });
+
+  it('error envelope 不含 kb_status', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    expect(parse(executeKbApiLookup(ctx, { api_name: '' }))['kb_status']).toBeUndefined();
+    expect(parse(executeKbApiLookup(ctx, { api_name: 'x', top_n: 0 }))['kb_status']).toBeUndefined();
+  });
+
+  it('fixture 的 built_at 非 ISO（"B"）→ freshness 如实为 unknown，不硬凑一个天数', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    const s = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }))['kb_status'] as Record<string, unknown>;
+    expect(s['freshness']).toBe('unknown');
+    expect(s['activityAgeDays']).toBeNull();
+  });
+});

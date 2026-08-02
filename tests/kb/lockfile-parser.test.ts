@@ -1,0 +1,654 @@
+/**
+ * F241 T051 — lockfile 版本解析器（FR-016 / SC-012 / EC-27 / EC-28）
+ *
+ * 三种 npm 生态 lockfile 各给最小 fixture 断言解析出预期版本；`go.sum` 断言
+ * `ecosystem-unsupported`（**不猜测**）；超限巨大 lockfile 断言明确失败而非 OOM。
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync, truncateSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import {
+  parseLockfileVersion,
+  detectLockfileKind,
+  LOCKFILE_PROBE_ORDER,
+  type LockfileIo,
+} from '../../src/scaffold-kb/lockfile-parser.js';
+import { MAX_LOCKFILE_BYTES } from '../../src/scaffold-kb/governance-constants.js';
+
+let dir: string;
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'lockparse-'));
+});
+afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+/** 写一个 fixture 并返回绝对路径 */
+function write(name: string, content: string): string {
+  const p = join(dir, name);
+  writeFileSync(p, content);
+  return p;
+}
+
+describe('lockfile-parser — npm 生态三种 lockfile（FR-016 / SC-012）', () => {
+  it('package-lock.json v3（packages 形态）→ 解析出具体版本', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        name: 'demo',
+        lockfileVersion: 3,
+        packages: {
+          '': { name: 'demo', version: '1.0.0' },
+          'node_modules/echarts': { version: '5.4.3', resolved: 'https://r/echarts-5.4.3.tgz' },
+        },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.version).toBe('5.4.3');
+      expect(r.source).toBe('package-lock.json');
+    }
+  });
+
+  it('package-lock.json v2（含 legacy dependencies 段）→ packages 段优先', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 2,
+        packages: { 'node_modules/echarts': { version: '5.4.3' } },
+        dependencies: { echarts: { version: '4.9.0' } },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok && r.version).toBe('5.4.3');
+  });
+
+  it('package-lock.json v1（只有 dependencies 段）→ 回落解析', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({ lockfileVersion: 1, dependencies: { echarts: { version: '4.9.0' } } }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok && r.version).toBe('4.9.0');
+  });
+
+  it('package-lock.json：scoped 包名正确定位', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: { 'node_modules/@scope/ui': { version: '2.1.0' } },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: '@scope/ui', kind: 'npm' });
+    expect(r.ok && r.version).toBe('2.1.0');
+  });
+
+  it('pnpm-lock.yaml v6（/name@version 键）→ 解析出具体版本', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '6.0'",
+        'dependencies:',
+        '  echarts:',
+        '    specifier: ^5.0.0',
+        '    version: 5.4.3',
+        'packages:',
+        '  /echarts@5.4.3:',
+        '    resolution: {integrity: sha512-fake}',
+        '    dev: false',
+        '',
+      ].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.version).toBe('5.4.3');
+      expect(r.source).toBe('pnpm-lock.yaml');
+    }
+  });
+
+  it('pnpm-lock.yaml v5（/name/version 键）→ 解析出具体版本', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      ["lockfileVersion: 5.4", 'packages:', '  /echarts/5.3.0:', '    resolution: {integrity: sha512-fake}', ''].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '5.3.0',
+    });
+  });
+
+  it('pnpm-lock.yaml v9（无前导斜杠 + peer 后缀）→ 剥离 peer 后缀取版本', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '9.0'",
+        'packages:',
+        '  vue@3.4.21:',
+        '    resolution: {integrity: sha512-fake}',
+        'snapshots:',
+        '  vue@3.4.21(typescript@5.4.5): {}',
+        '',
+      ].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'vue', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '3.4.21',
+    });
+  });
+
+  it('pnpm-lock.yaml：scoped 包名不被 @ 分隔符误切', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      ["lockfileVersion: '6.0'", 'packages:', '  /@scope/ui@2.1.0:', '    resolution: {integrity: sha512-fake}', ''].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: '@scope/ui', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '2.1.0',
+    });
+  });
+
+  it('yarn.lock v1（classic）→ 解析出具体版本', () => {
+    const p = write(
+      'yarn.lock',
+      [
+        '# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.',
+        '# yarn lockfile v1',
+        '',
+        'echarts@^5.0.0:',
+        '  version "5.4.3"',
+        '  resolved "https://registry.yarnpkg.com/echarts/-/echarts-5.4.3.tgz#abc"',
+        '',
+      ].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.version).toBe('5.4.3');
+      expect(r.source).toBe('yarn.lock');
+    }
+  });
+
+  it('yarn.lock berry（"name@npm:range" + version: 无引号）→ 解析出具体版本', () => {
+    const p = write(
+      'yarn.lock',
+      ['__metadata:', '  version: 6', '', '"echarts@npm:^5.0.0":', '  version: 5.5.0', '  resolution: "echarts@npm:5.5.0"', ''].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' })).toMatchObject({
+      ok: true,
+      version: '5.5.0',
+    });
+  });
+
+  it('yarn.lock 多 descriptor 同块 → 命中任一 descriptor 即取该块版本', () => {
+    const p = write(
+      'yarn.lock',
+      ['echarts@^5.0.0, echarts@^5.4.0:', '  version "5.4.3"', ''].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' })).toMatchObject({
+      ok: true,
+      version: '5.4.3',
+    });
+  });
+
+  it('yarn.lock：同名前缀包不误命中（echarts-gl ≠ echarts）', () => {
+    const p = write('yarn.lock', ['echarts-gl@^2.0.0:', '  version "2.0.9"', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('package-not-found');
+  });
+});
+
+describe('lockfile-parser — 非 npm 生态不猜测（FR-016 / EC-27 / SC-012）', () => {
+  it('go.sum → ecosystem-unsupported，且不返回任何版本', () => {
+    const p = write('go.sum', 'github.com/foo/bar v1.2.3 h1:abc=\ngithub.com/foo/bar v1.2.3/go.mod h1:def=\n');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'github.com/foo/bar', kind: 'go' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('ecosystem-unsupported');
+  });
+
+  it.each(['uv', 'pipenv', 'maven', 'gradle'] as const)('%s 生态同样 ecosystem-unsupported', (kind) => {
+    const p = write('some.lock', 'whatever');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'x', kind });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('ecosystem-unsupported');
+  });
+
+  it('detectLockfileKind 覆盖 LOCK_FILE_PRIORITY 全部文件名，且 npm 三种可解析', () => {
+    expect(detectLockfileKind('pnpm-lock.yaml')).toBe('pnpm');
+    expect(detectLockfileKind('yarn.lock')).toBe('yarn');
+    expect(detectLockfileKind('package-lock.json')).toBe('npm');
+    expect(detectLockfileKind('go.sum')).toBe('go');
+    expect(detectLockfileKind('不存在的文件')).toBeNull();
+    // 探测顺序沿用 LOCK_FILE_PRIORITY（不自定义顺序）
+    expect(LOCKFILE_PROBE_ORDER.map((e) => e.file).slice(0, 3)).toEqual([
+      'pnpm-lock.yaml',
+      'yarn.lock',
+      'package-lock.json',
+    ]);
+  });
+});
+
+describe('lockfile-parser — 大文件保护与失败可辨识（EC-28）', () => {
+  it('超过 MAX_LOCKFILE_BYTES → file-too-large，明确失败而非 OOM', () => {
+    const p = join(dir, 'package-lock.json');
+    writeFileSync(p, '');
+    // 稀疏文件：statSync 报告超限体积，但不实际写入数十 MB（保证测试秒级）
+    truncateSync(p, MAX_LOCKFILE_BYTES + 1);
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('file-too-large');
+  });
+
+  it('恰好等于阈值 → 不误伤（边界为「超过」而非「达到」）', () => {
+    const p = join(dir, 'package-lock.json');
+    writeFileSync(p, JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/echarts': { version: '5.4.3' } } }));
+    truncateSync(p, MAX_LOCKFILE_BYTES); // 补零到恰好阈值；JSON 尾部补 \0 会导致 parse-error 而非 too-large
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).not.toBe('file-too-large');
+  });
+
+  it('文件不存在 → file-unreadable（与「包不在锁里」可区分）', () => {
+    const r = parseLockfileVersion({
+      lockfilePath: join(dir, 'nope', 'package-lock.json'),
+      packageName: 'echarts',
+      kind: 'npm',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('file-unreadable');
+  });
+
+  it('目录占位（非常规文件）→ file-unreadable，不抛异常', () => {
+    mkdirSync(join(dir, 'package-lock.json'));
+    const r = parseLockfileVersion({
+      lockfilePath: join(dir, 'package-lock.json'),
+      packageName: 'echarts',
+      kind: 'npm',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('file-unreadable');
+  });
+
+  it('JSON 损坏 → parse-error（不静默当成「查无此包」）', () => {
+    const p = write('package-lock.json', '{ this is not json');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('结构合法但包不在锁里 → package-not-found', () => {
+    const p = write('package-lock.json', JSON.stringify({ lockfileVersion: 3, packages: {} }));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('package-not-found');
+  });
+});
+
+// ============================================================
+// F241 批 3 Codex 整改 — B3-C1 / B3-W1 / B3-W2
+// ============================================================
+
+/**
+ * B3-C1：pnpm 逐行扫描的四类误判。逐行扫描把「文本里出现了什么」当成「文档结构是什么」，
+ * 于是合法 YAML 被漏读、非结构位置的伪键被误读——两个方向的错都能发生。
+ */
+describe('lockfile-parser — pnpm 结构化 YAML 解析（B3-C1）', () => {
+  it('锚点值（`key: &anchor`）不再让整条包键消失 → 仍解析出版本', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '6.0'",
+        'packages:',
+        '  /echarts@5.4.3: &echarts-entry',
+        '    resolution: {integrity: sha512-fake}',
+        '    dev: false',
+        '  /zrender@5.4.4: *echarts-entry',
+        '',
+      ].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '5.4.3',
+    });
+  });
+
+  it('别名引用的邻居包（`*alias`）同样可被解析到自己的版本', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '6.0'",
+        'packages:',
+        '  /echarts@5.4.3: &e',
+        '    resolution: {integrity: sha512-fake}',
+        '  /zrender@5.4.4: *e',
+        '',
+      ].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'zrender', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '5.4.4',
+    });
+  });
+
+  it('block scalar 里的伪包键**不得**被采信（不是文档结构，只是一段文本）', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '9.0'",
+        'notes: |',
+        '  packages:',
+        '    echarts@9.9.9:',
+        '      resolution: {integrity: sha512-evil}',
+        'packages:',
+        '  vue@3.4.21:',
+        '    resolution: {integrity: sha512-fake}',
+        '',
+      ].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('package-not-found');
+    // 同一文件里真实结构位置的包仍要读得到（证明不是"整个文件读不了"糊过去的）
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'vue', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '3.4.21',
+    });
+  });
+
+  it('注释里的伪包键不得被采信', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '9.0'",
+        '# packages:',
+        '#   echarts@8.8.8:',
+        'packages:',
+        '  vue@3.4.21:',
+        '    resolution: {integrity: sha512-fake}',
+        '',
+      ].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('package-not-found');
+  });
+
+  it('空文件 → parse-error，**不得**与「包确实不在锁里」同流（B3-C1 核心区分）', () => {
+    const p = write('pnpm-lock.yaml', '');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('只有空白/注释的文件 → parse-error', () => {
+    const p = write('pnpm-lock.yaml', '\n\n# 只有注释\n\n');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('缺 lockfileVersion 的非 pnpm-lock 内容 → parse-error（结构校验，不猜）', () => {
+    const p = write('pnpm-lock.yaml', ['random: text', 'more: stuff', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('packages 段不是 mapping（结构损坏）→ parse-error', () => {
+    const p = write('pnpm-lock.yaml', ["lockfileVersion: '9.0'", 'packages: not-a-mapping', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('结构合法但包不在 packages 段 → package-not-found（与 parse-error 严格区分）', () => {
+    const p = write(
+      'pnpm-lock.yaml',
+      ["lockfileVersion: '9.0'", 'packages:', '  vue@3.4.21:', '    resolution: {integrity: sha512-fake}', ''].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('package-not-found');
+  });
+
+  it('顶层 dependencies/importers 段里的同名键不冒充 packages 段的锁定版本', () => {
+    // dependencies.<name>.specifier 是 range，不是已解析版本；只有 packages 段才是权威
+    const p = write(
+      'pnpm-lock.yaml',
+      [
+        "lockfileVersion: '6.0'",
+        'dependencies:',
+        '  echarts:',
+        '    specifier: ^5.0.0',
+        '    version: 5.4.3',
+        'packages:',
+        '  /echarts@5.4.3:',
+        '    resolution: {integrity: sha512-fake}',
+        '',
+      ].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'pnpm' })).toMatchObject({
+      ok: true,
+      version: '5.4.3',
+    });
+  });
+});
+
+/**
+ * B3-C1：yarn 至少要做 section 级结构校验——「像 version 行」不等于「是一个合法版本」。
+ */
+describe('lockfile-parser — yarn 结构校验（B3-C1）', () => {
+  it('损坏的 version 值（`version [unterminated`）→ parse-error，绝不当成功版本', () => {
+    const p = write('yarn.lock', ['echarts@^5.0.0:', '  version [unterminated', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('version 值不以数字开头（非版本形态）→ parse-error', () => {
+    const p = write('yarn.lock', ['echarts@^5.0.0:', '  version "latest"', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('空文件 → parse-error（不与「包不在锁里」同流）', () => {
+    const p = write('yarn.lock', '');
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('只有注释头（无任何块）→ parse-error', () => {
+    const p = write('yarn.lock', ['# yarn lockfile v1', '', ''].join('\n'));
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('顶格出现非 block-header 的垃圾行 → parse-error（section 级结构校验）', () => {
+    const p = write(
+      'yarn.lock',
+      ['echarts@^5.0.0:', '  version "5.4.3"', '', 'this line is garbage without colon', ''].join('\n'),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('parse-error');
+  });
+
+  it('合法 berry lockfile（含 __metadata 块 + 嵌套 dependencies）仍正常解析（结构校验不误伤）', () => {
+    const p = write(
+      'yarn.lock',
+      [
+        '# This file is generated by running "yarn install" inside your project.',
+        '',
+        '__metadata:',
+        '  version: 6',
+        '  cacheKey: 8',
+        '',
+        '"echarts@npm:^5.0.0":',
+        '  version: 5.5.0',
+        '  resolution: "echarts@npm:5.5.0"',
+        '  dependencies:',
+        '    tslib: "npm:2.3.0"',
+        '  checksum: 10c0/abc',
+        '  languageName: node',
+        '  linkType: hard',
+        '',
+      ].join('\n'),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' })).toMatchObject({
+      ok: true,
+      version: '5.5.0',
+    });
+  });
+
+  it('预发布 / build metadata 版本不被结构校验误杀', () => {
+    const p = write('yarn.lock', ['echarts@^5.0.0:', '  version "5.4.3-beta.1+build.7"', ''].join('\n'));
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'yarn' })).toMatchObject({
+      ok: true,
+      version: '5.4.3-beta.1+build.7',
+    });
+  });
+});
+
+/**
+ * B3-W1：`package-lock.json` 多个嵌套安装位置版本不一致时，遍历首项是「按 JS 对象键序碰运气」。
+ * 顶层唯一值可以直接用；多个嵌套且不一致时必须把全量呈上去，由 resolver 判 ambiguous。
+ */
+describe('lockfile-parser — package-lock 嵌套安装位置歧义（B3-W1）', () => {
+  it('顶层 node_modules/<pkg> 存在 → 直接采用，alternatives 为空（即便嵌套里另有版本）', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          'node_modules/echarts': { version: '5.4.3' },
+          'packages/app/node_modules/echarts': { version: '4.9.0' },
+        },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.version).toBe('5.4.3');
+      expect(r.alternatives).toEqual([]);
+    }
+  });
+
+  it('无顶层、多个嵌套但版本一致 → 收敛为单值，alternatives 为空', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          'packages/a/node_modules/echarts': { version: '5.4.3' },
+          'packages/b/node_modules/echarts': { version: '5.4.3' },
+        },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.version).toBe('5.4.3');
+      expect(r.alternatives).toEqual([]);
+    }
+  });
+
+  it('无顶层、多个嵌套且版本不一致 → 全量呈现（不静默取遍历首项）', () => {
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          'packages/a/node_modules/echarts': { version: '5.4.3' },
+          'packages/b/node_modules/echarts': { version: '4.9.0' },
+        },
+      }),
+    );
+    const r = parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect([r.version, ...r.alternatives].sort()).toEqual(['4.9.0', '5.4.3']);
+    }
+  });
+});
+
+/**
+ * B3-W2：原断言「>32MB 返回 file-too-large」证明不了「读取前先 stat」——
+ * 一个先读再量体积的实现同样能返回 file-too-large。要证明顺序，必须观察调用序列。
+ */
+describe('lockfile-parser — 先 stat 后 read 的调用序列（B3-W2 / EC-28）', () => {
+  /** 记录 statSync / readFileSync 调用序列的探针 IO */
+  function probeIo(size: number, text: string): { io: LockfileIo; calls: string[] } {
+    const calls: string[] = [];
+    const io: LockfileIo = {
+      statSync: (path) => {
+        calls.push(`stat:${path}`);
+        return { isFile: () => true, size };
+      },
+      readFileSync: (path) => {
+        calls.push(`read:${path}`);
+        return text;
+      },
+    };
+    return { io, calls };
+  }
+
+  it('正常体积：stat 严格先于 read，且各恰好一次', () => {
+    const body = JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/echarts': { version: '5.4.3' } } });
+    const { io, calls } = probeIo(body.length, body);
+    const r = parseLockfileVersion({ lockfilePath: '/virtual/package-lock.json', packageName: 'echarts', kind: 'npm' }, io);
+    expect(r.ok && r.version).toBe('5.4.3');
+    expect(calls).toEqual(['stat:/virtual/package-lock.json', 'read:/virtual/package-lock.json']);
+  });
+
+  it('超限：read **一次都不发生**（这才是「先 stat」的可观测证据）', () => {
+    const { io, calls } = probeIo(MAX_LOCKFILE_BYTES + 1, 'never-read');
+    const r = parseLockfileVersion({ lockfilePath: '/virtual/package-lock.json', packageName: 'echarts', kind: 'npm' }, io);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('file-too-large');
+    expect(calls.filter((c) => c.startsWith('read:'))).toEqual([]);
+    expect(calls).toEqual(['stat:/virtual/package-lock.json']);
+  });
+
+  it('非常规文件：read 同样不发生，直接 file-unreadable', () => {
+    const calls: string[] = [];
+    const io: LockfileIo = {
+      statSync: (path) => {
+        calls.push(`stat:${path}`);
+        return { isFile: () => false, size: 10 };
+      },
+      readFileSync: (path) => {
+        calls.push(`read:${path}`);
+        return '';
+      },
+    };
+    const r = parseLockfileVersion({ lockfilePath: '/virtual/package-lock.json', packageName: 'echarts', kind: 'npm' }, io);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('file-unreadable');
+    expect(calls).toEqual(['stat:/virtual/package-lock.json']);
+  });
+
+  it('生态不支持时连 stat 都不发生（早退在 IO 之前）', () => {
+    const { io, calls } = probeIo(10, 'x');
+    parseLockfileVersion({ lockfilePath: '/virtual/go.sum', packageName: 'x', kind: 'go' }, io);
+    expect(calls).toEqual([]);
+  });
+
+  it('默认 IO 走真实 node:fs（注入缝不得与生产路径漂移）', () => {
+    // 不传 io 时读的是磁盘上真实文件——若默认 IO 被换成桩，这条会拿不到版本
+    const p = write(
+      'package-lock.json',
+      JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/echarts': { version: '9.9.9' } } }),
+    );
+    expect(parseLockfileVersion({ lockfilePath: p, packageName: 'echarts', kind: 'npm' })).toMatchObject({
+      ok: true,
+      version: '9.9.9',
+    });
+  });
+});

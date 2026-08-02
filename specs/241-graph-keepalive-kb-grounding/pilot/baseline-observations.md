@@ -181,3 +181,41 @@ CLI 命令分发在本仓大量使用 O-7 这个形态（`src/cli/index.ts` 的�
 （有结果就更不会怀疑）。M-1 四分类把它计成 `hit`，报告时必须在「口径缺陷」节
 连同 1-3/1-5 一起给出「经交叉核对证实低估/错误的 hit 数」。
 详细归因见 plan.md 附录；处置同 O-3/O-7：并入既有 follow-up 卡范围，本 feature 不修。
+
+---
+
+## O-7 修订（批 3 实测反证后收窄）— **给正在修这个 bug 的人看**
+
+> ⚠️ 若你是从 follow-up 卡「修复调用图两类漏建」过来的：**O-7 的原始描述（「同文件 export 互调不建边」）已被实测证伪，别按那个方向查。**
+
+### 已排除的两个假设（不要重复排查）
+
+1. **不是「同文件 export 互调」**。反证（批 3 `1-24` 实测）：`src/scaffold-kb/schema-compat.ts` 里
+   `provenanceSelectFragment → hasProvenanceColumns` 是同文件两个 export 互调，图里**正常建了边**。
+2. **不是 staleness**。在 `freshness: fresh` + `graph-quality overallVerdict: pass` 的图上，
+   跨 `2e3a4cd` / `fd9af7f` / `bc3bfb5` 三个不同 commit 快照稳定复现。
+
+### 收窄后的真实共因
+
+**位于嵌套函数表达式（arrow function / function expression）体内的调用，不归属到其外层 named symbol。**
+
+四次证伪（ledger `1-11` / `1-12` / `1-21` / `1-22`）共享同一形态：
+```ts
+server.tool('kb_search', DESC, {…},
+  withTelemetry('kb_search', async (args) => executeKbSearch(ctx, args)));
+//                            ^^^^^^^^^^^^ 归属在此中断
+```
+外层实参位置的直接调用（`withTelemetry`）建了边；嵌套 arrow **body 内**的 `executeKbSearch` 丢失。
+
+**建议修法**：callee 归属沿 AST **向上找最近的 named symbol**，而不是遇到函数表达式就中断归属。
+
+### 仍待核实的相邻形态
+
+- **动态 `await import()` 解构**（O-7 第二形态，`src/cli/index.ts:222-223`）：可能同源也可能独立，未定论
+- **非零但偏低的 undercount**（O-8，`searchKbCore` 图报 2 实际 ≥4）：同上
+- **file-private 非 export 函数不入图**（`documentFallback` / `runQuery`）：这是 O-5 的已知盲区，**不是** O-7，别混为一谈
+
+### 批 3 的正面观测（避免过度归因）
+
+批 2 全新模块 `recordNoHit` 及其两条跨文件被调边（`executeKbSearch` / `executeKbApiLookup` → `recordNoHit`）
+**都正确建了图**。所以新代码进图这条链路是好的，缺陷严格局限于上述闭包归属形态。

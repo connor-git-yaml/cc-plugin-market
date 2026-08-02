@@ -186,3 +186,66 @@ describe('kb_search — no-hit 治理挂点（F241 FR-012 挂点 1）', () => {
     }
   });
 });
+
+/**
+ * F241 T062（FR-021 / SC-014）—— 工具级：kb_status 出现在全部成功 envelope。
+ */
+describe('kb_search — kb_status 治理字段（F241 FR-021）', () => {
+  it('双库命中成功 envelope 含 kb_status，且 sourceVersions 为两库并集', () => {
+    const out = parse(executeKbSearch(ctx, { query: 'API X' }));
+    expect(out.results.length).toBeGreaterThan(0);
+    expect(out.kb_status).toBeDefined();
+    expect(Object.keys(out.kb_status).sort()).toEqual(['activityAgeDays', 'freshness', 'sourceVersions']);
+    expect(Array.isArray(out.kb_status.sourceVersions)).toBe(true);
+  });
+
+  it('单库降级（source_filter=vendor）成功 envelope 同样含 kb_status', () => {
+    const out = parse(executeKbSearch(ctx, { query: 'API X', source_filter: 'vendor' }));
+    expect(out.kb_status).toBeDefined();
+  });
+
+  it('零命中成功 envelope 含 kb_status（治理信号在"查不到"时最有价值）', () => {
+    const out = parse(executeKbSearch(ctx, { query: 'zzzqqqnonexistentterm' }));
+    expect(out.total_found).toBe(0);
+    expect(out.kb_status).toBeDefined();
+  });
+
+  it('一个库都没查到（source_filter 与可用库不交）时仍含 kb_status，且不谎报新鲜', () => {
+    const vendorOnly: KbContext = { vendor: ctx.vendor, project: null, sourcesAvailable: ['vendor'] };
+    const out = parse(executeKbSearch(vendorOnly, { query: '鉴权失败', source_filter: 'project' }));
+    expect(out.sources_queried).toEqual([]);
+    expect(out.kb_status).toBeDefined();
+    expect(out.kb_status.freshness).toBe('unknown');
+    expect(out.kb_status.activityAgeDays).toBeNull();
+  });
+
+  it('error envelope 不含 kb_status（不扩大错误路径契约面）', () => {
+    for (const bad of [{ query: '   ' }, { query: '错误', top_k: 0 }]) {
+      expect(parse(executeKbSearch(ctx, bad))['kb_status']).toBeUndefined();
+    }
+  });
+
+  it('kb_status 计算失败不得拖垮主链路：状态聚合查询抛错时仍正常返回结果 + unknown', () => {
+    const realDb = ctx.vendor!.db;
+    // 只毒化 kb-status 专用的聚合查询（`MIN(built_at)`），检索链路的 SQL 一律放行
+    const poisonedDb = new Proxy(realDb, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target);
+        if (prop !== 'exec') return typeof value === 'function' ? value.bind(target) : value;
+        return (arg: unknown): void => {
+          const sql = typeof arg === 'string' ? arg : String((arg as { sql?: string })?.sql ?? '');
+          if (sql.includes('MIN(built_at)')) throw new Error('status-boom');
+          return (value as (a: unknown) => void).call(target, arg);
+        };
+      },
+    });
+    const poisoned: KbContext = {
+      vendor: { ...ctx.vendor!, db: poisonedDb },
+      project: null,
+      sourcesAvailable: ['vendor'],
+    };
+    const out = parse(executeKbSearch(poisoned, { query: '鉴权失败' }));
+    expect(out.results.length).toBeGreaterThan(0);
+    expect(out.kb_status.freshness).toBe('unknown');
+  });
+});

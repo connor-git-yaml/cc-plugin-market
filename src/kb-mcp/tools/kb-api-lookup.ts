@@ -20,6 +20,7 @@ import { matchEntities, type EntityMatch } from '../../scaffold-kb/entity-matche
 import { arbitrateEntities, type ArbitrationInput } from '../../scaffold-kb/arbitration.js';
 import { buildEvidenceEnvelope as envelope, defangSentinel, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
 import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
+import { buildKbStatusSubset } from '../../scaffold-kb/kb-status.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
 import { describeQueriedDbPaths, type KbContext, type KbHandle } from '../lib/kb-locator.js';
 import type { ApiEntity, SourceKind } from '../../scaffold-kb/types.js';
@@ -76,6 +77,16 @@ function deepDefang<T>(v: T): T {
   return v;
 }
 
+/**
+ * F241 FR-021：本次上下文里可用库的治理状态子集。
+ *
+ * 追加到**全部成功 envelope**（含 `document_fallback` 与 `not_found:true` 早返回）；
+ * `buildKbError` 出口**不**追加（P-W4 钉死：错误响应形状不因治理字段扩大契约面）。
+ */
+function kbStatusOf(ctx: KbContext): ReturnType<typeof buildKbStatusSubset> {
+  return buildKbStatusSubset([ctx.vendor?.db ?? null, ctx.project?.db ?? null]);
+}
+
 /** document_fallback：无实体表 → 文档级检索，不出校验结论（W-3） */
 function documentFallback(ctx: KbContext, apiName: string): ToolResult {
   const fetchK = 5;
@@ -109,6 +120,8 @@ function documentFallback(ctx: KbContext, apiName: string): ToolResult {
     evidence_note: EVIDENCE_NOTE,
     results: hits.slice(0, fetchK),
     total_found: hits.length,
+    // F241 FR-021（P-W4）：降级也是**成功响应**，调用方同样需要知道"是不是库太旧"
+    kb_status: kbStatusOf(ctx),
   });
 }
 
@@ -171,6 +184,7 @@ export function executeKbApiLookup(ctx: KbContext, params: KbApiLookupParams): T
       not_found: true,
       evidence_note: EVIDENCE_NOTE,
       note: `文档中未找到实体「${defangSentinel(params.api_name)}」（${EVIDENCE_NOTE}）；未编造签名/参数`,
+      kb_status: kbStatusOf(ctx),
     });
   }
 
@@ -250,6 +264,7 @@ export function executeKbApiLookup(ctx: KbContext, params: KbApiLookupParams): T
     truncated: totalChars > 10000,
     api_name_echoed: defangSentinel(params.api_name),
     evidence_note: EVIDENCE_NOTE,
+    kb_status: kbStatusOf(ctx),
   });
 }
 

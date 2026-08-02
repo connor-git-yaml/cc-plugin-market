@@ -277,3 +277,63 @@ orchestration.yaml 实况：implement 是 `id:"6"`，verify 是 `id:"7c"`——`
 
 门禁：`tests/kb/` 415 passed（≥368）/ 全量 6139 passed / 插件 1272 passed / build + tsc + `repo:check` 全 EXIT=0。
 详见 `verification/batch2-gate.md` 末节与 `verification/batch2-red-evidence.md` 第二节。
+
+---
+
+# Implement 批 3 — Codex 对抗审查整改单（阻断提交 → 修复）
+
+> 审查会话：codex `task-msccuu9b-5bu75q`（5 CRITICAL / 4 WARNING，4 条来自实跑探针）。
+
+## B3-C1 pnpm/yarn 是逐行扫描非结构化解析 → **确认**
+实证：合法 YAML 锚点/别名 → 误报 `package-not-found`；block scalar 里的伪包键 → 误取 `9.9.9`；yarn 损坏内容 `version [unterminated` 被当成功版本；空文件与「包确实不存在」不可区分。
+**处置**：pnpm 改真正 YAML 解析（复用仓内既有 YAML 能力，不引新依赖）；yarn 至少做 section 级结构校验；空文件/语法损坏统一 `parse-error`，与 `package-not-found` 区分。补 alias / block scalar / 空 / 损坏 / 注释伪键五类用例。
+
+## B3-C2 freshness 阈值先 floor 再比较，30.5/90.5 天判错 → **确认**
+**处置**：判级用**原始毫秒差或浮点天数**，展示字段单独取整；补 `30±ε`、`90±ε` 回归。
+
+## B3-C3 严格 flag 校验被重复 flag 绕过 → **确认（B2-4 回归）**
+实测 `scaffold-kb version --package typescript --package --evil --format json` exit 0 且 `--evil` 未被拒。根因：`readFlagEntry` 用全局 `indexOf` 取首次出现，校验循环在第二次出现时仍盲跳下一 token。
+**处置**：校验按**当前位置** `argv[i+1]` 推进，不重新 `indexOf`；显式拒绝重复 flag；补 duplicate / missing / unknown-smuggling 用例。**收严仍只作用于 STRICT_SCAFFOLD_KB_OPS**（既有四 op 零变化，RG-005）。
+
+## B3-C4 `kb_status` 子字段 snake_case，违反 FR-021 明定 camelCase → **确认**
+spec:416/580 与 tasks:266 都写 `activityAgeDays`/`sourceVersions`/`freshness`，实现输出 `activity_age_days`/`source_versions`，且测试把错误形状固化了。
+**处置**：改回 camelCase（spec 是合同，实现不得单方面改外部契约）；同步修测试期望。
+
+## B3-C5 损坏库被报 `dbExists:false` → **确认**
+`loadKbContext` 返回 `KB_CORRUPT` 被压成 `db=null`，`dbExists` 由 `db!==null` 推出。
+**处置**：把「文件是否存在」与「能否加载」分开传递；损坏库 → `dbExists:true` + `schemaCompat:"unreadable"`。spec Key Entities #8 相应补 `unreadable` 取值。
+
+## B3-W1 package-lock 多个嵌套安装版本时静默取遍历首项 → **确认**
+**处置**：顶层 `node_modules/<pkg>` 唯一值才直接采用；仅有多个嵌套且值不一致 → 走 `ambiguous` + 全量 candidates（复用 FR-017 既有五态，不新增状态）。
+
+## B3-W2 两条测试断言证明不了其声称性质 → **确认**
+「>32MB 返回 file-too-large」证明不了「读取前先 stat」（虽然 Codex 另行实测确认实现是对的）；「SHA 前后不变」近乎恒真（被哈希文件从未传入被测函数）。
+**处置**：parser 测试注入/spy `statSync`+`readFileSync` 断言调用顺序与超限时 read 次数为 0；只读断言改为对**实际 CLI 使用的文件路径**执行命令后再比 SHA。
+
+## B3-W3 tasks.md T061 表述与实际偏差矛盾 → **确认（文档）**
+tasks 仍称「不修改任何既有断言期望值」，实际 `kb-contract.test.ts` 121 insert / 1 delete（把 `kb_status` 加入 exact 集合，断言强度增强）。红态证据已如实记录，是 tasks 未同步。
+**处置**：改 T061 文字与已记录的必要偏差一致。
+
+## B3-W4 编排器自己的 metrics-raw.md M-2 算术错误 → **确认，已当场修正**
+`governance-constants.ts` 双计导致分母 22（应 21）；`kb-contract.test.ts` 跨类重复计数；`plugins/**` 行数字与列举不符。
+**处置**：已用「相对 batch1-base、A 优先于 M」去重脚本复算并改写 metrics-raw.md（coverage 9.5%、missed 19、归因合计校验 19 ✅），并在文中显式标注这是取数纪律失误、不隐去。
+
+## Codex 判定干净面（实跑验证，直接采信）
+lockfile 其余路径（含 32MB 确实先 stat）/ version-resolver 五态与冲突态 / **FR-018 删除边界干净**（无推断版本进检索过滤）/ freshness 聚合主体公式（逐行 max 再全表 MAX、oldestBuiltAt 不参与判级、旧 schema 恒 unknown）/ FR-021 五条成功路径全覆盖 + error envelope 不带 / 既有四 CLI op 零行为变化 / RG-008 SHA 矩阵 + RG-009 故障注入。
+
+## B3-C1 ~ B3-W4 落地状态（整改后回填）
+
+| # | 处置落点 | 状态 |
+|---|---------|------|
+| B3-C1 | pnpm 改结构化 YAML 解析（复用仓内 `parseYamlDocument`，**未引入新依赖**）：只认 `packages`/`snapshots` 段真实映射键；`lockfileVersion` 缺失 / 段落非 mapping / 空文件 / 只有注释 → `parse-error`。yarn 加 `splitYarnBlocks` 块结构校验 + `isConcreteVersion` 版本形态校验 | ✅ 已修（+25 红转绿，五类用例齐；四份审查复现输入均 CLI 端复验）|
+| B3-C2 | `ageDaysExact`（浮点）判级 + `toDisplayDays` 单独取整；`classify` 收未截断值；subset 同步。阈值常量语义不变 | ✅ 已修（+6 红转绿 + 4 条反向边界防误伤）|
+| B3-C3 | `flagValueAt(argv, i)` 按当前索引取值；校验循环用它推进并显式拒绝重复 flag；`readFlagEntry` 改薄封装。收严范围仍限 `STRICT_SCAFFOLD_KB_OPS` | ✅ 已修（+7 红转绿 + **1068 条 parseArgs 对拍**双向零差异确认既有四 op 零变化）|
+| B3-C4 | `KbStatusSubset` 三键改 camelCase，四个测试文件期望同步 | ✅ 已修（+7 红转绿 + 2 处「键不得含下划线」回归钉子）|
+| B3-C5 | `LoadKbResult` 失败分支纯附加 `unloadable`（既有 `ok`/`code` 零变更，RG-005）；`buildKbStatusReport` 增 `opts.dbExists`（缺省退回 `db!==null`）；损坏库 → `dbExists:true` + `unreadable` | ✅ 已修（+4 红转绿 + CLI 端三态复验）。spec Key Entities #8 外科补 `dbExists`/`schemaCompat` 独立性说明；**`unreadable` 取值批 3 已在 spec，未重复添加** |
+| B3-W1 | 顶层唯一值直接用；无顶层时收集全部嵌套，`alternatives` 带出；resolver 不收敛条件改 `distinctLockfiles>=2 \|\| distinctVersions>=2`，`multiple-lockfiles` 改按锁文件数计 | ✅ 已修（+7 红转绿）。**未新增状态**：复用 `ambiguous` 五态之一，`VersionFlag` 五值不变 |
+| B3-W2 | `parseLockfileVersion(input, io)` 注入缝 + 调用序列/read 次数为 0 断言；只读 SHA 改为对 CLI 实际读的文件路径做 + 「改一字节必变」分辨力断言 | ✅ 已修（+5 红转绿）。**偏差**：未用 `vi.mock('node:fs')`（该测试文件自身要用真实 `node:fs` 写 fixture，全局 mock 冲突），改显式注入缝 + 「不传 `io` 读真实磁盘」用例防漂移 |
+| B3-W3 | tasks.md T061 表述改写为与已记录偏差一致 | ✅ 已修（纯文档）|
+| B3-W4 | metrics-raw.md M-2 算术 | 编排器自行修复，整改子代理未触碰 |
+
+门禁：`tests/kb/` **569 passed**（≥511）/ 全量 **6293 passed** / 插件 **1272 passed** / build + `repo:check` 全 EXIT=0。
+`plugins/spec-driver/scripts/**` 对 `bc3bfb5` 零改动。详见 `verification/batch3-gate.md` 第二轮与 `verification/batch3-red-evidence.md` 第二节。

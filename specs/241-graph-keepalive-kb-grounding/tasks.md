@@ -216,62 +216,63 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 
 ## 批 3 — E2/E3 KB version selection + freshness status（FR-016~FR-021）
 
-- [ ] T050 记录 batch3 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch3=<sha>` 到 `trace.md`
+- [x] T050 记录 batch3 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch3=<sha>` 到 `trace.md`
   验证：`grep 'batch_base: batch3=' specs/241-graph-keepalive-kb-grounding/trace.md` 命中
 
 ### 3.1 lockfile 版本解析与决议
 
-- [ ] T051 [P][红测试] 新增 `tests/kb/lockfile-parser.test.ts`：FR-016，三种 lockfile（`package-lock.json`/`pnpm-lock.yaml`/`yarn.lock`）各给最小 fixture 断言解析出预期版本；`go.sum` fixture 断言 `ecosystem-unsupported`；构造超限巨大 lockfile 断言明确失败而非 OOM（EC-28）
+- [x] T051 [P][红测试] 新增 `tests/kb/lockfile-parser.test.ts`：FR-016，三种 lockfile（`package-lock.json`/`pnpm-lock.yaml`/`yarn.lock`）各给最小 fixture 断言解析出预期版本；`go.sum` fixture 断言 `ecosystem-unsupported`；构造超限巨大 lockfile 断言明确失败而非 OOM（EC-28）
   验证：`npx vitest run tests/kb/lockfile-parser.test.ts` 因模块不存在而失败（红）
 
-- [ ] T052 实现 `src/scaffold-kb/lockfile-parser.ts`：导出 `parseLockfileVersion({ lockfilePath, packageName, kind }) -> { version, source } | null`，复用 `src/panoramic/project-context.ts::LOCK_FILE_PRIORITY` 仅做探测优先级，内容解析全新写；`statSync` 前置大文件保护（阈值 32MB `[推断]`，理由见 plan §6）
+- [x] T052 实现 `src/scaffold-kb/lockfile-parser.ts`：导出 `parseLockfileVersion({ lockfilePath, packageName, kind }) -> { version, source } | null`，复用 `src/panoramic/project-context.ts::LOCK_FILE_PRIORITY` 仅做探测优先级，内容解析全新写；`statSync` 前置大文件保护（阈值 32MB `[推断]`，理由见 plan §6）
   验证：`npx vitest run tests/kb/lockfile-parser.test.ts` 全绿
 
-- [ ] T053 [P][红测试] 新增 `tests/kb/version-resolver.test.ts`：FR-017、EC-25，六组 fixture（仅显式/仅lockfile/两者冲突/多lockfile无显式/多lockfile+显式/**lockfile 与 `node_modules` 实际安装版本不一致**）断言 `resolved.status` 分别正确；`ambiguous` 时 `version===null` + `candidates.length≥2` + `flags` 含 `multiple-lockfiles`；冲突组 `flags` 含 `version-conflict`；第六组（P-W2 补齐缺口）`flags` 含 `lockfile-install-mismatch`，不可检测时不猜测且不含该值
+- [x] T053 [P][红测试] 新增 `tests/kb/version-resolver.test.ts`：FR-017、EC-25，六组 fixture（仅显式/仅lockfile/两者冲突/多lockfile无显式/多lockfile+显式/**lockfile 与 `node_modules` 实际安装版本不一致**）断言 `resolved.status` 分别正确；`ambiguous` 时 `version===null` + `candidates.length≥2` + `flags` 含 `multiple-lockfiles`；冲突组 `flags` 含 `version-conflict`；第六组（P-W2 补齐缺口）`flags` 含 `lockfile-install-mismatch`，不可检测时不猜测且不含该值
   验证：`npx vitest run tests/kb/version-resolver.test.ts` 因模块不存在而失败（红）
 
-- [ ] T054 实现 `src/scaffold-kb/version-resolver.ts`：导出 `resolveVersion({ projectRoot, packageName, explicitVersion? }) -> VersionResolution`，优先级仲裁 explicit > lockfile(单一) > range-only > none；多 lockfile 且无 explicit → `ambiguous`；lockfile 与 `node_modules/<pkg>/package.json` 实际安装版本不一致（可检测时）→ 两者同入 `candidates[]` 并标 `lockfile-install-mismatch`
+- [x] T054 实现 `src/scaffold-kb/version-resolver.ts`：导出 `resolveVersion({ projectRoot, packageName, explicitVersion? }) -> VersionResolution`，优先级仲裁 explicit > lockfile(单一) > range-only > none；多 lockfile 且无 explicit → `ambiguous`；lockfile 与 `node_modules/<pkg>/package.json` 实际安装版本不一致（可检测时）→ 两者同入 `candidates[]` 并标 `lockfile-install-mismatch`
   验证：`npx vitest run tests/kb/version-resolver.test.ts` 全绿
 
 ### 3.2 KB 状态报告器
 
-- [ ] T055 [P][红测试] 新增 `tests/kb/kb-status.test.ts`：FR-019/020，5/45/100 天前三组 `built_at` → current/aging/stale；100天前`built_at`+5天前`ingested_at` → `current`（验证取 max）且 `oldestBuiltAt` 如实反映 100 天前；缺 provenance 列旧库 → `unknown`+`legacy-missing-provenance`+exit 0；**追加"旧库 `built_at` 为 1 天前（很新）仍 `unknown`"回归用例**（P-W4，不得回落为 `current`）；`noHitCollection`/`recentNoHitCount` 字段断言（env 未设→`disabled`+`null`，设置且有数据→`enabled`+非负整数）；运行前后库文件 SHA-256 不变
+- [x] T055 [P][红测试] 新增 `tests/kb/kb-status.test.ts`：FR-019/020，5/45/100 天前三组 `built_at` → current/aging/stale；100天前`built_at`+5天前`ingested_at` → `current`（验证取 max）且 `oldestBuiltAt` 如实反映 100 天前；缺 provenance 列旧库 → `unknown`+`legacy-missing-provenance`+exit 0；**追加"旧库 `built_at` 为 1 天前（很新）仍 `unknown`"回归用例**（P-W4，不得回落为 `current`）；`noHitCollection`/`recentNoHitCount` 字段断言（env 未设→`disabled`+`null`，设置且有数据→`enabled`+非负整数）；运行前后库文件 SHA-256 不变
   验证：`npx vitest run tests/kb/kb-status.test.ts` 因模块不存在而失败（红）
 
-- [ ] T056 实现 `src/scaffold-kb/kb-status.ts`：导出 `buildKbStatusReport(db | null) -> KbStatusOutput`，直接 import `schema-compat.ts::hasProvenanceColumns` 做 `PRAGMA table_info` 探测（不新增探测函数）；`activityAt` 口径 `[推断，plan §1.6 拍板]` = 先逐行算 `max(built_at, ingested_at)` 再对全表取 `MAX(...)`，`oldestBuiltAt` = 全表 `MIN(built_at)`；`hasProvenanceColumns` 返回 `false` 时 `activityAt` 恒为 `null`、`freshness` 恒为 `"unknown"`（P-W4 纠正，不得因 `built_at` 新近而误判）
+- [x] T056 实现 `src/scaffold-kb/kb-status.ts`：导出 `buildKbStatusReport(db | null) -> KbStatusOutput`，直接 import `schema-compat.ts::hasProvenanceColumns` 做 `PRAGMA table_info` 探测（不新增探测函数）；`activityAt` 口径 `[推断，plan §1.6 拍板]` = 先逐行算 `max(built_at, ingested_at)` 再对全表取 `MAX(...)`，`oldestBuiltAt` = 全表 `MIN(built_at)`；`hasProvenanceColumns` 返回 `false` 时 `activityAt` 恒为 `null`、`freshness` 恒为 `"unknown"`（P-W4 纠正，不得因 `built_at` 新近而误判）
   验证：`npx vitest run tests/kb/kb-status.test.ts` 全绿
 
 ### 3.3 CLI 接线（version / status 两 op）
 
-- [ ] T057 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`version`/`status` 两 op 解析通过 + dispatch 到对应分支的集成断言（parse→runScaffoldKb 全链，P-W5，SC-012/013）
+- [x] T057 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`version`/`status` 两 op 解析通过 + dispatch 到对应分支的集成断言（parse→runScaffoldKb 全链，P-W5，SC-012/013）
   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts`（本组新增用例）因 union 未扩而失败（红）
 
-- [ ] T058 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union 再扩 `'version'`、`'status'`（P-W5，同批 2 模式）
+- [x] T058 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union 再扩 `'version'`、`'status'`（P-W5，同批 2 模式）
   验证：见 T059
 
-- [ ] T059 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'version'`、`'status'` 两分支
+- [x] T059 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'version'`、`'status'` 两分支
   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts` 全绿（T057 转绿，T058/T059 完成后）
 
-- [ ] T060 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `version`/`status` 两 op 说明
+- [x] T060 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `version`/`status` 两 op 说明
   验证：人工核对 `spectra scaffold-kb --help` 输出
 
 ### 3.4 MCP 响应字段扩展（FR-021）
 
-- [ ] T061 [红测试] 改 `tests/kb/kb-contract.test.ts`：新增断言 `kb_search`/`kb_api_lookup` **全部成功 envelope**（含 `document_fallback`、`not_found` 早返回分支）均含 `kb_status` 子对象；**error envelope 不含**该字段（P-W4 已钉死）；既有字段（`results`/`total_found`/`not_found`）快照逐字节不变（不修改任何既有断言期望值，只追加新断言）
+- [x] T061 [红测试] 改 `tests/kb/kb-contract.test.ts`：新增断言 `kb_search`/`kb_api_lookup` **全部成功 envelope**（含 `document_fallback`、`not_found` 早返回分支）均含 `kb_status` 子对象；**error envelope 不含**该字段（P-W4 已钉死）；既有字段（`results`/`total_found`/`not_found`）的名称、类型、层级零变更
+  **已记录偏差（B3-W3 修正表述）**：原文写「不修改任何既有断言期望值，只追加新断言」，实际必须改一处——`SC-012 响应契约 shape` 用例的 exact 键集合断言把 `kb_status` 纳入期望集（121 insert / 1 delete）。这不是放宽而是**加严**：断言仍是 `toEqual` 精确集合相等（未退化为 `arrayContaining`），既有 5 个键一个不少、一个不改，新增键必须如实出现。另补一条「删掉 `kb_status` 后剩余形状与接线前逐字段一致」的反向断言把 RG-005 钉死。
   验证：`npx vitest run tests/kb/kb-contract.test.ts` 此刻因 payload 未接线而失败（红）
 
-- [ ] T062 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/kb-search-tool.test.ts` / `tests/kb/kb-api-lookup-tool.test.ts`：工具级集成断言含 `kb_status`；`kb-api-lookup-tool.test.ts` 额外覆盖 `documentFallback` 分支下 `kb_status` 同样出现
+- [x] T062 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/kb-search-tool.test.ts` / `tests/kb/kb-api-lookup-tool.test.ts`：工具级集成断言含 `kb_status`；`kb-api-lookup-tool.test.ts` 额外覆盖 `documentFallback` 分支下 `kb_status` 同样出现
   验证：两文件此刻因 payload 未接线而失败（红）
 
-- [ ] T063 改 `src/kb-mcp/tools/kb-search.ts`：payload 新增 `kb_status` 子对象（`buildKbStatusReport` 子集：`activityAgeDays`/`sourceVersions`/`freshness`），追加到 `buildKbSuccess` 全部出口
+- [x] T063 改 `src/kb-mcp/tools/kb-search.ts`：payload 新增 `kb_status` 子对象（`buildKbStatusReport` 子集：`activityAgeDays`/`sourceVersions`/`freshness`），追加到 `buildKbSuccess` 全部出口
   验证：见 T064（两处改动合并验证）
 
-- [ ] T064 改 `src/kb-mcp/tools/kb-api-lookup.ts`：payload 新增 `kb_status` 子对象，追加到全部成功 envelope（含 `documentFallback` 分支现行 `:93`、`not_found` 早返回分支现行 `:142`）；`error` envelope（`buildKbError` 出口）不追加
+- [x] T064 改 `src/kb-mcp/tools/kb-api-lookup.ts`：payload 新增 `kb_status` 子对象，追加到全部成功 envelope（含 `documentFallback` 分支现行 `:93`、`not_found` 早返回分支现行 `:142`）；`error` envelope（`buildKbError` 出口）不追加
   验证：`npx vitest run tests/kb/kb-contract.test.ts tests/kb/kb-search-tool.test.ts tests/kb/kb-api-lookup-tool.test.ts` 全绿（T061/T062 全部转绿，T063/T064 完成后）
 
 ### 3.5 批 3 门禁
 
-- [ ] T065 **批 3 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数在批 2 基线之上净增）+ 新建的 `tests/kb/cli-scaffold-kb.test.ts` 相关用例（T-C5：作为独立 parse-args 集成测试点名重跑，不只是随 `tests/kb/` 整体带过）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch3-base> -- <paths>`，T-W3）：RG-005（KB 现有链零回归，`kb-contract.test.ts` 既有断言未放宽）；RG-008（**T-W4 命令矩阵**：对 `coverage-gap`/`version`/`status`/`query` 四个只读 CLI 子命令各执行一次，逐项记录 `specs/_meta/graph.json` 的 before/after SHA-256 + 命令退出码，全部相同/全部 0；RG-009 缺列故障注入：`kb-status.ts` 探测缺列场景下的读路径同样零副作用）
+- [x] T065 **批 3 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数在批 2 基线之上净增）+ 新建的 `tests/kb/cli-scaffold-kb.test.ts` 相关用例（T-C5：作为独立 parse-args 集成测试点名重跑，不只是随 `tests/kb/` 整体带过）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch3-base> -- <paths>`，T-W3）：RG-005（KB 现有链零回归，`kb-contract.test.ts` 既有断言未放宽）；RG-008（**T-W4 命令矩阵**：对 `coverage-gap`/`version`/`status`/`query` 四个只读 CLI 子命令各执行一次，逐项记录 `specs/_meta/graph.json` 的 before/after SHA-256 + 命令退出码，全部相同/全部 0；RG-009 缺列故障注入：`kb-status.ts` 探测缺列场景下的读路径同样零副作用）
   验证：以上命令全部零失败，逐项记入交付 report。**continuous capture 台账同步检查**：本批新增条目数一致且 `seq` 单调
 
 ---
@@ -540,3 +541,81 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
   + RG-005 `git diff fd9af7f -- tests/kb/kb-contract.test.ts | wc -l` → **0**
   + 改动面复核：整改轮对 `plugins/spec-driver/scripts/**` 零改动
   + 台账：`ledger-schema-check.mjs` 通过（23 行），新增调用 `1-20` 已双写、`seq` 单调
+
+---
+
+## 批 3 Codex 整改（代码对抗审查 `task-msccuu9b-5bu75q`）
+
+> 批 3 收尾后的代码对抗审查判「阻断提交」（5 CRITICAL / 4 WARNING，其中 4 条来自实跑探针）。
+> 裁决落在 `review-dispositions.md`「Implement 批 3 — Codex 对抗审查整改单」（B3-C1 ~ B3-W4）。
+> 逐条按 TDD 硬序修复（先用审查原文给出的复现输入补红测试 → 再修绿），红态证据见
+> `verification/batch3-red-evidence.md` 第二节，整改后门禁全表见 `verification/batch3-gate.md` 第二轮。
+
+- [x] T066 **B3-C1** pnpm 改真正 YAML 结构化解析 + yarn section 级结构校验
+  实现：`lockfile-parser.ts` 复用仓内既有 `parseYamlDocument`（`src/panoramic/parsers/yaml-config-parser.ts`，
+  **未引入新依赖**），只认 `packages` / `snapshots` 段的真实映射键；`lockfileVersion` 缺失 /
+  段落非 mapping / 空文件 / 只有注释 → `parse-error`（与 `package-not-found` 严格区分）。
+  yarn 新增 `splitYarnBlocks`（顶格 header + 缩进属性行的四类合法行，出现第五类即结构损坏）
+  与 `isConcreteVersion`（版本必须以数字开头）
+  验证：+25 红转绿，五类用例齐（alias / block scalar / 空 / 损坏 / 注释伪键）；
+  四份审查复现输入另在 CLI 端逐条复验（锚点→5.4.3、block scalar 伪键→不采信、
+  空 pnpm-lock→parse-error 可见、`version [unterminated`→parse-error 而非成功版本）
+
+- [x] T067 **B3-C2** freshness 判级改用未截断天数差
+  实现：`kb-status.ts` 拆 `ageDaysExact`（浮点，判级唯一输入）与 `toDisplayDays`（`Math.floor`，
+  仅展示）；`classify` 签名改收未截断值；`buildKbStatusSubset` 同步走 exact 最小值。
+  `governance-constants.ts` 的 `KB_FRESHNESS_AGING_DAYS=30` / `KB_FRESHNESS_STALE_DAYS=90` 语义不变
+  验证：+6 红转绿（30.5/30.01→aging、90.5/90.01→stale）+ 4 条反向边界（30/29.99/90/89.99 不得误伤）
+
+- [x] T068 **B3-C3** 严格 flag 校验改按当前索引推进 + 显式拒绝重复 flag（B2-4 回归）
+  实现：`parse-args.ts` 新增 `flagValueAt(argv, i)`；`checkScaffoldKbFlags` 用它按 `argv[i+1]`
+  推进（不再全局 `indexOf`）并对重复 flag 直接返回 `invalid_option`；`readFlagEntry` 改为
+  `flagValueAt` 的薄封装，首次出现语义不变。**收严范围仍限 `STRICT_SCAFFOLD_KB_OPS`**
+  验证：+7 红转绿（含 Codex 实测复现串 `--package typescript --package --evil --format json`）；
+  RG-005 用 **1068 条 argv 对拍**双向确认既有四 op 零变化（详见 gate 第 9 节）
+
+- [x] T069 **B3-C4** `kb_status` 子字段改回 camelCase
+  实现：`KbStatusSubset` 三键改 `activityAgeDays` / `sourceVersions` / `freshness`（spec FR-021
+  与 Key Entities #8 明定，实现不得单方面改外部契约）；`kb-status.test.ts` /
+  `kb-contract.test.ts` / `kb-search-tool.test.ts` / `kb-api-lookup-tool.test.ts` 期望同步
+  验证：+7 红转绿；另在两处加「子集键不得含下划线」的回归钉子，防再次漂回 snake_case
+
+- [x] T070 **B3-C5** 存在性与可加载性拆成两个独立信号
+  实现：`kb-locator.ts` 的 `LoadKbResult` 失败分支**纯附加** `unloadable: SourceKind[]`
+  （既有 `ok` / `code` 语义与取值零变更，RG-005）；`buildKbStatusReport` 增
+  `opts.dbExists`（缺省退回 `db !== null`，既有调用方零行为变化）；`runStatus` 传入真实存在性。
+  损坏库 → `dbExists: true` + `schemaCompat: "unreadable"`
+  验证：+4 红转绿 + CLI 端三态复验（真实库 / 损坏库 / 目录无 `chunks.sqlite`）。
+  spec Key Entities #8 外科补一段 `dbExists` 与 `schemaCompat` 独立性说明
+  （`unreadable` 取值批 3 已在，未重复添加）
+
+- [x] T071 **B3-W1** package-lock 嵌套安装位置歧义全量呈现
+  实现：`LockfileParseResult.ok` 增 `alternatives: string[]`；顶层 `node_modules/<pkg>` 唯一值
+  直接采用，无顶层时收集**全部**嵌套位置并去重；`version-resolver.ts` 不收敛条件改为
+  `distinctLockfiles >= 2 || distinctVersions >= 2`，`multiple-lockfiles` 改按**锁文件数**计
+  （原按 candidate 条数会把单锁文件内的嵌套歧义误标成多锁文件冲突）
+  验证：+7 红转绿。**未新增任何状态**：复用既有 `ambiguous` 五态之一，`VersionFlag` 五值不变
+
+- [x] T072 **B3-W2** 两条证明不了其声称性质的断言改写
+  实现：`parseLockfileVersion(input, io = DEFAULT_LOCKFILE_IO)` 加 IO 注入缝，测试断言
+  stat/read 调用序列与超限时 read 次数为 0；只读 SHA 断言改为对 **CLI 实际读的那个文件路径**
+  执行命令后再比，并先断言输出 `dbPath` 就是被 hash 的文件、最后主动改一字节断言 SHA 必变
+  验证：+5 红转绿。**偏差说明**：未用 `vi.mock('node:fs')` —— 该测试文件自身要用真实
+  `node:fs` 写 fixture，全局 mock 会互相打架；改用显式注入缝，并补一条「不传 `io` 时读真实
+  磁盘 fixture」的用例防注入缝与生产路径漂移
+
+- [x] T073 **B3-W3** T061 表述与已记录偏差对齐（纯文档，见本文件 T061 条目内的「已记录偏差」段）
+
+- [x] T074 **整改后门禁重跑**：`npx vitest run tests/kb/` 38 files / **569 passed**（整改前 511 ✅）
+  + `npx vitest run` 全量 **496 files / 6293 passed** EXIT=0（整改前 6235，+58 与 KB 净增对齐）
+  + `node --test plugins/spec-driver/tests/*.mjs` **1272/1272** EXIT=0
+  + `npm run build` EXIT=0 + `npm run repo:check` EXIT=0（86 pass）
+  + RG-008 四 op 只读矩阵复跑：全 exit 0，`graph.json` 与 `chunks.sqlite` SHA-256 全 SAME
+  + RG-009 缺列故障注入复跑：exit 0 / SHA 不变 / 旧库 `built_at` 1 天前仍恒 `unknown`
+  + RG-005 对 `bc3bfb5`：`plugins/spec-driver/scripts/**` **零改动**；1068 条 parseArgs 对拍双向零差异
+  + 未跑 `spectra graph` / `spectra batch`；未执行 `repo:sync`，无 `_generated` 时间戳漂移
+
+> **本轮一次已排除的 flaky**：首轮全量跑出现 1 例
+> `tests/integration/graph-quality-cli.test.ts > dirty 态验证 … exit 0`（收到 1）；隔离重跑
+> `17 passed (17)`、全量复跑亦全绿。该用例在 tmpDir 自建 git 仓 + spawn 真实 CLI，属已登记的
+> 「满载下子进程 CLI 超时」形态，本轮未触及 graph-quality 任何路径。**不当作回归**，但如实记录。

@@ -23,8 +23,14 @@ const logger = createLogger('project-context');
 // Lock 文件优先级检测表（按优先级从高到低）
 // ============================================================
 
-/** lock 文件到包管理器的映射，按优先级排序 */
-const LOCK_FILE_PRIORITY: Array<{ file: string; manager: PackageManager }> = [
+/**
+ * lock 文件到包管理器的映射，按优先级排序。
+ *
+ * 本表只表达"存在性探测优先级"，**不解析文件内容**。F241 E2 的
+ * `scaffold-kb/lockfile-parser.ts` 复用同一顺序做探测（避免两处各排一份优先级），
+ * 内容解析在那边独立实现。
+ */
+export const LOCK_FILE_PRIORITY: ReadonlyArray<{ file: string; manager: PackageManager }> = [
   { file: 'pnpm-lock.yaml', manager: 'pnpm' },
   { file: 'yarn.lock', manager: 'yarn' },
   { file: 'package-lock.json', manager: 'npm' },

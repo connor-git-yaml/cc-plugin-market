@@ -73,6 +73,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
   spectra scaffold-kb query --requirement "<需求>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
   spectra scaffold-kb coverage-gap [--format markdown|json]
+  spectra scaffold-kb version --package <name> [--project-root <path>] [--sdk-version <ver>] [--format markdown|json]
+  spectra scaffold-kb status (--vendor-kb <path> | --project-kb <path>) [--format markdown|json]
   spectra mcp-server
   spectra --version / --help
 
@@ -95,7 +97,9 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   index         构建并持久化 UnifiedGraph snapshot 到 .spectra/unified-graph.json（Feature 156）
   graph-quality 图质量体检（六指标 + freshness，F217）：读取 graph.json 输出质量门禁结果
   scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server；
-                coverage-gap 输出 KB 文档缺口 backlog（F241，读 no-hit 记录；采集需设 SPECTRA_KB_NOHIT_TELEMETRY=<目录>，默认关闭）
+                coverage-gap 输出 KB 文档缺口 backlog（F241，读 no-hit 记录；采集需设 SPECTRA_KB_NOHIT_TELEMETRY=<目录>，默认关闭）；
+                version 从 lockfile 决议指定包的具体版本（F241，仅 npm 生态；多 lockfile 无显式版本时如实报 ambiguous 不擅自收敛）；
+                status 报告 KB 新鲜度（F241，activityAt=max(built_at,ingested_at)；只读、只报告，不触发任何重建或 ingest）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:

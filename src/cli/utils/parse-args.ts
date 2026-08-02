@@ -110,8 +110,8 @@ export interface CLICommand {
    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
    */
   indexGitRange?: string;
-  /** F190/F191/F192/F241 scaffold-kb 子操作（build | serve | query | ingest | coverage-gap） */
-  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest' | 'coverage-gap';
+  /** F190/F191/F192/F241 scaffold-kb 子操作（build | serve | query | ingest | coverage-gap | version | status） */
+  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest' | 'coverage-gap' | 'version' | 'status';
   /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
   scaffoldKbLlmsTxt?: string;
   /** F190 scaffold-kb build：--dir 本地文档目录 */
@@ -148,6 +148,10 @@ export interface CLICommand {
   scaffoldKbMaxInjectChars?: number;
   /** F191 scaffold-kb query：--probe 仅打印能力 sentinel */
   scaffoldKbProbe?: boolean;
+  /** F241 scaffold-kb version：--package 待决议版本的包名（必需） */
+  scaffoldKbPackage?: string;
+  /** F241 scaffold-kb version：--project-root 决议基准的项目根（默认 cwd） */
+  scaffoldKbProjectRoot?: string;
   /** F217 graph-quality 子命令：graph.json 路径（默认: specs/_meta/graph.json） */
   graphQualityGraph?: string;
   /** F217 graph-quality 子命令：以结构化 JSON 输出完整报告 */
@@ -179,16 +183,30 @@ function defaultSkillTarget(env: NodeJS.ProcessEnv = process.env): 'claude' | 'c
 type FlagEntry = { present: false } | { present: true; value: string | null };
 
 /**
- * 读取一个带值 flag 的三态。
+ * 读取 `argv[idx]` 这个 flag 的取值（**按给定索引**，不重新查找）。
+ *
+ * F241 B3-C3：所有"这个 flag 带的值是什么"的判断都必须由本函数按**当前位置**回答。
+ * 用 `indexOf` 重新定位会永远读到首次出现的那一个，于是重复 flag 的第二次出现能
+ * 借到首次出现的值蒙混过关，把紧随其后的未知 token 当成"已消费的值"跳过。
+ */
+function flagValueAt(argv: string[], idx: number): string | null {
+  const val = argv[idx + 1];
+  return val === undefined || val.startsWith('--') ? null : val;
+}
+
+/**
+ * 读取一个带值 flag 的三态（取**首次出现**的位置）。
  *
  * 只看返回的字符串分不清「没写这个 flag」和「写了但没带值」，后者会被静默当成
  * 未提供、悄悄回落到默认值（F241 B2-4 抓到的 `--format` 缺值回落 markdown）。
+ *
+ * 严格 op 已在 `checkScaffoldKbFlags` 里拒绝重复 flag，故"首次出现"即唯一出现；
+ * 宽松 op 保持既有「取首次出现」语义不变（RG-005）。
  */
 function readFlagEntry(argv: string[], name: string): FlagEntry {
   const idx = argv.indexOf(name);
   if (idx === -1) return { present: false };
-  const val = argv[idx + 1];
-  return { present: true, value: val === undefined || val.startsWith('--') ? null : val };
+  return { present: true, value: flagValueAt(argv, idx) };
 }
 
 type ScaffoldKbOperation = NonNullable<CLICommand['scaffoldKbOperation']>;
@@ -213,30 +231,46 @@ const SCAFFOLD_KB_FLAG_SPECS: Record<ScaffoldKbOperation, Readonly<Record<string
     '--output': true, '--sdk-version': true, '--yes': false, '--dry-run': false, '--no-llm': false,
   },
   'coverage-gap': { '--format': true },
+  version: { '--package': true, '--project-root': true, '--sdk-version': true, '--format': true },
+  status: { '--vendor-kb': true, '--project-kb': true, '--format': true },
 };
 
 /** 强制执行 `SCAFFOLD_KB_FLAG_SPECS` 的 op 集合（F241 新增 op，无历史包袱） */
-const STRICT_SCAFFOLD_KB_OPS: ReadonlySet<string> = new Set<ScaffoldKbOperation>(['coverage-gap']);
+const STRICT_SCAFFOLD_KB_OPS: ReadonlySet<string> = new Set<ScaffoldKbOperation>([
+  'coverage-gap',
+  'version',
+  'status',
+]);
 
 function isStrictScaffoldKbOp(op: string): op is ScaffoldKbOperation {
   return STRICT_SCAFFOLD_KB_OPS.has(op);
 }
 
 /**
- * 严格模式的 flag 校验：未知 flag、多余位置参数、带值 flag 缺值一律拒绝。
+ * 严格模式的 flag 校验：未知 flag、多余位置参数、重复 flag、带值 flag 缺值一律拒绝。
+ *
+ * B3-C3（B2-4 回归）：缺值判定必须按**当前索引**（`argv[i + 1]`）做。原实现走
+ * `readFlagEntry` 的全局 `indexOf`，走到重复出现的 flag 时读的仍是首次出现的值，
+ * 于是判定"有值"、盲跳 `i + 1`——`--package x --package --evil` 里的 `--evil`
+ * 就被当成 `--package` 的取值消费掉，整条严格校验被绕过。
+ *
+ * 重复 flag 本身也直接拒绝：一个 flag 给两次没有确定语义，静默取一个是在替用户猜。
+ *
  * @returns 错误消息；通过则 `null`
  */
 function checkScaffoldKbFlags(op: ScaffoldKbOperation, argv: string[]): string | null {
   const spec = SCAFFOLD_KB_FLAG_SPECS[op];
   const allowed = Object.keys(spec).join(' | ') || '（无）';
+  const seen = new Set<string>();
   for (let i = 2; i < argv.length; i++) {
     const token = argv[i]!;
     if (!token.startsWith('-')) return `scaffold-kb ${op} 不接受位置参数: ${token}（可选: ${allowed}）`;
     const takesValue = spec[token];
     if (takesValue === undefined) return `未知选项 ${token}（scaffold-kb ${op} 可选: ${allowed}）`;
+    if (seen.has(token)) return `重复选项 ${token}（scaffold-kb ${op} 每个选项只能给一次）`;
+    seen.add(token);
     if (!takesValue) continue;
-    const entry = readFlagEntry(argv, token);
-    if (entry.present && entry.value === null) return `${token} 缺少取值（scaffold-kb ${op}）`;
+    if (flagValueAt(argv, i) === null) return `${token} 缺少取值（scaffold-kb ${op}）`;
     i += 1; // 跳过已消费的值
   }
   return null;
@@ -823,12 +857,17 @@ export function parseArgs(argv: string[]): ParseResult {
       };
     }
     const op = argv[1];
-    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest' && op !== 'coverage-gap') {
+    if (
+      op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest' &&
+      op !== 'coverage-gap' && op !== 'version' && op !== 'status'
+    ) {
       return {
         ok: false,
         error: {
           type: 'invalid_subcommand',
-          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest | coverage-gap）`,
+          message:
+            `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}` +
+            '（可选: build | serve | query | ingest | coverage-gap | version | status）',
         },
       };
     }
@@ -888,6 +927,8 @@ export function parseArgs(argv: string[]): ParseResult {
         scaffoldKbFormat,
         scaffoldKbMaxInjectChars,
         scaffoldKbProbe: argv.includes('--probe'),
+        scaffoldKbPackage: readFlag('--package'),
+        scaffoldKbProjectRoot: readFlag('--project-root'),
         deep: false, force: false, version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },

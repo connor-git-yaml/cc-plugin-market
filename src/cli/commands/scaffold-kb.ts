@@ -14,6 +14,8 @@ import { formatInjectionBlock, type EvidenceResult } from '../../scaffold-kb/inj
 import { describeQueriedDbPaths, loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
 import { recordNoHit, resolveNoHitTelemetryDir } from '../../scaffold-kb/nohit-recorder.js';
 import { buildCoverageGapReport, formatCoverageGapReport } from '../../scaffold-kb/coverage-gap.js';
+import { resolveVersion, type VersionStatus } from '../../scaffold-kb/version-resolver.js';
+import { buildKbStatusReport } from '../../scaffold-kb/kb-status.js';
 import { mergeResults } from '../../kb-mcp/lib/result-merger.js';
 import { prepareIngest, commitIngest, IngestError, type IngestSource } from '../../scaffold-kb/ingest/ingest-core.js';
 
@@ -91,6 +93,106 @@ function runCoverageGap(command: CLICommand): void {
   const nohitDir = resolveNoHitTelemetryDir();
   const report = buildCoverageGapReport({ nohitDir, isCollectionEnabled: nohitDir !== null });
   process.stdout.write(formatCoverageGapReport(report, command.scaffoldKbFormat === 'json' ? 'json' : 'markdown'));
+}
+
+/**
+ * scaffold-kb version：给定包名 → 版本决议（F241 FR-016/FR-017）。
+ *
+ * 只输出决议结果，不改任何文件、不接入检索（FR-018 已判删除）。
+ */
+function runVersion(command: CLICommand): void {
+  const packageName = command.scaffoldKbPackage;
+  if (!packageName) {
+    console.error(
+      '用法: spectra scaffold-kb version --package <包名> [--project-root <路径>] [--sdk-version <显式版本>] [--format markdown|json]',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const input: Parameters<typeof resolveVersion>[0] = {
+    projectRoot: command.scaffoldKbProjectRoot ?? process.cwd(),
+    packageName,
+  };
+  if (command.scaffoldKbSdkVersion !== undefined) input.explicitVersion = command.scaffoldKbSdkVersion;
+  const result = resolveVersion(input);
+
+  if (command.scaffoldKbFormat === 'json') {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  const lines = [
+    `# 版本决议 — ${packageName}`,
+    '',
+    `- status: \`${result.resolved.status}\` — ${VERSION_STATUS_EXPLANATION[result.resolved.status]}`,
+    `- version: ${result.resolved.version ?? '(null — 无单一可用版本)'}`,
+    `- flags: ${result.flags.length > 0 ? result.flags.map((f) => `\`${f}\``).join(', ') : '(无)'}`,
+    '',
+  ];
+  if (result.candidates.length === 0) {
+    lines.push('（无候选证据）');
+  } else {
+    lines.push('| version | source | detail |', '|---------|--------|--------|');
+    for (const c of result.candidates) {
+      lines.push(`| ${c.version || '(未解析)'} | ${c.source} | ${c.detail} |`);
+    }
+  }
+  process.stdout.write(`${lines.join('\n')}\n`);
+}
+
+const VERSION_STATUS_EXPLANATION: Record<VersionStatus, string> = {
+  explicit: '采用查询显式指定的版本（推断值同时呈现，见 candidates）',
+  lockfile: '采用唯一 lockfile 推断出的具体版本',
+  'range-only': '只有 package.json 声明的 range，无具体版本',
+  ambiguous: '存在多个 lockfile 且无显式版本，**无法收敛**（不擅自按优先级挑一个）',
+  none: '无任何版本信息 / 生态不支持',
+};
+
+/**
+ * scaffold-kb status：KB 新鲜度与治理态报告（F241 FR-019/FR-020）。
+ *
+ * **只报告，不触发任何重建或 ingest**；库不存在也恒 exit 0（这是一个状态查询，不是健康断言）。
+ */
+async function runStatus(command: CLICommand): Promise<void> {
+  const vendorKb = command.scaffoldKbVendorKb;
+  const projectKb = command.scaffoldKbProjectKb;
+  if (vendorKb !== undefined && projectKb !== undefined) {
+    console.error('[scaffold-kb status] --vendor-kb 与 --project-kb 只能给其一（状态报告针对单一库）');
+    process.exitCode = 1;
+    return;
+  }
+  const kbDir = vendorKb ?? projectKb;
+  if (!kbDir) {
+    console.error('用法: spectra scaffold-kb status (--vendor-kb <path> | --project-kb <path>) [--format markdown|json]');
+    process.exitCode = 1;
+    return;
+  }
+
+  // 库不可用不是错误：如实报 dbExists 与 unknown，绝不用"库很新"糊弄过去。
+  // B3-C5：「文件不存在」与「文件在但打不开」必须分开报——前者要建库、后者要修库。
+  const loaded = await loadKbContext({ vendorKbPath: kbDir });
+  const handle = loaded.ok ? loaded.context.vendor : null;
+  const dbFileExists = handle !== null || (!loaded.ok && loaded.unloadable.includes('vendor'));
+  const report = buildKbStatusReport(handle?.db ?? null, { dbExists: dbFileExists });
+  const dbPath = handle?.dbPath ?? join(kbDir, 'chunks.sqlite');
+
+  if (command.scaffoldKbFormat === 'json') {
+    process.stdout.write(`${JSON.stringify({ ...report, dbPath }, null, 2)}\n`);
+    return;
+  }
+  const lines = [
+    '# KB status',
+    '',
+    `- dbPath: \`${dbPath}\`（dbExists: ${report.dbExists}）`,
+    `- schemaCompat: \`${report.schemaCompat}\``,
+    `- freshness: \`${report.freshness}\`${report.freshness === 'unknown' ? ' — 无从判级（库缺失/旧 schema/无时间戳），**不代表库是新的**' : ''}`,
+    `- activityAt: ${report.activityAt ?? '(null)'} / activityAgeDays: ${report.activityAgeDays ?? '(null)'}`,
+    `- oldestBuiltAt: ${report.oldestBuiltAt ?? '(null)'}（仅可见性，不参与判级）`,
+    `- ingestAgeDays: ${report.ingestAgeDays ?? '(null)'}`,
+    `- sourceVersions: ${report.sourceVersions.length > 0 ? report.sourceVersions.join(', ') : '(无)'}`,
+    `- noHitCollection: \`${report.noHitCollection}\` / recentNoHitCount: ${report.recentNoHitCount ?? '(null — 采集未开启)'}`,
+    '',
+  ];
+  process.stdout.write(`${lines.join('\n')}\n`);
 }
 
 /** scaffold-kb ingest：三方源（url/file/minutes）→ 预览 → --yes 落项目库（FR-009/013） */
@@ -193,6 +295,16 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
     return;
   }
 
+  if (op === 'version') {
+    runVersion(command);
+    return;
+  }
+
+  if (op === 'status') {
+    await runStatus(command);
+    return;
+  }
+
   if (op === 'serve') {
     // Phase B：启动 KB MCP server。serve 实现随 KB MCP 层（src/kb-mcp/）接入（T046）。
     const vendorKbPath = command.scaffoldKbVendorKb;
@@ -205,7 +317,7 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
     return;
   }
 
-  console.error('用法: spectra scaffold-kb <build|serve|query|ingest|coverage-gap> ...');
+  console.error('用法: spectra scaffold-kb <build|serve|query|ingest|coverage-gap|version|status> ...');
   process.exitCode = 1;
 }
 

@@ -40,7 +40,20 @@ export interface KbContext {
   sourcesAvailable: SourceKind[];
 }
 
-export type LoadKbResult = { ok: true; context: KbContext } | { ok: false; code: KbErrorCode };
+export type LoadKbResult =
+  | { ok: true; context: KbContext }
+  | {
+      ok: false;
+      code: KbErrorCode;
+      /**
+       * F241 B3-C5：`chunks.sqlite` **文件存在但加载失败**的来源。
+       *
+       * 纯附加字段——既有 `ok`/`code` 语义与取值完全不变（RG-005）。状态层需要区分
+       * 「库不存在」与「库在但打不开」：前者要建库、后者要修库，把两者都压成
+       * `dbExists: false` 会把维护者指向错误的处置。
+       */
+      unloadable: SourceKind[];
+    };
 
 /**
  * F241：把本次**实际查询过**的库路径拼成单一 key，供 no-hit 记录计算 `dbPathHash`。
@@ -108,19 +121,20 @@ export async function loadKbContext(opts: {
 
   if (opts.vendorKbPath && existsSync(join(opts.vendorKbPath, 'chunks.sqlite'))) {
     const h = await loadHandle(opts.vendorKbPath);
-    if ('corrupt' in h) return { ok: false, code: 'KB_CORRUPT' };
+    if ('corrupt' in h) return { ok: false, code: 'KB_CORRUPT', unloadable: ['vendor'] };
     vendor = h;
     sourcesAvailable.push('vendor');
   }
   if (opts.projectKbPath && existsSync(join(opts.projectKbPath, 'chunks.sqlite'))) {
     const h = await loadHandle(opts.projectKbPath);
-    if ('corrupt' in h) return { ok: false, code: 'KB_CORRUPT' };
+    if ('corrupt' in h) return { ok: false, code: 'KB_CORRUPT', unloadable: ['project'] };
     project = h;
     sourcesAvailable.push('project');
   }
 
   if (vendor === null && project === null) {
-    return { ok: false, code: 'KB_NOT_FOUND' };
+    // 两库都没有 `chunks.sqlite` 文件：不是"打不开"，是"不存在"
+    return { ok: false, code: 'KB_NOT_FOUND', unloadable: [] };
   }
   return { ok: true, context: { vendor, project, sourcesAvailable } };
 }

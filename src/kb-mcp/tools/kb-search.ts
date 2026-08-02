@@ -13,6 +13,7 @@ import { withTelemetry } from '../../mcp/lib/telemetry.js';
 import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { buildEvidenceEnvelope as envelope, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
 import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
+import { buildKbStatusSubset } from '../../scaffold-kb/kb-status.js';
 import { mergeResults, annotateFreshness, type SourceKind } from '../lib/result-merger.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
 import { describeQueriedDbPaths, type KbContext } from '../lib/kb-locator.js';
@@ -133,6 +134,9 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
     truncated,
     query_echoed: params.query,
     sources_queried: sourcesQueried,
+    // F241 FR-021：纯新增治理字段，既有字段名称/类型/层级零变更（RG-005 / SC-014）。
+    // 只覆盖**本次实际查过**的库——报一个没查过的库的新鲜度会误导调用方。
+    kb_status: buildKbStatusSubset([useVendor ? ctx.vendor?.db ?? null : null, useProject ? ctx.project?.db ?? null : null]),
   };
   if (warnings.length > 0) payload['warnings'] = warnings;
   return buildKbSuccess(payload);
