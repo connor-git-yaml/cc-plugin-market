@@ -31,32 +31,32 @@ review_basis: reviews/codex-tasks-review-round1.md
 **可独立验证**：`worktreeinclude-contract.test.ts` 与 `worktreeinclude-golden-matrix.test.ts` 单独跑绿，不依赖批 2~5 任何改动。
 **Codex 复审结论**：有条件可绿；需先钉死 T002/T005 探针入口（本版本已通过 W5 修订解决，见 T005）。
 
-- [ ] T001 [批1][红测试] 新增 `tests/unit/worktreeinclude-contract.test.ts`，覆盖 FR-001 8 类拒绝 reason（`absolute-path`/`dot-dot-segment`/`glob-char`/`negation-prefix`/`escape-char`/`trailing-slash`/`not-ignored`/`not-regular-file`）+ 1 类合法条目通过，与 FR-008 byte-budget（`AGENTS.md` 现状通过、人为构造超限 fixture 判红、`AGENTS.override.md` 存在时按 max 取较大值）
+- [x] T001 [批1][红测试] 新增 `tests/unit/worktreeinclude-contract.test.ts`，覆盖 FR-001 8 类拒绝 reason（`absolute-path`/`dot-dot-segment`/`glob-char`/`negation-prefix`/`escape-char`/`trailing-slash`/`not-ignored`/`not-regular-file`）+ 1 类合法条目通过，与 FR-008 byte-budget（`AGENTS.md` 现状通过、人为构造超限 fixture 判红、`AGENTS.override.md` 存在时按 max 取较大值）
   - 文件：`tests/unit/worktreeinclude-contract.test.ts`
   - 完成判据：`npx vitest run tests/unit/worktreeinclude-contract.test.ts` 此刻**失败**，失败原因为 `validateWorktreeIncludeContract`/`validateAgentsByteBudget`/`.worktreeinclude` 文件均不存在（`Cannot find module` 或断言目标不存在类报错），而非语法错误
   - 依赖：无
 
-- [ ] T002 [批1][红测试] 新增 `tests/unit/worktreeinclude-golden-matrix.test.ts`（decision4），构造 6 种 golden byte fixture（CRLF 混用 / UTF-8 BOM / 行内 `#` / 无末行换行 / 纯注释文件 / 空文件），同时驱动 (a) `parseWorktreeInclude()`（Node）与 (b) 通过 `WORKTREEINCLUDE_PROBE_FILE` 环境变量驱动的 bash 探针入口（见 T005 钉死的探针机制），断言两侧输出条目序列逐字节一致
+- [x] T002 [批1][红测试] 新增 `tests/unit/worktreeinclude-golden-matrix.test.ts`（decision4），构造 6 种 golden byte fixture（CRLF 混用 / UTF-8 BOM / 行内 `#` / 无末行换行 / 纯注释文件 / 空文件），同时驱动 (a) `parseWorktreeInclude()`（Node）与 (b) 通过 `WORKTREEINCLUDE_PROBE_FILE` 环境变量驱动的 bash 探针入口（见 T005 钉死的探针机制），断言两侧输出条目序列逐字节一致
   - 文件：`tests/unit/worktreeinclude-golden-matrix.test.ts`
   - 完成判据：此刻**失败**，失败原因为 `parseWorktreeInclude` 未导出 且/或 `sync-worktree-local-state.sh` 尚不支持 `WORKTREEINCLUDE_PROBE_FILE` 探针入口
   - 依赖：无
 
-- [ ] T003 [批1][实现] 新增仓库根 `.worktreeinclude` 文件（tracked），初始内容仅一行 `.env.local`（迁移自现有硬编码 `COPY_TARGETS`）
+- [x] T003 [批1][实现] 新增仓库根 `.worktreeinclude` 文件（tracked），初始内容仅一行 `.env.local`（迁移自现有硬编码 `COPY_TARGETS`）
   - 文件：`.worktreeinclude`
   - 完成判据：`cat .worktreeinclude` 输出恰为 `.env.local`（含或不含尾随换行均可，视 T001 校验规则）
   - 依赖：无
 
-- [ ] T004 [批1][实现] 新增 `scripts/lib/worktree-local-state-core.mjs`，实现 `parseWorktreeInclude(content)`（钉死五条 grammar：单次剥 BOM、逐行剥单个 `\r`、`#` 仅行首触发注释、空行跳过、接受无末行换行）、`validateWorktreeIncludeEntry(entry, {projectRoot, gitAvailable})`（8 类拒绝 + 1 类合法通过，语法类优先于存在性/ignored 类，`trailing-slash` 必须在存在性检查之前拒绝）、`validateWorktreeIncludeContract({projectRoot})`、`validateAgentsByteBudget({projectRoot})`、`validateWorktreeLocalState({projectRoot})`（供批4 repo:check 接入的聚合入口，此处完整实现，聚合前两个校验函数）
+- [x] T004 [批1][实现] 新增 `scripts/lib/worktree-local-state-core.mjs`，实现 `parseWorktreeInclude(content)`（钉死五条 grammar：单次剥 BOM、逐行剥单个 `\r`、`#` 仅行首触发注释、空行跳过、接受无末行换行）、`validateWorktreeIncludeEntry(entry, {projectRoot, gitAvailable})`（8 类拒绝 + 1 类合法通过，语法类优先于存在性/ignored 类，`trailing-slash` 必须在存在性检查之前拒绝）、`validateWorktreeIncludeContract({projectRoot})`、`validateAgentsByteBudget({projectRoot})`、`validateWorktreeLocalState({projectRoot})`（供批4 repo:check 接入的聚合入口，此处完整实现，聚合前两个校验函数）
   - 文件：`scripts/lib/worktree-local-state-core.mjs`
   - 完成判据：`npx vitest run tests/unit/worktreeinclude-contract.test.ts` 转绿
   - 依赖：T001, T003
 
-- [ ] T005 [批1][实现] 在 `scripts/sync-worktree-local-state.sh` 中新增 `read_worktreeinclude_entries()` 函数（仅解析职责，钉死与 T004 一致的 grammar：`while IFS= read -r line || [[ -n "$line" ]]; do ... done < "$1"`），**并钉死 bash 探针入口机制（W5 修订）**：脚本参数解析头部新增对 `WORKTREEINCLUDE_PROBE_FILE` 环境变量的显式检查——若该变量非空，脚本**仅**调用 `read_worktreeinclude_entries "$WORKTREEINCLUDE_PROBE_FILE"`，将解析出的条目逐行打印到 stdout 后立即 `exit 0`，**不进入**后续 `git rev-parse`/`bootstrap_graph` 等主流程（避免测试探针误触发真实 git 副作用或依赖可安全 `source` 该脚本）；此阶段**只新增解析函数 + 探针分支**，尚不接入下游 `copy_path` 动态绑定（动态绑定与 `validate_entry()` 属于批2 范围，见 T012）
+- [x] T005 [批1][实现] 在 `scripts/sync-worktree-local-state.sh` 中新增 `read_worktreeinclude_entries()` 函数（仅解析职责，钉死与 T004 一致的 grammar：`while IFS= read -r line || [[ -n "$line" ]]; do ... done < "$1"`），**并钉死 bash 探针入口机制（W5 修订）**：脚本参数解析头部新增对 `WORKTREEINCLUDE_PROBE_FILE` 环境变量的显式检查——若该变量非空，脚本**仅**调用 `read_worktreeinclude_entries "$WORKTREEINCLUDE_PROBE_FILE"`，将解析出的条目逐行打印到 stdout 后立即 `exit 0`，**不进入**后续 `git rev-parse`/`bootstrap_graph` 等主流程（避免测试探针误触发真实 git 副作用或依赖可安全 `source` 该脚本）；此阶段**只新增解析函数 + 探针分支**，尚不接入下游 `copy_path` 动态绑定（动态绑定与 `validate_entry()` 属于批2 范围，见 T012）
   - 文件：`scripts/sync-worktree-local-state.sh`
   - 完成判据：`npx vitest run tests/unit/worktreeinclude-golden-matrix.test.ts` 转绿（6 种 golden fixture 下 node/bash 两侧条目序列逐字节一致，bash 侧经 `WORKTREEINCLUDE_PROBE_FILE=<fixture-path> bash scripts/sync-worktree-local-state.sh` 驱动且不产生任何 git/文件系统副作用）
   - 依赖：T002, T004
 
-- [ ] T006 [批1][回归验证] 批1 checkpoint：确认新增两个测试文件独立全绿，且不破坏现有 `tests/unit/sync-worktree-local-state.test.ts`（此时该文件尚未改动，仅验证 T005 新增探针分支不影响既有脚本主流程行为——即不带 `WORKTREEINCLUDE_PROBE_FILE` 时行为与改动前逐字节一致）
+- [x] T006 [批1][回归验证] 批1 checkpoint：确认新增两个测试文件独立全绿，且不破坏现有 `tests/unit/sync-worktree-local-state.test.ts`（此时该文件尚未改动，仅验证 T005 新增探针分支不影响既有脚本主流程行为——即不带 `WORKTREEINCLUDE_PROBE_FILE` 时行为与改动前逐字节一致）
   - 文件：无新增（验证性任务）
   - 完成判据：`npx vitest run tests/unit/worktreeinclude-contract.test.ts tests/unit/worktreeinclude-golden-matrix.test.ts tests/unit/sync-worktree-local-state.test.ts` 全部通过，0 失败
   - 依赖：T004, T005

@@ -120,6 +120,50 @@ link_path() {
   log "$(action_word) ${label}: $target_path -> $source_path"
 }
 
+# ─────────────────────────────────────────────────────────────
+# Feature 239 — .worktreeinclude 清单解析（plan 决策 4）
+# ─────────────────────────────────────────────────────────────
+# 本函数与 scripts/lib/worktree-local-state-core.mjs::parseWorktreeInclude 是同一份 grammar 的
+# 两套独立实现，任何改动必须两侧同步；tests/unit/worktreeinclude-golden-matrix.test.ts 用同一份
+# golden 字节 fixture 驱动两侧并逐字节对拍，防止"同一清单被读出不同条目集合"的静默漂移。
+#
+# grammar 五条：
+#   1. 文件首只剥一次 UTF-8 BOM
+#   2. 每行剥单个尾部 \r（兼容 CRLF；仓库无 .gitattributes 强制 LF，CRLF 是真实风险面）
+#   3. 不做其他任何 trim（含空格的条目按字面处理，由 validate_entry 自然拒绝）
+#   4. `#` 仅当是行首第一个字符时才是整行注释；行内 `#` 按字面处理
+#   5. 末行无换行符必须被接受——`|| [[ -n "$line" ]]` 不可省略，缺了会静默吞掉末行
+read_worktreeinclude_entries() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+
+  local line
+  local is_first_line="true"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$is_first_line" == "true" ]]; then
+      is_first_line="false"
+      line="${line#$'\xEF\xBB\xBF'}"
+    fi
+    line="${line%$'\r'}"
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    if [[ "${line:0:1}" == "#" ]]; then
+      continue
+    fi
+    printf '%s\n' "$line"
+  done < "$file"
+}
+
+# 解析探针入口：仅供 golden-matrix 测试驱动 bash 侧解析器，不参与生产流程。
+# 必须落在任何 git 命令之前——测试在非 git 临时目录内运行，且探针不得产生任何文件系统副作用。
+if [[ -n "${WORKTREEINCLUDE_PROBE_FILE:-}" ]]; then
+  read_worktreeinclude_entries "$WORKTREEINCLUDE_PROBE_FILE"
+  exit 0
+fi
+
 CURRENT_ROOT="$(git rev-parse --show-toplevel)"
 COMMON_GIT_DIR="$(git rev-parse --git-common-dir)"
 PRIMARY_ROOT="$(cd "$COMMON_GIT_DIR/.." && pwd)"
