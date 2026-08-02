@@ -501,6 +501,9 @@ function extractImports(
       resolvedPath,
       namedImports: namedImports.length > 0 ? namedImports : undefined,
       defaultImport,
+      // F242：`import * as ns` 的 namespace 绑定此前只用于 importType 分类、从未落表，
+      // 导致 `ns.fn()` 在 call-resolver Stage 3 无 alias 可查（与动态 import 同源遗漏）
+      namespaceImport: decl.getNamespaceImport()?.getText() ?? undefined,
       isTypeOnly,
       importType,
     });
@@ -536,16 +539,129 @@ function extractImports(
       tsConfigContext,
     );
 
+    // F242：动态 import() 补绑定名抽取（require() 分支按 plan Non-Goals 不动）。
+    // 无绑定形态（裸 `await import('x')`、无参 `.then()`）返回空对象，行为与修复前一致。
+    const binding = kind === 'dynamic' ? extractDynamicImportBinding(call) : {};
+
     imports.push({
       moduleSpecifier,
       isRelative,
       resolvedPath,
+      ...binding,
       isTypeOnly: false,
       importType: kind,
     });
   }
 
   return imports;
+}
+
+/**
+ * F242 — 从动态 `import()` 表达式的宿主语法抽取绑定名。
+ *
+ * 覆盖两条 AST 路径（`import('x')` 这个 CallExpression 自身的父节点形态）：
+ *   1. `AwaitExpression → VariableDeclaration`：`const { a } = await import('x')` /
+ *      `const m = await import('x')`
+ *   2. `PropertyAccessExpression('then') → CallExpression`：`import('x').then((m) => ...)` /
+ *      `import('x').then(({ a }) => ...)`，取回调第一个形参的 BindingName
+ *
+ * 其余形态（裸 `import('x');`、`.then()` 无参回调、非 then 的属性访问）不产出绑定字段。
+ *
+ * @param call - `import('x')` 对应的 CallExpression 节点
+ */
+function extractDynamicImportBinding(
+  call: Node,
+): { namedImports?: string[]; namespaceImport?: string } {
+  // 括号归一化在本函数内是**完备不变量**：任意深度的 ParenthesizedExpression 出现在任何
+  // 接缝上，都不得改变抽取结果。落实办法是逐个接缝统一处理——
+  //   · 每一处「取 parent 后做类型判定」→ 先 skipParenParents（向上剥）
+  //   · 每一处「取子表达式 / 实参后做类型判定」→ 先 stripParens（向下剥）
+  // 括号只是语法包装，不改变「谁 await 了它 / 谁在它上面取 .then / 谁是 callee」这些事实。
+  // 注意：剥括号只作用于形态识别，不放宽 callee 同一性判据本身（见路径 2）。
+  // BindingName 位置（变量名、形参名）语法上不允许加括号，无需归一化。
+
+  // 接缝 1：import 调用自身的父链（`((import('x'))).then(cb)` / `await ((import('x')))`）
+  const parent = skipParenParents(call.getParent());
+  if (!parent) return {};
+
+  // 路径 1：await import(...) 赋给变量声明
+  if (Node.isAwaitExpression(parent)) {
+    // 接缝 2：AwaitExpression **上方**的父链（`const m = ((await import('x')))`）——
+    // 括号夹在 await 与变量声明之间，不剥则判不中 VariableDeclaration 而漏抽。
+    const declaration = skipParenParents(parent.getParent());
+    if (declaration && Node.isVariableDeclaration(declaration)) {
+      return bindingNamesOf(declaration.getNameNode());
+    }
+    return {};
+  }
+
+  // 路径 2：import(...).then(callback)
+  if (Node.isPropertyAccessExpression(parent) && parent.getName() === 'then') {
+    // 接缝 3：PropertyAccess 上方的父链（`(import('x').then)(cb)` 里 PropertyAccess 与
+    // CallExpression 之间夹着 ParenthesizedExpression）。
+    const thenCall = skipParenParents(parent.getParent());
+    if (!thenCall || !Node.isCallExpression(thenCall)) return {};
+    // 接缝 4：callee 表达式。两侧同步剥括号再做 identity 比较，既不漏抽括号形态，
+    // 也不放宽「`.then` 必须真的是这个 CallExpression 的 callee」这一判据本身。
+    // 反例 `consume((m) => m.run(), import('./x.js').then)`：外层 CallExpression 是
+    // `consume(...)`，它的首参 `(m) => ...` 与本 import 毫无关系，取来当绑定名即是假绑定。
+    const callee = stripParens(thenCall.getExpression());
+    if (callee?.compilerNode !== parent.compilerNode) return {};
+    // 接缝 5：回调实参本身（`.then(((m) => m.run()))`）——括号包着 ArrowFunction 时
+    // 不剥则函数判定直接落空。剥完仍非函数（`.then((someIdentifier))`）照旧不产绑定。
+    const callback = stripParens(thenCall.getArguments()[0]);
+    if (!callback) return {};
+    if (!Node.isArrowFunction(callback) && !Node.isFunctionExpression(callback)) return {};
+    const firstParam = callback.getParameters()[0];
+    if (!firstParam) return {};
+    return bindingNamesOf(firstParam.getNameNode());
+  }
+
+  return {};
+}
+
+/** 向上跳过包裹本节点的 `ParenthesizedExpression`，返回第一个语义上的父节点。 */
+function skipParenParents(node: Node | undefined): Node | undefined {
+  let current = node;
+  while (current && Node.isParenthesizedExpression(current)) {
+    current = current.getParent();
+  }
+  return current;
+}
+
+/** 向下逐层剥掉 `ParenthesizedExpression` 包装，返回其中真正的表达式节点。 */
+function stripParens(node: Node | undefined): Node | undefined {
+  let current = node;
+  while (current && Node.isParenthesizedExpression(current)) {
+    current = current.getExpression();
+  }
+  return current;
+}
+
+/**
+ * 把一个 BindingName 节点转换为 ImportReference 的绑定字段。
+ *
+ * - `Identifier`（`const m = ...` / `(m) => ...`）→ namespaceImport
+ * - `ObjectBindingPattern`（`const { a, b: c } = ...`）→ namedImports
+ *
+ * rename 口径与静态 import 的 `ImportSpecifier.getName()` 逐字一致：记**源导出名**
+ * （`{ a: c }` 记 `'a'`），不记本地别名——两种 import 形态的 resolver 消费行为保持对称。
+ * 数组解构（`const [x] = await import(...)`）无对应 import 语义，不产出绑定。
+ */
+function bindingNamesOf(nameNode: Node): { namedImports?: string[]; namespaceImport?: string } {
+  if (Node.isIdentifier(nameNode)) {
+    return { namespaceImport: nameNode.getText() };
+  }
+  if (Node.isObjectBindingPattern(nameNode)) {
+    const names: string[] = [];
+    for (const element of nameNode.getElements()) {
+      // rest 元素（`const { ...rest } = ...`）无具体导出名，跳过
+      if (element.getDotDotDotToken()) continue;
+      names.push(element.getPropertyNameNode()?.getText() ?? element.getName());
+    }
+    return names.length > 0 ? { namedImports: names } : {};
+  }
+  return {};
 }
 
 // ============================================================

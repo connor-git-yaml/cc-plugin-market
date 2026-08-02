@@ -609,3 +609,1177 @@ describe('buildModuleSymbolIndex re-export 过滤（F221）', () => {
     expect(idx.get('src/facade.ts')?.has('reFn')).toBe(false);
   });
 });
+
+// ───────────────────────────────────────────────────────────
+// F242 — 边 source 归属回退链（isAddressable / resolveSourceId）
+//
+// 设计见 specs/242-fix-callsite-syntax-coverage/plan.md 决策 2：
+//   callerContext 可寻址 → `file::callerContext`
+//   否则 enclosingNamedContext 可寻址 → `file::enclosingNamedContext`
+//   否则 → `file`（模块节点兜底）
+// ───────────────────────────────────────────────────────────
+
+describe('F242 — 边 source 归属回退链', () => {
+  const tsSkeletons = (): Map<string, CodeSkeleton> =>
+    mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/a.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'registerX', kind: 'function', signature: 'function registerX(): void', isDefault: false, startLine: 1, endLine: 5 },
+          { name: 'executeX', kind: 'function', signature: 'function executeX(): void', isDefault: false, startLine: 7, endLine: 9 },
+          {
+            name: 'Foo',
+            kind: 'class',
+            signature: 'class Foo',
+            isDefault: false,
+            startLine: 11,
+            endLine: 20,
+            members: [{ name: 'bar', kind: 'method', signature: 'bar()', isStatic: false }],
+          },
+        ],
+      }),
+    ]);
+
+  it('① 匿名 callerContext + 可寻址 enclosingNamedContext → source 用命名祖先', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 3,
+        callerFile: 'src/a.ts',
+        callerContext: '<arrow:3:21>',
+        enclosingNamedContext: 'registerX',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.source).toBe('src/a.ts::registerX');
+    expect(edges[0]!.target).toBe('src/a.ts::executeX');
+  });
+
+  it('①b 匿名 callerContext + 点分可寻址 enclosingNamedContext（Class.member）→ source 用成员节点', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 13,
+        callerFile: 'src/a.ts',
+        callerContext: '<arrow:13:15>',
+        enclosingNamedContext: 'Foo.bar',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts::Foo.bar');
+  });
+
+  it('② 匿名 callerContext + enclosingNamedContext 缺失 → source 退化为纯模块路径', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 3,
+        callerFile: 'src/a.ts',
+        callerContext: '<arrow:3:21>',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts');
+    expect(edges[0]!.source).not.toContain('::');
+  });
+
+  it('②b 未导出的命名 callerContext（如 main）→ source 退化为纯模块路径', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 30,
+        callerFile: 'src/a.ts',
+        callerContext: 'main',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts');
+  });
+
+  it('②c callerContext 与 enclosingNamedContext 均不可寻址 → source 退化为纯模块路径', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 30,
+        callerFile: 'src/a.ts',
+        callerContext: '<arrow:30:4>',
+        enclosingNamedContext: 'notExported',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts');
+  });
+
+  it('②d callerContext 缺失（模块顶层调用）→ source 退化为纯模块路径（不再产 <module> 占位）', () => {
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'executeX', calleeKind: 'free', line: 1, callerFile: 'src/a.ts' },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts');
+    expect(edges[0]!.source).not.toContain('<module>');
+  });
+
+  it('③ callerContext 本身可寻址（既有 Stage 1 场景）→ source 保持 file::callerContext（回归锚）', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 3,
+        callerFile: 'src/a.ts',
+        callerContext: 'registerX',
+        // 即便 enclosingNamedContext 存在也不应被优先（省略规则下正常不会同时出现）
+        enclosingNamedContext: 'Foo.bar',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts::registerX');
+  });
+
+  it('③b Class.member 形态 callerContext 可寻址 → source 保持 file::Class.member（回归锚）', () => {
+    const calls: CallSiteWithFile[] = [
+      {
+        calleeName: 'executeX',
+        calleeKind: 'free',
+        line: 13,
+        callerFile: 'src/a.ts',
+        callerContext: 'Foo.bar',
+      },
+    ];
+    const edges = resolveCalls(calls, tsSkeletons());
+    expect(edges[0]!.source).toBe('src/a.ts::Foo.bar');
+  });
+
+  it('④ 语言无关：Python callSite（无 enclosingNamedContext 字段）同样走模块兜底', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'engine.py',
+        exports: [
+          { name: 'helper', kind: 'function', signature: 'def helper()', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      // Python 模块顶层调用：callerContext 缺失
+      { calleeName: 'helper', calleeKind: 'free', line: 20, callerFile: 'engine.py' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.source).toBe('engine.py');
+    expect(edges[0]!.target).toBe('engine.py::helper');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 — buildImportIndex 的 namespaceImport 落表（R2 target 侧）
+// ───────────────────────────────────────────────────────────
+
+describe('F242 — buildImportIndex namespaceImport 落表', () => {
+  it('namespaceImport 绑定名进入 aliasToTarget，供 Stage 3 qualifier 解析', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/a.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+            namespaceImport: 'mod',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/a.ts');
+    expect(info?.aliasToTarget.get('mod')).toBe('src/b.ts');
+  });
+
+  it('有 namespaceImport 时不再落 moduleSpecifier lastSeg 垃圾 alias', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/a.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './commands/scaffold-kb.js',
+            isRelative: true,
+            resolvedPath: 'src/commands/scaffold-kb.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+            namespaceImport: 'mod',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/a.ts');
+    expect(info?.aliasToTarget.get('mod')).toBe('src/commands/scaffold-kb.ts');
+    // 'js' 是 moduleSpecifier.split('.').pop() 的产物，绑定已可用时不应再注册
+    expect(info?.aliasToTarget.has('js')).toBe(false);
+  });
+
+  it('回归锚：无任何绑定时仍保留 lastSeg / moduleSpecifier 兜底 alias（Python import X 路径）', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'a.py',
+        imports: [
+          { moduleSpecifier: 'numpy', isRelative: false, resolvedPath: 'site/numpy/__init__.py', isTypeOnly: false },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('a.py');
+    expect(info?.aliasToTarget.get('numpy')).toBe('site/numpy/__init__.py');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 审查轮 C1 — dynamic 绑定歧义弃权（同名 alias 指向多 target）
+//
+// dynamic import 的绑定是**块级作用域**事实，而 ImportInfo 是文件级索引。
+// 同一文件里两个函数各自 `const m = await import(...)` 指向不同模块时，
+// 文件级 last-write-wins 会让先出现的那条调用解析到后者 → 确定性假边。
+// 修法：dynamic 候选唯一才写入，歧义整体弃权（回到 F242 前的未覆盖状态）。
+// ───────────────────────────────────────────────────────────
+
+describe('F242 审查轮 C1 — dynamic 绑定歧义弃权', () => {
+  const dynImport = (
+    moduleSpecifier: string,
+    resolvedPath: string | null,
+    binding: { namespaceImport?: string; namedImports?: string[] },
+  ) => ({
+    moduleSpecifier,
+    isRelative: true,
+    resolvedPath,
+    isTypeOnly: false,
+    importType: 'dynamic' as const,
+    ...binding,
+  });
+
+  const targetSkeletons = (): CodeSkeleton[] => [
+    mkSkeleton({
+      filePath: 'src/a.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+      ],
+    }),
+    mkSkeleton({
+      filePath: 'src/b.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+      ],
+    }),
+  ];
+
+  it('(a) 同 alias 双 dynamic 指向不同 target → 该 alias 整体不落表，两个 callSite 都不产 cross-module 边', () => {
+    const skeletons = mkSkeletonsMap([
+      ...targetSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          dynImport('./a.js', 'src/a.ts', { namespaceImport: 'm' }),
+          dynImport('./b.js', 'src/b.ts', { namespaceImport: 'm' }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('m')).toBe(false);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'cross-module', line: 3, callerFile: 'src/caller.ts', calleeQualifier: 'm' },
+      { calleeName: 'run', calleeKind: 'cross-module', line: 8, callerFile: 'src/caller.ts', calleeQualifier: 'm' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    // cross-module 未命中 alias → 落 Stage 4 之外（cross-module 不在 fallthrough 白名单）→ skip
+    for (const e of edges) {
+      expect(e.target).not.toBe('src/a.ts::run');
+      expect(e.target).not.toBe('src/b.ts::run');
+    }
+  });
+
+  it('(a2) 同 alias 双 dynamic 但 namedImports 形态 → 同样弃权', () => {
+    const skeletons = mkSkeletonsMap([
+      ...targetSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          dynImport('./a.js', 'src/a.ts', { namedImports: ['run'] }),
+          dynImport('./b.js', 'src/b.ts', { namedImports: ['run'] }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('run')).toBe(false);
+  });
+
+  it('(b) 同 alias 双 dynamic 指向同一 target → 无歧义，正常解析', () => {
+    const skeletons = mkSkeletonsMap([
+      ...targetSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          dynImport('./a.js', 'src/a.ts', { namespaceImport: 'm' }),
+          dynImport('./a.js', 'src/a.ts', { namespaceImport: 'm' }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.get('m')).toBe('src/a.ts');
+  });
+
+  it('(c) 静态 named import 与 dynamic 绑定同名冲突 → 静态获胜（保持 F242 前行为）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...targetSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './a.js',
+            isRelative: true,
+            resolvedPath: 'src/a.ts',
+            namedImports: ['run'],
+            isTypeOnly: false,
+            importType: 'static',
+          },
+          dynImport('./b.js', 'src/b.ts', { namedImports: ['run'] }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.get('run')).toBe('src/a.ts');
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 3, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/a.ts::run');
+  });
+
+  it('(c2) 静态在后、dynamic 在前时静态同样获胜（顺序无关）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...targetSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          dynImport('./b.js', 'src/b.ts', { namedImports: ['run'] }),
+          {
+            moduleSpecifier: './a.js',
+            isRelative: true,
+            resolvedPath: 'src/a.ts',
+            namedImports: ['run'],
+            isTypeOnly: false,
+            importType: 'static',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.get('run')).toBe('src/a.ts');
+  });
+
+  it('(d) 回归锚：唯一 dynamic 绑定（cli/index.ts 形态）照常解析', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/commands/scaffold-kb.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'runScaffoldKb', kind: 'function', signature: 'function runScaffoldKb(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+      }),
+      mkSkeleton({
+        filePath: 'src/cli/index.ts',
+        language: 'typescript',
+        imports: [
+          dynImport('./commands/scaffold-kb.js', 'src/commands/scaffold-kb.ts', { namedImports: ['runScaffoldKb'] }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/cli/index.ts');
+    expect(info?.aliasToTarget.get('runScaffoldKb')).toBe('src/commands/scaffold-kb.ts');
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'runScaffoldKb', calleeKind: 'free', line: 42, callerFile: 'src/cli/index.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/commands/scaffold-kb.ts::runScaffoldKb');
+  });
+
+  it('(e) dynamic 绑定 target 未解析（resolvedPath=null）→ 弃权，不落 null alias', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [dynImport('some-pkg', null, { namespaceImport: 'pkg' })],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('pkg')).toBe(false);
+  });
+
+  // 复审轮修复 2 修订：dynamic 无绑定项不再走 specifier 兜底（见下方「修复 2」describe）。
+  // 该兜底是为 Python `import numpy` 这类无绑定语法准备的，dynamic specifier 是路径，
+  // 兜底出来的 lastSeg 只会是扩展名垃圾，且会无条件覆盖同名静态绑定。
+  it('(f) 无绑定的 dynamic import 不再注册 specifier 兜底 alias', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: 'lodash',
+            isRelative: false,
+            resolvedPath: 'node_modules/lodash/index.js',
+            isTypeOnly: false,
+            importType: 'dynamic',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('lodash')).toBe(false);
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 审查轮 W3 — 大写 namespace alias 不再走类解析
+//
+// mapper 用首字母大小写启发式区分 `Class.method()` 与 `mod.fn()`，
+// 大写 namespace 绑定（`const M = await import(...)` / `import * as M`）
+// 会被标成 member 走 Stage 2，产出 `b.ts::M.D` 这种错形 target。
+// 修法：Stage 2 入口先查 namespaceAliases —— 绑定表是确定性事实，优先于启发式。
+// ───────────────────────────────────────────────────────────
+
+describe('F242 审查轮 W3 — 大写 namespace alias 走模块成员解析', () => {
+  const bSkeleton = () =>
+    mkSkeleton({
+      filePath: 'src/b.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'D', kind: 'function', signature: 'function D(): void', isDefault: false, startLine: 1, endLine: 3 },
+        // 同名类陷阱：b.ts 恰好导出 class M 且含成员 D 时，旧实现会产出真假边
+        {
+          name: 'M',
+          kind: 'class',
+          signature: 'class M',
+          isDefault: false,
+          startLine: 5,
+          endLine: 20,
+          members: [{ name: 'D', kind: 'method', signature: 'D()', isStatic: true }],
+        },
+      ],
+    });
+
+  it('(a) dynamic 大写 namespace `M.D()` → 解析为 src/b.ts::D（非 M.D 错形）', () => {
+    const skeletons = mkSkeletonsMap([
+      bSkeleton(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+            namespaceImport: 'M',
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 4, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.target).toBe('src/b.ts::D');
+    expect(edges[0]!.confidence).toBe('medium');
+  });
+
+  it('(b) 静态 `import * as NS` 大写 qualifier 成员调用 → src/b.ts::D', () => {
+    const skeletons = mkSkeletonsMap([
+      bSkeleton(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'static',
+            namespaceImport: 'NS',
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 4, callerFile: 'src/caller.ts', calleeQualifier: 'NS' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/b.ts::D');
+  });
+
+  it('(b2) 静态 `import * as ns` 小写 qualifier 走 Stage 3 → src/b.ts::D（既有路径不变）', () => {
+    const skeletons = mkSkeletonsMap([
+      bSkeleton(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'static',
+            namespaceImport: 'ns',
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'cross-module', line: 4, callerFile: 'src/caller.ts', calleeQualifier: 'ns' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/b.ts::D');
+  });
+
+  it('(c) 回归锚：named import 的类静态方法仍走 remote class 路径产 file::Class.method', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/x.ts',
+        language: 'typescript',
+        exports: [
+          {
+            name: 'SomeClass',
+            kind: 'class',
+            signature: 'class SomeClass',
+            isDefault: false,
+            startLine: 1,
+            endLine: 20,
+            members: [{ name: 'staticMethod', kind: 'method', signature: 'staticMethod()', isStatic: true }],
+          },
+        ],
+      }),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './x.js',
+            isRelative: true,
+            resolvedPath: 'src/x.ts',
+            namedImports: ['SomeClass'],
+            isTypeOnly: false,
+            importType: 'static',
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'staticMethod', calleeKind: 'member', line: 4, callerFile: 'src/caller.ts', calleeQualifier: 'SomeClass' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/x.ts::SomeClass.staticMethod');
+  });
+
+  it('(d) 歧义弃权的 dynamic namespace alias 不进 namespaceAliases（不产模块成员边）', () => {
+    const skeletons = mkSkeletonsMap([
+      bSkeleton(),
+      mkSkeleton({
+        filePath: 'src/a.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'D', kind: 'function', signature: 'function D(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+      }),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './a.js',
+            isRelative: true,
+            resolvedPath: 'src/a.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+            namespaceImport: 'M',
+          },
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+            namespaceImport: 'M',
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 4, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).not.toBe('src/a.ts::D');
+    expect(edges[0]!.target).not.toBe('src/b.ts::D');
+    expect(edges[0]!.target).toBe('?::D');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 复审轮 修复 1 — suppressedDynamicAliases 阻断歧义 alias 的后续回退
+//
+// C1 首轮只做到「歧义别名不落 aliasToTarget」，但弃权后的调用点仍会继续
+// 往下走 Stage 2 类启发式 / Stage 3 查表，等于把「已知不确定」重新伪装成
+// 「确定结论」：caller 模块恰好导出同名类时会产出**本地类边**（high，能存活
+// 下游全部过滤）。修法是把歧义别名显式登记到 ImportInfo.suppressedDynamicAliases，
+// 在 Stage 2 / Stage 3 入口拦截，落到 `?::` 占位（下游悬空过滤丢弃）。
+//
+// 同时收紧候选身份：从 target 单值改为 (bindingKind, target) 二元组 ——
+// 同一 alias 既被 named 解构又被 namespace 整体绑定时，即使 target 相同，
+// `M.D()` 的语义也完全不同（named 下 M 是符号、正确目标 `b.ts::M.D`；
+// namespace 下 M 是模块、正确目标 `b.ts::D`），无从判别只能弃权。
+// ───────────────────────────────────────────────────────────
+
+describe('F242 复审轮 修复 1 — suppressedDynamicAliases 阻断歧义回退', () => {
+  const dyn = (
+    moduleSpecifier: string,
+    resolvedPath: string | null,
+    binding: { namespaceImport?: string; namedImports?: string[] },
+  ) => ({
+    moduleSpecifier,
+    isRelative: true,
+    resolvedPath,
+    isTypeOnly: false,
+    importType: 'dynamic' as const,
+    ...binding,
+  });
+
+  /** src/a.ts 与 src/b.ts：各导出一个 run / D */
+  const abSkeletons = (): CodeSkeleton[] => [
+    mkSkeleton({
+      filePath: 'src/a.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+        { name: 'D', kind: 'function', signature: 'function D(): void', isDefault: false, startLine: 5, endLine: 7 },
+      ],
+    }),
+    mkSkeleton({
+      filePath: 'src/b.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+        { name: 'D', kind: 'function', signature: 'function D(): void', isDefault: false, startLine: 5, endLine: 7 },
+        {
+          name: 'M',
+          kind: 'class',
+          signature: 'class M',
+          isDefault: false,
+          startLine: 9,
+          endLine: 20,
+          members: [{ name: 'D', kind: 'method', signature: 'D()', isStatic: true }],
+        },
+      ],
+    }),
+  ];
+
+  it('(a) 反例 A — 歧义 alias 与 caller 本地同名类撞名时不产本地类边', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        // caller 自身恰好导出 class M { run() } —— 旧实现会拿它当 Stage 2 类启发式的落点
+        exports: [
+          {
+            name: 'M',
+            kind: 'class',
+            signature: 'class M',
+            isDefault: false,
+            startLine: 1,
+            endLine: 20,
+            members: [{ name: 'run', kind: 'method', signature: 'run()', isStatic: false }],
+          },
+        ],
+        imports: [
+          dyn('./a.js', 'src/a.ts', { namespaceImport: 'M' }),
+          dyn('./a.js', 'src/a.ts', { namespaceImport: 'M' }),
+          dyn('./b.js', 'src/b.ts', { namespaceImport: 'M' }),
+        ],
+      }),
+    ]);
+
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('M')).toBe(false);
+    expect(info?.suppressedDynamicAliases.has('M')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'member', line: 30, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    // 关键断言：不得落到 caller 本地类（这是 100% 假边，且 high confidence 能存活全部下游过滤）
+    expect(edges[0]!.target).not.toBe('src/caller.ts::M.run');
+    expect(edges[0]!.target).toBe('?::run');
+    expect(edges[0]!.confidence).toBe('low');
+  });
+
+  it('(b) 反例 B — 同 target 但 named / namespace 两种绑定语义 → 弃权，不进 namespaceAliases', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          // const { M } = await import('./b.js')  —— M 是 b.ts 导出的符号（类）
+          dyn('./b.js', 'src/b.ts', { namedImports: ['M'] }),
+          // const M = await import('./b.js')      —— M 是 b.ts 模块命名空间
+          dyn('./b.js', 'src/b.ts', { namespaceImport: 'M' }),
+        ],
+      }),
+    ]);
+
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('M')).toBe(false);
+    expect(info?.namespaceAliases.has('M')).toBe(false);
+    expect(info?.suppressedDynamicAliases.has('M')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 12, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    // namespace 语义会给出 src/b.ts::D，named 语义会给出 src/b.ts::M.D —— 两者都是猜测，一律不产
+    expect(edges[0]!.target).not.toBe('src/b.ts::D');
+    expect(edges[0]!.target).not.toBe('src/b.ts::M.D');
+    expect(edges[0]!.target).toBe('?::D');
+  });
+
+  it('(b2) Stage 3 侧同样拦截 — 歧义 alias 作 cross-module qualifier 不查表', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          dyn('./a.js', 'src/a.ts', { namespaceImport: 'm' }),
+          dyn('./b.js', 'src/b.ts', { namespaceImport: 'm' }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.has('m')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'cross-module', line: 3, callerFile: 'src/caller.ts', calleeQualifier: 'm' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    // cross-module 未命中 alias 且不在 Stage 4 fallthrough 白名单 → 整条 skip
+    expect(edges).toHaveLength(0);
+  });
+
+  it('(c1) 回归锚 — 纯 named 唯一绑定不受影响（不进 suppressedDynamicAliases，照常解析）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [dyn('./b.js', 'src/b.ts', { namedImports: ['M'] })],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.has('M')).toBe(false);
+    expect(info?.aliasToTarget.get('M')).toBe('src/b.ts');
+    expect(info?.namespaceAliases.has('M')).toBe(false);
+
+    // named 绑定的 M 指代 b.ts 里的类 M → `M.D()` 应走 remote class 路径
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 12, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/b.ts::M.D');
+  });
+
+  it('(c2) 回归锚 — 纯 namespace 唯一绑定不受影响（模块成员解析照常）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [dyn('./b.js', 'src/b.ts', { namespaceImport: 'M' })],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.has('M')).toBe(false);
+    expect(info?.namespaceAliases.has('M')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'D', calleeKind: 'member', line: 12, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/b.ts::D');
+  });
+
+  it('(c3) 回归锚 — 普通未知 qualifier（非歧义别名）行为一字不变，仍产 medium 占位', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({ filePath: 'src/caller.ts', language: 'typescript' }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'member', line: 3, callerFile: 'src/caller.ts', calleeQualifier: 'Unknown' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('?::run');
+    expect(edges[0]!.confidence).toBe('medium');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 确认轮 修复 1 — 抑制集补全（null target）+ Stage 1 拦截
+//
+// 复审轮把歧义别名登记进抑制集并在 Stage 2 / Stage 3 拦截，但留了两条绕行：
+//
+// 反例 A（Stage 1 绕行）：alias 已判歧义，可 calleeKind=free 的调用点在任何拦截
+//   之前就被 Stage 1「本地导出命中」截胡，caller 恰好导出同名函数时产 high 假边。
+// 反例 B（null-target 绕行）：唯一 dynamic 变体但 resolvedPath=null 时，旧实现只是
+//   不落 aliasToTarget、**不进抑制集** —— 绑定真实存在却指向未知，Stage 2 回落到
+//   caller 本地同名类，同样产 high 假边。
+//
+// 统一修法：抑制集语义从「多变体歧义」扩为「存在 dynamic 绑定但未产生可信
+// aliasToTarget 条目」，并在 Stage 1 一并拦截。静态获胜的那条不入集（静态绑定权威）。
+// ───────────────────────────────────────────────────────────
+
+describe('F242 确认轮 修复 1 — 抑制集补全 + Stage 1 拦截', () => {
+  const dyn = (
+    moduleSpecifier: string,
+    resolvedPath: string | null,
+    binding: { namespaceImport?: string; namedImports?: string[] },
+  ) => ({
+    moduleSpecifier,
+    isRelative: true,
+    resolvedPath,
+    isTypeOnly: false,
+    importType: 'dynamic' as const,
+    ...binding,
+  });
+
+  const abSkeletons = (): CodeSkeleton[] => [
+    mkSkeleton({
+      filePath: 'src/a.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+      ],
+    }),
+    mkSkeleton({
+      filePath: 'src/b.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+      ],
+    }),
+  ];
+
+  it('(a) 反例 A — 歧义 alias 与 caller 本地同名导出撞名时 Stage 1 不得截胡', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        // caller 自身也导出 run —— 旧实现的 Stage 1 会直接命中它并产 high 假边
+        exports: [
+          { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+        imports: [
+          dyn('./a.js', 'src/a.ts', { namedImports: ['run'] }),
+          dyn('./b.js', 'src/b.ts', { namedImports: ['run'] }),
+        ],
+      }),
+    ]);
+
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.has('run')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 30, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.target).not.toBe('src/caller.ts::run');
+    expect(edges[0]!.target).toBe('?::run');
+    expect(edges[0]!.confidence).toBe('low');
+  });
+
+  it('(b) 反例 B — 唯一变体但 target 未解析时进抑制集，Stage 2 不回落本地类', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        exports: [
+          {
+            name: 'M',
+            kind: 'class',
+            signature: 'class M',
+            isDefault: false,
+            startLine: 1,
+            endLine: 20,
+            members: [{ name: 'run', kind: 'method', signature: 'run()', isStatic: true }],
+          },
+        ],
+        // const M = await import('external-pkg') —— 绑定真实存在，但模块解析不出路径
+        imports: [
+          { ...dyn('external-pkg', null, { namespaceImport: 'M' }), isRelative: false },
+        ],
+      }),
+    ]);
+
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('M')).toBe(false);
+    expect(info?.suppressedDynamicAliases.has('M')).toBe(true);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'member', line: 30, callerFile: 'src/caller.ts', calleeQualifier: 'M' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.target).not.toBe('src/caller.ts::M.run');
+    expect(edges[0]!.target).toBe('?::run');
+    expect(edges[0]!.confidence).toBe('low');
+  });
+
+  it('(b2) 反例 B 的 free 形态 — null-target 绑定同样拦住 Stage 1', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+        imports: [
+          { ...dyn('external-pkg', null, { namedImports: ['run'] }), isRelative: false },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 9, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('?::run');
+    expect(edges[0]!.confidence).toBe('low');
+  });
+
+  it('(c) 回归锚 — 无任何 dynamic 绑定时普通本地导出调用 Stage 1 照常 high', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'run', kind: 'function', signature: 'function run(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.size).toBe(0);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 9, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/caller.ts::run');
+    expect(edges[0]!.confidence).toBe('high');
+  });
+
+  it('(c2) 回归锚 — 静态绑定同名时 Stage 1 本地导出仍优先（拦截不误伤主路径）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        exports: [
+          { name: 'other', kind: 'function', signature: 'function other(): void', isDefault: false, startLine: 1, endLine: 3 },
+        ],
+        imports: [
+          {
+            moduleSpecifier: './a.js',
+            isRelative: true,
+            resolvedPath: 'src/a.ts',
+            namedImports: ['run'],
+            isTypeOnly: false,
+            importType: 'static' as const,
+          },
+        ],
+      }),
+    ]);
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'other', calleeKind: 'free', line: 5, callerFile: 'src/caller.ts' },
+      { calleeName: 'run', calleeKind: 'free', line: 6, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/caller.ts::other');
+    expect(edges[0]!.confidence).toBe('high');
+    expect(edges[1]!.target).toBe('src/a.ts::run');
+  });
+
+  it('(d) 静态获胜的 dynamic 别名不入抑制集（C1(a) 登记项语义不变）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './a.js',
+            isRelative: true,
+            resolvedPath: 'src/a.ts',
+            namedImports: ['run'],
+            isTypeOnly: false,
+            importType: 'static' as const,
+          },
+          dyn('./b.js', 'src/b.ts', { namedImports: ['run'] }),
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.has('run')).toBe(false);
+    expect(info?.aliasToTarget.get('run')).toBe('src/a.ts');
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 3, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/a.ts::run');
+  });
+
+  it('(e) 唯一且可解析的 dynamic 绑定照常解析（抑制集不得扩大化）', () => {
+    const skeletons = mkSkeletonsMap([
+      ...abSkeletons(),
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [dyn('./a.js', 'src/a.ts', { namedImports: ['run'] })],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.suppressedDynamicAliases.size).toBe(0);
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'run', calleeKind: 'free', line: 3, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('src/a.ts::run');
+    expect(edges[0]!.confidence).toBe('medium');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F242 复审轮 修复 2 — dynamic 无绑定项不再注册 specifier 兜底别名
+//
+// registerSpecifierFallback 是给 Python `import numpy` 这类「无绑定名可用」
+// 语法准备的：那里 moduleSpecifier 的最后一段就是调用时写的名字。
+// TS 的 dynamic specifier 是**路径**，lastSeg 恒为 'js' / 'mjs' 之类扩展名，
+// 不但永远不是有意义的调用名，还会无条件 set() 覆盖同名静态绑定 → 假边。
+// ───────────────────────────────────────────────────────────
+
+describe('F242 复审轮 修复 2 — dynamic 无绑定项跳过 specifier 兜底', () => {
+  it('(a) 裸 `import("./b.js")` 不得覆盖同名静态 alias `js`', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: 'lit',
+            isRelative: false,
+            resolvedPath: 'node_modules/lit/index.js',
+            namedImports: ['js'],
+            isTypeOnly: false,
+            importType: 'static',
+          },
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.get('js')).toBe('node_modules/lit/index.js');
+
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'js', calleeKind: 'free', line: 9, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges[0]!.target).toBe('node_modules/lit/index.js::js');
+  });
+
+  it('(b) 裸 dynamic import 不再产生任何 lastSeg / moduleSpecifier 别名', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './b.js',
+            isRelative: true,
+            resolvedPath: 'src/b.ts',
+            isTypeOnly: false,
+            importType: 'dynamic',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.has('js')).toBe(false);
+    expect(info?.aliasToTarget.has('./b.js')).toBe(false);
+    expect(info?.aliasToTarget.size).toBe(0);
+  });
+
+  it('(b2) 多个裸 dynamic import 之间也不再 last-write-wins（都不注册）', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          { moduleSpecifier: './a.js', isRelative: true, resolvedPath: 'src/a.ts', isTypeOnly: false, importType: 'dynamic' as const },
+          { moduleSpecifier: './b.js', isRelative: true, resolvedPath: 'src/b.ts', isTypeOnly: false, importType: 'dynamic' as const },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.size).toBe(0);
+  });
+
+  it('(c) 回归锚 — 静态无绑定 import 的 specifier 兜底保持不变（Python import X 路径）', () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'a.py',
+        imports: [
+          { moduleSpecifier: 'numpy', isRelative: false, resolvedPath: 'site/numpy/__init__.py', isTypeOnly: false },
+          { moduleSpecifier: 'os.path', isRelative: false, resolvedPath: 'site/os/path.py', isTypeOnly: false },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('a.py');
+    expect(info?.aliasToTarget.get('numpy')).toBe('site/numpy/__init__.py');
+    expect(info?.aliasToTarget.get('path')).toBe('site/os/path.py');
+    expect(info?.aliasToTarget.get('os.path')).toBe('site/os/path.py');
+  });
+});

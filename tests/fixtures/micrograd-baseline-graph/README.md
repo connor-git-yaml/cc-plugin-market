@@ -10,10 +10,10 @@
 
 - micrograd 源 clone commit：`c911406e5ace8742e5841a7e0df113ecb5d54685`（`~/.spectra-baselines/micrograd`，
   本次重生成前已校验未漂移）
-- 生成时间：2026-07-21（F217 图质量门 P1 metadata 透传修复后重生成）
-- **producer commit**（生成本 fixture 时使用的 dist 对应的当前 worktree HEAD）：`1445edf`
-  （`claude/graph-quality-gates-3d4451` 分支，F217 P1~P3 交付态——验证 T022/T024 metadata
-  透传修复落地；前一版 producer 为 `a542599`，F214 交付态）
+- 生成时间：2026-08-03（F242 调用边归属回退链修复后重生成）
+- **producer commit**（生成本 fixture 时使用的 dist 对应的当前 worktree HEAD）：`2e3a4cd`
+  + F242 工作区改动（`claude/intelligent-kepler-bd4964` 分支，F242 实现态；正式 producer 以
+  F242 落账 commit 为准）。前一版 producer 为 `1445edf`（F217 交付态），再前为 `a542599`（F214 交付态）
 
 ## 生成命令
 
@@ -34,7 +34,30 @@ node dist/cli/index.js batch "$TMPCOPY" --mode graph-only --output-dir "$TMPOUT"
 cp "$TMPOUT/_meta/graph.json" tests/fixtures/micrograd-baseline-graph/graph.json
 ```
 
-## 实证数据（F217 重生成后）
+## 实证数据（F242 重生成后 — 当前版本）
+
+- **33 节点 / 38 边**（links：contains 28 + **calls 8** + depends-on 2）——节点数与 contains /
+  depends-on 边计数**与 F217 版逐字相同**；唯一变化是 calls 边 **7 → 8**
+- **本次改动逐条归因**（`git diff` 实测，仅 1 条新增边 + `metadata.edgeCount` 37→38）：
+  - 新增 `micrograd/engine.py --calls--> micrograd/engine.py::Value`（EXTRACTED / 0.95）
+  - 归因：`engine.py` 里 `Value(...)` 的构造调用发生在 `Value.__add__` / `__mul__` /
+    `__pow__` 等 **dunder 方法**内。这些 dunder 方法**不在节点集合中**（Python skeleton 的
+    members 只收录 `__init__` 与非 dunder 成员），因此修复前边的 source
+    `micrograd/engine.py::Value.__add__` 不可寻址、被 graph-builder 悬空过滤静默丢弃；
+    F242 归属回退链第三级（模块节点兜底）把它救回为模块级边。
+  - **属预期的精度降级而非错误**：该调用关系此前是**完全丢失**的，现以模块粒度记录。
+    要恢复到方法级精度需要把 dunder 方法纳入节点域——那是独立的节点域家族问题，
+    不在 F242 范围（F242 只改归属，不改节点域）。
+  - Python mapper **未改动**：`CallSite.enclosingNamedContext` 仅 TS/JS mapper 产出，
+    Python 侧回退链自动跳过第二级直落模块兜底，这正是 R1「resolver 层语言无关」的实证。
+- **零重复边 / 零悬空边**（实测：duplicate edge keys = 0，dangling = 0）；
+  `micrograd/engine.py → micrograd/engine.py::Value` 同时存在 `calls` 与 `contains` 两条边，
+  relation 不同，不构成重复（edge key 含 relation）
+- 7 个消费测试文件逐文件单跑全绿且**已人工核对 assertion 语义**：新增边指向 `Value`（类本身），
+  而消费方断言集中在 `Value.relu` 的 upstream（未受影响）、`MLP` 的 resolve / lineRange、
+  以及 shape-only 的数组/类型断言——**无任何断言的语义被本次改动改变，故零断言更新**
+
+## 实证数据（F217 重生成后 — 历史版本）
 
 - 33 节点 / 37 边（links：contains 28 + calls 7 + depends-on 2）——与前一版（F214 producer
   `a542599`）**节点/边计数完全相同**，符合预期（F217 P1 只新增 metadata 字段，不改变
@@ -108,5 +131,5 @@ graph-builder 第五路合并）后，本 fixture 重生成版本中**全部 28 
 `directional` 字段**，该偏差按预期自然消除，无手工修改。当前无已知偏差。
 
 与 `tests/fixtures/micrograd/`（Feature 140 手写 mini 快照，用于其他单元测试）是**不同目录、
-不同职责**，两者不可混用。本 fixture 专供依赖完整 micrograd 全量图（33 节点/37 边）的
+不同职责**，两者不可混用。本 fixture 专供依赖完整 micrograd 全量图（33 节点/38 边）的
 E2E / 集成测试消费。

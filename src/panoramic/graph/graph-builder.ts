@@ -6,17 +6,21 @@
  * 节点去重策略（last-write-wins）：
  *   先插入 DocGraph 节点（优先级低），后插入 ArchitectureIR 节点（覆盖同 ID）
  *
- * 悬空边处理：边的 source/target 不在已知节点集合时静默跳过
+ * 悬空边处理：边的 source/target 不在已知节点集合时跳过，并计数 + 记 debug 日志
+ *   （丢弃属常态而非异常，默认 warn 级别下不输出；`REVERSE_SPEC_LOG_LEVEL=debug` 可见）
  */
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { writeAtomicJson } from '../../utils/atomic-write.js';
+import { createLogger } from '../utils/logger.js';
 import type { ArchitectureIR, ArchitectureIRElement, ArchitectureIRRelationship } from '../models/architecture-ir-model.js';
 import type { DocGraph, DocGraphSpecNode, DocGraphReference } from '../builders/doc-graph-builder.js';
 import type { CrossReferenceLink } from '../../models/module-spec.js';
 import { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
 import type { BuildGraphOptions, ConfidenceLevel, GraphEdge, GraphJSON, GraphNode } from './graph-types.js';
 import { isAbsoluteForeignPath, parseCanonicalSymbolId } from '../../knowledge-graph/relativize.js';
+
+const logger = createLogger('graph-builder');
 
 // ============================================================
 // ArchitectureIRElementKind → GraphNode.kind 映射表
@@ -444,12 +448,22 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
   // 步骤 4：悬空边过滤（source/target 不在节点集合时跳过）
   // --------------------------------------------------------
   const filteredEdges: GraphEdge[] = [];
+  // F242 可观测性：此过滤此前完全静默（零计数、零日志），F242 诊断的 4,517 条边丢失
+  // 因此长期不可见。只计总数、不做分类打点——分类统计是一次性诊断脚本的职责，
+  // 不固化进生产路径（分类信号高度依赖具体代码库形态，不适合做长期指标）。
+  //
+  // 用 debug 级而非 warn：call-resolver 按设计就会产出 `?::name` 这类占位 target，
+  // 悬空丢弃是每次建图的常态而非异常，warn 级会变成恒响噪声（且绕过 batch 的静默控制）。
+  let droppedCount = 0;
   for (const edge of edgeMap.values()) {
     if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) {
-      // 悬空边静默跳过（参考 Graphify build.py L46-47）
+      droppedCount++;
       continue;
     }
     filteredEdges.push(edge);
+  }
+  if (droppedCount > 0) {
+    logger.debug(`dropped ${droppedCount} dangling edge(s) (source/target not in node set)`);
   }
 
   // --------------------------------------------------------
@@ -549,7 +563,10 @@ export function writeKnowledgeGraph(
   // 归一化「之后」（否则守卫会对未转换的绝对路径误报），届时需重排此处顺序。
   const violations = scanGraphPortabilityViolations(graphJson);
   if (violations.count > 0) {
-    console.warn(
+    // warn 级而非 debug：绝对路径泄漏意味着 producer 侧相对化失效，图将不可跨机复用，
+    // 属真异常信号，需要默认可见（logger 默认级别就是 warn）；与 dangling 边计数那种
+    // 「预期内、仅供诊断」的 debug 级信息区分开。
+    logger.warn(
       `[portable-guard] graph.json 含 ${violations.count} 个绝对路径泄漏（producer 侧应已相对化）：` +
         `${violations.samples.join(', ')}${violations.count > violations.samples.length ? ' …' : ''}`,
     );

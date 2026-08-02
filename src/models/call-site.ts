@@ -59,5 +59,21 @@ export const CallSiteSchema = z.object({
    * - calleeKind=free / dunder / decorator / super / unresolved → 通常 undefined
    */
   calleeQualifier: z.string().optional(),
+  /**
+   * 最近的**命名**祖先作用域 — F242 新增（resolver 归属回退链第二级）。
+   *
+   * `callerContext` 的设计用途是 member resolution（定位类名），它遵循「最近 scope 原则」，
+   * 匿名 callback 会产出 `<arrow:line:col>` 这类**不可寻址**的上下文名。call-resolver 把
+   * `callerContext` 复用为边的 source 地址时，这类边会因 source 不是图节点被悬空过滤丢弃。
+   *
+   * 本字段承载「跳过所有匿名帧后的第一个命名祖先」，让 resolver 在 `callerContext`
+   * 不可寻址时仍能把边归属到符号级节点（而非退到模块级），保住归属精度。
+   *
+   * 省略规则：`callerContext` 本身已是命名上下文时不填（此时二者必然相等，填了是冗余）；
+   * 栈内不存在命名祖先（如顶层 IIFE）时同样不填，resolver 走模块节点兜底。
+   *
+   * 语言无关性：仅 TS/JS mapper 产出此字段；其他语言 mapper 不填，回退链自动跳到模块兜底。
+   */
+  enclosingNamedContext: z.string().optional(),
 });
 export type CallSite = z.infer<typeof CallSiteSchema>;

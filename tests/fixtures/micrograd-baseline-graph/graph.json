@@ -5,7 +5,7 @@
     "name": "spectra-knowledge-graph",
     "generatedAt": "1970-01-01T00:00:00.000Z",
     "nodeCount": 33,
-    "edgeCount": 37,
+    "edgeCount": 38,
     "sources": [
       "extraction",
       "unified-graph"
@@ -489,6 +489,14 @@
       "source": "micrograd/engine.py::Value",
       "target": "micrograd/engine.py::Value.relu",
       "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 0.95,
+      "directional": true
+    },
+    {
+      "source": "micrograd/engine.py",
+      "target": "micrograd/engine.py::Value",
+      "relation": "calls",
       "confidence": "EXTRACTED",
       "confidenceScore": 0.95,
       "directional": true

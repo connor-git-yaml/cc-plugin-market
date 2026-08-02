@@ -41,6 +41,14 @@ const SCOPE_DEFINING_TYPES = new Set([
   'generator_function',             // const gen = function*() {}
 ]);
 
+/**
+ * 匿名上下文前缀 — F242。
+ *
+ * 与 _deriveCallerContext 产出的 `<arrow:line:col>` / `<fn:...>` / `<gen:...>` 约定对齐：
+ * 匹配即表示该帧不是可寻址的符号名，enclosingNamedContext 扫描时需跳过。
+ */
+const ANON_CONTEXT_RE = /^<(arrow|fn|gen):/;
+
 // ============================================================
 // 辅助工具
 // ============================================================
@@ -969,21 +977,34 @@ export class TypeScriptMapper implements QueryMapper {
       ? callerContextStack[callerContextStack.length - 1]
       : undefined;
 
+    // F242：callerCtx 不可寻址（匿名帧或栈空）时，向下扫描找第一个命名祖先。
+    // callerCtx 本身已是命名上下文时保持 undefined（省略规则：此时二者必然相等）。
+    let enclosingCtx: string | undefined;
+    if (callerCtx === undefined || ANON_CONTEXT_RE.test(callerCtx)) {
+      for (let i = callerContextStack.length - 1; i >= 0; i--) {
+        const frame = callerContextStack[i]!;
+        if (!ANON_CONTEXT_RE.test(frame)) {
+          enclosingCtx = frame;
+          break;
+        }
+      }
+    }
+
     // 核心分发：产出 callSite
     let skipSubtree: Parser.SyntaxNode | null = null;
 
     switch (node.type) {
       case 'call_expression':
-        this._handleCallExpression(node, callerCtx, out);
+        this._handleCallExpression(node, callerCtx, enclosingCtx, out);
         break;
       case 'new_expression':
-        this._handleNewExpression(node, callerCtx, out);
+        this._handleNewExpression(node, callerCtx, enclosingCtx, out);
         break;
       case 'decorator':
-        skipSubtree = this._handleDecorator(node, callerCtx, out);
+        skipSubtree = this._handleDecorator(node, callerCtx, enclosingCtx, out);
         break;
       case 'tagged_template_expression':
-        this._handleTaggedTemplate(node, callerCtx, out);
+        this._handleTaggedTemplate(node, callerCtx, enclosingCtx, out);
         break;
       default:
         break;
@@ -1104,6 +1125,7 @@ export class TypeScriptMapper implements QueryMapper {
   private _handleCallExpression(
     node: Parser.SyntaxNode,
     callerCtx: string | undefined,
+    enclosingCtx: string | undefined,
     out: CallSite[],
   ): void {
     const funcNode = node.childForFieldName('function');
@@ -1111,13 +1133,13 @@ export class TypeScriptMapper implements QueryMapper {
 
     // dynamic import：`import('./x')` — funcNode.type 为 'import'
     if (funcNode.type === 'import') {
-      out.push(this._mkCallSite('import', 'unresolved', node, callerCtx));
+      out.push(this._mkCallSite('import', 'unresolved', node, callerCtx, undefined, enclosingCtx));
       return;
     }
 
     // super() 构造器自调用（call_expression 中 func 为 super）
     if (funcNode.type === 'super') {
-      out.push(this._mkCallSite('super', 'super', node, callerCtx));
+      out.push(this._mkCallSite('super', 'super', node, callerCtx, undefined, enclosingCtx));
       return;
     }
 
@@ -1126,11 +1148,11 @@ export class TypeScriptMapper implements QueryMapper {
       const name = funcNode.text;
       // eval / Function → unresolved（C-8 修复：无 dynamicReason 元数据）
       if (DYNAMIC_CALL_NAMES.has(name)) {
-        out.push(this._mkCallSite(name, 'unresolved', node, callerCtx));
+        out.push(this._mkCallSite(name, 'unresolved', node, callerCtx, undefined, enclosingCtx));
         return;
       }
       // 普通 free 调用
-      out.push(this._mkCallSite(name, 'free', node, callerCtx));
+      out.push(this._mkCallSite(name, 'free', node, callerCtx, undefined, enclosingCtx));
       return;
     }
 
@@ -1146,13 +1168,13 @@ export class TypeScriptMapper implements QueryMapper {
           return;
         }
       }
-      this._handleMemberCall(funcNode, node, callerCtx, out);
+      this._handleMemberCall(funcNode, node, callerCtx, enclosingCtx, out);
       return;
     }
 
     // optional_member_expression：obj?.method()（tree-sitter 对应节点类型）
     if (funcNode.type === 'optional_member_expression') {
-      this._handleMemberCall(funcNode, node, callerCtx, out);
+      this._handleMemberCall(funcNode, node, callerCtx, enclosingCtx, out);
       return;
     }
 
@@ -1170,6 +1192,7 @@ export class TypeScriptMapper implements QueryMapper {
     memberNode: Parser.SyntaxNode,
     callNode: Parser.SyntaxNode,
     callerCtx: string | undefined,
+    enclosingCtx: string | undefined,
     out: CallSite[],
   ): void {
     const objectNode = memberNode.childForFieldName('object');
@@ -1181,30 +1204,30 @@ export class TypeScriptMapper implements QueryMapper {
 
     // this.method() → member（无 qualifier，resolver 通过 callerContext 定位类）
     if (qualifier === 'this') {
-      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx));
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, undefined, enclosingCtx));
       return;
     }
 
     // super.method() → super
     if (qualifier === 'super') {
-      out.push(this._mkCallSite(calleeName, 'super', callNode, callerCtx));
+      out.push(this._mkCallSite(calleeName, 'super', callNode, callerCtx, undefined, enclosingCtx));
       return;
     }
 
     // 首字母大写（Class.method）→ member + qualifier
     if (qualifier && /^[A-Z]/.test(qualifier)) {
-      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, qualifier));
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, qualifier, enclosingCtx));
       return;
     }
 
     // 首字母小写（mod.fn）→ cross-module + qualifier（与 PythonMapper 对齐）
     if (qualifier) {
-      out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, qualifier));
+      out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, qualifier, enclosingCtx));
       return;
     }
 
     // 无 qualifier 兜底 → cross-module
-    out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx));
+    out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, undefined, enclosingCtx));
   }
 
   /**
@@ -1217,6 +1240,7 @@ export class TypeScriptMapper implements QueryMapper {
   private _handleNewExpression(
     node: Parser.SyntaxNode,
     callerCtx: string | undefined,
+    enclosingCtx: string | undefined,
     out: CallSite[],
   ): void {
     const constructorNode = node.childForFieldName('constructor');
@@ -1227,17 +1251,17 @@ export class TypeScriptMapper implements QueryMapper {
       const name = constructorNode.text;
       // W-2 修复：new Function('code') → unresolved（动态构造，避免误判为本地构造）
       if (name === 'Function') {
-        out.push(this._mkCallSite('Function', 'unresolved', node, callerCtx));
+        out.push(this._mkCallSite('Function', 'unresolved', node, callerCtx, undefined, enclosingCtx));
         return;
       }
       // 普通构造：new Foo() → free，calleeName='Foo'
-      out.push(this._mkCallSite(name, 'free', node, callerCtx));
+      out.push(this._mkCallSite(name, 'free', node, callerCtx, undefined, enclosingCtx));
       return;
     }
 
     // member_expression 形式：new Foo.Sub()（如 new express.Router()）
     if (constructorNode.type === 'member_expression') {
-      this._handleMemberCall(constructorNode, node, callerCtx, out);
+      this._handleMemberCall(constructorNode, node, callerCtx, enclosingCtx, out);
       return;
     }
   }
@@ -1256,6 +1280,7 @@ export class TypeScriptMapper implements QueryMapper {
   private _handleDecorator(
     node: Parser.SyntaxNode,
     callerCtx: string | undefined,
+    enclosingCtx: string | undefined,
     out: CallSite[],
   ): Parser.SyntaxNode | null {
     // 找 decorator 节点的 call_expression 子节点（带参 decorator 才有）
@@ -1279,7 +1304,7 @@ export class TypeScriptMapper implements QueryMapper {
       calleeName = 'unknown';
     }
 
-    out.push(this._mkCallSite(calleeName, 'decorator', callExpr, callerCtx));
+    out.push(this._mkCallSite(calleeName, 'decorator', callExpr, callerCtx, undefined, enclosingCtx));
 
     // 返回 callExpr，让 walker 跳过该子树，避免双计数（W-3 修复）
     return callExpr;
@@ -1293,25 +1318,27 @@ export class TypeScriptMapper implements QueryMapper {
   private _handleTaggedTemplate(
     node: Parser.SyntaxNode,
     callerCtx: string | undefined,
+    enclosingCtx: string | undefined,
     out: CallSite[],
   ): void {
     const tagNode = node.childForFieldName('tag');
     if (!tagNode) return;
 
     if (tagNode.type === 'identifier') {
-      out.push(this._mkCallSite(tagNode.text, 'free', node, callerCtx));
+      out.push(this._mkCallSite(tagNode.text, 'free', node, callerCtx, undefined, enclosingCtx));
       return;
     }
 
     if (tagNode.type === 'member_expression') {
-      this._handleMemberCall(tagNode, node, callerCtx, out);
+      this._handleMemberCall(tagNode, node, callerCtx, enclosingCtx, out);
       return;
     }
   }
 
   /**
-   * 构造单个 CallSite 记录（6 字段，C-8 修复：不接受 dynamicReason / viaNew 参数）。
+   * 构造单个 CallSite 记录（C-8 修复：不接受 dynamicReason / viaNew 参数）。
    * 字段：calleeName / calleeKind / line / column / callerContext / calleeQualifier
+   *      + enclosingNamedContext（F242 新增，见 CallSiteSchema 注释）
    */
   private _mkCallSite(
     calleeName: string,
@@ -1319,6 +1346,7 @@ export class TypeScriptMapper implements QueryMapper {
     callNode: Parser.SyntaxNode,
     callerContext: string | undefined,
     calleeQualifier?: string,
+    enclosingNamedContext?: string,
   ): CallSite {
     const cs: CallSite = {
       calleeName,
@@ -1330,6 +1358,7 @@ export class TypeScriptMapper implements QueryMapper {
     }
     if (callerContext !== undefined) cs.callerContext = callerContext;
     if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
+    if (enclosingNamedContext !== undefined) cs.enclosingNamedContext = enclosingNamedContext;
     return cs;
   }
 }

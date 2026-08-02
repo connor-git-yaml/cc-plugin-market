@@ -391,3 +391,338 @@ export function add(a: number, b: number): number { return a + b; }
     });
   });
 });
+
+// ============================================================
+// F242 — 动态 import 绑定抽取 + 静态命名空间绑定（R2 target 侧）
+//
+// 设计见 specs/242-fix-callsite-syntax-coverage/plan.md 决策 3。
+// 动态 import()/require() 分支此前只记 moduleSpecifier，不抓绑定名，
+// 导致 buildImportIndex 无 alias、被调符号 Stage 3 解析失败产 `?::` 占位。
+// ============================================================
+
+describe('ast-analyzer — F242 动态 import 绑定抽取', () => {
+  beforeEach(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+  });
+
+  afterEach(() => {
+    resetProject();
+    LanguageAdapterRegistry.resetInstance();
+  });
+
+  /** 取指定 moduleSpecifier 的 import 记录 */
+  async function importOf(code: string, specifier: string) {
+    const filePath = createTempFile(code);
+    try {
+      const skeleton = await analyzeFile(filePath);
+      return skeleton.imports.find((i) => i.moduleSpecifier === specifier);
+    } finally {
+      cleanup(filePath);
+    }
+  }
+
+  // 形态 4：顶层 await import() 解构
+  it('形态 4 — 顶层 `const { fn } = await import(...)` 抓到 namedImports', async () => {
+    const imp = await importOf(
+      "const { runScaffoldKb } = await import('./commands/scaffold-kb.js');\nexport const x = 1;\n",
+      './commands/scaffold-kb.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.importType).toBe('dynamic');
+    expect(imp!.namedImports).toEqual(['runScaffoldKb']);
+  });
+
+  // 形态 5：函数体内 await import() 解构（位置不限于模块顶层）
+  it('形态 5 — 函数体内 `const { fn } = await import(...)` 同样抓到 namedImports', async () => {
+    const imp = await importOf(
+      [
+        'export async function main(): Promise<void> {',
+        "  const { runScaffoldKb } = await import('./commands/scaffold-kb.js');",
+        '  await runScaffoldKb();',
+        '}',
+      ].join('\n'),
+      './commands/scaffold-kb.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toEqual(['runScaffoldKb']);
+  });
+
+  // 形态 5b：rename 解构 — 口径与静态 import 的 getName() 一致（记 property 名）
+  it('形态 5b — rename 解构 `{ a: b }` 记 property 名 a（与静态 import 口径一致）', async () => {
+    const imp = await importOf(
+      "const { runScaffoldKb: run } = await import('./x.js');\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['runScaffoldKb']);
+  });
+
+  // 形态 5c：await import() 命名空间绑定
+  it('形态 5c — `const m = await import(...)` 抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "const mod = await import('./x.js');\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('mod');
+  });
+
+  // 形态 6：import().then(m => ...) 命名空间形参绑定
+  it('形态 6 — `import(...).then(m => m.fn())` 抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "import('./x.js').then((m) => m.fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  // 形态 6b：import().then(({ fn }) => ...) 解构形参绑定
+  it('形态 6b — `import(...).then(({ fn }) => fn())` 抓到 namedImports', async () => {
+    const imp = await importOf(
+      "import('./x.js').then(({ fn }) => fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  // 附加项（plan 决策 3 并入）：静态 import * as ns
+  it('附加 — 静态 `import * as ns from ...` 抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "import * as ns from './x.js';\nexport const y = ns;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('ns');
+  });
+
+  // 负向锚：无绑定的裸动态 import 不应臆造字段
+  it('负向锚 — 裸 `await import(...)` 无绑定时不产出绑定字段', async () => {
+    const imp = await importOf(
+      "export async function go(): Promise<void> { await import('./x.js'); }\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // 负向锚：CommonJS require 解构本次不动（plan Non-Goals 显式排除）
+  it('负向锚 — `const { a } = require(...)` 本次不抽取绑定（plan Non-Goals）', async () => {
+    const imp = await importOf(
+      "const { a } = require('./x.js');\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.importType).toBe('commonjs-require');
+    expect(imp!.namedImports).toBeUndefined();
+  });
+
+  // 负向锚（Codex W1）：`.then` 作为值传参时，外层 call 的首参与本 import 无关
+  it('负向锚 — `.then` 仅作为值传参时不产出绑定（callee 同一性校验）', async () => {
+    const imp = await importOf(
+      "declare function consume(cb: unknown, t: unknown): void;\nconsume((m) => m.run(), import('./x.js').then);\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.importType).toBe('dynamic');
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // 正向锚（Codex 复审轮 W1）：括号只是语法包装，`.then` 仍是外层 CallExpression 的 callee，
+  // 绑定必须照常抽到 —— identity 守卫要剥掉 ParenthesizedExpression 再比较。
+  it('正向锚 — `(import(...).then)(cb)` 括号包裹仍是同一 callee，正常产出绑定', async () => {
+    const imp = await importOf(
+      "(import('./x.js').then)((m) => m.fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — 多层括号 `((import(...).then))(cb)` 同样产出绑定', async () => {
+    const imp = await importOf(
+      "((import('./x.js').then))(({ fn }) => fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  it('负向锚 — 括号包裹但 `.then` 只是实参时仍不产绑定（剥括号不放宽同一性）', async () => {
+    const imp = await importOf(
+      "declare function consume(cb: unknown, t: unknown): void;\nconsume((m) => m.run(), (import('./x.js').then));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // 正向锚（Codex 确认轮 W1）：括号包在 **import 调用自身** 上时（receiver 侧），
+  // import CallExpression 的直接父节点是 ParenthesizedExpression，
+  // await / then 两条入口路径都进不去 —— 入口判定前必须先剥掉自身的括号父链。
+  it('正向锚 — receiver 单层括号 `(import(...)).then(cb)` 正常产出绑定', async () => {
+    const imp = await importOf(
+      "(import('./x.js')).then((m) => m.fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — receiver 双层括号 `((import(...))).then(cb)` 正常产出绑定', async () => {
+    const imp = await importOf(
+      "((import('./x.js'))).then(({ fn }) => fn());\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  it('正向锚 — receiver 括号 + await 形态 `await ((import(...)))` 正常产出绑定', async () => {
+    const imp = await importOf(
+      "const mod = await ((import('./x.js')));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namespaceImport).toBe('mod');
+  });
+
+  it('正向锚 — receiver 括号 + await 解构形态照常记源导出名', async () => {
+    const imp = await importOf(
+      "const { fn } = await ((import('./x.js')));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  it('负向锚 — receiver 括号但 `.then` 只是实参时仍不产绑定（剥 receiver 括号不放宽同一性）', async () => {
+    const imp = await importOf(
+      "declare function consume(cb: unknown, t: unknown): void;\nconsume((m) => m.run(), (import('./x.js')).then);\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  it('负向锚 — receiver 括号包裹的裸 `(import(...))` 仍不产绑定', async () => {
+    const imp = await importOf(
+      "export async function go(): Promise<void> { await ((import('./x.js'))); }\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // ----------------------------------------------------------
+  // Codex 第五轮 W1/W2：括号归一化必须是**函数内完备不变量**——
+  // 「本函数内任意深度括号出现在任何接缝，都不改变抽取结果」。
+  // 前四轮只覆盖了 import 调用自身父链与 `.then` callee 两处接缝，
+  // 剩下的 (1) AwaitExpression 上方父链、(2) `.then` 回调实参 两处仍会漏抽。
+  // ----------------------------------------------------------
+
+  // 接缝 1（await 上方括号）：AST 是 Call → Await → Paren → VariableDeclaration，
+  // 未剥括号时 `awaitExpr.getParent()` 拿到的是 ParenthesizedExpression 而非声明。
+  it('正向锚 — await 上方单层括号 `const m = ((await import(...)))` 抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "const m = ((await import('./x.js')));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — await 上方三层括号同样抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "const m = ((((await import('./x.js')))));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — await 上方括号 + 解构形态照常记源导出名', async () => {
+    const imp = await importOf(
+      "const { fn: local } = ((await import('./x.js')));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  // 接缝 2（`.then` 回调实参括号）：实参是 ParenthesizedExpression 包着 ArrowFunction，
+  // 未剥括号时 isArrowFunction / isFunctionExpression 判定直接落空。
+  it('正向锚 — `.then(((m) => m.run()))` 回调外裹括号仍抓到 namespaceImport', async () => {
+    const imp = await importOf(
+      "import('./x.js').then(((m) => m.run()));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — `.then(((({ fn }) => fn())))` 多层括号解构回调仍抓到 namedImports', async () => {
+    const imp = await importOf(
+      "import('./x.js').then(((({ fn }) => fn())));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namedImports).toEqual(['fn']);
+  });
+
+  it('正向锚 — 括号包裹的 function 表达式回调 `.then((function (m) { ... }))` 仍抓到绑定', async () => {
+    const imp = await importOf(
+      "import('./x.js').then((function (m: { run(): void }) { m.run(); }));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  // 组合形态：receiver 括号 + await 上方括号同时出现
+  it('正向锚 — 组合形态 `((await ((import(...)))))` 正常抓到绑定', async () => {
+    const imp = await importOf(
+      "const m = ((await ((import('./x.js')))));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  it('正向锚 — 组合形态 receiver 括号 + 回调括号 `((import(...))).then(((m) => ...))`', async () => {
+    const imp = await importOf(
+      "((import('./x.js'))).then(((m) => m.run()));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp!.namespaceImport).toBe('m');
+  });
+
+  // 负向锚：剥实参括号**不得**放宽 callee 同一性判据——
+  // `.then` 只是作为值传给别的函数时，即使首参被括号包着也不能采信。
+  it('负向锚 — 首参带括号但 `.then` 仅作为值传参时仍不产绑定', async () => {
+    const imp = await importOf(
+      "declare function consume(cb: unknown, t: unknown): void;\nconsume(((m) => m.run()), (import('./x.js').then));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // 负向锚：括号剥完仍不是函数的实参不产绑定（不因剥括号而误判非函数值）
+  it('负向锚 — `.then(((notAFunction)))` 剥完括号非函数仍不产绑定', async () => {
+    const imp = await importOf(
+      "declare const notAFunction: (m: unknown) => void;\nimport('./x.js').then(((notAFunction)));\nexport const y = 1;\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+
+  // 负向锚：await 上方括号后不是 VariableDeclaration 时仍不产绑定
+  it('负向锚 — `((await import(...)))` 非赋值上下文仍不产绑定', async () => {
+    const imp = await importOf(
+      "export async function go(): Promise<void> { console.log(((await import('./x.js')))); }\n",
+      './x.js',
+    );
+    expect(imp).toBeDefined();
+    expect(imp!.namedImports).toBeUndefined();
+    expect(imp!.namespaceImport).toBeUndefined();
+  });
+});

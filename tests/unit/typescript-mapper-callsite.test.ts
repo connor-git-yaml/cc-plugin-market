@@ -491,3 +491,137 @@ describe('TypeScriptMapper.extractCallSites — 直接调用骨架验证', () =>
   });
 
 });
+
+// ============================================================
+// F242 — enclosingNamedContext（resolver 归属回退链第二级）
+//
+// 设计见 specs/242-fix-callsite-syntax-coverage/plan.md 决策 1。
+// 本组用例同时承担两个职责：
+//   (a) callerContext 断言 = C-4 语义回归锚（本次修复不得改动 mapper 既有输出）
+//   (b) enclosingNamedContext 断言 = 新增字段的期望值（含 undefined 省略分支）
+//
+// 【实测现状核实（T001 注意栏歧义点）】
+// tree-sitter TS grammar 里匿名函数表达式的节点类型是 `function_expression`，
+// 而 SCOPE_DEFINING_TYPES 收录的是 `function`——后者实际匹配到的是 `function`
+// **关键字 token**（其子树不含函数体），因此 `<fn:` 前缀在当前 grammar 下
+// 永不出现在任何 callSite 的 callerContext 上：函数表达式体内的调用会直接归属
+// 其外层作用域。plan.md 形态 2 / 3b 描述的 `/^<fn:/` 与实测不符，
+// 按 tasks.md「以实测现状为准」记录，本次不改 mapper 既有行为（超出 fix 范围）。
+// ============================================================
+
+describe('TypeScriptMapper.extractCallSites — F242 enclosingNamedContext', () => {
+
+  // 形态 1：实参位置 arrow function 体内调用（kb-search.ts 验收案例的最小复刻）
+  it('F242-1 — 具名函数内实参 arrow body 的调用：callerContext 匿名，enclosingNamedContext 为外层具名函数', async () => {
+    const code = `
+export function registerX(ctx: unknown) {
+  withTelemetry('x', async (args: unknown) => executeX(ctx, args));
+}
+export function executeX(a: unknown, b: unknown) {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'executeX');
+    expect(call).toBeDefined();
+    // 回归锚：C-4 最近 scope 原则保持不变
+    expect(call?.callerContext).toMatch(/^<arrow:/);
+    // 新增：命名祖先可寻址，供 resolver 回退链第二级使用
+    expect(call?.enclosingNamedContext).toBe('registerX');
+  });
+
+  // 形态 2：实参位置 function expression 体内调用
+  // 实测现状：function_expression 不入栈 → callerContext 直接是外层具名函数，
+  // 按省略规则 enclosingNamedContext 不填（等价 undefined）。
+  it('F242-2 — 实参 function expression body 的调用：实测 callerContext 即外层具名函数，enclosingNamedContext 省略', async () => {
+    const code = `
+export function registerY(ctx: unknown) {
+  wrap('y', function (args: unknown) { return executeY(ctx, args); });
+}
+export function executeY(a: unknown, b: unknown) {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'executeY');
+    expect(call).toBeDefined();
+    // 实测现状锚（非 plan 预期的 /^<fn:/，理由见本 describe 顶部说明）
+    expect(call?.callerContext).toBe('registerY');
+    // callerContext 已是命名上下文 → 省略规则生效
+    expect(call?.enclosingNamedContext).toBeUndefined();
+  });
+
+  // 形态 3：嵌套两层匿名 callback → 跳过两层匿名直达命名祖先
+  it('F242-3 — 嵌套两层匿名 arrow callback：enclosingNamedContext 跳过两层匿名直达 outer', async () => {
+    const code = `
+export function outer(arr: unknown[]) {
+  arr.map((x: any) => x.filter((y: any) => inner(y)));
+}
+export function inner(y: unknown) {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'inner');
+    expect(call).toBeDefined();
+    // 回归锚：最近 scope 是最内层匿名 arrow
+    expect(call?.callerContext).toMatch(/^<arrow:/);
+    expect(call?.enclosingNamedContext).toBe('outer');
+  });
+
+  // 形态 3b-i：arrow IIFE 位于模块顶层 → 全栈皆匿名，无命名祖先 → 省略
+  it('F242-3b-i — 顶层 arrow IIFE 内调用：栈内无命名祖先，enclosingNamedContext 省略', async () => {
+    const code = `
+(() => {
+  helper();
+})();
+export function helper() {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'helper');
+    expect(call).toBeDefined();
+    expect(call?.callerContext).toMatch(/^<arrow:/);
+    expect(call?.enclosingNamedContext).toBeUndefined();
+  });
+
+  // 形态 3b-ii：function expression IIFE 位于模块顶层
+  // 实测现状：既无 callerContext 也无命名祖先（见顶部说明）
+  it('F242-3b-ii — 顶层 function expression IIFE 内调用：实测 callerContext 与 enclosingNamedContext 均缺省', async () => {
+    const code = `
+(function () {
+  helper();
+})();
+export function helper() {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'helper');
+    expect(call).toBeDefined();
+    expect(call?.callerContext).toBeUndefined();
+    expect(call?.enclosingNamedContext).toBeUndefined();
+  });
+
+  // 模块顶层直接调用：callerContext 缺省，无命名祖先 → 省略（resolver 走模块兜底）
+  it('F242-4 — 模块顶层直接调用：callerContext 与 enclosingNamedContext 均缺省', async () => {
+    const code = `
+const logger = createLogger('x');
+export function createLogger(n: string) { return n; }
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'createLogger');
+    expect(call).toBeDefined();
+    expect(call?.callerContext).toBeUndefined();
+    expect(call?.enclosingNamedContext).toBeUndefined();
+  });
+
+  // 类方法内的匿名 callback → 命名祖先是 "Class.method" 点分形态
+  it('F242-5 — 类方法内匿名 callback：enclosingNamedContext 为 "Class.method" 点分形态', async () => {
+    const code = `
+export class Foo {
+  bar(arr: unknown[]) {
+    arr.map((x: any) => baz(x));
+  }
+}
+export function baz(x: unknown) {}
+`;
+    const callSites = await analyzeTs(code);
+    const call = callSites.find((c) => c.calleeName === 'baz');
+    expect(call).toBeDefined();
+    expect(call?.callerContext).toMatch(/^<arrow:/);
+    expect(call?.enclosingNamedContext).toBe('Foo.bar');
+  });
+
+});

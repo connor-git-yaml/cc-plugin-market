@@ -141,6 +141,21 @@ export const ImportReferenceSchema = z.object({
    * module-derivation 在重建 ModuleEdge.importType 时读取此字段。
    */
   importType: ImportSemanticTypeSchema.optional(),
+  /**
+   * 命名空间绑定名 — F242 新增（可选，向后兼容）。
+   *
+   * 承载「整个 module namespace object 绑定到某个标识符」的三种形态：
+   *   - 静态 `import * as ns from 'x'` → `ns`
+   *   - 动态 `const m = await import('x')` → `m`
+   *   - 动态 `import('x').then((m) => ...)` → `m`
+   *
+   * 不复用 `defaultImport`：后者语义特指 ES module `export default` 对应的导入绑定，
+   * 与 namespace object 语义不同，混用会让 module-derivation 等现有消费方产生歧义。
+   *
+   * 消费方：call-resolver.buildImportIndex 把它落入 aliasToTarget，使 `ns.fn()` /
+   * `m.fn()` 一类调用能走 Stage 3 qualifier 解析，而非产 `?::` 占位后被丢弃。
+   */
+  namespaceImport: z.string().optional(),
 });
 export type ImportReference = z.infer<typeof ImportReferenceSchema>;
 
