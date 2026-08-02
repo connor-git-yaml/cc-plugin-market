@@ -242,7 +242,8 @@ describe('evaluateFreshness（真实临时 git 仓库）', () => {
 describe('getDirtySourceExtensions（FIX-4：一致性防漂移）', () => {
   it('导出集合 === TSJS 采集扩展 ∪ {".py"} ∪ JavaLanguageAdapter().extensions ∪ GoLanguageAdapter().extensions', () => {
     const expected = new Set<string>([
-      '.ts', '.tsx', '.js', '.jsx',
+      // F243：TSJS 采集面补 .mjs/.cjs（与 walkTsJsFiles 判定面同步扩容）
+      '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
       '.py',
       ...new JavaLanguageAdapter().extensions,
       ...new GoLanguageAdapter().extensions,

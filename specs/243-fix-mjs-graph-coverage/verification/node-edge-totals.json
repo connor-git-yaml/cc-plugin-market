@@ -1,0 +1,63 @@
+{
+  "rebase_base": "264338b",
+  "measured_at": "2026-08-03",
+  "before": {
+    "nodes": 6102,
+    "links": 9438,
+    "module_nodes": 1001,
+    "component_nodes": 5101,
+    "relations": { "calls": 2289, "contains": 5101, "depends-on": 2048 },
+    "source": "还原 source-discovery.ts 至 264338b 版本（`git checkout 264338b -- src/batch/stages/source-discovery.ts`）→ npm run build → `node dist/cli/index.js batch --mode graph-only` @新底座实测。同构对拍口径：仅还原唯一影响图内容的源文件，保留本次新增测试 .ts 文件，故与「原始未改动树」基线可差 1 节点 1 边"
+  },
+  "after": {
+    "nodes": 7052,
+    "links": 11792,
+    "module_nodes": 1201,
+    "component_nodes": 5851,
+    "relations": { "calls": 3535, "contains": 5851, "depends-on": 2406 },
+    "source": "HEAD 全量改动（`git checkout HEAD -- src/batch/stages/source-discovery.ts` 恢复 .mjs/.cjs 扫描面）→ npm run build → graph-only 重建 @新底座实测"
+  },
+  "delta": {
+    "nodes": 950,
+    "links": 2354,
+    "module_nodes": 200,
+    "component_nodes": 750,
+    "relations": { "calls": 1246, "contains": 750, "depends-on": 358 }
+  },
+  "attribution": {
+    "method": "before/after 节点 id 集合与边三元组（source|target|relation）集合差集",
+    "added_nodes": 950,
+    "removed_nodes": 0,
+    "added_links": 2354,
+    "removed_links": 0,
+    "added_nodes_non_mjs_cjs": 0,
+    "added_links_touching_no_mjs_cjs": 0,
+    "distinct_source_files": 200,
+    "extension_breakdown": { "mjs": 197, "cjs": 3 },
+    "git_ls_files_cross_check": "MATCH：新增 200 个 module 节点 == git ls-files 口径的 197 .mjs + 3 .cjs 全量（plugins 84 / scripts 106 / tests 6 / specs 4）",
+    "cross_extension_edges": {
+      "both_ends_mjs_cjs": 2026,
+      "source_end_only": 3,
+      "target_end_only": 325,
+      "by_relation": { "calls": 223, "depends-on": 105 },
+      "note": "跨扩展边共 328 条。其中 depends-on 105 条（.ts→.mjs import 边，旧底座同口径为 104）说明 resolver 侧早已支持、缺的只是扫描面；calls 223 条为新底座独有 —— 264338b 的调用边抽取增强（归属回退链 + 动态 import 绑定）使 .ts→.mjs 跨扩展调用得以解析，旧底座该类边为 0"
+    },
+    "verdict": "新增节点 100% 来自 .mjs/.cjs，零非来源变化、零节点消失、零边消失"
+  },
+  "superseded_old_base_numbers": {
+    "before": { "nodes": 6098, "links": 8066 },
+    "after": { "nodes": 7048, "links": 9648 },
+    "invalidated_reason": "旧数字在 2e3a4cd 时代底座测得。本 fix 已 rebase 至 264338b（并行交付的 242-fix-callsite-syntax-coverage，calls 边抽取增强 926→2287），该修复改变了图的边基数与 .mjs 文件可解析的调用边数量，旧底座数字在新底座不可复现，故整体作废，以本文件 before/after 为准",
+    "delta_comparison": "节点增量两个底座完全一致（+950，扫描面扩容是纯节点来源变化，与调用边抽取正交）；边增量由 +1582 提高到 +2354（+772），差额即 264338b 的 calls 增强在 .mjs/.cjs 采集面上多解析出的调用边"
+  },
+  "six_metrics": {
+    "duplicateCanonicalId": { "before": "pass", "after": "pass" },
+    "containsCoverage": { "before": "pass 5101/5101 ratio=1", "after": "pass 5851/5851 ratio=1" },
+    "orphanRatio": { "before": "pass offending=0", "after": "pass offending=0" },
+    "danglingEdges": { "before": "pass (0)", "after": "pass (0)" },
+    "legacyAndIgnoredNodes": { "before": "pass", "after": "pass" },
+    "allNodeZeroDegreeRatio": { "before": 0.02179613241560144, "after": 0.014606920022688599 },
+    "overallVerdict": { "before": "pass", "after": "pass" },
+    "freshness": { "before": "dirty", "after": "dirty", "note": "重编号 + 重测期间工作树有未提交改动，dirty 属预期；编排器 amend 提交后重建图即转 fresh" }
+  }
+}

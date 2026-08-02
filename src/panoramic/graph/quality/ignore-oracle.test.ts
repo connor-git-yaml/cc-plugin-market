@@ -123,6 +123,23 @@ describe('createIgnoreOracle', () => {
       expect(isIgnoredPath('tmp/a.ts')).toBe(true);
     });
 
+    // F243：.mjs/.cjs 纳入 TSJS 扫描面后，也必须走 TSJS 分派分支而非未知扩展名 union 兜底，
+    // 否则 oracle 判定面与 collector 实际扫描面再次脱节（ignored 检查漏检/误检）。
+    it('tmp/a.mjs → 仍 ignored（.mjs 路由到 TSJS 分支，TSJS 忽略集合含 tmp）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('tmp/a.mjs')).toBe(true);
+    });
+
+    it('venv/a.mjs → 不 ignored（.mjs 走 TSJS 分支，TSJS 忽略集合不含 venv；若退回 union 兜底会误判 true）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('venv/a.mjs')).toBe(false);
+    });
+
+    it('venv/a.cjs → 不 ignored（.cjs 同样走 TSJS 分支）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('venv/a.cjs')).toBe(false);
+    });
+
     it('未知扩展名（如 .rb）仍用 union 兜底（保守）：node_modules/x.rb → ignored', () => {
       const isIgnoredPath = createIgnoreOracle(tmpDir);
       expect(isIgnoredPath('node_modules/x.rb')).toBe(true);

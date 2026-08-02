@@ -389,7 +389,7 @@ export const TSJS_SKELETON_IGNORE_DIRS = new Set([
 ]);
 
 /**
- * Feature 152 T-020 — 收集 .ts/.tsx/.js/.jsx 文件 CodeSkeleton（含 callSites + import 路径解析）。
+ * Feature 152 T-020 — 收集 .ts/.tsx/.js/.jsx/.mjs/.cjs 文件 CodeSkeleton（含 callSites + import 路径解析）。
  *
  * 与 collectPythonCodeSkeletons 设计对齐：
  * - 可选 extractCallSites，走 TsJsLanguageAdapter 双路径 merge（Feature 152 T-013/T-014）
@@ -478,8 +478,14 @@ export async function collectTsJsCodeSkeletons(
 }
 
 /**
- * 递归扫描 .ts/.tsx/.js/.jsx 文件（排除产物目录）。
+ * 递归扫描 .ts/.tsx/.js/.jsx/.mjs/.cjs 文件（排除产物目录）。
  * 复用 walkPyFiles 的扫描模式，扩展 TS/JS 扩展名集合。
+ *
+ * F243：补 .mjs/.cjs（此前扫描面与 TsJsLanguageAdapter.extensions 声明面脱节，
+ * 导致全仓 .mjs/.cjs 结构性缺席知识图谱）。仍不收 .mts/.cts —— TS 变体需要
+ * getLanguage/scriptKind 联动适配，本仓库零存量，登记为已知残留。
+ * 改动此判定面时须同步 source-commit.ts::TSJS_COLLECTOR_EXTENSIONS 与
+ * quality/ignore-oracle.ts::TSJS_EXTENSIONS 两处镜像常量。
  *
  * F194：isGitignored 与 resolvedRoot 由 collectTsJsCodeSkeletons 构建并通过参数传入，
  * 在自写 walk 上叠加 .gitignore 过滤层（保留 TSJS_SKELETON_IGNORE_DIRS 与点前缀剪枝不变）。
@@ -510,7 +516,9 @@ function walkTsJsFiles(
         name.endsWith('.ts') ||
         name.endsWith('.tsx') ||
         name.endsWith('.js') ||
-        name.endsWith('.jsx')
+        name.endsWith('.jsx') ||
+        name.endsWith('.mjs') ||
+        name.endsWith('.cjs')
       ) {
         if (isGitignored(relPath)) continue; // 文件命中 .gitignore → 跳过
         out.push(path.join(dir, entry.name));

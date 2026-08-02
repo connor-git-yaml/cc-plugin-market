@@ -109,7 +109,9 @@ function goIgnoreDirs(): ReadonlySet<string> {
   return new Set([...new GoLanguageAdapter().defaultIgnoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
 }
 
-const TSJS_EXTENSIONS: ReadonlySet<string> = new Set(['.ts', '.tsx', '.js', '.jsx']);
+const TSJS_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+]);
 const PY_EXTENSIONS: ReadonlySet<string> = new Set(['.py']);
 
 function extnameOf(relativePath: string): string {

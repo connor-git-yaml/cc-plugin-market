@@ -251,7 +251,7 @@ Phase 4 的 **4a spec-review / 4b quality-review / 4c verify 三家全部漏判*
 判"新判据是否旧判据的严格超集"要**小字母表穷举**（本次用 `{ } : 中 a \n \`` 穷举长度 ≤6 共 137,257 串，
 确认旧 HIT ∧ 新 miss = 0），不能靠"既有测试全绿"——后者只覆盖已想到的形态。
 
-### 7.5.4 `plugins/**/*.mjs` 不在图谱覆盖范围（轨道 B 覆盖面）
+### 7.5.4 `plugins/**/*.mjs` 不在图谱覆盖范围（轨道 B 覆盖面）—— ✅ 已修复（F243）
 
 F228 与 F229 两轮均出现同一现象：对 `fix-compliance-core.mjs` 的 symbol 查 `impact` 返回 `symbol-not-found`，
 插件侧脚本的 caller analysis 长期只能退回 Grep。B 轨把 contains 覆盖打到 100%、孤立率打到 1.9%，
@@ -267,13 +267,60 @@ F228 与 F229 两轮均出现同一现象：对 `fix-compliance-core.mjs` 的 sy
 （插件脚本多为独立 CLI 入口，可能天然低度数，需一并决定是给 entrypoint 豁免还是调门禁口径）。
 证据链见 `specs/241-graph-keepalive-kb-grounding/pilot/baseline-observations.md` O-5。
 
+**F243 处置（2026-08-03）**（原编 F242 与并行交付的 `242-fix-callsite-syntax-coverage` 撞号，重编 F243）：
+根因不是 `plugins/` 被目录级排除，而是 `walkTsJsFiles`（`src/batch/stages/source-discovery.ts`）
+的扩展名白名单硬编码 4 扩展（`.ts/.tsx/.js/.jsx`），与 `TsJsLanguageAdapter.extensions` 已声明的 8 扩展面脱节 ——
+`.mjs/.cjs` 在**源发现层**被静默排除。修复为三处镜像常量同步扩容（walk 判定面 +
+`source-commit.ts::TSJS_COLLECTOR_EXTENSIONS` freshness 判定面 + `quality/ignore-oracle.ts::TSJS_EXTENSIONS` 分派面）。
+
+实测（本仓库 `--mode graph-only` 重建，pre/post 同构对拍；**数字为 rebase 至 `264338b` 后在新底座重测**，
+早前 `2e3a4cd` 时代底座测得的 6098 / 8066 → 7048 / 9648 已作废，原因见下）：
+
+| 口径 | before | after |
+|------|--------|-------|
+| 节点 / 边 | 6102 / 9438（同构对拍口径：仅还原唯一影响图内容的 `source-discovery.ts` 至 `264338b` 版本，保留本次新增测试 `.ts` 文件；来源与差集明细见 `specs/243-fix-mjs-graph-coverage/verification/node-edge-totals.json`） | 7052 / 11792（+950 / +2354） |
+| symbol 节点（contains 覆盖分母） | 5101 | 5851（+750） |
+| contains 覆盖率 | 100% | 100%（维持） |
+| orphan offending / dangling / duplicate-canonical-id / legacy-ignored | 全 pass | 全 pass（offending 仍 0） |
+| 全节点零度率 | 2.18% | **1.46%**（改善） |
+
+归因核对为节点 id 集合差集：新增 950 节点**零例**来自 `.mjs/.cjs` 以外来源，**零节点/零边消失**；
+其中 module 节点 200 个 = `git ls-files` 口径的 197 `.mjs` + 3 `.cjs` 全量（plugins 84 / scripts 106 / tests 6 / specs 4），
+新增边 2354 条全部至少一端落在 `.mjs/.cjs`（含 328 条跨扩展边：105 条 `.ts→.mjs` `depends-on` import 边，
+说明 resolver 侧早已支持、缺的只是扫描面；另 223 条跨扩展 `calls` 边为新底座独有）。
+
+**与旧底座数字的差异解读**：节点增量在两个底座完全一致（+950）—— 扫描面扩容是纯节点来源变化，与调用边抽取正交；
+边增量由 +1582 升至 +2354（+772），差额即 `264338b`（`242-fix-callsite-syntax-coverage`，calls 边 926→2287）
+的归属回退链与动态 import 绑定增强，在新纳入的 `.mjs/.cjs` 采集面上多解析出的调用边 —— 两个修复在边覆盖上叠加增益。
+
+**已知残留**（F243 范围外，逐条登记）：
+
+- `.mts/.cts` 仍未纳入（walk 面与 adapter 声明面尚差这两扩展）。它们需要 `ast-analyzer.ts::getLanguage`
+  与 `ts-js-adapter.ts` 的 scriptKind 推断联动适配，本仓库零存量、无消费诉求，留待有真实需求时连同语言判定一起补。
+- **freshness 无 collector 指纹**（Codex 本轮 CRITICAL）：升级 Spectra 后，旧图在同 commit、干净树条件下仍会被判为
+  `fresh` —— 图里缺 `.mjs/.cjs` 这件事没有任何信号暴露给消费方。根治要给 graph schema 加 producer 版本 / 扫描面指纹，
+  属独立设计题，分流 **M10 候选**，不在 F243 内改。
+- **adapter 声明面一致化残留**：`getTestPatterns` 的 filePattern 与 tree-sitter `languageForFile` 仍是 4 扩展口径 ——
+  `.test.mjs` 不被识别为测试文件（orphan 的 test-export 例外与 secret-redactor 因此按**从严**方向对待，不放松判定）；
+  `.mjs/.cjs` 的 call-site 第二解析路径会走 TypeScript grammar。两者均无实证损害，与 `.mts/.cts` 同族，
+  待 adapter 声明面统一收口时一并处理。
+- **`tests/fixtures` 下 5 个合成 `.mjs/.cjs` 已随扩展名放开入产品图**：与现有 `.ts` fixture 的行为一致（不是本次新引入的口径差异）；
+  "fixture 是否应隔离出产品图"属独立口径议题，不在 F243 内决策。
+
+（`cache-key-builder.ts::INCLUDED_EXTENSIONS` 曾是同源脱节的第四处 —— generator 无 `getDependencies()` 时
+fallback 全量扫描算 cache key 会漏掉 `.mjs/.cjs` 改动、错误复用旧缓存 —— 已在 F243 内一并修复，故不列入残留。）
+
+**方法论教训**：F217 六指标只度量"图内节点"的质量，不度量"应入图而未入图"的**覆盖缺口**；
+而 `source-commit.ts` / `ignore-oracle.ts` 的镜像一致性测试镜像的正是那个残缺的 4 扩展面 ——
+一致性测试反而把盲区固化了下来（自 F152 引入 walk 白名单起，跨 F217/F241 两轮质量门建设均未暴露）。覆盖缺口类指标（生产者扫描面 vs adapter 声明面的差集告警）值得作为 M10 候选。
+
 ### 7.5.5 调用边漏建：嵌套闭包归属中断（F241 pilot 实证 → **F242 已修复闭环**）
 
 > **状态：✅ 已修复（`264338b` F242）。** 本节保留完整发现过程作为方法论范本——它是
 > 「dogfooding 自用 → 量化失败 → 逐轮排除错误假设 → 收窄根因 → 立卡 → 并行修复 → 复测闭环」
 > 的完整链路记录。F241 rebase 到 F242 后复测：`executeKbSearch` 0→**6** caller（含嵌套闭包那条，置信 0.95）、
 > `runScaffoldKb` 0→**3**（含动态 import 解构）、`searchKbCore` 2→**8**（undercount 亦闭合）；
-> 全仓 calls 边 936→**2334**。三类形态全部关闭。**`.mjs` 覆盖缺口（§7.5.4）仍未修**，勿与本条混淆。
+> 全仓 calls 边 936→**2334**。三类形态全部关闭。`.mjs` 覆盖缺口（§7.5.4）已由 **F243** 修复，勿与本条混淆。
 
 
 F241 的 grounding pilot 在 **fresh 图 + 质量门 pass** 的条件下，跨 `2e3a4cd`/`fd9af7f`/`bc3bfb5` 三个快照

@@ -30,9 +30,16 @@ const EXCLUDED_DIRS = new Set([
   '.cache',
 ]);
 
-/** fallback 扫描时收集的文件扩展名 */
+/**
+ * fallback 扫描时收集的文件扩展名
+ *
+ * 口径是"影响文档生成的输入文件"，比 collector 扫描面更宽（含 .json/.md/.yaml 等
+ * 配置与文档），因此不是 collector 的镜像常量、无一致性测试约束；但其中的**源码扩展名
+ * 子集**必须与 collector 扫描面保持同步 —— 否则源码改动不会让 cache key 变化，
+ * 项目文档会错误复用旧缓存（F243：此前缺 .mjs/.cjs 即属此类脱节）。
+ */
 const INCLUDED_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx',
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.json', '.md', '.yaml', '.yml',
   '.toml', '.lock',
 ]);

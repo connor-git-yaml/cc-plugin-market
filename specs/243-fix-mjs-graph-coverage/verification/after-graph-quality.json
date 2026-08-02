@@ -1,0 +1,55 @@
+{
+  "graphPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/graph-topology-canonical-id-1de3ab/specs/_meta/graph.json",
+  "generatedAt": "2026-08-03T02:44:21.990Z",
+  "schemaVersion": "2.0",
+  "duplicateCanonicalId": {
+    "status": "pass",
+    "groups": []
+  },
+  "containsCoverage": {
+    "status": "pass",
+    "total": 5851,
+    "covered": 5851,
+    "ratio": 1,
+    "uncoveredIds": []
+  },
+  "orphanRatio": {
+    "status": "pass",
+    "totalSymbolNodes": 5851,
+    "rawOrphanCount": 0,
+    "exemptedByCategory": {
+      "entrypoint": 0,
+      "pure-type": 0,
+      "test-export": 0
+    },
+    "offendingRatio": 0,
+    "offendingIds": [],
+    "allNodeZeroDegreeRatio": 0.014605785592739649
+  },
+  "danglingEdges": {
+    "status": "pass",
+    "edges": []
+  },
+  "legacyAndIgnoredNodes": {
+    "status": "pass",
+    "legacyHashNodeIds": [],
+    "ignoredPathNodeIds": []
+  },
+  "freshness": {
+    "state": "dirty",
+    "recordedSourceCommit": "c146efcd457e0740537bb8dae1f8277ea6c7f788",
+    "currentHead": "c146efcd457e0740537bb8dae1f8277ea6c7f788",
+    "dirtyFiles": [
+      "src/batch/stages/source-discovery.ts",
+      "src/panoramic/cache/cache-key-builder.ts",
+      "src/panoramic/graph/quality/ignore-oracle.test.ts",
+      "src/panoramic/graph/source-commit.test.ts",
+      "tests/batch/source-discovery.test.ts",
+      "tests/panoramic/cache/cache-key-builder.test.ts"
+    ]
+  },
+  "overallVerdict": "pass",
+  "nextSteps": [
+    "图可能未反映未提交改动，如需精确请先提交或重新建图。"
+  ]
+}

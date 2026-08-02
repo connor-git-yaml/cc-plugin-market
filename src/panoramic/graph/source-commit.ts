@@ -33,7 +33,9 @@ export function resolveSourceCommit(projectRoot: string): string | null {
 }
 
 /** TSJS collector 实际扫描的扩展名（镜像 batch-orchestrator.ts::walkTsJsFiles 的 endsWith 判定面）。 */
-const TSJS_COLLECTOR_EXTENSIONS: ReadonlySet<string> = new Set(['.ts', '.tsx', '.js', '.jsx']);
+const TSJS_COLLECTOR_EXTENSIONS: ReadonlySet<string> = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+]);
 
 /** PY collector 实际扫描的扩展名（镜像 batch-orchestrator.ts::walkPyFiles，仅计入 .py，.pyi 不参与 dirty 判定）。 */
 const PY_COLLECTOR_EXTENSIONS: ReadonlySet<string> = new Set(['.py']);
