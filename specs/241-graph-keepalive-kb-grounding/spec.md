@@ -91,8 +91,9 @@ milestone_sc: M9-SC-007
 - **⚠️ 命名与能力边界（v2 更正）**：该阈值**不是 k-匿名**。no-hit 记录中没有任何主体标识（无 user-id / session-id），不存在"等价类"概念，因此不提供任何匿名性保证。全文一律称 **minimum-occurrence threshold（最小出现阈值）**，禁止在代码、输出、文档中使用「k-匿名 / k-anonymity」措辞。
 - **⚠️ 落盘范围与残余风险（v2 更正，删除原「原文在任何环节都不落盘」的绝对化表述）**：
   - **落盘的是**：redaction 后再经仓内 tokenizer（`src/scaffold-kb/tokenizer.ts`）切词得到的 **term 列表** + 归一化查询串的 **hash**（`normalizedQueryHash`）+ redaction 命中标记。
-  - **不落盘的是**：原始查询串**整串**（既不存原文，也不存 redaction 后的完整串）。
-  - **残余风险如实声明**：term 是自然语言切词结果，仍可能包含 redaction 六规则**未能识别**的敏感内容（中文姓名、内部项目代号、自然语言口令、带分隔符的电话号码等结构上不可判别的形态）。本 feature **不声称**已消除该风险，改以四层兜底控制暴露面：(1) 采集默认关闭（opt-in）；(2) 数据目录被 gitignore 且有自举保障（FR-024）；(3) 30 天保留期滚动清理；(4) 纯本机文件，不进任何上报通道。
+  - **不落盘的是**：原始查询串的**整串字段**——记录里**不新增** `query` / `redactedQuery` 这类承载完整查询串的字段（既不存原文，也不存 redaction 后的完整串）。
+  - **⚠️ 该红线的精确边界（v3 收窄，落 B2-5）**：落盘粒度是 **term**。当查询**本身就是单个 token** 时（如 `ProjectFalcon`），该 term 在字节上就等于原串——这是 term 粒度落盘的直接后果，属**已知且接受**的残余，不是红线被击穿。原表述「原串在任何环节都绝不出现」按字节口径不成立，故收窄为「不新增整串字段」。之所以不做「单 token 只留 hash」：单个 API 名 / 错误码正是 coverage-gap 最有价值的缺口信号，抹掉它等于废掉 E1 的目的。敏感形态由 redaction 先行遮蔽（FR-012），单 token 的 `sk-xxx` 落盘为 `<TOKEN>` 切词后的占位标记而非原串。
+  - **残余风险如实声明**：term 是自然语言切词结果，仍可能包含 redaction 六规则**未能识别**的敏感内容（中文姓名、内部项目代号、自然语言口令、带分隔符的电话号码、无点域名地址如 `user@localhost` 等结构上不可判别的形态）；单 token 查询时该内容即等于原串。本 feature **不声称**已消除该风险，改以四层兜底控制暴露面：(1) 采集默认关闭（opt-in）；(2) 数据目录被 gitignore 且有自举保障（FR-024）；(3) 30 天保留期滚动清理；(4) 纯本机文件，不进任何上报通道。
 - **默认关闭（opt-in）**。理由：(a) O-4 记录既有 telemetry 本身就是默认不采集、仅 env 开启，保持一致；(b) 记录用户查询词是本仓库首次落盘此类数据，脱敏是全新代码、未经实战验证，默认开启等于把未验证的隐私风险推给所有安装者；(c) coverage-gap 是治理/运维用途，消费者是仓库维护者，opt-in 的摩擦成本可接受。**代价与缓解**：默认关闭意味着 backlog 默认无数据，因此 FR-014 强制要求关闭态与"有数据但无缺口"必须输出**可区分**的状态，绝不允许用空 backlog 冒充"没有文档缺口"。本仓库自身在 dogfood 时显式开启。
 - **存哪里 / 留多久 / 谁能读**：见 FR-013 与 Key Entities「KB no-hit 记录」。
 
@@ -332,7 +333,11 @@ milestone_sc: M9-SC-007
 
 ### E1 — KB coverage-gap
 
-- **FR-012（no-hit 记录与 redaction 第一层）** `[必须]`：在 `kb_search`、`kb_api_lookup`、`spectra scaffold-kb query` 三个入口，当结果命中数为 0 时记录一条 no-hit 事件。**入库前**必须先对查询串施加 redaction，按下述规则逐条替换为占位类型标记：
+- **FR-012（no-hit 记录与 redaction 第一层）** `[必须]`：在 `kb_search`、`kb_api_lookup`、`spectra scaffold-kb query` 三个入口，当结果命中数为 0 **且本次至少真正检索过一个库**时记录一条 no-hit 事件。
+
+  **前置条件「至少查过一个库」（v4 增，落 B2-7）**：`source_filter` 与可用库求交后为空（例如只有 vendor 却请求 `source_filter: "project"`）、或两侧 handle 均为 `null` 时，零结果是**可用性**问题而非文档缺口，**不得**记录——否则 backlog 会被"没有库可查"污染成"文档缺失"。三个入口共用这条前置条件。
+
+  **入库前**必须先对查询串施加 redaction。redaction **入口先做 NFKC 归一化再匹配规则**，且归一化必须复用 `src/scaffold-kb/tokenizer.ts` 导出的**同一个**函数（v4 钉死，落 B2-1）：顺序颠倒或各写一份，全角形态（`１２３４５６７８`）会绕过规则、却在落盘切词时被还原成 ASCII 敏感串。规则中**凭据参数名**（`?TOKEN=`）、**认证 scheme**（`bearer`）、**home 路径段**（`c:\users\`）一律**大小写不敏感**；`sk-` / `ghp_` 等小写字面量前缀保持敏感（放宽会误遮普通大写词）。规则如下，逐条替换为占位类型标记：
 
   | 形态 | 判据 | 替换为 |
   |------|------|--------|
@@ -353,21 +358,22 @@ milestone_sc: M9-SC-007
   - `normalizedQueryHash: string` —— 归一化查询串的 hash（用于 `distinctQueries` 计数，不可逆、不用于还原）；
   - `redactionTags: string[]`、`tool`、`timestamp`、`resultCount: 0`、`dbPathHash`、`schemaVersion`。
 
-  **原始查询串整串不落盘**（既不存原文，也不存 redaction 后的完整串）。**如实声明**：`terms` 仍可能包含 redaction 未识别的敏感词（D5），本条不声称已消除该风险。
+  **不新增承载整串的字段**（无 `query` / `redactedQuery`；既不存原文，也不存 redaction 后的完整串）。**如实声明**：`terms` 仍可能包含 redaction 未识别的敏感词，且**单 token 查询时该 term 在字节上等于原串**——属 D5 已收窄并接受的残余（B2-5），本条不声称已消除该风险。
+  `normalizedQueryHash` 的输入是**等价类归一化**结果（NFKC + tokenizer 切词 + case-fold + 去重后重组，见 `tokenizer.ts::normalizeForEquivalence`）：大小写/全角变体必须收敛为同一 hash，否则同一个问题换个大小写问两遍就能把共同 term 顶过 FR-015 阈值（v4 钉死，落 B2-6）。
   该路径必须被 gitignore 且有自举保障（FR-024）。保留期 **30 天**滚动（proposed-default，见 OQ-2）：写入时清理 mtime 超过 30 天的同目录文件。可读范围 = 本机文件系统权限（不上传、不外发、不进任何 telemetry 上报通道）。写失败一律静默降级为 no-op（不得影响 KB 查询本身的返回）。
   *验证*：单测断言落盘对象的键集合恰为上列字段（**无** `redactedQuery` 等整串字段）；单测伪造 40 天前 mtime 的文件，跑一次写入后断言该文件被删除；把目录设为只读后跑一次查询，断言查询正常返回。gitignore 断言见 SC-020。
 
 - **FR-014（采集开关钉死为单一 env + 状态可区分）** `[必须，v3 钉死开关，落 P-W3]`：no-hit 采集**默认关闭**，开关**钉死**为**单一环境变量 `SPECTRA_KB_NOHIT_TELEMETRY`**：其值 = no-hit 记录目录路径（约定为 `.specify/kb-nohit/`，见 FR-013）；**未设置或值为空字符串 = 关闭**。该形态对齐 O-4 记录的既有先例 `SPECTRA_MCP_TELEMETRY_PATH`（env 直接携带路径、不设即不采集）。**不引入 config 字段、不引入「布尔开关 + 路径」两个变量**——「env 或 config 由 plan 决定」这一悬置表述在 v3 作废。FR-012 的三个 recorder 入口（`kb_search` / `kb_api_lookup` / `scaffold-kb query`）**必须共用同一个解析函数**读取该 env，禁止三处各自 `process.env` 取值导致语义漂移。
 
-  coverage-gap 子命令的输出必须区分至少三种状态且**不得混淆**：`collection-disabled`（env 未设或为空，无从判断有无缺口）、`no-data`（已开启但尚无记录）、`no-gap-above-threshold`（有记录但无条目满足最小出现阈值）。**禁止**在采集关闭时返回空 backlog 而不标明状态。
-  *验证*：三种条件各跑一次子命令，断言输出 `status` 字段分别为上述三值；断言三种情况下 `items` 均为空数组但 `status` 互不相同；grep 断言全仓仅有一处读取 `SPECTRA_KB_NOHIT_TELEMETRY` 的实现，三个 recorder 均 import 该解析函数；断言 env 设为空字符串时行为等同未设置（`collection-disabled`）。
+  coverage-gap 子命令的输出必须区分至少**四种**状态且**不得混淆**（v4 增第四态，落 B2-3）：`collection-disabled`（env 未设或为空，无从判断有无缺口）、`no-data`（已开启但尚无记录）、`data-unreadable`（匹配到 no-hit 文件但**全部读取失败**——权限/断链/IO——同样无从判断有无缺口）、`no-gap-above-threshold`（有记录但无条目满足最小出现阈值）。**禁止**在采集关闭、或数据存在却读不出来时返回空 backlog 而不标明状态。判定顺序：`readErrors > 0 且 totalRecords === 0` → `data-unreadable`，优先于 `no-data`。
+  *验证*：四种条件各跑一次子命令，断言输出 `status` 字段分别为上述四值；断言四种情况下 `items` 均为空数组但 `status` 互不相同；断言 `readErrors` 是恒在字段（关闭态为 0）；grep 断言全仓仅有一处读取 `SPECTRA_KB_NOHIT_TELEMETRY` 的实现，三个 recorder 均 import 该解析函数；断言 env 设为空字符串时行为等同未设置（`collection-disabled`）。
 
 - **FR-015（最小出现阈值聚合与 backlog 输出）** `[必须，v2 锁死聚合键，落 C5]`：coverage-gap 子命令读取 no-hit JSONL，按 **term** 聚合，仅输出满足 `distinctQueries ≥ 2`（k = 2）的条目。字段语义**锁死**：
 
   - `distinctQueries` = 包含该 term 的记录中**不同 `normalizedQueryHash` 的个数**。同一查询被重复执行 N 次只计 **1**（否决 clarify C-003 的「按行数/事件数计」——那恰是 C5 指出的绕过形态：把同一句话查两遍就能突破阈值）。
   - `occurrences` = 包含该 term 的**记录总行数**（即事件次数），仅作热度可见性，**不参与阈值判定**。
 
-  每个条目另含：涉及工具集合、首次/末次时间。输出支持 `--format json|markdown`。损坏行（JSON 不可解析）跳过并在输出中报告跳过行数，**不得**因单行损坏而整体失败。
+  每个条目另含：涉及工具集合、首次/末次时间。输出支持 `--format json|markdown`。损坏行（JSON 不可解析）跳过并在输出中报告跳过行数（`skippedLines`），**不得**因单行损坏而整体失败；**文件级读取失败**（权限/断链/IO）同样不得中断聚合，但必须计入独立字段 `readErrors` 并按 FR-014 参与 `data-unreadable` 判定——静默跳过会把"数据不可读"伪装成"尚无记录"（v4 增，落 B2-3）。
   *验证*：见 SC-011（fixture 含「同一 normalizedQueryHash 重复 3 行的 term」，断言其 `distinctQueries = 1` 因而**被阈值挡在 backlog 之外**——这条即是绕过形态的守卫）。
 
 ### E2 — KB version selection
@@ -530,9 +536,11 @@ freshness 的**唯一权威计算源**是 D8 canonical 模块 `plugins/spec-driv
 ```
 {
   schemaVersion: 1,
-  status: "collection-disabled" | "no-data" | "no-gap-above-threshold" | "ok",
+  status: "collection-disabled" | "no-data" | "data-unreadable" | "no-gap-above-threshold" | "ok",
   minOccurrenceThreshold: 2,          // 原 kAnonymityThreshold 更名（C5）；非匿名性保证
-  skippedLines: number,
+  totalRecords: number,
+  skippedLines: number,               // JSON 不可解析的行数（EC-18）
+  readErrors: number,                 // 整份读取失败的文件数（v4 增，落 B2-3）
   items: [ { term, occurrences, distinctQueries, tools: string[], firstSeen, lastSeen } ]
 }
 ```
@@ -603,8 +611,12 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 | EC-16 | KB 库不存在 | 状态子命令 `dbExists: false`、`freshness: "unknown"`、退出码 0；coverage-gap 与版本决议同样不崩 |
 | EC-17 | 旧 schema 库（无 provenance 列） | `PRAGMA table_info` 探测后走兼容分支，相关字段 `null`、`schemaCompat: "legacy-missing-provenance"`、`freshness: "unknown"`（FR-020） |
 | EC-18 | no-hit JSONL 单行损坏 | 跳过该行、`skippedLines` 计数、整体退出码 0（FR-015） |
-| EC-19 | no-hit JSONL 并发写 | 单次 `appendFileSync` 写完整一行（含结尾换行），行内容不含裸换行；不引入锁 |
+| EC-19 | no-hit JSONL 并发写 | 单次追加写完整一行（含结尾换行，`O_APPEND`），行内容不含裸换行；不引入锁 |
 | EC-20 | no-hit 目录不可写 / 磁盘满 | 静默 no-op，**KB 查询本身照常返回结果**（治理层绝不影响主链路） |
+| EC-31 | **daily 文件名被非常规文件占位（FIFO / symlink / 设备）**（v4 增，落 B2-2） | 写入用 `O_APPEND｜O_CREAT｜O_WRONLY｜O_NOFOLLOW｜O_NONBLOCK` 打开并对 fd `fstat` 校验 `isFile()`，非常规文件**放弃本条记录**（静默降级，不抛）。`O_NONBLOCK` 不可省：无 reader 的 FIFO 会让打开操作永久阻塞在 KB 查询的同步返回路径上，外层 try/catch 对"永不返回"无效。清理侧用 `lstatSync` 且跳过非常规文件，不跟随链接判定 mtime |
+| EC-32 | **`recordNoHit` 收到畸形入参**（v4 增，落 B2-8） | `tool` 不属三值 allowlist、`rawQuery`/`dbPath` 非 string（或 `dbPath` thunk 求值结果非 string）→ **直接 no-op，零 append**；保持 total 函数不抛。类型只在编译期生效，导出边界必须自己校验，否则等于开了一条绕过 redaction 落盘任意串的通道 |
+| EC-33 | **`dbPath` 计算过程抛错**（v4 增，落 B2-9） | 挂点以 thunk 形式传入路径计算，由 `recordNoHit` 在其 try 内求值 → 抛错走静默降级；**禁止**在挂点处先求值（那会绕过保护边界、连采集关闭态都能把异常穿透到主链） |
+| EC-34 | **no-hit 文件存在但整份读不出来**（v4 增，落 B2-3） | `readErrors` 计数 +1、继续聚合其余文件；若最终 `totalRecords === 0` 则 `status: "data-unreadable"`，**不得**报 `no-data` |
 | EC-21 | **redaction + 切词后 term 列表为空** | 若切词结果为空数组或只剩占位标记 token，该条记录**不进入 backlog 聚合**（无治理价值），但仍计入总记录数以便区分 `no-data` 与 `no-gap-above-threshold` |
 | EC-22 | 阈值下 backlog 为空 | 输出 `status: "no-gap-above-threshold"` + 空 `items`，**明确区别于** `collection-disabled` 与 `no-data`（FR-014） |
 | EC-30 | **同一查询被重复执行多次** | 该 term 的 `occurrences` 增长但 `distinctQueries` 恒为 1，**不满足阈值、不进 backlog**（FR-015 锁死聚合键；这是 C5 指出的绕过形态的直接防线） |
@@ -649,7 +661,7 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 
 - **SC-009（no-hit 落盘范围实证）**：构造含 email、`sk-` token、64 位 hex、`/Users/<name>/...`、10 位数字的查询各触发一次 no-hit，读取落盘 JSONL，断言：(a) 每条原文敏感片段在文件全文中**零出现**；(b) `redactionTags` 含对应类型标记；(c) 落盘对象键集合恰为 FR-013 列举的字段，**不含任何整串字段**（无 `redactedQuery`、无 `query`）；(d) 同一查询串执行两次，两行的 `normalizedQueryHash` 相同。
 
-- **SC-010（coverage-gap 三状态可区分）**：分别在「采集关闭」「采集开启但无记录」「有记录但无条目达阈值」三种条件下运行 coverage-gap 子命令，断言 `status` 分别为 `collection-disabled` / `no-data` / `no-gap-above-threshold`，且三者 `items` 均为空但状态互不相同；断言输出含 `minOccurrenceThreshold: 2` 且全文**不含**「k-匿名 / k-anonymity」字样。
+- **SC-010（coverage-gap 四状态可区分）**（v4 三态→四态，落 B2-3）：分别在「采集关闭」「采集开启但无记录」「有文件但全部读取失败」「有记录但无条目达阈值」四种条件下运行 coverage-gap 子命令，断言 `status` 分别为 `collection-disabled` / `no-data` / `data-unreadable` / `no-gap-above-threshold`，且四者 `items` 均为空但状态互不相同；断言不可读场景的 `readErrors ≥ 1`、关闭态 `readErrors === 0`，且 markdown/json 两种格式都打出该状态与计数；断言输出含 `minOccurrenceThreshold: 2` 且全文**不含**「k-匿名 / k-anonymity」字样。
 
 - **SC-011（backlog 产出、绕过防线与损坏容忍）**：用 fixture（term X 出现在 3 行、分属 **2 个不同 `normalizedQueryHash`**；term Y 出现在 3 行但同属 **1 个 `normalizedQueryHash`**；1 条独有词；1 行损坏 JSON）运行 coverage-gap，断言：输出恰含 **1 个条目（term X）**、其 `distinctQueries: 2` 且 `occurrences: 3`；**term Y 不在 items 中**（同一查询重复三次不构成缺口信号——C5 绕过形态防线）；`skippedLines: 1`；退出码 0。
 

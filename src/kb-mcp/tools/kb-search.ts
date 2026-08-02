@@ -12,9 +12,10 @@ import type { ToolResult } from '../../mcp/lib/tool-response.js';
 import { withTelemetry } from '../../mcp/lib/telemetry.js';
 import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { buildEvidenceEnvelope as envelope, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
+import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
 import { mergeResults, annotateFreshness, type SourceKind } from '../lib/result-merger.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
-import type { KbContext } from '../lib/kb-locator.js';
+import { describeQueriedDbPaths, type KbContext } from '../lib/kb-locator.js';
 
 const MAX_TOP_K = 20;
 const DEFAULT_TOP_K = 5;
@@ -78,6 +79,20 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
   const vendorResults = vendorHits && vendorHits.ok ? vendorHits.results : [];
   const projectResults = projectHits && projectHits.ok ? projectHits.results : [];
   const merged = annotateFreshness(mergeResults(vendorResults, projectResults, topK));
+
+  // F241 FR-012 挂点 1：真实零结果 → 记一条 no-hit 治理事件。
+  // recordNoHit 是 total 函数（默认关闭时零 I/O，任何失败静默 no-op），主链路不受影响（EC-20 / RG-009）。
+  //
+  // `sourcesQueried.length > 0` 是**前置条件**（B2-7）：一个库都没查过（如只有 vendor 却
+  // 请求 source_filter="project"）时的零结果是 availability 问题，不是文档缺口，不进 backlog。
+  // dbPath 传 thunk（B2-9）：路径计算在 recordNoHit 的 try 内求值，不在这里穿透主链。
+  if (merged.length === 0 && sourcesQueried.length > 0) {
+    recordNoHit({
+      tool: 'kb_search',
+      rawQuery: params.query,
+      dbPath: () => describeQueriedDbPaths([useVendor ? ctx.vendor : null, useProject ? ctx.project : null]),
+    });
+  }
 
   // token cap（字符口径）+ evidence envelope
   let truncated = false;

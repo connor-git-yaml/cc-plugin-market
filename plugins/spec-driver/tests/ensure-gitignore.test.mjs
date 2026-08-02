@@ -31,6 +31,8 @@ const EXPECTED_ENTRIES = [
   '.specify/templates/',
   // Feature 241 — 图消费决策审计事件流（FR-024 / SC-020）
   '.specify/graph-consumption-audit.jsonl',
+  // Feature 241 — KB no-hit 治理记录目录（FR-024 / SC-020）
+  '.specify/kb-nohit/',
 ];
 
 /**
@@ -616,8 +618,13 @@ describe('ensure-gitignore.sh 共享库', () => {
  * 而不是 grep 文件内容——后者会被 negation 行、目录形态差异、匹配范围放宽等情况骗过。
  */
 describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
-  /** F241 在批 1 引入的本机数据路径。批 2 会再加 `.specify/kb-nohit/`。 */
-  const F241_BATCH1_PATHS = ['.specify/graph-consumption-audit.jsonl'];
+  /**
+   * F241 引入的两条本机数据路径（批 1 审计事件流 + 批 2 KB no-hit 记录）。
+   *
+   * 目录型条目用其下的**真实文件形态**探测：`git check-ignore` 对不存在的裸目录路径行为
+   * 取决于末尾斜杠与 pattern 写法，用具体文件路径问是最贴近实际泄露场景的问法。
+   */
+  const F241_DATA_PATHS = ['.specify/graph-consumption-audit.jsonl', '.specify/kb-nohit/nohit-20260803.jsonl'];
 
   function checkIgnore(cwd, target) {
     return spawnSync('git', ['check-ignore', '-v', target], { cwd, encoding: 'utf8' });
@@ -625,7 +632,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
 
   it('第一段：本开发仓库内直查，路径确被忽略', () => {
     const repoRoot = path.resolve(__dirname, '..', '..', '..');
-    for (const target of F241_BATCH1_PATHS) {
+    for (const target of F241_DATA_PATHS) {
       const res = checkIgnore(repoRoot, target);
       assert.equal(res.status, 0, `${target} 未被本仓 .gitignore 忽略：${res.stderr}`);
       assert.match(res.stdout, /\.gitignore:/, '命中来源应是 .gitignore');
@@ -644,7 +651,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
       const installedLib = path.join(installedPluginDir, 'scripts', 'lib', 'ensure-gitignore.sh');
       assert.equal(fs.existsSync(installedLib), true, '自举脚本必须随插件分发');
 
-      for (const target of F241_BATCH1_PATHS) {
+      for (const target of F241_DATA_PATHS) {
         const before = checkIgnore(dir, target);
         assert.notEqual(before.status, 0, `前置：自举前 ${target} 不应已被忽略`);
       }
@@ -656,7 +663,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
       );
       assert.equal(res.status, 0, `自举脚本应零退出：${res.stderr}`);
 
-      for (const target of F241_BATCH1_PATHS) {
+      for (const target of F241_DATA_PATHS) {
         const after = checkIgnore(dir, target);
         assert.equal(after.status, 0, `自举后 ${target} 仍未被忽略：${after.stderr}`);
       }

@@ -134,82 +134,82 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 
 ## 批 2 — E1 KB coverage-gap（FR-012~FR-015、FR-024 no-hit 路径部分）
 
-- [ ] T028 记录 batch2 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch2=<sha>` 到 `trace.md`
+- [x] T028 记录 batch2 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch2=<sha>` 到 `trace.md`
   验证：`grep 'batch_base: batch2=' specs/241-graph-keepalive-kb-grounding/trace.md` 命中
 
 ### 2.1 常量与 redaction
 
-- [ ] T029 [P] 新增 `src/scaffold-kb/governance-constants.ts`：导出 `MIN_OCCURRENCE_THRESHOLD=2`、`NOHIT_RETENTION_DAYS=30`、`KB_FRESHNESS_AGING_DAYS=30`、`KB_FRESHNESS_STALE_DAYS=90`（OQ-2 单一常量模块要求，四参数集中于此使调参成本=改一处常量+改测试期望值）
+- [x] T029 [P] 新增 `src/scaffold-kb/governance-constants.ts`：导出 `MIN_OCCURRENCE_THRESHOLD=2`、`NOHIT_RETENTION_DAYS=30`、`KB_FRESHNESS_AGING_DAYS=30`、`KB_FRESHNESS_STALE_DAYS=90`（OQ-2 单一常量模块要求，四参数集中于此使调参成本=改一处常量+改测试期望值）
   验证：`npx tsc --noEmit` 对该文件零错误（随 `npm run build` 一并验证）
 
-- [ ] T030 [P][红测试] 新增 `tests/kb/query-redaction.test.ts`：FR-012 六类规则（email/带凭据URL/高熵串/疑似token/绝对路径home段/连续数字串）各 ≥2 正例 +1 反例，断言输出串不含原文敏感片段；另一条断言模块导出的规则表长度与文档表一致
+- [x] T030 [P][红测试] 新增 `tests/kb/query-redaction.test.ts`：FR-012 六类规则（email/带凭据URL/高熵串/疑似token/绝对路径home段/连续数字串）各 ≥2 正例 +1 反例，断言输出串不含原文敏感片段；另一条断言模块导出的规则表长度与文档表一致
   验证：`npx vitest run tests/kb/query-redaction.test.ts` 因模块不存在而失败（红）
 
-- [ ] T031 实现 `src/scaffold-kb/query-redaction.ts`：导出 `redactQuery(raw: string) -> { redacted: string, tags: string[] }`，六类规则以数据表形式声明（非散落正则），模块文档注释如实写明能力边界（对中文姓名/内部代号/自然语言口令/带分隔符电话号码无效）
+- [x] T031 实现 `src/scaffold-kb/query-redaction.ts`：导出 `redactQuery(raw: string) -> { redacted: string, tags: string[] }`，六类规则以数据表形式声明（非散落正则），模块文档注释如实写明能力边界（对中文姓名/内部代号/自然语言口令/带分隔符电话号码无效）
   验证：`npx vitest run tests/kb/query-redaction.test.ts` 全绿
 
 ### 2.2 no-hit 落盘
 
-- [ ] T032 [P][红测试] 新增 `tests/kb/nohit-recorder.test.ts`：FR-013 落盘对象键集合恰为 `terms`/`normalizedQueryHash`/`redactionTags`/`tool`/`timestamp`/`resultCount`/`dbPathHash`/`schemaVersion`（无整串字段）；伪造 40 天前 mtime 文件 → 写入时被清理；只读目录场景查询正常返回（静默降级）；同一查询两次的 `normalizedQueryHash` 相同；`SPECTRA_KB_NOHIT_TELEMETRY` 未设置/空字符串 → `resolveNoHitTelemetryDir()` 返回 `null` 且 `recordNoHit` 全程零 I/O（P-W3）
+- [x] T032 [P][红测试] 新增 `tests/kb/nohit-recorder.test.ts`：FR-013 落盘对象键集合恰为 `terms`/`normalizedQueryHash`/`redactionTags`/`tool`/`timestamp`/`resultCount`/`dbPathHash`/`schemaVersion`（无整串字段）；伪造 40 天前 mtime 文件 → 写入时被清理；只读目录场景查询正常返回（静默降级）；同一查询两次的 `normalizedQueryHash` 相同；`SPECTRA_KB_NOHIT_TELEMETRY` 未设置/空字符串 → `resolveNoHitTelemetryDir()` 返回 `null` 且 `recordNoHit` 全程零 I/O（P-W3）
   验证：`npx vitest run tests/kb/nohit-recorder.test.ts` 因模块不存在而失败（红）
 
-- [ ] T033 实现 `src/scaffold-kb/nohit-recorder.ts`：导出 `recordNoHit({ tool, rawQuery, dbPath })`（静默降级，EC-20）与 `resolveNoHitTelemetryDir()`（读 `SPECTRA_KB_NOHIT_TELEMETRY`，唯一解析函数，P-W3 硬约束）；内部流程 `resolveNoHitTelemetryDir` 判空提前返回 → `redactQuery` → 复用 `src/scaffold-kb/tokenizer.ts` 切词去重 → 落盘 + 30 天滚动清理（`NOHIT_RETENTION_DAYS` 常量）
+- [x] T033 实现 `src/scaffold-kb/nohit-recorder.ts`：导出 `recordNoHit({ tool, rawQuery, dbPath })`（静默降级，EC-20）与 `resolveNoHitTelemetryDir()`（读 `SPECTRA_KB_NOHIT_TELEMETRY`，唯一解析函数，P-W3 硬约束）；内部流程 `resolveNoHitTelemetryDir` 判空提前返回 → `redactQuery` → 复用 `src/scaffold-kb/tokenizer.ts` 切词去重 → 落盘 + 30 天滚动清理（`NOHIT_RETENTION_DAYS` 常量）
   验证：`npx vitest run tests/kb/nohit-recorder.test.ts` 全绿
 
 ### 2.3 三处挂点（T-C3：红测试全部前移到对应接线任务之前）
 
-- [ ] T034 [P][红测试] 改 `tests/kb/kb-search-tool.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用（spy）；`merged.length>0` 时断言 `recordNoHit` **不**被调用
+- [x] T034 [P][红测试] 改 `tests/kb/kb-search-tool.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用（spy）；`merged.length>0` 时断言 `recordNoHit` **不**被调用
   验证：`npx vitest run tests/kb/kb-search-tool.test.ts` 此刻因挂点未接线而失败（红）
 
-- [ ] T035 no-hit 挂点 1：`src/kb-mcp/tools/kb-search.ts::executeKbSearch` 在 `merged.length === 0` 时调用 `recordNoHit({ tool: 'kb_search', rawQuery: params.query, dbPath })`（plan §1.5 现行 `:80`）
+- [x] T035 no-hit 挂点 1：`src/kb-mcp/tools/kb-search.ts::executeKbSearch` 在 `merged.length === 0` 时调用 `recordNoHit({ tool: 'kb_search', rawQuery: params.query, dbPath })`（plan §1.5 现行 `:80`）
   验证：`npx vitest run tests/kb/kb-search-tool.test.ts` 全绿（T034 转绿）
 
-- [ ] T036 [红测试] 改 `tests/kb/kb-api-lookup-tool.test.ts`：新增四组用例——(a) `matched.length===0`（挂点2a，`allEnts.length>0` 正常路径）→ 断言 `recordNoHit` 被调用；(b) `matched.length>0`（2a 反例）→ 断言不被调用；(c) `documentFallback` 内 `hits.length===0`（挂点2b）→ 断言 `recordNoHit` 被调用；(d) `documentFallback` 内 `hits.length>0` → 断言不被调用（区分"零结果"与"有结果"两态，防止挂点误判为无条件记录）
+- [x] T036 [红测试] 改 `tests/kb/kb-api-lookup-tool.test.ts`：新增四组用例——(a) `matched.length===0`（挂点2a，`allEnts.length>0` 正常路径）→ 断言 `recordNoHit` 被调用；(b) `matched.length>0`（2a 反例）→ 断言不被调用；(c) `documentFallback` 内 `hits.length===0`（挂点2b）→ 断言 `recordNoHit` 被调用；(d) `documentFallback` 内 `hits.length>0` → 断言不被调用（区分"零结果"与"有结果"两态，防止挂点误判为无条件记录）
   验证：`npx vitest run tests/kb/kb-api-lookup-tool.test.ts` 此刻因两处挂点均未接线而失败（红）
 
-- [ ] T037 no-hit 挂点 2a：`src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` 的 `matched.length===0`（`allEnts.length>0` 正常路径，现行 `:141`）分支调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
+- [x] T037 no-hit 挂点 2a：`src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` 的 `matched.length===0`（`allEnts.length>0` 正常路径，现行 `:141`）分支调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
   验证：见 T038（两处挂点合并验证）
 
-- [ ] T038 no-hit 挂点 2b（P-W3 硬性不豁免）：`documentFallback`（`allEnts.length===0`，现行 `:79-100`）内部 `hits` 数组组装完成后（现行 `:93` 返回前），若 `hits.length === 0` **同样**调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
+- [x] T038 no-hit 挂点 2b（P-W3 硬性不豁免）：`documentFallback`（`allEnts.length===0`，现行 `:79-100`）内部 `hits` 数组组装完成后（现行 `:93` 返回前），若 `hits.length === 0` **同样**调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
   验证：`npx vitest run tests/kb/kb-api-lookup-tool.test.ts` 全绿（T036 全部四组用例转绿，T037/T038 完成后）
 
-- [ ] T039 [P][红测试] 改 `tests/kb/scaffold-kb-query.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用；`merged.length>0` 时断言不被调用
+- [x] T039 [P][红测试] 改 `tests/kb/scaffold-kb-query.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用；`merged.length>0` 时断言不被调用
   验证：`npx vitest run tests/kb/scaffold-kb-query.test.ts` 此刻因挂点未接线而失败（红）
 
-- [ ] T040 no-hit 挂点 3：`src/cli/commands/scaffold-kb.ts::runQuery` 在既有 `merged.length===0` 分支（现行 `:61-64`）旁挂 `recordNoHit({ tool: 'scaffold_kb_query', ... })`
+- [x] T040 no-hit 挂点 3：`src/cli/commands/scaffold-kb.ts::runQuery` 在既有 `merged.length===0` 分支（现行 `:61-64`）旁挂 `recordNoHit({ tool: 'scaffold_kb_query', ... })`
   验证：`npx vitest run tests/kb/scaffold-kb-query.test.ts` 全绿（T039 转绿）；人工手跑一次 `spectra scaffold-kb query` 触发零结果场景确认落盘
 
 ### 2.4 coverage-gap 聚合器与 CLI 接线
 
-- [ ] T041 [P][红测试] 新增 `tests/kb/coverage-gap.test.ts`：三态互不相同（`collection-disabled`/`no-data`/`no-gap-above-threshold`，`items` 均空但 `status` 不同）；fixture（term X 出现 3 行分属 2 个不同 `normalizedQueryHash`，term Y 出现 3 行同属 1 个 hash，1 条独有词，1 行损坏 JSON）→ 恰 1 条目（term X）+ `distinctQueries:2` + `occurrences:3`，term Y **不在** items 中，`skippedLines:1`，退出码 0
+- [x] T041 [P][红测试] 新增 `tests/kb/coverage-gap.test.ts`：三态互不相同（`collection-disabled`/`no-data`/`no-gap-above-threshold`，`items` 均空但 `status` 不同）；fixture（term X 出现 3 行分属 2 个不同 `normalizedQueryHash`，term Y 出现 3 行同属 1 个 hash，1 条独有词，1 行损坏 JSON）→ 恰 1 条目（term X）+ `distinctQueries:2` + `occurrences:3`，term Y **不在** items 中，`skippedLines:1`，退出码 0
   验证：`npx vitest run tests/kb/coverage-gap.test.ts` 因模块不存在而失败（红）
 
-- [ ] T042 实现 `src/scaffold-kb/coverage-gap.ts`：导出 `buildCoverageGapReport({ nohitDir, isCollectionEnabled }) -> CoverageGapOutput`，按 term 聚合、`distinctQueries≥2` 阈值过滤，`--format json|markdown`
+- [x] T042 实现 `src/scaffold-kb/coverage-gap.ts`：导出 `buildCoverageGapReport({ nohitDir, isCollectionEnabled }) -> CoverageGapOutput`，按 term 聚合、`distinctQueries≥2` 阈值过滤，`--format json|markdown`
   验证：`npx vitest run tests/kb/coverage-gap.test.ts` 全绿
 
-- [ ] T043 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`spectra scaffold-kb coverage-gap --dry-run` 经 parse-args 解析出 `op='coverage-gap'` 且不落 `invalid_subcommand`，并 dispatch 到 `runCoverageGap`；未知 op 仍被拒（P-W5，防"模块单测全绿但 CLI 永远不可达"）
+- [x] T043 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`spectra scaffold-kb coverage-gap --dry-run` 经 parse-args 解析出 `op='coverage-gap'` 且不落 `invalid_subcommand`，并 dispatch 到 `runCoverageGap`；未知 op 仍被拒（P-W5，防"模块单测全绿但 CLI 永远不可达"）
   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts` 此刻因 `parse-args.ts`/`scaffold-kb.ts` 均未接线而失败（红）
 
-- [ ] T044 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union（现行 `:113`）扩 `'coverage-gap'`，同步 `:758` 附近合法 op 校验分支，新增 coverage-gap 专用 flag 解析（P-W5）
+- [x] T044 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union（现行 `:113`）扩 `'coverage-gap'`，同步 `:758` 附近合法 op 校验分支，新增 coverage-gap 专用 flag 解析（P-W5）
   验证：见 T046（两处改动合并验证）
 
-- [ ] T045 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'coverage-gap'` 分支（`runCoverageGap`，调用 T042 的 `buildCoverageGapReport`）
+- [x] T045 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'coverage-gap'` 分支（`runCoverageGap`，调用 T042 的 `buildCoverageGapReport`）
   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts` 全绿（T043 转绿，T044/T045 完成后）
 
-- [ ] T046 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `coverage-gap` op 说明
+- [x] T046 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `coverage-gap` op 说明
   验证：人工核对 `spectra scaffold-kb --help` 输出含新增 op 说明
 
 ### 2.5 数据路径自举（FR-024 no-hit 路径部分）
 
-- [ ] T047 [P] 改仓库根 `.gitignore`：新增一条 `.specify/kb-nohit/`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 自举清单，新增同一条目
+- [x] T047 [P] 改仓库根 `.gitignore`：新增一条 `.specify/kb-nohit/`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 自举清单，新增同一条目
   验证：`git check-ignore -v .specify/kb-nohit/nohit-20260803.jsonl` 命中（退出码 0）
 
-- [ ] T048 [红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：与批 1 共享同一文件，本批追加 `.specify/kb-nohit/` 的双段断言，合计断言数从 5（T026 后）提升到 6（T-I1 修正：原 v1 的悬空引用已改为指向本任务）
+- [x] T048 [红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：与批 1 共享同一文件，本批追加 `.specify/kb-nohit/` 的双段断言，合计断言数从 5（T026 后）提升到 6（T-I1 修正：原 v1 的悬空引用已改为指向本任务）
   验证：`node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs` 全绿（T047 完成后转绿）
 
 ### 2.6 批 2 门禁
 
-- [ ] T049 **批 2 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数 ≥ 批 1 前基线 32/293 之上有净增）+ `npx vitest run tests/kb/cli-scaffold-kb.test.ts`（T-C5：作为既已存在文件的重跑而非"新建"，与 `tests/kb/` 整体一起跑但显式点名确认覆盖）+ `node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs`（T-C5：批 2 重跑该合用测试文件，确认 6 条断言全绿，不只是批 1 遗留状态）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch2-base> -- <paths>`，T-W3）：RG-005（`kb-contract.test.ts` 中既有字段断言未被放宽，人工 diff 核对）；RG-009（T-C5 扩展：no-hit 目录只读**与缺列**两类故障注入下 `kb_search` 返回的 `results` 与故障注入前逐字节相同、进程退出码 0、stdout 无治理层错误输出）。**continuous capture 台账同步检查**：`pilot/mcp-call-log.md`/`pilot/ledger.jsonl` 本批新增条目数一致且 `seq` 单调
+- [x] T049 **批 2 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数 ≥ 批 1 前基线 32/293 之上有净增）+ `npx vitest run tests/kb/cli-scaffold-kb.test.ts`（T-C5：作为既已存在文件的重跑而非"新建"，与 `tests/kb/` 整体一起跑但显式点名确认覆盖）+ `node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs`（T-C5：批 2 重跑该合用测试文件，确认 6 条断言全绿，不只是批 1 遗留状态）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch2-base> -- <paths>`，T-W3）：RG-005（`kb-contract.test.ts` 中既有字段断言未被放宽，人工 diff 核对）；RG-009（T-C5 扩展：no-hit 目录只读**与缺列**两类故障注入下 `kb_search` 返回的 `results` 与故障注入前逐字节相同、进程退出码 0、stdout 无治理层错误输出）。**continuous capture 台账同步检查**：`pilot/mcp-call-log.md`/`pilot/ledger.jsonl` 本批新增条目数一致且 `seq` 单调
   验证：以上命令全部零失败，逐项记入交付 report
 
 ---
@@ -326,10 +326,10 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 | FR-009 | `graph-consumption-cli.test.mjs` Part1/2（T014/T016） | `decide`/`annotate-caveat` 两子命令契约 | 同上（T027） |
 | FR-010 | `graph-consumption-cli.test.mjs` Part2（T016） | 双事件审计模型，12 值逐值验证 | 同上（T027） |
 | FR-011 | `goal-loop-graph-consumption-integration.test.mjs`（T020） | advisory/authoritative 双合同 + iteration log 注入正反断言 | `node --test .../goal-loop-graph-consumption-integration.test.mjs`（T027） |
-| FR-012 | `query-redaction.test.ts`（T030）+ `kb-search-tool.test.ts`（T034）+ `kb-api-lookup-tool.test.ts`（T036）+ `scaffold-kb-query.test.ts`（T039） | 六类脱敏规则 + 三处挂点各自正反 no-hit 用例 | `npx vitest run tests/kb/`（T049） |
-| FR-013 | `nohit-recorder.test.ts`（T032） | 落盘键集合恰 8 键 + 30 天清理 + 只读降级 | `npx vitest run tests/kb/nohit-recorder.test.ts`（T049） |
-| FR-014 | `coverage-gap.test.ts`（T041） | 三态互不相同 | `npx vitest run tests/kb/coverage-gap.test.ts`（T049） |
-| FR-015 | `coverage-gap.test.ts`（T041） | `distinctQueries≥2` 阈值过滤 | 同上（T049） |
+| FR-012 | `query-redaction.test.ts`（T030）+ `kb-search-tool.test.ts`（T034）+ `kb-api-lookup-tool.test.ts`（T036）+ `scaffold-kb-query.test.ts`（T039） | 六类脱敏规则 + 三处挂点各自正反 no-hit 用例；**M-3 整改增**：NFKC 前置/大小写不敏感（B2-1）、`sourcesQueried>0` 前置条件三挂点负例（B2-7）、dbPath thunk 惰性求值三挂点回归（B2-9） | `npx vitest run tests/kb/`（T049） |
+| FR-013 | `nohit-recorder.test.ts`（T032） | 落盘键集合恰 8 键 + 30 天清理 + 只读降级；**M-3 整改增**：整行敏感片段零出现终态断言 + 单 token 护栏（B2-1/B2-5）、等价类 hash（B2-6）、只写常规文件 FIFO/symlink（B2-2）、`tool` 运行时 allowlist 零 append（B2-8） | `npx vitest run tests/kb/nohit-recorder.test.ts`（T049） |
+| FR-014 | `coverage-gap.test.ts`（T041） | **四态**互不相同（含 `data-unreadable`，M-3 整改 B2-3）+ `readErrors` 恒在字段 | `npx vitest run tests/kb/coverage-gap.test.ts`（T049） |
+| FR-015 | `coverage-gap.test.ts`（T041） | `distinctQueries≥2` 阈值过滤；**M-3 整改增**：文件级读取失败计入 `readErrors` 而非静默跳过（B2-3） | 同上（T049） |
 | FR-016 | `lockfile-parser.test.ts`（T051） | 三种 lockfile + `go.sum` 不支持 + 超限保护 | `npx vitest run tests/kb/lockfile-parser.test.ts`（T065） |
 | FR-017 | `version-resolver.test.ts`（T053） | 六组 fixture 含 `lockfile-install-mismatch` | `npx vitest run tests/kb/version-resolver.test.ts`（T065） |
 | FR-018 | **已删除（plan §5，判定：不实现）** | 检索侧接入会改变默认行为语义，撞 Non-Goals 第9条；E2 验收由 FR-016/017 独立满足 | — |
@@ -353,7 +353,7 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 | SC-007 | T014, T016 | 单调用 spawn≤1（进程内）+ 调用方合同两次调用（跨调用） | T027 |
 | SC-008 | T020, T021, T022, T023 | 允许态确注入/拒绝态确不注入正反两向断言 | T027 |
 | SC-009 | T030, T032 | redaction 反例 + nohit-recorder 键集合 | T049 |
-| SC-010 | T041, T042 | 三态互不相同 | T049 |
+| SC-010 | T041, T042 | **四态**互不相同（`collection-disabled`/`no-data`/`data-unreadable`/`no-gap-above-threshold`）+ markdown/json 均打出 `readErrors` | T049 |
 | SC-011 | T041, T042 | `distinctQueries≥2` 阈值过滤 | T049 |
 | SC-012 | T051, T053, T057 | lockfile 解析 + version-resolver + CLI parse→dispatch 集成 | T065 |
 | SC-013 | T055, T057 | kb-status 三档 + CLI parse→dispatch 集成 | T065 |
@@ -459,3 +459,84 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 2. **`npm run repo:sync` 产生无关时间戳 churn**：`specs/products/**/_generated/*` 与
    `.specify/project-context.suggestions.{md,yaml}` 的 diff 仅为 `generatedAt` 漂移，已还原，
    还原后 `repo:check` 仍 `status=pass`。
+
+---
+
+## 批 2 M-3 整改（Codex 双组对抗审查 BLOCKED → 修订）
+
+> 依据：`review-dispositions.md`「Implement 批 2 — M-3 双组对抗审查整改单」（B2-1 ~ B2-9）。
+> A 组 BLOCKED（3 CRITICAL / 4 WARNING / 1 INFO）+ B 组 BLOCK（2 CRITICAL / 3 WARNING / 1 INFO），
+> 判读后 9 条真 finding / 0 误报。红态逐条见 `verification/batch2-red-evidence.md` 第二节，
+> 整改后门禁全表见 `verification/batch2-gate.md` 末节。
+
+- [x] T049a **B2-1** redaction 入口先 NFKC + 关键规则大小写不敏感（A-C2 / B-W2 交集，最高优先）
+  实现：`tokenizer.ts` 抽出并导出 `normalizeUnicode`（全仓**唯一**一份 NFKC，`tokenize` 改调它）；
+  `redactQuery` 入口先归一化再匹配；URL 凭据参数名整条规则 `/i`、Bearer scheme 逐字母字符类放宽、
+  home 段（`/Users/` `/home/` `X:\Users\`）放宽；`sk-`/`ghp_` 保持敏感
+  验证：`query-redaction.test.ts` +8（含「src/ 全树 NFKC 调用点恰 1 处且在 tokenizer.ts」结构断言）；
+  `nohit-recorder.test.ts` +6 **终态断言**（对落盘整行做敏感片段零出现检查，不只查字段名）→ 14 红全绿
+
+- [x] T049b **B2-2** 只写常规文件：FIFO 不阻塞主链、symlink 不写出目录外、清理不误删（A-C3 / B-C2 交集）
+  实现：写入改 `openSync(O_APPEND|O_CREAT|O_WRONLY|O_NOFOLLOW|O_NONBLOCK, 0o600)` + `fstatSync(fd).isFile()`
+  校验，非常规文件放弃写入（静默降级不抛）；`pruneExpired` 改 `lstatSync` 且跳过非常规文件。**未引入异步队列**
+  验证：watchdog 探针 `fifo: HUNG → RETURNED` / `symlink: escaped=true(207B) → escaped=false(0B)`；
+  vitest +3（FIFO / symlink 逃逸 / 清理不跟随链接）。**偏差如实记录**：`O_NONBLOCK` 是整改单未列的必要超集
+  （无它则阻塞在 `openSync`，`isFile()` 校验根本执行不到）
+
+- [x] T049c **B2-3** 读取失败不得误报 `no-data`（A-W4 / B-W3 交集）
+  实现：`CoverageGapOutput` 增 `readErrors: number`；`CoverageGapStatus` 增第四态 `data-unreadable`
+  （`readErrors > 0 && totalRecords === 0`，判定顺序先于 `no-data`）；markdown/json 均输出
+  spec 同步（外科改，未动其他条目）：FR-014 三态→四态 + 判定顺序、FR-015 文件级失败必须计数、
+  SC-010 四态 + `readErrors` 断言、§6 输出 schema、新增 EC-34；tasks crosswalk FR-014/FR-015/SC-010 三行同步
+  验证：`coverage-gap.test.ts` +6 → 全绿
+
+- [x] T049d **B2-4** parse-args 拒绝缺值/未知 flag（A-W3 / B-I1）
+  实现：抽出 `readFlagEntry` 三态读取（不存在 / 存在但缺值 / 存在且有值）；新增 `SCAFFOLD_KB_FLAG_SPECS`
+  各 op 允许 flag 表 + `checkScaffoldKbFlags`
+  **RG-005 收窄（按整改单授权）**：强制执行只作用于 `STRICT_SCAFFOLD_KB_OPS = { 'coverage-gap' }`；
+  既有 op 在 F241 前就接受未知 flag / 缺值静默回落，收严会改变已发布 CLI 行为，故允许表对它们只作文档用途
+  验证：+2 红（缺值 / 未知 flag）→ 全绿；另加 1 条**反向守卫**「既有 op 行为未被收严波及」（四 op 各一条）
+
+- [x] T049e **B2-5** 单 token 落盘口径：收窄红线 + 加护栏（A 独有；**不改代码逻辑**）
+  spec D5 与 FR-013 措辞收窄为「不新增整串字段；term 粒度落盘，单 token 查询时 term 等于原串，
+  属已知且接受的残余」，并入 D5 既有残余风险声明（同时补记 `user@localhost` 类无点域名残余）
+  验证：+2 护栏断言（回退态即绿）——`sk-xxx` 单独查询落盘为 `['TOKEN']` 占位标记；
+  非敏感单 token 等于原串（**现状钉子**：想改成「单 token 只留 hash」会先撞这条测试，被迫先改 spec）
+
+- [x] T049f **B2-6** `normalizedQueryHash` 改用等价类归一化（A 独有）
+  实现：新增 `tokenizer.ts::normalizeForEquivalence`（NFKC + 切词 + case-fold + 去重后重组，
+  与 B2-1 同一归一化链），hash 输入改用它
+  验证：+2 红（`retry alpha` vs `retry Alpha` 同 hash；全角变体同 hash）→ 全绿；
+  另加反向断言防压成一个桶（`retry alpha` vs `retry beta`、vs `alpha retry` 仍不同 hash）
+  **C5 措辞复核**：「不提供匿名性保证」仍准确——hash 输入变粗但仍是低熵确定性 SHA-256 截断、
+  仍可离线枚举，记录里也仍无主体标识，措辞无需修改
+
+- [x] T049g **B2-7** 无可用库源时不记 coverage gap（A 独有）
+  实现：三挂点统一前置条件「至少真正检索过一个库」——`kb_search` 用 `sourcesQueried.length > 0`；
+  `kb_api_lookup` 2b 用 `queriedHandles`（实际调过 `searchKbCore` 的 handle）、2a 用有实体表的 handle 集合；
+  `scaffold-kb query` 用非 null handle 集合。spec FR-012 同步写入该前置条件
+  验证：+2 红（kb_search 只有 vendor 却 `source_filter:"project"`；kb_api_lookup 两侧 handle 均 null）→ 全绿。
+  **第三挂点负例回退态即绿，如实标注**：`loadKbContext` 零 handle 时 `KB_NOT_FOUND` 提前返回、到不了挂点，
+  该守卫表达的是不变量而非修复，用例保留作回归护栏
+
+- [x] T049h **B2-8** `recordNoHit` 入口运行时校验（B 独有）
+  实现：按序校验 `input` 是对象、`tool ∈ ALLOWED_TOOLS`（三值）、`rawQuery` 是 string、
+  `dbPath`（或 thunk 求值结果）是 string；任一不合法**直接 no-op**，保持 total function 不抛。新增 EC-32
+  验证：+3 红（非法 tool 零 append / allowlist 近似值全拒 / 非 string 入参零 append）→ 全绿；
+  另加「合法输入不受影响」防止校验写成全量拒绝这种假绿
+
+- [x] T049i **B2-9** `dbPath` 改惰性 thunk，求值移入保护边界内（B 独有）
+  实现：`RecordNoHitInput.dbPath` 放宽为 `string | (() => string)`，三挂点改传
+  `() => describeQueriedDbPaths(...)`；`recordNoHit` 在 try 内、且**在开关判定之后**求值。新增 EC-33
+  验证：+4 红（三挂点「关闭态 + 抛错 getter → 查询正常返回」+ thunk/string 同 hash）
+  + 3 条既有断言按新契约转红 → 共 7 红全绿；另加「关闭态 thunk 零求值」计数器断言与
+  「thunk 返回非 string → 零 append」。`scaffold-kb query` 那条通过替换 `loadKbContext`
+  （默认透传真实实现）注入毒化 handle，走真实 CLI 路径而非拿桩自证
+
+- [x] T049j **整改后门禁重跑**：`npx vitest run tests/kb/` 35 files / **415 passed**（≥368 ✅）
+  + `npx vitest run` 全量 **493 files / 6139 passed** EXIT=0
+  + `node --test plugins/spec-driver/tests/*.mjs` **1272/1272** EXIT=0
+  + `npm run build` EXIT=0 + `npx tsc --noEmit` EXIT=0 + `npm run repo:check` EXIT=0（86 pass / 0 fail / 0 warn）
+  + RG-005 `git diff fd9af7f -- tests/kb/kb-contract.test.ts | wc -l` → **0**
+  + 改动面复核：整改轮对 `plugins/spec-driver/scripts/**` 零改动
+  + 台账：`ledger-schema-check.mjs` 通过（23 行），新增调用 `1-20` 已双写、`seq` 单调

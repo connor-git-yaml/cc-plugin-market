@@ -55,3 +55,20 @@
 
 > **批 1 的结构性事实（进报告）**：B4 接线代码 100% 落在 `plugins/**/*.mjs`，因此本批**每一次**
 > 面向自身改动面的 MCP 查询都必然是 `miss-structural`。这不是采样偏置，是 O-5 的确定性后果。
+
+### 分段 1 续：implement 批 2 子代理的调用（continuous capture，当下即记）
+
+图状态：`fresh` @ `fd9af7f`。
+
+| # | target | 工具 | 类别 | 备注 |
+|---|--------|------|------|------|
+| 1-11 | `src/kb-mcp/tools/kb-search.ts::executeKbSearch` | impact | `miss-empty`（**已证错误**）| 改 no-hit 挂点 1 前查影响面。`affected:[]`；grep 交叉核对同文件 `:147` `registerKbSearchTool` 确有生产调用 + 两个测试文件引用 —— **O-3 第三次复现**（0-3 / 1-6 之后），且这次图是 fresh，排除 stale 因素 |
+| 1-12 | `src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` | impact | `miss-empty`（**已证错误**）| 改挂点 2a/2b 前查影响面。`affected:[]`；grep 交叉核对同文件 `:256` `registerKbApiLookupTool` 确有生产调用 —— 与 1-11 同形态：**同文件内 `export function` 被同文件另一函数调用，这条边在图里缺失**（O-7 的更精确刻画）|
+| 1-13 | `src/kb-mcp/lib/kb-locator.ts::loadKbContext` | impact | `hit`（**部分漏报**）| 为挂点补 `KbHandle.dbPath` 前查影响面。`directCallers:1`（`kb-mcp/index.ts::startKbMcpServer`）；grep 交叉核对生产调用方实为 **2**（漏掉 `src/cli/commands/scaffold-kb.ts:38`）+ 5 个测试文件 —— O-8 复现 |
+| 1-14 | `src/cli/commands/scaffold-kb.ts::runQuery` | impact | `miss-structural` | 改挂点 3 前查影响面。symbol-not-found，fuzzy 三候选均非目标。根因：`runQuery` 是**模块内非 export 函数**，图只收 export symbol → file-private 函数结构性不可查（O-5 的 TS 侧同构形态）；grep 核对同文件 `:167` 有真实调用 |
+| 1-15 | `src/cli/commands/scaffold-kb.ts::runScaffoldKb` | impact | `miss-empty`（**已证错误**）| 改 op dispatch（T045）前查影响面。`affected:[]`；grep 核对 `src/cli/index.ts:223` 确有生产调用。**与 1-5 同一 target、同一错误**，但两次分处 `fresh@2e3a4cd` 与 `fresh@fd9af7f` 两版图 → O-7 是**稳定缺陷**，不是建图抖动 |
+| 1-16 | `executeKbSearch` | impact | （重复 1-11，M-3 包）| 0 caller 已证错误 |
+| 1-17 | `executeKbApiLookup` | impact | （重复 1-12，M-3 包）| 0 caller 已证错误 |
+| 1-18 | `loadKbContext` | impact | （重复 1-13，M-3 包）| 1 caller 部分漏报 |
+| 1-19 | `tokenizer.ts::tokenize` | context | `hit` | 4 callers；图快照早于批 2 新增调用方，相对快照非错 |
+| 1-20 | `src/scaffold-kb/tokenizer.ts::tokenize` | impact | `hit` | M-3 整改：抽 `normalizeUnicode` 前查 `tokenize` 上游 blast radius。`directCallers:4 / transitive:7`（`matchEntities` / `extractKeywords` / `sanitizeQuery` / `normalizeForIndex` → `executeKbApiLookup` / `searchKbCore` / `buildChunksDbBytes`）；与 grep 交叉核对一致，据此判定「纯提取重构、零行为变化」，并由全量 6139 用例覆盖这些消费方 |

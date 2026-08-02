@@ -72,6 +72,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) [--project-kb <path>] [--yes|--dry-run] [--no-llm]
   spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
   spectra scaffold-kb query --requirement "<需求>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
+  spectra scaffold-kb coverage-gap [--format markdown|json]
   spectra mcp-server
   spectra --version / --help
 
@@ -93,7 +94,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   direction-audit 依赖方向自查工具（SC-006 CI regression guard）
   index         构建并持久化 UnifiedGraph snapshot 到 .spectra/unified-graph.json（Feature 156）
   graph-quality 图质量体检（六指标 + freshness，F217）：读取 graph.json 输出质量门禁结果
-  scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server
+  scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server；
+                coverage-gap 输出 KB 文档缺口 backlog（F241，读 no-hit 记录；采集需设 SPECTRA_KB_NOHIT_TELEMETRY=<目录>，默认关闭）
   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
 
 认证:

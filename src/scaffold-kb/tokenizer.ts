@@ -20,6 +20,18 @@ const HAN = /\p{Script=Han}/u;
 
 type CharClass = 'han' | 'ascii' | 'sep';
 
+/**
+ * Unicode 兼容归一化（NFKC）——**全仓唯一**一份实现。
+ *
+ * 把全角 ASCII（`ＡＰＩ１２３`）、兼容字符折叠为标准形。写入侧、查询侧与
+ * `query-redaction.ts` 的 redaction 入口共用此函数：三者若各自归一化（或有先有后），
+ * 就会出现「redaction 看到的是全角、落盘的是被还原成 ASCII 的敏感串」这类绕过
+ * （F241 B2-1）。因此**禁止**在别处再写 `.normalize('NFKC')`。
+ */
+export function normalizeUnicode(text: string): string {
+  return text.normalize('NFKC');
+}
+
 function classify(ch: string): CharClass {
   if (HAN.test(ch)) return 'han';
   if (ALNUM.test(ch) || SYMBOL_CONNECTOR.test(ch)) return 'ascii';
@@ -60,9 +72,9 @@ function expandAsciiRun(run: string): string[] {
  * - ascii run → 组件 + 拼接形
  */
 export function tokenize(rawText: string): string[] {
-  // NFKC 规范化：把全角 ASCII（ＡＰＩ１２３）、兼容字符折叠为标准形，避免被当 sep 静默丢弃
-  // （修 Codex WARNING）。写入侧与查询侧同走此函数 → 仍同构。
-  const text = rawText.normalize('NFKC');
+  // NFKC 规范化：避免全角字符被当 sep 静默丢弃（修 Codex WARNING）。
+  // 写入侧、查询侧与 redaction 入口共用 normalizeUnicode → 仍同构。
+  const text = normalizeUnicode(rawText);
   const tokens: string[] = [];
   let runStart = 0;
   let runClass: CharClass | null = null;
@@ -95,4 +107,17 @@ export function tokenize(rawText: string): string[] {
  */
 export function normalizeForIndex(text: string): string {
   return tokenize(text).join(' ');
+}
+
+/**
+ * 规范化到「同一问题」的等价类字符串：`normalizeForIndex` 之上再做 case-fold 与去重。
+ *
+ * 用途是判定两次查询是不是同一个问题（F241 的 `normalizedQueryHash`）。
+ * 只做 NFKC + 切词不足以收敛：`retry alpha` 与 `retry Alpha` 会得到两个 hash，
+ * 于是同一个问题问两遍就能把共同 term 顶过 `distinctQueries` 阈值（F241 B2-6）。
+ *
+ * 保留 token 首次出现顺序（不排序）：词序不同的查询仍算不同问题。
+ */
+export function normalizeForEquivalence(text: string): string {
+  return [...new Set(tokenize(text).map((t) => t.toLowerCase()))].join(' ');
 }

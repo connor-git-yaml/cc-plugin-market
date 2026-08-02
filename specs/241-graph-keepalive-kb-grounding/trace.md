@@ -61,3 +61,14 @@
 | 02:3x-03:1x | 6 implement 批 0+批 1（B4）| T001-T027 全 done：决策矩阵纯函数（144 穷举+顺序探针）/ 双事件审计 / D8 迁移三件套 / SKILL 三段接线（phase.name）/ wrapper 再生 / gitignore 自举。**T018 抓到真 bug：symlink realpath 守卫静默空转**（exit 0 零副作用——F239 警告过的形态在自家门口复现）；`refresh-failed-timeout` 不可达缺口补 `--refresh-deadline-ms`；3 处 tasks 描述缺陷如实上报 |
 | 03:1x | 批 1 收尾（编排器裁决两项）| T027a symlink 守卫修 canonical+薄壳（判定收敛单一 `isInvokedDirectly` 导出）+ T027b D3 tasks.md 路径信号（仅 advisory 生效/git 优先/保守方向三红线落测）。node:test 1237 全绿 / vitest 54 全绿 / build 0 错 / repo:check 86 项 pass。评测脚本十余处同类 argv[1] 潜伏 bug → 立独立卡 |
 | 03:1x | 编排器清理 | `specs/products/_generated` 与 suggestions 的 repo:sync 时间戳噪声 checkout 还原（并行 feature 约定）|
+[04:04:18] batch_base: batch2=fd9af7f3a072fe1f160c0e0ac0a4c0dd9752072a
+
+| 03:2x | 批 1 Codex 代码审查 | `task-msc6wt4l-emi1m9`：**7C/7W 全带复现证据**。B1-C3 最重（刷新主幸福路径必然 snapshot-mismatch 丢 caveat）；B1-C1/C2 availability 判定漏洞；B1-C4 caveat 与真实 MCP 形状不兼容。整改代理全修（净增 35 用例），并附带抓出 RG-004 此前对错误路径空转检查 |
+| 03:5x | **批 1 commit** | `fd9af7f`（30 文件 +6981 行；node:test 1272 / vitest 54 / build / repo:check 86 族全 pass）|
+| 04:04 | 批 2 前置 | 图重建 fresh@fd9af7f（3.5s）；trace 记 batch_base: batch2 |
+| 04:0x-04:4x | 6 implement 批 2（E1）| T028-T049 全 done：redaction 六类 + nohit-recorder（total 函数契约）+ coverage-gap 聚合（distinct hash 键）+ 三挂点（含 document_fallback 零命中）+ CLI 可达性。实现期真 bug：placeholder token 碎片会让 EC-21 过滤失效（手跑抓到，单测按 id 写会全绿）。**dogfooding：5 次 MCP 调用 4 次被 grep 证伪**（1-11..1-15），其中 1-15 与 1-5 同 target 同错跨两版图复现 → O-7 稳定缺陷实证；新形态「同文件 export 互调不建边」浮出 |
+| 04:4x | 批 2 门禁 | vitest tests/kb 35 文件 368 测试（基线 32/293 纯增）；全量 6092 pass；RG-005 kb-contract 0 diff；RG-009 四场景 SHA 逐字节相同 |
+| 04:5x | **M-3 A/B 执行**（预注册兑现）| diff 冻结 1918 行 hash `7a888daa`；grounding 包 4 查询（错误结果按预注册**原样附上**）；A（no-grounding）/ B（grounded）同构 prompt 同时发起，兼作批 2 commit 前门禁审查 |
+| 05:0x | M-3 判读 | A 组 BLOCKED（3C/4W/1I）+ B 组 BLOCK（2C/3W/1I）→ 判读后 **9 条真 finding / 0 误报**（交集 3：NFKC 顺序、FIFO/symlink、读取失败误报；A 独有 3；B 独有 2；不采纳 1）。批 2 门禁作废，不得在修完前提交 |
+| 05:1x-05:5x | 批 2 M-3 整改（B2-1..B2-9）| 逐条修复 + 全量重验。取红方法：批 2 未 commit，用逆向替换脚本把 `src/**` 精确还原成审查形态（整份 + 25 反向 hunk）后跑新测取红，再还原。**38 红全绿**。B2-2 的 FIFO 阻塞会挂死 vitest worker（同步阻塞打不断，第一次全量跑 600s 无输出）——本身即 A-C3 的证明，改用 watchdog 子进程探针取证：`HUNG → RETURNED`、symlink 逃逸 `207B → 0B` |
+| 05:5x | 整改后门禁 | vitest tests/kb 35 文件 **415** 测试（368 → +47）；全量 493 文件 / **6139** pass；插件 `node --test` 1272/1272；build + tsc + `repo:check`(86 pass) 全 EXIT=0；RG-005 `kb-contract.test.ts` 仍 0 diff；整改轮对 `plugins/spec-driver/scripts/**` 零改动。**如实标注两处偏差**：B2-2 加 `O_NONBLOCK`（整改单未列的必要超集）、B2-7 第三挂点负例结构性不可达故回退态即绿 |

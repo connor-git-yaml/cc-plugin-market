@@ -1,0 +1,1918 @@
+diff --git a/.gitignore b/.gitignore
+index 7b28040..a33ab1c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -55,6 +55,8 @@ AGENTS.override.md
+ .specify/runs/
+ # Feature 241 — 图消费决策审计事件流（本机观测产物，只写不读，不进任何上报通道）
+ .specify/graph-consumption-audit.jsonl
++# Feature 241 — KB no-hit 治理记录（含用户查询切词结果，默认不采集；30 天滚动，纯本机）
++.specify/kb-nohit/
+ 
+ # Feature 152 — spectra index UnifiedGraph snapshot（按 worktree 各自独立）
+ .spectra/
+diff --git a/plugins/spec-driver/scripts/lib/ensure-gitignore.sh b/plugins/spec-driver/scripts/lib/ensure-gitignore.sh
+index 420e22c..1117a27 100755
+--- a/plugins/spec-driver/scripts/lib/ensure-gitignore.sh
++++ b/plugins/spec-driver/scripts/lib/ensure-gitignore.sh
+@@ -19,6 +19,7 @@
+ #   .specify/scorecards/                  — 插件默认品复制，可再生
+ #   .specify/templates/                   — 插件默认品复制，可再生
+ #   .specify/graph-consumption-audit.jsonl — Feature 241 图消费决策审计事件流（本机观测产物）
++#   .specify/kb-nohit/                    — Feature 241 KB no-hit 治理记录（含查询切词结果，默认不采集）
+ # 写死为字面量作为唯一事实来源，不从外部读取，避免引入新的路径依赖。
+ #
+ # 新增数据路径必须**同时**进这里和开发仓库根 .gitignore：只改后者，第三方安装者的仓库照样会把
+@@ -29,6 +30,7 @@ SPEC_DRIVER_GITIGNORE_ENTRIES=(
+   ".specify/scorecards/"
+   ".specify/templates/"
+   ".specify/graph-consumption-audit.jsonl"
++  ".specify/kb-nohit/"
+ )
+ 
+ # ── 并发取舍说明（W1 修复，Codex 四轮）─────────────────────────────────────
+diff --git a/plugins/spec-driver/tests/ensure-gitignore.test.mjs b/plugins/spec-driver/tests/ensure-gitignore.test.mjs
+index 182ddb2..67f6ab6 100644
+--- a/plugins/spec-driver/tests/ensure-gitignore.test.mjs
++++ b/plugins/spec-driver/tests/ensure-gitignore.test.mjs
+@@ -31,6 +31,8 @@ const EXPECTED_ENTRIES = [
+   '.specify/templates/',
+   // Feature 241 — 图消费决策审计事件流（FR-024 / SC-020）
+   '.specify/graph-consumption-audit.jsonl',
++  // Feature 241 — KB no-hit 治理记录目录（FR-024 / SC-020）
++  '.specify/kb-nohit/',
+ ];
+ 
+ /**
+@@ -616,8 +618,13 @@ describe('ensure-gitignore.sh 共享库', () => {
+  * 而不是 grep 文件内容——后者会被 negation 行、目录形态差异、匹配范围放宽等情况骗过。
+  */
+ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
+-  /** F241 在批 1 引入的本机数据路径。批 2 会再加 `.specify/kb-nohit/`。 */
+-  const F241_BATCH1_PATHS = ['.specify/graph-consumption-audit.jsonl'];
++  /**
++   * F241 引入的两条本机数据路径（批 1 审计事件流 + 批 2 KB no-hit 记录）。
++   *
++   * 目录型条目用其下的**真实文件形态**探测：`git check-ignore` 对不存在的裸目录路径行为
++   * 取决于末尾斜杠与 pattern 写法，用具体文件路径问是最贴近实际泄露场景的问法。
++   */
++  const F241_DATA_PATHS = ['.specify/graph-consumption-audit.jsonl', '.specify/kb-nohit/nohit-20260803.jsonl'];
+ 
+   function checkIgnore(cwd, target) {
+     return spawnSync('git', ['check-ignore', '-v', target], { cwd, encoding: 'utf8' });
+@@ -625,7 +632,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
+ 
+   it('第一段：本开发仓库内直查，路径确被忽略', () => {
+     const repoRoot = path.resolve(__dirname, '..', '..', '..');
+-    for (const target of F241_BATCH1_PATHS) {
++    for (const target of F241_DATA_PATHS) {
+       const res = checkIgnore(repoRoot, target);
+       assert.equal(res.status, 0, `${target} 未被本仓 .gitignore 忽略：${res.stderr}`);
+       assert.match(res.stdout, /\.gitignore:/, '命中来源应是 .gitignore');
+@@ -644,7 +651,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
+       const installedLib = path.join(installedPluginDir, 'scripts', 'lib', 'ensure-gitignore.sh');
+       assert.equal(fs.existsSync(installedLib), true, '自举脚本必须随插件分发');
+ 
+-      for (const target of F241_BATCH1_PATHS) {
++      for (const target of F241_DATA_PATHS) {
+         const before = checkIgnore(dir, target);
+         assert.notEqual(before.status, 0, `前置：自举前 ${target} 不应已被忽略`);
+       }
+@@ -656,7 +663,7 @@ describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
+       );
+       assert.equal(res.status, 0, `自举脚本应零退出：${res.stderr}`);
+ 
+-      for (const target of F241_BATCH1_PATHS) {
++      for (const target of F241_DATA_PATHS) {
+         const after = checkIgnore(dir, target);
+         assert.equal(after.status, 0, `自举后 ${target} 仍未被忽略：${after.stderr}`);
+       }
+diff --git a/specs/241-graph-keepalive-kb-grounding/pilot/ledger.jsonl b/specs/241-graph-keepalive-kb-grounding/pilot/ledger.jsonl
+index 5b27941..5813610 100644
+--- a/specs/241-graph-keepalive-kb-grounding/pilot/ledger.jsonl
++++ b/specs/241-graph-keepalive-kb-grounding/pilot/ledger.jsonl
+@@ -11,3 +11,8 @@
+ {"seq":"1-8","segment":"formal","target":"src/scaffold-kb/search-core.ts::searchKbCore","tool":"impact","category":"hit","countsTowardM1":true,"crossCheckedWrong":true,"note":"directCallers:2 实际 ≥4（O-8 部分漏报）","graphState":"fresh@2e3a4cd","caller":"plan-subagent","timestamp":null,"timestampNote":"schema 定稿前记录，先后次序见 mcp-call-log.md 的 git 历史"}
+ {"seq":"1-9","segment":"formal","target":"plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs::attemptLocalGraphBuild","tool":"impact","category":"miss-structural","countsTowardM1":true,"crossCheckedWrong":false,"note":"symbol-not-found + fuzzyMatches 空；grep 交叉核对确有真实调用方（同文件 :576、tests/unit/graph-bootstrap-status.test.ts 9 处）；O-5 .mjs 不在图，D6 结构性封顶复现","graphState":"fresh@6950b08","caller":"implement-batch1","timestamp":"2026-08-02T18:30:56Z"}
+ {"seq":"1-10","segment":"formal","target":"plugins/spec-driver/scripts/lib/goal-loop-core.mjs::parsePreservedConfigStates","tool":"context","category":"miss-structural","countsTowardM1":true,"crossCheckedWrong":false,"note":"symbol-not-found + fuzzyMatches 空；grep 交叉核对确有生产调用方 goal-loop-cli.mjs:276；O-5 复现","graphState":"fresh@6950b08","caller":"implement-batch1","timestamp":"2026-08-02T18:30:56Z"}
++{"seq":"1-11","segment":"formal","target":"src/kb-mcp/tools/kb-search.ts::executeKbSearch","tool":"impact","category":"miss-empty","countsTowardM1":true,"crossCheckedWrong":true,"note":"改挂点前查影响面。affected:[] / directCallers:0；grep 交叉核对同文件 :147 registerKbSearchTool 有生产调用 + tests/kb/{kb-search-tool,kb-contract}.test.ts 多处引用 —— O-3 在 fresh@fd9af7f 图上第三次复现（0-3/1-6 之后）","graphState":"fresh@fd9af7f","caller":"implement-batch2","timestamp":"2026-08-02T20:13:40Z"}
++{"seq":"1-12","segment":"formal","target":"src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup","tool":"impact","category":"miss-empty","countsTowardM1":true,"crossCheckedWrong":true,"note":"改两处挂点前查影响面。affected:[] / directCallers:0；grep 交叉核对同文件 :256 registerKbApiLookupTool 有生产调用 + tests/kb/kb-api-lookup-tool.test.ts 多处引用 —— 同 O-7 形态（同文件内 caller 未入边）","graphState":"fresh@fd9af7f","caller":"implement-batch2","timestamp":"2026-08-02T20:13:40Z"}
++{"seq":"1-13","segment":"formal","target":"src/kb-mcp/lib/kb-locator.ts::loadKbContext","tool":"impact","category":"hit","countsTowardM1":true,"crossCheckedWrong":true,"note":"为挂点补 KbHandle.dbPath 前查影响面。directCallers:1（src/kb-mcp/index.ts::startKbMcpServer）；grep 交叉核对生产调用方实为 2（漏 src/cli/commands/scaffold-kb.ts:38）+ 5 个测试文件 —— O-8 部分漏报形态复现","graphState":"fresh@fd9af7f","caller":"implement-batch2","timestamp":"2026-08-02T20:15:10Z"}
++{"seq":"1-14","segment":"formal","target":"src/cli/commands/scaffold-kb.ts::runQuery","tool":"impact","category":"miss-structural","countsTowardM1":true,"crossCheckedWrong":false,"note":"改挂点 3 前查影响面。symbol-not-found；fuzzyMatches 三候选(runScaffoldKb/模块/runDiff)均非目标。runQuery 是模块内非 export 函数 —— 图只收 export symbol，file-private 函数结构性不可查；grep 交叉核对同文件 :167 有真实调用","graphState":"fresh@fd9af7f","caller":"implement-batch2","timestamp":"2026-08-02T20:19:30Z"}
++{"seq":"1-15","segment":"formal","target":"src/cli/commands/scaffold-kb.ts::runScaffoldKb","tool":"impact","category":"miss-empty","countsTowardM1":true,"crossCheckedWrong":true,"note":"改 op dispatch(T045) 前查影响面。affected:[] / directCallers:0；grep 交叉核对 src/cli/index.ts:223 确有生产调用 —— 与 1-5 完全同一 target 同一错误，1-5 时图 fresh@2e3a4cd、本次 fresh@fd9af7f，两版图同错，证明 O-7 是稳定缺陷而非某次建图抖动","graphState":"fresh@fd9af7f","caller":"implement-batch2","timestamp":"2026-08-02T20:19:30Z"}
+diff --git a/specs/241-graph-keepalive-kb-grounding/pilot/mcp-call-log.md b/specs/241-graph-keepalive-kb-grounding/pilot/mcp-call-log.md
+index bd0d3bf..7fa1d48 100644
+--- a/specs/241-graph-keepalive-kb-grounding/pilot/mcp-call-log.md
++++ b/specs/241-graph-keepalive-kb-grounding/pilot/mcp-call-log.md
+@@ -55,3 +55,15 @@
+ 
+ > **批 1 的结构性事实（进报告）**：B4 接线代码 100% 落在 `plugins/**/*.mjs`，因此本批**每一次**
+ > 面向自身改动面的 MCP 查询都必然是 `miss-structural`。这不是采样偏置，是 O-5 的确定性后果。
++
++### 分段 1 续：implement 批 2 子代理的调用（continuous capture，当下即记）
++
++图状态：`fresh` @ `fd9af7f`。
++
++| # | target | 工具 | 类别 | 备注 |
++|---|--------|------|------|------|
++| 1-11 | `src/kb-mcp/tools/kb-search.ts::executeKbSearch` | impact | `miss-empty`（**已证错误**）| 改 no-hit 挂点 1 前查影响面。`affected:[]`；grep 交叉核对同文件 `:147` `registerKbSearchTool` 确有生产调用 + 两个测试文件引用 —— **O-3 第三次复现**（0-3 / 1-6 之后），且这次图是 fresh，排除 stale 因素 |
++| 1-12 | `src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` | impact | `miss-empty`（**已证错误**）| 改挂点 2a/2b 前查影响面。`affected:[]`；grep 交叉核对同文件 `:256` `registerKbApiLookupTool` 确有生产调用 —— 与 1-11 同形态：**同文件内 `export function` 被同文件另一函数调用，这条边在图里缺失**（O-7 的更精确刻画）|
++| 1-13 | `src/kb-mcp/lib/kb-locator.ts::loadKbContext` | impact | `hit`（**部分漏报**）| 为挂点补 `KbHandle.dbPath` 前查影响面。`directCallers:1`（`kb-mcp/index.ts::startKbMcpServer`）；grep 交叉核对生产调用方实为 **2**（漏掉 `src/cli/commands/scaffold-kb.ts:38`）+ 5 个测试文件 —— O-8 复现 |
++| 1-14 | `src/cli/commands/scaffold-kb.ts::runQuery` | impact | `miss-structural` | 改挂点 3 前查影响面。symbol-not-found，fuzzy 三候选均非目标。根因：`runQuery` 是**模块内非 export 函数**，图只收 export symbol → file-private 函数结构性不可查（O-5 的 TS 侧同构形态）；grep 核对同文件 `:167` 有真实调用 |
++| 1-15 | `src/cli/commands/scaffold-kb.ts::runScaffoldKb` | impact | `miss-empty`（**已证错误**）| 改 op dispatch（T045）前查影响面。`affected:[]`；grep 核对 `src/cli/index.ts:223` 确有生产调用。**与 1-5 同一 target、同一错误**，但两次分处 `fresh@2e3a4cd` 与 `fresh@fd9af7f` 两版图 → O-7 是**稳定缺陷**，不是建图抖动 |
+diff --git a/specs/241-graph-keepalive-kb-grounding/tasks.md b/specs/241-graph-keepalive-kb-grounding/tasks.md
+index 7f55847..84d7471 100644
+--- a/specs/241-graph-keepalive-kb-grounding/tasks.md
++++ b/specs/241-graph-keepalive-kb-grounding/tasks.md
+@@ -134,82 +134,82 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
+ 
+ ## 批 2 — E1 KB coverage-gap（FR-012~FR-015、FR-024 no-hit 路径部分）
+ 
+-- [ ] T028 记录 batch2 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch2=<sha>` 到 `trace.md`
++- [x] T028 记录 batch2 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch2=<sha>` 到 `trace.md`
+   验证：`grep 'batch_base: batch2=' specs/241-graph-keepalive-kb-grounding/trace.md` 命中
+ 
+ ### 2.1 常量与 redaction
+ 
+-- [ ] T029 [P] 新增 `src/scaffold-kb/governance-constants.ts`：导出 `MIN_OCCURRENCE_THRESHOLD=2`、`NOHIT_RETENTION_DAYS=30`、`KB_FRESHNESS_AGING_DAYS=30`、`KB_FRESHNESS_STALE_DAYS=90`（OQ-2 单一常量模块要求，四参数集中于此使调参成本=改一处常量+改测试期望值）
++- [x] T029 [P] 新增 `src/scaffold-kb/governance-constants.ts`：导出 `MIN_OCCURRENCE_THRESHOLD=2`、`NOHIT_RETENTION_DAYS=30`、`KB_FRESHNESS_AGING_DAYS=30`、`KB_FRESHNESS_STALE_DAYS=90`（OQ-2 单一常量模块要求，四参数集中于此使调参成本=改一处常量+改测试期望值）
+   验证：`npx tsc --noEmit` 对该文件零错误（随 `npm run build` 一并验证）
+ 
+-- [ ] T030 [P][红测试] 新增 `tests/kb/query-redaction.test.ts`：FR-012 六类规则（email/带凭据URL/高熵串/疑似token/绝对路径home段/连续数字串）各 ≥2 正例 +1 反例，断言输出串不含原文敏感片段；另一条断言模块导出的规则表长度与文档表一致
++- [x] T030 [P][红测试] 新增 `tests/kb/query-redaction.test.ts`：FR-012 六类规则（email/带凭据URL/高熵串/疑似token/绝对路径home段/连续数字串）各 ≥2 正例 +1 反例，断言输出串不含原文敏感片段；另一条断言模块导出的规则表长度与文档表一致
+   验证：`npx vitest run tests/kb/query-redaction.test.ts` 因模块不存在而失败（红）
+ 
+-- [ ] T031 实现 `src/scaffold-kb/query-redaction.ts`：导出 `redactQuery(raw: string) -> { redacted: string, tags: string[] }`，六类规则以数据表形式声明（非散落正则），模块文档注释如实写明能力边界（对中文姓名/内部代号/自然语言口令/带分隔符电话号码无效）
++- [x] T031 实现 `src/scaffold-kb/query-redaction.ts`：导出 `redactQuery(raw: string) -> { redacted: string, tags: string[] }`，六类规则以数据表形式声明（非散落正则），模块文档注释如实写明能力边界（对中文姓名/内部代号/自然语言口令/带分隔符电话号码无效）
+   验证：`npx vitest run tests/kb/query-redaction.test.ts` 全绿
+ 
+ ### 2.2 no-hit 落盘
+ 
+-- [ ] T032 [P][红测试] 新增 `tests/kb/nohit-recorder.test.ts`：FR-013 落盘对象键集合恰为 `terms`/`normalizedQueryHash`/`redactionTags`/`tool`/`timestamp`/`resultCount`/`dbPathHash`/`schemaVersion`（无整串字段）；伪造 40 天前 mtime 文件 → 写入时被清理；只读目录场景查询正常返回（静默降级）；同一查询两次的 `normalizedQueryHash` 相同；`SPECTRA_KB_NOHIT_TELEMETRY` 未设置/空字符串 → `resolveNoHitTelemetryDir()` 返回 `null` 且 `recordNoHit` 全程零 I/O（P-W3）
++- [x] T032 [P][红测试] 新增 `tests/kb/nohit-recorder.test.ts`：FR-013 落盘对象键集合恰为 `terms`/`normalizedQueryHash`/`redactionTags`/`tool`/`timestamp`/`resultCount`/`dbPathHash`/`schemaVersion`（无整串字段）；伪造 40 天前 mtime 文件 → 写入时被清理；只读目录场景查询正常返回（静默降级）；同一查询两次的 `normalizedQueryHash` 相同；`SPECTRA_KB_NOHIT_TELEMETRY` 未设置/空字符串 → `resolveNoHitTelemetryDir()` 返回 `null` 且 `recordNoHit` 全程零 I/O（P-W3）
+   验证：`npx vitest run tests/kb/nohit-recorder.test.ts` 因模块不存在而失败（红）
+ 
+-- [ ] T033 实现 `src/scaffold-kb/nohit-recorder.ts`：导出 `recordNoHit({ tool, rawQuery, dbPath })`（静默降级，EC-20）与 `resolveNoHitTelemetryDir()`（读 `SPECTRA_KB_NOHIT_TELEMETRY`，唯一解析函数，P-W3 硬约束）；内部流程 `resolveNoHitTelemetryDir` 判空提前返回 → `redactQuery` → 复用 `src/scaffold-kb/tokenizer.ts` 切词去重 → 落盘 + 30 天滚动清理（`NOHIT_RETENTION_DAYS` 常量）
++- [x] T033 实现 `src/scaffold-kb/nohit-recorder.ts`：导出 `recordNoHit({ tool, rawQuery, dbPath })`（静默降级，EC-20）与 `resolveNoHitTelemetryDir()`（读 `SPECTRA_KB_NOHIT_TELEMETRY`，唯一解析函数，P-W3 硬约束）；内部流程 `resolveNoHitTelemetryDir` 判空提前返回 → `redactQuery` → 复用 `src/scaffold-kb/tokenizer.ts` 切词去重 → 落盘 + 30 天滚动清理（`NOHIT_RETENTION_DAYS` 常量）
+   验证：`npx vitest run tests/kb/nohit-recorder.test.ts` 全绿
+ 
+ ### 2.3 三处挂点（T-C3：红测试全部前移到对应接线任务之前）
+ 
+-- [ ] T034 [P][红测试] 改 `tests/kb/kb-search-tool.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用（spy）；`merged.length>0` 时断言 `recordNoHit` **不**被调用
++- [x] T034 [P][红测试] 改 `tests/kb/kb-search-tool.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用（spy）；`merged.length>0` 时断言 `recordNoHit` **不**被调用
+   验证：`npx vitest run tests/kb/kb-search-tool.test.ts` 此刻因挂点未接线而失败（红）
+ 
+-- [ ] T035 no-hit 挂点 1：`src/kb-mcp/tools/kb-search.ts::executeKbSearch` 在 `merged.length === 0` 时调用 `recordNoHit({ tool: 'kb_search', rawQuery: params.query, dbPath })`（plan §1.5 现行 `:80`）
++- [x] T035 no-hit 挂点 1：`src/kb-mcp/tools/kb-search.ts::executeKbSearch` 在 `merged.length === 0` 时调用 `recordNoHit({ tool: 'kb_search', rawQuery: params.query, dbPath })`（plan §1.5 现行 `:80`）
+   验证：`npx vitest run tests/kb/kb-search-tool.test.ts` 全绿（T034 转绿）
+ 
+-- [ ] T036 [红测试] 改 `tests/kb/kb-api-lookup-tool.test.ts`：新增四组用例——(a) `matched.length===0`（挂点2a，`allEnts.length>0` 正常路径）→ 断言 `recordNoHit` 被调用；(b) `matched.length>0`（2a 反例）→ 断言不被调用；(c) `documentFallback` 内 `hits.length===0`（挂点2b）→ 断言 `recordNoHit` 被调用；(d) `documentFallback` 内 `hits.length>0` → 断言不被调用（区分"零结果"与"有结果"两态，防止挂点误判为无条件记录）
++- [x] T036 [红测试] 改 `tests/kb/kb-api-lookup-tool.test.ts`：新增四组用例——(a) `matched.length===0`（挂点2a，`allEnts.length>0` 正常路径）→ 断言 `recordNoHit` 被调用；(b) `matched.length>0`（2a 反例）→ 断言不被调用；(c) `documentFallback` 内 `hits.length===0`（挂点2b）→ 断言 `recordNoHit` 被调用；(d) `documentFallback` 内 `hits.length>0` → 断言不被调用（区分"零结果"与"有结果"两态，防止挂点误判为无条件记录）
+   验证：`npx vitest run tests/kb/kb-api-lookup-tool.test.ts` 此刻因两处挂点均未接线而失败（红）
+ 
+-- [ ] T037 no-hit 挂点 2a：`src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` 的 `matched.length===0`（`allEnts.length>0` 正常路径，现行 `:141`）分支调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
++- [x] T037 no-hit 挂点 2a：`src/kb-mcp/tools/kb-api-lookup.ts::executeKbApiLookup` 的 `matched.length===0`（`allEnts.length>0` 正常路径，现行 `:141`）分支调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
+   验证：见 T038（两处挂点合并验证）
+ 
+-- [ ] T038 no-hit 挂点 2b（P-W3 硬性不豁免）：`documentFallback`（`allEnts.length===0`，现行 `:79-100`）内部 `hits` 数组组装完成后（现行 `:93` 返回前），若 `hits.length === 0` **同样**调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
++- [x] T038 no-hit 挂点 2b（P-W3 硬性不豁免）：`documentFallback`（`allEnts.length===0`，现行 `:79-100`）内部 `hits` 数组组装完成后（现行 `:93` 返回前），若 `hits.length === 0` **同样**调用 `recordNoHit({ tool: 'kb_api_lookup', ... })`
+   验证：`npx vitest run tests/kb/kb-api-lookup-tool.test.ts` 全绿（T036 全部四组用例转绿，T037/T038 完成后）
+ 
+-- [ ] T039 [P][红测试] 改 `tests/kb/scaffold-kb-query.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用；`merged.length>0` 时断言不被调用
++- [x] T039 [P][红测试] 改 `tests/kb/scaffold-kb-query.test.ts`：新增两组用例——`merged.length===0` 时断言 `recordNoHit` 被调用；`merged.length>0` 时断言不被调用
+   验证：`npx vitest run tests/kb/scaffold-kb-query.test.ts` 此刻因挂点未接线而失败（红）
+ 
+-- [ ] T040 no-hit 挂点 3：`src/cli/commands/scaffold-kb.ts::runQuery` 在既有 `merged.length===0` 分支（现行 `:61-64`）旁挂 `recordNoHit({ tool: 'scaffold_kb_query', ... })`
++- [x] T040 no-hit 挂点 3：`src/cli/commands/scaffold-kb.ts::runQuery` 在既有 `merged.length===0` 分支（现行 `:61-64`）旁挂 `recordNoHit({ tool: 'scaffold_kb_query', ... })`
+   验证：`npx vitest run tests/kb/scaffold-kb-query.test.ts` 全绿（T039 转绿）；人工手跑一次 `spectra scaffold-kb query` 触发零结果场景确认落盘
+ 
+ ### 2.4 coverage-gap 聚合器与 CLI 接线
+ 
+-- [ ] T041 [P][红测试] 新增 `tests/kb/coverage-gap.test.ts`：三态互不相同（`collection-disabled`/`no-data`/`no-gap-above-threshold`，`items` 均空但 `status` 不同）；fixture（term X 出现 3 行分属 2 个不同 `normalizedQueryHash`，term Y 出现 3 行同属 1 个 hash，1 条独有词，1 行损坏 JSON）→ 恰 1 条目（term X）+ `distinctQueries:2` + `occurrences:3`，term Y **不在** items 中，`skippedLines:1`，退出码 0
++- [x] T041 [P][红测试] 新增 `tests/kb/coverage-gap.test.ts`：三态互不相同（`collection-disabled`/`no-data`/`no-gap-above-threshold`，`items` 均空但 `status` 不同）；fixture（term X 出现 3 行分属 2 个不同 `normalizedQueryHash`，term Y 出现 3 行同属 1 个 hash，1 条独有词，1 行损坏 JSON）→ 恰 1 条目（term X）+ `distinctQueries:2` + `occurrences:3`，term Y **不在** items 中，`skippedLines:1`，退出码 0
+   验证：`npx vitest run tests/kb/coverage-gap.test.ts` 因模块不存在而失败（红）
+ 
+-- [ ] T042 实现 `src/scaffold-kb/coverage-gap.ts`：导出 `buildCoverageGapReport({ nohitDir, isCollectionEnabled }) -> CoverageGapOutput`，按 term 聚合、`distinctQueries≥2` 阈值过滤，`--format json|markdown`
++- [x] T042 实现 `src/scaffold-kb/coverage-gap.ts`：导出 `buildCoverageGapReport({ nohitDir, isCollectionEnabled }) -> CoverageGapOutput`，按 term 聚合、`distinctQueries≥2` 阈值过滤，`--format json|markdown`
+   验证：`npx vitest run tests/kb/coverage-gap.test.ts` 全绿
+ 
+-- [ ] T043 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`spectra scaffold-kb coverage-gap --dry-run` 经 parse-args 解析出 `op='coverage-gap'` 且不落 `invalid_subcommand`，并 dispatch 到 `runCoverageGap`；未知 op 仍被拒（P-W5，防"模块单测全绿但 CLI 永远不可达"）
++- [x] T043 [红测试]（T-C3：从原实现之后前移到实现之前）改 `tests/kb/cli-scaffold-kb.test.ts`：`spectra scaffold-kb coverage-gap --dry-run` 经 parse-args 解析出 `op='coverage-gap'` 且不落 `invalid_subcommand`，并 dispatch 到 `runCoverageGap`；未知 op 仍被拒（P-W5，防"模块单测全绿但 CLI 永远不可达"）
+   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts` 此刻因 `parse-args.ts`/`scaffold-kb.ts` 均未接线而失败（红）
+ 
+-- [ ] T044 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union（现行 `:113`）扩 `'coverage-gap'`，同步 `:758` 附近合法 op 校验分支，新增 coverage-gap 专用 flag 解析（P-W5）
++- [x] T044 [P] 改 `src/cli/utils/parse-args.ts`：`scaffoldKbOperation` union（现行 `:113`）扩 `'coverage-gap'`，同步 `:758` 附近合法 op 校验分支，新增 coverage-gap 专用 flag 解析（P-W5）
+   验证：见 T046（两处改动合并验证）
+ 
+-- [ ] T045 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'coverage-gap'` 分支（`runCoverageGap`，调用 T042 的 `buildCoverageGapReport`）
++- [x] T045 改 `src/cli/commands/scaffold-kb.ts`：op dispatch 新增 `'coverage-gap'` 分支（`runCoverageGap`，调用 T042 的 `buildCoverageGapReport`）
+   验证：`npx vitest run tests/kb/cli-scaffold-kb.test.ts` 全绿（T043 转绿，T044/T045 完成后）
+ 
+-- [ ] T046 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `coverage-gap` op 说明
++- [x] T046 [P] 改 `src/cli/index.ts`：scaffold-kb help 文案补 `coverage-gap` op 说明
+   验证：人工核对 `spectra scaffold-kb --help` 输出含新增 op 说明
+ 
+ ### 2.5 数据路径自举（FR-024 no-hit 路径部分）
+ 
+-- [ ] T047 [P] 改仓库根 `.gitignore`：新增一条 `.specify/kb-nohit/`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 自举清单，新增同一条目
++- [x] T047 [P] 改仓库根 `.gitignore`：新增一条 `.specify/kb-nohit/`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 自举清单，新增同一条目
+   验证：`git check-ignore -v .specify/kb-nohit/nohit-20260803.jsonl` 命中（退出码 0）
+ 
+-- [ ] T048 [红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：与批 1 共享同一文件，本批追加 `.specify/kb-nohit/` 的双段断言，合计断言数从 5（T026 后）提升到 6（T-I1 修正：原 v1 的悬空引用已改为指向本任务）
++- [x] T048 [红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：与批 1 共享同一文件，本批追加 `.specify/kb-nohit/` 的双段断言，合计断言数从 5（T026 后）提升到 6（T-I1 修正：原 v1 的悬空引用已改为指向本任务）
+   验证：`node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs` 全绿（T047 完成后转绿）
+ 
+ ### 2.6 批 2 门禁
+ 
+-- [ ] T049 **批 2 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数 ≥ 批 1 前基线 32/293 之上有净增）+ `npx vitest run tests/kb/cli-scaffold-kb.test.ts`（T-C5：作为既已存在文件的重跑而非"新建"，与 `tests/kb/` 整体一起跑但显式点名确认覆盖）+ `node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs`（T-C5：批 2 重跑该合用测试文件，确认 6 条断言全绿，不只是批 1 遗留状态）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch2-base> -- <paths>`，T-W3）：RG-005（`kb-contract.test.ts` 中既有字段断言未被放宽，人工 diff 核对）；RG-009（T-C5 扩展：no-hit 目录只读**与缺列**两类故障注入下 `kb_search` 返回的 `results` 与故障注入前逐字节相同、进程退出码 0、stdout 无治理层错误输出）。**continuous capture 台账同步检查**：`pilot/mcp-call-log.md`/`pilot/ledger.jsonl` 本批新增条目数一致且 `seq` 单调
++- [x] T049 **批 2 门禁**：`npx vitest run tests/kb/` 全绿（文件数/测试数 ≥ 批 1 前基线 32/293 之上有净增）+ `npx vitest run tests/kb/cli-scaffold-kb.test.ts`（T-C5：作为既已存在文件的重跑而非"新建"，与 `tests/kb/` 整体一起跑但显式点名确认覆盖）+ `node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs`（T-C5：批 2 重跑该合用测试文件，确认 6 条断言全绿，不只是批 1 遗留状态）+ `npm run build` 零错误 + `npm run repo:check` exit 0。RG 抽查（对 `git diff <batch2-base> -- <paths>`，T-W3）：RG-005（`kb-contract.test.ts` 中既有字段断言未被放宽，人工 diff 核对）；RG-009（T-C5 扩展：no-hit 目录只读**与缺列**两类故障注入下 `kb_search` 返回的 `results` 与故障注入前逐字节相同、进程退出码 0、stdout 无治理层错误输出）。**continuous capture 台账同步检查**：`pilot/mcp-call-log.md`/`pilot/ledger.jsonl` 本批新增条目数一致且 `seq` 单调
+   验证：以上命令全部零失败，逐项记入交付 report
+ 
+ ---
+diff --git a/specs/241-graph-keepalive-kb-grounding/trace.md b/specs/241-graph-keepalive-kb-grounding/trace.md
+index 3a22a5f..b1dbc0f 100644
+--- a/specs/241-graph-keepalive-kb-grounding/trace.md
++++ b/specs/241-graph-keepalive-kb-grounding/trace.md
+@@ -61,3 +61,4 @@
+ | 02:3x-03:1x | 6 implement 批 0+批 1（B4）| T001-T027 全 done：决策矩阵纯函数（144 穷举+顺序探针）/ 双事件审计 / D8 迁移三件套 / SKILL 三段接线（phase.name）/ wrapper 再生 / gitignore 自举。**T018 抓到真 bug：symlink realpath 守卫静默空转**（exit 0 零副作用——F239 警告过的形态在自家门口复现）；`refresh-failed-timeout` 不可达缺口补 `--refresh-deadline-ms`；3 处 tasks 描述缺陷如实上报 |
+ | 03:1x | 批 1 收尾（编排器裁决两项）| T027a symlink 守卫修 canonical+薄壳（判定收敛单一 `isInvokedDirectly` 导出）+ T027b D3 tasks.md 路径信号（仅 advisory 生效/git 优先/保守方向三红线落测）。node:test 1237 全绿 / vitest 54 全绿 / build 0 错 / repo:check 86 项 pass。评测脚本十余处同类 argv[1] 潜伏 bug → 立独立卡 |
+ | 03:1x | 编排器清理 | `specs/products/_generated` 与 suggestions 的 repo:sync 时间戳噪声 checkout 还原（并行 feature 约定）|
++[04:04:18] batch_base: batch2=fd9af7f3a072fe1f160c0e0ac0a4c0dd9752072a
+diff --git a/src/cli/commands/scaffold-kb.ts b/src/cli/commands/scaffold-kb.ts
+index a075dbb..c1a05f8 100644
+--- a/src/cli/commands/scaffold-kb.ts
++++ b/src/cli/commands/scaffold-kb.ts
+@@ -11,7 +11,9 @@ import { buildKb } from '../../scaffold-kb/index.js';
+ import { extractKeywords } from '../../scaffold-kb/keyword-extract.js';
+ import { searchKbCore } from '../../scaffold-kb/search-core.js';
+ import { formatInjectionBlock, type EvidenceResult } from '../../scaffold-kb/injection-format.js';
+-import { loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
++import { describeQueriedDbPaths, loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
++import { recordNoHit, resolveNoHitTelemetryDir } from '../../scaffold-kb/nohit-recorder.js';
++import { buildCoverageGapReport, formatCoverageGapReport } from '../../scaffold-kb/coverage-gap.js';
+ import { mergeResults } from '../../kb-mcp/lib/result-merger.js';
+ import { prepareIngest, commitIngest, IngestError, type IngestSource } from '../../scaffold-kb/ingest/ingest-core.js';
+ 
+@@ -59,6 +61,12 @@ async function runQuery(command: CLICommand): Promise<void> {
+   const merged = mergeResults(vendorResults, projectResults, topK);
+ 
+   if (merged.length === 0) {
++    // F241 FR-012 挂点 3：真实零结果 → 记一条 no-hit 治理事件（recordNoHit 为 total 函数，默认关闭时零 I/O）
++    recordNoHit({
++      tool: 'scaffold_kb_query',
++      rawQuery: requirement,
++      dbPath: describeQueriedDbPaths([ctx.vendor, ctx.project]),
++    });
+     console.error('[scaffold-kb query] no-hit');
+     return; // exit 0, stdout 空
+   }
+@@ -72,6 +80,17 @@ async function runQuery(command: CLICommand): Promise<void> {
+   if (block.length > 0) process.stdout.write(block + '\n');
+ }
+ 
++/**
++ * scaffold-kb coverage-gap：读 no-hit 记录，输出达阈值的文档缺口 backlog（F241 FR-014/015）。
++ *
++ * 只读命令，恒 exit 0：即便采集未开启也**明确打出 status**，绝不用空 backlog 冒充"没有缺口"。
++ */
++function runCoverageGap(command: CLICommand): void {
++  const nohitDir = resolveNoHitTelemetryDir();
++  const report = buildCoverageGapReport({ nohitDir, isCollectionEnabled: nohitDir !== null });
++  process.stdout.write(formatCoverageGapReport(report, command.scaffoldKbFormat === 'json' ? 'json' : 'markdown'));
++}
++
+ /** scaffold-kb ingest：三方源（url/file/minutes）→ 预览 → --yes 落项目库（FR-009/013） */
+ async function runIngest(command: CLICommand): Promise<void> {
+   const sources: IngestSource[] = [];
+@@ -167,6 +186,11 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
+     return;
+   }
+ 
++  if (op === 'coverage-gap') {
++    runCoverageGap(command);
++    return;
++  }
++
+   if (op === 'serve') {
+     // Phase B：启动 KB MCP server。serve 实现随 KB MCP 层（src/kb-mcp/）接入（T046）。
+     const vendorKbPath = command.scaffoldKbVendorKb;
+@@ -179,7 +203,7 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
+     return;
+   }
+ 
+-  console.error('用法: spectra scaffold-kb <build|serve> ...');
++  console.error('用法: spectra scaffold-kb <build|serve|query|ingest|coverage-gap> ...');
+   process.exitCode = 1;
+ }
+ 
+diff --git a/src/cli/index.ts b/src/cli/index.ts
+index a9dbbc6..4aaed9c 100644
+--- a/src/cli/index.ts
++++ b/src/cli/index.ts
+@@ -72,6 +72,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
+   spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) [--project-kb <path>] [--yes|--dry-run] [--no-llm]
+   spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
+   spectra scaffold-kb query --requirement "<需求>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
++  spectra scaffold-kb coverage-gap [--format markdown|json]
+   spectra mcp-server
+   spectra --version / --help
+ 
+@@ -93,7 +94,8 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
+   direction-audit 依赖方向自查工具（SC-006 CI regression guard）
+   index         构建并持久化 UnifiedGraph snapshot 到 .spectra/unified-graph.json（Feature 156）
+   graph-quality 图质量体检（六指标 + freshness，F217）：读取 graph.json 输出质量门禁结果
+-  scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server
++  scaffold-kb   领域知识脚手架（Feature 190）：build 构建 kb/（doc-graph + FTS5）；serve 启动 KB MCP server；
++                coverage-gap 输出 KB 文档缺口 backlog（F241，读 no-hit 记录；采集需设 SPECTRA_KB_NOHIT_TELEMETRY=<目录>，默认关闭）
+   mcp-server    启动 MCP stdio server（供 Claude Code 插件调用）
+ 
+ 认证:
+diff --git a/src/cli/utils/parse-args.ts b/src/cli/utils/parse-args.ts
+index a9e8ea8..4c56f9e 100644
+--- a/src/cli/utils/parse-args.ts
++++ b/src/cli/utils/parse-args.ts
+@@ -110,8 +110,8 @@ export interface CLICommand {
+    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
+    */
+   indexGitRange?: string;
+-  /** F190/F191/F192 scaffold-kb 子操作（build | serve | query | ingest） */
+-  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest';
++  /** F190/F191/F192/F241 scaffold-kb 子操作（build | serve | query | ingest | coverage-gap） */
++  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest' | 'coverage-gap';
+   /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
+   scaffoldKbLlmsTxt?: string;
+   /** F190 scaffold-kb build：--dir 本地文档目录 */
+@@ -756,12 +756,12 @@ export function parseArgs(argv: string[]): ParseResult {
+       };
+     }
+     const op = argv[1];
+-    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest') {
++    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest' && op !== 'coverage-gap') {
+       return {
+         ok: false,
+         error: {
+           type: 'invalid_subcommand',
+-          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest）`,
++          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest | coverage-gap）`,
+         },
+       };
+     }
+diff --git a/src/kb-mcp/lib/kb-locator.ts b/src/kb-mcp/lib/kb-locator.ts
+index 977a7fd..e14c2f2 100644
+--- a/src/kb-mcp/lib/kb-locator.ts
++++ b/src/kb-mcp/lib/kb-locator.ts
+@@ -30,6 +30,8 @@ export interface KbHandle {
+   graph: DocGraphFile | null;
+   /** F192：api-entities.json（缺失/损坏 → null，kb_api_lookup 降级 document_fallback） */
+   entities: ApiEntityFile | null;
++  /** F241：sqlite 库文件路径。仅用于 no-hit 治理记录的 `dbPathHash`（落盘只存 hash，不存路径） */
++  dbPath: string;
+ }
+ 
+ export interface KbContext {
+@@ -40,6 +42,17 @@ export interface KbContext {
+ 
+ export type LoadKbResult = { ok: true; context: KbContext } | { ok: false; code: KbErrorCode };
+ 
++/**
++ * F241：把本次**实际查询过**的库路径拼成单一 key，供 no-hit 记录计算 `dbPathHash`。
++ * 只用于 hash（区分单库/双库场景），路径本身不落盘。
++ */
++export function describeQueriedDbPaths(handles: Array<KbHandle | null>): string {
++  return handles
++    .filter((h): h is KbHandle => h !== null)
++    .map((h) => h.dbPath)
++    .join('|');
++}
++
+ async function loadHandle(kbDir: string): Promise<KbHandle | { corrupt: true }> {
+   const sqlitePath = join(kbDir, 'chunks.sqlite');
+   let db: SqliteDb | undefined;
+@@ -78,7 +91,7 @@ async function loadHandle(kbDir: string): Promise<KbHandle | { corrupt: true }>
+   } catch {
+     entities = null; // 缺失/损坏 → kb_api_lookup 降级 document_fallback（W-3）
+   }
+-  return { db, graph, entities };
++  return { db, graph, entities, dbPath: sqlitePath };
+ }
+ 
+ /**
+diff --git a/src/kb-mcp/tools/kb-api-lookup.ts b/src/kb-mcp/tools/kb-api-lookup.ts
+index 4f829e4..6e0f0f3 100644
+--- a/src/kb-mcp/tools/kb-api-lookup.ts
++++ b/src/kb-mcp/tools/kb-api-lookup.ts
+@@ -19,8 +19,9 @@ import { searchKbCore } from '../../scaffold-kb/search-core.js';
+ import { matchEntities, type EntityMatch } from '../../scaffold-kb/entity-matcher.js';
+ import { arbitrateEntities, type ArbitrationInput } from '../../scaffold-kb/arbitration.js';
+ import { buildEvidenceEnvelope as envelope, defangSentinel, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
++import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
+ import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
+-import type { KbContext, KbHandle } from '../lib/kb-locator.js';
++import { describeQueriedDbPaths, type KbContext, type KbHandle } from '../lib/kb-locator.js';
+ import type { ApiEntity, SourceKind } from '../../scaffold-kb/types.js';
+ 
+ const DEFAULT_TOP_N = 10;
+@@ -90,6 +91,14 @@ function documentFallback(ctx: KbContext, apiName: string): ToolResult {
+       }
+     }
+   }
++  // F241 FR-012 挂点 2b：fallback 分支同样真实执行了 searchKbCore，零命中即真实零结果，不豁免采集（P-W3）
++  if (hits.length === 0) {
++    recordNoHit({
++      tool: 'kb_api_lookup',
++      rawQuery: apiName,
++      dbPath: describeQueriedDbPaths([ctx.vendor, ctx.project]),
++    });
++  }
+   return buildKbSuccess({
+     mode: 'document_fallback',
+     note: `未找到 api-entities.json，已降级为文档级检索；不提供参数/废弃校验结论（${EVIDENCE_NOTE}）`,
+@@ -139,6 +148,12 @@ export function executeKbApiLookup(ctx: KbContext, params: KbApiLookupParams): T
+   const matched = matchEntities(allEnts, matchQuery) as Array<EntityMatch & ArbitrationInput>;
+ 
+   if (matched.length === 0) {
++    // F241 FR-012 挂点 2a：有实体表但一个都没匹配上 → 真实零结果
++    recordNoHit({
++      tool: 'kb_api_lookup',
++      rawQuery: params.api_name,
++      dbPath: describeQueriedDbPaths([ctx.vendor, ctx.project]),
++    });
+     return buildKbSuccess({
+       results: [],
+       total_found: 0,
+diff --git a/src/kb-mcp/tools/kb-search.ts b/src/kb-mcp/tools/kb-search.ts
+index af809cf..c6a1eb8 100644
+--- a/src/kb-mcp/tools/kb-search.ts
++++ b/src/kb-mcp/tools/kb-search.ts
+@@ -12,9 +12,10 @@ import type { ToolResult } from '../../mcp/lib/tool-response.js';
+ import { withTelemetry } from '../../mcp/lib/telemetry.js';
+ import { searchKbCore } from '../../scaffold-kb/search-core.js';
+ import { buildEvidenceEnvelope as envelope, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
++import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
+ import { mergeResults, annotateFreshness, type SourceKind } from '../lib/result-merger.js';
+ import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
+-import type { KbContext } from '../lib/kb-locator.js';
++import { describeQueriedDbPaths, type KbContext } from '../lib/kb-locator.js';
+ 
+ const MAX_TOP_K = 20;
+ const DEFAULT_TOP_K = 5;
+@@ -79,6 +80,16 @@ export function executeKbSearch(ctx: KbContext, params: KbSearchParams): ToolRes
+   const projectResults = projectHits && projectHits.ok ? projectHits.results : [];
+   const merged = annotateFreshness(mergeResults(vendorResults, projectResults, topK));
+ 
++  // F241 FR-012 挂点 1：真实零结果 → 记一条 no-hit 治理事件。
++  // recordNoHit 是 total 函数（默认关闭时零 I/O，任何失败静默 no-op），主链路不受影响（EC-20 / RG-009）。
++  if (merged.length === 0) {
++    recordNoHit({
++      tool: 'kb_search',
++      rawQuery: params.query,
++      dbPath: describeQueriedDbPaths([useVendor ? ctx.vendor : null, useProject ? ctx.project : null]),
++    });
++  }
++
+   // token cap（字符口径）+ evidence envelope
+   let truncated = false;
+   let totalChars = 0;
+diff --git a/src/scaffold-kb/coverage-gap.ts b/src/scaffold-kb/coverage-gap.ts
+new file mode 100644
+index 0000000..936da7d
+--- /dev/null
++++ b/src/scaffold-kb/coverage-gap.ts
+@@ -0,0 +1,208 @@
++/**
++ * F241 E1 — coverage-gap 聚合器（FR-014 / FR-015）
++ *
++ * 读 no-hit JSONL → 按 term 聚合 → 用**最小出现阈值**过滤 → backlog。
++ *
++ * 两条不可动摇的口径：
++ * 1. **阈值判据是 `distinctQueries`（不同 `normalizedQueryHash` 数），不是行数**。
++ *    同一句话查 N 遍只算 1，否则"把同一个问题问两遍"就能凭空造出一条缺口（C5 指出的绕过形态，EC-30）。
++ * 2. **三种空态必须可区分**：`collection-disabled` / `no-data` / `no-gap-above-threshold`。
++ *    绝不允许采集关着却回一个空 backlog、让读的人以为"没有文档缺口"（FR-014）。
++ *
++ * `minOccurrenceThreshold` **不是**匿名性保证，只是治理信号的最低置信门槛，
++ * 输出与文档中都不得使用 k-匿名 / k-anonymity 措辞（C5 更名裁决）。
++ */
++
++import { readdirSync, readFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { MIN_OCCURRENCE_THRESHOLD } from './governance-constants.js';
++import { REDACTION_PLACEHOLDER_TOKENS } from './query-redaction.js';
++
++/** 与 no-hit 记录文件同一命名口径（recorder 侧写入形态） */
++const NOHIT_FILE_PATTERN = /^nohit-\d{8}\.jsonl$/;
++
++export type CoverageGapStatus = 'collection-disabled' | 'no-data' | 'no-gap-above-threshold' | 'ok';
++
++export interface CoverageGapItem {
++  term: string;
++  /** 包含该 term 的记录总行数，仅作热度可见性，**不参与阈值判定** */
++  occurrences: number;
++  /** 包含该 term 的记录中不同 `normalizedQueryHash` 的个数，**阈值判据** */
++  distinctQueries: number;
++  tools: string[];
++  firstSeen: string;
++  lastSeen: string;
++}
++
++export interface CoverageGapOutput {
++  schemaVersion: 1;
++  status: CoverageGapStatus;
++  minOccurrenceThreshold: number;
++  /** 有效解析的记录条数（含未产出条目的记录，用于区分 no-data 与 no-gap-above-threshold） */
++  totalRecords: number;
++  /** JSON 不可解析而跳过的行数（EC-18） */
++  skippedLines: number;
++  items: CoverageGapItem[];
++}
++
++export interface BuildCoverageGapOptions {
++  /** no-hit JSONL 所在目录；采集关闭时该值不被读取 */
++  nohitDir: string | null;
++  /** 采集是否开启（由调用方传入 `resolveNoHitTelemetryDir() !== null` 的判定结果） */
++  isCollectionEnabled: boolean;
++}
++
++interface NoHitRecord {
++  terms: unknown;
++  normalizedQueryHash: unknown;
++  tool: unknown;
++  timestamp: unknown;
++}
++
++/** 单 term 的聚合中间态 */
++interface TermAccumulator {
++  occurrences: number;
++  hashes: Set<string>;
++  tools: Set<string>;
++  firstSeen: string;
++  lastSeen: string;
++}
++
++function listNoHitFiles(dir: string): string[] {
++  try {
++    return readdirSync(dir)
++      .filter((f) => NOHIT_FILE_PATTERN.test(f))
++      .sort();
++  } catch {
++    return []; // 目录不存在/不可读 → 等同无数据（EC-16）
++  }
++}
++
++function parseRecord(line: string): NoHitRecord | null {
++  try {
++    const parsed = JSON.parse(line) as NoHitRecord;
++    if (parsed === null || typeof parsed !== 'object') return null;
++    if (!Array.isArray(parsed.terms) || typeof parsed.normalizedQueryHash !== 'string') return null;
++    return parsed;
++  } catch {
++    return null;
++  }
++}
++
++/** 剔除 redaction 占位符切词后的碎片，它们不是真实缺口词（EC-21） */
++function meaningfulTerms(terms: unknown[]): string[] {
++  return terms.filter(
++    (t): t is string => typeof t === 'string' && t.length > 0 && !REDACTION_PLACEHOLDER_TOKENS.has(t),
++  );
++}
++
++function accumulate(acc: Map<string, TermAccumulator>, record: NoHitRecord): void {
++  const hash = record.normalizedQueryHash as string;
++  const tool = typeof record.tool === 'string' ? record.tool : 'unknown';
++  const timestamp = typeof record.timestamp === 'string' ? record.timestamp : '';
++  for (const term of new Set(meaningfulTerms(record.terms as unknown[]))) {
++    const existing = acc.get(term);
++    if (existing === undefined) {
++      acc.set(term, {
++        occurrences: 1,
++        hashes: new Set([hash]),
++        tools: new Set([tool]),
++        firstSeen: timestamp,
++        lastSeen: timestamp,
++      });
++      continue;
++    }
++    existing.occurrences += 1;
++    existing.hashes.add(hash);
++    existing.tools.add(tool);
++    if (timestamp !== '' && (existing.firstSeen === '' || timestamp < existing.firstSeen)) existing.firstSeen = timestamp;
++    if (timestamp > existing.lastSeen) existing.lastSeen = timestamp;
++  }
++}
++
++/**
++ * 生成 coverage-gap backlog。
++ *
++ * 采集关闭时**不读盘**：目录里即便留着历史数据也一律回 `collection-disabled`，
++ * 因为此刻的数据不代表当前采集状态，据此下"有/无缺口"的结论会误导读者。
++ */
++export function buildCoverageGapReport(opts: BuildCoverageGapOptions): CoverageGapOutput {
++  const base = { schemaVersion: 1 as const, minOccurrenceThreshold: MIN_OCCURRENCE_THRESHOLD };
++  if (!opts.isCollectionEnabled || opts.nohitDir === null) {
++    return { ...base, status: 'collection-disabled', totalRecords: 0, skippedLines: 0, items: [] };
++  }
++
++  const acc = new Map<string, TermAccumulator>();
++  let totalRecords = 0;
++  let skippedLines = 0;
++  for (const file of listNoHitFiles(opts.nohitDir)) {
++    let text: string;
++    try {
++      text = readFileSync(join(opts.nohitDir, file), 'utf-8');
++    } catch {
++      continue; // 单文件不可读不影响其余（与损坏行同样宽容）
++    }
++    for (const line of text.split('\n')) {
++      if (line.trim().length === 0) continue;
++      const record = parseRecord(line);
++      if (record === null) {
++        skippedLines += 1;
++        continue;
++      }
++      totalRecords += 1;
++      accumulate(acc, record);
++    }
++  }
++
++  const items = [...acc.entries()]
++    .filter(([, v]) => v.hashes.size >= MIN_OCCURRENCE_THRESHOLD)
++    .map(([term, v]) => ({
++      term,
++      occurrences: v.occurrences,
++      distinctQueries: v.hashes.size,
++      tools: [...v.tools].sort(),
++      firstSeen: v.firstSeen,
++      lastSeen: v.lastSeen,
++    }))
++    // 先按 distinctQueries 降序（信号强度），同分按 term 稳定排序
++    .sort((a, b) => b.distinctQueries - a.distinctQueries || a.term.localeCompare(b.term));
++
++  let status: CoverageGapStatus;
++  if (totalRecords === 0) status = 'no-data';
++  else if (items.length === 0) status = 'no-gap-above-threshold';
++  else status = 'ok';
++
++  return { ...base, status, totalRecords, skippedLines, items };
++}
++
++const STATUS_EXPLANATION: Record<CoverageGapStatus, string> = {
++  'collection-disabled': '采集未开启（未设 SPECTRA_KB_NOHIT_TELEMETRY）——**无从判断有无文档缺口**',
++  'no-data': '采集已开启但尚无 no-hit 记录',
++  'no-gap-above-threshold': `有 no-hit 记录，但没有 term 达到最小出现阈值（distinctQueries ≥ ${MIN_OCCURRENCE_THRESHOLD}）`,
++  ok: '以下 term 达到最小出现阈值，建议补充对应文档',
++};
++
++/** 渲染报告。markdown 形态在任何状态下都先打出 status，杜绝"空表 = 没有缺口"的误读 */
++export function formatCoverageGapReport(report: CoverageGapOutput, format: 'json' | 'markdown'): string {
++  if (format === 'json') return `${JSON.stringify(report, null, 2)}\n`;
++  const lines = [
++    '# KB coverage-gap backlog',
++    '',
++    `- status: \`${report.status}\` — ${STATUS_EXPLANATION[report.status]}`,
++    `- minOccurrenceThreshold: ${report.minOccurrenceThreshold}（阈值判据 = distinctQueries，同一查询重复 N 次只计 1）`,
++    `- totalRecords: ${report.totalRecords} / skippedLines: ${report.skippedLines}`,
++    '',
++  ];
++  if (report.items.length === 0) {
++    lines.push('（无条目）');
++    return `${lines.join('\n')}\n`;
++  }
++  lines.push('| term | distinctQueries | occurrences | tools | firstSeen | lastSeen |');
++  lines.push('|------|-----------------|-------------|-------|-----------|----------|');
++  for (const i of report.items) {
++    lines.push(
++      `| ${i.term} | ${i.distinctQueries} | ${i.occurrences} | ${i.tools.join(', ')} | ${i.firstSeen} | ${i.lastSeen} |`,
++    );
++  }
++  return `${lines.join('\n')}\n`;
++}
+diff --git a/src/scaffold-kb/governance-constants.ts b/src/scaffold-kb/governance-constants.ts
+new file mode 100644
+index 0000000..6dab616
+--- /dev/null
++++ b/src/scaffold-kb/governance-constants.ts
+@@ -0,0 +1,18 @@
++/**
++ * F241 E1/E3 — KB 治理层参数的单一常量模块（OQ-2）
++ *
++ * 这四个参数都是 proposed-default，调参成本必须恒等于「改这里一处常量 + 改测试期望值」，
++ * 因此禁止在 recorder / 聚合器 / 状态命令里散落同名字面量。
++ */
++
++/** coverage-gap 最小出现阈值：term 至少被 k 个**不同** normalizedQueryHash 命中才进 backlog（FR-015，k=2） */
++export const MIN_OCCURRENCE_THRESHOLD = 2;
++
++/** no-hit JSONL 保留期（天）：写入时清理 mtime 超期的同目录文件（FR-013） */
++export const NOHIT_RETENTION_DAYS = 30;
++
++/** KB freshness：built_at 超过该天数记 aging（FR-020） */
++export const KB_FRESHNESS_AGING_DAYS = 30;
++
++/** KB freshness：built_at 超过该天数记 stale（FR-020） */
++export const KB_FRESHNESS_STALE_DAYS = 90;
+diff --git a/src/scaffold-kb/nohit-recorder.ts b/src/scaffold-kb/nohit-recorder.ts
+new file mode 100644
+index 0000000..25a83d9
+--- /dev/null
++++ b/src/scaffold-kb/nohit-recorder.ts
+@@ -0,0 +1,109 @@
++/**
++ * F241 E1 — KB no-hit 治理记录器（FR-013 / FR-014）
++ *
++ * 三个 KB 查询入口（kb_search / kb_api_lookup / scaffold-kb query）在零命中时调用
++ * `recordNoHit`，落一条 `.specify/kb-nohit/nohit-<YYYYMMDD>.jsonl` 记录，供 coverage-gap 聚合。
++ *
++ * 三条硬约束：
++ * 1. **默认关闭**：开关钉死为单一环境变量 `SPECTRA_KB_NOHIT_TELEMETRY`（值 = 落盘目录），
++ *    未设或为空即关闭；三个入口共用 `resolveNoHitTelemetryDir()`，禁止各自读 env（P-W3）。
++ * 2. **不落整串**：只落 redaction 后再切词去重的 `terms` 与不可逆的 `normalizedQueryHash`，
++ *    既不存原文也不存 redaction 后的完整串（FR-013）。
++ * 3. **绝不影响主链路**：任何失败（目录只读 / 磁盘满 / 路径被占位）一律静默 no-op（EC-20 / RG-009）。
++ */
++
++import { createHash } from 'node:crypto';
++import { appendFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
++import { join } from 'node:path';
++import { NOHIT_RETENTION_DAYS } from './governance-constants.js';
++import { redactQuery } from './query-redaction.js';
++import { tokenize } from './tokenizer.js';
++
++/** 采集开关的**唯一** env（FR-014 钉死，不引入 config 字段、不引入布尔+路径双变量） */
++const NOHIT_TELEMETRY_ENV = 'SPECTRA_KB_NOHIT_TELEMETRY';
++
++/** 落盘文件名形态，也是滚动清理的作用域边界（不碰目录内其他文件） */
++const NOHIT_FILE_PATTERN = /^nohit-\d{8}\.jsonl$/;
++
++/** hash 截断长度：64 bit 十六进制，仅用于计数去重，不用于还原 */
++const HASH_HEX_LENGTH = 16;
++
++export type NoHitTool = 'kb_search' | 'kb_api_lookup' | 'scaffold_kb_query';
++
++export interface RecordNoHitInput {
++  tool: NoHitTool;
++  /** 原始查询串；本函数内部先 redaction 再切词，调用方**不需要**预处理 */
++  rawQuery: string;
++  /** 被查询库的路径（多库时可用分隔符拼接）；只落其 hash，不落路径本身 */
++  dbPath: string;
++}
++
++/**
++ * 解析 no-hit 采集目录。**全仓唯一**读取 `SPECTRA_KB_NOHIT_TELEMETRY` 的地方。
++ *
++ * @returns 目录路径；未设置 / 空串 / 纯空白 → `null`（= 采集关闭）
++ */
++export function resolveNoHitTelemetryDir(): string | null {
++  const raw = process.env[NOHIT_TELEMETRY_ENV];
++  if (typeof raw !== 'string') return null;
++  const trimmed = raw.trim();
++  return trimmed.length === 0 ? null : trimmed;
++}
++
++function shortHash(input: string): string {
++  return createHash('sha256').update(input).digest('hex').slice(0, HASH_HEX_LENGTH);
++}
++
++/** 清理超过保留期的历史文件；单个文件失败不影响其余（best-effort） */
++function pruneExpired(dir: string, nowMs: number): void {
++  const cutoff = nowMs - NOHIT_RETENTION_DAYS * 86_400_000;
++  let entries: string[];
++  try {
++    entries = readdirSync(dir);
++  } catch {
++    return;
++  }
++  for (const name of entries) {
++    if (!NOHIT_FILE_PATTERN.test(name)) continue;
++    const p = join(dir, name);
++    try {
++      if (statSync(p).mtimeMs < cutoff) unlinkSync(p);
++    } catch {
++      /* 单文件清理失败不影响写入 */
++    }
++  }
++}
++
++/**
++ * 记录一次零命中事件。采集关闭时**全程零 I/O**。
++ *
++ * **total 函数契约**：整个函数体在 try 内，对任何输入、任何环境都不抛异常、无返回值（EC-20 / RG-009）。
++ * 三处挂点因此**不需要**各自包 try-catch——那样只会产生三段永不可达的死分支。
++ * 契约由 `tests/kb/nohit-recorder.test.ts` 的「任何输入都不抛」用例守护，改动本函数必须保持整体 try 包裹。
++ */
++export function recordNoHit(input: RecordNoHitInput): void {
++  try {
++    const dir = resolveNoHitTelemetryDir();
++    if (dir === null) return; // 默认关闭：提前返回，不触碰 fs
++    const { redacted, tags } = redactQuery(input.rawQuery);
++    const terms = [...new Set(tokenize(redacted))];
++    const timestamp = new Date().toISOString();
++    const record = {
++      schemaVersion: 1,
++      timestamp,
++      tool: input.tool,
++      terms,
++      // 归一化 = redaction 后再按索引口径切词拼接；同一查询恒等，不可逆
++      normalizedQueryHash: shortHash(terms.join(' ')),
++      redactionTags: tags,
++      resultCount: 0,
++      dbPathHash: shortHash(input.dbPath),
++    };
++    mkdirSync(dir, { recursive: true });
++    pruneExpired(dir, Date.parse(timestamp));
++    // 单次 appendFileSync 写完整一行（含结尾换行），行内无裸换行 → 并发写安全，不引锁（EC-19）
++    appendFileSync(join(dir, `nohit-${timestamp.slice(0, 10).replace(/-/g, '')}.jsonl`), `${JSON.stringify(record)}\n`);
++  } catch {
++    /* EC-20：治理层绝不影响 KB 查询主链路 */
++  }
++}
+diff --git a/src/scaffold-kb/query-redaction.ts b/src/scaffold-kb/query-redaction.ts
+new file mode 100644
+index 0000000..8523408
+--- /dev/null
++++ b/src/scaffold-kb/query-redaction.ts
+@@ -0,0 +1,126 @@
++/**
++ * F241 E1 — 查询串 redaction 第一层（FR-012）
++ *
++ * 用途：no-hit 治理记录**入库前**对查询串做结构性遮蔽。规则以数据表声明（非散落正则），
++ * 便于测试穷举与后续扩充。
++ *
++ * ## 能力边界（D5 残余风险，如实声明，不冒充"已脱敏"）
++ *
++ * 本规则集**只覆盖结构上可判别的形态**。以下敏感内容**检测不到**，落盘的 `terms` 里仍可能出现：
++ * - 中文姓名、内部项目代号、内部主机名等无结构特征的专有名词；
++ * - 自然语言口令（"密码是芝麻开门"）；
++ * - 带分隔符的电话号码（`138-0013-8000` 被拆成 <8 位数字段，不触发 DIGITS）；
++ * - 非 npm/URL 形态的密钥（自定义前缀、纯小写短串）。
++ *
++ * 反向边界（过度遮蔽）：`HIGH_ENTROPY` 按 spec 定义为「长度 ≥ 20 的 hex / base64 字符集连续片段」，
++ * 该判据不区分随机串与普通长单词/长路径段，因此 ≥20 字符的普通英文词或长目录名也会被遮蔽。
++ * 这会损失少量 coverage-gap 信号，但方向是**偏保守**（宁可多遮），符合治理数据的隐私取向。
++ *
++ * 本模块与 `query-sanitizer.ts::sanitizeQuery`（FTS5 语法构造）、
++ * `evidence-envelope.ts::defangSentinel`（防注入拆解）**语义无关**，不得互相复用。
++ */
++
++import { tokenize } from './tokenizer.js';
++
++/** 一条 redaction 规则（数据表条目） */
++export interface RedactionRule {
++  /** 类型标记，同时作为 `redactionTags` 的取值与占位符名 */
++  readonly id: string;
++  /** 替换后的占位串，恒为 `<id>` */
++  readonly placeholder: string;
++  /** 判据 */
++  readonly pattern: RegExp;
++  /** 判据的人类可读说明（与 spec FR-012 表格对应） */
++  readonly description: string;
++}
++
++/**
++ * 六类规则表（FR-012）。
++ *
++ * **数组顺序即应用顺序**，两处顺序依赖是刻意的，改动会引入回归：
++ * 1. `URL_WITH_CRED` 必须早于 `EMAIL`：`user:pass@host` 含 `@`，否则会被 EMAIL 先吃掉一半；
++ * 2. `TOKEN` 与 `HOME` 必须早于 `HIGH_ENTROPY`：base64 字符集含 `/`，
++ *    否则 `/Users/alice/projects/kb` 这类长路径会被整体判为高熵串，home 段标记丢失。
++ */
++export const REDACTION_RULES: readonly RedactionRule[] = [
++  {
++    id: 'URL_WITH_CRED',
++    placeholder: '<URL_WITH_CRED>',
++    pattern:
++      /(?:[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s/@]+:[^\s/@]+@\S*)|(?:[a-zA-Z][a-zA-Z0-9+.-]*:\/\/\S*[?&](?:token|key|secret|password|passwd|api_key|apikey|access_token)=\S*)/g,
++    description: 'URL 中含 user:pass@ 或 token/key/secret 类查询参数',
++  },
++  {
++    id: 'EMAIL',
++    placeholder: '<EMAIL>',
++    pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g,
++    description: '含 @ 的地址形态',
++  },
++  {
++    id: 'TOKEN',
++    placeholder: '<TOKEN>',
++    pattern:
++      /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|\b(?:github_pat|ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{8,}|\bBearer\s+[A-Za-z0-9._+/=-]+/g,
++    description: '常见 token 前缀形态（sk- / ghp_ / Bearer 等）',
++  },
++  {
++    id: 'HOME',
++    placeholder: '<HOME>',
++    pattern: /(?:\/Users\/|\/home\/)[^\s/\\]+|[A-Za-z]:\\Users\\[^\s\\]+/g,
++    description: '绝对路径 home 段（/Users/<name>、/home/<name>、C:\\Users\\<name>）',
++  },
++  {
++    id: 'HIGH_ENTROPY',
++    placeholder: '<HIGH_ENTROPY>',
++    pattern: /(?<![A-Za-z0-9+/=])[A-Za-z0-9+/=]{20,}(?![A-Za-z0-9+/=])/g,
++    description: '长度 ≥ 20 的连续 hex / base64 字符集片段',
++  },
++  {
++    id: 'DIGITS',
++    placeholder: '<DIGITS>',
++    pattern: /(?<!\d)\d{8,}(?!\d)/g,
++    description: '长度 ≥ 8 的纯数字串',
++  },
++];
++
++/**
++ * 占位符经仓内 tokenizer 切词后残留的**全部** token（EC-21 用）。
++ *
++ * 注意不是简单的 rule.id：tokenizer 把 `_` 当分隔符并额外产出拼接形，
++ * 因此 `<HIGH_ENTROPY>` 实际落成 `HIGH` / `ENTROPY` / `HIGHENTROPY` 三个 token
++ * （dogfood 手跑实证，见 F241 批 2 报告）。coverage-gap 聚合器据此剔除占位 token，
++ * 避免这些标记碎片冒充缺口词。
++ *
++ * 边界：比较是**大小写敏感**的，用户查询里小写的 `token` / `home` 不受影响；
++ * 但如果用户真的全大写查 `TOKEN`，该词会被误剔（可接受，方向偏保守）。
++ */
++export const REDACTION_PLACEHOLDER_TOKENS: ReadonlySet<string> = new Set(
++  REDACTION_RULES.flatMap((r) => tokenize(r.placeholder)),
++);
++
++export interface RedactionResult {
++  /** 遮蔽后的查询串（**不落盘整串**，仅供切词，见 FR-013） */
++  redacted: string;
++  /** 命中的规则 id（去重，按规则表顺序） */
++  tags: string[];
++}
++
++/**
++ * 对原始查询串逐规则施加遮蔽。
++ *
++ * 纯函数、不抛异常：任何输入都返回一个 `RedactionResult`。
++ */
++export function redactQuery(raw: string): RedactionResult {
++  if (typeof raw !== 'string' || raw.length === 0) return { redacted: '', tags: [] };
++  let redacted = raw;
++  const tags: string[] = [];
++  for (const rule of REDACTION_RULES) {
++    // 每条规则的正则带 /g，String.replace 用后 lastIndex 归零，规则表可安全复用
++    const next = redacted.replace(rule.pattern, rule.placeholder);
++    if (next !== redacted) {
++      redacted = next;
++      tags.push(rule.id);
++    }
++  }
++  return { redacted, tags };
++}
+diff --git a/tests/kb/cli-scaffold-kb.test.ts b/tests/kb/cli-scaffold-kb.test.ts
+index dd3be72..cb0877c 100644
+--- a/tests/kb/cli-scaffold-kb.test.ts
++++ b/tests/kb/cli-scaffold-kb.test.ts
+@@ -34,6 +34,92 @@ describe('parseArgs — scaffold-kb', () => {
+     expect(r.ok).toBe(false);
+     if (!r.ok) expect(r.error.type).toBe('invalid_subcommand');
+   });
++
++  // F241 T043（P-W5）：不扩 union 则 dispatch 分支永远不可达 —— CLI 可达性必须单独钉住
++  it('coverage-gap 子操作被解析出来，不落 invalid_subcommand', () => {
++    const r = parseArgs(['scaffold-kb', 'coverage-gap', '--dry-run']);
++    expect(r.ok).toBe(true);
++    if (r.ok) {
++      expect(r.command.scaffoldKbOperation).toBe('coverage-gap');
++      expect(r.command.scaffoldKbDryRun).toBe(true);
++    }
++  });
++
++  it('coverage-gap --format json|markdown 解析生效', () => {
++    const j = parseArgs(['scaffold-kb', 'coverage-gap', '--format', 'json']);
++    expect(j.ok && j.command.scaffoldKbFormat).toBe('json');
++    const m = parseArgs(['scaffold-kb', 'coverage-gap', '--format', 'markdown']);
++    expect(m.ok && m.command.scaffoldKbFormat).toBe('markdown');
++    const bad = parseArgs(['scaffold-kb', 'coverage-gap', '--format', 'yaml']);
++    expect(bad.ok).toBe(false);
++  });
++
++  it('扩 union 后未知 op 仍被拒（不是放开一切）', () => {
++    for (const op of ['coverage-gaps', 'coveragegap', 'frobnicate']) {
++      const r = parseArgs(['scaffold-kb', op]);
++      expect(r.ok).toBe(false);
++      if (!r.ok) expect(r.error.type).toBe('invalid_subcommand');
++    }
++  });
++});
++
++describe('runScaffoldKb — coverage-gap dispatch（F241 T043）', () => {
++  const ENV_KEY = 'SPECTRA_KB_NOHIT_TELEMETRY';
++  let saved: string | undefined;
++
++  function cmd(over: Partial<CLICommand>): CLICommand {
++    return {
++      subcommand: 'scaffold-kb',
++      deep: false, force: false, version: false, help: false,
++      global: false, remove: false, skillTarget: 'claude',
++      ...over,
++    };
++  }
++
++  async function capture(command: CLICommand): Promise<{ stdout: string; stderr: string; exitCode: number | undefined }> {
++    const out: string[] = [];
++    const err: string[] = [];
++    const origOut = process.stdout.write.bind(process.stdout);
++    const origErr = process.stderr.write.bind(process.stderr);
++    const prevExit = process.exitCode;
++    process.exitCode = undefined;
++    (process.stdout.write as unknown) = (s: string): boolean => (out.push(String(s)), true);
++    (process.stderr.write as unknown) = (s: string): boolean => (err.push(String(s)), true);
++    try {
++      await runScaffoldKb(command);
++    } finally {
++      (process.stdout.write as unknown) = origOut;
++      (process.stderr.write as unknown) = origErr;
++    }
++    const exitCode = process.exitCode;
++    process.exitCode = prevExit;
++    return { stdout: out.join(''), stderr: err.join(''), exitCode };
++  }
++
++  beforeEach(() => {
++    saved = process.env[ENV_KEY];
++    delete process.env[ENV_KEY];
++  });
++  afterEach(() => {
++    if (saved === undefined) delete process.env[ENV_KEY];
++    else process.env[ENV_KEY] = saved;
++  });
++
++  it('dispatch 到 runCoverageGap：采集关闭时输出 collection-disabled 且退出码 0', async () => {
++    const { stdout, exitCode } = await capture(cmd({ scaffoldKbOperation: 'coverage-gap', scaffoldKbFormat: 'json' }));
++    const parsed = JSON.parse(stdout) as Record<string, unknown>;
++    expect(parsed['status']).toBe('collection-disabled');
++    expect(parsed['minOccurrenceThreshold']).toBe(2);
++    expect(exitCode).toBeUndefined();
++    // 反证：没有落到"未知子操作"的用法分支
++    expect(stdout).not.toContain('用法:');
++  });
++
++  it('markdown 为默认格式', async () => {
++    const { stdout } = await capture(cmd({ scaffoldKbOperation: 'coverage-gap' }));
++    expect(stdout).toContain('coverage-gap');
++    expect(stdout).toContain('collection-disabled');
++  });
+ });
+ 
+ describe('runScaffoldKb — build handler', () => {
+diff --git a/tests/kb/coverage-gap.test.ts b/tests/kb/coverage-gap.test.ts
+new file mode 100644
+index 0000000..b7df10f
+--- /dev/null
++++ b/tests/kb/coverage-gap.test.ts
+@@ -0,0 +1,200 @@
++/**
++ * F241 T041 — coverage-gap 聚合器（FR-014 / FR-015 / SC-010 / SC-011 / EC-18 / EC-21 / EC-22 / EC-30）
++ */
++
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from 'node:fs';
++import { join } from 'node:path';
++import { tmpdir } from 'node:os';
++import { buildCoverageGapReport, formatCoverageGapReport } from '../../src/scaffold-kb/coverage-gap.js';
++
++let dir: string;
++
++beforeEach(() => {
++  dir = mkdtempSync(join(tmpdir(), 'covgap-'));
++});
++afterEach(() => rmSync(dir, { recursive: true, force: true }));
++
++interface RecordInput {
++  terms: string[];
++  hash: string;
++  tool?: string;
++  timestamp?: string;
++}
++
++function writeRecords(file: string, records: RecordInput[]): void {
++  const path = join(dir, file);
++  writeFileSync(path, '');
++  for (const r of records) {
++    appendFileSync(
++      path,
++      `${JSON.stringify({
++        schemaVersion: 1,
++        timestamp: r.timestamp ?? '2026-07-01T00:00:00.000Z',
++        tool: r.tool ?? 'kb_search',
++        terms: r.terms,
++        normalizedQueryHash: r.hash,
++        redactionTags: [],
++        resultCount: 0,
++        dbPathHash: 'abc',
++      })}\n`,
++    );
++  }
++}
++
++describe('coverage-gap — 三状态互不相同（FR-014 / SC-010 / EC-22）', () => {
++  it('采集关闭 → collection-disabled，且不读取目录内已有数据', () => {
++    writeRecords('nohit-20260701.jsonl', [
++      { terms: ['alpha'], hash: 'h1' },
++      { terms: ['alpha'], hash: 'h2' },
++    ]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: false });
++    expect(r.status).toBe('collection-disabled');
++    expect(r.items).toEqual([]);
++    expect(r.totalRecords).toBe(0);
++  });
++
++  it('采集开启但无记录 → no-data', () => {
++    expect(buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true }).status).toBe('no-data');
++  });
++
++  it('目录不存在 → no-data（EC-16，不崩）', () => {
++    const r = buildCoverageGapReport({ nohitDir: join(dir, 'nope'), isCollectionEnabled: true });
++    expect(r.status).toBe('no-data');
++    expect(r.items).toEqual([]);
++  });
++
++  it('有记录但无条目达阈值 → no-gap-above-threshold', () => {
++    writeRecords('nohit-20260701.jsonl', [{ terms: ['alpha'], hash: 'h1' }]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.status).toBe('no-gap-above-threshold');
++    expect(r.items).toEqual([]);
++    expect(r.totalRecords).toBe(1);
++  });
++
++  it('三态 items 均空但 status 互不相同（禁止空 backlog 冒充无缺口）', () => {
++    const disabled = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: false });
++    const noData = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    writeRecords('nohit-20260701.jsonl', [{ terms: ['alpha'], hash: 'h1' }]);
++    const noGap = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    const statuses = [disabled.status, noData.status, noGap.status];
++    expect(statuses).toEqual(['collection-disabled', 'no-data', 'no-gap-above-threshold']);
++    expect(new Set(statuses).size).toBe(3);
++    for (const r of [disabled, noData, noGap]) expect(r.items).toEqual([]);
++  });
++});
++
++describe('coverage-gap — backlog 产出与绕过防线（FR-015 / SC-011 / EC-18 / EC-30）', () => {
++  beforeEach(() => {
++    const path = join(dir, 'nohit-20260701.jsonl');
++    writeRecords('nohit-20260701.jsonl', [
++      // term X：3 行、2 个不同 hash → 达阈值
++      { terms: ['alpha', 'shared'], hash: 'h1', tool: 'kb_search', timestamp: '2026-07-01T10:00:00.000Z' },
++      { terms: ['alpha'], hash: 'h1', tool: 'kb_search', timestamp: '2026-07-02T10:00:00.000Z' },
++      { terms: ['alpha'], hash: 'h2', tool: 'kb_api_lookup', timestamp: '2026-07-03T10:00:00.000Z' },
++      // term Y：3 行但同一 hash（同一句话查三遍）→ 被阈值挡住（C5 绕过形态防线）
++      { terms: ['beta'], hash: 'h3' },
++      { terms: ['beta'], hash: 'h3' },
++      { terms: ['beta'], hash: 'h3' },
++      // 独有词：1 行
++      { terms: ['gamma'], hash: 'h4' },
++    ]);
++    // 损坏行（EC-18）
++    appendFileSync(path, '{"terms":["broken",\n');
++  });
++
++  it('恰 1 条目（term X），distinctQueries=2 / occurrences=3，term Y 不在 items 中', () => {
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.status).toBe('ok');
++    expect(r.items.map((i) => i.term)).toEqual(['alpha']);
++    expect(r.items[0]!.distinctQueries).toBe(2);
++    expect(r.items[0]!.occurrences).toBe(3);
++    expect(r.items.some((i) => i.term === 'beta')).toBe(false);
++    expect(r.items.some((i) => i.term === 'gamma')).toBe(false);
++  });
++
++  it('条目含 tools 集合与首末时间', () => {
++    const item = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true }).items[0]!;
++    expect([...item.tools].sort()).toEqual(['kb_api_lookup', 'kb_search']);
++    expect(item.firstSeen).toBe('2026-07-01T10:00:00.000Z');
++    expect(item.lastSeen).toBe('2026-07-03T10:00:00.000Z');
++  });
++
++  it('损坏行被跳过并计入 skippedLines，整体不失败（EC-18）', () => {
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.skippedLines).toBe(1);
++    expect(r.totalRecords).toBe(7);
++  });
++
++  it('阈值口径锁死：同一 hash 重复 N 次只计 1（EC-30）', () => {
++    rmSync(join(dir, 'nohit-20260701.jsonl'));
++    writeRecords('nohit-20260702.jsonl', Array.from({ length: 20 }, () => ({ terms: ['beta'], hash: 'same' })));
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.status).toBe('no-gap-above-threshold');
++    expect(r.items).toEqual([]);
++  });
++
++  it('跨多个日文件聚合同一 term', () => {
++    rmSync(join(dir, 'nohit-20260701.jsonl'));
++    writeRecords('nohit-20260701.jsonl', [{ terms: ['delta'], hash: 'q1' }]);
++    writeRecords('nohit-20260702.jsonl', [{ terms: ['delta'], hash: 'q2' }]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.items.map((i) => i.term)).toEqual(['delta']);
++    expect(r.items[0]!.distinctQueries).toBe(2);
++  });
++});
++
++describe('coverage-gap — 占位 token 不冒充缺口词（EC-21）', () => {
++  it('只剩占位 token 的记录不产出条目，但计入 totalRecords', () => {
++    writeRecords('nohit-20260701.jsonl', [
++      { terms: ['HIGH', 'ENTROPY', 'HIGHENTROPY'], hash: 'h1' },
++      { terms: ['HIGH', 'ENTROPY', 'HIGHENTROPY'], hash: 'h2' },
++      { terms: [], hash: 'h3' },
++    ]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.items).toEqual([]);
++    expect(r.status).toBe('no-gap-above-threshold');
++    expect(r.totalRecords).toBe(3);
++  });
++
++  it('混合记录里占位 token 被剔除、真实词保留', () => {
++    writeRecords('nohit-20260701.jsonl', [
++      { terms: ['EMAIL', 'retry'], hash: 'h1' },
++      { terms: ['EMAIL', 'retry'], hash: 'h2' },
++    ]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.items.map((i) => i.term)).toEqual(['retry']);
++  });
++});
++
++describe('coverage-gap — 输出格式（SC-010）', () => {
++  it('输出含 minOccurrenceThreshold: 2，且 json/markdown 全文均不含 k-匿名 / k-anonymity 字样', () => {
++    writeRecords('nohit-20260701.jsonl', [
++      { terms: ['alpha'], hash: 'h1' },
++      { terms: ['alpha'], hash: 'h2' },
++    ]);
++    const r = buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true });
++    expect(r.minOccurrenceThreshold).toBe(2);
++    expect(r.schemaVersion).toBe(1);
++    for (const format of ['json', 'markdown'] as const) {
++      const text = formatCoverageGapReport(r, format);
++      expect(text).not.toMatch(/k-匿名|k-anonymity|kAnonymity/i);
++      expect(text.length).toBeGreaterThan(0);
++    }
++    expect(JSON.parse(formatCoverageGapReport(r, 'json')).minOccurrenceThreshold).toBe(2);
++    expect(formatCoverageGapReport(r, 'markdown')).toContain('alpha');
++  });
++
++  it('markdown 在三种空态下也明确打出 status（不输出空表冒充无缺口）', () => {
++    const disabled = formatCoverageGapReport(
++      buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: false }),
++      'markdown',
++    );
++    expect(disabled).toContain('collection-disabled');
++    const noData = formatCoverageGapReport(
++      buildCoverageGapReport({ nohitDir: dir, isCollectionEnabled: true }),
++      'markdown',
++    );
++    expect(noData).toContain('no-data');
++  });
++});
+diff --git a/tests/kb/kb-api-lookup-tool.test.ts b/tests/kb/kb-api-lookup-tool.test.ts
+index 0ecb832..6ea9ab7 100644
+--- a/tests/kb/kb-api-lookup-tool.test.ts
++++ b/tests/kb/kb-api-lookup-tool.test.ts
+@@ -3,7 +3,7 @@
+  * 用手工 KB 三件套 fixture（source_chunk_id 真实存在于 sqlite，W-6）。
+  */
+ 
+-import { describe, it, expect } from 'vitest';
++import { describe, it, expect, beforeEach, vi } from 'vitest';
+ import { executeKbApiLookup } from '../../src/kb-mcp/tools/kb-api-lookup.js';
+ import { executeKbSearch } from '../../src/kb-mcp/tools/kb-search.js';
+ import { buildChunksDbBytes } from '../../src/scaffold-kb/sqlite-writer.js';
+@@ -11,6 +11,13 @@ import { loadDbFromBytes } from '../../src/scaffold-kb/sqlite-engine.js';
+ import type { KbContext, KbHandle } from '../../src/kb-mcp/lib/kb-locator.js';
+ import type { ApiEntity, ChunkMeta, Chunk, SourceKind } from '../../src/scaffold-kb/types.js';
+ 
++// F241 T036：no-hit 挂点 spy（FR-012 挂点 2a/2b）
++const { recordNoHitSpy } = vi.hoisted(() => ({ recordNoHitSpy: vi.fn() }));
++vi.mock('../../src/scaffold-kb/nohit-recorder.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../../src/scaffold-kb/nohit-recorder.js')>();
++  return { ...actual, recordNoHit: recordNoHitSpy };
++});
++
+ function parse(res: { content: Array<{ text: string }> }): Record<string, unknown> {
+   return JSON.parse(res.content[0]!.text);
+ }
+@@ -43,6 +50,7 @@ async function handle(
+   const { db } = await loadDbFromBytes(await buildChunksDbBytes(chunks, meta));
+   return {
+     db,
++    dbPath: `/fixture/${sourceKind}/chunks.sqlite`,
+     graph: null,
+     entities: {
+       schemaVersion: '1.0',
+@@ -147,6 +155,61 @@ describe('kb_api_lookup', () => {
+   });
+ });
+ 
++describe('kb_api_lookup — no-hit 治理挂点（F241 FR-012 挂点 2a/2b）', () => {
++  beforeEach(() => recordNoHitSpy.mockClear());
++
++  it('(a) 挂点 2a：有实体表但 matched.length===0 → recordNoHit 被调用一次', async () => {
++    const ctx: KbContext = {
++      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
++      project: null,
++      ...EMPTY_CTX_BASE,
++    };
++    const out = parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyz' }));
++    expect(out['not_found']).toBe(true);
++    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
++    const arg = recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>;
++    expect(arg['tool']).toBe('kb_api_lookup');
++    expect(arg['rawQuery']).toBe('nonexistentXyz');
++    expect(arg['dbPath']).toBe('/fixture/vendor/chunks.sqlite');
++  });
++
++  it('(b) 挂点 2a 反例：matched.length>0 → recordNoHit 不被调用', async () => {
++    const ctx: KbContext = {
++      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
++      project: null,
++      ...EMPTY_CTX_BASE,
++    };
++    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
++    expect((out['results'] as unknown[]).length).toBeGreaterThan(0);
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++
++  it('(c) 挂点 2b：document_fallback 内 hits.length===0 → recordNoHit 被调用一次（P-W3 不豁免）', async () => {
++    const vendorNoEnt: KbHandle = { ...(await handle([], 'vendor')), entities: null };
++    const ctx: KbContext = { vendor: vendorNoEnt, project: null, ...EMPTY_CTX_BASE };
++    const out = parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyzApi' }));
++    expect(out['mode']).toBe('document_fallback');
++    expect(out['total_found']).toBe(0);
++    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
++    expect((recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>)['tool']).toBe('kb_api_lookup');
++  });
++
++  it('(d) 挂点 2b 反例：document_fallback 内 hits.length>0 → recordNoHit 不被调用', async () => {
++    const vendorNoEnt: KbHandle = { ...(await handle([], 'vendor')), entities: null };
++    const ctx: KbContext = { vendor: vendorNoEnt, project: null, ...EMPTY_CTX_BASE };
++    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
++    expect(out['mode']).toBe('document_fallback');
++    expect(out['total_found'] as number).toBeGreaterThan(0);
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++
++  it('参数校验失败（未真正检索）→ recordNoHit 不被调用', async () => {
++    const ctx: KbContext = { vendor: await handle([ent({ name: 'x' })], 'vendor'), project: null, ...EMPTY_CTX_BASE };
++    executeKbApiLookup(ctx, { api_name: '  ' });
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++});
++
+ describe('kb_search freshness_hint（T010 档 B）', () => {
+   it('同 doc_id 两库命中 → 附 freshness_hint（不出 recommended）', async () => {
+     const vendor = await handle([], 'vendor', { builtAt: '2026-01-01' });
+diff --git a/tests/kb/kb-search-tool.test.ts b/tests/kb/kb-search-tool.test.ts
+index 1b3b979..3f1c022 100644
+--- a/tests/kb/kb-search-tool.test.ts
++++ b/tests/kb/kb-search-tool.test.ts
+@@ -2,7 +2,7 @@
+  * F190 T040 — kb_search 工具：envelope + token cap + 防注入 + 参数校验 + 双层联查
+  */
+ 
+-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
++import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+ import { join } from 'node:path';
+ import { tmpdir } from 'node:os';
+@@ -10,6 +10,13 @@ import { buildKb } from '../../src/scaffold-kb/index.js';
+ import { loadKbContext, type KbContext } from '../../src/kb-mcp/lib/kb-locator.js';
+ import { executeKbSearch } from '../../src/kb-mcp/tools/kb-search.js';
+ 
++// F241 T034：no-hit 挂点 spy（FR-012 挂点 1）
++const { recordNoHitSpy } = vi.hoisted(() => ({ recordNoHitSpy: vi.fn() }));
++vi.mock('../../src/scaffold-kb/nohit-recorder.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../../src/scaffold-kb/nohit-recorder.js')>();
++  return { ...actual, recordNoHit: recordNoHitSpy };
++});
++
+ let workdir: string;
+ let ctx: KbContext;
+ 
+@@ -118,3 +125,31 @@ describe('kb_search — 双层联查（FR-009 / EC-005 真实两库）', () => {
+     expect(out.results.every((r: any) => r.source_kind === 'vendor')).toBe(true);
+   });
+ });
++
++describe('kb_search — no-hit 治理挂点（F241 FR-012 挂点 1）', () => {
++  beforeEach(() => recordNoHitSpy.mockClear());
++
++  it('零结果（merged.length===0）→ recordNoHit 被调用一次，带 tool/rawQuery/dbPath', () => {
++    const query = 'zzzqqqnonexistentterm';
++    const out = parse(executeKbSearch(ctx, { query }));
++    expect(out.total_found).toBe(0);
++    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
++    const arg = recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>;
++    expect(arg['tool']).toBe('kb_search');
++    expect(arg['rawQuery']).toBe(query);
++    expect(typeof arg['dbPath']).toBe('string');
++    expect((arg['dbPath'] as string).length).toBeGreaterThan(0);
++  });
++
++  it('有结果（merged.length>0）→ recordNoHit 不被调用', () => {
++    const out = parse(executeKbSearch(ctx, { query: '鉴权失败' }));
++    expect(out.results.length).toBeGreaterThan(0);
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++
++  it('参数校验失败（未真正检索）→ recordNoHit 不被调用', () => {
++    executeKbSearch(ctx, { query: '   ' });
++    executeKbSearch(ctx, { query: '错误', top_k: 0 });
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++});
+diff --git a/tests/kb/nohit-recorder.test.ts b/tests/kb/nohit-recorder.test.ts
+new file mode 100644
+index 0000000..91cd9c8
+--- /dev/null
++++ b/tests/kb/nohit-recorder.test.ts
+@@ -0,0 +1,243 @@
++/**
++ * F241 T032 — no-hit 记录器（FR-013 / FR-014 / SC-009 / EC-19 / EC-20）
++ *
++ * 覆盖：落盘键集合恰 8 键（无整串字段）/ 30 天滚动清理 / 只读目录静默降级 /
++ *       同一查询两次 hash 相同 / env 未设或为空 → 零 I/O（P-W3）。
++ */
++
++import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
++import { mkdtempSync, mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync, utimesSync, chmodSync } from 'node:fs';
++import { join } from 'node:path';
++import { tmpdir } from 'node:os';
++
++// node:fs 透传包装：仅用于「env 未设 → 全程零 I/O」的调用计数断言（P-W3）
++const { fsCalls } = vi.hoisted(() => ({ fsCalls: { count: 0 } }));
++vi.mock('node:fs', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('node:fs')>();
++  const counted = <T extends (...args: never[]) => unknown>(fn: T): T =>
++    ((...args: Parameters<T>) => {
++      fsCalls.count++;
++      return fn(...args);
++    }) as unknown as T;
++  return {
++    ...actual,
++    mkdirSync: counted(actual.mkdirSync),
++    appendFileSync: counted(actual.appendFileSync),
++    writeFileSync: counted(actual.writeFileSync),
++    readdirSync: counted(actual.readdirSync),
++    statSync: counted(actual.statSync),
++    unlinkSync: counted(actual.unlinkSync),
++    existsSync: counted(actual.existsSync),
++  };
++});
++
++const { recordNoHit, resolveNoHitTelemetryDir } = await import('../../src/scaffold-kb/nohit-recorder.js');
++const { NOHIT_RETENTION_DAYS } = await import('../../src/scaffold-kb/governance-constants.js');
++
++const ENV_KEY = 'SPECTRA_KB_NOHIT_TELEMETRY';
++let dir: string;
++let savedEnv: string | undefined;
++
++beforeEach(() => {
++  savedEnv = process.env[ENV_KEY];
++  dir = mkdtempSync(join(tmpdir(), 'nohit-'));
++  process.env[ENV_KEY] = dir;
++});
++
++afterEach(() => {
++  if (savedEnv === undefined) delete process.env[ENV_KEY];
++  else process.env[ENV_KEY] = savedEnv;
++  try {
++    chmodSync(dir, 0o755);
++  } catch {
++    /* ignore */
++  }
++  rmSync(dir, { recursive: true, force: true });
++});
++
++/** 读出目录下所有 jsonl 行，解析为对象 */
++function readRecords(d: string): Array<Record<string, unknown>> {
++  const out: Array<Record<string, unknown>> = [];
++  for (const f of readdirSync(d)) {
++    const text = readFileSync(join(d, f), 'utf-8');
++    for (const line of text.split('\n')) {
++      if (line.trim().length > 0) out.push(JSON.parse(line) as Record<string, unknown>);
++    }
++  }
++  return out;
++}
++
++describe('resolveNoHitTelemetryDir — 单一 env 开关（FR-014 / P-W3）', () => {
++  it('env 设为目录路径 → 返回该路径', () => {
++    expect(resolveNoHitTelemetryDir()).toBe(dir);
++  });
++
++  it('env 未设置 → null', () => {
++    delete process.env[ENV_KEY];
++    expect(resolveNoHitTelemetryDir()).toBeNull();
++  });
++
++  it('env 为空字符串 / 纯空白 → null（等同未设置）', () => {
++    process.env[ENV_KEY] = '';
++    expect(resolveNoHitTelemetryDir()).toBeNull();
++    process.env[ENV_KEY] = '   ';
++    expect(resolveNoHitTelemetryDir()).toBeNull();
++  });
++});
++
++describe('recordNoHit — 默认关闭时全程零 I/O（P-W3）', () => {
++  it('env 未设置 → 不写盘且不触碰任何 fs 调用', () => {
++    delete process.env[ENV_KEY];
++    const before = fsCalls.count;
++    recordNoHit({ tool: 'kb_search', rawQuery: '错误码 E01', dbPath: '/x/chunks.sqlite' });
++    expect(fsCalls.count - before).toBe(0);
++    expect(readdirSync(dir)).toEqual([]);
++  });
++
++  it('env 为空字符串 → 同样零 I/O', () => {
++    process.env[ENV_KEY] = '';
++    const before = fsCalls.count;
++    recordNoHit({ tool: 'kb_api_lookup', rawQuery: 'sdk.Init', dbPath: '/x/chunks.sqlite' });
++    expect(fsCalls.count - before).toBe(0);
++  });
++});
++
++describe('recordNoHit — 落盘范围（FR-013 / SC-009）', () => {
++  it('落盘对象键集合恰为 8 个规定字段，无任何整串字段', () => {
++    recordNoHit({ tool: 'kb_search', rawQuery: '鉴权失败 ERR_AUTH', dbPath: '/kb/chunks.sqlite' });
++    const records = readRecords(dir);
++    expect(records.length).toBe(1);
++    expect(Object.keys(records[0]!).sort()).toEqual([
++      'dbPathHash',
++      'normalizedQueryHash',
++      'redactionTags',
++      'resultCount',
++      'schemaVersion',
++      'terms',
++      'timestamp',
++      'tool',
++    ]);
++    expect(records[0]!['redactedQuery']).toBeUndefined();
++    expect(records[0]!['query']).toBeUndefined();
++    expect(records[0]!['resultCount']).toBe(0);
++    expect(records[0]!['schemaVersion']).toBe(1);
++    expect(records[0]!['tool']).toBe('kb_search');
++    expect(typeof records[0]!['timestamp']).toBe('string');
++  });
++
++  it('文件名为 nohit-<YYYYMMDD>.jsonl，单行完整写入（行内无裸换行，EC-19）', () => {
++    recordNoHit({ tool: 'scaffold_kb_query', rawQuery: '多行\n查询 词', dbPath: '/kb/chunks.sqlite' });
++    const files = readdirSync(dir);
++    expect(files.length).toBe(1);
++    expect(files[0]).toMatch(/^nohit-\d{8}\.jsonl$/);
++    const text = readFileSync(join(dir, files[0]!), 'utf-8');
++    expect(text.endsWith('\n')).toBe(true);
++    expect(text.trimEnd().split('\n').length).toBe(1);
++  });
++
++  it('敏感片段零出现，redactionTags 标出类型（SC-009 a/b）', () => {
++    recordNoHit({
++      tool: 'kb_search',
++      rawQuery: 'alice@example.com 用 sk-abcdef123456 在 /Users/bob/w 查 13800138000',
++      dbPath: '/kb/chunks.sqlite',
++    });
++    const text = readFileSync(join(dir, readdirSync(dir)[0]!), 'utf-8');
++    for (const secret of ['alice@example.com', 'sk-abcdef123456', '/Users/bob', '13800138000']) {
++      expect(text).not.toContain(secret);
++    }
++    const tags = readRecords(dir)[0]!['redactionTags'] as string[];
++    expect(tags.sort()).toEqual(['DIGITS', 'EMAIL', 'HOME', 'TOKEN']);
++  });
++
++  it('terms 为 tokenizer 切词去重结果（无重复项、非空）', () => {
++    recordNoHit({ tool: 'kb_search', rawQuery: '错误码 错误码 retry', dbPath: '/kb/chunks.sqlite' });
++    const terms = readRecords(dir)[0]!['terms'] as string[];
++    expect(terms.length).toBeGreaterThan(0);
++    expect(new Set(terms).size).toBe(terms.length);
++    expect(terms).toContain('retry');
++  });
++
++  it('dbPathHash 不泄露原路径，不同库 hash 不同', () => {
++    recordNoHit({ tool: 'kb_search', rawQuery: 'q1', dbPath: '/vendor/kb/chunks.sqlite' });
++    recordNoHit({ tool: 'kb_search', rawQuery: 'q2', dbPath: '/project/kb/chunks.sqlite' });
++    const records = readRecords(dir);
++    const text = readFileSync(join(dir, readdirSync(dir)[0]!), 'utf-8');
++    expect(text).not.toContain('/vendor/kb/chunks.sqlite');
++    expect(records[0]!['dbPathHash']).not.toBe(records[1]!['dbPathHash']);
++  });
++
++  it('同一查询串两次 → normalizedQueryHash 相同；不同查询 → 不同', () => {
++    recordNoHit({ tool: 'kb_search', rawQuery: '限流 429 处理', dbPath: '/kb/chunks.sqlite' });
++    recordNoHit({ tool: 'kb_api_lookup', rawQuery: '限流 429 处理', dbPath: '/kb/chunks.sqlite' });
++    recordNoHit({ tool: 'kb_search', rawQuery: '完全不同的问题', dbPath: '/kb/chunks.sqlite' });
++    const records = readRecords(dir);
++    expect(records.length).toBe(3);
++    expect(records[0]!['normalizedQueryHash']).toBe(records[1]!['normalizedQueryHash']);
++    expect(records[0]!['normalizedQueryHash']).not.toBe(records[2]!['normalizedQueryHash']);
++  });
++});
++
++describe('recordNoHit — 30 天滚动清理（FR-013）', () => {
++  it('超过保留期的同目录文件在写入时被清理，当日文件保留', () => {
++    const stale = join(dir, 'nohit-20200101.jsonl');
++    writeFileSync(stale, '{"schemaVersion":1}\n');
++    const old = Date.now() / 1000 - (NOHIT_RETENTION_DAYS + 10) * 86400;
++    utimesSync(stale, old, old);
++
++    const fresh = join(dir, 'nohit-20200102.jsonl');
++    writeFileSync(fresh, '{"schemaVersion":1}\n');
++
++    recordNoHit({ tool: 'kb_search', rawQuery: '清理测试', dbPath: '/kb/chunks.sqlite' });
++
++    const files = readdirSync(dir);
++    expect(files).not.toContain('nohit-20200101.jsonl');
++    expect(files).toContain('nohit-20200102.jsonl'); // mtime 是刚写的，未超期 → 保留
++    expect(files.some((f) => /^nohit-\d{8}\.jsonl$/.test(f) && f !== 'nohit-20200102.jsonl')).toBe(true);
++  });
++
++  it('不清理非 no-hit 命名的无关文件', () => {
++    const other = join(dir, 'unrelated.log');
++    writeFileSync(other, 'x');
++    const old = Date.now() / 1000 - (NOHIT_RETENTION_DAYS + 10) * 86400;
++    utimesSync(other, old, old);
++    recordNoHit({ tool: 'kb_search', rawQuery: '清理边界', dbPath: '/kb/chunks.sqlite' });
++    expect(readdirSync(dir)).toContain('unrelated.log');
++  });
++});
++
++describe('recordNoHit — 故障静默降级（EC-20 / RG-009）', () => {
++  it('目录只读 → 不抛异常、不产生记录', () => {
++    chmodSync(dir, 0o555);
++    expect(() => recordNoHit({ tool: 'kb_search', rawQuery: '只读目录', dbPath: '/kb/chunks.sqlite' })).not.toThrow();
++    chmodSync(dir, 0o755);
++    expect(readdirSync(dir)).toEqual([]);
++  });
++
++  it('env 指向被普通文件占位的路径 → 不抛异常', () => {
++    const blocked = join(dir, 'blocked');
++    writeFileSync(blocked, 'not a dir');
++    process.env[ENV_KEY] = blocked;
++    expect(() => recordNoHit({ tool: 'kb_search', rawQuery: '占位文件', dbPath: '/kb/chunks.sqlite' })).not.toThrow();
++  });
++
++  it('total 函数契约：非法输入（null/非串 rawQuery、非法 tool）也不抛', () => {
++    const bad = [
++      { tool: 'kb_search', rawQuery: null, dbPath: '/kb' },
++      { tool: 'kb_search', rawQuery: 123, dbPath: null },
++      { tool: 'bogus_tool', rawQuery: 'x', dbPath: '/kb' },
++      {},
++      null,
++    ];
++    for (const b of bad) {
++      expect(() => recordNoHit(b as never)).not.toThrow();
++    }
++  });
++
++  it('目录不存在 → 懒建目录后正常写入（调用方不必自行 mkdir）', () => {
++    const nested = join(dir, 'a', 'b');
++    process.env[ENV_KEY] = nested;
++    recordNoHit({ tool: 'kb_search', rawQuery: '懒建目录', dbPath: '/kb/chunks.sqlite' });
++    expect(readRecords(nested).length).toBe(1);
++    mkdirSync(nested, { recursive: true });
++  });
++});
+diff --git a/tests/kb/query-redaction.test.ts b/tests/kb/query-redaction.test.ts
+new file mode 100644
+index 0000000..9c3af23
+--- /dev/null
++++ b/tests/kb/query-redaction.test.ts
+@@ -0,0 +1,184 @@
++/**
++ * F241 T030 — 查询串 redaction 第一层（FR-012 / SC-009）
++ *
++ * 六类结构性规则各 ≥2 正例 + 1 反例；另断言规则表长度与 spec 文档表一致（防规则悄悄减少）。
++ */
++
++import { describe, it, expect } from 'vitest';
++import { redactQuery, REDACTION_RULES, REDACTION_PLACEHOLDER_TOKENS } from '../../src/scaffold-kb/query-redaction.js';
++
++/** 断言：输出不含原文敏感片段，且打上了预期 tag */
++function expectRedacted(raw: string, secret: string, tag: string): { redacted: string; tags: string[] } {
++  const out = redactQuery(raw);
++  expect(out.redacted).not.toContain(secret);
++  expect(out.tags).toContain(tag);
++  return out;
++}
++
++describe('redactQuery — 规则表完整性（FR-012 防悄悄减少）', () => {
++  it('规则表恰 6 条，id 集合与 spec FR-012 文档表一致', () => {
++    expect(REDACTION_RULES.length).toBe(6);
++    // spec 文档表的六类（文档按可读性排序，此处按 id 排序比对集合，不约束应用顺序）
++    expect([...REDACTION_RULES.map((r) => r.id)].sort()).toEqual([
++      'DIGITS',
++      'EMAIL',
++      'HIGH_ENTROPY',
++      'HOME',
++      'TOKEN',
++      'URL_WITH_CRED',
++    ]);
++  });
++
++  it('应用顺序的两处依赖被钉死（改序即回归）', () => {
++    const order = REDACTION_RULES.map((r) => r.id);
++    // URL_WITH_CRED 早于 EMAIL：user:pass@host 含 @，否则被 EMAIL 吃掉一半
++    expect(order.indexOf('URL_WITH_CRED')).toBeLessThan(order.indexOf('EMAIL'));
++    // TOKEN / HOME 早于 HIGH_ENTROPY：base64 字符集含 '/'，否则长路径被整体判为高熵串
++    expect(order.indexOf('TOKEN')).toBeLessThan(order.indexOf('HIGH_ENTROPY'));
++    expect(order.indexOf('HOME')).toBeLessThan(order.indexOf('HIGH_ENTROPY'));
++  });
++
++  it('每条规则都有唯一 placeholder，恒为 <id> 形态', () => {
++    const placeholders = REDACTION_RULES.map((r) => r.placeholder);
++    expect(new Set(placeholders).size).toBe(placeholders.length);
++    for (const r of REDACTION_RULES) {
++      expect(r.placeholder).toBe(`<${r.id}>`);
++    }
++  });
++
++  it('占位 token 集合覆盖 placeholder 的**切词后**形态（EC-21 的实际过滤依据）', () => {
++    // tokenizer 把 `_` 当分隔符并额外产出拼接形：<HIGH_ENTROPY> → HIGH / ENTROPY / HIGHENTROPY
++    for (const t of ['EMAIL', 'TOKEN', 'HOME', 'DIGITS', 'HIGH', 'ENTROPY', 'HIGHENTROPY', 'URL', 'WITH', 'CRED', 'URLWITHCRED']) {
++      expect(REDACTION_PLACEHOLDER_TOKENS.has(t)).toBe(true);
++    }
++    // 大小写敏感：用户查询里的小写同名词不会被误剔
++    expect(REDACTION_PLACEHOLDER_TOKENS.has('token')).toBe(false);
++    expect(REDACTION_PLACEHOLDER_TOKENS.has('home')).toBe(false);
++  });
++});
++
++describe('redactQuery — email（<EMAIL>）', () => {
++  it('正例 1：普通地址被整体替换', () => {
++    const out = expectRedacted('联系 alice@example.com 排查', 'alice@example.com', 'EMAIL');
++    expect(out.redacted).toContain('<EMAIL>');
++  });
++  it('正例 2：带点/加号的地址被整体替换', () => {
++    expectRedacted('bug report from bob.smith+kb@corp.co.uk', 'bob.smith+kb@corp.co.uk', 'EMAIL');
++  });
++  it('反例：无地址形态的 @ 不触发', () => {
++    const out = redactQuery('@decorator 用法');
++    expect(out.tags).not.toContain('EMAIL');
++    expect(out.redacted).toContain('@decorator');
++  });
++});
++
++describe('redactQuery — 带凭据的 URL（<URL_WITH_CRED>）', () => {
++  it('正例 1：user:pass@ 形态', () => {
++    const out = expectRedacted('curl https://root:hunter2@db.internal/x 报错', 'hunter2', 'URL_WITH_CRED');
++    expect(out.redacted).toContain('<URL_WITH_CRED>');
++  });
++  it('正例 2：token= 查询参数形态', () => {
++    expectRedacted('https://api.example.com/v1/list?token=abc123zz&x=1 返回 401', 'abc123zz', 'URL_WITH_CRED');
++  });
++  it('正例 3：secret= / key= 查询参数形态', () => {
++    expectRedacted('https://api.example.com/v1?key=s3cretvalue 怎么调用', 's3cretvalue', 'URL_WITH_CRED');
++  });
++  it('反例：无凭据的普通 URL 不触发', () => {
++    const out = redactQuery('https://example.com/docs/auth 怎么读');
++    expect(out.tags).not.toContain('URL_WITH_CRED');
++    expect(out.redacted).toContain('https://example.com/docs/auth');
++  });
++});
++
++describe('redactQuery — 疑似 token（<TOKEN>）', () => {
++  it('正例 1：sk- 前缀', () => {
++    const out = expectRedacted('key sk-abc123DEF456 无效', 'sk-abc123DEF456', 'TOKEN');
++    expect(out.redacted).toContain('<TOKEN>');
++  });
++  it('正例 2：ghp_ 前缀', () => {
++    expectRedacted('用 ghp_16charsAtLeastXX 拉仓库失败', 'ghp_16charsAtLeastXX', 'TOKEN');
++  });
++  it('正例 3：Bearer 头', () => {
++    expectRedacted('Authorization: Bearer eyJhbGciOi.J9payload', 'eyJhbGciOi.J9payload', 'TOKEN');
++  });
++  it('反例：词内出现 sk- 的普通词不触发（task-runner）', () => {
++    const out = redactQuery('task-runner 怎么配置');
++    expect(out.tags).not.toContain('TOKEN');
++    expect(out.redacted).toContain('task-runner');
++  });
++});
++
++describe('redactQuery — 高熵串（<HIGH_ENTROPY>）', () => {
++  it('正例 1：64 位 hex', () => {
++    const hex = 'a'.repeat(20) + '9f3c1d2e';
++    const out = expectRedacted(`校验和 ${hex} 对不上`, hex, 'HIGH_ENTROPY');
++    expect(out.redacted).toContain('<HIGH_ENTROPY>');
++  });
++  it('正例 2：base64 字符集长串', () => {
++    const b64 = 'QUJDRGVmZ2hJSktMbW5vUFFS';
++    expectRedacted(`payload ${b64} 解不开`, b64, 'HIGH_ENTROPY');
++  });
++  it('反例：长度不足 20 的短 hex 不触发', () => {
++    const out = redactQuery('commit abcdef123 是哪个');
++    expect(out.tags).not.toContain('HIGH_ENTROPY');
++    expect(out.redacted).toContain('abcdef123');
++  });
++});
++
++describe('redactQuery — 绝对路径 home 段（<HOME>）', () => {
++  it('正例 1：macOS /Users/<name>', () => {
++    const out = expectRedacted('/Users/connorlu/projects/kb 里报错', '/Users/connorlu', 'HOME');
++    expect(out.redacted).toContain('<HOME>');
++    expect(out.redacted).toContain('/projects/kb'); // 仅遮蔽 home 段，路径其余部分保留
++  });
++  it('正例 2：Linux /home/<name>', () => {
++    expectRedacted('日志在 /home/deployer/var/log 下', '/home/deployer', 'HOME');
++  });
++  it('正例 3：Windows C:\\Users\\<name>', () => {
++    expectRedacted('路径 C:\\Users\\Alice\\AppData 打不开', 'C:\\Users\\Alice', 'HOME');
++  });
++  it('反例：非 home 的绝对路径不触发', () => {
++    const out = redactQuery('/var/log/app.log 在哪');
++    expect(out.tags).not.toContain('HOME');
++    expect(out.redacted).toContain('/var/log/app.log');
++  });
++});
++
++describe('redactQuery — 连续数字串（<DIGITS>）', () => {
++  it('正例 1：10 位数字', () => {
++    const out = expectRedacted('工单 13800138000 的处理', '13800138000', 'DIGITS');
++    expect(out.redacted).toContain('<DIGITS>');
++  });
++  it('正例 2：恰 8 位数字（边界）', () => {
++    expectRedacted('订单 12345678 查不到', '12345678', 'DIGITS');
++  });
++  it('反例：7 位数字（边界下）不触发', () => {
++    const out = redactQuery('错误 1234567 是什么');
++    expect(out.tags).not.toContain('DIGITS');
++    expect(out.redacted).toContain('1234567');
++  });
++});
++
++describe('redactQuery — 组合与不变量', () => {
++  it('多类共存时全部被遮蔽，tags 去重且只含命中类型', () => {
++    const raw = 'alice@example.com 在 /Users/bob/w 用 sk-abcdef123456 查 13800138000';
++    const out = redactQuery(raw);
++    for (const secret of ['alice@example.com', '/Users/bob', 'sk-abcdef123456', '13800138000']) {
++      expect(out.redacted).not.toContain(secret);
++    }
++    expect(new Set(out.tags).size).toBe(out.tags.length);
++    expect(out.tags.sort()).toEqual(['DIGITS', 'EMAIL', 'HOME', 'TOKEN']);
++  });
++
++  it('无敏感内容时原串不变、tags 为空', () => {
++    const raw = '如何配置 retry 超时';
++    const out = redactQuery(raw);
++    expect(out.redacted).toBe(raw);
++    expect(out.tags).toEqual([]);
++  });
++
++  it('空串与纯空白安全返回', () => {
++    expect(redactQuery('').redacted).toBe('');
++    expect(redactQuery('   ').tags).toEqual([]);
++  });
++});
+diff --git a/tests/kb/scaffold-kb-query.test.ts b/tests/kb/scaffold-kb-query.test.ts
+index 31fb9c9..c4f1b58 100644
+--- a/tests/kb/scaffold-kb-query.test.ts
++++ b/tests/kb/scaffold-kb-query.test.ts
+@@ -2,11 +2,18 @@
+  * F191 SC-001/SC-006 — scaffold-kb query CLI：probe / markdown / json / 降级 / 参数校验
+  */
+ 
+-import { describe, it, expect, afterEach } from 'vitest';
++import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+ import { join } from 'node:path';
+ import { parseArgs } from '../../src/cli/utils/parse-args.js';
+ import { runScaffoldKb } from '../../src/cli/commands/scaffold-kb.js';
+ 
++// F241 T039：no-hit 挂点 spy（FR-012 挂点 3）
++const { recordNoHitSpy } = vi.hoisted(() => ({ recordNoHitSpy: vi.fn() }));
++vi.mock('../../src/scaffold-kb/nohit-recorder.js', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../../src/scaffold-kb/nohit-recorder.js')>();
++  return { ...actual, recordNoHit: recordNoHitSpy };
++});
++
+ const ROOT = process.cwd();
+ const ZH_KB = join(ROOT, 'plugins/demo-kb-zh/kb');
+ 
+@@ -70,3 +77,35 @@ describe('scaffold-kb query CLI', () => {
+     expect(exitCode).toBe(1);
+   });
+ });
++
++describe('scaffold-kb query — no-hit 治理挂点（F241 FR-012 挂点 3）', () => {
++  beforeEach(() => recordNoHitSpy.mockClear());
++
++  it('零结果（merged.length===0）→ recordNoHit 被调用一次，tool=scaffold_kb_query', async () => {
++    const requirement = 'zzzqqqnonexistentterm';
++    const { stdout, exitCode } = await runCli([
++      'scaffold-kb', 'query', '--requirement', requirement, '--vendor-kb', ZH_KB,
++    ]);
++    expect(stdout.trim()).toBe('');
++    expect(exitCode).not.toBe(1);
++    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
++    const arg = recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>;
++    expect(arg['tool']).toBe('scaffold_kb_query');
++    expect(arg['rawQuery']).toBe(requirement);
++    expect(arg['dbPath']).toContain(ZH_KB);
++  });
++
++  it('有结果（merged.length>0）→ recordNoHit 不被调用', async () => {
++    const { stdout } = await runCli([
++      'scaffold-kb', 'query', '--requirement', '坐标轴', '--vendor-kb', ZH_KB, '--format', 'json',
++    ]);
++    expect(JSON.parse(stdout).results.length).toBeGreaterThan(0);
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++
++  it('KB 不可用 / 关键词为空 → 未真正检索，recordNoHit 不被调用', async () => {
++    await runCli(['scaffold-kb', 'query', '--requirement', '坐标轴', '--vendor-kb', '/nonexistent/kb']);
++    await runCli(['scaffold-kb', 'query', '--requirement', '   ', '--vendor-kb', ZH_KB]);
++    expect(recordNoHitSpy).not.toHaveBeenCalled();
++  });
++});

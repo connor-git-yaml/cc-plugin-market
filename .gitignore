@@ -55,6 +55,8 @@ AGENTS.override.md
 .specify/runs/
 # Feature 241 — 图消费决策审计事件流（本机观测产物，只写不读，不进任何上报通道）
 .specify/graph-consumption-audit.jsonl
+# Feature 241 — KB no-hit 治理记录（含用户查询切词结果，默认不采集；30 天滚动，纯本机）
+.specify/kb-nohit/
 
 # Feature 152 — spectra index UnifiedGraph snapshot（按 worktree 各自独立）
 .spectra/

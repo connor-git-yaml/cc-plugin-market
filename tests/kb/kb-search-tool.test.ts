@@ -2,13 +2,20 @@
  * F190 T040 — kb_search 工具：envelope + token cap + 防注入 + 参数校验 + 双层联查
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildKb } from '../../src/scaffold-kb/index.js';
 import { loadKbContext, type KbContext } from '../../src/kb-mcp/lib/kb-locator.js';
 import { executeKbSearch } from '../../src/kb-mcp/tools/kb-search.js';
+
+// F241 T034：no-hit 挂点 spy（FR-012 挂点 1）
+const { recordNoHitSpy } = vi.hoisted(() => ({ recordNoHitSpy: vi.fn() }));
+vi.mock('../../src/scaffold-kb/nohit-recorder.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/scaffold-kb/nohit-recorder.js')>();
+  return { ...actual, recordNoHit: recordNoHitSpy };
+});
 
 let workdir: string;
 let ctx: KbContext;
@@ -116,5 +123,66 @@ describe('kb_search — 双层联查（FR-009 / EC-005 真实两库）', () => {
     const out = parse(executeKbSearch(ctx, { query: 'API X', source_filter: 'vendor' }));
     expect(out.sources_queried).toEqual(['vendor']);
     expect(out.results.every((r: any) => r.source_kind === 'vendor')).toBe(true);
+  });
+});
+
+describe('kb_search — no-hit 治理挂点（F241 FR-012 挂点 1）', () => {
+  beforeEach(() => recordNoHitSpy.mockClear());
+
+  it('零结果（merged.length===0）→ recordNoHit 被调用一次，带 tool/rawQuery/dbPath', () => {
+    const query = 'zzzqqqnonexistentterm';
+    const out = parse(executeKbSearch(ctx, { query }));
+    expect(out.total_found).toBe(0);
+    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
+    const arg = recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg['tool']).toBe('kb_search');
+    expect(arg['rawQuery']).toBe(query);
+    // B2-9：dbPath 以 thunk 传入，由 recordNoHit 在其 try 内求值
+    expect(typeof arg['dbPath']).toBe('function');
+    expect((arg['dbPath'] as () => string)().length).toBeGreaterThan(0);
+  });
+
+  it('有结果（merged.length>0）→ recordNoHit 不被调用', () => {
+    const out = parse(executeKbSearch(ctx, { query: '鉴权失败' }));
+    expect(out.results.length).toBeGreaterThan(0);
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  it('参数校验失败（未真正检索）→ recordNoHit 不被调用', () => {
+    executeKbSearch(ctx, { query: '   ' });
+    executeKbSearch(ctx, { query: '错误', top_k: 0 });
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  // B2-7：无可用库源是 availability 问题，不是文档缺口
+  it('无可用库源（sourcesQueried 为空）→ 零结果也不记录', () => {
+    const vendorOnly: KbContext = { vendor: ctx.vendor, project: null, sourcesAvailable: ['vendor'] };
+    const out = parse(executeKbSearch(vendorOnly, { query: '鉴权失败', source_filter: 'project' }));
+    expect(out.sources_queried).toEqual([]);
+    expect(out.results).toEqual([]);
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  // B2-9：关闭态 + 抛错的 dbPath getter 也不得穿透到主链
+  it('dbPath getter 抛错 + 采集关闭 → 查询正常返回，不抛', () => {
+    const saved = process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+    delete process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+    try {
+      const poisoned: KbContext = {
+        vendor: {
+          ...ctx.vendor!,
+          get dbPath(): string {
+            throw new Error('governance-path-boom');
+          },
+        },
+        project: null,
+        sourcesAvailable: ['vendor'],
+      };
+      const out = parse(executeKbSearch(poisoned, { query: 'zzzqqqnonexistentterm' }));
+      expect(out.results).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+      else process.env['SPECTRA_KB_NOHIT_TELEMETRY'] = saved;
+    }
   });
 });

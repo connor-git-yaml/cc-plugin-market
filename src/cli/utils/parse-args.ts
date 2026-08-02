@@ -110,8 +110,8 @@ export interface CLICommand {
    *   'HEAD' / 'ORIG_HEAD HEAD' / 'HEAD~1 HEAD' 或 SHA-like
    */
   indexGitRange?: string;
-  /** F190/F191/F192 scaffold-kb 子操作（build | serve | query | ingest） */
-  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest';
+  /** F190/F191/F192/F241 scaffold-kb 子操作（build | serve | query | ingest | coverage-gap） */
+  scaffoldKbOperation?: 'build' | 'serve' | 'query' | 'ingest' | 'coverage-gap';
   /** F190 scaffold-kb build：--llms-txt 远程索引 URL */
   scaffoldKbLlmsTxt?: string;
   /** F190 scaffold-kb build：--dir 本地文档目录 */
@@ -173,6 +173,73 @@ export type ParseResult =
 
 function defaultSkillTarget(env: NodeJS.ProcessEnv = process.env): 'claude' | 'codex' {
   return isCodexRuntimeEnv(env) ? 'codex' : 'claude';
+}
+
+/** flag 的三态读取结果：不存在 / 存在但缺值（`value: null`）/ 存在且有值 */
+type FlagEntry = { present: false } | { present: true; value: string | null };
+
+/**
+ * 读取一个带值 flag 的三态。
+ *
+ * 只看返回的字符串分不清「没写这个 flag」和「写了但没带值」，后者会被静默当成
+ * 未提供、悄悄回落到默认值（F241 B2-4 抓到的 `--format` 缺值回落 markdown）。
+ */
+function readFlagEntry(argv: string[], name: string): FlagEntry {
+  const idx = argv.indexOf(name);
+  if (idx === -1) return { present: false };
+  const val = argv[idx + 1];
+  return { present: true, value: val === undefined || val.startsWith('--') ? null : val };
+}
+
+type ScaffoldKbOperation = NonNullable<CLICommand['scaffoldKbOperation']>;
+
+/**
+ * scaffold-kb 各子操作的**允许 flag 集合**（`true` = 带值，`false` = 布尔开关）。
+ *
+ * ⚠️ **只有 `STRICT_SCAFFOLD_KB_OPS` 里的 op 会强制执行此表**。既有 op（build / serve /
+ * query / ingest）在 F241 之前就接受任意未知 flag，突然收严会改变已发布 CLI 的行为，
+ * 触碰 RG-005「不得改变既有 op 现有行为」——故本表对它们只作**文档**用途，
+ * 收严留给单独的 fix 流程（届时需重跑既有 CLI 用例并写迁移说明）。
+ */
+const SCAFFOLD_KB_FLAG_SPECS: Record<ScaffoldKbOperation, Readonly<Record<string, boolean>>> = {
+  build: { '--llms-txt': true, '--dir': true, '--output': true, '--sdk-version': true, '--lang': true, '--no-llm': false },
+  serve: { '--vendor-kb': true, '--project-kb': true },
+  query: {
+    '--requirement': true, '--vendor-kb': true, '--project-kb': true,
+    '--top-k': true, '--max-inject-chars': true, '--format': true, '--probe': false,
+  },
+  ingest: {
+    '--url': true, '--file': true, '--minutes': true, '--project-kb': true,
+    '--output': true, '--sdk-version': true, '--yes': false, '--dry-run': false, '--no-llm': false,
+  },
+  'coverage-gap': { '--format': true },
+};
+
+/** 强制执行 `SCAFFOLD_KB_FLAG_SPECS` 的 op 集合（F241 新增 op，无历史包袱） */
+const STRICT_SCAFFOLD_KB_OPS: ReadonlySet<string> = new Set<ScaffoldKbOperation>(['coverage-gap']);
+
+function isStrictScaffoldKbOp(op: string): op is ScaffoldKbOperation {
+  return STRICT_SCAFFOLD_KB_OPS.has(op);
+}
+
+/**
+ * 严格模式的 flag 校验：未知 flag、多余位置参数、带值 flag 缺值一律拒绝。
+ * @returns 错误消息；通过则 `null`
+ */
+function checkScaffoldKbFlags(op: ScaffoldKbOperation, argv: string[]): string | null {
+  const spec = SCAFFOLD_KB_FLAG_SPECS[op];
+  const allowed = Object.keys(spec).join(' | ') || '（无）';
+  for (let i = 2; i < argv.length; i++) {
+    const token = argv[i]!;
+    if (!token.startsWith('-')) return `scaffold-kb ${op} 不接受位置参数: ${token}（可选: ${allowed}）`;
+    const takesValue = spec[token];
+    if (takesValue === undefined) return `未知选项 ${token}（scaffold-kb ${op} 可选: ${allowed}）`;
+    if (!takesValue) continue;
+    const entry = readFlagEntry(argv, token);
+    if (entry.present && entry.value === null) return `${token} 缺少取值（scaffold-kb ${op}）`;
+    i += 1; // 跳过已消费的值
+  }
+  return null;
 }
 
 /**
@@ -756,22 +823,26 @@ export function parseArgs(argv: string[]): ParseResult {
       };
     }
     const op = argv[1];
-    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest') {
+    if (op !== 'build' && op !== 'serve' && op !== 'query' && op !== 'ingest' && op !== 'coverage-gap') {
       return {
         ok: false,
         error: {
           type: 'invalid_subcommand',
-          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest）`,
+          message: `未知 scaffold-kb 子操作: ${op ?? '（未提供）'}（可选: build | serve | query | ingest | coverage-gap）`,
         },
       };
     }
+    // 严格 op（F241 B2-4）：未知 flag 与「flag 存在但缺值」一律 invalid_option。
+    // 只对新增 op 生效，见 SCAFFOLD_KB_FLAG_SPECS 上的 RG-005 说明。
+    if (isStrictScaffoldKbOp(op)) {
+      const strictErr = checkScaffoldKbFlags(op, argv);
+      if (strictErr !== null) return { ok: false, error: { type: 'invalid_option', message: strictErr } };
+    }
+    // 三态由 readFlagEntry 判定（不存在 / 存在但缺值 / 存在且有值）；严格 op 的缺值已在上面
+    // 拦下，宽松 op 保持原有「缺值视为未提供」行为不变（RG-005）。
     const readFlag = (name: string): string | undefined => {
-      const idx = argv.indexOf(name);
-      if (idx === -1) return undefined;
-      const val = argv[idx + 1];
-      // 缺值或下一个 token 是另一个 flag → 视为未提供（修 Codex WARNING）
-      if (val === undefined || val.startsWith('--')) return undefined;
-      return val;
+      const entry = readFlagEntry(argv, name);
+      return entry.present && entry.value !== null ? entry.value : undefined;
     };
     // 正整数严格校验（修 Codex W3：拒绝 0/负数/"3abc"，参数错误返回 invalid_option 非零退出）
     let intErr: string | undefined;

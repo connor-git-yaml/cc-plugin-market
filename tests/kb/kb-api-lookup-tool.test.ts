@@ -3,13 +3,20 @@
  * 用手工 KB 三件套 fixture（source_chunk_id 真实存在于 sqlite，W-6）。
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { executeKbApiLookup } from '../../src/kb-mcp/tools/kb-api-lookup.js';
 import { executeKbSearch } from '../../src/kb-mcp/tools/kb-search.js';
 import { buildChunksDbBytes } from '../../src/scaffold-kb/sqlite-writer.js';
 import { loadDbFromBytes } from '../../src/scaffold-kb/sqlite-engine.js';
 import type { KbContext, KbHandle } from '../../src/kb-mcp/lib/kb-locator.js';
 import type { ApiEntity, ChunkMeta, Chunk, SourceKind } from '../../src/scaffold-kb/types.js';
+
+// F241 T036：no-hit 挂点 spy（FR-012 挂点 2a/2b）
+const { recordNoHitSpy } = vi.hoisted(() => ({ recordNoHitSpy: vi.fn() }));
+vi.mock('../../src/scaffold-kb/nohit-recorder.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/scaffold-kb/nohit-recorder.js')>();
+  return { ...actual, recordNoHit: recordNoHitSpy };
+});
 
 function parse(res: { content: Array<{ text: string }> }): Record<string, unknown> {
   return JSON.parse(res.content[0]!.text);
@@ -43,6 +50,7 @@ async function handle(
   const { db } = await loadDbFromBytes(await buildChunksDbBytes(chunks, meta));
   return {
     db,
+    dbPath: `/fixture/${sourceKind}/chunks.sqlite`,
     graph: null,
     entities: {
       schemaVersion: '1.0',
@@ -144,6 +152,104 @@ describe('kb_api_lookup', () => {
     const res = executeKbApiLookup(ctx, { api_name: '  ' });
     expect(res.isError).toBe(true);
     expect(parse(res)['code']).toBe('INVALID_LOOKUP_ARG');
+  });
+});
+
+describe('kb_api_lookup — no-hit 治理挂点（F241 FR-012 挂点 2a/2b）', () => {
+  beforeEach(() => recordNoHitSpy.mockClear());
+
+  it('(a) 挂点 2a：有实体表但 matched.length===0 → recordNoHit 被调用一次', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyz' }));
+    expect(out['not_found']).toBe(true);
+    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
+    const arg = recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg['tool']).toBe('kb_api_lookup');
+    expect(arg['rawQuery']).toBe('nonexistentXyz');
+    // B2-9：dbPath 以 thunk 传入，由 recordNoHit 在其 try 内求值
+    expect(typeof arg['dbPath']).toBe('function');
+    expect((arg['dbPath'] as () => string)()).toBe('/fixture/vendor/chunks.sqlite');
+  });
+
+  it('(b) 挂点 2a 反例：matched.length>0 → recordNoHit 不被调用', async () => {
+    const ctx: KbContext = {
+      vendor: await handle([ent({ name: 'createChart' })], 'vendor'),
+      project: null,
+      ...EMPTY_CTX_BASE,
+    };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
+    expect((out['results'] as unknown[]).length).toBeGreaterThan(0);
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  it('(c) 挂点 2b：document_fallback 内 hits.length===0 → recordNoHit 被调用一次（P-W3 不豁免）', async () => {
+    const vendorNoEnt: KbHandle = { ...(await handle([], 'vendor')), entities: null };
+    const ctx: KbContext = { vendor: vendorNoEnt, project: null, ...EMPTY_CTX_BASE };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyzApi' }));
+    expect(out['mode']).toBe('document_fallback');
+    expect(out['total_found']).toBe(0);
+    expect(recordNoHitSpy).toHaveBeenCalledTimes(1);
+    expect((recordNoHitSpy.mock.calls[0]![0] as Record<string, unknown>)['tool']).toBe('kb_api_lookup');
+  });
+
+  it('(d) 挂点 2b 反例：document_fallback 内 hits.length>0 → recordNoHit 不被调用', async () => {
+    const vendorNoEnt: KbHandle = { ...(await handle([], 'vendor')), entities: null };
+    const ctx: KbContext = { vendor: vendorNoEnt, project: null, ...EMPTY_CTX_BASE };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'createChart' }));
+    expect(out['mode']).toBe('document_fallback');
+    expect(out['total_found'] as number).toBeGreaterThan(0);
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  it('参数校验失败（未真正检索）→ recordNoHit 不被调用', async () => {
+    const ctx: KbContext = { vendor: await handle([ent({ name: 'x' })], 'vendor'), project: null, ...EMPTY_CTX_BASE };
+    executeKbApiLookup(ctx, { api_name: '  ' });
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  // B2-7：两侧 handle 都为 null → 一个库都没查过，零结果属 availability 而非文档缺口
+  it('(e) 无可用库源 → document_fallback 零命中也不记录', () => {
+    const ctx: KbContext = { vendor: null, project: null, ...EMPTY_CTX_BASE };
+    const out = parse(executeKbApiLookup(ctx, { api_name: 'anyApi' }));
+    expect(out['mode']).toBe('document_fallback');
+    expect(out['total_found']).toBe(0);
+    expect(recordNoHitSpy).not.toHaveBeenCalled();
+  });
+
+  // B2-9：关闭态 + 抛错的 dbPath getter 不得穿透主链
+  it('(f) dbPath getter 抛错 + 采集关闭 → 查询正常返回，不抛', async () => {
+    const saved = process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+    delete process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+    try {
+      const base = await handle([ent({ name: 'createChart' })], 'vendor');
+      const poisoned: KbHandle = {
+        ...base,
+        get dbPath(): string {
+          throw new Error('governance-path-boom');
+        },
+      };
+      const ctx: KbContext = { vendor: poisoned, project: null, ...EMPTY_CTX_BASE };
+      // 2a 路径（有实体表、匹配不上）
+      expect(parse(executeKbApiLookup(ctx, { api_name: 'nonexistentXyz' }))['not_found']).toBe(true);
+      // 2b 路径（无实体表 → document_fallback 零命中）；注意从 base 重建，
+      // 展开 poisoned 会当场触发 getter
+      const poisonedNoEnt: KbHandle = {
+        ...base,
+        entities: null,
+        get dbPath(): string {
+          throw new Error('governance-path-boom');
+        },
+      };
+      const noEnt: KbContext = { vendor: poisonedNoEnt, project: null, ...EMPTY_CTX_BASE };
+      expect(parse(executeKbApiLookup(noEnt, { api_name: 'nonexistentXyzApi' }))['total_found']).toBe(0);
+    } finally {
+      if (saved === undefined) delete process.env['SPECTRA_KB_NOHIT_TELEMETRY'];
+      else process.env['SPECTRA_KB_NOHIT_TELEMETRY'] = saved;
+    }
   });
 });
 

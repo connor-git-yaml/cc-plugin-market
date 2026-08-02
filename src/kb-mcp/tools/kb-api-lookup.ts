@@ -19,8 +19,9 @@ import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { matchEntities, type EntityMatch } from '../../scaffold-kb/entity-matcher.js';
 import { arbitrateEntities, type ArbitrationInput } from '../../scaffold-kb/arbitration.js';
 import { buildEvidenceEnvelope as envelope, defangSentinel, safeTruncate } from '../../scaffold-kb/evidence-envelope.js';
+import { recordNoHit } from '../../scaffold-kb/nohit-recorder.js';
 import { buildKbError, buildKbSuccess } from '../lib/kb-error.js';
-import type { KbContext, KbHandle } from '../lib/kb-locator.js';
+import { describeQueriedDbPaths, type KbContext, type KbHandle } from '../lib/kb-locator.js';
 import type { ApiEntity, SourceKind } from '../../scaffold-kb/types.js';
 
 const DEFAULT_TOP_N = 10;
@@ -79,9 +80,11 @@ function deepDefang<T>(v: T): T {
 function documentFallback(ctx: KbContext, apiName: string): ToolResult {
   const fetchK = 5;
   const hits: Array<Record<string, unknown>> = [];
+  const queriedHandles: KbHandle[] = [];
   for (const [kind, handle] of [['vendor', ctx.vendor], ['project', ctx.project]] as const) {
     if (!handle) continue;
     const r = searchKbCore(handle.db, apiName, fetchK);
+    queriedHandles.push(handle);
     if (r.ok) {
       for (const h of r.results) {
         const content = envelope(safeTruncate(h.contentRaw, EVIDENCE_CHAR_CAP), h.docId, kind, h.builtAt);
@@ -89,6 +92,16 @@ function documentFallback(ctx: KbContext, apiName: string): ToolResult {
         hits.push({ doc_id: defangSentinel(h.docId), doc_title: defangSentinel(h.docTitle), content, source_kind: kind });
       }
     }
+  }
+  // F241 FR-012 挂点 2b：fallback 分支同样真实执行了 searchKbCore，零命中即真实零结果，不豁免采集（P-W3）。
+  // 但一个库都没查过（两侧 handle 都为 null）时属 availability 问题，不记（B2-7）；
+  // dbPath 传 thunk 交由 recordNoHit 在其 try 内求值（B2-9）。
+  if (hits.length === 0 && queriedHandles.length > 0) {
+    recordNoHit({
+      tool: 'kb_api_lookup',
+      rawQuery: apiName,
+      dbPath: () => describeQueriedDbPaths(queriedHandles),
+    });
   }
   return buildKbSuccess({
     mode: 'document_fallback',
@@ -139,6 +152,19 @@ export function executeKbApiLookup(ctx: KbContext, params: KbApiLookupParams): T
   const matched = matchEntities(allEnts, matchQuery) as Array<EntityMatch & ArbitrationInput>;
 
   if (matched.length === 0) {
+    // F241 FR-012 挂点 2a：有实体表但一个都没匹配上 → 真实零结果。
+    // 只统计**真正参与匹配**的库（有实体表的那些）：allEnts 非空保证这里至少有一个，
+    // 与另外两个挂点共用同一条「查过才记」前置条件（B2-7）；dbPath 惰性求值（B2-9）。
+    const queriedHandles = [ctx.vendor, ctx.project].filter(
+      (h): h is KbHandle => h !== null && h.entities !== null,
+    );
+    if (queriedHandles.length > 0) {
+      recordNoHit({
+        tool: 'kb_api_lookup',
+        rawQuery: params.api_name,
+        dbPath: () => describeQueriedDbPaths(queriedHandles),
+      });
+    }
     return buildKbSuccess({
       results: [],
       total_found: 0,

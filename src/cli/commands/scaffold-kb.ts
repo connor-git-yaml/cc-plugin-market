@@ -11,7 +11,9 @@ import { buildKb } from '../../scaffold-kb/index.js';
 import { extractKeywords } from '../../scaffold-kb/keyword-extract.js';
 import { searchKbCore } from '../../scaffold-kb/search-core.js';
 import { formatInjectionBlock, type EvidenceResult } from '../../scaffold-kb/injection-format.js';
-import { loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
+import { describeQueriedDbPaths, loadKbContext } from '../../kb-mcp/lib/kb-locator.js';
+import { recordNoHit, resolveNoHitTelemetryDir } from '../../scaffold-kb/nohit-recorder.js';
+import { buildCoverageGapReport, formatCoverageGapReport } from '../../scaffold-kb/coverage-gap.js';
 import { mergeResults } from '../../kb-mcp/lib/result-merger.js';
 import { prepareIngest, commitIngest, IngestError, type IngestSource } from '../../scaffold-kb/ingest/ingest-core.js';
 
@@ -52,13 +54,21 @@ async function runQuery(command: CLICommand): Promise<void> {
   }
   const ctx = loaded.context;
   // preTokenized=true：query 已由 extractKeywords 规范化，避免 sanitizeQuery 二次 CJK 展开（修 Codex W5）
+  const queriedHandles = [ctx.vendor, ctx.project].filter((h): h is NonNullable<typeof h> => h !== null);
   const vendorHits = ctx.vendor ? searchKbCore(ctx.vendor.db, query, topK * 2, undefined, true) : null;
   const projectHits = ctx.project ? searchKbCore(ctx.project.db, query, topK * 2, undefined, true) : null;
   const vendorResults = vendorHits && vendorHits.ok ? vendorHits.results : [];
   const projectResults = projectHits && projectHits.ok ? projectHits.results : [];
   const merged = mergeResults(vendorResults, projectResults, topK);
 
-  if (merged.length === 0) {
+  if (merged.length === 0 && queriedHandles.length > 0) {
+    // F241 FR-012 挂点 3：真实零结果 → 记一条 no-hit 治理事件（recordNoHit 为 total 函数，默认关闭时零 I/O）。
+    // 与另两个挂点共用「至少查过一个库才记」前置条件（B2-7）；dbPath 惰性求值（B2-9）。
+    recordNoHit({
+      tool: 'scaffold_kb_query',
+      rawQuery: requirement,
+      dbPath: () => describeQueriedDbPaths(queriedHandles),
+    });
     console.error('[scaffold-kb query] no-hit');
     return; // exit 0, stdout 空
   }
@@ -70,6 +80,17 @@ async function runQuery(command: CLICommand): Promise<void> {
   // markdown：MergedResult 结构兼容 EvidenceResult
   const block = formatInjectionBlock(merged as EvidenceResult[], maxInjectChars);
   if (block.length > 0) process.stdout.write(block + '\n');
+}
+
+/**
+ * scaffold-kb coverage-gap：读 no-hit 记录，输出达阈值的文档缺口 backlog（F241 FR-014/015）。
+ *
+ * 只读命令，恒 exit 0：即便采集未开启也**明确打出 status**，绝不用空 backlog 冒充"没有缺口"。
+ */
+function runCoverageGap(command: CLICommand): void {
+  const nohitDir = resolveNoHitTelemetryDir();
+  const report = buildCoverageGapReport({ nohitDir, isCollectionEnabled: nohitDir !== null });
+  process.stdout.write(formatCoverageGapReport(report, command.scaffoldKbFormat === 'json' ? 'json' : 'markdown'));
 }
 
 /** scaffold-kb ingest：三方源（url/file/minutes）→ 预览 → --yes 落项目库（FR-009/013） */
@@ -167,6 +188,11 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
     return;
   }
 
+  if (op === 'coverage-gap') {
+    runCoverageGap(command);
+    return;
+  }
+
   if (op === 'serve') {
     // Phase B：启动 KB MCP server。serve 实现随 KB MCP 层（src/kb-mcp/）接入（T046）。
     const vendorKbPath = command.scaffoldKbVendorKb;
@@ -179,7 +205,7 @@ export async function runScaffoldKb(command: CLICommand): Promise<void> {
     return;
   }
 
-  console.error('用法: spectra scaffold-kb <build|serve> ...');
+  console.error('用法: spectra scaffold-kb <build|serve|query|ingest|coverage-gap> ...');
   process.exitCode = 1;
 }
 

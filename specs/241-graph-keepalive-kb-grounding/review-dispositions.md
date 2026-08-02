@@ -215,3 +215,65 @@ orchestration.yaml 实况：implement 是 `id:"6"`，verify 是 `id:"7c"`——`
 
 ## 已核对安全面（Codex 独立 oracle 复算）
 矩阵 144 组合 0 mismatch / 双事件基本写入 / 薄壳导出差集空 + .catch 逐字 / phase.name 三份一致 + wrapper SHA 一致 / dry-run 零副作用 / src** 零改动 / 双 gitignore 清单一致。
+
+---
+
+# Implement 批 2 — M-3 双组对抗审查整改单（A 组 BLOCKED + B 组 BLOCK）
+
+> 来源：M-3 A/B 对照（`pilot/m3/output-a.md` / `output-b.md`，判读见 `pilot/m3/judgment.md`）。
+> 9 条真 finding、0 误报。两组均判阻断，批 2 **不得**在修完前提交。
+
+## B2-1 redaction 先于 NFKC + 规则大小写敏感（A-C2 / B-W2 交集）→ **确认，最高优先**
+全角 `１２３４５６７８` 绕过 `DIGITS`，随后被 tokenizer 的 NFKC 还原成 ASCII 数字落盘；`TOKEN=`、`bearer`、Windows `c:\users\Alice\` 因大小写/形态不匹配漏遮。
+**处置**：redaction **入口先做 NFKC 归一化**（与 tokenizer 同一归一化函数，禁止两份）；URL credential key、Bearer scheme、home 路径规则改大小写不敏感；补全角/大写/Windows 路径/跨类混合的用例，并加一条**终态断言**：对最终序列化的整行做敏感片段零出现检查（不只查字段名）。
+
+## B2-2 FIFO / symlink：阻塞主链 + 写出目录外 + 误删（A-C3 / B-C2 交集）→ **确认**
+`appendFileSync` 跟随 symlink、打开 FIFO 会无限阻塞（A 组实测延迟注入 300ms → 主查询同步延迟 301ms，证明它就在返回路径上）；`pruneExpired` 用 `statSync` 跟随链接，且任意非空 env 当目录时会按名删除该目录下匹配文件。
+**处置**：写入改 `openSync(path, O_APPEND|O_CREAT|O_NOFOLLOW)` + 对 fd `fstatSync` 校验 `isFile()`（非常规文件直接放弃写入，静默降级）；清理侧改 `lstatSync` 且跳过非常规文件；补「目录内存在同名 symlink/FIFO 时不写入且主链路正常返回」的回归测试。**不引入异步队列**（超范围），以「拒绝非常规文件」消除阻塞面。
+
+## B2-3 读取失败被误报 `no-data`（A-W4 / B-W3 交集）→ **确认**
+**处置**：`CoverageGapOutput` 增 `readErrors: number`（与既有 `skippedLines` 同级），文件级读取失败计数；`status` 增第四态 `data-unreadable`（`readErrors > 0 且 totalRecords === 0` 时）。spec FR-014/015 与 SC-010 同步扩（三态→四态），tasks crosswalk 同步。
+
+## B2-4 parse-args 接受缺值/未知 flag（A-W3 / B-I1）→ **确认**
+`--format` 缺值静默回落 markdown、`--unknown` 放行。**处置**：`readFlag` 区分「不存在」与「存在但缺值」，缺值返回 `invalid_option`；为 scaffold-kb 各 op 建立允许 flag 集合，未知 flag 拒绝。注意不得放宽既有 op 的现有行为（RG-005）。
+
+## B2-5 单 token 查询整串原文进 `terms`（**A 独有**）→ **确认，按「收窄红线 + 加护栏」处置**
+`rawQuery="ProjectFalcon"` → `terms:["ProjectFalcon"]`，整串逐字落盘。
+**处置**：**不**做「单 token 只留 hash」（会让单 API 名称这类最有价值的缺口信号全灭，与 E1 目的直接冲突）。改为两条：(a) **spec D5 措辞收窄**——把「整串不落盘」明确为「不新增整串字段；term 粒度落盘，当查询本身即单 token 时该 token 等于原串，属已知且接受的残余」，并入 D5 已有的残余风险声明；(b) 该残余仅在 redaction 未命中时存在，B2-1 修好后敏感形态会先被遮蔽。补一条「单 token 敏感形态（如 `sk-xxx` 单独查询）→ 落盘为占位标记而非原串」的断言。
+
+## B2-6 大小写变体绕过 distinctQueries 阈值（**A 独有**）→ **确认**
+`retry alpha` 与 `retry Alpha` 产生两个 hash → 共同 term 被计 `distinctQueries:2` 跨过阈值。
+**处置**：`normalizedQueryHash` 的输入改为**与检索语义一致的归一化结果**（复用 tokenizer 的 NFKC + case-fold 后重组），使大小写/空格变体收敛为同一 hash；补该对照用例。
+
+## B2-7 无可用库源时仍记 coverage gap（**A 独有**）→ **确认**
+`source_filter: "project"` 但只有 vendor 时 `sources_queried: []`，仍落一条 `dbPathHash` 为空串 hash 的记录。
+**处置**：三挂点统一前置条件——仅当**至少真正执行过一次检索**（`sourcesQueried.length > 0`）才记录；无可用源属 availability 问题，不进文档缺口 backlog。补三挂点各一条负例。
+
+## B2-8 `tool` 无运行时 allowlist（**B 独有**）→ **确认**
+`recordNoHit` 合同宣称 total function 且是导出边界，但 `tool` 未校验即序列化（B 组实测整串原文经 `tool` 落盘）。当前三个 call-site 都传字面量，故非外部可达，但边界合同没守住。
+**处置**：`recordNoHit` 入口做输入校验——`tool` 必须属三值 allowlist、`rawQuery`/`dbPath` 必须是 string，任一不合法**直接 no-op**（保持 total function 不抛）；补「非法 tool 不产生任何 append」断言。
+
+## B2-9 `dbPath` 在保护边界外求值（**B 独有**）→ **确认**
+`describeQueriedDbPaths(...)` 在 `recordNoHit` 的 try/catch **之外**先求值，getter 抛错会穿透到主链（实测关闭态也炸）。
+**处置**：三挂点改为**惰性传入**——把路径计算包成 thunk 交给 recorder，在其 try 内求值；或 recorder 先判开关再调 thunk。补三挂点「关闭态 + 抛错 getter → 查询正常返回」回归测试。
+
+## 不采纳
+- A-I1「hash 可字典枚举」：C5 裁决已改名 minimum-occurrence threshold 并声明不提供匿名性保证，属重复登记。**但** B2-6 修复后 hash 输入变化，需复核该声明措辞仍准确。
+  - **复核结论（整改后回填）：措辞仍准确，无需修改。** B2-6 只是把 hash 的输入从「切词后原样重组」换成更粗的等价类（NFKC + case-fold + 去重后重组），大小写/全角变体合并为同一桶。hash 本身仍是低熵输入上的确定性 SHA-256 截断、仍可离线字典枚举；记录里也仍无任何主体标识（无 user-id / session-id）。等价类变粗**降低**而非提升可区分度，因此「不提供匿名性保证」这一声明只会更保守，不会失真。
+
+## B2-1 ~ B2-9 落地状态（整改后回填）
+
+| # | 处置落点 | 状态 |
+|---|---------|------|
+| B2-1 | `tokenizer.ts::normalizeUnicode` 单点导出 + `redactQuery` 入口归一化；URL 凭据参数名 `/i`、Bearer 逐字母放宽、home 段放宽 | ✅ 已修（14 红转绿，含落盘整行终态断言与「NFKC 调用点恰 1 处」结构断言）|
+| B2-2 | `openSync(O_APPEND｜O_CREAT｜O_WRONLY｜O_NOFOLLOW｜O_NONBLOCK)` + `fstatSync().isFile()`；`pruneExpired` 改 `lstatSync` 跳过非常规文件；未引入异步队列 | ✅ 已修（探针 `HUNG→RETURNED`、`escaped 207B→0B`；+3 用例）。**偏差**：`O_NONBLOCK` 是整改单未列的必要超集，无它则阻塞在 `openSync`、`isFile()` 校验执行不到 |
+| B2-3 | `readErrors` 字段 + 第四态 `data-unreadable`；spec FR-014/FR-015/SC-010/§6/EC-34 与 tasks crosswalk 同步 | ✅ 已修（+6 红转绿）|
+| B2-4 | `readFlagEntry` 三态 + `SCAFFOLD_KB_FLAG_SPECS` + `checkScaffoldKbFlags` | ✅ 已修（+2 红转绿）。**按 RG-005 授权收窄**：强制执行仅 `coverage-gap`；既有 op 允许表已建但只作文档用途，另加四 op 反向守卫用例 |
+| B2-5 | spec D5 / FR-013 措辞收窄 + 2 条护栏断言 | ✅ 已修（**不改代码逻辑**，红态即绿的现状钉子）|
+| B2-6 | `tokenizer.ts::normalizeForEquivalence` 作 hash 输入 | ✅ 已修（+2 红转绿 + 2 条反向断言防压成一个桶）|
+| B2-7 | 三挂点统一「至少查过一个库」前置条件；spec FR-012 同步 | ✅ 已修（+2 红转绿）。**第三挂点负例回退态即绿**（`loadKbContext` 零 handle 时提前返回、结构性不可达），如实标注为不变量护栏 |
+| B2-8 | `recordNoHit` 入口 allowlist + 类型校验，不合法直接 no-op；新增 EC-32 | ✅ 已修（+3 红转绿 + 1 条「合法输入不受影响」防假绿）|
+| B2-9 | `dbPath: string \| (() => string)`，三挂点传 thunk，recorder 在 try 内且开关判定后求值；新增 EC-33 | ✅ 已修（+7 红转绿，含 3 条既有断言按新契约改写）|
+
+门禁：`tests/kb/` 415 passed（≥368）/ 全量 6139 passed / 插件 1272 passed / build + tsc + `repo:check` 全 EXIT=0。
+详见 `verification/batch2-gate.md` 末节与 `verification/batch2-red-evidence.md` 第二节。

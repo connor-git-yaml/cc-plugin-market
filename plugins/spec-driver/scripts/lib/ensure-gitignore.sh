@@ -19,6 +19,7 @@
 #   .specify/scorecards/                  — 插件默认品复制，可再生
 #   .specify/templates/                   — 插件默认品复制，可再生
 #   .specify/graph-consumption-audit.jsonl — Feature 241 图消费决策审计事件流（本机观测产物）
+#   .specify/kb-nohit/                    — Feature 241 KB no-hit 治理记录（含查询切词结果，默认不采集）
 # 写死为字面量作为唯一事实来源，不从外部读取，避免引入新的路径依赖。
 #
 # 新增数据路径必须**同时**进这里和开发仓库根 .gitignore：只改后者，第三方安装者的仓库照样会把
@@ -29,6 +30,7 @@ SPEC_DRIVER_GITIGNORE_ENTRIES=(
   ".specify/scorecards/"
   ".specify/templates/"
   ".specify/graph-consumption-audit.jsonl"
+  ".specify/kb-nohit/"
 )
 
 # ── 并发取舍说明（W1 修复，Codex 四轮）─────────────────────────────────────

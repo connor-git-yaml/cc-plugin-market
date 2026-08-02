@@ -1,0 +1,20 @@
+ M .gitignore
+ M plugins/spec-driver/scripts/lib/ensure-gitignore.sh
+ M plugins/spec-driver/tests/ensure-gitignore.test.mjs
+ M src/cli/commands/scaffold-kb.ts
+ M src/cli/index.ts
+ M src/cli/utils/parse-args.ts
+ M src/kb-mcp/lib/kb-locator.ts
+ M src/kb-mcp/tools/kb-api-lookup.ts
+ M src/kb-mcp/tools/kb-search.ts
+ M tests/kb/cli-scaffold-kb.test.ts
+ M tests/kb/kb-api-lookup-tool.test.ts
+ M tests/kb/kb-search-tool.test.ts
+ M tests/kb/scaffold-kb-query.test.ts
+?? src/scaffold-kb/coverage-gap.ts
+?? src/scaffold-kb/governance-constants.ts
+?? src/scaffold-kb/nohit-recorder.ts
+?? src/scaffold-kb/query-redaction.ts
+?? tests/kb/coverage-gap.test.ts
+?? tests/kb/nohit-recorder.test.ts
+?? tests/kb/query-redaction.test.ts

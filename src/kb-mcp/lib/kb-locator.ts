@@ -30,6 +30,8 @@ export interface KbHandle {
   graph: DocGraphFile | null;
   /** F192：api-entities.json（缺失/损坏 → null，kb_api_lookup 降级 document_fallback） */
   entities: ApiEntityFile | null;
+  /** F241：sqlite 库文件路径。仅用于 no-hit 治理记录的 `dbPathHash`（落盘只存 hash，不存路径） */
+  dbPath: string;
 }
 
 export interface KbContext {
@@ -39,6 +41,17 @@ export interface KbContext {
 }
 
 export type LoadKbResult = { ok: true; context: KbContext } | { ok: false; code: KbErrorCode };
+
+/**
+ * F241：把本次**实际查询过**的库路径拼成单一 key，供 no-hit 记录计算 `dbPathHash`。
+ * 只用于 hash（区分单库/双库场景），路径本身不落盘。
+ */
+export function describeQueriedDbPaths(handles: Array<KbHandle | null>): string {
+  return handles
+    .filter((h): h is KbHandle => h !== null)
+    .map((h) => h.dbPath)
+    .join('|');
+}
 
 async function loadHandle(kbDir: string): Promise<KbHandle | { corrupt: true }> {
   const sqlitePath = join(kbDir, 'chunks.sqlite');
@@ -78,7 +91,7 @@ async function loadHandle(kbDir: string): Promise<KbHandle | { corrupt: true }> 
   } catch {
     entities = null; // 缺失/损坏 → kb_api_lookup 降级 document_fallback（W-3）
   }
-  return { db, graph, entities };
+  return { db, graph, entities, dbPath: sqlitePath };
 }
 
 /**
