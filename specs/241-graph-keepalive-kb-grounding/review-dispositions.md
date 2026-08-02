@@ -177,3 +177,41 @@ orchestration.yaml 实况：implement 是 `id:"6"`，verify 是 `id:"7c"`——`
 **处置**：T011 拆 4（CLI 契约+dry-run/advisory；双事件审计；SC-019 安装态；SC-002/003 真实刷新）；T12 拆 2（decide 主链；annotate-caveat+审计写入器）；T029/T049 钉死目标测试文件路径。T053 保持单任务（两个同构 sibling 测试文件、同一断言模式，拆开反而碎）——**此处不采纳拆分**，理由记录。
 
 ## T-I1 T019 引用 T032 应为 T038 → 机械修正。
+
+---
+
+# Implement 批 1 — Codex 代码对抗审查整改单（门禁不通过 → 修复）
+
+> 审查会话：codex `task-msc6wt4l-emi1m9`（7 CRITICAL / 7 WARNING，全部带复现证据）。
+
+## B1-C1 缺 `graph.sourceCommit` 的合法 JSON 误判 present → **确认**
+`{"graph":{}}` 解析成功即判 present，EC-02 要求 corrupt。**处置**：availability 判定收紧——仅当 `sourceCommit` 为非空字符串才 present；缺失/空串/非字符串一律 corrupt；补三组 CLI 采集测试。
+
+## B1-C2 broken symlink 判成 missing（用了 statSync 违反 EC-02 lstat 硬合同）→ **确认**
+**处置**：CLI 的 availability 采集入口先 `lstatSync`；仅 lstat ENOENT = missing；路径存在但读取/解析/provenance 校验失败 = corrupt；补真实 broken-symlink fixture。
+
+## B1-C3 刷新成功后仍输出 G1 sourceCommit → annotate 主路径必然 snapshot-mismatch 丢 caveat → **确认（最重）**
+**处置**：刷新成功后**重读**已验证产物的 sourceCommit（G2）更新输出与 decision 事件；重读失败收口 `refresh-failed-artifact-unusable`；补 G1 stale → refresh G2 → annotate completed 全链集成测试。
+
+## B1-C4 caveat 判据与真实 MCP impact 形状不兼容 + 缺 target 反而误加 caveat → **确认**
+真实返回是 `summary.directCallers` 且无 `target`；现实现只认合成顶层形状，且 target 缺失时误加 caveat。**处置**：`annotate-caveat` 加 `--target <symbolId>`（由调用方显式声明查询目标）；内部归一化 `directCallers = raw.summary?.directCallers ?? raw.directCallers`；target 缺失或非 TS/JS 源**拒绝**加 caveat；补真实 MCP payload 形状测试。
+
+## B1-C5 goal_loop advisory 散文漏传 `--tasks-file` → **确认（T027b 后补功能没回灌 SKILL）**
+**处置**：SKILL 步骤 2 advisory 命令补 `--tasks-file "{feature_dir}/tasks.md"`；wrapper 再生；接线测试断言完整参数串而非只查标记。
+
+## B1-C6 RG-006 静态门禁集合漏 `git-change-classifier.mjs` 且 helper 可逃逸 → **确认**
+**处置**：静态检查改为**从 CLI 入口解析 import 闭包**（递归、限 plugins 目录内），三段扫描作用于闭包全集；固定清单只作为「闭包必须 ⊇ 清单」的下限断言。
+
+## B1-C7 SC-008 的「prompt 正反注入」实为只查日志 → **确认**
+**处置**：抽最小纯函数 `buildImpactInjectionBlock(decision, impactSummary)`（与既有 `shouldConsumeImpact` 同模块），SKILL 散文引用其语义；测试改为：允许态组装结果含 impact 内容、拒绝态用**同一候选 impact 输入**组装结果必须不含。
+
+## B1-W1 第三次 allowed 歧义 → **确认**：预算键钉死 `(projectRoot, phase=implement)`；goal_loop 已跑过时外层 verify 4b 恒 declined（SKILL 散文写明分派模式条件）。
+## B1-W2 tasks 路径判据收仓外/绝对路径 + `Node.js` 误收 → **确认**：拒绝 absolute / `..` / resolve 后出 projectRoot；要求路径含 `/`（挡裸词误收）；补负例。
+## B1-W3 realpath fallback 测试没进 catch → **确认**：测试显式改写 `process.argv[1]` 为不存在路径。实现本身安全。
+## B1-W4 append 测试非并发 → **确认**：并发 N 子进程 decide，断言行数/逐行可解析/decisionId 唯一。
+## B1-W5 gitignore 文件规则吞同名目录后代 → **登记为 Git pattern 固有残余**（不改，写入 spec 残余声明由 verify 复核）。
+## B1-W6 ensure-gitignore 残留「4 条」旧口径注释 → **确认**：改「固定条目/N 条」措辞（脚本 3 处 + 测试 5 处）。
+## B1-W7 审查沙箱 EPERM 无法复核完整绿态 → **接受**：修复后在 host shell 全量重跑门禁（编排器环境可写 /tmp）。
+
+## 已核对安全面（Codex 独立 oracle 复算）
+矩阵 144 组合 0 mismatch / 双事件基本写入 / 薄壳导出差集空 + .catch 逐字 / phase.name 三份一致 + wrapper SHA 一致 / dry-run 零副作用 / src** 零改动 / 双 gitignore 清单一致。

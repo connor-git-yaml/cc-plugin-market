@@ -14,7 +14,12 @@ import * as path from 'node:path';
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const HOOK_PATH = path.join(REPO_ROOT, 'plugins/spec-driver/hooks/worktree-lifecycle.sh');
 const REAL_SYNC_SCRIPT = path.join(REPO_ROOT, 'scripts/sync-worktree-local-state.sh');
-const REAL_STATUS_HELPER = path.join(REPO_ROOT, 'scripts/lib/graph-bootstrap-status.mjs');
+// F241 / D8：canonical 实现已迁入插件侧，仓根同名文件只是 export * 转发壳。
+// 这里要复制进合成 worktree 的必须是**自包含**的 canonical——转发壳被单独拷走会断相对 import。
+const REAL_STATUS_HELPER = path.join(
+  REPO_ROOT,
+  'plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs',
+);
 
 interface HookResult {
   stdout: string;

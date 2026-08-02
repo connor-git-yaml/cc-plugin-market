@@ -51,3 +51,13 @@
 > `graph-quality:freshness` 立即转 warn（图锚 `2e3a4cd` vs 新 HEAD）——B4 动机的天然复现：
 > 图在每次 commit 后必然 commit 级 stale；warn-not-fail 是正确门禁行为；刷新应由
 > 消费需求驱动（implement 前重建一次），而非每 commit 无条件重建。此观测进 pilot 报告。
+
+[02:25:34] phase_start_ref: implement=6950b084f5b3de7246ac0191cdfbdad55de555e5
+[02:25:34] batch_base: batch1=6950b084f5b3de7246ac0191cdfbdad55de555e5
+
+| 02:0x | 5 tasks | tasks.md v1（61 任务）；Codex 审查 `task-msc43enk-lprgh4`：**BLOCKED 6C/5W/1I**（T-C1 phase.id 恒 false / T-C4 continuous capture 未任务化 / T-C5 门禁可绕等）→ 全裁决落整改单 → tasks v2（73 任务/批 0-4）+ plan §3.1 勘误 |
+| 02:2x | **tasks 阶段 commit** | `6950b08` |
+| 02:2x | implement 前置 | 图重建 fresh@6950b08（3.5s）；trace 记 `phase_start_ref: implement` 与 `batch_base: batch1` 锚点 |
+| 02:3x-03:1x | 6 implement 批 0+批 1（B4）| T001-T027 全 done：决策矩阵纯函数（144 穷举+顺序探针）/ 双事件审计 / D8 迁移三件套 / SKILL 三段接线（phase.name）/ wrapper 再生 / gitignore 自举。**T018 抓到真 bug：symlink realpath 守卫静默空转**（exit 0 零副作用——F239 警告过的形态在自家门口复现）；`refresh-failed-timeout` 不可达缺口补 `--refresh-deadline-ms`；3 处 tasks 描述缺陷如实上报 |
+| 03:1x | 批 1 收尾（编排器裁决两项）| T027a symlink 守卫修 canonical+薄壳（判定收敛单一 `isInvokedDirectly` 导出）+ T027b D3 tasks.md 路径信号（仅 advisory 生效/git 优先/保守方向三红线落测）。node:test 1237 全绿 / vitest 54 全绿 / build 0 错 / repo:check 86 项 pass。评测脚本十余处同类 argv[1] 潜伏 bug → 立独立卡 |
+| 03:1x | 编排器清理 | `specs/products/_generated` 与 suggestions 的 repo:sync 时间戳噪声 checkout 还原（并行 feature 约定）|

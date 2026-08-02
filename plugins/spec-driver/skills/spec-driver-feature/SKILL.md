@@ -212,6 +212,63 @@ PARALLEL_GROUPS=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-parallel-g
 4. **构建上下文注入块**
    - 注入 feature_dir、branch_name、project_context_block、已完成制品列表
 
+4a. **（仅当 `phase.name === "implement"` 时）记录 phase 起点 ref**（Feature 241 / B4）
+
+   在第 5 步委派 implement 子代理**之前**执行，供 verify phase 计算"本 phase 实际改了什么"：
+
+   ```bash
+   printf '[%s] phase_start_ref: implement=%s\n' "$(date +%H:%M:%S)" "$(git rev-parse HEAD)" \
+     >> "{feature_dir}/trace.md"
+   ```
+
+   > 判定条件用 `phase.name` 而**不是** `phase.id`：`orchestration.yaml` 里 implement 的 id 是 `"6"`、
+   > verify 的 id 是 `"7c"`，按 id 比字符串会恒为 false，整条接线静默失效（T-C1）。
+   >
+   > 该锚点语义是 **last-match wins**：goal_loop 多轮 rerun 会追加新行，读取方永远取最后一条。
+   > 不要自己 `grep | tail -1`，把 trace 路径交给下方 `--base-ref-from-trace` 即可。
+
+4b. **（仅当 `phase.name === "verify"` 时）调用图消费决策（pre-verify authoritative）**（Feature 241 / B4）
+
+   ```bash
+   DECISION=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
+     --project-root {project_root} --phase implement \
+     --base-ref-from-trace "{feature_dir}/trace.md" \
+     --refresh-policy {见下方"刷新预算"规则})
+   ```
+
+   > **刷新预算键 = `(projectRoot, phase=implement)`**（注意不是 verify——本步判定的是 implement
+   > 阶段改了什么，`--phase` 传的也是 `implement`）。同一个键下整条流程只允许一次 `allowed`：
+   >
+   > - **goal_loop 已在本 phase 运行过 decide**（即 implement 走的是 goal_loop 分派，其迭代日志
+   >   含 `graphDecision` 字段）→ 本步 **恒 declined**。预算已被 goal_loop 步骤 2 的轮 1 消耗，
+   >   这里再传 allowed 就是同一 phase 内的第二次重建。
+   > - 否则（`agent_mode: single` 的常规路径，implement 期间没跑过 decide）→ 本步是该键下的
+   >   **首次调用，传 allowed**；本 phase 若因故重跑 4b，第二次起同样 declined。
+
+   - `DECISION.outcome == "consume-impact"`（含刷新成功后收口而来的）：
+     发起 Spectra MCP `impact` 调用 → 用 `annotate-caveat` 注解 → 把结果并入第 4 步的上下文注入块，
+     标注为 "verify 前置 grounding（authoritative）"
+
+     ```bash
+     node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" annotate-caveat \
+       --project-root {project_root} --decision "@{decision_json_file}" \
+       --impact-result "@{impact_result_json_file}" \
+       --target {本次 impact 查询的 symbolId} --impact-status completed
+     ```
+
+     > `--target` 必须传：MCP 返回体里没有"我问的是谁"这个信息，只有发起查询的你知道。
+     > 不传则 CLI 不做 FR-006 caveat 注解（宁可漏提示，也不给无根据的可信度声明）。
+
+   - 其余出口：**不**调用 impact，把 `DECISION.degradedReason` 与 `DECISION.fallbackHint` 并入上下文
+     注入块的 caveat 说明——让 verify 子代理知道"为什么没有影响面证据"，而不是让它静默缺失
+
+   > **调用方合同**：预算键 `(projectRoot, phase=implement)` 下第一次可传 `--refresh-policy allowed`，
+   > 第二次起必须传 `declined`。CLI 是无状态进程，不会也不该自行判断"本 phase 是否已刷过"。
+   >
+   > **措辞红线**：freshness 通过 **不等于** 影响面完整。即便出口是 `consume-impact`，若返回体带
+   > `caveats: ["coverage-gap-known-extraction-limit"]`，注入文案必须如实标注"图是新的，但该目标命中
+   > 已登记的抽取器漏边形态"，不得表述为"影响面可信/完整"。
+
 5. **委派子代理执行**
    ```bash
    Task(
@@ -379,6 +436,29 @@ d. 记录 S_i = { clean: isClean, ref: <HEAD SHA 或 rev-parse 捕获的 stash S
 **步骤 2：注入 Spectra impact 上下文（FR-011/012）**
 
 ```text
+0. （Feature 241 / B4，pre-implement advisory）先问"这份图现在该不该拿来做影响面分析"：
+   DECISION=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
+     --project-root {project_root} --phase implement \
+     --base-ref-from-trace "{feature_dir}/trace.md" \
+     --tasks-file "{feature_dir}/tasks.md" \
+     --refresh-policy {轮 1 传 allowed；轮 ≥2 传 declined} --advisory)
+
+   --tasks-file 不可省：轮 1 的注入发生在本轮 implement **之前**，工作树是干净的，git 侧只能给
+   unknown。D3 定的轮 1 替代信号就是"tasks.md 已声明目标文件路径的存在性"，漏传这个参数等于
+   让该信号在真实编排里永远拿不到（它只在 --advisory 且 git 变更清单为空时才生效，不会越权）。
+
+   刷新预算键 = (projectRoot, phase=implement)，整个 implement phase 只有一次 allowed：
+   轮 1 在此消耗，轮 ≥2 与步骤 3b 一律 declined。
+
+   - DECISION.outcome == "consume-impact" → 继续执行下面的 a/b；喂进 prompt 前先经
+     annotate-caveat 注解（--target 传本轮查询的 symbolId），注入文案标注为 "advisory grounding"
+   - 其余出口 → 跳过 a/b，本轮 injection_status=skipped_by_advisory_decision，
+     iteration log 记 DECISION.degradedReason 与 DECISION.fallbackHint
+
+   注意 advisory 的权威度：其输出 authoritativeOutcome 恒为 null。它**只能**决定"要不要预刷一次图"
+   与本轮注入的语气/caveat，**不得**被当成"impact 不适用"的权威结论，也不得据此让 verify 跳过
+   影响面复核——权威判定发生在 implement 之后的步骤 3b。
+
 a. 编排器发起 Spectra MCP `impact` 调用（target = 本轮拟改动的 symbol/文件），捕获其返回或错误对象
 b. 把返回写临时 JSON，喂 core 解释：
    IMP=$(node "$PLUGIN_DIR/scripts/goal-loop-cli.mjs" interpret-impact {mcpResultJsonFile})
@@ -399,6 +479,27 @@ Task(
 )
 ```
 - **MUST NOT** 在 implement prompt 中接受或转发任何"已达标/测试已绿"的声明（FR-010 职责分离）；达标只由步骤 5 的独立 verify 子代理实跑判定。
+
+**步骤 3b：图消费权威判定（Feature 241 / B4，pre-verify authoritative）**
+
+```text
+本轮 implement 已完成，此刻才拿得到真实 diff，因此这里才是权威判定的时点：
+DECISION2=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
+  --project-root {project_root} --phase implement \
+  --base-ref-from-trace "{feature_dir}/trace.md" \
+  --refresh-policy declined)
+# 预算键 (projectRoot, phase=implement) 下步骤 2 的轮 1 已消耗过唯一一次 allowed，
+# 按调用方合同此处必须 declined；外层 4b 同理（goal_loop 已在本 phase 运行过 decide → 恒 declined）
+
+把 DECISION2 记入本轮 iteration log 的 graphDecision 字段（entry 对象新增可选字段即可，
+formatIterationLogEntry 无字段白名单，不需要改它）；**不注入 prompt**——goal_loop 的 verify
+子代理本就 MUST 独立实跑，不消费 impact 摘要。本次调用的价值是把权威判定落进审计与迭代日志，
+供 pilot 取数与事后排障。
+
+DECISION2 只跑 decide、从不调 annotate-caveat，这是**设计内的正确形态**：decide 已无条件落一条
+kind:"decision" 审计事件独立满足"每次决策必留证据"，该 decisionId 没有回链的 caveat-annotation
+事件属于可观测的 decide-only 态，不是漏记。
+```
 
 **步骤 4：选择 verify 模式（FR-007）**
 

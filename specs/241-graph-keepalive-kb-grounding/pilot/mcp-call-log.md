@@ -43,3 +43,15 @@
 | 1-6 | `src/kb-mcp/tools/kb-search.ts::executeKbSearch` | impact | `miss-empty`（**已证错误**）| 复现 O-3（0 caller 而实际有）|
 | 1-7 | `goal-loop-core.mjs::interpretImpactResult` | context | `miss-structural` | 复现 O-5（.mjs 不在图）|
 | 1-8 | `src/scaffold-kb/search-core.ts::searchKbCore` | impact | `hit`（**部分漏报**）| 返回 directCallers:2，grep 交叉核对实际 ≥4（scaffold-kb.ts / kb-search.ts / kb-api-lookup.ts 等）——见 O-8 |
+
+### 分段 1 续：implement 批 1 子代理的调用（continuous capture，当下即记）
+
+图状态：`fresh` @ `6950b08`。
+
+| # | target | 工具 | 类别 | 备注 |
+|---|--------|------|------|------|
+| 1-9 | `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs::attemptLocalGraphBuild` | impact | `miss-structural` | 迁移前查 caller。symbol-not-found + fuzzyMatches 空。grep 交叉核对：同文件 `:576` 有生产调用、`tests/unit/graph-bootstrap-status.test.ts` 9 处引用 —— **确有调用方但图完全查不到**，D6「`.mjs` 结构性封顶为 0」在本 feature 主战场上的第一手复现 |
+| 1-10 | `plugins/spec-driver/scripts/lib/goal-loop-core.mjs::parsePreservedConfigStates` | context | `miss-structural` | 写 `git-change-classifier` 前查解析范式。symbol-not-found + fuzzyMatches 空。grep 交叉核对：`goal-loop-cli.mjs:276` 有生产调用。同 O-5 |
+
+> **批 1 的结构性事实（进报告）**：B4 接线代码 100% 落在 `plugins/**/*.mjs`，因此本批**每一次**
+> 面向自身改动面的 MCP 查询都必然是 `miss-structural`。这不是采样偏置，是 O-5 的确定性后果。

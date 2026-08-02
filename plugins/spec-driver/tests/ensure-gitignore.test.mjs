@@ -29,7 +29,17 @@ const EXPECTED_ENTRIES = [
   '.specify/runs/',
   '.specify/scorecards/',
   '.specify/templates/',
+  // Feature 241 — 图消费决策审计事件流（FR-024 / SC-020）
+  '.specify/graph-consumption-audit.jsonl',
 ];
+
+/**
+ * 条目数从表长派生，**不写死数字**。
+ *
+ * F241 给这份清单加了一条，旧版把 `created:4` 之类的数字散在十余处断言里，一次扩充就得逐处改，
+ * 而漏改的那几处只会以"数字对不上"的形式红——看不出到底是清单变了还是注入逻辑坏了。
+ */
+const ENTRY_COUNT = EXPECTED_ENTRIES.length;
 
 // W5（环境健壮性）：受限沙箱里 os.tmpdir() 可能 EPERM；允许 TEST_TMPDIR 覆盖落点。
 const TMP_BASE = process.env.TEST_TMPDIR || os.tmpdir();
@@ -83,12 +93,12 @@ function countExactLine(content, entry) {
 }
 
 describe('ensure-gitignore.sh 共享库', () => {
-  it('用例 1：全新注入 — 无 .gitignore 时创建含注释头 + 4 行条目，stdout=created:4', () => {
+  it('用例 1：全新注入 — 无 .gitignore 时创建含注释头 + 全部条目，stdout=created:<N>', () => {
     const dir = createTempDir();
     try {
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'created:4');
+      assert.equal(stdout, `created:${ENTRY_COUNT}`);
 
       const content = readGitignore(dir);
       assert.match(content, /# Spec Driver 本地缓存与运行态/, '应含注释头');
@@ -104,7 +114,7 @@ describe('ensure-gitignore.sh 共享库', () => {
     const dir = createTempDir();
     try {
       const first = callEnsure(dir);
-      assert.equal(first.stdout, 'created:4');
+      assert.equal(first.stdout, `created:${ENTRY_COUNT}`);
 
       const gitignorePath = path.join(dir, '.gitignore');
       const mtimeAfterFirst = fs.statSync(gitignorePath).mtimeMs;
@@ -122,7 +132,7 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 3：部分已存在 — 预写 2 条 + 无关行，追加缺失 2 条不重复，stdout=appended:2', () => {
+  it('用例 3：部分已存在 — 预写 2 条 + 无关行，只追加缺失条目且不重复', () => {
     const dir = createTempDir();
     try {
       const initial = [
@@ -136,15 +146,16 @@ describe('ensure-gitignore.sh 共享库', () => {
 
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'appended:2');
+      assert.equal(stdout, `appended:${ENTRY_COUNT - 2}`, '预写 2 条 → 只追加其余条目');
 
       const content = readGitignore(dir);
       // 已存在的 2 条不得重复
       assert.equal(countExactLine(content, '.specify/runs/'), 1);
       assert.equal(countExactLine(content, '.specify/templates/'), 1);
-      // 缺失的 2 条被追加
-      assert.equal(countExactLine(content, '.specify/.spec-driver-path'), 1);
-      assert.equal(countExactLine(content, '.specify/scorecards/'), 1);
+      // 缺失的条目被追加，且每条恰一次
+      for (const entry of EXPECTED_ENTRIES) {
+        assert.equal(countExactLine(content, entry), 1, `应含且仅含一条 ${entry}`);
+      }
       // 无关行保留
       assert.equal(countExactLine(content, 'node_modules/'), 1);
       assert.equal(countExactLine(content, 'dist/'), 1);
@@ -162,7 +173,7 @@ describe('ensure-gitignore.sh 共享库', () => {
 
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'created:4');
+      assert.equal(stdout, `created:${ENTRY_COUNT}`);
       assert.equal(fs.existsSync(path.join(dir, '.gitignore')), true);
     } finally {
       cleanupTempDir(dir);
@@ -177,7 +188,7 @@ describe('ensure-gitignore.sh 共享库', () => {
 
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'appended:4');
+      assert.equal(stdout, `appended:${ENTRY_COUNT}`);
 
       const content = readGitignore(dir);
       // 原行独立成行且未被污染（不与后续条目粘连成 node_modules/.specify/...）
@@ -214,7 +225,7 @@ describe('ensure-gitignore.sh 共享库', () => {
       const pathFile = path.join(dir, '.specify', '.spec-driver-path');
       assert.equal(fs.existsSync(pathFile), true, '.spec-driver-path 应被写入');
 
-      // .git/info/exclude 生成，含 4 条（主防线）
+      // .git/info/exclude 生成，含全部固定条目（主防线）
       const excludeContent = readExclude(dir);
       for (const entry of EXPECTED_ENTRIES) {
         assert.equal(countExactLine(excludeContent, entry), 1, `exclude 应含且仅含一条 ${entry}`);
@@ -238,7 +249,7 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 8：精确匹配非误判 — 预写宽松变体 .specify/runs/debug.log 时 .specify/runs/ 仍被追加，stdout=appended:4', () => {
+  it('用例 8：精确匹配非误判 — 预写宽松变体 .specify/runs/debug.log 时 .specify/runs/ 仍被追加，stdout=appended:<N>', () => {
     const dir = createTempDir();
     try {
       // 宽松变体（子路径）不得被整行精确匹配误判为已含 .specify/runs/
@@ -246,7 +257,7 @@ describe('ensure-gitignore.sh 共享库', () => {
 
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'appended:4', '4 条目标条目均视为缺失，全部追加');
+      assert.equal(stdout, `appended:${ENTRY_COUNT}`, '全部固定条目均视为缺失，逐条追加');
 
       const content = readGitignore(dir);
       for (const entry of EXPECTED_ENTRIES) {
@@ -299,10 +310,10 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 10：CRLF 行尾 — 预写 CRLF 4 条目时返回 ready:0 且文件不被改动', () => {
+  it('用例 10：CRLF 行尾 — 预写 CRLF 全部条目时返回 ready:0 且文件不被改动', () => {
     const dir = createTempDir();
     try {
-      // 4 条目以 CRLF 行尾预写（模拟 Windows 编辑器产出的 .gitignore）
+      // 固定条目以 CRLF 行尾预写（模拟 Windows 编辑器产出的 .gitignore）
       const crlfContent = EXPECTED_ENTRIES.map((e) => `${e}\r\n`).join('');
       const gitignorePath = path.join(dir, '.gitignore');
       fs.writeFileSync(gitignorePath, crlfContent, 'utf8');
@@ -322,10 +333,10 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 11：大文件 + pipefail — >100KB .gitignore 且 4 条目在头部时返回 ready:0 不重复追加', () => {
+  it('用例 11：大文件 + pipefail — >100KB .gitignore 且全部条目在头部时返回 ready:0 不重复追加', () => {
     const dir = createTempDir();
     try {
-      // 4 条目置于文件头部 + 大量填充行使总大小 >100KB（远超 64KB pipe buffer）。
+      // 固定条目置于文件头部 + 大量填充行使总大小 >100KB（远超 64KB pipe buffer）。
       // 在 set -euo pipefail 下，旧实现 `printf | grep -q` 会因 grep 头部匹配即退触发
       // 写端 SIGPIPE（管道退出码 141），被 pipefail 放大 → 条目误判缺失 → 重复追加。
       const head = EXPECTED_ENTRIES.join('\n');
@@ -346,7 +357,7 @@ describe('ensure-gitignore.sh 共享库', () => {
       const script = `set -euo pipefail; source "${LIB_PATH}"; ensure_spec_driver_gitignore "${dir}"`;
       const res = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
       assert.equal(res.status, 0, 'pipefail 下仍应零退出');
-      assert.equal(res.stdout.trim(), 'ready:0', '4 条目已在头部，不得误判缺失而追加');
+      assert.equal(res.stdout.trim(), 'ready:0', '固定条目已在头部，不得误判缺失而追加');
 
       const content = readGitignore(dir);
       for (const entry of EXPECTED_ENTRIES) {
@@ -378,7 +389,7 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 7：init-project.sh --json 端到端（git repo）— RESULTS 含 git_exclude:* 与 gitignore:created:4 双信号', () => {
+  it('用例 7：init-project.sh --json 端到端（git repo）— RESULTS 含 git_exclude:* 与 gitignore:created:<N> 双信号', () => {
     const dir = createTempDir();
     gitInit(dir); // git repo → exclude 主防线生效
     try {
@@ -394,14 +405,14 @@ describe('ensure-gitignore.sh 共享库', () => {
       // gitignore 兜底防线信号
       const gitignoreSignal = parsed.RESULTS.find((r) => r.startsWith('gitignore:'));
       assert.ok(gitignoreSignal, 'RESULTS 应含 gitignore:* 信号');
-      assert.equal(gitignoreSignal, 'gitignore:created:4');
+      assert.equal(gitignoreSignal, `gitignore:created:${ENTRY_COUNT}`);
 
-      // git_exclude 主防线信号（git init 已生成默认 exclude 模板 → 追加 4 条为 injected:4）
+      // git_exclude 主防线信号（git init 已生成默认 exclude 模板 → 追加全部条目为 injected:<N>）
       const excludeSignal = parsed.RESULTS.find((r) => r.startsWith('git_exclude:'));
       assert.ok(excludeSignal, 'RESULTS 应含 git_exclude:* 信号');
-      assert.equal(excludeSignal, 'git_exclude:injected:4');
+      assert.equal(excludeSignal, `git_exclude:injected:${ENTRY_COUNT}`);
 
-      // 两条防线均落盘 4 条
+      // 两条防线均落盘全部条目
       const content = readGitignore(dir);
       const excludeContent = readExclude(dir);
       for (const entry of EXPECTED_ENTRIES) {
@@ -437,14 +448,14 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 13：negation 尊重 — 预置 !.specify/templates/ 时该条跳过不追加，其余 3 条正常，negation 原行未动', () => {
+  it('用例 13：negation 尊重 — 预置 !.specify/templates/ 时该条跳过不追加，其余条目正常，negation 原行未动', () => {
     const dir = createTempDir();
     try {
       fs.writeFileSync(path.join(dir, '.gitignore'), '!.specify/templates/\n', 'utf8');
 
       const { stdout, status } = callEnsure(dir);
       assert.equal(status, 0);
-      assert.equal(stdout, 'appended:3', 'negation 命中条目不计入追加');
+      assert.equal(stdout, `appended:${ENTRY_COUNT - 1}`, 'negation 命中条目不计入追加');
 
       const content = readGitignore(dir);
       // 被 un-ignore 的条目不追加
@@ -455,10 +466,10 @@ describe('ensure-gitignore.sh 共享库', () => {
       );
       // negation 原行保留
       assert.equal(countExactLine(content, '!.specify/templates/'), 1, 'negation 原行未动');
-      // 其余 3 条正常追加
-      assert.equal(countExactLine(content, '.specify/.spec-driver-path'), 1);
-      assert.equal(countExactLine(content, '.specify/runs/'), 1);
-      assert.equal(countExactLine(content, '.specify/scorecards/'), 1);
+      // 其余条目正常追加
+      for (const entry of EXPECTED_ENTRIES.filter((e) => e !== '.specify/templates/')) {
+        assert.equal(countExactLine(content, entry), 1, `应含且仅含一条 ${entry}`);
+      }
     } finally {
       cleanupTempDir(dir);
     }
@@ -483,14 +494,14 @@ describe('ensure-gitignore.sh 共享库', () => {
     }
   });
 
-  it('用例 15：git_exclude 注入 + 幂等 — git repo 首次追加 4 条，重跑 ready:0 mtime 不变', () => {
+  it('用例 15：git_exclude 注入 + 幂等 — git repo 首次追加全部条目，重跑 ready:0 mtime 不变', () => {
     const dir = createTempDir();
     gitInit(dir);
     try {
       const first = callEnsureExclude(dir);
       assert.equal(first.status, 0);
-      // git init 已生成默认 exclude 模板文件 → 追加 4 条为 appended:4（非 created）
-      assert.equal(first.stdout, 'appended:4');
+      // git init 已生成默认 exclude 模板文件 → 追加全部条目为 appended:<N>（非 created）
+      assert.equal(first.stdout, `appended:${ENTRY_COUNT}`);
 
       const excludePath = path.join(dir, '.git', 'info', 'exclude');
       const content = readExclude(dir);
@@ -591,6 +602,77 @@ describe('ensure-gitignore.sh 共享库', () => {
       assert.equal(fs.statSync(infoPath).isFile(), true, '.git/info 仍是文件，未被破坏');
     } finally {
       cleanupTempDir(dir);
+    }
+  });
+});
+
+/**
+ * Feature 241 / FR-024 / SC-020 —— 新增数据路径的 gitignore 自举，双段验证。
+ *
+ * 为什么两段都要：只改开发仓库根 `.gitignore` 能让本仓 `git status` 干净，但第三方安装者的仓库
+ * 照样会把本机观测数据提交上去；只改自举清单则本仓自身可能长期漏配。两处必须同时成立。
+ *
+ * 断言方式一律用 `git check-ignore`（问 git 自己"这条路径到底被不被忽略"），
+ * 而不是 grep 文件内容——后者会被 negation 行、目录形态差异、匹配范围放宽等情况骗过。
+ */
+describe('F241 FR-024 / SC-020 新增数据路径双段 check-ignore', () => {
+  /** F241 在批 1 引入的本机数据路径。批 2 会再加 `.specify/kb-nohit/`。 */
+  const F241_BATCH1_PATHS = ['.specify/graph-consumption-audit.jsonl'];
+
+  function checkIgnore(cwd, target) {
+    return spawnSync('git', ['check-ignore', '-v', target], { cwd, encoding: 'utf8' });
+  }
+
+  it('第一段：本开发仓库内直查，路径确被忽略', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..', '..');
+    for (const target of F241_BATCH1_PATHS) {
+      const res = checkIgnore(repoRoot, target);
+      assert.equal(res.status, 0, `${target} 未被本仓 .gitignore 忽略：${res.stderr}`);
+      assert.match(res.stdout, /\.gitignore:/, '命中来源应是 .gitignore');
+    }
+  });
+
+  it('第二段：插件拷入临时全新 git repo，跑自举脚本后路径确被忽略', () => {
+    const dir = createTempDir();
+    try {
+      gitInit(dir);
+      // 模拟第三方安装态：只有 plugins/spec-driver/** 被分发过去
+      const installedPluginDir = path.join(dir, 'plugins', 'spec-driver');
+      fs.mkdirSync(path.dirname(installedPluginDir), { recursive: true });
+      fs.cpSync(path.resolve(__dirname, '..'), installedPluginDir, { recursive: true });
+
+      const installedLib = path.join(installedPluginDir, 'scripts', 'lib', 'ensure-gitignore.sh');
+      assert.equal(fs.existsSync(installedLib), true, '自举脚本必须随插件分发');
+
+      for (const target of F241_BATCH1_PATHS) {
+        const before = checkIgnore(dir, target);
+        assert.notEqual(before.status, 0, `前置：自举前 ${target} 不应已被忽略`);
+      }
+
+      const res = spawnSync(
+        'bash',
+        ['-c', `source "${installedLib}"; ensure_spec_driver_gitignore "${dir}"`],
+        { encoding: 'utf8' },
+      );
+      assert.equal(res.status, 0, `自举脚本应零退出：${res.stderr}`);
+
+      for (const target of F241_BATCH1_PATHS) {
+        const after = checkIgnore(dir, target);
+        assert.equal(after.status, 0, `自举后 ${target} 仍未被忽略：${after.stderr}`);
+      }
+    } finally {
+      cleanupTempDir(dir);
+    }
+  });
+
+  it('自举清单与开发仓库根 .gitignore 两处内容一致（缺一即等于对安装者默认泄露）', () => {
+    const repoRoot = path.resolve(__dirname, '..', '..', '..');
+    const rootGitignore = fs.readFileSync(path.join(repoRoot, '.gitignore'), 'utf8');
+    const libSource = fs.readFileSync(LIB_PATH, 'utf8');
+
+    for (const entry of EXPECTED_ENTRIES) {
+      assert.equal(countExactLine(rootGitignore, entry), 1, `仓根 .gitignore 缺 ${entry}`);
+      assert.ok(libSource.includes(`"${entry}"`), `自举清单缺 ${entry}`);
     }
   });
 });

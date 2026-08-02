@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Spec Driver - ignore 自举共享库（Feature 207）
 # 由 init-project.sh 与 postinstall.sh 共同 source。
-# 职责：确保 Spec Driver 落盘产物的 4 条 ignore 规则就位，避免脚手架与本机绝对路径
+# 职责：确保 Spec Driver 落盘产物的固定 ignore 条目全部就位（条目数以下方
+#       SPEC_DRIVER_GITIGNORE_ENTRIES 数组为准，不在散文里重复写死数字），避免脚手架与本机绝对路径
 #       污染宿主 repo 的 git diff / 交付 patch。提供两个入口：
 #         - ensure_spec_driver_gitignore    → 写宿主 <project_root>/.gitignore（团队共享）
 #         - ensure_spec_driver_git_exclude  → 写 <project_root>/.git/info/exclude（非 tracked，零 diff）
@@ -12,17 +13,22 @@
 #       函数内所有写入均显式检查返回值，不依赖 trap EXIT（避免污染被 source 进
 #       set -euo pipefail 调用方的退出钩子）。
 
-# Spec Driver 落盘产物的固定 4 条 ignore 条目（与开发仓库 .gitignore 一致，顺序即注入顺序）：
-#   .specify/.spec-driver-path  — 机器绝对路径（隐私 / 可移植）
-#   .specify/runs/              — 本地运行态
-#   .specify/scorecards/        — 插件默认品复制，可再生
-#   .specify/templates/         — 插件默认品复制，可再生
+# Spec Driver 落盘产物的固定 ignore 条目（与开发仓库 .gitignore 一致，顺序即注入顺序）：
+#   .specify/.spec-driver-path            — 机器绝对路径（隐私 / 可移植）
+#   .specify/runs/                        — 本地运行态
+#   .specify/scorecards/                  — 插件默认品复制，可再生
+#   .specify/templates/                   — 插件默认品复制，可再生
+#   .specify/graph-consumption-audit.jsonl — Feature 241 图消费决策审计事件流（本机观测产物）
 # 写死为字面量作为唯一事实来源，不从外部读取，避免引入新的路径依赖。
+#
+# 新增数据路径必须**同时**进这里和开发仓库根 .gitignore：只改后者，第三方安装者的仓库照样会把
+# 本机观测数据提交上去（FR-024）。
 SPEC_DRIVER_GITIGNORE_ENTRIES=(
   ".specify/.spec-driver-path"
   ".specify/runs/"
   ".specify/scorecards/"
   ".specify/templates/"
+  ".specify/graph-consumption-audit.jsonl"
 )
 
 # ── 并发取舍说明（W1 修复，Codex 四轮）─────────────────────────────────────
@@ -65,9 +71,9 @@ _spec_driver_has_nul() {
 #     （-L 检测必须先于 -f 分支：dangling symlink 时 [[ ! -f ]] 为真会走创建分支，
 #      `>` 重定向会跟随 symlink 在 symlink 指向的外部路径创建文件——安全隐患）
 #   - target_file 含 NUL 字节 → 拒写，stdout: failed:0（文件不被改动）
-#   - target_file 不存在 → 创建（with_header=1 时带注释头 + 4 行条目），stdout: created:N
+#   - target_file 不存在 → 创建（with_header=1 时带注释头 + N 行固定条目），stdout: created:N
 #   - target_file 存在但缺条目 → 精确整行匹配缺失项追加到末尾，stdout: appended:N
-#   - target_file 存在且 4 条全就位 → 不写文件（mtime 不变），stdout: ready:0
+#   - target_file 存在且固定条目全就位 → 不写文件（mtime 不变），stdout: ready:0
 #   - negation 尊重：归一化视图中若存在以 '!' 开头、去掉 '!' 后等于该条目或以该条目为
 #     前缀的行（如 !.specify/templates/ 或 !.specify/templates/**），该条目跳过不追加
 #     （尊重用户显式 un-ignore 意图），跳过条目不计入 appended:N

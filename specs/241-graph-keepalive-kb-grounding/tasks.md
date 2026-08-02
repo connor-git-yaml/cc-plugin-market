@@ -29,105 +29,105 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 
 ## 批 0 — Preflight（pilot 前置制品与 ledger schema 校验，P-C2 + T-C4）
 
-- [ ] T001 preflight 校验：新增 `specs/241-graph-keepalive-kb-grounding/pilot/ledger-schema-check.mjs`（轻量 schema 校验脚本，仅做结构校验，不做 M-1 计数重算——M-1 重算是批 4 `ledger-verify.mjs` 的职责，二者不重复）。校验：(a) `pilot/predicted-impact-set.md` 已存在（冻结制品，plan §1.7 已确认非本 feature 待做项）；(b) `pilot/ledger.jsonl` 现有 11 行字段集合完整（`seq`/`tool`/`args` 等 ledger schema 字段）、`seq` 单调递增、`timestamp===null` 且 `timestampNote` 非空（P-C2 point 3 迁移条款）
+- [x] T001 preflight 校验：新增 `specs/241-graph-keepalive-kb-grounding/pilot/ledger-schema-check.mjs`（轻量 schema 校验脚本，仅做结构校验，不做 M-1 计数重算——M-1 重算是批 4 `ledger-verify.mjs` 的职责，二者不重复）。校验：(a) `pilot/predicted-impact-set.md` 已存在（冻结制品，plan §1.7 已确认非本 feature 待做项）；(b) `pilot/ledger.jsonl` 现有 11 行字段集合完整（`seq`/`tool`/`args` 等 ledger schema 字段）、`seq` 单调递增、`timestamp===null` 且 `timestampNote` 非空（P-C2 point 3 迁移条款）
   验证：`node specs/241-graph-keepalive-kb-grounding/pilot/ledger-schema-check.mjs` exit 0
 
 ---
 
 ## 批 1 — B4 图消费决策（FR-001~FR-011、FR-024 审计路径部分）
 
-- [ ] T002 记录 batch1 base：`git rev-parse HEAD` 写入 `specs/241-graph-keepalive-kb-grounding/trace.md`，追加一行 `[HH:MM:SS] batch_base: batch1=<sha>`
+- [x] T002 记录 batch1 base：`git rev-parse HEAD` 写入 `specs/241-graph-keepalive-kb-grounding/trace.md`，追加一行 `[HH:MM:SS] batch_base: batch1=<sha>`
   验证：`grep 'batch_base: batch1=' specs/241-graph-keepalive-kb-grounding/trace.md` 命中恰 1 行（首次记录）
 
 ### 1.0 D8 模块迁移（分发拓扑前置，其余批 1 任务依赖它可用）
 
-- [ ] T003 [P][迁移回归测试]（T-W2 改标，非红测试）新增 `plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs`：对**当前尚未迁移**的仓根 `scripts/lib/graph-bootstrap-status.mjs` 直接执行 `write-status`/`check-freshness`/`attempt-build` 三个子命令，逐一断言产生真实副作用（而非静默 no-op）。此刻针对旧（未迁移）实现应**全绿**（对旧实现先绿，T-W2 纠正 v1"先红"的错误定性）
+- [x] T003 [P][迁移回归测试]（T-W2 改标，非红测试）新增 `plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs`：对**当前尚未迁移**的仓根 `scripts/lib/graph-bootstrap-status.mjs` 直接执行 `write-status`/`check-freshness`/`attempt-build` 三个子命令，逐一断言产生真实副作用（而非静默 no-op）。此刻针对旧（未迁移）实现应**全绿**（对旧实现先绿，T-W2 纠正 v1"先红"的错误定性）
   验证：`node --test plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs` 此刻全绿（对旧仓根实现）
 
-- [ ] T004 新增 `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs`：把仓根 `scripts/lib/graph-bootstrap-status.mjs` 逐字节搬移到此路径，只追加一段 D8 迁移说明注释，不改内部逻辑（D8 方案 A，plan §1.1/§1.2）
+- [x] T004 新增 `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs`：把仓根 `scripts/lib/graph-bootstrap-status.mjs` 逐字节搬移到此路径，只追加一段 D8 迁移说明注释，不改内部逻辑（D8 方案 A，plan §1.1/§1.2）
   验证：`diff <(git show HEAD:scripts/lib/graph-bootstrap-status.mjs) plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs` 除新增注释块外无差异
 
-- [ ] T005 改造仓根 `scripts/lib/graph-bootstrap-status.mjs` 为薄转发壳：`export * from '../../plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs'` + `invokedDirectly` argv 判断 + **逐字保留** canonical 的 `.catch`（unhandled rejection → stderr + `exitCode 1`）错误收敛（plan §1.2，P-W1 整改）
+- [x] T005 改造仓根 `scripts/lib/graph-bootstrap-status.mjs` 为薄转发壳：`export * from '../../plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs'` + `invokedDirectly` argv 判断 + **逐字保留** canonical 的 `.catch`（unhandled rejection → stderr + `exitCode 1`）错误收敛（plan §1.2，P-W1 整改）
   验证：文件内容与 plan §1.2 给出的薄壳样板逐字一致（人工比对，含 `.catch` 段）；`node --check scripts/lib/graph-bootstrap-status.mjs` 语法零错误
 
-- [ ] T006 迁移回归复跑：T004/T005 完成后，重跑 T003 的测试文件，确认对**新（已迁移）**实现依然全绿（迁移前后行为等价，T-W2 顺序：先绿旧实现 → 迁移 → 复跑仍绿；不要求人工回退制造红态）
+- [x] T006 迁移回归复跑：T004/T005 完成后，重跑 T003 的测试文件，确认对**新（已迁移）**实现依然全绿（迁移前后行为等价，T-W2 顺序：先绿旧实现 → 迁移 → 复跑仍绿；不要求人工回退制造红态）
   验证：`node --test plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs` 迁移后依然全绿
 
-- [ ] T007 改 `tests/unit/worktree-lifecycle-hook.test.ts:16,109`：`REAL_STATUS_HELPER` 常量从仓根路径改为 canonical 插件路径 `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs`（D8 代价清单，plan §1.3；**注意**：该测试用例 (b) 的 PATH 剥离场景不构成本次改动的回归证据，真实回归证据见 T003/T006，不得混淆，P-W1）
+- [x] T007 改 `tests/unit/worktree-lifecycle-hook.test.ts:16,109`：`REAL_STATUS_HELPER` 常量从仓根路径改为 canonical 插件路径 `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs`（D8 代价清单，plan §1.3；**注意**：该测试用例 (b) 的 PATH 剥离场景不构成本次改动的回归证据，真实回归证据见 T003/T006，不得混淆，P-W1）
   验证：`npx vitest run tests/unit/worktree-lifecycle-hook.test.ts` 全绿
 
 ### 1.1 决策纯函数核心（FR-001/002/003/004/004b/006）
 
-- [ ] T008 [红测试] 新增 `plugins/spec-driver/tests/graph-consumption-decision.test.mjs`：覆盖 FR-001/002/003/004/004b/006、SC-001/004/005/006。必须包含：(a) 144 组合穷举（3×3×4×2×2）逐一断言 `outcome`/`matchedRule`，无 `undefined`/throw；(b) missing 探针（`missing`+人为`fresh`→`matchedRule∈{5,6}`）与 out-of-scope 探针（`out-of-graph-scope`+`stale`+`allowed`→`matchedRule=2`且未触发刷新）两条顺序不变量；(c) 6 类 unreachable 组合的显式注释存在性（grep 断言）；(d) 刷新成功后收口规则单测（`changeClass=unknown`/`modifies-existing` 各一条，求值计数桩断言矩阵未被二次求值）；(e) 缺任一字段的 5 条 `invalid-input` 用例 + 1 条未知 freshness 字面量用例 + 1 条第六字段 `impactResult` 被忽略用例；(f) `DEGRADED_REASONS` 恰 12 项 + `CAVEAT_CODES` 恰 1 项 + 两组交集为空；(g) `annotateImpactCaveat` 三条对照（`consume-impact`+`directCallers:0`有caveat / `directCallers:3`无caveat / `consume-degraded`+`directCallers:0`不注解）；(h) 模块内无 `child_process`/`fs` import 的静态 grep 断言；(i) **SC-006 补齐**：刷新失败时按"刷新前 present"与"刷新前 missing"两态分别断言出口改写为 `consume-degraded`（present）与 `unavailable`（missing）——本文件负责这一改写逻辑本身，`graph-refresh-executor.test.mjs`（T012）只测 reason 映射，二者不重叠
+- [x] T008 [红测试] 新增 `plugins/spec-driver/tests/graph-consumption-decision.test.mjs`：覆盖 FR-001/002/003/004/004b/006、SC-001/004/005/006。必须包含：(a) 144 组合穷举（3×3×4×2×2）逐一断言 `outcome`/`matchedRule`，无 `undefined`/throw；(b) missing 探针（`missing`+人为`fresh`→`matchedRule∈{5,6}`）与 out-of-scope 探针（`out-of-graph-scope`+`stale`+`allowed`→`matchedRule=2`且未触发刷新）两条顺序不变量；(c) 6 类 unreachable 组合的显式注释存在性（grep 断言）；(d) 刷新成功后收口规则单测（`changeClass=unknown`/`modifies-existing` 各一条，求值计数桩断言矩阵未被二次求值）；(e) 缺任一字段的 5 条 `invalid-input` 用例 + 1 条未知 freshness 字面量用例 + 1 条第六字段 `impactResult` 被忽略用例；(f) `DEGRADED_REASONS` 恰 12 项 + `CAVEAT_CODES` 恰 1 项 + 两组交集为空；(g) `annotateImpactCaveat` 三条对照（`consume-impact`+`directCallers:0`有caveat / `directCallers:3`无caveat / `consume-degraded`+`directCallers:0`不注解）；(h) 模块内无 `child_process`/`fs` import 的静态 grep 断言；(i) **SC-006 补齐**：刷新失败时按"刷新前 present"与"刷新前 missing"两态分别断言出口改写为 `consume-degraded`（present）与 `unavailable`（missing）——本文件负责这一改写逻辑本身，`graph-refresh-executor.test.mjs`（T012）只测 reason 映射，二者不重叠
   验证：`node --test plugins/spec-driver/tests/graph-consumption-decision.test.mjs` 此刻应因模块不存在而失败（红）
 
-- [ ] T009 实现 `plugins/spec-driver/scripts/lib/graph-consumption-decision.mjs`：导出 `decideGraphConsumption(input)`、`annotateImpactCaveat(decision, impactResult)`、`DEGRADED_REASONS`（12值）、`CAVEAT_CODES`（1值）、`GRAPH_SCOPE_EXTENSIONS`（`.ts/.tsx/.js/.jsx`，全仓唯一一处定义，被本模块与 FR-006 判据共同 import）。矩阵按 FR-003 v2 固定顺序（additive-only → out-of-graph-scope → corrupt×policy → missing×policy → classification-unknown → stale×policy → dirty×policy → unknown-provenance → fresh 收口）实现，纯函数零 I/O
+- [x] T009 实现 `plugins/spec-driver/scripts/lib/graph-consumption-decision.mjs`：导出 `decideGraphConsumption(input)`、`annotateImpactCaveat(decision, impactResult)`、`DEGRADED_REASONS`（12值）、`CAVEAT_CODES`（1值）、`GRAPH_SCOPE_EXTENSIONS`（`.ts/.tsx/.js/.jsx`，全仓唯一一处定义，被本模块与 FR-006 判据共同 import）。矩阵按 FR-003 v2 固定顺序（additive-only → out-of-graph-scope → corrupt×policy → missing×policy → classification-unknown → stale×policy → dirty×policy → unknown-provenance → fresh 收口）实现，纯函数零 I/O
   验证：`node --test plugins/spec-driver/tests/graph-consumption-decision.test.mjs` 全绿（T008 转绿）
 
 ### 1.2 变更类别机械判定（FR-005）
 
-- [ ] T010 [P][红测试] 新增 `plugins/spec-driver/tests/git-change-classifier.test.mjs`：NUL 分隔 fixture（`\0` 字面构造，含 `M`/`A`/`??`/`R100` 三段重命名/`C75` 复制/空输入/含空格文件名/含中文与引号路径），断言分类与文件清单；另一条负例断言「若误按 ` -> ` 人读格式切分会得到错误文件清单」
+- [x] T010 [P][红测试] 新增 `plugins/spec-driver/tests/git-change-classifier.test.mjs`：NUL 分隔 fixture（`\0` 字面构造，含 `M`/`A`/`??`/`R100` 三段重命名/`C75` 复制/空输入/含空格文件名/含中文与引号路径），断言分类与文件清单；另一条负例断言「若误按 ` -> ` 人读格式切分会得到错误文件清单」
   验证：`node --test plugins/spec-driver/tests/git-change-classifier.test.mjs` 因模块不存在而失败（红）
 
-- [ ] T011 实现 `plugins/spec-driver/scripts/lib/git-change-classifier.mjs`：导出 `classifyChangeSet({ nameStatusText, porcelainText }) -> { changeClass, files }`，`--name-status -z` 与 `--porcelain -z` 双 NUL 契约解析，同构复用 `goal-loop-core.mjs::parsePreservedConfigStates` 的字段切分范式但不 import 该函数
+- [x] T011 实现 `plugins/spec-driver/scripts/lib/git-change-classifier.mjs`：导出 `classifyChangeSet({ nameStatusText, porcelainText }) -> { changeClass, files }`，`--name-status -z` 与 `--porcelain -z` 双 NUL 契约解析，同构复用 `goal-loop-core.mjs::parsePreservedConfigStates` 的字段切分范式但不 import 该函数
   验证：`node --test plugins/spec-driver/tests/git-change-classifier.test.mjs` 全绿
 
 ### 1.3 刷新执行层（FR-007）
 
-- [ ] T012 [P][红测试] 新增 `plugins/spec-driver/tests/graph-refresh-executor.test.mjs`：fake `attemptLocalGraphBuild` 注入四类失败（`spawn-error(ENOENT)`/`timeout`/`non-zero-exit`/`graph-not-queryable`）→ 断言映射到四个 `refresh-failed-*` 枚举值；本文件只测 reason 映射，出口改写（present→consume-degraded / missing→unavailable）留给 T008 的决策层单测覆盖；追加一条**不注入 fake、直接用真实 `attemptLocalGraphBuild`** 的慢集成用例，对最小临时 git fixture 项目跑真实 `graph-only` 重建
+- [x] T012 [P][红测试] 新增 `plugins/spec-driver/tests/graph-refresh-executor.test.mjs`：fake `attemptLocalGraphBuild` 注入四类失败（`spawn-error(ENOENT)`/`timeout`/`non-zero-exit`/`graph-not-queryable`）→ 断言映射到四个 `refresh-failed-*` 枚举值；本文件只测 reason 映射，出口改写（present→consume-degraded / missing→unavailable）留给 T008 的决策层单测覆盖；追加一条**不注入 fake、直接用真实 `attemptLocalGraphBuild`** 的慢集成用例，对最小临时 git fixture 项目跑真实 `graph-only` 重建
   验证：`node --test plugins/spec-driver/tests/graph-refresh-executor.test.mjs` 因模块不存在而失败（红）
 
-- [ ] T013 实现 `plugins/spec-driver/scripts/lib/graph-refresh-executor.mjs`：导出 `executeRefresh({ projectRoot, spectraBin, refreshPolicy, attemptLocalGraphBuild? })`，`attemptLocalGraphBuild` 为可选具名参数（依赖注入缝，P-W2），默认值绑定 T004 迁入的 canonical 真实实现；唯一职责是把返回结果映射到 `DEGRADED_REASONS` 的 `refresh-failed-*` 四值，不重实现任何 spawn/deadline 逻辑
+- [x] T013 实现 `plugins/spec-driver/scripts/lib/graph-refresh-executor.mjs`：导出 `executeRefresh({ projectRoot, spectraBin, refreshPolicy, attemptLocalGraphBuild? })`，`attemptLocalGraphBuild` 为可选具名参数（依赖注入缝，P-W2），默认值绑定 T004 迁入的 canonical 真实实现；唯一职责是把返回结果映射到 `DEGRADED_REASONS` 的 `refresh-failed-*` 四值，不重实现任何 spawn/deadline 逻辑
   验证：`node --test plugins/spec-driver/tests/graph-refresh-executor.test.mjs` 全绿（含真实集成用例）
 
 ### 1.4 CLI 两子命令与双事件审计模型（FR-008/009/010）——四段拆分（T-W5）
 
-- [ ] T014 [红测试] 新增 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 1：CLI 契约 + dry-run + advisory）：(a) `decide --dry-run --format json` 输出可 `JSON.parse` 且含 `outcome`/`degradedReason`/`caveats`/`inputs`/`advisory`/`matchedRule`/`decisionId` 七顶层键，图文件 SHA-256 dry-run 前后不变、审计文件零新增事件；(b) `--advisory` 下输出 `advisory:true` 且 `skip-impact` 不被当作权威结论字段写出；(c) spawn 计数桩断言单次 `decide` 调用内 `attemptLocalGraphBuild` 被调用 ≤1（EC-07 防线）；(f) `graphSourceCommit` 与注解时刻图内嵌值不匹配 → `impactStatus:"snapshot-mismatch"` 且 `caveats:[]`（该用例需先跑 annotate-caveat，实际断言并入 T016）；(g) 审计目录只读 → exit 0 + stderr warning；**SC-004 补齐**：CLI JSON 输出封闭键集合断言（无自由文本评价字段）+ 12 个 `DEGRADED_REASONS` → 固定人读模板的映射表测试（枚举→模板一一对应，可测）；**RG-006 三段静态检查**（T-C6 扩展版，显式列被审文件集合 `graph-consumption-cli.mjs`/`graph-consumption-decision.mjs`/`graph-refresh-executor.mjs`）：①产物名扫描——grep 断言这三个文件不新增写出任何 `*freshness*`/`*source-commit*` 命名的独立状态文件；②freshness 唯一依赖扫描——grep 断言 freshness 获取只经由 `checkFreshness`，不出现自读 `graph.json` 的 `sourceCommit` 字段与 HEAD 比对的裸实现；③审计路径读取扫描——grep 断言除 `annotate-caveat` 读取调用方传入的 decision JSON 文件外，不 `readFile`/`readFileSync`/`createReadStream` 审计事件流文件本身
+- [x] T014 [红测试] 新增 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 1：CLI 契约 + dry-run + advisory）：(a) `decide --dry-run --format json` 输出可 `JSON.parse` 且含 `outcome`/`degradedReason`/`caveats`/`inputs`/`advisory`/`matchedRule`/`decisionId` 七顶层键，图文件 SHA-256 dry-run 前后不变、审计文件零新增事件；(b) `--advisory` 下输出 `advisory:true` 且 `skip-impact` 不被当作权威结论字段写出；(c) spawn 计数桩断言单次 `decide` 调用内 `attemptLocalGraphBuild` 被调用 ≤1（EC-07 防线）；(f) `graphSourceCommit` 与注解时刻图内嵌值不匹配 → `impactStatus:"snapshot-mismatch"` 且 `caveats:[]`（该用例需先跑 annotate-caveat，实际断言并入 T016）；(g) 审计目录只读 → exit 0 + stderr warning；**SC-004 补齐**：CLI JSON 输出封闭键集合断言（无自由文本评价字段）+ 12 个 `DEGRADED_REASONS` → 固定人读模板的映射表测试（枚举→模板一一对应，可测）；**RG-006 三段静态检查**（T-C6 扩展版，显式列被审文件集合 `graph-consumption-cli.mjs`/`graph-consumption-decision.mjs`/`graph-refresh-executor.mjs`）：①产物名扫描——grep 断言这三个文件不新增写出任何 `*freshness*`/`*source-commit*` 命名的独立状态文件；②freshness 唯一依赖扫描——grep 断言 freshness 获取只经由 `checkFreshness`，不出现自读 `graph.json` 的 `sourceCommit` 字段与 HEAD 比对的裸实现；③审计路径读取扫描——grep 断言除 `annotate-caveat` 读取调用方传入的 decision JSON 文件外，不 `readFile`/`readFileSync`/`createReadStream` 审计事件流文件本身
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs` 因 CLI 不存在而失败（红）
 
-- [ ] T015 实现 `plugins/spec-driver/scripts/graph-consumption-cli.mjs` 的 `decide` 主链：采集五维输入 → 调 T009 纯函数 → 按需刷新 T013 → 输出决策 JSON → 非 dry-run 时无条件追加 `kind:"decision"` 审计事件（plan §1.4，P-C1 整改）
+- [x] T015 实现 `plugins/spec-driver/scripts/graph-consumption-cli.mjs` 的 `decide` 主链：采集五维输入 → 调 T009 纯函数 → 按需刷新 T013 → 输出决策 JSON → 非 dry-run 时无条件追加 `kind:"decision"` 审计事件（plan §1.4，P-C1 整改）
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 1 范围内断言）全绿
 
-- [ ] T016 [红测试] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 2：双事件审计模型 + SC-005）：(d) 按调用方合同跑两次（第一次 `allowed`、第二次 `declined`，同 `--phase`/projectRoot）→ 第二次 `refreshAttempted:false`，审计恰 2 条 `kind:"decision"` 事件；(e) `annotate-caveat` 以真实 `decide` 输出为入参追加 1 条 `kind:"caveat-annotation"` 事件且 `decisionId` 回链正确，并回填 T014 (f) 的 snapshot-mismatch 断言；**SC-005 缺口补齐**：对 `DEGRADED_REASONS` 12 值各构造一次非 dry-run `decide` 调用，逐值断言审计事件的 `degradedReason` 字段与预期一致（T-C2 明确要求的"12 个非 dry-run decision 事件逐值验证"）
+- [x] T016 [红测试] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 2：双事件审计模型 + SC-005）：(d) 按调用方合同跑两次（第一次 `allowed`、第二次 `declined`，同 `--phase`/projectRoot）→ 第二次 `refreshAttempted:false`，审计恰 2 条 `kind:"decision"` 事件；(e) `annotate-caveat` 以真实 `decide` 输出为入参追加 1 条 `kind:"caveat-annotation"` 事件且 `decisionId` 回链正确，并回填 T014 (f) 的 snapshot-mismatch 断言；**SC-005 缺口补齐**：对 `DEGRADED_REASONS` 12 值各构造一次非 dry-run `decide` 调用，逐值断言审计事件的 `degradedReason` 字段与预期一致（T-C2 明确要求的"12 个非 dry-run decision 事件逐值验证"）
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 2 范围内断言）因 `annotate-caveat` 子命令不存在而失败（红）
 
-- [ ] T017 实现 `annotate-caveat` 子命令 + 审计事件写入器（append-only JSONL writer，供 `decide` 与 `annotate-caveat` 两子命令共用同一写入路径）：快照校验（`graphSourceCommit` 比对）→ 调 `annotateImpactCaveat` → 追加 `kind:"caveat-annotation"` 事件
+- [x] T017 实现 `annotate-caveat` 子命令 + 审计事件写入器（append-only JSONL writer，供 `decide` 与 `annotate-caveat` 两子命令共用同一写入路径）：快照校验（`graphSourceCommit` 比对）→ 调 `annotateImpactCaveat` → 追加 `kind:"caveat-annotation"` 事件
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 1+2 全部范围）全绿（T014/T016 转绿）
 
-- [ ] T018 [红测试][P] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 3：SC-019 安装态）：把 `plugins/spec-driver/` 整体拷贝到仓外临时目录，从该目录跑 `decide --dry-run --format json`，断言 exit 0 + 可解析 + stderr 无 `ERR_MODULE_NOT_FOUND`/`Cannot find module`
+- [x] T018 [红测试][P] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 3：SC-019 安装态）：把 `plugins/spec-driver/` 整体拷贝到仓外临时目录，从该目录跑 `decide --dry-run --format json`，断言 exit 0 + 可解析 + stderr 无 `ERR_MODULE_NOT_FOUND`/`Cannot find module`
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 3 范围内）全绿（依赖 T015 已完成，此处验证的是导入路径不断链而非新增业务逻辑，无独立红态可强造——如实标注）
 
-- [ ] T019 [红测试][P] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 4：SC-002/003 真实刷新）：**SC-002**：在真实 `stale` 图的临时 git fixture 项目上非 dry-run 跑 `decide`（stale+allowed），断言 `refreshOk:true`、`outcome` 终态 `consume-impact`、审计恰 1 条 `decision` 事件且 `refreshDurationMs` 非空；**SC-003**：非 dry-run + additive-only fixture，断言图文件 SHA-256 全程不变
+- [x] T019 [红测试][P] 追加至 `plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（Part 4：SC-002/003 真实刷新）：**SC-002**：在真实 `stale` 图的临时 git fixture 项目上非 dry-run 跑 `decide`（stale+allowed），断言 `refreshOk:true`、`outcome` 终态 `consume-impact`、审计恰 1 条 `decision` 事件且 `refreshDurationMs` 非空；**SC-003**：非 dry-run + additive-only fixture，断言图文件 SHA-256 全程不变
   验证：`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs` 全部四段（Part 1-4）合计全绿
 
 ### 1.5 goal_loop 双合同接线（FR-011）
 
-- [ ] T020 [P][红测试] 新增 `plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs`：**新文件**，不碰 `goal-loop-core.test.mjs` 本体（RG-001 硬约束）。断言：advisory 调用输出含 `advisory:true`；允许态（`consume-impact`/刷新成功的`refresh-then-consume`）确实注入 iteration log + prompt 组装含 impact 内容；拒绝态（`consume-degraded`/`skip-impact`/`unavailable`）确实不注入 + iteration log 含对应 `degradedReason`；缺 freshness 字段的旧形态输入不抛错；authoritative 路径（DECISION2）只调用 `decide`、断言其 `decision` 事件已落盘且无回链的 `caveat-annotation` 事件，该 pending 态是设计内正确形态（P-C1 point 3）；**T-W1 追加**：`phase_start_ref` 锚点的 last-match-wins 语义断言（写入两行 `phase_start_ref: implement=` 后，读取方应取最后一条）
+- [x] T020 [P][红测试] 新增 `plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs`：**新文件**，不碰 `goal-loop-core.test.mjs` 本体（RG-001 硬约束）。断言：advisory 调用输出含 `advisory:true`；允许态（`consume-impact`/刷新成功的`refresh-then-consume`）确实注入 iteration log + prompt 组装含 impact 内容；拒绝态（`consume-degraded`/`skip-impact`/`unavailable`）确实不注入 + iteration log 含对应 `degradedReason`；缺 freshness 字段的旧形态输入不抛错；authoritative 路径（DECISION2）只调用 `decide`、断言其 `decision` 事件已落盘且无回链的 `caveat-annotation` 事件，该 pending 态是设计内正确形态（P-C1 point 3）；**T-W1 追加**：`phase_start_ref` 锚点的 last-match-wins 语义断言（写入两行 `phase_start_ref: implement=` 后，读取方应取最后一条）
   验证：`node --test plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs` 因接线未落地而失败（红）
 
-- [ ] T021 [推断已定案] SKILL.md 接线 §3.1：通用 Phase 循环（`agent_mode: single`，覆盖场景 A/B/C）— 在「构建上下文注入块」与「委派子代理执行」之间（现行 `:212-215`）新增两处判定条件均用 `phase.name`（**T-C1 修正**：orchestration.yaml 实况 implement 是 `id:"6"`、verify 是 `id:"7c"`，`phase.id === "verify"` 恒 false，改用 `phase.name === "implement"` / `phase.name === "verify"`）：①`phase.name === "implement"` 时，第 5 步委派 implement 子代理**之前**执行 `git rev-parse HEAD`，写入 `trace.md` 固定格式行 `[HH:MM:SS] phase_start_ref: implement=<sha>`；②`phase.name === "verify"` 时触发 `pre-verify authoritative` 决策调用段落，读取 `trace.md` 中最后一条 `phase_start_ref: implement=` 行作为 `--base-ref`（last-match wins，T-W1）
+- [x] T021 [推断已定案] SKILL.md 接线 §3.1：通用 Phase 循环（`agent_mode: single`，覆盖场景 A/B/C）— 在「构建上下文注入块」与「委派子代理执行」之间（现行 `:212-215`）新增两处判定条件均用 `phase.name`（**T-C1 修正**：orchestration.yaml 实况 implement 是 `id:"6"`、verify 是 `id:"7c"`，`phase.id === "verify"` 恒 false，改用 `phase.name === "implement"` / `phase.name === "verify"`）：①`phase.name === "implement"` 时，第 5 步委派 implement 子代理**之前**执行 `git rev-parse HEAD`，写入 `trace.md` 固定格式行 `[HH:MM:SS] phase_start_ref: implement=<sha>`；②`phase.name === "verify"` 时触发 `pre-verify authoritative` 决策调用段落，读取 `trace.md` 中最后一条 `phase_start_ref: implement=` 行作为 `--base-ref`（last-match wins，T-W1）
   验证：`git diff plugins/spec-driver/skills/spec-driver-feature/SKILL.md` 含上述两处新增段落（`trace.md` 记录步骤 + verify 前决策调用段落，均用 `phase.name` 而非 `phase.id` 判定）；新增一条自动化校验——`node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration feature --format json` 输出中 implement/verify 两 phase 的 `name` 字段值与 SKILL.md 散文里引用的字符串逐字一致（T-C1 要求的「读 effective orchestration 输出断言用 name 判定」）
 
-- [ ] T022 SKILL.md 接线 §3.2 位置一：goal_loop 步骤 2「注入 Spectra impact 上下文」（现行 `:379-389`）的 a. 之前插入 `pre-implement advisory` 决策段落（DECISION，出口决定是否继续 a/b 并标注 "advisory grounding"）
+- [x] T022 SKILL.md 接线 §3.2 位置一：goal_loop 步骤 2「注入 Spectra impact 上下文」（现行 `:379-389`）的 a. 之前插入 `pre-implement advisory` 决策段落（DECISION，出口决定是否继续 a/b 并标注 "advisory grounding"）
   验证：`git diff plugins/spec-driver/skills/spec-driver-feature/SKILL.md` 含该段落，人工核对与 plan §3.2 位置一逐字对齐
 
-- [ ] T023 SKILL.md 接线 §3.2 位置二：goal_loop 步骤 4「选择 verify 模式」（现行 `:403-413`）之前插入 `pre-verify authoritative` 决策段落（DECISION2，`--refresh-policy declined`——同 phase 内 advisory 已消耗过一次 `allowed` 预算），记录到 iteration log 但不注入 prompt
+- [x] T023 SKILL.md 接线 §3.2 位置二：goal_loop 步骤 4「选择 verify 模式」（现行 `:403-413`）之前插入 `pre-verify authoritative` 决策段落（DECISION2，`--refresh-policy declined`——同 phase 内 advisory 已消耗过一次 `allowed` 预算），记录到 iteration log 但不注入 prompt
   验证：`git diff plugins/spec-driver/skills/spec-driver-feature/SKILL.md` 含该段落，`node --test plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs` 全绿（T020 转绿）
 
-- [ ] T024 wrapper 再生（V-8/P-W7，与 T021/T022/T023 同批同提交）：跑 `npm run repo:sync`（或 `bash plugins/spec-driver/scripts/codex-skills.sh install`）重新生成 `plugins/spec-driver/skills-codex/spec-driver-feature/SKILL.md` 与 `.codex/skills/spec-driver-feature/SKILL.md` 两个 wrapper，与 canonical SKILL.md 改动**同一提交**内连带提交
+- [x] T024 wrapper 再生（V-8/P-W7，与 T021/T022/T023 同批同提交）：跑 `npm run repo:sync`（或 `bash plugins/spec-driver/scripts/codex-skills.sh install`）重新生成 `plugins/spec-driver/skills-codex/spec-driver-feature/SKILL.md` 与 `.codex/skills/spec-driver-feature/SKILL.md` 两个 wrapper，与 canonical SKILL.md 改动**同一提交**内连带提交
   验证：`npm run repo:check` 中 `spec-driver-wrappers:*` 族 pass；`git diff --stat` 确认两个 wrapper 文件与 canonical 一并出现在待提交改动中
 
 ### 1.6 数据路径自举（FR-024 审计路径部分）
 
-- [ ] T025 [P] 改仓库根 `.gitignore`：新增一条 `.specify/graph-consumption-audit.jsonl`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh`（**非仓根路径**，P-W6 已纠正）的自举清单，新增同一条目，两处内容一致
+- [x] T025 [P] 改仓库根 `.gitignore`：新增一条 `.specify/graph-consumption-audit.jsonl`；同步改 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh`（**非仓根路径**，P-W6 已纠正）的自举清单，新增同一条目，两处内容一致
   验证：`git check-ignore -v .specify/graph-consumption-audit.jsonl` 命中（退出码 0）
 
-- [ ] T026 [P][红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：新增 `.specify/graph-consumption-audit.jsonl` 的 `git check-ignore` 双段断言（仓内直查 + 插件拷入临时全新 git repo 跑自举脚本后再查），断言数从 4 提升到 5（批 2 再加 1 条到 6，见 T048）
+- [x] T026 [P][红测试] 改 `plugins/spec-driver/tests/ensure-gitignore.test.mjs`：新增 `.specify/graph-consumption-audit.jsonl` 的 `git check-ignore` 双段断言（仓内直查 + 插件拷入临时全新 git repo 跑自举脚本后再查），断言数从 4 提升到 5（批 2 再加 1 条到 6，见 T048）
   验证：`node --test plugins/spec-driver/tests/ensure-gitignore.test.mjs` 全绿（T025 完成后转绿）
 
 ### 1.7 批 1 门禁
 
-- [ ] T027 **批 1 门禁**：`node --test plugins/spec-driver/tests/graph-consumption-decision.test.mjs plugins/spec-driver/tests/git-change-classifier.test.mjs plugins/spec-driver/tests/graph-refresh-executor.test.mjs plugins/spec-driver/tests/graph-consumption-cli.test.mjs plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs plugins/spec-driver/tests/ensure-gitignore.test.mjs plugins/spec-driver/tests/goal-loop-core.test.mjs tests/unit/graph-bootstrap-status.test.ts plugins/spec-driver/tests/goal-loop-snapshot-rollback-integration.test.mjs` 全绿（T-C5：补齐 `graph-bootstrap-status.test.ts` 与 `goal-loop-snapshot-rollback-integration.test.mjs` 两条既有回归套件，确认本批未破坏它们）+ `npx vitest run tests/unit/worktree-lifecycle-hook.test.ts` 全绿 + `npm run build` 零错误 + `npm run repo:check` exit 0（含 `spec-driver-wrappers:*` 族）。RG 抽查（均对 `git diff <batch1-base> -- <paths>`，见 T002 锚点，T-W3）：RG-001（`goal-loop-core.test.mjs` 为 0 行改动，测试数 ≥163）；RG-002（`node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide --dry-run --format json` 对当前默认配置执行零副作用二次确认 + 检查 goal_loop 默认配置项为 disabled/opt-in，T-C2 落实为真实命令而非仅 crosswalk 声明）；RG-003（`goal-loop-core.mjs` 为空——本批未触碰该文件）；RG-004（`orchestration-schema.mjs`/`orchestration.yaml` 为空）；RG-007（`spectra graph-quality --json` 的 `overallVerdict` 为 `pass`/`pass-with-warnings`）。**continuous capture 台账同步检查**（T-C4）：`wc -l pilot/mcp-call-log.md` 的调用条目数与 `pilot/ledger.jsonl` 本批新增行数一致，且 `seq` 单调递增
+- [x] T027 **批 1 门禁**：`node --test plugins/spec-driver/tests/graph-consumption-decision.test.mjs plugins/spec-driver/tests/git-change-classifier.test.mjs plugins/spec-driver/tests/graph-refresh-executor.test.mjs plugins/spec-driver/tests/graph-consumption-cli.test.mjs plugins/spec-driver/tests/goal-loop-graph-consumption-integration.test.mjs plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs plugins/spec-driver/tests/ensure-gitignore.test.mjs plugins/spec-driver/tests/goal-loop-core.test.mjs tests/unit/graph-bootstrap-status.test.ts plugins/spec-driver/tests/goal-loop-snapshot-rollback-integration.test.mjs` 全绿（T-C5：补齐 `graph-bootstrap-status.test.ts` 与 `goal-loop-snapshot-rollback-integration.test.mjs` 两条既有回归套件，确认本批未破坏它们）+ `npx vitest run tests/unit/worktree-lifecycle-hook.test.ts` 全绿 + `npm run build` 零错误 + `npm run repo:check` exit 0（含 `spec-driver-wrappers:*` 族）。RG 抽查（均对 `git diff <batch1-base> -- <paths>`，见 T002 锚点，T-W3）：RG-001（`goal-loop-core.test.mjs` 为 0 行改动，测试数 ≥163）；RG-002（`node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide --dry-run --format json` 对当前默认配置执行零副作用二次确认 + 检查 goal_loop 默认配置项为 disabled/opt-in，T-C2 落实为真实命令而非仅 crosswalk 声明）；RG-003（`goal-loop-core.mjs` 为空——本批未触碰该文件）；RG-004（`orchestration-schema.mjs`/`orchestration.yaml` 为空）；RG-007（`spectra graph-quality --json` 的 `overallVerdict` 为 `pass`/`pass-with-warnings`）。**continuous capture 台账同步检查**（T-C4）：`wc -l pilot/mcp-call-log.md` 的调用条目数与 `pilot/ledger.jsonl` 本批新增行数一致，且 `seq` 单调递增
   验证：以上命令全部零失败，逐项截图/日志记入交付 report
 
 ---
@@ -391,6 +391,22 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 
 ---
 
+## 批 1 收尾追加任务（编排器裁决）
+
+批 1 门禁（T027）通过后，implement 报告的两条发现经编排器裁决为「补做」，编号续在 T027 之后。
+两条均按 TDD 硬序执行（先跑出真实红态 → 再实现转绿），红态证据见
+`verification/batch1-red-evidence.md`，门禁复跑摘要见 `verification/batch1-gate.md`。
+
+- [x] T027a 修 canonical 与薄壳的符号链接守卫缺陷（批 1 发现 1）：`plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs` 与仓根薄壳 `scripts/lib/graph-bootstrap-status.mjs` 的 `invokedDirectly` 原按 `path.resolve` 比对 `process.argv[1]` 与 `import.meta.url`。Node 默认解析符号链接，`import.meta.url` 已是 realpath，经软链路径调用时两者恒不相等 → `main()` 永不执行 → **exit 0 且什么都没做**（plan §1.2 警告的静默空转）。修法与 T018 在 `graph-consumption-cli.mjs` 用过的同款：两侧都过 `fs.realpathSync`，argv[1] 不可解析时优雅回退 `path.resolve`。判定逻辑收敛为 canonical 导出的 `isInvokedDirectly(moduleUrl)` 单一实现，薄壳 import 复用而非再写一份——两处各写一份正是本次同一 bug 在两边并存的成因。
+  - 红测试：`plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs` 追加 3 条（薄壳经软链目录 / canonical 经软链目录 / argv[1] 不可解析不抛错），断言只盯真实落盘副作用，不看退出码（空转恰好也是 0）
+  - 验证：`node --test plugins/spec-driver/tests/graph-bootstrap-status-shim.test.mjs`（8 → 11，全绿）；`npx vitest run tests/unit/graph-bootstrap-status.test.ts tests/unit/worktree-lifecycle-hook.test.ts`（54 全绿，零回归）
+
+- [x] T027b 补 D3 的 tasks.md 目标路径信号（批 1 发现 3 第三条）：新增纯函数模块 `plugins/spec-driver/scripts/lib/tasks-path-signal.mjs`，导出 `extractTaskPaths(tasksMarkdownText)`（任务行内路径抽取，容忍勾选态 / `[P]` 标记 / 反引号包裹 / 中文路径 / `路径::符号` 与 `路径#符号` / `:行:列` 后缀；章节号与版本号不误抽；解析不出返回 `[]`）与 `classifyFromTaskPaths(paths, fsExists)`（`fsExists` 注入以保纯函数；任一存在→`modifies-existing`，全不存在且非空→`additive-only`，空清单/未注入/探测抛错→`unknown`）。`graph-consumption-cli.mjs decide` 加可选 `--tasks-file <path>`：**仅 `--advisory` 生效**（非 advisory 传入则忽略 + stderr warning，权威判定只认 git diff 是 D3 红线），advisory 且 git 变更文件清单为空时才用该信号替代 `changeClass`，git 信号非空时 git 优先。作用域严格限于 `changeClass` 一维——`coverageScope` 仍只看 git 变更文件（tasks.md 是"打算改什么"，拿它决定要不要花一次全量重建不成立）。
+  - 保守方向约束（D3）：该信号产生的 `skip-impact` 仍带 `advisory: true` 且 `authoritativeOutcome: null`，`fallbackHint` 沿用既有 `degradedReason` → 模板映射，零新增自由文本；测试显式断言 stdout/stderr 不出现「无影响面」类权威表述
+  - 红测试：新增 `plugins/spec-driver/tests/tasks-path-signal.test.mjs`（21 条）；`graph-consumption-cli.test.mjs` Part 1 追加 7 条（advisory 三态 + git 优先 + 非 advisory 忽略并告警 + 读不到文件降级 + SC-004 封闭键集不变）
+  - 附带：`tasks-path-signal.mjs` 已并入 `graph-consumption-cli.test.mjs` 的 RG-006 被审文件集合与 SC-019 相对 import 边界清单（集合只增不减，新决策链成员不得脱离守卫）
+  - 验证：`node --test plugins/spec-driver/tests/tasks-path-signal.test.mjs`（21/21）；`node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs`（41 → 48，全绿）
+
 ## v2 相对 v1 的结构性变化（本轮修订摘要）
 
 1. **全部任务编号重排**：T001-T073（v1 为 T001-T061），新增批 0（T001）与 5 个 `batch_base` 记录任务（T002/T028/T050/T066）。
@@ -409,3 +425,37 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 ## Crosswalk 覆盖缺口自检
 
 四列化 crosswalk 覆盖全部 24 条 FR（含 1 条已确认删除的 FR-018）、20 条 SC、9 条 RG，逐项均有具体测试文件+断言描述+门禁命令三要素，未发现悬空引用或虚映射。
+
+## 批 1 Codex 整改（代码对抗审查 `task-msc6wt4l-emi1m9`）
+
+批 1 收尾后的代码对抗审查判「门禁不通过」（7 CRITICAL / 7 WARNING），裁决落在
+`review-dispositions.md` 的「Implement 批 1 — Codex 代码对抗审查整改单」。逐条按 TDD 硬序修复
+（先按审查证伪输入补红测试 → 再修绿），红态证据见 `verification/batch1-red-evidence.md` 末节，
+整改后门禁全表见 `verification/batch1-gate.md` 末节。
+
+| 编号 | 处置 | 落点 | 状态 |
+|---|---|---|---|
+| B1-C1 | availability 收紧：仅非空字符串 `sourceCommit` 判 present，缺失/空串/非字符串一律 corrupt | `graph-consumption-cli.mjs` 新增 `readVerifiedSourceCommit` | ✅ 已修（+4 红测试） |
+| B1-C2 | availability 采集入口改 `lstatSync`：仅 lstat ENOENT = missing，路径存在但不可用 = corrupt | `graph-consumption-cli.mjs::collectGraphAvailability` | ✅ 已修（+3 红测试，含真实 broken-symlink fixture） |
+| B1-C3 | 刷新成功后重读已验证产物取 G2 更新输出与 decision 事件；重读失败收口 `refresh-failed-artifact-unusable` | `graph-consumption-cli.mjs` 新增导出纯函数 `finalizeRefreshOutcome` + `runDecide` 接线 | ✅ 已修（+4 红测试，含 G1→G2→annotate 全链） |
+| B1-C4 | `annotate-caveat` 加 `--target <symbolId>`；内部归一化 `summary.directCallers ?? directCallers`；target 缺失或图外扩展一律**不注解** | `graph-consumption-decision.mjs::annotateImpactCaveat` + CLI 参数 | ✅ 已修（+7 红测试，含真实 MCP payload 形状） |
+| B1-C5 | SKILL 步骤 2 advisory 命令补 `--tasks-file`；wrapper 再生；接线测试断言**完整参数串** | `skills/spec-driver-feature/SKILL.md` + `npm run repo:sync` 再生两 wrapper | ✅ 已修（+2 红测试，其一直接校验两份 wrapper） |
+| B1-C6 | RG-006 静态门禁改为从 CLI 入口解析 import 闭包（递归、限 `plugins/spec-driver/scripts/` 子树），三段扫描作用于闭包全集；固定清单退为下限断言 | `graph-consumption-cli.test.mjs::resolveImportClosure` | ✅ 已修（门禁自身缺陷，无产品红态） |
+| B1-C7 | 抽最小纯函数 `buildImpactInjectionBlock(decision, impactSummary)`；正反两向用**同一份** impactSummary 输入断言 | `graph-consumption-decision.mjs` + goal_loop 集成测试 | ✅ 已修（+5 用例） |
+| B1-W1 | 预算键钉死 `(projectRoot, phase=implement)`；goal_loop 已在本 phase 跑过 decide → 外层 verify 4b 恒 declined | SKILL 4b / 步骤 2 / 步骤 3b 三处措辞 | ✅ 已修（+1 断言，含"歧义措辞不得并存"反向断言） |
+| B1-W2 | tasks 路径判据收紧：必须含 `/`、拒绝绝对路径与 Windows 盘符、拒绝 `..` 段；CLI 侧再做一次 projectRoot 包含性复核 | `tasks-path-signal.mjs` + CLI `classifyFromTasksFile` | ✅ 已修（+5 红测试，含正例对照防收紧过头） |
+| B1-W3 | 测试显式改写 `process.argv[1]` 为不存在路径，强制进 realpath 的 catch 分支 | `graph-bootstrap-status-shim.test.mjs` | ✅ 已修（实现本就正确，**无红态**，是覆盖缺口修补） |
+| B1-W4 | append 测试改真并发：6 个子进程同时 decide，断言行数/逐行可解析/decisionId 唯一 | `graph-consumption-cli.test.mjs` | ✅ 已修（+1 用例） |
+| B1-W5 | gitignore 文件规则吞同名目录后代 —— **按裁决不修**（Git pattern 固有残余，写入 spec 残余声明由 verify 复核） | — | ⏭ 不修（已登记） |
+| B1-W6 | 「4 条」旧口径措辞改为「固定条目 / N 条」 | `ensure-gitignore.sh` 3 处 + `ensure-gitignore.test.mjs` 5 处 | ✅ 已修（纯措辞，无行为变化） |
+| B1-W7 | 审查沙箱 EPERM 无法复核完整绿态 → 修复后在可写环境全量重跑 | 见 `verification/batch1-gate.md` 末节 | ✅ 已重跑（1272 + 54 全绿） |
+
+**本轮附带发现（如实上报，不静默绕过）**：
+
+1. **RG-004 前两轮是空转检查**：`verification/batch1-gate.md` 记录的路径
+   `plugins/spec-driver/contracts/orchestration.yaml` **不存在**（真实路径为
+   `plugins/spec-driver/config/orchestration.yaml`）。对不存在路径跑 `git diff` 恒为空，
+   故前两轮 RG-004 对 yaml 的那一半从未真正检查过。本轮已按正确路径复核，结论不变（0 行改动）。
+2. **`npm run repo:sync` 产生无关时间戳 churn**：`specs/products/**/_generated/*` 与
+   `.specify/project-context.suggestions.{md,yaml}` 的 diff 仅为 `generatedAt` 漂移，已还原，
+   还原后 `repo:check` 仍 `status=pass`。
