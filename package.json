@@ -61,7 +61,7 @@
     "codex:spec-driver:remove:global": "bash plugins/spec-driver/scripts/codex-skills.sh remove --global",
     "release:publish": "npm publish",
     "release:publish:dry": "npm publish --dry-run",
-    "prepublishOnly": "npm run release:check && npm run build && npm run repo:check && npx vitest run",
+    "prepublishOnly": "npm run release:check && npm run build && npm run repo:check && npx vitest run --maxWorkers=4",
     "postinstall": "node scripts/lifecycle-runner.cjs postinstall",
     "preuninstall": "node scripts/lifecycle-runner.cjs preuninstall"
   },
