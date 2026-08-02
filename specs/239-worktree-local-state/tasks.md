@@ -69,22 +69,22 @@ review_basis: reviews/codex-tasks-review-round1.md
 **可独立验证**：`tests/unit/sync-worktree-local-state.test.ts` 全绿（含新增/重做用例），不依赖批3的 graph provenance 改造。
 **Codex 复审结论（本版本已修复）**：原判定"不可绿"——ignored fixture 缺失、FR-002/004/012 证据不完整；本版本 T007（C3）、T008（C5）、T009（C1）、T011（C5）已分别补齐。
 
-- [ ] T007 [批2][红测试]（C3 修复）在 `tests/unit/sync-worktree-local-state.test.ts` 中扩展 `setupRepo({ worktreeInclude = ['.env.local'], gitignore = ['.env.local'] } = {})` 签名——**init commit 必须同时创建 `.gitignore`**（默认含 `.env.local`），否则后续 `not-ignored` 拒绝会让默认 manifest 条目被误判为不合规；新增动态清单红测试（C9-1）：manifest 新增一个 ignored 路径应被 copy（**该新增路径必须同步加入 fixture `.gitignore` 并先断言 `git check-ignore <path>` 成功**，再执行 sync 断言 copy 生效）；移除 `.env.local` 后不再被 copy（同时是 SC-002(b) 直接证据）
+- [x] T007 [批2][红测试]（C3 修复）在 `tests/unit/sync-worktree-local-state.test.ts` 中扩展 `setupRepo({ worktreeInclude = ['.env.local'], gitignore = ['.env.local'] } = {})` 签名——**init commit 必须同时创建 `.gitignore`**（默认含 `.env.local`），否则后续 `not-ignored` 拒绝会让默认 manifest 条目被误判为不合规；新增动态清单红测试（C9-1）：manifest 新增一个 ignored 路径应被 copy（**该新增路径必须同步加入 fixture `.gitignore` 并先断言 `git check-ignore <path>` 成功**，再执行 sync 断言 copy 生效）；移除 `.env.local` 后不再被 copy（同时是 SC-002(b) 直接证据）
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts -t "动态清单"` 此刻**失败**，失败原因为脚本仍读取硬编码 `COPY_TARGETS`（新增路径未被 copy / 移除 `.env.local` 后仍被 copy）；且用例内部对新增 manifest 路径的 `git check-ignore` 前置断言必须先行通过（若前置断言本身失败，视为 fixture 构造错误，需先修 fixture 而非当作红测试证据）
   - 依赖：T006
 
-- [ ] T008 [批2][红测试]（C5 修复，FR-002 分支补全）新增 manifest 文件缺失端到端用例：`setupRepo({ worktreeInclude: null })`（即不创建 `.worktreeinclude` 文件），断言 sync 执行后输出可见提示（如 `[worktree-sync]` 前缀日志含"未找到 .worktreeinclude"或等价文案）、其余同步步骤正常继续（`SYMLINK_TARGETS` 软链完成）、脚本 `exit 0`
+- [x] T008 [批2][红测试]（C5 修复，FR-002 分支补全）新增 manifest 文件缺失端到端用例：`setupRepo({ worktreeInclude: null })`（即不创建 `.worktreeinclude` 文件），断言 sync 执行后输出可见提示（如 `[worktree-sync]` 前缀日志含"未找到 .worktreeinclude"或等价文案）、其余同步步骤正常继续（`SYMLINK_TARGETS` 软链完成）、脚本 `exit 0`
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：此刻**失败**——脚本当前尚无 `.worktreeinclude` 缺失时的显式降级路径与提示文案（因为动态绑定尚未实现，硬编码 `COPY_TARGETS` 场景下该分支从未被触发过）
   - 依赖：T007
 
-- [ ] T009 [批2][characterization guard]（C1 修复，FR-012 二次同步覆盖 guard）新增 characterization guard：同一 fixture 连续执行两次 sync，第一次 sync 后 worktree `.env.local` 已存在，随后把**主仓** `.env.local` 内容从 `v1` 改为 `v2`，再执行第二次 sync，断言 worktree 侧 `.env.local` 内容被覆盖为 `v2`（而非保留 `v1`）——本用例**首跑即绿**（现有 `copy_path` 本就是每次覆盖语义），其作用是**锁死该语义**，防止 T012 在动态绑定改造过程中被误改成 copy-if-absent
+- [x] T009 [批2][characterization guard]（C1 修复，FR-012 二次同步覆盖 guard）新增 characterization guard：同一 fixture 连续执行两次 sync，第一次 sync 后 worktree `.env.local` 已存在，随后把**主仓** `.env.local` 内容从 `v1` 改为 `v2`，再执行第二次 sync，断言 worktree 侧 `.env.local` 内容被覆盖为 `v2`（而非保留 `v1`）——本用例**首跑即绿**（现有 `copy_path` 本就是每次覆盖语义），其作用是**锁死该语义**，防止 T012 在动态绑定改造过程中被误改成 copy-if-absent
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts -t "二次同步覆盖"` **首次运行即通过**（在改动前的现有 `copy_path` 实现下即可通过，测试文件注释需显式标注"guard: 现状已合规，非红测试"）；T012 完成后必须仍然通过（回归防线）
   - 依赖：T006
 
-- [ ] T010 [批2][红测试]（C4 重做）决策6重做后的 FR-011 逃逸矩阵，逐条修复审查指出的非因果与证据不全问题：
+- [x] T010 [批2][红测试]（C4 重做）决策6重做后的 FR-011 逃逸矩阵，逐条修复审查指出的非因果与证据不全问题：
   1. **两侧 canary 精确布置**（不按 `dirname(worktreeDir)` 想当然）：`..` 穿越类条目 `../shared-secret` 对应的 source 路径按脚本真实解析为 `$PRIMARY_ROOT/../shared-secret`，target 路径为 `$CURRENT_ROOT/../shared-secret`——**两侧都要**分别在这两个精确路径创建 canary 文件（若两路径物理重合可只建一份，但断言需覆盖两个路径变量各自解析结果都未被触碰）；绝对路径类条目在一个独立沙盒目录内的绝对路径处真实创建 canary 文件
   2. **每用例四断言齐备**：(a) stderr 出现精确 `[containment] <reason-code>: <entry>` 格式；(b) 脚本 `status === 0`；(c) 同一次 sync 中合法步骤仍完成（如 `CLAUDE.local.md` 正常软链存在）；(d) 隔离 `HOME` 沙盒（`spawnSync` 注入独立 `HOME`）内外均无非预期变化——canary 文件 mtime/内容快照在 sync 前后一致
   3. **`copy_path` 未被调用的可观察探针**：`copy_path()` 函数新增可选 `PROBE_LOG` 环境变量支持（写入 `$PROBE_LOG` 一行 `copy_path called: <source> -> <target>` 每次被调用时），测试通过设置 `PROBE_LOG` 并断言该文件中**不包含**任何与非法条目 source/target 相关的记录，证明 containment 校验确实在 `copy_path` 调用之前拦截
@@ -93,17 +93,17 @@ review_basis: reviews/codex-tasks-review-round1.md
   - 完成判据：此刻**失败**——`validate_entry()` 函数不存在，`copy_path` 尚无 `PROBE_LOG` 支持；每类非法条目在当前实现下要么被字面尝试 copy（因 source 不存在被现有"跳过"日志误判为已拦截），要么无法产出精确 reason code
   - 依赖：T007
 
-- [ ] T011 [批2][characterization guard]（C5/W7 修复）新增 FR-004 allowlist 精确性用例（断言 `SYMLINK_TARGETS` 精确等于既定 6 项 + 每项 source 存在时确实生成 symlink）+ **六个 `SYMLINK_TARGETS` 字符串逐一不出现在 `.worktreeinclude` 内容中的参数化交叉断言**（C5 补全）+ FR-005 pattern 黑名单**正反例矩阵**（W7 机械化）：对每个 pattern（`\.env`/`\bsecret\b`/`\bkey\b`（含 `id_rsa`/`\.pem`/`\.p12`/`\.pfx`）/`\btoken\b`/`\bcredential`/`\bpassword\b`/`\bauth\.json\b`）至少给出一个命中例与一个不命中例，且**必须包含** `monkey.json`、`keyboard-layout.json` 两个不误伤反例
+- [x] T011 [批2][characterization guard]（C5/W7 修复）新增 FR-004 allowlist 精确性用例（断言 `SYMLINK_TARGETS` 精确等于既定 6 项 + 每项 source 存在时确实生成 symlink）+ **六个 `SYMLINK_TARGETS` 字符串逐一不出现在 `.worktreeinclude` 内容中的参数化交叉断言**（C5 补全）+ FR-005 pattern 黑名单**正反例矩阵**（W7 机械化）：对每个 pattern（`\.env`/`\bsecret\b`/`\bkey\b`（含 `id_rsa`/`\.pem`/`\.p12`/`\.pfx`）/`\btoken\b`/`\bcredential`/`\bpassword\b`/`\bauth\.json\b`）至少给出一个命中例与一个不命中例，且**必须包含** `monkey.json`、`keyboard-layout.json` 两个不误伤反例
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：allowlist 精确性子用例与六字符串交叉断言子用例**首次运行即通过**（数组现状本就精确等于 6 项且不与 `.worktreeinclude` 内容重叠，标注为 characterization guard）；FR-005 正反例矩阵中每个 pattern 的命中例插入后判红、移除后恢复通过，`monkey.json`/`keyboard-layout.json` 全程保持不命中（通过）
   - 依赖：T006
 
-- [ ] T012 [批2][实现] 改造 `scripts/sync-worktree-local-state.sh`：(1) 删除硬编码 `COPY_TARGETS` 数组，同步主流程改为调用 `read_worktreeinclude_entries(".worktreeinclude")` 逐条动态处理，文件缺失时降级为空清单并输出可见提示（T008）；(2) 新增 `validate_entry()` 实现 8 类拒绝（统一输出格式 `[containment] <reason-code>: <entry>`）+ 1 类合法通过；`not-ignored` 子检查先探测 `git rev-parse --is-inside-work-tree`，非 git 环境降级为 `skip`（为批4沙箱测试预留）；(3) 校验失败的条目 skip 且不中断其余 sync 步骤；(4) `copy_path()` 新增 `PROBE_LOG` 环境变量支持（T010 探针需求）
+- [x] T012 [批2][实现] 改造 `scripts/sync-worktree-local-state.sh`：(1) 删除硬编码 `COPY_TARGETS` 数组，同步主流程改为调用 `read_worktreeinclude_entries(".worktreeinclude")` 逐条动态处理，文件缺失时降级为空清单并输出可见提示（T008）；(2) 新增 `validate_entry()` 实现 8 类拒绝（统一输出格式 `[containment] <reason-code>: <entry>`）+ 1 类合法通过；`not-ignored` 子检查先探测 `git rev-parse --is-inside-work-tree`，非 git 环境降级为 `skip`（为批4沙箱测试预留）；(3) 校验失败的条目 skip 且不中断其余 sync 步骤；(4) `copy_path()` 新增 `PROBE_LOG` 环境变量支持（T010 探针需求）
   - 文件：`scripts/sync-worktree-local-state.sh`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts` 中 T007、T008、T010 新增用例转绿；T009、T011 的 characterization guard 部分保持绿、T011 黑名单正反例矩阵红→绿；同文件中此前已绿的既有用例（F193 8 个 graph bootstrap 用例、`.agents` 旧软链迁移守护三场景、主工作区 no-op、幂等性）**不回归**
   - 依赖：T007, T008, T009, T010, T011
 
-- [ ] T013 [批2][回归验证] 批2 checkpoint：`tests/unit/sync-worktree-local-state.test.ts` 全绿（含批1/批2全部新增用例 + 既有回归用例）
+- [x] T013 [批2][回归验证] 批2 checkpoint：`tests/unit/sync-worktree-local-state.test.ts` 全绿（含批1/批2全部新增用例 + 既有回归用例）
   - 文件：无新增（验证性任务）
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts` 0 失败
   - 依赖：T012

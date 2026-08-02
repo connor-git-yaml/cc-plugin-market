@@ -201,13 +201,13 @@ SYMLINK_TARGETS=(
   "CLAUDE.local.md"
 )
 
-# === COPY_TARGETS：copy-on-checkout（每次 sync 从父仓库复制到 worktree）===
+# === copy 类清单：copy-on-checkout（每次 sync 从父仓库复制到 worktree）===
 # Codex CRITICAL 修订：含 secret 的文件不能用软链（worktree 误覆盖会污染父仓库）。
 # 用户在父仓库更新 .env.local 后，需要在 worktree 重跑 sync 拉取新版本。
-# - .env.local                     本地 secret (API key 等)，per-worktree 独立副本
-COPY_TARGETS=(
-  ".env.local"
-)
+#
+# Feature 239：清单由硬编码数组外化为仓库根 `.worktreeinclude`（单一事实源，Codex 桌面应用
+# 与本脚本双消费）。条目在 copy 之前必须逐条通过 validate_entry 的 containment 校验。
+WORKTREEINCLUDE_REL=".worktreeinclude"
 
 # === 不同步（per-worktree 独立）===
 # - .claude/scheduled_tasks.lock   Codex WARNING #1 修订：lock 跨 worktree 共享有
@@ -269,6 +269,13 @@ copy_path() {
   local target_path="$2"
   local label="$3"
 
+  # Feature 239：可观察探针。测试据此断言"非法条目从未走到 copy_path"——只有把调用事实
+  # 记在函数入口（早于 source 存在性检查），才能区分"被 containment 拦截"与"仅因 source
+  # 不存在而跳过"这两种在日志上难以分辨的情形。
+  if [[ -n "${PROBE_LOG:-}" ]]; then
+    printf 'copy_path called: %s -> %s\n' "$source_path" "$target_path" >> "$PROBE_LOG"
+  fi
+
   if [[ ! -e "$source_path" ]]; then
     log "跳过 ${label}: source 不存在 ($source_path)"
     return 0
@@ -287,12 +294,91 @@ copy_path() {
   log "$(action_word) ${label} (copy): $target_path <- $source_path"
 }
 
-for relative_path in "${COPY_TARGETS[@]}"; do
-  copy_path \
-    "$PRIMARY_ROOT/$relative_path" \
-    "$CURRENT_ROOT/$relative_path" \
-    "$relative_path"
-done
+# ─────────────────────────────────────────────────────────────
+# Feature 239 — containment 校验（FR-003/FR-011）
+# ─────────────────────────────────────────────────────────────
+# 输出格式固定为 `[containment] <reason-code>: <entry>`，供测试精确匹配。
+# 不复用 warn()：containment 是安全相关拒绝，即便 --quiet 也必须可见；且宽泛的
+# "跳过/警告"文案无法与"仅因 source 不存在而跳过"区分，起不到证伪作用。
+containment_reject() {
+  echo "[containment] $1: $2" >&2
+}
+
+# 非 git 环境（批 4 沙箱）无法执行 check-ignore，该子检查降级为 skip 而非把条目判红。
+GIT_IGNORE_PROBE=""
+git_ignore_check_available() {
+  if [[ -z "$GIT_IGNORE_PROBE" ]]; then
+    local inside
+    inside="$(git -C "$CURRENT_ROOT" rev-parse --is-inside-work-tree 2>/dev/null || true)"
+    if [[ "$inside" == "true" ]]; then
+      GIT_IGNORE_PROBE="true"
+    else
+      GIT_IGNORE_PROBE="false"
+      log "containment: 非 git 环境，not-ignored 子检查跳过"
+    fi
+  fi
+  [[ "$GIT_IGNORE_PROBE" == "true" ]]
+}
+
+# 8 类拒绝 + 1 类合法通过。判定顺序与 scripts/lib/worktree-local-state-core.mjs 的
+# SYNTAX_RULES 严格一致：语法类整体优先于存在性/ignored 类，其中 trailing-slash 必须
+# 在任何存在性检查之前拒绝——`.env.local/` 能通过 check-ignore，且尾斜杠会让存在性检查
+# 解析到目录本身从而绕过 not-regular-file 判定。
+validate_entry() {
+  local entry="$1"
+
+  case "$entry" in
+    /*) containment_reject "absolute-path" "$entry"; return 1 ;;
+    '!'*) containment_reject "negation-prefix" "$entry"; return 1 ;;
+    *\\*) containment_reject "escape-char" "$entry"; return 1 ;;
+    *'*'*|*'?'*|*'['*|*']'*) containment_reject "glob-char" "$entry"; return 1 ;;
+    */) containment_reject "trailing-slash" "$entry"; return 1 ;;
+  esac
+
+  case "/$entry/" in
+    */../*) containment_reject "dot-dot-segment" "$entry"; return 1 ;;
+  esac
+
+  if git_ignore_check_available; then
+    local ignore_status=0
+    git -C "$CURRENT_ROOT" check-ignore --quiet -- "$entry" || ignore_status=$?
+    # 1 = 明确未被忽略；其余非 0（128 等）= git 自身无法判定，不据此拒绝合法条目
+    if [[ "$ignore_status" == "1" ]]; then
+      containment_reject "not-ignored" "$entry"
+      return 1
+    fi
+  fi
+
+  # FR-001(c)：路径存在时必须是常规文件；不存在不违规（干净 checkout 里 ignored 文件缺席是常态）
+  local source_path="$PRIMARY_ROOT/$entry"
+  if [[ -e "$source_path" && ! -f "$source_path" ]]; then
+    containment_reject "not-regular-file" "$entry"
+    return 1
+  fi
+
+  return 0
+}
+
+# 动态读取 `.worktreeinclude` 并逐条 copy；校验失败的条目仅 skip，不中断其余同步步骤。
+copy_worktreeinclude_targets() {
+  local manifest="$CURRENT_ROOT/$WORKTREEINCLUDE_REL"
+
+  if [[ ! -f "$manifest" ]]; then
+    # 变量必须用 ${} 包裹：紧跟其后的全角括号会被 bash 当作变量名的一部分，
+    # 在 set -u 下直接报"未绑定的变量"并以 1 退出（沿用本脚本既有 ${label} 写法）。
+    warn "未找到 .worktreeinclude（${manifest}），本次跳过全部 copy 类同步；其余步骤继续。"
+    return 0
+  fi
+
+  local entry
+  while IFS= read -r entry; do
+    if validate_entry "$entry"; then
+      copy_path "$PRIMARY_ROOT/$entry" "$CURRENT_ROOT/$entry" "$entry"
+    fi
+  done < <(read_worktreeinclude_entries "$manifest")
+}
+
+copy_worktreeinclude_targets
 
 # ─────────────────────────────────────────────────────────────
 # Feature 193 — graph bootstrap（🅑 / spec FR-007~FR-009 / plan 决策 5）
