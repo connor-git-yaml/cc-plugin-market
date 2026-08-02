@@ -333,6 +333,33 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    〔预注册边界非缺陷，扩展需新一轮对抗设计〕；
    下一批：**F238 A2 wrapper 完整性 ∥ F239 B3 worktree/local 状态**〔disjoint：
    plugins/spec-driver wrapper 链+.codex vs scripts/sync-worktree+仓库根配置〕）
+  （2026-08-03 milestone 边界级整体 review〔用户指示：验收 F238/F239 + 全局架构/坏味道
+   + SuperPowers 再对比〕：
+   **A2✅ F238** ship〔9/9 wrapper 补齐 + capability sidecar + 模型字面量 grep 门禁 33→0；
+   门禁上线首日即拦住本窗 docs 违规——门禁活性实证；delegated 前缀逃逸三轮演化终态 =
+   caller 传参恒 required fail-loud〕；**B3✅ F239** ship〔.worktreeinclude 官方机制 +
+   8 类 containment 拒绝 + secret/allowlist 双防线 + graph provenance 状态文件 +
+   repo:check 第 14/15 族；spot-check：.worktreeinclude 落位 + 双族 pass〕；
+   **收官判定：M9 尚未彻底完成**——余 **A3〔hooks 合同〕/ A4〔CODEX_HOME + 一致性诊断
+   全量，F236 doctor 仅先行件〕/ B4〔条件保活，F239 显式遗留消费接线〕/ E〔KB 三薄层 +
+   grounding pilot〕** 四件 + F239 两处 MANUAL-PENDING〔T039 Codex 客户端人工验证〕；
+   **仪器化架构 review**〔graph-only 重建 + quality 门 pass + god-nodes + 行数扫描〕：
+   ① 🔴 **fix-compliance-core 回胖 1277 行**——F218 拆到 562 后被 F224-F239 门禁军备
+   竞赛喂回，拆分红利耗尽 → M10 再拆卡；② 🔴 **`spectra graph` 静默毁图陷阱仍活**
+   〔cli:197，F217 已坐实"graph 命令写 null"，误触以贫图覆盖好图〕→ M10 fix 卡
+   〔正道：该命令要么正确建图要么拒绝降级覆盖〕；③ batch-orchestrator facade 仍第一
+   枢纽〔degree 85/1763 行，F220 有意决策维持〕+ watch-list 四件全部 1100+ 未动
+   〔docs-quality-evaluator 1314 / product-ux-docs 1300 / single-spec-orchestrator 1297 /
+   parse-args 1161〕→ 显式列 M10 架构卡；
+   **SuperPowers 再对比新增两卡**〔6.1.1 已深读的未立卡项〕：④ receiving-code-review
+   式「审查反馈的技术严谨消费」——对每条审查发现先验证再整改、拒绝表演式同意，我们的
+   per-finding 处置约定升为结构化产物〔整改单：finding→验证→处置→证据〕；⑤
+   finishing-a-development-branch 式「交付收尾 ceremony」——merge/PR/放弃三选 + worktree/
+   分支清理作为受编排的收尾阶段〔5.4GB 残留 + 71 孤儿分支事故的结构化解，F239 管生命周期
+   本卡管交付礼仪〕；
+   下一批：**F240 A 轨收口〔A3+A4 合一线〕∥ F241 B/E 收口〔B4 保活接线 + E 三薄层 +
+   grounding pilot 合一线，B4 恰为 pilot 前提天然串联〕**——两线软 disjoint
+   〔hooks/codex 路径 vs goal-loop 接线+scaffold-kb〕，先 ship 先 push）
 
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
