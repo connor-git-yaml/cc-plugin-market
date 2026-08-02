@@ -34,3 +34,12 @@
 - [18:16] plan(修订): STARTED
 - [18:28] plan(修订): COMPLETED | plan.md v2（455 行）| 原子 resolveCodexModelDecision 三元组 / modelFlagMode 不暴露 caller / FR-305 stderr 落点 / synthesizeGap 五类用例 / baseline 不动 added 双 id / Slice3 改 repo:sync / FR-308 延后
 - [18:29] Phase 2 commit: plan.md + spec SC-002 措辞回流 + trace 入库
+- [18:40] tasks: COMPLETED | tasks.md（449 行 / 62 任务 / FR+SC 双映射）
+- [18:42] codex-review(tasks): STARTED
+- [18:58] codex-review(tasks): COMPLETED | 2 CRITICAL / 11 WARNING | 判定：需先修 tasks
+  - C1 调用计数与 --version 采集互斥 → 按参数分类计数（features list=1、--version=1）
+  - C2 callLLM 内部传 model 会被 proxy 判 required，生产链 delegate 不可达 → 编排器裁决：proxy 判定单一化为 model 前缀（delegated: 自描述，单一事实源=字符串本身，modelFlagMode 降为元数据，FR-305 日志移 llm-client 层）——比原设计更简，非法状态空间归零
+  - W1-W11 全采纳（T4.7 合法调用形态 / TDD 反序调整 / T2.4 拆分 / 映射修正 / 依赖补齐 / 并行组精确化 / grep 退出码 / T6.3 占位符 / T6.1 证据位置 / FR-301 与 refactor remove 补断言）
+- [19:00] tasks(修订): STARTED | 同步回流 plan §3.5 前缀判定裁决
+- [19:12] tasks(修订): COMPLETED | tasks.md v2（~66 任务：新增 T2.3b/T2.3c/T3.1b/T3.7b/T4.12b，废止 T4.11）| plan §3.5 前缀判定回流完成
+- [19:13] Phase 3 commit
