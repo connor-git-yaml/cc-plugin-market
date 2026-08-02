@@ -37,11 +37,7 @@ marketplace:
 # 属 Claude 侧调用语法的示例文本，非运行时工具依赖，Codex 按 frontmatter description 选技能、
 # 按 body 文本理解行为，可优雅降级。存证见
 # specs/213-codex-plugin-distribution/research/spectra-skill-neutrality-scan.md 第二轮扫描。
-waivers:
-  - id: "spec-driver-refactor-codex-wrapper-gap"
-    scope: "spec-driver"
-    missingSkillIds:
-      - "spec-driver-refactor"
-    description: "spec-driver-refactor 尚无 Codex wrapper（9 canonical skill 对 8 codex 适配 wrapper 的已知缺口）。补齐属 M9 轨道 A2 范围，本 feature（213/A1）不处理。"
-    tracking: "docs/design/milestone-M9-codex-trusted-live-graph.md §3 A2"
-    removalCondition: "A2 落地新增 spec-driver-refactor 的 Codex wrapper 后删除本条目"
+#
+# Feature 238（A2）：spec-driver-refactor 的 Codex wrapper 缺口已补齐（9/9 完整），
+# 原用于豁免该缺口的 waiver 条目已移除。waivers 数组当前为空，保留字段以备未来新缺口出现时使用。
+waivers: []

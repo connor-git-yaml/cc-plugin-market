@@ -18,51 +18,51 @@ plan: plan.md
 > **不可与 Slice 3 并行**：二者都会触发 `codex-skills.sh` 改动与 wrapper 重生产物链（plan C6），必须串行执行，Slice 3 在 Slice 1 完全合并后再开始。
 > Slice 1 内部可与 Slice 2（纯函数 helper，零接线）并行开发。
 
-- [ ] T1.1 [characterization/重构] `tests/unit/codex-plugin-consistency-core.test.ts` 新增共享 helper `synthesizeGap(fixtureRoot, skillId, waiverEntries)`：(a) 字符串手术从拷贝的 `wrapper-source-of-truth.yaml` 删除某一条 entry（如 `spec-driver-doc`）制造合成缺口；(b) **`rmSync` 摘除 fixture 内对应 `skills-codex/<id>` 目录**，防止目录仍在但 entry 缺失的状态不一致污染 `skill-count`/`skills-reference` 检查；(c) 按参数写入合成 waiver。用该 helper 重构五类用例：删除 waiver→`canonical-vs-codex-gap` fail 且指名合成 gap id / waiver 覆盖→pass 且 `evidence.waived` 含 `{skillId, waiverId}` / 陈旧 waiver（覆盖另一 id）→warning / 重复 waiver id→warning / `waivers[0].missingSkillIds` YAML shape 断言改为对合成 waiver 做数组 shape 校验（不再断言字面量 `'spec-driver-refactor'`）。`buildHappyFixture()` 的 `SPEC_DRIVER_CODEX_IDS` 追加至 9 项，`SPEC_DRIVER_CANONICAL_IDS` 去掉"+1"构造直接等于前者。（**标签修正（Tasks 审查轮"其他"）**：本任务验收要求全绿，不是驱动后续实现的红测试，标签由"[红-先行重构]"改为"[characterization/重构]"，避免与真正的红测试任务混淆）
+- [x] T1.1 [characterization/重构] `tests/unit/codex-plugin-consistency-core.test.ts` 新增共享 helper `synthesizeGap(fixtureRoot, skillId, waiverEntries)`：(a) 字符串手术从拷贝的 `wrapper-source-of-truth.yaml` 删除某一条 entry（如 `spec-driver-doc`）制造合成缺口；(b) **`rmSync` 摘除 fixture 内对应 `skills-codex/<id>` 目录**，防止目录仍在但 entry 缺失的状态不一致污染 `skill-count`/`skills-reference` 检查；(c) 按参数写入合成 waiver。用该 helper 重构五类用例：删除 waiver→`canonical-vs-codex-gap` fail 且指名合成 gap id / waiver 覆盖→pass 且 `evidence.waived` 含 `{skillId, waiverId}` / 陈旧 waiver（覆盖另一 id）→warning / 重复 waiver id→warning / `waivers[0].missingSkillIds` YAML shape 断言改为对合成 waiver 做数组 shape 校验（不再断言字面量 `'spec-driver-refactor'`）。`buildHappyFixture()` 的 `SPEC_DRIVER_CODEX_IDS` 追加至 9 项，`SPEC_DRIVER_CANONICAL_IDS` 去掉"+1"构造直接等于前者。（**标签修正（Tasks 审查轮"其他"）**：本任务验收要求全绿，不是驱动后续实现的红测试，标签由"[红-先行重构]"改为"[characterization/重构]"，避免与真正的红测试任务混淆）
   涉及文件：`tests/unit/codex-plugin-consistency-core.test.ts`
   验收命令：`npx vitest run tests/unit/codex-plugin-consistency-core.test.ts`（重构后应仍全绿，因为此时还未删除真实 waiver）
   关联：FR-103/104，plan T1.2/T1.3，Review C4
   [P，可与 T1.2/Slice 2 并行]
 
-- [ ] T1.2 [红-先行重构] `tests/integration/release-contract-sync.test.ts` 第 310-340 行"陈旧 waiver → warning-only exit 0"用例改用 `synthesizeGap` 等价版本（拷贝的是整棵 `plugins/spec-driver/skills-codex/` 真实目录，`rmSync` 摘除对应目录已内建在 helper 步骤中），不再依赖字符串 `original.replace('      - "spec-driver-refactor"', ...)`
+- [x] T1.2 [红-先行重构] `tests/integration/release-contract-sync.test.ts` 第 310-340 行"陈旧 waiver → warning-only exit 0"用例改用 `synthesizeGap` 等价版本（拷贝的是整棵 `plugins/spec-driver/skills-codex/` 真实目录，`rmSync` 摘除对应目录已内建在 helper 步骤中），不再依赖字符串 `original.replace('      - "spec-driver-refactor"', ...)`
   涉及文件：`tests/integration/release-contract-sync.test.ts`
   验收命令：`npx vitest run tests/integration/release-contract-sync.test.ts`
   关联：FR-103，plan T1.4，Review C4
   [P，可与 T1.1/Slice 2 并行]
 
-- [ ] T1.3 [红] `tests/integration/spec-driver-codex-skills.test.ts`：`SPEC_DRIVER_SKILLS` 数组追加 `'spec-driver-refactor'`（9 项），`.toHaveLength(8)` → `.toHaveLength(9)`；新增断言：生成的 `spec-driver-refactor` wrapper 正文含 `$spec-driver-refactor`，且**不含**字面量 `/spec-driver:spec-driver-refactor`；**（Tasks 审查轮 W11 新增）** 新增断言：`install` → `remove` 后 `.codex/skills/spec-driver-refactor/` 目录消失（补齐 remove 路径覆盖，此前仅覆盖其余 8 个 wrapper 的 remove 断言）；新增断言：该 wrapper 的 frontmatter 字段与 SHA-256 校验行为与其余 8 个 wrapper 一致（复用既有 wrapper frontmatter/SHA 校验 helper，不写平行断言逻辑）
+- [x] T1.3 [红] `tests/integration/spec-driver-codex-skills.test.ts`：`SPEC_DRIVER_SKILLS` 数组追加 `'spec-driver-refactor'`（9 项），`.toHaveLength(8)` → `.toHaveLength(9)`；新增断言：生成的 `spec-driver-refactor` wrapper 正文含 `$spec-driver-refactor`，且**不含**字面量 `/spec-driver:spec-driver-refactor`；**（Tasks 审查轮 W11 新增）** 新增断言：`install` → `remove` 后 `.codex/skills/spec-driver-refactor/` 目录消失（补齐 remove 路径覆盖，此前仅覆盖其余 8 个 wrapper 的 remove 断言）；新增断言：该 wrapper 的 frontmatter 字段与 SHA-256 校验行为与其余 8 个 wrapper 一致（复用既有 wrapper frontmatter/SHA 校验 helper，不写平行断言逻辑）
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   验收命令：`npx vitest run tests/integration/spec-driver-codex-skills.test.ts`（预期此时失败——SKILLS 数组尚未新增该项）
   关联：FR-105，plan T1.1（红列），Tasks 审查轮 W11
 
-- [ ] T1.4 [绿实现] `plugins/spec-driver/scripts/codex-skills.sh`：`SKILLS` 数组末尾追加 `"spec-driver-refactor"`；`install_all()` 追加一行显式 `write_wrapper "spec-driver-refactor" "spec-driver-refactor"`（`install_all()` 是逐行显式调用非遍历数组）；**`remove_all()` 不额外改动**（它遍历 `SKILLS` 数组做 `rm -rf`，追加后自动覆盖新 skill 移除，加调用反而会在 remove 路径意外生成 wrapper）
+- [x] T1.4 [绿实现] `plugins/spec-driver/scripts/codex-skills.sh`：`SKILLS` 数组末尾追加 `"spec-driver-refactor"`；`install_all()` 追加一行显式 `write_wrapper "spec-driver-refactor" "spec-driver-refactor"`（`install_all()` 是逐行显式调用非遍历数组）；**`remove_all()` 不额外改动**（它遍历 `SKILLS` 数组做 `rm -rf`，追加后自动覆盖新 skill 移除，加调用反而会在 remove 路径意外生成 wrapper）
   涉及文件：`plugins/spec-driver/scripts/codex-skills.sh`
   依赖：T1.3（先红后绿）
   关联：FR-101，plan T1.1（实现列），plan §3.1 Review W1
 
-- [ ] T1.5 [绿实现] `plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`：`rewriteCodexRuntimeText()` 的 per-skill slash 替换表（当前 7 条 `/spec-driver:spec-driver-{feature,implement,story,fix,resume,sync,doc}`）补第 8 条 `/spec-driver:spec-driver-refactor` → `$spec-driver-refactor`
+- [x] T1.5 [绿实现] `plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`：`rewriteCodexRuntimeText()` 的 per-skill slash 替换表（当前 7 条 `/spec-driver:spec-driver-{feature,implement,story,fix,resume,sync,doc}`）补第 8 条 `/spec-driver:spec-driver-refactor` → `$spec-driver-refactor`
   涉及文件：`plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`
   依赖：T1.3（先红后绿），与 T1.4 一起使 T1.3 转绿
   验收命令：`npm run codex:spec-driver:install && npx vitest run tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-101/205（第8条槽位新增，非 FR-205 文案改写本身——文案改写在 Slice 3），plan §3.1 Review W1
 
-- [ ] T1.6 `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml`：`codexWrappers.entries` 追加第 9 条，`id: spec-driver-refactor`，`source`/`target` 路径遵循既有命名规约
+- [x] T1.6 `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml`：`codexWrappers.entries` 追加第 9 条，`id: spec-driver-refactor`，`source`/`target` 路径遵循既有命名规约
   涉及文件：`plugins/spec-driver/contracts/wrapper-source-of-truth.yaml`
   关联：FR-102
   [P，可与 T1.3/1.4/1.5 并行——不同文件、无代码依赖]
 
-- [ ] T1.7 `contracts/codex-plugin-consistency.yaml`：删除 `waivers` 数组中 `spec-driver-refactor-codex-wrapper-gap` 整条；新增/确认断言 `waivers` 为空数组或字段不存在
+- [x] T1.7 `contracts/codex-plugin-consistency.yaml`：删除 `waivers` 数组中 `spec-driver-refactor-codex-wrapper-gap` 整条；新增/确认断言 `waivers` 为空数组或字段不存在
   涉及文件：`contracts/codex-plugin-consistency.yaml`
   依赖：T1.1/T1.2（测试基础设施须先解耦真实缺口依赖，再移除 waiver，否则先行 remove 会让 T1.1/T1.2 重构前的旧用例直接红）、T1.4/T1.5/T1.6（9/9 wrapper 齐备）
   验收命令：`! grep -q "spec-driver-refactor-codex-wrapper-gap" contracts/codex-plugin-consistency.yaml`（**Tasks 审查轮 W7 修正**：由 `grep -c ...`（预期字符串 `0`）改为 `! grep -q ...`，grep 未命中时自身 exit 1、取反后整体 exit 0，符合 shell "失败即非零退出"的验收惯用范式，避免误把字符串 `0` 当作命令输出比对的隐性心智负担）
   关联：FR-103/104，plan T1.3 步骤5
 
-- [ ] T1.8 `tests/integration/repo-maintenance-sync-check.test.ts`：本地 `SPEC_DRIVER_SKILLS` 数组（第 137-146 行，独立于 T1.3 那份）同步追加 `'spec-driver-refactor'`
+- [x] T1.8 `tests/integration/repo-maintenance-sync-check.test.ts`：本地 `SPEC_DRIVER_SKILLS` 数组（第 137-146 行，独立于 T1.3 那份）同步追加 `'spec-driver-refactor'`
   涉及文件：`tests/integration/repo-maintenance-sync-check.test.ts`
   关联：FR-106
   [P，可与 T1.6 并行]
 
-- [ ] T1.9【Slice 1 验收检查点】跑 plan §7 Slice 1 验证命令组，确认 9/9 wrapper 完整、无 waiver、无 stale-waiver 告警
+- [x] T1.9【Slice 1 验收检查点】跑 plan §7 Slice 1 验证命令组，确认 9/9 wrapper 完整、无 waiver、无 stale-waiver 告警
   验收命令：
   ```bash
   npm run codex:spec-driver:install

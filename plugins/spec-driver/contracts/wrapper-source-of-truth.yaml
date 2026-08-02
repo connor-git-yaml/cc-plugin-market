@@ -42,6 +42,9 @@ codexWrappers:
     - id: "spec-driver-doc"
       source: "plugins/spec-driver/skills/spec-driver-doc/SKILL.md"
       target: ".codex/skills/spec-driver-doc/SKILL.md"
+    - id: "spec-driver-refactor"
+      source: "plugins/spec-driver/skills/spec-driver-refactor/SKILL.md"
+      target: ".codex/skills/spec-driver-refactor/SKILL.md"
 
 claudeProjectOverrides:
   classification: "project-override"

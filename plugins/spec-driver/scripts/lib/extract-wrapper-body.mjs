@@ -64,8 +64,8 @@ function stripFrontmatter(content) {
 }
 
 /**
- * rewrite_codex_runtime_text 的 9 条 sed 替换纯 JS 等价（codex-skills.sh:80-89）。
- * 全部为全局替换（sed 的 g 标志）。逐条照搬，顺序与 shell 一致。
+ * rewrite_codex_runtime_text 的 10 条替换（Feature 238 T1.5 新增 spec-driver-refactor 一条）。
+ * 全部为全局替换。逐条照搬，顺序与生成端一致。
  */
 function rewriteCodexRuntimeText(text) {
   const replacements = [
@@ -76,6 +76,7 @@ function rewriteCodexRuntimeText(text) {
     ['/spec-driver:spec-driver-resume', '$spec-driver-resume'],
     ['/spec-driver:spec-driver-sync', '$spec-driver-sync'],
     ['/spec-driver:spec-driver-doc', '$spec-driver-doc'],
+    ['/spec-driver:spec-driver-refactor', '$spec-driver-refactor'],
     ['Claude Code 的 Task tool', 'Task tool（Codex 下按内联子代理执行）'],
     [
       '在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。',

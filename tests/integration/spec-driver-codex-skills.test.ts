@@ -16,10 +16,14 @@ import {
   statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { validateWrapperSources } from '../../plugins/spec-driver/scripts/validate-wrapper-sources.mjs';
+import { extractWrapperBody } from '../../plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs';
 
+const REPO_ROOT = resolve('.');
 const SCRIPT_PATH = resolve('plugins/spec-driver/scripts/codex-skills.sh');
 
-// Feature 213（T003）：8 个 Spec Driver Codex 适配 skill id（与 wrapper-source-of-truth.yaml entries 对齐）
+// Feature 238（T1.3）：9 个 Spec Driver Codex 适配 skill id（与 wrapper-source-of-truth.yaml entries 对齐，
+// spec-driver-refactor 的 wrapper 缺口已补齐，FR-101/105）
 const SPEC_DRIVER_SKILLS = [
   'spec-driver-constitution',
   'spec-driver-feature',
@@ -29,6 +33,7 @@ const SPEC_DRIVER_SKILLS = [
   'spec-driver-resume',
   'spec-driver-sync',
   'spec-driver-doc',
+  'spec-driver-refactor',
 ];
 
 // 真实仓库内 tracked 的 Codex 分发目录（无 flag 守护用例锚定其零变化）
@@ -150,6 +155,10 @@ describe('Spec Driver Codex skills script', () => {
         join(tempDir, '.codex', 'skills', 'spec-driver-constitution', 'SKILL.md'),
       ),
     ).toBe(true);
+    // Feature 238（T1.3/FR-105）：spec-driver-refactor 的 Codex wrapper 与其余 8 个路径完全一致
+    expect(
+      existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-refactor', 'SKILL.md')),
+    ).toBe(true);
 
     const storyWrapper = readFileSync(
       join(tempDir, '.codex', 'skills', 'spec-driver-story', 'SKILL.md'),
@@ -197,11 +206,38 @@ describe('Spec Driver Codex skills script', () => {
     expect(constitutionWrapper).toContain('$spec-driver-constitution [原则更新说明]');
     expect(constitutionWrapper).toContain('.specify/memory/constitution.md');
 
+    // Feature 238（T1.3/FR-101/105）：refactor wrapper 正文命令别名替换与其余 8 个路径完全一致。
+    // 断言对象是 extractWrapperBody 产出的"正文"（不含 Codex Runtime Adapter 说明段——
+    // 该段固定文案 `命令别名：正文中的 /spec-driver:X 在 Codex 中等价于 $Y` 出于文档目的
+    // 必然同时含两种记号，不属于替换范围，与 wrapper-sha256.test.ts 的既有断言口径一致）
+    const refactorSourcePath = join(
+      REPO_ROOT,
+      'plugins',
+      'spec-driver',
+      'skills',
+      'spec-driver-refactor',
+      'SKILL.md',
+    );
+    const refactorBody = extractWrapperBody(refactorSourcePath);
+    expect(refactorBody).toContain('$spec-driver-refactor');
+    expect(refactorBody).not.toContain('/spec-driver:spec-driver-refactor');
+
+    const refactorWrapper = readFileSync(
+      join(tempDir, '.codex', 'skills', 'spec-driver-refactor', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(refactorWrapper).toContain('$spec-driver-refactor');
+
     const remove = runScript(['remove'], { cwd: tempDir });
     expect(remove.exitCode).toBe(0);
     expect(remove.stdout).toContain('已移除');
     expect(
       existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-feature')),
+    ).toBe(false);
+    // Feature 238（Tasks 审查轮 W11）：补齐 spec-driver-refactor 的 remove 路径覆盖
+    // （此前仅覆盖其余 8 个 wrapper 的 remove 断言，该 skill 从未被验证过会被 remove 清理）
+    expect(
+      existsSync(join(tempDir, '.codex', 'skills', 'spec-driver-refactor')),
     ).toBe(false);
   });
 
@@ -259,7 +295,7 @@ describe('Spec Driver Codex skills script', () => {
 
   // Feature 213 T003：opt-in 双写机制（一红两绿）
   describe('Feature 213 — --sync-plugin-distribution opt-in 双写', () => {
-    it('[红] install --sync-plugin-distribution 生成 skills-codex/ 8 目录且与 .codex/skills 字节相同', () => {
+    it('[红] install --sync-plugin-distribution 生成 skills-codex/ 9 目录且与 .codex/skills 字节相同', () => {
       const fixtureScript = copyPluginFixture(tempDir);
       const install = runFixtureScript(
         fixtureScript,
@@ -273,7 +309,7 @@ describe('Spec Driver Codex skills script', () => {
       const codexDir = join(tempDir, '.codex', 'skills');
       expect(existsSync(distDir)).toBe(true);
       expect(readdirSync(distDir).filter((n) => statSync(join(distDir, n)).isDirectory()).sort())
-        .toHaveLength(8);
+        .toHaveLength(9);
       for (const skill of SPEC_DRIVER_SKILLS) {
         const distFile = join(distDir, skill, 'SKILL.md');
         const codexFile = join(codexDir, skill, 'SKILL.md');
@@ -319,6 +355,48 @@ describe('Spec Driver Codex skills script', () => {
       expect(existsSync(sentinel)).toBe(true);
       expect(readFileSync(sentinel, 'utf-8')).toBe('SENTINEL');
       expect(snapshotDir(REPO_SKILLS_CODEX)).toBe(repoBefore);
+    });
+  });
+
+  // Feature 238（T1.3/Tasks 审查轮 W11）：spec-driver-refactor 的 frontmatter/SHA 一致性行为
+  // 与其余 8 个 wrapper 完全一致——复用既有 validateWrapperSources helper（wrapper-sha256.test.ts
+  // 已用手法），不写平行断言逻辑。
+  describe('Feature 238 — refactor wrapper frontmatter/SHA 校验与其余 8 个一致', () => {
+    it('install 后 validateWrapperSources：9 个 wrapper（含 spec-driver-refactor）markers + sha256 全部 pass', () => {
+      const projectRoot = mkdtempSync(join(tmpdir(), 'spec-driver-codex-wrapper-sha-'));
+      try {
+        mkdirSync(join(projectRoot, 'plugins'), { recursive: true });
+        cpSync(join(REPO_ROOT, 'plugins', 'spec-driver'), join(projectRoot, 'plugins', 'spec-driver'), {
+          recursive: true,
+        });
+        cpSync(join(REPO_ROOT, '.claude-plugin'), join(projectRoot, '.claude-plugin'), { recursive: true });
+
+        execFileSync(
+          'bash',
+          [join(projectRoot, 'plugins', 'spec-driver', 'scripts', 'codex-skills.sh'), 'install'],
+          {
+            cwd: projectRoot,
+            encoding: 'utf-8',
+            timeout: 30_000,
+            env: { ...process.env, CODEX_SKILL_PROJECT_ROOT: projectRoot },
+          },
+        );
+
+        const result = validateWrapperSources({ projectRoot }) as {
+          status: string;
+          checks: Array<{ id: string; status: string; evidence: Record<string, unknown> }>;
+        };
+        expect(result.status).toBe('pass');
+        const markers = result.checks.find((c) => c.id === 'codex-wrapper-markers');
+        expect(markers?.status).toBe('pass');
+        // checkedCount === 9 机械验证 refactor 与其余 8 个一并被同一套 marker/sha256 校验覆盖，
+        // 不存在只覆盖 8 个的验证盲区
+        expect((markers?.evidence as { checkedCount: number }).checkedCount).toBe(9);
+        expect((markers?.evidence as { missingFiles: string[] }).missingFiles).toEqual([]);
+        expect((markers?.evidence as { shaMismatches: unknown[] }).shaMismatches).toEqual([]);
+      } finally {
+        rmSync(projectRoot, { recursive: true, force: true });
+      }
     });
   });
 });

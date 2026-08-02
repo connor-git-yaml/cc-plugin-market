@@ -43,3 +43,7 @@
 - [19:00] tasks(修订): STARTED | 同步回流 plan §3.5 前缀判定裁决
 - [19:12] tasks(修订): COMPLETED | tasks.md v2（~66 任务：新增 T2.3b/T2.3c/T3.1b/T3.7b/T4.12b，废止 T4.11）| plan §3.5 前缀判定回流完成
 - [19:13] Phase 3 commit
+- [19:20] implement Slice 2: COMPLETED | detect-codex-capability.mjs + 25 单测全绿 + build 零错误 | 真机验证 native/0.144.6 双模式输出正确
+- [19:35] implement Slice 1: COMPLETED | 9 任务全绿 / 37 tests / waiver 删除 / synthesizeGap 五类用例 | 偏差 2 处合理（断言口径对齐 extractWrapperBody、注释措辞规避 grep）
+- [19:37] 合并态验证: 5 文件 62 tests 全绿 | src.spec.md 零改动 | _generated 再生为 repo:sync 合法跟随
+- [19:38] Slice 1+2 commit

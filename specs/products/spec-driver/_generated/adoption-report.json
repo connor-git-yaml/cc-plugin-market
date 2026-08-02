@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-08T18:25:08.064Z",
+  "generatedAt": "2026-08-02T10:55:43.546Z",
   "productId": "spec-driver",
-  "status": "healthy",
+  "status": "attention",
   "summary": {
-    "totalRuns": 1,
-    "activeWorkflowCount": 1,
-    "overallSuccessRate": 100,
+    "totalRuns": 4,
+    "activeWorkflowCount": 2,
+    "overallSuccessRate": 75,
     "overallFailureRate": 0,
-    "overallPausedRate": 0,
+    "overallPausedRate": 25,
     "topWorkflow": {
       "id": "spec-driver-fix",
       "title": "快速问题修复",
-      "totalRuns": 1
+      "totalRuns": 2
     }
   },
   "stats": {
-    "logFileCount": 1,
-    "validRunCount": 1,
+    "logFileCount": 2,
+    "validRunCount": 4,
     "invalidLineCount": 0,
     "workflowCount": 7,
     "runsWithPhaseDurations": 0
@@ -59,8 +59,8 @@
       "id": "spec-driver-fix",
       "title": "快速问题修复",
       "persona": "修复者",
-      "totalRuns": 1,
-      "successRuns": 1,
+      "totalRuns": 2,
+      "successRuns": 2,
       "failedRuns": 0,
       "pausedRuns": 0,
       "partialRuns": 0,
@@ -69,7 +69,7 @@
       "failureRate": 0,
       "rerunRate": 0,
       "averageDurationMs": null,
-      "lastRunAt": "2026-06-07T07:15:45.391Z"
+      "lastRunAt": "2026-07-23T05:01:34.173Z"
     },
     {
       "id": "spec-driver-implement",
@@ -107,17 +107,17 @@
       "id": "spec-driver-story",
       "title": "快速需求实现",
       "persona": "迭代开发者",
-      "totalRuns": 0,
-      "successRuns": 0,
+      "totalRuns": 2,
+      "successRuns": 1,
       "failedRuns": 0,
-      "pausedRuns": 0,
+      "pausedRuns": 1,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 0,
+      "successRate": 50,
       "failureRate": 0,
       "rerunRate": 0,
       "averageDurationMs": null,
-      "lastRunAt": null
+      "lastRunAt": "2026-08-01T06:09:06.836Z"
     },
     {
       "id": "spec-driver-sync",
@@ -138,7 +138,12 @@
   ],
   "friction": {
     "rerunHotspots": [],
-    "gatePauseHotspots": [],
+    "gatePauseHotspots": [
+      {
+        "gate": "--artifact",
+        "count": 1
+      }
+    ],
     "verificationFailureHotspots": [],
     "slowestPhases": []
   },

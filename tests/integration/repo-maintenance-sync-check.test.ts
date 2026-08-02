@@ -133,7 +133,8 @@ describe('repo maintenance sync/check', () => {
     expect(existsSync(join(projectRoot, '.codex', 'skills', 'spec-driver-implement', 'SKILL.md'))).toBe(true);
     expect(existsSync(join(projectRoot, 'skills', 'spectra', 'SKILL.md'))).toBe(true);
 
-    // Feature 213（WARNING 3）：skills-codex/ 被 repo:sync 重新生成 8 项，且与 .codex/skills 逐字节一致
+    // Feature 213（WARNING 3）/238（T1.8）：skills-codex/ 被 repo:sync 重新生成 9 项，
+    // 且与 .codex/skills 逐字节一致
     const SPEC_DRIVER_SKILLS = [
       'spec-driver-constitution',
       'spec-driver-feature',
@@ -143,6 +144,7 @@ describe('repo maintenance sync/check', () => {
       'spec-driver-resume',
       'spec-driver-sync',
       'spec-driver-doc',
+      'spec-driver-refactor',
     ];
     const codexDir = join(projectRoot, '.codex', 'skills');
     for (const skill of SPEC_DRIVER_SKILLS) {

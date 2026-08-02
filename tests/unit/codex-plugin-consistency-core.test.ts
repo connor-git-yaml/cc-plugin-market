@@ -15,6 +15,8 @@ import { validateCodexPluginConsistency } from '../../scripts/lib/codex-plugin-c
 const REPO_ROOT = resolve('.');
 
 const SPECTRA_SKILL_IDS = ['spectra', 'spectra-batch', 'spectra-diff'];
+// Feature 238：spec-driver-refactor 的 Codex wrapper 缺口已补齐（9/9 完整），
+// happy fixture 天然零缺口、零 waiver；缺口场景改用 synthesizeGap 在测试内部人工合成。
 const SPEC_DRIVER_CODEX_IDS = [
   'spec-driver-constitution',
   'spec-driver-feature',
@@ -24,9 +26,9 @@ const SPEC_DRIVER_CODEX_IDS = [
   'spec-driver-resume',
   'spec-driver-sync',
   'spec-driver-doc',
+  'spec-driver-refactor',
 ];
-// canonical 比 codex 多一个 spec-driver-refactor（已知缺口，由 waiver 覆盖）
-const SPEC_DRIVER_CANONICAL_IDS = [...SPEC_DRIVER_CODEX_IDS, 'spec-driver-refactor'];
+const SPEC_DRIVER_CANONICAL_IDS = SPEC_DRIVER_CODEX_IDS;
 
 interface CheckResult {
   status: string;
@@ -52,6 +54,59 @@ function copyRepoFile(root: string, relativePath: string) {
   const target = join(root, relativePath);
   mkdirSync(join(target, '..'), { recursive: true });
   cpSync(join(REPO_ROOT, relativePath), target);
+}
+
+interface SyntheticWaiver {
+  id: string;
+  scope: string;
+  missingSkillIds: string[];
+  description?: string;
+  tracking?: string;
+  removalCondition?: string;
+}
+
+function renderWaiverBlock(waiver: SyntheticWaiver): string {
+  const lines = [
+    `  - id: "${waiver.id}"`,
+    `    scope: "${waiver.scope}"`,
+    '    missingSkillIds:',
+    ...waiver.missingSkillIds.map((id) => `      - "${id}"`),
+    `    description: "${waiver.description ?? 'synthetic waiver for test'}"`,
+    `    tracking: "${waiver.tracking ?? 'test-only'}"`,
+    `    removalCondition: "${waiver.removalCondition ?? 'test-only, removed automatically after each test'}"`,
+  ];
+  return lines.join('\n');
+}
+
+// Feature 238（T1.1）：在 fixture 内人工合成一个 canonical→codex 缺口 + 可选 waiver 覆盖，
+// 取代此前直接依赖真实 spec-driver-refactor 缺口的做法（该缺口已随 FR-101/102 补齐）。
+// (a) 从拷贝的 wrapper-source-of-truth.yaml 删除 skillId 对应 entry（制造合成缺口）
+// (b) rmSync fixture 内对应 skills-codex/<skillId> 目录，防止"目录仍在但 entry 缺失"污染
+//     skill-count / skills-reference 检查
+// (c) 按参数把 waiverEntries 写入拷贝的 codex-plugin-consistency.yaml（空数组即"无 waiver 覆盖"）
+function synthesizeGap(fixtureRoot: string, skillId: string, waiverEntries: SyntheticWaiver[] = []) {
+  const wrapperContractPath = join(fixtureRoot, 'plugins/spec-driver/contracts/wrapper-source-of-truth.yaml');
+  const originalWrapperContract = readFileSync(wrapperContractPath, 'utf-8');
+  const entryBlockPattern = new RegExp(`\\n    - id: "${skillId}"\\n(?:      .*\\n)*`);
+  const patchedWrapperContract = originalWrapperContract.replace(entryBlockPattern, '\n');
+  if (patchedWrapperContract === originalWrapperContract) {
+    throw new Error(`synthesizeGap: 未能在 wrapper-source-of-truth.yaml 中定位 entry "${skillId}"`);
+  }
+  writeFileSync(wrapperContractPath, patchedWrapperContract, 'utf-8');
+
+  rmSync(join(fixtureRoot, 'plugins/spec-driver/skills-codex', skillId), { recursive: true, force: true });
+
+  const contractPath = join(fixtureRoot, 'contracts/codex-plugin-consistency.yaml');
+  const originalContract = readFileSync(contractPath, 'utf-8');
+  // 生产合同 FR-103 落地后不含 waivers 段；waiverEntries 为空时无需写入 waivers 键。
+  if (waiverEntries.length === 0) {
+    return;
+  }
+  const waiversYaml = ['waivers:', ...waiverEntries.map(renderWaiverBlock)].join('\n');
+  const withWaivers = originalContract.includes('\nwaivers:')
+    ? originalContract.replace(/\nwaivers:[\s\S]*$/m, `\n${waiversYaml}\n`)
+    : `${originalContract}${originalContract.endsWith('\n') ? '' : '\n'}${waiversYaml}\n`;
+  writeFileSync(contractPath, withWaivers, 'utf-8');
 }
 
 // 构造一份"全 pass"自包含 fixture：契约 + 两份 manifest + mcp + skills + marketplace。
@@ -230,47 +285,46 @@ describe('validateCodexPluginConsistency', () => {
     expect(checkById(result, 'skill-count:spec-driver-codex-dir')?.status).toBe('pass');
   });
 
-  // ---- CRITICAL #6(a)：waiver 精确删除模拟 ----
-  it('删除 waiver 段 → canonical-vs-codex-gap fail 且 error 指名 spec-driver-refactor', () => {
-    // 从 fixture 精确删除 waivers 段（保留其余契约内容）
-    const contractPath = join(root, 'contracts/codex-plugin-consistency.yaml');
-    const original = readFileSync(contractPath, 'utf-8');
-    const withoutWaivers = original.replace(/\nwaivers:[\s\S]*$/m, '\n');
-    expect(withoutWaivers).not.toContain('waivers:');
-    writeFileSync(contractPath, withoutWaivers, 'utf-8');
+  // ---- CRITICAL #6(a)：waiver 精确删除模拟（Feature 238 改为 synthesizeGap 合成缺口） ----
+  it('删除 waiver → canonical-vs-codex-gap fail 且 error 指名合成 gap id', () => {
+    // 人工摘除 spec-driver-doc 的 entry + 目录，制造合成缺口，且不写入任何 waiver
+    synthesizeGap(root, 'spec-driver-doc', []);
 
     const result = run(root);
     expect(result.status).toBe('fail');
     expect(checkById(result, 'canonical-vs-codex-gap:spec-driver')?.status).toBe('fail');
-    // error 消息必须明确指名 spec-driver-refactor（不接受用其他 skill id 冒充）
-    expect(result.errors.join('\n')).toContain('spec-driver-refactor');
+    // error 消息必须明确指名合成 gap id（不接受用其他 skill id 冒充）
+    expect(result.errors.join('\n')).toContain('spec-driver-doc');
   });
 
   it('waiver 覆盖时 canonical-vs-codex-gap pass 且 evidence 记 {skillId, waiverId} 对', () => {
+    synthesizeGap(root, 'spec-driver-doc', [
+      { id: 'synthetic-gap-waiver', scope: 'spec-driver', missingSkillIds: ['spec-driver-doc'] },
+    ]);
+
     const result = run(root);
     const check = checkById(result, 'canonical-vs-codex-gap:spec-driver');
     expect(check?.status).toBe('pass');
     // W1：evidence 记 {skillId, waiverId} 对（非纯 skill id），可回溯每个缺口的豁免来源
     const waived = (check?.evidence as { waived: Array<{ skillId: string; waiverId: string }> }).waived;
-    expect(waived).toContainEqual({ skillId: 'spec-driver-refactor', waiverId: 'spec-driver-refactor-codex-wrapper-gap' });
+    expect(waived).toContainEqual({ skillId: 'spec-driver-doc', waiverId: 'synthetic-gap-waiver' });
   });
 
   // ---- W1：waiver 审计负例 ----
   it('陈旧 waiver（覆盖的 skill 已不在 gap）→ warning，但 gap check 仍 pass', () => {
     // 场景：waiver 多覆盖了一个已被 Codex 适配（不在 gap 中）的 skill（如 spec-driver-implement）。
     // 该多余覆盖是"陈旧 waiver"典型形态（A2 补齐后忘删）——核心须报 warning 提示删除。
-    const contractPath = join(root, 'contracts/codex-plugin-consistency.yaml');
-    const original = readFileSync(contractPath, 'utf-8');
-    // 在既有 waiver 的 missingSkillIds 后追加一个非 gap skill（spec-driver-implement 已被适配）
-    const patched = original.replace(
-      '      - "spec-driver-refactor"',
-      '      - "spec-driver-refactor"\n      - "spec-driver-implement"',
-    );
-    expect(patched).not.toBe(original);
-    writeFileSync(contractPath, patched, 'utf-8');
+    synthesizeGap(root, 'spec-driver-doc', [
+      {
+        id: 'synthetic-gap-waiver',
+        scope: 'spec-driver',
+        missingSkillIds: ['spec-driver-doc', 'spec-driver-implement'],
+      },
+    ]);
 
     const result = run(root);
-    // 真实 gap（refactor）仍被覆盖 → canonical-vs-codex-gap pass；陈旧覆盖（implement）触发 warning
+    // 真实合成缺口（spec-driver-doc）仍被覆盖 → canonical-vs-codex-gap pass；
+    // 陈旧覆盖（spec-driver-implement）触发 warning
     expect(checkById(result, 'canonical-vs-codex-gap:spec-driver')?.status).toBe('pass');
     expect(result.warnings.join('\n')).toContain('陈旧 waiver');
     expect(result.warnings.join('\n')).toContain('spec-driver-implement');
@@ -278,14 +332,10 @@ describe('validateCodexPluginConsistency', () => {
   });
 
   it('重复 waiver id → warning', () => {
-    const contractPath = join(root, 'contracts/codex-plugin-consistency.yaml');
-    const original = readFileSync(contractPath, 'utf-8');
-    // 追加一条与首条同 id 的 waiver
-    writeFileSync(
-      contractPath,
-      `${original}  - id: "spec-driver-refactor-codex-wrapper-gap"\n    scope: "spec-driver"\n    missingSkillIds:\n      - "spec-driver-refactor"\n    description: "dup"\n    removalCondition: "x"\n`,
-      'utf-8',
-    );
+    synthesizeGap(root, 'spec-driver-doc', [
+      { id: 'synthetic-gap-waiver', scope: 'spec-driver', missingSkillIds: ['spec-driver-doc'] },
+      { id: 'synthetic-gap-waiver', scope: 'spec-driver', missingSkillIds: ['spec-driver-doc'] },
+    ]);
     const result = run(root);
     expect(result.warnings.join('\n')).toContain('waiver id 重复');
   });
@@ -354,11 +404,25 @@ describe('validateCodexPluginConsistency', () => {
 
   // ---- 合同可被 simple-yaml 完整解析守护 ----
   it('契约 waivers[].missingSkillIds 是数组（块级序列）而非字符串标量', async () => {
+    // Feature 238：生产合同不再含真实缺口 waiver，改为对 synthesizeGap 写入的合成 waiver
+    // 做数组 shape 校验，不再断言字面量 ['spec-driver-refactor']。
+    synthesizeGap(root, 'spec-driver-doc', [
+      { id: 'synthetic-gap-waiver', scope: 'spec-driver', missingSkillIds: ['spec-driver-doc'] },
+    ]);
     // @ts-expect-error — .mjs 无类型声明
     const { parseYamlDocument } = await import('../../plugins/spec-driver/scripts/lib/simple-yaml.mjs');
     const doc = parseYamlDocument(readFileSync(join(root, 'contracts/codex-plugin-consistency.yaml'), 'utf-8'));
     const arr = doc.waivers[0].missingSkillIds;
     expect(Array.isArray(arr)).toBe(true);
-    expect(arr).toEqual(['spec-driver-refactor']);
+    expect(arr).toEqual(['spec-driver-doc']);
+  });
+
+  // ---- Feature 238（plan §3.1 步骤5）：生产合同 waivers 为空断言 ----
+  it('生产合同 contracts/codex-plugin-consistency.yaml 的 waivers 为空数组或字段不存在', async () => {
+    // @ts-expect-error — .mjs 无类型声明
+    const { parseYamlDocument } = await import('../../plugins/spec-driver/scripts/lib/simple-yaml.mjs');
+    const doc = parseYamlDocument(readFileSync(join(REPO_ROOT, 'contracts/codex-plugin-consistency.yaml'), 'utf-8'));
+    const waivers = (doc as { waivers?: unknown[] }).waivers;
+    expect(waivers === undefined || (Array.isArray(waivers) && waivers.length === 0)).toBe(true);
   });
 });

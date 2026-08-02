@@ -75,6 +75,7 @@ SKILLS=(
   "spec-driver-resume"
   "spec-driver-sync"
   "spec-driver-doc"
+  "spec-driver-refactor"
 )
 
 ensure_source_exists() {
@@ -218,6 +219,7 @@ install_all() {
   write_wrapper "spec-driver-resume" "spec-driver-resume"
   write_wrapper "spec-driver-sync" "spec-driver-sync"
   write_wrapper "spec-driver-doc" "spec-driver-doc"
+  write_wrapper "spec-driver-refactor" "spec-driver-refactor"
 
   # opt-in：仅显式 --sync-plugin-distribution 时才重写 tracked skills-codex/，
   # 避免测试套件以 cwd=tempDir 反复调用真实脚本时误删/重写真实工作树内容。
