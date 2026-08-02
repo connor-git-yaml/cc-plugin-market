@@ -51,3 +51,5 @@
 - [19:56] Slice 3 commit
 - [20:12] implement Slice 4: COMPLETED | 原子 resolver + proxy 前缀判定 + FR-305 日志(llm-client) + 保守超时 | 52 tests + unit 全量 5245 回归全绿 + build 零错误 | 七类来源对照齐 / E5+E7 专项 / T4.12b 生产链 E2E
 - [20:13] Slice 4 commit
+- [20:35] implement Slice 5: COMPLETED | grep 门禁（core+CLI+repo:check 第14族）+ 文案清理 33→0 offender | 52 tests 全绿 | 偏差：模板整段 model_compat 注释化（aliases.claude 同段字面量，T5.3 事实源指引）
+- [20:36] Slice 5 commit

@@ -330,7 +330,7 @@ node "$PLUGIN_DIR/scripts/record-workflow-run.mjs" --project-root "{project_root
 
 模型名在 Task 调度前按 run 模式的“运行时兼容归一化”执行一次转换：
 - `model_compat.runtime` 决定按 `claude` 或 `codex` 映射（`auto` 为默认）
-- Codex 下默认把 `opus/sonnet/haiku` 映射到 `gpt-5.4`，并使用 `codex_thinking` 选择思考等级（`medium|high|xhigh`）
+- Codex 下默认把 `opus/sonnet/haiku` 归一化到 `model_compat.defaults.codex`（或更细粒度的 `model_compat.aliases.codex`）配置的模型；未显式配置时由 Codex CLI 自身决定当前默认模型，并使用 `codex_thinking` 选择思考等级（`medium|high|xhigh`）
 - 若映射后模型不可用，回退到 `model_compat.defaults.{runtime}` 并记录 `[模型回退]`
 
 配置文件路径: `$PLUGIN_DIR/templates/spec-driver.config-template.yaml`（模板）或项目根目录 `spec-driver.config.yaml`（用户配置）。

@@ -1,7 +1,11 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '../..');
 import {
   resolveCodexExecutionConfig,
   resolveReverseSpecModel,
@@ -350,6 +354,19 @@ model_compat:
 
       expect(result.modelFlagMode).toBe('required');
       expect(result.model).toBe('gpt-5.6-sol');
+    });
+
+    it('T5.9 模板默认态（未取消注释）不会意外触发 required——resolveCodexExecutionConfig 仍为 delegate（FR-302 W7）', () => {
+      const templateContent = readFileSync(
+        join(REPO_ROOT, 'plugins/spec-driver/templates/spec-driver.config-template.yaml'),
+        'utf-8',
+      );
+      writeConfig(tempDir, templateContent);
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('delegate');
+      expect(result.model.startsWith('delegated:')).toBe(true);
     });
   });
 });

@@ -667,5 +667,5 @@ B) /spec-driver:spec-driver-story <需求描述>     # 需求已较清晰，但�
 
 - 优先级：`--preset` → `agents.{agent_id}.model`（仅显式配置时生效）→ preset 默认值
 - 兼容归一化：按 `model_compat.runtime` 解析当前运行时（auto/claude/codex）
-- Codex 下默认将 `opus/sonnet/haiku` 映射到 `gpt-5.4`，并通过 `codex_thinking.level_map` 选择 `medium|high|xhigh` 思考等级
+- Codex 下默认将 `opus/sonnet/haiku` 归一化到 `model_compat.defaults.codex`（或更细粒度的 `model_compat.aliases.codex`）配置的模型；未显式配置时由 Codex CLI 自身决定当前默认模型，并通过 `codex_thinking.level_map` 选择 `medium|high|xhigh` 思考等级
 - 若映射后模型不可用，回退到 `model_compat.defaults.codex` 并记录 `[模型回退]`

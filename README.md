@@ -179,7 +179,7 @@ When `spectra install` is active, Claude Code's PreToolUse hook automatically in
 - 🔬 **Parallel sub-agent dispatch** — RESEARCH_GROUP, DESIGN_PREP_GROUP, VERIFY_GROUP run in parallel; auto-fallback to serial
 - 🚦 **6 quality gates** — `GATE_RESEARCH` / `GATE_DESIGN` / `GATE_ANALYSIS` / `GATE_TASKS` / `GATE_IMPLEMENT_MID` / `GATE_VERIFY`
 - 🔧 **Per-project workflow overrides** — `.specify/orchestration-overrides.yaml` (like ESLint extends or Docker Compose override)
-- 🎯 **Multi-runtime model compat** — Same configs work in Claude (Sonnet/Opus) and Codex (gpt-5.4 + thinking levels)
+- 🎯 **Multi-runtime model compat** — Same configs work in Claude (Sonnet/Opus) and Codex (tier-mapped via model_compat.aliases.codex + thinking levels)
 - 🛡️ **Quality reviews** — `spec-review` (compliance) + `quality-review` (architecture/readability) + `verify` (build/lint/test)
 
 ### Mode selection (TL;DR)

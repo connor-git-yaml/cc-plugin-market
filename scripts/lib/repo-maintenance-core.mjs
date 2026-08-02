@@ -21,6 +21,7 @@ import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
 import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.mjs';
 import { validateGraphQuality } from './graph-quality-core.mjs';
 import { validateSpecDrift } from './spec-drift-core.mjs';
+import { validateModelLiteralGate } from './model-literal-gate-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -359,6 +360,15 @@ export async function validateRepository(projectRoot, options = {}) {
   aggregateValidation(
     'spec-drift',
     await validateSpecDriftSafely({ projectRoot: resolvedRoot, strict }),
+    warnings,
+    errors,
+    checks,
+  );
+  // Feature 238（US-3 收尾）— 第 14 个子检查族：模型版本字面量 grep 门禁（FR-310）。
+  // 对 FR-310 固定扫描清单做零依赖目录遍历 + 正则扫描，同构接线（三段式契约）。
+  aggregateValidation(
+    'model-literal-gate',
+    validateModelLiteralGate({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

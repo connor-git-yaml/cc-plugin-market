@@ -91,15 +91,18 @@ describe('repo:check 接入第 13 族后的零回归（SC-007）', () => {
     const duplicated = allIds.filter((id, i) => allIds.indexOf(id) !== i);
     expect(duplicated, `重复 check id：${duplicated.join(', ')}`).toEqual([]);
 
-    // (d) 相对基线新增的 check MUST **精确等于**第 13 族在"无 lock"场景下的唯一产出。
+    // (d) 相对基线新增的 check MUST **精确等于**第 13 族（spec-drift，"无 lock"场景下唯一
+    // 产出）+ 第 14 族（model-literal-gate，Feature 238 FR-310）的联合唯一产出。
     //
-    // ⚠️ 口径更正：不能只断言"新增项都以 spec-drift: 开头"——那样第 13 族多吐一条、
-    // 吐错一条（如 lock-integrity）或吐重复项都会照过。此处按仓库当前无
-    // `.specify/spec-drift.lock.json` 的事实，钉死唯一新增项。
-    // 该仓库若日后建锚，本断言会红并要求显式更新基线，这是有意为之。
+    // ⚠️ 口径更正：不能只断言"新增项都以 spec-drift:/model-literal-gate: 开头"——那样任一族
+    // 多吐一条、吐错一条或吐重复项都会照过。此处按仓库当前无 `.specify/spec-drift.lock.json`
+    // 的事实 + model-literal-gate 单一 check 的事实，钉死联合新增项集合。
+    // 基线（`repo-check-baseline.json`）**保持不变**（固化"接入这两族之前"的历史快照）——
+    // 若把这两族也写进基线，"新增"就会变成"零新增"，本断言反而测不出接线是否真正成功
+    // （Review C5 裁决）。该仓库若日后建锚，本断言会红并要求显式更新基线，这是有意为之。
     const baselineIds = new Set(baseline.checks.map((c) => c.id));
     const added = allIds.filter((id) => !baselineIds.has(id));
-    expect(added).toEqual(['spec-drift:anchors-status']);
+    expect(added).toEqual(['spec-drift:anchors-status', 'model-literal-gate:model-literal-scan']);
   }, 120_000);
 
   it('validateRepository 不传 options 时向后兼容（默认非 strict，不抛错）', async () => {

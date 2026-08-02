@@ -27,20 +27,18 @@ agents:
   #   model: sonnet
 
 # Cross-runtime model compatibility (Claude / Codex)
+# Replace <YOUR_CODEX_MODEL_ID> with a real model id from `~/.codex/config.toml`.
 model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5.4
-      sonnet: gpt-5.4
+      opus: <YOUR_CODEX_MODEL_ID>
+      sonnet: <YOUR_CODEX_MODEL_ID>
     claude:
-      gpt-5.4: sonnet
-      gpt-5: opus
-      gpt-5-mini: sonnet
       o3: opus
       o4-mini: sonnet
   defaults:
-    codex: gpt-5.4
+    codex: <YOUR_CODEX_MODEL_ID>
     claude: sonnet
 
 # Codex service tier
@@ -84,7 +82,7 @@ verification:
 
 > **v4.0 default model upgrade**: `balanced` preset previously mapped to Opus; since v4.0 it maps to Sonnet 4.6 (cost reduction ~5x with comparable quality for SDD scenarios). Explicit pinning preserved via `quality-first`.
 
-When running in Codex, Spec Driver keeps `opus/sonnet` semantics but maps both to `gpt-5.4`; depth is controlled by `codex_thinking` levels (`low` / `medium` / `high` / `xhigh`).
+When running in Codex, Spec Driver keeps `opus/sonnet` semantics and normalizes them to the tier configured under `model_compat.aliases.codex` (or `model_compat.defaults.codex` when no tier-specific alias is set); when neither is configured, the Codex CLI itself decides the active default model. Depth is controlled by `codex_thinking` levels (`low` / `medium` / `high` / `xhigh`).
 
 `spectra` CLI (`generate` / `batch` / `diff`) follows the same model config source:
 

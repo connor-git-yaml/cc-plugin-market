@@ -5,7 +5,8 @@
 # 快速填写指南（建议按顺序）:
 # 1) 新手只改 `preset`，其余保持默认即可运行
 # 2) 需要精细调参时再打开 `agents.<agent>.model` 覆盖
-# 3) Codex 运行时推荐固定模型为 `gpt-5.4`，通过 `codex_thinking` 调整思考等级
+# 3) Codex 运行时模型由 `model_compat.aliases.codex` tier 映射决定；未显式配置时
+#    由 Codex CLI 自身决定当前默认模型，可通过 `codex_thinking` 调整思考等级
 
 # ═══════════════════════════════════════
 # 模型预设（第一优先）
@@ -33,7 +34,7 @@ preset: balanced
 #
 # 可选值:
 # - Claude 逻辑名（推荐，跨端可移植）: opus | sonnet | haiku
-# - 运行时原生模型名（高级）: 例如 gpt-5.4
+# - 运行时原生模型名（高级，需替换为真实模型 ID）: 例如 <YOUR_CODEX_MODEL_ID>
 #
 # 常见示例:
 # - plan/verify 想更稳: 改为 opus
@@ -84,26 +85,27 @@ agents:
 #   当映射后的模型不可用时，回退到该运行时默认模型
 #
 # 说明:
-# - Codex 默认统一映射到 `gpt-5.4`
+# - Codex 未显式配置 aliases/defaults 时，由 Codex CLI 自身决定当前默认模型
+#   （省略 -m/--model flag，交还 CLI 按其配置分层解析，参见 `model_compat` 运行时语义）
 # - 思考深度不靠“切模型”，而是由下方 `codex_thinking` 和 `service_tier` 控制
 #
-model_compat:
-  runtime: auto
-  aliases:
-    codex:
-      opus: gpt-5.4
-      sonnet: gpt-5.4
-      haiku: gpt-5.4
-    claude:
-      gpt-5.4: sonnet
-      gpt-5.3-codex: sonnet
-      gpt-5: opus
-      gpt-5-mini: sonnet
-      o3: opus
-      o4-mini: sonnet
-  defaults:
-    codex: gpt-5.4
-    claude: sonnet
+# 如需固定某个 tier 的 Codex 模型，取消下方注释并把 <YOUR_CODEX_MODEL_ID>
+# 替换为 `~/.codex/config.toml` 中你实际使用的模型 ID：
+#
+# model_compat:
+#   runtime: auto
+#   aliases:
+#     codex:
+#       opus: <YOUR_CODEX_MODEL_ID>
+#       sonnet: <YOUR_CODEX_MODEL_ID>
+#       haiku: <YOUR_CODEX_MODEL_ID>
+#     claude:
+#       <YOUR_CODEX_MODEL_ID>: sonnet
+#       o3: opus
+#       o4-mini: sonnet
+#   defaults:
+#     codex: <YOUR_CODEX_MODEL_ID>
+#     claude: sonnet
 
 codex:
   service_tier: fast

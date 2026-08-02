@@ -270,77 +270,77 @@ plan: plan.md
 
 > 与 Slice 4 可并行，但**非整体声明**（见"依赖与并行说明"精确子组划分）。
 
-- [ ] T5.1 [红] `tests/unit/model-literal-gate-core.test.ts`（新）：对含 `gpt-5.4`/`gpt-5.6-sol`/`gpt-5-mini` 的临时 fixture 跑 `validateModelLiteralGate` → `status='fail'`，`offenders` 精确定位到文件+行号；对 `gpt-50`/`gpt-5x`（非目标字面量）不误报
+- [x] T5.1 [红] `tests/unit/model-literal-gate-core.test.ts`（新）：对含 `gpt-5.4`/`gpt-5.6-sol`/`gpt-5-mini` 的临时 fixture 跑 `validateModelLiteralGate` → `status='fail'`，`offenders` 精确定位到文件+行号；对 `gpt-50`/`gpt-5x`（非目标字面量）不误报
   涉及文件：`tests/unit/model-literal-gate-core.test.ts`
   关联：FR-310，plan T3.1
 
-- [ ] T5.2 [绿实现] `scripts/lib/model-literal-gate-core.mjs`（新）：正则 `gpt-5(\.\d+)?(-[a-z0-9]+)*(?![0-9a-zA-Z])`（右边界 negative lookahead）+ FR-310 固定扫描清单目录遍历，返回 `{status, checks:[{id:'model-literal-scan', title, status, evidence}], warnings, errors}` 四字段合同；`scripts/check-model-literals.mjs`（新）独立 CLI 直跑入口（自身不落在扫描面内）
+- [x] T5.2 [绿实现] `scripts/lib/model-literal-gate-core.mjs`（新）：正则 `gpt-5(\.\d+)?(-[a-z0-9]+)*(?![0-9a-zA-Z])`（右边界 negative lookahead）+ FR-310 固定扫描清单目录遍历，返回 `{status, checks:[{id:'model-literal-scan', title, status, evidence}], warnings, errors}` 四字段合同；`scripts/check-model-literals.mjs`（新）独立 CLI 直跑入口（自身不落在扫描面内）
   涉及文件：`scripts/lib/model-literal-gate-core.mjs`（新）、`scripts/check-model-literals.mjs`（新）
   依赖：T5.1（先红后绿）
   验收命令：`npx vitest run tests/unit/model-literal-gate-core.test.ts`
   关联：FR-310，plan T3.1
 
-- [ ] T5.3 对本仓库 FR-302/303 清理**完成前**的真实文件跑门禁 → 记录 `status='fail'` 的精确 offender 清单（文件+行号），作为后续逐条清理的事实源（不依赖 spec/plan 里的近似行号，行号随改动漂移，以本次扫描结果为准）
+- [x] T5.3 对本仓库 FR-302/303 清理**完成前**的真实文件跑门禁 → 记录 `status='fail'` 的精确 offender 清单（文件+行号），作为后续逐条清理的事实源（不依赖 spec/plan 里的近似行号，行号随改动漂移，以本次扫描结果为准）
   验收命令：`node scripts/check-model-literals.mjs`（预期非零退出，留存输出）
   依赖：T5.2
   关联：FR-302/303，plan T3.2（W9 修正）
 
-- [ ] T5.4 `README.md`（仓库根）：`Codex (gpt-5.4 + thinking levels)` 一行简介文案改写为 `Codex (tier-mapped via model_compat.aliases.codex + thinking levels)`
+- [x] T5.4 `README.md`（仓库根）：`Codex (gpt-5.4 + thinking levels)` 一行简介文案改写为 `Codex (tier-mapped via model_compat.aliases.codex + thinking levels)`
   涉及文件：`README.md`
   依赖：T5.3（按其输出的精确锚点定位）
   关联：FR-302
   [P，可与 T5.5/5.6/5.7/5.8 并行——不同文件]
 
-- [ ] T5.5 `plugins/spec-driver/README.md`：`opus: gpt-5.4` 等 YAML 示例段改为占位符 `<YOUR_CODEX_MODEL_ID>` + 注释指向 `model_compat.aliases.codex`/`~/.codex/config.toml`；模型兼容说明段落改为 tier 语义描述
+- [x] T5.5 `plugins/spec-driver/README.md`：`opus: gpt-5.4` 等 YAML 示例段改为占位符 `<YOUR_CODEX_MODEL_ID>` + 注释指向 `model_compat.aliases.codex`/`~/.codex/config.toml`；模型兼容说明段落改为 tier 语义描述
   涉及文件：`plugins/spec-driver/README.md`
   依赖：T5.3
   关联：FR-302
   [P]
 
-- [ ] T5.6 `docs/configuration.md`：同 T5.5 处理策略（YAML 示例段 + 中英文说明段落）
+- [x] T5.6 `docs/configuration.md`：同 T5.5 处理策略（YAML 示例段 + 中英文说明段落）
   涉及文件：`docs/configuration.md`
   依赖：T5.3
   关联：FR-302
   [P]
 
-- [ ] T5.7 `plugins/spec-driver/templates/spec-driver.config-template.yaml`：**`model_compat.aliases.codex`（`opus`/`sonnet`/`haiku` 三键）与 `defaults.codex` 段整段注释化**（`#` 前缀逐行，非仅改字面量），占位符 `<YOUR_CODEX_MODEL_ID>` 只出现在注释行内；**不得**把占位符留在活动 YAML（会被 `parseSimpleYaml` 当合法字符串值读入，导致 `readRuntimeAliases`/`readRuntimeDefault` 命中不存在模型 ID，误判 `required`，与 FR-304 delegate 语义矛盾）
+- [x] T5.7 `plugins/spec-driver/templates/spec-driver.config-template.yaml`：**`model_compat.aliases.codex`（`opus`/`sonnet`/`haiku` 三键）与 `defaults.codex` 段整段注释化**（`#` 前缀逐行，非仅改字面量），占位符 `<YOUR_CODEX_MODEL_ID>` 只出现在注释行内；**不得**把占位符留在活动 YAML（会被 `parseSimpleYaml` 当合法字符串值读入，导致 `readRuntimeAliases`/`readRuntimeDefault` 命中不存在模型 ID，误判 `required`，与 FR-304 delegate 语义矛盾）
   涉及文件：`plugins/spec-driver/templates/spec-driver.config-template.yaml`
   依赖：T5.3
   关联：FR-302，plan §3.4 W7 修正（**不可遗漏**）
   [P]
 
-- [ ] T5.8 `plugins/spec-driver/skills/{implement,story,resume}/SKILL.md`（canonical 源，仅这三份，**不得**手工分别改镜像）：清理"默认将 opus/sonnet/haiku 映射到 gpt-5.4"一类文案，改写为 plan §3.3 对照示例（"归一化到 `model_compat.defaults.codex`（或更细粒度的 `model_compat.aliases.codex`）配置的模型；未显式配置时由 Codex CLI 自身决定当前默认模型"）
+- [x] T5.8 `plugins/spec-driver/skills/{implement,story,resume}/SKILL.md`（canonical 源，仅这三份，**不得**手工分别改镜像）：清理"默认将 opus/sonnet/haiku 映射到 gpt-5.4"一类文案，改写为 plan §3.3 对照示例（"归一化到 `model_compat.defaults.codex`（或更细粒度的 `model_compat.aliases.codex`）配置的模型；未显式配置时由 Codex CLI 自身决定当前默认模型"）
   涉及文件：`plugins/spec-driver/skills/implement/SKILL.md`、`plugins/spec-driver/skills/story/SKILL.md`、`plugins/spec-driver/skills/resume/SKILL.md`
   依赖：T5.3
   关联：FR-303，plan §3.3
   [P]
 
-- [ ] T5.9 [红]（**Tasks 审查轮 W2：执行顺序标注**——本任务作为 TDD 红测试，应先于 T5.7 的模板注释化实现被**编写**（红），T5.7 完成后才能转绿；文档物理位置保持不变，仅标注真实的红→绿执行时序，不重编号）`tests/unit/model-selection.test.ts`：拷贝 `spec-driver.config-template.yaml` **默认态（注释化后未取消注释）**到 tempDir 作为 `spec-driver.config.yaml` → `resolveCodexExecutionConfig({cwd: tempDir, env:{}})` → `modelFlagMode==='delegate'`，`model` 以 `'delegated:'` 开头（证明模板默认态不会意外触发 required）
+- [x] T5.9 [红]（**Tasks 审查轮 W2：执行顺序标注**——本任务作为 TDD 红测试，应先于 T5.7 的模板注释化实现被**编写**（红），T5.7 完成后才能转绿；文档物理位置保持不变，仅标注真实的红→绿执行时序，不重编号）`tests/unit/model-selection.test.ts`：拷贝 `spec-driver.config-template.yaml` **默认态（注释化后未取消注释）**到 tempDir 作为 `spec-driver.config.yaml` → `resolveCodexExecutionConfig({cwd: tempDir, env:{}})` → `modelFlagMode==='delegate'`，`model` 以 `'delegated:'` 开头（证明模板默认态不会意外触发 required）
   涉及文件：`tests/unit/model-selection.test.ts`
   依赖：T5.7（模板必须已注释化）、Slice 4 的 `resolveCodexModelDecision()` 已实现（T4.12）
   关联：FR-302，plan T3.16（W7 新增，**不可遗漏**）
 
-- [ ] T5.10 `npm run repo:sync` 重生 `.codex/skills` 与 `skills-codex` 镜像，同步 T5.8 的 FR-303 改动到两份分发镜像（**硬依赖 Slice 3 已完成**：`repo:sync` 会一并重写 tracked `skills-codex/`，若 Slice 3 的 wrapper 产物链改动尚未合并，本任务提前执行会用旧 wrapper 源覆盖，产生虚假的"已同步"状态）
+- [x] T5.10 `npm run repo:sync` 重生 `.codex/skills` 与 `skills-codex` 镜像，同步 T5.8 的 FR-303 改动到两份分发镜像（**硬依赖 Slice 3 已完成**：`repo:sync` 会一并重写 tracked `skills-codex/`，若 Slice 3 的 wrapper 产物链改动尚未合并，本任务提前执行会用旧 wrapper 源覆盖，产生虚假的"已同步"状态）
   依赖：T5.8、Slice 3 完成（T3.12）
   验收命令：`npm run repo:sync`
   关联：FR-303 双写约束
 
-- [ ] T5.11 重跑门禁扫描器确认全部文案清理生效
+- [x] T5.11 重跑门禁扫描器确认全部文案清理生效
   验收命令：`node scripts/check-model-literals.mjs`（预期 exit 0）
   依赖：T5.4~T5.7、T5.10
   关联：SC-004，plan T3.3
 
-- [ ] T5.12 [绿实现] `scripts/lib/repo-maintenance-core.mjs`：接入第 14 检查族（`model-literal-gate:model-literal-scan`），消费 T5.2 的门禁核心模块
+- [x] T5.12 [绿实现] `scripts/lib/repo-maintenance-core.mjs`：接入第 14 检查族（`model-literal-gate:model-literal-scan`），消费 T5.2 的门禁核心模块
   涉及文件：`scripts/lib/repo-maintenance-core.mjs`
   依赖：T5.2
   关联：FR-310
 
-- [ ] T5.13 [红/更新]（**Tasks 审查轮 W2：执行顺序标注**——本任务作为断言"新增项"的红/更新测试，应先于 T5.12 的接线实现被编写，T5.12 完成后转绿；文档物理位置保持不变，仅标注真实红→绿时序）`tests/integration/spec-drift-repo-check-regression.test.ts`：断言 (d) 新增项精确匹配 `['spec-drift:anchors-status', 'model-literal-gate:model-literal-scan']`（按 `aggregateValidation` 调用序）；`tests/fixtures/.../repo-check-baseline.json` **保持不变，不追加 `model-literal-gate` 条目**（该基线固化"13 族接入 spec-drift 之前"的历史快照，两项相对基线都应是"新增项"，若写入 baseline 会让断言 (d) 测不出第 14 族是否真正接线成功）
+- [x] T5.13 [红/更新]（**Tasks 审查轮 W2：执行顺序标注**——本任务作为断言"新增项"的红/更新测试，应先于 T5.12 的接线实现被编写，T5.12 完成后转绿；文档物理位置保持不变，仅标注真实红→绿时序）`tests/integration/spec-drift-repo-check-regression.test.ts`：断言 (d) 新增项精确匹配 `['spec-drift:anchors-status', 'model-literal-gate:model-literal-scan']`（按 `aggregateValidation` 调用序）；`tests/fixtures/.../repo-check-baseline.json` **保持不变，不追加 `model-literal-gate` 条目**（该基线固化"13 族接入 spec-drift 之前"的历史快照，两项相对基线都应是"新增项"，若写入 baseline 会让断言 (d) 测不出第 14 族是否真正接线成功）
   涉及文件：`tests/integration/spec-drift-repo-check-regression.test.ts`
   依赖：T5.12
   关联：FR-310，plan T3.4（Review C5，**不可遗漏**：baseline 不动 + added 双 id 断言）
 
-- [ ] T5.14【Slice 5 验收检查点】
+- [x] T5.14【Slice 5 验收检查点】
   验收命令：
   ```bash
   npm run repo:sync

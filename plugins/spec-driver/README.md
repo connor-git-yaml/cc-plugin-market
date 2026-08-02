@@ -193,11 +193,11 @@ model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
     codex:
-      opus: gpt-5.4
-      sonnet: gpt-5.4
-      haiku: gpt-5.4
+      opus: <YOUR_CODEX_MODEL_ID>
+      sonnet: <YOUR_CODEX_MODEL_ID>
+      haiku: <YOUR_CODEX_MODEL_ID>
   defaults:
-    codex: gpt-5.4
+    codex: <YOUR_CODEX_MODEL_ID>
 
 codex:
   service_tier: fast
@@ -210,7 +210,7 @@ codex_thinking:
     haiku: medium
 ```
 
-说明：在 Codex 执行时，`opus/sonnet/haiku` 语义会先映射到 `gpt-5.4`，再通过 `codex_thinking` 选择思考等级，`codex.service_tier` 用于控制服务层级。
+说明：在 Codex 执行时，`opus/sonnet/haiku` 语义会先归一化到 `model_compat.aliases.codex` 配置的 tier 模型（`<YOUR_CODEX_MODEL_ID>` 需替换为 `~/.codex/config.toml` 中你实际使用的模型 ID）；未显式配置时由 Codex CLI 自身决定当前默认模型，再通过 `codex_thinking` 选择思考等级，`codex.service_tier` 用于控制服务层级。
 
 ## fix 模式流程依从性（fix_compliance）
 
