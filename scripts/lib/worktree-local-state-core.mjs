@@ -6,7 +6,7 @@ import path from 'node:path';
 //
 // 两个消费方共用本模块的同一份纯函数（plan 决策 3/4「同一纯函数双消费」）：
 // - `tests/unit/worktreeinclude-contract.test.ts` 直接 import（开发期红绿迭代快）
-// - `scripts/lib/repo-maintenance-core.mjs::validateRepository` 聚合为第 14 族（提交前强制门禁）
+// - `scripts/lib/repo-maintenance-core.mjs::validateRepository` 聚合为第 15 族（提交前强制门禁；F238 的 model-literal-gate 先 ship 占 14）
 //
 // 零第三方依赖：只用 node 内置模块，使本模块在未 `npm install` 的全新 worktree 里也能执行。
 
@@ -211,7 +211,7 @@ export function validateWorktreeIncludeContract({ projectRoot }) {
   const manifestPath = path.join(resolvedRoot, WORKTREEINCLUDE_FILENAME);
 
   // W7：清单本身也可能异常（缺失 / 目录 / symlink / 不可读）。用 lstat 免解引用地判定，
-  // 并把读取异常收敛为**本族的结构化 fail**——第 14 族在 repo:check 里是聚合调用，
+  // 并把读取异常收敛为**本族的结构化 fail**——第 15 族在 repo:check 里是聚合调用，
   // 裸抛异常会让整份报告变成一段栈，其余 13 族的结论一并丢失。
   let manifestStats = null;
   try {
@@ -375,7 +375,7 @@ export function validateAgentsByteBudget({ projectRoot }) {
 }
 
 /**
- * 第 14 族 `worktree-local-state` 的聚合入口，供 repo:check 通过 `aggregateValidation` 调用。
+ * 第 15 族 `worktree-local-state` 的聚合入口，供 repo:check 通过 `aggregateValidation` 调用。
  *
  * @param {{ projectRoot: string }} options
  * @returns {{ status: 'pass'|'warn'|'skip'|'fail', checks: Array<object>, warnings: string[], errors: string[] }}

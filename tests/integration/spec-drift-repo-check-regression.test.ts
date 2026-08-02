@@ -1,13 +1,13 @@
 /**
  * T026（C2）：`repo:check` 接入 spec drift 第 13 检查族后的零回归守护（SC-007）。
- * F239 追记：第 14 族 `worktree-local-state` 接入后，本文件同时守护 13/14 两族的追加清单。
+ * F238/F239 追记：第 14 族 `model-literal-gate` 与第 15 族 `worktree-local-state` 接入后，本文件同时守护 13/14/15 三族的追加清单。
  *
  * 四项断言：
  * (a) F217 六个图质量指标**逐项** check id 断言（不接受"整体 exit 0"作为代理证据）；
  * (b) 既有各族的 check id 集合与 status 与 T021 基线快照逐项一致；
  * (c) check id 全局唯一；
  * (d) 相对基线的新增项**精确等于**第 13 族（无 lock 场景下唯一产出 `spec-drift:anchors-status`）
- *     与第 14 族（F239 四个 `worktree-local-state:*`）的并集。
+ *     、第 14 族（F238 `model-literal-gate:*`）与第 15 族（F239 四个 `worktree-local-state:*`）的并集。
  *
  * 基线为何是"必须显式更新"的静态 fixture：
  * 基线若改成运行时动态推导（例如"过滤掉 spec-drift: 前缀后与当前结果自比"），
@@ -61,8 +61,8 @@ const GRAPH_QUALITY_METRIC_IDS = [
  */
 const FRESHNESS_ID = 'graph-quality:freshness';
 
-describe('repo:check 接入第 13/14 族后的零回归（SC-007）', () => {
-  it('F217 六指标逐项断言 + 既有 12 族与基线逐项一致 + 第 13/14 族追加', async () => {
+describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
+  it('F217 六指标逐项断言 + 既有 12 族与基线逐项一致 + 第 13/14/15 族追加', async () => {
     const result = (await validateRepository(REPO_ROOT)) as ValidationResult;
     const byId = new Map(result.checks.map((c) => [c.id, c]));
 

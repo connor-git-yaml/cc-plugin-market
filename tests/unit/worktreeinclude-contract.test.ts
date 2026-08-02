@@ -411,7 +411,7 @@ describe('Feature 239 — AGENTS.override.md ignored 前提（FR-007/SC-005）',
   });
 });
 
-describe('Feature 239 — validateWorktreeLocalState 聚合入口（批 4 repo:check 第 14 族复用）', () => {
+describe('Feature 239 — validateWorktreeLocalState 聚合入口（批 4 repo:check 第 15 族复用）', () => {
   it('本仓库聚合结果为 pass，且同时包含两个子校验的 checks', () => {
     const result = validateWorktreeLocalState({ projectRoot: REPO_ROOT });
     expect(result.errors).toEqual([]);
