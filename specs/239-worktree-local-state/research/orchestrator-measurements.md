@@ -102,6 +102,23 @@ spectra batch --mode graph-only（全局 CLI v4.4.0，via volta）
 
 **结论**：全局 spectra CLI 自带依赖，graph-only **不需要** repo node_modules。SC-001 的 ≤60s 预算在最冷的 Codex-managed worktree 场景（无 node_modules、无主仓路径可达）下依然有 ~17× 余量，且**不需要**把 `npm ci` 计入 bootstrap 关键路径。spec 中可把「repo node_modules 非前置」从 [推断] 升级为已实测事实；唯一保留前置 = 全局 spectra CLI 可用。
 
+## M10. graph-quality 全局 CLI 可用性 +「spectra graph」误触毁图事故（plan 审查 C3 的定案依据）
+
+**验证目标**：plan 审查 C3 建议"生产路径调用 canonical freshness 实现"。逐一排查可行路径：
+
+1. `scripts/lib/graph-quality-core.mjs` 是 spawn `node dist/cli/index.js graph-quality --json` 的薄壳（`:8-10` 注释明示）——**依赖 dist/**，dist 被 .gitignore，新 worktree 不存在 → 不可用作零依赖路径。
+2. 全局 spectra CLI v4.4.0 的 help **未列出** graph-quality 子命令，但直接调用验证：
+
+```
+spectra graph-quality --json --graph specs/_meta/graph.json
+→ exit 0，输出完整六指标 JSON，freshness 字段 = canonical 四态：
+  { "state": "fresh", "recordedSourceCommit": "aa8f326...", "currentHead": ... }
+```
+
+**结论**：`spectra graph-quality --json` 在全局 CLI **真实存在且可用**（help 遗漏是文档缺口，非功能缺口）。C3 定案：`checkFreshness` 生产路径 = spawn 全局 `spectra graph-quality --json --graph <path>` 解析 `.freshness` 字段——与 F217 同一份编译实现，**零第二份语义**；spectra 缺失时降级 `unknown` + warning。注意其 exit code 契约为 0/1/2 均携带可解析 JSON（`graph-quality-core.mjs:14-16` 先例：spawnSync 后无论 status 先取 stdout）。
+
+**🔴 附带事故实录（本 feature 价值的又一活体证据）**：验证过程中 `spectra graph quality --help` 被 CLI 解析为 `spectra graph`（quality 被当多余参数忽略），该命令**静默把 6079 节点的图覆写为 2 节点 + `sourceCommit: null`**（F217 记忆教训"graph 命令写 null"实锤重演）。一次善意的探测就摧毁了整张图的 provenance，且无任何告警——已用 `spectra batch --mode graph-only` 重建（3.3s，恢复 6079 节点 + sourceCommit=aa8f326）。这正是 FR-006"状态每次图变更后更新 + freshness 现算不缓存"要防御的场景：若消费端只信一次性缓存的 ready 标记，此类静默覆写将不可见。
+
 ## M8. 改动前测试基线（A/B 对照锚点）
 
 2026-08-02 18:25 于本 worktree 实测 `npx vitest run`：

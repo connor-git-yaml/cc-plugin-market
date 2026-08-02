@@ -77,20 +77,22 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#B3
     | 字段 | 类型 | 说明 |
     |---|---|---|
     | `schemaVersion` | number | 固定为 `1`，未来破坏性变更递增 |
-    | `bootstrapSource` | `"primary-copy" \| "local-build" \| "none"` | 本次 bootstrap 图的来源三态 |
+    | `bootstrapSource` | `"primary-copy" \| "local-build" \| "none" \| "unknown"` | 本次 bootstrap 图的来源四态 |
     | `embeddedSourceCommitAtBootstrap` | string \| null | bootstrap 完成时刻，图内嵌 `graph.sourceCommit` 字段的快照值（仅作记录，非权威 freshness 判定入口） |
     | `worktreeHeadAtBootstrap` | string \| null | bootstrap 完成时刻的 worktree HEAD |
     | `generatedAt` | string (ISO 8601) | 本状态文件写入时刻的真实时间戳 |
     | `assessable` | boolean | `false` 表示状态不可评估（如 bootstrap 过程本身异常终止、或图文件读取/解析失败），此时其余字段允许为 `null` |
-  - **freshness 唯一权威合同**：本状态文件**不缓存** `stale` 布尔值或任何 freshness 判定结果。freshness 必须由消费者在读取时刻，以图文件内嵌 `graph.sourceCommit` 与当前 HEAD 对比，通过既有 F217 `evaluateFreshness`（`src/panoramic/graph/quality/quality-types.ts` 定义的 `GraphFreshnessVerdict`）四态模型（`fresh` / `dirty` / `stale` / `unknown-provenance`）现算得出，不得落盘缓存、不得在本状态文件中重复表达。`unknown-provenance` 态承载"来源 commit 不明"的判定语义，直接对应 B3"不得复制来源 commit 不明的图后静默宣称 ready"的要求。
-  - **不允许三套 provenance 并存且互相矛盾**这一条是硬性不变量：本状态文件写入后，F193 sidecar（`specs/_meta/.graph-source-commit`）必须二选一处置——(a) 改为与本状态文件同步更新（消除已实测的"本地重建路径不更新 sidecar"缺陷），或 (b) 由本状态文件完全取代、移除 sidecar 独立写入逻辑。两种处置方式的具体选择留给 plan 阶段决定，但 spec 层面钉死：实现完成后，仓库内关于"这张图来自哪个 commit"的可查询记录**只能有一套权威口径**（内嵌 `graph.sourceCommit`），任何辅助记录（sidecar 或状态文件）都不得与其矛盾，且不得在本地重建路径下产生"记录未更新导致误报"的行为（对应已实测的 M4/M6 缺陷）。
+  - **`bootstrapSource` 判定规则**（防止 rerun 未变更图、仅补 snapshot 等场景写出假 provenance）：(a) 仅当**本次运行**实际把 `graph.json` 从主仓 copy 到 worktree 才记 `primary-copy`；仅当**本次运行**实际执行了本地图构建且成功才记 `local-build`；(b) snapshot（`.spectra/unified-graph.json`）的 copy 事件**永不**决定 `bootstrapSource` 的取值——它只是辅助产物，不代表 graph 本身的来源；(c) 本次运行未改变已存在的 `graph.json`（既未 copy 也未本地重建，例如图已存在且两者均判定"跳过"）的 rerun，必须**继承先前状态文件记录的 `bootstrapSource`**；若不存在先前状态文件记录、但 `graph.json` 已经存在，必须记为 `"unknown"`（诚实标注来源不可考，而非编造 `local-build` 或复制上一个无关的值）；(d) `graph.json` 存在但 JSON 解析失败时，仍必须走 FR-006 定义的原子写流程落盘状态文件，标记 `assessable: false`，不允许 helper 因解析异常而未捕获退出、导致本次运行完全不产出状态文件。
+  - **freshness 唯一权威合同**：本状态文件**不缓存** `stale` 布尔值或任何 freshness 判定结果。freshness 必须由消费者在读取时刻，以图文件内嵌 `graph.sourceCommit` 与当前 HEAD 对比，通过既有 F217 `evaluateFreshness`（`src/panoramic/graph/quality/quality-types.ts` 定义的 `GraphFreshnessVerdict`）四态模型（`fresh` / `dirty` / `stale` / `unknown-provenance`）现算得出，不得落盘缓存、不得在本状态文件中重复表达。`unknown-provenance` 态承载"来源 commit 不明"的判定语义，直接对应 B3"不得复制来源 commit 不明的图后静默宣称 ready"的要求。**现算的具体实现路径钉死为**：调用全局 `spectra graph-quality --json --graph <path>` 并解析其返回 JSON 中的 `freshness` 字段（该 CLI 内部即 `evaluateFreshness` 的编译产物，已实测全局 v4.4.0 版本可用，见 `orchestrator-measurements.md` §M10；其 exit code 契约为 0/1/2 均携带可解析的 JSON 输出，消费方需先取 stdout 解析 JSON 再判断 exit code）；**禁止**在本仓库脚本中重新实现四态判定逻辑，以防止出现第二份可能漂移的 freshness 语义；当全局 `spectra` CLI 不可用时，freshness 现算结果记为 `unknown-provenance` 的等价语义（即消费者侧的 `unknown` 呈现）并输出可见 warning，不得让调用方静默拿到默认的 `fresh`/`stale` 猜测值。
+  - **不允许三套 provenance 并存且互相矛盾**这一条是硬性不变量：本状态文件写入后，F193 sidecar（`specs/_meta/.graph-source-commit`）必须二选一处置——(a) 改为与本状态文件同步更新（消除已实测的"本地重建路径不更新 sidecar"缺陷），或 (b) 由本状态文件完全取代、移除 sidecar 独立写入逻辑。两种处置方式的具体选择留给 plan 阶段决定，但 spec 层面钉死：实现完成后，仓库内关于"这张图来自哪个 commit"的可查询记录**只能有一套权威口径**（内嵌 `graph.sourceCommit`），任何辅助记录（sidecar 或状态文件）都不得与其矛盾，且不得在本地重建路径下产生"记录未更新导致误报"的行为（对应已实测的 M4/M6 缺陷）。**无论选哪种处置，已存在于各 worktree 的遗留 sidecar 文件（`specs/_meta/.graph-source-commit`）必须有迁移语义**：新状态文件成功落盘后，须清理该遗留文件，避免同一 worktree 内同时存在"新状态文件"与"已废弃但仍可被误读的旧 sidecar"两份记录；`--dry-run` 模式下只报告"将会清理该遗留文件"而不实际删除；该迁移行为须有 seeded-legacy 测试覆盖（预先在 fixture worktree 中放置一份遗留 sidecar，验证 sync 后其被正确清理或按 dry-run 语义仅报告）。
   - **第一消费者**：`sync-worktree-local-state.sh` 自身现有的 `check_graph_source_stale` warning 路径，必须改为读取本状态文件（或改造后的 provenance 记录）作为其判断依据，而不是继续读取当前已被证实存在更新缺陷的旧 sidecar 逻辑——即本 feature 至少要让 sync 脚本自己成为该状态文件的第一个真实消费者。goal_loop / MCP 工具对该状态文件的消费是 M9 轨道 B4 的 follow-up 范围，本 feature 不实现（见 Non-Goals）。
   - **写入语义**：状态文件必须使用 temp 文件 + `mv`（rename）的原子写方式，不允许出现半文件状态。同一 worktree 内先后发起的两次 sync 执行，后完成写入的进程覆盖先完成写入的进程结果（后写覆盖，不做锁或排队）；本 feature 不引入跨进程锁机制。`--dry-run` 模式下不落盘写入本状态文件，只在 stdout/stderr 输出本次运行"若非 dry-run 将会写入"的拟生成状态内容。
-  - **状态文件每次 `bootstrap_graph` 执行都必须更新**（无论是否发生实际 copy 动作，也无论走 `primary-copy`、`local-build` 还是 `none` 分支），确保不会重复 M4/M6 实测发现的"仅部分路径更新导致记录失准"缺陷。
+  - **状态文件每次 `bootstrap_graph` 执行都必须更新**（无论是否发生实际 copy 动作，也无论走 `primary-copy`、`local-build`、`none` 还是 `unknown` 分支），确保不会重复 M4/M6 实测发现的"仅部分路径更新导致记录失准"缺陷。
+  - **`node` 运行时前提的降级条款**：状态文件写入与 freshness 现算的 helper 以 `.mjs` 实现，依赖 `node` 可执行；在手工 worktree 场景下，若当前 shell 环境 `node` 不在 `PATH`（理论边界场景），`sync-worktree-local-state.sh` 必须输出可见 warning「状态文件写入跳过：node 不可用」，并**继续完成其余同步步骤**（不中断、不静默失败）。此时"状态文件每次 `bootstrap_graph` 执行都必须更新"的要求在该枚举例外下豁免——由该 warning 本身承担显式信号，不视为对上一条约束的违反。
 - **FR-007（AGENTS.override.md 必须处于 ignored 前提）**：`.gitignore` 必须新增规则使 `AGENTS.override.md` 被 git 忽略。验收包含：`git check-ignore AGENTS.override.md` 命令必须成功（退出码 0）；且必须有断言确认 `AGENTS.override.md` 字符串不出现在 `.worktreeinclude` 内容中（因为官方机制会自动复制该文件，无需、也不应重复列入清单）。
 - **FR-008（byte budget 校验：按 active 文件、按 max 不按 sum）**：必须新增可重复运行的字节数校验手段（脚本或测试断言），对**每一个在仓库根目录可能成为 Codex 同层 active 文件的候选**分别校验其字节数 ≤ 32768（Codex `project_doc_max_bytes` 默认值）：即 `AGENTS.md` 与（若存在）`AGENTS.override.md` 各自独立校验，取二者中的较大值与预算比较，而非将两者字节数相加——因为 `AGENTS.override.md` 存在时是同层**取代** `AGENTS.md`（官方"二选一"语义），而非叠加读取。若未来仓库出现 nested 目录下的 `AGENTS.md`/`AGENTS.override.md`（当前仓库经实测确认只有仓库根一份，无 nested），该校验手段需要按 root→cwd 路径累计计算，这一前瞻性要求本 feature 只需留下扩展点，不需要在无 nested 文件的当前状态下实现累计逻辑。当前实测基线：`AGENTS.md` = 23346 bytes（占预算 71.2%，余量 9422 bytes），`AGENTS.override.md` 尚不存在。
 - **FR-009（worktree-lifecycle.sh hook 失败可见但不阻断）**：`plugins/spec-driver/hooks/worktree-lifecycle.sh` 的 `create` 分支必须调整为：`sync-worktree-local-state.sh` 执行失败时，失败原因（stderr 内容）必须对用户可见，但 hook 自身仍以成功退出码结束（不阻断 worktree 创建流程）。该行为必须由自动化 fixture 测试验证（构造一个固定输出特定 stderr 内容并以非零码退出的 sync 脚本 fixture，断言 hook 保留该 stderr 内容且 hook 自身退出码为 0），不得仅以手工验证步骤代替。
-- **FR-010（Codex-managed worktree bootstrap 入口）**：必须为 Codex-managed worktree 场景提供一个显式可调用的 bootstrap 入口（命令或脚本），其行为按 FR-006 定义的状态文件 schema 输出结构化状态；不得写死或假定未经证实的 `.codex/` setup script 文件名/字段格式（若确有需要写入具体文件名，须标注 `[推断]` 并留待实现阶段用真实 Codex 客户端核实）。该入口在满足 SC-001 成功腿前置条件时必须尝试构建可查询图，只有在枚举的真实失败原因下才允许写出 `bootstrapSource: "none"`（详见 SC-001）。**已实测结论**：repo `node_modules` **不是** `spectra batch --mode graph-only` 的前置条件——`orchestrator-measurements.md` §M9 已用 `git clone --local` 制造零 `node_modules`、零预置图的全冷副本，全局安装的 `spectra` CLI（自带自身依赖）在该环境下 3524ms 内成功建图（6079 节点/8050 边，与热环境一致），图内嵌 `sourceCommit` 正确写入。因此 bootstrap 入口的唯一环境前置是"全局 `spectra` CLI 可用"，不依赖当前仓库是否已存在 `node_modules`（也不依赖 FR-004 的软链是否已完成）。
+- **FR-010（Codex-managed worktree bootstrap 入口）**：必须为 Codex-managed worktree 场景提供一个显式可调用的 bootstrap 入口（命令或脚本），其行为按 FR-006 定义的状态文件 schema 输出结构化状态；不得写死或假定未经证实的 `.codex/` setup script 文件名/字段格式（若确有需要写入具体文件名，须标注 `[推断]` 并留待实现阶段用真实 Codex 客户端核实）。该入口在满足 SC-001 成功腿前置条件时必须尝试构建可查询图，只有在枚举的真实失败原因下才允许写出 `bootstrapSource: "none"`（详见 SC-001）。**已实测结论**：repo `node_modules` **不是** `spectra batch --mode graph-only` 的前置条件——`orchestrator-measurements.md` §M9 已用 `git clone --local` 制造零 `node_modules`、零预置图的全冷副本，全局安装的 `spectra` CLI（自带自身依赖）在该环境下 3524ms 内成功建图（6079 节点/8050 边，与热环境一致），图内嵌 `sourceCommit` 正确写入。因此 bootstrap 入口的唯一环境前置是**全局 `spectra` CLI 可用（其自身即依赖 `node`，二者一体，不需要额外单独校验 `node` 是否存在）**，不依赖当前仓库是否已存在 `node_modules`（也不依赖 FR-004 的软链是否已完成）。
 - **FR-011（路径逃逸对抗测试矩阵）**：必须新增以下对抗性测试用例，逐一验证 FR-003 的 containment 校验生效、且不产生任何仓库外读写：`.worktreeinclude` 含绝对路径条目（如 `/etc/passwd`）、含 `..` 路径穿越条目（如 `../shared-secret`）、含 glob 通配符条目（如 `*.env`）、含否定前缀条目（如 `!keep.env`）、含反斜杠转义条目（如 `\#file`）。每个用例必须断言：该条目被 skip 且产生 warning，sync 流程正常完成其余步骤，且文件系统层面在仓库根目录及其祖先目录之外**零写入、零读取**发生。
 - **FR-012（`.env.local` 二次同步覆盖测试）**：必须新增测试验证：worktree 首次 sync 后 `.env.local` 已存在，随后主仓 `.env.local` 内容变化，再次执行 sync，worktree 侧内容必须被覆盖为最新内容（而非保留旧内容）——锁定"文件每次覆盖"这一既有覆盖语义，防止实现过程中被误改为 copy-if-absent 语义。清单中若出现目录类条目，由 FR-001 内容合同测试直接判定失败（目录不在安全子集内），运行时层面（若绕过内容合同检测出现目录条目）按 FR-003 的规范化校验统一 skip + warning 处理，不与文件覆盖语义混淆。
 - **FR-013（现有测试套件回归保护）**：本 feature 完成后，`tests/unit/sync-worktree-local-state.test.ts` 现有全部用例（含 F193 的 8 个 graph bootstrap 用例、`.agents` 旧软链迁移守护三场景、主工作区 no-op、幂等性）必须保持通过，不得删除或弱化既有断言。
@@ -104,7 +106,7 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#B3
 - 不改动 A4（CODEX_HOME helper 统一）——遇到相关路径解析问题记为 follow-up，不在本件修。
 - 不改动 F238 涉及的 `plugins/spec-driver` wrapper 链与 `.codex-plugin` 一体分发。
 - 不对 Codex 桌面应用本身的行为做任何断言性验证（该行为不可从本仓库单元测试直接测得，只能测本仓库侧的清单内容/格式正确性，Codex 侧行为的验证只能通过真实客户端人工验证，不纳入自动化门禁）。
-- 不改动 F217 graph-quality 门禁本身的实现——本 feature 只是把 F217 已有的 `evaluateFreshness` 四态模型确立为唯一权威 freshness 合同并复用，不修改其判定逻辑。
+- 不改动 F217 graph-quality 门禁本身的实现——本 feature 只是把 F217 已有的 `evaluateFreshness` 四态模型确立为唯一权威 freshness 合同并复用（通过调用全局 `spectra graph-quality --json` 消费，不重新实现），不修改其判定逻辑。
 
 ## Edge Cases
 
@@ -122,6 +124,9 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#B3
 | graph bootstrap 来源为主仓 copy（`bootstrapSource: "primary-copy"`） | 状态文件记录 bootstrap 时刻的内嵌 sourceCommit 快照与 worktree HEAD；freshness 由消费者读取图内嵌 `graph.sourceCommit` 现算，不读取本状态文件的任何缓存布尔值 | FR-006 |
 | graph 为本地构建（`bootstrapSource: "local-build"`） | 状态文件必须在本地构建完成后同步更新（不得沿用旧 sidecar"仅 copy 时写"的缺陷行为），记录当前内嵌 sourceCommit 快照与 worktree HEAD | FR-006 |
 | 主仓无图且 worktree 本地构建也失败 | `bootstrapSource: "none"`、`assessable: false`，且必须在枚举的真实失败原因下才允许出现此态（不得作为默认捷径瞬间满足 SC-001） | FR-006/FR-010 |
+| 本次 rerun 未 copy 也未本地重建（图已存在且未变化） | `bootstrapSource` 继承先前状态文件记录的值；若无先前记录则记为 `"unknown"`，不得编造 `local-build` | FR-006 |
+| `graph.json` 存在但 JSON 解析失败 | 仍必须走原子写流程落盘状态文件，标记 `assessable: false`，helper 不允许因解析异常未捕获而整体退出、不产出状态文件 | FR-006 |
+| 当前 shell 环境 `node` 不在 `PATH`（手工 worktree 理论边界场景） | 输出可见 warning「状态文件写入跳过：node 不可用」，继续完成其余同步步骤，不中断、不静默；本次豁免"每次都必须更新状态文件"的要求 | FR-006 |
 | `AGENTS.md` 未来因共享区块增长逼近或超过 32768 bytes | 校验手段必须能检测到（返回非零或明确 warning），而不是被动依赖人工偶尔 `wc -c` | FR-008 |
 | `AGENTS.override.md` 存在且体积较大，但同层 `AGENTS.md` 体积正常 | 校验必须分别检测两者字节数（按 max 取较大值判定），不能因为只查了 `AGENTS.md` 就放过一个超限的 override | FR-008 |
 | `worktree-lifecycle.sh` create 分支 sync 脚本抛出非预期异常（非已知的 stale/warn 分支） | stderr 必须显示具体失败原因；worktree 创建本身仍需成功完成；该行为由自动化 fixture 测试验证 | FR-009 |
@@ -133,12 +138,12 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#B3
 1. 现有 `SYMLINK_TARGETS`（6 项）与 `COPY_TARGETS`（原 1 项，`.env.local`，将迁移到 `.worktreeinclude`）逐条**语义不变**：`.env.local` 继续走 copy-on-checkout（每次 sync 覆盖）、其余六项继续走软链跨 worktree 实时共享。
 2. `tests/unit/sync-worktree-local-state.test.ts` 现有全部用例必须保持通过：F193 graph bootstrap 8 个用例、`.agents` 旧软链迁移守护三场景（a/b/c）、主工作区 no-op、幂等重复执行。
 3. F215（E2E baseline fixture 解耦，`tests/fixtures/micrograd-baseline-graph`）不受影响，本 feature 不改动其 fixture 生成逻辑或加载路径。
-4. F217 graph-quality 门禁与六项质量指标不回归；本 feature 必须复用其 `evaluateFreshness` 四态模型作为唯一权威 freshness 判定入口，不得另造一套不兼容的 freshness 语义。
-5. graph bootstrap 失败或来源不明时必须有**显式**状态标记（`bootstrapSource: "none"` / `assessable: false`），不允许假装 ready；仓库内不允许出现三套互相矛盾的 provenance 记录（内嵌 `graph.sourceCommit` 为唯一权威源，F193 sidecar 与新状态文件必须与之保持一致或被其取代，见 FR-006）。
+4. F217 graph-quality 门禁与六项质量指标不回归；本 feature 必须复用其 `evaluateFreshness` 四态模型作为唯一权威 freshness 判定入口（经由全局 `spectra graph-quality --json` 调用），不得另造一套不兼容的 freshness 语义。
+5. graph bootstrap 失败或来源不明时必须有**显式**状态标记（`bootstrapSource: "none"` / `"unknown"` / `assessable: false`），不允许假装 ready；仓库内不允许出现三套互相矛盾的 provenance 记录（内嵌 `graph.sourceCommit` 为唯一权威源，F193 sidecar 与新状态文件必须与之保持一致或被其取代，见 FR-006）。
 6. 不修改 A4（CODEX_HOME helper 统一）范围内的代码；遇到相关问题记为 follow-up。
 7. **本 feature 的改动面必须显式区分禁触与允许两类**：
-   - **禁触面**（本 feature 严禁改动）：`plugins/spec-driver/` 下除 `plugins/spec-driver/hooks/worktree-lifecycle.sh` 之外的所有 wrapper 链代码、`.codex-plugin` 目录、F215 pinned fixture（`tests/fixtures/micrograd-baseline-graph`）及其生成逻辑、F217 graph-quality 门禁的判定实现本身（`src/panoramic/graph/quality/**`，本 feature 只读取/复用其导出的类型与函数，不修改其内部逻辑）。
-   - **允许触面**（本 feature 需要且可以改动）：`scripts/sync-worktree-local-state.sh`；`tests/unit/sync-worktree-local-state.test.ts` 及本 feature 新增的测试文件；仓库根 `.gitignore`（新增 `AGENTS.override.md` 与 `specs/_meta/graph-bootstrap-status.json` 规则）；仓库根新增的 `.worktreeinclude` 文件；`specs/_meta/` 下与状态文件合同相关的新增文件；`plugins/spec-driver/hooks/worktree-lifecycle.sh`；`AGENTS.md`/新增 `AGENTS.override.md` 相关文档内容；`scripts/repo-check.mjs` 或 `scripts/lib/repo-maintenance-core.mjs` 中新增校验族相关代码（若实现阶段选择将本 feature 校验接入 `repo:check` 第 14 族）。
+   - **禁触面**（本 feature 严禁改动）：`plugins/spec-driver/` 下除 `plugins/spec-driver/hooks/worktree-lifecycle.sh` 之外的所有 wrapper 链代码、`.codex-plugin` 目录、F215 pinned fixture（`tests/fixtures/micrograd-baseline-graph`）及其生成逻辑、F217 graph-quality 门禁的判定实现本身（`src/panoramic/graph/quality/**`，本 feature 只读取/复用其导出的类型与函数、或经由全局 CLI 调用，不修改其内部逻辑）。
+   - **允许触面**（本 feature 需要且可以改动）：`scripts/sync-worktree-local-state.sh`；`tests/unit/sync-worktree-local-state.test.ts` 及本 feature 新增的测试文件；仓库根 `.gitignore`（新增 `AGENTS.override.md` 与 `specs/_meta/graph-bootstrap-status.json` 规则）；仓库根新增的 `.worktreeinclude` 文件；`specs/_meta/` 下与状态文件合同相关的新增文件；`plugins/spec-driver/hooks/worktree-lifecycle.sh`；`AGENTS.md`/新增 `AGENTS.override.md` 相关文档内容；`scripts/repo-check.mjs` 或 `scripts/lib/repo-maintenance-core.mjs` 中新增校验族相关代码（若实现阶段选择将本 feature 校验接入 `repo:check` 第 14 族）；`tests/integration/spec-drift-repo-check-modes.test.ts` 与 `tests/integration/repo-maintenance-sync-check.test.ts`（这两个集成测试各自维护一份沙盒复制清单，用于在隔离沙盒中模拟仓库结构；新增的 `.worktreeinclude`/`graph-bootstrap-status.json` 等文件相关的 gitignore/校验行为若被沙盒排除在外，会导致第 14 族校验在沙盒环境中因"文件缺失"而误报，因此这两个测试的沙盒复制清单需要同步纳入本 feature 新增的相关路径）；`docs/spectra-cli-reference.md`（该文档第 172 行仍把 F193 sidecar 描述为现行的 graph provenance 合同，FR-006 的 sidecar 处置完成后，该文档必须同步更新为反映新状态文件合同或"sidecar 已被取代"的现状，避免文档与代码行为脱节误导用户）。
 
 ## Success Criteria
 
@@ -152,15 +157,15 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#B3
 - **SC-004（SYMLINK_TARGETS 固定 allowlist 精确性）**：存在参数化单元测试断言 `SYMLINK_TARGETS` 数组精确等于既定 6 项集合，且对每一项在 source 存在时验证确实生成指向主仓对应路径的 symlink（对应 FR-004）。
 - **SC-005（AGENTS override ignored + byte budget 校验）**：`git check-ignore AGENTS.override.md` 命令成功执行（退出码 0）；`AGENTS.override.md` 字符串不出现在 `.worktreeinclude` 内容中；存在可重复运行的字节数校验（脚本或测试），分别对 `AGENTS.md` 与（若存在）`AGENTS.override.md` 校验 ≤ 32768 bytes（按 FR-008 定义的"按 max 不按 sum"规则），当前基线 `AGENTS.md` = 23346 bytes 通过。
 - **SC-006（路径逃逸对抗测试矩阵零仓库外写入）**：FR-011 列出的每一类恶意/边界输入（绝对路径、`..` 穿越、glob、否定前缀、转义）均有对应测试用例，且每个用例断言运行结束后仓库根目录及其祖先目录之外没有产生任何新文件或修改（零仓库外写入/读取）。
-- **SC-007（graph provenance 唯一权威合同自消费）**：存在测试验证 `sync-worktree-local-state.sh` 自身的 stale warning 判定路径（即改造后的 `check_graph_source_stale` 或其等价逻辑）读取的是 FR-006 定义的状态文件或已改造后的 provenance 记录，而不是继续依赖已实测存在更新缺陷的旧 sidecar 独立逻辑；同时验证"本地重建路径下 provenance 记录被正确更新"（对应已实测的 M4/M6 缺陷不再复现）。
+- **SC-007（graph provenance 唯一权威合同自消费）**：存在测试验证 `sync-worktree-local-state.sh` 自身的 stale warning 判定路径（即改造后的 `check_graph_source_stale` 或其等价逻辑）读取的是 FR-006 定义的状态文件或已改造后的 provenance 记录，而不是继续依赖已实测存在更新缺陷的旧 sidecar 独立逻辑；同时验证"本地重建路径下 provenance 记录被正确更新"（对应已实测的 M4/M6 缺陷不再复现），以及"rerun 未变更图时继承先前 `bootstrapSource`、无先前记录时记为 `unknown`"（对应本轮新增判定规则）、"遗留 sidecar 文件按 seeded-legacy 测试被正确清理或 dry-run 下仅报告"。
 - **SC-008（hook 失败可见但不阻断，自动化验证）**：存在自动化 fixture 测试：构造一个固定输出特定 stderr 内容并以非零退出码退出的 `sync-worktree-local-state.sh` fixture，运行 `worktree-lifecycle.sh` 的 create 分支后，断言该 stderr 内容在 hook 输出中可见，且 hook 自身进程退出码为 0。
 - **SC-009（全量门禁）**：`npx vitest run`、`npm run build`、`npm run repo:check` 全部零失败（含本 feature 新增测试与既有全部回归测试；改动前基线见 `orchestrator-measurements.md` §M8：483 test files / 5773 tests passed，作为 A/B 归因锚点）。
 
 ## 开放问题
 
-以下事项已尽量按调研结论、用户决策与本轮 Codex 对抗审查裁决收敛，仍有 2 处需要在 plan 阶段进一步细化实现选择，未达到"歧义 >2 处需人工拍板"的门槛，故不再列为 `[NEEDS CLARIFICATION]`，而是作为执行阶段的核实项：
+以下事项已尽量按调研结论、用户决策与两轮 Codex 对抗审查（spec round1、plan round1）裁决收敛，仍有 2 处需要在 plan 阶段进一步细化实现选择，未达到"歧义 >2 处需人工拍板"的门槛，故不再列为 `[NEEDS CLARIFICATION]`，而是作为执行阶段的核实项：
 
-1. **F193 sidecar 的具体处置方式（FR-006 涉及）**：`[AUTO-RESOLVED: 按本轮审查裁决——不允许三套 provenance 并存且互相矛盾这一不变量已钉死在 FR-006/回归护栏第 5 条；"改为同步更新" vs "由新状态文件完全取代"两种具体实现路径留给 plan 阶段依据改动成本决定，二者均满足本 spec 的不变量]`。
+1. **F193 sidecar 的具体处置方式（FR-006 涉及）**：`[AUTO-RESOLVED: 按审查裁决——不允许三套 provenance 并存且互相矛盾这一不变量已钉死在 FR-006/回归护栏第 5 条，且遗留 sidecar 的迁移清理语义（新状态落盘后清理、dry-run 仅报告、seeded-legacy 测试覆盖）已钉死在 FR-006；"改为同步更新" vs "由新状态文件完全取代"两种具体实现路径留给 plan 阶段依据改动成本决定，二者均满足本 spec 的不变量]`。
 2. **Codex setup script 的精确接入点（FR-010 涉及）**：`[AUTO-RESOLVED: 按调研建议采用能力性描述——先提供一个通用可调用的 bootstrap 命令/脚本入口，不假定具体 `.codex/` 文件名；待实现阶段有机会在真实 Codex 客户端环境核实后再补充具体接入点]`。
 
-无 `[NEEDS CLARIFICATION]` 项——用户已就三项关键决策拍板，本轮 Codex 对抗审查的 8 项 CRITICAL、4 项 WARNING 已全部通过收紧 FR/SC 措辞、新增 containment 校验、固定 provenance 权威合同、明确禁触/允许改动面等方式落实为可测的规范条款，不遗留需要人工二次拍板的歧义。
+无 `[NEEDS CLARIFICATION]` 项——用户已就三项关键决策拍板，两轮 Codex 对抗审查（spec 阶段 8 项 CRITICAL/4 项 WARNING、plan 阶段 11 项 CRITICAL/3 项 WARNING 中回写 spec 的 4 处条款缺口）已全部通过收紧 FR/SC 措辞、新增 containment 校验、固定 provenance 权威合同与 freshness 现算实现路径、明确禁触/允许改动面、补全 `bootstrapSource` 四态判定规则与 `node` 运行时降级条款等方式落实为可测的规范条款，不遗留需要人工二次拍板的歧义。
