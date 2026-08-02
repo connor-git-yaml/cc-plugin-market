@@ -1,0 +1,82 @@
+# F241 — Codex 对抗审查整改单（Specify phase）
+
+> 结构：finding → 编排器验证 → 处置 → 证据/去向。逐条处置，不表演式同意。
+> 审查会话：codex `task-msc13f61-dgrxn8`（6 CRITICAL / 7 WARNING / 1 INFO）。
+
+## CRITICAL
+
+### C1 分发边界未决，FR-007 不可实施 → **确认，编排器拍板选 A**
+- **验证**：与我先行核实的 V-1 同源且互证（安装缓存无 `graph-bootstrap-status.mjs`；双 marketplace source 均只指 `plugins/spec-driver`）。Codex 额外抓到 spec.md 两处残留旧叙述（「直接 import 仓根 / 待核实」）——属实，D8 修订时漏清。
+- **处置**：**不再推给 plan，spec 层直接定拓扑 = 方案 A**：canonical 移入 `plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs`，仓根 `scripts/lib/graph-bootstrap-status.mjs` 改薄 re-export。三个消费方全部可达（B4 CLI 在插件内、sync 脚本与 lifecycle hook 均跑在仓内 checkout）。已知代价入 plan：`tests/unit/worktree-lifecycle-hook.test.ts:109` 的 copy 行为需改为从 canonical 路径 copy（薄 re-export 单独拷走会断相对路径）。
+- **附加验收**（采纳 Codex 建议的轻量版）：新增 SC——把 `plugins/spec-driver/` 整体拷到仓外临时目录模拟安装态，从那里跑决策 CLI 的 `--dry-run`，断言可运行（import 不断链）。
+
+### C2 求值顺序把真实输入送错分支 → **确认（我此前的 O-6 修订只对了一半）**
+- **验证**：反例 1（`unknown`+`missing`+`allowed` 命中行 2，违背 EC-01 应刷新）成立——行 1-2 在 availability 行之前，我修订时只锁了「availability 先于 freshness」，没看到「classification 先于 availability」这层。反例 2（`stale`+`out-of-scope`+`allowed` 白白重建 4.4s 后仍不可用）成立——coverage 判定排在行 12 太靠后。
+- **处置**：**矩阵改 v2 顺序**：additive-only → **out-of-graph-scope（升到第 2 位：范围外时重建无意义，直接降级给 Grep 路径）** → corrupt/missing×policy → **classification-unknown（availability 之后：图在手才谈得上降级消费）** → stale/dirty×policy → unknown-provenance → fresh 收口。并显式定义**刷新成功后的收口**：`changeClass=unknown` → `consume-degraded/classification-unknown`，否则 `consume-impact`（+FR-006 caveat）；**不重跑矩阵**（重跑会因 dirty-after-rebuild 误降级，EC-07 论证过）。顺序不变量测试从 1 条扩为 2 条（missing 探针 + out-of-scope 探针）。
+
+### C3 FR-008 无状态 CLI 下不可保证 → **确认，采纳收窄方案**
+- **验证**：成立。CLI 无状态、EC-13 禁锁、审计写在决策后不能当原子 claim——三点都对。
+- **处置**：按 Codex 方案二收窄：**进程内 single-flight 是硬保证**（一次 CLI 调用内绝不 spawn 两次，可测）；**跨调用 once-ness 是调用方合同**——编排层/goal_loop 在同一 phase 第二次起必须传 `--refresh-policy declined`（写进 SKILL 散文与 FR 文案）。SC-007 改为：(a) 单调用内 spawn 计数 ≤1 的进程内断言；(b) 按调用方合同模式（第二次 declined）跑两次的集成断言。删除「无锁又要跨进程互斥」的原表述。
+
+### C4 goal_loop 消费时点与 D3 权威判定冲突 → **确认，拆双合同**
+- **验证**：成立。goal_loop 步骤 2 注入发生在该轮 implement **前**，第一轮不存在「本轮 diff」；我的 V-2 只证了「无需改 core」，没解时序。
+- **处置**：拆两个契约并写进 FR-011：
+  - `pre-implement advisory`：轮 1 用 tasks.md 路径存在性 + phase 起点 diff（轮 ≥2 用累计 diff），输出**必须标 `advisory: true`**，仅决定「是否预刷新」与注入语气，禁止产生「impact 不适用」的权威结论；
+  - `pre-verify authoritative`：implement 后用实际 diff 做权威消费判定（B4① 的本义）。
+  goal_loop 步骤 2 的注入定性为 advisory grounding。
+
+### C5 脱敏可绕过 + 数据路径未 ignore → **确认，四点全收**
+- **验证**：中文姓名/内部代号/自然语言口令/带分隔符手机号穿透六规则——成立（这类形态本就在 D5 的「结构性遮蔽」能力之外）；`git check-ignore` 两路径未忽略——成立且我漏查（Codex 用 `--non-matching` 实测）；「k-匿名」名不副实（无主体标识）——成立。
+- **处置**：
+  1. **改名**：k-匿名 → **minimum-occurrence threshold**（最小出现阈值），全文不再声称匿名性保证；
+  2. **收窄声明**：删除「原文在任何环节都不落盘」的绝对化表述 → 改为「原始查询串**整串**不落盘；落盘的是 redaction 后按仓内 tokenizer 切词的 term + 归一化查询的 hash」——term 仍可能含未识别的敏感词，靠「默认关闭 + gitignore + 保留期 + 本地文件」四层兜底，如实写明残余风险；
+  3. **聚合键锁死**：`distinctQueries` = 含该 term 的**不同 normalizedQuery hash** 数（同一查询重复 N 次 = 1）；
+  4. **新增 FR + SC**：仓库 `.gitignore` 与插件 `ensure-gitignore.sh` 自举清单**同步**加入 `.specify/kb-nohit/` 与 `.specify/graph-consumption-audit.jsonl`，SC 用 `git check-ignore` 断言（含模拟第三方 repo 的安装态检查）。
+
+### C6 SC-005 的 13 值与 FR-006 caveat 通道矛盾 → **确认，机械修**
+- **处置**：枚举拆两组：`DEGRADED_REASONS`（12 值）+ `CAVEAT_CODES`（`coverage-gap-known-extraction-limit`，仅走 `caveats[]`）。SC-005 分别断言两组。FR-004 表格同步拆分。
+
+## WARNING
+
+### W1 五维「必须且只须」与 `impactResult?` 第六字段冲突 → **确认**
+- **处置**：FR-006 caveat 拆为独立后置纯函数 `annotateImpactCaveat(decision, impactResult)`；FR-002 保持五维严格校验；CLI 时序 = 决策 → （若消费）调 impact → 注解。
+
+### W2 「本轮 diff」无 phase 基线 + rename 解析格式错 → **确认**
+- **处置**：CLI 增加 `--base-ref`（权威判定用 phase 起点 ref；由调用方合同提供，goal_loop 用轮快照 S_i 的锚点）；解析器锁定 `git diff --name-status -z` 与 `git status --porcelain -z` 的 **NUL 分隔**契约（spec 原样本 `R100 old -> new` 是人读格式，修正 fixture）。
+
+### W3 审计文件存 freshness 快照 vs RG-006「唯一事实源」 → **确认（措辞层）**
+- **处置**：RG-006 改为「唯一**权威计算**源 = `checkFreshness`」；审计里的 freshness 是**观测快照**，显式标注非权威；新增依赖测试：生产决策代码禁止读审计文件作为输入。
+
+### W4 多条护栏可纸面过关 → **部分确认**
+- **处置**：RG-008 改用 **SHA-256** 对比（mtime+size 可伪）；RG-009 增加退出码 + stderr 断言；SC-004 弃用中文关键词黑名单 → 改为**结构化约束**：CLI JSON 输出无自由文本评价字段，人读 summary 必须是 degradedReason 枚举的固定模板映射（枚举→模板表可测）；SC-008 补「允许态确实注入 / 拒绝态确实不注入」的正反两向断言（以 goal_loop 迭代日志字段 + CLI 输出为证据面；SKILL 散文层无自动化先例，如实标注该残余）。
+- **不采纳项**：无。
+
+### W5 pilot SC 缺 ground truth → **部分确认**
+- **处置**：新增 `pilot/ledger.jsonl`（机器可读调用台账，与 markdown 双写）+ 一个小验证脚本从 ledger 重算 M-1 计数、比对报告数字；口径文件的「无 diff」断言在 pilot 文档首次 commit 后锚定具体 SHA；M-3 落盘两组 prompt 与 diff hash。**如实保留的局限**：台账仍是自报（减少算术漂移，不消除自报偏置）——该声明进报告，不冒充已解决。
+- **不采纳项**：SC-017 的「禁止外推表述」不可能穷举黑名单——正向声明（五项必含）保持机器 grep，禁止项改为 push gate 人工审查项，SC 文案如实改写。
+
+### W6 KB freshness 公式与多 lockfile resolved 语义未定 → **确认**
+- **处置**：FR-019 写死公式：`activityAt = max(built_at, ingested_at)`（最近活动），`freshness` 由 `now - activityAt` 对阈值表求值；同时输出 `oldestBuiltAt` 供可见性（不参与判级）。多 lockfile 且无显式版本：`resolved = { status: "ambiguous", version: null }` + 全量 `candidates[]`（契约扩 `resolved.status`）。
+
+### W7 k=2 / 30 天 / npm-only 既是 OQ 又是必须 → **确认（状态矛盾）**
+- **处置**：三参数改标 **proposed-default（按此实现）**；OQ-2/OQ-3 改写为「已按默认值实现，push gate 报告中列出，用户可否决 → 后续以 fix 流程调参（参数集中在常量模块，调整成本低）」。spec 由此 decision-complete。
+
+## INFO
+
+### I1 范围过载 / 拆批建议 → **部分采纳**
+- **处置**：**不拆 feature**（B4+E+pilot 合一线是用户明示的需求形态），但 implement 按 **B4 → E1 → E2/E3 → pilot 四批次序**推进，每批独立跑门禁后再进下一批（tasks.md 按此分组）；FR-010 审计与 FR-022/023 不降级——它们直接对应用户验收清单原文（「degraded reason 落审计」「三指标有对照数据」），不是可删项。
+
+## 已核对的「未发现问题」面（Codex 自报，我抽查一致）
+
+144 算术、F239 失败原因映射、goal-loop-core 零改造可行性、D7 字面措辞、`.mjs` 缺口证据、FR-014 三态区分、RG-003/004 可断言性——与我的 V-2/V-5/V-7 交叉一致。
+
+## 与 clarify 产物的冲突裁决（编排器主线收口）
+
+clarify（clarifications.md）4 条推荐里 2 条与本整改单冲突，裁决如下：
+
+| clarify 条目 | 冲突点 | 裁决 |
+|---|---|---|
+| C-001（FR-008 由 CLI 读审计 JSONL 判「已刷过」）| 违反 W3 处置「生产决策代码禁止读审计文件作为输入」+ 重踩 C3 指出的「审计写在决策后，不能当原子 claim」 | **否决**，维持 C3 处置：进程内 single-flight 硬保证 + 跨调用为调用方合同（第二次起 `--refresh-policy declined`）|
+| C-003（`distinctQueries` 按 JSONL 行数/事件数计）| 恰是 C5 指出的绕过形态：同一查询重复两次即跨 k=2 | **否决**，维持 C5 处置：distinct = 含该 term 的不同 normalizedQuery hash 数 |
+| C-002（FR-006 与 coverageScope 共用同一份扩展名白名单）| 无冲突 | **采纳**（防第二份白名单漂移）|
+| C-004（`--phase` 缺省用固定 sentinel 并纳入约束）| 无冲突 | **采纳**（审计分组键一致性）|
