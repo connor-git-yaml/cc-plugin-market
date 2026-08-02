@@ -22,13 +22,17 @@ interface HookResult {
   status: number;
 }
 
+/** 当前用例的隔离 HOME（W6(b)）：脚本末尾的 memory-symlink 步骤会读写 `$HOME/.claude/projects`。 */
+let homeSandbox: string;
+
 /** 以 create 事件驱动 hook；cwd 决定 hook 找到哪个 `scripts/sync-worktree-local-state.sh`。 */
 function runHook(cwd: string, extraEnv: Record<string, string> = {}): HookResult {
   const r = spawnSync('bash', [HOOK_PATH], {
     cwd,
     encoding: 'utf-8',
     input: JSON.stringify({ action: 'create', worktree_path: cwd }),
-    env: { ...process.env, ...extraEnv },
+    // 默认注入隔离 HOME，避免对开发者真实主目录产生非密封副作用
+    env: { HOME: homeSandbox, ...process.env, ...extraEnv, ...(extraEnv.HOME ? {} : { HOME: homeSandbox }) },
   });
   return { stdout: r.stdout ?? '', stderr: r.stderr ?? '', status: r.status ?? 0 };
 }
@@ -38,6 +42,8 @@ describe('Feature 239 — worktree-lifecycle hook create 分支失败可见性�
 
   beforeEach(() => {
     sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'worktree-lifecycle-hook-'));
+    homeSandbox = path.join(sandbox, 'home-sandbox');
+    fs.mkdirSync(homeSandbox, { recursive: true });
   });
 
   afterEach(() => {

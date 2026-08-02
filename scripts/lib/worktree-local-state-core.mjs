@@ -84,38 +84,101 @@ export function isGitWorkTree(projectRoot) {
 /**
  * 单条目 ignored 判定。
  *
- * `git check-ignore` 退出码：0 = 命中忽略规则，1 = 未命中，其余（128 等）= 无法判定。
- * 无法判定时返回 null，由调用方按"不拒绝"处理——门禁不应因 git 自身异常把合法条目判红。
+ * `git check-ignore` 退出码：0 = 命中忽略规则，1 = 未命中，其余（128 等）= git 无法判定。
  *
- * @returns {boolean | null}
+ * C2 修订：128 **不再**当作"未拒绝"放行。实测 `git check-ignore -- <穿过 symlink 的路径>`
+ * 返回 `fatal: beyond a symbolic link` + 128，旧实现把它视为"无法判定→不拒绝"，于是一条
+ * 逃逸到仓库外的路径可以同时绕过 ignored 前提与词法过滤。128 现在有独立 reason，
+ * 便于与"确实未被忽略"在日志上区分。
+ *
+ * @returns {'ignored' | 'not-ignored' | 'error'}
  */
-function isGitIgnored(projectRoot, entry) {
+function classifyGitIgnore(projectRoot, entry) {
   const result = spawnSync('git', ['check-ignore', '--quiet', '--', entry], { cwd: projectRoot });
-  if (result.status === 0) return true;
-  if (result.status === 1) return false;
+  if (result.status === 0) return 'ignored';
+  if (result.status === 1) return 'not-ignored';
+  return 'error';
+}
+
+/**
+ * 在 `root` 下逐段下降，返回第一个是 symlink 的**已存在**路径组件（含最终对象）。
+ *
+ * 为什么必须逐组件 lstat：`lstat(entry)` 只对**最终对象**免解引用，中间组件仍会被内核解析。
+ * 仓库里的 `_reference` 就是指向主工作区的目录软链——`_reference/x/y.env` 在旧实现下
+ * `[[ -f ]]` 为真、`lstat().isFile()` 为真，于是一条物理上位于仓库外的路径被判为合法条目。
+ *
+ * `includeFinal=false` 只判父目录组件：copy 的 **target 侧**最终对象若是 symlink，运行时由
+ * `copy_path` 安全处置（`rm -f` 删的是链接自身，绝不写穿，随后写出真实文件——这正是 F213 起
+ * 被测试守护的"遗留 .env.local 软链迁移为 copy"路径）；父目录 symlink 则没有这层保护。
+ *
+ * @param {string} root
+ * @param {string} entry
+ * @param {{ includeFinal?: boolean }} [options]
+ * @returns {string | null} 命中的 symlink 绝对路径；无命中返回 null
+ */
+function findSymlinkComponent(root, entry, { includeFinal = true } = {}) {
+  let current = path.resolve(root);
+  const components = entry.split('/').filter((component) => component.length > 0);
+
+  for (const [index, component] of components.entries()) {
+    current = path.join(current, component);
+    if (!includeFinal && index === components.length - 1) return null;
+    let stats;
+    try {
+      stats = fs.lstatSync(current);
+    } catch {
+      // 该组件不存在 → 其下更深的组件也不可能存在，无需继续下降
+      return null;
+    }
+    if (stats.isSymbolicLink()) return current;
+  }
+
   return null;
 }
 
 /**
  * 校验单个条目是否落在 FR-001 定义的安全公共子集内。
  *
- * 8 类拒绝 reason：absolute-path / dot-dot-segment / glob-char / negation-prefix / escape-char /
- * trailing-slash / not-ignored / not-regular-file；语法类（前 6）整体优先于存在性与 ignored 类。
+ * 10 类拒绝 reason：absolute-path / dot-dot-segment / glob-char / negation-prefix / escape-char /
+ * trailing-slash / not-ignored / check-ignore-error / symlink-component / not-regular-file。
+ *
+ * 判定顺序（bash 侧 `validate_entry` 必须逐条对齐）：
+ *   语法类（前 6）→ check-ignore（0 通过 / 1 not-ignored / 其余 check-ignore-error）
+ *   → symlink 组件（跨全部 root）→ not-regular-file
+ * 全部校验都在任何读写之前完成（FR-003：拒绝的条目绝不进入 copy 通道）。
  *
  * FR-001(c)：路径**存在**时必须是常规文件；**不存在不视为违规**——ignored 文件在干净 checkout
  * 中缺席是常态（CI 里 `.env.local` 本就不存在）。
  *
  * @param {string} entry
- * @param {{ projectRoot: string, gitAvailable?: boolean }} options
+ * @param {{ projectRoot: string, gitAvailable?: boolean, extraRoots?: string[] }} options
+ *   `extraRoots`：条目还会被拼接到哪些根下（运行时的 copy target 侧）。source 侧干净、
+ *   target 侧父目录是 symlink 时，copy 会把文件写出仓库，因此两侧都要校验。
  * @returns {{ valid: true } | { valid: false, reason: string }}
  */
-export function validateWorktreeIncludeEntry(entry, { projectRoot, gitAvailable = true }) {
+export function validateWorktreeIncludeEntry(
+  entry,
+  { projectRoot, gitAvailable = true, extraRoots = [] },
+) {
   for (const [reason, matches] of SYNTAX_RULES) {
     if (matches(entry)) return { valid: false, reason };
   }
 
-  if (gitAvailable && isGitIgnored(projectRoot, entry) === false) {
-    return { valid: false, reason: 'not-ignored' };
+  if (gitAvailable) {
+    const ignoreVerdict = classifyGitIgnore(projectRoot, entry);
+    if (ignoreVerdict === 'not-ignored') return { valid: false, reason: 'not-ignored' };
+    if (ignoreVerdict === 'error') return { valid: false, reason: 'check-ignore-error' };
+  }
+
+  // source 侧连最终对象一起判；extraRoots（copy target 侧）只判父目录，语义与
+  // bash 侧 `has_symlink_component ... parents-only` 逐条对齐。
+  if (findSymlinkComponent(projectRoot, entry) !== null) {
+    return { valid: false, reason: 'symlink-component' };
+  }
+  for (const root of extraRoots) {
+    if (findSymlinkComponent(root, entry, { includeFinal: false }) !== null) {
+      return { valid: false, reason: 'symlink-component' };
+    }
   }
 
   const absolutePath = path.resolve(projectRoot, entry);
@@ -147,7 +210,17 @@ export function validateWorktreeIncludeContract({ projectRoot }) {
 
   const manifestPath = path.join(resolvedRoot, WORKTREEINCLUDE_FILENAME);
 
-  if (!fs.existsSync(manifestPath)) {
+  // W7：清单本身也可能异常（缺失 / 目录 / symlink / 不可读）。用 lstat 免解引用地判定，
+  // 并把读取异常收敛为**本族的结构化 fail**——第 14 族在 repo:check 里是聚合调用，
+  // 裸抛异常会让整份报告变成一段栈，其余 13 族的结论一并丢失。
+  let manifestStats = null;
+  try {
+    manifestStats = fs.lstatSync(manifestPath);
+  } catch {
+    manifestStats = null;
+  }
+
+  if (manifestStats === null) {
     errors.push(
       `未找到 ${WORKTREEINCLUDE_FILENAME}：它是 copy 类本地态清单的唯一事实源（Codex 官方与 sync 脚本共同消费），必须存在于仓库根。`,
     );
@@ -159,13 +232,41 @@ export function validateWorktreeIncludeContract({ projectRoot }) {
     return { status: 'fail', checks, warnings, errors };
   }
 
+  if (!manifestStats.isFile()) {
+    const kind = manifestStats.isSymbolicLink() ? 'symlink' : manifestStats.isDirectory() ? '目录' : '非常规文件';
+    errors.push(
+      `${WORKTREEINCLUDE_FILENAME} 必须是常规文件，当前为${kind}——清单本身若可被 symlink 重定向，其内容合同就不再受本仓库控制。`,
+    );
+    checks.push(
+      createCheck('worktreeinclude-exists', '.worktreeinclude 清单存在', 'fail', {
+        manifestPath: WORKTREEINCLUDE_FILENAME,
+        kind,
+      }),
+    );
+    return { status: 'fail', checks, warnings, errors };
+  }
+
   checks.push(
     createCheck('worktreeinclude-exists', '.worktreeinclude 清单存在', 'pass', {
       manifestPath: WORKTREEINCLUDE_FILENAME,
     }),
   );
 
-  const entries = parseWorktreeInclude(fs.readFileSync(manifestPath, 'utf-8'));
+  let rawManifest;
+  try {
+    rawManifest = fs.readFileSync(manifestPath, 'utf-8');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push(`${WORKTREEINCLUDE_FILENAME} 读取失败：${message}`);
+    checks.push(
+      createCheck('worktreeinclude-entries', '清单条目全部落在 FR-001 安全公共子集内', 'fail', {
+        readError: message,
+      }),
+    );
+    return { status: 'fail', checks, warnings, errors };
+  }
+
+  const entries = parseWorktreeInclude(rawManifest);
   const gitAvailable = isGitWorkTree(resolvedRoot);
 
   const violations = [];

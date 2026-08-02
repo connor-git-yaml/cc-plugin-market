@@ -10,10 +10,13 @@
  * 假 `spectra` CLI 一律在测试沙盒内自建并以 `spectraBin` 绝对路径注入，不触碰真实全局 CLI。
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { execSync, spawnSync } from 'node:child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const REPO_ROOT = path.resolve(__dirname, '../..');
 
 // @ts-expect-error — .mjs 无类型声明，运行时可解析
 import * as statusCore from '../../scripts/lib/graph-bootstrap-status.mjs';
@@ -38,6 +41,7 @@ interface FreshnessVerdict {
   recordedSourceCommit?: string | null;
   currentHead?: string | null;
   reason?: string;
+  receivedState?: string;
 }
 
 interface BuildOutcome {
@@ -52,6 +56,7 @@ interface WriteOutcome {
   statusPath: string;
   warnings: string[];
   removedLegacySidecar: boolean;
+  plan: string[];
 }
 
 const readEmbeddedSourceCommit = statusCore.readEmbeddedSourceCommit as (
@@ -83,8 +88,8 @@ const writeBootstrapStatus = statusCore.writeBootstrapStatus as (
 ) => WriteOutcome;
 const checkFreshness = statusCore.checkFreshness as (
   projectRoot: string,
-  options: { graphJsonPath: string; spectraBin?: string },
-) => FreshnessVerdict;
+  options: { graphJsonPath: string; spectraBin?: string; deadlineMs?: number; graceMs?: number },
+) => Promise<FreshnessVerdict>;
 const attemptLocalGraphBuild = statusCore.attemptLocalGraphBuild as (options: {
   projectRoot: string;
   spectraBin?: string;
@@ -206,6 +211,102 @@ describe('Feature 239 — graph-bootstrap-status 状态文件（FR-006）', () =
     expect(readStatusFile(sandbox.root).bootstrapSource).toBe('local-build');
   });
 
+  // W6(a)：串行两次调用在固定 `${path}.tmp` 实现下同样能过，证不了唯一 temp。
+  // 改为两个**真实并发子进程**同时写同一目标路径。
+  it('W6：两个真实并发进程写同一状态文件 → 终态是其中之一的完整 JSON，且无 tmp 残留', async () => {
+    const helperUrl = pathToFileURL(
+      path.join(REPO_ROOT, 'scripts/lib/graph-bootstrap-status.mjs'),
+    ).href;
+    const spawnWriter = (source: string) =>
+      new Promise<number>((resolve) => {
+        const child = spawn(
+          process.execPath,
+          [
+            '-e',
+            `import(${JSON.stringify(helperUrl)}).then((m) => {
+               m.writeBootstrapStatus(${JSON.stringify(sandbox.root)}, {
+                 schemaVersion: 1,
+                 bootstrapSource: ${JSON.stringify(source)},
+                 embeddedSourceCommitAtBootstrap: null,
+                 worktreeHeadAtBootstrap: null,
+                 generatedAt: new Date().toISOString(),
+                 assessable: false,
+               });
+             });`,
+          ],
+          { stdio: 'ignore' },
+        );
+        child.on('exit', (code) => resolve(code ?? -1));
+      });
+
+    const [firstCode, secondCode] = await Promise.all([
+      spawnWriter('primary-copy'),
+      spawnWriter('local-build'),
+    ]);
+
+    expect(firstCode).toBe(0);
+    expect(secondCode).toBe(0);
+    // 终态必须是某一个 writer 的**完整** JSON（rename 原子性），不得是半截内容
+    const finalStatus = readStatusFile(sandbox.root);
+    expect(['primary-copy', 'local-build']).toContain(finalStatus.bootstrapSource);
+    expect(finalStatus.schemaVersion).toBe(1);
+    // 无论谁赢，都不得留下 tmp 残渣
+    const leftovers = fs
+      .readdirSync(path.join(sandbox.root, 'specs', '_meta'))
+      .filter((name) => name.includes('.tmp'));
+    expect(leftovers).toEqual([]);
+  }, 20000);
+
+  it('W3：遗留 sidecar 是 broken symlink 时同样被清理（existsSync 对其返回 false）', () => {
+    const sidecarPath = path.join(sandbox.root, LEGACY_SIDECAR_REL);
+    fs.symlinkSync(path.join(sandbox.root, 'no-such-target'), sidecarPath);
+    expect(fs.existsSync(sidecarPath)).toBe(false); // 正是 existsSync 的盲区
+    expect(fs.lstatSync(sidecarPath).isSymbolicLink()).toBe(true);
+
+    const outcome = writeBootstrapStatus(sandbox.root, basePayload());
+
+    expect(outcome.removedLegacySidecar).toBe(true);
+    expect(() => fs.lstatSync(sidecarPath)).toThrow();
+  });
+
+  it('W4：dry-run 输出操作计划清单，而非"拟合成"的最终状态对象', () => {
+    fs.writeFileSync(path.join(sandbox.root, LEGACY_SIDECAR_REL), `${'d'.repeat(40)}\n`);
+
+    const outcome = writeBootstrapStatus(sandbox.root, basePayload(), { dryRun: true });
+
+    // dry-run 下 payload 是基于"尚未发生的 copy"推算的，与真实执行结果不等价，
+    // 因此不再声称打印最终状态对象，只报告操作计划。
+    expect(Array.isArray(outcome.plan)).toBe(true);
+    expect(outcome.plan.join('\n')).toContain('拟写状态文件');
+    expect(outcome.plan.join('\n')).toContain('拟删除遗留 sidecar');
+  });
+
+  it('W5：graph.json 超出体积上限 → 不读入内存，记 graph-too-large', () => {
+    const graphPath = path.join(sandbox.root, GRAPH_REL);
+    fs.writeFileSync(graphPath, '');
+    // 稀疏文件：statSync 报告超限尺寸，但不实际占用磁盘也不会被读入
+    fs.truncateSync(graphPath, statusCore.MAX_JSON_BYTES + 1);
+
+    expect(readEmbeddedSourceCommit(graphPath)).toEqual({ ok: false, reason: 'graph-too-large' });
+
+    const payload = buildStatusPayload({
+      projectRoot: sandbox.root,
+      graphCopiedThisRun: true,
+      snapshotCopiedThisRun: false,
+      buildAttempted: false,
+      buildSucceeded: false,
+    });
+    expect(payload.assessable).toBe(false);
+  });
+
+  it('W5：历史状态文件超出体积上限 → 按"无历史记录"处理，不读入内存', () => {
+    const statusPath = path.join(sandbox.root, STATUS_REL);
+    fs.writeFileSync(statusPath, '');
+    fs.truncateSync(statusPath, statusCore.MAX_JSON_BYTES + 1);
+
+    expect(readPreviousStatus(sandbox.root)).toBeNull();
+  });
+
   it('落盘成功后迁移性删除遗留 sidecar（C10）', () => {
     fs.writeFileSync(path.join(sandbox.root, LEGACY_SIDECAR_REL), `${'d'.repeat(40)}\n`);
 
@@ -288,7 +389,7 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     sandbox.cleanup();
   });
 
-  function runWithFakeCli(body: string): FreshnessVerdict {
+  async function runWithFakeCli(body: string): Promise<FreshnessVerdict> {
     const bin = writeFakeSpectra(sandbox.root, body);
     return checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
@@ -298,8 +399,8 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
 
   // 四态原样透传，`dirty` 绝不折叠进 `fresh`——它是"HEAD 一致但工作树有未提交改动"这一
   // 有实际意义的状态，折叠会让"图已与工作树脱节"被静默忽略。
-  it.each(['fresh', 'dirty', 'stale', 'unknown-provenance'])('四态原样透传：%s', (state) => {
-    const verdict = runWithFakeCli(
+  it.each(['fresh', 'dirty', 'stale', 'unknown-provenance'])('四态原样透传：%s', async (state) => {
+    const verdict = await runWithFakeCli(
       `cat <<'JSON'\n{"overallVerdict":"pass","freshness":{"state":"${state}","recordedSourceCommit":"aa","currentHead":"bb"}}\nJSON`,
     );
     expect(verdict.state).toBe(state);
@@ -307,22 +408,22 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     expect(verdict.currentHead).toBe('bb');
   });
 
-  it('exit 1（强不变量违反）携带合法 JSON 时仍先取 stdout 解析', () => {
-    const verdict = runWithFakeCli(
+  it('exit 1（强不变量违反）携带合法 JSON 时仍先取 stdout 解析', async () => {
+    const verdict = await runWithFakeCli(
       `cat <<'JSON'\n{"overallVerdict":"fail-strong-invariant","freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"bb"}}\nJSON\nexit 1`,
     );
     expect(verdict.state).toBe('stale');
   });
 
-  it('exit 2（cannot-assess）携带合法 JSON 时仍先取 stdout 解析', () => {
-    const verdict = runWithFakeCli(
+  it('exit 2（cannot-assess）携带合法 JSON 时仍先取 stdout 解析', async () => {
+    const verdict = await runWithFakeCli(
       `cat <<'JSON'\n{"overallVerdict":"cannot-assess","freshness":{"state":"unknown-provenance"}}\nJSON\nexit 2`,
     );
     expect(verdict.state).toBe('unknown-provenance');
   });
 
-  it('CLI 缺失（ENOENT）→ unknown-provenance + spectra-cli-missing', () => {
-    const verdict = checkFreshness(sandbox.root, {
+  it('CLI 缺失（ENOENT）→ unknown-provenance + spectra-cli-missing', async () => {
+    const verdict = await checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
       spectraBin: path.join(sandbox.root, 'definitely-not-installed-spectra'),
     });
@@ -330,18 +431,18 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     expect(verdict.reason).toBe('spectra-cli-missing');
   });
 
-  it('stdout 不可解析 → unknown-provenance + unparseable-output', () => {
-    const verdict = runWithFakeCli(`echo "not json at all"`);
+  it('stdout 不可解析 → unknown-provenance + unparseable-output', async () => {
+    const verdict = await runWithFakeCli(`echo "not json at all"`);
     expect(verdict.state).toBe('unknown-provenance');
     expect(verdict.reason).toBe('unparseable-output');
   });
 
-  it('freshness 字段缺失 → unknown-provenance（不臆造状态）', () => {
-    const verdict = runWithFakeCli(`cat <<'JSON'\n{"overallVerdict":"pass"}\nJSON`);
+  it('freshness 字段缺失 → unknown-provenance（不臆造状态）', async () => {
+    const verdict = await runWithFakeCli(`cat <<'JSON'\n{"overallVerdict":"pass"}\nJSON`);
     expect(verdict.state).toBe('unknown-provenance');
   });
 
-  it('spawn 参数以数组形式传入：子命令与 flag 不被空格拆分（§M10 毁图事故防线）', () => {
+  it('spawn 参数以数组形式传入：子命令与 flag 不被空格拆分（§M10 毁图事故防线）', async () => {
     // 假 CLI 把收到的 argv 逐个回显；断言第一个参数精确是 `graph-quality` 而不是 `graph`。
     const argvDump = path.join(sandbox.root, 'argv.txt');
     const bin = writeFakeSpectra(
@@ -349,7 +450,7 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
       `printf '%s\\n' "$@" > ${JSON.stringify(argvDump)}\ncat <<'JSON'\n{"freshness":{"state":"fresh"}}\nJSON`,
       'fake-spectra-argv',
     );
-    checkFreshness(sandbox.root, {
+    await checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
       spectraBin: bin,
     });
@@ -360,15 +461,70 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     expect(argv).toContain(path.join(sandbox.root, GRAPH_REL));
   });
 
+  // ── W2：接受面收窄——只认 exit ∈ {0,1,2} + 无 signal + 四态枚举内的 state ──
+  it('W2：exit 3 即便携带合法 JSON 也判 unknown-provenance + unexpected-exit-code', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"fresh"}}\nJSON\nexit 3`,
+    );
+    expect(verdict.state).toBe('unknown-provenance');
+    expect(verdict.reason).toBe('unexpected-exit-code');
+  });
+
+  it('W2：被信号杀死 → unknown-provenance + killed-by-signal', async () => {
+    const verdict = await runWithFakeCli(`kill -9 $$`);
+    expect(verdict.state).toBe('unknown-provenance');
+    expect(verdict.reason).toBe('killed-by-signal');
+  });
+
+  it('W2：state 不在四态枚举内 → unknown-provenance + unknown-state，并回传原始值', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"definitely-ready"}}\nJSON`,
+    );
+    expect(verdict.state).toBe('unknown-provenance');
+    expect(verdict.reason).toBe('unknown-state');
+    expect(verdict.receivedState).toBe('definitely-ready');
+  });
+
+  // ── C5：freshness 必须有界，不能无限阻塞整个 sync/hook ──
+  it('C5：CLI 卡死时按 deadline 收口 → unknown-provenance + freshness-timeout（秒级返回）', async () => {
+    const bin = writeFakeSpectra(sandbox.root, `trap '' TERM\nwhile true; do sleep 1; done`, 'stub-hang');
+
+    const started = Date.now();
+    const verdict = await checkFreshness(sandbox.root, {
+      graphJsonPath: path.join(sandbox.root, GRAPH_REL),
+      spectraBin: bin,
+      deadlineMs: 800,
+      graceMs: 300,
+    });
+    const elapsed = Date.now() - started;
+
+    expect(verdict.state).toBe('unknown-provenance');
+    expect(verdict.reason).toBe('freshness-timeout');
+    expect(elapsed).toBeLessThan(15000);
+  }, 30000);
+
+  it('C5：freshness 默认 deadline 为 5000ms（远小于 SC-001 的 60s 预算）', () => {
+    expect(statusCore.DEFAULT_FRESHNESS_DEADLINE_MS).toBe(5000);
+  });
+
   // 真实 CLI 冒烟：本机装了全局 spectra 才跑，未装则显式 skip 并留痕（不静默跳过）。
   const hasGlobalSpectra = spawnSync('command', ['-v', 'spectra'], { shell: true }).status === 0;
+  const resolvedSpectraBin = spawnSync('command', ['-v', 'spectra'], {
+    shell: true,
+    encoding: 'utf-8',
+  }).stdout?.trim();
   const smokeIt = hasGlobalSpectra ? it : it.skip;
-  smokeIt('真实全局 spectra CLI 冒烟：返回四态之一（未装全局 CLI 时 skip）', () => {
-    const verdict = checkFreshness(sandbox.root, {
+
+  // C1：此前该冒烟把 unknown-provenance 也当合法结果，于是"CLI 根本没被启动"仍判绿。
+  // 现在要求传入绝对路径时 reason 不得是 spectra-cli-missing——CLI 必须真的跑起来。
+  smokeIt('C1：真实全局 spectra CLI（绝对路径）必须真的被启动，reason 不得为 spectra-cli-missing', async () => {
+    const verdict = await checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
+      spectraBin: resolvedSpectraBin,
     });
+    expect(verdict.reason).not.toBe('spectra-cli-missing');
     expect(['fresh', 'dirty', 'stale', 'unknown-provenance']).toContain(verdict.state);
-  });
+  }, 30000);
 });
 
 describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案）', () => {
@@ -443,12 +599,86 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
     expect(fs.readFileSync(heartbeat, 'utf-8')).toBe(afterKill);
   }, 20000);
 
-  it('构建成功（exit 0）→ ok:true', async () => {
-    const stub = writeFakeSpectra(sandbox.root, 'exit 0', 'stub-ok');
-    await expect(
-      attemptLocalGraphBuild({ projectRoot: sandbox.root, spectraBin: stub, deadlineMs: 5000 }),
-    ).resolves.toEqual({ ok: true });
-  });
+  // ── C4：exit 0 不等于构建成功——必须验证产物存在、可解析、最小可查询 ──
+  //
+  // ⚠️ 语义翻转：本用例原先断言 `exit 0 → ok:true`，那正是审查复现的假成功
+  // （`/usr/bin/true` 作 spectraBin、图根本不存在，却记 bootstrapSource=local-build）。
+  it('C4：子进程 exit 0 但没产出图 → ok:false + graph-missing-after-build（不再是假成功）', async () => {
+    const stub = writeFakeSpectra(sandbox.root, 'exit 0', 'stub-ok-no-graph');
+    const outcome = await attemptLocalGraphBuild({
+      projectRoot: sandbox.root,
+      spectraBin: stub,
+      deadlineMs: 1500,
+      graceMs: 300,
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('graph-missing-after-build');
+  }, 20000);
+
+  it('C4：exit 0 且产出可解析且含 graph.sourceCommit → ok:true', async () => {
+    const stub = writeFakeSpectra(
+      sandbox.root,
+      `mkdir -p specs/_meta\nprintf '{"graph":{"sourceCommit":"%s"},"nodes":[]}' "${'c'.repeat(40)}" > specs/_meta/graph.json`,
+      'stub-ok-with-graph',
+    );
+    const outcome = await attemptLocalGraphBuild({
+      projectRoot: sandbox.root,
+      spectraBin: stub,
+      deadlineMs: 5000,
+    });
+    expect(outcome).toEqual({ ok: true });
+  }, 20000);
+
+  it('C4：产出存在但 JSON 损坏 → ok:false + graph-unparsable', async () => {
+    const stub = writeFakeSpectra(
+      sandbox.root,
+      `mkdir -p specs/_meta\nprintf '{ broken' > specs/_meta/graph.json`,
+      'stub-broken-graph',
+    );
+    const outcome = await attemptLocalGraphBuild({
+      projectRoot: sandbox.root,
+      spectraBin: stub,
+      deadlineMs: 1500,
+      graceMs: 300,
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('graph-unparsable');
+  }, 20000);
+
+  it('C4：产出可解析但缺 graph.sourceCommit（不可查询）→ ok:false + graph-not-queryable', async () => {
+    const stub = writeFakeSpectra(
+      sandbox.root,
+      `mkdir -p specs/_meta\nprintf '{"nodes":[],"links":[]}' > specs/_meta/graph.json`,
+      'stub-unqueryable-graph',
+    );
+    const outcome = await attemptLocalGraphBuild({
+      projectRoot: sandbox.root,
+      spectraBin: stub,
+      deadlineMs: 1500,
+      graceMs: 300,
+    });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('graph-not-queryable');
+  }, 20000);
+
+  it('C4：父进程快速 exit 0、后台孙进程稍后才写出图 → 在 deadline 内等到产物即 ok:true', async () => {
+    // 审查指出的盲区：孙进程测试都让父进程长活，没覆盖"父进程秒退但产物还没落盘"。
+    const stub = writeFakeSpectra(
+      sandbox.root,
+      [
+        `( sleep 0.6; mkdir -p specs/_meta; printf '{"graph":{"sourceCommit":"%s"},"nodes":[]}' "${'d'.repeat(40)}" > specs/_meta/graph.json ) &`,
+        'exit 0',
+      ].join('\n'),
+      'stub-late-artifact',
+    );
+    const outcome = await attemptLocalGraphBuild({
+      projectRoot: sandbox.root,
+      spectraBin: stub,
+      deadlineMs: 5000,
+      graceMs: 300,
+    });
+    expect(outcome).toEqual({ ok: true });
+  }, 20000);
 
   it('构建失败（非零退出）→ ok:false + non-zero-exit', async () => {
     const stub = writeFakeSpectra(sandbox.root, 'exit 3', 'stub-fail');

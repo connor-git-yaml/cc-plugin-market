@@ -35,7 +35,7 @@ const AGENTS_BYTE_BUDGET: number = core.AGENTS_BYTE_BUDGET;
 const parseWorktreeInclude = core.parseWorktreeInclude as (content: string) => string[];
 const validateWorktreeIncludeEntry = core.validateWorktreeIncludeEntry as (
   entry: string,
-  options: { projectRoot: string; gitAvailable: boolean },
+  options: { projectRoot: string; gitAvailable: boolean; extraRoots?: string[] },
 ) => EntryVerdict;
 const validateWorktreeIncludeContract = core.validateWorktreeIncludeContract as (options: {
   projectRoot: string;
@@ -130,6 +130,93 @@ describe('Feature 239 — .worktreeinclude 内容合同（FR-001）', () => {
     });
   });
 
+  describe('C2 — symlink 组件与 check-ignore 异常（词法过滤之外的物理 containment）', () => {
+    it('symlink-component：最终对象本身是 symlink → 拒绝', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-outside-'));
+      try {
+        const realFile = path.join(outside, 'real.env');
+        fs.writeFileSync(realFile, 'SECRET=1');
+        fs.symlinkSync(realFile, path.join(fixture.root, '.env.local'));
+
+        const result = validateWorktreeIncludeEntry('.env.local', {
+          projectRoot: fixture.root,
+          gitAvailable: true,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('symlink-component');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('symlink-component：中间路径组件是 symlink → 拒绝（lstat 会穿过中间 symlink 的盲区）', () => {
+      // 复刻仓库 `_reference` 型布局：一个指向仓库外的目录 symlink，其下挂真实文件。
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-outside-'));
+      try {
+        fs.mkdirSync(path.join(outside, 'graphify'), { recursive: true });
+        fs.writeFileSync(path.join(outside, 'graphify', 'SECURITY.env'), 'OUTSIDE');
+        fs.symlinkSync(outside, path.join(fixture.root, '_reference'));
+
+        const result = validateWorktreeIncludeEntry('_reference/graphify/SECURITY.env', {
+          projectRoot: fixture.root,
+          gitAvailable: false,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('symlink-component');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('symlink-component：另一侧根（target 侧父目录为 symlink）同样被拒绝', () => {
+      // source 侧完全干净，只有 target 侧的父目录是 symlink —— 若只校验一侧，copy 会写到仓库外。
+      const targetRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-target-'));
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-outside-'));
+      try {
+        fs.mkdirSync(path.join(fixture.root, 'nested'), { recursive: true });
+        fs.writeFileSync(path.join(fixture.root, 'nested', 'local.env'), 'SRC');
+        fs.symlinkSync(outside, path.join(targetRoot, 'nested'));
+
+        const result = validateWorktreeIncludeEntry('nested/local.env', {
+          projectRoot: fixture.root,
+          gitAvailable: false,
+          extraRoots: [targetRoot],
+        });
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('symlink-component');
+      } finally {
+        fs.rmSync(targetRoot, { recursive: true, force: true });
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('check-ignore-error：git 返回 128（如路径穿过 symlink）→ 独立 reason 拒绝，不并入 not-ignored', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-outside-'));
+      try {
+        fs.mkdirSync(path.join(outside, 'inner'), { recursive: true });
+        fs.writeFileSync(path.join(outside, 'inner', 'x.env'), 'OUTSIDE');
+        fs.symlinkSync(outside, path.join(fixture.root, 'linked'));
+
+        // 先证实 git 在该路径上确实返回 128（beyond a symbolic link），而非 0/1
+        const probe = spawnSync('git', ['check-ignore', '--quiet', '--', 'linked/inner/x.env'], {
+          cwd: fixture.root,
+        });
+        expect(probe.status).toBe(128);
+
+        // 该条目同时命中 symlink-component 与 check-ignore-error；判定顺序钉死为
+        // check-ignore 先于 symlink 组件校验，故此处断言 check-ignore-error。
+        const result = validateWorktreeIncludeEntry('linked/inner/x.env', {
+          projectRoot: fixture.root,
+          gitAvailable: true,
+        });
+        expect(result.valid).toBe(false);
+        expect(result.reason).toBe('check-ignore-error');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('1 类合法条目通过', () => {
     it('已 ignored 的常规文件通过', () => {
       fs.writeFileSync(path.join(fixture.root, '.env.local'), 'SECRET=1');
@@ -208,6 +295,31 @@ describe('Feature 239 — .worktreeinclude 内容合同（FR-001）', () => {
       const result = validateWorktreeIncludeContract({ projectRoot: fixture.root });
       expect(result.status).toBe('fail');
       expect(result.errors.join('\n')).toContain('dot-dot-segment');
+    });
+
+    it('W7：manifest 是目录 → 结构化 fail（不裸抛 EISDIR）', () => {
+      fs.mkdirSync(path.join(fixture.root, '.worktreeinclude'));
+      let result: CheckResult | undefined;
+      expect(() => {
+        result = validateWorktreeIncludeContract({ projectRoot: fixture.root });
+      }).not.toThrow();
+      expect(result?.status).toBe('fail');
+      expect(result?.errors.length).toBeGreaterThan(0);
+    });
+
+    it('W7：manifest 是 symlink → 结构化 fail（清单本身不得是 symlink）', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'worktreeinclude-outside-'));
+      try {
+        const realManifest = path.join(outside, 'manifest');
+        fs.writeFileSync(realManifest, '.env.local\n');
+        fs.symlinkSync(realManifest, path.join(fixture.root, '.worktreeinclude'));
+
+        const result = validateWorktreeIncludeContract({ projectRoot: fixture.root });
+        expect(result.status).toBe('fail');
+        expect(result.errors.length).toBeGreaterThan(0);
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
     });
 
     it('非 git 环境：ignored 子检查记为 skip（不进 warnings/errors，不拖累整体状态）', () => {

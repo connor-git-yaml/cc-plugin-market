@@ -23,6 +23,13 @@ ATTEMPT_BUILD="false"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GRAPH_STATUS_HELPER="$SCRIPT_DIR/lib/graph-bootstrap-status.mjs"
 
+# C1：把 spectra 解析成**绝对路径**再交给 node helper。
+# 裸命令名会随子进程 PATH 变化而失效——Volta 等 shim 型版本管理器在启动 Node 时会把自身
+# shim 目录从子进程 PATH 中移除，于是 shell 里 `command -v spectra` 成功、helper 里
+# spawn("spectra") 却拿 ENOENT，freshness 永远降级、--attempt-build 永远失败。
+# 解析不到时留空，helper 侧回落到裸名（保持"没装 CLI"这一真实降级路径）。
+SPECTRA_BIN="$(command -v spectra 2>/dev/null || true)"
+
 for arg in "$@"; do
   case "$arg" in
     --dry-run)
@@ -196,15 +203,33 @@ publish_exclusive() {
     return 0
   fi
 
+  # 发布前先判 symlink：BSD/GNU `ln` 在 target 是"指向目录的 symlink"时可能跟随它，
+  # 从而在**外部目录**里建立硬链接。symlink 目标一律视为"已有他方产物"，不覆盖不跟随。
+  if [[ -L "$target_path" ]]; then
+    log "graph bootstrap: 目标是 symlink（非预期），保留原样不发布（清理 tmp）"
+    rm -f "$tmp"
+    return 1
+  fi
+
   # `ln` 的"目标已存在则失败"是内核级原子操作：并发的两个进程只有一个能建立到 target 的
   # 硬链接，另一个必拿 EEXIST。此前的"检查 target 不存在 → mv"存在 TOCTOU 窗口，两个进程
   # 可以都通过检查，随后各自 mv 互相覆盖（后执行者赢，静默丢弃先到达的版本）。
-  if ln "$tmp" "$target_path" 2>/dev/null; then
+  local ln_error
+  if ln_error="$(ln "$tmp" "$target_path" 2>&1)"; then
     rm -f "$tmp"
     return 0
   fi
 
-  log "graph bootstrap: 目标已被其他进程发布，保留对方版本（清理 tmp）"
+  # W1：ln 失败有两类完全不同的含义，不能共用一句"对方已发布"。
+  # 只有"失败后 target 确实存在"才是并发竞争（EEXIST）；否则是 EXDEV/EACCES/EROFS 等
+  # 真实错误——把它们说成"保留对方版本"会让一次真实的发布失败被当成正常降级咽下去。
+  if [[ -e "$target_path" || -L "$target_path" ]]; then
+    log "graph bootstrap: 目标已被其他进程发布，保留对方版本（清理 tmp）"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  warn "graph bootstrap: 发布失败（target 仍不存在，非并发竞争）：${ln_error}"
   rm -f "$tmp"
   return 1
 }
@@ -377,6 +402,50 @@ git_ignore_check_available() {
 # SYNTAX_RULES 严格一致：语法类整体优先于存在性/ignored 类，其中 trailing-slash 必须
 # 在任何存在性检查之前拒绝——`.env.local/` 能通过 check-ignore，且尾斜杠会让存在性检查
 # 解析到目录本身从而绕过 not-regular-file 判定。
+# 在 root 下逐段下降，任一**已存在**路径组件（含最终对象）是 symlink 即返回 0。
+#
+# 为什么必须逐组件判：`[[ -f path ]]` 与 lstat 都只对最终对象免解引用，中间组件仍会被解析。
+# 仓库里的 `_reference` 就是指向主工作区的目录软链——`_reference/x/y.env` 在旧实现下
+# `[[ -f ]]` 为真，于是一条物理上位于仓库外的路径被当作合法条目 copy。
+# mode=all（默认）连最终对象一起判；mode=parents-only 只判父目录组件。
+#
+# 为什么 target 侧只判父目录：`copy_path` 对"目标本身是 symlink"有既有的安全处置——
+# `rm -f` 删的是**链接自身**（绝不写穿），随后 cp 出一个真实文件。这正是 F213 起就被测试
+# 守护的"遗留 .env.local 软链迁移为 copy"路径。而父目录是 symlink 时没有这层保护，
+# copy 会直接写到 worktree 外，必须拒绝。
+has_symlink_component() {
+  local root="$1"
+  local remaining="$2"
+  local mode="${3:-all}"
+  local current="$root"
+  local component
+
+  while [[ -n "$remaining" ]]; do
+    component="${remaining%%/*}"
+    if [[ "$component" == "$remaining" ]]; then
+      remaining=""
+    else
+      remaining="${remaining#*/}"
+    fi
+    if [[ -z "$component" ]]; then
+      continue
+    fi
+    current="$current/$component"
+    if [[ "$mode" == "parents-only" && -z "$remaining" ]]; then
+      return 1
+    fi
+    if [[ -L "$current" ]]; then
+      return 0
+    fi
+    if [[ ! -e "$current" ]]; then
+      # 该组件不存在 → 更深的组件也不可能存在
+      return 1
+    fi
+  done
+
+  return 1
+}
+
 validate_entry() {
   local entry="$1"
 
@@ -395,11 +464,29 @@ validate_entry() {
   if git_ignore_check_available; then
     local ignore_status=0
     git -C "$CURRENT_ROOT" check-ignore --quiet -- "$entry" || ignore_status=$?
-    # 1 = 明确未被忽略；其余非 0（128 等）= git 自身无法判定，不据此拒绝合法条目
+    # 0 = 已忽略（唯一通过态）；1 = 明确未忽略；其余（128 等）= git 无法判定。
+    # 128 不再放行：`git check-ignore -- <穿过 symlink 的路径>` 正是返回
+    # `fatal: beyond a symbolic link` + 128，旧实现把它当"无法判定→不拒绝"，
+    # 于是一条逃逸到仓库外的路径同时绕过了 ignored 前提与词法过滤。
     if [[ "$ignore_status" == "1" ]]; then
       containment_reject "not-ignored" "$entry"
       return 1
     fi
+    if [[ "$ignore_status" != "0" ]]; then
+      containment_reject "check-ignore-error" "$entry"
+      return 1
+    fi
+  fi
+
+  # 物理 containment：source 侧连最终对象一起查（symlink source 会读穿到仓库外）；
+  # target 侧只查父目录（最终对象是 symlink 时由 copy_path 安全地删链接再写真实文件）。
+  if has_symlink_component "$PRIMARY_ROOT" "$entry" "all"; then
+    containment_reject "symlink-component" "$entry"
+    return 1
+  fi
+  if has_symlink_component "$CURRENT_ROOT" "$entry" "parents-only"; then
+    containment_reject "symlink-component" "$entry"
+    return 1
   fi
 
   # FR-001(c)：路径存在时必须是常规文件；不存在不违规（干净 checkout 里 ignored 文件缺席是常态）
@@ -517,19 +604,30 @@ check_graph_freshness() {
     return 0
   fi
 
-  local verdict state
-  verdict="$(node "$GRAPH_STATUS_HELPER" check-freshness --project-root "$CURRENT_ROOT" --graph "$graph_target" 2>/dev/null || true)"
+  local -a freshness_args=(check-freshness --project-root "$CURRENT_ROOT" --graph "$graph_target")
+  if [[ -n "$SPECTRA_BIN" ]]; then
+    freshness_args+=(--spectra-bin "$SPECTRA_BIN")
+  fi
+
+  local verdict state reason
+  verdict="$(node "$GRAPH_STATUS_HELPER" "${freshness_args[@]}" 2>/dev/null || true)"
   state="$(printf '%s' "$verdict" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')"
+  reason="$(printf '%s' "$verdict" | sed -n 's/.*"reason":"\([^"]*\)".*/\1/p')"
 
   case "$state" in
+    fresh|dirty)
+      : # 图与工作树一致（dirty 刻意不告警：提交前工作树几乎必然 dirty）
+      ;;
     stale)
       warn "graph 可能 stale：图内嵌的 sourceCommit 与当前 worktree HEAD 不一致。建议增量更新（spectra watch / spectra install --git）或重建（spectra batch）。"
       ;;
     unknown-provenance)
-      warn "graph provenance 不明（unknown-provenance）：无法确认图的来源 commit，建议重建（spectra batch）后再依赖其结论。"
+      warn "graph provenance 不明（unknown-provenance${reason:+, reason=$reason}）：无法确认图的来源 commit，建议重建（spectra batch）后再依赖其结论。"
       ;;
     *)
-      : # fresh / dirty / 判定不可用 → 静默
+      # W2：默认分支不再静默。helper 崩溃（空输出）或返回枚举外的 state 都必须可见，
+      # 否则"判定链路坏了"会伪装成"图很健康"。
+      warn "graph freshness 判定不可用（unknown-provenance）：收到非预期结果 state='${state:-<空>}'，请手动运行 \`spectra graph-quality --json\` 核实。"
       ;;
   esac
   return 0
@@ -560,10 +658,18 @@ bootstrap_graph() {
   local build_attempted="false"
   local build_succeeded="false"
   if [[ "$ATTEMPT_BUILD" == "true" && "$graph_copied" != "true" && ! -e "$graph_target" ]]; then
-    if node_available; then
+    if [[ "$DRY_RUN" == "true" ]]; then
+      # C3：dry-run 绝不 spawn 真实构建。此前 dry-run 只作用于状态写入，构建分支没查
+      # DRY_RUN，于是一次"预演"会真的跑起 `spectra batch` 并写出图——dry-run 的基本契约破裂。
+      log "[dry-run] 拟执行本地构建：spectra batch --mode graph-only（本次不执行）"
+    elif node_available; then
       build_attempted="true"
       log "graph bootstrap: 尝试本地构建（spectra batch --mode graph-only）"
-      if node "$GRAPH_STATUS_HELPER" attempt-build --project-root "$CURRENT_ROOT"; then
+      local -a build_args=(attempt-build --project-root "$CURRENT_ROOT")
+      if [[ -n "$SPECTRA_BIN" ]]; then
+        build_args+=(--spectra-bin "$SPECTRA_BIN")
+      fi
+      if node "$GRAPH_STATUS_HELPER" "${build_args[@]}"; then
         build_succeeded="true"
       else
         warn "graph bootstrap: 本地构建未成功（不阻断）"

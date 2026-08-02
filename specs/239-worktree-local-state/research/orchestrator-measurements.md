@@ -119,6 +119,17 @@ spectra graph-quality --json --graph specs/_meta/graph.json
 
 **🔴 附带事故实录（本 feature 价值的又一活体证据）**：验证过程中 `spectra graph quality --help` 被 CLI 解析为 `spectra graph`（quality 被当多余参数忽略），该命令**静默把 6079 节点的图覆写为 2 节点 + `sourceCommit: null`**（F217 记忆教训"graph 命令写 null"实锤重演）。一次善意的探测就摧毁了整张图的 provenance，且无任何告警——已用 `spectra batch --mode graph-only` 重建（3.3s，恢复 6079 节点 + sourceCommit=aa8f326）。这正是 FR-006"状态每次图变更后更新 + freshness 现算不缓存"要防御的场景：若消费端只信一次性缓存的 ready 标记，此类静默覆写将不可见。
 
+## M11. SC-001 双腿实测 + implement 审查 C1 的实证矛盾裁决
+
+**SC-001 双腿实测**（2026-08-02，scratchpad 隔离沙盒：`git clone --local` primary + `git worktree add` 两个 wt，全冷、无图、graph 被 gitignore 天然缺席）：
+
+| 腿 | 条件 | 墙钟 | 结果 |
+|---|---|---|---|
+| 成功腿 | 全局 spectra 可用 + `--attempt-build` | **4745ms**（预算 60s，12.6×余量） | `bootstrapSource=local-build`、`assessable=true`、图 6083 节点可查询、内嵌 sourceCommit == HEAD |
+| 失败腿 | PATH 剥离 spectra（thinbin 仅 node+系统工具） | **115ms** | `bootstrapSource="none"`、`assessable=false` 显式落盘、可见警告 + 构建指引、不挂起不重试 |
+
+**C1 裁决记录**：implement 审查 C1 称"Volta 环境下 helper spawn 裸名 spectra 必 ENOENT、attempt-build **永远失败**"，并附其 spawn 复现。但上表成功腿走的正是完整生产链（bash → PATH volta node → helper spawnSync spectra）且**真实构建成功**——两个实证矛盾，说明该问题是**node 调用上下文相关**（Volta shim 对子进程 PATH 的处理随调用方式而异），非普遍必然。裁决：修法照做（shell 解析 `command -v spectra` 绝对路径下传，根治整类 PATH 敏感性），声称按环境相关降级记录。此例的方法论教训：**对抗审查的实证与编排器的实证冲突时，两边都是真的——差异必在实验条件里，修法应选择让差异不再重要的那种**。
+
 ## M8. 改动前测试基线（A/B 对照锚点）
 
 2026-08-02 18:25 于本 worktree 实测 `npx vitest run`：

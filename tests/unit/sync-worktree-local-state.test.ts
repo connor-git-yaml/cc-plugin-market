@@ -96,6 +96,8 @@ function writeSpectraStub(binDir: string, spec: SpectraStubSpec): void {
 
 /** 当前活跃 fixture 的 stub 目录，由 setupRepo 设置，供 runSync* 注入 PATH 前缀。 */
 let activeStubBinDir: string | null = null;
+/** 当前活跃 fixture 的隔离 HOME（W6(b)），由 setupRepo 设置，默认注入所有 runSync*。 */
+let activeHomeSandbox: string | null = null;
 
 interface SetupRepoOptions {
   /** `.worktreeinclude` 清单内容；`null` 表示不创建该文件（Feature 239 T008 manifest 缺失场景） */
@@ -135,6 +137,11 @@ function setupRepo({
   writeSpectraStub(stubBinDir, { mode: 'auto' });
   activeStubBinDir = stubBinDir;
 
+  // W6(b)：每个 fixture 自带隔离 HOME，避免脚本的 memory-symlink 步骤触碰真实 ~
+  const homeSandbox = path.join(tempDir, 'home-default');
+  fs.mkdirSync(homeSandbox, { recursive: true });
+  activeHomeSandbox = homeSandbox;
+
   return {
     tempDir,
     primaryDir,
@@ -155,11 +162,20 @@ function writeWorktreeInclude(repo: TestRepo, entries: string[]): void {
   fs.writeFileSync(path.join(repo.worktreeDir, '.worktreeinclude'), `${entries.join('\n')}\n`);
 }
 
-/** 统一 env：把 fixture 的 stub 目录放到 PATH 最前，确保脚本解析到假 `spectra`。 */
+/**
+ * 统一 env：
+ * - 把 fixture 的 stub 目录放到 PATH 最前，确保脚本解析到假 `spectra`
+ * - W6(b)：默认注入**临时 HOME**。脚本末尾的 claude-project-memory 步骤会读写
+ *   `$HOME/.claude/projects`，继承真实 HOME 会让测试对开发者主目录产生非密封副作用
+ *   （fixture slug 若与真实目录碰撞，甚至会在真实 HOME 下建链）。
+ */
 function stubbedEnv(extraEnv: Record<string, string> = {}): NodeJS.ProcessEnv {
   const base = { ...process.env, ...extraEnv };
   if (activeStubBinDir !== null) {
     base.PATH = `${activeStubBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
+  }
+  if (base.HOME === process.env.HOME && activeHomeSandbox !== null) {
+    base.HOME = activeHomeSandbox;
   }
   return base;
 }
@@ -1123,5 +1139,256 @@ describe('sync-worktree-local-state.sh', () => {
       expect(fs.readFileSync(target, 'utf-8')).toBe('MINE');
       expect(fs.existsSync(tmp)).toBe(false);
     });
+
+    // ── W1：ln 失败必须区分"对方已发布"与"真实错误" ──
+    it('W1：ln 因真实错误失败（target 仍不存在）→ 明确 warn，不伪装成"对方已发布"', () => {
+      const tmp = path.join(repo.worktreeDir, 'missing-source.tmp');
+      const target = path.join(repo.worktreeDir, 'publish-target.json');
+      // tmp 不存在 → ln 必失败，且失败后 target 依然不存在，属真实错误而非并发竞争
+      expect(fs.existsSync(tmp)).toBe(false);
+
+      const r = runPublishProbe(tmp, target);
+
+      expect(r.stderr).toContain('发布失败');
+      expect(r.stderr).not.toContain('已被其他进程发布');
+      expect(fs.existsSync(target)).toBe(false);
+    });
+
+    it('W1：target 是 symlink 时不覆盖、不跟随（防 BSD ln 跟随目录 symlink 写到外部）', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'publish-outside-'));
+      try {
+        const tmp = path.join(repo.worktreeDir, 'publish.tmp');
+        const target = path.join(repo.worktreeDir, 'publish-target.json');
+        fs.writeFileSync(tmp, 'MINE');
+        fs.symlinkSync(path.join(outside, 'decoy'), target);
+
+        const r = runPublishProbe(tmp, target);
+
+        expect(r.status).toBe(0);
+        // target 仍是原 symlink，未被替换；symlink 指向的外部路径也没被创建
+        expect(fs.lstatSync(target).isSymbolicLink()).toBe(true);
+        expect(fs.existsSync(path.join(outside, 'decoy'))).toBe(false);
+        expect(fs.existsSync(tmp)).toBe(false);
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Codex implement review 修复轮：C2 / C3 / C5 / W2
+  // ─────────────────────────────────────────────────────────────
+  describe('Feature 239 修复轮 — containment 物理校验（C2）', () => {
+    const PROBE_LOG_NAME = 'copy-path-probe.log';
+
+    function runWithManifest(entries: string[]): SyncResult {
+      writeWorktreeInclude(repo, entries);
+      return runSyncArgs(repo.worktreeDir, [], {
+        PROBE_LOG: path.join(repo.tempDir, PROBE_LOG_NAME),
+      });
+    }
+
+    function probeLog(): string {
+      const logPath = path.join(repo.tempDir, PROBE_LOG_NAME);
+      return fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf-8') : '';
+    }
+
+    it('形态 1 final symlink：条目自身是 symlink → symlink-component 拒绝（消除 bash 接受 / node 拒绝的漂移）', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-outside-'));
+      try {
+        const realFile = path.join(outside, 'real.env');
+        fs.writeFileSync(realFile, 'OUTSIDE-SECRET');
+        fs.symlinkSync(realFile, path.join(repo.primaryDir, '.env.local'));
+
+        const r = runWithManifest(['.env.local']);
+
+        expect(r.status).toBe(0);
+        expect(r.stderr).toContain('[containment] symlink-component: .env.local');
+        expect(probeLog()).not.toContain('.env.local');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('形态 2 intermediate symlink：`_reference` 型目录软链下的条目被拒绝', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-outside-'));
+      try {
+        fs.mkdirSync(path.join(outside, 'graphify'), { recursive: true });
+        fs.writeFileSync(path.join(outside, 'graphify', 'SECURITY.env'), 'OUTSIDE');
+        fs.symlinkSync(outside, path.join(repo.primaryDir, '_reference'));
+        // gitignore 让它满足 ignored 前提，把拒绝原因逼到 symlink 组件这一层
+        fs.appendFileSync(path.join(repo.worktreeDir, '.gitignore'), '_reference\n');
+
+        const r = runWithManifest(['_reference/graphify/SECURITY.env']);
+
+        expect(r.status).toBe(0);
+        expect(r.stderr).toMatch(/\[containment\] (symlink-component|check-ignore-error): _reference\/graphify\/SECURITY\.env/);
+        expect(probeLog()).not.toContain('SECURITY.env');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('形态 3 target-parent symlink：source 侧干净但 target 侧父目录是软链 → 拒绝（否则写出 worktree）', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-outside-'));
+      try {
+        fs.mkdirSync(path.join(repo.primaryDir, 'nested'), { recursive: true });
+        fs.writeFileSync(path.join(repo.primaryDir, 'nested', 'local.env'), 'FROM-PRIMARY');
+        fs.symlinkSync(outside, path.join(repo.worktreeDir, 'nested'));
+        fs.appendFileSync(path.join(repo.worktreeDir, '.gitignore'), 'nested/\n');
+
+        const r = runWithManifest(['nested/local.env']);
+
+        expect(r.status).toBe(0);
+        expect(r.stderr).toMatch(/\[containment\] (symlink-component|check-ignore-error): nested\/local\.env/);
+        // 关键：外部目录内不得出现被写出的文件
+        expect(fs.existsSync(path.join(outside, 'local.env'))).toBe(false);
+        expect(probeLog()).not.toContain('nested/local.env');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('形态 4 git 128：check-ignore 返回 128 → check-ignore-error 拒绝（不再当作"未拒绝"放行）', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-outside-'));
+      try {
+        fs.mkdirSync(path.join(outside, 'inner'), { recursive: true });
+        fs.writeFileSync(path.join(outside, 'inner', 'x.env'), 'OUTSIDE');
+        fs.symlinkSync(outside, path.join(repo.worktreeDir, 'linked'));
+        fs.symlinkSync(outside, path.join(repo.primaryDir, 'linked'));
+
+        const probe = spawnSync('git', ['check-ignore', '--quiet', '--', 'linked/inner/x.env'], {
+          cwd: repo.worktreeDir,
+        });
+        expect(probe.status).toBe(128); // 先证实 git 确实返回 128
+
+        const r = runWithManifest(['linked/inner/x.env']);
+
+        expect(r.status).toBe(0);
+        expect(r.stderr).toContain('[containment] check-ignore-error: linked/inner/x.env');
+        expect(probeLog()).not.toContain('linked/inner/x.env');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('形态 5 manifest 引用穿 symlink 路径：合法条目照常 copy，非法条目被拒且不中断', () => {
+      const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-outside-'));
+      try {
+        // 刻意不用 `_reference` 这个名字——它本身是 SYMLINK_TARGETS 的一项，
+        // 会被软链步骤正常建链，与本用例要观察的 copy 通道无关。
+        fs.mkdirSync(path.join(outside, 'graphify'), { recursive: true });
+        fs.writeFileSync(path.join(outside, 'graphify', 'leak.env'), 'OUTSIDE');
+        fs.symlinkSync(outside, path.join(repo.primaryDir, 'linked-vendor'));
+        fs.appendFileSync(path.join(repo.worktreeDir, '.gitignore'), 'linked-vendor\n');
+        fs.writeFileSync(path.join(repo.primaryDir, '.env.local'), 'KEY=legal');
+
+        const r = runWithManifest(['linked-vendor/graphify/leak.env', '.env.local']);
+
+        expect(r.status).toBe(0);
+        expect(r.stderr).toContain('[containment]');
+        // 非法条目未落地，合法条目照常完成
+        expect(fs.existsSync(path.join(repo.worktreeDir, 'linked-vendor'))).toBe(false);
+        expect(fs.readFileSync(path.join(repo.worktreeDir, '.env.local'), 'utf-8')).toBe('KEY=legal');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('零误伤：现行清单唯一条目 .env.local（无 symlink 组件）照常 copy', () => {
+      fs.writeFileSync(path.join(repo.primaryDir, '.env.local'), 'KEY=1');
+      const r = runWithManifest(['.env.local']);
+      expect(r.status).toBe(0);
+      expect(r.stderr).not.toContain('[containment]');
+      expect(fs.readFileSync(path.join(repo.worktreeDir, '.env.local'), 'utf-8')).toBe('KEY=1');
+    });
+  });
+
+  describe('Feature 239 修复轮 — dry-run 绝不真实构建（C3）', () => {
+    it('--dry-run --attempt-build：只打印拟执行计划，不 spawn 构建，图/状态/sidecar 零变化', () => {
+      const marker = path.join(repo.tempDir, 'build-invoked.marker');
+      // stub 一旦被真的调用就会留下 marker
+      fs.writeFileSync(
+        path.join(repo.stubBinDir, 'spectra'),
+        [
+          '#!/usr/bin/env bash',
+          'set -u',
+          'if [[ "${1:-}" == "batch" ]]; then',
+          `  printf 'invoked\\n' > ${JSON.stringify(marker)}`,
+          '  mkdir -p specs/_meta',
+          `  printf '{"graph":{"sourceCommit":"deadbeef"}}' > specs/_meta/graph.json`,
+          '  exit 0',
+          'fi',
+          `printf '{"freshness":{"state":"fresh"}}\\n'`,
+          'exit 0',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+      const sidecar = path.join(repo.worktreeDir, 'specs/_meta/.graph-source-commit');
+      fs.mkdirSync(path.dirname(sidecar), { recursive: true });
+      fs.writeFileSync(sidecar, 'legacy\n');
+
+      const r = runSyncArgs(repo.worktreeDir, ['--dry-run', '--attempt-build']);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain('[dry-run] 拟执行本地构建');
+      // 构建绝不能真的发生
+      expect(fs.existsSync(marker)).toBe(false);
+      expect(fs.existsSync(path.join(repo.worktreeDir, 'specs/_meta/graph.json'))).toBe(false);
+      expect(
+        fs.existsSync(path.join(repo.worktreeDir, 'specs/_meta/graph-bootstrap-status.json')),
+      ).toBe(false);
+      expect(fs.existsSync(sidecar)).toBe(true);
+    });
+  });
+
+  describe('Feature 239 修复轮 — freshness 有界执行与未知态告警（C5/W2）', () => {
+    it('C5：freshness CLI 卡死时 sync 仍在秒级返回并给出 warning（不无限阻塞）', () => {
+      seedPrimaryGraphForFreshness();
+      fs.writeFileSync(
+        path.join(repo.stubBinDir, 'spectra'),
+        `#!/usr/bin/env bash\ntrap '' TERM\nwhile true; do sleep 1; done\n`,
+        { mode: 0o755 },
+      );
+
+      const started = Date.now();
+      const r = runSyncVerbose(repo.worktreeDir);
+      const elapsed = Date.now() - started;
+
+      expect(r.status).toBe(0);
+      expect(elapsed).toBeLessThan(40000);
+      expect(r.stderr).toMatch(/unknown-provenance|freshness/);
+    }, 60000);
+
+    it('W2：未知 state（含 exit 3）→ shell 默认分支必须输出可见 warning 且回显原始值', () => {
+      seedPrimaryGraphForFreshness();
+      fs.writeFileSync(
+        path.join(repo.stubBinDir, 'spectra'),
+        [
+          '#!/usr/bin/env bash',
+          'set -u',
+          'if [[ "${1:-}" == "graph-quality" ]]; then',
+          `  printf '{"freshness":{"state":"definitely-ready"}}\\n'`,
+          '  exit 3',
+          'fi',
+          'exit 0',
+          '',
+        ].join('\n'),
+        { mode: 0o755 },
+      );
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain('unknown-provenance');
+    });
+
+    /** 让 worktree 侧有一张图可供 freshness 检查。 */
+    function seedPrimaryGraphForFreshness(): void {
+      const graphPath = path.join(repo.primaryDir, 'specs/_meta/graph.json');
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(graphPath, JSON.stringify({ graph: { sourceCommit: 'e'.repeat(40) } }));
+    }
   });
 });
