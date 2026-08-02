@@ -60,9 +60,29 @@ precision      = 2/10 = 20.0%
 
 ### precision 噪声逐条（8 个预测了但没改）
 
-全部来自 `withTelemetry` 的 upstream 链（`src/mcp/**` 5 个 + `kb-doc-lookup` + `kb-server`）——
-预测时以为要改 telemetry 层，实际 B2 裁决把挂点放在 `executeXxx` 内部而非装饰层，
-所以整条 upstream 链都没动。**这是预测方法的问题（锚点选错），不是图的问题。**
+> **v3 更正（批 4 复算抓到，同类失误第三次）**：v2 此处写「全部来自 withTelemetry 链（`src/mcp/**` 5 个 + kb-doc-lookup + kb-server）」——
+> 列举项相加只有 7、`src/mcp/**` 实为 4 个，且末 2 条根本不属该链。逐文件枚举如下（`comm -23 预测集 实际集` 可复算）。
+
+| # | 文件 | 来源锚点 |
+|---|------|---------|
+| 1 | `src/mcp/graph-tools.ts` | `withTelemetry` upstream |
+| 2 | `src/mcp/index.ts` | `withTelemetry` upstream |
+| 3 | `src/mcp/lib/telemetry.ts` | `withTelemetry` 自身 |
+| 4 | `src/mcp/server.ts` | `withTelemetry` upstream |
+| 5 | `src/kb-mcp/server.ts` | `withTelemetry` upstream |
+| 6 | `src/kb-mcp/tools/kb-doc-lookup.ts` | `withTelemetry` upstream |
+| 7 | `src/scaffold-kb/schema-compat.ts` | **`hasProvenanceColumns` 锚点**（非 withTelemetry 链）|
+| 8 | `src/scaffold-kb/search-core.ts` | **`hasProvenanceColumns` 锚点**（非 withTelemetry 链）|
+
+withTelemetry 链 6 条 + hasProvenanceColumns 链 2 条 = 8 ✅
+
+**归因**：1-6 是预测时以为要改 telemetry 装饰层，实际 B2 裁决把挂点放进 `executeXxx` 内部，整条 upstream 链未动；
+7-8 是 plan §4 判定「直接复用 `hasProvenanceColumns` 不新增探测函数」后该文件无需改。
+两者都是**预测方法的问题（锚点选错），不是图的问题**。
+
+> **失误模式登记**：三次算术/分类错误（v2 的分母双计、v2 的归因重复计数、v3 的这处）**全部落在人工手写的分类小计上**；
+> 机器可重算的 headline 四数（2/21、2/10、19、2/14）三轮复算一次没错。
+> → 教训：pilot 这类「数字即结论」的产物，凡人手汇总的中间分类都应有机器复算兜底，否则错的是叙事而非数据。
 
 ## M-3 review 发现率（见 `m3/judgment.md`）
 

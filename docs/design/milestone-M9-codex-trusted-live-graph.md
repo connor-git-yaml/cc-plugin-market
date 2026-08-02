@@ -258,6 +258,40 @@ F228 与 F229 两轮均出现同一现象：对 `fix-compliance-core.mjs` 的 sy
 但那是 `src/**` 的口径；**`plugins/**` 这条与 Spec Driver 自身演进强相关的代码树整体在图外**。
 建议在 B 轨扫尾时评估纳入（或显式登记为 out-of-scope 并说明理由），避免"图很干净但照不到我们改得最频繁的地方"。
 
+**F241（B 轨扫尾）的评估结论 —— 根因已定位，显式登记 out-of-scope**：
+根因**不是**目录被排除，而是 `src/batch/stages/source-discovery.ts:509-514` 的 TS/JS walker 扩展名白名单只收
+`.ts/.tsx/.js/.jsx`——`plugins/` 下 84 个文件全是 `.mjs`（`.ts/.js/.cjs` 各 0），且该目录既不在
+`TSJS_SKELETON_IGNORE_DIRS` 也未被 gitignore。实测 `TsJsLanguageAdapter.analyzeFile` **能**解析 `.mjs`
+（`goal-loop-core.mjs` → 18 exports / 100 callSites），所以修复面很可能只是白名单加 `.mjs`/`.cjs`。
+**未纳入 F241 的理由**：新增约 84 文件节点会改动 F217 六指标基线与 golden-master 断言，需独立回归预算
+（插件脚本多为独立 CLI 入口，可能天然低度数，需一并决定是给 entrypoint 豁免还是调门禁口径）。
+证据链见 `specs/241-graph-keepalive-kb-grounding/pilot/baseline-observations.md` O-5。
+
+### 7.5.5 调用边漏建：嵌套闭包归属中断（F241 pilot 实证，**误导型**缺陷）
+
+F241 的 grounding pilot 在 **fresh 图 + 质量门 pass** 的条件下，跨 `2e3a4cd`/`fd9af7f`/`bc3bfb5` 三个快照
+稳定复现：**位于嵌套函数表达式体内的调用，不归属到其外层 named symbol**，因而不建 `calls` 边。
+
+```ts
+server.tool('kb_search', DESC, {…},
+  withTelemetry('kb_search', async (args) => executeKbSearch(ctx, args)));
+//   ↑ 这条边建了                          ↑ 这条边丢了（归属在此中断）
+```
+
+**危害高于 no-hit**：`impact` 自信返回 `directCallers: 0 / riskTier: "low"`，使用者不会意识到答案是错的
+（对比 `symbol-not-found` 至少会让人退回 Grep）。pilot 台账 20 次计入调用中 **10 次返回被 grep 证伪的结果**。
+
+**两个已实测排除的假设**（后续排查勿重走）：① 不是「同文件 export 互调」——`schema-compat.ts` 内
+`provenanceSelectFragment → hasProvenanceColumns` 同文件互调**建了**边；② 不是 staleness。
+
+**相邻待定形态**：动态 `await import()` 解构后的调用同样漏边（`src/cli/index.ts:222-223`，可能所有 CLI 入口
+函数都显示无调用方）；以及**非零但偏低的 undercount**（`searchKbCore` 图报 2 实际 ≥4）——两者与主形态是否同源未定论。
+
+**建议修法**：callee 归属沿 AST 向上找最近的 named symbol，而非遇函数表达式即中断。
+入手点 `src/adapters/ts-js-adapter.ts`；同构先例 F219「forEachChild 不枚举 token」。
+修后须评估对 F217 六指标的影响（基线：节点 6146 / 边 8134 / graph-only 3.6s @ `bc3bfb5`）。
+完整证据与逐次台账见 `specs/241-graph-keepalive-kb-grounding/pilot/`（O-3 / O-7 / O-8 与 `ledger.jsonl`）。
+
 ---
 
 ## 8. 执行顺序与 Gate

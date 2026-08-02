@@ -281,30 +281,30 @@ revision: v2（Codex Tasks-phase 对抗审查 BLOCKED → 修订，见 review-di
 
 > **前置澄清（P-C2）**：`pilot/predicted-impact-set.md`、`pilot/mcp-call-log.md`、`pilot/ledger.jsonl`（11 行，已含 `timestamp:null` + `timestampNote` 回填，preflight 已完成、continuous capture 持续记账中）均**非本批新增制品**，本批只做 finalize 段——实际集比对、M-3、报告撰写、ledger 重算校验。
 
-- [ ] T066 记录 batch4 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch4=<sha>` 到 `trace.md`
+- [x] T066 记录 batch4 base：`git rev-parse HEAD` 追加 `[HH:MM:SS] batch_base: batch4=<sha>` 到 `trace.md`
   验证：`grep 'batch_base: batch4=' specs/241-graph-keepalive-kb-grounding/trace.md` 命中
 
-- [ ] T067 [红测试][P] 新增 `specs/241-graph-keepalive-kb-grounding/pilot/ledger-verify.mjs`（dev-only 重算脚本，放 pilot 目录非 `scripts/`，纯 Node 内置模块）：从 `pilot/ledger.jsonl` 重算 M-1 四类计数与命中率；断言既有 11 行 `timestamp===null` 且 `timestampNote` 非空、此后新增行 `timestamp` 为合法 ISO 8601 字符串（非 null，P-C2 point 3 迁移条款）
+- [x] T067 [红测试][P] 新增 `specs/241-graph-keepalive-kb-grounding/pilot/ledger-verify.mjs`（dev-only 重算脚本，放 pilot 目录非 `scripts/`，纯 Node 内置模块）：从 `pilot/ledger.jsonl` 重算 M-1 四类计数与命中率；断言既有 11 行 `timestamp===null` 且 `timestampNote` 非空、此后新增行 `timestamp` 为合法 ISO 8601 字符串（非 null，P-C2 point 3 迁移条款）
   验证：先跑一次（报告尚未撰写时）应因缺参照数字而无法比对（记为"红"——脚本本体先写好但比对目标未就绪）；T070 完成后 `node specs/241-graph-keepalive-kb-grounding/pilot/ledger-verify.mjs` exit 0
 
-- [ ] T068 实际集比对（M-2）：对照 `pilot/predicted-impact-set.md` 计算 coverage/precision/missed-list 三数（missed-list 逐条归因），产出数据供 T070 报告引用
+- [x] T068 实际集比对（M-2）：对照 `pilot/predicted-impact-set.md` 计算 coverage/precision/missed-list 三数（missed-list 逐条归因），产出数据供 T070 报告引用
   验证：数据来源可追溯到 `pilot/mcp-call-log.md`/`pilot/ledger.jsonl` 的具体行，missed-list 每条附归因说明
 
-- [ ] T069 M-3 A/B 同构对抗审查：对同一份 diff 并行启动两组同构 Codex 对抗审查子代理，落盘 `pilot/m3/prompt-a.md`、`pilot/m3/prompt-b.md`、`pilot/m3/diff.hash`（对该轮 diff 内容算 SHA-256，与 `git diff` 现场重算值一致）；若配额不足无法并行执行两组，按 OQ-1 如实登记"M-3 未执行"及原因（不伪造数据凑正向结果）
+- [x] T069 M-3 A/B 同构对抗审查：对同一份 diff 并行启动两组同构 Codex 对抗审查子代理，落盘 `pilot/m3/prompt-a.md`、`pilot/m3/prompt-b.md`、`pilot/m3/diff.hash`（对该轮 diff 内容算 SHA-256，与 `git diff` 现场重算值一致）；若配额不足无法并行执行两组，按 OQ-1 如实登记"M-3 未执行"及原因（不伪造数据凑正向结果）
   验证：`sha256sum` 现场重算的 diff hash 与 `pilot/m3/diff.hash` 内容一致；`prompt-a.md`/`prompt-b.md` 除 grounding 包内容外逐字相同（人工 diff 核对，checklist 反纸面达成项）
 
-- [ ] T070 撰写 pilot 报告：`specs/241-graph-keepalive-kb-grounding/pilot/report.md`。含 M-1 四类计数与命中率、M-2 三数（coverage/precision/missed-list）、M-3 A/B 两组真 finding 数与"B独有"/"A独有"差异数；FR-023 诚实性声明五项关键词（N=1、判读者非盲、单次采样、自我选择偏置——含"机器台账只治算术漂移、不治自报偏置"一句、结构性封顶为0）；`.mjs` 部分命中率结构性封顶为 0 及根因指针（O-5）；plan 附录记录的 O-8 补充发现（`searchKbCore` 实际 4 个直接调用方、图仅报 2 个，非零但仍偏低的 undercount，caveat 设计覆盖不到）列入"口径缺陷"一节；**禁止外推表述**（如"提升 X%"）
+- [x] T070 撰写 pilot 报告：`specs/241-graph-keepalive-kb-grounding/pilot/report.md`。含 M-1 四类计数与命中率、M-2 三数（coverage/precision/missed-list）、M-3 A/B 两组真 finding 数与"B独有"/"A独有"差异数；FR-023 诚实性声明五项关键词（N=1、判读者非盲、单次采样、自我选择偏置——含"机器台账只治算术漂移、不治自报偏置"一句、结构性封顶为0）；`.mjs` 部分命中率结构性封顶为 0 及根因指针（O-5）；plan 附录记录的 O-8 补充发现（`searchKbCore` 实际 4 个直接调用方、图仅报 2 个，非零但仍偏低的 undercount，caveat 设计覆盖不到）列入"口径缺陷"一节；**禁止外推表述**（如"提升 X%"）
   验证：见 T071/T072
 
-- [ ] T071 [红测试][P] SC-015 验证：`git log --format=%aI -- specs/241-graph-keepalive-kb-grounding/pilot/predicted-impact-set.md` 首次提交时间早于首个 implement 代码提交；`git diff <measurement-design.md 首次commit锚定SHA> -- specs/241-graph-keepalive-kb-grounding/pilot/measurement-design.md` 输出为空
+- [x] T071 [红测试][P] SC-015 验证：`git log --format=%aI -- specs/241-graph-keepalive-kb-grounding/pilot/predicted-impact-set.md` 首次提交时间早于首个 implement 代码提交；`git diff <measurement-design.md 首次commit锚定SHA> -- specs/241-graph-keepalive-kb-grounding/pilot/measurement-design.md` 输出为空
   验证：两条命令均按预期输出（前者时间先后正确、后者 diff 为空）
 
-- [ ] T072 [红测试][P] SC-017 验证：grep `pilot/report.md` 断言含「N=1」「判读者非盲」「单次采样」「自我选择偏置」「结构性封顶」五项关键词；人工审查确认不含「提升 X%」等外推表述（该项因黑名单不可穷举，W5 已裁决改为人工审查项，记入交付 report）
+- [x] T072 [红测试][P] SC-017 验证：grep `pilot/report.md` 断言含「N=1」「判读者非盲」「单次采样」「自我选择偏置」「结构性封顶」五项关键词；人工审查确认不含「提升 X%」等外推表述（该项因黑名单不可穷举，W5 已裁决改为人工审查项，记入交付 report）
   验证：grep 命令全部命中；人工审查结论写入交付 report
 
 ### 批 4 门禁
 
-- [ ] T073 **批 4 门禁（同时是全局收口门禁）**：`node specs/241-graph-keepalive-kb-grounding/pilot/ledger-verify.mjs` exit 0（重算 M-1 数字与报告逐项一致）+ `npx vitest run` 全绿（总文件/测试数不低于改动前基线 490文件/6017测试）+ `npm run build` 零错误 + `npm run repo:check` exit 0（全 family）+ `npm run release:check` 零失败（SC-018）+ `spectra graph-quality --json` `overallVerdict` 为 `pass`/`pass-with-warnings`（RG-007）。**T-C5 补齐**：T071 与 T072 的全部验证命令重跑一遍（不只是撰写阶段跑过一次）；M-3 prompt 同构性重新人工 diff `pilot/m3/prompt-a.md`/`prompt-b.md` + `sha256sum` 复核 `diff.hash`；`node --test plugins/spec-driver/tests/*.mjs`（插件侧全套，不能只跑 vitest——本批不改插件代码，但作为全局收口须确认零回归）。**continuous capture 收口检查**：`pilot/mcp-call-log.md` 总条目数与 `pilot/ledger.jsonl` 总行数（含 11 行迁移行）一致，`seq` 全程单调
+- [x] T073 **批 4 门禁（同时是全局收口门禁）**：`node specs/241-graph-keepalive-kb-grounding/pilot/ledger-verify.mjs` exit 0（重算 M-1 数字与报告逐项一致）+ `npx vitest run` 全绿（总文件/测试数不低于改动前基线 490文件/6017测试）+ `npm run build` 零错误 + `npm run repo:check` exit 0（全 family）+ `npm run release:check` 零失败（SC-018）+ `spectra graph-quality --json` `overallVerdict` 为 `pass`/`pass-with-warnings`（RG-007）。**T-C5 补齐**：T071 与 T072 的全部验证命令重跑一遍（不只是撰写阶段跑过一次）；M-3 prompt 同构性重新人工 diff `pilot/m3/prompt-a.md`/`prompt-b.md` + `sha256sum` 复核 `diff.hash`；`node --test plugins/spec-driver/tests/*.mjs`（插件侧全套，不能只跑 vitest——本批不改插件代码，但作为全局收口须确认零回归）。**continuous capture 收口检查**：`pilot/mcp-call-log.md` 总条目数与 `pilot/ledger.jsonl` 总行数（含 11 行迁移行）一致，`seq` 全程单调
   验证：以上命令全部零失败，逐项记入交付 report；随后可进入 verify 阶段
 
 ---

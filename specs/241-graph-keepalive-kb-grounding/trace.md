@@ -43,8 +43,12 @@
 
 - 图重建实测 **4.4s** → 坐实 D1「条件刷新而非部分刷新」，否决增量建图引擎
 - 图曾为 **stale**（`236de66` vs HEAD `2e3a4cd`），且 MCP 返回体**无任何 stale 标记** → B4③ 缺口实证
-- 两类 calls 边漏建实证（O-3 回调体内 / O-7 动态 import 解构）→ 已立 follow-up 卡，本 feature out-of-scope
-- `plugins/**/*.mjs` 不在图内的根因定位到 `source-discovery.ts:509-514` 扩展名白名单 → 已立卡，显式 out-of-scope
+- 两类 calls 边漏建实证（O-3 回调体内 / O-7 后收窄为「嵌套闭包归属中断」）→ 本 feature out-of-scope。
+  **登记状态更正（批 4 复核）**：仅在会话级 task chip 立过卡（用户已启动其中一张），
+  **仓内无独立卡文件**；O-7 收窄结论与 O-8 此前只存在于本 pilot 目录 → 已补登记进
+  `docs/design/milestone-M9-codex-trusted-live-graph.md` §7.5.4，防随本 feature 沉底
+- `plugins/**/*.mjs` 不在图内的根因定位到 `source-discovery.ts:509-514` 扩展名白名单 →
+  显式 out-of-scope（登记在 spec D6 + M9 §7.5.4）
 - F239 模块**不随插件分发** → spec FR-007 / RG-006 / D2 三者原本互斥，已补 D8
 
 > **O-9（现场实证，plan commit 时）**：`0ee233c` 提交后 pre-commit repo:check 的
@@ -77,3 +81,9 @@
 | 05:4x-06:0x | 6 implement 批 3（E2/E3）| T050-T065 全 done：lockfile-parser（npm/pnpm v5-v9/yarn classic+berry，32MB 稀疏文件保护）+ version-resolver（五态，多 lockfile 不收敛）+ kb-status（逐行 max 再全表 MAX；旧 schema unknown 恒定）+ CLI 两 op（严格校验）+ `kb_status` 接三处成功 envelope。**实现期发现 3 处 tasks/plan 契约缺陷如实上报**：T052 签名 `{version,source}|null` 无法承载 EC-28/EC-27 的「明确失败」（改判别式联合）；plan §4「kb-contract 既有快照断言天然不受影响」与事实相反（exact key-set 必改，已以不降强度方式处理并补反向断言）；spec Key Entities #8 无 `dbPath` 而 FR-019 要求输出库路径（CLI 层单独打印）|
 | 06:0x | 批 3 门禁 | vitest tests/kb 38 文件 511 测试（基线 35/415 纯增）；全量 496 passed/6235 passed；node:test 1272/1272；build + repo:check(86) 全 EXIT=0；RG-008 四命令矩阵全 exit 0 + graph.json/chunks.sqlite SHA 全 SAME；RG-009 旧 schema built_at 1 天前仍 unknown（P-W4 端到端兑现）|
 | 06:0x | **dogfooding 关键观测** | 批 2 新代码首次入图：`recordNoHit` 2 个跨文件 caller **正确建图**（新模块非黑洞）；`hasProvenanceColumns` 的同文件 export→export 边**存在** → **反证 O-7 不是「同文件互调不建边」**，真实形态收窄为「**嵌套闭包内的调用不归属外层 symbol**」（`withTelemetry(name, async ()=>execute...)`），4 次 miss-empty 共因由此定性 |
+
+[07:05:50] batch_base: batch4=27cb5a63ec30205583ac5d0245e265bb3e8c170c
+
+| 07:0x | 6 implement 批 4（pilot finalize）| ledger-verify.mjs（8 变异体证非空转）+ report.md + SC-015/016/017 验证。抓到编排器 metrics-raw.md 第三处人工分类错误（precision 归因列 7 说 8）与 trace 的「已立卡」over-claim |
+| 07:1x | 编排器修订 | metrics-raw v3 逐文件枚举 + 失误模式登记；O-5 根因结论与 O-7 收窄版正式登记进 M9 §7.5.4/§7.5.5（此前只活在 pilot 目录，会随 feature 沉底）|
+| 07:2x | 7 verify 独立验证 | **SC 18 PASS / 2 PARTIAL / 0 FAIL；RG 9/9 PASS；门禁 5 项 EXIT 0**。独立复跑抓到 3 处 gate 计数陈旧（批 3 中途快照）+ SC-020(b) 文案错（ensure-gitignore.sh 只定义函数，直接 bash 是空操作）+ SC-015 锚定 SHA 半回填 → 三处已修 |

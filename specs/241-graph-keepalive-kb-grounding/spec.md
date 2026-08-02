@@ -675,7 +675,7 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 
 - **SC-014（MCP 响应向后兼容）**：`npx vitest run tests/kb/` 全绿；断言 `kb_search` / `kb_api_lookup` 响应新增状态子对象，且既有字段（`results` / `total_found` / `not_found`）名称、类型、层级零变更。
 
-- **SC-015（pilot 口径合规取数）**：`pilot/predicted-impact-set.md` 存在且其首次提交时间早于首个 implement 代码提交；`pilot/mcp-call-log.md` 与 `pilot/ledger.jsonl` 均存在且 ledger 行数 ≥ markdown 记录的调用条数；`pilot/measurement-design.md` 相对**其首次 commit 的具体 SHA**（该 SHA 在 pilot 文档首次 commit 后回填进本 SC 与 pilot 报告，形成锚定）**无 diff**——即 `git diff <锚定SHA> -- specs/241-graph-keepalive-kb-grounding/pilot/measurement-design.md` 输出为空。
+- **SC-015（pilot 口径合规取数）**：`pilot/predicted-impact-set.md` 存在且其首次提交时间早于首个 implement 代码提交；`pilot/mcp-call-log.md` 与 `pilot/ledger.jsonl` 均存在且 ledger 行数 ≥ markdown 记录的调用条数；`pilot/measurement-design.md` 相对**其首次 commit 的具体 SHA**（该 SHA 在 pilot 文档首次 commit 后回填进本 SC 与 pilot 报告，形成锚定）**无 diff**——即 `git diff 0ee233c -- specs/241-graph-keepalive-kb-grounding/pilot/measurement-design.md` 输出为空。锚定 SHA = **`0ee233c`**（pilot 三份口径文档的首次 commit）。
 
 - **SC-016（pilot 三指标有对照数据 + ledger 重算一致）**：pilot 报告含 M-1 四类计数与命中率、M-2 的 coverage/precision/missed-list 三个数（missed-list 逐条归因）、M-3 的 A/B 两组真 finding 数与「B 独有」「A 独有」两个差异数；**并且**运行 FR-022 的验证脚本，断言其从 `pilot/ledger.jsonl` 重算出的 M-1 四类计数与命中率与报告中的数字**逐项一致**，脚本退出码 0。
 
@@ -689,7 +689,7 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 
 - **SC-020（数据路径 gitignore 自举）**（v2 新增，落 C5-4）：
   (a) **本仓**：`git check-ignore -v .specify/kb-nohit/nohit-20260803.jsonl` 与 `git check-ignore -v .specify/graph-consumption-audit.jsonl` 均有命中（退出码 0）；
-  (b) **安装态**：在临时目录 `git init` 一个全新 repo，拷入 `plugins/spec-driver/`，运行 `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 后，对上述两条路径再跑 `git check-ignore -v`，断言同样命中——证明第三方安装者不会因为清单遗漏而把 no-hit 数据与审计提交进自己的仓库。
+  (b) **安装态**：在临时目录 `git init` 一个全新 repo，拷入 `plugins/spec-driver/`，**source** `plugins/spec-driver/scripts/lib/ensure-gitignore.sh` 并调用其两个入口函数 `ensure_spec_driver_gitignore` / `ensure_spec_driver_git_exclude`（该库只定义函数、无顶层执行逻辑，**直接 `bash` 执行它是空操作**——verify 阶段 D-4 实测发现原文案有误，已更正）后，对上述两条路径再跑 `git check-ignore -v`，断言同样命中——证明第三方安装者不会因为清单遗漏而把 no-hit 数据与审计提交进自己的仓库。
 
 ---
 
