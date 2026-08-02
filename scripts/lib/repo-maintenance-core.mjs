@@ -22,6 +22,7 @@ import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.
 import { validateGraphQuality } from './graph-quality-core.mjs';
 import { validateSpecDrift } from './spec-drift-core.mjs';
 import { validateModelLiteralGate } from './model-literal-gate-core.mjs';
+import { validateWorktreeLocalState } from './worktree-local-state-core.mjs';
 
 function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
@@ -369,6 +370,16 @@ export async function validateRepository(projectRoot, options = {}) {
   aggregateValidation(
     'model-literal-gate',
     validateModelLiteralGate({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  // F239（M9 轨道 B3）— 第 15 个子检查族：worktree/local 状态合同
+  // （`.worktreeinclude` 安全公共子集 + AGENTS 文档字节预算）。
+  // 同步函数，无需 await；`not-ignored` 子检查在非 git 沙箱内降级为 skip，不拖累整体族状态。
+  aggregateValidation(
+    'worktree-local-state',
+    validateWorktreeLocalState({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

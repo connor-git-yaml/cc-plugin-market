@@ -60,6 +60,9 @@ const COPY_FILES = [
   // 未拷贝到沙箱会被新的 required-missing 判定拖累整体 status（与本测试主题
   // spec-drift 无关的噪声）。
   'docs/configuration.md',
+  // Feature 239（C7）：第 14 族 worktree-local-state 对"清单文件缺失"判 fail 且不因非 git
+  // 沙箱豁免（FR-001 硬性要求）。不预先复制会让本沙箱在新族接入后凭空多出一条 error。
+  '.worktreeinclude',
 ];
 
 let sandbox: string;

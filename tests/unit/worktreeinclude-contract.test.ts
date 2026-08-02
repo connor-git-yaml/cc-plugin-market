@@ -11,7 +11,7 @@
  * - 决策 4（C7）：`not-ignored` 子检查在非 git 环境降级为 skip，不拖累整体族状态
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -282,6 +282,20 @@ describe('Feature 239 — AGENTS byte budget（FR-008）', () => {
     fs.writeFileSync(path.join(fixture.root, 'AGENTS.md'), 'x'.repeat(100));
     const result = validateAgentsByteBudget({ projectRoot: fixture.root });
     expect(result.status).toBe('pass');
+  });
+});
+
+describe('Feature 239 — AGENTS.override.md ignored 前提（FR-007/SC-005）', () => {
+  it('git check-ignore AGENTS.override.md 退出码为 0（override 是 per-worktree 本地态，绝不入库）', () => {
+    const result = spawnSync('git', ['check-ignore', '--quiet', '--', 'AGENTS.override.md'], {
+      cwd: REPO_ROOT,
+    });
+    expect(result.status).toBe(0);
+  });
+
+  it('AGENTS.override.md 不出现在 .worktreeinclude 内容中（它由 Codex 原生管理，不走 copy 通道）', () => {
+    const manifest = fs.readFileSync(path.join(REPO_ROOT, '.worktreeinclude'), 'utf-8');
+    expect(manifest).not.toContain('AGENTS.override.md');
   });
 });
 

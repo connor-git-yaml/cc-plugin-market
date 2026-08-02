@@ -14,9 +14,19 @@ fi
 
 case "$ACTION" in
   create)
-    # 同步 worktree 本地态
+    # 同步 worktree 本地态。
+    #
+    # Feature 239 FR-009：失败与降级都必须**可见**，但都不阻断 worktree 创建。
+    # 原实现是 `2>/dev/null || true`——同步脚本的报错和"node 不可用，状态文件写入跳过"
+    # 这类降级 warning 一并被吞掉，新 worktree 带着"看起来成功"的假象继续跑。
+    # 现在 stderr 直接透传（脚本自身以 exit 0 表示"已降级但完成"，其 warning 必须能被看到），
+    # 非零退出时再补一条明确的失败注记；hook 自身始终 exit 0。
     if [ -f scripts/sync-worktree-local-state.sh ]; then
-      bash scripts/sync-worktree-local-state.sh 2>/dev/null || true
+      SYNC_STATUS=0
+      bash scripts/sync-worktree-local-state.sh || SYNC_STATUS=$?
+      if [ "$SYNC_STATUS" -ne 0 ]; then
+        echo "[worktree-lifecycle] 同步脚本以退出码 ${SYNC_STATUS} 结束（上方为其输出）；不阻断 worktree 创建。" >&2
+      fi
     fi
     ;;
   remove)

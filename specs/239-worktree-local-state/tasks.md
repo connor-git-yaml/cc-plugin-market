@@ -199,37 +199,37 @@ review_basis: reviews/codex-tasks-review-round1.md
 **依赖诚实化（W3 修订）**：T030/T031/T032/T033 仅依赖批1，可与批3 并行；T029 的 PATH 剥离 node 子场景需要批3 已落地的 `command -v node` 条件分支（T024）才能验证"其余步骤仍完成"，故 T029 显式依赖 T024；T034 依赖 T031（使红转绿）；批4 **完整** checkpoint（T035）依赖 T024（间接依赖批3），不能声称批4 整体独立于批3。
 **可独立验证**：`npm run repo:check` 含新族且 pass，两个既有集成测试仍 pass，`worktree-lifecycle-hook.test.ts` 绿。
 
-- [ ] T029 [批4][红测试]（W2 修正判据）新增 `tests/unit/worktree-lifecycle-hook.test.ts`：(a) 固定 stderr 内容 + 非零退出码的 `sync-worktree-local-state.sh` fixture（FR-009），断言 `worktree-lifecycle.sh` create 分支运行后该 stderr 内容在 hook 输出中可见、hook 自身退出码为 0；(b) 新增 PATH 剥离 `node` 的端到端用例，断言 warning 出现 + `.env.local` copy 与 `SYMLINK_TARGETS` 步骤仍完成 + `exit 0`
+- [x] T029 [批4][红测试]（W2 修正判据）新增 `tests/unit/worktree-lifecycle-hook.test.ts`：(a) 固定 stderr 内容 + 非零退出码的 `sync-worktree-local-state.sh` fixture（FR-009），断言 `worktree-lifecycle.sh` create 分支运行后该 stderr 内容在 hook 输出中可见、hook 自身退出码为 0；(b) 新增 PATH 剥离 `node` 的端到端用例，断言 warning 出现 + `.env.local` copy 与 `SYMLINK_TARGETS` 步骤仍完成 + `exit 0`
   - 文件：`tests/unit/worktree-lifecycle-hook.test.ts`
   - 完成判据：(a) 子场景此刻**失败**，失败原因为 hook 现状 `2>/dev/null || true` 会把 stderr 吞掉，测试断言"stderr 内容可见"失败（**而非** `set -e` 中断——W2 修正：此时 T024 的 node 条件分支已存在于脚本中，真正的红因是 hook 层面尚未捕获/透传 stderr）；(b) 子场景此刻**失败**，失败原因为 hook 尚未捕获 stderr 因此看不到"状态文件写入跳过：node 不可用"这条 warning（脚本内部该 warning 本身已由 T024 产出，但 hook 吞掉了它）
   - 依赖：T024
 
-- [ ] T030 [批4][红测试] 新增断言（可并入 `worktreeinclude-contract.test.ts` 追加断言块，非新文件）：`git check-ignore AGENTS.override.md` 命令成功（退出码 0）；`AGENTS.override.md` 字符串不出现在 `.worktreeinclude` 内容中
+- [x] T030 [批4][红测试] 新增断言（可并入 `worktreeinclude-contract.test.ts` 追加断言块，非新文件）：`git check-ignore AGENTS.override.md` 命令成功（退出码 0）；`AGENTS.override.md` 字符串不出现在 `.worktreeinclude` 内容中
   - 文件：`tests/unit/worktreeinclude-contract.test.ts`
   - 完成判据：此刻**失败**——`.gitignore` 尚未收录 `AGENTS.override.md`，`git check-ignore AGENTS.override.md` 退出码非 0
   - 依赖：T006
 
-- [ ] T031 [批4][红测试]（W4 新增：14 族接线证据）新增断言：直接调用 `validateRepository({ projectRoot })`（或 `npm run repo:check -- --json` 解析输出），断言其结果集中**存在**以 `worktree-local-state` 为前缀的 check 项——当前状态下因该族尚未注册而**判红**
+- [x] T031 [批4][红测试]（W4 新增：14 族接线证据）新增断言：直接调用 `validateRepository({ projectRoot })`（或 `npm run repo:check -- --json` 解析输出），断言其结果集中**存在**以 `worktree-local-state` 为前缀的 check 项——当前状态下因该族尚未注册而**判红**
   - 文件：`tests/integration/repo-maintenance-sync-check.test.ts`（新增独立断言块于同文件）
   - 完成判据：`npx vitest run tests/integration/repo-maintenance-sync-check.test.ts -t "worktree-local-state"` 此刻**失败**，失败原因为 `validateRepository` 输出的 checks 集合中不存在 `worktree-local-state` 前缀条目
   - 依赖：T006
 
-- [ ] T032 [批4][实现] 改造 `plugins/spec-driver/hooks/worktree-lifecycle.sh` 的 `create` 分支：捕获 `sync-worktree-local-state.sh` 执行的 stderr，非零退出时打印捕获内容到 stderr，hook 自身仍以 `exit 0` 结束
+- [x] T032 [批4][实现] 改造 `plugins/spec-driver/hooks/worktree-lifecycle.sh` 的 `create` 分支：捕获 `sync-worktree-local-state.sh` 执行的 stderr，非零退出时打印捕获内容到 stderr，hook 自身仍以 `exit 0` 结束
   - 文件：`plugins/spec-driver/hooks/worktree-lifecycle.sh`
   - 完成判据：`npx vitest run tests/unit/worktree-lifecycle-hook.test.ts` 中 T029 的 (a)(b) 两个子场景均转绿
   - 依赖：T029
 
-- [ ] T033 [批4][实现] `.gitignore` 新增一行 `AGENTS.override.md`
+- [x] T033 [批4][实现] `.gitignore` 新增一行 `AGENTS.override.md`
   - 文件：`.gitignore`
   - 完成判据：`npx vitest run tests/unit/worktreeinclude-contract.test.ts` 中 T030 新增断言转绿；`git check-ignore AGENTS.override.md` 手动执行退出码 0
   - 依赖：T030
 
-- [ ] T034 [批4][实现]（合并接线）先补齐两个既有集成沙箱测试的复制清单以防第 14 族接入后误判回归：`tests/integration/spec-drift-repo-check-modes.test.ts` 的 `COPY_FILES` 数组新增 `.worktreeinclude`；`tests/integration/repo-maintenance-sync-check.test.ts` 的 `copyFile(projectRoot, ...)` 调用序列新增 `.worktreeinclude`；随后在 `scripts/lib/repo-maintenance-core.mjs::validateRepository()` 中接入第 14 族：`aggregateValidation('worktree-local-state', validateWorktreeLocalState({ projectRoot: resolvedRoot }), warnings, errors, checks)`（复用 T004 已实现的聚合函数）
+- [x] T034 [批4][实现]（合并接线）先补齐两个既有集成沙箱测试的复制清单以防第 14 族接入后误判回归：`tests/integration/spec-drift-repo-check-modes.test.ts` 的 `COPY_FILES` 数组新增 `.worktreeinclude`；`tests/integration/repo-maintenance-sync-check.test.ts` 的 `copyFile(projectRoot, ...)` 调用序列新增 `.worktreeinclude`；随后在 `scripts/lib/repo-maintenance-core.mjs::validateRepository()` 中接入第 14 族：`aggregateValidation('worktree-local-state', validateWorktreeLocalState({ projectRoot: resolvedRoot }), warnings, errors, checks)`（复用 T004 已实现的聚合函数）
   - 文件：`tests/integration/spec-drift-repo-check-modes.test.ts`、`tests/integration/repo-maintenance-sync-check.test.ts`、`scripts/lib/repo-maintenance-core.mjs`
   - 完成判据：`npx vitest run tests/integration/spec-drift-repo-check-modes.test.ts tests/integration/repo-maintenance-sync-check.test.ts` 中 T031 新增断言转绿（`worktree-local-state` 前缀 check 确实出现且为 pass）；同时两个既有沙箱测试原有的整体 `pass` 断言**不因新族接入而回归**（验证缓解生效：`.worktreeinclude` 已提前补入复制清单，非 git 环境下 `not-ignored` 子检查降级为 `skip` 不拖累整体族状态）
   - 依赖：T031, T033
 
-- [ ] T035 [批4][回归验证] 批4 checkpoint：`worktree-lifecycle-hook.test.ts` 绿 + `npm run repo:check` pass（含第 14 族）+ 两个既有集成测试仍 pass
+- [x] T035 [批4][回归验证] 批4 checkpoint：`worktree-lifecycle-hook.test.ts` 绿 + `npm run repo:check` pass（含第 14 族）+ 两个既有集成测试仍 pass
   - 文件：无新增（验证性任务）
   - 完成判据：`npx vitest run tests/unit/worktree-lifecycle-hook.test.ts tests/integration/spec-drift-repo-check-modes.test.ts tests/integration/repo-maintenance-sync-check.test.ts && npm run repo:check` 全部 0 失败
   - 依赖：T032, T034

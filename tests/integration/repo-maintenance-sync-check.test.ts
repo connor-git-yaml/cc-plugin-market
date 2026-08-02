@@ -76,6 +76,9 @@ describe('repo maintenance sync/check', () => {
     // 未拷贝到隔离 fixture 会被新的 required-missing 判定为 fail，污染本测试主题
     // （repo:sync 重建受控产物）之外的断言。
     copyFile(projectRoot, 'docs/configuration.md');
+    // Feature 239（C7）：第 15 族 worktree-local-state 对"清单文件缺失"判 fail 且不因非 git
+    // 沙箱豁免（FR-001 硬性要求），必须随沙箱一起复制，否则新族接入即打红既有 pass 断言。
+    copyFile(projectRoot, '.worktreeinclude');
     // Feature 213（T016）：codex-plugin-consistency 矩阵接入 validateRepository() 后，
     // marketplace-entries check 需要 tracked 的 Codex marketplace catalog 存在，否则隔离
     // fixture 会因缺文件报 error，使既有 status==='pass' 断言假失败。
@@ -185,5 +188,31 @@ describe('repo maintenance sync/check', () => {
 
     expect(readFileSync(specDriverReadmePath, 'utf-8')).toContain(`> 当前发布版本: v${SPEC_DRIVER_VERSION}`);
     expect(readFileSync(agentPath, 'utf-8')).toContain('## 仓库级同步约定');
+  });
+
+  // Feature 239（W4）：第 14 族接线证据。只断言"整体 pass"无法证明新族真的被注册——
+  // 一个从未被调用的 validator 同样不会产生 error。必须显式断言该前缀的 check 出现在结果集里。
+  it('repo:check 输出含 worktree-local-state 第 14 族且为 pass', () => {
+    // 沙箱在 beforeEach 里被刻意移除了 `.codex`（由 repo:sync 重建），因此与既有用例一样
+    // 先 sync 再 check，否则整体 exitCode 会因与本族无关的 codex 产物缺失而非零。
+    expect(runNode(join(projectRoot, 'scripts', 'repo-sync.mjs'), projectRoot).exitCode).toBe(0);
+
+    const check = runNode(join(projectRoot, 'scripts', 'repo-check.mjs'), projectRoot);
+    const payload = JSON.parse(check.stdout) as {
+      status: string;
+      checks: Array<{ id: string; status: string }>;
+    };
+
+    const familyChecks = payload.checks.filter((item) => item.id.startsWith('worktree-local-state:'));
+    expect(familyChecks.length).toBeGreaterThan(0);
+    // 沙箱不是 git 仓库：ignored 子检查降级为 skip，其余子检查必须 pass，整体不得出现 fail
+    expect(familyChecks.every((item) => item.status === 'pass' || item.status === 'skip')).toBe(true);
+    expect(payload.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'worktree-local-state:worktreeinclude-exists', status: 'pass' }),
+        expect.objectContaining({ id: 'worktree-local-state:worktreeinclude-entries', status: 'pass' }),
+      ]),
+    );
+    expect(check.exitCode).toBe(0);
   });
 });
