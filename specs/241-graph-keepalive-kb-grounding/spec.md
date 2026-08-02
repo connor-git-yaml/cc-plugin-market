@@ -13,6 +13,7 @@ milestone_sc: M9-SC-007
 # Feature 241：图条件保活消费接线 + KB 三薄层 + Grounding Pilot
 
 > 修订 v2（Codex 对抗审查整改）：C1-C6/W1-W7/I1 落地，整改单见 review-dispositions.md
+> 修订 v3（plan 阶段 Codex 审查回灌）：审计双事件模型 + KB 语义钉死，整改单见 review-dispositions.md 的 Plan phase 节
 
 ## 概述与目标
 
@@ -302,11 +303,24 @@ milestone_sc: M9-SC-007
   **明确否决的路线（clarify C-001「CLI 读审计 JSONL 判已刷过」）**：不采纳。理由两条且均为硬理由——(a) 审计记录写在**决策与刷新之后**，它不是原子 claim，两个并发进程会各自读到「尚未刷过」而双双 spawn，把可用性问题伪装成已解决；(b) W3 处置明确禁止生产决策代码把审计文件当输入（审计是可被人工编辑、可被清理、可被 gitignore 丢弃的观测产物，让决策依赖它等于给决策引入一条不可信输入通道）。
   *验证*：见 SC-007（(a) 进程内 spawn 计数 ≤ 1；(b) 按调用方合同跑两次的集成断言）。
 
-- **FR-009（CLI 子命令）** `[必须]`：新增一个 CLI 子命令，参数为 projectRoot 与：`--phase <name>`（缺省 sentinel `"unscoped"`）、`--base-ref <ref>`（**权威判定必传**，phase 起点 ref；goal_loop 用该轮快照 S_i 的锚点；缺省时退化为仅用 `git status --porcelain -z` 的工作树差异并在输出标 `baseRefMissing: true`）、`--refresh-policy allowed|declined`、`--advisory`（切换 `pre-implement advisory` 合同，见 FR-011）、`--dry-run`、`--format json|text`（默认 json）。内部完成「采集五维输入（含调用 D8 canonical 模块的 `checkFreshness`） → 调用 FR-001 纯函数 → 按需刷新（受 FR-008 进程内 single-flight 约束） → 若消费则调 impact 并经 `annotateImpactCaveat` 注解 → 输出决策 JSON」。`--dry-run` 下只打印将要执行的操作计划，**不 spawn 任何构建、不写审计**。
-  *验证*：`node plugins/spec-driver/scripts/<cli>.mjs <subcommand> --dry-run --format json` 输出可被 `JSON.parse`，含 `outcome` / `degradedReason` / `caveats` / `inputs` / `advisory` / `matchedRule` 六个顶层键；断言 dry-run 下图文件 SHA-256 不变（RG-008）；断言 `--advisory` 下输出 `advisory: true` 且 `outcome !== "skip-impact"` 不被当作权威结论字段写出（见 FR-011）。
+- **FR-009（CLI 两子命令契约：`decide` / `annotate-caveat`）** `[必须，v3 改两子命令，落 P-C1]`：决策 CLI 暴露**两个子命令**而非一个。拆分的硬性依据：CLI 是 `.mjs` 脚本、**不持有 MCP client**，无法在单命令内自行发起 `impact` 调用（plan 已论证），impact 必须由调用方（编排层 / goal_loop）发起。
 
-- **FR-010（degraded reason 落审计）** `[必须]`：每次**非 dry-run** 决策（无论出口）必须追加一条审计记录到 `.specify/graph-consumption-audit.jsonl`，字段见 Key Entities。该路径必须被 gitignore 且有自举保障（FR-024）。写入必须是 append-only 且对并发写安全（单次 `appendFileSync` 写完整一行，行内不含裸换行）。审计写失败**不得**阻断决策返回（降级为 stderr warning）。审计是**只写不读**的观测产物：生产决策代码禁止把它当输入（RG-006）。
-  *验证*：跑两次决策后断言文件恰有 2 行合法 JSON；把审计目录设为只读后跑一次，断言进程退出码仍为 0 且 stderr 含 warning。
+  1. **`decide`**：参数为 `--project-root <path>`、`--phase <name>`（缺省 sentinel `"unscoped"`）、`--base-ref <ref>`（**权威判定必传**，phase 起点 ref；goal_loop 用该轮快照 S_i 的锚点；缺省时退化为仅用 `git status --porcelain -z` 的工作树差异并在输出标 `baseRefMissing: true`）、`--refresh-policy allowed|declined`、`--advisory`（切换 `pre-implement advisory` 合同，见 FR-011）、`--dry-run`、`--format json|text`（默认 json）。内部完成「采集五维输入（含调用 D8 canonical 模块的 `checkFreshness`） → 调用 FR-001 纯函数 → 按需刷新（受 FR-008 进程内 single-flight 约束） → 输出决策 JSON（含 `decisionId` 与决策时的 `graphSourceCommit`） → **非 dry-run 时当场**追加 `kind:"decision"` 审计事件（FR-010）」。`--dry-run` 下只打印将要执行的操作计划，**不 spawn 任何构建、不写任何审计事件**。
+  2. **`annotate-caveat`**：参数为 `--project-root <path>`、`--decision <json|@file>`（`decide` 的原样输出）、`--impact-result <json|@file>`（调用方拿到的 impact 结果）、`--impact-status completed|failed|skipped`、`--format json|text`。内部完成「快照校验（比对 decision 的 `graphSourceCommit` 与当下图内嵌值，见 FR-010） → 调 `annotateImpactCaveat`（FR-006） → 输出注解后的 decision → 追加 `kind:"caveat-annotation"` 审计事件」。
+
+  **CLI 时序固定为**：`decide` → （若出口需要消费 impact）**由调用方**发起 MCP `impact` → `annotate-caveat`。**不消费 impact 的出口**（`skip-impact` / `consume-degraded` / `unavailable`）与 **goal_loop authoritative 路径**只跑 `decide` 一步即为完整形态，没有注解事件不算漏（FR-010）。
+  *验证*：`node plugins/spec-driver/scripts/<cli>.mjs decide --dry-run --format json` 输出可被 `JSON.parse`，含 `outcome` / `degradedReason` / `caveats` / `inputs` / `advisory` / `matchedRule` / `decisionId` 七个顶层键；断言 dry-run 下图文件 SHA-256 不变（RG-008）且审计文件零新增事件；断言 `--advisory` 下输出 `advisory: true` 且 `outcome !== "skip-impact"` 不被当作权威结论字段写出（见 FR-011）；`annotate-caveat` 以 `decide` 的真实输出为入参跑一次，断言其输出 `caveats` 与新增的注解事件内容一致、`decisionId` 回链正确。
+
+- **FR-010（审计：双事件模型，decision 事件独立满足）** `[必须，v3 改双事件，落 P-C1]`：审计不再是「一决策一行」，而是 `.specify/graph-consumption-audit.jsonl` 上的**事件日志**，共两种 `kind`：
+
+  1. **`kind: "decision"`**：`decide` 在**非 dry-run** 时**无条件当场**追加一条——无论出口为何、无论后续是否消费 impact、无论调用方是否再跑 `annotate-caveat`。字段：`{ kind: "decision", decisionId(uuid), ts, phase, advisory, inputs: <五维入参对象>, outcome, degradedReason, caveats: []（此刻恒空）, graphSourceCommit（决策时图内嵌值 | null）, refreshAttempted, refreshOk }`。**FR-010「每次决策必留证据」由该事件独立满足**，与后续任何步骤无关——两步之间 crash 也不会漏记。
+  2. **`kind: "caveat-annotation"`**：`annotate-caveat` 被调用时追加一条。字段：`{ kind: "caveat-annotation", decisionId（回链 decision 事件）, ts, impactStatus: "completed"|"failed"|"skipped"|"snapshot-mismatch", caveats: [...], graphSourceCommitAtAnnotation }`。
+     **入参快照校验（必须）**：把 decision JSON 里的 `graphSourceCommit` 与注解时刻的图内嵌值比对；**不相等**时 `impactStatus` 置为 `"snapshot-mismatch"`、`caveats` **置空且不采信**该 impact 结果——「decide 读的是 G1、impact 却跑在 G2 上」这类跨快照拼接必须被显式检出，而不是静默拼接。
+
+  **goal_loop authoritative 路径（本就不消费 impact）= `decide` 单步即完整形态**，缺注解事件是正确形态，不得据此判为漏审计。
+
+  该路径必须被 gitignore 且有自举保障（FR-024）。写入必须是 append-only 且对并发写安全（单次 `appendFileSync` 写完整一行，行内不含裸换行）。审计写失败**不得**阻断决策返回（降级为 stderr warning）。审计是**只写不读**的观测产物：生产决策代码禁止把它当输入（RG-006）。
+  *验证*：跑两次非 dry-run `decide` 后断言文件恰有 **2 条 `kind:"decision"` 事件**、0 条注解事件；再跑一次 `annotate-caveat`，断言新增恰 1 条 `kind:"caveat-annotation"` 事件且 `decisionId` 与对应 decision 事件一致；构造「注解前图被重建」的场景，断言注解事件 `impactStatus: "snapshot-mismatch"` 且 `caveats` 为空；把审计目录设为只读后跑一次 `decide`，断言进程退出码仍为 0 且 stderr 含 warning。
 
 - **FR-011（goal_loop 接线：双合同，零改造既有函数）** `[必须，v2 拆双合同，落 C4]`：goal_loop 与散文层通过 FR-009 的 CLI（或直接 import FR-001 纯函数）消费同一份判定，但按 D3 的两个合同区分调用：
 
@@ -331,7 +345,8 @@ milestone_sc: M9-SC-007
 
   规则集必须以数据表形式声明（而非散落正则），便于测试穷举与后续扩充。redaction **不是** `sanitizeQuery`（FTS5 语法构造）也 **不是** `defangSentinel`（防注入拆解），必须新写独立模块，不复用二者。
   **能力边界必须在模块文档注释中如实写明**：本规则集只覆盖**结构上可判别**的形态，对中文姓名、内部项目代号、自然语言口令、带分隔符的电话号码等**无结构特征**的敏感内容无效（D5 残余风险声明）。
-  *验证*：单测对每条规则各给 ≥ 2 个正例 + 1 个反例，断言输出串中不含原文敏感片段；另有一条断言模块导出的规则表长度与文档表一致（防规则悄悄减少）。
+  **fallback 分支不豁免（v3 补充，落 P-W3）**：`kb_api_lookup` 走 `document_fallback` 分支且 `hits.length === 0` 时**必须记录** no-hit——这是**真实的零结果**（用户问了、KB 什么也没给出），不得因为入口是 fallback 就把该分支整体排除在采集之外，否则 coverage-gap backlog 会系统性漏掉 API 类缺口。
+  *验证*：单测对每条规则各给 ≥ 2 个正例 + 1 个反例，断言输出串中不含原文敏感片段；另有一条断言模块导出的规则表长度与文档表一致（防规则悄悄减少）；另有一条断言 `kb_api_lookup` 的 `document_fallback` + `hits.length === 0` 路径确实产生了一条 no-hit 记录。
 
 - **FR-013（no-hit 记录的落盘范围、存储与保留）** `[必须，v2 收窄落盘声明，落 C5]`：no-hit 记录写入 `.specify/kb-nohit/nohit-<YYYYMMDD>.jsonl`。**落盘内容严格限定为**：
   - `terms: string[]` —— redaction 后的串再经仓内 tokenizer（`src/scaffold-kb/tokenizer.ts`）切词、去重后的 term 列表；
@@ -342,8 +357,10 @@ milestone_sc: M9-SC-007
   该路径必须被 gitignore 且有自举保障（FR-024）。保留期 **30 天**滚动（proposed-default，见 OQ-2）：写入时清理 mtime 超过 30 天的同目录文件。可读范围 = 本机文件系统权限（不上传、不外发、不进任何 telemetry 上报通道）。写失败一律静默降级为 no-op（不得影响 KB 查询本身的返回）。
   *验证*：单测断言落盘对象的键集合恰为上列字段（**无** `redactedQuery` 等整串字段）；单测伪造 40 天前 mtime 的文件，跑一次写入后断言该文件被删除；把目录设为只读后跑一次查询，断言查询正常返回。gitignore 断言见 SC-020。
 
-- **FR-014（采集开关与状态可区分）** `[必须]`：no-hit 采集**默认关闭**，通过显式开关开启（env 或 config，具体形式由 plan 定）。coverage-gap 子命令的输出必须区分至少三种状态且**不得混淆**：`collection-disabled`（未开启采集，无从判断有无缺口）、`no-data`（已开启但尚无记录）、`no-gap-above-threshold`（有记录但无条目满足最小出现阈值）。**禁止**在采集关闭时返回空 backlog 而不标明状态。
-  *验证*：三种条件各跑一次子命令，断言输出 `status` 字段分别为上述三值；断言三种情况下 `items` 均为空数组但 `status` 互不相同。
+- **FR-014（采集开关钉死为单一 env + 状态可区分）** `[必须，v3 钉死开关，落 P-W3]`：no-hit 采集**默认关闭**，开关**钉死**为**单一环境变量 `SPECTRA_KB_NOHIT_TELEMETRY`**：其值 = no-hit 记录目录路径（约定为 `.specify/kb-nohit/`，见 FR-013）；**未设置或值为空字符串 = 关闭**。该形态对齐 O-4 记录的既有先例 `SPECTRA_MCP_TELEMETRY_PATH`（env 直接携带路径、不设即不采集）。**不引入 config 字段、不引入「布尔开关 + 路径」两个变量**——「env 或 config 由 plan 决定」这一悬置表述在 v3 作废。FR-012 的三个 recorder 入口（`kb_search` / `kb_api_lookup` / `scaffold-kb query`）**必须共用同一个解析函数**读取该 env，禁止三处各自 `process.env` 取值导致语义漂移。
+
+  coverage-gap 子命令的输出必须区分至少三种状态且**不得混淆**：`collection-disabled`（env 未设或为空，无从判断有无缺口）、`no-data`（已开启但尚无记录）、`no-gap-above-threshold`（有记录但无条目满足最小出现阈值）。**禁止**在采集关闭时返回空 backlog 而不标明状态。
+  *验证*：三种条件各跑一次子命令，断言输出 `status` 字段分别为上述三值；断言三种情况下 `items` 均为空数组但 `status` 互不相同；grep 断言全仓仅有一处读取 `SPECTRA_KB_NOHIT_TELEMETRY` 的实现，三个 recorder 均 import 该解析函数；断言 env 设为空字符串时行为等同未设置（`collection-disabled`）。
 
 - **FR-015（最小出现阈值聚合与 backlog 输出）** `[必须，v2 锁死聚合键，落 C5]`：coverage-gap 子命令读取 no-hit JSONL，按 **term** 聚合，仅输出满足 `distinctQueries ≥ 2`（k = 2）的条目。字段语义**锁死**：
 
@@ -385,11 +402,15 @@ milestone_sc: M9-SC-007
   **只报告状态，不触发任何重建或 ingest。**
   *验证*：对一份 fixture 库跑子命令，断言输出含全部字段；构造 `built_at` = 100 天前但 `ingested_at` = 5 天前的库，断言 `freshness: "current"`（验证取 max 而非 min）且 `oldestBuiltAt` 如实反映 100 天前；构造两者均 100 天前的库，断言 `stale`；断言运行前后库文件 SHA-256 不变。
 
-- **FR-020（旧 schema 库的探测-兼容）** `[必须]`：状态与聚合逻辑读取 `chunk_meta` 的 provenance 类列（`built_at` / `ingested_at` / `ingest_source_type` 等）前，必须先用 `PRAGMA table_info` 探测列是否存在，沿用 `src/scaffold-kb/schema-compat.ts:19-33` 的 `hasProvenanceColumns` 模式；旧库缺列时相应字段返回 `null` 并把新鲜度状态置为 `unknown`，**不得**抛错、**不得**假定所有历史库都有新字段。若本 feature 需要新增列或新表，同样必须走探测-兼容路径，且必须能在旧库上只读运行。
-  *验证*：准备一份缺 provenance 列的旧 schema fixture 库，跑状态子命令，断言退出码 0、相关字段为 `null`、`freshness: "unknown"`。
+- **FR-020（旧 schema 库的探测-兼容；`unknown` 恒定）** `[必须，v3 钉死语义，落 P-W4]`：状态与聚合逻辑读取 `chunk_meta` 的 provenance 类列（`built_at` / `ingested_at` / `ingest_source_type` 等）前，必须先用 `PRAGMA table_info` 探测列是否存在，沿用 `src/scaffold-kb/schema-compat.ts:19-33` 的 `hasProvenanceColumns` 模式；旧库缺列时相应字段返回 `null` 并把新鲜度状态置为 `unknown`，**不得**抛错、**不得**假定所有历史库都有新字段。若本 feature 需要新增列或新表，同样必须走探测-兼容路径，且必须能在旧库上只读运行。
 
-- **FR-021（MCP 响应字段扩展，向后兼容）** `[必须]`：`kb_search` 与 `kb_api_lookup` 的响应新增一个状态子对象（含 `activityAgeDays`、source version 列表、三元新鲜度）。必须是**纯新增字段**，既有字段名、类型、层级零变更（`kb_search` 的 `results` / `total_found`、`kb_api_lookup` 的 `not_found` 等一律保持）。**不新增独立 MCP tool**（D4）。
-  *验证*：`npx vitest run tests/kb/kb-contract.test.ts tests/kb/kb-search-tool.test.ts tests/kb/kb-api-lookup-tool.test.ts` 全绿；新增一条断言响应含新字段且既有字段快照不变。
+  **`freshness: "unknown"` 在旧 schema 下是恒定结论（v3 钉死）**：即便旧库恰好有一列 `built_at` 且其值很新（例如 5 天前），也**不得**据此判为 `current`。理由：FR-019 的判级输入是 `activityAt = max(built_at, ingested_at)`，缺 provenance 列意味着 `ingested_at` 不可知，单凭 `built_at` 一列无法支撑任何判级声明——那属于 D7 措辞红线禁止的 over-claim。
+  *验证*：准备一份缺 provenance 列的旧 schema fixture 库，跑状态子命令，断言退出码 0、相关字段为 `null`、`freshness: "unknown"`；另准备一份缺 provenance 列但 `built_at` 为 **5 天前**的旧库，断言 `freshness` 仍为 `"unknown"`（不得回落为 `current`），见 SC-013。
+
+- **FR-021（MCP 响应字段扩展，向后兼容；追加范围钉死）** `[必须，v3 钉死追加范围，落 P-W4]`：`kb_search` 与 `kb_api_lookup` 的响应新增一个状态子对象 `kb_status`（含 `activityAgeDays`、source version 列表、三元新鲜度）。必须是**纯新增字段**，既有字段名、类型、层级零变更（`kb_search` 的 `results` / `total_found`、`kb_api_lookup` 的 `not_found` 等一律保持）。**不新增独立 MCP tool**（D4）。
+
+  **追加范围钉死**：`kb_status` 追加到**全部成功 envelope**，明确包含 `kb_api_lookup` 的 `document_fallback` 分支与 `not_found: true` 的早返回路径——这两条同样是**成功响应**，调用方同样需要知道「查不到，是不是因为库太旧」。**error envelope 不追加**（明定：错误响应保持既有形状，不因治理字段扩大错误路径的契约面）。
+  *验证*：`npx vitest run tests/kb/kb-contract.test.ts tests/kb/kb-search-tool.test.ts tests/kb/kb-api-lookup-tool.test.ts` 全绿；新增断言：(a) 常规成功响应含 `kb_status` 且既有字段快照不变；(b) `document_fallback` 分支与 `not_found: true` 早返回两条路径的响应**均含** `kb_status`；(c) error envelope **不含** `kb_status`。
 
 ### 数据路径自举
 
@@ -403,14 +424,16 @@ milestone_sc: M9-SC-007
 
 ### Pilot
 
-- **FR-022（按冻结口径取数 + 机器台账）** `[必须，v2 增机器台账，落 W5]`：pilot 三指标（M-1 grounding 命中率 / M-2 impact coverage / M-3 review 发现率）严格按 `pilot/measurement-design.md` 已冻结的定义采集，**口径不得修改**；如发现口径缺陷，只在报告中追加「口径缺陷」一节。具体要求：
+- **FR-022（按冻结口径取数 + 机器台账 + 三段执行）** `[必须，v2 增机器台账落 W5；v3 增三段执行与 ledger 迁移条款落 P-C2]`：pilot 三指标（M-1 grounding 命中率 / M-2 impact coverage / M-3 review 发现率）严格按 `pilot/measurement-design.md` 已冻结的定义采集，**口径不得修改**；如发现口径缺陷，只在报告中追加「口径缺陷」一节。具体要求：
 
+  - **执行分三段（v3）**：**preflight**（批 1 开始**之前**：`pilot/predicted-impact-set.md` 已冻结的存在性校验 + `pilot/ledger.jsonl` 的 schema 校验）/ **continuous capture**（**横跨批 1-3**：每次 MCP 调用**当下**双写）/ **finalize**（批 4：实际集比对、M-3、报告撰写、ledger 重算校验）。只有 finalize 属于批 4；`predicted-impact-set.md` 与 `ledger.jsonl` **不是批 4 新增制品**（前者已冻结、后者持续记账中），plan / tasks 不得把它们标为批 4 新增。
   - **M-1 双写台账**：调用当下同时写入人读 `pilot/mcp-call-log.md` 与**机器可读** `pilot/ledger.jsonl`（每行含 timestamp、tool、target、四分类判读结果、备注）。另提供一个 dev-only 小验证脚本，从 `ledger.jsonl` 重算 M-1 四类计数与命中率，并与报告中的数字逐项比对，不一致即报错退出非 0。
+  - **ledger 迁移条款（v3）**：schema 定稿**之前**写入的既有行允许 `"timestamp": null`，但**必须**带 `"timestampNote"`（说明「schema 定稿前记录，先后次序见 `pilot/mcp-call-log.md` 的 git 历史」）；schema 定稿**之后**的新行**必须**带真实 ISO timestamp。**禁止**为既有行伪造事后时间戳——回填假时间会把"无法重建的时序"伪装成已知事实，属于本 feature 全篇禁止的 over-claim。
   - **M-2**：预测集必须在 implement 开始**之前**冻结写入 `pilot/predicted-impact-set.md`（含时间戳与所用 target 列表），且**覆盖全部计划改动文件**，不允许只挑图内的。
   - **M-3**：两组同构对抗审查的**完整 prompt 与被审 diff 的 hash** 必须落盘（`pilot/m3/` 下，A/B 各一份），使"两组确实同构、审的确实是同一份 diff"可事后核验。
   - **诚实边界（不得省略）**：台账仍是**自报**——它消除的是算术漂移与事后追记，**不消除**自我选择偏置。该声明必须进报告（FR-023）。
 
-  *验证*：`pilot/predicted-impact-set.md` 的首次提交时间早于首个 implement 代码提交；验证脚本退出码 0 且输出「ledger 重算 = 报告数字」；`pilot/m3/` 下 A/B 两份 prompt 存在且记录的 diff hash 相同。
+  *验证*：`pilot/predicted-impact-set.md` 的首次提交时间早于首个 implement 代码提交；验证脚本退出码 0 且输出「ledger 重算 = 报告数字」；ledger schema 校验断言「凡 `timestamp` 为 null 的行必须有 `timestampNote`，且此类行仅存在于 schema 定稿 commit 之前」；`pilot/m3/` 下 A/B 两份 prompt 存在且记录的 diff hash 相同。
 
 - **FR-023（pilot 报告的诚实性约束）** `[必须]`：pilot 报告必须显式写明：N=1、判读者非盲、单次采样、M-1 存在自我选择偏置（含「机器台账只治算术漂移、不治自报偏置」这一句）、`plugins/**/*.mjs` 部分命中率结构性封顶为 0（根因 O-5，处置 D6）。若 M-3 实验组 B 独有真 finding 数为 0，如实报 0，不得改判口径去凑正向结果。**禁止外推表述**（如「提升 X%」）——该项因黑名单不可穷举，改为 push gate 的人工审查项而非机器断言（见 SC-017）。
   *验证*：见 SC-017。
@@ -445,11 +468,49 @@ milestone_sc: M9-SC-007
 }
 ```
 
-CLI 输出（FR-009）在此基础上再加顶层键：`advisory: boolean`、`inputs`、`refreshAttempted` / `refreshOk` / `refreshDurationMs`、`baseRefMissing?: boolean`。
+`decide` 子命令输出（FR-009）在此基础上再加顶层键：`decisionId`、`graphSourceCommit`、`advisory: boolean`、`inputs`、`refreshAttempted` / `refreshOk` / `refreshDurationMs`、`baseRefMissing?: boolean`。`decisionId` 与 `graphSourceCommit` 是 `annotate-caveat` 的回链与快照校验入参（FR-010）。
 
-### 3. 图消费审计记录 `.specify/graph-consumption-audit.jsonl`（FR-010）
+### 3. 图消费审计事件日志 `.specify/graph-consumption-audit.jsonl`（FR-010，v3 双事件模型）
 
-每行一个对象：`{ schemaVersion: 1, timestamp, projectRoot, phase, advisory, inputs: <入参对象>, outcome, degradedReason, caveats, refreshAttempted: boolean, refreshOk: boolean|null, refreshDurationMs: number|null }`。append-only，gitignored（FR-024），`phase` 缺省为 sentinel `"unscoped"`。
+每行一个事件对象，由 `kind` 区分两种形态：
+
+**(a) `kind: "decision"`** —— `decide` 在非 dry-run 时**无条件当场**追加：
+
+```
+{
+  kind:            "decision",
+  schemaVersion:   2,
+  decisionId:      string,          // uuid，供 caveat-annotation 回链
+  ts:              string,          // ISO
+  projectRoot:     string,
+  phase:           string,          // 缺省 sentinel "unscoped"
+  advisory:        boolean,
+  inputs:          <五维入参对象>,
+  outcome:         <出口枚举>,
+  degradedReason:  <DEGRADED_REASONS> | null,
+  caveats:         [],              // 此刻恒空——caveat 只可能由注解事件产生
+  graphSourceCommit: string|null,   // 决策时图内嵌值，供跨快照检出
+  refreshAttempted:  boolean,
+  refreshOk:         boolean|null,
+  refreshDurationMs: number|null
+}
+```
+
+**(b) `kind: "caveat-annotation"`** —— `annotate-caveat` 被调用时追加：
+
+```
+{
+  kind:            "caveat-annotation",
+  schemaVersion:   2,
+  decisionId:      string,          // 回链上面的 decision 事件
+  ts:              string,
+  impactStatus:    "completed" | "failed" | "skipped" | "snapshot-mismatch",
+  caveats:         Array<CAVEAT_CODES>,   // snapshot-mismatch 时必须为空
+  graphSourceCommitAtAnnotation: string|null
+}
+```
+
+append-only，gitignored（FR-024）。**「每次决策必留证据」由 (a) 独立满足**；(b) 缺失不构成漏记——不消费 impact 的出口与 goal_loop authoritative 路径本就只产生 (a)。`graphSourceCommit` 与 `graphSourceCommitAtAnnotation` 不相等时，注解事件必须记 `impactStatus: "snapshot-mismatch"` 且 `caveats` 置空、不采信该 impact 结果。
 
 ### 4. freshness 事实源（**不新建**）
 
@@ -562,22 +623,22 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 
 - **SC-001（决策矩阵穷举 + 顺序不变量）**：`node --test plugins/spec-driver/tests/<决策核心测试>.mjs` 全绿，且该测试文件包含：(a) 一条穷举 144 种输入组合的用例，断言每种组合返回 FR-003 v2 表格规定的出口与 `matchedRule`，无 `undefined`、无 throw；(b) **missing 探针**（`missing` + 人为 `fresh` → `matchedRule ∈ {5,6}`）；(c) **out-of-scope 探针**（`out-of-graph-scope` + `stale` + `allowed` → `matchedRule = 2`、未触发刷新）；(d) 6 类 unreachable 组合的显式注释存在（grep 断言注释关键词）。
 
-- **SC-002（B4① 改既有代码 → 实测走刷新路径）**：在图为 `stale` 的 worktree 上，改动一个 `src/**` 既有文件后运行决策 CLI（authoritative 合同 + `--base-ref`），断言输出 `outcome: "refresh-then-consume"` 且刷新成功后终态为 `consume-impact`、`refreshAttempted: true`、`refreshOk: true`，且审计 JSONL 新增一行含上述字段。刷新耗时记录进审计（本仓参考值 ~4.4s）。
+- **SC-002（B4① 改既有代码 → 真实 stale worktree 上非 dry-run 实测走刷新路径）**（v3 明确非 dry-run + 事件语义，落 P-C1 / P-W2）：在图**确为** `stale` 的**真实** worktree 上（freshness 由 `checkFreshness` 实算得出，不是桩造输入），改动一个 `src/**` 既有文件后**以非 dry-run** 运行 `decide`（authoritative 合同 + `--base-ref`），断言输出 `outcome: "refresh-then-consume"` 且刷新成功后终态为 `consume-impact`、`refreshAttempted: true`、`refreshOk: true`；审计新增**恰 1 条 `kind:"decision"` 事件**，含上述字段与非空 `graphSourceCommit`，刷新耗时记录在该事件的 `refreshDurationMs`（本仓参考值 ~4.4s）。**必须非 dry-run**——dry-run 既不刷新也不写事件，用它验刷新路径等于没验。
 
-- **SC-003（B4② 纯新增 → 实测不刷新）**：在只新增文件的工作树上运行决策 CLI，断言 `outcome: "skip-impact"`、`degradedReason: "impact-not-applicable-additive-only"`、`refreshAttempted: false`，且图文件 SHA-256 在命令前后**完全不变**（证明未触发重建）。
+- **SC-003（B4② 纯新增 → 非 dry-run 实测不刷新 + 图 SHA-256 不变）**（v3 明确非 dry-run + 事件语义，落 P-C1 / P-W2）：在只新增文件的工作树上**以非 dry-run** 运行 `decide`，断言 `outcome: "skip-impact"`、`degradedReason: "impact-not-applicable-additive-only"`、`refreshAttempted: false`，审计新增**恰 1 条 `kind:"decision"` 事件**；且 `specs/_meta/graph.json` 的 **SHA-256 在命令前后完全不变**（证明 additive-only 路径确实未触发重建）。**该 SHA 断言必须在非 dry-run 下做**——dry-run 天然不写图，在其下断言无鉴别力。
 
 - **SC-004（B4③ 覆盖缺口 → fresh 也降级 + 结构化 over-claim 约束）**：在 `freshness: fresh` 的图上，对改动集全为 `plugins/**/*.mjs` 的情形运行决策 CLI，断言 `outcome: "consume-degraded"`、`degradedReason: "coverage-gap-out-of-graph-scope"`、`matchedRule: 2`、`refreshAttempted: false`。
   **over-claim 防线改为结构化约束**（v2 弃用中文关键词黑名单，落 W4）：(a) 断言 CLI 的 JSON 输出**不含任何自由文本评价字段**——顶层键集合等于契约声明的封闭集合，`fallbackHint` 取值必须来自导出的固定模板表；(b) 断言人读 `--format text` 的 summary 行是 `degradedReason → 固定模板` 的纯映射——测试对 12 个 `DEGRADED_REASONS` 逐一渲染，断言输出逐字等于模板表对应项（模板表本身作为常量被测试引用，任何新增自由文案都会使该断言失败）。
 
-- **SC-005（两组枚举分别可达）**（v2 拆分，落 C6）：
-  (a) **degraded reason**：为 `DEGRADED_REASONS` 的 **12** 个值各构造一次决策（可用注入桩模拟 refresh 失败四态），断言审计 JSONL 中 `degradedReason` 出现全部 12 个值，且无枚举外的值；
-  (b) **caveat**：单独构造一次经 FR-006 路径的 `consume-impact` + `directCallers: 0`，断言审计行 `caveats` 含 `coverage-gap-known-extraction-limit`，且该值**从未**出现在任何行的 `degradedReason` 字段。
+- **SC-005（两组枚举分别可达，按事件语义断言）**（v2 拆分落 C6；v3 改事件语义落 P-C1）：
+  (a) **degraded reason**：为 `DEGRADED_REASONS` 的 **12** 个值各构造一次非 dry-run `decide`（可用注入桩模拟 refresh 失败四态），断言审计中 **`kind:"decision"` 事件**的 `degradedReason` 覆盖全部 12 个值，且无枚举外的值；并断言这些 decision 事件的 `caveats` 恒为空数组；
+  (b) **caveat**：单独跑一次 `decide`（得 `consume-impact`）+ 一次 `annotate-caveat`（`impactResult.directCallers: 0`），断言新增的 **`kind:"caveat-annotation"` 事件**的 `caveats` 含 `coverage-gap-known-extraction-limit`、其 `decisionId` 回链到对应 decision 事件；且该值**从未**出现在任何 `kind:"decision"` 事件的 `degradedReason` 字段。
 
 - **SC-006（刷新失败四态映射）**：注入 fake `attemptLocalGraphBuild` 分别返回 `spawn-error(ENOENT)` / `timeout` / `non-zero-exit` / `graph-not-queryable`，断言 degraded reason 分别为 `refresh-failed-spectra-missing` / `refresh-failed-timeout` / `refresh-failed-nonzero-exit` / `refresh-failed-artifact-unusable`；另断言刷新前 `present` 与 `missing` 分别得到 `consume-degraded` 与 `unavailable`。
 
-- **SC-007（刷新次数：进程内硬保证 + 调用方合同）**（v2 拆两段，落 C3）：
-  (a) **进程内 spawn 计数**：在脏工作树上以 `--refresh-policy allowed` 跑**一次**决策 CLI，用 spawn 计数桩断言 `attemptLocalGraphBuild` 被调用次数**恰为 1**（覆盖「刷新成功后不重跑矩阵、不二次刷新」这一 EC-07 防线）；
-  (b) **按调用方合同跑两次**：第一次传 `--refresh-policy allowed`、第二次按合同传 `--refresh-policy declined`（同 `--phase`、同 projectRoot），断言第二次 `refreshAttempted: false`、`outcome: "consume-degraded"` + `graph-dirty-uncommitted`，且第二次总耗时不含构建。
+- **SC-007（刷新次数：进程内硬保证 + 调用方合同）**（v2 拆两段落 C3；v3 审计断言改事件语义落 P-C1）：
+  (a) **进程内 spawn 计数**：在脏工作树上以 `--refresh-policy allowed` 跑**一次** `decide`，用 spawn 计数桩断言 `attemptLocalGraphBuild` 被调用次数**恰为 1**（覆盖「刷新成功后不重跑矩阵、不二次刷新」这一 EC-07 防线）；
+  (b) **按调用方合同跑两次**：第一次传 `--refresh-policy allowed`、第二次按合同传 `--refresh-policy declined`（同 `--phase`、同 projectRoot），断言第二次 `refreshAttempted: false`、`outcome: "consume-degraded"` + `graph-dirty-uncommitted`，审计中共**恰 2 条 `kind:"decision"` 事件**，且第二次总耗时不含构建。
   **不断言**跨进程互斥（CLI 无状态、不加锁、不读审计——该 once-ness 由调用方合同承担，见 FR-008 与 EC-13 的残余声明）。
 
 - **SC-008（goal_loop 零回归 + 接线正反两向生效）**：`node --test plugins/spec-driver/tests/goal-loop-core.test.mjs` 与 `plugins/spec-driver/tests/goal-loop-snapshot-rollback-integration.test.mjs` 全绿（含 `interpretImpactResult (FR-012)` 四条冻结断言）；新增测试给出**正反两向**断言：
@@ -594,7 +655,7 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 
 - **SC-012（版本推断命中 + 显式优先 + ambiguous）**：对三种 npm lockfile fixture 各断言解析出预期版本；对「显式 `4.0.0` + lockfile `3.2.1`」断言 `resolved.status = "explicit"`、`resolved.version = "4.0.0"`、`candidates` 含 `3.2.1`、`flags` 含 `version-conflict`；对「多 lockfile + 无显式版本」断言 `resolved.status = "ambiguous"`、`resolved.version === null`、`candidates.length ≥ 2`、`flags` 含 `multiple-lockfiles`；对 `go.sum` fixture 断言 `flags` 含 `ecosystem-unsupported`、`resolved.status = "none"`。
 
-- **SC-013（KB freshness 公式与三元状态可查）**：对 fixture 库构造三组 provenance——(i) `built_at` 5 天前；(ii) `built_at` 45 天前；(iii) `built_at` 100 天前——运行状态子命令断言 `freshness` 分别为 `current` / `aging` / `stale`；另构造 (iv) `built_at` 100 天前 + `ingested_at` 5 天前，断言 `freshness: "current"`（验证 `activityAt = max(...)`）且 `oldestBuiltAt` 反映 100 天前、未影响判级；对缺 provenance 列的旧 schema 库断言 `unknown` + `schemaCompat: "legacy-missing-provenance"` + 退出码 0；断言运行前后库文件 SHA-256 不变（只读证明）。
+- **SC-013（KB freshness 公式与三元状态可查）**（v3 增旧库钉死用例，落 P-W4）：对 fixture 库构造三组 provenance——(i) `built_at` 5 天前；(ii) `built_at` 45 天前；(iii) `built_at` 100 天前——运行状态子命令断言 `freshness` 分别为 `current` / `aging` / `stale`；另构造 (iv) `built_at` 100 天前 + `ingested_at` 5 天前，断言 `freshness: "current"`（验证 `activityAt = max(...)`）且 `oldestBuiltAt` 反映 100 天前、未影响判级；对缺 provenance 列的旧 schema 库断言 `unknown` + `schemaCompat: "legacy-missing-provenance"` + 退出码 0；**另构造 (v) 缺 provenance 列但 `built_at` 为 5 天前的旧库，断言 `freshness` 恒为 `"unknown"`**（FR-020 v3 钉死：单列 `built_at` 再新也不足以判级，不得回落为 `current`）；断言运行前后库文件 SHA-256 不变（只读证明）。
 
 - **SC-014（MCP 响应向后兼容）**：`npx vitest run tests/kb/` 全绿；断言 `kb_search` / `kb_api_lookup` 响应新增状态子对象，且既有字段（`results` / `total_found` / `not_found`）名称、类型、层级零变更。
 
@@ -676,12 +737,14 @@ MCP 响应扩展字段为该对象的子集（`activityAgeDays` / `sourceVersion
 | **复杂度信号** | **2 个**：① 并发控制（no-hit JSONL 与审计 JSONL 的并发追加写；已按"行原子性 + 不引入锁 + 跨调用交由调用方合同"约束降级处理）；② 数据迁移/兼容（KB 旧 schema 库的 `PRAGMA` 探测-兼容路径；以及 D8 的模块迁移 + re-export 兼容）。**无**递归结构、**无**状态机 |
 | **总体复杂度** | **HIGH**（组件 6 > 5，且存在 2 个复杂度信号） |
 
-**交付批次约束（v2 新增，落 I1）**：**不拆分为多个 feature**——B4 + E + pilot 合一线是用户明示的需求形态，拆 feature 会割裂 M9 收口的组织归属与 pilot 载体。但 implement **必须按四批次序推进，每批独立跑完门禁（`npx vitest run` / `node --test` / `npm run build` / `npm run repo:check` 对应子集零失败）后再进下一批**：
+**交付批次约束（v2 新增落 I1；v3 pilot 改三段落 P-C2）**：**不拆分为多个 feature**——B4 + E + pilot 合一线是用户明示的需求形态，拆 feature 会割裂 M9 收口的组织归属与 pilot 载体。但 implement **必须按四批次序推进，每批独立跑完门禁（`npx vitest run` / `node --test` / `npm run build` / `npm run repo:check` 对应子集零失败）后再进下一批**：
 
 1. **批 1 — B4**（组件 1-2 + D8 模块迁移 + goal_loop 接线）：FR-001~FR-011、FR-024 的审计路径部分；
 2. **批 2 — E1**（组件 3-4）：FR-012~FR-015、FR-024 的 no-hit 路径部分；
 3. **批 3 — E2/E3**（组件 5-6）：FR-016~FR-021；
-4. **批 4 — pilot**：FR-022~FR-023（取数依附于前三批的实际开发过程，因此必须最后收口）。
+4. **批 4 — pilot finalize**：FR-022~FR-023 的收口部分（实际集比对、M-3、报告撰写、ledger 重算校验）。
+
+**pilot 不是只发生在批 4（v3 更正）**：按 FR-022 的三段执行，**preflight** 在批 1 开始之前完成（预测集存在性 + ledger schema 校验），**continuous capture** 横跨批 1-3 持续记账（每次 MCP 调用当下双写），批 4 只做 **finalize**。因此 `pilot/predicted-impact-set.md` 与 `pilot/ledger.jsonl` 在 plan / tasks 中**不得**被标为「批 4 新增制品」——它们分别已冻结、已在持续写入。
 
 该约束将在 tasks.md 中体现为四个任务分组，组间为硬依赖边（前一组门禁未过不得启动下一组）。
 

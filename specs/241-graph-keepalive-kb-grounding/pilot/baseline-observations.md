@@ -170,3 +170,14 @@ CLI 命令分发在本仓大量使用 O-7 这个形态（`src/cli/index.ts` 的�
 → 缺口是**特定语法形态**的，不是普遍性失效。这提高了修复的可行性，也提高了「不修就长期误导」的代价。
 
 **处置**：仍不在 F241 范围内（属 Spectra AST 抽取面），与 O-3 合并为同一个 follow-up。
+
+## O-8 第三类形态：hit 但**部分漏报**（plan 子代理发现，编排器 grep 复核）
+
+`impact(src/scaffold-kb/search-core.ts::searchKbCore)` 返回 `directCallers: 2`，
+但 grep 交叉核对实际调用方 ≥ 4：`src/cli/commands/scaffold-kb.ts:55-56`、
+`src/kb-mcp/tools/kb-search.ts:66/70`、`src/kb-mcp/tools/kb-api-lookup.ts`。
+
+**与 O-3/O-7 的区别**：不是零命中，是**计数低估**——最难被使用者察觉的形态
+（有结果就更不会怀疑）。M-1 四分类把它计成 `hit`，报告时必须在「口径缺陷」节
+连同 1-3/1-5 一起给出「经交叉核对证实低估/错误的 hit 数」。
+详细归因见 plan.md 附录；处置同 O-3/O-7：并入既有 follow-up 卡范围，本 feature 不修。

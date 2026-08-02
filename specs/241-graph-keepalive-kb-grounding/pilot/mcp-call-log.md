@@ -35,3 +35,11 @@
 > 按冻结口径它们会被计入 `fuzzy-hit`/`miss-empty`，从而**高估**命中率。
 > 报告 M-1 时必须同时给出「其中经交叉核对被证实为错误结果的次数」，
 > 不得只报四分类数字。这条写进最终报告的「口径缺陷」节。
+
+### 分段 1 续：plan 子代理的调用（编排器代记，来源=plan 子代理报告 + plan.md 附录）
+
+| # | target | 工具 | 类别 | 备注 |
+|---|--------|------|------|------|
+| 1-6 | `src/kb-mcp/tools/kb-search.ts::executeKbSearch` | impact | `miss-empty`（**已证错误**）| 复现 O-3（0 caller 而实际有）|
+| 1-7 | `goal-loop-core.mjs::interpretImpactResult` | context | `miss-structural` | 复现 O-5（.mjs 不在图）|
+| 1-8 | `src/scaffold-kb/search-core.ts::searchKbCore` | impact | `hit`（**部分漏报**）| 返回 directCallers:2，grep 交叉核对实际 ≥4（scaffold-kb.ts / kb-search.ts / kb-api-lookup.ts 等）——见 O-8 |

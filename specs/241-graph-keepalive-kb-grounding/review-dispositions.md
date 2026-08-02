@@ -80,3 +80,58 @@ clarify（clarifications.md）4 条推荐里 2 条与本整改单冲突，裁决
 | C-003（`distinctQueries` 按 JSONL 行数/事件数计）| 恰是 C5 指出的绕过形态：同一查询重复两次即跨 k=2 | **否决**，维持 C5 处置：distinct = 含该 term 的不同 normalizedQuery hash 数 |
 | C-002（FR-006 与 coverageScope 共用同一份扩展名白名单）| 无冲突 | **采纳**（防第二份白名单漂移）|
 | C-004（`--phase` 缺省用固定 sentinel 并纳入约束）| 无冲突 | **采纳**（审计分组键一致性）|
+
+---
+
+# Plan phase — Codex 对抗审查整改单（BLOCKED → 修订）
+
+> 审查会话：codex `task-msc2o01b-cf6m3v`（2 CRITICAL / 7 WARNING，结论 BLOCKED）。
+
+## P-C1 两步协议正常路径即漏审计 + 跨快照拼接 → **确认，改为「双事件审计模型」**
+
+Codex 的三个证伪都成立：goal_loop authoritative 路径只跑 decide 永不 annotate → `consume-impact` 必漏记；
+decide 与 annotate 间图被并发重建 → G1 输入拼 G2 结果且无法检测；两步间 crash → 永久漏记。
+
+**处置（新契约，spec 与 plan 同步落）——审计从「一决策一行」改为「事件日志」**：
+1. `decide`（非 dry-run）**无条件当场**追加一条 `kind:"decision"` 事件：
+   `{ kind:"decision", decisionId(uuid), ts, phase, advisory, inputs{五维}, outcome, degradedReason, caveats:[], graphSourceCommit(决策时图内嵌值|null), refreshAttempted, refreshOk }`
+   → FR-010 由 decision 事件**独立满足**，与后续任何步骤无关（crash 也不漏）
+2. `annotate-caveat` 被调用时追加一条 `kind:"caveat-annotation"` 事件：
+   `{ kind:"caveat-annotation", decisionId(回链), ts, impactStatus:"completed"|"failed"|"skipped"|"snapshot-mismatch", caveats:[...], graphSourceCommitAtAnnotation }`
+   - 入参校验：decision JSON 里的 `graphSourceCommit` vs 注解时刻图内嵌值，不等 → `impactStatus:"snapshot-mismatch"`、caveats 置空不采信该 impact 结果（跨快照拼接被显式检出而非静默拼接）
+3. goal_loop authoritative 路径（plan §3.2 位置二）= **decide 单步即完整**（该路径本就不消费 impact，无注解事件是正确形态，不是漏）
+4. SC 断言全部改为事件语义：SC-005 的 12 个 degradedReason 走 decision 事件断言、caveat 走 annotation 事件断言；「跑两次决策 → 审计恰 2 行」改为「恰 2 条 kind:decision 事件」
+
+## P-C2 pilot 批次依赖环 + ledger 缺 timestamp → **确认（后者是编排器自己的错）**
+
+**处置**：
+1. pilot 拆三段：**preflight**（批 1 前：预测集已冻结的存在性校验 + ledger schema 校验）/ **continuous capture**（横跨批 1-3：每次 MCP 调用当下双写）/ **finalize**（批 4：实际集、M-3、报告、ledger 重算）——只有 finalize 在批 4
+2. plan 不得把 `predicted-impact-set.md` / `ledger.jsonl` 标为「批 4 新增」（它们已存在且冻结/持续记账中）
+3. ledger 既有 11 行缺 `timestamp` → **诚实回填**：`"timestamp": null` + `"timestampNote": "schema 定稿前记录，先后次序见 mcp-call-log.md 的 git 历史"`；此后新行必须带真实 ISO timestamp。**禁止**伪造事后时间戳
+4. spec FR-022 补一句「允许 schema 定稿前的行 timestamp 为 null + 强制 timestampNote」的迁移条款
+
+## P-W1 薄壳缺 `.catch` + lifecycle 测试不会红 → **确认两点**
+薄壳样板逐字保留 canonical 的 `.catch`（unhandled rejection → stderr + exitCode 1）；
+`worktree-lifecycle-hook.test.ts` 的 copy 用例把 PATH 剥到无 Node，helper 根本不执行 → plan 声称的「先红」不成立。
+**处置**：薄壳样板补 `.catch`；新增一条「Node 可用、直接执行仓根薄壳三个子命令」的回归测试；plan 不再把旧 lifecycle 用例当薄壳回归证据。
+
+## P-W2 TDD 红=加载失败 + mandatory 覆盖缺口 + 注入缝缺失 → **确认**
+**处置**：`graph-refresh-executor` 签名加依赖注入缝（`attemptLocalGraphBuild` 可注入）；tasks.md 必须附 FR/SC/RG→测试逐项 crosswalk；补齐缺失断言：SC-019 仓外插件拷贝、FR-024/SC-020 双段 check-ignore、FR-017 `lockfile-install-mismatch`、FR-019 `noHitCollection`/`recentNoHitCount`、M-3 prompt+diff hash 落盘、RG-006 静态「不读审计」检查、SC-002 真实 stale 刷新断言、SC-003 非 dry-run additive 图 SHA 断言。
+
+## P-W3 E1 开关未定 + fallback no-hit 被整体排除 → **确认**
+**处置**：开关钉死 = 单一 env `SPECTRA_KB_NOHIT_TELEMETRY`（值 = 记录目录；未设/空 = off，默认关闭），对齐 O-4 的 `SPECTRA_MCP_TELEMETRY_PATH` 先例；三个 recorder 共用同一解析函数。`kb_api_lookup` 的 document_fallback 分支在 `hits.length === 0` 时**必须记录** no-hit（这是真实零结果），不得整体排除。
+
+## P-W4 旧 schema 语义矛盾 + kb_status 分支悬置 → **确认**
+**处置**：旧 schema（缺 provenance 列）→ `freshness:"unknown"` **恒定**（即便 built_at 很新——单列 built_at 不足以支撑判级声明），加「旧库 built_at 很新仍 unknown」测试；`kb_status` 追加到**全部成功 envelope**（含 document_fallback 与 not_found 早返回），error envelope 不追加（明定）。
+
+## P-W5 E2/E3 子命令 CLI 不可达 → **确认（好抓）**
+**处置**：批 3 文件清单补 `src/cli/utils/parse-args.ts`（scaffoldKbOperation union 扩 `version`/`status`）+ `src/cli/index.ts` help 文案 + parse→dispatch 集成测试。
+
+## P-W6 FR-024 路径写错 → **确认（机械）**
+**处置**：`plugins/spec-driver/scripts/lib/ensure-gitignore.sh`（非仓根）；同步列入 `plugins/spec-driver/tests/ensure-gitignore.test.mjs` 的 4→6 条合同更新。
+
+## P-W7 wrapper 双生成文件漏报 → **确认（与 V-8 互证且更全）**
+**处置**：SKILL.md 改动的传播面 = canonical + `plugins/spec-driver/skills-codex/spec-driver-feature/SKILL.md` + `.codex/skills/spec-driver-feature/SKILL.md` 两个生成 wrapper；再生走 `npm run repo:sync`；rebase 冲突规则 = 先合 canonical 再统一 repo:sync 再生，**禁止手工解生成文件冲突**。plan §7 冲突面补全。
+
+## Codex 未发现问题面（抽查一致，直接沿用）
+I1 薄壳双执行/退出码疑虑排除；I2 无遗漏生产消费方、插件分发不漏新文件（package.json files 含整个 plugins/）；I3 散文插入点在生成区块外；I4 FR-018 删除理由成立。

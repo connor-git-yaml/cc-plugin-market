@@ -104,3 +104,13 @@ git status --porcelain -uall > before; npm run repo:check; git status --porcelai
 | SC-018 全量测试 | `npx vitest run` | **490 文件 pass / 4 skipped（494）；6017 测试 pass / 18 skipped / 21 todo（6056）**，exit 0，58.5s |
 
 图规模基线：**6092 节点 / 8062 边**（calls 926 / depends-on 2040），graph-only 重建 **4.4s**。
+
+## V-8 ❗ SKILL.md 改动会触发 wrapper SHA 门禁（plan 未覆盖，tasks 必须补）
+
+`plugins/spec-driver/skills-codex/spec-driver-feature/SKILL.md` 头部内嵌：
+`Source SHA256: 8d03668...`（canonical `skills/spec-driver-feature/SKILL.md` 的全文 hash，F186/F238 门禁资产）。
+
+→ 本 feature §3 的两处 SKILL.md 散文接线**必然**改变 canonical SHA，
+必须在同一批内跑 wrapper 再生（`bash plugins/spec-driver/scripts/codex-skills.sh install` 或 repo:sync 链），
+并连带提交 skills-codex 侧 wrapper 更新；否则 `spec-driver-wrappers:*` 族 repo:check 红。
+tasks.md 必须为此立显式任务（放批 1 的 SKILL 接线任务之后）。
