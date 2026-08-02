@@ -346,7 +346,7 @@ specs/241-graph-keepalive-kb-grounding/pilot/
 定位：`### 执行模式` 小节（现行 `:190-258`），第 4 步"构建上下文注入块"与第 5 步"委派子代理执行"之间（现行 `:212-215`）。新增条件分支，**只在当前 phase 为 verify 时触发**（`pre-verify authoritative` 合同）：
 
 ```text
-4b.（仅当 phase.id === "verify" 时）调用图消费决策（pre-verify authoritative）：
+4b.（仅当 phase.name === "verify" 时）调用图消费决策（pre-verify authoritative）：（勘误：orchestration.yaml 中 verify 的 id 是 "7c"，判定必须用 name——见 review-dispositions.md T-C1）
     DECISION=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
       --project-root {project_root} --base-ref {phase 6 implement 起点 ref} \
       --refresh-policy {本 phase 内首次调用传 allowed，否则 declined})

@@ -135,3 +135,45 @@ decide 与 annotate 间图被并发重建 → G1 输入拼 G2 结果且无法检
 
 ## Codex 未发现问题面（抽查一致，直接沿用）
 I1 薄壳双执行/退出码疑虑排除；I2 无遗漏生产消费方、插件分发不漏新文件（package.json files 含整个 plugins/）；I3 散文插入点在生成区块外；I4 FR-018 删除理由成立。
+
+---
+
+# Tasks phase — Codex 对抗审查整改单（BLOCKED → 修订）
+
+> 审查会话：codex `task-msc43enk-lprgh4`（6 CRITICAL / 5 WARNING / 1 INFO）。
+
+## T-C1 `phase.id === "verify"` 永不触发 → **确认（源头是 plan §3.1 伪代码，编排器抽查也漏了）**
+orchestration.yaml 实况：implement 是 `id:"6"`，verify 是 `id:"7c"`——`phase.id === "verify"` 恒 false，场景 A/B/C 主接线整体失效。
+**处置**：判定条件改 `phase.name === "verify"` / `"implement"`；T014 加一条「读 effective orchestration 断言 name 判定」的自动化校验；plan §3.1 出一行勘误（同步修 plan.md 该处伪代码，避免 implement 者照抄旧文）。
+
+## T-C2 crosswalk 未到断言级 + 四处虚映射 → **确认**
+**处置**：crosswalk 改四列 `条目 → 测试文件 → 具体断言/用例 → 门禁命令`；补四缺口：SC-004 的 CLI JSON 封闭键集合 + 12 reason 固定模板映射测试；SC-005 的「制造 12 个非 dry-run decision 事件逐值验证审计」任务；SC-006 的失败改写用例落进 decision 测试（T005 范围）；RG-002 的默认 feature dry-run 检查真实落进 T020（或从 crosswalk 删除虚 claim——**选前者**）。
+
+## T-C3 批 2/3 红测试排序倒置 + 两挂点无红测试 → **确认**
+**处置**：T029/T035/T049/T053 移到对应实现任务**之前**；为 kb_search 挂点与 scaffold-kb query 挂点各补一条「正反 no-hit」红测试（调 recorder 桩断言被调/不被调）。红失败必须因**行为缺失**而非仅模块不存在。
+
+## T-C4 continuous capture 未任务化 → **确认**
+**处置**：新增批 0/preflight 任务（T000 系列）：ledger schema 校验 + 「每次 MCP 调用当下双写」设为 T001-T054 的**共同完成条件**（写进各批门禁：校验 mcp-call-log 与 ledger 的调用数/seq 同步单调）。
+
+## T-C5 四个批门禁都可在证据缺失时通过 → **确认**
+**处置**：T020 补 `goal-loop-snapshot-rollback-integration.test.mjs` + `tests/unit/graph-bootstrap-status.test.ts` + RG-002 dry-run；T039 补重跑 `ensure-gitignore.test.mjs`；T054 补新建 unit parse-args 测试 + RG-009 缺列故障注入；T061 补 T059/T060 全部验证命令 + M-3 prompt 同构与 diff hash 校验 + plugin `node --test` 全套（不能只跑 vitest）。
+
+## T-C6 RG-006 静态检查只 grep 读 API → **确认**
+**处置**：扩为三段静态断言并显式列被审文件集合：(1) 产物名扫描（无新增 `*freshness*`/`*source-commit*` 状态文件）；(2) freshness 获取唯一依赖 `checkFreshness` 扫描（禁自读 graph.json.sourceCommit 比 HEAD）；(3) 审计路径常量 import / 读取扫描。
+
+## T-W1 trace 锚点格式与 rerun 语义 → **确认**
+**处置**：锚点行采用与现行 trace 一致的时间戳格式 `[HH:MM:SS] phase_start_ref: implement=<sha>`；语义 = **last-match wins**（rerun 追加新行，读取方取最后一条）；该语义写进 SKILL 接线段落并进集成测试断言。
+
+## T-W2 T003 非红测试 → **确认（编排器此前独立观察到，互证）**
+**处置**：改标「迁移回归测试」；顺序改为 **T003 先行**（对旧实现先绿）→ T001/T002 迁移 → T003 复跑仍绿；不要求人工回退制造红态。
+
+## T-W3 裸 `git diff` 可被 staged/已提交绕过 → **确认**
+**处置**：每批开始记录 `batch-base SHA`（git rev-parse HEAD 写 trace，复用 T-W1 格式 `[HH:MM:SS] batch_base: batch1=<sha>`）；门禁 RG 检查一律 `git diff <batch-base> -- <paths>`。
+
+## T-W4 RG-008 无可执行命令矩阵 → **确认**
+**处置**：T054 列命令矩阵（coverage-gap/version/status/query × 各只读断言），每项存 before/after SHA-256 + 退出码。
+
+## T-W5 巨石任务与不定路径 → **部分采纳**
+**处置**：T011 拆 4（CLI 契约+dry-run/advisory；双事件审计；SC-019 安装态；SC-002/003 真实刷新）；T12 拆 2（decide 主链；annotate-caveat+审计写入器）；T029/T049 钉死目标测试文件路径。T053 保持单任务（两个同构 sibling 测试文件、同一断言模式，拆开反而碎）——**此处不采纳拆分**，理由记录。
+
+## T-I1 T019 引用 T032 应为 T038 → 机械修正。
