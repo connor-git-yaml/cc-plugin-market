@@ -1,0 +1,23 @@
+# F238 Trace — codex-wrapper-completeness
+
+- [16:55] init: worktree modest-ellis-e4f0fe @ 0ae3eb7（≥ 基线 3830296）；238/239 编号无占用；工作区干净
+- [16:56] baseline vitest: STARTED（后台全量）
+- [16:57] tech-research: STARTED | model=sonnet | 委派 spec-driver:tech-research（Codex CLI 能力探测 + 模型字面盘点）
+- [17:00] baseline vitest: COMPLETED | 483 passed / 4 skipped files, 5773 tests, 0 failures | 72.5s
+- [17:02] tech-research: COMPLETED | artifacts=research/tech-research.md | 缺口：子代理无 Bash，CLI 一手证据未取
+- [17:04] orchestrator 补测: codex 0.144.6 | `codex features list` → multi_agent stable true（权威探测信号，修正三方博客"实验特性"推断）| `codex exec -m` 可选（不传走 config.toml model → 内建默认）| 证据追加 research 附 2
+- [17:06] specify: STARTED | model=sonnet | 委派 spec-driver:specify
+- [17:10] specify: COMPLETED | artifacts=spec.md（157 行：3 US / 29 FR 三组 / 8 EC / 8 SC / grep 门禁可执行规范）| Q1/Q2 已裁决，Q3 留 plan
+- [17:11] codex-review(specify): STARTED | codex:codex-rescue 对抗审查 spec.md
+- [17:22] codex-review(specify): COMPLETED | 5 CRITICAL / 5 WARNING / 4 INFO | 判定：需先修 spec
+  - C1 adapter头部与extract-wrapper-body正文替换矛盾 → 采纳（helper 纳入 scope，正文改中性指针）
+  - C2 本机探测固化进 tracked 分发物=构建机状态污染全体用户 → 采纳，编排器裁决 sidecar 架构（wrapper 恒中性，探测审计落 gitignored .codex/spec-driver-capability.md；F186/F213 门禁零波及，优于"放宽逐字节一致"）
+  - C3 model provenance 七来源矩阵缺失 → 采纳（modelFlagMode: required|delegate 字段）
+  - C4 resolved.model 冒充实际执行模型 → 采纳（delegated 标识+保守超时档）
+  - C5 FR-309 固定路径 vs SC-004 全仓两套合同 → 采纳，统一为指定用户表面扫描
+  - W1 附2缺失：事实半错（编排器 append 遭子代理终稿覆盖竞态，已重放）；措辞降级建议采纳
+  - W2-W5 全采纳（探测一次缓存/reason 枚举扩齐/regex 边界/SC-002 成本边界/Claude diff 白名单）
+- [17:24] specify(修订): STARTED | 委派 specify 按裁决修订 spec.md
+- [17:32] specify(修订): COMPLETED | spec.md v2（sidecar 架构 / FR-201~209 + FR-301~310 / 七源决策矩阵 / Review Log 13 条）
+- [17:34] orchestrator 预检: FR-205 事实误差修正（rewrite_codex_runtime_text 已被 F186 T2 移除，两端共用单 helper）
+- [17:35] GATE_RESEARCH+specify commit: spec.md + research + trace 入库
