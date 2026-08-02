@@ -16,6 +16,12 @@ ZERO_SHA="0000000000000000000000000000000000000000"
 
 DRY_RUN="false"
 QUIET="false"
+# Feature 239 FR-010：仅 Codex-managed worktree 场景需要"图既没得 copy 也不存在时尝试本地构建"，
+# 手工 worktree（hook 无 flag 调用）不应默认触发自动构建。
+ATTEMPT_BUILD="false"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GRAPH_STATUS_HELPER="$SCRIPT_DIR/lib/graph-bootstrap-status.mjs"
 
 for arg in "$@"; do
   case "$arg" in
@@ -25,13 +31,20 @@ for arg in "$@"; do
     --quiet)
       QUIET="true"
       ;;
+    --attempt-build)
+      ATTEMPT_BUILD="true"
+      ;;
     --help|-h)
       cat <<'USAGE'
 用法:
-  bash scripts/sync-worktree-local-state.sh [--dry-run] [--quiet]
+  bash scripts/sync-worktree-local-state.sh [--dry-run] [--quiet] [--attempt-build]
 
 说明:
   将主工作区的关键本地态以软链接方式同步到当前 worktree。
+
+选项:
+  --attempt-build   图既无法从主仓 copy、worktree 自身也没有时，尝试本地构建
+                    （spectra batch --mode graph-only），失败不阻断。
 USAGE
       exit 0
       ;;
@@ -161,6 +174,46 @@ read_worktreeinclude_entries() {
 # 必须落在任何 git 命令之前——测试在非 git 临时目录内运行，且探针不得产生任何文件系统副作用。
 if [[ -n "${WORKTREEINCLUDE_PROBE_FILE:-}" ]]; then
   read_worktreeinclude_entries "$WORKTREEINCLUDE_PROBE_FILE"
+  exit 0
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Feature 239 — 发布原语（C11）
+# ─────────────────────────────────────────────────────────────
+# 只承载"最终发布指令本身"这一件事，**不含** copy_if_absent_atomic 里的 `-e` 二次预检查
+# （那是调用方的竞态收窄优化与日志载体）。职责这样切分，测试才能直调本原语验证其排他性，
+# 而不会命中调用方的预检查分支得到假绿。
+#
+# 返回 0 = 本进程赢得发布；返回 1 = 对方已发布，保留对方版本。
+# 定义前置到探针区：本原语不依赖 CURRENT_ROOT/PRIMARY_ROOT，前置后测试可在不触发主流程的
+# 前提下直调它（探针分支见下）。
+publish_exclusive() {
+  local tmp="$1"
+  local target_path="$2"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "[dry-run] ln $tmp $target_path"
+    return 0
+  fi
+
+  # `ln` 的"目标已存在则失败"是内核级原子操作：并发的两个进程只有一个能建立到 target 的
+  # 硬链接，另一个必拿 EEXIST。此前的"检查 target 不存在 → mv"存在 TOCTOU 窗口，两个进程
+  # 可以都通过检查，随后各自 mv 互相覆盖（后执行者赢，静默丢弃先到达的版本）。
+  if ln "$tmp" "$target_path" 2>/dev/null; then
+    rm -f "$tmp"
+    return 0
+  fi
+
+  log "graph bootstrap: 目标已被其他进程发布，保留对方版本（清理 tmp）"
+  rm -f "$tmp"
+  return 1
+}
+
+# 发布原语探针：PUBLISH_EXCLUSIVE_PROBE="<tmp>|<target>"，直调原语后立即退出，不进主流程。
+if [[ -n "${PUBLISH_EXCLUSIVE_PROBE:-}" ]]; then
+  probe_publish_tmp="${PUBLISH_EXCLUSIVE_PROBE%%|*}"
+  probe_publish_target="${PUBLISH_EXCLUSIVE_PROBE#*|}"
+  publish_exclusive "$probe_publish_tmp" "$probe_publish_target" || true
   exit 0
 fi
 
@@ -390,11 +443,20 @@ copy_worktreeinclude_targets
 # - copy 单元 = specs/_meta/graph.json + .spectra/unified-graph.json 快照（决策 1b；
 #   两者均在 .gitignore，属 worktree 本地态）
 # - 源优先级：主仓 →（共享缓存 ~/.spectra-graph-cache 为二期）→ 均无则提示构建（不报错）
-# - copy 后写 specs/_meta/.graph-source-commit sidecar（源 commit），供 stale 检查
 # - 前提：id 相对化（🅐）已使图跨 worktree 可移植，copy 来即可用
+#
+# Feature 239 变更：F193 的 specs/_meta/.graph-source-commit sidecar 被**完全移除**（写入逻辑
+# 删除 + 遗留文件迁移性删除）。sidecar 只在"本次确实 copy 了图"时才写、记的还是主仓 HEAD，
+# 本地重建路径下 provenance 必然失准；改由 graph-bootstrap-status.mjs 读图内嵌
+# `graph.sourceCommit` 现算 freshness，并把 bootstrap 时刻的 provenance 落进结构化状态文件。
 GRAPH_REL="specs/_meta/graph.json"
 SNAPSHOT_REL=".spectra/unified-graph.json"
-SOURCE_COMMIT_REL="specs/_meta/.graph-source-commit"
+
+# 生产路径需要 node 可执行；缺失时全部 node 相关步骤跳过并 warn，其余同步照常完成。
+# 不加这层守卫的话，set -euo pipefail 会让一次 `node: command not found`（127）直接中断整条 sync。
+node_available() {
+  command -v node >/dev/null 2>&1
+}
 
 # 原子 copy（仅当 target 不存在）：temp + mv，避免与 post-commit 增量竞态产生半成品。
 # 通过全局 COPY_RESULT 回传结果："copied" | "skipped"（已有真实文件 / 异常类型 / 源不存在）。
@@ -433,23 +495,43 @@ copy_if_absent_atomic() {
     run rm -f "$tmp"
     return 0
   fi
-  run mv "$tmp" "$target_path"
-  COPY_RESULT="copied"
-  log "$(action_word) ${label}（bootstrap copy）: $target_path <- $source_path"
+  # 最终发布交给 publish_exclusive 原语（定义在文件前部的探针区）
+  if publish_exclusive "$tmp" "$target_path"; then
+    COPY_RESULT="copied"
+    log "$(action_word) ${label}（bootstrap copy）: $target_path <- $source_path"
+  fi
   return 0
 }
 
-# stale 检查：sidecar 记录的源 commit 与当前 worktree HEAD 不一致 → 提示，不阻断。
-# sidecar 缺失（图为本地构建非 bootstrap）→ no-op。
-check_graph_source_stale() {
-  local sidecar="$CURRENT_ROOT/$SOURCE_COMMIT_REL"
-  [[ -f "$sidecar" ]] || return 0
-  local recorded current
-  recorded="$(cat "$sidecar" 2>/dev/null || true)"
-  current="$(git -C "$CURRENT_ROOT" rev-parse HEAD 2>/dev/null || true)"
-  if [[ -n "$recorded" && -n "$current" && "$recorded" != "$current" ]]; then
-    warn "graph 可能 stale：图来自 commit ${recorded:0:8}，当前 worktree 在 ${current:0:8}。建议增量更新（spectra watch / spectra install --git）或重建（spectra batch）。"
+# freshness 检查（取代 F193 的 sidecar 比对）：委托 graph-bootstrap-status.mjs 现算。
+#
+# 判定实现只有一份——编译进全局 spectra CLI 的那份 F217 实现；本脚本既不缓存 stale 布尔值，
+# 也不自己比较 commit。四态映射：stale / unknown-provenance → warn；fresh / dirty → 静默
+# （提交前工作树几乎必然 dirty，对 dirty 告警会让每次正常流程都产生噪音）。
+check_graph_freshness() {
+  local graph_target="$CURRENT_ROOT/$GRAPH_REL"
+  [[ -f "$graph_target" ]] || return 0
+
+  if ! node_available; then
+    warn "freshness 检查跳过：node 不可用"
+    return 0
   fi
+
+  local verdict state
+  verdict="$(node "$GRAPH_STATUS_HELPER" check-freshness --project-root "$CURRENT_ROOT" --graph "$graph_target" 2>/dev/null || true)"
+  state="$(printf '%s' "$verdict" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')"
+
+  case "$state" in
+    stale)
+      warn "graph 可能 stale：图内嵌的 sourceCommit 与当前 worktree HEAD 不一致。建议增量更新（spectra watch / spectra install --git）或重建（spectra batch）。"
+      ;;
+    unknown-provenance)
+      warn "graph provenance 不明（unknown-provenance）：无法确认图的来源 commit，建议重建（spectra batch）后再依赖其结论。"
+      ;;
+    *)
+      : # fresh / dirty / 判定不可用 → 静默
+      ;;
+  esac
   return 0
 }
 
@@ -460,36 +542,66 @@ bootstrap_graph() {
   # graph 与 snapshot 各自独立 copy-if-absent（Codex W：已有 graph 时仍补齐缺失 snapshot，
   # 避免"只有 graph 无 snapshot"的 worktree 永久退化 full reindex）。
   # MVP 源 = 主仓（共享缓存 ~/.spectra-graph-cache 为二期，见 plan 决策 5）。
+  # 四事实追踪（Feature 239 C4）：状态机只依据"本次确实发生了什么"判定 provenance，
+  # 不从"图当前存在"反推来源。snapshot 的 copy 事实**永不**参与 graph 来源判定。
   copy_if_absent_atomic "$PRIMARY_ROOT/$GRAPH_REL" "$graph_target" "graph.json"
-  local graph_copied="$COPY_RESULT"
+  local graph_copied="false"
+  if [[ "$COPY_RESULT" == "copied" ]]; then graph_copied="true"; fi
+
   copy_if_absent_atomic "$PRIMARY_ROOT/$SNAPSHOT_REL" "$snapshot_target" "unified-graph 快照"
+  local snapshot_copied="false"
+  if [[ "$COPY_RESULT" == "copied" ]]; then snapshot_copied="true"; fi
+
   if [[ ! -e "$snapshot_target" ]]; then
     log "graph bootstrap: 无快照（首次 commit 将走 full reindex，非阻塞）"
   fi
 
-  # 既无 worktree 本地图、也未从主仓 copy 到 → 提示构建（FR-008，不报错）
-  if [[ ! -e "$graph_target" ]]; then
-    log "graph bootstrap: 主仓与 worktree 均无图（${PRIMARY_ROOT}/${GRAPH_REL}）。请在当前 worktree 运行 \`spectra batch\` 或 \`spectra index\` 构建图。"
-    return 0
-  fi
-
-  # 仅当本次确实从主仓 copy 了图，才写/更新 sidecar（记录源=主仓 HEAD）；
-  # 本地构建的图无"源 commit"概念，不写 sidecar（stale 检查对其 no-op）。
-  if [[ "$graph_copied" == "copied" ]]; then
-    local src_commit
-    if src_commit="$(git -C "$PRIMARY_ROOT" rev-parse HEAD 2>/dev/null)"; then
-      if [[ "$DRY_RUN" == "true" ]]; then
-        log "graph bootstrap: [dry-run] 计划记录源 commit ${src_commit:0:8} → $SOURCE_COMMIT_REL"
+  # 本地构建兜底（FR-010）：仅 --attempt-build 且图既没 copy 到、自身也不存在时触发
+  local build_attempted="false"
+  local build_succeeded="false"
+  if [[ "$ATTEMPT_BUILD" == "true" && "$graph_copied" != "true" && ! -e "$graph_target" ]]; then
+    if node_available; then
+      build_attempted="true"
+      log "graph bootstrap: 尝试本地构建（spectra batch --mode graph-only）"
+      if node "$GRAPH_STATUS_HELPER" attempt-build --project-root "$CURRENT_ROOT"; then
+        build_succeeded="true"
       else
-        printf '%s\n' "$src_commit" > "$CURRENT_ROOT/$SOURCE_COMMIT_REL"
-        log "graph bootstrap: 记录源 commit ${src_commit:0:8} → $SOURCE_COMMIT_REL"
+        warn "graph bootstrap: 本地构建未成功（不阻断）"
       fi
+    else
+      warn "本地构建跳过：node 不可用"
     fi
   fi
 
-  # stale 检查：首次 bootstrap 与 rerun 都查（Codex CRITICAL：新 worktree HEAD 若已 ≠ 源 commit，
-  # 首次 copy 后也须立即提示，不静默拿 stale 图）。
-  check_graph_source_stale
+  # 既无 worktree 本地图、也未从主仓 copy 到、本地构建也没产出 → 提示构建（FR-008，不报错）
+  if [[ ! -e "$graph_target" ]]; then
+    log "graph bootstrap: 主仓与 worktree 均无图（${PRIMARY_ROOT}/${GRAPH_REL}）。请在当前 worktree 运行 \`spectra batch\` 或 \`spectra index\` 构建图。"
+  fi
+
+  # 状态文件：无论走到哪条分支都要写——"图不存在"本身也是必须被记录的 provenance 事实
+  # （bootstrapSource=none + assessable=false），否则下游无从区分"没图"与"没记录"。
+  if node_available; then
+    local -a status_args=(
+      write-status
+      --project-root "$CURRENT_ROOT"
+      --graph-copied "$graph_copied"
+      --snapshot-copied "$snapshot_copied"
+      --build-attempted "$build_attempted"
+      --build-succeeded "$build_succeeded"
+    )
+    if [[ "$DRY_RUN" == "true" ]]; then
+      status_args+=(--dry-run)
+    fi
+    if ! node "$GRAPH_STATUS_HELPER" "${status_args[@]}"; then
+      warn "graph bootstrap: 状态文件写入失败（不阻断）"
+    fi
+  else
+    warn "状态文件写入跳过：node 不可用"
+  fi
+
+  # freshness：首次 bootstrap 与 rerun 都查（Codex CRITICAL：新 worktree HEAD 若已 ≠ 图的
+  # 来源 commit，首次 copy 后也须立即提示，不静默拿 stale 图）。
+  check_graph_freshness
   return 0
 }
 

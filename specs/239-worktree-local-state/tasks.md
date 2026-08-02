@@ -116,77 +116,77 @@ review_basis: reviews/codex-tasks-review-round1.md
 **可独立验证**：`graph-bootstrap-status.test.ts` + `sync-worktree-local-state.test.ts` 全绿。
 **Codex 复审结论（本版本已修复）**：原判定"不可作为可信 checkpoint"——发布竞态测试假红、SC-007 接线与旧 stale fixture 改造缺失；本版本通过 T021-T023（三步拆分）与 T020/T025/T026（补全）修复。**终审精修**：T021/T022 的原语提取边界进一步收窄（见下方措辞），避免二次假红。
 
-- [ ] T014 [批3][红测试] 新增 `tests/unit/graph-bootstrap-status.test.ts`：schema 字段完整性（`schemaVersion`/`bootstrapSource`/`embeddedSourceCommitAtBootstrap`/`worktreeHeadAtBootstrap`/`generatedAt`/`assessable`）、`--dry-run` 不落盘/不删除遗留 sidecar、原子写、**唯一 temp 并发 writer**（两次先后写入均成功、后写内容生效）—— 此时模块尚不存在，整组用例因 `import` 失败而红
+- [x] T014 [批3][红测试] 新增 `tests/unit/graph-bootstrap-status.test.ts`：schema 字段完整性（`schemaVersion`/`bootstrapSource`/`embeddedSourceCommitAtBootstrap`/`worktreeHeadAtBootstrap`/`generatedAt`/`assessable`）、`--dry-run` 不落盘/不删除遗留 sidecar、原子写、**唯一 temp 并发 writer**（两次先后写入均成功、后写内容生效）—— 此时模块尚不存在，整组用例因 `import` 失败而红
   - 文件：`tests/unit/graph-bootstrap-status.test.ts`
   - 完成判据：`npx vitest run tests/unit/graph-bootstrap-status.test.ts` 此刻**失败**，失败原因为 `scripts/lib/graph-bootstrap-status.mjs` 模块不存在（`Cannot find module`）
   - 依赖：T013
 
-- [ ] T015 [批3][实现-skeleton]（W1 修订）新增 `scripts/lib/graph-bootstrap-status.mjs` **skeleton**：导出全部函数签名（`readEmbeddedSourceCommit`、`resolveWorktreeHead`、`readPreviousStatus`、`determineBootstrapSource`、`buildStatusPayload`、`writeBootstrapStatus`、`checkFreshness`、`attemptLocalGraphBuild`、`main`），函数体均 `throw new Error('NotImplemented: <fnName>')`（`attemptLocalGraphBuild` 返回 rejected Promise）——使 T014 的"模块缺失"红态转为"可 import 但调用即抛错"，为 T016-T018 提供针对具体行为断言失败的特异性红态基础
+- [x] T015 [批3][实现-skeleton]（W1 修订）新增 `scripts/lib/graph-bootstrap-status.mjs` **skeleton**：导出全部函数签名（`readEmbeddedSourceCommit`、`resolveWorktreeHead`、`readPreviousStatus`、`determineBootstrapSource`、`buildStatusPayload`、`writeBootstrapStatus`、`checkFreshness`、`attemptLocalGraphBuild`、`main`），函数体均 `throw new Error('NotImplemented: <fnName>')`（`attemptLocalGraphBuild` 返回 rejected Promise）——使 T014 的"模块缺失"红态转为"可 import 但调用即抛错"，为 T016-T018 提供针对具体行为断言失败的特异性红态基础
   - 文件：`scripts/lib/graph-bootstrap-status.mjs`
   - 完成判据：`npx vitest run tests/unit/graph-bootstrap-status.test.ts` 中 T014 的用例此刻仍**失败**，但失败原因从 `Cannot find module` 变为 `NotImplemented: <fnName>`（可观察的错误信息变化即为本任务完成的证据）
   - 依赖：T014
 
-- [ ] T016 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `checkFreshness` adapter 解析/映射测试（plan 决策5）：fixture 驱动假 `spectra` CLI 输出 `fresh`/`dirty`/`stale`/`unknown-provenance` 四态、exit 1 携带合法 JSON、exit 2 携带合法 JSON、CLI 缺失（`ENOENT`）、stdout 不可解析共 8 种形态，四态原样透传不折叠；另加一条真实 CLI 冒烟（本机已装全局 `spectra` 时跑，未装则 `it.skip` 并标注 skip 原因）
+- [x] T016 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `checkFreshness` adapter 解析/映射测试（plan 决策5）：fixture 驱动假 `spectra` CLI 输出 `fresh`/`dirty`/`stale`/`unknown-provenance` 四态、exit 1 携带合法 JSON、exit 2 携带合法 JSON、CLI 缺失（`ENOENT`）、stdout 不可解析共 8 种形态，四态原样透传不折叠；另加一条真实 CLI 冒烟（本机已装全局 `spectra` 时跑，未装则 `it.skip` 并标注 skip 原因）
   - 文件：`tests/unit/graph-bootstrap-status.test.ts`
   - 完成判据：此刻**失败**，失败原因为 `checkFreshness` 抛出 `NotImplemented: checkFreshness`（而非模块缺失，特异性红）
   - 依赖：T015
 
-- [ ] T017 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `attemptLocalGraphBuild` 两个关键 stub（plan 决策5）：忽略 SIGTERM 的 stub（断言总墙钟 `< 50000ms` 且最终被 SIGKILL 收口）、启动后台孙进程的 stub（断言孙进程心跳文件在 deadline+grace 后停止更新，判据用心跳文件而非 `pgrep` 查宿主进程表）
+- [x] T017 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `attemptLocalGraphBuild` 两个关键 stub（plan 决策5）：忽略 SIGTERM 的 stub（断言总墙钟 `< 50000ms` 且最终被 SIGKILL 收口）、启动后台孙进程的 stub（断言孙进程心跳文件在 deadline+grace 后停止更新，判据用心跳文件而非 `pgrep` 查宿主进程表）
   - 文件：`tests/unit/graph-bootstrap-status.test.ts`
   - 完成判据：此刻**失败**，失败原因为 `attemptLocalGraphBuild` 返回的 Promise reject 为 `NotImplemented: attemptLocalGraphBuild`（特异性红，而非裸 `spawnSync(timeout)` 方案的进程组清理缺陷——该方案已被证伪，不作为对照）
   - 依赖：T015
 
-- [ ] T018 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `bootstrapSource` 四事实状态机测试：(a) 首次 `primary-copy` 后无变化 rerun 必须继承 `primary-copy`（不得被覆盖为 `local-build`）；(b) 仅补 snapshot 不得改变已记录的 graph 来源；(c) `graph.json` 解析失败时原子落盘 `assessable:false` 而非未捕获异常退出；(d) 无历史记录且图已存在 → `unknown`
+- [x] T018 [批3][红测试]（W1：针对 skeleton 的特异性红）同文件新增 `bootstrapSource` 四事实状态机测试：(a) 首次 `primary-copy` 后无变化 rerun 必须继承 `primary-copy`（不得被覆盖为 `local-build`）；(b) 仅补 snapshot 不得改变已记录的 graph 来源；(c) `graph.json` 解析失败时原子落盘 `assessable:false` 而非未捕获异常退出；(d) 无历史记录且图已存在 → `unknown`
   - 文件：`tests/unit/graph-bootstrap-status.test.ts`
   - 完成判据：此刻**失败**，失败原因为 `determineBootstrapSource`/`readPreviousStatus` 抛出 `NotImplemented`（特异性红）
   - 依赖：T015
 
-- [ ] T019 [批3][实现] 逐函数实现 `scripts/lib/graph-bootstrap-status.mjs`（替换 T015 skeleton 的 `NotImplemented` 抛错为真实逻辑）：`readEmbeddedSourceCommit`（三态）、`resolveWorktreeHead`、`readPreviousStatus`、`determineBootstrapSource`（四步判定）、`buildStatusPayload`、`writeBootstrapStatus`（唯一 temp 命名 `${targetPath}.${pid}.${random}.tmp` + 原子 rename + 落盘后迁移性删除遗留 sidecar）、`checkFreshness`（`spawnSync` 参数数组形式，非拼接字符串，防 §M10 事故）、`attemptLocalGraphBuild`（异步 `spawn` + `detached` 独立进程组 + TERM→grace→KILL）、`main`（async CLI 入口，分发 `write-status`/`check-freshness`/`attempt-build` 三个子命令）
+- [x] T019 [批3][实现] 逐函数实现 `scripts/lib/graph-bootstrap-status.mjs`（替换 T015 skeleton 的 `NotImplemented` 抛错为真实逻辑）：`readEmbeddedSourceCommit`（三态）、`resolveWorktreeHead`、`readPreviousStatus`、`determineBootstrapSource`（四步判定）、`buildStatusPayload`、`writeBootstrapStatus`（唯一 temp 命名 `${targetPath}.${pid}.${random}.tmp` + 原子 rename + 落盘后迁移性删除遗留 sidecar）、`checkFreshness`（`spawnSync` 参数数组形式，非拼接字符串，防 §M10 事故）、`attemptLocalGraphBuild`（异步 `spawn` + `detached` 独立进程组 + TERM→grace→KILL）、`main`（async CLI 入口，分发 `write-status`/`check-freshness`/`attempt-build` 三个子命令）
   - 文件：`scripts/lib/graph-bootstrap-status.mjs`
   - 完成判据：`npx vitest run tests/unit/graph-bootstrap-status.test.ts` 全部转绿（T014/T016/T017/T018 涉及的全部用例），且此前已绿的批1/批2测试不回归
   - 依赖：T016, T017, T018
 
-- [ ] T020 [批3][红测试]（补全 + C9-2/C9-3）在 `tests/unit/sync-worktree-local-state.test.ts` 中：(a) 新增 poison-sidecar 接线测试（C9-2）——内嵌 `graph.sourceCommit` 记 stale、遗留 sidecar 人为写成 current，rerun 仍必须 warn；反向：内嵌 fresh、sidecar 写成 stale，不得误报 stale；(b) 新增 bootstrap 后显式断言 `specs/_meta/.graph-source-commit` **不存在**（含预先 seed 一个遗留 sidecar，bootstrap 后必须被清理，C9-3）；(c) **将 plan 明确要求的"两个既有 stale 相关用例改造为 seed 含 `graph.sourceCommit` 字段的 JSON"显式并入本任务**——修改现有两个 stale fixture 用例的 graph fixture 内容，使其带真实 `graph.sourceCommit` 字段（不再是旧格式）
+- [x] T020 [批3][红测试]（补全 + C9-2/C9-3）在 `tests/unit/sync-worktree-local-state.test.ts` 中：(a) 新增 poison-sidecar 接线测试（C9-2）——内嵌 `graph.sourceCommit` 记 stale、遗留 sidecar 人为写成 current，rerun 仍必须 warn；反向：内嵌 fresh、sidecar 写成 stale，不得误报 stale；(b) 新增 bootstrap 后显式断言 `specs/_meta/.graph-source-commit` **不存在**（含预先 seed 一个遗留 sidecar，bootstrap 后必须被清理，C9-3）；(c) **将 plan 明确要求的"两个既有 stale 相关用例改造为 seed 含 `graph.sourceCommit` 字段的 JSON"显式并入本任务**——修改现有两个 stale fixture 用例的 graph fixture 内容，使其带真实 `graph.sourceCommit` 字段（不再是旧格式）
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：此刻**失败**——若 `check_graph_source_stale` 仍读 sidecar（或两者都读但优先级不对），两个方向中至少一个给出错误结果；sidecar 清理断言此刻失败（sidecar 仍会被写入且不被清理）；两个既有 stale 用例因 fixture 数据结构未对齐新 schema 而在实现完成前处于**待改造**状态（本任务范围内完成 fixture 数据结构迁移，此步骤本身不引入新回归，仅重塑既有断言的数据 shape）
   - 依赖：T019
 
-- [ ] T021 [批3][实现-重构]（C2-a，**终审精修：原语边界收窄**）从 `copy_if_absent_atomic()`（`sync-worktree-local-state.sh:273-310`）中提取一个可被测试直接调用的发布原语函数 `publish_exclusive(tmp, target_path)`，**该原语的提取边界只含最终发布指令本身**（当前语义 = 无条件 `run mv "$tmp" "$target_path"`，即 `sync-worktree-local-state.sh:306` 一行），**不包含** `:301-306` 的"发布前 `-e` 二次预检查"（该预检查——"若 `target_path` 此时已存在则保留对方版本、清理 tmp、return"——继续留在调用方 `copy_if_absent_atomic` 内部，作为既有竞态收窄优化与既有日志文案的载体，不下沉进原语）；本任务是纯重构，`publish_exclusive` 内部此刻**保持无条件覆盖式 `mv`**，不改变任何可观察行为
+- [x] T021 [批3][实现-重构]（C2-a，**终审精修：原语边界收窄**）从 `copy_if_absent_atomic()`（`sync-worktree-local-state.sh:273-310`）中提取一个可被测试直接调用的发布原语函数 `publish_exclusive(tmp, target_path)`，**该原语的提取边界只含最终发布指令本身**（当前语义 = 无条件 `run mv "$tmp" "$target_path"`，即 `sync-worktree-local-state.sh:306` 一行），**不包含** `:301-306` 的"发布前 `-e` 二次预检查"（该预检查——"若 `target_path` 此时已存在则保留对方版本、清理 tmp、return"——继续留在调用方 `copy_if_absent_atomic` 内部，作为既有竞态收窄优化与既有日志文案的载体，不下沉进原语）；本任务是纯重构，`publish_exclusive` 内部此刻**保持无条件覆盖式 `mv`**，不改变任何可观察行为
   - 文件：`scripts/sync-worktree-local-state.sh`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts` 全部既有用例（含批1/批2/T020 新增用例）保持全绿，无任何行为变化（纯重构验证）；**额外验证**：调用方 `copy_if_absent_atomic` 内既有"期间目标已被其他进程生成，保留对方版本（清理 tmp）"日志分支（由调用方的 `-e` 预检查触发，不下沉进 `publish_exclusive`）仍然存在且其既有测试/日志文案不变——即预检查与原语的职责边界清晰可见（调用方负责"是否已存在"的竞态收窄判断，原语只负责"execute 发布动作本身"）
   - 依赖：T020
 
-- [ ] T022 [批3][红测试]（C2-b，真红，**终审精修：跳过调用方预检查，直调原语本体**）新增对 `publish_exclusive` 原语的**直接**调用测试（**不经过** `copy_if_absent_atomic` 的调用方预检查，直接调用 `publish_exclusive(tmp, target_path)` 本身）：预置 `tmp` 与 `target_path` 双双存在（`target_path` 内容已知且非空），直调 `publish_exclusive(tmp, target_path)`，断言 (a) `target_path` 原内容不被覆盖、(b) `tmp` 文件被清理
+- [x] T022 [批3][红测试]（C2-b，真红，**终审精修：跳过调用方预检查，直调原语本体**）新增对 `publish_exclusive` 原语的**直接**调用测试（**不经过** `copy_if_absent_atomic` 的调用方预检查，直接调用 `publish_exclusive(tmp, target_path)` 本身）：预置 `tmp` 与 `target_path` 双双存在（`target_path` 内容已知且非空），直调 `publish_exclusive(tmp, target_path)`，断言 (a) `target_path` 原内容不被覆盖、(b) `tmp` 文件被清理
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：此刻**真实失败**——`publish_exclusive` 当前实现是**无条件** `mv "$tmp" "$target_path"`（T021 只提取了这一行，不含调用方的 `-e` 预检查分支），预置的 `target_path` 会被 `tmp` 内容无条件覆盖，断言 (a) 判红；这一失败**不依赖**调用方 `copy_if_absent_atomic` 的预检查是否存在（测试直调原语，绕开了预检查），因此排除了"命中既有 `-e` 预检查分支从而两条断言在旧语义下同样全过"这一假红路径（此前版本的残留缺陷已被消除）
   - 依赖：T021
 
-- [ ] T023 [批3][实现]（C2-c）将 `publish_exclusive` 内部实现从"无条件 `mv`"改为硬链接排他发布：`ln "$tmp" "$target_path" 2>/dev/null` 成功即视为本进程赢得发布（清理 `tmp`）；失败（`EEXIST` 或其他）即视为对方已发布，保留对方版本并清理 `tmp`；调用方 `copy_if_absent_atomic()` 的既有 `-e` 预检查逻辑**不变**（仍在 `publish_exclusive` 调用之前先做一次"目标是否已存在"的检查与日志），只是最终发布这一步改为调用 `publish_exclusive`
+- [x] T023 [批3][实现]（C2-c）将 `publish_exclusive` 内部实现从"无条件 `mv`"改为硬链接排他发布：`ln "$tmp" "$target_path" 2>/dev/null` 成功即视为本进程赢得发布（清理 `tmp`）；失败（`EEXIST` 或其他）即视为对方已发布，保留对方版本并清理 `tmp`；调用方 `copy_if_absent_atomic()` 的既有 `-e` 预检查逻辑**不变**（仍在 `publish_exclusive` 调用之前先做一次"目标是否已存在"的检查与日志），只是最终发布这一步改为调用 `publish_exclusive`
   - 文件：`scripts/sync-worktree-local-state.sh`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts` 中 T022 转绿（直调原语场景下 `ln`+`EEXIST` 保留对方版本）；`copy_if_absent_atomic` 既有全部回归用例（F193 8 个，含调用方预检查路径）保持绿
   - 依赖：T022
 
-- [ ] T024 [批3][实现] 改造 `scripts/sync-worktree-local-state.sh` 完成 graph provenance 主流程接线：(1) 删除 `SOURCE_COMMIT_REL` 常量与 `bootstrap_graph()` 内"仅当 copy 才写 sidecar"的写入逻辑；(2) `check_graph_source_stale()` 重命名/委托为 `check_graph_freshness()`，内部包在 `command -v node` 条件分支内调用 `node scripts/lib/graph-bootstrap-status.mjs check-freshness`，按四态映射决定是否 warn（**`stale`/`unknown-provenance` → warn，`fresh`/`dirty` → 静默**）；(3) `bootstrap_graph()` 结尾新增：`command -v node` 可用时按四事实（`graphCopiedThisRun`/`snapshotCopiedThisRun`/`buildAttempted`/`buildSucceeded`）调用 `write-status`，不可用时仅输出「状态文件写入跳过：node 不可用」warning，其余步骤照常完成；(4) 新增 `--attempt-build` flag 解析，带该 flag 且 `node` 可用、图既未 copy 也不存在时调用 `attempt-build` 子命令，成功/失败结果反映进四事实
+- [x] T024 [批3][实现] 改造 `scripts/sync-worktree-local-state.sh` 完成 graph provenance 主流程接线：(1) 删除 `SOURCE_COMMIT_REL` 常量与 `bootstrap_graph()` 内"仅当 copy 才写 sidecar"的写入逻辑；(2) `check_graph_source_stale()` 重命名/委托为 `check_graph_freshness()`，内部包在 `command -v node` 条件分支内调用 `node scripts/lib/graph-bootstrap-status.mjs check-freshness`，按四态映射决定是否 warn（**`stale`/`unknown-provenance` → warn，`fresh`/`dirty` → 静默**）；(3) `bootstrap_graph()` 结尾新增：`command -v node` 可用时按四事实（`graphCopiedThisRun`/`snapshotCopiedThisRun`/`buildAttempted`/`buildSucceeded`）调用 `write-status`，不可用时仅输出「状态文件写入跳过：node 不可用」warning，其余步骤照常完成；(4) 新增 `--attempt-build` flag 解析，带该 flag 且 `node` 可用、图既未 copy 也不存在时调用 `attempt-build` 子命令，成功/失败结果反映进四事实
   - 文件：`scripts/sync-worktree-local-state.sh`
   - 完成判据：`npx vitest run tests/unit/sync-worktree-local-state.test.ts tests/unit/graph-bootstrap-status.test.ts` 中 T020、T025（下）、T026（下）三组新增用例**全部**转绿；同文件既有全部回归用例（F193 8 个、`.agents` 三场景、主工作区 no-op、幂等性、批1/批2新增用例）不回归
   - 依赖：T023
 
-- [ ] T025 [批3][红测试]（补全：完整 shell `--attempt-build` 接线证据）新增完整 shell 端到端测试：在 `PATH` 中放置一个 stub `spectra` 可执行文件（`spectra batch --mode graph-only` 时写出一个含已知 `graph.sourceCommit` 字段的 `graph.json`），运行 `bash scripts/sync-worktree-local-state.sh --attempt-build`，断言：(a) 状态文件 `graph-bootstrap-status.json` 的 `bootstrapSource === "local-build"`；(b) `embeddedSourceCommitAtBootstrap` 等于 stub 写入图内嵌的 `sourceCommit` 值；(c) `worktreeHeadAtBootstrap` 等于 fixture worktree 的真实 HEAD（`git rev-parse HEAD` 结果）
+- [x] T025 [批3][红测试]（补全：完整 shell `--attempt-build` 接线证据）新增完整 shell 端到端测试：在 `PATH` 中放置一个 stub `spectra` 可执行文件（`spectra batch --mode graph-only` 时写出一个含已知 `graph.sourceCommit` 字段的 `graph.json`），运行 `bash scripts/sync-worktree-local-state.sh --attempt-build`，断言：(a) 状态文件 `graph-bootstrap-status.json` 的 `bootstrapSource === "local-build"`；(b) `embeddedSourceCommitAtBootstrap` 等于 stub 写入图内嵌的 `sourceCommit` 值；(c) `worktreeHeadAtBootstrap` 等于 fixture worktree 的真实 HEAD（`git rev-parse HEAD` 结果）
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：测试代码先行编写，在 T024 完成之前跑此刻**失败**（脚本尚无 `--attempt-build` flag 与四事实接线，状态文件或字段值不符合预期）；T024 完成后转绿
   - 依赖：T024
 
-- [ ] T026 [批3][红测试]（补全：bash warning 四态映射测试）新增假 `spectra` CLI fixture 驱动的四态映射测试：分别构造 `fresh`/`dirty`/`stale`/`unknown-provenance` 四种 `checkFreshness` 返回态（通过 stub `spectra graph-quality --json` 的输出控制），逐态运行 `sync-worktree-local-state.sh`（不带 `--attempt-build`），断言 `fresh`/`dirty` 态下**不产生** warning、`stale`/`unknown-provenance` 态下**产生**对应 warning 文案
+- [x] T026 [批3][红测试]（补全：bash warning 四态映射测试）新增假 `spectra` CLI fixture 驱动的四态映射测试：分别构造 `fresh`/`dirty`/`stale`/`unknown-provenance` 四种 `checkFreshness` 返回态（通过 stub `spectra graph-quality --json` 的输出控制），逐态运行 `sync-worktree-local-state.sh`（不带 `--attempt-build`），断言 `fresh`/`dirty` 态下**不产生** warning、`stale`/`unknown-provenance` 态下**产生**对应 warning 文案
   - 文件：`tests/unit/sync-worktree-local-state.test.ts`
   - 完成判据：测试代码先行编写，在 T024 完成之前跑此刻**失败**（`check_graph_freshness()` 尚未接入四态映射逻辑）；T024 完成后转绿
   - 依赖：T024
 
-- [ ] T027 [批3][实现] 更新 `docs/spectra-cli-reference.md:171-173`：将 `.graph-source-commit` sidecar 的描述替换为 `specs/_meta/graph-bootstrap-status.json` 新状态文件合同说明（含 freshness 现算、不缓存 stale 布尔值）
+- [x] T027 [批3][实现] 更新 `docs/spectra-cli-reference.md:171-173`：将 `.graph-source-commit` sidecar 的描述替换为 `specs/_meta/graph-bootstrap-status.json` 新状态文件合同说明（含 freshness 现算、不缓存 stale 布尔值）
   - 文件：`docs/spectra-cli-reference.md`
   - 完成判据：`grep -n "graph-source-commit" docs/spectra-cli-reference.md` 不再输出旧描述文本（或仅保留标注为 superseded 的历史说明），改为出现 `graph-bootstrap-status.json` 描述
   - 依赖：T024
 
-- [ ] T028 [批3][回归验证] 批3 checkpoint：`graph-bootstrap-status.test.ts` + `sync-worktree-local-state.test.ts` 全绿（含 T025/T026 完整 shell 接线证据）
+- [x] T028 [批3][回归验证] 批3 checkpoint：`graph-bootstrap-status.test.ts` + `sync-worktree-local-state.test.ts` 全绿（含 T025/T026 完整 shell 接线证据）
   - 文件：无新增（验证性任务）
   - 完成判据：`npx vitest run tests/unit/graph-bootstrap-status.test.ts tests/unit/sync-worktree-local-state.test.ts` 0 失败
   - 依赖：T024, T025, T026, T027

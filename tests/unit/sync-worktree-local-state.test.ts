@@ -22,8 +22,80 @@ interface TestRepo {
   tempDir: string;
   primaryDir: string;
   worktreeDir: string;
+  /** 假 `spectra` 所在目录，被注入 PATH 前缀；用例可覆写其中的 stub 改变行为 */
+  stubBinDir: string;
   cleanup: () => void;
 }
+
+/**
+ * 假 `spectra` CLI 行为规格。
+ *
+ * Feature 239 起 sync 脚本会 spawn `spectra graph-quality --json` 做 freshness 判定；测试一律
+ * 注入沙盒内的 stub，既保证判定结果可控，也避免测试触发真实全局 CLI（真实 CLI 冒烟由
+ * graph-bootstrap-status.test.ts 单独覆盖）。
+ */
+type SpectraStubSpec =
+  | { mode: 'auto' }
+  | { mode: 'fixed'; state: string }
+  | { mode: 'build'; sourceCommit: string };
+
+function writeSpectraStub(binDir: string, spec: SpectraStubSpec): void {
+  fs.mkdirSync(binDir, { recursive: true });
+
+  // auto：按图内嵌 sourceCommit 与当前 HEAD 的一致性给出 fresh/stale，充当 canonical 判定的
+  // 测试替身；fixed：固定返回指定状态，用于四态映射测试。
+  const stateResolution =
+    spec.mode === 'fixed'
+      ? [
+          `state=${JSON.stringify(spec.state)}`,
+          'recorded="stub-recorded"',
+          'current="stub-current"',
+        ].join('\n')
+      : [
+          `recorded="$(sed -n 's/.*"sourceCommit":"\\([^"]*\\)".*/\\1/p' "$graph" 2>/dev/null | head -1)"`,
+          'current="$(git rev-parse HEAD 2>/dev/null || true)"',
+          'if [[ -z "$recorded" ]]; then state="unknown-provenance"',
+          'elif [[ "$recorded" == "$current" ]]; then state="fresh"',
+          'else state="stale"; fi',
+        ].join('\n');
+
+  const batchBody =
+    spec.mode === 'build'
+      ? [
+          'mkdir -p specs/_meta',
+          `printf '{"graph":{"sourceCommit":"%s"},"nodes":[],"links":[]}' ${JSON.stringify(spec.sourceCommit)} > specs/_meta/graph.json`,
+        ].join('\n')
+      : ':';
+
+  fs.writeFileSync(
+    path.join(binDir, 'spectra'),
+    [
+      '#!/usr/bin/env bash',
+      'set -u',
+      'cmd="${1:-}"',
+      'shift || true',
+      'if [[ "$cmd" == "graph-quality" ]]; then',
+      '  graph=""',
+      '  while [[ $# -gt 0 ]]; do',
+      '    if [[ "$1" == "--graph" ]]; then graph="${2:-}"; shift 2; else shift; fi',
+      '  done',
+      stateResolution,
+      `  printf '{"overallVerdict":"pass","freshness":{"state":"%s","recordedSourceCommit":"%s","currentHead":"%s"}}\\n' "$state" "$recorded" "$current"`,
+      '  exit 0',
+      'fi',
+      'if [[ "$cmd" == "batch" ]]; then',
+      batchBody,
+      '  exit 0',
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+}
+
+/** 当前活跃 fixture 的 stub 目录，由 setupRepo 设置，供 runSync* 注入 PATH 前缀。 */
+let activeStubBinDir: string | null = null;
 
 interface SetupRepoOptions {
   /** `.worktreeinclude` 清单内容；`null` 表示不创建该文件（Feature 239 T008 manifest 缺失场景） */
@@ -59,10 +131,15 @@ function setupRepo({
   fs.mkdirSync(path.dirname(worktreeDir), { recursive: true });
   execSync(`git worktree add -q -b feature-x "${worktreeDir}"`, { cwd: primaryDir });
 
+  const stubBinDir = path.join(tempDir, 'stub-bin');
+  writeSpectraStub(stubBinDir, { mode: 'auto' });
+  activeStubBinDir = stubBinDir;
+
   return {
     tempDir,
     primaryDir,
     worktreeDir,
+    stubBinDir,
     cleanup: () => fs.rmSync(tempDir, { recursive: true, force: true }),
   };
 }
@@ -78,24 +155,35 @@ function writeWorktreeInclude(repo: TestRepo, entries: string[]): void {
   fs.writeFileSync(path.join(repo.worktreeDir, '.worktreeinclude'), `${entries.join('\n')}\n`);
 }
 
-function runSync(cwd: string): SyncResult {
-  const r = spawnSync('bash', [SCRIPT_PATH, '--quiet'], { cwd, encoding: 'utf-8' });
+/** 统一 env：把 fixture 的 stub 目录放到 PATH 最前，确保脚本解析到假 `spectra`。 */
+function stubbedEnv(extraEnv: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const base = { ...process.env, ...extraEnv };
+  if (activeStubBinDir !== null) {
+    base.PATH = `${activeStubBinDir}${path.delimiter}${process.env.PATH ?? ''}`;
+  }
+  return base;
+}
+
+function runSyncArgs(cwd: string, args: string[], extraEnv: Record<string, string> = {}): SyncResult {
+  const r = spawnSync('bash', [SCRIPT_PATH, ...args], {
+    cwd,
+    encoding: 'utf-8',
+    env: stubbedEnv(extraEnv),
+  });
   return { stdout: r.stdout, stderr: r.stderr, status: r.status ?? 0 };
 }
 
+function runSync(cwd: string): SyncResult {
+  return runSyncArgs(cwd, ['--quiet']);
+}
+
 function runSyncVerbose(cwd: string): SyncResult {
-  const r = spawnSync('bash', [SCRIPT_PATH], { cwd, encoding: 'utf-8' });
-  return { stdout: r.stdout, stderr: r.stderr, status: r.status ?? 0 };
+  return runSyncArgs(cwd, []);
 }
 
 /** 注入额外环境变量（隔离 HOME / PROBE_LOG）的运行入口，供 FR-011 逃逸矩阵使用。 */
 function runSyncWithEnv(cwd: string, extraEnv: Record<string, string>): SyncResult {
-  const r = spawnSync('bash', [SCRIPT_PATH], {
-    cwd,
-    encoding: 'utf-8',
-    env: { ...process.env, ...extraEnv },
-  });
-  return { stdout: r.stdout, stderr: r.stderr, status: r.status ?? 0 };
+  return runSyncArgs(cwd, [], extraEnv);
 }
 
 describe('sync-worktree-local-state.sh', () => {
@@ -299,6 +387,7 @@ describe('sync-worktree-local-state.sh', () => {
     const GRAPH_REL = 'specs/_meta/graph.json';
     const SNAPSHOT_REL = '.spectra/unified-graph.json';
     const SIDECAR_REL = 'specs/_meta/.graph-source-commit';
+    const STATUS_REL = 'specs/_meta/graph-bootstrap-status.json';
 
     function seedPrimaryGraph(graphContent: string, snapshotContent?: string): void {
       const g = path.join(repo.primaryDir, GRAPH_REL);
@@ -311,7 +400,8 @@ describe('sync-worktree-local-state.sh', () => {
       }
     }
 
-    it('worktree 缺图时从主仓 copy graph.json + 快照（非软链）+ 写 source-commit sidecar', () => {
+    // Feature 239 T020(b)：sidecar 写入被彻底移除，改由结构化状态文件承载 provenance。
+    it('worktree 缺图时从主仓 copy graph.json + 快照（非软链）+ 写结构化状态文件（不再写 sidecar）', () => {
       seedPrimaryGraph('{"nodes":[],"links":[]}', '{"schemaVersion":"2.0"}');
 
       const r = runSync(repo.worktreeDir);
@@ -327,11 +417,11 @@ describe('sync-worktree-local-state.sh', () => {
       expect(fs.lstatSync(s).isSymbolicLink()).toBe(false);
       expect(fs.readFileSync(s, 'utf-8')).toBe('{"schemaVersion":"2.0"}');
 
-      // sidecar 记录主仓 HEAD
-      const sidecar = path.join(repo.worktreeDir, SIDECAR_REL);
-      expect(fs.existsSync(sidecar)).toBe(true);
-      const head = execSync('git rev-parse HEAD', { cwd: repo.primaryDir, encoding: 'utf-8' }).trim();
-      expect(fs.readFileSync(sidecar, 'utf-8').trim()).toBe(head);
+      // 状态文件记录本次 provenance；旧 sidecar 不得再被生成
+      const status = JSON.parse(fs.readFileSync(path.join(repo.worktreeDir, STATUS_REL), 'utf-8'));
+      expect(status.schemaVersion).toBe(1);
+      expect(status.bootstrapSource).toBe('primary-copy');
+      expect(fs.existsSync(path.join(repo.worktreeDir, SIDECAR_REL))).toBe(false);
     });
 
     it('worktree 已有本地增量图时 rerun 不覆盖（copy-if-absent 幂等，Codex W4）', () => {
@@ -365,11 +455,17 @@ describe('sync-worktree-local-state.sh', () => {
       expect(r.stderr).toMatch(/spectra batch|spectra index|构建图/);
     });
 
+    // Feature 239 T020(c)：两个 stale 用例的 fixture 迁移为含 `graph.sourceCommit` 的新格式。
+    // freshness 不再由脚本自行比对 sidecar，而是经 checkFreshness adapter 读图内嵌字段判定。
     it('source-commit ≠ worktree HEAD 时 rerun 给出 stale 提示（不阻断）', () => {
-      seedPrimaryGraph('{"nodes":[]}');
-      runSync(repo.worktreeDir); // bootstrap 写 sidecar = 主仓 HEAD
+      const primaryHead = execSync('git rev-parse HEAD', {
+        cwd: repo.primaryDir,
+        encoding: 'utf-8',
+      }).trim();
+      seedPrimaryGraph(JSON.stringify({ graph: { sourceCommit: primaryHead }, nodes: [] }));
+      runSync(repo.worktreeDir); // 首次 bootstrap copy 图（内嵌 sourceCommit = 当时的 HEAD）
 
-      // worktree 推进一个 commit，使 HEAD ≠ 记录的 source commit
+      // worktree 推进一个 commit，使 HEAD ≠ 图内嵌的 sourceCommit
       execSync('git commit -q --allow-empty -m advance', { cwd: repo.worktreeDir });
 
       const r = runSyncVerbose(repo.worktreeDir);
@@ -378,13 +474,17 @@ describe('sync-worktree-local-state.sh', () => {
     });
 
     it('首次 bootstrap 时 worktree HEAD 已 ≠ 主仓 HEAD → 立即 stale 提示（Codex CRITICAL）', () => {
+      const primaryHead = execSync('git rev-parse HEAD', {
+        cwd: repo.primaryDir,
+        encoding: 'utf-8',
+      }).trim();
       // worktree 先 diverge（领先主仓一个 commit），再 seed 主仓图并首次 bootstrap
       execSync('git commit -q --allow-empty -m worktree-ahead', { cwd: repo.worktreeDir });
-      seedPrimaryGraph('{"nodes":[]}');
+      seedPrimaryGraph(JSON.stringify({ graph: { sourceCommit: primaryHead }, nodes: [] }));
 
       const r = runSyncVerbose(repo.worktreeDir);
       expect(r.status).toBe(0);
-      // 首次 copy 后即应比较 sidecar(=主仓 HEAD) vs worktree HEAD → stale
+      // 首次 copy 后即应比较图内嵌 sourceCommit vs worktree HEAD → stale
       expect(r.stderr).toMatch(/stale/);
       expect(fs.existsSync(path.join(repo.worktreeDir, GRAPH_REL))).toBe(true); // 仍 copy（stale 不阻断）
     });
@@ -818,6 +918,210 @@ describe('sync-worktree-local-state.sh', () => {
       const polluted = [...EXPECTED_SYMLINK_TARGETS, 'config/db-secret.json'];
       expect(polluted.flatMap(secretHits)).not.toEqual([]);
       expect(EXPECTED_SYMLINK_TARGETS.flatMap(secretHits)).toEqual([]);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Feature 239 批 3：graph provenance 接线（FR-006/FR-010/SC-007）
+  // ─────────────────────────────────────────────────────────────
+
+  describe('Feature 239 — graph provenance 接线（FR-006/SC-007）', () => {
+    const GRAPH_REL = 'specs/_meta/graph.json';
+    const SIDECAR_REL = 'specs/_meta/.graph-source-commit';
+    const STATUS_REL = 'specs/_meta/graph-bootstrap-status.json';
+    const FOREIGN_COMMIT = '0'.repeat(40);
+
+    function seedPrimaryGraphWithCommit(sourceCommit: string): void {
+      const graphPath = path.join(repo.primaryDir, GRAPH_REL);
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(
+        graphPath,
+        JSON.stringify({ graph: { sourceCommit }, nodes: [], links: [] }),
+      );
+    }
+
+    function seedWorktreeSidecar(content: string): void {
+      const sidecarPath = path.join(repo.worktreeDir, SIDECAR_REL);
+      fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
+      fs.writeFileSync(sidecarPath, `${content}\n`);
+    }
+
+    function worktreeHead(): string {
+      return execSync('git rev-parse HEAD', { cwd: repo.worktreeDir, encoding: 'utf-8' }).trim();
+    }
+
+    function readStatus(): Record<string, unknown> {
+      return JSON.parse(fs.readFileSync(path.join(repo.worktreeDir, STATUS_REL), 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+    }
+
+    // C9-2 正向：内嵌 sourceCommit 已 stale，但遗留 sidecar 被人为写成 current。
+    // 若判定仍读 sidecar（或两者都读且优先级不对），会静默放过一张 stale 图。
+    it('poison-sidecar 正向：内嵌 stale + sidecar 写成 current → 仍必须 warn stale', () => {
+      seedPrimaryGraphWithCommit(FOREIGN_COMMIT);
+      seedWorktreeSidecar(worktreeHead());
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toMatch(/stale/);
+    });
+
+    // C9-2 反向：内嵌 sourceCommit 与 HEAD 一致（fresh），但遗留 sidecar 被写成 stale。
+    it('poison-sidecar 反向：内嵌 fresh + sidecar 写成 stale → 不得误报 stale', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      seedWorktreeSidecar(FOREIGN_COMMIT);
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).not.toMatch(/stale/);
+    });
+
+    // C9-3：预先 seed 一个遗留 sidecar，bootstrap 后必须被迁移性删除
+    it('遗留 sidecar 在 bootstrap 后被清理，且不会被重新生成', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      seedWorktreeSidecar(FOREIGN_COMMIT);
+      expect(fs.existsSync(path.join(repo.worktreeDir, SIDECAR_REL))).toBe(true);
+
+      expect(runSync(repo.worktreeDir).status).toBe(0);
+
+      expect(fs.existsSync(path.join(repo.worktreeDir, SIDECAR_REL))).toBe(false);
+      expect(fs.existsSync(path.join(repo.worktreeDir, STATUS_REL))).toBe(true);
+    });
+
+    it('rerun 未改变已有图时继承先前 bootstrapSource（不被覆盖为 local-build/unknown）', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      expect(runSync(repo.worktreeDir).status).toBe(0);
+      expect(readStatus().bootstrapSource).toBe('primary-copy');
+
+      // 第二次 sync：图已存在，本次既未 copy 也未构建 → 必须继承
+      expect(runSync(repo.worktreeDir).status).toBe(0);
+      expect(readStatus().bootstrapSource).toBe('primary-copy');
+    });
+
+    it('主仓与 worktree 均无图 → bootstrapSource=none 且 assessable=false（状态文件仍落盘）', () => {
+      expect(runSync(repo.worktreeDir).status).toBe(0);
+
+      const status = readStatus();
+      expect(status.bootstrapSource).toBe('none');
+      expect(status.assessable).toBe(false);
+    });
+
+    it('--dry-run 不落盘状态文件、不删除遗留 sidecar', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      seedWorktreeSidecar(FOREIGN_COMMIT);
+
+      const r = runSyncArgs(repo.worktreeDir, ['--dry-run', '--quiet']);
+
+      expect(r.status).toBe(0);
+      expect(fs.existsSync(path.join(repo.worktreeDir, STATUS_REL))).toBe(false);
+      expect(fs.existsSync(path.join(repo.worktreeDir, SIDECAR_REL))).toBe(true);
+    });
+
+    // T026：四态 → warning 映射（stale/unknown-provenance 才 warn）
+    it.each([
+      { state: 'fresh', shouldWarn: false },
+      { state: 'dirty', shouldWarn: false },
+      { state: 'stale', shouldWarn: true },
+      { state: 'unknown-provenance', shouldWarn: true },
+    ])('freshness 四态映射：$state → warn=$shouldWarn', ({ state, shouldWarn }) => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      writeSpectraStub(repo.stubBinDir, { mode: 'fixed', state });
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      if (shouldWarn) {
+        expect(r.stderr).toContain(state);
+      } else {
+        // dirty 刻意不告警：提交前工作树几乎必然 dirty，否则每次正常流程都产生噪音
+        expect(r.stderr).not.toMatch(/stale|unknown-provenance/);
+      }
+    });
+
+    // T025：--attempt-build 完整 shell 接线证据
+    it('--attempt-build：本地构建成功 → 状态文件记 local-build 且字段取自图内嵌 sourceCommit', () => {
+      const builtCommit = 'a'.repeat(40);
+      writeSpectraStub(repo.stubBinDir, { mode: 'build', sourceCommit: builtCommit });
+      // 主仓无图 → 走本地构建兜底
+      expect(fs.existsSync(path.join(repo.primaryDir, GRAPH_REL))).toBe(false);
+
+      const r = runSyncArgs(repo.worktreeDir, ['--attempt-build']);
+
+      expect(r.status).toBe(0);
+      expect(fs.existsSync(path.join(repo.worktreeDir, GRAPH_REL))).toBe(true);
+      const status = readStatus();
+      expect(status.bootstrapSource).toBe('local-build');
+      expect(status.embeddedSourceCommitAtBootstrap).toBe(builtCommit);
+      expect(status.worktreeHeadAtBootstrap).toBe(worktreeHead());
+    });
+
+    it('不带 --attempt-build 时不触发本地构建（默认路径行为不变）', () => {
+      writeSpectraStub(repo.stubBinDir, { mode: 'build', sourceCommit: 'b'.repeat(40) });
+
+      expect(runSync(repo.worktreeDir).status).toBe(0);
+
+      expect(fs.existsSync(path.join(repo.worktreeDir, GRAPH_REL))).toBe(false);
+      expect(readStatus().bootstrapSource).toBe('none');
+    });
+
+    it('PATH 剥离 node 时：warning 可见 + copy/软链步骤仍完成 + exit 0', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      fs.writeFileSync(path.join(repo.primaryDir, '.env.local'), 'KEY=1');
+      fs.writeFileSync(path.join(repo.primaryDir, 'CLAUDE.local.md'), '# 约定');
+
+      // 只保留 git/bash 等基础工具目录，剔除 node 所在目录（用一个不含 node 的最小 PATH）
+      const minimalPath = `${repo.stubBinDir}${path.delimiter}/usr/bin${path.delimiter}/bin`;
+      const r = spawnSync('bash', [SCRIPT_PATH], {
+        cwd: repo.worktreeDir,
+        encoding: 'utf-8',
+        env: { ...process.env, PATH: minimalPath },
+      });
+
+      expect(r.status ?? 0).toBe(0);
+      expect(r.stderr).toContain('node 不可用');
+      expect(fs.readFileSync(path.join(repo.worktreeDir, '.env.local'), 'utf-8')).toBe('KEY=1');
+      expect(
+        fs.lstatSync(path.join(repo.worktreeDir, 'CLAUDE.local.md')).isSymbolicLink(),
+      ).toBe(true);
+      expect(fs.existsSync(path.join(repo.worktreeDir, GRAPH_REL))).toBe(true);
+    });
+  });
+
+  describe('Feature 239 — publish_exclusive 发布原语（C11 排他发布）', () => {
+    /** 直调原语，绕开 copy_if_absent_atomic 的 `-e` 二次预检查。 */
+    function runPublishProbe(tmp: string, target: string): SyncResult {
+      return runSyncArgs(repo.worktreeDir, [], { PUBLISH_EXCLUSIVE_PROBE: `${tmp}|${target}` });
+    }
+
+    it('直调原语：target 已存在时不覆盖对方版本，且 tmp 被清理', () => {
+      const tmp = path.join(repo.worktreeDir, 'publish.tmp');
+      const target = path.join(repo.worktreeDir, 'publish-target.json');
+      fs.writeFileSync(tmp, 'MINE');
+      fs.writeFileSync(target, 'THEIRS');
+
+      const r = runPublishProbe(tmp, target);
+
+      expect(r.status).toBe(0);
+      // (a) 对方版本不被覆盖
+      expect(fs.readFileSync(target, 'utf-8')).toBe('THEIRS');
+      // (b) 本次 tmp 被清理
+      expect(fs.existsSync(tmp)).toBe(false);
+    });
+
+    it('直调原语：target 不存在时本进程赢得发布，内容为本次 tmp', () => {
+      const tmp = path.join(repo.worktreeDir, 'publish.tmp');
+      const target = path.join(repo.worktreeDir, 'publish-target.json');
+      fs.writeFileSync(tmp, 'MINE');
+
+      const r = runPublishProbe(tmp, target);
+
+      expect(r.status).toBe(0);
+      expect(fs.readFileSync(target, 'utf-8')).toBe('MINE');
+      expect(fs.existsSync(tmp)).toBe(false);
     });
   });
 });

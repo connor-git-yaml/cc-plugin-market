@@ -176,8 +176,21 @@ bash scripts/sync-worktree-local-state.sh
 ```
 
 After this the MCP tools work immediately against the copied graph. A
-`specs/_meta/.graph-source-commit` sidecar records the source commit; if the worktree HEAD
-later diverges, re-running the hook prints a non-blocking *stale* hint.
+`specs/_meta/graph-bootstrap-status.json` state file records how the graph got there
+(`bootstrapSource`: `primary-copy` | `local-build` | `none` | `unknown`) plus the embedded
+source commit and worktree HEAD observed at bootstrap time. Freshness itself is **computed
+live** on every run (by delegating to `spectra graph-quality --json`, which reads the graph's
+own embedded `graph.sourceCommit`) — the state file never caches a stale boolean. `stale` and
+`unknown-provenance` print a non-blocking hint; `fresh` and `dirty` stay silent.
+
+Pass `--attempt-build` (Codex-managed worktrees) to fall back to `spectra batch --mode
+graph-only` when the graph can neither be copied from the primary repo nor already exists
+locally; failures never block the rest of the sync.
+
+> Superseded (Feature 239): the former `specs/_meta/.graph-source-commit` sidecar is gone —
+> it was only written when a copy actually happened and recorded the *primary repo's HEAD*
+> rather than the graph's true origin, so locally rebuilt graphs always carried wrong
+> provenance. Any leftover sidecar is deleted on the next sync.
 
 > The bootstrap only works once the **primary repo's graph is itself in the relative-id
 > format** (i.e. rebuilt with Feature 193+). A pre-F193 absolute-id graph copied in is
