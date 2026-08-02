@@ -1,11 +1,13 @@
 /**
  * T026（C2）：`repo:check` 接入 spec drift 第 13 检查族后的零回归守护（SC-007）。
+ * F239 追记：第 14 族 `worktree-local-state` 接入后，本文件同时守护 13/14 两族的追加清单。
  *
  * 四项断言：
  * (a) F217 六个图质量指标**逐项** check id 断言（不接受"整体 exit 0"作为代理证据）；
  * (b) 既有各族的 check id 集合与 status 与 T021 基线快照逐项一致；
  * (c) check id 全局唯一；
- * (d) 相对基线的新增项**精确等于** `spec-drift:anchors-status`（无 lock 场景下第 13 族的唯一产出）。
+ * (d) 相对基线的新增项**精确等于**第 13 族（无 lock 场景下唯一产出 `spec-drift:anchors-status`）
+ *     与第 14 族（F239 四个 `worktree-local-state:*`）的并集。
  *
  * 基线为何是"必须显式更新"的静态 fixture：
  * 基线若改成运行时动态推导（例如"过滤掉 spec-drift: 前缀后与当前结果自比"），
@@ -59,8 +61,8 @@ const GRAPH_QUALITY_METRIC_IDS = [
  */
 const FRESHNESS_ID = 'graph-quality:freshness';
 
-describe('repo:check 接入第 13 族后的零回归（SC-007）', () => {
-  it('F217 六指标逐项断言 + 既有 12 族与基线逐项一致 + 第 13 族追加', async () => {
+describe('repo:check 接入第 13/14 族后的零回归（SC-007）', () => {
+  it('F217 六指标逐项断言 + 既有 12 族与基线逐项一致 + 第 13/14 族追加', async () => {
     const result = (await validateRepository(REPO_ROOT)) as ValidationResult;
     const byId = new Map(result.checks.map((c) => [c.id, c]));
 
@@ -91,18 +93,28 @@ describe('repo:check 接入第 13 族后的零回归（SC-007）', () => {
     const duplicated = allIds.filter((id, i) => allIds.indexOf(id) !== i);
     expect(duplicated, `重复 check id：${duplicated.join(', ')}`).toEqual([]);
 
-    // (d) 相对基线新增的 check MUST **精确等于**第 13 族（spec-drift，"无 lock"场景下唯一
-    // 产出）+ 第 14 族（model-literal-gate，Feature 238 FR-310）的联合唯一产出。
+    // (d) 相对基线新增的 check MUST **精确等于**第 13/14/15 族产出的并集（按追加顺序）。
     //
-    // ⚠️ 口径更正：不能只断言"新增项都以 spec-drift:/model-literal-gate: 开头"——那样任一族
-    // 多吐一条、吐错一条或吐重复项都会照过。此处按仓库当前无 `.specify/spec-drift.lock.json`
-    // 的事实 + model-literal-gate 单一 check 的事实，钉死联合新增项集合。
-    // 基线（`repo-check-baseline.json`）**保持不变**（固化"接入这两族之前"的历史快照）——
-    // 若把这两族也写进基线，"新增"就会变成"零新增"，本断言反而测不出接线是否真正成功
-    // （Review C5 裁决）。该仓库若日后建锚，本断言会红并要求显式更新基线，这是有意为之。
+    // ⚠️ 口径更正：不能只断言"新增项都以某几个前缀开头"——那样任一族多吐一条、吐错一条
+    // （如 lock-integrity）或吐重复项都会照过。此处按仓库当前事实钉死联合精确清单：
+    //   - 第 13 族（spec drift）：仓库无 `.specify/spec-drift.lock.json`，故只产出 anchors-status
+    //   - 第 14 族（F238 model-literal-gate，FR-310）：单一 model-literal-scan check
+    //   - 第 15 族（F239 worktree-local-state）：`.worktreeinclude` 内容合同 3 项 + AGENTS 字节预算 1 项
+    // 基线（`repo-check-baseline.json`）**保持不变**（固化"接入这些族之前"的历史快照）——
+    // 若把新族也写进基线，"新增"就会变成"零新增"，本断言反而测不出接线是否真正成功。
+    // 该仓库若日后建锚、或再有新族接入，本断言会红并要求显式更新基线，这是有意为之
+    // （F238 与 F239 的接入正是这样被本断言拦下并在此显式落账的；两者 rebase 汇合时
+    // 清单按 validateRepository 的族追加顺序取并集）。
     const baselineIds = new Set(baseline.checks.map((c) => c.id));
     const added = allIds.filter((id) => !baselineIds.has(id));
-    expect(added).toEqual(['spec-drift:anchors-status', 'model-literal-gate:model-literal-scan']);
+    expect(added).toEqual([
+      'spec-drift:anchors-status',
+      'model-literal-gate:model-literal-scan',
+      'worktree-local-state:worktreeinclude-exists',
+      'worktree-local-state:worktreeinclude-entries',
+      'worktree-local-state:worktreeinclude-ignored-verified',
+      'worktree-local-state:agents-byte-budget',
+    ]);
   }, 120_000);
 
   it('validateRepository 不传 options 时向后兼容（默认非 strict，不抛错）', async () => {

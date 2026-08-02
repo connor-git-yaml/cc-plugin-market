@@ -172,6 +172,53 @@ fi
 
 ---
 
+## 追记：T036 全量跑批暴露的 roster 断言回归（批 4 checkpoint 点名清单外的第三个集成测试）
+
+### 现象
+
+批 4 的 T035 checkpoint 只点名了两个集成测试（`repo-maintenance-sync-check` /
+`spec-drift-repo-check-modes`），第三个 **`tests/integration/spec-drift-repo-check-regression.test.ts`**
+不在清单内，因此直到 T036 全量 `npx vitest run` 才暴露：
+
+```
+AssertionError: expected [ 'spec-drift:anchors-status', …(4) ] to deeply equal [ 'spec-drift:anchors-status' ]
++   "worktree-local-state:worktreeinclude-exists",
++   "worktree-local-state:worktreeinclude-entries",
++   "worktree-local-state:worktreeinclude-ignored-verified",
++   "worktree-local-state:agents-byte-budget",
+ ❯ tests/integration/spec-drift-repo-check-regression.test.ts:102:19
+```
+
+### 判定
+
+**不是缺陷，是这条断言设计上要的效果**。该断言（:94-99 原注释）自述"钉死精确新增清单，仓库若
+日后新增会红并要求**显式更新基线**，这是有意为之"——第 14 族接入正是那个时刻，修复方式就是
+它索要的那次显式更新。它拦住的恰恰是"新族悄悄混进 repo:check roster 而无人 review"这一风险，
+说明护栏按设计生效了。
+
+### 处置（只改这一个测试文件）
+
+1. `:102` 预期数组扩展为 13 族 + 14 族并集，顺序**以实测 received 顺序为准**（`spec-drift:anchors-status`
+   在前，四个 `worktree-local-state:*` 依 `worktreeinclude-exists` → `worktreeinclude-entries` →
+   `worktreeinclude-ignored-verified` → `agents-byte-budget` 在后），非凭记忆书写
+2. `:94-99` 注释口径更新：写明现在钉死的是"第 13 族（无 lock 场景唯一产出）+ 第 14 族（F239 四 check）"
+   的精确并集，保留"未来再新增须显式更新"的设计意图句，并补一句"F239 正是被本断言拦下并在此落账"
+3. 文件头 docstring 的 (d) 条与 `describe`/`it` 名由"第 13 族"改为"第 13/14 族"，避免误导后人
+
+### 验证
+
+```
+命令: npx vitest run tests/integration/spec-drift-repo-check-regression.test.ts
+输出: Test Files  1 passed (1) / Tests  2 passed (2)
+
+邻域复核: npx vitest run <上述三个集成测试 + worktree-lifecycle-hook.test.ts>
+输出: Test Files  4 passed (4) / Tests  14 passed (14)
+```
+
+`tasks.md` 未改动——本项属 T036 完成判据内的回归处置，不新增/勾选任务。
+
+---
+
 ## 意外与处置
 
 | 现象 | 判定 | 处置 |
