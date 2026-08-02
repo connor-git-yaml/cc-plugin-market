@@ -36,8 +36,15 @@ SPECTRA_HYPEREDGES_ENABLED=true spectra batch --mode=full   # env equivalent
 # Enable ADR pipeline (disabled by default in v4.0.1+ pending evidence-binding refactor)
 spectra batch --enable-adr
 
-# Spec drift detection
+# Spec drift detection (single-spec structural/semantic diff)
 spectra diff specs/auth.spec.md src/auth/
+
+# Graph quality gates — six machine-checked indicators (F217)
+# duplicate-canonical-id / contains-coverage / orphan-ratio / dangling-edge /
+# legacy-ignored / freshness (graph sourceCommit vs HEAD; stale is explicit, never silent).
+# Runs inside repo:check as its own check family; exit 0 = pass.
+spectra graph-quality [--graph <path>] [--json] [--output <path>] [--format json|text]
+spectra graph-quality --status [--json]   # freshness/status probe only
 
 # Custom output directory
 spectra generate src/auth/ --output-dir out/
@@ -189,6 +196,28 @@ spectra watch          # debounced incremental rebuild on file save
 Because the snapshot is portable (relative `fileHashes` keys), incremental updates resume
 correctly in the new worktree. If no snapshot was bootstrapped, the first commit safely
 falls back to a full reindex (then keepalive is incremental from there on).
+
+## Spec Drift Anchors (repo-level, Feature 219)
+
+Beyond single-spec `spectra diff`, the repo ships an **AST-anchored spec drift** toolchain:
+pin a spec's code references to canonical symbol IDs, then mechanically detect when the
+anchored symbols drift (normalized-AST fingerprint — formatting-insensitive; identifier /
+literal / control-flow changes flip the anchor to `stale`).
+
+```bash
+# Create / refresh anchors from a reference manifest (atomic lock write)
+npm run drift:link -- --manifest <path> [--refresh [--id <id>]]
+
+# Re-check all persisted anchors (exact canonical-ID match, no fuzzy re-resolution)
+npm run drift:check -- [--strict]
+
+# Remove one anchor by id
+npm run drift:unlink -- <id>
+```
+
+State lives in a versioned lock file; `drift:check` also runs inside `repo:check` as its own
+check family (stale/orphaned anchors surface as warnings by default; `--strict` hard-fails —
+CI-friendly). Renames are honestly reported as `orphaned` (rename-follow is a later phase).
 
 ## Domain Knowledge Scaffold (`scaffold-kb`, Feature 190/192)
 

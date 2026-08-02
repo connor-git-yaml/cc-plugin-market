@@ -53,6 +53,16 @@ Supports 6 research modes (`full`, `tech-only`, `product-only`, `codebase-scan`,
 9. **Spec Review + Quality Review** — Parallel dispatch (VERIFY_GROUP)
 10. **Verify** — Build, lint, and test validation
 
+**Opt-in `goal_loop` (Feature 201/204)** — the Implement phase can run as a metric-driven
+autonomous loop instead of a single pass: implement → independent verify (real exit codes,
+never trusts self-reported success) → `decide-stop` (REACHED_GOAL / continue / escalate to
+full verification / no-progress fallback), with git-snapshot rollback on regression and a
+full-command-set completeness check on the final gate (anti reward-hacking). **Default off**;
+enable per-project by setting `implement.agent_mode: goal_loop` for feature mode in
+`.specify/orchestration-overrides.yaml` (a golden template ships at
+`plugins/spec-driver/templates/goal-loop-override-template.yaml`). Human `GATE_VERIFY`
+remains the final gate regardless.
+
 ### Implement Mode — Mature Spec Direct Implementation
 
 ```bash
@@ -76,6 +86,22 @@ Skips research phases — analyzes existing code context instead. Ideal for iter
 ```
 
 Rapid diagnosis → root cause analysis → targeted fix → verification. Auto-syncs specs after fix.
+
+**Process-compliance Stop hook (Feature 208)** — fix sessions are structurally guarded: a Stop
+hook judges the session's artifacts (feature dir, fix-report with judgment basis) and can block
+premature completion with actionable feedback. Three tiers via `fix_compliance.enforcement`
+in `spec-driver.config.yaml`: `block` (default — exit 2 with dual-path guidance) / `warn` /
+`off`. Bounded degradation prevents lock-out (third same-session block auto-releases with an
+audit mark; successful remediation resets the counter). Non-fix sessions are never touched.
+
+**No-op evidence gate (Feature 216)** — claiming "already fixed / no change needed" requires
+**executable evidence** (a reproduction command/test run recorded after the claim); an
+unverified confident no-op is blocked with a next-step asking for the repro. Real repair paths
+pay zero extra friction.
+
+**Snapshot drift diagnostic** — `npm run judge:doctor` (read-only) compares the *installed*
+judge snapshot against repo source, catching the "gate silently running an old judge" failure
+mode. Run it after upgrading the plugin or when gate behavior looks stale.
 
 ### Refactor Mode — Large-Scale Refactoring
 

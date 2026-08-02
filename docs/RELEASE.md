@@ -235,9 +235,34 @@ jobs:
 
 ---
 
+## 发布实操检查单（2026-08 双 4.4.0 发版实测沉淀）
+
+按时间序，每条都是真实踩过的坑：
+
+1. **发版前后跑 `npm run judge:doctor`**：安装版 plugin 快照 vs 仓库源码的漂移诊断。
+   发版动机常常就是 doctor 报 `drift`（判定器等修复躺在 master 上、安装版零生效）；
+   发完 + 重装后复检应转 `match`（active 路径按 installPath 解析，需重启 session 刷新）。
+2. **plugin 升级用 `claude plugin update`，不是 `install`**：`install` 对已装项直接跳过
+   （"already installed"），只有 `update` 才会 4.x → 4.y。
+3. **本地 `prepublishOnly` 全量 vitest 可能"全过仍 exit 1"**（F235 worker RPC 超时签名，
+   publish 链嵌套 npm 进程吃余量）——已在 `prepublishOnly` 固定 `--maxWorkers=4`；若复发，
+   独立跑 `npx vitest run` 判别真失败 vs 该签名。
+4. **npm 登录会话会过期**（浏览器 web-auth 约两周量级）：`npm whoami` 返回 E401 时发布会
+   报 404/401。先 `npm login`。
+5. **发布动作本身可能再触发一次浏览器授权挑战**（2FA auth-and-writes + web-auth）——该
+   挑战**必须在交互式终端完成**（会自动弹浏览器）；非交互 shell 里 npm 只打印授权 URL 就
+   退出。此时由操作者在自己终端跑最后一步。
+6. **本地图新鲜度门**：repo:check 的 graph-quality 族会拦本地陈旧图（dangling-edge fail）；
+   `spectra batch --mode graph-only`（秒级）重建即绿。
+7. 改过任何 SKILL.md 后：`npm run repo:sync` 重生 codex wrapper（body-sha256 门禁 + F213
+   双写链），否则 repo:check fail。
+
 ## 备注
 
 - canonical 版本号在 `contracts/release-contract.yaml`，不是 `package.json`
-- `prepublishOnly` 是 npm 内置 hook，`npm publish` 时**自动**调用，无法跳过（除非加 `--ignore-scripts`，禁止使用）
+- `prepublishOnly` 是 npm 内置 hook，`npm publish` 时**自动**调用。`--ignore-scripts` 原则
+  禁止；**唯一例外**：四道门刚刚在同机独立跑过且全绿、仅为完成上条第 5 点的交互式授权
+  挑战时，允许在操作者终端用 `npm publish --ignore-scripts` 免重复 8 分钟门禁（2026-08-02
+  4.4.0 发版即此情形）——门禁没跑过就绝不允许
 - `publishConfig.access: public` 防止 scope 包默认 private 的坑（spectra-cli 不带 scope 实际是默认 public，但显式声明更安全）
 - npm 发布是**不可逆的公开操作**，72 小时后不能撤回，发版前务必跑 dry-run + 审包

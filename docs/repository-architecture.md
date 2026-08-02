@@ -27,20 +27,32 @@ src/                               # Spectra TypeScript source
 │   ├── mermaid-class-diagram.ts   # Mermaid class diagram generation
 │   └── index-generator.ts         # _index.spec.md generation
 ├── batch/                         # Batch processing
-│   ├── batch-orchestrator.ts      # Batch spec generation
+│   ├── batch-orchestrator.ts      # Batch facade (F220: scheduling kept here by design)
+│   ├── stages/                    # F220 five-stage split (each independently testable):
+│   │                              #   source discovery / graph assembly / generation
+│   │                              #   scheduling / checkpoint-incremental state / artifact writing
 │   ├── budget-gate.ts             # Dry-run + cost budget (F1)
 │   ├── cost-summary.ts            # Token usage aggregation (F1)
 │   ├── model-override-decision.ts # Model selection logic
 │   ├── progress-reporter.ts       # Terminal progress display
 │   ├── delta-regenerator.ts       # Incremental regeneration
 │   └── checkpoint.ts              # Checkpoint recovery state
+├── graph/                         # Canonical graph model (F214 three-layer contract, layer 1)
+├── knowledge-graph/               # Derived views over canonical model (layer 2)
 ├── panoramic/                     # Panoramic doc + graph (Phase 1+2)
+│   ├── graph/                     # Persisted/query representation (layer 3):
+│   │                              #   graph.json writer (normalize + portable guard, F183/F193)
+│   │                              #   + GraphQueryEngine + quality gates (F217)
 │   ├── anchoring/                 # F4: function-level semantic anchoring
 │   ├── hyperedges/                # F4: multi-node hyperedge extraction
 │   ├── builders/doc-graph-builder # Schema v2.0 graph builder
 │   ├── exporters/html-template    # F5: graph.html D3 visualization
 │   ├── pipelines/                 # ADR / debt-intelligence / docs-bundle / ...
 │   └── qa/                        # F5: natural language Q&A (RAG)
+├── scaffold-kb/                   # F190/F192: vendor-doc KB builder (doc-graph + SQLite FTS5,
+│   │                              #   API entity layer, SSRF-guarded url/office/minutes ingest)
+├── kb-mcp/                        # KB MCP server (kb_search / kb_doc_lookup / kb_api_lookup;
+│   │                              #   vendor read-only + project writable, federated)
 ├── debt-scanner/                  # F3: TODO + design-doc Open Questions
 ├── spec-store/                    # F2: unified SpecStore abstraction
 ├── adapters/                      # Multi-language adapters (TS/Python/Go/Java)
@@ -49,9 +61,14 @@ src/                               # Spectra TypeScript source
 ├── utils/                         # Utility functions
 ├── installer/                     # Skill installer/uninstaller
 ├── auth/                          # Auth detection & proxy
-├── mcp/                           # MCP Server (graph_query / _node / _path / _community / _god_nodes / _hyperedges)
-├── cli/                           # CLI entry & subcommands
+├── mcp/                           # Spectra MCP Server — 17 tools (graph queries + agent
+│                                  #   context + file navigation + pipeline)
+├── cli/                           # CLI entry & subcommands (incl. graph-quality, scaffold-kb)
 └── scripts/                       # npm lifecycle scripts
+
+# Note (F214): the three graph layers have schema'd conversion contracts with round-trip
+# tests — canonical model (src/graph) → derived view (src/knowledge-graph) → persisted/query
+# (src/panoramic/graph). ID format is unified canonical (`::`); conversions live at one boundary.
 
 plugins/                           # Claude Code plugins
 ├── spectra/                       # Spectra MCP plugin

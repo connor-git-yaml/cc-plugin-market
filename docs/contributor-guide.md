@@ -48,4 +48,14 @@ npm run docs:sync:agents   # 仅同步 docs/shared → CLAUDE.md + AGENTS.md
 npm run lint               # TypeScript 类型检查
 npm run build              # 编译
 npm test                   # 全量测试
+
+# —— 图与门禁（M9 起）——
+node dist/cli/index.js batch --mode graph-only   # 秒级零 LLM 建图（新 worktree 首选）
+spectra graph-quality                            # 六指标图质量门（repo:check 内含）
+npm run drift:check                              # spec↔代码锚 drift 检查（--strict 硬门）
+npm run judge:doctor                             # 安装版判定器快照 vs 源码漂移诊断
+npm run repo:sync && npm run repo:check          # 受控产物再生 + 全族校验（提交前）
 ```
+
+> 多 worktree 并行开发约定（编号防撞 / 先 ship 先 push / `specs/src.spec.md` 再生噪声
+> 排除出 commit）见 `CLAUDE.md` 分支同步与交付节——提交前先 `git fetch origin master`。

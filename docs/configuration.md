@@ -28,6 +28,7 @@ agents:
 
 # Cross-runtime model compatibility (Claude / Codex)
 # Replace <YOUR_CODEX_MODEL_ID> with a real model id from `~/.codex/config.toml`.
+# Codex-side values are free strings; leave unset to let the Codex CLI pick its default.
 model_compat:
   runtime: auto  # auto | claude | codex
   aliases:
@@ -52,6 +53,18 @@ codex_thinking:
     opus: xhigh
     sonnet: medium
     haiku: low
+
+# Fix-mode process compliance (Feature 208/216) — Stop-hook enforcement tier
+# block (default): premature completion blocked (exit 2 + dual-path guidance);
+#                  no-op claims additionally require executable repro evidence (F216)
+# warn:  same judgment, warning only     off: zero-touch
+fix_compliance:
+  enforcement: block  # block | warn | off
+
+# goal_loop (Feature 201) — opt-in autonomous implement loop for feature mode.
+# NOT configured here: it is a *process-structure* override, so it lives in
+# .specify/orchestration-overrides.yaml (see golden template at
+# plugins/spec-driver/templates/goal-loop-override-template.yaml).
 
 # Gate policy: strict | balanced | autonomous
 gate_policy: balanced
