@@ -2,7 +2,7 @@
 
 > **Product**: spectra
 > **Ruleset**: 默认持续治理评分 (default-governance)
-> **Generated**: 2026-08-02T10:55:43.548Z
+> **Generated**: 2026-08-02T11:07:10.693Z
 > **Status**: WARN
 > **Score**: 90/100
 

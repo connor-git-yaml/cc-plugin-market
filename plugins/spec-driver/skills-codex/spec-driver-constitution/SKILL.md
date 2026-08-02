@@ -22,9 +22,9 @@ effort: low
 此 Skill 在安装时直接同步自 `$PLUGIN_DIR/skills/spec-driver-constitution/SKILL.md` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
 - 命令别名：正文中的 `/spec-driver:spec-driver-constitution` 在 Codex 中等价于 `$spec-driver-constitution`
-- 子代理执行：正文中的 `Task(...)` / `Task tool` 在 Codex 中视为当前会话内联子代理执行
+- 子代理执行能力：以 install-time 探测记录为准（`.codex/spec-driver-capability.md`）；记录缺失或 degraded 时，正文中的 `Task(...)` / `Task tool` 一律按当前会话内联/串行降级执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 `[回退:串行]`
-- 模型兼容：保持 `--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认` 优先级；runtime=codex 时先做 `model_compat` 归一化，不可用时标注 `[模型回退]`
+- 模型兼容：遵循 `model_compat.aliases.codex` tier 映射优先级（`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认`）；未显式 pin 时由 Codex CLI 自身按其配置分层（`-c` override > profile > `~/.codex/config.toml` 的 `model` 字段 > CLI 内建默认）决定当前默认模型，不冒充为已验证的具体版本
 - 质量门与产物：所有质量门、制品路径、写入边界与 source skill 完全一致，不得弱化或越界
 
 ---

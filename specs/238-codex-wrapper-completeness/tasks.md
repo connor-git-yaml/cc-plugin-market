@@ -116,63 +116,63 @@ plan: plan.md
 
 > **不可与 Slice 1 并行**（plan C6：都改 `codex-skills.sh`，产物链耦合）；必须在 Slice 1 合并后开始，依赖 Slice 2 的 `detect-codex-capability.mjs`。
 
-- [ ] T3.1 [红] `tests/integration/spec-driver-codex-skills.test.ts` 新增块：**受控 PATH（完全替换非追加）**——tempDir/bin 内含 fake `codex`（返回 `multi_agent  stable  true`）+ 脚本实际调用面所需系统命令（`node`/`bash`/`dirname`/`mkdir`/`cat` 等，implement 阶段按 `codex-skills.sh` 与 `detect-codex-capability.mjs` 实际调用面逐一核实列全）symlink，`env.PATH` 整体替换（非 `PATH:'<tempDir>/bin:'+process.env.PATH` 追加式，防止装机真实 `codex` 抢先命中导致假失败）→ `install` 后 `.codex/spec-driver-capability.md` 含 `Subagent Capability: native`，`.codex/skills/*/SKILL.md` 不含该行（capability-neutral）
+- [x] T3.1 [红] `tests/integration/spec-driver-codex-skills.test.ts` 新增块：**受控 PATH（完全替换非追加）**——tempDir/bin 内含 fake `codex`（返回 `multi_agent  stable  true`）+ 脚本实际调用面所需系统命令（`node`/`bash`/`dirname`/`mkdir`/`cat` 等，implement 阶段按 `codex-skills.sh` 与 `detect-codex-capability.mjs` 实际调用面逐一核实列全）symlink，`env.PATH` 整体替换（非 `PATH:'<tempDir>/bin:'+process.env.PATH` 追加式，防止装机真实 `codex` 抢先命中导致假失败）→ `install` 后 `.codex/spec-driver-capability.md` 含 `Subagent Capability: native`，`.codex/skills/*/SKILL.md` 不含该行（capability-neutral）
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-201/204/206，plan T2.4（含 W4 修订）
 
-- [ ] T3.1b [红]（**Tasks 审查轮 W11 新增**）同文件：**FR-204 三份产物中性指针一致性机械断言**——对 `.codex/skills/<sample-id>/SKILL.md` 与 `plugins/spec-driver/skills-codex/<sample-id>/SKILL.md`（各抽一个样本 skill）逐一 grep，断言均含中性指针文案（`.codex/spec-driver-capability.md` 路径字面量），且均**不含**任何具体 capability 结果值字面量（如 `native`/`degraded`），机械验证三份产物（wrapper 正文两处分发镜像 + capability-neutral 指针文案）与探测结果彻底解耦
+- [x] T3.1b [红]（**Tasks 审查轮 W11 新增**）同文件：**FR-204 三份产物中性指针一致性机械断言**——对 `.codex/skills/<sample-id>/SKILL.md` 与 `plugins/spec-driver/skills-codex/<sample-id>/SKILL.md`（各抽一个样本 skill）逐一 grep，断言均含中性指针文案（`.codex/spec-driver-capability.md` 路径字面量），且均**不含**任何具体 capability 结果值字面量（如 `native`/`degraded`），机械验证三份产物（wrapper 正文两处分发镜像 + capability-neutral 指针文案）与探测结果彻底解耦
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-204，plan §3.3、Tasks 审查轮 W11
 
-- [ ] T3.2 [红]（**Tasks 审查轮 C1 修订：调用计数按参数分类**）同文件：fake `codex` 脚本按参数分类记录调用（区分 `features list` 子命令与 `--version` 参数，各自独立计数或按参数追加带标签的日志行，不合并计数）；断言单次 `install` 后 `features list` 恰好被调用 1 次、`--version` 恰好被调用 1 次（分别机械验证 FR-201"单次探测+缓存"对两类子调用独立成立，避免合并计数掩盖任一子调用被重复触发的回归）
+- [x] T3.2 [红]（**Tasks 审查轮 C1 修订：调用计数按参数分类**）同文件：fake `codex` 脚本按参数分类记录调用（区分 `features list` 子命令与 `--version` 参数，各自独立计数或按参数追加带标签的日志行，不合并计数）；断言单次 `install` 后 `features list` 恰好被调用 1 次、`--version` 恰好被调用 1 次（分别机械验证 FR-201"单次探测+缓存"对两类子调用独立成立，避免合并计数掩盖任一子调用被重复触发的回归）
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-201，plan T2.4b（W4 新增，Tasks 审查轮 C1 修订）
 
-- [ ] T3.3 [红] 同文件：受控 PATH **不含**任何 `codex` 可执行文件（区别于"追加式 PATH 里没有"）→ sidecar 含 `degraded(reason=binary-missing)`，`install` 整体 exit 0
+- [x] T3.3 [红] 同文件：受控 PATH **不含**任何 `codex` 可执行文件（区别于"追加式 PATH 里没有"）→ sidecar 含 `degraded(reason=binary-missing)`，`install` 整体 exit 0
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-202/206，E1，plan T2.5
 
-- [ ] T3.4 [红] 同文件：fake `codex` 脚本 `exit 1` → sidecar 含 `degraded(reason=command-failed)`
+- [x] T3.4 [红] 同文件：fake `codex` 脚本 `exit 1` → sidecar 含 `degraded(reason=command-failed)`
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-203/206，plan T2.6
 
-- [ ] T3.5 [红] 同文件：两次连续 install（第一次 fake codex 返回 true，第二次替换为返回 false）→ sidecar 内容随第二次刷新
+- [x] T3.5 [红] 同文件：两次连续 install（第一次 fake codex 返回 true，第二次替换为返回 false）→ sidecar 内容随第二次刷新
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-208，plan T2.7
 
-- [ ] T3.6 [红] 同文件：**sidecar schema 三要素完整性断言**——含 capability 行 + ISO 8601 时间戳行 + `codex --version` 结果行三要素齐全；且 `.codex/skills/*/SKILL.md`、`plugins/spec-driver/skills-codex/*/SKILL.md`、`npm pack` 产物列表均**不含** sidecar 文件（FR-207 隔离边界机械验证）（**与 T3.2 对齐**：本任务断言中 `codex --version` 结果行的取值来源即 T3.2 按参数分类计数体系中单独核算的 `--version` 调用，二者共用同一 fake `codex` 脚本的分类记录机制，不重复实现）
+- [x] T3.6 [红] 同文件：**sidecar schema 三要素完整性断言**——含 capability 行 + ISO 8601 时间戳行 + `codex --version` 结果行三要素齐全；且 `.codex/skills/*/SKILL.md`、`plugins/spec-driver/skills-codex/*/SKILL.md`、`npm pack` 产物列表均**不含** sidecar 文件（FR-207 隔离边界机械验证）（**与 T3.2 对齐**：本任务断言中 `codex --version` 结果行的取值来源即 T3.2 按参数分类计数体系中单独核算的 `--version` 调用，二者共用同一 fake `codex` 脚本的分类记录机制，不重复实现）
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-206/207，plan T2.7b（W4 新增，**不可遗漏**）
 
-- [ ] T3.7 [红] `tests/unit/spec-driver/wrapper-sha256.test.ts` 第 68 行 `expect(body).toContain('Task tool（Codex 下按内联子代理执行）')` 改为断言新 capability-neutral 文案（见 plan §3.3 精确文案）
+- [x] T3.7 [红] `tests/unit/spec-driver/wrapper-sha256.test.ts` 第 68 行 `expect(body).toContain('Task tool（Codex 下按内联子代理执行）')` 改为断言新 capability-neutral 文案（见 plan §3.3 精确文案）
   涉及文件：`tests/unit/spec-driver/wrapper-sha256.test.ts`
   关联：FR-205，plan T2.8——**必须与 T3.9 在同一 commit 完成**，否则该测试挂红阻断后续提交
 
-- [ ] T3.7b [红]（**Tasks 审查轮 W10 新增**）`tests/integration/spec-driver-codex-skills.test.ts`：生成 wrapper 后断言 `write_codex_adapter()` 输出的"模型兼容"一行**不含**字面量 `gpt-5`（任何 `gpt-5*` 具体版本号）、**含**"由 Codex CLI"字样（最小机械断言，驱动 FR-301 文案改写，先于 T3.8 实现前置）
+- [x] T3.7b [红]（**Tasks 审查轮 W10 新增**）`tests/integration/spec-driver-codex-skills.test.ts`：生成 wrapper 后断言 `write_codex_adapter()` 输出的"模型兼容"一行**不含**字面量 `gpt-5`（任何 `gpt-5*` 具体版本号）、**含**"由 Codex CLI"字样（最小机械断言，驱动 FR-301 文案改写，先于 T3.8 实现前置）
   涉及文件：`tests/integration/spec-driver-codex-skills.test.ts`
   关联：FR-301，plan §3.3
 
-- [ ] T3.8 [绿实现] `plugins/spec-driver/scripts/codex-skills.sh`：在 9 个 `write_wrapper` 调用之后、`install_all()` 结尾调用 `detect-codex-capability.mjs`（`--markdown` 模式重定向输出到 `$(dirname "$TARGET_DIR")/spec-driver-capability.md`）一次，失败仅 `echo` 警告不阻断 install；`write_codex_adapter()` 的"子代理执行"与"模型兼容"两行按 plan §3.3 精确文案改写（FR-204/301）
+- [x] T3.8 [绿实现] `plugins/spec-driver/scripts/codex-skills.sh`：在 9 个 `write_wrapper` 调用之后、`install_all()` 结尾调用 `detect-codex-capability.mjs`（`--markdown` 模式重定向输出到 `$(dirname "$TARGET_DIR")/spec-driver-capability.md`）一次，失败仅 `echo` 警告不阻断 install；`write_codex_adapter()` 的"子代理执行"与"模型兼容"两行按 plan §3.3 精确文案改写（FR-204/301）
   涉及文件：`plugins/spec-driver/scripts/codex-skills.sh`
   依赖：T3.1~T3.7b（先红后绿）、Slice 2 完成（消费 `detect-codex-capability.mjs`）
   关联：FR-201/202/204/206/207/208/301，plan §3.2（含 W2/W3 修订）
 
-- [ ] T3.9 [绿实现] `plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`：`rewriteCodexRuntimeText()` 替换列表第 8 条目标文案改写为 capability-neutral 指针短语（plan §3.3：`['Claude Code 的 Task tool', 'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，缺失/degraded 时按内联/串行降级执行）']`）
+- [x] T3.9 [绿实现] `plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`：`rewriteCodexRuntimeText()` 替换列表第 8 条目标文案改写为 capability-neutral 指针短语（plan §3.3：`['Claude Code 的 Task tool', 'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，缺失/degraded 时按内联/串行降级执行）']`）
   涉及文件：`plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs`
   依赖：T3.7（先红后绿）
   关联：FR-205，plan §3.3
 
-- [ ] T3.10 `.gitignore` 新增一行 `.codex/spec-driver-capability.md`
+- [x] T3.10 `.gitignore` 新增一行 `.codex/spec-driver-capability.md`
   涉及文件：`.gitignore`
   关联：FR-207
   [P，可与 T3.8/3.9 并行]
 
-- [ ] T3.11 `npm run repo:sync` 重新生成 tracked `plugins/spec-driver/skills-codex/`（C6 要求：`extract-wrapper-body.mjs` 改动后 tracked 旧 sha 与新 helper 重算结果不一致，裸 install 不会重写 tracked 目录，必须走 `repo:sync` 才能同步，否则 `codex-plugin-distribution-markers` 检查必红）
+- [x] T3.11 `npm run repo:sync` 重新生成 tracked `plugins/spec-driver/skills-codex/`（C6 要求：`extract-wrapper-body.mjs` 改动后 tracked 旧 sha 与新 helper 重算结果不一致，裸 install 不会重写 tracked 目录，必须走 `repo:sync` 才能同步，否则 `codex-plugin-distribution-markers` 检查必红）
   依赖：T3.9 完成
   验收命令：`npm run repo:sync`
   关联：FR-101/106，plan §7 Slice 3 验证命令注释
 
-- [ ] T3.12【Slice 3 验收检查点】
+- [x] T3.12【Slice 3 验收检查点】
   验收命令：
   ```bash
   npm run repo:sync

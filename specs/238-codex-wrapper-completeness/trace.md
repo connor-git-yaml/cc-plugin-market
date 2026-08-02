@@ -47,3 +47,5 @@
 - [19:35] implement Slice 1: COMPLETED | 9 任务全绿 / 37 tests / waiver 删除 / synthesizeGap 五类用例 | 偏差 2 处合理（断言口径对齐 extractWrapperBody、注释措辞规避 grep）
 - [19:37] 合并态验证: 5 文件 62 tests 全绿 | src.spec.md 零改动 | _generated 再生为 repo:sync 合法跟随
 - [19:38] Slice 1+2 commit
+- [19:55] implement Slice 3: COMPLETED | sidecar 接线 + capability-neutral 文案 | 23 tests 全绿 / repo:sync+repo:check 干净 / gitignore 生效 | 偏差 4 处均合理（T3.1b 自包含 fixture、受控 PATH 8 命令清单、C6 预判的短暂红→绿、未碰 src）
+- [19:56] Slice 3 commit

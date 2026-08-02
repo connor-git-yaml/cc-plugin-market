@@ -14,6 +14,7 @@ import {
   cpSync,
   readdirSync,
   statSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { validateWrapperSources } from '../../plugins/spec-driver/scripts/validate-wrapper-sources.mjs';
@@ -119,6 +120,118 @@ function runScript(
       exitCode: error.status ?? 1,
     };
   }
+}
+
+// Feature 238（Slice 3/W4 修订）：受控 PATH 手法 —— tempDir/bin 内只含脚本实际调用面
+// 所需系统命令的 symlink + fake `codex`，测试时 env.PATH **完全替换**为该目录（非追加式），
+// 防止装机上真实 `codex`/系统工具版本差异抢先命中导致假失败。
+//
+// codex-skills.sh 与 detect-codex-capability.mjs 实际调用面核实结果：
+// bash（脚本自身解释器）、node（extract-wrapper-body.mjs ×2 + detect-codex-capability.mjs）、
+// dirname（$SCRIPT_DIR/$PLUGIN_DIR/sidecar_path 派生）、mkdir（write_wrapper 建目录）、
+// awk（write_frontmatter）、cat（heredoc 生成 adapter/contract 段）、rm/cp（--sync-plugin-distribution
+// 分支，本文件部分用例会触发）。cd/pwd/local/printf 均为 bash 内建，无需额外 symlink。
+// project 模式借由测试统一显式传 CODEX_SKILL_PROJECT_ROOT，跳过 `git rev-parse` 分支，故不需要 git。
+const CONTROLLED_BIN_COMMANDS = ['bash', 'node', 'dirname', 'mkdir', 'awk', 'cat', 'rm', 'cp'] as const;
+
+// 少量对 shell/Node 运行时稳定性有意义、与"codex 版本抢先命中"风险无关的环境变量原样透传，
+// 其余全部清空——PATH 本身严格只指向受控 bin 目录（不含真实系统 PATH 任何片段）。
+const ENV_PASSTHROUGH_KEYS = ['LANG', 'LC_ALL', 'TMPDIR', 'TERM'] as const;
+
+function resolveSystemBinary(name: string): string {
+  const out = execFileSync('bash', ['-c', `command -v ${name}`], { encoding: 'utf-8' }).trim();
+  if (!out) {
+    throw new Error(`resolveSystemBinary: 无法定位系统命令 ${name}`);
+  }
+  return out;
+}
+
+function buildControlledBin(binDir: string): void {
+  mkdirSync(binDir, { recursive: true });
+  for (const cmd of CONTROLLED_BIN_COMMANDS) {
+    symlinkSync(resolveSystemBinary(cmd), join(binDir, cmd));
+  }
+}
+
+type FakeCodexMode = 'native' | 'effective-false' | 'command-failed';
+
+// fake `codex` 按参数分类记录调用（Tasks 审查轮 C1 修订）：`features list` 与 `--version`
+// 各自独立追加一行带标签的日志到 callLogPath，供调用方分别核算各自的调用次数，
+// 不合并计数——避免任一子调用被重复触发的回归被"总计数=N"这种粗粒度断言掩盖。
+function writeFakeCodex(binDir: string, mode: FakeCodexMode, callLogPath: string): void {
+  const featuresBody =
+    mode === 'command-failed'
+      ? '  exit 1'
+      : mode === 'effective-false'
+        ? '  echo "multi_agent   stable   false"\n  exit 0'
+        : '  echo "multi_agent   stable   true"\n  exit 0';
+  const versionBody = mode === 'command-failed' ? '  exit 1' : '  echo "codex-cli 9.9.9 (fake)"\n  exit 0';
+
+  const script = [
+    '#!/usr/bin/env bash',
+    'set -euo pipefail',
+    `CALL_LOG="${callLogPath}"`,
+    'if [[ "${1:-}" == "features" && "${2:-}" == "list" ]]; then',
+    '  echo "features-list" >> "$CALL_LOG"',
+    featuresBody,
+    'elif [[ "${1:-}" == "--version" ]]; then',
+    '  echo "version" >> "$CALL_LOG"',
+    versionBody,
+    'else',
+    '  exit 1',
+    'fi',
+    '',
+  ].join('\n');
+  writeFileSync(join(binDir, 'codex'), script, { mode: 0o755 });
+}
+
+function runWithControlledPath(
+  scriptPath: string,
+  args: string[],
+  opts: { root: string; binDir: string },
+): { stdout: string; exitCode: number } {
+  const bashBin = join(opts.binDir, 'bash');
+  const passthroughEnv: Record<string, string> = {};
+  for (const key of ENV_PASSTHROUGH_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) passthroughEnv[key] = value;
+  }
+  try {
+    const stdout = execFileSync(bashBin, [scriptPath, ...args], {
+      encoding: 'utf-8',
+      timeout: 20_000,
+      cwd: opts.root,
+      env: {
+        ...passthroughEnv,
+        PATH: opts.binDir,
+        HOME: opts.root,
+        CODEX_SKILL_PROJECT_ROOT: opts.root,
+      },
+    });
+    return { stdout, exitCode: 0 };
+  } catch (err: unknown) {
+    const error = err as { stdout?: string; stderr?: string; status?: number };
+    return {
+      stdout: (error.stdout ?? '') + (error.stderr ?? ''),
+      exitCode: error.status ?? 1,
+    };
+  }
+}
+
+function collectFileNames(dir: string): string[] {
+  const names: string[] = [];
+  const walk = (current: string): void => {
+    for (const name of readdirSync(current)) {
+      const full = join(current, name);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+      } else {
+        names.push(name);
+      }
+    }
+  };
+  walk(dir);
+  return names;
 }
 
 describe('Spec Driver Codex skills script', () => {
@@ -397,6 +510,150 @@ describe('Spec Driver Codex skills script', () => {
       } finally {
         rmSync(projectRoot, { recursive: true, force: true });
       }
+    });
+  });
+
+  // Feature 238（Slice 3/US-2/FR-201~209/301）：capability 探测 install-time 接线 + sidecar
+  // + capability-neutral 文案。全部用例走「受控 PATH」（见文件顶部 helper），避免装机真实
+  // codex/系统工具版本差异污染断言。
+  describe('Feature 238 — capability 探测与 sidecar 接线', () => {
+    const SAMPLE_SKILL = 'spec-driver-implement';
+
+    function setupControlledInstall(root: string): { scriptPath: string; binDir: string } {
+      const scriptPath = copyPluginFixture(root);
+      const binDir = join(root, 'ctrl-bin');
+      buildControlledBin(binDir);
+      return { scriptPath, binDir };
+    }
+
+    it('[T3.1/T3.2] native codex → sidecar 记录 native 且 wrapper 正文 capability-neutral；features list / --version 单次 install 内各恰好调用 1 次', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      const callLog = join(tempDir, 'codex-calls.log');
+      writeFakeCodex(binDir, 'native', callLog);
+
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(install.exitCode).toBe(0);
+
+      const sidecarPath = join(tempDir, '.codex', 'spec-driver-capability.md');
+      expect(existsSync(sidecarPath)).toBe(true);
+      const sidecarContent = readFileSync(sidecarPath, 'utf-8');
+      expect(sidecarContent).toContain('Subagent Capability: native');
+
+      // capability-neutral：wrapper 正文永远不含探测结果行
+      for (const skill of SPEC_DRIVER_SKILLS) {
+        const wrapper = readFileSync(join(tempDir, '.codex', 'skills', skill, 'SKILL.md'), 'utf-8');
+        expect(wrapper).not.toContain('Subagent Capability');
+      }
+
+      // T3.2（Tasks 审查轮 C1 修订）：features list 与 --version 各自独立计数，各恰好 1 次
+      const callLines = readFileSync(callLog, 'utf-8').trim().split('\n').filter(Boolean);
+      expect(callLines.filter((line) => line === 'features-list')).toHaveLength(1);
+      expect(callLines.filter((line) => line === 'version')).toHaveLength(1);
+    });
+
+    it('[T3.1b] FR-204 三份产物中性指针一致性：.codex/skills 与 skills-codex 镜像均含中性指针文案、均不含具体 capability 结果值字面量', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      writeFakeCodex(binDir, 'native', join(tempDir, 'codex-calls.log'));
+      const install = runWithControlledPath(scriptPath, ['install', '--sync-plugin-distribution'], {
+        root: tempDir,
+        binDir,
+      });
+      expect(install.exitCode).toBe(0);
+
+      const neutralPointer = '.codex/spec-driver-capability.md';
+
+      for (const distPath of [
+        join(tempDir, '.codex', 'skills', SAMPLE_SKILL, 'SKILL.md'),
+        join(tempDir, 'plugins', 'spec-driver', 'skills-codex', SAMPLE_SKILL, 'SKILL.md'),
+      ]) {
+        const content = readFileSync(distPath, 'utf-8');
+        expect(content).toContain(neutralPointer);
+        expect(content).not.toContain('Subagent Capability: native');
+        expect(content).not.toMatch(/Subagent Capability: degraded/);
+      }
+    });
+
+    it('[T3.3] 受控 PATH 内不含任何 codex 可执行文件 → sidecar degraded(reason=binary-missing)，install 整体 exit 0（FR-202/206，E1）', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      // 有意不写入 fake codex —— 受控 PATH 内完全不存在该可执行文件（区别于"追加式 PATH 里没有"）
+
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(install.exitCode).toBe(0);
+
+      const sidecarContent = readFileSync(join(tempDir, '.codex', 'spec-driver-capability.md'), 'utf-8');
+      expect(sidecarContent).toContain('Subagent Capability: degraded(reason=binary-missing)');
+    });
+
+    it('[T3.4] fake codex exit 1 → sidecar degraded(reason=command-failed)', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      writeFakeCodex(binDir, 'command-failed', join(tempDir, 'codex-calls.log'));
+
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(install.exitCode).toBe(0);
+
+      const sidecarContent = readFileSync(join(tempDir, '.codex', 'spec-driver-capability.md'), 'utf-8');
+      expect(sidecarContent).toContain('Subagent Capability: degraded(reason=command-failed)');
+    });
+
+    it('[T3.5] 连续两次 install，第二次 fake codex 返回 effective=false → sidecar 内容随第二次刷新（FR-208）', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      const callLog = join(tempDir, 'codex-calls.log');
+      const sidecarPath = join(tempDir, '.codex', 'spec-driver-capability.md');
+
+      writeFakeCodex(binDir, 'native', callLog);
+      const first = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(first.exitCode).toBe(0);
+      expect(readFileSync(sidecarPath, 'utf-8')).toContain('Subagent Capability: native');
+
+      writeFakeCodex(binDir, 'effective-false', callLog);
+      const second = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(second.exitCode).toBe(0);
+      expect(readFileSync(sidecarPath, 'utf-8')).toContain(
+        'Subagent Capability: degraded(reason=effective-false)',
+      );
+    });
+
+    it('[T3.6] sidecar 三要素完整性 + 隔离边界：tracked 产物与 npm pack 产物列表均不含 sidecar 文件（FR-206/207）', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      writeFakeCodex(binDir, 'native', join(tempDir, 'codex-calls.log'));
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(install.exitCode).toBe(0);
+
+      const sidecarContent = readFileSync(join(tempDir, '.codex', 'spec-driver-capability.md'), 'utf-8');
+      // 三要素：capability 行 + ISO 8601 时间戳行 + codex --version 结果行
+      expect(sidecarContent).toMatch(/Subagent Capability: (native|degraded\(reason=[a-z-]+\))/);
+      expect(sidecarContent).toMatch(/Detected At: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/);
+      expect(sidecarContent).toContain('Codex Version:');
+      expect(sidecarContent).toContain('9.9.9');
+
+      // 隔离边界：sidecar 文件名不应出现在任一 tracked 分发树内
+      expect(collectFileNames(join(tempDir, '.codex', 'skills'))).not.toContain(
+        'spec-driver-capability.md',
+      );
+      expect(collectFileNames(REPO_SKILLS_CODEX)).not.toContain('spec-driver-capability.md');
+
+      // 隔离边界：npm 发布包产物列表不含 sidecar 文件
+      const packOutput = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+        encoding: 'utf-8',
+        cwd: REPO_ROOT,
+        timeout: 60_000,
+      });
+      const packInfo = JSON.parse(packOutput) as Array<{ files: Array<{ path: string }> }>;
+      const allPackedPaths = packInfo.flatMap((entry) => entry.files.map((f) => f.path));
+      expect(allPackedPaths.some((p) => p.endsWith('spec-driver-capability.md'))).toBe(false);
+    });
+
+    it('[T3.7b] write_codex_adapter() 的"模型兼容"行不含具体 gpt-5 字面量、含"由 Codex CLI"字样（FR-301 前置）', () => {
+      const { scriptPath, binDir } = setupControlledInstall(tempDir);
+      writeFakeCodex(binDir, 'native', join(tempDir, 'codex-calls.log'));
+      const install = runWithControlledPath(scriptPath, ['install'], { root: tempDir, binDir });
+      expect(install.exitCode).toBe(0);
+
+      const wrapper = readFileSync(join(tempDir, '.codex', 'skills', SAMPLE_SKILL, 'SKILL.md'), 'utf-8');
+      const modelLine = wrapper.split('\n').find((line) => line.includes('模型兼容'));
+      expect(modelLine).toBeDefined();
+      expect(modelLine).not.toMatch(/gpt-5/);
+      expect(modelLine).toContain('由 Codex CLI');
     });
   });
 });
