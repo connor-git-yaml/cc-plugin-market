@@ -315,6 +315,24 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    门禁军备竞赛随 F231 收敛、F229 沉淀"异构对抗审查必备档位"方法论已入 M10 卡；
    下一步：**plugin 4.4.0 发版〔本轮〕→ V008 评测复测〔preflight 新增 judge:doctor
    ==match + 版本核对〕→ A2-A4/B3-B4/E 继续**）
+  （2026-08-02 发布收口轮 + F237 落账：
+   **F237✅ V008 复测**〔231dab8 终报 PUBLISH-REPORT-M9-interim：c3 **28/33 = 84.8%**
+   零剔除，vs F212 +3.0pp；**V008 1/3→2/3 是唯一结构性变化**〔VB003+1/V002−1 镜像
+   噪声对消〕；对 GStack 差距 9.1→**6.1pp**〔3 run→2 run〕未反超——余 2 run =
+   V002 r3 噪声 + **V008 r3 命中 F216 预注册语义边界（非新失败形态）**；N=33 CI 宽
+   〔72.7-97.0%〕率值单批不定论，方向信号以 V008 逐任务机制取证为支撑——诚实口径；
+   oracle_error 离线重判三连先例 + 零剔除测量链再次守住〕；
+   **释出欠账三连修**〔895628c/231dab8 补齐 0d292e3 漏同步的 spectra 版本行×2 +
+   版本敏感测试——"版本钉死测试 = 释出欠账检测器"沉淀 memory〕；
+   **发布收口实操**〔本轮〕：marketplace update + `claude plugin update` 双 plugin
+   4.3.0→**4.4.0**〔install 对已装项不升级，update 才升——操作性发现〕；4.4.0 快照
+   6/6 文件 sha 与源码一致，session 重启后 judge:doctor 必 match〔active 路径文件
+   按 F236 设计只认 installPath，重启刷新〕；**npm publish 4.4.0 = 最后一个欠账**
+   〔registry 仍 4.3.0，manifest 已备，等用户确认发布〕；
+   V008 r3 残余处置：F216 语义边界是否扩展 → 列 M10 候选，不追加即时修复
+   〔预注册边界非缺陷，扩展需新一轮对抗设计〕；
+   下一批：**F238 A2 wrapper 完整性 ∥ F239 B3 worktree/local 状态**〔disjoint：
+   plugins/spec-driver wrapper 链+.codex vs scripts/sync-worktree+仓库根配置〕）
 
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
