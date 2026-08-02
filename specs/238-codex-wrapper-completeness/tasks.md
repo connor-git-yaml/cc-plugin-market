@@ -188,72 +188,72 @@ plan: plan.md
 
 > 建议在 Slice 1-3 完成后开始（保持 review 粒度一致，非强制依赖），与 Slice 5 文案层可并行（编辑面不重叠）。
 
-- [ ] T4.1 [红] `tests/unit/model-selection.test.ts`：tempDir 无 `spec-driver.config.yaml`、无 env → `resolveCodexExecutionConfig({cwd, env:{}})` → `modelFlagMode='delegate'`，`modelSource` 以 `'preset:'` 开头，`model` 以 `'delegated:'` 开头
+- [x] T4.1 [红] `tests/unit/model-selection.test.ts`：tempDir 无 `spec-driver.config.yaml`、无 env → `resolveCodexExecutionConfig({cwd, env:{}})` → `modelFlagMode='delegate'`，`modelSource` 以 `'preset:'` 开头，`model` 以 `'delegated:'` 开头
   涉及文件：`tests/unit/model-selection.test.ts`
   关联：FR-304，plan T3.5
 
-- [ ] T4.2 [红] 同文件：`preset: balanced`（无 `agents`/`model_compat`）→ 同上 delegate 结果
+- [x] T4.2 [红] 同文件：`preset: balanced`（无 `agents`/`model_compat`）→ 同上 delegate 结果
   涉及文件：`tests/unit/model-selection.test.ts`
   关联：FR-304，plan T3.6
 
-- [ ] T4.3 [红] 同文件：`agents.<agentId>.model: sonnet` 显式配置 → `modelFlagMode='required'`，`modelSource` 以 `'driver-config-agent:'` 开头
+- [x] T4.3 [红] 同文件：`agents.<agentId>.model: sonnet` 显式配置 → `modelFlagMode='required'`，`modelSource` 以 `'driver-config-agent:'` 开头
   涉及文件：`tests/unit/model-selection.test.ts`
   关联：FR-304，plan T3.7
 
-- [ ] T4.4 [红] 同文件 + `tests/unit/codex-proxy.test.ts`：`model_compat.aliases.codex.sonnet: gpt-5.6-sol`（preset 命中 sonnet tier，无 `agents.<id>.model` 显式覆盖）→ `modelFlagMode==='required'`，`modelSource` 以 `'model_compat.aliases.codex:'` 开头，**且 `resolved.model === 'gpt-5.6-sol'`**（回归哨兵：杜绝"标 required 却传内建默认"假绿）；配套端到端断言：`callLLMviaCodex()` 最终 spawn 的 `--model` 参数值精确等于 `'gpt-5.6-sol'`
+- [x] T4.4 [红] 同文件 + `tests/unit/codex-proxy.test.ts`：`model_compat.aliases.codex.sonnet: gpt-5.6-sol`（preset 命中 sonnet tier，无 `agents.<id>.model` 显式覆盖）→ `modelFlagMode==='required'`，`modelSource` 以 `'model_compat.aliases.codex:'` 开头，**且 `resolved.model === 'gpt-5.6-sol'`**（回归哨兵：杜绝"标 required 却传内建默认"假绿）；配套端到端断言：`callLLMviaCodex()` 最终 spawn 的 `--model` 参数值精确等于 `'gpt-5.6-sol'`
   涉及文件：`tests/unit/model-selection.test.ts`、`tests/unit/codex-proxy.test.ts`
   关联：FR-304/309，plan T3.8（**C1 新增断言**）
 
-- [ ] T4.5 [红] `tests/unit/model-selection.test.ts`：`model_compat.defaults.codex: gpt-5.6-sol`（无 aliases 命中）→ `required`，`modelSource='model_compat.defaults.codex'`
+- [x] T4.5 [红] `tests/unit/model-selection.test.ts`：`model_compat.defaults.codex: gpt-5.6-sol`（无 aliases 命中）→ `required`，`modelSource='model_compat.defaults.codex'`
   涉及文件：`tests/unit/model-selection.test.ts`
   关联：FR-304，plan T3.9
 
-- [ ] T4.6 [红] 同文件：`env.REVERSE_SPEC_MODEL` 设置 → `required`，`modelSource='env:REVERSE_SPEC_MODEL'`
+- [x] T4.6 [红] 同文件：`env.REVERSE_SPEC_MODEL` 设置 → `required`，`modelSource='env:REVERSE_SPEC_MODEL'`
   涉及文件：`tests/unit/model-selection.test.ts`
   关联：FR-304，plan T3.10
 
-- [ ] T4.7 [红]（**Tasks 审查轮 W1 修订：改为合法调用形态**）`tests/unit/llm-client.test.ts`：构造真实 `AssembledContext`（**不引用不存在的 `providerRuntime` 字段**）+ `vi.mock` 使认证探测入口（`detectAuth()` 或等价函数）返回 `codex` → `callLLM({model: getCanonicalSonnetModelId('codex'), ...})`（依据 mock 后的 runtime 判定走 codex 分支，而非直接传入不存在的字段）→ mock spawn 捕获 args 含 `'--model'`，`result.model` **不**以 `'delegated:'` 开头（FR-306 互斥回归锁定，Fix 134 教训不重演；锁在 `callLLM()` 入口层而非 `codex-proxy.ts` 内部）
+- [x] T4.7 [红]（**Tasks 审查轮 W1 修订：改为合法调用形态**）`tests/unit/llm-client.test.ts`：构造真实 `AssembledContext`（**不引用不存在的 `providerRuntime` 字段**）+ `vi.mock` 使认证探测入口（`detectAuth()` 或等价函数）返回 `codex` → `callLLM({model: getCanonicalSonnetModelId('codex'), ...})`（依据 mock 后的 runtime 判定走 codex 分支，而非直接传入不存在的字段）→ mock spawn 捕获 args 含 `'--model'`，`result.model` **不**以 `'delegated:'` 开头（FR-306 互斥回归锁定，Fix 134 教训不重演；锁在 `callLLM()` 入口层而非 `codex-proxy.ts` 内部）
   涉及文件：`tests/unit/llm-client.test.ts`
   关联：FR-306，plan T3.11（**C2+I4 修订，Tasks 审查轮 W1**）
 
-- [ ] T4.8 [红] `tests/unit/codex-proxy.test.ts`：`getDefaultCodexCLIProxyConfig({cwd: tempDirNoConfig, env:{}})` 取得 delegate 态默认配置（`model` 以 `'delegated:'` 开头）→ `callLLMviaCodex(prompt, {})`（不传 `model`，走默认解析路径）→ spawn args **不**含 `--model`，`result.model` 以 `'delegated:'` 开头
+- [x] T4.8 [红] `tests/unit/codex-proxy.test.ts`：`getDefaultCodexCLIProxyConfig({cwd: tempDirNoConfig, env:{}})` 取得 delegate 态默认配置（`model` 以 `'delegated:'` 开头）→ `callLLMviaCodex(prompt, {})`（不传 `model`，走默认解析路径）→ spawn args **不**含 `--model`，`result.model` 以 `'delegated:'` 开头
   涉及文件：`tests/unit/codex-proxy.test.ts`
   关联：FR-304/306，plan T3.12（**C2+I4 修订**）
 
-- [ ] T4.9 [红] `tests/unit/llm-client.test.ts`：`getTimeoutForModel('delegated:gpt-5.4')` → `300_000`；`getTimeoutForModel('delegated:whatever-unknown-string')` → 仍 `300_000`（证明走显式前缀分支非关键字巧合）
+- [x] T4.9 [红] `tests/unit/llm-client.test.ts`：`getTimeoutForModel('delegated:gpt-5.4')` → `300_000`；`getTimeoutForModel('delegated:whatever-unknown-string')` → 仍 `300_000`（证明走显式前缀分支非关键字巧合）
   涉及文件：`tests/unit/llm-client.test.ts`
   关联：FR-305(b)/307，plan T3.13
 
-- [ ] T4.10 [红] `tests/unit/codex-proxy.test.ts`：`getDefaultCodexCLIProxyConfig({cwd: tempDirNoConfig, env:{}})` → `timeout === 300_000`（delegate 场景端到端保守超时）
+- [x] T4.10 [红] `tests/unit/codex-proxy.test.ts`：`getDefaultCodexCLIProxyConfig({cwd: tempDirNoConfig, env:{}})` → `timeout === 300_000`（delegate 场景端到端保守超时）
   涉及文件：`tests/unit/codex-proxy.test.ts`
   关联：FR-307，plan T3.14
 
-- [ ] T4.12 [绿实现] `src/core/model-selection.ts`：新增 `export type CodexModelFlagMode = 'required' | 'delegate'`；新增私有原子 resolver `resolveCodexModelDecision(options): {model, modelFlagMode, modelSource}`（判定顺序：env `REVERSE_SPEC_MODEL` → `agents.<id>.model` 显式 → `model_compat.aliases.codex[tier]` 命中 → `model_compat.defaults.codex` 命中 → delegate 兜底 `model='delegated:<内部hint>'`；**必须显式优先查 aliases[tier]**，不得包装现状会漏读 aliases 的 `toCodexModelId()`——Review C1）；`ResolvedCodexExecutionConfig` 接口新增 `modelFlagMode`/`modelSource` 两个必填字段（纯加法，不破坏现有 `model: string` 契约）；`resolveCodexExecutionConfig()` 改为直接调用该 resolver 取三元组
+- [x] T4.12 [绿实现] `src/core/model-selection.ts`：新增 `export type CodexModelFlagMode = 'required' | 'delegate'`；新增私有原子 resolver `resolveCodexModelDecision(options): {model, modelFlagMode, modelSource}`（判定顺序：env `REVERSE_SPEC_MODEL` → `agents.<id>.model` 显式 → `model_compat.aliases.codex[tier]` 命中 → `model_compat.defaults.codex` 命中 → delegate 兜底 `model='delegated:<内部hint>'`；**必须显式优先查 aliases[tier]**，不得包装现状会漏读 aliases 的 `toCodexModelId()`——Review C1）；`ResolvedCodexExecutionConfig` 接口新增 `modelFlagMode`/`modelSource` 两个必填字段（纯加法，不破坏现有 `model: string` 契约）；`resolveCodexExecutionConfig()` 改为直接调用该 resolver 取三元组
   涉及文件：`src/core/model-selection.ts`
   依赖：T4.1~T4.6（先红后绿）
   关联：FR-304/306/307/309，plan §3.5、Review C1
 
-- [ ] T4.12b [红]（**Tasks 审查轮 C2 回流新增：SC-007 生产链真实闭环**）`tests/unit/llm-client.test.ts` 新增生产链 E2E 用例：tempDir 内无 `spec-driver.config.yaml`、`env:{}` + `vi.mock` 使认证探测入口返回 `codex` + mock `node:child_process` spawn → 从 `callLLM()` 入口发起调用（**不显式传 `model`**，走完整默认解析路径）→ 断言全链路 delegate：mock spawn 捕获的 args **不**含 `--model`；`LLMResponse.model` 以 `'delegated:'` 开头。（修正原设计缺口：此前测试仅在 `codex-proxy.ts` 内部单元验证 delegate 分支与 `resolveCodexModelDecision()` 单元验证判定矩阵，二者之间"`callLLM()` 入口 → proxy 层实际传参判定"这一真实生产调用链从未被端到端锁定，Codex 对抗审查发现的 C2 矛盾——`callLLM()` 把含 `delegated:` 前缀的 `model` 字符串传给 proxy 后被旧判定逻辑`impliedRequired = config.model !== undefined` 错误升级为 required——正是因为缺了这条链路测试才在实现阶段才会被发现而非在红测试阶段被拦截）
+- [x] T4.12b [红]（**Tasks 审查轮 C2 回流新增：SC-007 生产链真实闭环**）`tests/unit/llm-client.test.ts` 新增生产链 E2E 用例：tempDir 内无 `spec-driver.config.yaml`、`env:{}` + `vi.mock` 使认证探测入口返回 `codex` + mock `node:child_process` spawn → 从 `callLLM()` 入口发起调用（**不显式传 `model`**，走完整默认解析路径）→ 断言全链路 delegate：mock spawn 捕获的 args **不**含 `--model`；`LLMResponse.model` 以 `'delegated:'` 开头。（修正原设计缺口：此前测试仅在 `codex-proxy.ts` 内部单元验证 delegate 分支与 `resolveCodexModelDecision()` 单元验证判定矩阵，二者之间"`callLLM()` 入口 → proxy 层实际传参判定"这一真实生产调用链从未被端到端锁定，Codex 对抗审查发现的 C2 矛盾——`callLLM()` 把含 `delegated:` 前缀的 `model` 字符串传给 proxy 后被旧判定逻辑`impliedRequired = config.model !== undefined` 错误升级为 required——正是因为缺了这条链路测试才在实现阶段才会被发现而非在红测试阶段被拦截）
   涉及文件：`tests/unit/llm-client.test.ts`
   依赖：T4.12（先有 `resolveCodexModelDecision()` 才能构造无配置场景的确定性 delegate 态）
   关联：FR-304/305/306，plan §3.5（Tasks 审查轮 C2 回流），SC-007
 
-- [ ] T4.13 [绿实现]（**Tasks 审查轮 C2 回流修订**）`src/core/llm-client.ts`：`LLMConfig` **不**新增 caller 可传入的 `modelFlagMode`/`modelSource` 字段；`callLLM()` 内 `providerRuntime==='codex'` 时若 `config?.model !== undefined`（无条件）→ `modelFlagMode='required'`，`modelSource='caller-override:callLLM'`，否则取 `resolveCodexExecutionConfig()` 产出值（已含 `delegated:` 前缀的 `model` 字符串）——**将该 model 字符串原样传给 codex-proxy 层即可**，不再需要额外内部信道字段传递 `modelFlagMode`（proxy 侧判定改为只认 model 字符串前缀，见 T4.14）；`callLLM()` codex 分支拿到 `modelFlagMode==='delegate'`（且 caller 未传 `model`）时写一行 stderr 诊断日志：`[llm-client] codex 模型选择委托给 CLI 自身 (source=<modelSource>, timeout-hint=<timeout>ms)`（**FR-305 日志落点由 `codex-proxy.ts` 移至此处**：`modelSource` 信息在 `llm-client.ts` 这一层完整，`codex-proxy.ts` 不再打印同类日志，避免双行输出）；`getTimeoutForModel()` 顶部新增 `if (lowerModel.startsWith('delegated:')) return 300_000;`（先于其余关键字判断）
+- [x] T4.13 [绿实现]（**Tasks 审查轮 C2 回流修订**）`src/core/llm-client.ts`：`LLMConfig` **不**新增 caller 可传入的 `modelFlagMode`/`modelSource` 字段；`callLLM()` 内 `providerRuntime==='codex'` 时若 `config?.model !== undefined`（无条件）→ `modelFlagMode='required'`，`modelSource='caller-override:callLLM'`，否则取 `resolveCodexExecutionConfig()` 产出值（已含 `delegated:` 前缀的 `model` 字符串）——**将该 model 字符串原样传给 codex-proxy 层即可**，不再需要额外内部信道字段传递 `modelFlagMode`（proxy 侧判定改为只认 model 字符串前缀，见 T4.14）；`callLLM()` codex 分支拿到 `modelFlagMode==='delegate'`（且 caller 未传 `model`）时写一行 stderr 诊断日志：`[llm-client] codex 模型选择委托给 CLI 自身 (source=<modelSource>, timeout-hint=<timeout>ms)`（**FR-305 日志落点由 `codex-proxy.ts` 移至此处**：`modelSource` 信息在 `llm-client.ts` 这一层完整，`codex-proxy.ts` 不再打印同类日志，避免双行输出）；`getTimeoutForModel()` 顶部新增 `if (lowerModel.startsWith('delegated:')) return 300_000;`（先于其余关键字判断）
   涉及文件：`src/core/llm-client.ts`
   依赖：T4.7、T4.9、T4.12、T4.12b（先红后绿）
   关联：FR-304（第5/6行）/305/306/307，plan §3.5、Tasks 审查轮 C2 回流
 
-- [ ] T4.14 [绿实现]（**Tasks 审查轮 C2 回流修订：proxy 判定单一化为 model 字符串前缀**）`src/auth/codex-proxy.ts`：`CodexCLIProxyConfig` **不**新增 `modelFlagMode`/`modelSource` 可传入字段；`getDefaultCodexCLIProxyConfig(options?: {cwd?, env?})` 增加可选透传参数，内部把结果装入返回对象（`resolved.modelFlagMode`/`resolved.modelSource`，仅供日志/测试断言消费，**proxy 判定逻辑本身不读取这两个字段**）；`callLLMviaCodex()` 的 delegate 判定**只认一个信号**：`cfg.model` 字符串是否以 `'delegated:'` 开头（**删除**原 `impliedRequired = config.model !== undefined` 判定逻辑与相应短路赋值——该逻辑会把含 `delegated:` 前缀的 `model` 字符串错误升级为 required，是 Codex 对抗审查发现的致命矛盾根因）；拼接 args 时 `if (!cfg.model.startsWith('delegated:')) { args.push('--model', cfg.model); }`；**proxy 不再打印 delegate 诊断日志**（该职责已移至 T4.13 的 `llm-client.ts`）
+- [x] T4.14 [绿实现]（**Tasks 审查轮 C2 回流修订：proxy 判定单一化为 model 字符串前缀**）`src/auth/codex-proxy.ts`：`CodexCLIProxyConfig` **不**新增 `modelFlagMode`/`modelSource` 可传入字段；`getDefaultCodexCLIProxyConfig(options?: {cwd?, env?})` 增加可选透传参数，内部把结果装入返回对象（`resolved.modelFlagMode`/`resolved.modelSource`，仅供日志/测试断言消费，**proxy 判定逻辑本身不读取这两个字段**）；`callLLMviaCodex()` 的 delegate 判定**只认一个信号**：`cfg.model` 字符串是否以 `'delegated:'` 开头（**删除**原 `impliedRequired = config.model !== undefined` 判定逻辑与相应短路赋值——该逻辑会把含 `delegated:` 前缀的 `model` 字符串错误升级为 required，是 Codex 对抗审查发现的致命矛盾根因）；拼接 args 时 `if (!cfg.model.startsWith('delegated:')) { args.push('--model', cfg.model); }`；**proxy 不再打印 delegate 诊断日志**（该职责已移至 T4.13 的 `llm-client.ts`）
   涉及文件：`src/auth/codex-proxy.ts`
   依赖：T4.4、T4.8、T4.10、T4.12（先红后绿；原 T4.11 已废止，日志断言合并入 T4.13，见收尾说明）
   验收命令（红测试两态，取代原 impliedRequired 相关断言）：`model:'delegated:x'` → spawn args 无 `--model`；`model:'gpt-x'` → spawn args 含 `--model`
   关联：FR-304/306，plan §3.5、Tasks 审查轮 C2 回流
 
-- [ ] T4.15 `npm run build` 类型检查零错误（`ResolvedCodexExecutionConfig` 新增字段不破坏既有调用点类型）
+- [x] T4.15 `npm run build` 类型检查零错误（`ResolvedCodexExecutionConfig` 新增字段不破坏既有调用点类型）
   依赖：T4.12~T4.14
   验收命令：`npm run build`
 
-- [ ] T4.16【Slice 4 验收检查点】
+- [x] T4.16【Slice 4 验收检查点】
   验收命令：
   ```bash
   npx vitest run tests/unit/model-selection.test.ts tests/unit/codex-proxy.test.ts tests/unit/llm-client.test.ts

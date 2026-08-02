@@ -243,6 +243,115 @@ agents:
       expect(getCanonicalSonnetModelId()).toBe(SONNET_MODEL);
     });
   });
+
+  // Feature 238 Slice 4 — FR-304 modelFlagMode 决策矩阵七类来源
+  describe('resolveCodexExecutionConfig — modelFlagMode 决策矩阵（FR-304）', () => {
+    it('T4.1 无配置文件、无 env → delegate，modelSource 以 preset: 开头，model 以 delegated: 开头', () => {
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('delegate');
+      expect(result.modelSource.startsWith('preset:')).toBe(true);
+      expect(result.model.startsWith('delegated:')).toBe(true);
+    });
+
+    it('T4.2 preset: balanced（无 agents/model_compat）→ delegate 结果', () => {
+      writeConfig(
+        tempDir,
+        `
+preset: balanced
+`,
+      );
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('delegate');
+      expect(result.modelSource).toBe('preset:balanced');
+      expect(result.model).toBe('delegated:sonnet');
+    });
+
+    it('T4.3 agents.<agentId>.model 显式配置 → required，modelSource 以 driver-config-agent: 开头', () => {
+      writeConfig(
+        tempDir,
+        `
+preset: balanced
+agents:
+  specify:
+    model: sonnet
+`,
+      );
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {}, agentId: 'specify' });
+
+      expect(result.modelFlagMode).toBe('required');
+      expect(result.modelSource.startsWith('driver-config-agent:')).toBe(true);
+    });
+
+    it('T4.4 model_compat.aliases.codex[tier] 命中（preset 命中 sonnet tier，无 agents 显式覆盖）→ required，且 model 为该 alias 字面值', () => {
+      writeConfig(
+        tempDir,
+        `
+preset: cost-efficient
+model_compat:
+  aliases:
+    codex:
+      sonnet: gpt-5.6-sol
+`,
+      );
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('required');
+      expect(result.modelSource.startsWith('model_compat.aliases.codex:')).toBe(true);
+      // 回归哨兵：必须是该 alias 的字面配置值，不能静默丢弃为内建默认（Review C1 新增断言）
+      expect(result.model).toBe('gpt-5.6-sol');
+    });
+
+    it('T4.5 model_compat.defaults.codex 命中（无 aliases 命中）→ required，modelSource 精确等于 model_compat.defaults.codex', () => {
+      writeConfig(
+        tempDir,
+        `
+preset: balanced
+model_compat:
+  defaults:
+    codex: gpt-5.6-sol
+`,
+      );
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('required');
+      expect(result.modelSource).toBe('model_compat.defaults.codex');
+      expect(result.model).toBe('gpt-5.6-sol');
+    });
+
+    it('T4.6 env.REVERSE_SPEC_MODEL 设置 → required，modelSource 精确等于 env:REVERSE_SPEC_MODEL', () => {
+      const result = resolveCodexExecutionConfig({
+        cwd: tempDir,
+        env: { REVERSE_SPEC_MODEL: 'opus' },
+      });
+
+      expect(result.modelFlagMode).toBe('required');
+      expect(result.modelSource).toBe('env:REVERSE_SPEC_MODEL');
+    });
+
+    it('E5 用户显式 pin 某 tier（model_compat.aliases.codex）时，delegate 逻辑绝不能覆盖该显式值', () => {
+      writeConfig(
+        tempDir,
+        `
+preset: quality-first
+model_compat:
+  aliases:
+    codex:
+      opus: gpt-5.6-sol
+`,
+      );
+
+      const result = resolveCodexExecutionConfig({ cwd: tempDir, env: {} });
+
+      expect(result.modelFlagMode).toBe('required');
+      expect(result.model).toBe('gpt-5.6-sol');
+    });
+  });
 });
 
 function writeConfig(dir: string, content: string, fileName = 'spec-driver.config.yaml'): void {

@@ -11,6 +11,7 @@ import type { AssembledContext } from './context-assembler.js';
 import { detectAuth } from '../auth/auth-detector.js';
 import { callLLMviaCli as cliProxyCall } from '../auth/cli-proxy.js';
 import { callLLMviaCodex as codexProxyCall } from '../auth/codex-proxy.js';
+import type { CodexModelFlagMode } from './model-selection.js';
 import { resolveCodexExecutionConfig, resolveReverseSpecModel } from './model-selection.js';
 
 /**
@@ -142,6 +143,10 @@ export type RetryCallback = (event: RetryEvent) => void;
  */
 export function getTimeoutForModel(model: string): number {
   const lowerModel = model.toLowerCase();
+  // FR-305(b)/307：delegate 场景走显式 `delegated:` 前缀分支，必须先于其余关键字
+  // 判断（hint 可能是 'sonnet' 等逻辑 tier 名，若不优先匹配会被下方 `.includes('sonnet')`
+  // 误判为窄超时档，与"delegate 场景须走保守/最长档位"的要求矛盾）
+  if (lowerModel.startsWith('delegated:')) return 300_000; // 5 分钟（保守档，非字符串误判）
   if (lowerModel.includes('opus')) return 300_000;   // 5 分钟
   if (lowerModel.startsWith('gpt-5')) return 300_000; // 5 分钟
   if (lowerModel.includes('codex')) return 300_000;  // 5 分钟
@@ -262,11 +267,36 @@ export async function callLLM(
   const codexExecution = providerRuntime === 'codex'
     ? resolveCodexExecutionConfig()
     : undefined;
+
+  // FR-304 决策矩阵第 5/6 行："调用方直接传入 config.model" 与
+  // "getCanonicalSonnetModelId() 强制降级路径（Fix 134）" 均在此处以"调用方是否
+  // 显式传了 model"这一更上游信号无条件短路为 required，不经过
+  // resolveCodexExecutionConfig() 的 delegate 判定——这不是偷懒，而是让 FR-306
+  // "两条语义必须在代码路径上互斥"这一约束从设计上自然成立（C2+I4）。
+  const callerOverrideModel = config?.model !== undefined;
+  const modelFlagMode: CodexModelFlagMode | undefined = providerRuntime === 'codex'
+    ? (callerOverrideModel ? 'required' : codexExecution?.modelFlagMode)
+    : undefined;
+  const modelSource = providerRuntime === 'codex'
+    ? (callerOverrideModel ? 'caller-override:callLLM' : codexExecution?.modelSource)
+    : undefined;
+
   const effectiveModel = config?.model ?? codexExecution?.model ?? resolvedProviderModel;
+  const effectiveTimeout = config?.timeout ?? getTimeoutForSpecGeneration(effectiveModel, context.tokenCount);
+
+  // FR-305(a) 诚实标识：delegate 场景下写一行诊断日志。落点在此层（而非
+  // codex-proxy.ts）——modelSource/timeout 上下文在这一层最完整，避免同一决策
+  // 产生两行日志（Tasks 审查轮 C2 回流）。
+  if (providerRuntime === 'codex' && modelFlagMode === 'delegate') {
+    console.error(
+      `[llm-client] codex 模型选择委托给 CLI 自身 (source=${modelSource}, timeout-hint=${effectiveTimeout}ms)`,
+    );
+  }
+
   const cfg = mergeConfig({
     ...config,
     model: effectiveModel,
-    timeout: config?.timeout ?? getTimeoutForSpecGeneration(effectiveModel, context.tokenCount),
+    timeout: effectiveTimeout,
     reasoningEffort: config?.reasoningEffort ?? codexExecution?.reasoningEffort,
     serviceTier: config?.serviceTier ?? codexExecution?.serviceTier,
   });

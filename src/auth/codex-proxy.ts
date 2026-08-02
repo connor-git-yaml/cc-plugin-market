@@ -15,10 +15,11 @@ import {
   LLMUnavailableError,
   getTimeoutForModel,
 } from '../core/llm-client.js';
+import type { CodexModelFlagMode } from '../core/model-selection.js';
 import { resolveCodexExecutionConfig } from '../core/model-selection.js';
 
 export interface CodexCLIProxyConfig {
-  /** Codex 模型 ID */
+  /** Codex 模型 ID（delegate 场景下为 `delegated:<hint>` 前缀字符串，见 FR-305） */
   model: string;
   /** 超时时间（毫秒） */
   timeout: number;
@@ -30,6 +31,18 @@ export interface CodexCLIProxyConfig {
   cliPath?: string;
   /** Codex exec 的工作目录 */
   cwd?: string;
+}
+
+/**
+ * `getDefaultCodexCLIProxyConfig()` 的返回类型（Feature 238 FR-304）。
+ * `modelFlagMode`/`modelSource` 仅供日志/测试断言消费——`callLLMviaCodex()`
+ * 内部的 delegate 判定只认 `model` 字符串是否以 `delegated:` 开头（见下方
+ * 该函数实现注释与 Tasks 审查轮 C2 回流），不消费这两个字段做二次判定，也
+ * 因此它们**不**出现在 `CodexCLIProxyConfig`（callLLMviaCodex 的公共入参类型）里。
+ */
+export interface ResolvedCodexCLIProxyConfig extends CodexCLIProxyConfig {
+  modelFlagMode: CodexModelFlagMode;
+  modelSource: string;
 }
 
 interface CodexJsonEvent {
@@ -54,14 +67,19 @@ interface ParsedCodexOutput {
   errorMessage?: string;
 }
 
-export function getDefaultCodexCLIProxyConfig(): CodexCLIProxyConfig {
-  const resolved = resolveCodexExecutionConfig();
+export function getDefaultCodexCLIProxyConfig(options?: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+}): ResolvedCodexCLIProxyConfig {
+  const resolved = resolveCodexExecutionConfig(options);
   return {
     model: resolved.model,
     timeout: getTimeoutForModel(resolved.model),
     reasoningEffort: resolved.reasoningEffort,
     serviceTier: resolved.serviceTier,
     cwd: process.cwd(),
+    modelFlagMode: resolved.modelFlagMode,
+    modelSource: resolved.modelSource,
   };
 }
 
@@ -94,8 +112,15 @@ export function callLLMviaCodex(
       '--sandbox', 'read-only',
       '--color', 'never',
       '--output-last-message', outputLastMessagePath,
-      '--model', cfg.model,
     ];
+
+    // FR-304/306（Tasks 审查轮 C2 回流：proxy 判定单一化为 model 字符串前缀）：
+    // delegate 判定只认一个信号——`cfg.model` 是否以 `delegated:` 开头。
+    // 不消费 modelFlagMode 字段（该字段已不是 CodexCLIProxyConfig 的可传入项），
+    // 单一事实源即 `model` 字符串本身，非法状态空间为零。
+    if (!cfg.model.startsWith('delegated:')) {
+      args.push('--model', cfg.model);
+    }
 
     if (cfg.reasoningEffort) {
       args.push('-c', `model_reasoning_effort=${JSON.stringify(cfg.reasoningEffort)}`);

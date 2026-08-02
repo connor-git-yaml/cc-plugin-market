@@ -97,11 +97,29 @@ export interface ResolvedReverseSpecModel {
   runtimeSource: ReverseSpecRuntimeSource;
 }
 
+/**
+ * Codex `-m/--model` flag 的传递模式（Feature 238 FR-304）。
+ * - 'required'：必须携带显式 `--model` flag（命中决策矩阵前 6 行任一来源）
+ * - 'delegate'：省略 `--model` flag，交还 Codex CLI 自身按其配置分层解析模型
+ *   （唯一情形：仅 preset 逻辑名、无任何 codex 侧显式覆盖）
+ */
+export type CodexModelFlagMode = 'required' | 'delegate';
+
 export interface ResolvedCodexExecutionConfig {
   model: string;
+  /** FR-304：本次调用是否必须携带显式 `--model` flag */
+  modelFlagMode: CodexModelFlagMode;
+  /** FR-304：命中的具体判定来源（如 `env:REVERSE_SPEC_MODEL`、`preset:balanced`），供日志/测试断言使用 */
+  modelSource: string;
   reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   serviceTier?: string;
   configPath?: string;
+}
+
+interface CodexModelDecision {
+  model: string;
+  modelFlagMode: CodexModelFlagMode;
+  modelSource: string;
 }
 
 interface ParsedDriverConfig {
@@ -194,6 +212,91 @@ export function resolveReverseSpecModel(options: {
   };
 }
 
+/**
+ * Codex 侧 modelFlagMode 决策矩阵原子 resolver（Feature 238 FR-304，Review C1）。
+ *
+ * 单次调用同时决定"来源"与"模型值"，判定顺序（先命中先返回）：
+ * 1. env `REVERSE_SPEC_MODEL`
+ * 2. `agents.<id>.model` 显式配置（可能是逻辑 tier 名，经 aliases 归一化为真实 codex 模型 ID）
+ * 3. `model_compat.aliases.codex[tier]` 命中（`tier` 由 preset 归一化的 opus/sonnet/haiku 决定，
+ *    值原样生效，见 FR-309）
+ * 4. `model_compat.defaults.codex` 命中（值原样生效）
+ * 5. 以上均未命中 → delegate 兜底，`model='delegated:<tier>'`
+ *
+ * 注意：这是新增判定逻辑，不是对 `toCodexModelId()` 的复用包装——核实现状发现
+ * `toCodexModelId()` 在 preset-only 路径上从不读取 `model_compat.aliases.codex`
+ * 的按-tier 映射（只读 `defaults.codex` 作为兜底替换），会漏读用户按 tier 精细配置
+ * 的 alias（见 plan §3.5 "C1 修订说明"）。
+ */
+function resolveCodexModelDecision(options: {
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  agentId?: string;
+} = {}): CodexModelDecision {
+  const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
+  const env = options.env ?? process.env;
+  const agentId = options.agentId ?? 'specify';
+  const config = loadDriverConfig(cwd);
+
+  const aliases: Record<string, string> = {
+    ...DEFAULT_CODEX_ALIASES,
+    ...(config ? readRuntimeAliases(config.data, 'codex') : {}),
+  };
+
+  // 1. env REVERSE_SPEC_MODEL（最高优先级，required）
+  const envModel = normalizeModelName(env['REVERSE_SPEC_MODEL'], aliases);
+  if (envModel) {
+    return {
+      model: envModel,
+      modelFlagMode: 'required',
+      modelSource: 'env:REVERSE_SPEC_MODEL',
+    };
+  }
+
+  const preset = config ? readPreset(config.data) : 'balanced';
+  const tier = PRESET_MODEL_MAP[preset] ?? PRESET_MODEL_MAP.balanced ?? 'sonnet';
+
+  if (config) {
+    // 2. agents.<id>.model 显式配置（required；逻辑 tier 名经 aliases 归一化为真实 codex 模型 ID）
+    const agentModel = normalizeModelName(readAgentModel(config.data, agentId), aliases);
+    if (agentModel) {
+      return {
+        model: agentModel,
+        modelFlagMode: 'required',
+        modelSource: `driver-config-agent:${agentId}`,
+      };
+    }
+
+    // 3. model_compat.aliases.codex[tier] 命中（required，原样生效，见 FR-309）
+    const runtimeAliases = readRuntimeAliases(config.data, 'codex');
+    const aliasModel = runtimeAliases[tier];
+    if (aliasModel) {
+      return {
+        model: aliasModel,
+        modelFlagMode: 'required',
+        modelSource: `model_compat.aliases.codex:${tier}`,
+      };
+    }
+
+    // 4. model_compat.defaults.codex 命中（required，原样生效）
+    const defaultModel = readRuntimeDefault(config.data, 'codex');
+    if (defaultModel) {
+      return {
+        model: defaultModel,
+        modelFlagMode: 'required',
+        modelSource: 'model_compat.defaults.codex',
+      };
+    }
+  }
+
+  // 5. 仅 preset 逻辑名，无任何 codex 侧显式覆盖 → delegate（唯一省略 -m flag 的情形）
+  return {
+    model: `delegated:${tier}`,
+    modelFlagMode: 'delegate',
+    modelSource: `preset:${preset}`,
+  };
+}
+
 export function resolveCodexExecutionConfig(options: {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
@@ -201,15 +304,12 @@ export function resolveCodexExecutionConfig(options: {
 } = {}): ResolvedCodexExecutionConfig {
   const cwd = options.cwd ? path.resolve(options.cwd) : process.cwd();
   const config = loadDriverConfig(cwd);
-  const modelResolution = resolveReverseSpecModel({
-    cwd,
-    env: options.env,
-    agentId: options.agentId,
-    provider: 'codex',
-  });
+  const decision = resolveCodexModelDecision(options);
 
   return {
-    model: modelResolution.model,
+    model: decision.model,
+    modelFlagMode: decision.modelFlagMode,
+    modelSource: decision.modelSource,
     reasoningEffort: config ? readCodexReasoningEffort(config.data) : undefined,
     serviceTier: config ? readCodexServiceTier(config.data) : undefined,
     configPath: config?.configPath,

@@ -22,7 +22,7 @@ vi.mock('node:fs', async (importOriginal) => {
 
 import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
-import { callLLMviaCodex } from '../../src/auth/codex-proxy.js';
+import { callLLMviaCodex, getDefaultCodexCLIProxyConfig } from '../../src/auth/codex-proxy.js';
 import {
   LLMRateLimitError,
   LLMResponseError,
@@ -181,5 +181,64 @@ describe('codex-proxy', () => {
     mockChild.emit('close', 1);
 
     await expect(promise).rejects.toThrow(LLMResponseError);
+  });
+
+  // Feature 238 Slice 4 — FR-304/306/307/309 modelFlagMode 决策矩阵端到端断言
+  describe('modelFlagMode 决策矩阵端到端（FR-304/306/307/309）', () => {
+    it('T4.4 model_compat.aliases.codex[tier] 命中 → spawn 的 --model 参数值精确等于该 alias 字面值', async () => {
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+      mockedExistsSync.mockReturnValue(true);
+      mockedReadFileSync.mockReturnValue(`
+preset: cost-efficient
+model_compat:
+  aliases:
+    codex:
+      sonnet: gpt-5.6-sol
+`);
+
+      const promise = callLLMviaCodex('test', {});
+
+      mockChild.stdout.emit('data', Buffer.from('{"type":"result","is_error":false}\n'));
+      mockChild.emit('close', 0);
+
+      await promise;
+
+      const spawnCall = mockedSpawn.mock.calls[0]!;
+      const args = spawnCall[1] as string[];
+      expect(args).toContain('--model');
+      expect(args[args.indexOf('--model') + 1]).toBe('gpt-5.6-sol');
+    });
+
+    it('T4.8 delegate 默认解析路径：spawn args 不含 --model，result.model 以 delegated: 开头', async () => {
+      // beforeEach 默认 mockedExistsSync.mockReturnValue(false) → 找不到任何
+      // spec-driver.config.yaml → resolveCodexModelDecision 落到 delegate 兜底分支
+      const preCheck = getDefaultCodexCLIProxyConfig({ cwd: '/nonexistent-for-test', env: {} });
+      expect(preCheck.modelFlagMode).toBe('delegate');
+      expect(preCheck.model.startsWith('delegated:')).toBe(true);
+
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLMviaCodex('delegate prompt', {});
+
+      mockChild.stdout.emit('data', Buffer.from('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'));
+      mockChild.stdout.emit('data', Buffer.from('{"type":"result","is_error":false}\n'));
+      mockChild.emit('close', 0);
+
+      const result = await promise;
+
+      const spawnCall = mockedSpawn.mock.calls[0]!;
+      const args = spawnCall[1] as string[];
+      expect(args).not.toContain('--model');
+      expect(result.model.startsWith('delegated:')).toBe(true);
+    });
+
+    it('T4.10 getDefaultCodexCLIProxyConfig delegate 场景端到端保守超时 === 300000（FR-307）', () => {
+      const result = getDefaultCodexCLIProxyConfig({ cwd: '/nonexistent-for-test', env: {} });
+
+      expect(result.modelFlagMode).toBe('delegate');
+      expect(result.timeout).toBe(300_000);
+    });
   });
 });

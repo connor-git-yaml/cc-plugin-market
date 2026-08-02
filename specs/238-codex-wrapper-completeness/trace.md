@@ -49,3 +49,5 @@
 - [19:38] Slice 1+2 commit
 - [19:55] implement Slice 3: COMPLETED | sidecar 接线 + capability-neutral 文案 | 23 tests 全绿 / repo:sync+repo:check 干净 / gitignore 生效 | 偏差 4 处均合理（T3.1b 自包含 fixture、受控 PATH 8 命令清单、C6 预判的短暂红→绿、未碰 src）
 - [19:56] Slice 3 commit
+- [20:12] implement Slice 4: COMPLETED | 原子 resolver + proxy 前缀判定 + FR-305 日志(llm-client) + 保守超时 | 52 tests + unit 全量 5245 回归全绿 + build 零错误 | 七类来源对照齐 / E5+E7 专项 / T4.12b 生产链 E2E
+- [20:13] Slice 4 commit

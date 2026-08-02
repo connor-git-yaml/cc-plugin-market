@@ -2,13 +2,72 @@
  * llm-client 单元测试
  * 验证 parseLLMResponse、buildSystemPrompt（不调用真实 API）
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { Writable } from 'node:stream';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+// Feature 238 Slice 4 — mock 认证探测入口与子进程 spawn，用于 callLLM() codex 分支
+// modelFlagMode 决策矩阵的端到端回归测试（FR-304/305/306，SC-007）。
+// 与 codex-proxy.test.ts / llm-client-token-extraction.test.ts 已用手法一致。
+vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
+vi.mock('../../src/auth/auth-detector.js', () => ({ detectAuth: vi.fn() }));
+
+import { spawn } from 'node:child_process';
+import { detectAuth } from '../../src/auth/auth-detector.js';
+import type { AuthDetectionResult } from '../../src/auth/auth-detector.js';
 import {
+  callLLM,
   parseLLMResponse,
   buildSystemPrompt,
   getTimeoutForModel,
   getTimeoutForSpecGeneration,
 } from '../../src/core/llm-client.js';
+import { getCanonicalSonnetModelId } from '../../src/core/model-selection.js';
+import type { AssembledContext } from '../../src/core/context-assembler.js';
+
+const mockedSpawn = vi.mocked(spawn);
+const mockedDetectAuth = vi.mocked(detectAuth);
+
+const CODEX_AUTH_RESULT: AuthDetectionResult = {
+  methods: [],
+  preferred: { type: 'cli-proxy', provider: 'codex', available: true, details: '' },
+  diagnostics: [],
+};
+
+const TEST_CONTEXT: AssembledContext = {
+  prompt: 'irrelevant in mock',
+  tokenCount: 50,
+  truncated: false,
+} as AssembledContext;
+
+function createMockChild() {
+  const child = new EventEmitter() as any;
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+
+  const stdinChunks: string[] = [];
+  child.stdin = new Writable({
+    write(chunk: Buffer, _encoding: string, callback: () => void) {
+      stdinChunks.push(chunk.toString());
+      callback();
+    },
+  });
+  child._stdinChunks = stdinChunks;
+  child.kill = vi.fn();
+
+  return child;
+}
+
+/** 模拟一次成功的 Codex CLI exec 输出（agent_message + turn.completed + result） */
+function emitSuccessfulCodexRun(mockChild: ReturnType<typeof createMockChild>): void {
+  mockChild.stdout.emit('data', Buffer.from('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}\n'));
+  mockChild.stdout.emit('data', Buffer.from('{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":5}}\n'));
+  mockChild.stdout.emit('data', Buffer.from('{"type":"result","is_error":false}\n'));
+  mockChild.emit('close', 0);
+}
 
 describe('llm-client', () => {
   describe('parseLLMResponse', () => {
@@ -251,6 +310,66 @@ JWT 过期时间默认 24 小时
 
     it('扩展超时窗口最多封顶到 15 分钟', () => {
       expect(getTimeoutForSpecGeneration('gpt-5.4', 200_000)).toBe(900_000);
+    });
+
+    // Feature 238 Slice 4 — FR-305(b)/307：delegate 场景走显式前缀分支，非字符串误判
+    it('T4.9 delegated: 前缀恒返回保守档 300000（非关键字巧合匹配）', () => {
+      expect(getTimeoutForModel('delegated:gpt-5.4')).toBe(300_000);
+      expect(getTimeoutForModel('delegated:whatever-unknown-string')).toBe(300_000);
+    });
+  });
+
+  // Feature 238 Slice 4 — callLLM() codex 分支 modelFlagMode 决策矩阵端到端回归
+  // （FR-304/305/306，SC-007）
+  describe('callLLM codex 分支 modelFlagMode 决策（Feature 238 Slice 4）', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('T4.7 调用方显式传入 model 时无条件走 required 分支，result.model 不带 delegated: 前缀（FR-306 互斥回归锁定）', async () => {
+      mockedDetectAuth.mockReturnValue(CODEX_AUTH_RESULT);
+      const mockChild = createMockChild();
+      mockedSpawn.mockReturnValue(mockChild);
+
+      const promise = callLLM(TEST_CONTEXT, { model: getCanonicalSonnetModelId('codex') });
+      emitSuccessfulCodexRun(mockChild);
+      const result = await promise;
+
+      const spawnCall = mockedSpawn.mock.calls[0]!;
+      const args = spawnCall[1] as string[];
+      expect(args).toContain('--model');
+      expect(result.model).not.toMatch(/^delegated:/);
+    });
+
+    it('T4.12b 生产链 E2E：无配置 + 未传 model → 全链路 delegate（SC-007）', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'llm-client-delegate-'));
+      const originalCwd = process.cwd();
+      const originalEnv = process.env;
+      process.env = { ...originalEnv };
+      delete process.env['REVERSE_SPEC_MODEL'];
+      delete process.env['CODEX_THREAD_ID'];
+      delete process.env['CODEX_SHELL'];
+      delete process.env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'];
+
+      try {
+        process.chdir(tempDir);
+        mockedDetectAuth.mockReturnValue(CODEX_AUTH_RESULT);
+        const mockChild = createMockChild();
+        mockedSpawn.mockReturnValue(mockChild);
+
+        const promise = callLLM(TEST_CONTEXT);
+        emitSuccessfulCodexRun(mockChild);
+        const result = await promise;
+
+        const spawnCall = mockedSpawn.mock.calls[0]!;
+        const args = spawnCall[1] as string[];
+        expect(args).not.toContain('--model');
+        expect(result.model).toMatch(/^delegated:/);
+      } finally {
+        process.chdir(originalCwd);
+        process.env = originalEnv;
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });
