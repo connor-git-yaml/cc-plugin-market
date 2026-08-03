@@ -169,3 +169,45 @@ npx vitest run tests/unit/{hook-installer,git-hook-installer,worktree-lifecycle-
 1. **Spectra MCP `impact` 参数名**：server instructions 描述为"某 symbol 的 BFS 影响面"，但实际入参是 `target`；传 `symbol` 报 `Invalid arguments ... Required at target`。描述与入参名不一致，首次调用即失败。
 2. **Spectra MCP `impact` 返回空**：对 `resolveTargetDir` 查询，fuzzy 正确解析到 `src/installer/skill-installer.ts::resolveTargetDir`（confidence 0.9），但 `affected: []` / `directCallers: 0`。该函数在仓内确有调用方，疑为图陈旧或 caller 边缺失。`nextStepHint` 正确引导改用 `context`。
 3. **spec-driver 插件 cache 缺 zod**：`orchestrator-cli` 在插件 cache 路径下静默降级为 fallback 配置（项目级 overrides 不生效）。仓内源路径可规避，但默认路径的降级对使用者不可见。
+
+---
+
+## Phase 7 — implement：R1 批次 / Phase A（T007~T015）
+
+**委派**：`spec-driver:implement`（opus）。首轮子代理在 91 次工具调用后因 API 连接中断，**编排器查磁盘确认产物完整后接手验证**（未用 SendMessage 恢复大 transcript——既往该路径死亡率高）。
+
+**产出**：
+- `src/core/codex-home.ts` — `resolveCodexHome` 纯函数（强制显式注入、零 I/O）+ `resolveCodexHomeFromProcess`（全仓唯一读 `process.env`/`homedir()` 处）
+- `src/core/codex-home-access.ts` — `probeCodexPath` 经 `statSync` 区分 ENOENT/ENOTDIR 与 EACCES/EPERM
+- `plugins/spec-driver/scripts/lib/codex-home.sh` — shell 侧对拍实现
+- 5 个测试文件（含 scope-boundary 负向守卫与 global-path-wording 反向守卫）
+
+## Phase 7' — implement 的 Codex 对抗审查
+
+**0 CRITICAL / 4 WARNING**，裁定"不建议原样合入"。**最高优先的 global/project 边界逐点全部合规**（含 Claude global 未被劫持）；断言未被删除或弱化（变异测试思想实验确认守护力）；wrapper sha 自洽；未打红 F236；无越界。
+
+四项 WARNING 全修：
+| # | 问题 | 处置 |
+|---|---|---|
+| W1 | 注释声称「逐字节等价」但实际不等价；消费链产生 `//` | 移除 over-claim，改为明确等价范围 + 3 行已知差异表；消费链改 `codex_path_join`；含换行的 `CODEX_HOME` 两侧 fail-loud 拒绝；dot-segment 如实登记为已知差异（在 bash 重实现 `path.normalize` 等于手写路径解析器 = F231 证伪的逃逸面类型，且词法折叠在 symlink 下反而不正确） |
+| W2 | `existsSync`/`[[ -d ]]` 把 EACCES 静默压成"不存在" | 改为可区分 errno 的探测；默认路径保持既有宽松行为 |
+| W3 | adapter 文案与 CLI 帮助仍无条件写 `~/.codex`，致 9 个 wrapper 同文件内自相矛盾 | 已修 + `repo:sync` 重生 + 新增反向守卫（已做变异测试验证守护力） |
+| W4 | `feature-213` E2E 继承外部 `CODEX_HOME` 却固定清理默认目录 → 假绿 | 显式隔离子进程环境 + 按生效 home 清理 + 残留断言 |
+
+**实施期自行发现的真实缺陷**：shell 的 `${v//\/\//\/}` 在 **bash 3.2（macOS 自带 `/bin/bash`）会产出字面反斜杠**，把 `//x` 损坏为 `\/x`；脚本用 `#!/usr/bin/env bash`，解释器取决于 `PATH`。已重写为零反斜杠转义实现，并让对拍矩阵**对机器上每个 bash 版本各跑一遍**（F232 教训：本地默认解释器全绿 ≠ 其他环境绿）。
+
+## 交付状态（截至 923dd27）
+
+| 批次 | 范围 | 状态 |
+|---|---|---|
+| 设计 | 调研 / spec / plan / tasks / grounding | ✅ 已交付 `c5337c2` |
+| **R1 / A4 Phase A** | A4① `CODEX_HOME` helper、A4② 消费点统一 | ✅ 已交付 `923dd27` |
+| R1 / A4 Phase D | A4③ 四方一致性诊断 CLI、脱敏、inventory（T044~T051） | ⬜ 未开始 |
+| R2 / A3 | A3①②③④（T016~T043） | ⬜ 未开始 |
+| 人工挂账 | T062（hook 信任真实授予）、T063（F239 T039） | ⬜ 待用户执行 |
+
+**门禁基线（923dd27 时点，全部实跑）**：
+- `npm test`：vitest **495 files / 6170 passed / 0 failed**；test:plugins **1065 pass / 0 fail**
+- 回归基线：69（改动前）→ 77（迁移后）→ **80**（修复后），逐轮只增不减、零断言删改
+- `npm run build` ✓ / `npm run repo:check` 仅预存 `graph-quality:freshness` warn / `npm run release:check` valid
+- `feature-213` E2E 真跑 2/2 通过
