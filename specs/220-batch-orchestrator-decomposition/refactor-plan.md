@@ -97,6 +97,8 @@ src/batch/stages/
 
 **facade 导出语法（修复 C1）**：显式白名单 `export { … } from './stages/…'` + `export type { … } from`；**禁止 `export *`**（防把 stage 内部 helper 泄漏进公共 API）。**stages 禁止 runtime import facade**（W1：tsc 不抓 ESM 环，TDZ 在 Node 运行时才炸；由 G3 静态断言把关）。
 
+> **F244 增补（2026-08-03）**：G3 守护收窄共置测试豁免（*.test.ts/*.spec.ts 不参与 stage 依赖矩阵）并新增第 4 条合同「生产文件（facade+stages）禁止 import 测试命名模块」，保证豁免不成为生产 ESM 图逃逸面；详见 specs/244-fix-stage-guard-colocated-tests/fix-report.md。
+
 ---
 
 ## 5. batch-project-docs.ts 处置（显式决策）
