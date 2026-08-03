@@ -745,6 +745,9 @@ function buildHookTrustCheck({ codexHome, roots }) {
 
   const configPath = path.join(codexHome, 'config.toml');
   const read = readTextFile(configPath);
+  // 🔴 `configProbe` 只承载**文件级**事实（读到了 / 不在 / 读不出），对应输出里的
+  // `config-toml-readable`；「hooks.state 段在不在」由 `stateSection` 单独承载，
+  // 其探针结局由 core 的 `deriveHooksStateProbe` 从 stateSection 推导，二者不得混用同一条记录。
   let configProbe;
   let stateSection;
   if (read.kind === 'error') {

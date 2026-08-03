@@ -9,6 +9,7 @@
  * - `PLUGIN_BUILD_PROBES` 5 探针：`probedSources.length === 5` 且 id 集合恰等
  * - `createCheck` 的受限类型强制（非法枚举即构造失败）
  * - hook-trust 四情形固定状态值（T048）
+ * - hook-trust 探针 id 与其 outcome 语义一致（`config-toml-readable` 管文件、`config-toml-hooks-state` 管段）
  * - `--dangerously-bypass-hook-trust` 产品目录五处零命中门禁（T048，与 T065 共用）
  *
  * 运行：npx vitest run tests/unit/codex-runtime-doctor.test.ts
@@ -871,6 +872,98 @@ describe('F240 T048 — hook-trust 四情形固定状态值（FR-009）', () => 
     });
     expect(verdict.status).toBe('indeterminate');
     expect(verdict.trustStatus).toBe('indeterminate');
+  });
+});
+
+describe('F240 — `config-toml-hooks-state` 的 outcome 必须描述「段」而非「文件可读性」', () => {
+  type Probe = { id: string; outcome: string; errorClass: string | null };
+  type HookCheck = {
+    status: string;
+    remediation: { code: string | null };
+    details: { trustStatus: string; attemptedProbes: Probe[] };
+  };
+  function hookProbes(configToml: string | null): { check: HookCheck; probes: Probe[] } {
+    const fx = makeFixture({ hooksJson: '{"Stop":[]}', configToml });
+    const check = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeExec({}),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    }).checks['hook-trust'] as HookCheck;
+    return { check, probes: check.details.attemptedProbes };
+  }
+  const byId = (probes: Probe[], id: string) => probes.find((p) => p.id === id);
+
+  it('真机场景：config.toml 可读但全文无 hooks 段 → 段探针 absent、文件探针 found', () => {
+    const { check, probes } = hookProbes('[mcp_servers.x]\nurl = "https://example.invalid"\n');
+    expect(byId(probes, 'config-toml-readable')?.outcome).toBe('found');
+    // 🔴 修复前此处是 'found'——一条 id 叫 `...hooks-state` 的记录报 found，会被读成「找到了段」
+    expect(byId(probes, 'config-toml-hooks-state')?.outcome).toBe('absent');
+    // 判定结论逐字不变
+    expect(check.status).toBe('warning');
+    expect(check.details.trustStatus).toBe('untrusted');
+    expect(check.remediation.code).toBe('grant-hook-trust');
+  });
+
+  it('段存在 → 段探针 found，且判定仍为 indeterminate（不假设已信任）', () => {
+    const { check, probes } = hookProbes('[hooks.state]\ntrusted_hash = "deadbeef"\n');
+    expect(byId(probes, 'config-toml-readable')?.outcome).toBe('found');
+    expect(byId(probes, 'config-toml-hooks-state')?.outcome).toBe('found');
+    expect(check.status).toBe('indeterminate');
+    expect(check.details.trustStatus).toBe('indeterminate');
+  });
+
+  it('config.toml 不存在 → 文件探针 absent；「没有文件」蕴含「没有段」，段探针同为 absent', () => {
+    const { check, probes } = hookProbes(null);
+    expect(byId(probes, 'config-toml-readable')?.outcome).toBe('absent');
+    expect(byId(probes, 'config-toml-hooks-state')?.outcome).toBe('absent');
+    expect(check.details.trustStatus).toBe('untrusted');
+  });
+
+  it('config.toml 读不出 → 两条探针同记 error + errorClass，且段绝不落 absent', () => {
+    const verdict = core.classifyHookTrust({
+      hooksJsonPresent: true,
+      configProbe: { outcome: 'error', errorClass: 'EACCES' },
+      stateSection: { kind: 'unavailable' },
+      currentHash: null,
+    });
+    const probes = verdict.probes as Probe[];
+    expect(byId(probes, 'config-toml-readable')).toEqual({
+      id: 'config-toml-readable',
+      outcome: 'error',
+      errorClass: 'EACCES',
+    });
+    expect(byId(probes, 'config-toml-hooks-state')).toEqual({
+      id: 'config-toml-hooks-state',
+      outcome: 'error',
+      errorClass: 'EACCES',
+    });
+    expect(verdict.status).toBe('indeterminate');
+  });
+
+  it('段这条路径没真走过（kind 未知）→ not-probed，不得伪装成 absent（W2 不变量）', () => {
+    const verdict = core.classifyHookTrust({
+      hooksJsonPresent: true,
+      configProbe: { outcome: 'found', errorClass: null },
+      stateSection: { kind: 'some-unmodelled-kind' },
+      currentHash: null,
+    });
+    const probes = verdict.probes as Probe[];
+    expect(byId(probes, 'config-toml-hooks-state')?.outcome).toBe('not-probed');
+    expect(verdict.status).toBe('indeterminate');
+  });
+
+  it('两条 id 均在 HOOK_TRUST_PROBES 内，故能通过 details 净化漏斗（不被结构性丢弃）', () => {
+    for (const id of ['config-toml-readable', 'config-toml-hooks-state']) {
+      expect(core.HOOK_TRUST_PROBES).toContain(id);
+    }
+    const { probes } = hookProbes('[mcp_servers.x]\nurl = "https://example.invalid"\n');
+    expect(probes.map((p) => p.id)).toEqual([
+      'codex-home-hooks-json',
+      'config-toml-readable',
+      'config-toml-hooks-state',
+    ]);
   });
 });
 

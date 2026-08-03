@@ -63,8 +63,21 @@ export const PLUGIN_BUILD_PROBES = Object.freeze([
   'app-server-rpc',
 ]);
 
-/** hook 信任状态的探查点（FR-009） */
-export const HOOK_TRUST_PROBES = Object.freeze(['codex-home-hooks-json', 'config-toml-hooks-state']);
+/**
+ * hook 信任状态的探查点（FR-009）。
+ *
+ * 🔴 `config-toml-readable` 与 `config-toml-hooks-state` 是**两个**探查点，不是一个：
+ * 前者只回答「config.toml 这个文件读到了吗」，后者只回答「`hooks.state` 段在不在」。
+ * 二者曾由同一条 id 为 `...hooks-state` 的记录兼表，导致「文件读到了但全文无 hooks 段」
+ * 被输出成 `{id:'config-toml-hooks-state', outcome:'found'}` —— 判定结论虽仍由
+ * `stateSection` 正确驱动，但读报告的人会把它读成「找到了 hooks.state 段」。
+ * 一条 id 已经承诺了语义，其 outcome 就必须描述它承诺的那件事（W2 同源要求）。
+ */
+export const HOOK_TRUST_PROBES = Object.freeze([
+  'codex-home-hooks-json',
+  'config-toml-readable',
+  'config-toml-hooks-state',
+]);
 
 /**
  * 探查点结局。
@@ -638,6 +651,34 @@ export function aggregateOverallStatus(checks) {
 }
 
 /**
+ * 由「config.toml 文件级读取结果 + 段判定结果」推导 `config-toml-hooks-state` 的结局。
+ *
+ * 🔴 该探针的 id 承诺的是**段**，故其 outcome 只能描述段：文件读到了但段不在 →
+ * `absent`（真探过、确定没有）；文件根本读不到 → 沿用文件级失败结局（没能探到段），
+ * **绝不**因为「文件读到了」就报 `found`。文件是否可读由 `config-toml-readable` 单独承载。
+ *
+ * @param {{outcome: string, errorClass: string|null}} configProbe config.toml 文件级探测结果
+ * @param {{kind: string}} stateSection
+ * @returns {{outcome: string, errorClass: string|null}}
+ */
+function deriveHooksStateProbe(configProbe, stateSection) {
+  if (configProbe.outcome === 'error' || configProbe.outcome === 'not-executable') {
+    return { outcome: configProbe.outcome, errorClass: configProbe.errorClass ?? null };
+  }
+  switch (stateSection?.kind) {
+    case 'confirmed':
+    case 'present-unconfirmed':
+      return { outcome: 'found', errorClass: null };
+    case 'absent':
+      // 文件不存在也归此处：「没有文件」蕴含「没有段」，是确定性事实而非「没查」
+      return { outcome: 'absent', errorClass: null };
+    default:
+      // `unavailable` / 未知 kind：段这条路径没真走过 —— 记 `not-probed`，不得伪装成 `absent`
+      return { outcome: 'not-probed', errorClass: null };
+  }
+}
+
+/**
  * hook 信任状态判定（纯函数，FR-009 / `_grounding.md` §9.7 的 T003 算法）。
  *
  * 🔴 `stateSection.kind === 'present-unconfirmed'` → `indeterminate`：信任段的**确切
@@ -662,13 +703,17 @@ export function classifyHookTrust(input) {
     outcome: hooksJsonProbe?.outcome ?? (hooksJsonPresent ? 'found' : 'absent'),
     errorClass: hooksJsonProbe?.errorClass ?? null,
   };
+  const stateProbeEntry = { id: 'config-toml-hooks-state', ...deriveHooksStateProbe(configProbe, stateSection) };
   const probes = [
     hooksProbeEntry,
+    // 文件级事实：config.toml 读到了 / 不在 / 读不出。判定不直接消费它以外的含义
     {
-      id: 'config-toml-hooks-state',
+      id: 'config-toml-readable',
       outcome: configProbe.outcome,
       errorClass: configProbe.errorClass ?? null,
     },
+    // 段级事实：hooks.state 段在不在（由 stateSection 驱动，与判定同源）
+    stateProbeEntry,
   ];
 
   // hooks.json 在，但不可读 / 不是合法 JSON 对象 → 不可判定（且**不给**信任授予步骤）
