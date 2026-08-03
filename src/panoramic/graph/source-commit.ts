@@ -7,6 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { JavaLanguageAdapter } from '../../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../../adapters/go-adapter.js';
+import { extractExtension } from './collector-extname.js';
 import type { GraphFreshnessVerdict } from './quality/quality-types.js';
 
 /** git 只读命令输出上限（FIX-3：防大仓库输出超默认 1MB 被截断触发 ENOBUFS）。 */
@@ -65,13 +66,6 @@ export function getDirtySourceExtensions(): ReadonlySet<string> {
     ...new JavaLanguageAdapter().extensions,
     ...new GoLanguageAdapter().extensions,
   ]);
-}
-
-/** 大小写严格匹配（不做归一化）：与生产者 `name.endsWith(ext)` 精确匹配语义对齐（FIX-4）。 */
-function extname(filePath: string): string {
-  const idx = filePath.lastIndexOf('.');
-  if (idx < 0) return '';
-  return filePath.slice(idx);
 }
 
 /**
@@ -135,7 +129,7 @@ function getDirtySourceFiles(projectRoot: string): DirtySourceFilesResult {
 
   const extensions = getDirtySourceExtensions();
   const allPaths = parsePorcelainZPaths(raw);
-  const dirtyPaths = allPaths.filter((p) => extensions.has(extname(p)));
+  const dirtyPaths = allPaths.filter((p) => extensions.has(extractExtension(p)));
   return { paths: [...new Set(dirtyPaths)].sort(), readFailed: false };
 }
 

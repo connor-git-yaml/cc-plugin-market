@@ -27,6 +27,7 @@ import * as path from 'node:path';
 import { createGitignoreFilter } from '../../../utils/file-scanner.js';
 import { JavaLanguageAdapter } from '../../../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../../../adapters/go-adapter.js';
+import { extractExtension } from '../collector-extname.js';
 
 /**
  * 图生产者 ignore 合同的单一事实源：TSJS_SKELETON_IGNORE_DIRS ∪ PY_SKELETON_IGNORE_DIRS
@@ -114,15 +115,9 @@ const TSJS_EXTENSIONS: ReadonlySet<string> = new Set([
 ]);
 const PY_EXTENSIONS: ReadonlySet<string> = new Set(['.py']);
 
-function extnameOf(relativePath: string): string {
-  const idx = relativePath.lastIndexOf('.');
-  if (idx < 0) return '';
-  return relativePath.slice(idx);
-}
-
 /** 按扩展名分派到对应生产者的忽略目录集合；未知扩展名（含纯目录路径）→ union 兜底。 */
 function ignoreDirsForPath(relativePath: string): ReadonlySet<string> {
-  const ext = extnameOf(relativePath);
+  const ext = extractExtension(relativePath);
   if (TSJS_EXTENSIONS.has(ext)) return TSJS_IGNORE_DIRS;
   if (PY_EXTENSIONS.has(ext)) return PY_IGNORE_DIRS;
   if (ext === '.java') return javaIgnoreDirs();
