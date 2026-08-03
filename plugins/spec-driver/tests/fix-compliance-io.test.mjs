@@ -52,6 +52,64 @@ describe('readHookPayload', () => {
     assert.equal(r.ok, false);
     assert.ok(r.diagnostics.includes('payload-invalid'));
   });
+
+  // F240 T036 · FR-004：transcript_path 放宽（Codex payload schema 中该字段 nullable）。
+  // 三类输入的诊断必须语义可区分：路径缺席 ≠ 路径给了但读不到 ≠ payload 本身结构非法。
+  it('F240：transcript_path 缺失 + session_id 有值 → ok（不再误判 payload-invalid）', () => {
+    const r = readHookPayload(JSON.stringify({ session_id: 'abc', stop_hook_active: false }));
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.diagnostics, []);
+    assert.equal(r.payload.session_id, 'abc');
+  });
+  it('F240：transcript_path 为 null → ok', () => {
+    const r = readHookPayload(JSON.stringify({ session_id: 'abc', transcript_path: null }));
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.diagnostics, []);
+  });
+  it('F240：transcript_path 为空串 → ok（视同缺席，下游产出 transcript-path-absent）', () => {
+    const r = readHookPayload(JSON.stringify({ session_id: 'abc', transcript_path: '' }));
+    assert.equal(r.ok, true);
+  });
+  it('F240：transcript_path 类型非法（非字符串非 null）→ 仍 payload-invalid', () => {
+    for (const bad of [123, true, { a: 1 }, ['x']]) {
+      const r = readHookPayload(JSON.stringify({ session_id: 'abc', transcript_path: bad }));
+      assert.equal(r.ok, false, JSON.stringify(bad));
+      assert.deepEqual(r.diagnostics, ['payload-invalid'], JSON.stringify(bad));
+    }
+  });
+  it('F240：session_id 仍必需 —— 缺失/空串/类型非法一律 payload-invalid（放宽不外溢）', () => {
+    for (const bad of [undefined, '', 123, null, {}]) {
+      const r = readHookPayload(JSON.stringify({ session_id: bad, transcript_path: '/x/t.jsonl' }));
+      assert.equal(r.ok, false, JSON.stringify(bad));
+      assert.deepEqual(r.diagnostics, ['payload-invalid'], JSON.stringify(bad));
+    }
+  });
+  it('F240：session_id 缺失 + transcript_path 同时缺失 → payload-invalid（session_id 优先判定）', () => {
+    const r = readHookPayload(JSON.stringify({ stop_hook_active: false }));
+    assert.equal(r.ok, false);
+    assert.deepEqual(r.diagnostics, ['payload-invalid']);
+  });
+});
+
+describe('F240 T036 · readTranscriptEntries：路径缺席的独立诊断码', () => {
+  it('transcriptPath 为 null/undefined/空串 → transcript-path-absent（与 transcript-unavailable 可区分）', () => {
+    for (const bad of [null, undefined, '']) {
+      const r = readTranscriptEntries(bad);
+      assert.deepEqual(r.entries, []);
+      assert.deepEqual(r.diagnostics, ['transcript-path-absent'], String(bad));
+    }
+  });
+  it('三诊断码语义互不混淆：absent / unavailable / too-large 各自独立', () => {
+    assert.deepEqual(readTranscriptEntries(null).diagnostics, ['transcript-path-absent']);
+    assert.deepEqual(readTranscriptEntries(path.join(tmp, 'nope.jsonl')).diagnostics, ['transcript-unavailable']);
+    const p = path.join(tmp, 'big.jsonl');
+    fs.writeFileSync(p, '{"type":"user"}\n');
+    assert.deepEqual(readTranscriptEntries(p, 1).diagnostics, ['transcript-too-large']);
+  });
+  it('非字符串路径（数字/对象）→ transcript-path-absent 而非抛出', () => {
+    assert.deepEqual(readTranscriptEntries(123).diagnostics, ['transcript-path-absent']);
+    assert.deepEqual(readTranscriptEntries({}).diagnostics, ['transcript-path-absent']);
+  });
 });
 
 describe('readTranscriptEntries', () => {

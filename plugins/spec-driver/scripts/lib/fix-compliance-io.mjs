@@ -39,9 +39,15 @@ export function readHookPayload(stdinRaw) {
     return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
   }
   const sessionId = parsed && parsed.session_id;
-  const transcriptPath = parsed && parsed.transcript_path;
-  if (typeof sessionId !== 'string' || sessionId.length === 0
-    || typeof transcriptPath !== 'string' || transcriptPath.length === 0) {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
+  }
+  // F240 FR-004：transcript_path 在 Codex 的 Stop payload schema 中是 nullable。缺席/为 null 的
+  // payload 结构合法，判 payload-invalid 会给出误导性诊断（看着像 payload 坏了，其实只是没给路径）。
+  // 放宽到"可缺席"，由下游 readTranscriptEntries 产出语义精确的 transcript-path-absent；
+  // 类型非法（既非字符串又非 null）仍是真正的结构错误，维持 payload-invalid。
+  const transcriptPath = parsed.transcript_path;
+  if (transcriptPath !== undefined && transcriptPath !== null && typeof transcriptPath !== 'string') {
     return { ok: false, payload: null, diagnostics: ['payload-invalid'] };
   }
   return { ok: true, payload: parsed, diagnostics: [] };
@@ -58,6 +64,11 @@ export function readHookPayload(stdinRaw) {
  * @returns {{ entries:object[], diagnostics:string[] }}
  */
 export function readTranscriptEntries(transcriptPath, maxBytes = MAX_TRANSCRIPT_BYTES) {
+  // F240 FR-004：路径压根没给 与 路径给了却读不到 是两种不同的失效，诊断码必须可区分
+  // （transcript-path-absent vs transcript-unavailable）。两者退出码同为 0，只是诊断更精确。
+  if (typeof transcriptPath !== 'string' || transcriptPath.length === 0) {
+    return { entries: [], diagnostics: ['transcript-path-absent'] };
+  }
   let stat;
   try {
     stat = fs.statSync(transcriptPath);

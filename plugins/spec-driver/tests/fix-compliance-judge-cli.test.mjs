@@ -19,7 +19,11 @@ import {
   parseArgs,
   buildFeedbackText,
 } from '../scripts/fix-compliance-judge.mjs';
-import { MISSING_ACTION_TEXT } from '../scripts/lib/fix-compliance-core.mjs';
+import {
+  MISSING_ACTION_TEXT,
+  CLAUDE_TRANSCRIPT_ROLES,
+  FOREIGN_DIALECT_DIAGNOSTICS,
+} from '../scripts/lib/fix-compliance-core.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url));
 const HOOK_SH = fileURLToPath(new URL('../hooks/stop-fix-compliance-check.sh', import.meta.url));
@@ -1292,5 +1296,306 @@ describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () 
     assert.equal(events.length, 1);
     assert.equal(events[0].degraded, true);
     assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
+  });
+});
+
+// ────────────────────────────────────────
+// F240 T033 · FR-004：transcript 方言识别的三条不变量（I1 / I2 / I3）
+//
+// 范围声明（禁止 over-claim，与 plan §5 逐字一致）：本组守护的是**可观测性**改进——
+// 判定能力在异构 wire format 下失效时**是否留下诊断**。它**不**提供独立于 transcript
+// 的第二事实源、**不**提高合规判定强度、**不**改变任何放行/阻断语义（恒 exit 0 方向）。
+// ────────────────────────────────────────
+
+/**
+ * I2 钉死基线：改动前对 Claude fixture 全集实测采集的可观测结局。
+ * 以常量形式写死（不做 git stash 前后对拍——CI 不可复现）。任何一行变动即为 Claude 侧回归。
+ */
+const CLAUDE_BASELINE = Object.freeze({
+  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'compliant-noop.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
+  'non-fix-session.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
+  'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
+  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+});
+
+/** 跑一次 CLI 并归约为与 CLAUDE_BASELINE 同构的可观测结局 */
+function observeFixtureOutcome(fixtureName, { sessionId = 'base' } = {}) {
+  const transcriptPath = stageFixture(fixtureName, { verification: VERIFICATION_DOC });
+  const r = runCli({ transcriptPath, sessionId });
+  const events = readVerdictEvents();
+  return {
+    status: r.status,
+    eventCount: events.length,
+    compliant: events.map((e) => e.compliant),
+    diagnostics: events.map((e) => e.diagnostics),
+    stderrPrefix: r.stderr.split(' ')[0] || '',
+    specifyDirCreated: fs.existsSync(path.join(tmp, '.specify')),
+  };
+}
+
+/** 写一份 Codex rollout 格式 transcript（每行 {timestamp,type,payload}），返回绝对路径 */
+function writeCodexRollout(types = ['session_meta', 'event_msg', 'response_item']) {
+  const p = path.join(tmp, 'rollout.jsonl');
+  fs.writeFileSync(p, types.map((type, i) => JSON.stringify({
+    timestamp: `2026-08-03T10:0${i}:00.000Z`, type, payload: { seq: i },
+  })).join('\n') + '\n', 'utf8');
+  return p;
+}
+
+describe('F240 I1 · 退出码恒 0：方言识别不新增任何阻断路径', () => {
+  it('Codex rollout transcript → exit 0', () => {
+    assert.equal(runCli({ transcriptPath: writeCodexRollout() }).status, 0);
+  });
+
+  it('unknown 方言 transcript → exit 0', () => {
+    const p = path.join(tmp, 'unknown.jsonl');
+    fs.writeFileSync(p, `${JSON.stringify({ type: 'x-alien', foo: 1 })}\n`, 'utf8');
+    assert.equal(runCli({ transcriptPath: p }).status, 0);
+  });
+
+  it('empty transcript（仅空白行）→ exit 0', () => {
+    const p = path.join(tmp, 'empty.jsonl');
+    fs.writeFileSync(p, '\n\n', 'utf8');
+    assert.equal(runCli({ transcriptPath: p }).status, 0);
+  });
+
+  it('enforcement=warn 下 Codex rollout → 仍 exit 0', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    assert.equal(runCli({ transcriptPath: writeCodexRollout() }).status, 0);
+  });
+
+  it('SC-025 第 6 行：诊断落盘路径自身不可写 → 仍 exit 0，不抛异常', () => {
+    // .specify/runs 位置放一个文件 → mkdirSync 必失败 → appendAuditEvent 走 ok:false
+    fs.mkdirSync(path.join(tmp, '.specify'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.specify', 'runs'), 'blocker', 'utf8');
+    const r = runCli({ transcriptPath: writeCodexRollout() });
+    assert.equal(r.status, 0);
+  });
+});
+
+describe('F240 I2 · Claude 零回归：既有 fixture 全集结局与钉死基线逐字段相等', () => {
+  for (const [name, expected] of Object.entries(CLAUDE_BASELINE)) {
+    it(`${name} 结局与改动前基线一致`, () => {
+      assert.deepEqual(observeFixtureOutcome(name), expected);
+    });
+  }
+});
+
+describe('F240 I3 · 健康路径零落盘：Claude 非 fix 会话不得因本改造开始产生诊断', () => {
+  it('正常 Claude 非 fix 会话 → exit 0 且 .specify 目录未被创建（零落盘）', () => {
+    const r = runCli({ transcriptPath: stageFixture('non-fix-session.jsonl', { verification: VERIFICATION_DOC }) });
+    assert.equal(r.status, 0);
+    assert.equal(r.stderr.trim(), '');
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false, '健康路径不得产生任何落盘');
+    assert.equal(readVerdictEvents().length, 0);
+  });
+
+  it('手写的最小 Claude 非 fix 会话（无任何 skill 锚点）→ 零落盘', () => {
+    const p = writeTranscript([
+      { type: 'user', message: { role: 'user', content: [{ type: 'text', text: '帮我看下这个函数' }] } },
+      ASSISTANT_TEXT('看完了，没问题。'),
+    ]);
+    const r = runCli({ transcriptPath: p });
+    assert.equal(r.status, 0);
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false);
+  });
+});
+
+// ────────────────────────────────────────
+// F240 W-2 · 白名单欠包含性回归语料（US5 零落盘不变量的可证伪探针）
+//
+// 背景（本机全量实扫 ~/.claude/projects 2676 份 .jsonl 取证）：Claude transcript 的顶层
+// `type` 实测取值域为 assistant / user / attachment / last-prompt / queue-operation /
+// custom-title / system / mode / permission-mode / file-history-snapshot / ai-title /
+// frame-link / agent-name，远超 CLAUDE_TRANSCRIPT_ROLES 声明的 4 项；其中 1 份**规范
+// session 文件**（`<encoded-cwd>/<uuid>.jsonl`）只含 ai-title + agent-name 两行。
+//
+// 这些用例把"白名单是否穷尽"变成**可证伪**命题：US5「健康路径零落盘」不允许依赖一份
+// 需要永久跟随上游 Claude 版本维护的 type 清单——清单只要落后一个版本，就会在任意用户
+// 项目目录凭空创建 .specify/ 并写入事实错误的 `transcript-format-unrecognized` 诊断。
+// ────────────────────────────────────────
+
+/**
+ * 本机实扫观测到、且**不在** CLAUDE_TRANSCRIPT_ROLES 内的真实顶层 type。
+ * 键形状按实测还原（值已脱敏），刻意每份只含单一 type：混入 user/assistant 会让白名单
+ * 命中而使探针失效，那正是既有 30 份 Claude fixture 测不出欠包含性的原因。
+ */
+const OBSERVED_NON_WHITELISTED_ENTRIES = Object.freeze({
+  attachment: {
+    parentUuid: null, isSidechain: false, attachment: { type: 'file', path: '/w/a.ts' },
+    type: 'attachment', uuid: 'u-1', timestamp: '2026-08-03T00:00:00.000Z', userType: 'external',
+    entrypoint: 'cli', cwd: '/w', sessionId: 's-1', version: '2.1.215', gitBranch: 'master',
+  },
+  'last-prompt': { type: 'last-prompt', leafUuid: 'u-1', sessionId: 's-1' },
+  'queue-operation': { type: 'queue-operation', operation: 'add', timestamp: '2026-08-03T00:00:00.000Z', sessionId: 's-1', content: '排队中的提示词' },
+  'custom-title': { type: 'custom-title', customTitle: '自定义标题', sessionId: 's-1' },
+  mode: { type: 'mode', mode: 'default', sessionId: 's-1' },
+  'permission-mode': { type: 'permission-mode', permissionMode: 'acceptEdits', sessionId: 's-1' },
+  'file-history-snapshot': { type: 'file-history-snapshot', messageId: 'm-1', snapshot: {}, isSnapshotUpdate: false },
+  'ai-title': { type: 'ai-title', aiTitle: '示例会话标题', sessionId: 's-1' },
+  'agent-name': { type: 'agent-name', agentName: '示例代理名', sessionId: 's-1' },
+  'frame-link': { type: 'frame-link', sessionId: 's-1', path: '/w/a.ts', frameUrl: 'http://localhost:1/f', timestamp: '2026-08-03T00:00:00.000Z' },
+});
+
+describe('F240 W-2 · Claude 非白名单顶层 type 语料：健康路径恒零落盘', () => {
+  const assertZeroSideEffect = (transcriptPath) => {
+    const r = runCli({ transcriptPath });
+    assert.equal(r.status, 0);
+    assert.equal(r.stderr.trim(), '');
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false, '健康路径不得在用户项目目录创建 .specify/');
+    assert.equal(readVerdictEvents().length, 0, '健康路径不得写入任何审计事件');
+  };
+
+  it('语料非空且确实全部落在白名单之外（防探针空转）', () => {
+    const types = Object.keys(OBSERVED_NON_WHITELISTED_ENTRIES);
+    assert.ok(types.length >= 10, `语料仅 ${types.length} 项`);
+    for (const t of types) assert.equal(CLAUDE_TRANSCRIPT_ROLES.includes(t), false, `${t} 已在白名单内，探针失效`);
+  });
+
+  for (const [type, entry] of Object.entries(OBSERVED_NON_WHITELISTED_ENTRIES)) {
+    it(`只含 ${type} 条目的真实 Claude 会话 → exit 0 且零落盘`, () => {
+      assertZeroSideEffect(writeTranscript([entry]));
+    });
+  }
+
+  it('真实观测的最小 session 文件（只含 ai-title + agent-name）→ 零落盘', () => {
+    assertZeroSideEffect(path.join(FIXTURE_DIR, 'real-claude-session-title-only.jsonl'));
+  });
+
+  it('多种非白名单 type 混合的正常会话（无 user/assistant）→ 零落盘', () => {
+    assertZeroSideEffect(writeTranscript(Object.values(OBSERVED_NON_WHITELISTED_ENTRIES)));
+  });
+});
+
+describe('F240 SC-025 · Codex rollout 必须落 loud 诊断且与「确实不是 fix 会话」可区分', () => {
+  it('第 1 行：Codex rollout → 落盘一条 loud 诊断事件，含格式不可识别原因 code', () => {
+    const r = runCli({ transcriptPath: writeCodexRollout(), sessionId: 'codex-1' });
+    assert.equal(r.status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].compliant, null, '本次 compliance 判定未执行');
+    assert.equal(events[0].degraded, true);
+    assert.equal(events[0].closureForm, 'undetermined');
+    assert.equal(events[0].sessionId, 'codex-1');
+    assert.ok(events[0].diagnostics.includes('transcript-format-unrecognized'), JSON.stringify(events[0].diagnostics));
+    assert.ok(events[0].diagnostics.includes('dialect:codex-rollout'), JSON.stringify(events[0].diagnostics));
+  });
+
+  it('第 2 行：与「确实不是 fix 会话」信号可区分（后者零事件，前者有独立 code）', () => {
+    const codexEvents = (() => {
+      runCli({ transcriptPath: writeCodexRollout(), sessionId: 'codex-2' });
+      return readVerdictEvents();
+    })();
+    assert.equal(codexEvents.length, 1);
+    // 对照：同一沙箱换成 Claude 非 fix 会话，事件数不增长
+    const before = readVerdictEvents().length;
+    runCli({ transcriptPath: stageFixture('non-fix-session.jsonl', { verification: VERIFICATION_DOC }), sessionId: 'claude-2' });
+    assert.equal(readVerdictEvents().length, before, 'Claude 非 fix 会话不得新增任何事件');
+  });
+
+  it('第 3 行：只含 turn_context / world_state / compacted 的 rollout 切片仍被正确识别', () => {
+    // W-1：这三种顶层 type 实测存在（turn_context 出现于 1001/1167 份 rollout），
+    // 却曾漏出 CODEX_ROLLOUT_ROLES。C-1 把 unknown 收窄为静默后，本清单成为承重件——
+    // 漏项将直接表现为"Codex 切片静默漏报"，故此处按单一 type 逐个取证。
+    for (const type of ['turn_context', 'world_state', 'compacted', 'inter_agent_communication_metadata']) {
+      const p = path.join(tmp, `codex-${type}.jsonl`);
+      fs.writeFileSync(p, `${JSON.stringify({ timestamp: '2026-08-03T00:00:00.000Z', type, payload: {} })}\n`, 'utf8');
+      const r = runCli({ transcriptPath: p, sessionId: `codex-${type}` });
+      assert.equal(r.status, 0);
+      const events = readVerdictEvents().filter((e) => e.sessionId === `codex-${type}`);
+      assert.equal(events.length, 1, `type=${type} 未落 loud 诊断`);
+      assert.ok(events[0].diagnostics.includes('transcript-format-unrecognized'), type);
+      assert.ok(events[0].diagnostics.includes('dialect:codex-rollout'), type);
+    }
+  });
+
+  it('empty transcript → 维持现状零落盘（不产生诊断，避免噪声）', () => {
+    const p = path.join(tmp, 'empty.jsonl');
+    fs.writeFileSync(p, '\n', 'utf8');
+    assert.equal(runCli({ transcriptPath: p }).status, 0);
+    assert.equal(readVerdictEvents().length, 0);
+  });
+
+  it('第 4 行：transcript 不存在 → 仍是 transcript-unavailable（既有行为不变，不被方言码顶替）', () => {
+    assert.equal(runCli({ transcriptPath: path.join(tmp, 'nope.jsonl') }).status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('transcript-unavailable'), JSON.stringify(events[0].diagnostics));
+    assert.equal(events[0].diagnostics.includes('transcript-format-unrecognized'), false);
+  });
+
+  it('enforcement=off + Codex rollout → 零接触放行（off 短路仍先于一切读取）', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: off\n');
+    const r = runCli({ transcriptPath: writeCodexRollout() });
+    assert.equal(r.status, 0);
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false);
+  });
+
+  it('真实 Codex rollout fixture（real-bash-transcript-codex.jsonl）→ 同样落 loud 诊断 + exit 0', () => {
+    const r = runCli({ transcriptPath: path.join(FIXTURE_DIR, 'real-bash-transcript-codex.jsonl'), sessionId: 'codex-real' });
+    assert.equal(r.status, 0);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('transcript-format-unrecognized'));
+    assert.ok(events[0].diagnostics.includes('dialect:codex-rollout'));
+  });
+
+  it('over-claim 静态检查：改造涉及的三个文件不出现「第二事实源/判定已加固/compliance 已闭环」类表述', () => {
+    const files = [
+      '../scripts/lib/fix-compliance-core.mjs',
+      '../scripts/fix-compliance-judge.mjs',
+      '../scripts/lib/fix-compliance-io.mjs',
+    ].map((rel) => fs.readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'));
+    for (const src of files) {
+      for (const banned of ['第二事实源', '判定已加固', 'compliance 已闭环', '判定强度']) {
+        assert.equal(src.includes(banned), false, `禁止 over-claim 表述: ${banned}`);
+      }
+    }
+  });
+
+  it('合同同步：方言诊断码从 FOREIGN_DIALECT_DIAGNOSTICS 派生，恒 ⊆ verdict-event schema enum', () => {
+    // schema 为文档契约（无运行时 ajv 校验，见 F224 plan §3），故用测试守住"代码发码 ⊆ 合同枚举"。
+    // I-2：这里刻意**遍历常量表**而非硬编码码字符串——判定器已改为只发表内的码，
+    // 于是"新增一个方言码却忘了登记合同"必然在此变红，不会像模板串拼接那样静默逃逸。
+    const schemaPath = fileURLToPath(new URL(
+      '../../../specs/208-fix-mode-process-compliance/contracts/fix-compliance-verdict-event.schema.json',
+      import.meta.url,
+    ));
+    const registered = new Set(JSON.parse(fs.readFileSync(schemaPath, 'utf8'))
+      .properties.diagnostics.items.enum);
+    const emitted = Object.values(FOREIGN_DIALECT_DIAGNOSTICS);
+    assert.ok(emitted.length > 0, '常量表为空会让本守卫空转');
+    for (const code of [...emitted, 'transcript-path-absent', 'transcript-format-unrecognized']) {
+      assert.ok(registered.has(code), `诊断码 ${code} 未登记进 schema enum`);
+    }
+    // C-1：dialect:unknown 已随"unknown 不落盘"一并退役，留在合同里会变成误导性死码
+    assert.equal(registered.has('dialect:unknown'), false, 'dialect:unknown 应已从合同 enum 移除');
+  });
+
+  it('I-2 反向守卫：判定器不再用模板串拼接方言诊断码', () => {
+    const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
+    assert.equal(/`dialect:\$\{/.test(judgeSrc), false, '模板串拼接会绕过合同 enum 守卫');
+  });
+
+  it('C-1 回归：`unknown` 是开放世界的否定，不得被当成「这是异构格式」的肯定断言', () => {
+    // 只有正向识别到 Codex rollout 才落盘。任何"我不认识"的形态一律回落零落盘
+    // （= 本改造前的行为），否则 US5 不变量会被上游任意新增的 envelope 形态击穿。
+    const p = path.join(tmp, 'unknown.jsonl');
+    fs.writeFileSync(p, `${JSON.stringify({ type: 'x-alien' })}\n`, 'utf8');
+    assert.equal(runCli({ transcriptPath: p }).status, 0);
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false, 'unknown 方言不得落盘');
+    assert.equal(readVerdictEvents().length, 0);
+  });
+
+  it('反向验证：判定链三文件不存在对 .specify/runs/ 的判定输入读取', () => {
+    const core = fs.readFileSync(fileURLToPath(new URL('../scripts/lib/fix-compliance-core.mjs', import.meta.url)), 'utf8');
+    // core 层是纯函数层，不得出现任何 runs 目录读取
+    assert.equal(/readFileSync[^\n]*runs/.test(core), false);
+    assert.equal(/\bfs\./.test(core.slice(core.indexOf('export function detectTranscriptDialect'))), false);
   });
 });

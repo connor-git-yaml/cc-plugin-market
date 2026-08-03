@@ -22,6 +22,8 @@ import fs from 'node:fs';
 import { realpathSync } from 'node:fs';
 import {
   detectFixSkillExpansion,
+  detectTranscriptDialect,
+  FOREIGN_DIALECT_DIAGNOSTICS,
   extractDelegationsAfter,
   resolveFeatureDirCandidate,
   classifyClosureForm,
@@ -118,9 +120,29 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   const anchor = detectFixSkillExpansion(entries);
   const isFix = anchor.found && anchor.mode === 'fix';
   if (!isFix) {
+    // F240 FR-004：区分"确实不是 fix 会话"与"这份 transcript 我根本解析不了"。
+    //
+    // 谓词只认**正向识别**成功的异构方言（FOREIGN_DIALECT_DIAGNOSTICS 的键集）。'unknown'
+    // 刻意不入表：它是开放世界的否定（"我不认识"），而两份 role 清单都非穷尽——实扫本机
+    // 2676 份真实 Claude transcript，就有规范 session 文件只含 ai-title / agent-name 等
+    // 会话元数据 envelope 而落入 unknown。若把 unknown 当异构断言，US5"健康路径零落盘"
+    // 会被上游任意新增的 envelope 形态击穿：在无关的用户项目目录凭空建 .specify/ 并写入
+    // 事实错误的诊断。故 unknown 一律回落 []（= 本改造前的行为，非能力回退）。
+    //
+    // 由此落盘条件收窄为单一肯定命题：**必须命中 Codex 的 role 名**。US5 因而不再依赖
+    // Claude 白名单追平上游——上游新增任意顶层 type 都只会落进 unknown → 静默。
+    // 残余面（如实标注，非本次消除）：若某天 Claude transcript 出现与 CODEX_ROLLOUT_ROLES
+    // 重名的顶层 type（如 `compacted`）且整份文件不含任何 Claude role，仍会被判 codex-rollout。
+    // 本机 2676 份实扫未出现此形态；真出现时的正确修法是给 Codex 侧加结构性判别（如 rollout
+    // 特有的 `timestamp`+`payload` 信封），而不是回头去补 Claude 白名单。
+    const dialect = detectTranscriptDialect(entries);
+    const dialectCode = Object.hasOwn(FOREIGN_DIALECT_DIAGNOSTICS, dialect)
+      ? FOREIGN_DIALECT_DIAGNOSTICS[dialect]
+      : null;
     return {
       enforcement, configDegraded, isFix: false, mode: anchor.mode,
-      transcriptDiagnostics: [], verdict: null,
+      transcriptDiagnostics: dialectCode ? ['transcript-format-unrecognized', dialectCode] : [],
+      verdict: null,
     };
   }
 

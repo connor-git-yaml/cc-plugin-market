@@ -24,6 +24,7 @@ envelope 结构参照 research.md「实测校准记录（T001）」：顶层 `ty
 | `compliant-full-canonical-chinese-no-subagent-type.jsonl` | 中文 description + 无 subagent_type 的完整合规 | 合规（防假阻断回归） |
 | `role-mismatch-plan-tasks-fix-word.jsonl` | plan/tasks 委派 desc 含「修复」但非「代码修复」 | 不归 implement 类（窄模式精确切分） |
 | `real-bash-transcript-claude.jsonl` | **FR-017 真实 Claude Bash use/result 字段锚点**（sentinel 场景）；runtime=Claude Code · CLI 2.1.215 · 采集 2026-07-20 · content 形态=string · 未暴露数字退出码 | 字段路径参照（非判定用例，W6） |
+| `real-claude-session-title-only.jsonl` | **F240 W-2 白名单欠包含性探针**：真实观测到的最小 Claude session 文件形态（`<encoded-cwd>/<uuid>.jsonl`，仅含 `ai-title` + `agent-name` 两条会话元数据 envelope，值已脱敏）；实扫 `~/.claude/projects` 2676 份命中 1 份 | 健康路径，恒零落盘（不得判为异构格式） |
 | `real-bash-transcript-codex.jsonl` | **Codex rollout schema 差异记录**（`custom_tool_call`/`custom_tool_call_output` 形态，与 Claude 不同构）；runtime=Codex · 采集 2026-07-20 · 非判定输入、待 M9 A3 | 文档性参照（不参与 C4 裁决，不要求 `name==='Bash'`） |
 
 ## F216 Phase 2 判据 fixture（合成，非真实采集）

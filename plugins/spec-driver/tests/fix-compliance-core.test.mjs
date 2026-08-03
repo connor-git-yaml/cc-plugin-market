@@ -33,6 +33,10 @@ import {
   MISSING_ACTION_TEXT,
   ENFORCEMENT_VALUES,
   ROOT_CAUSE_HEADING_REGEX,
+  detectTranscriptDialect,
+  CLAUDE_TRANSCRIPT_ROLES,
+  CODEX_ROLLOUT_ROLES,
+  FOREIGN_DIALECT_DIAGNOSTICS,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
@@ -3816,5 +3820,128 @@ describe('F231 真实文件系统差分：判定器说「改名」⟺ 真实 she
     const cand = resolveWith(`mv ${S} ${nonstandard}`);
     assert.equal(cand.path, null);
     assert.equal(cand.ambiguous, true);
+  });
+});
+
+// ────────────────────────────────────────
+// F240 T030 · FR-004：transcript 方言识别（detectTranscriptDialect）
+//
+// 范围声明（禁止 over-claim）：本组用例守护的是**可观测性**改进——判定能力在异构
+// wire format 下失效时是否留下诊断。它**不**提供第二事实源、**不**提高合规判定强度、
+// **不**改变任何放行/阻断语义。
+// ────────────────────────────────────────
+
+describe('F240 T030 detectTranscriptDialect：四结果矩阵（正向识别）', () => {
+  const claudeEntry = (role) => normalizeTranscriptEntry({ type: role, message: { role, content: 'x' } }, 0, false);
+  const codexEntry = (type, i = 0) => normalizeTranscriptEntry({ timestamp: '2026-08-03T00:00:00Z', type, payload: {} }, i, false);
+
+  it('常量合同：两个角色集合 frozen；Codex 侧覆盖实扫观测到的全部 7 种顶层 type', () => {
+    assert.deepEqual([...CLAUDE_TRANSCRIPT_ROLES], ['user', 'assistant', 'system', 'summary']);
+    // W-1：本机全量实扫 ~/.codex/sessions 1167 份 rollout 的顶层 type 观测集合。
+    // 曾只声明前 3 个，漏掉 turn_context(1001 份) / world_state(95) /
+    // inter_agent_communication_metadata(33) / compacted(31)。C-1 把 unknown 收窄为静默后
+    // 本清单成为承重件，漏项 = Codex 切片静默漏报，故此处按实测集合逐字钉死。
+    assert.deepEqual([...CODEX_ROLLOUT_ROLES], [
+      'session_meta', 'event_msg', 'response_item',
+      'turn_context', 'world_state', 'compacted', 'inter_agent_communication_metadata',
+    ]);
+    assert.ok(Object.isFrozen(CLAUDE_TRANSCRIPT_ROLES));
+    assert.ok(Object.isFrozen(CODEX_ROLLOUT_ROLES));
+  });
+
+  it('C-1 常量合同：FOREIGN_DIALECT_DIAGNOSTICS 只含正向识别成功的方言，unknown MUST NOT 入表', () => {
+    assert.ok(Object.isFrozen(FOREIGN_DIALECT_DIAGNOSTICS));
+    assert.deepEqual(Object.keys(FOREIGN_DIALECT_DIAGNOSTICS), ['codex-rollout']);
+    assert.equal(FOREIGN_DIALECT_DIAGNOSTICS['codex-rollout'], 'dialect:codex-rollout');
+    // unknown = 开放世界的否定（"我不认识"），不是"这是异构格式"的肯定断言。
+    // 两份 role 清单都非穷尽，真实 Claude 会话可以落进 unknown（实扫已命中），
+    // 因此它一旦入表就等于把 US5 零落盘不变量押在清单的追平速度上。
+    assert.equal(Object.hasOwn(FOREIGN_DIALECT_DIAGNOSTICS, 'unknown'), false);
+    assert.equal(Object.hasOwn(FOREIGN_DIALECT_DIAGNOSTICS, 'claude'), false);
+    assert.equal(Object.hasOwn(FOREIGN_DIALECT_DIAGNOSTICS, 'empty'), false);
+  });
+
+  it('C-1：真实 Claude 会话元数据 envelope（白名单外的顶层 type）判 unknown 而非 claude —— 故消费方不得据 unknown 落盘', () => {
+    // 实扫 ~/.claude/projects 2676 份取证：这些顶层 type 真实存在于 Claude transcript，
+    // 且有 1 份规范 session 文件（<encoded-cwd>/<uuid>.jsonl）只含 ai-title + agent-name。
+    // 本用例把"白名单欠包含 ⇒ 健康会话落 unknown"这一事实钉在 core 层，
+    // 使 judge 侧"unknown 恒静默"的必要性不依赖阅读理解。
+    for (const type of ['attachment', 'last-prompt', 'queue-operation', 'custom-title',
+      'mode', 'permission-mode', 'file-history-snapshot', 'ai-title', 'agent-name', 'frame-link']) {
+      assert.equal(CLAUDE_TRANSCRIPT_ROLES.includes(type), false, `${type} 已在白名单内，用例失效`);
+      assert.equal(detectTranscriptDialect([normalizeTranscriptEntry({ type, sessionId: 's-1' }, 0, false)]), 'unknown', type);
+    }
+  });
+
+  it('规则 1：无非 parseError 条目 → empty（空数组 / 全损坏 / 非数组入参同解）', () => {
+    assert.equal(detectTranscriptDialect([]), 'empty');
+    assert.equal(detectTranscriptDialect([normalizeTranscriptEntry(null, 0, true)]), 'empty');
+    assert.equal(detectTranscriptDialect(null), 'empty');
+    assert.equal(detectTranscriptDialect(undefined), 'empty');
+    assert.equal(detectTranscriptDialect('not-an-array'), 'empty');
+  });
+
+  it('规则 2：存在任一 Claude role → claude（四种 role 逐个覆盖）', () => {
+    for (const role of CLAUDE_TRANSCRIPT_ROLES) {
+      assert.equal(detectTranscriptDialect([claudeEntry(role)]), 'claude', `role=${role}`);
+    }
+  });
+
+  it('规则 3：全部为 Codex rollout role → codex-rollout（三种 type 逐个 + 混合）', () => {
+    for (const type of CODEX_ROLLOUT_ROLES) {
+      assert.equal(detectTranscriptDialect([codexEntry(type)]), 'codex-rollout', `type=${type}`);
+    }
+    assert.equal(
+      detectTranscriptDialect(CODEX_ROLLOUT_ROLES.map((t, i) => codexEntry(t, i))),
+      'codex-rollout',
+    );
+  });
+
+  it('规则 4：既无 Claude role 也无 Codex role → unknown', () => {
+    assert.equal(detectTranscriptDialect([normalizeTranscriptEntry({ type: 'x-custom' }, 0, false)]), 'unknown');
+    // role 缺失（无 type 字段）同样落 unknown，不得误归 claude
+    assert.equal(detectTranscriptDialect([normalizeTranscriptEntry({ foo: 1 }, 0, false)]), 'unknown');
+  });
+
+  it('规则 2 优先于规则 3：Claude + Codex role 混合 → claude（保守归属）', () => {
+    assert.equal(detectTranscriptDialect([codexEntry('event_msg', 0), claudeEntry('user')]), 'claude');
+    assert.equal(detectTranscriptDialect([claudeEntry('assistant'), codexEntry('session_meta', 1)]), 'claude');
+  });
+
+  it('parseError 条目不参与方言判定（部分损坏的 Claude transcript 仍判 claude）', () => {
+    assert.equal(
+      detectTranscriptDialect([normalizeTranscriptEntry(null, 0, true), claudeEntry('user')]),
+      'claude',
+    );
+  });
+
+  it('🔴 负向不变量：正常 Claude **非 fix** 会话 MUST 判 claude —— 禁止用「不是 fix 会话」反推方言', () => {
+    // non-fix-session.jsonl 是 feature 模式展开（无 fix 锚点）的正常 Claude transcript。
+    // 若实现用「无 fix 锚点」当异构信号，此处会误判 → 每个健康 Claude 会话都开始落盘诊断，
+    // 直接摧毁 fix-compliance-judge.mjs「US5：健康路径不产生任何落盘」不变量。
+    const entries = loadEntries('non-fix-session.jsonl');
+    assert.equal(detectFixSkillExpansion(entries).mode, 'feature', '前提：该 fixture 确实不是 fix 会话');
+    assert.equal(detectTranscriptDialect(entries), 'claude');
+  });
+
+  it('真实 fixture 对拍：Claude 侧 fixture 全判 claude、Codex rollout fixture 判 codex-rollout', () => {
+    for (const name of ['collapsed-zero-delegation.jsonl', 'compliant-full.jsonl', 'real-bash-transcript-claude.jsonl']) {
+      assert.equal(detectTranscriptDialect(loadEntries(name)), 'claude', name);
+    }
+    assert.equal(detectTranscriptDialect(loadEntries('real-bash-transcript-codex.jsonl')), 'codex-rollout');
+  });
+
+  it('I4 静态守卫：函数体内零 I/O —— fs. / require / import( 零命中', () => {
+    const body = detectTranscriptDialect.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/\brequire\s*\(/.test(body), false, body);
+    assert.equal(/\bimport\s*\(/.test(body), false, body);
+  });
+
+  it('I4 性能上界：5 万条 entries 单遍判定 < 200ms（零额外文件读取）', () => {
+    const big = Array.from({ length: 50000 }, (_, i) => codexEntry('event_msg', i));
+    const t0 = Date.now();
+    assert.equal(detectTranscriptDialect(big), 'codex-rollout');
+    assert.ok(Date.now() - t0 < 200, `耗时 ${Date.now() - t0}ms`);
   });
 });

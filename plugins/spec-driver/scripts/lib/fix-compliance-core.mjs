@@ -437,6 +437,88 @@ export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
 }
 
 // ────────────────────────────────────────
+// transcript 方言识别（F240 FR-004）
+// ────────────────────────────────────────
+
+/**
+ * Claude transcript 顶层 `type` 的**已知**取值域，非穷尽（normalizeTranscriptEntry 存入 entry.role）。
+ *
+ * 来源与已知偏差（本机全量实扫 `~/.claude/projects` 2676 份 .jsonl 取证）：真实取值域还包含
+ * attachment / last-prompt / queue-operation / custom-title / mode / permission-mode /
+ * file-history-snapshot / ai-title / frame-link / agent-name 等会话元数据 envelope，且随
+ * Claude Code 版本演进；`summary` 则在该次实扫中 0 次出现（属早期推测保留项）。
+ *
+ * 因此本清单**刻意不作为承重判据**：它只用于正向认领"这确实是 Claude"，绝不用于反证
+ * "这不是 Claude"。零落盘不变量由 fix-compliance-judge.mjs 的"仅正向识别到 Codex 才落盘"
+ * 谓词机械保证，不依赖本清单追平上游版本（见 detectTranscriptDialect 规则 4 说明）。
+ */
+export const CLAUDE_TRANSCRIPT_ROLES = Object.freeze(['user', 'assistant', 'system', 'summary']);
+/**
+ * Codex rollout wire format 顶层 `type` 的**已知**取值域，非闭合。
+ * 来源：本机全量实扫 `~/.codex/sessions` 1167 份 rollout（每项括号内为出现该 type 的文件数）——
+ * session_meta(1167) / event_msg(1167) / response_item(1154) / turn_context(1001) /
+ * world_state(95) / inter_agent_communication_metadata(33) / compacted(31)。
+ * 上游新增 type 时本清单会落后：漏项只会让相应 rollout 切片**少落一条诊断**（回落静默），
+ * 不会反向影响 Claude 侧零落盘不变量。
+ */
+export const CODEX_ROLLOUT_ROLES = Object.freeze([
+  'session_meta',
+  'event_msg',
+  'response_item',
+  'turn_context',
+  'world_state',
+  'compacted',
+  'inter_agent_communication_metadata',
+]);
+
+/**
+ * 需要落 loud 诊断的方言 → 诊断码（消费方 fix-compliance-judge.mjs 只认本表，不做字符串拼接）。
+ *
+ * 表内只放**正向识别成功**的异构方言。`unknown` 刻意不在表内：它是开放世界的否定
+ * （"我不认识这份 transcript"），不构成"这是异构格式"的肯定断言——把它当断言用，等于让
+ * 一份需要跟随上游版本维护的 role 清单去承担零落盘不变量（实测会误伤真实 Claude 会话）。
+ *
+ * 🔴 新增条目时必须同步 specs/208 的 fix-compliance-verdict-event.schema.json 的
+ * diagnostics enum；`fix-compliance-judge-cli.test.mjs` 的合同同步用例遍历本表守住这一点。
+ */
+export const FOREIGN_DIALECT_DIAGNOSTICS = Object.freeze({ 'codex-rollout': 'dialect:codex-rollout' });
+
+/**
+ * 判定一组已归一化 entries 属于哪种 transcript wire format。
+ *
+ * 用途仅限**可观测性**：让"判定器读到了自己解析不了的格式"这一事实能被落盘诊断捕获，
+ * 而不是经非 fix 分支静默放行。本函数不参与、也不影响任何合规结论与放行/阻断决策。
+ *
+ * 判定必须是**正向识别**（按序求值，见 specs/240 plan §5.3(1)）：
+ *   1. 无可用条目           → 'empty'
+ *   2. 存在任一 Claude role → 'claude'
+ *   3. 存在任一 Codex role  → 'codex-rollout'
+ *   4. 其余                 → 'unknown'（**"我不认识"，不是"这是异构格式"**；
+ *      因两个 role 清单都非穷尽，健康的 Claude 会话完全可能落到这里，故消费方
+ *      MUST NOT 据此落盘——见 FOREIGN_DIALECT_DIAGNOSTICS）
+ *
+ * 🔴 MUST NOT 用"这不是 fix 会话"反推方言：那会让每个健康的 Claude 非 fix 会话都落盘诊断，
+ * 摧毁 fix-compliance-judge.mjs 的"健康路径零落盘"不变量并淹没审计事件流。规则 2 就是这条禁令的机械实现。
+ *
+ * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
+ * @returns {'claude'|'codex-rollout'|'unknown'|'empty'}
+ */
+export function detectTranscriptDialect(entries) {
+  const list = Array.isArray(entries) ? entries : [];
+  let usable = 0;
+  let codexHits = 0;
+  for (const entry of list) {
+    if (!entry || entry.parseError) continue;
+    usable += 1;
+    // 规则 2 一旦命中即可短路：Claude 归属优先于 Codex（混合形态保守判 claude）
+    if (CLAUDE_TRANSCRIPT_ROLES.includes(entry.role)) return 'claude';
+    if (CODEX_ROLLOUT_ROLES.includes(entry.role)) codexHits += 1;
+  }
+  if (usable === 0) return 'empty';
+  return codexHits > 0 ? 'codex-rollout' : 'unknown';
+}
+
+// ────────────────────────────────────────
 // 判定窗口锚定（D1）
 // ────────────────────────────────────────
 

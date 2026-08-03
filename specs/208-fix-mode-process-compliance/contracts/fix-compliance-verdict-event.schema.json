@@ -41,7 +41,10 @@
           "config-degraded",
           "state-storage-unavailable",
           "payload-invalid",
-          "feature-dir-unresolvable"
+          "feature-dir-unresolvable",
+          "transcript-path-absent",
+          "transcript-format-unrecognized",
+          "dialect:codex-rollout"
         ]
       }
     }

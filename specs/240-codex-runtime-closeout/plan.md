@@ -150,7 +150,7 @@ graph LR
 | `plugins/spec-driver/scripts/fix-compliance-judge.mjs` | 499 | 4 export（`parseArgs`/`buildFeedbackText`/`main` + 内部 7 函数） | `evaluate()` 单函数 131 行（L103-233），含 3 段共 40 行历史教训注释（F224/F227/F230）；4 处 fail-open 分支。**rev2 后本文件新增 ≤ 10 行**，不再跨 500 行 |
 | `plugins/spec-driver/scripts/lib/fix-compliance-core.mjs` | 900+ | 多 export | `normalizeTranscriptEntry` L398-402 把 `raw.type` 存入 `entry.role`；消费点只认 `role === 'user'`（L453）与 `role === 'assistant'`（L510 / L837）。**rev2 的方言识别落在本文件**（已在 `JUDGE_FILE_SET` 内） |
 | `plugins/spec-driver/scripts/lib/fix-compliance-io.mjs` | 335 | 11 export | `readHookPayload` L43-45 强制要求 `transcript_path` 非空，在 Codex（schema 为 nullable）下是隐性耦合点；`readTranscriptEntries` L79-93 逐行容错，**Codex rollout 每行都是合法 JSON → 不触发任何 diagnostics** |
-| `plugins/spec-driver/scripts/lib/judge-snapshot-core.mjs` | 265+ | 多 export | `JUDGE_FILE_SET` L16-23 **实读为 6 项**，且**已含 `scripts/lib/fix-compliance-core.mjs`** → rev2 无需变更（§3.3） |
+| `plugins/spec-driver/scripts/lib/judge-snapshot-core.mjs` | 265+ | 多 export | `JUDGE_FILE_SET` **实读为 7 项**（F246 已纳入 `lib/is-invoked-directly.mjs`；rev2 写的「6 项」是 F246 落地前的过期数字），且**已含 `scripts/lib/fix-compliance-core.mjs`** → 无需变更（§3.3）。🔴 该类内嵌计数会随其他 feature 落地而过期，验收时一律**当次实测**而非转录 |
 | `plugins/spec-driver/scripts/record-workflow-run.mjs` | 407 | 1 export（`recordWorkflowRun`） | 事件中零 `sessionId` / 零 `turnId`（grep 零命中）。**rev2 不改本文件**（决策三） |
 | `src/hooks/hook-installer.ts` | 195 | 3 export | 无 debt；结构为**扁平** `HookConfig[]`，与 Codex 的两级嵌套结构不同构（见 §6.1） |
 | `src/installer/skill-installer.ts` | 277 | 5 export | 🔴 `resolveTargetDir` L163-172：同函数两分支语义相反（global=家目录 / project=cwd） |
@@ -367,7 +367,11 @@ export function detectTranscriptDialect(entries) { /* ≈ 25 行 */ }
     // FR-004(rev2)：仅在**正向识别**到异构 wire format 时补 loud 诊断；
     // Claude 会话（含正常非 fix 会话）恒走 [] 分支，零落盘语义逐字不变。
     const dialect = detectTranscriptDialect(entries);
-    const foreign = dialect === 'codex-rollout' || dialect === 'unknown';
+    // 🔴 rev3（FR-004 对抗审查 C-1）：unknown 是**开放世界的否定**（「我不认识」），
+    // 不得当作肯定断言（「这是异构格式」）。实测真实 Claude transcript 顶层 type 有 13 种，
+    // 白名单仅 4 种 → 曾在真实会话上误判 foreign 并在用户项目目录凭空创建 .specify/。
+    // 收窄为只认正向识别成功的异构方言；unknown 回落 []（= 改动前行为）。
+    const foreign = FOREIGN_DIALECT_DIAGNOSTICS[dialect] !== undefined;
     return {
       enforcement, configDegraded, isFix: false, mode: anchor.mode,
       transcriptDiagnostics: foreign ? ['transcript-format-unrecognized', `dialect:${dialect}`] : [],
@@ -396,7 +400,7 @@ L406-409 现有分支 `if (result.transcriptDiagnostics.length > 0) { tryAppendF
 | # | 不变量 | 验证方式 |
 |---|---|---|
 | **I1** | **退出码恒等**：本改造在任何 transcript 下都只可能产出 exit 0 路径，**不新增任何 exit 2 可能** | 静态：新代码路径只落在 `!isFix` 分支与 io 校验；机械：对 Codex/未知/空/Claude 四类 fixture 断言 CLI 退出码恒为 0 |
-| **I2** | **Claude 零回归**：`dialect === 'claude'` 时 `evaluate` 与 `runHook` 的返回值与落盘行为与改动前**逐字节等价** | `fix-compliance-judge-cli.test.mjs` 扩展：对既有 Claude fixture 全集断言 verdict/退出码/落盘事件数与钉死基线相等 |
+| **I2** | **Claude 零回归**：**任何非 codex-rollout 的 transcript**（含 `claude` 与 `unknown`）下 `evaluate` 与 `runHook` 的返回值与落盘行为与改动前**逐字节等价**。🔴 rev3 更正：原表述只覆盖 `dialect === 'claude'`，而实测真实 Claude 会话存在被判 `unknown` 的情形（顶层 type 13 种、白名单仅 4 种），按原表述这些会话不在护栏内 —— 正是 C-1 的漏网口 | `fix-compliance-judge-cli.test.mjs` 扩展：对既有 Claude fixture 全集断言 verdict/退出码/落盘事件数与钉死基线相等 |
 | **I3** | **健康路径零落盘保持**：Claude 非 fix 会话仍**零落盘** | 专门用例：喂一段无 fix 锚点的正常 Claude transcript → 断言审计事件文件**未被创建/未增长** |
 | **I4** | **无新 I/O、无 DoS 面**：检测只消费已解析的 `entries`，单遍 O(n)，零额外文件读取 | 静态守卫用例：`detectTranscriptDialect` 函数体内 `fs.`/`require`/`import(` 零命中；大体量 entries 的耗时上界用例 |
 | **I5** | **单调性**：不存在任何路径把「改动前阻断」变为「改动后放行」，也不存在把「改动前放行」变为「改动后阻断」 | 由 I1+I2 蕴含；另加一条组合用例覆盖 fix 会话不受影响 |
@@ -1021,7 +1025,7 @@ FR-009（hook 信任诊断）在 spec 中标为「A3/A4 交叉」。**本 plan �
 | 3 | **判定链 exit 码不变量（rev2 替换 rev1 的单调性测试）** | `node --test plugins/spec-driver/tests/fix-compliance-judge-cli.test.mjs` | I1/I2/I3 三条不变量用例全绿（§5.3(5)）：Codex/未知/空/Claude 四类 fixture 退出码恒 0；Claude fixture 落盘行为与钉死基线逐字节相等；Claude 非 fix 会话零落盘 |
 | 4 | **F239 第 14/15 族** | `npx vitest run tests/unit/spec-drift-check.test.ts tests/unit/spec-drift-cli.test.ts tests/unit/spec-drift-state-matrix.test.ts tests/integration/spec-drift-repo-check-regression.test.ts tests/integration/spec-drift-repo-check-modes.test.ts tests/unit/sync-worktree-local-state.test.ts` + `npm run repo:check` | 退出码 0；`repo:check` 输出中 `spec-drift`（第 14 族）与 `worktree-local-state`（第 15 族）status 均为 `ok` |
 | 5 | **F238 wrapper sha + literal gate** | `npx vitest run tests/unit/spec-driver/wrapper-sha256.test.ts tests/integration/spec-driver-wrapper-source-truth.test.ts` + `npm run repo:check` | 退出码 0；`spec-driver-wrappers` 与 `model-literal-gate` 均 `ok`。**因 §7.5 必然触发，MUST 先 `npm run repo:sync` 再复跑** |
-| 6 | **F236 判定器闭包守卫** | `node --test plugins/spec-driver/tests/judge-file-set-guard.test.mjs plugins/spec-driver/tests/judge-snapshot-core.test.mjs` | 退出码 0；**rev2 预期 `JUDGE_FILE_SET` 保持 6 项不变**（§3.3）。若变为 7 项即说明实现违反了「不新增模块」约束，须回查 |
+| 6 | **F236 判定器闭包守卫** | `node --test plugins/spec-driver/tests/judge-file-set-guard.test.mjs plugins/spec-driver/tests/judge-snapshot-core.test.mjs` | 退出码 0；**rev3 判据 = 改动前后计数相等**（实测 7 项；rev2 写的「6 项」是 F246 落地前的过期数字，§3.3）。若计数变化即说明实现违反了「不新增模块」约束，须回查 |
 | 7 | 评测链未被触碰 | `git diff --name-only master...HEAD -- 'scripts/eval-*' 'scripts/pilot-*' 'scripts/baseline-*'` | 输出为**空** |
 | 8 | `~/.codex` 硬编码点收口完整性 | `rg -n "\.codex" --glob '!node_modules' --glob '!specs/**' --glob '!tests/**' src plugins scripts` | 每条命中归入 (a) 已走 helper / (b) 明确保留（仓库根基）/ (c) 文案已处理或豁免（评测链）三类之一，**不允许未归类命中**；归类结果写入 `verification-report.md` |
 | 9 | 模型字面量中立 | `npm run repo:check` 的 `model-literal-gate` | doctor 输出中涉及模型的字段只允许 tier 名或配置项引用，**不得**硬编码具体模型版本号 |

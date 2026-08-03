@@ -112,7 +112,7 @@ grounding_basis: specs/240-codex-runtime-closeout/_grounding.md（§8/§9 最高
 |---|---|---|---|---|---|
 | T030 | 🔁 **rev2 重写（决策三）** 测试先行：扩展 `plugins/spec-driver/tests/fix-compliance-core.test.mjs` —— `detectTranscriptDialect` 四结果矩阵（`claude`/`codex-rollout`/`unknown`/`empty`）+ 🔴 **「禁止用非 fix 反推方言」负向用例**（正常 Claude 非 fix transcript MUST 判 `claude`） | R2 / A3 | [P] | 无（**不再依赖 M5**） | FR-004 / SC-007 |
 | T031 | 🔁 **rev2 重写（决策三）** 实现：`lib/fix-compliance-core.mjs` 新增 `detectTranscriptDialect` + `CLAUDE_TRANSCRIPT_ROLES` / `CODEX_ROLLOUT_ROLES` 常量（≈25 行纯函数，零 I/O、零新增 import） | R2 / A3 | [S] | T030 | FR-004 / SC-007 |
-| T032 | 🔁 **rev2 重写（实读更正）** 门禁**复核**（非变更）：跑 `judge-file-set-guard.test.mjs` + `judge-snapshot-core.test.mjs`，确认 `JUDGE_FILE_SET` **保持 6 项不变**（实读 `judge-snapshot-core.mjs:16-23` 已含 `scripts/lib/fix-compliance-core.mjs`）。**若变为 7 项即说明实现违反「不新建模块 / 不新增 import」约束，须回查而非改清单** | R2 / A3 | [S] | T031 | plan §3.3 / SC-017 |
+| T032 | 🔁 **rev2 重写（实读更正）** 门禁**复核**（非变更）：跑 `judge-file-set-guard.test.mjs` + `judge-snapshot-core.test.mjs`，确认 `JUDGE_FILE_SET` **计数不因本次改动变化**（rev3 实测为 **7 项**，F246 已纳入 `lib/is-invoked-directly.mjs`；rev2 写的「6 项」是 F246 落地前的过期数字）。**判据是「改动前后计数相等」而非某个固定数字**；若计数变化即说明违反「不新建模块 / 不新增 import」约束，须回查而非改清单 | R2 / A3 | [S] | T031 | plan §3.3 / SC-017 |
 | T033 | 🔁 **rev2 重写（决策三）** 测试先行：扩展 `plugins/spec-driver/tests/fix-compliance-judge-cli.test.mjs` —— **I1/I2/I3 三条不变量**（退出码恒 0 / Claude fixture 落盘逐字节等价于钉死基线 / Claude 非 fix 会话零落盘） | R2 / A3 | [P] | 无 | FR-004(5) / SC-007 |
 | ~~T034~~ | ❌ **已废止（决策三）** 静态守卫用例：`crossCheckTranscript` 返回值无否决权 —— rev2 已无 `crossCheckTranscript` | — | — | — | — |
 | T035 | 🔁 **rev2 重写（决策三）** 实现：`fix-compliance-judge.mjs` 的 `evaluate()` `!isFix` 分支接线（≤ 8 行；本文件净增 ≤ 10 行）；🔴 **函数签名逐字不变、`runHook` L406-409 逐字不变、`releaseDegraded` 逐字不变** | R2 / A3 | [S] | T031, T033 | FR-004(2) / SC-007 |
@@ -393,8 +393,8 @@ grounding_basis: specs/240-codex-runtime-closeout/_grounding.md（§8/§9 最高
 - 验收方式：T030 转绿。
 - 注意事项：🔴 **零 I/O、零新增 import、禁止 dynamic import**（否则触发 T032 的门禁复核失败）；单遍 O(n)。
 
-**T032 — 【rev2 重写】门禁复核：`JUDGE_FILE_SET` 保持 6 项**
-- 目标：跑 `node --test plugins/spec-driver/tests/judge-file-set-guard.test.mjs plugins/spec-driver/tests/judge-snapshot-core.test.mjs`，确认 `JUDGE_FILE_SET` **仍为 6 项**。
+**T032 — 【rev3 更正】门禁复核：`JUDGE_FILE_SET` 计数不因本次改动变化（实测 7 项）**
+- 目标：跑 `node --test plugins/spec-driver/tests/judge-file-set-guard.test.mjs plugins/spec-driver/tests/judge-snapshot-core.test.mjs`，确认 `JUDGE_FILE_SET` **计数与改动前相等**（rev3 实测 7 项；勿转录历史数字）。
 - 依据：实读 `lib/judge-snapshot-core.mjs:16-23` 确认清单已含 `scripts/lib/fix-compliance-core.mjs`，rev2 的实现全部落在既有 6 文件内且不新增 import ⇒ 清单**无需变更**，`judge:doctor` 也**不会**产生 rev1 所述的预期 drift。
 - 验收方式：两个测试退出码 0 且清单长度断言仍为 6。
 - 注意事项：🔴 **若清单被迫变为 7 项，说明实现违反了「不新建模块」约束 —— 应回查实现，而不是顺手改清单**。确有必要新增时，MUST 同批更新 `judge-snapshot-core.test.mjs` 长度断言，并在交付报告中说明旧安装快照会报 drift（预期行为）。
@@ -588,7 +588,7 @@ rm -rf "$CODEX_HOME"
 3. **禁止**安装流程（`install-codex-hooks.mjs`/`codex-skills.sh`）自动写入任何绕过 hook 信任的配置项，**禁止**调用 `--dangerously-bypass-hook-trust` 作为产品安装路径的一部分（该 flag **仅允许**出现在 `tests/e2e/codex-hooks/` 内部；T048/T065 的门禁测试断言该字符串在 `src/`/`plugins/`/`scripts/`/`README.md`/`docs/` **五处零命中**）。
 4. **禁止**改动 `_grounding.md` §9.2 列出的「MUST NOT 改动」清单中的仓库内 `.codex` 路径点：`skill-installer.ts:171`（project 分支）、`validate-orchestrator-models.mjs:84`、`sync-delegation-contract.mjs:60`、`codex-skills.sh:66`（project 模式）——误改会同时打断 `repo:check` 与 F238 wrapper body-sha256 门禁。
 5. **禁止**新建 `hooks.codex.json` 等并列声明文件（`tech-research.md` §6.1 建议已被否决）——双份声明必然漂移，Codex 侧声明 MUST 从 canonical `hooks.json` 派生。
-6. 🔁 **rev2 更正** **禁止**在 FR-004 改造中新建模块、新增相对 import 或使用 dynamic import —— 实现 MUST 落在既有 `fix-compliance-core.mjs` / `fix-compliance-judge.mjs` / `fix-compliance-io.mjs` 内，使 `JUDGE_FILE_SET` 保持 6 项（T032）。
+6. 🔁 **rev2 更正** **禁止**在 FR-004 改造中新建模块、新增相对 import 或使用 dynamic import —— 实现 MUST 落在既有 `fix-compliance-core.mjs` / `fix-compliance-judge.mjs` / `fix-compliance-io.mjs` 内，使 `JUDGE_FILE_SET` 计数不变（T032，rev3 实测 7 项）。
 7. 🔁 **rev2 新增（决策三）** **禁止**把 `.specify/runs/*.jsonl` 的任何事件作为合规判定输入，**禁止**扩展 `record-workflow-run.mjs` 的事件 schema，**禁止**改动 5 处 SKILL.md 的 `record-workflow-run` 调用文本或 `record-workflow-run-fields.md` 合同 —— 该路线已被编排器实测 + Codex 审查双重证伪（正常事件无合规字段；`.specify/runs/` 非可信安全边界）。
 8. 🔁 **rev2 新增（决策三）** **禁止**在任何产物中把 FR-004 的改造描述为「提高了合规判定强度」「获得了独立事实源」「修复了 Codex 下的合规漏判」—— 它只是**可观测性**改进（plan §5 范围声明），over-claim 视为缺陷（T043 题面 ⑥ 专查此项）。
 9. 🔁 **rev2 新增（C4）** **禁止**把「安装后 `$CODEX_HOME/hooks.json` 的事件集合恰等于 4 项」作为对**文件全集**的判据 —— 产品层只约束我方 owned 条目；**禁止**任何会导致「必须删除第三方条目才能通过门禁」的设计。
