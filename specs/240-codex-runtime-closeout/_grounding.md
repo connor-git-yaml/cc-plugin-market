@@ -585,6 +585,27 @@ plan 把「编排器执行 Bash 步骤时能否拿到会话/轮次标识」列�
 
 ---
 
+### 9.7 T003 / T004 前置实测完成（A4 Phase D 的探测手段确证）
+
+#### T004：Codex active plugin 标记 —— **确证存在可机械判定的三级链**
+
+| 级 | 信号 | 实测证据 |
+|---|---|---|
+| 1（首选） | **`codex plugin list --json`** | flag 实测存在（另有 `--available --json`）；`codex mcp list --json` 同样机器可读（FR-013 inventory 可直接用） |
+| 2 | **`config.toml` 的 `[plugins."<name>@<marketplace>"]` 段** | 实测真实文件含多个此类段，字段含 `enabled = true`；这就是 Codex 的 active 注册表（`installed_plugins.json` 等价物**不存在**——plugins 目录下零 json/toml/lock 标记文件） |
+| 3 | **快照目录内 manifest** | `~/.codex/plugins/cache/<marketplace>/<plugin>/<snapshot-hash>/.codex-plugin/plugin.json` 实测含 `{name, version}`（superpowers → `5.1.3`，真实 semver） |
+
+> 🔴 **与 F236 教训的映射修正**：Codex cache 的版本目录是**快照哈希**（如 `11c74d6b`），不是语义版本目录——「取最高版本号」在 Codex 侧**根本不可构造**。active 判定必须走「注册表（级 1/2）→ 定位快照 → 读 manifest version（级 3）」，不存在"扫目录猜版本"的诱惑路径，但**也因此绝不能拿快照哈希当版本比较**。
+
+#### T003：hook 信任状态探测 —— **持久化位置有强证据，确切形态留 T062 人工确证**
+
+- 二进制字段级证据：`HookStateToml` struct 含 **`trusted_hash`** 字段；日志串 `config/batchWrite failed while updating hook trust` 与 `hooks.state` 相邻 → 信任经 **config 写路径**持久化，section 名指向 `hooks.state`
+- 隔离 `CODEX_HOME` 下仅放 hooks.json（未信任、未跑 TUI）时，config.toml **不出现**该段 → 「段缺失」≠「已信任」
+- **诊断算法（FR-009 实现口径）**：读 config.toml 的 hooks.state 类段：**缺失 → `untrusted`（或 `indeterminate`，取决于 hooks.json 是否存在）**；存在 → 比对 `trusted_hash` 与当前脚本内容哈希 → 一致 `trusted` / 不一致 `modified`
+- ⚠️ **确切 TOML 形态（键名层级、哈希算法）未经实测确证**——需要在真实 TUI 里完成一次信任授予才能观测，这正是 T062 人工挂账项。实现 MUST 把「段存在但形态不符合预期」归入 `indeterminate` 而非猜测解析，且 `remediation` 不得写未经验证的步骤
+
+---
+
 ### 9.4 🔴 现存缺陷（**范围外**，本 feature 不修，须挂账）：`pre-tool-use-guard.sh` 一直空转
 
 **实测**（编排器直接喂 payload 给脚本，非推断）：
