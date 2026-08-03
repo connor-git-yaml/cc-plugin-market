@@ -24,13 +24,33 @@ import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.j
 import type { CommentRegion } from '../debt-scanner/types.js';
 import { buildModuleGraphFromCodeSkeletons } from '../knowledge-graph/module-derivation.js';
 import { createGitignoreFilter } from '../utils/file-scanner.js';
+import {
+  PY_WALK_SURFACE,
+  PYTHON_SYMBOL_SCAN_SURFACE,
+  surfaceMatchesFile,
+} from '../collector-surface.js';
 
 export class PythonLanguageAdapter implements LanguageAdapter {
   readonly id = 'python';
 
   readonly languages: readonly Language[] = ['python'];
 
-  readonly extensions: ReadonlySet<string> = new Set(['.py', '.pyi']);
+  /**
+   * **声明面**（registry 分派用）：`.py` + `.pyi`，引用 SSoT 的 `PY_WALK_SURFACE.extensions`
+   * 而非本地字面量（F249 FR-002/FR-019：采集面只有一份事实源）。
+   *
+   * ⚠️ 与本类 `scanPyFiles` 的**扫描面**（`PYTHON_SYMBOL_SCAN_SURFACE`，仅 `.py`）**不一致**，
+   * 这是实现期审查（W-002）如实登记的**既存现状**，不是本轮引入的缺陷：
+   * - 声明面 = 本字段，决定 `LanguageAdapterRegistry` 把哪些扩展名分派给 python adapter
+   *   （`.pyi` 文件经 #2 `walkPyFiles` 采集后仍需由本 adapter 分析，故声明面必须含 `.pyi`）
+   * - 扫描面 = `scanPyFiles`，决定 `extractSymbolNodes`/`buildModuleGraph` 实际遍历哪些文件
+   *   （只收 `.py`，`.pyi` 不产出符号节点）
+   *
+   * 因此**不能**把本字段收窄成 `PYTHON_SYMBOL_SCAN_SURFACE.extensions`：那会改变 registry
+   * 对 `.pyi` 的分派行为，属于本轮明确不做的行为变更。`.pyi` 是否应产出符号节点是产品裁决，
+   * 已作为 follow-up 登记；在裁决落地前，两面失配由 SSoT 两个常量 + 行为探针显式钉死。
+   */
+  readonly extensions: ReadonlySet<string> = PY_WALK_SURFACE.extensions;
 
   readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
     '__pycache__',
@@ -107,6 +127,10 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    * 复用 `defaultIgnoreDirs` 并叠加 Python 项目惯例（test/tests/dist 等）。
    * 由 `extractSymbolNodes` 与 `buildModuleGraph` 共用，避免 DRY 违反。
    *
+   * F249 W-002：文件判定改为消费 SSoT 的 `PYTHON_SYMBOL_SCAN_SURFACE`（`.py`、大小写敏感
+   * endsWith），与原 `entry.name.endsWith('.py')` **行为逐字等价**——本轮只做事实源收敛，
+   * 不改采集行为（`.pyi` 依旧不产出符号节点，见 `extensions` 字段的失配说明）。
+   *
    * @throws 当根目录不可读时抛出（调用方按需 try-catch 决定是否吞掉）
    */
   private scanPyFiles(resolvedRoot: string): string[] {
@@ -126,7 +150,7 @@ export class PythonLanguageAdapter implements LanguageAdapter {
           if (!ignoreNames.has(entry.name) && !entry.name.startsWith('.') && !isGitignored(relPath)) {
             walk(path.join(dir, entry.name));
           }
-        } else if (entry.isFile() && entry.name.endsWith('.py')) {
+        } else if (entry.isFile() && surfaceMatchesFile(PYTHON_SYMBOL_SCAN_SURFACE, entry.name)) {
           // 文件命中 .gitignore 则跳过
           if (!isGitignored(relPath)) {
             pyFiles.push(path.join(dir, entry.name));

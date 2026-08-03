@@ -36,7 +36,8 @@ interface TestRepo {
  */
 type SpectraStubSpec =
   | { mode: 'auto' }
-  | { mode: 'fixed'; state: string }
+  /** `staleReasons`：F249 W-001 —— 让 stub 能产出指纹型 stale，用于验证 shell 侧文案不再硬编码 commit 型原因。 */
+  | { mode: 'fixed'; state: string; staleReasons?: string[] }
   | { mode: 'build'; sourceCommit: string };
 
 function writeSpectraStub(binDir: string, spec: SpectraStubSpec): void {
@@ -67,6 +68,11 @@ function writeSpectraStub(binDir: string, spec: SpectraStubSpec): void {
         ].join('\n')
       : ':';
 
+  const staleReasonsFragment =
+    spec.mode === 'fixed' && spec.staleReasons !== undefined
+      ? `,"staleReasons":${JSON.stringify(spec.staleReasons)}`
+      : '';
+
   fs.writeFileSync(
     path.join(binDir, 'spectra'),
     [
@@ -80,7 +86,8 @@ function writeSpectraStub(binDir: string, spec: SpectraStubSpec): void {
       '    if [[ "$1" == "--graph" ]]; then graph="${2:-}"; shift 2; else shift; fi',
       '  done',
       stateResolution,
-      `  printf '{"overallVerdict":"pass","freshness":{"state":"%s","recordedSourceCommit":"%s","currentHead":"%s"}}\\n' "$state" "$recorded" "$current"`,
+      // staleReasons 片段：仅 fixed 模式显式给定时才输出（auto 模式沿用旧形态，即"旧版本 CLI 不产出该字段"）
+      `  printf '{"overallVerdict":"pass","freshness":{"state":"%s","recordedSourceCommit":"%s","currentHead":"%s"${staleReasonsFragment}}}\\n' "$state" "$recorded" "$current"`,
       '  exit 0',
       'fi',
       'if [[ "$cmd" == "batch" ]]; then',
@@ -1056,6 +1063,68 @@ describe('sync-worktree-local-state.sh', () => {
         // dirty 刻意不告警：提交前工作树几乎必然 dirty，否则每次正常流程都产生噪音
         expect(r.stderr).not.toMatch(/stale|unknown-provenance/);
       }
+    });
+
+    // ── F249 W-001：stale 文案 reason-aware（shell 原样打印 helper 现算的诊断串）──
+
+    it('W-001：仅指纹型 stale → 文案说指纹不一致，MUST NOT 出现 sourceCommit 型说法', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      writeSpectraStub(repo.stubBinDir, {
+        mode: 'fixed',
+        state: 'stale',
+        staleReasons: ['collector-fingerprint'],
+      });
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toMatch(/stale/);
+      expect(r.stderr).toContain('collector fingerprint 与当前采集器实现不一致');
+      // 修复前这里必然出现"图内嵌的 sourceCommit 与当前 worktree HEAD 不一致"——
+      // 一句与本次 stale 成因毫无关系的话，会把人引去查 commit
+      expect(r.stderr).not.toContain('sourceCommit');
+    });
+
+    it.each([
+      { reason: 'collector-fingerprint-unrecorded', phrase: '未记录 collector fingerprint' },
+      { reason: 'collector-fingerprint-invalid', phrase: '结构畸形' },
+    ])('W-001：$reason 型 stale → 文案精确对应该原因（不退化为 commit 型）', ({ reason, phrase }) => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      writeSpectraStub(repo.stubBinDir, { mode: 'fixed', state: 'stale', staleReasons: [reason] });
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain(phrase);
+      expect(r.stderr).not.toContain('sourceCommit');
+    });
+
+    it('W-001：commit + 指纹多原因并存 → 两条原因都出现在同一条 warning 里', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      writeSpectraStub(repo.stubBinDir, {
+        mode: 'fixed',
+        state: 'stale',
+        staleReasons: ['source-commit', 'collector-fingerprint-invalid'],
+      });
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain('sourceCommit');
+      expect(r.stderr).toContain('结构畸形');
+    });
+
+    it('W-001：stale 但 CLI 未产出 staleReasons（旧版本）→ 仍告警，且不谎报具体原因', () => {
+      seedPrimaryGraphWithCommit(worktreeHead());
+      // 不传 staleReasons → stub 输出的 JSON 里没有该字段（旧版本 CLI 形态）
+      writeSpectraStub(repo.stubBinDir, { mode: 'fixed', state: 'stale' });
+
+      const r = runSyncVerbose(repo.worktreeDir);
+
+      expect(r.status).toBe(0);
+      expect(r.stderr).toMatch(/stale/);
+      expect(r.stderr).toContain('未提供具体原因');
+      expect(r.stderr).not.toContain('sourceCommit');
     });
 
     // T025：--attempt-build 完整 shell 接线证据

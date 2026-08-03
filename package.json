@@ -30,6 +30,7 @@
     "lint": "tsc --noEmit",
     "typecheck:tests": "tsc -p tests/type-tests/tsconfig.json --noEmit && tsc -p tests/type-tests/f220.tsconfig.json --noEmit && tsc -p tests/type-tests/f222.tsconfig.json --noEmit",
     "docs:sync:agents": "node scripts/sync-agent-docs.mjs",
+    "fixtures:regen:collector-fingerprint": "npx tsx scripts/regen-collector-fingerprint-fixtures.ts",
     "repo:sync": "node scripts/repo-sync.mjs",
     "repo:check": "node scripts/repo-check.mjs",
     "drift:link": "node scripts/spec-drift-cli.mjs link",

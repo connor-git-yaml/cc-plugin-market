@@ -205,6 +205,19 @@
         "porcelainReadFailed": {
           "type": "boolean",
           "description": "FIX-3：git status --porcelain 读取失败时保守判 dirty 的标记"
+        },
+        "staleReasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "source-commit",
+              "collector-fingerprint",
+              "collector-fingerprint-unrecorded",
+              "collector-fingerprint-invalid"
+            ]
+          },
+          "description": "F249（FR-009）：state==='stale' 时的判别原因数组，顺序确定性，多原因并存时全部保留。可选字段（state!=='stale' 时缺席），故不进 required；但因本 $defs 为 additionalProperties:false，必须显式登记于此，否则携带该字段的 --json 输出会被判非法"
         }
       }
     }

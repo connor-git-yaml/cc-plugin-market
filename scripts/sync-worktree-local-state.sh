@@ -609,17 +609,26 @@ check_graph_freshness() {
     freshness_args+=(--spectra-bin "$SPECTRA_BIN")
   fi
 
-  local verdict state reason
+  local verdict state reason diagnostic
   verdict="$(node "$GRAPH_STATUS_HELPER" "${freshness_args[@]}" 2>/dev/null || true)"
   state="$(printf '%s' "$verdict" | sed -n 's/.*"state":"\([^"]*\)".*/\1/p')"
   reason="$(printf '%s' "$verdict" | sed -n 's/.*"reason":"\([^"]*\)".*/\1/p')"
+  # F249 W-001：stale 诊断文案由 helper 侧按 staleReasons 现算并整串回传，本脚本**不自行拼装原因**。
+  # 旧写法在这里硬编码"sourceCommit 与 HEAD 不一致"，于是三类指纹型 stale 全被渲染成 commit 型
+  # 诊断，人照提示去查 commit 反而被误导。helper 契约保证该串不含引号/反引号/$（可安全内插）。
+  diagnostic="$(printf '%s' "$verdict" | sed -n 's/.*"freshnessDiagnostic":"\([^"]*\)".*/\1/p')"
 
   case "$state" in
     fresh|dirty)
       : # 图与工作树一致（dirty 刻意不告警：提交前工作树几乎必然 dirty）
       ;;
     stale)
-      warn "graph 可能 stale：图内嵌的 sourceCommit 与当前 worktree HEAD 不一致。建议增量更新（spectra watch / spectra install --git）或重建（spectra batch）。"
+      # 兜底：字段缺席（旧版本 helper / 提取失败）时仍必须告警 stale，只是没有原因明细
+      if [[ -n "$diagnostic" ]]; then
+        warn "$diagnostic"
+      else
+        warn "graph 可能 stale：判定器未回传原因明细，请手动运行 spectra graph-quality --json 查看 staleReasons。"
+      fi
       ;;
     unknown-provenance)
       warn "graph provenance 不明（unknown-provenance${reason:+, reason=$reason}）：无法确认图的来源 commit，建议重建（spectra batch）后再依赖其结论。"

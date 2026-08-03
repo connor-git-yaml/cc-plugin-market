@@ -17,6 +17,48 @@ function createCheck(id, title, status, evidence = {}) {
   return { id, title, status, evidence };
 }
 
+/**
+ * F249 FR-013：单条 staleReason 的 warning 描述片段。
+ *
+ * 与 `src/cli/commands/graph-quality.ts` 的 `describeStaleReason` 是两套刻意分开的文案
+ * （CLI 给建议、repo:check 给一句话结论），共同约束只有一条：都必须含原因字面量，使
+ * "指纹型 stale 被描述成 sourceCommit 不一致"这类错配可被断言抓住。
+ *
+ * @param {string} reason
+ * @param {{ recordedSourceCommit?: string|null, currentHead?: string|null }} freshness
+ * @returns {string}
+ */
+function describeStaleReason(reason, freshness) {
+  switch (reason) {
+    case 'source-commit':
+      return `source-commit：图记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${freshness.currentHead ?? 'null'}）不一致`;
+    case 'collector-fingerprint':
+      return 'collector-fingerprint：图记录的 collector fingerprint 与当前采集器实现不一致（采集面或 behaviorVersion 已变更）';
+    case 'collector-fingerprint-unrecorded':
+      return 'collector-fingerprint-unrecorded：图未记录 collector fingerprint（旧图或直连建图 API 未写入），无法证明与当前采集器一致';
+    case 'collector-fingerprint-invalid':
+      return 'collector-fingerprint-invalid：图记录的 collector fingerprint 结构畸形，内容不可信';
+    default:
+      // 未来新增原因（本工具版本落后于产出报告的 CLI 版本）：原样回传而非静默丢弃
+      return `${reason}：未识别的 stale 原因（请升级 spectra / 本仓工具链）`;
+  }
+}
+
+/**
+ * stale 态的完整 warning 文案：逐条原因拼接，顺序沿用 CLI 给出的确定性顺序。
+ *
+ * `staleReasons` 缺席时回落到 commit 级描述——那是本机制上线前 stale 的唯一语义。
+ *
+ * @param {{ recordedSourceCommit?: string|null, currentHead?: string|null }} freshness
+ * @param {string[]} staleReasons
+ * @returns {string}
+ */
+function describeFreshnessStale(freshness, staleReasons) {
+  const reasons = staleReasons.length > 0 ? staleReasons : ['source-commit'];
+  const detail = reasons.map((reason) => describeStaleReason(reason, freshness)).join('；');
+  return `图产物已 stale（${reasons.join(', ')}）：${detail}。请重新运行 \`spectra batch --mode graph-only\` 重建图。`;
+}
+
 const EXIT_CODE_FOR_VERDICT = {
   pass: 0,
   'pass-with-warnings': 0,
@@ -217,17 +259,20 @@ export function validateGraphQuality({ projectRoot }) {
 
   // FR-010/FR-026：freshness——stale → warning；dirty MUST NOT 产生 warning（提交前工作树
   // 几乎必然 dirty，否则每次正常提交流程都会产生噪音告警）。
+  // F249 FR-012/FR-013：stale 的原因（commit 不一致 / collector 指纹不一致、未记录、畸形）
+  // 必须 reason-aware——文案与 evidence 两处都透传 staleReasons，缺一不可：只改人读文案会让
+  // 下游按结构化字段消费的工具（CI 聚合 / 状态面板）继续拿不到原因。
+  const staleReasons = report.freshness.staleReasons ?? [];
   checks.push(
-    createCheck('freshness', '图内容与当前 HEAD 一致（commit 级）', report.freshness.state === 'stale' ? 'warn' : 'pass', {
+    createCheck('freshness', '图内容与当前采集器/HEAD 一致（commit + collector 指纹级）', report.freshness.state === 'stale' ? 'warn' : 'pass', {
       state: report.freshness.state,
       recordedSourceCommit: report.freshness.recordedSourceCommit,
       currentHead: report.freshness.currentHead,
+      staleReasons,
     }),
   );
   if (report.freshness.state === 'stale') {
-    warnings.push(
-      `图产物记录的 sourceCommit（${report.freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${report.freshness.currentHead ?? 'null'}）不一致（commit 级 stale），请重新建图。`,
-    );
+    warnings.push(describeFreshnessStale(report.freshness, staleReasons));
   }
   // 'dirty' 态刻意不产生 warning（FR-026），checks 条目仍记录 state 供人工查看。
 

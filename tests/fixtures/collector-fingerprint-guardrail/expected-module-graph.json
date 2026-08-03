@@ -1,0 +1,149 @@
+{
+  "fixtureInputHash": "b623ce5e0dbe8cbb8d8e8839eb4df2f3494da5cbe8a8cb74f5d3d147442888b7",
+  "fingerprint": {
+    "formatVersion": 1,
+    "extensionSurface": {
+      "tsjsSkeletonWalk": {
+        "extensions": [
+          ".cjs",
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".ts",
+          ".tsx"
+        ],
+        "matchSemantics": "case-sensitive"
+      },
+      "pyWalk": {
+        "extensions": [
+          ".py",
+          ".pyi"
+        ],
+        "matchSemantics": "case-sensitive"
+      },
+      "genericAdapters": {
+        "extensions": [
+          ".go",
+          ".java"
+        ],
+        "matchSemantics": "case-insensitive"
+      },
+      "moduleDerivationScan": {
+        "extensions": [
+          ".cjs",
+          ".cts",
+          ".js",
+          ".jsx",
+          ".mjs",
+          ".mts",
+          ".ts",
+          ".tsx"
+        ],
+        "matchSemantics": "case-insensitive"
+      },
+      "pythonSymbolScan": {
+        "extensions": [
+          ".py"
+        ],
+        "matchSemantics": "case-sensitive"
+      }
+    },
+    "behaviorVersion": 1
+  },
+  "moduleGraph": {
+    "projectRoot": "<PROJECT_ROOT>",
+    "modules": [
+      {
+        "source": "src/module-only/entry.mjs",
+        "isOrphan": false,
+        "inDegree": 0,
+        "outDegree": 1,
+        "level": 0,
+        "language": "ts-js"
+      },
+      {
+        "source": "src/ts/bar.js",
+        "isOrphan": true,
+        "inDegree": 0,
+        "outDegree": 0,
+        "level": 0,
+        "language": "ts-js"
+      },
+      {
+        "source": "src/ts/bar.jsx",
+        "isOrphan": true,
+        "inDegree": 0,
+        "outDegree": 0,
+        "level": 0,
+        "language": "ts-js"
+      },
+      {
+        "source": "src/ts/foo.ts",
+        "isOrphan": false,
+        "inDegree": 1,
+        "outDegree": 0,
+        "level": 1,
+        "language": "ts-js"
+      },
+      {
+        "source": "src/ts/foo.tsx",
+        "isOrphan": true,
+        "inDegree": 0,
+        "outDegree": 0,
+        "level": 0,
+        "language": "ts-js"
+      }
+    ],
+    "edges": [
+      {
+        "from": "src/module-only/entry.mjs",
+        "to": "src/ts/foo.ts",
+        "isCircular": false,
+        "importType": "static"
+      }
+    ],
+    "topologicalOrder": [
+      "src/module-only/entry.mjs",
+      "src/ts/bar.js",
+      "src/ts/bar.jsx",
+      "src/ts/foo.tsx",
+      "src/ts/foo.ts"
+    ],
+    "sccs": [
+      {
+        "id": 0,
+        "modules": [
+          "src/ts/foo.ts"
+        ]
+      },
+      {
+        "id": 1,
+        "modules": [
+          "src/module-only/entry.mjs"
+        ]
+      },
+      {
+        "id": 2,
+        "modules": [
+          "src/ts/bar.js"
+        ]
+      },
+      {
+        "id": 3,
+        "modules": [
+          "src/ts/bar.jsx"
+        ]
+      },
+      {
+        "id": 4,
+        "modules": [
+          "src/ts/foo.tsx"
+        ]
+      }
+    ],
+    "totalModules": 5,
+    "totalEdges": 1,
+    "analyzedAt": "1970-01-01T00:00:00.000Z",
+    "mermaidSource": "graph TD\n  module_only_entry_mjs[\"module-only/entry.mjs\"]\n  ts_bar[\"ts/bar\"]\n  ts_bar[\"ts/bar\"]\n  ts_foo[\"ts/foo\"]\n  ts_foo[\"ts/foo\"]\n  module_only_entry_mjs --> ts_foo"
+  }
+}

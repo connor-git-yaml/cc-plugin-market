@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DocumentGenerator, ProjectContext } from '../interfaces.js';
 import type { ContentHasher } from './content-hasher.js';
+import { TSJS_SKELETON_WALK_SURFACE } from '../../collector-surface.js';
 
 // ============================================================
 // 常量
@@ -31,15 +32,19 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 /**
- * fallback 扫描时收集的文件扩展名
+ * fallback 扫描时收集的文件扩展名。
  *
- * 口径是"影响文档生成的输入文件"，比 collector 扫描面更宽（含 .json/.md/.yaml 等
- * 配置与文档），因此不是 collector 的镜像常量、无一致性测试约束；但其中的**源码扩展名
- * 子集**必须与 collector 扫描面保持同步 —— 否则源码改动不会让 cache key 变化，
- * 项目文档会错误复用旧缓存（F243：此前缺 .mjs/.cjs 即属此类脱节）。
+ * 口径是"影响文档生成的输入文件"，比 collector 扫描面更宽（含 .json/.md/.yaml 等配置与
+ * 文档）；但其中的**源码扩展名子集**必须与 collector 扫描面保持同步——否则源码改动不会让
+ * cache key 变化，项目文档会错误复用旧缓存（d27ba75 修复的"此前缺 .mjs/.cjs"即属此类脱节）。
+ *
+ * F249 FR-002 #6：该源码子集原为硬编码镜像（靠人工同步维持），现直接引用采集面事实源
+ * `TSJS_SKELETON_WALK_SURFACE`——"必须保持同步"从注释约定升级为结构保证，`.mjs`/`.cjs`
+ * 经事实源自动进入本集合。doc/config 扩展与本文件自身的 `toLowerCase()` 匹配语义属 cache
+ * fallback 自有职责，FR-002 明确排除在收敛范围外，保持原样。
  */
 const INCLUDED_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  ...TSJS_SKELETON_WALK_SURFACE.extensions,
   '.json', '.md', '.yaml', '.yml',
   '.toml', '.lock',
 ]);

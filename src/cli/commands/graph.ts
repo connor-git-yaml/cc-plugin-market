@@ -198,6 +198,9 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
     // F217 FR-009：本命令从缓存 architectureIR / 已生成 spec / crossRefs 三路合并产出，
     // 不解析源码，MUST 显式写 null（盖当前 HEAD 属于 provenance 伪造）。
     graphJson.graph.sourceCommit = null;
+    // F249 FR-007：同一诚实降级理由——本命令没有跑任何采集管线，写入"当前采集器指纹"会
+    // 谎称这张图由当前采集面产出。写 null 让 freshness 判定按 unrecorded 保守处理。
+    graphJson.graph.fingerprint = null;
     const writtenPath = writeKnowledgeGraph(graphJson, outputDir);
     console.log(`✓ graph.json 已写入: ${writtenPath}`);
   } catch (err) {

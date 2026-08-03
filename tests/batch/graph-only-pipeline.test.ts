@@ -41,8 +41,33 @@ vi.mock('../../src/panoramic/anchoring/providers/factory.js', async (orig) => {
   return { ...actual, createEmbeddingProvider: llmSpies.createEmbeddingProvider };
 });
 
+// F249 T032：module-derivation 整模块 partial mock —— `buildModuleGraphForProject` 换成 spy，
+// 用于证明 graph-only 链路全程不触达 moduleDerivationScan 管线（FR-006 的前提断言）。
+// 必须 hoisted + 整模块 mock：graph-assembly.ts 是静态 import 该函数，事后 vi.spyOn(模块对象)
+// 改不到已绑定的 import binding。
+const moduleDerivationSpies = vi.hoisted(() => ({
+  buildModuleGraphForProject: vi.fn(),
+}));
+
+vi.mock('../../src/knowledge-graph/module-derivation.js', async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  const real = actual['buildModuleGraphForProject'] as (
+    ...args: unknown[]
+  ) => Promise<unknown>;
+  // 委托真实实现：本测试要的是"有没有被调用"，不是"调用后返回什么"——
+  // 换成 stub 会让其他用例（若将来触达该路径）静默拿到假图。
+  moduleDerivationSpies.buildModuleGraphForProject.mockImplementation((...args: unknown[]) =>
+    real(...args),
+  );
+  return { ...actual, buildModuleGraphForProject: moduleDerivationSpies.buildModuleGraphForProject };
+});
+
 import { buildAstGraphOnly } from '../../src/batch/batch-orchestrator.js';
 import { resolveSourceCommit } from '../../src/panoramic/graph/source-commit.js';
+import {
+  computeCollectorFingerprint,
+  isValidCollectorFingerprint,
+} from '../../src/panoramic/graph/collector-fingerprint.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 
 const tmpDirs: string[] = [];
@@ -223,6 +248,69 @@ describe('buildAstGraphOnly — F217 T029: generic collector 接入 + sourceComm
 
     expect(graph.graph.sourceCommit).toBe(resolveSourceCommit(dir));
     expect(graph.graph.sourceCommit).toBeNull();
+  });
+});
+
+// ============================================================
+// F249 T031/T032 — graph-only 写入路径的 collector fingerprint（SC-011/SC-013）
+// ============================================================
+
+describe('buildAstGraphOnly — F249: collector fingerprint 写入（SC-011/SC-013）', () => {
+  it('SC-011：graph-only 产出图 100% 含合法 fingerprint（isValidCollectorFingerprint=true）', async () => {
+    const dir = makeProject({ ...TS_FIXTURE, ...PY_FIXTURE });
+    await buildAstGraphOnly(dir);
+    const graph = readGraph(dir);
+
+    expect(graph.graph.fingerprint).toBeDefined();
+    expect(graph.graph.fingerprint).not.toBeNull();
+    expect(isValidCollectorFingerprint(graph.graph.fingerprint)).toBe(true);
+  });
+
+  it('SC-013：写入图的指纹与公共导出 computeCollectorFingerprint() 序列化后 byte-identical', async () => {
+    const dir = makeProject(TS_FIXTURE);
+    await buildAstGraphOnly(dir);
+    const graph = readGraph(dir);
+
+    // byte-identical 而非仅"语义相等"：直连 API 与内部写入路径必须产出同一份字节
+    expect(JSON.stringify(graph.graph.fingerprint)).toBe(
+      JSON.stringify(computeCollectorFingerprint()),
+    );
+  });
+
+  it('空图（无可解析源码）同样写入合法 fingerprint（指纹描述采集器，与图内容多少无关）', async () => {
+    const dir = makeProject({ 'README.md': '# empty\n' });
+    await buildAstGraphOnly(dir);
+    const graph = readGraph(dir);
+
+    expect(isValidCollectorFingerprint(graph.graph.fingerprint)).toBe(true);
+  });
+
+  // ── T032：FR-006 前提锁定 ──
+
+  it('T032 前置：spy 确实拦截到了 buildModuleGraphForProject（否则"零调用"断言是空转的）', async () => {
+    // "断言某函数没被调用"最典型的假绿是 mock 根本没生效（spy 永远 0 次，测试永远绿）。
+    // 先证明 spy 在同一 module specifier 上是活的，零调用断言才有意义。
+    const { buildModuleGraphForProject } = await import(
+      '../../src/knowledge-graph/module-derivation.js'
+    );
+    const dir = makeProject(TS_FIXTURE);
+    moduleDerivationSpies.buildModuleGraphForProject.mockClear();
+
+    await buildModuleGraphForProject(dir);
+
+    expect(moduleDerivationSpies.buildModuleGraphForProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('FR-006：buildAstGraphOnly 全程不调用 buildModuleGraphForProject（moduleDerivationScan 仅 full batch 消费）', async () => {
+    // 该前提是 SC-002/SC-005 护栏盲区判定的基础：graph-only 不执行 module 派生扫描，
+    // 因此 a-track 重建对比永远抓不到 #7/#8 管线的行为漂移（护栏必须双轨）。
+    // 若哪天 graph-only 悄悄接入了该管线，本断言先红，而不是让盲区判定悄悄失去依据。
+    const dir = makeProject({ ...TS_FIXTURE, ...PY_FIXTURE });
+    moduleDerivationSpies.buildModuleGraphForProject.mockClear();
+
+    await buildAstGraphOnly(dir);
+
+    expect(moduleDerivationSpies.buildModuleGraphForProject).toHaveBeenCalledTimes(0);
   });
 });
 

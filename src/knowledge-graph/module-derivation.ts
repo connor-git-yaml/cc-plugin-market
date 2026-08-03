@@ -27,6 +27,7 @@ import { analyzeFileInternal } from '../core/ast-analyzer.js';
 import { scanFiles } from '../utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { createLogger } from '../panoramic/utils/logger.js';
+import { MODULE_DERIVATION_SCAN_SURFACE } from '../collector-surface.js';
 
 const logger = createLogger('module-derivation');
 
@@ -349,9 +350,11 @@ export async function buildModuleGraphForProject(
   // ── 1. 扫描 TS/JS 源文件 ──
   const registry = LanguageAdapterRegistry.getInstance();
   const tsJsAdapter = registry.getAllAdapters().find((a) => a.id === 'ts-js');
+  // F249 FR-002 #8：registry 为空时的 fallback 面原为 ×8 硬编码字面量（与
+  // ts-js-adapter.ts 的 `extensions` 构成镜像对），现收敛为引用采集面事实源。
   const tsJsExts = tsJsAdapter
     ? new Set(tsJsAdapter.extensions)
-    : new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts']);
+    : new Set(MODULE_DERIVATION_SCAN_SURFACE.extensions);
 
   const includeOnlyRe = options.includeOnly ? new RegExp(options.includeOnly) : /^src\//;
   const srcDir = path.join(resolvedRoot, 'src');

@@ -40,6 +40,10 @@ interface FreshnessVerdict {
   state: string;
   recordedSourceCommit?: string | null;
   currentHead?: string | null;
+  /** F249 FR-013：stale 原因透传（非 stale 或旧版本 CLI 未产出时为空数组）。 */
+  staleReasons?: string[];
+  /** F249 W-001：stale 态的完整 reason-aware 诊断串（bash 侧原样打印）。 */
+  freshnessDiagnostic?: string;
   reason?: string;
   receivedState?: string;
 }
@@ -90,6 +94,10 @@ const checkFreshness = statusCore.checkFreshness as (
   projectRoot: string,
   options: { graphJsonPath: string; spectraBin?: string; deadlineMs?: number; graceMs?: number },
 ) => Promise<FreshnessVerdict>;
+const buildFreshnessDiagnostic = statusCore.buildFreshnessDiagnostic as (verdict: {
+  state: string;
+  staleReasons?: string[];
+}) => string;
 const attemptLocalGraphBuild = statusCore.attemptLocalGraphBuild as (options: {
   projectRoot: string;
   spectraBin?: string;
@@ -408,6 +416,58 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     expect(verdict.currentHead).toBe('bb');
   });
 
+  // ── F249 T027/FR-013：staleReasons 透传（bootstrap-status 消费面）──
+
+  it('F249：CLI 报告含 staleReasons 时原样透传（顺序不变，不折叠不重排）', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"overallVerdict":"pass-with-warnings","freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"bb","staleReasons":["source-commit","collector-fingerprint-invalid"]}}\nJSON`,
+    );
+    expect(verdict.state).toBe('stale');
+    expect(verdict.staleReasons).toEqual(['source-commit', 'collector-fingerprint-invalid']);
+  });
+
+  it('F249：单一指纹型原因同样透传（不被误映射为 source-commit）', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"aa","staleReasons":["collector-fingerprint-unrecorded"]}}\nJSON`,
+    );
+    expect(verdict.staleReasons).toEqual(['collector-fingerprint-unrecorded']);
+  });
+
+  it('F249：CLI 报告未含 staleReasons（fresh 态 / 旧版本 CLI）→ 空数组，不为 undefined', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"fresh","recordedSourceCommit":"aa","currentHead":"aa"}}\nJSON`,
+    );
+    expect(verdict.staleReasons).toEqual([]);
+  });
+
+  it('F249：staleReasons 为非数组畸形值 → 归一化为空数组（不把畸形值透传给下游）', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"bb","staleReasons":"source-commit"}}\nJSON`,
+    );
+    expect(verdict.staleReasons).toEqual([]);
+  });
+
+  // ── F249 W-001：checkFreshness 顺带回传 reason-aware 完整诊断串（bash 侧不再自行拼装）──
+
+  it('W-001：stale 判定回传 freshnessDiagnostic，内容按实际 staleReasons 现算', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"aa","staleReasons":["collector-fingerprint-invalid"]}}\nJSON`,
+    );
+    expect(verdict.freshnessDiagnostic).toContain('结构畸形');
+    // 关键反例：指纹型 stale 的诊断里 MUST NOT 出现 commit 型说法
+    expect(verdict.freshnessDiagnostic).not.toContain('sourceCommit');
+  });
+
+  it('W-001：非 stale 态回传空诊断串（不给 fresh/dirty 编造诊断）', async () => {
+    const verdict = await runWithFakeCli(
+      `cat <<'JSON'\n{"freshness":{"state":"fresh","recordedSourceCommit":"aa","currentHead":"aa"}}\nJSON`,
+    );
+    expect(verdict.freshnessDiagnostic).toBe('');
+  });
+  // FRESHNESS_STATES / ACCEPTED_FRESHNESS_EXIT_CODES 未因本需求变更这一点，由本 describe
+  // 既有的行为断言承担（四态原样透传 / exit 3 判 unexpected-exit-code / 枚举外 state 判
+  // unknown-state），不为此把两个模块私有常量提升为导出——只为断言而扩公共 API 是错误的交换。
+
   it('exit 1（强不变量违反）携带合法 JSON 时仍先取 stdout 解析', async () => {
     const verdict = await runWithFakeCli(
       `cat <<'JSON'\n{"overallVerdict":"fail-strong-invariant","freshness":{"state":"stale","recordedSourceCommit":"aa","currentHead":"bb"}}\nJSON\nexit 1`,
@@ -525,6 +585,110 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
     expect(verdict.reason).not.toBe('spectra-cli-missing');
     expect(['fresh', 'dirty', 'stale', 'unknown-provenance']).toContain(verdict.state);
   }, 30000);
+});
+
+describe('F249 W-001 — buildFreshnessDiagnostic（四类单原因 + 多原因 + 退化形态）', () => {
+  /** 四类单一原因各自的判别关键词（同时断言"不含其他三类的关键词"，防串台）。 */
+  const SINGLE_REASON_CASES: ReadonlyArray<{
+    reason: string;
+    mustContain: string;
+    mustNotContain: readonly string[];
+  }> = [
+    {
+      reason: 'source-commit',
+      mustContain: 'sourceCommit',
+      mustNotContain: ['fingerprint'],
+    },
+    {
+      reason: 'collector-fingerprint',
+      mustContain: 'collector fingerprint 与当前采集器实现不一致',
+      mustNotContain: ['sourceCommit', '未记录', '畸形'],
+    },
+    {
+      reason: 'collector-fingerprint-unrecorded',
+      mustContain: '未记录 collector fingerprint',
+      mustNotContain: ['sourceCommit', '畸形'],
+    },
+    {
+      reason: 'collector-fingerprint-invalid',
+      mustContain: '结构畸形',
+      mustNotContain: ['sourceCommit', '未记录'],
+    },
+  ];
+
+  it.each(SINGLE_REASON_CASES)(
+    '单原因 $reason：诊断串精确对应该原因，且不混入其他原因的说法',
+    ({ reason, mustContain, mustNotContain }) => {
+      const diagnostic = buildFreshnessDiagnostic({ state: 'stale', staleReasons: [reason] });
+
+      expect(diagnostic).toContain('stale');
+      expect(diagnostic).toContain(mustContain);
+      for (const forbidden of mustNotContain) {
+        expect(diagnostic).not.toContain(forbidden);
+      }
+      // 每条诊断都要带下一步动作，否则人看到告警不知道该做什么
+      expect(diagnostic).toContain('spectra batch --mode graph-only');
+    },
+  );
+
+  it('多原因并存：全部原因都出现且顺序与入参一致（不排序、不去重、不折叠）', () => {
+    const diagnostic = buildFreshnessDiagnostic({
+      state: 'stale',
+      staleReasons: ['source-commit', 'collector-fingerprint-invalid'],
+    });
+
+    expect(diagnostic).toContain('sourceCommit');
+    expect(diagnostic).toContain('结构畸形');
+    expect(diagnostic.indexOf('sourceCommit')).toBeLessThan(diagnostic.indexOf('结构畸形'));
+
+    // 反向顺序入参 → 诊断串顺序也反过来（证明确实沿用入参顺序而非内部固定顺序）
+    const reversed = buildFreshnessDiagnostic({
+      state: 'stale',
+      staleReasons: ['collector-fingerprint-invalid', 'source-commit'],
+    });
+    expect(reversed.indexOf('结构畸形')).toBeLessThan(reversed.indexOf('sourceCommit'));
+  });
+
+  it('staleReasons 为空（旧版本 CLI）：诚实说明原因未提供，MUST NOT 猜成 commit 型', () => {
+    const diagnostic = buildFreshnessDiagnostic({ state: 'stale', staleReasons: [] });
+
+    expect(diagnostic).toContain('未提供具体原因');
+    expect(diagnostic).not.toContain('sourceCommit');
+  });
+
+  it('未知原因值（CLI 比 helper 新）：原样回显收到的值，不静默丢弃', () => {
+    const diagnostic = buildFreshnessDiagnostic({
+      state: 'stale',
+      staleReasons: ['some-future-reason'],
+    });
+
+    expect(diagnostic).toContain('some-future-reason');
+  });
+
+  it('非 stale 四态一律返回空串（诊断串只服务 stale 分支）', () => {
+    for (const state of ['fresh', 'dirty', 'unknown-provenance']) {
+      expect(buildFreshnessDiagnostic({ state, staleReasons: ['source-commit'] })).toBe('');
+    }
+  });
+
+  it('诊断串不含 shell 危险字符（bash 侧要把它内插进双引号字符串）', () => {
+    const samples = [
+      buildFreshnessDiagnostic({ state: 'stale', staleReasons: [] }),
+      buildFreshnessDiagnostic({
+        state: 'stale',
+        staleReasons: [
+          'source-commit',
+          'collector-fingerprint',
+          'collector-fingerprint-unrecorded',
+          'collector-fingerprint-invalid',
+        ],
+      }),
+    ];
+    for (const diagnostic of samples) {
+      // 双引号/反斜杠会破坏 sed 提取；反引号与 $ 会在 shell 双引号语境触发命令替换/变量展开
+      expect(diagnostic).not.toMatch(/["\\`$]/);
+    }
+  });
 });
 
 describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案）', () => {

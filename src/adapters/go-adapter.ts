@@ -17,13 +17,15 @@ import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
 import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallback.js';
 import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
+import { GO_ADAPTER_SURFACE } from '../collector-surface.js';
 
 export class GoLanguageAdapter implements LanguageAdapter {
   readonly id = 'go';
 
   readonly languages: readonly Language[] = ['go'];
 
-  readonly extensions: ReadonlySet<string> = new Set(['.go']);
+  /** F249 FR-002 #3：直接持有采集面事实源的引用（不复制字面量），失败模式退化为"导入断裂"。 */
+  readonly extensions: ReadonlySet<string> = GO_ADAPTER_SURFACE.extensions;
 
   readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
     'vendor',

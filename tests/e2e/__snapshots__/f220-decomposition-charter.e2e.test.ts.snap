@@ -36,6 +36,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 7,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 6,
@@ -415,6 +465,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 11,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 9,
@@ -868,6 +968,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 12,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 13,
@@ -1400,6 +1550,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 13,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 13,
@@ -1942,6 +2142,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 0,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 0,
@@ -2155,6 +2405,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 12,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 13,
@@ -2688,6 +2988,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 12,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 13,
@@ -3259,6 +3609,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 7,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 6,
@@ -3706,6 +4106,56 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "directed": false,
     "graph": {
       "edgeCount": 12,
+      "fingerprint": {
+        "behaviorVersion": 1,
+        "extensionSurface": {
+          "genericAdapters": {
+            "extensions": [
+              ".go",
+              ".java",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "moduleDerivationScan": {
+            "extensions": [
+              ".cjs",
+              ".cts",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".mts",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-insensitive",
+          },
+          "pyWalk": {
+            "extensions": [
+              ".py",
+              ".pyi",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "pythonSymbolScan": {
+            "extensions": [
+              ".py",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+          "tsjsSkeletonWalk": {
+            "extensions": [
+              ".cjs",
+              ".js",
+              ".jsx",
+              ".mjs",
+              ".ts",
+              ".tsx",
+            ],
+            "matchSemantics": "case-sensitive",
+          },
+        },
+        "formatVersion": 1,
+      },
       "inputHash": "<HASH>",
       "name": "spectra-knowledge-graph",
       "nodeCount": 13,

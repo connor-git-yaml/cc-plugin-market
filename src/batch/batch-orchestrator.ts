@@ -73,7 +73,12 @@ import type { DocsBundleProfileSummary } from '../panoramic/models/docs-bundle-t
 import { BATCH_OUTPUT_SUBDIRS } from '../panoramic/output-filenames.js';
 import { collectGenericLanguageCodeSkeletons } from './generic-language-skeleton-collector.js';
 import { resolveSourceCommit } from '../panoramic/graph/source-commit.js';
-import { buildKnowledgeGraph, writeKnowledgeGraph, normalizeGraphForWrite } from '../panoramic/graph/index.js';
+import {
+  buildKnowledgeGraph,
+  computeCollectorFingerprint,
+  writeKnowledgeGraph,
+  normalizeGraphForWrite,
+} from '../panoramic/graph/index.js';
 import {
   buildUnifiedGraph,
   setCurrentUnifiedGraph,
@@ -1498,6 +1503,8 @@ export async function runBatch(
       // F217 FR-009：runBatch 主链基于当前工作树 AST 重新分析源码，写盘前注入 sourceCommit
       // （非 git 仓库 / rev-parse 失败时 resolveSourceCommit 返回 null，不抛异常）
       graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot);
+      // F249 FR-006：与 graph-only 链路共用同一份全局组合指纹（零 I/O，见 collector-fingerprint.ts）
+      graphJson.graph.fingerprint = computeCollectorFingerprint();
 
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
       const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);

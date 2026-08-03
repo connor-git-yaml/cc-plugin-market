@@ -35,6 +35,10 @@ import { scanFiles } from '../../src/utils/file-scanner.js';
 import { LanguageAdapterRegistry } from '../../src/adapters/language-adapter-registry.js';
 import { bootstrapAdapters } from '../../src/adapters/index.js';
 import { resolveSourceCommit } from '../../src/panoramic/graph/source-commit.js';
+import {
+  computeCollectorFingerprint,
+  isValidCollectorFingerprint,
+} from '../../src/panoramic/graph/collector-fingerprint.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 import type { ModuleGraph, ModuleEdge } from '../../src/knowledge-graph/module-derivation.js';
 import type { BatchState } from '../../src/models/module-spec.js';
@@ -563,5 +567,28 @@ describe('runBatch — F217 T029: generic collector 接入 + sourceCommit 注入
     // 非 git 临时目录 → resolveSourceCommit 应为 null，与写盘产物一致
     expect(graph.graph.sourceCommit).toBe(resolveSourceCommit(projectRoot));
     expect(graph.graph.sourceCommit).toBeNull();
+  }, 30_000);
+
+  // ── F249 T031：collector fingerprint 写入（SC-011/SC-013）──
+
+  it('F249 SC-011/SC-013：runBatch 主链产出图含合法 fingerprint，且与 computeCollectorFingerprint() byte-identical', async () => {
+    fs.writeFileSync(
+      path.join(projectRoot, 'app.ts'),
+      'export function app(): number {\n  return 1;\n}\n',
+      'utf-8',
+    );
+
+    const result = await runBatch(projectRoot, { force: false });
+    expect(result.failed).toHaveLength(0);
+
+    const graph = readGraph(projectRoot);
+    expect(graph.graph.fingerprint).toBeDefined();
+    expect(graph.graph.fingerprint).not.toBeNull();
+    expect(isValidCollectorFingerprint(graph.graph.fingerprint)).toBe(true);
+    // 与 graph-only 路径（tests/batch/graph-only-pipeline.test.ts 同名断言）共用同一份
+    // 全局组合指纹 —— FR-006 明确不按 --mode 区分 producer 版本
+    expect(JSON.stringify(graph.graph.fingerprint)).toBe(
+      JSON.stringify(computeCollectorFingerprint()),
+    );
   }, 30_000);
 });

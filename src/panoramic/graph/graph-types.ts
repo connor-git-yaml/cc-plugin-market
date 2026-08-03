@@ -4,6 +4,7 @@
  * 遵循 NetworkX node-link 格式，供下游 Feature 102/105/107 消费
  */
 import type { ExtractionResult } from '../../extraction/extraction-types.js';
+import type { CollectorFingerprint } from './collector-fingerprint.js';
 
 // ============================================================
 // 置信度类型
@@ -189,6 +190,19 @@ export interface GraphJSON {
      * 不 bump schemaVersion（决策 5：纯可选新增字段，向后兼容）。
      */
     sourceCommit?: string | null;
+    /**
+     * F249 新增（FR-006/FR-007）：写盘链路记录的 collector fingerprint——"这张图是由哪一版
+     * 采集器行为产出的"，与 `sourceCommit`（"基于哪一版源码"）互补，共同构成图产物 provenance。
+     *
+     * - `CollectorFingerprint`：AST 重建链路（batch 主链 / graph-only）写入的当前指纹
+     * - `null`：非 AST 重建的写盘路径（如 `spectra graph`，不解析源码，禁止凭空推导指纹——
+     *   与 `sourceCommit` 同一诚实降级惯例，FR-007）
+     * - `undefined`：字段缺失（本 Feature 上线前的旧图产物）；与 `null` 同等按
+     *   `collector-fingerprint-unrecorded` 保守处理（FR-010），非异常
+     *
+     * 不 bump schemaVersion（延续 F217 决策 5：纯可选新增字段，向后兼容）。
+     */
+    fingerprint?: CollectorFingerprint | null;
   };
   /** 节点数组 */
   nodes: GraphNode[];

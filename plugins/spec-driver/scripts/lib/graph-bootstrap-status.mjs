@@ -46,6 +46,49 @@ export const MAX_JSON_BYTES = 256 * 1024 * 1024;
 const FRESHNESS_STATES = new Set(['fresh', 'dirty', 'stale', 'unknown-provenance']);
 const ACCEPTED_FRESHNESS_EXIT_CODES = new Set([0, 1, 2]);
 
+/**
+ * F249 W-001：`staleReasons` 原因值 → 人读原因短语。
+ *
+ * 判定实现只有一份（编译进全局 CLI 的 F217/F249 实现），**文案渲染也只有一份**——放在这里
+ * 而不是 bash 侧：shell 自己按 state 拼固定文案时，只能说出它唯一知道的那句话
+ * （"sourceCommit 与 HEAD 不一致"），于是三类指纹型 stale 全被渲染成 commit 型诊断，
+ * 人按提示去查 commit 却查不出任何问题。sed 提数组再在 bash 里做 case 映射等于把这张表
+ * 抄第二遍，抄错就是同一类漂移。
+ *
+ * 文案硬约束（供 bash 直接内插进双引号字符串）：**不得含双引号、反引号、`$`、反斜杠**。
+ * 反引号/`$` 会在 shell 双引号语境里触发命令替换/变量展开，双引号与反斜杠会破坏 sed 提取。
+ */
+const STALE_REASON_PHRASES = {
+  'source-commit': '图内嵌的 sourceCommit 与当前 worktree HEAD 不一致',
+  'collector-fingerprint': '图记录的 collector fingerprint 与当前采集器实现不一致（采集面或行为版本已变）',
+  'collector-fingerprint-unrecorded': '图未记录 collector fingerprint（本机制上线前的旧图，或绕过 CLI 写入）',
+  'collector-fingerprint-invalid': '图记录的 collector fingerprint 结构畸形，不可信',
+};
+
+const STALE_NEXT_STEP = '建议增量更新（spectra watch / spectra install --git）或重建（spectra batch --mode graph-only）。';
+
+/**
+ * 组装 reason-aware 的完整诊断串（stale 态用；非 stale 态返回空串）。
+ *
+ * 多原因用「；」串联，顺序原样沿用 CLI 给出的确定性顺序（不排序、不去重、不折叠）。
+ * 未知原因值原样回显而非丢弃：CLI 版本比本 helper 新时，人至少能看到收到了什么。
+ *
+ * @param {{ state: string, staleReasons?: string[] }} verdict
+ * @returns {string}
+ */
+export function buildFreshnessDiagnostic(verdict) {
+  if (verdict.state !== 'stale') return '';
+  const reasons = Array.isArray(verdict.staleReasons) ? verdict.staleReasons : [];
+  if (reasons.length === 0) {
+    // 旧版本 CLI 未产出 staleReasons：诚实说"原因未提供"，而不是替它猜一个 commit 型原因
+    return `graph 可能 stale：判定器未提供具体原因（可能是旧版本 CLI）。${STALE_NEXT_STEP}`;
+  }
+  const phrases = reasons.map(
+    (reason) => STALE_REASON_PHRASES[reason] ?? `未知原因 ${String(reason)}`,
+  );
+  return `graph 可能 stale：${phrases.join('；')}。${STALE_NEXT_STEP}`;
+}
+
 const STATUS_REL = path.join('specs', '_meta', 'graph-bootstrap-status.json');
 const LEGACY_SIDECAR_REL = path.join('specs', '_meta', '.graph-source-commit');
 const GRAPH_REL = path.join('specs', '_meta', 'graph.json');
@@ -348,7 +391,10 @@ function runBoundedProcess({ command, args, cwd, deadlineMs, graceMs, captureStd
  *
  * @param {string} projectRoot
  * @param {{ graphJsonPath: string, spectraBin?: string }} options
- * @returns {{ state: string, recordedSourceCommit?: string|null, currentHead?: string|null, reason?: string }}
+ * @returns {{ state: string, recordedSourceCommit?: string|null, currentHead?: string|null,
+ *             staleReasons?: string[], freshnessDiagnostic?: string, reason?: string }}
+ *   `freshnessDiagnostic`：stale 态的完整 reason-aware 人读诊断串（非 stale 态为空串），
+ *   供 bash 侧原样打印（W-001）；判定失败的早退路径不含该字段（那些路径本就不是 stale）。
  */
 export async function checkFreshness(
   projectRoot,
@@ -414,11 +460,16 @@ export async function checkFreshness(
     };
   }
 
-  return {
+  const verdict = {
     state: freshness.state,
     recordedSourceCommit: freshness.recordedSourceCommit ?? null,
     currentHead: freshness.currentHead ?? null,
+    // F249 FR-013：stale 原因原样透传（顺序保持 CLI 给出的确定性顺序）。非 stale 态或旧版本
+    // CLI 未产出该字段时为空数组——不臆造原因，也不让下游对 undefined 做存在性判断。
+    staleReasons: Array.isArray(freshness.staleReasons) ? freshness.staleReasons : [],
   };
+  // W-001：把完整诊断串一并回传，bash 侧原样打印即可（不在 shell 里二次拼装原因文案）
+  return { ...verdict, freshnessDiagnostic: buildFreshnessDiagnostic(verdict) };
 }
 
 /**

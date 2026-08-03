@@ -21,7 +21,11 @@ import type { LanguageGroup } from '../language-grouper.js';
 import { collectGenericLanguageCodeSkeletons } from '../generic-language-skeleton-collector.js';
 import { collectPythonCodeSkeletons, collectTsJsCodeSkeletons } from './source-discovery.js';
 import { buildUnifiedGraph } from '../../knowledge-graph/index.js';
-import { buildKnowledgeGraph, writeKnowledgeGraph } from '../../panoramic/graph/index.js';
+import {
+  buildKnowledgeGraph,
+  computeCollectorFingerprint,
+  writeKnowledgeGraph,
+} from '../../panoramic/graph/index.js';
 import { resolveSourceCommit } from '../../panoramic/graph/source-commit.js';
 
 const logger = createLogger('batch-orchestrator');
@@ -253,6 +257,9 @@ export async function buildAstGraphOnly(
   // F217 FR-009：graph-only 基于当前工作树 AST 重新分析源码，写盘前注入 sourceCommit
   // （非 git 仓库 / rev-parse 失败时 resolveSourceCommit 返回 null，不抛异常）
   graphJson.graph.sourceCommit = resolveSourceCommit(resolvedRoot);
+  // F249 FR-006：与 batch 主链共用同一份全局组合指纹（不按 --mode 区分——mode 是运行参数
+  // 而非采集器版本标识），使两条链路产出的图在 freshness 判定下等价可比。
+  graphJson.graph.fingerprint = computeCollectorFingerprint();
 
   // 步骤 5：复用 F183 写盘出口（内部 portable 守卫扫描 → normalizeGraphForWrite → 原子写）
   const graphPath = writeKnowledgeGraph(graphJson, resolvedOutputDir, {

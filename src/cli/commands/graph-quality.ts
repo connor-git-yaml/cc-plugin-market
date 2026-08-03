@@ -20,6 +20,7 @@ import { createIgnoreOracle } from '../../panoramic/graph/quality/ignore-oracle.
 import { evaluateFreshness } from '../../panoramic/graph/source-commit.js';
 import { LanguageAdapterRegistry } from '../../adapters/language-adapter-registry.js';
 import type {
+  FreshnessStaleReason,
   GraphQualityReport,
   GraphFreshnessVerdict,
   OrphanExceptionCategory,
@@ -48,7 +49,11 @@ const GRAPH_QUALITY_HELP = `spectra graph-quality — 图质量体检（六指�
   - orphan-ratio:           source symbol orphan 比例
   - dangling-edge:          悬空边（强不变量）
   - legacy-ignored:         遗留 # 节点 / ignored 路径节点
-  - freshness:              graph.sourceCommit 与当前 HEAD 的一致性（fresh/dirty/stale/unknown-provenance）
+  - freshness:              双维一致性（fresh/dirty/stale/unknown-provenance）：
+                            ① graph.sourceCommit 与当前 HEAD 是否一致
+                            ② graph.fingerprint（collector fingerprint）与当前采集器实现是否一致
+                            任一不一致即 stale，具体原因见 staleReasons（source-commit /
+                            collector-fingerprint / -unrecorded / -invalid）
 
   git 上下文固定为运行本命令时的 process.cwd()（即使显式 --graph 指向其他路径的
   graph.json，也不反推其所属仓库根，避免多 worktree/嵌套仓库场景误判）。
@@ -193,6 +198,46 @@ function computeOverallVerdict(
   return 'pass';
 }
 
+/**
+ * F249 FR-013：把单条 `staleReasons` 原因渲染为面向维护者的修复建议。
+ *
+ * 每条文案都显式含原因字面量（如 `collector-fingerprint-unrecorded`），让人读输出与
+ * `--json` 的 `staleReasons` 可对照，也让"指纹型问题被渲染成 sourceCommit 诊断"这类
+ * 错配在测试中可被字面量断言直接抓住。
+ *
+ * 严重度措辞（FR-011/SC-006）：四类原因统一使用"请重新运行 …… 重建图"的祈使句式，
+ * 指纹型不弱于 sourceCommit 型——三者都是"这张图不可信、必须重建"，没有轻重之分。
+ */
+function describeStaleReason(
+  reason: FreshnessStaleReason,
+  freshness: GraphFreshnessVerdict,
+): string {
+  switch (reason) {
+    case 'source-commit':
+      return `[source-commit] 图产物记录的 sourceCommit（${freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${freshness.currentHead ?? 'null'}）不一致，请重新运行 \`spectra batch --mode graph-only\` 重建图。`;
+    case 'collector-fingerprint':
+      return '[collector-fingerprint] 图产物记录的 collector fingerprint 与当前采集器实现不一致（采集面或 behaviorVersion 已变更），该图可能遗漏/多计文件，请重新运行 `spectra batch --mode graph-only` 重建图。';
+    case 'collector-fingerprint-unrecorded':
+      return '[collector-fingerprint-unrecorded] 图产物未记录 collector fingerprint（本机制上线前生成的旧图，或绕过 CLI 直连建图 API 未写入指纹），无法证明其与当前采集器行为一致，请重新运行 `spectra batch --mode graph-only` 重建图。';
+    case 'collector-fingerprint-invalid':
+      return '[collector-fingerprint-invalid] 图产物记录的 collector fingerprint 结构畸形（字段缺失/类型错误/formatVersion 不受支持），内容不可信，请重新运行 `spectra batch --mode graph-only` 重建图。';
+  }
+}
+
+/**
+ * stale 态的 nextSteps：逐条原因各出一句，顺序沿用 `staleReasons` 的确定性顺序。
+ *
+ * `staleReasons` 缺席时（旧版本判定器产出的报告，或字段被下游裁剪）回落到 sourceCommit
+ * 型文案——这是本命令上线本机制前的唯一 stale 语义，比"stale 却给不出任何建议"更有用。
+ */
+function buildStaleNextSteps(freshness: GraphFreshnessVerdict): string[] {
+  const reasons = freshness.staleReasons ?? [];
+  if (reasons.length === 0) {
+    return [describeStaleReason('source-commit', freshness)];
+  }
+  return reasons.map((reason) => describeStaleReason(reason, freshness));
+}
+
 /** SC-011：为每个 fail/stale 项生成面向维护者的下一步修复建议文本。 */
 function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[] {
   const steps: string[] = [];
@@ -229,9 +274,7 @@ function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[]
     }
   }
   if (report.freshness.state === 'stale') {
-    steps.push(
-      `图产物记录的 sourceCommit（${report.freshness.recordedSourceCommit ?? 'null'}）与当前 HEAD（${report.freshness.currentHead ?? 'null'}）不一致，请重新运行 \`spectra batch --mode graph-only\` 重建图。`,
-    );
+    steps.push(...buildStaleNextSteps(report.freshness));
   }
   if (report.freshness.state === 'dirty') {
     if (report.freshness.porcelainReadFailed) {
@@ -251,7 +294,13 @@ function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[]
 function buildReport(graph: GraphJSON, graphPath: string, projectRoot: string): GraphQualityReport {
   const isIgnored = createIgnoreOracle(projectRoot);
   const structural = runGraphQualityChecks(graph, { isIgnored, getTestPatterns });
-  const rawFreshness = evaluateFreshness(graph.graph.sourceCommit, projectRoot);
+  // F249 FR-009：第三参传入图产物记录的指纹（可能为 undefined/null/畸形值，
+  // evaluateFreshness 内部经 isValidCollectorFingerprint 收口，本层不做预校验）
+  const rawFreshness = evaluateFreshness(
+    graph.graph.sourceCommit,
+    projectRoot,
+    graph.graph.fingerprint,
+  );
   // --json 契约稳定性：JSON.stringify 会丢弃值为 undefined 的 key（字段缺失场景）。
   // recordedSourceCommit 为 undefined（旧图产物字段缺失）与显式 null（非 git 仓库）在
   // FR-010 语义上等价（均判定 unknown-provenance），故此处归一化为 null，避免 --json
@@ -319,7 +368,12 @@ function formatReportText(report: GraphQualityReport): string {
         ? ` (legacy: ${report.legacyAndIgnoredNodes.legacyHashNodeIds.length}, ignored: ${report.legacyAndIgnoredNodes.ignoredPathNodeIds.length})`
         : ''),
     `[freshness] ${report.freshness.state}` +
-      ` (recorded=${report.freshness.recordedSourceCommit ?? 'null'}, current=${report.freshness.currentHead ?? 'null'})`,
+      ` (recorded=${report.freshness.recordedSourceCommit ?? 'null'}, current=${report.freshness.currentHead ?? 'null'})` +
+      // F249 FR-013：stale 的具体原因必须出现在人读摘要行本身，而不是只藏在 nextSteps 里——
+      // 摘要行是扫读时唯一必看的一行
+      (report.freshness.staleReasons && report.freshness.staleReasons.length > 0
+        ? ` [staleReasons: ${report.freshness.staleReasons.join(', ')}]`
+        : ''),
   ];
 
   if (report.duplicateCanonicalId.status === 'fail') {

@@ -52,6 +52,21 @@ describe('runGraphCommand — F217 T031: sourceCommit 恒为 null', () => {
     expect(graph.graph.sourceCommit).toBeNull();
   });
 
+  // ── F249 T033 / SC-012：fingerprint 同走诚实降级 ──
+
+  it('F249 SC-012：spectra graph 写盘的 graph.json 中 graph.fingerprint 恒为 null（不凭空推导指纹）', async () => {
+    const outputDir = path.join(tmpDir, 'specs-fingerprint');
+    await runGraphCommand(
+      baseCommand({ subcommand: 'graph', graphOperation: 'build', outputDir }),
+    );
+
+    const graphPath = path.join(outputDir, '_meta', 'graph.json');
+    const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
+    // 显式 null（字段存在但为 null），而非字段缺席——诚实表达"这条路径没有采集器指纹可言"
+    expect(graph.graph.fingerprint).toBeNull();
+    expect('fingerprint' in graph.graph).toBe(true);
+  });
+
   it('即使在真实 git 仓库内运行，spectra graph 仍不盖当前 HEAD（provenance 诚实降级）', async () => {
     // tmpDir 本身不是 git 仓库；即使调用方 cwd 位于本仓库内，runGraphCommand 也
     // 不应调用 git —— 该断言通过读取产物验证行为契约，而非 mock child_process

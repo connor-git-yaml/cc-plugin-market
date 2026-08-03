@@ -18,6 +18,11 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { resolve } from 'node:path';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
+import {
+  ALL_STALE_REASONS,
+  SC009_STALE_SCENARIOS,
+  baseFreshnessGraph,
+} from '../helpers/freshness-stale-scenarios.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
 
@@ -74,23 +79,17 @@ function writeGraph(graphPath: string, graph: GraphJSON): void {
   fs.writeFileSync(graphPath, JSON.stringify(graph, null, 2), 'utf-8');
 }
 
-function baseGraph(overrides: Partial<GraphJSON['graph']> = {}): GraphJSON {
-  return {
-    directed: false,
-    multigraph: false,
-    graph: {
-      name: 'spectra-knowledge-graph',
-      generatedAt: '2026-01-01T00:00:00.000Z',
-      nodeCount: 0,
-      edgeCount: 0,
-      sources: ['unified-graph'],
-      schemaVersion: '2.0',
-      ...overrides,
-    },
-    nodes: [],
-    links: [],
-  };
-}
+/**
+ * F249：委托共享 helper —— 默认写入**当前合法指纹**。
+ *
+ * 不带指纹时每个既有用例都会因 FR-010 归入 `collector-fingerprint-unrecorded` 而判 stale
+ * ——那不是回归，而是本机制的核心语义（"证明不了一致就不放行"）。需要 unrecorded / invalid /
+ * mismatch 场景的用例显式覆盖该字段（或直接用 `SC009_STALE_SCENARIOS`）。
+ *
+ * 跨进程可比性依据：`computeCollectorFingerprint()` 的产出确定性（FR-017/SC-014）保证本进程
+ * 算出的指纹与被 spawn 的 dist CLI 子进程算出的完全一致。
+ */
+const baseGraph = baseFreshnessGraph;
 
 describe('graph-quality CLI（F217 T033）', () => {
   beforeAll(() => {
@@ -437,6 +436,164 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.state).toBe('stale');
       expect(report.freshness.recordedSourceCommit).toBe(generatedGraph.graph.sourceCommit);
       expect(report.freshness.currentHead).not.toBe(generatedGraph.graph.sourceCommit);
+      // F249：真实建图链路已写入合法指纹，因此唯一 stale 原因是 commit 前进
+      // （若此处出现 collector-fingerprint-unrecorded，说明 batch 写入点回归了）
+      expect(report.freshness.staleReasons).toEqual(['source-commit']);
     }, 30_000);
+  });
+
+  // ============================================================
+  // F249 T030 / SC-009：reason-aware 诊断（CLI 文本 + --json 两个消费面）
+  // ============================================================
+
+  describe('SC-009：五类 stale 样本在 CLI 文本与 --json 的诊断准确性', () => {
+    /** 在临时 git 仓库落一份场景图，返回 graph.json 路径与当前 HEAD。 */
+    function seedScenarioGraph(buildGraph: (head: string) => GraphJSON): string {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, buildGraph(sha));
+      return graphPath;
+    }
+
+    for (const scenario of SC009_STALE_SCENARIOS) {
+      it(`--json：${scenario.id}（${scenario.label}）→ stale + staleReasons=[${scenario.expectedStaleReasons.join(', ')}]`, () => {
+        const graphPath = seedScenarioGraph(scenario.buildGraph);
+
+        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+        expect(result.exitCode).toBe(0);
+        const report = JSON.parse(result.stdout);
+        expect(report.freshness.state).toBe('stale');
+        expect(report.freshness.staleReasons).toEqual(scenario.expectedStaleReasons);
+        // FR-011：指纹型 stale 不得静默降级为 pass
+        expect(report.overallVerdict).toBe('pass-with-warnings');
+      });
+
+      it(`文本输出：${scenario.id} 的 [freshness] 行与 nextSteps 均含准确原因字面量，且不错配为其他原因`, () => {
+        const graphPath = seedScenarioGraph(scenario.buildGraph);
+
+        const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+
+        expect(result.stdout).toContain('[freshness] stale');
+        for (const reason of scenario.expectedStaleReasons) {
+          // 摘要行的 staleReasons 展示 + nextSteps 的 [reason] 前缀，两处都必须出现
+          expect(result.stdout).toContain(`staleReasons: ${scenario.expectedStaleReasons.join(', ')}`);
+          expect(result.stdout).toContain(`[${reason}]`);
+        }
+        // 错配防线：未命中的原因字面量 MUST NOT 出现在输出里
+        // （例如 unrecorded 场景不得渲染出 sourceCommit 不一致的诊断）
+        for (const reason of ALL_STALE_REASONS) {
+          if (scenario.expectedStaleReasons.includes(reason)) continue;
+          // `collector-fingerprint` 是另外两个原因名的前缀，裸子串判断会假阳性——
+          // 改判 `[原因]` 这一 nextSteps 前缀形态（闭合方括号）的精确出现
+          expect(result.stdout).not.toContain(`[${reason}]`);
+        }
+      });
+    }
+
+    it('SC-009：多原因样本重复运行 3 次，--json 的 staleReasons 顺序完全一致', () => {
+      const multi = SC009_STALE_SCENARIOS.find((s) => s.id === 'multi-reason');
+      expect(multi).toBeDefined();
+      const graphPath = seedScenarioGraph(multi!.buildGraph);
+
+      const observed = [1, 2, 3].map(() => {
+        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+        return JSON.parse(result.stdout).freshness.staleReasons;
+      });
+
+      for (const reasons of observed) {
+        expect(reasons).toEqual(multi!.expectedStaleReasons);
+      }
+    });
+
+    it('对照组：commit 与指纹均一致 → fresh，--json 不含 staleReasons 字段', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const report = JSON.parse(result.stdout);
+
+      expect(report.freshness.state).toBe('fresh');
+      expect(report.freshness.staleReasons).toBeUndefined();
+    });
+
+    it('对照组：dirty 态（commit + 指纹均一致、工作树脏）仍判 dirty，不被指纹判定误升为 stale', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      fs.writeFileSync(path.join(tmpDir, 'app.ts'), 'export const x = 1;\n');
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const report = JSON.parse(result.stdout);
+
+      expect(report.freshness.state).toBe('dirty');
+      expect(report.freshness.staleReasons).toBeUndefined();
+    });
+  });
+
+  // ============================================================
+  // F249 T034 / SC-018：schemaVersion 1.0 双边界回归 oracle（非原子组成员）
+  //
+  // 验证本需求未改变 MIN_SUPPORTED_SCHEMA_VERSION 的既有双边界行为：1.0 旧图在
+  // schemaVersion 关卡就被拒，判定链路根本走不到 freshness / 指纹比较分支。
+  // ============================================================
+
+  describe('SC-018：schemaVersion 1.0 判 schema-too-old，不进入 freshness/指纹分支', () => {
+    it('1.0 旧图 + 不含 fingerprint 字段 → schema-too-old（exit 2）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      const graph = baseGraph({ schemaVersion: '1.0', sourceCommit: sha });
+      delete graph.graph.fingerprint;
+      writeGraph(graphPath, graph);
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('schema-too-old');
+      // 判定链路未进入 freshness 分支的证据：cannot-assess 占位报告的 freshness 恒为
+      // unknown-provenance 且不带任何 staleReasons（即使 sourceCommit 与 HEAD 明明一致）
+      expect(report.freshness.state).toBe('unknown-provenance');
+      expect(report.freshness.staleReasons).toBeUndefined();
+    });
+
+    it('1.0 旧图 + 含合法当前 fingerprint → 仍判 schema-too-old（fingerprint 不改变双边界）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ schemaVersion: '1.0', sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.cannotAssessReason).toBe('schema-too-old');
+      expect(report.freshness.staleReasons).toBeUndefined();
+    });
+
+    it('1.0 旧图 + 畸形 fingerprint → 仍判 schema-too-old（不因指纹畸形改判为 stale）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      const graph = baseGraph({ schemaVersion: '1.0', sourceCommit: sha });
+      (graph.graph as unknown as Record<string, unknown>)['fingerprint'] = { formatVersion: 'x' };
+      writeGraph(graphPath, graph);
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      expect(JSON.parse(result.stdout).cannotAssessReason).toBe('schema-too-old');
+    });
+
+    it('上边界未被本需求改变：schemaVersion 2.0 + 合法 fingerprint 仍可完整评估（非 cannot-assess）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).overallVerdict).not.toBe('cannot-assess');
+    });
   });
 });

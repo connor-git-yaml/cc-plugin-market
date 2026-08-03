@@ -23,6 +23,11 @@ import { tmpdir } from 'node:os';
 // @ts-expect-error — .mjs 无类型声明，运行时可解析
 import { validateGraphQuality } from '../../scripts/lib/graph-quality-core.mjs';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
+import {
+  ALL_STALE_REASONS,
+  SC009_STALE_SCENARIOS,
+  baseFreshnessGraph,
+} from '../helpers/freshness-stale-scenarios.js';
 
 const REPO_ROOT = resolve('.');
 
@@ -40,23 +45,13 @@ interface CheckResult {
   errors: string[];
 }
 
-function baseGraph(overrides: Partial<GraphJSON['graph']> = {}): GraphJSON {
-  return {
-    directed: false,
-    multigraph: false,
-    graph: {
-      name: 'spectra-knowledge-graph',
-      generatedAt: '2026-01-01T00:00:00.000Z',
-      nodeCount: 0,
-      edgeCount: 0,
-      sources: ['unified-graph'],
-      schemaVersion: '2.0',
-      ...overrides,
-    },
-    nodes: [],
-    links: [],
-  };
-}
+/**
+ * F249：委托共享 helper —— 默认携带当前合法指纹。
+ *
+ * 既有"期待零 warning"的用例（如 dirty 态不告警）必须带指纹，否则会因 FR-010 归入
+ * `collector-fingerprint-unrecorded` 而产生 stale warning——那是本机制的预期语义而非回归。
+ */
+const baseGraph = baseFreshnessGraph;
 
 function writeGraph(projectRoot: string, graph: GraphJSON): string {
   const graphPath = join(projectRoot, 'specs', '_meta', 'graph.json');
@@ -203,6 +198,78 @@ describe('graph-quality-core.mjs（F217 T037/T038）', () => {
 
     expect(result.errors).toEqual([]);
     expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
+  // ============================================================
+  // F249 T026/T030 — SC-009：repo:check 消费面的 reason-aware 文案 + evidence 透传
+  //
+  // C-05 的直接落地：**文案与 evidence 两处都断言**。只改人读文案会让按结构化字段消费的
+  // 下游（CI 聚合 / 状态面板）继续拿不到原因，反之只填 evidence 则人读输出仍在撒谎。
+  // ============================================================
+
+  describe('SC-009：五类 stale 样本的 warning 文案与 evidence', () => {
+    /** 取 freshness 子检查条目（唯一 id 为 'freshness' 的 check）。 */
+    function freshnessCheck(result: CheckResult): CheckEntry {
+      const entry = result.checks.find((c) => c.id === 'freshness');
+      expect(entry).toBeDefined();
+      return entry!;
+    }
+
+    for (const scenario of SC009_STALE_SCENARIOS) {
+      it(`${scenario.id}（${scenario.label}）→ warn，文案与 evidence.staleReasons 均准确`, () => {
+        linkDist(projectRoot);
+        const sha = initGitRepoWithCommit(projectRoot);
+        writeGraph(projectRoot, scenario.buildGraph(sha));
+
+        const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+        // FR-012：指纹型 stale 与 commit 型 stale 同为 warn，不静默放行、也不升级为 error
+        expect(result.errors).toEqual([]);
+        const check = freshnessCheck(result);
+        expect(check.status).toBe('warn');
+        expect(check.evidence['state']).toBe('stale');
+        // evidence 透传（C-05 前半）
+        expect(check.evidence['staleReasons']).toEqual(scenario.expectedStaleReasons);
+
+        // 文案透传（C-05 后半）：命中的原因字面量必须出现，未命中的必须不出现
+        const warningText = result.warnings.join('\n');
+        for (const reason of scenario.expectedStaleReasons) {
+          expect(warningText).toContain(reason);
+        }
+        for (const reason of ALL_STALE_REASONS) {
+          if (scenario.expectedStaleReasons.includes(reason)) continue;
+          // `collector-fingerprint` 是另两个原因名的前缀，用 `原因：` 冒号形态精确判定
+          expect(warningText).not.toContain(`${reason}：`);
+        }
+      });
+    }
+
+    it('fresh 态：evidence.staleReasons 为空数组，且零 warning', () => {
+      linkDist(projectRoot);
+      const sha = initGitRepoWithCommit(projectRoot);
+      writeGraph(projectRoot, baseGraph({ sourceCommit: sha }));
+
+      const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+      expect(result.warnings).toEqual([]);
+      const check = freshnessCheck(result);
+      expect(check.status).toBe('pass');
+      expect(check.evidence['staleReasons']).toEqual([]);
+    });
+
+    it('dirty 态（FR-026 噪音哲学不变）：仍零 warning，evidence.staleReasons 为空数组', () => {
+      linkDist(projectRoot);
+      const sha = initGitRepoWithCommit(projectRoot);
+      writeFileSync(join(projectRoot, 'app.ts'), 'export const x = 1;\n');
+      writeGraph(projectRoot, baseGraph({ sourceCommit: sha }));
+
+      const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+      expect(result.warnings).toEqual([]);
+      const check = freshnessCheck(result);
+      expect(check.evidence['state']).toBe('dirty');
+      expect(check.evidence['staleReasons']).toEqual([]);
+    });
   });
 });
 

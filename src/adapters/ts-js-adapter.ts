@@ -29,6 +29,7 @@ import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallb
 import { buildModuleGraphForProject } from '../knowledge-graph/module-derivation.js';
 import { Project, ScriptTarget, ScriptKind } from 'ts-morph';
 import { TreeSitterAnalyzer } from '../core/tree-sitter-analyzer.js';
+import { MODULE_DERIVATION_SCAN_SURFACE } from '../collector-surface.js';
 
 export class TsJsLanguageAdapter implements LanguageAdapter {
   readonly id = 'ts-js';
@@ -38,9 +39,10 @@ export class TsJsLanguageAdapter implements LanguageAdapter {
   // 扫描扩展名扩充 `.mjs/.cjs/.mts/.cts`：
   //   - `.mjs/.cjs`：Node.js ESM/CJS 模块文件
   //   - `.mts/.cts`：TypeScript ESM/CJS 显式扩展
-  readonly extensions: ReadonlySet<string> = new Set([
-    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
-  ]);
+  //
+  // F249 FR-002 #7：原 ×8 硬编码字面量与 `module-derivation.ts` 的 registry-fallback
+  // 构成手工镜像对，现收敛为对采集面事实源的共同引用（`===` 引用同一性可被测试断言）。
+  readonly extensions: ReadonlySet<string> = MODULE_DERIVATION_SCAN_SURFACE.extensions;
 
   readonly defaultIgnoreDirs: ReadonlySet<string> = new Set([
     'node_modules',

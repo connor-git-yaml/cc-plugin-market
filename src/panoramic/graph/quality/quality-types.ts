@@ -69,10 +69,29 @@ export type OrphanExceptionCategory = 'entrypoint' | 'pure-type' | 'test-export'
 // ============================================================
 
 /**
+ * F249（FR-009）：`state === 'stale'` 的判别原因。
+ *
+ * 为什么不并入 `state` 枚举：`state` 表达"图与当前工作区的关系处于哪一态"，四态本身
+ * 已完备且被下游（exit code 映射 / bootstrap-status 的 `FRESHNESS_STATES`）当作稳定契约；
+ * "为什么 stale"是同一态下的多值维度（可并存），扩 `state` 会让每个新增原因都变成一次
+ * 下游枚举破坏性变更。
+ *
+ * - source-commit：记录的 sourceCommit 与当前 HEAD 不一致（F217 既有语义）
+ * - collector-fingerprint：指纹结构合法但内容与当前采集器行为不一致（FR-009）
+ * - collector-fingerprint-unrecorded：指纹字段缺失或为 null（旧图 / 直连 API 未写入，FR-010）
+ * - collector-fingerprint-invalid：指纹字段存在但结构畸形，不可信（FR-018）
+ */
+export type FreshnessStaleReason =
+  | 'source-commit'
+  | 'collector-fingerprint'
+  | 'collector-fingerprint-unrecorded'
+  | 'collector-fingerprint-invalid';
+
+/**
  * freshness 判定的四态结果。
- * - fresh：sourceCommit 与当前 HEAD 一致，且工作树无未提交源码改动
- * - dirty：sourceCommit 与当前 HEAD 一致，但工作树存在未提交源码改动
- * - stale：sourceCommit 与当前 HEAD 不一致
+ * - fresh：sourceCommit 与当前 HEAD 一致、collector 指纹与当前实现一致，且工作树无未提交源码改动
+ * - dirty：上述一致性均成立，但工作树存在未提交源码改动
+ * - stale：sourceCommit 与当前 HEAD 不一致，或 collector 指纹不一致/缺失/畸形（原因见 staleReasons）
  * - unknown-provenance：sourceCommit 为 null / 缺失，或当前 HEAD 无法解析
  *   （currentHead 为 null 时绝不据此比较出 stale）
  */
@@ -90,6 +109,13 @@ export interface GraphFreshnessVerdict {
    * "工作树状态读取失败，按 dirty 保守处理"。仅在 state === 'dirty' 时可能为 true。
    */
   porcelainReadFailed?: boolean;
+  /**
+   * F249（FR-009）：`state === 'stale'` 时的判别原因数组，多原因并存时全部保留。
+   *
+   * 顺序确定性由 `evaluateFreshness` 的固定 push 顺序保证（不依赖对象键遍历），
+   * 下游文案渲染可直接依赖该顺序（SC-007/SC-009）。`state !== 'stale'` 时字段缺席。
+   */
+  staleReasons?: FreshnessStaleReason[];
 }
 
 // ============================================================

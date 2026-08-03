@@ -28,6 +28,13 @@ import { createGitignoreFilter } from '../../../utils/file-scanner.js';
 import { JavaLanguageAdapter } from '../../../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../../../adapters/go-adapter.js';
 import { extractExtension } from '../collector-extname.js';
+import {
+  GO_ADAPTER_SURFACE,
+  JAVA_ADAPTER_SURFACE,
+  PY_WALK_SURFACE,
+  TSJS_SKELETON_WALK_SURFACE,
+  surfaceHasExtension,
+} from '../../../collector-surface.js';
 
 /**
  * 图生产者 ignore 合同的单一事实源：TSJS_SKELETON_IGNORE_DIRS ∪ PY_SKELETON_IGNORE_DIRS
@@ -110,18 +117,28 @@ function goIgnoreDirs(): ReadonlySet<string> {
   return new Set([...new GoLanguageAdapter().defaultIgnoreDirs, ...GENERIC_UNIVERSAL_IGNORE_DIRS]);
 }
 
-const TSJS_EXTENSIONS: ReadonlySet<string> = new Set([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-]);
-const PY_EXTENSIONS: ReadonlySet<string> = new Set(['.py']);
-
-/** 按扩展名分派到对应生产者的忽略目录集合；未知扩展名（含纯目录路径）→ union 兜底。 */
+/**
+ * 按扩展名分派到对应生产者的忽略目录集合；未知扩展名（含纯目录路径）→ union 兜底。
+ *
+ * F249 FR-002 #5：分派判定面原为本文件自有的 `TSJS_EXTENSIONS`/`PY_EXTENSIONS` 镜像
+ * 常量 + `'.java'`/`'.go'` 字面量比较，现全部改为消费采集面事实源，并按各管线自身的
+ * `matchSemantics` 判定（d27ba75 给 `TSJS_EXTENSIONS` 追加的 `.mjs`/`.cjs` 随该镜像常量
+ * 一并消亡，扩面语义由 `TSJS_SKELETON_WALK_SURFACE` 单点表达）。两处随之修正的分派失真
+ * （均为向生产者真实行为靠拢）：
+ * ① `.pyi` 此前落 union 兜底，现随 PY 生产者面走 PY_IGNORE_DIRS（walkPyFiles 确实采集 `.pyi`）；
+ * ② `Foo.JAVA`/`main.GO` 等大小写变体此前落 union 兜底，现随各自 adapter 面走对应忽略集合
+ *    （generic collector 用 `extname().toLowerCase()`，确实会采集这些变体）。
+ *
+ * 扩展名提取消费 F248 的共享 `extractExtension`（本文件原有的私有 `extnameOf` 已随之删除）：
+ * 本函数是"手上只有扩展名"的分派型消费方，因此用 `surfaceHasExtension` 而非
+ * `surfaceMatchesFile`，提取口径按 F248 合同保持 `lastIndexOf('.')` 切片语义不变。
+ */
 function ignoreDirsForPath(relativePath: string): ReadonlySet<string> {
   const ext = extractExtension(relativePath);
-  if (TSJS_EXTENSIONS.has(ext)) return TSJS_IGNORE_DIRS;
-  if (PY_EXTENSIONS.has(ext)) return PY_IGNORE_DIRS;
-  if (ext === '.java') return javaIgnoreDirs();
-  if (ext === '.go') return goIgnoreDirs();
+  if (surfaceHasExtension(TSJS_SKELETON_WALK_SURFACE, ext)) return TSJS_IGNORE_DIRS;
+  if (surfaceHasExtension(PY_WALK_SURFACE, ext)) return PY_IGNORE_DIRS;
+  if (surfaceHasExtension(JAVA_ADAPTER_SURFACE, ext)) return javaIgnoreDirs();
+  if (surfaceHasExtension(GO_ADAPTER_SURFACE, ext)) return goIgnoreDirs();
   return GRAPH_COLLECTOR_IGNORE_DIRS;
 }
 

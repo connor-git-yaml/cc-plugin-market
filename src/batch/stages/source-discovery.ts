@@ -22,6 +22,11 @@ import {
 } from '../../core/import-resolver.js';
 import type { CodeSkeleton } from '../../models/code-skeleton.js';
 import { groupFilesByLanguage, type LanguageGroup } from '../language-grouper.js';
+import {
+  PY_WALK_SURFACE,
+  TSJS_SKELETON_WALK_SURFACE,
+  surfaceMatchesFile,
+} from '../../collector-surface.js';
 
 // ============================================================
 // Feature 145 P1：designDocAbsPaths "磁盘优先"合并策略
@@ -346,8 +351,12 @@ export async function collectPythonCodeSkeletons(
 /**
  * F194：isGitignored 与 resolvedRoot 由 collectPythonCodeSkeletons 构建并通过参数传入，
  * 在自写 walk 上叠加 .gitignore 过滤层（保留 PY_SKELETON_IGNORE_DIRS 与点前缀剪枝不变）。
+ *
+ * F249 T008：加 export（零行为变化，理由同 PY_SKELETON_IGNORE_DIRS 的 F217 T004 先例）——
+ * 供 `tests/unit/collector-surface.test.ts` 的 #2 行为探针直接实跑该 walk，断言采集
+ * 文件集合与 `PY_WALK_SURFACE` 声明面精确一致（SC-005b）。
  */
-function walkPyFiles(
+export function walkPyFiles(
   dir: string,
   out: string[],
   isGitignored: (relativePath: string) => boolean,
@@ -367,7 +376,7 @@ function walkPyFiles(
       if (PY_SKELETON_IGNORE_DIRS.has(entry.name)) continue;
       if (isGitignored(relPath)) continue; // 目录命中 .gitignore → 剪枝
       walkPyFiles(path.join(dir, entry.name), out, isGitignored, resolvedRoot);
-    } else if (entry.isFile() && (entry.name.endsWith('.py') || entry.name.endsWith('.pyi'))) {
+    } else if (entry.isFile() && surfaceMatchesFile(PY_WALK_SURFACE, entry.name)) {
       if (isGitignored(relPath)) continue; // 文件命中 .gitignore → 跳过
       out.push(path.join(dir, entry.name));
     }
@@ -481,16 +490,21 @@ export async function collectTsJsCodeSkeletons(
  * 递归扫描 .ts/.tsx/.js/.jsx/.mjs/.cjs 文件（排除产物目录）。
  * 复用 walkPyFiles 的扫描模式，扩展 TS/JS 扩展名集合。
  *
- * F243：补 .mjs/.cjs（此前扫描面与 TsJsLanguageAdapter.extensions 声明面脱节，
- * 导致全仓 .mjs/.cjs 结构性缺席知识图谱）。仍不收 .mts/.cts —— TS 变体需要
+ * d27ba75（对方 F243）补 .mjs/.cjs（此前扫描面与 TsJsLanguageAdapter.extensions 声明面
+ * 脱节，导致全仓 .mjs/.cjs 结构性缺席知识图谱）。仍不收 .mts/.cts —— TS 变体需要
  * getLanguage/scriptKind 联动适配，本仓库零存量，登记为已知残留。
- * 改动此判定面时须同步 source-commit.ts::TSJS_COLLECTOR_EXTENSIONS 与
- * quality/ignore-oracle.ts::TSJS_EXTENSIONS 两处镜像常量。
+ *
+ * F249 rebase 调和：该扩面**不再**由本文件的 endsWith 链表达，而是收敛进
+ * `TSJS_SKELETON_WALK_SURFACE`（事实源）。原注释要求的"改动时同步
+ * source-commit.ts::TSJS_COLLECTOR_EXTENSIONS 与 ignore-oracle.ts::TSJS_EXTENSIONS
+ * 两处镜像常量"随镜像常量本身一并消亡——改扩面只需改事实源一处。
  *
  * F194：isGitignored 与 resolvedRoot 由 collectTsJsCodeSkeletons 构建并通过参数传入，
  * 在自写 walk 上叠加 .gitignore 过滤层（保留 TSJS_SKELETON_IGNORE_DIRS 与点前缀剪枝不变）。
+ *
+ * F249 T008：加 export（零行为变化，理由同 walkPyFiles）——供 #1 行为探针实跑断言。
  */
-function walkTsJsFiles(
+export function walkTsJsFiles(
   dir: string,
   out: string[],
   isGitignored: (relativePath: string) => boolean,
@@ -511,15 +525,7 @@ function walkTsJsFiles(
       if (isGitignored(relPath)) continue; // 目录命中 .gitignore → 剪枝
       walkTsJsFiles(path.join(dir, entry.name), out, isGitignored, resolvedRoot);
     } else if (entry.isFile()) {
-      const name = entry.name;
-      if (
-        name.endsWith('.ts') ||
-        name.endsWith('.tsx') ||
-        name.endsWith('.js') ||
-        name.endsWith('.jsx') ||
-        name.endsWith('.mjs') ||
-        name.endsWith('.cjs')
-      ) {
+      if (surfaceMatchesFile(TSJS_SKELETON_WALK_SURFACE, entry.name)) {
         if (isGitignored(relPath)) continue; // 文件命中 .gitignore → 跳过
         out.push(path.join(dir, entry.name));
       }
