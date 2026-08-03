@@ -109,19 +109,26 @@ export const MODULE_DERIVATION_SCAN_SURFACE: CollectorPipelineSurface = {
  * （`batch/stages/graph-assembly.ts` 与 `batch/batch-orchestrator.ts` 各有一处调用），
  * 因此它是不折不扣的建图采集面，此前漏记于 SSoT。
  *
- * 匹配形态与集合按 `scanPyFiles` 现状**如实记账**（`entry.name.endsWith('.py')`）：
- * - 集合只有 `.py`——**不含** `.pyi`，尽管 `PythonLanguageAdapter.extensions`（声明面，
- *   = `PY_WALK_SURFACE`）与 `walkPyFiles`（#2）都覆盖 `.pyi`
- * - 语义为大小写敏感 endsWith
+ * 集合与语义（F250 起为**已裁决的设计意图**，不再是"待裁决的记账现状"）：
+ * - 集合为 `.py` + `.pyi`，与声明面（`PythonLanguageAdapter.extensions` = `PY_WALK_SURFACE`）
+ *   及 `walkPyFiles`（#2）一致——W-002 登记的"声明面覆盖 `.pyi`、扫描面不覆盖"失配已消除
+ * - 语义为大小写敏感 endsWith（`.PYI` 不采集，与 `.PY` 现状一致）
  *
- * 声明面（`.py`+`.pyi`）与本扫描面（仅 `.py`）的失配是**既存现状而非本轮引入**：
- * `.pyi` 是否应产出符号节点属产品裁决，本轮显式不改 `scanPyFiles` 行为，只把现状登记进
- * 事实源与指纹（编排器已另行登记 follow-up）。行为探针（`tests/unit/collector-surface.test.ts`
- * 的 `mod.py` 命中 / `mod.pyi` 不命中）把该现状钉死：将来任一侧被改动都会变红，迫使
- * 修改者显式面对这个失配。
+ * **`.pyi` 纳入本面产出的是类型面 stub 符号**：stub 的函数体恒为 `...`，只有签名没有实现，
+ * 因此其 component 节点与同名 `.py` 实现符号**语义并不等价**（前者描述类型契约、天然零
+ * callSites，后者描述运行时行为）。纳入的目的是让 stub 符号获得与实现符号**同级的元数据
+ * 精度**（`signature`/`symbolKind`/`confidence: 'EXTRACTED'`），并消除 extraction 与 unified
+ * 双路只覆盖其一所滋生的认知混淆——不是主张两者可以互相替代。
+ *
+ * 同名 `.py`/`.pyi` 并存（shadow 对）时，两者的节点 id 因 relPath 不同而天然区分；import
+ * 解析另有护栏恒指向实现文件 `.py`（见 `python-adapter.ts::buildModuleGraph` 的护栏 A）。
+ *
+ * 本常量与 `PY_WALK_SURFACE` 扩展名集合已一致但仍**分列两条**：见 `ALL_PRODUCER_SURFACES`
+ * 与 `collector-fingerprint.ts` 的 `pythonSymbolScan` 说明——分列保留的是管线身份与指纹 key
+ * 的独立稳定性，不是"集合不同"。
  */
 export const PYTHON_SYMBOL_SCAN_SURFACE: CollectorPipelineSurface = {
-  extensions: new Set(['.py']),
+  extensions: new Set(['.py', '.pyi']),
   matchSemantics: 'case-sensitive',
 };
 

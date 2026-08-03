@@ -71,7 +71,8 @@
           },
           "pythonSymbolScan": {
             "extensions": [
-              ".py"
+              ".py",
+              ".pyi"
             ],
             "matchSemantics": "case-sensitive"
           }
@@ -177,9 +178,11 @@
       {
         "id": "src/py/mod.pyi",
         "kind": "module",
-        "label": "mod.pyi",
+        "label": "mod",
         "metadata": {
-          "sourceTag": "unified-graph",
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/mod.pyi",
+          "confidence": "EXTRACTED",
           "unifiedKind": "module",
           "sourcePath": "src/py/mod.pyi",
           "callSitesCount": 0
@@ -190,7 +193,11 @@
         "kind": "component",
         "label": "mod_fn",
         "metadata": {
-          "sourceTag": "unified-graph",
+          "symbolKind": "function",
+          "signature": "def mod_fn() -> int",
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/mod.pyi",
+          "confidence": "EXTRACTED",
           "unifiedKind": "symbol",
           "sourcePath": "src/py/mod.pyi",
           "exportKind": "function"

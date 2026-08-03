@@ -69,6 +69,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -498,6 +499,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -1001,6 +1003,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -1583,6 +1586,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -2175,6 +2179,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -2438,6 +2443,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -3021,6 +3027,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -3642,6 +3649,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },
@@ -4139,6 +4147,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
           "pythonSymbolScan": {
             "extensions": [
               ".py",
+              ".pyi",
             ],
             "matchSemantics": "case-sensitive",
           },

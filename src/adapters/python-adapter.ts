@@ -30,6 +30,21 @@ import {
   surfaceMatchesFile,
 } from '../collector-surface.js';
 
+/**
+ * 按文件**真实**扩展名剥离，产出 extraction 路 module 节点的展示 label（护栏 B，F250 FR-005）。
+ *
+ * 取代此前两处各自硬编码的 `path.basename(relPath, '.py')`——那种写法对 `.pyi` 不剥离后缀，
+ * 会让 stub 的 module label 残留为 `mod.pyi`，与同目录 `mod.py` 的 `mod` 展示不一致。收敛成
+ * 单一 helper 是为了消除"正常分支与 parseError 降级分支双写漂移"（FR-005 明确两处都要修）。
+ *
+ * 纯点文件（文件名恰好是 `.py`/`.pyi`）存在一处**已声明为可接受**的行为 delta：
+ * `path.extname('.py') === ''` 故不剥离、返回 `.py`；旧实现对 `.py` 返回空串，而空 label
+ * 本身更接近缺陷（任何按 label 展示的下游都不应显示空字符串）。
+ */
+function stripFileExtension(relPath: string): string {
+  return path.basename(relPath, path.extname(relPath));
+}
+
 export class PythonLanguageAdapter implements LanguageAdapter {
   readonly id = 'python';
 
@@ -39,16 +54,14 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    * **声明面**（registry 分派用）：`.py` + `.pyi`，引用 SSoT 的 `PY_WALK_SURFACE.extensions`
    * 而非本地字面量（F249 FR-002/FR-019：采集面只有一份事实源）。
    *
-   * ⚠️ 与本类 `scanPyFiles` 的**扫描面**（`PYTHON_SYMBOL_SCAN_SURFACE`，仅 `.py`）**不一致**，
-   * 这是实现期审查（W-002）如实登记的**既存现状**，不是本轮引入的缺陷：
+   * 与本类 `scanPyFiles` 的**扫描面**（`PYTHON_SYMBOL_SCAN_SURFACE`）自 F250 起**扩展名集合
+   * 一致**——W-002 曾登记的"声明面覆盖 `.pyi`、扫描面只收 `.py`"失配已由产品裁决消除：
    * - 声明面 = 本字段，决定 `LanguageAdapterRegistry` 把哪些扩展名分派给 python adapter
-   *   （`.pyi` 文件经 #2 `walkPyFiles` 采集后仍需由本 adapter 分析，故声明面必须含 `.pyi`）
    * - 扫描面 = `scanPyFiles`，决定 `extractSymbolNodes`/`buildModuleGraph` 实际遍历哪些文件
-   *   （只收 `.py`，`.pyi` 不产出符号节点）
    *
-   * 因此**不能**把本字段收窄成 `PYTHON_SYMBOL_SCAN_SURFACE.extensions`：那会改变 registry
-   * 对 `.pyi` 的分派行为，属于本轮明确不做的行为变更。`.pyi` 是否应产出符号节点是产品裁决，
-   * 已作为 follow-up 登记；在裁决落地前，两面失配由 SSoT 两个常量 + 行为探针显式钉死。
+   * 集合一致仍**不能**把本字段改写为引用 `PYTHON_SYMBOL_SCAN_SURFACE.extensions`：两者是
+   * 两条独立管线的事实源，各自的指纹分量需要独立追踪；合并引用会让未来任一侧单独调整时
+   * 静默改变另一侧的行为（registry 分派与符号扫描是不同的决策面，只是当前取值相同）。
    */
   readonly extensions: ReadonlySet<string> = PY_WALK_SURFACE.extensions;
 
@@ -122,14 +135,19 @@ export class PythonLanguageAdapter implements LanguageAdapter {
   }
 
   /**
-   * 递归扫描项目根目录下所有 `.py` 文件，排除语言生态常见忽略目录。
+   * 递归扫描项目根目录下所有 Python 源文件（`.py` 实现 + `.pyi` 类型 stub），
+   * 排除语言生态常见忽略目录。
    *
    * 复用 `defaultIgnoreDirs` 并叠加 Python 项目惯例（test/tests/dist 等）。
    * 由 `extractSymbolNodes` 与 `buildModuleGraph` 共用，避免 DRY 违反。
    *
-   * F249 W-002：文件判定改为消费 SSoT 的 `PYTHON_SYMBOL_SCAN_SURFACE`（`.py`、大小写敏感
-   * endsWith），与原 `entry.name.endsWith('.py')` **行为逐字等价**——本轮只做事实源收敛，
-   * 不改采集行为（`.pyi` 依旧不产出符号节点，见 `extensions` 字段的失配说明）。
+   * 文件判定消费 SSoT 的 `PYTHON_SYMBOL_SCAN_SURFACE`（F249 W-002 收敛），本方法**不含**任何
+   * 硬编码扩展名字面量：F250 把 `.pyi` 纳入符号采集面时，本方法体一行未改，扩集完全由常量
+   * 取值变化自动生效。改回硬编码字面量判断会破坏这条性质（有防回归探针 `T-FR002` 钉死）。
+   *
+   * 注意本方法的硬编码剪枝集（`test`/`tests`/`dist` 等）与 unified 路 `walkPyFiles` 的
+   * `PY_SKELETON_IGNORE_DIRS` **不同**：落在两者差集内的文件只由其中一路采集，这是既有设计
+   * 差异，非缺陷（对照探针见 `tests/adapters/python-adapter.test.ts::T-SC005-control`）。
    *
    * @throws 当根目录不可读时抛出（调用方按需 try-catch 决定是否吞掉）
    */
@@ -163,13 +181,17 @@ export class PythonLanguageAdapter implements LanguageAdapter {
   }
 
   /**
-   * 提取 Python 项目所有 .py 文件的符号节点（函数/类），转换为 ExtractionResult 格式
+   * 提取 Python 项目全部采集面内文件（`.py` 实现 + `.pyi` 类型 stub）的符号节点（函数/类），
+   * 转换为 ExtractionResult 格式
    *
    * Feature 145 P0：桥接 Python AST（CodeSkeleton.exports）到知识图谱 ExtractionResult 第四路数据源。
-   * 每个 .py 文件产出一个 ExtractionResult，包含：
-   * - 文件级 module 节点（id = relPath, kind = 'module'）
+   * 每个文件产出一个 ExtractionResult，包含：
+   * - 文件级 module 节点（id = relPath，kind = 'module'，label = 剥离真实扩展名后的模块名）
    * - 每个 export 符号的 component 节点（id = {relPath}::{name}, kind = 'component'；Feature 214 canonical :: 分隔符）
    * - module → component 的 containment 边（relation = 'contains'）
+   *
+   * F250：`.pyi` 产出的是**类型面 stub 符号**（函数体恒为 `...`，天然零 callSites），与同名
+   * `.py` 实现符号是两个独立节点（relPath 不同 → id 不同），语义互补而非等价。
    *
    * NF-004：处理完每个文件后 skeleton 立即丢弃，不集中持有全量数据，避免内存压力。
    */
@@ -199,7 +221,7 @@ export class PythonLanguageAdapter implements LanguageAdapter {
             {
               id: relPath,
               kind: 'module',
-              label: path.basename(relPath, '.py'),
+              label: stripFileExtension(relPath),
               source_file: relPath,
               confidence: 'EXTRACTED',
               metadata: { parseError: true },
@@ -217,7 +239,7 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       nodes.push({
         id: relPath,
         kind: 'module',
-        label: path.basename(relPath, '.py'),
+        label: stripFileExtension(relPath),
         source_file: relPath,
         confidence: 'EXTRACTED',
       });
@@ -258,10 +280,13 @@ export class PythonLanguageAdapter implements LanguageAdapter {
    * 构建 Python 项目的模块图（Feature 156 W1.4：UnifiedGraph 派生路径）
    *
    * 流程：
-   * 1. 递归扫描所有 .py 文件，排除语言生态忽略目录
+   * 1. 递归扫描采集面内全部文件（`.py` + `.pyi`），排除语言生态忽略目录
    * 2. 解析 Python import → 相对路径（包含 dot-relative + namedImports 展开）
    * 3. 把推断到的 resolvedPath 写回 CodeSkeleton.imports[i]
    * 4. buildModuleGraphFromCodeSkeletons 一站式派生
+   *
+   * `.pyi` 完整参与拓扑视图（作为 module 条目、作为 import 来源），但**永不作为 import 的
+   * 解析目标**（护栏 A，见下方 `pyModuleMap` 构建处）。
    *
    * Python import 解析规则：
    * - 绝对模块（`import foo` / `from foo import x`）：用 basename map（EC-6 简化策略）
@@ -278,7 +303,7 @@ export class PythonLanguageAdapter implements LanguageAdapter {
   ): Promise<ModuleGraph> {
     const resolvedRoot = path.resolve(projectRoot);
 
-    // 递归扫描所有 .py 文件
+    // 递归扫描采集面内全部 Python 文件（`.py` + `.pyi`）
     const pyFiles = this.scanPyFiles(resolvedRoot);
 
     // 构建模块名 → 相对路径映射（绝对 import 用）
@@ -289,6 +314,19 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       const rel = path.relative(resolvedRoot, absF).split(path.sep).join('/');
       relPyFiles.push(rel);
       relPySet.add(rel);
+      // 护栏 A（F250 FR-004）：`.pyi` 类型 stub 永不作为绝对 import 的解析目标，
+      // 绝对 import 恒指向实现文件 `.py`。显式跳过，而非依赖"`path.basename(absF, '.py')`
+      // 对 `.pyi` 不剥离后缀、产生的键 `mod.pyi` 恰好与 topModule（不含点）不相等"这一
+      // 意外安全属性——后者会在有人把 `stripFileExtension` 顺手统一到本处键生成时失效
+      // （`mod.pyi` 键塌缩为 `mod`，与同目录 `mod.py` 撞键，制造真实的解析歧义）。
+      // 只跳过 map 写入：`.pyi` 仍进 relPyFiles/relPySet，完整参与 ModuleGraph 拓扑视图，
+      // 且其作为 import **来源**发起的解析同样不受影响（只排除"作为目标"）。
+      //
+      // Scope 边界：判定式硬编码 `.pyi` 字面量（大小写敏感，与 `PYTHON_SYMBOL_SCAN_SURFACE`
+      // 的 endsWith 语义一致）。若未来采集面新增其他 stub 类扩展名，此处需**同步扩展**——
+      // 不自动跟随 SSoT 是 research 决策 1 的 YAGNI 取舍：当前只有 `.pyi` 一种 stub 形态，
+      // 为此引入"stub 扩展名子集"抽象的成本高于收益。
+      if (absF.endsWith('.pyi')) continue;
       pyModuleMap.set(path.basename(absF, '.py'), rel);
     }
 

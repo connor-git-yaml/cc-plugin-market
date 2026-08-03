@@ -126,15 +126,18 @@ describe('computeCollectorFingerprint：三分量结构与 SSoT 推导（FR-001/
       sortedExtensions(MODULE_DERIVATION_SCAN_SURFACE.extensions),
     );
 
-    // W-002 新增的第六条管线：仅 `.py`（**不含** `.pyi`），与 pyWalk 刻意分列
+    // W-002 补记的第六条管线。两条 key 独立存在、值自 F250 起相等；在集合相等期间，
+    // 值层面**无法分辨接线错误**（`toSurfaceEntry` 每次新建对象，引用断言恒真故不设），
+    // 接线正确性以 `collector-fingerprint.ts` 的
+    // `pythonSymbolScan: toSurfaceEntry(PYTHON_SYMBOL_SCAN_SURFACE)` 源码为准；
+    // 集合若再度分叉，下面的值断言将恢复分辨力。
     expect(extensionSurface.pythonSymbolScan).toEqual({
-      extensions: ['.py'],
+      extensions: ['.py', '.pyi'],
       matchSemantics: 'case-sensitive',
     });
     expect(extensionSurface.pythonSymbolScan.extensions).toEqual(
       sortedExtensions(PYTHON_SYMBOL_SCAN_SURFACE.extensions),
     );
-    expect(extensionSurface.pythonSymbolScan).not.toEqual(extensionSurface.pyWalk);
   });
 
   it('自身产出确定性：同进程重复调用深相等且序列化一致（SC-013 partial / FR-017 同进程半段）', () => {

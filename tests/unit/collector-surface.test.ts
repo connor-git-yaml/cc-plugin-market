@@ -83,17 +83,21 @@ describe('SC-005 (a1)：消费方持有 SSoT 的同一个运行时引用', () =>
     expect(new TsJsLanguageAdapter().extensions).toBe(MODULE_DERIVATION_SCAN_SURFACE.extensions);
   });
 
-  // W-002：python adapter 的**声明面**引用 PY_WALK_SURFACE（`.py`+`.pyi`），与其**扫描面**
-  // PYTHON_SYMBOL_SCAN_SURFACE（仅 `.py`）刻意不同——两面失配是如实登记的既存现状，
-  // 此处同时钉死"声明面引用 SSoT"与"两面确实不同"，防止有人"顺手统一"而静默改变行为。
+  // F250：python adapter 的**声明面**引用 PY_WALK_SURFACE（`.py`+`.pyi`），其**扫描面**
+  // PYTHON_SYMBOL_SCAN_SURFACE 自 F250 起扩集为同一扩展名集合——W-002 登记的两面失配已消除
+  // （管线 parity 修复）。但两者仍是**两个独立常量**：分列保留各自的管线身份与指纹 key 的独立
+  // 稳定性，使未来任一管线单独变化时能被独立感知。此处同时钉死"声明面引用 SSoT"与"两面集合
+  // 一致但引用不同"，防止有人"顺手合并成一个常量"而丢失管线可辨识性。
   it('#11 python：`new PythonLanguageAdapter().extensions === PY_WALK_SURFACE.extensions`（声明面）', () => {
     expect(new PythonLanguageAdapter().extensions).toBe(PY_WALK_SURFACE.extensions);
   });
 
-  it('#11 python 扫描面 PYTHON_SYMBOL_SCAN_SURFACE 仅含 `.py`，与声明面（含 `.pyi`）确实不同', () => {
-    expect([...PYTHON_SYMBOL_SCAN_SURFACE.extensions]).toEqual(['.py']);
+  it('#11 python 扫描面 PYTHON_SYMBOL_SCAN_SURFACE 含 `.py`+`.pyi`，与声明面集合一致但仍是独立引用', () => {
+    // FR-006：硬编码期望值，不由被测常量自身反向推导——常量被改回 `['.py']` 时本行必红
+    expect([...PYTHON_SYMBOL_SCAN_SURFACE.extensions].sort()).toEqual(['.py', '.pyi']);
     expect(PYTHON_SYMBOL_SCAN_SURFACE.matchSemantics).toBe('case-sensitive');
     expect([...PY_WALK_SURFACE.extensions].sort()).toEqual(['.py', '.pyi']);
+    // 集合一致 ≠ 同一对象：两条管线仍分列，指纹按各自 key 独立追踪
     expect(PYTHON_SYMBOL_SCAN_SURFACE.extensions).not.toBe(PY_WALK_SURFACE.extensions);
   });
 
@@ -369,7 +373,7 @@ describe('SC-005 (b) #11：PythonLanguageAdapter 符号扫描面 === PYTHON_SYMB
 
   const PY_SCAN_SAMPLES: readonly string[] = [
     'mod.py', // 声明面与扫描面都覆盖 → MUST 命中
-    'mod.pyi', // 声明面覆盖、扫描面不覆盖 → MUST NOT 命中（如实锁定既存失配）
+    'mod.pyi', // 声明面与扫描面自 F250 起都覆盖 → MUST 命中（parity 修复后两面一致）
     'legacy.PY', // 大小写变体 → MUST NOT 命中（endsWith 大小写敏感）
     'notes.md', // 面外 → MUST NOT 命中
   ];
@@ -407,25 +411,32 @@ describe('SC-005 (b) #11：PythonLanguageAdapter 符号扫描面 === PYTHON_SYMB
     vi.restoreAllMocks();
   });
 
-  it('实跑采集集合与 SSoT 声明面精确一致（mod.py 命中；mod.pyi / legacy.PY 不命中）', async () => {
+  it('实跑采集集合与 SSoT 声明面精确一致（mod.py / mod.pyi 命中；legacy.PY 不命中）', async () => {
     const scanned = await scannedFiles();
 
     expect(scanned).toEqual(
       PY_SCAN_SAMPLES.filter((name) => surfaceMatchesFile(PYTHON_SYMBOL_SCAN_SURFACE, name)).sort(),
     );
-    expect(scanned).toEqual(['mod.py']);
-    expect(scanned).not.toContain('mod.pyi');
+    // FR-006：独立的硬编码期望值列表——常量被改回 `['.py']` 时本行必红，
+    // 不允许退化为"仅由 PYTHON_SYMBOL_SCAN_SURFACE 自身反向推导"的自证断言
+    expect(scanned).toEqual(['mod.py', 'mod.pyi']);
     expect(scanned).not.toContain('legacy.PY');
+    expect(scanned).not.toContain('notes.md');
   });
 
-  it('同一目录下 walkPyFiles（#2）**会**采集 mod.pyi —— 两面失配如实存在，非测试构造', () => {
+  it('同一目录下 walkPyFiles（#2）与符号扫描面（#11）采集集合相等 —— F250 parity 修复后两面一致', async () => {
     const walked: string[] = [];
     walkPyFiles(scanDir, walked, () => false, scanDir);
-    const names = walked.map((p) => path.basename(p)).sort();
+    const walkedNames = walked.map((p) => path.basename(p)).sort();
+    const scanned = await scannedFiles();
 
-    expect(names).toContain('mod.py');
-    expect(names).toContain('mod.pyi');
-    // 结论：`.pyi` 进 skeleton 采集面但不进 python 符号扫描面 —— 这正是 SSoT 分列两条常量的理由
+    // 两侧各自持有独立硬编码期望（FR-006）：任一侧单独回退都会变红，
+    // 而不是仅比较两侧相等（后者在"两侧同时回退"时会假绿）
+    expect(walkedNames).toEqual(['mod.py', 'mod.pyi']);
+    expect(scanned).toEqual(['mod.py', 'mod.pyi']);
+    expect(scanned).toEqual(walkedNames);
+    // 结论：`.pyi` 同时进 skeleton 采集面与 python 符号扫描面。SSoT 仍分列两条常量，
+    // 是为保留各自管线身份与指纹 key 的独立稳定性，而非因为扩展名集合不同。
   });
 });
 
@@ -771,7 +782,8 @@ describe('surfaceMatchesFile', () => {
     expect(surfaceMatchesFile(TSJS_SKELETON_WALK_SURFACE, 'src/nested/a.tsx')).toBe(true);
     expect(surfaceMatchesFile(TSJS_SKELETON_WALK_SURFACE, 'a.TS')).toBe(false);
     expect(surfaceMatchesFile(PY_WALK_SURFACE, 'stub.pyi')).toBe(true);
-    expect(surfaceMatchesFile(PYTHON_SYMBOL_SCAN_SURFACE, 'stub.pyi')).toBe(false);
+    // F250：符号扫描面扩集后同样命中 `.pyi`（两面 parity）
+    expect(surfaceMatchesFile(PYTHON_SYMBOL_SCAN_SURFACE, 'stub.pyi')).toBe(true);
   });
 
   it('extname 族：大小写变体命中；扩展名出现在目录段而非文件名时不命中', () => {

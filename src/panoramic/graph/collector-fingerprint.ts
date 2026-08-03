@@ -41,9 +41,10 @@ export interface CollectorExtensionSurfaceEntry {
  * `genericAdapters` 是 java/go 两个 SSoT 常量的合并视图（决策 3）——二者 `matchSemantics` 相同，
  * 合并不丢失可辨识信息；若未来出现分歧，`mergeSurfaces` 会 throw 而非静默产出错误分量。
  *
- * `pythonSymbolScan` 是实现期审查（W-002，2026-08-03）补记的第六条生产管线
- * （`scanPyFiles`，仅 `.py`），与 `pyWalk`（`.py`+`.pyi`）**刻意分列**：两者是不同管线、
- * 采集面确实不同，合并会掩盖这个既存失配。
+ * `pythonSymbolScan` 是实现期审查（W-002，2026-08-03）补记的第六条生产管线（`scanPyFiles`），
+ * 与 `pyWalk`（`walkPyFiles`）**刻意分列**：两者分列是为了保留各自管线身份与指纹 key 的独立
+ * 稳定性，其扩展名集合自 F250 起趋于一致（同为 `.py`+`.pyi`），但仍作为两个独立指纹分量分别
+ * 追踪，以便未来任一管线单独变化时能被独立感知。合并成单一条目会永久丢失这种可辨识性。
  */
 export interface CollectorExtensionSurface {
   tsjsSkeletonWalk: CollectorExtensionSurfaceEntry;
