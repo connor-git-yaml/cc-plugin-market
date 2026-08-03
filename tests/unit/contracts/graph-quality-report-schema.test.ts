@@ -26,6 +26,7 @@ import {
   SC009_STALE_SCENARIOS,
   baseFreshnessGraph,
 } from '../../helpers/freshness-stale-scenarios.js';
+import { assertDistBuilt } from '../../helpers/dist-cli-guard.js';
 import type { GraphJSON } from '../../../src/panoramic/graph/graph-types.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
@@ -91,10 +92,10 @@ describe('graph-quality-report.schema.json — staleReasons 契约登记（F249 
 
 describe('真实 CLI --json 输出过递归 schema 校验（SC-009 五类样本）', () => {
   beforeAll(() => {
-    // 与 graph-quality-cli.test.ts / graph-quality-core.test.ts 同一惯例：dist 必须含本次改动，
-    // 否则校验的是旧编译产物的输出（假绿）。构建成本实测约 2s。
-    execFileSync('npm', ['run', 'build'], { encoding: 'utf-8', timeout: 120_000 });
-  }, 120_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），
+    // 此处只做 fail-fast 存在性断言，不再触发构建（避免与其他文件竞写 dist）。
+    assertDistBuilt();
+  });
 
   let tmpDir: string;
 

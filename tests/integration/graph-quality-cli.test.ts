@@ -23,6 +23,7 @@ import {
   SC009_STALE_SCENARIOS,
   baseFreshnessGraph,
 } from '../helpers/freshness-stale-scenarios.js';
+import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
 
@@ -93,9 +94,10 @@ const baseGraph = baseFreshnessGraph;
 
 describe('graph-quality CLI（F217 T033）', () => {
   beforeAll(() => {
-    // 确保编译产物含本次新增的 graph-quality 命令（先红：实现前该子命令不存在）。
-    execFileSync('npm', ['run', 'build'], { encoding: 'utf-8', timeout: 120_000 });
-  }, 120_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），
+    // 此处只做 fail-fast 存在性断言，不再触发构建（避免与其他文件竞写 dist）。
+    assertDistBuilt();
+  });
 
   let tmpDir: string;
 

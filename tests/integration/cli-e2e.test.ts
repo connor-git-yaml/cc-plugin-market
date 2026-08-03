@@ -7,6 +7,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
 
@@ -29,13 +30,10 @@ function runCLI(args: string[]): { stdout: string; exitCode: number } {
 
 describe('CLI 端到端测试', () => {
   beforeAll(() => {
-    // 确保编译产物存在。`npm run build` 在 CI 冷缓存环境常超 10s（vitest hook 默认上限），
-    // 显式给 60s hook timeout 匹配 execFileSync 的 60_000ms 子进程超时。
-    execFileSync('npm', ['run', 'build'], {
-      encoding: 'utf-8',
-      timeout: 60_000,
-    });
-  }, 60_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），
+    // 此处只做 fail-fast 存在性断言，不再触发构建（避免与其他文件竞写 dist）。
+    assertDistBuilt();
+  });
 
   describe('--version', () => {
     it('输出版本号并退出码为 0', () => {
@@ -136,7 +134,9 @@ describe.skipIf(process.platform === 'win32')('CLI 零认证隔离端到端测�
   let zeroAuthEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
-    execFileSync('npm', ['run', 'build'], { encoding: 'utf-8', timeout: 60_000 });
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），
+    // 此处只做 fail-fast 存在性断言，其余 fixture/env 初始化逻辑保持不变。
+    assertDistBuilt();
 
     fixtureDir = mkdtempSync(join(tmpdir(), 'spectra-zero-auth-fixture-'));
     writeFileSync(
@@ -150,7 +150,7 @@ describe.skipIf(process.platform === 'win32')('CLI 零认证隔离端到端测�
     symlinkSync(process.execPath, join(fakeBin, 'node'));
 
     zeroAuthEnv = { HOME: fakeHome, PATH: `${fakeBin}:/usr/bin:/bin` };
-  }, 60_000);
+  });
 
   afterAll(() => {
     for (const dir of [fixtureDir, fakeHome, fakeBin]) {

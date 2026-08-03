@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { GraphQualityReport } from '../../src/panoramic/graph/quality/quality-types.js';
+import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
 
 const CLI_PATH = path.resolve('dist/cli/index.js');
 const FIXTURE_DIR = path.resolve('tests/fixtures/graph-quality-adversarial');
@@ -54,10 +55,11 @@ function gitConfig(dir: string): void {
 
 describe('对抗注入 fixture 测试（F217 T048）', () => {
   beforeAll(() => {
-    if (!fs.existsSync(CLI_PATH)) {
-      execFileSync('npm', ['run', 'build'], { encoding: 'utf-8', timeout: 120_000 });
-    }
-  }, 120_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），此处只做
+    // fail-fast 存在性断言；原「只判存在不判新鲜」的半条件 build 逻辑一并去除
+    // （globalSetup 的新鲜度判据已覆盖，不留潜伏缺口）。
+    assertDistBuilt();
+  });
 
   describe('SC-003 duplicate-canonical-id.json：语义重复 canonical ID 100% 检出', () => {
     it('检出重复三元组并精确定位 ids', () => {

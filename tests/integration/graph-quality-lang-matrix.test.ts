@@ -27,6 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { GraphQualityReport } from '../../src/panoramic/graph/quality/quality-types.js';
+import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
 
@@ -53,11 +54,11 @@ function runGraphQualityJson(graphPath: string): { result: CLIResult; report: Gr
 
 describe('四语言图质量回归矩阵（F217 T046）', () => {
   beforeAll(() => {
-    // 与 graph-quality-cli.test.ts（T033）同款前置：确保 dist 含本次新增命令。
-    if (!existsSync(CLI_PATH)) {
-      execFileSync('npm', ['run', 'build'], { encoding: 'utf-8', timeout: 120_000 });
-    }
-  }, 120_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），此处只做
+    // fail-fast 存在性断言；原「只判存在不判新鲜」的半条件 build 逻辑一并去除
+    // （globalSetup 的新鲜度判据已覆盖，不留潜伏缺口）。
+    assertDistBuilt();
+  });
 
   describe('Python（micrograd，F215 in-repo pinned fixture，P4 重生成后验证 T024 修复）', () => {
     const GRAPH_PATH = resolve('tests/fixtures/micrograd-baseline-graph/graph.json');

@@ -54,6 +54,14 @@ export default defineConfig({
     // 与调整前「启动即拉满 worker」的行为一致，只是上限变小。
     maxWorkers: maxTestWorkers,
 
+    // F251：dist/ 构建收拢到 globalSetup（所有 worker fork 之前的单进程阶段串行执行一次），
+    // 消除「N 个测试文件各自 beforeAll 无条件 build」与「~14 个 spawn dist CLI 的测试文件」
+    // 之间的构建期/消费期竞写窗口。根级声明（而非放进某个 project 条目）：vitest 的
+    // `_initializeGlobalSetup` 恒会把 `getRootProject()` 纳入待初始化集合，保证任意调用形态
+    // （全量 / --project 过滤 / 单文件）都执行且仅执行一次，不存在按 project 声明时「新增
+    // 消费方所在 project 忘了同步声明」的遗漏面（详见 plan.md 决策点 1）。
+    globalSetup: './tests/global-setup.ts',
+
     // 覆盖率报告
     coverage: {
       provider: 'v8',

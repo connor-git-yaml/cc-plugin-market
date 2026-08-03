@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
 
@@ -39,13 +40,10 @@ describe('init 端到端测试', () => {
   let tempDir: string;
 
   beforeAll(() => {
-    // 确保编译产物存在。execFileSync 的 60_000ms 是子进程超时，vitest hook 还需要
-    // 显式超时（默认 10s）才能容纳 CI 冷缓存下的 `npm run build` 耗时。
-    execFileSync('npm', ['run', 'build'], {
-      encoding: 'utf-8',
-      timeout: 60_000,
-    });
-  }, 60_000);
+    // F251：dist 构建已收拢到 vitest globalSetup（tests/global-setup.ts），
+    // 此处只做 fail-fast 存在性断言，不再触发构建（避免与其他文件竞写 dist）。
+    assertDistBuilt();
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'init-e2e-'));
