@@ -21,6 +21,7 @@ import type { LanguageAdapter } from '../adapters/language-adapter.js';
 import { JavaLanguageAdapter } from '../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../adapters/go-adapter.js';
 import { createIgnoreOracle } from '../panoramic/graph/quality/ignore-oracle.js';
+import { surfaceMatchesFile, type CollectorPipelineSurface } from '../collector-surface.js';
 
 /** 大文件 size guard，与 Python/TS-JS 采集器对齐（EC-14：1MB 阈值）。 */
 const MAX_FILE_BYTES = 1_000_000;
@@ -41,13 +42,21 @@ function collectDefaultIgnoreDirs(adapters: readonly LanguageAdapter[]): Set<str
   return dirs;
 }
 
+/**
+ * 逐 adapter 判定文件归属：判定委托 `surfaceMatchesFile`（本采集器是 case-insensitive 族
+ * 的生产者，`matchSemantics` 在此把既有事实显式化），扩展名提取口径随之内化进事实源，
+ * 本模块不再自行 `path.extname().toLowerCase()`。
+ */
 function resolveAdapterForFile(
   filePath: string,
   adapters: readonly LanguageAdapter[],
 ): LanguageAdapter | null {
-  const ext = path.extname(filePath).toLowerCase();
   for (const adapter of adapters) {
-    if (adapter.extensions.has(ext)) return adapter;
+    const surface: CollectorPipelineSurface = {
+      extensions: adapter.extensions,
+      matchSemantics: 'case-insensitive',
+    };
+    if (surfaceMatchesFile(surface, filePath)) return adapter;
   }
   return null;
 }
@@ -70,6 +79,9 @@ function walkFiles(
     return;
   }
 
+  // 并集采集面：本采集器按 `extname().toLowerCase()` 匹配，故语义为 case-insensitive。
+  const surface: CollectorPipelineSurface = { extensions, matchSemantics: 'case-insensitive' };
+
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     const relativePath = path.relative(baseDir, fullPath);
@@ -83,8 +95,7 @@ function walkFiles(
     }
 
     if (!entry.isFile()) continue;
-    const ext = path.extname(entry.name).toLowerCase();
-    if (!extensions.has(ext)) continue;
+    if (!surfaceMatchesFile(surface, entry.name)) continue;
     if (isIgnored(relativePath)) continue;
     out.push(fullPath);
   }

@@ -6,6 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
+import { surfaceMatchesFile, type CollectorPipelineSurface } from '../collector-surface.js';
 
 /** 通用忽略目录（与语言无关，始终忽略） */
 const UNIVERSAL_IGNORE_DIRS = new Set([
@@ -271,6 +272,12 @@ function walkDir(
 
   const registry = LanguageAdapterRegistry.getInstance();
 
+  // 本扫描器按 `extname().toLowerCase()` 匹配，故语义为 case-insensitive（显式化既有事实）。
+  const surface: CollectorPipelineSurface = {
+    extensions: supportedExtensions,
+    matchSemantics: 'case-insensitive',
+  };
+
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     const relativePath = path.relative(baseDir, fullPath);
@@ -295,8 +302,9 @@ function walkDir(
       walkDir(fullPath, baseDir, isIgnored, supportedExtensions, ignoreDirs, results, stats, unsupported, languageStats);
     } else if (entry.isFile()) {
       stats.totalScanned++;
+      // ext 保留：下方 languageStats 分组与 unsupported 统计仍以它为键（判定本身已交给 surface）
       const ext = path.extname(entry.name).toLowerCase();
-      if (supportedExtensions.has(ext)) {
+      if (surfaceMatchesFile(surface, entry.name)) {
         results.push(relativePath);
 
         // 累加 languageStats（按 adapter.id 分组）

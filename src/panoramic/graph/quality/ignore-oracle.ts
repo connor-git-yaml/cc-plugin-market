@@ -27,13 +27,12 @@ import * as path from 'node:path';
 import { createGitignoreFilter } from '../../../utils/file-scanner.js';
 import { JavaLanguageAdapter } from '../../../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../../../adapters/go-adapter.js';
-import { extractExtension } from '../collector-extname.js';
 import {
   GO_ADAPTER_SURFACE,
   JAVA_ADAPTER_SURFACE,
   PY_WALK_SURFACE,
   TSJS_SKELETON_WALK_SURFACE,
-  surfaceHasExtension,
+  surfaceMatchesFile,
 } from '../../../collector-surface.js';
 
 /**
@@ -118,7 +117,8 @@ function goIgnoreDirs(): ReadonlySet<string> {
 }
 
 /**
- * 按扩展名分派到对应生产者的忽略目录集合；未知扩展名（含纯目录路径）→ union 兜底。
+ * 按路径落在哪条采集面分派到对应生产者的忽略目录集合；不落任何采集面（含纯目录路径）
+ * → union 兜底。
  *
  * F249 FR-002 #5：分派判定面原为本文件自有的 `TSJS_EXTENSIONS`/`PY_EXTENSIONS` 镜像
  * 常量 + `'.java'`/`'.go'` 字面量比较，现全部改为消费采集面事实源，并按各管线自身的
@@ -129,16 +129,46 @@ function goIgnoreDirs(): ReadonlySet<string> {
  * ② `Foo.JAVA`/`main.GO` 等大小写变体此前落 union 兜底，现随各自 adapter 面走对应忽略集合
  *    （generic collector 用 `extname().toLowerCase()`，确实会采集这些变体）。
  *
- * 扩展名提取消费 F248 的共享 `extractExtension`（本文件原有的私有 `extnameOf` 已随之删除）：
- * 本函数是"手上只有扩展名"的分派型消费方，因此用 `surfaceHasExtension` 而非
- * `surfaceMatchesFile`，提取口径按 F248 合同保持 `lastIndexOf('.')` 切片语义不变。
+ * 判定形态遵循 W-004 合同：本函数手上持有的是调用方给的**完整相对路径**（见
+ * `createIgnoreOracle` 的 `relativePath`），而不是一个已提取好的扩展名字符串，因此整条
+ * 判定委托 `surfaceMatchesFile`，不再先自行提取扩展名再走 `surfaceHasExtension`——
+ * "文件名 → 扩展名"的提取口径本身就随管线而异（endsWith 族 vs `path.extname` 族），
+ * 把提取步骤留在消费方实现正是 W-004 所指的形态失真来源。
+ *
+ * 两族的分派合同，以"末尾切片式提取"（`name.slice(name.lastIndexOf('.'))`，F252 前的
+ * 实现口径，随 `collector-extname.ts` 退役）为对照系——测试正是按这两族的分歧钉住的：
+ * - 大小写敏感族（TSJS/PY）与对照系**恒等**：对面内每个扩展名 e，"末尾切片 === e"
+ *   ⟺ "relativePath.endsWith(e)"。纯 dotfile `.ts` 命中 TSJS 面，与生产者 walkTsJsFiles
+ *   的 `endsWith` 同解。
+ * - 大小写不敏感族（Java/Go）走 `path.extname`，与对照系存在**两类**分歧；两类都只改变
+ *   分派目标（语言专属集合 ⇄ union 兜底），故目录段落在哪个集合决定翻转方向，两类各自
+ *   **双向**可翻：
+ *   ① 纯 dotfile basename（`.go`/`.java`）：`path.extname` 判定其无扩展名 → union 兜底，
+ *      而对照系算出 `.go` → 语言专属集合。目录段只在专属集合内（`vendor/.go`、
+ *      `.gradle/.java`）→ 判定为不忽略；目录段只在 union 内（`tmp/.java`、`dist/.go`、
+ *      `venv/.java`、`target/.go`）→ 判定为忽略。
+ *   ② 尾随分隔符路径（`f.go/` 形态）：`path.extname` 剥掉尾随分隔符算出 `.go` → 语言专属
+ *      集合，而对照系保留分隔符得到 `.go/`、不落任何面 → union 兜底。分派移动方向与 ①
+ *      相反，翻转方向随之镜像：`vendor/f.go/` → 判定为忽略；`tmp/f.go/` → 判定为不忽略。
+ *
+ * 上述两类形态在现有全部消费方均**不可达**，因此分歧不产生可观察的判定差异（采集面与图
+ * 质量门结论均不受影响，BEHAVIOR_VERSION 不因这两类分歧而 bump）：
+ * - generic collector（`generic-language-skeleton-collector.ts::walkFiles`）：目录项被
+ *   `entry.name.startsWith('.')` 前置跳过，文件项被 `surfaceMatchesFile` 的扩展面判定挡下
+ *   （纯 dotfile 不匹配 case-insensitive 面），两条路径都在调用 `isIgnored` **之前** return；
+ *   而 relativePath 由 `path.relative(path.join(...))` 构造、`entry.name` 不含分隔符，
+ *   结构上不产出尾随分隔符形态。
+ * - 图质量门（`legacy-ignored-check.ts`）：输入是图节点 id 的 filePart，由上述采集器产出，
+ *   同样不含这两类形态。
+ *
+ * 新增消费方时 MUST 重新评估这条不可达性：若某消费方可能持有纯 dotfile 或带尾随分隔符的
+ * 路径，上述分歧会立刻变为可观察行为差异。
  */
 function ignoreDirsForPath(relativePath: string): ReadonlySet<string> {
-  const ext = extractExtension(relativePath);
-  if (surfaceHasExtension(TSJS_SKELETON_WALK_SURFACE, ext)) return TSJS_IGNORE_DIRS;
-  if (surfaceHasExtension(PY_WALK_SURFACE, ext)) return PY_IGNORE_DIRS;
-  if (surfaceHasExtension(JAVA_ADAPTER_SURFACE, ext)) return javaIgnoreDirs();
-  if (surfaceHasExtension(GO_ADAPTER_SURFACE, ext)) return goIgnoreDirs();
+  if (surfaceMatchesFile(TSJS_SKELETON_WALK_SURFACE, relativePath)) return TSJS_IGNORE_DIRS;
+  if (surfaceMatchesFile(PY_WALK_SURFACE, relativePath)) return PY_IGNORE_DIRS;
+  if (surfaceMatchesFile(JAVA_ADAPTER_SURFACE, relativePath)) return javaIgnoreDirs();
+  if (surfaceMatchesFile(GO_ADAPTER_SURFACE, relativePath)) return goIgnoreDirs();
   return GRAPH_COLLECTOR_IGNORE_DIRS;
 }
 

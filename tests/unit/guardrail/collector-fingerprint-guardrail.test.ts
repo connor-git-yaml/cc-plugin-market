@@ -35,6 +35,7 @@ import {
   computeCollectorFingerprint,
   fingerprintsEqual,
   isValidCollectorFingerprint,
+  parseCollectorFingerprint,
 } from '../../../src/panoramic/graph/collector-fingerprint.js';
 import type { GraphJSON } from '../../../src/panoramic/graph/graph-types.js';
 import {
@@ -137,10 +138,15 @@ describe('a-track：graph-only 重建 vs pinned 期望（FR-005 / SC-005(b)）',
     expect(isValidCollectorFingerprint(rebuiltFingerprint)).toBe(true);
     expect(pinnedFingerprint?.behaviorVersion).toBe(BEHAVIOR_VERSION);
     expect(rebuiltFingerprint?.behaviorVersion).toBe(BEHAVIOR_VERSION);
+    // F252：isValidCollectorFingerprint 收紧为纯 boolean 后不再是类型谓词，`as never` 类型
+    // 断言绕过已不是合适写法——改经 parseCollectorFingerprint 拿到强类型 snapshot（if-throw
+    // 是真实 control-flow narrowing，而非 expect() 内的伪窄化）。
+    const pinnedSnapshot = parseCollectorFingerprint(pinnedFingerprint);
+    if (pinnedSnapshot === null) {
+      throw new Error('pinned fingerprint 应合法（上方 isValidCollectorFingerprint 已断言为 true）');
+    }
     // pinned 记录的指纹与当前代码状态语义相等——不等就说明 pinned 过期，护栏本身失去参照
-    expect(
-      fingerprintsEqual(pinnedFingerprint as never, computeCollectorFingerprint()),
-    ).toBe(true);
+    expect(fingerprintsEqual(pinnedSnapshot, computeCollectorFingerprint())).toBe(true);
   });
 
   it('覆盖 #1 六扩展 + #2 两扩展 + #3 大小写变体样本（护栏输入面未被悄悄缩小）', () => {

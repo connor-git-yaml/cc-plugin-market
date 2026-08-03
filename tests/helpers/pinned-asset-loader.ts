@@ -12,7 +12,7 @@
  */
 import * as fs from 'node:fs';
 import type { CollectorFingerprint } from '../../src/panoramic/graph/collector-fingerprint.js';
-import { isValidCollectorFingerprint } from '../../src/panoramic/graph/collector-fingerprint.js';
+import { parseCollectorFingerprint } from '../../src/panoramic/graph/collector-fingerprint.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 import type { NormalizedModuleGraphSnapshot } from './module-graph-snapshot-normalize.js';
 
@@ -90,17 +90,19 @@ export function loadPinnedGraphOnlyAsset(assetPath: string): PinnedGraphOnlyAsse
 /**
  * 解包 b-track pinned 资产（`expected-module-graph.json`）。
  *
- * 这里额外跑 `isValidCollectorFingerprint`：b-track 的 `fingerprint` 是顶层独立字段
+ * 这里额外跑 `parseCollectorFingerprint`：b-track 的 `fingerprint` 是顶层独立字段
  * （`ModuleGraph` 生产 schema 里没有指纹的位置），一旦畸形，下游的 `fingerprintsEqual` 会拿到
- * 非法结构；在唯一入口处收口比在每个调用点各判一次更可靠。
+ * 非法结构；在唯一入口处收口比在每个调用点各判一次更可靠。用 parse 而非布尔投影，还额外
+ * 获得"外部 JSON 防御性拷贝"收益——返回的是与磁盘对象物理独立的 snapshot，下游比较不会
+ * 被后续代码对原 JSON 对象的意外修改影响。
  */
 export function loadPinnedModuleGraphAsset(assetPath: string): PinnedModuleGraphAsset {
   const parsed = requireFixtureInputHash(readJson(assetPath), assetPath);
 
-  const fingerprint = parsed['fingerprint'];
-  if (!isValidCollectorFingerprint(fingerprint)) {
+  const fingerprint = parseCollectorFingerprint(parsed['fingerprint']);
+  if (fingerprint === null) {
     throw new Error(
-      `pinned 资产的 fingerprint 结构非法（isValidCollectorFingerprint === false）: ${assetPath}`,
+      `pinned 资产的 fingerprint 结构非法（parseCollectorFingerprint 返回 null）: ${assetPath}`,
     );
   }
 

@@ -329,7 +329,7 @@ export function parseCollectorFingerprint(value: unknown): CollectorFingerprint 
  * 需要拿指纹继续做比较的调用方 MUST 用 `parseCollectorFingerprint` 并消费其返回的 snapshot，
  * **不要** `isValid...` 之后再拿原对象去比较——那正是 W-005 修掉的二次读取模式。
  */
-export function isValidCollectorFingerprint(value: unknown): value is CollectorFingerprint {
+export function isValidCollectorFingerprint(value: unknown): boolean {
   return parseCollectorFingerprint(value) !== null;
 }
 

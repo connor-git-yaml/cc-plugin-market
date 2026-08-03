@@ -62,7 +62,9 @@ export function resolveSourceCommit(projectRoot: string): string | null {
  * `collector-extname.ts::extractExtension`。本轮改造更进一步——dirty 判定不再在本模块做任何
  * 扩展名提取（提取口径随管线而异，已内化进 `surfaceMatchesFile`），因此这里连
  * `extractExtension` 也不需要 import。F248 的"消除双实现"意图完全达成（零重复提取实现），
- * 其共享叶子仍由 `ignore-oracle.ts` 这一分派型消费方使用，未被孤立。
+ * 其共享叶子 `collector-extname.ts` 此前仍由 `ignore-oracle.ts` 这一消费方引用；该消费方
+ * 实际手上持有的是完整文件路径而非仅扩展名，已于 F252 一并迁移至 `surfaceMatchesFile`，
+ * `collector-extname.ts` 随之零消费方退役并删除。
  */
 function isDirtyJudgedSourceFile(filePath: string): boolean {
   return DIRTY_SOURCE_SURFACES.some((surface) => surfaceMatchesFile(surface, filePath));

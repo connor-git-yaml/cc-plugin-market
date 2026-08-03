@@ -165,10 +165,16 @@ export const DIRTY_SOURCE_SURFACES: readonly CollectorPipelineSurface[] = ALL_PR
  * 仍会出现"某处忘了做 toLowerCase"的镜像失真。
  *
  * **适用边界（W-004）**：本函数只回答"这个扩展名字符串是否在面内"，供**手上只有扩展名、
- * 没有文件名**的分派型消费方使用（如 `ignore-oracle.ts` 按扩展名选忽略目录集合）。
- * 要判定"某个文件是否会被该管线采集"，MUST 用 `surfaceMatchesFile`——因为"文件名 →
- * 扩展名"的提取口径本身就随管线而异（endsWith 族 vs `path.extname` 族），把提取步骤留给
- * 调用方各自实现，正是 W-004 那类形态失真（纯点文件 `src/.go` 被误判命中）的来源。
+ * 没有文件名**的分派型消费方使用。要判定"某个文件是否会被该管线采集"，MUST 用
+ * `surfaceMatchesFile`——因为"文件名 → 扩展名"的提取口径本身就随管线而异（endsWith 族 vs
+ * `path.extname` 族），把提取步骤留给调用方各自实现，正是 W-004 那类形态失真（纯点文件
+ * `src/.go` 被误判命中）的来源。
+ *
+ * 消费方现状（F252 如实记账）：本函数目前**零生产消费方**——原先唯一的例子
+ * `ignore-oracle.ts`（按扩展名选忽略目录集合）实际手上持有完整相对路径，已迁移至
+ * `surfaceMatchesFile`。函数本体作为 SSoT 公共 API 面的合法组成保留，供未来确实只掌握
+ * 扩展名字符串的消费方使用，其两族语义继续由 `tests/unit/collector-surface.test.ts` 的
+ * 真值表测试锚定。
  *
  * @param extension 待判定扩展名，**保留原始大小写**（含前导 `.`，如 `.TS`）；
  *   调用方 MUST NOT 预先归一化，否则 case-sensitive 管线的判定会被静默放宽。

@@ -144,5 +144,42 @@ describe('createIgnoreOracle', () => {
       const isIgnoredPath = createIgnoreOracle(tmpDir);
       expect(isIgnoredPath('node_modules/x.rb')).toBe(true);
     });
+
+    // F252：分派改由 surfaceMatchesFile 按各管线真实匹配形态求值后，大小写不敏感族
+    // （Java/Go）的纯 dotfile 不再被误分派到该语言专属忽略集合。判据取"首段目录只存在于
+    // 该语言 adapter 的 defaultIgnoreDirs、不在 GRAPH_COLLECTOR_IGNORE_DIRS union 内"，
+    // 因此旧的误分派逻辑判 true、新的 union 兜底判 false，两者可区分。
+    it('vendor/.go → 不 ignored（纯 dotfile 不再误分派到 Go 专属忽略集合，F252 行为变化点）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      // generic collector 的 path.extname('.go') === ''，根本不会采集这个文件
+      expect(isIgnoredPath('vendor/.go')).toBe(false);
+    });
+
+    it('.gradle/.java → 不 ignored（纯 dotfile 不再误分派到 Java 专属忽略集合，F252 行为变化点）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('.gradle/.java')).toBe(false);
+    });
+
+    it('vendor/foo.go（真实 Go 文件，非纯 dotfile）→ 仍 ignored（case-insensitive 族非 dotfile 场景零变化）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('vendor/foo.go')).toBe(true);
+    });
+
+    // 纯 dotfile 分歧是**双向**的：上面两例取"目录段只在语言专属集合内"（vendor/.gradle）
+    // 得到 true→false，本例取相反判别式——目录段只在 union 内、不在该语言专属集合内。
+    // 'tmp' ∈ GRAPH_COLLECTOR_IGNORE_DIRS 但 ∉ javaIgnoreDirs()，故末尾切片式提取会算出
+    // '.java' 分派到 Java 专属集合而判 false，union 兜底则判 true。
+    it('tmp/.java → ignored（union 兜底后 union 独有目录段新命中，反向 flip 钉住）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('tmp/.java')).toBe(true);
+    });
+
+    // 第二类分歧：path.extname 剥掉尾随分隔符（path.extname('vendor/f.go/') === '.go'），
+    // 而末尾切片式提取保留分隔符得到 '.go/'、不落任何采集面。故分派移动方向与纯 dotfile
+    // 相反——本例走 Go 专属集合（含 vendor）判 true，union 兜底（不含 vendor）则判 false。
+    it('vendor/f.go/ → ignored（尾随分隔符经 path.extname 剥离后命中 Go 面，第二类分歧钉住）', () => {
+      const isIgnoredPath = createIgnoreOracle(tmpDir);
+      expect(isIgnoredPath('vendor/f.go/')).toBe(true);
+    });
   });
 });
