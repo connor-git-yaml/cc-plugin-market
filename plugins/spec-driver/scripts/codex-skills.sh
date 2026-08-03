@@ -220,6 +220,40 @@ sync_plugin_distribution_copy() {
   echo "Spec Driver Codex skills 已同步到分发目录: $dist_dir"
 }
 
+# Feature 240（FR-011/FR-010）：全局模式下把我方 hook 条目合并写入 $CODEX_HOME/hooks.json。
+#
+# 🔴 作用域：**只有 global 模式**调用。Codex hooks 只有全局位置，无项目级语义
+#    （_grounding.md §8.1），project 模式下调用等于往用户全局文件里写不该写的东西。
+#
+# 失败处置沿用 sidecar 模式（plan §6.6）：写入失败仅告警，不让 skills 安装回滚 ——
+# 唯一例外是目标 hooks.json 非法 JSON（退出码 3），此时必须 fail-loud 中断，
+# 否则用户会以为 hooks 已装好而实际一条都没生效。
+run_codex_hooks_cli() {
+  local action_label="$1"
+  shift
+
+  local codex_home
+  if ! codex_home="$(resolve_codex_home_from_env)"; then
+    echo "[警告] 无法解析 Codex 家目录，跳过 hooks ${action_label}（skills 操作不受影响）" >&2
+    return 0
+  fi
+
+  local status=0
+  set +e
+  node "$PLUGIN_DIR/scripts/install-codex-hooks.mjs" --codex-home "$codex_home" --plugin-root "$PLUGIN_DIR" "$@"
+  status=$?
+  set -e
+
+  if [[ $status -eq 3 ]]; then
+    echo "[错误] $codex_home/hooks.json 不是合法 JSON，hooks ${action_label}未执行且未改动该文件。请手动修复后重跑本命令" >&2
+    exit 1
+  fi
+  if [[ $status -ne 0 ]]; then
+    echo "[警告] Codex hooks ${action_label}失败（退出码 $status），不阻断 skills 操作" >&2
+  fi
+  return 0
+}
+
 install_all() {
   write_wrapper "spec-driver-constitution" "spec-driver-constitution"
   write_wrapper "spec-driver-feature" "spec-driver-feature"
@@ -331,8 +365,17 @@ remove_all() {
   fi
 }
 
+# hooks 与 skills 是两个独立产物，顺序上 hooks 在后：skills 装不成时不该留下指向半截安装的
+# hook 条目。写成显式 if 而非 `[[ ... ]] && cmd`：后者在 project 模式下会让脚本以整条
+# AND-list 的非零状态收尾（`set -e` 下的经典脚尾陷阱）。
 if [[ "$ACTION" == "install" ]]; then
   install_all
+  if [[ "$MODE" == "global" ]]; then
+    run_codex_hooks_cli "安装"
+  fi
 else
   remove_all
+  if [[ "$MODE" == "global" ]]; then
+    run_codex_hooks_cli "卸载" --remove
+  fi
 fi
