@@ -27,6 +27,13 @@ interface EmbeddedCommitResult {
   reason?: string;
 }
 
+/** F254：`readEmbeddedGraphMeta` 的成功态同时带 sourceCommit 与 collector fingerprint。 */
+interface EmbeddedGraphMetaResult {
+  ok: boolean;
+  value?: { sourceCommit: string | null; fingerprint: unknown };
+  reason?: string;
+}
+
 interface StatusPayload {
   schemaVersion: number;
   bootstrapSource: string;
@@ -66,6 +73,9 @@ interface WriteOutcome {
 const readEmbeddedSourceCommit = statusCore.readEmbeddedSourceCommit as (
   graphJsonPath: string,
 ) => EmbeddedCommitResult;
+const readEmbeddedGraphMeta = statusCore.readEmbeddedGraphMeta as (
+  graphJsonPath: string,
+) => EmbeddedGraphMetaResult;
 const resolveWorktreeHead = statusCore.resolveWorktreeHead as (projectRoot: string) => string | null;
 const readPreviousStatus = statusCore.readPreviousStatus as (
   projectRoot: string,
@@ -381,6 +391,78 @@ describe('Feature 239 — graph-bootstrap-status 状态文件（FR-006）', () =
         ok: false,
         reason: 'parse-error',
       });
+    });
+  });
+
+  describe('F254 readEmbeddedGraphMeta 泛化读取（sourceCommit + collector fingerprint）', () => {
+    const graphPath = (): string => path.join(sandbox.root, GRAPH_REL);
+
+    /** F249 指纹的最小合法形态（五条管线 key 齐全），供本组用例复用。 */
+    const sampleFingerprint = {
+      formatVersion: 1,
+      extensionSurface: {
+        tsjsSkeletonWalk: { extensions: ['.ts', '.mjs'], matchSemantics: 'case-sensitive' },
+        pyWalk: { extensions: ['.py'], matchSemantics: 'case-sensitive' },
+        genericAdapters: { extensions: ['.go'], matchSemantics: 'case-insensitive' },
+        moduleDerivationScan: { extensions: ['.mts'], matchSemantics: 'case-insensitive' },
+        pythonSymbolScan: { extensions: ['.py'], matchSemantics: 'case-sensitive' },
+      },
+      behaviorVersion: 1,
+    };
+
+    it('图带 fingerprint → value.fingerprint 与源 JSON 深度相等，sourceCommit 一并透传', () => {
+      seedGraph(
+        sandbox.root,
+        JSON.stringify({ graph: { sourceCommit: 'e'.repeat(40), fingerprint: sampleFingerprint } }),
+      );
+
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual({
+        ok: true,
+        value: { sourceCommit: 'e'.repeat(40), fingerprint: sampleFingerprint },
+      });
+    });
+
+    it('图无 fingerprint 字段（F249 之前的旧图）→ value.fingerprint 为 null', () => {
+      seedGraph(sandbox.root, JSON.stringify({ graph: { sourceCommit: 'e'.repeat(40) } }));
+
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual({
+        ok: true,
+        value: { sourceCommit: 'e'.repeat(40), fingerprint: null },
+      });
+    });
+
+    it('三态失败分支的 reason 与 readEmbeddedSourceCommit 逐字相同（薄壳化未改契约）', () => {
+      // file-missing：图根本不存在
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual(readEmbeddedSourceCommit(graphPath()));
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual({ ok: false, reason: 'file-missing' });
+
+      // parse-error：文件在但不是 JSON
+      seedGraph(sandbox.root, '{ not json');
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual(readEmbeddedSourceCommit(graphPath()));
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual({ ok: false, reason: 'parse-error' });
+
+      // graph-too-large：稀疏文件，statSync 报超限但不实际读入
+      fs.writeFileSync(graphPath(), '');
+      fs.truncateSync(graphPath(), statusCore.MAX_JSON_BYTES + 1);
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual(readEmbeddedSourceCommit(graphPath()));
+      expect(readEmbeddedGraphMeta(graphPath())).toEqual({ ok: false, reason: 'graph-too-large' });
+    });
+
+    it('薄壳投影等价：readEmbeddedSourceCommit === readEmbeddedGraphMeta 的 sourceCommit 投影', () => {
+      for (const content of [
+        JSON.stringify({ graph: { sourceCommit: 'e'.repeat(40), fingerprint: sampleFingerprint } }),
+        JSON.stringify({ graph: { sourceCommit: 'e'.repeat(40) } }),
+        // 旧格式图：graph 字段整体缺失 → 两者都应给 ok:true + value:null（不是 parse-error）
+        JSON.stringify({ nodes: [], links: [] }),
+      ]) {
+        seedGraph(sandbox.root, content);
+        const meta = readEmbeddedGraphMeta(graphPath());
+        expect(meta.ok).toBe(true);
+        expect(readEmbeddedSourceCommit(graphPath())).toEqual({
+          ok: true,
+          value: meta.value?.sourceCommit ?? null,
+        });
+      }
     });
   });
 });

@@ -454,14 +454,33 @@ describe('FR-006 (g) annotateImpactCaveat 后置注解', () => {
     assert.deepEqual(annotated.caveats, []);
   });
 
-  it('目标不是 TS/JS 源 → 不注解（判据与 coverageScope 共用同一白名单）', () => {
+  it('目标落在图覆盖面之外 → 不注解（判据与 coverageScope 共用同一份面）', () => {
     const decision = decideGraphConsumption(VALID_INPUT);
-    const annotated = annotateImpactCaveat(
-      decision,
-      { directCallers: 0 },
+    // `.md` 不属于任何图生产管线的采集面；F254 之前这里用的是 `.mjs`，而 `.mjs` 早已在图内
+    for (const target of ['docs/design.md::foo', 'README.txt', 'no-extension-at-all']) {
+      assert.deepEqual(
+        annotateImpactCaveat(decision, { directCallers: 0 }, target).caveats,
+        [],
+        `${target} 不该被注解`,
+      );
+    }
+  });
+
+  it('F254：`.mjs` 目标现在落在覆盖面内 → 注解（修复前被误判范围外，caveat 通道对它整体失效）', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    for (const target of [
       'plugins/spec-driver/scripts/lib/goal-loop-core.mjs::foo',
-    );
-    assert.deepEqual(annotated.caveats, []);
+      'src/mod.cjs::bar',
+      'src/mod.py::baz',
+      'src/Main.java::Main',
+      'src/main.go::main',
+    ]) {
+      assert.deepEqual(
+        annotateImpactCaveat(decision, { directCallers: 0 }, target).caveats,
+        [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
+        `${target} 应被注解`,
+      );
+    }
   });
 
   it('B1-C4 真实 MCP 形状：计数在 summary.directCallers 上同样被识别', () => {
@@ -504,11 +523,66 @@ describe('FR-006 (g) annotateImpactCaveat 后置注解', () => {
     }
   });
 
-  it('GRAPH_SCOPE_EXTENSIONS 恰为图 walker 白名单四项，且全仓仅定义一处（FR-006 d）', () => {
-    assert.deepEqual([...GRAPH_SCOPE_EXTENSIONS].sort(), ['.js', '.jsx', '.ts', '.tsx']);
+  it('GRAPH_SCOPE_EXTENSIONS 恰为六条采集管线的扩展名并集，且全仓仅定义一处（FR-006 d / F254）', () => {
+    // 与 SSoT（src/collector-surface.ts::ALL_PRODUCER_SURFACES）的逐项一致性由跨语言合同测试
+    // tests/unit/graph-scope-extensions-contract.test.ts 守护——本模块零 import，无法引用 SSoT
+    assert.deepEqual(
+      [...GRAPH_SCOPE_EXTENSIONS].sort(),
+      ['.cjs', '.cts', '.go', '.java', '.js', '.jsx', '.mjs', '.mts', '.py', '.pyi', '.ts', '.tsx'],
+    );
 
     const definitions = MODULE_SOURCE.match(/(?:export\s+)?const\s+GRAPH_SCOPE_EXTENSIONS\s*=/g) ?? [];
-    assert.equal(definitions.length, 1, '白名单常量必须只在本模块定义一次');
+    assert.equal(definitions.length, 1, '静态 fallback 常量必须只在本模块定义一次');
+  });
+
+  it('F254 注释不得再保留已失真的两句断言（"只收这四类" / "全仓唯一定义处"白名单口径）', () => {
+    assert.equal(/只收这四类/.test(MODULE_SOURCE), false, '注释仍声称 walker 只收四类扩展名');
+    assert.equal(
+      /\*\*全仓唯一定义处\*\*/.test(MODULE_SOURCE),
+      false,
+      '注释仍以"全仓唯一定义处"自称权威白名单——现在图自述面才是优先判据',
+    );
+  });
+});
+
+describe('F254 annotateImpactCaveat 第 4 参 scopeExtensions 参数化', () => {
+  const TS_TARGET = 'src/a.ts::foo';
+
+  it('不传第 4 参 ≡ 显式传入 GRAPH_SCOPE_EXTENSIONS（默认值就是静态 fallback）', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    for (const target of [TS_TARGET, 'src/mod.mjs::foo', 'docs/design.md']) {
+      assert.deepEqual(
+        annotateImpactCaveat(decision, { directCallers: 0 }, target),
+        annotateImpactCaveat(decision, { directCallers: 0 }, target, GRAPH_SCOPE_EXTENSIONS),
+        `target=${target} 时默认值与显式传参必须等价`,
+      );
+    }
+  });
+
+  it('显式传入自定义面 → 判据随之切换（动态面能收窄，不只是扩大）', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+
+    // 自定义面只含 `.md`：`.ts` 反而落在面外 → 不注解
+    assert.deepEqual(annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, ['.md']).caveats, []);
+    // 同一份自定义面下 `.md` 目标反而被注解
+    assert.deepEqual(
+      annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', ['.md']).caveats,
+      [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
+    );
+    // 空面：什么都不注解（图自述面推导失败时不会走到这里，但函数本身必须是全序的）
+    assert.deepEqual(annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, []).caveats, []);
+  });
+
+  it('纯函数不变量：不就地改写 scopeExtensions 入参数组', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    const scopeExtensions = ['.ts', '.md'];
+    const snapshot = JSON.stringify(scopeExtensions);
+
+    annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, scopeExtensions);
+    annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', scopeExtensions);
+
+    assert.equal(JSON.stringify(scopeExtensions), snapshot);
+    assert.deepEqual([...GRAPH_SCOPE_EXTENSIONS].length, 12, '默认常量本身也不得被污染');
   });
 });
 

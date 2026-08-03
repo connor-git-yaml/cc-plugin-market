@@ -99,15 +99,21 @@ const MAX_SPAWN_BUFFER_BYTES = 64 * 1024 * 1024;
 const INHERITABLE_SOURCES = new Set(['primary-copy', 'local-build', 'unknown']);
 
 /**
- * 读取图内嵌的 `graph.sourceCommit`，返回三态结果。
+ * 读取图内嵌元数据：`graph.sourceCommit`（F239）+ `graph.fingerprint`（F249 collector 指纹）。
  *
  * 三态而非 `string | null`：调用方必须能区分"字段缺失（旧格式图，仍可评估）"与"图损坏
  * （不可评估）"——后者强制 `assessable: false`。
  *
+ * 为什么泛化成"一次读、两个字段"（F254）：图消费决策同时需要 sourceCommit（快照校验）与
+ * fingerprint（推导覆盖面）。两者同源于同一份 `graph.json`，各写一个读取函数会对 4.5MB 级别的
+ * 产物重复 stat + read + JSON.parse 两遍；而 `readEmbeddedSourceCommit` 是它的投影薄壳，
+ * 所以两个字段永远来自同一次解析，不存在"两次读取之间图被换掉"的窗口。
+ *
  * @param {string} graphJsonPath
- * @returns {{ ok: true, value: string | null } | { ok: false, reason: 'file-missing'|'parse-error' }}
+ * @returns {{ ok: true, value: { sourceCommit: string | null, fingerprint: unknown } }
+ *          | { ok: false, reason: 'file-missing'|'parse-error'|'graph-too-large' }}
  */
-export function readEmbeddedSourceCommit(graphJsonPath) {
+export function readEmbeddedGraphMeta(graphJsonPath) {
   let stats;
   try {
     stats = fs.statSync(graphJsonPath);
@@ -128,10 +134,32 @@ export function readEmbeddedSourceCommit(graphJsonPath) {
 
   try {
     const parsed = JSON.parse(raw);
-    return { ok: true, value: parsed?.graph?.sourceCommit ?? null };
+    return {
+      ok: true,
+      value: {
+        sourceCommit: parsed?.graph?.sourceCommit ?? null,
+        fingerprint: parsed?.graph?.fingerprint ?? null,
+      },
+    };
   } catch {
     return { ok: false, reason: 'parse-error' };
   }
+}
+
+/**
+ * `readEmbeddedGraphMeta` 的 sourceCommit 投影（F254 薄壳化）。
+ *
+ * 返回形状与三态 reason 枚举逐字保持不变：既有调用方（`buildStatusPayload`、CLI 的
+ * `readVerifiedSourceCommit`）零改动。
+ *
+ * @param {string} graphJsonPath
+ * @returns {{ ok: true, value: string | null }
+ *          | { ok: false, reason: 'file-missing'|'parse-error'|'graph-too-large' }}
+ */
+export function readEmbeddedSourceCommit(graphJsonPath) {
+  const meta = readEmbeddedGraphMeta(graphJsonPath);
+  if (!meta.ok) return meta;
+  return { ok: true, value: meta.value.sourceCommit };
 }
 
 /**

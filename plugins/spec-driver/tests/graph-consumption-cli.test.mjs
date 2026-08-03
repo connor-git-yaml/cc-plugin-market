@@ -100,6 +100,8 @@ const DECIDE_OUTPUT_KEYS = [
   'advisory',
   'dryRun',
   'inputs',
+  'scopeExtensionsSource',
+  'coverageUnionApplied',
   'changedFiles',
   'outcome',
   'authoritativeOutcome',
@@ -1014,12 +1016,12 @@ describe('Part 2 / FR-010 (d) 调用方合同：同 phase 跑两次', () => {
     assert.deepEqual(
       Object.keys(event).sort(),
       [
-        'advisory', 'caveats', 'decisionId', 'degradedReason', 'graphSourceCommit', 'inputs', 'kind',
-        'outcome', 'phase', 'projectRoot', 'refreshAttempted', 'refreshDurationMs', 'refreshOk',
-        'schemaVersion', 'ts',
+        'advisory', 'caveats', 'coverageUnionApplied', 'decisionId', 'degradedReason', 'graphSourceCommit',
+        'inputs', 'kind', 'outcome', 'phase', 'projectRoot', 'refreshAttempted', 'refreshDurationMs',
+        'refreshOk', 'schemaVersion', 'scopeExtensionsSource', 'ts',
       ],
     );
-    assert.equal(event.schemaVersion, 2);
+    assert.equal(event.schemaVersion, 3);
     assert.deepEqual(event.caveats, [], 'decision 事件的 caveats 恒空——caveat 只由注解事件产生');
     assert.equal(event.phase, 'unscoped', '--phase 缺省应落 sentinel');
   });
@@ -1074,7 +1076,7 @@ describe('Part 2 / FR-010 (e) annotate-caveat 事件与回链', () => {
     const annotations = events.filter((event) => event.kind === 'caveat-annotation');
     assert.equal(annotations.length, 1);
     assert.equal(annotations[0].decisionId, decided.json.decisionId, 'decisionId 必须回链到 decision 事件');
-    assert.equal(annotations[0].schemaVersion, 2);
+    assert.equal(annotations[0].schemaVersion, 3);
     assert.equal(annotations[0].impactStatus, 'completed');
     assert.deepEqual(annotations[0].caveats, ['coverage-gap-known-extraction-limit']);
     assert.deepEqual(annotated.json.decision.caveats, annotations[0].caveats, '输出与事件内容必须一致');
@@ -1220,11 +1222,13 @@ describe('批 1 整改 / B1-C4 annotate-caveat 与真实 MCP impact 形状对齐
     assert.deepEqual(annotation.caveats, []);
   });
 
-  it('--target 是图覆盖范围外的扩展名 → 拒绝注解（复用 GRAPH_SCOPE_EXTENSIONS 单一白名单）', () => {
+  it('--target 是图覆盖范围外的扩展名 → 拒绝注解（复用同一份覆盖面判据）', () => {
     const decisionFile = decideForAnnotation();
+    // F254：`.mjs` 已不再是"范围外"的例子（它本就在图内），换成真正落在采集面之外的扩展名
     for (const target of [
-      'plugins/spec-driver/scripts/lib/goal-loop-core.mjs::foo',
       'docs/design.md',
+      'README.txt',
+      'config/settings.yaml',
       'no-extension-at-all',
     ]) {
       const annotated = annotate(decisionFile, [
@@ -1254,7 +1258,10 @@ describe('Part 2 / SC-005 12 个 degradedReason 逐值落审计（非 dry-run de
     },
     {
       reason: DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE,
-      setup: (root) => { writeGraph(root); fs.appendFileSync(path.join(root, 'notes.mjs'), '// touched\n'); },
+      // F254：触发文件必须真正落在采集面之外。原用例改的是 `notes.mjs`，而 `.mjs` 早已在图内——
+      // 那条断言锁的是"白名单失真"这个 bug 本身，修复后自然不再成立。
+      // `writeGraph` 写的是无 fingerprint 的旧图形态，因此本用例同时覆盖 static-fallback 路径。
+      setup: (root) => { writeGraph(root); fs.appendFileSync(path.join(root, 'notes.md'), '<!-- touched -->\n'); },
       args: ['--refresh-policy', 'declined'],
     },
     {
@@ -1329,7 +1336,8 @@ describe('Part 2 / SC-005 12 个 degradedReason 逐值落审计（非 dry-run de
   for (const scenario of SCENARIOS) {
     it(`degradedReason=${scenario.reason} 落进 kind:"decision" 审计事件`, () => {
       seedProject(sandbox);
-      fs.writeFileSync(path.join(sandbox, 'notes.mjs'), 'export const note = 1;\n');
+      // 已提交的范围外文件（`.md`）：out-of-graph-scope 场景靠改它来触发
+      fs.writeFileSync(path.join(sandbox, 'notes.md'), '# notes\n');
       spawnSync('git', ['add', '-A'], { cwd: sandbox });
       spawnSync('git', ['commit', '-q', '-m', 'notes'], { cwd: sandbox });
 
@@ -1350,6 +1358,461 @@ describe('Part 2 / SC-005 12 个 degradedReason 逐值落审计（非 dry-run de
       assert.equal(decisions[0].phase, 'sc005');
     });
   }
+});
+
+/* ----------------------------- Part 2b：F254 fingerprint 驱动的动态覆盖面 */
+
+describe('Part 2b / F254 覆盖面优先取图自述的 collector fingerprint', () => {
+  /**
+   * 造一份合法的 F249 collector fingerprint（五条管线 key 齐全）。
+   *
+   * 默认值取本仓库真实采集面；`overrides` 用来精简/篡改某条管线，验证"动态面既能扩大也能收窄"
+   * 与"结构畸形整体回落"。
+   */
+  function makeFingerprint(overrides = {}) {
+    return {
+      formatVersion: 1,
+      extensionSurface: {
+        tsjsSkeletonWalk: { extensions: ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx'], matchSemantics: 'case-sensitive' },
+        pyWalk: { extensions: ['.py', '.pyi'], matchSemantics: 'case-sensitive' },
+        genericAdapters: { extensions: ['.go', '.java'], matchSemantics: 'case-insensitive' },
+        moduleDerivationScan: { extensions: ['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'], matchSemantics: 'case-insensitive' },
+        pythonSymbolScan: { extensions: ['.py'], matchSemantics: 'case-sensitive' },
+        ...overrides,
+      },
+      behaviorVersion: 1,
+    };
+  }
+
+  /** 与 `writeGraph` 同款，但图内嵌 `graph.fingerprint`（F249 之后的图形态）。 */
+  function writeGraphWithFingerprint(root, fingerprint, sourceCommit = 'a'.repeat(40)) {
+    fs.mkdirSync(path.join(root, 'specs', '_meta'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, GRAPH_REL),
+      JSON.stringify({ graph: { sourceCommit, fingerprint }, nodes: [{ id: 'src/a.ts' }], edges: [] }),
+    );
+  }
+
+  /** 提交一个指定文件后再改动它 → 稳定构造 modifies-existing + 指定扩展名的变更集。 */
+  function commitThenTouch(root, relPath, initial, appended) {
+    fs.mkdirSync(path.dirname(path.join(root, relPath)), { recursive: true });
+    fs.writeFileSync(path.join(root, relPath), initial);
+    spawnSync('git', ['add', '-A'], { cwd: root });
+    spawnSync('git', ['commit', '-q', '-m', `add ${relPath}`], { cwd: root });
+    fs.appendFileSync(path.join(root, relPath), appended);
+  }
+
+  it('(a) 旧图无 fingerprint 字段 → static-fallback，且行为与本 fix 之前一致', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'notes.md', '# notes\n', '<!-- touched -->\n');
+    writeGraph(sandbox); // 无 fingerprint 的旧图形态
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.scopeExtensionsSource, 'static-fallback');
+    assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope', '`.md` 在静态 fallback 下也是范围外');
+    assert.equal(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+  });
+
+  it('(b) 合法 fingerprint 且面内不含 `.py` → `.py` 改动判 out-of-scope（动态面能收窄）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/tool.py', 'x = 1\n', 'y = 2\n');
+    // 精简掉两条 python 管线：这份图确实没收 .py，覆盖面就该如实反映
+    writeGraphWithFingerprint(
+      sandbox,
+      makeFingerprint({
+        pyWalk: { extensions: ['.no-such-ext'], matchSemantics: 'case-sensitive' },
+        pythonSymbolScan: { extensions: ['.no-such-ext'], matchSemantics: 'case-sensitive' },
+      }),
+    );
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.equal(
+      result.json.inputs.coverageScope,
+      'out-of-graph-scope',
+      '静态 fallback 含 .py，但这份图自述不含——必须以图为准',
+    );
+  });
+
+  it('(c) 合法 fingerprint 含 `.mjs` → `.mjs` 改动判 in-scope（本 fix 的核心正面回归）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/tool.mjs', 'export const a = 1;\n', 'export const b = 2;\n');
+    writeGraphWithFingerprint(sandbox, makeFingerprint());
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.deepEqual(result.json.changedFiles, ['scripts/tool.mjs']);
+    assert.equal(result.json.inputs.coverageScope, 'in-graph-scope');
+    assert.notEqual(
+      result.json.degradedReason,
+      DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE,
+      '.mjs 改动不得再被判范围外——这正是 F254 要修的行为',
+    );
+    assert.equal(result.json.outcome, 'consume-impact');
+  });
+
+  it('(c2) 静态 fallback 下 `.mjs` 同样 in-scope（无 fingerprint 的旧图不留缺口）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/tool.mjs', 'export const a = 1;\n', 'export const b = 2;\n');
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.json.scopeExtensionsSource, 'static-fallback');
+    assert.equal(result.json.inputs.coverageScope, 'in-graph-scope');
+  });
+
+  it('(d) fingerprint 结构畸形 → 整体回落 static-fallback，绝不产出部分并集', () => {
+    const cases = [
+      { label: 'formatVersion 非 1', fingerprint: { ...makeFingerprint(), formatVersion: 2 } },
+      { label: 'formatVersion 是字符串', fingerprint: { ...makeFingerprint(), formatVersion: '1' } },
+      { label: 'extensionSurface 缺一条管线 key', fingerprint: (() => {
+        const fingerprint = makeFingerprint();
+        delete fingerprint.extensionSurface.pythonSymbolScan;
+        return fingerprint;
+      })() },
+      { label: 'extensions 不是数组', fingerprint: makeFingerprint({
+        pyWalk: { extensions: '.py', matchSemantics: 'case-sensitive' },
+      }) },
+      { label: 'extensions 元素非字符串', fingerprint: makeFingerprint({
+        pyWalk: { extensions: ['.py', 42], matchSemantics: 'case-sensitive' },
+      }) },
+      { label: 'extensionSurface 是数组', fingerprint: { formatVersion: 1, extensionSurface: [], behaviorVersion: 1 } },
+      // W-2：多出未知管线 key 同样判不认识（严格集合，与 TS 侧 keySetEquals 同口径）。
+      // 宽容忽略会让"新增第六条管线却忘了 bump formatVersion"静默按残缺五条算出合法并集——
+      // 新管线覆盖的扩展名于是被判范围外，正是本 fix 的原始 bug 形态。
+      { label: '合法五 key + 多出第 6 条未知管线 key', fingerprint: (() => {
+        const fingerprint = makeFingerprint();
+        fingerprint.extensionSurface.rustAdapters = { extensions: ['.rs'], matchSemantics: 'case-insensitive' };
+        return fingerprint;
+      })() },
+      { label: 'fingerprint 是数组', fingerprint: [] },
+      { label: 'fingerprint 是字符串', fingerprint: 'not-a-fingerprint' },
+    ];
+
+    for (const { label, fingerprint } of cases) {
+      const root = fs.mkdtempSync(path.join(TMP_BASE, 'graph-consumption-cli-fp-'));
+      try {
+        seedProject(root);
+        // 只造一个面外文件（.md）：静态 fallback 与任何"部分并集"都不含 .md，
+        // 因此 out-of-graph-scope + static-fallback 这对断言足以判定是否整体回落
+        commitThenTouch(root, 'notes.md', '# notes\n', '<!-- touched -->\n');
+        writeGraphWithFingerprint(root, fingerprint);
+        const bin = seedFakeSpectra(root);
+
+        const result = runCli(
+          ['decide', '--project-root', root, '--refresh-policy', 'declined', '--spectra-bin', bin],
+          { cwd: root },
+        );
+
+        assert.equal(result.status, 0, `[${label}] stderr=${result.stderr}`);
+        assert.equal(result.json.scopeExtensionsSource, 'static-fallback', `[${label}] 必须整体回落`);
+        assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope', `[${label}]`);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('(e) annotate-caveat 按注解时点独立重推导覆盖面，不透传 decide 阶段的值', () => {
+    seedProject(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+    // decide 时：图带合法 fingerprint（动态面）
+    writeGraphWithFingerprint(sandbox, makeFingerprint());
+    const bin = seedFakeSpectra(sandbox);
+
+    const decided = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    assert.equal(decided.json.outcome, 'consume-impact', `前置：应落 consume-impact，实得 ${decided.stdout}`);
+    assert.equal(decided.json.scopeExtensionsSource, 'graph-fingerprint');
+
+    const decisionFile = path.join(sandbox, 'decision.json');
+    fs.writeFileSync(decisionFile, JSON.stringify(decided.json));
+
+    // 注解前图被换成"同 sourceCommit、但 fingerprint 已被抹掉"的形态：
+    // 快照校验仍然通过（sourceCommit 未变），覆盖面来源却必须如实变成 static-fallback
+    writeGraph(sandbox);
+
+    const annotated = runCli([
+      'annotate-caveat',
+      '--project-root', sandbox,
+      '--decision', `@${decisionFile}`,
+      '--impact-result', JSON.stringify({ summary: { directCallers: 0 } }),
+      '--target', 'src/a.ts::helper',
+      '--impact-status', 'completed',
+    ]);
+
+    assert.equal(annotated.status, 0, `stderr=${annotated.stderr}`);
+    const [annotation] = readAuditEvents(sandbox).filter((event) => event.kind === 'caveat-annotation');
+    assert.equal(annotation.impactStatus, 'completed', '前置：sourceCommit 未变，快照校验应通过');
+    assert.equal(
+      annotation.scopeExtensionsSource,
+      'static-fallback',
+      'annotate 阶段必须按自己读到的图重推导，不得沿用 decide 阶段的 graph-fingerprint',
+    );
+    // `.ts` 在两份面里都在范围内，因此注解结论本身不变——变的只有来源标识
+    assert.deepEqual(annotation.caveats, [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT]);
+  });
+
+  it('(f) 合法 fingerprint 下 caveat 判据与 coverageScope 判据消费同一份面（C-002）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/tool.mjs', 'export const a = 1;\n', 'export const b = 2;\n');
+    // 这份图自述"只收 .mjs"：`.ts` 应同时在两处判据里都落到面外
+    writeGraphWithFingerprint(
+      sandbox,
+      makeFingerprint({
+        tsjsSkeletonWalk: { extensions: ['.mjs'], matchSemantics: 'case-sensitive' },
+        pyWalk: { extensions: ['.mjs'], matchSemantics: 'case-sensitive' },
+        genericAdapters: { extensions: ['.mjs'], matchSemantics: 'case-insensitive' },
+        moduleDerivationScan: { extensions: ['.mjs'], matchSemantics: 'case-insensitive' },
+        pythonSymbolScan: { extensions: ['.mjs'], matchSemantics: 'case-sensitive' },
+      }),
+    );
+    const bin = seedFakeSpectra(sandbox);
+
+    const decided = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    assert.equal(decided.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.equal(decided.json.inputs.coverageScope, 'in-graph-scope', '.mjs 在这份图的面内');
+    assert.equal(decided.json.outcome, 'consume-impact');
+
+    const decisionFile = path.join(sandbox, 'decision.json');
+    fs.writeFileSync(decisionFile, JSON.stringify(decided.json));
+
+    const annotateWith = (target) =>
+      runCli([
+        'annotate-caveat', '--project-root', sandbox, '--decision', `@${decisionFile}`,
+        '--impact-result', JSON.stringify({ summary: { directCallers: 0 } }),
+        '--target', target, '--impact-status', 'completed',
+      ]);
+
+    assert.deepEqual(
+      annotateWith('scripts/tool.mjs::a').json.caveats,
+      [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
+      '面内目标应被注解',
+    );
+    assert.deepEqual(
+      annotateWith('src/a.ts::helper').json.caveats,
+      [],
+      '`.ts` 不在这份图的自述面里 → caveat 判据必须与 coverageScope 用同一份面，不得回落静态白名单',
+    );
+  });
+
+  /**
+   * W-1（复审沙箱证伪路径转译）：窄面旧图 + 面外扩展改动 + stale 下的自锁。
+   *
+   * 构造一份"扩面之前建的旧图"：指纹五 key 齐全、结构完全合法，但采集面不含 `.mjs`
+   * （模拟 d27ba75 扩面之前的图）。此时改动一个 `.mjs` 文件：
+   * - `declined`：这份图确实不含 `.mjs`，判 out-of-graph-scope → 行 2 早退，**现状保持**
+   * - `allowed` ：重建能把 `.mjs` 纳入（当前 collector 面含它），必须放行到刷新分支，
+   *               否则图永远不因这类改动被刷新，而刷新恰恰是唯一出路
+   */
+  function seedNarrowFingerprintMjsChange(root) {
+    seedProject(root);
+    commitThenTouch(root, 'scripts/tool.mjs', 'export const a = 1;\n', 'export const b = 2;\n');
+    writeGraphWithFingerprint(
+      root,
+      makeFingerprint({
+        // 扩面前的 TSJS 面：无 .mjs/.cjs
+        tsjsSkeletonWalk: { extensions: ['.js', '.jsx', '.ts', '.tsx'], matchSemantics: 'case-sensitive' },
+        moduleDerivationScan: { extensions: ['.js', '.jsx', '.ts', '.tsx'], matchSemantics: 'case-insensitive' },
+      }),
+    );
+    return seedFakeSpectra(root);
+  }
+
+  it('(h) W-1：窄面旧图 + .mjs 改动 + stale × allowed → 进入刷新链（行 8），不被行 2 自锁早退', () => {
+    const bin = seedNarrowFingerprintMjsChange(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'allowed', '--dry-run', '--spectra-bin', bin],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.deepEqual(result.json.changedFiles, ['scripts/tool.mjs']);
+    // allowed 下用「重建可达面」= union(图自述窄面, 静态面)，`.mjs` 在静态面内 → in-scope
+    assert.equal(result.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.equal(result.json.coverageUnionApplied, true, 'allowed + 可推导指纹 → 必须启用并集');
+    assert.equal(result.json.inputs.coverageScope, 'in-graph-scope');
+    // 行 8（stale × allowed）而非行 2：刷新链被打通
+    assert.equal(result.json.matchedRule, 8, `应命中 stale×allowed 刷新行，实得 ${result.stdout}`);
+    assert.equal(result.json.outcome, 'refresh-then-consume');
+    assert.notEqual(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+    assert.ok(
+      result.json.plan.some((entry) => entry.includes('拟执行全量重建')),
+      `dry-run 计划必须含重建动作，实得 ${JSON.stringify(result.json.plan)}`,
+    );
+  });
+
+  it('(i) W-1 对照：同构造 + declined → 仍是行 2 consume-degraded（不重建时判范围外是正确的）', () => {
+    const bin = seedNarrowFingerprintMjsChange(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--dry-run', '--spectra-bin', bin],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    // declined 下只问「手里这份图」——它确实不含 .mjs
+    assert.equal(result.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.equal(result.json.coverageUnionApplied, false, 'declined 不得启用并集');
+    assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope');
+    assert.equal(result.json.matchedRule, 2);
+    assert.equal(result.json.outcome, 'consume-degraded');
+    assert.equal(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+    assert.ok(
+      result.json.plan.every((entry) => !entry.includes('拟执行全量重建')),
+      'declined 下不得出现重建计划',
+    );
+  });
+
+  it('(j) W-1 边界：目标落在并集之外时，allowed 下行 2 仍然早退（"重建也进不去"的论证依然成立）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'notes.md', '# notes\n', '<!-- touched -->\n');
+    writeGraphWithFingerprint(sandbox, makeFingerprint());
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'allowed', '--dry-run', '--spectra-bin', bin],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.coverageUnionApplied, true);
+    // `.md` 既不在图自述面、也不在静态面 → 并集里也没有 → 重建确实进不去，行 2 早退是对的
+    assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope');
+    assert.equal(result.json.matchedRule, 2);
+    assert.equal(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+    assert.ok(
+      result.json.plan.every((entry) => !entry.includes('拟执行全量重建')),
+      '真正范围外的目标不得触发重建（行 2 的原始设计意图：不为范围外目标白花一次全量重建）',
+    );
+  });
+
+  it('(k) W-1：图自述面比静态面更宽（图由更新的 collector 建）→ allowed 下并集必须保留 derived 半边', () => {
+    /**
+     * 守护对象：把 L508 的并集写成"allowed 只用静态面"的变异——(h)/(i)/(j) 三条**全都杀不掉它**，
+     * 因为那三条里 `.mjs` / `.md` 恰好都在静态面这一侧，只用静态面也能得出相同结论。
+     *
+     * 本用例走另一个 skew 方向：安装的 spectra 比 plugin 新、采集面已含 `.rs`，于是它建出来的图
+     * 自述面比 plugin 的静态 12-ext 更宽。此时 `.rs` 改动**只**存在于 derived 半边——并集一旦
+     * 丢掉 derived，`.rs` 就会被判范围外而错过刷新，正是 W-1 自锁的同一形态。
+     */
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'src/lib.rs', 'fn a() {}\n', 'fn b() {}\n');
+    writeGraphWithFingerprint(
+      sandbox,
+      makeFingerprint({
+        // 五 key 齐全、结构合法，只是某条管线声明了本仓静态面之外的扩展
+        tsjsSkeletonWalk: {
+          extensions: ['.cjs', '.js', '.jsx', '.mjs', '.rs', '.ts', '.tsx'],
+          matchSemantics: 'case-sensitive',
+        },
+      }),
+    );
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'allowed', '--dry-run', '--spectra-bin', bin],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.deepEqual(result.json.changedFiles, ['src/lib.rs']);
+    assert.equal(result.json.coverageUnionApplied, true);
+    assert.equal(
+      result.json.inputs.coverageScope,
+      'in-graph-scope',
+      '`.rs` 只在图自述面里——并集丢掉 derived 半边就会误判范围外',
+    );
+    assert.equal(result.json.matchedRule, 8, `应命中 stale×allowed 刷新行，实得 ${result.stdout}`);
+    assert.equal(result.json.outcome, 'refresh-then-consume');
+  });
+
+  it('(g) 【已知现状基线·勿当 bug 修】注解时点覆盖面收窄到目标扩展名之外 → 静默不注解、无替代信号', () => {
+    /**
+     * F254 quality-review **WARNING-1** 登记的已知现状（编排器裁决：不改行为，只把现状钉住）。
+     *
+     * 现象：decide 时目标在覆盖面内（走 static-fallback，`.py` 在 12-ext 并集里）→ 落 consume-impact；
+     * 到 annotate 时图换成了**同 sourceCommit 但采集面更窄**的指纹（不含 `.py`），于是 FR-010 快照校验
+     * 照常通过（sourceCommit 相同），caveat 判据却已把该目标判到面外——结果是 caveat 被**静默丢弃**：
+     * 输出仍是 consume-impact、caveats 为空，除了 `scopeExtensionsSource` 变成 graph-fingerprint 之外
+     * 没有任何信号告诉消费方"这个目标其实已经不在图覆盖范围里了"。
+     *
+     * 触发条件极窄（同一个 sourceCommit 下指纹采集面发生收窄，理论上不该发生：采集面变了指纹就变了、
+     * 通常伴随重建从而换 sourceCommit），因此裁决为**不改行为**。
+     *
+     * **本用例是基线而非期望**：未来若决定在此补一条显式信号（如新增 caveat 码或 degradedReason），
+     * 要翻转的就是下面这两条断言（caveats 为空 / outcome 不变）。届时请连同本注释一并更新，
+     * 不要把它当成回归 bug 顺手"修绿"。
+     */
+    seedProject(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+    // decide 时：无 fingerprint 的旧图 → static-fallback（`.py` 在 12-ext 静态并集内）
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const decided = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    assert.equal(decided.json.outcome, 'consume-impact', `前置：应落 consume-impact，实得 ${decided.stdout}`);
+    assert.equal(decided.json.scopeExtensionsSource, 'static-fallback');
+
+    const decisionFile = path.join(sandbox, 'decision.json');
+    fs.writeFileSync(decisionFile, JSON.stringify(decided.json));
+
+    const annotatePyTarget = () =>
+      runCli([
+        'annotate-caveat', '--project-root', sandbox, '--decision', `@${decisionFile}`,
+        '--impact-result', JSON.stringify({ summary: { directCallers: 0 } }),
+        '--target', 'src/x.py::foo', '--impact-status', 'completed',
+      ]);
+
+    // 对照组：图未换之前，同一个 `.py` 目标在 static-fallback 下**是**会被注解的——
+    // 这一步确保下面的"没注解"确实源于指纹收窄，而不是别的前置条件不满足。
+    assert.deepEqual(
+      annotatePyTarget().json.caveats,
+      [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
+      '对照：static-fallback 含 .py，注解通道本应打开',
+    );
+
+    // 换成同 sourceCommit（'a'.repeat(40)，与 writeGraph 默认值一致）但采集面不含 `.py` 的窄指纹。
+    // 五条管线 key 必须齐全（deriveScopeExtensionsFromFingerprint 是"全有或全无"核验），
+    // 只是把两条 python 管线的 extensions 换成非 `.py`。
+    writeGraphWithFingerprint(
+      sandbox,
+      makeFingerprint({
+        pyWalk: { extensions: ['.ts'], matchSemantics: 'case-sensitive' },
+        pythonSymbolScan: { extensions: ['.ts'], matchSemantics: 'case-sensitive' },
+      }),
+      'a'.repeat(40),
+    );
+
+    const annotated = annotatePyTarget();
+
+    assert.equal(annotated.status, 0, `stderr=${annotated.stderr}`);
+    // FR-010 快照校验通过：sourceCommit 未变，因此不是 snapshot-mismatch 那条已有的显式通道
+    assert.equal(annotated.json.impactStatus, 'completed', '同 sourceCommit → 快照校验必须通过');
+    assert.equal(annotated.json.scopeExtensionsSource, 'graph-fingerprint', '注解时点已改用窄的图自述面');
+    // 以下两条即"静默丢弃"的现状：出口不变、caveats 为空、没有任何替代信号
+    assert.equal(annotated.json.decision.outcome, 'consume-impact', '出口不变（caveat 通道不改出口）');
+    assert.deepEqual(
+      annotated.json.decision.caveats,
+      [],
+      '现状基线：目标落到窄面之外 → 不注解，且不产生任何替代信号（WARNING-1，非 bug）',
+    );
+
+    const annotations = readAuditEvents(sandbox).filter((event) => event.kind === 'caveat-annotation');
+    assert.equal(annotations.length, 2, '两次注解各留一条审计事件');
+    assert.deepEqual(annotations[1].caveats, [], '审计事件同样只如实记空 caveats，不含降级/警示字段');
+  });
 });
 
 /* ------------------------------------------ Part 3：SC-019 安装态可达性 */

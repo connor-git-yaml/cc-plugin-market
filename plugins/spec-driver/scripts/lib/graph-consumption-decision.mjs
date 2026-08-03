@@ -45,12 +45,33 @@ export const CAVEAT_CODES = Object.freeze({
 });
 
 /**
- * 图 walker 的扩展名白名单（O-5：`source-discovery.ts` 只收这四类）。
+ * 图覆盖范围判据的**静态 fallback**（F254）——只在图产物没有可信自述面时使用。
  *
- * **全仓唯一定义处**：coverageScope 判据（CLI 侧）与 FR-006 的 caveat 判据共用同一份，
- * 两份白名单迟早会漂移成"范围内不注解、范围外反而注解"的自相矛盾。
+ * 值等于全部图生产管线采集面的并集（SSoT：`src/collector-surface.ts::ALL_PRODUCER_SURFACES`），
+ * 覆盖 TSJS skeleton walk（含 `.mjs`/`.cjs`）、PY walk（含 `.pyi`）、java/go generic adapter、
+ * module 派生扫描（含 `.mts`/`.cts`）、python 符号扫描六条管线。本文件是零 import 的纯函数模块，
+ * **无法**引用那份 TS 侧 SSoT，因此一致性不能靠"注释自称与 SSoT 对齐"——由跨语言合同测试
+ * `tests/unit/graph-scope-extensions-contract.test.ts` 逐项断言守护：任一侧扩面而忘了同步另一侧，
+ * 该测试立刻红。
+ *
+ * **它不再是"权威白名单"**：coverageScope 判据（CLI 侧）与 FR-006 的 caveat 判据优先消费图自述的
+ * collector fingerprint（`graph.fingerprint.extensionSurface`，F249）推导出的**动态面**——语义是
+ * "改动能否反映在**手里这份图**里"，而不是"当前代码理论上会采集什么"。只有图缺失 / 损坏 / 超限 /
+ * 无指纹 / 指纹结构畸形时才落回本常量。
+ *
+ * C-002（两处判据同一份面）依然成立，只是这份面按调用时点可能是动态的：调用方必须把算好的面
+ * 显式传给 `annotateImpactCaveat` 第 4 参 `scopeExtensions`，本常量只是各消费点的默认值。
+ *
+ * 历史（F254）：F241 立项时此处只有 TSJS 四个扩展，注释自称是权威白名单、且断言 walker 的采集面
+ * 与之等同。这两句断言在 d27ba75（`.mjs`/`.cjs` 扩面）之后即失真，导致 `.mjs` 改动被判
+ * out-of-graph-scope、跳过图刷新与 impact 注入。教训：注释里的"唯一/穷尽"类断言必须有测试锚定，
+ * 否则它只会随扩面静默变成假话。
  */
-export const GRAPH_SCOPE_EXTENSIONS = Object.freeze(['.ts', '.tsx', '.js', '.jsx']);
+export const GRAPH_SCOPE_EXTENSIONS = Object.freeze([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
+  '.py', '.pyi',
+  '.java', '.go',
+]);
 
 const CHANGE_CLASSES = new Set(['modifies-existing', 'additive-only', 'unknown']);
 const GRAPH_AVAILABILITIES = new Set(['present', 'missing', 'corrupt']);
@@ -78,7 +99,7 @@ export const DEGRADED_REASON_HINTS = Object.freeze({
   [DEGRADED_REASONS.IMPACT_NOT_APPLICABLE_ADDITIVE_ONLY]:
     '本轮全部为新增文件，impact 语义上不适用（新代码尚无 caller）；改用 context / graph_query 做模块级定位，或直接 Grep',
   [DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE]:
-    '目标路径整体不在图覆盖范围内（根因 O-5：图 walker 扩展名白名单），impact 结果不具参考性；请退回 Grep / Read',
+    '目标路径整体不在图覆盖范围内（判据：图自述采集面 fingerprint.extensionSurface，无自述时用静态 fallback），impact 结果不具参考性；请退回 Grep / Read',
   [DEGRADED_REASONS.CLASSIFICATION_UNKNOWN]:
     '变更类别无法机械判定，impact 结果按参考值使用，勿作为"改动面已穷尽"的依据',
   [DEGRADED_REASONS.GRAPH_MISSING]: '图不存在且本次不允许刷新；请退回 Grep / Read，或另行运行 spectra batch --mode graph-only',
@@ -391,17 +412,21 @@ function normalizeDirectCallers(impactResult) {
  * @param {object} decision `decideGraphConsumption` / `finalizeAfterRefresh` 的输出
  * @param {{ summary?: { directCallers?: number }, directCallers?: number }} impactResult
  * @param {string} target 调用方声明的 impact 查询目标 symbolId（`路径::符号` / `路径#符号` / 纯路径）
+ * @param {readonly string[]} [scopeExtensions] 本次判定用的图覆盖面（小写扩展名，含前导 `.`）。
+ *   缺省时用静态 fallback `GRAPH_SCOPE_EXTENSIONS`；CLI 侧会传入从图自述 collector fingerprint
+ *   推导出的动态面，使本判据与 coverageScope 判据消费**同一份面**（C-002）——只是这份面现在随
+ *   图状态变化，不再是编译期常量。参数只是调用方传入的数据，本文件零 import 的硬合同不受影响。
  * @returns {object} 新对象（不就地改写入参）
  */
-export function annotateImpactCaveat(decision, impactResult, target) {
+export function annotateImpactCaveat(decision, impactResult, target, scopeExtensions = GRAPH_SCOPE_EXTENSIONS) {
   const annotated = { ...decision, caveats: [...(decision?.caveats ?? [])] };
 
   if (decision?.outcome !== 'consume-impact') return annotated;
   if (normalizeDirectCallers(impactResult) !== 0) return annotated;
 
-  // 判据与 coverageScope 共用同一份白名单（C-002：防第二份白名单漂移）
+  // 判据与 coverageScope 共用同一份面（C-002：防第二份判据漂移）
   const extension = extensionOf(target);
-  if (extension === null || !GRAPH_SCOPE_EXTENSIONS.includes(extension)) return annotated;
+  if (extension === null || !scopeExtensions.includes(extension)) return annotated;
 
   annotated.caveats.push(CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT);
   return annotated;
