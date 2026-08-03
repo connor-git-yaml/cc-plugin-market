@@ -9,7 +9,7 @@
 | `checkJudgeSnapshotDrift` | `judge-snapshot-doctor.mjs` | 编排（内含 I/O 调用） | `({ projectRoot: string, env?: object, claudeHome?: string }) => DriftCheckResult` |
 | `resolveActiveSnapshot` | `lib/judge-snapshot-core.mjs` | 纯函数 | `(sources: SnapshotResolutionSources) => SnapshotResolutionResult` |
 | `compareFile` / `aggregateStatus` | `lib/judge-snapshot-core.mjs` | 纯函数（一对协作函数） | `compareFile(repoDigest: DigestResult, snapshotDigest: DigestResult) => Omit<FileComparisonEntry, 'file'>`（即 `{ status, side?, errorCode? }`，由调用方补上 `file` 字段）；`aggregateStatus(files: FileComparisonEntry[]) => 'in-sync'\|'drift'\|'indeterminate'` |
-| `JUDGE_FILE_SET` | `lib/judge-snapshot-core.mjs` | 常量导出（非函数） | `readonly string[]`（6 个相对路径；`Object.freeze` 防意外改写） |
+| `JUDGE_FILE_SET` | `lib/judge-snapshot-core.mjs` | 常量导出（非函数） | `readonly string[]`（7 个相对路径——F236 定为 6，F246 起 +`scripts/lib/is-invoked-directly.mjs`；`Object.freeze` 防意外改写） |
 
 （本表不含 FR-002b 守卫解析器的 `extractModuleReferences`/`resolveStaticImportClosure`——它们是**测试专用**基础设施，不构成生产运行期契约，详见文末"FR-002b 守卫解析器契约"独立小节。）
 
@@ -49,7 +49,7 @@
 4. agg = aggregateStatus(files)：any 'indeterminate' → 'indeterminate'；否则 any !== 'match' → 'drift'；否则 'in-sync'
      agg==='indeterminate' → { status:'indeterminate', indeterminateKind:'comparison', reason:'partial-file-read-failure',
                                 snapshotPath: result.snapshotPath, resolutionSource: result.resolutionSource, files }
-                              （files 必须携带全部 6 条明细，含已确认的 mismatch/missing* 条目，不因存在读取失败而清空）
+                              （files 必须携带全部 7 条明细，含已确认的 mismatch/missing* 条目，不因存在读取失败而清空）
      agg==='drift'         → { status:'drift', snapshotPath: result.snapshotPath, resolutionSource: result.resolutionSource, files }
      agg==='in-sync'       → { status:'in-sync', snapshotPath: result.snapshotPath, resolutionSource: result.resolutionSource, files }
 ```
@@ -66,12 +66,12 @@
 | 4c | 同上但 2 条候选中 1 条 `valid.kind==='invalid'`（如 `name-mismatch`）、1 条 `valid.kind==='ok'` | *不是* `indeterminate` | — | — | 过滤后剩 1 条合法候选，`resolutionSource:'installed-plugins-metadata'`，正常进入比对，不算歧义 |
 | 5 | `installed_plugins.json` 缺失/损坏 + 无 `CLAUDE_PLUGIN_ROOT` + 无 `.specify/.spec-driver-path` + `claudeHome` 下存在 ≥1 个合法快照目录（`scanInstalledSnapshotPresence` → `'present'`） | `indeterminate` | `resolution` | `no-active-snapshot-resolvable` | `[]` |
 | 6 | 同上但扫描 `claudeHome` 下 cache 目录本身遇 `EACCES`（`scanInstalledSnapshotPresence` → `'error'`） | `indeterminate` | `resolution` | `installed-snapshot-scan-error` | `[]` |
-| 7 | 唯一候选解析成功 + 6 文件全部两侧 sha256 相等 | `in-sync` | — | 无 | 6 条 `match` |
-| 8 | 唯一候选解析成功 + 1 文件不等、其余 5 文件相等（部分 match 部分 drift） | `drift` | — | 无 | 5 条 `match` + 1 条 `mismatch` |
+| 7 | 唯一候选解析成功 + 7 文件全部两侧 sha256 相等 | `in-sync` | — | 无 | 7 条 `match` |
+| 8 | 唯一候选解析成功 + 1 文件不等、其余 6 文件相等（部分 match 部分 drift） | `drift` | — | 无 | 6 条 `match` + 1 条 `mismatch` |
 | 9 | 唯一候选解析成功 + 快照侧缺失 1 个文件（如 `fix-compliance-execution-record.mjs`） | `drift` | — | 无 | 该项 `status:'missingInSnapshot'`，其余 `match` |
 | 10 | 唯一候选解析成功 + 某文件**两侧都缺失**（`missingBoth`，W2 修订） | `drift` | — | 无 | 该项 `status:'missingBoth'`，其余 `match` |
-| 11 | 唯一候选解析成功 + 仓库侧某文件读取遇 `EACCES`、其余 5 文件两侧相等 | `indeterminate` | `comparison` | `partial-file-read-failure` | 该项 `status:'indeterminate', side:'repo', errorCode:'EACCES'`，**其余 5 条 `match` 仍完整保留** |
-| 12 | 唯一候选解析成功 + 1 文件 `mismatch` 与 1 文件读取 `EACCES` **混合出现**（mismatch+EACCES 混合） | `indeterminate` | `comparison` | `partial-file-read-failure` | `files` 中**同时**保留该 `mismatch` 条目（不被吞掉）与该 `indeterminate` 条目，其余 4 条 `match` |
+| 11 | 唯一候选解析成功 + 仓库侧某文件读取遇 `EACCES`、其余 6 文件两侧相等 | `indeterminate` | `comparison` | `partial-file-read-failure` | 该项 `status:'indeterminate', side:'repo', errorCode:'EACCES'`，**其余 6 条 `match` 仍完整保留** |
+| 12 | 唯一候选解析成功 + 1 文件 `mismatch` 与 1 文件读取 `EACCES` **混合出现**（mismatch+EACCES 混合） | `indeterminate` | `comparison` | `partial-file-read-failure` | `files` 中**同时**保留该 `mismatch` 条目（不被吞掉）与该 `indeterminate` 条目，其余 5 条 `match` |
 
 > 场景 11/12 直接对应 C3 修订核心诉求：`comparison-indeterminate` 绝不能因为整体状态是 `indeterminate` 就清空/隐藏已经确认的 `mismatch`/`missing*` 明细。
 

@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { buildQualitySection } from './lib/baseline-quality.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -884,9 +885,7 @@ async function runOneTarget(args) {
   console.log(`[baseline] fixture written: ${path.relative(PROJECT_ROOT, fixturePath)}`);
 }
 
-const isCliEntry =
-  import.meta.url === `file://${process.argv[1]}` ||
-  import.meta.url === `file://${path.resolve(process.argv[1])}`;
+const isCliEntry = isInvokedDirectly(import.meta.url);
 
 if (isCliEntry) {
   main().catch((err) => {

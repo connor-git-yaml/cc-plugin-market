@@ -27,6 +27,7 @@ import {
   SEMANTIC_MODULES,
 } from './lib/preregistration-check.mjs';
 import { isGenerationInfraFailure } from './lib/generation-infra.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 // 共享判定 re-export（既有单测从本模块导入；单一事实源在 ./lib/generation-infra.mjs）
 export { isGenerationInfraFailure };
@@ -473,6 +474,6 @@ function writeOut(outPath, perAnswer, taskIds, fixturesDir) {
 }
 
 // 仅 CLI 直跑时执行 main（被单测 import 时不跑）
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   main().catch((e) => { console.error(e.message || e); process.exit(2); });
 }

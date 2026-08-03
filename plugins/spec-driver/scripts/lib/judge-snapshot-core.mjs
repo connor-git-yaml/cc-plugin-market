@@ -18,6 +18,8 @@ export const JUDGE_FILE_SET = Object.freeze([
   'scripts/lib/fix-compliance-core.mjs',
   'scripts/lib/fix-compliance-execution-record.mjs',
   'scripts/lib/fix-compliance-io.mjs',
+  // F246：record-workflow-run.mjs 的入口守卫改用共享 helper 后，helper 进入判定器 import 闭包
+  'scripts/lib/is-invoked-directly.mjs',
   'scripts/lib/simple-yaml.mjs',
   'scripts/record-workflow-run.mjs',
 ]);

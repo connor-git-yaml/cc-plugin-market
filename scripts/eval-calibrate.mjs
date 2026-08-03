@@ -26,6 +26,7 @@ import { planWarmupJobs, taskIdOf } from './lib/warmup-planner.mjs';
 import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs';
 import { datasetTagToHfId } from './lib/swebench-dataset-build.mjs';
 import { preflightClaudeConnectivity } from './lib/generation-infra.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -517,5 +518,5 @@ function shuffle(arr, rng) {
 }
 
 // 直接执行时跑 main
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) main().catch((e) => { console.error(e); process.exit(1); });

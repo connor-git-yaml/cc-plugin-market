@@ -340,8 +340,8 @@ describe('resolveActiveSnapshot — FR-007 四步优先级 + W1 边界', () => {
 });
 
 describe('JUDGE_FILE_SET — 常量断言', () => {
-  it('长度为 6，内容与 data-model.md 罗列一致（Set 比较，顺序无关）', () => {
-    assert.equal(JUDGE_FILE_SET.length, 6);
+  it('长度为 7，内容与 data-model.md 罗列一致（Set 比较，顺序无关）', () => {
+    assert.equal(JUDGE_FILE_SET.length, 7);
     assert.deepStrictEqual(
       new Set(JUDGE_FILE_SET),
       new Set([
@@ -349,6 +349,8 @@ describe('JUDGE_FILE_SET — 常量断言', () => {
         'scripts/lib/fix-compliance-core.mjs',
         'scripts/lib/fix-compliance-execution-record.mjs',
         'scripts/lib/fix-compliance-io.mjs',
+        // F246：record-workflow-run.mjs 入口守卫改用共享 helper 后进入闭包
+        'scripts/lib/is-invoked-directly.mjs',
         'scripts/lib/simple-yaml.mjs',
         'scripts/record-workflow-run.mjs',
       ]),
@@ -357,6 +359,6 @@ describe('JUDGE_FILE_SET — 常量断言', () => {
 
   it('Object.freeze 生效：push/赋值不改变内容', () => {
     assert.throws(() => JUDGE_FILE_SET.push('x'));
-    assert.equal(JUDGE_FILE_SET.length, 6);
+    assert.equal(JUDGE_FILE_SET.length, 7);
   });
 });

@@ -33,6 +33,7 @@ import { validateMergeResult } from './lib/sync-validator.mjs';
 
 // 复用现有 helper
 import { getProductsRoot } from './lib/product-artifact-paths.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 // ────────────────────────────────────────────────────────────
 // CLI 参数解析
@@ -656,7 +657,7 @@ function printResult(result, args) {
 // CLI 入口
 // ────────────────────────────────────────────────────────────
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const result = syncMergeEngine(args);
   printResult(result, args);

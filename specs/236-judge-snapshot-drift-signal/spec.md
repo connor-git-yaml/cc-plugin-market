@@ -16,7 +16,7 @@
 **实测核实的关键事实**（供本 spec 的判据设计依据）：
 
 - 本机 `~/.claude/plugins/cache/` 下可能同时存在多个版本快照目录（如 `4.2.1` 与 `4.3.0`），但真正生效的只有一个，由 `~/.claude/plugins/installed_plugins.json` 中 `spec-driver@cc-plugin-market` 的 `installPath` 字段和项目 `.specify/.spec-driver-path` 精确指向；**"取最高版本号"只是碰巧对，不是正确解析法**，其他插件已出现过 cache 内多目录、但 installed metadata 只指向其中一个非最高版本的情况。
-- 从 `fix-compliance-judge.mjs` 递归解析相对 import 得到的真实消费闭包是 **6 个文件**：`scripts/fix-compliance-judge.mjs`、`scripts/lib/fix-compliance-core.mjs`、`scripts/lib/fix-compliance-execution-record.mjs`、`scripts/lib/fix-compliance-io.mjs`、`scripts/lib/simple-yaml.mjs`（`fix-compliance-io.mjs` 依赖它解析 enforcement 配置）、`scripts/record-workflow-run.mjs`（judge 依赖它做收口记录）。此前认为的"4 个文件"是事实错误。
+- 从 `fix-compliance-judge.mjs` 递归解析相对 import 得到的真实消费闭包是 **6 个文件**：`scripts/fix-compliance-judge.mjs`、`scripts/lib/fix-compliance-core.mjs`、`scripts/lib/fix-compliance-execution-record.mjs`、`scripts/lib/fix-compliance-io.mjs`、`scripts/lib/simple-yaml.mjs`（`fix-compliance-io.mjs` 依赖它解析 enforcement 配置）、`scripts/record-workflow-run.mjs`（judge 依赖它做收口记录）。此前认为的"4 个文件"是事实错误。**后续演进**：F246 起该闭包为 **7 个文件**，新增 `scripts/lib/is-invoked-directly.mjs`（`record-workflow-run.mjs` 的入口守卫收敛到共享 helper）；此处 6 个是 F236 定稿时点的实测事实，FR-002 已按 7 更新。
 - 当前某些历史快照（如 4.3.0 安装时点）会**缺少** `fix-compliance-execution-record.mjs`（F218 拆分后新增的模块，安装快照生成时尚不存在）；"文件缺失"本身就是最关键的一种漂移信号，不能被简单地当作"读取失败就跳过"而吞掉。
 - raw sha256 比对前提已实测核实成立：仓库 checkout 与已安装快照逐字节相同（无 BOM/CRLF/构建期转换差异），故本 feature 采用的字节级指纹判据有效。
 
@@ -32,7 +32,7 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 仓库内判定器文件集合（6 个文件）与本机已安装快照对应文件内容逐字节一致，**When** 开发者执行 doctor 命令，**Then** 结果报告 `in-sync`（无漂移）。
+1. **Given** 仓库内判定器文件集合（7 个文件；F236 定为 6，F246 起 +`scripts/lib/is-invoked-directly.mjs`）与本机已安装快照对应文件内容逐字节一致，**When** 开发者执行 doctor 命令，**Then** 结果报告 `in-sync`（无漂移）。
 2. **Given** 仓库内判定器文件集合中至少一个文件与快照侧对应文件内容不一致（例如仓库已修复但快照未更新），**When** 开发者执行 doctor 命令，**Then** 结果报告 `drift`，并如实列出哪些文件不一致（不猜测原因、不给出修复建议）。
 3. **Given** 判定器文件集合中某文件只存在于仓库侧、快照侧没有该文件（如快照生成于该文件被拆分出来之前），**When** 开发者执行 doctor 命令，**Then** 结果同样报告 `drift`，并在 `missingInSnapshot` 字段中列出该文件，不得因"读取失败"而静默跳过、误判为 `in-sync` 或 `not-applicable`。
 4. **Given** 本机不存在任何该插件的已安装快照目录（如全新 CI 环境、cache 从未生成），**When** 开发者执行 doctor 命令，**Then** 结果报告 `not-applicable`（场景不适用，无快照可比对），不视为失败也不视为漂移。
@@ -86,7 +86,7 @@
 ### Functional Requirements
 
 - **FR-001**: 系统 MUST 提供一个可在 spec-driver 仓库内主动触发的独立 doctor 命令，比对"仓库侧判定器文件集合"与"本机已安装该插件快照对应文件集合"的内容一致性，并返回四态结果之一：`in-sync`（一致）、`drift`（不一致，含内容不一致或任一侧缺文件，且不猜测/不引导修复）、`not-applicable`（无仓库侧参照或无任何已安装快照可比对）、`indeterminate`（存在仓库侧与快照侧参照但检测器因歧义或读取失败而无法完成比较）。`[必须]`
-- **FR-002**: 判定器文件集合 MUST 精确覆盖 Stop hook 实际消费链上的 6 个文件：`scripts/fix-compliance-judge.mjs`、`scripts/lib/fix-compliance-core.mjs`、`scripts/lib/fix-compliance-execution-record.mjs`、`scripts/lib/fix-compliance-io.mjs`、`scripts/lib/simple-yaml.mjs`、`scripts/record-workflow-run.mjs`。该集合允许以代码内显式维护的路径数组作为定义方式（它本质上是一种清单，但随代码同步提交、且受 FR-002b 守卫测试约束，不属于游离于代码之外的独立人工事实源）。`[必须]`
+- **FR-002**: 判定器文件集合 MUST 精确覆盖 Stop hook 实际消费链上的 7 个文件（F236 定为 6，F246 起 +`scripts/lib/is-invoked-directly.mjs`——`record-workflow-run.mjs` 的入口守卫改用共享 helper 后，该 helper 进入 import 闭包）：`scripts/fix-compliance-judge.mjs`、`scripts/lib/fix-compliance-core.mjs`、`scripts/lib/fix-compliance-execution-record.mjs`、`scripts/lib/fix-compliance-io.mjs`、`scripts/lib/is-invoked-directly.mjs`、`scripts/lib/simple-yaml.mjs`、`scripts/record-workflow-run.mjs`。该集合允许以代码内显式维护的路径数组作为定义方式（它本质上是一种清单，但随代码同步提交、且受 FR-002b 守卫测试约束，不属于游离于代码之外的独立人工事实源）。`[必须]`
 - **FR-002b**: 系统 MUST 附带一个守卫测试：递归解析当前仓库入口 `scripts/fix-compliance-judge.mjs` 的本地静态 import 闭包（含其间接依赖），断言解析得到的文件集合与 FR-002 定义的显式数组完全相等；未来新增/移除消费文件而忘记同步数组时，该测试必须失败。本次不采用"运行期动态推导闭包并据此比对"的方案——其复杂度超出本 feature 的 LOW 复杂度定位，静态数组 + 守卫测试已足够防止清单腐化。`[必须]`
 - **FR-003**: 系统 MUST 对判定器文件集合（FR-002）中的每个文件，分别在仓库侧路径（`plugins/spec-driver/scripts/...`）与快照侧路径（`<snapshot>/scripts/...`）现算内容指纹（sha256），两侧现算、现比对，不持久化"预期指纹"作为事实源。该比对是**字节级（byte-level）**判据，非语义判据：CRLF/BOM/纯格式差异会被有意判定为 `drift`（见"已知约束"）。`[必须]`
 - **FR-004**: 系统 MUST 仅使用 Node 内置 `node:crypto` 计算指纹，不得引入任何新的 npm 运行时依赖（Constitution 原则 X）。`[必须]`

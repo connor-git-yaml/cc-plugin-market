@@ -11,9 +11,9 @@
  */
 import path from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
 
 import { linkReferences, checkAnchors, unlinkAnchor, DEFAULT_LOCK_RELPATH } from './lib/spec-drift-core.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const SUBCOMMANDS = ['link', 'check', 'unlink'];
 
@@ -276,8 +276,8 @@ async function runCommand(args, write, format) {
 }
 
 // 直接执行（而非被 import）时才驱动进程退出码。
-// 手拼 `file://${argv[1]}` 在 Windows 上永远不等于 import.meta.url（盘符需编码成
-// `file:///C:/...`），会让 npm script 静默不执行 main() 并以 exit 0 骗过 CI。
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// 判定统一走共享 helper（两侧各自 realpath canonical 化），同时兼容 Windows 盘符编码与
+// 符号链接路径——任一侧规范化程度不对称都会让 main() 静默不执行并以 exit 0 骗过 CI。
+if (isInvokedDirectly(import.meta.url)) {
   process.exitCode = await main();
 }

@@ -30,6 +30,8 @@ const JUDGE_FILE_SET = [
   'scripts/lib/fix-compliance-core.mjs',
   'scripts/lib/fix-compliance-execution-record.mjs',
   'scripts/lib/fix-compliance-io.mjs',
+  // F246：record-workflow-run.mjs 入口守卫改用共享 helper 后进入闭包
+  'scripts/lib/is-invoked-directly.mjs',
   'scripts/lib/simple-yaml.mjs',
   'scripts/record-workflow-run.mjs',
 ];

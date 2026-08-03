@@ -33,6 +33,7 @@ import { computeFixtureContentHash } from './lib/preregistration-check.mjs';
 import { computeValidationStats, readOracleOutcome } from './eval-validate.mjs';
 import { CALIBRATION_COHORT_TO_TOOL, CALIBRATION_DATASET } from './eval-calibrate.mjs';
 import { computeTaskSetHash } from './eval-split-sets.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -445,7 +446,7 @@ async function main() {
   }
 }
 
-const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isDirectRun = isInvokedDirectly(import.meta.url);
 if (isDirectRun) {
   main().catch((e) => { console.error(`[pool-rerun] ❌ ${e.stack ?? e}`); process.exit(1); });
 }

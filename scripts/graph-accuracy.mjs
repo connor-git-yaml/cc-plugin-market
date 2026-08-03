@@ -28,6 +28,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as url from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
@@ -623,7 +624,7 @@ async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   main().catch((e) => {
     console.error(`[graph-accuracy] error: ${e.message}`);
     process.exit(1);

@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const SCHEMA_VERSION = 1;
 const VALID_RESULTS = new Set(['success', 'partial', 'paused', 'failed']);
@@ -400,7 +401,7 @@ function printResult(result, asJson) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const result = recordWorkflowRun(args);
   printResult(result, args.json);

@@ -14,6 +14,7 @@ import {
 } from './lib/product-artifact-paths.mjs';
 import { appendWarningsSection, dedupeStringValues } from './lib/script-diagnostics.mjs';
 import { readJsonArtifact, writeJsonArtifact, writeMarkdownArtifact } from './lib/script-report-io.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const SCHEMA_VERSION = 1;
 const PRODUCT_ID = 'spec-driver';
@@ -563,7 +564,7 @@ function printResult(result, asJson) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const result = generateAdoptionInsights(args);
   printResult(result, args.json);

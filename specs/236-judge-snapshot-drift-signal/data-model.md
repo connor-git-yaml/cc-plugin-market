@@ -4,7 +4,7 @@
 
 ## 1. Judge File Set（判定器文件集合）
 
-以代码内显式数组维护（`plugins/spec-driver/scripts/lib/judge-snapshot-core.mjs` 导出 `JUDGE_FILE_SET`），相对 `plugins/spec-driver/` 的路径：
+以代码内显式数组维护（`plugins/spec-driver/scripts/lib/judge-snapshot-core.mjs` 导出 `JUDGE_FILE_SET`），共 **7 个文件**（F236 定为 6，F246 起 +`scripts/lib/is-invoked-directly.mjs`——`record-workflow-run.mjs` 的入口守卫收敛到共享 helper 后进入 import 闭包），相对 `plugins/spec-driver/` 的路径：
 
 ```js
 export const JUDGE_FILE_SET = [
@@ -12,6 +12,7 @@ export const JUDGE_FILE_SET = [
   'scripts/lib/fix-compliance-core.mjs',
   'scripts/lib/fix-compliance-execution-record.mjs',
   'scripts/lib/fix-compliance-io.mjs',
+  'scripts/lib/is-invoked-directly.mjs',
   'scripts/lib/simple-yaml.mjs',
   'scripts/record-workflow-run.mjs',
 ];
@@ -202,19 +203,19 @@ type DriftCheckResult =
       reason: 'partial-file-read-failure';
       snapshotPath: string;              // 必须保留——已确定的快照目录，不因部分文件读取失败而清空
       resolutionSource: 'claude-plugin-root' | 'spec-driver-path-file' | 'installed-plugins-metadata';
-      files: FileComparisonEntry[];      // 必须保留全部 6 条明细，含已确认的 match/mismatch/missing* 条目与触发失败的 indeterminate 条目
+      files: FileComparisonEntry[];      // 必须保留全部 7 条明细，含已确认的 match/mismatch/missing* 条目与触发失败的 indeterminate 条目
     }
   | {
       status: 'in-sync';
       snapshotPath: string;
       resolutionSource: 'claude-plugin-root' | 'spec-driver-path-file' | 'installed-plugins-metadata';
-      files: FileComparisonEntry[];      // 6 条，全部 'match'
+      files: FileComparisonEntry[];      // 7 条，全部 'match'
     }
   | {
       status: 'drift';
       snapshotPath: string;
       resolutionSource: 'claude-plugin-root' | 'spec-driver-path-file' | 'installed-plugins-metadata';
-      files: FileComparisonEntry[];      // 6 条，至少 1 条非 'match' 且不含 'indeterminate'
+      files: FileComparisonEntry[];      // 7 条，至少 1 条非 'match' 且不含 'indeterminate'
     };
 ```
 
@@ -267,7 +268,7 @@ type DriftCheckResult =
 
 两者均为 Node 内建解析结果，探测式回退 `const specs = mod.moduleRequests ? mod.moduleRequests.map(r => r.specifier) : mod.dependencySpecifiers;`，**不引入任何手写 tokenizer**。含 `import…from` / side-effect `import '<spec>'` / `export…from` re-export 全部形态。
 
-**dynamic import → fail-closed（保守）**：静态 specifier 列表不枚举 dynamic import。守卫的立场收敛为——**只保证静态 import 闭包正确；dynamic import 是判定器当前不使用的形态**。用一个保守粗检扫描源码是否出现 dynamic import 调用（`import` 后跟 `(`，两者间允许 空白 / 块注释 `/*…*/` / 行注释 `//…\n` 任意间隔——合法 dynamic import 允许 `import/**/(…)` 与 `import// x\n(…)` 形态；排除 `import.meta` 与 static `import…from`），一旦命中即整体 fail-closed，提示人工确认 `JUDGE_FILE_SET`。当前 6 个判定器文件均无 dynamic import，故不触发。
+**dynamic import → fail-closed（保守）**：静态 specifier 列表不枚举 dynamic import。守卫的立场收敛为——**只保证静态 import 闭包正确；dynamic import 是判定器当前不使用的形态**。用一个保守粗检扫描源码是否出现 dynamic import 调用（`import` 后跟 `(`，两者间允许 空白 / 块注释 `/*…*/` / 行注释 `//…\n` 任意间隔——合法 dynamic import 允许 `import/**/(…)` 与 `import// x\n(…)` 形态；排除 `import.meta` 与 static `import…from`），一旦命中即整体 fail-closed，提示人工确认 `JUDGE_FILE_SET`。当前 7 个判定器文件（F236 定为 6，F246 起 +`scripts/lib/is-invoked-directly.mjs`）均无 dynamic import，故不触发。
 
 - **已知限制（误报方向安全）**：粗检不区分代码上下文——字符串 / 注释 / 模板原文里出现的 `import(` 会被保守命中（误报），方向安全：宁可多要人工确认一眼，也绝不静默放行真实 dynamic import。诊断 snippet 指向正则**真实命中处**（由字符偏移换算行号），而非源码首个 `import` 出现行。
 
@@ -318,4 +319,4 @@ helper 子进程内 BFS：对每个相对 specifier（以 `./` 或 `../` 开头�
 4. **side-effect import**：`import '../lib/side-effect.mjs';` → 计入 `refs`
 5. **注释掉的伪 import**：整行处于 `//` 或 `/* */` 内的 `import '../not-a-real-dependency.mjs';` → 断言 `refs` 与 `unsupported` 均**不**包含该行任何内容（验证遮蔽正确生效，既不误判为边也不误判为 unsupported）
 
-该测试独立于"对仓库真实 6 文件跑 BFS"的 `judge-file-set-guard.test.mjs`，防止"只靠改 `JUDGE_FILE_SET` 看红"这种间接验证掩盖解析器本身的实现 bug。
+该测试独立于"对仓库真实 7 文件跑 BFS"的 `judge-file-set-guard.test.mjs`，防止"只靠改 `JUDGE_FILE_SET` 看红"这种间接验证掩盖解析器本身的实现 bug。

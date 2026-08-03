@@ -72,6 +72,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pearson } from './lib/pearson.mjs';
 import { buildAdversarialPrompt } from './lib/judge-prompt-builder.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1228,7 +1229,7 @@ function buildArtifact({ args, judges, records, errors, evalResult, integrity })
 }
 
 // 仅在直接执行时跑（便于单元测试 import 而不触发 main）
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) {
   main().catch((err) => {
     console.error('FATAL:', err.stack || err.message);

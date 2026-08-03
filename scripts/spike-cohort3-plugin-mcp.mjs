@@ -31,6 +31,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { prepareSpikeFixture } from './lib/spike-fixture-prep.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLUGIN_NS_PREFIX = 'mcp__plugin_spectra_spectra__';
@@ -357,7 +358,7 @@ async function main() {
 }
 
 // 仅在作为主模块直接运行时执行（被单测 import parsePluginMcpCalls 时不触发 claude 调用）
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) {
   main().catch((e) => { console.error('[spike] 异常:', e.message); process.exit(1); });
 }

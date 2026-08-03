@@ -38,6 +38,7 @@ import { COHORT_TO_TOOL } from './lib/cohort-registry.mjs'; // Feature 187 FR-00
 import { globalSpectraPluginPresent, globalSpecDriverPluginPresent } from './lib/local-spectra-plugin.mjs';
 import { classifyRuns, writeRunStarted, writeRunFinalizedSuccess, writeRunFinalizedFailed, atomicWriteJson } from './lib/eval-quota-store.mjs';
 import { anonymizeFixture } from './eval-judge.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const RUNNER = path.join(PROJECT_ROOT, 'scripts', 'eval-task-runner.mjs');
@@ -587,7 +588,7 @@ async function main() {
   console.error(`[batch] lift(c3/c1)=${agg.lift?.toFixed(3) ?? 'n/a'} | c3_vs_c4 diff=${agg.c3_vs_c4?.diff?.toFixed(3) ?? 'n/a'} | tokenRatio(c3/c1)=${agg.tokenRatioC3overC1?.toFixed(3) ?? 'n/a'}`);
 }
 
-const isCliEntry = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const isCliEntry = isInvokedDirectly(import.meta.url);
 if (isCliEntry) {
   main().catch((e) => { console.error(`[batch] error: ${e.message}`); process.exit(1); });
 }

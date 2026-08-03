@@ -26,6 +26,7 @@ import { preflightClaudeConnectivity } from './lib/generation-infra.mjs';
 // 旧实现硬编码 tool='spec-driver'（c2，不带 Spectra）且 readOraclePassed 读不存在的字段
 // （swebenchResult/...）→ /goal 度量恒 0、跑错 cohort——与校准侧 codex CRITICAL-1 同病，一并修正。
 import { oraclePassedFromFixture, CALIBRATION_COHORT_TO_TOOL, CALIBRATION_DATASET } from './eval-calibrate.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -411,5 +412,5 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) main().catch((e) => { console.error(e); process.exit(1); });

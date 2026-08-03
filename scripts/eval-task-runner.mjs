@@ -26,6 +26,7 @@ import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { fixturesDir as verifiedFixturesDir } from './lib/swe-bench-verified-paths.mjs';
 import { runSwebenchInstance } from './lib/swebench-oracle.mjs'; // Feature 187：真实 FAIL_TO_PASS oracle（opt-in --swebench-oracle）
 import { isGenerationInfraFailure } from './lib/generation-infra.mjs'; // Feature 188：生成 infra 失败（OAuth/限流）检测
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -1080,7 +1081,7 @@ export function persistRunArtifacts({ artifactsDir, runId, patchDiff, stdout, st
 
 // 精确入口判定（codex：endsWith 宽松匹配会让"路径恰以 eval-task-runner.mjs 结尾"的包装脚本
 // 在 import 本模块（经 cohort-registry 传递依赖）时误触发 main）
-const isCliEntry = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isCliEntry = isInvokedDirectly(import.meta.url);
 if (isCliEntry) {
   main().catch((err) => {
     console.error(`[task-runner] error: ${err.message}`);

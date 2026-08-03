@@ -32,6 +32,7 @@ import {
 } from './lib/project-context-paths.mjs';
 import { appendWarningsSection, dedupeStringValues } from './lib/script-diagnostics.mjs';
 import { readJsonArtifact, writeMarkdownArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const SCHEMA_VERSION = 1;
 
@@ -602,7 +603,7 @@ function firstConflictPath(projectRoot, sources) {
   return firstPath ? firstPath : toRelativePosix(projectRoot, getProjectContextSuggestionsYamlPath(projectRoot));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const result = generateProjectContextSuggestions({
     projectRoot: args.projectRoot,

@@ -34,6 +34,6 @@ describe('judge-file-set-guard — 真实 import 闭包 == JUDGE_FILE_SET', () =
     const relFiles = new Set(result.files.map((abs) => path.relative(PLUGIN_ROOT, abs)));
     const expected = new Set(JUDGE_FILE_SET);
     assert.deepStrictEqual(relFiles, expected);
-    assert.equal(relFiles.size, 6);
+    assert.equal(relFiles.size, 7);
   });
 });

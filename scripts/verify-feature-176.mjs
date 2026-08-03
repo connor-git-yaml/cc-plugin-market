@@ -16,11 +16,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { PROJECT_ROOT, VERIFIED_ROOT_REL, runFixturePath, aggregateDir } from './lib/swe-bench-verified-paths.mjs';
 import { verifySpectraVersion } from './lib/spectra-version-gate.mjs';
 import { parsePreregistration, computeTaskSetHash } from './lib/preregistration-check.mjs';
 import { scanForbiddenClaims } from './lib/forbidden-claims-scan.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const TEST_MODE = process.argv.includes('--test-mode');
 const SPEC_DIR = path.join(PROJECT_ROOT, 'specs/176-swe-bench-verified-cross-cohort');
@@ -202,5 +202,5 @@ function main() {
   process.exit(failed.length === 0 ? 0 : 1);
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) main();

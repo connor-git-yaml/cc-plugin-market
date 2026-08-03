@@ -15,6 +15,7 @@ import {
 } from './lib/product-artifact-paths.mjs';
 import { readJsonArtifact, writeYamlArtifact } from './lib/script-report-io.mjs';
 import { parseYamlDocument } from './lib/simple-yaml.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const DEFAULT_KIND = 'product';
 const DEFAULT_OWNER = 'unknown';
@@ -465,7 +466,7 @@ function printResult(result, asJson) {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const result = generateProductEntityCatalog(args);
   printResult(result, args.json);

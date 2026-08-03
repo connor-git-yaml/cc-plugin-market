@@ -17,9 +17,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { PROJECT_ROOT, fixturesDir } from './lib/swe-bench-verified-paths.mjs';
 import { computeTaskSetHash, freezeBlock } from './lib/preregistration-check.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const PREREG = path.join(PROJECT_ROOT, 'specs/176-swe-bench-verified-cross-cohort/verification/preregistration.md');
 
@@ -119,5 +119,5 @@ async function main() {
   }
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) main();

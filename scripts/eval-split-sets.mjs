@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { taskIdOf } from './lib/warmup-planner.mjs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -241,5 +242,5 @@ function shuffle(arr, rng) {
   return a;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const isMain = isInvokedDirectly(import.meta.url);
 if (isMain) main().catch((e) => { console.error(e); process.exit(1); });

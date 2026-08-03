@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 const DEFAULT_DATASET = 'SWE-bench/SWE-bench_Lite';
 
@@ -110,7 +111,7 @@ export function buildLocalDataset({ fixturePaths, fixtures: fixtureObjs, outPath
 }
 
 // CLI：node swebench-dataset-build.mjs --fixture <path> [--fixture <path>...] --out <path>
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isInvokedDirectly(import.meta.url)) {
   const argv = process.argv.slice(2);
   const fixturePaths = [];
   let outPath = null;
