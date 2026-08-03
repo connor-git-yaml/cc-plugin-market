@@ -2,7 +2,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+
+import { isInvokedDirectly } from './is-invoked-directly.mjs';
 
 // Feature 239（M9 轨道 A/B）— graph provenance 状态机。
 //
@@ -588,33 +589,8 @@ export async function main(argv) {
   return 2;
 }
 
-/**
- * 自调用守卫的**唯一实现**，导出给仓根薄壳复用（T027a）。
- *
- * 必须比到 realpath，不能只 `path.resolve`：`import.meta.url` 是 Node 解析后的真实路径，
- * 而 `process.argv[1]` 是用户敲进来的字面路径。只要中间隔着一层符号链接（macOS 的 `/tmp` →
- * `/private/tmp`、符号链接的插件安装目录、worktree 里软链过来的 `scripts/`），两者恒不相等 →
- * `main()` 永不执行 → **exit 0 且什么都没做**。这是本文件最危险的一类失败：看起来成功、实际空转。
- *
- * 之所以做成导出函数而不是让薄壳各写一份：薄壳与 canonical 此前就是各写一份 `path.resolve`
- * 比对，同一个 bug 在两处并存——两份守卫必然同步漂移，所以只留一份。
- *
- * @param {string} moduleUrl 调用方的 `import.meta.url`
- * @returns {boolean}
- */
-export function isInvokedDirectly(moduleUrl) {
-  const entry = process.argv[1];
-  if (entry === undefined) return false;
-  // realpath 失败（路径不存在 / 不可读）时退回 path.resolve：守卫不得因为解析不了而抛错
-  const canonicalize = (target) => {
-    try {
-      return fs.realpathSync(target);
-    } catch {
-      return path.resolve(target);
-    }
-  };
-  return canonicalize(entry) === canonicalize(fileURLToPath(moduleUrl));
-}
+// 自调用守卫的实现已收敛到共享 helper `./is-invoked-directly.mjs`（F246），此处 re-export 供仓根薄壳复用（T027a）。
+export { isInvokedDirectly };
 
 if (isInvokedDirectly(import.meta.url)) {
   main(process.argv.slice(2))
