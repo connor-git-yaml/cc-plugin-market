@@ -28,7 +28,7 @@ import process from 'node:process';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { realpathSync } from 'node:fs';
+import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 import { runDoctor } from './lib/codex-runtime-doctor-io.mjs';
 import { formatTextReport, buildSummary } from './lib/codex-runtime-doctor-core.mjs';
 
@@ -142,15 +142,6 @@ function main(argv) {
   return resolveExitCode(report.overallStatus, parsed.strict);
 }
 
-function isDirectExecution() {
-  if (!process.argv[1]) return false;
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-}
-
-if (isDirectExecution()) {
+if (isInvokedDirectly(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }
