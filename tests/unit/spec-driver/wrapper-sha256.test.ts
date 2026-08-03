@@ -67,8 +67,10 @@ describe('F186 T2 — extract-wrapper-body helper', () => {
     expect(body).not.toContain('/spec-driver:spec-driver-feature');
     // Feature 238（Slice 3/FR-205）：capability-neutral 指针文案，不再固化按内联子代理执行的措辞
     // Codex implement 审查修复轮 W4：指针文案改为两位置表述（project-local + 全局安装路径）
+    // Feature 240（FR-007(2)）：提及全局路径 ~/.codex/... 时必须带「默认路径，实际以 CODEX_HOME 为准」
+    // 限定，避免自定义 CODEX_HOME 的用户被指向错误目录；project-local 的 .codex/... 保持不变。
     expect(body).toContain(
-      'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，全局安装则为 ~/.codex/spec-driver-capability.md，缺失/degraded 时按内联/串行降级执行）',
+      'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，全局安装则为 ~/.codex/spec-driver-capability.md（默认路径，实际以 CODEX_HOME 为准），缺失/degraded 时按内联/串行降级执行）',
     );
     expect(body).not.toContain('Task tool（Codex 下按内联子代理执行）');
     expect(body).not.toContain('Claude Code 的 Task tool');

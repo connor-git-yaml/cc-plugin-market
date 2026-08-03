@@ -79,7 +79,7 @@ function rewriteCodexRuntimeText(text) {
     ['/spec-driver:spec-driver-refactor', '$spec-driver-refactor'],
     [
       'Claude Code 的 Task tool',
-      'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，全局安装则为 ~/.codex/spec-driver-capability.md，缺失/degraded 时按内联/串行降级执行）',
+      'Task tool（Codex 下子代理执行能力以 .codex/spec-driver-capability.md 探测记录为准，全局安装则为 ~/.codex/spec-driver-capability.md（默认路径，实际以 CODEX_HOME 为准），缺失/degraded 时按内联/串行降级执行）',
     ],
     [
       '在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。',

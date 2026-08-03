@@ -560,6 +560,31 @@ plan 把「编排器执行 Bash 步骤时能否拿到会话/轮次标识」列�
 
 ---
 
+### 9.6 T006 前置实测完成：`codex doctor` 对各类 `CODEX_HOME` 取值的真实行为
+
+**方法**：逐一设置 `CODEX_HOME` 后跑 `codex doctor --json`，读 `checks["config.load"]` 的 `status` 与 `details.CODEX_HOME` 回显值。**已分离「目录是否存在」与「路径形态」两个变量**（首轮测量因未预先建目录而混淆了二者，已重测修正）。
+
+| `CODEX_HOME` 取值 | `config.load` | 回显值 | 结论 |
+|---|---|---|---|
+| **空串** | `ok` | `/Users/connorlu/.codex` | **空串 等同 未设置 → fallback `~/.codex`** |
+| 存在的目录 + **尾部斜杠** | `ok` | 去掉尾斜杠后的路径 | **规范化：去尾斜杠** |
+| 存在的目录 + **相对路径** | `ok` | 相对 cwd 解析出的**绝对路径** | **规范化：转绝对** |
+| 存在的目录 + **symlink** | `ok` | symlink **解析后的真实路径** | **规范化：解 symlink（realpath）** |
+| 存在的目录 + **含空格** | `ok` | 原样保留（含空格） | 空格不影响 |
+| **不存在的目录** | 🔴 **`fail`** | 无该键 | `summary: "config could not be loaded"`，`details: {}`，`remediation: "Fix the reported config error, then rerun codex doctor."` |
+
+> 🔴 **推翻 spec §6 的一条 Edge Case**：spec 原写「`CODEX_HOME` 指向不存在的路径 → `resolveCodexHome` 仍返回该路径原样（不做存在性校验，**语义与官方 `codex doctor` 对齐**——尊重用户显式设置值）」。
+>
+> **实测证明 `codex doctor` 并非"原样返回"，而是直接 `fail`**。Codex 对 plan 的审查（W4）曾质疑该边界"只实测了有效临时目录、未证明"，该质疑成立，现由本次实测给出确切答案。
+
+**对 FR-006 实现（T007/T008/T009/T010）的直接约束**：
+
+1. **空串必须等同未设置**（走 fallback）—— 与 doctor 一致，可放心声称对齐
+2. **存在性校验不属于纯函数 `resolveCodexHome` 的职责**（纯函数不应做 I/O），因此我方 helper 对"不存在"返回路径值本身是**合理设计**；但 spec/实现/文档 **MUST NOT 再声称这一点"与 `codex doctor` 对齐"** —— 它不对齐。应改述为「我方 helper 只做取值与 fallback，不做存在性校验；存在性由各调用点按需自行处理并 fail-loud」
+3. **规范化行为（去尾斜杠 / 转绝对 / 解 symlink）是 doctor 的行为，不是 helper 的必然义务**。是否在我方 helper 中做规范化，是一个**需要显式决策并写进测试矩阵的设计选择**；无论选哪种，Node 侧与 shell 侧 **MUST 对拍一致**（否则同一 `CODEX_HOME` 在两条链路上解析出不同目录）。**建议不做规范化**（保持纯粹的"取值或 fallback"），把规范化留给真正需要比较路径的消费点，理由是规范化涉及 I/O（realpath 需读文件系统），会破坏纯函数属性并让 shell 侧对拍变复杂
+
+---
+
 ### 9.4 🔴 现存缺陷（**范围外**，本 feature 不修，须挂账）：`pre-tool-use-guard.sh` 一直空转
 
 **实测**（编排器直接喂 payload 给脚本，非推断）：

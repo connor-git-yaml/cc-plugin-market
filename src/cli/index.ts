@@ -109,7 +109,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   3. Codex CLI 登录态（spawn CLI 子进程代理）
 
 选项:
-  --global, -g   安装到全局 ~/.claude/skills/ 或 ~/.codex/skills/（由 --target 决定，仅 init）
+  --global, -g   安装到全局 ~/.claude/skills/ 或 ~/.codex/skills/（Codex 侧为默认路径，实际以 CODEX_HOME 为准）（由 --target 决定，仅 init）
   --remove       移除已安装的 skills（仅 init）或 hooks（仅 install）
   --target       目标平台: claude | codex | both（仅 init，默认按当前运行时自动选择）
   --verify       在线验证认证凭证（仅 auth-status）

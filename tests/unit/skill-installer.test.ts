@@ -10,6 +10,7 @@ import {
   existsSync,
   readFileSync,
   writeFileSync,
+  chmodSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
@@ -18,6 +19,7 @@ import {
   removeSkills,
   resolveTargetDir,
   formatSummary,
+  formatGlobalRootDisplay,
 } from '../../src/installer/skill-installer.js';
 import {
   SKILL_DEFINITIONS,
@@ -198,6 +200,39 @@ describe('skill-installer', () => {
       }
     });
 
+    // ── Codex 对抗审查 W2：不可访问 ≠ 未安装 ──
+
+    it('🔴 W2 — 目录不可访问时返回 failed + 权限诊断，绝不冒充 skipped', () => {
+      // root 跑测时 mode 000 拦不住，此时该场景无法构造 —— 显式跳过而不是假装通过
+      if (process.getuid?.() === 0) {
+        return;
+      }
+
+      const lockedRoot = join(tempDir, 'locked');
+      const targetDir = join(lockedRoot, 'skills');
+      // 先正常安装，确认产物**确实存在**（这正是"卸载假成功"的危险前提）
+      installSkills({ targetDir, mode: 'project', platform: 'claude' });
+      expect(existsSync(join(targetDir, SKILL_DEFINITIONS[0]!.name))).toBe(true);
+
+      chmodSync(lockedRoot, 0o000);
+      try {
+        const summary = removeSkills({ targetDir, mode: 'project', platform: 'claude' });
+
+        for (const result of summary.results) {
+          expect(result.status, `不得把 EACCES 当成 skipped: ${JSON.stringify(result)}`).toBe(
+            'failed',
+          );
+          expect(result.error).toContain('权限不足');
+        }
+
+        // 🔴 关键反向断言：上层格式化不得输出"无需清理"——
+        // 产物其实还在磁盘上，那句话就是卸载假成功
+        expect(formatSummary(summary)).not.toContain('无需清理');
+      } finally {
+        chmodSync(lockedRoot, 0o755);
+      }
+    });
+
     it('移除时不影响其他 skill', () => {
       const targetDir = join(tempDir, '.claude', 'skills');
 
@@ -219,6 +254,20 @@ describe('skill-installer', () => {
   });
 
   describe('resolveTargetDir', () => {
+    // F240（FR-007）：本块下方 4 条原有断言验证的是「CODEX_HOME 未设置时的默认行为」，
+    // 迁移后它们才具备「helper 是否破坏了默认路径」的检测能力，故断言本身逐字保留。
+    // 此处仅**补充**显式的环境隔离：若跑测机器的环境里恰好设置了 CODEX_HOME，
+    // 默认行为断言会因外部环境而假失败——隔离后这 4 条重新变回环境无关。
+    let savedCodexHome: string | undefined;
+    beforeEach(() => {
+      savedCodexHome = process.env['CODEX_HOME'];
+      delete process.env['CODEX_HOME'];
+    });
+    afterEach(() => {
+      if (savedCodexHome === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = savedCodexHome;
+    });
+
     it('project 模式返回 cwd/.claude/skills', () => {
       const result = resolveTargetDir('project', 'claude');
       expect(result).toBe(join(process.cwd(), '.claude', 'skills'));
@@ -237,6 +286,57 @@ describe('skill-installer', () => {
     it('global + codex 返回 ~/.codex/skills', () => {
       const result = resolveTargetDir('global', 'codex');
       expect(result).toBe(join(homedir(), '.codex', 'skills'));
+    });
+
+    // ── F240 / FR-007(3)：以下为**新增**的自定义 CODEX_HOME 用例（原断言未删改）──
+
+    it('global + codex 在自定义 CODEX_HOME 下解析到该目录，而非 ~/.codex', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-installer-custom';
+      const result = resolveTargetDir('global', 'codex');
+      expect(result).toBe(join('/tmp/f240-installer-custom', 'skills'));
+      expect(result).not.toBe(join(homedir(), '.codex', 'skills'));
+    });
+
+    it('global + codex 的自定义 CODEX_HOME 带尾斜杠时不产生 //', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-trailing/';
+      expect(resolveTargetDir('global', 'codex')).toBe('/tmp/f240-trailing/skills');
+    });
+
+    it('🔴 自定义 CODEX_HOME 不得影响 project + codex（仓库内 .codex/ 语义相反）', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-installer-custom';
+      expect(resolveTargetDir('project', 'codex')).toBe(join(process.cwd(), '.codex', 'skills'));
+    });
+
+    it('🔴 自定义 CODEX_HOME 不得影响 Claude 两个分支', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-installer-custom';
+      expect(resolveTargetDir('global', 'claude')).toBe(join(homedir(), '.claude', 'skills'));
+      expect(resolveTargetDir('project', 'claude')).toBe(join(process.cwd(), '.claude', 'skills'));
+    });
+  });
+
+  describe('formatGlobalRootDisplay（F240 / FR-007(2)）', () => {
+    let savedCodexHome: string | undefined;
+    beforeEach(() => {
+      savedCodexHome = process.env['CODEX_HOME'];
+      delete process.env['CODEX_HOME'];
+    });
+    afterEach(() => {
+      if (savedCodexHome === undefined) delete process.env['CODEX_HOME'];
+      else process.env['CODEX_HOME'] = savedCodexHome;
+    });
+
+    it('CODEX_HOME 未设置时沿用简写 ~/.codex（既有输出不变）', () => {
+      expect(formatGlobalRootDisplay('codex')).toBe('~/.codex');
+    });
+
+    it('CODEX_HOME 自定义时展示真实路径，不再误导用户去看 ~/.codex', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-display';
+      expect(formatGlobalRootDisplay('codex')).toBe('/tmp/f240-display');
+    });
+
+    it('Claude 平台恒为 ~/.claude，不受 CODEX_HOME 影响', () => {
+      process.env['CODEX_HOME'] = '/tmp/f240-display';
+      expect(formatGlobalRootDisplay('claude')).toBe('~/.claude');
     });
   });
 

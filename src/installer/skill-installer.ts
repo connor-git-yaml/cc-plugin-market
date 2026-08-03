@@ -7,6 +7,8 @@ import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getSkillDefinitionsForPlatform } from './skill-templates.js';
+import { resolveCodexHomeFromProcess } from '../core/codex-home.js';
+import { probeCodexPath, describeCodexPathProblem } from '../core/codex-home-access.js';
 
 // ============================================================
 // 数据模型接口（按 data-model.md 和 contracts/installer-api.md）
@@ -123,17 +125,31 @@ export function removeSkills(options: RemoveOptions): InstallSummary {
     const skillDir = join(targetDir, skill.name);
 
     try {
-      if (existsSync(skillDir)) {
+      // W2 修订：原实现为 existsSync(skillDir)。existsSync 对 EACCES 与 ENOENT 同样返回 false，
+      // 于是**不可访问**的安装目录被判成"没安装"→ status=skipped → 上层输出"无需清理"，
+      // 而实际上 skill 仍留在磁盘上（卸载假成功）。改按 errno 分流：
+      //   missing            → skipped（确实没装）
+      //   directory / file   → 执行删除
+      //   denied / error     → failed + 明确诊断（绝不冒充 skipped）
+      const probe = probeCodexPath(skillDir);
+      if (probe.kind === 'missing') {
+        results.push({
+          skillName: skill.name,
+          status: 'skipped',
+          targetPath: join(skillDir, 'SKILL.md'),
+        });
+      } else if (probe.kind === 'denied' || probe.kind === 'error') {
+        results.push({
+          skillName: skill.name,
+          status: 'failed',
+          targetPath: join(skillDir, 'SKILL.md'),
+          error: describeCodexPathProblem(skillDir, probe)!,
+        });
+      } else {
         rmSync(skillDir, { recursive: true, force: true });
         results.push({
           skillName: skill.name,
           status: 'removed',
-          targetPath: join(skillDir, 'SKILL.md'),
-        });
-      } else {
-        results.push({
-          skillName: skill.name,
-          status: 'skipped',
           targetPath: join(skillDir, 'SKILL.md'),
         });
       }
@@ -166,9 +182,31 @@ export function resolveTargetDir(
 ): string {
   const rootDir = platform === 'codex' ? '.codex' : '.claude';
   if (mode === 'global') {
+    // 🔴 F240 / FR-007：**只有** codex + global 这一格以「全局 Codex 家目录」为基，
+    // 受 CODEX_HOME 控制；Claude 全局分支与之无关，保持家目录拼接。
+    if (platform === 'codex') {
+      return join(resolveCodexHomeFromProcess(), 'skills');
+    }
     return join(homedir(), rootDir, 'skills');
   }
+  // 🔴 project 分支以 process.cwd() 为基，与上方 global 分支**语义相反**（同一个 rootDir 变量）。
+  // 仓库内 .codex/skills/ 是 F238 wrapper 产物目录（受 body-sha256 门禁保护），
+  // 误接 CODEX_HOME helper 会同时打断 repo:check 与 F238 门禁链路（_grounding.md §9.2）。
   return join(process.cwd(), rootDir, 'skills');
+}
+
+/**
+ * 全局安装目录的**展示用**根路径。
+ *
+ * F240 / FR-007(2)：CODEX_HOME 自定义时不得继续无条件展示 `~/.codex`（会误导用户去看错目录）；
+ * 未自定义时沿用简写以保持既有输出不变。
+ */
+export function formatGlobalRootDisplay(platform: SkillTargetPlatform): string {
+  if (platform !== 'codex') {
+    return '~/.claude';
+  }
+  const resolved = resolveCodexHomeFromProcess();
+  return resolved === join(homedir(), '.codex') ? '~/.codex' : resolved;
 }
 
 /**
@@ -259,7 +297,7 @@ function formatDisplayPath(
 ): string {
   const rootDir = summary.platform === 'codex' ? '.codex' : '.claude';
   if (summary.mode === 'global') {
-    return `~/${rootDir}/skills/${result.skillName}/SKILL.md`;
+    return `${formatGlobalRootDisplay(summary.platform)}/skills/${result.skillName}/SKILL.md`;
   }
   return `${rootDir}/skills/${result.skillName}/SKILL.md`;
 }
@@ -271,7 +309,7 @@ function formatDisplayDir(
 ): string {
   const rootDir = summary.platform === 'codex' ? '.codex' : '.claude';
   if (summary.mode === 'global') {
-    return `~/${rootDir}/skills/${result.skillName}/`;
+    return `${formatGlobalRootDisplay(summary.platform)}/skills/${result.skillName}/`;
   }
   return `${rootDir}/skills/${result.skillName}/`;
 }

@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { detectAuth } from '../../src/auth/auth-detector.js';
 
 // Mock child_process
@@ -13,16 +13,28 @@ vi.mock('node:child_process', () => ({
 }));
 
 // Mock fs（用于非 macOS 平台的凭证检测）
+// W2：Codex 凭据探测从 existsSync 改为 statSync（需区分 ENOENT / EACCES），
+// 故 statSync 也必须纳入 mock —— 否则会打到跑测机器的真实 ~/.codex/auth.json，
+// 让「未登录」类断言随机器是否登录过 Codex 而漂移。
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
     ...actual,
     existsSync: vi.fn(actual.existsSync),
+    statSync: vi.fn(actual.statSync),
   };
 });
 
 const mockedExecSync = vi.mocked(execSync);
 const mockedExistsSync = vi.mocked(existsSync);
+const mockedStatSync = vi.mocked(statSync);
+
+/** 构造带 errno 的 fs 异常，用于驱动 probeCodexPath 的分支 */
+function fsError(code: string): NodeJS.ErrnoException {
+  const err = new Error(`${code}: mocked`) as NodeJS.ErrnoException;
+  err.code = code;
+  return err;
+}
 
 describe('auth-detector', () => {
   const originalEnv = process.env;
@@ -33,11 +45,19 @@ describe('auth-detector', () => {
     delete process.env['CODEX_THREAD_ID'];
     delete process.env['CODEX_SHELL'];
     delete process.env['CODEX_INTERNAL_ORIGINATOR_OVERRIDE'];
+    // F240（FR-007）：Codex 凭据路径迁移到 CODEX_HOME helper 后，默认行为断言
+    // 要求 CODEX_HOME 未设置——显式清除以免跑测机器的外部环境导致假失败。
+    delete process.env['CODEX_HOME'];
     vi.clearAllMocks();
     mockedExecSync.mockImplementation(() => {
       throw new Error('not found');
     });
     mockedExistsSync.mockReturnValue(false);
+    // 默认「路径确实不存在」，与上面 existsSync=false 语义对齐，
+    // 使既有的「Codex 未登录」类断言保持原意且与跑测机器状态无关。
+    mockedStatSync.mockImplementation(() => {
+      throw fsError('ENOENT');
+    });
   });
 
   afterEach(() => {
@@ -174,7 +194,16 @@ describe('auth-detector', () => {
 
       // mock ~/.codex/auth.json 存在，Claude Keychain 不存在
       Object.defineProperty(process, 'platform', { value: 'linux' });
+      // existsSync 仍服务于 Claude 凭据路径探测（未迁移，保持原样）
       mockedExistsSync.mockImplementation((filePath: any) => String(filePath).includes('/.codex/auth.json'));
+      // W2：Codex 凭据探测已改用 statSync（需区分 ENOENT / EACCES），故同步 mock。
+      // 下方断言逐字未动，仅探测机制随实现变更而对齐。
+      mockedStatSync.mockImplementation((filePath: unknown) => {
+        if (String(filePath).includes('/.codex/auth.json')) {
+          return { isDirectory: () => false } as unknown as ReturnType<typeof statSync>;
+        }
+        throw fsError('ENOENT');
+      });
 
       const result = detectAuth();
 
@@ -182,6 +211,95 @@ describe('auth-detector', () => {
       expect(result.preferred!.type).toBe('cli-proxy');
       expect(result.preferred!.provider).toBe('codex');
       expect(result.diagnostics.some((item) => item.includes('Codex CLI > API Key > Claude CLI'))).toBe(true);
+    });
+
+    // ── F240 / FR-007(3)：新增的自定义 CODEX_HOME 用例（上方默认行为断言未删改）──
+
+    it('自定义 CODEX_HOME 时到该目录下找 auth.json，而非 ~/.codex', () => {
+      delete process.env['ANTHROPIC_API_KEY'];
+      process.env['CODEX_HOME'] = '/tmp/f240-auth-home';
+
+      mockedExecSync.mockImplementation((cmd: string) => {
+        const cmdStr = typeof cmd === 'string' ? cmd : String(cmd);
+        if (cmdStr.includes('which codex')) return '/usr/local/bin/codex';
+        if (cmdStr.includes('/usr/local/bin/codex --version')) return 'codex-cli 0.144.6';
+        if (cmdStr.includes('find-generic-password')) throw new Error('not found');
+        return '';
+      });
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+
+      // W2：探测点从 existsSync 改为 statSync（需区分 ENOENT / EACCES），故在此追踪 statSync
+      const probed: string[] = [];
+      mockedStatSync.mockImplementation((filePath: unknown) => {
+        const p = String(filePath);
+        probed.push(p);
+        if (p === '/tmp/f240-auth-home/auth.json') {
+          return { isDirectory: () => false } as unknown as ReturnType<typeof statSync>;
+        }
+        throw fsError('ENOENT');
+      });
+
+      const result = detectAuth();
+
+      // 确实探测了自定义目录下的 auth.json
+      expect(probed).toContain('/tmp/f240-auth-home/auth.json');
+      // 且没有再去探测家目录下的 ~/.codex/auth.json
+      expect(probed.some((p) => p.endsWith('/.codex/auth.json') && p !== '/tmp/f240-auth-home/auth.json')).toBe(false);
+
+      const codexMethod = result.methods.find((m) => m.provider === 'codex');
+      expect(codexMethod!.details).toContain('已登录');
+    });
+
+    // ── Codex 对抗审查 W2：凭据探测失败 ≠ 未登录 ──
+
+    it('🔴 W2 — 凭据路径 EACCES 时报"无法探测"而非"未登录"', () => {
+      delete process.env['ANTHROPIC_API_KEY'];
+      process.env['CODEX_HOME'] = '/tmp/f240-auth-denied';
+
+      mockedExecSync.mockImplementation((cmd: string) => {
+        const cmdStr = typeof cmd === 'string' ? cmd : String(cmd);
+        if (cmdStr.includes('which codex')) return '/usr/local/bin/codex';
+        if (cmdStr.includes('/usr/local/bin/codex --version')) return 'codex-cli 0.144.6';
+        throw new Error('not found');
+      });
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      mockedStatSync.mockImplementation(() => {
+        throw fsError('EACCES');
+      });
+
+      const result = detectAuth();
+      const codexMethod = result.methods.find((m) => m.provider === 'codex')!;
+
+      // 仍然不可用（确实用不了），但措辞必须说清是**探测不了**而非**没登录** ——
+      // 否则用户会按提示去做无效的重新登录，真正的权限问题被永远掩盖。
+      expect(codexMethod.available).toBe(false);
+      expect(codexMethod.details).toContain('无法探测');
+      expect(codexMethod.details).toContain('EACCES');
+      expect(codexMethod.details).not.toContain('未登录');
+
+      const codexDiag = result.diagnostics.find((d) => d.startsWith('Codex CLI:'))!;
+      expect(codexDiag).toContain('无法探测');
+      expect(codexDiag).not.toContain('未登录');
+    });
+
+    it('🔴 W2 — 凭据路径 ENOENT 时仍报"未登录"（既有语义不变）', () => {
+      delete process.env['ANTHROPIC_API_KEY'];
+      process.env['CODEX_HOME'] = '/tmp/f240-auth-missing';
+
+      mockedExecSync.mockImplementation((cmd: string) => {
+        const cmdStr = typeof cmd === 'string' ? cmd : String(cmd);
+        if (cmdStr.includes('which codex')) return '/usr/local/bin/codex';
+        if (cmdStr.includes('/usr/local/bin/codex --version')) return 'codex-cli 0.144.6';
+        throw new Error('not found');
+      });
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+
+      const result = detectAuth();
+      const codexMethod = result.methods.find((m) => m.provider === 'codex')!;
+
+      expect(codexMethod.available).toBe(false);
+      expect(codexMethod.details).toContain('未登录');
+      expect(codexMethod.details).not.toContain('无法探测');
     });
 
     it('API Key 掩码正确显示', () => {

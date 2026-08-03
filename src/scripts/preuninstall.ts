@@ -1,12 +1,14 @@
 /**
  * preuninstall 脚本
  * 全局卸载时清理 ~/.claude/skills/ 和/或 ~/.codex/skills/ 中已注册的 skill
+ * （Codex 侧为默认路径，实际以 CODEX_HOME 为准）
  * 复用 installer 模块的核心逻辑
  */
 
 import {
   removeSkills,
   resolveTargetDir,
+  formatGlobalRootDisplay,
   type SkillTargetPlatform,
 } from '../installer/skill-installer.js';
 
@@ -53,12 +55,13 @@ function main(): void {
     for (const platform of targets) {
       const targetDir = resolveTargetDir('global', platform);
       const summary = removeSkills({ targetDir, mode: 'global', platform });
-      const rootDir = platform === 'codex' ? '.codex' : '.claude';
+      // F240 / FR-007(2)：CODEX_HOME 自定义时展示真实清理路径，不再无条件写 ~/.codex
+      const displayRoot = formatGlobalRootDisplay(platform);
       const platformLabel = platform === 'codex' ? 'Codex' : 'Claude Code';
 
       for (const result of summary.results) {
         if (result.status === 'removed') {
-          console.log(`✓ 已清理: ~/${rootDir}/skills/${result.skillName}/`);
+          console.log(`✓ 已清理: ${displayRoot}/skills/${result.skillName}/`);
         } else if (result.status === 'failed') {
           console.warn(`⚠ 警告: 清理 ${result.skillName} 失败: ${result.error ?? '未知错误'}`);
         }

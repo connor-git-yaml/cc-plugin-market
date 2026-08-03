@@ -7,6 +7,8 @@ import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveReverseSpecRuntime } from '../core/model-selection.js';
+import { resolveCodexHomeFromProcess } from '../core/codex-home.js';
+import { probeCodexPath, describeCodexPathProblem } from '../core/codex-home-access.js';
 
 // ============================================================
 // 类型定义
@@ -120,10 +122,29 @@ function isCliAuthenticated(): boolean {
   }
 }
 
-function isCodexAuthenticated(): boolean {
-  const home = getHomeDir();
-  if (!home) return false;
-  return existsSync(join(home, '.codex', 'auth.json'));
+/** Codex 登录态：第三态 `inaccessible` 用于承载"探测失败"，不得再压回 false */
+type CodexAuthStatus =
+  | { state: 'authenticated' }
+  | { state: 'unauthenticated' }
+  | { state: 'inaccessible'; diagnostic: string };
+
+function probeCodexAuth(): CodexAuthStatus {
+  // F240 / FR-007：Codex 凭据位于**全局** Codex 家目录下，该目录由 CODEX_HOME 决定
+  // （未设置才 fallback ~/.codex），故经统一 helper 解析而非自行拼接家目录。
+  // 上方 getHomeDir() 保持不动——它服务的是 Claude 凭据路径，与 Codex 家目录无关。
+  const authPath = join(resolveCodexHomeFromProcess(), 'auth.json');
+
+  // W2 修订：原实现为 existsSync(authPath)，会把 EACCES 静默压成"不存在"，
+  // 于是"凭据目录权限不对"被误报为"未登录"——用户按提示重新登录也修不好。
+  // 现按 errno 分流：确定不存在 → 未登录；不可访问 / 其他 I/O 故障 → 明确诊断。
+  const probe = probeCodexPath(authPath);
+  if (probe.kind === 'directory' || probe.kind === 'file') {
+    return { state: 'authenticated' };
+  }
+  if (probe.kind === 'missing') {
+    return { state: 'unauthenticated' };
+  }
+  return { state: 'inaccessible', diagnostic: describeCodexPathProblem(authPath, probe)! };
 }
 
 function getPriorityOrder(): Array<'api-key' | 'claude-cli' | 'codex-cli'> {
@@ -195,8 +216,8 @@ export function detectAuth(): AuthDetectionResult {
   } else {
     const version = getCliVersion(codexPath);
     const versionStr = version ? ` (${version})` : '';
-    const authenticated = isCodexAuthenticated();
-    if (authenticated) {
+    const codexAuth = probeCodexAuth();
+    if (codexAuth.state === 'authenticated') {
       methods.push({
         type: 'cli-proxy',
         provider: 'codex',
@@ -204,6 +225,18 @@ export function detectAuth(): AuthDetectionResult {
         details: `已安装${versionStr}, 已登录`,
       });
       diagnostics.push(`Codex CLI: 已安装${versionStr}, 已登录`);
+    } else if (codexAuth.state === 'inaccessible') {
+      // W2：凭据探测失败 ≠ 未登录。available 仍为 false（确实不能用），
+      // 但 details/diagnostics 必须说清是**探测不了**而非**没登录**，否则用户会去做无效的重新登录。
+      methods.push({
+        type: 'cli-proxy',
+        provider: 'codex',
+        available: false,
+        details: `已安装${versionStr}, 登录状态无法探测（${codexAuth.diagnostic}）`,
+      });
+      diagnostics.push(
+        `Codex CLI: 已安装${versionStr}, 登录状态无法探测 —— ${codexAuth.diagnostic}`,
+      );
     } else {
       methods.push({
         type: 'cli-proxy',

@@ -15,6 +15,7 @@ import {
   readdirSync,
   statSync,
   symlinkSync,
+  chmodSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { validateWrapperSources } from '../../plugins/spec-driver/scripts/validate-wrapper-sources.mjs';
@@ -100,17 +101,26 @@ function runFixtureScript(
 
 function runScript(
   args: string[],
-  options?: { cwd?: string; home?: string },
+  options?: { cwd?: string; home?: string; codexHome?: string },
 ): { stdout: string; exitCode: number } {
+  // F240（FR-007）：global 模式的目标目录改由 CODEX_HOME 决定（未设置才 fallback ~/.codex）。
+  // 默认**显式清除** CODEX_HOME，使既有「隔离 HOME → 写 HOME/.codex/skills」的默认行为断言
+  // 不受跑测机器外部环境影响；仅在用例显式传入 codexHome 时才注入。
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    HOME: options?.home ?? process.env['HOME'],
+  };
+  if (options?.codexHome === undefined) {
+    delete env['CODEX_HOME'];
+  } else {
+    env['CODEX_HOME'] = options.codexHome;
+  }
   try {
     const stdout = execFileSync('bash', [SCRIPT_PATH, ...args], {
       encoding: 'utf-8',
       timeout: 10_000,
       cwd: options?.cwd ?? process.cwd(),
-      env: {
-        ...process.env,
-        HOME: options?.home ?? process.env['HOME'],
-      },
+      env,
     });
     return { stdout, exitCode: 0 };
   } catch (err: unknown) {
@@ -403,6 +413,193 @@ describe('Spec Driver Codex skills script', () => {
     // W5：原子写不留 .tmp 残留
     const codexDirEntries = readdirSync(join(fakeHome, '.codex'));
     expect(codexDirEntries.some((name) => name.includes('.tmp.'))).toBe(false);
+  });
+
+  // ── F240 / FR-007(3)：新增的自定义 CODEX_HOME 用例（上方默认行为断言未删改）──
+
+  it('global 模式在自定义 CODEX_HOME 下写入该目录，且 sidecar 自动跟随', () => {
+    const fakeHome = join(tempDir, 'fake-home-2');
+    const customCodexHome = join(tempDir, 'custom-codex-home');
+
+    const result = runScript(['install', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: customCodexHome,
+    });
+    expect(result.exitCode).toBe(0);
+
+    // wrapper 落在 CODEX_HOME/skills 下
+    expect(
+      existsSync(join(customCodexHome, 'skills', 'spec-driver-feature', 'SKILL.md')),
+    ).toBe(true);
+    expect(
+      existsSync(join(customCodexHome, 'skills', 'spec-driver-refactor', 'SKILL.md')),
+    ).toBe(true);
+    expect(result.stdout).toContain(join(customCodexHome, 'skills'));
+
+    // 🔴 连带收益显式断言：sidecar 由 dirname "$TARGET_DIR" 推导，
+    // TARGET_DIR 走 helper 后 sidecar **自动**跟随 CODEX_HOME（易被误认为遗漏点）。
+    const sidecarPath = join(customCodexHome, 'spec-driver-capability.md');
+    expect(existsSync(sidecarPath)).toBe(true);
+    expect(readFileSync(sidecarPath, 'utf-8')).toMatch(
+      /Subagent Capability: (native|degraded\(reason=[a-z-]+\))/,
+    );
+
+    // 家目录下的 ~/.codex 完全未被创建（未走 fallback）
+    expect(existsSync(join(fakeHome, '.codex'))).toBe(false);
+  });
+
+  it('global 模式 remove 在自定义 CODEX_HOME 下清理该目录', () => {
+    const fakeHome = join(tempDir, 'fake-home-3');
+    const customCodexHome = join(tempDir, 'custom-codex-home-rm');
+
+    expect(
+      runScript(['install', '--global'], { cwd: tempDir, home: fakeHome, codexHome: customCodexHome })
+        .exitCode,
+    ).toBe(0);
+    expect(existsSync(join(customCodexHome, 'skills', 'spec-driver-feature'))).toBe(true);
+
+    const remove = runScript(['remove', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: customCodexHome,
+    });
+    expect(remove.exitCode).toBe(0);
+    expect(existsSync(join(customCodexHome, 'skills', 'spec-driver-feature'))).toBe(false);
+  });
+
+  it('CODEX_HOME 为空串时视同未设置，回落 HOME/.codex（与 helper 语义一致）', () => {
+    const fakeHome = join(tempDir, 'fake-home-4');
+    const result = runScript(['install', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: '',
+    });
+    expect(result.exitCode).toBe(0);
+    expect(
+      existsSync(join(fakeHome, '.codex', 'skills', 'spec-driver-feature', 'SKILL.md')),
+    ).toBe(true);
+  });
+
+  // ── Codex 对抗审查 W1：**完整消费链**（解析 + 拼接）而非仅纯函数 ──
+
+  it('🔴 W1 — CODEX_HOME 带尾斜杠时 TARGET_DIR 不产生 //（纯函数对拍抓不到的消费链漂移）', () => {
+    const fakeHome = join(tempDir, 'fake-home-slash');
+    const base = join(tempDir, 'custom-trailing');
+    // 关键：传入带尾斜杠的 CODEX_HOME —— 修复前 codex-skills.sh 会拼出 `<base>//skills`
+    const result = runScript(['install', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: `${base}/`,
+    });
+    expect(result.exitCode).toBe(0);
+
+    // 脚本输出的目标目录里不得出现 `//`
+    const targetLine = result.stdout
+      .split('\n')
+      .find((line) => line.includes('安装完成'))!;
+    expect(targetLine, `输出含 //: ${targetLine}`).not.toContain('//');
+    // 且与 Node 侧 join() 逐字节一致
+    expect(targetLine).toContain(join(base, 'skills'));
+
+    // 产物确实落在规范化后的路径上
+    expect(existsSync(join(base, 'skills', 'spec-driver-feature', 'SKILL.md'))).toBe(true);
+    // sidecar 由 dirname "$TARGET_DIR" 推导，同样不受尾斜杠影响
+    expect(existsSync(join(base, 'spec-driver-capability.md'))).toBe(true);
+  });
+
+  it('🔴 W1 — CODEX_HOME 含内部重复斜杠时同样折叠，与 Node join 一致', () => {
+    const fakeHome = join(tempDir, 'fake-home-dbl');
+    const base = join(tempDir, 'dbl');
+    mkdirSync(base, { recursive: true });
+
+    const result = runScript(['install', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: `${base}//nested`,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(join(base, 'nested', 'skills'));
+    expect(existsSync(join(base, 'nested', 'skills', 'spec-driver-feature', 'SKILL.md'))).toBe(true);
+  });
+
+  it('🔴 W1 — CODEX_HOME 含换行时 fail-loud，不静默安装到被剥了换行的目录', () => {
+    const fakeHome = join(tempDir, 'fake-home-nl');
+    const base = join(tempDir, 'nl-home');
+
+    const result = runScript(['install', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: `${base}\n`,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain('含换行符');
+    // 关键：**没有**悄悄写到剥掉换行后的那个目录
+    expect(existsSync(join(base, 'skills'))).toBe(false);
+  });
+
+  // ── Codex 对抗审查 W2：不可访问 ≠ 未安装 ──
+
+  it('🔴 W2 — remove --global 在目录不可访问时 fail-loud，不输出"无需清理"', () => {
+    if (process.getuid?.() === 0) {
+      return; // root 下 mode 000 拦不住，场景无法构造 —— 跳过而非假装通过
+    }
+    const fakeHome = join(tempDir, 'fake-home-denied');
+    const base = join(tempDir, 'denied-home');
+
+    // 先正常安装，确认产物**确实存在**（这正是"卸载假成功"的危险前提）
+    expect(
+      runScript(['install', '--global'], { cwd: tempDir, home: fakeHome, codexHome: base })
+        .exitCode,
+    ).toBe(0);
+    const installed = join(base, 'skills', 'spec-driver-feature');
+    expect(existsSync(installed)).toBe(true);
+
+    chmodSync(join(base, 'skills'), 0o000);
+    try {
+      const remove = runScript(['remove', '--global'], {
+        cwd: tempDir,
+        home: fakeHome,
+        codexHome: base,
+      });
+      expect(remove.exitCode).not.toBe(0);
+      expect(remove.stdout).not.toContain('无需清理');
+      expect(remove.stdout).toContain('权限不足');
+    } finally {
+      chmodSync(join(base, 'skills'), 0o755);
+    }
+    // 产物仍在磁盘上 —— 证明"无需清理"确实会是假成功
+    expect(existsSync(installed)).toBe(true);
+  });
+
+  it('🔴 W2 — remove --global 在目录确实不存在时仍输出"无需清理"（既有语义不变）', () => {
+    const fakeHome = join(tempDir, 'fake-home-clean');
+    const base = join(tempDir, 'never-installed');
+
+    const remove = runScript(['remove', '--global'], {
+      cwd: tempDir,
+      home: fakeHome,
+      codexHome: base,
+    });
+    expect(remove.exitCode).toBe(0);
+    expect(remove.stdout).toContain('无需清理');
+  });
+
+  it('🔴 project 模式不受 CODEX_HOME 影响（仓库内 .codex/ 语义相反）', () => {
+    const projectRoot = join(tempDir, 'proj-scope');
+    const customCodexHome = join(tempDir, 'custom-codex-home-scope');
+    mkdirSync(projectRoot, { recursive: true });
+
+    const result = runScript(['install'], {
+      cwd: projectRoot,
+      codexHome: customCodexHome,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(
+      existsSync(join(projectRoot, '.codex', 'skills', 'spec-driver-feature', 'SKILL.md')),
+    ).toBe(true);
+    // 自定义 CODEX_HOME 下不得出现任何 skills 产物
+    expect(existsSync(join(customCodexHome, 'skills'))).toBe(false);
   });
 
   it('project 模式在 git 子目录执行时安装到 git 根目录', () => {

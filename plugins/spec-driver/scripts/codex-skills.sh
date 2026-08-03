@@ -11,6 +11,12 @@ SYNC_PLUGIN_DIST="false"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Feature 240（FR-006/007）：全局模式的目标根目录经统一 helper 解析（CODEX_HOME 优先，
+# 未设置才 fallback ~/.codex），与 Node 侧 src/core/codex-home.ts 逐字节对拍。
+# 🔴 只有 global 分支消费它；project 分支仍以 $PROJECT_ROOT 为基，语义相反，不得混用。
+# shellcheck source=lib/codex-home.sh
+source "$SCRIPT_DIR/lib/codex-home.sh"
+
 usage() {
   cat <<'USAGE'
 用法:
@@ -21,6 +27,7 @@ usage() {
   install                     安装 Spec Driver 的 Codex 包装技能到 .codex/skills
   remove                      移除已安装的 Spec Driver Codex 包装技能
   --global                    目标目录改为 ~/.codex/skills
+                              （默认路径，实际以 CODEX_HOME 为准）
   --sync-plugin-distribution  额外把生成结果 copy 到 tracked 的
                               plugins/spec-driver/skills-codex/（随插件包分发）；
                               仅供 npm run repo:sync 使用，普通安装无需该 flag
@@ -54,7 +61,10 @@ for arg in "$@"; do
 done
 
 if [[ "$MODE" == "global" ]]; then
-  TARGET_DIR="$HOME/.codex/skills"
+  # W1 修订：MUST NOT 写成 "$(resolve_codex_home_from_env)/skills" —— CODEX_HOME 带尾斜杠时
+  # 会产出 `/tmp/x//skills`，与 Node 侧 join() 的 `/tmp/x/skills` 漂移。
+  # resolve_codex_home_subdir 内部经 codex_path_join 吸收尾斜杠与内部 //，与 Node 侧一致。
+  TARGET_DIR="$(resolve_codex_home_subdir skills)"
 else
   if [[ -n "${CODEX_SKILL_PROJECT_ROOT:-}" ]]; then
     PROJECT_ROOT="$CODEX_SKILL_PROJECT_ROOT"
@@ -123,7 +133,7 @@ write_codex_adapter() {
 此 Skill 在安装时直接同步自 \`\$PLUGIN_DIR/skills/$source_skill_name/SKILL.md\` 的描述与正文，只额外叠加以下 Codex 运行时差异：
 
 - 命令别名：正文中的 \`$source_command\` 在 Codex 中等价于 \`\$$skill_name\`
-- 子代理执行能力：以 install-time 探测记录为准（\`.codex/spec-driver-capability.md\`，全局安装则为 \`~/.codex/spec-driver-capability.md\`）；记录缺失或 degraded 时，正文中的 \`Task(...)\` / \`Task tool\` 一律按当前会话内联/串行降级执行
+- 子代理执行能力：以 install-time 探测记录为准（\`.codex/spec-driver-capability.md\`，全局安装则为 \`~/.codex/spec-driver-capability.md\`（默认路径，实际以 \`CODEX_HOME\` 为准））；记录缺失或 degraded 时，正文中的 \`Task(...)\` / \`Task tool\` 一律按当前会话内联/串行降级执行
 - 并行回退：原并行组若当前环境无法并行，必须显式标注 \`[回退:串行]\`
 - 模型兼容：遵循 \`model_compat.aliases.codex\` tier 映射优先级（\`--preset -> agents.{agent_id}.model(仅显式配置时生效) -> preset 默认\`）；未显式 pin 时由 Codex CLI 自身按其配置分层（\`-c\` override > profile > \`~/.codex/config.toml\` 的 \`model\` 字段 > CLI 内建默认）决定当前默认模型，不冒充为已验证的具体版本
 - 质量门与产物：所有质量门、制品路径、写入边界与 source skill 完全一致，不得弱化或越界
@@ -248,7 +258,62 @@ install_all() {
   echo "Spec Driver Codex skills 安装完成: $TARGET_DIR"
 }
 
+# W2 修订：`[[ -d "$dir" ]]` 对「不存在」与「无权限」返回同一个 false，
+# 于是不可访问的安装目录被当成"没装过" → 输出"无需清理"（卸载假成功，产物其实还在磁盘上）。
+# bash 拿不到 errno，故改为按**可判定性**分流：只有在能确定"父目录可搜索、目标目录可读可搜索"
+# 的前提下，`[[ -d ]]` 的 false 才真正代表"不存在"；否则一律 fail-loud，绝不冒充"无需清理"。
+#
+# 诚实标注适用范围：这里只检查 TARGET_DIR 及其**直接父目录**两级（即 CODEX_HOME 与
+# CODEX_HOME/skills），不做递归祖先遍历——这两级正是本脚本自身创建与写入的层级，
+# 更上层不可达属环境级异常，此时 `[[ ! -e ]]` 仍可能误判为 missing，非本修复覆盖面。
+# Node 侧（skill-installer.ts）走的是真实 errno 分流，判定能力强于此处。
+probe_removal_root() {
+  local root="$1"
+  local parent
+  parent="$(dirname "$root")"
+
+  if [[ -e "$parent" && ! -x "$parent" ]]; then
+    printf '%s\n' "denied-parent"
+    return 0
+  fi
+  if [[ ! -e "$root" ]]; then
+    printf '%s\n' "missing"
+    return 0
+  fi
+  if [[ ! -d "$root" ]]; then
+    printf '%s\n' "not-a-directory"
+    return 0
+  fi
+  # 目录存在但不可读/不可搜索时无法枚举子目录，下面的 `[[ -d ]]` 会一律 false
+  if [[ ! -r "$root" || ! -x "$root" ]]; then
+    printf '%s\n' "denied"
+    return 0
+  fi
+  printf '%s\n' "ok"
+}
+
 remove_all() {
+  local root_state
+  root_state="$(probe_removal_root "$TARGET_DIR")"
+  case "$root_state" in
+    denied-parent)
+      echo "[错误] 无法判定是否已安装：$TARGET_DIR 的父目录不可搜索（权限不足），这不等于「未安装」。请检查目录权限后重试" >&2
+      exit 1
+      ;;
+    denied)
+      echo "[错误] 无法枚举已安装内容：$TARGET_DIR 不可读或不可搜索（权限不足），这不等于「未安装」。请检查目录权限后重试" >&2
+      exit 1
+      ;;
+    not-a-directory)
+      echo "[错误] $TARGET_DIR 存在但不是目录，拒绝在此执行清理" >&2
+      exit 1
+      ;;
+    missing)
+      echo "未检测到已安装的 Spec Driver Codex skills，无需清理"
+      return 0
+      ;;
+  esac
+
   local removed=0
   for skill in "${SKILLS[@]}"; do
     local dir="$TARGET_DIR/$skill"
