@@ -11,6 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { collectGenericLanguageCodeSkeletons } from './generic-language-skeleton-collector.js';
 import { JavaLanguageAdapter } from '../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../adapters/go-adapter.js';
@@ -57,6 +58,9 @@ describe('collectGenericLanguageCodeSkeletons', () => {
   });
 
   it('④ 内置忽略目录命中样本（build/Generated.java）不进入 skeleton map', async () => {
+    // 前置守卫：样本须真实存在于磁盘，否则本断言在样本缺失时会空洞通过零信号
+    // （F253 根因：该样本此前从未入库，见 fix-report.md）。
+    expect(fs.existsSync(path.join(JAVA_FIXTURE_ROOT, 'build/Generated.java'))).toBe(true);
     const skeletons = await collectGenericLanguageCodeSkeletons(JAVA_FIXTURE_ROOT, [
       new JavaLanguageAdapter(),
     ]);
@@ -65,6 +69,9 @@ describe('collectGenericLanguageCodeSkeletons', () => {
   });
 
   it('④ .gitignore 命中样本（generated/StubOnly.java）不进入 skeleton map', async () => {
+    // 前置守卫：样本须真实存在于磁盘，否则本断言在样本缺失时会空洞通过零信号
+    // （F253 根因：该样本此前从未入库，见 fix-report.md）。
+    expect(fs.existsSync(path.join(JAVA_FIXTURE_ROOT, 'generated/StubOnly.java'))).toBe(true);
     const skeletons = await collectGenericLanguageCodeSkeletons(JAVA_FIXTURE_ROOT, [
       new JavaLanguageAdapter(),
     ]);
@@ -82,6 +89,10 @@ describe('collectGenericLanguageCodeSkeletons', () => {
   });
 
   it('④ Go 内置忽略目录（vendor/）与 .gitignore（generated/）样本均不进入 skeleton map', async () => {
+    // 前置守卫：两类样本须真实存在于磁盘，否则对应断言在样本缺失时会空洞通过零信号
+    // （F253 根因：generated/stub.go 此前从未入库；vendor/Generated.go 已入库仍一并复核）。
+    expect(fs.existsSync(path.join(GO_FIXTURE_ROOT, 'vendor/Generated.go'))).toBe(true);
+    expect(fs.existsSync(path.join(GO_FIXTURE_ROOT, 'generated/stub.go'))).toBe(true);
     const skeletons = await collectGenericLanguageCodeSkeletons(GO_FIXTURE_ROOT, [
       new GoLanguageAdapter(),
     ]);
