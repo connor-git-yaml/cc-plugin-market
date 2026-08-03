@@ -267,7 +267,14 @@ F228 与 F229 两轮均出现同一现象：对 `fix-compliance-core.mjs` 的 sy
 （插件脚本多为独立 CLI 入口，可能天然低度数，需一并决定是给 entrypoint 豁免还是调门禁口径）。
 证据链见 `specs/241-graph-keepalive-kb-grounding/pilot/baseline-observations.md` O-5。
 
-### 7.5.5 调用边漏建：嵌套闭包归属中断（F241 pilot 实证，**误导型**缺陷）
+### 7.5.5 调用边漏建：嵌套闭包归属中断（F241 pilot 实证 → **F242 已修复闭环**）
+
+> **状态：✅ 已修复（`264338b` F242）。** 本节保留完整发现过程作为方法论范本——它是
+> 「dogfooding 自用 → 量化失败 → 逐轮排除错误假设 → 收窄根因 → 立卡 → 并行修复 → 复测闭环」
+> 的完整链路记录。F241 rebase 到 F242 后复测：`executeKbSearch` 0→**6** caller（含嵌套闭包那条，置信 0.95）、
+> `runScaffoldKb` 0→**3**（含动态 import 解构）、`searchKbCore` 2→**8**（undercount 亦闭合）；
+> 全仓 calls 边 936→**2334**。三类形态全部关闭。**`.mjs` 覆盖缺口（§7.5.4）仍未修**，勿与本条混淆。
+
 
 F241 的 grounding pilot 在 **fresh 图 + 质量门 pass** 的条件下，跨 `2e3a4cd`/`fd9af7f`/`bc3bfb5` 三个快照
 稳定复现：**位于嵌套函数表达式体内的调用，不归属到其外层 named symbol**，因而不建 `calls` 边。

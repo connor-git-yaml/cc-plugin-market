@@ -415,3 +415,36 @@ git diff 0ee233c -- specs/241-graph-keepalive-kb-grounding/pilot/measurement-des
 2. `.mjs`/`.cjs` 纳入图扫描（已登记 M9 §7.5.4，需独立回归预算）
 3. MCP 返回体自带 freshness 标记（本轮未覆盖的 O-1 残余）
 4. 评测脚本十余处 `argv[1]` symlink 静默空转（已立 chip）
+
+---
+
+## 事后验证（post-hoc）— 本 pilot 发现的缺陷已被 F242 修复
+
+> **口径纪律**：上文全部指标是在**修复前**的图上按冻结口径测得，**一个数字都不回改**。
+> 本节只追加「测完之后发生了什么」，因为把已修缺陷继续描述成现存问题同样是失真。
+
+### 时间线
+
+1. 本 pilot（M-1 取数期间）实测出嵌套闭包调用归属中断，并逐轮**排除**了两个错误假设
+2. 据此立 follow-up 卡并写入 `baseline-observations.md` O-7 收窄节 + M9 §7.5.5
+3. 并行 session 据该卡实现 **F242**（`264338b`：归属回退链 + 动态 import 绑定 + Codex 五轮对抗闭环），先于本 feature push 到 master
+4. 本 feature rebase 到 F242 之上后重建图并复测
+
+### 复测结果（图 `19e3b99`，节点 6210 / 边 **9616**，calls 边 936 → **2334**）
+
+| pilot 期间的证伪项 | 修复前 | rebase F242 后 |
+|---|---|---|
+| `executeKbSearch`（嵌套闭包形态，O-3/O-7） | `directCallers: 0` | **6**，含 `registerKbSearchTool`（置信 0.95）|
+| `runScaffoldKb`（动态 `import()` 解构形态，O-7 第二形态） | `directCallers: 0` | **3**，含 `src/cli/index.ts` |
+| `searchKbCore`（非零 undercount，O-8） | `2`（实际 ≥4） | **8** |
+
+**三类形态全部闭合。** `.mjs` 覆盖缺口（O-5）另有独立卡在跑，本次复测时 `plugins/` 前缀节点仍为 0，**尚未修复**。
+
+### 这对 pilot 结论意味着什么
+
+- **M-1 的 25% 可信命中率是修复前的真实状态**，不是测量误差；它促成了修复，本身即有效。
+- **不能据此推断修复后命中率会是多少**——那需要一次新的、按同样口径重新预注册的测量，本 feature 不做。
+- **M-2 / M-3 不重算**：M-2 的预测集冻结于 implement 前，M-3 的 A/B 跑在冻结 diff 上，事后重跑会破坏两者的冻结前提。
+- 一个**方法论层面的观察**：pilot 的价值在本轮主要不是「量出 grounding 有多好」，而是
+  **把一个模糊的「图有时候不准」证伪收敛成可直接动手修的精确描述，并真的在同一个 milestone 内被修掉了**。
+  这条链路（自用 → 量化失败 → 收窄根因 → 立卡 → 修复 → 复测闭环）比任何单个指标数字都更能说明 dogfooding 的作用。
