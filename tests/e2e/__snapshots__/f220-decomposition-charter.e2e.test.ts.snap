@@ -37,7 +37,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 7,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -467,7 +467,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 11,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -971,7 +971,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 12,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -1554,7 +1554,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 13,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -2147,7 +2147,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 0,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -2411,7 +2411,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 12,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -2995,7 +2995,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 12,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -3617,7 +3617,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 7,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [
@@ -4115,7 +4115,7 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
     "graph": {
       "edgeCount": 12,
       "fingerprint": {
-        "behaviorVersion": 1,
+        "behaviorVersion": 2,
         "extensionSurface": {
           "genericAdapters": {
             "extensions": [

@@ -4,6 +4,7 @@
  * 嵌套目录递归扫描、空目录处理、符号链接忽略（FR-026）
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -331,5 +332,135 @@ describe('file-scanner', () => {
 
     expect(isIgnored('anything.py')).toBe(false);
     expect(isIgnored('generated/x.py')).toBe(false);
+  });
+
+  // F255：非 git 上下文必须逐字节沿用修复前的根 .gitignore 近似解析
+  // （维度收窄的 fail-open——固化这条判据，防止未来把 git 模式误接到非 git 路径）
+  it('createGitignoreFilter: 非 git 目录 → 回退根 .gitignore 解析，嵌套 .gitignore 不生效', () => {
+    createFile(tmpDir, '.gitignore', 'ignored/\n*.generated.ts\n');
+    createFile(tmpDir, 'sub/.gitignore', '*.go\n');
+
+    const isIgnored = createGitignoreFilter(tmpDir);
+
+    // 根规则照常生效（与修复前一致）
+    expect(isIgnored('ignored/skip.ts')).toBe(true);
+    expect(isIgnored('pkg/foo.generated.ts')).toBe(true);
+    expect(isIgnored('pkg/core.ts')).toBe(false);
+    // 嵌套规则在回退模式下不可见——这是有意保留的降级面，不是缺陷
+    expect(isIgnored('sub/foo.go')).toBe(false);
+  });
+
+  it('createGitignoreFilter: 非 git 目录 → 否定模式行为与修复前一致', () => {
+    createFile(tmpDir, '.gitignore', '*.ts\n!important.ts\n');
+
+    const isIgnored = createGitignoreFilter(tmpDir);
+
+    expect(isIgnored('skip.ts')).toBe(true);
+    expect(isIgnored('important.ts')).toBe(false);
+  });
+});
+
+/**
+ * F255：git 仓库内改以 git 本体为忽略事实源。
+ * 全部用例使用真实 `git init` 仓库——不 mock git 输出，避免测试与实现共享同一份错误假设。
+ */
+describe('createGitignoreFilter：git 事实源模式（F255）', () => {
+  let repoDir: string;
+
+  function git(args: string[]): void {
+    execFileSync('git', args, { cwd: repoDir, stdio: ['ignore', 'ignore', 'ignore'] });
+  }
+
+  function initRepo(): void {
+    git(['init', '-q']);
+    git(['config', 'user.email', 'f252-test@example.com']);
+    git(['config', 'user.name', 'F255 Test']);
+  }
+
+  beforeEach(() => {
+    repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'file-scanner-git-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it('嵌套 .gitignore 声明的忽略模式生效（根 .gitignore 为空）', () => {
+    createFile(repoDir, '.gitignore', '');
+    createFile(repoDir, 'sub/.gitignore', '*.go\n');
+    createFile(repoDir, 'sub/foo.go', 'package sub');
+    createFile(repoDir, 'sub/keep.ts', 'export {}');
+    initRepo();
+
+    const isIgnored = createGitignoreFilter(repoDir);
+
+    expect(isIgnored('sub/foo.go')).toBe(true);
+    expect(isIgnored('sub/keep.ts')).toBe(false);
+  });
+
+  it('tracked 豁免：git add -f 强制入库的文件不再判 ignored', () => {
+    createFile(repoDir, '.gitignore', '*.log\n');
+    createFile(repoDir, 'forced.log', 'kept');
+    createFile(repoDir, 'other.log', 'dropped');
+    initRepo();
+    git(['add', '-f', 'forced.log']);
+
+    const isIgnored = createGitignoreFilter(repoDir);
+
+    // tracked 文件的改动 git status 会报告 → 采集面必须同向收录
+    expect(isIgnored('forced.log')).toBe(false);
+    expect(isIgnored('other.log')).toBe(true);
+  });
+
+  it('整目录忽略：目录本身与其下任意深度路径均判 ignored', () => {
+    createFile(repoDir, '.gitignore', 'wholedir/\n');
+    createFile(repoDir, 'wholedir/deep/a.ts', 'export {}');
+    initRepo();
+
+    const isIgnored = createGitignoreFilter(repoDir);
+
+    expect(isIgnored('wholedir')).toBe(true);
+    expect(isIgnored('wholedir/deep/a.ts')).toBe(true);
+    // 前缀不能按字符串裸匹配：wholedirectory 不是 wholedir 的子路径
+    expect(isIgnored('wholedirectory/a.ts')).toBe(false);
+  });
+
+  it('walkBase 参数：忽略清单基准跟随 walk 根，避免子目录扫描时系统性 MISS', () => {
+    createFile(repoDir, '.gitignore', '');
+    createFile(repoDir, 'sub/.gitignore', '*.go\n');
+    createFile(repoDir, 'sub/foo.go', 'package sub');
+    initRepo();
+
+    const subDir = path.join(repoDir, 'sub');
+    const isIgnoredFromSub = createGitignoreFilter(repoDir, subDir);
+
+    expect(isIgnoredFromSub('foo.go')).toBe(true);
+    expect(isIgnoredFromSub('keep.ts')).toBe(false);
+    // 对照：基准错位（清单相对仓库根、查询相对子目录）时查不中——正是 walkBase 参数要防的回归
+    expect(createGitignoreFilter(repoDir)('foo.go')).toBe(false);
+  });
+
+  it('git 命令失败但 .git 存在 → console.warn 一次并回退根 .gitignore 解析', () => {
+    // 畸形 .git 文件让 git 必然失败（真实失败路径，不 mock 子进程）
+    createFile(repoDir, '.git', 'not a valid gitfile');
+    createFile(repoDir, '.gitignore', 'generated/\n');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const isIgnored = createGitignoreFilter(repoDir);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(isIgnored('generated/auto.py')).toBe(true);
+    expect(isIgnored('pkg/core.py')).toBe(false);
+  });
+
+  it('非 git 目录且无 .git → 静默回退，不产生 warn 噪声', () => {
+    createFile(repoDir, '.gitignore', 'generated/\n');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const isIgnored = createGitignoreFilter(repoDir);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(isIgnored('generated/auto.py')).toBe(true);
   });
 });

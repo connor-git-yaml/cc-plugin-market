@@ -6,9 +6,10 @@
  * generic-language-skeleton-collector.ts（Java/Go 采集器）共同复用，
  * 避免出现第三份互不一致的忽略规则定义。
  *
- * 与六指标 check 函数不同，本模块内部调用 createGitignoreFilter（读 .gitignore 文件），
- * 存在文件系统 I/O——因此不是"零 I/O 纯函数"，由 CLI 层 / collector 层显式构造后
- * 注入到纯函数 check 里（legacy-ignored-check.ts 的 isIgnored 回调）。
+ * 与六指标 check 函数不同，本模块内部调用 createGitignoreFilter（F255 起：git 仓库内向
+ * git 本体预取忽略清单，非 git 上下文回退读根 .gitignore 文件），存在子进程 / 文件系统
+ * I/O——因此不是"零 I/O 纯函数"，由 CLI 层 / collector 层显式构造后注入到纯函数 check 里
+ * （legacy-ignored-check.ts 的 isIgnored 回调）。
  *
  * P0 修正（本仓库实跑发现 551 个假阳性 ignored-path 节点后的根因修复）：
  * 早期实现误用了 `src/utils/file-scanner.ts` 的 `BUILTIN_IGNORE_DIRS`——那是"spec 生成
@@ -176,7 +177,7 @@ function ignoreDirsForPath(relativePath: string): ReadonlySet<string> {
  * 构造 ignore 判定函数：输入相对 projectRoot 的路径，返回是否应被视为"已忽略"。
  *
  * 命中条件（任一即视为忽略）：
- * - .gitignore 规则命中（全语言通用）
+ * - git 忽略规则命中（全语言通用；F255 起以 git 本体为事实源，非 git 上下文回退根 .gitignore 近似）
  * - 路径任意目录段命中该路径扩展名对应的图生产者忽略目录合同（FIX-5：按语言分派，
  *   而非无差别 union；未知扩展名退回 GRAPH_COLLECTOR_IGNORE_DIRS 兜底）
  */

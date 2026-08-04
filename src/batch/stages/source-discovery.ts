@@ -262,7 +262,8 @@ export async function collectPythonCodeSkeletons(
   // → call-resolver buildImportIndex lookup miss
   const resolvedProjectRoot = path.resolve(projectRoot);
 
-  // F194：构建 .gitignore 过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  // F194：构建 git 忽略过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  // F255：git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似
   const isGitignored = createGitignoreFilter(resolvedProjectRoot);
 
   const pyFiles: string[] = [];
@@ -419,7 +420,8 @@ export async function collectTsJsCodeSkeletons(
   // 避免调用方传相对路径 → Map key 与 imports[].resolvedPath 形态不一致
   const resolvedProjectRoot = path.resolve(projectRoot);
 
-  // F194：构建 .gitignore 过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  // F194：构建 git 忽略过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
+  // F255：git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似
   const isGitignored = createGitignoreFilter(resolvedProjectRoot);
 
   const tsJsFiles: string[] = [];

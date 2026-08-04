@@ -1,12 +1,17 @@
 /**
- * 文件发现与 .gitignore 过滤
- * 扫描目录中支持的源文件，遵循 .gitignore 规则（FR-026）
+ * 文件发现与 git 忽略过滤
+ * 扫描目录中支持的源文件，遵循 git 忽略规则（FR-026）——git 仓库内以 git 本体为事实源，
+ * 非 git 上下文回退到根 .gitignore 的近似解析（见 createGitignoreFilter）
  * 支持的扩展名从 LanguageAdapterRegistry 动态获取
  */
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import { surfaceMatchesFile, type CollectorPipelineSurface } from '../collector-surface.js';
+
+/** git 只读命令输出上限（与 source-commit.ts 的 MAX_GIT_OUTPUT_BYTES 同语义：防大仓库输出触发 ENOBUFS）。 */
+const MAX_GIT_OUTPUT_BYTES = 64 * 1024 * 1024;
 
 /** 通用忽略目录（与语言无关，始终忽略） */
 const UNIVERSAL_IGNORE_DIRS = new Set([
@@ -183,21 +188,99 @@ function parseGitignore(gitignorePath: string): (relativePath: string) => boolea
   };
 }
 
+/** git 预取的忽略清单：精确文件条目 + 整目录忽略前缀。 */
+interface GitIgnoredIndex {
+  /** 逐条列出的被忽略文件（相对 walkBase，POSIX 分隔符）。 */
+  files: ReadonlySet<string>;
+  /** 整目录被忽略的前缀（已去尾斜杠）。 */
+  dirPrefixes: readonly string[];
+}
+
+/**
+ * 一次性预取"被忽略的 untracked 文件 + 整目录"清单，返回 null 表示非 git 上下文或命令失败。
+ *
+ * 为什么用 `--directory` 而不逐路径 `git check-ignore`：walk 每个路径起一个子进程性能不可接受；
+ * 预取后过滤函数退化为纯查找，每次构造只付一个 git 进程（~10-40ms）。
+ *
+ * 输出形态（实测）：纯 ignored 目录折叠为 `dir/` 一条；模式命中的目录可能同时出现 `dir/`
+ * 与其内文件条目（冗余无害，两种形态都会被下面的查找命中）。
+ */
+function readGitIgnoredIndex(walkBase: string): GitIgnoredIndex | null {
+  let raw: string;
+  try {
+    raw = execFileSync(
+      'git',
+      ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '-z'],
+      { cwd: walkBase, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: MAX_GIT_OUTPUT_BYTES },
+    );
+  } catch {
+    return null;
+  }
+
+  const files = new Set<string>();
+  const dirPrefixes: string[] = [];
+  for (const entry of raw.split('\x00')) {
+    if (entry.length === 0) continue;
+    if (entry.endsWith('/')) {
+      dirPrefixes.push(entry.slice(0, -1));
+    } else {
+      files.add(entry);
+    }
+  }
+  return { files, dirPrefixes };
+}
+
+/** 把 git 预取清单包成查找函数：命中精确条目、等于目录前缀、或落在目录前缀之下均视为忽略。 */
+function createGitIgnoredLookup(index: GitIgnoredIndex): (relativePath: string) => boolean {
+  return (relativePath: string): boolean => {
+    const normalized = relativePath.split(path.sep).join('/');
+    if (normalized.length === 0) return false;
+    if (index.files.has(normalized)) return true;
+    return index.dirPrefixes.some(
+      (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+    );
+  };
+}
+
 /**
  * 创建 .gitignore 过滤器（单一事实源）
  * 供 python-adapter 及 batch-orchestrator 的自写 walk 叠加接入。
  *
- * 基准契约：返回的过滤函数期望输入**相对 projectRoot 的路径**
- * （即 .gitignore 所在根 = 相对路径基准，二者必须一致，由调用方保证）。
- * 注意 scanFiles 现状存在 scanRoot != projectRoot 时基准错位的既有怪癖
- * （gitignore 取自 projectRoot 而 relativePath 相对 resolvedDir，
- * 如 module-derivation.ts scanRoot=src 的调用）——该怪癖属 file-scanner
- * 既有行为，本 fix 不修也不放大；三处新接入 walk 的扫描根 = gitignore 根，无错位。
+ * F255：git 仓库内的忽略判定改以 git 本体为事实源（`git ls-files --others --ignored
+ * --exclude-standard --directory`），与 freshness dirty 判定侧的 `git status` 同源。
+ * 手写的根 `.gitignore` 近似解析器拿不到嵌套 `.gitignore`、`.git/info/exclude`、全局
+ * excludesFile 与 tracked 豁免——采集面与 dirty 观测面因此分叉，被嵌套规则覆盖的文件
+ * 会入图却永判 fresh（隐性漏报）。
  *
- * @param projectRoot - 项目根目录（用于定位 .gitignore，亦是相对路径基准）
- * @returns 过滤函数：接受相对 projectRoot 的路径，返回 true 表示命中 gitignore 应跳过
+ * 非 git 上下文 / git 命令失败时回退到原根 `.gitignore` 解析（逐字节保持既有行为）。
+ * 这是维度收窄的 fail-open：根规则仍生效，仅嵌套保真度降级到修复前水平；而非 git 上下文
+ * 的 freshness 本就在 `resolveSourceCommit` 处短路为 unknown-provenance，不存在错配面。
+ *
+ * 基准契约：返回的过滤函数期望输入**相对 walkBase 的路径**（git 模式下 `git ls-files`
+ * 的输出基准即命令 cwd；回退模式下沿用 projectRoot 根解析）。walkBase 缺省等于
+ * projectRoot，两个基准重合，四处既有单参调用点语义不变。
+ *
+ * walkBase != projectRoot 时：git 模式下清单基准与查询基准对齐，F194 遗留的基准错位怪癖
+ * 自然痊愈；回退模式下该怪癖原样保留（规则取自 projectRoot 根、路径却相对 walkBase），
+ * 与修复前行为一致——本次不修也不放大。
+ *
+ * @param projectRoot - 项目根目录（回退模式下定位 .gitignore；亦是 `.git` 存在性诊断的基准）
+ * @param walkBase - walk 的实际扫描根，即过滤函数入参的相对路径基准，缺省等于 projectRoot
+ * @returns 过滤函数：接受相对 walkBase 的路径，返回 true 表示应被忽略
  */
-export function createGitignoreFilter(projectRoot: string): (relativePath: string) => boolean {
+export function createGitignoreFilter(
+  projectRoot: string,
+  walkBase: string = projectRoot,
+): (relativePath: string) => boolean {
+  const index = readGitIgnoredIndex(walkBase);
+  if (index !== null) {
+    return createGitIgnoredLookup(index);
+  }
+
+  // git 仓库内却拿不到清单属于异常降级，必须出声——静默回退会让漏报重新变得不可见
+  if (fs.existsSync(path.join(projectRoot, '.git'))) {
+    console.warn('⚠ git 仓库内忽略清单预取失败，已降级为仅根 .gitignore 近似过滤');
+  }
   return parseGitignore(path.resolve(projectRoot, '.gitignore'));
 }
 
@@ -366,10 +449,12 @@ export function scanFiles(targetDir: string, options?: ScanOptions): ScanResult 
   const supportedExtensions = getSupportedExtensions(options);
   const ignoreDirs = getIgnoreDirs();
 
-  // 解析 .gitignore
+  // 解析忽略规则：显式把 walk 基准（resolvedDir）传给 oracle。
+  // walkDir 的 relativePath 相对 resolvedDir，若 git 模式仍以 projectRoot 为基准取清单，
+  // scanRoot != projectRoot 时（如 module-derivation.ts 的 scanRoot=src）查找会系统性 MISS
+  // → 过滤静默失效。回退模式下仍读 projectRoot 根 .gitignore，行为与修复前一致。
   const projectRoot = options?.projectRoot ?? resolvedDir;
-  const gitignorePath = path.join(projectRoot, '.gitignore');
-  const gitignoreCheck = parseGitignore(gitignorePath);
+  const gitignoreCheck = createGitignoreFilter(projectRoot, resolvedDir);
 
   // 合并额外忽略模式
   const extraPatterns = (options?.extraIgnorePatterns ?? []).map((p) => {

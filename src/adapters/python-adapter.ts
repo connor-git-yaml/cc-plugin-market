@@ -156,7 +156,9 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       ...this.defaultIgnoreDirs,
       'test', 'tests', 'dist', 'node_modules', '.git',
     ]);
-    // F194：叠加 .gitignore 过滤层（只叠加不替换硬编码集）。
+    // F194：叠加 git 忽略过滤层（只叠加不替换硬编码集）。
+    // F255 起该过滤层在 git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），
+    // 非 git 上下文回退根 .gitignore 近似解析。
     // 基准 = resolvedRoot（与 file-scanner walkDir 的 path.relative(baseDir, fullPath) 同口径，不做 sep 转换）。
     const isGitignored = createGitignoreFilter(resolvedRoot);
     const pyFiles: string[] = [];

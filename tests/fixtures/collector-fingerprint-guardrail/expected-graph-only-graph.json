@@ -77,7 +77,7 @@
             "matchSemantics": "case-sensitive"
           }
         },
-        "behaviorVersion": 1
+        "behaviorVersion": 2
       }
     },
     "nodes": [
