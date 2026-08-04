@@ -135,3 +135,12 @@ W1/W2 的 flip 方向与不可达性均已在本轮**实跑验算**（新实现�
 | I4 | `package.json` 的 `main` 指向不存在的文件 | **记录不动**。预存问题，与本批次零关联 |
 | I5 | `file-scanner.ts` 的判定口径（`surfaceMatchesFile`）与统计口径（保留的 `ext` 变量）可独立漂移 | **接受**。两口径当前同解，注释已在保留 `ext` 的行上说明其用途边界；强行合并会牵动 `languageStats` 分组键的语义 |
 | I6 | verification 报告声称的"全仓 grep"实际取证面仅 `src/` + `tests/` | **结论不变**。复审已补扫 `plugins/` `scripts/` `contracts/` `.github/` 四处，`extractExtension` / `collector-extname` 零匹配，原结论（零消费方死代码）成立 |
+
+## 交付记录（编号重编与最终落地）
+
+本目录**原编 `specs/251-fix-surface-convergence-batch/`**，正文与代码注释中的批次号原为 F251。交付前的 fetch 复核抓到 master 已前移：姊妹会话的「测试期 dist 竞写收口」批次（`135b6da`）先落 master 并占用 251 号（`specs/251-fix-dist-race-test-isolation/`）。按仓规"先落 master 者得号、后入库者重编"，本批次整体重编为 **F252**，随后 rebase 到该新基座、重跑全部验收命令，最终以 **`8bad2f7` fix(F252)** fast-forward 落 master。
+
+重编号的两条操作要点（供后续撞号场景复用）：
+
+1. **禁止全仓 `sed F251→F252`**：抢号的姊妹批次已在 `tests/global-setup.ts`、`tests/integration/*` 等 7+ 个文件写入它自己的 "F251" 字样。安全做法是只替换**本 commit 文件清单内**的文件，并在动手前以 `git show HEAD -- <本批次文件> | grep "^+" | grep -c F251` 与文件内计数比对（本次 7=7）确认待替换字样全部出自本批次 diff。
+2. **`git mv` 要单独作为一条光杆命令执行**：本次把 `git mv` 混在 `set -e` + for 循环的复合命令里，导致 Stop hook 的 fix 依从性判定器（按 F231 判据只跟随"整条命令就是一条光杆 `mv`/`git mv`"的改名事件）不跟随本次重命名，仍以旧路径核验制品而误报"未建立特性目录"。该保守判据是防伪造 mv fail-open 的有意设计，非缺陷；规避方式是重编号时先单独跑一条光杆 `git mv`，再跑后续 sed 与校验。
