@@ -190,6 +190,49 @@ export function checkFeatureDirOnDisk(projectRoot, relPath) {
 }
 
 /**
+ * 按 short-name 枚举 `specs/` 下形如 `NNN-fix-<shortName>` 的目录（F256 盲区 1）。
+ *
+ * 存在理由：改名跟随只有 transcript 一条事实源，复合命令重编号后候选会停在磁盘上已消失的旧编号。
+ * 本函数提供 judge 层重锚定所需的**磁盘侧**枚举能力——core 是纯函数层，磁盘判据必须落在 io。
+ *
+ * 只读一层 `specs/` 目录项做字面量后缀比对：一次 `readdirSync`，无递归、无 glob 引擎、非全仓扫描。
+ * 开销随 `specs/` 目录项数**线性**（不是常数——措辞勿再写成常数级），且与 transcript 规模、
+ * 候选历史长度均无关，因此不构成按攻击者可控输入增长的扫描面（判定器跑在同步 Stop hook 上，
+ * F227/F231 有 O(N²) 与灾难性回溯的 DoS 前科）。
+ *
+ * 用 `endsWith` 字面量比对 + 数字前缀校验而非动态构造正则：`shortName` 来自用户可控的 transcript
+ * 文本，字符串操作天然规避正则元字符转义问题，且"是否可能误配"更易人眼审计。
+ *
+ * 非抛出式：`specs/` 缺失/不可读均返回空数组。本函数**只枚举不核验制品**——
+ * "含 fix-report.md 才采信"的判据留在 judge 的 usable() 谓词，与 F227 兜底同源。
+ * @param {string} projectRoot
+ * @param {string} shortName - 已由 extractFixShortName 抽取的 <short> 段
+ * @returns {string[]} 匹配目录相对路径（`specs/NNN-fix-<shortName>`），按编号升序排列
+ */
+export function listFeatureDirCandidatesByShortName(projectRoot, shortName) {
+  if (typeof shortName !== 'string' || shortName.length === 0) return [];
+  let entries;
+  try {
+    entries = fs.readdirSync(path.join(projectRoot, 'specs'), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const suffix = `-fix-${shortName}`;
+  const matches = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const name = entry.name;
+    if (!name.endsWith(suffix)) continue;
+    const numPart = name.slice(0, name.length - suffix.length);
+    if (!/^\d+$/.test(numPart)) continue;
+    matches.push({ num: Number(numPart), relPath: `specs/${name}` });
+  }
+  // 按编号数值升序（非字典序）：judge 侧「取编号最大者」直接取末项，排序语义是其正确性前提
+  matches.sort((a, b) => a.num - b.num);
+  return matches.map((m) => m.relPath);
+}
+
+/**
  * 读取制品文件内容（ArtifactCheckResult 的磁盘侧输入，data-model.md §6）。
  * @param {string} projectRoot
  * @param {string} relPath
@@ -259,6 +302,12 @@ function normalizeState(sessionId, parsed) {
     blockCount,
     // 历史文件缺 degradedRecorded 字段 → 按 false（向后兼容，data-model.md §8）
     degradedRecorded: src.degradedRecorded === true,
+    // F256：在途推迟预算，与 blockCount **分列且互不影响**——推迟不消耗阻断预算是其语义的必要
+    // 组成，共用一个计数器会让在途停顿白白烧掉阻断额度。F256 之前写入的状态文件没有此字段，
+    // 缺省 0（同 blockCount 的向后兼容口径）。
+    inFlightDeferCount: Number.isInteger(src.inFlightDeferCount) && src.inFlightDeferCount >= 0
+      ? src.inFlightDeferCount
+      : 0,
   };
 }
 
@@ -295,9 +344,14 @@ function tryWriteState(filePath, payload) {
 
 /**
  * 持久化阻断计数状态（主路径失败降级 tmpdir，两级均失败 → state-storage-unavailable）。
+ *
+ * 🔴 整份状态**整体覆写**、不做字段级合并：调用方必须把本次不打算改动的字段原样带回
+ * （见 fix-compliance-judge.mjs 各写入点），否则会被静默抹平为默认值。刻意不在此处做
+ * read-modify-write 合并——判定器的每条写入路径都恰好先 load 过一次，隐式合并只会让
+ * "谁负责保住哪个字段"变得不可审计。
  * @param {string} projectRoot
  * @param {string} sessionId
- * @param {{ blockCount:number, degradedRecorded:boolean }} state
+ * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number }} state
  * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[] }}
  */
 export function saveBlockState(projectRoot, sessionId, state) {
@@ -306,6 +360,9 @@ export function saveBlockState(projectRoot, sessionId, state) {
     sessionId: sanitizedId,
     blockCount: Number.isInteger(state && state.blockCount) && state.blockCount >= 0 ? state.blockCount : 0,
     degradedRecorded: Boolean(state && state.degradedRecorded),
+    inFlightDeferCount: Number.isInteger(state && state.inFlightDeferCount) && state.inFlightDeferCount >= 0
+      ? state.inFlightDeferCount
+      : 0,
     updatedAt: new Date().toISOString(),
   };
 
@@ -323,7 +380,8 @@ export function saveBlockState(projectRoot, sessionId, state) {
 /**
  * 重置阻断计数状态（FR-006 增补：补救成功后的清零转移）。
  * 删除两级存储（主路径 + tmpdir 回落）中该 session 对应的状态文件，
- * 与"从未被阻断"状态同构——blockCount 与 degradedRecorded 一并归位，无字段级歧义。
+ * 与"从未被阻断"状态同构——blockCount / degradedRecorded / inFlightDeferCount 一并归位，
+ * 无字段级歧义（新增状态字段无需改动本函数，删文件即全量清零；回归钉子见 judge-cli 测试）。
  * 尽力而为、非抛出式：文件不存在（本就未阻断过）或删除失败均静默忽略，
  * 不产生可失败传播的下游（与 sweep 同为旁路维护语义，不同于 saveBlockState 需暴露
  * state-storage-unavailable 诊断——reset 失败的最坏后果只是"旧计数残留"，

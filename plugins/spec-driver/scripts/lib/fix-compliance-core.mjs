@@ -62,6 +62,24 @@ export const BASH_WRITE_INDICATOR_REGEX = /(?:>>?|<<|\btee\b)/;
 export const FIX_DIR_NAME_REGEX = /^specs\/\d+-fix-[a-z0-9-]+\/?$/;
 
 /**
+ * 从合法特性目录路径中抽取 short-name 段（F256 盲区 1：`specs/NNN-fix-<short>` 的 `<short>`）。
+ *
+ * 存在理由：Feature 编号被复合命令（`cd … && git mv specs/251-fix-foo specs/254-fix-foo && …`）
+ * 重编时，F231 的光杆命令白名单刻意不跟随该形态，候选于是永久停在磁盘上已消失的旧编号路径。
+ * short-name 是同一特性在重编前后**唯一不变的部分**，因此被选作磁盘侧重锚定的键。
+ *
+ * 判据与 FIX_DIR_NAME_REGEX 同源（整串锚定、容忍尾随斜杠）：不满足即返回 null，
+ * 刻意不做模糊提取/启发式兜底——候选一旦能漂移到无关特性，本兜底就成了新的冒用面。
+ * @param {string|null} dirPath
+ * @returns {string|null}
+ */
+export function extractFixShortName(dirPath) {
+  if (typeof dirPath !== 'string') return null;
+  const match = /^specs\/\d+-fix-([a-z0-9-]+)\/?$/.exec(dirPath);
+  return match ? match[1] : null;
+}
+
+/**
  * 「光杆改名命令」字面白名单的 token 化判据（F231 第 5 轮立判据 / 第 8 轮改线性实现）。
  *
  * 语义：整条 Bash 命令必须**就是**一条带字面路径操作数的 `mv` / `git mv`，多一个 token 都不认——
@@ -606,6 +624,222 @@ export function extractDelegationsAfter(entries, anchorLineIndex) {
     }
   }
   return out;
+}
+
+// ────────────────────────────────────────
+// 在途委派判定（F256 盲区 2：判定时机未到）
+// ────────────────────────────────────────
+
+/**
+ * SendMessage 恢复后台子代理的工具名（F256 盲区 2）。
+ *
+ * 刻意不并入 DELEGATION_TOOL_NAMES——"派了工"（SendMessage 触发恢复）与"收了工"（子代理完成收口）
+ * 是两个不同断言，把它计入委派会让「派一条消息」直接顶替「验证闭环已完成」。本常量只用于识别
+ * "在途"信号，不参与 judgeCompliance 的 delegationCounts。
+ */
+const SEND_MESSAGE_TOOL_NAME = 'SendMessage';
+
+/**
+ * `<task-notification>` 完成信号内 `<task-id>`/`<tool-use-id>` 配对提取。
+ *
+ * 实测 wire format 中两者恒相邻、恒同顺序，故单一锚定正则一次捕获两个分组即可，无需解析完整
+ * XML-like 结构。只从 `role === 'user'` 的文本块中提取（harness 注入，模型无法伪造），
+ * 与 detectFixSkillExpansion 的反伪造模型一致。
+ * `[^<]+` 由下一个 `<` 天然止界，双分组单趟线性扫描，无嵌套量词、无回溯
+ * （判定器跑在同步 Stop hook 上，F231 有灾难性回溯前科）。
+ *
+ * 捕获组**必须**再经 trim（见调用点）：`[^<]+` 会把标签内侧的换行与缩进一并吃进 id，
+ * 于是 `<tool-use-id>\nbg\n</tool-use-id>` 捕出 `"\nbg\n"`，与真实 id `bg` 配不上 →
+ * 已完成的委派被继续判在途 → 偏向放行，与在途判定的主风险同轴叠加。刻意不改用
+ * `[^<\s]+` 收窄字符类：那样只是让含空白的 id 整条不匹配（同样偏向放行），
+ * trim 才是"按 wire format 语义归一化"的修法。
+ */
+const TASK_NOTIFICATION_PAIR_REGEX = /<task-id>([^<]+)<\/task-id>\s*<tool-use-id>([^<]+)<\/tool-use-id>/g;
+
+/**
+ * 尾部未消费的同步委派。
+ *
+ * **只检查 entries 最后一条条目**，这是承重的安全边界而非权宜：同步 Agent/Task 会阻塞会话轮次
+ * 直至 tool_result 返回——只要该调用之后还有任何后续条目，就足以证明它已经解决（否则会话不可能
+ * 继续产生新条目）。故"真正在途"只可能发生在整个 transcript 的最后一条条目上。
+ *
+ * 🔴 不得放宽为"扫描任意位置的未配对调用"：本仓库既有 fixture 构造 `TOOL_USE('Agent', …)` 时
+ * 从不附带 tool_result（委派抽取此前不需要它），放宽会把大量本该阻断的用例集体误判为在途 →
+ * 一次隐蔽的大规模 fail-open。
+ */
+function findTrailingUnresolvedSyncDelegation(entries, anchor) {
+  if (entries.length === 0) return null;
+  const last = entries[entries.length - 1];
+  if (!last || last.role !== 'assistant' || last.lineIndex <= anchor) return null;
+  let target = null;
+  for (const block of last.toolUseBlocks) {
+    if (!DELEGATION_TOOL_NAMES.has(block.name)) continue;
+    if (block.input && block.input.run_in_background === true) continue;
+    target = block;
+  }
+  if (!target || !target.id) return null;
+  const resolved = last.toolResultBlocks.some((r) => r.toolUseId === target.id);
+  return resolved ? null : { kind: 'sync', id: target.id, lineIndex: last.lineIndex };
+}
+
+/**
+ * 后台 Agent/Task（run_in_background===true）尚未收到匹配 `<tool-use-id>` 完成通知者。
+ *
+ * 有效性门槛（与 findPendingSendMessageResumptions **同一条**，不得只给其中一条规则设）：
+ * 仅计入自身已获得**非错误 tool_result 回执**的派发。后台派发在 wire format 上会立刻拿到一条
+ * ack 回执（"launched in the background…"），故这一门槛不影响任何真实在途派发；而它堵住的是
+ * 最廉价的自助绕过——发起一次注定失败（`is_error:true`）或压根没被受理的后台派发，
+ * 即可让 runHook 永久判"在途"、永不进入阻断路由。规则 2 缺这道门槛而规则 3 有，
+ * 等于把两条等价的推迟入口只锁了一扇门。
+ *
+ * 通知先归约为 Set 再做 O(1) 查表，**不是可省的优化**：判定器跑在同步 Stop hook 上，
+ * 两者规模都只受 20MB transcript 上限约束（各自可达 10^5 量级），逐条 `Array.some` 会构成
+ * O(委派数 × 通知数) 的二次扫描——F227 已有 O(N²) 候选历史导致 11.8s 同步阻塞的前科。
+ *
+ * 🔴 残余限界（如实登记，由 judge 层的 IN_FLIGHT_DEFER_LIMIT 有界化兜住，不在本函数消除）：
+ * 实扫本机 2466 份 transcript，202 次后台派发中 **43 次（21.3%）回执正常、完成通知却从未到达**。
+ * 即"每个在途委派最终都会回收通知"在真实数据上不成立，故本函数返回非空**不足以**支撑无界推迟。
+ */
+function findPendingBackgroundDelegations(entries, anchor, notifications, resultByToolUseId) {
+  const notifiedToolUseIds = new Set(notifications.map((n) => n.toolUseId));
+  const pending = [];
+  for (const entry of entries) {
+    if (!entry || entry.role !== 'assistant' || entry.lineIndex <= anchor) continue;
+    for (const block of entry.toolUseBlocks) {
+      if (!DELEGATION_TOOL_NAMES.has(block.name)) continue;
+      if (!block.input || block.input.run_in_background !== true || !block.id) continue;
+      const result = resultByToolUseId.get(block.id);
+      if (!result || result.isError === true) continue; // 无回执/回执报错 → 不计入在途
+      if (!notifiedToolUseIds.has(block.id)) pending.push({ kind: 'background', id: block.id, lineIndex: entry.lineIndex });
+    }
+  }
+  return pending;
+}
+
+/**
+ * SendMessage(to: A) 最后一次派发晚于 A 最后一次 `<task-id>` 通知者。
+ *
+ * 有效性门槛：仅计入**自身已获得非错误 tool_result 回执**的派发。若不设此门槛，向一个虚构 `to`
+ * 反复发送 SendMessage 即可让 runHook 永久判"在途"、永不进入阻断路由——deferred 不是 exempted，
+ * 这一门槛是该语义的必要组成。
+ *
+ * 残余限界（如实登记）：持续向一个真实存在但恒不产出响应的 agent 重复派发，仍可让本函数恒返回非空。
+ * 该残余面**不再**由本函数承担——judge 层的 IN_FLIGHT_DEFER_LIMIT 给推迟设了硬预算，
+ * 耗尽后恢复正常裁决，故"恒在途"最多推迟固定次数而非无限期。
+ */
+function findPendingSendMessageResumptions(entries, anchor, notifications, resultByToolUseId) {
+  const lastDispatchByAgent = new Map();
+  for (const entry of entries) {
+    if (!entry || entry.role !== 'assistant' || entry.lineIndex <= anchor) continue;
+    for (const block of entry.toolUseBlocks) {
+      if (block.name !== SEND_MESSAGE_TOOL_NAME) continue;
+      const to = block.input && typeof block.input.to === 'string' ? block.input.to : null;
+      if (!to || !block.id) continue;
+      const result = resultByToolUseId.get(block.id);
+      if (!result || result.isError === true) continue; // 无回执/回执报错 → 不计入派发
+      const prev = lastDispatchByAgent.get(to);
+      if (!prev || entry.lineIndex > prev) lastDispatchByAgent.set(to, entry.lineIndex);
+    }
+  }
+  const lastNoteByAgent = new Map();
+  for (const n of notifications) {
+    const prev = lastNoteByAgent.get(n.taskId);
+    if (!prev || n.lineIndex > prev) lastNoteByAgent.set(n.taskId, n.lineIndex);
+  }
+  const pending = [];
+  for (const [agentId, dispatchLine] of lastDispatchByAgent) {
+    const noteLine = lastNoteByAgent.get(agentId) ?? -1;
+    if (dispatchLine > noteLine) pending.push({ kind: 'send-message', id: agentId, lineIndex: dispatchLine });
+  }
+  return pending;
+}
+
+/**
+ * 抽取锚点之后的"在途委派"——判定时机未到的第三态。
+ *
+ * 存在理由：判定器原本把 stop 一律当作会话终态做二值判定（合规/不合规），但后台委派使 stop 成为
+ * **中途停顿**——已派工、结果未回的会话被误分类为"零 verify 委派的烂尾"。本函数给出第三态所需的
+ * 结构化事实：锚点之后是否还有未回收的在途工作。
+ *
+ * 三条规则见上方三个私有函数的 JSDoc（同步尾部未消费 / 后台无完成通知 / SendMessage 派发晚于通知）。
+ * 本函数零 I/O，判定结论如何使用（推迟裁决）由 judge 层决定。
+ * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
+ * @param {number|null} anchorLineIndex
+ * @returns {{ kind:'sync'|'background'|'send-message', id:string, lineIndex:number }[]}
+ */
+export function extractInFlightDelegationsAfter(entries, anchorLineIndex) {
+  const list = Array.isArray(entries) ? entries : [];
+  const anchor = typeof anchorLineIndex === 'number' ? anchorLineIndex : -1;
+
+  const notifications = [];
+  const resultByToolUseId = new Map();
+  for (const entry of list) {
+    if (!entry) continue;
+    // 通知与回执都锚在同一个窗口：本函数的全部消费者只查**锚点之后**发起的委派，
+    // 而其回执/通知的 lineIndex 必然 ≥ 该委派自身的 lineIndex（> anchor），
+    // 故加窗不改变任何配对结果，只是不再把上一轮展开周期的回执读进 Map（与 notifications 写法一致）。
+    if (entry.lineIndex <= anchor) continue;
+    if (entry.role === 'user') {
+      for (const text of entry.textBlocks) {
+        TASK_NOTIFICATION_PAIR_REGEX.lastIndex = 0;
+        let m;
+        while ((m = TASK_NOTIFICATION_PAIR_REGEX.exec(text)) !== null) {
+          // trim 见 TASK_NOTIFICATION_PAIR_REGEX 的 JSDoc：标签内侧换行/缩进不属于 id
+          const taskId = m[1].trim();
+          const toolUseId = m[2].trim();
+          if (taskId.length === 0 || toolUseId.length === 0) continue;
+          notifications.push({ taskId, toolUseId, lineIndex: entry.lineIndex });
+        }
+      }
+    }
+    for (const r of entry.toolResultBlocks) {
+      if (typeof r.toolUseId === 'string') {
+        resultByToolUseId.set(r.toolUseId, { isError: r.isError, lineIndex: entry.lineIndex });
+      }
+    }
+  }
+
+  const items = [];
+  const trailing = findTrailingUnresolvedSyncDelegation(list, anchor);
+  if (trailing) items.push(trailing);
+  items.push(...findPendingBackgroundDelegations(list, anchor, notifications, resultByToolUseId));
+  items.push(...findPendingSendMessageResumptions(list, anchor, notifications, resultByToolUseId));
+  return items;
+}
+
+/**
+ * 可推迟缺口白名单（F256 第 2 轮 CRITICAL-1c）——只有**在途工作确实有可能关闭**的缺口才配推迟。
+ *
+ * 判定"在途"只说明"还有子代理没回收"，不说明"回收之后缺口会被补上"。实测本机 174 个不合规
+ * fix 会话中有 9 个（5.2%）的 missing 是 `["feature-dir","fix-report.md"]` 却因存在在途委派而被
+ * 静默推迟：这两项是**主线程自己**该产出的制品，任何子代理回收都不会改变它们，推迟纯属延误。
+ *
+ * 表内四项恰是"由子代理产出/由子代理构成"的缺口：三类委派计数会随该子代理被计入，
+ * verification-report.md 则由 verify 子代理落盘。
+ * 🔴 新增枚举到 MISSING_ACTION_TEXT 时须显式判断是否入表，默认**不入**（fail-closed）。
+ */
+export const DEFERRABLE_MISSING_KEYS = Object.freeze([
+  'delegation:implement',
+  'delegation:verify',
+  'delegation:noop-verify',
+  'verification-report.md',
+]);
+
+const DEFERRABLE_MISSING_SET = new Set(DEFERRABLE_MISSING_KEYS);
+
+/**
+ * 这组缺口是否**整体**可由在途工作关闭（全称判定，非存在判定）。
+ *
+ * 必须取全称：只要 missing 里混进一项子代理关不掉的缺口（如 feature-dir），推迟就不可能等到
+ * 缺口自愈，那次 stop 该照常裁决。空 missing 返回 false 是防御性的——不合规必有缺口，
+ * 空集出现即说明上游状态异常，此时不推迟（fail-closed）。
+ * @param {string[]} missing
+ * @returns {boolean}
+ */
+export function isDeferrableMissingSet(missing) {
+  const list = Array.isArray(missing) ? missing : [];
+  if (list.length === 0) return false;
+  return list.every((key) => DEFERRABLE_MISSING_SET.has(key));
 }
 
 // ────────────────────────────────────────

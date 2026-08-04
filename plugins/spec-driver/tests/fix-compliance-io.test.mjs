@@ -26,6 +26,7 @@ import {
   saveBlockState,
   resetBlockState,
   sanitizeSessionId,
+  listFeatureDirCandidatesByShortName,
 } from '../scripts/lib/fix-compliance-io.mjs';
 
 let tmp;
@@ -486,5 +487,80 @@ describe('F216 T006 readTranscriptEntries 透传 ExecutionRecord 字段 + 既有
     const resultEntry = r.entries[1];
     assert.equal(resultEntry.toolResultBlocks.length, 1);
     assert.deepEqual(resultEntry.textBlocks, [], 'tool_result 伪造展开痕迹不得进 textBlocks');
+  });
+});
+
+// ────────────────────────────────────────
+// F256 盲区 1 · listFeatureDirCandidatesByShortName（按 short-name 的一层只读枚举）
+// ────────────────────────────────────────
+
+/** 在 tmp 下建若干 specs/ 子目录（只建目录，制品齐备度由调用方另行铺设） */
+function stageSpecDirs(...names) {
+  for (const name of names) fs.mkdirSync(path.join(tmp, 'specs', name), { recursive: true });
+}
+
+describe('F256 T002 · listFeatureDirCandidatesByShortName', () => {
+  it('命中单个候选 → 返回其相对路径', () => {
+    stageSpecDirs('254-fix-graph-scope-extensions', '253-fix-other-thing');
+    assert.deepEqual(
+      listFeatureDirCandidatesByShortName(tmp, 'graph-scope-extensions'),
+      ['specs/254-fix-graph-scope-extensions'],
+    );
+  });
+
+  it('命中多个候选 → 按编号升序返回（judge 侧「取编号最大者」依赖此序）', () => {
+    // 刻意乱序创建 + 混入宽度不同的编号，确保排序按数值而非字典序
+    stageSpecDirs('254-fix-foo', '9-fix-foo', '251-fix-foo', '1000-fix-foo');
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'foo'), [
+      'specs/9-fix-foo',
+      'specs/251-fix-foo',
+      'specs/254-fix-foo',
+      'specs/1000-fix-foo',
+    ]);
+  });
+
+  it('specs/ 目录不存在 → 返回 []（非抛出）', () => {
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'foo'), []);
+  });
+
+  it('specs/ 被文件占位（readdir ENOTDIR）→ 返回 []（非抛出）', () => {
+    fs.writeFileSync(path.join(tmp, 'specs'), 'blocker');
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'foo'), []);
+  });
+
+  it('回归钉子：子串误配边界 —— shortName="x" 不得误配 decoy-x / xx / 前缀非纯数字', () => {
+    stageSpecDirs(
+      '999-fix-decoy-x',   // 后缀切分后前缀为 "999-fix-decoy" 非纯数字 → 不得命中
+      '1-fix-xx',          // 后缀字面量 "-fix-x" 不匹配 "…-fix-xx" 的切分 → 不得命中
+      'v1-fix-x',          // 前缀含非数字 → 不得命中
+      '-fix-x',            // 前缀为空 → 不得命中
+      '7-fix-x',           // 唯一合法命中
+    );
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'x'), ['specs/7-fix-x']);
+  });
+
+  it('只认目录项，同名普通文件不得混入结果', () => {
+    stageSpecDirs('7-fix-bar');
+    fs.writeFileSync(path.join(tmp, 'specs', '8-fix-bar'), 'not a dir');
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'bar'), ['specs/7-fix-bar']);
+  });
+
+  it('非法 shortName（空串/非字符串）→ [] 且不触碰磁盘', () => {
+    stageSpecDirs('7-fix-x');
+    for (const bad of ['', null, undefined, 123, {}, []]) {
+      assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, bad), [], String(bad));
+    }
+  });
+
+  it('枚举只下探一层：嵌套在子目录里的同名目录不得被找到（非递归、非 glob）', () => {
+    fs.mkdirSync(path.join(tmp, 'specs', 'archive', '300-fix-nested'), { recursive: true });
+    assert.deepEqual(listFeatureDirCandidatesByShortName(tmp, 'nested'), []);
+  });
+
+  it('本函数只枚举不核验：返回项不保证含 fix-report.md（制品判据留给 judge 的 usable()）', () => {
+    stageSpecDirs('7-fix-empty');
+    const hits = listFeatureDirCandidatesByShortName(tmp, 'empty');
+    assert.deepEqual(hits, ['specs/7-fix-empty']);
+    assert.equal(fs.existsSync(path.join(tmp, hits[0], 'fix-report.md')), false);
   });
 });

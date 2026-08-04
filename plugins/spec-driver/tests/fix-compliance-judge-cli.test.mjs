@@ -23,6 +23,8 @@ import {
   MISSING_ACTION_TEXT,
   CLAUDE_TRANSCRIPT_ROLES,
   FOREIGN_DIALECT_DIAGNOSTICS,
+  scanRenameCommandEvents,
+  isDeferrableMissingSet,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const CLI = fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url));
@@ -197,6 +199,15 @@ describe('退出码矩阵（--mode hook）', () => {
 // ────────────────────────────────────────
 
 /** 读取沙箱 .specify/runs/ 全部 fix-compliance-verdict 事件 */
+/**
+ * 读取某 session 的阻断/推迟状态文件（F256 R2：blockCount 与 inFlightDeferCount 分列）。
+ * @returns {{blockCount:number, inFlightDeferCount:number, degradedRecorded:boolean}|null} 文件不存在返回 null
+ */
+function readState(sessionId, root = tmp) {
+  const p = path.join(root, '.specify', 'runs', '.fix-compliance-state', `${sessionId}.json`);
+  return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+}
+
 function readVerdictEvents(root = tmp) {
   const runsDir = path.join(root, '.specify', 'runs');
   if (!fs.existsSync(runsDir)) return [];
@@ -1577,6 +1588,21 @@ describe('F240 SC-025 · Codex rollout 必须落 loud 诊断且与「确实不�
     assert.equal(registered.has('dialect:unknown'), false, 'dialect:unknown 应已从合同 enum 移除');
   });
 
+  it('F256 T017 合同同步：判定器实际产出的 delegation-in-flight 必须已登记进 schema enum', () => {
+    // 与上一条同源守卫，但独立成条：新增诊断码不来自 FOREIGN_DIALECT_DIAGNOSTICS 常量表，
+    // 上一条的遍历覆盖不到它，若不单列会出现"码已发、合同未登记"的静默漂移。
+    const schemaPath = fileURLToPath(new URL(
+      '../../../specs/208-fix-mode-process-compliance/contracts/fix-compliance-verdict-event.schema.json',
+      import.meta.url,
+    ));
+    const registered = new Set(JSON.parse(fs.readFileSync(schemaPath, 'utf8'))
+      .properties.diagnostics.items.enum);
+    assert.ok(registered.has('delegation-in-flight'), '诊断码 delegation-in-flight 未登记进 schema enum');
+    // 反向：判定器源码里确实发这个码（防止合同登记了一个从不产出的死码）
+    const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
+    assert.ok(judgeSrc.includes("'delegation-in-flight'"), '判定器未产出该码 → 合同登记了死码');
+  });
+
   it('I-2 反向守卫：判定器不再用模板串拼接方言诊断码', () => {
     const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
     assert.equal(/`dialect:\$\{/.test(judgeSrc), false, '模板串拼接会绕过合同 enum 守卫');
@@ -1597,5 +1623,705 @@ describe('F240 SC-025 · Codex rollout 必须落 loud 诊断且与「确实不�
     // core 层是纯函数层，不得出现任何 runs 目录读取
     assert.equal(/readFileSync[^\n]*runs/.test(core), false);
     assert.equal(/\bfs\./.test(core.slice(core.indexOf('export function detectTranscriptDialect'))), false);
+  });
+});
+
+// ────────────────────────────────────────
+// F256 盲区 1 · 复合命令重编号后的 short-name 磁盘重锚定（端到端）
+// ────────────────────────────────────────
+
+describe('F256 T006 · 盲区 1 端到端：编号被复合命令重编后不再误报「未建立特性目录」', () => {
+  const OLD_DIR = 'specs/251-fix-foo';
+  const NEW_DIR = 'specs/254-fix-foo';
+  /**
+   * 复现 F254 交付实况：三次撞号重编都是复合命令 `cd "<worktree>" && git mv A B && FILES=(…)`。
+   * F231 第 5 轮把改名跟随收窄为「整条命令必须就是一条光杆 mv/git mv」，故本命令**不产生任何改名事件**
+   * ——候选因此停在磁盘上已消失的 251，这正是被修复的盲区，不可改用光杆 mv 构造（那会走 F224 路径）。
+   */
+  const RENUMBER_COMMAND = `cd "/w/worktrees/serene" && git mv ${OLD_DIR} ${NEW_DIR} && FILES=(spec.md plan.md)`;
+
+  /** 提名旧编号目录 + 复合命令重编 + 完整委派；磁盘上只有新编号目录 */
+  function renumberedTranscript() {
+    return writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成，制品已迁移'),
+    ]);
+  }
+
+  it('前提核实：复合命令确实不产生改名事件（候选停在旧编号且 ambiguous=false）', () => {
+    // 该前提一旦被日后放宽 scanRenameCommandEvents 打破，本组用例就不再覆盖目标盲区，
+    // 故显式钉住，避免用例静默退化为"测了别的东西"。
+    assert.deepEqual(scanRenameCommandEvents(RENUMBER_COMMAND), []);
+  });
+
+  it('候选停在磁盘已消失的 251、磁盘仅存制品齐全的 254 → 重锚定后合规放行（exit 0）', () => {
+    const p = renumberedTranscript();
+    stageDir(NEW_DIR); // 只铺新编号目录；specs/251-fix-foo 磁盘上不存在
+
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, true, JSON.stringify(out));
+    assert.deepEqual(out.missing, [], JSON.stringify(out));
+    assert.deepEqual(out.transcriptDiagnostics, []);
+
+    // hook 模式端到端：exit 0 且不产生任何审计事件（合规路径静默放行）
+    const r = runCli({ transcriptPath: p, sessionId: 'f256-blk1' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落任何 verdict 事件');
+    assert.equal(
+      fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'f256-blk1.json')),
+      false,
+      '阻断计数状态文件不得被创建',
+    );
+  });
+
+  it('磁盘上无同名 short-name 目录 → 完全回落现状（仍按缺失阻断，兜底不凭空放行）', () => {
+    const p = renumberedTranscript();
+    // 磁盘上什么都不铺：短名枚举命中 0 → resolvedPath 保持 null
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, false, JSON.stringify(out));
+    assert.ok(out.missing.includes('feature-dir'), JSON.stringify(out.missing));
+    assert.ok(out.missing.includes('fix-report.md'), JSON.stringify(out.missing));
+  });
+
+  it('同名 short-name 目录存在但缺 fix-report.md → 不采信（usable 谓词仍是唯一采信闸门）', () => {
+    const p = renumberedTranscript();
+    stageDir(NEW_DIR, { fixReport: null });
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, false, JSON.stringify(out));
+    assert.ok(out.missing.includes('fix-report.md'), JSON.stringify(out.missing));
+  });
+
+  it('多个同 short-name 目录均制品齐全 → 取编号最大者（重编链末端）', () => {
+    const p = renumberedTranscript();
+    stageDir('specs/252-fix-foo');
+    stageDir('specs/253-fix-foo', { verification: null }); // 中间编号故意缺 verification
+    stageDir(NEW_DIR);
+    const out = reportInProcess(p);
+    // 若错取升序首项（252）也会 compliant:true，故补一条能区分的断言：
+    // 把 254 的 verification 抽掉后必须变红（证明确实读的是 254 而非 252）
+    assert.equal(out.compliant, true, JSON.stringify(out));
+    fs.rmSync(path.join(tmp, NEW_DIR, 'verification'), { recursive: true, force: true });
+    const out2 = reportInProcess(p);
+    assert.equal(out2.compliant, false, `采信的应是编号最大的 ${NEW_DIR}：${JSON.stringify(out2)}`);
+    assert.ok(out2.missing.includes('verification-report.md'), JSON.stringify(out2.missing));
+  });
+
+  it('short-name 不同的目录不得被冒用（要求完全相等，无模糊匹配）', () => {
+    const p = renumberedTranscript();
+    stageDir('specs/254-fix-foobar'); // 仅前缀相同
+    stageDir('specs/254-fix-ofoo');   // 仅后缀相同
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, false, JSON.stringify(out));
+    assert.ok(out.missing.includes('feature-dir'), JSON.stringify(out.missing));
+  });
+
+  it('单调性：ambiguous=true（光杆 mv 改名到非规范目录）时短名兜底零介入', () => {
+    // F224 fail-open 降级通道必须逐字保留——短名兜底整体嵌套在 ambiguous===false 分支内。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Bash', { command: `mv ${OLD_DIR} tmp/stage-a` }),
+    ]);
+    stageDir(NEW_DIR); // 短名可命中的目录就在磁盘上；若兜底越界介入，此处会被选中
+    const out = reportInProcess(p);
+    assert.deepEqual(out.transcriptDiagnostics, ['feature-dir-unresolvable'], JSON.stringify(out));
+    assert.equal(out.compliant, undefined, 'ambiguous 分支必须维持 F224 fail-open');
+  });
+});
+
+// ────────────────────────────────────────
+// F256 · 真实 F254 交付 transcript 截断回放（本机路径缺失时优雅跳过）
+// ────────────────────────────────────────
+
+/**
+ * fix-report.md 证据基线引用的真实 transcript（F254 交付会话，649 条 / 2.3MB）。
+ * 沿用 F227_REAL_TRANSCRIPT 的 existsSync + t.skip 先例：本机存在则跑，缺失则跳过。
+ */
+const F256_REAL_TRANSCRIPT = path.join(
+  os.homedir(),
+  '.claude/projects/-Users-connorlu-Desktop--workspace2-nosync-cc-plugin-market--claude-worktrees-serene-taussig-2c33c3',
+  'f3f2fe3b-5458-4dbe-8dab-cb9fb6e3966a.jsonl',
+);
+
+/**
+ * 按 stop 时间戳做**前缀**截断，复现该时点 hook 看到的 transcript。
+ *
+ * 用前缀（而非按时间戳过滤）是因为文件行序即写入序——hook 在时刻 T 读到的就是彼时已落盘的前缀；
+ * 实测该 transcript 的 timestamp 并非全序（sidechain 条目交错），故截断点取
+ * "最后一个 timestamp ≤ T 的行下标"，而不是简单计数。
+ * @returns {string} 截断文件绝对路径
+ */
+function truncateRealTranscriptAt(stopIso, tag) {
+  const lines = fs.readFileSync(F256_REAL_TRANSCRIPT, 'utf8').split('\n').filter((l) => l.trim());
+  let cut = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    let obj;
+    try { obj = JSON.parse(lines[i]); } catch { continue; }
+    if (obj && typeof obj.timestamp === 'string' && obj.timestamp <= stopIso) cut = i;
+  }
+  const out = path.join(tmp, `f256-trunc-${tag}.jsonl`);
+  fs.writeFileSync(out, lines.slice(0, cut + 1).join('\n') + '\n', 'utf8');
+  return out;
+}
+
+/** 对截断文件跑 --mode report（零落盘，可安全以真实 worktree 为 projectRoot） */
+function reportRealTranscript(truncatedPath) {
+  const res = spawnSync('node', [CLI, '--mode', 'report', '--transcript-path', truncatedPath, '--project-root', REPO_ROOT], { encoding: 'utf8' });
+  assert.equal(res.status, 0, res.stderr);
+  return JSON.parse(res.stdout);
+}
+
+/** 签名 A（盲区 1）的三个误报 stop —— fix-report.md「检测判据」表后三行 */
+const F256_SIGNATURE_A_STOPS = [
+  '2026-08-04T03:03:46.034Z',
+  '2026-08-04T03:05:02.669Z',
+  '2026-08-04T03:07:22.999Z',
+];
+
+describe('F256 T007 · 真实 F254 transcript 截断回放：签名 A 三个 stop 不再误报', () => {
+  it('三处截断均不再复现 missing:["feature-dir","fix-report.md"]', (t) => {
+    if (!fs.existsSync(F256_REAL_TRANSCRIPT)) {
+      t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
+      return;
+    }
+    // 前提：REPO_ROOT 上确有重编后的目标目录，否则本用例会以"磁盘没有可锚定对象"的理由假绿
+    assert.ok(
+      fs.existsSync(path.join(REPO_ROOT, 'specs/254-fix-graph-scope-extensions/fix-report.md')),
+      '前提缺失：重编后的 specs/254-fix-graph-scope-extensions 应在本仓库',
+    );
+    for (const [i, stop] of F256_SIGNATURE_A_STOPS.entries()) {
+      const out = reportRealTranscript(truncateRealTranscriptAt(stop, `a${i}`));
+      const missing = out.missing || [];
+      assert.equal(
+        missing.includes('feature-dir') && missing.includes('fix-report.md'),
+        false,
+        `${stop} 仍复现签名 A：${JSON.stringify(out)}`,
+      );
+      // 单调性：改动前是 exit 2 阻断，改动后至少不得反向新增阻断维度
+      assert.deepEqual(out.transcriptDiagnostics, [], `${stop}: ${JSON.stringify(out)}`);
+    }
+  });
+});
+
+// ────────────────────────────────────────
+// F256 盲区 2 · 在途委派 = 判定时机未到（端到端）
+// ────────────────────────────────────────
+
+describe('F256 T013 · 盲区 2 端到端：未回收的在途委派推迟裁决而非判烂尾', () => {
+  const AGENT_ID = 'ad602324a1dd9715a';
+  /** 带 tool_use id 的 assistant 条目（既有 TOOL_USE 不带 id，配对判定需要它） */
+  const TOOL_USE_ID = (id, name, input) => ({
+    type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
+  });
+  /** harness 写入的 tool_result 回执（落在紧随的 user 条目，与真实 wire format 一致） */
+  const TOOL_RESULT = (toolUseId, content, isError = false) => ({
+    type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: isError, content }] },
+  });
+  /** <task-notification> 完成信号（harness 注入的 user 文本块） */
+  const TASK_NOTIFICATION = (taskId, toolUseId) => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n<status>completed</status>\n</task-notification>` }] },
+  });
+
+  /**
+   * 复现 F254 实况：复审全部走 `SendMessage` → 后台恢复。SendMessage 立刻拿到 ack tool_result，
+   * 在途性体现在**尚未到达的 task-notification**，而非缺失的 tool_result。
+   * @param {boolean} withNotification - true 时补上完成通知（对照组：在途集合为空）
+   */
+  function inFlightTranscript(withNotification) {
+    const lines = [
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE_ID('toolu_impl', 'Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_RESULT('toolu_impl', `Agent "${AGENT_ID}" completed`),
+      TOOL_USE_ID('toolu_sm', 'SendMessage', { to: AGENT_ID, message: '继续复审' }),
+      TOOL_RESULT('toolu_sm', `{"success":true,"message":"Agent \\"${AGENT_ID}\\" had no active task; resumed from transcript in the background with your message."}`),
+    ];
+    if (withNotification) lines.push(TASK_NOTIFICATION(AGENT_ID, 'toolu_impl'));
+    lines.push(ASSISTANT_TEXT('等待复审结果'));
+    return writeTranscript(lines);
+  }
+
+  /** 两组共用磁盘状态：fix-report 齐备但缺 verification-report → 判据本应判不合规 */
+  function stageIncomplete() {
+    stageDir(FEATURE_DIR, { verification: null });
+  }
+
+  it('对照组（在途集合为空）：同一 fixture 走既有阻断路由 → exit 2 且递增阻断计数', () => {
+    // 这一组存在的意义是证明下一组的 exit 0 确实由本次新增分支产生，
+    // 而非"这个 fixture 本来就合规/本来就走了别的放行分支"。
+    const p = inFlightTranscript(true);
+    stageIncomplete();
+    const r = runCli({ transcriptPath: p, sessionId: 'f256-ctrl' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.ok(r.stderr.startsWith('[FIX-COMPLIANCE] '), r.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].compliant, false);
+    assert.equal(events[0].blockCount, 1, '对照组必须消耗一次阻断预算');
+    assert.equal(events[0].diagnostics.includes('delegation-in-flight'), false);
+    assert.ok(events[0].missing.includes('verification-report.md'), JSON.stringify(events[0].missing));
+  });
+
+  it('在途组：exit 0 + WARN 级 delegation-in-flight，且不消耗阻断预算', () => {
+    const p = inFlightTranscript(false);
+    stageIncomplete();
+    const r = runCli({ transcriptPath: p, sessionId: 'f256-inflight' });
+
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(r.stderr.includes('[FIX-COMPLIANCE][WARN]'), r.stderr);
+    assert.ok(r.stderr.includes('诊断: delegation-in-flight'), r.stderr);
+
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('delegation-in-flight'), JSON.stringify(events[0].diagnostics));
+    assert.equal(events[0].compliant, false, '缺口如实记录，不是把不合规粉饰为合规');
+    assert.equal(events[0].degraded, false, '推迟裁决不是降级放行，两者审计语义必须可区分');
+    assert.equal(events[0].blockCount, null);
+    // 状态文件确实被写（推迟必须有界，见 IN_FLIGHT_DEFER_LIMIT），但两个预算分列：
+    // 推迟只递增 inFlightDeferCount，blockCount 原地不动。
+    assert.deepEqual(
+      (({ blockCount, inFlightDeferCount }) => ({ blockCount, inFlightDeferCount }))(readState('f256-inflight')),
+      { blockCount: 0, inFlightDeferCount: 1 },
+      '推迟不得消耗阻断预算（否则在途停顿会白白烧掉 2 次额度）',
+    );
+  });
+
+  it('推迟不是豁免：在途回收后同一会话再次 stop 恢复完整裁决（exit 2）', () => {
+    // 单调性论证的实证半边——若"推迟"实为"豁免"，补上完成通知后仍会 exit 0。
+    stageIncomplete();
+    const first = runCli({ transcriptPath: inFlightTranscript(false), sessionId: 'f256-seq' });
+    assert.equal(first.status, 0, first.stderr);
+    const second = runCli({ transcriptPath: inFlightTranscript(true), sessionId: 'f256-seq' });
+    assert.equal(second.status, 2, second.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 2);
+    assert.equal(events[1].blockCount, 1, '推迟期间未消耗预算，回收后从 1 起算');
+  });
+
+  it('合规会话即使有在途委派仍走合规早退（compliant 分支优先于在途分支）', () => {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/verification/verification-report.md`, content: '# V' }),
+      TOOL_USE_ID('toolu_sm', 'SendMessage', { to: AGENT_ID, message: '继续' }),
+      TOOL_RESULT('toolu_sm', '{"success":true}'),
+      ASSISTANT_TEXT('完成'),
+    ]);
+    stageDir(FEATURE_DIR);
+    const r = runCli({ transcriptPath: p, sessionId: 'f256-ok' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readVerdictEvents(), [], '合规路径零落盘语义不得被在途分支破坏');
+  });
+
+  it('warn 档：退出码不变（本就 exit 0），但审计事件带上 delegation-in-flight', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    stageIncomplete();
+    const r = runCli({ transcriptPath: inFlightTranscript(false), sessionId: 'f256-warn' });
+    assert.equal(r.status, 0, r.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].enforcement, 'warn');
+    assert.ok(events[0].diagnostics.includes('delegation-in-flight'), JSON.stringify(events[0].diagnostics));
+  });
+
+  it('off 档：在途分支不改变零接触语义（off 仍先于一切读取短路）', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: off\n');
+    stageIncomplete();
+    assert.equal(runCli({ transcriptPath: inFlightTranscript(false) }).status, 0);
+    assert.equal(fs.existsSync(path.join(tmp, '.specify')), false);
+  });
+
+  it('--mode report 透传 inFlightDelegations 且维持零落盘', () => {
+    stageIncomplete();
+    const out = reportInProcess(inFlightTranscript(false));
+    assert.equal(out.inFlightDelegations.length, 1);
+    assert.equal(out.inFlightDelegations[0].kind, 'send-message');
+    assert.equal(out.inFlightDelegations[0].id, AGENT_ID);
+    assert.deepEqual(reportInProcess(inFlightTranscript(true)).inFlightDelegations, []);
+  });
+});
+
+describe('F256 T014 · 真实 F254 transcript 截断回放：在途检测与 fix-report 判据表逐行一致', () => {
+  /**
+   * fix-report.md「检测判据」表：签名 B 的三个 stop 命中在途（放行），签名 A 的三个不命中。
+   *
+   * 如实标注（不粉饰）：该表「在途数」一列对 16:48:49 记的是 2，而按 plan.md §5.3 的规则实现
+   * （SendMessage 按 **agent 去重**取最后一次派发）+ 前缀截断回放，可复现值为 1。差异源于计数
+   * 粒度（逐次派发 vs 逐 agent），**不影响任何判定结论**——路由只看在途集合是否非空。
+   * 因此本用例钉的是表格真正承重的一列：命中/不命中。
+   */
+  const TABLE = [
+    { stop: '2026-08-03T16:32:26.638Z', signature: 'B', inFlight: true },
+    { stop: '2026-08-03T16:33:41.002Z', signature: 'B', inFlight: true },
+    { stop: '2026-08-03T16:48:49.072Z', signature: 'B', inFlight: true },
+    { stop: '2026-08-04T03:03:46.034Z', signature: 'A', inFlight: false },
+    { stop: '2026-08-04T03:05:02.669Z', signature: 'A', inFlight: false },
+    { stop: '2026-08-04T03:07:22.999Z', signature: 'A', inFlight: false },
+  ];
+
+  it('6 个 stop 时间戳截断回放的在途命中/不命中与判据表逐行一致', (t) => {
+    if (!fs.existsSync(F256_REAL_TRANSCRIPT)) {
+      t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
+      return;
+    }
+    for (const [i, row] of TABLE.entries()) {
+      const out = reportRealTranscript(truncateRealTranscriptAt(row.stop, `b${i}`));
+      const items = out.inFlightDelegations || [];
+      assert.equal(items.length > 0, row.inFlight, `${row.stop}（签名 ${row.signature}）在途判定与表格不符：${JSON.stringify(items)}`);
+      if (row.inFlight) {
+        // 实测形态：F254 的复审全部走 SendMessage → 后台恢复（后台 Agent 0 个、同步 Agent 均已收口），
+        // 这直接证伪了"按缺失 tool_result 检测"的路线——那条路线在本 transcript 上 0 命中。
+        assert.deepEqual([...new Set(items.map((x) => x.kind))], ['send-message'], row.stop);
+      }
+    }
+  });
+
+  it('两处修复正交：签名 A 的三个 stop 在途恒为 0，不会把盲区 1 顺手遮蔽', (t) => {
+    if (!fs.existsSync(F256_REAL_TRANSCRIPT)) {
+      t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
+      return;
+    }
+    // 若在途检测在签名 A 上误命中，盲区 1 的磁盘兜底就会被"顺手治好"的假象掩盖，
+    // 其真实修复效果将不再可测。此断言守住二者的可独立回归性。
+    for (const row of TABLE.filter((r) => r.signature === 'A')) {
+      const out = reportRealTranscript(truncateRealTranscriptAt(row.stop, 'orth'));
+      assert.deepEqual(out.inFlightDelegations, [], row.stop);
+    }
+  });
+
+  it('真实 transcript 的差分对照：同一 projectRoot 下 B 命中放行、A 不命中仍阻断', (t) => {
+    if (!fs.existsSync(F256_REAL_TRANSCRIPT)) {
+      t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
+      return;
+    }
+    // hook 模式会落盘，故用 tmp 内的隔离 projectRoot（绝不指向真实 worktree，见 F227 注释），
+    // 并铺上重编后的 specs/254-fix-graph-scope-extensions/fix-report.md ——
+    // 这是短名磁盘兜底的锚定对象，也让两个时点的 missing 收敛为**完全相同**的
+    // `["verification-report.md"]`（实测，见下方断言）。missing 相同是有效对照的前提：
+    // 退出码差异因此只可能由在途分支产生，而不会掺入"可推迟性闸门"或缺口构成的差异。
+    const stagedRoot = path.join(tmp, 'f256-staged-root');
+    fs.mkdirSync(path.join(stagedRoot, 'specs/254-fix-graph-scope-extensions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(stagedRoot, 'specs/254-fix-graph-scope-extensions/fix-report.md'),
+      REPAIR_FIX_REPORT, 'utf8',
+    );
+    const runHookOn = (truncated, sessionId) => spawnSync('node', [CLI, '--mode', 'hook', '--project-root', stagedRoot], {
+      input: JSON.stringify({ session_id: sessionId, transcript_path: truncated, stop_hook_active: false }),
+      encoding: 'utf8',
+    });
+
+    // 取 16:33:41（签名 B）而非 16:32:26：前者的 missing 与签名 A 逐字相同，对照更纯
+    const bRun = runHookOn(truncateRealTranscriptAt('2026-08-03T16:33:41.002Z', 'diff-b'), 'f256-real-b');
+    assert.equal(bRun.status, 0, bRun.stderr);
+    assert.ok(bRun.stderr.includes('诊断: delegation-in-flight'), bRun.stderr);
+
+    const aRun = runHookOn(truncateRealTranscriptAt('2026-08-04T03:03:46.034Z', 'diff-a'), 'f256-real-a');
+    assert.equal(aRun.status, 2, '签名 A 无在途信号 → 仍走既有阻断路由（放行不得外溢）');
+
+    const byId = Object.fromEntries(readVerdictEvents(stagedRoot).map((e) => [e.sessionId, e]));
+    assert.deepEqual(byId['f256-real-b'].missing, ['verification-report.md'], JSON.stringify(byId['f256-real-b']));
+    assert.deepEqual(byId['f256-real-b'].missing, byId['f256-real-a'].missing, '两次 missing 必须相同，才构成有效对照');
+    assert.ok(byId['f256-real-b'].diagnostics.includes('delegation-in-flight'));
+    assert.equal(byId['f256-real-a'].diagnostics.includes('delegation-in-flight'), false);
+  });
+
+  it('真实 transcript 正样本核实：16:32 stop 的 missing 两项均在可推迟白名单内（收窄闸门不得误伤）', (t) => {
+    if (!fs.existsSync(F256_REAL_TRANSCRIPT)) {
+      t.skip('本机不存在该真实 transcript（非本 worktree 环境）');
+      return;
+    }
+    // 第 2 轮新增的「可推迟性闸门」是收紧改动（把部分放行改回阻断），必须证明它没有误伤
+    // 本 Feature 的正样本——F254 那次真实的中途停顿。
+    const stagedRoot = path.join(tmp, 'f256-anchor-root');
+    fs.mkdirSync(path.join(stagedRoot, 'specs/254-fix-graph-scope-extensions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(stagedRoot, 'specs/254-fix-graph-scope-extensions/fix-report.md'),
+      REPAIR_FIX_REPORT, 'utf8',
+    );
+    const truncated = truncateRealTranscriptAt('2026-08-03T16:32:26.638Z', 'anchor');
+    const res = spawnSync('node', [CLI, '--mode', 'report', '--transcript-path', truncated, '--project-root', stagedRoot], { encoding: 'utf8' });
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout);
+    assert.deepEqual(out.missing, ['verification-report.md', 'delegation:verify'], JSON.stringify(out));
+    assert.equal(isDeferrableMissingSet(out.missing), true, '正样本必须仍可推迟');
+    assert.ok((out.inFlightDelegations || []).length > 0, JSON.stringify(out.inFlightDelegations));
+  });
+});
+
+// ────────────────────────────────────────
+// F256 第 2 轮（三路对抗审查后修复轮）· 在途推迟的两道闸门 + 短名兜底的可用性过滤
+// ────────────────────────────────────────
+
+describe('F256 R2 · 在途推迟必须有界且只对「在途工作关得掉的缺口」生效', () => {
+  const BG_ID = 'toolu_bg_review';
+
+  /** 带 tool_use id 的 assistant 条目（既有 TOOL_USE 不带 id，而配对判定需要它） */
+  const TOOL_USE_ID = (id, name, input) => ({
+    type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] },
+  });
+  /** harness 写入的 tool_result 回执 */
+  const TOOL_RESULT = (toolUseId, content, isError = false) => ({
+    type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: isError, content }] },
+  });
+  /** <task-notification> 完成信号 */
+  const TASK_NOTIFICATION = (taskId, toolUseId) => ({
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'text', text: `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n<status>completed</status>\n</task-notification>` }] },
+  });
+
+  /**
+   * 制品与委派齐备、只差 verification-report.md，外加一次**后台**复审委派的会话。
+   * 配 stageDir(FEATURE_DIR, { verification: null }) 时 missing 恰为 ['verification-report.md']
+   * ——白名单内的可推迟缺口，于是"推不推迟"只由在途判定与预算决定，判据边界最纯。
+   * @param {{ack?:boolean, ackIsError?:boolean, notified?:boolean}} [opts]
+   */
+  function backgroundReviewTranscript({ ack = true, ackIsError = false, notified = false } = {}) {
+    const lines = [
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE_ID(BG_ID, 'Agent', { subagent_type: 'spec-driver:verify', description: '后台复审', run_in_background: true }),
+    ];
+    if (ack) lines.push(TOOL_RESULT(BG_ID, 'Agent launched in the background', ackIsError));
+    if (notified) lines.push(TASK_NOTIFICATION('agent-x', BG_ID));
+    lines.push(ASSISTANT_TEXT('等待后台复审结果'));
+    return writeTranscript(lines);
+  }
+
+  /** 只铺 fix-report.md，不铺 verification → 判据本应判不合规 */
+  function stageIncomplete() {
+    stageDir(FEATURE_DIR, { verification: null });
+  }
+
+  it('前提核实：本组 fixture 的 missing 恰为可推迟白名单内的单项', () => {
+    stageIncomplete();
+    const out = reportInProcess(backgroundReviewTranscript());
+    assert.deepEqual(out.missing, ['verification-report.md'], JSON.stringify(out));
+    assert.equal(isDeferrableMissingSet(out.missing), true);
+  });
+
+  // —— 闸门 0（CRITICAL-1a）：后台派发本身必须被受理，才谈得上"在途" ——
+
+  it('🔴 CRITICAL-1a：一次 is_error 的后台派发不得制造在途 → 恢复阻断（exit 2）', () => {
+    // 修复前：规则 2 只看"有没有完成通知"，不看该派发是否被受理，于是**一条被拒的后台派发**
+    // 即可让门禁永久推迟。这是最廉价的自助绕过，且与规则 3 已设的门槛不对等。
+    stageIncomplete();
+    const out = reportInProcess(backgroundReviewTranscript({ ackIsError: true }));
+    assert.deepEqual(out.inFlightDelegations, [], JSON.stringify(out.inFlightDelegations));
+
+    const r = runCli({ transcriptPath: backgroundReviewTranscript({ ackIsError: true }), sessionId: 'r2-err' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.equal(readState('r2-err').inFlightDeferCount, 0, '未推迟 → 在途预算不动');
+    assert.equal(readState('r2-err').blockCount, 1);
+  });
+
+  it('🔴 CRITICAL-1a：完全没有回执的后台派发同样不得制造在途（exit 2）', () => {
+    stageIncomplete();
+    assert.deepEqual(reportInProcess(backgroundReviewTranscript({ ack: false })).inFlightDelegations, []);
+    assert.equal(runCli({ transcriptPath: backgroundReviewTranscript({ ack: false }), sessionId: 'r2-noack' }).status, 2);
+  });
+
+  it('对照：正常 ack 且通知未到 → 确实在途，走推迟（exit 0）', () => {
+    // 与上两条构成 A/B：三者 fixture 只差 tool_result 回执一项，退出码差异只可能来自 1a 的门槛。
+    stageIncomplete();
+    const out = reportInProcess(backgroundReviewTranscript());
+    assert.deepEqual(out.inFlightDelegations.map((x) => x.kind), ['background']);
+    const r = runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-ok' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(r.stderr.includes('诊断: delegation-in-flight'), r.stderr);
+  });
+
+  // —— 闸门 1（CRITICAL-1c）：只有在途工作关得掉的缺口才配推迟 ——
+
+  it('🔴 CRITICAL-1c：缺口含 feature-dir/fix-report.md（主线程自己该产出）时不得推迟', () => {
+    // 同一份**在途成立**的 transcript，只改磁盘状态：什么都不铺 → missing 混入主线程制品缺口。
+    // 修复前这类会话（实测占不合规会话的 5.2%）会被静默推迟，而在途工作再怎么回收也补不上它们。
+    const p = backgroundReviewTranscript();
+    const out = reportInProcess(p);
+    assert.ok(out.inFlightDelegations.length > 0, '前提：在途判定成立，退出码差异只能来自可推迟性闸门');
+    assert.deepEqual(out.missing, ['feature-dir', 'fix-report.md'], JSON.stringify(out.missing));
+    assert.equal(isDeferrableMissingSet(out.missing), false);
+
+    const r = runCli({ transcriptPath: p, sessionId: 'r2-nondef' });
+    assert.equal(r.status, 2, r.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].diagnostics.includes('delegation-in-flight'), false, '不推迟就不该发在途诊断码');
+    assert.equal(readState('r2-nondef').inFlightDeferCount, 0);
+  });
+
+  // —— 闸门 2（CRITICAL-1b）：推迟次数有界 ——
+
+  it('🔴 CRITICAL-1b：连续在途 stop 推迟至多 3 次，第 4 次恢复裁决并留 budget-exhausted 诊断', () => {
+    // 「每个在途委派最终都会回收通知」已被实测证伪（202 次后台派发中 43 次、21.3% 的通知从未到达），
+    // 无界推迟等于给出一条自然发生率两成的永久放行通道。本用例钉住上界。
+    stageIncomplete();
+    const p = backgroundReviewTranscript();
+    for (let i = 1; i <= 3; i += 1) {
+      const r = runCli({ transcriptPath: p, sessionId: 'r2-budget' });
+      assert.equal(r.status, 0, `第 ${i} 次推迟应放行：${r.stderr}`);
+      assert.equal(readState('r2-budget').inFlightDeferCount, i);
+      assert.equal(readState('r2-budget').blockCount, 0, '推迟全程不动阻断预算');
+    }
+
+    const fourth = runCli({ transcriptPath: p, sessionId: 'r2-budget' });
+    assert.equal(fourth.status, 2, `预算耗尽后必须恢复阻断：${fourth.stderr}`);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 4);
+    assert.ok(events[3].diagnostics.includes('delegation-in-flight-budget-exhausted'), JSON.stringify(events[3]));
+    assert.equal(events[3].diagnostics.includes('delegation-in-flight'), false, '两个诊断码互斥：推了才发前者');
+    assert.equal(events[3].blockCount, 1, '恢复裁决后才开始消耗阻断预算');
+
+    // 继续跑到阻断预算也耗尽 → 落回既有 FR-006 降级放行（两个有界机制串联仍在有限步内收敛）
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'r2-budget' }).status, 2);
+    const last = runCli({ transcriptPath: p, sessionId: 'r2-budget' });
+    assert.equal(last.status, 0, last.stderr);
+    assert.ok(last.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), last.stderr);
+  });
+
+  it('warn 档：预算耗尽后退出码仍为 0，但审计事件必须留 budget-exhausted 诊断', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    stageIncomplete();
+    const p = backgroundReviewTranscript();
+    for (let i = 0; i < 3; i += 1) assert.equal(runCli({ transcriptPath: p, sessionId: 'r2-warn' }).status, 0);
+    const fourth = runCli({ transcriptPath: p, sessionId: 'r2-warn' });
+    assert.equal(fourth.status, 0, fourth.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 4);
+    assert.ok(events[3].diagnostics.includes('delegation-in-flight-budget-exhausted'), JSON.stringify(events[3]));
+    assert.equal(events[3].enforcement, 'warn');
+  });
+
+  it('存储不可用 → 不推迟（维持不了计数就不能开推迟通道，方向 fail-closed）', () => {
+    // 两级状态存储均不可写：主路径被文件占位、tmpdir 降级路径 env 指向文件。
+    fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), 'blocker');
+    const tmpBlocker = path.join(tmp, 'tmp-blocker');
+    fs.writeFileSync(tmpBlocker, 'x');
+    stageIncomplete();
+
+    const r = runCli({
+      transcriptPath: backgroundReviewTranscript(),
+      sessionId: 'r2-nostore',
+      env: { SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP: tmpBlocker },
+    });
+    // 落回正常裁决 → routeBlock 同样写不了计数 → 走既有 FR-006「存储不可用等同已达上限」降级放行。
+    // 与推迟分支的判别锚点：前缀是 GATE-DEGRADED 而非 WARN，诊断码是存储不可用而非在途。
+    assert.ok(r.stderr.startsWith('[FIX-COMPLIANCE][GATE-DEGRADED] '), r.stderr);
+    assert.equal(r.stderr.includes('delegation-in-flight'), false, '未推迟就不得发在途诊断码');
+    const events = readVerdictEvents();
+    assert.ok(events.some((e) => e.diagnostics.includes('state-storage-unavailable')), JSON.stringify(events));
+    assert.equal(events.some((e) => e.diagnostics.includes('delegation-in-flight')), false);
+  });
+
+  // —— 两个预算互不干扰 ——
+
+  it('🔴 变异钉子 M15：推迟既不递增也不重置阻断计数（先阻断 1 次 → 推迟 → 回收后仍不合规 = 2 次）', () => {
+    stageIncomplete();
+    // 第 1 次：无在途（通知已到）→ 正常阻断，blockCount 1
+    const first = runCli({ transcriptPath: backgroundReviewTranscript({ notified: true }), sessionId: 'r2-m15' });
+    assert.equal(first.status, 2, first.stderr);
+    assert.equal(readState('r2-m15').blockCount, 1);
+
+    // 第 2 次：在途 → 推迟；blockCount 必须原地不动（既不 +1 也不清零）
+    const second = runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-m15' });
+    assert.equal(second.status, 0, second.stderr);
+    assert.deepEqual(
+      (({ blockCount, inFlightDeferCount }) => ({ blockCount, inFlightDeferCount }))(readState('r2-m15')),
+      { blockCount: 1, inFlightDeferCount: 1 },
+    );
+
+    // 第 3 次：在途已回收且仍不合规 → 从 1 续上，而非从 0 重来
+    const third = runCli({ transcriptPath: backgroundReviewTranscript({ notified: true }), sessionId: 'r2-m15' });
+    assert.equal(third.status, 2, third.stderr);
+    assert.equal(readState('r2-m15').blockCount, 2, '推迟不得重置阻断预算（重置=多送一次阻断额度）');
+  });
+
+  it('阻断路径不得抹平在途预算（saveBlockState 是整体覆写，两个字段须各自带回）', () => {
+    stageIncomplete();
+    const p = backgroundReviewTranscript();
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'r2-mix' }).status, 0);
+    assert.equal(readState('r2-mix').inFlightDeferCount, 1);
+    // 一次不含在途的阻断写入后，在途预算必须仍是 1（被写回 0 就等于又送 1 次推迟）
+    runCli({ transcriptPath: backgroundReviewTranscript({ notified: true }), sessionId: 'r2-mix' });
+    assert.deepEqual(
+      (({ blockCount, inFlightDeferCount }) => ({ blockCount, inFlightDeferCount }))(readState('r2-mix')),
+      { blockCount: 1, inFlightDeferCount: 1 },
+    );
+  });
+
+  it('合规收口清零两个预算（resetBlockState 删整份状态文件）', () => {
+    stageIncomplete();
+    assert.equal(runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-reset' }).status, 0);
+    assert.equal(readState('r2-reset').inFlightDeferCount, 1);
+
+    // 补齐 verification 后同一 session 合规收口 → 状态文件整份删除
+    stageDir(FEATURE_DIR);
+    assert.equal(runCli({ transcriptPath: backgroundReviewTranscript({ notified: true }), sessionId: 'r2-reset' }).status, 0);
+    assert.equal(readState('r2-reset'), null, '合规收口后状态文件应被删除（两个预算一并归零）');
+
+    // 再退回不合规 + 在途 → 预算从 1 重新起算，证明确实清零而非文件残留
+    stageDir(FEATURE_DIR, { verification: null });
+    fs.rmSync(path.join(tmp, FEATURE_DIR, 'verification'), { recursive: true, force: true });
+    assert.equal(runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-reset' }).status, 0);
+    assert.equal(readState('r2-reset').inFlightDeferCount, 1);
+  });
+
+  it('向后兼容：F256 之前写下的状态文件（缺 inFlightDeferCount）按 0 起算', () => {
+    stageIncomplete();
+    const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(path.join(stateDir, 'r2-legacy.json'), JSON.stringify({ sessionId: 'r2-legacy', blockCount: 1, degradedRecorded: false }));
+    assert.equal(runCli({ transcriptPath: backgroundReviewTranscript(), sessionId: 'r2-legacy' }).status, 0);
+    const st = readState('r2-legacy');
+    assert.equal(st.inFlightDeferCount, 1, '缺字段按 0 起算，本次推迟记为 1');
+    assert.equal(st.blockCount, 1, '既有阻断计数不得被新字段写入抹平');
+  });
+
+  it('合同同步：judge 实际产出的 delegation-in-flight-budget-exhausted 必须已登记进 schema enum', () => {
+    const schemaPath = fileURLToPath(new URL(
+      '../../../specs/208-fix-mode-process-compliance/contracts/fix-compliance-verdict-event.schema.json',
+      import.meta.url,
+    ));
+    const registered = new Set(JSON.parse(fs.readFileSync(schemaPath, 'utf8')).properties.diagnostics.items.enum);
+    assert.ok(registered.has('delegation-in-flight-budget-exhausted'), '诊断码未登记进 schema enum');
+    const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
+    assert.ok(judgeSrc.includes("'delegation-in-flight-budget-exhausted'"), '合同登记了一个从不产出的死码');
+  });
+});
+
+describe('F256 R2 · 短名磁盘兜底的 usable 过滤是承重判据', () => {
+  const OLD_DIR = 'specs/251-fix-foo';
+  const RENUMBER_COMMAND = `cd "/w/worktrees/serene" && git mv ${OLD_DIR} specs/254-fix-foo && FILES=(spec.md)`;
+
+  it('🔴 变异钉子 M10/M11：编号更大者是空壳时必须回落到编号更小的**可用**目录', () => {
+    // 删掉 evaluate() 里的 `.filter(usable)` 后本用例必须变红。修复前 748 条测试全绿——
+    // 既有用例只覆盖"唯一候选是空壳"（回落 null 后 missing 仍含 fix-report.md，断言照样通过），
+    // 覆盖不到"空壳把可用目录挤掉"这一真实重编场景（先建新目录、制品尚未迁入即是此形态）。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir('specs/252-fix-foo');                                   // 编号小、制品齐全
+    fs.mkdirSync(path.join(tmp, 'specs/254-fix-foo'), { recursive: true }); // 编号大、空壳
+
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, true, `应回落到制品齐全的 252 而非空壳 254：${JSON.stringify(out)}`);
+    assert.deepEqual(out.missing, [], JSON.stringify(out.missing));
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'r2-usable' }).status, 0);
   });
 });

@@ -37,6 +37,11 @@ import {
   CLAUDE_TRANSCRIPT_ROLES,
   CODEX_ROLLOUT_ROLES,
   FOREIGN_DIALECT_DIAGNOSTICS,
+  extractFixShortName,
+  FIX_DIR_NAME_REGEX,
+  extractInFlightDelegationsAfter,
+  DEFERRABLE_MISSING_KEYS,
+  isDeferrableMissingSet,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
@@ -3943,5 +3948,483 @@ describe('F240 T030 detectTranscriptDialect：四结果矩阵（正向识别）'
     const t0 = Date.now();
     assert.equal(detectTranscriptDialect(big), 'codex-rollout');
     assert.ok(Date.now() - t0 < 200, `耗时 ${Date.now() - t0}ms`);
+  });
+});
+
+// ────────────────────────────────────────
+// F256 盲区 1 · extractFixShortName（short-name 磁盘兜底的纯函数前置）
+// ────────────────────────────────────────
+
+describe('F256 T001 · extractFixShortName：合法特性目录路径的 short-name 抽取', () => {
+  it('阳性：标准 specs/NNN-fix-<short> 路径抽出 <short> 段', () => {
+    assert.equal(extractFixShortName('specs/256-fix-compliance-false-blocks'), 'compliance-false-blocks');
+    assert.equal(extractFixShortName('specs/1-fix-a'), 'a');
+    assert.equal(extractFixShortName('specs/0254-fix-graph-scope-extensions'), 'graph-scope-extensions');
+  });
+
+  it('阳性：尾随斜杠形态同样正确提取（与 FIX_DIR_NAME_REGEX 的容忍面一致）', () => {
+    assert.equal(extractFixShortName('specs/256-fix-compliance-false-blocks/'), 'compliance-false-blocks');
+  });
+
+  it('阴性：缺 fix- 段 / 含大写 / 纯数字目录名 → null（不做启发式兜底）', () => {
+    assert.equal(extractFixShortName('specs/256-other-thing'), null);
+    assert.equal(extractFixShortName('specs/256-Fix-Foo'), null);
+    assert.equal(extractFixShortName('specs/256-fix-Foo'), null);
+    assert.equal(extractFixShortName('specs/256'), null);
+    assert.equal(extractFixShortName('specs/256-fix-'), null);
+  });
+
+  it('阴性：非 specs/ 前缀、多层嵌套、制品文件路径 → null（整串锚定，不做子串搜索）', () => {
+    assert.equal(extractFixShortName('other/256-fix-foo'), null);
+    assert.equal(extractFixShortName('a/specs/256-fix-foo'), null);
+    assert.equal(extractFixShortName('specs/256-fix-foo/fix-report.md'), null);
+    assert.equal(extractFixShortName('specs/256-fix-foo/verification'), null);
+  });
+
+  it('阴性：非字符串输入一律 null，不抛出', () => {
+    for (const bad of [null, undefined, 123, {}, [], true]) {
+      assert.equal(extractFixShortName(bad), null, JSON.stringify(bad) ?? String(bad));
+    }
+  });
+
+  it('与 FIX_DIR_NAME_REGEX 语义对齐：凡该正则接受的路径必有非 null short-name', () => {
+    // 两者是同一命名合同的两个面（判"是否合法特性目录" vs 取"其中的 short 段"），
+    // 若日后放宽/收紧其一而忘了另一，此断言变红。
+    for (const p of ['specs/1-fix-a', 'specs/300-fix-alpha/', 'specs/99-fix-a-b-c-9']) {
+      assert.equal(FIX_DIR_NAME_REGEX.test(p), true, p);
+      assert.notEqual(extractFixShortName(p), null, p);
+    }
+    for (const p of ['specs/1-fixa', 'specs/x-fix-a', 'specs/1-fix-A']) {
+      assert.equal(FIX_DIR_NAME_REGEX.test(p), false, p);
+      assert.equal(extractFixShortName(p), null, p);
+    }
+  });
+
+  it('I4 静态守卫：函数体内零 I/O（core 层纯函数契约）', () => {
+    const body = extractFixShortName.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/\brequire\s*\(/.test(body), false, body);
+    assert.equal(/\bimport\s*\(/.test(body), false, body);
+    assert.equal(/process\.env/.test(body), false, body);
+  });
+});
+
+// ────────────────────────────────────────
+// F256 盲区 2 · extractInFlightDelegationsAfter（在途委派 = 判定时机未到）
+// ────────────────────────────────────────
+
+/** assistant 条目：若干 tool_use 块 + 可选同条目 tool_result 块（wire format 与真实 transcript 同构） */
+const assistantEntry = (lineIndex, toolUses, toolResults = []) => normalizeTranscriptEntry({
+  type: 'assistant',
+  message: {
+    role: 'assistant',
+    content: [
+      ...toolUses.map(({ id, name, input }) => ({ type: 'tool_use', id, name, input })),
+      ...toolResults.map(({ toolUseId, isError }) => ({ type: 'tool_result', tool_use_id: toolUseId, is_error: isError === true, content: 'ok' })),
+    ],
+  },
+}, lineIndex, false);
+
+/** user 条目：纯文本块（harness 注入面，<task-notification> 只从这里认） */
+const userTextEntry = (lineIndex, text) => normalizeTranscriptEntry({
+  type: 'user',
+  message: { role: 'user', content: [{ type: 'text', text }] },
+}, lineIndex, false);
+
+/** user 条目：tool_result 块（真实 wire format 中同步工具回执落在紧随的 user 条目） */
+const userResultEntry = (lineIndex, toolUseId, isError = false) => normalizeTranscriptEntry({
+  type: 'user',
+  message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: isError, content: 'ack' }] },
+}, lineIndex, false);
+
+/** 真实 <task-notification> 文本（wire format 取自 fix-report.md 引用的 F254 transcript 实测） */
+const taskNotification = (taskId, toolUseId) => [
+  '<task-notification>',
+  `<task-id>${taskId}</task-id>`,
+  `<tool-use-id>${toolUseId}</tool-use-id>`,
+  '<status>completed</status>',
+  '</task-notification>',
+].join('\n');
+
+const kinds = (items) => items.map((x) => x.kind).sort();
+
+describe('F256 T008 · extractInFlightDelegationsAfter 规则 1：尾部未消费的同步委派', () => {
+  it('阳性：transcript 以裸 Agent tool_use 收尾且无配对 tool_result → 命中 sync', () => {
+    const entries = [
+      userTextEntry(0, '开始'),
+      assistantEntry(1, [{ id: 'toolu_a', name: 'Agent', input: { subagent_type: 'spec-driver:verify' } }]),
+    ];
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    assert.deepEqual(kinds(items), ['sync']);
+    assert.equal(items[0].id, 'toolu_a');
+    assert.equal(items[0].lineIndex, 1);
+  });
+
+  it('阳性：Task 与 Agent 等价对待（历史/未来工具名同属委派白名单）', () => {
+    const entries = [userTextEntry(0, 'x'), assistantEntry(1, [{ id: 't1', name: 'Task', input: {} }])];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, 0)), ['sync']);
+  });
+
+  it('🔴 阴性回归钉子：未配对的 Agent 之后还有任意后续条目 → 不得命中', () => {
+    // 这条钉子守护 plan.md §5.1 的收窄边界。语义根据：同步 Agent/Task 会阻塞会话轮次直至
+    // tool_result 返回——只要其后还有任何条目，就足以证明它已经解决。
+    //
+    // 若日后放宽为"扫描任意位置的未配对调用"，全仓 25 处既有 TOOL_USE('Agent', …) fixture
+    // （均不附 tool_result，因为委派抽取此前从不需要它）会被集体误判为在途 →
+    // 本该 exit 2 的阻断类用例集体降级 exit 0，是一次隐蔽的大规模 fail-open。
+    for (const trailing of [
+      userTextEntry(2, '随便一条后续用户消息'),
+      normalizeTranscriptEntry({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '' }] } }, 2, false),
+      normalizeTranscriptEntry({ type: 'system' }, 2, false),
+    ]) {
+      const entries = [
+        userTextEntry(0, 'x'),
+        assistantEntry(1, [{ id: 'toolu_a', name: 'Agent', input: {} }]),
+        trailing,
+      ];
+      assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), [], JSON.stringify(trailing.role));
+    }
+  });
+
+  it('阴性：同条目内已有配对 tool_result → 不命中', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      assistantEntry(1, [{ id: 'toolu_a', name: 'Agent', input: {} }], [{ toolUseId: 'toolu_a' }]),
+    ];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), []);
+  });
+
+  it('阴性：末条 Agent 在锚点之前/末条不是 assistant/末条无委派 → 不命中', () => {
+    assert.deepEqual(
+      extractInFlightDelegationsAfter([assistantEntry(1, [{ id: 'a', name: 'Agent', input: {} }])], 5),
+      [], '锚点之后才计入',
+    );
+    assert.deepEqual(
+      extractInFlightDelegationsAfter([userTextEntry(0, 'x'), userTextEntry(1, 'y')], 0),
+      [], '末条非 assistant',
+    );
+    assert.deepEqual(
+      extractInFlightDelegationsAfter([userTextEntry(0, 'x'), assistantEntry(1, [{ id: 'b', name: 'Bash', input: {} }])], 0),
+      [], '非委派工具不计入',
+    );
+  });
+
+  it('阴性：末条 Agent 缺 tool_use id → 不命中（无 id 无法配对，宁可漏判不误放行）', () => {
+    const entries = [userTextEntry(0, 'x'), normalizeTranscriptEntry({
+      type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Agent', input: {} }] },
+    }, 1, false)];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), []);
+  });
+
+  it('空 entries / 非数组入参 → []（不抛出）', () => {
+    for (const bad of [[], null, undefined, 'x', 123]) {
+      assert.deepEqual(extractInFlightDelegationsAfter(bad, 0), [], String(bad));
+    }
+  });
+});
+
+describe('F256 T008 · extractInFlightDelegationsAfter 规则 2：后台委派未收到完成通知', () => {
+  /**
+   * 后台 Agent 派发 + 紧随的 ack tool_result（真实 wire format：后台派发会立刻拿到
+   * "launched in the background…" 回执，完成信号才是后续的 <task-notification>）。
+   * @param {{ack?:boolean, ackIsError?:boolean}} [opts] - 关掉/污染回执以覆盖有效性门槛
+   */
+  const backgroundDispatch = (line, id, { ack = true, ackIsError = false } = {}) => {
+    const out = [assistantEntry(line, [{ id, name: 'Agent', input: { run_in_background: true } }])];
+    if (ack) out.push(userResultEntry(line + 1, id, ackIsError));
+    return out;
+  };
+
+  it('阳性：run_in_background:true + 正常 ack 回执 + 无匹配 <tool-use-id> 通知 → 命中 background', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...backgroundDispatch(1, 'toolu_bg'),
+      userTextEntry(3, '后续消息'),
+    ];
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    assert.deepEqual(kinds(items), ['background']);
+    assert.equal(items[0].id, 'toolu_bg');
+  });
+
+  it('阴性：已收到匹配 <tool-use-id> 的 task-notification → 不命中', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...backgroundDispatch(1, 'toolu_bg'),
+      userTextEntry(3, taskNotification('agent-1', 'toolu_bg')),
+    ];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), []);
+  });
+
+  it('阴性：通知的 tool-use-id 属于**另一个**委派 → 原委派仍在途（配对按 id，不按存在性）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...backgroundDispatch(1, 'toolu_bg'),
+      userTextEntry(3, taskNotification('agent-1', 'toolu_other')),
+    ];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, 0)), ['background']);
+  });
+
+  it('🔴 gaming 边界：后台派发缺少非错误 tool_result 回执时不得计入在途（与规则 3 同一道门槛）', () => {
+    // CRITICAL（第 2 轮）：规则 2 原先只看"有没有完成通知"，不看该派发自身是否被受理。
+    // 于是一次注定失败的后台派发（is_error）或压根没被受理的派发，就足以让门禁永久推迟——
+    // 这是最廉价的自助绕过，且与规则 3 已设的门槛不对等。
+    const noAck = [userTextEntry(0, 'x'), ...backgroundDispatch(1, 'bg', { ack: false }), userTextEntry(3, 'y')];
+    assert.deepEqual(extractInFlightDelegationsAfter(noAck, 0), [], '无回执的后台派发不得制造在途');
+    const errAck = [userTextEntry(0, 'x'), ...backgroundDispatch(1, 'bg', { ackIsError: true }), userTextEntry(3, 'y')];
+    assert.deepEqual(extractInFlightDelegationsAfter(errAck, 0), [], '报错回执的后台派发不得制造在途');
+  });
+
+  it('反伪造：assistant 文本块里的 task-notification 不算完成信号（只认 harness 注入的 user 文本）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...backgroundDispatch(1, 'toolu_bg'),
+      normalizeTranscriptEntry({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: taskNotification('agent-1', 'toolu_bg') }] },
+      }, 3, false),
+    ];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, 0)), ['background'],
+      '模型自陈的完成通知不得让在途消失（那是反向的 fail-open）');
+  });
+
+  it('多个后台委派各自独立计数', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      assistantEntry(1, [
+        { id: 'bg1', name: 'Agent', input: { run_in_background: true } },
+        { id: 'bg2', name: 'Agent', input: { run_in_background: true } },
+      ], [{ toolUseId: 'bg1' }, { toolUseId: 'bg2' }]),
+      userTextEntry(2, taskNotification('agent-1', 'bg1')),
+    ];
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    assert.deepEqual(kinds(items), ['background']);
+    assert.equal(items[0].id, 'bg2');
+  });
+
+  it('🔴 回归钉子：完成通知 id 被换行/缩进包裹时仍须正确配对（否则偏向"继续判在途"=偏向放行）', () => {
+    // TASK_NOTIFICATION_PAIR_REGEX 的 `[^<]+` 会把标签内侧空白一并捕获，不 trim 就配不上真实 id。
+    const padded = '<task-notification>\n<task-id>\n  agent-1\n</task-id>\n<tool-use-id>\n  toolu_bg\n</tool-use-id>\n</task-notification>';
+    const entries = [userTextEntry(0, 'x'), ...backgroundDispatch(1, 'toolu_bg'), userTextEntry(3, padded)];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), [], '换行包裹的 id 必须能与 toolu_bg 配对');
+  });
+});
+
+describe('F256 T008 · extractInFlightDelegationsAfter 规则 3：SendMessage 恢复后台子代理', () => {
+  /** SendMessage(to) 派发 + 紧随的非错误 ack tool_result（真实 wire format） */
+  const sendMessage = (line, id, to, { ack = true, ackIsError = false } = {}) => {
+    const out = [assistantEntry(line, [{ id, name: 'SendMessage', input: { to, message: '继续' } }])];
+    if (ack) out.push(userResultEntry(line + 1, id, ackIsError));
+    return out;
+  };
+
+  it('阳性：派发晚于该 agent 最后一次 <task-id> 通知 → 命中 send-message', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      userTextEntry(1, taskNotification('agent-A', 'toolu_orig')),
+      ...sendMessage(2, 'sm1', 'agent-A'),
+      userTextEntry(4, '后续'),
+    ];
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    assert.deepEqual(kinds(items), ['send-message']);
+    assert.equal(items[0].id, 'agent-A');
+  });
+
+  it('阴性：派发之后已到达该 agent 的新通知 → 不命中', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...sendMessage(1, 'sm1', 'agent-A'),
+      userTextEntry(3, taskNotification('agent-A', 'toolu_orig')),
+    ];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), []);
+  });
+
+  it('阴性：通知属于另一个 agent → 原 agent 仍在途（按 task-id 配对）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...sendMessage(1, 'sm1', 'agent-A'),
+      userTextEntry(3, taskNotification('agent-B', 'toolu_orig')),
+    ];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, 0)), ['send-message']);
+  });
+
+  it('🔴 gaming 边界：派发缺少非错误 tool_result 回执时不得计入在途', () => {
+    // 若不设此门槛，向一个虚构 to 反复 SendMessage 即可让 runHook 永久判"在途"、永不进入阻断路由。
+    // 门槛后攻击者至少需要一次**真实成功**的 SendMessage（harness 落地的非错误回执）。
+    const noAck = [userTextEntry(0, 'x'), ...sendMessage(1, 'sm1', 'ghost-agent', { ack: false }), userTextEntry(3, 'y')];
+    assert.deepEqual(extractInFlightDelegationsAfter(noAck, 0), [], '无回执的派发不得制造在途');
+    const errAck = [userTextEntry(0, 'x'), ...sendMessage(1, 'sm2', 'ghost-agent', { ackIsError: true }), userTextEntry(3, 'y')];
+    assert.deepEqual(extractInFlightDelegationsAfter(errAck, 0), [], '报错回执的派发不得制造在途');
+  });
+
+  it('阴性：SendMessage 缺 to 字段 / to 非字符串 → 不计入', () => {
+    for (const to of [undefined, null, 123, {}]) {
+      const entries = [
+        userTextEntry(0, 'x'),
+        assistantEntry(1, [{ id: 'sm1', name: 'SendMessage', input: { to } }]),
+        userResultEntry(2, 'sm1'),
+        userTextEntry(3, 'y'),
+      ];
+      assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), [], String(to));
+    }
+  });
+
+  it('同一 agent 多次派发按最后一次派发计（取最晚派发 vs 最晚通知）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      ...sendMessage(1, 'sm1', 'agent-A'),
+      userTextEntry(3, taskNotification('agent-A', 'toolu_orig')),
+      ...sendMessage(4, 'sm2', 'agent-A'),
+      userTextEntry(6, 'y'),
+    ];
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    assert.deepEqual(kinds(items), ['send-message'], '末次派发后无通知 → 仍在途');
+    assert.equal(items[0].lineIndex, 4);
+  });
+
+  it('SendMessage 刻意不并入 DELEGATION_TOOL_NAMES：不得被 extractDelegationsAfter 计为委派', () => {
+    // "派了工"（SendMessage 触发恢复）与"收了工"（子代理完成收口）是两个不同断言。
+    // 把它计入委派会让「派一条消息」直接顶替「验证闭环已完成」，反而削弱合规判据。
+    const entries = [userTextEntry(0, 'x'), ...sendMessage(1, 'sm1', 'agent-A'), userTextEntry(3, 'y')];
+    assert.deepEqual(extractDelegationsAfter(entries, 0), []);
+  });
+});
+
+describe('F256 T008 · extractInFlightDelegationsAfter：窗口/正交/性能', () => {
+  it('锚点窗口：锚点之前的委派与通知一律不参与判定', () => {
+    const entries = [
+      assistantEntry(0, [{ id: 'old', name: 'Agent', input: { run_in_background: true } }]),
+      userTextEntry(1, 'Base directory for this skill: /w/skills/spec-driver-fix'),
+      userTextEntry(2, '之后'),
+    ];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 1), []);
+  });
+
+  it('anchorLineIndex 非数字（null/undefined）→ 按 -1 处理，全量窗口', () => {
+    const entries = [
+      assistantEntry(0, [{ id: 'bg', name: 'Agent', input: { run_in_background: true } }], [{ toolUseId: 'bg' }]),
+      userTextEntry(1, 'y'),
+    ];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, null)), ['background']);
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, undefined)), ['background']);
+  });
+
+  it('三条规则可同时命中且互不吞并', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      assistantEntry(1, [{ id: 'bg', name: 'Agent', input: { run_in_background: true } }], [{ toolUseId: 'bg' }]),
+      assistantEntry(2, [{ id: 'sm1', name: 'SendMessage', input: { to: 'agent-A' } }]),
+      userResultEntry(3, 'sm1'),
+      assistantEntry(4, [{ id: 'sync1', name: 'Agent', input: {} }]),
+    ];
+    assert.deepEqual(kinds(extractInFlightDelegationsAfter(entries, 0)), ['background', 'send-message', 'sync']);
+  });
+
+  it('健康会话（委派全部收口）→ 空数组：本判定对既有健康路径零介入', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      assistantEntry(1, [{ id: 'a1', name: 'Agent', input: { subagent_type: 'spec-driver:implement' } }]),
+      userResultEntry(2, 'a1'),
+      assistantEntry(3, [{ id: 'a2', name: 'Agent', input: { subagent_type: 'spec-driver:verify' } }]),
+      userResultEntry(4, 'a2'),
+      normalizeTranscriptEntry({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '完成' }] } }, 5, false),
+    ];
+    assert.deepEqual(extractInFlightDelegationsAfter(entries, 0), []);
+  });
+
+  it('性能/无回溯：5 万条噪声 task-notification 文本单遍扫描 < 500ms', () => {
+    // 判定器跑在同步 Stop hook 上，F227（O(N²) 候选历史）与 F231（灾难性回溯）均有 DoS 前科。
+    // 通知正则 `[^<]+` 由下一个 `<` 天然止界，无嵌套量词；本用例是其线性性的回归锚点。
+    const noise = `${taskNotification('agent-noise', 'toolu_noise')}\n${'<'.repeat(200)}${'x'.repeat(2000)}`;
+    const entries = [userTextEntry(0, 'x')];
+    for (let i = 1; i <= 50000; i += 1) entries.push(userTextEntry(i, noise));
+    entries.push(assistantEntry(50001, [{ id: 'tail', name: 'Agent', input: {} }]));
+    const t0 = Date.now();
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    const cost = Date.now() - t0;
+    assert.deepEqual(kinds(items), ['sync']);
+    assert.ok(cost < 500, `耗时 ${cost}ms`);
+  });
+
+  it('性能/线性：5 万后台委派 × 5 万完成通知不得退化为二次扫描（< 1000ms）', () => {
+    // 后台委派数与通知数**各自独立增长**，逐条 Array.some 会构成 O(委派数 × 通知数)——
+    // 20MB transcript 上限下两者都可达 10^5 量级，二次扫描足以让同步 Stop hook 挂死
+    // （F227 已有 O(N²) 候选历史导致 11.8s 阻塞的前科）。本用例是该线性性的回归锚点。
+    //
+    // N 的取值经实测校准：把 Set 查表换回 `Array.some` 后本用例必须变红才算真守卫——
+    // N=2 万时二次实现耗时 ~0.76s 仍在 1s 预算内（守不住），N=5 万时二次实现约 4-5s、
+    // 线性实现约 0.1s，两侧相差一个数量级，判据才有区分力。
+    const N = 50000;
+    const entries = [userTextEntry(0, 'x')];
+    for (let i = 1; i <= N; i += 1) {
+      // ack 回执与派发同条目：有效性门槛（第 2 轮 1a）要求非错误回执，否则不计在途
+      entries.push(assistantEntry(i, [{ id: `bg${i}`, name: 'Agent', input: { run_in_background: true } }], [{ toolUseId: `bg${i}` }]));
+    }
+    // 通知全部指向另一批 id：一条都配不上 → 强制走满全部查表，杜绝"提前命中"掩盖复杂度
+    for (let i = 1; i <= N; i += 1) entries.push(userTextEntry(N + i, taskNotification(`ag${i}`, `other${i}`)));
+    const t0 = Date.now();
+    const items = extractInFlightDelegationsAfter(entries, 0);
+    const cost = Date.now() - t0;
+    assert.equal(items.length, N);
+    assert.ok(cost < 1000, `耗时 ${cost}ms —— 疑似退化为二次扫描`);
+  });
+
+  it('I4 静态守卫：函数体内零 I/O（core 层纯函数契约）', () => {
+    const body = extractInFlightDelegationsAfter.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/\brequire\s*\(/.test(body), false, body);
+    assert.equal(/process\.env/.test(body), false, body);
+  });
+});
+
+// ────────────────────────────────────────
+// F256 第 2 轮 · isDeferrableMissingSet（推迟的第一道闸门：缺口必须由在途工作可关闭）
+// ────────────────────────────────────────
+
+describe('F256 R2 · isDeferrableMissingSet：只有在途工作关得掉的缺口才配推迟', () => {
+  it('白名单四项逐项单独出现时均可推迟（遍历常量，防日后删项无人察觉）', () => {
+    assert.deepEqual([...DEFERRABLE_MISSING_KEYS].sort(), [
+      'delegation:implement',
+      'delegation:noop-verify',
+      'delegation:verify',
+      'verification-report.md',
+    ]);
+    for (const key of DEFERRABLE_MISSING_KEYS) {
+      assert.equal(isDeferrableMissingSet([key]), true, key);
+    }
+  });
+
+  it('白名单内多项组合仍可推迟 —— 含 F254 的正样本 ["verification-report.md","delegation:verify"]', () => {
+    // 🔴 这是本 Feature 的正样本（F254 16:32 stop 的真实 missing），收窄闸门不得误伤它。
+    assert.equal(isDeferrableMissingSet(['verification-report.md', 'delegation:verify']), true);
+    assert.equal(isDeferrableMissingSet(['delegation:implement', 'delegation:verify']), true);
+  });
+
+  it('全称而非存在：混入任一非白名单项即整体不可推迟', () => {
+    // 实测 174 个不合规 fix 会话中 9 个（5.2%）的 missing 是 ["feature-dir","fix-report.md"]，
+    // 这两项由主线程自己产出，子代理回收再多次也不会补上 → 推迟纯属延误。
+    assert.equal(isDeferrableMissingSet(['feature-dir', 'fix-report.md']), false);
+    assert.equal(isDeferrableMissingSet(['verification-report.md', 'feature-dir']), false);
+    assert.equal(isDeferrableMissingSet(['delegation:verify', 'artifact:placeholder']), false);
+    assert.equal(isDeferrableMissingSet(['noop:judgment-section', 'delegation:noop-verify']), false);
+  });
+
+  it('MISSING_ACTION_TEXT 的其余枚举一律不可推迟（新增枚举默认 fail-closed）', () => {
+    const nonDeferrable = Object.keys(MISSING_ACTION_TEXT).filter((k) => !DEFERRABLE_MISSING_KEYS.includes(k));
+    assert.ok(nonDeferrable.length > 0);
+    for (const key of nonDeferrable) {
+      assert.equal(isDeferrableMissingSet([key]), false, key);
+    }
+  });
+
+  it('空集 / 非数组 → false（不合规必有缺口，空集属上游异常，此时不推迟）', () => {
+    for (const bad of [[], null, undefined, 'verification-report.md', 123, {}]) {
+      assert.equal(isDeferrableMissingSet(bad), false, String(bad));
+    }
+  });
+
+  it('I4 静态守卫：纯函数零 I/O', () => {
+    const body = isDeferrableMissingSet.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/process\.env/.test(body), false, body);
   });
 });

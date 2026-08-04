@@ -25,6 +25,9 @@ import {
   detectTranscriptDialect,
   FOREIGN_DIALECT_DIAGNOSTICS,
   extractDelegationsAfter,
+  extractInFlightDelegationsAfter,
+  isDeferrableMissingSet,
+  extractFixShortName,
   resolveFeatureDirCandidate,
   classifyClosureForm,
   extractExecutionRecordsAfter,
@@ -39,6 +42,7 @@ import {
   findAndParseConfig,
   appendAuditEvent,
   checkFeatureDirOnDisk,
+  listFeatureDirCandidatesByShortName,
   readArtifactFile,
   loadBlockState,
   saveBlockState,
@@ -53,6 +57,22 @@ const PREFIX_DEGRADED = '[FIX-COMPLIANCE][GATE-DEGRADED]';
 
 /** 会话内不合规阻断上限（FR-006）：达到后降级放行 */
 const BLOCK_LIMIT = 2;
+
+/**
+ * 会话内"在途推迟"次数上限（F256 第 2 轮 CRITICAL-1b）：达到后不再推迟，恢复正常裁决。
+ *
+ * why 必须有界：推迟的安全性原本论证为"每个在途委派最终都会回收通知，届时在途集合已空"，
+ * 该前提**已被实测证伪**——本机 2466 份 transcript 中 202 次后台派发有 43 次（21.3%）
+ * 回执正常但完成通知从未到达。无界推迟等于给出一条自然发生率就有两成的永久放行通道。
+ *
+ * why 取 3：与 BLOCK_LIMIT=2 同源的"给足补救余量再收口"取向，且须覆盖真实在途停顿——
+ * 本 Feature 取证的 F254 交付会话共 3 次 stop 命中在途（见 fix-report.md「检测判据」表的签名 B
+ * 三行，测试以截断回放逐行钉死），取 3 恰好覆盖该实况。上限之外，"永不回收"的委派最多推迟
+ * 3 次即恢复裁决——加上 BLOCK_LIMIT 的 2 次阻断，单会话最坏路径仍在有限步内收敛。
+ * 刻意与 blockCount **分列计数**：推迟不消耗阻断预算，否则在途停顿会白白烧掉阻断额度，
+ * 使真正需要阻断时已降级放行。
+ */
+const IN_FLIGHT_DEFER_LIMIT = 3;
 
 // ────────────────────────────────────────
 // 参数解析
@@ -100,6 +120,7 @@ function readStdinSync() {
  *   isFix:boolean, mode:string|null,
  *   transcriptDiagnostics:string[],
  *   verdict:object|null,
+ *   inFlightDelegations?:{kind:string,id:string,lineIndex:number}[],
  * }}
  */
 function evaluate(projectRoot, transcriptPath, cfg = null) {
@@ -180,6 +201,36 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
       }
     }
     // 循环内一个都没命中 → resolvedPath 保持初值 candidate.path（含 null）：完全回落现状
+
+    // F256 盲区 1：上面的候选历史兜底仍未命中 + 原始主候选是明确的 specs/NNN-fix-<short> 形态时，
+    // 按 short-name 在磁盘上重新枚举——覆盖 Feature 编号被复合命令（`cd … && git mv A B && …`）
+    // 重编、而 F231 刻意不跟随复合命令改名事件的场景：候选于是永久停在已从磁盘消失的旧编号路径，
+    // transcript 侧再无重锚定手段，判定器拿死路径撞核验，把"目录改了名"误判成"目录不存在"。
+    //
+    // 安全边界：仅当 candidate.path !== null 时才取 short-name——这确保 short-name 来自 transcript
+    // 中一个明确被提名过的具体候选，而非从 ambiguous 状态或空候选反推，维持与 F227 相同的
+    // "提名≠判据，磁盘核验才采信"原则；short-name 要求**完全相等**，不做模糊匹配，候选无法漂移到
+    // 无关特性；采信前仍过同一个 usable() 谓词（须含 fix-report.md）。
+    //
+    // 单调性（与上方 F227 论证同一套不变量，逐条复核）：ambiguous===true 时外层 if 就不进入；
+    // 主候选可用或历史兜底已命中时 !usable(resolvedPath) 为假、本段不执行；只有"主候选不可用 +
+    // 历史兜底未命中 + 短名磁盘命中制品齐全目录"这一狭窄交集才改变 resolvedPath，且只可能把
+    // "改动前阻断"转为"改动后放行"，不产生新的误阻断。
+    //
+    // 已知限界（如实登记，非本次消除）：这把 F227「已知限界一」（冒用磁盘上已存在且制品齐全的
+    // 历史目录）从"必须精确提名该目录"放宽到"提名同 short-name 的任一编号"。属被接受限界的边际
+    // 扩大而非新开攻击面——冒用者原本直接提名目标目录即可达成同样效果，无需借道本兜底。
+    if (!usable(resolvedPath) && candidate.path !== null) {
+      const shortName = extractFixShortName(candidate.path);
+      if (shortName !== null) {
+        // `.filter(usable)` 是承重判据而非防御性冗余：磁盘上同 short-name 的目录里完全可能存在
+        // 编号更大的**空壳**（重编时先建新目录、制品尚未迁入，或撞号后被弃用的空目录）。
+        // 不过滤就会选中空壳、把"制品其实齐备"错判成"缺少诊断报告"——恰是本 Feature 要修的误报。
+        const diskMatches = listFeatureDirCandidatesByShortName(projectRoot, shortName).filter(usable);
+        // 取编号最大的**可用**者 = 重编链末端里制品齐备的那个（枚举已按编号升序，见 io 层排序注释）
+        if (diskMatches.length > 0) resolvedPath = diskMatches[diskMatches.length - 1];
+      }
+    }
   }
 
   // F224 FR-004/FR-005：候选目录确已失效但新位置无法机械定位（如改名到非 NNN-fix-<name> 目录）。
@@ -248,9 +299,14 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     };
   }
 
+  // F256 盲区 2：复用已解析的 entries/锚点求"在途委派"（零额外磁盘/transcript 读取）。
+  // 本字段只描述事实（锚点后是否还有未回收的在途工作），不参与 verdict 本身；
+  // 如何使用它（推迟裁决）由 runHook 决定。
+  const inFlightDelegations = extractInFlightDelegationsAfter(entries, anchor.anchorLineIndex);
+
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
-    transcriptDiagnostics: [], verdict,
+    transcriptDiagnostics: [], verdict, inFlightDelegations,
   };
 }
 
@@ -307,9 +363,10 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
 
 /**
  * 处理不合规 + block 档：阻断计数路由（FR-006 有界化）。
+ * @param {string[]} [extraDiagnostics] - 上游路由追加的诊断码（如在途预算耗尽）
  * @returns {number} 退出码
  */
-function routeBlock(projectRoot, sessionId, verdict) {
+function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
   const loaded = loadBlockState(projectRoot, sessionId);
   const count = loaded.blockCount;
 
@@ -319,10 +376,12 @@ function routeBlock(projectRoot, sessionId, verdict) {
     const saved = saveBlockState(projectRoot, sessionId, {
       blockCount: nextCount,
       degradedRecorded: loaded.degradedRecorded,
+      // saveBlockState 是整体覆写：本路径不改在途预算，必须原样带回，否则会被抹平为 0
+      inFlightDeferCount: loaded.inFlightDeferCount,
     });
     if (saved.ok) {
       appendAuditEvent(projectRoot, buildAuditEvent({
-        sessionId, enforcement: 'block', verdict, blockCount: nextCount, degraded: false,
+        sessionId, enforcement: 'block', verdict, blockCount: nextCount, degraded: false, extraDiagnostics,
       }));
       process.stderr.write(`${PREFIX_BLOCK} ${buildFeedbackText(verdict.missing)}\n`);
       return 2;
@@ -331,6 +390,8 @@ function routeBlock(projectRoot, sessionId, verdict) {
     return releaseDegraded(projectRoot, sessionId, verdict, {
       alreadyRecorded: false,
       storageUnavailable: true,
+      inFlightDeferCount: loaded.inFlightDeferCount,
+      extraDiagnostics,
     });
   }
 
@@ -338,6 +399,8 @@ function routeBlock(projectRoot, sessionId, verdict) {
   return releaseDegraded(projectRoot, sessionId, verdict, {
     alreadyRecorded: loaded.degradedRecorded,
     storageUnavailable: false,
+    inFlightDeferCount: loaded.inFlightDeferCount,
+    extraDiagnostics,
   });
 }
 
@@ -345,8 +408,13 @@ function routeBlock(projectRoot, sessionId, verdict) {
  * 降级放行：exit 0 + [GATE-DEGRADED] reason + 幂等终态双写（首次）或轻量审计（重复）。
  * @returns {number} 恒 0
  */
-function releaseDegraded(projectRoot, sessionId, verdict, { alreadyRecorded, storageUnavailable }) {
-  const extraDiagnostics = storageUnavailable ? ['state-storage-unavailable'] : [];
+function releaseDegraded(projectRoot, sessionId, verdict, {
+  alreadyRecorded, storageUnavailable, inFlightDeferCount = 0, extraDiagnostics: upstreamDiagnostics = [],
+}) {
+  const extraDiagnostics = [
+    ...upstreamDiagnostics,
+    ...(storageUnavailable ? ['state-storage-unavailable'] : []),
+  ];
   const blockCount = BLOCK_LIMIT;
   // 存储不可用无法读写幂等标记 → 允许重复终态（宁可可审计不可静默丢失，research.md D2/D4）
   const shouldWriteTerminal = storageUnavailable || !alreadyRecorded;
@@ -372,7 +440,8 @@ function releaseDegraded(projectRoot, sessionId, verdict, { alreadyRecorded, sto
     }
     // 首次降级成功后置幂等标记（存储可用时才有意义）
     if (!storageUnavailable) {
-      saveBlockState(projectRoot, sessionId, { blockCount, degradedRecorded: true });
+      // 同样是整体覆写：在途预算须原样带回（见 saveBlockState JSDoc）
+      saveBlockState(projectRoot, sessionId, { blockCount, degradedRecorded: true, inFlightDeferCount });
     }
   }
 
@@ -441,16 +510,59 @@ function runHook(projectRoot, payload) {
 
   const sessionId = payload.session_id;
 
+  // F256 盲区 2：判定时机未到——存在在途委派时**有界地**推迟裁决，不消耗阻断预算。
+  //
+  // 放行=推迟而非豁免，但这一语义**只在推迟有界时成立**。第 1 轮实现曾论证"每个在途委派最终都会
+  // 回收完成通知，届时在途集合已空"，该前提已被实测证伪（202 次后台派发中 43 次、21.3% 的通知
+  // 从未到达，见 IN_FLIGHT_DEFER_LIMIT 的 JSDoc）。故推迟由两道闸门共同约束：
+  //   闸门一（可推迟性 / isDeferrableMissingSet）：缺口必须**全部**是在途工作有可能关闭的类型。
+  //     feature-dir、fix-report.md 是主线程自己该产出的制品，子代理回收再多次也不会补上它们，
+  //     对这类缺口推迟纯属延误（实测 174 个不合规会话中 9 个、5.2% 曾因此被静默推迟）。
+  //   闸门二（次数预算 / IN_FLIGHT_DEFER_LIMIT）：与 blockCount 分列的独立计数，
+  //     耗尽后恢复正常裁决并在审计事件里留 delegation-in-flight-budget-exhausted。
+  //
+  // 三条不推迟的出口都**方向一致地落回正常裁决**（fail-closed）：缺口不可推迟 / 预算耗尽 /
+  // 计数持久化失败。其中持久化失败必须不推迟——维持不了计数就不能开推迟通道，
+  // 与 routeBlock 里"存储不可用即等同已达上限"的既有取舍同源。
+  //
+  // 插入点在 compliant 早退之后、warn 分支之前，对 block/warn 两档一视同仁：warn 档本就 exit 0，
+  // 但若落在其后会把"时机未到"误记为"真实不合规"审计事件。两档退出码语义均不变，仅审计更准确。
+  const hasInFlight = Array.isArray(result.inFlightDelegations) && result.inFlightDelegations.length > 0;
+  const deferExtraDiagnostics = [];
+  if (hasInFlight && isDeferrableMissingSet(result.verdict.missing)) {
+    const loaded = loadBlockState(projectRoot, sessionId);
+    if (loaded.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT) {
+      // 先持久化再推迟：计数写不进去就等于没有上界，此时宁可照常裁决
+      const saved = saveBlockState(projectRoot, sessionId, {
+        blockCount: loaded.blockCount,               // 推迟不动阻断预算（整体覆写，须原样带回）
+        degradedRecorded: loaded.degradedRecorded,
+        inFlightDeferCount: loaded.inFlightDeferCount + 1,
+      });
+      if (saved.ok) {
+        appendAuditEvent(projectRoot, buildAuditEvent({
+          sessionId, enforcement: result.enforcement, verdict: result.verdict,
+          blockCount: null, degraded: false, extraDiagnostics: ['delegation-in-flight'],
+        }));
+        process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing, { diagnostics: ['delegation-in-flight'] })}\n`);
+        return 0;
+      }
+      deferExtraDiagnostics.push('state-storage-unavailable');
+    } else {
+      deferExtraDiagnostics.push('delegation-in-flight-budget-exhausted');
+    }
+  }
+
   if (result.enforcement === 'warn') {
     appendAuditEvent(projectRoot, buildAuditEvent({
       sessionId, enforcement: 'warn', verdict: result.verdict, blockCount: null, degraded: false,
+      extraDiagnostics: deferExtraDiagnostics,
     }));
     process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing)}\n`);
     return 0;
   }
 
   // enforcement=block
-  return routeBlock(projectRoot, sessionId, result.verdict);
+  return routeBlock(projectRoot, sessionId, result.verdict, deferExtraDiagnostics);
 }
 
 // ────────────────────────────────────────
@@ -465,6 +577,8 @@ function runReport(projectRoot, transcriptPath) {
     enforcement: result.enforcement,
     configDegraded: result.configDegraded,
     transcriptDiagnostics: result.transcriptDiagnostics,
+    // F256 盲区 2：在途委派事实透传，供 --mode report 端到端复现与事后审计核对
+    inFlightDelegations: result.inFlightDelegations || [],
     ...(result.verdict || {}),
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);
