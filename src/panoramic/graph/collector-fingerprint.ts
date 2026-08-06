@@ -86,8 +86,14 @@ const SUPPORTED_FORMAT_VERSION = 1;
  *   `.git/info/exclude`、全局 excludesFile 与 tracked 豁免），既有图产物的采集面口径已变，
  *   必须整体归 stale 后重建。（F258 措辞收口：此处原写"以 git 本体为事实源"，那句把两个回答
  *   不同问题的 git 命令混为一谈，盲区见 `src/utils/gitignore-oracle.ts` 文件头。）
+ * - 3 ← 2（F259）：`collector-fingerprint-guardrail` fixture 基线扩充（新增
+ *   `src/py/producer.py`/`consumer.py`，补齐 `#2 pyWalk` 管线对 depends-on/calls 边的独占
+ *   覆盖样本，修补探针 C 证实的护栏盲区）。**非**采集器代码行为变化（六类 responsibility 均不
+ *   适用，本身不改 `extensionSurface`）——是 fixture 本身作为"护栏验证的行为契约基线"，
+ *   其内容变更依 `shouldRejectRegen` 判据的既定设计同样需要 bump 留痕，见
+ *   `scripts/lib/collector-fingerprint-regen-predicate.mjs` 顶部 Q1 处置说明。
  */
-export const BEHAVIOR_VERSION = 2;
+export const BEHAVIOR_VERSION = 3;
 
 /**
  * `BEHAVIOR_VERSION` 的 bump 责任范围（FR-004 六类条件）。

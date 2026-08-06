@@ -30,6 +30,10 @@ import {
 } from '../../../src/collector-surface.js';
 import { buildAstGraphOnly } from '../../../src/batch/batch-orchestrator.js';
 import { buildModuleGraphForProject } from '../../../src/knowledge-graph/module-derivation.js';
+import { buildUnifiedGraph } from '../../../src/knowledge-graph/index.js';
+import { collectTsJsCodeSkeletons } from '../../../src/batch/stages/source-discovery.js';
+import { collectGenericLanguageCodeSkeletons } from '../../../src/batch/generic-language-skeleton-collector.js';
+import { PythonLanguageAdapter } from '../../../src/adapters/python-adapter.js';
 import {
   BEHAVIOR_VERSION,
   computeCollectorFingerprint,
@@ -167,6 +171,28 @@ describe('a-track：graph-only 重建 vs pinned 期望（FR-005 / SC-005(b)）',
     ]) {
       expect(fileNodeIds).toContain(expected);
     }
+  });
+
+  // F259 T009：护栏对 `#2 pyWalk` 管线此前零独占覆盖（探针 C：整体剔除 pythonSkeletons 后
+  // 护栏仍 20/20 全绿）——mod.py/mod.pyi 样本无 import/callSite，两条生产者（#2 pyWalk /
+  // #11 pythonSymbolScan）在节点面完全重合，`#2` 唯一能独占贡献的 calls/depends-on 边面因此
+  // 是空的。producer.py/consumer.py 构成真实 py→py import + call，`#11`（extractSymbolNodes）
+  // 结构上不读取 imports/callSites，产不出这两条边——断言具体端点而非仅"边数非空"（P10 纪律）。
+  it('#2 pyWalk 独占贡献 py→py 的 depends-on 与 calls 边（探针 C 边面覆盖，禁止仅断言非空）', () => {
+    expect(rebuiltGraph.links).toContainEqual(
+      expect.objectContaining({
+        source: 'src/py/consumer.py',
+        target: 'src/py/producer.py',
+        relation: 'depends-on',
+      }),
+    );
+    expect(rebuiltGraph.links).toContainEqual(
+      expect.objectContaining({
+        source: 'src/py/consumer.py::use',
+        target: 'src/py/producer.py::make',
+        relation: 'calls',
+      }),
+    );
   });
 
   // 扩面后 b-track 的存在理由需要重新锚定：a-track 仍**看不到** `.mts`/`.cts`
@@ -387,4 +413,64 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
 
   // ③ 拒绝纯函数真值表：见 tests/unit/collector-fingerprint-regen-predicate.test.ts
   //   （`shouldRejectRegen` 2×2 全覆盖 + `selectRegenDiagnostic` 分流），本文件不重复实现。
+});
+
+describe('F259 T013 — 验证 #2 pyWalk 是 py→py depends-on/calls 边的唯一生产者（隔离对照，探针 C 永久等价用例）', () => {
+  // fix-report 探针 C 的做法是临时改 graph-assembly.ts 源码把 pythonSkeletons 整体剔除。
+  // plan.md Complexity Tracking 明确不采用该做法做永久回归（生产源码结构一旦调整测试会静默
+  // 失效或需同步改生产代码）。这里改用「合法公开 API 用法」复现同等因果链：直接调用
+  // collectTsJsCodeSkeletons + collectGenericLanguageCodeSkeletons（显式不调用
+  // collectPythonCodeSkeletons），把结果喂给 buildUnifiedGraph——效果等价于「#2 pyWalk
+  // 未运行」，不 monkey-patch 任何生产源码内部结构。
+  //
+  // 内部对抗复审 C4 澄清：本用例只证明"buildUnifiedGraph 不吃 python skeleton 就产不出这两条
+  // 边"——这是 buildUnifiedGraph 与 #11（extractSymbolNodes）两条互不相交调用路径的必然结果，
+  // 本身是同义反复，不构成"#2 是这两条边的唯一生产者"的独立证据。真正的风险点是：#11 未来若
+  // 被扩展为也产 calls/depends-on（例如为了功能对齐），`buildKnowledgeGraph` 按
+  // `source|target|relation` 去重合并两路 edges，届时即便 #2 整条管线被删，边仍会"复活"，
+  // 探针 C 与本用例都会失去意义。下方新增的正向不变量钉死用例（钉死 #11 当前只产 contains）
+  // 才是真正堵住这个复发路径的护栏——一旦有人给 #11 加上 calls/depends-on 产出能力，改动当下
+  // 就会 fail-loud，而不是要等到有人手滑删掉 #2 才被发现。
+  it('排除 python codeSkeletons 后，producer/consumer 的 depends-on/calls 边缺失', async () => {
+    const staged = stageFixture();
+    const tsJsSkeletons = await collectTsJsCodeSkeletons(staged, { extractCallSites: true });
+    const genericSkeletons = await collectGenericLanguageCodeSkeletons(staged);
+    const codeSkeletons = new Map([...tsJsSkeletons, ...genericSkeletons]);
+
+    const graph = buildUnifiedGraph({ projectRoot: staged, codeSkeletons });
+
+    const hasDependsOn = graph.edges.some(
+      (e) =>
+        e.source === 'src/py/consumer.py' &&
+        e.target === 'src/py/producer.py' &&
+        e.relation === 'depends-on',
+    );
+    const hasCalls = graph.edges.some(
+      (e) =>
+        e.source === 'src/py/consumer.py::use' &&
+        e.target === 'src/py/producer.py::make' &&
+        e.relation === 'calls',
+    );
+    expect(hasDependsOn).toBe(false);
+    expect(hasCalls).toBe(false);
+    // 佐证：py 相关节点也完全不存在（codeSkeletons 里根本没有 python 文件），
+    // 与探针 C「节点仍存在（由 #11 单独产出），边面为空」的现象在本用例的收窄输入下
+    // 进一步简化为「节点边皆无」——因为本用例连 #11 的输出也未合并，只验证 #2 这一路的
+    // 独占贡献，不依赖 #11 是否参与。
+    const pyNodeIds = graph.nodes.filter((n) => n.id.startsWith('src/py/'));
+    expect(pyNodeIds).toEqual([]);
+  });
+
+  // F259 内部对抗复审 C4 —— 正向不变量钉死：#11 pythonSymbolScan（extractSymbolNodes）当前
+  // 结构上只读 skeleton.exports 派生 module→component 的 contains 边，从不读取
+  // imports/callSites。这是「#2 独占贡献 depends-on/calls」这一事实成立的**前提**，但此前
+  // 全仓无测试把这条前提钉死——一旦未来有人给 #11 加上 depends-on/calls 产出能力，
+  // `buildKnowledgeGraph` 按 `source|target|relation` 去重合并两路 edges，即便整条 #2 管线
+  // 被误删，边仍会由 #11 补上，掩码原样复发，且上面的探针/隔离对照两个用例都感知不到这一幕。
+  it('#11 extractSymbolNodes 当前只产 contains 边（钉死前提，防止未来给 #11 加边后掩码复发）', async () => {
+    const staged = stageFixture();
+    const results = await new PythonLanguageAdapter().extractSymbolNodes(staged);
+    const relations = new Set(results.flatMap((r) => r.edges.map((e) => e.relation)));
+    expect(relations).toEqual(new Set(['contains']));
+  });
 });

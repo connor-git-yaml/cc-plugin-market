@@ -269,7 +269,30 @@ export function buildImportIndex(
       // 把 moduleSpecifier 的最后一段 + 整个 module 作为 alias 兜底。
       // F242：绑定名存在即说明「无绑定可用」前提不成立，不再造 lastSeg 猜测别名
       // （对 './commands/scaffold-kb.js' 这类 specifier，lastSeg 是 'js' 之类的垃圾）。
-      if (!hasBindingNames(imp)) {
+      // F259：兜底成立的前提是「moduleSpecifier 是点分模块名」（Python 语义），仅当
+      // `imp.importType === undefined` 时该前提可能成立 —— TS/JS 两条抽取路径（ts-morph
+      // 主路径 + tree-sitter 降级路径）恒会显式设置 importType（'static'/'dynamic'/
+      // 'type-only'/'commonjs-require' 四选一），Python/Java/Go 三条路径恒不设置。
+      // 用字段存在性而非值枚举判定：`commonjs-require` 的 specifier 是路径字面量，
+      // lastSeg 恒为文件扩展名（'js'/'json'…），会无条件覆盖同名静态绑定产出确定性假边；
+      // 未来 TS/JS 抽取层新增第 5 个 ImportSemanticType 值时自动纳入拦截范围，无需
+      // 在此同步追加枚举条目（root cause 正是枚举式判据漏判 commonjs-require）。
+      //
+      // ⚠️ 「tree-sitter 降级路径恒会显式设置 importType」不是 mapper 自身的结构性保证，
+      // 是**两个函数协同**才成立的隐式耦合（内部对抗复审 W2 核实，2026-08-06）：
+      // `typescript-mapper.ts::_extractImportStatement`（静态 import_statement 分支）
+      // 返回的 `ImportReference` 本身**不含** `importType` 字段；该字段是调用方
+      // `tree-sitter-analyzer.ts::analyze()` 内联执行的 `postProcessTsJsImports()`
+      // （仅当 `language === 'typescript' | 'javascript'` 时触发）事后回填的
+      // （`importType: imp.importType ?? (imp.isTypeOnly ? 'type-only' : 'static')`）。
+      // dynamic/commonjs-require 两类由 `_extractCallExpressionImport`（CRIT-3）直接产出时
+      // 自带 `importType`，不依赖 postProcess 回填。这条不变量目前靠"全仓唯一调用点"维持，
+      // 不是 mapper 输出契约本身承诺的——若未来出现绕过 `analyze()` 直接消费
+      // `typescript-mapper.extractImports()` 裸产出的新调用路径，这条前提会静默失效
+      // （回退到 Python 语义分支，重新产出确定性假边）。已配套永久用例
+      // （`call-resolver.test.ts` "F259 裁定 3 补充"）直接调用
+      // `TreeSitterAnalyzer.getInstance().analyze()` 钉死当前该不变量成立。
+      if (!hasBindingNames(imp) && imp.importType === undefined) {
         registerSpecifierFallback(imp, target, aliasToTarget);
       }
     }

@@ -9,6 +9,10 @@
  * - MRO 死循环防御（EC-4）
  */
 import { describe, expect, it } from 'vitest';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 import {
   resolveCalls,
@@ -19,6 +23,9 @@ import {
   extractClassName,
   type CallSiteWithFile,
 } from '../../../src/knowledge-graph/call-resolver.js';
+import { deriveImportEdges } from '../../../src/knowledge-graph/index.js';
+import { collectTsJsCodeSkeletons } from '../../../src/batch/stages/source-discovery.js';
+import { TreeSitterAnalyzer } from '../../../src/core/tree-sitter-analyzer.js';
 import type { CodeSkeleton } from '../../../src/models/code-skeleton.js';
 
 // ───────────────────────────────────────────────────────────
@@ -1781,5 +1788,189 @@ describe('F242 复审轮 修复 2 — dynamic 无绑定项跳过 specifier 兜�
     expect(info?.aliasToTarget.get('numpy')).toBe('site/numpy/__init__.py');
     expect(info?.aliasToTarget.get('path')).toBe('site/os/path.py');
     expect(info?.aliasToTarget.get('os.path')).toBe('site/os/path.py');
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F259 — commonjs-require 兜底别名覆写同名静态绑定（确定性假边收口）
+//
+// fix-report.md 缺陷 1：registerSpecifierFallback 的调用闸此前只挡 `importType === 'dynamic'`，
+// `commonjs-require` 走同一路径无闸 —— require('./dep.js') 的 lastSeg 'js' 会无条件覆盖
+// 同名静态绑定 `import { js } from './lit.js'`，产出两端皆真实节点、能存活 graph-builder
+// 悬空过滤的确定性假边。判据从「importType 值枚举」改为「imp.importType === undefined」这一
+// 结构性存在性判据（TS/JS 两条抽取路径恒设置该字段，Python/Java/Go 三条路径恒不设置，见
+// plan.md 判据设计表逐路径核实），避免新增 ImportSemanticType 枚举值时重蹈值枚举漏判覆盖。
+// ───────────────────────────────────────────────────────────
+
+describe('F259 — commonjs-require 兜底别名覆写同名静态绑定（确定性假边）', () => {
+  function mkCallerWithRequireCollision(): Map<string, CodeSkeleton> {
+    return mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './lit.js',
+            isRelative: true,
+            resolvedPath: 'src/lit.ts',
+            namedImports: ['js'],
+            isTypeOnly: false,
+            importType: 'static',
+          },
+          {
+            moduleSpecifier: './dep.js',
+            isRelative: true,
+            resolvedPath: 'src/dep.ts',
+            isTypeOnly: false,
+            importType: 'commonjs-require',
+          },
+        ],
+      }),
+    ]);
+  }
+
+  it("(a) require('./dep.js') 不得覆盖同名静态绑定 alias `js`（复刻 fix-report 探针）", () => {
+    const skeletons = mkCallerWithRequireCollision();
+    const info = buildImportIndex(skeletons).get('src/caller.ts');
+    expect(info?.aliasToTarget.get('js')).toBe('src/lit.ts');
+  });
+
+  it("(b) `js()` 调用产出的边指向静态绑定目标，不产出指向 require 目标的 `::js` 假边", () => {
+    const skeletons = mkCallerWithRequireCollision();
+    const calls: CallSiteWithFile[] = [
+      { calleeName: 'js', calleeKind: 'free', line: 3, callerFile: 'src/caller.ts' },
+    ];
+    const edges = resolveCalls(calls, skeletons);
+    expect(edges).toHaveLength(1);
+    expect(edges[0]!.target).toBe('src/lit.ts::js');
+  });
+
+  // (c) 「registerSpecifierFallback 双保险防御（不覆写已有 alias）」曾作为改动点 2 实现，
+  // 经内部对抗复审裁定撤回：该函数全仓仅一个调用点，改动点 1 落地后 TS/JS 已不再进入该函数，
+  // 防御的实际作用面收窄为纯 Python，把 last-write-wins 改成 first-write-wins 是一次范围外的
+  // Python 语义变更（实测 6 个构造中 3 个行为改变，1 变坏 2 变好，并非单纯"防御"）。已撤回，
+  // 详见 implementation-notes.md「已知残留」节；Python 侧 lastSeg 撞名（如 `import pkg.util` +
+  // `import util` 均落在同一别名 key）沿用改动前 last-write-wins 行为，不在 F259 范围内。
+});
+
+describe('F259 — 回归：require 的 depends-on 边不受兜底别名闸收紧影响', () => {
+  it("require('./dep.js') 场景下 depends-on 边仍存在（deriveImportEdges 只读 resolvedPath，与 aliasToTarget 无耦合）", () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/caller.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './dep.js',
+            isRelative: true,
+            resolvedPath: 'src/dep.ts',
+            isTypeOnly: false,
+            importType: 'commonjs-require',
+          },
+        ],
+      }),
+    ]);
+    const edges = deriveImportEdges(skeletons);
+    expect(edges).toContainEqual(
+      expect.objectContaining({
+        source: 'src/caller.ts',
+        target: 'src/dep.ts',
+        relation: 'depends-on',
+      }),
+    );
+  });
+});
+
+describe('F259 — 副作用回归：side-effect-only 静态 import 不再注册垃圾别名', () => {
+  it("import './x.css'（无 named/default/namespace）不向 aliasToTarget 注册 lastSeg 垃圾别名", () => {
+    const skeletons = mkSkeletonsMap([
+      mkSkeleton({
+        filePath: 'src/entry.ts',
+        language: 'typescript',
+        imports: [
+          {
+            moduleSpecifier: './x.css',
+            isRelative: true,
+            resolvedPath: 'src/x.css',
+            isTypeOnly: false,
+            importType: 'static',
+          },
+        ],
+      }),
+    ]);
+    const info = buildImportIndex(skeletons).get('src/entry.ts');
+    expect(info?.aliasToTarget.has('css')).toBe(false);
+    expect(info?.aliasToTarget.has('./x.css')).toBe(false);
+    expect(info?.aliasToTarget.size).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F259 内部对抗复审裁定 3（WARNING-2）—— 不变量护栏：
+// `ImportReference.importType` 在 code-skeleton.ts 是 `.optional()`，"TS/JS 采集路径恒设置该
+// 字段"只是一条无机制保障的隐式约定，失效形态是**静默假边**（该 import 会被误判为 Python 语义
+// 分支，重新掉进 registerSpecifierFallback）而非报错。用真实采集器（而非手写 skeleton 字面量）
+// 对含 4 类 import（static/dynamic/type-only/commonjs-require）的 fixture 跑一遍，钉死这条
+// 判据依赖的前提在**当前代码**下成立；未来若某条抽取路径漏填该字段，本用例会 fail-loud。
+// ───────────────────────────────────────────────────────────
+
+describe('F259 裁定 3 — TS/JS 采集器产出的每条 import 必填 importType（判据依赖的隐式约定钉死）', () => {
+  it('collectTsJsCodeSkeletons 对 4 类 import fixture（static/dynamic/type-only/commonjs-require）产出的 import 条目均带 importType', async () => {
+    const fixtureDir = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../fixtures/156-w1.2-v2/ts-import-types',
+    );
+    const skeletons = await collectTsJsCodeSkeletons(fixtureDir, { extractCallSites: true });
+    const mainSkeleton = [...skeletons.values()].find((sk) => sk.filePath.endsWith('main.ts'));
+    expect(mainSkeleton).toBeDefined();
+    expect(mainSkeleton?.imports.length).toBeGreaterThanOrEqual(4);
+    for (const imp of mainSkeleton?.imports ?? []) {
+      expect(imp.importType, `import ${imp.moduleSpecifier} 缺失 importType`).toBeDefined();
+    }
+    // 逐类核对：main.ts 的 4 个 import 语句对应 4 类 importType 均出现（非仅"某条有值"）
+    const seenTypes = new Set((mainSkeleton?.imports ?? []).map((imp) => imp.importType));
+    expect(seenTypes).toEqual(
+      new Set(['static', 'type-only', 'dynamic', 'commonjs-require']),
+    );
+  });
+});
+
+// ───────────────────────────────────────────────────────────
+// F259 裁定 3 补充（内部对抗复审 W2，2026-08-06）——
+//
+// 上一个 describe 块用 `collectTsJsCodeSkeletons(..., { extractCallSites: true })` 驱动，
+// 按 `ts-js-adapter.ts` EC-11 规则，registry 已注册 ts-js adapter 时 imports/exports **恒来自
+// ts-morph 主路径**，tree-sitter 侧的 imports 会被丢弃——该用例完全没有覆盖注释点名的
+// "tree-sitter 降级路径"。这里直接调用 `TreeSitterAnalyzer.getInstance().analyze()`，绕开
+// EC-11 discard 规则，钉死 tree-sitter 路径自身（`typescript-mapper.ts::_extractImportStatement`
+// + `tree-sitter-analyzer.ts::postProcessTsJsImports` 协同）产出的 4 类 import 均带 importType。
+// ───────────────────────────────────────────────────────────
+
+describe('F259 裁定 3 补充 — tree-sitter 降级路径（绕开 EC-11 discard）产出的 4 类 import 均带 importType', () => {
+  it('TreeSitterAnalyzer.analyze() 直接产出的 static/type-only/dynamic/commonjs-require 四类 import 均定义 importType', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f259-tree-sitter-importtype-'));
+    const filePath = path.join(tmpDir, 'main.ts');
+    const code = [
+      "import { staticHello } from './static-target';",
+      "import type { TypeOnlyShape } from './type-only-target';",
+      "const cjs = require('./cjs-target.cjs');",
+      'async function run(): Promise<void> {',
+      "  const dyn = await import('./dynamic-target');",
+      '  void dyn; void cjs;',
+      '}',
+      '',
+    ].join('\n');
+    fs.writeFileSync(filePath, code, 'utf-8');
+    try {
+      const skeleton = await TreeSitterAnalyzer.getInstance().analyze(filePath, 'typescript');
+      expect(skeleton.imports.length).toBeGreaterThanOrEqual(4);
+      for (const imp of skeleton.imports) {
+        expect(imp.importType, `tree-sitter 路径 import ${imp.moduleSpecifier} 缺失 importType`).toBeDefined();
+      }
+      const seenTypes = new Set(skeleton.imports.map((imp) => imp.importType));
+      expect(seenTypes).toEqual(new Set(['static', 'type-only', 'dynamic', 'commonjs-require']));
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

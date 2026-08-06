@@ -8,7 +8,8 @@
 | 路径 | 覆盖的采集管线 | 意图 |
 |------|---------------|------|
 | `src/ts/foo.ts`、`foo.tsx`、`bar.js`、`bar.jsx` | #1 `tsjsSkeletonWalk` | 声明面前四扩展（大小写敏感面） |
-| `src/py/mod.py`、`mod.pyi` | #2 `pyWalk` | 含 FIX-4 曾漏报的 `.pyi` |
+| `src/py/mod.py`、`mod.pyi` | #2 `pyWalk` | 含 FIX-4 曾漏报的 `.pyi`。**F259 脚注**：这两个样本无 import/callSite，仅覆盖节点面（SC-005b 扩展名声明面），不覆盖边面独占性——`#2`（本管线）与 `#11 pythonSymbolScan` 在这两个样本上产出的节点 id 完全重合，去重后 `#2` 对最终图零独占贡献（探针 C 证实：整条 `#2` 管线被剔除，护栏仍 20/20 全绿）。 |
+| `src/py/producer.py`、`consumer.py` | #2 `pyWalk`（边面独占覆盖，F259） | 补齐 `depends-on`/`calls` 边的 `#2` 独占可见性，防止整条管线被删除而护栏无感（见下方"探针 C 补记"）。 |
 | `src/java/Foo.JAVA` | #3 `genericAdapters`（java 分量） | 大小写变体样本，证明大小写不敏感面被真实覆盖 |
 | `src/go/main.go` | #3 `genericAdapters`（go 分量） | go 扩展 |
 | `src/module-only/entry.mjs` | #1 `tsjsSkeletonWalk` ∩ #7/#8 `moduleDerivationScan` | **双轨可见**样本（见下方"rebase 调和"） |
@@ -33,6 +34,28 @@ fixture 根目录会让 b-track 扫不到任何文件、退化为空图假绿。
 显式带 `.ts` 扩展名的相对路径让 `resolveTsJsImport` 的相对路径分支第一候选即命中真实文件，
 不依赖扩展名推断或 tsconfig paths alias，因此 b-track 才能稳定断言 `entry.mjs → foo.ts` 这条
 具体端点的边（禁止退化为"边数非空"式断言）。
+
+### 探针 C 补记 · 2026-08-06（`#2 pyWalk` 边面独占样本，F259）
+
+`specs/259-fix-callgraph-false-edge-guardrail/fix-report.md` 记录的探针 C 实测证实：把
+`graph-assembly.ts` 里合并 `codeSkeletons` 时的 `pythonSkeletons` 整体剔除后，
+`collector-fingerprint-guardrail.test.ts` 的 a-track 用例仍 20/20 全绿——因为既有 `mod.py`/
+`mod.pyi` 样本无 import/callSite，`#2`（本管线）与 `#11 pythonSymbolScan`
+（`PythonLanguageAdapter.extractSymbolNodes`）在这两个样本上产出的节点 id 完全重合，
+buildKnowledgeGraph 按 id 去重后 `#2` 对最终图零独占贡献；`BEHAVIOR_VERSION` bump 纪律因此
+在 py 侧完全失灵。
+
+新增 `producer.py`/`consumer.py`（真实 py→py 相对 import + 调用）补齐 `#2` 在 `depends-on`/
+`calls` 两条边上的独占贡献：`#11` 结构上只读 `skeleton.exports` 派生 module→component 的
+`contains` 边，从不读取 `imports`/`callSites`，产不出这两条边。同时新增护栏用例
+`#11 extractSymbolNodes 当前只产 contains 边` 把这条前提正向钉死——一旦未来有人给 `#11`
+扩展出 `calls`/`depends-on` 产出能力，即便整条 `#2` 管线被误删，边仍会由 `#11` 补上、掩码
+原样复发，该用例会在改动当下 fail-loud，不必等到有人手滑删除 `#2` 才被发现。
+
+此次 fixture 变更依 `shouldRejectRegen` 判据（`scripts/lib/collector-fingerprint-regen-predicate.mjs`）
+的既定设计触发 `BEHAVIOR_VERSION` bump（2→3，见 `src/panoramic/graph/collector-fingerprint.ts`
+bump 记录）——即便本次未改动任何采集器代码行为，fixture 本身作为"护栏验证的行为契约基线"，
+其内容变更同样需要 bump 留痕，防止静默更新 pinned 资产绕开审计链路。
 
 ## pinned 期望资产
 

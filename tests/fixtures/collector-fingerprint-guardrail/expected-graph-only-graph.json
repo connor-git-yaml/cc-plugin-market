@@ -1,13 +1,13 @@
 {
-  "fixtureInputHash": "b623ce5e0dbe8cbb8d8e8839eb4df2f3494da5cbe8a8cb74f5d3d147442888b7",
+  "fixtureInputHash": "8e00f28820fed2a985054d37d4251d6c6d34e3149dea7f3c0ec7ed41a8aae3c5",
   "graph": {
     "directed": false,
     "multigraph": false,
     "graph": {
       "name": "spectra-knowledge-graph",
       "generatedAt": "1970-01-01T00:00:00.000Z",
-      "nodeCount": 18,
-      "edgeCount": 10,
+      "nodeCount": 22,
+      "edgeCount": 14,
       "sources": [
         "extraction",
         "unified-graph"
@@ -77,7 +77,7 @@
             "matchSemantics": "case-sensitive"
           }
         },
-        "behaviorVersion": 2
+        "behaviorVersion": 3
       }
     },
     "nodes": [
@@ -148,6 +148,34 @@
         }
       },
       {
+        "id": "src/py/consumer.py",
+        "kind": "module",
+        "label": "consumer",
+        "metadata": {
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/consumer.py",
+          "confidence": "EXTRACTED",
+          "unifiedKind": "module",
+          "sourcePath": "src/py/consumer.py",
+          "callSitesCount": 1
+        }
+      },
+      {
+        "id": "src/py/consumer.py::use",
+        "kind": "component",
+        "label": "use",
+        "metadata": {
+          "symbolKind": "function",
+          "signature": "def use() -> int",
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/consumer.py",
+          "confidence": "EXTRACTED",
+          "unifiedKind": "symbol",
+          "sourcePath": "src/py/consumer.py",
+          "exportKind": "function"
+        }
+      },
+      {
         "id": "src/py/mod.py",
         "kind": "module",
         "label": "mod",
@@ -200,6 +228,34 @@
           "confidence": "EXTRACTED",
           "unifiedKind": "symbol",
           "sourcePath": "src/py/mod.pyi",
+          "exportKind": "function"
+        }
+      },
+      {
+        "id": "src/py/producer.py",
+        "kind": "module",
+        "label": "producer",
+        "metadata": {
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/producer.py",
+          "confidence": "EXTRACTED",
+          "unifiedKind": "module",
+          "sourcePath": "src/py/producer.py",
+          "callSitesCount": 0
+        }
+      },
+      {
+        "id": "src/py/producer.py::make",
+        "kind": "component",
+        "label": "make",
+        "metadata": {
+          "symbolKind": "function",
+          "signature": "def make() -> int",
+          "sourceTag": "extraction",
+          "sourceFile": "src/py/producer.py",
+          "confidence": "EXTRACTED",
+          "unifiedKind": "symbol",
+          "sourcePath": "src/py/producer.py",
           "exportKind": "function"
         }
       },
@@ -327,6 +383,31 @@
         "evidenceText": "../ts/foo.ts"
       },
       {
+        "source": "src/py/consumer.py::use",
+        "target": "src/py/producer.py::make",
+        "relation": "calls",
+        "confidence": "INFERRED",
+        "confidenceScore": 0.65,
+        "directional": true
+      },
+      {
+        "source": "src/py/consumer.py",
+        "target": "src/py/consumer.py::use",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true
+      },
+      {
+        "source": "src/py/consumer.py",
+        "target": "src/py/producer.py",
+        "relation": "depends-on",
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true,
+        "evidenceText": ".producer"
+      },
+      {
         "source": "src/py/mod.pyi",
         "target": "src/py/mod.pyi::mod_fn",
         "relation": "contains",
@@ -337,6 +418,14 @@
       {
         "source": "src/py/mod.py",
         "target": "src/py/mod.py::mod_fn",
+        "relation": "contains",
+        "confidence": "EXTRACTED",
+        "confidenceScore": 0.95,
+        "directional": true
+      },
+      {
+        "source": "src/py/producer.py",
+        "target": "src/py/producer.py::make",
         "relation": "contains",
         "confidence": "EXTRACTED",
         "confidenceScore": 0.95,

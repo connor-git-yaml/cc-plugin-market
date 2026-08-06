@@ -131,3 +131,33 @@ exit_code=1
 ### 未验证项（工具未安装）
 
 无（本项目 npm 工具链全部可用）。
+
+## F259 补记 · 2026-08-06（FR-005(c) 护栏实际守护面据实修订）
+
+> 本节由 `specs/259-fix-callgraph-false-edge-guardrail/fix-report.md` 发起的问题修复流程追加，
+> 只追加不改写上方本报告的原有记账内容。
+
+本 Feature（F249）交付时 FR-005 双轨护栏的 a-track 覆盖表（本报告 SC-010 行、以及
+`tests/fixtures/collector-fingerprint-guardrail/README.md` 覆盖表）把 `src/py/mod.py`、
+`mod.pyi` 记为覆盖 `#2 pyWalk` 管线，且 SC-010 抽查判定"真实存在且断言有效"——该判定对**节点面**
+（SC-005b 扩展名声明面）成立，但 F259 实证发现 a-track 对 `#2 pyWalk` 管线在**边面**
+（`depends-on`/`calls`）上存在**零独占覆盖窗口**：
+
+- `mod.py`/`mod.pyi` 样本无 import/callSite，`#2 pyWalk` 与 `#11 pythonSymbolScan`
+  （`PythonLanguageAdapter.extractSymbolNodes`）在这两个样本上产出的节点 id 完全重合，
+  `buildKnowledgeGraph` 按 id 去重后 `#2` 对最终图零独占贡献
+- 决定性探针：把 `graph-assembly.ts` 合并 `codeSkeletons` 时的 `pythonSkeletons` 整体剔除
+  （即整条 `#2 pyWalk` 管线被删），`collector-fingerprint-guardrail.test.ts` 的 a-track 用例
+  **仍 20/20 全绿**——`BEHAVIOR_VERSION` bump 纪律在 py 侧的边面变更上完全失灵
+
+已由 F259 补齐：新增 `producer.py`/`consumer.py`（真实 py→py 相对 import + 调用）覆盖
+`depends-on`/`calls` 两条边的 `#2` 独占贡献，并新增正向不变量用例钉死
+`#11 extractSymbolNodes` 当前只产 `contains` 边这一前提（防止未来给 `#11` 扩展出
+`calls`/`depends-on` 产出能力后，掩码经由该扩展原样复发）。`BEHAVIOR_VERSION` 因本次
+fixture 基线扩充由 2 bump 至 3。
+
+**据实结论**：本报告 Layer 1（FR-005 判定合规）与 SC-010 抽查（"真实存在且断言有效"）在
+当时的验证范围（节点面覆盖 + 比较器灵敏度/活性/拒绝判据三件套）内成立，判定本身不构成误判；
+本补记澄清的是**验证范围未覆盖到的一个具体维度**（`#2` 管线的边面独占可见性），避免未来审计
+将 F249 误读为"从未有过盲区"。详见 `specs/259-fix-callgraph-false-edge-guardrail/fix-report.md`
+5-Why 根因追溯（缺陷 2）与 `implementation-notes.md` Phase 2 记录。
