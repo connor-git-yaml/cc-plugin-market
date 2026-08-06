@@ -449,6 +449,64 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    grounding pilot 合一线，B4 恰为 pilot 前提天然串联〕**——两线软 disjoint
    〔hooks/codex 路径 vs goal-loop 接线+scaffold-kb〕，先 ship 先 push）
 
+  （2026-08-03b **F240-F256 十七件大批次记账 + 7 维对抗审查**〔用户指示"review 这批代码 + 下一步"；
+   规模 33 commit / 230 文件 / +37971 行，M9 至今最大批〕：
+   **M9 四轨代码面全部收口** —— A3①②④〔批1 hooks 合同：两层门禁 + 从 canonical 派生 + 非破坏性
+   合并写入〕+ A3③〔批2 transcript 方言 loud 诊断，明确只做可观测性不提合规强度〕/ A4①②〔PhaseA
+   CODEX_HOME helper + 消费点统一〕+ A4③〔PhaseD 四方一致性诊断 codex:doctor/inventory〕/
+   B4+E〔F241 四批：图消费决策接线 + KB coverage-gap/版本推断/freshness + grounding pilot〕；
+   另 13 件收敛/修复〔F242-F256〕。
+   **门禁基线**：build 0 / test:plugins 0 / repo:check **85 族** pass / release:check 0 /
+   vitest 唯一失败 = repo-maintenance-sync-check hook 超时〔环境性，隔离重跑 2 passed，根因见下 ②〕。
+   **Dogfood 量化收益**：graph-only 重建后 calls 边 **926 → 3813（4.1×）**、节点 6079→7506，
+   六指标全 pass〔contains 100% / orphan 0% / freshness fresh〕——F242 调用边缺口 + F243 .mjs/.cjs
+   + F250 .pyi 的采集面修复效果可量化。
+   **7 维对抗审查 workflow**〔wf_7c4e7d8a，42 agent / 5.94M token / 1311 tool use；维度 = 门禁
+   fail-open / collector 指纹链 / gitignore oracle / Codex A3A4 / F241 保活KB / 收敛去重 / 跨切面架构〕：
+   **35 findings → 16 确认 / 19 证伪**。验证层价值双向兑现：① 杀掉 **4 个假 critical**〔含"F254 图
+   自述面含永不可采的 .mts/.cts"、"Codex 全局 Stop hook 到处凭空建 .specify/"〕；② 把 4 个确认
+   critical 的严重度**诚实下调为 high/major**〔触发均有前置条件〕；③ **纠正了主线程自己的推断**——
+   我 inline 记的"core 回胖 1593 = 拆分红利负收益、需换维度"被证伪：74% 增长是注释〔记录对抗教训〕、
+   叶子模块 316→329 仅 +4% 稳定、F228 实证新代码会正确落 execution-record、全仓无体量门禁且零行为
+   后果 → **M10「core 再拆」卡降级为「评估是否需要」，不作为待办**。
+   **确认缺陷 16 条 → 四张 fix 卡**〔全部带独立复现证据，多条经 shipped vs 父提交 A/B 实证〕：
+   - 🔴 **F257 门禁 fail-open 收口**〔最高优先，门禁静默放行〕：①F256 short-name 磁盘重锚定**不校验
+     会话归属**——本会话目录无制品时会静默改用磁盘上同 short-name 的旧 feature 目录完成合规判定，
+     `exit 2 → exit 0` 已用 shipped vs ec583b0a 同 transcript A/B 实证，且**零审计落盘**〔judge:220-233；
+     缓解因素：本仓 80 个 fix 目录 short-name 无重复，属前置条件未成立〕；②IN_FLIGHT_DEFER_LIMIT 的
+     唯一上界存于被判方可 `rm -rf` 的状态文件，删除即**无界静默推迟**〔10 轮实测全 exit 0、审计
+     degraded=false、零终态记录 —— 比 blockCount 篡改更安静，直接证伪 contract 的"不存在永久免于裁决
+     的会话"断言〕
+   - 🔴 **F258 图事实源失真三处**：①F255 忽略判定退化为**磁盘存在性**〔`ls-files --others` 语义 =
+     "存在且未追踪"，非"规则是否命中"；路径不在盘上即判不忽略，与 `git check-ignore` 分叉 → 图质量门
+     ignoredPathNodeIds 维度静默失效，相对 F255 前的纯规则匹配是**行为回退**〕；②F241 `runGit` 把任何
+     git 非零退出吞成空 diff → base-ref 不可达时 refresh-then-consume 静默翻 skip-impact 且
+     `baseRefMissing` 仍报 false〔本仓强制 rebase 会改写 phase_start_ref 使其不可达 = 常规路径〕；
+     ③消费侧丢弃 fingerprint 的 matchSemantics 一律 toLowerCase，.PY/.PYI 被误判 in-graph-scope
+   - 🔴 **F259 假边 + 护栏盲区**：①F242 只给 dynamic 上了兜底别名闸，**commonjs-require 同路径仍
+     无条件覆盖静态绑定**造确定性假边〔`./dep.js` → lastSeg 'js' → 覆盖同名静态绑定；独立探针实证
+     假边 `caller::go → dep::js [medium]` 两端真实节点、下游只过滤悬空端点故必定入图；F243 刚把 232 个
+     .mjs/.cjs 拉进采集面放大暴露面。假边比漏边有害〕；②collector 指纹护栏 **py 侧整条 #2 pyWalk
+     零独占覆盖**——探针 C 把 pythonSkeletons 整体置空护栏仍 20/20 绿，因 #11 scanPyFiles 等值产出
+     互为掩码 → `BEHAVIOR_VERSION` bump 责任的 5 个维度落 py 侧全部不可见，违背 spec FR-005(c)
+     "至少一轨必红"承诺
+   - 🟡 **F260 Codex hooks 四件 warning**：projectForeignOnly 空数组不对称致保全判据误报 /
+     config.toml 段头正则漏 `[[array-of-tables]]` 与行尾注释致误报版本漂移 / 原子写 tmp+rename
+     **丢失目标文件权限位**〔用户 0600 被静默放宽 0644〕/ `.bak` 在二次安装非本次写入前状态且
+     揭示此点的 backup-already-exists 被 CLI 静默过滤
+   **另两条本轮 inline 发现**：① F240 `trace.md` 交付表自身漂移〔A3/A4-PhaseD 仍写"⬜未开始"但已 ship〕；
+   ② **worktree 积累复发**〔`.claude/` 又达 2.7GB / 6 worktree〕致 repo-maintenance-sync-check 在全量
+   并行下 beforeEach hook 10s 超时——**同一根因第二次**，结构性修法明确〔该测试 `copyTree('.claude')`
+   只需 rules/settings/skills，排除 `worktrees` 即永久免疫〕，并**实证了 M10 卡⑤「交付收尾 ceremony」
+   的必要性** → 并入 F257 或单立小 fix。
+   **待用户执行的人工挂账 2 项**〔代码侧做不了〕：**T062** Codex hook 信任真实授予 / **T063** F239 T039
+   Codex 客户端人工验证 —— 二者是 M9 宣布收官的最后拼图。
+   ⚠️ **Codex 配额耗尽（用户 2026-08-03 告知）**：F257-F260 全属门禁/判定器/事实源类，按 `CLAUDE.local.md`
+   顶部暂停节的替代档位执行〔独立子代理异构对抗 ≥2 切入角〕，且**须在 commit 显式标注「Codex 暂停·
+   异构档位缺席」**，配额恢复后可回补审查。
+   **收官判定**：M9 **代码面完成、质量面待收口** —— 四张 fix 卡是 M9 收官前的必要条件〔它们修的正是
+   本 milestone 自己新引入的缺陷〕，非 M10 内容）
+
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
 1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**
