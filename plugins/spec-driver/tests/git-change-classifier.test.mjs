@@ -22,7 +22,11 @@ import { classifyChangeSet } from '../scripts/lib/git-change-classifier.mjs';
 /** 把字段数组拼成 NUL 分隔文本（每个字段后跟一个 \0，与 git 输出一致）。 */
 const nul = (...fields) => fields.map((field) => `${field}\0`).join('');
 
-const EMPTY = { nameStatusText: '', porcelainText: '' };
+/**
+ * F258：`nameStatusOk` / `porcelainOk` 是 required 布尔位（缺省即 throw），因此每个用例的
+ * 基底都必须显式声明"这两路 git 输出是可信的"。见文件尾 R2-4 段。
+ */
+const EMPTY = { nameStatusText: '', porcelainText: '', nameStatusOk: true, porcelainOk: true };
 
 describe('FR-005 name-status -z 解析', () => {
   it('M + A 混合 → modifies-existing，文件清单含两者', () => {
@@ -110,6 +114,7 @@ describe('FR-005 porcelain -z 解析', () => {
 describe('FR-005 两路输入合并', () => {
   it('name-status 全 A 但 porcelain 有 M → 合并后 modifies-existing', () => {
     const result = classifyChangeSet({
+      ...EMPTY,
       nameStatusText: nul('A', 'src/new.ts'),
       porcelainText: nul(' M src/existing.ts'),
     });
@@ -119,6 +124,7 @@ describe('FR-005 两路输入合并', () => {
 
   it('两路都是新增 → additive-only，文件清单去重', () => {
     const result = classifyChangeSet({
+      ...EMPTY,
       nameStatusText: nul('A', 'src/new.ts'),
       porcelainText: nul('?? src/new.ts', '?? src/other.ts'),
     });
@@ -135,13 +141,16 @@ describe('FR-005 unknown 兜底', () => {
   });
 
   it('仅空白字符 / 仅 NUL → unknown', () => {
-    assert.equal(classifyChangeSet({ nameStatusText: '\0', porcelainText: '  ' }).changeClass, 'unknown');
+    assert.equal(classifyChangeSet({ ...EMPTY, nameStatusText: '\0', porcelainText: '  ' }).changeClass, 'unknown');
   });
 
-  it('入参缺失或非字符串 → unknown，不抛错', () => {
-    for (const bad of [undefined, null, {}, { nameStatusText: 42, porcelainText: [] }]) {
-      assert.doesNotThrow(() => classifyChangeSet(bad));
-      assert.equal(classifyChangeSet(bad).changeClass, 'unknown');
+  it('ok 位齐全时，文本字段缺失或非字符串 → unknown，不抛错', () => {
+    // F258 口径调整：可信度由 ok 位承担并 fail-loud（见文件尾 R2-4），文本类型仍保持宽容——
+    // 同一件事没必要判两遍。原用例断言的是"整个入参缺失也不抛错"，那条已被 required 契约取代。
+    for (const bad of [{}, { nameStatusText: 42, porcelainText: [] }]) {
+      const withOk = { ...bad, nameStatusOk: true, porcelainOk: true };
+      assert.doesNotThrow(() => classifyChangeSet(withOk));
+      assert.equal(classifyChangeSet(withOk).changeClass, 'unknown');
     }
   });
 
@@ -190,5 +199,83 @@ describe('FR-005 格式契约守卫：绝不按 " -> " 人读形态切分', () =
     const trickyNew = 'src/x -> y.ts';
     const result = classifyChangeSet({ ...EMPTY, porcelainText: nul(`R  ${trickyNew}`, 'src/old.ts') });
     assert.deepEqual([...result.files].sort(), ['src/old.ts', trickyNew].sort());
+  });
+});
+
+/* ------------------------------- F258 R2-4：输入不可信的显式入口（required + throw） */
+
+describe('F258 R2-4 输入可信度必须由调用方显式声明（required ok 位，缺省即 throw）', () => {
+  /**
+   * 原缺陷（fix-report 缺陷 2 的 Why 5）：`runGit` 把"命令跑失败"折成空串，而空串在
+   * `parseNameStatus` 里是合法的"没有变更"——于是"读不到"与"没有改动"在类型层不可区分。
+   *
+   * 为什么是 **throw** 而不是"缺省即不可信"：后者会把一切缺省调用静默判成 `unknown`，
+   * 而 R1 已实证 `unknown` 走矩阵行 7 `consume-degraded`、**根本不刷图**，还会抢在 freshness
+   * 之前短路，把 stale/dirty 信号永久遮蔽。静默的保守方向在这里恰恰不保守。
+   */
+  it('缺两个 ok 位 → throw TypeError（不接受"缺省即可信"）', () => {
+    assert.throws(
+      () => classifyChangeSet({ nameStatusText: '', porcelainText: nul('?? src/a.ts') }),
+      TypeError,
+    );
+  });
+
+  it('只缺其中一个 ok 位 → 同样 throw（两位都是 required）', () => {
+    assert.throws(
+      () => classifyChangeSet({ nameStatusText: '', porcelainText: '', porcelainOk: true }),
+      TypeError,
+    );
+    assert.throws(
+      () => classifyChangeSet({ nameStatusText: '', porcelainText: '', nameStatusOk: true }),
+      TypeError,
+    );
+  });
+
+  it('整个入参缺失（undefined / null）→ 同样 throw（`input?.[key]` 得 undefined，非 boolean）', () => {
+    for (const bad of [undefined, null]) {
+      assert.throws(() => classifyChangeSet(bad), TypeError, `入参 ${JSON.stringify(bad)} 应被拒`);
+    }
+  });
+
+  it('ok 位非 boolean（含 truthy 的 1 / "true"）→ throw，不做隐式转换', () => {
+    for (const bad of [1, 0, 'true', null, undefined]) {
+      assert.throws(
+        () => classifyChangeSet({ nameStatusText: '', porcelainText: '', nameStatusOk: bad, porcelainOk: true }),
+        TypeError,
+        `nameStatusOk=${JSON.stringify(bad)} 应被拒`,
+      );
+    }
+  });
+
+  it('nameStatusOk:false → unknown（空串不再被当成"没有变更"这一事实）', () => {
+    const result = classifyChangeSet({
+      nameStatusText: '',
+      nameStatusOk: false,
+      porcelainText: nul('?? src/a.ts'),
+      porcelainOk: true,
+    });
+    // 若不看 ok 位，这份输入会被判成 additive-only（porcelain 里只有 ??）
+    assert.equal(result.changeClass, 'unknown');
+  });
+
+  it('porcelainOk:false → unknown（同上，责任方是工作树读取）', () => {
+    const result = classifyChangeSet({
+      nameStatusText: nul('A', 'src/new.ts'),
+      nameStatusOk: true,
+      porcelainText: '',
+      porcelainOk: false,
+    });
+    assert.equal(result.changeClass, 'unknown');
+  });
+
+  it('两位皆 true 时行为与既有逐字一致（防修过头）', () => {
+    const result = classifyChangeSet({
+      nameStatusText: nul('A', 'src/new.ts'),
+      nameStatusOk: true,
+      porcelainText: '',
+      porcelainOk: true,
+    });
+    assert.equal(result.changeClass, 'additive-only');
+    assert.deepEqual(result.files, ['src/new.ts']);
   });
 });

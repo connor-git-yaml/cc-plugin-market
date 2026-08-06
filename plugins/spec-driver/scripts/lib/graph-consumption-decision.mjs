@@ -6,12 +6,16 @@
 // 什么时候不该消费 impact、降级时留什么证据」做成一份可穷举、可测的判定。
 //
 // 三条硬约束（FR-001 / D2）：
-// - **纯函数、零 I/O**：本文件不 import 任何模块。刷新执行、freshness 采集、审计落盘全在外层。
-//   单测靠静态断言守这条——一旦有人为了图方便在这里 spawn 一次，测试立刻红。
+// - **纯函数、零 I/O**：刷新执行、freshness 采集、审计落盘全在外层。原约束是"零 import"，F258 §5.2
+//   把它**收窄式放宽**为「零 I/O + 仅 `node:path`」：`surfaceMatchesFileMjs` 的大小写不敏感分支必须
+//   调用与 TS 侧生产者**同一个** `path.extname`，自造等价实现才是真正的风险（Node 对 `..`/纯点文件
+//   有非直觉分支）。单测的静态断言相应改为**封闭等值**（多一条、少一条都红），守护力不降。
 // - **矩阵求值顺序是安全属性**：见下方 FR-003 v2 表。顺序错了会产生"为范围外目标白白重建"
 //   与"对不存在的图做降级消费"两类错误，不是风格偏好。
 // - **措辞红线（D7）**：freshness 通过 ≠ impact 可信。因此 degraded reason 与 caveat 是**两组
 //   不相交的封闭枚举**，让「图是新的、在范围内、但仍可能漏边」成为一个可表达、不与降级混淆的态。
+
+import path from 'node:path';
 
 /**
  * 降级原因封闭枚举（FR-004，12 值）。
@@ -45,33 +49,97 @@ export const CAVEAT_CODES = Object.freeze({
 });
 
 /**
- * 图覆盖范围判据的**静态 fallback**（F254）——只在图产物没有可信自述面时使用。
+ * 图覆盖范围判据的**静态 fallback**（F254 立项、F258 改为逐管线结构）——只在图产物没有可信
+ * 自述面时使用。
  *
- * 值等于全部图生产管线采集面的并集（SSoT：`src/collector-surface.ts::ALL_PRODUCER_SURFACES`），
- * 覆盖 TSJS skeleton walk（含 `.mjs`/`.cjs`）、PY walk（含 `.pyi`）、java/go generic adapter、
- * module 派生扫描（含 `.mts`/`.cts`）、python 符号扫描六条管线。本文件是零 import 的纯函数模块，
- * **无法**引用那份 TS 侧 SSoT，因此一致性不能靠"注释自称与 SSoT 对齐"——由跨语言合同测试
- * `tests/unit/graph-scope-extensions-contract.test.ts` 逐项断言守护：任一侧扩面而忘了同步另一侧，
- * 该测试立刻红。
+ * **为什么不能是扁平扩展名数组（F258 缺陷 3 的 Why 4）**：各采集管线的**匹配语义并不相同**
+ * （TSJS/PY skeleton walk 与 python 符号扫描用大小写敏感 `endsWith`；java/go adapter 与 module
+ * 派生扫描用 `extname().toLowerCase()`）。扁平 `string[]` 从类型上就承载不了这一维，消费侧只能
+ * 各自 `toLowerCase()` 后比较——于是 `foo.PY` 被判 in-graph-scope，而 `walkPyFiles` 用的是
+ * `endsWith('.py')`，那个文件**根本不入图**。这与 F252 在 TS 侧废除
+ * `getDirtySourceExtensions(): Set<string>` 扁平契约踩的是同一个坑，只是发生在 `.mjs` 消费侧。
  *
- * **它不再是"权威白名单"**：coverageScope 判据（CLI 侧）与 FR-006 的 caveat 判据优先消费图自述的
+ * 形态与 `computeCollectorFingerprint().extensionSurface` 的五个 key 一一对应（java/go 合并为
+ * `genericAdapters`），使静态面与图自述动态面**同形**，两条路径共用同一个匹配器
+ * `surfaceMatchesFileMjs`。SSoT 是 `src/collector-surface.ts::ALL_PRODUCER_SURFACES`；本文件受
+ * 零 dist 依赖边界所限无法 import 它，一致性由跨语言合同测试
+ * `tests/unit/graph-scope-extensions-contract.test.ts` **逐管线逐字段**锚定（id 集合、extensions、
+ * matchSemantics，外加一张"同解真值表"）——任一侧改面而忘了同步另一侧，该测试立刻红。
+ *
+ * **它不是"权威白名单"**：coverageScope 判据（CLI 侧）与 FR-006 的 caveat 判据优先消费图自述的
  * collector fingerprint（`graph.fingerprint.extensionSurface`，F249）推导出的**动态面**——语义是
  * "改动能否反映在**手里这份图**里"，而不是"当前代码理论上会采集什么"。只有图缺失 / 损坏 / 超限 /
  * 无指纹 / 指纹结构畸形时才落回本常量。
  *
- * C-002（两处判据同一份面）依然成立，只是这份面按调用时点可能是动态的：调用方必须把算好的面
- * 显式传给 `annotateImpactCaveat` 第 4 参 `scopeExtensions`，本常量只是各消费点的默认值。
+ * **C-002 的现状要如实说（F258 审查修复轮）**：本常量层面的机制（调用方把算好的面显式传给
+ * `annotateImpactCaveat` 第 4 参 `scopeSurfaces`，本常量只是默认值）确实到位，但"两处判据消费
+ * **同一份**面"这句话在 `refresh-policy=allowed` 下**已经不成立**——CLI 的 coverage 判据按
+ * W-1 用的是 union(图自述面, 静态面) 这个「重建可达面」，而 `annotate-caveat` 时点用的是图自述面。
+ * 两侧面不同的直接后果：落在 union 内、图自述面外的目标，decide 侧判 in-graph-scope（不降级）、
+ * annotate 侧判面外（不注解 caveat），**两边同时静默**。
  *
- * 历史（F254）：F241 立项时此处只有 TSJS 四个扩展，注释自称是权威白名单、且断言 walker 的采集面
- * 与之等同。这两句断言在 d27ba75（`.mjs`/`.cjs` 扩面）之后即失真，导致 `.mjs` 改动被判
- * out-of-graph-scope、跳过图刷新与 impact 注入。教训：注释里的"唯一/穷尽"类断言必须有测试锚定，
- * 否则它只会随扩面静默变成假话。
+ * 这不是本常量能修的，也不是 F258 引入的（union 分支来自 F254 W-1，收敛它要动决策矩阵语义），
+ * 已按独立 fix 卡登记。此处只负责**不把它写成已经成立的不变量**——下一轮审查者会照着这句话
+ * 放过它，那正是 over-claim 的实际危害。
  */
-export const GRAPH_SCOPE_EXTENSIONS = Object.freeze([
-  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts',
-  '.py', '.pyi',
-  '.java', '.go',
+export const GRAPH_SCOPE_SURFACES = Object.freeze([
+  Object.freeze({ id: 'tsjsSkeletonWalk', extensions: Object.freeze(['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']), matchSemantics: 'case-sensitive' }),
+  Object.freeze({ id: 'pyWalk', extensions: Object.freeze(['.py', '.pyi']), matchSemantics: 'case-sensitive' }),
+  Object.freeze({ id: 'genericAdapters', extensions: Object.freeze(['.go', '.java']), matchSemantics: 'case-insensitive' }),
+  Object.freeze({ id: 'moduleDerivationScan', extensions: Object.freeze(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']), matchSemantics: 'case-insensitive' }),
+  Object.freeze({ id: 'pythonSymbolScan', extensions: Object.freeze(['.py', '.pyi']), matchSemantics: 'case-sensitive' }),
 ]);
+
+/**
+ * 判定某文件路径是否落在**单条**采集管线的面内，与 TS 侧 `surfaceMatchesFile` **同解**。
+ *
+ * 两族形态各自与生产者逐字对应：
+ * - `case-sensitive` → `filePathOrName.endsWith(ext)`。纯点文件 `.ts` 命中，与 `walkTsJsFiles` /
+ *   `walkPyFiles` / `scanPyFiles` 一致；`foo.PY` 不命中。
+ * - `case-insensitive` → `path.extname(filePathOrName).toLowerCase()` 查表。纯点文件 `src/.go`
+ *   **不**命中（`path.extname('src/.go') === ''`），与 generic collector / file-scanner walkDir 一致。
+ *
+ * **第三出口是 `null`，不是 `else` 兜底（R5，硬性）**：TS 侧 `surfaceMatchesFile` 写成
+ * `if (case-sensitive) … else …`，`.mjs` 侧若"同解照镜"就会继承那个兜底——畸形指纹或未来的第三种
+ * 匹配语义会被**静默按 case-insensitive 处理**，正是本次要修的 `.PY` bug 原样复活。合同测试能锚
+ * "两侧同解"，锚不住"两侧同错"，所以这条只能由结构保证：认不出的语义一律判**不可判**，由调用方
+ * 整体回落静态面并让 `scopeExtensionsSource` 出现可区分取值。
+ *
+ * @param {{ extensions?: readonly string[], matchSemantics?: string }} surface
+ * @param {string} filePathOrName 文件名或路径，**保留原始大小写**
+ * @returns {boolean|null} `null` = 该 surface 的匹配语义/结构不认识（不可判）
+ */
+export function surfaceMatchesFileMjs(surface, filePathOrName) {
+  if (surface === null || typeof surface !== 'object' || Array.isArray(surface)) return null;
+  if (!Array.isArray(surface.extensions)) return null;
+  if (typeof filePathOrName !== 'string' || filePathOrName.length === 0) return null;
+
+  if (surface.matchSemantics === 'case-sensitive') {
+    return surface.extensions.some((extension) => filePathOrName.endsWith(extension));
+  }
+  if (surface.matchSemantics === 'case-insensitive') {
+    return surface.extensions.includes(path.extname(filePathOrName).toLowerCase());
+  }
+  return null;
+}
+
+/**
+ * 某 symbol id / 文件路径是否落在给定覆盖面内（任一管线命中即算在内）。
+ *
+ * `::` 与 `#` 两种 symbol 分隔符都认，剥出 filePart 后交给**同一个**匹配器求值——不再自行做
+ * "取扩展名 + toLowerCase"这类各自实现的提取（F252 W-004 禁令的同形要求：提取口径本身随管线而异）。
+ *
+ * `=== true` 收口：`null`（不可判）按"不在面内"处理。不可判的面在推导阶段就该被整体拦下
+ * （见 CLI 的 `deriveScopeSurfacesFromFingerprint`），走到这里说明调用方传了自定义面——
+ * 宁可漏一次提示，也不能凭一个"判不了"给出可信度声明。
+ */
+function targetInScope(target, scopeSurfaces) {
+  if (typeof target !== 'string' || target.length === 0) return false;
+  if (!Array.isArray(scopeSurfaces)) return false;
+  const filePart = target.split('::')[0].split('#')[0];
+  if (filePart.length === 0) return false;
+  return scopeSurfaces.some((surface) => surfaceMatchesFileMjs(surface, filePart) === true);
+}
 
 const CHANGE_CLASSES = new Set(['modifies-existing', 'additive-only', 'unknown']);
 const GRAPH_AVAILABILITIES = new Set(['present', 'missing', 'corrupt']);
@@ -363,16 +431,6 @@ export function buildImpactInjectionBlock(decision, impactSummary) {
   return `${lines.join('\n')}\n`;
 }
 
-/** 从 symbol id / 文件路径取小写扩展名；`::` 与 `#` 两种 symbol 分隔符都认。 */
-function extensionOf(target) {
-  if (typeof target !== 'string' || target.length === 0) return null;
-  const filePath = target.split('::')[0].split('#')[0];
-  const dot = filePath.lastIndexOf('.');
-  const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
-  if (dot <= slash) return '';
-  return filePath.slice(dot).toLowerCase();
-}
-
 /**
  * 从 impact 返回体里取 `directCallers`，兼容真实 MCP 形状与合成顶层形状（B1-C4）。
  *
@@ -412,21 +470,21 @@ function normalizeDirectCallers(impactResult) {
  * @param {object} decision `decideGraphConsumption` / `finalizeAfterRefresh` 的输出
  * @param {{ summary?: { directCallers?: number }, directCallers?: number }} impactResult
  * @param {string} target 调用方声明的 impact 查询目标 symbolId（`路径::符号` / `路径#符号` / 纯路径）
- * @param {readonly string[]} [scopeExtensions] 本次判定用的图覆盖面（小写扩展名，含前导 `.`）。
- *   缺省时用静态 fallback `GRAPH_SCOPE_EXTENSIONS`；CLI 侧会传入从图自述 collector fingerprint
- *   推导出的动态面，使本判据与 coverageScope 判据消费**同一份面**（C-002）——只是这份面现在随
- *   图状态变化，不再是编译期常量。参数只是调用方传入的数据，本文件零 import 的硬合同不受影响。
+ * @param {readonly {id?: string, extensions: readonly string[], matchSemantics: string}[]} [scopeSurfaces]
+ *   本次判定用的图覆盖面，**逐管线** `{extensions, matchSemantics}` 结构（F258）。缺省时用静态
+ *   fallback `GRAPH_SCOPE_SURFACES`；CLI 侧会传入从图自述 collector fingerprint 推导出的动态面，
+ *   使本判据与 coverageScope 判据消费**同一份面**（C-002）——只是这份面现在随图状态变化，
+ *   不再是编译期常量。参数只是调用方传入的数据，本文件的零 I/O 硬合同不受影响。
  * @returns {object} 新对象（不就地改写入参）
  */
-export function annotateImpactCaveat(decision, impactResult, target, scopeExtensions = GRAPH_SCOPE_EXTENSIONS) {
+export function annotateImpactCaveat(decision, impactResult, target, scopeSurfaces = GRAPH_SCOPE_SURFACES) {
   const annotated = { ...decision, caveats: [...(decision?.caveats ?? [])] };
 
   if (decision?.outcome !== 'consume-impact') return annotated;
   if (normalizeDirectCallers(impactResult) !== 0) return annotated;
 
-  // 判据与 coverageScope 共用同一份面（C-002：防第二份判据漂移）
-  const extension = extensionOf(target);
-  if (extension === null || !scopeExtensions.includes(extension)) return annotated;
+  // 判据与 coverageScope 共用同一份面与同一个匹配器（C-002：防第二份判据漂移）
+  if (!targetInScope(target, scopeSurfaces)) return annotated;
 
   annotated.caveats.push(CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT);
   return annotated;

@@ -594,7 +594,7 @@ describe('SC-005 (b) #5：createIgnoreOracle 的扩展名分派面与 SSoT 一�
 
   beforeAll(() => {
     oracleDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f243-ignore-oracle-'));
-    isIgnored = createIgnoreOracle(oracleDir);
+    isIgnored = createIgnoreOracle(oracleDir).isIgnored;
   });
 
   afterAll(() => {

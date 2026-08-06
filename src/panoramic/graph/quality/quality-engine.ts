@@ -6,8 +6,16 @@
  * 由 CLI 层读取 sourceCommit 后单独计算，与本聚合结果一起组装成完整六字段
  * GraphQualityReport，见 quality-types.ts）。
  *
- * 纯函数，零 I/O：所有需要外部信息的判定均通过 opts 注入的回调完成
+ * 本模块**自身**不做 I/O：所有需要外部信息的判定均通过 opts 注入的回调完成
  * （isIgnored 来自 ignore-oracle.ts，getTestPatterns 来自 CLI 层的 LanguageAdapterRegistry 查找）。
+ *
+ * ⚠️ F258 起**不再对注入回调假设纯粹性**（原文"纯函数，零 I/O"是无条件表述，已不成立）：
+ * `isIgnored` 现在可能 spawn 子进程（`git check-ignore`）、带内部可变状态（记忆化 Map /
+ * undeterminable 累加器 / L2 预算计时），因而**同一份 graph 连跑两次可能给出不同结果**
+ * （预算耗尽、文件系统变化、未提交的忽略规则改动均会影响它）。
+ *
+ * 也就是说：本模块的输出是**相对于注入回调的**确定性，而不是绝对确定性。
+ * 需要可重现结果的调用方（如快照测试）MUST 注入自己的确定性回调。
  */
 import type { GraphJSON } from '../graph-types.js';
 import { checkDuplicateCanonicalIds } from './duplicate-id-check.js';

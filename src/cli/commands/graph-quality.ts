@@ -17,6 +17,7 @@ import type { CLICommand } from '../utils/parse-args.js';
 import type { GraphJSON } from '../../panoramic/graph/graph-types.js';
 import { runGraphQualityChecks } from '../../panoramic/graph/quality/quality-engine.js';
 import { createIgnoreOracle } from '../../panoramic/graph/quality/ignore-oracle.js';
+import type { UndeterminableSummary } from '../../utils/gitignore-oracle.js';
 import { evaluateFreshness } from '../../panoramic/graph/source-commit.js';
 import { LanguageAdapterRegistry } from '../../adapters/language-adapter-registry.js';
 import type {
@@ -290,10 +291,87 @@ function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[]
   return steps;
 }
 
+/**
+ * F258：不可判忽略判定的机读前缀 token。
+ *
+ * `graph-quality-report.schema.json` 顶层是 `additionalProperties: false`，新增结构化字段
+ * 代价过大，故诊断走已有的 `nextSteps: string[]`。代价是它只能是一条**文本契约**——
+ * 消费者 `scripts/lib/graph-quality-core.mjs` 对本 token 做前缀匹配，改文案即静默断链。
+ * 因此该字面值由 `tests/unit/graph-quality-core.test.ts` 的跨侧测试**双向钉住**。
+ */
+export const IGNORE_UNDETERMINABLE_TOKEN = '[ignore-undeterminable]';
+
+/**
+ * F258 审查修复轮 M-1：三态 oracle **整体降级**的机读子 token（嵌在同一条 nextSteps 文案里）。
+ *
+ * 单独一个子 token 而不是靠中文文案关键词：消费者要据此把 `degraded` 放进结构化 evidence，
+ * 靠"文案里有没有'降级'两个字"做判据等于把门禁挂在措辞上。与外层 token 同为文本契约，
+ * 同样由 `tests/unit/graph-quality-core.test.ts` 跨侧双向钉住。
+ */
+export const IGNORE_ORACLE_DEGRADED_TOKEN = '[oracle-degraded]';
+
+/**
+ * F258：把 oracle 累积的"判不了"诊断渲染成一条 nextSteps 文案。
+ *
+ * 文案必须能区分**三件**互不等价的事（D7 + 审查修复轮 M-1/M-2）：
+ * - "判不了"（`count`）：git 对该路径形态拒答 / 权限受限等；
+ * - "预算耗尽所以没去判"（`budgetExhausted`）：具名出口 `l2-budget-exhausted`；
+ * - "整个三态判定根本没在跑"（`degraded`）：git 仓内忽略清单预取失败 ⇒ oracle 退成二态近似。
+ *
+ * `degraded` 优先级最高且必须**先**判：该态下 `count` 与 `budgetExhausted` 结构性恒为
+ * 0 / false，沿用另外两条文案会把"没在判"说成"判过了没问题"——正是这条文案要堵的洞。
+ */
+export function describeUndeterminable(summary: UndeterminableSummary): string {
+  if (summary.degraded) {
+    return (
+      `${IGNORE_UNDETERMINABLE_TOKEN} ${IGNORE_ORACLE_DEGRADED_TOKEN} ` +
+      'git 仓库内忽略清单预取失败（git 不可用 / 仓库损坏 / 输出超限），三态忽略判定已整体降级为' +
+      '仅根 .gitignore 近似解析的二态结果：本次运行**不产出**不可判计数，' +
+      '因此"0 个不可判路径"不构成"忽略判定无盲区"的证据；' +
+      'ignoredPathNodeIds 维度的保真度同步降级，请先修复 git 环境再复核本报告。'
+    );
+  }
+  const sampleText = summary.samples.length > 0 ? `；样本：${summary.samples.join(', ')}` : '';
+  if (summary.count === 0) {
+    // 预算恰在最后一次 L2 之后耗尽：一条也没落进 undeterminable，但此后的离盘路径不再被查询
+    return (
+      `${IGNORE_UNDETERMINABLE_TOKEN} 本次运行未产出不可判路径，但权威忽略判定预算已耗尽` +
+      '[l2-budget-exhausted]：此后的离盘路径一律不再发起权威查询，' +
+      'ignoredPathNodeIds 维度可能不完整。'
+    );
+  }
+  const budgetText = summary.budgetExhausted
+    ? '（其中部分路径因权威判定预算耗尽 [l2-budget-exhausted] 而未实际查询，并非 git 拒答）'
+    : '';
+  return (
+    `${IGNORE_UNDETERMINABLE_TOKEN} ${summary.count} 个节点路径的忽略判定不可判` +
+    `（symlink 穿越 / submodule / 仓外 / 越界 / 权限受限）${budgetText}，` +
+    `已按未忽略处理，未计入 ignoredPathNodeIds${sampleText}。`
+  );
+}
+
+/**
+ * 诊断是否需要出声。
+ *
+ * **不得写成 `count > 0`**（审查修复轮 M-1 / M-2）：那条判据同时漏掉两个出口——
+ * `degraded`（三态判定整体没在跑，count 结构性恒 0）与 `budgetExhausted`（没去判，
+ * 预算恰在最后一次 L2 后耗尽时 count 也是 0）。两者都是"沉默即绿灯"的方向。
+ *
+ * 与 {@link describeUndeterminable} 一同导出：这两个纯函数是诊断通道的**判据与文案契约**，
+ * `budgetExhausted` 那条出口在 E2E 里成本极高（要真把 L2 预算跑穿），直接对它们下断言是
+ * 唯一能让该出口被变异测试杀掉的方式。
+ */
+export function shouldVoiceUndeterminable(summary: UndeterminableSummary): boolean {
+  return summary.count > 0 || summary.degraded || summary.budgetExhausted;
+}
+
 /** 组装完整 GraphQualityReport（成功读取到合法图产物场景）。 */
 function buildReport(graph: GraphJSON, graphPath: string, projectRoot: string): GraphQualityReport {
-  const isIgnored = createIgnoreOracle(projectRoot);
-  const structural = runGraphQualityChecks(graph, { isIgnored, getTestPatterns });
+  const ignoreOracle = createIgnoreOracle(projectRoot);
+  const structural = runGraphQualityChecks(graph, {
+    isIgnored: ignoreOracle.isIgnored,
+    getTestPatterns,
+  });
   // F249 FR-009：第三参传入图产物记录的指纹（可能为 undefined/null/畸形值，
   // evaluateFreshness 内部经 isValidCollectorFingerprint 收口，本层不做预校验）
   const rawFreshness = evaluateFreshness(
@@ -324,7 +402,19 @@ function buildReport(graph: GraphJSON, graphPath: string, projectRoot: string): 
     overallVerdict,
   };
 
-  return { ...base, nextSteps: buildNextSteps(base) };
+  const nextSteps = buildNextSteps(base);
+
+  // F258：三态 oracle 的"判不了"诊断——有界（不逐条 warn）、双通道（nextSteps 供机读、
+  // stderr 供人读）。两类消费方（采集面 walk / 图质量门）对 undeterminable **同向**按
+  // not-ignored 处理，故这里只报告、不改判定。
+  const undeterminable = ignoreOracle.drainUndeterminable();
+  if (shouldVoiceUndeterminable(undeterminable)) {
+    const message = describeUndeterminable(undeterminable);
+    nextSteps.push(message);
+    console.error(`[graph-quality] ${message}`);
+  }
+
+  return { ...base, nextSteps };
 }
 
 function toStatusReport(report: GraphQualityReport, graphExists: boolean): GraphQualityStatusReport {

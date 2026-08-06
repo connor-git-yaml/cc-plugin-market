@@ -35,7 +35,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { checkFreshness, readEmbeddedGraphMeta } from './lib/graph-bootstrap-status.mjs';
@@ -45,17 +44,47 @@ import {
   annotateImpactCaveat,
   DEGRADED_REASONS,
   DEGRADED_REASON_HINTS,
-  GRAPH_SCOPE_EXTENSIONS,
+  GRAPH_SCOPE_SURFACES,
 } from './lib/graph-consumption-decision.mjs';
-import { classifyChangeSet } from './lib/git-change-classifier.mjs';
+import {
+  collectChangeSet,
+  collectCoverageScope,
+  collectGraphAvailability,
+  deriveScopeSurfacesFromFingerprint,
+  verifiedSourceCommitOf,
+} from './lib/graph-consumption-inputs.mjs';
 import { executeRefresh } from './lib/graph-refresh-executor.mjs';
 import { extractTaskPaths, classifyFromTaskPaths } from './lib/tasks-path-signal.mjs';
+
+// 五维输入采集随实现一起搬进 `lib/graph-consumption-inputs.mjs`（F258 CLEANUP），其中**三个**
+// 常量是跨语言合同测试的锚点，此处**再导出**以保持
+// `tests/unit/graph-scope-extensions-contract.test.ts` 的既有 import 路径不变——
+// 这三个常量的存在理由就是"给合同测试一个锚点"，锚点位置不应因内部搬运而漂移。
+// （`export … from` 是 live binding：改 lib 侧而不改本文件，合同测试同样会红。已实测验证。）
+export {
+  FINGERPRINT_SURFACE_KEYS,
+  FINGERPRINT_ENTRY_KEYS,
+  SUPPORTED_FINGERPRINT_FORMAT_VERSION,
+} from './lib/graph-consumption-inputs.mjs';
 
 // 3（F254）：`decide` 输出与两类审计事件新增 `scopeExtensionsSource`，`decide` 侧另加
 // `coverageUnionApplied`（annotate 侧无此字段——注解时点不存在"重建可达面"这一说）。additive 字段
 // 不破坏任何现有消费方（审计只写不读），但 schemaVersion 的用途就是让"形状变了"可被显式识别——
 // 该 bump 却不 bump，这个字段就会逐渐失去指示意义。
-export const AUDIT_SCHEMA_VERSION = 3;
+//
+// 4（F258）：形状确实又变了——
+//   ① `decide` 输出与 `kind:'decision'` 事件新增 `baseRefResolution` / `worktreeStatusReadFailed`；
+//   ② 新增 `kind:'decide-aborted'` 事件与 abort payload（失败路径也留证据）；
+//   ③ `scopeExtensionsSource` 新增取值 `static-fallback-malformed-fingerprint`（P2 落地）。
+//
+// ⚠️ **本文件当前有 5 处写入点**：`decide-aborted` 事件、abort payload、`decision` 事件、
+// `decide` payload、`caveat-annotation` 事件。本仓**无入库 audit fixture**，漏改某处不会被
+// fixture 抓到，因此五处一律引用本常量，禁止任何地方写字面量版本号。
+//
+// 这条"共 N 处"的清单本身也会随扩面静默变成假话（F258 P3 复审实测：上一版写"三处"时实际已是
+// 五处）。故它不是一句自述，而是由 `graph-consumption-cli.test.mjs` 的
+// `SCHEMA_VERSION_WRITE_SITES` 静态断言锚住的——新增写入点却不更新这段注释即测试红。
+export const AUDIT_SCHEMA_VERSION = 4;
 const AUDIT_REL = path.join('.specify', 'graph-consumption-audit.jsonl');
 const GRAPH_REL = path.join('specs', '_meta', 'graph.json');
 const DEFAULT_PHASE = 'unscoped';
@@ -117,25 +146,6 @@ export function resolvePhaseStartRef(traceText, phase) {
   return found;
 }
 
-/* ----------------------------------------------------------- 五维输入采集 */
-
-function runGit(projectRoot, args) {
-  const result = spawnSync('git', args, { cwd: projectRoot, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-  return result.status === 0 ? (result.stdout ?? '') : '';
-}
-
-/**
- * `changeClass` + 变更文件清单。
- *
- * `--base-ref` 缺省时只看工作树差异（`baseRefMissing: true`）——这不是等价替代：
- * 已 commit 的改动会整体看不见，因此调用方在权威判定时必须传 base-ref。
- */
-function collectChangeSet(projectRoot, baseRef) {
-  const nameStatusText = baseRef ? runGit(projectRoot, ['diff', '--name-status', '-z', `${baseRef}..`]) : '';
-  const porcelainText = runGit(projectRoot, ['status', '--porcelain', '-z', '--untracked-files=all']);
-  return classifyChangeSet({ nameStatusText, porcelainText });
-}
-
 /**
  * D3 advisory 轮 1 的替补信号：tasks.md 已声明目标文件路径的存在性。
  *
@@ -168,28 +178,6 @@ function classifyFromTasksFile(projectRoot, tasksFilePath) {
 }
 
 /**
- * "已验证的 `graph.sourceCommit`"判据的**唯一实现**：非空字符串才算数，其余一律 null（B1-C1）。
- *
- * `readEmbeddedGraphMeta` 的 `ok:true` 只保证"文件读到了、JSON 解析通过"，字段本身缺失时
- * 它回的是 `sourceCommit: null`（那是 F239 为"旧格式图仍可评估"留的三态语义）。消费侧不能沿用
- * 那条宽松语义：一份查不出 provenance 的图，`annotate-caveat` 无从做快照校验、freshness 无从落地，
- * 对图消费决策而言与"读不出来"等价。判据与 canonical `inspectBuiltGraph` 逐字一致，
- * 避免"构建后判为不可用、决策时又判为可用"的自相矛盾。
- *
- * 取 meta 而非路径为入参（F254）：需要同时拿 fingerprint 的调用点只读一次文件即可复用本判据，
- * 不必为省一次读取而把这个 2 行谓词抄成三份。
- *
- * @param {{ ok: boolean, value: { sourceCommit: unknown } }} meta `readEmbeddedGraphMeta` 的返回
- *   （`ok:true` 时 `value` 必存在——本函数对其无条件解引用，依赖该上游保证）
- * @returns {string|null}
- */
-function verifiedSourceCommitOf(meta) {
-  if (!meta.ok) return null;
-  const sourceCommit = meta.value.sourceCommit;
-  return typeof sourceCommit === 'string' && sourceCommit.length > 0 ? sourceCommit : null;
-}
-
-/**
  * 只需要 sourceCommit、不需要 fingerprint 的读取路径（刷新后重读产物）。
  *
  * @returns {string|null}
@@ -199,131 +187,58 @@ function readVerifiedSourceCommit(graphJsonPath) {
 }
 
 /**
- * 图可用性三态。
+ * 指纹被拒时的**主动信号**（F258 D4：新增的观测取值必须有人读）。
  *
- * **入口必须是 `lstat`（EC-02 硬合同，B1-C2）**：`statSync` 会跟随符号链接，一条指向不存在目标的
- * `graph.json` symlink 因此报 ENOENT → 被判 `missing` → `allowed` 下走"重建"分支，而重建会
- * 沿着那条 symlink 往仓外写图。路径**存在与否**只能由 lstat 回答；能不能用是另一个问题。
- *
- * 判据收敛为两句话：
- * - lstat 报 ENOENT（路径确实不存在）→ `missing`，这是**唯一**的 missing 通路
- * - 路径存在但拿不到可验证的 `sourceCommit`（断链 / 目录 / 不可读 / 非 JSON / 缺字段 /
- *   空串 / 非字符串 / `graph-too-large`）→ `corrupt`
+ * `scopeExtensionsSource` 的全仓非测试消费点只有"人读渲染 + 写审计"，skills 一次都不读，审计按
+ * RG-006 只写不读——只加一个取值等于加一个没人会知道的字段。stderr warn 是这条链上唯一能主动
+ * 到达调用方的通道，且与 stdout 的结构化输出互不干扰（调用方用 `$( )` 捕获的是 stdout）。
  */
-function collectGraphAvailability(graphJsonPath) {
-  try {
-    fs.lstatSync(graphJsonPath);
-  } catch (error) {
-    // ENOENT 之外的 lstat 失败（父目录不可搜索等）不是"图不存在"，按不可用处理
-    const missing = error !== null && typeof error === 'object' && error.code === 'ENOENT';
-    return { graphAvailability: missing ? 'missing' : 'corrupt', graphSourceCommit: null, graphFingerprint: null };
-  }
+/**
+ * `scopeExtensionsSource` 三值（F258 §5.5）——"没有指纹"与"指纹不被认识"必须可区分。
+ *
+ * 两者的处置相同（都用静态面），但成因与该做的事完全不同：前者是旧图的正常形态，后者说明
+ * 图产物与消费侧口径已经对不上，需要有人去看。压成同一个取值就是把后者藏进前者里。
+ */
+function resolveScopeSource(derived) {
+  if (derived.surfaces !== null) return 'graph-fingerprint';
+  return derived.rejection !== null ? 'static-fallback-malformed-fingerprint' : 'static-fallback';
+}
 
-  // F254：sourceCommit 与 fingerprint 一次读取、一次解析（图产物可达 MB 级，也避免两次读取
-  // 之间图被换掉的窗口）。availability 判据本身逐字不变：仍只看已验证的 sourceCommit。
-  const meta = readEmbeddedGraphMeta(graphJsonPath);
-  const sourceCommit = verifiedSourceCommitOf(meta);
-  return sourceCommit === null
-    ? { graphAvailability: 'corrupt', graphSourceCommit: null, graphFingerprint: null }
-    : { graphAvailability: 'present', graphSourceCommit: sourceCommit, graphFingerprint: meta.value.fingerprint };
+function warnMalformedFingerprint(rejection) {
+  process.stderr.write(
+    `[warning] 图自述 collector fingerprint 不被认识，本次覆盖面整体回落静态面` +
+      `（scopeExtensionsSource=static-fallback-malformed-fingerprint）：${rejection}\n`,
+  );
 }
 
 /**
- * `graph.fingerprint.extensionSurface` 的五条管线 key（顺序与 collector-fingerprint.ts 对齐）。
+ * 逐管线合并动态面与静态面（W-1 的"重建可达面"并集，F258 起按管线 id 配对）。
  *
- * **导出仅为合同测试锚点**（`tests/unit/graph-scope-extensions-contract.test.ts`）：这份 key 列表是
- * TS 侧 `collector-fingerprint.ts::EXTENSION_SURFACE_KEYS` 的手写副本——zero-dist-dependency 边界
- * 下无法 import，只能靠外部合同测试锚定，否则就是本 fix 根治的那类镜像漂移的又一处。
- * 漂移的失败方向虽然安全（key 对不上 → 严格核验失败 → 整体回落静态面），但会**静默**丧失动态面
- * 能力：判定照常返回结果，只是永远走 fallback，没有任何报错能提示这件事。
+ * `matchSemantics` 两侧同 id 却不一致时**不合并、也不 throw**：该 id 按两条独立条目并存。
+ * 宁可多判一次 in-scope，也不静默选一个语义——与 TS 侧 `mergeSurfaces` 遇语义分歧即 throw 的
+ * 纪律同向（都拒绝静默选一个），只是消费侧的保守方向是"并存"而不是"中断决策"。
  */
-export const FINGERPRINT_SURFACE_KEYS = [
-  'tsjsSkeletonWalk',
-  'pyWalk',
-  'genericAdapters',
-  'moduleDerivationScan',
-  'pythonSymbolScan',
-];
-
-/**
- * 本模块唯一认识的 collector fingerprint 格式版本。
- *
- * **导出仅为合同测试锚点**（同 `FINGERPRINT_SURFACE_KEYS`）：这是 TS 侧
- * `collector-fingerprint.ts::SUPPORTED_FORMAT_VERSION` 的第三处手写副本，zero-dist-dependency 边界
- * 下无法 import。漂移的失败方向同样安全但同样静默——版本号对不上只会让所有指纹被判不认识、
- * 永久回落静态面，不报任何错。由 `tests/unit/graph-scope-extensions-contract.test.ts` 锚定。
- */
-export const SUPPORTED_FINGERPRINT_FORMAT_VERSION = 1;
-
-/**
- * 从图内嵌的 collector fingerprint（F249）推导覆盖范围判据用的扩展名并集。
- *
- * 消费图**自述**的采集面而非当前代码的采集面，是因为 coverageScope 问的是"这次改动能不能反映在
- * **手里这份图**里"。旧图配新代码时，按代码算会把图里根本没有的扩展判成 in-scope。
- *
- * **只做"够不够安全地取出扩展名列表"的宽松结构核验，不复刻 collector-fingerprint.ts 的整套版本
- * 演进/behaviorVersion 比较**：`plugins/spec-driver/scripts` 是零 dist 依赖的纯 `.mjs`（W1 硬约束，
- * 见 graph-bootstrap-status.mjs 文件头），无法 import TS 侧编译产物。这里刻意重复的只有
- * `formatVersion` 门槛这一个判断——真正会漂移的版本演进与比较语义仍只有一份实现（TS 侧，服务
- * freshness 判定），本函数只解读"扩展名在哪"这一个维度。
- *
- * 结构核验是**全有或全无**：`extensionSurface` 的 key 集合必须**精确等于**五条已知管线（多一个、
- * 少一个都算不认识），且每条形状合法，任一环不合规立即返回 null 整体回落静态面。宁可用旧口径，
- * 也不要用"凑出来的"部分并集——那正是本 fix 要根治的"扩面时悄悄漏一条管线"同类错误。
- *
- * **多出的未知 key 为什么也判不认识**（与 TS 侧 `parseCollectorFingerprint` 的 `keySetEquals` 同口径）：
- * 未来某个 producer 新增第六条管线却忘了 bump `formatVersion` 时，宽容忽略会让我们按残缺的五条
- * 算出一个**看起来合法**的并集，于是新管线覆盖的扩展名被静默判成范围外——正是本 fix 的原始 bug
- * 形态。严格集合把这种失误变成"整体回落静态面"（保守且可诊断，`scopeExtensionsSource` 会显示
- * static-fallback），代价只是"演进格式时必须同时 bump formatVersion"——那本就是它的用途。
- *
- * @param {unknown} fingerprint `graph.json` 的 `graph.fingerprint` 字段，可能是 undefined/null/畸形对象
- * @returns {string[] | null} 排序后的扩展名并集；无法可靠推导时返回 null
- */
-function deriveScopeExtensionsFromFingerprint(fingerprint) {
-  if (fingerprint === null || typeof fingerprint !== 'object' || Array.isArray(fingerprint)) return null;
-  // 未来格式演进：不认就回落，不猜测新形状
-  if (fingerprint.formatVersion !== SUPPORTED_FINGERPRINT_FORMAT_VERSION) return null;
-
-  const surface = fingerprint.extensionSurface;
-  if (surface === null || typeof surface !== 'object' || Array.isArray(surface)) return null;
-
-  // 严格 key 集合：长度相等 + 已知 key 全在 ⟹ 集合相等（FINGERPRINT_SURFACE_KEYS 无重复项）
-  const presentKeys = Object.keys(surface);
-  if (presentKeys.length !== FINGERPRINT_SURFACE_KEYS.length) return null;
-
-  const union = new Set();
-  for (const key of FINGERPRINT_SURFACE_KEYS) {
-    const entry = surface[key];
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return null;
-    if (!Array.isArray(entry.extensions)) return null;
-    for (const extension of entry.extensions) {
-      if (typeof extension !== 'string' || extension.length === 0) return null;
-      union.add(extension);
+function mergeScopeSurfaces(dynamicSurfaces, staticSurfaces) {
+  const staticById = new Map(staticSurfaces.map((surface) => [surface.id, surface]));
+  const merged = [];
+  for (const dynamic of dynamicSurfaces) {
+    const staticPeer = staticById.get(dynamic.id);
+    staticById.delete(dynamic.id);
+    if (staticPeer === undefined) {
+      merged.push(dynamic);
+    } else if (staticPeer.matchSemantics !== dynamic.matchSemantics) {
+      merged.push(dynamic, staticPeer);
+    } else {
+      merged.push({
+        id: dynamic.id,
+        extensions: [...new Set([...dynamic.extensions, ...staticPeer.extensions])].sort(),
+        matchSemantics: dynamic.matchSemantics,
+      });
     }
   }
-  return union.size > 0 ? [...union].sort() : null;
-}
-
-/**
- * 覆盖范围判据：本轮变更文件是否**全部**落在图覆盖面之外。
- *
- * "全部之外"而非"存在之外"：混合改动（既有面内文件又有面外文件）里面内部分的 impact 仍然有值，
- * 一有面外文件就整体判 out-of-scope 会把有效信号一起丢掉。
- * 无变更文件时不声称 out-of-scope——那是"不知道"，不是"范围外"。
- *
- * `scopeExtensions` 由调用方算好后显式传入（图自述动态面，或静态 fallback），使本判据与
- * `annotateImpactCaveat` 在同一次调用内消费同一份面（C-002）。
- */
-function collectCoverageScope(files, scopeExtensions) {
-  if (!Array.isArray(files) || files.length === 0) return 'in-graph-scope';
-  const anyInScope = files.some((filePath) => {
-    const dot = filePath.lastIndexOf('.');
-    const slash = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
-    if (dot <= slash) return false;
-    return scopeExtensions.includes(filePath.slice(dot).toLowerCase());
-  });
-  return anyInScope ? 'in-graph-scope' : 'out-of-graph-scope';
+  // 静态面独有的管线（动态面缺该 id）同样并入：并集的语义是"重建后可达"
+  for (const remaining of staticById.values()) merged.push(remaining);
+  return merged;
 }
 
 /**
@@ -428,6 +343,103 @@ function renderDecisionText(payload) {
   return `${lines.join('\n')}\n`;
 }
 
+/* ------------------------------------------------------- base-ref abort 出口 */
+
+/** abort payload 里 `gitStderr` 的回显上限：诊断够用即可，不做无界回显。 */
+const ABORT_STDERR_LIMIT = 512;
+
+/**
+ * 恢复口径（F258 §4.5）——**没有恢复口径 = 把本仓常规路径整条关掉，比原缺陷更坏**。
+ *
+ * 本仓 rebase 交付是强制流程，`phase_start_ref` 指向被改写的旧 sha 是常规形态，而
+ * `resolvePhaseStartRef` 是纯读取、无回退。因此 abort 必须同时告诉调用方**怎么出去**：
+ *
+ * (a) 显式传一个可达的 `--base-ref` 覆盖 trace 锚点（CLI 已有该参数）；
+ * (b) 由编排器**显式**重记 `phase_start_ref` 并在 trace / iteration log 留一条可审计记录。
+ *
+ * 红线与 (b) 的差别是**可审计性、不是动作本身**：禁止的是"自行、静默把锚点重记为当前 HEAD"
+ * （凭空重定义基线且无人知道）；显式 + 留痕 + 声明覆盖面损失的重记是允许的。
+ *
+ * 实现层刻意**不**做自动重记——自动重记就是把红线要防的事做成默认行为。CLI 只 abort + 给 hint。
+ */
+const ABORT_HINT_UNRESOLVABLE =
+  'phase 起点锚点不可达（rebase 改写历史会造成该形态）。不得据此判定变更类别；' +
+  '请改用可达的 --base-ref 重跑，或由编排器显式重记 phase_start_ref 并在 trace / iteration log 留痕' +
+  '（记明原锚点不可达、新锚点是什么、此前变更不在本次影响面证据内）。本次不提供影响面证据。';
+
+/**
+ * `diff-failed` **必须**用不同的话说。
+ *
+ * 这条分支的定义恰恰是"锚点已经 probe 通过"——失败在 diff 本身（索引损坏 / 仓库状态异常 /
+ * spawn 层 ENOBUFS）。若沿用 unresolvable 的文案，操作者会照着去重记 `phase_start_ref`：
+ * 那个动作对本形态毫无作用，还会按红线要求在 trace 里留下一条**事实错误**的"原锚点不可达"记录。
+ * 出口相同（都 exit 3、都不给影响面证据），但恢复动作不同，话就不能混着说。
+ */
+const ABORT_HINT_DIFF_FAILED =
+  'phase 起点锚点本身可解析，但 git diff 执行失败（索引损坏 / 仓库状态异常 / 输出超出缓冲区）。' +
+  '不得据此判定变更类别；**不要**重记 phase_start_ref——锚点没有问题。' +
+  '请先排查仓库状态（gitStderr / gitSpawnError 字段给出了原因），修好后重跑。本次不提供影响面证据。';
+
+const ABORT_HINTS = {
+  unresolvable: ABORT_HINT_UNRESOLVABLE,
+  'diff-failed': ABORT_HINT_DIFF_FAILED,
+};
+
+/**
+ * base-ref 不可信时的硬失败出口：退出码 3，stdout 仍是可解析 JSON。
+ *
+ * **封闭键集，刻意不含 `degradedReason` / `fallbackHint`**：abort 发生在矩阵求值之前，它没有
+ * outcome、也不是一种降级——把它塞进 `DEGRADED_REASONS` 就是与"变更类别真判不出来"共用出口，
+ * 正是用户裁决明确否掉的。调用方 SKILL 侧必须相应改记 `error` / `hint`，否则会写出一行 `undefined`。
+ *
+ * stdout 仍输出 JSON 而不是只写 stderr：调用方现状用 `DECISION=$(...)` 捕获 stdout，
+ * 让它拿到可解析内容才谈得上"把原因并入注入块"。abort payload **不随 `--format text` 变形**：
+ * 人读渲染器是按决策形状写的（outcome/matchedRule/caveats），abort 一个都没有，给它套一层
+ * 半空的人读模板只会让"这不是一次决策"这件事变模糊；人读通道由下方 stderr 承担。
+ *
+ * @returns {3} 固定退出码 3（0 成功 / 1 内部异常 / 2 用法错误 之外的第四个语义：锚点不可信）
+ */
+function abortUnresolvableBaseRef({ projectRoot, phase, advisory, dryRun, baseRef, changeSet }) {
+  const hint = ABORT_HINTS[changeSet.baseRefResolution];
+  const event = {
+    kind: 'decide-aborted',
+    schemaVersion: AUDIT_SCHEMA_VERSION,
+    ts: new Date().toISOString(),
+    projectRoot,
+    phase,
+    advisory,
+    error: 'base-ref-unresolvable',
+    baseRefResolution: changeSet.baseRefResolution,
+    baseRef,
+    gitStatus: changeSet.gitStatus,
+  };
+  // dry-run 的"零副作用"合同不因失败路径而失效：锚点坏没坏与要不要写盘是两件事
+  const auditWritten = dryRun ? false : appendAuditEvent(projectRoot, event);
+
+  const payload = {
+    schemaVersion: AUDIT_SCHEMA_VERSION,
+    error: 'base-ref-unresolvable',
+    ts: event.ts,
+    projectRoot,
+    phase,
+    advisory,
+    baseRef,
+    baseRefResolution: changeSet.baseRefResolution,
+    gitStatus: changeSet.gitStatus,
+    gitStderr: changeSet.gitStderr.slice(0, ABORT_STDERR_LIMIT),
+    // spawn 层失败时 `gitStatus` 为 null、`gitStderr` 为空串——那时这个字段是唯一的诊断来源
+    gitSpawnError: changeSet.gitSpawnError,
+    hint,
+    auditWritten,
+  };
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  // 人读通道也要出声：exit 3 若只体现在退出码上，散文调用方漏检时连线索都没有
+  process.stderr.write(
+    `[error] phase 起点锚点不可信（${changeSet.baseRefResolution}）：${baseRef}\n${hint}\n`,
+  );
+  return 3;
+}
+
 /* ---------------------------------------------------------------- decide */
 
 async function runDecide(flags) {
@@ -446,19 +458,63 @@ async function runDecide(flags) {
   const advisory = flags.advisory === true;
   const dryRun = flags['dry-run'] === true;
   const phase = typeof flags.phase === 'string' ? flags.phase : DEFAULT_PHASE;
+  // 锚点类参数的**类型闸门**（F258，与附带项 6.2 的 `--refresh-deadline-ms` 同形）：
+  // `parseFlags` 对"下一个 token 以 `--` 开头或缺省"置 `true`，于是 `--base-ref --format json`
+  // 这类手滑会让 `typeof !== 'string'` 分支把它静默降级成"压根没给锚点"，输出 `baseRefMissing:true`
+  // 照常出决策——**调用方明明声称了锚点，我们却当它没说过**。这与本 fix 要消灭的"base-ref 坏了
+  // 还照常给结论"是同一种病，只是发生在参数解析层。
+  //
+  // 出口取 **2（用法错误）而非 3（锚点不可信）**：命令行本身写错了，责任在编排层，语义不是
+  // "锚点不可达"。SKILL 对 RC==2 的处置正是"停下修调用"，与责任方一致。
+  for (const key of ['base-ref', 'base-ref-from-trace']) {
+    if (flags[key] === undefined) continue;
+    if (typeof flags[key] !== 'string') {
+      process.stderr.write(`参数 --${key} 缺少取值（下一个 token 是另一个 flag 或已到末尾）\n`);
+      return 2;
+    }
+    // 空串 / 纯空白同样是"声称了却没给"：`--base-ref "$REF"` 而 `REF` 未设是最常见的 shell 形态，
+    // 而空串会从 `typeof === 'string'` 的缝里漏进"未提供锚点"分支，得到一份 exit 0 的权威决策。
+    // 尤其危险的是：abort 的恢复口径 (a) **就是**"显式传 --base-ref <可达 ref> 重跑"——编排 agent
+    // 若算出空值，恢复动作本身会把一次响亮的 abort 换成一次静默的错误决策。
+    if (flags[key].trim().length === 0) {
+      process.stderr.write(`参数 --${key} 取值为空（空串或纯空白不是合法锚点；请给出可达的 ref / trace 路径）\n`);
+      return 2;
+    }
+  }
   // `--base-ref-from-trace` 是给编排层用的便捷入口：直接指 trace.md，由 CLI 按 last-match-wins
   // 取出该 phase 最后一次的起点 ref（T-W1）。显式 `--base-ref` 优先级更高。
   let baseRef = typeof flags['base-ref'] === 'string' ? flags['base-ref'] : null;
-  if (baseRef === null && typeof flags['base-ref-from-trace'] === 'string') {
+  const baseRefTraceSource = typeof flags['base-ref-from-trace'] === 'string' ? flags['base-ref-from-trace'] : null;
+  if (baseRef === null && baseRefTraceSource !== null) {
     try {
-      baseRef = resolvePhaseStartRef(fs.readFileSync(flags['base-ref-from-trace'], 'utf-8'), phase);
+      baseRef = resolvePhaseStartRef(fs.readFileSync(baseRefTraceSource, 'utf-8'), phase);
     } catch {
       // trace 读不到就当没有锚点：输出会标 baseRefMissing:true，不静默冒充"有"
       baseRef = null;
     }
+    // EC-29 的原文要求是「`--base-ref` 缺失时，authoritative 合同下应在输出中**明确警示**」，
+    // 而"调用方指定了 trace 却取不到锚点"此前一句警示都没有（stderr 恒 0 字节）：它与"压根没传
+    // `--base-ref*`"落进同一个 `not-provided`，事后连审计都分不出来。出口维持 exit 0 不变
+    // （EC-29 回归护栏，见红用例 R2-3），但**必须出声**——"没有锚点"和"锚点源答不出来"是两件事。
+    if (baseRef === null) {
+      process.stderr.write(
+        `[warning] --base-ref-from-trace 指定了 ${baseRefTraceSource}，但其中取不到 phase=${phase} 的 ` +
+          `phase_start_ref（文件不存在 / 无该 phase 的锚点行 / --phase 与 trace 里记的名字不一致）。` +
+          `本次按"无锚点"处理：只看工作树差异，已 commit 的改动整体看不见，结论据此产生。\n`,
+      );
+    }
   }
   const spectraBin = typeof flags['spectra-bin'] === 'string' ? flags['spectra-bin'] : 'spectra';
-  // 缺省时沿用 canonical 的默认重建预算；显式传入是给有时间预算的调用方（CI / 短 phase）用的
+  // 缺省时沿用 canonical 的默认重建预算；显式传入是给有时间预算的调用方（CI / 短 phase）用的。
+  //
+  // **类型闸门必须在 Number() 之前（F258 附带项 6.2）**：`parseFlags` 对"下一个 token 以 `--` 开头
+  // 或缺省"置 `true`，而 `Number(true) === 1` 恰好通过 `isFinite && > 0` 校验——于是
+  // `--refresh-deadline-ms --format json` 这种手滑会把重建预算静默压成 1 ms（必然超时），
+  // 表现为"刷新老是失败"而不是"参数写错了"。
+  if (flags['refresh-deadline-ms'] !== undefined && typeof flags['refresh-deadline-ms'] !== 'string') {
+    process.stderr.write('参数 --refresh-deadline-ms 缺少取值（下一个 token 是另一个 flag 或已到末尾）\n');
+    return 2;
+  }
   const refreshDeadlineMs = Number(flags['refresh-deadline-ms']);
   if (flags['refresh-deadline-ms'] !== undefined && !(Number.isFinite(refreshDeadlineMs) && refreshDeadlineMs > 0)) {
     process.stderr.write('参数 --refresh-deadline-ms 必须是正整数毫秒\n');
@@ -466,7 +522,29 @@ async function runDecide(flags) {
   }
   const graphJsonPath = path.join(projectRoot, GRAPH_REL);
 
-  const { changeClass: gitChangeClass, files } = collectChangeSet(projectRoot, baseRef);
+  const changeSet = collectChangeSet(projectRoot, baseRef);
+
+  // ---------------------------------------------------------------------------
+  // F258 缺陷 2：锚点不可信 ⇒ **本次拒绝给出决策**（exit 3），在矩阵求值之前收口。
+  //
+  // 为什么不退到 `changeClass = 'unknown'` 让它"保守刷图"（fix-report R1 已实证证伪）：
+  // `unknown` 命中矩阵行 7 `consume-degraded`，**排在 stale（行 8）之前**短路，而只有
+  // `refresh-then-consume` 才会 `executeRefresh` —— unknown 根本不刷图，还会把
+  // `graph-stale-refresh-declined` / `graph-dirty-uncommitted` 等真实信号永久遮蔽。
+  // 那是比原缺陷更坏的静默降级。
+  //
+  // abort 发生在这里（`collectGraphAvailability` / `checkFreshness` 之前）不是顺手为之：
+  // 锚点不可信时，"图新不新""覆盖面够不够"问了也没有意义，而多问一次就多一次 spawn；
+  // 更重要的是，**没有发生任何刷新**这一事实是 §4.5「abort 不消耗刷新预算」口径的实现侧依据。
+  //
+  // `--advisory` 同样 exit 3：advisory 与权威合同的区别是"结论的权威度"，不是"事实源可不可以
+  // 骗人"。给 advisory 开一条软路，等于恢复一条"锚点坏了但照常出结论"的静默通道。
+  // ---------------------------------------------------------------------------
+  if (changeSet.baseRefResolution === 'unresolvable' || changeSet.baseRefResolution === 'diff-failed') {
+    return abortUnresolvableBaseRef({ projectRoot, phase, advisory, dryRun, baseRef, changeSet });
+  }
+
+  const { changeClass: gitChangeClass, files } = changeSet;
 
   // D3 双合同的分界线就在这几行：
   // - 权威合同（无 `--advisory`）**只认 git diff**，传了 `--tasks-file` 也忽略并显式告警。
@@ -486,9 +564,11 @@ async function runDecide(flags) {
   }
 
   const { graphAvailability, graphSourceCommit, graphFingerprint } = collectGraphAvailability(graphJsonPath);
-  // F254：覆盖面优先取图自述的采集面（图能回答"我收了哪些扩展名"就以它为准），推不出来才回落静态面。
-  const derivedScopeExtensions = deriveScopeExtensionsFromFingerprint(graphFingerprint);
-  const scopeExtensionsSource = derivedScopeExtensions !== null ? 'graph-fingerprint' : 'static-fallback';
+  // F254：覆盖面优先取图自述的采集面（图能回答"我收了哪些扩展名、按什么语义匹配"就以它为准），
+  // 推不出来才回落静态面。F258：回落分两种——"图本就没有指纹"与"有指纹但不被认识"，后者出声。
+  const derived = deriveScopeSurfacesFromFingerprint(graphFingerprint);
+  const scopeExtensionsSource = resolveScopeSource(derived);
+  if (derived.rejection !== null) warnMalformedFingerprint(derived.rejection);
 
   // ---------------------------------------------------------------------------
   // W-1：coverage 判据的面**按 refreshPolicy 分支**，因为两种策略下问的根本不是同一个问题。
@@ -511,18 +591,29 @@ async function runDecide(flags) {
   // 行 2 的只剩「目标同时落在图自述面**和**本仓静态面之外」——那才是货真价实的"重建也进不去"。
   // 严格地说：该论证**在 plugin 与执行重建的 collector 同版本这一前提下恒真**；跨版本 skew 时
   // （安装的 spectra 比 plugin 新、采集面更宽）并集仍可能窄于重建后的真实面，此时该改动会被判
-  // 范围外而错过一次本可命中的重建——残留风险与修复前**同向**（都是"该刷没刷"，不会反向变成
-  // "不该刷却刷"），量级则远小于修复前（修复前是任何面外扩展恒自锁）。
+  // 范围外而错过一次本可命中的重建——这一支的残留风险与修复前**同向**（"该刷没刷"），
+  // 量级则远小于修复前（修复前是任何面外扩展恒自锁）。
+  //
+  // ⚠️ **但"不会反向"这句原话是 over-claim，已按实证撤回（F258 审查修复轮）**：union 分支存在
+  // 第三个方向——`freshness=fresh` × `allowed` 时，落在 union 内、图自述面**外**的目标不再命中
+  // 行 2，却也不会走到刷新（图是 fresh 的，没什么可刷），于是直接拿到全信 `consume-impact`：
+  // 手里这份图**根本不含**该扩展，impact 结果却按"覆盖完整"消费。更糟的是 `annotate-caveat`
+  // 时点用的是图自述面（不带 union），该目标在那边判面外 ⇒ 不注解 ⇒ 两侧同时静默。
+  // 即"该降级却全信"，与"该刷没刷"方向**相反**。
+  //
+  // 收敛它要动决策矩阵语义（在 fresh 分支下让 coverage 判据回到图自述面，或给 union 分支补一条
+  // 显式 caveat），且病灶来自 F254 W-1 而非本 fix，故按**独立 fix 卡**登记、本轮不改行为。
+  // 这里只保证登记如实——原文案会让下一轮审查者按"方向安全"放过它。
   // 落在并集内、但不在图自述面内的目标现在不再命中行 2，而是继续走 availability/freshness 分支
   // （stale×allowed → 行 8 刷新）——这正是修复的那条路径。
   //
   // EC-07 不受影响：本分支只改矩阵**入参**的算法，`finalizeAfterRefresh` 仍不重跑矩阵。
   // ---------------------------------------------------------------------------
   const refreshAllowed = refreshPolicy === 'allowed';
-  const coverageUnionApplied = refreshAllowed && derivedScopeExtensions !== null;
-  const coverageScopeExtensions = coverageUnionApplied
-    ? [...new Set([...derivedScopeExtensions, ...GRAPH_SCOPE_EXTENSIONS])].sort()
-    : (derivedScopeExtensions ?? GRAPH_SCOPE_EXTENSIONS);
+  const coverageUnionApplied = refreshAllowed && derived.surfaces !== null;
+  const coverageScopeSurfaces = coverageUnionApplied
+    ? mergeScopeSurfaces(derived.surfaces, GRAPH_SCOPE_SURFACES)
+    : (derived.surfaces ?? GRAPH_SCOPE_SURFACES);
 
   // freshness 的唯一权威来源是 canonical 的 checkFreshness（RG-006）：本文件既不缓存它、
   // 也不自己拿 graph.sourceCommit 去比 HEAD 复算一份。
@@ -531,7 +622,7 @@ async function runDecide(flags) {
     changeClass,
     graphAvailability,
     freshness: freshnessVerdict.state,
-    coverageScope: collectCoverageScope(files, coverageScopeExtensions),
+    coverageScope: collectCoverageScope(files, coverageScopeSurfaces),
     refreshPolicy,
   };
 
@@ -595,6 +686,10 @@ async function runDecide(flags) {
         inputs,
         scopeExtensionsSource,
         coverageUnionApplied,
+        // F258：锚点与工作树两路输入各自的可信度如实入审计。成功路径上 `baseRefResolution`
+        // 只可能是 `not-provided` / `resolved`——`unresolvable` / `diff-failed` 走 decide-aborted 事件。
+        baseRefResolution: changeSet.baseRefResolution,
+        worktreeStatusReadFailed: changeSet.worktreeStatusReadFailed,
         outcome: decision.outcome,
         degradedReason: decision.degradedReason,
         caveats: [],
@@ -634,7 +729,14 @@ async function runDecide(flags) {
     caveats: decision.caveats,
     matchedRule: decision.matchedRule,
     graphSourceCommit: effectiveGraphSourceCommit,
+    // 语义不变（`baseRef === null` = 调用方压根没给锚点），保留既有断言与调用方读法
     baseRefMissing: baseRef === null,
+    // F258 新增两个如实标注：
+    // - `baseRefResolution`：把"没给"与"给了且可达"分开——`baseRefMissing` 只能说前一半。
+    // - `worktreeStatusReadFailed`：`git status --porcelain` 读失败的如实标注。刻意与
+    //   `graph-quality` 的 `porcelainReadFailed` 同名同义（措辞复用，读者不必学第二套词汇）。
+    baseRefResolution: changeSet.baseRefResolution,
+    worktreeStatusReadFailed: changeSet.worktreeStatusReadFailed,
     refreshAttempted,
     refreshOk,
     refreshDurationMs,
@@ -699,11 +801,12 @@ function runAnnotateCaveat(flags) {
   // 是两个独立进程，中间隔着一次真实 MCP impact 调用，图状态可能已经变了。快照校验（FR-010）
   // 已经在处理"图变了"这件事；覆盖面若仍沿用上一份图的口径，就会多出一个
   // "sourceCommit 校验过了、判据却是旧图的"不一致窗口。
-  const derivedScopeExtensionsAtAnnotation = graphMetaAtAnnotation.ok
-    ? deriveScopeExtensionsFromFingerprint(graphMetaAtAnnotation.value.fingerprint)
-    : null;
-  const scopeExtensionsAtAnnotation = derivedScopeExtensionsAtAnnotation ?? GRAPH_SCOPE_EXTENSIONS;
-  const scopeExtensionsSource = derivedScopeExtensionsAtAnnotation !== null ? 'graph-fingerprint' : 'static-fallback';
+  const derivedAtAnnotation = graphMetaAtAnnotation.ok
+    ? deriveScopeSurfacesFromFingerprint(graphMetaAtAnnotation.value.fingerprint)
+    : { surfaces: null, rejection: null };
+  const scopeSurfacesAtAnnotation = derivedAtAnnotation.surfaces ?? GRAPH_SCOPE_SURFACES;
+  const scopeExtensionsSource = resolveScopeSource(derivedAtAnnotation);
+  if (derivedAtAnnotation.rejection !== null) warnMalformedFingerprint(derivedAtAnnotation.rejection);
 
   // 快照校验：decide 读的是 G1、impact 却跑在 G2 上，这类跨快照拼接必须被显式检出，
   // 而不是静默拼成一条对不上号却"看起来完整"的记录。
@@ -714,7 +817,7 @@ function runAnnotateCaveat(flags) {
         decision,
         impactStatus === 'completed' ? impactResult : null,
         target,
-        scopeExtensionsAtAnnotation,
+        scopeSurfacesAtAnnotation,
       )
     : { ...decision, caveats: [] };
 

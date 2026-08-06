@@ -1,15 +1,24 @@
 /**
  * F217 决策 2 增补（FR-008）：共享 ignore 判定 oracle。
  *
- * 组合 createGitignoreFilter（.gitignore 规则）+ 图生产者自己的忽略目录合同（GRAPH_COLLECTOR_IGNORE_DIRS），
- * 供 legacy-ignored-check.ts（ignored path 节点检测）与
+ * 组合三态 gitignore oracle（gitignore-oracle.ts）+ 图生产者自己的忽略目录合同
+ * （GRAPH_COLLECTOR_IGNORE_DIRS），供 legacy-ignored-check.ts（ignored path 节点检测）与
  * generic-language-skeleton-collector.ts（Java/Go 采集器）共同复用，
  * 避免出现第三份互不一致的忽略规则定义。
  *
- * 与六指标 check 函数不同，本模块内部调用 createGitignoreFilter（F255 起：git 仓库内向
- * git 本体预取忽略清单，非 git 上下文回退读根 .gitignore 文件），存在子进程 / 文件系统
- * I/O——因此不是"零 I/O 纯函数"，由 CLI 层 / collector 层显式构造后注入到纯函数 check 里
- * （legacy-ignored-check.ts 的 isIgnored 回调）。
+ * 与六指标 check 函数不同，本模块内部会 spawn 子进程、读文件系统，且带内部可变状态
+ * （记忆化 / 不可判计数 / L2 预算）——因此不是"零 I/O 纯函数"，由 CLI 层 / collector 层
+ * 显式构造后注入到 check 里（legacy-ignored-check.ts 的 isIgnored 回调）。
+ *
+ * F258 三态收敛（本模块的核心职责）：底层 oracle 给 `ignored | not-ignored | undeterminable`
+ * 三态，本模块把它收口成 `checkLegacyAndIgnoredNodes` 需要的同步 boolean 谓词，方向是
+ * **`undeterminable` ⇒ 按 `not-ignored` 处理**——与采集面消费方**同向**（详见
+ * legacy-ignored-check.ts 文件头）。诊断不丢弃，经 `drainUndeterminable()` 有界取回；
+ * 刻意**不**提供"返回裸谓词"的便捷入口，那等于给未来的消费方留一个静默丢弃诊断的口子。
+ *
+ * 事实源口径（撤下 over-claim）：底层是两个回答不同问题的 git 命令
+ * （`git ls-files --others --ignored --directory` 管在盘枚举、`git check-ignore` 管规则查询，
+ * 后者权威**但非全域**），已知限制 KL-1..KL-6 逐条登记在 gitignore-oracle.ts 文件头。
  *
  * P0 修正（本仓库实跑发现 551 个假阳性 ignored-path 节点后的根因修复）：
  * 早期实现误用了 `src/utils/file-scanner.ts` 的 `BUILTIN_IGNORE_DIRS`——那是"spec 生成
@@ -25,7 +34,10 @@
  * BUILTIN_IGNORE_DIRS。
  */
 import * as path from 'node:path';
-import { createGitignoreFilter } from '../../../utils/file-scanner.js';
+import {
+  createGitignoreOracle,
+  type UndeterminableSummary,
+} from '../../../utils/gitignore-oracle.js';
 import { JavaLanguageAdapter } from '../../../adapters/java-adapter.js';
 import { GoLanguageAdapter } from '../../../adapters/go-adapter.js';
 import {
@@ -177,17 +189,36 @@ function ignoreDirsForPath(relativePath: string): ReadonlySet<string> {
  * 构造 ignore 判定函数：输入相对 projectRoot 的路径，返回是否应被视为"已忽略"。
  *
  * 命中条件（任一即视为忽略）：
- * - git 忽略规则命中（全语言通用；F255 起以 git 本体为事实源，非 git 上下文回退根 .gitignore 近似）
+ * - git 忽略规则判定为 `ignored`（三态 oracle；`undeterminable` **不**算命中，按 not-ignored 处理）
  * - 路径任意目录段命中该路径扩展名对应的图生产者忽略目录合同（FIX-5：按语言分派，
  *   而非无差别 union；未知扩展名退回 GRAPH_COLLECTOR_IGNORE_DIRS 兜底）
+ *
+ * 注意 `undeterminable` 的可达性如实表述：walk 场景**通常**不可达（dirent 恒在盘 ⇒ 走 L1
+ * 查表），但 EACCES / ELOOP 等 errno 形态**可达**——此时按 not-ignored 处理，
+ * 与旧行为逐字节一致。不得写成"结构上不可达"。
  */
-export function createIgnoreOracle(projectRoot: string): (relativePath: string) => boolean {
-  const gitignoreCheck = createGitignoreFilter(projectRoot);
+export interface IgnoreOracle {
+  /**
+   * 同步 boolean 谓词（`checkLegacyAndIgnoredNodes` 的既有契约不变）。
+   * 三态在本函数内部收敛：`undeterminable` ⇒ 按 `not-ignored` 处理（见 drainUndeterminable）。
+   */
+  isIgnored(relativePath: string): boolean;
+  /** 取走并清空累积的"判不了"诊断；返回形状含 `budgetExhausted` 具名出口。 */
+  drainUndeterminable(): UndeterminableSummary;
+}
 
-  return (relativePath: string): boolean => {
-    if (gitignoreCheck(relativePath)) return true;
-    const segments = relativePath.split(/[\\/]/).filter((seg) => seg.length > 0 && seg !== path.sep);
-    const ignoreDirs = ignoreDirsForPath(relativePath);
-    return segments.some((seg) => ignoreDirs.has(seg));
+export function createIgnoreOracle(projectRoot: string): IgnoreOracle {
+  const gitignore = createGitignoreOracle(projectRoot);
+
+  return {
+    isIgnored(relativePath: string): boolean {
+      if (gitignore.verdict(relativePath) === 'ignored') return true;
+      const segments = relativePath
+        .split(/[\\/]/)
+        .filter((seg) => seg.length > 0 && seg !== path.sep);
+      const ignoreDirs = ignoreDirsForPath(relativePath);
+      return segments.some((seg) => ignoreDirs.has(seg));
+    },
+    drainUndeterminable: () => gitignore.drainUndeterminable(),
   };
 }

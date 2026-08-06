@@ -157,8 +157,10 @@ export class PythonLanguageAdapter implements LanguageAdapter {
       'test', 'tests', 'dist', 'node_modules', '.git',
     ]);
     // F194：叠加 git 忽略过滤层（只叠加不替换硬编码集）。
-    // F255 起该过滤层在 git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），
-    // 非 git 上下文回退根 .gitignore 近似解析。
+    // F255 起该过滤层在 git 仓库内消费 `git ls-files --others --ignored --directory` 的
+    // **在盘枚举**（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似解析。
+    // 它的盲区（嵌套 git 仓不枚举、离盘路径缺席等）逐条登记在 `utils/gitignore-oracle.ts` 文件头，
+    // 不要在此复述成"以 git 本体为事实源"（F258 撤下的 over-claim）。
     // 基准 = resolvedRoot（与 file-scanner walkDir 的 path.relative(baseDir, fullPath) 同口径，不做 sep 转换）。
     const isGitignored = createGitignoreFilter(resolvedRoot);
     const pyFiles: string[] = [];

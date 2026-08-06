@@ -114,12 +114,35 @@ function parsePorcelain(text) {
  * 未识别状态码走 `unknown` 而非"猜一个"：`unknown` 在 FR-003 矩阵里落降级消费（行 7），
  * 是安全方向；猜成 `additive-only` 会直接跳过 impact，猜错的代价不对称。
  *
- * @param {{ nameStatusText?: string, porcelainText?: string }} input
+ * **输入可信度必须由调用方显式声明（F258 缺陷 2 的 Why 5）**：`nameStatusOk` / `porcelainOk`
+ * 是 required 布尔位，缺失或非 boolean 一律 `throw TypeError`。
+ *
+ * - 为什么不接受"缺省即可信"：调用方的 git 包装器若把"命令跑失败"折成空串，空串在这里是
+ *   完全合法的"没有变更"——"读不到"与"没有改动"在类型层不可区分，正是原缺陷的形态。
+ * - 为什么也不接受"缺省即不可信"：那会把一切旧调用静默判成 `unknown`，而 `unknown` 命中矩阵
+ *   行 7 `consume-degraded`、**根本不刷图**，还会抢在 freshness 之前短路，把 stale/dirty 信号
+ *   永久遮蔽（fix-report R1 实证）。静默的"保守"方向在这条链上恰恰不保守。
+ * - 终态取 caller 传参 required + fail-loud（F238 教训：让字符串/缺省承担控制信号必被击穿）。
+ *
+ * 文本字段仍保持宽容（非字符串按空串处理）：它们的"可信与否"已由 ok 位承担，再对文本类型
+ * fail-loud 只会把同一件事判两遍。
+ *
+ * @param {{ nameStatusText?: string, nameStatusOk: boolean,
+ *           porcelainText?: string, porcelainOk: boolean }} input
  * @returns {{ changeClass: 'modifies-existing'|'additive-only'|'unknown', files: string[] }}
+ * @throws {TypeError} 两个 ok 位任一非 boolean 时
  */
 export function classifyChangeSet(input) {
-  const nameStatusText = typeof input?.nameStatusText === 'string' ? input.nameStatusText : '';
-  const porcelainText = typeof input?.porcelainText === 'string' ? input.porcelainText : '';
+  for (const key of ['nameStatusOk', 'porcelainOk']) {
+    if (typeof input?.[key] !== 'boolean') {
+      throw new TypeError(
+        `classifyChangeSet: 入参 ${key} 必须是 boolean（调用方必须显式声明该路 git 输出是否可信），实得 ${JSON.stringify(input?.[key])}`,
+      );
+    }
+  }
+
+  const nameStatusText = typeof input.nameStatusText === 'string' ? input.nameStatusText : '';
+  const porcelainText = typeof input.porcelainText === 'string' ? input.porcelainText : '';
 
   const nameStatus = parseNameStatus(nameStatusText);
   const porcelain = parsePorcelain(porcelainText);
@@ -127,7 +150,14 @@ export function classifyChangeSet(input) {
   const files = new Set();
   let modifiesExisting = false;
   let additive = false;
-  let unrecognized = !nameStatus.ok || !porcelain.ok;
+  // 读取失败与解析失败同权：两者都意味着"这一路的事实拿不到"，不得被空串伪装成"没有变更"。
+  //
+  // ⚠️ `porcelainOk:false` 并进这里是**有意的**，且有实打实的下游代价：它会让 changeClass 变
+  // `unknown` ⇒ 命中 FR-003 矩阵行 7 `consume-degraded` ⇒ 本次不刷图（审查修复轮 M-5 登记于
+  // `graph-consumption-inputs.mjs::collectChangeSet` 的 JSDoc）。保留它的理由是另一边更危险：
+  // 排除 porcelain 会让只看得见已提交部分的残缺变更集冒充完整的，工作树里的修改型改动被抹掉
+  // 后整体判 `additive-only` ⇒ 跳过 impact。
+  let unrecognized = !input.nameStatusOk || !input.porcelainOk || !nameStatus.ok || !porcelain.ok;
 
   for (const entry of nameStatus.entries) {
     for (const filePath of entry.paths) files.add(filePath);

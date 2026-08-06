@@ -82,8 +82,10 @@ const SUPPORTED_FORMAT_VERSION = 1;
  *
  * bump 记录：
  * - 2 ← 1（F255，`gitignore-interpretation`）：采集侧忽略判定从"手写根 `.gitignore` 近似解析"
- *   改为以 git 本体为事实源（含嵌套 `.gitignore`、`.git/info/exclude`、全局 excludesFile
- *   与 tracked 豁免），既有图产物的采集面口径已变，必须整体归 stale 后重建。
+ *   改为消费 `git ls-files --others --ignored --directory` 的在盘枚举（含嵌套 `.gitignore`、
+ *   `.git/info/exclude`、全局 excludesFile 与 tracked 豁免），既有图产物的采集面口径已变，
+ *   必须整体归 stale 后重建。（F258 措辞收口：此处原写"以 git 本体为事实源"，那句把两个回答
+ *   不同问题的 git 命令混为一谈，盲区见 `src/utils/gitignore-oracle.ts` 文件头。）
  */
 export const BEHAVIOR_VERSION = 2;
 

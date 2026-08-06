@@ -97,6 +97,9 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     //
     // ⚠️ 口径更正：不能只断言"新增项都以某几个前缀开头"——那样任一族多吐一条、吐错一条
     // （如 lock-integrity）或吐重复项都会照过。此处按仓库当前事实钉死联合精确清单：
+    //   - 第 12 族（图质量）内的 F258 新增项：`graph-quality:ignore-undeterminable`——三态 gitignore
+    //     oracle 的"判不了"诊断消费者（D4：新观测出口必须有人读）。它落在图质量族内，故按族追加
+    //     顺序排在最前；基线固化的是接入它之前的快照，因此它以"新增"身份出现在此处
     //   - 第 13 族（spec drift）：仓库无 `.specify/spec-drift.lock.json`，故只产出 anchors-status
     //   - 第 14 族（F238 model-literal-gate，FR-310）：单一 model-literal-scan check
     //   - 第 15 族（F239 worktree-local-state）：`.worktreeinclude` 内容合同 3 项 + AGENTS 字节预算 1 项
@@ -108,6 +111,7 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     const baselineIds = new Set(baseline.checks.map((c) => c.id));
     const added = allIds.filter((id) => !baselineIds.has(id));
     expect(added).toEqual([
+      'graph-quality:ignore-undeterminable',
       'spec-drift:anchors-status',
       'model-literal-gate:model-literal-scan',
       'worktree-local-state:worktreeinclude-exists',

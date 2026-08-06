@@ -301,3 +301,197 @@ describe('repo-maintenance-core.mjs 接入 graph-quality（F217 T039）', () => 
     expect(graphQualityChecks.some((c) => c.status === 'fail')).toBe(false);
   });
 });
+
+/**
+ * F258（D4）— `ignore-undeterminable` warn check：三态 oracle 诊断出口的 repo:check 侧消费者。
+ *
+ * 本 describe 同时承担"跨侧 token 双向钉住"的职责：`nextSteps` 是一条**文本契约**
+ * （schema 顶层 additionalProperties:false 挡住了结构化字段），生产者在 TS 侧、消费者在
+ * .mjs 侧，两份手写副本一旦漂移就静默断链，只能靠这条断言抓。
+ */
+describe('F258：ignore-undeterminable warn check', () => {
+  let projectRoot: string;
+
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'f258-graph-quality-core-'));
+  });
+
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it('生产者（TS）与消费者（.mjs）的机读 token 逐字相等', async () => {
+    const { IGNORE_UNDETERMINABLE_TOKEN: producerToken } = await import(
+      '../../src/cli/commands/graph-quality.js'
+    );
+    const { IGNORE_UNDETERMINABLE_TOKEN: consumerToken } = await import(
+      // @ts-expect-error — .mjs 无类型声明，运行时可解析
+      '../../scripts/lib/graph-quality-core.mjs'
+    );
+
+    expect(consumerToken).toBe(producerToken);
+    expect(producerToken).toBe('[ignore-undeterminable]');
+  });
+
+  /**
+   * 审查修复轮 M-1 / M-2：出声判据与文案的三形态直测。
+   *
+   * 为什么直测纯函数而不是全走 E2E：`budgetExhausted` 那条出口要真把 L2 预算跑穿才能构造，
+   * E2E 成本与不确定性都太高，于是它长期没有任何断言按住——正是审查抓到"budget-only 完全静默"
+   * 的原因。判据与文案是纯函数，直接对它们下断言才能让这条出口被变异杀掉。
+   */
+  describe('M-1/M-2: shouldVoiceUndeterminable × describeUndeterminable 的三形态', () => {
+    const quiet = { count: 0, samples: [], budgetExhausted: false, degraded: false };
+
+    it('三位皆空 ⇒ 不出声（不制造常态噪声）', async () => {
+      const { shouldVoiceUndeterminable } = await import('../../src/cli/commands/graph-quality.js');
+      expect(shouldVoiceUndeterminable(quiet)).toBe(false);
+    });
+
+    it('count-only ⇒ 出声，且文案给出计数与样本', async () => {
+      const { shouldVoiceUndeterminable, describeUndeterminable } = await import(
+        '../../src/cli/commands/graph-quality.js'
+      );
+      const summary = { ...quiet, count: 2, samples: ['a/ghost.ts', 'b/ghost.ts'] };
+
+      expect(shouldVoiceUndeterminable(summary)).toBe(true);
+      const text = describeUndeterminable(summary);
+      expect(text).toContain('2 个节点路径');
+      expect(text).toContain('a/ghost.ts');
+      expect(text).not.toContain('[oracle-degraded]');
+    });
+
+    it('budget-only（count===0 且 budgetExhausted）⇒ 仍出声，文案指名 l2-budget-exhausted', async () => {
+      const { shouldVoiceUndeterminable, describeUndeterminable } = await import(
+        '../../src/cli/commands/graph-quality.js'
+      );
+      const summary = { ...quiet, budgetExhausted: true };
+
+      // 修复前判据是 `count > 0` ⇒ 这条具名出口完全静默
+      expect(shouldVoiceUndeterminable(summary)).toBe(true);
+      expect(describeUndeterminable(summary)).toContain('[l2-budget-exhausted]');
+    });
+
+    it('degraded ⇒ 出声，且文案必须否定"0 个不可判 = 没问题"这条读法', async () => {
+      const { shouldVoiceUndeterminable, describeUndeterminable } = await import(
+        '../../src/cli/commands/graph-quality.js'
+      );
+      const summary = { ...quiet, degraded: true };
+
+      expect(shouldVoiceUndeterminable(summary)).toBe(true);
+      const text = describeUndeterminable(summary);
+      expect(text).toContain('[oracle-degraded]');
+      expect(text).toContain('降级');
+      expect(text).toContain('不构成');
+    });
+
+    it('degraded 优先于另外两条文案（该态下 count / budgetExhausted 结构性恒空，沿用会说反）', async () => {
+      const { describeUndeterminable } = await import('../../src/cli/commands/graph-quality.js');
+
+      expect(describeUndeterminable({ ...quiet, degraded: true, budgetExhausted: true, count: 3 })).toContain(
+        '[oracle-degraded]',
+      );
+    });
+  });
+
+  it('M-1: 降级子 token 同样跨侧逐字相等（evidence.degraded 的判据不得挂在中文措辞上）', async () => {
+    const { IGNORE_ORACLE_DEGRADED_TOKEN: producerToken } = await import(
+      '../../src/cli/commands/graph-quality.js'
+    );
+    const { IGNORE_ORACLE_DEGRADED_TOKEN: consumerToken } = await import(
+      // @ts-expect-error — .mjs 无类型声明，运行时可解析
+      '../../scripts/lib/graph-quality-core.mjs'
+    );
+
+    expect(consumerToken).toBe(producerToken);
+    expect(producerToken).toBe('[oracle-degraded]');
+  });
+
+  it('存在不可判节点 ⇒ 出现 ignore-undeterminable warn check（且 detail 透传文案）', () => {
+    linkDist(projectRoot);
+    const sha = initGitRepoWithCommit(projectRoot);
+    // 仓内 symlink 指向被忽略目录；其下**离盘**路径 ⇒ git check-ignore exit 128 ⇒ undeterminable
+    writeFileSync(join(projectRoot, '.gitignore'), 'ignored_dir/\n');
+    mkdirSync(join(projectRoot, 'ignored_dir'), { recursive: true });
+    symlinkSync(join(projectRoot, 'ignored_dir'), join(projectRoot, 'link_to_ign'), 'dir');
+
+    const graph = baseGraph({ sourceCommit: sha });
+    graph.nodes.push({
+      id: 'link_to_ign/ghost.ts::Sym',
+      kind: 'component',
+      label: 'Sym',
+      metadata: {},
+    });
+    writeGraph(projectRoot, graph);
+
+    const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+    const check = result.checks.find((c) => c.id === 'ignore-undeterminable');
+    expect(check).toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(String(check!.evidence['detail'])).toContain('[ignore-undeterminable]');
+    expect(result.warnings.some((w) => w.startsWith('[ignore-undeterminable]'))).toBe(true);
+    // 保守方向：判不了不得升级为 error，也不得把门判红
+    expect(result.errors).toEqual([]);
+  });
+
+  /**
+   * 审查修复轮 M-1：**打坏 git 不得让这道门变绿**。
+   *
+   * 修复前：`git ls-files` 失败 ⇒ oracle 整体降级为二态 ⇒ 结构性永不产出 undeterminable ⇒
+   * drain 恒 `{count:0}` ⇒ CLI 的 `count > 0` 判据不成立 ⇒ `nextSteps` 无 token ⇒
+   * 本 check 报 **pass**，标题还写着"无不可判路径（三态 oracle）"——而三态 oracle 根本没在跑。
+   * 这是一条可被主动触发的 fail-open 面（审查实证：shim 只让 `git ls-files` 失败即 warn→pass）。
+   */
+  it('M-1: 忽略清单预取失败（三态 oracle 整体降级）⇒ 仍报 warn，且 evidence 标出降级', () => {
+    linkDist(projectRoot);
+    const sha = initGitRepoWithCommit(projectRoot);
+    writeGraph(projectRoot, baseGraph({ sourceCommit: sha }));
+    // 真实失败路径（不 mock 子进程）：损坏 index ⇒ `git ls-files` exit 128，
+    // 而 `git rev-parse HEAD` 仍正常 ⇒ 精确复刻"只有忽略清单预取塌了"的形态
+    writeFileSync(join(projectRoot, '.git', 'index'), 'garbage');
+
+    const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+    const check = result.checks.find((c) => c.id === 'ignore-undeterminable');
+    expect(check).toBeDefined();
+    expect(check!.status).toBe('warn');
+    expect(check!.evidence['degraded']).toBe(true);
+    expect(String(check!.evidence['detail'])).toContain('降级');
+    // 保守方向不变：降级只出声，不把门判红
+    expect(result.errors).toEqual([]);
+  });
+
+  it('无不可判节点 ⇒ check 为 pass 且零 warning（不制造噪声）', () => {
+    linkDist(projectRoot);
+    const sha = initGitRepoWithCommit(projectRoot);
+    writeGraph(projectRoot, baseGraph({ sourceCommit: sha }));
+
+    const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+    const check = result.checks.find((c) => c.id === 'ignore-undeterminable');
+    expect(check).toBeDefined();
+    expect(check!.status).toBe('pass');
+    expect(check!.evidence['degraded']).toBe(false);
+    expect(result.warnings.some((w) => w.startsWith('[ignore-undeterminable]'))).toBe(false);
+  });
+
+  it('早退分支不误报：cannot-assess / dist 未构建 两条路径都不产出该 check', () => {
+    // ① cannot-assess（schemaVersion 过旧）
+    linkDist(projectRoot);
+    writeGraph(projectRoot, baseGraph({ schemaVersion: '1.0' }));
+    const cannotAssess = validateGraphQuality({ projectRoot }) as CheckResult;
+    expect(cannotAssess.checks.some((c) => c.id === 'ignore-undeterminable')).toBe(false);
+
+    // ② dist 未构建
+    const bare = mkdtempSync(join(tmpdir(), 'f258-graph-quality-core-bare-'));
+    try {
+      const sha = initGitRepoWithCommit(bare);
+      writeGraph(bare, baseGraph({ sourceCommit: sha }));
+      const distMissing = validateGraphQuality({ projectRoot: bare }) as CheckResult;
+      expect(distMissing.checks.some((c) => c.id === 'ignore-undeterminable')).toBe(false);
+    } finally {
+      rmSync(bare, { recursive: true, force: true });
+    }
+  });
+});

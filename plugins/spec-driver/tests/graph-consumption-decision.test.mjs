@@ -28,7 +28,8 @@ import {
   annotateImpactCaveat,
   DEGRADED_REASONS,
   CAVEAT_CODES,
-  GRAPH_SCOPE_EXTENSIONS,
+  GRAPH_SCOPE_SURFACES,
+  surfaceMatchesFileMjs,
 } from '../scripts/lib/graph-consumption-decision.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -523,16 +524,15 @@ describe('FR-006 (g) annotateImpactCaveat 后置注解', () => {
     }
   });
 
-  it('GRAPH_SCOPE_EXTENSIONS 恰为六条采集管线的扩展名并集，且全仓仅定义一处（FR-006 d / F254）', () => {
-    // 与 SSoT（src/collector-surface.ts::ALL_PRODUCER_SURFACES）的逐项一致性由跨语言合同测试
-    // tests/unit/graph-scope-extensions-contract.test.ts 守护——本模块零 import，无法引用 SSoT
+  it('GRAPH_SCOPE_SURFACES 的扩展名并集恰为六条采集管线的并集（F254 / F258）', () => {
+    // 与 SSoT（src/collector-surface.ts::ALL_PRODUCER_SURFACES）的**逐管线逐字段**一致性由跨语言
+    // 合同测试 tests/unit/graph-scope-extensions-contract.test.ts 守护——本模块无法引用 SSoT
+    const union = new Set();
+    for (const surface of GRAPH_SCOPE_SURFACES) for (const extension of surface.extensions) union.add(extension);
     assert.deepEqual(
-      [...GRAPH_SCOPE_EXTENSIONS].sort(),
+      [...union].sort(),
       ['.cjs', '.cts', '.go', '.java', '.js', '.jsx', '.mjs', '.mts', '.py', '.pyi', '.ts', '.tsx'],
     );
-
-    const definitions = MODULE_SOURCE.match(/(?:export\s+)?const\s+GRAPH_SCOPE_EXTENSIONS\s*=/g) ?? [];
-    assert.equal(definitions.length, 1, '静态 fallback 常量必须只在本模块定义一次');
   });
 
   it('F254 注释不得再保留已失真的两句断言（"只收这四类" / "全仓唯一定义处"白名单口径）', () => {
@@ -545,15 +545,16 @@ describe('FR-006 (g) annotateImpactCaveat 后置注解', () => {
   });
 });
 
-describe('F254 annotateImpactCaveat 第 4 参 scopeExtensions 参数化', () => {
+describe('F254 annotateImpactCaveat 第 4 参 scopeSurfaces 参数化', () => {
   const TS_TARGET = 'src/a.ts::foo';
+  const MD_SURFACES = [{ id: 'custom', extensions: ['.md'], matchSemantics: 'case-insensitive' }];
 
-  it('不传第 4 参 ≡ 显式传入 GRAPH_SCOPE_EXTENSIONS（默认值就是静态 fallback）', () => {
+  it('不传第 4 参 ≡ 显式传入 GRAPH_SCOPE_SURFACES（默认值就是静态 fallback）', () => {
     const decision = decideGraphConsumption(VALID_INPUT);
     for (const target of [TS_TARGET, 'src/mod.mjs::foo', 'docs/design.md']) {
       assert.deepEqual(
         annotateImpactCaveat(decision, { directCallers: 0 }, target),
-        annotateImpactCaveat(decision, { directCallers: 0 }, target, GRAPH_SCOPE_EXTENSIONS),
+        annotateImpactCaveat(decision, { directCallers: 0 }, target, GRAPH_SCOPE_SURFACES),
         `target=${target} 时默认值与显式传参必须等价`,
       );
     }
@@ -563,33 +564,138 @@ describe('F254 annotateImpactCaveat 第 4 参 scopeExtensions 参数化', () => 
     const decision = decideGraphConsumption(VALID_INPUT);
 
     // 自定义面只含 `.md`：`.ts` 反而落在面外 → 不注解
-    assert.deepEqual(annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, ['.md']).caveats, []);
+    assert.deepEqual(annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, MD_SURFACES).caveats, []);
     // 同一份自定义面下 `.md` 目标反而被注解
     assert.deepEqual(
-      annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', ['.md']).caveats,
+      annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', MD_SURFACES).caveats,
       [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
     );
     // 空面：什么都不注解（图自述面推导失败时不会走到这里，但函数本身必须是全序的）
     assert.deepEqual(annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, []).caveats, []);
   });
 
-  it('纯函数不变量：不就地改写 scopeExtensions 入参数组', () => {
+  it('纯函数不变量：不就地改写 scopeSurfaces 入参', () => {
     const decision = decideGraphConsumption(VALID_INPUT);
-    const scopeExtensions = ['.ts', '.md'];
-    const snapshot = JSON.stringify(scopeExtensions);
+    const scopeSurfaces = [
+      { id: 'a', extensions: ['.ts'], matchSemantics: 'case-sensitive' },
+      { id: 'b', extensions: ['.md'], matchSemantics: 'case-insensitive' },
+    ];
+    const snapshot = JSON.stringify(scopeSurfaces);
 
-    annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, scopeExtensions);
-    annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', scopeExtensions);
+    annotateImpactCaveat(decision, { directCallers: 0 }, TS_TARGET, scopeSurfaces);
+    annotateImpactCaveat(decision, { directCallers: 0 }, 'docs/design.md', scopeSurfaces);
 
-    assert.equal(JSON.stringify(scopeExtensions), snapshot);
-    assert.deepEqual([...GRAPH_SCOPE_EXTENSIONS].length, 12, '默认常量本身也不得被污染');
+    assert.equal(JSON.stringify(scopeSurfaces), snapshot);
+    assert.equal(GRAPH_SCOPE_SURFACES.length, 5, '默认常量本身也不得被污染');
+  });
+});
+
+describe('F258 缺陷 3：逐管线 matchSemantics 同解判定', () => {
+  const TS_TARGET = 'src/a.ts::foo';
+
+  it('GRAPH_SCOPE_SURFACES 是逐管线结构（5 条，各带 extensions + matchSemantics，全部 frozen）', () => {
+    assert.equal(Object.isFrozen(GRAPH_SCOPE_SURFACES), true);
+    assert.equal(GRAPH_SCOPE_SURFACES.length, 5);
+    assert.deepEqual(
+      GRAPH_SCOPE_SURFACES.map((surface) => surface.id),
+      ['tsjsSkeletonWalk', 'pyWalk', 'genericAdapters', 'moduleDerivationScan', 'pythonSymbolScan'],
+    );
+    for (const surface of GRAPH_SCOPE_SURFACES) {
+      assert.equal(Object.isFrozen(surface), true, `${surface.id} 必须 frozen`);
+      assert.equal(Object.isFrozen(surface.extensions), true, `${surface.id}.extensions 必须 frozen`);
+      assert.ok(surface.extensions.length > 0);
+      assert.ok(
+        ['case-sensitive', 'case-insensitive'].includes(surface.matchSemantics),
+        `${surface.id} 的 matchSemantics 越界：${surface.matchSemantics}`,
+      );
+      for (const extension of surface.extensions) {
+        assert.equal(extension, extension.toLowerCase(), '扩展名一律小写字面量声明');
+        assert.equal(extension.startsWith('.'), true);
+      }
+    }
+    // 扁平常量必须整体删除：留着就是留第二份真相（fix-report 缺陷 3 的 Why 4）
+    assert.equal(
+      /GRAPH_SCOPE_EXTENSIONS/.test(MODULE_SOURCE),
+      false,
+      '扁平 GRAPH_SCOPE_EXTENSIONS 必须整体删除，不留兼容别名',
+    );
+    const definitions = MODULE_SOURCE.match(/(?:export\s+)?const\s+GRAPH_SCOPE_SURFACES\s*=/g) ?? [];
+    assert.equal(definitions.length, 1, '静态 fallback 常量必须只在本模块定义一次');
+  });
+
+  it('surfaceMatchesFileMjs：case-sensitive 面用 endsWith 求值（`.PY` 不命中，纯点文件 `.py` 命中）', () => {
+    const pyWalk = GRAPH_SCOPE_SURFACES.find((surface) => surface.id === 'pyWalk');
+    assert.equal(surfaceMatchesFileMjs(pyWalk, 'foo.py'), true);
+    assert.equal(surfaceMatchesFileMjs(pyWalk, 'foo.PY'), false, '生产者是 endsWith(".py")，`.PY` 根本不入图');
+    assert.equal(surfaceMatchesFileMjs(pyWalk, 'foo.PYI'), false);
+    assert.equal(surfaceMatchesFileMjs(pyWalk, '.py'), true, '纯点文件命中，与 walkPyFiles 一致');
+  });
+
+  it('surfaceMatchesFileMjs：case-insensitive 面用 extname().toLowerCase() 求值（`src/.go` 不命中）', () => {
+    const generic = GRAPH_SCOPE_SURFACES.find((surface) => surface.id === 'genericAdapters');
+    assert.equal(surfaceMatchesFileMjs(generic, 'Foo.JAVA'), true);
+    assert.equal(surfaceMatchesFileMjs(generic, 'src/main.go'), true);
+    assert.equal(surfaceMatchesFileMjs(generic, 'src/.go'), false, 'path.extname("src/.go") === ""');
+  });
+
+  it('surfaceMatchesFileMjs：未知/缺失 matchSemantics ⇒ 显式第三出口 null（**不得** else 兜底到 case-insensitive）', () => {
+    for (const semantics of ['case-folded', undefined, null, '', 'CASE-SENSITIVE']) {
+      assert.equal(
+        surfaceMatchesFileMjs({ id: 'x', extensions: ['.py'], matchSemantics: semantics }, 'foo.PY'),
+        null,
+        `matchSemantics=${JSON.stringify(semantics)} 必须判不可判，而不是静默按大小写不敏感处理`,
+      );
+    }
+    // 结构畸形同样走第三出口，绝不抛错、也绝不给 false（false 会被读成"确定不在面内"）
+    for (const badSurface of [null, undefined, [], 'pyWalk', { id: 'x', matchSemantics: 'case-sensitive' }]) {
+      assert.equal(surfaceMatchesFileMjs(badSurface, 'foo.py'), null, `畸形 surface=${JSON.stringify(badSurface)}`);
+    }
+  });
+
+  it('R3-2 annotateImpactCaveat：`foo.PY::bar` 落在覆盖面外 → 不注解', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    for (const target of ['scripts/foo.PY::bar', 'scripts/foo.PY', 'scripts/foo.PYI#bar', 'src/.go']) {
+      assert.deepEqual(
+        annotateImpactCaveat(decision, { summary: { directCallers: 0 } }, target).caveats,
+        [],
+        `${target} 不该被注解`,
+      );
+    }
+  });
+
+  it('R3-4 annotateImpactCaveat：`Foo.JAVA` 走大小写不敏感面 → 仍注解（防修过头）', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    for (const target of ['src/Foo.JAVA::Foo', 'src/foo.py::bar', 'src/a.ts::foo']) {
+      assert.deepEqual(
+        annotateImpactCaveat(decision, { summary: { directCallers: 0 } }, target).caveats,
+        [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT],
+        `${target} 应被注解`,
+      );
+    }
+  });
+
+  it('annotateImpactCaveat：surface 语义不可判时按"不在面内"收口（=== true 才注解）', () => {
+    const decision = decideGraphConsumption(VALID_INPUT);
+    const brokenSurfaces = [{ id: 'broken', extensions: ['.ts'], matchSemantics: 'case-folded' }];
+    assert.deepEqual(
+      annotateImpactCaveat(decision, { summary: { directCallers: 0 } }, TS_TARGET, brokenSurfaces).caveats,
+      [],
+      'null 不得被当作真值',
+    );
   });
 });
 
 describe('FR-001 (h) 纯函数静态约束', () => {
   it('模块内不 import child_process / fs / node:url 等 I/O 依赖', () => {
     const importLines = MODULE_SOURCE.split('\n').filter((line) => /^\s*import\s/.test(line));
-    assert.deepEqual(importLines, [], `决策模块必须零 import，实得：${importLines.join(' | ')}`);
+    // F258 §5.2：零 import 硬约束收窄式放宽为「零 I/O + 仅 `node:path`」。断言改为**封闭等值**
+    // （多一条、少一条都红）：被守护的实质是"不 spawn、不读文件"，而 `path.extname` 必须与
+    // TS 侧生产者用同一个实现——自造等价 extname 才是真正的风险（Node 对 `..`/纯点文件有非直觉分支）。
+    assert.deepEqual(
+      importLines,
+      ["import path from 'node:path';"],
+      `决策模块只允许 import node:path，实得：${importLines.join(' | ')}`,
+    );
     assert.equal(/require\s*\(/.test(MODULE_SOURCE), false, '不得使用 require');
     assert.equal(/child_process/.test(MODULE_SOURCE.replace(/^\s*\/\/.*$/gm, '')), false);
   });

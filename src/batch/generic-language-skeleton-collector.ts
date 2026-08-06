@@ -118,10 +118,45 @@ export async function collectGenericLanguageCodeSkeletons(
   const resolvedProjectRoot = path.resolve(projectRoot);
   const extensions = collectExtensions(adapters);
   const adapterIgnoreDirs = collectDefaultIgnoreDirs(adapters);
-  const isIgnored = createIgnoreOracle(resolvedProjectRoot);
+  const ignoreOracle = createIgnoreOracle(resolvedProjectRoot);
 
   const filePaths: string[] = [];
-  walkFiles(resolvedProjectRoot, resolvedProjectRoot, extensions, adapterIgnoreDirs, isIgnored, filePaths);
+  walkFiles(
+    resolvedProjectRoot,
+    resolvedProjectRoot,
+    extensions,
+    adapterIgnoreDirs,
+    ignoreOracle.isIgnored,
+    filePaths,
+  );
+
+  // F258：walk 场景**通常**不可达 undeterminable（dirent 恒在盘 ⇒ 走 L1 查表），
+  // 但 EACCES / ELOOP 等 errno 形态**可达**——此时按 not-ignored 处理（= 与旧行为逐字节
+  // 一致，采集面的失败方向必须是"可见"而不是"消失"），并在 walk 结束后聚合出声一次。
+  //
+  // 出声判据**不得**只有 `count > 0`（审查修复轮 M-1 / M-2）：`degraded`（三态判定整体没在跑，
+  // count 结构性恒 0）与 `budgetExhausted`（没去判，预算恰在最后一次 L2 后耗尽时 count 同样是 0）
+  // 在那条判据下会完全静默，而这两种形态恰恰意味着"本次被采集的文件集合可能与正常态不同"。
+  // 两条出口分开说：它们是**两件事**，`count` 是"判不了"，另外两位是"根本没判"。
+  const undeterminable = ignoreOracle.drainUndeterminable();
+  if (undeterminable.degraded) {
+    console.warn(
+      '⚠ git 仓库内忽略清单预取失败，本次采集的忽略判定已整体降级为仅根 .gitignore 近似' +
+        '（不区分"判不了"，不可判计数恒为 0）：被采集的文件集合可能与正常态不同',
+    );
+  }
+  if (undeterminable.budgetExhausted) {
+    console.warn(
+      '⚠ 权威忽略判定预算已耗尽 [l2-budget-exhausted]：此后的离盘路径不再发起查询，' +
+        '本次采集的忽略判定可能不完整',
+    );
+  }
+  if (undeterminable.count > 0) {
+    console.warn(
+      `\u26A0 ${undeterminable.count} 个路径的忽略判定不可判（已按未忽略处理，即照常采集）` +
+        (undeterminable.samples.length > 0 ? `；样本：${undeterminable.samples.join(', ')}` : ''),
+    );
+  }
 
   for (const filePath of filePaths) {
     const adapter = resolveAdapterForFile(filePath, adapters);

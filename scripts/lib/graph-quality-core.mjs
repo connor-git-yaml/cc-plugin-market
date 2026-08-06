@@ -18,6 +18,27 @@ function createCheck(id, title, status, evidence = {}) {
 }
 
 /**
+ * F258：`graph-quality` 挂在 `nextSteps` 上的"忽略判定不可判"机读前缀 token。
+ *
+ * 生产者是 `src/cli/commands/graph-quality.ts::IGNORE_UNDETERMINABLE_TOKEN`。两侧是**手写
+ * 副本**（本文件是零 dist 依赖的 .mjs，不能 import TS），一致性由
+ * `tests/unit/graph-quality-core.test.ts` 的跨侧断言守护——改任一侧而不改另一侧即测试红。
+ */
+export const IGNORE_UNDETERMINABLE_TOKEN = '[ignore-undeterminable]';
+
+/**
+ * F258 审查修复轮 M-1：三态 oracle **整体降级**的机读子 token。
+ *
+ * 生产者是 `src/cli/commands/graph-quality.ts::IGNORE_ORACLE_DEGRADED_TOKEN`，同为手写副本、
+ * 同由 `tests/unit/graph-quality-core.test.ts` 跨侧双向钉住。
+ *
+ * 为什么这道 check 必须能识别降级：修复前 `git ls-files` 一失败，oracle 就退成二态，
+ * `undeterminable` 结构性不可能产出 ⇒ `nextSteps` 无 token ⇒ 本 check 报 **pass**，
+ * 标题还写着"无不可判路径（三态 oracle）"——**打坏 git 反而让门变绿**（审查实证）。
+ */
+export const IGNORE_ORACLE_DEGRADED_TOKEN = '[oracle-degraded]';
+
+/**
  * F249 FR-013：单条 staleReason 的 warning 描述片段。
  *
  * 与 `src/cli/commands/graph-quality.ts` 的 `describeStaleReason` 是两套刻意分开的文案
@@ -255,6 +276,35 @@ export function validateGraphQuality({ projectRoot }) {
     warnings.push(
       `图中存在 ${report.legacyAndIgnoredNodes.legacyHashNodeIds.length} 个遗留 \`#\` 节点 / ${report.legacyAndIgnoredNodes.ignoredPathNodeIds.length} 个 ignored 路径节点。`,
     );
+  }
+
+  // F258（D4）：三态 gitignore oracle 的"判不了"诊断消费者。
+  //
+  // 为什么是文本前缀匹配而不是结构化字段：`graph-quality-report.schema.json` 顶层是
+  // `additionalProperties: false`，新增字段的连锁代价过大，故 CLI 侧把诊断挂在已有的
+  // `nextSteps: string[]` 上。代价如实登记——这是一条**文本契约**，天然比 schema 字段脆弱，
+  // 改文案即静默断链，因此 token 由 `tests/unit/graph-quality-core.test.ts` 跨侧双向钉住。
+  //
+  // 位置：必须在报告解析成功、且过了 exit-code 一致性与 cannot-assess 两道早退之后——
+  // 那些分支下 `nextSteps` 要么不存在要么无意义，在那里读会制造假警报。
+  const undeterminableStep = (Array.isArray(report.nextSteps) ? report.nextSteps : []).find(
+    (step) => typeof step === 'string' && step.startsWith(IGNORE_UNDETERMINABLE_TOKEN),
+  );
+  // 审查修复轮 M-1：`degraded` 必须落成结构化 evidence，而不是让下游去猜文案措辞。
+  // 该态下 pass 是**错**的答案——不是"没有不可判路径"，是"整套三态判定根本没在跑"。
+  const oracleDegraded = Boolean(
+    undeterminableStep && undeterminableStep.includes(IGNORE_ORACLE_DEGRADED_TOKEN),
+  );
+  checks.push(
+    createCheck(
+      'ignore-undeterminable',
+      '图质量门的忽略判定无不可判路径、且三态 oracle 未降级',
+      undeterminableStep ? 'warn' : 'pass',
+      { detail: undeterminableStep ?? null, degraded: oracleDegraded },
+    ),
+  );
+  if (undeterminableStep) {
+    warnings.push(undeterminableStep);
   }
 
   // FR-010/FR-026：freshness——stale → warning；dirty MUST NOT 产生 warning（提交前工作树

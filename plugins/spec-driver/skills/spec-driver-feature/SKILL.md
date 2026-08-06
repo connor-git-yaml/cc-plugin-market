@@ -230,11 +230,38 @@ PARALLEL_GROUPS=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-parallel-g
 4b. **（仅当 `phase.name === "verify"` 时）调用图消费决策（pre-verify authoritative）**（Feature 241 / B4）
 
    ```bash
+   RC=0
    DECISION=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
      --project-root {project_root} --phase implement \
      --base-ref-from-trace "{feature_dir}/trace.md" \
-     --refresh-policy {见下方"刷新预算"规则})
+     --refresh-policy {见下方"刷新预算"规则}) || RC=$?
    ```
+
+   > **MUST 检查 `RC`（Feature 258）**。三个退出码的处置各不相同，漏检会让最危险的那个静默通过。
+   > ⚠️ 写法必须是 `RC=0` + `|| RC=$?`，**不能**写成 `DECISION=$(...) ; RC=$?`——本仓要求 bash
+   > 脚本带 `set -euo pipefail`，那种写法下命令替换非零会让 shell 在赋值处直接终止，
+   > `RC=$?` 那一行永远执行不到，于是 `RC == 3` 这条最危险的分支**永远进不去**。
+
+   >
+   > - `RC == 0` → 按下方 outcome 分支处置。
+   > - `RC == 2` → 参数用法错误，属**编排层 bug**。MUST 停下修调用，不得吞掉继续。
+   > - `RC == 3` → **锚点不可信**：`phase 起点 ref` 不可解析（本仓 rebase 交付是强制流程，
+   >   `phase_start_ref` 指向被改写的旧 sha 是**常规形态**，不是异常）。处置：
+   >   - MUST NOT 发起 `impact`、MUST NOT 注入任何影响面证据；
+   >   - 把 `DECISION.error` 与 `DECISION.hint` **原样**并入上下文注入块 / iteration log，文案必须
+   >     写明"本轮无影响面证据（phase 起点锚点不可达）"；
+   >   - **MUST NOT 记 `DECISION.degradedReason` / `DECISION.fallbackHint`** —— abort payload 的
+   >     封闭键集里没有这两个键，记了就是一行 `undefined`；
+   >   - 本次调用**不计入刷新预算消耗**（abort 发生在决策矩阵求值之前，一次刷新都没有发生），
+   >     后续调用仍可按预算规则传 `allowed`；
+   >   - MUST NOT **自行、静默**把 `phase_start_ref` 重记为当前 HEAD —— 那会凭空重定义基线。
+   >     **恢复口径（二选一，均须留痕）**：
+   >     (a) 显式传 `--base-ref <可达 ref>` 重跑；
+   >     (b) 显式重记 `phase_start_ref`，并在 trace / iteration log 记一条
+   >         "原锚点 `<old>` 不可达（rebase 改写），已于 `<ts>` 重记为 `<new>`；此前的 phase 内变更
+   >         不在本次影响面证据内"。
+   >     红线禁的是**自行 + 静默**，(b) 的**显式 + 留痕 + 声明覆盖面损失**是允许的——
+   >     二者的差别是可审计性，不是动作本身。
 
    > **刷新预算键 = `(projectRoot, phase=implement)`**（注意不是 verify——本步判定的是 implement
    > 阶段改了什么，`--phase` 传的也是 `implement`）。同一个键下整条流程只允许一次 `allowed`：
@@ -264,10 +291,15 @@ PARALLEL_GROUPS=$(node "$PLUGIN_DIR/scripts/orchestrator-cli.mjs" get-parallel-g
 
    > **调用方合同**：预算键 `(projectRoot, phase=implement)` 下第一次可传 `--refresh-policy allowed`，
    > 第二次起必须传 `declined`。CLI 是无状态进程，不会也不该自行判断"本 phase 是否已刷过"。
+   > **`RC == 3` 的调用不消耗预算**（没有发生刷新），下一次仍可传 `allowed`。
    >
    > **措辞红线**：freshness 通过 **不等于** 影响面完整。即便出口是 `consume-impact`，若返回体带
    > `caveats: ["coverage-gap-known-extraction-limit"]`，注入文案必须如实标注"图是新的，但该目标命中
    > 已登记的抽取器漏边形态"，不得表述为"影响面可信/完整"。
+   >
+   > **措辞红线（Feature 258）**：`RC == 3` **不等于"图不可用"**，而是"**我们不知道这个 phase 改了
+   > 什么**"。前者说的是手里这份图的状态，后者说的是变更集本身无从确定——两者的正确说法不同，
+   > 不得混用。把 abort 描述成"图不可用"会诱导出"那就重建一次图"这种完全无关的处置。
 
 5. **委派子代理执行**
    ```bash
@@ -437,11 +469,12 @@ d. 记录 S_i = { clean: isClean, ref: <HEAD SHA 或 rev-parse 捕获的 stash S
 
 ```text
 0. （Feature 241 / B4，pre-implement advisory）先问"这份图现在该不该拿来做影响面分析"：
+   RC=0
    DECISION=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
      --project-root {project_root} --phase implement \
      --base-ref-from-trace "{feature_dir}/trace.md" \
      --tasks-file "{feature_dir}/tasks.md" \
-     --refresh-policy {轮 1 传 allowed；轮 ≥2 传 declined} --advisory)
+     --refresh-policy {轮 1 传 allowed；轮 ≥2 传 declined} --advisory) || RC=$?
 
    --tasks-file 不可省：轮 1 的注入发生在本轮 implement **之前**，工作树是干净的，git 侧只能给
    unknown。D3 定的轮 1 替代信号就是"tasks.md 已声明目标文件路径的存在性"，漏传这个参数等于
@@ -449,10 +482,22 @@ d. 记录 S_i = { clean: isClean, ref: <HEAD SHA 或 rev-parse 捕获的 stash S
 
    刷新预算键 = (projectRoot, phase=implement)，整个 implement phase 只有一次 allowed：
    轮 1 在此消耗，轮 ≥2 与步骤 3b 一律 declined。
+   **例外（Feature 258）**：若某轮返回 RC == 3，该轮**不计入预算消耗**——abort 发生在决策矩阵
+   求值之前，一次刷新都没有发生。若按"轮 1 已用掉"照算，后续轮次会恒 declined，一次 abort 就把
+   整个 phase 的重建机会永久吃掉。故：**预算记的是"发生过一次刷新尝试"，不是"调用过一次 decide"**。
 
-   - DECISION.outcome == "consume-impact" → 继续执行下面的 a/b；喂进 prompt 前先经
+   - RC == 3（Feature 258，锚点不可信）→ 跳过 a/b，本轮 injection_status=skipped_base_ref_unresolvable，
+     iteration log 记 DECISION.error 与 DECISION.hint
+     （**MUST NOT 记 DECISION.degradedReason / DECISION.fallbackHint** —— abort payload 的封闭键集里
+     没有这两个键，记了就是一行 undefined）。
+     本轮不消耗刷新预算；MUST NOT 自行、静默把 phase_start_ref 重记为当前 HEAD。
+     恢复口径（二选一，均须留痕）：(a) 显式传 --base-ref <可达 ref> 重跑；
+     (b) 显式重记 phase_start_ref 并在 trace / iteration log 记一条
+         "原锚点 <old> 不可达，已重记为 <new>，此前变更不在本次影响面证据内"。
+   - RC == 2 → 参数用法错误，属编排层 bug，MUST 停下修调用，不得吞掉继续。
+   - RC == 0 且 DECISION.outcome == "consume-impact" → 继续执行下面的 a/b；喂进 prompt 前先经
      annotate-caveat 注解（--target 传本轮查询的 symbolId），注入文案标注为 "advisory grounding"
-   - 其余出口 → 跳过 a/b，本轮 injection_status=skipped_by_advisory_decision，
+   - RC == 0 的其余出口 → 跳过 a/b，本轮 injection_status=skipped_by_advisory_decision，
      iteration log 记 DECISION.degradedReason 与 DECISION.fallbackHint
 
    注意 advisory 的权威度：其输出 authoritativeOutcome 恒为 null。它**只能**决定"要不要预刷一次图"
@@ -484,12 +529,22 @@ Task(
 
 ```text
 本轮 implement 已完成，此刻才拿得到真实 diff，因此这里才是权威判定的时点：
+RC2=0
 DECISION2=$(node "$PLUGIN_DIR/scripts/graph-consumption-cli.mjs" decide \
   --project-root {project_root} --phase implement \
   --base-ref-from-trace "{feature_dir}/trace.md" \
-  --refresh-policy declined)
+  --refresh-policy declined) || RC2=$?
 # 预算键 (projectRoot, phase=implement) 下步骤 2 的轮 1 已消耗过唯一一次 allowed，
 # 按调用方合同此处必须 declined；外层 4b 同理（goal_loop 已在本 phase 运行过 decide → 恒 declined）
+
+# MUST 检查 RC2（Feature 258）：
+#   RC2 == 3 → 锚点不可信。iteration log 的 graphDecision 字段记 DECISION2.error 与 DECISION2.hint
+#              （MUST NOT 记 degradedReason / fallbackHint —— abort 封闭键集里没有，会是 undefined），
+#              并显式标注"本轮权威判定缺席：phase 起点锚点不可达"。本轮不消耗刷新预算。
+#              MUST NOT 自行、静默重记 phase_start_ref；恢复口径同步骤 2 的 (a)/(b)，均须留痕。
+#   RC2 == 2 → 编排层 bug，MUST 停下修调用。
+#   RC2 == 0 → 按下方既有处置。
+# 措辞红线：RC2 == 3 不等于"图不可用"，而是"我们不知道这个 phase 改了什么"——不得混用。
 
 把 DECISION2 记入本轮 iteration log 的 graphDecision 字段（entry 对象新增可选字段即可，
 formatIterationLogEntry 无字段白名单，不需要改它）；**不注入 prompt**——goal_loop 的 verify

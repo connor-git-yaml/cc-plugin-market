@@ -49,6 +49,8 @@ const RG006_MINIMUM_AUDITED_FILES = [
   path.join(SCRIPTS_DIR, 'lib', 'graph-refresh-executor.mjs'),
   path.join(SCRIPTS_DIR, 'lib', 'tasks-path-signal.mjs'),
   path.join(SCRIPTS_DIR, 'lib', 'git-change-classifier.mjs'),
+  // F258 `[CLEANUP]`：五维输入采集从 CLI 搬进独立模块后，它同样是决策链成员，必须在下限清单里
+  path.join(SCRIPTS_DIR, 'lib', 'graph-consumption-inputs.mjs'),
 ];
 
 /**
@@ -111,6 +113,8 @@ const DECIDE_OUTPUT_KEYS = [
   'matchedRule',
   'graphSourceCommit',
   'baseRefMissing',
+  'baseRefResolution',
+  'worktreeStatusReadFailed',
   'refreshAttempted',
   'refreshOk',
   'refreshDurationMs',
@@ -1016,12 +1020,13 @@ describe('Part 2 / FR-010 (d) 调用方合同：同 phase 跑两次', () => {
     assert.deepEqual(
       Object.keys(event).sort(),
       [
-        'advisory', 'caveats', 'coverageUnionApplied', 'decisionId', 'degradedReason', 'graphSourceCommit',
-        'inputs', 'kind', 'outcome', 'phase', 'projectRoot', 'refreshAttempted', 'refreshDurationMs',
-        'refreshOk', 'schemaVersion', 'scopeExtensionsSource', 'ts',
-      ],
+        'advisory', 'baseRefResolution', 'caveats', 'coverageUnionApplied', 'decisionId', 'degradedReason',
+        'graphSourceCommit', 'inputs', 'kind', 'outcome', 'phase', 'projectRoot', 'refreshAttempted',
+        'refreshDurationMs', 'refreshOk', 'schemaVersion', 'scopeExtensionsSource', 'ts',
+        'worktreeStatusReadFailed',
+      ].sort(),
     );
-    assert.equal(event.schemaVersion, 3);
+    assert.equal(event.schemaVersion, 4);
     assert.deepEqual(event.caveats, [], 'decision 事件的 caveats 恒空——caveat 只由注解事件产生');
     assert.equal(event.phase, 'unscoped', '--phase 缺省应落 sentinel');
   });
@@ -1076,7 +1081,7 @@ describe('Part 2 / FR-010 (e) annotate-caveat 事件与回链', () => {
     const annotations = events.filter((event) => event.kind === 'caveat-annotation');
     assert.equal(annotations.length, 1);
     assert.equal(annotations[0].decisionId, decided.json.decisionId, 'decisionId 必须回链到 decision 事件');
-    assert.equal(annotations[0].schemaVersion, 3);
+    assert.equal(annotations[0].schemaVersion, 4);
     assert.equal(annotations[0].impactStatus, 'completed');
     assert.deepEqual(annotations[0].caveats, ['coverage-gap-known-extraction-limit']);
     assert.deepEqual(annotated.json.decision.caveats, annotations[0].caveats, '输出与事件内容必须一致');
@@ -1472,7 +1477,7 @@ describe('Part 2b / F254 覆盖面优先取图自述的 collector fingerprint', 
     assert.equal(result.json.inputs.coverageScope, 'in-graph-scope');
   });
 
-  it('(d) fingerprint 结构畸形 → 整体回落 static-fallback，绝不产出部分并集', () => {
+  it('(d) fingerprint 结构畸形 → 整体回落，绝不产出部分并集（F258：取值与"图本就没有指纹"可区分且出声）', () => {
     const cases = [
       { label: 'formatVersion 非 1', fingerprint: { ...makeFingerprint(), formatVersion: 2 } },
       { label: 'formatVersion 是字符串', fingerprint: { ...makeFingerprint(), formatVersion: '1' } },
@@ -1496,6 +1501,16 @@ describe('Part 2b / F254 覆盖面优先取图自述的 collector fingerprint', 
         fingerprint.extensionSurface.rustAdapters = { extensions: ['.rs'], matchSemantics: 'case-insensitive' };
         return fingerprint;
       })() },
+      // 审查修复轮 M-6：顶层 key 做了精确等值，**entry 内**却照单全收未知 key——同一形态
+      // 下沉一层。未来 entry 新增**收窄**字段（如 `excludePatterns`）而忘了 bump
+      // `formatVersion` 时，消费侧会按"只有 extensions + matchSemantics"算出一个偏**宽**的面，
+      // 于是本该判范围外的改动拿到全信 impact。与顶层同口径：entry 也精确等值。
+      { label: 'entry 多出未知 key（收窄字段漏 bump formatVersion 的形态）', fingerprint: makeFingerprint({
+        pyWalk: { extensions: ['.py', '.pyi'], matchSemantics: 'case-sensitive', excludePatterns: ['**/gen/**'] },
+      }) },
+      { label: 'entry 缺 extensions 只有 matchSemantics', fingerprint: makeFingerprint({
+        pyWalk: { matchSemantics: 'case-sensitive' },
+      }) },
       { label: 'fingerprint 是数组', fingerprint: [] },
       { label: 'fingerprint 是字符串', fingerprint: 'not-a-fingerprint' },
     ];
@@ -1516,8 +1531,13 @@ describe('Part 2b / F254 覆盖面优先取图自述的 collector fingerprint', 
         );
 
         assert.equal(result.status, 0, `[${label}] stderr=${result.stderr}`);
-        assert.equal(result.json.scopeExtensionsSource, 'static-fallback', `[${label}] 必须整体回落`);
+        assert.equal(
+          result.json.scopeExtensionsSource,
+          'static-fallback-malformed-fingerprint',
+          `[${label}] 有指纹但不被认识 ⇒ 必须用可区分取值（F258 R5）`,
+        );
         assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope', `[${label}]`);
+        assert.match(result.stderr, /static-fallback-malformed-fingerprint/, `[${label}] 必须出声（D4）`);
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
       }
@@ -1784,7 +1804,7 @@ describe('Part 2b / F254 覆盖面优先取图自述的 collector fingerprint', 
     );
 
     // 换成同 sourceCommit（'a'.repeat(40)，与 writeGraph 默认值一致）但采集面不含 `.py` 的窄指纹。
-    // 五条管线 key 必须齐全（deriveScopeExtensionsFromFingerprint 是"全有或全无"核验），
+    // 五条管线 key 必须齐全（deriveScopeSurfacesFromFingerprint 是"全有或全无"核验），
     // 只是把两条 python 管线的 extensions 换成非 `.py`。
     writeGraphWithFingerprint(
       sandbox,
@@ -1956,6 +1976,707 @@ describe('Part 4 / SC-003 additive-only 非 dry-run 下图文件零变化', () =
     const decisions = readAuditEvents(sandbox).filter((event) => event.kind === 'decision');
     assert.equal(decisions.length, 1, '非 dry-run 仍必须留下决策证据');
     assert.equal(decisions[0].outcome, 'skip-impact');
+  });
+});
+
+/* ------------------------------------------- Part 2c：F258 缺陷 3 / 附带项 6.2 */
+
+describe('Part 2c / F258 缺陷 3：覆盖面判定必须按逐管线 matchSemantics 求值', () => {
+  /** 造一份合法的 F249 collector fingerprint（五条管线 key 齐全，含 matchSemantics）。 */
+  function makeFingerprint(overrides = {}) {
+    return {
+      formatVersion: 1,
+      extensionSurface: {
+        tsjsSkeletonWalk: { extensions: ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx'], matchSemantics: 'case-sensitive' },
+        pyWalk: { extensions: ['.py', '.pyi'], matchSemantics: 'case-sensitive' },
+        genericAdapters: { extensions: ['.go', '.java'], matchSemantics: 'case-insensitive' },
+        moduleDerivationScan: { extensions: ['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx'], matchSemantics: 'case-insensitive' },
+        pythonSymbolScan: { extensions: ['.py', '.pyi'], matchSemantics: 'case-sensitive' },
+        ...overrides,
+      },
+      behaviorVersion: 2,
+    };
+  }
+
+  function writeGraphWithFingerprint(root, fingerprint, sourceCommit = 'a'.repeat(40)) {
+    fs.mkdirSync(path.join(root, 'specs', '_meta'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, GRAPH_REL),
+      JSON.stringify({ graph: { sourceCommit, fingerprint }, nodes: [{ id: 'src/a.ts' }], edges: [] }),
+    );
+  }
+
+  function commitThenTouch(root, relPath, initial, appended) {
+    fs.mkdirSync(path.dirname(path.join(root, relPath)), { recursive: true });
+    fs.writeFileSync(path.join(root, relPath), initial);
+    spawnSync('git', ['add', '-A'], { cwd: root });
+    spawnSync('git', ['commit', '-q', '-m', `add ${relPath}`], { cwd: root });
+    fs.appendFileSync(path.join(root, relPath), appended);
+  }
+
+  it('R3-1 静态 fallback：`foo.PY` 改动判 out-of-graph-scope（PY walk 是大小写敏感 endsWith，`.PY` 根本不入图）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/foo.PY', 'x = 1\n', 'y = 2\n');
+    writeGraph(sandbox); // 无 fingerprint ⇒ 走静态面，正是本仓实跑的那条路径
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.scopeExtensionsSource, 'static-fallback');
+    assert.deepEqual(result.json.changedFiles, ['scripts/foo.PY']);
+    assert.equal(
+      result.json.inputs.coverageScope,
+      'out-of-graph-scope',
+      '`.PY` 不会被任何管线采集：pyWalk 大小写敏感，case-insensitive 的两条面都不含 .py',
+    );
+    assert.equal(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+  });
+
+  it('R3-1b 图自述面同理：合法 fingerprint 下 `foo.PY` 仍判 out-of-graph-scope', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/foo.PY', 'x = 1\n', 'y = 2\n');
+    writeGraphWithFingerprint(sandbox, makeFingerprint());
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.scopeExtensionsSource, 'graph-fingerprint');
+    assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope');
+  });
+
+  it('R3-4 防修过头：`Foo.JAVA` 走 case-insensitive 面，仍判 in-graph-scope', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'src/Foo.JAVA', 'class Foo {}\n', '// touched\n');
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.inputs.coverageScope, 'in-graph-scope', 'generic adapter 面是大小写不敏感的');
+    assert.notEqual(result.json.degradedReason, DEGRADED_REASONS.COVERAGE_GAP_OUT_OF_GRAPH_SCOPE);
+  });
+
+  it('R3-1c `.py` 正常命中（大小写敏感面的正向用例，防"把整条 python 面判没了"）', () => {
+    seedProject(sandbox);
+    commitThenTouch(sandbox, 'scripts/tool.py', 'x = 1\n', 'y = 2\n');
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.json.inputs.coverageScope, 'in-graph-scope');
+  });
+
+  it('R3-3 指纹 entry 的 matchSemantics 缺失 / 未知 → 整体回落 + 可区分取值 + stderr warn（D4 消费者）', () => {
+    const cases = [
+      {
+        label: 'matchSemantics 缺失',
+        overrides: { pyWalk: { extensions: ['.py', '.pyi'] } },
+      },
+      {
+        label: 'matchSemantics 取值未知（case-folded）',
+        overrides: { pyWalk: { extensions: ['.py', '.pyi'], matchSemantics: 'case-folded' } },
+      },
+    ];
+
+    for (const { label, overrides } of cases) {
+      const root = fs.mkdtempSync(path.join(TMP_BASE, 'graph-consumption-cli-f258-'));
+      try {
+        seedProject(root);
+        // 面外文件（.md）：任何"部分并集"都不含 .md，故 out-of-graph-scope 足以判定整体回落
+        commitThenTouch(root, 'notes.md', '# notes\n', '<!-- touched -->\n');
+        writeGraphWithFingerprint(root, makeFingerprint(overrides));
+        const bin = seedFakeSpectra(root);
+
+        const result = runCli(
+          ['decide', '--project-root', root, '--refresh-policy', 'declined', '--spectra-bin', bin],
+          { cwd: root },
+        );
+
+        assert.equal(result.status, 0, `[${label}] stderr=${result.stderr}`);
+        assert.equal(
+          result.json.scopeExtensionsSource,
+          'static-fallback-malformed-fingerprint',
+          `[${label}] 必须与"图本就没有指纹"的 static-fallback 可区分`,
+        );
+        assert.equal(result.json.inputs.coverageScope, 'out-of-graph-scope', `[${label}] 必须整体回落`);
+        // D4：新增取值必须有主动信号，否则等于"新增了字段但没人会知道"
+        assert.match(
+          result.stderr,
+          /static-fallback-malformed-fingerprint/,
+          `[${label}] 畸形指纹必须在 stderr 出声`,
+        );
+        assert.match(result.stderr, /matchSemantics/, `[${label}] warn 必须含被拒的具体原因`);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('R3-2 annotate-caveat --target `foo.PY::bar` + directCallers:0 → 不挂 caveat', () => {
+    seedProject(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const decided = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    assert.equal(decided.json.outcome, 'consume-impact', `前置：应落 consume-impact，实得 ${decided.stdout}`);
+    const decisionFile = path.join(sandbox, 'decision.json');
+    fs.writeFileSync(decisionFile, JSON.stringify(decided.json));
+
+    const annotated = runCli([
+      'annotate-caveat', '--project-root', sandbox,
+      '--decision', `@${decisionFile}`,
+      '--impact-result', JSON.stringify({ summary: { directCallers: 0 } }),
+      '--target', 'scripts/foo.PY::bar',
+      '--impact-status', 'completed',
+    ]);
+
+    assert.equal(annotated.status, 0, `stderr=${annotated.stderr}`);
+    assert.equal(annotated.json.impactStatus, 'completed');
+    assert.deepEqual(annotated.json.caveats, [], '`.PY` 目标不在图覆盖面内，不得挂"已登记漏边"的可信度声明');
+  });
+
+  it('R3-2b 对照：同一条链路上 `.py` 目标仍会被注解（判据没被整体关掉）', () => {
+    seedProject(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const decided = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    const decisionFile = path.join(sandbox, 'decision.json');
+    fs.writeFileSync(decisionFile, JSON.stringify(decided.json));
+
+    const annotated = runCli([
+      'annotate-caveat', '--project-root', sandbox,
+      '--decision', `@${decisionFile}`,
+      '--impact-result', JSON.stringify({ summary: { directCallers: 0 } }),
+      '--target', 'scripts/foo.py::bar',
+      '--impact-status', 'completed',
+    ]);
+
+    assert.deepEqual(annotated.json.caveats, [CAVEAT_CODES.COVERAGE_GAP_KNOWN_EXTRACTION_LIMIT]);
+  });
+});
+
+describe('Part 2c / F258 附带项 6.2：--refresh-deadline-ms 的类型闸门', () => {
+  it('`--refresh-deadline-ms --format json`（下一个 token 是另一个 flag）→ 用法错误 exit 2，不得静默压成 1ms', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'allowed', '--refresh-deadline-ms', '--format', 'json', '--spectra-bin', bin],
+      { expectJson: false },
+    );
+
+    assert.equal(result.status, 2, `stdout=${result.stdout} stderr=${result.stderr}`);
+    assert.match(result.stderr, /--refresh-deadline-ms/);
+  });
+
+  it('`--refresh-deadline-ms` 作为末尾 token（缺省下一个 token）→ 同样 exit 2', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+
+    const result = runCli(
+      ['decide', '--project-root', sandbox, '--refresh-policy', 'allowed', '--refresh-deadline-ms'],
+      { expectJson: false },
+    );
+
+    assert.equal(result.status, 2, `stdout=${result.stdout} stderr=${result.stderr}`);
+    assert.match(result.stderr, /--refresh-deadline-ms/);
+  });
+
+  it('合法取值仍照常通过（防闸门修过头）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--refresh-policy', 'declined',
+      '--refresh-deadline-ms', '900', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+  });
+});
+
+/* --------------------------------- Part 2d：F258 缺陷 2 base-ref 不可解析 ⇒ exit 3 */
+
+/** abort payload 的**封闭键集**（plan §4.3）——刻意不含 degradedReason / fallbackHint。 */
+const ABORT_OUTPUT_KEYS = [
+  'schemaVersion',
+  'error',
+  'ts',
+  'projectRoot',
+  'phase',
+  'advisory',
+  'baseRef',
+  'baseRefResolution',
+  'gitStatus',
+  'gitStderr',
+  'gitSpawnError',
+  'hint',
+  'auditWritten',
+].sort();
+
+const UNREACHABLE_SHA = 'deadbeef'.repeat(5);
+
+describe('Part 2d / F258 缺陷 2：base-ref 不可解析必须显式报错，绝不静默给结论', () => {
+  /**
+   * 为什么不是"退到 changeClass=unknown 保守刷图"（fix-report R1 已实证证伪）：
+   * `unknown` 命中矩阵行 7 `consume-degraded`，**排在 stale 之前短路**，而只有
+   * `refresh-then-consume` 才会 `executeRefresh` —— 于是 unknown 根本不刷图，还会把
+   * `graph-stale-refresh-declined` / `graph-dirty-uncommitted` 等真实信号永久遮蔽。
+   *
+   * 本仓 rebase 交付是强制流程，`phase_start_ref` 指向被改写的旧 sha 是**常规形态**，
+   * 因此这条路径的正确与否直接决定 B4 grounding 通道会不会长期喂假结论。
+   */
+
+  it('R2-1 --base-ref 指向不可达 sha → exit 3 + error:base-ref-unresolvable + decide-aborted 审计事件', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--phase', 'implement',
+      '--base-ref', UNREACHABLE_SHA,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3, `期望退出码 3，实得 ${result.status}；stdout=${result.stdout}`);
+    assert.notEqual(result.json, null, `abort 仍必须输出可解析 JSON：${result.stdout}`);
+    assert.equal(result.json.error, 'base-ref-unresolvable');
+    assert.equal(result.json.baseRefResolution, 'unresolvable');
+    assert.equal(result.json.baseRef, UNREACHABLE_SHA, 'baseRef 必须原样回显调用方给的值');
+    assert.equal(result.json.phase, 'implement');
+    assert.notEqual(result.json.gitStatus, 0, 'gitStatus 应如实记录探测命令的非零退出码');
+    assert.equal(typeof result.json.hint, 'string');
+    assert.ok(result.json.hint.includes('--base-ref'), 'hint 必须指名"显式传可达 --base-ref"这条恢复路径');
+    assert.ok(result.json.hint.includes('phase_start_ref'), 'hint 必须指名"显式重记锚点并留痕"这条恢复路径');
+    // 出口不得混进决策语汇：abort 发生在矩阵求值之前，它没有 outcome
+    assert.equal('outcome' in result.json, false, 'abort 不得声称任何 outcome');
+
+    const aborted = readAuditEvents(sandbox).filter((event) => event.kind === 'decide-aborted');
+    assert.equal(aborted.length, 1, '失败路径同样"每次决策必留证据"');
+    assert.equal(aborted[0].error, 'base-ref-unresolvable');
+    assert.equal(aborted[0].baseRefResolution, 'unresolvable');
+    assert.equal(result.json.auditWritten, true);
+  });
+
+  it('R2-2 --advisory 下同样 exit 3（两种合同一视同仁，不给 advisory 开软路）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--phase', 'implement',
+      '--base-ref', UNREACHABLE_SHA,
+      '--refresh-policy', 'declined', '--advisory', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3, `advisory 也必须 exit 3，实得 ${result.status}；stdout=${result.stdout}`);
+    assert.equal(result.json.advisory, true);
+    assert.equal(result.json.error, 'base-ref-unresolvable');
+  });
+
+  it('R2-3 --base-ref-from-trace 指向无锚点文件 → 仍 exit 0 + baseRefMissing:true（EC-29 回归护栏，锁定不回退）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    const tracePath = path.join(sandbox, 'trace.md');
+    fs.writeFileSync(tracePath, '# trace\n没有锚点\n');
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref-from-trace', tracePath,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 0, `"没给锚点"与"给了但不可达"是两件事，前者不得 abort；stderr=${result.stderr}`);
+    assert.equal(result.json.baseRefMissing, true);
+    assert.equal(result.json.baseRefResolution, 'not-provided');
+  });
+
+  it('T054 三种异常 ref 形态（`-` 开头 / 含空格 / 悬空 sha）一律非零 → 全部收口到 exit 3', () => {
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    // 实测锚点可解析性探测的退出码谱（记录用；实现按"非 0 即 unresolvable"收口，不依赖具体码值）
+    const probe = (ref) =>
+      spawnSync('git', ['cat-file', '-e', `${ref}^{commit}`], { cwd: sandbox, encoding: 'utf-8' }).status;
+    const observed = {
+      valid: probe(baseSha),
+      dashLeading: probe('-x'),
+      withSpaces: probe('no such ref'),
+      dangling: probe(UNREACHABLE_SHA),
+    };
+    assert.equal(observed.valid, 0, `可达 ref 必须 exit 0，实得 ${JSON.stringify(observed)}`);
+    for (const [label, status] of Object.entries(observed).filter(([key]) => key !== 'valid')) {
+      assert.notEqual(status, 0, `${label} 应非零，实得 ${JSON.stringify(observed)}`);
+    }
+
+    for (const ref of ['-x', 'no such ref', UNREACHABLE_SHA]) {
+      const result = runCli([
+        'decide', '--project-root', sandbox, '--base-ref', ref,
+        '--refresh-policy', 'declined', '--spectra-bin', bin,
+      ]);
+      assert.equal(result.status, 3, `ref=${JSON.stringify(ref)} 应 abort，实得 ${result.status}；stdout=${result.stdout}`);
+      assert.equal(result.json.baseRefResolution, 'unresolvable');
+    }
+  });
+
+  it('`--base-ref ""` / 纯空白 → exit 2，**绝不**从守卫缝里漏进"没给锚点"分支', () => {
+    // `--base-ref "$REF"` 而 `REF` 未设是最常见的 shell 形态。空串此前会走 `length === 0` 守卫落进
+    // not-provided，产出一份 exit 0 的权威决策，且 payload 自相矛盾：`baseRefMissing:false`
+    // （因为 baseRef 不是 null）+ `baseRefResolution:'not-provided'`，两个字段互相否证。
+    // 最要命的是 abort 的恢复口径 (a) 就是"显式传 --base-ref 重跑"——恢复动作本身会踩这个坑。
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    for (const value of ['', '   ']) {
+      const result = runCli([
+        'decide', '--project-root', sandbox, '--base-ref', value,
+        '--refresh-policy', 'declined', '--spectra-bin', bin,
+      ]);
+      assert.equal(result.status, 2, `--base-ref ${JSON.stringify(value)} 应 exit 2，实得 ${result.status}；stdout=${result.stdout}`);
+      assert.match(result.stderr, /--base-ref 取值为空/);
+    }
+
+    const fromTrace = runCli([
+      'decide', '--project-root', sandbox, '--base-ref-from-trace', '',
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+    assert.equal(fromTrace.status, 2, `--base-ref-from-trace "" 应 exit 2，实得 ${fromTrace.status}`);
+  });
+
+  it('`baseRefMissing` 与 `baseRefResolution` 恒不互相否证（两字段必须同源）', () => {
+    // 防的是 C-2 那类形态：一个字段说"锚点没缺失"，另一个说"锚点未提供"。
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const cases = [
+      { args: [], expectMissing: true, expectResolution: 'not-provided' },
+      { args: ['--base-ref', baseSha], expectMissing: false, expectResolution: 'resolved' },
+    ];
+    for (const { args, expectMissing, expectResolution } of cases) {
+      const result = runCli([
+        'decide', '--project-root', sandbox, ...args,
+        '--refresh-policy', 'declined', '--spectra-bin', bin,
+      ]);
+      assert.equal(result.status, 0, `stderr=${result.stderr}`);
+      assert.equal(result.json.baseRefMissing, expectMissing);
+      assert.equal(result.json.baseRefResolution, expectResolution);
+      assert.equal(
+        result.json.baseRefMissing,
+        result.json.baseRefResolution === 'not-provided',
+        `两字段互相否证：baseRefMissing=${result.json.baseRefMissing} / baseRefResolution=${result.json.baseRefResolution}`,
+      );
+    }
+  });
+
+  it('`--base-ref-from-trace` 取不到该 phase 的锚点 → 仍 exit 0（EC-29），但**必须出声**（此前 stderr 恒 0 字节）', () => {
+    // EC-29 原文要求"authoritative 合同下应在输出中明确警示"，而"指定了 trace 却取不到锚点"
+    // 与"压根没传 --base-ref*"落进同一个 not-provided，此前一句警示都没有。
+    // 出口不变（回归护栏），但"没有锚点"和"锚点源答不出来"是两件事，后者必须让人知道。
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    const tracePath = path.join(sandbox, 'trace.md');
+    fs.writeFileSync(tracePath, '# trace\n没有锚点\n');
+
+    const declared = runCli([
+      'decide', '--project-root', sandbox, '--phase', 'implement',
+      '--base-ref-from-trace', tracePath,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+    assert.equal(declared.status, 0, 'EC-29 回归护栏：出口不变');
+    assert.match(declared.stderr, /--base-ref-from-trace 指定了/, '声称了锚点源却取不到，必须出声');
+    assert.match(declared.stderr, /phase=implement/, 'warn 必须指名是哪个 phase 取不到');
+
+    // 对照：压根没传锚点源 ⇒ 不该有这条 warn（否则等于把两件事又压回一起）
+    const silent = runCli([
+      'decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+    assert.equal(silent.status, 0);
+    assert.equal(
+      /--base-ref-from-trace 指定了/.test(silent.stderr),
+      false,
+      '未声称锚点源时不得出这条 warn——"没给"与"给了但答不出"必须可区分',
+    );
+  });
+
+  it('`--base-ref` 缺取值（下一个 token 是另一个 flag）→ exit 2 用法错误，**绝不**静默降级成"没给锚点"', () => {
+    // 与附带项 6.2 的 `Number(true) === 1` 同形：`parseFlags` 会把缺值 flag 置 `true`，
+    // 而 `typeof !== 'string'` 的旧读法把它当成"压根没传 --base-ref"，照常出决策并标
+    // `baseRefMissing:true`——调用方明明声称了锚点，我们却当它没说过。
+    // 出口是 2 而不是 3：命令行写错了，责任在编排层，不是"锚点不可达"。
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    for (const key of ['--base-ref', '--base-ref-from-trace']) {
+      const result = runCli([
+        'decide', '--project-root', sandbox, key,
+        '--refresh-policy', 'declined', '--spectra-bin', bin,
+      ]);
+      assert.equal(result.status, 2, `${key} 缺值应 exit 2，实得 ${result.status}；stdout=${result.stdout}`);
+      assert.match(result.stderr, new RegExp(`${key} 缺少取值`));
+    }
+  });
+
+  it('锚点可解析但 git diff 失败 → 同样 exit 3，但 hint **不得**叫人去重记锚点（锚点没问题）', () => {
+    // 构造：删掉 HEAD 的 tree 对象 —— commit 对象仍在（预检通过），diff 却读不到树。
+    // 这条分支若沿用 unresolvable 的文案，操作者会照着去重记 phase_start_ref：
+    // 那个动作对本形态毫无作用，还会按红线要求在 trace 里留下一条**事实错误**的"原锚点不可达"。
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const treeSha = spawnSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: sandbox, encoding: 'utf-8' }).stdout.trim();
+    const treeObject = path.join(sandbox, '.git', 'objects', treeSha.slice(0, 2), treeSha.slice(2));
+    if (!fs.existsSync(treeObject)) {
+      // 打包过的仓库没有松散对象（本 fixture 刚 init 不会走到，但不静默跳过）
+      assert.fail(`前置构造失效：找不到松散 tree 对象 ${treeObject}`);
+    }
+    fs.rmSync(treeObject);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', baseSha,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3, `stdout=${result.stdout}`);
+    assert.equal(result.json.baseRefResolution, 'diff-failed', '预检通过、diff 失败 ⇒ 必须是 diff-failed 而非 unresolvable');
+    assert.notEqual(result.json.gitStatus, 0);
+    assert.ok(result.json.hint.includes('可解析'), 'diff-failed 的 hint 必须说明锚点本身没问题');
+    assert.equal(
+      result.json.hint.includes('rebase 改写历史'),
+      false,
+      'diff-failed 不得沿用 unresolvable 的 rebase 文案',
+    );
+    assert.match(result.json.hint, /不要.*重记 phase_start_ref/, 'hint 必须明确劝阻错误的恢复动作');
+    assert.equal('gitSpawnError' in result.json, true, 'spawn 层失败时它是唯一诊断来源，字段必须存在');
+  });
+
+  it('索引损坏：base-ref 可用但 porcelain 读失败 → **不** abort，只标 worktreeStatusReadFailed（责任方不同）', () => {
+    // 与上一条互为对照：同一个仓，坏的是工作树读取而不是锚点 ⇒ 出口必须不同。
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.writeFileSync(path.join(sandbox, '.git', 'index'), 'GARBAGE-NOT-AN-INDEX');
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', baseSha,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 0, `porcelain 失败是环境能力缺失，不是合同违反；stdout=${result.stdout}`);
+    assert.equal(result.json.baseRefResolution, 'resolved');
+    assert.equal(result.json.worktreeStatusReadFailed, true);
+    assert.equal(result.json.inputs.changeClass, 'unknown', '读不到工作树就不得声称变更类别');
+  });
+
+  /**
+   * 审查修复轮 M-5：把上一条的**下游后果**钉住。
+   *
+   * `collectChangeSet` 的 JSDoc 曾写 porcelain 失败"只需如实标注 `worktreeStatusReadFailed`"，
+   * 读起来像是"标一下、别的照旧"；实际后果是 `changeClass='unknown'` ⇒ 命中矩阵行 7
+   * `consume-degraded` ⇒ **抢在 stale 行之前短路、根本不刷图**——恰恰是本 fix 为 base-ref
+   * 拒绝 `unknown` 时给出的那条理由。
+   *
+   * 裁决（选项 a）：**保留该行为、改写文档**。理由是 `porcelainOk:false` 意味着工作树变更集
+   * 真的拿不到，判 `unknown` 是正确的保守读法；若把 porcelain 排除出 `unrecognized`
+   * （选项 b），一份**残缺**的变更集就会冒充完整的，被判成 `additive-only` 从而跳过 impact
+   * ——那才是不安全的方向。本用例即该裁决的锚：要翻转裁决就得先翻这三条断言。
+   */
+  it('M-5: porcelain 读失败的下游后果 —— unknown ⇒ consume-degraded ⇒ allowed+stale 也不刷图', () => {
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.writeFileSync(path.join(sandbox, '.git', 'index'), 'GARBAGE-NOT-AN-INDEX');
+
+    const result = runCli(
+      [
+        'decide', '--project-root', sandbox, '--base-ref', baseSha,
+        // 最容易触发刷新的组合：allowed + stale
+        '--refresh-policy', 'allowed', '--spectra-bin', bin,
+      ],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 0, `stdout=${result.stdout}`);
+    assert.equal(result.json.inputs.changeClass, 'unknown');
+    assert.equal(result.json.outcome, 'consume-degraded', 'unknown 命中矩阵行 7，抢在 stale 行之前短路');
+    assert.equal(countBuildSpawns(sandbox), 0, '短路的直接后果：allowed + stale 也不会刷图');
+  });
+
+  it('R2-5① abort 路径不发生任何刷新（支撑"abort 不消耗刷新预算"的散文口径）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+
+    const result = runCli(
+      [
+        'decide', '--project-root', sandbox, '--phase', 'implement',
+        '--base-ref', UNREACHABLE_SHA,
+        // 最容易触发刷新的组合：allowed + stale。abort 若不在矩阵之前收口，这里就会刷一次
+        '--refresh-policy', 'allowed', '--spectra-bin', bin,
+      ],
+      { env: { F241_FRESHNESS: 'stale' } },
+    );
+
+    assert.equal(result.status, 3);
+    assert.equal(countBuildSpawns(sandbox), 0, 'abort 必须发生在矩阵求值之前——一次刷新都不得发生');
+    assert.deepEqual(readInvocations(sandbox), [], 'abort 之后连 freshness 探测都不该跑：锚点不可信时问什么都没意义');
+    assert.equal('refreshAttempted' in result.json, false, 'abort payload 不得携带刷新相关字段');
+  });
+
+  it('R2-5② 恢复口径可用：同一仓改传可达 --base-ref 重跑 → 正常 exit 0 出决策（abort 不是死路）', () => {
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+
+    const aborted = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', UNREACHABLE_SHA,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+    assert.equal(aborted.status, 3);
+
+    const recovered = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', baseSha,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+    assert.equal(recovered.status, 0, `恢复路径必须真的能出决策；stderr=${recovered.stderr}`);
+    assert.equal(recovered.json.baseRefResolution, 'resolved');
+    assert.equal(recovered.json.baseRefMissing, false);
+    assert.equal(recovered.json.inputs.changeClass, 'modifies-existing');
+  });
+
+  it('R2-5③ abort payload 是封闭键集，且**不含** degradedReason / fallbackHint（否则调用方日志会记一行 undefined）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', UNREACHABLE_SHA,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3);
+    assert.deepEqual(Object.keys(result.json).sort(), ABORT_OUTPUT_KEYS);
+    assert.equal('degradedReason' in result.json, false);
+    assert.equal('fallbackHint' in result.json, false);
+  });
+
+  it('--dry-run 下 abort 仍 exit 3，但保持零副作用（不写审计）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', UNREACHABLE_SHA,
+      '--refresh-policy', 'declined', '--dry-run', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3, 'dry-run 不改变"锚点确实不可达"这一事实');
+    assert.equal(result.json.auditWritten, false);
+    assert.equal(fs.existsSync(path.join(sandbox, AUDIT_REL)), false, 'dry-run 零副作用合同不得被 abort 出口破坏');
+  });
+
+  it('gitStderr 截断至 512 字符（abort payload 不做无界回显）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', 'x'.repeat(4096),
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 3);
+    assert.equal(typeof result.json.gitStderr, 'string');
+    assert.ok(result.json.gitStderr.length <= 512, `gitStderr 长度 ${result.json.gitStderr.length} 超过 512`);
+  });
+});
+
+describe('Part 2d / F258 观测字段：baseRefResolution 与 worktreeStatusReadFailed', () => {
+  it('成功路径：给了可达锚点 → baseRefResolution:resolved + worktreeStatusReadFailed:false，且两字段同时进审计', () => {
+    const baseSha = seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+    fs.appendFileSync(path.join(sandbox, 'src', 'a.ts'), '// touched\n');
+
+    const result = runCli([
+      'decide', '--project-root', sandbox, '--base-ref', baseSha,
+      '--refresh-policy', 'declined', '--spectra-bin', bin,
+    ]);
+
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    assert.equal(result.json.baseRefResolution, 'resolved');
+    assert.equal(result.json.worktreeStatusReadFailed, false);
+
+    const [event] = readAuditEvents(sandbox);
+    assert.equal(event.baseRefResolution, 'resolved');
+    assert.equal(event.worktreeStatusReadFailed, false);
+  });
+
+  it('非 git 目录 + 未给锚点：porcelain 读失败**不** abort，只如实标 worktreeStatusReadFailed:true', () => {
+    // 责任方不同就不该共用出口：base-ref 是调用方显式声称的锚点（声称了却不可达 = 合同违反），
+    // 而 porcelain 失败是环境能力缺失，是 CLI 本就支持的合法运行形态。
+    fs.mkdirSync(path.join(sandbox, 'src'), { recursive: true });
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+
+    assert.equal(result.status, 0, `非 git 目录是合法运行形态，不得 abort；stderr=${result.stderr}`);
+    assert.equal(result.json.worktreeStatusReadFailed, true);
+    assert.equal(result.json.baseRefResolution, 'not-provided');
+    assert.equal(result.json.inputs.changeClass, 'unknown');
+  });
+
+  /**
+   * `AUDIT_SCHEMA_VERSION` 的写入点数量必须与源码注释里的人工核对清单一致。
+   *
+   * 本仓**无入库 audit fixture** ⇒ 漏改某处写入点不会被任何 fixture 抓到，那段注释是唯一的
+   * 检查清单；而 P3 复审实测：它在新增两处写入点的同一次改动里没跟着更新（写"三处"、实为五处）。
+   * 一个少数两处的清单比没有清单更危险，所以清单本身也要被锚住。
+   */
+  it('schemaVersion 写入点数量与源码注释的人工核对清单一致（清单本身必须被锚住）', () => {
+    const source = fs.readFileSync(CLI_PATH, 'utf-8');
+    const writeSites = source.match(/schemaVersion: AUDIT_SCHEMA_VERSION/g) ?? [];
+    assert.equal(
+      writeSites.length,
+      5,
+      `schemaVersion 写入点数量变了（实得 ${writeSites.length}）——请同步更新 AUDIT_SCHEMA_VERSION ` +
+        '上方注释里的"共 N 处"清单与本断言，否则下一次 bump 会照着一份过时清单漏改',
+    );
+    assert.match(source, /本文件当前有 5 处写入点/, '源码注释里的数字必须与实际写入点数一致');
+    // 字面量版本号是这条链上唯一会绕过常量传导的形态
+    assert.equal(
+      /schemaVersion:\s*\d/.test(source),
+      false,
+      'schemaVersion 不得写字面量，必须一律引用 AUDIT_SCHEMA_VERSION',
+    );
+  });
+
+  it('AUDIT_SCHEMA_VERSION 已 bump 到 4（新增两个输出/审计字段 + 新增 decide-aborted 事件 kind）', () => {
+    seedProject(sandbox);
+    writeGraph(sandbox);
+    const bin = seedFakeSpectra(sandbox);
+
+    const result = runCli(['decide', '--project-root', sandbox, '--refresh-policy', 'declined', '--spectra-bin', bin]);
+    assert.equal(result.json.schemaVersion, 4);
+    assert.equal(readAuditEvents(sandbox)[0].schemaVersion, 4);
   });
 });
 

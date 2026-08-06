@@ -263,7 +263,10 @@ export async function collectPythonCodeSkeletons(
   const resolvedProjectRoot = path.resolve(projectRoot);
 
   // F194：构建 git 忽略过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
-  // F255：git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似
+  // F255：git 仓库内消费 `git ls-files --others --ignored --directory` 的在盘枚举
+  // （含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似解析。
+  // 该枚举的盲区逐条登记在 `utils/gitignore-oracle.ts` 文件头，不要复述成"以 git 本体为事实源"
+  // （F258 撤下的 over-claim）。
   const isGitignored = createGitignoreFilter(resolvedProjectRoot);
 
   const pyFiles: string[] = [];
@@ -421,7 +424,10 @@ export async function collectTsJsCodeSkeletons(
   const resolvedProjectRoot = path.resolve(projectRoot);
 
   // F194：构建 git 忽略过滤器，基准 = resolvedProjectRoot（与 walk 内 path.relative 同口径）
-  // F255：git 仓库内以 git 本体为事实源（含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似
+  // F255：git 仓库内消费 `git ls-files --others --ignored --directory` 的在盘枚举
+  // （含嵌套 .gitignore / tracked 豁免），非 git 上下文回退根 .gitignore 近似解析。
+  // 该枚举的盲区逐条登记在 `utils/gitignore-oracle.ts` 文件头，不要复述成"以 git 本体为事实源"
+  // （F258 撤下的 over-claim）。
   const isGitignored = createGitignoreFilter(resolvedProjectRoot);
 
   const tsJsFiles: string[] = [];

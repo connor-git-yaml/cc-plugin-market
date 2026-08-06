@@ -13,7 +13,7 @@
  * ⑤ contains 双轨风险实证复核：用 runGraphQualityChecks 对真实建图产物实测
  *    containsCoverage，断言 Java/Go 无 Python 式双轨 contains 缺口
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -247,5 +247,35 @@ describe('F255 真实语义锚定：untracked+ignored 样本不进入 skeleton m
     expect(keys.some((k) => k.includes('vendor'))).toBe(false);
     expect(keys.some((k) => k.includes('generated'))).toBe(false);
     expect(skeletons.size).toBe(4);
+  });
+
+  /**
+   * 审查修复轮 M-1（采集面侧）：三态 oracle 整体降级时，采集面同样必须出声。
+   *
+   * 修复前判据是 `undeterminable.count > 0`，而 L0 降级态**结构性**产不出 undeterminable，
+   * 于是"忽略判定已经不按 git 事实源跑了"这件事在采集面上完全静默——被采集的文件集合可能
+   * 与正常态不同（只剩根 .gitignore 近似），却没有任何信号。
+   */
+  it('M-1: 忽略清单预取失败 ⇒ 采集面出声报告降级（不因 count===0 而静默）', async () => {
+    const staged = stageFixtureAsUntrackedRepo(GO_FIXTURE_ROOT);
+    execFileSync('git', ['add', '-A'], { cwd: staged, stdio: ['ignore', 'ignore', 'ignore'] });
+    execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: staged, stdio: ['ignore', 'ignore', 'ignore'] });
+    // 真实失败路径：损坏 index ⇒ `git ls-files` exit 128 ⇒ 预取清单构造失败
+    fs.writeFileSync(path.join(staged, '.git', 'index'), 'garbage');
+
+    const warnings: string[] = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    });
+    try {
+      await collectGenericLanguageCodeSkeletons(staged, [new GoLanguageAdapter()]);
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    // 判别力：oracle 构造期本就会对着 stderr 说一句"已降级为仅根 .gitignore 近似过滤"，
+    // 那条不含"采集"。这里要的是**采集面自己**在 walk 结束后给出的那一句——即 drain 判据
+    // 不再只看 count 的证据。
+    expect(warnings.some((line) => line.includes('降级') && line.includes('采集'))).toBe(true);
   });
 });
