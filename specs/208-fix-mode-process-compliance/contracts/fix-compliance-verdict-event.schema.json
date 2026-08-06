@@ -42,11 +42,13 @@
           "state-storage-unavailable",
           "payload-invalid",
           "feature-dir-unresolvable",
+          "feature-dir-witness-absent",
           "transcript-path-absent",
           "transcript-format-unrecognized",
           "dialect:codex-rollout",
           "delegation-in-flight",
-          "delegation-in-flight-budget-exhausted"
+          "delegation-in-flight-budget-exhausted",
+          "delegation-in-flight-entry-budget-exhausted"
         ]
       }
     }

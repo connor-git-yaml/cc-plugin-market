@@ -28,6 +28,8 @@ import {
   extractInFlightDelegationsAfter,
   isDeferrableMissingSet,
   extractFixShortName,
+  collectArtifactWriteWitnessDirs,
+  countAssistantEntriesSinceEarliestFixExpansion,
   resolveFeatureDirCandidate,
   classifyClosureForm,
   extractExecutionRecordsAfter,
@@ -73,6 +75,63 @@ const BLOCK_LIMIT = 2;
  * 使真正需要阻断时已降级放行。
  */
 const IN_FLIGHT_DEFER_LIMIT = 3;
+
+/**
+ * 闸门三：自**最早**一次 fix 技能展开之后允许的 assistant **entry** 上限（F257 缺陷 2）。
+ *
+ * why 需要第三道闸门：`IN_FLIGHT_DEFER_LIMIT`（闸门二）的唯一上界存放在
+ * `.specify/runs/.fix-compliance-state/<sessionId>.json`——该目录在 projectRoot 下、被 gitignore、
+ * 属"本地运行态"，`loadBlockState` 对缺失/损坏一律静默回落 0。实测：每轮 stop 前先 `rm -rf` 该目录，
+ * 10 轮全部 exit 0、审计 `degraded=false`、终态记录 0 条，形成"永不裁决"的静默通道；且它比既有
+ * blockCount 篡改杠杆更安静（推迟只打 `[WARN]`，事后审计看起来像"还有子代理在跑"）。
+ * 本常量与闸门二**并联取严**，计量源派生自 transcript，被判方不经手写入、只增不减，`rm -rf` 抹不掉。
+ *
+ * 🔴 语义：**这不是"等待多久算超时"，而是"会话长度已异常，不再给推迟通道"**。
+ * 后人若按"在途等待时长"去调它，会把一个会话长度阈值误当成超时阈值。
+ *
+ * 🔴 单位是 assistant **entry**，不是"轮"：wire format 里一次助手轮常拆成多条 assistant envelope
+ * （文本一条、每个 tool_use 一条），"轮"没有稳定边界。常量名与诊断码一律按 entry 表述。
+ *
+ * 🔴 名字里的 `EARLIEST_FIX_` 是承重的，不是修饰：它指向本常量实际比较的那个量的**基线**
+ * （`earliestFixLineIndex` / `assistantEntriesSinceEarliestFix`，即**最早**一次 fix 展开）。
+ * 本常量第 4 轮前叫 `POST_ANCHOR_ENTRY_DEFER_LIMIT`——`POST_ANCHOR_` 指向的是判定**主锚点**
+ * （`anchorLineIndex`，**最晚**一次展开），而那正是已被实测证伪的错误语义：以最晚锚点为基线时
+ * 攻击组每轮重新 `Skill(spec-driver-fix)` 展开即可令计数归零，30/30 全 exit 0。
+ * 即旧名精确地指向了攻击者想要的实现，顺着名字理解就会把修复改回去。**不要改回去。**
+ *
+ * why 取 420：真实语料标定。
+ *
+ * ⚠️ 本段前身版本写的是 `P75=76 / P99=409 / max=647`、并称"420 覆盖 P99"——**那组数字取自旧口径
+ * （以最晚锚点 `anchorLineIndex` 为基线的"锚点后计数"），与本常量实际比较的量不是同一个**，
+ * 结论因此偏乐观。第 4 轮审查以 `countAssistantEntriesSinceEarliestFixExpansion`（**实际生效的口径**）
+ * 在同一语料重取数，已由两方独立复现，逐位一致：
+ *   新口径（实际生效）：`N=149 / P50=61 / P75=77 / P90=244 / P95=286 / P99=647 / max=801 / min=1`
+ *   旧口径（注释前身写的那组，仅存档对照）：`P50=61 / P75=76 / P90=244 / P95=286 / P99=409 / max=647`
+ *
+ * 故如实表述是：**420 落在约 P98.7**（149 份里 147 份 < 420，2 份越阈），**不是"覆盖 P99"**。
+ *
+ * why 明知落在 P98.7 仍**不上调**：按新口径 P99=647 抬到 660，会让"约 140 轮内免于裁决"变成
+ * 约 220 轮，闸门被显著削弱；而两份越阈会话经复算**都不因此受实际影响**——
+ *   · 801 那份：`missing=[feature-dir, fix-report.md]`，不属可推迟集合，闸门一先行拦下，本就不走推迟通道；
+ *   · 647 那份：`compliant=true`，在推迟闸门之前就已合规早退。
+ * 且越阈代价本身有界（见下条）。收益远小于代价，故取值维持 420 不动。
+ *
+ * ⚠️ 标定语料是**活的**：分位数会随会话增长持续漂移——上一轮记录的 `max=647` 在本轮已被 801 超过。
+ * 后人复核时应重跑取数，不要把本段数字当作静态事实；同时它仍是单机 149 份样本，而本常量随 plugin
+ * 发版进入所有用户环境，外推有效性未经验证。
+ *
+ * 被否的两个候选（按新口径复核）：占位值 200 低于 P90=244，会误伤 11.4%（17/149）真实会话；
+ * 原公式值 620 相当于允许约 200 轮持续绕过，"有界"字面成立而工程意义上接近无界，
+ * 且它在新口径下也**并非零误伤**（≥620 者同为 2 份），花掉的宽度换不到误伤面的改善。
+ *
+ * why 越界代价有界：越过阈值只是**不推迟、照常裁决**——若判不合规，最多阻断 2 次即触达
+ * `BLOCK_LIMIT` 降级放行，会话不会卡死；若确有在途工作，被判方在下次 stop 前补齐制品即恢复。
+ * 故阈值即使偏小，失效方向也是可自愈的 fail-closed。
+ *
+ * 如实登记的边界（禁止读成"消除"）：本闸门**不消除**"删状态文件绕过闸门二"这一手法本身，
+ * 只给它加了一条抹不掉的天花板——把「**永久**免于裁决」降级为「约 140 轮内免于裁决」。
+ */
+export const EARLIEST_FIX_ENTRY_DEFER_LIMIT = 420;
 
 // ────────────────────────────────────────
 // 参数解析
@@ -121,6 +180,7 @@ function readStdinSync() {
  *   transcriptDiagnostics:string[],
  *   verdict:object|null,
  *   inFlightDelegations?:{kind:string,id:string,lineIndex:number}[],
+ *   assistantEntriesSinceEarliestFix?:number,
  * }}
  */
 function evaluate(projectRoot, transcriptPath, cfg = null) {
@@ -167,6 +227,15 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     };
   }
 
+  // F257 缺陷 2 · 闸门三的计量源：基线用 anchor.earliestFixLineIndex，**刻意不用 anchor.anchorLineIndex**。
+  // 主锚点取的是最晚一次展开，agent 自调一次 Skill(spec-driver-fix) 即可把它推到末尾、令锚点后计数
+  // 归零而 isFix 仍为真（对抗审查实跑：攻击组 30/30 全 exit 0、计数恒 4）。两个基线由**同一趟**
+  // detectFixSkillExpansion 扫描顺带产出（第 3 轮修复：闸门三原先另扫一遍 SKILL_EXPANSION_REGEX，
+  // 该正则含惰性量词，诱饵前缀语料下把最坏耗时整整翻倍——判定器跑在同步 Stop hook 上，不可接受）。
+  // 🔴 绝不可为"统一"把两个基线合并成一个，也绝不可在此另起第二遍展开扫描。
+  const assistantEntriesSinceEarliestFix =
+    countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
+
   const candidate = resolveFeatureDirCandidate(entries, anchor.anchorLineIndex);
 
   // F227 D：主候选磁盘不可用时的只读兜底——状态机（core 层）逐字不变，
@@ -192,6 +261,10 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   // **不在本次范围**（介入它必然引入新的误阻断），已另开独立跟进项。
   const usable = (dir) => dir !== null && readArtifactFile(projectRoot, `${dir}/fix-report.md`).exists;
   let resolvedPath = candidate.path;
+  // 🔴 声明位置是承重的：必须与 resolvedPath 同级，**不得**放进下方的 `if` 块内。
+  // 放进块内会让下方 judgeCompliance 的消费点抛 ReferenceError，而 main() 顶层 catch（FR-013）
+  // 会把它静默转成 exit 0 放行——本次修复会被自己反转成一条新的 fail-open。
+  let witnessAbsent = false;
   if (candidate.ambiguous === false && !usable(resolvedPath)) {
     const history = Array.isArray(candidate.candidates) ? candidate.candidates : [];
     for (let i = history.length - 1; i >= 0; i -= 1) {
@@ -217,18 +290,105 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     // 历史兜底未命中 + 短名磁盘命中制品齐全目录"这一狭窄交集才改变 resolvedPath，且只可能把
     // "改动前阻断"转为"改动后放行"，不产生新的误阻断。
     //
-    // 已知限界（如实登记，非本次消除）：这把 F227「已知限界一」（冒用磁盘上已存在且制品齐全的
-    // 历史目录）从"必须精确提名该目录"放宽到"提名同 short-name 的任一编号"。属被接受限界的边际
-    // 扩大而非新开攻击面——冒用者原本直接提名目标目录即可达成同样效果，无需借道本兜底。
+    // F257 缺陷 1 收口（方案 A′ · 写入见证门槛）：F256 原实现的采信闸门只有 usable()，
+    // 而 usable() 是**制品存在性**判据、不是**会话归属**判据。二者都不蕴含归属，于是本会话零产出时，
+    // 判定器会静默改用磁盘上同 short-name 的另一编号旧目录完成合规判定 → compliant:true →
+    // 合规早退（发生在任何 appendAuditEvent 之前）→ exit 0 且事后零审计线索。
+    //
+    // F256 原注释把这条判为"被接受限界的边际扩大，因为冒用者原本直接提名目标目录即可"——
+    // 该理由**只对主动冒用成立**。真正的失效模式是**无意**的：本会话老实提名了自己的新编号目录、
+    // 磁盘上恰好存在同 short-name 的历史目录，判定器就静默采信了别人的产物，被判方全程没有任何
+    // 冒用动作。故追加一维证据：磁盘重锚定必须有本会话对该 short-name 家族制品的**成功写入见证**。
+    //
+    // 🔴🔴 承重前提（第 3 轮红队实证，破坏它即复活一条零审计 fail-open）：
+    // **见证的制品类必须与本段采信谓词 `usable()` 严格同源**。当前 `usable()` 只查 fix-report.md，
+    // 故 `ANCHORED_ARTIFACT_PATH_REGEX` 也只收 fix-report.md。二者一旦脱钩就会出现「拿到了见证但
+    // 不 usable」的目录：上方 F227 历史兜底只挑 usable 的历史候选故不选它 → 控制流照旧落进本段 →
+    // witnessedShortNames 命中 → 重锚定到本会话从未触碰的旧目录 → compliant:true → 合规早退 → exit 0。
+    // 红队实跑链（第 2 轮实现把 verification/verification-report.md 也算见证时成立）：零真实产出 +
+    // 两次廉价 Agent 委派 + Write 一份 1 字节的 verification-report.md 到全新编号目录 → exit 0。
+    // 后人放宽任一侧（加回见证制品类 / 放宽 usable）都必须同步另一侧并补回归用例。
+    //
+    // ⚠️ 第 2 轮此处那段「(a) 同编号版本采信正支结构性不可达」的演绎证明**已被上述实证证伪**，
+    // 故删除，不得再作为放宽依据：该证明从「见证集合 ⊆ 提名集合 ⟹ 被见证目录必进 candidateHistory」
+    // 推出「F227 兜底先手命中」，但**「进 candidateHistory」不蕴含「usable」**——兜底循环只挑
+    // usable 的历史候选。同轮"576 组排列穷举 0 命中"的穷举集合也没覆盖该形态，不构成反证。
+    //
+    // 🔴 为何比较是 **short-name 家族级**而不是"见证目录与重锚定目标同编号"——这是本判据的命门，
+    // 后人"优化"回同编号会静默删除整个 F256：F256 的真实场景里被见证的是**旧**目录
+    // （`specs/251-fix-foo`，已被 git mv 移走故不可用，F227 兜底不命中），而重锚定目标是磁盘上的
+    // `specs/254-fix-foo`，short-name 同为 `foo` ⟹ 见证成立 ⟹ 正支可达，F256 正向用例仍 exit 0。
+    // 同编号写法下该正支不可达（见证目录不在磁盘上），F256 的修复会被整段抵消。
+    //
+    // 安全下界没有被家族级放宽：伪造见证仍须真的 Write 一份同 short-name 目录的 fix-report.md 并拿到
+    // harness 的成功回执。放宽的只是"哪个编号"，没有放宽"是否真写过"。
+    //
+    // 方向仍是收窄（fail-closed）：只可能把"改动前放行"转为"改动后阻断"，不新增任何放行出口。
+    //
+    // 新增误阻断类 X（如实登记，非回归）：本会话对该 short-name 家族**任一**目录都没有成功写入过
+    // fix-report.md，却期望采信磁盘上同 short-name 的目录 → 阻断。补救成本极低（对家族内任一目录的
+    // fix-report.md 做一次 Write/Edit 即恢复放行），且 BLOCK_LIMIT=2 保证最坏两次阻断后降级放行，
+    // 会话不会卡死。
+    //
+    // 🔴 类 X 的**三种**典型形态（第 4 轮审查补登记形态 2、第 5 轮补登记形态 3——前身注释只写了
+    // 形态 1，漏登记会让后人把它们当回归"修"回去，即放宽见证判据、复活零审计 fail-open）：
+    //   形态 1 · 子代理写制品：制品全部由子代理在 sidechain 内写入，主 transcript 不可见。
+    //   形态 2 · **制品经 Bash 写入**：本判据的提名侧与见证侧在**两个维度上不对称**——
+    //     · 工具集：提名侧 `resolveFeatureDirCandidate` 接受 Bash 写入（`hasBashWriteIndicator`
+    //       即 `>` / `>>` / `<<` / `tee` + `ARTIFACT_PATH_REGEX`），见证侧只接受 `Write` / `Edit`；
+    //     · 制品类：提名侧的 `ARTIFACT_PATH_REGEX` 还收 `verification/verification-report.md`，
+    //       见证侧的 `ANCHORED_ARTIFACT_PATH_REGEX` 只收 `fix-report.md`（与 `usable()` 同源，见上）。
+    //     第 4 轮实跑复现：`cat > specs/251-fix-bar/fix-report.md <<'EOF'` 写制品 → 委派齐全 →
+    //     复合命令 `git mv` 重编到 254 → 磁盘 254 制品齐备，结果由 `compliant:true` 翻转为
+    //     `compliant:false, missing:[feature-dir, fix-report.md], diagnostics:[feature-dir-witness-absent]`。
+    //     该流程完全无恶意，却被阻断。
+    //   🔴 这是**取舍不是 bug，不要为它放宽见证判据**：把 Bash 收进见证侧会让 `cat X > /dev/null`
+    //     之类零成本命令即可发证（正是 F227「已知限界一」的形态），见证从"证据"退化为"格式"；
+    //     把 verification-report.md 收进见证侧则会直接复活第 3 轮红队实证的绕过链（见上方
+    //     ANCHORED_ARTIFACT_PATH_REGEX 的承重不变量）。两条放宽都换不回等价的安全下界。
+    //     形态 2 的补救与形态 1 相同：对家族内任一目录的 fix-report.md 做一次 Write/Edit 即恢复。
+    //   形态 3 · **会话中途重新展开 fix skill**（第 5 轮审查补登记）：见证窗口的下界用的是
+    //     `anchor.anchorLineIndex`（**最晚**一次展开），与闸门三刻意取**最早**展开作基线的方向相反
+    //     （见 countAssistantEntriesSinceEarliestFixExpansion 的 JSDoc）。于是同一会话中途再次
+    //     `Skill(spec-driver-fix)` 展开时，之前对制品的**合法** Write 会落到新窗口之外 → 见证清空 →
+    //     `feature-dir-witness-absent` 阻断。
+    //     🔴 这个方向不对称是**刻意的、且两侧各自 fail-closed**，不是需要"对齐"的 bug：见证窗口用最晚
+    //     锚点 ⟹ 重展开只会**收窄**见证（更难放行）；闸门三用最早展开 ⟹ 重展开无法把计数清零
+    //     （更难推迟）。两侧都取"重展开不能让被判方获益"的那一端。若把见证窗口也改成最早展开，
+    //     会让锚点前的陈旧写入事件重新计入见证，放宽的是**放行**方向，与本收口相反。
+    //     补救与形态 1/2 相同：重展开后对家族内任一目录的 fix-report.md 再做一次 Write/Edit 即恢复。
+    //
+    // 本次**不**消除的两条既有面（禁止读成"已消除"）：
+    //   1. F227「已知限界一」——不经过本兜底、直接提名磁盘上完好的旧目录并用 `cat X > /dev/null`
+    //      满足 BASH_WRITE_INDICATOR_REGEX 仍可放行。本收口的价值在于消除**无意**的静默采信，
+    //      而非阻止主动冒用。
+    //   2. **见证不绑定终态**（红队形态 W1 已实证，收窄制品类不消除它）：`Write .../fix-report.md`
+    //      拿到成功回执后立刻回滚，磁盘零变化而见证仍成立——判据看 transcript 历史、制品判据看磁盘
+    //      终态，二者时间解耦（F227「终态存在性 ≠ 历史事件是否发生」的镜像）。第 2 轮把它记作边角
+    //      限界是低估，现按**承重逃逸面**登记：它是本判据下唯一成本可控的伪造路径。仍接受的理由是
+    //      伪造者必须真的执行一次写入并拿到 harness 回执（成本高于第 1 条），且事件留痕可事后审计；
+    //      真正闭合需把见证与磁盘终态做交叉核验，属独立跟进项。
     if (!usable(resolvedPath) && candidate.path !== null) {
       const shortName = extractFixShortName(candidate.path);
       if (shortName !== null) {
+        // 见证集合按 short-name 归约后比较（家族级；理由见上方「为何比较是 short-name 家族级」一段）
+        const witnessedShortNames = new Set(
+          [...collectArtifactWriteWitnessDirs(entries, anchor.anchorLineIndex, projectRoot)]
+            .map(extractFixShortName)
+            .filter((s) => s !== null),
+        );
         // `.filter(usable)` 是承重判据而非防御性冗余：磁盘上同 short-name 的目录里完全可能存在
         // 编号更大的**空壳**（重编时先建新目录、制品尚未迁入，或撞号后被弃用的空目录）。
-        // 不过滤就会选中空壳、把"制品其实齐备"错判成"缺少诊断报告"——恰是本 Feature 要修的误报。
-        const diskMatches = listFeatureDirCandidatesByShortName(projectRoot, shortName).filter(usable);
-        // 取编号最大的**可用**者 = 重编链末端里制品齐备的那个（枚举已按编号升序，见 io 层排序注释）
-        if (diskMatches.length > 0) resolvedPath = diskMatches[diskMatches.length - 1];
+        // 不过滤就会选中空壳、把"制品其实齐备"错判成"缺少诊断报告"——恰是 F256 要修的误报。
+        const usableMatches = listFeatureDirCandidatesByShortName(projectRoot, shortName).filter(usable);
+        if (witnessedShortNames.has(shortName)) {
+          // 取编号最大的**可用**者 = 重编链末端里制品齐备的那个（枚举已按编号升序，见 io 层排序注释）
+          if (usableMatches.length > 0) resolvedPath = usableMatches[usableMatches.length - 1];
+        } else if (usableMatches.length > 0) {
+          // 磁盘上确有可采信的同名目录、但本会话没写过这个家族的任何制品 → 拒绝重锚定并留下归因线索，
+          // 否则事后只看到 missing:[feature-dir]，与"根本没建目录"不可区分
+          witnessAbsent = true;
+        }
       }
     }
   }
@@ -266,7 +426,11 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     executionRecords,
     enforcement,
     configDegraded,
-    diagnostics: configDiagnostics,
+    // F257 O1：见证缺席时追加可归因诊断码。judgeCompliance 对 diagnostics 是**纯透传**、不据此改判，
+    // 经 buildAuditEvent 进审计事件。
+    // 🔴 绝不可放进 transcriptDiagnostics —— 该数组非空即触发 runHook 的 FR-013 fail-open 放行，
+    // 会把本次收口反转成一条新的静默放行通道。
+    diagnostics: witnessAbsent ? [...configDiagnostics, 'feature-dir-witness-absent'] : configDiagnostics,
   });
 
   // F224 CRITICAL 收窄（Phase 5 后修复轮）：fail-open 必须**按维度**生效，不得整体短路（沿用不变）。
@@ -296,6 +460,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     return {
       enforcement, configDegraded, isFix: true, mode: anchor.mode,
       transcriptDiagnostics: ['feature-dir-unresolvable'], verdict: null,
+      assistantEntriesSinceEarliestFix,
     };
   }
 
@@ -306,7 +471,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
 
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
-    transcriptDiagnostics: [], verdict, inFlightDelegations,
+    transcriptDiagnostics: [], verdict, inFlightDelegations, assistantEntriesSinceEarliestFix,
   };
 }
 
@@ -453,6 +618,58 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
 }
 
 /**
+ * 推迟成功时的终态记录（F257 缺陷 2 · 审计可见性提档）。
+ *
+ * why：改造前推迟只 `appendAuditEvent`（`degraded:false`）+ `[WARN]` stderr，**不写** `record-workflow-run`
+ * 终态；于是事后审计里推迟通道是零终态痕迹的，看起来就是"还有子代理在跑"。降级放行则有终态记录。
+ * 两条放行路径的可见性不对等，恰好让更安静的那条成为首选绕过面。
+ *
+ * why `paused` 而非 `failed`：与"降级放行 = failed"区分，事后可分辨两类放行
+ * （`VALID_RESULTS = success|partial|paused|failed`）。审计事件的 `degraded` 仍为 `false`，
+ * contract 既有区分语义不变。
+ *
+ * 🔴 why 刻意**不设幂等标记**：幂等标记若存在于可被删除的状态文件里，正是缺陷 2 的根因。不设标记时
+ * "状态被删"的后果是**多写**终态记录（审计更多，方向安全）。
+ * ⚠️ 数量论证必须与残余同真：**不是**"单会话最多 3 条"——被判方每轮删状态时闸门二恒放行，每轮都会
+ * 写一条终态，真实上界是"闸门三阈值内能塞下多少次 stop"。方向是多写审计（安全），数量受闸门三约束。
+ *
+ * ⚠️ 已知副作用（第 4 轮审查补登记，**本轮刻意不修**）：**`runId` 与 fix skill 不同源，会污染
+ * adoption 指标。** 这里的 `runId = sessionId`，而 `skills/spec-driver-fix/SKILL.md` 收尾调用
+ * `record-workflow-run` 时用的是 `--run-id "{branch_name}"`；`scripts/generate-adoption-insights.mjs`
+ * 的 `dedupeRunEvents` 按 `(workflowId, runId)` 去重 ⟹ 两者落在**不同 key**，于是每个发生过推迟的
+ * fix 会话会额外贡献一条独立的 `paused` run（同会话内多次推迟被 dedupe 折叠为 1 条，取最晚者），
+ * 使 `totalRuns` 上浮、`successRate`（`success / totalRuns`）被下压。
+ * 注：`releaseDegraded`（F208）早有同样写法，**不是本次新引入的模式**；但降级放行罕见、推迟是常规
+ * 路径，量级不同，故在此显式登记。
+ * 本轮不改 `runId` 的理由：改它要同时动 adoption 脚本与 skill 的 `--run-id` 契约，超出本次范围，
+ * 且与既有 F208 写法保持一致更利于后续一次性收口。
+ * 闭合方向（独立跟进项，二选一）：① `runId` 与 skill 对齐（判定器改用 branch_name 之类同源标识）；
+ * ② 在 adoption 侧排除判定器写入的合成终态（如按 `warnings` 前缀或新增来源字段过滤）。
+ *
+ * 整段 try/catch（与 releaseDegraded 同规格）：终态写入失败不得让推迟路由崩溃（FR-013 精神）。
+ */
+function recordDeferTerminal(projectRoot, sessionId, verdict, entryCount) {
+  try {
+    recordWorkflowRun({
+      projectRoot,
+      workflowId: 'spec-driver-fix',
+      runId: sessionId,
+      result: 'paused',
+      warnings: [`${PREFIX_WARN} fix 会话因在途委派推迟裁决（最早 fix 展开后 assistant entry=${entryCount}），缺失: ${verdict.missing.join(', ')}`],
+      complianceVerdict: {
+        closureForm: verdict.closureForm,
+        compliant: verdict.compliant,
+        missing: verdict.missing,
+        degraded: false,
+        blockCount: null,
+      },
+    });
+  } catch {
+    // 终态写入失败不得让推迟路由崩溃
+  }
+}
+
+/**
  * FR-013 fail-open 的 loud 半边：判定能力失效时 best-effort 落盘 degraded 诊断事件，
  * 使"漏拦"在事后审计中可被发现而非彻底隐没。写入自身失败不得影响放行（双重兜底）。
  */
@@ -520,10 +737,20 @@ function runHook(projectRoot, payload) {
   //     对这类缺口推迟纯属延误（实测 174 个不合规会话中 9 个、5.2% 曾因此被静默推迟）。
   //   闸门二（次数预算 / IN_FLIGHT_DEFER_LIMIT）：与 blockCount 分列的独立计数，
   //     耗尽后恢复正常裁决并在审计事件里留 delegation-in-flight-budget-exhausted。
+  //   闸门三（会话长度预算 / EARLIEST_FIX_ENTRY_DEFER_LIMIT，F257 缺陷 2）：自**最早**一次 fix 展开
+  //     之后的 assistant entry 总数。闸门二的计数寄存在 projectRoot 下、被 gitignore 的状态文件里，
+  //     每轮 stop 前 `rm -rf` 该目录即可让它永久归零（实测 10 轮全 exit 0、零终态记录），
+  //     故闸门二**单独不构成上界**；闸门三的计量源派生自 transcript，被判方不经手写入、只增不减。
   //
-  // 三条不推迟的出口都**方向一致地落回正常裁决**（fail-closed）：缺口不可推迟 / 预算耗尽 /
-  // 计数持久化失败。其中持久化失败必须不推迟——维持不了计数就不能开推迟通道，
+  // 🔴 三道闸门取**合取（AND）**：任一不满足即不推迟。绝不能写成 `||`——那等于两道预算互相赦免，
+  // 缺陷 2 原样存活（变异 M-5 专钉这一点）。
+  //
+  // 四条不推迟的出口都**方向一致地落回正常裁决**（fail-closed）：缺口不可推迟 / 次数预算耗尽 /
+  // 会话长度预算耗尽 / 计数持久化失败。其中持久化失败必须不推迟——维持不了计数就不能开推迟通道，
   // 与 routeBlock 里"存储不可用即等同已达上限"的既有取舍同源。
+  //
+  // 如实登记（禁止读成"消除"）：闸门三**不消除**"删状态文件绕过闸门二"这一手法本身，只给它加了一条
+  // 抹不掉的天花板——把「永久免于裁决」降级为「约 140 轮内免于裁决」。
   //
   // 插入点在 compliant 早退之后、warn 分支之前，对 block/warn 两档一视同仁：warn 档本就 exit 0，
   // 但若落在其后会把"时机未到"误记为"真实不合规"审计事件。两档退出码语义均不变，仅审计更准确。
@@ -531,7 +758,12 @@ function runHook(projectRoot, payload) {
   const deferExtraDiagnostics = [];
   if (hasInFlight && isDeferrableMissingSet(result.verdict.missing)) {
     const loaded = loadBlockState(projectRoot, sessionId);
-    if (loaded.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT) {
+    const entryCount = typeof result.assistantEntriesSinceEarliestFix === 'number'
+      ? result.assistantEntriesSinceEarliestFix
+      : Number.POSITIVE_INFINITY;                    // 计量缺席 → 视同预算耗尽（fail-closed）
+    const countBudgetLeft = loaded.inFlightDeferCount < IN_FLIGHT_DEFER_LIMIT;  // 闸门二（可被抹除）
+    const entryBudgetLeft = entryCount < EARLIEST_FIX_ENTRY_DEFER_LIMIT;         // 闸门三（单调，抹不掉）
+    if (countBudgetLeft && entryBudgetLeft) {
       // 先持久化再推迟：计数写不进去就等于没有上界，此时宁可照常裁决
       const saved = saveBlockState(projectRoot, sessionId, {
         blockCount: loaded.blockCount,               // 推迟不动阻断预算（整体覆写，须原样带回）
@@ -539,6 +771,8 @@ function runHook(projectRoot, payload) {
         inFlightDeferCount: loaded.inFlightDeferCount + 1,
       });
       if (saved.ok) {
+        // 审计提档：推迟不再是零终态痕迹的静默通道（F257 缺陷 2）
+        recordDeferTerminal(projectRoot, sessionId, result.verdict, entryCount);
         appendAuditEvent(projectRoot, buildAuditEvent({
           sessionId, enforcement: result.enforcement, verdict: result.verdict,
           blockCount: null, degraded: false, extraDiagnostics: ['delegation-in-flight'],
@@ -548,7 +782,9 @@ function runHook(projectRoot, payload) {
       }
       deferExtraDiagnostics.push('state-storage-unavailable');
     } else {
-      deferExtraDiagnostics.push('delegation-in-flight-budget-exhausted');
+      // 两道预算分别给码：事后可区分"次数用尽"与"会话过长"，两者可同时出现
+      if (!countBudgetLeft) deferExtraDiagnostics.push('delegation-in-flight-budget-exhausted');
+      if (!entryBudgetLeft) deferExtraDiagnostics.push('delegation-in-flight-entry-budget-exhausted');
     }
   }
 
@@ -579,6 +815,11 @@ function runReport(projectRoot, transcriptPath) {
     transcriptDiagnostics: result.transcriptDiagnostics,
     // F256 盲区 2：在途委派事实透传，供 --mode report 端到端复现与事后审计核对
     inFlightDelegations: result.inFlightDelegations || [],
+    // F257 缺陷 2：闸门三的计量源透传。与 inFlightDelegations 同为**事实字段**——
+    // report 模式不施加任何闸门、不落盘，故该值大于阈值**不**等于本次会被阻断。
+    assistantEntriesSinceEarliestFix: typeof result.assistantEntriesSinceEarliestFix === 'number'
+      ? result.assistantEntriesSinceEarliestFix
+      : null,
     ...(result.verdict || {}),
   };
   process.stdout.write(`${JSON.stringify(out)}\n`);

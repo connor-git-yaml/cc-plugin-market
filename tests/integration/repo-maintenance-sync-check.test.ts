@@ -10,7 +10,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 // 动态从 release-contract.yaml 读期望版本，避免 release 升版后测试再次 stale
 import { loadReleaseContract } from '../../scripts/lib/release-contract-core.mjs';
@@ -36,10 +36,25 @@ function runNode(scriptPath: string, projectRoot: string) {
   }
 }
 
-function copyTree(projectRoot: string, relativePath: string) {
+interface CopyTreeOptions {
+  /** 相对于被拷贝子树根的排除路径（分段级精确匹配，含其整棵子树） */
+  exclude?: string[];
+  /** 拷贝来源根目录，默认真实仓库根；测试自身校验 filter 行为时可指向合成 fixture */
+  sourceRoot?: string;
+}
+
+function copyTree(projectRoot: string, relativePath: string, options: CopyTreeOptions = {}) {
+  const sourcePath = join(options.sourceRoot ?? REPO_ROOT, relativePath);
   const targetPath = join(projectRoot, relativePath);
+  const excludedPaths = (options.exclude ?? []).map((entry) => join(sourcePath, entry));
   mkdirSync(join(targetPath, '..'), { recursive: true });
-  cpSync(join(REPO_ROOT, relativePath), targetPath, { recursive: true });
+  cpSync(sourcePath, targetPath, {
+    recursive: true,
+    // `excluded + sep` 的 sep 是承重的，不能退化成裸 `startsWith(excluded)`：后者会连**兄弟目录**
+    // 一起剪掉——`.claude/worktrees-archive` 以 `.claude/worktrees` 为字符串前缀却是另一棵树。
+    // 误剪的后果是沙箱缺文件，打红与本主题无关的断言。守护用例见下方「copyTree 子树排除」。
+    filter: (src) => !excludedPaths.some((excluded) => src === excluded || src.startsWith(excluded + sep)),
+  });
 }
 
 function copyFile(projectRoot: string, relativePath: string) {
@@ -47,6 +62,41 @@ function copyFile(projectRoot: string, relativePath: string) {
   mkdirSync(join(targetPath, '..'), { recursive: true });
   cpSync(join(REPO_ROOT, relativePath), targetPath);
 }
+
+describe('copyTree 子树排除', () => {
+  it('剪掉 worktrees 子树，且不误伤兄弟前缀目录 worktrees-archive', () => {
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'repo-maintenance-src-'));
+    const sandbox = mkdtempSync(join(tmpdir(), 'repo-maintenance-dst-'));
+    try {
+      mkdirSync(join(sourceRoot, '.claude', 'rules'), { recursive: true });
+      writeFileSync(join(sourceRoot, '.claude', 'rules', 'tests.md'), '# rules', 'utf-8');
+      writeFileSync(join(sourceRoot, '.claude', 'settings.local.json'), '{}', 'utf-8');
+      // 🔴 判别力反例：**兄弟前缀**目录——绝对路径以 `<src>/.claude/worktrees` 为字符串前缀，
+      // 却是另一棵树。裸 `startsWith(excluded)`（去掉 `+ sep`）会把它一起剪掉，本用例即转红。
+      // 注意：`.claude/skills/worktrees-helper` 这类**另一棵子树下**的同名目录抓不到该变异
+      // （它根本不以 excluded 为前缀），故必须用兄弟前缀形态，不能只放同名子目录。
+      mkdirSync(join(sourceRoot, '.claude', 'worktrees-archive'), { recursive: true });
+      writeFileSync(join(sourceRoot, '.claude', 'worktrees-archive', 'a.md'), '# archived', 'utf-8');
+      // 附带反例：另一棵子树下含 "worktrees" 的路径（守 includes() 式子串匹配的退化）
+      mkdirSync(join(sourceRoot, '.claude', 'skills', 'worktrees-helper'), { recursive: true });
+      writeFileSync(join(sourceRoot, '.claude', 'skills', 'worktrees-helper', 'SKILL.md'), '# skill', 'utf-8');
+      mkdirSync(join(sourceRoot, '.claude', 'worktrees', 'dummy'), { recursive: true });
+      writeFileSync(join(sourceRoot, '.claude', 'worktrees', 'dummy', 'big-file'), 'x'.repeat(4096), 'utf-8');
+
+      copyTree(sandbox, '.claude', { exclude: ['worktrees'], sourceRoot });
+
+      expect(existsSync(join(sandbox, '.claude', 'worktrees'))).toBe(false);
+      expect(existsSync(join(sandbox, '.claude', 'rules', 'tests.md'))).toBe(true);
+      expect(existsSync(join(sandbox, '.claude', 'settings.local.json'))).toBe(true);
+      // 兄弟前缀目录必须原样拷进沙箱——这一条是本用例对裸 startsWith 变异的唯一判别点
+      expect(existsSync(join(sandbox, '.claude', 'worktrees-archive', 'a.md'))).toBe(true);
+      expect(existsSync(join(sandbox, '.claude', 'skills', 'worktrees-helper', 'SKILL.md'))).toBe(true);
+    } finally {
+      rmSync(sourceRoot, { recursive: true, force: true });
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('repo maintenance sync/check', () => {
   let projectRoot: string;
@@ -59,7 +109,11 @@ describe('repo maintenance sync/check', () => {
     copyTree(projectRoot, 'plugins/spec-driver');
     copyTree(projectRoot, 'plugins/spectra');
     copyTree(projectRoot, '.claude-plugin');
-    copyTree(projectRoot, '.claude');
+    // `.claude/worktrees` 存放的是各 git worktree 的完整工作副本（主仓实测 2.6G，占 `.claude` 的
+    // 全部体量），本用例只依赖 `.claude` 下的 rules / settings*.json / skills。整目录拷贝会把沙箱
+    // 构造耗时绑死在 worktree 数量上，在全量并行下直接把本用例推到超时（同根因已第二次复发），
+    // 且在 worktree 内跑时因 REPO_ROOT 取 cwd 而不可复现。排除后耗时与 worktree 数量解耦。
+    copyTree(projectRoot, '.claude', { exclude: ['worktrees'] });
     copyTree(projectRoot, '.specify');
     copyTree(projectRoot, 'docs/shared');
     copyTree(projectRoot, 'specs/products');

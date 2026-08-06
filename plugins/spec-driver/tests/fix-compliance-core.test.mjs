@@ -42,6 +42,9 @@ import {
   extractInFlightDelegationsAfter,
   DEFERRABLE_MISSING_KEYS,
   isDeferrableMissingSet,
+  collectArtifactWriteWitnessDirs,
+  ARTIFACT_WRITER_TOOL_NAMES,
+  countAssistantEntriesSinceEarliestFixExpansion,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
@@ -4426,5 +4429,382 @@ describe('F256 R2 · isDeferrableMissingSet：只有在途工作关得掉的缺�
     const body = isDeferrableMissingSet.toString();
     assert.equal(/\bfs\./.test(body), false, body);
     assert.equal(/process\.env/.test(body), false, body);
+  });
+});
+
+// ────────────────────────────────────────
+// F257 缺陷 1 · collectArtifactWriteWitnessDirs（short-name 磁盘重锚定的会话归属证据源）
+// ────────────────────────────────────────
+
+describe('F257 · collectArtifactWriteWitnessDirs：只有本会话真写过的制品才发证', () => {
+  const ROOT = '/repo';
+  /** 带 id 的 assistant 写入条目 */
+  const write = (lineIndex, id, filePath, name = 'Write') =>
+    assistantEntry(lineIndex, [{ id, name, input: { file_path: filePath } }]);
+  const dirs = (entries, anchor = 0, root = ROOT) => [...collectArtifactWriteWitnessDirs(entries, anchor, root)].sort();
+
+  it('🔴 C-1a 见证制品类**只认 fix-report.md**（与 judge 的 usable() 严格同源）', () => {
+    // 第 3 轮红队 CRITICAL：制品类一旦宽于 usable()，就会出现"拿到了见证但不 usable"的目录 →
+    // F227 历史兜底只挑 usable 者故不选它 → 控制流落进短名分支 → 见证成立 → 重锚定到本会话
+    // 从未触碰的旧目录 → compliant:true → 合规早退 → exit 2 变 exit 0 且零审计。
+    // 把 verification/verification-report.md 加回 ANCHORED_ARTIFACT_PATH_REGEX 后本用例必须转红。
+    const entries = [
+      userTextEntry(0, '锚点'),
+      write(1, 'w1', 'specs/254-fix-alpha/fix-report.md'),
+      userResultEntry(2, 'w1'),
+      write(3, 'w2', 'specs/255-fix-beta/verification/verification-report.md'),
+      userResultEntry(4, 'w2'),
+    ];
+    assert.deepEqual(dirs(entries), ['specs/254-fix-alpha'], 'verification-report.md 不得发证');
+  });
+
+  it('C-1b 锚点窗口：lineIndex <= anchor 的写入不发证（上一轮展开周期的产出不算本次）', () => {
+    const entries = [
+      write(0, 'w0', 'specs/254-fix-alpha/fix-report.md'),
+      userResultEntry(1, 'w0'),
+      userTextEntry(2, '锚点在此'),
+    ];
+    assert.deepEqual(dirs(entries, 2), []);
+    assert.deepEqual(dirs(entries, -1), ['specs/254-fix-alpha']); // 同一份数据，窗口放开即发证
+  });
+
+  it('C-1c 非 assistant envelope 里的 tool_use 不发证（被判方只能在 assistant 侧发起工具）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      normalizeTranscriptEntry({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'tool_use', id: 'w1', name: 'Write', input: { file_path: 'specs/254-fix-alpha/fix-report.md' } }] },
+      }, 1, false),
+      userResultEntry(2, 'w1'),
+    ];
+    assert.deepEqual(dirs(entries), []);
+  });
+
+  it('C-1d 回执缺席 / is_error / id 不匹配 / id 为空 一律不发证（fail-closed）', () => {
+    const noReceipt = [userTextEntry(0, 'x'), write(1, 'w1', 'specs/254-fix-alpha/fix-report.md')];
+    assert.deepEqual(dirs(noReceipt), [], '无回执 = 写入未被受理 / transcript 被截断，同向 fail-closed');
+
+    const errored = [...noReceipt, userResultEntry(2, 'w1', true)];
+    assert.deepEqual(dirs(errored), []);
+
+    const mismatched = [...noReceipt, userResultEntry(2, 'other-id')];
+    assert.deepEqual(dirs(mismatched), []);
+
+    const emptyId = [
+      userTextEntry(0, 'x'),
+      write(1, '', 'specs/254-fix-alpha/fix-report.md'),
+      userResultEntry(2, ''),
+    ];
+    assert.deepEqual(dirs(emptyId), [], 'id 为空串时无法可信配对');
+  });
+
+  it('C-1d2 🔴 W-A3：同一 tool_use id 的**全部**回执均非 error 才发证（id 复用击穿配对）', () => {
+    // 攻击形态：Write(目标制品, id=X) 得 is_error:true → 任意无关工具复用 id=X 得成功回执。
+    // 判据若写成"存在某条非 error 回执"，此处即凭空发证。
+    const entries = [
+      userTextEntry(0, 'x'),
+      write(1, 'dup', 'specs/254-fix-alpha/fix-report.md'),
+      userResultEntry(2, 'dup', true),   // Write 本身失败
+      userResultEntry(3, 'dup', false),  // 无关工具复用同 id 拿到成功回执
+    ];
+    assert.deepEqual(dirs(entries), []);
+    // 顺序反转同样不发证（Map 后写覆盖式实现会在此变红）
+    const reversed = [userTextEntry(0, 'x'), write(1, 'dup', 'specs/254-fix-alpha/fix-report.md'), userResultEntry(2, 'dup', false), userResultEntry(3, 'dup', true)];
+    assert.deepEqual(dirs(reversed), []);
+  });
+
+  it('C-1e 子串越界反例：alpha-retry 的写入只产出 alpha-retry，绝不产出 alpha', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      write(1, 'w1', 'specs/254-fix-alpha-retry/fix-report.md'),
+      userResultEntry(2, 'w1'),
+    ];
+    assert.deepEqual(dirs(entries), ['specs/254-fix-alpha-retry']);
+  });
+
+  it('C-1f 路径形态 fail-closed 表：尾随斜杠 / 双斜杠 / 大写 / `..` 段 / 非制品文件一律不发证', () => {
+    const cases = [
+      'specs/254-fix-alpha/fix-report.md/',
+      'specs//254-fix-alpha/fix-report.md',
+      'Specs/254-fix-alpha/fix-report.md',
+      'specs/254-fix-Alpha/fix-report.md',
+      'specs/254-fix-alpha/../254-fix-beta/fix-report.md',
+      'specs/254-fix-alpha/plan.md',
+      'specs/254-fix-alpha/verification-report.md',
+      // 🔴 第 3 轮 CRITICAL：verification-report.md 是**被核验制品**却**不是** usable() 的判据，
+      // 收进见证即形成"有见证但不 usable"的白嫖面（见 C-1a）
+      'specs/254-fix-alpha/verification/verification-report.md',
+      'docs/specs/254-fix-alpha/fix-report.md',
+      'specs/254-fix-alpha/fix-report.md ',
+      '',
+    ];
+    for (const [i, fp] of cases.entries()) {
+      const entries = [userTextEntry(0, 'x'), write(1, `w${i}`, fp), userResultEntry(2, `w${i}`)];
+      assert.deepEqual(dirs(entries), [], fp);
+    }
+    // 前导 ./ 是唯一被接受的归一化形态
+    const dotted = [userTextEntry(0, 'x'), write(1, 'wd', './specs/254-fix-alpha/fix-report.md'), userResultEntry(2, 'wd')];
+    assert.deepEqual(dirs(dotted), ['specs/254-fix-alpha']);
+  });
+
+  it('C-1g 绝对路径按**分段级**前缀剥离：/repo 内命中，/repo-backup 不得命中', () => {
+    const inside = [userTextEntry(0, 'x'), write(1, 'w1', '/repo/specs/254-fix-alpha/fix-report.md'), userResultEntry(2, 'w1')];
+    assert.deepEqual(dirs(inside), ['specs/254-fix-alpha']);
+
+    const backup = [userTextEntry(0, 'x'), write(1, 'w1', '/repo-backup/specs/254-fix-alpha/fix-report.md'), userResultEntry(2, 'w1')];
+    assert.deepEqual(dirs(backup), [], '裸 startsWith(projectRoot) 会让此例命中');
+
+    // projectRoot 带尾随斜杠时行为一致
+    assert.deepEqual(dirs(inside, 0, '/repo/'), ['specs/254-fix-alpha']);
+    // projectRoot 缺省 / 非字符串 → 绝对路径无从判断归属，不发证
+    assert.deepEqual(dirs(inside, 0, null), []);
+  });
+
+  it('C-1h I-A2 纵深防御：assistant envelope 自带的 tool_result 不参与配对', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      // 同一条 assistant 里既发 tool_use 又自带成功 tool_result
+      assistantEntry(1, [{ id: 'w1', name: 'Write', input: { file_path: 'specs/254-fix-alpha/fix-report.md' } }], [{ toolUseId: 'w1' }]),
+    ];
+    assert.deepEqual(dirs(entries), [], '真实回执只由 harness 写在非 assistant envelope 内');
+  });
+
+  it('C-1i I4：缺省 is_error 字段按**成功**处理（与真实 wire format 一致）', () => {
+    const entries = [
+      userTextEntry(0, 'x'),
+      write(1, 'w1', 'specs/254-fix-alpha/fix-report.md'),
+      normalizeTranscriptEntry({
+        type: 'user',
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'w1', content: 'ok' }] },
+      }, 2, false),
+    ];
+    assert.deepEqual(dirs(entries), ['specs/254-fix-alpha'], '改成 is_error === false 会在此变红（大规模误阻断）');
+  });
+
+  it('C-1j 工具集合恰为 Write/Edit 且 frozen（唯一放宽点，增项必须是显式决策）', () => {
+    assert.deepEqual([...ARTIFACT_WRITER_TOOL_NAMES].sort(), ['Edit', 'Write']);
+    assert.equal(Object.isFrozen(ARTIFACT_WRITER_TOOL_NAMES), true);
+    const read = [userTextEntry(0, 'x'), write(1, 'r1', 'specs/254-fix-alpha/fix-report.md', 'Read'), userResultEntry(2, 'r1')];
+    assert.deepEqual(dirs(read), [], '读过 ≠ 写过');
+    const edit = [userTextEntry(0, 'x'), write(1, 'e1', 'specs/254-fix-alpha/fix-report.md', 'Edit'), userResultEntry(2, 'e1')];
+    assert.deepEqual(dirs(edit), ['specs/254-fix-alpha']);
+  });
+
+  it('C-1k 非法入参：entries 非数组 / anchor 非数字 → 不抛异常', () => {
+    for (const bad of [null, undefined, 'x', 123, {}]) {
+      assert.deepEqual([...collectArtifactWriteWitnessDirs(bad, 0, ROOT)], [], String(bad));
+    }
+    const entries = [write(0, 'w1', 'specs/254-fix-alpha/fix-report.md'), userResultEntry(1, 'w1')];
+    assert.deepEqual([...collectArtifactWriteWitnessDirs(entries, null, ROOT)], ['specs/254-fix-alpha'], 'anchor 非数字按 -1 处理');
+  });
+
+  it('C-1l 性能/线性：2 万条写入 + 2 万条回执单遍扫描 < 500ms（同步 Stop hook 硬约束）', () => {
+    const N = 20000;
+    const entries = [userTextEntry(0, 'x')];
+    for (let i = 1; i <= N; i += 1) entries.push(write(i, `w${i}`, `specs/${100000 + i}-fix-alpha/fix-report.md`));
+    for (let i = 1; i <= N; i += 1) entries.push(userResultEntry(N + i, `w${i}`));
+    const t0 = Date.now();
+    const got = collectArtifactWriteWitnessDirs(entries, 0, ROOT);
+    const cost = Date.now() - t0;
+    assert.equal(got.size, N);
+    assert.ok(cost < 500, `耗时 ${cost}ms —— 疑似退化为二次扫描`);
+  });
+
+  it('C-1m I4 静态守卫：函数体内零 I/O（core 层纯函数契约）', () => {
+    const body = collectArtifactWriteWitnessDirs.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/\brequire\s*\(/.test(body), false, body);
+    assert.equal(/process\.env/.test(body), false, body);
+  });
+});
+
+// ────────────────────────────────────────
+// F257 缺陷 2 · countAssistantEntriesSinceEarliestFixExpansion（闸门三的单调计量源）
+// ────────────────────────────────────────
+
+describe('F257 · countAssistantEntriesSinceEarliestFixExpansion：基线必须是**最早**一次 fix 展开', () => {
+  const expansion = (mode) => `Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-${mode}\n请处理`;
+  /** 一条普通 assistant 条目（内容无关，只贡献计数） */
+  const asst = (lineIndex) => assistantEntry(lineIndex, [{ id: `t${lineIndex}`, name: 'Bash', input: { command: 'ls' } }]);
+  /**
+   * 判定器的实际调用形态：基线由 detectFixSkillExpansion 在**同一趟**扫描里顺带产出后传入
+   * （第 3 轮 WARNING：闸门三原先自己再扫一遍 SKILL_EXPANSION_REGEX，把最坏耗时翻倍）。
+   */
+  const countOf = (entries) =>
+    countAssistantEntriesSinceEarliestFixExpansion(entries, detectFixSkillExpansion(entries).earliestFixLineIndex);
+
+  it('C-2a 只数「基线之后」的 assistant 条目（user / tool_result 条目不计）', () => {
+    const entries = [
+      asst(0),                              // 基线之前，不计
+      userTextEntry(1, expansion('fix')),   // 基线
+      asst(2), asst(3),
+      userResultEntry(4, 't2'),             // 非 assistant，不计
+      userTextEntry(5, '继续'),              // 非 assistant，不计
+      asst(6),
+    ];
+    assert.equal(countOf(entries), 3);
+  });
+
+  it('🔴 C-2b（CRITICAL-2 守护）会话内重复展开 spec-driver-fix 不得重置计数', () => {
+    // 主锚点（detectFixSkillExpansion）取的是**最晚**一次展开：agent 自己再调一次
+    // Skill(spec-driver-fix) 即可把它推到末尾、令锚点后计数归零，而 isFix 仍为 true。
+    // 实跑证据：攻击组每轮重展开 → 30/30 全 exit 0、锚点后计数恒 4。
+    // 闸门三因此必须自己找**最早**一次 fix 展开作基线——重展开只会追加条目，不改变基线。
+    const entries = [];
+    let line = 0;
+    for (let round = 0; round < 4; round += 1) {
+      entries.push(userTextEntry(line, expansion('fix'))); line += 1;
+      entries.push(asst(line)); line += 1;
+      entries.push(asst(line)); line += 1;
+    }
+    // 主锚点在最后一次展开（line 9）之后只剩 2 条 assistant；闸门三基线在 line 0，应数满 8 条
+    assert.equal(detectFixSkillExpansion(entries).anchorLineIndex, 9);
+    assert.equal(countOf(entries), 8);
+  });
+
+  it('C-2c 基线只认 fix 展开：更早的 sync/plan 展开不得充当基线', () => {
+    const entries = [
+      userTextEntry(0, expansion('sync')),
+      asst(1),                                // sync 之后、fix 之前，不计
+      userTextEntry(2, expansion('fix')),
+      asst(3), asst(4),
+    ];
+    assert.equal(countOf(entries), 2);
+  });
+
+  it('C-2d 反伪造：展开痕迹只认 user 文本块（assistant 自述不得推后基线）', () => {
+    // 若接受 assistant 侧文本，被判方在会话末尾自述一句展开语即可把基线推到末尾 → 计数归零（fail-open）。
+    const entries = [
+      userTextEntry(0, expansion('fix')),
+      asst(1), asst(2),
+      normalizeTranscriptEntry({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: expansion('fix') }] },
+      }, 3, false),
+      asst(4),
+    ];
+    // line 3 那条 assistant 自述不构成基线；它自己也是一条 assistant 条目，故基线 0 之后共 4 条
+    assert.equal(countOf(entries), 4);
+  });
+
+  it('C-2e 无 fix 展开痕迹 → 全量计数（方向 fail-closed：更容易触顶而非更宽松）', () => {
+    const entries = [asst(0), userTextEntry(1, expansion('sync')), asst(2)];
+    assert.equal(countOf(entries), 2);
+  });
+
+  it('C-2f 单调性回归钉子：对同一份 transcript 的递增前缀，计数只增不减', () => {
+    const entries = [];
+    let line = 0;
+    for (let round = 0; round < 5; round += 1) {
+      entries.push(userTextEntry(line, expansion('fix'))); line += 1;      // 每轮都重展开（攻击形态）
+      entries.push(asst(line)); line += 1;
+      entries.push(userResultEntry(line, `t${line - 1}`)); line += 1;
+    }
+    let prev = -1;
+    for (let cut = 1; cut <= entries.length; cut += 1) {
+      const n = countOf(entries.slice(0, cut));
+      assert.ok(n >= prev, `前缀长度 ${cut} 处计数回退：${prev} → ${n}`);
+      prev = n;
+    }
+    assert.equal(prev, 5, '5 轮各 1 条 assistant');
+  });
+
+  it('C-2g 非法入参不抛异常（判定器顶层 catch 会把异常静默转成放行）', () => {
+    for (const bad of [null, undefined, 'x', 123, {}]) {
+      assert.equal(countOf(bad), 0, String(bad));
+    }
+  });
+
+  it('C-2h 零 I/O：函数体内不触碰 fs / process.env（core 层纯函数契约）', () => {
+    const body = countAssistantEntriesSinceEarliestFixExpansion.toString();
+    assert.equal(/\bfs\./.test(body), false, body);
+    assert.equal(/process\.env/.test(body), false, body);
+  });
+
+  it('C-2i 性能：2 万条 entries 线性单遍 < 300ms（同步 Stop hook 硬约束）', () => {
+    const entries = [userTextEntry(0, expansion('fix'))];
+    for (let i = 1; i <= 20000; i += 1) entries.push(asst(i));
+    const t0 = Date.now();
+    const n = countOf(entries);
+    const cost = Date.now() - t0;
+    assert.equal(n, 20000);
+    assert.ok(cost < 300, `耗时 ${cost}ms —— 疑似退化为二次扫描`);
+  });
+
+  it('🔴 C-2j 单趟不变量：本函数体内不得出现 SKILL_EXPANSION_REGEX（基线只能由入参给入）', () => {
+    // 第 3 轮 WARNING 的结构性钉子：把展开扫描写回本函数即恢复"全链扫两趟"，
+    // 诱饵语料下最坏耗时立刻翻倍（判定器跑在同步 Stop hook 上）。
+    const body = countAssistantEntriesSinceEarliestFixExpansion.toString();
+    assert.equal(/SKILL_EXPANSION_REGEX/.test(body), false, body);
+    assert.equal(countAssistantEntriesSinceEarliestFixExpansion.length, 2, '基线必须是显式入参');
+  });
+
+  it('C-2k 基线缺席（未传 / null / 非数字）→ 全量计数（fail-closed：更容易触顶而非更宽松）', () => {
+    const entries = [asst(0), userTextEntry(1, expansion('fix')), asst(2)];
+    for (const bad of [undefined, null, 'x', {}, NaN]) {
+      // NaN 是 number，`lineIndex > NaN` 恒假 → 计 0，同样偏严，不构成放宽
+      const n = countAssistantEntriesSinceEarliestFixExpansion(entries, bad);
+      assert.ok(n === 2 || n === 0, `基线 ${String(bad)} → ${n}（只允许更严的两种取值）`);
+    }
+    assert.equal(countAssistantEntriesSinceEarliestFixExpansion(entries), 2, '未传 = 基线 -1 = 全量');
+  });
+});
+
+// ────────────────────────────────────────
+// F257 第 3 轮 WARNING · 展开扫描的诱饵前缀性能回归锚点
+// ────────────────────────────────────────
+
+describe('F257 · SKILL_EXPANSION_REGEX 诱饵前缀形态：全链只允许扫一趟', () => {
+  // 退化机理：`([^\n]+?)\/skills\/` 是惰性量词。同一**行**内重复出现 `Base directory for this skill:`
+  // 诱饵前缀、且该行不含 `/skills/` 时，每个诱饵起点都要把 `[^\n]+?` 扩到行尾才放弃 → O(K×N)。
+  // 真展开放在**下一行**，使任何"命中即 break"的早退在诱饵位于真展开之前时完全失效。
+  //
+  // 红队 A/B（8.1MB transcript / 4000 诱饵 + 末尾真展开）：改动前 10188ms → 第 2 轮实现 19785ms。
+  // 本机复现（K=12000）：单趟 5006ms；第 2 轮的两趟实现 10131ms → 修复后 5025ms（第二趟 5124ms→0.1ms）。
+  //
+  // 本组锚点捕获的是**扫描趟数回归**（超线性倍增），不是微观性能门禁：判定器跑在同步 Stop hook 上，
+  // 多一趟就是最坏耗时直接翻倍。预算按 F231/F233 分档经验取宽，避免满载 CI 假红——
+  // 单趟本机 ~145ms（K=2000），预算 3000ms 留 ~20× 余量；两趟实现会翻倍，仅靠预算区分不开，
+  // 故**判别力来自 C-2j 的结构钉子 + 下方"计数趟耗时相对展开趟可忽略"的比例断言**。
+  const DECOYS = 2000;
+  const buildEntries = () => {
+    const decoyLine = `Base directory for this skill: ${'x'.repeat(80)} `.repeat(DECOYS);
+    const realLine = 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix';
+    const list = [userTextEntry(0, `${decoyLine}\n${realLine}\n请修复`)];
+    for (let i = 1; i <= 50; i += 1) list.push(assistantEntry(i, [{ id: `t${i}`, name: 'Bash', input: { command: 'ls' } }]));
+    return list;
+  };
+
+  it('🔴 计数趟不得再跑一遍展开扫描：耗时须相对展开趟可忽略（< 5%）', () => {
+    const entries = buildEntries();
+    const t0 = process.hrtime.bigint();
+    const anchor = detectFixSkillExpansion(entries);
+    const t1 = process.hrtime.bigint();
+    const count = countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
+    const t2 = process.hrtime.bigint();
+    const detectMs = Number(t1 - t0) / 1e6;
+    const countMs = Number(t2 - t1) / 1e6;
+
+    // 前提核实：诱饵形态确实让展开趟成为热点，否则本断言无判别力
+    assert.equal(anchor.mode, 'fix');
+    assert.equal(anchor.earliestFixLineIndex, 0);
+    assert.equal(count, 50);
+    assert.ok(detectMs > 5, `诱饵语料未构成热点（${detectMs.toFixed(1)}ms），本用例失去判别力`);
+    assert.ok(
+      countMs < detectMs * 0.05,
+      `计数趟 ${countMs.toFixed(1)}ms vs 展开趟 ${detectMs.toFixed(1)}ms —— 疑似把第二遍展开扫描加回来了`,
+    );
+  });
+
+  it('全链（展开趟 + 计数趟）在诱饵形态下有界，且不因诱饵数翻倍而超线性倍增', () => {
+    const run = () => {
+      const entries = buildEntries();
+      const t0 = process.hrtime.bigint();
+      const anchor = detectFixSkillExpansion(entries);
+      countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
+      return Number(process.hrtime.bigint() - t0) / 1e6;
+    };
+    const ms = run();
+    assert.ok(ms < 3000, `疑似扫描趟数回归：全链耗时 ${ms.toFixed(1)}ms（预算 3000ms）`);
   });
 });

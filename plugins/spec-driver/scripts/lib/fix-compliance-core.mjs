@@ -38,6 +38,17 @@ export const ENFORCEMENT_VALUES = new Set(['block', 'warn', 'off']);
  * 技能展开痕迹正则（research.md D1）。harness 注入的 user 文本块形如：
  * `Base directory for this skill: <pluginPath>/skills/spec-driver-<mode>`
  * mode 限定小写字母，避免把路径尾随字符误并入 mode。全局匹配便于取"最晚一次"。
+ *
+ * ⚠️ 性能特征（F257 缺陷 2 修复轮如实登记，**勿**再写成"无回溯风险"）：
+ * `([^\n]+?)` 是**惰性量词**，无嵌套量词故不存在指数级灾难性回溯，但这**不蕴含**线性。
+ * 退化形态：同一**行**内重复出现 `Base directory for this skill:` 诱饵前缀、且该行内不含
+ * `/skills/` 时，每个诱饵起点都要把 `[^\n]+?` 一路扩到行尾才放弃 → 整体 O(K×N)
+ * （K=诱饵数，N=行长）。实测（K=12000、行长 ~1.3MB）单趟 ≈ 5s。
+ * 判定器跑在**同步 Stop hook** 上，故本正则的扫描次数是承重指标：
+ * 🔴 全链**只允许扫一趟**——`detectFixSkillExpansion` 已在同一趟里同时产出主锚点与
+ * `earliestFixLineIndex`；任何新增消费方都必须复用它的返回值，不得再起第二遍全量扫描
+ * （第 2 轮就是因为闸门三另扫一遍，把红队诱饵语料的耗时从 10188ms 翻倍到 19785ms）。
+ * 本正则本身的线性化属独立跟进项，不在本轮范围。
  */
 export const SKILL_EXPANSION_REGEX = /Base directory for this skill:\s*([^\n]+?)\/skills\/spec-driver-([a-z]+)/g;
 
@@ -441,6 +452,10 @@ export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
         // tool_result 收进独立字段：由 harness 写入的可信 envelope，作复现执行证据配对源（F216 AD-2）；
         // 刻意不并入 textBlocks/toolUseBlocks——展开痕迹只认 user text、委派只认 assistant tool_use，
         // 这两个判定输入不被 tool_result 污染，反伪造语义不回退。
+        //
+        // 🔴 `isError: block.is_error === true` —— **缺省字段按成功处理**，与真实 wire format 一致
+        // （成功回执通常不带 is_error）。勿改成 `block.is_error === false`：那会把绝大多数真实成功
+        // 写入判成"非成功"，让 collectArtifactWriteWitnessDirs 的见证大规模缺席 → 大规模误阻断。
         toolResultBlocks.push({
           toolUseId: typeof block.tool_use_id === 'string' ? block.tool_use_id : null,
           isError: block.is_error === true,
@@ -541,15 +556,32 @@ export function detectTranscriptDialect(entries) {
 // ────────────────────────────────────────
 
 /**
- * 检测最晚一次 spec-driver 技能展开（只认 user 文本块）。
+ * 单趟扫描全部 user 文本块，同时产出**最晚**一次 spec-driver 技能展开（主锚点）与**最早**一次
+ * `spec-driver-fix` 展开的 lineIndex（闸门三专用基线）。
+ *
+ * 🔴 主锚点语义（`found` / `mode` / `anchorLineIndex`）**逐字不变**——F216/F227/F224 全链依赖它。
+ * `earliestFixLineIndex` 是**纯增量**返回字段，既有调用方逐字不受影响。
+ *
+ * why 两个基线要合并在一趟里求（F257 缺陷 2 修复轮）：闸门三原先另跑一遍 `SKILL_EXPANSION_REGEX`
+ * 求最早展开，把最坏耗时整整翻倍。红队 A/B（诱饵形态 transcript）：改动前 10188ms → 改动后 19785ms。
+ * 退化来源是 `SKILL_EXPANSION_REGEX` 里的惰性量词 `([^\n]+?)\/skills\/`——同一**行**内重复出现
+ * `Base directory for this skill:` 诱饵前缀且该行不含 `/skills/` 时，每个诱饵起点都要把 `[^\n]+?`
+ * 一路扩到行尾才放弃，整体 O(K×N)。诱饵位于真展开**之前**时，任何"找到即 break"的早退都失效。
+ * 合并后全链只扫一趟，最坏耗时回到单趟量级（详见 SKILL_EXPANSION_REGEX 上的性能登记）。
+ *
+ * 反伪造：两个基线都只接受 user 角色（harness 注入）的 text 块，排除 assistant / tool_result。
+ * 若接受 assistant 侧文本，被判方在会话末尾自述一句展开语即可把最早基线推到末尾 → 闸门三计数归零。
+ *
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
- * @returns {{ found:boolean, mode:string|null, anchorLineIndex:number|null }}
+ * @returns {{ found:boolean, mode:string|null, anchorLineIndex:number|null, earliestFixLineIndex:number|null }}
  */
 export function detectFixSkillExpansion(entries) {
   const list = Array.isArray(entries) ? entries : [];
   let latest = { found: false, mode: null, anchorLineIndex: null };
+  // 最早一次 **fix** 展开：与主锚点取值规则刻意不同（主锚点每块只看最后一次匹配的 mode，
+  // 本基线看该块内**任一**匹配是否为 fix），故必须在同一趟里各自累计，不能互相推导。
+  let earliestFixLineIndex = null;
   for (const entry of list) {
-    // 反伪造：只接受 user 角色（harness 注入）的 text 块，排除 assistant / tool_result
     if (!entry || entry.role !== 'user') continue;
     for (const text of entry.textBlocks) {
       // 全局匹配取该块内最后一次（同块多痕迹时取最晚）
@@ -558,13 +590,14 @@ export function detectFixSkillExpansion(entries) {
       SKILL_EXPANSION_REGEX.lastIndex = 0;
       while ((match = SKILL_EXPANSION_REGEX.exec(text)) !== null) {
         lastMode = match[2];
+        if (earliestFixLineIndex === null && match[2] === 'fix') earliestFixLineIndex = entry.lineIndex;
       }
       if (lastMode !== null) {
         latest = { found: true, mode: lastMode, anchorLineIndex: entry.lineIndex };
       }
     }
   }
-  return latest;
+  return { ...latest, earliestFixLineIndex };
 }
 
 // ────────────────────────────────────────
@@ -840,6 +873,234 @@ export function isDeferrableMissingSet(missing) {
   const list = Array.isArray(missing) ? missing : [];
   if (list.length === 0) return false;
   return list.every((key) => DEFERRABLE_MISSING_SET.has(key));
+}
+
+// ────────────────────────────────────────
+// 会话写入见证（F257 缺陷 1 · 方案 A′）
+// ────────────────────────────────────────
+
+/**
+ * 可作为「本会话写入见证」的写工具名——**唯一的放宽点**，改动即改变整条判据的安全下界。
+ *
+ * why 只收 Write / Edit：二者的成败由 harness 写回的 `tool_result` 背书，被判方伪造不了成功回执，
+ * 而要真拿到成功回执就必须**真的写了那份制品**——伪造证据与满足合同同价。
+ * why 不收 Read：读一份别人的制品零成本，"读过即算见证"等于没有门槛
+ * （实测真实会话锚点后 Read 触及制品 15 次）。
+ * why 不收 Bash：Bash 的写形态可被 `cat X > /dev/null` 之类满足（F227 已知限界一），下界弱得多。
+ */
+export const ARTIFACT_WRITER_TOOL_NAMES = Object.freeze(new Set(['Write', 'Edit']));
+
+/**
+ * 被核验制品的**锚定**路径正则：整串匹配，捕获组 1 = 规范特性目录。
+ *
+ * 🔴🔴 承重不变量（第 3 轮红队实证，改动即复活一条 fail-open）：
+ * **本正则收的制品类必须与 judge 侧采信谓词 `usable(dir)` 同源**——目前 `usable()` 只查
+ * `fix-report.md`，故本正则也只能收 `fix-report.md`。二者一旦脱钩，就会出现「拿到了见证但不 usable」
+ * 的目录：judge 的 F227 历史兜底只挑 usable 的历史候选故不选它 → 控制流照旧落进短名分支 →
+ * 见证成立 → 重锚定到磁盘上本会话从未触碰的旧目录 → compliant:true → 合规早退（在任何
+ * `appendAuditEvent` 之前）→ exit 0 且事后零审计线索。
+ *
+ * 红队实跑的绕过链（第 2 轮实现收 `verification/verification-report.md` 时成立）：
+ * 本会话零真实产出 → 两次廉价 `Agent` 委派 → `Write specs/999-fix-<short>/verification/verification-report.md`
+ * （1 字节，拿到成功回执）→ stop → exit 0。
+ *
+ * ⚠️ 第 2 轮注释里那段演绎证明（「见证集合 ⊆ 提名集合 ⟹ 被见证目录必进 candidateHistory ⟹
+ * F227 兜底先手命中 ⟹ 可用磁盘目录 ∩ 见证 = ∅」）**已被证伪**，勿再据此放宽：
+ * 「进 candidateHistory」**不蕴含**「usable」，兜底循环只挑 usable 者。同轮所谓「576 组排列穷举
+ * 0 命中」的穷举集合也没覆盖「用 verification-report.md 作见证」这一形态。
+ * 后人若把 `verification/verification-report.md` 加回本正则、或放宽 `usable()` 去认别的制品，
+ * 上述绕过立刻复活——两处必须同时改、同时配回归用例。
+ *
+ * 🔴 不变量二：目录只能由「整条写入路径全串匹配后**反取**前缀」得到，禁止任何目录级子串比较
+ * （`String.prototype.includes` / 裸 `startsWith(dir)`）。红队实证：用 includes 实现时
+ * `specs/254-fix-alpha-retry` 会命中 `specs/254-fix-alpha`。本写法结构性回避该风险——
+ * `specs/254-fix-alpha-retry/fix-report.md` 只能产出 `specs/254-fix-alpha-retry`。
+ * 尾随 `/`、`//`、大小写差异一律不匹配（方向 fail-closed）。
+ * 量词 `\d+` 与 `[a-z0-9-]+` 各自后接固定字面分隔符，无嵌套量词、无灾难性回溯面（F231 前车之鉴）。
+ */
+const ANCHORED_ARTIFACT_PATH_REGEX = /^(specs\/\d+-fix-[a-z0-9-]+)\/fix-report\.md$/;
+
+/**
+ * 把 tool_use 的 `file_path` 归一化为仓库相对路径并锚定匹配，命中则返回其特性目录，否则 null。
+ *
+ * 归一化逐条（每条不满足即 fail-closed 返回 null）：
+ *  1. 必须是非空字符串；
+ *  2. 绝对路径必须以 `projectRoot + '/'` 为**分段级**前缀后剥离——禁止裸 `startsWith(projectRoot)`，
+ *     否则 `/repo-backup/...` 会命中 `/repo`，跨仓写入即可为本仓目录背书；
+ *  3. 去掉单个前导 `./`；
+ *  4. 含 `..` 段一律跳过（core 零 I/O 契约下无法可靠 resolve，软链场景尤其不可靠）；
+ *  5. 全串匹配锚定正则，取捕获组 1。
+ *
+ * 🔴 已知分歧（第 4 轮审查补登记，**不修**）：**符号链接层面的不同源会让见证恒空 → 误阻断。**
+ * 本函数按 core 零 I/O 契约做**纯字符串**前缀剥离（`startsWith(rootPrefix)`），不做 `realpath`；
+ * 而提名侧 `resolveFeatureDirCandidate` 走的是 `ARTIFACT_PATH_REGEX` **子串**匹配、完全不看根。
+ * 于是当 hook 的 `projectRoot` 与 `file_path` 在软链层面不同源时——macOS 经典的
+ * `/tmp` ↔ `/private/tmp`、`/var` ↔ `/private/var`，或项目本身挂在软链下——
+ * **提名成立而见证恒空**，短名重锚定被拒 → `feature-dir-witness-absent` 误阻断。
+ *
+ * 为何不修：引入 `realpath` 即引入 fs I/O，直接破坏 core 的零 I/O 契约（该契约本身是承重的——
+ * 判定器跑在**同步** Stop hook 上）。生产风险已被压低：`hooks/stop-fix-compliance-check.sh` 以
+ * `--project-root "$(pwd)"` 调用，与会话 cwd 同源；代价也有界（`BLOCK_LIMIT = 2`，最坏两次阻断后
+ * 降级放行，且补一次相对路径写入即恢复）。但语料中确有 `cwd=/private/var/folders/...` 形态的会话，
+ * 故按已知分歧登记而非声称不存在。与 contract 的 R11 条同源，只是触发面从"判定根错位"扩到"软链不同源"。
+ * @param {unknown} raw
+ * @param {string|null} rootPrefix - 已带尾斜杠的 projectRoot 前缀；null 表示无从判断绝对路径归属
+ * @returns {string|null}
+ */
+function normalizeArtifactWritePath(raw, rootPrefix) {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  let rel = raw;
+  if (rel.startsWith('/')) {
+    if (rootPrefix === null || !rel.startsWith(rootPrefix)) return null;
+    rel = rel.slice(rootPrefix.length);
+  }
+  if (rel.startsWith('./')) rel = rel.slice(2);
+  if (rel.split('/').includes('..')) return null;
+  const match = ANCHORED_ARTIFACT_PATH_REGEX.exec(rel);
+  return match ? match[1] : null;
+}
+
+/**
+ * 收集「本会话 fix 锚点之后被成功写入过 `fix-report.md`」的特性目录集合（F257 缺陷 1 的采信证据源）。
+ *
+ * 存在理由：F256 的 short-name 磁盘重锚定只用 `usable()`（目录含 fix-report.md）做采信闸门，
+ * 而 `usable()` 是**制品存在性**判据、不是**会话归属**判据。本会话零产出时，判定器会静默改用磁盘上
+ * 同 short-name 的另一编号旧目录完成合规判定 → compliant:true → 合规早退（发生在任何审计落盘之前）
+ * → exit 0 且事后零线索。本函数提供缺失的那一维证据。
+ *
+ * 🔴 制品类**只认 `fix-report.md`**，与 judge 的 `usable()` 严格同源——理由与红队绕过链见
+ * `ANCHORED_ARTIFACT_PATH_REGEX` 的承重不变量注释。放宽制品类而不同步 `usable()` 会直接复活
+ * 一条零审计的 fail-open。
+ *
+ * 合同（充要）：`dir ∈ 返回集合` ⟺ 存在 entry `E` 与其 tool_use 块 `B` 同时满足
+ *  1. `E.role === 'assistant'` 且 `E.lineIndex > anchorLineIndex`；
+ *  2. `ARTIFACT_WRITER_TOOL_NAMES.has(B.name)` 且 `B.id` 为非空字符串；
+ *  3. `B.input.file_path` 经 normalizeArtifactWritePath 归一化后命中，取其特性目录；
+ *  4. **该 `B.id` 的全部 tool_result 回执均非 error**。
+ *
+ * 🔴 窗口下界刻意用**最晚**一次展开（调用方传入 `anchor.anchorLineIndex`），与闸门三的计量基线
+ * （`countAssistantEntriesSinceEarliestFixExpansion` 用**最早**一次 fix 展开）**方向相反**——这是刻意的，
+ * 不是两处该"对齐"的疏漏：两侧各自取"重新展开 fix skill 不能让被判方获益"的那一端。
+ *   · 见证用最晚锚点 ⟹ 会话中途重展开只会**收窄**见证集合（更难放行）；
+ *   · 闸门三用最早展开 ⟹ 重展开无法把计数清零（更难推迟）。
+ * 代价如实登记：重展开会让此前对制品的**合法**写入落到窗口外 → 见证清空 → `feature-dir-witness-absent`
+ * 误阻断（judge 侧「类 X 形态 3」）。方向是收窄（fail-closed），补一次 Write/Edit 即恢复。
+ * ⚠️ 若把窗口下界也改成最早展开，锚点前的陈旧写入事件会重新计入见证——放宽的是**放行**方向，
+ * 与本判据的收口意图相反，不得以"统一基线"为由这么改。
+ *
+ * 关于条 4 取全称而非存在：`tool_use.id` 可被复用。实测 `Write(目标制品, id='X')` 拿到
+ * `is_error:true` 后，任意无关工具复用 `id='X'` 拿到成功回执，即可让"存在某条非 error 回执"成立
+ * 而凭空发证。取"全部回执均非 error"堵掉该配对击穿面。无回执 = 不通过（transcript 被截断、
+ * 写入未被受理、显式失败三种情形同向 fail-closed）。
+ *
+ * 配对表刻意**只从非 assistant envelope 建**（纵深防御）：`normalizeTranscriptEntry` 会把 assistant
+ * 自带的 tool_result 块也收进 toolResultBlocks，实测该块型可发证；当前 wire format 下模型产不出它，
+ * 但真实回执本就只落在 harness 写入的非 assistant envelope，收窄不损失任何真实见证。
+ *
+ * 🔴 **承重逃逸面（如实登记，收窄制品类并未消除它）：见证不绑定终态。**
+ * 本判据看的是 transcript **历史**（写入事件是否发生过），而制品判据看的是磁盘**终态**——二者时间
+ * 解耦。红队已实证形态 W1：`Write specs/NNN-fix-<short>/fix-report.md` 拿到成功回执后立刻
+ * `git checkout` / 删除回滚，磁盘上该目录零痕迹，而见证仍成立。这是 F227「终态存在性 ≠ 历史事件
+ * 是否发生」的镜像，第 2 轮把它写成"边角限界"是低估——它现在是本判据下**唯一成本可控**的伪造路径，
+ * 应按承重逃逸面对待。之所以仍接受：伪造者必须真的执行一次对该 short-name 家族制品的写入并拿到
+ * harness 回执（成本高于 F227 已知限界一的 `cat X > /dev/null`），且该写入事件本身留在 transcript
+ * 里可被事后审计。要真正闭合它需要把见证与磁盘终态做交叉核验，属独立跟进项，不在本轮范围。
+ *
+ * 本函数零 I/O：`projectRoot` 只用于绝对路径的字符串前缀剥离，不做任何 fs 调用。
+ * 复杂度 O(entries + toolUseBlocks + toolResultBlocks)，与 extractInFlightDelegationsAfter 同阶
+ * （判定器跑在**同步** Stop hook 上，这是硬约束）。
+ *
+ * 返回**完整目录路径**而非 short-name：信息不丢失，如何比较由 judge 层决定（见其家族级比较注释）。
+ * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
+ * @param {number|null} anchorLineIndex
+ * @param {string} projectRoot
+ * @returns {Set<string>} 形如 'specs/254-fix-alpha' 的规范特性目录路径
+ */
+export function collectArtifactWriteWitnessDirs(entries, anchorLineIndex, projectRoot) {
+  const list = Array.isArray(entries) ? entries : [];
+  const anchor = typeof anchorLineIndex === 'number' ? anchorLineIndex : -1;
+  const witnessed = new Set();
+
+  // 第一趟：tool_use id → 回执聚合（anyError 为该 id 的**任一**回执失败）。
+  // 不加锚点窗口：回执可能落在任意位置，而 id 由被判方无法伪造的 harness 侧配对，
+  // 全量建表只会让判据更严（多看见一条 error 回执 = 更不容易发证）。
+  const receiptByToolUseId = new Map();
+  for (const entry of list) {
+    if (!entry || entry.role === 'assistant') continue;
+    for (const result of entry.toolResultBlocks) {
+      if (typeof result.toolUseId !== 'string' || result.toolUseId.length === 0) continue;
+      const prev = receiptByToolUseId.get(result.toolUseId);
+      if (prev) prev.anyError = prev.anyError || result.isError === true;
+      else receiptByToolUseId.set(result.toolUseId, { anyError: result.isError === true });
+    }
+  }
+
+  const rootPrefix = typeof projectRoot === 'string' && projectRoot.length > 0
+    ? `${projectRoot.replace(/\/+$/, '')}/`
+    : null;
+
+  // 第二趟：锚点后的 assistant 写入，逐块过四条合同
+  for (const entry of list) {
+    if (!entry || entry.role !== 'assistant' || entry.lineIndex <= anchor) continue;
+    for (const block of entry.toolUseBlocks) {
+      if (!ARTIFACT_WRITER_TOOL_NAMES.has(block.name)) continue;
+      if (typeof block.id !== 'string' || block.id.length === 0) continue;
+      const receipt = receiptByToolUseId.get(block.id);
+      if (!receipt || receipt.anyError) continue;
+      const dir = normalizeArtifactWritePath(block.input && block.input.file_path, rootPrefix);
+      if (dir !== null) witnessed.add(dir);
+    }
+  }
+  return witnessed;
+}
+
+// ────────────────────────────────────────
+// 会话长度计量（F257 缺陷 2 · 闸门三的单调计量源）
+// ────────────────────────────────────────
+
+/**
+ * 自**最早**一次 `spec-driver-fix` 技能展开之后的 assistant 条目总数。
+ *
+ * 存在理由：在途推迟的唯一上界（`IN_FLIGHT_DEFER_LIMIT`）存放在
+ * `.specify/runs/.fix-compliance-state/<sessionId>.json`——该目录位于 projectRoot 下、被 gitignore、
+ * 属"本地运行态"，`loadBlockState` 对缺失/损坏一律静默回落 0。实测：每轮 stop 前先 `rm -rf` 该目录，
+ * 10 轮全部 exit 0、审计 `degraded=false`、终态记录 0 条——一条比 blockCount 篡改更安静的静默通道。
+ * 本函数提供一个**不落在 projectRoot 下、被判方不经手写入**的计量源，供 judge 层并联取严。
+ *
+ * 🔴 基线必须是「最早一次 fix 展开」，**绝不能**改用 `detectFixSkillExpansion` 的**主锚点**
+ * （`anchorLineIndex`）——主锚点取的是**最晚**一次展开，agent 自己再调一次 `Skill(spec-driver-fix)`
+ * 即可把它推到末尾、同时保持 `isFix=true`，令锚点后计数归零。对抗审查已实跑证伪：攻击组每轮重展开
+ * → **30/30 全 exit 0**、锚点后计数恒 4；对照组（不重展开）则正常收敛为 `0 0 2 2 2 2 2 2`。
+ * 以最早展开为基线后，重展开只是**追加**条目，基线不动，计数继续单调递增。
+ *
+ * 🔴 基线由**入参**给入而不再自行扫描（F257 缺陷 2 修复轮）：`SKILL_EXPANSION_REGEX` 含惰性量词，
+ * 诱饵前缀语料下单趟即 O(K×N)（红队 A/B：多扫一趟把 10188ms 翻到 19785ms）。故基线改由
+ * `detectFixSkillExpansion(entries).earliestFixLineIndex` 在**同一趟**里顺带产出，本函数只做计数。
+ * ⚠️ 调用方**必须**传 `earliestFixLineIndex`，不得在此另起一遍展开扫描把第二趟加回来。
+ *
+ * ⚠️ 同样**不得**反过来去改 `detectFixSkillExpansion` 的主锚点语义（会牵动 F216/F227/F224 全链）：
+ * `earliestFixLineIndex` 是纯增量返回字段，主锚点三字段逐字不变。
+ *
+ * 反伪造由基线的产出方保证：展开痕迹只认 `role === 'user'` 的文本块（harness 注入面）。
+ * 若接受 assistant 侧文本，被判方在会话末尾自述一句展开语即可把基线推到末尾 → 计数归零。
+ *
+ * 单调性的边界（如实登记，非本函数消除）：会话 compaction 会重写 transcript，可能使计数回退；
+ * 但 compaction 通常连 fix 展开痕迹一并吞掉 → `isFix=false` → 走的是另一条早退面，另案登记。
+ *
+ * 基线缺席（null / 未传 / 非数字）时取 -1（全量计数）——方向 fail-closed：更容易触顶，而不是更宽松。
+ * 复杂度 O(entries)，单趟计数、不跑任何正则（判定器跑在**同步** Stop hook 上）。
+ * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
+ * @param {number|null} [earliestFixLineIndex] - 来自 detectFixSkillExpansion 的最早 fix 展开 lineIndex
+ * @returns {number}
+ */
+export function countAssistantEntriesSinceEarliestFixExpansion(entries, earliestFixLineIndex) {
+  const list = Array.isArray(entries) ? entries : [];
+  const baseline = typeof earliestFixLineIndex === 'number' ? earliestFixLineIndex : -1;
+  let count = 0;
+  for (const entry of list) {
+    if (entry && entry.role === 'assistant' && entry.lineIndex > baseline) count += 1;
+  }
+  return count;
 }
 
 // ────────────────────────────────────────

@@ -37,6 +37,22 @@ const SKILL_EXPANSION_LINE = (mode) => ({
 const ASSISTANT_TEXT = (text) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
 const TOOL_USE = (name, input) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', name, input }] } });
 
+/**
+ * F257：带 `id` 的 tool_use + 紧随其后的配对 tool_result（真实 wire format 形态）。
+ *
+ * 为何单独加而不是改 TOOL_USE：`collectArtifactWriteWitnessDirs` 的安全下界来自 harness 回执
+ * （被判方伪造不了成功回执），故见证要求 `id` 非空 + 配对回执非 error。既有 TOOL_USE 两者都不产出，
+ * 于是既有 fixture 的 Write 一律**不构成见证**——这是刻意保留的：放弃该要求等于允许凭空伪造
+ * `tool_use` 而不真的执行。只有需要见证的用例改用本 helper，无关用例逐字不动。
+ *
+ * 返回**两条** envelope，调用处用展开符插入：`...TOOL_USE_OK('Write', { … }, 'w1')`。
+ * @param {{ isError?:boolean }} [opts] - isError=true 时回执为失败（用于反例）
+ */
+const TOOL_USE_OK = (name, input, id, { isError = false } = {}) => ([
+  { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } },
+  { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, is_error: isError, content: 'ok' }] } },
+]);
+
 const FEATURE_DIR = 'specs/301-fix-sample-bug';
 
 let tmp;
@@ -1640,11 +1656,17 @@ describe('F256 T006 · 盲区 1 端到端：编号被复合命令重编后不再
    */
   const RENUMBER_COMMAND = `cd "/w/worktrees/serene" && git mv ${OLD_DIR} ${NEW_DIR} && FILES=(spec.md plan.md)`;
 
-  /** 提名旧编号目录 + 复合命令重编 + 完整委派；磁盘上只有新编号目录 */
+  /**
+   * 提名旧编号目录 + 复合命令重编 + 完整委派；磁盘上只有新编号目录。
+   *
+   * F257：那次 Write 改用 TOOL_USE_OK（带 id + 配对成功回执）——重锚定的采信条件新增了
+   * 「本会话对该 short-name 家族制品的成功写入见证」，而真实 transcript 里 Write 必有 id 与
+   * tool_result，原 TOOL_USE 两者都不产出只是 fixture 简化。此处补齐即与真实 wire format 同构。
+   */
   function renumberedTranscript() {
     return writeTranscript([
       SKILL_EXPANSION_LINE('fix'),
-      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      ...TOOL_USE_OK('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'f256-w-old'),
       TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
       TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
       TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
@@ -1750,15 +1772,44 @@ const F256_REAL_TRANSCRIPT = path.join(
 );
 
 /**
+ * 该真实会话自己的 projectRoot（transcript 每条 envelope 的 `cwd` 字段，实测全文件唯一取值）。
+ * 从文件自身读取而非硬编码：回放改根（见 truncateRealTranscriptAt 的 replayRoot）需要精确的原始根串。
+ */
+function readRealTranscriptSessionRoot() {
+  for (const line of fs.readFileSync(F256_REAL_TRANSCRIPT, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    let obj;
+    try { obj = JSON.parse(line); } catch { continue; }
+    if (obj && typeof obj.cwd === 'string' && obj.cwd.length > 0) return obj.cwd;
+  }
+  return null;
+}
+
+/**
  * 按 stop 时间戳做**前缀**截断，复现该时点 hook 看到的 transcript。
  *
  * 用前缀（而非按时间戳过滤）是因为文件行序即写入序——hook 在时刻 T 读到的就是彼时已落盘的前缀；
  * 实测该 transcript 的 timestamp 并非全序（sidechain 条目交错），故截断点取
  * "最后一个 timestamp ≤ T 的行下标"，而不是简单计数。
+ *
+ * F257 新增 `replayRoot`：这份 transcript 产自**另一个 worktree**（其 `cwd` 与写入用的绝对
+ * `file_path` 都指向 serene-taussig-2c33c3），而回放时磁盘侧 projectRoot 只能是本 worktree 或 tmp
+ * 沙箱。生产环境里 hook 的 projectRoot 恒等于会话自身的 cwd，两者从不错位；不改根的回放等于人为
+ * 制造一个生产上不存在的跨仓错位，会让「本会话写入见证」的绝对路径归一化（刻意 fail-closed 拒绝
+ * projectRoot 之外的写入，见 T-1h）全部落空，从而测到一个与被测语义无关的假失败。
+ * 故传 replayRoot 时把原始根串整体替换为回放根 = 「同一份会话如果发生在这里」，
+ * 除该前缀外逐字不变（提名走 `specs/…` 子串、F231 不跟随复合命令，均不受根串影响）。
+ * @param {string} [replayRoot] - 缺省不改根（不依赖绝对路径的用例保持字节原样）
  * @returns {string} 截断文件绝对路径
  */
-function truncateRealTranscriptAt(stopIso, tag) {
-  const lines = fs.readFileSync(F256_REAL_TRANSCRIPT, 'utf8').split('\n').filter((l) => l.trim());
+function truncateRealTranscriptAt(stopIso, tag, replayRoot) {
+  const raw = fs.readFileSync(F256_REAL_TRANSCRIPT, 'utf8');
+  let lines = raw.split('\n').filter((l) => l.trim());
+  if (typeof replayRoot === 'string') {
+    const sessionRoot = readRealTranscriptSessionRoot();
+    assert.ok(sessionRoot, '真实 transcript 缺 cwd 字段，无法安全改根');
+    lines = lines.map((l) => l.split(sessionRoot).join(replayRoot.replace(/\/+$/, '')));
+  }
   let cut = -1;
   for (let i = 0; i < lines.length; i += 1) {
     let obj;
@@ -1796,7 +1847,9 @@ describe('F256 T007 · 真实 F254 transcript 截断回放：签名 A 三个 sto
       '前提缺失：重编后的 specs/254-fix-graph-scope-extensions 应在本仓库',
     );
     for (const [i, stop] of F256_SIGNATURE_A_STOPS.entries()) {
-      const out = reportRealTranscript(truncateRealTranscriptAt(stop, `a${i}`));
+      // replayRoot=REPO_ROOT：reportRealTranscript 以 REPO_ROOT 为 projectRoot，回放必须同根，
+      // 否则会话内以绝对路径写下的制品全部落在 projectRoot 之外，F257 写入见证按设计拒绝采信
+      const out = reportRealTranscript(truncateRealTranscriptAt(stop, `a${i}`, REPO_ROOT));
       const missing = out.missing || [];
       assert.equal(
         missing.includes('feature-dir') && missing.includes('fix-report.md'),
@@ -2020,11 +2073,12 @@ describe('F256 T014 · 真实 F254 transcript 截断回放：在途检测与 fix
     });
 
     // 取 16:33:41（签名 B）而非 16:32:26：前者的 missing 与签名 A 逐字相同，对照更纯
-    const bRun = runHookOn(truncateRealTranscriptAt('2026-08-03T16:33:41.002Z', 'diff-b'), 'f256-real-b');
+    // replayRoot=stagedRoot：与本用例的 projectRoot 同根（理由见 truncateRealTranscriptAt 的 JSDoc）
+    const bRun = runHookOn(truncateRealTranscriptAt('2026-08-03T16:33:41.002Z', 'diff-b', stagedRoot), 'f256-real-b');
     assert.equal(bRun.status, 0, bRun.stderr);
     assert.ok(bRun.stderr.includes('诊断: delegation-in-flight'), bRun.stderr);
 
-    const aRun = runHookOn(truncateRealTranscriptAt('2026-08-04T03:03:46.034Z', 'diff-a'), 'f256-real-a');
+    const aRun = runHookOn(truncateRealTranscriptAt('2026-08-04T03:03:46.034Z', 'diff-a', stagedRoot), 'f256-real-a');
     assert.equal(aRun.status, 2, '签名 A 无在途信号 → 仍走既有阻断路由（放行不得外溢）');
 
     const byId = Object.fromEntries(readVerdictEvents(stagedRoot).map((e) => [e.sessionId, e]));
@@ -2047,7 +2101,8 @@ describe('F256 T014 · 真实 F254 transcript 截断回放：在途检测与 fix
       path.join(stagedRoot, 'specs/254-fix-graph-scope-extensions/fix-report.md'),
       REPAIR_FIX_REPORT, 'utf8',
     );
-    const truncated = truncateRealTranscriptAt('2026-08-03T16:32:26.638Z', 'anchor');
+    // replayRoot=stagedRoot：与本用例的 projectRoot 同根（理由见 truncateRealTranscriptAt 的 JSDoc）
+    const truncated = truncateRealTranscriptAt('2026-08-03T16:32:26.638Z', 'anchor', stagedRoot);
     const res = spawnSync('node', [CLI, '--mode', 'report', '--transcript-path', truncated, '--project-root', stagedRoot], { encoding: 'utf8' });
     assert.equal(res.status, 0, res.stderr);
     const out = JSON.parse(res.stdout);
@@ -2310,7 +2365,9 @@ describe('F256 R2 · 短名磁盘兜底的 usable 过滤是承重判据', () => 
     // 覆盖不到"空壳把可用目录挤掉"这一真实重编场景（先建新目录、制品尚未迁入即是此形态）。
     const p = writeTranscript([
       SKILL_EXPANSION_LINE('fix'),
-      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      // F257：带 id + 成功回执，使本会话对 short-name 家族 `foo` 的写入见证成立（否则重锚定被拒，
+      // 本用例就测不到 `.filter(usable)` 这一层了）
+      ...TOOL_USE_OK('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'r2-w-old'),
       TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
       TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
       TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
@@ -2323,5 +2380,532 @@ describe('F256 R2 · 短名磁盘兜底的 usable 过滤是承重判据', () => 
     assert.equal(out.compliant, true, `应回落到制品齐全的 252 而非空壳 254：${JSON.stringify(out)}`);
     assert.deepEqual(out.missing, [], JSON.stringify(out.missing));
     assert.equal(runCli({ transcriptPath: p, sessionId: 'r2-usable' }).status, 0);
+  });
+});
+
+// ────────────────────────────────────────
+// F257 缺陷 1 · short-name 磁盘重锚定的「本会话写入见证」门槛（方案 A′ · short-name 家族级）
+// ────────────────────────────────────────
+
+describe('F257 · 短名磁盘重锚定必须有本会话对同 short-name 家族制品的成功写入见证', () => {
+  const OLD_DIR = 'specs/251-fix-foo';
+  const NEW_DIR = 'specs/254-fix-foo';
+  /** 与 F256 T006 同源：复合命令，F231 刻意不跟随 → 候选永久停在磁盘已消失的旧编号 */
+  const RENUMBER_COMMAND = `cd "/w/worktrees/serene" && git mv ${OLD_DIR} ${NEW_DIR} && FILES=(spec.md plan.md)`;
+  const IMPLEMENT = TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' });
+  const VERIFY = TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' });
+
+  it('T-1a 缺陷 1 主场景：本会话零产出时不得静默采信磁盘上同 short-name 的**旧编号**目录', () => {
+    // 失效模式是**无意**的而非冒用：本会话老实提名了自己的新编号目录 specs/777-fix-foo，
+    // 磁盘上恰好存在同 short-name 的历史目录 specs/100-fix-foo（别人的产出、制品齐全），
+    // F256 的重锚定只过 usable() 闸门 → 静默采信他人产物 → compliant:true → 合规早退
+    // （发生在任何 appendAuditEvent 之前）→ exit 0 且事后零审计线索。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: 'specs/777-fix-foo/fix-report.md', content: '# Fix' }),
+      IMPLEMENT,
+      VERIFY,
+      ASSISTANT_TEXT('已修复完毕'),
+    ]);
+    stageDir('specs/100-fix-foo'); // 非本会话产出的历史目录，制品齐全
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-a' });
+    assert.equal(r.status, 2, `本会话零产出必须落回阻断：${r.stderr}`);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1, JSON.stringify(events));
+    assert.ok(events[0].missing.includes('feature-dir'), JSON.stringify(events[0].missing));
+    assert.ok(
+      events[0].diagnostics.includes('feature-dir-witness-absent'),
+      `新增阻断必须可归因（否则与"根本没建目录"不可区分）：${JSON.stringify(events[0].diagnostics)}`,
+    );
+  });
+
+  it('T-1b F256 互补：改名后对新目录零写入，家族级见证仍成立 → 仍 exit 0', () => {
+    // 🔴 本用例与真实会话（F254 交付会话 f3f2fe3b）同构：锚点后全部写入都打在**旧**编号目录，
+    // 改名后对新目录零写入。刻意**不**人为补一次"改名后写新目录"——那样构造会让主候选
+    // 直接提名到 254 并被 usable 命中，根本不进短名分支，用例即成假绿（守护力为零）。
+    // 验收硬要求：把 judge 的短名分支整段注释掉后本用例必须转红。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'w-old'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成，制品已迁移'),
+    ]);
+    stageDir(NEW_DIR); // 磁盘上只有新编号目录
+
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, true, JSON.stringify(out));
+    assert.deepEqual(out.missing, [], JSON.stringify(out));
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-b' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落 verdict 事件');
+  });
+
+  it('T-1c 类 X（预期阻断，勿当回归修回）：家族内任一目录都无成功写入见证 → exit 2', () => {
+    // 与 T-1b 唯一差别：那次 Write 没有 id / 没有配对回执（等价于"制品由子代理在 sidechain 落盘、
+    // 主 transcript 不可见"）。这是修正后类 X 的**预期**行为，不是回归——
+    // 补一次对该 short-name 家族任一目录制品的成功 Write/Edit 即恢复 exit 0，
+    // 且 BLOCK_LIMIT=2 保证最坏两次阻断后降级放行，会话不会卡死。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-c' });
+    assert.equal(r.status, 2, r.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('feature-dir-witness-absent'), JSON.stringify(events[0].diagnostics));
+  });
+
+  it('T-1d 子串边界：见证 specs/254-fix-alpha-retry 不得为 short-name `alpha` 背书', () => {
+    // 红队实证过 includes() 实现会让 specs/254-fix-alpha-retry 命中 specs/254-fix-alpha。
+    // 见证侧用锚定全串匹配后**反取**目录，家族比较用 short-name **完全相等**，两层都不许子串越界。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: 'specs/254-fix-alpha-retry/fix-report.md', content: '# Fix' }, 'w-retry'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Write', { file_path: 'specs/999-fix-alpha/fix-report.md', content: '# Fix' }), // 末次提名
+      ASSISTANT_TEXT('完成'),
+    ]);
+    stageDir('specs/254-fix-alpha'); // 磁盘只有 alpha；alpha-retry 刻意不铺（否则 F227 历史兜底先手命中）
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-d' });
+    assert.equal(r.status, 2, `见证不得跨到 short-name 不同的目录：${r.stderr}`);
+    assert.ok(readVerdictEvents()[0].diagnostics.includes('feature-dir-witness-absent'));
+  });
+
+  it('T-1e 回执为 error + id 复用：不构成见证（配对判据取「该 id 全部回执均非 error」）', () => {
+    // W-A3 实证：若判据写成"存在某条非 error 回执"，先让 Write 失败、再让任意无关工具复用同一
+    // tool_use id 拿到成功回执，即可凭空发证。故取全称判据。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'w-dup', { isError: true }),
+      ...TOOL_USE_OK('Bash', { command: 'echo hi' }, 'w-dup'), // 无关工具复用同 id + 成功回执
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-e' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.ok(readVerdictEvents()[0].diagnostics.includes('feature-dir-witness-absent'));
+  });
+
+  it('T-1f 只 Read 过制品不构成见证（ARTIFACT_WRITER_TOOL_NAMES 是唯一放宽点）', () => {
+    // 变异钉子：向 ARTIFACT_WRITER_TOOL_NAMES 增补 'Read' 后本用例必须转红。
+    // 实测真实会话锚点后 Read 触及制品 15 次，"读过即算见证"会把见证门槛降到接近零成本。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }),
+      ...TOOL_USE_OK('Read', { file_path: `${NEW_DIR}/fix-report.md` }, 'r-1'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-f' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.ok(readVerdictEvents()[0].diagnostics.includes('feature-dir-witness-absent'));
+  });
+
+  it('T-1g 绝对路径（projectRoot 内）归一化后构成见证 → exit 0', () => {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: path.join(tmp, OLD_DIR, 'fix-report.md'), content: '# Fix' }, 'w-abs'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'f257-g' }).status, 0);
+  });
+
+  it('T-1h 跨仓绝对路径不作见证（分段级前缀比较，`/repo-backup` 不得命中 `/repo`）', () => {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: `${tmp}-backup/${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'w-out'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-h' });
+    assert.equal(r.status, 2, `projectRoot 之外的写入不得为本仓目录背书：${r.stderr}`);
+    assert.ok(readVerdictEvents()[0].diagnostics.includes('feature-dir-witness-absent'));
+  });
+
+  it('T-1i Edit 与 Write 等价发证', () => {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Edit', { file_path: `${OLD_DIR}/fix-report.md`, old_string: 'a', new_string: 'b' }, 'e-1'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'f257-i' }).status, 0);
+  });
+
+  it('T-1j 合同同步：feature-dir-witness-absent 必须已登记进 schema enum（逐码硬编码，不会自动守住）', () => {
+    const schemaPath = fileURLToPath(new URL(
+      '../../../specs/208-fix-mode-process-compliance/contracts/fix-compliance-verdict-event.schema.json',
+      import.meta.url,
+    ));
+    const registered = new Set(JSON.parse(fs.readFileSync(schemaPath, 'utf8')).properties.diagnostics.items.enum);
+    assert.ok(registered.has('feature-dir-witness-absent'), '诊断码未登记进 schema enum');
+    const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
+    assert.ok(judgeSrc.includes("'feature-dir-witness-absent'"), '合同登记了一个从不产出的死码');
+  });
+
+  it('T-1k 诊断码绝不可落进 transcriptDiagnostics（该数组非空即 fail-open 放行）', () => {
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: 'specs/777-fix-foo/fix-report.md', content: '# Fix' }),
+      IMPLEMENT,
+      VERIFY,
+      ASSISTANT_TEXT('已修复完毕'),
+    ]);
+    stageDir('specs/100-fix-foo');
+    const out = reportInProcess(p);
+    assert.deepEqual(out.transcriptDiagnostics, [], JSON.stringify(out));
+    assert.ok(out.diagnostics.includes('feature-dir-witness-absent'), JSON.stringify(out));
+  });
+
+  // ── 第 3 轮红队复打（CRITICAL）：见证制品类与采信谓词 usable() 不同源 ──
+  //
+  // 攻击链（红队已实跑）：本会话零真实产出 → 两次廉价 Agent 委派 → Write 一份 1 字节的
+  // `verification/verification-report.md` 到全新编号目录并拿到成功回执 → stop。
+  // 该目录**拿到了见证但不 usable**（无 fix-report.md）⟹ 上方 F227 历史兜底只挑 usable 者故不选它
+  // ⟹ 控制流照旧进入短名分支 ⟹ `witnessedShortNames.has(shortName)` 成立 ⟹ 重锚定到磁盘上
+  // 本会话从未触碰的旧目录 ⟹ compliant:true ⟹ 合规早退（在任何 appendAuditEvent 之前）⟹ exit 0 零审计。
+  //
+  // 这直接证伪了第 2 轮注释里的演绎证明：「见证集合 ⊆ 提名集合 ⟹ 被见证目录必进 candidateHistory
+  // ⟹ F227 兜底先手命中」——**「进 candidateHistory」≠「usable」**，兜底循环只挑 usable 的历史候选。
+  const GHOST_SHORT = 'ghost';
+  const GHOST_NEW_DIR = `specs/999-fix-${GHOST_SHORT}`;
+  const GHOST_OLD_DIR = `specs/100-fix-${GHOST_SHORT}`;
+  /** 本会话唯一产出：一份 verification-report.md（带 id + 成功回执，见证的其余条件全部满足） */
+  const ghostTranscript = () => writeTranscript([
+    SKILL_EXPANSION_LINE('fix'),
+    IMPLEMENT,
+    VERIFY,
+    ...TOOL_USE_OK('Write', { file_path: `${GHOST_NEW_DIR}/verification/verification-report.md`, content: 'x' }, 'w-ghost'),
+    ASSISTANT_TEXT('已完成'),
+  ]);
+
+  it('🔴 T-1L 红先行（S1 形态）：只 Write verification-report.md 不得白嫖见证 → 必须 exit 2', () => {
+    const p = ghostTranscript();
+    // 该 1 字节写入确实落了盘（S1：新编号目录在磁盘上存在，但**不 usable**——没有 fix-report.md）
+    fs.mkdirSync(path.join(tmp, GHOST_NEW_DIR, 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, GHOST_NEW_DIR, 'verification', 'verification-report.md'), 'x', 'utf8');
+    stageDir(GHOST_OLD_DIR); // 本会话从未触碰的旧目录，制品齐全
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-l' });
+    assert.equal(r.status, 2, `见证制品类必须与 usable() 同源，否则本会话零产出仍 exit 0：${r.stderr}`);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1, JSON.stringify(events));
+    assert.equal(events[0].compliant, false, JSON.stringify(events[0]));
+    assert.ok(
+      events[0].diagnostics.includes('feature-dir-witness-absent'),
+      `拒绝重锚定必须可归因：${JSON.stringify(events[0].diagnostics)}`,
+    );
+  });
+
+  it('🔴 T-1M 红先行（W1 形态）：写完立刻回滚、磁盘上新编号目录根本不存在 → 仍必须 exit 2', () => {
+    // 见证不绑定终态（判据看 transcript 历史、制品判据看磁盘终态，二者时间解耦），
+    // 故 W1 与 S1 走的是同一条采信路径；收窄制品类后两者一并落回裁决。
+    const p = ghostTranscript();
+    stageDir(GHOST_OLD_DIR); // 磁盘上只有旧目录，999 全无痕迹
+
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-m' });
+    assert.equal(r.status, 2, r.stderr);
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1, JSON.stringify(events));
+    assert.ok(events[0].missing.includes('feature-dir'), JSON.stringify(events[0].missing));
+    assert.ok(events[0].diagnostics.includes('feature-dir-witness-absent'), JSON.stringify(events[0].diagnostics));
+  });
+
+  it('T-1N 互补（F256 正向不得被误伤）：Write fix-report.md + 复合命令改名 → 仍 exit 0', () => {
+    // 收窄见证制品类只砍掉 verification-report.md 这一类；F256 的真实场景里旧目录本就写过
+    // fix-report.md（只是被 git mv 移走故不 usable），家族级见证照旧成立。
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ...TOOL_USE_OK('Write', { file_path: `${OLD_DIR}/fix-report.md`, content: '# Fix' }, 'w-n'),
+      IMPLEMENT,
+      VERIFY,
+      TOOL_USE('Bash', { command: RENUMBER_COMMAND }),
+      ASSISTANT_TEXT('重编号完成'),
+    ]);
+    stageDir(NEW_DIR);
+
+    const out = reportInProcess(p);
+    assert.equal(out.compliant, true, JSON.stringify(out));
+    assert.equal(out.diagnostics.includes('feature-dir-witness-absent'), false, JSON.stringify(out.diagnostics));
+    const r = runCli({ transcriptPath: p, sessionId: 'f257-n' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落 verdict 事件');
+  });
+});
+
+// ────────────────────────────────────────
+// F257 缺陷 2 · 闸门三（会话长度预算）：不依赖 projectRoot 下可写状态的单调上界
+// ────────────────────────────────────────
+
+describe('F257 缺陷 2 · 推迟通道的上界不得只寄存在可被删除的本地状态里', () => {
+  /** 每轮追加的 assistant 条目数（真实长会话的"一段工作"量级；6 轮跨过 420 阈值） */
+  const PER_ROUND = 70;
+
+  /** 未消费的同步 verify 委派——必须是 entries 末条且带 id（findTrailingUnresolvedSyncDelegation 合同） */
+  const SYNC_AGENT = (id) => ({
+    type: 'assistant',
+    message: {
+      role: 'assistant',
+      content: [{ type: 'tool_use', id, name: 'Agent', input: { subagent_type: 'spec-driver:verify', description: '工具链验证' } }],
+    },
+  });
+  const PAD = (n, tag) => Array.from({ length: n }, (_, i) => ASSISTANT_TEXT(`${tag}-pad-${i}`));
+
+  /** 抹掉本地推迟状态（缺陷 2 的攻击动作，也可作为无恶意的"清理本地运行态"自然发生） */
+  function wipeState() {
+    fs.rmSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), { recursive: true, force: true });
+  }
+
+  /** 读取 .specify/runs/ 全部 workflow-run-summary 终态记录 */
+  function readWorkflowRuns(root = tmp) {
+    const runsDir = path.join(root, '.specify', 'runs');
+    if (!fs.existsSync(runsDir)) return [];
+    const events = [];
+    for (const f of fs.readdirSync(runsDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      for (const line of fs.readFileSync(path.join(runsDir, f), 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.eventType === 'workflow-run-summary') events.push(obj);
+        } catch { /* 跳过损坏行 */ }
+      }
+    }
+    return events;
+  }
+
+  /**
+   * 单次展开的长会话：制品与 implement 委派齐备、只差 verification-report.md（可推迟缺口），
+   * 末条挂一条未消费的同步 verify 委派（恒在途）。锚点后 assistant 条目数 = PER_ROUND × rounds + 3。
+   */
+  function longSessionTranscript(rounds) {
+    const lines = [
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+    ];
+    for (let r = 1; r <= rounds; r += 1) lines.push(...PAD(PER_ROUND, `r${r}`));
+    lines.push(SYNC_AGENT('toolu_sync_tail'));
+    return writeTranscript(lines);
+  }
+
+  /**
+   * 锚点重展开攻击会话（CRITICAL-2 实跑形态）：每轮 ① 重新展开 Skill(spec-driver-fix)
+   * ② 对制品做一次 Write 重提名（否则 missing 混入 feature-dir 变不可推迟）
+   * ③ 末条挂未消费的同步 Agent。每轮 assistant 条目数 = PER_ROUND。
+   */
+  function reExpansionAttackTranscript(rounds) {
+    const lines = [];
+    for (let r = 1; r <= rounds; r += 1) {
+      lines.push(SKILL_EXPANSION_LINE('fix'));
+      lines.push(TOOL_USE('Write', { file_path: `${FEATURE_DIR}/fix-report.md`, content: '# Fix' }));
+      lines.push(TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }));
+      lines.push(...PAD(PER_ROUND - 3, `a${r}`));
+      lines.push(SYNC_AGENT(`toolu_sync_${r}`));
+    }
+    return writeTranscript(lines);
+  }
+
+  function stageIncomplete() {
+    stageDir(FEATURE_DIR, { verification: null });
+  }
+
+  it('前提核实：本组 fixture 的缺口恰在可推迟白名单内，且在途判定成立', () => {
+    stageIncomplete();
+    const out = reportInProcess(longSessionTranscript(1));
+    assert.deepEqual(out.missing, ['verification-report.md'], JSON.stringify(out));
+    assert.equal(isDeferrableMissingSet(out.missing), true);
+    assert.deepEqual(out.inFlightDelegations.map((x) => x.kind), ['sync'], JSON.stringify(out.inFlightDelegations));
+  });
+
+  it('report 透传：assistantEntriesSinceEarliestFix 为事实字段（供端到端复现与标定取数）', () => {
+    stageIncomplete();
+    const out = reportInProcess(longSessionTranscript(2));
+    assert.equal(out.assistantEntriesSinceEarliestFix, PER_ROUND * 2 + 3, JSON.stringify(out));
+  });
+
+  it('🔴 T-2a 红先行：每轮删状态文件 → 不得"全部 exit 0 且零终态记录"，越阈必须落回裁决', () => {
+    // 修复前：`rm -rf .specify/runs/.fix-compliance-state` 让闸门二每轮读到初始态 → 推迟通道恒开，
+    // N≫3 轮全部 exit 0、审计 degraded=false、终态记录 0 条（比 blockCount 篡改更安静的静默通道）。
+    stageIncomplete();
+    const statuses = [];
+    const counts = [];
+    for (let rounds = 1; rounds <= 6; rounds += 1) {
+      wipeState();                                    // ← 缺陷 2 的攻击动作，每轮抹掉闸门二
+      const p = longSessionTranscript(rounds);
+      counts.push(reportInProcess(p).assistantEntriesSinceEarliestFix);
+      statuses.push(runCli({ transcriptPath: p, sessionId: 'f257-g3' }).status);
+    }
+
+    assert.notDeepEqual(statuses, [0, 0, 0, 0, 0, 0], '删状态即全放行的静默通道必须被闸门三兜住');
+    assert.deepEqual(statuses, [0, 0, 0, 0, 0, 2], JSON.stringify({ statuses, counts }));
+    // 计数单调递增，且恰在越过 420 的那一轮转为阻断
+    for (let i = 1; i < counts.length; i += 1) assert.ok(counts[i] > counts[i - 1], JSON.stringify(counts));
+    assert.ok(counts[4] < 420 && counts[5] >= 420, JSON.stringify(counts));
+
+    const events = readVerdictEvents();
+    const last = events[events.length - 1];
+    assert.ok(last.diagnostics.includes('delegation-in-flight-entry-budget-exhausted'), JSON.stringify(last));
+    assert.equal(last.diagnostics.includes('delegation-in-flight'), false, '未推迟就不得发在途诊断码');
+    assert.equal(last.compliant, false);
+  });
+
+  it('🔴 T-2b 红先行（CRITICAL-2 回归钉子）：每轮重展开 fix 锚点 + 删状态，计数仍须单调收敛', () => {
+    // 主锚点取最晚一次展开：agent 自调一次 Skill(spec-driver-fix) 即可令锚点后计数归零而 isFix 仍真。
+    // 实跑证据：攻击组 30/30 全 exit 0、锚点后计数恒 4。闸门三以**最早**一次展开为基线破掉它。
+    stageIncomplete();
+    const statuses = [];
+    const counts = [];
+    for (let rounds = 1; rounds <= 6; rounds += 1) {
+      wipeState();
+      const p = reExpansionAttackTranscript(rounds);
+      const out = reportInProcess(p);
+      assert.equal(isDeferrableMissingSet(out.missing), true, `第 ${rounds} 轮缺口须仍可推迟：${JSON.stringify(out.missing)}`);
+      assert.ok(out.inFlightDelegations.length > 0, `第 ${rounds} 轮在途须成立：${JSON.stringify(out)}`);
+      counts.push(out.assistantEntriesSinceEarliestFix);
+      statuses.push(runCli({ transcriptPath: p, sessionId: 'f257-reexp' }).status);
+    }
+
+    assert.notDeepEqual(statuses, [0, 0, 0, 0, 0, 0], '重展开攻击必须被闸门三收敛，不得 N/N 全 exit 0');
+    assert.deepEqual(statuses, [0, 0, 0, 0, 0, 2], JSON.stringify({ statuses, counts }));
+    for (let i = 1; i < counts.length; i += 1) {
+      assert.ok(counts[i] > counts[i - 1], `重展开使计数回退（= 用了最晚锚点作基线）：${JSON.stringify(counts)}`);
+    }
+    const last = readVerdictEvents().pop();
+    assert.ok(last.diagnostics.includes('delegation-in-flight-entry-budget-exhausted'), JSON.stringify(last));
+  });
+
+  it('🔴 T-2c 不回退：正常在途会话（不删状态、远未越阈）仍保持既有 0 0 0 2 2 0 形态', () => {
+    stageIncomplete();
+    const p = longSessionTranscript(1);                 // 73 条 ≪ 420，闸门三全程不触发
+    const seq = [];
+    for (let i = 0; i < 6; i += 1) seq.push(runCli({ transcriptPath: p, sessionId: 'f257-normal' }).status);
+    assert.deepEqual(seq, [0, 0, 0, 2, 2, 0], '闸门三不得改变闸门二 + BLOCK_LIMIT 的既有收敛序列');
+  });
+
+  it('🔴 T-2d 审计提档：推迟成功必须落一条 result:"paused" 的 workflow-run 终态', () => {
+    // 修复前推迟只打 [WARN] + degraded=false 审计事件、**不写终态**，事后审计看起来就是"还有子代理在跑"。
+    stageIncomplete();
+    const r = runCli({ transcriptPath: longSessionTranscript(1), sessionId: 'f257-paused' });
+    assert.equal(r.status, 0, r.stderr);
+
+    const runs = readWorkflowRuns();
+    assert.equal(runs.length, 1, JSON.stringify(runs));
+    assert.equal(runs[0].result, 'paused', 'paused 与"降级放行 = failed"区分，事后可分辨两类放行');
+    assert.equal(runs[0].workflowId, 'spec-driver-fix');
+    assert.equal(runs[0].runId, 'f257-paused');
+    assert.equal(runs[0].complianceVerdict.degraded, false);
+    // recordWorkflowRun 的 normalizeComplianceVerdict 只收有限数值，null 会被整键丢弃——
+    // 与"推迟不消耗阻断预算、无计数可报"的既有语义一致，故此处断言的是**键缺席**而非值为 null。
+    assert.equal(Object.hasOwn(runs[0].complianceVerdict, 'blockCount'), false, JSON.stringify(runs[0].complianceVerdict));
+    assert.deepEqual(runs[0].complianceVerdict.missing, ['verification-report.md']);
+
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('delegation-in-flight'), JSON.stringify(events[0]));
+    assert.equal(events[0].degraded, false, '审计事件的 degraded 语义不变（推迟 ≠ 降级放行）');
+  });
+
+  it('🔴 T-2e 并联是 AND 不是 OR：闸门二耗尽而闸门三未耗尽 → 不推迟', () => {
+    // 改成 `||` 等于两道闸门互相赦免（缺陷 2 原样存活）：此处 entryBudgetLeft 为真会把已耗尽的
+    // 闸门二一并赦免 → exit 0。
+    stageIncomplete();
+    preinstallBlockState('f257-and', { blockCount: 0, degradedRecorded: false, inFlightDeferCount: 3 });
+    const r = runCli({ transcriptPath: longSessionTranscript(1), sessionId: 'f257-and' });
+    assert.equal(r.status, 2, `闸门二耗尽即不得推迟：${r.stderr}`);
+    const events = readVerdictEvents();
+    assert.ok(events[0].diagnostics.includes('delegation-in-flight-budget-exhausted'), JSON.stringify(events[0]));
+    assert.equal(events[0].diagnostics.includes('delegation-in-flight-entry-budget-exhausted'), false, '闸门三尚未耗尽，不得误报');
+    assert.equal(events[0].diagnostics.includes('delegation-in-flight'), false);
+    assert.deepEqual(readWorkflowRuns(), [], '不推迟就不得写 paused 终态');
+  });
+
+  it('T-2f warn 档：退出码仍恒 0，但越阈后的诊断码从 delegation-in-flight 变为 entry-budget-exhausted', () => {
+    fs.writeFileSync(path.join(tmp, 'spec-driver.config.yaml'), 'fix_compliance:\n  enforcement: warn\n');
+    stageIncomplete();
+    wipeState();
+    const under = runCli({ transcriptPath: longSessionTranscript(1), sessionId: 'f257-warn' });
+    assert.equal(under.status, 0, under.stderr);
+    wipeState();
+    const over = runCli({ transcriptPath: longSessionTranscript(6), sessionId: 'f257-warn' });
+    assert.equal(over.status, 0, over.stderr);
+    const events = readVerdictEvents();
+    assert.ok(events[0].diagnostics.includes('delegation-in-flight'), JSON.stringify(events[0]));
+    assert.ok(events[1].diagnostics.includes('delegation-in-flight-entry-budget-exhausted'), JSON.stringify(events[1]));
+    assert.equal(events[1].enforcement, 'warn');
+  });
+
+  it('失败路径：终态记录写不进去时推迟路由不得崩溃（崩溃 → main() 顶层 catch → 静默 exit 0）', () => {
+    // recordDeferTerminal 的 try/catch 不是防御性冗余：judge 的 main() 顶层 catch（FR-013）会把任何
+    // 未捕获异常静默转成 exit 0 放行，于是"终态写失败"会连带把一次本该走完的裁决变成 fail-open。
+    // 这里把月度 jsonl 占成目录，令 recordWorkflowRun 的 appendFileSync 必抛。
+    stageIncomplete();
+    const runsDir = path.join(tmp, '.specify', 'runs');
+    fs.mkdirSync(path.join(runsDir, `${new Date().toISOString().slice(0, 7)}.jsonl`), { recursive: true });
+
+    const r = runCli({ transcriptPath: longSessionTranscript(1), sessionId: 'f257-terminal-fail' });
+    assert.equal(r.status, 0, `推迟路由须照常走完：${r.stderr}`);
+    assert.ok(r.stderr.includes('诊断: delegation-in-flight'), r.stderr);
+    // 推迟确实发生过（计数落盘），证明不是"异常被顶层 catch 吞掉后碰巧也 exit 0"
+    assert.equal(readState('f257-terminal-fail').inFlightDeferCount, 1);
+  });
+
+  it('🔴 变异钉子 M-6：EARLIEST_FIX_ENTRY_DEFER_LIMIT 的数量级本身是承重判据', async () => {
+    // 把常量改成 Number.MAX_SAFE_INTEGER 等价于删除闸门三，而阈值缩放型用例（越阈轮次由计数决定）
+    // 抓不到这一手——必须有一条直接钉住取值的断言。
+    const { EARLIEST_FIX_ENTRY_DEFER_LIMIT } = await import('../scripts/fix-compliance-judge.mjs');
+    assert.equal(
+      EARLIEST_FIX_ENTRY_DEFER_LIMIT,
+      420,
+      '定稿值 420 ≈ 真实语料（新口径 N=149）的 P98.7；实测 2/149 越阈，且均不因此受实际影响'
+        + '（一份缺口不可推迟、一份合规早退）。⚠️ 前身消息写的「覆盖 P99=409」取自旧口径，已更正',
+    );
+    assert.equal(Number.isSafeInteger(EARLIEST_FIX_ENTRY_DEFER_LIMIT), true);
+    assert.ok(
+      EARLIEST_FIX_ENTRY_DEFER_LIMIT > 0 && EARLIEST_FIX_ENTRY_DEFER_LIMIT <= 1000,
+      `闸门三失去实际约束力：${EARLIEST_FIX_ENTRY_DEFER_LIMIT}`,
+    );
+  });
+
+  it('合同同步：judge 实际产出的 delegation-in-flight-entry-budget-exhausted 必须已登记进 schema enum', () => {
+    const schemaPath = fileURLToPath(new URL(
+      '../../../specs/208-fix-mode-process-compliance/contracts/fix-compliance-verdict-event.schema.json',
+      import.meta.url,
+    ));
+    const registered = new Set(JSON.parse(fs.readFileSync(schemaPath, 'utf8')).properties.diagnostics.items.enum);
+    assert.ok(registered.has('delegation-in-flight-entry-budget-exhausted'), '诊断码未登记进 schema enum');
+    const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
+    assert.ok(judgeSrc.includes("'delegation-in-flight-entry-budget-exhausted'"), '合同登记了一个从不产出的死码');
   });
 });
