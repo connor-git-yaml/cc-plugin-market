@@ -507,6 +507,40 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    **收官判定**：M9 **代码面完成、质量面待收口** —— 四张 fix 卡是 M9 收官前的必要条件〔它们修的正是
    本 milestone 自己新引入的缺陷〕，非 M10 内容）
 
+  （2026-08-04 **三张 fix 卡全 ship + 体检**〔F257/F258/F259，40 文件 +5913/-591〕：
+   **F257✅ 门禁两处 fail-open 真闭合**——缺陷 1 加"写入见证门槛"（只认本会话写工具的写入见证，
+   不收 Read："读一份别人的制品零成本，读过即算见证等于没门槛"）；缺陷 2 加**闸门三**
+   `EARLIEST_FIX_ENTRY_DEFER_LIMIT`，**计量源派生自 transcript**（自最早一次 fix 展开起的 assistant
+   entry 数，被判方不经手写入、只增不减、`rm -rf` 抹不掉），与闸门二并联取严。**体检确认真闭合**：
+   T-2a 用例直接复刻审查方的攻击手法〔每轮 `wipeState()` × 6 轮〕，断言 `notDeepEqual([0×6])` +
+   `deepEqual([0,0,0,0,0,2])`；T-2b 钉住 CRITICAL-2 变体〔每轮重展开 fix 锚点归零计数〕。注释诚实
+   记录第一版取"最晚锚点"为基线被实测 30/30 全绕过 → 改"最早展开"，并写明"顺着旧名字理解就会把
+   修复改回去，不要改回去"。**F258✅** 图事实源三处失真收口〔gitignore 三态 oracle + base-ref 硬失败
+   + 消费侧口径〕；**F259✅** commonjs-require 兜底别名假边收口 + collector 护栏 py 侧独占覆盖补齐。
+   **门禁基线**：build 0 / vitest **7164 passed 0 failed** / test:plugins 0 / repo:check **87 族** /
+   release:check 0 —— 上轮那个 worktree 积累致 hook 超时的环境性失败本轮未复现。
+   **图实测**：节点 7547 / 边 12709（calls 3841）；六指标全 pass。
+   **🔴 本轮用户 dogfood 三条 → 亲验后两条升为 fix 候选，第一条诊断被修正**：
+   ① 用户报"class-method 疑似未被索引"（`impact` upstream 返回 `affected:[]`）——**假设不成立但真相更严重**：
+      节点在图里（`src/adapters/python-adapter.ts::PythonLanguageAdapter.extractSymbolNodes` 存在，
+      全仓 3449 个 Class.method 节点），真因是**方法调用边未解析**：该节点唯一入边是自己类的
+      `contains`，**calls 入边 = 0**，而源码里有两个真实调用者（`batch-orchestrator.ts:1217`、
+      `graph-assembly.ts:241`，均经实例调用）。量化：**Class.method 节点 calls 入边覆盖率仅 4.5%
+      （154/3449），普通函数 49.6%（1390/2803）——11× 差距，结构性盲区非个案**。后果：`impact(upstream)`
+      对任何类方法**静默返回空**（比报错更糟，用户会当"没人调用"），且 F242 只修了函数级归属，
+      实例方法调用（`obj.method()` / `new X().method()`）的解析仍缺 → 立 **F260**
+   ② 用户报"graph.json 用 dist 建、无 builder 版本戳，`sourceCommit` 记源码 commit 反而误导"——
+      **实证成立**：图元数据字段为 name/generatedAt/nodeCount/edgeCount/sources/skippedSources/
+      schemaVersion/sourceCommit/fingerprint，**无任何 builder/dist 版本字段**；而
+      `dist/.spectra-build-meta.json` 已有 `commit` + `dirty`（F176 postbuild 盖章），**接进去即可**。
+      与 F259 memory 记载的"图基线用陈旧 dist 建会造假回归信号"同源（该 session 首次取基线虚高
+      148 节点差点误判回归）→ 并入 **F261**
+   ③ 用户报"implement 子代理 API 断连，要求每 Phase 落 notes 有效降损"——采纳为流程约定，
+      并入 F261 或单独文档 fix（改 `agents/implement.md` 默认约定；与 [[feedback_resumed_subagent_api_error_recovery]] 同源）
+   **下一批**：**F260 方法调用边解析**〔src/knowledge-graph/call-resolver + ast-analyzer，产品级盲区，
+   最高价值〕∥ **F261 图产物 builder 戳 + implement notes 约定**〔src/panoramic/graph 写盘元数据 +
+   agents/implement.md，与 F260 写入路径 disjoint〕；F260-Codex-hooks 四 warning 顺延为 **F262**）
+
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
 1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**
