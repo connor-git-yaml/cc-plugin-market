@@ -96,7 +96,10 @@ export async function runCommunityCommand(command: CLICommand): Promise<void> {
         node.metadata['community'] = String(communityId);
       }
     }
-    writeKnowledgeGraph(graphJson, outputDir);
+    // F261：本命令**没有重建任何节点/边**，只往 node.metadata 塞 community id 再整份写回。
+    // 因此 MUST 声明 preserve-recorded：图的 builder 记的是"谁建的这张图"，不是"谁改的这个文件"。
+    // 盖自己的章会把陈旧 dist 建的图（以及上线前无该字段的存量图）洗成"当前 dist 建的图"。
+    writeKnowledgeGraph(graphJson, outputDir, { builderProvenance: 'preserve-recorded' });
     console.log(`✓ graph.json 社区 ID 已更新`);
   } catch (err) {
     console.error(

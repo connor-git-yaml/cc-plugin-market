@@ -79,6 +79,26 @@ describe('runGraphCommand — F217 T031: sourceCommit 恒为 null', () => {
     const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
     expect(graph.graph.sourceCommit).toBeNull();
   });
+
+  /**
+   * F261 对抗复审 C-2（第四轮补齐）—— 钉住 `graph.ts` 的 `stamp-this-build` 字面量。
+   *
+   * 判别力来自"键是否存在"这一维，与 builder 的取值无关：`buildKnowledgeGraph` 新建的图**不含**
+   * `builder` 键，所以声明一旦被改成 `preserve-recorded`（或漏写、走 fail-safe 默认），写盘后该键
+   * **整个消失**；声明为 `stamp-this-build` 时该键必然存在（vitest 跑 src 定位不到 build-meta，
+   * 值为 `null` 的诚实降级，见 `builder-stamp.ts` 形态 (b)）。
+   */
+  it('F261 C-2：spectra graph MUST 声明 stamp-this-build —— 产物必含 builder 键（src 直跑时值为 null）', async () => {
+    const outputDir = path.join(tmpDir, 'specs-builder');
+    await runGraphCommand(
+      baseCommand({ subcommand: 'graph', graphOperation: 'build', outputDir }),
+    );
+
+    const graphPath = path.join(outputDir, '_meta', 'graph.json');
+    const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
+    expect('builder' in graph.graph).toBe(true);
+    expect(graph.graph.builder).toBeNull();
+  });
 });
 
 describe('runCommunityCommand — F217 T031: sourceCommit 透传（零改动确认）', () => {
@@ -149,5 +169,49 @@ describe('runCommunityCommand — F217 T031: sourceCommit 透传（零改动确�
 
     const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
     expect('sourceCommit' in graph.graph).toBe(false);
+  });
+
+  /**
+   * F261 对抗复审 C-2（第四轮补齐）—— **调用点声明字面量的护栏**。
+   *
+   * F261 把"谁有资格给图盖 builder 章"的控制信号从"对象形态反推"改成"caller 显式传参"，
+   * 消除了绕过面，却把正确性完全押在 4 个调用点的**字面量**上。实测证伪：把 `community.ts` 的
+   * `preserve-recorded` 改成 `stamp-this-build`（= 本特性立项要抓的伪造 provenance 形态）、
+   * 把 `graph.ts` 的改成 `preserve-recorded`，全量 7000+ 用例**无一变红**。
+   *
+   * `tests/panoramic/community-persist.test.ts` 那几条**不能**替代本用例：它们手写
+   * `{ builderProvenance: 'preserve-recorded' }` 复刻 community 的步骤，把被测的那个开关当成了
+   * 输入常量，守的是 `writeKnowledgeGraph` 的内部分支，不是 `community.ts` 的声明。
+   * 本用例走**真 `runCommunityCommand`**，是这条链路上唯一能钉住该字面量的位置。
+   */
+  it('F261 C-2：community 命令 MUST 声明 preserve-recorded —— 陈旧 builder 不被洗成当前 dist', async () => {
+    const STALE_BUILDER = {
+      formatVersion: 1 as const,
+      commit: 'deaddead'.repeat(5),
+      dirty: false,
+      sourceDirty: false,
+      distSha256: '1'.repeat(64),
+    };
+    writeSeedGraph('a'.repeat(40));
+    const seeded = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
+    seeded.graph.builder = { ...STALE_BUILDER };
+    fs.writeFileSync(graphPath, JSON.stringify(seeded, null, 2), 'utf-8');
+
+    await runCommunityCommand(baseCommand({ subcommand: 'community', outputDir }));
+
+    const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
+    expect(graph.graph.builder).toEqual(STALE_BUILDER);
+    // 活性对照：回写确实发生（否则本断言会因"什么都没跑"而假绿）
+    expect(graph.nodes.every((n) => typeof n.metadata['community'] === 'string')).toBe(true);
+  });
+
+  it('F261 C-2：community 命令不得给无 builder 键的存量图补写该键', async () => {
+    writeSeedGraph('a'.repeat(40));
+
+    await runCommunityCommand(baseCommand({ subcommand: 'community', outputDir }));
+
+    const graph = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as GraphJSON;
+    expect('builder' in graph.graph).toBe(false);
+    expect(graph.nodes.every((n) => typeof n.metadata['community'] === 'string')).toBe(true);
   });
 });

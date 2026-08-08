@@ -1507,7 +1507,10 @@ export async function runBatch(
       graphJson.graph.fingerprint = computeCollectorFingerprint();
 
       // 社区分析完成后写盘（graphJson 已含 degree metadata）
-      const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir);
+      // F261：graphJson 系本次运行 buildKnowledgeGraph 现建（见上方同函数内），故盖本进程的章
+      const graphWrittenPath = writeKnowledgeGraph(graphJson, resolvedOutputDir, {
+        builderProvenance: 'stamp-this-build',
+      });
       docGraphPath = toProjectPath(graphWrittenPath);
 
       // Feature 140 FR-011：graph.html 始终生成（之前 `if (options.generateHtml)` 是

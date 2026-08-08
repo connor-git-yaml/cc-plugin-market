@@ -5,6 +5,7 @@
  */
 import type { ExtractionResult } from '../../extraction/extraction-types.js';
 import type { CollectorFingerprint } from './collector-fingerprint.js';
+import type { GraphBuilderStamp } from './builder-stamp.js';
 
 // ============================================================
 // 置信度类型
@@ -203,6 +204,40 @@ export interface GraphJSON {
      * 不 bump schemaVersion（延续 F217 决策 5：纯可选新增字段，向后兼容）。
      */
     fingerprint?: CollectorFingerprint | null;
+    /**
+     * F261 新增：**把这张图的内容建出来并首次落盘**的那一版 builder（dist 编译产物）身份。
+     * 与 `sourceCommit`（基于哪版源码）、`fingerprint`（哪版采集面）互补，共同构成三维
+     * provenance——三者可以两两不同，且只有 builder 这一维能揭穿"用陈旧 dist 建的图"
+     * （此时另两维都是"当前值"，看不出任何异常）。
+     *
+     * 写入规则：写盘出口 `writeKnowledgeGraph` 按调用方声明的 `builderProvenance` 处置——
+     * 三条建图链路声明 `stamp-this-build`（盖本进程的章），纯 metadata 回写链路
+     * （`spectra community`：只往节点 metadata 塞 community id 再整份写回）声明
+     * `preserve-recorded`（保留磁盘原值，缺席就继续缺席）。否则跑一次 community 就能把
+     * "陈旧 dist 建的图"或"上线前无该字段的存量图"洗成"当前 dist 建的图"，洗掉的正是本字段
+     * 唯一的存在理由（口径对齐 F249 对 `fingerprint` 的同款要求）。
+     *
+     * - `GraphBuilderStamp`：定位到 `.spectra-build-meta.json` 且解析合法
+     * - `null`：本次写盘无法定位/解析 build-meta（源码 tsx/vitest 直跑、clean checkout 未 build、
+     *   meta 畸形）——诚实降级为"非盖章 build"
+     * - `undefined`：字段缺失（本机制上线前生成的旧图），与 `null` 同等按"未盖章"处理，非异常
+     *
+     * **本类型描述的是本版本 producer 会写出的形态，不是磁盘上可能出现的全集**（D6）：
+     * `preserve-recorded` 通道遇到**读不懂**的原值时会**原样保留**（前向兼容规则：旧版本无权
+     * 抹掉更新版本写入的内容），因此磁盘上完全可能出现不符合 `GraphBuilderStamp` 的值。
+     * 一切消费方 MUST 经 `parseGraphBuilderStamp` 防御性解析，MUST NOT 直接按本类型断言取字段。
+     *
+     * 消费口径（第三轮 D1）：`graph-quality` 的 `[builder]` advisory 把本字段与**当前运行的
+     * builder**（`getBuilderStamp()`）做字段级比较——回答"这张图是不是由你现在跑的这一版
+     * spectra 建的"。**不与 `sourceCommit` 比对**：那是被分析项目的 commit，与本字段跨仓库，
+     * 不等是结构性恒真的（前两轮的实证教训，详见 `builder-stamp.ts` 文件头）。
+     *
+     * 不 bump schemaVersion（延续 F217 决策 5 / F249 惯例：纯可选新增字段，向后兼容）。
+     * 本字段 **MUST NOT** 携带时间戳或文件系统路径（byte-stable 与 F193 portable 的合同面，
+     * 理由见 `builder-stamp.ts` 文件头）。它是**事故检测器而非篡改检测器**（D4）：图这条链路
+     * 只读 meta、不复算 dist hash。
+     */
+    builder?: GraphBuilderStamp | null;
   };
   /** 节点数组 */
   nodes: GraphNode[];

@@ -61,7 +61,130 @@ function isMemberContains(edge) {
 
 function loadGraph(path) {
   const g = JSON.parse(readFileSync(path, 'utf-8'));
-  return { nodes: g.nodes ?? [], links: g.links ?? g.edges ?? [] };
+  // F261 D3：`graph.graph` 承载三维 provenance（sourceCommit / fingerprint / builder），
+  // 两图比较时必须一并读出，否则"差异其实来自工具版本"这条解释在本工作流里不可见。
+  const meta = g.graph !== null && typeof g.graph === 'object' && !Array.isArray(g.graph) ? g.graph : {};
+  return { nodes: g.nodes ?? [], links: g.links ?? g.edges ?? [], meta };
+}
+
+// ─────────────────── F261 D3：provenance banner ───────────────────
+
+/**
+ * 十六进制值域闸口：只有真正的小写 hex 才被渲染，其余一律折叠成 `unrecognized`。
+ *
+ * 与 `src/panoramic/graph/builder-stamp.ts` 的 `COMMIT_VALUE_PATTERN` /
+ * `DIST_SHA256_VALUE_PATTERN` 同一理由（F261 复审 F3 实证）：这些值来自**外部 graph.json**，
+ * 会被原样打印到终端；`commit = ESC[2J ESC[H` 在真终端里清屏 + 光标归位，能抹掉上方全部输出。
+ */
+function hexOrNull(value, min, max) {
+  if (typeof value !== 'string') return null;
+  return new RegExp(`^[0-9a-f]{${min},${max}}$`).test(value) ? value : null;
+}
+
+/**
+ * 键序无关的规范化序列化：banner 的判据必须只对**语义差异**触发。
+ *
+ * 直接用 `JSON.stringify` 会**键序敏感**——两份字段完全相同、只是书写顺序不同的 fingerprint
+ * （手工编辑过的图、或另一个序列化器产出的图）会被判为"不同"，打出一条纯噪声的 banner。
+ * 本函数递归按键名排序后再序列化，把这一类假阳性消掉。
+ */
+function canonicalJson(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value ?? null);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+}
+
+/**
+ * 两个值在**顶层键**上的差异集合（键名已消毒，见下）。
+ *
+ * 为什么需要（对抗复审 W1）：判据比对**整个对象**，渲染却只暴露一两个字段——`describeFingerprint`
+ * 只打 `behaviorVersion`、`describeBuilderRecord` 只打 `commit`/`dist`。差异落在未渲染字段时，
+ * banner 会声称"provenance 不同"，紧接着的证据行两侧**一模一样**，读者最可能的反应是判定工具
+ * 有 bug 并忽略整条提示 —— 比不打 banner 更糟。
+ *
+ * 这不是边角形态：`CollectorFingerprint` 的 `extensionSurface` 变化会自动改指纹而**不**需要
+ * bump `behaviorVersion`（F249 的设计口径，F243 `.mjs/.cjs`、F250 `.pyi` 都走这条），所以
+ * "跨版本两图 fingerprint 不同"的最常见真实形态恰好渲染成 `behaviorVersion=7 → behaviorVersion=7`。
+ *
+ * 键名来自**外部 graph.json**，与值一样是数据流出口：只放行常规标识符字符，其余整体折叠成
+ * `<非常规字段名>`，并限量输出（同 `hexOrNull` 的理由）。
+ */
+function diffTopLevelKeys(a, b) {
+  const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(a) || !isObj(b)) return [];
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+  const differing = keys.filter((k) => canonicalJson(a[k]) !== canonicalJson(b[k]));
+  const safe = differing.map((k) => (/^[A-Za-z0-9_.-]{1,40}$/.test(k) ? k : '<非常规字段名>'));
+  return safe.length > 5 ? [...safe.slice(0, 5), `…共 ${safe.length} 项`] : safe;
+}
+
+/** builder 记录的人读身份；三种"没有可用身份"的形态刻意分列（与 graph-quality advisory 同口径）。 */
+function describeBuilderRecord(builder) {
+  if (builder === undefined) return 'unrecorded（本字段上线前的旧图产物）';
+  if (builder === null) return 'unstamped（未盖章 build / 源码直跑写出）';
+  if (typeof builder !== 'object' || Array.isArray(builder)) return 'unrecognized（记录形态不可识别）';
+  const commit = hexOrNull(builder.commit, 7, 64);
+  const dist = hexOrNull(builder.distSha256, 64, 64);
+  if (commit === null || dist === null) return 'unrecognized（记录值不可识别）';
+  return `commit ${commit.slice(0, 7)} / dist ${dist.slice(0, 12)}`;
+}
+
+/** sourceCommit 的人读形态（外部值，同样过值域闸口）。 */
+function describeSourceCommit(value) {
+  if (value === undefined) return 'unrecorded';
+  if (value === null) return 'null（非 git 仓库 / 非 AST 重建链路）';
+  const commit = hexOrNull(value, 7, 64);
+  return commit === null ? 'unrecognized' : commit.slice(0, 7);
+}
+
+/** fingerprint 的人读形态：只暴露 behaviorVersion（其余字段进 banner 只是噪声）。 */
+function describeFingerprint(value) {
+  if (value === undefined) return 'unrecorded';
+  if (value === null) return 'null';
+  if (typeof value !== 'object' || Array.isArray(value)) return 'unrecognized';
+  return typeof value.behaviorVersion === 'number'
+    ? `behaviorVersion=${value.behaviorVersion}`
+    : 'behaviorVersion=?';
+}
+
+/**
+ * 两图 provenance 任一维不同 → 先打一段醒目提示，再进入三类归因明细。
+ *
+ * **纯输出增量**：不改 exit code、不改判定、不新增 repo:check check（F261 D3 硬约束）。
+ * 理由：事故当时的真实工作流就是"两张图对比、看到 148 节点差"，而节点差最常见的解释——
+ * **两张图由不同版本的工具建出**——在这条工作流里此前一个字都不出现。
+ */
+function printProvenanceBanner(oldMeta, newMeta) {
+  // `?? null` 把"键缺失"与"显式 null"归一：两者都表示**没有可用的 build 身份**，对"节点差是不是
+  // 工具版本造成的"这个问题零信息量，分开报只会制造噪声。有身份的一侧与无身份的一侧仍会触发提示。
+  const dims = [];
+
+  /**
+   * 组装一维证据行。两侧渲染值**相同**时补上差异落点（W1）——否则就是一句自相矛盾的输出。
+   */
+  const pushDim = (name, oldValue, newValue, render) => {
+    if (canonicalJson(oldValue ?? null) === canonicalJson(newValue ?? null)) return;
+    const oldText = render(oldValue);
+    const newText = render(newValue);
+    let line = `${name}: old ${oldText} → new ${newText}`;
+    if (oldText === newText) {
+      const keys = diffTopLevelKeys(oldValue, newValue);
+      line += keys.length > 0 ? `（差异在未展示字段：${keys.join(', ')}）` : '（差异在未展示字段）';
+    }
+    dims.push(line);
+  };
+
+  pushDim('builder', oldMeta.builder, newMeta.builder, describeBuilderRecord);
+  pushDim('sourceCommit', oldMeta.sourceCommit, newMeta.sourceCommit, describeSourceCommit);
+  pushDim('fingerprint', oldMeta.fingerprint, newMeta.fingerprint, describeFingerprint);
+
+  if (dims.length === 0) return;
+
+  console.log('[provenance] ⚠ 两图 provenance 不同，节点/边差异可能来自工具版本而非源码：');
+  for (const d of dims) console.log(`[provenance]   ${d}`);
+  console.log('[provenance] 排查建议：先用同一版 dist 重建两侧图再比对，再判断差异是否为真实源码变化。');
+  console.log('');
 }
 
 /** multiset：key → count */
@@ -229,6 +352,9 @@ function runDiff(oldPath, newPath) {
   console.log(`old: ${oldPath}  (nodes=${oldG.nodes.length}, links=${oldG.links.length})`);
   console.log(`new: ${newPath}  (nodes=${newG.nodes.length}, links=${newG.links.length})`);
   console.log('');
+  // F261 D3：provenance 提示必须在三类归因明细**之前**——读者先看见"两图可能不同版本工具建出"，
+  // 才不会把工具版本造成的节点/边差异误读成源码变化。
+  printProvenanceBanner(oldG.meta, newG.meta);
   console.log(`[类1] contains 边增量:`);
   console.log(`  new contains 总计: ${newContainsEdges.length}（module→symbol ${newContainsTop} / class→member ${newContainsMember}）`);
   console.log(`  相对 old 新增: module→symbol +${addedTop} / class→member +${addedMember}；旧 contains 缺失: ${missingContains.length}`);

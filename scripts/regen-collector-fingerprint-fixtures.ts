@@ -9,6 +9,12 @@
  * 才能重跑护栏"的前置门槛，也让本脚本与 vitest 护栏测试跑的是同一份源码（dist 陈旧导致
  * "脚本说一致、测试说不一致"这类伪冲突不会发生）。
  *
+ * **F261 追加约束：这条 tsx/src 路径同时是 `expected-graph-only-graph.json` 里 `"builder": null`
+ * 的成因，MUST NOT 改用 dist CLI 再生。** `builder-stamp` 跑 `src/` 时结构性定位不到
+ * `.spectra-build-meta.json`（诚实降级为 null）；改走 dist 会把再生者本机的 commit / dirty /
+ * distSha256 烤进 tracked 资产，而这些值跨机器必然不同 ⇒ fixture 在别人机器上永久红，
+ * 且红因与被护栏保护的采集面毫无关系。详见该 fixture 的 README。
+ *
  * 与护栏测试的共享面：`normalizeModuleGraphSnapshot`（b-track 归一化）、
  * `bootstrap-guardrail-registry`（registry 生命周期）、`pinned-asset-loader`（解包）三个
  * `tests/helpers/` 模块，以及本文件导出的两个比较器 + `swapPinnedAssets`。

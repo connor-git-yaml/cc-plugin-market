@@ -19,6 +19,11 @@ import type { CrossReferenceLink } from '../../models/module-spec.js';
 import { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
 import type { BuildGraphOptions, ConfidenceLevel, GraphEdge, GraphJSON, GraphNode } from './graph-types.js';
 import { isAbsoluteForeignPath, parseCanonicalSymbolId } from '../../knowledge-graph/relativize.js';
+import {
+  getBuilderStamp,
+  isStampProjectionLossless,
+  parseGraphBuilderStamp,
+} from './builder-stamp.js';
 
 const logger = createLogger('graph-builder');
 
@@ -540,18 +545,58 @@ export function enrichNodeDegrees(graphJson: GraphJSON, godNodes: Array<{ id: st
 }
 
 /**
+ * F261：本次写盘对 `graph.graph.builder` 的处置口径，**必须由调用方显式声明**。
+ *
+ * - `stamp-this-build`：本次写盘的图内容是**本进程刚建出来的**（走过 `buildKnowledgeGraph`），
+ *   因此由本进程的 dist 盖章。三条建图链路（batch 主链 / graph-only / cli graph）用它。
+ * - `preserve-recorded`：本次写盘只是把一张**别人建的图**改了点 metadata 再写回
+ *   （`spectra community` 是当前唯一这类链路），MUST NOT 声称是自己建的——保留磁盘上记录的值：
+ *   缺席就继续缺席，可解析则写回字段投影，**读不懂就原样不动**（D6 前向兼容规则）。
+ */
+export type BuilderProvenanceMode = 'stamp-this-build' | 'preserve-recorded';
+
+/** `writeKnowledgeGraph` 的选项：归一化选项 + builder provenance 口径。 */
+export interface WriteKnowledgeGraphOptions extends NormalizeGraphOptions {
+  /**
+   * 省略时取 **fail-safe 默认 `preserve-recorded`**。
+   *
+   * why 默认取"不盖章"而非"盖章"：两个方向的失效后果不对称——建图链路忘了声明，图变成
+   * `unstamped`（消费侧措辞，少一维信息，诚实降级）；回写链路忘了声明，
+   * 图会被盖上一个**它没建过**的章（自信的假陈述，且正是本机制要抓的失效模式）。
+   *
+   * **护栏口径（第四轮订正）**：本段前一版声称"有 E2E 用例把三条生产链路钉住"——**是假的**，
+   * 对抗复审用变异实测证伪：把 `cli graph` 的声明改成 `preserve-recorded`、把 `cli community` 的
+   * 改成 `stamp-this-build`（= 本特性立项要抓的伪造 provenance 形态），全量 7000+ 用例**无一变红**。
+   * 把控制信号从"数据形态反推"改成"caller 传参"消除了绕过面，但也把正确性完全押在四个调用点的
+   * **字面量**上，而那时四个字面量一个护栏都没有。现状（已补齐后）：
+   *
+   * | 调用点 | 声明 | 钉住它的用例 |
+   * |---|---|---|
+   * | `batch/stages/graph-assembly.ts`（graph-only） | stamp-this-build | `tests/integration/builder-stamp-e2e.test.ts`（真 dist，2 条） |
+   * | `cli/commands/graph.ts` | stamp-this-build | `tests/integration/graph-command-sourcecommit.test.ts`（真 `runGraphCommand`） |
+   * | `cli/commands/community.ts` | preserve-recorded | 同上文件（真 `runCommunityCommand`，反洗白） |
+   * | `batch/batch-orchestrator.ts`（主链） | stamp-this-build | 仅被 f220 charter 快照的 `"builder": null` **间接**约束键存在性——如实登记为**较弱**的一环 |
+   *
+   * 注意 `tests/panoramic/community-persist.test.ts` 那几条**不**算 community 调用点的护栏：
+   * 它们手写 `{ builderProvenance: 'preserve-recorded' }` 复刻 community 的步骤，把被测开关当成了
+   * 输入常量，守的是 `writeKnowledgeGraph` 的内部分支。
+   */
+  builderProvenance?: BuilderProvenanceMode;
+}
+
+/**
  * 将 GraphJSON 原子写入目标路径
  * 内部调用 writeAtomicJson，同步执行
  *
  * @param graphJson - buildKnowledgeGraph() 的返回值
  * @param outputDir - 项目输出根目录（graph.json 写入 {outputDir}/_meta/graph.json）
- * @param options - 归一化选项（默认 undefined，等价 stripTimestamps:false）；透传 normalizeGraphForWrite
+ * @param options - 归一化选项（默认 undefined，等价 stripTimestamps:false）+ builder provenance 口径
  * @returns 实际写入的绝对路径
  */
 export function writeKnowledgeGraph(
   graphJson: GraphJSON,
   outputDir: string,
-  options?: NormalizeGraphOptions,
+  options?: WriteKnowledgeGraphOptions,
 ): string {
   // F183 修复 1：将 normalizeGraphForWrite 内聚进写盘出口，使 graph / community / batch
   // 三路写盘自动经过同一归一化，消除「CLI graph/community 未归一化 → 跨写盘点形态不一致」。
@@ -571,7 +616,87 @@ export function writeKnowledgeGraph(
         `${violations.samples.join(', ')}${violations.count > violations.samples.length ? ' …' : ''}`,
     );
   }
+  // ①.5 F261：按调用方声明的口径处置 builder stamp——"这张图的内容由哪一版 dist 建出来"。
+  //
+  // why 由调用方显式声明，而不是从对象形态反推（复审 C-2，两路独立对抗审查各自实证复现）：
+  // 本出口同时服务两类语义完全相反的写盘——
+  // (a) 建图链路（batch 主链 / graph-only / cli graph）：内容是本进程 buildKnowledgeGraph 现做的，
+  //     该盖自己的章；
+  // (b) 纯 metadata 回写链路（cli community：JSON.parse 已有 graph.json → 只往节点 metadata 塞
+  //     community id → 整份写回）：内容是**别人建的**，盖自己的章就是伪造 provenance。
+  // 中间试过两版"从形态反推"的判据，都被实证击穿：
+  //   · 裸赋值（第一轮）→ 把磁盘上 `commit=deaddead…` 的陈旧章洗成当前 commit；
+  //   · `!('builder' in graph)`（第二轮）→ 挡住了有值那支，却把**上线前的存量图**（100% 没有
+  //     该键）在一次 community 后从诚实的 `unrecorded`（键缺失态的消费侧措辞）变成一句自信的假陈述。
+  // 教训与 F238 同类：**控制信号一旦由数据形态承担，就一定能被某种形态绕过**；终态是 caller 传参。
+  // 默认值取 fail-safe 的 `preserve-recorded`（理由见 WriteKnowledgeGraphOptions）。
+  //
+  // why 不沿用 sourceCommit / fingerprint 的「非 AST 路径写 null」惯例：那条惯例的立论是
+  // 「不解析源码就不许凭空推导源码属性」。但 builder 不是被分析对象的属性，是执行者自己的属性
+  // ——`spectra graph` 这条链路同样由某一版 dist 建图，它完全知道自己是谁；让它写 null 不是
+  // 诚实降级，而是主动丢弃一条它确实掌握的事实。
+  //
+  // why 放在归一化「之前」：确立「所有落盘前的字段变更都发生在归一化之前，归一化永远是最后
+  // 一道确定性收口」。若未来 normalizeGraphForWrite 增加 meta 字段级处理（排序 / 剥除），
+  // builder 会自动被纳入其确定性处理面。对 I-1 备注无影响：本处置插在守卫与归一化「之间」，
+  // 两者相对次序未变；且 builder MUST NOT 携带任何文件系统路径，即便未来守卫被移到归一化
+  // 之后，也不会因它产生新的误报或漏报。
+  //
+  // 入口收口（对抗复审 A-W2，第四轮）：`graph.graph` 在类型上是对象，但 `cli community` 的入口
+  // 校验只查 `nodes` / `links` 是数组、**不查 `graph`**，外来 / 手工构造的 graph.json 完全可能
+  // 带一个 `null` 的 meta。本处置之前的 `writeKnowledgeGraph` 对该形态不抛（守卫与归一化都不碰
+  // `graph.graph`，除非 stripTimestamps），F261 加的 `in` / 属性赋值把它变成了 `TypeError`。
+  // 实证后果是**半成功**：`community` 已经重写了 GRAPH_REPORT.md，随后写盘抛出 ⇒ 两个产物不一致。
+  // 一个 advisory 字段 MUST NOT 具备让写盘失败的能力，故非对象形态一律**跳过 builder 处置**
+  // （诚实降级：少一维信息，不中断写盘、不造假），与 `resolveBuilderStamp` 的同款口径一致。
+  const meta: Record<string, unknown> | null =
+    graphJson.graph !== null && typeof graphJson.graph === 'object'
+      ? (graphJson.graph as unknown as Record<string, unknown>)
+      : null;
+  if (meta === null) {
+    // 不做任何 builder 处置
+  } else if (options?.builderProvenance === 'stamp-this-build') {
+    graphJson.graph.builder = getBuilderStamp();
+    // 用 hasOwnProperty 而非 `in`（对抗复审 I-3）：`in` 走原型链，一旦进程内有人污染
+    // `Object.prototype.builder`，一张**本无该键的存量图**会被判成"有记录"、走进下方分支并被
+    // 写成自有属性——恰好是 C-2 用例要防的"补写"。这里零成本消除该向量。
+  } else if (Object.prototype.hasOwnProperty.call(meta, 'builder')) {
+    // 保留通道的判据是「**覆盖会不会丢信息**」，不是「能不能解析」（裁决 D6 + 对抗复审 A-W1）：
+    //
+    // (i) 原值可解析**且不含任何未知键** → 用 5 字段投影覆盖（唯一效果是把键序规范化）。
+    // (ii) 其余一切情形（不可解析 / 非对象 / 可解析但带未知键）→ **原样不动该键**
+    //      （不解析、不投影、不覆盖、不置 null）。
+    //
+    // why (ii) 不再 collapse 成 null（第二轮就是这么做的，被实证是更严重的失真）：
+    // 一张由**更新版本 spectra** 盖章的图，被**旧版** `spectra community` 跑一次纯 metadata
+    // 回写，原始 stamp 就**永久丢失**——消费侧的 `unrecognized`（"更新版本写出 / 已被篡改"）
+    // 被抹成 `unstamped`（"根本没盖章"），两者对应的排查动作完全不同。版本偏斜在本仓库是常态
+    // （全局 MCP 装旧 dist、repo 跑新 dist），可达性不低。**旧版本无权抹掉更新版本写入的内容**
+    // 是标准前向兼容规则；把"不可识别"抹成"未盖章"是把未知伪装成已知，与本字段的全部设计意图
+    // （provenance 可见）方向相反。
+    //
+    // why 判据是"无损"而不是"可解析"（A-W1）：本模块的演进口径是"加字段**不必** bump
+    // `formatVersion`"（见 `builder-stamp.ts` 文件头）。于是"更新版本写的 `formatVersion: 1`
+    // ＋ 新字段"是**可解析**的，只按可解析性分流会让它走进投影分支、新字段被静默抹掉——
+    // 与上一段要根除的是同一件事，只是换了个入口。见 {@link isStampProjectionLossless}。
+    //
+    // 由此让渡的那条防线（第二轮 A-W1：外来 `builtAtIso` / 绝对路径不落盘）由**消费侧**承担：
+    // `describeBuilderStamp` 的 `unrecognized` 输出是与记录内容无关的常量串；
+    // `scripts/graph-semantic-diff.mjs` 只渲染过十六进制闸口的值，外来内容里**只有经字符集消毒
+    // 且限量的键名**会出现（`[A-Za-z0-9_.-]{1,40}`、最多 5 个），**值一律不进输出**——
+    // 这条如实表述见 `builder-stamp.ts` 文件头，两侧各有用例钉住。
+    // 这里 MUST NOT 顺手去扩 `scanGraphPortabilityViolations` 扫 `graph.graph`：写入侧的值域校验
+    // 管的是"我们自己写什么"，保留通道管的是"别人写的我们看不懂的东西别动"，两者职责不同，
+    // 混起来只会新增一片误报面（保留态的外来值本就预期不合我们的值域）。
+    const recorded: unknown = meta['builder'];
+    const projected = parseGraphBuilderStamp(recorded);
+    if (projected !== null && isStampProjectionLossless(recorded)) {
+      graphJson.graph.builder = projected;
+    }
+  }
   // ② 内聚归一化（in-place）：默认 options=undefined → stripTimestamps:false，保留各路时间戳
+  // 注意：builder MUST NOT 被加进 stripTimestamps 的剥除面——那会在恰恰最需要 provenance 的
+  // batch / graph-only 两条链路上把它抹掉。
   normalizeGraphForWrite(graphJson, options);
   const graphJsonPath = path.join(outputDir, '_meta', 'graph.json');
   // ③ 同步原子写盘，无需 await

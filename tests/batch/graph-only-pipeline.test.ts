@@ -185,6 +185,20 @@ describe('buildAstGraphOnly — byte 稳定（SC-003 b2 / NFR-002）', () => {
     const second = fs.readFileSync(path.join(dir, 'specs', '_meta', 'graph.json'));
     expect(second.equals(first)).toBe(true);
   });
+
+  // F261 T012 / T-R4a：整份文件 Buffer 相等已能捕获任何非确定性引入，但失败信息只会说
+  // "两个文件不一样"。这条定向断言让 builder 字段一旦引入时间戳/路径等非确定性内容时，
+  // 失败输出能直接指向本字段。守护力本身由 T021 变异测试（临时加回 builtAtIso）证明。
+  it('连跑两次的 graph.graph.builder 完全相同（F261 定向定位断言）', async () => {
+    const dir = makeProject({ ...TS_FIXTURE, ...PY_FIXTURE });
+    await buildAstGraphOnly(dir);
+    const first = readGraph(dir);
+    await buildAstGraphOnly(dir);
+    const second = readGraph(dir);
+
+    expect('builder' in second.graph).toBe(true);
+    expect(second.graph.builder).toEqual(first.graph.builder);
+  });
 });
 
 describe('buildAstGraphOnly — 三语言矩阵（EC-002）', () => {

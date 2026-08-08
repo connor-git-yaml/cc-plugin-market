@@ -264,6 +264,10 @@ export async function buildAstGraphOnly(
   // 步骤 5：复用 F183 写盘出口（内部 portable 守卫扫描 → normalizeGraphForWrite → 原子写）
   const graphPath = writeKnowledgeGraph(graphJson, resolvedOutputDir, {
     stripTimestamps: true,
+    // F261：graph-only 链路的图内容由上方 buildKnowledgeGraph 现建 ⇒ 盖本进程的章。
+    // 注意 builder MUST NOT 被纳入 stripTimestamps 的剥除面——生产 graph-only 正是
+    // stripTimestamps:true，剥掉等于该字段在最需要 provenance 的链路上永远不写。
+    builderProvenance: 'stamp-this-build',
   });
 
   const callEdgeCount = graphJson.links.filter((e) => e.relation === 'calls').length;

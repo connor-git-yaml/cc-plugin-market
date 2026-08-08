@@ -19,6 +19,11 @@ import { runGraphQualityChecks } from '../../panoramic/graph/quality/quality-eng
 import { createIgnoreOracle } from '../../panoramic/graph/quality/ignore-oracle.js';
 import type { UndeterminableSummary } from '../../utils/gitignore-oracle.js';
 import { evaluateFreshness } from '../../panoramic/graph/source-commit.js';
+import {
+  getBuilderStamp,
+  parseGraphBuilderStamp,
+  type GraphBuilderStamp,
+} from '../../panoramic/graph/builder-stamp.js';
 import { LanguageAdapterRegistry } from '../../adapters/language-adapter-registry.js';
 import type {
   FreshnessStaleReason,
@@ -365,6 +370,256 @@ export function shouldVoiceUndeterminable(summary: UndeterminableSummary): boole
   return summary.count > 0 || summary.degraded || summary.budgetExhausted;
 }
 
+/**
+ * 十六进制摘要的人读展示形态：截到 `length` 位（展示层裁剪，图产物本身仍存全长）。
+ *
+ * 入参刻意放宽到 `unknown` 并显式判类型（复审 F1）：第二轮实测过一份 `sourceCommit: 123` 的图
+ * 能一路走到展示层，旧实现的 `sha.slice(0,7)` 当场抛 `sha.slice is not a function`，整条
+ * graph-quality 崩成 exit 2。第三轮 D1 把比对对象换成 builder 之后，那条具体路径已结构性消失
+ * （本函数的实参现在只剩经 `parseGraphBuilderStamp` 校验过的字段），但**类型守卫按裁决保留**为
+ * 防御纵深：一个 advisory 展示函数 MUST NOT 具备改变 exit code 的能力，这条不变量不该依赖
+ * "调用方恰好只传合法值"。
+ */
+function short(hex: unknown, length = 7): string {
+  return typeof hex === 'string' && hex.length > 0 ? hex.slice(0, length) : 'null';
+}
+
+/**
+ * 单份 stamp 的人读身份：commit 7 位 + dist 前 12 位 + 两个 build 时刻的脏标志。
+ *
+ * **`dist` 必须出现（第三轮 D2）**：在**未提交的 feature 分支**上 `builder.commit` 恒等于 HEAD，
+ * 无论 dist 落后源码多少次编辑——"同 commit 内 dist 落后"恰恰是本机制要抓的**主形态**，只比
+ * commit 对它完全失明。第二轮实测：两份仅 `distSha256` 不同的 stamp 渲染出的文案**逐字相同**。
+ *
+ * 复审 F7：两个 flag 取的是 **`npm run build` 那一刻**的工作树状态（`stampBuild`，
+ * `scripts/lib/spectra-version-gate.mjs:68-90`），与**建图时刻**无关，两者可以差数天。
+ * 而 `dirty` 恰好又是 freshness 四态之一、语义是"建图时工作树脏"——实跑输出里
+ * `[freshness] fresh` 紧邻 `(dirty=true, ...)`，不标时间参照系必被误读成互相矛盾。
+ */
+function stampIdentity(stamp: GraphBuilderStamp): string {
+  return (
+    `commit ${short(stamp.commit)} / dist ${short(stamp.distSha256, 12)} ` +
+    `(build 时: 工作树 dirty=${stamp.dirty}, build 输入 sourceDirty=${stamp.sourceDirty})`
+  );
+}
+
+/**
+ * 两个 commit 记法是否**相容**：一方是另一方的前缀即算相容（含完全相等）。
+ *
+ * 为什么不能裸 `!==`（对抗复审 W1 实证）：`COMMIT_VALUE_PATTERN` 的 7 位下界是**刻意**为
+ * "外部工具 / 手工构造的图用 short-sha 记账"开的。裸比较会让"图记 `0d3e385`、当前是
+ * `0d3e385f…`"判成"commit 不同"，而展示层两侧都截到 7 位 ⇒ **同一行里两个渲染值逐字相同、
+ * 结论却说不同**，是一句读者能当场证伪的话——正是前两轮栽过的形状。
+ *
+ * 前缀相容**不等于**同一 commit（7 位前缀会碰撞），所以它只用来避免"自相矛盾的断言"，
+ * 不用来充当同一性证据；同一性由 `distSha256` 承担（见 {@link describeBuilderStamp}）。
+ */
+function commitNotationCompatible(a: string, b: string): boolean {
+  const shared = Math.min(a.length, b.length);
+  return a.slice(0, shared) === b.slice(0, shared);
+}
+
+/**
+ * `distSha256` 不同（= 两份编译产物内容不同）时，点名是哪一维不同。
+ */
+function describeProductDelta(recorded: GraphBuilderStamp, current: GraphBuilderStamp): string {
+  return commitNotationCompatible(recorded.commit, current.commit)
+    ? '同一 commit 下 dist 内容不同（源码改了但未重新提交，两次 build 之间 dist 变过）'
+    : 'commit 与 dist 内容两维都不同';
+}
+
+/**
+ * `distSha256` 相同（= 编译产物内容按 sha256 无差别）但盖章元数据仍有出入时，逐项列出。
+ *
+ * 为什么这些差异不配占据结论位（对抗复审 W4）：`stampBuild` 的 `dirty` 取的是**整树**
+ * `git status --porcelain`，与 dist 内容毫无关系——碰任何一个无关文件（再生 specs、临时脚本）
+ * 后重建，`distSha256` 不变而 `dirty` 翻转，此前建的所有图会一律被标"不是同一个 build"。
+ * 那正是本机制设计时要避免的"天天红 → 被当噪声忽略"。
+ */
+function describeMetadataDeltas(
+  recorded: GraphBuilderStamp,
+  current: GraphBuilderStamp,
+): string[] {
+  const notes: string[] = [];
+  if (recorded.commit !== current.commit) {
+    notes.push(
+      commitNotationCompatible(recorded.commit, current.commit)
+        ? `commit 记法长度不同（图 ${recorded.commit.length} 位 / 当前 ${current.commit.length} 位，前缀相同）`
+        : `盖章 commit 不同（图 ${short(recorded.commit)} / 当前 ${short(current.commit)}）`,
+    );
+  }
+  if (recorded.dirty !== current.dirty || recorded.sourceDirty !== current.sourceDirty) {
+    // 两侧取值都要给出：本分支只渲染了 recorded 一侧的 stampIdentity，不列出当前侧的取值
+    // 就等于把差异说了个"有"却不让读者看见"差在哪"。
+    notes.push(
+      '盖章时记录的工作树状态不同（' +
+        `图 dirty=${recorded.dirty}/sourceDirty=${recorded.sourceDirty}，` +
+        `当前 dirty=${current.dirty}/sourceDirty=${current.sourceDirty}）`,
+    );
+  }
+  return notes;
+}
+
+/**
+ * F261：把图产物的 builder stamp 渲染成一行 **advisory**（INFO 级，非判定）。
+ *
+ * ## 比对对象（第三轮 D1）：**当前正在运行的 builder**，不是 `sourceCommit`
+ *
+ * 前两轮把 `builder.commit` 与 `graph.graph.sourceCommit` 比对，这是**设计级错误**：前者是
+ * Spectra 自己 dist 的 build commit，后者是**被分析项目**的 commit，除自举外二者跨仓库，
+ * **不等是结构性恒真的**。真 dist 实证（外部临时项目，dist 一点也不滞后）：
+ *
+ * ```
+ * [builder] 0d3e385 (…) — 与 sourceCommit=eceb956 不一致：本图由与源码树不同版本的编译产物写出
+ * ```
+ *
+ * 这句对每个外部用户每次运行都出现且恒为假，正好复现 fix-report 决策 2 要避免的
+ * "天天红 → 被当噪声忽略"。
+ *
+ * 新语义把**图里记录的 builder** 与 {@link getBuilderStamp}（本进程加载期抓到的 builder）比对，
+ * 回答「**这张图是不是由你现在跑的这一版 spectra 建的**」——对任何被分析项目都良定义，且恰好
+ * 就是 fix-report 那起事故的形状（陈旧 dist 建的基线图，在新 dist 下被使用 / 被对比）。
+ *
+ * 比对**渲染**整份 stamp（`commit` + `distSha256` + 两个脏标志，见 {@link stampIdentity}），
+ * 但**结论由 `distSha256` 判定**——它是"执行的编译产物是不是同一份"的唯一硬证据；commit 记法
+ * 与脏标志只是盖章元数据，差异降级为同一行内的括注（对抗复审 W1/W4，理由见
+ * {@link commitNotationCompatible} 与 {@link describeMetadataDeltas}）。
+ *
+ * ## 七态（记录侧三态 × 比对侧四态收敛而来）
+ *
+ * | 情形 | 输出要点 |
+ * |------|----------|
+ * | 记录键缺失 | `unrecorded` — 未记录（旧图产物，或元数据结构异常） |
+ * | 记录显式 `null` | `unstamped` — 记录为 null（未盖章 build / 源码直跑写出） |
+ * | 记录存在但解析失败 | `unrecognized` — 更新版本写出、或已被篡改（**MUST NOT** 塌进 `unstamped`，且输出 MUST 与记录内容无关） |
+ * | 当前找不到盖章 | 无法比对（源码直跑，**或** dist 缺 build-meta） |
+ * | dist 相同且元数据全同 | 由当前运行的 build 写出 |
+ * | dist 相同但元数据有出入 | 由当前运行的这一份编译产物写出 + 逐项列出元数据出入 |
+ * | dist 不同 | 不是同一个 build，并点名是"同 commit 下 dist 变了"还是"两维都不同" |
+ *
+ * 记录侧三态刻意分列（对齐 F249 `collector-fingerprint-unrecorded` / `-invalid` 分列的既有先例）：
+ * "没记"、"记了个 null"、"记了但读不懂"对应完全不同的排查动作，塌成一句等于抹掉诊断信息。
+ *
+ * **任何由 `JSON.parse` 能产出的输入都不得抛异常**——本函数处在 `graph-quality` 的成功路径上，
+ * 一次抛出就是 exit 2，等于 advisory 反过来当了门禁。收口做在**两层**：外层 `graph`、内层
+ * `graph.graph`，各自非对象形态先折叠成 `{}`（对抗复审 B-W1：上一版只挡内层，`graph` 自身为
+ * `null` / `undefined` 时第一条语句就抛）。
+ *
+ * 边界如实登记：**未**用 try/catch 兜底，因此进程内手工构造的"取值即抛的 getter"仍会穿透。
+ * 这类输入不可能来自 `JSON.parse`（本函数唯一的生产输入源），而加一层 catch-all 会把真 bug
+ * 一并吞掉——宁可把不变量的作用域写准，也不用一个包住一切的 catch 去凑一句更漂亮的绝对句。
+ *
+ * ## 为什么只"可见"不"判定"
+ *
+ * dist 与源码树不同步是开发期常态，把它升为 stale 会让 `graph-quality` 天天红、迅速被当噪声
+ * 忽略，反而降低现有 stale 信号（真正的采集面变更）的信噪比。本行 **不改** exit code /
+ * `overallVerdict` / freshness 四态，也 **不进** `--json`（`graph-quality-report.schema.json`
+ * 顶层 `additionalProperties: false`；机读需求由 `graph.graph.builder` 结构化字段本身满足，
+ * 报告工具不该充当第二个可漂移的副本）。
+ *
+ * 为什么不走 `nextSteps`：① `nextSteps` 的合同是"面向维护者的下一步**修复建议**"，同 build 态
+ * 没有任何要修的东西，塞进去是把 INFO 伪装成 action item；② `nextSteps` 靠"非空即有问题"被扫读，
+ * 每次运行都多一条会稀释它；③ F258 已登记 `nextSteps` 文本前缀是脆弱机读契约，不该再挂第三个 token。
+ *
+ * **文案硬约束（plan §7.3）**：MUST NOT 出现 `[source-commit]` / `[collector-fingerprint]` /
+ * `[collector-fingerprint-unrecorded]` / `[collector-fingerprint-invalid]` 四个方括号字面量——
+ * `graph-quality-cli.test.ts` 的"错配防线"会对未命中场景逐个断言 `not.toContain('[<reason>]')`，
+ * 一旦撞上就会在某个 stale 场景里误红。
+ *
+ * @param currentBuilder 当前正在运行的 builder。默认取 {@link getBuilderStamp}（进程加载期常量）；
+ *   显式入参**只为可测性**存在——生产进程里它恒为同一个值，单测无法通过构造输入覆盖六态。
+ *
+ * 导出供单测直接打（不经 CLI 子进程）。
+ */
+export function describeBuilderStamp(
+  graph: GraphJSON,
+  currentBuilder: GraphBuilderStamp | null = getBuilderStamp(),
+): string {
+  // 入口收口：`graph.graph` 在类型上是对象，但本函数是**导出**的、且 CLI 侧的
+  // `validateGraphJsonShape` 只保证它 `typeof === 'object'`（数组也过）。用 `in` 运算符前先把
+  // 非对象形态折叠掉——`'builder' in null` 会抛，而一次抛出就是 exit 2（advisory 反当门禁）。
+  //
+  // 收口必须**两层都做**（对抗复审 B-W1 实证）：上一版只折叠了内层 `graph.graph`，第一条语句
+  // `graph.graph` 本身在 `graph` 为 `null` / `undefined` 时就已经抛了，17 组敌意输入里正是这 2 组
+  // 穿透。本函数的 JSDoc 与 `short()` 的注释都把"不抛"声明成**不依赖调用方**的纵深防御，
+  // 只挡内层等于这条不变量按其自身口径没成立。
+  const outer: Record<string, unknown> =
+    graph !== null && typeof graph === 'object'
+      ? (graph as unknown as Record<string, unknown>)
+      : {};
+  const rawMeta: unknown = outer['graph'];
+  const meta: Record<string, unknown> =
+    rawMeta !== null && typeof rawMeta === 'object'
+      ? (rawMeta as Record<string, unknown>)
+      : {};
+  // 同 `writeKnowledgeGraph`：用 hasOwnProperty 而非 `in`，不让原型链上的 `builder` 冒充图的记录。
+  const rawRecorded: unknown = Object.prototype.hasOwnProperty.call(meta, 'builder')
+    ? meta['builder']
+    : undefined;
+
+  // 记录侧三态：没记 / 记了 null / 记了但读不懂——排查动作各不相同，MUST NOT 合并。
+  if (rawRecorded === undefined) {
+    // 措辞不写死单一成因（复审 I2）：图产物元数据整体畸形时也落在这里。
+    return '[builder] unrecorded — 图未记录 builder（本字段上线前的旧图产物，或元数据结构异常），无从判断由哪一版 build 建出';
+  }
+  if (rawRecorded === null) {
+    // 成因收窄回"未盖章 / 源码直跑"两条（第四轮 D6）：上一版这里还挂着"或曾被回写链路降级"
+    // 的兜底措辞，因为 `preserve-recorded` 当时会把读不懂的原值 collapse 成 null。D6 已从写盘
+    // 侧根除该通道（读不懂就原样不动），这条成因不再可达，留着反而是一句无法发生的假设。
+    return '[builder] unstamped — 图记录 builder 为 null（未盖章 build / 源码直跑写出），无 build 身份可比对';
+  }
+  const recorded = parseGraphBuilderStamp(rawRecorded);
+  if (recorded === null) {
+    // 值域不合规（控制字符 / 路径 / 时间戳）与 formatVersion 不受支持都落在这里：图**自称**有
+    // builder 却读不懂，这是"更新版本写出、或已被篡改"，与"根本没盖章"是两回事。
+    //
+    // **返回值 MUST 是与 `rawRecorded` 内容无关的常量串**（D6 配套不变量）：D6 之后磁盘上会
+    // 长期存在我们读不懂的 builder 值（前向兼容的代价），"控制字符不进终端 / 绝对路径与时间戳
+    // 不外泄"这条不变量因此**完全落在本行**——写盘侧不再销毁证据当第二道保险。任何形式的回显
+    // （哪怕只是"顺手把 formatVersion 打出来帮助排查"）都会重新打开 F3 已实证的注入面。
+    // 由 `graph-quality-builder-advisory.test.ts` 的恒定性用例（8 组敌意输入输出必须完全相同）钉住。
+    return '[builder] unrecognized — builder 记录存在但不可识别（更新版本写出、或已被篡改）';
+  }
+
+  // 比对侧：当前进程找不到盖章 ⇒ 只报身份，MUST NOT 下同/异判断。
+  // 成因不写死成"源码直跑"（复审 W2 实证）：`npx tsc` / IDE build task /
+  // `npm run build --ignore-scripts` 都会产出**真编译 dist 但没有 build-meta**，同样落在这里。
+  if (currentBuilder === null) {
+    return (
+      `[builder] 图记录 ${stampIdentity(recorded)} — 无法比对：` +
+      '当前进程未找到 build 盖章（源码直跑，或 dist 缺 .spectra-build-meta.json）'
+    );
+  }
+
+  // **同一性由 `distSha256` 判定**：它是 dist 全树 .js 的内容 hash，相同即意味着"执行的编译产物
+  // 就是同一份"。commit / 脏标志是盖章时刻的**元数据**，与产物内容无关（复审 W1/W4）：
+  // 前者可能只是 short-sha 记法差异，后者碰任何无关文件重建就会翻转。让元数据差异去主导
+  // "是不是同一个 build"的结论，会同时制造①自相矛盾的断言 与②高频误报噪声。
+  const sameProduct = recorded.distSha256 === currentBuilder.distSha256;
+
+  // D2 后半条：`sourceDirty === true` 时**禁止**说"一致"——脏工作树 build 的 commit 本就不构成
+  // 可复现身份（同一 commit 可以对应无数份不同的 dist）。措辞按分支区分：不等分支里两侧可能
+  // 只有一侧脏，说成"该 build"会指代不明。
+  const anyDirty = recorded.sourceDirty || currentBuilder.sourceDirty;
+
+  if (sameProduct) {
+    const caveat = anyDirty ? '；注意该 build 出自脏工作树，commit 不构成可复现身份' : '';
+    const deltas = describeMetadataDeltas(recorded, currentBuilder);
+    if (deltas.length === 0) {
+      return `[builder] ${stampIdentity(recorded)} — 由当前运行的 build 写出${caveat}`;
+    }
+    return (
+      `[builder] ${stampIdentity(recorded)} — 由当前运行的这一份编译产物写出（dist 按 sha256 相同）；` +
+      `仅盖章元数据有出入：${deltas.join('、')}${caveat}`
+    );
+  }
+  const caveat = anyDirty ? '；注意至少一侧 build 出自脏工作树，commit 不构成可复现身份' : '';
+  return (
+    `[builder] 图记录 ${stampIdentity(recorded)}；当前运行 ${stampIdentity(currentBuilder)} — ` +
+    `不是同一个 build：${describeProductDelta(recorded, currentBuilder)}${caveat}`
+  );
+}
+
 /** 组装完整 GraphQualityReport（成功读取到合法图产物场景）。 */
 function buildReport(graph: GraphJSON, graphPath: string, projectRoot: string): GraphQualityReport {
   const ignoreOracle = createIgnoreOracle(projectRoot);
@@ -429,8 +684,15 @@ function formatPercent(ratio: number | null): string {
   return ratio === null ? 'n/a' : `${(ratio * 100).toFixed(1)}%`;
 }
 
-/** 完整报告的人读文本渲染。 */
-function formatReportText(report: GraphQualityReport): string {
+/**
+ * 完整报告的人读文本渲染。
+ *
+ * @param builderAdvisory F261：builder stamp 的 advisory 行（`describeBuilderStamp` 的产出）。
+ *   只有"成功读到合法图产物"时才有值——`cannot-assess` 系列报告根本没有可读的 `graph.graph`，
+ *   此时传 `null` 即不渲染该行。**刻意作为独立入参而非 report 字段**：report 会被
+ *   `JSON.stringify` 直出 `--json`，加字段就会撞上 schema 的 `additionalProperties: false`。
+ */
+function formatReportText(report: GraphQualityReport, builderAdvisory: string | null): string {
   const lines: string[] = [
     'Graph Quality Report',
     '=====================',
@@ -465,6 +727,12 @@ function formatReportText(report: GraphQualityReport): string {
         ? ` [staleReasons: ${report.freshness.staleReasons.join(', ')}]`
         : ''),
   ];
+
+  // F261：advisory 紧跟 [freshness] 之后——两者都在回答"这张图还能不能信"，只是维度不同
+  // （freshness 判源码/采集面，builder 记执行体）。仅人读文本面新增，判定面一律不动。
+  if (builderAdvisory !== null) {
+    lines.push(builderAdvisory);
+  }
 
   if (report.duplicateCanonicalId.status === 'fail') {
     lines.push('', 'Duplicate canonical ID groups:');
@@ -538,6 +806,8 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
   const graphExists = fs.existsSync(graphPath);
 
   let report: GraphQualityReport;
+  // F261：仅在成功读到合法图产物时才有 builder advisory；cannot-assess 系列没有可读的 graph.graph。
+  let builderAdvisory: string | null = null;
   if (!graphExists) {
     report = buildCannotAssessReport(graphPath, 'graph-missing', [
       '未建图，请先运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · <2min）生成 graph.json。',
@@ -576,6 +846,7 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
           ]);
         } else {
           report = buildReport(parsed, graphPath, projectRoot);
+          builderAdvisory = describeBuilderStamp(parsed);
         }
       }
     }
@@ -588,7 +859,7 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
     const status = toStatusReport(report, graphExists);
     output = useJson ? JSON.stringify(status, null, 2) : formatStatusText(status);
   } else {
-    output = useJson ? JSON.stringify(report, null, 2) : formatReportText(report);
+    output = useJson ? JSON.stringify(report, null, 2) : formatReportText(report, builderAdvisory);
   }
 
   if (command.graphQualityOutput) {
@@ -598,7 +869,7 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
         ? JSON.stringify(command.graphQualityStatus ? toStatusReport(report, graphExists) : report, null, 2)
         : command.graphQualityStatus
           ? formatStatusText(toStatusReport(report, graphExists))
-          : formatReportText(report);
+          : formatReportText(report, builderAdvisory);
     const writeResult = writeOutputFile(command.graphQualityOutput, fileContent);
     // FIX-8（Codex WARNING）：写入通知/失败提示均打印到 stderr，保证 --json 时 stdout
     // 只含结构化报告本身，可被下游脚本直接 JSON.parse，不被人读提示污染。

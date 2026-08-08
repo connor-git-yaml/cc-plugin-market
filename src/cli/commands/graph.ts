@@ -201,7 +201,12 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
     // F249 FR-007：同一诚实降级理由——本命令没有跑任何采集管线，写入"当前采集器指纹"会
     // 谎称这张图由当前采集面产出。写 null 让 freshness 判定按 unrecorded 保守处理。
     graphJson.graph.fingerprint = null;
-    const writtenPath = writeKnowledgeGraph(graphJson, outputDir);
+    // F261：本命令的图内容由上面的 buildKnowledgeGraph 当场建出 ⇒ 由本进程的 dist 盖章。
+    // （与 sourceCommit / fingerprint 写 null 不矛盾：那两维是**被分析对象**的属性，本命令没解析
+    // 源码所以不能推导；builder 是**执行者自己**的属性，它确切知道自己是哪一版。）
+    const writtenPath = writeKnowledgeGraph(graphJson, outputDir, {
+      builderProvenance: 'stamp-this-build',
+    });
     console.log(`✓ graph.json 已写入: ${writtenPath}`);
   } catch (err) {
     console.error(

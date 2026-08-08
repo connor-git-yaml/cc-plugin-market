@@ -68,6 +68,19 @@ bump 记录）——即便本次未改动任何采集器代码行为，fixture �
 
 重新生成：`npm run fixtures:regen:collector-fingerprint`（首次冷启动加 `--init`）。
 
+### `expected-graph-only-graph.json` 的 `"builder": null` 是**再生路径的产物**（F261）
+
+该资产里 `graph.graph.builder` 为 `null`，**不是**"这个字段无所谓"，而是再生脚本走
+`tsx` 直跑 `src/` 这条路径的必然结果：`builder-stamp` 只在**祖先目录本身**找
+`.spectra-build-meta.json`，跑 `src/panoramic/graph/` 时结构性定位不到（形态 b，诚实降级）。
+
+**MUST NOT 改用 dist CLI（`node dist/cli/index.js`）再生这两份资产。** 那样会把再生者本机的
+`commit` / `dirty` / `sourceDirty` / `distSha256` 烤进 tracked 文件——这些值**跨机器、跨 worktree
+必然不同**，于是 fixture 在别人机器上永久红，且红的原因与被护栏保护的采集面毫无关系。
+
+同理，若将来给再生脚本加"用真 CLI 复核"之类的旁路，落盘前必须把 `graph.graph.builder`
+显式置回 `null`，或干脆不落这条旁路的产物。
+
 ## 禁止事项
 
 1. **禁止在本目录（含任意子目录）新增与既有大小写变体样本仅大小写不同的文件。**

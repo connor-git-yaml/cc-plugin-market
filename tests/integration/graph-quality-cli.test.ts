@@ -24,8 +24,13 @@ import {
   baseFreshnessGraph,
 } from '../helpers/freshness-stale-scenarios.js';
 import { assertDistBuilt } from '../helpers/dist-cli-guard.js';
+import { validateAgainstSchema } from '../helpers/json-schema-subset-validator.js';
 
 const CLI_PATH = resolve('dist/cli/index.js');
+/** F261 T-R5d：`--json` 契约不回归的判据来源（与 T029 契约测试同一份 schema）。 */
+const REPORT_SCHEMA_PATH = resolve(
+  'specs/217-graph-quality-gates/contracts/graph-quality-report.schema.json',
+);
 
 interface CLIResult {
   stdout: string;
@@ -596,6 +601,220 @@ describe('graph-quality CLI（F217 T033）', () => {
 
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).overallVerdict).not.toBe('cannot-assess');
+    });
+  });
+
+  // ============================================================
+  // F261 T009-T011 / T-R5b-d：builder stamp advisory（只在人读 text 面可见）
+  // ============================================================
+
+  describe('F261：builder advisory（text 面新增一行，判定面一律不动）', () => {
+    /**
+     * 第三轮 D1：比对对象是**当前正在运行的 builder**（本测试跑的是真 `dist/cli/index.js`，
+     * 因此子进程里 `getBuilderStamp()` 恒为 `dist/.spectra-build-meta.json` 的投影，
+     * 由 `assertDistBuilt()` 保证存在）。
+     */
+    type BuilderStampLike = NonNullable<GraphJSON['graph']['builder']>;
+
+    /** 读出**当前 dist** 的 stamp——即子进程里 `getBuilderStamp()` 会拿到的那一份。 */
+    function currentDistStamp(): BuilderStampLike {
+      const meta = JSON.parse(
+        fs.readFileSync(resolve('dist/.spectra-build-meta.json'), 'utf-8'),
+      ) as Omit<BuilderStampLike, 'formatVersion'>;
+      return {
+        formatVersion: 1,
+        commit: meta.commit,
+        dirty: meta.dirty,
+        sourceDirty: meta.sourceDirty,
+        distSha256: meta.distSha256,
+      };
+    }
+
+    /** 一份与当前 dist 毫无关系的 build 身份（"陈旧 dist 建的图"）。 */
+    const FOREIGN_BUILDER: BuilderStampLike = {
+      formatVersion: 1,
+      commit: 'a'.repeat(40),
+      dirty: false,
+      sourceDirty: false,
+      distSha256: '0'.repeat(64),
+    };
+
+    function seedGraph(builder: unknown): string {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(
+        graphPath,
+        baseGraph({ sourceCommit: sha, builder: builder as GraphJSON['graph']['builder'] }),
+      );
+      return graphPath;
+    }
+
+    it('D1：图由当前运行的 build 写出 → text 明说「由当前运行的 build 写出」', () => {
+      const graphPath = seedGraph(currentDistStamp());
+
+      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+
+      expect(result.stdout).toContain('[builder]');
+      expect(result.stdout).toContain('由当前运行的 build 写出');
+      expect(result.stdout).not.toContain('不是同一个 build');
+    });
+
+    it('D1：图由另一版 build 写出 → text 判「不是同一个 build」并给出两侧短值', () => {
+      const graphPath = seedGraph(FOREIGN_BUILDER);
+
+      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+
+      expect(result.stdout).toContain('[builder]');
+      expect(result.stdout).toContain('不是同一个 build');
+      expect(result.stdout).toContain('aaaaaaa');
+      expect(result.stdout).toContain(currentDistStamp().commit.slice(0, 7));
+    });
+
+    /**
+     * D2 的**主形态**端到端判据：未提交的 feature 分支上 `commit` 恒等于 HEAD，dist 落后多少次
+     * 编辑都不改变它——只有 `distSha256` 这一维能分辨。修复前，这两次运行的 `[builder]` 行
+     * **逐字相同**（真 dist 实证）。
+     */
+    it('D2：同 commit、仅 distSha256 不同 → 与"完全同一 build"的输出必须不同，且渲染 dist 前 12 位', () => {
+      const current = currentDistStamp();
+      const samePath = path.join(tmpDir, 'same', 'graph.json');
+      const distDriftPath = path.join(tmpDir, 'drift', 'graph.json');
+      const sha = initGitRepoWithCommit(tmpDir);
+      const driftedDist = 'f'.repeat(64);
+      writeGraph(
+        samePath,
+        baseGraph({ sourceCommit: sha, builder: current }),
+      );
+      writeGraph(
+        distDriftPath,
+        baseGraph({
+          sourceCommit: sha,
+          builder: { ...current, distSha256: driftedDist },
+        }),
+      );
+
+      const builderLine = (graphPath: string): string => {
+        const out = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir }).stdout;
+        return out.split('\n').find((line) => line.startsWith('[builder]')) ?? '';
+      };
+      const sameLine = builderLine(samePath);
+      const driftLine = builderLine(distDriftPath);
+
+      expect(sameLine).not.toBe('');
+      expect(driftLine).not.toBe(sameLine);
+      expect(driftLine).toContain(driftedDist.slice(0, 12));
+      expect(driftLine).toContain(current.distSha256.slice(0, 12));
+      expect(driftLine).toContain('不是同一个 build');
+    });
+
+    it('D1：builder 键缺失（旧图产物）→ unrecorded，且与 unstamped/unrecognized 分列', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+
+      expect(result.stdout).toContain('[builder]');
+      expect(result.stdout).toContain('unrecorded');
+    });
+
+    it('D1：builder 显式 null → unstamped；不可解析 → unrecognized', () => {
+      const nullPath = seedGraph(null);
+      const nullResult = runCLI(['graph-quality', '--graph', nullPath], { cwd: tmpDir });
+      expect(nullResult.stdout).toContain('unstamped');
+
+      const bogusPath = path.join(tmpDir, 'bogus', 'graph.json');
+      writeGraph(
+        bogusPath,
+        baseGraph({ builder: { formatVersion: 9 } as unknown as GraphJSON['graph']['builder'] }),
+      );
+      const bogusResult = runCLI(['graph-quality', '--graph', bogusPath], { cwd: tmpDir });
+      expect(bogusResult.stdout).toContain('unrecognized');
+      expect(bogusResult.stdout).not.toContain('unstamped');
+    });
+
+    it('T-R5c：advisory 不改判定——有/无 builder 两种输入的 exitCode、overallVerdict、freshness.state 逐字相同', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const withPath = path.join(tmpDir, 'with', 'graph.json');
+      const withoutPath = path.join(tmpDir, 'without', 'graph.json');
+      writeGraph(withPath, baseGraph({ sourceCommit: sha, builder: FOREIGN_BUILDER }));
+      writeGraph(withoutPath, baseGraph({ sourceCommit: sha }));
+
+      const withResult = runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
+      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
+        cwd: tmpDir,
+      });
+
+      expect(withResult.exitCode).toBe(withoutResult.exitCode);
+      const a = JSON.parse(withResult.stdout);
+      const b = JSON.parse(withoutResult.stdout);
+      expect(a.overallVerdict).toBe(b.overallVerdict);
+      expect(a.freshness.state).toBe(b.freshness.state);
+      expect(a.freshness.staleReasons).toEqual(b.freshness.staleReasons);
+      expect(a.nextSteps).toEqual(b.nextSteps);
+    });
+
+    it('T-R5d：两种输入的 --json 输出均过 schema 校验且 violations 为空（builder 未泄进 --json）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const withPath = path.join(tmpDir, 'with', 'graph.json');
+      const withoutPath = path.join(tmpDir, 'without', 'graph.json');
+      writeGraph(withPath, baseGraph({ sourceCommit: sha, builder: FOREIGN_BUILDER }));
+      writeGraph(withoutPath, baseGraph({ sourceCommit: sha }));
+
+      const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+
+      for (const graphPath of [withPath, withoutPath]) {
+        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+        const report = JSON.parse(result.stdout);
+        expect(validateAgainstSchema(report, schema).violations).toEqual([]);
+        // 直接证明 builder 没被塞进报告顶层
+        expect(Object.keys(report)).not.toContain('builder');
+      }
+    });
+
+    /**
+     * 复审 F1（第二轮）—— 第一轮 `short()` 对非字符串 `sourceCommit` 直接 `.slice`，整条
+     * `graph-quality` 崩成 `exit 2`（`✗ 错误: 致命错误: sha.slice is not a function`）。
+     * 该路径真实可达：`validateGraphJsonShape` 不校验 `sourceCommit` 类型，`evaluateFreshness`
+     * 也容忍任意值。删掉 builder 键即恢复 exit 0 ⇒ 确为本特性引入的回归，且违反本特性自己的
+     * "advisory 一律不改 exit code"不变量。这里用 CLI 真子进程钉住该不变量。
+     */
+    it('F1：sourceCommit 畸形（非字符串）时，有/无 builder 的 exitCode 逐字相同且不为 2', () => {
+      initGitRepoWithCommit(tmpDir);
+      /** `sourceCommit` 为数字：类型系统禁止，但磁盘上的 JSON 完全可以是这样（守卫不校验它）。 */
+      const withMalformedSourceCommit = (extra: Partial<GraphJSON['graph']> = {}): GraphJSON => {
+        const graph = baseGraph(extra);
+        (graph.graph as { sourceCommit?: unknown }).sourceCommit = 123;
+        return graph;
+      };
+      const withPath = path.join(tmpDir, 'with', 'graph.json');
+      const withoutPath = path.join(tmpDir, 'without', 'graph.json');
+      writeGraph(withPath, withMalformedSourceCommit({ builder: FOREIGN_BUILDER }));
+      writeGraph(withoutPath, withMalformedSourceCommit());
+
+      const withResult = runCLI(['graph-quality', '--graph', withPath], { cwd: tmpDir });
+      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath], { cwd: tmpDir });
+
+      expect(withResult.exitCode).toBe(withoutResult.exitCode);
+      expect(withResult.exitCode).not.toBe(2);
+      expect(withResult.stdout).not.toContain('sha.slice');
+      expect(withResult.stderr).not.toContain('sha.slice');
+      // 仍应产出完整报告（含 builder advisory 行），而不是半路崩掉
+      expect(withResult.stdout).toContain('[builder]');
+    });
+
+    it('T-R5d：--status 输出不受 builder 影响（三字段逐字不变）', () => {
+      const graphPath = seedGraph(FOREIGN_BUILDER);
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+        cwd: tmpDir,
+      });
+
+      const status = JSON.parse(result.stdout);
+      expect(Object.keys(status).sort()).toEqual(['freshness', 'graphExists', 'overallVerdict']);
     });
   });
 });
