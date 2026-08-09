@@ -1,0 +1,120 @@
+{
+  "beforeEdges": 12714,
+  "afterEdges": 12718,
+  "beforeCallsEdges": 3843,
+  "afterCallsEdges": 3845,
+  "addedTotal": 5,
+  "removedTotal": 1,
+  "addedCalls": 3,
+  "removedCalls": 1,
+  "addedByRelation": {
+    "calls": 3,
+    "contains": 2
+  },
+  "removedByRelation": {
+    "calls": 1
+  },
+  "retargetPairs": 0,
+  "retargetPairsWithConfidenceChange": 0,
+  "unpairedAddedCalls": 3,
+  "unpairedRemovedCalls": 1,
+  "assertion2": {
+    "ok": 0,
+    "violations": 3,
+    "notEvaluated": 0,
+    "exportsIndexSupplied": true
+  },
+  "assertion3": {
+    "danglingAdded": 0
+  },
+  "verdicts": [
+    {
+      "id": "P2-只减不增（例外：retarget 对）",
+      "pass": false,
+      "detail": "不成对新增边 = 3（须为 0）；retarget 对 = 0"
+    },
+    {
+      "id": "断言 2 — 新增 calls 边 target 落在非 class 声明上的条数 = 0",
+      "pass": false,
+      "detail": "违规 3 / 通过 0 / 未判定 0"
+    },
+    {
+      "id": "断言 3 — 无悬空新增边",
+      "pass": true,
+      "detail": "悬空新增边 = 0"
+    }
+  ],
+  "allPass": false,
+  "dedupOrderHint": "非零 diff：归因到本阶段前须先排除 graph-builder.ts:422-437 第五路 dedup 的 first-write-wins 顺序敏感性（B5）",
+  "lists": {
+    "retargetPairs": [],
+    "unpairedAddedCalls": [
+      {
+        "source": "src/core/ast-analyzer.ts",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._extractImportStatement",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED"
+      },
+      {
+        "source": "src/core/tree-sitter-fallback.ts",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED"
+      }
+    ],
+    "unpairedRemovedCalls": [
+      {
+        "source": "plugins/spec-driver/scripts/lib/graph-refresh-executor.mjs::executeRefresh",
+        "relation": "calls",
+        "target": "plugins/spec-driver/scripts/lib/graph-bootstrap-status.mjs::attemptLocalGraphBuild",
+        "confidence": "INFERRED"
+      }
+    ],
+    "addedNonCalls": [
+      {
+        "source": "src/models/code-skeleton.ts",
+        "relation": "contains",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/models/code-skeleton.ts",
+        "relation": "contains",
+        "target": "src/models/code-skeleton.ts::NamedImportBinding",
+        "confidence": "EXTRACTED"
+      }
+    ],
+    "removedNonCalls": [],
+    "assertion2Violations": [
+      {
+        "source": "src/core/ast-analyzer.ts",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._extractImportStatement",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      },
+      {
+        "source": "src/core/tree-sitter-fallback.ts",
+        "relation": "calls",
+        "target": "src/models/code-skeleton.ts::buildNamedImportBindings",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      }
+    ],
+    "assertion2NotEvaluated": [],
+    "danglingAdded": []
+  }
+}

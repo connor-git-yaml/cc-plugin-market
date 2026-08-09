@@ -15,6 +15,8 @@
 import type { CodeSkeleton } from '../models/code-skeleton.js';
 import type { CallSite } from '../models/call-site.js';
 import type { ConfidenceTier, UnifiedEdge } from './unified-graph.js';
+import type { ReceiverTypeIndex } from './receiver-type-resolution.js';
+import { buildReceiverTypeIndex, resolveReceiverTypeCall } from './receiver-type-resolution.js';
 
 // ───────────────────────────────────────────────────────────
 // Public API
@@ -55,6 +57,7 @@ export function resolveCalls(
   const classMemberIndex = buildClassMemberIndex(codeSkeletons);
   const importIndex = buildImportIndex(codeSkeletons);
   const classMroIndex = buildClassMroIndex(codeSkeletons);
+  const receiverTypeIndex = buildReceiverTypeIndex(codeSkeletons);
 
   const edges: UnifiedEdge[] = [];
   for (const cs of callSites) {
@@ -63,6 +66,7 @@ export function resolveCalls(
       classMemberIndex,
       importIndex,
       classMroIndex,
+      receiverTypeIndex,
     });
     if (edge) edges.push(edge);
   }
@@ -82,6 +86,8 @@ interface ResolverIndices {
   importIndex: ReadonlyMap<string, ImportInfo>;
   /** "file::ClassName" → string[]，简化版 MRO（仅 superclass 名字，按定义序）*/
   classMroIndex: ReadonlyMap<string, ReadonlyArray<string>>;
+  /** F260 — file → export 条目（first-write-wins）+ default import 别名，供 D2b 六条件与门用 */
+  receiverTypeIndex: ReceiverTypeIndex;
 }
 
 interface ImportInfo {
@@ -119,6 +125,29 @@ interface ImportInfo {
    * 完整解法需要作用域感知的绑定模型，归 follow-up，不在本次修复范围。
    */
   suppressedDynamicAliases: ReadonlySet<string>;
+  /**
+   * F260 — 由**重命名 import 说明符**引入的**文件内本地绑定名**集合（`import { Foo as X }` 的 `X`）。
+   *
+   * ## 为什么记 local 而不是 imported
+   *
+   * `aliasToTarget` 的键此前记的是源导出名（`Foo`）——那是个本文件根本不存在的绑定，
+   * 收口办法是**不写这个键**，因此 `Foo` 天然查不到，无需另立集合拦截。反过来，
+   * 把 `Foo` 记进本集合还会误伤合法解析：同文件另有 `import { Foo } from './c.js'` 时
+   * 键 `Foo` 指向 c.ts 是**正确**的，拦掉就把「retarget」变成了「丢边」。
+   *
+   * 真正需要记住的是本地绑定名 `X`：它是文件里真实存在、且**我们无法表达其目标**的绑定
+   * ——`ImportInfo` 的值只有文件路径，拼出来会是 `a.ts::X.run` 这个不存在的节点（D1
+   * 否决「改成正确的键」的直接理由）。所以对 `X` 必须显式弃权。
+   *
+   * ## 为什么不能只靠「不写入」（与 suppressedDynamicAliases 同源的教训）
+   *
+   * 不写入只保证**本条 import** 不贡献键，挡不住别处把同名键写进表：dynamic 收敛的第二遍
+   * 会为块级作用域里的 `const { X } = await import('./c.js')` 写入键 `X`（静态未占用时），
+   * 于是顶层 `X.run()` 会被这条来自另一个作用域的绑定截胡，产出 medium 假边。三处消费点
+   * （Stage 2 import 回退 / Stage 3 查表 / P4 新分支条件 ③）因此在查 `aliasToTarget`
+   * 之前先查本集合，命中即弃权。
+   */
+  renamedImportAliases: ReadonlySet<string>;
 }
 
 export function buildModuleSymbolIndex(
@@ -144,6 +173,10 @@ export function buildClassMemberIndex(
   const idx = new Map<string, Set<string>>();
   for (const [filePath, sk] of codeSkeletons) {
     for (const exp of sk.exports) {
+      // F260：与 buildModuleSymbolIndex 的 re-export 跳过保持结构对称 —— re-export 是别名条目，
+      // 真身成员由目标文件贡献，拿别名 key 建成员索引会指向被图派生过滤掉的节点。
+      // 当前零行为变化：`extractReExports` 构造的 ExportSymbol 不含 members，下一行已 100% 跳过。
+      if (exp.kind === 're-export') continue;
       if (!exp.members || exp.members.length === 0) continue;
       // 仅 class / interface / struct / data_class 等"含方法"的类型才有意义
       const classKey = `${filePath}::${exp.name}`;
@@ -238,6 +271,40 @@ export function buildImportIndex(
     const aliasToTarget = new Map<string, string | null>();
     const starImportTargets = new Set<string>();
     const namespaceAliases = new Set<string>();
+    const renamedImportAliases = new Set<string>();
+
+    /**
+     * F260 — 具名 import 说明符的落表规则（两遍共用）。
+     *
+     * 带 `namedImportBindings` 的条目以它为**唯一**键源（该字段一旦产出即是完整绑定视图，
+     * 见 D1 产出规则）：`local === imported` 照旧落表；`local !== imported` 既不落
+     * `aliasToTarget` 也不落别处，只把 `local` 记进弃权集。不带该字段的条目逐字走旧路径。
+     *
+     * @param register 落表动作（第一遍直接写 aliasToTarget，第二遍走 dynamic 候选收集）
+     */
+    const forEachNamedBinding = (
+      imp: CodeSkeleton['imports'][number],
+      register: (name: string) => void,
+      onStar: () => void,
+    ): void => {
+      if (imp.namedImportBindings && imp.namedImportBindings.length > 0) {
+        for (const { imported, local } of imp.namedImportBindings) {
+          if (imported === '*') {
+            onStar();
+          } else if (local === imported) {
+            register(imported);
+          } else {
+            renamedImportAliases.add(local);
+          }
+        }
+        return;
+      }
+      for (const name of imp.namedImports ?? []) {
+        // import * 在 namedImports 中通常表现为 '*' 字符串
+        if (name === '*') onStar();
+        else register(name);
+      }
+    };
 
     // ── 第一遍：非 dynamic 条目（静态 ES import / require / 无 importType 的语言）──
     // 行为与 F242 之前逐字一致，dynamic 条目的存在不影响这里的任何写入。
@@ -245,15 +312,14 @@ export function buildImportIndex(
       if (imp.importType === 'dynamic') continue;
       const target = imp.resolvedPath ?? null;
       // namedImports：每个名字单独放索引
-      if (imp.namedImports && imp.namedImports.length > 0) {
-        for (const name of imp.namedImports) {
-          // import * 在 namedImports 中通常表现为 '*' 字符串
-          if (name === '*') {
+      if ((imp.namedImports?.length ?? 0) > 0 || (imp.namedImportBindings?.length ?? 0) > 0) {
+        forEachNamedBinding(
+          imp,
+          (name) => aliasToTarget.set(name, target),
+          () => {
             if (target) starImportTargets.add(target);
-          } else {
-            aliasToTarget.set(name, target);
-          }
-        }
+          },
+        );
       }
       // defaultImport：作为别名直接放
       if (imp.defaultImport) {
@@ -318,13 +384,15 @@ export function buildImportIndex(
       // 裸 `await import('x')` —— 无绑定名。dynamic specifier 是路径而非调用名，
       // 兜底别名只会是 'js' 之类的扩展名垃圾且会覆盖静态绑定，直接跳过。
       if (!hasBindingNames(imp)) continue;
-      for (const name of imp.namedImports ?? []) {
-        if (name === '*') {
+      // F260：dynamic 解构（`const { Foo as X } = await import('./a.js')`）同样可能重命名，
+      // 与静态分支共用同一条落表规则 —— 否则收口只堵住一半抽取路径（F259 教训）。
+      forEachNamedBinding(
+        imp,
+        (name) => addCandidate(name, 'named', target),
+        () => {
           if (target) starImportTargets.add(target);
-          continue;
-        }
-        addCandidate(name, 'named', target);
-      }
+        },
+      );
       // defaultImport 与 namedImports 同属「别名指代某个导出符号」一类，归为 named
       if (imp.defaultImport) addCandidate(imp.defaultImport, 'named', target);
       if (imp.namespaceImport) addCandidate(imp.namespaceImport, 'namespace', target);
@@ -361,6 +429,7 @@ export function buildImportIndex(
       starImportTargets,
       namespaceAliases,
       suppressedDynamicAliases,
+      renamedImportAliases,
     });
   }
   return idx;
@@ -375,13 +444,28 @@ export function buildClassMroIndex(
   // Codex P1 W-3 修订：用 bracket-aware split 而不是简单 split(',')，避免 `Generic[T, U]` 拆坏
   const SUPERCLASS_RE = /class\s+\w+\s*\(\s*([^)]+)\s*\)/;
   for (const [filePath, sk] of codeSkeletons) {
+    // F260 P5（B7 裁决）—— 语言分流必须用**正向**判据显式命中 ts/js。
+    // 「非 Python 即 TS」的反向判据会让 Java（`public class Foo extends Bar`）、Kotlin 等
+    // 骨架流进 TS 分支，而 collector-fingerprint 护栏对此**结构性抓不到**
+    // （plan §7.2 实测：pinned 图 TS/JS 侧 calls 边 = 0，该护栏对本改动无拒绝域）。
+    const isTsJs = sk.language === 'typescript' || sk.language === 'javascript';
     for (const exp of sk.exports) {
-      if (exp.kind !== 'class' && exp.kind !== 'interface') continue;
-      const match = SUPERCLASS_RE.exec(exp.signature);
-      if (!match || !match[1]) continue;
-      const supers = bracketAwareSplit(match[1])
+      // F260 P5（A7 裁决）—— TS/JS 分支内**仅 class 进 MRO**。
+      // 原判据 `kind !== 'class' && kind !== 'interface'` 把 interface 一并纳入处理范围；
+      // 只加 TS 分支而不收窄这行，`interface A extends B` 会进 MRO ⇒ lookupInMro 命中
+      // interface 条目 ⇒ interface-target 边 ⇒ 直接打破验收断言 2。
+      // 非 ts/js 分支**逐字保持**原判据（Python 无 interface kind，此收窄只对 TS/JS 生效）。
+      if (isTsJs ? exp.kind !== 'class' : exp.kind !== 'class' && exp.kind !== 'interface') continue;
+      // TS/JS class signature 形态是 `class Foo<T> extends Bar implements Baz`（不含圆括号），
+      // Python 形态是 `class Foo(Bar, Baz):`。两者只是「父类列表」的载体不同，
+      // 后续的 split / 剥泛型 / 过滤逐字共用，避免两套并行的清洗规则漂移。
+      const superList = isTsJs
+        ? extractTsExtendsClause(exp.signature)
+        : SUPERCLASS_RE.exec(exp.signature)?.[1];
+      if (!superList) continue;
+      const supers = bracketAwareSplit(superList)
         .map((s) => s.trim())
-        .map((s) => stripGenericParams(s)) // `Generic[T]` → `Generic`
+        .map((s) => stripGenericParams(s)) // `Generic[T]` / `Base<T>` → `Generic` / `Base`
         .filter((s) => s.length > 0 && s !== 'object');
       if (supers.length > 0) {
         idx.set(`${filePath}::${exp.name}`, supers);
@@ -389,6 +473,52 @@ export function buildClassMroIndex(
     }
   }
   return idx;
+}
+
+/**
+ * F260 P5 —— 从 TS/JS class signature 中截出 `extends` 子句（`implements` 之前的部分）。
+ *
+ * signature 由 `ast-analyzer.getSignature` 与 `typescript-mapper` 两条抽取路径产出，
+ * 形态恒为 `class Name<TypeParams> extends Super implements I1, I2`。两处都必须括号感知：
+ *
+ * - `extends` 也能出现在**类型参数**里（`class Box<T extends Cfg> extends Wrapper`），
+ *   按文本首次出现取会截出 `Cfg> extends Wrapper` 这种垃圾父类名；
+ * - `implements` 之后是接口名而非父类，不截断则 interface-target 边会经 MRO 流出（A7 同一红线）。
+ *
+ * 返回 undefined 表示该 signature 没有继承子句。
+ */
+function extractTsExtendsClause(signature: string): string | undefined {
+  const start = indexOfTopLevelKeyword(signature, 'extends');
+  if (start < 0) return undefined;
+  const clause = signature.slice(start + 'extends'.length);
+  const implementsAt = indexOfTopLevelKeyword(clause, 'implements');
+  return implementsAt < 0 ? clause : clause.slice(0, implementsAt);
+}
+
+/**
+ * 在**括号深度 0** 处查找独立单词 `keyword`，返回起始下标；未命中返回 -1。
+ *
+ * `=>` 里的 `>` 不参与深度计算 —— 否则 `class Fn<T extends (x: number) => void> extends Base`
+ * 的深度会在箭头处提前归零，把类型参数内部的 `extends` 误当成顶层继承子句。
+ */
+function indexOfTopLevelKeyword(input: string, keyword: string): number {
+  const isWordChar = (c: string | undefined): boolean => c !== undefined && /[\w$]/.test(c);
+  let depth = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === '[' || ch === '(' || ch === '<') depth++;
+    else if (ch === ']' || ch === ')' || (ch === '>' && input[i - 1] !== '=')) {
+      depth = Math.max(0, depth - 1);
+    } else if (
+      depth === 0 &&
+      input.startsWith(keyword, i) &&
+      !isWordChar(input[i - 1]) &&
+      !isWordChar(input[i + keyword.length])
+    ) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 /**
@@ -414,9 +544,17 @@ function bracketAwareSplit(input: string): string[] {
   return out;
 }
 
-/** 剥离 `Generic[T, U]` 末尾的参数化部分，返回 `Generic`。 */
+/**
+ * 剥离 `Generic[T, U]`（Python）/ `Base<T, U>`（TS/JS）末尾的参数化部分，返回裸类名。
+ *
+ * F260 P5：`<` 与 `[` 都要认 —— 只剥 `[` 时 TS 的 `extends Base<Cfg>` 会留下 `Base<Cfg>`，
+ * 索引全落空（recall 损失，非假边）。取两者中**先出现**的那个作为切点，
+ * 因为类名本身不含这两个字符，先出现的必是参数化部分的起点。
+ */
 function stripGenericParams(name: string): string {
-  const idx = name.indexOf('[');
+  const bracket = name.indexOf('[');
+  const angle = name.indexOf('<');
+  const idx = bracket < 0 ? angle : angle < 0 ? bracket : Math.min(bracket, angle);
   if (idx < 0) return name;
   return name.slice(0, idx).trim();
 }
@@ -453,6 +591,18 @@ function resolveOne(
     // 否则 fallthrough 到 Stage 3（可能是 cross-module 但 calleeKind 标错为 free）
     // 不立即返回，让后续 stage 处理
   }
+
+  // ─── F260 新分支：接收者类型解析（D2b 六条件与门）───
+  // 位置是 Stage 1 之后、Stage 2 之前：mapper 推断出的 receiverType 是**语义事实**，
+  // 优先级高于 Stage 2/3 赖以分流的首字母大小写启发式。六条件任一不成立即返回 null，
+  // 控制流原样落进下面的既有 stage（不出新边、不产占位）——R12 的「不夺路」由此保证。
+  const receiverEdge = resolveReceiverTypeCall(cs, {
+    source,
+    moduleSymbolIndex,
+    importView: importIndex.get(cs.callerFile),
+    receiverTypeIndex: indices.receiverTypeIndex,
+  });
+  if (receiverEdge) return receiverEdge;
 
   // ─── Stage 2: member（self.x / Class.x，Codex C-4 双重验证 + Codex P1 C-2 qualifier）───
   if (cs.calleeKind === 'member') {
@@ -503,7 +653,8 @@ function resolveOne(
       return mkEdge(source, `${classKey}.${cs.calleeName}`, 'medium');
     }
     // className 不在本模块 export 表 — 尝试 importIndex（Class 来自其他模块）
-    if (className) {
+    // F260 消费点 1：重命名 import 的本地绑定名一律弃权（见 ImportInfo.renamedImportAliases）。
+    if (className && !isRenamedImportAlias(cs, className, importIndex)) {
       const imports = importIndex.get(cs.callerFile);
       const classFile = imports?.aliasToTarget.get(className);
       if (classFile) {
@@ -527,7 +678,12 @@ function resolveOne(
     const lookupKey = cs.calleeQualifier ?? cs.calleeName;
     // 复审轮修复 1：该名字的 dynamic 绑定已被抑制时不查表 —— 否则同名静态兜底别名
     // 会顶替未知答案，把弃权变成一次伪装成确定结论的猜测。跳过后落既有 Stage 4 fallthrough。
-    if (imports && !imports.suppressedDynamicAliases.has(lookupKey)) {
+    // F260 消费点 2：同上，重命名 import 的本地绑定名在查表前拦截。
+    if (
+      imports &&
+      !imports.suppressedDynamicAliases.has(lookupKey) &&
+      !imports.renamedImportAliases.has(lookupKey)
+    ) {
       const target = imports.aliasToTarget.get(lookupKey);
       if (target) {
         const isStar = imports.starImportTargets.has(target);
@@ -583,6 +739,15 @@ function isSuppressedDynamicAlias(
   return importIndex.get(cs.callerFile)?.suppressedDynamicAliases.has(name) ?? false;
 }
 
+/** F260 — 该名字是否是 callerFile 里由重命名 import 引入的本地绑定名（见 ImportInfo 字段注释）。 */
+function isRenamedImportAlias(
+  cs: CallSiteWithFile,
+  name: string,
+  importIndex: ResolverIndices['importIndex'],
+): boolean {
+  return importIndex.get(cs.callerFile)?.renamedImportAliases.has(name) ?? false;
+}
+
 /**
  * 从 callerContext 字符串提取 className。
  *
@@ -636,7 +801,17 @@ function lookupInMro(
         return `${sameFileKey}.${methodName}`;
       }
       // 再尝试通过 import 表定位 superclass 所在 file
-      if (callerImports) {
+      // F260 P5 消费点 3（plan §4-D3 硬约束 4）：这里是 `aliasToTarget` 的第二个消费点，
+      // 同样必须在查表**之前**拦 renamedImportAliases。
+      //
+      // ⚠️ 「P2 不写幽灵键 ⇒ 这里自动安全」已被实测证伪（用例 R21）：不写入只保证**本条 import**
+      // 不贡献键，挡不住别处把同名键写进表 —— 顶层 `import { Base as Alias }` 之外，
+      // 块级作用域里的 `const { Alias } = await import('./other.js')` 会在 buildImportIndex
+      // 第二遍把键 `Alias` 写成 other.ts，于是 `class Sub extends Alias` 的父类被另一个作用域的
+      // 绑定截胡，产出 `other.ts::Alias.m` 这条确定性假边（真身是 base.ts 的 Base）。
+      // 在 P5 之前该路径对 TS 不可达（TS 的 MRO 索引恒为空），是 P5 打开了这个暴露面。
+      // 非 TS/JS 语言的 renamedImportAliases 恒为空集，此拦截对它们逐字无行为变化。
+      if (callerImports && !callerImports.renamedImportAliases.has(superName)) {
         const targetFile = callerImports.aliasToTarget.get(superName);
         if (targetFile) {
           const importedClassKey = `${targetFile}::${superName}`;

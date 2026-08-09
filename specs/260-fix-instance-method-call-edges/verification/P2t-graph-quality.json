@@ -1,0 +1,60 @@
+{
+  "graphPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/vigorous-mahavira-7de572/specs/260-fix-instance-method-call-edges/verification/graph-P2t.json",
+  "generatedAt": "2026-08-08T09:23:15.888Z",
+  "schemaVersion": "2.0",
+  "duplicateCanonicalId": {
+    "status": "pass",
+    "groups": []
+  },
+  "containsCoverage": {
+    "status": "pass",
+    "total": 6257,
+    "covered": 6257,
+    "ratio": 1,
+    "uncoveredIds": []
+  },
+  "orphanRatio": {
+    "status": "pass",
+    "totalSymbolNodes": 6257,
+    "rawOrphanCount": 0,
+    "exemptedByCategory": {
+      "entrypoint": 0,
+      "pure-type": 0,
+      "test-export": 0
+    },
+    "offendingRatio": 0,
+    "offendingIds": [],
+    "allNodeZeroDegreeRatio": 0.015352038115404976
+  },
+  "danglingEdges": {
+    "status": "pass",
+    "edges": []
+  },
+  "legacyAndIgnoredNodes": {
+    "status": "pass",
+    "legacyHashNodeIds": [],
+    "ignoredPathNodeIds": []
+  },
+  "freshness": {
+    "state": "dirty",
+    "recordedSourceCommit": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+    "currentHead": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+    "dirtyFiles": [
+      "specs/260-fix-instance-method-call-edges/verification/callsites-fingerprint.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/coverage-metric.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/dump-skeletons.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/edge-diff.mjs",
+      "src/core/ast-analyzer.ts",
+      "src/core/query-mappers/typescript-mapper.ts",
+      "src/core/tree-sitter-fallback.ts",
+      "src/knowledge-graph/call-resolver.ts",
+      "src/models/code-skeleton.ts",
+      "tests/unit/knowledge-graph/call-resolver.test.ts",
+      "tests/unit/typescript-mapper-callsite.test.ts"
+    ]
+  },
+  "overallVerdict": "pass",
+  "nextSteps": [
+    "图可能未反映未提交改动，如需精确请先提交或重新建图。"
+  ]
+}

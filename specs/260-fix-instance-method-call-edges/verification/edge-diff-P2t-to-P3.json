@@ -1,0 +1,246 @@
+{
+  "beforeEdges": 12720,
+  "afterEdges": 12732,
+  "beforeCallsEdges": 3846,
+  "afterCallsEdges": 3848,
+  "addedTotal": 12,
+  "removedTotal": 0,
+  "addedCalls": 2,
+  "removedCalls": 0,
+  "addedByRelation": {
+    "calls": 2,
+    "contains": 9,
+    "depends-on": 1
+  },
+  "removedByRelation": {},
+  "retargetPairs": 0,
+  "retargetPairsWithConfidenceChange": 0,
+  "unpairedAddedCalls": 2,
+  "unpairedRemovedCalls": 0,
+  "assertion2": {
+    "ok": 0,
+    "violations": 2,
+    "notEvaluated": 0,
+    "exportsIndexSupplied": true
+  },
+  "assertion3": {
+    "danglingAdded": 0
+  },
+  "addedEdgeClasses": {
+    "retarget": 0,
+    "new-symbol": 12,
+    "phase-expected": 0,
+    "unclassified": 0
+  },
+  "verdicts": [
+    {
+      "id": "P3-边集不得有减少（抽取层只加字段，resolver 未接线）",
+      "pass": true,
+      "detail": "减少边 = 0（须为 0）"
+    },
+    {
+      "id": "裁决 P2-1 — 新增边逐条归入三分类（retarget / 新符号自证 / 阶段期望）",
+      "pass": true,
+      "detail": "retarget 0 / 新符号自证 12 / 阶段期望 0 / **无法归类 0**（须为 0）"
+    },
+    {
+      "id": "断言 2 — 新增 calls 边 target 落在非 class 声明上的条数 = 0",
+      "applicable": false,
+      "pass": true,
+      "detail": "【裁决 P2-2：本断言只对 P4 / P5 新分支与 MRO 分支产出的 calls 边生效，P3 不适用；下列为信息项】违规 2 / 通过 0 / 未判定 0"
+    },
+    {
+      "id": "断言 3 — 无悬空新增边",
+      "pass": true,
+      "detail": "悬空新增边 = 0"
+    }
+  ],
+  "allPass": true,
+  "dedupOrderHint": "非零 diff：归因到本阶段前须先排除 graph-builder.ts:422-437 第五路 dedup 的 first-write-wins 顺序敏感性（B5）",
+  "lists": {
+    "retargetPairs": [],
+    "unpairedAddedCalls": [
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._handleMemberCall",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::resolveCallSiteReceiver",
+        "confidence": "INFERRED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper.extractCallSites",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "INFERRED"
+      }
+    ],
+    "unpairedRemovedCalls": [],
+    "addedNonCalls": [
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._receiverEnv",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts",
+        "relation": "depends-on",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding.receiverType",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding.soleImportBinding",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv.isSoleImportBinding",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv.lookupReceiverType",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::resolveCallSiteReceiver",
+        "confidence": "EXTRACTED"
+      }
+    ],
+    "removedNonCalls": [],
+    "assertion2Violations": [
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._handleMemberCall",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::resolveCallSiteReceiver",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper.extractCallSites",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      }
+    ],
+    "assertion2NotEvaluated": [],
+    "danglingAdded": [],
+    "addedNewSymbolEdges": [
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._handleMemberCall",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::resolveCallSiteReceiver",
+        "confidence": "INFERRED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper.extractCallSites",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "INFERRED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-mapper.ts::TypeScriptMapper._receiverEnv",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-mapper.ts",
+        "relation": "depends-on",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding.receiverType",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding.soleImportBinding",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv.isSoleImportBinding",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv.lookupReceiverType",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverBinding",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::ReceiverTypeEnv",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      },
+      {
+        "source": "src/core/query-mappers/typescript-receiver-env.ts",
+        "relation": "contains",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::resolveCallSiteReceiver",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "new-symbol"
+      }
+    ],
+    "addedUnclassifiedEdges": []
+  }
+}

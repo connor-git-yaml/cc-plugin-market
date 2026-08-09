@@ -1,0 +1,53 @@
+{
+  "graphPath": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/vigorous-mahavira-7de572/specs/260-fix-instance-method-call-edges/verification/graph-P0.json",
+  "generatedAt": "2026-08-08T08:12:29.119Z",
+  "schemaVersion": "2.0",
+  "duplicateCanonicalId": {
+    "status": "pass",
+    "groups": []
+  },
+  "containsCoverage": {
+    "status": "pass",
+    "total": 6254,
+    "covered": 6254,
+    "ratio": 1,
+    "uncoveredIds": []
+  },
+  "orphanRatio": {
+    "status": "pass",
+    "totalSymbolNodes": 6254,
+    "rawOrphanCount": 0,
+    "exemptedByCategory": {
+      "entrypoint": 0,
+      "pure-type": 0,
+      "test-export": 0
+    },
+    "offendingRatio": 0,
+    "offendingIds": [],
+    "allNodeZeroDegreeRatio": 0.01535813584006355
+  },
+  "danglingEdges": {
+    "status": "pass",
+    "edges": []
+  },
+  "legacyAndIgnoredNodes": {
+    "status": "pass",
+    "legacyHashNodeIds": [],
+    "ignoredPathNodeIds": []
+  },
+  "freshness": {
+    "state": "dirty",
+    "recordedSourceCommit": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+    "currentHead": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+    "dirtyFiles": [
+      "specs/260-fix-instance-method-call-edges/verification/callsites-fingerprint.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/coverage-metric.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/dump-skeletons.mjs",
+      "specs/260-fix-instance-method-call-edges/verification/edge-diff.mjs"
+    ]
+  },
+  "overallVerdict": "pass",
+  "nextSteps": [
+    "图可能未反映未提交改动，如需精确请先提交或重新建图。"
+  ]
+}

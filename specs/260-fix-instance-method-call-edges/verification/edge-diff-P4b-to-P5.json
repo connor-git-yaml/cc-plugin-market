@@ -1,0 +1,134 @@
+{
+  "beforeEdges": 12882,
+  "afterEdges": 12886,
+  "beforeCallsEdges": 3975,
+  "afterCallsEdges": 3977,
+  "addedTotal": 4,
+  "removedTotal": 0,
+  "addedCalls": 2,
+  "removedCalls": 0,
+  "addedByRelation": {
+    "calls": 2,
+    "depends-on": 2
+  },
+  "removedByRelation": {},
+  "retargetPairs": 0,
+  "retargetPairsWithConfidenceChange": 0,
+  "unpairedAddedCalls": 2,
+  "unpairedRemovedCalls": 0,
+  "assertion2": {
+    "ok": 1,
+    "violations": 1,
+    "notEvaluated": 0,
+    "exportsIndexSupplied": true
+  },
+  "assertion3": {
+    "danglingAdded": 0
+  },
+  "addedEdgeClasses": {
+    "retarget": 0,
+    "new-symbol": 0,
+    "new-endpoint-manual": 0,
+    "phase-expected": 2,
+    "unclassified": 2
+  },
+  "manualAuditRequired": 0,
+  "verdicts": [
+    {
+      "id": "P5-只增不减（例外：成对 retarget）",
+      "pass": true,
+      "detail": "不成对减少边 = 0（须为 0）；retarget 对 = 0"
+    },
+    {
+      "id": "裁决 P2-1 — 新增边逐条归入分类（retarget / 两端全新自证 / 单端新增待人工 / 阶段期望）",
+      "pass": false,
+      "detail": "retarget 0 / 两端全新自证 0 / 单端新增待人工核对 0 / 阶段期望 2 / **无法归类 2**（须为 0）"
+    },
+    {
+      "id": "M4 — 单端新增边（source/target 只有一端是本阶段新增）须**人工回源码核对**",
+      "notEvaluated": true,
+      "pass": true,
+      "detail": "待人工核对 0 条 —— 本项为 **notEvaluated**：机械层只判「归得了类」，**不构成「已核实为真」的证据**。unclassified = 0 ≠ 已核实；清单见 lists.addedManualAuditEdges，必须逐条回源码核对后写进 attribution。"
+    },
+    {
+      "id": "断言 2 — 新增 calls 边 target 落在非 class 声明上的条数 = 0",
+      "applicable": true,
+      "pass": false,
+      "detail": "违规 1 / 通过 1 / 未判定 0"
+    },
+    {
+      "id": "断言 3 — 无悬空新增边",
+      "pass": true,
+      "detail": "悬空新增边 = 0"
+    }
+  ],
+  "allPass": false,
+  "machineVerdictOnly": false,
+  "dedupOrderHint": "非零 diff：归因到本阶段前须先排除 graph-builder.ts:422-437 第五路 dedup 的 first-write-wins 顺序敏感性（B5）",
+  "lists": {
+    "retargetPairs": [],
+    "unpairedAddedCalls": [
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "calls",
+        "target": "src/core/grammar-manager.ts::GrammarManager.getInstance",
+        "confidence": "INFERRED"
+      },
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "INFERRED"
+      }
+    ],
+    "unpairedRemovedCalls": [],
+    "addedNonCalls": [
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "depends-on",
+        "target": "src/core/grammar-manager.ts",
+        "confidence": "EXTRACTED"
+      },
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "depends-on",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts",
+        "confidence": "EXTRACTED"
+      }
+    ],
+    "removedNonCalls": [],
+    "assertion2Violations": [
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "calls",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts::buildReceiverTypeEnv",
+        "confidence": "INFERRED",
+        "reason": "symbol 节点 exportKind=function"
+      }
+    ],
+    "assertion2NotEvaluated": [],
+    "danglingAdded": [],
+    "addedNewSymbolEdges": [],
+    "addedManualAuditEdges": [],
+    "addedUnclassifiedEdges": [
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "depends-on",
+        "target": "src/core/grammar-manager.ts",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "unclassified",
+        "sourceIsNew": false,
+        "targetIsNew": false
+      },
+      {
+        "source": "tests/unit/typescript-mapper-callsite.test.ts",
+        "relation": "depends-on",
+        "target": "src/core/query-mappers/typescript-receiver-env.ts",
+        "confidence": "EXTRACTED",
+        "addedEdgeClass": "unclassified",
+        "sourceIsNew": false,
+        "targetIsNew": false
+      }
+    ]
+  }
+}

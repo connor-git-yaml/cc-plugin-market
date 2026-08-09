@@ -1,0 +1,99 @@
+{
+  "graph": "/private/tmp/claude-501/-Users-connorlu-Desktop--workspace2-nosync-cc-plugin-market--claude-worktrees-vigorous-mahavira-7de572/343190fc-b793-4053-831a-d53c8994543e/scratchpad/p5b/art/graph-P5.json",
+  "sourceCommit": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+  "nodes": 7586,
+  "edges": 12886,
+  "callsEdges": 3977,
+  "headline": {
+    "methodNodes": 517,
+    "methodWithInEdge": 236,
+    "methodCoveragePct": 45.6,
+    "functionNodes": 1471,
+    "functionWithInEdge": 1315,
+    "functionCoveragePct": 89.4,
+    "gapPct": 43.8,
+    "gapRatio": 1.96
+  },
+  "memberNodesByKind": {
+    "property": {
+      "total": 2905,
+      "withInEdge": 2,
+      "pct": 0.1
+    },
+    "method": {
+      "total": 517,
+      "withInEdge": 236,
+      "pct": 45.6
+    },
+    "getter": {
+      "total": 3,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "staticmethod": {
+      "total": 2,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "classmethod": {
+      "total": 1,
+      "withInEdge": 0,
+      "pct": 0
+    }
+  },
+  "symbolNodesByExportKind": {
+    "function": {
+      "total": 1471,
+      "withInEdge": 1315,
+      "pct": 89.4
+    },
+    "interface": {
+      "total": 580,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "const": {
+      "total": 399,
+      "withInEdge": 2,
+      "pct": 0.5
+    },
+    "type": {
+      "total": 230,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "class": {
+      "total": 107,
+      "withInEdge": 81,
+      "pct": 75.7
+    },
+    "variable": {
+      "total": 21,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "enum": {
+      "total": 5,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "struct": {
+      "total": 4,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "data_class": {
+      "total": 2,
+      "withInEdge": 0,
+      "pct": 0
+    }
+  },
+  "legacy": {
+    "classMethodNodes": 3465,
+    "classMethodWithInEdge": 238,
+    "classMethodCoveragePct": 6.9,
+    "plainSymbolNodes": 2819,
+    "plainSymbolWithInEdge": 1398,
+    "plainSymbolCoveragePct": 49.6
+  }
+}

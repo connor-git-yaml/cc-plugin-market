@@ -18,6 +18,7 @@ import type {
   ParseError,
   Language,
 } from '../models/code-skeleton.js';
+import { buildNamedImportBindings } from '../models/code-skeleton.js';
 import { TreeSitterAnalyzer } from './tree-sitter-analyzer.js';
 import {
   resolveTsJsImportToAbsolute,
@@ -118,13 +119,18 @@ function extractImportsFromText(
     const isTypeOnly = match[0].includes('import type');
 
     const namedImportsStr = match[1] ?? match[4];
-    const namedImports = namedImportsStr
+    // F260 路径 4（正则最终兜底）：` as ` 右侧此前被直接丢弃，`namedImports` 只剩源导出名。
+    // 现在同时保留右侧本地绑定名，交 buildNamedImportBindings 按 D1 规则决定是否产出。
+    const specifiers = namedImportsStr
       ? namedImportsStr
           .replace(/[{}]/g, '')
           .split(',')
-          .map((s) => s.trim().split(/\s+as\s+/)[0]!)
-          .filter(Boolean)
-      : undefined;
+          .map((s) => s.trim().split(/\s+as\s+/))
+          .filter((parts) => Boolean(parts[0]))
+          .map((parts) => ({ imported: parts[0]!.trim(), local: parts[1]?.trim() }))
+      : [];
+    const namedImports = namedImportsStr ? specifiers.map((s) => s.imported) : undefined;
+    const namedImportBindings = buildNamedImportBindings(specifiers);
 
     const defaultImport = match[2] ?? match[3] ?? null;
     const resolvedPath = resolveTsJsImportToAbsolute(
@@ -139,6 +145,7 @@ function extractImportsFromText(
       isRelative,
       resolvedPath,
       namedImports: namedImports && namedImports.length > 0 ? namedImports : undefined,
+      ...(namedImportBindings ? { namedImportBindings } : {}),
       defaultImport,
       isTypeOnly,
       importType: isTypeOnly ? 'type-only' : 'static',

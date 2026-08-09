@@ -1,0 +1,897 @@
+{
+  "beforeTotal": 122933,
+  "afterTotal": 123065,
+  "distinctKeysBefore": 85402,
+  "distinctKeysAfter": 85479,
+  "addedCount": 132,
+  "removedCount": 0,
+  "zeroDiff": false,
+  "verdict": "指纹非零",
+  "positionFree": true,
+  "fingerprintFields": [
+    "callerFile",
+    "calleeName",
+    "calleeKind",
+    "calleeQualifier",
+    "callerContext",
+    "enclosingNamedContext"
+  ],
+  "excludedFields": [
+    "receiverType",
+    "receiverTypeSoleImportBinding"
+  ],
+  "lists": {
+    "onlyInAfter": [
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-mapper.ts",
+          "calleeName": "buildReceiverTypeEnv",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "TypeScriptMapper.extractCallSites",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-mapper.ts",
+          "calleeName": "resolveCallSiteReceiver",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "TypeScriptMapper._handleMemberCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "cur",
+          "callerContext": "stripParens",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "isDynamicImportCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "isRequireCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "child",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classNode",
+          "callerContext": "hasExtendsClause",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "child",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "child",
+          "callerContext": "hasExtendsClause",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "test",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "/\\bextends\\b/",
+          "callerContext": "hasExtendsClause",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classNode",
+          "callerContext": "classBucketName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "hasExtendsClause",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "classBucketName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "classBucketName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "memberHostBucket",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "has",
+          "calleeKind": "member",
+          "calleeQualifier": "THIS_REBINDING_FUNCTION_TYPES",
+          "callerContext": "resolveThisHostBucket",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "memberHostBucket",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveThisHostBucket",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "classBucketName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveThisHostBucket",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "annotation",
+          "callerContext": "classNameFromTypeAnnotation",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "typeNode",
+          "callerContext": "classNameFromTypeAnnotation",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "typeNode",
+          "callerContext": "classNameFromTypeAnnotation",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "classNameFromNewExpression",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "out",
+          "callerContext": "collectPatternNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "collectPatternNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "collectPatternNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "collectPatternNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "collectPatternNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "stripParens",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "declaratorValueIsImportSourced",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "declarator",
+          "callerContext": "declaratorValueIsImportSourced",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "isDynamicImportCall",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "declaratorValueIsImportSourced",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "value",
+          "callerContext": "declaratorValueIsImportSourced",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "isRequireCall",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "declaratorValueIsImportSourced",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "fn",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "fn",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "has",
+          "calleeKind": "member",
+          "calleeQualifier": "THIS_REBINDING_FUNCTION_TYPES",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "skipParenParents",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "args",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "call",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callee",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "isDynamicImportCall",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "stripParens",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "paramIsImportThenFirstParam",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "child",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "paramNode",
+          "callerContext": "isParameterProperty",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "isParameterProperty",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "constructorPropertyHost",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "method",
+          "callerContext": "constructorPropertyHost",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "memberHostBucket",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "constructorPropertyHost",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeEnv",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "nameBindings",
+          "callerContext": "bindName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "nameBindings",
+          "callerContext": "bindName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "receivers",
+          "callerContext": "bindReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "receivers",
+          "callerContext": "bindReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "registerImportBindings",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 11,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "bindName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 14,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "declaratorValueIsImportSourced",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 4,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "collectPatternNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 3,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "classNameFromTypeAnnotation",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "classNameFromNewExpression",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 10,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "bindReceiver",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "paramIsImportThenFirstParam",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "constructorPropertyHost",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "memberHostBucket",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "findChildType",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "has",
+          "calleeKind": "member",
+          "calleeQualifier": "NAMED_DECLARATION_TYPES",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "child",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 3,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "visit",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "visit",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeEnv",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "receivers",
+          "callerContext": "lookupReceiverType",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "nameBindings",
+          "callerContext": "isSoleImportBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "child",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "node",
+          "callerContext": "findChildType",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "n",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 3,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "namedChild",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "n",
+          "callerContext": "visit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "visit",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "registerImportBindings",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "memberNode",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 3,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "bind",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "lookupReceiverType",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "env",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 2,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "childForFieldName",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "objectNode",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "resolveThisHostBucket",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "classNameFromNewExpression",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCallSiteReceiver",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/core/query-mappers/typescript-receiver-env.ts",
+          "calleeName": "isSoleImportBinding",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "env",
+          "callerContext": "bind",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/models/call-site.ts",
+          "calleeName": "string",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "z",
+          "callerContext": "",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/models/call-site.ts",
+          "calleeName": "optional",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "z.string()",
+          "callerContext": "",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/models/call-site.ts",
+          "calleeName": "boolean",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "z",
+          "callerContext": "",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/models/call-site.ts",
+          "calleeName": "optional",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "z.boolean()",
+          "callerContext": "",
+          "enclosingNamedContext": ""
+        }
+      }
+    ],
+    "onlyInBefore": []
+  }
+}

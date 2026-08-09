@@ -13,8 +13,11 @@ import type {
   Language,
   Visibility,
 } from '../../models/code-skeleton.js';
+import { buildNamedImportBindings } from '../../models/code-skeleton.js';
 import type { CallSite, CalleeKind } from '../../models/call-site.js';
 import type { QueryMapper, MapperOptions } from './base-mapper.js';
+import type { ReceiverBinding, ReceiverTypeEnv } from './typescript-receiver-env.js';
+import { buildReceiverTypeEnv, resolveCallSiteReceiver } from './typescript-receiver-env.js';
 
 // ============================================================
 // Feature 152 — call site 抽取常量（与 PythonMapper 对齐）
@@ -220,6 +223,15 @@ function isMemberAbstract(node: Parser.SyntaxNode): boolean {
 
 export class TypeScriptMapper implements QueryMapper {
   readonly language: Language = 'typescript';
+
+  /**
+   * F260：当前 `extractCallSites` 调用的接收者类型环境（仅在该调用期间有值）。
+   *
+   * 走成员字段而非逐层透传，是为了把 `typescript-mapper` 侧的净增量压在预算内
+   * （plan §2.3：本文件已 1364 行，新逻辑一律落新文件）。`extractCallSites` 全程同步、
+   * 无 await，不存在重入窗口；`finally` 保证异常路径也复位。
+   */
+  private _receiverEnv: ReceiverTypeEnv | null = null;
 
   /**
    * 从 AST tree 提取导出符号
@@ -844,6 +856,15 @@ export class TypeScriptMapper implements QueryMapper {
 
     // 提取 named imports
     const namedImports: string[] = [];
+    // F260 路径 3（tree-sitter 静态 import 降级路径）：`import_specifier` 的 `alias` 字段
+    // 此前被整个丢弃，`namedImports` 因此只有源导出名。收集二元组供 buildNamedImportBindings
+    // 按 D1 规则决定是否产出 namedImportBindings。
+    const specifiers: Array<{ imported: string; local?: string }> = [];
+    const pushSpecifier = (specifier: Parser.SyntaxNode): void => {
+      const importedName = fieldText(specifier, 'name') ?? specifier.text;
+      namedImports.push(importedName);
+      specifiers.push({ imported: importedName, local: fieldText(specifier, 'alias') });
+    };
     let defaultImport: string | null = null;
 
     for (let i = 0; i < node.childCount; i++) {
@@ -862,8 +883,7 @@ export class TypeScriptMapper implements QueryMapper {
             for (let k = 0; k < clauseChild.childCount; k++) {
               const specifier = clauseChild.child(k);
               if (specifier?.type === 'import_specifier') {
-                const importedName = fieldText(specifier, 'name') ?? specifier.text;
-                namedImports.push(importedName);
+                pushSpecifier(specifier);
               }
             }
           } else if (clauseChild.type === 'namespace_import') {
@@ -879,8 +899,7 @@ export class TypeScriptMapper implements QueryMapper {
         for (let j = 0; j < child.childCount; j++) {
           const specifier = child.child(j);
           if (specifier?.type === 'import_specifier') {
-            const importedName = fieldText(specifier, 'name') ?? specifier.text;
-            namedImports.push(importedName);
+            pushSpecifier(specifier);
           }
         }
       }
@@ -894,11 +913,14 @@ export class TypeScriptMapper implements QueryMapper {
       }
     }
 
+    const namedImportBindings = buildNamedImportBindings(specifiers);
+
     return {
       moduleSpecifier,
       isRelative,
       resolvedPath: null,
       namedImports: namedImports.length > 0 ? namedImports : undefined,
+      ...(namedImportBindings ? { namedImportBindings } : {}),
       defaultImport,
       isTypeOnly,
     };
@@ -948,8 +970,15 @@ export class TypeScriptMapper implements QueryMapper {
     const out: CallSite[] = [];
     const callerContextStack: string[] = [];
 
-    this._walkCallSites(tree.rootNode, callerContextStack, out);
-    return out;
+    // F260 H4：先全文件建接收者类型环境，再走调用点。边建边出会让「同名第二个绑定 ⇒
+    // 歧义弃权」只对之后的调用点生效，文件开头的调用点已经带着错误类型出去了。
+    this._receiverEnv = buildReceiverTypeEnv(tree);
+    try {
+      this._walkCallSites(tree.rootNode, callerContextStack, out);
+      return out;
+    } finally {
+      this._receiverEnv = null;
+    }
   }
 
   /**
@@ -1201,33 +1230,38 @@ export class TypeScriptMapper implements QueryMapper {
 
     const calleeName = propertyNode.text;
     const qualifier = objectNode?.text ?? '';
+    // F260：接收者类型推断。裸 `this` / `super` / 无法推断的形态一律返回 undefined，
+    // 不夺既有 resolver 路径（R12 回归断言）。
+    const recv = this._receiverEnv
+      ? resolveCallSiteReceiver(this._receiverEnv, memberNode)
+      : undefined;
 
     // this.method() → member（无 qualifier，resolver 通过 callerContext 定位类）
     if (qualifier === 'this') {
-      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, undefined, enclosingCtx));
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, undefined, enclosingCtx, recv));
       return;
     }
 
     // super.method() → super
     if (qualifier === 'super') {
-      out.push(this._mkCallSite(calleeName, 'super', callNode, callerCtx, undefined, enclosingCtx));
+      out.push(this._mkCallSite(calleeName, 'super', callNode, callerCtx, undefined, enclosingCtx, recv));
       return;
     }
 
     // 首字母大写（Class.method）→ member + qualifier
     if (qualifier && /^[A-Z]/.test(qualifier)) {
-      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, qualifier, enclosingCtx));
+      out.push(this._mkCallSite(calleeName, 'member', callNode, callerCtx, qualifier, enclosingCtx, recv));
       return;
     }
 
     // 首字母小写（mod.fn）→ cross-module + qualifier（与 PythonMapper 对齐）
     if (qualifier) {
-      out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, qualifier, enclosingCtx));
+      out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, qualifier, enclosingCtx, recv));
       return;
     }
 
     // 无 qualifier 兜底 → cross-module
-    out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, undefined, enclosingCtx));
+    out.push(this._mkCallSite(calleeName, 'cross-module', callNode, callerCtx, undefined, enclosingCtx, recv));
   }
 
   /**
@@ -1347,6 +1381,7 @@ export class TypeScriptMapper implements QueryMapper {
     callerContext: string | undefined,
     calleeQualifier?: string,
     enclosingNamedContext?: string,
+    receiver?: ReceiverBinding,
   ): CallSite {
     const cs: CallSite = {
       calleeName,
@@ -1359,6 +1394,11 @@ export class TypeScriptMapper implements QueryMapper {
     if (callerContext !== undefined) cs.callerContext = callerContext;
     if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
     if (enclosingNamedContext !== undefined) cs.enclosingNamedContext = enclosingNamedContext;
+    // F260：两个字段同源产出，不存在「类型有、判据无」的半开组合（D2 定稿理由 2）
+    if (receiver !== undefined) {
+      cs.receiverType = receiver.receiverType;
+      cs.receiverTypeSoleImportBinding = receiver.soleImportBinding;
+    }
     return cs;
   }
 }

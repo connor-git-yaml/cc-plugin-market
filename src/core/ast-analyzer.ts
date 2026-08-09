@@ -11,10 +11,12 @@ import type {
   ExportKind,
   ImportReference,
   ImportSemanticType,
+  NamedImportBinding,
   MemberInfo,
   Language,
   Visibility,
 } from '../models/code-skeleton.js';
+import { buildNamedImportBindings } from '../models/code-skeleton.js';
 import { analyzeFallback } from './tree-sitter-fallback.js';
 import { LanguageAdapterRegistry } from '../adapters/language-adapter-registry.js';
 import type { AnalyzeFileOptions } from '../adapters/language-adapter.js';
@@ -470,6 +472,13 @@ function extractImports(
     const namedImports = decl.getNamedImports().map((n) => n.getName());
     const defaultImport = decl.getDefaultImport()?.getText() ?? null;
 
+    // F260 路径 1（ts-morph 静态 import，生产主路径）：`getName()` 返回源导出名，
+    // 本地绑定名在 `getAliasNode()`。二者不同的说明符会让 `namedImports` 记入一个
+    // 本文件不存在的绑定名，见 ImportReference.namedImportBindings 的字段注释。
+    const namedImportBindings = buildNamedImportBindings(
+      decl.getNamedImports().map((n) => ({ imported: n.getName(), local: n.getAliasNode()?.getText() })),
+    );
+
     // 派生 importType（WARN-1 v2 修订）：
     //   (a) 顶层 `import type` → type-only
     //   (b) 否则若没有 default + 没有 namespace + 所有 named import 均为 type-only → type-only
@@ -500,6 +509,7 @@ function extractImports(
       isRelative,
       resolvedPath,
       namedImports: namedImports.length > 0 ? namedImports : undefined,
+      ...(namedImportBindings ? { namedImportBindings } : {}),
       defaultImport,
       // F242：`import * as ns` 的 namespace 绑定此前只用于 importType 分类、从未落表，
       // 导致 `ns.fn()` 在 call-resolver Stage 3 无 alias 可查（与动态 import 同源遗漏）
@@ -647,19 +657,34 @@ function stripParens(node: Node | undefined): Node | undefined {
  * rename 口径与静态 import 的 `ImportSpecifier.getName()` 逐字一致：记**源导出名**
  * （`{ a: c }` 记 `'a'`），不记本地别名——两种 import 形态的 resolver 消费行为保持对称。
  * 数组解构（`const [x] = await import(...)`）无对应 import 语义，不产出绑定。
+ *
+ * F260（路径 2）：本地别名不再被丢弃，而是与源导出名一起落 `namedImportBindings`
+ * （产出规则见 `buildNamedImportBindings`），让 resolver 能对重命名项弃权而非造假边。
  */
-function bindingNamesOf(nameNode: Node): { namedImports?: string[]; namespaceImport?: string } {
+function bindingNamesOf(nameNode: Node): {
+  namedImports?: string[];
+  namespaceImport?: string;
+  namedImportBindings?: NamedImportBinding[];
+} {
   if (Node.isIdentifier(nameNode)) {
     return { namespaceImport: nameNode.getText() };
   }
   if (Node.isObjectBindingPattern(nameNode)) {
-    const names: string[] = [];
+    const specifiers: Array<{ imported: string; local: string }> = [];
     for (const element of nameNode.getElements()) {
       // rest 元素（`const { ...rest } = ...`）无具体导出名，跳过
       if (element.getDotDotDotToken()) continue;
-      names.push(element.getPropertyNameNode()?.getText() ?? element.getName());
+      specifiers.push({
+        imported: element.getPropertyNameNode()?.getText() ?? element.getName(),
+        local: element.getName(),
+      });
     }
-    return names.length > 0 ? { namedImports: names } : {};
+    if (specifiers.length === 0) return {};
+    const namedImportBindings = buildNamedImportBindings(specifiers);
+    return {
+      namedImports: specifiers.map((s) => s.imported),
+      ...(namedImportBindings ? { namedImportBindings } : {}),
+    };
   }
   return {};
 }

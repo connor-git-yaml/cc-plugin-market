@@ -726,3 +726,65 @@ describe('ast-analyzer — F242 动态 import 绑定抽取', () => {
     expect(imp!.namespaceImport).toBeUndefined();
   });
 });
+
+// ───────────────────────────────────────────────────────────
+// F260 P4b W-C —— `buildNamedImportBindings` 的 **ts-morph 静态 import 主路径**（路径 1）
+//
+// D1 的产出规则集中在单点 helper，但四条生产调用路径里此前只有 tree-sitter 那条
+// （M13）有测试。主路径（`extractImports` → `decl.getNamedImports()` +
+// `n.getAliasNode()`）的 `{imported, local}` 方向零覆盖 —— 把二元组写反在全量测试里
+// 不会红。本用例走真实抽取钉死方向。
+// ───────────────────────────────────────────────────────────
+
+describe('F260 P4b W-C — ts-morph 静态 import 主路径产出 namedImportBindings（路径 1）', () => {
+  beforeEach(() => {
+    LanguageAdapterRegistry.resetInstance();
+    bootstrapAdapters();
+  });
+
+  afterEach(() => {
+    resetProject();
+    LanguageAdapterRegistry.resetInstance();
+  });
+
+  async function importOfMain(code: string, specifier: string) {
+    const filePath = createTempFile(code);
+    try {
+      const skeleton = await analyzeFile(filePath);
+      expect(skeleton.parserUsed, '本用例必须走 ts-morph 主路径').toBe('ts-morph');
+      return skeleton.imports.find((i) => i.moduleSpecifier === specifier);
+    } finally {
+      cleanup(filePath);
+    }
+  }
+
+  it('W-C1 — `import { Foo as ExternalFoo } from "./a.js"`：imported=源导出名，local=本地绑定名', async () => {
+    const imp = await importOfMain(
+      "import { Foo as ExternalFoo } from './a.js';\nexport const use = () => new ExternalFoo();\n",
+      './a.js',
+    );
+    expect(imp).toBeDefined();
+    // 方向钉死：写反会让 resolver 拿 `ExternalFoo` 当源导出名去拼 target
+    expect(imp!.namedImportBindings).toEqual([{ imported: 'Foo', local: 'ExternalFoo' }]);
+    expect(imp!.namedImports).toEqual(['Foo']);
+  });
+
+  it('W-C1b — 混合重命名与未重命名说明符时，namedImportBindings 是**完整**绑定视图', async () => {
+    const imp = await importOfMain(
+      "import { Foo as ExternalFoo, Bar } from './a.js';\nexport const use = () => [ExternalFoo, Bar];\n",
+      './a.js',
+    );
+    expect(imp!.namedImportBindings).toEqual([
+      { imported: 'Foo', local: 'ExternalFoo' },
+      { imported: 'Bar', local: 'Bar' },
+    ]);
+  });
+
+  it('W-C1c — 无任何重命名说明符时不产出该字段（D1 产出规则，保旧行为零变化）', async () => {
+    const imp = await importOfMain(
+      "import { Foo, Bar } from './a.js';\nexport const use = () => [Foo, Bar];\n",
+      './a.js',
+    );
+    expect(imp!.namedImportBindings).toBeUndefined();
+  });
+});

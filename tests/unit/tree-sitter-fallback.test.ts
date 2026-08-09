@@ -1,11 +1,12 @@
 /**
  * tree-sitter-fallback 单元测试
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { analyzeFallback } from '../../src/core/tree-sitter-fallback.js';
+import { TreeSitterAnalyzer } from '../../src/core/tree-sitter-analyzer.js';
 
 describe('analyzeFallback', () => {
   let tempDir: string;
@@ -183,3 +184,52 @@ describe('WARN-2 v2：正则降级路径不会被字符串/注释中的伪 requi
   });
 });
 
+// ═══════════════════════════════════════════════════════════
+// F260 P4b W-C（第二腿）—— 正则最终兜底路径（路径 4）
+//
+// **本腿未按 plan §13 W-C 的字面完成，原因是该路径结构性不可达，如实登记而非绕过。**
+//
+// 实测（`analyzeFallback` + 打断 tree-sitter，四种 import 形态各一条）：
+//   static / static-双引号 / dynamic `import('x')` / `require('x')` —— **imports 全部为 `[]`**。
+// 根因：`sanitizeForImportRegex`（WARN-2 v3）把字符串字面量**连同定界引号**一并抹成空格，
+// 而三条正则（`importRe` / `dynamicRe` / `requireRe`）都要求 `['"]…['"]`，于是一条都命中不了。
+// ⇒ F260 在该函数里加的 `buildNamedImportBindings` 调用（路径 4）是**不可达的死代码**，
+//    无法写出「产出 namedImportBindings」的行为断言。
+//
+// 该缺陷**早于 F260**（`git show HEAD:` 核实过 sanitized 用法在 HEAD 上已存在），
+// 与本次收口无关，按「不自行添加未要求的修复」**本轮不修**。
+// 这里改立**现状锚**：缺陷被修好的那天这两条会 fail-loud，逼回来补真正的 W-C2 行为用例。
+// ═══════════════════════════════════════════════════════════
+
+describe('F260 P4b W-C 第二腿 — 正则兜底路径当前不可达（现状锚，不是期望行为）', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f260-p4b-regex-'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it.each([
+    ['static-单引号', "import { Foo as ExternalFoo } from './a.js';\nexport const y = 1;\n"],
+    ['static-双引号', 'import { Foo } from "./a.js";\nexport const y = 1;\n'],
+    ['dynamic', "export const m = import('./a.js');\n"],
+    ['commonjs-require', "export const m = require('./a.js');\n"],
+  ])('W-C2-anchor(%s) — 落到正则兜底后抽不到任何 import', async (id, code) => {
+    const spy = vi.spyOn(TreeSitterAnalyzer, 'getInstance').mockImplementation(() => {
+      throw new Error('forced tree-sitter unavailable (F260 P4b W-C)');
+    });
+    const filePath = path.join(tempDir, 'anchor.ts');
+    fs.writeFileSync(filePath, code, 'utf-8');
+    const skeleton = await analyzeFallback(filePath, { projectRoot: tempDir });
+    // 前提钉死：确实进了 tree-sitter 分支并抛错 ⇒ 控制流必然落到 regexFallback
+    expect(spy).toHaveBeenCalled();
+    expect(
+      skeleton.imports,
+      `${id}：若此处不再为空，说明 sanitizer 缺陷已修 —— 请回来补 W-C2 的 namedImportBindings 行为用例`,
+    ).toEqual([]);
+  });
+});

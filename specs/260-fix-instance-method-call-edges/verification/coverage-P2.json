@@ -1,0 +1,99 @@
+{
+  "graph": "/Users/connorlu/Desktop/.workspace2.nosync/cc-plugin-market/.claude/worktrees/vigorous-mahavira-7de572/specs/260-fix-instance-method-call-edges/verification/graph-P2.json",
+  "sourceCommit": "0d3e385f4927bf2b83f5f8d92b5cade0f5326e86",
+  "nodes": 7555,
+  "edges": 12718,
+  "callsEdges": 3845,
+  "headline": {
+    "methodNodes": 515,
+    "methodWithInEdge": 152,
+    "methodCoveragePct": 29.5,
+    "functionNodes": 1466,
+    "functionWithInEdge": 1310,
+    "functionCoveragePct": 89.4,
+    "gapPct": 59.9,
+    "gapRatio": 3.03
+  },
+  "memberNodesByKind": {
+    "property": {
+      "total": 2891,
+      "withInEdge": 2,
+      "pct": 0.1
+    },
+    "method": {
+      "total": 515,
+      "withInEdge": 152,
+      "pct": 29.5
+    },
+    "getter": {
+      "total": 3,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "staticmethod": {
+      "total": 2,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "classmethod": {
+      "total": 1,
+      "withInEdge": 0,
+      "pct": 0
+    }
+  },
+  "symbolNodesByExportKind": {
+    "function": {
+      "total": 1466,
+      "withInEdge": 1310,
+      "pct": 89.4
+    },
+    "interface": {
+      "total": 574,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "const": {
+      "total": 399,
+      "withInEdge": 2,
+      "pct": 0.5
+    },
+    "type": {
+      "total": 229,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "class": {
+      "total": 107,
+      "withInEdge": 81,
+      "pct": 75.7
+    },
+    "variable": {
+      "total": 21,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "enum": {
+      "total": 5,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "struct": {
+      "total": 4,
+      "withInEdge": 0,
+      "pct": 0
+    },
+    "data_class": {
+      "total": 2,
+      "withInEdge": 0,
+      "pct": 0
+    }
+  },
+  "legacy": {
+    "classMethodNodes": 3449,
+    "classMethodWithInEdge": 154,
+    "classMethodCoveragePct": 4.5,
+    "plainSymbolNodes": 2807,
+    "plainSymbolWithInEdge": 1393,
+    "plainSymbolCoveragePct": 49.6
+  }
+}

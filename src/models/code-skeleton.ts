@@ -156,8 +156,53 @@ export const ImportReferenceSchema = z.object({
    * `m.fn()` 一类调用能走 Stage 3 qualifier 解析，而非产 `?::` 占位后被丢弃。
    */
   namespaceImport: z.string().optional(),
+  /**
+   * 具名 import 的「源导出名 → 文件内绑定名」二元组视图 — F260 新增（可选，向后兼容）。
+   *
+   * `namedImports` 记的是**源导出名**（`import { Foo as ExternalFoo }` 记 `'Foo'`），
+   * 消费方却普遍把它当**文件内绑定名**用 —— `call-resolver.buildImportIndex` 就据此写
+   * `aliasToTarget` 的键，于是表里出现一个本文件根本没有的绑定名 `Foo`。文件里恰好有
+   * 别的东西叫 `Foo` 时，`Foo.run()` 会解析出确定性假边（F260 H1）。
+   *
+   * 不改 `namedImports` 语义而新增字段的理由（plan D1）：`namedImports` 的消费面越过
+   * graph 层，波及 code-slice 优先级、prompt 拼装与 Python dot-relative 展开，
+   * 改语义的 blast radius 与收益不成比例。
+   *
+   * **产出规则**：仅当该条 import 语句**至少有一个重命名说明符**时产出；一旦产出即为该
+   * 条目 `namedImports` 的**完整**绑定视图（含未重命名项）—— 否则 `import { Foo, Foo as B }`
+   * 形态下会误杀合法绑定。无重命名的条目不产出该字段，消费方逐字保持旧行为
+   * （Python / Java / Go / 旧 baseline 零变化）。
+   *
+   * 消费方：`call-resolver.buildImportIndex` 两遍消费 —— `local === imported` 照旧写
+   * `aliasToTarget`；`local !== imported` 既不写 `aliasToTarget` 也不写别处，`local`
+   * 记入 `ImportInfo.renamedImportAliases` 供三处消费点在查表前拦截。
+   */
+  namedImportBindings: z
+    .array(z.object({ imported: z.string().min(1), local: z.string().min(1) }))
+    .optional(),
 });
 export type ImportReference = z.infer<typeof ImportReferenceSchema>;
+
+/** 单个具名 import 说明符的绑定二元组（`import { imported as local }`）。 */
+export type NamedImportBinding = NonNullable<ImportReference['namedImportBindings']>[number];
+
+/**
+ * F260 — `namedImportBindings` 的**唯一**产出规则实现（plan D1）。
+ *
+ * 四条 TS/JS import 抽取路径（ts-morph 静态 / ts-morph dynamic 解构 / tree-sitter 静态 /
+ * 正则兜底）共用本函数，规则因此只有一处定义：**至少一个说明符重命名才产出，产出即为完整
+ * 绑定视图**。F259 的教训是「两个函数协同才成立的隐式耦合」会静默失效 —— 把规则复制到
+ * 四个抽取点等于埋四份漂移风险，故此处集中。
+ *
+ * @param specifiers 逐个说明符的 `{ imported, local }`；`local` 缺省表示未重命名。
+ * @returns 存在重命名时返回完整绑定列表，否则返回 `undefined`（调用方不写该字段）。
+ */
+export function buildNamedImportBindings(
+  specifiers: ReadonlyArray<{ imported: string; local?: string | null | undefined }>,
+): NamedImportBinding[] | undefined {
+  const bindings = specifiers.map((s) => ({ imported: s.imported, local: s.local || s.imported }));
+  return bindings.some((b) => b.local !== b.imported) ? bindings : undefined;
+}
 
 /** 解析错误 */
 export const ParseErrorSchema = z.object({

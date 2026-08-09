@@ -1,0 +1,4048 @@
+{
+  "beforeTotal": 123237,
+  "afterTotal": 123260,
+  "distinctKeysBefore": 123237,
+  "distinctKeysAfter": 123260,
+  "addedCount": 166,
+  "removedCount": 143,
+  "zeroDiff": false,
+  "verdict": "指纹非零",
+  "positionFree": false,
+  "fingerprintFields": [
+    "callerFile",
+    "line",
+    "column",
+    "calleeName",
+    "calleeKind",
+    "calleeQualifier",
+    "callerContext",
+    "enclosingNamedContext"
+  ],
+  "excludedFields": [
+    "receiverType",
+    "receiverTypeSoleImportBinding"
+  ],
+  "lists": {
+    "onlyInAfter": [
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "56",
+          "column": "28",
+          "calleeName": "buildModuleSymbolIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "57",
+          "column": "27",
+          "calleeName": "buildClassMemberIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "58",
+          "column": "22",
+          "calleeName": "buildImportIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "59",
+          "column": "24",
+          "calleeName": "buildClassMroIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "60",
+          "column": "28",
+          "calleeName": "buildReceiverTypeIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "64",
+          "column": "17",
+          "calleeName": "resolveOne",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "71",
+          "column": "14",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "edges",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "156",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "158",
+          "column": "18",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "163",
+          "column": "6",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "names",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "165",
+          "column": "4",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "173",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "183",
+          "column": "26",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "185",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "memberNames",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "187",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "197",
+          "column": "4",
+          "calleeName": "Boolean",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "hasBindingNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "198",
+          "column": "4",
+          "calleeName": "Boolean",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "hasBindingNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "216",
+          "column": "18",
+          "calleeName": "pop",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imp.moduleSpecifier.split('.')",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "216",
+          "column": "18",
+          "calleeName": "split",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imp.moduleSpecifier",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "217",
+          "column": "2",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "218",
+          "column": "2",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "269",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "271",
+          "column": "26",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "272",
+          "column": "30",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "273",
+          "column": "29",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "274",
+          "column": "33",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "293",
+          "column": "12",
+          "calleeName": "onStar",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "295",
+          "column": "12",
+          "calleeName": "register",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "297",
+          "column": "12",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "renamedImportAliases",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "304",
+          "column": "26",
+          "calleeName": "onStar",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "305",
+          "column": "13",
+          "calleeName": "register",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "316",
+          "column": "8",
+          "calleeName": "forEachNamedBinding",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "318",
+          "column": "20",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "<arrow:318:10>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "320",
+          "column": "24",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "starImportTargets",
+          "callerContext": "<arrow:319:10>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "326",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "331",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "332",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "namespaceAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "361",
+          "column": "11",
+          "calleeName": "hasBindingNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "362",
+          "column": "8",
+          "calleeName": "registerSpecifierFallback",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "367",
+          "column": "30",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "368",
+          "column": "37",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "374",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "dynamicCandidates",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "376",
+          "column": "19",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "377",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "dynamicCandidates",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "379",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "379",
+          "column": "19",
+          "calleeName": "dynamicBindingKey",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "386",
+          "column": "11",
+          "calleeName": "hasBindingNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "389",
+          "column": "6",
+          "calleeName": "forEachNamedBinding",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "391",
+          "column": "18",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "<arrow:391:8>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "393",
+          "column": "22",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "starImportTargets",
+          "callerContext": "<arrow:392:8>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "397",
+          "column": "29",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "398",
+          "column": "31",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "406",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "suppressedDynamicAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "409",
+          "column": "19",
+          "calleeName": "next",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants.values()",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "409",
+          "column": "19",
+          "calleeName": "values",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "414",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "suppressedDynamicAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "417",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "423",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "424",
+          "column": "44",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "namespaceAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "427",
+          "column": "4",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "441",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "449",
+          "column": "20",
+          "calleeName": "exec",
+          "calleeKind": "member",
+          "calleeQualifier": "SUPERCLASS_RE",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "451",
+          "column": "21",
+          "calleeName": "bracketAwareSplit",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "451",
+          "column": "21",
+          "calleeName": "filter",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])\n        .map((s) => s.trim())\n        .map((s) => stripGenericParams(s))",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "451",
+          "column": "21",
+          "calleeName": "map",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])\n        .map((s) => s.trim())",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "451",
+          "column": "21",
+          "calleeName": "map",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "452",
+          "column": "20",
+          "calleeName": "trim",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "s",
+          "callerContext": "<arrow:452:13>",
+          "enclosingNamedContext": "buildClassMroIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "453",
+          "column": "20",
+          "calleeName": "stripGenericParams",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "<arrow:453:13>",
+          "enclosingNamedContext": "buildClassMroIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "456",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "474",
+          "column": "61",
+          "calleeName": "max",
+          "calleeKind": "member",
+          "calleeQualifier": "Math",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "476",
+          "column": "26",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "out",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "482",
+          "column": "22",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "out",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "488",
+          "column": "14",
+          "calleeName": "indexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "490",
+          "column": "9",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "490",
+          "column": "9",
+          "calleeName": "trim",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name.slice(0, idx)",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "507",
+          "column": "17",
+          "calleeName": "resolveSourceId",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "511",
+          "column": "25",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "517",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "localExports",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "518",
+          "column": "7",
+          "calleeName": "isSuppressedDynamicAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "520",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "530",
+          "column": "23",
+          "calleeName": "resolveReceiverTypeCall",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "533",
+          "column": "16",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "545",
+          "column": "30",
+          "calleeName": "isSuppressedDynamicAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "546",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "554",
+          "column": "22",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "555",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports?.namespaceAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "556",
+          "column": "25",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "558",
+          "column": "17",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "565",
+          "column": "44",
+          "calleeName": "extractClassName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "566",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "566",
+          "column": "21",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex.get(cs.callerFile)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "569",
+          "column": "10",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "569",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(classKey)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "570",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "573",
+          "column": "22",
+          "calleeName": "lookupInMro",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "578",
+          "column": "8",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "581",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "584",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "588",
+          "column": "22",
+          "calleeName": "isRenamedImportAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "589",
+          "column": "22",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "590",
+          "column": "24",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports?.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "593",
+          "column": "12",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "593",
+          "column": "12",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(remoteClassKey)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "594",
+          "column": "17",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "597",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "601",
+          "column": "11",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "608",
+          "column": "20",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "615",
+          "column": "7",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.suppressedDynamicAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "616",
+          "column": "7",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.renamedImportAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "618",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "620",
+          "column": "23",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.starImportTargets",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "629",
+          "column": "22",
+          "calleeName": "extractClassName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "632",
+          "column": "24",
+          "calleeName": "lookupInMro",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "637",
+          "column": "8",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "640",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "653",
+          "column": "11",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "670",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "isSuppressedDynamicAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "670",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex.get(cs.callerFile)?.suppressedDynamicAliases",
+          "callerContext": "isSuppressedDynamicAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "679",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "isRenamedImportAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "679",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex.get(cs.callerFile)?.renamedImportAliases",
+          "callerContext": "isRenamedImportAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "692",
+          "column": "18",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerContext",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "695",
+          "column": "23",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerContext",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "696",
+          "column": "25",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "beforeMethod",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "698",
+          "column": "9",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "beforeMethod",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "714",
+          "column": "18",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "718",
+          "column": "17",
+          "calleeName": "shift",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "721",
+          "column": "8",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "visited",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "722",
+          "column": "4",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "visited",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "724",
+          "column": "19",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMroIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "729",
+          "column": "23",
+          "calleeName": "split",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "key",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "731",
+          "column": "10",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "731",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(sameFileKey)",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "736",
+          "column": "27",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerImports.aliasToTarget",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "739",
+          "column": "14",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "739",
+          "column": "14",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(importedClassKey)",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "742",
+          "column": "10",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "746",
+          "column": "6",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "770",
+          "column": "17",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "772",
+          "column": "11",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "772",
+          "column": "11",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex.get(file)",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "774",
+          "column": "20",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "775",
+          "column": "21",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "776",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "776",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(`${file}::${className}`)",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "798",
+          "column": "6",
+          "calleeName": "isAddressable",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveSourceId",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "801",
+          "column": "6",
+          "calleeName": "isAddressable",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveSourceId",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "88",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "90",
+          "column": "25",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "94",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "exportByName",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "95",
+          "column": "22",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "96",
+          "column": "41",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "members",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "97",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "exportByName",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "99",
+          "column": "33",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "101",
+          "column": "29",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "defaultImportAliases",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "103",
+          "column": "4",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildReceiverTypeIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "135",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importView?.suppressedDynamicAliases",
+          "callerContext": "resolveReceiverTypeCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "138",
+          "column": "20",
+          "calleeName": "locateClassFile",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveReceiverTypeCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "142",
+          "column": "16",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "receiverTypeIndex.get(classFile)?.exportByName",
+          "callerContext": "resolveReceiverTypeCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "142",
+          "column": "16",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "receiverTypeIndex",
+          "callerContext": "resolveReceiverTypeCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "144",
+          "column": "7",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "entry.members",
+          "callerContext": "resolveReceiverTypeCall",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "168",
+          "column": "6",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.moduleSymbolIndex",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "168",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.moduleSymbolIndex.get(cs.callerFile)",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "172",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.importView?.renamedImportAliases",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "173",
+          "column": "6",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.receiverTypeIndex",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "173",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.receiverTypeIndex.get(cs.callerFile)?.defaultImportAliases",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/receiver-type-resolution.ts",
+          "line": "174",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "ctx.importView?.aliasToTarget",
+          "callerContext": "locateClassFile",
+          "enclosingNamedContext": ""
+        }
+      }
+    ],
+    "onlyInBefore": [
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "54",
+          "column": "28",
+          "calleeName": "buildModuleSymbolIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "55",
+          "column": "27",
+          "calleeName": "buildClassMemberIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "56",
+          "column": "22",
+          "calleeName": "buildImportIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "57",
+          "column": "24",
+          "calleeName": "buildClassMroIndex",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "61",
+          "column": "17",
+          "calleeName": "resolveOne",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "67",
+          "column": "14",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "edges",
+          "callerContext": "resolveCalls",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "150",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "152",
+          "column": "18",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "157",
+          "column": "6",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "names",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "159",
+          "column": "4",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildModuleSymbolIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "167",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "177",
+          "column": "26",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "179",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "memberNames",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "181",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildClassMemberIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "191",
+          "column": "4",
+          "calleeName": "Boolean",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "hasBindingNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "192",
+          "column": "4",
+          "calleeName": "Boolean",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "hasBindingNames",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "210",
+          "column": "18",
+          "calleeName": "pop",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imp.moduleSpecifier.split('.')",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "210",
+          "column": "18",
+          "calleeName": "split",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imp.moduleSpecifier",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "211",
+          "column": "2",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "212",
+          "column": "2",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "registerSpecifierFallback",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "263",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "265",
+          "column": "26",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "266",
+          "column": "30",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "267",
+          "column": "29",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "268",
+          "column": "33",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "287",
+          "column": "12",
+          "calleeName": "onStar",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "289",
+          "column": "12",
+          "calleeName": "register",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "291",
+          "column": "12",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "renamedImportAliases",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "298",
+          "column": "26",
+          "calleeName": "onStar",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "299",
+          "column": "13",
+          "calleeName": "register",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "forEachNamedBinding",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "310",
+          "column": "8",
+          "calleeName": "forEachNamedBinding",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "312",
+          "column": "20",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "<arrow:312:10>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "314",
+          "column": "24",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "starImportTargets",
+          "callerContext": "<arrow:313:10>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "320",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "325",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "326",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "namespaceAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "355",
+          "column": "11",
+          "calleeName": "hasBindingNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "356",
+          "column": "8",
+          "calleeName": "registerSpecifierFallback",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "361",
+          "column": "30",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "362",
+          "column": "37",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "368",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "dynamicCandidates",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "370",
+          "column": "19",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "371",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "dynamicCandidates",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "373",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "373",
+          "column": "19",
+          "calleeName": "dynamicBindingKey",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "addCandidate",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "380",
+          "column": "11",
+          "calleeName": "hasBindingNames",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "383",
+          "column": "6",
+          "calleeName": "forEachNamedBinding",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "385",
+          "column": "18",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "<arrow:385:8>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "387",
+          "column": "22",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "starImportTargets",
+          "callerContext": "<arrow:386:8>",
+          "enclosingNamedContext": "buildImportIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "391",
+          "column": "29",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "392",
+          "column": "31",
+          "calleeName": "addCandidate",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "400",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "suppressedDynamicAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "403",
+          "column": "19",
+          "calleeName": "next",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants.values()",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "403",
+          "column": "19",
+          "calleeName": "values",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "variants",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "408",
+          "column": "8",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "suppressedDynamicAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "411",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "417",
+          "column": "6",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "aliasToTarget",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "418",
+          "column": "44",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "namespaceAliases",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "421",
+          "column": "4",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildImportIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "435",
+          "column": "14",
+          "calleeName": "Map",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "443",
+          "column": "20",
+          "calleeName": "exec",
+          "calleeKind": "member",
+          "calleeQualifier": "SUPERCLASS_RE",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "445",
+          "column": "21",
+          "calleeName": "bracketAwareSplit",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "445",
+          "column": "21",
+          "calleeName": "filter",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])\n        .map((s) => s.trim())\n        .map((s) => stripGenericParams(s))",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "445",
+          "column": "21",
+          "calleeName": "map",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])\n        .map((s) => s.trim())",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "445",
+          "column": "21",
+          "calleeName": "map",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "bracketAwareSplit(match[1])",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "446",
+          "column": "20",
+          "calleeName": "trim",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "s",
+          "callerContext": "<arrow:446:13>",
+          "enclosingNamedContext": "buildClassMroIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "447",
+          "column": "20",
+          "calleeName": "stripGenericParams",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "<arrow:447:13>",
+          "enclosingNamedContext": "buildClassMroIndex"
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "450",
+          "column": "8",
+          "calleeName": "set",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "idx",
+          "callerContext": "buildClassMroIndex",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "468",
+          "column": "61",
+          "calleeName": "max",
+          "calleeKind": "member",
+          "calleeQualifier": "Math",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "470",
+          "column": "26",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "out",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "476",
+          "column": "22",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "out",
+          "callerContext": "bracketAwareSplit",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "482",
+          "column": "14",
+          "calleeName": "indexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "484",
+          "column": "9",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "484",
+          "column": "9",
+          "calleeName": "trim",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name.slice(0, idx)",
+          "callerContext": "stripGenericParams",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "501",
+          "column": "17",
+          "calleeName": "resolveSourceId",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "505",
+          "column": "25",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "511",
+          "column": "6",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "localExports",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "512",
+          "column": "7",
+          "calleeName": "isSuppressedDynamicAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "514",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "527",
+          "column": "30",
+          "calleeName": "isSuppressedDynamicAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "528",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "536",
+          "column": "22",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "537",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports?.namespaceAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "538",
+          "column": "25",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "540",
+          "column": "17",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "547",
+          "column": "44",
+          "calleeName": "extractClassName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "548",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "548",
+          "column": "21",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex.get(cs.callerFile)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "551",
+          "column": "10",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "551",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(classKey)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "552",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "555",
+          "column": "22",
+          "calleeName": "lookupInMro",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "560",
+          "column": "8",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "563",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "566",
+          "column": "13",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "570",
+          "column": "22",
+          "calleeName": "isRenamedImportAlias",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "571",
+          "column": "22",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "572",
+          "column": "24",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports?.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "575",
+          "column": "12",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "575",
+          "column": "12",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(remoteClassKey)",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "576",
+          "column": "17",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "579",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "583",
+          "column": "11",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "590",
+          "column": "20",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "597",
+          "column": "7",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.suppressedDynamicAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "598",
+          "column": "7",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.renamedImportAliases",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "600",
+          "column": "21",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.aliasToTarget",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "602",
+          "column": "23",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "imports.starImportTargets",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "604",
+          "column": "15",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "611",
+          "column": "22",
+          "calleeName": "extractClassName",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "614",
+          "column": "24",
+          "calleeName": "lookupInMro",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "619",
+          "column": "8",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "635",
+          "column": "11",
+          "calleeName": "mkEdge",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveOne",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "652",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "isSuppressedDynamicAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "652",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex.get(cs.callerFile)?.suppressedDynamicAliases",
+          "callerContext": "isSuppressedDynamicAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "661",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex",
+          "callerContext": "isRenamedImportAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "661",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "importIndex.get(cs.callerFile)?.renamedImportAliases",
+          "callerContext": "isRenamedImportAlias",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "674",
+          "column": "18",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerContext",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "677",
+          "column": "23",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerContext",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "678",
+          "column": "25",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "beforeMethod",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "680",
+          "column": "9",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "beforeMethod",
+          "callerContext": "extractClassName",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "696",
+          "column": "18",
+          "calleeName": "Set",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "700",
+          "column": "17",
+          "calleeName": "shift",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "703",
+          "column": "8",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "visited",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "704",
+          "column": "4",
+          "calleeName": "add",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "visited",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "706",
+          "column": "19",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMroIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "711",
+          "column": "23",
+          "calleeName": "split",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "key",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "713",
+          "column": "10",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "713",
+          "column": "10",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(sameFileKey)",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "718",
+          "column": "27",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "callerImports.aliasToTarget",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "721",
+          "column": "14",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "721",
+          "column": "14",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(importedClassKey)",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "724",
+          "column": "10",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "728",
+          "column": "6",
+          "calleeName": "push",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "queue",
+          "callerContext": "lookupInMro",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "752",
+          "column": "17",
+          "calleeName": "lastIndexOf",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "754",
+          "column": "11",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "754",
+          "column": "11",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "moduleSymbolIndex.get(file)",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "756",
+          "column": "20",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "757",
+          "column": "21",
+          "calleeName": "slice",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "name",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "758",
+          "column": "9",
+          "calleeName": "get",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "758",
+          "column": "9",
+          "calleeName": "has",
+          "calleeKind": "cross-module",
+          "calleeQualifier": "classMemberIndex.get(`${file}::${className}`)",
+          "callerContext": "isAddressable",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "780",
+          "column": "6",
+          "calleeName": "isAddressable",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveSourceId",
+          "enclosingNamedContext": ""
+        }
+      },
+      {
+        "n": 1,
+        "fields": {
+          "callerFile": "src/knowledge-graph/call-resolver.ts",
+          "line": "783",
+          "column": "6",
+          "calleeName": "isAddressable",
+          "calleeKind": "free",
+          "calleeQualifier": "",
+          "callerContext": "resolveSourceId",
+          "enclosingNamedContext": ""
+        }
+      }
+    ]
+  }
+}

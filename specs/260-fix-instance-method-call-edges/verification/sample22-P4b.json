@@ -1,0 +1,134 @@
+[
+  {
+    "source": "tests/panoramic/anchoring/providers/local-provider.test.ts",
+    "relation": "calls",
+    "target": "src/panoramic/anchoring/providers/local-provider.ts::LocalEmbeddingProvider.embed",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/generators/architecture-overview-generator.ts::ArchitectureOverviewGenerator.extract",
+    "relation": "calls",
+    "target": "src/panoramic/generators/workspace-index-generator.ts::WorkspaceIndexGenerator.extract",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/batch-project-docs.ts::generateBatchProjectDocs",
+    "relation": "calls",
+    "target": "src/panoramic/cache/cache-manager.ts::CacheManager.initialize",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/builders/component-view-builder.ts::ComponentViewBuilderGenerator.extract",
+    "relation": "calls",
+    "target": "src/panoramic/generators/architecture-ir-generator.ts::ArchitectureIRGenerator.generate",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/parsers/toml-config-parser.ts::parseTomlContent",
+    "relation": "calls",
+    "target": "src/panoramic/parsers/comment-tracker.ts::CommentTracker.append",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/parsers/toml-config-parser.ts::parseTomlContent",
+    "relation": "calls",
+    "target": "src/panoramic/parsers/comment-tracker.ts::CommentTracker.reset",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "scripts/eval-validate.mjs",
+    "relation": "calls",
+    "target": "scripts/lib/parallel-run-pool.mjs::ParallelRunPool.run",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/panoramic/cache/content-hasher.test.ts",
+    "relation": "calls",
+    "target": "src/panoramic/cache/content-hasher.ts::ContentHasherImpl.hashFiles",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/generators/pattern-hints-generator.ts::PatternHintsGenerator.extract",
+    "relation": "calls",
+    "target": "src/panoramic/generators/architecture-overview-generator.ts::ArchitectureOverviewGenerator.extract",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/panoramic/config-reference-generator.test.ts",
+    "relation": "calls",
+    "target": "src/panoramic/generators/config-reference-generator.ts::ConfigReferenceGenerator.isApplicable",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/debt-scanner/index.ts::describeScannedLanguages",
+    "relation": "calls",
+    "target": "src/adapters/language-adapter-registry.ts::LanguageAdapterRegistry.getAllAdapters",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/batch/generic-language-skeleton-collector.test.ts",
+    "relation": "calls",
+    "target": "src/adapters/java-adapter.ts::JavaLanguageAdapter.analyzeFile",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/panoramic/cache/content-hasher.test.ts",
+    "relation": "calls",
+    "target": "src/panoramic/cache/content-hasher.ts::ContentHasherImpl.hashContent",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/query.ts::queryPanoramic",
+    "relation": "calls",
+    "target": "src/panoramic/generators/cross-package-analyzer.ts::CrossPackageAnalyzer.generate",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/batch/batch-orchestrator.ts::runBatch",
+    "relation": "calls",
+    "target": "src/panoramic/pipelines/coverage-auditor.ts::CoverageAuditor.audit",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/unit/graph-query-tokenize.test.ts",
+    "relation": "calls",
+    "target": "src/panoramic/graph/graph-query.ts::GraphQueryEngine.query",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/adapters/ts-js-adapter-equivalence.test.ts",
+    "relation": "calls",
+    "target": "src/adapters/ts-js-adapter.ts::TsJsLanguageAdapter.analyzeFile",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "plugins/spec-driver/tests/orchestration-resolver.test.mjs",
+    "relation": "calls",
+    "target": "plugins/spec-driver/lib/orchestrator.mjs::Orchestrator.getPhases",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "tests/fixtures/ky/src/index.ts::ky",
+    "relation": "calls",
+    "target": "tests/fixtures/ky/src/core.ts::Ky.execute",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/batch/batch-orchestrator.ts::runBatch",
+    "relation": "calls",
+    "target": "src/batch/delta-regenerator.ts::DeltaRegenerator.plan",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/batch/generic-language-skeleton-collector.test.ts",
+    "relation": "calls",
+    "target": "src/adapters/java-adapter.ts::JavaLanguageAdapter.getTestPatterns",
+    "confidence": "INFERRED"
+  },
+  {
+    "source": "src/panoramic/query.ts::queryPanoramic",
+    "relation": "calls",
+    "target": "src/panoramic/generators/cross-package-analyzer.ts::CrossPackageAnalyzer.isApplicable",
+    "confidence": "INFERRED"
+  }
+]
