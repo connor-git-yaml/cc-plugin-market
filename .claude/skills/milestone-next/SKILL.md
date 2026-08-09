@@ -42,6 +42,16 @@ $ARGUMENTS
   - milestone 文档有没有因它产生的**事实漂移**要校正（先例：F180 实测工具数 17 校正了 scope 文档里的 18）
 - 体检结论如实汇报；发现真问题 → 转化为 Fix 候选或并入后续 Feature scope，**不在体检里顺手改源码**
 
+### 2.5 Review Dogfooding 反馈账本（每轮固定动作）
+
+读 `docs/design/dogfooding-feedback-ledger.md` 的「待处理」节（各需求交付时按 dogfooding policy 落账）：
+
+- **聚类**：同一工具面的多条反馈合并为一个改进候选（复现频次是排期信号，账本刻意不去重）
+- **对照**：候选是否已被 milestone 既有轨道 / 在途 Feature 覆盖？已覆盖 → 直接标 `已分流`
+- **产出改进计划**：每个候选给 一句话问题 + 改进方向 + 预估规模 + 分流建议（当前 milestone 塞得下 / defer 到下个 roadmap），**回用户拍板**（产品视角讲清对使用体验的实际影响，给推荐项）
+- **拍板后落账**：更新条目状态（`已分流 → F<NNN>/M<N> roadmap` / `裁决不做（理由）`），已处理条目移到「已处理」节；采纳项进 §4 的 milestone 修订或 §5 的派发
+- 账本为空或全部已处理 → 输出"无待处理反馈"，合法结论，不硬造改进项
+
 ### 3. 判断要不要 workflow（不要默认全量重跑）
 
 实测经济学（本仓库）：全量三轨 workflow（竞品调研×3 + 代码审查×4 + 对抗验证）≈ 14 agent / ~1.1M token / ~15 min。调研边际收益按天衰减；审查轨只在有大批新代码时有料。
@@ -68,7 +78,8 @@ $ARGUMENTS
   - 问题（verify 过的现状 + 行号）/ 方案 / 🔴回归护栏 / 验收 / 预算
   - 每 phase Codex 对抗审查；push 前列 report 等确认
   - `specs/src.spec.md` 排除出 commit（显式路径）
-  - 🆕 工具使用反馈节（dogfooding policy 四维度：MCP 可用性 / 信息完整性 / 流程顺畅度 / 结果准确性）
+  - 🆕 工具使用反馈节（dogfooding policy 四维度：MCP 可用性 / 信息完整性 / 流程顺畅度 / 结果准确性），且有实质反馈时**同步 append 到 `docs/design/dogfooding-feedback-ledger.md`**（状态：待处理，随需求一并 commit；"无"不落账）——供 §2.5 下轮统一 review
+  - 对抗/变异类实验必须在 /tmp 副本上做，不得在工作 worktree 改文件；派发对抗审查前先冻结改动面（不重建 dist、不继续改被审文件），避免移动靶
   - ⚠️ 注明在独立 worktree 跑，避免与本窗口工作目录撞车
 - **评测类 Feature（花真钱/烧配额）**：prompt 里前置订阅优先凭据检查（host shell verify 三件套）+ 成本与配额提醒；派发节奏先问用户（先例：F176 等 F180 ship 后串行，避免白烧评测费）
 
@@ -76,6 +87,7 @@ $ARGUMENTS
 
 1. **master 增量**：哪些 Feature 合入
 2. **体检/调研结论**：每个 Feature 的体检结果；workflow 跑没跑 + 为什么
-3. **milestone 改动**：改了什么（或"无需改动"+ 理由）
-4. **派发的 prompt**：哪些、并行还是串行 + 理由
-5. **工具使用反馈**（dogfooding 四维度，本轮用 Spectra MCP / Spec Driver 的问题，没遇到写"无"）
+3. **反馈账本处置**：本轮 review 了几条待处理反馈、聚类成哪些改进候选、拍板结果与状态流转（或"无待处理反馈"）
+4. **milestone 改动**：改了什么（或"无需改动"+ 理由）
+5. **派发的 prompt**：哪些、并行还是串行 + 理由
+6. **工具使用反馈**（dogfooding 四维度，本轮用 Spectra MCP / Spec Driver 的问题，没遇到写"无"；有实质反馈同步落账 ledger）

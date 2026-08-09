@@ -289,6 +289,7 @@ ls -la ~/.codex/auth.json
   - 流程是否顺畅（Spec Driver 的 gate / phase / 产物是否卡住、冗余或难用）
   - 结果是否准确（impact / graph / fuzzy match 等给出错误或误导性结果）
 - **反馈是产品输入而非噪声**：发现的真问题应转化为后续 Fix / 改进 Feature 候选（按"大范围改动不塞当前 Milestone"原则分流到合适里程碑），不要在当前需求里顺手乱改工具源码
+- **反馈同步落账**：有实质反馈时（"无"不落账），按条目格式 append 到 `docs/design/dogfooding-feedback-ledger.md`（状态：待处理）并随需求一并 commit；`milestone-next` 循环统一 review 待处理条目、聚类并设计改进计划，回用户拍板后流转状态——反馈只写在 chat 交付报告里会随会话流失，账本才是改进闭环的载体
 
 ### 不适用场景
 
