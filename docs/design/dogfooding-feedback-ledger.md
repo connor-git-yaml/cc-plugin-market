@@ -44,6 +44,18 @@
   F261 缺陷②（implement 每 Phase 落 notes）已缓解 implement 侧，审查类子代理的断连损失暂靠
   自包含 prompt 重派。低优先级：harness 层问题，应用侧已有工作缓解
 
+### F260 · 2026-08-11
+状态：待处理
+来源：F260 假边面异构对抗审查（主线程派发的独立子代理，交付报告反馈节）
+- [信息完整性][Spectra 图产物] 边 `confidence` 落盘为 `EXTRACTED/INFERRED/AMBIGUOUS` 三态，
+  而 resolver 内部是 `high/medium/low`，两套词汇要靠 `confidence-mapper.ts` 反查才能对应；
+  且边**无 provenance/stage 标记**——审查"哪些边是 F260 新分支产出"时无法从图直接区分
+  （F260 边与 Stage 2/3 的 medium 边都塌成 INFERRED），逐边归因只能重跑流水线或读源码补齐。
+  改进方向：图边可选带 `resolverStage` 类溯源字段，利于回归审计与逐边 diff 归因
+- [MCP 可用性][Spectra MCP] 对抗审查场景未走 MCP 工具链——`impact`/`context` 是加工视图，
+  证伪需要逐边裸数据，直读 `graph.json` + CLI graph-only（0.1s 建临时图、零认证）更合适。
+  非缺陷，属工具定位记录：MCP 面向消费、裸图面向审计，两者互补
+
 ## 已处理
 
 （暂无）
