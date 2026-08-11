@@ -1,5 +1,12 @@
 # F260 验证闭环报告（fix mode Phase 4c）
 
+> **证据文件清理说明（2026-08-11 事后维护，非验证内容变更）**：本目录曾入库 38 个逐阶段
+> callsites 指纹/digest/edge-diff JSON dump（~65k 行，单文件最大 20037 行）。按仓库既定
+> "一次性验证产物不入库、只留重算器"策略（CLAUDE.local.md baseline 边界），已 `git rm`——
+> 需要复现时用本目录保留的 `callsites-fingerprint.mjs` / `edge-diff.mjs` / `coverage-metric.mjs`
+> 等脚本重算，或从 git 历史（a9c338dc）检出原件。canonical 指标保留在 `coverage-final.json`。
+> 下文对 `callsites-*.json` / `edge-diff-*.json` / `*-graph-quality.json` 的引用按此理解。
+
 > 最终验证者报告。所有门禁、图重建与验收断言**由本代理独立实跑**，不采信 4a/4b/P5b 的任何转述。
 > 审查树 = 4d 文本收口之后的最终工作树（`git diff HEAD --stat` 见 §1.1）。
 > 硬约束遵守情况：**零 git 写操作**（仅 `git show` / `git diff` 只读）；除
