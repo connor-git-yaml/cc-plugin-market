@@ -157,16 +157,26 @@ export function resolveReceiverTypeCall(
 /**
  * 条件 ③ —— 把类名定位到文件；定位不到返回 `null`。
  *
- * 两条来源互斥且**本模块导出优先**：类名在 caller 自己的导出表里时，它指的必然是本模块
- * 那个符号，此时 import 别名表不适用（也不需要 A1 判据）。走 import 表则必须同时满足
- * A1（唯一绑定且来自 import）、D1（非重命名别名）、A2（非 default 别名）三道闸。
+ * 两条来源互斥，本模块导出优先于 import 表。但"名字在本模块导出表里"只回答"文件级导出
+ * 可见性"，回答不了"调用点这个名字当前绑定到谁"——命中本地导出后仍必须查 `receiverTypeSoleBinding`
+ * 确认该名字在本文件没有被局部绑定（局部类 / 泛型形参 / 局部 const 等）遮蔽；遮蔽或判据缺席
+ * 一律整体弃权，不 fallthrough 到 import 分支（理由见下）。走 import 表则维持原有三道闸
+ * （A1 + D1 + A2）。
  */
 function locateClassFile(
   cs: CallSiteWithFile,
   receiverType: string,
   ctx: ReceiverResolutionContext,
 ): string | null {
-  if (ctx.moduleSymbolIndex.get(cs.callerFile)?.has(receiverType)) return cs.callerFile;
+  if (ctx.moduleSymbolIndex.get(cs.callerFile)?.has(receiverType)) {
+    // F263：与分支 (b) 的 A1 判据对称：`undefined` 按「有遮蔽」处理（fail-closed）。
+    // 命中本地导出但判为遮蔽时必须整体弃权（return null），不得 fallthrough 到
+    // 下面的 import 分支——本模块确实有这个导出符号是真事实，但它不是调用点这个名字
+    // 绑定的目标；把答案交给 import 表另一个可能存在的同名绑定，是在「已知本地答案不可信」
+    // 的前提下伪造一个新的确定性来源，属于新造的一类假边（可能连到与调用点毫不相关的
+    // 第三个文件），比"当前弃权、少一条边"更差。
+    return cs.receiverTypeSoleBinding === true ? cs.callerFile : null;
+  }
 
   // A1：`undefined` 按 `false` 处理 —— 字段缺席意味着 import 表的可信度无从判断
   if (cs.receiverTypeSoleImportBinding !== true) return null;

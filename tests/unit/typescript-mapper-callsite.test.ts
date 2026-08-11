@@ -943,6 +943,159 @@ export function use(p: Foo): void {
     expect(nonImportCall?.receiverType).toBe('Foo');
     expect(nonImportCall?.receiverTypeSoleImportBinding).toBe(false);
   });
+
+  it('M10d — F263 分支 (a) 真实复现场景：局部类遮蔽同名导出类 ⇒ receiverTypeSoleBinding=false', async () => {
+    // fix-report 案例①的最小复现，直接钉在 mapper 抽取层：
+    // `total===2`（外层导出声明 + 内层局部声明各计一次），与表 1 现有计数逻辑天然吻合。
+    const callSites = await analyzeTs(`
+export class Task { run(): void {} }
+export function schedule(): void {
+  class Task { run(): void {} }
+  const t = new Task();
+  t.run();
+}
+`);
+    const call = findCall(callSites, 'run', 't');
+    expect(call?.receiverType).toBe('Task');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
+
+  it('M10e — 字段语义分歧样本（复用 M10c 子样本 2）：receiverTypeSoleImportBinding 与 receiverTypeSoleBinding 语义不同', async () => {
+    // 非 import 来源的唯一绑定：soleImportBinding=false（M10c 已覆盖），
+    // 但 soleBinding 只问「唯一绑定」不问来源 ⇒ true。防止未来把 isSoleBinding 误实现成
+    // isSoleImportBinding 的别名。
+    const callSites = await analyzeTs(`
+declare const Foo: unknown;
+export function use(p: Foo): void { p.m(); }
+`);
+    const call = findCall(callSites, 'm', 'p');
+    expect(call?.receiverTypeSoleImportBinding).toBe(false);
+    expect(call?.receiverTypeSoleBinding).toBe(true);
+  });
+
+  it('M10f — 正向保真：唯一绑定且来自 import 时两字段同为 true（复用 M1 场景）', async () => {
+    const callSites = await analyzeTs(`
+import { Foo } from './a.js';
+export function u(): void { const a = new Foo(); a.m(); }
+`);
+    const call = findCall(callSites, 'm', 'a');
+    expect(call?.receiverTypeSoleImportBinding).toBe(true);
+    expect(call?.receiverTypeSoleBinding).toBe(true);
+  });
+
+  it('M10g — F263 R2 mapper 层红先行钉：泛型形参遮蔽导出类，receiverTypeSoleBinding=false', async () => {
+    // fix-report 案例②的 mapper 层验证——R33 只在 resolver 层用手工构造的字段值断言，
+    // mapper 侧从未验证过它真的产出 false，是第 1 轮遗留的覆盖缺口（对抗审查发现）。
+    // Handler：class_declaration 顶层绑定 1 次（topLevel=1），
+    // 又被 `function process<Handler>(h: Handler)` 的 type_parameter 遮蔽（nested=1）
+    // ⇒ nested!==0 ⇒ sole=false。
+    const callSites = await analyzeTs(`
+export class Handler { run(): void {} }
+export function process<Handler>(h: Handler): void {
+  h.run();
+}
+`);
+    const call = findCall(callSites, 'run', 'h');
+    expect(call?.receiverType).toBe('Handler');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
+
+  it('M10h — F263 R2 声明合并正向钉：class + declare namespace 同名 ⇒ receiverTypeSoleBinding=true', async () => {
+    // plan-delta-r2.md 证伪 1 的最小复现：`class Models` 与 `declare namespace Models` 是
+    // TS 声明合并（同一符号），二者都在文件顶层（topLevel=2），无任何嵌套遮蔽（nested=0）
+    // ⇒ topLevel>=1 && nested===0 ⇒ sole=true，修复第 1 轮 `total===1` 误伤声明合并的问题。
+    const callSites = await analyzeTs(`
+export class Models {
+  retrieve(id: string): string { return id; }
+}
+export declare namespace Models {
+  export type Model = { id: string };
+}
+export function useModels(m: Models): string {
+  return m.retrieve('gpt');
+}
+`);
+    const call = findCall(callSites, 'retrieve', 'm');
+    expect(call?.receiverType).toBe('Models');
+    expect(call?.receiverTypeSoleBinding).toBe(true);
+  });
+
+  it('M10i — F263 R2 别名导出绕过钉：`export { Impl as Task }` + 泛型遮蔽 ⇒ receiverTypeSoleBinding=false', async () => {
+    // plan-delta-r2.md 证伪 2 的最小复现：`Task` 在本文件没有任何顶层绑定
+    // （真正的顶层绑定名是 `Impl`，`export { Impl as Task }` 只是导出别名，不产生名为
+    // `Task` 的本地绑定），Task 唯一的登记来自遮蔽它的泛型形参（nested=1，topLevel=0）
+    // ⇒ topLevel>=1 条件不成立 ⇒ sole=false（旧判据 `total===1` 会被这唯一 1 次计数
+    // 误判为「无遮蔽」而放行，是第 1 轮的绕过面）。
+    const callSites = await analyzeTs(`
+class Impl { run(): void {} }
+export { Impl as Task };
+export function goAlias<Task>(t: Task): void {
+  t.run();
+}
+`);
+    const call = findCall(callSites, 'run', 't');
+    expect(call?.receiverType).toBe('Task');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
+
+  it('M10j — F263 第 3 轮对抗审查钉：顶层裸重赋值 `Eye = Other;` 不得算作声明合并', async () => {
+    // 缺陷 1：`assignment_expression` 分支曾把 isTopLevel 原样透传给 bindName，
+    // 而赋值/重绑在语法上不可能是声明合并（合并只发生在 class/interface/namespace 等
+    // 声明形态之间）。`Eye` 的顶层绑定点变成 2（class 声明 + 顶层重赋值），
+    // nested=0 ⇒ 旧实现误判 sole=true，放行了一条指向错误目标的假边
+    // （实测：mixin 包裹后 `Eye = withLogging(Eye)`，`v.m()` 实际执行的是
+    // `Wrapped.m` 而非 `Eye.m`）。修复后重赋值降级为 nested ⇒ sole=false。
+    const callSites = await analyzeTs(`
+class Other { m(): string { return 'other'; } }
+export class Eye { m(): string { return 'eye'; } }
+Eye = Other;
+export function runI(): string {
+  const v = new Eye();
+  return v.m();
+}
+`);
+    const call = findCall(callSites, 'm', 'v');
+    expect(call?.receiverType).toBe('Eye');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
+
+  it('M10k — F263 第 3 轮对抗审查钉：顶层 `for (Cee of [...])` 重绑不得算作声明合并', async () => {
+    // 缺陷 1 的第二个形态：`for_in_statement` 分支同样把 isTopLevel 直接透传。
+    // 顶层 `for (Cee of xs)`（无 const/let 声明，复用已声明的 Cee）与
+    // `assignment_expression` 同理是重绑而非声明合并，修复后同样降级为 nested。
+    const callSites = await analyzeTs(`
+export class Cee { m(): string { return 'cee'; } }
+class Other { m(): string { return 'other'; } }
+for (Cee of [Other]) {
+  break;
+}
+export function runK(): string {
+  const v = new Cee();
+  return v.m();
+}
+`);
+    const call = findCall(callSites, 'm', 'v');
+    expect(call?.receiverType).toBe('Cee');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
+
+  it('M10l — F263 第 3 轮对抗审查钉：箭头函数无括号单形参遮蔽同名顶层类', async () => {
+    // 缺陷 2：`case 'arrow_function'` 用箭头节点自己收到的 isTopLevel 去绑定它的
+    // 无括号单形参。`export default Kay => {...}` 直接挂在 export_statement（透明层）下，
+    // 这个函数作用域形参被误记成顶层绑定，与同名顶层 class 凑出 topLevel=2/nested=0，
+    // 旧实现误判 sole=true。实测函数体内 `new Kay()` 实际绑定的是形参（调用方任意传入的类），
+    // 不是外层 class ⇒ 是假边。修复后形参恒记为 nested。
+    const callSites = await analyzeTs(`
+export class Kay { m(): string { return 'kay'; } }
+export default Kay => {
+  const v = new Kay();
+  return v.m();
+};
+`);
+    const call = findCall(callSites, 'm', 'v');
+    expect(call?.receiverType).toBe('Kay');
+    expect(call?.receiverTypeSoleBinding).toBe(false);
+  });
 });
 
 describe('F260 P3 — 不夺路 / 两遍式 / this 分桶 / 类型形状（M11–M12d）', () => {

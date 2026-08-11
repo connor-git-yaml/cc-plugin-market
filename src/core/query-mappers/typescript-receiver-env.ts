@@ -12,7 +12,10 @@
  * ## 两张**互不相交**的表（plan D2）
  *
  * - **表 1（类名绑定点计数表）**：key = 类名，value = 该名字在本文件的绑定点总数 +
- *   其中来自 import 的个数。只服务 A1 判据（`receiverTypeSoleImportBinding`）。
+ *   其中来自 import 的个数，**以及**（F263 R2 新增）按顶层 / 嵌套作用域分计的两个计数。
+ *   服务两条独立判据：A1（`receiverTypeSoleImportBinding`）与 F263 R2
+ *   （`receiverTypeSoleBinding` = 顶层至少 1 个绑定点 + 嵌套绑定点为 0，见 `isSoleBinding`
+ *   实现处的完整论证）。
  * - **表 2（接收者名 → 类名环境）**：key = 接收者名（`this.x` 按 `ClassName#x` 分桶），
  *   value = 推断出的类名，或**中毒**（歧义 / 类型不可知）。只服务 `receiverType`。
  *
@@ -44,6 +47,11 @@ export interface ReceiverBinding {
   receiverType: string;
   /** 该类名在本文件恰好 1 个绑定点且来自 import（A1 正向许可） */
   soleImportBinding: boolean;
+  /**
+   * F263 R2 —— 该类名在本文件顶层至少 1 个绑定点、且没有任何嵌套（作用域内）绑定
+   * （放行声明合并，挡住局部遮蔽 / 别名导出绕过），供本地导出分支使用。
+   */
+  soleBinding: boolean;
 }
 
 /** 文件级接收者类型环境（只读查询接口）。 */
@@ -52,12 +60,21 @@ export interface ReceiverTypeEnv {
   lookupReceiverType(key: string): string | undefined;
   /** 表 1 查询：A1 判据（恰好 1 个绑定点且来自 import）。 */
   isSoleImportBinding(className: string): boolean;
+  /** 表 1 查询：F263 R2 判据（顶层 >=1 个绑定点，且嵌套绑定点 ===0）。 */
+  isSoleBinding(className: string): boolean;
 }
 
-/** 表 1 的槽位：绑定点总数 + 其中 import 来源的个数。 */
+/**
+ * 表 1 的槽位：绑定点总数 + 其中 import 来源的个数（A1 用，字段与语义原样不动）+
+ * F263 新增的顶层 / 嵌套分计（`isSoleBinding` 用）。
+ */
 interface NameBindingSlot {
   total: number;
   fromImport: number;
+  /** 顶层作用域的绑定点个数（见下方「顶层作用域判定」）。 */
+  topLevel: number;
+  /** 顶层以外（函数体 / 类体 / namespace 体 / 形参表 / 泛型形参表…）的绑定点个数。 */
+  nested: number;
 }
 
 /** 表 2 的槽位；`type === null` 表示**中毒**（歧义或类型不可知），永不再恢复。 */
@@ -118,6 +135,37 @@ const NAMED_VALUE_EXPRESSION_TYPES = new Set([
  * 同一判据分两处各写一份即 F259 型不对称隐患，故只留这一个事实源。
  */
 const ASSIGNMENT_BINDING_TARGET_TYPES = new Set(['identifier', 'object_pattern', 'array_pattern']);
+
+/**
+ * F263 —— 「顶层作用域」传播白名单：只有这些节点类型**原样传递**（不改变）isTopLevel 给子节点，
+ * 其余任何节点类型一旦出现在祖先链上，其子树内的一切绑定点即归为 `nested`。
+ *
+ * 集合取自 tree-sitter-typescript 实测探针（非猜测）：对 `export class` / `export declare
+ * namespace` / `export default class` / `declare class` / `export function` / `export let/var` /
+ * `declare module "x"` 等顶层形态逐一解析取祖先链，归纳出这 6 个类型：
+ *
+ * - `program`：根节点本身，子节点原样继承调用方传入的 isTopLevel（首次调用为 `true`）
+ * - `export_statement`：`export` 关键字包装层
+ * - `ambient_declaration`：`declare` 关键字包装层（`declare class` / `declare namespace` /
+ *   `export declare namespace` 均经此层）
+ * - `expression_statement`：裸语句包装层（`namespace Foo {}`、顶层裸赋值 `x = new Foo()` 均经此层；
+ *   探针实测证实，不然会把合法的顶层裸 namespace 误判为 nested，造成新回归）
+ * - `lexical_declaration` / `variable_declaration`：`const`/`let` 与 `var` 声明包装层
+ *
+ * ⚠️ 刻意**不包含** `variable_declarator`：`variable_declarator` 节点自身的绑定名（如
+ * `const K = ...` 里的 `K`）由 `visit()` 的 `variable_declarator` case **直接**用当前收到的
+ * isTopLevel 处理；但递归进它的 `value` 子树（如 `class Foo {}` 表达式）时子节点一律降级为
+ * `nested`——这正是 F263-R-7 登记的既定取舍：具名类/函数表达式自身的名字永远算 nested，
+ * 不因外层是不是顶层 `const` 而改变（避免过度放宽引入新暴露面）。
+ */
+const TRANSPARENT_TOP_LEVEL_WRAPPER_TYPES = new Set([
+  'program',
+  'export_statement',
+  'ambient_declaration',
+  'expression_statement',
+  'lexical_declaration',
+  'variable_declaration',
+]);
 
 /** 会重新绑定 `this` 的函数形态——`this.x` 一旦跨过它就无法再归属到宿主 class（A3）。 */
 const THIS_REBINDING_FUNCTION_TYPES = new Set([
@@ -367,12 +415,19 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
   /** 表 2：接收者 key → 类名 / 中毒 */
   const receivers = new Map<string, ReceiverSlot>();
 
-  /** 登记一个绑定点（表 1）。宁可多记：多记只降 recall，漏记会放行遮蔽。 */
-  function bindName(name: string | undefined, fromImport: boolean): void {
+  /**
+   * 登记一个绑定点（表 1）。宁可多记：多记只降 recall，漏记会放行遮蔽。
+   *
+   * F263：`isTopLevel` 由调用方按当前 AST 位置传入（见 `visit` 的顶层作用域传播），
+   * 与 `fromImport` 各自独立计数，互不影响 A1 判据的既有语义。
+   */
+  function bindName(name: string | undefined, fromImport: boolean, isTopLevel: boolean): void {
     if (!name) return;
-    const slot = nameBindings.get(name) ?? { total: 0, fromImport: 0 };
+    const slot = nameBindings.get(name) ?? { total: 0, fromImport: 0, topLevel: 0, nested: 0 };
     slot.total += 1;
     if (fromImport) slot.fromImport += 1;
+    if (isTopLevel) slot.topLevel += 1;
+    else slot.nested += 1;
     nameBindings.set(name, slot);
   }
 
@@ -396,16 +451,26 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
    * 这一步**不损失真边**：这些形态本来就从不往表 2 写类型，中毒只是把「被别人冒名顶替」
    * 这条路堵死。
    */
-  function bindValue(name: string | undefined, fromImport: boolean): void {
+  function bindValue(name: string | undefined, fromImport: boolean, isTopLevel: boolean): void {
     if (!name) return;
-    bindName(name, fromImport);
+    bindName(name, fromImport, isTopLevel);
     bindReceiver(name, null);
   }
 
-  function visit(node: Parser.SyntaxNode): void {
+  /**
+   * F263 —— `isTopLevel` 表示 `node` **自身**是否位于文件顶层作用域（祖先链只经过
+   * `TRANSPARENT_TOP_LEVEL_WRAPPER_TYPES`）。递归进子节点时，只有当前节点本身也在
+   * 该白名单里才原样传递；否则（真正的声明 / 作用域节点，如 class_declaration /
+   * function_declaration / internal_module / statement_block / class_body …）
+   * 子树一律降级为 `nested`——这正是「顶层」定义的核心：一旦跨过任何一个非透明节点，
+   * 后面的一切绑定点都不再算顶层。
+   */
+  function visit(node: Parser.SyntaxNode, isTopLevel: boolean): void {
     switch (node.type) {
       case 'import_statement':
-        registerImportBindings(node, bindValue);
+        // import 语句恒为顶层（合法 TS/JS 不存在嵌套 import_statement），但仍按当前
+        // isTopLevel 透传而非写死 true——保持与其余分支同一套传播规则，不搞特例。
+        registerImportBindings(node, bindValue, isTopLevel);
         break;
 
       case 'variable_declarator': {
@@ -413,7 +478,7 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
         const nameNode = node.childForFieldName('name');
         const names: string[] = [];
         collectPatternNames(nameNode, names);
-        for (const n of names) bindName(n, fromImport);
+        for (const n of names) bindName(n, fromImport, isTopLevel);
 
         if (nameNode?.type === 'identifier') {
           const type =
@@ -433,7 +498,7 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
         const pattern = node.childForFieldName('pattern');
         const names: string[] = [];
         collectPatternNames(pattern, names);
-        for (const n of names) bindName(n, fromImport);
+        for (const n of names) bindName(n, fromImport, isTopLevel);
 
         const type = classNameFromTypeAnnotation(node.childForFieldName('type'));
         if (pattern?.type === 'identifier') {
@@ -449,9 +514,17 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
 
       case 'arrow_function': {
         // 单形参无括号形态：`x => …`（有括号时走 required_parameter 分支）
+        //
+        // F263 第 3 轮（缺陷 2）：这里绑的是**函数作用域形参**，不是顶层声明，
+        // 恒按 nested 计——箭头节点自身即使因挂在 export_statement 等透明层下而
+        // 收到 isTopLevel===true，它的形参名在语法上也绝不可能与外层同名声明构成
+        // 声明合并（合并只发生在 class/interface/namespace 等声明形态之间）。
+        // 若沿用收到的 isTopLevel，`export default Kay => { new Kay() }` 这种形参
+        // 遮蔽同名顶层类的写法会被误判成「无遮蔽」，产出一条指向错误目标的假边
+        // （实测：函数体内 `new Kay()` 绑定的是调用方传入的形参，不是外层 class）。
         const param = node.childForFieldName('parameter');
         if (param?.type === 'identifier') {
-          bindName(param.text, paramIsImportThenFirstParam(param));
+          bindName(param.text, paramIsImportThenFirstParam(param), false);
           bindReceiver(param.text, null);
         }
         break;
@@ -461,7 +534,7 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
         const names: string[] = [];
         collectPatternNames(node.childForFieldName('parameter'), names);
         for (const n of names) {
-          bindName(n, false);
+          bindName(n, false, isTopLevel);
           bindReceiver(n, null);
         }
         break;
@@ -482,7 +555,14 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
         const names: string[] = [];
         collectPatternNames(left, names);
         for (const n of names) {
-          bindName(n, false);
+          // F263 第 3 轮（缺陷 1）：赋值/重绑在语法上绝不可能是声明合并（合并只发生在
+          // class/interface/namespace 等声明形态之间），恒按 nested 计——哪怕这条赋值语句
+          // 本身位于文件顶层（isTopLevel===true）。沿用收到的 isTopLevel 会让顶层裸重赋值
+          // `Eye = Other;` 与顶层同名 class 声明凑出「顶层>=1 + 嵌套=0」的假声明合并信号，
+          // 放行一条指向错误目标的假边（实测：mixin 包裹 `Eye = withLogging(Eye)` 后，
+          // `v.m()` 实际执行的是 `Wrapped.m` 而非 `Eye.m`）。降级为 nested 只会更保守
+          // （多弃权，不会放行），不影响真正的声明合并场景。
+          bindName(n, false, false);
           bindReceiver(n, null);
         }
         break;
@@ -514,7 +594,9 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
         const names: string[] = [];
         collectPatternNames(left, names);
         for (const n of names) {
-          bindName(n, false);
+          // F263 第 3 轮（缺陷 1）：理由与 `for_in_statement` 分支同一份注释——赋值/重绑
+          // 在语法上绝不可能是声明合并，恒按 nested 计（哪怕赋值语句本身在文件顶层）。
+          bindName(n, false, false);
           bindReceiver(n, null);
         }
         break;
@@ -522,20 +604,21 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
 
       default:
         if (VALUE_DECLARATION_TYPES.has(node.type) || NAMED_VALUE_EXPRESSION_TYPES.has(node.type)) {
-          bindValue(node.childForFieldName('name')?.text, false);
+          bindValue(node.childForFieldName('name')?.text, false, isTopLevel);
         } else if (TYPE_ONLY_DECLARATION_TYPES.has(node.type)) {
-          bindName(node.childForFieldName('name')?.text, false);
+          bindName(node.childForFieldName('name')?.text, false, isTopLevel);
         }
         break;
     }
 
+    const childIsTopLevel = TRANSPARENT_TOP_LEVEL_WRAPPER_TYPES.has(node.type) && isTopLevel;
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
-      if (child) visit(child);
+      if (child) visit(child, childIsTopLevel);
     }
   }
 
-  visit(tree.rootNode);
+  visit(tree.rootNode, true);
 
   return {
     lookupReceiverType(key: string): string | undefined {
@@ -545,6 +628,15 @@ export function buildReceiverTypeEnv(tree: Parser.Tree): ReceiverTypeEnv {
       const slot = nameBindings.get(className);
       // A1：≥2 拦（存在遮蔽）/ =1 且非 import 拦 / =0 拦（fail-closed）
       return slot !== undefined && slot.total === 1 && slot.fromImport === 1;
+    },
+    isSoleBinding(className: string): boolean {
+      const slot = nameBindings.get(className);
+      // F263 R2 —— 判据由「绑定点总数===1」改为「顶层至少 1 个 + 嵌套为 0」：
+      // 合法 TS 里同一名字的多个顶层绑定只可能是声明合并（class + interface + namespace），
+      // 用 `>=1` 而非 `===1` 正是为了放行声明合并；`nested===0` 挡住任何词法遮蔽
+      // （局部类 / 泛型形参 / 局部 const…），`topLevel>=1` 挡住别名导出绕过
+      // （遮蔽者的绑定若不在顶层，仅凭 nested===0 无法证明该名字确有一个可信的顶层答案）。
+      return slot !== undefined && slot.topLevel >= 1 && slot.nested === 0;
     },
   };
 }
@@ -565,17 +657,18 @@ function findChildType(node: Parser.SyntaxNode, type: string): boolean {
  */
 function registerImportBindings(
   node: Parser.SyntaxNode,
-  bindValue: (name: string | undefined, fromImport: boolean) => void,
+  bindValue: (name: string | undefined, fromImport: boolean, isTopLevel: boolean) => void,
+  isTopLevel: boolean,
 ): void {
   const visit = (n: Parser.SyntaxNode): void => {
     switch (n.type) {
       case 'import_specifier':
         // 重命名时本地绑定名是 alias，未重命名时是 name
-        bindValue((n.childForFieldName('alias') ?? n.childForFieldName('name'))?.text, true);
+        bindValue((n.childForFieldName('alias') ?? n.childForFieldName('name'))?.text, true, isTopLevel);
         return;
       case 'namespace_import': // `* as NS`
       case 'import_require_clause': // `import IE = require('./x')`
-        bindValue(n.namedChild(0)?.text, true);
+        bindValue(n.namedChild(0)?.text, true, isTopLevel);
         return;
       default:
         break;
@@ -585,7 +678,7 @@ function registerImportBindings(
         const child = n.namedChild(i);
         if (!child) continue;
         // import_clause 直挂的 identifier 就是 default import 绑定名
-        if (child.type === 'identifier') bindValue(child.text, true);
+        if (child.type === 'identifier') bindValue(child.text, true, isTopLevel);
         else visit(child);
       }
       return;
@@ -646,5 +739,9 @@ export function resolveCallSiteReceiver(
 /** 把类名包装成 `ReceiverBinding`；类名缺席即弃权。 */
 function bind(env: ReceiverTypeEnv, className: string | null | undefined): ReceiverBinding | undefined {
   if (className == null) return undefined;
-  return { receiverType: className, soleImportBinding: env.isSoleImportBinding(className) };
+  return {
+    receiverType: className,
+    soleImportBinding: env.isSoleImportBinding(className),
+    soleBinding: env.isSoleBinding(className),
+  };
 }

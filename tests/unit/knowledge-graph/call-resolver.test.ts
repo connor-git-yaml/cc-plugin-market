@@ -2857,6 +2857,184 @@ describe('F260 R4–R12 / R16 — resolver 新分支（D2b 六条件与门）', 
 });
 
 // ───────────────────────────────────────────────────────────
+// F263 — locateClassFile 分支 (a)（本地导出路径）遮蔽守卫（plan.md「红先行用例清单 §resolver 层」）
+//
+// 编号说明：plan.md 原文用 R13–R17 标注这 5 条用例，但该编号区间已被本文件下方
+// 「F260 P5 — TS/JS extends MRO」describe 块（R13–R19）占用（历史先后：MRO 用例先落地）。
+// 沿用 plan.md 的字面编号会造成 `-t "R13|R14|..."` grep 过滤误命中两组互不相关的用例，
+// 污染红先行验证结果，故本次按文件内实际最大编号（R31）顺延为 **R32–R36**，用例内容与
+// 断言逐字取自 plan.md，仅编号改写。
+// ───────────────────────────────────────────────────────────
+
+describe('F263 R32–R36 — locateClassFile 分支 (a) 遮蔽守卫（plan.md 原编号 R13–R17）', () => {
+  /** 与 fix-report 案例①同构：caller 自身导出 `class Task { run(){} }`。 */
+  const callerTaskTs = mkSkeleton({
+    filePath: 'caller.ts',
+    language: 'typescript',
+    exports: [
+      { name: 'schedule', kind: 'function', signature: 'function schedule()', isDefault: false, startLine: 1, endLine: 3 },
+      {
+        name: 'Task',
+        kind: 'class',
+        signature: 'class Task',
+        isDefault: false,
+        startLine: 5,
+        endLine: 10,
+        members: [{ name: 'run', kind: 'method', signature: 'run()', isStatic: false }],
+      },
+    ],
+  });
+
+  it('R32（plan R13）— 局部类遮蔽同名导出类：receiverTypeSoleBinding=false ⇒ 不出边', () => {
+    const skeletons = mkSkeletonsMap([callerTaskTs]);
+    const edges = resolveCalls(
+      [
+        {
+          callerFile: 'caller.ts',
+          calleeName: 'run',
+          calleeKind: 'cross-module',
+          calleeQualifier: 't',
+          callerContext: 'schedule',
+          receiverType: 'Task',
+          receiverTypeSoleBinding: false,
+          line: 3,
+        },
+      ],
+      skeletons,
+    );
+    expect(edges.some((e) => e.target.startsWith('caller.ts::Task.'))).toBe(false);
+    expect(edges).toEqual([]);
+  });
+
+  it('R33（plan R14）— 泛型形参遮蔽同名导出类：resolver 层同构断言（receiverTypeSoleBinding=false ⇒ 不出边）', () => {
+    // fixture 层面等价于 fix-report 案例②（`export function process<Handler>(h: Handler)`），
+    // resolver 层只需 receiverTypeSoleBinding=false 即可覆盖，不需要重建泛型 AST。
+    const skeletons = mkSkeletonsMap([callerTaskTs]);
+    const edges = resolveCalls(
+      [
+        {
+          callerFile: 'caller.ts',
+          calleeName: 'run',
+          calleeKind: 'cross-module',
+          calleeQualifier: 'h',
+          callerContext: 'schedule',
+          receiverType: 'Task',
+          receiverTypeSoleBinding: false,
+          line: 3,
+        },
+      ],
+      skeletons,
+    );
+    expect(edges.some((e) => e.target.startsWith('caller.ts::Task.'))).toBe(false);
+    expect(edges).toEqual([]);
+  });
+
+  it('R34（plan R15）— 对照真边：本模块导出命中且无遮蔽（receiverTypeSoleBinding=true）⇒ 照常出边', () => {
+    const skeletons = mkSkeletonsMap([callerTaskTs]);
+    const edges = resolveCalls(
+      [
+        {
+          callerFile: 'caller.ts',
+          calleeName: 'run',
+          calleeKind: 'cross-module',
+          calleeQualifier: 't',
+          callerContext: 'schedule',
+          receiverType: 'Task',
+          receiverTypeSoleBinding: true,
+          line: 3,
+        },
+      ],
+      skeletons,
+    );
+    expect(edges).toEqual([
+      { source: 'caller.ts::schedule', target: 'caller.ts::Task.run', relation: 'calls', confidence: 'medium', directional: true },
+    ]);
+  });
+
+  it('R35（plan R16）— fail-closed 回归钉：receiverTypeSoleBinding 字段缺席（模拟旧 baseline）⇒ 分支 (a) 弃权', () => {
+    const skeletons = mkSkeletonsMap([callerTaskTs]);
+    const edges = resolveCalls(
+      [
+        {
+          callerFile: 'caller.ts',
+          calleeName: 'run',
+          calleeKind: 'cross-module',
+          calleeQualifier: 't',
+          callerContext: 'schedule',
+          receiverType: 'Task',
+          // receiverTypeSoleBinding 刻意缺席 —— 验证 `=== true` 严格比较而非 `!== false`
+          line: 3,
+        },
+      ],
+      skeletons,
+    );
+    expect(edges).toEqual([]);
+  });
+
+  it('R36（plan R17）— 禁止 fallthrough 回归钉：遮蔽 + 恰好同名 import 目标存在时，不得连到 import 目标', () => {
+    // 变异测试实证（代码质量审查）：members 若写成与调用名不匹配的 'otherMethod'，
+    // 条件 ⑤（entry.members.has(calleeName)）会独立把边挡住，此用例即使 fallthrough 到
+    // import 分支也不会出边——本用例就失去了「禁止 fallthrough」这一目标的区分力
+    // （把 locateClassFile 分支 (a) 改成故意 fallthrough 也照样绿）。改成 'run'（与调用名
+    // 一致）后才会真正在 fallthrough 时命中 x.ts::Task.run 产出假边，让本用例守住目标。
+    const xTs = mkSkeleton({
+      filePath: 'x.ts',
+      language: 'typescript',
+      exports: [
+        {
+          name: 'Task',
+          kind: 'class',
+          signature: 'class Task',
+          isDefault: false,
+          startLine: 1,
+          endLine: 10,
+          members: [{ name: 'run', kind: 'method', signature: 'run()', isStatic: false }],
+        },
+      ],
+    });
+    const callerTs = mkSkeleton({
+      filePath: 'caller.ts',
+      language: 'typescript',
+      exports: [
+        { name: 'schedule', kind: 'function', signature: 'function schedule()', isDefault: false, startLine: 1, endLine: 3 },
+        {
+          name: 'Task',
+          kind: 'class',
+          signature: 'class Task',
+          isDefault: false,
+          startLine: 5,
+          endLine: 10,
+          members: [{ name: 'run', kind: 'method', signature: 'run()', isStatic: false }],
+        },
+      ],
+      imports: [
+        { moduleSpecifier: './x.js', isRelative: true, resolvedPath: 'x.ts', namedImports: ['Task'], isTypeOnly: false, importType: 'static' },
+      ],
+    });
+    const skeletons = mkSkeletonsMap([xTs, callerTs]);
+    const edges = resolveCalls(
+      [
+        {
+          callerFile: 'caller.ts',
+          calleeName: 'run',
+          calleeKind: 'cross-module',
+          calleeQualifier: 't',
+          callerContext: 'schedule',
+          receiverType: 'Task',
+          // 陷阱：遮蔽事实是 false，但 import 侧刻意给 true —— 若 fallthrough 会命中 x.ts
+          receiverTypeSoleBinding: false,
+          receiverTypeSoleImportBinding: true,
+          line: 3,
+        },
+      ],
+      skeletons,
+    );
+    expect(edges.some((e) => e.target.startsWith('x.ts::Task.'))).toBe(false);
+    expect(edges).toEqual([]);
+  });
+});
+
+// ───────────────────────────────────────────────────────────
 // F260 P4b — M1 净回归钉（plan §13）
 //
 // plan §13 M1 的第三个实测反例是**唯一一条从正确边退化成假边的净回归**：

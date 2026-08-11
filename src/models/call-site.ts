@@ -98,5 +98,19 @@ export const CallSiteSchema = z.object({
    * 不存在「类型有、判据无」的半开组合。
    */
   receiverTypeSoleImportBinding: z.boolean().optional(),
+  /**
+   * `receiverType` 那个类名在**本文件内恰好 1 个绑定点**（不要求来自 import）— F263 新增。
+   *
+   * 与 `receiverTypeSoleImportBinding` 的区别：后者是 import 表可信度的**正向许可**语义
+   * （`total===1 && fromImport===1`），只服务分支 (b)；本字段是**纯遮蔽计数**
+   * （`total===1`，不问绑定来源），服务分支 (a)——「名字在本模块导出表里」这一路径要回答的
+   * 不是「import 表能不能信」，而是「这个名字在调用点所在文件有没有被别的绑定遮蔽」。
+   *
+   * **`undefined` 按 `false` 处理**（fail-closed，与 `receiverTypeSoleImportBinding` 逐字
+   * 对齐）：字段缺席只可能来自旧 baseline 或非 TS/JS mapper，此时遮蔽状态无从判断，必须拦住。
+   * 与 `receiverType` / `receiverTypeSoleImportBinding` 由同一处（`typescript-mapper.ts`
+   * `_mkCallSite`）同源产出，不存在「其余字段有值、本字段缺席」的半开组合。
+   */
+  receiverTypeSoleBinding: z.boolean().optional(),
 });
 export type CallSite = z.infer<typeof CallSiteSchema>;

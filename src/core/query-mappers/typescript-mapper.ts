@@ -1394,10 +1394,11 @@ export class TypeScriptMapper implements QueryMapper {
     if (callerContext !== undefined) cs.callerContext = callerContext;
     if (calleeQualifier !== undefined) cs.calleeQualifier = calleeQualifier;
     if (enclosingNamedContext !== undefined) cs.enclosingNamedContext = enclosingNamedContext;
-    // F260：两个字段同源产出，不存在「类型有、判据无」的半开组合（D2 定稿理由 2）
+    // F260/F263：三个字段同源产出，不存在「类型有、判据无」的半开组合（D2 定稿理由 2）
     if (receiver !== undefined) {
       cs.receiverType = receiver.receiverType;
       cs.receiverTypeSoleImportBinding = receiver.soleImportBinding;
+      cs.receiverTypeSoleBinding = receiver.soleBinding;
     }
     return cs;
   }
