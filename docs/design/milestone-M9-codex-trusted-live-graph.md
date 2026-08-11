@@ -541,6 +541,34 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    最高价值〕∥ **F261 图产物 builder 戳 + implement notes 约定**〔src/panoramic/graph 写盘元数据 +
    agents/implement.md，与 F260 写入路径 disjoint〕；F260-Codex-hooks 四 warning 顺延为 **F262**）
 
+  （2026-08-11 **F260/F261 双 ship + 体检**〔102 文件，但 +81617 行中 ~60k 是 F260 落盘的
+   逐阶段 callsites 证据 JSON〕：**F260✅ 实例方法调用边真闭合**——主线程独立重建图复测：
+   method 有 calls 入边者 **154 → 238（Δ+84，逐字复现报告的 +84）**；**上轮 dogfood① 的 symbol
+   `PythonLanguageAdapter.extractSymbolNodes` 现有 7 条真 caller 入边**（含上轮认定的两个 ground
+   truth：`batch-orchestrator::runBatch`、`graph-assembly::buildAstGraphOnly`）→ `impact(upstream)`
+   不再对类方法静默返回空。**假边探针**：抽样 5 条 src→src method 边全真（`getInstance()` 静态调用
+   + `this.method()` 类内调用，正是目标形态）；F260 边创建逻辑紧接 F259 假边收口，故**另起独立
+   子代理异构对抗专攻假边构造面 + 覆盖率虚抬面**（后台跑，结论待回收）。覆盖率口径：新口径
+   45.6%（236/517，剔六类弃权）= 结构上界 U；legacy 口径 6.9%（238/3471），二者与 +84 绝对增量
+   自洽。**F261✅ 两半全闭合**：图产物新增 `builder` 字段〔`{formatVersion,commit,dirty}`，与
+   `sourceCommit`（源码树）分离，dist 陈旧时机器可检——**正是 dogfood② 诉求**〕，实测 byte-stable
+   〔连跑两次 graph.json sha 一致，不破 F183/F193〕；implement.md §5 落「每 Phase 写盘
+   `implementation-notes.md`」默认约定〔dogfood③〕。**门禁**：build 0 / vitest **7444 passed 0 failed**
+   / test:plugins 0 / repo:check **87 族** / release:check 0。
+   **🟡 本轮新发现（hygiene）**：F260 把 ~60k 行 callsites 指纹/digest/edge-diff JSON
+   〔`specs/260-*/verification/callsites-*.json`、`edge-diff-*.json`，单文件最大 20037 行〕作为逐阶段
+   证据入库并已随 a9c338dc 上 master。按 CLAUDE.local.md baseline 策略，一次性评估流程产物属"不入库"
+   类〔非跨版本 perf anchor〕；verification-report.md 已是人类可读小结，巨型机器 dump 是纯 git 膨胀 →
+   清理候选（保留 report、`git rm` digest/fingerprint JSON），是否清理待用户拍板。
+   **dogfooding ledger 已工作**：737075e7 建 `docs/design/dogfooding-feedback-ledger.md` + milestone-next
+   SKILL 统一 review 闭环；F261 条目已落"待处理"，含一条洞见——**MCP `nextStepHint` 会主动往错误
+   推论引导**〔dist 陈旧时不仅不告警还顺着虚高偏差往"回归"结论引〕，改进方向=MCP 返回体带 freshness
+   状态（F261 的 builder 戳是数据基础，消费侧接线留后续）。
+   **M9 剩余**：**F262**〔Codex hooks 四 warning，第 3 条「原子写 tmp+rename 丢目标文件权限位、
+   用户 0600 被静默放宽 0644」是 security-class → 异构对抗档位〕为最后一张实质代码卡；之后仅
+   **T062/T063** 两项人工验证〔见 [[project_m9_manual_pending_verifications]]，agent 侧做不了〕。
+   **在此之前任何"M9 已完成"表述都必须带"代码面完成、两项人工验证待办"限定。**）
+
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
 1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**
