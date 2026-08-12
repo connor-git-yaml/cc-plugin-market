@@ -141,19 +141,49 @@ const REPLACEMENT_WARNINGS = {
   'event-value-not-array-replaced': '该事件的原有值不是数组，已被替换为数组',
 };
 
-function renderDiagnostic(diagnostic) {
+/**
+ * 渲染一条诊断。
+ *
+ * 🔴 涉及 `.bak` 的文案一律打印**本次真实的 backupPath**：目标是符号链接时 `.bak` 落在
+ * realpath 所在目录，占位符 `<目标>.bak` 指的是错误位置，照着它去找文件只会扑空。
+ */
+function renderDiagnostic(diagnostic, backupPath) {
+  // 🔴 不含 `path`：唯一带 `path` 的诊断是 `backup-already-exists`，它有专属提前 return，
+  // 走不到通用兜底。留着那段拼接只会让人以为通用分支也能渲染路径。
   const suffix = `${diagnostic.event ? ` event=${diagnostic.event}` : ''}${
     diagnostic.command ? ` command=${diagnostic.command}` : ''
   }`;
+  const backupLabel = backupPath ?? '<目标>.bak';
   if (diagnostic.code === 'owned-entry-removed') {
-    return `[codex-hooks] 🔴 owned-entry-removed command=${diagnostic.command} —— 已按归属锚点移除；若这不是我方条目，请用 <目标>.bak 回滚并反馈`;
+    // 🔴 升版换路径时这条一次会刷出多条；且 `.bak` 是**最早**那一份（可能早于用户近期的手工
+    // 改动），照着整份回滚会把那些改动一起抹掉。故指引必须先要求核对内容。
+    return `[codex-hooks] 🔴 owned-entry-removed command=${diagnostic.command} —— 已按归属锚点移除；若这不是我方条目，请先核对 ${backupLabel} 的内容再决定是否回滚，并反馈`;
+  }
+  if (diagnostic.code === 'backup-already-exists') {
+    // 🔴 只陈述本进程可证实的事实：EEXIST 只证明「文件已在」，不足以指认它是谁写的
+    //（可能是用户自带的备份，也可能是删掉后第二次安装重建的）。任何"这份 .bak 是首次安装前
+    // 状态"的指认式文案，在这两个场景下都是假陈述。
+    return `[codex-hooks] 提示 backup-already-exists —— ${diagnostic.path ?? backupLabel} 已存在，本次未覆盖；本工具仅在 .bak 不存在时创建备份（保留最早一份），不随每次写入刷新`;
+  }
+  if (diagnostic.code === 'target-mode-preserve-failed') {
+    return `[codex-hooks] 警告 target-mode-preserve-failed${diagnostic.errno ? ` errno=${diagnostic.errno}` : ''} —— 内容已正常写入，但目标原有权限位未能恢复（当前不宽于 0600），请手动核对`;
   }
   const replacement = REPLACEMENT_WARNINGS[diagnostic.code];
   if (replacement) {
-    return `[codex-hooks] 🔴 数据被替换 ${diagnostic.code}${suffix} —— ${replacement}；原文已备份到 <目标>.bak`;
+    return `[codex-hooks] 🔴 数据被替换 ${diagnostic.code}${suffix} —— ${replacement}；原文已备份到 ${backupLabel}`;
   }
   return `[codex-hooks] 警告 ${diagnostic.code}${suffix}`;
 }
+
+/**
+ * 静默的 info 级 code 白名单。
+ *
+ * 这两条的语义已被 stdout 侧的成功文案完整覆盖（"没有我方条目，无需清理"），重复打印只会
+ * 淹没真信号。**其余 info 一律打印** —— 此前的判据是 `code !== 'owned-entry-removed'`，
+ * 而该 code 恒为 warning 级、从来进不了这个分支，等于"所有 info 全静默"，
+ * `backup-already-exists`（唯一能澄清 `.bak` 语义的信号）因此从未被用户看到过。
+ */
+const SILENCED_INFO_CODES = new Set(['target-missing', 'nothing-to-remove']);
 
 function main(argv) {
   let args;
@@ -193,8 +223,8 @@ function main(argv) {
     );
   }
   for (const diagnostic of result.diagnostics ?? []) {
-    if (diagnostic.level === 'info' && diagnostic.code !== 'owned-entry-removed') continue;
-    console.error(renderDiagnostic(diagnostic));
+    if (diagnostic.level === 'info' && SILENCED_INFO_CODES.has(diagnostic.code)) continue;
+    console.error(renderDiagnostic(diagnostic, result.backupPath));
   }
   if (result.action === 'install') {
     if (args.json) console.error(HOOK_TRUST_NOTICE);

@@ -52,6 +52,7 @@ interface ValidationReport {
     ok: boolean;
     projectionEqual: boolean;
     lostCommands: string[];
+    removedByDeclaration: string[];
   };
 }
 
@@ -93,16 +94,20 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
   let codexHome: string;
   let target: string;
   let baseline: string;
+  /** F262：本用例造出的"升级后插件根"沙箱，逐个回收 */
+  let upgradedBases: string[] = [];
 
   beforeEach(() => {
     codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'f240-flow-home-'));
     target = path.join(codexHome, 'hooks.json');
     baseline = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'f240-flow-base-')), 'baseline.json');
+    upgradedBases = [];
   });
 
   afterEach(() => {
     fs.rmSync(codexHome, { recursive: true, force: true });
     fs.rmSync(path.dirname(baseline), { recursive: true, force: true });
+    for (const base of upgradedBases) fs.rmSync(base, { recursive: true, force: true });
   });
 
   function seedForeign(): string {
@@ -114,6 +119,63 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
   function installCli(extra: string[] = []): RunResult {
     return run('node', [INSTALL_CLI, '--codex-home', codexHome, '--plugin-root', PLUGIN_ROOT, ...extra]);
+  }
+
+  /** F262 新增回归组共用：把任意文档同时落到 target 与 baseline（安装前状态即基线） */
+  function seedBoth(doc: unknown): void {
+    const raw = `${JSON.stringify(doc, null, 2)}\n`;
+    fs.writeFileSync(target, raw, 'utf-8');
+    fs.writeFileSync(baseline, raw, 'utf-8');
+  }
+
+  /** F262 新增回归组共用：把任意内容落成 `--desired` 文件 */
+  function writeDesiredFile(content: string, name = 'desired.json'): string {
+    const file = path.join(path.dirname(baseline), name);
+    fs.writeFileSync(file, content, 'utf-8');
+    return file;
+  }
+
+  /**
+   * F262 新增回归组共用：造一个「升级后的插件根」——新版本目录 + `spec-driver` 分量
+   *（归属锚点要求），`hooks/` 与 `scripts/` 软链回真实插件根。
+   * 🔴 不能用纯虚构路径：`install-codex-hooks.mjs` 会从 pluginRoot 读 canonical 文档，
+   * 读不到直接退 1，用例会退化成"升版根本没发生"的空转。
+   */
+  function makeUpgradedPluginRoot(): string {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'f262-upgraded-'));
+    upgradedBases.push(base);
+    const root = path.join(base, '9.9.9', 'spec-driver');
+    fs.mkdirSync(root, { recursive: true });
+    fs.symlinkSync(path.join(PLUGIN_ROOT, 'hooks'), path.join(root, 'hooks'));
+    fs.symlinkSync(path.join(PLUGIN_ROOT, 'scripts'), path.join(root, 'scripts'));
+    return root;
+  }
+
+  /** F262 新增回归组共用：升版安装（旧路径命令被摘除、写入新路径命令） */
+  function upgradeInstallCli(extra: string[] = []): RunResult {
+    return run('node', [
+      INSTALL_CLI,
+      '--codex-home',
+      codexHome,
+      '--plugin-root',
+      makeUpgradedPluginRoot(),
+      ...extra,
+    ]);
+  }
+
+  /** F262 新增回归组共用：跑保全门禁并解析 JSON 报告 */
+  function gateJson(extra: string[] = []): { exitCode: number; report: ValidationReport } {
+    const result = run('node', [
+      VALIDATE_CLI,
+      '--target',
+      target,
+      '--baseline',
+      baseline,
+      ...extra,
+      '--format',
+      'json',
+    ]);
+    return { exitCode: result.exitCode, report: JSON.parse(result.stdout) as ValidationReport };
   }
 
   it('安装 → 校验 → 卸载：第三方条目全程逐字节保留', () => {
@@ -445,6 +507,363 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
     });
   });
 
+  // ─── F262 / W1a：用户预存空数组事件键不得被判成第三方数据被破坏 ───────────
+
+  describe('🔴 W1a 第三方保全比较语义豁免：用户预存空数组事件键不误报', () => {
+    it('用户预存 {hooks:{Stop:[]}} + 正常安装 → 保全判据 pass（零数据丢失却报 fail 是误报）', () => {
+      seedBoth({ description: '用户自己的 hooks', hooks: { Stop: [] } });
+
+      const installed = installCli(['--json']);
+      expect(installed.exitCode).toBe(0);
+      const desired = writeDesiredFile(installed.stdout);
+
+      const { exitCode, report } = gateJson(['--desired', desired]);
+
+      expect(report.foreignPreservation.projectionEqual).toBe(true);
+      expect(report.foreignPreservation.lostCommands).toEqual([]);
+      expect(report.findings.map((f) => f.code)).not.toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(0);
+    });
+
+    it('🔴 M1 变异：安装器把用户的空事件键整个删掉 → 仍 MUST fail（豁免不得越界成"任你删"）', () => {
+      // 手工构造"被变异过的写入器"的产物：baseline 里 Stop 是用户预存的空数组，
+      // target 里该键被整个抹掉 —— 这是真正的用户数据（键本身）丢失。
+      const foreign = {
+        matcher: 'vendor',
+        hooks: [{ type: 'command', command: 'bash /opt/vendor/permission.sh' }],
+      };
+      fs.writeFileSync(
+        baseline,
+        JSON.stringify({ hooks: { Stop: [], PermissionRequest: [foreign] } }, null, 2),
+        'utf-8',
+      );
+      fs.writeFileSync(target, JSON.stringify({ hooks: { PermissionRequest: [foreign] } }, null, 2), 'utf-8');
+
+      const { exitCode, report } = gateJson();
+
+      expect(report.foreignPreservation.projectionEqual).toBe(false);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(1);
+    });
+
+    it('🔴 W-1 强形态：4 个我方事件键全被用户预存为空数组 + 正常安装 → 仍 pass（豁免要真管用）', () => {
+      seedBoth({
+        description: '用户自己的 hooks',
+        hooks: { SessionStart: [], PreToolUse: [], PostToolUse: [], Stop: [] },
+      });
+
+      const installed = installCli(['--json']);
+      expect(installed.exitCode).toBe(0);
+      const desired = writeDesiredFile(installed.stdout, 'desired-four-empty.json');
+
+      const { exitCode, report } = gateJson(['--desired', desired]);
+
+      expect(report.foreignPreservation.projectionEqual).toBe(true);
+      expect(report.findings.map((f) => f.code)).not.toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(0);
+    });
+
+    it('🔴 W-1 注入：after 侧该键被塞进第三方内容 → MUST fail（豁免只看键在不在是内容盲）', () => {
+      // 豁免的正当性来自"合法安装的归一化终态 = after 投影里该键已不存在"（我方条目 strip 后
+      // 整键被删）。只查"键在 after 原始文档里物理存在"时，攻击者往该键塞任何东西都能白嫖豁免。
+      fs.writeFileSync(baseline, JSON.stringify({ hooks: { Stop: [] } }, null, 2), 'utf-8');
+      fs.writeFileSync(
+        target,
+        JSON.stringify(
+          {
+            hooks: {
+              Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'bash /tmp/evil/backdoor.sh' }] }],
+            },
+          },
+          null,
+          2,
+        ),
+        'utf-8',
+      );
+
+      const { exitCode, report } = gateJson();
+
+      expect(report.foreignPreservation.projectionEqual).toBe(false);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(1);
+    });
+
+    it('🔴 W-1 类型销毁：after 侧该键被写成 null → MUST fail（键还在但值已不是数组）', () => {
+      fs.writeFileSync(baseline, JSON.stringify({ hooks: { Stop: [] } }, null, 2), 'utf-8');
+      fs.writeFileSync(target, JSON.stringify({ hooks: { Stop: null } }, null, 2), 'utf-8');
+
+      const { exitCode, report } = gateJson();
+
+      expect(report.foreignPreservation.projectionEqual).toBe(false);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(1);
+    });
+
+    it('🔴 RAW 槽：hooks 字段是空数组、被整份换成标准结构 → 仍 MUST fail（豁免不得吃掉 RAW 槽）', () => {
+      // `doc.hooks = []` 时投影落 RAW_HOOKS_KEY 槽，其值恰好也是空数组 ——
+      // 若豁免按"值是空数组"一刀切，两侧会坍缩成同一空壳，用户整份 hooks 被替换却判 pass。
+      seedBoth({ description: '用户自己的 hooks', hooks: [] });
+
+      const installed = installCli(['--json']);
+      expect(installed.exitCode).toBe(0);
+      const desired = writeDesiredFile(installed.stdout);
+
+      const { exitCode, report } = gateJson(['--desired', desired]);
+
+      expect(report.foreignPreservation.projectionEqual).toBe(false);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(1);
+    });
+
+    it('🔴 RAW 槽（非空形态）：hooks 是数组且内容被改写 → 仍 MUST fail', () => {
+      fs.writeFileSync(baseline, JSON.stringify({ hooks: [{ foo: 1 }] }, null, 2), 'utf-8');
+      fs.writeFileSync(target, JSON.stringify({ hooks: [{ foo: 2 }] }, null, 2), 'utf-8');
+
+      const { exitCode, report } = gateJson();
+
+      expect(report.foreignPreservation.projectionEqual).toBe(false);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-entries-mutated');
+      expect(exitCode).toBe(1);
+    });
+  });
+
+  // ─── F262 / W1b：升版路径的"移除清单"要能被门禁直接消费 ────────────────
+
+  describe('🔴 W1b 升版路径：--desired 直接消费 install --json 完整输出', () => {
+    const upgradeInstall = () => upgradeInstallCli(['--json']);
+
+    it('把 install --json 的完整输出直接作 --desired → 升版零误报', () => {
+      seedForeign();
+      expect(installCli(['--json']).exitCode).toBe(0);
+      // 以首次安装后的状态为基线，再升版
+      fs.copyFileSync(target, baseline);
+
+      const upgraded = upgradeInstall();
+      expect(upgraded.exitCode).toBe(0);
+      // 升版确实摘掉了旧路径的 5 条命令（否则本用例退化成"没发生升版"的空转）
+      expect(
+        (JSON.parse(upgraded.stdout) as { diagnostics: Array<{ code: string }> }).diagnostics.filter(
+          (d) => d.code === 'owned-entry-removed',
+        ),
+      ).toHaveLength(5);
+      const desired = writeDesiredFile(upgraded.stdout, 'desired-upgrade.json');
+
+      const { exitCode, report } = gateJson(['--desired', desired, '--skip-shape']);
+
+      // 旧路径命令的消失是写入器自己声明过的（removedCommands），不该被判成第三方数据丢失
+      expect(report.foreignPreservation.lostCommands).toEqual([]);
+      expect(report.findings.map((f) => f.code)).not.toContain('foreign-command-lost');
+      expect(exitCode).toBe(0);
+
+      // 🔴 C1：`removedCommands` 这份减数由归属谓词派生，判据 2 对它只能降级为 warning ——
+      // 故豁免 MUST 可见（判据无法区分"真升版"与"归属误认误删"，两者都要人工过目一眼）。
+      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(5);
+      expect(
+        report.findings.filter((f) => f.code === 'foreign-command-removed-by-declaration'),
+      ).toHaveLength(5);
+      expect(report.status).toBe('warning');
+      expect(report.ok).toBe(true);
+    });
+
+    it('🔴 同一升版场景不传 --desired → 仍 MUST fail（最严格口径不因新形态而放宽）', () => {
+      seedForeign();
+      expect(installCli(['--json']).exitCode).toBe(0);
+      fs.copyFileSync(target, baseline);
+      expect(upgradeInstall().exitCode).toBe(0);
+
+      const { exitCode, report } = gateJson(['--skip-shape']);
+
+      expect(exitCode).toBe(1);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-command-lost');
+      expect(report.foreignPreservation.lostCommands).toHaveLength(5);
+    });
+
+    it('旧两种 --desired 形态继续工作（command 字符串数组 / {hooks:{...}} 生成器文档）', () => {
+      seedForeign();
+      const installed = installCli(['--json']);
+      const parsed = JSON.parse(installed.stdout) as { writtenCommands: string[] };
+
+      const asArray = writeDesiredFile(JSON.stringify(parsed.writtenCommands), 'desired-array.json');
+      expect(gateJson(['--desired', asArray]).exitCode).toBe(0);
+
+      // `{hooks:{...}}` 文档形态：直接拿安装后的目标文件当声明（其命令字面量集合即写入集）
+      const asDocument = writeDesiredFile(fs.readFileSync(target, 'utf-8'), 'desired-doc.json');
+      expect(gateJson(['--desired', asDocument]).exitCode).toBe(0);
+    });
+  });
+
+  // ─── F262 / C1：removedCommands 减数的豁免可见性 ──────────────────────────
+
+  describe('🔴 C1 removedCommands 豁免可见性：归属误认不再被静默吞掉', () => {
+    const MISCLAIMED = 'bash /opt/othertool/spec-driver/scripts/postinstall.sh';
+
+    it('归属误认 + 第三形态 --desired → exit 0 但 status=warning + 专用 code + 命令可见', () => {
+      // `/opt/othertool/...` 是**第三方**路径，却满足我方全部归属硬条件 ⇒ 安装时被 strip 误删，
+      // 并进 install 结果的 removedCommands。第三形态把它并进减数后，判据 2 不再判 fail ——
+      // 这是"升版零误报"的确定代价，因此必须留下 warning 级审计痕迹，而不是静默 pass。
+      seedBoth({
+        hooks: {
+          PermissionRequest: [{ matcher: 'vendor', hooks: [{ type: 'command', command: MISCLAIMED }] }],
+        },
+      });
+
+      const installed = installCli(['--json']);
+      expect(installed.exitCode).toBe(0);
+      // 写入器自己承认删了这一条（否则本用例退化成"误删根本没发生"的空转）
+      expect(
+        (JSON.parse(installed.stdout) as { removedCommands: string[] }).removedCommands,
+      ).toEqual([MISCLAIMED]);
+      const desired = writeDesiredFile(installed.stdout, 'desired-misclaim.json');
+
+      const { exitCode, report } = gateJson(['--desired', desired]);
+
+      expect(exitCode).toBe(0);
+      expect(report.ok).toBe(true);
+      expect(report.status).toBe('warning');
+      expect(report.foreignPreservation.lostCommands).toEqual([]);
+      expect(report.foreignPreservation.removedByDeclaration).toEqual([MISCLAIMED]);
+      expect(
+        report.findings.find((f) => f.code === 'foreign-command-removed-by-declaration'),
+      ).toMatchObject({ level: 'warning', layer: 'preservation', command: MISCLAIMED });
+    });
+
+    it('调用方显式声明的减数（数组形态）不打 warning —— 只有谓词派生的豁免才需人工过目', () => {
+      seedForeign();
+      const installed = installCli(['--json']);
+      const parsed = JSON.parse(installed.stdout) as { writtenCommands: string[] };
+      const asArray = writeDesiredFile(
+        JSON.stringify(parsed.writtenCommands),
+        'desired-array-nowarn.json',
+      );
+
+      const { report } = gateJson(['--desired', asArray]);
+
+      expect(report.foreignPreservation.removedByDeclaration).toEqual([]);
+      expect(report.findings.map((f) => f.code)).not.toContain(
+        'foreign-command-removed-by-declaration',
+      );
+    });
+
+    it('🔴 数组形态下归属误认仍 MUST fail（既有口径不因 C1 而放宽）', () => {
+      seedBoth({
+        hooks: {
+          PermissionRequest: [{ matcher: 'vendor', hooks: [{ type: 'command', command: MISCLAIMED }] }],
+        },
+      });
+      const installed = installCli(['--json']);
+      const parsed = JSON.parse(installed.stdout) as { writtenCommands: string[] };
+      const asArray = writeDesiredFile(
+        JSON.stringify(parsed.writtenCommands),
+        'desired-array-misclaim.json',
+      );
+
+      const { exitCode, report } = gateJson(['--desired', asArray]);
+
+      expect(exitCode).toBe(1);
+      expect(report.foreignPreservation.lostCommands).toEqual([MISCLAIMED]);
+      expect(report.findings.map((f) => f.code)).toContain('foreign-command-lost');
+    });
+  });
+
+  // ─── F262 / W-2：--desired 形态识别收严 ──────────────────────────────────
+
+  describe('🔴 W-2 --desired 形态识别：remove --json 输出与畸形字段', () => {
+    it('`--remove --json` 的输出作 --desired → removedCommands 进减数（不再 5 条假 lost）', () => {
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+      // 以安装后的状态为新基线，再卸载 —— 卸载删掉的正是我方那 5 条
+      fs.copyFileSync(target, baseline);
+
+      const removed = installCli(['--remove', '--json']);
+      expect(removed.exitCode).toBe(0);
+      expect((JSON.parse(removed.stdout) as { removedCommands: string[] }).removedCommands).toHaveLength(5);
+      const desired = writeDesiredFile(removed.stdout, 'desired-remove.json');
+
+      const { report } = gateJson(['--desired', desired]);
+
+      // 卸载后我方条目为零 ⇒ 产品层必然 4 条 product-event-missing（与保全无关），
+      // 故这里只钉**保全层**：不得再有 foreign-command-lost。
+      expect(report.foreignPreservation.lostCommands).toEqual([]);
+      expect(report.findings.filter((f) => f.layer === 'preservation' && f.level === 'fail')).toEqual([]);
+      // 豁免全部来自 removedCommands ⇒ 5 条都要可见
+      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(5);
+    });
+
+    it('🔴 I-2 形态判定是优先级而非互斥：混合形态走 install-result 分支，hooks 里的命令不进减数', () => {
+      // `{"hooks":{…},"writtenCommands":[]}` 两种形态的特征都占。这里钉的是**实际优先级**
+      // （先探 install-result 字段，命中即走该分支），而不是此前注释里那句被实测证伪的
+      //「三形态结构上互斥」。
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+      fs.copyFileSync(target, baseline);
+      installCli(['--remove']);
+
+      // hooks 文档形态：命令字面量集合即减数 ⇒ 卸载掉的 5 条被声明，保全层无 fail
+      const asDocument = writeDesiredFile(
+        fs.readFileSync(baseline, 'utf-8'),
+        'desired-mixed-doc.json',
+      );
+      expect(
+        gateJson(['--desired', asDocument]).report.foreignPreservation.lostCommands,
+      ).toEqual([]);
+
+      // 同一份文档补一个空 writtenCommands ⇒ 走 install-result 分支，hooks 里的命令被忽略
+      const mixed = JSON.parse(fs.readFileSync(baseline, 'utf-8')) as Record<string, unknown>;
+      mixed.writtenCommands = [];
+      const asMixed = writeDesiredFile(JSON.stringify(mixed), 'desired-mixed.json');
+      expect(
+        gateJson(['--desired', asMixed]).report.foreignPreservation.lostCommands,
+      ).toHaveLength(5);
+    });
+
+    it('🔴 畸形 --desired（writtenCommands 非数组）→ exit 2 fail-loud，不静默塌成空减数', () => {
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+      fs.copyFileSync(target, baseline);
+      const desired = writeDesiredFile('{"writtenCommands": "not-array"}', 'desired-malformed.json');
+
+      const result = run('node', [
+        VALIDATE_CLI,
+        '--target',
+        target,
+        '--baseline',
+        baseline,
+        '--desired',
+        desired,
+        '--format',
+        'json',
+      ]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('writtenCommands');
+    });
+
+    it('🔴 畸形 --desired（removedCommands 元素非字符串）→ 同样 exit 2', () => {
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+      fs.copyFileSync(target, baseline);
+      const desired = writeDesiredFile(
+        '{"writtenCommands": [], "removedCommands": [42]}',
+        'desired-malformed-removed.json',
+      );
+
+      const result = run('node', [
+        VALIDATE_CLI,
+        '--target',
+        target,
+        '--baseline',
+        baseline,
+        '--desired',
+        desired,
+        '--format',
+        'json',
+      ]);
+
+      expect(result.exitCode).toBe(2);
+      expect(result.stderr).toContain('removedCommands');
+    });
+  });
+
   // ─── W5：--json 输出必须可被机器解析 ─────────────────────────────────────
 
   describe('🔴 W5 --json 输出可解析', () => {
@@ -529,5 +948,67 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
     expect(result.stderr).toContain('hooks-field-not-object-replaced');
     expect(result.stderr).toContain('已被替换');
     expect(result.stderr).toContain('.bak');
+  });
+
+  // ─── F262 / W4：.bak 语义的可观测性（行为不变，只让事实可见）────────────
+
+  describe('🔴 W4 .bak 可观测性（W4）', () => {
+    it('升版时 backup-already-exists 不再被静默吞掉，且打印真实 .bak 路径', () => {
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+      expect(fs.existsSync(`${target}.bak`)).toBe(true);
+
+      const upgraded = upgradeInstallCli();
+
+      expect(upgraded.exitCode).toBe(0);
+      expect(upgraded.stderr).toContain('backup-already-exists');
+      expect(upgraded.stderr).toContain(`${target}.bak`);
+      // 只陈述本进程可证实的事实：不得指认这份 .bak 的来历
+      expect(upgraded.stderr).toContain('未覆盖');
+      // 行为本身不变：最早那一份 .bak 原地不动
+      expect(fs.readFileSync(`${target}.bak`, 'utf-8')).toBe(
+        `${JSON.stringify(FOREIGN_DOC, null, 2)}\n`,
+      );
+    });
+
+    it('owned-entry-removed 的回滚指引提示先核对 .bak 内容（升版会一次刷 5 条）', () => {
+      seedForeign();
+      expect(installCli().exitCode).toBe(0);
+
+      const upgraded = upgradeInstallCli();
+
+      expect(upgraded.stderr.match(/owned-entry-removed/g) ?? []).toHaveLength(5);
+      expect(upgraded.stderr).toContain('核对');
+      expect(upgraded.stderr).toContain(`${target}.bak`);
+    });
+
+    it('数据被替换类告警打印真实 .bak 路径，不再是占位符 `<目标>.bak`', () => {
+      fs.writeFileSync(target, JSON.stringify([1, 2, 3]), 'utf-8');
+
+      const result = installCli();
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('document-not-object-replaced');
+      expect(result.stderr).toContain(`${target}.bak`);
+      expect(result.stderr).not.toContain('<目标>.bak');
+    });
+
+    it('死分支收口不引入新噪声：target-missing / nothing-to-remove 仍保持静默', () => {
+      // 这两条 info 的语义已被 stdout 的成功文案覆盖，重复打印只会淹没真信号。
+      const missing = installCli(['--remove']);
+      expect(missing.exitCode).toBe(0);
+      expect(missing.stderr).not.toContain('target-missing');
+
+      seedForeign();
+      const nothing = installCli(['--remove']);
+      expect(nothing.exitCode).toBe(0);
+      expect(nothing.stderr).not.toContain('nothing-to-remove');
+
+      // I6 场景同样不得混入这两条
+      fs.writeFileSync(target, JSON.stringify({ description: 'x', hooks: 'not-an-object' }), 'utf-8');
+      const replaced = installCli();
+      expect(replaced.stderr).not.toContain('target-missing');
+      expect(replaced.stderr).not.toContain('nothing-to-remove');
+    });
   });
 });

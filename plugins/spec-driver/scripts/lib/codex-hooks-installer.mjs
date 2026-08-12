@@ -30,8 +30,14 @@
  * 判据在数学上无法检出它所依赖的谓词自身的错误，而过度认领恰是唯一会摧毁用户数据的方向。
  * 因此本模块额外提供两条**不依赖归属谓词**的补偿：
  * 1. `projectForeignOnly` 对非对象文档/非对象 `hooks` **保留原值**，杜绝两侧坍缩成同一空壳；
- * 2. 每一条被摘除的 command 逐条写入 `diagnostics`（`owned-entry-removed`），
- *    配合 `validate-codex-hooks.mjs` 的命令字面量存活判据（`--desired`）形成独立口径。
+ * 2. 每一条被摘除的 command 逐条写入 `diagnostics`（`owned-entry-removed`）并由 CLI 打印，
+ *    使误删可见、可回滚。
+ *
+ * ⚠️ 这两条补偿都只做到"可见"，**没有**做到"判 fail"。`validate-codex-hooks.mjs` 的命令字面量
+ * 存活判据（判据 2）在调用方只声明写入集时确实独立于本谓词；但一旦把 `removedCommands`
+ * （由本谓词派生的移除清单）也喂给 `--desired`，误删就会被自动豁免，该判据对这条命令随之
+ * 降级为 warning（`foreign-command-removed-by-declaration`）。详见该文件
+ * `checkForeignPreservation` 的说明 —— 不要再把它当作"能独立检出归属误认"的防线。
  *
  * 运行相关测试:
  *   npx vitest run tests/unit/codex-hooks-installer.test.ts
@@ -114,17 +120,77 @@ function resolveWriteTarget(targetPath) {
   return targetPath;
 }
 
+/** 目标不存在或权限位读不出时的保守默认（Codex 自己的 `auth.json`/`config.toml` 实测即 0600） */
+const DEFAULT_TARGET_MODE = 0o600;
+
+/**
+ * 读目标文件当前的权限位（含 setuid/setgid/sticky 高位）。
+ * `& 0o7777` 而非 `& 0o777`：后者会把用户刻意设置的高位静默丢掉。
+ * 读不到（首次创建 / stat 失败）一律回落最严格的 0600 —— hooks.json 的内容会被 Codex
+ * **当命令执行**，宽松 umask 下按默认 mode 创建就是世界可写，等于开一个本地注入面。
+ */
+function readTargetMode(filePath) {
+  try {
+    return fs.statSync(filePath).mode & 0o7777;
+  } catch {
+    return DEFAULT_TARGET_MODE;
+  }
+}
+
 /**
  * 原子 JSON 写入（tmp + rename）。
  * tmp 文件名带 pid 与随机后缀：并发安装时两个进程各写各的 tmp，`rename` 是同目录内的原子替换，
  * 结果必为其中一方的**完整**文档，不会出现两份内容互相截断。
  * 任一环节失败都清理 tmp，绝不留半截文件在用户的 `$CODEX_HOME` 里。
+ *
+ * ## 🔴 权限位也是"别人的数据"（F262 / W3）
+ * `rename` 替换的是**整个 inode**，权限元数据随新 inode 走：不做处理时用户的 0600 私密配置
+ * 会被静默放宽成 0644（umask 000 下更是 0666 世界可写）。故写入前快照目标 mode，写入后按
+ * 快照精确恢复：
+ * - tmp **创建即 `mode: 0o600`**：`open(2)` 的 mode 受 umask 掩蔽，只会更严不会更松，
+ *   因此这一步保证内容从落盘第一刻起就不宽于 0600，消除"chmod 之前以 0644 暴露"的窗口；
+ * - 随后 `chmodSync` 精确化（chmod 不受 umask 影响），才能还原 0640 / setgid 这类原值。
+ *
+ * ⚠️ TOCTOU：stat 与 rename 之间目标 mode 若被并发修改，保全的是"写入开始时的快照"而非
+ * 最终值。这不是原子操作，此处显式承认、不加任何伪补偿（重读校验只会把窗口挪个位置）。
+ *
+ * ⚠️ **保全 ≠ 加固**：已存在文件的宽 mode（用户自己设的 0666）会被如实保全，本函数不做
+ * "顺手收紧"（那是替用户改他的配置）。下面 `mode: 0o700` 关闭的注入面只覆盖**首次创建**
+ * 的路径分量 —— 已存在的宽目录同样原样不动。
+ *
+ * 🔴 `diagnostics` 必传（F262 / I-3）：本函数是模块私有的，唯一调用方 `commit` 传的是
+ * 上层诊断数组的引用。给默认值会让将来的第二个调用方忘传时把 `target-mode-preserve-failed`
+ * 这类告警静默落进一个随即被丢弃的数组里 —— 不给默认值，忘传即 TypeError。
  */
-function writeJsonAtomic(filePath, data) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+function writeJsonAtomic(filePath, data, { diagnostics }) {
+  // 🔴 `mode: 0o700`（F262 / W3）：目录权限也是注入面的一半。umask 000 下按默认 mode 建出的
+  // 是 0777 目录，同机任何本地用户都能 unlink 掉那份 0600 的 hooks.json 再放一份自己的进来，
+  // 内容会被 Codex 当命令执行 —— 只收紧文件位等于没关门。
+  // mkdir 的 mode 只作用于**本次新建**的路径分量；目录已存在时 mkdirSync 不改其 mode。
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const targetMode = readTargetMode(filePath);
   const tmpPath = `${filePath}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
   try {
-    fs.writeFileSync(tmpPath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
+    // `flag: 'wx'`（O_EXCL，F262 / I-1）：tmp 路径若被预置成已有文件或软链，直接报错落进下面的
+    // 清理分支，而不是顺着别人的软链把内容写到未知位置。
+    fs.writeFileSync(tmpPath, `${JSON.stringify(data, null, 2)}\n`, {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: 'wx',
+    });
+    // 🔴 chmod 失败**不阻断安装**：无权限位的文件系统（exFAT / SMB / 部分容器 overlay）上
+    // "权限被放宽"这个风险面本就不存在，让锦上添花的元数据动作反过来把本可正常写入的
+    // hooks 拦下来，是新增了一个此前不存在的阻断面。此时最终权限仍不宽于 0600（tmp 的创建
+    // mode），只是没能精确匹配原文件可能更严格的形态，故记 warning 让用户可核对。
+    try {
+      fs.chmodSync(tmpPath, targetMode);
+    } catch (error) {
+      diagnostics.push({
+        level: 'warning',
+        code: 'target-mode-preserve-failed',
+        errno: error && typeof error === 'object' ? (error.code ?? null) : null,
+      });
+    }
     fs.renameSync(tmpPath, filePath);
   } catch (error) {
     try {
@@ -206,13 +272,26 @@ function stripOwnedFromHooks(sourceHooks) {
  *
  * 只登记「真正消失」的那些：安装时被摘掉又原样写回的我方条目（幂等的正常路径）不是删除，
  * 报出来只会淹没真信号。
+ *
+ * 🔴 返回值（F262 / W1b）：同一份「真正消失」的清单同时以**数据**形式回传。
+ * `--desired` 的合同语义是"本轮写入器声明**写入/移除**的条目"，但此前移除只进 diagnostics，
+ * 在数据面没有一等出口 —— 于是插件升版（旧路径命令被摘除重写）时，调用方无从声明"删了什么"，
+ * 保全判据 2（`foreign-command-lost`）每次升版都误报。
+ *
+ * ⚠️ 这份清单**由归属谓词派生**（谁被摘掉是 `isOwnedEntry` 说了算），因此它当减数时会一并
+ * 豁免掉谓词误认造成的误删。门禁侧据此把这部分豁免打成 warning，不要指望它还能判 fail。
+ *
+ * @returns {string[]} 本轮真正消失（未被重新写回）的 command 字面量
  */
 function reportRemovedCommands(diagnostics, removedCommands, reinstatedCommands = []) {
   const reinstated = new Set(reinstatedCommands);
+  const trulyRemoved = [];
   for (const command of removedCommands) {
     if (reinstated.has(command)) continue;
+    trulyRemoved.push(command);
     diagnostics.push({ level: 'warning', code: 'owned-entry-removed', command });
   }
+  return trulyRemoved;
 }
 
 /** 收集 `entries` 中我方本轮声明要写入的 command 字面量 */
@@ -258,7 +337,8 @@ function commit({ targetPath, exists, nextDoc, diagnostics = [] }) {
       }
     }
   }
-  writeJsonAtomic(writeTarget, nextDoc);
+  // 透传同一个 diagnostics 数组引用：权限保全失败的告警汇入既有诊断通道，无需新建返回面
+  writeJsonAtomic(writeTarget, nextDoc, { diagnostics });
   return backupPath;
 }
 
@@ -268,8 +348,12 @@ function commit({ targetPath, exists, nextDoc, diagnostics = [] }) {
  * @param {{codexHome: string, entries: {hooks: Record<string, unknown[]>}}} args
  *   `entries` 是 `codex-hooks-generator.mjs` 的产物（路径已展开为绝对路径）。
  * @returns {{ok: boolean, changed: boolean, targetPath: string, backupPath: string|null,
- *            ownedCount: number, writtenCommands: string[],
+ *            ownedCount: number, writtenCommands: string[], removedCommands: string[],
  *            diagnostics: Array<{level: string, code: string, command?: string}>}}
+ *   `writtenCommands` / `removedCommands` 合起来就是「本轮写入器自己声明动过的条目」，
+ *   可整份喂给 `validate-codex-hooks.mjs --desired`（保全判据的减数）。
+ *   ⚠️ 两者的可信度不同：前者是我方生成器的产物（与归属谓词无关），后者由谓词派生 ——
+ *   门禁会对后者带来的豁免逐条打 warning，见该文件 `checkForeignPreservation`。
  */
 export function installCodexHooks({ codexHome, entries } = {}) {
   const targetPath = resolveHooksPath(codexHome);
@@ -299,7 +383,8 @@ export function installCodexHooks({ codexHome, entries } = {}) {
   const stripped = stripOwnedFromHooks(sourceHooks);
   const nextHooks = stripped.hooks;
   // 被摘掉又原样写回的不算删除；只有真正消失的（旧版本路径 / 归属误认）才登记
-  reportRemovedCommands(diagnostics, stripped.removedCommands, writtenCommands);
+  /** 本轮写入器**自己声明**移除的 command 字面量（与 `writtenCommands` 同为保全判据的减数） */
+  const removedCommands = reportRemovedCommands(diagnostics, stripped.removedCommands, writtenCommands);
 
   // 2) 追加本次要写入的条目，落在既有第三方条目**之后**（不打乱他人顺序）
   const desiredEvents = new Set(Object.keys(entries.hooks));
@@ -338,6 +423,7 @@ export function installCodexHooks({ codexHome, entries } = {}) {
       backupPath: null,
       ownedCount,
       writtenCommands,
+      removedCommands,
       diagnostics,
     };
   }
@@ -350,6 +436,7 @@ export function installCodexHooks({ codexHome, entries } = {}) {
     backupPath,
     ownedCount,
     writtenCommands,
+    removedCommands,
     diagnostics,
   };
 }
@@ -418,7 +505,8 @@ export const RAW_HOOKS_KEY = '__codexHooksNonObjectHooks';
  * 该破坏路径立刻变红。
  *
  * ⚠️ 本判据仍与写入器共用 `isOwnedEntry`，因此**检不出归属谓词自身的过度认领**（见模块头部）。
- * 那一维由 `validate-codex-hooks.mjs` 的命令字面量存活判据独立覆盖。
+ * 那一维交给 `validate-codex-hooks.mjs` 的命令字面量存活判据：只有当 `--desired` 不含
+ * 由本谓词派生的 `removedCommands` 时它才判 fail；含时降级为 warning 级审计信号。
  */
 export function projectForeignOnly(doc) {
   if (!isPlainObject(doc)) return { [RAW_DOCUMENT_KEY]: doc };

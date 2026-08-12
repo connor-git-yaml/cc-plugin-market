@@ -342,6 +342,291 @@ describe('F240 T045 — PLUGIN_BUILD_PROBES 5 探针（clarify #3 强标准）',
   });
 });
 
+describe('F262 / W2 — config.toml 词法扫描形态清单', () => {
+  /** 造一个 Codex 快照缓存（与上一组同形；本组自持一份，避免跨 describe 取用私有 helper）*/
+  function seedSnapshot(
+    codexHome: string,
+    market: string,
+    plugin: string,
+    snapshot: string,
+    version: string,
+  ) {
+    const dir = path.join(codexHome, 'plugins', 'cache', market, plugin, snapshot, '.codex-plugin');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'plugin.json'), JSON.stringify({ name: plugin, version }));
+  }
+
+  /**
+   * 跑一次 doctor：仓库两产品版本均为 4.4.0，磁盘上预置若干快照。
+   *
+   * 判别信号刻意选"最终 status"而非"probe 是否 absent"：预置一个**明显与仓库版本不符**的
+   * 旧/假快照后，段头解析一旦被污染（键泄漏给前一段、幻影段被注册），该产品就会被判 `fail`
+   * （版本漂移 + reinstall 指引）；解析正确时它只能落 `indeterminate`。
+   * 这样"误报"与"正确"落在两个不同的枚举值上，不会靠弱信号蒙混过关。
+   */
+  function runWithConfig(
+    configToml: string,
+    snapshots: Array<{ market: string; plugin: string; snapshot: string; version: string }> = [],
+  ) {
+    const fx = makeFixture({ spectraVersion: '4.4.0', specDriverVersion: '4.4.0', configToml });
+    for (const s of snapshots) seedSnapshot(fx.codexHome, s.market, s.plugin, s.snapshot, s.version);
+    return io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeExec({}),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+  }
+
+  it('行尾注释（主形态）：段头被注释吞掉 → 前一产品被诬告漂移、后一产品判不出', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        '',
+        '[plugins."spectra@m"] # 用户自己加的备注',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      [
+        { market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' },
+        { market: 'm', plugin: 'spectra', snapshot: 'bbbb2222', version: '4.4.0' },
+      ],
+    );
+
+    // spectra 段头必须被认出来 → 读到 4.4.0 快照 → ok
+    expect(report.checks['plugin-build.spectra'].status).toBe('ok');
+    expect(report.checks['plugin-build.spectra'].details.semver).toBe('4.4.0');
+    // spec-driver 明确 enabled=false，不得被后面泄漏的 `enabled = true` 点燃成"漂移"
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+  });
+
+  it('段头含 `\\"` 转义：注释剥离不得在转义引号处误判引号状态', () => {
+    // 🔴 仓内 `simple-yaml.mjs` 的注释剥离恰好是"有引号互斥、无转义感知"，照抄即在此形态失败：
+    // `\"` 被当成闭合引号后，后面的 `#` 会被认成串内字符 → 注释不剥 → 段头不匹配 → 键泄漏。
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        '',
+        '[mcp_servers."a\\"b"] # 备注',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      [{ market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' }],
+    );
+
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+  });
+
+  it('`[[array-of-tables]]` 必须重置段边界，不得让键泄漏回前一 plugin 段', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        '',
+        '[[profiles.batch]]',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      [{ market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' }],
+    );
+
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+  });
+
+  it('FORM-D 多行字符串值泄漏：`"""…"""` 内的 `enabled = true` 不得生效', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        'description = """',
+        'enabled = true',
+        '"""',
+        '',
+      ].join('\n'),
+      [{ market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' }],
+    );
+
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+  });
+
+  it('FORM-E 多行字符串幻影段：串内的 `[plugins."x@y"]` 不得被注册为真实条目', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        'notes = """',
+        '[plugins."spectra@evil-market"]',
+        'enabled = true',
+        '"""',
+        '',
+      ].join('\n'),
+      [{ market: 'evil-market', plugin: 'spectra', snapshot: 'cccc3333', version: '9.9.9' }],
+    );
+
+    // 幻影段被注册 ⇒ 会去读 evil-market 下的 9.9.9 假快照并判 fail（漂移误报）
+    expect(report.checks['plugin-build.spectra'].status).toBe('indeterminate');
+    expect(report.checks['plugin-build.spectra'].details.semver ?? null).toBeNull();
+  });
+
+  it('单引号里的 `#` 不算注释，正常段头照常识别（剥注释不得剥过头）', () => {
+    const report = runWithConfig(
+      [
+        "[mcp_servers.x]",
+        "token = 'a#b'",
+        '',
+        '[plugins."spectra@m"]',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      [{ market: 'm', plugin: 'spectra', snapshot: 'bbbb2222', version: '4.4.0' }],
+    );
+
+    expect(report.checks['plugin-build.spectra'].status).toBe('ok');
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // F262 修复轮 —— 幻影多行串（三连引号标记出现在「不该被当作定界符」的位置）
+  //
+  // 共用判别信号：spec-driver 明写 `enabled = false` 且只有一个 3.0.0 旧快照，
+  // spectra 明写 `enabled = true` 且有一个与仓库同版的 4.4.0 快照。于是
+  // - 解析正确 ⇒ spec-driver `indeterminate`（没被点燃）+ spectra `ok`（4.4.0 匹配）；
+  // - 幻影串吞掉 spectra 段头 ⇒ `enabled = true` 泄漏回 spec-driver ⇒ spec-driver `fail`
+  //   （3.0.0 漂移误报）+ spectra `indeterminate`。
+  // 两种结局落在不同枚举值上，误报无法蒙混过关。
+  // ───────────────────────────────────────────────────────────────────────────
+  const PHANTOM_SNAPSHOTS = [
+    { market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' },
+    { market: 'm', plugin: 'spectra', snapshot: 'bbbb2222', version: '4.4.0' },
+  ];
+
+  function expectNoPhantomSwallow(report: any) {
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+    expect(report.checks['plugin-build.spectra'].status).toBe('ok');
+    expect(report.checks['plugin-build.spectra'].details.semver).toBe('4.4.0');
+  }
+
+  it('🔴 单行 literal string 里的 `"""` 不是多行串定界符（主向量：偶数个杂散标记会吞掉整段）', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        'note = \'multiline 写法是 """\'',
+        '',
+        '[plugins."spectra@m"]',
+        'note = \'收尾例子 """\'',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      PHANTOM_SNAPSHOTS,
+    );
+
+    expectNoPhantomSwallow(report);
+  });
+
+  it('🔴 单行 basic string 里的 `\'\'\'` 不是多行串定界符', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        'note = "literal 写法是 \'\'\'"',
+        '',
+        '[plugins."spectra@m"]',
+        'note = "收尾例子 \'\'\'"',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      PHANTOM_SNAPSHOTS,
+    );
+
+    expectNoPhantomSwallow(report);
+  });
+
+  it('🔴 注释里的 `"""` 不是多行串定界符（偶数个 ⇒ 幻影串中途闭合、被吞区间含段头）', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        '# 备注：多行写法是 """',
+        '',
+        '[plugins."spectra@m"]',
+        '# 又一条备注 """',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      PHANTOM_SNAPSHOTS,
+    );
+
+    expectNoPhantomSwallow(report);
+  });
+
+  it('行内成对 `"""a"""` 闭合后不得留下跨行状态', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        'desc = """inline"""',
+        '',
+        '[plugins."spectra@m"]',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      PHANTOM_SNAPSHOTS,
+    );
+
+    expectNoPhantomSwallow(report);
+  });
+
+  it('`""""` 四引号 / 开标记行带行尾注释 / 闭合行尾接内容：三种边界形态都不得错判', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        // `""""` = 开多行 basic 串 + 串内第一个字符是 `"`；行尾的 `#` 落在串内，不是注释
+        'quad = """" # 这个井号在串内',
+        // 串内的键值行必须不生效（否则 spec-driver 被点燃成 3.0.0 漂移）
+        'enabled = true',
+        // 闭合三连引号之后的行尾内容要继续正常扫描，不得整行丢弃
+        '""" 收尾后还有内容',
+        '',
+        '[plugins."spectra@m"]',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      PHANTOM_SNAPSHOTS,
+    );
+
+    expectNoPhantomSwallow(report);
+  });
+
+  it('🔴 段头含 `]`（无法解析）必须视为段边界：既不建条目，也不得让键泄漏给前一段', () => {
+    const report = runWithConfig(
+      [
+        '[plugins."spec-driver@m"]',
+        'enabled = false',
+        '',
+        // 段名内侧含 `]` ⇒ `^\[([^\]]+)\]$` 结构性失配。此时 MUST 重置段边界（保守 absent），
+        // 而不是"不认识就跳过"——跳过会让下面的 `enabled = true` 归属回 spec-driver 段。
+        '[plugins."spectra@m]evil"]',
+        'enabled = true',
+        '',
+      ].join('\n'),
+      [
+        { market: 'm', plugin: 'spec-driver', snapshot: 'aaaa1111', version: '3.0.0' },
+        { market: 'm]evil', plugin: 'spectra', snapshot: 'cccc3333', version: '9.9.9' },
+      ],
+    );
+
+    // 前一段不被泄漏点燃
+    expect(report.checks['plugin-build.spec-driver'].status).toBe('indeterminate');
+    // 该段自身不建条目 ⇒ 不会去读 `m]evil` 下的 9.9.9 假快照
+    expect(report.checks['plugin-build.spectra'].status).toBe('indeterminate');
+    expect(report.checks['plugin-build.spectra'].details.semver ?? null).toBeNull();
+  });
+});
+
 describe('F240 T045 — 按产品分组的比较矩阵', () => {
   it('spectra 与 spec-driver 的仓库版本各自独立读取（不混用）', () => {
     const fx = makeFixture({ spectraVersion: '4.4.0', specDriverVersion: '3.1.2' });
@@ -840,6 +1125,27 @@ describe('F240 T048 — hook-trust 四情形固定状态值（FR-009）', () => 
       expect(core.HOOK_TRUST_PROBES).toContain(probe.id);
       expect(core.PROBE_OUTCOMES).toContain(probe.outcome);
     }
+  });
+
+  it('🔴 F262 / W2：裸 `[hooks]`（Codex 产品特性段）不是信任记录段 → 照常判 untrusted', () => {
+    // `[hooks]` 是 Codex 自己的功能开关段，不是 `hooks.state` 那种信任记录；
+    // 旧判据 `^hooks(\.|$)` 会把它当成"信任记录已存在"，于是把**可执行的** grant-hook-trust
+    // 指引降级成 manual-investigate —— 用户被告知"去人工排查"，而实际动作是去 Codex 里授权。
+    const fx = makeFixture({
+      hooksJson: '{"Stop":[]}',
+      configToml: '[hooks]\nsome_feature = true\n',
+    });
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeExec({}),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+    const check = report.checks['hook-trust'];
+    expect(check.status).toBe('warning');
+    expect(check.details.trustStatus).toBe('untrusted');
+    expect(check.remediation.code).toBe('grant-hook-trust');
   });
 
   it('classifyHookTrust 纯函数覆盖 trusted / modified 两态（T062 确证后接线）', () => {

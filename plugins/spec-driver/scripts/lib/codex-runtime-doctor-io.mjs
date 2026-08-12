@@ -220,38 +220,181 @@ function probeGlobalCli(exec, binaryName) {
 // 三方：plugin build（5 个可枚举排查点，全部执行，任一抛错不跳过其余）
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * config.toml 的单遍词法扫描器：注释剥离与字符串跟踪由**同一次左到右逐字符遍历**完成。
+ *
+ * 🔴 为什么必须合一（F262 修复轮）：先前是"多行串跟踪跑在原始行上、注释剥离另跑一遍"两个
+ * 互不知情的扫描。于是 `"""` / `'''` 只要**出现过**就被当定界符，无论它落在注释里、落在
+ * 单行 basic string 里（`"… ''' …"`）还是落在单行 literal string 里（`'… """ …'`）。
+ * 这类杂散标记为**偶数**个时，幻影串会中途闭合，被吞区间若含段头，后面的 `enabled = true`
+ * 就错归属给上一个 plugin 段 —— 直接产出 fail 级的版本漂移误报（而非安全方向的 absent）。
+ *
+ * 扫描状态：
+ * - `openTriple`：跨行的多行串定界符（`"""` 或 `'''`），只有在「串外且非注释」处出现的
+ *   三连引号才会开启它；串内只寻找**对应**的闭合定界符，其余字符一律吞掉；
+ *   闭合后该行剩余部分继续正常扫描（含可能的行尾注释）。
+ * - 单行 basic string（`"`）：`\` 转义下一字符，故 `\"` 不闭串（仓内 `simple-yaml.mjs`
+ *   的无转义版本会在 `[mcp_servers."a\"b"] # note` 上把注释留下、整行不匹配段头）。
+ * - 单行 literal string（`'`）：无转义语义。
+ * - 单行串在行尾仍未闭合是非法 TOML；此处不报错，保守吞掉该行剩余（不可判定内容）。
+ * - `#` 出现在一切串外 ⇒ 行止。
+ *
+ * `consumeLine` 返回该行**归约后的可判定文本**（串内内容与注释已剔除，单行串的内容原样保留
+ * —— 段头名恰恰住在单行串里）。
+ */
+function createTomlScanner() {
+  let openTriple = null;
+  return {
+    consumeLine(rawLine) {
+      let out = '';
+      let i = 0;
+      while (i < rawLine.length) {
+        if (openTriple !== null) {
+          if (rawLine.startsWith(openTriple, i)) {
+            openTriple = null;
+            i += 3;
+          } else {
+            i += 1; // 多行串内容：整体丢弃，不参与任何段头/键值判定
+          }
+          continue;
+        }
+        const ch = rawLine[i];
+        if (ch === '#') break; // 串外注释 ⇒ 行止
+        if (rawLine.startsWith('"""', i) || rawLine.startsWith("'''", i)) {
+          openTriple = rawLine.slice(i, i + 3);
+          i += 3;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          const end = scanSingleLineString(rawLine, i, ch);
+          if (end === null) return out; // 行尾未闭合（非法 TOML）⇒ 保守吞掉剩余
+          out += rawLine.slice(i, end);
+          i = end;
+          continue;
+        }
+        out += ch;
+        i += 1;
+      }
+      return out;
+    },
+  };
+}
+
+/**
+ * 从 `start`（引号本身）扫到单行字符串的闭合引号，返回闭合引号之后的下标；未闭合返回 null。
+ * basic string（`"`）内 `\` 转义下一字符；literal string（`'`）内无转义语义。
+ */
+function scanSingleLineString(rawLine, start, quote) {
+  const escaping = quote === '"';
+  let i = start + 1;
+  while (i < rawLine.length) {
+    const ch = rawLine[i];
+    if (escaping && ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === quote) return i + 1;
+    i += 1;
+  }
+  return null;
+}
+
+/**
+ * config.toml 行规范化管线（`parsePluginRegistry` 与 `hasHooksStateSection` 共用同一判据）。
+ *
+ * 每行经 `createTomlScanner` 归约后 trim，再依次尝试 `[[x]]`（数组表）与 `[x]`（普通表）。
+ *
+ * ## 段边界承诺（判据的一部分）
+ * **任何以 `[` 开头的归约行都是段边界**（`isSectionBoundary`，消费方必须重置归属），
+ * 其中**能成功解析出段名的**才带 `headerName`。二者刻意分离：`[plugins."a]b@y"]`、
+ * `[mcp_servers."a]b"]` 这类段名内含 `]` 的形态对 `^\[([^\]]+)\]$` 结构性失配，
+ * 若"解析不出就跳过"，后续 `enabled = true` 会泄漏回上一个 plugin 段 —— 保守的方向是
+ * 「判不出归属」（absent → indeterminate），绝不是「错归属」（fail 级误报）。
+ *
+ * ## 🔴 不支持形态清单
+ * 下列形态**不会**被解析成注册条目，落 `absent → indeterminate` 的安全方向（已有测试锚定）：
+ * - 段头内侧空白：`[ plugins."x@y" ]`
+ * - literal string 键：`[plugins.'x@y']`
+ * - 段名内含 `]`：`[plugins."a]b@y"]`（按上述承诺当段边界处理）
+ * - 点分键写法：`plugins."x@y".enabled = true`
+ * - 无 `@marketplace` 的段名、名字里含多个 `@`
+ * - `[[plugins."x@y"]]` 数组表（[推断] Codex 侧预期反序列化失败，absent 与事实同向）
+ *
+ * ## 已知过度近似（方向安全，但会主动放弃判定）
+ * 本模块不跟踪「值上下文」，因此多行数组的续行 `[1, 2],` 这类以 `[` 开头的行也会被当成段边界，
+ * 提前断开归属 —— 结论落 absent → indeterminate，与上面的段边界承诺同向。
+ * 反过来，单行字符串**连同定界引号一起**保留在归约文本里（`'[plugins."x@y"]'` 归约后仍以 `'`
+ * 开头），所以字符串**内容**无法伪造出段头；这一点已实测。
+ * 这些形态写下来是因为：枚举式判据每漏记一种真实形态就漏一次（F259 教训），
+ * 而"全部落安全方向"这种总括式承诺一旦不真，就是把盲区伪装成保证。
+ *
+ * @returns {Array<{text: string, headerName: string|null, isArrayTable: boolean,
+ *                  isSectionBoundary: boolean}>}
+ */
+function normalizeTomlLines(tomlText) {
+  const scanner = createTomlScanner();
+  const lines = [];
+  for (const rawLine of tomlText.split('\n')) {
+    const text = scanner.consumeLine(rawLine).trim();
+    const arrayTable = /^\[\[([^\]]+)\]\]$/.exec(text);
+    if (arrayTable) {
+      lines.push({ text, headerName: arrayTable[1], isArrayTable: true, isSectionBoundary: true });
+      continue;
+    }
+    const table = /^\[([^\]]+)\]$/.exec(text);
+    if (table) {
+      lines.push({ text, headerName: table[1], isArrayTable: false, isSectionBoundary: true });
+      continue;
+    }
+    lines.push({
+      text,
+      headerName: null,
+      isArrayTable: false,
+      isSectionBoundary: text.startsWith('['),
+    });
+  }
+  return lines;
+}
+
 /** 从 config.toml 中提取 `[plugins."<name>@<market>"]` 段（词法扫描，不做通用 TOML 解析） */
 function parsePluginRegistry(tomlText) {
   const entries = [];
   let current = null;
-  for (const rawLine of tomlText.split('\n')) {
-    const line = rawLine.trim();
-    const header = /^\[([^\]]+)\]$/.exec(line);
-    if (header) {
-      const section = header[1];
-      const pluginKey = /^plugins\."([^"]+)"$/.exec(section);
+  for (const line of normalizeTomlLines(tomlText)) {
+    if (line.isSectionBoundary) {
+      // 段边界一律先断开归属：数组表、非 plugins 段、解析不出名字的段头都只重置、不建条目
+      current = null;
+      const pluginKey =
+        line.headerName !== null && !line.isArrayTable
+          ? /^plugins\."([^"]+)"$/.exec(line.headerName)
+          : null;
       if (pluginKey) {
         const [name, marketplace] = pluginKey[1].split('@');
         current = { name, marketplace: marketplace ?? null, enabled: false };
         entries.push(current);
-      } else {
-        current = null;
       }
       continue;
     }
-    if (current && /^enabled\s*=\s*true$/.test(line)) {
+    if (current && /^enabled\s*=\s*true$/.test(line.text)) {
       current.enabled = true;
     }
   }
   return entries;
 }
 
-/** config.toml 是否含 `hooks.state` 类段（FR-009 的信任记录落点，§9.7） */
+/**
+ * config.toml 是否含 `hooks.state` 类段（FR-009 的信任记录落点，§9.7）。
+ *
+ * 🔴 判据收窄到 `hooks.state` 前缀（原为 `^hooks(\.|$)`）：`[hooks]` 是 Codex 自己的产品特性段，
+ * 把它误判成信任记录段会让**可执行**的 `grant-hook-trust` 指引降级成 `manual-investigate` ——
+ * 用户被告知"去人工排查"，而实际动作只是去 Codex 里授权。
+ * 段的确切形态仍未经实测确证（T062 挂账），故命中时依旧只归 `present-unconfirmed`（indeterminate），
+ * 绝不猜测解析出"已信任"。
+ */
 function hasHooksStateSection(tomlText) {
-  for (const rawLine of tomlText.split('\n')) {
-    const header = /^\[([^\]]+)\]$/.exec(rawLine.trim());
-    if (!header) continue;
-    if (/^hooks(\.|$)/.test(header[1])) return true;
+  for (const line of normalizeTomlLines(tomlText)) {
+    if (line.headerName === null) continue;
+    if (/^hooks\.state(\.|$)/.test(line.headerName)) return true;
   }
   return false;
 }

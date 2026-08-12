@@ -11,7 +11,8 @@
  *
  * 运行：npx vitest run tests/unit/codex-hooks-installer.test.ts
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -19,12 +20,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const installer = await import(
-  new URL('../../plugins/spec-driver/scripts/lib/codex-hooks-installer.mjs', import.meta.url).href
-);
-const generator = await import(
-  new URL('../../plugins/spec-driver/scripts/lib/codex-hooks-generator.mjs', import.meta.url).href
-);
+const INSTALLER_URL = new URL(
+  '../../plugins/spec-driver/scripts/lib/codex-hooks-installer.mjs',
+  import.meta.url,
+).href;
+const GENERATOR_URL = new URL(
+  '../../plugins/spec-driver/scripts/lib/codex-hooks-generator.mjs',
+  import.meta.url,
+).href;
+const installer = await import(INSTALLER_URL);
+const generator = await import(GENERATOR_URL);
 
 const CANONICAL_HOOKS_JSON = path.join(repoRoot, 'plugins', 'spec-driver', 'hooks', 'hooks.json');
 const PLUGIN_ROOT = path.join(repoRoot, 'plugins', 'spec-driver');
@@ -406,6 +411,149 @@ describe('codex-hooks-installer', () => {
       installer.removeCodexHooks({ codexHome });
 
       expect(fs.readFileSync(`${target}.bak`, 'utf-8')).toBe(before);
+    });
+  });
+
+  // ─── (h) 权限位保全（F262 / W3）─────────────────────────────────────────
+
+  describe('(h) 权限位保全（W3）', () => {
+    it('目标原有 0600 → 写入后仍是 0600（rename 换 inode 不得把用户私密配置放宽成 0644）', () => {
+      seedForeign();
+      fs.chmodSync(target, 0o600);
+
+      const result = installer.installCodexHooks({ codexHome, entries: entriesFor(PLUGIN_ROOT) });
+
+      expect(result.changed).toBe(true);
+      expect((fs.statSync(target).mode & 0o777).toString(8)).toBe((0o600).toString(8));
+      // 权限保全不能是"写坏内容换来的"
+      expect(ownedHandlers(readTarget())).toHaveLength(5);
+    });
+
+    it('目标原有 setgid 高位（2640）→ 高位一并保全（`& 0o777` 掩码会静默丢掉 setgid）', () => {
+      seedForeign();
+      fs.chmodSync(target, 0o2640);
+
+      installer.installCodexHooks({ codexHome, entries: entriesFor(PLUGIN_ROOT) });
+
+      expect((fs.statSync(target).mode & 0o7777).toString(8)).toBe((0o2640).toString(8));
+    });
+
+    it('目标不存在（首次创建）且 umask 宽松（000）→ 落 0600，绝不世界可写', () => {
+      // 🔴 hooks.json 的内容会被 Codex 当命令执行；umask 000 下按默认 mode 创建就是 0666
+      // （世界可写）＝ 本地注入面。
+      // 用**子进程**设 umask 而不是 `process.umask()`：后者是进程级全局状态，
+      // 会污染同一 vitest worker 里并行跑的其他用例。
+      const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'f262-umask-'));
+      const helper = path.join(sandbox, 'first-create.mjs');
+      const freshHome = path.join(sandbox, 'codex-home');
+      fs.writeFileSync(
+        helper,
+        [
+          "import fs from 'node:fs';",
+          'const [installerUrl, generatorUrl, canonicalPath, pluginRoot, codexHome] = process.argv.slice(2);',
+          'const { installCodexHooks } = await import(installerUrl);',
+          'const { generateCodexHooks } = await import(generatorUrl);',
+          "const canonical = JSON.parse(fs.readFileSync(canonicalPath, 'utf-8'));",
+          'installCodexHooks({ codexHome, entries: generateCodexHooks({ canonical, pluginRoot }) });',
+          "process.stdout.write((fs.statSync(`${codexHome}/hooks.json`).mode & 0o7777).toString(8));",
+          '',
+        ].join('\n'),
+        'utf-8',
+      );
+      try {
+        const argv = [helper, INSTALLER_URL, GENERATOR_URL, CANONICAL_HOOKS_JSON, PLUGIN_ROOT, freshHome]
+          .map((value) => `'${value}'`)
+          .join(' ');
+        const result = spawnSync('bash', ['-c', `umask 000; node ${argv}`], {
+          encoding: 'utf-8',
+          timeout: 60_000,
+        });
+        expect(result.stderr).toBe('');
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe((0o600).toString(8));
+      } finally {
+        fs.rmSync(sandbox, { recursive: true, force: true });
+      }
+    });
+
+    it('🔴 W-3：首次创建的目录在 umask 000 下也是 0700（0777 目录里谁都能 unlink 掉 0600 文件）', () => {
+      // 文件位收紧到 0600 并不关闭注入面：目录若是 0777，同机任何本地用户都能把 hooks.json
+      // unlink 掉再放一份自己的进来 —— 内容会被 Codex 当命令执行。
+      const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'f262-dirmode-'));
+      const helper = path.join(sandbox, 'first-create-dir.mjs');
+      const freshHome = path.join(sandbox, 'codex-home', 'deep');
+      fs.writeFileSync(
+        helper,
+        [
+          "import fs from 'node:fs';",
+          'const [installerUrl, generatorUrl, canonicalPath, pluginRoot, codexHome] = process.argv.slice(2);',
+          'const { installCodexHooks } = await import(installerUrl);',
+          'const { generateCodexHooks } = await import(generatorUrl);',
+          "const canonical = JSON.parse(fs.readFileSync(canonicalPath, 'utf-8'));",
+          'installCodexHooks({ codexHome, entries: generateCodexHooks({ canonical, pluginRoot }) });',
+          'process.stdout.write((fs.statSync(codexHome).mode & 0o7777).toString(8));',
+          '',
+        ].join('\n'),
+        'utf-8',
+      );
+      try {
+        const argv = [helper, INSTALLER_URL, GENERATOR_URL, CANONICAL_HOOKS_JSON, PLUGIN_ROOT, freshHome]
+          .map((value) => `'${value}'`)
+          .join(' ');
+        const result = spawnSync('bash', ['-c', `umask 000; node ${argv}`], {
+          encoding: 'utf-8',
+          timeout: 60_000,
+        });
+        expect(result.stderr).toBe('');
+        expect(result.status).toBe(0);
+        expect(result.stdout).toBe((0o700).toString(8));
+      } finally {
+        fs.rmSync(sandbox, { recursive: true, force: true });
+      }
+    });
+
+    it('tmp 文件创建即 0600：内容全程没有一个"更宽权限"的暴露窗口', () => {
+      const spy = vi.spyOn(fs, 'writeFileSync');
+      try {
+        installer.installCodexHooks({ codexHome, entries: entriesFor(PLUGIN_ROOT) });
+        const tmpWrites = spy.mock.calls.filter(
+          ([file]) => typeof file === 'string' && file.startsWith(`${target}.tmp.`),
+        );
+        expect(tmpWrites).toHaveLength(1);
+        const options = tmpWrites[0][2];
+        expect(typeof options).toBe('object');
+        expect((options as { mode?: number }).mode).toBe(0o600);
+        // I-1：`wx`（O_EXCL）—— tmp 路径被预置成软链/已有文件时报错走清理分支，
+        // 而不是顺着别人的软链把内容写到未知位置
+        expect((options as { flag?: string }).flag).toBe('wx');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('chmod 失败（无权限位文件系统）→ 降级继续：安装照常成功 + target-mode-preserve-failed 诊断', () => {
+      // 放宽面在 exFAT/SMB 这类 FS 上本就不存在；为一个锦上添花的元数据动作新增阻断面
+      // 反而会让本可正常写入的 hooks 装不上。
+      seedForeign();
+      const spy = vi.spyOn(fs, 'chmodSync').mockImplementation(() => {
+        const error: NodeJS.ErrnoException = new Error('operation not supported');
+        error.code = 'ENOTSUP';
+        throw error;
+      });
+      try {
+        const result = installer.installCodexHooks({ codexHome, entries: entriesFor(PLUGIN_ROOT) });
+
+        expect(result.ok).toBe(true);
+        expect(result.changed).toBe(true);
+        expect(ownedHandlers(readTarget())).toHaveLength(5);
+        expect(result.diagnostics.map((d: { code: string }) => d.code)).toContain(
+          'target-mode-preserve-failed',
+        );
+        // 降级不等于留残渣：tmp 文件不得遗留在用户的 $CODEX_HOME
+        expect(fs.readdirSync(codexHome).filter((name) => name.includes('.tmp.'))).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 
