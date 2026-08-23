@@ -589,6 +589,32 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    **"实测恰等于自构上界"不得当完备性证据引用**。断言 2（member-target 边宿主全为 class）
    审查方独立重算通过；真边抽样全真；分母 517 无虚抬（六类弃权不缩分母）——F260 正收益坐实。）
 
+  （2026-08-23 **🏁 M9 代码面收官 + F262/F263 体检 + 账本流转 + M10 规划启动**〔用户拍板三项：
+   收官并跑交界 workflow / 三张缺陷卡进 M10 首批 P0 / 流程改进本轮落账〕：
+   **F262✅（M9 最后一张实质代码卡）**：主线程对抗性实跑 W3——umask 000 下首创文件 0600 / 目录
+   0700（非 0666/0777）、用户 0640 二次安装后精确保全、0600@umask022 保全、外来 hooks 条目不丢；
+   真 canonical entries 三连装 handler 恒 5（幂等，ownership 由 `isOwnedEntry(command)` 识别）。
+   修法比卡面周全：stat 快照 → tmp 创建即 0o600 → chmodSync 精确还原 → rename；TOCTOU 与
+   "保全≠加固"如实披露。W1/W2/W4 各有 fixture 与裁决（W4 保持"首份 .bak"语义 + CLI 文案明示）。
+   **F263✅（上轮欠的完整体检）**：临时工程 5 用例 5/5——审查方两条假边复现（局部类遮蔽 / 类型形参
+   遮蔽）消失、正常 `new X().m()` 真边保留、**TS 声明合并（首版误伤形态）保留**、**顶层重赋值
+   （次版假边形态）正确弃权**；本仓锚点 method 入边 **238 不变**；守卫形态优于卡面（对称
+   fail-closed + 禁 fallthrough 到 import 分支防新造第三源假边）。
+   **门禁基线**：build 0 / vitest **7498 passed 0 failed** / test:plugins 0 / repo:check 86 族 /
+   release:check 0；图 7611 节点 / 12938 边（calls 3996）；`builder.commit == sourceCommit`（F261 戳在工作）。
+   **🏁 收官判定**：A/B/C/D/E 五轨 + F257-F263 七张质量收口卡**代码面全部完成**；正式收官仍挂
+   **T062/T063** 两项人工验证（用户在真实 Codex 客户端执行，见 memory）。**在此之前任何"M9 已完成"
+   表述都必须带"代码面完成、两项人工验证待办"限定。**
+   **账本流转**（F261/F260/F263/F262 共 11 条 → 全部已处理）：2 条已修复进 milestone-next SKILL §5
+   模板〔禁 stash/checkout 隔离 + 共享树验收口径；图解析类改动加外部语料 A/B 第二口径〕；
+   3 条分流为 **M10 首批 P0 三卡**（见 §10 新增）；3 条分流 M10 roadmap 既有轨道〔plan 裁决回写 →
+   引擎硬化；边 provenance/resolverStage → 可信活图审计面；派活粒度 → task right-sizing〕；
+   2 条裁决不做〔harness 断连属应用侧已缓解；MCP vs 裸图定位非缺陷〕；1 条并入同类计数。
+   **M10 规划 workflow 已启动**〔wf_0532a10b：3 路增量调研（code-context 工具赛道 / agentic
+   workflow 与 harness / 图检索范式与评测）∥ 4 维全仓审查（src 核心架构 / spec-driver 引擎与门禁链 /
+   测试与守护资产 / 产品表面一致性）→ 逐条对抗证伪（每维上限 3，超限者登记未证伪）→ 完整性批评〕，
+   结果回收后出 M10 路线图草案（独立 stepback-revision 文档）回用户拍板。）
+
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
 1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**
@@ -644,6 +670,12 @@ M10 与 M9 共用这份 program roadmap，但只有 M9 质量门通过后才进�
   - 同卡：9 入口 description 全部从引擎语言改写为**意图语言**（"想做新功能但需求还模糊？先跑这个"）——F184 MCP 触发率工程的同款 adoption 逻辑应用到命令层；可选 intent 别名/router 二期
   - 立项依据：SuperPowers 火的解剖（方法论可读性 + 分钟级 time-to-value + 意图命名）vs 我们实测优势（81.8% vs 66.7%）——终局产品要"让人想用"与"用了真有效"兼得，此卡补前者；
 - goal_loop 扩展到更多有界任务及 fallback/rollback 对抗验证。
+- **🔴 M10 首批 P0 三卡（2026-08-23 账本流转拍板，均为 M9 收官期实证缺陷，不算"体验扩张"）**：
+  - **P0-①「fix-compliance 判定器对陈旧 transcript 快照的处置」**（门禁类，异构对抗档位必备）：F262 实证 Claude Agent SDK harness 下主 transcript 懒刷盘（滞后 25+ 分钟、停格 38 行），判定器读不到已发生的 mkdir/Write/委派证据 → 每次 fix 会话结尾必吃 2 次假 block 再按 F256 有界降级放行，F208 门禁在真实 harness 里退化为噪声+延迟。方向："陈旧快照 → indeterminate + 审计"而非"证据缺失 → block"；**硬约束**：spec 阶段必须给出被判方无法伪造"陈旧"的判据（任何放宽都是新绕过面，F224-F257 九轮史），并与磁盘侧候选历史兜底（F227）协同而非叠加
+  - **P0-②「Claude 侧 atomic-write 缺陷群」**（security-adjacent）：`src/utils/atomic-write.ts` writeAtomicJson 无 mode 保全 + **rename 拆软链**（dotfiles 管理 `.claude/settings.json` 的用户收不到更新，实测）+ tmp 固定名并发互截 + 失败不清理，5 个生产消费方；`src/hooks/hook-installer.ts` 无条件 `chmodSync(0o755)` 放宽用户收紧的 0700、`.bak` 无 COPYFILE_EXCL、remove 路径不备份；`codex-runtime-doctor-io.mjs` `.find` 首匹配非首可用（畸形段屏蔽合法段→absent）。以 F262 W3 的 codex 侧实现为参照做 parity，详单见 specs/262 fix-report「同源但分流」
+  - **P0-③「MCP impact/context 返回面接入图新鲜度状态」**：F261 实证陈旧图下 `impact(upstream)` 返回 `callers: []` 且 nextStepHint 往"没人调用"引导，与真空结果不可区分；F261 已把 `builder{commit,dirty}` 落进图产物、F217 已有 freshness 门，只差接到 MCP 返回 envelope（stale 时显式降级措辞 + 建议重建）。小卡，M10 第一批并行
+- **引擎硬化轨道追加**（账本分流）：fix/feature 流程补"主线程裁决回写 plan（就地批注、保留原文）"显式步骤（F261 实证 plan.md 与实现持续背离）；派活粒度与 tasks.md 任务粒度对齐（并入 task right-sizing）
+- **可信活图审计面**（账本分流，F260 报 + F263 再现）：图边可选 `resolverStage`/provenance 溯源字段 + confidence 双词汇（`high/medium/low` vs `EXTRACTED/INFERRED/AMBIGUOUS`）收敛，使逐边 diff 归因不必重跑流水线
 - **implement/review 引擎硬化**（2026-07-20 SuperPowers 6.1.1 深读对照，机制级证据）：
   - **TDD 红先行引擎化**（P0，最高性价比）：现 implement agent TDD 指令 = 零（grep 实证），红绿纪律只散在仓库约定与个别 feature 自律。落法：implement.md 写入红绿重构流程 + tasks 模板默认"红测试→实现"配对（bite-sized：写红/跑红/最小实现/跑绿/commit）+ 完成声明加红证据字段 + verify Layer 1.5 查红证据。**协同乘法：goal_loop 的 metric 本就是红测试，TDD 普及后每任务天然 goal_loop-able**。不抄 prompt 级"删代码"威胁（F206 证伪路线），证据进 judge 查验
   - **任务级上下文精确构造**："为子代理构造恰好需要的上下文、永不全文 handoff"（SP implementer/reviewer 合同核心原则）——作为 M8-deferred「自适应流程裁剪」卡的设计方向，同解 4-12× token 与上下文污染

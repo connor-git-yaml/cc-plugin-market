@@ -80,6 +80,8 @@ $ARGUMENTS
   - `specs/src.spec.md` 排除出 commit（显式路径）
   - 🆕 工具使用反馈节（dogfooding policy 四维度：MCP 可用性 / 信息完整性 / 流程顺畅度 / 结果准确性），且有实质反馈时**同步 append 到 `docs/design/dogfooding-feedback-ledger.md`**（状态：待处理，随需求一并 commit；"无"不落账）——供 §2.5 下轮统一 review
   - 对抗/变异类实验必须在 /tmp 副本上做，不得在工作 worktree 改文件；派发对抗审查前先冻结改动面（不重建 dist、不继续改被审文件），避免移动靶
+  - 🔴 **禁用 `git stash` / `git checkout` / `git switch` 类手段做 A/B 或隔离**（会卷走同 worktree 并行代理的未提交工作，F261 codex-rescue 与 F262 内部子代理各实证一次）；受控 A/B 一律"复制副本 → 就地改 → 从副本还原"。多代理共享同一 worktree 时，验收口径改为"**目标文件组绿 + 受控 A/B 零 delta**"，不要求全量绿（他人的红在途，全量绿对单代理结构性不可达）
+  - **图解析 / 采集面类改动**（call-resolver、mapper、adapter、collector、gitignore oracle 等）验收必须带**第二口径：外部语料 A/B 差分**——在本仓之外的语料（`~/.spectra-baselines/` 既有 baseline projects 或 node_modules 抽样）上对改动前后建图做逐边 diff，并抽样核对；只靠"本仓锚点不变"不算验收（F263 实证：本仓锚点 238 对两轮真缺陷全盲——首版误伤 TS 声明合并、次版放行顶层重赋值假边，均由外部语料形态暴露）
   - ⚠️ 注明在独立 worktree 跑，避免与本窗口工作目录撞车
 - **评测类 Feature（花真钱/烧配额）**：prompt 里前置订阅优先凭据检查（host shell verify 三件套）+ 成本与配额提醒；派发节奏先问用户（先例：F176 等 F180 ship 后串行，避免白烧评测费）
 
