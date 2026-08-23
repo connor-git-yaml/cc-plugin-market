@@ -71,8 +71,11 @@ function codes(findings: Finding[]): string[] {
 }
 
 describe('CODEX 事件常量', () => {
-  it('schema 层为 10 个事件，产品层为 4 个事件且是前者子集', () => {
-    expect(schema.CODEX_EVENT_SCHEMA_SET).toHaveLength(10);
+  it('schema 层为 11 个事件，产品层为 4 个事件且是前者子集', () => {
+    // F264：`SessionEnd` 依 0.149.0 口径补入（10→11）。本机 0.144.6 实测**不接受**它，
+    // 见 codex-hooks-schema.mjs 的版本相关性说明——补入只放宽第三方条目的告警面，
+    // 产品集下面仍钉死 4 项不变。
+    expect(schema.CODEX_EVENT_SCHEMA_SET).toHaveLength(11);
     expect([...schema.CODEX_EVENT_SCHEMA_SET].sort()).toEqual(
       [
         'PostCompact',
@@ -81,6 +84,7 @@ describe('CODEX 事件常量', () => {
         'PreToolUse',
         'PermissionRequest',
         'SessionStart',
+        'SessionEnd',
         'Stop',
         'SubagentStart',
         'SubagentStop',
@@ -334,6 +338,156 @@ describe('三处校验对象各自成立', () => {
       expect(merged.description).toBe('用户自己的 hooks');
     } finally {
       fs.rmSync(codexHome, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * F264 — 产品层 handler 级判据（事件级判据的必要补强）
+ *
+ * 立论：事件集合是 handler 集合的**有损投影**。`Stop` 下挂着两条脚本，只丢掉
+ * `stop-fix-compliance-check.sh`（依从性判定器本体）时事件集合毫无变化 —— 旧的事件级判据
+ * 对这个"最该被拦下的缺口"判 pass。本组用例用**变异**钉死这条守护力：把守护删掉，
+ * 下面第一条用例必红。
+ */
+describe('F264 — 产品层 handler 级判据', () => {
+  const canonicalOptions = { checkCommandShape: false, canonicalSource: true };
+  const readCanonical = () => JSON.parse(fs.readFileSync(CANONICAL_HOOKS_JSON, 'utf-8'));
+  const productCodes = (report: { findings: Finding[] }) =>
+    report.findings.filter((f) => f.layer === 'product').map((f) => f.code);
+
+  it('canonical hooks.json 本身通过 handler 级判据（无 product 层 finding）', () => {
+    const report = schema.validateCodexHooksDocument(readCanonical(), canonicalOptions);
+    expect(productCodes(report)).toEqual([]);
+  });
+
+  it('🔴 Stop 事件仍在、只缺 stop-fix-compliance handler → 事件级判 pass，handler 级必须判 fail', () => {
+    const doc = readCanonical();
+    doc.hooks.Stop = doc.hooks.Stop.filter(
+      (group: unknown) => !JSON.stringify(group).includes('stop-fix-compliance'),
+    );
+    const report = schema.validateCodexHooksDocument(doc, canonicalOptions);
+
+    // 事件级判据对该缺口完全无感：Stop 仍在 owned 事件集合里，也没有 product-event-missing
+    expect(report.ownedEvents).toContain('Stop');
+    expect(productCodes(report)).not.toContain('product-event-missing');
+    // handler 级把它抓出来
+    expect(report.ok).toBe(false);
+    expect(
+      report.findings.find((f) => f.code === 'product-handler-missing'),
+    ).toMatchObject({ script: 'hooks/stop-fix-compliance-check.sh', event: 'Stop' });
+  });
+
+  it('owned 脚本挂到错误事件上 → product-handler-misplaced', () => {
+    const doc = readCanonical();
+    doc.hooks.PostToolUse.push(doc.hooks.PreToolUse[0]);
+    doc.hooks.PreToolUse = [];
+    const report = schema.validateCodexHooksDocument(doc, canonicalOptions);
+
+    expect(report.ok).toBe(false);
+    expect(
+      report.findings.find((f) => f.code === 'product-handler-misplaced'),
+    ).toMatchObject({
+      script: 'hooks/pre-tool-use-guard.sh',
+      event: 'PostToolUse',
+      expectedEvent: 'PreToolUse',
+    });
+  });
+
+  it('五条 owned 脚本逐条删除，每一条都必须被 handler 级判据抓到（无遗漏登记）', () => {
+    const scripts = Object.keys(schema.OWNED_HOOK_EXPECTED_EVENT);
+    expect(scripts).toHaveLength(5);
+    for (const script of scripts) {
+      const basename = script.split('/')[1];
+      const doc = readCanonical();
+      for (const event of Object.keys(doc.hooks)) {
+        doc.hooks[event] = (doc.hooks[event] as unknown[]).filter(
+          (group) => !JSON.stringify(group).includes(basename),
+        );
+      }
+      const report = schema.validateCodexHooksDocument(doc, canonicalOptions);
+      expect(
+        report.findings.some((f) => f.code === 'product-handler-missing' && (f as { script?: string }).script === script),
+        `删除 ${script} 后未被 handler 级判据抓到`,
+      ).toBe(true);
+    }
+  });
+
+  it('我方脚本挂到产品集之外的事件上 → 只由事件级判据报一次，不与 handler 级重复计数', () => {
+    const doc = readCanonical();
+    doc.hooks.SessionEnd = doc.hooks.SessionStart;
+    delete doc.hooks.SessionStart;
+    const report = schema.validateCodexHooksDocument(doc, canonicalOptions);
+
+    expect(report.ok).toBe(false);
+    // 事件越界由事件级报
+    expect(productCodes(report)).toContain('product-event-out-of-scope');
+    // 同一根因不再由 handler 级重复报一次 misplaced
+    expect(
+      report.findings.filter((f) => f.code === 'product-handler-misplaced'),
+    ).toEqual([]);
+    // 但"它从期望事件上消失了"仍必须被抓到（去重不等于漏报）
+    expect(
+      report.findings.find((f) => f.code === 'product-handler-missing'),
+    ).toMatchObject({ script: 'scripts/postinstall.sh', event: 'SessionStart' });
+  });
+
+  it('第三方条目不参与 handler 级判据（不得因用户自己的 hook 判 fail）', () => {
+    const doc = readCanonical();
+    doc.hooks.PermissionRequest = [
+      { matcher: '', hooks: [{ type: 'command', command: 'bash /opt/vendor/permission.sh' }] },
+    ];
+    const report = schema.validateCodexHooksDocument(doc, canonicalOptions);
+    expect(productCodes(report)).toEqual([]);
+  });
+
+  it('ownedScriptSuffixKey 与 isOwnedEntry 取键口径一致（两处漂移会造成全盘假红）', () => {
+    const owned = 'bash /x/spec-driver/hooks/stop-task-check.sh';
+    expect(schema.isOwnedEntry(owned)).toBe(true);
+    expect(schema.ownedScriptSuffixKey(owned)).toBe('hooks/stop-task-check.sh');
+    // 非我方条目两侧同时判否
+    const foreign = 'bash /opt/othertool/spec-driver/postinstall.sh';
+    expect(schema.isOwnedEntry(foreign)).toBe(false);
+    expect(schema.ownedScriptSuffixKey(foreign)).toBeNull();
+  });
+});
+
+/**
+ * F264 — `SessionEnd` 补入 schema 全集的版本相关性
+ *
+ * 本机 codex-cli 0.144.6 实测**不接受** `SessionEnd`（静默丢弃，与 WorktreeCreate 同待遇）；
+ * 补入依 0.149.0 口径。故这里只钉死两件事：(a) 它在 schema 全集里（第三方用它不再告警）；
+ * (b) 它**绝不能**进产品集（我方条目挂上去 = 一条永不执行的 hook）。
+ */
+describe('F264 — SessionEnd 的作用域', () => {
+  it('SessionEnd 在 schema 全集内，但不在产品集内', () => {
+    expect(schema.CODEX_EVENT_SCHEMA_SET).toContain('SessionEnd');
+    expect(schema.CODEX_EVENT_PRODUCT_SET).not.toContain('SessionEnd');
+  });
+
+  it('第三方的 SessionEnd 条目：不再是 unknown-event-name，但必须给出版本相关告警（不得静默）', () => {
+    const doc = JSON.parse(fs.readFileSync(CANONICAL_HOOKS_JSON, 'utf-8'));
+    doc.hooks.SessionEnd = [
+      { matcher: '', hooks: [{ type: 'command', command: 'bash /opt/vendor/on-session-end.sh' }] },
+    ];
+    const report = schema.validateCodexHooksDocument(doc, {
+      checkCommandShape: false,
+      canonicalSource: true,
+    });
+    expect(
+      report.findings.filter((f) => f.code === 'unknown-event-name' && f.event === 'SessionEnd'),
+    ).toEqual([]);
+    // 🔴 不能只是"少一条 warning"：0.144.6 上这条 hook 确实永不执行，用户有权知道。
+    expect(
+      report.findings.find((f) => f.code === 'version-dependent-event-name'),
+    ).toMatchObject({ level: 'warning', event: 'SessionEnd' });
+  });
+
+  it('版本相关事件集只含 SessionEnd，且与产品集不相交', () => {
+    expect([...schema.CODEX_EVENT_VERSION_DEPENDENT]).toEqual(['SessionEnd']);
+    for (const event of schema.CODEX_EVENT_VERSION_DEPENDENT) {
+      expect(schema.CODEX_EVENT_SCHEMA_SET).toContain(event);
+      expect(schema.CODEX_EVENT_PRODUCT_SET).not.toContain(event);
     }
   });
 });

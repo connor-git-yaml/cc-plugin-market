@@ -13,6 +13,14 @@
  * 非破坏性合并直接冲突。这是本文件存在的主要风险面，改动前请先读 `codex-hooks-schema.mjs`
  * 顶部的作用域表。
  *
+ * ## 产品层判据是**两级**的（F264）
+ * 事件级（「恰四事件」）之外还有 handler 级：每一条 owned 脚本必须挂在
+ * `OWNED_HOOK_EXPECTED_EVENT` 指定的事件上，5 条一条不缺。新增 fail code：
+ * `product-handler-missing`（某条脚本整条不见了）、`product-handler-misplaced`（挂错事件）、
+ * `product-handler-unregistered`（归属判定认得出但没登记期望事件 —— 我方两张表脱节）。
+ * 🔴 为什么必须有 handler 级：`Stop` 下挂着两条脚本，只丢掉 `stop-fix-compliance-check.sh`
+ * （依从性判定器本体）时事件集合毫无变化 —— 只有事件级判据时，这个最该被拦下的缺口判 pass。
+ *
  * ## 退出码合同（消费端按码分流，勿改语义）
  * | 码 | 含义 |
  * |---|---|

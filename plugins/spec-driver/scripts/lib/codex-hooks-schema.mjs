@@ -13,8 +13,12 @@
  *
  * | 层 | 作用域 | 判据 | 失败级别 |
  * |---|---|---|---|
- * | schema | 全文件事件名 | 是否属于 Codex 10 事件全集 | 我方条目非法 → fail；第三方未知名 → warning |
- * | product | **仅我方 owned 条目**覆盖的事件集合 | 恰等于 4 项 | 越界 / 缺项 → fail（code 可区分） |
+ * | schema | 全文件事件名 | 是否属于 Codex 事件全集（`CODEX_EVENT_SCHEMA_SET`） | 我方条目非法 → fail；第三方未知名 → warning |
+ * | product（事件级） | **仅我方 owned 条目**覆盖的事件集合 | 恰等于 4 项 | 越界 / 缺项 → fail（code 可区分） |
+ * | product（handler 级，F264） | **每一条 owned handler** | 脚本已登记，且挂在 `OWNED_HOOK_EXPECTED_EVENT` 指定的事件上；5 条一条不缺 | 挂错 / 缺条 → fail |
+ *
+ * 🔴 handler 级是 F264 新增的**必要补强**，不是事件级的重复：`Stop` 下挂着两条脚本，只丢掉
+ * `stop-fix-compliance-check.sh`（依从性判定器）时事件集合毫无变化，事件级判据判 pass。
  *
  * 🔴 第三方未知事件名判 warning 而非 fail 的理由：Codex 版本演进会扩充事件全集，且我们对
  * 第三方条目**无否决权**。判 fail 等于用我方门禁逼用户删自己的数据。
@@ -29,9 +33,26 @@
  */
 
 /**
- * Codex hook 事件全集（10 项，PascalCase）。
+ * Codex hook 事件全集（11 项，PascalCase）。
  * 来源：`_grounding.md` §2 —— 从 codex 二进制提取 `HookEventName` / `HookEventNameWire` /
  * `HookEventsToml` 三处枚举去重。**全集中不存在 `WorktreeCreate` / `WorktreeRemove`**。
+ *
+ * ## 🔴 本集合是**版本相关**的，`SessionEnd` 就是分界点（F264）
+ * 前 10 项在 codex-cli 0.144.6 上**已实测被接受**：把 14 个候选事件名各写一条进
+ * `$CODEX_HOME/hooks.json`，经 app-server RPC `hooks/list` 回读，恰好返回这 10 条。
+ * 同一次实测里 `SessionEnd` **未被接受**——与 `WorktreeCreate` / `WorktreeRemove` 同待遇：
+ * 静默丢弃，`warnings` / `errors` 均为空。
+ * `SessionEnd` 依 0.149.0 口径补入（M10 §4 P0-B 卡面事实），本机无 0.149.0 无法复测。
+ *
+ * 因此本集合的语义必须理解为：「**某个受支持的 Codex 版本**认识这个事件名」，而不是
+ * 「当前这台机器上的 Codex 一定会执行它」。
+ *
+ * 🔴 **补入它不能以抹掉真信号为代价**（异构对抗第二轮 I1）：0.144.6 上第三方写的 `SessionEnd`
+ * hook **确实永不执行**，原来那条 `unknown-event-name` warning 对该用户是**准确**的。若只是把它
+ * 挪进全集，用户会从"收到一条准确告警"变成"什么都收不到"。故版本相关的事件名单独成集
+ * （`CODEX_EVENT_VERSION_DEPENDENT`），产出**语义更准**的 `version-dependent-event-name` warning。
+ * 🔴 **MUST NOT** 因为某个事件名在本集合里，就把它加进 `CODEX_EVENT_PRODUCT_SET`——
+ * 我方条目挂到一个当前版本不认的事件上，等于写一条永不执行的 hook（静默失效面）。
  */
 export const CODEX_EVENT_SCHEMA_SET = Object.freeze([
   'PreToolUse',
@@ -40,11 +61,19 @@ export const CODEX_EVENT_SCHEMA_SET = Object.freeze([
   'PreCompact',
   'PostCompact',
   'SessionStart',
+  'SessionEnd',
   'UserPromptSubmit',
   'SubagentStart',
   'SubagentStop',
   'Stop',
 ]);
+
+/**
+ * 全集中**版本相关**的事件名（F264）：名字合法，但在部分受支持版本上不被接受、静默丢弃。
+ * 第三方条目落在这些事件上时产出 `version-dependent-event-name` warning ——
+ * 既不冒充"未知事件名"（它在新版本里是合法的），也不静默（在旧版本里它确实永不执行）。
+ */
+export const CODEX_EVENT_VERSION_DEPENDENT = Object.freeze(['SessionEnd']);
 
 /** 本 feature 允许我方条目使用的事件子集（FR-001，4 项，顺序即生成顺序） */
 export const CODEX_EVENT_PRODUCT_SET = Object.freeze([
@@ -75,6 +104,26 @@ export const OWNED_HOOK_SCRIPT_SUFFIXES = Object.freeze([
   Object.freeze(['hooks', 'stop-task-check.sh']),
   Object.freeze(['hooks', 'stop-fix-compliance-check.sh']),
 ]);
+
+/**
+ * 我方每条 owned hook 脚本**期望挂载的事件**（F264）。
+ *
+ * ## 为什么事件级判据不够
+ * 原产品层只判「owned 条目覆盖的事件集合恰等于 `CODEX_EVENT_PRODUCT_SET` 四项」。`Stop` 下有
+ * **两条**脚本（`stop-task-check.sh` 与 `stop-fix-compliance-check.sh`），只要还剩一条，`Stop`
+ * 就仍在 owned 事件集合里 —— 于是「依从性判定器整条掉了」这种**最该被拦下的缺口**照样判 pass。
+ * 事件集合是 handler 集合的**有损投影**，用投影做完整性判据必然漏判。
+ *
+ * key 为 `<父目录>/<脚本名>`（与 `OWNED_HOOK_SCRIPT_SUFFIXES` 同一口径），value 为期望事件。
+ * 🔴 新增 owned hook 时**必须**同时登记到这里，否则它会被判成 `product-handler-misplaced`。
+ */
+export const OWNED_HOOK_EXPECTED_EVENT = Object.freeze({
+  'scripts/postinstall.sh': 'SessionStart',
+  'hooks/pre-tool-use-guard.sh': 'PreToolUse',
+  'hooks/post-tool-use-format.sh': 'PostToolUse',
+  'hooks/stop-task-check.sh': 'Stop',
+  'hooks/stop-fix-compliance-check.sh': 'Stop',
+});
 
 /**
  * 我方的 **Claude adapter 独有** hook 脚本（Codex 全集中无对应事件）。
@@ -242,6 +291,25 @@ export function extractOwnedScriptPath(command) {
 }
 
 /**
+ * 提取 owned command 的 `<父目录>/<脚本名>` 后缀 key（F264，handler 级判据的取键口径）。
+ *
+ * 与 `isOwnedEntry` **共用同一个 `findScriptPath`**：两处各写一份取键逻辑必然漂移，而漂移的
+ * 后果是「归属判定认得出、handler 判据认不出」→ 每条 owned handler 都被判 `misplaced` 的全盘假红。
+ *
+ * @returns {string|null} 形如 `hooks/stop-task-check.sh`；非 owned 条目返回 null
+ */
+export function ownedScriptSuffixKey(command, options = {}) {
+  const token = findScriptPath(
+    command,
+    OWNED_HOOK_SCRIPT_SUFFIXES,
+    options.allowPlaceholderRoot === true,
+  );
+  if (token === null) return null;
+  const segments = token.split('/');
+  return `${segments[segments.length - 2]}/${segments[segments.length - 1]}`;
+}
+
+/**
  * 收集文档中全部 handler 的 `command` 字面量（**不做任何归属判定**）。
  *
  * 🔴 存在的唯一理由：第三方数据保全判据不能依赖 `isOwnedEntry`。
@@ -363,6 +431,9 @@ export function validateCodexHooksDocument(doc, options = {}) {
     if (!CODEX_EVENT_SCHEMA_SET.includes(event)) {
       // 🔴 第三方数据只 warning：我们对它无否决权（C4）
       warn('schema', 'unknown-event-name', { event });
+    } else if (CODEX_EVENT_VERSION_DEPENDENT.includes(event)) {
+      // 名字合法但版本相关：旧版本上静默丢弃，用户有权知道（F264 / 第二轮 I1）
+      warn('schema', 'version-dependent-event-name', { event });
     }
   }
 
@@ -379,6 +450,44 @@ export function validateCodexHooksDocument(doc, options = {}) {
     }
   }
 
+  // ---- 产品层（handler 级，F264）：每条 owned 脚本各就各位，一条不缺 ----
+  //
+  // 🔴 与上面的事件级判据是 AND 关系，不是替代：事件级管「有没有越界到第五个事件」，
+  // handler 级管「四个事件里那 5 条脚本是不是都在、有没有挂错」。少了 handler 级，
+  // `Stop` 掉一条脚本时事件集合不变，整份文件照样判 pass（见模块头的作用域表）。
+  const seenScriptEvents = new Map(); // suffixKey -> Set<event>
+  for (const { event, handler } of handlers) {
+    if (!isPlainObject(handler)) continue;
+    const suffixKey = ownedScriptSuffixKey(handler.command, ownership);
+    if (suffixKey === null) continue;
+    const expectedEvent = OWNED_HOOK_EXPECTED_EVENT[suffixKey];
+    if (expectedEvent === undefined) {
+      // 归属判定认得出（在 OWNED_HOOK_SCRIPT_SUFFIXES 里），却没登记期望事件 —— 两张表脱节。
+      // 这是我方自己的登记缺口，fail-loud 好过静默放过一条无人校验的 hook。
+      // ⚠️ 诚实标注（F264 / 第二轮 W4.3）：两张表当前 5/5 完全对齐，本分支**结构性不可达**，
+      // 是给"将来只改了一张表"准备的前瞻分支 —— **不要**把它算进"已验证的守护力"。
+      fail('product', 'product-handler-unregistered', { event, script: suffixKey });
+      continue;
+    }
+    if (event !== expectedEvent) {
+      // 🔴 不与事件级判据重复计数（F264 / 第二轮 W4）：事件本身就越界（不在产品集）时，
+      // 上面的 `product-event-out-of-scope` 已经报过同一根因；这里只负责"事件在产品集内、
+      // 但脚本挂错了那一个"的情形。缺位一侧仍由下方的 `product-handler-missing` 覆盖，
+      // 因此不存在漏报。
+      if (CODEX_EVENT_PRODUCT_SET.includes(event)) {
+        fail('product', 'product-handler-misplaced', { event, script: suffixKey, expectedEvent });
+      }
+      continue;
+    }
+    if (!seenScriptEvents.has(suffixKey)) seenScriptEvents.set(suffixKey, new Set());
+    seenScriptEvents.get(suffixKey).add(event);
+  }
+  for (const [script, expectedEvent] of Object.entries(OWNED_HOOK_EXPECTED_EVENT)) {
+    if (!seenScriptEvents.has(script)) {
+      fail('product', 'product-handler-missing', { event: expectedEvent, script });
+    }
+  }
+
   // ---- 我方条目的形状校验（FR-005 / SC-001）----
   if (checkCommandShape) {
     for (const { event, handler } of handlers) {
@@ -388,7 +497,12 @@ export function validateCodexHooksDocument(doc, options = {}) {
         fail('product', 'owned-handler-type-invalid', { event, command });
       }
       if (command.includes('${')) {
-        // Codex 不注入任何 plugin root 变量（§8.6），运行期插值必然展开为空串
+        // 🔴 作用域限定（F264 更正）：本判据只对**我方合并写入 `$CODEX_HOME/hooks.json`** 的条目成立。
+        // 那份文件里 Codex 不注入任何 plugin root 变量（§8.6），插值必然展开为空串。
+        // 但「Codex 从不展开 `${CLAUDE_PLUGIN_ROOT}`」这个更宽的说法**已被实测推翻**：
+        // 插件包内 `hooks/hooks.json`（`source=plugin`）里的该占位符会被 Codex 正常展开为
+        // 插件 cache 绝对路径（F264 复现步骤 1）。故校验 canonical source 时必须
+        // `checkCommandShape: false`，本分支不参与——判据本身不变，只是作用域被钉死。
         fail('product', 'owned-command-interpolated', { event, command });
       }
       const scriptPath = extractOwnedScriptPath(command);
