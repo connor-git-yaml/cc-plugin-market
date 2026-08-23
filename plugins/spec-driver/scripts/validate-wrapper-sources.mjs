@@ -176,6 +176,55 @@ function validateWrapperMarkers(projectRoot, entries, resolveTarget, checkId, ch
   );
 }
 
+/**
+ * F264 — Codex wrapper 里不得残留 **Claude 专属的 MCP 工具命名空间**。
+ *
+ * Claude Code 把插件 MCP 工具暴露成 `mcp__<plugin>_<server>__<tool>` 这种字面工具名；Codex 不使用
+ * 这个前缀（它按 `~/.codex/config.toml` 的 `[mcp_servers.<name>]` 注册，工具名不带该段）。把 Claude
+ * 的字面工具名照抄进 Codex wrapper，等于指示 Codex 去调一个恒不存在的工具名。
+ *
+ * 🔴 判据刻意窄到只扫这一个前缀，**不复用** `scripts/lib/codex-plugin-consistency-core.mjs` 的
+ * `NEUTRALITY_HARD_MARKER`：后者还含 `Task tool` / `Task(` / `AskUserQuestion`，而 Codex wrapper
+ * **合法地**保留 `Task tool` 文本（生成端会把它改写成带降级说明的版本，见
+ * `lib/extract-wrapper-body.mjs` 的替换表），套用宽 pattern 会对合法产物假红。
+ *
+ * 唯一修法是改 `extract-wrapper-body.mjs` 的替换表后重跑 `npm run repo:sync` —— 手改 wrapper
+ * 会被 `Source SHA256` 门禁在下一次校验时打回。
+ */
+const CLAUDE_MCP_NAMESPACE_PATTERN = /mcp__/;
+
+function validateRuntimeNamespace(projectRoot, wrapperPaths, errors) {
+  const offenders = [];
+  for (const relativePath of wrapperPaths) {
+    const absolutePath = path.resolve(projectRoot, relativePath);
+    let content;
+    try {
+      content = fs.readFileSync(absolutePath, 'utf-8');
+    } catch {
+      // 文件缺失由 `codex-wrapper-markers` / `codex-plugin-distribution-markers` 负责报，
+      // 此处不重复计一次 fail（同一根因报两遍会掩盖真实缺口数量）。
+      continue;
+    }
+    content.split('\n').forEach((line, index) => {
+      if (CLAUDE_MCP_NAMESPACE_PATTERN.test(line)) {
+        offenders.push(`${relativePath}:${index + 1}`);
+      }
+    });
+  }
+  if (offenders.length > 0) {
+    errors.push(
+      `Codex wrapper 残留 Claude 专属 MCP 命名空间（共 ${offenders.length} 处）：${offenders.join(', ')}。` +
+        '修法：在 plugins/spec-driver/scripts/lib/extract-wrapper-body.mjs 的替换表补一条，再跑 npm run repo:sync',
+    );
+  }
+  return createCheck(
+    'codex-wrapper-runtime-namespace',
+    'Codex 包装技能无 Claude 专属 MCP 命名空间',
+    offenders.length === 0 ? 'pass' : 'fail',
+    { scanned: wrapperPaths.length, offenders },
+  );
+}
+
 function validateContract(projectRoot, contract) {
   const errors = [];
   const warnings = [];
@@ -238,6 +287,21 @@ function validateContract(projectRoot, contract) {
       ),
     );
   }
+
+  // F264：命名空间扫描覆盖两处产物（.codex/skills 与 skills-codex），二者由同一生成器产出，
+  // 只扫一处会让另一处的残留在下一次分发时复活。
+  checks.push(
+    validateRuntimeNamespace(
+      projectRoot,
+      [
+        ...codexEntries.map((entry) => entry.target),
+        ...(pluginDistributionRoot
+          ? codexEntries.map((entry) => [pluginDistributionRoot, entry.id, 'SKILL.md'].join('/'))
+          : []),
+      ],
+      errors,
+    ),
+  );
 
   const missingClaudeOverrides = claudeEntries
     .filter((entry) => !fs.existsSync(path.resolve(projectRoot, entry.target)))

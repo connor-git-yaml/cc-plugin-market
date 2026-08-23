@@ -1,8 +1,8 @@
 # Spec Driver Workflow Registry
 
-- Generated At: 2026-08-02T11:50:41.510Z
+- Generated At: 2026-08-23T18:03:47.543Z
 - Source Dir: plugins/spec-driver/workflows
-- Override Dir: .specify/workflows
+- Override Dir: 未配置
 - Workflows: 7
 - Golden Paths: 4
 

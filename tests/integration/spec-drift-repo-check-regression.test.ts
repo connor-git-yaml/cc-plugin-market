@@ -97,6 +97,8 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     //
     // ⚠️ 口径更正：不能只断言"新增项都以某几个前缀开头"——那样任一族多吐一条、吐错一条
     // （如 lock-integrity）或吐重复项都会照过。此处按仓库当前事实钉死联合精确清单：
+    //   - 第 4 族（spec-driver-wrappers）内的 F264 新增项：`codex-wrapper-runtime-namespace`——
+    //     Codex wrapper 的 Claude 专属 MCP 命名空间残留扫描
     //   - 第 12 族（图质量）内的 F258 新增项：`graph-quality:ignore-undeterminable`——三态 gitignore
     //     oracle 的"判不了"诊断消费者（D4：新观测出口必须有人读）。它落在图质量族内，故按族追加
     //     顺序排在最前；基线固化的是接入它之前的快照，因此它以"新增"身份出现在此处
@@ -111,6 +113,10 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     const baselineIds = new Set(baseline.checks.map((c) => c.id));
     const added = allIds.filter((id) => !baselineIds.has(id));
     expect(added).toEqual([
+      // F264：`spec-driver-wrappers` 族内新增的窄门禁——扫 Codex wrapper 是否残留 Claude 专属
+      // MCP 命名空间（Codex 下该前缀恒不存在，照抄等于让它去调一个不存在的工具名）。它落在
+      // 第 4 族内，故按族追加顺序排在图质量族之前。
+      'spec-driver-wrappers:codex-wrapper-runtime-namespace',
       'graph-quality:ignore-undeterminable',
       'spec-drift:anchors-status',
       'model-literal-gate:model-literal-scan',

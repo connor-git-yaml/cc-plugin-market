@@ -64,7 +64,7 @@ function stripFrontmatter(content) {
 }
 
 /**
- * rewrite_codex_runtime_text 的 10 条替换（Feature 238 T1.5 新增 spec-driver-refactor 一条）。
+ * rewrite_codex_runtime_text 的 11 条替换（F238 T1.5 加 spec-driver-refactor 一条；F264 加 Spectra MCP 命名空间一条）。
  * 全部为全局替换。逐条照搬，顺序与生成端一致。
  */
 function rewriteCodexRuntimeText(text) {
@@ -85,6 +85,19 @@ function rewriteCodexRuntimeText(text) {
       '在同一消息中同时发出多个 Task tool 调用。Claude Code 的 function calling 机制支持在单个 assistant 消息中发出多个 tool calls，这些 tool calls 会被并行执行。',
       '若当前环境支持并行工具调用，则在同一消息中并行执行；否则按本 Skill 的回退规则串行执行。',
     ],
+    // F264：`mcp__plugin_spectra_spectra__*` 是 **Claude Code 插件 MCP 的命名空间**
+    // （`mcp__<plugin>_<server>__<tool>`），Codex 下不存在这个前缀——Codex 按
+    // `~/.codex/config.toml` 的 `[mcp_servers.<name>]` 注册，工具名不带 `mcp__` 段。
+    // 直接把 Claude 的字面工具名留在 Codex wrapper 里，等于让 Codex 侧去调一个恒不存在的
+    // 工具名；改写成运行时中立的表述，让 Codex 按自身注册去解析。
+    // 🔴 替换**结果文本**本身不得再出现该前缀字面量，否则 wrapper 侧的窄门禁
+    // （validate-wrapper-sources 的命名空间扫描）会对自己生成的产物假红。
+    // 🔴 替换 MUST 落在本表而非 canonical SKILL.md：canonical 是 Claude 侧事实源，
+    // 那里的 `mcp__…` 前缀在 Claude 运行时是正确的。
+    [
+      '`mcp__plugin_spectra_spectra__*` 工具',
+      'Spectra MCP 工具（Codex 下工具名以当前运行时注册的 `spectra` MCP server 为准）',
+    ],
   ];
   let result = text;
   for (const [from, to] of replacements) {
@@ -94,7 +107,7 @@ function rewriteCodexRuntimeText(text) {
 }
 
 /**
- * 提取 wrapper body 文本（frontmatter 剥除 + 9 条 runtime text 替换）。
+ * 提取 wrapper body 文本（frontmatter 剥除 + runtime text 替换表逐条应用）。
  * @param {string} sourceSkillPath canonical SKILL.md 绝对路径
  * @returns {string}
  */

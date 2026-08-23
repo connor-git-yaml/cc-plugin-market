@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-02T11:50:41.510Z",
+  "generatedAt": "2026-08-23T18:03:47.543Z",
   "sourceDir": "plugins/spec-driver/workflows",
-  "overrideDir": ".specify/workflows",
+  "overrideDir": null,
   "workflowCount": 7,
   "goldenPathCount": 4,
   "workflows": [

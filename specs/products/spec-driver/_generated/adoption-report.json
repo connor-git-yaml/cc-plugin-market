@@ -1,23 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-02T11:50:41.547Z",
+  "generatedAt": "2026-08-23T18:03:47.579Z",
   "productId": "spec-driver",
   "status": "attention",
   "summary": {
-    "totalRuns": 4,
-    "activeWorkflowCount": 2,
-    "overallSuccessRate": 75,
-    "overallFailureRate": 0,
-    "overallPausedRate": 25,
+    "totalRuns": 6,
+    "activeWorkflowCount": 1,
+    "overallSuccessRate": 83.3,
+    "overallFailureRate": 16.7,
+    "overallPausedRate": 0,
     "topWorkflow": {
       "id": "spec-driver-fix",
       "title": "快速问题修复",
-      "totalRuns": 2
+      "totalRuns": 6
     }
   },
   "stats": {
-    "logFileCount": 2,
-    "validRunCount": 4,
+    "logFileCount": 1,
+    "validRunCount": 6,
     "invalidLineCount": 0,
     "workflowCount": 7,
     "runsWithPhaseDurations": 0
@@ -59,17 +59,17 @@
       "id": "spec-driver-fix",
       "title": "快速问题修复",
       "persona": "修复者",
-      "totalRuns": 2,
-      "successRuns": 2,
-      "failedRuns": 0,
+      "totalRuns": 6,
+      "successRuns": 5,
+      "failedRuns": 1,
       "pausedRuns": 0,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 100,
-      "failureRate": 0,
+      "successRate": 83.3,
+      "failureRate": 16.7,
       "rerunRate": 0,
       "averageDurationMs": null,
-      "lastRunAt": "2026-07-23T05:01:34.173Z"
+      "lastRunAt": "2026-08-12T19:49:09.568Z"
     },
     {
       "id": "spec-driver-implement",
@@ -107,17 +107,17 @@
       "id": "spec-driver-story",
       "title": "快速需求实现",
       "persona": "迭代开发者",
-      "totalRuns": 2,
-      "successRuns": 1,
+      "totalRuns": 0,
+      "successRuns": 0,
       "failedRuns": 0,
-      "pausedRuns": 1,
+      "pausedRuns": 0,
       "partialRuns": 0,
       "rerunRuns": 0,
-      "successRate": 50,
+      "successRate": 0,
       "failureRate": 0,
       "rerunRate": 0,
       "averageDurationMs": null,
-      "lastRunAt": "2026-08-01T06:09:06.836Z"
+      "lastRunAt": null
     },
     {
       "id": "spec-driver-sync",
@@ -138,12 +138,7 @@
   ],
   "friction": {
     "rerunHotspots": [],
-    "gatePauseHotspots": [
-      {
-        "gate": "--artifact",
-        "count": 1
-      }
-    ],
+    "gatePauseHotspots": [],
     "verificationFailureHotspots": [],
     "slowestPhases": []
   },
