@@ -181,6 +181,15 @@ milestone_source: docs/design/milestone-M9-codex-trusted-live-graph.md#A3
 
 - **FR-011**（A3 新增，必须，**闭合 `_grounding.md` §9.3 / O1**）：`$CODEX_HOME/hooks.json` 是**全局唯一共享文件**，与现有 Codex skills 安装（每 skill 独立目录、天然隔离）的冲突模型**根本不同**。用户的该文件可能已含其自有 hooks 或其他工具写入的条目。因此本 feature 的 Codex hooks 写入器 MUST 满足以下全部语义：
 
+> **[后续更正 · Feature 264（卡面 F265）/ 2026-08-24]** 本条建立在"`$CODEX_HOME/hooks.json` 是 Codex
+> hooks 的**唯一注册源**"这一前提上，该前提**不成立**。实测（隔离 `CODEX_HOME`，codex-cli 0.144.6）：
+> 插件包内 `hooks/hooks.json` 与 `$CODEX_HOME/hooks.json` 是两个**互不知情、互不去重**的注册源；
+> 两条路径都走一遍会让同一批 hook 被注册两遍（`hooks/list` 返回 10 条同名重复）。
+> 该文件仍是**全局唯一的那一份**（这部分描述正确），但已不再是唯一注册源，也不再是主路径。
+> Feature 264 把插件自带 `hooks/hooks.json` 定为主路径、本 FR 实现的全局合并器降级为
+> skills-only 安装的 fallback，并在写入前加了双注册守卫。
+> 本注记只更正前提，不改动本 spec 已交付的正文结论。
+
   1. **合并而非覆写**：写入时 MUST 保留目标文件中所有非我方条目与所有未知字段；解析失败时 **MUST NOT** 以空对象覆写。**包括第三方条目所在的事件域**——即便该事件不在我方 4 事件子集内（如用户自有的 `PermissionRequest` / `Notification` hook），也 MUST 原样保留（与 FR-001/FR-002 的作用域限定一致，闭合 **C4-plan**）。
   2. **幂等**：重复安装 MUST NOT 产生重复条目（已存在我方条目时跳过或原地更新）。
   3. **可精确卸载**：卸载 MUST 只移除我方条目，其他来源的条目原样保留。

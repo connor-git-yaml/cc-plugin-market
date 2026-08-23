@@ -92,6 +92,15 @@
 - **FR-004**: `plugins/spectra/.codex-plugin/plugin.json` MUST 用 `"skills": "./skills/"` 字段直接指向 `plugins/spectra/skills/` 目录（3 个 skill：spectra / spectra-batch / spectra-diff）。因该目录内容 runtime 中立、不含 Claude 专属工具引用，无需额外的 Codex 适配转换即可直接复用。`[必须]`
 - **FR-005**: `plugins/spec-driver/.codex-plugin/plugin.json` 的 `"skills"` 字段 MUST 指向一个内容为 **Codex 适配 wrapper 集合**（与 `plugins/spec-driver/contracts/wrapper-source-of-truth.yaml` 登记的 entries 在数量与身份上一致）的目录，而非 Claude 侧原始 canonical `skills/` 目录（该目录含 Task tool、`mcp__plugin_spectra_spectra__*` 等 Claude 专属引用，不能被 Codex 直接消费）。该目录的具体生成/落位方式（倾向：扩展既有生成器多写一份到 `plugins/spec-driver/` 内的 Codex 适配目录，tracked 并纳入一致性矩阵校验）由 plan 阶段给出工程方案、GATE_TASKS 时用户复核（决策权移交 plan，见 OQ-004 决议）；spec 层面只约束"manifest 指向的目录内容必须与 wrapper contract 一致"这一不变量；已有的 F186 body-sha256 盖章链（`extract-wrapper-body.mjs --sha256` + `validate-wrapper-sources.mjs` 复算比对）MUST 继续对该目录内容生效，不得因落位变化而失效。`[必须，描述性要求不变，落位工程方案见 plan 阶段]`
 - **FR-006**: 两个 `.codex-plugin/plugin.json` MUST NOT 声明 hooks 相关字段（经本机 codex 0.142.0 对两份真实 manifest 的实测确认，Codex plugin manifest schema 当前无 hooks 字段）；对应的 hook 脚本（`plugins/spectra/hooks/hooks.json`、`plugins/spec-driver/hooks/hooks.json` 中定义者）MUST 随 plugin 包一起 ship，保证文件系统层面可被发现，但不要求验证其在 Codex runtime 下的实际触发行为（该验证属 A3 范围）。`[必须]`
+
+> **[后续更正 · Feature 264（卡面 F265）/ 2026-08-24]** 本条的**第二半句前提已被实测推翻**：
+> "Codex plugin manifest schema 无 hooks 字段" 本身成立，但由此外推出的 "Codex 不读插件包内 hooks"
+> **不成立**。Codex 的插件 hooks 走**目录约定**（`<pluginRoot>/hooks/hooks.json`），根本不经 manifest
+> 字段声明。隔离 `CODEX_HOME` 实测（codex-cli 0.144.6 与 0.149.0）：`codex plugin add spec-driver` 后
+> `hooks/list` 直接返回 5 条 `source=plugin` 的条目，`${CLAUDE_PLUGIN_ROOT}` 已展开。
+> 现行路线见 `specs/264-fix-codex-hooks-distribution/fix-report.md` 与
+> `docs/design/milestone-M10-ship-honest-graph-evidence-gate.md` §4 P0-B。
+> 本注记只更正前提，不改动本 spec 已交付的正文结论。
 - **FR-007**: 系统 MUST 在 `scripts/lib/repo-maintenance-core.mjs` 的 `validateRepository()` 校验链中新增一致性矩阵 check（遵循既有 `aggregateValidation(prefix, validateX(...), ...)` 模式），比对 Codex manifest 中声明的 skill 数量/引用目录、MCP 配置与 Claude 侧 canonical source（`plugins/*/skills/` 或对应 Codex 适配目录的实际数量、`.mcp.json` 内容）是否一致，并比对 marketplace.json 中登记的 plugin 条目与 `plugins/<name>` 实际存在的 plugin 是否一致。`[必须]`
 - **FR-008**: 系统 MUST 在 `contracts/release-contract.yaml` 与 `scripts/lib/release-contract-core.mjs` 中，将两个 `.codex-plugin/plugin.json` 的 version / description 等受控字段纳入既有 `expectEqual` 累加器校验，使 `npm run release:check` 能检出 Codex manifest 与其他受控文件（`plugin.json`、`marketplace.json`、`package-lock.json`、README）之间的版本漂移。`[必须]`
 - **FR-009**: 一致性矩阵校验 MUST 接入既有 `npm run repo:check` 与 `npm run release:check` 命令链（不新增独立命令），使其成为提交前 / 发布前流程的一部分。`[必须]`

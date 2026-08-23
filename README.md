@@ -280,42 +280,93 @@ claude plugin list                                # list installed plugins
 ### Codex Support
 
 <details>
-<summary>📦 Install for Codex (CLI + skills)</summary>
+<summary>📦 Install for Codex (plugin — recommended)</summary>
 
-For Codex, install `spectra` CLI and register skills into `.codex/skills`:
+Codex discovers this repository as a plugin marketplace. Installing the plugin registers
+**both** the Codex wrapper skills and the plugin's own hooks — no extra installer step:
 
 ```bash
-# Install CLI
-npm install -g spectra-cli
+# Add this repo as a Codex marketplace (local clone or Git URL)
+codex plugin marketplace add <path-to-clone-or-git-url>
 
-# Project-level Codex skills
-spectra init --target codex
+# Install the plugin (skills + hooks in one step)
+codex plugin add spec-driver@cc-plugin-market
 
-# Or global Codex skills
-spectra init --global --target codex
-
-# Install both Claude + Codex skills in one command
-spectra init --global --target both
-
-# Optional: control npm postinstall target with env var
-SPECTRA_SKILL_TARGET=codex npm install -g spectra-cli   # values: claude | codex | both
+# Verify what got registered
+codex plugin list
 ```
 
-Spec Driver uses an independent Codex entrypoint (parallel to Spectra):
+What you get after `codex plugin add`:
+
+- Skills from the plugin's `skills-codex/` directory
+- **5 hooks** declared in the plugin's `hooks/hooks.json`, registered with `source=plugin`
+  (`SessionStart`, `PreToolUse`, `PostToolUse`, and two `Stop` handlers).
+  `${CLAUDE_PLUGIN_ROOT}` is expanded by Codex to the installed plugin cache path.
+- Hooks land as `trustStatus=untrusted`: **you must grant hook trust inside Codex once**,
+  otherwise they are registered but never execute.
+
+Notes and known limits:
+
+- The `WorktreeCreate` / `WorktreeRemove` hooks in the canonical declaration are Claude-only
+  events; Codex drops them silently (no warning). This is expected — they have no Codex equivalent.
+- Spectra's MCP tools are configured separately (`plugins/spectra/.mcp.json`); install the
+  `spectra` CLI with `npm install -g spectra-cli` if you want the MCP server available in Codex.
+
+</details>
+
+<details>
+<summary>🧩 Skills-only fallback (no plugin install)</summary>
+
+If you do not want to install the plugin — or your Codex build does not support plugins —
+install just the wrapper skills:
 
 ```bash
-# Run from repository root
+# Spectra CLI + skills
+npm install -g spectra-cli
+spectra init --target codex             # project-level  (.codex/skills)
+spectra init --global --target codex    # global         ($CODEX_HOME/skills)
+spectra init --global --target both     # Claude + Codex in one command
+
+# Spec Driver skills (run from repository root)
 npm run codex:spec-driver:install                 # project-level
 npm run codex:spec-driver:install:global          # global
 npm run codex:spec-driver:remove                  # remove
 
-# Equivalent low-level scripts
+# Equivalent low-level script
 bash plugins/spec-driver/scripts/codex-skills.sh install [--global]
 ```
 
 Notes:
-- Project mode installs to the current git repository root (or current directory when not in a git repo).
-- Codex skills are generated from the current `spec-driver-*` source skills with a small Codex runtime adapter block; rerun `install` after upgrading Spec Driver.
+
+- Project mode installs to the current git repository root (or the current directory when not in a git repo).
+- Codex skills are generated from the current `spec-driver-*` source skills with a small Codex
+  runtime adapter block; rerun `install` after upgrading Spec Driver.
+- `--global` additionally merges the Spec Driver hook entries into `$CODEX_HOME/hooks.json`.
+  This is the **fallback** registration path only.
+
+</details>
+
+<details>
+<summary>⚠️ Double-registration guard (<code>$CODEX_HOME/hooks.json</code>)</summary>
+
+The plugin's own `hooks/hooks.json` and the global `$CODEX_HOME/hooks.json` are two independent
+registration sources, and **Codex does not de-duplicate between them**. Running both paths
+registers every hook twice — the Stop-hook judge then runs twice per turn and burns its
+block budget in a single turn.
+
+`codex-skills.sh install --global` therefore detects an existing native plugin registration and
+**refuses to merge the hook entries** (skill installation still completes normally):
+
+```text
+[codex-hooks] 已检测到 Codex 原生插件注册（marketplace=...），跳过合并写入以避免同一 hook 被注册两次
+```
+
+- To remove hook entries written by an earlier merger run **without touching installed skills**:
+  `node plugins/spec-driver/scripts/install-codex-hooks.mjs --codex-home "$CODEX_HOME" --remove`.
+  Note that `codex-skills.sh remove --global` also deletes the nine `spec-driver-*` skill
+  directories under `$CODEX_HOME/skills`, not just the hook entries.
+- To override the guard (only if you have verified your Codex build does **not** read plugin
+  hooks): append `--force-hooks`. Doing so on a build that does read them produces duplicates.
 
 </details>
 

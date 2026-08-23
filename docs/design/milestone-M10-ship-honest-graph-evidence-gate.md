@@ -72,6 +72,7 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 **事实**（隔离 CODEX_HOME 于 0.144.6 与 0.149.0 实测）：`codex plugin add spec-driver` 后 `hooks/list` 直接返回 5 条 `source=plugin` 的 `hooks/hooks.json` 条目、`${CLAUDE_PLUGIN_ROOT}` 已展开、WorktreeCreate/Remove 被静默丢弃、全部 `trustStatus=untrusted`；再按 README 跑 `codex-skills.sh install --global` → 10 条同名 hook，判定器每次 Stop 跑两遍，`BLOCK_LIMIT=2` 一次 Stop 烧尽立即降级放行，postinstall 每 SessionStart 跑两遍。F213 FR-006 / F240 FR-011 的"Codex 不读插件 hooks.json"前提不成立。
 **路线（已拍板）**：插件自带 `hooks/hooks.json` 为主；全局合并器降为 skills-only 安装的 fallback，**检测到插件已注册时拒绝重复安装**（双注册守卫，第一步，独立小 commit 先落）；项目级 `.codex/config.toml`（spec-kit 路线）记为候选不做。同步：修正 F213/F240 错误前提的文档与注释、README Codex 节（当前仍是 M9 前 skills-only 路径）、`codex-hooks-schema.mjs` 事件集补 SessionEnd（10→11）、`validate-codex-hooks` 按 handler 而非仅按事件判（Stop 事件缺 `stop-fix-compliance` handler 也应红）、Codex 包装 skill 里残留的 Claude 专属 `mcp__plugin_spectra_spectra__*` 命名空间。
 **验收**：原生安装 + 合并器叠装 → hook 恒 5 条不重复；T062 在此之后于 Codex ≥0.149 执行（§8）。规模：small-medium。
+**状态（2026-08-24）**：✅ 已交付 → `specs/264-fix-codex-hooks-distribution/`（卡面派发时写作 F265，按"不预占编号"实际落 **264**）。卡面事实已在隔离 `CODEX_HOME` / codex-cli 0.144.6 上逐条复现；验收 6 步端到端复验通过（原生 5 条 → 叠装仍 5 条且 `hooks.json` 未创建 → 幂等 → `enabled=false` 放行 → 历史条目点名 → `remove --global` 回到 5 条）。**新增两条本机一手事实**：`enabled` 键缺失时 Codex 照常注册（守卫判据据此取三态）；0.144.6 **不接受** `SessionEnd`（补入 schema 全集依 0.149.0 口径，已在代码内标注版本相关性）。T062 前置条件（双注册守卫）已具备。
 
 ### P0-C 空图/退化图 fail-loud 链 + 诚实返回面（吸收原卡③）
 
