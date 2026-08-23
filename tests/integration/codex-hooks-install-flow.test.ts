@@ -34,6 +34,8 @@ const PRODUCTION_FILES = [
   path.join(PLUGIN_ROOT, 'scripts', 'lib', 'codex-hooks-installer.mjs'),
   path.join(PLUGIN_ROOT, 'scripts', 'lib', 'codex-hooks-schema.mjs'),
   path.join(PLUGIN_ROOT, 'hooks', 'stop-fix-compliance-check.sh'),
+  // Feature 264：双注册守卫新增的生产文件，同样纳入该覆盖面（写入路径的上游判定逻辑）。
+  path.join(PLUGIN_ROOT, 'scripts', 'lib', 'codex-plugin-registration.mjs'),
 ];
 
 interface RunResult {
@@ -318,6 +320,189 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
     expect(result.exitCode).toBe(0);
   });
 
+  // ─── F264 / D1-D4：双注册守卫端到端 ───────────────────────────────────────
+
+  describe('🔴 F264 双注册守卫：install-codex-hooks.mjs 前置探测 + --force-hooks 逃生口', () => {
+    const CANONICAL_HOOKS_JSON = path.join(PLUGIN_ROOT, 'hooks', 'hooks.json');
+
+    /** 在临时 codexHome 里造一份"Codex 已原生注册本插件"的最小快照（config.toml + cache）。*/
+    function seedNativeRegistration(
+      marketplace = 'cc-plugin-market',
+      enabledLine: string | null = null,
+    ): void {
+      const configPath = path.join(codexHome, 'config.toml');
+      const lines = [`[plugins."spec-driver@${marketplace}"]`];
+      if (enabledLine !== null) lines.push(enabledLine);
+      fs.writeFileSync(configPath, `${lines.join('\n')}\n`, 'utf-8');
+
+      const snapshotDir = path.join(codexHome, 'plugins', 'cache', marketplace, 'spec-driver', 'v1', 'hooks');
+      fs.mkdirSync(snapshotDir, { recursive: true });
+      fs.copyFileSync(CANONICAL_HOOKS_JSON, path.join(snapshotDir, 'hooks.json'));
+    }
+
+    it('守卫命中（E3：表存在未写 enabled）→ 退出码 4，一个字节都不写入 hooks.json', () => {
+      seedForeign();
+      const before = fs.existsSync(target) ? fs.readFileSync(target, 'utf-8') : null;
+      const beforeMtime = fs.statSync(target).mtimeMs;
+      seedNativeRegistration();
+
+      const result = installCli();
+
+      expect(result.exitCode).toBe(4);
+      expect(result.stderr).toContain('已检测到 Codex 原生插件注册');
+      expect(result.stderr).toContain('--force-hooks');
+      // 一个字节都不写：内容与 mtime 均不变
+      expect(fs.readFileSync(target, 'utf-8')).toBe(before);
+      expect(fs.statSync(target).mtimeMs).toBe(beforeMtime);
+    });
+
+    it('🔴 已有历史合并器条目 + 插件已注册 = 此刻正在生效的双注册 → 必须显式点名并给清理指引', () => {
+      // 只说"已跳过写入"会让用户以为问题解决了，而 hooks.json 里那 5 条历史条目仍与插件注册叠加，
+      // Stop hook 每轮照跑两遍。守卫不替用户删（那是 --remove 的职责），但必须让它可见。
+      installCli(); // 先在未注册态下正常装一次，产出 5 条历史合并器条目
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+
+      const result = installCli();
+
+      expect(result.exitCode).toBe(4);
+      expect(result.stderr).toContain('5 条历史合并器条目');
+      expect(result.stderr).toContain('remove --global');
+    });
+
+    it('无历史条目时不打这条警告（未发生的事不该报警）', () => {
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+      const result = installCli();
+      expect(result.exitCode).toBe(4);
+      expect(result.stderr).not.toContain('历史合并器条目');
+    });
+
+    it('守卫命中（enabled = true 显式）→ 同样退出码 4', () => {
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+      const result = installCli();
+      expect(result.exitCode).toBe(4);
+    });
+
+    it('enabled = false（E2）→ 守卫放行，正常写入（退出码 0）', () => {
+      seedNativeRegistration('cc-plugin-market', 'enabled = false');
+      const result = installCli();
+      expect(result.exitCode).toBe(0);
+      expect(fs.existsSync(target)).toBe(true);
+    });
+
+    it('config.toml 不存在（E1 之后同形）→ 守卫放行，正常写入', () => {
+      const result = installCli();
+      expect(result.exitCode).toBe(0);
+    });
+
+    it('--force-hooks：跳过守卫，正常写入且打印代价说明', () => {
+      seedNativeRegistration();
+
+      const result = installCli(['--force-hooks']);
+
+      expect(result.exitCode).toBe(0);
+      expect(fs.existsSync(target)).toBe(true);
+      const doc = JSON.parse(fs.readFileSync(target, 'utf-8')) as { hooks: Record<string, unknown> };
+      expect(Object.keys(doc.hooks)).toEqual(
+        expect.arrayContaining(['SessionStart', 'PreToolUse', 'PostToolUse', 'Stop']),
+      );
+      expect(result.stderr).toContain('--force-hooks 已跳过双注册检测');
+      expect(result.stderr).toContain('将导致同一 hook 被注册两次');
+    });
+
+    it('--force-hooks 但守卫本就不会命中（未注册）→ 正常写入，不打印代价说明（未命中不该报警）', () => {
+      const result = installCli(['--force-hooks']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).not.toContain('已跳过双注册检测');
+    });
+
+    it('🔴 守卫不得吞掉 hooks.json 非法 JSON 的 fail-loud（退出码 3 优先于 4）', () => {
+      // 守卫命中与否不改变"这份文件坏了必须先修"的事实。若守卫先短路，用户的全局 hooks.json
+      // 已损坏（连第三方 hook 一起失效），我方工具却报"一切正常，无需再装"。
+      fs.writeFileSync(target, 'NOT JSON', 'utf-8');
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+
+      const result = installCli();
+
+      expect(result.exitCode).toBe(3);
+      expect(result.stderr).toContain('不是合法 JSON');
+    });
+
+    it('🔴 守卫命中时 --json 输出仍保留 writtenCommands/removedCommands（--desired 管道不被打断）', () => {
+      // validate-codex-hooks.mjs --desired 的文档明写"把 install --json 的完整输出整份喂进来"，
+      // 其解析器按有无 writtenCommands 分流。字段整个消失会让下游拿到"无法识别的 --desired"。
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+
+      const result = installCli(['--json']);
+
+      expect(result.exitCode).toBe(4);
+      const parsed = JSON.parse(result.stdout) as {
+        skipped: boolean;
+        writtenCommands: string[];
+        removedCommands: string[];
+        evidencePaths: string[];
+      };
+      expect(parsed.skipped).toBe(true);
+      expect(parsed.writtenCommands).toEqual([]);
+      expect(parsed.removedCommands).toEqual([]);
+      expect(parsed.evidencePaths.length).toBeGreaterThan(0);
+    });
+
+    it('守卫命中时打印判定依据路径（误拒时用户要能自救）', () => {
+      seedNativeRegistration('cc-plugin-market', 'enabled = true');
+      const result = installCli();
+      expect(result.stderr).toContain('判定依据：');
+      expect(result.stderr).toContain('hooks.json');
+    });
+
+    it('--remove 不受守卫影响：即使已原生注册，卸载仍正常执行', () => {
+      seedForeign();
+      // 先在"未注册"状态下正常装一次（产出我方条目），再补上原生注册态，验证卸载不被拦
+      expect(installCli().exitCode).toBe(0);
+      seedNativeRegistration();
+
+      const result = installCli(['--remove']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('移除');
+    });
+
+    it('--json 模式下守卫命中：stdout 仍是一份可解析 JSON，skipped=true', () => {
+      seedNativeRegistration();
+
+      const result = installCli(['--json']);
+
+      expect(result.exitCode).toBe(4);
+      const parsed = JSON.parse(result.stdout) as {
+        action: string;
+        skipped: boolean;
+        marketplace: string;
+      };
+      expect(parsed).toMatchObject({ action: 'install', skipped: true, marketplace: 'cc-plugin-market' });
+    });
+
+    it('codex-skills.sh install --global：守卫命中不阻断 skills 安装（退出码仍 0）', () => {
+      seedNativeRegistration();
+
+      const result = run('bash', [SKILLS_SH, 'install', '--global'], { CODEX_HOME: codexHome });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toContain('hooks 已由 Codex 原生插件注册生效');
+      // hooks.json 未被合并写入创建（守卫拦在写入前）
+      expect(fs.existsSync(target)).toBe(false);
+    });
+
+    it('codex-skills.sh install --global --force-hooks：透传逃生口，正常写入', () => {
+      seedNativeRegistration();
+
+      const result = run('bash', [SKILLS_SH, 'install', '--global', '--force-hooks'], {
+        CODEX_HOME: codexHome,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(fs.existsSync(target)).toBe(true);
+    });
+  });
+
   describe('codex-skills.sh 挂接点', () => {
     it('install --global 写入 hooks 并打印信任提示；remove --global 清理', () => {
       seedForeign();
@@ -373,8 +558,9 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
         'dangerously-bypass-hook-trust',
       );
     }
-    // 生产脚本自身也不得含该 flag（只允许出现在测试内部）—— I1：覆盖本 feature 全部 7 个生产文件
-    expect(PRODUCTION_FILES).toHaveLength(7);
+    // 生产脚本自身也不得含该 flag（只允许出现在测试内部）—— I1：覆盖全部 8 个生产文件
+    // （F240 原 7 个 + F264 新增的 codex-plugin-registration.mjs）
+    expect(PRODUCTION_FILES).toHaveLength(8);
     for (const script of PRODUCTION_FILES) {
       expect(fs.existsSync(script)).toBe(true);
       expect(fs.readFileSync(script, 'utf-8')).not.toContain('dangerously-bypass-hook-trust');

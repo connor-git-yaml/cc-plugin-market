@@ -23,6 +23,15 @@
  * | 0 | 成功（含"无变更"） | 继续 |
  * | 1 | 一般失败（权限、IO、参数） | **仅告警**，不阻断 skills 安装（plan §6.6） |
  * | 3 | 目标 `hooks.json` 不是合法 JSON | **fail-loud 中断**：静默降级会让用户以为 hooks 已装好 |
+ * | 4 | 双注册守卫命中：Codex 已原生注册本插件（Feature 264 D3） | **不阻断** skills 安装；本次拒绝写入 `hooks.json`（一个字节都不写），由 `codex-skills.sh` 打印中文指引；`--force-hooks` 可覆盖 |
+ *
+ * ## 双注册守卫（Feature 264，`specs/264-fix-codex-hooks-distribution/`）
+ * `codex plugin add` 之后 Codex 会直接注册插件包内的 `hooks/hooks.json`（主路径），本脚本
+ * 只是**降级为 fallback**——仅在插件未被原生注册时才需要合并写入。`action === 'install'`
+ * 分支前置调用 `codex-plugin-registration.mjs` 的 `detectNativePluginRegistration`：命中
+ * 且未传 `--force-hooks` → 退出码 4，中断写入；`--remove` 分支不受影响（用户需要能随时清理
+ * 历史遗留的合并写入条目）。逃生口 `--force-hooks` 服务"Codex 版本老到不读插件 hooks"的
+ * 人工判断，命中时仍会打印代价说明（将产生重复 hook）。
  *
  * ## 🔴 信任模型：本脚本只写声明，不碰信任
  * Codex 首次执行 hooks 需要用户在 Codex 内完成信任授予。本脚本**严禁**写入任何绕过信任的
@@ -43,14 +52,22 @@ import { fileURLToPath } from 'node:url';
 import { generateCodexHooks, CANONICAL_HOOKS_RELATIVE_PATH } from './lib/codex-hooks-generator.mjs';
 import {
   INVALID_JSON_ERROR_CODE,
+  assertHooksDocumentParsable,
+  countOwnedHandlers,
   installCodexHooks,
   removeCodexHooks,
+  resolveHooksPath,
 } from './lib/codex-hooks-installer.mjs';
+import { detectNativePluginRegistration } from './lib/codex-plugin-registration.mjs';
 import { isInvokedDirectly } from './lib/is-invoked-directly.mjs';
 
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
 export const EXIT_INVALID_JSON = 3;
+export const EXIT_ALREADY_REGISTERED = 4;
+
+/** Codex 插件 manifest（`.claude-plugin/plugin.json`）里的 `name` 字段值，双注册守卫按此匹配。 */
+const CODEX_PLUGIN_NAME = 'spec-driver';
 
 /** FR-010：安装成功后的信任提示（与 README / `codex-skills.sh` 的文案保持一致） */
 export const HOOK_TRUST_NOTICE =
@@ -63,7 +80,13 @@ const DEFAULT_PLUGIN_ROOT = path.resolve(SCRIPT_DIR, '..');
 class UsageError extends Error {}
 
 function parseArgs(argv) {
-  const args = { codexHome: null, pluginRoot: DEFAULT_PLUGIN_ROOT, remove: false, json: false };
+  const args = {
+    codexHome: null,
+    pluginRoot: DEFAULT_PLUGIN_ROOT,
+    remove: false,
+    json: false,
+    forceHooks: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     const next = () => {
@@ -84,6 +107,9 @@ function parseArgs(argv) {
         break;
       case '--json':
         args.json = true;
+        break;
+      case '--force-hooks':
+        args.forceHooks = true;
         break;
       default:
         throw new UsageError(`未知参数: ${token}`);
@@ -110,18 +136,75 @@ function loadCanonical(pluginRoot) {
   return JSON.parse(fs.readFileSync(file, 'utf-8'));
 }
 
+/**
+ * 数一数 `$CODEX_HOME/hooks.json` 里现存多少条我方历史合并器条目。
+ * 纯只读、绝不抛：文件不存在 / 非法 JSON / 读不动一律返回 0 —— 这只是给提示文案用的计数，
+ * 不参与任何判定，让它有能力打断安装流程是得不偿失的。
+ */
+function countStaleMergedEntries(codexHome) {
+  try {
+    return countOwnedHandlers(JSON.parse(fs.readFileSync(resolveHooksPath(codexHome), 'utf-8')));
+  } catch {
+    return 0;
+  }
+}
+
 /** 按已解析参数执行（`run` 的内核；`main` 复用它以便消费同一份 args，不重复解析） */
 function execute(args) {
   if (args.remove) {
     const result = removeCodexHooks({ codexHome: args.codexHome });
     return { action: 'remove', ...result };
   }
+  // 🔴 顺序不可调换（F264 / 第二轮 W1）：目标文件"非法 JSON ⇒ 退出码 3 fail-loud"这条通道
+  // 必须**先于**守卫求值。守卫命中与否不改变"这份文件坏了必须先修"的事实；把守卫放前面会让
+  // 一份已损坏的全局 hooks.json 被报成"一切正常，无需再装"。
+  assertHooksDocumentParsable(args.codexHome);
+
+  // Feature 264 / D3：双注册守卫只跑在 install 分支。命中且未传 `--force-hooks` → 一个字节
+  // 都不写，直接返回 skipped 结果；`main()` 据此分流到 EXIT_ALREADY_REGISTERED。
+  const registration = detectNativePluginRegistration({
+    codexHome: args.codexHome,
+    pluginName: CODEX_PLUGIN_NAME,
+  });
+  if (registration.registered && !args.forceHooks) {
+    // 🔴 守卫自己的 diagnostics 必须随结果一并出栈：它承载的是"某侧判不出"的可见信号
+    // （cache 不可读 / config.toml 不可读 等），静默丢弃就回到了对抗审查抓到的那片盲区。
+    return {
+      action: 'install',
+      skipped: true,
+      marketplace: registration.marketplace,
+      // 🔴 形状不能与正常安装结果脱节（F264 / 第二轮 W5）：`validate-codex-hooks.mjs --desired`
+      // 的文档明写"把 install --json 的完整输出整份喂进来"，其解析器按有无 `writtenCommands`
+      // 分流。守卫命中时确实**什么都没写、什么都没删**，故如实给两个空数组 —— 而不是让字段
+      // 整个消失、把下游打成"无法识别的 --desired"。
+      writtenCommands: [],
+      removedCommands: [],
+      // 命中证据路径：误拒时用户要能看见"是哪个文件让你拒的"（第二轮 W3）
+      evidencePaths: registration.evidencePaths,
+      // 🔴 拒绝安装只挡住**新的**双注册；用户机器上可能已经有一批**历史**合并器条目
+      //（插件注册之前装的），那才是此刻正在生效的双注册。守卫不替用户删这些条目
+      //（那是 `--remove` 的职责，删错就是数据丢失），但**必须把它变成可见的**：
+      // 只说"已跳过写入"会让用户以为问题已解决，而 Stop hook 仍在每轮跑两遍。
+      staleMergedEntries: countStaleMergedEntries(args.codexHome),
+      diagnostics: registration.diagnostics,
+    };
+  }
   const entries = generateCodexHooks({
     canonical: loadCanonical(args.pluginRoot),
     pluginRoot: args.pluginRoot,
   });
   const result = installCodexHooks({ codexHome: args.codexHome, entries });
-  return { action: 'install', ...result };
+  return {
+    action: 'install',
+    skipped: false,
+    // 逃生口命中：守卫本会拦但用户显式覆盖，main() 据此打印代价说明（marketplace 一并带上，
+    // 未命中时为 null，`main()` 的判据只看 forcedOverNativeRegistration，不会误用它）
+    forcedOverNativeRegistration: registration.registered && args.forceHooks,
+    marketplace: registration.marketplace,
+    ...result,
+    // 守卫诊断并入既有诊断通道（顺序在前：它描述的是写入之前的判定环节）
+    diagnostics: [...registration.diagnostics, ...(result.diagnostics ?? [])],
+  };
 }
 
 export function run(argv) {
@@ -185,7 +268,29 @@ function renderDiagnostic(diagnostic, backupPath) {
  */
 const SILENCED_INFO_CODES = new Set(['target-missing', 'nothing-to-remove']);
 
+/** `--help` / `-h` 的用法文案（Feature 264：补 `--force-hooks` 说明） */
+function printUsage() {
+  console.log(
+    [
+      '用法:',
+      '  node install-codex-hooks.mjs --codex-home <dir> [--plugin-root <dir>] [--remove] [--json] [--force-hooks]',
+      '',
+      '说明:',
+      '  --codex-home   Codex 家目录（必填，或设置非空 CODEX_HOME 环境变量）',
+      '  --plugin-root  插件根目录（默认本脚本的上一级目录）',
+      '  --remove       卸载已合并写入的我方 hook 条目（不受双注册守卫影响）',
+      '  --json         以 JSON 格式输出结果（人类可读提示改走 stderr）',
+      '  --force-hooks  跳过双注册守卫强制写入（Codex 已原生注册时会导致同一 hook 被注册两次）',
+    ].join('\n'),
+  );
+}
+
 function main(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printUsage();
+    return EXIT_OK;
+  }
+
   let args;
   let result;
   try {
@@ -198,6 +303,34 @@ function main(argv) {
     }
     console.error(`[codex-hooks] ${error instanceof Error ? error.message : String(error)}`);
     return EXIT_FAILED;
+  }
+
+  // Feature 264 / D3：守卫命中，一个字节都没写。单独分流，不进入下方的 install/remove 通用渲染
+  // 逻辑（那段逻辑假设 result 里有 changed/ownedCount 等只有真正写入才有的字段）。
+  if (result.action === 'install' && result.skipped) {
+    if (args.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.error(
+        `[codex-hooks] 已检测到 Codex 原生插件注册（marketplace=${result.marketplace ?? '未知'}），跳过合并写入以避免同一 hook 被注册两次；若确认当前 Codex 版本不读取插件内 hooks，可追加 --force-hooks 强制安装`,
+      );
+      // 🔴 判定证据必须可见（第二轮 W3）：只给一个 marketplace 名，误拒的用户无从自救。
+      for (const evidencePath of result.evidencePaths ?? []) {
+        console.error(`[codex-hooks] 判定依据：${evidencePath}`);
+      }
+      if (result.staleMergedEntries > 0) {
+        console.error(
+          `[codex-hooks] ⚠️ 但 ${resolveHooksPath(args.codexHome)} 里仍有 ${result.staleMergedEntries} 条历史合并器条目 —— ` +
+            '它们与插件注册叠加，此刻就是双注册状态（Stop hook 每轮跑两遍）。' +
+            '清理方式（只删 hook 条目、不动 skills）：`node "$PLUGIN_DIR/scripts/install-codex-hooks.mjs" --codex-home "$CODEX_HOME" --remove`；' +
+            '若连 Codex 包装 skills 一起卸载，才用 `bash "$PLUGIN_DIR/scripts/codex-skills.sh" remove --global`',
+        );
+      }
+      for (const diagnostic of result.diagnostics ?? []) {
+        console.error(`[codex-hooks] ${diagnostic.level ?? 'info'} ${diagnostic.code}`);
+      }
+    }
+    return EXIT_ALREADY_REGISTERED;
   }
 
   if (args.json) {
@@ -225,6 +358,13 @@ function main(argv) {
   for (const diagnostic of result.diagnostics ?? []) {
     if (diagnostic.level === 'info' && SILENCED_INFO_CODES.has(diagnostic.code)) continue;
     console.error(renderDiagnostic(diagnostic, result.backupPath));
+  }
+  // Feature 264 / D3：`--force-hooks` 覆盖了双注册守卫的代价说明；`console.error` 而非
+  // `console.log`，保证 `--json` 模式下 stdout 仍只有那一份 JSON。
+  if (result.forcedOverNativeRegistration) {
+    console.error(
+      `[codex-hooks] 警告 --force-hooks 已跳过双注册检测（marketplace=${result.marketplace}）：若 Codex 确已原生注册本插件，本次强制写入将导致同一 hook 被注册两次（例如 Stop hook 每次会跑两遍）；如非必要请勿加此参数`,
+    );
   }
   if (result.action === 'install') {
     if (args.json) console.error(HOOK_TRUST_NOTICE);

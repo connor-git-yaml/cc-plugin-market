@@ -331,7 +331,10 @@ function scanSingleLineString(rawLine, start, quote) {
  * @returns {Array<{text: string, headerName: string|null, isArrayTable: boolean,
  *                  isSectionBoundary: boolean}>}
  */
-function normalizeTomlLines(tomlText) {
+// Feature 264 / T001：新增具名导出，供 `codex-plugin-registration.mjs`（双注册守卫）复用同一
+// 词法扫描器，避免第三份手写 TOML 解析器（F231/F259 教训：每次独立实现都会漏判某种形态）。
+// 函数体本身不变，`parsePluginRegistry` 等既有消费者的行为零变化。
+export function normalizeTomlLines(tomlText) {
   const scanner = createTomlScanner();
   const lines = [];
   for (const rawLine of tomlText.split('\n')) {

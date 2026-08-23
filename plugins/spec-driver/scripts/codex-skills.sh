@@ -8,6 +8,9 @@ ACTION="install"
 # Feature 213（A1）：opt-in 双写开关，默认关闭；仅显式 --sync-plugin-distribution 时置 true。
 # 只有 repo:sync 的 runStep 传该 flag，避免测试/用户普通 install 误重写 tracked skills-codex/。
 SYNC_PLUGIN_DIST="false"
+# Feature 264（D3/D4）：双注册守卫的逃生口，默认关闭；只有显式 --force-hooks 才透传给
+# install-codex-hooks.mjs，且只在 install --global 分支生效（见文末 run_codex_hooks_cli 调用点）。
+FORCE_HOOKS="false"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -20,7 +23,7 @@ source "$SCRIPT_DIR/lib/codex-home.sh"
 usage() {
   cat <<'USAGE'
 用法:
-  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" install [--global] [--sync-plugin-distribution]
+  bash "\$PLUGIN_DIR/scripts/codex-skills.sh" install [--global] [--sync-plugin-distribution] [--force-hooks]
   bash "\$PLUGIN_DIR/scripts/codex-skills.sh" remove [--global]
 
 说明:
@@ -31,6 +34,10 @@ usage() {
   --sync-plugin-distribution  额外把生成结果 copy 到 tracked 的
                               plugins/spec-driver/skills-codex/（随插件包分发）；
                               仅供 npm run repo:sync 使用，普通安装无需该 flag
+  --force-hooks               跳过双注册守卫（Feature 264），强制把 hook 条目合并写入
+                              $CODEX_HOME/hooks.json；仅 install --global 时生效，
+                              服务"Codex 版本老到不读插件内 hooks"这类人工判断，
+                              命中时会导致同一 hook 被注册两次，请谨慎使用
 
 环境变量:
   CODEX_SKILL_PROJECT_ROOT  覆盖 project 模式的目标项目根目录
@@ -47,6 +54,9 @@ for arg in "$@"; do
       ;;
     --sync-plugin-distribution)
       SYNC_PLUGIN_DIST="true"
+      ;;
+    --force-hooks)
+      FORCE_HOOKS="true"
       ;;
     --help|-h)
       usage
@@ -223,11 +233,20 @@ sync_plugin_distribution_copy() {
 # Feature 240（FR-011/FR-010）：全局模式下把我方 hook 条目合并写入 $CODEX_HOME/hooks.json。
 #
 # 🔴 作用域：**只有 global 模式**调用。Codex hooks 只有全局位置，无项目级语义
-#    （_grounding.md §8.1），project 模式下调用等于往用户全局文件里写不该写的东西。
+#    （_grounding.md §8.1）——这一点本身仍成立；project 模式下调用等于往用户全局文件里写
+#    不该写的东西。
+#
+# 🔴 F264 更正（specs/264-fix-codex-hooks-distribution/fix-report.md）：本文件此前的注释曾把
+#    "hooks 只有全局位置"误外推成"合并写入是 hooks 生效的唯一路径"。实测 `codex plugin add`
+#    之后会**直接注册插件包内的 `hooks/hooks.json`**（主路径），本文件调用的合并写入只是
+#    **降级为 fallback**——仅在插件未被原生注册时才需要。故调用点现在多了一道**双注册守卫**
+#    （install-codex-hooks.mjs 侧实现，命中即退出码 4），见下方新增分支：命中时说明 Codex
+#    已原生注册，跳过合并写入以避免同一 hook 被注册两遍。
 #
 # 失败处置沿用 sidecar 模式（plan §6.6）：写入失败仅告警，不让 skills 安装回滚 ——
-# 唯一例外是目标 hooks.json 非法 JSON（退出码 3），此时必须 fail-loud 中断，
-# 否则用户会以为 hooks 已装好而实际一条都没生效。
+# 例外一，目标 hooks.json 非法 JSON（退出码 3），此时必须 fail-loud 中断，否则用户会以为
+# hooks 已装好而实际一条都没生效；例外二，双注册守卫命中（退出码 4）同样不阻断 skills 安装，
+# 但文案是"无需再装"而非"失败"。
 run_codex_hooks_cli() {
   local action_label="$1"
   shift
@@ -247,6 +266,14 @@ run_codex_hooks_cli() {
   if [[ $status -eq 3 ]]; then
     echo "[错误] $codex_home/hooks.json 不是合法 JSON，hooks ${action_label}未执行且未改动该文件。请手动修复后重跑本命令" >&2
     exit 1
+  fi
+  if [[ $status -eq 4 ]]; then
+    # 🔴 措辞必须点破 remove --global 的真实作用域（F264 / 第二轮 W2）：
+    # remove_all() 会先 rm -rf $TARGET_DIR/spec-driver-* 把 9 个 Codex 包装 skill 一并删掉，
+    # 再去清 hook 条目。只说"移除 hook 条目"等于对同时在用 fallback skills 的用户做一次没预告的删除。
+    echo "[提示] hooks 已由 Codex 原生插件注册生效，无需再跑合并器；如确认当前 Codex 版本不读取插件内 hooks，可在命令后加 --force-hooks 强制安装" >&2
+    echo "[提示] 只想清掉历史合并器写入的 hook 条目（保留已安装的 Codex skills）：node \"$PLUGIN_DIR/scripts/install-codex-hooks.mjs\" --codex-home \"$codex_home\" --remove；codex-skills.sh remove --global 会连 skills 一起卸载" >&2
+    return 0
   fi
   if [[ $status -ne 0 ]]; then
     echo "[警告] Codex hooks ${action_label}失败（退出码 $status），不阻断 skills 操作" >&2
@@ -371,7 +398,11 @@ remove_all() {
 if [[ "$ACTION" == "install" ]]; then
   install_all
   if [[ "$MODE" == "global" ]]; then
-    run_codex_hooks_cli "安装"
+    if [[ "$FORCE_HOOKS" == "true" ]]; then
+      run_codex_hooks_cli "安装" --force-hooks
+    else
+      run_codex_hooks_cli "安装"
+    fi
   fi
 else
   remove_all

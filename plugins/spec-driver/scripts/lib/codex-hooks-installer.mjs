@@ -8,6 +8,17 @@
  * 顶层未知字段、第三方事件键、甚至形状畸形的第三方条目，一律原样透传。任何"顺手清理"都是
  * 静默数据丢失。
  *
+ * ## 🔴 前提更正（F264）：本文件是「唯一的那一份全局文件」，但**不是唯一的注册源**
+ * F240 FR-011 建立在"Codex hooks 只有全局位置"之上，该前提**已被实测推翻**：
+ * `codex plugin add` 之后 Codex 会直接注册插件包内的 `hooks/hooks.json`（`hooks/list` 返回
+ * `source=plugin` 的条目，`${CLAUDE_PLUGIN_ROOT}` 已展开），与本文件**互不知情、互不去重** ——
+ * 两条路径都走一遍即双注册（同一 hook 跑两遍）。
+ *
+ * 因此本模块的定位已从「主注册路径」降为 **skills-only 安装的 fallback**：写入前由
+ * `install-codex-hooks.mjs` 经 `codex-plugin-registration.mjs` 的双注册守卫把关，
+ * 检测到原生注册即拒绝写入（退出码 4，`--force-hooks` 可覆盖）。
+ * 详见 `specs/264-fix-codex-hooks-distribution/fix-report.md` 与 README 的 Codex Support 节。
+ *
  * ## 为什么是对称实现而不是复用 `src/hooks/hook-installer.ts`（plan §6.1）
  * 那份实现属 npm `spectra` 包（TS，需 `npm run build` 产 dist）；本模块属 spec-driver 插件
  * （纯 `.mjs`，从 plugin cache 直接 `node` 执行，**无构建步骤**）。让插件脚本 import dist 会给
@@ -104,6 +115,20 @@ function readDocument(targetPath) {
     failure.code = INVALID_JSON_ERROR_CODE;
     throw failure;
   }
+}
+
+/**
+ * 只读地断言目标文件可解析（F264 / 第二轮 W1）。
+ *
+ * 🔴 存在的唯一理由：`install-codex-hooks.mjs` 的双注册守卫**前置于** `installCodexHooks`，
+ * 于是"目标 hooks.json 非法 JSON ⇒ 退出码 3 fail-loud"这条既有通道会被守卫整段短路 ——
+ * 用户的全局 hooks.json 已经坏了（连第三方 hook 一起失效），我方工具却报"一切正常，无需再装"。
+ * 守卫命中与否**不改变**"这份文件坏了必须先修"的事实，故调用方 MUST 在守卫之前调用本函数。
+ *
+ * 文件不存在 = 正常（首次安装），不抛。
+ */
+export function assertHooksDocumentParsable(codexHome) {
+  readDocument(resolveHooksPath(codexHome));
 }
 
 /**
