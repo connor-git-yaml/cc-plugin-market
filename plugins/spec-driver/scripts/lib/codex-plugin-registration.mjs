@@ -41,6 +41,20 @@
  * 因别的原因提到 `spec-driver` 字样，会拿到一次**误拒**。这比第一轮的 fail-open 窄得多，
  * 且落在可见一侧：命中时打印诊断 + 证据路径，`--force-hooks` 可覆盖。
  *
+ * ## 🔴 已知残余误拒面（诚实登记，不假装已消除）
+ * 复用 `normalizeTomlLines` 带来一个**方向翻转**：它头部那份"不支持形态清单 → 全部落 absent
+ * 安全方向"的承诺，是对 doctor（absent = indeterminate）说的；在本模块里 absent ⇒ 判不出归属
+ * ⇒ `enabled` 停在 `undefined` ⇒ 判"启用" ⇒ **拒绝**。也就是说**词法扫描器的每个盲区都自动
+ * 等价于一次误拒**。已用 `scanPluginMentions` 把其中最常见的几种（段头内侧空白、literal string
+ * 键、inline table）连同它们的 `enabled = false` 一起救回来，但仍有一类救不回：
+ *
+ * > 插件表内在 `enabled` **之前**出现以 `[` 开头的续行（如多行数组 `matrix = [\n  [1, 2],\n]`），
+ * > 归属会被提前断开，`enabled = false` 读不到 ⇒ 误拒。
+ *
+ * 不为它加"值上下文跟踪"是刻意的：那等于在这里再造半个 TOML 解析器，而本仓已被
+ * 手写解析器的枚举式盲区反复教育过（F231 / F236 / F259）。现实性也低 —— Codex 自己写出的
+ * 插件表只有 `enabled` 一个键。误拒时用户会看到判定依据路径与 `--force-hooks` 出口。
+ *
  * ## 为什么误拒比漏拦更可接受（两个方向不对称）
  * - **漏拦**（该拒没拒）⇒ 静默双注册：Stop 判定器每轮跑两遍、`BLOCK_LIMIT=2` 一次 Stop 烧尽
  *   即降级放行 —— 用户**看不见**，且损坏的正是依从性门禁本身；
@@ -162,7 +176,7 @@ function collectCacheEvidence(codexHome, pluginName, marketplaceName, diagnostic
  * 但 `enabled` 语义不同：那边默认 false（doctor 的"保守确认 active"），这边 `undefined` 独立成态 ——
  * fix-report E3 实测 `enabled` 键缺失时 Codex 照常注册，两者不能混。
  *
- * @returns {{readable: boolean, text: string|null,
+ * @returns {{readable: boolean, lines: Array<object>,
  *            tables: Array<{marketplace: string, enabled: boolean|undefined}>}}
  */
 function readPluginTables(codexHome, pluginName, diagnostics) {
@@ -176,12 +190,13 @@ function readPluginTables(codexHome, pluginName, diagnostics) {
       // 读不出 ⇒ 台账不可用 ⇒ 退到 cache 兜底证据。必须让用户看得见原因。
       diagnostics.push({ level: 'warning', code: 'config-unreadable', errno: code ?? null });
     }
-    return { readable: false, text: null, tables: [] };
+    return { readable: false, lines: [], tables: [] };
   }
 
   const tables = [];
+  const lines = normalizeTomlLines(text);
   let current = null;
-  for (const line of normalizeTomlLines(text)) {
+  for (const line of lines) {
     if (line.isSectionBoundary) {
       current = null;
       const pluginKey =
@@ -201,7 +216,66 @@ function readPluginTables(codexHome, pluginName, diagnostics) {
     if (/^enabled\s*=\s*true$/.test(line.text)) current.enabled = true;
     else if (/^enabled\s*=\s*false$/.test(line.text)) current.enabled = false;
   }
-  return { readable: true, text, tables };
+  return { readable: true, lines, tables };
+}
+
+
+/**
+ * 在 config.toml 里**结构化地**找本插件的痕迹（F264 / 第一轮审查 CRITICAL-1 修订）。
+ *
+ * 🔴 这里绝不能用「全文件子串匹配插件名」。异构对抗实测出三条误拒链，全都命中那种写法：
+ * - 用户**注释掉**插件段来停用（`codex plugin` 没有 `disable` 子命令，手改是唯一途径，
+ *   而注释掉正是最自然的手改）—— 注释在归约后已被剥掉，语义上就是"没注册"；
+ * - `[projects."/Users/dev/code/spec-driver"]` 这类**信任目录**段：Codex 给每个受信目录写一条，
+ *   本机实测有 8 条，路径里带插件名再正常不过；
+ * - `[plugins."spec-driver-lite@other"]` 这类**名字含子串**的第三方插件。
+ * 三者都会让守卫吐出「已由 Codex 原生注册生效」——一句在这些情形下**是假的**陈述，
+ * 而用户没有理由怀疑它，唯一出口 `--force-hooks` 也就无从想起。
+ *
+ * 故判据收紧为两条合取：
+ * 1. **作用域**：该行必须落在 plugins 语境里 —— `[plugins…]` / `[[plugins…]]` 段头、
+ *    `plugins.` 点分键、`[profiles.<x>.plugins…]`，或位于 `[plugins]` 表体内；
+ * 2. **token 边界**：行内出现 `"<name>@` / `'<name>@` / `"<name>"` / `'<name>'`，
+ *    而不是裸子串（挡掉 `spec-driver-lite`）。
+ *
+ * 命中后继续向前扫到下一个段边界，找**显式 `enabled = false`**（含同行的 inline table 形态）：
+ * 找到即视为用户已关停 —— 这让 `[ plugins."x@y" ]`、`[plugins.'x@y']` 这类我方解析不出的
+ * 合法写法**仍然能豁免**，把第二轮 WARNING-2 那类误拒也一并收掉。
+ *
+ * @returns {{mentioned: boolean, disabled: boolean}}
+ */
+function scanPluginMentions(lines, pluginName) {
+  const tokens = [`"${pluginName}@`, `'${pluginName}@`, `"${pluginName}"`, `'${pluginName}'`];
+  let insidePluginsTable = false;
+  let mentioned = false;
+  let disabled = false;
+  let trailing = false; // 正处在"某条提及本插件的行"之后、下一个段边界之前
+
+  for (const line of lines) {
+    const text = line.text;
+    // 段头内侧空白（`[ plugins."x" ]` / `[\tplugins…`）在作用域判定前吸收掉
+    const compact = text.replace(/^\[+\s+/, (m) => m.replace(/\s+/g, ''));
+
+    if (line.isSectionBoundary) {
+      trailing = false;
+      insidePluginsTable = /^\[\s*plugins\s*\]$/.test(text);
+    }
+    const pluginsScoped =
+      insidePluginsTable ||
+      compact.startsWith('[plugins') ||
+      compact.startsWith('[[plugins') ||
+      text.startsWith('plugins.') ||
+      (compact.startsWith('[profiles.') && compact.includes('.plugins'));
+
+    if (pluginsScoped && tokens.some((token) => text.includes(token))) {
+      mentioned = true;
+      trailing = true;
+      if (/enabled\s*=\s*false/.test(text)) disabled = true; // inline table 形态
+      continue;
+    }
+    if (trailing && /^enabled\s*=\s*false$/.test(text)) disabled = true;
+  }
+  return { mentioned, disabled };
 }
 
 /**
@@ -243,9 +317,15 @@ export function detectNativePluginRegistration({ codexHome, pluginName, marketpl
   const activeTable = config.readable
     ? (config.tables.find((table) => table.enabled !== false) ?? null)
     : null;
-  /** 台账解析不出表，但文本里出现过插件名 —— 极可能是我方词法扫描器认不出的合法写法 */
-  const mentionOnly =
-    config.readable && config.tables.length === 0 && config.text.includes(pluginName);
+  /**
+   * 台账解析不出表，但 plugins 语境里**结构化地**提到了本插件 —— 极可能是我方词法扫描器
+   * 认不出的合法写法。同时看该处有没有显式 `enabled = false`（那就是用户已关停）。
+   */
+  const mention =
+    config.readable && config.tables.length === 0
+      ? scanPluginMentions(config.lines, pluginName)
+      : { mentioned: false, disabled: false };
+  const mentionOnly = mention.mentioned && !mention.disabled;
 
   if (cache.length > 0) {
     // 有我方 hooks 缓存 ⇒ Codex **有东西可注册**，此时由台账逐条裁决每一份证据。

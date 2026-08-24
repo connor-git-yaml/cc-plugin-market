@@ -252,3 +252,69 @@ add / list / marketplace / remove），`enabled = false` 只能手改文件—�
 - 两轮合并的 **26 条对抗构造** + 4 条 marketplace 匹配边界，逐条实跑全部符合期望
 - 真实 codex-cli 0.144.6 隔离 CODEX_HOME **6 步端到端**：原生 5 条 → 叠装仍 5 条（打印判定依据路径）→
   幂等 5 条 → `enabled=false` 放行 → 历史条目叠加时点名 10 条 → **只清 hook 条目**后回 5 条且 skills 9 个保留
+
+---
+
+## 对抗审查第一轮 · 迟到回收（审查对象 = 已提交态 `a7f4298e`）
+
+第一路代理在宿主机休眠后仍存活，最终回收了一份**针对已提交代码**的报告：**1 CRITICAL + 3 WARNING**，
+且 Q2 回归面逐项实测**未发现回归**（`--remove` / 退出码 0·1·3·4 / `--json` 纯净 / 既有 flag /
+`normalizeTomlLines` 改导出后 doctor 71 tests 绿 / F262 权限位保全与幂等 / 相关 226 tests 绿 /
+守卫抛异常打挂安装**构造失败**）。
+
+### CRITICAL-1：`mentionOnly` 用**全文件子串匹配**当注册证据 → 守卫会说一句假话
+
+判据行 4 原来写的是 `config.text.includes(pluginName)`，与 `[plugins."…"]` 表毫无结构关系。
+配合"幽灵 cache 真实存在"，构成完整误拒链：**Codex 没注册 → 守卫拒绝 → 用户零 hook**，
+而输出的是"已由 Codex 原生插件注册生效，无需再跑合并器"——**在下列情形下都是假陈述**：
+
+| 构造 | 现实性 |
+|---|---|
+| 用户**注释掉**插件段来停用 | 最高：`codex plugin` 没有 `disable` 子命令，手改是唯一途径，注释掉是最自然的手改 |
+| `[projects."/Users/dev/code/spec-driver"]` 信任目录段 | 高：Codex 给每个受信目录写一条，本机实测 **8 条** |
+| `[plugins."spec-driver-lite@other"]` 名字含子串的第三方插件 | 中 |
+
+**归因（审查方给出，主线程认可）**：台账侧对"判不出"的处理是 `undefined ⇒ 按启用算 ⇒ 拒绝`，
+而 `normalizeTomlLines` 的每个盲区都会产出 `undefined` 或 `tables.length === 0` ——
+**词法扫描器的每一个盲区都自动等价于一次误拒**，`mentionOnly` 又把触发条件放宽到
+"文件里出现过这七个字符"。CRITICAL-1 / WARNING-1 / WARNING-2 是同一条链上的三个采样点。
+
+### 修法：结构化作用域 + token 边界，并顺带把 exotic 写法的 `enabled = false` 救回来
+
+`scanPluginMentions()` 取代子串匹配，两条合取：
+1. **作用域**：该行须落在 plugins 语境（`[plugins…]` / `[[plugins…]]` / `plugins.` 点分键 /
+   `[profiles.<x>.plugins…]` / `[plugins]` 表体内）；注释在归约阶段已被剥掉，注释掉的段天然不算；
+2. **token 边界**：`"<name>@` / `'<name>@` / `"<name>"` / `'<name>'`，而非裸子串。
+
+命中后继续扫到下一个段边界找显式 `enabled = false`（含 inline table 同行形态）——
+这让 `[ plugins."x@y" ]`、`[plugins.'x@y']`、`[plugins]` + inline table 这些我方**解析不出**的
+合法写法**仍能豁免**，把第二轮 WARNING-2 那类误拒一并收掉。
+
+### 一条被真机推翻的旧期望（连带更正）
+
+"未闭合三引号吞掉后续"这条构造，两轮审查都把它列为 BLOCK 方向存疑。**真机裁决**：
+往隔离 CODEX_HOME 的 config.toml 注入未闭合 `"""` 后，`hooks/list` 返回
+`hooks: []` + `errors: [invalid multi-line basic string]`，日志 `Invalid configuration; using defaults`
+—— **非法 TOML 下 Codex 注册 0 条**。故此情形的正确答案是 **ALLOW**，我方 harness 里的
+BLOCK 期望才是错的，已更正并写进测试注释。
+
+### WARNING 处置
+
+| # | 发现 | 处置 |
+|---|---|---|
+| W1 | 插件表内在 `enabled` **之前**有 `[` 开头的续行（多行数组）→ 归属提前断开 → `enabled = false` 读不到 → 误拒，且**一条诊断都没有** | **登记不修**：修它等于在这里再造半个 TOML 解析器（F231/F236/F259 教训）；Codex 自己写出的插件表只有 `enabled` 一个键。已在模块头「已知残余误拒面」显式登记 |
+| W2 | doctor 头部"不支持形态清单 → 全部落安全方向"的**总括承诺对新消费者不再成立**（那边 absent=安全，这边 absent=拒绝） | 已在模块头点破该**方向翻转**，并说明哪几种形态已被 `scanPluginMentions` 救回 |
+| W3 | `plugins/cache` 不可读时唯一出口仍是 `--force-hooks`，而提示只讲"Codex 版本不读插件 hooks"一种理由，与用户处境对不上 | 诊断已产出 `cache-scan-unreadable` + `cache-scan-inconclusive` 两条可见信号；文案未再改（登记） |
+
+### INFO（登记不改）
+
+`--help` 提前返回改变了"未知参数 → exit 1"的旧行为（无消费方依赖）；`repo:sync` 走 project 模式
+不经守卫；守卫命中后 `hooks.json` 不存在，而 `codex-runtime-doctor` 的 `codex-home-hooks-json`
+探针会报"文件都没有"——两个产品面对同一台机器叙述不一致，误拒时会加深困惑（非 bug，登记）。
+
+### 修后复验
+
+- 两轮合并 **26 条**对抗构造 + 本轮 **10 条**新构造（3 条误拒链 / 3 条 exotic 豁免 / 4 条收紧后仍须拦）
+  + 4 条 marketplace 边界，逐条实跑**全部符合期望**
+- 真机复验新增一步：注释掉插件段后叠装 → 合并器**正常安装**、`hooks/list` 5 条（`source=user`）
+- 全量 `npx vitest run`：`531 passed | 4 skipped`，`7574 tests passed`，退出码 0

@@ -266,7 +266,6 @@ describe('F264 — 对抗构造回归（绕过面全部必须 BLOCK）', () => {
     ['profile 段', '[profiles.work.plugins."spec-driver@cc-plugin-market"]\nenabled = true\n'],
     ['数组表', '[[plugins."spec-driver@cc-plugin-market"]]\nenabled = true\n'],
     ['段名缺 @marketplace', '[plugins."spec-driver"]\nenabled = true\n'],
-    ['未闭合三引号吞掉后续', 'x = """\nunclosed\n[plugins."spec-driver@cc-plugin-market"]\nenabled = true\n'],
   ])('W1/W4/S3：合法但我方解析不出的 TOML 形态（%s）+ cache 命中 → 必须 BLOCK', (_label, toml) => {
     config(toml);
     seed('cc-plugin-market', '4.4.2');
@@ -427,5 +426,75 @@ describe('F264 — 拒绝判定必须回传证据路径', () => {
     const result = detectNativePluginRegistration({ codexHome: home, pluginName: PLUGIN_NAME });
     expect(result.registered).toBe(false);
     expect(result.evidencePaths).toEqual([]);
+  });
+});
+
+/**
+ * F264 / 第一轮审查 CRITICAL-1 与 WARNING-2 — 「config.toml 里提到插件名」必须是**结构化**判据
+ *
+ * 全文件子串匹配会把下面三种情形误判成"已注册"，而守卫此时会吐出一句**假陈述**
+ * （"已由 Codex 原生注册生效，无需再跑合并器"），用户没有理由怀疑它、也就想不到用 `--force-hooks`。
+ */
+describe('F264 — plugins 语境 + token 边界的结构化提及判据', () => {
+  let home: string;
+  beforeEach(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'f264-mention-'));
+  });
+  afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
+
+  const config = (content: string) => fs.writeFileSync(path.join(home, 'config.toml'), content);
+  function seedGhostCache(marketplace = 'ghostmkt'): void {
+    const dir = path.join(home, 'plugins', 'cache', marketplace, PLUGIN_NAME, 'snap1', 'hooks');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'hooks.json'), JSON.stringify(OWNED_HOOKS_DOC));
+  }
+  const detect = () => detectNativePluginRegistration({ codexHome: home, pluginName: PLUGIN_NAME });
+
+  it.each([
+    [
+      '用户注释掉插件段来停用（无 disable 子命令时最自然的手改）',
+      '# 暂时停用\n#[plugins."spec-driver@ghostmkt"]\n#enabled = true\n',
+    ],
+    [
+      '[projects."/…/spec-driver"] 信任目录路径里含插件名（本机实测有 8 条 projects 段）',
+      'model = "gpt-5.6"\n[projects."/Users/dev/code/spec-driver"]\ntrust_level = "trusted"\n',
+    ],
+    [
+      '名字含子串的第三方插件 spec-driver-lite 已注册',
+      '[plugins."spec-driver-lite@other"]\nenabled = true\n',
+    ],
+  ])('🔴 %s → 不得判为已注册（否则守卫会说一句假话）', (_label, toml) => {
+    config(toml);
+    seedGhostCache();
+    expect(detect().registered).toBe(false);
+  });
+
+  it.each([
+    ['段头内侧空格', '[ plugins."spec-driver@ghostmkt" ]\nenabled = false\n'],
+    ['literal string 键', "[plugins.'spec-driver@ghostmkt']\nenabled = false\n"],
+    ['inline table 同行 enabled', '[plugins]\n"spec-driver@ghostmkt" = { enabled = false }\n'],
+  ])('我方解析不出的合法写法（%s）里的显式 enabled=false 仍须豁免', (_label, toml) => {
+    config(toml);
+    seedGhostCache();
+    expect(detect().registered).toBe(false);
+  });
+
+  it.each([
+    ['段头内侧空格', '[ plugins."spec-driver@ghostmkt" ]\nenabled = true\n'],
+    ['inline table', '[plugins]\n"spec-driver@ghostmkt" = { enabled = true }\n'],
+    ['点分键', 'plugins."spec-driver@ghostmkt".enabled = true\n'],
+    ['profile 段', '[profiles.work.plugins."spec-driver@ghostmkt"]\nenabled = true\n'],
+  ])('同样这些写法在 enabled=true 时仍须拦（收紧不得反向打开绕过面：%s）', (_label, toml) => {
+    config(toml);
+    seedGhostCache();
+    expect(detect().registered).toBe(true);
+  });
+
+  it('非法 TOML（未闭合三引号）→ 放行：真机实测此时 Codex 报 Invalid configuration 且注册 0 条', () => {
+    // codex-cli 0.144.6 隔离 CODEX_HOME 实测：注入未闭合 `"""` 后 hooks/list 返回
+    // `hooks: []` + errors 里带 `invalid multi-line basic string`。配置整份失效 ⇒ 无可注册。
+    config('x = """\nunclosed\n[plugins."spec-driver@ghostmkt"]\nenabled = true\n');
+    seedGhostCache();
+    expect(detect().registered).toBe(false);
   });
 });

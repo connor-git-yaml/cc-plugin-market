@@ -149,3 +149,24 @@ cache 目录名与 `@token` 精确匹配优先，对不上才退回聚合判断�
 - `product-handler-unregistered` 分支**结构性不可达**（两张表 5/5 对齐），是前瞻分支，
   **不得**算进"已验证的守护力"——已在源码注释显式标注。
 - 其余（0.149.0 无法本机复测、`hooks/list` 只证注册不证 trust 授予后的执行）与原报告一致。
+
+---
+
+## 附录二 · 第一轮审查迟到回收后的再次修订与重新验证
+
+第一路对抗代理（切入角「双注册绕过面」）在宿主机休眠后仍存活，最终回收了一份**针对已提交态
+`a7f4298e`** 的报告：1 CRITICAL + 3 WARNING，Q2 回归面逐项实测**未发现回归**。
+
+- **CRITICAL-1**：`mentionOnly` 用全文件子串匹配 `spec-driver` 当注册证据 → 三条已实测误拒链
+  （注释掉插件段 / `[projects."/…/spec-driver"]` 信任目录 / `spec-driver-lite` 同前缀插件），
+  且守卫会输出一句**假陈述**。已改为 `scanPluginMentions()` 的「plugins 语境作用域 + token 边界」
+  结构化判据，并顺带把 exotic 写法里的显式 `enabled = false` 救回来。
+- **一条旧期望被真机推翻**：非法 TOML（未闭合三引号）下 Codex 报 `Invalid configuration; using defaults`
+  且 `hooks/list` 返回 `hooks: []` —— 该情形正确答案是 ALLOW，两轮审查里标为 BLOCK 的期望是错的。
+- **W1 登记不修**：插件表内 `enabled` 之前的 `[` 开头续行会让归属断开 → 误拒。修它等于再造半个
+  TOML 解析器（F231/F236/F259 教训）。已写进模块头「已知残余误拒面」。
+
+重新验证：两轮合并 26 条 + 本轮 10 条新构造 + 4 条 marketplace 边界逐条实跑全部符合期望；
+真机新增一步（注释掉插件段后叠装 → 合并器正常安装、`hooks/list` 5 条 `source=user`）；
+`npx vitest run` **531 passed | 4 skipped，7574 tests passed，退出码 0**；build / repo:check（仅基线
+noise）/ release:check 全绿。
