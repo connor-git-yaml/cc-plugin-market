@@ -416,8 +416,15 @@ function probeCodexPluginManifest(codexHome, product) {
     if (read.errorClass === 'ENOENT') return { outcome: 'absent', errorClass: null };
     return { outcome: 'error', errorClass: read.errorClass };
   }
-  const entry = parsePluginRegistry(read.text).find((item) => item.name === product && item.enabled);
-  if (!entry || !entry.marketplace) return { outcome: 'absent', errorClass: null };
+  // 🔴 可用性判据（`marketplace` 非空）必须折进 `.find` 谓词本身（F267 / D7）。
+  // 此前是「先 find 出首个同名 enabled 条目，再判它有没有 marketplace」——判定被拆成两半，
+  // 中间隔了一个会**提前终止**的搜索：一个无 `@market` 的畸形同名段（手工编辑 config.toml /
+  // 旧写法残留）排在合法段之前时，就把后面那条真正可用的段屏蔽掉，探针误报 `absent`。
+  // 找的从来不是「首个匹配」，而是「首个可用」。
+  const entry = parsePluginRegistry(read.text).find(
+    (item) => item.name === product && item.enabled && item.marketplace,
+  );
+  if (!entry) return { outcome: 'absent', errorClass: null };
 
   const pluginDir = path.join(codexHome, 'plugins', 'cache', entry.marketplace, entry.name);
   let snapshots;
@@ -516,11 +523,20 @@ function probeCodexCliInventory(exec, product) {
     return { outcome: 'error', errorClass: 'parse-failed' };
   }
   const installed = Array.isArray(parsed?.installed) ? parsed.installed : [];
-  const entry = installed.find((item) => item?.name === product && item?.enabled === true);
-  if (!entry) return { outcome: 'absent', errorClass: null };
-  const normalized = normalizeVersion(typeof entry.version === 'string' ? entry.version : null);
-  if (normalized.semver === null) return { outcome: 'absent', errorClass: null };
-  return { outcome: 'found', errorClass: null, semver: normalized.semver, rawShape: normalized.rawShape };
+  // 🔴 与 `probeCodexPluginManifest` 同一类问题（F267 / D7）：可用性判据是「版本串能解析出
+  // semver」，此前放在 `.find` 之后，于是一个 `version: "nightly"` 的同名条目排在前面就把后面
+  // 那条版本合法的条目屏蔽掉，探针误报 `absent`。
+  //
+  // 与 L416 语义对称（都是"把可用性折进搜索，不让首个形式匹配但语义不可用的候选提前终止它"），
+  // 但**实现形态刻意不对称**：那边的判据是零成本的属性存在性，单层 `.find` 即可；这边的判据要
+  // 调 `normalizeVersion`，塞进 `.find` 谓词会对每个候选算一遍、命中后还得再算一遍。
+  // `filter → map → find` 让每个候选只解析一次。为了"看起来对称"而引入重复求值不是对称，是负担。
+  const resolved = installed
+    .filter((item) => item?.name === product && item?.enabled === true)
+    .map((item) => normalizeVersion(typeof item.version === 'string' ? item.version : null))
+    .find((normalized) => normalized.semver !== null);
+  if (!resolved) return { outcome: 'absent', errorClass: null };
+  return { outcome: 'found', errorClass: null, semver: resolved.semver, rawShape: resolved.rawShape };
 }
 
 /** 探针 3 `codex-doctor-checks`：官方体检的 check 集合里是否存在覆盖 plugin 版本的 check */

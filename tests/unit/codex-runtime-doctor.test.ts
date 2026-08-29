@@ -327,6 +327,66 @@ describe('F240 T045 — PLUGIN_BUILD_PROBES 5 探针（clarify #3 强标准）',
     expect(report.checks['plugin-build.spectra'].status).toBe('indeterminate');
   });
 
+  // ─── F267 / D7：`.find` 取「首个匹配」而非「首个可用」──────────────────────
+  //
+  // 两条探针的搜索谓词都只表达了"是不是我要找的那一条"，可用性判定被放在 `.find` **之后**。
+  // 判定被拆成两半、中间隔了一个会提前终止的搜索：第一个形式匹配但语义不可用的候选，会把
+  // 后面真正可用的那条**屏蔽**掉，探针误报 `absent`。两条用例的断言目标刻意对称。
+
+  it('D7-a 畸形段（无 marketplace）排在合法段之前时，plugin-manifest 探针仍返回 found', () => {
+    const fx = makeFixture({
+      spectraVersion: '4.4.0',
+      // 无 `@market` 的同名段是真实可发生的形态（手工编辑 config.toml / 旧版写法残留）
+      configToml:
+        '[plugins."spectra"]\nenabled = true\n\n[plugins."spectra@some-market"]\nenabled = true\n',
+    });
+    seedSnapshot(fx.codexHome, 'some-market', 'spectra', 'abc123hash', '4.4.0');
+
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeExec({}),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+
+    const check = report.checks['plugin-build.spectra'];
+    const probe = check.details.probedSources.find((p: any) => p.id === 'codex-plugin-manifest');
+    expect(probe.outcome).toBe('found');
+    expect(check.details.activeInstallPath).toBe('plugins/cache/some-market/spectra/abc123hash');
+  });
+
+  it('D7-b 版本不可解析的条目排在合法条目之前时，cli-inventory 探针仍返回 found', () => {
+    const fx = makeFixture({ spectraVersion: '4.4.0' });
+
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: (file: string, args: string[]) => {
+        if (file === 'codex' && args[0] === 'plugin') {
+          return JSON.stringify({
+            installed: [
+              // 同名 + enabled，但版本串解析不出 semver → 形式匹配、语义不可用
+              { name: 'spectra', enabled: true, version: 'nightly' },
+              { name: 'spectra', enabled: true, version: '4.4.0' },
+            ],
+          });
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOENT');
+        err.code = 'ENOENT';
+        throw err;
+      },
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+
+    const check = report.checks['plugin-build.spectra'];
+    const probe = check.details.probedSources.find((p: any) => p.id === 'codex-cli-help');
+    expect(probe.outcome).toBe('found');
+    expect(check.details.semver).toBe('4.4.0');
+    expect(check.status).toBe('ok');
+  });
+
   it('全部探针非 found 时才允许 indeterminate + reason codex-active-marker-unknown', () => {
     const fx = makeFixture({});
     const report = io.runDoctor({
