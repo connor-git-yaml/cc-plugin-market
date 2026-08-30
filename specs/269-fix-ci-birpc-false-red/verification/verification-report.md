@@ -2,11 +2,11 @@
 
 **生成方式**: verify 子代理（fix 模式 · 轻量验证路径 4c，4a/4b 独立审查并入本次单代理执行）
 **时间**: 2026-08-30
-**改动面**: `.github/workflows/ci.yml`（Test 步注入步级 env `VITEST_MAX_FORKS=1` + 观测 echo + 因果注释块）、`vitest.config.ts`（F235 注释块追加 7 行纯注释）
+**改动面**（回填，含 delta 轮与 T008）: `.github/workflows/ci.yml`（Test 步 env + 护栏 + 观测行 + 注释）、`vitest.config.ts`（注释）、`tests/integration/graph-quality-cli.test.ts`（同步 spawn 链异步化，349 行变更）、`specs/269-fix-ci-birpc-false-red/`（制品）
 
 ## 执行摘要
 
-**状态**: PASS（本地全量门禁零回归；真实 CI 连续 2 次验收 T004-T006 尚未执行，见下方 PENDING 节）
+**状态**: PASS（本地全量门禁零回归 + 真实 CI 连续 2 次执行全绿，含 delta 轮对抗复审收口，见下方「真实 CI 验收」节回填结果）
 
 全部本地门禁命令（vitest 全量 / build / repo:check / release:check / YAML 语法 / env 生效抽测）均 exit 0，无需触发预存 flaky 隔离复判路径（未命中任何失败文件）。Spec 合规与代码质量审查均为 PASS，注释新增的技术断言逐条核实与源码 / fix-report 证据一致，未发现不实陈述。
 
@@ -54,7 +54,7 @@
 
 ## 真实 CI 验收（T004-T006）
 
-**状态：PENDING（等待主编排器 commit + push 分支触发）**
+**状态：已完成（回填），最终结果 PASS**
 
 判据：`Test` 步日志需满足以下全部 5 项，且需**连续 ≥2 次独立执行**（run 1 + `gh run rerun` 触发的 attempt 2）同时满足：
 1. 观测行输出确认 `nproc=4`（钉死 runner 规格）与 `VITEST_MAX_FORKS=1`（确认 env 生效）
@@ -63,10 +63,39 @@
 4. `Test` 步最终状态为 success（exit code 0）
 5. `Repo Check` / `Release Check` / `Test Plugins` 三步保持绿色（不回归）
 
-本次 verify 子代理**未执行** T004-T006（不 commit / push / 触发 CI，按运行时上下文边界约束），结果留待主编排器后续触发并回收。若任一次执行未满足上述 5 项，按 tasks.md T007 转入回滚路径评估。
+**中间证据 run（fa723232，仅 `VITEST_MAX_FORKS=1` 形态，未含 T008）**：33311237734 = failure。观测行 `[ci-diag] nproc=4 VITEST_MAX_FORKS=1` 证明 env 生效，但同签名 `"Timeout calling"` 超时仍现 1 次，判据 3 未满足。逐时间戳定位到唯一 ≥60s 静默窗口（64.8s）落在 `tests/integration/graph-quality-cli.test.ts` 的同步 spawn 链——引出 T008（该文件同步 spawn 链异步化，349 行变更）与机制两分：并发争抢排队类（方案 A 已收敛）/ 单文件同步阻塞链类（需另修）。
+
+**T008 + delta 对抗复审**：`tests/integration/graph-quality-cli.test.ts` 同步化改动经 opus 独立子代理 delta 轮对抗复审（测试架空面）：初判 BLOCK，命中 C-1（`runCLIFull` 缺 error 监听）、C-2（tsc 空网判据）两项 CRITICAL。两条均已修复并收口：C-1 修法附带 2ms 负向实证；C-2 判据改写为运行时断言网 + 变异测试（7 体 100% 击杀），独立证明转换后断言网满力，未留检测空洞。
+
+**验收 run A**（交付 commit `4c2b467d`，attempt 1）：33314711574 = success。job 12m56s，Test 步 `"Timeout calling"` 出现 **0 次**，`Test Files 533 passed | 9 skipped`，vitest Duration 665.42s（tests 累计 504.78s）。
+
+**验收 run B**（同 SHA `4c2b467d`，attempt 2，`gh run rerun` 触发、独立 runner VM）：success。`"Timeout calling"` **0 次**，`533 passed`，Duration 696.85s（tests 累计 533.29s），`[ci-diag] nproc=4 VITEST_MAX_FORKS=1`。
+
+**判据逐项核对（两次执行均满足）**：
+1. `nproc=4` / `VITEST_MAX_FORKS=1` ✓（两次观测行均确认）
+2. vitest 汇总 `0 failed` ✓（run A 533 passed | 9 skipped；run B 533 passed）
+3. 日志无 `"Timeout calling"` ✓（两次皆 0 次）
+4. `Test` 步 exit 0 / success ✓（两次独立 attempt 均 success）
+5. 连续 ≥2 次独立执行同时满足 ✓（run A attempt 1 + run B attempt 2，同 SHA `4c2b467d`，独立 runner VM）
+
+**对比基线**：修复前 533 文件时代 3/3 run 确定性失败（`33304003606` / `33307096100` / `33308646065`），与验收 run A/B 的 2/2 全绿形成对照。
+
+**交付 commit 本地门禁**（amend 前重跑确认，四项均 exit 0）：`npx vitest run`（538 文件 0 失败）/ `npm run build` / `npm run repo:check` / `npm run release:check`。
+
+**残余风险（如实保留）**：N=2 样本量偏弱，方案 A 仍是余量型收敛（60s 硬超时机制本身未变）；T008 收敛的是本次实测命中的单文件同步阻塞类超时，不排除其余 spawn 密集测试文件存在同类未触发的静默窗口。合入后建议继续观察 5-10 次自然 run 积累更大样本，该项已记入 fix-report.md「残余风险」节，不阻断本次验收判定。
+
+## Delta 轮与最终验收（回填）
+
+本节为主编排器在真实 CI 验收完成后回填，记录本报告首次生成后发生的 delta 对抗复审与最终收口事实，不改动上方各节在当时观测到的原始记录。
+
+- **中间形态失败**：仅 `VITEST_MAX_FORKS=1`（无 T008）时，run `33311237734` 仍现 1 次 `"Timeout calling"`，证明方案 A（并发争抢收窄）对本仓库全部超时成因不是充分条件——还存在单文件同步 spawn 链导致的独立静默窗口（`graph-quality-cli.test.ts`，64.8s）。
+- **T008 修复**：该测试文件同步 spawn 链异步化（349 行变更），消解该静默窗口成因。
+- **delta 对抗复审**：opus 独立子代理从"测试架空面"视角复审 T008，初判 BLOCK（C-1 `runCLIFull` 缺 error 监听、C-2 tsc 空网判据），两条均已修复并附带负向实证 / 变异测试证据收口。
+- **最终验收**：交付 commit `4c2b467d` 在真实 CI 上连续 2 次独立执行（attempt 1 + `gh run rerun` attempt 2，独立 runner VM）Test 步均 success、`"Timeout calling"` 均 0 次、vitest 汇总均 0 failed，满足 tasks.md T004-T006 全部判据。
+- **对比基线**：修复前 3/3 run 确定性失败 → 修复后 2/2 run 全绿，方向一致且样本内无例外。
 
 ## 总结论
 
-**PASS**
+**PASS**（本地四门禁 + 真实 CI 连续 2 次执行全绿；残余风险已登记 fix-report）
 
-本地全部门禁（vitest 全量 538 passed / build / repo:check / release:check / YAML 语法 / env 生效抽测）零失败、零回归；Spec 合规与代码质量两节均无 CRITICAL / WARNING 发现；注释内技术断言逐条核实为真，无不实陈述。改动范围精确匹配 tasks.md T001/T002 验收判据，未波及其余 CI 步骤。真实 CI 连续验收（T004-T006）为本次 verify 职责边界外事项，标记 PENDING 转交主编排器执行。
+本地全部门禁（vitest 全量 538 passed / build / repo:check / release:check / YAML 语法 / env 生效抽测）零失败、零回归；Spec 合规与代码质量两节均无 CRITICAL / WARNING 发现（初版审查范围内）；注释内技术断言逐条核实为真，无不实陈述。真实 CI 连续 2 次独立执行（同 SHA `4c2b467d`，不同 runner VM）全部满足 T004-T006 判据（exit 0 / 0 failed / 无 "Timeout calling" / 连续 2 次），并经 delta 轮对抗复审（opus 异构档位，2 项 CRITICAL 全修复收口）后交付。残余风险（N=2 样本量偏弱、方案 A 为余量型收敛）已如实登记于 fix-report.md「残余风险」节，不阻断本次验收判定。

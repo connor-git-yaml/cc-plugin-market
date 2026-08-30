@@ -192,3 +192,18 @@
   （"commit 串从哪读、在哪比对、在哪被丢弃、生命周期不跨出哪个函数"），`context`/`impact` 的
   symbol 级 caller/callee 摘要无法替代逐行读代码确认变量生命周期，MCP 在此场景零采用。
   非缺陷定位记录 + 能力缺口候选：若 P1-J 检索内核考虑"符号内数据流"维度，本卡是一个真实需求样本
+
+### F269 · 2026-08-30
+状态：待处理（2 条）
+来源：specs/269-fix-ci-birpc-false-red/（fix 流程编排器实证）
+- [流程顺畅][spec-driver fix SKILL] fix 模式复用 `create-new-feature.sh` 会在特性目录落一个
+  未填充的 feature `spec.md` 模板（`[FEATURE NAME]` 占位符原样），而 fix 流程制品集是
+  fix-report/plan/tasks/verification（F268 先例无 spec.md）——每个 fix 都需手工识别并删除
+  该模板，本卡即 `rm` 后才 commit。改进方向：`create-new-feature.sh` 加 `--mode fix` 跳过
+  spec.md 脚手架，或 fix SKILL 初始化步骤显式声明删除动作
+- [流程顺畅][fix-compliance Stop hook × 长异步验证] 本卡验收判据是真实 CI 连续 2 次 run
+  （30+ 分钟异步等待），而 Stop hook 要求 verification-report.md 先存在才放行 idle——两者
+  张力靠「报告先落盘 + 真实 CI 验收节标 PENDING + 完成后回填」的两段式惯例化解。该惯例
+  目前无处成文，属编排器现场发明；若判定器未来加「PENDING 节视为未完成」的严格化，这类
+  长异步验证流会被卡死。改进方向：把「异步验证 PENDING→回填」惯例写进 fix SKILL，或判定
+  器显式支持 in-flight 状态
