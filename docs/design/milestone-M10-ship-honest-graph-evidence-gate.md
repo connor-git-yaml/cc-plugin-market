@@ -64,7 +64,7 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 **病根**：判定器以 transcript 为唯一证据源，而官方明言它异步滞后；SDK harness 下滞后 25 分钟+。三路证据烧同一个 F256 预算：(i) 陈旧快照 → 每会话 2 次假 block 后降级放行（F262 ledger）；(ii) 2.1.232 后每次委派触发 Stop，`IN_FLIGHT_DEFER_LIMIT=3` 在 diagnose→plan→fix→verify 四次委派即耗尽（调研②）；(iii) GATE 暂停等用户拍板被当收口尝试误阻断，烧光 `BLOCK_LIMIT` 后**人工门禁被绕过、会话末尾真实收口检查被自己废掉**（审查 `fix-compliance-judge.mjs:757-801, 534-630`）。另两处同文件缺陷一并收：(iv) `isFix = anchor.mode==='fix'` 取**最晚任意** spec-driver-* 展开——会话尾部展开 sync/doc 即整体跳过判定且零落盘（`:202/:719`，绕过面，spec FR-007 要求取最晚一次 *fix* 展开）；(v) block/defer 状态 load→modify→save 无锁，Codex 双注册下同一 Stop 并发两次判定互相覆写。
 **方向**：PostToolUse hook 实时把 `{tool_use_id, tool_name, tool_input 摘要, ts}` 追加到会话证据账本；Stop 只读账本；`background_tasks`/`session_crons` 判在途（取代次数预算）；`last_assistant_message` 与 transcript 尾部交叉校验陈旧并打 `snapshot-stale` 专码（与"证据缺失"区分）；GATE 暂停识别为"等待用户"而非收口尝试；锚点改最晚一次 *fix* 展开。transcript 降为次级佐证，Codex 方言保持 indeterminate 语义。
-**spec 阶段必答**：① 账本的威胁模型——被判方可经 Bash 写账本文件，"不经手"门槛如何达成（hook 进程独立写 + 结构/序列校验 + 与 harness 字段交叉，诚实写清只防"疏忽不合规"不防"蓄意伪造"的边界）；② 与 F227 磁盘候选历史、F257 闸门三的关系（协同还是取代，逐条列出保留/废除的闸门）；③ `stop_hook_active` 重入防护；④ 49 份 fixture 中 48 份手工合成——新增**真实会话录制**的 fixture 作为主验收语料。
+**spec 阶段必答**：① 账本的威胁模型——被判方可经 Bash 写账本文件，"不经手"门槛如何达成（hook 进程独立写 + 结构/序列校验 + 与 harness 字段交叉，诚实写清只防"疏忽不合规"不防"蓄意伪造"的边界）；② 与 F227 磁盘候选历史、F257 闸门三的关系（协同还是取代，逐条列出保留/废除的闸门）；③ `stop_hook_active` 重入防护；④ 49 份 fixture 中 48 份手工合成——新增**真实会话录制**的 fixture 作为主验收语料。⑤ 长异步验证（真实 CI 等待 30min+）的 in-flight/PENDING 语义：把 F269 现场发明的「报告先落盘 + 真实验收节标 PENDING + 完成后回填」惯例成文并让判定器显式支持，避免未来严格化把长异步流卡死。
 **护栏**：F208 三档语义、F211 补救清零、F216 no-op 证据门、F231 光杆命令判据不回退；JUDGE_FILE_SET 同步；本机门禁跑的是已安装快照（F236）——修完必须 `judge:doctor` 并说明生效时点。规模：medium-large；**串行于 P0-B 的双注册守卫**（同碰 `hooks/hooks.json` 与 installer）。
 
 ### P0-B Codex hooks 分发纠偏（M9 A3 前提错误）
@@ -89,9 +89,9 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 - **P1-F 多语言解析 parity**：Python import 解析**两套语义分叉 kernel**（`python-adapter.ts:410-470`：batch 拓扑图与 graph.json 各信一套，第三套已死——critical/medium）；`python-mapper.ts` 0 处 receiver 处理，java/go 只处理声明侧；3 个 perf baseline 里 2 个是 Python。产出按语言的 parity 矩阵（free call / method call / import / receiver）后再补齐；同卡收 `stored-module-specs.ts:31-45` 两套 stored-spec 读取器 `sourceKind` 分叉（bundle 副本未过滤 → 项目级文档消费 3.03× 重复模块，即 F260 立项时的分母污染根因）。
 - **P1-G 测试与守护资产清淤**：`src/panoramic/qa/__tests__` 8 个文件从未被 vitest include 且已腐烂（10/10 失败）——修或删；`graph-mcp-snapshot` Layer B 因 fixture 被删 describe.skip 三个月；`typecheck:tests`（F220 G3 / F222 llmDegraded / F170c 三份类型守护）未接 CI/repo:check；四语言 lang-matrix 的 TS pinned graph 落后 builder（11 边 vs 14）且无"pinned 是否陈旧"检查；`regen-collector-fingerprint-fixtures.ts` 放行路径丢弃已算出的 differences；23 条 it.todo 挂 4 个月；源码文本 grep 式测试与恒真断言清单。
 - **P1-H 评测前置**：对既有 33-run 产物做坏题审计（分歧集法）+ 重钉 GStack 锚版本；之后才允许再投 run。brainstorm 卡与任何"c3 更有效"对外表述都以此为前置。
-- **P1-I 诚实工具面**：图边携带解析 stage/策略标签并在 MCP callers/callees 暴露（账本 F260+F263 再现）；confidence 双词汇收敛；`tokenBudget` 参数（超预算按相关性收缩并顶部声明截断，现 `PAYLOAD_CAP_BYTES` 1MB 是安全上限非预算）；impact/context/graph_node top-N 裁剪与 `tools/list` 的确定性回归（同名平局 ≥14 次运行集合恒等，GitNexus #2796 教训）。
+- **P1-I 诚实工具面**（优先级论据：F266 实测本仓 live 图 linkageRatio 仅 3.1%——123767/126411 已探测调用点未成边，coverage-gap 在非导出 symbol 上恒成立、confirmed-zero 不可达，producer 侧 call-site 归因持久化按此数量级重估）：图边携带解析 stage/策略标签并在 MCP callers/callees 暴露（账本 F260+F263 再现）；confidence 双词汇收敛；`tokenBudget` 参数（超预算按相关性收缩并顶部声明截断，现 `PAYLOAD_CAP_BYTES` 1MB 是安全上限非预算）；impact/context/graph_node top-N 裁剪与 `tools/list` 的确定性回归（同名平局 ≥14 次运行集合恒等，GitNexus #2796 教训）。
 - **P1-J 检索内核 v1 + 离线基准**：先把 Spectra 当 retriever 接入 Agent Retrieval Bench 拿基线；内核 = 图结构分 + FTS5 RRF；embedding 门控（§2-2）；复合 `find` 工具（Code Finder 形态）留 kernel 落地后。
-- **P1-K Spec Driver 引擎正确性与硬化**：`orchestrator-cli.mjs:73` 永远传空 userConfig → `spec-driver.config.yaml` 的 gate_policy/gates 在 CLI 路径被忽略（small，先修）；6 个 SKILL 仍写 `Task` 而真实委派是 `Agent`；`io.mjs` 20MB transcript 上限注释基于 0.31MB 实测而现网已 5.66MB；三套 doctor + 六套 validate/status CLI 各写各的状态词表/退出码/flag 解析且无一接入 repo:check（给统一输出契约）。既有硬化项照 M9 §10 保留：TDD 红先行引擎化（吸收 GStack evidence ledger：命令哈希+退出码+树内容指纹）、任务级上下文精确构造、diff-file 审查纪律、task right-sizing、systematic-debugging、**plan 裁决回写**（账本 F261）、派发纪律（被派发子代理禁再派发；A/B 用副本；共享树验收"目标文件组绿 + A/B 零 delta"）。
+- **P1-K Spec Driver 引擎正确性与硬化**：`orchestrator-cli.mjs:73` 永远传空 userConfig → `spec-driver.config.yaml` 的 gate_policy/gates 在 CLI 路径被忽略（small，先修）；6 个 SKILL 仍写 `Task` 而真实委派是 `Agent`；`io.mjs` 20MB transcript 上限注释基于 0.31MB 实测而现网已 5.66MB；三套 doctor + 六套 validate/status CLI 各写各的状态词表/退出码/flag 解析且无一接入 repo:check（给统一输出契约）；**2026-08-31 账本流转追加 7 项**：zod 缺失下 orchestration-overrides 整体不生效（与 userConfig 恒空同修）；spec-review 只读 git 白名单或编排器预跑注入；`create-new-feature.sh --mode fix` 跳过 spec.md 脚手架；fix 轻量/完整路径判据加**性质闸**（触及权限/软链/子进程/门禁判定器一律完整路径）；spec/plan 对**推断得出的关键前提**强制登记 + verify 至少一条运行时口径验证（F264 根因）；子代理 MCP 注入链路诊断（frontmatter 授权 ≠ 运行时可达，F266 实测 "No such tool available"）；值级数据流需求样本 → P1-J。既有硬化项照 M9 §10 保留：TDD 红先行引擎化（吸收 GStack evidence ledger：命令哈希+退出码+树内容指纹）、任务级上下文精确构造、diff-file 审查纪律、task right-sizing、systematic-debugging、**plan 裁决回写**（账本 F261）、派发纪律（被派发子代理禁再派发；A/B 用副本；共享树验收"目标文件组绿 + A/B 零 delta"）。
 - **P1-L brainstorm 轻量入口 + 入口意图化命名**：采用 SuperPowers v6.3 "spike/bounded/architectural 三路由，分类先行并宣告、审批不缩放、分类不得作逃逸口"骨架；我们的差异化（Spectra 影响面 grounding、brainstorm.md 一键转 feature）叠在 architectural 路径；立项文案按 §2-6 去 overclaim。
 - **P1-M Spec Drift adoption 研究 → rename-follow**：先回答"为什么 `.specify/spec-drift.lock.json` 只有 3 个锚"（specs/** 可自动建锚比例、link 一条锚的实际步骤数），再决定 rename-follow / 全仓映射 / gap 分类的投入；Spec Drift 进 `spectra` CLI（P1-E 联动）。
 - **P1-N Codex 运行时跟进**：Agent Plugins 1.0 spike（§2-3 事实核实前置；根 `plugin.json` + `mcp.json` dual-manifest；注意该模式排除 hooks 能力）；Codex rollout `.jsonl.zst`/分页格式翻转的 loud 诊断码 + tripwire（不写解析器）；`detect-codex-capability.mjs` 在 0.149 探测仍通过（已核）。
@@ -132,3 +132,13 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 | 3 | P1-E/F/G/K（小卡优先） | 见各卡 | 按路径矩阵再判 |
 
 先 ship 先 push；后者 rebase 最新 master 重跑全量验证。
+
+---
+
+## 11. 进展账（rolling）
+
+- **2026-08-30/31 批次 1 全部 ship**：G0=F265（4.5.0 **已 npm 发布**、CI 接 repo:check/release:check、doctor/MCP commit 自省、度量基线尺子）+ 追加 2ad22eb3（CI 治理两步解除 Test 连坐）；P0-B=F264（双注册守卫 + 插件自带 hooks 为主；判据三轮异构对抗推翻重写两次）；P0-C=F266（空图 fail-loud 链 + MCP 三态诚实返回面，三轮异构九 CRITICAL 全闭环）；P0-D=F267（atomic-write 群；对抗抓到"软链跟随=写穿任意路径"新破坏面，能力改 opt-in）；CI 收尾 F268（真实 spectra 两级解析回退）+ F269（birpc 假红收敛，**仓史首次 CI 全绿**，master 连续 success）。
+- **2026-08-31 milestone-next 体检**：vitest 7894/0、test:plugins 0、repo:check 0、release:check 0（publish-gap 报 indeterminate=fail-loud 正常，npm registry 缺 gitHead）；npm 4.5.0 已可安装；F264-c "scripts 层不在图"经主线程证伪（422 节点在图，当时零节点=旧 4.4.0 全局 MCP，发布断层症状；hooks/*.sh 无解析器不在图记能力边界）。账本 15 条全部流转（4 修复进模板 / 7 进 P1-K / 1 进 P0-A 必答 / 其余已修复或分流）。
+- **批次 2（2026-08-31 派发）**：F270=P0-A 门禁证据源换代 ∥ F271=P1-E 产品表面清扫 ∥ F272=P1-G 测试资产清淤；P1-K 等 P0-A 落地（避免同碰 SKILL/judge）；P1-F 下批。
+- **G0-4 两基线**：下轮（≈09-06，发布满一周）跑 adoption census + F241 冻结口径复测。
+- **T062/T063**：等用户升级 Codex ≥0.149 后执行（P0-B 已落地，前置齐了）。
