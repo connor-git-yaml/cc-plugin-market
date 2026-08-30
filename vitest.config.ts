@@ -52,6 +52,13 @@ export default defineConfig({
     // poolOptions，用 maxWorkers 以便对 forks / threads 任一 pool 都生效。
     // 不设 minWorkers：vitest 会取 min(推导值, maxWorkers) == maxWorkers，
     // 与调整前「启动即拉满 worker」的行为一致，只是上限变小。
+    //
+    // F269：CI 上经 `.github/workflows/ci.yml` 的 `Test` 步级 env
+    // `VITEST_MAX_FORKS=1` 覆盖此处推导值（poolOptions.forks.maxForks 读取
+    // 该环境变量，优先级高于这里的 maxWorkers）——这是本仓库当前唯一的
+    // poolOptions 注入点，上面「本仓库不设 poolOptions」指的是本文件不静态
+    // 声明，不代表运行时不会被 CI 步级 env 间接设置。详见
+    // specs/269-fix-ci-birpc-false-red/fix-report.md。
     maxWorkers: maxTestWorkers,
 
     // F251：dist/ 构建收拢到 globalSetup（所有 worker fork 之前的单进程阶段串行执行一次），

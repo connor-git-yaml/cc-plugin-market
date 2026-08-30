@@ -42,8 +42,37 @@ jobs:
         id: graph
         run: node dist/cli/index.js batch --mode graph-only
 
+      # F269：CI 上把 vitest 并发钉死到 1 个 fork（步级 env，仅此步生效）。
+      #
+      # vitest.config.ts 的 F235 注释已记录：worker↔主进程的 birpc RPC
+      # （onTaskUpdate 等）有 60s 硬超时，且该超时 vitest 未开放配置（上游
+      # #8164 open）。F235 把 CI worker 降到 CPU/2（4 vCPU → 2 个）后，其
+      # implement 报告估计仅剩约 1.2× 安全余量（该倍数在 F235 verification
+      # 中被标注为未经独立验证的预测值）；此后测试面继续增长（tests 累计
+      # 时长从 527 文件时代的 ~601s 涨到 533 文件时代的 ~810-836s，+35%，
+      # 详见 fix-report.md 确定性证据表），三次 run 逐字同签名复现，余量
+      # 确证被吃穿：4 vCPU 上「主进程 + 2 worker + spawn 孙进程」饱和排队，
+      # worker 的 onTaskUpdate 应答延迟越过 60s，抛出 unhandled error 让
+      # 进程 exit 1，而 vitest 汇总行仍是 `0 failed`（全绿假红）。钉 1 fork
+      # 只收口①类触发面——多 worker 争抢排队（run 33311237734 实证 nproc=4、
+      # 1 fork 下其余静默窗口全部 <36s）；同一次 run 仍复现同签名超时，定位
+      # 出②类触发面：`tests/integration/graph-quality-cli.test.ts` 的 CLI
+      # helper 连续同步 spawn 累积出 64.8s 零输出静默窗口，与 worker 数无关，
+      # 由该文件 helper async 化收口（T008，见其注释）。步级 env 覆盖
+      # maxWorkers 推导值无需改动 npm test 组合
+      # （等效替代是给 vitest 传 --maxWorkers=1 CLI flag，但那要改
+      # package.json 脚本链）。poolOptions.forks.maxForks 优先级高于
+      # maxWorkers，详见 vitest.config.ts 与 fix-report.md。
       - name: Test
-        run: npm test
+        env:
+          VITEST_MAX_FORKS: "1"
+        run: |
+          # 护栏：VITEST_MAX_FORKS 必须是 >=1 的整数——vitest 对 "0" 走真值
+          # 分支得 maxForks=0，会静默跑零测试仍 exit 0（连 "No test files
+          # found" 兜底都绕过）
+          node -e 'const v=process.env.VITEST_MAX_FORKS;const n=Number(v);if(!Number.isInteger(n)||n<1){console.error("[ci-diag] VITEST_MAX_FORKS 必须是 >=1 的整数，得到: "+v);process.exit(1)}'
+          echo "[ci-diag] nproc=$(nproc) VITEST_MAX_FORKS=${VITEST_MAX_FORKS}"
+          npm test
 
       # 治理链（Feature 265 G0-2）。位置有两条约束：
       #

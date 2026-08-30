@@ -12,7 +12,8 @@
  * 全部通过 spawn `node dist/cli/index.js` 子进程验证，端到端覆盖 CLI 契约本身。
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -38,31 +39,86 @@ interface CLIResult {
   exitCode: number;
 }
 
-function runCLI(args: string[], opts: { cwd?: string } = {}): CLIResult {
+const execFileAsync = promisify(execFile);
+
+/**
+ * F269：两个 CLI helper 从同步 exec*Sync 改为 async——本文件 66 个用例逐个
+ * `execFileSync`/`spawnSync` 连成近连续同步阻塞链，1 fork 的 CI 上累积成
+ * 64.8s 零输出静默窗口（F269 CI run 33311237734 实证），期间 worker↔主进程的
+ * birpc onTaskUpdate 应答躺在缓冲区不被处理，同步链结束时 vitest 的 60s 硬
+ * 超时定时器已先一步触发——这与并发 worker 数无关（钉 1 fork 只收口另一类
+ * 「多 worker 争抢排队」的触发面，见 ci.yml Test 步注释）。async 化后每次
+ * spawn 的等待期都让给事件循环一次完整轮次，在途 RPC 应答得以正常处理。
+ */
+async function runCLI(args: string[], opts: { cwd?: string } = {}): Promise<CLIResult> {
   try {
-    const stdout = execFileSync('node', [CLI_PATH, ...args], {
+    const { stdout } = await execFileAsync('node', [CLI_PATH, ...args], {
       encoding: 'utf-8',
       timeout: 30_000,
       cwd: opts.cwd,
     });
+    // 成功时丢弃 stderr——与原 execFileSync 行为一致（execFileSync 的返回值
+    // 本就只是 stdout，不提供成功路径的 stderr）。
     return { stdout, stderr: '', exitCode: 0 };
   } catch (err: unknown) {
-    const error = err as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: error.stdout ?? '', stderr: error.stderr ?? '', exitCode: error.status ?? 1 };
+    const error = err as { stdout?: string; stderr?: string; code?: unknown };
+    // execFile 的 rejection 对象用 `.code` 装退出码，不是 spawnSync 的 `.status`；
+    // 且 `.code` 也可能是 spawn 层错误码（如 'ENOENT'）而非数字退出码，须类型判断。
+    return {
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? '',
+      exitCode: typeof error.code === 'number' ? error.code : 1,
+    };
   }
 }
 
 /**
  * FIX-8：与 runCLI 不同，本 helper 无论 exit code 是否为 0 都保留 stdout/stderr 分离，
  * 供 --output 场景断言"写入通知在 stderr、stdout 只含结构化输出"。
+ *
+ * F269：改用 `spawn` + Promise 包装而非 `spawnSync`（原因同 runCLI 上方注释）。
+ * `ChildProcess` 的 `'error'` 是 EventEmitter 特例事件——无监听者时会直接抛
+ * uncaught，且该路径下 `'close'` 不会触发（对抗复审 C-1 实测：spawn 失败如
+ * EAGAIN/EMFILE 只发 `'error'`），若只挂 `'close'` 会让 Promise 永挂，最终撞上
+ * 60s testTimeout。故 `'error'`/`'close'` 双监听 + `settled` 守卫保证恒
+ * resolve，二者谁先到都收口，不会重复 resolve。
+ *
+ * spawn 的 `timeout` 选项依赖向子进程发 `SIGTERM` 生效——已核实
+ * `graph-quality`/`batch` 两个命令均不装 SIGTERM handler，超时能如期杀死子
+ * 进程并触发 `'close'`（`code` 为 null，同原 `res.status ?? 1` 一样兜底为 1）。
+ * 该前提若变化（例如未来某命令加优雅关闭逻辑吞掉 SIGTERM），此处 timeout 会
+ * 失效、`'close'` 不再来，届时会靠 vitest 的 `testTimeout` 兜底判红，而不是
+ * 静默挂起。
  */
-function runCLIFull(args: string[], opts: { cwd?: string } = {}): CLIResult {
-  const res = spawnSync('node', [CLI_PATH, ...args], {
-    encoding: 'utf-8',
-    timeout: 30_000,
-    cwd: opts.cwd,
+async function runCLIFull(args: string[], opts: { cwd?: string } = {}): Promise<CLIResult> {
+  return new Promise<CLIResult>((resolvePromise) => {
+    const child = spawn('node', [CLI_PATH, ...args], {
+      cwd: opts.cwd,
+      timeout: 30_000,
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const done = (result: CLIResult): void => {
+      if (settled) return;
+      settled = true;
+      resolvePromise(result);
+    };
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on('error', (err) => {
+      done({ stdout, stderr: String(err), exitCode: 1 });
+    });
+    child.on('close', (code) => {
+      done({ stdout, stderr, exitCode: typeof code === 'number' ? code : 1 });
+    });
   });
-  return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', exitCode: res.status ?? 1 };
 }
 
 function gitConfig(dir: string): void {
@@ -115,12 +171,12 @@ describe('graph-quality CLI（F217 T033）', () => {
   });
 
   describe('exit code 矩阵', () => {
-    it('六指标 + freshness 全 pass → exit 0, overallVerdict=pass', () => {
+    it('六指标 + freshness 全 pass → exit 0, overallVerdict=pass', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout);
@@ -128,7 +184,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.state).toBe('fresh');
     });
 
-    it('非强指标 fail（contains 覆盖率不足）→ exit 0, overallVerdict=pass-with-warnings', () => {
+    it('非强指标 fail（contains 覆盖率不足）→ exit 0, overallVerdict=pass-with-warnings', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha });
@@ -140,7 +196,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       });
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout);
@@ -148,7 +204,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.containsCoverage.status).toBe('fail');
     });
 
-    it('强不变量违反（重复 canonical ID）→ exit 1, overallVerdict=fail-strong-invariant', () => {
+    it('强不变量违反（重复 canonical ID）→ exit 1, overallVerdict=fail-strong-invariant', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha });
@@ -158,7 +214,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       );
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(1);
       const report = JSON.parse(result.stdout);
@@ -167,10 +223,10 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.duplicateCanonicalId.groups.length).toBeGreaterThan(0);
     });
 
-    it('图产物不存在 → exit 2, cannot-assess/graph-missing', () => {
+    it('图产物不存在 → exit 2, cannot-assess/graph-missing', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -178,12 +234,12 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBe('graph-missing');
     });
 
-    it('图产物 JSON 解析失败 → exit 2, cannot-assess/json-parse-error', () => {
+    it('图产物 JSON 解析失败 → exit 2, cannot-assess/json-parse-error', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, '{ this is not valid json', 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -191,23 +247,23 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBe('json-parse-error');
     });
 
-    it('图产物结构损坏（缺 nodes/links）→ exit 2, cannot-assess/json-parse-error', () => {
+    it('图产物结构损坏（缺 nodes/links）→ exit 2, cannot-assess/json-parse-error', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify({ foo: 'bar' }), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
       expect(report.cannotAssessReason).toBe('json-parse-error');
     });
 
-    it('schemaVersion 过旧（1.0）→ exit 2, cannot-assess/schema-too-old', () => {
+    it('schemaVersion 过旧（1.0）→ exit 2, cannot-assess/schema-too-old', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ schemaVersion: '1.0' }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -215,7 +271,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBe('schema-too-old');
     });
 
-    it('FIX-7 红测试：schemaVersion 高于支持版本（3.0）→ exit 2, cannot-assess/schema-newer-than-supported', () => {
+    it('FIX-7 红测试：schemaVersion 高于支持版本（3.0）→ exit 2, cannot-assess/schema-newer-than-supported', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       // 直接写字面量 JSON（不经 baseGraph 的 GraphJSON 类型收窄，schemaVersion 联合类型不允许 '3.0'）
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
@@ -238,7 +294,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         'utf-8',
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -246,7 +302,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBe('schema-newer-than-supported');
     });
 
-    it('FIX-1 红测试①：顶层缺 directed/multigraph → exit 2, cannot-assess/json-parse-error（当前实现错误地 pass）', () => {
+    it('FIX-1 红测试①：顶层缺 directed/multigraph → exit 2, cannot-assess/json-parse-error（当前实现错误地 pass）', async () => {
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(
@@ -255,7 +311,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         'utf-8',
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -263,7 +319,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBe('json-parse-error');
     });
 
-    it('FIX-1 红测试②：edge 缺 source/target → exit 2, cannot-assess/json-parse-error（当前实现错误地变强失败 exit 1）', () => {
+    it('FIX-1 红测试②：edge 缺 source/target → exit 2, cannot-assess/json-parse-error（当前实现错误地变强失败 exit 1）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
@@ -271,7 +327,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -304,10 +360,10 @@ describe('graph-quality CLI（F217 T033）', () => {
       return graph;
     }
 
-    it('入库空图 fixture → exit 2, cannot-assess/empty-graph（改动前这里是 exit 0 + pass 系）', () => {
+    it('入库空图 fixture → exit 2, cannot-assess/empty-graph（改动前这里是 exit 0 + pass 系）', async () => {
       const graphPath = seedEmptyGraphFixture();
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -321,13 +377,13 @@ describe('graph-quality CLI（F217 T033）', () => {
      * 如果空图闸不存在，六指标会全部落入 not-applicable/无违规空态，聚合出 `pass` + exit 0——
      * 也就是"建图彻底失败"比"建出一张有瑕疵的图"更容易过门。
      */
-    it('freshness 完全健康的空图 → 仍是 exit 2 + empty-graph（新鲜的空图也不是好图）', () => {
+    it('freshness 完全健康的空图 → 仍是 exit 2 + empty-graph（新鲜的空图也不是好图）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify(emptiedBaseGraph(sha)), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -339,21 +395,21 @@ describe('graph-quality CLI（F217 T033）', () => {
      * FR-006：三种 cannot-assess 成因必须可分辨。它们的修复动作完全不同——空图是"没扫到源码"、
      * 缺图是"还没建"、解析失败是"产物损坏"；共用一个 reason 会让 CI 上的人拿着错误的处方修。
      */
-    it('empty-graph / graph-missing / json-parse-error 三者 reason 互不相同', () => {
+    it('empty-graph / graph-missing / json-parse-error 三者 reason 互不相同', async () => {
       const emptyPath = seedEmptyGraphFixture();
       const emptyReport = JSON.parse(
-        runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir })).stdout,
       );
 
       const missingPath = path.join(tmpDir, 'specs', '_meta', 'absent-graph.json');
       const missingReport = JSON.parse(
-        runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir })).stdout,
       );
 
       const brokenPath = path.join(tmpDir, 'specs', '_meta', 'broken.json');
       fs.writeFileSync(brokenPath, '{ not json', 'utf-8');
       const brokenReport = JSON.parse(
-        runCLI(['graph-quality', '--graph', brokenPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', brokenPath, '--json'], { cwd: tmpDir })).stdout,
       );
 
       const reasons = [
@@ -370,7 +426,7 @@ describe('graph-quality CLI（F217 T033）', () => {
      * 的信息量缺失属于 F217 orphan-ratio / contains-coverage 的职责，已经能被判 warning；
      * 把它一并升格为 exit 2 会越过既有指标分级。
      */
-    it('nodes 非空但 links 为空 → 不触发 empty-graph（仍走六指标，exit 0 + pass-with-warnings）', () => {
+    it('nodes 非空但 links 为空 → 不触发 empty-graph（仍走六指标，exit 0 + pass-with-warnings）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
@@ -378,7 +434,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout);
@@ -390,7 +446,7 @@ describe('graph-quality CLI（F217 T033）', () => {
      * FR-007（裁决 1）：builder 戳只可见、不判定。空图闸只看结构性计数，给同一张空图配上
      * 一份与当前 dist 毫无关系的 builder 身份，判定结果必须逐字不变。
      */
-    it('FR-007：空图带/不带 builder 戳，exitCode 与 reason 逐字相同（builder 不参与判定）', () => {
+    it('FR-007：空图带/不带 builder 戳，exitCode 与 reason 逐字相同（builder 不参与判定）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const withPath = path.join(tmpDir, 'with-builder.json');
       const withoutPath = path.join(tmpDir, 'without-builder.json');
@@ -406,8 +462,8 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.writeFileSync(withPath, JSON.stringify(withBuilder), 'utf-8');
       fs.writeFileSync(withoutPath, JSON.stringify(emptiedBaseGraph(sha)), 'utf-8');
 
-      const withResult = runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
-      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
+      const withResult = await runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
+      const withoutResult = await runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
         cwd: tmpDir,
       });
 
@@ -421,15 +477,15 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(a.freshness.state).toBe(b.freshness.state);
     });
 
-    it('text 输出与 --status 均如实呈现 cannot-assess，且 nextSteps 给出重建处方', () => {
+    it('text 输出与 --status 均如实呈现 cannot-assess，且 nextSteps 给出重建处方', async () => {
       const graphPath = seedEmptyGraphFixture();
 
-      const textResult = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const textResult = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
       expect(textResult.exitCode).toBe(2);
       expect(textResult.stdout).toContain('cannot-assess');
       expect(textResult.stdout).toContain('graph-only');
 
-      const statusResult = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+      const statusResult = await runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
         cwd: tmpDir,
       });
       expect(statusResult.exitCode).toBe(2);
@@ -438,12 +494,12 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(status.overallVerdict).toBe('cannot-assess');
     });
 
-    it('FR-008：正常（非空）基线图判定不受影响，仍是 exit 0 + pass', () => {
+    it('FR-008：正常（非空）基线图判定不受影响，仍是 exit 0 + pass', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout);
@@ -451,10 +507,10 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.cannotAssessReason).toBeUndefined();
     });
 
-    it('--json 输出仍过 schema 契约校验（empty-graph 是追加式枚举值，FR-013）', () => {
+    it('--json 输出仍过 schema 契约校验（empty-graph 是追加式枚举值，FR-013）', async () => {
       const graphPath = seedEmptyGraphFixture();
       const report = JSON.parse(
-        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout,
       );
       const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
       expect(validateAgainstSchema(report, schema).violations).toEqual([]);
@@ -476,13 +532,13 @@ describe('graph-quality CLI（F217 T033）', () => {
       return graph;
     }
 
-    it('1 个 module 节点 / 0 边 → exit 2 + no-symbol-nodes（改动前这里是 exit 0 + pass）', () => {
+    it('1 个 module 节点 / 0 边 → exit 2 + no-symbol-nodes（改动前这里是 exit 0 + pass）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -492,7 +548,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.nextSteps.join('\n')).toContain('symbol');
     });
 
-    it('多个模块节点 + 非 calls 边的退化图同样被拦（不是只对单节点生效）', () => {
+    it('多个模块节点 + 非 calls 边的退化图同样被拦（不是只对单节点生效）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graph = moduleOnlyGraph(sha);
       graph['nodes'] = [
@@ -505,25 +561,25 @@ describe('graph-quality CLI（F217 T033）', () => {
       const graphPath = path.join(tmpDir, 'degraded.json');
       fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       expect(JSON.parse(result.stdout).cannotAssessReason).toBe('no-symbol-nodes');
     });
 
-    it('只要有 1 个 symbol 节点就不触发（不越权吞掉 orphan/contains 的 warning 级职责）', () => {
+    it('只要有 1 个 symbol 节点就不触发（不越权吞掉 orphan/contains 的 warning 级职责）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       // baseGraph 本身就是 1 module + 1 symbol + 1 contains 边的最小非空图
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).cannotAssessReason).toBeUndefined();
     });
 
-    it('no-symbol-nodes / empty-graph 是两个可分辨的 reason（处方不同）', () => {
+    it('no-symbol-nodes / empty-graph 是两个可分辨的 reason（处方不同）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const degradedPath = path.join(tmpDir, 'degraded.json');
       fs.writeFileSync(degradedPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
@@ -533,24 +589,24 @@ describe('graph-quality CLI（F217 T033）', () => {
       emptied['links'] = [];
       fs.writeFileSync(emptyPath, JSON.stringify(emptied), 'utf-8');
 
-      const a = JSON.parse(runCLI(['graph-quality', '--graph', degradedPath, '--json'], { cwd: tmpDir }).stdout);
-      const b = JSON.parse(runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir }).stdout);
+      const a = JSON.parse((await runCLI(['graph-quality', '--graph', degradedPath, '--json'], { cwd: tmpDir })).stdout);
+      const b = JSON.parse((await runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir })).stdout);
       expect(a.cannotAssessReason).toBe('no-symbol-nodes');
       expect(b.cannotAssessReason).toBe('empty-graph');
     });
 
-    it('--json 输出仍过 schema 契约校验（no-symbol-nodes 是追加式枚举值）', () => {
+    it('--json 输出仍过 schema 契约校验（no-symbol-nodes 是追加式枚举值）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'degraded.json');
       fs.writeFileSync(graphPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
-      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+      const report = JSON.parse((await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout);
       const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
       expect(validateAgainstSchema(report, schema).violations).toEqual([]);
     });
   });
 
   describe('F266-A6c：读到合法图的 cannot-assess 分支必须报真实 freshness', () => {
-    it('空图 + commit 与 HEAD 一致 → freshness.fresh（不再硬写 unknown-provenance）', () => {
+    it('空图 + commit 与 HEAD 一致 → freshness.fresh（不再硬写 unknown-provenance）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const emptied = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
@@ -559,7 +615,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.mkdirSync(path.dirname(graphPath), { recursive: true });
       fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
 
-      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+      const report = JSON.parse((await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout);
 
       expect(report.cannotAssessReason).toBe('empty-graph');
       // 承重断言：sourceCommit 磁盘上确有其值，硬写 null 会让下游 sync 脚本
@@ -568,7 +624,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.state).toBe('fresh');
     });
 
-    it('空图 + commit 与 HEAD 不一致 → freshness.stale（真判定，不是兜底值）', () => {
+    it('空图 + commit 与 HEAD 不一致 → freshness.stale（真判定，不是兜底值）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'stale-empty.json');
       const emptied = baseGraph({ sourceCommit: 'f'.repeat(40) }) as unknown as Record<string, unknown>;
@@ -576,14 +632,14 @@ describe('graph-quality CLI（F217 T033）', () => {
       emptied['links'] = [];
       fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
 
-      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+      const report = JSON.parse((await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout);
 
       expect(report.freshness.state).toBe('stale');
       expect(report.freshness.currentHead).toBe(sha);
       expect(report.freshness.recordedSourceCommit).toBe('f'.repeat(40));
     });
 
-    it('no-symbol-nodes 分支同样报真实 freshness', () => {
+    it('no-symbol-nodes 分支同样报真实 freshness', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
       graph['nodes'] = [
@@ -593,25 +649,25 @@ describe('graph-quality CLI（F217 T033）', () => {
       const graphPath = path.join(tmpDir, 'degraded.json');
       fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
 
-      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+      const report = JSON.parse((await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout);
 
       expect(report.cannotAssessReason).toBe('no-symbol-nodes');
       expect(report.freshness.recordedSourceCommit).toBe(sha);
       expect(report.freshness.state).toBe('fresh');
     });
 
-    it('真正无图可读的分支（graph-missing）仍报 unknown-provenance + null（那里的 null 是真值）', () => {
+    it('真正无图可读的分支（graph-missing）仍报 unknown-provenance + null（那里的 null 是真值）', async () => {
       initGitRepoWithCommit(tmpDir);
       const missingPath = path.join(tmpDir, 'specs', '_meta', 'absent.json');
 
-      const report = JSON.parse(runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir }).stdout);
+      const report = JSON.parse((await runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir })).stdout);
 
       expect(report.cannotAssessReason).toBe('graph-missing');
       expect(report.freshness.state).toBe('unknown-provenance');
       expect(report.freshness.recordedSourceCommit).toBeNull();
     });
 
-    it('空图 nextSteps 不再声称"源码不在 src/ 目录下"（graph-only 不受该过滤器影响，已实证）', () => {
+    it('空图 nextSteps 不再声称"源码不在 src/ 目录下"（graph-only 不受该过滤器影响，已实证）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'empty2.json');
       const emptied = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
@@ -620,7 +676,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
 
       const steps = JSON.parse(
-        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout,
       ).nextSteps.join('\n');
 
       expect(steps).not.toContain('src/');
@@ -655,7 +711,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       return p;
     }
 
-    it('无 symbol + 重复 canonical ID → exit 1 + fail-strong-invariant（第一轮这里是 exit 2 + 占位 pass）', () => {
+    it('无 symbol + 重复 canonical ID → exit 1 + fail-strong-invariant（第一轮这里是 exit 2 + 占位 pass）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = seed(
         'dup-no-symbol.json',
@@ -665,7 +721,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         ]),
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(1);
       const report = JSON.parse(result.stdout);
@@ -675,7 +731,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.duplicateCanonicalId.groups[0].ids).toEqual(['src/a.ts#Foo', 'src/a.ts::Foo']);
     });
 
-    it('无 symbol + 悬空边 → exit 1 + fail-strong-invariant（第二条强不变量同样不被吞）', () => {
+    it('无 symbol + 悬空边 → exit 1 + fail-strong-invariant（第二条强不变量同样不被吞）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = seed(
         'dangling-no-symbol.json',
@@ -695,7 +751,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         ),
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(1);
       const report = JSON.parse(result.stdout);
@@ -705,7 +761,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       ]);
     });
 
-    it('无 symbol + 无违规 → exit 2 + cannot-assess/no-symbol-nodes，且各指标是真实结果而非占位', () => {
+    it('无 symbol + 无违规 → exit 2 + cannot-assess/no-symbol-nodes，且各指标是真实结果而非占位', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = seed(
         'clean-no-symbol.json',
@@ -714,7 +770,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         ]),
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -727,7 +783,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.recordedSourceCommit).toBe(sha);
     });
 
-    it('无 symbol + warning 级发现（ignored 路径节点）→ 仍改判 cannot-assess，但真实发现不丢', () => {
+    it('无 symbol + warning 级发现（ignored 路径节点）→ 仍改判 cannot-assess，但真实发现不丢', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = seed(
         'ignored-no-symbol.json',
@@ -736,7 +792,7 @@ describe('graph-quality CLI（F217 T033）', () => {
         ]),
       );
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       // "无 symbol ⇒ 绝不宣称 pass"：门禁的诚实度不该取决于"恰好有没有一个 warning 级发现"
       expect(result.exitCode).toBe(2);
@@ -752,7 +808,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.nextSteps[0]).toContain('symbol');
     });
 
-    it('降级后的报告（cannot-assess 携带真实指标）仍过 schema 契约 + text/--status 渲染不崩', () => {
+    it('降级后的报告（cannot-assess 携带真实指标）仍过 schema 契约 + text/--status 渲染不崩', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = seed(
         'render-no-symbol.json',
@@ -762,17 +818,17 @@ describe('graph-quality CLI（F217 T033）', () => {
       );
 
       const jsonReport = JSON.parse(
-        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+        (await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir })).stdout,
       );
       const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
       expect(validateAgainstSchema(jsonReport, schema).violations).toEqual([]);
 
-      const textResult = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const textResult = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
       expect(textResult.exitCode).toBe(2);
       expect(textResult.stdout).toContain('cannot-assess');
       expect(textResult.stdout).toContain('[legacy-ignored] fail');
 
-      const statusResult = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+      const statusResult = await runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
         cwd: tmpDir,
       });
       expect(statusResult.exitCode).toBe(2);
@@ -783,12 +839,12 @@ describe('graph-quality CLI（F217 T033）', () => {
   });
 
   describe('三种输出格式', () => {
-    it('--json 输出完整六字段（含 CLI 层组装的 freshness）', () => {
+    it('--json 输出完整六字段（含 CLI 层组装的 freshness）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
       const report = JSON.parse(result.stdout);
 
       for (const key of [
@@ -811,7 +867,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness).toHaveProperty('currentHead');
     });
 
-    it('--status 仅输出三字段裁剪（overallVerdict 保留四态，不坍缩为二元）', () => {
+    it('--status 仅输出三字段裁剪（overallVerdict 保留四态，不坍缩为二元）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha });
@@ -823,7 +879,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       });
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], { cwd: tmpDir });
       const status = JSON.parse(result.stdout);
 
       expect(Object.keys(status).sort()).toEqual(['freshness', 'graphExists', 'overallVerdict']);
@@ -832,7 +888,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(status.overallVerdict).toBe('pass-with-warnings');
     });
 
-    it('默认 text 输出人读摘要逐项列出六指标状态 + next-step 建议', () => {
+    it('默认 text 输出人读摘要逐项列出六指标状态 + next-step 建议', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ sourceCommit: sha });
@@ -842,7 +898,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       );
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(1);
       expect(result.stdout).toContain('duplicate');
@@ -853,33 +909,33 @@ describe('graph-quality CLI（F217 T033）', () => {
   });
 
   describe('dirty 态验证（SC-014 前半）', () => {
-    it('sourceCommit 与 HEAD 一致但工作树存在未提交源码改动 → dirty 提示，exit 0', () => {
+    it('sourceCommit 与 HEAD 一致但工作树存在未提交源码改动 → dirty 提示，exit 0', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       // 未提交的源码改动
       fs.writeFileSync(path.join(tmpDir, 'app.ts'), 'export const x = 1;\n');
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       const report = JSON.parse(result.stdout);
       expect(report.freshness.state).toBe('dirty');
       expect(report.freshness.dirtyFiles).toContain('app.ts');
 
-      const textResult = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const textResult = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
       expect(textResult.stdout).toContain('dirty');
     });
   });
 
   describe('--output 报告写入（FIX-8/8b）', () => {
-    it('FIX-8：--json --output 时 stdout 只含可解析 JSON，写入通知转到 stderr', () => {
+    it('FIX-8：--json --output 时 stdout 只含可解析 JSON，写入通知转到 stderr', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
       const outputPath = path.join(tmpDir, 'report.json');
 
-      const result = runCLIFull(
+      const result = await runCLIFull(
         ['graph-quality', '--graph', graphPath, '--json', '--output', outputPath],
         { cwd: tmpDir },
       );
@@ -893,7 +949,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(fs.existsSync(outputPath)).toBe(true);
     });
 
-    it('FIX-8b：--output 写入失败（目标父目录被同名文件占用）→ stderr 警告"报告写入失败"，exit code 仍按 verdict（不受写入失败影响）', () => {
+    it('FIX-8b：--output 写入失败（目标父目录被同名文件占用）→ stderr 警告"报告写入失败"，exit code 仍按 verdict（不受写入失败影响）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
@@ -903,7 +959,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       fs.writeFileSync(blockedPath, 'not a directory', 'utf-8');
       const badOutputPath = path.join(blockedPath, 'nested', 'report.json');
 
-      const result = runCLIFull(
+      const result = await runCLIFull(
         ['graph-quality', '--graph', graphPath, '--json', '--output', badOutputPath],
         { cwd: tmpDir },
       );
@@ -915,7 +971,7 @@ describe('graph-quality CLI（F217 T033）', () => {
   });
 
   describe('SC-010 独立复验：HEAD 真实前进场景', () => {
-    it('batch --mode graph-only 真实建图后再提交一次，图未重建 → stale', () => {
+    it('batch --mode graph-only 真实建图后再提交一次，图未重建 → stale', async () => {
       execFileSync('git', ['init', '-q'], { cwd: tmpDir });
       gitConfig(tmpDir);
       fs.writeFileSync(path.join(tmpDir, 'index.ts'), 'export function hello(): number { return 1; }\n');
@@ -923,7 +979,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       execFileSync('git', ['commit', '-q', '-m', 'initial'], { cwd: tmpDir });
 
       const specsDir = path.join(tmpDir, 'specs');
-      const batchResult = runCLI(
+      const batchResult = await runCLI(
         ['batch', tmpDir, '--mode', 'graph-only', '--output-dir', specsDir],
         { cwd: tmpDir },
       );
@@ -939,7 +995,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       execFileSync('git', ['add', '.'], { cwd: tmpDir });
       execFileSync('git', ['commit', '-q', '-m', 'second'], { cwd: tmpDir });
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
       const report = JSON.parse(result.stdout);
 
       expect(report.freshness.state).toBe('stale');
@@ -965,10 +1021,10 @@ describe('graph-quality CLI（F217 T033）', () => {
     }
 
     for (const scenario of SC009_STALE_SCENARIOS) {
-      it(`--json：${scenario.id}（${scenario.label}）→ stale + staleReasons=[${scenario.expectedStaleReasons.join(', ')}]`, () => {
+      it(`--json：${scenario.id}（${scenario.label}）→ stale + staleReasons=[${scenario.expectedStaleReasons.join(', ')}]`, async () => {
         const graphPath = seedScenarioGraph(scenario.buildGraph);
 
-        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+        const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
         expect(result.exitCode).toBe(0);
         const report = JSON.parse(result.stdout);
@@ -978,10 +1034,10 @@ describe('graph-quality CLI（F217 T033）', () => {
         expect(report.overallVerdict).toBe('pass-with-warnings');
       });
 
-      it(`文本输出：${scenario.id} 的 [freshness] 行与 nextSteps 均含准确原因字面量，且不错配为其他原因`, () => {
+      it(`文本输出：${scenario.id} 的 [freshness] 行与 nextSteps 均含准确原因字面量，且不错配为其他原因`, async () => {
         const graphPath = seedScenarioGraph(scenario.buildGraph);
 
-        const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+        const result = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
 
         expect(result.stdout).toContain('[freshness] stale');
         for (const reason of scenario.expectedStaleReasons) {
@@ -1000,40 +1056,43 @@ describe('graph-quality CLI（F217 T033）', () => {
       });
     }
 
-    it('SC-009：多原因样本重复运行 3 次，--json 的 staleReasons 顺序完全一致', () => {
+    it('SC-009：多原因样本重复运行 3 次，--json 的 staleReasons 顺序完全一致', async () => {
       const multi = SC009_STALE_SCENARIOS.find((s) => s.id === 'multi-reason');
       expect(multi).toBeDefined();
       const graphPath = seedScenarioGraph(multi!.buildGraph);
 
-      const observed = [1, 2, 3].map(() => {
-        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
-        return JSON.parse(result.stdout).freshness.staleReasons;
-      });
+      // F269：Array.prototype.map 的回调不会等待内部 Promise，改用 for 循环逐次 await
+      // （3 次运行本身就要求顺序独立观测，串行执行与原语义等价）。
+      const observed: unknown[] = [];
+      for (let i = 0; i < 3; i += 1) {
+        const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+        observed.push(JSON.parse(result.stdout).freshness.staleReasons);
+      }
 
       for (const reasons of observed) {
         expect(reasons).toEqual(multi!.expectedStaleReasons);
       }
     });
 
-    it('对照组：commit 与指纹均一致 → fresh，--json 不含 staleReasons 字段', () => {
+    it('对照组：commit 与指纹均一致 → fresh，--json 不含 staleReasons 字段', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
       const report = JSON.parse(result.stdout);
 
       expect(report.freshness.state).toBe('fresh');
       expect(report.freshness.staleReasons).toBeUndefined();
     });
 
-    it('对照组：dirty 态（commit + 指纹均一致、工作树脏）仍判 dirty，不被指纹判定误升为 stale', () => {
+    it('对照组：dirty 态（commit + 指纹均一致、工作树脏）仍判 dirty，不被指纹判定误升为 stale', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       fs.writeFileSync(path.join(tmpDir, 'app.ts'), 'export const x = 1;\n');
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
       const report = JSON.parse(result.stdout);
 
       expect(report.freshness.state).toBe('dirty');
@@ -1049,14 +1108,14 @@ describe('graph-quality CLI（F217 T033）', () => {
   // ============================================================
 
   describe('SC-018：schemaVersion 1.0 判 schema-too-old，不进入 freshness/指纹分支', () => {
-    it('1.0 旧图 + 不含 fingerprint 字段 → schema-too-old（exit 2）', () => {
+    it('1.0 旧图 + 不含 fingerprint 字段 → schema-too-old（exit 2）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ schemaVersion: '1.0', sourceCommit: sha });
       delete graph.graph.fingerprint;
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -1068,12 +1127,12 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.staleReasons).toBeUndefined();
     });
 
-    it('1.0 旧图 + 含合法当前 fingerprint → 仍判 schema-too-old（fingerprint 不改变双边界）', () => {
+    it('1.0 旧图 + 含合法当前 fingerprint → 仍判 schema-too-old（fingerprint 不改变双边界）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ schemaVersion: '1.0', sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       const report = JSON.parse(result.stdout);
@@ -1081,25 +1140,25 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(report.freshness.staleReasons).toBeUndefined();
     });
 
-    it('1.0 旧图 + 畸形 fingerprint → 仍判 schema-too-old（不因指纹畸形改判为 stale）', () => {
+    it('1.0 旧图 + 畸形 fingerprint → 仍判 schema-too-old（不因指纹畸形改判为 stale）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       const graph = baseGraph({ schemaVersion: '1.0', sourceCommit: sha });
       (graph.graph as unknown as Record<string, unknown>)['fingerprint'] = { formatVersion: 'x' };
       writeGraph(graphPath, graph);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(2);
       expect(JSON.parse(result.stdout).cannotAssessReason).toBe('schema-too-old');
     });
 
-    it('上边界未被本需求改变：schemaVersion 2.0 + 合法 fingerprint 仍可完整评估（非 cannot-assess）', () => {
+    it('上边界未被本需求改变：schemaVersion 2.0 + 合法 fingerprint 仍可完整评估（非 cannot-assess）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
 
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout).overallVerdict).not.toBe('cannot-assess');
@@ -1151,20 +1210,20 @@ describe('graph-quality CLI（F217 T033）', () => {
       return graphPath;
     }
 
-    it('D1：图由当前运行的 build 写出 → text 明说「由当前运行的 build 写出」', () => {
+    it('D1：图由当前运行的 build 写出 → text 明说「由当前运行的 build 写出」', async () => {
       const graphPath = seedGraph(currentDistStamp());
 
-      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
 
       expect(result.stdout).toContain('[builder]');
       expect(result.stdout).toContain('由当前运行的 build 写出');
       expect(result.stdout).not.toContain('不是同一个 build');
     });
 
-    it('D1：图由另一版 build 写出 → text 判「不是同一个 build」并给出两侧短值', () => {
+    it('D1：图由另一版 build 写出 → text 判「不是同一个 build」并给出两侧短值', async () => {
       const graphPath = seedGraph(FOREIGN_BUILDER);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
 
       expect(result.stdout).toContain('[builder]');
       expect(result.stdout).toContain('不是同一个 build');
@@ -1177,7 +1236,7 @@ describe('graph-quality CLI（F217 T033）', () => {
      * 编辑都不改变它——只有 `distSha256` 这一维能分辨。修复前，这两次运行的 `[builder]` 行
      * **逐字相同**（真 dist 实证）。
      */
-    it('D2：同 commit、仅 distSha256 不同 → 与"完全同一 build"的输出必须不同，且渲染 dist 前 12 位', () => {
+    it('D2：同 commit、仅 distSha256 不同 → 与"完全同一 build"的输出必须不同，且渲染 dist 前 12 位', async () => {
       const current = currentDistStamp();
       const samePath = path.join(tmpDir, 'same', 'graph.json');
       const distDriftPath = path.join(tmpDir, 'drift', 'graph.json');
@@ -1195,12 +1254,12 @@ describe('graph-quality CLI（F217 T033）', () => {
         }),
       );
 
-      const builderLine = (graphPath: string): string => {
-        const out = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir }).stdout;
+      const builderLine = async (graphPath: string): Promise<string> => {
+        const out = (await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir })).stdout;
         return out.split('\n').find((line) => line.startsWith('[builder]')) ?? '';
       };
-      const sameLine = builderLine(samePath);
-      const driftLine = builderLine(distDriftPath);
+      const sameLine = await builderLine(samePath);
+      const driftLine = await builderLine(distDriftPath);
 
       expect(sameLine).not.toBe('');
       expect(driftLine).not.toBe(sameLine);
@@ -1209,20 +1268,20 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(driftLine).toContain('不是同一个 build');
     });
 
-    it('D1：builder 键缺失（旧图产物）→ unrecorded，且与 unstamped/unrecognized 分列', () => {
+    it('D1：builder 键缺失（旧图产物）→ unrecorded，且与 unstamped/unrecognized 分列', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
       writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
 
-      const result = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      const result = await runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
 
       expect(result.stdout).toContain('[builder]');
       expect(result.stdout).toContain('unrecorded');
     });
 
-    it('D1：builder 显式 null → unstamped；不可解析 → unrecognized', () => {
+    it('D1：builder 显式 null → unstamped；不可解析 → unrecognized', async () => {
       const nullPath = seedGraph(null);
-      const nullResult = runCLI(['graph-quality', '--graph', nullPath], { cwd: tmpDir });
+      const nullResult = await runCLI(['graph-quality', '--graph', nullPath], { cwd: tmpDir });
       expect(nullResult.stdout).toContain('unstamped');
 
       const bogusPath = path.join(tmpDir, 'bogus', 'graph.json');
@@ -1230,20 +1289,20 @@ describe('graph-quality CLI（F217 T033）', () => {
         bogusPath,
         baseGraph({ builder: { formatVersion: 9 } as unknown as GraphJSON['graph']['builder'] }),
       );
-      const bogusResult = runCLI(['graph-quality', '--graph', bogusPath], { cwd: tmpDir });
+      const bogusResult = await runCLI(['graph-quality', '--graph', bogusPath], { cwd: tmpDir });
       expect(bogusResult.stdout).toContain('unrecognized');
       expect(bogusResult.stdout).not.toContain('unstamped');
     });
 
-    it('T-R5c：advisory 不改判定——有/无 builder 两种输入的 exitCode、overallVerdict、freshness.state 逐字相同', () => {
+    it('T-R5c：advisory 不改判定——有/无 builder 两种输入的 exitCode、overallVerdict、freshness.state 逐字相同', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const withPath = path.join(tmpDir, 'with', 'graph.json');
       const withoutPath = path.join(tmpDir, 'without', 'graph.json');
       writeGraph(withPath, baseGraph({ sourceCommit: sha, builder: FOREIGN_BUILDER }));
       writeGraph(withoutPath, baseGraph({ sourceCommit: sha }));
 
-      const withResult = runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
-      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
+      const withResult = await runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
+      const withoutResult = await runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
         cwd: tmpDir,
       });
 
@@ -1256,7 +1315,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(a.nextSteps).toEqual(b.nextSteps);
     });
 
-    it('T-R5d：两种输入的 --json 输出均过 schema 校验且 violations 为空（builder 未泄进 --json）', () => {
+    it('T-R5d：两种输入的 --json 输出均过 schema 校验且 violations 为空（builder 未泄进 --json）', async () => {
       const sha = initGitRepoWithCommit(tmpDir);
       const withPath = path.join(tmpDir, 'with', 'graph.json');
       const withoutPath = path.join(tmpDir, 'without', 'graph.json');
@@ -1269,7 +1328,7 @@ describe('graph-quality CLI（F217 T033）', () => {
       >;
 
       for (const graphPath of [withPath, withoutPath]) {
-        const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+        const result = await runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
         const report = JSON.parse(result.stdout);
         expect(validateAgainstSchema(report, schema).violations).toEqual([]);
         // 直接证明 builder 没被塞进报告顶层
@@ -1284,7 +1343,7 @@ describe('graph-quality CLI（F217 T033）', () => {
      * 也容忍任意值。删掉 builder 键即恢复 exit 0 ⇒ 确为本特性引入的回归，且违反本特性自己的
      * "advisory 一律不改 exit code"不变量。这里用 CLI 真子进程钉住该不变量。
      */
-    it('F1：sourceCommit 畸形（非字符串）时，有/无 builder 的 exitCode 逐字相同且不为 2', () => {
+    it('F1：sourceCommit 畸形（非字符串）时，有/无 builder 的 exitCode 逐字相同且不为 2', async () => {
       initGitRepoWithCommit(tmpDir);
       /** `sourceCommit` 为数字：类型系统禁止，但磁盘上的 JSON 完全可以是这样（守卫不校验它）。 */
       const withMalformedSourceCommit = (extra: Partial<GraphJSON['graph']> = {}): GraphJSON => {
@@ -1297,8 +1356,8 @@ describe('graph-quality CLI（F217 T033）', () => {
       writeGraph(withPath, withMalformedSourceCommit({ builder: FOREIGN_BUILDER }));
       writeGraph(withoutPath, withMalformedSourceCommit());
 
-      const withResult = runCLI(['graph-quality', '--graph', withPath], { cwd: tmpDir });
-      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath], { cwd: tmpDir });
+      const withResult = await runCLI(['graph-quality', '--graph', withPath], { cwd: tmpDir });
+      const withoutResult = await runCLI(['graph-quality', '--graph', withoutPath], { cwd: tmpDir });
 
       expect(withResult.exitCode).toBe(withoutResult.exitCode);
       expect(withResult.exitCode).not.toBe(2);
@@ -1308,10 +1367,10 @@ describe('graph-quality CLI（F217 T033）', () => {
       expect(withResult.stdout).toContain('[builder]');
     });
 
-    it('T-R5d：--status 输出不受 builder 影响（三字段逐字不变）', () => {
+    it('T-R5d：--status 输出不受 builder 影响（三字段逐字不变）', async () => {
       const graphPath = seedGraph(FOREIGN_BUILDER);
 
-      const result = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+      const result = await runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
         cwd: tmpDir,
       });
 
