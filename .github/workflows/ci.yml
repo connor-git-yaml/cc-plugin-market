@@ -31,6 +31,7 @@ jobs:
         run: npm run lint
 
       - name: Build
+        id: build
         run: npm run build
 
       # 干净 checkout 没有 specs/_meta/graph.json（该路径被 .gitignore 忽略），
@@ -38,6 +39,7 @@ jobs:
       # graph-only 模式是纯 AST 构建：零 LLM 调用、零认证需求、约 5s 完成。
       # 必须排在 Build 之后（依赖 dist/cli/index.js）、Test 之前。
       - name: Build Knowledge Graph
+        id: graph
         run: node dist/cli/index.js batch --mode graph-only
 
       - name: Test
@@ -54,15 +56,22 @@ jobs:
       # 2. 必须排在 Test **之后**（对抗审查 W-7）：治理检查红掉会短路整个 job，把 vitest 的
       #    全部信号一起吞掉——先拿到测试结论，再看治理结论。
       #
-      # 两步都**不加** if: always()——lint/build/建图/测试任一步已失败时，在一个已知损坏的
-      # 构建上跑治理检查没有意义。这与下面 Test Plugins 加 if: always() 的理由（防 vitest flaky
-      # 短路掉 mjs 测试面）是两类不同问题，不套用同一处理。
+      # 两步都带显式 if：**不受 Test 连坐，但仍以 build + graph 成功为前提**。GitHub Actions
+      # 里没写 if 的步骤默认是 `if: success()`，而上面第 2 条把治理链排到了 Test 之后——于是
+      # Test 一红，治理两步直接被 skip。master 当前有 3 条硬依赖全局 spectra CLI 的 mjs 用例
+      # 恒红（独立卡修），实测 run 33296411587 中 Repo Check / Release Check 双 skipped，
+      # G0-2 的"CI 接治理链"在红河上等于没接。因此改判为 build + graph 两步成功即执行：测试
+      # 红绿不影响治理结论，而构建或建图失败时依旧跳过（保留 C-5 的"不在一个已知损坏的构建上
+      # 跑治理检查"）。这与下面 Test Plugins 用 if: always() 的理由（防 vitest flaky 短路掉
+      # mjs 测试面）仍是两类不同问题，不套用同一处理。
       - name: Repo Check
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
         run: |
           test -f specs/_meta/graph.json
           npm run repo:check
 
       - name: Release Check
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
         run: npm run release:check
 
       # 独立门禁：plugin mjs 测试。npm test 内部用 `vitest run && npm run test:plugins`，
