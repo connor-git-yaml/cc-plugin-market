@@ -176,8 +176,14 @@ describe('extractImage - Vision 成功路径', () => {
 
     const result = await extractImage(pngPath, { ...defaultOptions, projectRoot: tmpDir });
 
-    // 验证或成功或降级
-    expect(result).toBeTruthy();
+    // F272 ⑦-B7：原 `expect(result).toBeTruthy()` 对任意非空返回恒真（哪怕节点 id
+    // 格式错误也通过），与用例名承诺的「id 格式符合 diagram:{相对路径}」不符。
+    // 改为直接校验 nodeId：projectRoot=tmpDir 下 docs/arch.png 的相对路径应为
+    // 'docs/arch.png'，节点 id 应为 'diagram:docs/arch.png'（见
+    // src/extraction/image-extractor.ts 的 `diagram:${relPath}` 拼接逻辑）。
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0]?.id).toBe('diagram:docs/arch.png');
+    expect(result.nodes[0]?.id).toMatch(/^diagram:/);
   });
 });
 
@@ -235,20 +241,31 @@ describe('extractImage - SVG 文本处理', () => {
   it('SVG 文件以文本方式处理（不跳过）', async () => {
     process.env['ANTHROPIC_API_KEY'] = 'sk-test-key-for-testing';
 
+    const createMock = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"description": "SVG flowchart", "components": ["Step1", "Step2"]}' }],
+    });
     MockedAnthropic.mockImplementation(() => ({
-      messages: {
-        create: vi.fn().mockResolvedValue({
-          content: [{ type: 'text', text: '{"description": "SVG flowchart", "components": ["Step1", "Step2"]}' }],
-        }),
-      },
+      messages: { create: createMock },
     }) as unknown as Anthropic);
 
+    const svgContent = '<svg><rect/></svg>';
     const svgPath = path.join(tmpDir, 'flowchart.svg');
-    fs.writeFileSync(svgPath, '<svg><rect/></svg>', 'utf-8');
+    fs.writeFileSync(svgPath, svgContent, 'utf-8');
 
     const result = await extractImage(svgPath, { ...defaultOptions, projectRoot: tmpDir });
-    // SVG 处理不应崩溃
-    expect(result).toBeTruthy();
+
+    // F272 ⑦-B7：原 `expect(result).toBeTruthy()` 对任意非空返回恒真——即使走了
+    // "格式过滤跳过" 的降级分支返回 EMPTY_EXTRACTION_RESULT（其本身也是一个真值
+    // 对象），断言依旧通过，检测不到用例名承诺的「不跳过」与「以文本方式」。
+    // 改为：(1) 断言确实生成了 diagram 节点（未走跳过分支），(2) 断言 Vision API
+    // 调用时 messages[0].content 是字符串而非 base64 图像 block（isSvg=true 分支，
+    // 见 src/extraction/image-extractor.ts callVisionApi 的 messageContent 三元）。
+    expect(result.nodes).toHaveLength(1);
+    expect(createMock).toHaveBeenCalledTimes(1);
+    const callArgs = createMock.mock.calls[0]?.[0] as { messages: Array<{ content: unknown }> };
+    const messageContent = callArgs.messages[0]?.content;
+    expect(typeof messageContent).toBe('string');
+    expect(messageContent as string).toContain(svgContent);
   });
 });
 
@@ -272,12 +289,11 @@ describe('extractImage - SPECTRA_VISION_MODEL 环境变量', () => {
     const pngPath = createMinimalPng(tmpDir, 'test.png');
     await extractImage(pngPath, { ...defaultOptions, projectRoot: tmpDir });
 
-    // 验证使用了自定义模型
-    if (createMock.mock.calls.length > 0) {
-      const callArgs = createMock.mock.calls[0]?.[0] as { model?: string } | undefined;
-      expect(callArgs?.model).toBe('claude-custom-model');
-    }
-    // 即使未调用（降级），测试也通过
+    // 验证使用了自定义模型（前置调用断言，移除「即使未调用（降级），测试也通过」
+    // 的放水包裹——见 F272 ⑦-B2：该注释直接自认恒真）
+    expect(createMock).toHaveBeenCalled();
+    const callArgs = createMock.mock.calls[0]?.[0] as { model?: string } | undefined;
+    expect(callArgs?.model).toBe('claude-custom-model');
     delete process.env['SPECTRA_VISION_MODEL'];
   });
 });

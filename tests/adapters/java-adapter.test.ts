@@ -51,12 +51,11 @@ describe('JavaLanguageAdapter 静态属性', () => {
     expect(dirs.has('.mvn')).toBe(true);
   });
 
-  it('实现 LanguageAdapter 接口全部方法', () => {
-    expect(typeof adapter.analyzeFile).toBe('function');
-    expect(typeof adapter.analyzeFallback).toBe('function');
-    expect(typeof adapter.getTerminology).toBe('function');
-    expect(typeof adapter.getTestPatterns).toBe('function');
-  });
+  // F272 ⑦-B6：原「实现 LanguageAdapter 接口全部方法」用例仅做 typeof === 'function'
+  // 检查——adapter 是 `new JavaLanguageAdapter()` 静态构造，类型即 LanguageAdapter，
+  // 该检查由 tsc 全权保证，运行时永不可能为假。四个方法均已在下方独立 describe 块
+  // （analyzeFile / analyzeFallback / getTerminology / getTestPatterns）中被真实调用
+  // 覆盖，故删除此恒真用例。
 });
 
 // ════════════════════════ analyzeFile 测试 ════════════════════════

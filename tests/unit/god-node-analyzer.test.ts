@@ -92,14 +92,17 @@ describe('findGodNodes', () => {
   });
 
   it('按度数降序排列', () => {
-    const nodes = ['hub1', 'hub2', ...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map(id => makeNode(id))].map(
-      id => typeof id === 'string' ? makeNode(id) : id,
-    );
+    // hub1 与 hub2 分别连接互不重叠的目标节点集合（原 fixture 中 hub1/hub2 共享 a-f
+    // 目标节点，实际 findGodNodes 阈值计算下 hub2 的度数不足以入选，导致
+    // `if (godNodes.length >= 2)` 恒假、断言从不执行——见 F272 ⑦-B2）。
+    // 改为互不重叠目标后，hub1 (degree=8) 与 hub2 (degree=6) 均超过 2σ 阈值，
+    // 稳定产出 2 个 god node，可真实验证降序排序行为。
+    const hub1Targets = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'];
+    const hub2Targets = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'];
+    const nodes = ['hub1', 'hub2', ...hub1Targets, ...hub2Targets].map(id => makeNode(id));
     const links = [
-      // hub1 连接 8 个节点
-      ...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(id => makeEdge('hub1', id)),
-      // hub2 连接 6 个节点
-      ...['a', 'b', 'c', 'd', 'e', 'f'].map(id => makeEdge('hub2', id)),
+      ...hub1Targets.map(id => makeEdge('hub1', id)),
+      ...hub2Targets.map(id => makeEdge('hub2', id)),
     ];
     const graphJson = makeGraphJSON(nodes, links);
     const graph = loadGraph(graphJson);
@@ -108,8 +111,11 @@ describe('findGodNodes', () => {
     for (const n of graph.nodes()) communityMap.set(n, 0);
 
     const godNodes = findGodNodes(graph, communityMap);
-    if (godNodes.length >= 2) {
-      expect(godNodes[0]!.degree).toBeGreaterThanOrEqual(godNodes[1]!.degree);
-    }
+    expect(godNodes.length).toBe(2);
+    expect(godNodes[0]!.id).toBe('hub1');
+    expect(godNodes[0]!.degree).toBe(8);
+    expect(godNodes[1]!.id).toBe('hub2');
+    expect(godNodes[1]!.degree).toBe(6);
+    expect(godNodes[0]!.degree).toBeGreaterThanOrEqual(godNodes[1]!.degree);
   });
 });

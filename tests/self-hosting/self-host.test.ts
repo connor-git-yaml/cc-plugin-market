@@ -58,8 +58,12 @@ describe('自举测试：spectra 分析自身', () => {
       expect(skeleton.hash).toMatch(/^[0-9a-f]{64}$/);
       expect(skeleton.parserUsed).toBe('ts-morph');
 
-      // 每个文件应有导出（src/ 中的文件都是模块）
-      expect(skeleton.exports.length).toBeGreaterThanOrEqual(0);
+      // 注：不收紧为 `> 0`——实测 src/ 全量 341 个文件中有 16 个 exports.length === 0
+      // （cli/index.ts 侧效入口、postinstall.ts / preuninstall.ts 脚本、若干与源码
+      // 同目录的 *.test.ts），「src/ 中的文件都是模块」的原注释与事实不符，收紧会
+      // 造成确定性红（见 F272 ⑦-B4）。`.length >= 0` 对数组长度恒真、无检测力，
+      // 改为验证类型不变量：exports 字段应始终为数组（即便为空）。
+      expect(Array.isArray(skeleton.exports)).toBe(true);
     }
   });
 

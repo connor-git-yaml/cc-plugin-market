@@ -133,7 +133,7 @@ describe('四语言图质量回归矩阵（F217 T046）', () => {
       graphPath: resolve('tests/fixtures/graph-quality-ts-graph/graph.json'),
       expectedNodeCount: 10,
       expectedSymbolCount: 8,
-      expectedEdgeCount: 11,
+      expectedEdgeCount: 14,
     },
     {
       lang: 'Java',

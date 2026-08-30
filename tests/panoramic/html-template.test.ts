@@ -94,10 +94,30 @@ describe('buildHtmlTemplate', () => {
     });
 
     it('options 正确合并默认值：fileSizeWarnThreshold 为可选', () => {
-      const json = makeGraphJson(5);
-      // 只传部分 options，不报错
-      const html = buildHtmlTemplate(json, { forceLayoutThreshold: 2000 });
-      expect(html).toBeTruthy();
+      // F272 ⑦-B7：原 `expect(html).toBeTruthy()` 对任意非空字符串恒真，检测不到
+      // 用例名承诺的「默认值确实生效」。fileSizeWarnThreshold 未内嵌进 HTML 文本，
+      // 但其默认值（DEFAULT_FILE_SIZE_WARN_BYTES = 5MB，见 html-template.ts）会
+      // 决定是否触发体积超阈值 stderr 告警——用小 fixture（远小于 5MB）不传该字段时
+      // 不应告警（证明落到默认值而非 undefined/0），显式传一个极小阈值时应告警
+      // （证明 options 里传入的值确实被合并覆盖了默认值）。
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        const json = makeGraphJson(5);
+
+        const htmlDefault = buildHtmlTemplate(json, { forceLayoutThreshold: 2000 });
+        expect(htmlDefault).toBeTruthy();
+        expect(stderrSpy).not.toHaveBeenCalled();
+
+        stderrSpy.mockClear();
+        const htmlCustomThreshold = buildHtmlTemplate(json, {
+          forceLayoutThreshold: 2000,
+          fileSizeWarnThreshold: 1,
+        });
+        expect(htmlCustomThreshold).toBeTruthy();
+        expect(stderrSpy).toHaveBeenCalled();
+      } finally {
+        stderrSpy.mockRestore();
+      }
     });
   });
 

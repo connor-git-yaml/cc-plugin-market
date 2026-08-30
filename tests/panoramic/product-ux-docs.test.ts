@@ -548,12 +548,14 @@ describe('generateProductUxDocs', () => {
     expect(summaryText.split('\n').filter((l) => l.includes('Autograd')).every((l) => l.trim().startsWith('>'))).toBe(true);
 
     // targetUsers fallback 的 description 应标 (基于英文 README 推断)
-    if (result.overview.targetUsers.length > 0) {
-      const dev = result.overview.targetUsers.find((u) => u.name === '开发者');
-      if (dev && dev.description) {
-        expect(dev.description).toMatch(/英文 README 推断|tiny Autograd/);
-      }
-    }
+    // 该 fixture 下 fallback 稳定产出唯一的「开发者」用户，原 `if (length>0)` +
+    // `if (dev && dev.description)` 双层放水在实测中恒真，钉死 fixture 必产出该用户
+    // 及其 description（见 F272 ⑦-B2）。
+    expect(result.overview.targetUsers.length).toBe(1);
+    const dev = result.overview.targetUsers.find((u) => u.name === '开发者');
+    expect(dev).toBeDefined();
+    expect(dev!.description).toBeDefined();
+    expect(dev!.description).toMatch(/英文 README 推断|tiny Autograd/);
 
     // evidence 中英文 excerpt 应有 nonChinese: true 标记
     const englishEvidence = result.overview.evidence.filter((e) => e.excerpt.includes('Autograd'));
@@ -596,10 +598,11 @@ describe('generateProductUxDocs', () => {
     expect(summaryText).toContain('面向团队协作');
 
     // 中文 evidence 应有 nonChinese: false
+    // 该 fixture 下稳定产出 2 条命中「团队协作」的 evidence（README.md + readme.md
+    // 两个候选路径），前置断言先钉死 length（见 F272 ⑦-B2）。
     const chineseEvidence = result.overview.evidence.filter((e) => e.excerpt.includes('团队协作'));
-    if (chineseEvidence.length > 0) {
-      expect(chineseEvidence.every((e) => e.nonChinese === false || e.nonChinese === undefined)).toBe(true);
-    }
+    expect(chineseEvidence.length).toBeGreaterThan(0);
+    expect(chineseEvidence.every((e) => e.nonChinese === false || e.nonChinese === undefined)).toBe(true);
   });
 });
 

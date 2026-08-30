@@ -13,5 +13,5 @@
     "isolatedModules": true,
     "rootDir": "../.."
   },
-  "include": ["./**/*.test-d.ts", "../../src/mcp/lib/response-helpers.ts"]
+  "include": ["./**/*.test-d.ts"]
 }

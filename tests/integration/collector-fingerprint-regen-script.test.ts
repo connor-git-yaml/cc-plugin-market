@@ -123,6 +123,21 @@ function readAssetFingerprints(fixtureRoot: string): { graphOnly: number; module
   };
 }
 
+/**
+ * F272 ⑤ T-B12：在 fixture 源码里新增一个可被 AST 解析到的顶层导出函数，
+ * 使 a-track 重建产物真的偏离 pinned（`aTrack.mismatch === true`），
+ * 用于构造"contentMismatch=true 且被放行"的双变量场景（与仅 bump behaviorVersion
+ * 的既有放行用例区分开——那条用例不改 fixture 源码，`contentMismatch` 大概率为 false）。
+ */
+function appendExportedFunctionToFooTs(fixtureRoot: string): void {
+  const fooPath = path.join(fixtureRoot, 'src/ts/foo.ts');
+  fs.appendFileSync(
+    fooPath,
+    '\nexport function extraPermitProbe(): string {\n  return \'extra\';\n}\n',
+    'utf-8',
+  );
+}
+
 /** 扰动 b-track pinned 期望：删一条 module 边 → 重建产物与 pinned 不一致（指纹不变）。 */
 function perturbModuleGraphAsset(fixtureRoot: string): void {
   const assetPath = path.join(fixtureRoot, MODULE_GRAPH_ASSET);
@@ -177,6 +192,32 @@ describe('再生脚本 — 放行/无变更场景（活性证明）', () => {
     expect(
       fs.readdirSync(fixtureRoot).filter((name) => name.endsWith('.bak') || name.includes('.tmp-')),
     ).toEqual([]);
+  });
+
+  /**
+   * F272 ⑤ T-B12：contentMismatch=true 且被放行的双变量场景（FR-005 放行分支打印 differences）。
+   *
+   * 与上一条"仅 bump behaviorVersion"用例的关键区别：上一条不改 fixture 源码，
+   * `aTrack.mismatch` 大概率为 false，无法测出放行分支新增的"打印 differences"行为；
+   * 本用例同时构造①fixture 源码变化（新增顶层导出函数 → a-track 重建产物真的偏离 pinned）
+   * ②指纹变化（downgrade behaviorVersion → fingerprintUnchanged=false），确保二者都成立时
+   * 走的仍是放行分支（`shouldRejectRegen` 只在 contentMismatch ∧ fingerprintUnchanged 时拒绝，
+   * fingerprintUnchanged=false ⇒ 不拒绝），从而验证放行分支真的把已算好的 differences 打印出来。
+   */
+  it('contentMismatch=true 且指纹已变 → exit 0、放行、且打印具体差异文案（非空泛 differences 字样）', () => {
+    const fixtureRoot = stageFixtureRoot();
+    appendExportedFunctionToFooTs(fixtureRoot);
+    downgradeBehaviorVersionInBothAssets(fixtureRoot);
+
+    const run = runRegenScript(fixtureRoot);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('放行');
+    expect(run.stdout).toContain('fingerprintUnchanged=false');
+    // contentMismatch 必须真的为 true（否则本用例退化成上一条的复制，测不出新增的打印分支）
+    expect(run.stdout).toMatch(/contentMismatch=true/);
+    // 断到具体差异文案（新增导出函数产生的节点，仅存在于重建产物），而非空泛的 "differences" 字样
+    expect(run.stdout).toContain('[regen]   - 节点仅存在于重建产物: src/ts/foo.ts::extraPermitProbe');
   });
 });
 

@@ -102,6 +102,10 @@ ${longParagraph}
 
     const chunks = chunkMarkdownFiles([filePath], tmpDir);
 
+    // 两个 ## 章节应稳定拆成 2 个 chunk，钉死具体数值，避免上方 for 循环在空数组
+    // 下空转、以及末尾 `if (chunks.length>0)` 恒真放水（见 F272 ⑦-B2）。
+    expect(chunks.length).toBe(2);
+
     // 每个 chunk 的行号都应该是正数（1-based）
     for (const chunk of chunks) {
       expect(chunk.startLine).toBeGreaterThanOrEqual(1);
@@ -109,9 +113,7 @@ ${longParagraph}
     }
 
     // 第一个 chunk 应包含第 1 行（H2 标题）
-    if (chunks.length > 0) {
-      expect(chunks[0].startLine).toBe(1);
-    }
+    expect(chunks[0].startLine).toBe(1);
   });
 
   it('测试用例 5：空文件路径列表，返回 [] 不报错（FR-015 降级场景）', () => {

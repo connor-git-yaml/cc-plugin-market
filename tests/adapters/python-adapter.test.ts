@@ -61,12 +61,11 @@ describe('PythonLanguageAdapter 静态属性', () => {
     expect(dirs.has('.eggs')).toBe(true);
   });
 
-  it('实现 LanguageAdapter 接口全部方法 (FR-001)', () => {
-    expect(typeof adapter.analyzeFile).toBe('function');
-    expect(typeof adapter.analyzeFallback).toBe('function');
-    expect(typeof adapter.getTerminology).toBe('function');
-    expect(typeof adapter.getTestPatterns).toBe('function');
-  });
+  // F272 ⑦-B6：原「实现 LanguageAdapter 接口全部方法 (FR-001)」用例仅做
+  // typeof === 'function' 检查——adapter 是 `new PythonLanguageAdapter()` 静态构造，
+  // 类型即 LanguageAdapter，该检查由 tsc 全权保证，运行时永不可能为假。四个方法均
+  // 已在下方独立 describe 块（analyzeFile / analyzeFallback / getTerminology /
+  // getTestPatterns）中被真实调用覆盖，故删除此恒真用例。
 });
 
 // ════════════════════════ analyzeFile 测试 (T007) ════════════════════════

@@ -34,7 +34,21 @@ node dist/cli/index.js batch "$TMPCOPY" --mode graph-only --output-dir "$TMPOUT"
 cp "$TMPOUT/_meta/graph.json" tests/fixtures/micrograd-baseline-graph/graph.json
 ```
 
-## 实证数据（F242 重生成后 — 当前版本）
+## 实证数据（F272 ⑦ 重建后 — 当前版本）
+
+- **异构对抗审查实证**：pinned 陈旧检测守卫（`tests/integration/graph-quality-pinned-staleness.test.ts`）
+  此前复用的 `compareGraphOnlyStructure` 只比对节点/边 multiset，`graph.fingerprint`（F249 采集面指纹）
+  与 `graph.builder`（F261 构建戳，D1 规定"仅可见不判定"）两个元数据字段被结构性跳过——本次守卫改为
+  全字段深比较（**排除 `graph.builder`**，理由见测试文件顶部注释：该字段跟踪宿主仓库/dist 状态，
+  跨机器/跨 commit 必然不同，不是"这份 pinned 是否代表当前 builder 行为"该判定的维度）
+- **33 节点 / 38 边，逐节点 id 逐边三元组与 F242 版完全相同**（已用 multiset 比较脚本核对：节点 id
+  集合相等、边 `source|relation|target` multiset 相等，零增删）——本次重建**只新增**
+  `graph.fingerprint` 与 `graph.builder` 两个此前缺失的元数据字段（旧版 `graph.*` 仅 8 个键，
+  当前 builder 产出 10 个键）
+- producer commit：`f7a65aa9`（`npm run build` 后用当前 dist 重建）；micrograd 源 clone commit
+  校验通过（`c911406e5ace8742e5841a7e0df113ecb5d54685`，与上方「来源」记录一致，未漂移）
+
+## 实证数据（F242 重生成后 — 历史版本）
 
 - **33 节点 / 38 边**（links：contains 28 + **calls 8** + depends-on 2）——节点数与 contains /
   depends-on 边计数**与 F217 版逐字相同**；唯一变化是 calls 边 **7 → 8**

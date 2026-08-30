@@ -76,6 +76,14 @@ describe('isDebtQuestion', () => {
   it('普通问题不应匹配', () => {
     expect(isDebtQuestion('什么调用了认证模块')).toBe(false);
   });
+
+  it('包含 technical debt 时应返回 true', () => {
+    expect(isDebtQuestion('what technical debt exists')).toBe(true);
+  });
+
+  it('架构问题不应匹配', () => {
+    expect(isDebtQuestion('模块间的依赖关系是什么')).toBe(false);
+  });
 });
 
 describe('injectDebtContext', () => {

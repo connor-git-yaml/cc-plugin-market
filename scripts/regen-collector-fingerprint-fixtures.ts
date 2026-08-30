@@ -589,6 +589,14 @@ export async function runRegen(argv: string[]): Promise<number> {
       `[regen] 放行：contentMismatch=${aTrack.mismatch || bTrack.mismatch}、` +
         `fingerprintUnchanged=${fingerprintUnchanged}、inputHashChanged=${inputHashChanged}`,
     );
+    // F272 ⑤：`differences` 此前已算好却被丢弃——`contentMismatch=true` 但因指纹已变化而
+    // 走到放行分支时，维护者能看到"内容变了"却看不到"变了什么"。格式与拒绝分支（上方
+    // 第 576-578 行）一致，便于两条路径的输出被同一套日志解析方式消费。
+    if (aTrack.mismatch || bTrack.mismatch) {
+      for (const difference of [...aTrack.differences, ...bTrack.differences]) {
+        console.log(`[regen]   - ${difference}`);
+      }
+    }
   }
 
   const swapOutcome = await swapPinnedAssets([

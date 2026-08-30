@@ -190,8 +190,12 @@ describe('runExtractionPipeline - Zod 验证', () => {
       includeImages: false,
     });
 
-    // 无效结果被丢弃
-    expect(result).toBeDefined();
+    // F272 ⑦-B7：原 `expect(result).toBeDefined()` 对任何非 undefined 返回恒真，
+    // 检测不到用例名承诺的「无效结果被丢弃，不纳入返回值」。改为直接断言
+    // invalid-node 不出现在展平后的节点列表中（Zod 校验失败时该文件整体退化为
+    // EMPTY_EXTRACTION_RESULT，见 extraction-pipeline.ts extractWithCache）。
+    const allNodes = result.results.flatMap((r) => r.nodes);
+    expect(allNodes.find((n) => n.id === 'invalid-node')).toBeUndefined();
   });
 });
 

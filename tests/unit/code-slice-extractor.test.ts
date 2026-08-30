@@ -233,13 +233,15 @@ describe('extractCodeSlices', () => {
       ],
     });
 
-    // 设置极小的 token 预算，只能容纳一个切片
-    const slices = extractCodeSlices([skeleton], sourceMap, { maxTokens: 50 });
+    // 设置只能容纳一个切片的 token 预算（原 maxTokens: 50 过小，实测两个切片
+    // 均无法通过，slices 恒为空数组，`if (slices.length>0)` + `A || B` 析取双重放水
+    // 从未真正执行——见 F272 ⑦-B2。250 是实测下仅 publicFunc 通过、_privateFunc
+    // 被裁掉的边界值）
+    const slices = extractCodeSlices([skeleton], sourceMap, { maxTokens: 250 });
     // 应该只保留 P1（publicFunc）
-    if (slices.length > 0) {
-      expect(slices.every((s) => s.priority === CodeSlicePriority.P1_PUBLIC_EXPORT) ||
-             slices[0]?.symbolName === 'publicFunc').toBe(true);
-    }
+    expect(slices.length).toBe(1);
+    expect(slices[0]?.symbolName).toBe('publicFunc');
+    expect(slices[0]?.priority).toBe(CodeSlicePriority.P1_PUBLIC_EXPORT);
   });
 
   it('空函数体跳过', () => {

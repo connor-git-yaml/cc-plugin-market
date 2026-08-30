@@ -25,7 +25,65 @@
       }
     ],
     "schemaVersion": "2.0",
-    "sourceCommit": null
+    "sourceCommit": null,
+    "fingerprint": {
+      "formatVersion": 1,
+      "extensionSurface": {
+        "tsjsSkeletonWalk": {
+          "extensions": [
+            ".cjs",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".ts",
+            ".tsx"
+          ],
+          "matchSemantics": "case-sensitive"
+        },
+        "pyWalk": {
+          "extensions": [
+            ".py",
+            ".pyi"
+          ],
+          "matchSemantics": "case-sensitive"
+        },
+        "genericAdapters": {
+          "extensions": [
+            ".go",
+            ".java"
+          ],
+          "matchSemantics": "case-insensitive"
+        },
+        "moduleDerivationScan": {
+          "extensions": [
+            ".cjs",
+            ".cts",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".mts",
+            ".ts",
+            ".tsx"
+          ],
+          "matchSemantics": "case-insensitive"
+        },
+        "pythonSymbolScan": {
+          "extensions": [
+            ".py",
+            ".pyi"
+          ],
+          "matchSemantics": "case-sensitive"
+        }
+      },
+      "behaviorVersion": 3
+    },
+    "builder": {
+      "formatVersion": 1,
+      "commit": "f7a65aa90eb22f18b2fc9fa2420a36c7c1692456",
+      "dirty": true,
+      "sourceDirty": true,
+      "distSha256": "d7bbc3ffb3ac5c31068b73986c9fc1784cf53cb597a2812b430889877253e62c"
+    }
   },
   "nodes": [
     {

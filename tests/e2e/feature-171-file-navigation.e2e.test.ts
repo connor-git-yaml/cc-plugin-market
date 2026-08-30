@@ -124,8 +124,6 @@ describe('用户故事:3 工具 description 满足 F170c 4 要素 (US4)', () => 
 // HOST_E2E gate：真实 driver token 对比（默认 skip，需 HOST_E2E=1 + 真实 LLM 凭据）
 // ============================================================
 describe.skipIf(!process.env['HOST_E2E'])('HOST_E2E: 真实 driver 用 view_file vs 全文 Read 的 token 对比', () => {
-  it('占位：driver 调 view_file 实测输入 token < 全文 Read（需 host 真实 driver）', () => {
-    // 真机验收时在此接入真实 driver run + telemetry tokensInput 对比；sandbox 默认 skip。
-    expect(true).toBe(true);
-  });
+  // 真机验收时在此接入真实 driver run + telemetry tokensInput 对比；sandbox 默认 skip。
+  it.todo('driver 调 view_file 实测输入 token < 全文 Read（需 host 真实 driver）');
 });

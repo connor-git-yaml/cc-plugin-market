@@ -3,15 +3,30 @@
  *
  * 覆盖 spec FR-007：新项目首次 batch 后 hyperedge 不再 silently 跳过。
  *
- * **本 step 实现策略**：mock Anthropic SDK + 临时目录构造 docChunks，
- * 不依赖 Phase 1a 真实 fixture（fixture 在 T10-T14 才创建，spec 中的
- * 4 fixture 端到端 case 留 it.todo）。
+ * **本文件实现策略**：mock Anthropic SDK + 临时目录构造 docChunks。
  *
  * 验证目标：
  * 1. 单批 docChunks（< 50k token）→ 单次 Map call → hyperedges 输出非空
  * 2. 多批 docChunks（> 50k token）→ FFD 装箱拆分 → 多次 Map → Reduce 去重
  * 3. 重复 hyperedge（同一 node-set）→ Reduce 后保留 rationale 最长的
  * 4. docChunks 为空 → 提前返回，不创建 Anthropic client
+ *
+ * **deferred（永久不做，Feature 272 裁决）**：曾以 `it.todo()` 占位的 4 条端到端用例中，
+ * **3 条**——「fixture micrograd/nanoGPT/ky → graph.json.hyperedges.length」——永久删除，
+ * 断言的是 **hyperedge 由 LLM 提取的语义产出**（`src/panoramic/hyperedges/extractor.ts`
+ * 直接 `import Anthropic`）。本仓所有 e2e 测试统一 `vi.mock('@anthropic-ai/sdk')`（见
+ * `tests/e2e/batch-pipeline.e2e.test.ts`），mock 出的"LLM 语义"是测试自己写进去的，
+ * 填充这类用例只会得到断言恒真的表面工作，不是真实覆盖。这不是等待 fixture 落地后
+ * 就能填的临时阻塞（4 个 fixture 均已存在），而是本仓测试基础设施（无真实 LLM 通道）
+ * 下的结构性设计选择。非 LLM 部分的覆盖见本文件 case 1-7（FFD 装箱拆分 / Reduce 去重 /
+ * fail-closed 等 pipeline 编排逻辑，用 mock LLM 响应驱动真实调用）。
+ *
+ * **第 4 条保留（Feature 272 复核更正）**：「fixture empty-project →
+ * graph.json.hyperedges = []」断言的是**空输入下的缺席**（空项目没有 docChunks 可喂给
+ * LLM，输出空数组与 LLM 说了什么无关，本文件 case 4「docChunks 为空 → 提前返回」已在
+ * 单元层面覆盖同一不变量，这条只是其 fixture-based 端到端版本），不依赖 LLM 语义输出，
+ * 技术上可填充。保留为 `it.todo`，待有人写 mock-LLM 集成用例填充；填充属新增测试覆盖
+ * 而非清淤，已移交后续卡。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GraphNode, Hyperedge } from '../../src/panoramic/graph/graph-types.js';
@@ -220,10 +235,8 @@ describe('Feature 140 FR-007 — hyperedge 首次 batch + MapReduce 接入', () 
   });
 
   // ============================================================================
-  // Phase 1a fixture-based 用例 — 待 T10-T14 fixture 落地后启用
+  // 技术上可填充（断言空输入下的缺席，不依赖 LLM 语义输出），待有人写 mock-LLM
+  // 集成用例填充；填充属新增测试覆盖而非清淤，已移交后续卡（Feature 272 裁决⑥复核更正）。
   // ============================================================================
-  it.todo('fixture micrograd → graph.json.hyperedges.length >= 1');
-  it.todo('fixture nanoGPT → graph.json.hyperedges.length >= 1');
-  it.todo('fixture ky → graph.json.hyperedges.length >= 1（且 --include-docs=true 时更多）');
   it.todo('fixture empty-project → graph.json.hyperedges = []');
 });

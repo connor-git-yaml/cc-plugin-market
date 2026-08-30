@@ -181,14 +181,6 @@ describe('answerQuestion', () => {
       expect(buildQnAPrompt).toHaveBeenCalledOnce();
       expect(callQnALlm).toHaveBeenCalledOnce();
     });
-
-    it('应包含 durationMs 字段（>= 0）', async () => {
-      setupNormalMocks();
-
-      const result = await answerQuestion({ text: '测试' }, defaultOptions);
-
-      expect(result.durationMs).toBeGreaterThanOrEqual(0);
-    });
   });
 
   describe('边界条件 — 空字符串查询', () => {

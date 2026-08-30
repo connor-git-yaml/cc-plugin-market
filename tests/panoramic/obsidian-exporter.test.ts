@@ -239,9 +239,9 @@ describe('buildGodNodePage', () => {
     expect(page.content).toContain('src/foo/bar.ts');
   });
 
-  it('metadata.sourceTarget 不存在时不报错', () => {
+  it('metadata.sourceTarget 不存在时静默降级——不生成"源文件"区块', () => {
     const page = buildGodNodePage(godNode, communityResult, graphJson, nodeIdToLabel);
-    expect(() => page.content).not.toThrow();
+    expect(page.content).not.toContain('## 源文件');
   });
 
   it('社区 ID 为 -1（未分类）时显示"未分类"', () => {
@@ -294,8 +294,19 @@ describe('generateObsidianVault', () => {
     expect(fs.existsSync(path.join(tmpDir, 'god-nodes', 'Module-A.md'))).toBe(true);
   });
 
-  it('返回 durationMs 大于 0', () => {
+  it('返回 durationMs 字段且为 number 类型', () => {
+    // F272 B4：不收紧为 `> 0`——实测该小型 fixture（4 文件同步写盘）在真实
+    // Date.now() 精度下 10 次采样命中 0 的次数达 5 次，收紧会造成近确定性红
+    // （与 html-exporter.test.ts 同一根因，见其同名用例注释）。改为断言类型与有限性。
+    //
+    // 三条断言各抓不同失效面（Feature 272 异构对抗审查缺陷 5 补回）：
+    // - typeof === 'number' 抓类型错位（如误返回字符串/undefined）
+    // - Number.isFinite 抓 NaN / Infinity
+    // - toBeGreaterThanOrEqual(0) 抓负数——`Date.now()` 两次采样相减在系统时钟回拨场景下
+    //   可为负，唯独这条断言能抓；对本用例是恒真（0 或正数），但不是与前两条冗余的断言。
     const result = generateObsidianVault(graphJson, communityResult, godNodes, tmpDir);
+    expect(typeof result.durationMs).toBe('number');
+    expect(Number.isFinite(result.durationMs)).toBe(true);
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 

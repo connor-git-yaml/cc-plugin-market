@@ -159,12 +159,13 @@ export function run(): number {
 
     const skeleton = result.get(runnerPath);
     // extractCallSites=true 时 callSites 应存在（可能为空数组，但字段本身存在）
-    // 注意：tree-sitter 双路径 merge，不保证一定能检测到 cross-module 调用
-    // 只断言字段存在且类型正确
+    // 实测该 fixture 下 tree-sitter 路径稳定解析出 1 条 cross-module 调用
+    // （run() 调用 double()），原 `if (!==undefined)` 两侧都恒真的写法从未
+    // 验证过实际行为（见 F272 ⑦-B2）——钉死具体调用内容。
     expect(skeleton).toBeDefined();
-    // callSites 应为数组（可能为空）或 undefined（tree-sitter 降级时）
-    if (skeleton!.callSites !== undefined) {
-      expect(Array.isArray(skeleton!.callSites)).toBe(true);
-    }
+    expect(skeleton!.callSites).toBeDefined();
+    expect(Array.isArray(skeleton!.callSites)).toBe(true);
+    expect(skeleton!.callSites!.length).toBe(1);
+    expect(skeleton!.callSites![0]!.calleeName).toBe('double');
   });
 });

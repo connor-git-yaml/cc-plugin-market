@@ -35,7 +35,14 @@
 resolution，故无 `depends-on`/`calls` 边）
 - 每个 symbol 节点均有且仅有 1 条 contains 入边（module→顶层函数/类型，或 struct/interface→方法）
 
-## 六指标预期值
+## 重建历史
+
+| 日期 | producer commit | 节点/边总数 | 变化原因 |
+|---|---|---|---|
+| F217 初建 | 见 `specs/217-graph-quality-gates/plan.md` | 13 / 9 | 初始人工推导 |
+| F272 ⑦ 重建 | `f7a65aa9` + `npm run build` | 13 / 9（不变） | 异构对抗审查实证：pinned 陈旧检测守卫（`graph-quality-pinned-staleness.test.ts`）此前只比对节点/边 multiset，`graph.fingerprint`（F249）与 `graph.builder`（F261）两个元数据字段被结构性跳过；本次改为全字段深比较（排除 `graph.builder`，理由见 `graph-quality-pinned-staleness.test.ts` 顶部注释与 F261 D1）后，此 fixture 因缺 `fingerprint`/`builder` 两键即报 stale。用当前 builder 重建后节点/边逐字未变（已用 multiset 比较脚本核对），仅新增 `graph.fingerprint` 与 `graph.builder` 两个元数据字段 |
+
+
 
 | 指标 | 预期结果 | 推导依据 |
 |---|---|---|

@@ -7,9 +7,23 @@
  * - frontmatter generatedByModel 字段存在
  * - empty-project → ADR 为空
  *
- * **本 step 实现策略**：使用 mock LLM + 临时目录构造各项目特有的 ADR 候选，
- * 不依赖 Phase 1a 真实 fixture（fixture 创建在 T10-T14，留 it.todo）。
+ * **本文件实现策略**：使用 mock LLM + 临时目录构造各项目特有的 ADR 候选，
  * 验证 ADR pipeline 在不同项目语境下产出**不同**的 ADR（FR-003 反 hallucinate 核心目标）。
+ *
+ * **deferred（永久不做，Feature 272 裁决）**：曾以 `it.todo()` 占位的 4 条端到端用例中，
+ * **3 条**——「fixture micrograd/nanoGPT/ky → 真实 batch → ADR 含特定领域词」——永久删除，
+ * 断言的对象是 **LLM 的语义产出**（ADR 标题/决策内容是否含特定领域抽象）。本仓所有
+ * e2e 测试统一 `vi.mock('@anthropic-ai/sdk')`（见 `tests/e2e/batch-pipeline.e2e.test.ts`），
+ * mock 出的"LLM 语义"是测试自己写进去的，填充这类用例只会得到断言恒真的表面工作，不是
+ * 真实覆盖。这不是等待 fixture 落地后就能填的临时阻塞（4 个 fixture 均已存在），而是
+ * 本仓测试基础设施（无真实 LLM 通道）下的结构性设计选择。非 LLM 部分的覆盖见本文件
+ * case 1-3（programmatic mock 构造下的 distinct 标题 / fail-closed / evidenceRef 占比契约）。
+ *
+ * **第 4 条保留（Feature 272 复核更正）**：「fixture empty-project → 真实 batch + ADR
+ * 列表为空 + `_PIPELINE_FAILED.md`」断言的是**空输入下的缺席**（无源码可喂给 LLM，ADR
+ * 为空与 LLM 说了什么无关）与**文件系统产物**（`_PIPELINE_FAILED.md` 是否落盘是纯函数/
+ * 纯 IO 判定），不依赖 LLM 语义输出，技术上可填充。保留为 `it.todo`，待有人写 mock-LLM
+ * 集成用例填充；填充属新增测试覆盖而非清淤，已移交后续卡。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
@@ -93,7 +107,7 @@ function setupMockForProject(projectFlavor: 'micrograd' | 'nanoGPT' | 'ky'): voi
   });
 }
 
-describe('Feature 140 FR-015 — ADR 跨项目隔离 (programmatic test，留 fixture-based 给 Phase 1a)', () => {
+describe('Feature 140 FR-015 — ADR 跨项目隔离 (programmatic mock 构造用例)', () => {
   it('case 1: micrograd / nanoGPT / ky 三个项目产出 distinct ADR 标题（FR-003 反 hallucinate）', async () => {
     const adrTitles = new Set<string>();
 
@@ -161,10 +175,9 @@ describe('Feature 140 FR-015 — ADR 跨项目隔离 (programmatic test，留 fi
   });
 
   // ============================================================================
-  // 留 Phase 1a fixture-based 端到端 case
+  // 技术上可填充（断言空输入下的缺席/文件系统产物，不依赖 LLM 语义输出），
+  // 待有人写 mock-LLM 集成用例填充；填充属新增测试覆盖而非清淤，已移交后续卡
+  // （Feature 272 裁决⑥复核更正）。
   // ============================================================================
-  it.todo('fixture micrograd → 真实 batch + ADR 标题含 micrograd 特有抽象');
-  it.todo('fixture nanoGPT → 真实 batch + ADR 与 micrograd 完全不重叠');
-  it.todo('fixture ky → 真实 batch + ADR 含 ky-specific hooks/retry 决策');
   it.todo('fixture empty-project → 真实 batch + ADR 列表为空 + _PIPELINE_FAILED.md');
 });

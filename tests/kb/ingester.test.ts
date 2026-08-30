@@ -388,19 +388,10 @@ describe('ingestDocuments —— 两者同时提供：合并去重（llms-txt �
     }
   });
 
-  it('去重以 id 为准：真正相同 id 时 llms-txt 版本优先', async () => {
-    // 构造真正的 id 碰撞：手工 mock 一个 fetchImpl，
-    // 使得 llms.txt 条目 URL 和 dir 文件的 id 产生一样的字符串
-    // 实际上两种模式的 id 策略不同（URL host+path vs 相对路径），
-    // 真正碰撞时是"同一 URL 既出现在 llms.txt 也出现在 dir"场景。
-    // 这里用的测试策略：验证 llms-txt 先写入 Map，dir 后写入且不覆盖
-    // 通过以下方式间接验证：
-    // 若 llms-txt 先执行，其 title 保留；dir 同 id（伪造）不覆盖
-
-    // 这个场景在当前实现中是"先 llms，后 dir，Map.set 只在无同 id 时才设"
-    // 通过上方源码逻辑验证即可，集成测试从结果确认顺序语义
-    expect(true).toBe(true); // 此断言为文档性占位
-  });
+  // TODO(F272 ⑦-B1): 构造真正的 id 碰撞 fixture（llms.txt 条目与 dir 文件产生相同 id
+  // 字符串），验证 llms-txt 版本优先写入且 dir 版本不覆盖。当前实现是
+  // "先 llms 后 dir，Map.set 只在无同 id 时才设"，尚无覆盖此顺序语义的真实断言。
+  it.todo('去重以 id 为准：真正相同 id 时 llms-txt 版本优先');
 });
 
 // ── 参数校验 ──────────────────────────────────────────────────────────────────

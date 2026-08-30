@@ -94,12 +94,12 @@ describe('communityColor', () => {
     expect(uniqueColors.size).toBe(total);
   });
 
-  it('社区数量为 1 时不报错', () => {
-    expect(() => communityColor(0, 1)).not.toThrow();
+  it('社区数量为 1 时返回色相为 0 的固定色值', () => {
+    expect(communityColor(0, 1)).toBe('hsl(0, 65%, 55%)');
   });
 
-  it('社区数量为 0 时不报错（回退处理）', () => {
-    expect(() => communityColor(0, 0)).not.toThrow();
+  it('社区数量为 0 时回退为色相 0（避免除以 0）', () => {
+    expect(communityColor(0, 0)).toBe('hsl(0, 65%, 55%)');
   });
 
   it('色相值在 [0, 360) 范围内', () => {
@@ -402,8 +402,18 @@ describe('generateHtmlExport', () => {
     expect(fs.existsSync(result.files[0]!)).toBe(true);
   });
 
-  it('返回 durationMs 大于等于 0', () => {
+  it('返回 durationMs 字段且为 number 类型', () => {
+    // F272 B4：不收紧为 `> 0`——实测该小型 fixture 在真实 Date.now() 精度下经常返回 0ms
+    // （10 次采样命中 0 的次数 ≥8 次），收紧会造确定性/近确定性红。改为断言类型与存在性。
+    //
+    // 三条断言各抓不同失效面（Feature 272 异构对抗审查缺陷 5 补回）：
+    // - typeof === 'number' 抓类型错位（如误返回字符串/undefined）
+    // - Number.isFinite 抓 NaN / Infinity
+    // - toBeGreaterThanOrEqual(0) 抓负数——`Date.now()` 两次采样相减在系统时钟回拨场景下
+    //   可为负，唯独这条断言能抓；对本用例是恒真（0 或正数），但不是与前两条冗余的断言。
     const result = generateHtmlExport(graphJson, communityResult, godNodes, tmpDir);
+    expect(typeof result.durationMs).toBe('number');
+    expect(Number.isFinite(result.durationMs)).toBe(true);
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 });

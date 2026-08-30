@@ -25,11 +25,24 @@
   `GreeterService.lastMessage`（memberKind=property）、`GreetingOptions`（exportKind=interface）、
   `GreetingOptions.loud`（memberKind=property）、`GreetingResult`（exportKind=type）
 
-边总数：**11**（1 条 depends-on + 2 条 calls + 8 条 contains）
+边总数：**14**（1 条 depends-on + 5 条 calls + 8 条 contains，F272 ④ 重建，见下方"重建历史"）
 - `depends-on`：`greeter-service.test.ts -> greeter-service.ts`（测试文件依赖被测模块）
-- `calls`：`GreeterService.buildMessage -> formatGreeting`、`GreeterService.greet -> GreeterService.buildMessage`
-  （满足决策 6"class 内方法间至少 1 条可被 AST 解析的调用关系"，`calls` 边非空）
+- `calls`：5 条
+  - `GreeterService.buildMessage -> formatGreeting`、`GreeterService.greet -> GreeterService.buildMessage`
+    （满足决策 6"class 内方法间至少 1 条可被 AST 解析的调用关系"，`calls` 边非空）
+  - `greeter-service.test.ts -> greeter-service.ts::formatGreeting`
+  - `greeter-service.test.ts -> greeter-service.ts::GreeterService.greet`
+  - `greeter-service.test.ts -> greeter-service.ts::GreeterService`
+    （以上 3 条是测试文件对被测模块的直接调用边，由 F242/F260 调用边覆盖增强新增识别，
+    是纯增益，不影响既有 2 条 class 内部 calls 边与全部 contains 边）
 - `contains`：8 条，每个 symbol 节点均有且仅有 1 条 contains 入边（module→顶层符号，或 class/interface→成员）
+
+## 重建历史
+
+| 日期 | producer commit | 边总数 | calls | 变化原因 |
+|---|---|---|---|---|
+| F217 初建 | 见 `specs/217-graph-quality-gates/plan.md` | 11 | 2 | 初始人工推导 |
+| F272 ④ 重建 | `f7a65aa9` + `npm run build` | 14 | 5 | F242/F260 调用边覆盖增强后 pinned 图静默陈旧（断言仍绿因为断言的是 pinned 文件自身），本卡覆盖重建为当前 builder 行为，新增 3 条测试文件→被测模块的 calls 边，无丢失边 |
 
 ## 六指标预期值
 
@@ -38,7 +51,7 @@
 | duplicate-canonical-id | **pass** | 全部 id 均为 canonical `::` 格式，无重复三元组 |
 | contains-coverage | **pass**，8/8 = 100% | 8 个 symbol 节点均有 contains 入边 |
 | orphan-ratio | **pass**，超标 0/8 = 0% | 全部 8 个 symbol 节点因 contains 入边 degree ≥ 1，无 zero-degree 节点 |
-| dangling-edge | **pass** | 全部 11 条边的 source/target 均指向图中存在的节点 |
+| dangling-edge | **pass** | 全部 14 条边的 source/target 均指向图中存在的节点 |
 | legacy-ignored | **pass** | 无遗留 `#` 节点；路径均不命中 `.gitignore` 或图生产者忽略目录合同 |
 | freshness | **unknown-provenance** | `sourceCommit === null`（fixture 源自无 `.git` 的仓库外临时目录，CONSTRAINT-002 预期） |
 

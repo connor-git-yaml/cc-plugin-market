@@ -100,47 +100,12 @@ describe('Feature 135 Codex Finding 1：ADR 遗留文件中和逻辑（文件系
     expect(source).toContain('--enable-adr');
   });
 
-  it('预写 adr-0001.md 后，中和逻辑应保留原文件（保守策略验证）', () => {
-    // 在 adrDir 预写假 ADR 文件
-    const fakeAdrPath = path.join(adrDir, 'adr-0001.md');
-    fs.writeFileSync(fakeAdrPath, '# ADR-0001\n\n假内容', 'utf-8');
-    const fakeIndexPath = path.join(adrDir, 'index.md');
-    fs.writeFileSync(fakeIndexPath, '# ADR Index\n\n- [ADR-0001](./adr-0001.md)', 'utf-8');
-
-    // 验证文件存在（作为前置条件）
-    expect(fs.existsSync(fakeAdrPath)).toBe(true);
-    expect(fs.existsSync(fakeIndexPath)).toBe(true);
-
-    // 模拟中和逻辑（与 batch-project-docs.ts else 分支逻辑一致）
-    const noticePath = path.join(adrDir, '_PIPELINE_DISABLED.md');
-    const disabledNotice =
-      `# ADR Pipeline 已禁用（Spectra v4.0.1）\n\n` +
-      `> 警告：ADR 自动生成流水线在 Spectra v4.0.1 中临时禁用（evidence-binding 重构中）。\n`;
-    fs.writeFileSync(noticePath, disabledNotice, 'utf-8');
-    fs.writeFileSync(
-      fakeIndexPath,
-      `# ADR Pipeline 已禁用\n\n` +
-      `当前批次未生成新 ADR。详见 [_PIPELINE_DISABLED.md](./_PIPELINE_DISABLED.md)。\n\n` +
-      `本目录下的其他 \`adr-*.md\` 文件来自先前批次，可能包含 hallucinated 内容，请勿信任。\n`,
-      'utf-8',
-    );
-
-    // 断言：_PIPELINE_DISABLED.md 已写入
-    expect(fs.existsSync(noticePath)).toBe(true);
-    const noticeContent = fs.readFileSync(noticePath, 'utf-8');
-    expect(noticeContent).toContain('ADR Pipeline 已禁用');
-    expect(noticeContent).toContain('v4.0.1');
-
-    // 断言：index.md 已被改写为 supersede notice
-    const indexContent = fs.readFileSync(fakeIndexPath, 'utf-8');
-    expect(indexContent).toContain('_PIPELINE_DISABLED.md');
-    expect(indexContent).toContain('hallucinated');
-
-    // 断言：原有 adr-0001.md 仍存在（保守保留）
-    expect(fs.existsSync(fakeAdrPath)).toBe(true);
-    const adrContent = fs.readFileSync(fakeAdrPath, 'utf-8');
-    expect(adrContent).toBe('# ADR-0001\n\n假内容'); // 内容未被修改
-  });
+  // F272 B3：原「预写 adr-0001.md 后，中和逻辑应保留原文件」用例已删除——它全程未调用
+  // batch-project-docs.ts 的任何导出函数，只是在测试体内自行复刻中和逻辑（写 notice / 改写
+  // index.md），再读回断言自己刚写的内容，等于验证测试自己而非生产代码。真实中和逻辑内嵌在
+  // generateBatchProjectDocs()（需要 buildProjectContext + bootstrapRuntime + 完整 generator
+  // 注册的重量级集成调用）里，未被单独导出为可直接调用的函数；在不修改生产代码结构的前提下
+  // 无法以同等成本改写为真调用，故按 inventory-item7.md B3 的"否则删"处置。
 });
 
 // ====================================================================

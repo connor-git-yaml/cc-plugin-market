@@ -112,13 +112,15 @@ describe('rerankWithEmbedding', () => {
       const ctx = makeGraphCtx(3);
       const result = await rerankWithEmbedding(ctx, ['/abs/specs/module-a.md'], '模块设计', '/project');
 
-      if (result.rankedChunks.length > 0) {
-        const first = result.rankedChunks[0]!;
-        expect(first.chunk).toBeDefined();
-        expect(first.chunk.filePath).toBeDefined();
-        expect(typeof first.similarity).toBe('number');
-        expect(typeof first.nodeId).toBe('string');
-      }
+      // chunker mock 固定返回 2 个 chunk，mock embedding provider 对所有文本返回同一
+      // 常量向量（余弦相似度恒为 1），默认阈值 0.70 下两者均通过——原 `if (length>0)`
+      // 在这份 fixture 下恒真，钉死具体值再断言字段 shape（见 F272 ⑦-B2）。
+      expect(result.rankedChunks.length).toBe(2);
+      const first = result.rankedChunks[0]!;
+      expect(first.chunk).toBeDefined();
+      expect(first.chunk.filePath).toBeDefined();
+      expect(typeof first.similarity).toBe('number');
+      expect(typeof first.nodeId).toBe('string');
     });
   });
 
@@ -195,11 +197,12 @@ describe('rerankWithEmbedding', () => {
         { similarityThreshold: 0.0 },
       );
 
-      if (result.rankedChunks.length > 0) {
-        // 所有 chunk 均无法匹配 specPath，回退到第一个节点 'node-0'
-        for (const rc of result.rankedChunks) {
-          expect(rc.nodeId).toBe('node-0');
-        }
+      // 同上：chunker mock 固定返回 2 个 chunk，默认阈值 0.70 下必然全部通过，
+      // 钉死具体值而非用 `if (length>0)` 放水（见 F272 ⑦-B2）。
+      expect(result.rankedChunks.length).toBe(2);
+      // 所有 chunk 均无法匹配 specPath，回退到第一个节点 'node-0'
+      for (const rc of result.rankedChunks) {
+        expect(rc.nodeId).toBe('node-0');
       }
     });
 
@@ -213,14 +216,16 @@ describe('rerankWithEmbedding', () => {
       );
 
       // 两个 chunk 文件分别对应不同节点，nodeId 不应全部相同（原来轮询伪装问题的回归测试）
-      if (result.rankedChunks.length >= 2) {
-        const nodeIds = result.rankedChunks.map((rc) => rc.nodeId);
-        const uniqueNodeIds = new Set(nodeIds);
-        // 有两个不同 specPath，正常情况下应有两个不同 nodeId
-        expect(uniqueNodeIds.size).toBeGreaterThanOrEqual(1);
-        // 核心断言：确认不是所有 nodeId 都是 '__query__'（旧的伪装方式）
-        expect(nodeIds.every((id) => id === '__query__')).toBe(false);
-      }
+      // chunker mock 固定返回 module-a/module-b 两个 chunk，ctx 中两个 specPath 分别
+      // 精确匹配，钉死 length===2 且 uniqueNodeIds.size===2（而非放水的 `>=1`），
+      // 见 F272 ⑦-B2。
+      expect(result.rankedChunks.length).toBe(2);
+      const nodeIds = result.rankedChunks.map((rc) => rc.nodeId);
+      const uniqueNodeIds = new Set(nodeIds);
+      // 有两个不同 specPath，应有两个不同 nodeId
+      expect(uniqueNodeIds.size).toBe(2);
+      // 核心断言：确认不是所有 nodeId 都是 '__query__'（旧的伪装方式）
+      expect(nodeIds.every((id) => id === '__query__')).toBe(false);
     });
   });
 });

@@ -3,9 +3,10 @@
  *
  * 覆盖 spec FR-010：开关前后行为对比。
  *
- * **本 step 实现策略**：使用临时目录 + mock LLM 提取器，**不依赖 Phase 1a 的 ky/micrograd
- * 真实 fixture**（fixture 在 T10-T14 才创建）。spec 中的 fixture-based 端到端 case 留
- * `it.todo()`，待 Phase 1a 落地后填充。
+ * **本文件实现策略**：使用临时目录 + mock LLM 提取器覆盖非 LLM 数据流。spec 中的
+ * fixture-based 端到端 case（日志文本 / readmeExcerpt / 发给 LLM 的 prompt 入参，均不
+ * 依赖 LLM 输出，技术上可填充）留 `it.todo()`，待有人写 mock-LLM 集成用例填充
+ * （Feature 272 裁决：填充属新增测试覆盖而非清淤，已移交后续卡）。
  *
  * 验证目标：
  * 1. `--include-docs=true` → batch 末尾日志含"include-docs: 已加入 N 份"，无"跳过"
@@ -154,8 +155,9 @@ describe('Feature 140 FR-010 — --include-docs 端到端联动', () => {
   });
 
   // ============================================================================
-  // 以下 fixture-based 用例需 Phase 1a (T10-T14) 创建 ky / micrograd / nanoGPT fixture，
-  // 落地后改为 .it() 即可启用。
+  // 以下 fixture-based 用例技术上可填充（断言的是日志文本 / 纯截断的 readmeExcerpt /
+  // 发给 LLM 的 prompt 入参，均不依赖 LLM 输出），待有人写 mock-LLM 集成用例填充；
+  // 填充属新增测试覆盖而非清淤，已移交后续卡（Feature 272 裁决⑥）。
   // ============================================================================
   it.todo('fixture ky → batch 末尾日志含 "include-docs: 已加入 N 份"，不含 "跳过"');
   it.todo('fixture micrograd → narrative readmeExcerpt 反映 micrograd README');

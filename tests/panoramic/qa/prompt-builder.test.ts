@@ -52,12 +52,19 @@ function makeCitations(): Citation[] {
 // ============================================================
 
 describe('buildQnAPrompt', () => {
-  it('应返回 systemPrompt 和 userPrompt 字段', () => {
+  it('应返回 systemPrompt 和 userPrompt 字段，且均为非空字符串并包含真实内容', () => {
+    // F272 ⑦-B7：原用例仅 `toBeTruthy()` 两处，虽能拒绝空串/undefined，但未验证
+    // 「字段」本身的具体结构（是否为 string 类型、是否携带调用方传入的问题文本）。
+    // 与下方已有 toContain 断言合并，改为同时验证类型 + 结构性内容（userPrompt 应
+    // 包含调用时传入的原始问题）。
     const ctx = makeGraphCtx();
-    const result = buildQnAPrompt(ctx, makeCitations(), '什么调用了认证模块');
+    const question = '什么调用了认证模块';
+    const result = buildQnAPrompt(ctx, makeCitations(), question);
 
-    expect(result.systemPrompt).toBeTruthy();
-    expect(result.userPrompt).toBeTruthy();
+    expect(typeof result.systemPrompt).toBe('string');
+    expect(typeof result.userPrompt).toBe('string');
+    expect(result.systemPrompt.length).toBeGreaterThan(0);
+    expect(result.userPrompt).toContain(question);
   });
 
   it('systemPrompt 应包含 citation 格式要求', () => {

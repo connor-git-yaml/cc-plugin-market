@@ -106,8 +106,14 @@ export class Parser {
     expect(adapterResult.imports).toEqual(directResult.imports);
   });
 
-  it('adapter.buildModuleGraph 方法存在', () => {
-    // 验证 buildModuleGraph 方法存在且可调用（W1.4：原 buildDependencyGraph 重命名）
-    expect(typeof adapter.buildModuleGraph).toBe('function');
-  });
+  // F272 ⑦-B6：原「adapter.buildModuleGraph 方法存在」用例仅做 typeof === 'function'
+  // 检查。⚠️ 注意：`buildModuleGraph` 在 `LanguageAdapter`（src/adapters/language-adapter.ts）
+  // 里是**可选成员**（`buildModuleGraph?(`），不像 go/java/python 三处删除的是
+  // analyzeFile / analyzeFallback / getTerminology / getTestPatterns 四个**必选**方法——
+  // 那三处的删除依据才是"tsc 全权保证存在"；本处若援引同一套说辞是错的（变异实证：把
+  // ts-js-adapter.ts 里 buildModuleGraph 改名后，`tsc --noEmit` 仍零错误通过，`typeof`
+  // 检查论据被直接证伪）。本用例真正的删除依据是运行时覆盖：`buildModuleGraph` 已在
+  // tests/integration/156-w1.2-v2.test.ts:122 与 :177 中被真实调用
+  // （`tsAdapter!.buildModuleGraph!(...)`），方法缺失会在那两处报错变红（已变异验证），
+  // 故删除此处仅做存在性检查的恒真用例。
 });

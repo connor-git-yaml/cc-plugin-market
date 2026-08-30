@@ -24,7 +24,45 @@
 
 ## 待处理
 
-（无——2026-08-31 milestone-next 全部流转，见下）
+### F272 · 2026-08-31
+状态：待处理
+来源：specs/272-test-guard-asset-cleanup/（story 流程编排器实证 + 异构对抗审查回收）
+- [结果准确性][spec-driver 审查档位] **同构审查 1 WARNING vs 异构对抗 3 CRITICAL + 7 WARNING**：
+  本卡（守护资产类）同时跑了 spec-driver 内建的 `spec-review` + `quality-review`（同构档位）
+  与 2 个 `general-purpose` 异构对抗代理（只给"证伪这段代码"、不给实现思路、指定 2 个切入角）。
+  同构侧合计 1 WARNING + 若干 INFO；异构侧报出 **3 CRITICAL + 7 WARNING**，其中 2 条会直接
+  导致交付缺陷：①零执行守卫扫描进 `.gitignore` 的 `.claude/worktrees/`，合并回主仓将报
+  **2194 条假阳性**（主仓现有 4 个 worktree）；②pinned 陈旧守卫复用的比较器只比 node id 与
+  边三元组，`kind`/`metadata`/`confidence`/`fingerprint.behaviorVersion`/`extensionSurface` 全不比——
+  而 F249 collector 指纹恰是该资产陈旧的核心信号，守卫对它全盲。这是本仓继 F229/F262/F266 之后
+  **第四次**实证同构审查盲区。改进方向：把"守护/门禁类改动必须走异构对抗（换执行者 + 换视角 +
+  ≥2 切入角）"从 CLAUDE.local.md 的暂停期临时档位升格为常设约定，不随 Codex 配额恢复而取消
+- [信息完整性][spec-driver 制品链] **事实基线文档的"结论转述"缺可核验证据**：`verified-facts.md`
+  引用 `git show <commit>` 做论据时只写结论（"src 侧断言是 `> 0`、tests 侧被弱化成 `>= 0`"）
+  未附原文片段。该结论**是错的**——两侧断言逐字相同（都是 `toBeGreaterThanOrEqual(0)`），
+  差异只在 it 名。若按字面执行"修回 `> 0`"会引入确定性红用例（全 mock 管线下 `Date.now()-t0`
+  确定性返回 0，实测连续 5 次全 0ms）。这个错误是靠批 A 子代理"全量用例必须绿"的硬判据顺带
+  暴露的，判据写宽一点就会直接进 master。改进方向：verified-facts 类"开工前实证"文档引用
+  历史内容做论据时，必须附 `git show` 的实际输出片段而非结论转述
+- [流程顺畅][spec-driver 编排] **子代理在本机休眠 / stall 下的高中断率**：本卡 5 个子代理
+  非正常结束——2 次 `API Error: Your computer went to sleep mid-response`（tasks 分解、
+  批 C-⑦ 实施）、3 次 `Agent stalled: no progress for 600s`（其中 tasks.md checkbox 同步
+  连续 3 次失败，最后触发委派合同的 inline 降级通道）。已登记的教训是"长 transcript 恢复
+  高死亡率"，本卡实证**另一类**：纯文档编辑的短任务同样会中断，且 stall 检测要 600s 才触发、
+  期间磁盘零产出。改进方向：①派活 prompt 显式要求"尽快落盘、分段 Write 而非最后一次性写"；
+  ②编排器侧对纯文档类小任务放宽 inline 降级门槛（三次 Task 失败的成本远高于 inline 完成）
+- [流程顺畅][spec-driver spec/tasks] **数字类验收量在多轮修订下反复算错**：本卡的 todo 计数
+  被改了**四次**（8 → 7 → 9 → 12），每次都因跨项交互未纳入换算：第一次是纯算术错
+  （13+7+1=21 剩 7 却写 8）；第二次漏了 ⑦-B1 把 2 条占位断言转为 `it.todo`；第三次漏了
+  对抗审查要求恢复的 3 条 empty-project todo。同期 `inventory-item7.md` 的"35 条"也因
+  单位口径不一致（坐标条目 vs 断言行数）被上下游各算错一次。改进方向：spec/tasks 里的
+  可观测数量一律写成**换算式 + 各项来源**（如 `21 − 10 − 1 + 2 = 12`），禁止写裸数字；
+  且必须显式声明**计数单位**
+- [MCP 可用性][Spectra] 本卡全程**未使用** Spectra MCP——编排器与全部 9 个子代理独立给出
+  同一判断："任务性质是测试文件的文本级比对/删除/断言收紧，不涉及 caller 分析、影响面评估
+  或跨包关系，图谱导航不是自然匹配"。唯一的非测试文件改动（`regen-collector-fingerprint-fixtures.ts`
+  局部加日志）也不构成 blast radius 场景。如实记录为**适用边界信号**而非工具缺陷：
+  测试资产清淤类任务不在 Spectra 的价值区间内
 
 ## 已处理
 

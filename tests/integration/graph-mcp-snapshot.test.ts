@@ -8,22 +8,16 @@
  *
  * 当前阶段（Feature 157 follow-up — P3 T-016b 完成）：
  * - 6 graph MCP tool 双层测试已就位（Layer A × 6 + Layer B MVP × 2）
- * - **Layer B 真实 self-dogfood fixture**（来自 self-dogfood 完整 spectra batch + 归一化）已入库 → 新增 self-dogfood describe 块（Layer B × 2）
  * - 原 Layer B MVP fixture（4 节点 / 5 边手工 GraphJSON）保留作为 normalizer 行为正交验证
- * - 总 snapshot：6 Layer A + 2 Layer B MVP + 2 Layer B self-dogfood = 10
+ * - 总 snapshot：6 Layer A + 2 Layer B MVP = 8
  */
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import { GraphQueryEngine } from '../../src/panoramic/graph/graph-query.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // ───────────────────────────────────────────────────────────
 // Minimum-viable fixture（P0 阶段；P3 替换为 self-dogfood baseline）
@@ -200,62 +194,6 @@ describe('graph MCP tools snapshot — Layer B (calls-enabled, 首版基线)', (
   it('graph_god_nodes top=3 — Layer B degree 受 calls 影响', () => {
     const result = engine.getGodNodes(3);
     expect(result).toMatchSnapshot('layer-b-graph_god_nodes');
-  });
-});
-
-// ───────────────────────────────────────────────────────────
-// filterOutCallEdges normalizer 单测（Codex C-1 验收前置）
-// ───────────────────────────────────────────────────────────
-
-// ───────────────────────────────────────────────────────────
-// Layer B — self-dogfood 真实 fixture（Feature 157 follow-up T-016b）
-// ───────────────────────────────────────────────────────────
-
-const SELF_DOGFOOD_FIXTURE_PATH = path.resolve(__dirname, '__fixtures__/self-dogfood-graph.json');
-const SELF_DOGFOOD_FIXTURE_EXISTS = fs.existsSync(SELF_DOGFOOD_FIXTURE_PATH);
-const SELF_DOGFOOD_GRAPH: GraphJSON | null = SELF_DOGFOOD_FIXTURE_EXISTS
-  ? (JSON.parse(fs.readFileSync(SELF_DOGFOOD_FIXTURE_PATH, 'utf-8')) as GraphJSON)
-  : null;
-
-const describeIfSelfDogfoodFixture = SELF_DOGFOOD_FIXTURE_EXISTS ? describe : describe.skip;
-
-function buildLayerBSelfDogfoodEngine(): GraphQueryEngine {
-  // Type-narrow：describe.skip 已经守卫了运行时（fixture 缺失时 it 不会跑），
-  // 但 SELF_DOGFOOD_GRAPH 类型是 GraphJSON | null，TypeScript 需要这步显式 null-check
-  // 才能让下面 GraphQueryEngine.fromJSON(SELF_DOGFOOD_GRAPH) 通过类型检查
-  if (!SELF_DOGFOOD_GRAPH) {
-    throw new Error('SELF_DOGFOOD_GRAPH fixture missing — describe block 应已 skip');
-  }
-  return GraphQueryEngine.fromJSON(SELF_DOGFOOD_GRAPH);
-}
-
-describeIfSelfDogfoodFixture('graph MCP tools snapshot — Layer B (self-dogfood, calls-enabled, P3 T-016b)', () => {
-  // keyword 选择：实测 GraphQueryEngine.query 用 toLowerCase + split([\s\-_.]+) tokenize，
-  // PascalCase 关键词（如 BatchOrchestrator）会被合并为单 token 不匹配 kebab-case label；
-  // 选 'LanguageAdapter' 既能 tokenize 为 'languageadapter'（命中 69 节点，含产品类 LanguageAdapter）
-  it('graph_query keyword=LanguageAdapter — Layer B 含真实 src/ 节点 + calls 边（W-2 路径限定）', () => {
-    const engine = buildLayerBSelfDogfoodEngine();
-    const result = engine.query('LanguageAdapter', { budget: 30 });
-    expect(result).toMatchSnapshot('layer-b-self-dogfood-graph_query');
-    // 真实数据应含 ≥ 1 src/ 路径节点（避免 tests/fixtures 下的 .py 干扰）
-    const hasSrcNode = result.nodes.some(
-      (n) => typeof n.id === 'string' && (n.id.startsWith('src/') || n.id.includes('/src/'))
-    );
-    expect(hasSrcNode).toBe(true);
-    // Codex W-2：calls 边断言必须限定端点至少有一端落在 src/，避免 fixtures 误满足
-    const hasSrcCallsEdge = result.edges.some((e) => {
-      if (e.relation !== 'calls') return false;
-      const src = typeof e.source === 'string' ? e.source : '';
-      const tgt = typeof e.target === 'string' ? e.target : '';
-      return src.startsWith('src/') || src.includes('/src/') || tgt.startsWith('src/') || tgt.includes('/src/');
-    });
-    expect(hasSrcCallsEdge).toBe(true);
-  });
-
-  it('graph_god_nodes top=5 — Layer B degree 受 calls 影响', () => {
-    const engine = buildLayerBSelfDogfoodEngine();
-    const result = engine.getGodNodes(5);
-    expect(result).toMatchSnapshot('layer-b-self-dogfood-graph_god_nodes');
   });
 });
 

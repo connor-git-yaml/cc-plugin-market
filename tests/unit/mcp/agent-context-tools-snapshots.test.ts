@@ -143,12 +143,9 @@ describe('F170c SC-005 — 兼容性快照测试', () => {
       expect(oldClientStrictSchema.safeParse(oldOnlyResponse).success, 'strict parser 应能解析旧 only response').toBe(true);
     });
 
-    it('真实 handleImpact 产出 topImpacted + nextStepHint 的覆盖位于 agent-context-tools.test.ts（占位说明）', () => {
-      // 本测试是占位：真实 handler 的 success path 含新字段断言由
-      // tests/unit/mcp/agent-context-tools.test.ts 中 F170c SC-003 三路径 describe 块覆盖
-      // 此处不重复 mock graph 数据，避免维护两套 fixture
-      expect(true).toBe(true);
-    });
+    // 真实 handleImpact 产出 topImpacted + nextStepHint 的覆盖位于
+    // tests/unit/mcp/agent-context-tools.test.ts 中 F170c SC-003 三路径 describe 块，
+    // 此处不重复 mock graph 数据，避免维护两套 fixture（原占位 it 已删除，见 F272 ⑦-B1）
   });
 
   // ─── SC-005(f1) Zod schema 不含 .strict() ──────────────

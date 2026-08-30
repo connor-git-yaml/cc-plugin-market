@@ -103,6 +103,26 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
         run: npm run release:check
 
+      # F272 US2：三份类型契约守护资产（F220 orchestrator exports / F222
+      # llm-degraded required / F170c enrichment optional）只 type-only
+      # import src/**，不依赖 dist/，此前它们从未被 CI 校验过——`npm run lint`
+      # 走根 tsconfig.json（exclude 含 "tests"）覆盖不到 tests/type-tests/。
+      #
+      # 位置沿用与 Repo Check / Release Check 同一条 F265 原则（对抗审查
+      # W-7）：治理/校验类步骤必须排在 Test **之后**——红掉会短路整个 job，
+      # 把 vitest 的全部信号一起吞掉，必须先拿到测试结论。此步骤原先误排
+      # 在 Build **之前**（第 5 位），F272 异构对抗审查实证：
+      # tests/type-tests/tsconfig.json 开了 exactOptionalPropertyTypes:
+      # true（根 tsconfig 是 false），比 `npm run lint` 严格得多——一次
+      # lint/build 双绿的生产改动就能让它单独变红，进而通过 `Build` 被
+      # skip 连坐吞掉 `Build Knowledge Graph` / `Test` / `Repo Check` /
+      # `Release Check` 全部下游信号。既然它和 Repo Check / Release Check
+      # 一样只依赖 src/**（不依赖 dist/），就应与它们并列排在 Test 之后，
+      # 用同一条 if 表达式：不受 Test 连坐，但仍以 build + graph 成功为前提。
+      - name: Type Check Tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
+        run: npm run typecheck:tests
+
       # 独立门禁：plugin mjs 测试。npm test 内部用 `vitest run && npm run test:plugins`，
       # 若 vitest 因仓库预存 dist-staleness flaky 失败会短路跳过 test:plugins，
       # 导致 162 个 mjs 测试在 CI 实际不跑。此步骤无论上一步成败都独立运行并报告，

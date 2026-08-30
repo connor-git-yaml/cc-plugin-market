@@ -77,14 +77,16 @@ describe('findSurprisingEdges', () => {
     const communityMap = new Map([['a', 0], ['b', 1], ['c', 0], ['d', 1]]);
     const surprises = findSurprisingEdges(graph, communityMap);
 
-    if (surprises.length >= 2) {
-      // AMBIGUOUS 边应该评分更高
-      const ambiguousEdge = surprises.find(e => e.confidence === 'AMBIGUOUS');
-      const extractedEdge = surprises.find(e => e.confidence === 'EXTRACTED');
-      if (ambiguousEdge && extractedEdge) {
-        expect(ambiguousEdge.score).toBeGreaterThan(extractedEdge.score);
-      }
-    }
+    // a-b 与 c-d 均为跨社区边（crossCommunity=true），两者都会被保留，
+    // 原 `if (surprises.length >= 2)` + 双层 `find` 判空是恒真条件下的多余放水
+    // （见 F272 ⑦-B2）——钉死 length 与两条边的存在性再断言评分关系。
+    expect(surprises.length).toBe(2);
+    const ambiguousEdge = surprises.find(e => e.confidence === 'AMBIGUOUS');
+    const extractedEdge = surprises.find(e => e.confidence === 'EXTRACTED');
+    expect(ambiguousEdge).toBeDefined();
+    expect(extractedEdge).toBeDefined();
+    // AMBIGUOUS 边应该评分更高
+    expect(ambiguousEdge!.score).toBeGreaterThan(extractedEdge!.score);
   });
 
   it('空图返回空列表', () => {
