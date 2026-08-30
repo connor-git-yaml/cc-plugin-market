@@ -10,6 +10,9 @@
  * 而不必真的把 spectra 卸载/挂起；但**至少保留两条不注入的集成用例**，否则"映射表全绿、真实
  * 调用签名早就对不上"这类漂移测不出来。
  *
+ * SC-002 集成用例的「真实 spectra」解析走 `tests/lib/real-spectra-bin.mjs` 的两级回退链
+ * （PATH 全局安装 ∨ 仓内 dist/cli/index.js 构建产物），CI runner 无全局安装时不再恒红（F268）。
+ *
  * 运行方式: node --test plugins/spec-driver/tests/graph-refresh-executor.test.mjs
  */
 
@@ -23,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { executeRefresh } from '../scripts/lib/graph-refresh-executor.mjs';
 import { DEGRADED_REASONS } from '../scripts/lib/graph-consumption-decision.mjs';
+import { resolveRealSpectraBin } from './lib/real-spectra-bin.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MODULE_PATH = path.join(__dirname, '..', 'scripts', 'lib', 'graph-refresh-executor.mjs');
@@ -198,10 +202,13 @@ describe('D8 约束：executor 不得自带第二份 spawn / deadline 实现', (
 
 describe('FR-007 / SC-002 集成用例（不注入 fake，走真实 attemptLocalGraphBuild）', () => {
   it('真实 spectra + 最小 git fixture：真实 graph-only 重建成功并产出可查询图', async () => {
-    const probe = spawnSync('spectra', ['--version'], { encoding: 'utf-8' });
-    if (probe.error || probe.status !== 0) {
+    // 真实 spectra 的解析来源：PATH 全局安装 ∨ 仓内 dist/cli/index.js 构建产物
+    //（全局发布版 ∨ 本仓构建产物，均为真实 spectra CLI；解析细节与边界见该文件头）
+    const bin = resolveRealSpectraBin();
+    if (bin === null) {
       assert.fail(
-        '本机 spectra CLI 不可用，SC-002 的真实刷新证据无法取得——不得以 mock 冒充（请修复安装后重跑）',
+        '本机 spectra CLI 不可用（PATH 全局安装与仓内 dist/cli/index.js 构建产物两级解析均失败），' +
+          'SC-002 的真实刷新证据无法取得——不得以 mock 冒充（请先 npm run build 或安装全局 spectra 后重跑）',
       );
     }
 
@@ -211,7 +218,7 @@ describe('FR-007 / SC-002 集成用例（不注入 fake，走真实 attemptLocal
 
     const outcome = await executeRefresh({
       projectRoot: sandbox,
-      spectraBin: 'spectra',
+      spectraBin: bin,
       refreshPolicy: 'allowed',
       // 刻意不传 attemptLocalGraphBuild：走默认绑定的 canonical 真实实现
     });

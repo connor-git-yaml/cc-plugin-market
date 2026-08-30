@@ -11,6 +11,9 @@
  * 所有用例都在临时 git fixture 项目里跑：审计文件、图文件、状态文件全部落在 sandbox 内，
  * 不触碰本仓 `specs/_meta/graph.json`。
  *
+ * Part 4 的「真实 spectra」解析走 `tests/lib/real-spectra-bin.mjs` 的两级回退链
+ * （PATH 全局安装 ∨ 仓内 dist/cli/index.js 构建产物），CI runner 无全局安装时不再恒红（F268）。
+ *
  * 运行方式: node --test plugins/spec-driver/tests/graph-consumption-cli.test.mjs
  */
 
@@ -29,6 +32,7 @@ import {
   DEGRADED_REASON_HINTS,
 } from '../scripts/lib/graph-consumption-decision.mjs';
 import { finalizeRefreshOutcome } from '../scripts/graph-consumption-cli.mjs';
+import { resolveRealSpectraBin } from './lib/real-spectra-bin.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_DIR = path.join(__dirname, '..');
@@ -1894,14 +1898,19 @@ describe('Part 3 / SC-019 插件整体拷到仓外仍可运行', () => {
 
 describe('Part 4 / SC-002 真实 stale 图上的真实刷新', () => {
   it('真实 spectra + 真实 stale：refreshOk:true、终态 consume-impact、审计恰 1 条 decision 事件', () => {
-    const probe = spawnSync('spectra', ['--version'], { encoding: 'utf-8' });
-    if (probe.error || probe.status !== 0) {
-      assert.fail('本机 spectra CLI 不可用，SC-002 真实刷新证据无法取得——不得以 mock 冒充');
+    // 真实 spectra 的解析来源：PATH 全局安装 ∨ 仓内 dist/cli/index.js 构建产物
+    //（全局发布版 ∨ 本仓构建产物，均为真实 spectra CLI；解析细节与边界见该文件头）
+    const bin = resolveRealSpectraBin();
+    if (bin === null) {
+      assert.fail(
+        '本机 spectra CLI 不可用（PATH 全局安装与仓内 dist/cli/index.js 构建产物两级解析均失败），' +
+          'SC-002 真实刷新证据无法取得——不得以 mock 冒充（请先 npm run build 或安装全局 spectra 后重跑）',
+      );
     }
 
     const baseRef = seedProject(sandbox);
     // 在 C1 上建真图
-    const built = spawnSync('spectra', ['batch', '--mode', 'graph-only'], { cwd: sandbox, encoding: 'utf-8' });
+    const built = spawnSync(bin, ['batch', '--mode', 'graph-only'], { cwd: sandbox, encoding: 'utf-8' });
     assert.equal(built.status, 0, `建图失败：${built.stderr}`);
     const graphPath = path.join(sandbox, GRAPH_REL);
     const commitAtBuild = JSON.parse(fs.readFileSync(graphPath, 'utf-8')).graph.sourceCommit;
@@ -1919,6 +1928,7 @@ describe('Part 4 / SC-002 真实 stale 图上的真实刷新', () => {
       '--phase', 'verify',
       '--base-ref', baseRef,
       '--refresh-policy', 'allowed',
+      '--spectra-bin', bin,
     ]);
 
     assert.equal(result.status, 0, `stderr=${result.stderr}`);
@@ -1944,13 +1954,18 @@ describe('Part 4 / SC-002 真实 stale 图上的真实刷新', () => {
 
 describe('Part 4 / SC-003 additive-only 非 dry-run 下图文件零变化', () => {
   it('纯新增改动 → skip-impact，且图文件 SHA-256 全程不变（不是 dry-run 的被动跳过）', () => {
-    const probe = spawnSync('spectra', ['--version'], { encoding: 'utf-8' });
-    if (probe.error || probe.status !== 0) {
-      assert.fail('本机 spectra CLI 不可用，SC-003 证据无法取得——不得以 mock 冒充');
+    // 真实 spectra 的解析来源：PATH 全局安装 ∨ 仓内 dist/cli/index.js 构建产物
+    //（全局发布版 ∨ 本仓构建产物，均为真实 spectra CLI；解析细节与边界见该文件头）
+    const bin = resolveRealSpectraBin();
+    if (bin === null) {
+      assert.fail(
+        '本机 spectra CLI 不可用（PATH 全局安装与仓内 dist/cli/index.js 构建产物两级解析均失败），' +
+          'SC-003 证据无法取得——不得以 mock 冒充（请先 npm run build 或安装全局 spectra 后重跑）',
+      );
     }
 
     const baseRef = seedProject(sandbox);
-    const built = spawnSync('spectra', ['batch', '--mode', 'graph-only'], { cwd: sandbox, encoding: 'utf-8' });
+    const built = spawnSync(bin, ['batch', '--mode', 'graph-only'], { cwd: sandbox, encoding: 'utf-8' });
     assert.equal(built.status, 0, `建图失败：${built.stderr}`);
     const graphPath = path.join(sandbox, GRAPH_REL);
     const beforeSha = sha256(graphPath);
@@ -1963,6 +1978,7 @@ describe('Part 4 / SC-003 additive-only 非 dry-run 下图文件零变化', () =
       '--project-root', sandbox,
       '--base-ref', baseRef,
       '--refresh-policy', 'allowed', // 刻意给 allowed：证明是矩阵行 1 主动短路，不是没预算
+      '--spectra-bin', bin,
     ]);
 
     assert.equal(result.status, 0, `stderr=${result.stderr}`);
