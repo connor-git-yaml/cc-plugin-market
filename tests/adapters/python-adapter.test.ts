@@ -395,6 +395,173 @@ describe('PythonLanguageAdapter.extractSymbolNodes() (Feature 145)', () => {
       vi.restoreAllMocks();
     }
   });
+
+  // F271 FR-005：Python extraction 第四路产出 lineRange（与 TS/JS 主路径同标准）
+  it('F271 FR-005: 具名函数的 component 节点 metadata.lineRange = { start, end }，数值取自 ExportSymbol span', async () => {
+    const adapter = new PythonLanguageAdapter();
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [
+        {
+          name: 'add',
+          kind: 'function',
+          signature: 'def add(x, y)',
+          jsDoc: null,
+          isDefault: false,
+          startLine: 12,
+          endLine: 19,
+        },
+      ],
+      imports: [],
+      raw: '',
+    } as unknown as CodeSkeleton);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-f271-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'math.py'), 'def add(x, y): return x + y\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+      const componentNode = results[0]!.nodes.find((n) => n.kind === 'component');
+      expect(componentNode).toBeDefined();
+      // key 名铁律：消费端读 .start/.end
+      expect(componentNode!.metadata?.['lineRange']).toEqual({ start: 12, end: 19 });
+      // 既有字段不受影响
+      expect(componentNode!.metadata?.['symbolKind']).toBe('function');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F271 FR-003: ExportSymbol 缺 span 时 lineRange 诚实缺席（不写 { start: undefined }）', async () => {
+    const adapter = new PythonLanguageAdapter();
+    // 降级/异常解析路径可能产出无行号的 export，此时不得写入畸形 lineRange
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [{ name: 'add', kind: 'function', signature: 'def add(x, y)', jsDoc: null }],
+      imports: [],
+      raw: '',
+    } as unknown as CodeSkeleton);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-f271-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'math.py'), 'def add(x, y): return x + y\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+      const componentNode = results[0]!.nodes.find((n) => n.kind === 'component');
+      expect(componentNode).toBeDefined();
+      expect('lineRange' in (componentNode!.metadata ?? {})).toBe(false);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  // F271 对抗审查 F1：同文件内同名 def（条件定义 / try-except 双份 / 遮蔽）撞同一 canonical id。
+  // 修复前逐条 push 多个同 id 节点，靠下游 nodeMap upsert（last-wins）折叠 → lineRange 随机取末条。
+  it('F271 对抗审查 F1: 同名 def 折叠为单节点，lineRange 取所有条目的并集', async () => {
+    const adapter = new PythonLanguageAdapter();
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [
+        { name: 'run', kind: 'function', signature: 'def run()', jsDoc: null, isDefault: false, startLine: 3, endLine: 8 },
+        { name: 'run', kind: 'function', signature: 'def run()', jsDoc: null, isDefault: false, startLine: 20, endLine: 26 },
+      ],
+      imports: [],
+      raw: '',
+    } as unknown as CodeSkeleton);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-f271-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'cond.py'), 'def run(): pass\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+      const componentNodes = results[0]!.nodes.filter((n) => n.kind === 'component');
+      expect(componentNodes).toHaveLength(1);
+      expect(componentNodes[0]!.metadata?.['lineRange']).toEqual({ start: 3, end: 26 });
+      // contains 边同步折叠（同 source/target/relation 的重复边无意义）
+      const containsEdges = results[0]!.edges.filter((e) => e.relation === 'contains');
+      expect(containsEdges).toHaveLength(1);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  // F271 对抗审查 F2/F3：regex 退化条目与畸形 span 一律诚实缺席
+  it('F271 对抗审查 F2: regex fallback 条目（`[REGEX] ` 前缀签名）不写 lineRange', async () => {
+    const adapter = new PythonLanguageAdapter();
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'regex',
+      exports: [
+        {
+          name: 'add',
+          kind: 'function',
+          // tree-sitter-fallback 的退化标记；其 span 恒为签名单行，是假 span
+          signature: '[REGEX] def add(x, y):',
+          jsDoc: null,
+          isDefault: false,
+          startLine: 5,
+          endLine: 5,
+        },
+      ],
+      imports: [],
+      raw: '',
+    } as unknown as CodeSkeleton);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-f271-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'math.py'), 'def add(x, y): return x + y\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+      const componentNode = results[0]!.nodes.find((n) => n.kind === 'component');
+      expect(componentNode).toBeDefined();
+      expect('lineRange' in (componentNode!.metadata ?? {})).toBe(false);
+      // 节点本身仍产出（只是缺席行号），签名保留退化标记供诊断
+      expect(componentNode!.metadata?.['signature']).toContain('[REGEX] ');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F271 对抗审查 F3: 畸形 span（start > end / 0 行号）诚实缺席', async () => {
+    const adapter = new PythonLanguageAdapter();
+    vi.spyOn(adapter, 'analyzeFile').mockResolvedValue({
+      language: 'python',
+      filePath: '',
+      parserUsed: 'tree-sitter',
+      exports: [
+        { name: 'reversed_span', kind: 'function', signature: 'def reversed_span()', jsDoc: null, isDefault: false, startLine: 9, endLine: 2 },
+        { name: 'zero_start', kind: 'function', signature: 'def zero_start()', jsDoc: null, isDefault: false, startLine: 0, endLine: 4 },
+      ],
+      imports: [],
+      raw: '',
+    } as unknown as CodeSkeleton);
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-f271-'));
+    try {
+      fs.writeFileSync(path.join(tmpDir, 'bad.py'), 'def reversed_span(): pass\n', 'utf-8');
+
+      const results = await adapter.extractSymbolNodes(tmpDir);
+      const componentNodes = results[0]!.nodes.filter((n) => n.kind === 'component');
+      expect(componentNodes).toHaveLength(2);
+      for (const node of componentNodes) {
+        expect('lineRange' in (node.metadata ?? {})).toBe(false);
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 // ════════════════════════ scanPyFiles 遵循 .gitignore (F194) ════════════════════════
@@ -841,7 +1008,14 @@ describe('PythonLanguageAdapter .pyi 符号采集面（F250）', () => {
 
   // ── T-overload（FR-011，可选探针）──
 
-  it('T-overload: @overload 同名多签名经写入层 upsert 后按 id 收敛，不产生重复节点/边', async () => {
+  // 【F271 前提迁移】本探针原先钉死"extraction 路本身**不**去重（rawNodes 恰为 2 条）、
+  // 收敛只由写入层 upsert 提供"。F271 对抗审查 F1 把折叠前移到了 extraction 侧——因为
+  // last-wins 的写入层收敛会让同名符号的 lineRange 随机取到末条，必须在能看到全部条目的
+  // 地方取并集。原断言按设计 fail-loud 报出了这次前提变化，故在此显式改写而非放宽：
+  //   - extraction 侧现在恰为 1 条节点，且 lineRange 是两条 overload 的并集（证明第二条
+  //     确实被"合并"而不是被"丢弃"——这是替代旧 `length === 2` 的防假绿锚点）；
+  //   - 写入层 upsert 仍必须幂等收敛（下方 nodeMap/edgeMap 断言原样保留）。
+  it('T-overload: @overload 同名多签名在 extraction 侧折叠为单节点（lineRange 取并集），写入层 upsert 仍幂等收敛', async () => {
     const adapter = new PythonLanguageAdapter();
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f250-overload-'));
     try {
@@ -862,10 +1036,16 @@ describe('PythonLanguageAdapter .pyi 符号采集面（F250）', () => {
       const rawNodes = results.flatMap((r) => r.nodes);
       const rawEdges = results.flatMap((r) => r.edges);
 
-      // 前置事实：extraction 路本身**不**去重，两个 @overload 同名函数在此处恰为 2 条原始条目。
-      // 必须钉死精确条数而非 `>= 1`：若未来解析层自己把 overload 去重了（本探针的前提失效、
-      // 收敛不再由写入层提供），`>= 1` 仍会绿——那正是这条前置断言要防的假绿。
-      expect(rawNodes.filter((n) => n.id === 'ov.pyi::parse').length).toBe(2);
+      // 前置事实（F271 后）：extraction 路按 symbolId 折叠，两个 @overload 恰为 1 条节点。
+      // 精确条数而非 `>= 1`：既防"折叠失效退回重复节点"，也防"折叠过头把不同符号并掉"。
+      const parseNodes = rawNodes.filter((n) => n.id === 'ov.pyi::parse');
+      expect(parseNodes).toHaveLength(1);
+      // 防假绿锚点：折叠必须是"并集"而非"丢弃后来者"——两条 overload 分别在第 3-4 行与
+      // 第 5-6 行，只有真正合并才能得到跨越两者的 span。若退化为 first-wins/last-wins，
+      // end 会停在 4 或 start 会滑到 5，本断言立刻红。
+      expect(parseNodes[0]!.metadata?.['lineRange']).toEqual({ start: 3, end: 6 });
+      // 其余 metadata 仍 first-wins（签名取第一条 overload）
+      expect(parseNodes[0]!.metadata?.['signature']).toBe('def parse(raw: str) -> int');
 
       // 收敛发生在写入层：upsertNode（按 id）/ upsertEdge（按 source|target|relation|directed）
       const nodeMap = new Map<string, GraphNode>();

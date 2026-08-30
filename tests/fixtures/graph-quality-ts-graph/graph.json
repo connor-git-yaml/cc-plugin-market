@@ -82,10 +82,10 @@
     },
     "builder": {
       "formatVersion": 1,
-      "commit": "f7a65aa90eb22f18b2fc9fa2420a36c7c1692456",
-      "dirty": true,
-      "sourceDirty": true,
-      "distSha256": "d7bbc3ffb3ac5c31068b73986c9fc1784cf53cb597a2812b430889877253e62c"
+      "commit": "68b5929cb16e44db5ed3e10f5a5c12ed9c2c37b8",
+      "dirty": false,
+      "sourceDirty": false,
+      "distSha256": "40ba0fdb25184c7e423f41f82bda3036804a57d3305109a9c782e8d93dc25be4"
     }
   },
   "nodes": [
@@ -119,7 +119,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "greeter-service.ts",
-        "exportKind": "function"
+        "exportKind": "function",
+        "lineRange": {
+          "start": 21,
+          "end": 24
+        }
       }
     },
     {
@@ -130,7 +134,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "greeter-service.ts",
-        "exportKind": "class"
+        "exportKind": "class",
+        "lineRange": {
+          "start": 26,
+          "end": 38
+        }
       }
     },
     {
@@ -174,7 +182,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "greeter-service.ts",
-        "exportKind": "interface"
+        "exportKind": "interface",
+        "lineRange": {
+          "start": 13,
+          "end": 15
+        }
       }
     },
     {
@@ -196,7 +208,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "greeter-service.ts",
-        "exportKind": "type"
+        "exportKind": "type",
+        "lineRange": {
+          "start": 17,
+          "end": 19
+        }
       }
     }
   ],

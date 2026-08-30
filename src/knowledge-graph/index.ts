@@ -26,6 +26,7 @@ import {
   type UnifiedNode,
 } from './unified-graph.js';
 import { relativizePosix, relativizeSymbolId } from './relativize.js';
+import { lineRangeFromSymbol, mergeLineRanges, normalizeLineRange } from './line-range.js';
 
 // ───────────────────────────────────────────────────────────
 // Public types & API
@@ -195,6 +196,23 @@ function memberNodeId(symbolId: string, memberName: string): string {
 }
 
 /**
+ * F271 — 同 id 节点二次写入时，把 incoming 的 lineRange 并入 existing（就地修改）。
+ *
+ * 仅在两侧都有合法 span 时并集；一侧缺席就保留另一侧（缺席方多半是 regex 退化条目或
+ * member 节点，没有可信 span 可贡献）。其余 metadata 保持 first-wins，不在此触碰。
+ */
+function mergeNodeLineRange(existing: UnifiedNode, incoming: UnifiedNode): void {
+  const incomingRange = normalizeLineRange(incoming.metadata?.['lineRange']);
+  if (incomingRange === undefined) return;
+  const existingRange = normalizeLineRange(existing.metadata?.['lineRange']);
+  existing.metadata = {
+    ...existing.metadata,
+    lineRange:
+      existingRange === undefined ? incomingRange : mergeLineRanges(existingRange, incomingRange),
+  };
+}
+
+/**
  * 从 CodeSkeleton 派生 module + symbol 节点（默认行为）。
  *
  * 仅当 input.preBuiltNodes 未提供时使用。
@@ -206,15 +224,25 @@ function memberNodeId(symbolId: string, memberName: string): string {
  * 【C1 生产端去重】按 node id 去重。code-skeleton 允许同名 member（getter/setter、
  * 重载），逐 member 写入会产生重复 UnifiedNode；UnifiedGraph snapshot 直接持久化此输出、
  * 不过 GraphJSON nodeMap，故第五路合并去重救不了快照层重复，必须在生产端折叠（FR-011）。
+ *
+ * 【F271 lineRange 并集例外】去重整体仍是 first-wins（不动 F214 身份合同：label/kind/
+ * language/filePath/exportKind 等一律取首条），唯独 lineRange 在同 id 再次写入时取两者并集
+ * ——同名符号（Python 条件定义、TS 函数重载、declaration merging）的后续条目携带的是
+ * 同一逻辑符号的其他片段，整条丢弃会让重载符号的 lineRange 只剩签名行。
  */
 function deriveNodesFromSkeletons(
   codeSkeletons: ReadonlyMap<string, CodeSkeleton>,
 ): UnifiedNode[] {
   const nodes: UnifiedNode[] = [];
-  const seen = new Set<string>();
+  // Map（而非 Set）：命中已存 id 时需要就地并集其 lineRange，故要拿得到已存节点对象。
+  const seen = new Map<string, UnifiedNode>();
   const push = (node: UnifiedNode): void => {
-    if (seen.has(node.id)) return;
-    seen.add(node.id);
+    const existing = seen.get(node.id);
+    if (existing !== undefined) {
+      mergeNodeLineRange(existing, node);
+      return;
+    }
+    seen.set(node.id, node);
     nodes.push(node);
   };
   for (const [filePath, sk] of codeSkeletons) {
@@ -233,6 +261,7 @@ function deriveNodesFromSkeletons(
       // 造 `orchestrator::X` 别名节点会与 stages 真身重复，触碰 F217 duplicate/orphan 门与 F214 canonical ID 拓扑。
       if (exp.kind === 're-export') continue;
       const symbolId = symbolNodeId(filePath, exp.name);
+      const symbolRange = lineRangeFromSymbol(exp);
       push({
         id: symbolId,
         label: exp.name,
@@ -241,7 +270,14 @@ function deriveNodesFromSkeletons(
         filePath,
         // F217 决策 2 增补：透传 exp.kind，供 orphan-check.ts pure-type 例外分类
         // （metadata.exportKind === 'interface' | 'type'）判定依据。
-        metadata: { exportKind: exp.kind },
+        // F271 FR-001/FR-003 增补：透传 AST span 为 lineRange。key 名必须是 { start, end }，
+        // 与消费端 file-nav-tools.ts nodeToRange / agent-context-tools.ts buildDefinition 读取的
+        // key 一致；写成 { startLine, endLine } 会静默读到 undefined 且不报错。
+        // lineRangeFromSymbol 两道闸：regex 退化条目（假单行 span）与畸形数值一律诚实缺席。
+        metadata: {
+          exportKind: exp.kind,
+          ...(symbolRange !== undefined ? { lineRange: symbolRange } : {}),
+        },
       });
       if (exp.members) {
         for (const m of exp.members) {
@@ -252,6 +288,9 @@ function deriveNodesFromSkeletons(
             language: sk.language,
             filePath,
             // F217 决策 2 增补：透传 m.kind（member 级 kind，如 method/property）。
+            // F271 FR-002：member 节点诚实缺席 lineRange —— MemberInfoSchema
+            // （code-skeleton.ts）没有任何行号字段，用所属 class 的 span 兜底会指向
+            // class 头而非 method 体，产出错误定位。宁可缺席，不填近似值。
             metadata: { memberKind: m.kind },
           });
         }

@@ -23,6 +23,11 @@ import { analyzeFallback as treeSitterFallback } from '../core/tree-sitter-fallb
 import { extractCommentsWithTreeSitter } from './tree-sitter-comment-extractor.js';
 import type { CommentRegion } from '../debt-scanner/types.js';
 import { buildModuleGraphFromCodeSkeletons } from '../knowledge-graph/module-derivation.js';
+import {
+  lineRangeFromSymbol,
+  mergeLineRanges,
+  normalizeLineRange,
+} from '../knowledge-graph/line-range.js';
 import { createGitignoreFilter } from '../utils/file-scanner.js';
 import {
   PY_WALK_SURFACE,
@@ -248,23 +253,48 @@ export class PythonLanguageAdapter implements LanguageAdapter {
         confidence: 'EXTRACTED',
       });
 
-      // 每个导出符号（函数/类）产出 component 节点 + containment 边
+      // 每个导出符号（函数/类）产出 component 节点 + containment 边。
+      // F271：同文件内同名 symbol（Python 条件定义 / 遮蔽 / `try-except` 双份 def）会撞同一
+      // canonical id。此前逐条 push 多个同 id 节点，靠下游 nodeMap upsert（last-wins）折叠——
+      // 结果是 lineRange 随机取到最后一条。改为在本文件内按 symbolId 聚合：首条定形状
+      // （label/kind/symbolKind/signature 全部 first-wins），lineRange 取所有条目的并集。
+      const symbolNodeIndex = new Map<string, ExtractionResult['nodes'][number]>();
       for (const symbol of skeleton.exports) {
         // Feature 214（方案 A）：Python symbol ID 收敛为 canonical :: 分隔符，
         // 与 TS/JS symbol ID 统一，使 F193 三处 ::-only 护栏自然生效。
         // :217/:221 contains 边 target 复用 symbolId 变量，自动同步。
         const symbolId = `${relPath}::${symbol.name}`;
-        nodes.push({
+        // F271 FR-005：Python extraction 第四路与主路径同标准产出 lineRange。
+        // 走共享 lineRangeFromSymbol —— extraction 侧 metadata 会被 graph-builder 的
+        // `...existing.metadata` 原样保留（不经 unified 侧的结构校验），畸形值会直达图产物，
+        // 而 FR-003 要求形状严格为 { start: number, end: number }。两类条目诚实缺席：
+        // regex 退化条目（span 恒为签名单行的假值）与不满足 1-indexed 整数区间的畸形值。
+        const symbolRange = lineRangeFromSymbol(symbol);
+        const existingNode = symbolNodeIndex.get(symbolId);
+        if (existingNode !== undefined) {
+          if (symbolRange !== undefined) {
+            const prev = normalizeLineRange(existingNode.metadata?.['lineRange']);
+            existingNode.metadata = {
+              ...existingNode.metadata,
+              lineRange: prev === undefined ? symbolRange : mergeLineRanges(prev, symbolRange),
+            };
+          }
+          continue;
+        }
+        const symbolNode = {
           id: symbolId,
-          kind: 'component',
+          kind: 'component' as const,
           label: symbol.name,
           source_file: relPath,
-          confidence: 'EXTRACTED',
+          confidence: 'EXTRACTED' as const,
           metadata: {
             symbolKind: symbol.kind,
             signature: symbol.signature ?? undefined,
-          },
-        });
+            ...(symbolRange !== undefined ? { lineRange: symbolRange } : {}),
+          } as Record<string, unknown>,
+        };
+        symbolNodeIndex.set(symbolId, symbolNode);
+        nodes.push(symbolNode);
         edges.push({
           source: relPath,
           target: symbolId,

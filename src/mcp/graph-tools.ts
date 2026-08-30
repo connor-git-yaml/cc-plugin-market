@@ -191,6 +191,27 @@ function runGraphTool(
   }
 }
 
+/**
+ * F271 FR-011 — graph_hyperedges 空结果的诚实说明。
+ *
+ * 空数组的两种成因需要区分：过滤条件太窄 vs 本图压根没有超边数据。后者是常态。
+ *
+ * 【文案口径】只说「启用条件」，不说「满足即有」——启用条件是必要非充分：
+ * 即使 full mode + opt-in + 有设计文档来源，batch 触发 budget gate 降级
+ * （batch-orchestrator 的 `!budgetSkipEnrichmentAll` 闸）或 LLM 没提取到协作面时，
+ * 超边依然为空。设计文档来源也不限于 `docs/project/`：source-discovery 把根 README、
+ * 已产出的 module spec、project-context 都算作来源，新项目首次 batch 即可满足。
+ *
+ * 导出为纯函数，便于直接单测而不必驱动完整 MCP handler。
+ *
+ * @param filtered - 本次调用是否带了 label / node_id 过滤条件
+ */
+export function describeEmptyHyperedges(filtered: boolean): string {
+  return filtered
+    ? '过滤条件（label / node_id）未匹配到任何超边；若怀疑本图完全没有超边数据，请去掉过滤参数重试。'
+    : '本图不包含超边数据。hyperedges 的启用条件是：(1) full mode（`spectra batch --mode full`）；(2) 显式 opt-in（`--hyperedges` 或环境变量 `SPECTRA_HYPEREDGES_ENABLED=true`）；(3) 存在任一设计文档来源（根 README 即可，也含 docs/project、已产出的 module spec、project-context）。注意这些条件是必要非充分——即使全部满足，batch 触发预算降级或 LLM 未提取到跨模块协作面时，超边仍为空。空结果不代表本项目无跨模块协作。';
+}
+
 // ──────────────────────────────────────────────────────────
 // 工具注册主函数
 // ──────────────────────────────────────────────────────────
@@ -326,14 +347,14 @@ Typical chained usage:
   // ─── 工具 4: graph_community — 社区节点查询 ───
   server.tool(
     'graph_community',
-    `获取指定社区的节点列表，用于识别代码聚类和模块边界。需先运行 spectra graph 生成含社区信息的图谱。
+    `获取指定社区的节点列表，用于识别代码聚类和模块边界。社区数据的唯一生产者是 \`spectra community\` CLI —— \`spectra batch\` / \`spectra graph\` / \`spectra index\` 均不写入 metadata.community，未跑过 \`spectra community\` 的图查询本工具必然 0 命中。
 
 Use when:
 - 想识别代码的自然聚类 / 模块边界
 - 分析高内聚低耦合结构
 
 Typical chained usage:
-- batch → graph_community → graph_node（聚类后看具体节点）`,
+- spectra community（CLI，先生成社区数据）→ graph_community → graph_node（聚类后看具体节点）`,
     {
       communityId: z.string().describe('社区 ID（来自 graph.json 中节点的 metadata.community 字段）'),
       budget: z
@@ -361,6 +382,7 @@ Typical chained usage:
   server.tool(
     'graph_hyperedges',
     `查询知识图谱中的超边（Hyperedges），每条连接 3+ 节点，表达命名流程或跨模块协作。支持按 label 模糊过滤和节点 ID 精确过滤。
+超边的启用条件：full mode + 显式 opt-in（\`--hyperedges\` 或 \`SPECTRA_HYPEREDGES_ENABLED=true\`）+ 存在设计文档来源（根 README 即可）；这些条件必要非充分——预算降级或 LLM 未提取到协作面时结果仍为空。
 
 Use when:
 - 想看跨多模块的协作流程
@@ -407,7 +429,18 @@ Typical chained usage:
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ hyperedges, total: hyperedges.length, filtered }, null, 2),
+              text: JSON.stringify(
+                {
+                  hyperedges,
+                  total: hyperedges.length,
+                  filtered,
+                  // F271 FR-011：空结果附诚实说明。空数组极易被误读为"本项目无跨模块协作"，
+                  // 但真实成因通常是三重前置条件未满足（返回结构不变，只多一个 message 字段）。
+                  ...(hyperedges.length === 0 ? { message: describeEmptyHyperedges(filtered) } : {}),
+                },
+                null,
+                2,
+              ),
             },
           ],
         };

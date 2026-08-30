@@ -170,7 +170,7 @@ Each generated spec must contain these 9 sections in Chinese:
 - `graph_query`：按关键词查询相关模块和子图（`{ question: "认证模块", depth: 2 }`）
 - `graph_node`：查询指定节点的详情和邻居（`{ id: "src/auth/login.ts" }`）；v2.0 起返回额外的 `semanticEdges` 字段（见下）
 - `graph_path`：查找两个节点间的最短路径（`{ source, target }`）
-- `graph_community`：列出某社区的节点（`{ communityId: "c-0" }`）
+- `graph_community`：列出某社区的节点（`{ communityId: "0" }`）
 - `graph_god_nodes`：识别度数最高的枢纽节点（`{ limit: 10 }`）
 - `graph_hyperedges`：查询超边（Hyperedges），表达 3+ 节点共同参与的架构流程或概念群（见下）
 

@@ -63,6 +63,12 @@
   或跨包关系，图谱导航不是自然匹配"。唯一的非测试文件改动（`regen-collector-fingerprint-fixtures.ts`
   局部加日志）也不构成 blast radius 场景。如实记录为**适用边界信号**而非工具缺陷：
   测试资产清淤类任务不在 Spectra 的价值区间内
+### F271 · 2026-08-31
+状态：待处理
+来源：specs/271-product-surface-sweep/（交付报告反馈节 + 两轮实证）
+- [结果准确性][Spectra collector-fingerprint 护栏] 护栏比较器是 **metadata 盲**的（`compareGraphOnlyStructure` 只比节点 id multiset + 边 multiset）：F271 给 symbol 节点加 `metadata.lineRange` 后，护栏对真实 fixture 判"一致、无需更新"，但"已 bump 重写"路径序列化全量含新字段 → 该场景 digest 断言失配；pinned 资产经 `--init` 冷启动再生（绕过全部拒绝判据、无留痕通道）后护栏 23/23 复绿——**绿着但对 metadata 面漂移零检测力**，同一盲区在对抗修复轮再次印证（资产含新字段、护栏仍绿）。改进方向：①比较维度加"metadata key 集合"档（不比值、只比 key 全集，捕获字段增删而不引入值级噪声）；②`--init` 冷启动写一条再生审计记录到 fixture README 或独立 sidecar（本卡为手工补记）
+- [流程顺畅度][spec-driver 编排] 宿主机反复休眠时长时后台子代理结构性不可靠：本卡 specify ×2、implement 收口 ×2 共 4 次 Task 死于「computer went to sleep / 600s 看门狗」，两次遗留半成品工作树需主线程盘点接手；~10-17 min 的审查型子代理全部存活。改进方向：编排器对 >15 min 的实现型委派考虑分段化（每段自包含可恢复），或在派发前探测宿主电源管理状态
+- [信息完整性][Spectra 图产物] 再现：F260/F263 —— 边/节点 metadata 无 provenance 标记在本卡再次拖累：撞 id 场景两条生产路径（unified/extraction）取不同 lineRange 被静默合流，逐条目归因"这个值来自哪条路径"只能实跑内存态调试；tree-sitter regex 退化条目也只能靠 `[REGEX] ` signature 前缀这种带内标记识别
 
 ## 已处理
 

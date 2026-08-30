@@ -96,7 +96,9 @@ describe.skipIf(SHOULD_SKIP)(
       const content = result.content as Array<{ type: string; text: string }>;
       const text = content[0]?.text ?? '';
       const data = JSON.parse(text) as { code?: string };
-      expect(['internal-error', 'invalid-input']).toContain(data.code);
+      // F271 FR-014：prepare 对不存在路径新增前置校验，确定性返回精确码 file-not-found
+      //（不再塌缩为 internal-error）。本用例守护的不变量不变：统一 envelope + 不漏绝对路径/stack。
+      expect(data.code).toBe('file-not-found');
       assertNoSensitiveData(text);
     }, 20_000);
 

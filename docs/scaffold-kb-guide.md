@@ -14,7 +14,7 @@
 ## When to use this
 
 Spectra already turns the **source-code side** of a project into a queryable knowledge graph
-(17 MCP tools). `scaffold-kb` complements it on the **documentation side**: API references,
+(18 MCP tools). `scaffold-kb` complements it on the **documentation side**: API references,
 quick-starts, error-code tables, version changelogs. The target shape is generic:
 
 - A **vendor** (any SDK / PaaS / library author) builds a KB from their public docs once.

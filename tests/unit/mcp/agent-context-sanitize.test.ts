@@ -115,7 +115,8 @@ describe('F186 T4 — agent-context-tools 错误响应脱敏', () => {
 
     expect(parsed.code).toBe('graph-not-built');
     expect(parsed.message).toBe('graph 未构建');
-    expect(parsed.hint).toBe('请先运行 `spectra batch` 生成图谱');
+    // F271：hint 随恢复提示统一改为 graph-only 措辞；本断言的守护目的不变——hint 是固定文案、不含绝对路径
+    expect(parsed.hint).toBe('请先运行 `spectra batch --mode graph-only` 快速建图（纯 AST · 零 LLM · 无需认证 · <2min）；需要完整 spec 关系图再跑 `spectra batch`');
     assertNoAbsolutePath(serialized);
   });
 

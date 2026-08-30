@@ -98,7 +98,10 @@ export async function runIndexCommand(command: CLICommand): Promise<void> {
   const projectRoot = path.resolve(command.projectRoot ?? process.cwd());
   if (!fs.existsSync(projectRoot)) {
     console.error(`[index] 项目目录不存在: ${projectRoot}`);
-    process.exitCode = 2;
+    // F271 FR-022：目标路径不存在统一用 TARGET_ERROR=1，与 prepare.ts / diff.ts 的同类场景对齐
+    //（此前为 2，是全仓唯一确证的"同语义不同码"冲突）。
+    // 注意：下方索引**执行失败**的退出码仍是 2（不同语义，不在本次收口范围）。
+    process.exitCode = 1;
     return;
   }
 

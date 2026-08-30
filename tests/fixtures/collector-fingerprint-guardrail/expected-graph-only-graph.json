@@ -101,7 +101,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/go/main.go",
-          "exportKind": "function"
+          "exportKind": "function",
+          "lineRange": {
+            "start": 4,
+            "end": 6
+          }
         }
       },
       {
@@ -123,7 +127,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/java/Foo.JAVA",
-          "exportKind": "class"
+          "exportKind": "class",
+          "lineRange": {
+            "start": 6,
+            "end": 10
+          }
         }
       },
       {
@@ -168,6 +176,10 @@
         "metadata": {
           "symbolKind": "function",
           "signature": "def use() -> int",
+          "lineRange": {
+            "start": 5,
+            "end": 6
+          },
           "sourceTag": "extraction",
           "sourceFile": "src/py/consumer.py",
           "confidence": "EXTRACTED",
@@ -196,6 +208,10 @@
         "metadata": {
           "symbolKind": "function",
           "signature": "def mod_fn()",
+          "lineRange": {
+            "start": 2,
+            "end": 3
+          },
           "sourceTag": "extraction",
           "sourceFile": "src/py/mod.py",
           "confidence": "EXTRACTED",
@@ -224,6 +240,10 @@
         "metadata": {
           "symbolKind": "function",
           "signature": "def mod_fn() -> int",
+          "lineRange": {
+            "start": 2,
+            "end": 2
+          },
           "sourceTag": "extraction",
           "sourceFile": "src/py/mod.pyi",
           "confidence": "EXTRACTED",
@@ -252,6 +272,10 @@
         "metadata": {
           "symbolKind": "function",
           "signature": "def make() -> int",
+          "lineRange": {
+            "start": 4,
+            "end": 5
+          },
           "sourceTag": "extraction",
           "sourceFile": "src/py/producer.py",
           "confidence": "EXTRACTED",
@@ -279,7 +303,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/ts/bar.js",
-          "exportKind": "function"
+          "exportKind": "function",
+          "lineRange": {
+            "start": 2,
+            "end": 4
+          }
         }
       },
       {
@@ -301,7 +329,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/ts/bar.jsx",
-          "exportKind": "function"
+          "exportKind": "function",
+          "lineRange": {
+            "start": 2,
+            "end": 4
+          }
         }
       },
       {
@@ -323,7 +355,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/ts/foo.ts",
-          "exportKind": "function"
+          "exportKind": "function",
+          "lineRange": {
+            "start": 3,
+            "end": 5
+          }
         }
       },
       {
@@ -345,7 +381,11 @@
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
           "sourcePath": "src/ts/foo.tsx",
-          "exportKind": "function"
+          "exportKind": "function",
+          "lineRange": {
+            "start": 3,
+            "end": 5
+          }
         }
       }
     ],

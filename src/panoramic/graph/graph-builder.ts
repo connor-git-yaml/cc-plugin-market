@@ -19,6 +19,7 @@ import type { CrossReferenceLink } from '../../models/module-spec.js';
 import { CONFIDENCE_SCORES, mapDocConfidence, mapEvidenceConfidence } from './confidence-mapper.js';
 import type { BuildGraphOptions, ConfidenceLevel, GraphEdge, GraphJSON, GraphNode } from './graph-types.js';
 import { isAbsoluteForeignPath, parseCanonicalSymbolId } from '../../knowledge-graph/relativize.js';
+import { mergeLineRanges, normalizeLineRange, type LineRange } from '../../knowledge-graph/line-range.js';
 import {
   getBuilderStamp,
   isStampProjectionLossless,
@@ -54,6 +55,19 @@ const KIND_MAP: Record<string, GraphNode['kind']> = {
 function undirectedEdgeKey(source: string, target: string, relation: string): string {
   const [s, t] = source <= target ? [source, target] : [target, source];
   return `${s}|${t}|${relation}`;
+}
+
+/**
+ * F271 — 五路合流时 lineRange 的合并规则：两侧都有合法 span 取并集，否则取有值的一侧。
+ *
+ * existing 侧的值来自 extraction 路径（python-adapter），incoming 来自 unified 路径；
+ * 两者同源于 ExportSymbol span，但同名符号在两条路径上可能折叠到不同条目，故不假设等值。
+ */
+function mergeExistingLineRange(existingRaw: unknown, incoming: LineRange | undefined): LineRange | undefined {
+  const existing = normalizeLineRange(existingRaw);
+  if (existing === undefined) return incoming;
+  if (incoming === undefined) return existing;
+  return mergeLineRanges(existing, incoming);
 }
 
 /** 完整 SHA-256 hex（供 inputHash 的内容子哈希使用，最终 inputHash 再统一截 16 位） */
@@ -370,6 +384,11 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
         const memberKind = typeof ugNode.metadata?.['memberKind'] === 'string'
           ? (ugNode.metadata['memberKind'] as string)
           : undefined;
+        // F271 FR-004：lineRange 透传。上游（knowledge-graph/index.ts、python-adapter.ts）
+        // 写入的是 { start, end } 数字对；此处走共享 normalizeLineRange 做同一套结构校验
+        // （整数 / 1-indexed / start <= end），形状不符一律按缺席处理，
+        // 避免把畸形值带进图污染消费端（file-nav-tools 会据此切片源文件）。
+        const lineRange = normalizeLineRange(ugNode.metadata?.['lineRange']);
 
         if (existing) {
           // F217 决策 2 增补 4：已有节点（典型场景：Python extractSymbolNodes 第四路先写入
@@ -378,8 +397,14 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
           // metadata.unifiedKind==='symbol' 判定分母，若不补齐会导致这些顶层符号在 FR-003/
           // FR-005 判定中分母缩水（假绿）。
           // 不覆盖 extraction provenance 字段（sourceTag/sourceFile/symbolKind 等）——
-          // 以下四个 key 是 existing.metadata 里原本不存在的新增 key，spread existing.metadata
+          // 以下五个 key 是 existing.metadata 里原本不存在的新增 key，spread existing.metadata
           // 在前、新 key 在后，不会触碰已存在的 provenance 字段。
+          // F271 FR-004：lineRange 与上述四个 key 不同——extraction 侧（python-adapter）
+          // 也会写 lineRange，故 existing 可能已有值。两侧虽同源于 ExportSymbol span，但
+          // **不保证等值**：同名符号（条件定义 / 遮蔽 / 重载）在两条路径上可能折叠到不同条目，
+          // 静默覆盖会丢掉另一侧的行区间。故两侧都有合法值且不等时取并集（min start / max end），
+          // 只有一侧有值时取那一侧。
+          const mergedLineRange = mergeExistingLineRange(existing.metadata?.['lineRange'], lineRange);
           existing.metadata = {
             ...existing.metadata,
             unifiedKind: ugKind,
@@ -387,7 +412,14 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             ...(callSitesCount !== undefined ? { callSitesCount } : {}),
             ...(exportKind !== undefined ? { exportKind } : {}),
             ...(memberKind !== undefined ? { memberKind } : {}),
+            ...(mergedLineRange !== undefined ? { lineRange: mergedLineRange } : {}),
           };
+          // Delta 再审 W1：merged 为 undefined 时，spread 会把 extraction 侧的畸形原值原样保留
+          //（"不写新 key"≠"剥旧 key"）。本处是全链声明的结构校验收口点，畸形值必须在此剔除，
+          // 否则 start:0 一类值会穿过消费端 typeof number 闸、被 clamp 后伪装成"图陈旧"误诊。
+          if (mergedLineRange === undefined && 'lineRange' in existing.metadata) {
+            delete (existing.metadata as Record<string, unknown>)['lineRange'];
+          }
           continue;
         }
 
@@ -408,6 +440,7 @@ export function buildKnowledgeGraph(options: BuildGraphOptions): GraphJSON {
             ...(isExternal ? { external: true } : {}),
             ...(exportKind !== undefined ? { exportKind } : {}),
             ...(memberKind !== undefined ? { memberKind } : {}),
+            ...(lineRange !== undefined ? { lineRange } : {}),
           },
         });
       }

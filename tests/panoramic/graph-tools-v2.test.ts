@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GraphQueryEngine } from '../../src/panoramic/graph/graph-query.js';
+import { describeEmptyHyperedges } from '../../src/mcp/graph-tools.js';
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 
 // 项目根目录（worktree 根）
@@ -208,5 +209,42 @@ describe('graph_node semanticEdges 字段（通过 GraphQueryEngine.getSemanticE
     expect(mergedResult.node).not.toBeNull();
     expect(mergedResult.neighbors).toBeDefined();
     expect(mergedResult.community).toBeDefined();
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════
+// F271 FR-011 — graph_hyperedges 空结果诚实说明
+// ════════════════════════════════════════════════════════════════════
+
+describe('F271 FR-011 — describeEmptyHyperedges 空结果诚实文案', () => {
+  it('filtered=true：指向过滤条件，并提示去掉过滤参数重试', () => {
+    const msg = describeEmptyHyperedges(true);
+    expect(msg).toContain('过滤条件');
+    expect(msg).toContain('label');
+    expect(msg).toContain('node_id');
+    // 带过滤时不该断言"本图没有超边数据"——那是未经证实的结论
+    expect(msg).not.toContain('本图不包含超边数据');
+  });
+
+  it('filtered=false：列出启用条件，标注必要非充分，并否定"无跨模块协作"的误读', () => {
+    const msg = describeEmptyHyperedges(false);
+    expect(msg).toContain('full mode');
+    expect(msg).toContain('--hyperedges');
+    expect(msg).toContain('SPECTRA_HYPEREDGES_ENABLED');
+    // 设计文档来源不限于 docs/project：README 即可（source-discovery 的多来源）
+    expect(msg).toContain('README');
+    expect(msg).toContain('不代表本项目无跨模块协作');
+  });
+
+  it('filtered=false：不得把启用条件说成充分条件（预算降级 / LLM 未提取时仍为空）', () => {
+    const msg = describeEmptyHyperedges(false);
+    expect(msg).toContain('必要非充分');
+    // 旧文案断言"三者同时满足才生成、缺一即为空"已被代码证伪（第四道 budget gate + LLM 结果）
+    expect(msg).not.toContain('三个前置条件');
+    expect(msg).not.toContain('缺任一条即为空');
+  });
+
+  it('两种输入产出不同文案（不是同一句话套壳）', () => {
+    expect(describeEmptyHyperedges(true)).not.toBe(describeEmptyHyperedges(false));
   });
 });

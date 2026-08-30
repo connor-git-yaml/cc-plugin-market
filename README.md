@@ -67,7 +67,7 @@ spectra batch --mode reading --html       # ~2-5 min for typical project
 /spec-driver:spec-driver-feature  Add OAuth2 login flow
 ```
 
-After step 4, AI coding assistants (Claude Code, Cursor, Codex with MCP) can query your codebase architecture via **17 MCP tools** (6 graph queries + 3 agent-context + 3 file-navigation + 5 pipeline) — **see [How AI Coding Assistants Use Spectra](#-how-ai-coding-assistants-use-spectra) below**.
+After step 4, AI coding assistants (Claude Code, Cursor, Codex with MCP) can query your codebase architecture via **18 MCP tools** (6 graph queries + 3 agent-context + 3 file-navigation + 6 pipeline) — **see [How AI Coding Assistants Use Spectra](#-how-ai-coding-assistants-use-spectra) below**.
 
 ---
 
@@ -81,7 +81,7 @@ A hybrid AST + LLM pipeline that reverse-engineers source code into structured S
 
 - 📝 **9-section module specs** — AST-extracted intent / interface / data / dependencies / quality / lifecycle / etc. (TS/JS interface 100% AST-extracted)
 - 🌐 **Knowledge graph schema v2.0** — `references` / `conceptually_related_to` / `rationale_for` edges + multi-node hyperedges
-- 🔍 **17 MCP tools** — graph queries (community / god-nodes / hyperedges / path) + agent context (impact / context / detect_changes with unified `{code}` error contract + per-call telemetry) + file navigation (token-efficient line-range reads, symbol fuzzy match) + pipeline (prepare / generate / batch / diff / panoramic-query)
+- 🔍 **18 MCP tools** — graph queries (community / god-nodes / hyperedges / path) + agent context (impact / context / detect_changes with unified `{code}` error contract + per-call telemetry) + file navigation (token-efficient line-range reads, symbol fuzzy match) + pipeline (prepare / generate / batch / diff / panoramic-query / server_build_info)
 - 📊 **Interactive `graph.html`** — D3-force visualization with hyperedge convex hulls (self-contained, no server)
 - 💰 **LLM cost transparency** — `--dry-run` cost preview + `--budget N` enforcement + `tokenUsage` in every spec frontmatter
 - ⚡ **Lightweight modes** — `--mode reading` (skip product docs) / `--mode code-only` (skip enrichment, still per-module spec-gen LLM) / `--mode graph-only` (pure AST, zero LLM, no auth)
@@ -133,9 +133,9 @@ The big idea: **Spectra builds a persistent architecture knowledge graph once, t
 | `graph_query` | Keyword + BFS subgraph traversal | `graph_query({ question: "auth module", budget: 30 })` |
 | `graph_node` | Single node details + neighbors | `graph_node({ id: "src/auth/login.ts" })` or `{ keyword: "login" }` |
 | `graph_path` | Shortest dependency path between two nodes | `graph_path({ source: "cli/main.ts", target: "db/connection.ts" })` |
-| `graph_community` | All members of a detected community | `graph_community({ communityId: "c-0" })` |
-| `graph_god_nodes` | Top-degree hub nodes (core abstractions) | `graph_god_nodes({ topK: 10 })` |
-| `graph_hyperedges` | Multi-node participation patterns | `graph_hyperedges({ filter: "ingestion" })` |
+| `graph_community` | All members of a detected community | `graph_community({ communityId: "0" })` |
+| `graph_god_nodes` | Top-degree hub nodes (core abstractions) | `graph_god_nodes({ limit: 10 })` |
+| `graph_hyperedges` | Multi-node participation patterns | `graph_hyperedges({ label: "ingestion" })` or `{ node_id: "src/ingest/run.ts" }` |
 
 Plus the higher-level `panoramic-query` MCP tool with `natural-language` operation (Phase 2 F5):
 

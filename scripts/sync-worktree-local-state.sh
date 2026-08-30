@@ -690,7 +690,7 @@ bootstrap_graph() {
 
   # 既无 worktree 本地图、也未从主仓 copy 到、本地构建也没产出 → 提示构建（FR-008，不报错）
   if [[ ! -e "$graph_target" ]]; then
-    log "graph bootstrap: 主仓与 worktree 均无图（${PRIMARY_ROOT}/${GRAPH_REL}）。请在当前 worktree 运行 \`spectra batch\` 或 \`spectra index\` 构建图。"
+    log "graph bootstrap: 主仓与 worktree 均无图（${PRIMARY_ROOT}/${GRAPH_REL}）。请在当前 worktree 运行 \`spectra batch --mode graph-only\` 构建图（纯 AST · 零 LLM · 无需认证 · <2min）。"
   fi
 
   # 状态文件：无论走到哪条分支都要写——"图不存在"本身也是必须被记录的 provenance 事实

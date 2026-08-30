@@ -131,6 +131,16 @@ describe('Feature 156 W2 — spectra index 全量路径', () => {
     expect(fs.existsSync(snapshotPath(workspaceRoot))).toBe(false);
   });
 
+  // F271 FR-022：目标目录不存在 → TARGET_ERROR=1（此前为 2，与 prepare.ts / diff.ts 同类场景冲突）
+  it('F271: 目标目录不存在 → exit 1（TARGET_ERROR，与 prepare/diff 同类场景一致）', async () => {
+    await runIndexCommand(
+      mkIndexCommand({ projectRoot: path.join(workspaceRoot, 'no-such-dir') }),
+    );
+    expect(process.exitCode).toBe(1);
+    // 早退：不产出 snapshot
+    expect(fs.existsSync(snapshotPath(workspaceRoot))).toBe(false);
+  });
+
   it('--incremental 无 baseline snapshot 时降级为全量索引（fallbackToFull + exit 0）', async () => {
     await runIndexCommand(
       mkIndexCommand({ projectRoot: workspaceRoot, indexIncremental: true }),

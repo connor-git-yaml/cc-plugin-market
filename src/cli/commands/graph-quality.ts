@@ -381,7 +381,7 @@ function buildNextSteps(report: Omit<GraphQualityReport, 'nextSteps'>): string[]
   if (report.legacyAndIgnoredNodes.status === 'fail') {
     if (report.legacyAndIgnoredNodes.legacyHashNodeIds.length > 0) {
       steps.push(
-        `发现 ${report.legacyAndIgnoredNodes.legacyHashNodeIds.length} 个遗留 \`#\` 分隔符 symbol 节点，请运行 \`spectra index\` 或 \`spectra batch\` 在当前 worktree 重建图以升级为 canonical \`::\` 格式。`,
+        `发现 ${report.legacyAndIgnoredNodes.legacyHashNodeIds.length} 个遗留 \`#\` 分隔符 symbol 节点，请运行 \`spectra batch --mode graph-only\` 在当前 worktree 重建图以升级为 canonical \`::\` 格式。`,
       );
     }
     if (report.legacyAndIgnoredNodes.ignoredPathNodeIds.length > 0) {

@@ -10,7 +10,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { readFileSync, statSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepareContext, generateSpec } from '../core/single-spec-orchestrator.js';
 import { runBatch, buildAstGraphOnly } from '../batch/batch-orchestrator.js';
@@ -108,6 +108,28 @@ Typical chained usage:
     },
     withTelemetry('prepare', async (args) => {
       const { targetPath, deep } = args as { targetPath: string; deep: boolean };
+      // F271 FR-014：存在性前置校验。不做此校验时，"路径不存在"会一路抛到
+      // withTelemetry 的无绑定 catch 被脱敏成 internal-error（F177），可诊断信息 100% 丢失。
+      // 刻意只用裸 statSync 判存在性，不复用 resolveSafePath —— 后者强制根内边界
+      // （path-outside-root），会给 prepare 引入历史上不存在的限制（FR-014 明确 MUST NOT）。
+      try {
+        statSync(resolve(targetPath));
+      } catch (err) {
+        // 只有"确实不存在"（ENOENT / 路径中间段不是目录 ENOTDIR）才能声称 file-not-found。
+        // 其余 stat 失败（EACCES 无权限、ELOOP 软链环、ENAMETOOLONG…）路径其实存在，
+        // 报 file-not-found 就是对调用方说谎，会把排查引向"路径写错了"。这些异常原样抛出，
+        // 落回 withTelemetry 的脱敏 internal-error（F177）——含糊，但不撒谎。
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err;
+        // 🔴 脱敏红线（F180 e2e assertNoSensitiveData）：不得把 targetPath 原样回显——
+        // 它常是绝对路径，回显等于泄露调用方机器的文件系统布局。只回显 basename，
+        // 足以让调用方认出是哪个目标，又不暴露上层目录结构。
+        return buildErrorResponse(
+          'file-not-found',
+          `目标路径不存在: ${basename(targetPath)}`,
+          '请检查 targetPath 是否正确（支持绝对路径或相对于当前工作目录的相对路径）',
+        );
+      }
       // 顶层异常由 withTelemetry 捕获 → 脱敏 internal-error（F177）
       const result = await prepareContext(targetPath, {
         deep,

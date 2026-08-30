@@ -61,7 +61,7 @@ src/                               # Spectra TypeScript source
 ├── utils/                         # Utility functions
 ├── installer/                     # Skill installer/uninstaller
 ├── auth/                          # Auth detection & proxy
-├── mcp/                           # Spectra MCP Server — 17 tools (graph queries + agent
+├── mcp/                           # Spectra MCP Server — 18 tools (graph queries + agent
 │                                  #   context + file navigation + pipeline)
 ├── cli/                           # CLI entry & subcommands (incl. graph-quality, scaffold-kb)
 └── scripts/                       # npm lifecycle scripts

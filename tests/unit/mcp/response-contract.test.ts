@@ -162,6 +162,51 @@ describe('Feature 177 — 17 工具统一错误响应契约', () => {
     expect(env!['code']).toBe('internal-error');
   });
 
+  // ── F271 FR-014：prepare 存在性前置校验（新增分支，不改上面既有断言）──
+  it('F271: prepare 对不存在路径返回 file-not-found（不再塌缩为 internal-error）', async () => {
+    const missing = join(emptyRoot, 'does-not-exist');
+    const result = await tool('prepare').handler({ targetPath: missing, deep: false });
+    expect(result.isError).toBe(true);
+    const env = parseEnvelope(result);
+    expect(env).not.toBeNull();
+    expect(env!['code']).toBe('file-not-found');
+    // 诊断信息可用，但只到 basename 为止：F180 脱敏红线（e2e assertNoSensitiveData 禁止
+    // 响应体出现 /Users/... 、/var/folders/... 等调用方绝对路径）优先于"回显完整入参"。
+    // 故这里断言 basename 而非 `missing` 全路径——server.ts 刻意只回显 basename(targetPath)。
+    expect(String(env!['message'])).toContain('does-not-exist');
+    expect(String(env!['message'])).not.toContain(missing);
+    // 前置短路：orchestrator 根本没被调用
+    expect(mocks.prepareContext).not.toHaveBeenCalled();
+  });
+
+  // ── F271 对抗审查 F5：前置校验只对"确实不存在"说 file-not-found ──
+  it('F271 F5: 路径中间段不是目录（ENOTDIR）→ 仍算不存在，返回 file-not-found', async () => {
+    const filePath = join(emptyRoot, 'plain.txt');
+    writeFileSync(filePath, 'x');
+    const result = await tool('prepare').handler({ targetPath: join(filePath, 'sub'), deep: false });
+    expect(result.isError).toBe(true);
+    expect(parseEnvelope(result)!['code']).toBe('file-not-found');
+    expect(mocks.prepareContext).not.toHaveBeenCalled();
+  });
+
+  it('F271 F5: 非 ENOENT/ENOTDIR 的可访问性异常（ENAMETOOLONG）不得谎称 file-not-found，落 internal-error', async () => {
+    // 路径**语法上**存在问题而非"不存在"：报 file-not-found 会把排查引向"路径写错了"，
+    // 而真实原因是文件系统拒绝了这次 stat。含糊的 internal-error 也好过撒谎的 file-not-found。
+    const tooLong = join(emptyRoot, 'a'.repeat(5000));
+    const result = await tool('prepare').handler({ targetPath: tooLong, deep: false });
+    expect(result.isError).toBe(true);
+    expect(parseEnvelope(result)!['code']).toBe('internal-error');
+    expect(mocks.prepareContext).not.toHaveBeenCalled();
+  });
+
+  it('F271: 存在路径但 orchestrator 抛未预期异常 → 仍脱敏为 internal-error（F177 不变量不被前置校验削弱）', async () => {
+    // emptyRoot 存在 → 前置校验放行 → mock reject → 落 telemetry 兜底
+    const result = await tool('prepare').handler({ targetPath: emptyRoot, deep: false });
+    expect(result.isError).toBe(true);
+    expect(parseEnvelope(result)!['code']).toBe('internal-error');
+    expect(mocks.prepareContext).toHaveBeenCalled();
+  });
+
   it('generate 顶层异常错误响应含 code（internal-error）', async () => {
     const result = await tool('generate').handler({ targetPath: '.', deep: false, outputDir: 'specs' });
     expect(result.isError).toBe(true);

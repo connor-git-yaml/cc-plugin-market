@@ -395,3 +395,237 @@ describe('writeKnowledgeGraph — builder 由调用方显式声明（F4 反洗�
     expect(parsed.nodes.map((n) => n.id)).toEqual(['src/a.ts', 'src/z.ts']);
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// F271 FR-004 — UnifiedNode → GraphNode 的 lineRange 透传（两条分支缺一不可）
+// ════════════════════════════════════════════════════════════════════
+
+/** 构造一个只含 unifiedGraph 数据源的最小 build 入参。 */
+function unifiedOnly(
+  nodes: Array<{ id: string; kind?: string; label?: string; filePath?: string; metadata?: Record<string, unknown> }>,
+): { unifiedGraph: { nodes: typeof nodes; edges: never[] } } {
+  return { unifiedGraph: { nodes, edges: [] } };
+}
+
+describe('buildKnowledgeGraph — lineRange 透传（F271 FR-004）', () => {
+  it('分支①（新节点构造）：unified 侧 lineRange 透传到 GraphNode.metadata', () => {
+    const graph = buildKnowledgeGraph(
+      unifiedOnly([
+        {
+          id: 'src/a.ts::namedFn',
+          kind: 'symbol',
+          label: 'namedFn',
+          filePath: 'src/a.ts',
+          metadata: { exportKind: 'function', lineRange: { start: 42, end: 57 } },
+        },
+      ]),
+    );
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::namedFn');
+    expect(node).toBeDefined();
+    // 走的确实是"新节点"路径
+    expect(node!.metadata['sourceTag']).toBe('unified-graph');
+    expect(node!.metadata['lineRange']).toEqual({ start: 42, end: 57 });
+  });
+
+  it('分支②（已有节点补齐）：extraction 侧先写入的同 id 节点被补齐 lineRange', () => {
+    // 第四路（extraction）先写入同 id 节点 → unified 侧进入 `existing` 补齐分支
+    const graph = buildKnowledgeGraph({
+      extractionResults: [
+        {
+          nodes: [
+            {
+              id: 'src/a.ts::namedFn',
+              kind: 'component',
+              label: 'namedFn',
+              source_file: 'src/a.ts',
+              confidence: 'EXTRACTED',
+              metadata: { symbolKind: 'function' },
+            },
+          ],
+          edges: [],
+        },
+      ],
+      ...unifiedOnly([
+        {
+          id: 'src/a.ts::namedFn',
+          kind: 'symbol',
+          label: 'namedFn',
+          filePath: 'src/a.ts',
+          metadata: { exportKind: 'function', lineRange: { start: 7, end: 21 } },
+        },
+      ]),
+    } as Parameters<typeof buildKnowledgeGraph>[0]);
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::namedFn');
+    expect(node).toBeDefined();
+    // 走的确实是"已有节点补齐"路径：extraction provenance 未被覆盖
+    expect(node!.metadata['sourceTag']).toBe('extraction');
+    expect(node!.metadata['symbolKind']).toBe('function');
+    // 补齐分支同样透传 lineRange（不加就静默丢弃）
+    expect(node!.metadata['lineRange']).toEqual({ start: 7, end: 21 });
+  });
+
+  it('负向（Delta 再审 W1）：extraction 侧畸形 lineRange 在合流分支被剔除，不经 spread 存活', () => {
+    // extraction 侧带畸形值（start:0 是 number、能穿过消费端 typeof 闸的最危险形态），
+    // unified 侧无 lineRange → merged 为 undefined。收口点必须剥掉旧 key，
+    // 只"不写新 key"会让畸形原值经 ...existing.metadata 原样进图。
+    const graph = buildKnowledgeGraph({
+      extractionResults: [
+        {
+          nodes: [
+            {
+              id: 'src/a.ts::badSpan',
+              kind: 'component',
+              label: 'badSpan',
+              source_file: 'src/a.ts',
+              confidence: 'EXTRACTED',
+              metadata: { symbolKind: 'function', lineRange: { start: 0, end: 5 } },
+            },
+          ],
+          edges: [],
+        },
+      ],
+      ...unifiedOnly([
+        {
+          id: 'src/a.ts::badSpan',
+          kind: 'symbol',
+          label: 'badSpan',
+          filePath: 'src/a.ts',
+          metadata: { exportKind: 'function' },
+        },
+      ]),
+    } as Parameters<typeof buildKnowledgeGraph>[0]);
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::badSpan');
+    expect(node).toBeDefined();
+    expect(node!.metadata['sourceTag']).toBe('extraction');
+    expect('lineRange' in node!.metadata).toBe(false);
+  });
+
+  it('负向：unified 侧无 lineRange 时，产出节点不含该 key（不写 undefined 占位）', () => {
+    const graph = buildKnowledgeGraph(
+      unifiedOnly([
+        {
+          id: 'src/a.ts::Foo.bar',
+          kind: 'symbol',
+          label: 'Foo.bar',
+          filePath: 'src/a.ts',
+          metadata: { memberKind: 'method' },
+        },
+      ]),
+    );
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::Foo.bar');
+    expect(node).toBeDefined();
+    expect('lineRange' in node!.metadata).toBe(false);
+  });
+
+  it('负向：畸形 lineRange（非数字 / 非对象 / null）一律按缺席处理，不带进图', () => {
+    const graph = buildKnowledgeGraph(
+      unifiedOnly([
+        {
+          id: 'bad/str.ts::a',
+          kind: 'symbol',
+          metadata: { lineRange: 'oops' },
+        },
+        {
+          id: 'bad/partial.ts::b',
+          kind: 'symbol',
+          metadata: { lineRange: { start: 1 } },
+        },
+        {
+          id: 'bad/nonnum.ts::c',
+          kind: 'symbol',
+          metadata: { lineRange: { start: '1', end: '2' } },
+        },
+        {
+          id: 'bad/null.ts::d',
+          kind: 'symbol',
+          metadata: { lineRange: null },
+        },
+      ]),
+    );
+
+    for (const id of ['bad/str.ts::a', 'bad/partial.ts::b', 'bad/nonnum.ts::c', 'bad/null.ts::d']) {
+      const node = graph.nodes.find((n) => n.id === id);
+      expect(node).toBeDefined();
+      expect('lineRange' in node!.metadata).toBe(false);
+    }
+  });
+
+  // F271 对抗审查 F3：结构校验与两个生产端同判据（整数 / 1-indexed / start <= end）
+  it.each([
+    ['start > end', { start: 9, end: 3 }],
+    ['start = 0（非 1-indexed）', { start: 0, end: 5 }],
+    ['负数', { start: -3, end: -1 }],
+    ['非整数', { start: 1.5, end: 4 }],
+  ])('负向：畸形 span（%s）按缺席处理', (_label, lineRange) => {
+    const graph = buildKnowledgeGraph(
+      unifiedOnly([{ id: 'src/a.ts::s', kind: 'symbol', metadata: { lineRange } }]),
+    );
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::s');
+    expect(node).toBeDefined();
+    expect('lineRange' in node!.metadata).toBe(false);
+  });
+
+  // F271 对抗审查 F1：合流分支的两侧不保证等值（同名符号在 extraction / unified 两条路径上
+  // 可能折叠到不同条目），静默覆盖会丢掉一侧的行区间。
+  it('合流：两侧 lineRange 不等时取并集（不是让 unified 侧静默覆盖 extraction 侧）', () => {
+    const graph = buildKnowledgeGraph({
+      extractionResults: [
+        {
+          nodes: [
+            {
+              id: 'src/a.ts::dup',
+              kind: 'component',
+              label: 'dup',
+              source_file: 'src/a.ts',
+              confidence: 'EXTRACTED',
+              metadata: { symbolKind: 'function', lineRange: { start: 3, end: 8 } },
+            },
+          ],
+          edges: [],
+        },
+      ],
+      ...unifiedOnly([
+        {
+          id: 'src/a.ts::dup',
+          kind: 'symbol',
+          label: 'dup',
+          filePath: 'src/a.ts',
+          metadata: { exportKind: 'function', lineRange: { start: 20, end: 26 } },
+        },
+      ]),
+    } as Parameters<typeof buildKnowledgeGraph>[0]);
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::dup');
+    expect(node!.metadata['lineRange']).toEqual({ start: 3, end: 26 });
+  });
+
+  it('合流：unified 侧缺席时保留 extraction 侧已有 lineRange（不被抹掉）', () => {
+    const graph = buildKnowledgeGraph({
+      extractionResults: [
+        {
+          nodes: [
+            {
+              id: 'src/a.ts::only',
+              kind: 'component',
+              label: 'only',
+              source_file: 'src/a.ts',
+              confidence: 'EXTRACTED',
+              metadata: { symbolKind: 'function', lineRange: { start: 5, end: 11 } },
+            },
+          ],
+          edges: [],
+        },
+      ],
+      ...unifiedOnly([
+        { id: 'src/a.ts::only', kind: 'symbol', label: 'only', filePath: 'src/a.ts', metadata: {} },
+      ]),
+    } as Parameters<typeof buildKnowledgeGraph>[0]);
+
+    const node = graph.nodes.find((n) => n.id === 'src/a.ts::only');
+    expect(node!.metadata['lineRange']).toEqual({ start: 5, end: 11 });
+  });
+});

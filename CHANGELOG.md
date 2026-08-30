@@ -3,6 +3,21 @@
 本文件记录 cc-plugin-market（Spectra + Spec Driver）仓库的重要变更。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added — spectra
+
+- **symbol 节点携带行号（Feature 271）** — `specs/_meta/graph.json` 的 symbol 节点 `metadata` 新增 `lineRange`（`{ start, end }`，1-indexed 闭区间）。**旧图不含该字段**，需 `spectra batch --mode graph-only` 重建后才生效。两类条目按设计诚实缺席：member 节点（`Class.method`，抽取层无成员级行号，用 class span 兜底会指向 class 头）与 regex 退化解析条目（span 恒为签名单行的假值）。同名符号（Python 条件定义 / TS 重载 / declaration merging）折叠为单节点时，`lineRange` 取各条目并集。
+- **`view_file(symbolId)` / `context.definition` 首次可用行号（Feature 271）** — 前者按符号行区间切片而非返回默认窗口，后者返回 `lineStart` / `lineEnd`。定位失败时 `view_file` 显式给出 warning：`lineRange-unavailable`（图中无行号，含旧图）、`lineRange-clamped`（图中行号越界，说明图已陈旧）。
+
+### Fixed — spectra
+
+- **`prepare` 对不存在的 `targetPath` 返回 `file-not-found`（Feature 271）** — 此前一路抛到顶层被脱敏成 `internal-error`，可诊断信息全部丢失。仅 `ENOENT` / `ENOTDIR` 判为不存在；其他可访问性异常（无权限、软链环等）仍走 `internal-error`，不谎报路径不存在。
+- **`graph_community` / `graph_hyperedges` 空结果诚实化（Feature 271）** — `graph_community` 区分"本图从未跑过 `spectra community`"与"社区 ID 写错了"；`graph_hyperedges` 空结果附启用条件说明，并明确这些条件必要非充分（预算降级或 LLM 未提取到协作面时仍为空）。
+- **`spectra index` 目标目录不存在的退出码 2 → 1（Feature 271）** — 与全局约定（1 = 目标 / 输入错误）对齐。
+- **恢复提示统一为 `spectra batch --mode graph-only`（Feature 271）** — MCP `graph-not-built` / `graph-format-stale` 及 worktree 同步脚本此前提示 `spectra index` 或 `spectra batch`，前者写的是另一份产物（`.spectra/unified-graph.json`），照做无法解除报错。
+- **文档面批量修正（Feature 271）** — MCP 工具数 17 → 18；`spectra export` 的 `--output` → `--output-dir`；CLI reference 补齐此前完全缺失的 `query` / `index` / `panoramic` / `direction-audit` / `mcp-server` / `scaffold-kb` 子命令；Exit Codes 章节修正"从不调用 `process.exit()`"的绝对化表述（`watch` / `mcp-server` 例外），并补充 `diff` / `direction-audit` 的"检查未通过"也退 1。
+
 ## [4.5.0] — 2026-08-30
 
 > **Spectra v4.5.0 + Spec Driver v4.4.3 — 可信活图链（Trusted Live Graph）与 Codex 运行时治理**

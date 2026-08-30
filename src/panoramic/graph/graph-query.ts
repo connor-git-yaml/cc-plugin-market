@@ -70,7 +70,11 @@ export interface CommunityResult {
    * 文件不存在时 graceful degrade，值为 null
    */
   cohesion: number | null;
-  /** 附加消息（如"社区不存在"或"内聚度不可用"） */
+  /**
+   * 附加消息。0 命中时区分两种成因（F271）：
+   * "本图不包含任何社区划分数据（尚未运行 `spectra community`）" vs
+   * "未找到社区 ID 但图中存在其他社区数据"；另有"内聚度不可用"等降级说明。
+   */
   message?: string;
 }
 
@@ -222,7 +226,7 @@ export function assertGraphFormatNotStale(
       throw new Error(
         `graph-format-stale: 图含 legacy \`#\` 分隔符的 symbol 节点（${node.id}）。` +
           `\n该图由旧版本 Spectra 建立（Python symbol 用 \`#\` 而非 canonical \`::\`）。` +
-          `\n请运行 \`spectra index\` 或 \`spectra batch\` 在当前 worktree 重建图。`,
+          `\n请运行 \`spectra batch --mode graph-only\` 在当前 worktree 重建图（纯 AST · 零 LLM · 无需认证 · <2min）。`,
       );
     }
     // external 节点的绝对路径合法（node_modules / 跨仓引用），跳过
@@ -232,7 +236,7 @@ export function assertGraphFormatNotStale(
       throw new Error(
         `graph-format-stale: 图节点 id 含非当前项目根的绝对路径（${node.id}）。` +
           `\n该图可能 copy 自其他 worktree / 主仓的旧绝对格式。` +
-          `\n请运行 \`spectra index\` 或 \`spectra batch\` 在当前 worktree 重建图。`,
+          `\n请运行 \`spectra batch --mode graph-only\` 在当前 worktree 重建图（纯 AST · 零 LLM · 无需认证 · <2min）。`,
       );
     }
   }
@@ -739,10 +743,19 @@ export class GraphQueryEngine {
    * @returns CommunityResult
    */
   getCommunity(communityId: string, budget?: number): CommunityResult {
-    // 筛选属于该社区的节点
+    // 筛选属于该社区的节点。
+    // F271 FR-008：同时统计图中是否存在**任何**社区数据——0 命中有两种截然不同的成因，
+    // 旧文案统一说"社区不存在"会把"本图压根没跑过 spectra community"误诊成"你给的 ID 错了"，
+    // 让 agent 往错误方向排查。
     const communityNodes: GraphNode[] = [];
+    let anyCommunityDataExists = false;
     for (const node of this.nodeMap.values()) {
-      if (node.metadata['community'] === communityId) {
+      const community = node.metadata['community'];
+      // Delta 再审 I3：与命中判据（=== communityId，string 比较）及 getNode 的
+      // typeof === 'string' 口径镜像——非 string 的 community 值（手编/外部图）不算"存在社区数据"，
+      // 否则会误导用户"检查 ID"而正确 ID 永远查不到。
+      if (typeof community === 'string') anyCommunityDataExists = true;
+      if (community === communityId) {
         communityNodes.push(node);
       }
     }
@@ -752,7 +765,9 @@ export class GraphQueryEngine {
         communityId,
         nodes: [],
         cohesion: null,
-        message: `社区不存在：${communityId}`,
+        message: anyCommunityDataExists
+          ? `未找到社区 ID「${communityId}」：图中存在其他社区数据，请检查 ID 是否正确（社区 ID 是数字字符串，如 "0"、"1"）`
+          : '本图不包含任何社区划分数据（尚未运行 `spectra community`）。社区数据的唯一生产者是 `spectra community` CLI —— `spectra batch` / `spectra graph` 均不写入，请先运行该命令后再查询。',
       };
     }
 

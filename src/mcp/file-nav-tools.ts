@@ -130,14 +130,14 @@ function resolveSymbolRange(
         result: buildErrorResponse(
           'graph-format-stale',
           err.message,
-          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。请运行 `spectra batch --mode graph-only` 在当前 worktree 重建图（纯 AST · 零 LLM · 无需认证 · <2min）。',
         ),
       };
     }
     throw err;
   }
   if (cached === null) {
-    return { ok: false, result: buildErrorResponse('graph-not-built', 'graph 未构建', '请先运行 `spectra batch` 生成图谱') };
+    return { ok: false, result: buildErrorResponse('graph-not-built', 'graph 未构建', '请先运行 `spectra batch --mode graph-only` 快速建图（纯 AST · 零 LLM · 无需认证 · <2min）；需要完整 spec 关系图再跑 `spectra batch`') };
   }
   const { graphData } = cached;
   const canon = canonicalizeSymbolId(symbolId, graphData, { projectRoot });
@@ -216,6 +216,9 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
     let startLine = args.startLine;
     let endLine = args.endLine;
     const warnings: string[] = [];
+    // symbolId 解析出的区间（仅此来源需要 clamp 检测——显式 startLine/endLine 被钳制是调用方
+    // 自己传的越界值，图数据没有可疑之处）
+    let symbolRange: { start: number; end: number } | undefined;
     if (typeof args.symbolId === 'string' && args.symbolId.length > 0) {
       const sym = resolveSymbolRange(projectRoot, args.symbolId);
       if (!sym.ok) return sym.result;
@@ -244,6 +247,13 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
         }
         startLine = sym.start;
         endLine = typeof sym.end === 'number' ? sym.end : sym.start;
+        symbolRange = { start: startLine, end: endLine };
+      } else {
+        // F271 对抗审查 F4：symbol 解析成功、但图里没有可用行号（member 节点诚实缺席
+        // lineRange，或图由 4.5.0 及更早版本构建、根本没有该字段）。
+        // 此前静默走默认窗口/整文件，调用方无从知道"按 symbolId 定位"其实没生效，
+        // 会把开头 N 行误当作该 symbol 的实现。显式 warning 让 agent 能改用行号或重建图。
+        warnings.push('lineRange-unavailable');
       }
     }
 
@@ -252,6 +262,15 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
       return buildErrorResponse('binary-file', '目标为二进制文件，无法按行查看');
     }
     const slice = sliceLines(buf.toString('utf-8'), { startLine, endLine });
+    // F271 对抗审查 F4：symbolId 给出的区间被 sliceLines 钳制到文件实际行数，说明图中的
+    // 行号已经越界（源文件在建图后被缩短）。此时返回的片段与该 symbol 无关，必须让调用方
+    // 知道是图陈旧而不是代码就长这样。
+    if (
+      symbolRange !== undefined &&
+      (slice.startLine !== symbolRange.start || slice.endLine !== symbolRange.end)
+    ) {
+      warnings.push('lineRange-clamped');
+    }
     const data: Record<string, unknown> = {
       path: args.path,
       lines: slice.lines,
@@ -265,7 +284,9 @@ export async function handleViewFile(args: ViewFileArgs): Promise<ToolResult> {
     // lines 不做静默截断（丢代码行会误导）：超 cap 显式返回 payload-too-large，引导缩小区间
     const result = buildSuccessResponse(data, []);
     if (exceedsPayloadCap(result)) {
-      return buildErrorResponse('payload-too-large', '响应过大，请缩小 startLine/endLine 区间');
+      // Delta 再审 I2：declaration merging 等场景的 symbol 并集 span 可能覆盖近整文件，
+      // 只传 symbolId 的调用方收到"缩小区间"指引无从下手 → 补一句改用显式行号分段。
+      return buildErrorResponse('payload-too-large', '响应过大，请缩小 startLine/endLine 区间；若由 symbolId 切片触发（该符号 span 覆盖过大），请改用显式 startLine/endLine 分段查看');
     }
     return result;
   });

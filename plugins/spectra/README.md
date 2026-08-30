@@ -14,9 +14,11 @@
 | `spectra-batch` | `/spectra-batch` | 批量生成整个项目的 Spec（按模块级聚合） |
 | `spectra-diff` | `/spectra-diff` | 检测 Spec 与源代码之间的漂移 |
 
-### MCP Server（4 个工具）
+### MCP Server（18 个工具）
 
-通过 MCP 协议暴露以下工具供 Claude Code 直接调用：
+通过 MCP 协议暴露以下工具供 Claude Code 直接调用，按用途分四组：
+
+**流水线类（6 个）** —— Spec 生成与项目自省
 
 | 工具 | 说明 |
 |------|------|
@@ -24,8 +26,39 @@
 | `generate` | 完整 Spec 生成流水线 |
 | `batch` | 批量 Spec 生成 |
 | `diff` | Spec 漂移检测 |
+| `panoramic-query` | 全景查询（cross-package / architecture-ir / overview / 自然语言问答） |
+| `server_build_info` | MCP server 自省（版本 / commit / 构建元数据） |
 
-> 认证说明：以上工具在缺少 LLM 认证时均可运行 —— `generate` / `batch` / `diff` 会自动降级（无 LLM 语义增强）并继续产出结果；CLI 端可用 `--require-llm` 要求缺少认证时直接失败。
+**上下文导航类（3 个）** —— 改动影响面分析，最常用
+
+| 工具 | 说明 |
+|------|------|
+| `impact` | 某 symbol 的 BFS 影响面与 caller 链（blast radius） |
+| `context` | symbol 360° 上下文：定义 + caller + callee + import |
+| `detect_changes` | git diff → 受影响 symbol 列表 |
+
+**文件查看类（3 个）** —— 省 token 的定向读取
+
+| 工具 | 说明 |
+|------|------|
+| `view_file` | 按行区间或 symbolId 查看文件片段（替代全文读取） |
+| `search_in_file` | 文件内 pattern 搜索 |
+| `list_directory` | 列目录（支持递归深度控制） |
+
+**图谱查询类（6 个）** —— 知识图谱结构检索
+
+| 工具 | 说明 |
+|------|------|
+| `graph_query` | 关键词 + BFS 子图遍历 |
+| `graph_node` | 单节点详情 + 邻居 |
+| `graph_path` | 两节点间最短依赖路径 |
+| `graph_community` | 列出某社区的全部节点（社区数据需先跑 `spectra community` CLI 生成） |
+| `graph_hyperedges` | 跨模块协作超边（启用条件：full mode + 显式 opt-in `--hyperedges` / `SPECTRA_HYPEREDGES_ENABLED=true` + 有设计文档来源（根 README 即可）；条件必要非充分——预算降级或 LLM 未提取到协作面时仍为空） |
+| `graph_god_nodes` | 高耦合枢纽节点（核心抽象） |
+
+> **认证说明**：其中 **12 个查询类工具**（上表的上下文导航 3 个 + 文件查看 3 个 + 图谱查询 6 个）**完全不需要 LLM 认证** —— 它们只读本地知识图谱与源文件，零 LLM 调用。流水线类中 `prepare` 同样是纯 AST、从不调用 LLM，`server_build_info` 只读构建元数据；`generate` / `batch` / `diff` 在缺少 LLM 认证时会自动降级（无 LLM 语义增强）并继续产出结果，CLI 端可用 `--require-llm` 要求缺少认证时直接失败。**`panoramic-query` 例外**：其自然语言问答必须调 LLM，缺少认证时不降级、直接报错（"问答 LLM 调用失败"）。
+>
+> 图谱查询类与上下文导航类工具依赖已建好的知识图谱。若返回 `graph-not-built`，运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · 无需认证 · <2min）建图后重试。
 
 ## 安装方式
 

@@ -129,7 +129,7 @@ function loadGraphOrError(projectRoot: string):
         error: buildErrorResponse(
           'graph-not-built',
           'graph 未构建',
-          '请先运行 `spectra batch` 生成图谱',
+          '请先运行 `spectra batch --mode graph-only` 快速建图（纯 AST · 零 LLM · 无需认证 · <2min）；需要完整 spec 关系图再跑 `spectra batch`',
         ),
       };
     }
@@ -140,7 +140,7 @@ function loadGraphOrError(projectRoot: string):
         error: buildErrorResponse(
           'graph-format-stale',
           err.message,
-          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。运行 `spectra index` 或 `spectra batch` 在当前 worktree 重建图。',
+          '当前 worktree 的图为旧绝对路径格式（可能 copy 自主仓/其他 worktree）。请运行 `spectra batch --mode graph-only` 在当前 worktree 重建图（纯 AST · 零 LLM · 无需认证 · <2min）。',
         ),
       };
     }
@@ -149,7 +149,7 @@ function loadGraphOrError(projectRoot: string):
       error: buildErrorResponse(
         'graph-not-built',
         'graph 未构建',
-        '请先运行 `spectra batch` 生成图谱',
+        '请先运行 `spectra batch --mode graph-only` 快速建图（纯 AST · 零 LLM · 无需认证 · <2min）；需要完整 spec 关系图再跑 `spectra batch`',
       ),
     };
   }

@@ -57,6 +57,27 @@ buildKnowledgeGraph 按 id 去重后 `#2` 对最终图零独占贡献；`BEHAVIO
 bump 记录）——即便本次未改动任何采集器代码行为，fixture 本身作为"护栏验证的行为契约基线"，
 其内容变更同样需要 bump 留痕，防止静默更新 pinned 资产绕开审计链路。
 
+### 再生记录 · 2026-08-31（F271 `lineRange` 新字段，**不 bump** `BEHAVIOR_VERSION`）
+
+F271 给 symbol 节点 `metadata` 新增 `lineRange`（`{ start, end }`，1-indexed 闭区间），
+`expected-graph-only-graph.json` 里的 symbol 节点因此多出该字段，pinned 资产经
+`npm run fixtures:regen:collector-fingerprint -- --init` 冷启动再生。
+
+**`BEHAVIOR_VERSION` 保持 3**：这是节点上多了一个字段，不改变"哪些文件被计入采集面"，
+六类 bump responsibility 均不适用，`extensionSurface` 也未变；与上一节 F259 的情形不同
+（那次是 fixture **输入样本**本身变更，触发 `shouldRejectRegen` 的既定 bump 纪律，本次输入
+文件一字未改）。为防止"新字段掩盖了别的漂移"，再生前后做过一次审计：把新旧资产的
+symbol 节点 `lineRange` 剥掉后深等比较，除该字段外无任何差异——记录在
+`specs/271-product-surface-sweep/verification/implement-notes.md`。
+
+**同轮附带的一处 metadata 取值方向翻转（本护栏语料测不到，显式承认）**：F271 把
+`python-adapter.extractSymbolNodes` 的同名符号折叠从"下游 `upsertNode` last-wins"前移为
+"extraction 侧 first-wins + lineRange 并集"。同一文件内同名 `def`（try-except 双份 / 条件定义）
+的 `signature`/`symbolKind` 终值会从末条翻成首条。本 fixture 无同文件同名样本
+（`mod.py`/`mod.pyi` 是跨文件、id 不同），护栏对此翻转零覆盖——"剥 lineRange 深等"审计只证明
+现有语料无其他漂移，不证明折叠面行为等价。方向已被 `tests/adapters/python-adapter.test.ts`
+的 T-overload 探针钉死（first-wins + 并集，双向 fail-loud）。
+
 ## pinned 期望资产
 
 - `expected-graph-only-graph.json`：`{ fixtureInputHash, graph }`，`graph` 是 `buildAstGraphOnly` 产物。

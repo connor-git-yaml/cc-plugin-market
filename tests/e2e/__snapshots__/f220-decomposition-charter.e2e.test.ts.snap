@@ -210,6 +210,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -232,6 +236,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -647,6 +655,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "engine.py",
           "sourcePath": "engine.py",
@@ -708,6 +720,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "nn.py",
           "sourcePath": "nn.py",
@@ -1161,6 +1177,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "py/engine.py",
           "sourcePath": "py/engine.py",
@@ -1222,6 +1242,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "py/nn.py",
           "sourcePath": "py/nn.py",
@@ -1275,6 +1299,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -1297,6 +1325,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -1762,6 +1794,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "py/engine.py",
           "sourcePath": "py/engine.py",
@@ -1823,6 +1859,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "py/nn.py",
           "sourcePath": "py/nn.py",
@@ -1875,6 +1915,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -1897,6 +1941,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -2604,6 +2652,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "py/engine.py",
           "sourcePath": "py/engine.py",
@@ -2665,6 +2717,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "py/nn.py",
           "sourcePath": "py/nn.py",
@@ -2718,6 +2774,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -2740,6 +2800,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -3189,6 +3253,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "py/engine.py",
           "sourcePath": "py/engine.py",
@@ -3250,6 +3318,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "py/nn.py",
           "sourcePath": "py/nn.py",
@@ -3303,6 +3375,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -3325,6 +3401,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -3797,6 +3877,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -3819,6 +3903,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -4311,6 +4399,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "class",
+          "lineRange": {
+            "end": 6,
+            "start": 1,
+          },
           "signature": "class Value",
           "sourceFile": "py/engine.py",
           "sourcePath": "py/engine.py",
@@ -4372,6 +4464,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "metadata": {
           "confidence": "EXTRACTED",
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 3,
+          },
           "signature": "def make(n)",
           "sourceFile": "py/nn.py",
           "sourcePath": "py/nn.py",
@@ -4425,6 +4521,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "alpha",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 3,
+            "start": 1,
+          },
           "sourcePath": "src/a.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",
@@ -4447,6 +4547,10 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
         "label": "beta",
         "metadata": {
           "exportKind": "function",
+          "lineRange": {
+            "end": 4,
+            "start": 2,
+          },
           "sourcePath": "src/b.ts",
           "sourceTag": "unified-graph",
           "unifiedKind": "symbol",

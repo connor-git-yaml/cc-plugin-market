@@ -79,10 +79,10 @@
     },
     "builder": {
       "formatVersion": 1,
-      "commit": "f7a65aa90eb22f18b2fc9fa2420a36c7c1692456",
-      "dirty": true,
-      "sourceDirty": true,
-      "distSha256": "d7bbc3ffb3ac5c31068b73986c9fc1784cf53cb597a2812b430889877253e62c"
+      "commit": "68b5929cb16e44db5ed3e10f5a5c12ed9c2c37b8",
+      "dirty": false,
+      "sourceDirty": false,
+      "distSha256": "40ba0fdb25184c7e423f41f82bda3036804a57d3305109a9c782e8d93dc25be4"
     }
   },
   "nodes": [
@@ -119,6 +119,10 @@
       "metadata": {
         "symbolKind": "class",
         "signature": "class Value",
+        "lineRange": {
+          "start": 2,
+          "end": 94
+        },
         "sourceTag": "extraction",
         "sourceFile": "micrograd/engine.py",
         "confidence": "EXTRACTED",
@@ -235,6 +239,10 @@
       "metadata": {
         "symbolKind": "class",
         "signature": "class Layer(Module)",
+        "lineRange": {
+          "start": 30,
+          "end": 43
+        },
         "sourceTag": "extraction",
         "sourceFile": "micrograd/nn.py",
         "confidence": "EXTRACTED",
@@ -283,6 +291,10 @@
       "metadata": {
         "symbolKind": "class",
         "signature": "class MLP(Module)",
+        "lineRange": {
+          "start": 45,
+          "end": 60
+        },
         "sourceTag": "extraction",
         "sourceFile": "micrograd/nn.py",
         "confidence": "EXTRACTED",
@@ -331,6 +343,10 @@
       "metadata": {
         "symbolKind": "class",
         "signature": "class Module",
+        "lineRange": {
+          "start": 4,
+          "end": 11
+        },
         "sourceTag": "extraction",
         "sourceFile": "micrograd/nn.py",
         "confidence": "EXTRACTED",
@@ -368,6 +384,10 @@
       "metadata": {
         "symbolKind": "class",
         "signature": "class Neuron(Module)",
+        "lineRange": {
+          "start": 13,
+          "end": 28
+        },
         "sourceTag": "extraction",
         "sourceFile": "micrograd/nn.py",
         "confidence": "EXTRACTED",
@@ -463,7 +483,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "test/test_engine.py",
-        "exportKind": "function"
+        "exportKind": "function",
+        "lineRange": {
+          "start": 28,
+          "end": 67
+        }
       }
     },
     {
@@ -474,7 +498,11 @@
         "sourceTag": "unified-graph",
         "unifiedKind": "symbol",
         "sourcePath": "test/test_engine.py",
-        "exportKind": "function"
+        "exportKind": "function",
+        "lineRange": {
+          "start": 4,
+          "end": 26
+        }
       }
     }
   ],

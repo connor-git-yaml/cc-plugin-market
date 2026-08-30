@@ -92,6 +92,13 @@ const SUPPORTED_FORMAT_VERSION = 1;
  *   适用，本身不改 `extensionSurface`）——是 fixture 本身作为"护栏验证的行为契约基线"，
  *   其内容变更依 `shouldRejectRegen` 判据的既定设计同样需要 bump 留痕，见
  *   `scripts/lib/collector-fingerprint-regen-predicate.mjs` 顶部 Q1 处置说明。
+ *
+ * 判定为**不 bump** 的留痕：
+ * - F271（2026-08-31）为 symbol 节点 metadata 新增 `lineRange`。这是节点上多了一个字段，
+ *   不改变"哪些文件被计入采集面"，六类 responsibility 均不适用，故不 bump。
+ *   `collector-fingerprint-guardrail` 的 pinned 资产经 `--init` 冷启动再生；
+ *   "剥掉 lineRange 后与旧资产深等"的审计见
+ *   `specs/271-product-surface-sweep/verification/implement-notes.md`。
  */
 export const BEHAVIOR_VERSION = 3;
 

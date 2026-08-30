@@ -220,7 +220,7 @@ Batch 完成后，Spectra 自动生成 `specs/_meta/graph.json` 和 `specs/_meta
 列出某个社区（模块聚类）的所有节点，识别代码边界。
 
 - 用途：从社区层面审视架构划分是否合理
-- 典型调用：`graph_community({ communityId: "c-0" })`
+- 典型调用：`graph_community({ communityId: "0" })`
 - 返回：该社区下的全部节点
 
 ### `graph_god_nodes` — 枢纽节点识别

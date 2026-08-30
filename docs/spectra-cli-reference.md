@@ -67,10 +67,10 @@ spectra graph [--directed] [--force]
 spectra community
 
 # Export to Obsidian Vault (bidirectional links + frontmatter + Graph View compatible)
-spectra export --format obsidian --output obsidian-vault/
+spectra export --format obsidian --output-dir obsidian-vault/
 
-# Export to HTML interactive visualization
-spectra export --format html --output docs/graph.html
+# Export to HTML interactive visualization (writes <output-dir>/graph.html)
+spectra export --format html --output-dir docs/
 
 # Watch for file changes and incrementally sync specs and graph
 spectra watch
@@ -88,6 +88,28 @@ spectra scaffold-kb build (--dir <path> | --llms-txt <url>) [--output <kb/>] [--
 spectra scaffold-kb ingest (--url <url> | --file <path> | --minutes <path>) [--project-kb <path>] [--yes|--dry-run] [--no-llm]
 spectra scaffold-kb serve --vendor-kb <path> [--project-kb <path>]
 spectra scaffold-kb query --requirement "<need>" --vendor-kb <path> [--top-k N] [--max-inject-chars N] [--format markdown|json] [--probe]
+spectra scaffold-kb coverage-gap [--format markdown|json]
+spectra scaffold-kb version --package <name> [--project-root <path>] [--sdk-version <ver>] [--format markdown|json]
+spectra scaffold-kb status (--vendor-kb <path> | --project-kb <path>) [--format markdown|json]
+
+# Natural-language Q&A over the knowledge graph (no graph rebuild; reads specs/_meta/graph.json)
+spectra query "<question>" [--budget <N>] [--format json|text]
+
+# UnifiedGraph index — writes .spectra/unified-graph.json (NOT specs/_meta/graph.json).
+# Consumed by panoramic / IDE tooling. To fix a `graph-not-built` MCP error you want
+# `spectra batch --mode graph-only` instead — see Exit Codes / Troubleshooting below.
+spectra index [--watch] [--incremental] [--caller-depth <N>] [--project-root <dir>]
+
+# Panoramic analyses over cached architecture IR
+spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
+
+# Dependency-direction audit (layering violations); snapshot + compare for regression gating
+spectra direction-audit [--graph <path>] [--output <path>] [--format json|text]
+spectra direction-audit --snapshot <path>
+spectra direction-audit --compare-snapshot <path>
+
+# Start the MCP stdio server (exposes the 18 MCP tools to Claude Code / Cursor / Codex)
+spectra mcp-server
 
 # Version (includes build commit suffix when build metadata is present — F186)
 spectra --version
@@ -111,6 +133,14 @@ a strict subset of what `batch` puts in the graph — so running it after `batch
 Since F266 that overwrite is refused by an information-loss guard and the command exits 1
 (see `spectra graph` below).
 
+> **Graphs built before F271 carry no symbol line numbers.** Any `specs/_meta/graph.json`
+> produced by 4.5.0 or earlier lacks `metadata.lineRange` on symbol nodes, so
+> `view_file(symbolId)` cannot slice to the symbol (it returns the default window and warns
+> `lineRange-unavailable`) and `context` reports no `definition` line numbers. Rebuild with
+> `spectra batch --mode graph-only` (pure AST, zero LLM, no auth, <2min) to activate both.
+> Member nodes (`Class.method`) and regex-fallback symbols stay absent by design — the
+> underlying extraction has no trustworthy span for them.
+
 ### Step 2 — Community Detection & Architecture Insights
 
 ```bash
@@ -126,7 +156,7 @@ Outputs `_meta/GRAPH_REPORT.md` containing:
 ### Step 3 — Export to Obsidian Vault
 
 ```bash
-spectra export --format obsidian --output obsidian-vault/
+spectra export --format obsidian --output-dir obsidian-vault/
 ```
 
 Each spec becomes an Obsidian note with:
@@ -142,7 +172,7 @@ Open the exported vault in Obsidian:
 ### Step 4 — HTML Interactive Visualization
 
 ```bash
-spectra export --format html --output docs/graph.html
+spectra export --format html --output-dir docs/   # writes docs/graph.html
 # or generate inline during batch:
 spectra batch --html
 ```
@@ -202,7 +232,7 @@ migrate explicitly: `spectra install --remove --git && spectra install --git`.
 ### Worktree Bootstrap & Keepalive (Feature 193)
 
 In a **multi-worktree workflow** (one git worktree per feature), each new worktree starts
-without a `specs/_meta/graph.json`, so the 17 Spectra MCP tools (`impact` / `context` / …)
+without a `specs/_meta/graph.json`, so the 18 Spectra MCP tools (`impact` / `context` / …)
 are unavailable until a graph exists. Since Feature 193, graph node/edge ids and the
 incremental snapshot are **relative + POSIX-normalized**, making the graph portable across
 worktrees. This enables two things:
@@ -421,6 +451,46 @@ metadata (`.spectra-build-meta.json`) is present (Feature 186) — this lets you
 binaries of the same package version apart (e.g. a stale global install vs. a fresh build).
 In a dev environment that has not run the build-stamping step, it gracefully falls back to the
 bare version string.
+
+## Exit Codes
+
+By convention `spectra` sets `process.exitCode` and lets the process drain rather than calling
+`process.exit()`. The exceptions are the long-running commands, which must terminate an active
+event loop: `spectra watch` (`cli/commands/watch.ts`) and `spectra mcp-server`
+(`cli/commands/mcp-server.ts`) both call `process.exit()` on shutdown. (The hook script emitted
+by `hooks/hook-installer.ts` also contains a `process.exit(0)`, but that lives inside an embedded
+`node -e` snippet run by the hook — it is not the `spectra` CLI process.)
+
+The global convention is **0 = success, 1 = target/input error *or* "check did not pass",
+2 = fatal / cannot proceed**, with one documented exception (row 7).
+
+| # | Code | Meaning | Where |
+|---|------|---------|-------|
+| 1 | `0` | Success | — |
+| 2 | `1` | Target path does not exist / invalid target (`TARGET_ERROR`) | `error-handler.ts` (`EXIT_CODES.TARGET_ERROR`); used by `prepare`, `diff`, and `index` |
+| 2b | `1` | **Check did not pass** — reusing `TARGET_ERROR` as a gate signal, *not* a path error: `spectra diff` exits 1 when it detects HIGH **or MEDIUM** drift (only-LOW exits 0), and `spectra direction-audit` exits 1 when a compared snapshot shows new/increased layering violations | `cli/commands/diff.ts`, `cli/commands/direction-audit.ts` |
+| 3 | `2` | LLM / API error (`API_ERROR`) | `error-handler.ts` (`EXIT_CODES.API_ERROR`) |
+| 4 | `2` | Catch-all for any unclassified error (shares `API_ERROR` despite the name) | `error-handler.ts` — final `return` of the error handler |
+| 5 | `2` | Uncaught fatal error at the top level | `cli/index.ts` |
+| 6 | `2` | Index execution failed (`spectra index`, full or incremental) | `cli/commands/index.ts` |
+| 7 | `2` | Succeeded **with gaps** — some sources failed, successful parts were still written | `cli/commands/scaffold-kb.ts` |
+| 8 | `3` | Budget gate cancelled the run (`BUDGET_EXCEEDED`) — lets CI distinguish "0 modules, fine" from "stopped by budget" | `error-handler.ts` (`EXIT_CODES.BUDGET_EXCEEDED`); `spectra batch --budget N --on-over-budget cancel` |
+
+### Known exception — `spectra graph-quality`
+
+`graph-quality` uses its own, **independent** semantic domain and its 1/2 direction is the
+**reverse** of the table above:
+
+| `overallVerdict` | Exit code |
+|---|---|
+| `pass` / `pass-with-warnings` | `0` |
+| `fail-strong-invariant` (a real quality failure) | `1` |
+| `cannot-assess` (the gate could not evaluate the graph at all) | `2` |
+
+This is intentional and **not** normalised: the behaviour is locked in by Feature 266 tests,
+and within `graph-quality` the ordering reads as "worse evidence ⇒ higher code" (a failure you
+can trust is more actionable than a verdict you cannot compute). Script against
+`graph-quality`'s codes using this table, not the global convention.
 
 ## See Also
 
