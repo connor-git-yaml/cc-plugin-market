@@ -149,6 +149,73 @@ describe.skipIf(SHOULD_SKIP)(
       expect(names.length).toBeGreaterThanOrEqual(12);
     }, 15_000);
 
+    /**
+     * F265 G0-3 / T021 — A 路（`serverInfo.description`）经**官方 SDK 客户端**解析后仍可见。
+     *
+     * 🔴 这条断言是本卡的"防死功能"证据：probe P1 实测 `ImplementationSchema` 是 `z.object()`
+     * （strip 未知键），往 serverInfo 塞 `commit` / `dirty` 自定义键会被客户端静默丢弃。
+     * 因此必须用 `client.getServerVersion()`（SDK 解析后的 serverInfo）取值，
+     * 只看服务端"发了什么"不算数。
+     */
+    it('T-A6: serverInfo.description 承载 build 串，且经官方 SDK 客户端解析后仍可见（F265 FR-018 A 路）', () => {
+      const serverInfo = client.getServerVersion() as
+        | { name?: string; version?: string; description?: string; commit?: unknown; dirty?: unknown }
+        | undefined;
+      expect(serverInfo).toBeTruthy();
+      expect(serverInfo?.name).toBe('spectra');
+      expect(typeof serverInfo?.description).toBe('string');
+      // 形态：`spectra vX.Y.Z` 或带 build commit 后缀的 `spectra vX.Y.Z (abcdef0)`
+      expect(serverInfo?.description).toMatch(/^spectra v\d+\.\d+\.\d+( \([0-9a-f]{7}\))?$/);
+      // 反向锚定死功能：自定义键即便服务端写了也不可能穿过客户端 schema，
+      // 故任何依赖 serverInfo.commit 的实现都是错的（此处断言它恒不可用）
+      expect(serverInfo?.commit).toBeUndefined();
+      expect(serverInfo?.dirty).toBeUndefined();
+    }, 15_000);
+
+    /**
+     * F265 G0-3 / T022 — B 路（`server_build_info` 工具）+ 宪法 XIII 向后兼容。
+     *
+     * 既有 17 个工具的名字逐一断言仍在；`impact` / `context` 的 inputSchema 序列化后
+     * 与改动前逐字相同（本卡只新增第 18 个工具，不得改动任何既有工具的 schema）。
+     */
+    it('T-A7: server_build_info 工具可调用，且既有 17 工具 schema 零变化（F265 FR-017/FR-018 B 路）', async () => {
+      const EXISTING_17 = [
+        'prepare', 'generate', 'batch', 'diff', 'panoramic-query',
+        'graph_query', 'graph_node', 'graph_path', 'graph_community', 'graph_hyperedges', 'graph_god_nodes',
+        'impact', 'context', 'detect_changes',
+        'view_file', 'search_in_file', 'list_directory',
+      ];
+      const listed = await client.listTools();
+      const names = listed.tools.map((t) => t.name);
+      expect(names).toHaveLength(18);
+      for (const name of EXISTING_17) expect(names).toContain(name);
+      expect(names).toContain('server_build_info');
+
+      // 代表性工具的 inputSchema 逐字锚定（改动前实测值，防止新增工具时误改既有 schema）
+      const schemaOf = (name: string) =>
+        JSON.stringify(listed.tools.find((t) => t.name === name)?.inputSchema);
+      expect(schemaOf('impact')).toBe(
+        '{"type":"object","properties":{"target":{"type":"string","description":"symbol id (e.g. \\"micrograd/engine.py::Value.__add__\\")"},"depth":{"type":"integer","minimum":0,"maximum":20,"description":"BFS depth (default 2, max 5; 超出 clamp)"},"minConfidence":{"type":"number","minimum":0,"maximum":1,"description":"confidence 阈值 (default 0.65)"},"direction":{"type":"string","enum":["upstream","downstream","both"],"description":"BFS 方向 (default upstream)"},"budget":{"type":"integer","minimum":0,"maximum":10000,"description":"节点上限 (default 200, max 1000; 超出 clamp)"},"projectRoot":{"type":"string","description":"default cwd"}},"required":["target"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}',
+      );
+      expect(schemaOf('context')).toBe(
+        '{"type":"object","properties":{"symbolId":{"type":"string","description":"symbol id"},"include":{"type":"array","items":{"type":"string","enum":["callers","callees","imports","related-spec"]},"description":"字段子集 (default [\\"callers\\",\\"callees\\",\\"imports\\"])"},"projectRoot":{"type":"string"}},"required":["symbolId"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}',
+      );
+
+      // 零参数调用：返回体只含 { version, commit, dirty } 三个键（不叠加任何响应包络）
+      const result = await client.callTool({ name: 'server_build_info', arguments: {} });
+      const content = result.content as Array<{ type: string; text: string }>;
+      const data = JSON.parse(content[0]?.text ?? '{}') as {
+        version?: unknown; commit?: unknown; dirty?: unknown;
+      };
+      expect(Object.keys(data).sort()).toEqual(['commit', 'dirty', 'version']);
+      expect(data.version).toBe(
+        (JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf-8')) as { version: string }).version,
+      );
+      // 缺 build meta 时是 null（而非省略键）——消费方只需判空值
+      expect(data.commit === null || typeof data.commit === 'string').toBe(true);
+      expect(data.dirty === null || typeof data.dirty === 'boolean').toBe(true);
+    }, 20_000);
+
     it('T-A2: impact tool — graph-not-built 错误（tempRoot 无 graph, 绝对 projectRoot 指向有 graph 的 tempRoot）', async () => {
       // 先验证 graph-not-built 错误路径（用不存在 graph 的 cwd）
       const emptyDir = mkdtempSync(join(tmpdir(), 'spectra-160-no-graph-'));

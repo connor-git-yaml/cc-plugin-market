@@ -3,6 +3,167 @@
 本文件记录 cc-plugin-market（Spectra + Spec Driver）仓库的重要变更。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [4.5.0] — 2026-08-30
+
+> **Spectra v4.5.0 + Spec Driver v4.4.3 — 可信活图链（Trusted Live Graph）与 Codex 运行时治理**
+>
+> 区间 `0ae3eb70..HEAD`（71 commit，其中改动 `src/` 的 18 个）。本条目同时追认区间内 Spec Driver 的 v4.4.1 / v4.4.2 两次 bump——它们与 v4.4.3 一起随本次发布首次对外可见。
+>
+> **发布口径说明**：4.4.0 的 npm tarball 实际打包自 `0ae3eb70`（npm registry `gitHead` 字段），而非 bump 版本号的那次 commit（`0d292e3b`），两者相差 9 个 commit。本区间因此以 `0ae3eb70` 为起点计数，而不是 `0d292e3b`。
+
+### Added — spectra
+
+- **实例方法调用边解析（Feature 260）** — 接收者类型推断整环补齐 + D2b 六条件受控出边，method 类调用边覆盖率由 29.5% 提升到 45.6%（该数值取自 F260 交付的覆盖率重算器输出）。
+- **`.mjs` / `.cjs` 纳入知识图谱采集面（Feature 243）** — 四处扩展名脱节同步收口，此前这两类文件在采集面被整体漏掉。
+- **`.pyi` 类型 stub 纳入 Python 符号采集面（Feature 250）** — 与 `.py` 走双路 parity 收敛，并加双精度护栏。
+- **collector 指纹参与 freshness 判定（Feature 249）** — 图产物版本化 + 采集面单一事实源收敛 + 双轨重建护栏；指纹不一致时图被判 stale 而非误判 fresh。
+- **图产物 builder build stamp（Feature 261）** — 图产物记录生成它的 builder 版本戳。该戳**只可见、不参与判定**（本卡明确裁决，避免它变成第二套隐式门禁）。
+- **KB coverage-gap 与 freshness 状态（Feature 241 批 2 / 批 3）** — KB no-hit telemetry + redaction + 最小出现阈值聚合（E1）、KB 版本推断（E2）、KB freshness 状态（E3）。
+- **CODEX_HOME 统一 helper 与消费点迁移（Feature 240 R1 Phase A）** — 此前各消费点各自拼 Codex 家目录路径。
+
+### Fixed — spectra
+
+- **TS/JS 调用边抽取覆盖缺口（Feature 242）** — 归属回退链（三级）+ 动态 `import()` 绑定修复。
+- **假边面三处收口** — commonjs-require 兜底别名产生的假边（Feature 259）；receiver 类型定位在"本地导出分支遮蔽"形态下产生的假边（Feature 263，判据终版为 `topLevel >= 1 && nested === 0` 的对称形式）；F259 同批补齐 collector 护栏在 Python 侧的独占覆盖。
+- **图事实源三处失真（Feature 258）** — gitignore 三态 oracle（`git check-ignore` 为权威源）+ base-ref 解析失败改为硬失败（此前静默降级）+ 消费侧口径对齐（`matchSemantics`）。
+- **嵌套 `.gitignore` 覆盖的文件不再入图且永判 fresh（Feature 255）** — 采集侧 gitignore oracle 收敛到 git 事实源（`git ls-files` 预取忽略清单 + tracked 豁免，与 `git status` 同源）。
+- **图消费决策白名单与图采集面失真（Feature 254）** — 改为以图自述 fingerprint 面优先 + SSoT 锚定 fallback，替换原先的静态常量白名单。
+- **取扩展名双实现收敛（Feature 248）** — 收敛为 `collector-extname` 零依赖叶子模块 + 语义合同锚定。
+- **collector-surface 同族深收敛（Feature 252）** — 分派语义化 + producer matcher 收敛 + 指纹谓词类型收紧。
+- **`.mjs` 入口守卫 symlink 静默空转（Feature 246）** — 23 处收敛到共享 helper，并修复 Codex 侧的反向误判。
+- **`graph-bootstrap-status` 内嵌 `isInvokedDirectly` 双实现漂移（Feature 247）** — 收敛到 F246 的共享 helper。
+- **spec-driver wrapper 的 `delegated:` 前缀逃逸与门禁 fail-open（Feature 238）** — `modelFlagMode` 改为原子决策矩阵 + proxy 判定去前缀化；模型字面量 grep 门禁把用户表面文案 tier 化（33 处 → 0）。
+
+### Added / Fixed — spec-driver
+
+- **v4.4.3（本次）**
+  - **fix 依从性门禁两处 fail-open 收口（Feature 257）** — 写入见证门槛 + 推迟通道单调上界，闭合"在途陈旧度可被刷新"造成的无界推迟。
+  - **图事实源与门禁消费侧口径同步（Feature 258）** — 与 spectra 侧同批改动的 spec-driver 消费端。
+  - **implement 每 Phase 落 notes 的默认约定（Feature 261）**。
+  - **Codex hooks 权限位保全 + 三处误报收口（Feature 262）** — 保全判据的比较语义双条件豁免、谓词派生的独立性消解改为 warning 可见化、多行串 tracker 改单遍扫描器。
+- **v4.4.2（区间内已 bump，本次首度对外）** — fix 依从性判定器两处误报盲区收窄（Feature 256）：特性目录被复合命令重编号后的磁盘侧 short-name 重锚定；在途委派第三态（有界推迟，缺口白名单 + `DEFER_LIMIT=3` 两道闸门）。
+- **v4.4.1（区间内已 bump，本次首度对外）** — PreToolUse / PostToolUse 两个 hook 的 payload 嵌套取值缺陷修复（Feature 245），及取值修复后被激活的三个隐性缺陷同批处置。
+- **worktree / local 运行态治理（Feature 239）** — `.worktreeinclude` 内容合同 + node/bash 双解析器对拍、8 类 containment 拒绝、graph provenance 重构（状态文件 / freshness adapter / 进程组收口）、hook 失败可见不阻断、`repo:check` 第 14 检查族。
+- **Codex hooks 合同（Feature 240 R2 A3）** — 两层门禁 + 从 canonical 派生 + 非破坏性合并写入；transcript 方言识别遵循"判不了就大声报"。
+- **四方一致性诊断 CLI（Feature 240 R1 A4③）** — `codex:doctor` + `codex:inventory`。
+- **测试期 `dist` 竞写收口（Feature 251）** — 构建收拢到 vitest `globalSetup` 单点 + 内容指纹新鲜度判据。
+- **F220 stage 守护对共置测试的结构性误报（Feature 244）** — 豁免收窄 + 三层合同闭环。
+- **被 gitignore 吞掉的 fixture 样本入库 + 存在性前置守卫（Feature 253）**。
+
+### 发布工程（Feature 265 — M10 Gate 0）
+
+- **CHANGELOG 补齐** — 追认 `[4.2.0]` / `[4.3.0]` / `[4.4.0]` 三个已发布但从未写入 CHANGELOG 的版本，并处置遗留的 `[Unreleased]` 段。
+- **发布断层预警判据** — 新增 `scripts/lib/publish-gap-check.mjs`，以 npm registry 的 `gitHead` 为事实源计算"HEAD 领先已发布版本多少个 `src/` commit"（量测面**仅** `src/`，不含 `plugins/` 等其它发布路径，该边界写在 warning 文案与 evidence 里），N ≥ 5 时在 `release:check` 输出**非阻断 warning**。判据返回值结构上不含 `errors` 键，warning 永远不会把 `release:check` 弄红。任何一种"算不出来"（registry 不可达 / 包不存在 E404 / 无 `gitHead` / 返回体不可解析 / git 不可用 / 量测路径在 HEAD 上不存在 / commit 在本地不可达 / 计数读不出）都落各自 `reason` 枚举的可见 `indeterminate`，不静默跳过、不共用一句会指错排查方向的文案。走测试注入入口 `SPECTRA_PUBLISHED_REF` 时**无条件**追加一条 override 提示 warning——注入值同样能造出"绿"，那个绿必须能被一眼认出来。
+- **CI 接入治理链** — `.github/workflows/ci.yml` 的 Checkout 改为 `fetch-depth: 0`（浅克隆会让已发布 `gitHead` 恒不可达、判据恒 indeterminate），并在建图与 `Test` 之后插入 `repo:check` 与 `release:check` 两步（排在 `Test` 之后是为了不让治理红吞掉整个 vitest 信号）。`Repo Check` 前置一行 `test -f specs/_meta/graph.json` 哑守卫：`graph-quality` 族在缺图时是**静默跳过、CI 照绿**，步骤顺序是它真正跑起来的唯一保障。`release:check` 的 warning 在 GitHub Actions 下额外发一条 `::warning::` annotation，避免"判据坏死"与"没有 warning"在绿灯下观感相同。
+- **MCP 版本自省与 doctor commit 比对** — MCP server 的 `serverInfo.description` 承载一行人可读 build 串，机器可读的结构化自省走新增的 `server_build_info` 工具（返回 `{version, commit, dirty}`，与 `--version` 同源解析）；`codex:doctor` 的四方一致性检查新增基于 commit 的比对维度，且**感知 dirty**——commit 相同但 build 编自未提交的工作树时落 warning 而非 ok。commit 原串不进入报告正文、日志或返回体，跨出比对函数的只有 `match|mismatch|absent|unreadable` 四个枚举值。doctor 探的是 **PATH 上的 `spectra` 二进制**（`probeTarget: 'path-binary'`），不是 MCP 客户端此刻连着的进程——该边界写进了 summary、details 与 remediation 文案。
+- **度量基线工具** — 新增 `scripts/adoption-census.mjs`（只读扫描本机 transcript，聚合 Spectra MCP 工具调用次数，输出到 stdout 不写文件）与 `docs/design/f265-graph-quality-rerun-plan.md`（图质量复测冻结口径）。**本次只交付尺子，不产出任何数字结论**。
+
+---
+
+## [4.4.0] — 2026-08-02
+
+> **Spectra v4.4.0 + Spec Driver v4.4.0 — Trusted Live Graph 底座 + 依从性门禁八轮收敛 + CI 门禁重建**
+>
+> 区间 `fbb0b88a..0d292e3b`（163 commit）。发布日期取自 npm registry 的 `time` 字段。**实际发布的 tarball 打包自 `0ae3eb70`**（npm registry `gitHead`），比 bump commit `0d292e3b` 晚 9 个 commit——本段描述以 bump 区间为准，`0d292e3b..0ae3eb70` 之间的 9 个 commit 计入 `[4.5.0]` 段。[本条为本次补写时的口径声明]
+
+### Added — spectra
+
+- **Trusted Live Graph 底座（Feature 214）** — canonical symbol ID（统一 `::` 分隔）+ 两级 containment + semantic-diff 门禁 + e2e pinned fixture。
+- **图质量门机器化（Feature 217）** — 图产物质量判据进入 `repo:check`。
+- **Spec Drift 检测生产化（Feature 219）** — `drift link` / `check` / `unlink` CLI + lock 持久化、`repo:check` 第 13 检查族接线（含 TOCTOU / symlink 收口）、canonical AST 指纹改用 `getChildren` 全 token 流。
+- **scaffold-kb 知识库（Feature 190 / 191 / 192）** — MVP 落地、research 预查注入（跨插件确定性 KB 注入）、实体层 ingest。
+- **MCP `batch --mode graph-only`（Feature 202）** — 纯 AST 零 LLM 建图路径经 MCP 暴露。
+- **判定器快照漂移信号（Feature 236）**。
+
+### Fixed — spectra
+
+- **CLI 零认证不再硬退（Feature 222）** — AST-only 降级路径恢复可达。
+- **spec 生成器识别 re-export（Feature 221）** + 渲染出口行尾空白归一化；F219 的 re-export 边界随之更新。
+- **charter 快照日期噪声清洗（Feature 223）**。
+- **CI 门禁六重失效 / 残余两链 / 墙钟 perf 断言 / vitest worker RPC 超时（Feature 232 / 233 / 234 / 235）** — 本地全绿而 CI 红的四条独立成因逐条收口。
+- **zod 缺失优雅降级（Feature 198 / 199）** — 共享 `load-zod` helper + 降级诊断，覆盖 orchestration-schema 两个消费者。
+- **`config-schema` 补全 `batch` 段 Zod schema**，`--show-effective` 展示 `batch.concurrency` 并强化单源护栏。
+
+### Added / Fixed — spec-driver
+
+- **fix 模式流程依从性结构化保障（Feature 208，spec-driver v4.3.0）** — 阻断型 Stop hook（`stop-fix-compliance-check.sh` → `fix-compliance-judge.mjs`）在会话收口时机械判定合规性，判据全部来自 harness 客观记录，模型自陈零采信；阻断有界（同会话至多 2 次，第 3 次降级放行）；项目级 `fix_compliance.enforcement` 配置（block 默认 / warn / off）。
+- **依从性判定器绕过面八轮收敛（Feature 224 → 231）** — 候选目录解析盲区（224 / 227）、复合命令候选劫持（225）、占位符误报与不成对花括号绕过（228 / 229）、伪造 `mv` 的 fail-open（230）、改名跟随收敛为光杆单命令字面白名单（231）。
+- **fix 模式 no-op 出口可执行证据门（Feature 216）** + 补救成功清零阻断计数（Feature 211）。
+- **`.agents` 原子过渡 + Spec Driver Codex opt-in 双写基础设施 + 双 `.codex-plugin` manifest + 一致性矩阵与双 check 链接入（Feature 213 W1/W2/W3）**。
+- **`init` 脚手架污染用户 repo git diff 与 `.spec-driver-path` 绝对路径泄漏（Feature 207，spec-driver v4.2.2）** — 自举式 ignore 注入（主防线写 `.git/info/exclude`，兜底写 `.gitignore`）。
+- **goal_loop（Feature 201 / 202 / 203 / 204）** — Phase A/B/C 落地 + core 两缺陷修复 + full 命令集完整性校验。
+- **`scaffold-kb` 命令惰性 import（Feature 201）** — 修复冷启动开销。
+
+### 评测设施
+
+- 离线重判驱动 `eval-offline-rejudge` + 逐实例 checkpoint / `--timeout-ms` / 单实例 PID 锁（Feature 188）；cohort-batch 加 c1/c3 子集能力与报告 honesty 修复。
+- 难度校准评测 harness（Feature 206）+ 评测基座恢复与全池复测薄驱动、oracle 语义 re-freeze（Feature 212）。
+- `eval-validate` 汇总层 oracle 侧 infra 假报剔分母（Feature 210），calibrate 侧对齐（Feature 212 T0）。
+
+---
+
+## [4.3.0] — 2026-07-19
+
+> **Spectra v4.3.0（Feature 186 分发可靠性）+ Spec Driver v4.2.1** — npm 重发 + 防漂移门禁。
+>
+> 区间 `27ce6fbe..fbb0b88a`（140 commit）。发布日期取自 npm registry 的 `time` 字段。
+
+### Added — spectra
+
+- **File Navigation MCP 工具组（Feature 171）** — `view_file` / `search_in_file` / `list_directory`。
+- **symbol fuzzy match（Feature 174）** — symbol 入参类工具名字有偏差时自动 resolve 或回传候选。
+- **`batch` 默认增量（Feature 175）** — `--full` 显式全量、byte-stable 输出、孤儿产物删除。
+- **`graph-only` 零 LLM 建图路径（Feature 195）** — 纯 AST，无需认证。
+- **worktree graph 开箱可用（Feature 193）** — worktree graph bootstrap 钩子 + 保活文档 + 性能根因诊断。
+- **`spectra --version` 输出 build commit 后缀（Feature 186）** — 复用 F176 盖章，用于区分新旧 binary。
+- **driver preference shaping 与 tool description / response format 升级（Feature 170c / 170d）**。
+
+### Fixed — spectra
+
+- **Codex wrapper body sha256 指纹校验（Feature 186）** — 生成端与校验端共用单一 Node helper，缺 sha 即 fail，挡 source 漂移与手改。
+- **`prepare` MCP 工具 ESM 死代码修复（Feature 186）** — 裸 `require` 改静态 `import`，`detectedLanguages` 真实注入。
+- **agent-context 三处错误响应脱敏（Feature 186）** — 不外漏绝对路径 / stack。
+- **`batch --help` synopsis 补 `graph-only`（Feature 186）** 并加定点断言护栏。
+
+### Added / Fixed — spec-driver
+
+- **fix skill 委派硬约束 + fix skill 编排器模型 sonnet → opus（Feature 176，spec-driver v4.2.1）** — 实测 sonnet 会无视 MUST 委派指令而 inline 化，导致子代理的 spectra MCP 集成链整体失效。
+- **子代理 MCP 触发率工程（Feature 184）**。
+
+### 评测设施
+
+- Spec Drift detection 原型最小闭环（Feature 189）。
+- 评测 harness v2（Feature 187）—— 三分类 lib（classify-oracle / phase-markers）、experiment manifest 参数化 + 预注册 oracle 语义门禁、SWE-Bench oracle 执行器 + cohort registry + freezeBlock 语义冻结；F187 评测公正性 6 缺陷修复（Feature 197）。
+
+---
+
+## [4.2.0] — 2026-06-06
+
+> **Spectra v4.2.0（Feature 170a）+ Spec Driver v4.2.0 — NPM 发布同步**
+>
+> 区间 `v4.1.1..27ce6fbe`（132 commit）。发布日期取自 npm registry 的 `time` 字段。
+
+### Added — spectra
+
+- **agent-context MCP 工具组随本次发布首度对外（Feature 155）** — `impact` / `context` / `detect_changes`。修复 npm publish 滞后导致全局安装 binary 缺工具的 Bug-1（Feature 170a）。
+- **Spectra Incremental Indexing + DependencyGraph shim（Feature 156）**。
+
+### Fixed — spectra
+
+- **`docs-bundle` 在 `outputDir` 位于 `projectRoot` 之外时不再污染 worktree**。
+- **`panoramic` 两处**：module `spec.md` 里的 AST interface / data dump 加上限；product-overview 中英混杂修正。
+
+### Added / Fixed — spec-driver
+
+- **5 个 sub-agent frontmatter namespace mismatch 修复（Feature 170a，spec-driver v4.2.0）** — `mcp__spectra__*` → `mcp__plugin_spectra_spectra__*`，确保 Claude Code plugin 环境下 sub-agent 两步开箱即用调到 spectra MCP 工具；新增 `spectra-mcp-integration.md` + `customization.md` 部署指引。
+- **5 个核心 sub-agent 首次声明 spectra MCP 工具（Feature 162 Phase 0，spec-driver v4.1.0）** — plan / implement / verify / quality-review / spec-review。
+
+### 评测设施
+
+本区间以评测基建为主（Feature 147 / 149 / 150 / 151 / 152 / 153 / 154 / 158 / 159 / 161 / 162 / 164 / 165 / 166 / 167 / 169）：cross-vendor LLM jury（Anthropic + OpenAI + SiliconFlow 三方双盲评分）、functional oracle + fixture sanity check、公平 doc-quality rubric、N=5 重跑 + bootstrap CI、SWE-Bench Lite Grounding Eval 与 micrograd-track、baseline 项目采集与图精度 truth-set 抽取。这些改动不进入 npm 包的运行时表面。[以上为按 commit message 归并的主题聚合，非逐 commit 罗列]
+
+---
+
 ## [4.1.1] — 2026-04-30
 
 > **Spectra v4.1.1 LLM 并发优化（Feature 146）** — 替换手写信号量为 p-limit + 默认并发数从 1 提升到 3。Patch release（用户体验变化，非破坏性）。
@@ -44,7 +205,11 @@
 - **hyperedge 首次运行即生效（P1）** — `batch-orchestrator.ts` 中 `designDocAbsPaths` 构建逻辑改为"磁盘优先"合并策略：先取本轮 `writtenFiles`，再主动扫描 `outputDir/project/` 目录下已存在的 `.md` 文件，去重合并。解决首次运行时 `writtenFiles` 为空导致 hyperedge 被静默跳过的 bug（FR-006/FR-007）。
 - **debt-scanner 诊断日志增强（P2）** — `debt-intelligence-pipeline.ts` 诊断日志新增 `openQuestions.length` 和 `ruleCandidates`，便于排查 Open Questions 为空的根因（FR-008/FR-009）。
 
-## [Unreleased]
+## [4.1.1 附录] — Feature 140 fixture 集 + 跨项目隔离 + DoD 验收脚本
+
+> **该段内容实际随 4.1.1 一并发布**，当时标题遗留为 `[Unreleased]` 未改版本号。
+> git 可证：写入该段的 `b3b15fb7`（2026-04-30 21:33）是 `v4.1.1` tag 的祖先，且早于 tag 15 小时。
+> 本次补写只改标题、不改正文，正文保持原样。
 
 ### Added — Feature 140 Step 8（Phase 1a + Phase 4）：fixture 集 + 跨项目隔离 + DoD 验收脚本
 

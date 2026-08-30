@@ -76,7 +76,7 @@ describe('createMcpServer', () => {
     vi.clearAllMocks();
   });
 
-  it('注册 prepare/generate/batch/diff/panoramic-query / graph 查询 / agent-context 工具', () => {
+  it('注册 prepare/generate/batch/diff/panoramic-query / graph 查询 / agent-context / 自省 工具', () => {
     const server = createMcpServer() as unknown as InstanceType<typeof hoistedTypes.FakeMcpServer>;
     const names = server.tools.map((t) => t.name).sort();
     expect(names).toEqual([
@@ -86,6 +86,8 @@ describe('createMcpServer', () => {
       'list_directory',
       'panoramic-query', 'prepare',
       'search_in_file',
+      // F265 G0-3：服务器自省（描述的是 server 自身，不参与 detect_changes → impact 链路）
+      'server_build_info',
       'view_file',
     ]);
   });

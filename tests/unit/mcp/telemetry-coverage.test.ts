@@ -1,5 +1,5 @@
 /**
- * Feature 177 — telemetry 17/17 工具覆盖矩阵（RED→GREEN）
+ * Feature 177 — telemetry 全工具覆盖矩阵（RED→GREEN；F265 起 18/18）
  *
  * 防假绿（Codex WARNING-2）：用 fake server 捕获 createMcpServer 注册的真实 handler，
  * 逐个调用一次，断言每次调用恰写 1 行 telemetry JSONL（锁死双发射 EC-1）+ toolName 全覆盖。
@@ -64,12 +64,17 @@ vi.mock('../../../src/config/project-config.js', () => ({
 
 import { createMcpServer } from '../../../src/mcp/server.js';
 
-/** 17 工具权威名单（注册漂移护栏） */
-const ALL_17_TOOLS = [
+/**
+ * 工具权威名单（注册漂移护栏）。
+ * F265 新增第 18 个 `server_build_info`（服务器自省）—— 它同样经 `withTelemetry`
+ * 注册，故 F177 的「每个到达 handler 的调用恰写 1 行 telemetry」不变量对它照常成立。
+ */
+const ALL_TOOLS = [
   'prepare', 'generate', 'batch', 'diff', 'panoramic-query',
   'graph_query', 'graph_node', 'graph_path', 'graph_community', 'graph_god_nodes', 'graph_hyperedges',
   'impact', 'context', 'detect_changes',
   'view_file', 'search_in_file', 'list_directory',
+  'server_build_info',
 ] as const;
 
 describe('Feature 177 — telemetry 17/17 覆盖矩阵', () => {
@@ -133,13 +138,13 @@ describe('Feature 177 — telemetry 17/17 覆盖矩阵', () => {
     }
   }
 
-  it('createMcpServer 恰注册 17 工具（防漂移）', () => {
-    expect(server.tools.length).toBe(17);
+  it('createMcpServer 恰注册 18 工具（防漂移）', () => {
+    expect(server.tools.length).toBe(18);
     const names = server.tools.map((t) => t.name).sort();
-    expect(names).toEqual([...ALL_17_TOOLS].sort());
+    expect(names).toEqual([...ALL_TOOLS].sort());
   });
 
-  for (const name of ALL_17_TOOLS) {
+  for (const name of ALL_TOOLS) {
     it(`${name} 每次调用恰写 1 行 telemetry（toolName 匹配）`, async () => {
       const t = server.tools.find((x) => x.name === name);
       expect(t, `${name} 未注册`).toBeDefined();

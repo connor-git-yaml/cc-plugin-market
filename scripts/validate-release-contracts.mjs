@@ -2,6 +2,7 @@ import process from 'node:process';
 import { parseCommonProjectArgs } from '../plugins/spec-driver/scripts/lib/script-cli-args.mjs';
 import { validateReleaseContract } from './lib/release-contract-core.mjs';
 import { validateCodexPluginConsistency } from './lib/codex-plugin-consistency-core.mjs';
+import { checkPublishGap } from './lib/publish-gap-check.mjs';
 
 const args = parseCommonProjectArgs(process.argv.slice(2), { json: false });
 const payload = validateReleaseContract(args.projectRoot);
@@ -24,14 +25,47 @@ payload.warnings = [
   ...(payload.warnings ?? []),
   ...codexResult.warnings.map((w) => `[codex-plugin-consistency] ${w}`),
 ];
+// Feature 265（G0-2，FR-010/FR-013）：第三个合并源——发布断层领先量判据。
+// 与上面两个源的关键差异：**只并 checks 与 warnings，绝不并进 payload.errors**。
+// checkPublishGap() 的返回值在结构上就没有 errors 键（见该模块顶部的不变量说明），
+// 因此本判据无论怎么判都不可能把 release:check 弄红——`prepublishOnly` 串着这条链，
+// 判据能变红就等于发布路径被自己堵死。
+const publishGapResult = checkPublishGap({ projectRoot: args.projectRoot });
+payload.checks = [
+  ...(payload.checks ?? []),
+  ...publishGapResult.checks.map((c) => ({ ...c, id: `publish-gap:${c.id}` })),
+];
+payload.warnings = [
+  ...(payload.warnings ?? []),
+  ...publishGapResult.warnings.map((w) => `[publish-gap] ${w}`),
+];
+
 payload.status = payload.errors.length > 0 ? 'fail' : payload.status;
+
+/**
+ * warning 的唯一输出出口。
+ *
+ * Feature 265（对抗审查 W-4）：warning 此前只走 stderr 的一行 `! ...`，而 CI 上
+ * 「判据正常且无 warning」与「判据整个坏死」的观感完全一致——两者都是一片绿。
+ * GitHub Actions 环境下额外发一条 workflow command，让 warning 出现在 job 的
+ * annotation 区，肉眼扫一眼就知道这条链还活着、且它说了什么。
+ *
+ * 走 stderr 而非 stdout：runner 对两个流一并做 workflow command 解析，而 stdout
+ * 必须给 `--json` 模式留作纯 JSON 通道，不能被注解行污染。
+ */
+function reportWarning(warning) {
+  console.warn(`! ${warning}`);
+  if (process.env.GITHUB_ACTIONS !== undefined) {
+    console.warn(`::warning::${warning}`);
+  }
+}
 
 if (args.json) {
   console.log(JSON.stringify(payload, null, 2));
 } else if (payload.status === 'pass') {
   console.log(`Release contract valid (${payload.contractPath})`);
   for (const warning of payload.warnings) {
-    console.warn(`! ${warning}`);
+    reportWarning(warning);
   }
 } else {
   console.error(`Release contract invalid (${payload.contractPath})`);
@@ -39,7 +73,7 @@ if (args.json) {
     console.error(`- ${error}`);
   }
   for (const warning of payload.warnings) {
-    console.warn(`! ${warning}`);
+    reportWarning(warning);
   }
 }
 

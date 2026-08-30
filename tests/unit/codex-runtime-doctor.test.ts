@@ -732,7 +732,14 @@ describe('F240 T045 — 按产品分组的比较矩阵', () => {
     expect(report.checks['global-cli.spec-driver'].status).toBe('not-applicable');
     expect(report.checks['mcp-server.spec-driver'].status).toBe('not-applicable');
     expect(report.checks['mcp-server.spectra'].status).toBe('indeterminate');
-    expect(report.checks['mcp-server.spectra'].details.knownGap).toBe(true);
+    // F265：`knownGap` 已随 `server_build_info` 的落地被移除 —— 那个缺口不再成立。
+    // 本 fixture 的 exec 对一切命令抛 ENOENT，故自省通道打不通 ⇒ indeterminate + ENOENT，
+    // 语义从"产品没有这个能力"变成"这次没问到"。
+    expect('knownGap' in report.checks['mcp-server.spectra'].details).toBe(false);
+    expect(report.checks['mcp-server.spectra'].details.probeMethod).toBe('stdio-server-build-info');
+    expect(report.checks['mcp-server.spectra'].details.errorClass).toBe('ENOENT');
+    // F265 对抗审查 C-2：报告自述探测对象 —— PATH 上的二进制，不是客户端连着的进程
+    expect(report.checks['mcp-server.spectra'].details.probeTarget).toBe('path-binary');
   });
 
   it('版本一致 → ok；版本漂移 → fail；无法解析 → indeterminate（而非 fail）', () => {
@@ -1353,4 +1360,355 @@ describe('F240 T048 — `--dangerously-bypass-hook-trust` 产品目录零命中�
       expect(out.trim(), `${target} 不应出现 ${flag}`).toBe('');
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F265 G0-3 — commit 维度（T025 变异测试矩阵行 5 / 行 7）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 两个真实形态的 40 位 SHA（前 7 位不同），用于构造 match / mismatch */
+const HEAD_A = 'ee6e8314da4a591128d7bbfea1b28d4248ee8ab8';
+const HEAD_B = '0ae3eb7012345678901234567890123456789abc';
+
+/**
+ * F265 — 按 `(file, args)` 分派的假 exec。
+ *
+ * 既有 `makeExec` 只按 `file` 分派，区分不了 `spectra --version` 与
+ * `spectra mcp-server` —— 而 commit 维度恰恰要给这两条喂不同的东西，
+ * 否则测的就不是"两个通道各自读到什么"，而是"同一段文本被读了两遍"。
+ */
+function makeCommitExec(opts: {
+  /** `git rev-parse HEAD` 的 stdout；`null` ⇒ 该命令 ENOENT（模拟非 git 工作区 / 无 git） */
+  head?: string | null;
+  /** `spectra --version` 的 stdout；`null` ⇒ ENOENT */
+  versionLine?: string | null;
+  /** `spectra mcp-server` 的自省结果 */
+  mcp?:
+    | { version?: string; commit?: string | null; dirty?: boolean | null }
+    | 'tool-not-found'
+    | 'garbage'
+    | null;
+}) {
+  const enoent = (): never => {
+    const err: NodeJS.ErrnoException = new Error('spawn ENOENT');
+    err.code = 'ENOENT';
+    throw err;
+  };
+  const initLine = JSON.stringify({
+    result: { protocolVersion: '2025-06-18', capabilities: {}, serverInfo: { name: 'spectra' } },
+    jsonrpc: '2.0',
+    id: 1,
+  });
+  return (file: string, args: string[] = []): string => {
+    if (file === 'git') {
+      if (opts.head === null || opts.head === undefined) return enoent();
+      return `${opts.head}\n`;
+    }
+    if (file === 'spectra' && args[0] === 'mcp-server') {
+      const spec = opts.mcp;
+      if (spec === null || spec === undefined) return enoent();
+      if (spec === 'garbage') return 'volta error: could not locate binary\n';
+      const callLine =
+        spec === 'tool-not-found'
+          ? JSON.stringify({
+              result: {
+                content: [{ type: 'text', text: 'MCP error -32602: Tool server_build_info not found' }],
+                isError: true,
+              },
+              jsonrpc: '2.0',
+              id: 2,
+            })
+          : JSON.stringify({
+              result: {
+                content: [
+                  {
+                    type: 'text',
+                    text: JSON.stringify({
+                      version: spec.version ?? '4.5.0',
+                      commit: spec.commit ?? null,
+                      dirty: spec.dirty ?? null,
+                    }),
+                  },
+                ],
+              },
+              jsonrpc: '2.0',
+              id: 2,
+            });
+      return `${initLine}\n${callLine}\n`;
+    }
+    if (file === 'spectra') {
+      if (opts.versionLine === null || opts.versionLine === undefined) return enoent();
+      return opts.versionLine;
+    }
+    return enoent();
+  };
+}
+
+describe('F265 T025 — compareCommits 纯函数（变异测试矩阵行 5）', () => {
+  it('两个不同的 7 位十六进制 → mismatch', () => {
+    expect(core.compareCommits('ee6e831', '0ae3eb7')).toBe('mismatch');
+  });
+
+  it('相同 → match；长短不一但前 7 位相同 → match（--version 只暴露 commit(7)）', () => {
+    expect(core.compareCommits('ee6e831', 'ee6e831')).toBe('match');
+    expect(core.compareCommits(HEAD_A, 'ee6e831')).toBe('match');
+    // 大小写不敏感：git 输出恒小写，但外部来源不保证
+    expect(core.compareCommits('EE6E831', 'ee6e831')).toBe('match');
+  });
+
+  it('W-2：比较宽度取较短一方的长度，而不是恒取 7 位', () => {
+    // 双方都给了 14 位 ⇒ 就该比 14 位。恒取 7 位意味着只用 28 bit 判同一性，
+    // 两个不同 build 撞前 7 位就会被判成同一份代码（对抗审查 W-2）。
+    expect(core.compareCommits(`${'ee6e831'}aaaaaaa`, `${'ee6e831'}bbbbbbb`)).toBe('mismatch');
+    // 双方都是全长 SHA ⇒ 全长比较：只有末位不同也必须是 mismatch
+    const a = `${'ee6e8314da4a591128d7bbfea1b28d4248ee8ab'}8`;
+    const b = `${'ee6e8314da4a591128d7bbfea1b28d4248ee8ab'}0`;
+    expect(core.compareCommits(a, b)).toBe('mismatch');
+    // 一方只暴露 commit(7)（`spectra --version` 的形态）⇒ 退到 7 位比较，仍 match
+    expect(core.compareCommits(HEAD_A, HEAD_A.slice(0, 7))).toBe('match');
+  });
+
+  it('任一侧缺席（null / undefined / 空串）→ absent，且 absent 优先于 unreadable', () => {
+    expect(core.compareCommits(null, HEAD_A)).toBe('absent');
+    expect(core.compareCommits(HEAD_A, null)).toBe('absent');
+    expect(core.compareCommits(undefined, HEAD_A)).toBe('absent');
+    expect(core.compareCommits(HEAD_A, '   ')).toBe('absent');
+    expect(core.compareCommits(null, null)).toBe('absent');
+    // 一侧缺席、另一侧畸形 ⇒ absent（"没得比"比"读不懂"更贴近事实）
+    expect(core.compareCommits(null, 'not-a-commit')).toBe('absent');
+  });
+
+  it('两侧都有值但形态不是 commit（非十六进制 / 不足 7 位 / 超 40 位 / 非字符串）→ unreadable', () => {
+    expect(core.compareCommits('zzzzzzz', HEAD_A)).toBe('unreadable');
+    expect(core.compareCommits('ee6e83', HEAD_A)).toBe('unreadable');
+    expect(core.compareCommits(`${HEAD_A}0`, HEAD_A)).toBe('unreadable');
+    expect(core.compareCommits(123, HEAD_A)).toBe('unreadable');
+    expect(core.compareCommits({ commit: HEAD_A }, HEAD_A)).toBe('unreadable');
+  });
+
+  it('返回值恒落在 COMMIT_COMPARISONS 域内（commit 维度对外的唯一出口）', () => {
+    const inputs = [null, undefined, '', '   ', 'zzz', 'ee6e831', HEAD_A, HEAD_B, 7, {}, []];
+    for (const a of inputs) {
+      for (const b of inputs) {
+        expect([...core.COMMIT_COMPARISONS]).toContain(core.compareCommits(a, b));
+      }
+    }
+    expect([...core.COMMIT_COMPARISONS]).toEqual(['match', 'mismatch', 'absent', 'unreadable']);
+  });
+});
+
+describe('F265 T025 — commit 维度接进四方报告', () => {
+  it('repo-version：基准可读 ⇒ available；无 git ⇒ absent（基准立不住则其余三方也必 absent）', () => {
+    const fx = makeFixture({ spectraVersion: '4.5.0' });
+    const withGit = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeCommitExec({ head: HEAD_A }),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+    // I-1：基准方登记的是"基准立没立得住"，不是一次自比结论
+    expect(withGit.checks['repo-version.spectra'].details.baselineCommit).toBe('available');
+    expect('commitComparison' in withGit.checks['repo-version.spectra'].details).toBe(false);
+
+    const noGit = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeCommitExec({ head: null, versionLine: 'spectra v4.5.0 (ee6e831)\n' }),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+    expect(noGit.checks['repo-version.spectra'].details.baselineCommit).toBe('absent');
+    expect(noGit.checks['global-cli.spectra'].details.commitComparison).toBe('absent');
+  });
+
+  it('global-cli：版本号相同但 commit 不同 ⇒ warning（不是 ok，也不是 fail）', () => {
+    const fx = makeFixture({ spectraVersion: '4.5.0' });
+    const run = (versionLine: string) =>
+      io.runDoctor({
+        projectRoot: fx.projectRoot,
+        codexHome: fx.codexHome,
+        env: {},
+        exec: makeCommitExec({ head: HEAD_A, versionLine }),
+        now: () => new Date('2026-08-03T00:00:00.000Z'),
+      }).checks['global-cli.spectra'];
+
+    const same = run('spectra v4.5.0 (ee6e831)\n');
+    expect(same.status).toBe('ok');
+    expect(same.details.commitComparison).toBe('match');
+
+    const drifted = run('spectra v4.5.0 (0ae3eb7)\n');
+    expect(drifted.status).toBe('warning');
+    expect(drifted.details.commitComparison).toBe('mismatch');
+    expect(drifted.details.semver).toBe('4.5.0');
+    // 🔴 版本号一致，所以这不能是 fail —— 它是"你自用的 CLI 不是这次改动"的提示
+    expect(drifted.summary).toContain('commitComparison=mismatch');
+
+    // 无 commit 后缀 ⇒ absent，绝不因"比不了"降级成 warning
+    const bare = run('spectra v4.5.0\n');
+    expect(bare.status).toBe('ok');
+    expect(bare.details.commitComparison).toBe('absent');
+  });
+
+  it('mcp-server：自省成功 ⇒ 按 commit 落 ok / warning；旧 build 无该工具 ⇒ indeterminate + rpc-error', () => {
+    const fx = makeFixture({ spectraVersion: '4.5.0' });
+    const run = (mcp: Parameters<typeof makeCommitExec>[0]['mcp']) =>
+      io.runDoctor({
+        projectRoot: fx.projectRoot,
+        codexHome: fx.codexHome,
+        env: {},
+        exec: makeCommitExec({ head: HEAD_A, versionLine: 'spectra v4.5.0 (ee6e831)\n', mcp }),
+        now: () => new Date('2026-08-03T00:00:00.000Z'),
+      }).checks['mcp-server.spectra'];
+
+    const match = run({ version: '4.5.0', commit: HEAD_A, dirty: false });
+    expect(match.status).toBe('ok');
+    expect(match.details.commitComparison).toBe('match');
+    expect(match.details.semver).toBe('4.5.0');
+    expect(match.details.probeMethod).toBe('stdio-server-build-info');
+    expect(match.details.probeTarget).toBe('path-binary');
+    expect(match.details.buildDirty).toBe(false);
+
+    const mismatch = run({ version: '4.5.0', commit: HEAD_B, dirty: false });
+    expect(mismatch.status).toBe('warning');
+    expect(mismatch.details.commitComparison).toBe('mismatch');
+    expect(mismatch.remediation?.code).toBe('reload-mcp-client');
+
+    // 自省通道通了但对方没盖章（clean checkout / tsx 直跑）⇒ 比不了，不是错
+    const noStamp = run({ version: '4.5.0', commit: null, dirty: null });
+    expect(noStamp.status).toBe('indeterminate');
+    expect(noStamp.details.commitComparison).toBe('absent');
+    // W-1：「没给」的文案说的就是"没有 commit 信息"
+    expect(noStamp.summary).toContain('没有 commit 信息');
+    // dirty 不是布尔（这里是 null）⇒ 该键不写，且**不得**倒灌 parse-failed
+    expect('buildDirty' in noStamp.details).toBe(false);
+    expect('errorClass' in noStamp.details).toBe(false);
+
+    // 🔴 C-1：commit 相同但 build 编自未提交的工作树 ⇒ warning，不是 ok。
+    // 开发期这是主路径；渲染成干净的 ok 等于让诊断在最常见的场景下说假话。
+    const dirty = run({ version: '4.5.0', commit: HEAD_A, dirty: true });
+    expect(dirty.status).toBe('warning');
+    expect(dirty.details.commitComparison).toBe('match');
+    expect(dirty.details.buildDirty).toBe(true);
+    expect(dirty.summary).toContain('dirty');
+    expect(dirty.summary).toContain('未提交的工作树');
+
+    // 旧 build（4.4.0）没有 server_build_info ⇒ SDK 回 isError 的正常响应
+    const oldBuild = run('tool-not-found');
+    expect(oldBuild.status).toBe('indeterminate');
+    expect(oldBuild.details.errorClass).toBe('rpc-error');
+    expect(oldBuild.details.commitComparison).toBe('absent');
+
+    // stdout 不是 NDJSON（PATH 上摆着别的东西 / 包装脚本噪声）⇒ parse-failed，不崩
+    const garbage = run('garbage');
+    expect(garbage.status).toBe('indeterminate');
+    expect(garbage.details.errorClass).toBe('parse-failed');
+  });
+
+  it('🔴 plugin-build 的 commitComparison 恒为 absent（变异测试矩阵行 7）', () => {
+    // 任何输入变化都不得让它变成别的值：manifest schema 没有 commit 字段，
+    // 快照目录名是快照哈希而非 build 标识（F236），拿它冒充 commit 是造假不是修复。
+    const variants: Array<Parameters<typeof makeCommitExec>[0]> = [
+      { head: HEAD_A },
+      { head: null },
+      { head: HEAD_A, versionLine: 'spectra v4.5.0 (ee6e831)\n' },
+      { head: HEAD_A, versionLine: 'spectra v4.5.0 (0ae3eb7)\n', mcp: { commit: HEAD_A } },
+      { head: HEAD_B, mcp: 'tool-not-found' },
+    ];
+    for (const opts of variants) {
+      const fx = makeFixture({ spectraVersion: '4.5.0' });
+      const report = io.runDoctor({
+        projectRoot: fx.projectRoot,
+        codexHome: fx.codexHome,
+        env: {},
+        exec: makeCommitExec(opts),
+        now: () => new Date('2026-08-03T00:00:00.000Z'),
+      });
+      for (const product of ['spectra', 'spec-driver']) {
+        expect(
+          report.checks[`plugin-build.${product}`].details.commitComparison,
+          `plugin-build.${product} 的 commitComparison 必须恒为 absent`,
+        ).toBe('absent');
+      }
+    }
+  });
+
+  it('`none-available` 已无产出路径：probeMethod 域只剩实际使用的探测方法', () => {
+    // 报告里再出现 `none-available` 就是在陈述一个不再成立的事实（缺口已由
+    // server_build_info 关闭）；自省失败走 errorClass，而不是退回"没有通道"。
+    expect(core.SUMMARY_CODES).not.toContain('mcp-server-known-gap');
+    expect(core.SUMMARY_CODES).toContain('mcp-server-commit-match');
+    expect(core.SUMMARY_CODES).toContain('mcp-server-commit-mismatch');
+    expect(core.SUMMARY_CODES).toContain('mcp-server-introspection-unavailable');
+    // W-1：「没给 commit」与「给了但读不懂」拆成两个码，不再共用一句文案
+    expect(core.SUMMARY_CODES).not.toContain('mcp-server-commit-indeterminate');
+    expect(core.SUMMARY_CODES).toContain('mcp-server-commit-absent');
+    expect(core.SUMMARY_CODES).toContain('mcp-server-commit-unreadable');
+    // C-1：commit 相同但脏树的独立码
+    expect(core.SUMMARY_CODES).toContain('mcp-server-commit-match-dirty');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F265 对抗审查修复批 —— mcp-server 侧的诚实性（C-1 / C-2 / W-1 / W-3）
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('F265 对抗审查 — mcp-server 消费面', () => {
+  const runMcp = (mcp: Parameters<typeof makeCommitExec>[0]['mcp'], head: string | null = HEAD_A) => {
+    const fx = makeFixture({ spectraVersion: '4.5.0' });
+    return io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: makeCommitExec({ head, versionLine: 'spectra v4.5.0 (ee6e831)\n', mcp }),
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    }).checks['mcp-server.spectra'];
+  };
+
+  it('W-1：回传了 commit 但形态不合法 ⇒ commit-unreadable，与 absent 文案分开', () => {
+    const check = runMcp({ version: '4.5.0', commit: 'not-a-commit', dirty: false });
+    expect(check.status).toBe('indeterminate');
+    expect(check.details.commitComparison).toBe('unreadable');
+    expect(check.summary).toContain('形态不合法');
+    // 与「没有 commit 信息」是两句不同的话
+    expect(check.summary).not.toContain('没有 commit 信息');
+  });
+
+  it('C-2：summary 说的是 PATH 上的二进制，不再声称探到了"正在运行的" server', () => {
+    const match = runMcp({ version: '4.5.0', commit: HEAD_A, dirty: false });
+    expect(match.summary).toContain('PATH 上的');
+    expect(match.summary).not.toContain('正在运行的');
+
+    const mismatch = runMcp({ version: '4.5.0', commit: HEAD_B, dirty: false });
+    expect(mismatch.summary).toContain('PATH 上的');
+    expect(mismatch.summary).not.toContain('正在运行的');
+    // remediation 也要说清结论的适用范围：客户端连着的旧进程需重连
+    expect(mismatch.remediation.text).toContain('重连');
+  });
+
+  it('C-1：dirty 只认布尔 true —— false / 缺失 / 非布尔一律不降级为 warning', () => {
+    expect(runMcp({ version: '4.5.0', commit: HEAD_A, dirty: false }).status).toBe('ok');
+    // 缺字段（旧 build 只回 version+commit）⇒ 不知道脏不脏 ⇒ 按已知的说，判 ok
+    const missing = runMcp({ version: '4.5.0', commit: HEAD_A });
+    expect(missing.status).toBe('ok');
+    expect('buildDirty' in missing.details).toBe(false);
+    // commit 不同的情况下，dirty 与否都不改变 mismatch 结论
+    expect(runMcp({ version: '4.5.0', commit: HEAD_B, dirty: true }).status).toBe('warning');
+    expect(runMcp({ version: '4.5.0', commit: HEAD_B, dirty: true }).details.commitComparison).toBe(
+      'mismatch',
+    );
+  });
+
+  it('W-3：无界 version 串不进报告 —— 超长 / 形态不符一律 semver:null', () => {
+    // 200KB 的 version 串（对抗代理实测能一路进 details）
+    const huge = runMcp({ version: `4.5.0${'0'.repeat(200_000)}`, commit: HEAD_A, dirty: false });
+    expect(huge.details.semver).toBeNull();
+    expect(JSON.stringify(huge).length).toBeLessThan(4000);
+
+    // 33 字符（上限 32）⇒ 拒；32 字符内但整串不是受限 semver ⇒ 拒
+    expect(runMcp({ version: `4.5.0 ${'x'.repeat(27)}`, commit: HEAD_A }).details.semver).toBeNull();
+    expect(runMcp({ version: 'v4.5.0-beta.1', commit: HEAD_A }).details.semver).toBeNull();
+    // 合法形态照常放行（`v` 前缀是受限形态的一部分）
+    expect(runMcp({ version: 'v4.5.0', commit: HEAD_A }).details.semver).toBe('4.5.0');
+  });
 });

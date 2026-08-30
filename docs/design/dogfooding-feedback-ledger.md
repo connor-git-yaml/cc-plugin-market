@@ -146,3 +146,24 @@
   轻量路径、跳过 4a/4b 独立审查——而它恰恰是 security-adjacent、且实际引入了 CRITICAL 级破坏面。
   改进方向：路径判据加一条"性质闸"：触及权限/软链/子进程/门禁判定器的改动一律走完整路径，
   规模判据只对性质中立的改动生效
+
+### F265 · 2026-08-30
+状态：待处理（3 条）
+来源：specs/265-ship-cli-release-gate0/（story 流程编排器实证 + plan/spec-review 子代理交付报告反馈节）
+- [流程顺畅][spec-driver 编排] 插件 cache 安装（4.4.0）下 `resolve-project-context.mjs` 与
+  `orchestrator-cli.mjs effective-orchestration` 均报 `zod-unavailable` 降级——后者的直接后果是
+  **项目级 `orchestration-overrides.yaml` 在缺 zod 时整体不被应用**（diagnostics 原文明说），
+  gate 行为解析只能落回 base 默认。源码侧优雅降级已达标（不崩、有诊断），但"配置静默不生效"
+  对用户是隐性行为差异；且 4-tier gate 行为链的 user_config 层在 CLI 路径本就恒空（P1-K 已认领
+  `orchestrator-cli.mjs:73`），两层叠加后项目级 gate 定制实际全线失效。改进方向：P1-K 修
+  userConfig 注入时一并评估 zod 缺失下 overrides 的非 zod 校验路径（手写归一化已有先例）
+- [流程顺畅][spec-driver 子代理工具面] spec-review 子代理工具清单无 Bash，本卡三处合规核验
+  （CHANGELOG `[Unreleased]` 归属的 git 时序、`[推断]` 边界的 commit message 比对、Out of Scope
+  的 `.find` 字节级 diff）只能凭文件内容特征间接判断，全部回抛编排器补验。改进方向：spec-review
+  的 frontmatter 增加只读 git 白名单（`git log`/`git diff`/`git show`），或在 SKILL 注入块里
+  约定"git 考古类证据由编排器预跑并随 prompt 注入"
+- [信息完整性][Spectra MCP] plan 子代理反馈（原判"未达落账阈值"，编排器复核后升格落账，
+  因同卡 implement/审查子代理全程同样纯 Read/Grep）：本卡核心任务是**值级数据流追踪**
+  （"commit 串从哪读、在哪比对、在哪被丢弃、生命周期不跨出哪个函数"），`context`/`impact` 的
+  symbol 级 caller/callee 摘要无法替代逐行读代码确认变量生命周期，MCP 在此场景零采用。
+  非缺陷定位记录 + 能力缺口候选：若 P1-J 检索内核考虑"符号内数据流"维度，本卡是一个真实需求样本

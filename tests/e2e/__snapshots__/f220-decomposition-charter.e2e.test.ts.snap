@@ -241,15 +241,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:cfd0d374ba70e5b6",
-    "a.spec.md": "658789e72ee63f83",
-    "b.spec.md": "4b23edef054cfbbb",
+    "_index.spec.md": "full:d5a5f2fa74591ad7",
+    "a.spec.md": "1d4ad566d1ddd104",
+    "b.spec.md": "1a4f1dde12544733",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -335,7 +335,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -746,15 +746,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:cff66147d3f815ec",
-    "engine.spec.md": "eaf81e5948447db3",
-    "nn.spec.md": "b0ded165de2bafe6",
+    "_index.spec.md": "full:3e69c1680bbb2170",
+    "engine.spec.md": "c7ebaa71e5393b9a",
+    "nn.spec.md": "156caca4df09fb61",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -840,7 +840,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -1306,15 +1306,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:642152d9ae00a45e",
-    "py.spec.md": "06939e9671766068",
-    "src.spec.md": "fa00c6e7ffe694e3",
+    "_index.spec.md": "full:4207d04bad1aa37b",
+    "py.spec.md": "4abb6990ccd2d735",
+    "src.spec.md": "5efec98e29740c67",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -1413,7 +1413,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -1906,15 +1906,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:13a97fef198ff63b",
-    "engine.spec.md": "a55b09c11a8394f8",
-    "nn.spec.md": "ca08d6bd5e577944",
+    "_index.spec.md": "full:18167abfbc68ba4b",
+    "engine.spec.md": "08de241a855b109e",
+    "nn.spec.md": "aa3dcd07630dc1ad",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -2009,7 +2009,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -2231,13 +2231,13 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 0,
   "moduleSpecs": {
-    "_index.spec.md": "full:340da462d9850e63",
+    "_index.spec.md": "full:c7a6829d90c013ef",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 0
 lastUpdated: <ISO-TS>
@@ -2298,7 +2298,7 @@ lastUpdated: <ISO-TS>
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -2749,15 +2749,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 1,
   "moduleSpecs": {
-    "_index.spec.md": "full:2bef3e118903ef1d",
-    "py.spec.md": "06939e9671766068",
-    "src.spec.md": "5667735efd81bf39",
+    "_index.spec.md": "full:529d25610d5cc85f",
+    "py.spec.md": "4abb6990ccd2d735",
+    "src.spec.md": "fc6c03c0e0d43524",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -2855,7 +2855,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -3334,15 +3334,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:642152d9ae00a45e",
-    "py.spec.md": "c58d62553f1ed5c8",
-    "src.spec.md": "e16517e0ff0afdcd",
+    "_index.spec.md": "full:4207d04bad1aa37b",
+    "py.spec.md": "c3f9a3ce979b99f9",
+    "src.spec.md": "3fa0be8265847d52",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -3441,7 +3441,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -3828,15 +3828,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:cfd0d374ba70e5b6",
-    "a.spec.md": "658789e72ee63f83",
-    "b.spec.md": "4b23edef054cfbbb",
+    "_index.spec.md": "full:d5a5f2fa74591ad7",
+    "a.spec.md": "1d4ad566d1ddd104",
+    "b.spec.md": "1a4f1dde12544733",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -3922,7 +3922,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 
@@ -4456,15 +4456,15 @@ exports[`F220 拆分特征化守护（语言矩阵 + checkpoint 链，mock-LLM�
   },
   "llmCalls": 2,
   "moduleSpecs": {
-    "_index.spec.md": "full:642152d9ae00a45e",
-    "py.spec.md": "483209e9b40b76cf",
-    "src.spec.md": "0927cd7712282155",
+    "_index.spec.md": "full:4207d04bad1aa37b",
+    "py.spec.md": "110ce5537666937f",
+    "src.spec.md": "eb85fe9071de9854",
   },
   "reporting": {
     "indexSpec": "---
 type: architecture-index
 version: v1
-generatedBy: spectra v4.4.0
+generatedBy: spectra v4.5.0
 projectRoot: <ROOT>
 totalModules: 2
 lastUpdated: <ISO-TS>
@@ -4563,7 +4563,7 @@ graph TD
 ",
     "readme": "# <PROJECT> — 技术文档索引
 
-> 由 spectra v4.4.0 自动生成 | <DATE>
+> 由 spectra v4.5.0 自动生成 | <DATE>
 
 ## 目录结构
 

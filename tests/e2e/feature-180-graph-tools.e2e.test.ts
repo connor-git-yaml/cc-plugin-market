@@ -7,11 +7,12 @@
  * 同时验证 listTools 返回的工具名集合与实测真值精确匹配。
  *
  * 实测复核（T-011 节点）：
- *   工具注册真值 = 17 个（2026-06-08 实测确认）
+ *   工具注册真值 = 18 个（2026-08-30 复核；原 17 个 + F265 G0-3 新增 server_build_info）
  *   sorted names：["batch","context","detect_changes","diff","generate","graph_community",
  *     "graph_god_nodes","graph_hyperedges","graph_node","graph_path","graph_query",
- *     "impact","list_directory","panoramic-query","prepare","search_in_file","view_file"]
- *   scope 文档写 18 是错的；源码 server.ts 注释也写 17，与实测一致。
+ *     "impact","list_directory","panoramic-query","prepare","search_in_file",
+ *     "server_build_info","view_file"]
+ *   历史注记：F180 当时 scope 文档写 18 是错的（真值 17）；本次到 18 是 F265 真实新增工具所致。
  */
 
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
@@ -30,8 +31,8 @@ import {
 const SHOULD_SKIP = buildSkipCondition(false);
 const SKIP_REASON = buildSkipReason(false);
 
-// 实测确认的 17 个工具名（排序后）
-// 实测时间：2026-06-08；若工具集合有变更，此处断言会立即失败并暴露漂移
+// 实测确认的 18 个工具名（排序后）
+// 实测时间：2026-08-30；若工具集合有变更，此处断言会立即失败并暴露漂移
 const EXPECTED_TOOL_NAMES = [
   'batch',
   'context',
@@ -49,6 +50,7 @@ const EXPECTED_TOOL_NAMES = [
   'panoramic-query',
   'prepare',
   'search_in_file',
+  'server_build_info', // F265 G0-3 自省工具
   'view_file',
 ];
 

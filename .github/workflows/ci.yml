@@ -9,8 +9,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # fetch-depth: 0（Feature 265 G0-2）——默认是浅克隆（depth 1），而 release:check 的
+      # 发布断层判据要拿 npm registry 的 gitHead（几十到上百个 commit 之前的历史提交）在本地
+      # 做 `git cat-file -e` + `git rev-list --count`。浅克隆下该 commit 恒不可达，判据会
+      # 永远只输出 indeterminate，整条 G0-2 在 CI 上形同虚设。这不是可选优化。
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,6 +42,28 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # 治理链（Feature 265 G0-2）。位置有两条约束：
+      #
+      # 1. 必须排在 Build Knowledge Graph **之后**：repo:check 内的 graph-quality:* 判据读
+      #    specs/_meta/graph.json（该路径被 .gitignore，干净 checkout 没有）。⚠️ 缺图时它们
+      #    **不会**变红——graph-quality-core 的 FR-017 是优雅跳过，缺图即静默 skip、CI 照绿
+      #    （对抗审查 C-5 实测；此处原注释写的"顺序颠倒会必红"是不实陈述）。也就是说步骤顺序
+      #    是这条判据真正跑起来的**唯一**保障，没有任何门禁会在顺序错时提醒你。因此下面
+      #    Repo Check 的 run 首行放了一条 `test -f` 哑守卫：图不在就当场红，而不是绿着空转。
+      # 2. 必须排在 Test **之后**（对抗审查 W-7）：治理检查红掉会短路整个 job，把 vitest 的
+      #    全部信号一起吞掉——先拿到测试结论，再看治理结论。
+      #
+      # 两步都**不加** if: always()——lint/build/建图/测试任一步已失败时，在一个已知损坏的
+      # 构建上跑治理检查没有意义。这与下面 Test Plugins 加 if: always() 的理由（防 vitest flaky
+      # 短路掉 mjs 测试面）是两类不同问题，不套用同一处理。
+      - name: Repo Check
+        run: |
+          test -f specs/_meta/graph.json
+          npm run repo:check
+
+      - name: Release Check
+        run: npm run release:check
 
       # 独立门禁：plugin mjs 测试。npm test 内部用 `vitest run && npm run test:plugins`，
       # 若 vitest 因仓库预存 dist-staleness flaky 失败会短路跳过 test:plugins，

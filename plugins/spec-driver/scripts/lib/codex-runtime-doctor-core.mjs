@@ -126,6 +126,20 @@ export const REMEDIATION_CODES = Object.freeze([
  */
 export const RAW_SHAPES = Object.freeze(['bare-semver', 'decorated-semver', 'unparseable', 'absent']);
 
+/**
+ * commit 比对的**派生**结论（F265 G0-3 / FR-014、FR-015）。
+ *
+ * 🔴 这四个字面量是 commit 维度对外的**唯一**出口。C1 裁决（F236/F240）不可回退：
+ * commit 后缀在语法上与一个 32/40 位十六进制凭据完全同构，语法证明不了那串东西
+ * 不是密钥。因此报告 schema 里没有任何字段能承载 commit 原串，比对只在读取函数的
+ * 局部作用域内发生，跨出去的只有这里的四个枚举值之一。
+ *
+ * - `match` / `mismatch`：两方都读到了 commit，按较短一方的长度取前缀比较后相同 / 不同
+ * - `absent`：至少一方没有 commit 信息（该方不携带 commit，或本地基准不可读）
+ * - `unreadable`：读到了东西，但形态不是 commit（长度不足 7 位 / 非十六进制）
+ */
+export const COMMIT_COMPARISONS = Object.freeze(['match', 'mismatch', 'absent', 'unreadable']);
+
 export const TRUST_STATUSES = Object.freeze([
   'trusted',
   'untrusted',
@@ -151,7 +165,21 @@ const ENUM_DOMAINS = Object.freeze({
   rawShape: RAW_SHAPES,
   errorClass: ERROR_CLASSES,
   binaryName: Object.freeze(['spectra']),
-  probeMethod: Object.freeze(['none-available']),
+  // F240 时期只有 `none-available`（MCP 侧确无自省通道）。F265 落地 `server_build_info`
+  // 后该值**已无产出路径**——报告里再出现它就是在陈述一个不再成立的事实，故整体替换为
+  // 实际使用的探测方法名。自省失败不退回 `none-available`：那会把「问了但没问到」
+  // 说成「压根没有可问的通道」，是两回事。
+  probeMethod: Object.freeze(['stdio-server-build-info']),
+  // 探测对象的自述（F265 对抗审查 C-2）：域里只有这一个值，是**刻意**的——
+  // 它存在的意义不是分类，而是让报告自己说清"这一条讲的是 PATH 上那个二进制，
+  // 不是客户端此刻连着的那个进程"。真要判在跑的进程，只能由客户端侧自己调
+  // `server_build_info`，doctor 结构上做不到（见 probeMcpServerBuild 的 docstring）。
+  probeTarget: Object.freeze(['path-binary']),
+  // 基准方（本地 HEAD）自身的可读性（F265 对抗审查 I-1）。刻意**不复用**
+  // `commitComparison`：基准与自己比恒得 `match`，那个 `match` 与真实的跨方比对
+  // 在渲染上无法区分，读者会以为"仓库这一方也比过了"。
+  baselineCommit: Object.freeze(['available', 'absent']),
+  commitComparison: COMMIT_COMPARISONS,
   trustStatus: TRUST_STATUSES,
 });
 
@@ -229,6 +257,49 @@ export function parseVersionLine(raw, opts = {}) {
     hadVPrefix: vPrefix === 'v',
     commitSuffixPresent: /\([0-9a-f]{7,40}\)$/.test(line),
   };
+}
+
+/** commit 的形态判据：7~40 位十六进制（大小写不敏感，比较前统一小写） */
+const COMMIT_RE = /^[0-9a-f]{7,40}$/i;
+
+/**
+ * 两个 commit 的比对（F265 G0-3）——**报告侧 commit 维度的唯一出口**。
+ *
+ * 🔴 本函数是 C1 脱敏纪律与「按 commit 比对」需求的交汇点：入参可以是原串，
+ * 返回值**只可能**是 `COMMIT_COMPARISONS` 的四个字面量之一。调用方因此在结构上
+ * 无法把 commit 原串带进 details / summary / 日志 —— 与其说这是"注意不要"，
+ * 不如说是「没有一条路径能把它带出去」。
+ *
+ * 判定顺序（先命中先返回）：
+ * 1. 任一方是 `null` / `undefined` / 空串 ⇒ `absent`（那一方**没有** commit 信息，
+ *    例如 release contract schema 从来不含 commit 字段、非 git 工作区读不到 HEAD）；
+ * 2. 任一方不是字符串、或不满足 7~40 位十六进制 ⇒ `unreadable`（读到了东西但不是 commit）；
+ * 3. 按**较短一方的长度**取前缀（小写）比较 ⇒ `match` / `mismatch`。之所以不恒取 7 位：
+ *    7 位十六进制只有 28 bit，两个全长 SHA 会因为前 7 位撞车被判成同一个 build
+ *    （对抗审查 W-2）。按较短方长度比较意味着信息给多少就用多少——双方都是 40 位时
+ *    做的就是全长比较，只有在一方只暴露 commit(7)（`spectra --version` 的形态）时
+ *    才退到 7 位，而 7 位是 `COMMIT_RE` 保证的下限。
+ *
+ * 🔴 信任边界：本比对的两输入均来自被测方自述（`--version` 的输出、MCP 自省回传的
+ * 字段），**无任何完整性绑定**——它证明不了那个二进制真的编自它自称的那个 commit。
+ * 这里判的是"两方各自说的是不是同一个值"，不是"它们真的是同一份代码"。
+ *
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {'match'|'mismatch'|'absent'|'unreadable'}
+ */
+export function compareCommits(a, b) {
+  const isAbsent = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim().length === 0);
+  if (isAbsent(a) || isAbsent(b)) return 'absent';
+  if (typeof a !== 'string' || typeof b !== 'string') return 'unreadable';
+  const left = a.trim();
+  const right = b.trim();
+  if (!COMMIT_RE.test(left) || !COMMIT_RE.test(right)) return 'unreadable';
+  // 较短一方的长度即可比较的信息量上限；`COMMIT_RE` 已保证它 >= 7
+  const width = Math.min(left.length, right.length);
+  return left.slice(0, width).toLowerCase() === right.slice(0, width).toLowerCase()
+    ? 'match'
+    : 'mismatch';
 }
 
 /**
@@ -315,6 +386,12 @@ export const DETAILS_SCHEMA = Object.freeze({
     semver: 'semver',
     rawShape: 'enum',
     errorClass: 'enum',
+    // 基准方的 commit 维度（F265）：release contract schema 从不含 commit 字段，
+    // 该方的 commit 取运行 doctor 那一刻的本地 `git rev-parse HEAD`（活读取、不持久化）。
+    // 🔴 这里记的是**基准立没立得住**（`available` / `absent`），不是一次比对结论——
+    // 用 `commitComparison: 'match'` 表达"基准和自己一样"是自比，渲染出来与真实的
+    // 跨方 `match` 无法区分（对抗审查 I-1）。基准 `absent` 时其余三方必然也是 `absent`。
+    baselineCommit: 'enum',
   }),
   'global-cli': Object.freeze({
     binaryName: 'enum',
@@ -322,6 +399,9 @@ export const DETAILS_SCHEMA = Object.freeze({
     // 版本行的两个**派生**特征位（C1：原始 commit 子串在 schema 层不可承载）
     hadVPrefix: 'boolean',
     commitSuffixPresent: 'boolean',
+    // 与基准 commit 的比对结论（F265）；`commitSuffixPresent` 只说"有没有后缀"，
+    // 这一项才回答"是不是同一个 build"
+    commitComparison: 'enum',
     exitCode: 'boundedInt',
     errorClass: 'enum',
     rawShape: 'enum',
@@ -331,10 +411,27 @@ export const DETAILS_SCHEMA = Object.freeze({
     activeInstallPath: 'scopedRelPath',
     semver: 'semver',
     rawShape: 'enum',
+    // 🔴 恒为 `absent`：`.codex-plugin/plugin.json` 的 manifest schema 从来没有 commit 字段，
+    // 而快照目录名是**快照哈希**、`probeCodexPluginManifest` 已明令绝不能当版本/构建标识用
+    // （F236 教训）。这是**如实反映"该方无 commit 信息"**，不是未完成事项；
+    // 有锁定测试防止未来有人"顺手"把快照哈希接上来冒充 commit。
+    commitComparison: 'enum',
   }),
   'mcp-server': Object.freeze({
     probeMethod: 'enum',
-    knownGap: 'boolean',
+    // 探测对象自述（F265 对抗审查 C-2）：`path-binary` —— PATH 上的 `spectra`，
+    // 而不是 MCP 客户端此刻连着的那个进程
+    probeTarget: 'enum',
+    // F265：MCP server 自省 build 与基准 commit 的比对结论（本类目的主判据）
+    commitComparison: 'enum',
+    // 该 build 是否编自未提交的工作树（F265 对抗审查 C-1）。生产侧一直如实回传这一位，
+    // 消费侧此前零引用，于是"脏树 build"被渲染成干净的 `match / ok` —— 而开发期的
+    // 主路径恰恰就是脏树。缺失/非布尔时**不写这个键**（写 undefined 会触发
+    // sanitizeDetails 的类型违规分支，把一次"对方没报"误记成 parse-failed）。
+    buildDirty: 'boolean',
+    // 自省同时回传 version，作为**次级**信号记录，不驱动本类目状态（版本漂移由 global-cli 承载）
+    semver: 'semver',
+    errorClass: 'enum',
   }),
   'hook-trust': Object.freeze({
     attemptedProbes: 'probeList',
@@ -419,6 +516,17 @@ const SUMMARY_TEMPLATES = Object.freeze({
     params: { product: 'enum:product', errorClass: 'enum:errorClass' },
     render: (p) => `全局 ${p.product} CLI 不可用（errorClass=${p.errorClass}），该方不可判定`,
   },
+  /**
+   * F265：语义版本一致、但 build commit 不是同一个。
+   * 落 `warning` 而非 `fail` —— 版本号没漂，只是二进制不是本地这份代码编出来的，
+   * 这是"你自用的 CLI 不是这次改动"的诚实信号，不是发布契约破损。
+   * 🔴 参数里**没有** commit 值本身（`buildSummary` 的参数校验也不认识这种类型）。
+   */
+  'global-cli-commit-mismatch': {
+    params: { product: 'enum:product', semver: 'semver' },
+    render: (p) =>
+      `全局 ${p.product} CLI 版本号与仓库一致（${p.semver}），但 build commit 与本地 HEAD 不同（commitComparison=mismatch）`,
+  },
   'global-cli-compare-unavailable': {
     params: { product: 'enum:product' },
     render: (p) => `全局 ${p.product} CLI 版本已读到，但仓库侧参照不可判定，无法比较`,
@@ -440,9 +548,61 @@ const SUMMARY_TEMPLATES = Object.freeze({
     params: { product: 'enum:product' },
     render: (p) => `已读到 ${p.product} 的 active plugin build 版本，但仓库侧参照不可判定，无法比较`,
   },
-  'mcp-server-known-gap': {
+  /**
+   * F265 G0-3：`mcp-server-known-gap`（"当前不暴露版本自省能力，属已知产品缺口"）已**移除** ——
+   * 该缺口由本卡的 `server_build_info` 工具关闭，继续输出它就是在报告一个不再成立的事实。
+   * 下面四条按自省探测的实际结局分支，替代原先那条恒定文案。
+   */
+  /**
+   * 🔴 措辞只到能证成的范围（F265 对抗审查 C-2）：doctor 探的是**PATH 上的 `spectra`
+   * 二进制**（自己拉起一个新进程问它），不是 MCP 客户端此刻连着的那个进程。说成
+   * "正在运行的 MCP server"会把本卡最想抓的失效态——客户端连着旧进程没重连——
+   * 描述成已经检查过了，而那恰恰是这条探测结构上够不着的地方。
+   */
+  'mcp-server-commit-match': {
     params: { product: 'enum:product' },
-    render: (p) => `${p.product} MCP server 当前不暴露版本自省能力，此诊断为已知产品缺口`,
+    render: (p) =>
+      `PATH 上的 ${p.product} 二进制所构建的 MCP server 与本地 HEAD 是同一个 commit（commitComparison=match）`,
+  },
+  /**
+   * F265 对抗审查 C-1：commit 相同、但那个 build 编自未提交的工作树。
+   * 落 `warning` 而非 `ok` —— commit 一致只说明"基于同一次提交"，脏树 build 里
+   * 装的是当时工作区的任意状态，跟当前代码可以毫无关系。开发期这是主路径，
+   * 把它渲染成干净的 `ok` 等于让诊断在最常见的场景下说假话。
+   */
+  'mcp-server-commit-match-dirty': {
+    params: { product: 'enum:product' },
+    render: (p) =>
+      `PATH 上的 ${p.product} 二进制所构建的 MCP server 与本地 HEAD 是同一个 commit，` +
+      '但该 build 编自未提交的工作树（dirty），行为可能对不上当前代码',
+  },
+  'mcp-server-commit-mismatch': {
+    params: { product: 'enum:product' },
+    render: (p) =>
+      `PATH 上的 ${p.product} 二进制所构建的 MCP server 与本地 HEAD 不是同一个 commit（commitComparison=mismatch），MCP 行为可能对不上当前代码`,
+  },
+  /**
+   * 自省成功、但**对方没有** commit 信息（clean checkout / tsx 直跑的 build 不盖章），
+   * 或本地基准读不到 —— 是"没有可比的东西"，不是错误。
+   * 与下面的 `-unreadable` 分开：同文件的 PROBE_OUTCOMES 早就写过这条纪律 ——
+   * "没给"和"给了但读不懂"是两种事实，套同一句文案会把排查方向指错（对抗审查 W-1）。
+   */
+  'mcp-server-commit-absent': {
+    params: { product: 'enum:product' },
+    render: (p) =>
+      `PATH 上的 ${p.product} 二进制的 MCP server 自省已读到，但比对所需的一方没有 commit 信息，该维度不可判定`,
+  },
+  /** 自省成功、对方也回传了 commit，但那串东西的形态不是 commit（非十六进制 / 长度越界） */
+  'mcp-server-commit-unreadable': {
+    params: { product: 'enum:product' },
+    render: (p) =>
+      `PATH 上的 ${p.product} 二进制的 MCP server 回传了 commit，但形态不合法（非 7~40 位十六进制），该维度不可判定`,
+  },
+  /** 自省通道本身没走通（二进制不可执行 / 超时 / 旧 build 没有该工具） */
+  'mcp-server-introspection-unavailable': {
+    params: { product: 'enum:product', errorClass: 'enum:errorClass' },
+    render: (p) =>
+      `无法从 PATH 上的 ${p.product} 二进制读到 MCP server 自省 build 信息（errorClass=${p.errorClass}），该方无 commit 信息，不可判定`,
   },
   'mcp-server-not-applicable': {
     params: { product: 'enum:product' },
@@ -539,7 +699,11 @@ const REMEDIATION_TEMPLATES = Object.freeze({
   },
   'reload-mcp-client': {
     command: null,
-    text: '请在 MCP 客户端中重新加载该 server 后重跑本诊断。',
+    // 🔴 F265 对抗审查 C-2：本诊断探的是 PATH 上的二进制，不是客户端已连接的那个进程。
+    // 不点破这一点，读者会把"PATH 上是新的"当成"我正在用的 MCP 也是新的"。
+    text:
+      '请在 MCP 客户端中重新加载该 server 后重跑本诊断。' +
+      '注意本诊断读的是 PATH 上的二进制，客户端已连接的旧进程需重连后本结论才适用。',
   },
   'grant-hook-trust': {
     command: null,

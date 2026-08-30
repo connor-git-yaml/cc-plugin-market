@@ -26,6 +26,8 @@ import {
   PLUGIN_BUILD_PROBES,
   createCheck,
   assembleReport,
+  compareCommits,
+  constrainVersionLine,
   normalizeVersion,
   parseVersionLine,
   toScopedRelPath,
@@ -46,18 +48,32 @@ const SUBPROCESS_TIMEOUT_MS = 5000;
  */
 const CODEX_DOCTOR_TIMEOUT_MS = 15000;
 
+/**
+ * MCP 自省探测（`spectra mcp-server` 一次 stdio JSON-RPC 往返）的墙钟上限。
+ *
+ * 本机实测一次完整往返（进程冷启动 + initialize + tools/call + stdin EOF 后自行退出）
+ * 约 0.2s，10s 留足余量。之所以仍要有界：若某个旧 build 在 stdin 关闭后不退出，
+ * 这条探测会挂住整个诊断——宁可落 ETIMEDOUT（indeterminate）也不挂起。
+ */
+const MCP_INTROSPECTION_TIMEOUT_MS = 10000;
+
 const RELEASE_CONTRACT_REL = path.join('contracts', 'release-contract.yaml');
 
 /**
- * 默认子进程执行器：只回传 stdout 文本，子进程错误输出直接丢弃（见文件头结构性防线）。
+ * 默认子进程执行器：只回传子进程的标准输出文本，其错误输出直接丢弃（见文件头结构性防线）。
+ *
+ * `options.input` 用于需要向子进程喂请求的探测（MCP stdio JSON-RPC）：给了才把 stdin
+ * 接成管道，其余场景仍是 `ignore` —— 保持"默认不给子进程任何输入"这条默认值。
  * @returns {string}
  */
 function defaultExec(file, args, options = {}) {
+  const hasInput = typeof options.input === 'string';
   return execFileSync(file, args, {
     timeout: options.timeout ?? SUBPROCESS_TIMEOUT_MS,
     killSignal: 'SIGKILL',
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'ignore'],
+    stdio: [hasInput ? 'pipe' : 'ignore', 'pipe', 'ignore'],
+    ...(hasInput ? { input: options.input } : {}),
   });
 }
 
@@ -87,7 +103,10 @@ function extractExitCode(err) {
  */
 function runCommand(exec, file, args, opts = {}) {
   try {
-    const text = exec(file, args, { timeout: opts.timeout ?? SUBPROCESS_TIMEOUT_MS });
+    const text = exec(file, args, {
+      timeout: opts.timeout ?? SUBPROCESS_TIMEOUT_MS,
+      ...(typeof opts.input === 'string' ? { input: opts.input } : {}),
+    });
     return { kind: 'ok', text: typeof text === 'string' ? text : '' };
   } catch (err) {
     return { kind: 'error', errorClass: classifyErrorClass(err, opts), exitCode: extractExitCode(err) };
@@ -108,7 +127,10 @@ function memoizeExec(exec) {
     // 🔴 分隔符必须以**转义序列**书写，不能把裸 NUL 字节敲进源文件：源码里出现 NUL
     // 会让 git 把整个文件判为 binary，`git diff` 退化成「Binary files differ」，
     // 于是这个文件对文本审查与 grep 类门禁**全部失明**（W5）。
-    const key = `${file}\u0000${args.join('\u0000')}`;
+    // 🔴 `input` 也必须进 key：同一条命令喂不同请求会得到不同响应，只按 file+args 缓存
+    // 等于让第二次调用拿到第一次的答案（当前只有 MCP 自省一条带 input 的调用，
+    // 但缓存键漏掉一个真实入参就是一颗待引爆的哑弹）。
+    const key = `${file}\u0000${args.join('\u0000')}\u0000${typeof options.input === 'string' ? options.input : ''}`;
     const hit = cache.get(key);
     if (hit) {
       if (hit.kind === 'ok') return hit.value;
@@ -151,6 +173,47 @@ function fileExists(absPath) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// commit 维度（F265 G0-3）：基准读取与比对闸门
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * commit 比对闸门。**本模块里唯一持有 commit 原串的地方**。
+ *
+ * 设计要点（FR-015 / C1 裁决的结构性落实）：
+ * - 基准值（本地 `git rev-parse HEAD`）只活在这个闭包里，既不返回、不入 details、
+ *   也不进任何模板参数；
+ * - 对外只暴露 `compareWith(otherCommit)`，返回值是 `compareCommits` 的四个枚举之一；
+ * - 各方自己的 commit 原串同样只在各自探测函数体内活到调用 `compareWith` 的那一行，
+ *   探测函数**返回的是枚举而不是 commit**。
+ *   于是"commit 原串跨函数边界"在结构上不可构造，而不是靠 review 时提醒。
+ *
+ * 基准取"运行 doctor 那一刻的本地 HEAD"而非某个持久化字段：G0-2 已裁定不新增
+ * 会过期、需人工维护的持久化 commit 字段；这里是活读取，不写回任何文件。
+ *
+ * @param {Function} exec 注入的子进程执行器（单测据此保持离线）
+ * @param {string} projectRoot
+ */
+function createCommitGate(exec, projectRoot) {
+  const result = runCommand(exec, 'git', ['-C', projectRoot, 'rev-parse', 'HEAD']);
+  // 非 git 工作区 / 无 git 可执行文件 ⇒ 基准缺席（absent），绝不猜一个出来
+  const baseline =
+    result.kind === 'ok' ? (result.text.split('\n', 1)[0].trim() || null) : null;
+  return {
+    /**
+     * 基准立没立得住：读到本地 HEAD ⇒ `available`，非 git 工作区 / 读到的东西形态不是
+     * commit ⇒ `absent`。
+     * 🔴 刻意**不是**一次 `compareCommits(baseline, baseline)` 自比（对抗审查 I-1）：
+     * 自比恒得 `match`，渲染出来与真实的跨方比对结论无法区分。
+     */
+    baselineCommit: compareCommits(baseline, baseline) === 'match' ? 'available' : 'absent',
+    /** @param {string|null} otherCommit @returns {'match'|'mismatch'|'absent'|'unreadable'} */
+    compareWith(otherCommit) {
+      return compareCommits(baseline, otherCommit);
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 一方：仓库版本（contracts/release-contract.yaml）
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -187,6 +250,26 @@ function readRepoVersions(projectRoot) {
 /** 只有 spectra 有独立全局 CLI；spec-driver 侧是 not-applicable（设计上不存在对应物） */
 const GLOBAL_CLI_BINARIES = Object.freeze({ spectra: 'spectra' });
 
+/** 受限版本行末尾的 commit 后缀（`spectra v4.5.0 (ee6e831)`），局部使用、不导出 */
+const VERSION_LINE_COMMIT_SUFFIX_RE = /\(([0-9a-f]{7,40})\)$/;
+
+/**
+ * 从**已通过 core 整行语法校验**的版本行里取出 commit 子串（局部辅助，不导出、不复用于别处）。
+ *
+ * 入参必须是 `constrainVersionLine` 的产物（`null` 或一条完整合法的版本行），因此这里
+ * 不再做第二遍归约。它**不改变** `parseVersionLine` 的返回值形态（那仍然只回
+ * `semver` / `hadVPrefix` / `commitSuffixPresent` 三个派生值，是刻意的），
+ * 只是在 io 层多取一次同一行的后缀，取到即刻换成枚举。
+ *
+ * @param {string|null} line
+ * @returns {string|null}
+ */
+function extractCommitFromConstrainedLine(line) {
+  if (typeof line !== 'string') return null;
+  const match = VERSION_LINE_COMMIT_SUFFIX_RE.exec(line);
+  return match ? match[1] : null;
+}
+
 /**
  * 读全局 CLI 版本。
  *
@@ -195,24 +278,30 @@ const GLOBAL_CLI_BINARIES = Object.freeze({ spectra: 'spectra' });
  * 于是 `warning: expected 4.4.0 but no binary was executed` 这种垃圾输出
  * 会被当成一次成功的版本读取并判 `ok`。
  *
- * 🔴 C1：返回值里没有任何原始子串 —— 只有三段数字拼装的 `semver` 与两个
- * 派生布尔位，commit 的值本身在 core 层就已被丢弃。
+ * 🔴 C1：返回值里没有任何原始子串 —— 只有三段数字拼装的 `semver`、两个派生布尔位，
+ * 以及 F265 新增的 `commitComparison` 枚举。commit 的值本身只在本函数体内活一行。
  */
-function probeGlobalCli(exec, binaryName) {
+function probeGlobalCli(exec, binaryName, commitGate) {
   const result = runCommand(exec, binaryName, ['--version']);
   if (result.kind === 'error') {
     return { kind: 'error', errorClass: result.errorClass, exitCode: result.exitCode };
   }
   const parsed = parseVersionLine(result.text, { expectedProgram: binaryName });
   if (!parsed.ok) {
-    return { kind: 'ok', semver: null, rawShape: 'unparseable' };
+    return { kind: 'ok', semver: null, rawShape: 'unparseable', commitComparison: 'absent' };
   }
+  // 🔴 提取的输入必须是 core 已整行判负/判正过的那一行，不另开第二条归约路径：
+  // 两条归约路径必然漂移，且 `$` 在无 `/m` 时是**文本末尾**而非行尾（F229 教训），
+  // 直接对多行原始输出跑后缀正则会得到与主判据不一致的接受面。
+  const commit = extractCommitFromConstrainedLine(constrainVersionLine(result.text));
   return {
     kind: 'ok',
     semver: parsed.semver,
     rawShape: parsed.hadVPrefix || parsed.commitSuffixPresent ? 'decorated-semver' : 'bare-semver',
     hadVPrefix: parsed.hadVPrefix,
     commitSuffixPresent: parsed.commitSuffixPresent,
+    // commit 原串到此为止：返回的是枚举
+    commitComparison: commitGate.compareWith(commit),
   };
 }
 
@@ -639,12 +728,163 @@ function collectPluginBuildProbes({ exec, codexHome, product }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 四方：MCP server 自省（F265 G0-3 —— 关闭 F240 时期的 `mcp-server-known-gap`）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * MCP 自省回传 `version` 的**摄入闸门**（F265 对抗审查 W-3）。
+ *
+ * `normalizeVersion` 取的是**首个** `MAJOR.MINOR.PATCH` 匹配，对整串长度与其余字符
+ * 一概不管——于是一个 200KB 的 `version` 串照样能提取出三段数字，而那 200KB 本身
+ * 来自一个无界的子进程输出。F240 的整行闸（`constrainVersionLine`）只护 global-cli
+ * 那条通道，这条通道此前是敞开的。
+ *
+ * 这里先做**整串**校验（长度 ≤32 且全串就是一个受限 semver），不合格直接判 `null`
+ * 走 unparseable 路径，绝不"从垃圾里捞出三段数字"。代价是 prerelease / build metadata
+ * 形态（`4.5.0-beta.1`）也会被判 null —— 生产侧 `server_build_info` 回传的是
+ * package.json 的 version，本仓从不发 prerelease；宁可判不出，也不放行无界串。
+ *
+ * @param {unknown} raw
+ * @returns {string|null}
+ */
+const INTROSPECTED_VERSION_MAX_LEN = 32;
+const INTROSPECTED_VERSION_RE = /^v?\d+\.\d+\.\d+$/;
+function readIntrospectedSemver(raw) {
+  if (typeof raw !== 'string') return null;
+  const text = raw.trim();
+  if (text.length === 0 || text.length > INTROSPECTED_VERSION_MAX_LEN) return null;
+  if (!INTROSPECTED_VERSION_RE.test(text)) return null;
+  return normalizeVersion(text).semver;
+}
+
+/**
+ * 一次 stdio JSON-RPC 往返的请求体（三行 newline-delimited JSON）。
+ *
+ * 必须完整走 `initialize` → `notifications/initialized` → `tools/call` 三步：
+ * MCP SDK 的 server 在 initialize 完成前不受理 `tools/call`。三行一次性喂进 stdin
+ * 后随即 EOF，server 读完即自行退出（本机实测一次往返约 0.2s）。
+ */
+const MCP_INTROSPECTION_REQUEST = [
+  JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'codex-runtime-doctor', version: '1' },
+    },
+  }),
+  JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
+  JSON.stringify({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: { name: 'server_build_info', arguments: {} },
+  }),
+  '',
+].join('\n');
+
+/**
+ * 从 newline-delimited JSON 的 stdout 里取出指定 id 的响应。
+ *
+ * 逐行 `JSON.parse` 且**逐行**吞异常：stdout 里混进非 JSON 行（旧 build 的启动日志、
+ * PATH 上摆着的假 `spectra` 脚本、任何噪声）都只应让那一行被跳过，不应让整次探测崩掉。
+ * 返回的是已解析的对象——它的**任何子串都不会进报告**，调用方只从中取 commit 去比对。
+ */
+function findRpcResponse(stdout, id) {
+  for (const line of String(stdout).split('\n')) {
+    const text = line.trim();
+    if (text.length === 0 || text[0] !== '{') continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      continue;
+    }
+    if (parsed && typeof parsed === 'object' && parsed.id === id) return parsed;
+  }
+  return null;
+}
+
+/**
+ * 探测 **PATH 上的 `spectra` 二进制所构建的** MCP server 的 build 标识。
+ *
+ * 🔴 探测对象的准确表述很重要（F265 对抗审查 C-2）：本函数**自己拉起一个新进程**
+ * （`spectra mcp-server`）问它。它与 `plugins/spectra/.mcp.json` 的 `command: "spectra"`
+ * 解析到同一个二进制，所以能回答"下次客户端拉起来的会是哪份代码"；但它**回答不了**
+ * "客户端此刻连着的那个进程是哪份代码"——那个进程可能是几小时前用另一个二进制拉起的，
+ * 而那恰恰是本卡最想抓的失效态。真要判在跑的进程，只能由客户端侧自己调
+ * `server_build_info` 工具（MCP 协议里没有第三方进程内省的通道）。
+ * details 里的 `probeTarget: 'path-binary'` 就是把这条边界写进报告本身，
+ * 而不是靠文案含糊过去。
+ *
+ * 🔴 信任边界：回传的 commit / dirty 全是**被测方自述**，没有任何完整性绑定——
+ * 一个说谎的二进制可以回传任意值。这里判的是"它说的和本地 HEAD 是不是同一个值"。
+ *
+ * 🔴 C1：返回值里只有 `semver`（三段数字）、`commitComparison`（四枚举）与
+ * `buildDirty`（布尔）。自省回传的 commit 原串只在本函数体内活到
+ * `commitGate.compareWith(...)` 那一行。
+ *
+ * 失败面（全部归为"该方无 commit 信息"，不猜、不伪造）：
+ * - 二进制不存在 / 不可执行 / 超时 ⇒ `{kind:'error', errorClass}`；
+ * - 旧 build 没有 `server_build_info` 工具 ⇒ 响应带 `isError:true` ⇒ `rpc-error`；
+ * - 响应缺失 / 内容不是 JSON ⇒ `parse-failed`。
+ */
+function probeMcpServerBuild(exec, binaryName, commitGate) {
+  const result = runCommand(exec, binaryName, ['mcp-server'], {
+    timeout: MCP_INTROSPECTION_TIMEOUT_MS,
+    input: MCP_INTROSPECTION_REQUEST,
+  });
+  if (result.kind === 'error') {
+    return { kind: 'error', errorClass: result.errorClass };
+  }
+  const response = findRpcResponse(result.text, 2);
+  if (response === null) {
+    return { kind: 'error', errorClass: 'parse-failed' };
+  }
+  // 旧 build（无该工具）走这里：SDK 把"工具不存在"包成 isError 的正常响应而非 JSON-RPC error
+  if (response.error !== undefined || response.result?.isError === true) {
+    return { kind: 'error', errorClass: 'rpc-error' };
+  }
+  const text = response.result?.content?.[0]?.text;
+  if (typeof text !== 'string') {
+    return { kind: 'error', errorClass: 'parse-failed' };
+  }
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    return { kind: 'error', errorClass: 'parse-failed' };
+  }
+  if (typeof payload !== 'object' || payload === null) {
+    return { kind: 'error', errorClass: 'parse-failed' };
+  }
+  return {
+    kind: 'ok',
+    // 版本先过整串摄入闸门再归一化（W-3：这条通道的输入是无界子进程输出）
+    semver: readIntrospectedSemver(payload.version),
+    // commit 原串到此为止：返回的是枚举
+    commitComparison: commitGate.compareWith(
+      typeof payload.commit === 'string' ? payload.commit : null,
+    ),
+    // 🔴 只认布尔（C-1）：生产侧如实回传 true/false，缺字段或别的类型一律当"没报"，
+    // 绝不把 truthy 的任意值读成 true —— 那会把"不知道脏不脏"说成"确认是脏的"。
+    buildDirty: typeof payload.dirty === 'boolean' ? payload.dirty : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // check 组装
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildRepoVersionCheck({ product, contract, roots }) {
+function buildRepoVersionCheck({ product, contract, roots, commitGate }) {
   const id = `repo-version.${product}`;
   const contractRelPath = toScopedRelPath(contract.absPath, roots);
+  // 基准方登记的是「这次比对的基准到底立没立得住」：读到本地 HEAD ⇒ `available`，
+  // 非 git 工作区 ⇒ `absent`（此时其余三方的 commit 结论也必然是 `absent`）。
+  // 它不驱动本类目状态（contract schema 里本就没有 commit 字段可漂）。
+  const baselineCommit = commitGate.baselineCommit;
   if (contract.kind === 'error') {
     return createCheck({
       id,
@@ -653,7 +893,7 @@ function buildRepoVersionCheck({ product, contract, roots }) {
       status: 'indeterminate',
       summaryCode: 'repo-version-unreadable',
       summaryParams: { errorClass: contract.errorClass },
-      details: { contractPath: contractRelPath, errorClass: contract.errorClass },
+      details: { contractPath: contractRelPath, errorClass: contract.errorClass, baselineCommit },
       remediationCode: 'manual-investigate',
     });
   }
@@ -671,6 +911,7 @@ function buildRepoVersionCheck({ product, contract, roots }) {
         versionField: PRODUCT_VERSION_PATHS[product],
         semver: null,
         rawShape: normalized.rawShape,
+        baselineCommit,
       },
       remediationCode: 'manual-investigate',
     });
@@ -687,11 +928,12 @@ function buildRepoVersionCheck({ product, contract, roots }) {
       versionField: PRODUCT_VERSION_PATHS[product],
       semver: normalized.semver,
       rawShape: normalized.rawShape,
+      baselineCommit,
     },
   });
 }
 
-function buildGlobalCliCheck({ product, exec, repoSemver }) {
+function buildGlobalCliCheck({ product, exec, repoSemver, commitGate }) {
   const id = `global-cli.${product}`;
   const binaryName = GLOBAL_CLI_BINARIES[product];
   if (!binaryName) {
@@ -704,7 +946,7 @@ function buildGlobalCliCheck({ product, exec, repoSemver }) {
       summaryParams: { product },
     });
   }
-  const probe = probeGlobalCli(exec, binaryName);
+  const probe = probeGlobalCli(exec, binaryName, commitGate);
   if (probe.kind === 'error') {
     return createCheck({
       id,
@@ -713,7 +955,7 @@ function buildGlobalCliCheck({ product, exec, repoSemver }) {
       status: 'indeterminate',
       summaryCode: 'global-cli-unavailable',
       summaryParams: { product, errorClass: probe.errorClass },
-      details: { binaryName, errorClass: probe.errorClass, exitCode: probe.exitCode },
+      details: { binaryName, errorClass: probe.errorClass, exitCode: probe.exitCode, commitComparison: 'absent' },
       remediationCode: 'upgrade-global-cli',
     });
   }
@@ -726,7 +968,13 @@ function buildGlobalCliCheck({ product, exec, repoSemver }) {
       summaryCode: 'global-cli-unparseable',
       summaryParams: { product },
       // 版本行整行语法校验未通过 —— 以固定枚举表达原因，不承载任何原文
-      details: { binaryName, semver: null, rawShape: probe.rawShape, errorClass: 'version-parse-failed' },
+      details: {
+        binaryName,
+        semver: null,
+        rawShape: probe.rawShape,
+        errorClass: 'version-parse-failed',
+        commitComparison: probe.commitComparison,
+      },
       remediationCode: 'manual-investigate',
     });
   }
@@ -736,6 +984,7 @@ function buildGlobalCliCheck({ product, exec, repoSemver }) {
     hadVPrefix: probe.hadVPrefix,
     commitSuffixPresent: probe.commitSuffixPresent,
     rawShape: probe.rawShape,
+    commitComparison: probe.commitComparison,
   };
   if (repoSemver === null) {
     return createCheck({
@@ -750,6 +999,22 @@ function buildGlobalCliCheck({ product, exec, repoSemver }) {
     });
   }
   if (repoSemver === probe.semver) {
+    // 🔴 版本号一致不等于同一份代码：同一个 4.5.0 可以是发布前后两个 build。
+    // commit 不同 ⇒ `warning`（"你自用的 CLI 不是这次改动"），而非 `fail`
+    // ——发布契约没破，破的是"我以为跑的是我刚改的那份"这个假设。
+    // `absent` / `unreadable` 不降级为 warning：那是"比不了"，不是"比出来不一样"。
+    if (details.commitComparison === 'mismatch') {
+      return createCheck({
+        id,
+        category: 'global-cli',
+        product,
+        status: 'warning',
+        summaryCode: 'global-cli-commit-mismatch',
+        summaryParams: { product, semver: probe.semver },
+        details,
+        remediationCode: 'upgrade-global-cli',
+      });
+    }
     return createCheck({
       id,
       category: 'global-cli',
@@ -799,7 +1064,7 @@ function buildPluginBuildCheck({ product, exec, codexHome, repoSemver, roots }) 
       status: 'indeterminate',
       summaryCode: 'plugin-build-unknown',
       summaryParams: { product },
-      details: { probedSources },
+      details: { probedSources, commitComparison: 'absent' },
       remediationCode: 'manual-investigate',
     });
   }
@@ -808,6 +1073,10 @@ function buildPluginBuildCheck({ product, exec, codexHome, repoSemver, roots }) 
     probedSources,
     semver: resolved.semver,
     rawShape: resolved.rawShape,
+    // 🔴 恒 `absent`，且**不接任何代理值**：manifest schema 没有 commit 字段，
+    // 快照目录名是快照哈希而非 build 标识（F236）。这里如实说"该方没有 commit 信息"，
+    // 好过拿一个形状像 commit 的东西冒充它。有锁定测试守着这条。
+    commitComparison: 'absent',
   };
   if (resolved.installDir) {
     details.activeInstallPath = toScopedRelPath(resolved.installDir, roots);
@@ -847,8 +1116,19 @@ function buildPluginBuildCheck({ product, exec, codexHome, repoSemver, roots }) 
   });
 }
 
-/** 只有 spectra 有 MCP server；且它当前**不暴露版本自省能力**，是已知产品缺口 */
-function buildMcpServerCheck({ product }) {
+/**
+ * 只有 spectra 有 MCP server。
+ *
+ * F240 时期这一方恒为 `mcp-server-known-gap`（"不暴露版本自省能力"）；F265 的
+ * `server_build_info` 工具关闭了那个缺口，于是这里改为**真去问一次** PATH 上的
+ * `spectra` 二进制：跑通 ⇒ 按 commit（并看 dirty）落 ok / warning；跑不通
+ * （旧 build 没这个工具、二进制不在 PATH、超时）⇒ `indeterminate` + `errorClass`，
+ * 如实说"问不到"。
+ *
+ * 🔴 结论的适用范围止于 `probeTarget: 'path-binary'` —— 见 `probeMcpServerBuild`
+ * 的 docstring：客户端此刻连着的进程不在本探测的射程内。
+ */
+function buildMcpServerCheck({ product, exec, commitGate }) {
   const id = `mcp-server.${product}`;
   if (product !== 'spectra') {
     return createCheck({
@@ -860,14 +1140,92 @@ function buildMcpServerCheck({ product }) {
       summaryParams: { product },
     });
   }
+  const binaryName = GLOBAL_CLI_BINARIES[product];
+  const probe = probeMcpServerBuild(exec, binaryName, commitGate);
+  if (probe.kind === 'error') {
+    return createCheck({
+      id,
+      category: 'mcp-server',
+      product,
+      status: 'indeterminate',
+      summaryCode: 'mcp-server-introspection-unavailable',
+      summaryParams: { product, errorClass: probe.errorClass },
+      details: {
+        probeMethod: 'stdio-server-build-info',
+        probeTarget: 'path-binary',
+        commitComparison: 'absent',
+        errorClass: probe.errorClass,
+      },
+      // 自省通道不通最常见的成因就是客户端/PATH 上跑着旧 build
+      remediationCode: 'reload-mcp-client',
+    });
+  }
+  const details = {
+    probeMethod: 'stdio-server-build-info',
+    probeTarget: 'path-binary',
+    commitComparison: probe.commitComparison,
+    semver: probe.semver,
+    // 对方没报 dirty（旧 build / 字段缺失）时**不写这个键**：写 undefined 会被
+    // sanitizeDetails 判为类型违规并倒灌一个 `errorClass: 'parse-failed'`，
+    // 把"这一位没有信息"说成"解析失败"。
+    ...(typeof probe.buildDirty === 'boolean' ? { buildDirty: probe.buildDirty } : {}),
+  };
+  if (probe.commitComparison === 'match') {
+    // 🔴 C-1：commit 相同不等于代码相同 —— 脏树 build 里装的是当时工作区的任意状态。
+    // 开发期这是主路径，落 `warning` 而非 `ok`，让最常见的场景不再被渲染成干净。
+    // 只有 `dirty === true` 才降级：`false` 是"确认干净"，缺失是"不知道"，
+    // 两者都不该被当成脏（不知道就按已知的说，不脑补）。
+    if (probe.buildDirty === true) {
+      return createCheck({
+        id,
+        category: 'mcp-server',
+        product,
+        status: 'warning',
+        summaryCode: 'mcp-server-commit-match-dirty',
+        summaryParams: { product },
+        details,
+        // 刻意无 remediation：现有 remediation 表里没有一条能真正解决它
+        // （重连客户端不会让脏树变干净），而 FR-009 要求步骤须经实测能达成目标状态。
+      });
+    }
+    return createCheck({
+      id,
+      category: 'mcp-server',
+      product,
+      status: 'ok',
+      summaryCode: 'mcp-server-commit-match',
+      summaryParams: { product },
+      details,
+    });
+  }
+  if (probe.commitComparison === 'mismatch') {
+    // `warning` 而非 `fail`：MCP 跑的是另一个 build 是**真实且常见**的状态
+    // （客户端未重连 / PATH 上是已发布版），它是提示不是契约破损。
+    return createCheck({
+      id,
+      category: 'mcp-server',
+      product,
+      status: 'warning',
+      summaryCode: 'mcp-server-commit-mismatch',
+      summaryParams: { product },
+      details,
+      remediationCode: 'reload-mcp-client',
+    });
+  }
+  // `absent` / `unreadable`：自省成功但比对做不成。两者分开落码（对抗审查 W-1）——
+  // "一方没有 commit 信息"与"回传了但形态不合法"是两种事实，指向的排查动作不同。
   return createCheck({
     id,
     category: 'mcp-server',
     product,
     status: 'indeterminate',
-    summaryCode: 'mcp-server-known-gap',
+    summaryCode:
+      probe.commitComparison === 'unreadable'
+        ? 'mcp-server-commit-unreadable'
+        : 'mcp-server-commit-absent',
     summaryParams: { product },
-    details: { probeMethod: 'none-available', knownGap: true },
+    details,
+    remediationCode: 'manual-investigate',
   });
 }
 
@@ -974,12 +1332,18 @@ export function runDoctor({ projectRoot, codexHome, env = {}, exec: rawExec = de
   const repoSemverOf = (product) =>
     contract.kind === 'ok' ? contract.versions[product].semver : null;
 
+  // commit 比对基准只读一次（本地 HEAD），四方共用同一个闸门；
+  // 基准原串封在闭包里，跨出去的只有四个枚举之一（F265 FR-015）
+  const commitGate = createCommitGate(exec, projectRoot);
+
   const checks = [];
   for (const product of PRODUCTS) {
-    checks.push(buildRepoVersionCheck({ product, contract, roots }));
+    checks.push(buildRepoVersionCheck({ product, contract, roots, commitGate }));
   }
   for (const product of PRODUCTS) {
-    checks.push(buildGlobalCliCheck({ product, exec, repoSemver: repoSemverOf(product) }));
+    checks.push(
+      buildGlobalCliCheck({ product, exec, repoSemver: repoSemverOf(product), commitGate }),
+    );
   }
   for (const product of PRODUCTS) {
     checks.push(
@@ -987,7 +1351,7 @@ export function runDoctor({ projectRoot, codexHome, env = {}, exec: rawExec = de
     );
   }
   for (const product of PRODUCTS) {
-    checks.push(buildMcpServerCheck({ product }));
+    checks.push(buildMcpServerCheck({ product, exec, commitGate }));
   }
   checks.push(buildHookTrustCheck({ codexHome, roots }));
 

@@ -1,8 +1,9 @@
 /**
  * MCP Server 定义
- * 注册 17 个工具（prepare、generate、batch、diff、panoramic-query +
+ * 注册 18 个工具（prepare、generate、batch、diff、panoramic-query +
  * 6 个 graph 查询工具 + 3 个 agent-context 工具 impact / context / detect_changes +
- * 3 个 file-navigation 工具 view_file / search_in_file / list_directory）
+ * 3 个 file-navigation 工具 view_file / search_in_file / list_directory +
+ * 1 个自省工具 server_build_info）
  * 供 Claude Code 通过 MCP 协议调用。
  */
 
@@ -24,11 +25,19 @@ import { registerAgentContextTools } from './agent-context-tools.js';
 import { registerFileNavTools } from './file-nav-tools.js';
 import { buildErrorResponse } from './lib/tool-response.js';
 import { withTelemetry } from './lib/telemetry.js';
+import { resolveBuildInfo, resolveVersionString } from '../cli/version-meta.js';
 
 // 读取 package.json 版本号
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgPath = resolve(__dirname, '..', '..', 'package.json');
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+
+/**
+ * F176 postbuild 盖章产物。与 `pkgPath` 用同一套相对路径算法：
+ * 编译后 `__dirname` 是 `dist/mcp`、tsx 直跑源码时是 `src/mcp`，两种情况下
+ * `../../dist/.spectra-build-meta.json` 都落在仓库（或 npm 包）根下的 dist 里。
+ */
+const buildMetaPath = resolve(__dirname, '..', '..', 'dist', '.spectra-build-meta.json');
 
 /**
  * MCP server 级 instructions（F184 FR-002）：经 SDK `ServerOptions` 注入 initialize result，
@@ -61,10 +70,16 @@ export function createMcpServer(): McpServer {
 
   // F184 FR-002：instructions 属于 SDK 第二个 ServerOptions 参数（非 serverInfo 对象），
   // 写错位置不会进入 initialize result。
+  //
+  // F265 G0-3 A 路：`description` 承载一行人可读 build 串（`spectra v<semver> (<commit7>)` 形态）。
+  // 🔴 只能用 `ImplementationSchema` 的官方字段：该 schema 底座是 `z.object()`（strip 未知键），
+  // 往 serverInfo 塞 `commit` / `dirty` 这类自定义键会被官方客户端 SDK 解析时丢弃，
+  // 是确证的死功能（F265 probe P1 实测）。机器可读的结构化自省走 `server_build_info` 工具。
   const server = new McpServer(
     {
       name: 'spectra',
       version: pkg.version,
+      description: resolveVersionString(buildMetaPath, pkg.version),
     },
     {
       instructions: TOOL_GUIDE,
@@ -338,6 +353,39 @@ Typical chained usage:
         content: [{ type: 'text' as const, text: JSON.stringify(result.data) }],
       };
     }),
+  );
+
+  // ─── 工具 6: server_build_info — 服务器自省（F265 G0-3 B 路） ───
+  // 单个工具不构成"一组"，故与前 5 个工具同样内联注册，不新建 registerIntrospectionTools()。
+  server.tool(
+    'server_build_info',
+    `服务器自省：返回当前正在运行的 Spectra MCP server 自身的 build 标识 { version, commit, dirty }。
+
+Use this tool when:
+- 要确认 MCP 跑的是不是本次改动/本次发布的那个 build
+- 排查"MCP 行为与代码对不上"时先定位实际运行的二进制
+- 外部诊断工具（codex-runtime-doctor）做四方 commit 一致性比对
+
+Example:
+- Input: {}（零参数）
+- Output: { version, commit, dirty }
+  例：version "4.5.0" / commit "ee6e8314…"（全长 SHA）/ dirty false；
+  缺 build 元数据（clean checkout / 源码直跑）时 commit 与 dirty 均为 null，键仍在
+
+注意：本工具描述的是**服务器自身**，与被分析代码库无关，不参与 detect_changes → impact → context 链路。`,
+    {},
+    // 与另外 5 个内联工具同样经 withTelemetry 注册：F177 的不变量是「每个到达 handler
+    // 的调用恰写 1 行 telemetry」，新增工具不挂装饰器就等于在漂移护栏上开个口子。
+    // 装饰器只做采样与顶层异常兜底，**不改返回体** —— 自省返回的仍是裸的
+    // `{version, commit, dirty}`，不叠加任何既有工具的响应包络字段。
+    withTelemetry('server_build_info', () => ({
+      content: [
+        {
+          type: 'text' as const,
+          text: JSON.stringify(resolveBuildInfo(buildMetaPath, pkg.version)),
+        },
+      ],
+    })),
   );
 
   // ─── 注册图谱查询工具（graph_query / graph_node / graph_path / graph_community / graph_god_nodes） ───

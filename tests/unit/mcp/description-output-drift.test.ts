@@ -157,6 +157,9 @@ const TRUTH: Record<string, readonly string[]> = {
   impact: ['affected', 'summary', 'topImpacted', 'nextStepHint'],
   // src/mcp/agent-context-tools.ts:365-408(data 对象字段)
   context: ['definition', 'callers', 'callees', 'imports', 'topRelevantCallers', 'nextStepHint'],
+  // src/cli/version-meta.ts resolveBuildInfo 的 BuildInfo 三键(server_build_info 是自省工具,
+  // 返回体刻意不套 buildSuccessResponse 的 data/nextStepHint 包络 —— 见 F265 plan §D)
+  server_build_info: ['version', 'commit', 'dirty'],
   // src/mcp/agent-context-tools.ts:636-651(data 对象字段)
   detect_changes: [
     'changedSymbols',

@@ -43,6 +43,20 @@ const CANARY = 'F240CANARY/sk-live+9a8b7c6d5e4f3a2b1c0d';
  */
 const HEX_CANARY = 'cafebabedeadbeeffeedface0123456';
 
+/**
+ * 🔴 F265 C1 canary：**40 位**十六进制串 —— 与一个完整 git SHA 逐字符同构。
+ *
+ * F265 给 doctor 加了 commit 维度，于是新增了三个持有 commit 原串的地方
+ * （`git rev-parse HEAD` 的 stdout、版本行的后缀、MCP 自省回传的 `commit`）。
+ * 「这串东西是 commit 不是密钥」在语法上依然证明不了，所以防线仍然只能是
+ * 「报告里没有字段能承载它」：比对只在读取函数的局部作用域内发生，
+ * 跨出去的只有 `match|mismatch|absent|unreadable` 四个字面量。
+ * 取 40 位（而非 HEX_CANARY 的 31 位）是因为真实 SHA 就是 40 位，
+ * 且它会**超出**受限版本行 48 字符上限——正好逼出「版本行走拒绝分支时，
+ * 另外两个通道（git / MCP）有没有把它带出来」这条此前不存在的路径。
+ */
+const HEX40_CANARY = 'deadbeefcafebabefeedface0123456789abcdef';
+
 function encodedForms(value: string): Record<string, string> {
   return {
     plain: value,
@@ -56,6 +70,7 @@ function encodedForms(value: string): Record<string, string> {
 
 const FORMS = encodedForms(CANARY);
 const HEX_FORMS = encodedForms(HEX_CANARY);
+const HEX40_FORMS = encodedForms(HEX40_CANARY);
 
 /**
  * 断言两个 canary 的四种编码形式在给定通道文本中均不出现。
@@ -69,6 +84,40 @@ function assertNoCanary(channel: string, text: string) {
   for (const [encoding, form] of Object.entries(HEX_FORMS)) {
     expect(text.includes(form), `通道 ${channel} 泄漏了 hex canary（编码：${encoding}）`).toBe(false);
   }
+  for (const [encoding, form] of Object.entries(HEX40_FORMS)) {
+    expect(text.includes(form), `通道 ${channel} 泄漏了 40 位 hex canary（编码：${encoding}）`).toBe(false);
+  }
+}
+
+/** MCP 自省成功响应的 NDJSON（第 2 行即 `tools/call` 的结果） */
+function mcpIntrospectionStdout(commit: string): string {
+  const payload = JSON.stringify({ version: '4.4.0', commit, dirty: false });
+  return [
+    JSON.stringify({ result: { protocolVersion: '2025-06-18', capabilities: {} }, jsonrpc: '2.0', id: 1 }),
+    JSON.stringify({ result: { content: [{ type: 'text', text: payload }] }, jsonrpc: '2.0', id: 2 }),
+    '',
+  ].join('\n');
+}
+
+/**
+ * 同一注入点的 in-process（`exec`）与子进程（PATH 上的真脚本）两种表达，必须等价 ——
+ * 否则第五通道等于没覆盖到该注入点。
+ * `cat >/dev/null` 是必须的：doctor 会往 stdin 喂 JSON-RPC 请求，脚本不读就会 EPIPE。
+ */
+function commitCanaryBinScripts(commit: string): Record<string, string> {
+  return {
+    git: `#!/bin/sh\necho ${commit}\n`,
+    spectra: [
+      '#!/bin/sh',
+      'if [ "$1" = "mcp-server" ]; then',
+      '  cat >/dev/null',
+      `  echo '${mcpIntrospectionStdout(commit).trim()}'`,
+      '  exit 0',
+      'fi',
+      `echo "spectra v4.4.0 (${commit.slice(0, 7)})"`,
+      '',
+    ].join('\n'),
+  };
 }
 
 interface Fixture {
@@ -360,6 +409,27 @@ describe('F240 T047 — canary 十一注入点 × 五通道 × 四编码（SC-01
           binScripts: { spectra: `#!/bin/sh\necho "spectra v4.4.0 (${HEX_CANARY})"\n` },
         }),
     },
+    {
+      /**
+       * 🔴 F265 注入点：commit 维度的**三个**新原串持有点一次性全打
+       * —— `git rev-parse HEAD`（比对基准）、版本行后缀、MCP 自省回传的 `commit`。
+       * 三处同喂一个 40 位 hex 凭据形状的串，比对结论会正常算出来（见下方正面用例），
+       * 但报告的五个通道里都不该出现它本身。
+       */
+      name: '注入点 12：commit 维度三处原串（git HEAD / 版本行后缀 / MCP 自省）',
+      make: () =>
+        baseFixture({
+          exec: ((file: string, args?: string[]) => {
+            if (file === 'git') return `${HEX40_CANARY}\n`;
+            if (file === 'spectra' && (args ?? [])[0] === 'mcp-server') {
+              return mcpIntrospectionStdout(HEX40_CANARY);
+            }
+            if (file === 'spectra') return `spectra v4.4.0 (${HEX40_CANARY.slice(0, 7)})\n`;
+            return enoentExec();
+          }) as Fixture['exec'],
+          binScripts: commitCanaryBinScripts(HEX40_CANARY),
+        }),
+    },
   ];
 
   for (const testCase of cases) {
@@ -409,6 +479,49 @@ describe('F240 T047 — canary 十一注入点 × 五通道 × 四编码（SC-01
     expect('versionLine' in check.details).toBe(false);
     assertNoCanary('hex-allowlist-json', JSON.stringify(report));
     assertNoCanary('hex-allowlist-text', core.formatTextReport(report));
+  });
+
+  /**
+   * 🔴 与注入点 11 同款的"非空跑"证明，针对 F265 的 commit 维度。
+   *
+   * 「报告里没有那串 hex」有两种成因：(a) 值被结构性丢弃；(b) 比对压根没跑起来
+   * （探测失败 ⇒ 全 absent ⇒ 断言自动成立）。只有 (a) 才算证明。本用例正面断言
+   * 比对**确实发生了**：三方各自读到了那个 40 位串并算出 `match`，
+   * 而串本身在五个通道里一次都不出现。
+   */
+  it('注入点 12 确实跑到了比对：三方均算出 match，但 40 位 commit 原串一次都不出现', () => {
+    const fx = baseFixture({
+      exec: ((file: string, args?: string[]) => {
+        if (file === 'git') return `${HEX40_CANARY}\n`;
+        if (file === 'spectra' && (args ?? [])[0] === 'mcp-server') {
+          return mcpIntrospectionStdout(HEX40_CANARY);
+        }
+        if (file === 'spectra') return `spectra v4.4.0 (${HEX40_CANARY.slice(0, 7)})\n`;
+        return enoentExec();
+      }) as Fixture['exec'],
+    });
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec: fx.exec,
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+
+    // 三方都真的比过了（否则本用例等于空跑）
+    // repo-version 侧登记的是"基准立没立得住"（I-1 后不再是自比出来的 match）
+    expect(report.checks['repo-version.spectra'].details.baselineCommit).toBe('available');
+    expect(report.checks['global-cli.spectra'].details.commitComparison).toBe('match');
+    expect(report.checks['mcp-server.spectra'].details.commitComparison).toBe('match');
+    expect(report.checks['mcp-server.spectra'].status).toBe('ok');
+    // 🔴 plugin-build 恒 absent：该方 manifest 里根本没有 commit 字段，
+    // 快照目录哈希不是 build 标识（F236），如实说"没有"好过拿代理值冒充
+    expect(report.checks['plugin-build.spectra'].details.commitComparison).toBe('absent');
+    expect(report.checks['plugin-build.spec-driver'].details.commitComparison).toBe('absent');
+
+    // 而 40 位串本身在两个渲染通道里一次都不出现
+    assertNoCanary('commit-dimension-json', JSON.stringify(report));
+    assertNoCanary('commit-dimension-text', core.formatTextReport(report));
   });
 
   it('第五通道：CLI 顶层错误输出同样不泄漏（参数非法路径含 canary）', () => {

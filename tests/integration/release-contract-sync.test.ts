@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import process from 'node:process';
 import {
   cpSync,
   mkdtempSync,
@@ -24,6 +25,15 @@ function runNode(scriptPath: string, projectRoot: string) {
       cwd: projectRoot,
       encoding: 'utf-8',
       timeout: 20_000,
+      env: {
+        ...process.env,
+        // Feature 265（对抗审查 W-9）：validate-release-contracts 现在串着发布断层判据，
+        // 不注入这个入口的话每条用例都会真打一次 `npm view`（+5s 超时，离线环境必红）。
+        // fixture 目录本就不是 git 工作区，注入什么值都只会得到 indeterminate（非阻断），
+        // 这里要的仅仅是"不出网"。断言 warnings 时须按内容过滤，别数条数——
+        // 注入路径恒带一条 override 提示 warning（C-4）。
+        SPECTRA_PUBLISHED_REF: 'HEAD',
+      },
     });
     return { exitCode: 0, stdout };
   } catch (error) {
