@@ -193,6 +193,132 @@ describe('真实 CLI --json 输出过递归 schema 校验（SC-009 五类样本�
     expect(result.violations).toEqual([]);
   });
 
+  // ------------------------------------------------------------
+  // F266 T005：cannotAssessReason 追加 empty-graph（追加式，旧枚举值全保留）
+  // ------------------------------------------------------------
+
+  it('F266：cannotAssessReason 枚举含 empty-graph，且四个旧值一个不少（FR-013 追加式）', () => {
+    const properties = loadSchema()['properties'] as Record<string, JsonSchema>;
+    const reasonEnum = (properties['cannotAssessReason'] as JsonSchema)['enum'] as string[];
+
+    expect(reasonEnum).toContain('empty-graph');
+    // 对抗审查 A6a 追加的第六个值
+    expect(reasonEnum).toContain('no-symbol-nodes');
+    // 旧值逐个点名而非只比长度：追加式兼容的实质是"没人被挤掉"
+    for (const legacy of [
+      'graph-missing',
+      'json-parse-error',
+      'schema-too-old',
+      'schema-newer-than-supported',
+    ]) {
+      expect(reasonEnum).toContain(legacy);
+    }
+    expect(new Set(reasonEnum).size).toBe(reasonEnum.length);
+  });
+
+  it('F266：空图的真实 --json 输出逐层符合 schema（empty-graph 已被契约接纳）', () => {
+    const report = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      graph.nodes = [];
+      graph.links = [];
+      return graph;
+    });
+
+    expect(report['overallVerdict']).toBe('cannot-assess');
+    expect(report['cannotAssessReason']).toBe('empty-graph');
+    expect(validateAgainstSchema(report, loadSchema()).violations).toEqual([]);
+  });
+
+  it('F266-A6a：无 symbol 节点退化图的真实 --json 输出逐层符合 schema', () => {
+    const report = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      // 只留模块节点：绕过 (0,0) 空图闸，但六指标分母全为 0
+      graph.nodes = graph.nodes.filter((n) => n.metadata?.['unifiedKind'] !== 'symbol');
+      graph.links = [];
+      return graph;
+    });
+
+    expect(report['overallVerdict']).toBe('cannot-assess');
+    expect(report['cannotAssessReason']).toBe('no-symbol-nodes');
+    expect(validateAgainstSchema(report, loadSchema()).violations).toEqual([]);
+  });
+
+  // ------------------------------------------------------------
+  // F266 E3：metricsPopulated —— 报告体是"真实测量值"还是"空态占位"的结构标记
+  // ------------------------------------------------------------
+
+  it('F266-E3：schema 接纳 metricsPopulated（const true 的可选字段），且它不是 required', () => {
+    const schema = loadSchema();
+    const properties = schema['properties'] as Record<string, JsonSchema>;
+    const field = properties['metricsPopulated'] as JsonSchema | undefined;
+
+    expect(field).toBeDefined();
+    // 顶层 additionalProperties:false —— 不进 schema 的字段会让所有真实输出直接违规
+    expect(schema['additionalProperties']).toBe(false);
+    // 只允许 true：`false` 与"缺席"必须是同一件事（缺席即不保证真实），不给第三种态。
+    // 用 `enum` 而非 `const` 表达：本仓的递归校验器只实现 `enum`，写成 `const` 会让下面那条
+    // 灵敏度证明变成空转（实测：篡改成 false 后校验器照样放行）——契约字段的约束
+    // MUST 用校验器真的会执行的关键字表达，否则 schema 只是注释。
+    expect(field!['enum']).toEqual([true]);
+    expect(schema['required'] as string[]).not.toContain('metricsPopulated');
+  });
+
+  it('F266-E3：no-symbol-nodes 的真实输出带 metricsPopulated=true 且逐层符合 schema', () => {
+    const report = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      graph.nodes = graph.nodes.filter((n) => n.metadata?.['unifiedKind'] !== 'symbol');
+      graph.links = [];
+      return graph;
+    });
+
+    expect(report['cannotAssessReason']).toBe('no-symbol-nodes');
+    expect(report['metricsPopulated']).toBe(true);
+    expect(validateAgainstSchema(report, loadSchema()).violations).toEqual([]);
+  });
+
+  it('F266-E3：占位路径（empty-graph / schema-too-old）MUST NOT 置该标记——否则消费侧会去读编出来的 pass', () => {
+    const emptyGraphReport = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      graph.nodes = [];
+      graph.links = [];
+      return graph;
+    });
+    expect(emptyGraphReport['cannotAssessReason']).toBe('empty-graph');
+    expect(emptyGraphReport['metricsPopulated']).toBeUndefined();
+
+    const tooOldReport = runRealCliJson((head) => baseFreshnessGraph({ schemaVersion: '1.0', sourceCommit: head }));
+    expect(tooOldReport['cannotAssessReason']).toBe('schema-too-old');
+    expect(tooOldReport['metricsPopulated']).toBeUndefined();
+  });
+
+  it('F266-E3 灵敏度证明：把 metricsPopulated 篡改为 false 后必然报违规（const true 真的在校验）', () => {
+    const report = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      graph.nodes = graph.nodes.filter((n) => n.metadata?.['unifiedKind'] !== 'symbol');
+      graph.links = [];
+      return graph;
+    });
+    report['metricsPopulated'] = false;
+
+    const result = validateAgainstSchema(report, loadSchema());
+    expect(result.valid).toBe(false);
+    expect(result.violations.some((v) => v.path === '/metricsPopulated')).toBe(true);
+  });
+
+  it('F266 灵敏度证明：把 cannotAssessReason 篡改为枚举外的值后必然报违规', () => {
+    const report = runRealCliJson((head) => {
+      const graph = baseFreshnessGraph({ sourceCommit: head });
+      graph.nodes = [];
+      graph.links = [];
+      return graph;
+    });
+    report['cannotAssessReason'] = 'totally-made-up-reason';
+
+    const result = validateAgainstSchema(report, loadSchema());
+    expect(result.valid).toBe(false);
+    expect(result.violations.some((v) => v.path === '/cannotAssessReason')).toBe(true);
+  });
+
   it('灵敏度证明：真实输出注入一个未登记字段后，递归校验器必然报违规（否则上面的绿是空转）', () => {
     const report = runRealCliJson(SC009_STALE_SCENARIOS[0]!.buildGraph);
     const freshness = report['freshness'] as Record<string, unknown>;

@@ -373,13 +373,62 @@ export async function buildModuleGraphForProject(
 
   const testPattern = tsJsAdapter?.getTestPatterns().filePattern;
   const tsJsFiles: string[] = [];
+  // F266 FR-001：空模块图有三种成因（工程里根本没源文件 / 有源文件但全被 includeOnly 滤掉 /
+  // 全是测试文件），只有第二种是「用户布局与默认过滤器不匹配」这一需要出声的真信号。
+  // why 两个计数而非只看 tsJsFiles.length：最终结果为空无法区分成因，对"本来就没文件"的
+  // 空工程报警只是噪声。故按「进入 includeOnly 判断的候选数」与「通过 includeOnly 的数」分别计。
+  let scannedCandidateCount = 0;
+  let includedCount = 0;
+  const excludedSamples: string[] = [];
+  // 被滤候选里是否存在"不在扫描根顶层"的文件（见下方出声档位判据）
+  let anyNestedExcluded = false;
   for (const relToScan of scanResult.files) {
     const absFile = path.isAbsolute(relToScan) ? relToScan : path.join(scanRoot, relToScan);
     const rel = path.relative(resolvedRoot, absFile).split(path.sep).join('/');
-    if (!includeOnlyRe.test(rel)) continue;
+    scannedCandidateCount += 1;
+    if (!includeOnlyRe.test(rel)) {
+      if (excludedSamples.length < 3) excludedSamples.push(rel);
+      if (path.relative(scanRoot, absFile).includes(path.sep)) anyNestedExcluded = true;
+      continue;
+    }
+    includedCount += 1;
+    // 注意：测试文件过滤发生在 includeOnly **之后**，故不计入 includedCount 的减项——
+    // 一个只有 src/*.test.ts 的工程属于"布局匹配但内容全是测试"，不是布局不匹配，不该报警。
     if (testPattern && testPattern.test(rel)) continue;
     if (rel.includes('__tests__') || rel.includes('__mocks__')) continue;
     tsJsFiles.push(rel);
+  }
+
+  if (scannedCandidateCount > 0 && includedCount === 0) {
+    // why warn/info 而非 throw：buildModuleGraphForProject 是建图的子环节，抛错会把"模块层缺失"
+    // 升级成"整个 batch 失败"，超出 FR-001「可观测即可」的诉求。
+    // 文案如实：默认 includeOnly 当前没有任何对外 CLI flag / config 键（R-1 已核实），
+    // 因此 MUST NOT 引导用户去设一个不存在的开关；自定义 regex 时则回显实际 regex、不提开关。
+    //
+    // F266 对抗审查 B2 —— 出声档位按**结构**分，不做内容启发式：
+    //   · 被滤候选中存在"不在扫描根顶层"的文件 → warn（典型：lib/ 或 source/ 布局的真信号）
+    //   · 被滤候选全是扫描根顶层文件           → info（典型：py/go 工程根目录躺着
+    //     eslint.config.js / webpack.config.js，报警只是每次全量 batch 的固定噪声）
+    // 已知边界（如实登记，不假装判得出）：
+    //   ① 全部源码平铺在根目录的 TS 工程会落 info 档 —— 结构上与"只有根级构建配置"不可分；
+    //   ② src/ 存在但源码在别处的混合布局本判据结构性不可见：scanRoot 一旦锁定 src/，
+    //      根级与 lib/ 下的文件根本不进扫描结果（已实证），故这里永远不会触发。
+    const usingDefaultFilter = options.includeOnly === undefined;
+    const filterText = usingDefaultFilter
+      ? `默认过滤器（${String(includeOnlyRe)}，该过滤器当前没有对外开关）`
+      : `过滤器 ${String(includeOnlyRe)}`;
+    const headText = usingDefaultFilter
+      ? '未在 src/ 下发现 TS/JS 源码，TS/JS 模块层将为空'
+      : 'TS/JS 模块层将为空';
+    const message =
+      `[module-derivation] 模块图为空：${headText}；` +
+      `扫描根 ${scanRoot} 下共 ${scannedCandidateCount} 个候选源文件被${filterText}滤除。` +
+      `被排除样例：${excludedSamples.join(', ')}`;
+    if (anyNestedExcluded) {
+      logger.warn(message);
+    } else {
+      logger.info(message);
+    }
   }
 
   if (tsJsFiles.length === 0) {

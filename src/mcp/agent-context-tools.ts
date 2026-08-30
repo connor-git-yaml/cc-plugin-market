@@ -44,6 +44,7 @@ import {
   type TopImpacted,
   type TopRelevantCaller,
 } from './lib/response-helpers.js';
+import { buildHonestyAnnotation, type GraphHonesty } from './lib/graph-honesty.js';
 
 // ============================================================
 // 共享响应原语 + Telemetry（Feature 171 抽到 lib/ 复用，解 C-4 / TELEMETRY-COUPLING）
@@ -266,6 +267,26 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
       data['resolvedConfidence'] = fuzzyResolved.confidence;
     }
 
+    // F266：诚实标注（判定全在 graph-honesty.ts；本处只装配，不得堆逻辑）
+    // callerOriented：本模块的 resolution 证据全是 caller 取向的（导出面 / 未成边调用点），
+    // downstream 查的是 callee，拿 caller 侧证据去解释一个 callee 零结果是答非所问，故不产出。
+    const honesty = buildHonestyAnnotation({
+      projectRoot,
+      graph: loaded.data,
+      symbolId: startId,
+      resultsEmpty: r.affected.length === 0,
+      // E4：budget/depth 归零时 BFS 根本没执行（budget=0 一个节点都取不到；depth=0 一层都不展开），
+      // 零结果由入参决定、与图内容无关，故**优先于**方向判定给出 query-constrained-to-zero
+      // ——包括 downstream：一个没跑过的遍历，先说"它没跑"比先说"本工具没有 callee 侧证据"更贴事实。
+      resolutionBasis:
+        effectiveBudget === 0 || effectiveDepth === 0
+          ? 'query-constrained-to-zero'
+          : direction === 'upstream' || direction === 'both'
+            ? true
+            : 'non-caller-oriented-query',
+    });
+    data['honesty'] = honesty;
+
     // F170c enrichment 三路径（plan G 节）：临时变量 + 显式 catch reset 避免 partial fill
     let topImpacted: TopImpacted[];
     let nextStepHint: string;
@@ -276,6 +297,7 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
         'impact',
         { topImpacted: _topImpacted, affected: r.affected },
         'success',
+        honesty,
       );
       topImpacted = _topImpacted;
       nextStepHint = _nextStepHint;
@@ -397,7 +419,21 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
     if (warnings.length > 0) data['warnings'] = warnings;
 
     // F170c enrichment 三路径（plan G 节）
+    // 区分"没查"与"查了为空"：queried 为 false 时 data['callers'] 键根本不存在，
+    // 此处 MUST 把这一区别原样传给 hint 层（`?? []` 一抹平就成了假的存在性断言，见 A1）。
+    const callersQueried = include.includes('callers');
     const callersRaw = (data['callers'] as Array<{ id: string; confidence: number; relation?: string }> | undefined) ?? [];
+    // F266：诚实标注（判定全在 graph-honesty.ts；本处只装配，不得堆逻辑）
+    // callerOriented：include 不含 'callers' 时 callersRaw 恒为 []，那是"没查"而不是"查了为空"——
+    // 据此产出 resolution 就会对着一个有几十个 caller 的 symbol 说"图中无调用方"。
+    const honesty = buildHonestyAnnotation({
+      projectRoot,
+      graph: loaded.data,
+      symbolId: resolvedId,
+      resultsEmpty: callersRaw.length === 0,
+      resolutionBasis: callersQueried ? true : 'callers-not-queried',
+    });
+    data['honesty'] = honesty;
     let topRelevantCallers: TopRelevantCaller[];
     let nextStepHint: string;
     let enrichmentDegraded: boolean;
@@ -405,8 +441,9 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
       const _top = buildTopRelevantCallers(callersRaw, 3);
       const _hint = generateNextStepHint(
         'context',
-        { definition, callers: callersRaw },
+        { definition, ...(callersQueried ? { callers: callersRaw } : {}) },
         'success',
+        honesty,
       );
       topRelevantCallers = _top;
       nextStepHint = _hint;
@@ -543,6 +580,8 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
 
     // 1) 拿改动文件列表
     let changedFiles: ChangedFile[];
+    // F266 FR-012：仅 baseRef 模式有 git range 口径可声明；diff 模式由调用方自带 diff，保持 null
+    let gitRange: string | null = null;
     let unmappedFromInput: Array<{ file: string; reason: 'deleted-file' | 'binary' | 'new-file-not-in-graph-yet' | 'not-in-graph' }> = [];
     if (hasDiff) {
       // 5MB 上限校验前置（CRITICAL fix：返回 payload-too-large 而非 invalid-diff）
@@ -567,6 +606,7 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
       }
       changedFiles = r.changed;
       unmappedFromInput = r.unmapped;
+      gitRange = r.gitRange;
     }
 
     // 没有改动文件 → success warning（FR-050 'no-changed-files' 是 warning 不是 error）
@@ -646,8 +686,31 @@ export async function handleDetectChanges(args: DetectChangesArgs): Promise<Tool
     };
     if (uniqWarnings.length > 0) data['warnings'] = uniqWarnings;
 
+    // F266：诚实标注 + 比较口径声明（判定全在 graph-honesty.ts；本处只装配）
+    const honesty = buildHonestyAnnotation({
+      projectRoot,
+      graph: loaded.data,
+      resultsEmpty: affectedAcc.length === 0,
+      // detect_changes 的 BFS 恒为 upstream（找改动 symbol 的上游调用方），故是 caller 取向的；
+      // 但 delta 审查 D4：起点集合为空时那趟 BFS 一次都没跑过，"零受影响"是查询未执行、
+      // 不是查过为零，此时拿图级覆盖证据去下 resolution 就是对一个没发生的查询作证。
+      // E4：与 impact 同形的对称口径。`budget === 0` 时 `remaining <= 0` 在第一次循环就 break，
+      // 共享 BFS 一次都没跑；`depth === 0` 时 bfsTraverse 虽被调用却一层都不展开 ——
+      // 两者的零结果都由**入参**决定、与图里有什么无关，拿图级覆盖证据解释它同样是替一个
+      // 没发生的遍历作证。故该判定排在 no-symbols-in-graph 之前，且两个归零形态一视同仁
+      // （初版只判 budget 的不对称口径已按主编排器裁决对齐）。
+      resolutionBasis:
+        effectiveBudget === 0 || effectiveDepth === 0
+          ? 'query-constrained-to-zero'
+          : allChangedSymbolIds.length > 0
+            ? true
+            : 'no-symbols-in-graph',
+      gitRange,
+    });
+    data['honesty'] = honesty;
+
     // F170c enrichment（plan G + D 节）
-    const enrichment = _computeDetectChangesEnrichment(affectedAcc, riskTier, totalChanged);
+    const enrichment = _computeDetectChangesEnrichment(affectedAcc, riskTier, totalChanged, honesty);
     data['riskTier'] = riskTier;
     data['topImpacted'] = enrichment.topImpacted;
     data['nextStepHint'] = enrichment.nextStepHint;
@@ -669,6 +732,7 @@ function _computeDetectChangesEnrichment(
   affectedAcc: BfsAffected[],
   riskTier: 'low' | 'medium' | 'high',
   totalChanged: number,
+  honesty?: GraphHonesty,
 ): { topImpacted: TopImpacted[]; nextStepHint: string; degraded: boolean } {
   try {
     const topImpacted = buildTopImpactedRanking(affectedAcc, 5);
@@ -676,6 +740,7 @@ function _computeDetectChangesEnrichment(
       'detect_changes',
       { topImpacted, riskTier, totalChanged },
       'success',
+      honesty,
     );
     return { topImpacted, nextStepHint, degraded: false };
   } catch (e) {
@@ -817,7 +882,8 @@ function runGitDiffNameStatus(
   baseRef: string,
   projectRoot: string,
 ):
-  | { ok: true; changed: ChangedFile[]; unmapped: Array<{ file: string; reason: 'deleted-file' | 'binary' | 'new-file-not-in-graph-yet' }> }
+  // F266 FR-012：回传实际执行的三点记法 range 字面量，供 comparisonScope 如实声明比较口径
+  | { ok: true; changed: ChangedFile[]; unmapped: Array<{ file: string; reason: 'deleted-file' | 'binary' | 'new-file-not-in-graph-yet' }>; gitRange: string }
   | { ok: false; code: ErrorCode; message: string; context?: Record<string, unknown> } {
   if (!BASEREF_WHITELIST.test(baseRef) || baseRef.startsWith('-')) {
     return {
@@ -893,7 +959,7 @@ function runGitDiffNameStatus(
       if (typeof file === 'string') changed.push({ file, changeKind: 'modified' });
     }
   }
-  return { ok: true, changed, unmapped };
+  return { ok: true, changed, unmapped, gitRange: `${sha}...HEAD` };
 }
 
 // ─── file → symbols 索引 ───────────────────────────────────

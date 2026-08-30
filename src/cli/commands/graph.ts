@@ -16,7 +16,7 @@ import { SpecStore } from '../../spec-store/index.js';
 const GRAPH_HELP = `spectra graph — 构建并持久化知识图谱
 
 用法:
-  spectra graph [--directed] [--output-dir <dir>]
+  spectra graph [--directed] [--force] [--output-dir <dir>]
 
 说明:
   读取当前项目的 architecture-ir、doc-graph、cross-reference-index，
@@ -25,6 +25,7 @@ const GRAPH_HELP = `spectra graph — 构建并持久化知识图谱
 选项:
   --directed          输出有向图（默认为无向图）
   --output-dir <dir>  指定输出根目录（默认：{cwd}/specs）
+  --force             跳过信息量守卫，允许写入节点数 / 边数 / calls 边数少于现有图的新图
   --help              显示帮助信息
 
 输出:
@@ -32,7 +33,62 @@ const GRAPH_HELP = `spectra graph — 构建并持久化知识图谱
 
 退出码:
   0  成功
-  1  图构建失败（错误信息输出到 stderr）`;
+  1  图构建失败，或新图信息量低于现有图而被守卫拒绝（错误信息输出到 stderr）`;
+
+/** graph.json 的结构性计数指标（信息量守卫的唯一判据来源） */
+interface GraphStructuralCounts {
+  nodeCount: number;
+  edgeCount: number;
+  /** `relation === 'calls'` 的边数 —— 调用图这一层的独立计数 */
+  callsEdgeCount: number;
+}
+
+/**
+ * 从一张已在内存里的图统计守卫用的三个计数。
+ *
+ * F266 对抗审查 A6b：**一律现数，绝不信图自报的 `graph.nodeCount` / `graph.edgeCount`**。
+ * 自报值与实际数组可以脱节（写入方 bug / 手工编辑 / 更新版本改口径），守卫拿自报值当基线
+ * 等于把判据交给被判定对象自己填。反正 JSON 已全文 parse，现数是零额外成本的。
+ */
+function countGraphStructure(nodes: unknown[], links: unknown[]): GraphStructuralCounts {
+  let callsEdgeCount = 0;
+  for (const l of links) {
+    if (l !== null && typeof l === 'object' && (l as { relation?: unknown }).relation === 'calls') {
+      callsEdgeCount += 1;
+    }
+  }
+  return { nodeCount: nodes.length, edgeCount: links.length, callsEdgeCount };
+}
+
+/**
+ * 读取既有 graph.json 的结构性计数，作为覆写守卫的基线。
+ *
+ * F266 FR-003：守卫**不得把"没有基线"误判成"退化"**，因此以下情形一律返回 null（= 放行）：
+ * 文件不存在 / 读取失败 / JSON 损坏 / `nodes`|`links` 不是数组。
+ *
+ * @param outputDir - 项目输出根目录（与 writeKnowledgeGraph 的 outputDir 同源）
+ * @returns 旧图计数；无可用基线时返回 null
+ */
+function readExistingGraphCounts(outputDir: string): GraphStructuralCounts | null {
+  try {
+    // 路径必须与生产者 writeKnowledgeGraph 的 `{outputDir}/_meta/graph.json` 同源，
+    // 否则守卫会读到一个根本不会被覆写的文件（既可能误拒也可能漏放）。
+    const graphPath = path.join(outputDir, '_meta', 'graph.json');
+    if (!fs.existsSync(graphPath)) {
+      return null;
+    }
+    const parsed = JSON.parse(fs.readFileSync(graphPath, 'utf-8')) as {
+      nodes?: unknown;
+      links?: unknown;
+    };
+    if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.links)) {
+      return null;
+    }
+    return countGraphStructure(parsed.nodes, parsed.links);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 从磁盘缓存加载 ArchitectureIR
@@ -201,6 +257,37 @@ export async function runGraphCommand(command: CLICommand): Promise<void> {
     // F249 FR-007：同一诚实降级理由——本命令没有跑任何采集管线，写入"当前采集器指纹"会
     // 谎称这张图由当前采集面产出。写 null 让 freshness 判定按 unrecorded 保守处理。
     graphJson.graph.fingerprint = null;
+
+    // F266 FR-003：信息量守卫。本命令只合并磁盘缓存 + 已生成的 .spec.md，**不解析源码**，
+    // 在没有 spec 产物的仓库里它会把一张由 batch/graph-only 建出的完整图静默覆写成贫图。
+    // why 判据只用结构性计数：语义化质量评分属于 F217 六指标的职责，混进来只会造出第二套
+    // 互相打架的判定。why 阈值是"严格不减"而非百分比容忍：任意容忍阈值本身就是新的造假面。
+    //
+    // F266 对抗审查 A6b：判据从两个标量扩到三个，第三个是 **calls 边数**。
+    // 实证：架构 IR 在场时本命令会产出"节点/总边数都更多、但 calls 边归零"的图，
+    // 两标量守卫全程放行 —— 调用图被静默洗掉，而调用图正是 impact / context 的承重面。
+    // 本命令在结构上永远不产 calls 边（它不解析源码），所以这条判据不会误伤自身的正常路径。
+    const previousCounts = readExistingGraphCounts(outputDir);
+    const nextCounts = countGraphStructure(graphJson.nodes, graphJson.links);
+    const degraded =
+      previousCounts !== null &&
+      (nextCounts.nodeCount < previousCounts.nodeCount ||
+        nextCounts.edgeCount < previousCounts.edgeCount ||
+        nextCounts.callsEdgeCount < previousCounts.callsEdgeCount);
+    if (degraded && !command.force) {
+      console.error(
+        `[graph] 拒绝覆写：新图信息量低于现有图` +
+          `（节点 ${previousCounts.nodeCount} → ${nextCounts.nodeCount}，` +
+          `边 ${previousCounts.edgeCount} → ${nextCounts.edgeCount}，` +
+          `calls 边 ${previousCounts.callsEdgeCount} → ${nextCounts.callsEdgeCount}）。\n` +
+          `[graph] 'spectra graph' 只合并缓存与已生成的 spec，不解析源码；` +
+          `要真正重建知识图谱请改用 'spectra batch --mode graph-only'（纯 AST / 零 LLM / 无需认证）。\n` +
+          `[graph] 若这是有意的（主动重置 / --directed 表示形态切换 / 确认接受调用图丢失），加 --force。`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     // F261：本命令的图内容由上面的 buildKnowledgeGraph 当场建出 ⇒ 由本进程的 dist 盖章。
     // （与 sourceCommit / fingerprint 写 null 不矛盾：那两维是**被分析对象**的属性，本命令没解析
     // 源码所以不能推导；builder 是**执行者自己**的属性，它确切知道自己是哪一版。）

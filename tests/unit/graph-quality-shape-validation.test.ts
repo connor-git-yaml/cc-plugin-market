@@ -9,6 +9,8 @@
  *    （exit 1）；加深后必须在进入引擎前就判定结构无效（exit 2），绝不进引擎。
  */
 import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import { resolve } from 'node:path';
 import { validateGraphJsonShape } from '../../src/cli/commands/graph-quality.js';
 
 function validGraph(): unknown {
@@ -89,5 +91,38 @@ describe('validateGraphJsonShape（FIX-1）', () => {
     expect(validateGraphJsonShape([])).toBe(false);
     expect(validateGraphJsonShape('foo')).toBe(false);
     expect(validateGraphJsonShape(42)).toBe(false);
+  });
+
+  /**
+   * F266 FR-006：空图闸是**独立于结构校验的一层**，两者的边界必须钉死。
+   *
+   * 空图在结构上完全合法（`nodes:[]` / `links:[]` 都是合法数组），把它塞进
+   * `validateGraphJsonShape` 会让 `empty-graph` 与 `json-parse-error` 两种成因混为一谈——
+   * 而这两者的修复动作截然不同（前者是"没扫到源码"，后者是"产物损坏"）。
+   */
+  describe('F266：空图不属于结构损坏（判据分层边界）', () => {
+    it('nodes/links 同时为空 → 仍是合法结构 true（空图闸在 CLI 层单独判，不并入本函数）', () => {
+      const g = validGraph() as Record<string, unknown>;
+      g['nodes'] = [];
+      g['links'] = [];
+      expect(validateGraphJsonShape(g)).toBe(true);
+    });
+
+    it('入库空图 fixture 结构合法（schemaVersion 2.0，确保走的是空图闸而非 schema 分支）', () => {
+      const fixture = JSON.parse(
+        fs.readFileSync(resolve('tests/fixtures/graph-quality-empty-graph.json'), 'utf-8'),
+      ) as Record<string, unknown>;
+      expect(validateGraphJsonShape(fixture)).toBe(true);
+      expect((fixture['graph'] as Record<string, unknown>)['schemaVersion']).toBe('2.0');
+      expect(fixture['nodes']).toEqual([]);
+      expect(fixture['links']).toEqual([]);
+    });
+
+    it('nodes 非空但 links 为空 → 合法结构 true（该形态由 orphan/contains 指标负责，不是空图）', () => {
+      const g = validGraph() as Record<string, unknown>;
+      g['nodes'] = [{ id: 'src/a.ts', kind: 'module', label: 'a.ts', metadata: {} }];
+      g['links'] = [];
+      expect(validateGraphJsonShape(g)).toBe(true);
+    });
   });
 });

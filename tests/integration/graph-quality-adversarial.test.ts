@@ -93,10 +93,22 @@ describe('对抗注入 fixture 测试（F217 T048）', () => {
   });
 
   describe('SC-005 ignored-path-node.json：ignored 路径节点 100% 检出', () => {
-    it('检出 node_modules/ 下的节点为 ignored-path', () => {
+    /**
+     * F266 delta D1：本 fixture 只有 1 个不带 `unifiedKind` 的节点，是一张**无 symbol 图**
+     * （生产可达：`spectra graph` 从 arch-IR 建出的图就不写 `unifiedKind`）。D1 之后这类图
+     * 一律不得宣称 pass —— 六指标里依赖 symbol 分母的两项根本没跑起来，"体检通过"无从谈起。
+     * 故顶层判定由 `pass-with-warnings`（exit 0）改为 `cannot-assess/no-symbol-nodes`（exit 2）。
+     *
+     * **SC-005 的承重断言（ignored 路径节点 100% 检出 + 精确定位）逐条不变**：D1 的降级只改
+     * 顶层 verdict，报告体保留 `buildReport` 算出的真实指标——这正是 D1 相对第一轮"前置短路 +
+     * pass 占位"的区别所在，本组用例同时也是它的守护资产。
+     */
+    it('检出 node_modules/ 下的节点为 ignored-path（顶层判定因无 symbol 图降级为 cannot-assess）', () => {
       const { result, report } = runGraphQualityJson('ignored-path-node.json');
-      expect(result.exitCode).toBe(0);
-      expect(report.overallVerdict).toBe('pass-with-warnings');
+      expect(result.exitCode).toBe(2);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('no-symbol-nodes');
+      // 承重：真实指标未被占位值覆盖
       expect(report.legacyAndIgnoredNodes.status).toBe('fail');
       expect(report.legacyAndIgnoredNodes.ignoredPathNodeIds).toEqual([
         'node_modules/pkg/index.js::foo',
@@ -131,6 +143,14 @@ describe('对抗注入 fixture 测试（F217 T048）', () => {
     });
   });
 
+  /**
+   * F266：`stale-commit.json` 原本是一张**空图**（只靠 `sourceCommit` 一个字段隔离 freshness
+   * 维度）。空图闸（FR-006）上线后它会先命中 `cannot-assess/empty-graph`，freshness 根本走不到，
+   * 本组三条断言全红。修的是 fixture 的假设而不是闸——"用空图当正常基线"正是本卡要根治的
+   * 那类失真：它让"根本没建出图"混进了"图建好了、只是过期了"的测试语义里。
+   * 现 fixture 改为最小非空图（1 module + 1 symbol + 1 contains 边），六项结构指标全 pass，
+   * stale 仍是唯一被触发的维度，隔离性不变。
+   */
   describe('SC-007 stale-commit.json：freshness stale 判定 + 双值展示（隔离临时仓库）', () => {
     let tmpDir: string;
 

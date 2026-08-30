@@ -143,6 +143,77 @@ describe('graph-quality-core.mjs（F217 T037/T038）', () => {
     expect(result.warnings.length).toBeGreaterThan(0);
   });
 
+  /**
+   * F266 T003/T006：把"消费侧无需改动"这个核实结论固化为回归网。
+   *
+   * T003 核实结论：`graph-quality-core.mjs` **不存在** `cannotAssessReason` 值白名单——
+   * cannot-assess 的路由完全由 `report.overallVerdict === 'cannot-assess'` 决定，reason
+   * 只作为文案/evidence 透传（带 `?? 'unknown'` 兜底）。因此新增 `empty-graph` 自动继承
+   * warn 严重度，无需改 .mjs。
+   *
+   * 但"结论正确"和"结论会一直正确"是两回事：若将来有人把这里改成按 reason 值分派
+   * （F259 的"判据写成值枚举=每加一个值漏一次"前车之鉴），下面这条会立刻红。
+   */
+  describe('F266：empty-graph（新增 cannotAssessReason）在消费侧的映射行为', () => {
+    it('空图 → warn 严重度（非 error、非 skip），且 warning 文案与 evidence 携带 empty-graph 字面量', () => {
+      linkDist(projectRoot);
+      const sha = initGitRepoWithCommit(projectRoot);
+      const graph = baseGraph({ sourceCommit: sha });
+      graph.nodes = [];
+      graph.links = [];
+      writeGraph(projectRoot, graph);
+
+      const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+      expect(result.status).toBe('warn');
+      expect(result.errors).toEqual([]);
+      // 文案必须把成因说清楚，否则 CI 上的人拿到的只是"评估失败"这种无处方的噪声
+      expect(result.warnings.some((w) => w.includes('empty-graph'))).toBe(true);
+
+      const assessable = result.checks.find((c) => c.id === 'graph-assessable');
+      expect(assessable?.status).toBe('warn');
+      expect(assessable?.evidence['cannotAssessReason']).toBe('empty-graph');
+    });
+
+    it('A6a：no-symbol-nodes 同样自动继承 warn 严重度（消费侧无 reason 白名单的回归网）', () => {
+      linkDist(projectRoot);
+      const sha = initGitRepoWithCommit(projectRoot);
+      const graph = baseGraph({ sourceCommit: sha });
+      graph.nodes = graph.nodes.filter((n) => n.metadata?.['unifiedKind'] !== 'symbol');
+      graph.links = [];
+      writeGraph(projectRoot, graph);
+
+      const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+      expect(result.status).toBe('warn');
+      expect(result.errors).toEqual([]);
+      expect(result.warnings.some((w) => w.includes('no-symbol-nodes'))).toBe(true);
+      const assessable = result.checks.find((c) => c.id === 'graph-assessable');
+      expect(assessable?.evidence['cannotAssessReason']).toBe('no-symbol-nodes');
+    });
+
+    it('与既有 cannot-assess 成因（schema-too-old）严重度一致——新 reason 未被降级或漏判', () => {
+      linkDist(projectRoot);
+      const emptyRoot = projectRoot;
+      const sha = initGitRepoWithCommit(emptyRoot);
+      const emptyGraph = baseGraph({ sourceCommit: sha });
+      emptyGraph.nodes = [];
+      emptyGraph.links = [];
+      writeGraph(emptyRoot, emptyGraph);
+      const emptyResult = validateGraphQuality({ projectRoot: emptyRoot }) as CheckResult;
+
+      // 同一临时仓库改写成 schema-too-old，对照严重度
+      writeGraph(emptyRoot, baseGraph({ schemaVersion: '1.0', sourceCommit: sha }));
+      const oldSchemaResult = validateGraphQuality({ projectRoot: emptyRoot }) as CheckResult;
+
+      expect(emptyResult.status).toBe(oldSchemaResult.status);
+      expect(emptyResult.errors).toEqual(oldSchemaResult.errors);
+      expect(
+        emptyResult.checks.find((c) => c.id === 'graph-assessable')?.status,
+      ).toBe(oldSchemaResult.checks.find((c) => c.id === 'graph-assessable')?.status);
+    });
+  });
+
   it('强不变量违反（重复 canonical ID）→ error（阻断），真实覆盖 dist CLI exit 1 分支', () => {
     linkDist(projectRoot);
     const sha = initGitRepoWithCommit(projectRoot);
@@ -492,6 +563,131 @@ describe('F258：ignore-undeterminable warn check', () => {
       expect(distMissing.checks.some((c) => c.id === 'ignore-undeterminable')).toBe(false);
     } finally {
       rmSync(bare, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * F266 第三轮对抗审查 E3 —— cannot-assess 在消费侧的**分档**放行。
+ *
+ * 缺陷本体：`graph-quality-core.mjs` 对 `cannot-assess` 一律早退。这在 D1 之前是对的
+ * （那时报告的六指标全是 pass 占位，读它就是伪造绿 check），但 D1 让 `no-symbol-nodes`
+ * 走后置降级、报告体携带**真实指标**之后，同一条早退就把 legacy-ignored 真发现、
+ * freshness stale、F258 的 `[ignore-undeterminable]` 诊断一并吞掉——门禁一句都不说。
+ *
+ * 判据是结构标记 `metricsPopulated`（存在性判定，非 reason 值枚举，F259 教训）。
+ */
+describe('F266-E3：cannot-assess 报告按 metricsPopulated 分档消费', () => {
+  let projectRoot: string;
+
+  beforeAll(() => {
+    assertDistBuilt();
+  });
+
+  beforeEach(() => {
+    projectRoot = mkdtempSync(join(tmpdir(), 'f266-e3-'));
+  });
+
+  afterEach(() => {
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  /**
+   * 无 symbol 节点 + legacy `#` 节点（warning 级真发现）+ sourceCommit 与 HEAD 不一致（stale）。
+   * `#` 节点走 `sourceTag: 'extraction'` + `.py` 的 legacy 判据，**不带** `unifiedKind: 'symbol'`
+   * ——否则它自己就会让 `hasNoSymbolNodes` 为假，测的就不再是本场景。
+   */
+  function writeNoSymbolGraphWithFindings(root: string): void {
+    const graph = baseGraph({ sourceCommit: 'f'.repeat(40) });
+    graph.nodes = graph.nodes.filter((n) => n.metadata?.['unifiedKind'] !== 'symbol');
+    graph.nodes.push({
+      id: 'src/legacy.py#LegacyThing',
+      kind: 'component',
+      label: 'LegacyThing',
+      metadata: { sourceTag: 'extraction', sourcePath: 'src/legacy.py' },
+    });
+    graph.links = [];
+    writeGraph(root, graph);
+  }
+
+  it('metricsPopulated（no-symbol-nodes）→ 逐维度 check 全部恢复可达：legacy-ignored + freshness + graph-assessable 三条 warn', () => {
+    linkDist(projectRoot);
+    initGitRepoWithCommit(projectRoot);
+    writeNoSymbolGraphWithFindings(projectRoot);
+
+    const result = validateGraphQuality({ projectRoot }) as CheckResult;
+
+    const assessable = result.checks.find((c) => c.id === 'graph-assessable');
+    expect(assessable?.status).toBe('warn');
+    expect(assessable?.evidence['cannotAssessReason']).toBe('no-symbol-nodes');
+    expect(assessable?.evidence['metricsPopulated']).toBe(true);
+
+    // 承重①：warning 级真发现不再被 cannot-assess 吞掉
+    const legacy = result.checks.find((c) => c.id === 'legacy-ignored-nodes');
+    expect(legacy).toBeDefined();
+    expect(legacy!.status).toBe('warn');
+    expect(legacy!.evidence['legacyCount']).toBe(1);
+    expect(result.warnings.some((w) => w.includes('遗留'))).toBe(true);
+
+    // 承重②：freshness stale 恢复可见（图恒定格在旧 commit 正是最需要说出口的时刻）
+    const freshness = result.checks.find((c) => c.id === 'freshness');
+    expect(freshness).toBeDefined();
+    expect(freshness!.status).toBe('warn');
+    expect(freshness!.evidence['state']).toBe('stale');
+
+    // 承重③：F258 的三态 oracle 诊断探测点恢复可达
+    expect(result.checks.some((c) => c.id === 'ignore-undeterminable')).toBe(true);
+
+    // 方向不变：只出声、不阻断（强不变量未违反 ⇒ 绝不翻 fail）
+    expect(result.status).toBe('warn');
+    expect(result.errors).toEqual([]);
+  });
+
+  it('文案按成因分档：no-symbol-nodes 不再被归因成"graph.json 损坏或过旧"，改透传报告自己的处方', () => {
+    linkDist(projectRoot);
+    initGitRepoWithCommit(projectRoot);
+    writeNoSymbolGraphWithFindings(projectRoot);
+
+    const result = validateGraphQuality({ projectRoot }) as CheckResult;
+    const assessWarning = result.warnings.find((w) => w.includes('no-symbol-nodes'));
+
+    expect(assessWarning).toBeDefined();
+    // 错误归因必须消失：这张图既没损坏也不是"过旧"，它是缺 symbol 层
+    expect(assessWarning).not.toContain('请检查 graph.json 是否损坏或过旧后重建');
+    // 处方来自报告自身的 nextSteps 首条（noSymbolNodesNextStep）
+    expect(assessWarning).toContain('symbol');
+  });
+
+  it('回归对照：占位报告（empty-graph / schema-too-old）逐字维持早退——不发射任何逐维度 check', () => {
+    linkDist(projectRoot);
+    const sha = initGitRepoWithCommit(projectRoot);
+    const emptyGraph = baseGraph({ sourceCommit: sha });
+    emptyGraph.nodes = [];
+    emptyGraph.links = [];
+    writeGraph(projectRoot, emptyGraph);
+
+    const empty = validateGraphQuality({ projectRoot }) as CheckResult;
+    const emptyAssessable = empty.checks.find((c) => c.id === 'graph-assessable');
+    expect(emptyAssessable?.evidence['metricsPopulated']).toBe(false);
+    // 占位六指标无信息量，继续读只会发出编造的 pass —— 早退语义必须原样保留
+    for (const id of ['legacy-ignored-nodes', 'freshness', 'contains-coverage', 'orphan-ratio', 'duplicate-canonical-id', 'dangling-edge', 'ignore-undeterminable']) {
+      expect(empty.checks.some((c) => c.id === id)).toBe(false);
+    }
+    expect(empty.warnings.some((w) => w.includes('请检查 graph.json 是否损坏或过旧后重建'))).toBe(true);
+    expect(empty.status).toBe('warn');
+    expect(empty.errors).toEqual([]);
+
+    // schema-too-old 同档（真正"过旧"的那条路，旧文案在这里才是对的）
+    const staleSchemaRoot = mkdtempSync(join(tmpdir(), 'f266-e3-schema-'));
+    try {
+      linkDist(staleSchemaRoot);
+      writeGraph(staleSchemaRoot, baseGraph({ schemaVersion: '1.0' }));
+      const old = validateGraphQuality({ projectRoot: staleSchemaRoot }) as CheckResult;
+      expect(old.checks.find((c) => c.id === 'graph-assessable')?.evidence['metricsPopulated']).toBe(false);
+      expect(old.checks.some((c) => c.id === 'freshness')).toBe(false);
+      expect(old.warnings.some((w) => w.includes('请检查 graph.json 是否损坏或过旧后重建'))).toBe(true);
+    } finally {
+      rmSync(staleSchemaRoot, { recursive: true, force: true });
     }
   });
 });

@@ -185,16 +185,41 @@ export function validateGraphQuality({ projectRoot }) {
   }
 
   // FR-027：cannot-assess（图产物 JSON 损坏 / 结构损坏 / schemaVersion 过旧）→ warning。
+  //
+  // F266 第三轮对抗审查 E3：本分支**不再无条件早退**。早退在历史上是对的——那时 cannot-assess
+  // 报告的六项指标一律是 `buildCannotAssessReport` 的 pass 占位，读它就是在伪造绿 check。
+  // 但 D1 之后 `no-symbol-nodes` 走的是后置降级，报告体携带的是**真实测量值**；对它早退会让
+  // legacy-ignored 的真发现、freshness stale、F258 的 `[ignore-undeterminable]` 诊断
+  // 在消费侧整体塌陷（门禁一句都不说 = 又一处 fail-open）。
+  //
+  // 判据用**结构标记存在性**（`metricsPopulated === true`）而不是 `cannotAssessReason` 值枚举：
+  // 值枚举每新增一个 reason 就漏判一次（F259 教训），且"真实 vs 占位"只有报告构造方知道。
+  // 缺席（旧报告 / 占位报告）一律按占位处理 —— 保守方向，行为与本次改动前逐字一致。
+  const metricsPopulated = report.metricsPopulated === true;
   if (report.overallVerdict === 'cannot-assess') {
+    const cannotAssessReason = report.cannotAssessReason ?? 'unknown';
+    const firstNextStep = (Array.isArray(report.nextSteps) ? report.nextSteps : []).find(
+      (step) => typeof step === 'string' && step.length > 0,
+    );
     warnings.push(
-      `图质量检测无法完成评估（${report.cannotAssessReason ?? 'unknown'}），请检查 graph.json 是否损坏或过旧后重建。`,
+      metricsPopulated
+        ? // 无 symbol 节点的图并不是"损坏或过旧"，照抄旧文案会把维护者引向错误的排查方向；
+          // 透传报告自己的处方（`noSymbolNodesNextStep`）才是对成因的如实陈述。
+          `图质量检测的整体结论不可采信（${cannotAssessReason}）：${firstNextStep ?? '报告体内各项指标仍为真实测量值，请按下方 checks 逐项排查。'}`
+        : `图质量检测无法完成评估（${cannotAssessReason}），请检查 graph.json 是否损坏或过旧后重建。`,
     );
     checks.push(
       createCheck('graph-assessable', '图产物可被 graph-quality 完整评估', 'warn', {
         cannotAssessReason: report.cannotAssessReason,
+        metricsPopulated,
       }),
     );
-    return { status: 'warn', checks, warnings, errors };
+    // 占位报告：六项指标无信息量，继续往下读只会发出编造的 pass。真实指标报告：继续走逐维度
+    // 发射路径。后者不会把 status 翻成 fail —— 强不变量违反根本不会被降级成 cannot-assess
+    // （`downgradeForNoSymbolNodes` 对 `fail-strong-invariant` 原样返回），故此处只可能产出 warn。
+    if (!metricsPopulated) {
+      return { status: 'warn', checks, warnings, errors };
+    }
   }
 
   // FR-018：强不变量违反（重复 canonical ID / 悬空边）→ error（阻断）。
@@ -285,8 +310,10 @@ export function validateGraphQuality({ projectRoot }) {
   // `nextSteps: string[]` 上。代价如实登记——这是一条**文本契约**，天然比 schema 字段脆弱，
   // 改文案即静默断链，因此 token 由 `tests/unit/graph-quality-core.test.ts` 跨侧双向钉住。
   //
-  // 位置：必须在报告解析成功、且过了 exit-code 一致性与 cannot-assess 两道早退之后——
+  // 位置：必须在报告解析成功、且过了 exit-code 一致性与 cannot-assess 两道闸之后——
   // 那些分支下 `nextSteps` 要么不存在要么无意义，在那里读会制造假警报。
+  // E3 之后 cannot-assess 不再一律早退：`metricsPopulated` 的报告会走到这里，而它的
+  // `nextSteps` 正是 `buildReport` 的真实产物（只是被置顶了一条处方），读它有意义。
   const undeterminableStep = (Array.isArray(report.nextSteps) ? report.nextSteps : []).find(
     (step) => typeof step === 'string' && step.startsWith(IGNORE_UNDETERMINABLE_TOKEN),
   );

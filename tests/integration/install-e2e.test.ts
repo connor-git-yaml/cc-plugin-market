@@ -99,14 +99,14 @@ describe('install-e2e', () => {
     expect(fs.existsSync(hookPath)).toBe(true);
     const contentBefore = fs.readFileSync(hookPath, 'utf-8');
     expect(contentBefore).toContain('# --- spectra begin ---');
-    expect(contentBefore).toContain('spectra graph');
+    expect(contentBefore).toContain('spectra batch --mode graph-only');
 
     removeGitHook(tmpDir);
 
     // 段落已清除
     const contentAfter = fs.readFileSync(hookPath, 'utf-8');
     expect(contentAfter).not.toContain('# --- spectra begin ---');
-    expect(contentAfter).not.toContain('spectra graph');
+    expect(contentAfter).not.toContain('spectra batch --mode graph-only');
   });
 
   // ─── SC-004: 幂等性验证 ────────────────────────────────────────────────────

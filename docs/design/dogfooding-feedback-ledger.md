@@ -24,7 +24,32 @@
 
 ## 待处理
 
-（无——2026-08-23 milestone-next 全部流转，见下）
+### F266 · 2026-08-30
+状态：待处理
+来源：specs/266-honest-graph-quality-gate/（交付报告反馈节）
+- [结果准确性][Spectra MCP] 再现：F261 —— MCP context 对广泛被 import 的纯类型 symbol 返回
+  不诚实零结果：F266 Phase 1 实施中实测 `context('quality-types.ts::GraphQualityReport')`
+  返回 `callers: []`，nextStepHint 提示「无已知调用方，可能为顶层入口」，但该类型实际被 8+
+  文件 import（F261 旧条目案例是 `writeKnowledgeGraph`，非同一 symbol，但症状同型：图 stale
+  漏边 + 返回体无 freshness 信号 + nextStepHint 误导推论）。备注：该缺陷正是 F266 本卡（诚实
+  图质量门）的修复对象——修复后同一查询已返回 boundary-exposed + coverage 缺口 + freshness
+  dirty 三态区分，可作为既有分流项（M10 P0 卡③）的验收信号之一，留 milestone-next 裁决是否
+  收窄/关闭该分流
+- [MCP 可用性][Spectra MCP] 子代理会话中 Spectra MCP 工具不可用（新）——F266 的 specify 子代理
+  实测调用 `mcp__plugin_spectra_spectra__context` 与 `mcp__spectra__context` 均返回 "No such
+  tool available"，而 system-reminder 的 MCP server instructions 声明其可用，spec-driver 的
+  5 个子代理 frontmatter 也已授权这些工具。影响：spec-driver 全链「工具优先使用规则」在子代理
+  侧实际落空，各 phase 只能靠主线程注入事实兜底。改进方向：排查子代理运行时的 MCP 工具注入
+  链路是否与主线程隔离（frontmatter 授权 ≠ 运行时可达）
+- [信息完整性][Spectra 图产物] 本仓 live 图 linkageRatio 仅 3.1%（123767/126411 已探测调用点
+  未成边，新）——F266 Phase 3 首次如实暴露该数字（非本卡引入，是长期存量）。含义：coverage-gap
+  在本仓任何非导出 symbol 的零结果上恒成立、confirmed-zero 实际不可达；改进方向：M10 P1「边
+  stage 标签」（producer 侧 call-site 归因持久化）应按该数量级重估优先级
+- [流程顺畅度][Spec Driver] 跨语言外部语料选型验收前须先数目标扩展名文件数（新）——F266 plan
+  Q8 纸面推演选了 nanoGPT 验证"非 src 布局告警"，实测其为纯 Python 项目（0 个 TS/JS 文件），
+  而 FR-001 判据只对 TS/JS 生效，会跑出"看似通过实则测了另一件事"的假验收；已换 hono（284 个
+  真实 .ts 文件）语料。改进方向：验收语料选型 checklist 增加"先用 `find`/`grep -c` 数目标扩展
+  名文件数，确认判据适用范围覆盖该语料"一项
 
 ## 已处理
 

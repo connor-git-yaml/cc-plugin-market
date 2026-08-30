@@ -280,6 +280,508 @@ describe('graph-quality CLI（F217 T033）', () => {
     });
   });
 
+  // ============================================================
+  // F266 FR-006/007/008：空图 fail-loud
+  // ============================================================
+
+  describe('F266：空图归入 cannot-assess 通道（FR-006）', () => {
+    /** 入库空图 fixture：schemaVersion 钉死 2.0，确保命中的是空图闸而不是 schema 版本分支。 */
+    const EMPTY_GRAPH_FIXTURE = resolve('tests/fixtures/graph-quality-empty-graph.json');
+
+    /** 把入库空图 fixture 落进临时仓库的 specs/_meta/graph.json，返回其路径。 */
+    function seedEmptyGraphFixture(): string {
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.copyFileSync(EMPTY_GRAPH_FIXTURE, graphPath);
+      return graphPath;
+    }
+
+    /** 把 baseGraph 清空 nodes/links——保留其余一切（合法指纹等），只隔离"空"这一维。 */
+    function emptiedBaseGraph(sha: string): Record<string, unknown> {
+      const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      graph['nodes'] = [];
+      graph['links'] = [];
+      return graph;
+    }
+
+    it('入库空图 fixture → exit 2, cannot-assess/empty-graph（改动前这里是 exit 0 + pass 系）', () => {
+      const graphPath = seedEmptyGraphFixture();
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).not.toBe('pass');
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('empty-graph');
+    });
+
+    /**
+     * 关键红测试：这张图在**除"空"以外的每一维**都健康（commit 一致、指纹合法 ⇒ freshness=fresh）。
+     * 如果空图闸不存在，六指标会全部落入 not-applicable/无违规空态，聚合出 `pass` + exit 0——
+     * 也就是"建图彻底失败"比"建出一张有瑕疵的图"更容易过门。
+     */
+    it('freshness 完全健康的空图 → 仍是 exit 2 + empty-graph（新鲜的空图也不是好图）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(graphPath, JSON.stringify(emptiedBaseGraph(sha)), 'utf-8');
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('empty-graph');
+    });
+
+    /**
+     * FR-006：三种 cannot-assess 成因必须可分辨。它们的修复动作完全不同——空图是"没扫到源码"、
+     * 缺图是"还没建"、解析失败是"产物损坏"；共用一个 reason 会让 CI 上的人拿着错误的处方修。
+     */
+    it('empty-graph / graph-missing / json-parse-error 三者 reason 互不相同', () => {
+      const emptyPath = seedEmptyGraphFixture();
+      const emptyReport = JSON.parse(
+        runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir }).stdout,
+      );
+
+      const missingPath = path.join(tmpDir, 'specs', '_meta', 'absent-graph.json');
+      const missingReport = JSON.parse(
+        runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir }).stdout,
+      );
+
+      const brokenPath = path.join(tmpDir, 'specs', '_meta', 'broken.json');
+      fs.writeFileSync(brokenPath, '{ not json', 'utf-8');
+      const brokenReport = JSON.parse(
+        runCLI(['graph-quality', '--graph', brokenPath, '--json'], { cwd: tmpDir }).stdout,
+      );
+
+      const reasons = [
+        emptyReport.cannotAssessReason,
+        missingReport.cannotAssessReason,
+        brokenReport.cannotAssessReason,
+      ];
+      expect(reasons).toEqual(['empty-graph', 'graph-missing', 'json-parse-error']);
+      expect(new Set(reasons).size).toBe(3);
+    });
+
+    /**
+     * 判据是 `nodes.length === 0 && links.length === 0` 而非 `||`：全孤岛图（有节点、无边）
+     * 的信息量缺失属于 F217 orphan-ratio / contains-coverage 的职责，已经能被判 warning；
+     * 把它一并升格为 exit 2 会越过既有指标分级。
+     */
+    it('nodes 非空但 links 为空 → 不触发 empty-graph（仍走六指标，exit 0 + pass-with-warnings）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      graph['links'] = [];
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('pass-with-warnings');
+      expect(report.cannotAssessReason).toBeUndefined();
+    });
+
+    /**
+     * FR-007（裁决 1）：builder 戳只可见、不判定。空图闸只看结构性计数，给同一张空图配上
+     * 一份与当前 dist 毫无关系的 builder 身份，判定结果必须逐字不变。
+     */
+    it('FR-007：空图带/不带 builder 戳，exitCode 与 reason 逐字相同（builder 不参与判定）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const withPath = path.join(tmpDir, 'with-builder.json');
+      const withoutPath = path.join(tmpDir, 'without-builder.json');
+
+      const withBuilder = emptiedBaseGraph(sha);
+      (withBuilder['graph'] as Record<string, unknown>)['builder'] = {
+        formatVersion: 1,
+        commit: 'a'.repeat(40),
+        dirty: false,
+        sourceDirty: false,
+        distSha256: '0'.repeat(64),
+      };
+      fs.writeFileSync(withPath, JSON.stringify(withBuilder), 'utf-8');
+      fs.writeFileSync(withoutPath, JSON.stringify(emptiedBaseGraph(sha)), 'utf-8');
+
+      const withResult = runCLI(['graph-quality', '--graph', withPath, '--json'], { cwd: tmpDir });
+      const withoutResult = runCLI(['graph-quality', '--graph', withoutPath, '--json'], {
+        cwd: tmpDir,
+      });
+
+      expect(withResult.exitCode).toBe(withoutResult.exitCode);
+      expect(withResult.exitCode).toBe(2);
+      const a = JSON.parse(withResult.stdout);
+      const b = JSON.parse(withoutResult.stdout);
+      expect(a.overallVerdict).toBe(b.overallVerdict);
+      expect(a.cannotAssessReason).toBe(b.cannotAssessReason);
+      expect(a.cannotAssessReason).toBe('empty-graph');
+      expect(a.freshness.state).toBe(b.freshness.state);
+    });
+
+    it('text 输出与 --status 均如实呈现 cannot-assess，且 nextSteps 给出重建处方', () => {
+      const graphPath = seedEmptyGraphFixture();
+
+      const textResult = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      expect(textResult.exitCode).toBe(2);
+      expect(textResult.stdout).toContain('cannot-assess');
+      expect(textResult.stdout).toContain('graph-only');
+
+      const statusResult = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+        cwd: tmpDir,
+      });
+      expect(statusResult.exitCode).toBe(2);
+      const status = JSON.parse(statusResult.stdout);
+      expect(status.graphExists).toBe(true);
+      expect(status.overallVerdict).toBe('cannot-assess');
+    });
+
+    it('FR-008：正常（非空）基线图判定不受影响，仍是 exit 0 + pass', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(0);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('pass');
+      expect(report.cannotAssessReason).toBeUndefined();
+    });
+
+    it('--json 输出仍过 schema 契约校验（empty-graph 是追加式枚举值，FR-013）', () => {
+      const graphPath = seedEmptyGraphFixture();
+      const report = JSON.parse(
+        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+      );
+      const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
+      expect(validateAgainstSchema(report, schema).violations).toEqual([]);
+    });
+  });
+
+  // ============================================================
+  // 对抗审查 A6a / A6c：退化图 fail-loud + cannot-assess 分支的真实 freshness
+  // ============================================================
+
+  describe('F266-A6a：无 symbol 节点的退化图归入 cannot-assess', () => {
+    /** 只留模块节点的退化图：节点非空 ⇒ 绕过 (0,0) 空图闸；但六指标的分母全为 0 */
+    function moduleOnlyGraph(sha: string): Record<string, unknown> {
+      const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      graph['nodes'] = [
+        { id: 'src/a.ts', kind: 'module', label: 'a.ts', metadata: { unifiedKind: 'module', sourcePath: 'src/a.ts' } },
+      ];
+      graph['links'] = [];
+      return graph;
+    }
+
+    it('1 个 module 节点 / 0 边 → exit 2 + no-symbol-nodes（改动前这里是 exit 0 + pass）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(graphPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('no-symbol-nodes');
+      expect(report.nextSteps.join('\n')).toContain('graph-only');
+      expect(report.nextSteps.join('\n')).toContain('symbol');
+    });
+
+    it('多个模块节点 + 非 calls 边的退化图同样被拦（不是只对单节点生效）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graph = moduleOnlyGraph(sha);
+      graph['nodes'] = [
+        { id: 'src/a.ts', kind: 'module', label: 'a.ts', metadata: { unifiedKind: 'module', sourcePath: 'src/a.ts' } },
+        { id: 'src/b.ts', kind: 'module', label: 'b.ts', metadata: { unifiedKind: 'module', sourcePath: 'src/b.ts' } },
+      ];
+      graph['links'] = [
+        { source: 'src/a.ts', target: 'src/b.ts', relation: 'depends-on', confidence: 'EXTRACTED', confidenceScore: 1, directional: true },
+      ];
+      const graphPath = path.join(tmpDir, 'degraded.json');
+      fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      expect(JSON.parse(result.stdout).cannotAssessReason).toBe('no-symbol-nodes');
+    });
+
+    it('只要有 1 个 symbol 节点就不触发（不越权吞掉 orphan/contains 的 warning 级职责）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      // baseGraph 本身就是 1 module + 1 symbol + 1 contains 边的最小非空图
+      writeGraph(graphPath, baseGraph({ sourceCommit: sha }));
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).cannotAssessReason).toBeUndefined();
+    });
+
+    it('no-symbol-nodes / empty-graph 是两个可分辨的 reason（处方不同）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const degradedPath = path.join(tmpDir, 'degraded.json');
+      fs.writeFileSync(degradedPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
+      const emptyPath = path.join(tmpDir, 'empty.json');
+      const emptied = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      emptied['nodes'] = [];
+      emptied['links'] = [];
+      fs.writeFileSync(emptyPath, JSON.stringify(emptied), 'utf-8');
+
+      const a = JSON.parse(runCLI(['graph-quality', '--graph', degradedPath, '--json'], { cwd: tmpDir }).stdout);
+      const b = JSON.parse(runCLI(['graph-quality', '--graph', emptyPath, '--json'], { cwd: tmpDir }).stdout);
+      expect(a.cannotAssessReason).toBe('no-symbol-nodes');
+      expect(b.cannotAssessReason).toBe('empty-graph');
+    });
+
+    it('--json 输出仍过 schema 契约校验（no-symbol-nodes 是追加式枚举值）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'degraded.json');
+      fs.writeFileSync(graphPath, JSON.stringify(moduleOnlyGraph(sha)), 'utf-8');
+      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+      const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
+      expect(validateAgainstSchema(report, schema).violations).toEqual([]);
+    });
+  });
+
+  describe('F266-A6c：读到合法图的 cannot-assess 分支必须报真实 freshness', () => {
+    it('空图 + commit 与 HEAD 一致 → freshness.fresh（不再硬写 unknown-provenance）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'specs', '_meta', 'graph.json');
+      const emptied = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      emptied['nodes'] = [];
+      emptied['links'] = [];
+      fs.mkdirSync(path.dirname(graphPath), { recursive: true });
+      fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
+
+      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+
+      expect(report.cannotAssessReason).toBe('empty-graph');
+      // 承重断言：sourceCommit 磁盘上确有其值，硬写 null 会让下游 sync 脚本
+      // 打印"provenance 不明，建议重建"→ 重建后仍空 → 死循环建议
+      expect(report.freshness.recordedSourceCommit).toBe(sha);
+      expect(report.freshness.state).toBe('fresh');
+    });
+
+    it('空图 + commit 与 HEAD 不一致 → freshness.stale（真判定，不是兜底值）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'stale-empty.json');
+      const emptied = baseGraph({ sourceCommit: 'f'.repeat(40) }) as unknown as Record<string, unknown>;
+      emptied['nodes'] = [];
+      emptied['links'] = [];
+      fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
+
+      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+
+      expect(report.freshness.state).toBe('stale');
+      expect(report.freshness.currentHead).toBe(sha);
+      expect(report.freshness.recordedSourceCommit).toBe('f'.repeat(40));
+    });
+
+    it('no-symbol-nodes 分支同样报真实 freshness', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      graph['nodes'] = [
+        { id: 'src/a.ts', kind: 'module', label: 'a.ts', metadata: { unifiedKind: 'module', sourcePath: 'src/a.ts' } },
+      ];
+      graph['links'] = [];
+      const graphPath = path.join(tmpDir, 'degraded.json');
+      fs.writeFileSync(graphPath, JSON.stringify(graph), 'utf-8');
+
+      const report = JSON.parse(runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout);
+
+      expect(report.cannotAssessReason).toBe('no-symbol-nodes');
+      expect(report.freshness.recordedSourceCommit).toBe(sha);
+      expect(report.freshness.state).toBe('fresh');
+    });
+
+    it('真正无图可读的分支（graph-missing）仍报 unknown-provenance + null（那里的 null 是真值）', () => {
+      initGitRepoWithCommit(tmpDir);
+      const missingPath = path.join(tmpDir, 'specs', '_meta', 'absent.json');
+
+      const report = JSON.parse(runCLI(['graph-quality', '--graph', missingPath, '--json'], { cwd: tmpDir }).stdout);
+
+      expect(report.cannotAssessReason).toBe('graph-missing');
+      expect(report.freshness.state).toBe('unknown-provenance');
+      expect(report.freshness.recordedSourceCommit).toBeNull();
+    });
+
+    it('空图 nextSteps 不再声称"源码不在 src/ 目录下"（graph-only 不受该过滤器影响，已实证）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = path.join(tmpDir, 'empty2.json');
+      const emptied = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      emptied['nodes'] = [];
+      emptied['links'] = [];
+      fs.writeFileSync(graphPath, JSON.stringify(emptied), 'utf-8');
+
+      const steps = JSON.parse(
+        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+      ).nextSteps.join('\n');
+
+      expect(steps).not.toContain('src/');
+      expect(steps).toContain('受支持语言');
+    });
+  });
+
+  /**
+   * delta 审查 D1：`no-symbol-nodes` 从"前置短路 + pass 占位"改为"跑完 buildReport 再后置降级"。
+   *
+   * 攻击构造来自 delta 审查的实证：`spectra graph` 由 arch-IR 建出的图**不写 `unifiedKind`**，
+   * 却可以同时放进 `src/a.ts::Foo` 与 `src/a.ts#Foo` —— 一条货真价实的重复 canonical ID
+   * （强不变量）。第一轮的前置闸把它洗成 `cannot-assess` + `duplicateCanonicalId: pass` 占位，
+   * 硬失败（exit 1）被降成 warn，repo:check 由 FAIL 变 PASS。
+   */
+  describe('F266-D1：无 symbol 图的降级 MUST NOT 吞掉强不变量违反', () => {
+    /** 无 symbol 节点（不写 unifiedKind）的图，节点/边由调用方给定 */
+    function noSymbolGraph(
+      sha: string,
+      nodes: Array<Record<string, unknown>>,
+      links: Array<Record<string, unknown>> = [],
+    ): Record<string, unknown> {
+      const graph = baseGraph({ sourceCommit: sha }) as unknown as Record<string, unknown>;
+      graph['nodes'] = nodes;
+      graph['links'] = links;
+      return graph;
+    }
+
+    function seed(name: string, graph: Record<string, unknown>): string {
+      const p = path.join(tmpDir, name);
+      fs.writeFileSync(p, JSON.stringify(graph), 'utf-8');
+      return p;
+    }
+
+    it('无 symbol + 重复 canonical ID → exit 1 + fail-strong-invariant（第一轮这里是 exit 2 + 占位 pass）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = seed(
+        'dup-no-symbol.json',
+        noSymbolGraph(sha, [
+          { id: 'src/a.ts::Foo', kind: 'component', label: 'Foo', metadata: {} },
+          { id: 'src/a.ts#Foo', kind: 'component', label: 'Foo', metadata: {} },
+        ]),
+      );
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('fail-strong-invariant');
+      expect(report.cannotAssessReason).toBeUndefined();
+      expect(report.duplicateCanonicalId.status).toBe('fail');
+      expect(report.duplicateCanonicalId.groups[0].ids).toEqual(['src/a.ts#Foo', 'src/a.ts::Foo']);
+    });
+
+    it('无 symbol + 悬空边 → exit 1 + fail-strong-invariant（第二条强不变量同样不被吞）', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = seed(
+        'dangling-no-symbol.json',
+        noSymbolGraph(
+          sha,
+          [{ id: 'src/a.ts::Foo', kind: 'component', label: 'Foo', metadata: {} }],
+          [
+            {
+              source: 'src/a.ts::Foo',
+              target: 'src/missing.ts::Bar',
+              relation: 'calls',
+              confidence: 'EXTRACTED',
+              confidenceScore: 1,
+              directional: true,
+            },
+          ],
+        ),
+      );
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('fail-strong-invariant');
+      expect(report.danglingEdges.edges).toEqual([
+        { source: 'src/a.ts::Foo', target: 'src/missing.ts::Bar', relation: 'calls' },
+      ]);
+    });
+
+    it('无 symbol + 无违规 → exit 2 + cannot-assess/no-symbol-nodes，且各指标是真实结果而非占位', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = seed(
+        'clean-no-symbol.json',
+        noSymbolGraph(sha, [
+          { id: 'src/a.ts', kind: 'module', label: 'a.ts', metadata: { sourcePath: 'src/a.ts' } },
+        ]),
+      );
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      expect(report.cannotAssessReason).toBe('no-symbol-nodes');
+      // 承重：占位报告写死 schemaVersion:'unknown' 且 allNodeZeroDegreeRatio:0；
+      // 真实报告读到图自己的 2.0，并算出这个零边孤岛的真实 zero-degree 率 1。
+      expect(report.schemaVersion).toBe('2.0');
+      expect(report.orphanRatio.allNodeZeroDegreeRatio).toBe(1);
+      expect(report.freshness.recordedSourceCommit).toBe(sha);
+    });
+
+    it('无 symbol + warning 级发现（ignored 路径节点）→ 仍改判 cannot-assess，但真实发现不丢', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = seed(
+        'ignored-no-symbol.json',
+        noSymbolGraph(sha, [
+          { id: 'node_modules/pkg/index.js::foo', kind: 'component', label: 'foo', metadata: {} },
+        ]),
+      );
+
+      const result = runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir });
+
+      // "无 symbol ⇒ 绝不宣称 pass"：门禁的诚实度不该取决于"恰好有没有一个 warning 级发现"
+      expect(result.exitCode).toBe(2);
+      const report = JSON.parse(result.stdout);
+      expect(report.overallVerdict).toBe('cannot-assess');
+      // 真实发现原样保留在报告体与 nextSteps 里，不被 pass 占位覆盖
+      expect(report.legacyAndIgnoredNodes.status).toBe('fail');
+      expect(report.legacyAndIgnoredNodes.ignoredPathNodeIds).toEqual([
+        'node_modules/pkg/index.js::foo',
+      ]);
+      expect(report.nextSteps.join('\n')).toContain('应被排除路径');
+      // 处方置顶
+      expect(report.nextSteps[0]).toContain('symbol');
+    });
+
+    it('降级后的报告（cannot-assess 携带真实指标）仍过 schema 契约 + text/--status 渲染不崩', () => {
+      const sha = initGitRepoWithCommit(tmpDir);
+      const graphPath = seed(
+        'render-no-symbol.json',
+        noSymbolGraph(sha, [
+          { id: 'node_modules/pkg/index.js::foo', kind: 'component', label: 'foo', metadata: {} },
+        ]),
+      );
+
+      const jsonReport = JSON.parse(
+        runCLI(['graph-quality', '--graph', graphPath, '--json'], { cwd: tmpDir }).stdout,
+      );
+      const schema = JSON.parse(fs.readFileSync(REPORT_SCHEMA_PATH, 'utf-8'));
+      expect(validateAgainstSchema(jsonReport, schema).violations).toEqual([]);
+
+      const textResult = runCLI(['graph-quality', '--graph', graphPath], { cwd: tmpDir });
+      expect(textResult.exitCode).toBe(2);
+      expect(textResult.stdout).toContain('cannot-assess');
+      expect(textResult.stdout).toContain('[legacy-ignored] fail');
+
+      const statusResult = runCLI(['graph-quality', '--graph', graphPath, '--status', '--json'], {
+        cwd: tmpDir,
+      });
+      expect(statusResult.exitCode).toBe(2);
+      const status = JSON.parse(statusResult.stdout);
+      expect(status.overallVerdict).toBe('cannot-assess');
+      expect(status.freshness).toBe('fresh');
+    });
+  });
+
   describe('三种输出格式', () => {
     it('--json 输出完整六字段（含 CLI 层组装的 freshness）', () => {
       const sha = initGitRepoWithCommit(tmpDir);

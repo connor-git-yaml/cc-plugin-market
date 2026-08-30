@@ -18,11 +18,23 @@ import {
 import type { GraphJSON } from '../../src/panoramic/graph/graph-types.js';
 import type { FreshnessStaleReason } from '../../src/panoramic/graph/quality/quality-types.js';
 
+/** 本 helper 构造的最小图里那个模块节点的 id（同时也是它的源文件路径）。 */
+const FIXTURE_MODULE_ID = 'src/f266-fixture.ts';
+/** 该模块下唯一的 symbol 节点 id（canonical `::` 形态，不会被判为 legacy `#` 节点）。 */
+const FIXTURE_SYMBOL_ID = `${FIXTURE_MODULE_ID}::fixtureSymbol`;
+
 /**
  * schemaVersion 2.0 的最小合法图产物，默认携带**当前合法指纹**。
  *
  * 默认带指纹的理由：不带等价于"图未记录指纹"，按 FR-010 一律判 stale +
  * `collector-fingerprint-unrecorded`——绝大多数既有用例想测的不是这件事。
+ *
+ * F266 R-A：本 helper 曾返回 `nodes:[] / links:[]`。空图一旦被 `graph-quality` 判为
+ * `cannot-assess`（FR-006），所有以它为"正常基线"的既有用例都会被自己制造的空 fixture
+ * 误伤——测的将不再是各自那一维度，而是"图是空的"。故改为**最小非空图**：1 个模块节点 +
+ * 1 个 symbol 节点 + 一条 `contains` 边，恰好让六项指标全部走进"有数据且合规"的判定分支
+ * （contains 覆盖率 1.0、symbol orphan 数 0、无重复 canonical ID、无悬空边、无 legacy/ignored
+ * 节点），从而保持"基线图 = pass"这一各用例共同依赖的前提。
  */
 export function baseFreshnessGraph(overrides: Partial<GraphJSON['graph']> = {}): GraphJSON {
   return {
@@ -31,15 +43,38 @@ export function baseFreshnessGraph(overrides: Partial<GraphJSON['graph']> = {}):
     graph: {
       name: 'spectra-knowledge-graph',
       generatedAt: '2026-01-01T00:00:00.000Z',
-      nodeCount: 0,
-      edgeCount: 0,
+      nodeCount: 2,
+      edgeCount: 1,
       sources: ['unified-graph'],
       schemaVersion: '2.0',
       fingerprint: computeCollectorFingerprint(),
       ...overrides,
     },
-    nodes: [],
-    links: [],
+    nodes: [
+      {
+        id: FIXTURE_MODULE_ID,
+        kind: 'module',
+        label: 'f266-fixture.ts',
+        // 不带 unifiedKind:'symbol'——模块节点不进 contains 覆盖率/orphan 的分母
+        metadata: { sourcePath: FIXTURE_MODULE_ID },
+      },
+      {
+        id: FIXTURE_SYMBOL_ID,
+        kind: 'component',
+        label: 'fixtureSymbol',
+        metadata: { unifiedKind: 'symbol', sourcePath: FIXTURE_MODULE_ID },
+      },
+    ],
+    links: [
+      {
+        source: FIXTURE_MODULE_ID,
+        target: FIXTURE_SYMBOL_ID,
+        relation: 'contains',
+        confidence: 'EXTRACTED',
+        confidenceScore: 1,
+        directional: true,
+      },
+    ],
   };
 }
 

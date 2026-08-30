@@ -155,7 +155,7 @@ This is **AI-for-AI architecture memory**: the AI never has to re-read your code
 - **Token economics** — Querying a 50K-token graph instead of re-reading 500K LOC saves 90%+ tokens per session
 - **Cross-session memory** — `_meta/graph.json` persists between Claude Code sessions; AI can ask "what changed since last time?"
 - **Multi-IDE compatible** — Same MCP server works for Claude Code, Cursor, Codex, Aider, OpenCode, etc.
-- **Hook-driven freshness** — `spectra install --git` registers a post-commit hook that incrementally rebuilds the graph; AI always queries the latest
+- **Hook-driven freshness** — `spectra install --git` registers a post-commit hook that rebuilds the graph in the background via `spectra batch --mode graph-only` (full pure-AST rebuild, zero LLM); AI always queries the latest
 
 #### Trigger via auto-injection (PreToolUse hook)
 

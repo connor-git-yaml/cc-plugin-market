@@ -144,9 +144,16 @@
         "graph-missing",
         "json-parse-error",
         "schema-too-old",
-        "schema-newer-than-supported"
+        "schema-newer-than-supported",
+        "empty-graph",
+        "no-symbol-nodes"
       ],
-      "description": "overallVerdict==='cannot-assess' 时的具体原因分类"
+      "description": "overallVerdict==='cannot-assess' 时的具体原因分类（F266 追加 empty-graph：结构合法但 0 节点 0 边；no-symbol-nodes：节点非空但无任何 unifiedKind==='symbol' 节点，六项结构指标失去判定对象）"
+    },
+    "metricsPopulated": {
+      "type": "boolean",
+      "enum": [true],
+      "description": "F266 E3：六项指标为真实测量值（而非 cannot-assess 的空态占位）。仅 no-symbol-nodes 的后置降级报告置 true；graph-missing / json-parse-error / schema-* / empty-graph 的占位报告不置。缺席即不保证为真实测量值，消费侧一律按占位处理。"
     },
     "nextSteps": {
       "type": "array",

@@ -58,8 +58,10 @@ spectra init [--global] [--target claude|codex|both]
 # Remove installed skills
 spectra init --remove [--target claude|codex|both]
 
-# Build persistent knowledge graph (_meta/graph.json)
-spectra graph
+# Merge cached architecture IR + generated specs into _meta/graph.json.
+# NOT a rebuild: it does not parse source. Refuses to overwrite a richer existing graph
+# (fewer nodes, fewer edges, or fewer `calls` edges) and exits 1; pass --force to override.
+spectra graph [--directed] [--force]
 
 # Community detection — outputs GRAPH_REPORT.md
 spectra community
@@ -98,9 +100,16 @@ Spectra builds a unified knowledge graph (`_meta/graph.json`) from all generated
 ### Step 1 — Build the Graph
 
 ```bash
-spectra batch          # generate or refresh all module specs first
-spectra graph          # builds _meta/graph.json
+spectra batch                    # full run: specs + graph (writes _meta/graph.json itself)
+spectra batch --mode graph-only  # graph only: pure AST, zero LLM, no auth, <2min
 ```
+
+`spectra batch` **already writes the graph** — there is no second "now build the graph" step.
+The former two-step recipe (`spectra batch` then `spectra graph`) is gone: `spectra graph` merges
+only the cached architecture IR, already-generated `.spec.md` files and the cross-reference index —
+a strict subset of what `batch` puts in the graph — so running it after `batch` degrades the graph.
+Since F266 that overwrite is refused by an information-loss guard and the command exits 1
+(see `spectra graph` below).
 
 ### Step 2 — Community Detection & Architecture Insights
 
@@ -153,10 +162,42 @@ Keep docs and graph fresh automatically:
 spectra watch
 
 # Install the PreToolUse auto-injection hook (Claude Code), and add --git for the
-# git post-commit hook that incrementally rebuilds on every commit.
+# git post-commit hook. The hook runs `spectra batch --mode graph-only` in the
+# background after each commit that touches code -- a full pure-AST rebuild (zero LLM,
+# no auth), not an incremental parse. It is killed after 180s.
 spectra install          # PreToolUse hook only
 spectra install --git    # also installs the post-commit graph-rebuild hook
 ```
+
+**Where the hook's diagnostics go.** Everything — stdout, stderr, the timeout notice and a
+non-zero exit code — is *appended* to `<git-dir>/spectra-post-commit.log`, one `=== run <UTC ts> ===`
+header per run. Appending (rather than truncating) is what keeps a failed run's marker alive when a
+second commit follows seconds later; the file is rotated to `spectra-post-commit.log.old` once it
+grows past 200 KB. Nothing is printed to the terminal: the hook's subshell detaches from git's
+stdout/stderr on purpose, because keeping those descriptors open blocks any consumer that reads
+commit output until EOF (command substitution, CI runners, IDEs) for as long as the rebuild takes.
+Silence on the terminal is the price of not blocking the commit — check the log file to see whether
+a rebuild succeeded.
+
+**One rebuild at a time.** A rebuild takes a lock at `<git-dir>/spectra-rebuild.lock` (an atomic
+`mkdir`). If another rebuild is still running — the timeout window is 180s — the new hook run logs
+`skipped: another rebuild in progress` and exits instead of racing it: two concurrent rebuilds would
+overwrite the same `graph.json` last-writer-wins, and the resulting staleness is already covered by
+the freshness advisory on every MCP response. A lock left behind by a killed process is reclaimed
+after 4 minutes — the reclaiming run first *renames* the stale lock to a private path, so only one
+racer can ever claim it.
+
+**Commits that arrive during a rebuild are not dropped.** A run that yields the lock also touches
+`<git-dir>/spectra-rebuild-requested`. When the lock holder finishes, it sees that marker and runs
+one more rebuild pass, so a burst of commits (a rebase replay, for instance) ends with a graph built
+from the *last* commit's tree rather than the first one's. The holder runs at most two passes per
+invocation; beyond that it logs a line and leaves the remaining staleness to the freshness advisory.
+
+**Upgrading an existing install.** The hook segment is replaced as a whole between its
+`# --- spectra begin/end ---` markers and is *not* rewritten retroactively. If you installed the
+hook before F266 you still have the old segment (which ran `spectra graph`, a non-rebuild).
+Re-running `spectra install --git` is idempotent and will *skip* an already-installed segment, so
+migrate explicitly: `spectra install --remove --git && spectra install --git`.
 
 ### Worktree Bootstrap & Keepalive (Feature 193)
 
@@ -197,18 +238,20 @@ locally; failures never block the rest of the sync.
 > detected at load time and reported as `graph-format-stale` (with a rebuild hint) rather
 > than silently returning wrong results — rebuild the primary once with `spectra batch`.
 
-**2. Keepalive (incremental freshness).** To keep the bootstrapped graph fresh as you edit,
-activate one of the existing incremental paths:
+**2. Keepalive (staying fresh).** To keep the bootstrapped graph fresh as you edit,
+activate one of the existing refresh paths:
 
 ```bash
-spectra install --git  # post-commit hook → incremental graph update after each commit
+spectra install --git  # post-commit hook → full pure-AST graph rebuild after each commit
 # or
 spectra watch          # debounced incremental rebuild on file save
 ```
 
-Because the snapshot is portable (relative `fileHashes` keys), incremental updates resume
-correctly in the new worktree. If no snapshot was bootstrapped, the first commit safely
-falls back to a full reindex (then keepalive is incremental from there on).
+The two paths differ: the post-commit hook shells out to `spectra batch --mode graph-only`,
+which re-parses the whole tree from scratch on every code commit (no snapshot involved).
+`spectra watch` is the incremental one — because the snapshot is portable (relative
+`fileHashes` keys), its incremental updates resume correctly in the new worktree, and when no
+snapshot was bootstrapped the first run safely falls back to a full reindex.
 
 ## Spec Drift Anchors (repo-level, Feature 219)
 

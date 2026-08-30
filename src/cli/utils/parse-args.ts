@@ -501,7 +501,8 @@ export function parseArgs(argv: string[]): ParseResult {
         graphOperation: 'build',
         directed,
         outputDir,
-        deep: false, force: false, version: false, help: false,
+        // F266 FR-003：--force 是信息量守卫的显式逃生口（主动重置 / 缩图场景）
+        deep: false, force: argv.includes('--force'), version: false, help: false,
         global: false, remove: false, skillTarget: defaultSkillTarget(),
       },
     };

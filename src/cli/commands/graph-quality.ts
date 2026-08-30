@@ -75,7 +75,8 @@ const GRAPH_QUALITY_HELP = `spectra graph-quality — 图质量体检（六指�
 退出码:
   0  完成完整评估，且无强不变量违反（overallVerdict 为 pass 或 pass-with-warnings）
   1  强不变量违反（overallVerdict 为 fail-strong-invariant：重复 canonical ID / 悬空边）
-  2  无法完成评估（overallVerdict 为 cannot-assess：图产物不存在 / JSON 解析失败或结构损坏 / schemaVersion 过旧）`;
+  2  无法完成评估（overallVerdict 为 cannot-assess：图产物不存在 / JSON 解析失败或结构损坏 /
+     schemaVersion 过旧或过新 / 图为空（0 节点 0 边））`;
 
 /** --status 轻量模式的三字段裁剪结果（决策 7）。 */
 interface GraphQualityStatusReport {
@@ -150,11 +151,22 @@ function compareSchemaVersion(a: ParsedSchemaVersion, b: ParsedSchemaVersion): n
   return a.minor - b.minor;
 }
 
-/** cannot-assess 场景下的占位六指标（未实际执行判定，語义为"无违规可报告"的空态，见 T034 实现说明）。 */
+/**
+ * cannot-assess 场景下的占位六指标（未实际执行判定，語义为"无违规可报告"的空态，见 T034 实现说明）。
+ *
+ * @param freshness 读到了**合法图产物**的 cannot-assess 分支（当前只剩 empty-graph——
+ *   `no-symbol-nodes` 在 delta 审查 D1 后改走 `downgradeForNoSymbolNodes` 的后置降级，
+ *   它保留 `buildReport` 的完整报告体，根本不经过本函数）
+ *   MUST 传入按该图真实算出的 freshness：那两条路上 `graph.sourceCommit` 磁盘上确有其值，
+ *   硬写 `unknown-provenance / recordedSourceCommit: null` 是拿"没读"冒充"读了没有"，
+ *   下游（sync-worktree-local-state 等）会据此死循环建议"provenance 不明，请重建"。
+ *   真正无图可读的分支（graph-missing / json-parse-error / schema-*）不传——那里的 null 是真值。
+ */
 function buildCannotAssessReport(
   graphPath: string,
   reason: NonNullable<GraphQualityReport['cannotAssessReason']>,
   nextSteps: string[],
+  freshness?: GraphFreshnessVerdict,
 ): GraphQualityReport {
   const exemptedByCategory: Record<OrphanExceptionCategory, number> = {
     entrypoint: 0,
@@ -178,11 +190,110 @@ function buildCannotAssessReport(
     },
     danglingEdges: { status: 'pass', edges: [] },
     legacyAndIgnoredNodes: { status: 'pass', legacyHashNodeIds: [], ignoredPathNodeIds: [] },
-    freshness: { state: 'unknown-provenance', recordedSourceCommit: null, currentHead: null },
+    freshness: freshness ?? { state: 'unknown-provenance', recordedSourceCommit: null, currentHead: null },
     overallVerdict: 'cannot-assess',
     cannotAssessReason: reason,
     nextSteps,
   };
+}
+
+/**
+ * F266 FR-006：空图判据——节点与边**同时**为空。
+ *
+ * 为什么必须在 `buildReport` 之前拦掉：六项指标对空图的每一项都会走进"分母为 0 ⇒
+ * not-applicable"或"没有违规样本 ⇒ pass"的空态，聚合出来就是 `overallVerdict: 'pass'`。
+ * 也就是说，建图彻底失败（零节点）反而比建出一张有瑕疵的图更容易过门——判定器对
+ * "根本没建出图"这件事说了假话。
+ *
+ * 为什么是 `&&` 而不是 `||`：`nodes` 非空但 `links` 为空是"全孤岛图"。**注意**：原注释称
+ * 这种图"已经能被 orphan-ratio / contains-coverage 判为 fail/warning"——该说法只在图里
+ * **有 symbol 级节点**时成立（那两项指标的分母都是 `unifiedKind === 'symbol'` 的节点数）。
+ * 一张只有 module 节点的退化图分母为 0，两项指标双双 not-applicable，会一路 pass。
+ * 那个缺口由 `hasNoSymbolNodes` 单独收口，不靠放宽本判据（放宽会把真正属于
+ * warning 级的"有 symbol 的全孤岛图"误升为硬失败）。
+ *
+ * **为什么本闸可以前置短路、而 `no-symbol-nodes` 不行**（delta 审查 D1）：空图上六指标
+ * 是**可证明**无违规的——没有节点就没有重复 canonical ID、没有 ignored 路径节点、没有遗留
+ * `#` 节点；没有边就没有悬空边。前置跳过 `buildReport` 因此零信息损失。而"有节点、只是没有
+ * symbol 节点"完全不同：duplicate-id / dangling-edge / legacy-ignored 三项检查遍历的是**全部
+ * 节点与边**，与 symbol 层在不在场无关，那种图上照样能有真违规（`spectra graph` 读 arch-IR
+ * 建出的图不写 `unifiedKind`，却可以同时含 `a.ts::Foo` 与 `a.ts#Foo` 两个 element）。
+ * 故 `no-symbol-nodes` MUST 走后置降级（先跑完 `buildReport` 再改判），见 `downgradeForNoSymbolNodes`。
+ *
+ * 本判据只看结构性计数，不读 builder 戳（裁决 1：builder 戳只可见不判定）。
+ */
+function isEmptyGraph(graph: GraphJSON): boolean {
+  return graph.nodes.length === 0 && graph.links.length === 0;
+}
+
+/**
+ * F266 对抗审查 A6a：节点非空、但没有任何 symbol 级节点 —— 六项结构指标**部分**失去判定对象。
+ *
+ * 判据来源必须与指标本身同源：`contains-coverage` 与 `orphan-ratio` 的分母都是
+ * `metadata.unifiedKind === 'symbol'` 的节点数（contains-coverage-check.ts / orphan-check.ts），
+ * 分母为 0 时它们返回 not-applicable；`freshness` 与 symbol 层无关但也说明不了结构质量。
+ * 于是这种"只剩模块骨架、symbol 层整体缺失"的图会聚合出 `pass` —— 门禁说它没问题。
+ *
+ * **本函数只是"要不要改判"的必要条件，不是充分条件**（delta 审查 D1 推翻了上一版注释）：
+ * 上一版这里写着「duplicate-canonical-id / dangling-edges / legacy-ignored 在无 symbol 节点时
+ * 也没有违规样本可报」——**该断言为假**。这三项检查遍历的是全部节点与全部边，判据里没有任何
+ * 一处读 `unifiedKind`。实证反例：`spectra graph` 从 arch-IR 建出的图不写 `unifiedKind`，却能
+ * 同时放进 `src/a.ts::Foo` 与 `src/a.ts#Foo` 两个 element —— 那是货真价实的重复 canonical ID
+ * （旧判定面 exit 1 / repo:check FAIL），当时却被前置短路洗成 `duplicateCanonicalId: pass` 的占位值。
+ * 因此改判必须**后置**：先跑完 `buildReport` 拿到真实指标，再由 `downgradeForNoSymbolNodes` 决定。
+ */
+function hasNoSymbolNodes(graph: GraphJSON): boolean {
+  return graph.nodes.length > 0 && !graph.nodes.some((n) => n.metadata?.['unifiedKind'] === 'symbol');
+}
+
+/** `no-symbol-nodes` 改判时置顶的处方文案（machine-readable 的是 `cannotAssessReason`，本条供人读）。 */
+function noSymbolNodesNextStep(nodeCount: number): string {
+  return (
+    `图中无任何 symbol 级节点（共 ${nodeCount} 个节点，全部为模块/骨架层），` +
+    'contains-coverage / orphan-ratio 等依赖 symbol 分母的指标全部失去判定对象，本次体检结论不可采信。' +
+    '请运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · <2min）重建完整图；' +
+    '若重建后仍无 symbol 节点，说明源码解析阶段未产出任何符号（如项目使用的语言尚未被 Spectra 支持）。'
+  );
+}
+
+/**
+ * D1：无 symbol 图的**后置**降级 —— 在 `buildReport` 跑完之后改判，而不是在它之前短路。
+ *
+ * 两条硬规则：
+ * 1. `fail-strong-invariant` **原样保留**（exit 1）。重复 canonical ID / 悬空边是全节点、全边
+ *    维度的强不变量，与 symbol 层在不在场无关；把它降级成 `cannot-assess` 等于用"我评估不了"
+ *    吞掉一条已经评估出来的硬违规，是比原缺陷更糟的 fail-open。
+ * 2. 其余情形改判 `cannot-assess`，但**报告体保留 `buildReport` 算出的真实指标**（不再用
+ *    `buildCannotAssessReport` 的 pass 占位覆盖）：`legacyAndIgnoredNodes: fail` 这类真发现
+ *    必须留在报告里，只是它不足以支撑"这张图体检通过"的结论。
+ *
+ * 关于第 2 条的一个刻意取舍：**warning 级发现不阻止降级**。一张 symbol 层整体缺失的图，
+ * 恰好带一个 `node_modules/` 节点时报 `pass-with-warnings`（exit 0）、不带时报 `cannot-assess`
+ * （exit 2），会让门禁的诚实度取决于一个无关的巧合。规则收敛为"无 symbol ⇒ 绝不宣称 pass"，
+ * warning 级发现照常保留在报告体与 nextSteps 里，不丢失。
+ */
+function downgradeForNoSymbolNodes(report: GraphQualityReport, nodeCount: number): GraphQualityReport {
+  if (report.overallVerdict === 'fail-strong-invariant') return report;
+  return {
+    ...report,
+    overallVerdict: 'cannot-assess',
+    cannotAssessReason: 'no-symbol-nodes',
+    // E3：本报告体是 `buildReport` 的真实测量结果，只是**结论**不可采信。消费方（repo:check 的
+    // graph-quality-core.mjs）据此继续发射逐维度 check——否则 legacy-ignored 真发现 / freshness
+    // stale / F258 的 ignore-undeterminable 诊断会随 cannot-assess 一起整体塌陷。
+    metricsPopulated: true,
+    // 处方置顶，`buildReport` 的真实 nextSteps（stale 建议 / ignored 路径发现 / oracle 诊断）全部保留
+    nextSteps: [noSymbolNodesNextStep(nodeCount), ...report.nextSteps],
+  };
+}
+
+/**
+ * 对一张**已读到的合法图**算真实 freshness（与 `buildReport` 内同一口径，含 recordedSourceCommit 归一化）。
+ * 抽出来是为了让 cannot-assess 的"读到图"分支与正常分支共用同一实现，不产生第二套口径。
+ */
+function evaluateGraphFreshness(graph: GraphJSON, projectRoot: string): GraphFreshnessVerdict {
+  const raw = evaluateFreshness(graph.graph.sourceCommit, projectRoot, graph.graph.fingerprint);
+  return { ...raw, recordedSourceCommit: raw.recordedSourceCommit ?? null };
 }
 
 /** 按节点 sourcePath 查找对应语言的测试文件匹配模式（决策 2 test-export 例外判定）。 */
@@ -627,21 +738,12 @@ function buildReport(graph: GraphJSON, graphPath: string, projectRoot: string): 
     isIgnored: ignoreOracle.isIgnored,
     getTestPatterns,
   });
-  // F249 FR-009：第三参传入图产物记录的指纹（可能为 undefined/null/畸形值，
-  // evaluateFreshness 内部经 isValidCollectorFingerprint 收口，本层不做预校验）
-  const rawFreshness = evaluateFreshness(
-    graph.graph.sourceCommit,
-    projectRoot,
-    graph.graph.fingerprint,
-  );
-  // --json 契约稳定性：JSON.stringify 会丢弃值为 undefined 的 key（字段缺失场景）。
-  // recordedSourceCommit 为 undefined（旧图产物字段缺失）与显式 null（非 git 仓库）在
-  // FR-010 语义上等价（均判定 unknown-provenance），故此处归一化为 null，避免 --json
-  // 输出因该字段整体消失而破坏契约（详见 graph-quality-report.schema.json 的 required）。
-  const freshness: GraphFreshnessVerdict = {
-    ...rawFreshness,
-    recordedSourceCommit: rawFreshness.recordedSourceCommit ?? null,
-  };
+  // F249 FR-009：evaluateGraphFreshness 内把图产物记录的指纹作为第三参传入（可能为
+  // undefined/null/畸形值，evaluateFreshness 内部经 isValidCollectorFingerprint 收口）。
+  // 同时归一化 recordedSourceCommit：JSON.stringify 会丢弃值为 undefined 的 key，而
+  // undefined（旧图字段缺失）与显式 null（非 git 仓库）在 FR-010 语义上等价，
+  // 不归一化会让 --json 输出因该字段整体消失而破坏契约（见 schema 的 required）。
+  const freshness = evaluateGraphFreshness(graph, projectRoot);
   const overallVerdict = computeOverallVerdict(structural.structuralVerdict, freshness.state);
 
   const base: Omit<GraphQualityReport, 'nextSteps'> = {
@@ -844,9 +946,27 @@ export async function runGraphQualityCommand(command: CLICommand): Promise<void>
           report = buildCannotAssessReport(graphPath, 'schema-newer-than-supported', [
             `图产物 schemaVersion（${parsed.graph.schemaVersion}）高于本工具当前支持的版本（${MIN_SUPPORTED_SCHEMA_VERSION}），请升级 spectra 后重试。`,
           ]);
+        } else if (isEmptyGraph(parsed)) {
+          // F266 FR-006：结构合法但零节点零边 —— 归入既有 cannot-assess 通道继承 exit 2，
+          // 不给 exit code 新增语义（FR-007），也不进 buildReport（否则六指标空态会聚合成 pass）。
+          report = buildCannotAssessReport(
+            graphPath,
+            'empty-graph',
+            [
+              '图产物为空（0 节点 / 0 边），无法对其做任何质量判定——空图不等于"图没问题"，而是"没建出图"。请重新运行 `spectra batch --mode graph-only`（纯 AST · 零 LLM · <2min）建图；若重建后仍为空，说明项目内未发现任何受支持语言的源文件（或该项目使用的语言尚未被 Spectra 支持）。',
+            ],
+            evaluateGraphFreshness(parsed, projectRoot),
+          );
         } else {
+          // F266 对抗审查 A6a + delta 审查 D1：无 symbol 节点的退化图**照常跑完整体检**，
+          // 再按结果决定是否改判——强不变量违反原样保留（exit 1），其余改判 cannot-assess
+          // 但保留真实指标。前置短路会把 duplicate-id / dangling-edge / legacy-ignored 这三项
+          // 与 symbol 无关的检查一并吞掉（已实证会把真 exit 1 洗成 warn）。
           report = buildReport(parsed, graphPath, projectRoot);
           builderAdvisory = describeBuilderStamp(parsed);
+          if (hasNoSymbolNodes(parsed)) {
+            report = downgradeForNoSymbolNodes(report, parsed.nodes.length);
+          }
         }
       }
     }

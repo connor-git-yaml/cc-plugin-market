@@ -4,12 +4,34 @@
   "graph": {
     "name": "spectra-knowledge-graph",
     "generatedAt": "2026-01-01T00:00:00.000Z",
-    "nodeCount": 0,
-    "edgeCount": 0,
+    "nodeCount": 2,
+    "edgeCount": 1,
     "sources": ["unified-graph"],
     "schemaVersion": "2.0",
     "sourceCommit": "ffffffffffffffffffffffffffffffffffffffff"
   },
-  "nodes": [],
-  "links": []
+  "nodes": [
+    {
+      "id": "src/stale.ts",
+      "kind": "module",
+      "label": "stale.ts",
+      "metadata": { "sourcePath": "src/stale.ts" }
+    },
+    {
+      "id": "src/stale.ts::staleSymbol",
+      "kind": "component",
+      "label": "staleSymbol",
+      "metadata": { "unifiedKind": "symbol", "sourcePath": "src/stale.ts" }
+    }
+  ],
+  "links": [
+    {
+      "source": "src/stale.ts",
+      "target": "src/stale.ts::staleSymbol",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "confidenceScore": 1,
+      "directional": true
+    }
+  ]
 }

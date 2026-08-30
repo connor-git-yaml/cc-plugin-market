@@ -183,19 +183,48 @@ export interface GraphQualityReport {
    * - pass：六项指标 + freshness 均无 warning 级或以上问题
    * - pass-with-warnings：无强不变量违反，但存在至少一项非强指标问题
    * - fail-strong-invariant：存在强不变量违反（重复 canonical ID / 悬空边）
-   * - cannot-assess：命令无法完成评估（图产物不存在 / JSON 解析失败或结构损坏 / schemaVersion 过旧）
+   * - cannot-assess：命令无法完成评估（图产物不存在 / JSON 解析失败或结构损坏 / schemaVersion 过旧或过新 / 图为空）
    */
   overallVerdict: 'pass' | 'pass-with-warnings' | 'fail-strong-invariant' | 'cannot-assess';
   /**
    * overallVerdict==='cannot-assess' 时的具体原因分类。
    * FIX-7（Codex 对抗审查）新增 'schema-newer-than-supported'：图产物 schemaVersion
    * 高于本工具当前支持的版本（如 2.1/3.0），提示升级 spectra 而非误判为陈旧/损坏。
+   *
+   * F266 FR-006 新增 'empty-graph'：图结构合法但零节点零边。此前这种图六项指标全部落入
+   * "分母为 0 ⇒ not-applicable / 无违规可报告"的空态，被判 pass——门禁对"根本没建出图"
+   * 这件事说了假话。归入 cannot-assess 通道后继承既有 exit 2，不新增退出码语义。
+   *
+   * F266 对抗审查 A6a 新增 'no-symbol-nodes'：节点非空但**没有任何 symbol 级节点**
+   * （只剩模块/骨架层）。`empty-graph` 的 (0,0) 判据是个阶跃，1 个 module 节点 / 0 边的
+   * 退化图就能绕过它；而六项结构指标里 contains-coverage 与 orphan-ratio 的分母恰恰是
+   * `metadata.unifiedKind === 'symbol'` 的节点数——分母为 0 时它们双双 not-applicable，
+   * 全图指标失去判定对象后聚合成 pass。**这条 fail-open 已被实证**（"orphan/contains 能接住
+   * 全孤岛图"的旧注释只在有 symbol 节点时成立）。
    */
   cannotAssessReason?:
     | 'graph-missing'
     | 'json-parse-error'
     | 'schema-too-old'
-    | 'schema-newer-than-supported';
+    | 'schema-newer-than-supported'
+    | 'empty-graph'
+    | 'no-symbol-nodes';
+  /**
+   * F266 第三轮对抗审查 E3：本报告的**六项指标是真实测量值**而非占位值。
+   *
+   * 只有 `downgradeForNoSymbolNodes` 产出的 `cannot-assess` 报告置 `true`——它是先跑完
+   * `buildReport` 再改判的，报告体里的 `legacyAndIgnoredNodes` / `freshness` / `nextSteps`
+   * 全部是对这张图的真实观测。`buildCannotAssessReport`（graph-missing / json-parse-error /
+   * schema-* / empty-graph）**不置**：那条路上六指标是"无违规可报告"的空态占位，
+   * 消费方读它等于读一份编出来的绿。
+   *
+   * 为什么必须是结构标记而不是让消费方按 `cannotAssessReason` 值枚举（F259 教训）：
+   * 值枚举每新增一个 reason 就漏判一次，且"占位 vs 真实"是报告**构造方式**的属性，
+   * 只有构造方知道，让下游从 reason 反推等于把它重新猜一遍。
+   *
+   * 缺席即"不保证是真实测量值"——旧报告（无此字段）在消费侧一律按占位处理，保守方向。
+   */
+  metricsPopulated?: true;
   /** 面向维护者的下一步修复建议文本（SC-011） */
   nextSteps: string[];
 }

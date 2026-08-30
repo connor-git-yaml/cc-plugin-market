@@ -57,7 +57,7 @@ const HELP_TEXT = `spectra — 代码逆向工程 Spec 生成工具 v${version}
   spectra panoramic <cross-package|architecture-ir|overview> [--json] [--project-root <dir>]
   spectra cache <stats|clear> [--generator <id>] [--output-dir <dir>]
   spectra watch [--debounce <seconds>] [--verbose] [--require-llm]
-  spectra graph [--directed] [--output-dir <dir>]
+  spectra graph [--directed] [--force] [--output-dir <dir>]
   spectra community [--min-size <N>] [--output-dir <dir>]
   spectra query "<问题>" [--budget <N>] [--format json|text]
   spectra install [--git] [--remove]
