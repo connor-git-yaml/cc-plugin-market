@@ -315,9 +315,9 @@ plan.md 决策 5 页脚写的「31 条独立处置 + 1 + 2 = 35」本身也有�
 
 - [ ] **T-F05** `quickstart.md` 全部命令走一遍，逐条核对输出与文档预期一致（①~⑦ + FR-011 + 全量回归 + build/repo:check）。**依赖**：T-F04 完成。
 
-- [ ] **T-F06** 回填 T-B05 的 CI 真实 run 结果（PENDING → 实际结果），确认 `Type Check Tests` 步骤在真实 GitHub Actions 上按预期执行（成功或按预期失败）。**依赖**：本卡分支已 push 且触发过一次 CI run。
+- [x] **T-F06** 回填 T-B05 的 CI 真实 run 结果（PENDING → 实际结果）（已回填：run 33363928380 success，见 verification/ci-pending.md），确认 `Type Check Tests` 步骤在真实 GitHub Actions 上按预期执行（成功或按预期失败）。**依赖**：本卡分支已 push 且触发过一次 CI run。
 
-- [ ] **T-F07** dogfooding 反馈记录：若本卡执行过程中使用 Spectra MCP / Spec Driver 遇到问题（例如本次 tasks 阶段发现的契约内部矛盾这类"设计阶段产出需要二次校验"的经验），按 `docs/design/dogfooding-feedback-ledger.md` 格式 append（状态：待处理）；若无其它实质反馈，在交付报告中显式写「无」。**依赖**：全部实现任务完成后，implement/verify 阶段收尾时执行。
+- [x] **T-F07** dogfooding 反馈记录（已落账：docs/design/dogfooding-feedback-ledger.md F272 条目 5 条待处理）：若本卡执行过程中使用 Spectra MCP / Spec Driver 遇到问题（例如本次 tasks 阶段发现的契约内部矛盾这类"设计阶段产出需要二次校验"的经验），按 `docs/design/dogfooding-feedback-ledger.md` 格式 append（状态：待处理）；若无其它实质反馈，在交付报告中显式写「无」。**依赖**：全部实现任务完成后，implement/verify 阶段收尾时执行。
 
 ---
 

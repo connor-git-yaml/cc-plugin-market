@@ -189,16 +189,20 @@
 
 ---
 
-## 7. PENDING（待真实 CI run 回填）
+## 7. CI run 回填（✅ 已完成，原 PENDING 节）
 
-按 F269 惯例，CI 改动本地无法验证。待回填项见
-[`ci-pending.md`](./ci-pending.md)：
+真实 CI run：https://github.com/connor-git-yaml/cc-plugin-market/actions/runs/33363928380
+（commit `125bfdb3` push master 触发，**conclusion: success**，12 步骤全 success）。
+逐项证据见 [`ci-pending.md`](./ci-pending.md)，三项观测全部符合预期：
 
-- `Type Check Tests` 步骤是否被执行、耗时、exit code
-- 其在 `Release Check` 之后的新位置是否按 `if:` 条件正确触发
-- 两道新守卫（零执行 / pinned 陈旧）在 CI 干净 checkout 上的行为
-  —— 特别是 **pinned 陈旧守卫的 Python 项应报 `unverifiable:external-source` 并在日志中可见**
-  （CI 无 `~/.spectra-baselines/micrograd` clone）
+- `Type Check Tests` 已执行、success、~10s，位置在 `Release Check` 之后（`if:` 条件生效）
+- 零执行守卫在干净 checkout 通过（1 test, 717ms）
+- pinned 陈旧守卫通过（6 tests, 3097ms），且 CI 日志**如实可见** Python 项的
+  `[pinned-staleness] Python 未核验（诚实缺席，非静默跳过）: 外部源 clone 不存在:
+  /home/runner/.spectra-baselines/micrograd（…）` —— 诚实缺席设计按预期生效
+
+**附**：本卡的 pinned 陈旧守卫在并行卡 F271 的交付中**首次实战拦截**——抓到 F271 重建
+dist 后 4 份 pinned graph 的陈旧漂移，F271 按 SOP 再生后通过。守卫上线当天即产生真实拦截。
 
 ## 8. 已知边界（诚实登记，非缺陷）
 
