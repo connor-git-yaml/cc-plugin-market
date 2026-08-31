@@ -426,9 +426,12 @@ export const GATE_DEGRADED_PREFIX_LINE = '已达阻断上限(2 次)，本次降�
  */
 export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
   if (parseError || !raw || typeof raw !== 'object') {
-    return { lineIndex, role: undefined, textBlocks: [], toolUseBlocks: [], toolResultBlocks: [], parseError: true };
+    return { lineIndex, role: undefined, timestamp: null, textBlocks: [], toolUseBlocks: [], toolResultBlocks: [], parseError: true };
   }
   const role = typeof raw.type === 'string' ? raw.type : undefined;
+  // F270 P4：透传顶层 timestamp（账本委派 hookTs 与 latestFix 展开时刻对齐用；C-14）。
+  // 只认字符串；缺失/非串→null（不编造，与"探测不到"诚实对齐）。
+  const timestamp = typeof raw.timestamp === 'string' ? raw.timestamp : null;
   const content = raw.message && raw.message.content;
   const textBlocks = [];
   const toolUseBlocks = [];
@@ -466,7 +469,7 @@ export function normalizeTranscriptEntry(raw, lineIndex, parseError = false) {
     }
   }
   // 非 user/assistant 顶层类型或缺 content → 空集（T001 补充结论 7），toolResultBlocks 恒带空数组
-  return { lineIndex, role, textBlocks, toolUseBlocks, toolResultBlocks, parseError: false };
+  return { lineIndex, role, timestamp, textBlocks, toolUseBlocks, toolResultBlocks, parseError: false };
 }
 
 // ────────────────────────────────────────
@@ -596,6 +599,7 @@ export function detectFixSkillExpansion(entries) {
   // 这两个基线看该块内**任一**匹配是否为 fix），故必须在同一趟里各自累计，不能互相推导。
   let earliestFixLineIndex = null;
   let latestFixLineIndex = null;
+  let latestFixTimestamp = null;   // F270 P4：latestFix 那行的 transcript timestamp（账本对齐用）
   for (const entry of list) {
     if (!entry || entry.role !== 'user') continue;
     for (const text of entry.textBlocks) {
@@ -608,6 +612,7 @@ export function detectFixSkillExpansion(entries) {
         if (match[2] === 'fix') {
           if (earliestFixLineIndex === null) earliestFixLineIndex = entry.lineIndex;
           latestFixLineIndex = entry.lineIndex;
+          latestFixTimestamp = entry.timestamp ?? null;
         }
       }
       if (lastMode !== null) {
@@ -615,7 +620,7 @@ export function detectFixSkillExpansion(entries) {
       }
     }
   }
-  return { ...latest, earliestFixLineIndex, latestFixLineIndex };
+  return { ...latest, earliestFixLineIndex, latestFixLineIndex, latestFixTimestamp };
 }
 
 // ────────────────────────────────────────

@@ -32,6 +32,8 @@ const JUDGE_FILE_SET = [
   'scripts/lib/fix-compliance-io.mjs',
   // F246：record-workflow-run.mjs 入口守卫改用共享 helper 后进入闭包
   'scripts/lib/in-flight-verdict.mjs',
+  'scripts/lib/ledger-reader.mjs',
+  'scripts/lib/ledger-writer.mjs',
   'scripts/lib/is-invoked-directly.mjs',
   'scripts/lib/simple-yaml.mjs',
   'scripts/record-workflow-run.mjs',

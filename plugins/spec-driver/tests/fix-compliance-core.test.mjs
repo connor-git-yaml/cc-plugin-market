@@ -4890,3 +4890,46 @@ describe('F270 P2 · T204 五消费点窗口切换（core 级）', () => {
     assert.equal(inOldWindow.length, 0, '旧窗口（anchor=doc 行）把委派全切掉——病根 iv 的误伤面实证');
   });
 });
+
+// ════════════════════════════════════════
+// F270 P4 · normalizeTranscriptEntry 保留 timestamp + detectFixSkillExpansion 产 latestFixTimestamp
+// （账本委派 hookTs 与 latestFix 展开的 transcript timestamp 对齐用；C-14 职责切分）
+// Tests FIRST：字段尚不存在，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P4 · timestamp 透传 + latestFixTimestamp', () => {
+  const mk = (objs) => objs.map((o, i) => normalizeTranscriptEntry(o, i, false));
+  const skillAt = (mode, ts) => ({
+    type: 'user', timestamp: ts,
+    message: { role: 'user', content: `Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-${mode}` },
+  });
+
+  it('normalizeTranscriptEntry 透传顶层 timestamp（缺失→null）', () => {
+    const withTs = normalizeTranscriptEntry({ type: 'user', timestamp: '2026-09-01T10:00:00.000Z', message: { role: 'user', content: 'x' } }, 0, false);
+    assert.equal(withTs.timestamp, '2026-09-01T10:00:00.000Z');
+    const noTs = normalizeTranscriptEntry({ type: 'user', message: { role: 'user', content: 'x' } }, 0, false);
+    assert.equal(noTs.timestamp, null);
+  });
+
+  it('detectFixSkillExpansion 产出 latestFixTimestamp（最晚 fix 展开那行的 timestamp）', () => {
+    const a = detectFixSkillExpansion(mk([
+      skillAt('fix', '2026-09-01T10:00:00.000Z'),
+      { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } },
+      skillAt('fix', '2026-09-01T10:05:00.000Z'),
+      skillAt('doc', '2026-09-01T10:10:00.000Z'),
+    ]));
+    assert.equal(a.latestFixLineIndex, 2);
+    assert.equal(a.latestFixTimestamp, '2026-09-01T10:05:00.000Z', 'doc 展开不改 latestFix 的 ts');
+  });
+
+  it('无 fix 展开 → latestFixTimestamp null', () => {
+    const a = detectFixSkillExpansion(mk([skillAt('doc', '2026-09-01T10:00:00.000Z')]));
+    assert.equal(a.latestFixTimestamp, null);
+  });
+
+  it('fix 展开行无 timestamp → latestFixTimestamp null（不编造）', () => {
+    const a = detectFixSkillExpansion([normalizeTranscriptEntry({ type: 'user', message: { role: 'user', content: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix' } }, 0, false)]);
+    assert.equal(a.latestFixLineIndex, 0);
+    assert.equal(a.latestFixTimestamp, null);
+  });
+});

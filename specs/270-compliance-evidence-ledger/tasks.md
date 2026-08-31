@@ -74,17 +74,18 @@
 ## Phase 4 · 账本接入委派判定（改判据主输入，高风险，plan §4d）
 
 ### 🔴 红先行
-- [ ] T401 [P] 账本缺席回退等价测试：删/空账本 → 委派判定回退 transcript，结论与变更前逐条一致（SC-007 组件级）。
-- [ ] T402 [P] 部分缺席回退测试：账本存在但条目不全（`git clean` / matcher 不全 / 中途不可写）→ 回退 transcript，**不以残账本裁决**（FR-047）。
-- [ ] T403 [P] 去重语义测试：同 `tool_use_id` 内容一致→静默去重；内容不一致→`ledger-entry-conflict`；截断相同的不同委派**不**被误折叠（FR-048/delta W-6）。
-- [ ] T404 [P] 方向性交叉测试：账本有委派 + transcript 完整区段无 → 矛盾诊断 + 取严；transcript 尾部缺证 → 账本优先（FR-008）。
+- [x] T401 账本缺席回退等价——**✅** 账本缺席→纯 transcript（对抗 B 逐字核实严格等价，所有存量会话零回归）。
+- [x] T402 部分缺席/窗口未定——**✅** null-timestamp→windowUndetermined+空补充（对抗 WARNING-2 修订：不跨周期回流）；坏行跳过计数；无 hookTs 保守剔除。
+- [x] T403 去重语义——**✅** 同 id 内容一致静默折叠 / 不一致落 ledger-entry-conflict（去重键 subagent_type 全值，FR-048）。
+- [x] T404 账本补齐端到端——**✅** transcript 尾部缺委派 + 账本有 implement/verify → 补齐合规 exit 0；窗口过滤切旧轮。
 
 ### 实现
-- [ ] T405 `lib/ledger-reader.mjs`：读账本 + 逐行解析（坏行跳过计数，FR-010）+ 去重（FR-048）+ `latestFixLineIndex` 时间戳窗口过滤。
-- [ ] T406 `extractDelegationsAfter` / `extractInFlightDelegationsAfter` 委派来源：账本可用时以账本为主源，缺席/部分缺席回退 transcript（D-1 只此两点，见证/执行记录**不碰**）。
-- [ ] T407 FR-008 方向性优先 + 矛盾交叉诊断码。
-- [ ] T408 委派证据下界下降登记项的守卫测试（delta C-3：确认下界降级已在诊断中可见）。
-- [ ] T409 **Phase 收尾 · 异构对抗 ×2**（切入角：① 账本可写载体作主源的伪造面 ② 部分缺席/回退致误阻断面）。
+- [x] T405 `lib/ledger-reader.mjs`——读+逐行解析（坏行跳过计数）+去重+hookTs 窗口过滤；只产 Agent/Task（D-1）；缺席/窗口未定→空。
+- [x] T406 委派来源接入 evaluate——transcript ∪ 账本**补充语义**（非替代取严，对抗 WARNING-1 如实化）；account 缺席回退 transcript；F216 见证/执行记录**不碰**（D-1）。
+- [x] T407 ~~FR-008 方向性优先 + 矛盾交叉~~——**改为补充语义 + ledger-supplemented-role 诊断**（对抗核实 FR-008 强形态的"取严"本就审计-only、挡不住伪造；补充语义下界更保守，如实登记不 over-claim）。
+- [x] T408 委派下界下降守卫——注释如实登记（harness 背书→hook 记录+可写，D-1 用户拍板"只防疏忽"）；normalizeTranscriptEntry 加 timestamp / detectFixSkillExpansion 加 latestFixTimestamp（窗口对齐）。
+- [x] T409 **Phase 收尾 · 异构对抗 ×2**——**✅ 无 CRITICAL**（A：伪造在已接受边界内，2 WARNING 全修；B：误伤面单调 ≤0，2 WARNING 全修）；留痕 `verification/p4-adversarial.md`。
+- ledger-reader + ledger-writer 入 `JUDGE_FILE_SET`（8→10，reader import writer 的 ledgerPathFor）；五处断言同步；schema enum +3 码。时间戳格式承重假设加守卫钉。
 
 ---
 

@@ -51,6 +51,7 @@ import {
   resetBlockState,
 } from './lib/fix-compliance-io.mjs';
 import { classifyInFlightFromPayload, IN_FLIGHT_STATES } from './lib/in-flight-verdict.mjs';
+import { readLedgerDelegations, LEDGER_ABSENT } from './lib/ledger-reader.mjs';
 import { recordWorkflowRun } from './record-workflow-run.mjs';
 
 /** stderr 反馈前缀（FR-010，与既有 stop-task-check.sh 的 `[提醒]` 相区分） */
@@ -210,7 +211,7 @@ function readStdinSync() {
  *   assistantEntriesSinceEarliestFix?:number,
  * }}
  */
-function evaluate(projectRoot, transcriptPath, cfg = null) {
+function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
   const config = cfg || findAndParseConfig(projectRoot);
   const enforcement = config.enforcement;
   const configDegraded = config.configDegraded;
@@ -459,7 +460,32 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   // 因此这里只记标记，不早退：委派抽取与 judgeCompliance 必须照常跑完（见下方 FR-004 收窄段）。
   const featureDirUndetermined = resolvedPath === null && candidate.ambiguous === true;
 
-  const delegations = extractDelegationsAfter(entries, anchor.latestFixLineIndex);
+  // F270 P4 · 委派证据主源换代（D-1 方向 X）：账本作 transcript 委派的**补充**（只增不减）。
+  //
+  // 语义澄清（P4 对抗 WARNING-1 修订：此前注释谎称"矛盾交叉取严"，实际是纯补充——门禁 over-claim
+  // 是承重面上的假话，已改如实）：本实现**不做**"以账本替代 transcript + 矛盾取严"（FR-008 的强形态），
+  // 而是 D-1 下更保守的**补充语义**——transcript 因异步滞后尾部缺委派时，账本（实时采集）补上其
+  // 未覆盖的 roleClass；账本有而 transcript 无的角色，方向是**减少误阻断**（帮合规用户），不引入
+  // "可写载体压过 harness 背书"的替代逻辑。
+  //   - 账本缺席（LEDGER_ABSENT）/ 窗口未定（windowUndetermined，latestFix 无 timestamp）
+  //     → 空补充 → 纯 transcript（FR-009 回退等价）。窗口未定绝不退回"全会话账本回流"（WARNING-2）。
+  //   - 窗口过滤：hookTs >= latestFix 展开的 transcript timestamp（FR-013 归属窗口）。
+  //   🔴 安全下界如实登记（对抗 A / 必答①）：账本条目被判方可写，委派下界从 harness 背书降到
+  //     hook 记录+可改写——蓄意者可 echo 一行 JSON 伪造委派，成本从"篡改 harness 制品"降到"写一行"。
+  //     这是 D-1 方向 X **用户拍板接受**的下界（只防疏忽不防蓄意）。**补充事件如实落诊断**
+  //     （ledger-supplemented-role），使"账本补了 transcript 没有的角色"这一唯一有安全意义的事件
+  //     可事后审计——不阻断（补充方向是帮合规用户），但不再零留痕。
+  const transcriptDelegations = extractDelegationsAfter(entries, anchor.latestFixLineIndex);
+  const ledgerResult = sessionId
+    ? readLedgerDelegations(projectRoot, sessionId, { sinceTs: anchor.latestFixTimestamp ?? null })
+    : { state: LEDGER_ABSENT, delegations: [], corruptCount: 0, diagnostics: [], windowUndetermined: false };
+  const ledgerDiagnostics = [...(ledgerResult.diagnostics || [])];
+  // 补充：transcript 委派为主体，账本补其未覆盖的 roleClass（按 roleClass 去重，不重复计数）。
+  const transcriptRoles = new Set(transcriptDelegations.map((d) => d.roleClass));
+  const ledgerSupplement = ledgerResult.delegations.filter((d) => !transcriptRoles.has(d.roleClass));
+  const delegations = [...transcriptDelegations, ...ledgerSupplement];
+  // WARNING-1 收口：补充非空即落诊断（账本补了 transcript 没有的角色=唯一有安全意义的事件）
+  if (ledgerSupplement.length > 0) ledgerDiagnostics.push('ledger-supplemented-role');
   const featureDirCheck = checkFeatureDirOnDisk(projectRoot, resolvedPath);
   const fixReport = resolvedPath
     ? readArtifactFile(projectRoot, `${resolvedPath}/fix-report.md`)
@@ -533,6 +559,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
     transcriptDiagnostics: [], verdict, inFlightDelegations, assistantEntriesSinceEarliestFix,
+    ledgerDiagnostics,   // F270 P4：账本读取诊断（ledger-entry-conflict 等），透传进 runHook 审计
   };
 }
 
@@ -864,7 +891,7 @@ function runHook(projectRoot, payload) {
   const cfg = findAndParseConfig(projectRoot);
   if (cfg.enforcement === 'off') return 0;
 
-  const result = evaluate(projectRoot, payload.transcript_path, cfg);
+  const result = evaluate(projectRoot, payload.transcript_path, cfg, payload.session_id);
 
   // transcript 不可用/超限 → FR-013 fail-open 放行 + loud 诊断落盘（合并配置层诊断）
   if (result.transcriptDiagnostics.length > 0) {
@@ -954,7 +981,7 @@ function runHook(projectRoot, payload) {
   } else {
     hasInFlight = Array.isArray(result.inFlightDelegations) && result.inFlightDelegations.length > 0;
   }
-  const deferExtraDiagnostics = [...reentryDiagnostics];
+  const deferExtraDiagnostics = [...reentryDiagnostics, ...(result.ledgerDiagnostics || [])];
   // 三态诊断码的可见面收窄（P3 对抗 B-必答④）：`buildFeedbackText` 会把 diagnostics 渲染进
   // 用户可见 stderr——无条件 push 会让每次 warn/降级都带"诊断: in-flight-none"类内部码噪声。
   // 只有 undetermined（探测异常态）值得进 warn/block 文案；in-flight 态的码走推迟成功审计
@@ -1014,8 +1041,8 @@ function runHook(projectRoot, payload) {
 // report 模式（只读，恒 exit 0，仅 stdout verdict JSON）
 // ────────────────────────────────────────
 
-function runReport(projectRoot, transcriptPath) {
-  const result = evaluate(projectRoot, transcriptPath);
+function runReport(projectRoot, transcriptPath, reportSessionId = null) {
+  const result = evaluate(projectRoot, transcriptPath, null, reportSessionId);
   const out = {
     mode: result.mode,
     fixSession: result.isFix,
@@ -1045,11 +1072,17 @@ export function main(argv, stdinRaw) {
     if (args.mode === 'report') {
       // report 优先用 --transcript-path，缺省时回落 stdin payload
       let transcriptPath = args.transcriptPath;
-      if (!transcriptPath) {
+      let reportSessionId = null;
+      // F270 P4：report 模式也从 stdin payload 取 session_id（账本按 session 分文件），
+      // 便于端到端复现账本委派接入；仅 --transcript-path 无 payload 时账本按缺席处理。
+      {
         const parsed = readHookPayload(stdinRaw);
-        transcriptPath = parsed.ok ? parsed.payload.transcript_path : null;
+        if (parsed.ok) {
+          if (!transcriptPath) transcriptPath = parsed.payload.transcript_path;
+          reportSessionId = typeof parsed.payload.session_id === 'string' ? parsed.payload.session_id : null;
+        }
       }
-      return runReport(args.projectRoot, transcriptPath);
+      return runReport(args.projectRoot, transcriptPath, reportSessionId);
     }
     // hook 模式：stdin payload 必需
     const parsed = readHookPayload(stdinRaw);

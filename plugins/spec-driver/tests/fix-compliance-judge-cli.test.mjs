@@ -3245,3 +3245,73 @@ describe('F270 P3 · saveBlockState 带回合同（漏带即清零回归钉）',
     assert.equal(s2.inFlightDeferCount, 1, '推迟计数正常累积');
   });
 });
+
+// ════════════════════════════════════════
+// F270 P4 · 账本接入委派判定（D-1 方向 X：委派证据主源换账本，缺席回退 transcript）
+// Tests FIRST：账本委派尚未接入 evaluate，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P4 · 账本委派接入', () => {
+  const AGENT_LEDGER_DIR = ['.specify', 'runs', '.fix-compliance-ledger'];
+  function writeLedger(sessionId, entries) {
+    const dir = path.join(tmp, ...AGENT_LEDGER_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${sessionId}.jsonl`),
+      entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  }
+  function stageFixReport(shortDir) {
+    fs.mkdirSync(path.join(tmp, 'specs', shortDir, 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', shortDir, 'fix-report.md'), REPAIR_FIX_REPORT);
+    fs.writeFileSync(path.join(tmp, 'specs', shortDir, 'verification', 'verification-report.md'), VERIFICATION_DOC);
+  }
+
+  it('🔴 transcript 尾部缺委派（滞后）+ 账本有 implement/verify → 账本补齐 → 合规 exit 0', () => {
+    stageFixReport('301-fix-sample-bug');
+    // transcript 只有 fix 展开 + 写制品，**没有委派 tool_use**（模拟尾部滞后）
+    // fix 展开须带 timestamp（WARNING-2 后：无 ts → windowUndetermined → 账本不补充）
+    const p = writeTranscript([
+      { type: 'user', timestamp: '2026-09-01T10:00:00.000Z', message: { role: 'user', content: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix' } },
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    // 账本记录了两次委派（实时采集，不滞后；hookTs 晚于 latestFix timestamp）
+    writeLedger('p4-ledger', [
+      { v: 1, tool_use_id: 'a1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:implement', ok: true },
+      { v: 1, tool_use_id: 'a2', tool_name: 'Agent', hookTs: '2026-09-01T10:06:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'p4-ledger' });
+    assert.equal(r.status, 0, `账本补齐委派应合规；exit=${r.status} stderr=${r.stderr.slice(0, 300)}`);
+  });
+
+  it('🔴 账本缺席 → 纯 transcript 判定（FR-009 回退等价）', () => {
+    stageFixReport('301-fix-sample-bug');
+    // transcript 有完整委派 → 无账本也应合规
+    const p = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:verify', description: '工具链验证' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    // 不写账本
+    const r = runCli({ transcriptPath: p, sessionId: 'p4-noledger' });
+    assert.equal(r.status, 0, '账本缺席回退 transcript，行为与改动前等价');
+  });
+
+  it('🔴 账本委派带 latestFix 之前的 hookTs → 窗口过滤掉，不误当本轮证据', () => {
+    stageFixReport('301-fix-sample-bug');
+    // transcript：fix 展开带 timestamp
+    const p = writeTranscript([
+      { type: 'user', timestamp: '2026-09-01T10:00:00.000Z', message: { role: 'user', content: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix' } },
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    // 账本委派全部早于 latestFix（旧轮遗留）→ 应被窗口切掉 → 无委派 → 不合规 exit 2
+    writeLedger('p4-oldwin', [
+      { v: 1, tool_use_id: 'a1', tool_name: 'Agent', hookTs: '2026-09-01T09:00:00.000Z', subagent_type: 'spec-driver:implement', ok: true },
+      { v: 1, tool_use_id: 'a2', tool_name: 'Agent', hookTs: '2026-09-01T09:01:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'p4-oldwin' });
+    assert.equal(r.status, 2, 'latestFix 之前的账本委派不算本轮证据（FR-013 归属窗口）');
+  });
+});
