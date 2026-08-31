@@ -308,3 +308,10 @@
   低置信候选。改进方向：symbol-not-found 的 hint 当前引导用户"检查 symbol id 格式"，会误导为拼写错误；
   若该文件在图中存在而 symbol 不存在，hint 应提示"可能是新增/新导出符号，建议 `spectra batch
   --mode graph-only` 重建后重试"，把用户导向正确下一步
+### F270 · 2026-08-31（spec/plan 阶段交付；implement 待环境恢复）
+状态：待处理（4 条）
+来源：specs/270-compliance-evidence-ledger/（spec-driver-story 主线程实证，门禁类第十轮，5 份 research + 3 轮对抗）
+- [流程顺畅][spec-driver 子代理编排] **长会话中子代理结构性高死亡**：本卡 spec/plan 阶段 6 次委派子代理死 5 次，全部 API 错误（宿主休眠 ×1 + 连接中断 ×4），且**均在"读完材料准备动笔"阶段零产出死亡**。被迫 specify 修订与 plan 全改主线程 inline（委派合同的合法降级，已标 DEGRADED）。这不是偶发——长 transcript + 大 prompt 的子代理恢复本就高死亡率（memory 已记），本卡把它推到"委派整体不可用"。改进方向：①spec-driver 派发子代理时**强制"先落盘骨架再逐节 Edit"**协议（写进 agents/*.md 的输出纪律，而非靠 prompt 临时叮嘱——本卡两次在 prompt 里叮嘱仍被子代理忽略"Write in one shot"而死）；②编排器对"判定/收口"类必须主线程做的判断，与"可分发的机械填充"更早分层，减少把承重设计塞进易死子代理
+- [流程顺畅][spec-driver GATE] **GATE_DESIGN 无"多轮对抗迭代"的一等表达**：本卡 spec 经历 3 路对抗(22C)→delta 复审(4C)→delta-2 微型对抗，每轮都在**上一轮的修订里**发现新缺陷（FR-025 复活已证伪实现 / FR-046 全称放行 / FR-024 空集条款）。这正是九轮史"修分歧引入新分歧"在 spec 阶段的复现，但 story 模式的 GATE_DESIGN 是单点通过/暂停，没有"对抗-修订-再对抗"的循环结构，全靠主线程手动编排。改进方向：门禁/判定器类改动的 GATE 应内建"delta 复审直到零新 CRITICAL"的收敛循环，而非单轮
+- [信息完整性][spec-driver 反向普查] **护栏表按卡面点名抄=回归根因**（本卡对抗审查的元判断）：spec 初稿的"不回退清单"是按卡面点名的护栏抄的，非按改动影响面反向普查，结果三处最重回归全落在未点名的护栏上（F257 闸门三基线 / F240 US5 零落盘 / F208 非 brick）。改进方向：plan 阶段应有**强制的"关键量反向普查"步骤**（列出被改量的全部消费点），本卡是主线程手动补的（reverse-census.md），应成为 spec-driver-plan 的标准产物
+- [结果准确][Spectra MCP] 本卡**未用 Spectra MCP**（`impact`/`context`/`graph_*`）做判定器改动的影响面分析，全部靠 Explore 子代理 + Grep + 手写 reverse-census。原因：判定器是 `.mjs` 脚本层（plugins/spec-driver/scripts），而 Spectra 图的 caller/callee 覆盖对 `.mjs` 的函数级调用边是否完整未验证（F243 记 CJS module.exports 提取为空是能力边界，`.mjs` 类似存疑）。改进方向：若 Spectra 能可靠给出 `.mjs` 判定器内 `anchorLineIndex` 这类**变量的**消费点（而非仅函数调用边），本卡的五量反向普查本可用 MCP 加速——当前工具面是符号/调用边级，缺"变量数据流"级查询，这类门禁改动最需要的恰是后者（并入 P1-K 值级数据流样本 → P1-J）
