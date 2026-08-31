@@ -137,6 +137,14 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 
 ## 11. 进展账（rolling）
 
+**2026-09-01（批次 2 体检 + 账本 20 条流转 + 发版链）**：
+- **F270（P0-A）部分交付 + 诚实更正**：账本主链落地（PostToolUse 采集器 / 判定器接账本 / `background_tasks` 在途三态 / 锚点三分修病根 iv / agent_id 归属 / US5 零落盘闸门 / 审计留痕 / 分发登记）；集成态审查（六 Phase 全 commit 后补做，五路异构三轮）再收 4 处 fail-open；**SC 诚实口径 6 真达成 / 4 部分 / 5 未达成**（vs 曾声称 13/15）。**病根 iii（GATE 暂停误判）原样存活、病根 v（状态竞态）零实现且被账本并发面加重、PENDING/长异步与 snapshot-stale 专码未做——全部移交 F276**。结构性教训入 F277：范围在 plan 阶段静默收缩且无对账点，是全部 over-claim 的根源。
+- **F275 ✅ 活体验证**：本机 doctor hook-trust 三态正确（`app-server-hooks-list:found`，untrusted → warning + grant-hook-trust 实测文案）；SC-013 第 3 段 PENDING-user（本机 5 hook 待授信）。
+- **发版链**：spec-driver 4.4.3 → **4.5.0**（f5a8a475）——本机门禁快照停旧判定器（judge:doctor 4 mismatch + 4 missing），F270/F275 生效需 publish + `claude plugin update`（用户动作）。
+- **门禁串行序（用户拍板）**：F276（P0-A 残余：病根 iii + v + PENDING/in-flight〔含 F275② 等后台审查被 block〕+ snapshot-stale + routeNonBlock 死代码处置）→ 续做/旁链入口卡（设计已定稿 `docs/design/fix-compliance-continuation-binding-design.md`，F276 ship 后取号启动）。
+- **账本 20 条全流转**：8 项 → **F277 引擎硬化**（头号：plan「FR→Phase」覆盖矩阵 + 裁剪登记；GATE 对抗收敛循环；反向普查标准产物；落盘纪律/时长分流；「随 Phase N 落」显式任务 + 生产可达性检查；verified-facts 附原文；数字换算式）；4 项 → **F278 诚实工具面小补**（impact 新符号 hint / 护栏 metadata-key 档 / --init 再生审计 / judge:doctor 增量漂移视图）；**异构对抗升常设档位**（SKILL §5 + CLAUDE.local.md + memory）；其余记录（值级数据流缺口 ×3 再现 + MCP 适用边界 → P1-J 定位参考；provenance 再现 → 审计面计数）。
+- 门禁基线：vitest **8033/0** / plugins 0 / repo:check 0 / release:check 0。**G0-4 两基线（adoption census + F241 冻结口径复测）≈ 09-06 到期，下轮跑**。
+
 - **2026-08-30/31 批次 1 全部 ship**：G0=F265（4.5.0 **已 npm 发布**、CI 接 repo:check/release:check、doctor/MCP commit 自省、度量基线尺子）+ 追加 2ad22eb3（CI 治理两步解除 Test 连坐）；P0-B=F264（双注册守卫 + 插件自带 hooks 为主；判据三轮异构对抗推翻重写两次）；P0-C=F266（空图 fail-loud 链 + MCP 三态诚实返回面，三轮异构九 CRITICAL 全闭环）；P0-D=F267（atomic-write 群；对抗抓到"软链跟随=写穿任意路径"新破坏面，能力改 opt-in）；CI 收尾 F268（真实 spectra 两级解析回退）+ F269（birpc 假红收敛，**仓史首次 CI 全绿**，master 连续 success）。
 - **2026-08-31 milestone-next 体检**：vitest 7894/0、test:plugins 0、repo:check 0、release:check 0（publish-gap 报 indeterminate=fail-loud 正常，npm registry 缺 gitHead）；npm 4.5.0 已可安装；F264-c "scripts 层不在图"经主线程证伪（422 节点在图，当时零节点=旧 4.4.0 全局 MCP，发布断层症状；hooks/*.sh 无解析器不在图记能力边界）。账本 15 条全部流转（4 修复进模板 / 7 进 P1-K / 1 进 P0-A 必答 / 其余已修复或分流）。
 - **批次 2（2026-08-31 派发）**：F270=P0-A 门禁证据源换代 ∥ F271=P1-E 产品表面清扫 ∥ F272=P1-G 测试资产清淤；P1-K 等 P0-A 落地（避免同碰 SKILL/judge）；P1-F 下批。

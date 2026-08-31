@@ -76,7 +76,7 @@ $ARGUMENTS
   - 启动前 `git fetch origin master` 确认 HEAD ≥ <最新 hash>
   - feature 编号（先查远端分支与 specs/ 防多 worktree 编号冲突）
   - 问题（verify 过的现状 + 行号）/ 方案 / 🔴回归护栏 / 验收 / 预算
-  - 每 phase Codex 对抗审查；push 前列 report 等确认
+  - 每 phase 对抗审查；**门禁/判定器/守护/安全类改动的异构对抗为常设档位**（独立子代理 + 换执行者换视角 + ≥2 切入角；Codex 可用时叠加为额外层，**不随配额恢复取消**——F229/F262/F264/F266/F272 五次实证同构审查对此类改动结构性漏判）；push 前列 report 等确认
   - `specs/src.spec.md` 排除出 commit（显式路径）
   - 🆕 工具使用反馈节（dogfooding policy 四维度：MCP 可用性 / 信息完整性 / 流程顺畅度 / 结果准确性），且有实质反馈时**同步 append 到 `docs/design/dogfooding-feedback-ledger.md`**（状态：待处理，随需求一并 commit；"无"不落账）——供 §2.5 下轮统一 review
   - 对抗/变异类实验必须在 /tmp 副本上做，不得在工作 worktree 改文件；派发对抗审查前先冻结改动面（不重建 dist、不继续改被审文件），避免移动靶

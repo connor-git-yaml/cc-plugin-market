@@ -24,8 +24,12 @@
 
 ## 待处理
 
+（无——2026-09-01 milestone-next 20 条全部流转，见下）
+
+## 已处理
+
 ### F272 · 2026-08-31
-状态：待处理
+状态：已处理（5 条：1 已修复 / 3 已分流 / 1 记录）
 来源：specs/272-test-guard-asset-cleanup/（story 流程编排器实证 + 异构对抗审查回收）
 - [结果准确性][spec-driver 审查档位] **同构审查 1 WARNING vs 异构对抗 3 CRITICAL + 7 WARNING**：
   本卡（守护资产类）同时跑了 spec-driver 内建的 `spec-review` + `quality-review`（同构档位）
@@ -37,6 +41,7 @@
   而 F249 collector 指纹恰是该资产陈旧的核心信号，守卫对它全盲。这是本仓继 F229/F262/F266 之后
   **第四次**实证同构审查盲区。改进方向：把"守护/门禁类改动必须走异构对抗（换执行者 + 换视角 +
   ≥2 切入角）"从 CLAUDE.local.md 的暂停期临时档位升格为常设约定，不随 Codex 配额恢复而取消
+  ↳ **处置（2026-09-01 milestone-next）**：已修复 → 异构对抗升**常设档位**（milestone-next SKILL §5 + CLAUDE.local.md + memory，2026-09-01；第四/五次实证后不随 Codex 配额恢复取消）
 - [信息完整性][spec-driver 制品链] **事实基线文档的"结论转述"缺可核验证据**：`verified-facts.md`
   引用 `git show <commit>` 做论据时只写结论（"src 侧断言是 `> 0`、tests 侧被弱化成 `>= 0`"）
   未附原文片段。该结论**是错的**——两侧断言逐字相同（都是 `toBeGreaterThanOrEqual(0)`），
@@ -44,6 +49,7 @@
   确定性返回 0，实测连续 5 次全 0ms）。这个错误是靠批 A 子代理"全量用例必须绿"的硬判据顺带
   暴露的，判据写宽一点就会直接进 master。改进方向：verified-facts 类"开工前实证"文档引用
   历史内容做论据时，必须附 `git show` 的实际输出片段而非结论转述
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（verified-facts 类文档引用历史内容必附 git show 原文片段）
 - [流程顺畅][spec-driver 编排] **子代理在本机休眠 / stall 下的高中断率**：本卡 5 个子代理
   非正常结束——2 次 `API Error: Your computer went to sleep mid-response`（tasks 分解、
   批 C-⑦ 实施）、3 次 `Agent stalled: no progress for 600s`（其中 tasks.md checkbox 同步
@@ -51,6 +57,7 @@
   高死亡率"，本卡实证**另一类**：纯文档编辑的短任务同样会中断，且 stall 检测要 600s 才触发、
   期间磁盘零产出。改进方向：①派活 prompt 显式要求"尽快落盘、分段 Write 而非最后一次性写"；
   ②编排器侧对纯文档类小任务放宽 inline 降级门槛（三次 Task 失败的成本远高于 inline 完成）
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（子代理「先落盘骨架再逐节 Edit」输出纪律 + 纯文档小任务放宽 inline 降级）
 - [流程顺畅][spec-driver spec/tasks] **数字类验收量在多轮修订下反复算错**：本卡的 todo 计数
   被改了**四次**（8 → 7 → 9 → 12），每次都因跨项交互未纳入换算：第一次是纯算术错
   （13+7+1=21 剩 7 却写 8）；第二次漏了 ⑦-B1 把 2 条占位断言转为 `it.todo`；第三次漏了
@@ -58,20 +65,75 @@
   单位口径不一致（坐标条目 vs 断言行数）被上下游各算错一次。改进方向：spec/tasks 里的
   可观测数量一律写成**换算式 + 各项来源**（如 `21 − 10 − 1 + 2 = 12`），禁止写裸数字；
   且必须显式声明**计数单位**
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（spec/tasks 可观测数量必写换算式+计数单位）
 - [MCP 可用性][Spectra] 本卡全程**未使用** Spectra MCP——编排器与全部 9 个子代理独立给出
   同一判断："任务性质是测试文件的文本级比对/删除/断言收紧，不涉及 caller 分析、影响面评估
   或跨包关系，图谱导航不是自然匹配"。唯一的非测试文件改动（`regen-collector-fingerprint-fixtures.ts`
   局部加日志）也不构成 blast radius 场景。如实记录为**适用边界信号**而非工具缺陷：
   测试资产清淤类任务不在 Spectra 的价值区间内
+  ↳ **处置（2026-09-01 milestone-next）**：记录：测试资产清淤类任务不在 Spectra 价值区间——适用边界信号，计入 P1-J 定位参考
 ### F271 · 2026-08-31
-状态：待处理
+状态：已处理（3 条：2 已分流 / 1 记录）
 来源：specs/271-product-surface-sweep/（交付报告反馈节 + 两轮实证）
 - [结果准确性][Spectra collector-fingerprint 护栏] 护栏比较器是 **metadata 盲**的（`compareGraphOnlyStructure` 只比节点 id multiset + 边 multiset）：F271 给 symbol 节点加 `metadata.lineRange` 后，护栏对真实 fixture 判"一致、无需更新"，但"已 bump 重写"路径序列化全量含新字段 → 该场景 digest 断言失配；pinned 资产经 `--init` 冷启动再生（绕过全部拒绝判据、无留痕通道）后护栏 23/23 复绿——**绿着但对 metadata 面漂移零检测力**，同一盲区在对抗修复轮再次印证（资产含新字段、护栏仍绿）。改进方向：①比较维度加"metadata key 集合"档（不比值、只比 key 全集，捕获字段增删而不引入值级噪声）；②`--init` 冷启动写一条再生审计记录到 fixture README 或独立 sidecar（本卡为手工补记）
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F278 诚实工具面小补**（护栏比较器加 metadata-key 集合档 + --init 冷启动再生审计留痕）
 - [流程顺畅度][spec-driver 编排] 宿主机反复休眠时长时后台子代理结构性不可靠：本卡 specify ×2、implement 收口 ×2 共 4 次 Task 死于「computer went to sleep / 600s 看门狗」，两次遗留半成品工作树需主线程盘点接手；~10-17 min 的审查型子代理全部存活。改进方向：编排器对 >15 min 的实现型委派考虑分段化（每段自包含可恢复），或在派发前探测宿主电源管理状态
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（委派按任务时长分流：长文档生成分段落盘或 inline，短分析正常委派；再现：F272③/F270）
 - [信息完整性][Spectra 图产物] 再现：F260/F263 —— 边/节点 metadata 无 provenance 标记在本卡再次拖累：撞 id 场景两条生产路径（unified/extraction）取不同 lineRange 被静默合流，逐条目归因"这个值来自哪条路径"只能实跑内存态调试；tree-sitter regex 退化条目也只能靠 `[REGEX] ` signature 前缀这种带内标记识别
+  ↳ **处置（2026-09-01 milestone-next）**：记录：边/节点 provenance 缺失再现 +1（F260/F263 同条）→ M10「可信活图审计面」计数
+### F275 · 2026-08-31
+状态：已处理（2 条：1 记录 / 1 已分流）
+来源：specs/275-fix-codex-doctor-hook-trust/（fix 流程主线程实证 + 三个子代理交付报告反馈节）
+- [信息完整性][Spectra MCP] 再现：F265（ledger「commit 串从哪读」条目同型）—— plan/implement×2 三个
+  子代理独立裁定不用 `context`/`impact`：改动面在 fix-report/plan 里已完全给定（文件+函数级），关键难点是
+  "协议事实核对与设计裁决"而非"找 caller"，逐行读源码确认生命周期不可被 symbol 级摘要替代。复现计数 +1
+  （改动面给定的 fix 卡上 MCP 结构性零采用），供 M10 检索内核 v1 定位参考：这类卡的真实需求是
+  "文件内精读"而非"图导航"
+  ↳ **处置（2026-09-01 milestone-next）**：记录：改动面给定的 fix 卡上 MCP 结构性零采用，再现 +1 → P1-J 检索内核定位参考
+- [流程顺畅][fix-compliance Stop hook × 后台子代理等待] 变体新现象（与 F262 陈旧快照失明、F267 长异步
+  验证 PENDING 两条相邻但不同）：编排器在"四路对抗审查子代理后台运行中、主线程合法等待"状态下两次被
+  Stop hook block（要求 verify 闭环产物），但当时流程既未完成也不该产 verification-report——它在等审查
+  结论来决定还要修什么。判定器无法区分"流程没走完就想停"与"流程在等后台子代理"。本卡靠继续输出等待
+  turn 化解，无实害；但若未来判定器对重复 block 收紧，长后台等待型编排会被卡死。改进方向与 F267 条目
+  同向：判定器支持 in-flight 语义（如检测主 transcript 尾部存在未完成的 Task tool_use 时降级为放行+审计）
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F276 P0-A 残余**（判定器 in-flight/等待后台子代理语义——与病根 iii/PENDING 同卡收口）
+### F274 · 2026-08-31
+状态：已处理（1 条：已分流）
+来源：specs/274-fix-global-setup-cross-worktree-freshness/（implement 子代理交付报告反馈节）
+- [结果准确][Spectra impact] 再现：F202 —— `impact(tests/global-setup.ts::isDistFresh, upstream)` 对
+  "本次新导出/新增的 symbol"返回 symbol-not-found（图是上次构建快照，私有函数不在图中），fuzzy 只给
+  低置信候选。改进方向：symbol-not-found 的 hint 当前引导用户"检查 symbol id 格式"，会误导为拼写错误；
+  若该文件在图中存在而 symbol 不存在，hint 应提示"可能是新增/新导出符号，建议 `spectra batch
+  --mode graph-only` 重建后重试"，把用户导向正确下一步
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F278 诚实工具面小补**（symbol-not-found 且文件在图中 → hint 引导 graph-only 重建而非「检查拼写」）
+### F270 · 2026-08-31（spec/plan 阶段交付；implement 待环境恢复）
+状态：已处理（4 条：3 已分流 / 1 记录）
+来源：specs/270-compliance-evidence-ledger/（spec-driver-story 主线程实证，门禁类第十轮，5 份 research + 3 轮对抗）
+- [流程顺畅][spec-driver 子代理编排] **长会话中子代理结构性高死亡**：本卡 spec/plan 阶段 6 次委派子代理死 5 次，全部 API 错误（宿主休眠 ×1 + 连接中断 ×4），且**均在"读完材料准备动笔"阶段零产出死亡**。被迫 specify 修订与 plan 全改主线程 inline（委派合同的合法降级，已标 DEGRADED）。这不是偶发——长 transcript + 大 prompt 的子代理恢复本就高死亡率（memory 已记），本卡把它推到"委派整体不可用"。改进方向：①spec-driver 派发子代理时**强制"先落盘骨架再逐节 Edit"**协议（写进 agents/*.md 的输出纪律，而非靠 prompt 临时叮嘱——本卡两次在 prompt 里叮嘱仍被子代理忽略"Write in one shot"而死）；②编排器对"判定/收口"类必须主线程做的判断，与"可分发的机械填充"更早分层，减少把承重设计塞进易死子代理
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（agents/*.md 落盘纪律为一等输出协议 + 承重判断与机械填充更早分层）
+- [流程顺畅][spec-driver GATE] **GATE_DESIGN 无"多轮对抗迭代"的一等表达**：本卡 spec 经历 3 路对抗(22C)→delta 复审(4C)→delta-2 微型对抗，每轮都在**上一轮的修订里**发现新缺陷（FR-025 复活已证伪实现 / FR-046 全称放行 / FR-024 空集条款）。这正是九轮史"修分歧引入新分歧"在 spec 阶段的复现，但 story 模式的 GATE_DESIGN 是单点通过/暂停，没有"对抗-修订-再对抗"的循环结构，全靠主线程手动编排。改进方向：门禁/判定器类改动的 GATE 应内建"delta 复审直到零新 CRITICAL"的收敛循环，而非单轮
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（门禁类 GATE 内建「对抗-修订-再对抗至零新 CRITICAL」收敛循环）
+- [信息完整性][spec-driver 反向普查] **护栏表按卡面点名抄=回归根因**（本卡对抗审查的元判断）：spec 初稿的"不回退清单"是按卡面点名的护栏抄的，非按改动影响面反向普查，结果三处最重回归全落在未点名的护栏上（F257 闸门三基线 / F240 US5 零落盘 / F208 非 brick）。改进方向：plan 阶段应有**强制的"关键量反向普查"步骤**（列出被改量的全部消费点），本卡是主线程手动补的（reverse-census.md），应成为 spec-driver-plan 的标准产物
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（plan 阶段强制「关键量反向普查」标准产物）
+- [结果准确][Spectra MCP] 本卡**未用 Spectra MCP**（`impact`/`context`/`graph_*`）做判定器改动的影响面分析，全部靠 Explore 子代理 + Grep + 手写 reverse-census。原因：判定器是 `.mjs` 脚本层（plugins/spec-driver/scripts），而 Spectra 图的 caller/callee 覆盖对 `.mjs` 的函数级调用边是否完整未验证（F243 记 CJS module.exports 提取为空是能力边界，`.mjs` 类似存疑）。改进方向：若 Spectra 能可靠给出 `.mjs` 判定器内 `anchorLineIndex` 这类**变量的**消费点（而非仅函数调用边），本卡的五量反向普查本可用 MCP 加速——当前工具面是符号/调用边级，缺"变量数据流"级查询，这类门禁改动最需要的恰是后者（并入 P1-K 值级数据流样本 → P1-J）
+  ↳ **处置（2026-09-01 milestone-next）**：记录：值级数据流缺口 → P1-J 定位参考（判定器类代码是符号/调用边图的系统性盲区）
+### F270 · 2026-09-01（implement 阶段追加，接 08-31 spec/plan 反馈）
+状态：已处理（3 条：2 已分流 / 1 记录）
+来源：specs/270-compliance-evidence-ledger/（spec-driver-story implement 六 Phase 实证）
+- [流程顺畅][spec-driver 子代理编排] **子代理死亡率随任务长度强相关，但短任务稳定可用**：spec/plan 阶段 6 委派死 5（长任务），implement 阶段改用"短任务形态"子代理（对抗审查、探针，各 <5min）后**存活率接近 100%**（P2/P3/P4 各 2 路对抗 + 环境探针全部完成）。而 implement 的**生产代码红先行+实现**仍全部主线程 inline（判定器接线是承重设计，本就该主线程收口）。改进方向：spec-driver 的委派策略应显式区分"长文档生成"（易死，需分段落盘协议或主线程 inline）与"短分析/审查"（稳定，正常委派）——按任务时长而非任务类型分流。
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（委派策略按任务时长显式分流；再现：F271②/F272③）
+- [结果准确][spec-driver 门禁自身] **judge:doctor 是承重的 F236 生效时点检测器，但对"本次改动 vs 基线漂移"无区分能力**：本卡改完 judge:doctor 报 drift（4 mismatch + 4 missingInSnapshot），其中 3 个 missingInSnapshot 是本卡新增的账本模块（in-flight-verdict/ledger-reader/ledger-writer）——但 doctor 无法告诉你"哪些 drift 是本次引入 vs 开工前就有"。开工前基线报告手动记了"本机快照停 4.4.0 已 drift"才能区分。改进方向：judge:doctor 增加 `--since <baseline-snapshot>` 或输出"相对某 commit 的增量漂移"，否则每次门禁类改动都要人工记基线。
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F278 诚实工具面小补**（judge:doctor 增量漂移视图 --since/基线对比）
+- [结果准确][Spectra MCP] 本卡**再次未用 Spectra**——判定器是 .mjs 脚本，且 F270 的核心是"变量级数据流"（anchorLineIndex 的 5 个消费点、saveBlockState 的原样带回合同、JUDGE_FILE_SET 的 import 闭包），Spectra 的符号/调用边级图不覆盖这类查询。本卡靠反向普查子代理 + grep 手工完成。**再现：F270 spec 阶段同条**（值级数据流缺口 → P1-J/P1-K）。复现计数 +1 → 排期信号：判定器/门禁这类"变量数据流承重"的代码是 Spectra 当前工具面的系统性盲区。
+  ↳ **处置（2026-09-01 milestone-next）**：记录：值级数据流再现 +1 → P1-J
+### F270 · 2026-09-01（集成 review 追加，第 3 次落账）
+状态：已处理（2 条：均已分流）
+来源：specs/270-compliance-evidence-ledger/verification/integrated-review.md（六 Phase 全 commit 后补做集成审查）
+- [流程顺畅][spec-driver 流程结构] 🔴 **plan 阶段可以静默裁剪 spec 范围，而流程没有任何对账点**：F270 卡面 5 病根、spec 49 FR，plan 的 6 个 Phase 实际只覆盖其中一部分——病根 iii/v、PENDING、snapshot-stale 四组在 plan / tasks / 生产码里命中数全为 `0/0/0`，而 `plan.md §8`「spec 与代码现状矛盾记录」也没登记这次裁剪。后果是 tasks 按裁剪后的 plan 写、SC 与 commit 却按未裁剪的 spec 口径报「13/15 达成」，三者对不上且**无人对账**，最终 15 个 SC 的诚实口径是 6 真达成 / 4 部分 / 5 未达成或假达成。改进方向：(a) `spec-driver-plan` 产出时强制生成「FR → Phase」覆盖矩阵，未被任何 Phase 认领的 FR 必须显式落进 §8 的裁剪登记；(b) `spec-driver-verify` 的 SC 核对应以该矩阵为输入，对未认领 FR 自动判「未实现」而非由人填。这是本卡全部 over-claim 的**结构性根源**，不是个案疏忽。
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（🔴 头号项：plan 强制「FR → Phase」覆盖矩阵，未认领 FR 显式裁剪登记；verify 以矩阵为输入自动判未实现）
+- [流程顺畅][spec-driver 阶段划分] **跨 phase 的「留给下一阶段」承诺无跟踪机制**：P3 的任务卡写「GATE 指纹去重通道预留同路由（随 P4 落）」，P4 实际做的是账本接入、从未接 GATE，而 T311 仍被勾成 `[x]`，导致 `routeNonBlock` 及其两个阈值常量成为**生产零接线的死代码**，其单元测试反而制造了「已达成」假象（变异实验：函数首行改 `return 0` 只红 5 个直接 import 的用例，零端到端失败）。改进方向：tasks 里凡出现「随 Phase N 落」的承诺，应生成一条归属 Phase N 的显式任务，否则该 phase 完成时无从检查。另建议 `spec-driver-verify` 增加「新增导出符号的生产可达性」检查——从真实入口正向追调用链，只被测试 import 的导出应报警。
+  ↳ **处置（2026-09-01 milestone-next）**：已分流 → **F277 引擎硬化**（「随 Phase N 落」承诺生成归属 Phase N 的显式任务 + verify 增「新增导出符号生产可达性」检查）
 
-
-## 已处理
 
 ### F240-T062 · 2026-08-31
 状态：已处理（4 条：3 已分流 → F275 / 1 记录）
@@ -285,46 +347,7 @@
 
 
 
-### F275 · 2026-08-31
-状态：待处理（2 条）
-来源：specs/275-fix-codex-doctor-hook-trust/（fix 流程主线程实证 + 三个子代理交付报告反馈节）
-- [信息完整性][Spectra MCP] 再现：F265（ledger「commit 串从哪读」条目同型）—— plan/implement×2 三个
-  子代理独立裁定不用 `context`/`impact`：改动面在 fix-report/plan 里已完全给定（文件+函数级），关键难点是
-  "协议事实核对与设计裁决"而非"找 caller"，逐行读源码确认生命周期不可被 symbol 级摘要替代。复现计数 +1
-  （改动面给定的 fix 卡上 MCP 结构性零采用），供 M10 检索内核 v1 定位参考：这类卡的真实需求是
-  "文件内精读"而非"图导航"
-- [流程顺畅][fix-compliance Stop hook × 后台子代理等待] 变体新现象（与 F262 陈旧快照失明、F267 长异步
-  验证 PENDING 两条相邻但不同）：编排器在"四路对抗审查子代理后台运行中、主线程合法等待"状态下两次被
-  Stop hook block（要求 verify 闭环产物），但当时流程既未完成也不该产 verification-report——它在等审查
-  结论来决定还要修什么。判定器无法区分"流程没走完就想停"与"流程在等后台子代理"。本卡靠继续输出等待
-  turn 化解，无实害；但若未来判定器对重复 block 收紧，长后台等待型编排会被卡死。改进方向与 F267 条目
-  同向：判定器支持 in-flight 语义（如检测主 transcript 尾部存在未完成的 Task tool_use 时降级为放行+审计）
 
-### F274 · 2026-08-31
-状态：待处理（1 条）
-来源：specs/274-fix-global-setup-cross-worktree-freshness/（implement 子代理交付报告反馈节）
-- [结果准确][Spectra impact] 再现：F202 —— `impact(tests/global-setup.ts::isDistFresh, upstream)` 对
-  "本次新导出/新增的 symbol"返回 symbol-not-found（图是上次构建快照，私有函数不在图中），fuzzy 只给
-  低置信候选。改进方向：symbol-not-found 的 hint 当前引导用户"检查 symbol id 格式"，会误导为拼写错误；
-  若该文件在图中存在而 symbol 不存在，hint 应提示"可能是新增/新导出符号，建议 `spectra batch
-  --mode graph-only` 重建后重试"，把用户导向正确下一步
-### F270 · 2026-08-31（spec/plan 阶段交付；implement 待环境恢复）
-状态：待处理（4 条）
-来源：specs/270-compliance-evidence-ledger/（spec-driver-story 主线程实证，门禁类第十轮，5 份 research + 3 轮对抗）
-- [流程顺畅][spec-driver 子代理编排] **长会话中子代理结构性高死亡**：本卡 spec/plan 阶段 6 次委派子代理死 5 次，全部 API 错误（宿主休眠 ×1 + 连接中断 ×4），且**均在"读完材料准备动笔"阶段零产出死亡**。被迫 specify 修订与 plan 全改主线程 inline（委派合同的合法降级，已标 DEGRADED）。这不是偶发——长 transcript + 大 prompt 的子代理恢复本就高死亡率（memory 已记），本卡把它推到"委派整体不可用"。改进方向：①spec-driver 派发子代理时**强制"先落盘骨架再逐节 Edit"**协议（写进 agents/*.md 的输出纪律，而非靠 prompt 临时叮嘱——本卡两次在 prompt 里叮嘱仍被子代理忽略"Write in one shot"而死）；②编排器对"判定/收口"类必须主线程做的判断，与"可分发的机械填充"更早分层，减少把承重设计塞进易死子代理
-- [流程顺畅][spec-driver GATE] **GATE_DESIGN 无"多轮对抗迭代"的一等表达**：本卡 spec 经历 3 路对抗(22C)→delta 复审(4C)→delta-2 微型对抗，每轮都在**上一轮的修订里**发现新缺陷（FR-025 复活已证伪实现 / FR-046 全称放行 / FR-024 空集条款）。这正是九轮史"修分歧引入新分歧"在 spec 阶段的复现，但 story 模式的 GATE_DESIGN 是单点通过/暂停，没有"对抗-修订-再对抗"的循环结构，全靠主线程手动编排。改进方向：门禁/判定器类改动的 GATE 应内建"delta 复审直到零新 CRITICAL"的收敛循环，而非单轮
-- [信息完整性][spec-driver 反向普查] **护栏表按卡面点名抄=回归根因**（本卡对抗审查的元判断）：spec 初稿的"不回退清单"是按卡面点名的护栏抄的，非按改动影响面反向普查，结果三处最重回归全落在未点名的护栏上（F257 闸门三基线 / F240 US5 零落盘 / F208 非 brick）。改进方向：plan 阶段应有**强制的"关键量反向普查"步骤**（列出被改量的全部消费点），本卡是主线程手动补的（reverse-census.md），应成为 spec-driver-plan 的标准产物
-- [结果准确][Spectra MCP] 本卡**未用 Spectra MCP**（`impact`/`context`/`graph_*`）做判定器改动的影响面分析，全部靠 Explore 子代理 + Grep + 手写 reverse-census。原因：判定器是 `.mjs` 脚本层（plugins/spec-driver/scripts），而 Spectra 图的 caller/callee 覆盖对 `.mjs` 的函数级调用边是否完整未验证（F243 记 CJS module.exports 提取为空是能力边界，`.mjs` 类似存疑）。改进方向：若 Spectra 能可靠给出 `.mjs` 判定器内 `anchorLineIndex` 这类**变量的**消费点（而非仅函数调用边），本卡的五量反向普查本可用 MCP 加速——当前工具面是符号/调用边级，缺"变量数据流"级查询，这类门禁改动最需要的恰是后者（并入 P1-K 值级数据流样本 → P1-J）
 
-### F270 · 2026-09-01（implement 阶段追加，接 08-31 spec/plan 反馈）
-状态：待处理（3 条）
-来源：specs/270-compliance-evidence-ledger/（spec-driver-story implement 六 Phase 实证）
-- [流程顺畅][spec-driver 子代理编排] **子代理死亡率随任务长度强相关，但短任务稳定可用**：spec/plan 阶段 6 委派死 5（长任务），implement 阶段改用"短任务形态"子代理（对抗审查、探针，各 <5min）后**存活率接近 100%**（P2/P3/P4 各 2 路对抗 + 环境探针全部完成）。而 implement 的**生产代码红先行+实现**仍全部主线程 inline（判定器接线是承重设计，本就该主线程收口）。改进方向：spec-driver 的委派策略应显式区分"长文档生成"（易死，需分段落盘协议或主线程 inline）与"短分析/审查"（稳定，正常委派）——按任务时长而非任务类型分流。
-- [结果准确][spec-driver 门禁自身] **judge:doctor 是承重的 F236 生效时点检测器，但对"本次改动 vs 基线漂移"无区分能力**：本卡改完 judge:doctor 报 drift（4 mismatch + 4 missingInSnapshot），其中 3 个 missingInSnapshot 是本卡新增的账本模块（in-flight-verdict/ledger-reader/ledger-writer）——但 doctor 无法告诉你"哪些 drift 是本次引入 vs 开工前就有"。开工前基线报告手动记了"本机快照停 4.4.0 已 drift"才能区分。改进方向：judge:doctor 增加 `--since <baseline-snapshot>` 或输出"相对某 commit 的增量漂移"，否则每次门禁类改动都要人工记基线。
-- [结果准确][Spectra MCP] 本卡**再次未用 Spectra**——判定器是 .mjs 脚本，且 F270 的核心是"变量级数据流"（anchorLineIndex 的 5 个消费点、saveBlockState 的原样带回合同、JUDGE_FILE_SET 的 import 闭包），Spectra 的符号/调用边级图不覆盖这类查询。本卡靠反向普查子代理 + grep 手工完成。**再现：F270 spec 阶段同条**（值级数据流缺口 → P1-J/P1-K）。复现计数 +1 → 排期信号：判定器/门禁这类"变量数据流承重"的代码是 Spectra 当前工具面的系统性盲区。
 
-### F270 · 2026-09-01（集成 review 追加，第 3 次落账）
-状态：待处理（2 条，均为流程级）
-来源：specs/270-compliance-evidence-ledger/verification/integrated-review.md（六 Phase 全 commit 后补做集成审查）
-- [流程顺畅][spec-driver 流程结构] 🔴 **plan 阶段可以静默裁剪 spec 范围，而流程没有任何对账点**：F270 卡面 5 病根、spec 49 FR，plan 的 6 个 Phase 实际只覆盖其中一部分——病根 iii/v、PENDING、snapshot-stale 四组在 plan / tasks / 生产码里命中数全为 `0/0/0`，而 `plan.md §8`「spec 与代码现状矛盾记录」也没登记这次裁剪。后果是 tasks 按裁剪后的 plan 写、SC 与 commit 却按未裁剪的 spec 口径报「13/15 达成」，三者对不上且**无人对账**，最终 15 个 SC 的诚实口径是 6 真达成 / 4 部分 / 5 未达成或假达成。改进方向：(a) `spec-driver-plan` 产出时强制生成「FR → Phase」覆盖矩阵，未被任何 Phase 认领的 FR 必须显式落进 §8 的裁剪登记；(b) `spec-driver-verify` 的 SC 核对应以该矩阵为输入，对未认领 FR 自动判「未实现」而非由人填。这是本卡全部 over-claim 的**结构性根源**，不是个案疏忽。
-- [流程顺畅][spec-driver 阶段划分] **跨 phase 的「留给下一阶段」承诺无跟踪机制**：P3 的任务卡写「GATE 指纹去重通道预留同路由（随 P4 落）」，P4 实际做的是账本接入、从未接 GATE，而 T311 仍被勾成 `[x]`，导致 `routeNonBlock` 及其两个阈值常量成为**生产零接线的死代码**，其单元测试反而制造了「已达成」假象（变异实验：函数首行改 `return 0` 只红 5 个直接 import 的用例，零端到端失败）。改进方向：tasks 里凡出现「随 Phase N 落」的承诺，应生成一条归属 Phase N 的显式任务，否则该 phase 完成时无从检查。另建议 `spec-driver-verify` 增加「新增导出符号的生产可达性」检查——从真实入口正向追调用链，只被测试 import 的导出应报警。
+
