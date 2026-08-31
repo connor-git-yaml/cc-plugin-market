@@ -50,6 +50,7 @@ import {
   saveBlockState,
   resetBlockState,
 } from './lib/fix-compliance-io.mjs';
+import { classifyInFlightFromPayload, IN_FLIGHT_STATES } from './lib/in-flight-verdict.mjs';
 import { recordWorkflowRun } from './record-workflow-run.mjs';
 
 /** stderr 反馈前缀（FR-010，与既有 stop-task-check.sh 的 `[提醒]` 相区分） */
@@ -58,7 +59,33 @@ const PREFIX_WARN = '[FIX-COMPLIANCE][WARN]';
 const PREFIX_DEGRADED = '[FIX-COMPLIANCE][GATE-DEGRADED]';
 
 /** 会话内不合规阻断上限（FR-006）：达到后降级放行 */
-const BLOCK_LIMIT = 2;
+export const BLOCK_LIMIT = 2;
+
+/**
+ * F270 P3 · 解锁计时器上限（FR-046）。为「不计入 blockCount 但也不能立即放行」的裁决
+ * （重入 / 在途 undetermined / 证据陈旧 / 无法交叉校验 / 指纹无进展）计数，耗尽后走终态
+ * 可见放行——既不锁死（有计时器保证最终放行）也不早放行（要累积到阈值）。
+ *
+ * 🔴 承重不变量（delta-2 定时雷，MUST）：`NON_BLOCK_LIMIT >= BLOCK_LIMIT`。被判方**完全控制
+ * 一次裁决落进哪个桶**（触发重入 / `Bash(run_in_background)` 制造在途 / 制造 undetermined 均
+ * self-inducible）。若本桶阈值低于诚实 `blockCount` 地板（=BLOCK_LIMIT），被判方就把真实不合规
+ * 塞进本桶，使放行地板 `min(阈值)+1` 跌破诚实地板 → 比变更前更坏的绕过。取等号，不给额外额度。
+ */
+export const NON_BLOCK_LIMIT = BLOCK_LIMIT;
+
+/**
+ * F270 P3 · 解锁计时器的**不可擦 backstop** 阈值（delta-2）。
+ *
+ * why 需要它：`nonBlockStopCount` 快路径寄存在 gitignore 的状态文件里，被判方每轮 Stop 前
+ * `rm -rf` 该目录即可让它永久归零 → 计时器永不耗尽 → 会话被 brick 在放行/阻断循环（视本身
+ * 语义）。故真正的放行闸挂 transcript 派生的**单调不可擦量**：自首次 nonBlock 裁决设锚
+ * （firstNonBlockEntryBaseline）起、最早 fix 展开后的 assistant entry 增量。与闸门三为
+ * inFlightDeferCount 兜底同构（IN_FLIGHT_DEFER_LIMIT 的 JSDoc）。
+ *
+ * why 取与闸门三同量级：它是"会话已异常长"的兜底，不是精确计数——擦库场景下快路径失效，
+ * 靠这条抹不掉的天花板保证最终放行。取 EARLIEST_FIX_ENTRY_DEFER_LIMIT 同值即可。
+ */
+export const NON_BLOCK_ENTRY_LIMIT = 420;
 
 /**
  * 会话内"在途推迟"次数上限（F256 第 2 轮 CRITICAL-1b）：达到后不再推迟，恢复正常裁决。
@@ -575,8 +602,10 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
     const saved = saveBlockState(projectRoot, sessionId, {
       blockCount: nextCount,
       degradedRecorded: loaded.degradedRecorded,
-      // saveBlockState 是整体覆写：本路径不改在途预算，必须原样带回，否则会被抹平为 0
+      // saveBlockState 是整体覆写：本路径不改在途预算与解锁计时器，必须原样带回，否则会被抹平为 0
+      // （F270 P3 自查抓到的漏带即清零：三处旧调用点都要补两新字段——见 io normalizeState 注释）
       inFlightDeferCount: loaded.inFlightDeferCount,
+      nonBlockStopCount: loaded.nonBlockStopCount,
     });
     if (saved.ok) {
       appendAuditEvent(projectRoot, buildAuditEvent({
@@ -590,6 +619,7 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
       alreadyRecorded: false,
       storageUnavailable: true,
       inFlightDeferCount: loaded.inFlightDeferCount,
+      nonBlockStopCount: loaded.nonBlockStopCount,
       extraDiagnostics,
     });
   }
@@ -599,6 +629,7 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
     alreadyRecorded: loaded.degradedRecorded,
     storageUnavailable: false,
     inFlightDeferCount: loaded.inFlightDeferCount,
+    nonBlockStopCount: loaded.nonBlockStopCount,
     extraDiagnostics,
   });
 }
@@ -608,7 +639,12 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
  * @returns {number} 恒 0
  */
 function releaseDegraded(projectRoot, sessionId, verdict, {
-  alreadyRecorded, storageUnavailable, inFlightDeferCount = 0, extraDiagnostics: upstreamDiagnostics = [],
+  alreadyRecorded, storageUnavailable, inFlightDeferCount = 0,
+  // F270 P3：整体覆写须原样带回。刻意**无默认值**（F238 教训）：新调用点忘传时这里
+  // undefined 会被 saveBlockState 归一为 0/null 抹平——归一层已兜底不炸，但 required 化
+  // 让 lint/review 面能看见"忘传"，而默认值会把抹平静默化。
+  nonBlockStopCount,
+  extraDiagnostics: upstreamDiagnostics = [],
 }) {
   const extraDiagnostics = [
     ...upstreamDiagnostics,
@@ -640,7 +676,10 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
     // 首次降级成功后置幂等标记（存储可用时才有意义）
     if (!storageUnavailable) {
       // 同样是整体覆写：在途预算须原样带回（见 saveBlockState JSDoc）
-      saveBlockState(projectRoot, sessionId, { blockCount, degradedRecorded: true, inFlightDeferCount });
+      saveBlockState(projectRoot, sessionId, {
+        blockCount, degradedRecorded: true, inFlightDeferCount,
+        nonBlockStopCount,   // F270 P3：原样带回，防抹平
+      });
     }
   }
 
@@ -648,6 +687,89 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
     sessionId, enforcement: 'block', verdict, blockCount, degraded: true, extraDiagnostics,
   }));
   process.stderr.write(`${PREFIX_DEGRADED} ${buildFeedbackText(verdict.missing, { degraded: true, diagnostics: extraDiagnostics })}\n`);
+  return 0;
+}
+
+/**
+ * F270 P3 · 解锁计时器路由（FR-046）：处理「不计入 blockCount 但也不能立即放行」的裁决类。
+ * ⚠️ 接线状态（P3 对抗 CRITICAL-1 后）：**当前零接线**——初版把必答③重入接在此，被对抗证伪后
+ * 撤线（重入改为纯诊断登记，见 runHook）。本路由保留给 P4 的 GATE 指纹无进展 / 陈旧类接入
+ * （那些才是真"不该计 blockCount 也不该立即按不合规阻断"的裁决类）。P4 接入前本函数不可达。
+ *
+ * 语义（delta-2 重写后的解锁计时器主线，spec FR-046 五点）：
+ *   1. 不计 `blockCount`（真实不合规的额度不被非不合规态烧掉）；计 `nonBlockStopCount`。
+ *   2. 计时器**未耗尽**前照常按裁决类自身语义处理（重入=放行；未来接入的陈旧类若本该阻断仍阻断）。
+ *   3. 耗尽后走**终态可见**放行（recordWorkflowRun + 标注触发计时器，SC-014），不走安静通道。
+ *   4. 🔴 不可擦 backstop：快路径计数可被 `rm -rf` 状态目录清零；首次 nonBlock 裁决时把
+ *      「最早 fix 展开后 assistant entry 数」设为锚（firstNonBlockEntryBaseline），此后
+ *      `entryCount - 锚 >= NON_BLOCK_ENTRY_LIMIT` 即视同耗尽——量派生自 transcript、抹不掉。
+ *   5. save 失败沿用「存储不可用=已达上限」fail-closed（与 routeBlock:554 同源）：写不进计数
+ *      就直接按耗尽走终态可见放行，不给"既不计数又不留痕"的静默通道。
+ *
+ * @param {string} reasonDiagnostic - 本次裁决类的诊断码（如 'stop-hook-reentry'）
+ * @param {number|null} entryCount - 最早 fix 展开后的 assistant entry 数（backstop 计量源）
+ * @returns {number} 恒 0（当前接入的裁决类均为放行语义；阻断语义类接入时由调用方先行 exit 2）
+ */
+export function routeNonBlock(projectRoot, sessionId, verdict, reasonDiagnostic, entryCount) {
+  const loaded = loadBlockState(projectRoot, sessionId);
+  // 🔴 backstop 用**单调量直接比常量**（P3 对抗 CRITICAL-2 修订）：初版把首次裁决时的 entryCount
+  // 存进状态文件作锚、比 delta——但锚在可擦文件里，`rm -rf` 状态目录一次即同时打掉快路径与
+  // backstop（delta = 单调量 − 可擦锚，减去可擦量后整体可擦，"不可擦"为假）。正确形态就在
+  // 本文件闸门三（entryCount < EARLIEST_FIX_ENTRY_DEFER_LIMIT）：单调量比常量、不存锚，
+  // rm -rf 无效。代价是上界按"整个 fix 会话长度"而非"首次 nonBlock 起"计——对兜底语义可接受。
+  const fastPathExhausted = loaded.nonBlockStopCount >= NON_BLOCK_LIMIT;
+  const backstopExhausted = typeof entryCount === 'number' && entryCount >= NON_BLOCK_ENTRY_LIMIT;
+
+  const nextState = {
+    blockCount: loaded.blockCount,               // 整体覆写：不动的字段原样带回
+    degradedRecorded: loaded.degradedRecorded,
+    inFlightDeferCount: loaded.inFlightDeferCount,
+    nonBlockStopCount: loaded.nonBlockStopCount + 1,
+  };
+  const saved = saveBlockState(projectRoot, sessionId, nextState);
+
+  if (fastPathExhausted || backstopExhausted || !saved.ok) {
+    // 终态可见放行（SC-014：标注触发计时器，与 blockCount-degraded 可区分）
+    const trigger = !saved.ok
+      ? 'nonblock-storage-unavailable'
+      : (backstopExhausted ? 'nonblock-backstop-exhausted' : 'nonblock-limit-exhausted');
+    try {
+      recordWorkflowRun({
+        projectRoot,
+        workflowId: 'spec-driver-fix',
+        runId: sessionId,
+        result: 'paused',
+        warnings: [`${PREFIX_WARN} 解锁计时器耗尽(${trigger})后放行，缺失: ${verdict ? verdict.missing.join(', ') : '(无判定)'}`],
+        complianceVerdict: verdict ? {
+          closureForm: verdict.closureForm,
+          compliant: verdict.compliant,
+          missing: verdict.missing,
+          degraded: false,
+          blockCount: null,
+        } : undefined,
+      });
+    } catch {
+      // 终态写入失败不得让放行崩溃
+    }
+    try {
+      appendAuditEvent(projectRoot, buildAuditEvent({
+        sessionId, enforcement: 'block', verdict, blockCount: null, degraded: false,
+        extraDiagnostics: [reasonDiagnostic, trigger],
+      }));
+    } catch { /* 同上 */ }
+    process.stderr.write(`${PREFIX_WARN} ${reasonDiagnostic} 计时器耗尽(${trigger})，本次放行且已留终态痕迹\n`);
+    return 0;
+  }
+
+  // 未耗尽：按裁决类自身语义放行 + 如实落审计 + **loud stderr**（P3 对抗 W：不留最安静通道——
+  // F257 缺陷 2 的教训是"两条放行路径可见性不对等，更安静那条成为首选绕过面"）
+  try {
+    appendAuditEvent(projectRoot, buildAuditEvent({
+      sessionId, enforcement: 'block', verdict, blockCount: null, degraded: false,
+      extraDiagnostics: [reasonDiagnostic],
+    }));
+  } catch { /* 审计失败不影响放行 */ }
+  process.stderr.write(`${PREFIX_WARN} ${reasonDiagnostic}：本次放行（解锁计时器 ${loaded.nonBlockStopCount + 1}/${NON_BLOCK_LIMIT}），已落审计\n`);
   return 0;
 }
 
@@ -776,6 +898,18 @@ function runHook(projectRoot, payload) {
 
   const sessionId = payload.session_id;
 
+  // F270 P3 · 必答③重入语义（P3 对抗 CRITICAL-1 修订：**撤销提前放行**）。
+  // 初版把 `stop_hook_active===true` 接成"不得阻断、必放行"（routeNonBlock），对抗实跑证伪：
+  //   - 它把最短完全绕过从「2 次 exit 2 + failed 终态」砍到「1 次 exit 2 + 零终态零 stderr」——
+  //     惩罚动作（exit 2）本身生成豁免（下一次 Stop 即重入），是最坏形态的 self-inducible；
+  //   - 它唯一声称的收益（防阻断死循环）在既有 BLOCK_LIMIT=2 下**本就不存在**——exit 2 已被
+  //     有界化为 2 次，第 3 次走 releaseDegraded 放行，循环天然终止。收益为零、净损一格预算。
+  //   （spec 必答③「重入必放行」的前提由此被实现层证据推翻，spec 侧已留痕修订。）
+  // 终版语义：重入**不改变任何路由**——裁决/预算/终态与非重入逐字一致（=改动前行为），仅把
+  // `stop-hook-reentry` 诊断码如实并入本次审计（新增纯可观测性）。非布尔取值同样只影响该码的
+  // 缺席，不影响裁决（对上游序列化行为的假设不成立时不做任何判定分支）。
+  const reentryDiagnostics = payload.stop_hook_active === true ? ['stop-hook-reentry'] : [];
+
   // F256 盲区 2：判定时机未到——存在在途委派时**有界地**推迟裁决，不消耗阻断预算。
   //
   // 放行=推迟而非豁免，但这一语义**只在推迟有界时成立**。第 1 轮实现曾论证"每个在途委派最终都会
@@ -803,8 +937,31 @@ function runHook(projectRoot, payload) {
   //
   // 插入点在 compliant 早退之后、warn 分支之前，对 block/warn 两档一视同仁：warn 档本就 exit 0，
   // 但若落在其后会把"时机未到"误记为"真实不合规"审计事件。两档退出码语义均不变，仅审计更准确。
-  const hasInFlight = Array.isArray(result.inFlightDelegations) && result.inFlightDelegations.length > 0;
-  const deferExtraDiagnostics = [];
+  // F270 P3（FR-014/015 三态）：在途判定优先用 harness 权威字段 `background_tasks`（P-12 真实
+  // Stop 直证：非空⟺真有在途，Gw 过滤器只收 running/pending）。三态处置：
+  //   in-flight    → 确证在途（并入诊断码，进入既有三闸门推迟逻辑——闸门/预算照旧，FR-016/019：
+  //                  推迟消耗 inFlightDeferCount 不动 blockCount，delta C-2 裁决）
+  //   no-in-flight → 权威确证**无**在途 → 不推迟，按正常收口判据裁决（US2-AS2；transcript 派生的
+  //                  "未见回收"让位于 harness 实时事实——21.3% 通知不达正是 transcript 派生的假在途源）
+  //   undetermined → 键缺席/形状异常（老版本 harness、Codex、toolUseContext 缺席）→ **退回既有
+  //                  transcript 派生判定**（向后兼容，C-2：探测不到≠确证无在途，坍缩即恢复误 block）
+  const inFlightVerdict = classifyInFlightFromPayload(payload);
+  let hasInFlight;
+  if (inFlightVerdict.state === IN_FLIGHT_STATES.IN_FLIGHT) {
+    hasInFlight = true;
+  } else if (inFlightVerdict.state === IN_FLIGHT_STATES.NO_IN_FLIGHT) {
+    hasInFlight = false;
+  } else {
+    hasInFlight = Array.isArray(result.inFlightDelegations) && result.inFlightDelegations.length > 0;
+  }
+  const deferExtraDiagnostics = [...reentryDiagnostics];
+  // 三态诊断码的可见面收窄（P3 对抗 B-必答④）：`buildFeedbackText` 会把 diagnostics 渲染进
+  // 用户可见 stderr——无条件 push 会让每次 warn/降级都带"诊断: in-flight-none"类内部码噪声。
+  // 只有 undetermined（探测异常态）值得进 warn/block 文案；in-flight 态的码走推迟成功审计
+  // （那条审计单独写 extraDiagnostics）；no-in-flight 是平凡态，不进文案。
+  if (inFlightVerdict.state === IN_FLIGHT_STATES.UNDETERMINED) {
+    deferExtraDiagnostics.push(inFlightVerdict.diagnostic);
+  }
   if (hasInFlight && isDeferrableMissingSet(result.verdict.missing)) {
     const loaded = loadBlockState(projectRoot, sessionId);
     const entryCount = typeof result.assistantEntriesSinceEarliestFix === 'number'
@@ -818,13 +975,16 @@ function runHook(projectRoot, payload) {
         blockCount: loaded.blockCount,               // 推迟不动阻断预算（整体覆写，须原样带回）
         degradedRecorded: loaded.degradedRecorded,
         inFlightDeferCount: loaded.inFlightDeferCount + 1,
+        nonBlockStopCount: loaded.nonBlockStopCount,             // F270 P3：原样带回，防抹平
+        firstNonBlockEntryBaseline: loaded.firstNonBlockEntryBaseline,
       });
       if (saved.ok) {
         // 审计提档：推迟不再是零终态痕迹的静默通道（F257 缺陷 2）
         recordDeferTerminal(projectRoot, sessionId, result.verdict, entryCount);
         appendAuditEvent(projectRoot, buildAuditEvent({
           sessionId, enforcement: result.enforcement, verdict: result.verdict,
-          blockCount: null, degraded: false, extraDiagnostics: ['delegation-in-flight'],
+          blockCount: null, degraded: false,
+          extraDiagnostics: ['delegation-in-flight', inFlightVerdict.diagnostic],
         }));
         process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing, { diagnostics: ['delegation-in-flight'] })}\n`);
         return 0;

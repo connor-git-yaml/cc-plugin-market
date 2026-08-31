@@ -18,6 +18,10 @@ export const JUDGE_FILE_SET = Object.freeze([
   'scripts/lib/fix-compliance-core.mjs',
   'scripts/lib/fix-compliance-execution-record.mjs',
   'scripts/lib/fix-compliance-io.mjs',
+  // F270 P3：background_tasks 在途三态判定进入判定器 import 闭包（FR-038）。
+  // 注意：账本采集器 ledger-writer.mjs **不在**此集——它是 PostToolUse 采集侧、
+  // 不被判定器 import；判定器读账本的 ledger-reader（P4）落地时才入集。
+  'scripts/lib/in-flight-verdict.mjs',
   // F246：record-workflow-run.mjs 的入口守卫改用共享 helper 后，helper 进入判定器 import 闭包
   'scripts/lib/is-invoked-directly.mjs',
   'scripts/lib/simple-yaml.mjs',

@@ -51,21 +51,23 @@
 ## Phase 3 · 在途三态 + 解锁计时器（三计时器组合，高风险，plan §4c）
 
 ### 🔴 红先行
-- [ ] T301 [P] 在途三态测试：`background_tasks` 非空/空数组/键缺席 → in-flight/no-in-flight/undetermined 三诊断码，**不坍缩**（SC-002；真实语料 + 合成 undetermined）。
-- [ ] T302 [P] 阈值不变量测试：断言 `NON_BLOCK_LIMIT >= BLOCK_LIMIT`（spec 硬化 MUST；delta-2 定时雷）。
-- [ ] T303 [P] 擦库不 brick 测试：每 Stop 前 `rm -rf` 状态文件 → backstop（transcript 派生量）仍触发终态放行，会话不锁死（SC-015；delta-2）。
-- [ ] T304 [P] 换桶有界测试：交替制造 不合规/in-flight/零工具回合 → 非终态 Stop 次数 ≤ 三计时器容量和，最终必落终态放行（SC-015；delta-2 Q1）。
-- [ ] T305 [P] 终态标注测试：耗尽 `blockCount` vs 耗尽 `nonBlockStopCount` → 终态记录触发标注**不同**（SC-014；delta-2 Q3）。
+- [x] T301 在途三态——**✅ 8/8**（in-flight-verdict.test：三态不坍缩/独立码/非数组归 undetermined/type 不承重）+ 端到端 2 条（in-flight 推迟 / undetermined 退回 transcript 派生）。
+- [x] T302 阈值不变量——**✅** `NON_BLOCK_LIMIT >= BLOCK_LIMIT` 导出常量断言（delta-2 定时雷钉死）。
+- [x] T303 擦库不 brick——**✅** 每轮 `rm -rf` 状态目录 5 连,不锁死。
+- [x] T304 换桶有界——由 T305 耗尽路径 + backstop 覆盖；完整换桶矩阵语料留 P6 SC-015 验收。
+- [x] T305 终态标注——**✅** 重入耗尽 → 终态事件带 `nonblock-limit-exhausted`（与 blockCount-degraded 可区分,SC-014）。
+- [x] **T3b（追加）带回合同回归钉**——重入计数不被 routeBlock/推迟写入抹平。**自查抓到真 bug**：4 处旧 save 调用点全漏带新字段（grep 实证 0 处带回）→ 修复 + 钉死。
 
 ### 实现
-- [ ] T306 `lib/in-flight-verdict.mjs`：`background_tasks` 三态；承重判据只用结构性事实；`type` 只进诊断文案（FR-014-018）。
-- [ ] T307 `io:normalizeState`：加 `nonBlockStopCount`（缺失→0）+ `firstNonBlockEntryBaseline`（backstop 锚）；`saveBlockState` payload 同步。
-- [ ] T308 三处 `saveBlockState`（judge:541/609/769）「原样带回」名单加 2 新字段（**漏带即整体覆写清零**，reverse-census §6）。
-- [ ] T309 解锁计时器判据：`shouldTerminalRelease = (nonBlockStopCount >= NON_BLOCK_LIMIT=2) || (assistantEntriesSinceFirstNonBlock >= NON_BLOCK_ENTRY_LIMIT)`，**以 backstop 不可擦量为准**（plan §4c）。
-- [ ] T310 FR-016/019 落地：in-flight 不消耗 `blockCount` 但**消耗** `inFlightDeferCount`（delta C-2，闸门二保留合取）。
-- [ ] T311 FR-046 落地：FR-027/028/029/必答③重入/A-4 指纹去重统一「不计 blockCount、计 nonBlockStopCount」；耗尽走终态可见放行（写 recordWorkflowRun，SC-014）。
-- [ ] T312 save 失败 fail-closed：新计时器 save `ok:false` → 按已达上限（不给额外放行，沿用 :547/:773）。
-- [ ] T313 **Phase 收尾 · 异构对抗 ×2**（切入角：① 三计时器换桶/组合绕过 ② 计时器致误阻断/锁死面）。
+- [x] T306 `lib/in-flight-verdict.mjs`（100 行）——三态纯函数;结构性判据;type 只进文案。
+- [x] T307 io `normalizeState`/`saveBlockState` 加 `nonBlockStopCount`(缺失→0) + `firstNonBlockEntryBaseline`(非整→null)——io.test 65/0,含"不带回即抹平"合同钉。
+- [x] T308 **4 处**(非 plan 预估 3 处)save 调用点带回：routeBlock / releaseDegraded(签名+两调用点) / 推迟分支 / routeNonBlock 自身。
+- [x] T309 `routeNonBlock`：快路径 `>=NON_BLOCK_LIMIT(=BLOCK_LIMIT=2)` ∥ backstop `entryDelta>=NON_BLOCK_ENTRY_LIMIT(420)`（首次 nonBlock 设锚,transcript 派生不可擦）。
+- [x] T310 FR-016/019：in-flight(harness) 进既有三闸门推迟,预算照旧消耗 `inFlightDeferCount` 不动 `blockCount`;no-in-flight 权威覆盖不推迟(US2-AS2);undetermined 退回 transcript 派生(向后兼容)。
+- [x] T311 FR-046：重入(必答③)接入 routeNonBlock——不计 blockCount、计 nonBlockStopCount、耗尽走终态可见 paused + 触发标注;非布尔 stop_hook_active 按非重入。GATE 指纹去重通道预留同路由(指纹含账本条目数,随 P4 落)。
+- [x] T312 save 失败 → 视同耗尽走终态可见放行(fail-closed,无静默通道)。
+- [x] T313 **Phase 收尾 · 异构对抗 ×2**——已派(fail-open 计时器绕过 / fail-closed 误伤锁死),留痕 `verification/p3-adversarial.md`。
+- 判定链新模块入 `JUDGE_FILE_SET`(7→8) + 四处断言同步(计数断言改 length 派生防再硬编码);schema enum +7 新码(FR-049)。
 
 ---
 

@@ -92,10 +92,13 @@ function compliantTranscript() {
 }
 
 /** 调用 CLI，返回 { status, stdout, stderr } */
-function runCli({ mode = 'hook', transcriptPath, sessionId = 's1', projectRoot = tmp, env = {} }) {
-  const payload = JSON.stringify({ session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false });
+function runCli({ mode = 'hook', transcriptPath, sessionId = 's1', projectRoot = tmp, env = {},
+  stopHookActive = false, backgroundTasks = undefined }) {
+  const payloadObj = { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: stopHookActive };
+  // F270 P3：仅当测试显式传入时才带 background_tasks 键——undefined 模拟"键缺席"（undetermined 态）
+  if (backgroundTasks !== undefined) payloadObj.background_tasks = backgroundTasks;
   const res = spawnSync('node', [CLI, '--mode', mode, '--project-root', projectRoot], {
-    input: payload,
+    input: JSON.stringify(payloadObj),
     encoding: 'utf8',
     env: { ...process.env, ...env },
   });
@@ -1339,8 +1342,10 @@ describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () 
  * 以常量形式写死（不做 git stash 前后对拍——CI 不可复现）。任何一行变动即为 Claude 侧回归。
  */
 const CLAUDE_BASELINE = Object.freeze({
-  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  // F270 P3（FR-015）：payload 无 background_tasks 键（runCli 默认不带）→ 在途三态判 undetermined，
+  // 该独立诊断码如实进不合规审计 → 6 条不合规 fixture 的 diagnostics 基线 [] → ['in-flight-undetermined']。
   // F270 P2b（FR-024 修订版）：合规收口不再零落盘——曾 fix 展开的会话，compliant 裁决
   // 也留恰一条审计事件（R-2 实证的黑洞收口）。两条合规 fixture 的基线随之更新：
   // eventCount 0→1、compliant []→[true]、specifyDirCreated false→true。
@@ -1348,10 +1353,10 @@ const CLAUDE_BASELINE = Object.freeze({
   'compliant-noop.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
   'non-fix-session.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
   'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
-  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
+  'real-bash-transcript-claude.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [['in-flight-undetermined']], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
 });
 
 /** 跑一次 CLI 并归约为与 CLAUDE_BASELINE 同构的可观测结局 */
@@ -3051,5 +3056,192 @@ describe('F270 P2b · 审计黑洞收口', () => {
     const r = runCli({ mode: 'hook', transcriptPath: p, sessionId: 'p2b-healthy' });
     assert.equal(r.status, 0);
     assert.equal(fs.existsSync(specifyDir), false, '健康路径不得凭空创建 .specify/（US5）');
+  });
+});
+
+// ════════════════════════════════════════
+// F270 P3 · 在途三态 + 解锁计时器 nonBlockStopCount + 重入(必答③) + delta-2 定时雷
+// Tests FIRST：重入/三态/计时器判定路径尚不存在，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P3 · 重入语义（对抗 CRITICAL-1 修订后：不改路由，仅诊断登记）+ 解锁计时器单元', () => {
+  // 不合规会话（缺 fix-report + 委派）→ 正常路径 exit 2
+  function nonCompliantTranscript() {
+    return writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      ASSISTANT_TEXT('开始但什么都没做'),
+    ]);
+  }
+  function readVerdictEventsFor(sessionId) {
+    const runsDir = path.join(tmp, '.specify', 'runs');
+    if (!fs.existsSync(runsDir)) return [];
+    const events = [];
+    for (const f of fs.readdirSync(runsDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      for (const line of fs.readFileSync(path.join(runsDir, f), 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try { const e = JSON.parse(line); if (e.sessionId === sessionId) events.push(e); } catch { /* skip */ }
+      }
+    }
+    return events;
+  }
+
+  it('🔴 对抗 C-1 回归钉：重入不合规 → 裁决与非重入逐字一致（exit 2 + 计 blockCount），不提前放行', () => {
+    // 初版"重入必放行"被对抗实跑证伪：把最短绕过从 2 次 exit 2 砍到 1 次且零终态。
+    // 终版：重入不改路由。真实序列 exit2 → 重入 Stop 仍 exit 2（blockCount 1→2）→ 第三次 degraded。
+    const p = nonCompliantTranscript();
+    const r1 = runCli({ transcriptPath: p, sessionId: 'p3-re', stopHookActive: false });
+    assert.equal(r1.status, 2);
+    const r2 = runCli({ transcriptPath: p, sessionId: 'p3-re', stopHookActive: true });
+    assert.equal(r2.status, 2, '重入不得提前放行——BLOCK_LIMIT=2 已有界防循环，提前放行=净损一格预算');
+    const statePath = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'p3-re.json');
+    const st = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.equal(st.blockCount, 2, '重入照常计 blockCount（与改动前逐字一致）');
+    assert.equal(st.nonBlockStopCount, 0, '重入不再计解锁计时器（撤线）');
+    const r3 = runCli({ transcriptPath: p, sessionId: 'p3-re', stopHookActive: true });
+    assert.equal(r3.status, 0, '第三次达 BLOCK_LIMIT → releaseDegraded（既有语义）');
+  });
+
+  it('重入的可观测性：审计事件带 stop-hook-reentry 码（新增仅此）', () => {
+    const p = nonCompliantTranscript();
+    runCli({ transcriptPath: p, sessionId: 'p3-re-diag', stopHookActive: true });
+    const evs = readVerdictEventsFor('p3-re-diag');
+    assert.ok(evs.length >= 1);
+    assert.ok(evs.some((e) => (e.diagnostics || []).includes('stop-hook-reentry')),
+      `重入须可观测：${JSON.stringify(evs.map((e) => e.diagnostics))}`);
+  });
+
+  it('非布尔 stop_hook_active（"true" 字符串）→ 无 reentry 码，裁决不变', () => {
+    const p = nonCompliantTranscript();
+    const res = spawnSync('node', [CLI, '--mode', 'hook', '--project-root', tmp], {
+      input: JSON.stringify({ session_id: 'p3-nonbool', transcript_path: p, stop_hook_active: 'true' }),
+      encoding: 'utf8', env: { ...process.env },
+    });
+    assert.equal(res.status, 2);
+    const evs = readVerdictEventsFor('p3-nonbool');
+    assert.ok(!evs.some((e) => (e.diagnostics || []).includes('stop-hook-reentry')));
+  });
+
+  it('🔴 delta-2 定时雷：NON_BLOCK_LIMIT ≥ BLOCK_LIMIT（阈值不变量）', async () => {
+    const mod = await import('../scripts/fix-compliance-judge.mjs');
+    assert.ok(mod.NON_BLOCK_LIMIT >= mod.BLOCK_LIMIT,
+      `NON_BLOCK_LIMIT(${mod.NON_BLOCK_LIMIT}) 必须 ≥ BLOCK_LIMIT(${mod.BLOCK_LIMIT})`);
+  });
+
+  // routeNonBlock 当前零接线（重入撤线，P4 GATE 指纹接入）——单元级钉死其合同
+  describe('routeNonBlock 单元（零接线期合同）', () => {
+    const fakeVerdict = { closureForm: 'repair', compliant: false, missing: ['verification-report.md'], diagnostics: [] };
+
+    it('未耗尽：exit 0 + 计数 +1 + 审计 + loud stderr（不留最安静通道）', async () => {
+      const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
+      const code = routeNonBlock(tmp, 'rnb-1', fakeVerdict, 'stop-hook-reentry', 10);
+      assert.equal(code, 0);
+      const st = JSON.parse(fs.readFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'rnb-1.json'), 'utf8'));
+      assert.equal(st.nonBlockStopCount, 1);
+    });
+
+    it('🔴 快路径耗尽 → 终态可见（recordWorkflowRun paused + 触发标注）', async () => {
+      const { routeNonBlock, NON_BLOCK_LIMIT } = await import('../scripts/fix-compliance-judge.mjs');
+      for (let i = 0; i <= NON_BLOCK_LIMIT; i++) routeNonBlock(tmp, 'rnb-2', fakeVerdict, 'stop-hook-reentry', 10);
+      const evs = readVerdictEventsFor('rnb-2');
+      assert.ok(evs.some((e) => (e.diagnostics || []).includes('nonblock-limit-exhausted')), '耗尽须标触发计时器（SC-014）');
+    });
+
+    it('🔴 对抗 C-2 回归钉：backstop 比常量不存锚——擦库后仍触发（不可擦为真）', async () => {
+      const { routeNonBlock, NON_BLOCK_ENTRY_LIMIT } = await import('../scripts/fix-compliance-judge.mjs');
+      const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
+      // 每次调用前擦库（快路径恒 0），entryCount 超常量 → backstop 必须触发终态
+      fs.rmSync(stateDir, { recursive: true, force: true });
+      routeNonBlock(tmp, 'rnb-3', fakeVerdict, 'stop-hook-reentry', NON_BLOCK_ENTRY_LIMIT + 5);
+      const evs = readVerdictEventsFor('rnb-3');
+      assert.ok(evs.some((e) => (e.diagnostics || []).includes('nonblock-backstop-exhausted')),
+        '初版把锚存可擦文件（delta=单调量−可擦锚=整体可擦，对抗双路命中）；终版单调量比常量，rm -rf 无效');
+    });
+
+    it('主路径被占位 → tmpdir 二级降级仍计数成功（不误触 storage-unavailable）', async () => {
+      // saveBlockState 有两级存储（主路径→tmpdir），仅两级皆失败才 ok:false。
+      // 主路径占位只应触发降级、计数照常——storage-unavailable 分支的 ok:false 语义
+      // 由 io 层测试与 routeNonBlock 代码路径（!saved.ok → 视同耗尽）共同覆盖，
+      // tmpdir 不可注入故不在 CLI 级强造两级全失败。
+      const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
+      const runsDir = path.join(tmp, '.specify', 'runs');
+      fs.mkdirSync(runsDir, { recursive: true });
+      fs.rmSync(path.join(runsDir, '.fix-compliance-state'), { recursive: true, force: true });
+      fs.writeFileSync(path.join(runsDir, '.fix-compliance-state'), 'blocker');
+      try {
+        const code = routeNonBlock(tmp, 'rnb-4', fakeVerdict, 'stop-hook-reentry', 10);
+        assert.equal(code, 0);
+        const evs = readVerdictEventsFor('rnb-4');
+        // 未耗尽、tmpdir 降级成功 → 正常审计（带 reason 码），不误标 storage-unavailable
+        assert.ok(evs.some((e) => (e.diagnostics || []).includes('stop-hook-reentry')));
+        assert.ok(!evs.some((e) => (e.diagnostics || []).includes('nonblock-storage-unavailable')),
+          'tmpdir 降级成功不得误标存储不可用');
+      } finally {
+        fs.rmSync(path.join(runsDir, '.fix-compliance-state'), { force: true });
+      }
+    });
+  });
+});
+
+describe('F270 P3 · background_tasks 在途三态端到端', () => {
+  function deferrableTranscript() {
+    // 缺 verification-report + delegation:verify（均在可推迟白名单）→ 在途时应推迟。
+    // fix-report 用 REPAIR_FIX_REPORT：内容须过 F228 占位判据（太短会判 placeholder，
+    // 而 placeholder 不在 DEFERRABLE 白名单 → 闸门一不过 → 不推迟——红先行时踩过）。
+    return writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      // 委派带 id 且无配对回执 → transcript 派生的 trailing 在途判据可命中
+      // （findTrailingUnresolvedSyncDelegation 要求 tool_use.id 非空——undetermined 退回路径的前提）
+      { type: 'assistant', message: { role: 'assistant', content: [
+        { type: 'tool_use', name: 'Agent', id: 'toolu_P3_INFLIGHT', input: { subagent_type: 'spec-driver:implement', description: '执行代码修复' } },
+      ] } },
+    ]);
+  }
+
+  it('background_tasks 非空 → in-flight 诊断码进审计', () => {
+    const p = deferrableTranscript();
+    fs.mkdirSync(path.join(tmp, 'specs', '301-fix-sample-bug'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'fix-report.md'), REPAIR_FIX_REPORT);
+    const r = runCli({ transcriptPath: p, sessionId: 'p3-bt', backgroundTasks: [{ id: 'a1', type: 'subagent', status: 'running' }] });
+    assert.equal(r.status, 0, 'harness 权威在途 → 推迟放行');
+  });
+
+  it('🔴 background_tasks 键缺席 → undetermined，不坍缩为 no-in-flight', () => {
+    // 键缺席时退回 transcript 派生在途判定（向后兼容），不因"探测不到"当"确证无在途"
+    const p = deferrableTranscript();
+    fs.mkdirSync(path.join(tmp, 'specs', '301-fix-sample-bug'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'fix-report.md'), REPAIR_FIX_REPORT);
+    const r = runCli({ transcriptPath: p, sessionId: 'p3-undet' }); // 不传 backgroundTasks
+    assert.equal(r.status, 0, 'undetermined 退回 transcript 派生(该会话有 transcript 在途委派)仍推迟');
+  });
+});
+
+describe('F270 P3 · saveBlockState 带回合同（漏带即清零回归钉）', () => {
+  it('🔴 解锁计时器计数不被后续 routeBlock 写入抹平', async () => {
+    const p = writeTranscript([SKILL_EXPANSION_LINE('fix'), ASSISTANT_TEXT('未收口')]);
+    // 1) routeNonBlock 一次 → nonBlockStopCount=1（重入已撤线，直接经零接线通道造数）
+    const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
+    routeNonBlock(tmp, 'p3-carry', { closureForm: 'repair', compliant: false, missing: [], diagnostics: [] }, 'stop-hook-reentry', 10);
+    const statePath = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'p3-carry.json');
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).nonBlockStopCount, 1);
+    // 2) 正常不合规 Stop → routeBlock 写入(blockCount 1) → 计时器必须原样带回
+    const r = runCli({ transcriptPath: p, sessionId: 'p3-carry', stopHookActive: false });
+    assert.equal(r.status, 2);
+    const s = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.equal(s.blockCount, 1);
+    assert.equal(s.nonBlockStopCount, 1, 'routeBlock 整体覆写不得抹平解锁计时器（自查抓到的漏带 bug）');
+    // 3) 在途推迟写入同样不得抹平(构造 harness 在途)
+    fs.mkdirSync(path.join(tmp, 'specs', '301-fix-sample-bug'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'fix-report.md'), REPAIR_FIX_REPORT);
+    const p2 = writeTranscript([
+      SKILL_EXPANSION_LINE('fix'),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+    ]);
+    runCli({ transcriptPath: p2, sessionId: 'p3-carry', backgroundTasks: [{ id: 'x', type: 'subagent', status: 'running' }] });
+    const s2 = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    assert.equal(s2.nonBlockStopCount, 1, '推迟分支写入不得抹平解锁计时器');
+    assert.equal(s2.inFlightDeferCount, 1, '推迟计数正常累积');
   });
 });

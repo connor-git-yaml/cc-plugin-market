@@ -564,3 +564,43 @@ describe('F256 T002 · listFeatureDirCandidatesByShortName', () => {
     assert.equal(fs.existsSync(path.join(tmp, hits[0], 'fix-report.md')), false);
   });
 });
+
+// ════════════════════════════════════════
+// F270 P3 · 解锁计时器 nonBlockStopCount + backstop 锚（normalizeState 扩两字段）
+// Tests FIRST：字段尚不存在，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P3 · normalizeState/saveBlockState 新字段', () => {
+  // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中「锚在可擦文件=backstop
+  //   整体可擦」后撤销——backstop 改为单调量比常量。本组只覆盖存活的 nonBlockStopCount。）
+  it('saveBlockState 带回 nonBlockStopCount → load 读回', () => {
+    saveBlockState(tmp, 'p3-1', {
+      blockCount: 1, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 2,
+    });
+    assert.equal(loadBlockState(tmp, 'p3-1').nonBlockStopCount, 2);
+  });
+
+  it('历史状态文件缺新字段 → 向后兼容默认 0', () => {
+    const dir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'p3-legacy.json'), JSON.stringify({ sessionId: 'p3-legacy', blockCount: 1 }));
+    assert.equal(loadBlockState(tmp, 'p3-legacy').nonBlockStopCount, 0);
+  });
+
+  it('非法 nonBlockStopCount（负/非整/字符串）→ 归 0', () => {
+    for (const bad of [-1, 1.5, 'x', null]) {
+      saveBlockState(tmp, 'p3-bad', {
+        blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: bad,
+      });
+      assert.equal(loadBlockState(tmp, 'p3-bad').nonBlockStopCount, 0, `bad=${bad}`);
+    }
+  });
+
+  it('整体覆写：不带回 nonBlockStopCount 会被抹平（合同不变，须原样带回）', () => {
+    saveBlockState(tmp, 'p3-c', {
+      blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 5,
+    });
+    saveBlockState(tmp, 'p3-c', { blockCount: 1, degradedRecorded: false });
+    assert.equal(loadBlockState(tmp, 'p3-c').nonBlockStopCount, 0);
+  });
+});

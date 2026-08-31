@@ -34,6 +34,8 @@ describe('judge-file-set-guard — 真实 import 闭包 == JUDGE_FILE_SET', () =
     const relFiles = new Set(result.files.map((abs) => path.relative(PLUGIN_ROOT, abs)));
     const expected = new Set(JUDGE_FILE_SET);
     assert.deepStrictEqual(relFiles, expected);
-    assert.equal(relFiles.size, 7);
+    // F270 P3：长度改由 SET 派生（此前硬编码 7 是第 5 处长度断言——C-W2 普查漏计的一处，
+    // 恰被本守卫的 deepStrictEqual 抓出：闭包与 SET 已一致，只有这行落后）
+    assert.equal(relFiles.size, JUDGE_FILE_SET.length);
   });
 });

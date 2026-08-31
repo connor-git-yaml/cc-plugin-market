@@ -36,6 +36,13 @@
         "enum": [
           "transcript-unavailable",
           "transcript-empty",
+          "in-flight-detected",
+          "in-flight-none",
+          "in-flight-undetermined",
+          "stop-hook-reentry",
+          "nonblock-limit-exhausted",
+          "nonblock-backstop-exhausted",
+          "nonblock-storage-unavailable",
           "transcript-too-large",
           "parse-timeout",
           "internal-error",

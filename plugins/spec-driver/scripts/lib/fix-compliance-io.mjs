@@ -308,6 +308,13 @@ function normalizeState(sessionId, parsed) {
     inFlightDeferCount: Number.isInteger(src.inFlightDeferCount) && src.inFlightDeferCount >= 0
       ? src.inFlightDeferCount
       : 0,
+    // F270 P3：解锁计时器。为「不计入 blockCount 但也不能立即放行」的裁决（证据陈旧 / 无法交叉
+    // 校验 / 在途 undetermined / 重入 / 指纹无进展）计数——耗尽后走终态可见放行（不锁死），
+    // 阈值 MUST ≥ BLOCK_LIMIT（delta-2 定时雷：被判方控桶权在手，阈值低于诚实地板即更坏绕过）。
+    // 缺省 0（向后兼容）。
+    nonBlockStopCount: Number.isInteger(src.nonBlockStopCount) && src.nonBlockStopCount >= 0
+      ? src.nonBlockStopCount
+      : 0,
   };
 }
 
@@ -351,7 +358,7 @@ function tryWriteState(filePath, payload) {
  * "谁负责保住哪个字段"变得不可审计。
  * @param {string} projectRoot
  * @param {string} sessionId
- * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number }} state
+ * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number, nonBlockStopCount?:number }} state
  * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[] }}
  */
 export function saveBlockState(projectRoot, sessionId, state) {
@@ -362,6 +369,12 @@ export function saveBlockState(projectRoot, sessionId, state) {
     degradedRecorded: Boolean(state && state.degradedRecorded),
     inFlightDeferCount: Number.isInteger(state && state.inFlightDeferCount) && state.inFlightDeferCount >= 0
       ? state.inFlightDeferCount
+      : 0,
+    // F270 P3：整体覆写语义不变——调用方须原样带回本字段，否则被抹平（见 normalizeState 注释）。
+    // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中"锚在可擦文件=backstop
+    //   整体可擦"后撤销——backstop 改为单调量比常量，不存锚，见 judge routeNonBlock。）
+    nonBlockStopCount: Number.isInteger(state && state.nonBlockStopCount) && state.nonBlockStopCount >= 0
+      ? state.nonBlockStopCount
       : 0,
     updatedAt: new Date().toISOString(),
   };

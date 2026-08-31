@@ -57,7 +57,7 @@ function walkChmod(dir, mode) {
   }
 }
 
-/** 在 base 目录下写入 JUDGE_FILE_SET 7 个文件（可覆盖单文件内容 / 标记 missing） */
+/** 在 base 目录下写入 JUDGE_FILE_SET 8 个文件（可覆盖单文件内容 / 标记 missing） */
 function writeJudgeFiles(base, overrides = {}) {
   for (const entry of JUDGE_FILE_SET) {
     if (Object.prototype.hasOwnProperty.call(overrides, entry) && overrides[entry] === null) {
@@ -77,7 +77,7 @@ function makeRepoProjectRoot(overrides = {}) {
   return projectRoot;
 }
 
-/** 构造一个合法快照目录（含 .claude-plugin/plugin.json + 7 文件） */
+/** 构造一个合法快照目录（含 .claude-plugin/plugin.json + JUDGE_FILE_SET 全部文件） */
 function makeSnapshotDir(name, overrides = {}) {
   const dir = path.join(tmp, name);
   fs.mkdirSync(path.join(dir, '.claude-plugin'), { recursive: true });
@@ -86,7 +86,7 @@ function makeSnapshotDir(name, overrides = {}) {
   return dir;
 }
 
-/** 只写 manifest（合法插件根，不含 7 文件），用于解析歧义等场景 */
+/** 只写 manifest（合法插件根，不含 SET 文件），用于解析歧义等场景 */
 function makePluginRootOnly(name, pluginName = 'spec-driver') {
   const dir = path.join(tmp, name);
   fs.mkdirSync(path.join(dir, '.claude-plugin'), { recursive: true });
@@ -215,13 +215,13 @@ describe('checkJudgeSnapshotDrift — Part A 确定性 fixture 场景', () => {
     assert.equal(r.reason, 'installed-snapshot-scan-error');
   });
 
-  it('#7 唯一候选解析成功 + 7 文件全一致 → in-sync', () => {
+  it('#7 唯一候选解析成功 + SET 全文件一致 → in-sync', () => {
     const projectRoot = makeRepoProjectRoot();
     const snap = makeSnapshotDir('snap7');
     const r = checkJudgeSnapshotDrift({ projectRoot, env: { CLAUDE_PLUGIN_ROOT: snap }, claudeHome: emptyClaudeHome() });
     assert.equal(r.status, 'in-sync');
     assert.equal(r.resolutionSource, 'claude-plugin-root');
-    assert.equal(r.files.length, 7);
+    assert.equal(r.files.length, JUDGE_FILE_SET.length);
     assert.ok(r.files.every((f) => f.status === 'match'));
   });
 
@@ -231,7 +231,7 @@ describe('checkJudgeSnapshotDrift — Part A 确定性 fixture 场景', () => {
     const snap = makeSnapshotDir('snap8', { [target]: 'DIFFERENT-CONTENT' });
     const r = checkJudgeSnapshotDrift({ projectRoot, env: { CLAUDE_PLUGIN_ROOT: snap }, claudeHome: emptyClaudeHome() });
     assert.equal(r.status, 'drift');
-    assert.equal(r.files.filter((f) => f.status === 'match').length, 6);
+    assert.equal(r.files.filter((f) => f.status === 'match').length, JUDGE_FILE_SET.length - 1);
     const mm = r.files.find((f) => f.file === target);
     assert.equal(mm.status, 'mismatch');
   });
@@ -265,12 +265,12 @@ describe('checkJudgeSnapshotDrift — Part A 确定性 fixture 场景', () => {
     assert.equal(r.reason, 'partial-file-read-failure');
     assert.ok(r.snapshotPath); // 快照路径保留非空
     assert.equal(r.resolutionSource, 'claude-plugin-root');
-    assert.equal(r.files.length, 7);
+    assert.equal(r.files.length, JUDGE_FILE_SET.length);
     const bad = r.files.find((f) => f.file === target);
     assert.equal(bad.status, 'indeterminate');
     assert.equal(bad.side, 'repo');
     assert.equal(bad.errorCode, 'EACCES');
-    assert.equal(r.files.filter((f) => f.status === 'match').length, 6);
+    assert.equal(r.files.filter((f) => f.status === 'match').length, JUDGE_FILE_SET.length - 1);
   });
 
   it('#11b 入口文件(JUDGE_FILE_SET[0]) EACCES + active 快照有效 → comparison-indeterminate（非 not-applicable，C2）', { skip: isRoot ? 'root' : false }, () => {
@@ -288,13 +288,13 @@ describe('checkJudgeSnapshotDrift — Part A 确定性 fixture 场景', () => {
     assert.equal(r.reason, 'partial-file-read-failure');
     assert.ok(r.snapshotPath);
     assert.equal(r.resolutionSource, 'claude-plugin-root');
-    assert.equal(r.files.length, 7);
+    assert.equal(r.files.length, JUDGE_FILE_SET.length);
     const bad = r.files.find((f) => f.file === entry);
     assert.equal(bad.status, 'indeterminate');
     assert.equal(bad.side, 'repo');
     assert.equal(bad.errorCode, 'EACCES');
     // 其余 6 个文件仍被正常比对（已确认明细不被隐藏）
-    assert.equal(r.files.filter((f) => f.status === 'match').length, 6);
+    assert.equal(r.files.filter((f) => f.status === 'match').length, JUDGE_FILE_SET.length - 1);
   });
 
   it('#11c 入口 EACCES 但同时另有文件真实 mismatch → 已确认 mismatch 保留（不被入口不可读吞掉，C2）', { skip: isRoot ? 'root' : false }, () => {
@@ -324,8 +324,8 @@ describe('checkJudgeSnapshotDrift — Part A 确定性 fixture 场景', () => {
     const bad = r.files.find((f) => f.file === eaccesTarget);
     assert.equal(bad.status, 'indeterminate');
     assert.equal(bad.side, 'repo');
-    // roster 7 个文件 - 1 mismatch - 1 EACCES = 5 个 match
-    assert.equal(r.files.filter((f) => f.status === 'match').length, 5);
+    // roster N 个文件 - 1 mismatch - 1 EACCES = N-2 个 match（N=JUDGE_FILE_SET.length，F270 P3 起为 8）
+    assert.equal(r.files.filter((f) => f.status === 'match').length, JUDGE_FILE_SET.length - 2);
   });
 });
 
