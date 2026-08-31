@@ -26,6 +26,18 @@
  *   确定性成本，多付一次构建。与修复前基线相比（CI 内 5 个文件 6 处 beforeAll 各自无条件
  *   build，其中 `cli-e2e.test.ts` 一个文件就占 2 处）仍净省 5 次构建，接受该成本，不为此
  *   额外引入基于 git commit/diff 的锚定回退证据链（超出本次 fix 的范围）。
+ * - F274 修订：上述 sidecar 曾隐含假设"一份 sidecar 只对应一份 dist"，但本仓库多
+ *   worktree 惯例是 `node_modules` 软链到主仓（sidecar 物理路径共享），`dist/` 却
+ *   per-worktree 独立——这打破了该假设，会让 worktree A 的构建见证被 worktree B
+ *   误采信，B 的陈旧 dist 被判新鲜（详见
+ *   specs/274-fix-global-setup-cross-worktree-freshness/fix-report.md 的 5-Why）。
+ *   修法双管齐下：(1) sidecar 文件名按 `sha256(PROJECT_ROOT)` 分键，每个 worktree
+ *   持有独立见证文件；(2) sidecar schema 升 v2，新增 `distSha256` 字段，绑定"这份
+ *   见证对应的是哪一份 dist 内容"（用 hashDistTree 现算，不信任 build-meta 的转述）。
+ *   该绑定提供的是 dist 的**自指一致性**证据（自见证以来未被改动/替换），**不**证明
+ *   dist 就是 build(inputs) 的完整产物；连同 `hashDistTree` 的覆盖边界（只看 `.js`、
+ *   不跟随 symlink 子目录、扩展名大小写敏感）一并记在 `computeDistFingerprint` 的
+ *   函数注释里——均为既有实现/既有构建流的边界，非本次修复引入。
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -34,7 +46,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, relative, resolve } from 'node:path';
 import type { GlobalSetupContext } from 'vitest/node';
 // @ts-expect-error — .mjs 无类型声明，运行时可解析（沿用 graph-quality-core.test.ts 既有约定）
-import { BUILD_INPUT_PATHS, BUILD_META_NAME } from '../scripts/lib/spectra-version-gate.mjs';
+import { BUILD_INPUT_PATHS, BUILD_META_NAME, hashDistTree } from '../scripts/lib/spectra-version-gate.mjs';
 
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST_CLI = join(PROJECT_ROOT, 'dist', 'cli', 'index.js');
@@ -45,7 +57,28 @@ const BUILD_META = join(PROJECT_ROOT, 'dist', BUILD_META_NAME as string);
 // （测试基础设施的内部状态不应该出现在发布产物里）。`.cache/` 天然不入包、不入库；
 // `npm ci` 清空 `node_modules` 时 sidecar 随之消失，触发一次保守重建，方向正确。
 // dist 本身的完整性判定不受影响——仍由 DIST_CLI + BUILD_META 的存在性单独锚定。
-const TEST_INPUTS_SIDECAR = join(PROJECT_ROOT, 'node_modules', '.cache', 'spectra', 'test-build-inputs.json');
+//
+// F274 修订：`.cache/` 随 `node_modules` 软链在多 worktree 间物理共享，若固定单一
+// 文件名会导致跨 worktree 互相踩踏见证（见文件头"已知边界"）。改为按 PROJECT_ROOT
+// 分键，每个 worktree 持有独立见证文件。`deriveSidecarPath`/`computeDistFingerprint`/
+// `readSidecar`/`writeSidecar`/`isDistFresh` 均导出并参数化，供
+// tests/integration/global-setup-cross-worktree-freshness.test.ts 用临时目录隔离验证，
+// 生产调用路径（本文件内 setup()/onTestsRerun()/runBuild()）均使用默认参数，行为不变。
+const DIST_DIR = join(PROJECT_ROOT, 'dist');
+
+export function deriveSidecarPath(projectRoot: string): string {
+  const key = sha256Hex(projectRoot).slice(0, 12);
+  return join(projectRoot, 'node_modules', '.cache', 'spectra', `test-build-inputs-${key}.json`);
+}
+
+// 承重接线：这行把「分键推导」接进生产路径，被 tests/integration/
+// global-setup-cross-worktree-freshness.test.ts 直接钉住（回退成固定共享名即转红）。
+export const TEST_INPUTS_SIDECAR = deriveSidecarPath(PROJECT_ROOT);
+// 关于 F274 之前的固定共享文件名 `test-build-inputs.json`：**有意不清理**。它仍是
+// pre-F274 兄弟 worktree（node_modules 软链共享同一份 .cache）的活见证，删掉会让那些
+// worktree 在过渡期每轮被迫重建（对抗审查中已实测到该 thrash）。本版代码从不读取旧
+// 文件名，留下的死文件无害，且会随 `npm ci` 清空 node_modules 一并消失——
+// "不删活见证"优先于"不留死文件"。
 
 // BUILD_INPUT_PATHS（F176 版本门禁语义）只覆盖 tsc 自身输入；本判据要覆盖完整
 // `npm run build` 流水线（prebuild + tsc + postbuild），额外补 prebuild/postbuild 脚本
@@ -57,6 +90,12 @@ const FULL_BUILD_INPUT_PATHS: string[] = [
   'scripts/inline-d3.ts',
   'scripts/postbuild-stamp.mjs',
   'scripts/lib/spectra-version-gate.mjs',
+  // why：prebuild（scripts/inline-d3.ts）实际读取这个 bundle 并把它内联进 src，所以它是
+  // 真正的构建输入之一。而 `node_modules` 在本仓库多 worktree 惯例下是跨 worktree 软链
+  // 共享的——d3-force 被升级、src 与 lockfile 都没变时，不覆盖它的判据会算出相同指纹并
+  // 假新鲜跳过重建（与 F274 主 bug 同一根因家族：共享物理路径影响构建产物却不在判据里）。
+  // 该路径不存在时 computeInputsFingerprint 的 visit() 本就直接跳过，无需特判。
+  'node_modules/d3-force/dist/d3-force.min.js',
 ];
 
 function sha256Hex(data: Buffer | string): string {
@@ -114,31 +153,78 @@ function computeInputsFingerprint(): string | null {
 }
 
 interface TestInputsSidecar {
-  schemaVersion: 1;
+  schemaVersion: 2;
   inputsSha256: string;
+  /** hashDistTree(dist).sha256 —— 绑定这份见证对应的具体 dist 内容（F274）。 */
+  distSha256: string;
 }
 
 /** 解析失败/schemaVersion 不匹配/字段缺失/文件不存在一律返回 null（保守偏置）。 */
-function readSidecarFingerprint(): string | null {
+export function readSidecar(sidecarPath: string = TEST_INPUTS_SIDECAR): TestInputsSidecar | null {
   try {
-    if (!existsSync(TEST_INPUTS_SIDECAR)) return null;
-    const parsed = JSON.parse(readFileSync(TEST_INPUTS_SIDECAR, 'utf-8')) as Partial<TestInputsSidecar>;
-    if (parsed.schemaVersion !== 1) return null;
-    return typeof parsed.inputsSha256 === 'string' ? parsed.inputsSha256 : null;
+    if (!existsSync(sidecarPath)) return null;
+    const parsed = JSON.parse(readFileSync(sidecarPath, 'utf-8')) as Partial<TestInputsSidecar>;
+    if (parsed.schemaVersion !== 2) return null;
+    if (typeof parsed.inputsSha256 !== 'string' || typeof parsed.distSha256 !== 'string') return null;
+    return { schemaVersion: 2, inputsSha256: parsed.inputsSha256, distSha256: parsed.distSha256 };
   } catch {
     return null;
   }
 }
 
-function writeSidecar(inputsSha256: string): void {
-  mkdirSync(dirname(TEST_INPUTS_SIDECAR), { recursive: true });
-  const payload: TestInputsSidecar = { schemaVersion: 1, inputsSha256 };
-  writeFileSync(TEST_INPUTS_SIDECAR, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+export function writeSidecar(
+  inputsSha256: string,
+  distSha256: string,
+  sidecarPath: string = TEST_INPUTS_SIDECAR,
+): void {
+  mkdirSync(dirname(sidecarPath), { recursive: true });
+  const payload: TestInputsSidecar = { schemaVersion: 2, inputsSha256, distSha256 };
+  writeFileSync(sidecarPath, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+}
+
+/**
+ * dist 目录内容指纹（F274）：复用 scripts/lib/spectra-version-gate.mjs 既有
+ * `hashDistTree`（与 F176 版本门禁 build-meta 的 distSha256 同一实现），不重新实现。
+ * try/catch 包裹（同 computeInputsFingerprint 的 W1 TOCTOU 处置）：遍历/读取窗口内
+ * dist 被并发改动/不可读时返回 null，调用方按"无法证明新鲜"处理。
+ * 成本：本仓库当前 329 个 `.js`，实测单次约 6–12ms（冷 page cache 时偏高端），
+ * 相对一次 `npm run build` 可忽略。
+ *
+ * 该指纹的证明力，如实界定（不 over-claim）：sidecar 里的 `distSha256` 只提供
+ * **自指一致性**证据——"这份 dist 自见证写入那一刻起没有被改动/替换过"。它
+ * **不证明** dist 恰好就是 build(inputs) 的完整产物：`npm run build` 没有 clean 步骤，
+ * 被删除/改名的 src 留下的孤儿 `.js` 会残留在 dist 里并被一并见证进指纹，此后
+ * 判据会认为这份"带孤儿的 dist"是新鲜的。这是既有构建流的结构性边界，非本次引入，
+ * 也非本判据能解决的问题（要根治需要 build 前 clean dist，超出本次 fix 范围）。
+ *
+ * `hashDistTree` 的覆盖边界（该既有实现的性质，如实登记以防误读）：
+ * - 只统计 `dist/` 下的 `.js`，非 `.js` 产物（`.d.ts`/`.json`/sourcemap）被单独篡改
+ *   而 `.js` 不变时捕获不到；
+ * - 目录递归用 `dirent.isDirectory()`，**不跟随** dist 内的 symlink 子目录（软链子树
+ *   里的 `.js` 不进指纹；软链的 `.js` 文件本身仍会被读取跟随）；
+ * - 扩展名匹配是大小写敏感的 `endsWith('.js')`，`.JS` 不可见。
+ * 后两条在真实 tsc 构建流下不可达（tsc 不产出软链子目录，也不产出大写扩展名）。
+ */
+export function computeDistFingerprint(distDir: string = DIST_DIR): string | null {
+  try {
+    return hashDistTree(distDir).sha256 as string;
+  } catch (err) {
+    console.warn(
+      `[global-setup] dist 内容指纹计算失败（TOCTOU 或不可读），保守判定为不新鲜: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return null;
+  }
 }
 
 /**
  * fresh 判定需要 dist 入口 + build-meta + sidecar 三者同时具备，且 sidecar 记录的指纹与
- * 当前现算指纹一致。`currentFingerprint` 为 `null`（指纹计算失败）时直接判不新鲜——
+ * 当前现算指纹一致，且 sidecar 记录的 distSha256 与当前现算的 dist 内容指纹一致
+ * （F274：后一条是本次修复新增的绑定校验，专门堵跨 worktree 假新鲜——即便
+ * inputsSha256 因 sidecar 跨 worktree 共享/同 commit 而"恰好匹配"，只要本 worktree
+ * 的 dist 实际内容与那次见证不同，就不会被判新鲜）。`currentFingerprint` 为
+ * `null`（指纹计算失败）时直接判不新鲜——
  * 无法证明新鲜就不能采信。任何一环缺失/不匹配都判不新鲜（宁可多建，不可漏建）。
  *
  * 关于 build-meta：`stampBuild`（`scripts/postbuild-stamp.mjs` 调用）在非 git 环境
@@ -148,11 +234,17 @@ function writeSidecar(inputsSha256: string): void {
  * 指纹而非 meta 本身的存在时间，旧 meta 配合"当前指纹与 sidecar 不匹配"仍会正确触发
  * 重建；meta 存在性检查只是防"入口文件在但构建从未走完/被中断"这一结构性怪态的兜底。
  */
-function isDistFresh(currentFingerprint: string | null): boolean {
+export function isDistFresh(
+  currentFingerprint: string | null,
+  opts: { distCli?: string; buildMeta?: string; sidecarPath?: string; distDir?: string } = {},
+): boolean {
+  const { distCli = DIST_CLI, buildMeta = BUILD_META, sidecarPath = TEST_INPUTS_SIDECAR, distDir = DIST_DIR } = opts;
   if (currentFingerprint === null) return false;
-  if (!existsSync(DIST_CLI) || !existsSync(BUILD_META)) return false;
-  const sidecarFingerprint = readSidecarFingerprint();
-  return sidecarFingerprint !== null && sidecarFingerprint === currentFingerprint;
+  if (!existsSync(distCli) || !existsSync(buildMeta)) return false;
+  const sidecar = readSidecar(sidecarPath);
+  if (sidecar === null || sidecar.inputsSha256 !== currentFingerprint) return false;
+  const currentDistFingerprint = computeDistFingerprint(distDir);
+  return currentDistFingerprint !== null && currentDistFingerprint === sidecar.distSha256;
 }
 
 /**
@@ -169,7 +261,8 @@ function isDistFresh(currentFingerprint: string | null): boolean {
  * 一旦开始，旧快照立即失效；只有构建完整走完（`execFileSync` 未抛）才重新写入新快照。
  * 这样任何失败/中途被打断的构建（`execFileSync` 抛异常）都会让 sidecar 处于"不存在"
  * 状态，下一次运行现算指纹时 `existsSync(TEST_INPUTS_SIDECAR)` 为 false，
- * `readSidecarFingerprint()` 返回 null，`isDistFresh()` 恒为 false，无条件触发重建——
+ * `readSidecar()`（F274 前名为 `readSidecarFingerprint()`）返回 null，`isDistFresh()`
+ * 恒为 false，无条件触发重建——
  * "构建整体失败/被打断"这一支路径的假新鲜窗口已被彻底堵死。
  *
  * 内部对抗复审后修订（W1 收尾）：上面这个修法仍留了一个更窄的残余窗口——如果构建**成功**
@@ -208,7 +301,14 @@ function runBuild(fingerprintBeforeBuild: string | null): void {
   // 不一致或重算失败（null）时保持"只删不写"，下次运行会因 sidecar 缺失继续重建。
   const fingerprintAfterBuild = computeInputsFingerprint();
   if (fingerprintAfterBuild !== null && fingerprintAfterBuild === fingerprintBeforeBuild) {
-    writeSidecar(fingerprintAfterBuild);
+    // F274：同时现算本次构建产出的 dist 内容指纹，绑定进 sidecar——不读取
+    // build-meta 里已算好的 distSha256（stampBuild 在非 git 环境会跳过盖章，
+    // 此时旧 meta 可能残留陈旧值），现算才是诚实证据源。计算失败（TOCTOU）时
+    // 同样保持"只删不写"，不落盘半绑定的 sidecar。
+    const distFingerprint = computeDistFingerprint();
+    if (distFingerprint !== null) {
+      writeSidecar(fingerprintAfterBuild, distFingerprint);
+    }
   }
   console.log('[global-setup] npm run build 完成');
 }

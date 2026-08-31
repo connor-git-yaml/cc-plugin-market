@@ -270,3 +270,12 @@
   ↳ **处置（2026-08-23 milestone-next）**：已分流 → **M10 P0 卡②**「Claude 侧 atomic-write 缺陷群」：`src/utils/atomic-write.ts`（mode 保全 + 软链跟随 + tmp 随机名 + 失败清理）+ `src/hooks/hook-installer.ts`（chmod 0755 放宽 / .bak COPYFILE_EXCL / remove 备份）+ doctor-io `.find` 首匹配漏诊；详单见 specs/262 fix-report「同源但分流」
 
 
+
+### F274 · 2026-08-31
+状态：待处理（1 条）
+来源：specs/274-fix-global-setup-cross-worktree-freshness/（implement 子代理交付报告反馈节）
+- [结果准确][Spectra impact] 再现：F202 —— `impact(tests/global-setup.ts::isDistFresh, upstream)` 对
+  "本次新导出/新增的 symbol"返回 symbol-not-found（图是上次构建快照，私有函数不在图中），fuzzy 只给
+  低置信候选。改进方向：symbol-not-found 的 hint 当前引导用户"检查 symbol id 格式"，会误导为拼写错误；
+  若该文件在图中存在而 symbol 不存在，hint 应提示"可能是新增/新导出符号，建议 `spectra batch
+  --mode graph-only` 重建后重试"，把用户导向正确下一步
