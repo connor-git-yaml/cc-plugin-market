@@ -74,9 +74,13 @@ export const PLUGIN_BUILD_PROBES = Object.freeze([
  * 一条 id 已经承诺了语义，其 outcome 就必须描述它承诺的那件事（W2 同源要求）。
  */
 export const HOOK_TRUST_PROBES = Object.freeze([
+  'app-server-hooks-list',
   'codex-home-hooks-json',
   'config-toml-readable',
   'config-toml-hooks-state',
+  // F275 对抗审查后新增（B2）：`$CODEX_HOME/plugins/cache/*/spec-driver` 目录存在性，
+  // 纯文件读，用作 `app-server-hooks-list` 探测失败时的 tie-break 证据
+  'codex-home-plugin-cache',
 ]);
 
 /**
@@ -482,8 +486,11 @@ export function sanitizeDetails(category, raw) {
  * summary 模板表：`code → { params, render }`。
  * `params` 声明每个模板参数的受限类型；render 只能消费已通过校验的参数，
  * **禁止**任何形式的自由输入拼接。
+ *
+ * 🔴 F275：导出仅用于**测试内省**（断言新增文案不出现某段字面文本），模板表本身不承载
+ * 任何来自子进程/用户输入的自由文本，导出不构成脱敏纪律的例外。
  */
-const SUMMARY_TEMPLATES = Object.freeze({
+export const SUMMARY_TEMPLATES = Object.freeze({
   'repo-version-read': {
     params: { product: 'enum:product', semver: 'semver' },
     render: (p) => `${p.product} 仓库声明版本为 ${p.semver}`,
@@ -612,13 +619,37 @@ const SUMMARY_TEMPLATES = Object.freeze({
     params: {},
     render: () => 'Codex 家目录下不存在 hooks.json，hook 信任状态不适用',
   },
+  /**
+   * 🔴 F275 对抗审查后新增（终版矩阵，前置门 `not-probed` 分支）：与 `hook-trust-not-applicable`
+   * 的区别是——本条明确说明"没探"（前置门判定两处都无痕迹后主动跳过 RPC），而不是暗示
+   * "探过了、确定没有"。二者指向同一个 `not-applicable` 状态，但文案的诚实程度不同。
+   */
+  'hook-trust-not-probed': {
+    params: {},
+    render: () => '未发现 Codex 插件或合并器 hooks 痕迹，hook 信任状态不适用',
+  },
+  /**
+   * 🔴 F275 对抗审查后新增（终版矩阵行 6）：`app-server-hooks-list` 确实尝试过但失败
+   * （`not-executable`/`error`），且既无 `hooks.json` 也无插件 cache 目录佐证——与
+   * `hook-trust-not-probed` 的区别是这里**真的发起过** RPC 探测，只是没能拿到结论。
+   */
+  'hook-trust-not-applicable-no-evidence': {
+    params: {},
+    render: () => '未发现本插件安装痕迹（Codex 原生探测未完成），hook 信任状态不适用',
+  },
   'hook-trust-untrusted': {
     params: {},
     render: () => 'hooks.json 已存在但未见信任记录，hook 在授予信任前不会执行',
   },
+  /**
+   * 🔴 F275 对抗审查后更正（spec C1）：T062 实测证伪「脚本内容变更导致信任失效」——
+   * `currentHash` 覆盖的是 `hooks.json` 里的 hook **声明**（如 command 串），不覆盖被
+   * 调用脚本本身的字节内容（改脚本 1 字节，`hooks/list` 回读的 `trustStatus` 不变）。
+   * 旧文案的因果表述已被证伪，改为中性表述——只说"记录与当前声明不一致"，不猜测原因。
+   */
   'hook-trust-modified': {
     params: {},
-    render: () => 'hook 脚本内容已变更导致既有信任失效，需要重新授予信任',
+    render: () => '信任记录与当前 hook 声明不一致，需要重新授予信任',
   },
   'hook-trust-trusted': {
     params: {},
@@ -635,6 +666,51 @@ const SUMMARY_TEMPLATES = Object.freeze({
   'hook-trust-unreadable': {
     params: { errorClass: 'enum:errorClass' },
     render: (p) => `hooks.json 存在但不可解析为合法配置（errorClass=${p.errorClass}），hook 信任状态不可判定`,
+  },
+  /**
+   * 🔴 以下 5 条为 F275 新增：判定来源是 `codex app-server` 的 `hooks/list` RPC
+   * （原生注册路径，见 plan §2 第 1/2 优先级），**不提及** `hooks.json` 存在性 ——
+   * F264 主路径下 `$CODEX_HOME/hooks.json` 根本不存在，复用旧文案会让报告说出一句
+   * 不成立的事实。新文案让用户能从 summary 本身分辨"这次判定走的是原生路径还是
+   * 合并器路径"（plan §3.1）。
+   */
+  'hook-trust-native-untrusted': {
+    params: {},
+    render: () => 'Codex 原生已注册本插件的 hook，其信任状态为 untrusted，hook 在授予信任前不会执行',
+  },
+  /**
+   * 🔴 F275 对抗审查后更正（spec C1）：同上，T062 实测证伪「脚本内容变更」这一因果——
+   * `currentHash` 绑定的是 `hooks.json` 的 hook **声明**，不是被调用脚本的字节内容。
+   * 改为实测支撑的表述："信任所绑定的 hook 声明内容已变更"。
+   */
+  'hook-trust-native-modified': {
+    params: {},
+    render: () =>
+      'Codex 原生已注册本插件的 hook，其信任状态为 modified（信任所绑定的 hook 声明内容已变更），需要重新授予信任',
+  },
+  'hook-trust-native-trusted': {
+    params: {},
+    render: () => 'Codex 原生已注册本插件的 hook，其信任状态为 trusted，与当前脚本内容一致',
+  },
+  'hook-trust-native-managed': {
+    params: {},
+    render: () =>
+      'Codex 原生报告本插件 hook 信任状态为 managed（企业托管），本诊断无法判定其是否已生效',
+  },
+  'hook-trust-native-probe-failed': {
+    params: { errorClass: 'enum:errorClass' },
+    render: (p) => `Codex 原生 hooks/list 探测失败（errorClass=${p.errorClass}），hook 信任状态不可判定`,
+  },
+  /**
+   * 🔴 F275 对抗审查后新增（终版矩阵行 5，假阴 C4）：RPC 探测失败，但插件 cache 证据表明
+   * 本插件确实曾被 Codex 的插件管理器安装过——与 `hook-trust-native-probe-failed` 共享
+   * "探测失败"这一事实，但额外点出"已知装过"，指引用户去排查为什么原生路径探不通，
+   * 而不是误以为"这台机器根本没装这个插件"。
+   */
+  'hook-trust-native-unreachable': {
+    params: { errorClass: 'enum:errorClass' },
+    render: (p) =>
+      `检测到本插件已安装，但 Codex 原生 hooks 探测未能完成（errorClass=${p.errorClass}），hook 信任状态不可判定`,
   },
   'cli-internal-error': {
     params: { errorClass: 'enum:errorClass' },
@@ -685,10 +761,13 @@ export function buildSummary(code, params = {}) {
  * remediation 模板表。
  *
  * 🔴 `grant-hook-trust` 的 `command` 恒为 `null`：FR-009 明确要求「任何步骤 MUST 事先
- * 经实测验证确实能达成目标状态」，而 hook 信任授予的确切命令形态尚未经 SC-013 人工
- * 验证（T062 挂账）。填一个看似合理实则无效的步骤，比不给步骤更有害。
+ * 经实测验证确实能达成目标状态」。`text` 于 F275 起逐字回填自 T062 人工验证报告
+ * （`specs/240-codex-runtime-closeout/verification/t062-manual-report-2026-08-31.md`
+ * L1824-1826）——这是**唯一**经实测确证可指导操作的步骤描述，不得改写措辞。
+ *
+ * 🔴 导出仅用于测试内省（与 `SUMMARY_TEMPLATES` 同理），不构成脱敏纪律例外。
  */
-const REMEDIATION_TEMPLATES = Object.freeze({
+export const REMEDIATION_TEMPLATES = Object.freeze({
   'upgrade-global-cli': {
     command: 'npm install -g spectra@latest',
     text: '全局 CLI 与仓库声明版本不一致或不可用，升级全局安装后重跑本诊断。',
@@ -707,7 +786,10 @@ const REMEDIATION_TEMPLATES = Object.freeze({
   },
   'grant-hook-trust': {
     command: null,
-    text: '请参考 Codex 官方文档，在 Codex 客户端中完成 hook 信任授予；在授予完成前 hook 不会执行。',
+    text:
+      '在目标 CODEX_HOME 下启动 Codex，输入 /hooks；选择标记为 untrusted 或 modified 的事件并按 Enter；' +
+      '确认命令与来源后，按界面提示的小写 t 授予当前哈希信任。显示 Trust Trusted 后退出并重跑 doctor。' +
+      '若没有显示 "Press t to trust"，不要猜测按键，按 Esc 返回并人工排查。',
   },
   'manual-investigate': {
     command: null,
@@ -843,6 +925,29 @@ function deriveHooksStateProbe(configProbe, stateSection) {
 }
 
 /**
+ * `nativeProbe.entries` 的原始 `trustStatus` 闭集（F275 §2）——`hooks/list` RPC 报告的
+ * 四种真实值。任一命中条目不属于此闭集视为协议漂移，不参与聚合。
+ */
+const NATIVE_TRUST_VALUE_SET = new Set(['managed', 'untrusted', 'trusted', 'modified']);
+
+/**
+ * 由 RPC 探到的我方条目原始 `trustStatus` 列表聚合出唯一判定结果（取严，F275 §2 优先级 1）。
+ * 协议漂移（任一值不在四值闭集内）→ 返回 `null`，调用方据此判 error/parse-failed，不猜测聚合。
+ *
+ * @param {string[]} entries
+ * @returns {'untrusted'|'modified'|'managed'|'trusted'|null}
+ */
+function aggregateNativeTrust(entries) {
+  for (const entry of entries) {
+    if (!NATIVE_TRUST_VALUE_SET.has(entry)) return null;
+  }
+  if (entries.includes('untrusted')) return 'untrusted';
+  if (entries.includes('modified')) return 'modified';
+  if (entries.includes('managed')) return 'managed';
+  return 'trusted';
+}
+
+/**
  * hook 信任状态判定（纯函数，FR-009 / `_grounding.md` §9.7 的 T003 算法）。
  *
  * 🔴 `stateSection.kind === 'present-unconfirmed'` → `indeterminate`：信任段的**确切
@@ -854,20 +959,59 @@ function deriveHooksStateProbe(configProbe, stateSection) {
  * 后者是**配置本身坏了**，授予信任修不了它，因此既不能报 `untrusted`
  * 也不能给 `grant-hook-trust`，只能落 `indeterminate` + `manual-investigate`。
  *
+ * 🔴 F275：新增 `nativeProbe` 入参（`codex app-server` 的 `hooks/list` RPC 结果）。
+ *
+ * 🔴 F275 对抗审查后修订（终版判定矩阵，2026-08-31）——原「`error` 无条件短路成
+ * `indeterminate`」被两路异构对抗同时证伪（误报面：制造无插件机噪声；假阴面：在
+ * F264 主路径上复活原始 bug）。新增第三个证据维度做 tie-break：`pluginCacheEvidence`
+ * （`$CODEX_HOME/plugins/cache/*\/spec-driver` 是否存在，纯文件读、与 RPC 独立）。
+ *
+ * | nativeProbe.outcome | hooksJsonPresent | pluginCacheEvidence | 结论 |
+ * |---|---|---|---|
+ * | `found`（≥1 条我方条目） | — | — | 按 entries 聚合取严 |
+ * | `absent`（RPC 成功、结构完好、确证无我方条目） | 任意 | — | 回退合并器判据 |
+ * | `not-probed`（前置门跳过） | false（前置门保证） | false（前置门保证） | `not-applicable` |
+ * | `not-executable` / `error` | **true** | — | **回退合并器判据**（RPC 失败仅 probe 留痕） |
+ * | `not-executable` / `error` | false | **true** | **`indeterminate`** + `manual-investigate` |
+ * | `not-executable` / `error` | false | false | `not-applicable` |
+ *
+ * `probes` 统一追加 `{id:'app-server-hooks-list', outcome, errorClass}` 与
+ * `{id:'codex-home-plugin-cache', outcome, errorClass:null}` 两条留痕，无论最终走哪条分支。
+ *
  * @param {{hooksJsonPresent: boolean,
  *          hooksJsonProbe?: {outcome: string, errorClass: string|null}|null,
  *          configProbe: {outcome: string, errorClass: string|null},
  *          stateSection: {kind: string, trustedHash?: string|null},
- *          currentHash: string|null}} input
+ *          currentHash: string|null,
+ *          nativeProbe?: {outcome: string, errorClass: string|null, entries: string[]}|null,
+ *          pluginCacheEvidence?: boolean}} input
  */
 export function classifyHookTrust(input) {
-  const { hooksJsonPresent, hooksJsonProbe = null, configProbe, stateSection, currentHash } = input;
+  const {
+    hooksJsonPresent,
+    hooksJsonProbe = null,
+    configProbe,
+    stateSection,
+    currentHash,
+    nativeProbe = null,
+    pluginCacheEvidence = false,
+  } = input;
   const hooksProbeEntry = {
     id: 'codex-home-hooks-json',
     outcome: hooksJsonProbe?.outcome ?? (hooksJsonPresent ? 'found' : 'absent'),
     errorClass: hooksJsonProbe?.errorClass ?? null,
   };
   const stateProbeEntry = { id: 'config-toml-hooks-state', ...deriveHooksStateProbe(configProbe, stateSection) };
+  const nativeProbeEntry = {
+    id: 'app-server-hooks-list',
+    outcome: nativeProbe?.outcome ?? 'not-probed',
+    errorClass: nativeProbe?.errorClass ?? null,
+  };
+  const pluginCacheProbeEntry = {
+    id: 'codex-home-plugin-cache',
+    outcome: pluginCacheEvidence ? 'found' : 'absent',
+    errorClass: null,
+  };
   const probes = [
     hooksProbeEntry,
     // 文件级事实：config.toml 读到了 / 不在 / 读不出。判定不直接消费它以外的含义
@@ -878,8 +1022,100 @@ export function classifyHookTrust(input) {
     },
     // 段级事实：hooks.state 段在不在（由 stateSection 驱动，与判定同源）
     stateProbeEntry,
+    // F275：原生 RPC 探针留痕，无论走哪条优先级分支均记录
+    nativeProbeEntry,
+    // F275 对抗审查后新增：插件 cache 证据留痕（tie-break 依据，纯文件读）
+    pluginCacheProbeEntry,
   ];
 
+  // F275 §2 优先级 1：RPC 探到 ≥1 条我方条目 → 由原始 trustStatus 聚合（主信息源）
+  if (
+    nativeProbe !== null &&
+    nativeProbe.outcome === 'found' &&
+    Array.isArray(nativeProbe.entries) &&
+    nativeProbe.entries.length > 0
+  ) {
+    const aggregated = aggregateNativeTrust(nativeProbe.entries);
+    if (aggregated === null) {
+      // 协议漂移防御：命中条目的 trustStatus 有不属于四值闭集的第 5 个值，不猜测聚合
+      return {
+        status: 'indeterminate',
+        trustStatus: 'indeterminate',
+        summaryCode: 'hook-trust-native-probe-failed',
+        summaryParams: { errorClass: 'parse-failed' },
+        remediationCode: 'manual-investigate',
+        probes,
+      };
+    }
+    if (aggregated === 'untrusted') {
+      return {
+        status: 'warning',
+        trustStatus: 'untrusted',
+        summaryCode: 'hook-trust-native-untrusted',
+        remediationCode: 'grant-hook-trust',
+        probes,
+      };
+    }
+    if (aggregated === 'modified') {
+      return {
+        status: 'warning',
+        trustStatus: 'modified',
+        summaryCode: 'hook-trust-native-modified',
+        remediationCode: 'grant-hook-trust',
+        probes,
+      };
+    }
+    if (aggregated === 'managed') {
+      // 决议 1.1：不猜测 managed 的语义，统一落 indeterminate
+      return {
+        status: 'indeterminate',
+        trustStatus: 'indeterminate',
+        summaryCode: 'hook-trust-native-managed',
+        remediationCode: 'manual-investigate',
+        probes,
+      };
+    }
+    // aggregated === 'trusted'
+    return {
+      status: 'ok',
+      trustStatus: 'trusted',
+      summaryCode: 'hook-trust-native-trusted',
+      remediationCode: null,
+      probes,
+    };
+  }
+
+  // F275 对抗审查后修订（终版矩阵行 4/5/6）：`not-executable`/`error` 不再无条件短路成
+  // `indeterminate`。`hooksJsonPresent===true` 时合并器结论本身是可判定的，RPC 失败只是
+  // 主信息源没探成，不能用它掩盖一个已经拿得出手的合并器结论（消误报 C-1/C-2）；
+  // `hooksJsonPresent===false` 时按插件 cache 证据 tie-break：有证据 → "装了但探不通"
+  // 落 `indeterminate`（消假阴 C4）；无证据 → 没有任何插件安装痕迹，落 `not-applicable`
+  // （消误报 C-1 的只读 CODEX_HOME / 旧版 Codex / EACCES / NODE_OPTIONS 污染四种噪声形态）。
+  if (
+    nativeProbe !== null &&
+    (nativeProbe.outcome === 'not-executable' || nativeProbe.outcome === 'error') &&
+    !hooksJsonPresent
+  ) {
+    if (pluginCacheEvidence) {
+      return {
+        status: 'indeterminate',
+        trustStatus: 'indeterminate',
+        summaryCode: 'hook-trust-native-unreachable',
+        summaryParams: { errorClass: nativeProbe.errorClass ?? 'unknown' },
+        remediationCode: 'manual-investigate',
+        probes,
+      };
+    }
+    return {
+      status: 'not-applicable',
+      trustStatus: 'not-applicable',
+      summaryCode: 'hook-trust-not-applicable-no-evidence',
+      remediationCode: null,
+      probes,
+    };
+  }
+
+  // F275 §2 优先级 3（fallback）：以下为原有四分支逻辑，逐字未改
   // hooks.json 在，但不可读 / 不是合法 JSON 对象 → 不可判定（且**不给**信任授予步骤）
   if (hooksProbeEntry.outcome === 'error') {
     return {
@@ -894,10 +1130,15 @@ export function classifyHookTrust(input) {
 
   // hooks.json 不存在 → 与 A3 解耦（plan §10.3），是确定性事实而非「读不到」
   if (!hooksJsonPresent) {
+    // F275 对抗审查后修订（W-5）：not-applicable 的措辞按 nativeProbe.outcome 分化——
+    // `not-probed`（前置门主动跳过）明确说"没探"；其余情形（`absent` 确证 / `null` 遗留
+    // 未接线场景）沿用既有措辞，不过度声明。
     return {
       status: 'not-applicable',
       trustStatus: 'not-applicable',
-      summaryCode: 'hook-trust-not-applicable',
+      summaryCode: nativeProbe !== null && nativeProbe.outcome === 'not-probed'
+        ? 'hook-trust-not-probed'
+        : 'hook-trust-not-applicable',
       remediationCode: null,
       probes,
     };

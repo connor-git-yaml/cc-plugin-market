@@ -19,11 +19,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { parseYamlDocument } from './simple-yaml.mjs';
 import {
   PRODUCTS,
   PRODUCT_VERSION_PATHS,
   PLUGIN_BUILD_PROBES,
+  ERROR_CLASSES,
   createCheck,
   assembleReport,
   compareCommits,
@@ -58,6 +60,35 @@ const CODEX_DOCTOR_TIMEOUT_MS = 15000;
 const MCP_INTROSPECTION_TIMEOUT_MS = 10000;
 
 const RELEASE_CONTRACT_REL = path.join('contracts', 'release-contract.yaml');
+
+/**
+ * F275：`codex app-server` 的 `hooks/list` RPC 探针 helper 路径。触碰原始子进程输出流
+ * 的全部逻辑都被隔离进这个独立文件（plan §3.2/§3.2b）——本模块自身**不再**直接持有
+ * 任何一条 hooks/list 原始记录，只把它当作又一个"跑一个命令、解析其正常返回值文本"的
+ * 子进程调用（与 `probeMcpServerBuild`/`probeCodexDoctorChecks` 完全同构）。
+ */
+const HOOKS_LIST_PROBE_HELPER_PATH = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'codex-hooks-list-probe.mjs',
+);
+
+/**
+ * 调用 helper 的外层超时。推导（plan §4.5）：helper 内部等待 `id:2` 的 deadline
+ * （`HOOKS_LIST_DEADLINE_MS = 6000`）+ 2000ms 安全余量（覆盖 helper 自身 Node 冷启动、
+ * `spawn` 系统调用开销、`kill` 信号送达与子进程实际终止之间的间隙、`execFileSync`
+ * 收尾开销）。若外层超时先于 helper 内部 deadline 触发，helper 会来不及打印结果就被杀掉
+ * ——本卡未假设这个余量绝对够用，留作实现阶段的一次真实验证点（见 T031）。
+ */
+const APP_SERVER_HOOKS_LIST_TIMEOUT_MS = 8000;
+
+/**
+ * helper 输出里 `entries` 每一项须归属的闭集（防御性二次校验用；即便 helper 是我方代码，
+ * 也不盲信子进程输出，镜像 `readIntrospectedSemver` 的"整串先过闸门"手法）。
+ */
+const RAW_NATIVE_TRUST_VALUES = Object.freeze(['managed', 'untrusted', 'trusted', 'modified']);
+
+/** helper 输出里 `outcome` 须归属的闭集（helper 恒真实执行了一次探测，不会自报 `not-probed`） */
+const HOOKS_LIST_PROBE_OUTCOMES = Object.freeze(['found', 'absent', 'error', 'not-executable']);
 
 /**
  * 默认子进程执行器：只回传子进程的标准输出文本，其错误输出直接丢弃（见文件头结构性防线）。
@@ -167,6 +198,14 @@ function readTextFile(absPath) {
 function fileExists(absPath) {
   try {
     return fs.statSync(absPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function dirExists(absPath) {
+  try {
+    return fs.statSync(absPath).isDirectory();
   } catch {
     return false;
   }
@@ -1259,7 +1298,131 @@ function readHooksJson(hooksJsonPath) {
   return { present: true, probe: { outcome: 'found', errorClass: null } };
 }
 
-function buildHookTrustCheck({ codexHome, roots }) {
+/**
+ * helper 输出的防御性二次校验：**不盲信**子进程输出，哪怕它是我方代码（plan §3.2）。
+ * allowlist 只读 `outcome`/`errorClass`/`entries` 三键；任何形状不符（非法 JSON、
+ * `outcome` 不在四值内、`entries` 非数组或含闭集外的值）→ 统一归约为
+ * `{outcome:'error', errorClass:'parse-failed', entries:[]}`；`errorClass` 不在
+ * `ERROR_CLASSES` 闭集内时归约为 `null`（不因单个次要字段拖垮整条判定）。
+ *
+ * @param {unknown} parsed
+ * @returns {{outcome: string, errorClass: string|null, entries: string[]}}
+ */
+function sanitizeNativeProbeOutput(parsed) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { outcome: 'error', errorClass: 'parse-failed', entries: [] };
+  }
+  const outcome = parsed.outcome;
+  if (typeof outcome !== 'string' || !HOOKS_LIST_PROBE_OUTCOMES.includes(outcome)) {
+    return { outcome: 'error', errorClass: 'parse-failed', entries: [] };
+  }
+  const errorClassRaw = parsed.errorClass;
+  const errorClass = ERROR_CLASSES.includes(errorClassRaw) ? errorClassRaw : null;
+  const entriesRaw = parsed.entries;
+  if (!Array.isArray(entriesRaw)) {
+    return { outcome: 'error', errorClass: 'parse-failed', entries: [] };
+  }
+  const entries = [];
+  for (const item of entriesRaw) {
+    if (typeof item !== 'string' || !RAW_NATIVE_TRUST_VALUES.includes(item)) {
+      // 协议漂移防御：闭集外的值不猜测放行，整体归约为 error/parse-failed
+      return { outcome: 'error', errorClass: 'parse-failed', entries: [] };
+    }
+    entries.push(item);
+  }
+  return { outcome, errorClass, entries };
+}
+
+/**
+ * F275：调用 `codex-hooks-list-probe.mjs` helper 子进程，获取 `nativeProbe`。
+ *
+ * 🔴 结构性约束（plan §3.2）：本函数是"调用一个命令、把它的正常返回值当文本解析"，
+ * 与 `probeMcpServerBuild`/`probeCodexDoctorChecks` 完全同构，**不包含**任何 RPC
+ * 请求构造 / JSON-RPC 响应解析 / own-entry 判据代码（全部在 helper 内完成）。
+ *
+ * ENOENT（helper 子进程本身起不来）与 helper 内部报告的"codex 二进制缺失"同等对待：
+ * 都映射为 `not-executable`，走 §2 优先级 3 回退合并器（与 `probeCodexCliInventory`
+ * 等既有探针的 ENOENT 处理同构），而不是短路成"RPC 明确失败"的 `error`。
+ *
+ * 🔴 F275 对抗审查后修订（W-1）：helper 的 stdout 取**最后一个非空行**再 `JSON.parse`——
+ * 若子进程的启动环境被 `NODE_OPTIONS` 之类的变量注入了额外的 preload 输出，helper 自身
+ * 唯一的一行 JSON 仍是最后一行，避免被前面的噪声行拖累成一次假的 `parse-failed`。
+ *
+ * @param {Function} exec 注入的子进程执行器
+ * @param {string} projectRoot
+ * @returns {{outcome: string, errorClass: string|null, entries: string[]}}
+ */
+function probeAppServerHooksList(exec, projectRoot) {
+  const result = runCommand(exec, process.execPath, [HOOKS_LIST_PROBE_HELPER_PATH, projectRoot], {
+    timeout: APP_SERVER_HOOKS_LIST_TIMEOUT_MS,
+  });
+  if (result.kind === 'error') {
+    return {
+      outcome: result.errorClass === 'ENOENT' ? 'not-executable' : 'error',
+      errorClass: result.errorClass,
+      entries: [],
+    };
+  }
+  const lines = result.text.split('\n').filter((line) => line.trim().length > 0);
+  const lastLine = lines.length > 0 ? lines[lines.length - 1] : '';
+  let parsed;
+  try {
+    parsed = JSON.parse(lastLine);
+  } catch {
+    return { outcome: 'error', errorClass: 'parse-failed', entries: [] };
+  }
+  return sanitizeNativeProbeOutput(parsed);
+}
+
+/**
+ * F275 对抗审查后新增（前置门，误报 C-4）：是否应跳过原生 `hooks/list` RPC 探测。
+ *
+ * 🔴 判据刻意用粗粒度（`$CODEX_HOME/plugins` 目录整体，而非具体到某个插件的 cache 子目录）——
+ * 只要这台机器上**存在任何** Codex 插件安装痕迹或合并器写入痕迹，就值得花一次 RPC 往返去
+ * 弄清真相；只有当两者都不存在时，才有正向证据支持"这台机器压根不可能有我方 hook"，此时
+ * 跳过 RPC 探测能避免向一个空的 `$CODEX_HOME` 写入 ~110 个 app-server 初始化文件、
+ * 触发子进程 spawn 与最长 8s 的墙钟等待（若门误判导致本该跳过的没跳过，后果只是多花一次
+ * 已有的 RPC 往返，不会引入新的错误结论）。
+ *
+ * @param {string} codexHome
+ * @param {boolean} hooksJsonPresent
+ * @returns {boolean}
+ */
+function shouldSkipNativeProbe(codexHome, hooksJsonPresent) {
+  const pluginsDirExists = dirExists(path.join(codexHome, 'plugins'));
+  return !pluginsDirExists && !hooksJsonPresent;
+}
+
+/**
+ * F275 对抗审查后新增（B2，假阴 C4 / 误报 W-2 的 tie-break 依据）：纯文件读探测
+ * `$CODEX_HOME/plugins/cache/<任意一级目录>/spec-driver` 目录是否存在。
+ *
+ * 与 `shouldSkipNativeProbe` 的粗粒度前置门不同，这里要的是**细粒度**证据——专门用于在
+ * `hooks/list` RPC 探测失败（`not-executable`/`error`）且合并器侧也拿不出结论
+ * （`hooksJsonPresent===false`）时做 tie-break：有这份 cache 目录，说明本插件曾经通过
+ * Codex 的插件管理器安装过，"探不出结论"应判 `indeterminate`（有装痕迹但查不清）而不是
+ * `not-applicable`（当作压根没装）。任何 fs 异常（权限 / 竞态删除等）一律归约为 `false`，
+ * 不抛出——这是一次纯粹的辅助性证据收集，不应让整条诊断因它失败。
+ *
+ * @param {string} codexHome
+ * @returns {boolean}
+ */
+function detectPluginCacheEvidence(codexHome) {
+  try {
+    const cacheDir = path.join(codexHome, 'plugins', 'cache');
+    if (!dirExists(cacheDir)) return false;
+    const marketplaceDirs = fs.readdirSync(cacheDir, { withFileTypes: true });
+    for (const entry of marketplaceDirs) {
+      if (!entry.isDirectory()) continue;
+      if (dirExists(path.join(cacheDir, entry.name, 'spec-driver'))) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function buildHookTrustCheck({ codexHome, roots, exec }) {
   const hooksJsonPath = path.join(codexHome, 'hooks.json');
   const hooksJson = readHooksJson(hooksJsonPath);
 
@@ -1287,12 +1450,22 @@ function buildHookTrustCheck({ codexHome, roots }) {
       : { kind: 'absent' };
   }
 
+  // F275 对抗审查后修订（前置门，误报 C-4）：无任何插件/合并器痕迹时跳过 RPC 往返，
+  // 纯文件读的 cache 证据探测则无论是否跳过都照常执行——它与 spawn 无关，跳过没有理由
+  // 连带跳过这一步留痕。
+  const pluginCacheEvidence = detectPluginCacheEvidence(codexHome);
+  const nativeProbe = shouldSkipNativeProbe(codexHome, hooksJson.present)
+    ? { outcome: 'not-probed', errorClass: null, entries: [] }
+    : probeAppServerHooksList(exec, roots.projectRoot);
+
   const verdict = classifyHookTrust({
     hooksJsonPresent: hooksJson.present,
     hooksJsonProbe: hooksJson.probe,
     configProbe,
     stateSection,
     currentHash: null,
+    nativeProbe,
+    pluginCacheEvidence,
   });
   return createCheck({
     id: 'hook-trust',
@@ -1353,7 +1526,7 @@ export function runDoctor({ projectRoot, codexHome, env = {}, exec: rawExec = de
   for (const product of PRODUCTS) {
     checks.push(buildMcpServerCheck({ product, exec, commitGate }));
   }
-  checks.push(buildHookTrustCheck({ codexHome, roots }));
+  checks.push(buildHookTrustCheck({ codexHome, roots, exec }));
 
   return assembleReport({ checks, generatedAt: now().toISOString() });
 }

@@ -24,6 +24,23 @@
 
 **SC-013 复测条件**：F275 修复 ship 后按同款隔离流程重跑三态（untrusted/modified 两态可无 UI 断言；trusted 态需一次 UI 授信 ≈5min）。复测绿之前 **A4 达标条件（tasks.md §5）不闭合**。
 
+### T062 复测（F275 修复后，2026-08-31）— 状态：**PENDING-user（2/3 段绿）**
+
+F275（`specs/275-fix-codex-doctor-hook-trust/`）已落地 doctor hook-trust 对齐插件主路径：app-server `hooks/list` 探针 + FR-009 三情形合同 + remediation 实测回填（与本文件 §T062 记录逐字节一致，直引号口径）。
+
+| SC-013 段 | 状态 | 证据 |
+|---|---|---|
+| 1. untrusted 观察 + remediation | **PASS（自动化）** | 单测覆盖（`tests/unit/codex-runtime-doctor.test.ts` 终版矩阵用例）+ 真实 `~/.codex`（F264 主路径，5 条 plugin hook 全 untrusted）端到端实跑：doctor 报 `warning` / `trustStatus: untrusted` / `remediation.code=grant-hook-trust`，文案为实测回填文本 |
+| 2. modified 观察 | **PASS（自动化断言口径）** | 单测覆盖（native entries 含 `modified` → warning + grant-hook-trust；聚合取严 `['trusted','modified']→modified`）；无 UI 自动化断言按 F275 卡面约定 |
+| 3. untrusted→trusted 真实迁移（含 UI 授信 + 无 bypass 真实事件） | **PENDING-user** | 需一次用户 UI 授信（≈5min）：在真实（或隔离）CODEX_HOME 按 doctor remediation 文案操作（/hooks → 选事件 → Enter → 小写 t → Trusted），随后重跑 `node plugins/spec-driver/scripts/codex-runtime-doctor.mjs --project-root . --format json`，观察 hook-trust 转 `ok` / `trustStatus: trusted`。做完后把本行翻 PASS 并在下方登记输出摘要 |
+
+**回填区（用户授信后填写）**：
+
+- [ ] 授信后 doctor 输出：`status=____ / trustStatus=____`（期望 `ok / trusted`）
+- [ ] 授信日期与 codex 版本：____
+
+三段全绿后本节转绿，即闭合 M9 A4 达标条件（tasks.md §5）。
+
 ## T063 — F239 T039 Codex 桌面 managed worktree 同步验证
 
 **未完成**（2026-08-31）：交回的报告文件为空，/tmp 原件不存在——测试未产出记录，需按派发 prompt 重做（桌面客户端建 managed worktree + worktree 内会话四项观察 + 桌面版本号）。

@@ -285,6 +285,21 @@
 
 
 
+### F275 · 2026-08-31
+状态：待处理（2 条）
+来源：specs/275-fix-codex-doctor-hook-trust/（fix 流程主线程实证 + 三个子代理交付报告反馈节）
+- [信息完整性][Spectra MCP] 再现：F265（ledger「commit 串从哪读」条目同型）—— plan/implement×2 三个
+  子代理独立裁定不用 `context`/`impact`：改动面在 fix-report/plan 里已完全给定（文件+函数级），关键难点是
+  "协议事实核对与设计裁决"而非"找 caller"，逐行读源码确认生命周期不可被 symbol 级摘要替代。复现计数 +1
+  （改动面给定的 fix 卡上 MCP 结构性零采用），供 M10 检索内核 v1 定位参考：这类卡的真实需求是
+  "文件内精读"而非"图导航"
+- [流程顺畅][fix-compliance Stop hook × 后台子代理等待] 变体新现象（与 F262 陈旧快照失明、F267 长异步
+  验证 PENDING 两条相邻但不同）：编排器在"四路对抗审查子代理后台运行中、主线程合法等待"状态下两次被
+  Stop hook block（要求 verify 闭环产物），但当时流程既未完成也不该产 verification-report——它在等审查
+  结论来决定还要修什么。判定器无法区分"流程没走完就想停"与"流程在等后台子代理"。本卡靠继续输出等待
+  turn 化解，无实害；但若未来判定器对重复 block 收紧，长后台等待型编排会被卡死。改进方向与 F267 条目
+  同向：判定器支持 in-flight 语义（如检测主 transcript 尾部存在未完成的 Task tool_use 时降级为放行+审计）
+
 ### F274 · 2026-08-31
 状态：待处理（1 条）
 来源：specs/274-fix-global-setup-cross-worktree-freshness/（implement 子代理交付报告反馈节）

@@ -13,6 +13,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,9 +23,16 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const CORE_PATH = path.join(repoRoot, 'plugins/spec-driver/scripts/lib/codex-runtime-doctor-core.mjs');
 const IO_PATH = path.join(repoRoot, 'plugins/spec-driver/scripts/lib/codex-runtime-doctor-io.mjs');
 const CLI_PATH = path.join(repoRoot, 'plugins/spec-driver/scripts/codex-runtime-doctor.mjs');
+// F275 / T016：新增独立探针 helper，纳入结构性静态守卫的扫描集（不允许游离在外）
+const PROBE_HELPER_PATH = path.join(repoRoot, 'plugins/spec-driver/scripts/lib/codex-hooks-list-probe.mjs');
 
 const core = await import(new URL('../../plugins/spec-driver/scripts/lib/codex-runtime-doctor-core.mjs', import.meta.url).href);
 const io = await import(new URL('../../plugins/spec-driver/scripts/lib/codex-runtime-doctor-io.mjs', import.meta.url).href);
+// F275 / T019：helper 层行为性 canary 测试的消费方——只用 `readAppServerResponse`/
+// `deriveResult` 两个纯函数，不调用 `main()`（它恒 `process.exit(0)`，会杀掉测试进程）。
+const probeHelper = await import(
+  new URL('../../plugins/spec-driver/scripts/lib/codex-hooks-list-probe.mjs', import.meta.url).href
+);
 
 /** canary 刻意含 `/` 与 `+`，使 URL-encoded / base64 形态与明文可区分 */
 const CANARY = 'F240CANARY/sk-live+9a8b7c6d5e4f3a2b1c0d';
@@ -567,6 +575,11 @@ describe('F240 T047 — 结构性静态守卫（禁止内容启发式 / 禁止�
     core: fs.readFileSync(CORE_PATH, 'utf-8'),
     io: fs.readFileSync(IO_PATH, 'utf-8'),
     cli: fs.readFileSync(CLI_PATH, 'utf-8'),
+    // F275 / T016：独立探针 helper——它确实有一处必须触碰原始子进程输出流的代码
+    // （见 `withoutDeclaredRawIoSite` 与「RAW-IO-SITE 标记对唯一性」用例），但仍须被
+    // 纳入本文件全部既有结构性静态守卫（DETAILS_SCHEMA / err.message-stack / 密钥
+    // 特征正则 / 裸 NUL 字节等），不允许游离在扫描范围之外。
+    probeHelper: fs.readFileSync(PROBE_HELPER_PATH, 'utf-8'),
   };
 
   it('DETAILS_SCHEMA 常量存在、被冻结，且被 createCheck 强制应用', () => {
@@ -676,6 +689,17 @@ describe('F240 T047 — 结构性静态守卫（禁止内容启发式 / 禁止�
     return text.replace(/process\.(stdout|stderr)/g, 'process.OWN_STREAM');
   }
 
+  /**
+   * F275 / T017（硬约束 6b）：剥掉 `codex-hooks-list-probe.mjs` 里被一对全文件唯一的
+   * 标记注释包裹的代码块——与 `withoutOwnStdio()` 剥离 `process.stdout`/`process.stderr`
+   * 的手法同构，只是豁免范围从"一个固定字面量"换成"一段被显式标记包裹、经下方独立
+   * 用例保证只出现一次的代码块"。**仅**对 `sources.probeHelper` 应用；`core`/`io`/`cli`
+   * 三个来源继续保持零豁免（不调用本函数）。
+   */
+  function withoutDeclaredRawIoSite(text: string): string {
+    return text.replace(/\/\* RAW-IO-SITE-BEGIN \*\/[\s\S]*?\/\* RAW-IO-SITE-END \*\//, '');
+  }
+
   it('`.stdout` / `.stderr` 从不出现在 createCheck 实参 / summary 赋值 / JSON.stringify 参数位置', () => {
     const forbiddenContexts = ['createCheck(', 'summary', 'JSON.stringify('];
     for (const [name, text] of Object.entries(sources)) {
@@ -691,10 +715,20 @@ describe('F240 T047 — 结构性静态守卫（禁止内容启发式 / 禁止�
 
   it('三层实现全都不读取被诊断进程的 stdout / stderr 属性（结构性防线）', () => {
     for (const [name, text] of Object.entries(sources)) {
-      const stripped = withoutOwnStdio(text);
+      // 🔴 只有 probeHelper 经过 RAW-IO-SITE 剥离；core/io/cli 三个来源继续零豁免，
+      // 不得新增任何豁免分支（这是本用例本身的护栏，不是本卡要放宽的对象）。
+      const stripped =
+        name === 'probeHelper' ? withoutDeclaredRawIoSite(withoutOwnStdio(text)) : withoutOwnStdio(text);
       expect(stripped.includes('.stdout'), `${name} 不得读取子进程 stdout 属性`).toBe(false);
       expect(stripped.includes('.stderr'), `${name} 不得读取子进程 stderr 属性`).toBe(false);
     }
+  });
+
+  it('RAW-IO-SITE 标记对在 probeHelper 中严格出现且仅出现一次（防止豁免范围被悄悄扩大）', () => {
+    const beginCount = (sources.probeHelper.match(/RAW-IO-SITE-BEGIN/g) ?? []).length;
+    const endCount = (sources.probeHelper.match(/RAW-IO-SITE-END/g) ?? []).length;
+    expect(beginCount).toBe(1);
+    expect(endCount).toBe(1);
   });
 
   /**
@@ -733,5 +767,176 @@ describe('F240 T047 — 结构性静态守卫（禁止内容启发式 / 禁止�
     expect(core.toScopedRelPath('/etc/passwd', roots)).toBe('outside-known-roots');
     expect(core.toScopedRelPath(`/tmp/repo/${CANARY}`, roots)).toBe('outside-known-roots');
     expect(core.toScopedRelPath(null, roots)).toBe('outside-known-roots');
+  });
+
+  /**
+   * F275 对抗审查后新增（D4）：`managed`/`untrusted`/`trusted`/`modified` 四值闭集在
+   * core（`NATIVE_TRUST_VALUE_SET`）、io（`RAW_NATIVE_TRUST_VALUES`）、helper
+   * （`NATIVE_TRUST_VALUES`）三处各自维护一份字面量数组。三份漂移的后果是某一层悄悄
+   * 放行 / 拒绝一个其余两层不认的值（如新增第 5 个值时漏改一处）。把隐性同步契约变成
+   * 一条会红的测试（质量 W-2）。
+   */
+  it('四值闭集(managed/untrusted/trusted/modified)字面量数组在 core/io/helper 三处逐字一致', () => {
+    const TRUST_SET_LITERAL_RE = /\[\s*'managed'\s*,\s*'untrusted'\s*,\s*'trusted'\s*,\s*'modified'\s*\]/;
+    const extract = (text: string): string | null => {
+      const m = text.match(TRUST_SET_LITERAL_RE);
+      return m ? m[0].replace(/\s+/g, '') : null;
+    };
+    const coreLiteral = extract(sources.core);
+    const ioLiteral = extract(sources.io);
+    const helperLiteral = extract(sources.probeHelper);
+    expect(coreLiteral, 'core.mjs 未找到四值闭集字面量数组').not.toBeNull();
+    expect(ioLiteral, 'io.mjs 的四值闭集字面量数组与 core.mjs 不一致').toBe(coreLiteral);
+    expect(helperLiteral, 'helper 的四值闭集字面量数组与 core.mjs 不一致').toBe(coreLiteral);
+  });
+});
+
+describe('F275 T018（硬约束 6c）— io 层对 hooks-list-probe helper 输出的防御性二次校验', () => {
+  /**
+   * 伪造 `process.execPath` 调用返回一个"看起来合法但夹带额外字段"的 JSON——
+   * `probeAppServerHooksList` 的 allowlist 只读 `outcome`/`errorClass`/`entries` 三键，
+   * 任何多余字段（哪怕命中 own-entry 判据用到的 `sourcePath`/`pluginId`/`command`）都
+   * 不得被放行，更不得出现在 `check.details`/序列化报告的任何输出通道里。
+   */
+  it('helper 输出夹带额外字段（sourcePath / pluginId / command 含 canary）→ 不进入任何输出通道', () => {
+    const fx = baseFixture({
+      exec: ((file: string) => {
+        if (file === process.execPath) {
+          return JSON.stringify({
+            outcome: 'found',
+            errorClass: null,
+            entries: ['trusted', 'untrusted'],
+            // 夹带的额外字段：allowlist 之外，必须被丢弃
+            sourcePath: CANARY,
+            pluginId: CANARY,
+            command: CANARY,
+            key: CANARY,
+          });
+        }
+        return enoentExec();
+      }) as Fixture['exec'],
+    });
+    // F275 对抗审查后新增前置门：无 `plugins` 目录 + 无 `hooksJson` 时会跳过 RPC 探测，
+    // 注入的假 exec 就不会被调用。本用例要测的正是 io 层对 exec 返回值的防御性二次校验，
+    // 必须先让前置门放行（造一个空的 `plugins` 目录即可，粒度与前置门判据一致）。
+    fs.mkdirSync(path.join(fx.codexHome, 'plugins'), { recursive: true });
+    const channels = channelsOf(fx);
+    for (const [name, text] of Object.entries(channels)) {
+      assertNoCanary(name, text);
+      expect(text.includes('sourcePath'), `通道 ${name} 泄漏了额外字段名 sourcePath`).toBe(false);
+      expect(text.includes('pluginId'), `通道 ${name} 泄漏了额外字段名 pluginId`).toBe(false);
+    }
+    // 行为面核对：allowlist 之外的字段确未影响 entries 聚合本身（untrusted 覆盖 trusted）
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: fx.env,
+      exec: fx.exec,
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+    expect(report.checks['hook-trust'].details.trustStatus).toBe('untrusted');
+  });
+
+  it('helper 输出 entries 数组里塞一个对象而非字符串 → io 层归约为 error/parse-failed，不泄漏', () => {
+    const fx = baseFixture({
+      exec: ((file: string) => {
+        if (file === process.execPath) {
+          return JSON.stringify({
+            outcome: 'found',
+            errorClass: null,
+            entries: [{ trustStatus: 'trusted', sourcePath: CANARY }],
+          });
+        }
+        return enoentExec();
+      }) as Fixture['exec'],
+    });
+    // 同上：需先放行前置门，且本用例还需要插件 cache 证据把 tie-break 引向
+    // indeterminate（否则终版矩阵行 6 会判 not-applicable，测不到 sanitize 逻辑本身）。
+    fs.mkdirSync(path.join(fx.codexHome, 'plugins', 'cache', 'cc-plugin-market', 'spec-driver'), {
+      recursive: true,
+    });
+    const channels = channelsOf(fx);
+    for (const [name, text] of Object.entries(channels)) {
+      assertNoCanary(name, text);
+      expect(text.includes('sourcePath'), `通道 ${name} 泄漏了额外字段名 sourcePath`).toBe(false);
+    }
+    const report = io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: fx.env,
+      exec: fx.exec,
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    });
+    expect(report.checks['hook-trust'].status).toBe('indeterminate');
+    expect(report.checks['hook-trust'].summary).toBe(
+      core.buildSummary('hook-trust-native-unreachable', { errorClass: 'parse-failed' }),
+    );
+  });
+});
+
+describe('F275 T019（硬约束 6d）— helper 层行为性 canary 测试（不依赖词法扫描的兜底）', () => {
+  /**
+   * 造一个最小的假 `codex app-server` 双工对象：不真的 spawn，只是一个 `EventEmitter`，
+   * 挂 `stdout`（另一个 `EventEmitter`）、`stdin.write`（no-op）、`kill`（no-op）。
+   * 收到 `readAppServerResponse` 写入的请求后，异步把伪造的 `hooks/list` 响应
+   * （`{id:2, result: payload}`）当作一行 NDJSON 推给 `stdout` 的 `data` 事件。
+   */
+  function makeFakeSpawnFn(payload: unknown) {
+    return () => {
+      const child = new EventEmitter() as EventEmitter & {
+        stdout: EventEmitter;
+        stdin: { write: (data: string) => void };
+        kill: (signal: string) => void;
+      };
+      child.stdout = new EventEmitter();
+      child.stdin = { write: () => {} };
+      child.kill = () => {};
+      setImmediate(() => {
+        child.stdout.emit('data', Buffer.from(`${JSON.stringify({ id: 2, result: payload })}\n`));
+      });
+      return child as unknown as ReturnType<typeof import('node:child_process').spawn>;
+    };
+  }
+
+  /**
+   * 能被 `command` 判定为"我方"的条目（命中 F275 对抗审查后修订的 command 层判据）。
+   *
+   * 🔴 `source` 刻意用 `'user'` 而非 `'plugin'`：修订后 `source==='plugin'` 的条目只认
+   * `pluginId`/`sourcePath` 两个结构化字段（假阴 C2 收口，第三方插件 command 提及我方
+   * 路径不再被误认领），本用例的 `pluginId`/`sourcePath` 恰好是 canary 垃圾值、不构成
+   * 合法归属证据，若仍标 `source:'plugin'` 会导致该条目整体不被认领（entries 变空），
+   * 测不到本用例真正想测的东西——命令层判据命中后，垃圾自由文本字段是否泄漏。
+   */
+  function ownEntryWithCanaries(canary: string) {
+    return {
+      source: 'user',
+      command:
+        'bash /home/user/.codex/plugins/cache/cc-plugin-market/spec-driver/4.4.3/hooks/pre-tool-use-guard.sh',
+      trustStatus: 'untrusted',
+      // 三个自由文本字段均嵌入 canary —— `deriveResult` MUST NOT 把它们写进返回值
+      sourcePath: canary,
+      pluginId: canary,
+      key: canary,
+    };
+  }
+
+  it.each([
+    ['CANARY', CANARY, FORMS],
+    ['HEX_CANARY', HEX_CANARY, HEX_FORMS],
+    ['HEX40_CANARY', HEX40_CANARY, HEX40_FORMS],
+  ])('%s 三种自由文本字段（sourcePath/pluginId/key）不出现在 helper 最终 JSON 的任何编码形式中', async (_label, canary, forms) => {
+    const projectRoot = '/tmp/fake-project-root';
+    const payload = { data: [{ cwd: projectRoot, hooks: [ownEntryWithCanaries(canary)] }] };
+    const readerOutcome = await probeHelper.readAppServerResponse(makeFakeSpawnFn(payload), projectRoot, 1000);
+    expect(readerOutcome.kind).toBe('ok');
+    const result =
+      readerOutcome.kind === 'ok' ? probeHelper.deriveResult(readerOutcome.response, projectRoot) : null;
+    expect(result).toEqual({ outcome: 'found', errorClass: null, entries: ['untrusted'] });
+    const finalJson = JSON.stringify(result);
+    for (const [encoding, form] of Object.entries(forms as Record<string, string>)) {
+      expect(finalJson.includes(form), `helper 最终 JSON 泄漏了 canary（编码：${encoding}）`).toBe(false);
+    }
+    // 行为性断言的核心：不是"字面没提到 canary"，而是结果里压根没有能承载它的字段
+    expect(Object.keys(result as object).sort()).toEqual(['entries', 'errorClass', 'outcome']);
   });
 });

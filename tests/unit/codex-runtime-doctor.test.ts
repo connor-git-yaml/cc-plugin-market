@@ -47,6 +47,20 @@ function makeFixture(options: {
   contractContent?: string;
   hooksJson?: string | null;
   configToml?: string | null;
+  /**
+   * F275 对抗审查后新增：是否在 `$CODEX_HOME` 下造一个空的 `plugins` 目录，模拟"这台机器上
+   * 确实装过某个 Codex 插件"（前置门 `shouldSkipNativeProbe` 只看这个目录在不在，不深入到
+   * 具体插件）。默认 `false`（沿用旧 fixture 的"全新家目录"形态）——需要驱动
+   * `app-server-hooks-list` 真正被调用的用例（原生环境相关测试）须显式传 `true`，
+   * 否则前置门会在 `hooksJson` 也不存在时跳过 RPC，注入的假 `exec` 永远不会被调用。
+   */
+  pluginsDir?: boolean;
+  /**
+   * F275 对抗审查后新增：是否在 `$CODEX_HOME/plugins/cache/<marketplace>/spec-driver` 下
+   * 造一个真实存在的目录，模拟"本插件确实通过 Codex 插件管理器安装过"（tie-break 用的
+   * cache 证据）。传 `true` 时隐含创建 `plugins` 目录（无需再单独传 `pluginsDir: true`）。
+   */
+  pluginSpecDriverCache?: boolean;
 }) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'f240-doctor-'));
   const projectRoot = path.join(base, 'repo');
@@ -76,6 +90,13 @@ function makeFixture(options: {
   }
   if (options.configToml != null) {
     fs.writeFileSync(path.join(codexHome, 'config.toml'), options.configToml);
+  }
+  if (options.pluginSpecDriverCache) {
+    fs.mkdirSync(path.join(codexHome, 'plugins', 'cache', 'cc-plugin-market', 'spec-driver'), {
+      recursive: true,
+    });
+  } else if (options.pluginsDir) {
+    fs.mkdirSync(path.join(codexHome, 'plugins'), { recursive: true });
   }
   return { base, projectRoot, codexHome };
 }
@@ -1248,6 +1269,476 @@ describe('F240 T048 — hook-trust 四情形固定状态值（FR-009）', () => 
   });
 });
 
+describe('F275 T005 — classifyHookTrust 的 nativeProbe 三段优先级（纯函数，不经 io.runDoctor）', () => {
+  /** 合并器 fallback 侧的固定 fixture：与旧「段缺失 → untrusted」用例同构（回归锚对照组） */
+  const fallbackUntrustedInput = {
+    hooksJsonPresent: true,
+    configProbe: { outcome: 'found', errorClass: null },
+    stateSection: { kind: 'absent' },
+    currentHash: null,
+  };
+  /** 合并器 fallback 侧另一固定 fixture：会给出 trusted 结论，用于验证优先级真正生效（不是侥幸凑对） */
+  const fallbackTrustedInput = {
+    hooksJsonPresent: true,
+    configProbe: { outcome: 'found', errorClass: null },
+    stateSection: { kind: 'confirmed', trustedHash: 'a'.repeat(64) },
+    currentHash: 'a'.repeat(64),
+  };
+
+  it('nativeProbe=null → 走原四分支（回归锚，与现有行为逐字一致），第 4 条留痕 outcome=not-probed', () => {
+    const verdict = core.classifyHookTrust(fallbackUntrustedInput);
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-untrusted');
+    expect(verdict.remediationCode).toBe('grant-hook-trust');
+    const native = verdict.probes.find((p) => p.id === 'app-server-hooks-list');
+    expect(native).toEqual({ id: 'app-server-hooks-list', outcome: 'not-probed', errorClass: null });
+  });
+
+  it("outcome='found', entries 含 untrusted → untrusted/warning/grant-hook-trust（覆盖合并器侧本会给出的 trusted 结论）", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'untrusted', 'trusted'] },
+    });
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-native-untrusted');
+    expect(verdict.remediationCode).toBe('grant-hook-trust');
+  });
+
+  it("outcome='found', entries 含 modified（无 untrusted）→ modified/warning", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'modified'] },
+    });
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('modified');
+    expect(verdict.summaryCode).toBe('hook-trust-native-modified');
+    expect(verdict.remediationCode).toBe('grant-hook-trust');
+  });
+
+  it("outcome='found', entries 含 managed（无 untrusted/modified）→ indeterminate/hook-trust-native-managed", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'managed'] },
+    });
+    expect(verdict.status).toBe('indeterminate');
+    expect(verdict.trustStatus).toBe('indeterminate');
+    expect(verdict.summaryCode).toBe('hook-trust-native-managed');
+    expect(verdict.remediationCode).toBe('manual-investigate');
+  });
+
+  it("outcome='found', entries 全 trusted → trusted/ok/remediation=null", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackUntrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'trusted'] },
+    });
+    expect(verdict.status).toBe('ok');
+    expect(verdict.trustStatus).toBe('trusted');
+    expect(verdict.summaryCode).toBe('hook-trust-native-trusted');
+    expect(verdict.remediationCode).toBeNull();
+  });
+
+  it('协议漂移防御：entries 含闭集外的第 5 个值 → 整体 error/parse-failed，不猜测聚合', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'some-unknown-fifth-value'] },
+    });
+    expect(verdict.status).toBe('indeterminate');
+    expect(verdict.trustStatus).toBe('indeterminate');
+    expect(verdict.summaryCode).toBe('hook-trust-native-probe-failed');
+    expect(verdict.summaryParams).toEqual({ errorClass: 'parse-failed' });
+    expect(verdict.remediationCode).toBe('manual-investigate');
+  });
+
+  it("outcome='absent'（RPC 成功但我方条目为 0）→ 回退合并器 fallback，逐字不变", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackUntrustedInput,
+      nativeProbe: { outcome: 'absent', errorClass: null, entries: [] },
+    });
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-untrusted');
+  });
+
+  it("outcome='not-executable'（codex 二进制缺失，ENOENT）+ hooksJsonPresent=true → 回退合并器 fallback，逐字不变", () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackUntrustedInput,
+      nativeProbe: { outcome: 'not-executable', errorClass: 'ENOENT', entries: [] },
+    });
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-untrusted');
+  });
+});
+
+describe('F275 对抗审查后修订 — classifyHookTrust 终版判定矩阵六行逐行用例', () => {
+  const fallbackUntrustedInput = {
+    hooksJsonPresent: true,
+    configProbe: { outcome: 'found', errorClass: null },
+    stateSection: { kind: 'absent' },
+    currentHash: null,
+  };
+  const fallbackTrustedInput = {
+    hooksJsonPresent: true,
+    configProbe: { outcome: 'found', errorClass: null },
+    stateSection: { kind: 'confirmed', trustedHash: 'a'.repeat(64) },
+    currentHash: 'a'.repeat(64),
+  };
+  /** 无合并器痕迹的输入（`hooksJsonPresent: false`），用于驱动矩阵行 5/6 */
+  const noMergerInput = {
+    hooksJsonPresent: false,
+    configProbe: { outcome: 'absent', errorClass: null },
+    stateSection: { kind: 'absent' },
+    currentHash: null,
+  };
+
+  it('行 4a：outcome=error + hooksJsonPresent=true → 回退合并器判据，采用合并器侧本会给出的 trusted 结论（消误报 C-2）', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'error', errorClass: 'rpc-error', entries: [] },
+    });
+    expect(verdict.status).toBe('ok');
+    expect(verdict.trustStatus).toBe('trusted');
+    expect(verdict.summaryCode).toBe('hook-trust-trusted');
+    expect(verdict.remediationCode).toBeNull();
+    // RPC 失败仅留痕，不影响最终判定（探测事实仍可查）
+    const native = verdict.probes.find((p) => p.id === 'app-server-hooks-list');
+    expect(native).toEqual({ id: 'app-server-hooks-list', outcome: 'error', errorClass: 'rpc-error' });
+  });
+
+  it('行 4b：outcome=not-executable + hooksJsonPresent=true → 回退合并器判据（untrusted 分支）', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackUntrustedInput,
+      nativeProbe: { outcome: 'not-executable', errorClass: 'ENOENT', entries: [] },
+    });
+    expect(verdict.status).toBe('warning');
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-untrusted');
+  });
+
+  it('行 5a：outcome=error + hooksJsonPresent=false + pluginCacheEvidence=true → indeterminate/hook-trust-native-unreachable（消假阴 C4）', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'error', errorClass: 'rpc-error', entries: [] },
+      pluginCacheEvidence: true,
+    });
+    expect(verdict.status).toBe('indeterminate');
+    expect(verdict.trustStatus).toBe('indeterminate');
+    expect(verdict.summaryCode).toBe('hook-trust-native-unreachable');
+    expect(verdict.summaryParams).toEqual({ errorClass: 'rpc-error' });
+    expect(verdict.remediationCode).toBe('manual-investigate');
+    const cacheProbe = verdict.probes.find((p) => p.id === 'codex-home-plugin-cache');
+    expect(cacheProbe).toEqual({ id: 'codex-home-plugin-cache', outcome: 'found', errorClass: null });
+  });
+
+  it('行 5b：outcome=not-executable + hooksJsonPresent=false + pluginCacheEvidence=true → indeterminate（与 error 同一处置方向）', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'not-executable', errorClass: 'ENOENT', entries: [] },
+      pluginCacheEvidence: true,
+    });
+    expect(verdict.status).toBe('indeterminate');
+    expect(verdict.trustStatus).toBe('indeterminate');
+    expect(verdict.summaryCode).toBe('hook-trust-native-unreachable');
+    expect(verdict.summaryParams).toEqual({ errorClass: 'ENOENT' });
+  });
+
+  it('行 6a：outcome=error + hooksJsonPresent=false + pluginCacheEvidence=false → not-applicable（消误报 C-1 噪声）', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'error', errorClass: 'rpc-error', entries: [] },
+    });
+    expect(verdict.status).toBe('not-applicable');
+    expect(verdict.trustStatus).toBe('not-applicable');
+    expect(verdict.summaryCode).toBe('hook-trust-not-applicable-no-evidence');
+    expect(verdict.remediationCode).toBeNull();
+    const cacheProbe = verdict.probes.find((p) => p.id === 'codex-home-plugin-cache');
+    expect(cacheProbe).toEqual({ id: 'codex-home-plugin-cache', outcome: 'absent', errorClass: null });
+  });
+
+  it('行 6b：outcome=not-executable + hooksJsonPresent=false + pluginCacheEvidence=false → not-applicable', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'not-executable', errorClass: 'EACCES', entries: [] },
+    });
+    expect(verdict.status).toBe('not-applicable');
+    expect(verdict.trustStatus).toBe('not-applicable');
+    expect(verdict.summaryCode).toBe('hook-trust-not-applicable-no-evidence');
+  });
+
+  it('行 3：outcome=not-probed（前置门跳过）+ hooksJsonPresent=false → not-applicable/hook-trust-not-probed（诚实标注"没探"）', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'not-probed', errorClass: null, entries: [] },
+    });
+    expect(verdict.status).toBe('not-applicable');
+    expect(verdict.trustStatus).toBe('not-applicable');
+    expect(verdict.summaryCode).toBe('hook-trust-not-probed');
+  });
+
+  it('行 2：outcome=absent（RPC 成功、确证我方条目为 0）→ 回退合并器判据，与 hooksJsonPresent 无关', () => {
+    const verdict = core.classifyHookTrust({
+      ...noMergerInput,
+      nativeProbe: { outcome: 'absent', errorClass: null, entries: [] },
+    });
+    expect(verdict.status).toBe('not-applicable');
+    expect(verdict.trustStatus).toBe('not-applicable');
+    // absent 属于既有 `hook-trust-not-applicable`（未标注"没探"），与 not-probed 措辞不同
+    expect(verdict.summaryCode).toBe('hook-trust-not-applicable');
+  });
+
+  it('聚合优先级区分性用例：[modified, untrusted] → untrusted（不是侥幸命中，真按优先级取严）', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['modified', 'untrusted'] },
+    });
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-native-untrusted');
+  });
+
+  it('聚合优先级区分性用例：[trusted, modified] → modified', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackUntrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'modified'] },
+    });
+    expect(verdict.trustStatus).toBe('modified');
+    expect(verdict.summaryCode).toBe('hook-trust-native-modified');
+  });
+
+  it('聚合优先级区分性用例：[managed, untrusted] → untrusted（untrusted 优先级高于 managed）', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['managed', 'untrusted'] },
+    });
+    expect(verdict.trustStatus).toBe('untrusted');
+    expect(verdict.summaryCode).toBe('hook-trust-native-untrusted');
+  });
+
+  it('双注册聚合：[trusted, trusted, untrusted] → untrusted（任一来源 untrusted 即取严）', () => {
+    const verdict = core.classifyHookTrust({
+      ...fallbackTrustedInput,
+      nativeProbe: { outcome: 'found', errorClass: null, entries: ['trusted', 'trusted', 'untrusted'] },
+    });
+    expect(verdict.trustStatus).toBe('untrusted');
+  });
+});
+
+describe('F275 T015 — io.mjs 三形态 + 边界集成用例（伪造 helper 输出驱动 hook-trust 类目）', () => {
+  /** 伪造 helper（`process.execPath`）打印给定的 nativeProbe JSON 后驱动一次 runDoctor */
+  function runHookTrust(
+    fixtureOptions: Parameters<typeof makeFixture>[0],
+    exec: ReturnType<typeof makeExec>,
+  ) {
+    const fx = makeFixture(fixtureOptions);
+    return io.runDoctor({
+      projectRoot: fx.projectRoot,
+      codexHome: fx.codexHome,
+      env: {},
+      exec,
+      now: () => new Date('2026-08-03T00:00:00.000Z'),
+    }).checks['hook-trust'] as {
+      status: string;
+      summary: string;
+      remediation: { code: string | null } | null;
+      details: { trustStatus: string };
+    };
+  }
+  function makeExecWithNativeProbe(payload: unknown) {
+    return makeExec({ [process.execPath]: { stdout: JSON.stringify(payload) } });
+  }
+
+  it('无插件环境：helper 探测「我方条目为 0」→ 回退合并器，逐字复用现有 T048 对照锚', () => {
+    // 🔴 F275 对抗审查后修订：前置门只看 `$CODEX_HOME/plugins` 目录 + hooksJson 是否存在，
+    // 二者皆无时会直接跳过 RPC（不调用注入的 exec）。本用例的意图是验证"RPC 真的探测过、
+    // 确证我方条目为 0"这条路径，因此需要 `pluginsDir: true` 让前置门不拦截。
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExecWithNativeProbe({ outcome: 'absent', errorClass: null, entries: [] }),
+    );
+    expect(check.status).toBe('not-applicable');
+    expect(check.details.trustStatus).toBe('not-applicable');
+  });
+
+  it('仅合并器环境（helper 本身 ENOENT，process.execPath 不在表中）：现有全部 4 个固定状态值断言逐字保持不变', () => {
+    expect(runHookTrust({ hooksJson: null }, makeExec({})).status).toBe('not-applicable');
+
+    const untrusted = runHookTrust(
+      { hooksJson: '{"Stop":[]}', configToml: '[mcp_servers.x]\nurl = "https://example.invalid"\n' },
+      makeExec({}),
+    );
+    expect(untrusted.status).toBe('warning');
+    expect(untrusted.details.trustStatus).toBe('untrusted');
+
+    const indeterminate = runHookTrust(
+      { hooksJson: '{"Stop":[]}', configToml: '[hooks.state]\ntrusted_hash = "deadbeef"\n' },
+      makeExec({}),
+    );
+    expect(indeterminate.status).toBe('indeterminate');
+    expect(indeterminate.details.trustStatus).toBe('indeterminate');
+
+    const bareHooks = runHookTrust(
+      { hooksJson: '{"Stop":[]}', configToml: '[hooks]\nsome_feature = true\n' },
+      makeExec({}),
+    );
+    expect(bareHooks.status).toBe('warning');
+    expect(bareHooks.details.trustStatus).toBe('untrusted');
+  });
+
+  it('【硬约束 5】无插件环境不得误报 warning：helper ENOENT 且本地无 hooks.json → status 不为 warning（F264「判不出⇒按启用算」镜像面）', () => {
+    const check = runHookTrust({ hooksJson: null }, makeExec({}));
+    expect(check.status).not.toBe('warning');
+    expect(check.status).toBe('not-applicable');
+  });
+
+  it('原生环境 —— all untrusted → status=warning trustStatus=untrusted remediation.code=grant-hook-trust', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExecWithNativeProbe({
+        outcome: 'found',
+        errorClass: null,
+        entries: ['untrusted', 'untrusted', 'untrusted', 'untrusted', 'untrusted'],
+      }),
+    );
+    expect(check.status).toBe('warning');
+    expect(check.details.trustStatus).toBe('untrusted');
+    expect(check.remediation?.code).toBe('grant-hook-trust');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-untrusted', {}));
+  });
+
+  it('原生环境 —— 含 modified（无 untrusted）→ status=warning trustStatus=modified', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExecWithNativeProbe({ outcome: 'found', errorClass: null, entries: ['trusted', 'modified'] }),
+    );
+    expect(check.status).toBe('warning');
+    expect(check.details.trustStatus).toBe('modified');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-modified', {}));
+  });
+
+  it('原生环境 —— 含 managed（无 untrusted/modified）→ status=indeterminate trustStatus=indeterminate', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExecWithNativeProbe({ outcome: 'found', errorClass: null, entries: ['trusted', 'managed'] }),
+    );
+    expect(check.status).toBe('indeterminate');
+    expect(check.details.trustStatus).toBe('indeterminate');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-managed', {}));
+  });
+
+  it('原生环境 —— 全 trusted → status=ok trustStatus=trusted remediation=null', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExecWithNativeProbe({ outcome: 'found', errorClass: null, entries: ['trusted', 'trusted'] }),
+    );
+    expect(check.status).toBe('ok');
+    expect(check.details.trustStatus).toBe('trusted');
+    expect(check.remediation).toBeNull();
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-trusted', {}));
+  });
+
+  it('F275 对抗审查后修订：RPC 明确失败（rpc-error）+ hooksJsonPresent=true → 回退合并器判据，采用合并器侧结论（消误报 C-2）', () => {
+    // 🔴 旧行为（已被两路异构对抗证伪）：RPC 失败无条件短路成 indeterminate，即使合并器侧
+    // 能给出确定结论也被掩盖。终版矩阵行 4：hooksJsonPresent=true 时合并器结论本身可信，
+    // RPC 失败只留痕（见下方 attemptedProbes 断言），不再压制这个可判定的结论。
+    const check = runHookTrust(
+      { hooksJson: '{"Stop":[]}', configToml: '[mcp_servers.x]\nurl = "https://example.invalid"\n' },
+      makeExecWithNativeProbe({ outcome: 'error', errorClass: 'rpc-error', entries: [] }),
+    ) as unknown as {
+      status: string;
+      details: { trustStatus: string; attemptedProbes: Array<{ id: string; outcome: string; errorClass: string | null }> };
+      remediation: { code: string | null } | null;
+    };
+    expect(check.status).toBe('warning');
+    expect(check.details.trustStatus).toBe('untrusted');
+    expect(check.remediation?.code).toBe('grant-hook-trust');
+    const nativeProbeEntry = check.details.attemptedProbes.find((p) => p.id === 'app-server-hooks-list');
+    expect(nativeProbeEntry).toEqual({ id: 'app-server-hooks-list', outcome: 'error', errorClass: 'rpc-error' });
+  });
+
+  it('helper 输出畸形（entries 含闭集外的值）+ 有插件 cache 证据 → indeterminate/hook-trust-native-unreachable（终版矩阵行 5）', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginSpecDriverCache: true },
+      makeExecWithNativeProbe({ outcome: 'found', errorClass: null, entries: ['trusted', 'some-unknown-fifth-value'] }),
+    );
+    expect(check.status).toBe('indeterminate');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-unreachable', { errorClass: 'parse-failed' }));
+  });
+
+  it('helper 输出畸形（整体不是合法 JSON）+ 有插件 cache 证据 → indeterminate/hook-trust-native-unreachable', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginSpecDriverCache: true },
+      makeExec({ [process.execPath]: { stdout: '{not valid json' } }),
+    );
+    expect(check.status).toBe('indeterminate');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-unreachable', { errorClass: 'parse-failed' }));
+  });
+
+  it('helper 输出畸形（outcome 不在四值内）+ 有插件 cache 证据 → indeterminate/hook-trust-native-unreachable', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginSpecDriverCache: true },
+      makeExecWithNativeProbe({ outcome: 'something-unexpected', errorClass: null, entries: [] }),
+    );
+    expect(check.status).toBe('indeterminate');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-unreachable', { errorClass: 'parse-failed' }));
+  });
+
+  it('helper 输出畸形（entries 夹带非字符串项：对象而非字符串）+ 有插件 cache 证据 → indeterminate/hook-trust-native-unreachable', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginSpecDriverCache: true },
+      makeExecWithNativeProbe({ outcome: 'found', errorClass: null, entries: [{ trustStatus: 'trusted' }] }),
+    );
+    expect(check.status).toBe('indeterminate');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-unreachable', { errorClass: 'parse-failed' }));
+  });
+
+  it('helper 输出畸形（整体不是合法 JSON）+ 无任何插件安装痕迹 → not-applicable/hook-trust-not-applicable-no-evidence（终版矩阵行 6）', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExec({ [process.execPath]: { stdout: '{not valid json' } }),
+    );
+    expect(check.status).toBe('not-applicable');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-not-applicable-no-evidence', {}));
+  });
+
+  it('B3：helper stdout 前缀夹带非 JSON 噪声行（模拟 NODE_OPTIONS preload 输出）→ 取最后一个非空行解析，不误判 parse-failed', () => {
+    const check = runHookTrust(
+      { hooksJson: null, pluginsDir: true },
+      makeExec({
+        [process.execPath]: {
+          stdout: [
+            '(node:12345) Warning: some preload noise',
+            '',
+            JSON.stringify({ outcome: 'found', errorClass: null, entries: ['trusted'] }),
+            '',
+          ].join('\n'),
+        },
+      }),
+    );
+    expect(check.status).toBe('ok');
+    expect(check.details.trustStatus).toBe('trusted');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-native-trusted', {}));
+  });
+
+  it('前置门跳过：无 plugins 目录 + 无 hooksJson → helper 从不被 spawn，直接 not-applicable/hook-trust-not-probed', () => {
+    // 🔴 `exec` 是 io.runDoctor 全部检查共用的注入执行器（repo-version 不用它，但
+    // global-cli/plugin-build/mcp-server 都会调），因此不能断言"从未被调用"，只能断言
+    // "从未以 helper 路径为参数被调用"——这才是前置门真正要保证的事。
+    let helperInvoked = false;
+    const baseExec = makeExec({});
+    const exec = ((file: string, args: string[] = [], options?: unknown) => {
+      if (args.some((a) => a.includes('codex-hooks-list-probe.mjs'))) {
+        helperInvoked = true;
+      }
+      return baseExec(file, args, options as never);
+    }) as unknown as ReturnType<typeof makeExec>;
+    const check = runHookTrust({ hooksJson: null }, exec);
+    expect(helperInvoked).toBe(false);
+    expect(check.status).toBe('not-applicable');
+    expect(check.summary).toBe(core.buildSummary('hook-trust-not-probed', {}));
+  });
+});
+
 describe('F240 — `config-toml-hooks-state` 的 outcome 必须描述「段」而非「文件可读性」', () => {
   type Probe = { id: string; outcome: string; errorClass: string | null };
   type HookCheck = {
@@ -1327,16 +1818,30 @@ describe('F240 — `config-toml-hooks-state` 的 outcome 必须描述「段」�
     expect(verdict.status).toBe('indeterminate');
   });
 
-  it('两条 id 均在 HOOK_TRUST_PROBES 内，故能通过 details 净化漏斗（不被结构性丢弃）', () => {
-    for (const id of ['config-toml-readable', 'config-toml-hooks-state']) {
+  it('全部 id 均在 HOOK_TRUST_PROBES 内，故能通过 details 净化漏斗（不被结构性丢弃）', () => {
+    for (const id of [
+      'config-toml-readable',
+      'config-toml-hooks-state',
+      'app-server-hooks-list',
+      'codex-home-plugin-cache',
+    ]) {
       expect(core.HOOK_TRUST_PROBES).toContain(id);
     }
     const { probes } = hookProbes('[mcp_servers.x]\nurl = "https://example.invalid"\n');
+    // 🔴 F275 对抗审查后修订：本 fixture 的 hooksJson 存在 → 前置门不拦截，io.runDoctor 会
+    // 真的调用注入的 exec（`makeExec({})`，process.execPath 未登记 → ENOENT）；classifyHookTrust
+    // 因而收到 `nativeProbe.outcome === 'not-executable'`，而不是旧版假设的 `not-probed`。
+    // `codex-home-plugin-cache` 是新增的第 5 条留痕（纯文件读，本 fixture 未造 cache 目录 → absent）。
     expect(probes.map((p) => p.id)).toEqual([
       'codex-home-hooks-json',
       'config-toml-readable',
       'config-toml-hooks-state',
+      'app-server-hooks-list',
+      'codex-home-plugin-cache',
     ]);
+    const nativeProbeEntry = probes.find((p) => p.id === 'app-server-hooks-list');
+    expect(nativeProbeEntry?.outcome).toBe('not-executable');
+    expect(nativeProbeEntry?.errorClass).toBe('ENOENT');
   });
 });
 
