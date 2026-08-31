@@ -70,7 +70,21 @@
 - [流程顺畅度][spec-driver 编排] 宿主机反复休眠时长时后台子代理结构性不可靠：本卡 specify ×2、implement 收口 ×2 共 4 次 Task 死于「computer went to sleep / 600s 看门狗」，两次遗留半成品工作树需主线程盘点接手；~10-17 min 的审查型子代理全部存活。改进方向：编排器对 >15 min 的实现型委派考虑分段化（每段自包含可恢复），或在派发前探测宿主电源管理状态
 - [信息完整性][Spectra 图产物] 再现：F260/F263 —— 边/节点 metadata 无 provenance 标记在本卡再次拖累：撞 id 场景两条生产路径（unified/extraction）取不同 lineRange 被静默合流，逐条目归因"这个值来自哪条路径"只能实跑内存态调试；tree-sitter regex 退化条目也只能靠 `[REGEX] ` signature 前缀这种带内标记识别
 
+
 ## 已处理
+
+### F240-T062 · 2026-08-31
+状态：已处理（4 条：3 已分流 → F275 / 1 记录）
+来源：T062 人工验证报告（specs/240-codex-runtime-closeout/verification/t062-manual-report-2026-08-31.md；执行方为 Codex 会话，其硬约束禁改仓库故由 milestone-next 代为落账）
+- [结果准确性][codex:doctor] hook-trust 维度在 F264 插件主路径下**结构性假阴性**：只探 `$CODEX_HOME/hooks.json` 存在性，未消费 app-server `hooks/list`，原生 untrusted/trusted/modified 一律误报 not-applicable、remediation=null
+  ↳ **处置**：已分流 → **F275**
+- [结果准确性][spec 假设] FR-009/_grounding §8.3「信任按脚本内容哈希绑定」被 codex 0.151.0 实测证伪：`currentHash` 只覆盖 hooks.json 声明，脚本改 1 字节仍 trusted——顺带暴露新安全面（受信 hook 脚本可被静默替换）
+  ↳ **处置**：已分流 → **F275**（spec 修订 + 评估我方脚本内容指纹核验）
+- [信息完整性][codex:doctor] grant-hook-trust remediation 模板缺实测步骤；本次已产出唯一允许回填的实测文案（/hooks → 选事件 → Enter → 小写 t；仅 modified→trusted 完整观察）
+  ↳ **处置**：已分流 → **F275**
+- [流程顺畅度][T062 骨架] tasks.md §3 步骤骨架写于 F264 之前（依赖全局 hooks.json 路径），与插件主路径不兼容；双注册守卫本身工作正常并给出清晰指引
+  ↳ **处置**：记录（骨架已被本次执行实际路径取代，verification-report.md 为准；无需改 shipped tasks.md 正文）
+
 
 ### F264 · 2026-08-24
 状态：已处理（2 已修复 / 1 已分流）

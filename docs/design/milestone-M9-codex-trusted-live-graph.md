@@ -625,6 +625,20 @@ Gate 0: M8 F188 收官 + master 全绿 —— ✅ 已满足（2026-07-20 F212 �
    Wiki→M11 / 门禁换 hook 侧实时账本 / Codex 插件自带 hooks 为主 / 内核 v1 不含 embedding 先测后建）。
    **本节 §10 的排期由 `milestone-M10-ship-honest-graph-evidence-gate.md` 取代，候选池保留。**）
 
+  （2026-08-31b **T062 人工验证已执行（codex 0.151.0）→ 判定 FAIL，缺陷全在我方侧 → 派生 F275；
+   T063 未完成**：Codex 会话 + 用户 UI 授信按隔离 CODEX_HOME 流程执行三段——**Codex 原生能力全
+   PASS**（5 条 plugin hook 发现/展开、F264 双注册守卫拦截合并器、UI 授信 untrusted→trusted、无
+   bypass 真实事件执行含 SessionStart 落盘证据、hooks.json 声明改 1 字节→modified、小写 t 重授信）；
+   **SC-013 FAIL 的全部原因在我方**：① doctor hook-trust 维度只探 `$CODEX_HOME/hooks.json` 存在性、
+   未消费 app-server hooks/list → F264 插件主路径下把三态一律误报 not-applicable / remediation=null
+   （FR-009 三情形合同未兑现）；② FR-009/_grounding §8.3「信任按脚本内容哈希绑定」被 0.151.0 实测
+   证伪——currentHash 只覆盖 hooks.json 声明，**脚本文件改 1 字节仍 trusted**（新安全面：受信 hook
+   脚本可被静默替换）；③ remediation 模板缺实测步骤（本次已产出唯一允许回填的实测文案）。
+   完整一手记录入库 specs/240-…/verification/t062-manual-report-2026-08-31.md，聚合结论入
+   specs/240-…/verification-report.md（新建），tasks.md T062 行改 `[MANUAL-EXECUTED · FAIL]`。
+   **A4 达标条件因 SC-013 FAIL 不闭合：M9 正式收官前置更新为 F275 ship + SC-013 复测绿 + T063 重做**
+   （T063 交回的报告为空文件、/tmp 原件不存在=测试未产出记录，需按派发 prompt 重做并记桌面版本号）。）
+
 **Gate 0 吸收点（2026-07-20 F212 终报落账，用户指示"未超 GStack，按结果调整规划"）**：
 
 1. 🔴 **新增 M9 产品卡：fix 模式方向误读修复（V008 病根，对 GStack 剩余差距的全部结构性部分）**

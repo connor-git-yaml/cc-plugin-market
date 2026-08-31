@@ -109,7 +109,7 @@ M9 把图做"对"了，但**没有一个用户拿到过**：npm `spectra-cli` �
 ## 8. 人工验证与环境前置
 
 - **本机版本落后**：Claude Code 2.1.215（最新 2.1.241，hooks 合同在 2.1.212/214/222/232 有变化）、Codex 0.144.6（最新 0.149.0）。升级后：Codex 杀 stale app-server（memory）；**F245 的 headless hook 基线在 2.1.241 重跑**；Stop hook payload 确认含 `background_tasks`/`last_assistant_message`。
-- **T062 / T063**（M9 正式收官前置）改在 **Codex ≥0.149 且 P0-B 双注册守卫落地后**执行，并新增两项观察：linked worktree 信任校验（#39616）对 F239 managed worktree 是否触发新提示；受限环境下 `AGENTS.override.md` 是否可读（#39653，否则 turn setup 直接失败）。完成判据仍要求记录客户端版本号。
+- **T062 已执行（2026-08-31，codex 0.151.0）→ FAIL，派生 F275**〔doctor hook-trust 对插件主路径假阴性 + 「脚本内容哈希」spec 假设被证伪 + remediation 回填；诊断类，异构对抗档位；ship 后 SC-013 复测绿才闭合 A4〕；**T063 未完成**（报告空文件，需重做）。原前置已满足（Codex ≥0.149、P0-B 守卫已实测拦截）。原文：T062 / T063（M9 正式收官前置）改在 **Codex ≥0.149 且 P0-B 双注册守卫落地后**执行，并新增两项观察：linked worktree 信任校验（#39616）对 F239 managed worktree 是否触发新提示；受限环境下 `AGENTS.override.md` 是否可读（#39653，否则 turn setup 直接失败）。完成判据仍要求记录客户端版本号。
 - 平台：CI 仅 ubuntu、hooks 全 .sh、README 无平台声明——M10 不承诺 Windows，但文档须明示；`npm audit` 纳入 release:check 前置。
 
 ## 9. 交付门禁与纪律
