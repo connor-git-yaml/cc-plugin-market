@@ -7,6 +7,27 @@
 **Revision note**: 三路异构对抗审查（22C/21W）后按处置文档 §3 清单修订；修订由主编排器 inline 执行 `[DEGRADED: inline-execution — specify 修订 — 3 次子代理均死于 API 错误（宿主休眠 ×1 / 连接中断 ×2），零产出，error 证据在案]`
 **Input**: 把 fix-compliance 门禁的证据源从「官方明言会异步滞后的 transcript」换成「PostToolUse hook 侧实时写入的会话证据账本」，并用 harness 原生的 `background_tasks` 字段判「在途」，取代现有基于次数预算（`IN_FLIGHT_DEFER_LIMIT` / `BLOCK_LIMIT`）的猜测式有界放行。
 
+## 0-pre. 实现状态与偏离登记（集成 review 补，2026-09-01）
+
+> 🔴 **本 spec 描述的是需求全集，而本卡实际交付的是其子集。** 阅读任何 FR 前先看这张表。
+> 逐条状态、SC 诚实口径（6 真达成 / 4 部分 / 5 未达成）与结构性根因见 `tasks.md` Phase 7；
+> 完整审查证据见 `verification/integrated-review.md`。
+>
+> **本卡已实现**：病根 iv（锚点三分，双端到端变异守护）、病根 i 的**委派维度**（账本补充，
+> 含 FR-021 归属过滤）、病根 ii 的**探测手段**（`background_tasks` 三态；但
+> `IN_FLIGHT_DEFER_LIMIT` 一行未动）、采集器（含 US5 零落盘闸门）、审计留痕补全。
+>
+> **本卡未实现，移交后续卡**：病根 iii（FR-026..029，GATE 暂停 —— 实测原样存活）、病根 v
+> （FR-012，状态竞态）、PENDING（FR-030..032）、snapshot-stale / US4（FR-033）、
+> FR-043/044（活性自检）、FR-010（坏行诊断码）、FR-011（超限读取侧）、在途相关性过滤。
+>
+> **⚠️ 必答③ 与实现相反，以实现为准**：本文档必答③ 仍写着「`stop_hook_active === true` 时
+> 判定器不得再次产生阻断、必须放行」+「计入 `nonBlockStopCount`」。该前提已被 P3 对抗**实跑
+> 证伪**——如此接线会把最短完全绕过从「2 次 exit 2 + failed 终态」砍到「1 次 exit 2 + 零终态
+> 零 stderr」，即惩罚动作自身生成豁免；而它声称的防死循环收益在 `BLOCK_LIMIT=2` 下本就不存在。
+> 实现终版：重入**不改变任何路由**，仅并入 `stop-hook-reentry` 诊断码。FR-029「重入不计
+> `blockCount`」同属未实现（撤线时一并倒掉，该撤的只是「必放行」）。本条 spec 待后续卡修订。
+
 ## 0. 事实源与前提登记
 
 本规范的所有 harness 行为类断言均以下列事实源为准，**不得以文档推断或历史卡面记载替代**（F264 教训）：
@@ -278,6 +299,12 @@
 ### 账本采集（US1 · 病根 i / v）
 
 - **FR-001** `[必须]`：系统 MUST 在每次工具调用完成后，由 PostToolUse 事件触发的独立采集器向**本会话的证据账本**追加一条结构化记录。
+  > ⚠️ **集成 review 修订**：matcher 已由 `""`（全工具）收窄为 `"Agent|Task"`。D-1 方向 X 下账本只
+  > 承担委派证据，消费侧 `DELEGATION_TOOL_NAMES={Agent,Task}` 之外的条目从不被读取，全量触发是
+  > 纯开销（端到端 43–63ms/次且 PostToolUse 阻塞后续工具）并放大病根 v 的并发写入面。
+  > **代价已登记**：零委派会话此后不产生账本文件，FR-043/044 的活性哨兵失去物理前提（详见
+  > `tasks.md` Phase 7 与 `codex-hooks-schema.mjs` 注释）。故本条 FR 的"每次工具调用"应读作
+  > "每次**委派类**工具调用"。
 - **FR-002** `[必须]`：账本条目 MUST 至少包含：`tool_use_id`、`tool_name`、`tool_input` 摘要、`prompt_id`、`session_id`、hook 侧生成的时间戳；当且仅当 payload 提供时 MUST 包含 `agent_id` / `agent_type`。
 - **FR-003** `[必须]`：账本条目的时间戳 MUST 由 hook 进程生成，且其语义 MUST 在规范与产物中显式声明为「hook 执行时刻」而非「工具调用时刻」（C-1）。
 - **FR-004** `[必须]`：采集器 MUST 在任何失败路径下以退出码 0 结束，且 MUST NOT 向 stdout/stderr 输出会被 harness 转成 `hook blocking error` 的内容（C-10）。

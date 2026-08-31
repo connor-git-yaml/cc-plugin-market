@@ -46,6 +46,7 @@
           "ledger-entry-conflict",
           "ledger-window-undetermined",
           "ledger-supplemented-role",
+          "ledger-agent-id-inversion-suspected",
           "transcript-too-large",
           "parse-timeout",
           "internal-error",

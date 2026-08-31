@@ -60,11 +60,15 @@
 
 ### 实现
 - [x] T306 `lib/in-flight-verdict.mjs`（100 行）——三态纯函数;结构性判据;type 只进文案。
-- [x] T307 io `normalizeState`/`saveBlockState` 加 `nonBlockStopCount`(缺失→0) + `firstNonBlockEntryBaseline`(非整→null)——io.test 65/0,含"不带回即抹平"合同钉。
+- [x] T307 io `normalizeState`/`saveBlockState` 加 `nonBlockStopCount`(缺失→0)——io.test 含"不带回即抹平"合同钉。⚠️ 集成 review 更正：任务原文里的 `firstNonBlockEntryBaseline` **已在 P3 对抗中撤销**(锚存可擦文件⟹backstop 整体可擦)，最终实现无该字段；judge 侧残留的传参已随集成 review 清除。
 - [x] T308 **4 处**(非 plan 预估 3 处)save 调用点带回：routeBlock / releaseDegraded(签名+两调用点) / 推迟分支 / routeNonBlock 自身。
-- [x] T309 `routeNonBlock`：快路径 `>=NON_BLOCK_LIMIT(=BLOCK_LIMIT=2)` ∥ backstop `entryDelta>=NON_BLOCK_ENTRY_LIMIT(420)`（首次 nonBlock 设锚,transcript 派生不可擦）。
+- [x] T309 `routeNonBlock`：快路径 `>=NON_BLOCK_LIMIT(=BLOCK_LIMIT=2)` ∥ backstop `entryCount>=NON_BLOCK_ENTRY_LIMIT(420)`(单调量直接比常量、**不存锚**——"首次 nonBlock 设锚"的初版写法已被 P3 对抗撤销)。⚠️ **函数生产零接线**，见 T311。
 - [x] T310 FR-016/019：in-flight(harness) 进既有三闸门推迟,预算照旧消耗 `inFlightDeferCount` 不动 `blockCount`;no-in-flight 权威覆盖不推迟(US2-AS2);undetermined 退回 transcript 派生(向后兼容)。
-- [x] T311 FR-046：重入(必答③)接入 routeNonBlock——不计 blockCount、计 nonBlockStopCount、耗尽走终态可见 paused + 触发标注;非布尔 stop_hook_active 按非重入。GATE 指纹去重通道预留同路由(指纹含账本条目数,随 P4 落)。
+- [ ] ~~T311 FR-046：重入(必答③)接入 routeNonBlock……GATE 指纹去重通道预留同路由(随 P4 落)~~ → 🔴 **集成 review 撤回勾选**。实际状态：
+  - 重入接入**已被 P3 对抗证伪并撤线**(初版把最短完全绕过从 2 次 exit2 砍到 1 次)，现为纯诊断登记、裁决与改动前逐字一致 —— 撤线本身正确，但**该撤的是"必放行"、不该撤的是"不计 blockCount"**(FR-029)，后者一并倒掉了；
+  - "GATE 指纹去重随 P4 落" —— **P4 做的是账本接入，从未接 GATE 指纹**，本卡 6 个 Phase 无一是 GATE。跨 phase 承诺断链，无人回头兑现；
+  - 故 `routeNonBlock` / `NON_BLOCK_LIMIT` / `NON_BLOCK_ENTRY_LIMIT` / `nonBlockStopCount` **生产零接线**，其单元测试是合同钉不是端到端守护(变异：首行 `return 0` 只红 5 个直接 import 用例)；
+  - **FR-026/027/028/029 四个 `[必须]` 全部未实现，病根 iii 原样存活，SC-004 未达成** —— 移交后续卡。
 - [x] T312 save 失败 → 视同耗尽走终态可见放行(fail-closed,无静默通道)。
 - [x] T313 **Phase 收尾 · 异构对抗 ×2**——已派(fail-open 计时器绕过 / fail-closed 误伤锁死),留痕 `verification/p3-adversarial.md`。
 - 判定链新模块入 `JUDGE_FILE_SET`(7→8) + 四处断言同步(计数断言改 length 派生防再硬编码);schema enum +7 新码(FR-049)。
@@ -91,7 +95,7 @@
 
 ## Phase 5 · 分发登记 + 清单同步（机械但漏一处即红，plan §4a 裁决五）
 
-- [x] T501 `hooks/hooks.json` 加 PostToolUse 账本 handler——**✅** matcher 空（全工具触发 FR-001）;PostToolUse 下现两条（prettier + 账本），与 Stop 下两条同构。
+- [x] T501 `hooks/hooks.json` 加 PostToolUse 账本 handler——**✅** matcher（原为空=全工具触发 FR-001）;PostToolUse 下现两条（prettier + 账本），与 Stop 下两条同构。  ⚠️ **集成 review 更正**：matcher 已收窄为 `Agent|Task`（见 T702），本行原述的「matcher 空」已不成立。
 - [x] T502 `codex-hooks-schema.mjs` 双处登记——**✅** `OWNED_HOOK_SCRIPT_SUFFIXES`(6) + `OWNED_HOOK_EXPECTED_EVENT`(6) 一致;「恒 5 条」口径改 6（F264/C-11）。
 - [x] T503 `JUDGE_FILE_SET`——**已在 P3/P4 完成**（in-flight-verdict + ledger-reader + ledger-writer，7→10，五处断言 length 派生）。
 - [x] T504 verdict-event schema enum——**已在 P2/P3/P4 增量补**（transcript-empty / 7 在途计时器码 / 3 账本码）;守卫不照抄单文件模板。
@@ -115,3 +119,59 @@
 - [ ] 全部 CRITICAL 收口，判定器 Phase 各留异构对抗留痕；commit 标注「Codex 审查暂停，异构档位缺席」。
 - [ ] 五量守卫全绿（plan §6）；G-1..G-10 护栏各配守卫。
 - [ ] push 前 7 字段 report 等用户确认（CLAUDE.local.md）。
+
+---
+
+## Phase 7 · 集成态整体 review 处置（2026-09-01，六 Phase 全 commit 后）
+
+六个 Phase 的对抗只审各自 delta，**跨 phase 集成态无人审过**。补审后（主线程实跑 + 三路异构对抗）
+发现 7 个 CRITICAL 级问题，全部由主线程亲自实跑复现。完整报告：`verification/integrated-review.md`。
+
+### 已修（三条会造成实际伤害的）
+
+- [x] T701 🔴 **FR-021 `agent_id` 归属过滤**（CRITICAL-1）：PostToolUse 对子代理内部工具同样触发且
+  `session_id` 同值 → 整棵会话树写进同一本账本，而 reader 全文无 `agent_id` ⟹「主线程只派
+  general-purpose、由它在内部再派 implement/verify」被判成主线程走了两阶段收口，**不需伪造任何
+  字节**。修：reader 逐条剔除带非空串 `agent_id` 的条目；全部条目都带则落
+  `ledger-agent-id-inversion-suspected`（FR-021 后半「落诊断而非静默改判」）。
+  实跑 A/B：修前 exit 0 → 修后 exit 2。**FR-021 是 `[必须]` 但 plan/tasks 零命中——从未落到任务卡。**
+- [x] T702 🔴 **US5 零落盘闸门**（CRITICAL-2）：采集器无项目判断 → 空目录单次工具调用即凭空创建
+  `.specify/`，装了插件的用户**每个项目每次工具调用**都被写盘。修：writer 最前置
+  `isSpecDriverProject`（`.specify/` 已存在才写，采集器绝不自建），闸门早于 `isClaudeShape` 以防
+  两条 selfdiag 兜底路径穿透；hooks.json matcher `""`→`"Agent|Task"`（D-1 下账本只承担委派证据，
+  全量触发是纯开销 43–63ms/次且放大病根 v 的并发面）。实跑：修后空目录 0 项。
+- [x] T703 🔴 **合规路径审计留痕**（CRITICAL-3，三方独立命中）：`ledger-supplemented-role` 恰好在
+  唯一有安全意义的路径（账本把 exit 2 翻成 exit 0）上丢失——补充没改变结论时留痕、翻成放行时反而
+  无痕，伪造通过与诚实通过在审计流里逐字节相同。修：合规早退的 `buildAuditEvent` 传
+  `extraDiagnostics: result.ledgerDiagnostics`。实跑：`[]` → `["ledger-supplemented-role"]`。
+- [x] T704 文档诚实化：删 judge 假注释「spec 侧已留痕修订」（spec.md 在本卡改动 **0 行**）；
+  `routeNonBlock` JSDoc 与实现对齐并标注生产零接线；清除 `firstNonBlockEntryBaseline` 幽灵传参；
+  撤回 T311 勾选、更正 T307/T309；reader 成功路径补 `windowUndetermined`。
+
+### 移交后续卡（本卡不实现，诚实标注）
+
+| 项 | 状态 | 说明 |
+|---|---|---|
+| **病根 iii** GATE 暂停（FR-026/027/028/029 四个 `[必须]`） | **未实现** | 实测 GATE 暂停态反复 Stop 仍 0→1→2 后降级放行，与改动前逐字一致。方案函数 `routeNonBlock` 生产零接线。spec 已记录两个候选识别信号均被取证排除，只剩 A-4 指纹去重一条路，成本 ≈ 一个 Phase |
+| **病根 v** 状态竞态（FR-012） | **未实现** | `saveBlockState` 仍是裸 `writeFileSync`，4 调用点全是裸 read-modify-write；本卡还往同一竞态覆写里加了字段。matcher 收窄已缓解采集器侧的并发放大 |
+| **PENDING**（FR-030..032） | **未实现** | plan 无 Phase、tasks 无任务、生产码零命中 |
+| **snapshot-stale**（FR-033 / US4） | **未实现** | 同上；`last_assistant_message` 在生产无任何消费者 |
+| FR-043/044 活性自检 | **未实现** | `ledgerResult.state` 构造后从不读，`ledger-open` 哨兵只写不读 → 采集器整条挂掉时门禁零信号（F245 病根形态） |
+| FR-010 `ledger-entry-corrupt` | **未实现** | 坏行只 `corruptCount += 1`，而 `corruptCount` 被判定器丢弃 |
+| FR-011 超限读取侧处理 | **未实现** | 超限后残账本照常补充委派 |
+| 在途相关性过滤 | **未实现** | `background_tasks` 判据为纯"数组非空"，一个 `npm run dev` 即换 3 次推迟放行（非对抗场景自然触发）。收窄需结构性判据，`type` 是展示别名不可用 |
+
+### SC 诚实口径（更正 P6 自查与 commit 里的「13 达成」）
+
+| 判定 | SC | 计 |
+|---|---|---|
+| **真达成** | SC-003 / 005 / 006 / 007 / 010 / 013 | **6** |
+| **部分** | SC-001（`IN_FLIGHT_DEFER_LIMIT` 一行未动）/ SC-002（真实语料只覆盖非空数组一态）/ SC-008 / SC-009（`last_assistant_message` 那条测的是无消费者的字段；账本消费那条只跑写侧纯函数） | **4** |
+| **未达成/假达成** | SC-004（无 GATE 机制）/ SC-011（全仓零耗时断言；实测全链 43–63ms > 建议 ≤50ms）/ SC-012（活性自检未实现）/ SC-014（**假达成**：靠零接线函数 + 测试直调）/ SC-015（backstop 长在零接线函数里） | **5** |
+
+### 结构性根因（供后续卡引以为戒）
+
+范围**在 plan 阶段静默收缩**：卡面 5 病根、spec 49 FR，而 plan 的 6 个 Phase 未为病根 iii/v、
+PENDING、snapshot-stale 安排任何 Phase，且 `plan.md §8`「spec 与代码现状矛盾记录」**也没登记这次
+裁剪**。于是 tasks 按裁剪后的 plan 写、SC 与 commit 却按未裁剪的 spec 口径报，三者对不上而无人对账
+——这就是「勾了但没做」的产生机制。**后续卡若在 plan 阶段裁剪范围，必须同步登记进 §8 并回改 SC。**

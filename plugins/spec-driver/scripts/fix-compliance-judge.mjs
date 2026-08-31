@@ -51,7 +51,7 @@ import {
   resetBlockState,
 } from './lib/fix-compliance-io.mjs';
 import { classifyInFlightFromPayload, IN_FLIGHT_STATES } from './lib/in-flight-verdict.mjs';
-import { readLedgerDelegations, LEDGER_ABSENT } from './lib/ledger-reader.mjs';
+import { readLedgerDelegations, LEDGER_ABSENT, LEDGER_SUPPLEMENTED_ROLE } from './lib/ledger-reader.mjs';
 import { recordWorkflowRun } from './record-workflow-run.mjs';
 
 /** stderr 反馈前缀（FR-010，与既有 stop-task-check.sh 的 `[提醒]` 相区分） */
@@ -67,6 +67,13 @@ export const BLOCK_LIMIT = 2;
  * （重入 / 在途 undetermined / 证据陈旧 / 无法交叉校验 / 指纹无进展）计数，耗尽后走终态
  * 可见放行——既不锁死（有计时器保证最终放行）也不早放行（要累积到阈值）。
  *
+ * ⚠️ **当前生产零接线**（集成 review 核实）：`routeNonBlock` 在 runHook 里没有任何调用点，
+ * 故 `nonBlockStopCount` 恒为 0、本常量与 NON_BLOCK_ENTRY_LIMIT 从不参与生产判定。它原定
+ * 的两个入口——重入（P3 对抗后撤销，见 runHook 内说明）与 GATE 指纹去重（FR-026..029，
+ * **本卡未实现**）——都不存在。下方测试（judge-cli「routeNonBlock 单元（零接线期合同）」）
+ * 是单元级合同钉，**不构成端到端守护**：变异实验证实把本函数首行改成 `return 0` 只会让 5 个
+ * 直接 import 它的单元测试变红，零端到端失败。接线属后续卡范围。
+ *
  * 🔴 承重不变量（delta-2 定时雷，MUST）：`NON_BLOCK_LIMIT >= BLOCK_LIMIT`。被判方**完全控制
  * 一次裁决落进哪个桶**（触发重入 / `Bash(run_in_background)` 制造在途 / 制造 undetermined 均
  * self-inducible）。若本桶阈值低于诚实 `blockCount` 地板（=BLOCK_LIMIT），被判方就把真实不合规
@@ -79,9 +86,13 @@ export const NON_BLOCK_LIMIT = BLOCK_LIMIT;
  *
  * why 需要它：`nonBlockStopCount` 快路径寄存在 gitignore 的状态文件里，被判方每轮 Stop 前
  * `rm -rf` 该目录即可让它永久归零 → 计时器永不耗尽 → 会话被 brick 在放行/阻断循环（视本身
- * 语义）。故真正的放行闸挂 transcript 派生的**单调不可擦量**：自首次 nonBlock 裁决设锚
- * （firstNonBlockEntryBaseline）起、最早 fix 展开后的 assistant entry 增量。与闸门三为
- * inFlightDeferCount 兜底同构（IN_FLIGHT_DEFER_LIMIT 的 JSDoc）。
+ * 语义）。故真正的放行闸挂 transcript 派生的**单调不可擦量**：直接用「最早 fix 展开后的
+ * assistant entry 总数」与本常量比较。与闸门三为 inFlightDeferCount 兜底同构。
+ *
+ * （初版曾另设 `firstNonBlockEntryBaseline` 锚字段存进状态文件，被 P3 对抗双路独立命中
+ * 「锚存在可擦文件里 ⟹ delta = 单调量 − 可擦锚 整体可擦」后撤销，改为与常量直接比较、不存锚。）
+ *
+ * ⚠️ 与 NON_BLOCK_LIMIT 同：**当前生产零接线**。
  *
  * why 取与闸门三同量级：它是"会话已异常长"的兜底，不是精确计数——擦库场景下快路径失效，
  * 靠这条抹不掉的天花板保证最终放行。取 EARLIEST_FIX_ENTRY_DEFER_LIMIT 同值即可。
@@ -485,7 +496,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
   const ledgerSupplement = ledgerResult.delegations.filter((d) => !transcriptRoles.has(d.roleClass));
   const delegations = [...transcriptDelegations, ...ledgerSupplement];
   // WARNING-1 收口：补充非空即落诊断（账本补了 transcript 没有的角色=唯一有安全意义的事件）
-  if (ledgerSupplement.length > 0) ledgerDiagnostics.push('ledger-supplemented-role');
+  if (ledgerSupplement.length > 0) ledgerDiagnostics.push(LEDGER_SUPPLEMENTED_ROLE);
   const featureDirCheck = checkFeatureDirOnDisk(projectRoot, resolvedPath);
   const fixReport = resolvedPath
     ? readArtifactFile(projectRoot, `${resolvedPath}/fix-report.md`)
@@ -544,10 +555,14 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     (d) => d && (d.roleClass === 'verify' || d.noopVerify === true),
   );
   if (featureDirUndetermined && hasVerifyClassDelegation) {
+    // 🔴 必须透传 ledgerDiagnostics（对抗 D CRITICAL-2）：`hasVerifyClassDelegation` 算的是
+    // `delegations` ＝ transcript **＋账本补充**，故账本一条 verify 就能把本谓词从 false 翻成
+    // true，进而走这条 exit 0 的降级放行。它与「合规」是账本翻转裁决的**两条**路径，此前只有
+    // 合规那条补了留痕，本条仍无痕 → 伪造通过与诚实降级在审计流里逐字节相同。
     return {
       enforcement, configDegraded, isFix: true, mode: anchor.mode,
       transcriptDiagnostics: ['feature-dir-unresolvable'], verdict: null,
-      assistantEntriesSinceEarliestFix,
+      assistantEntriesSinceEarliestFix, ledgerDiagnostics,
     };
   }
 
@@ -719,17 +734,24 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
 
 /**
  * F270 P3 · 解锁计时器路由（FR-046）：处理「不计入 blockCount 但也不能立即放行」的裁决类。
- * ⚠️ 接线状态（P3 对抗 CRITICAL-1 后）：**当前零接线**——初版把必答③重入接在此，被对抗证伪后
- * 撤线（重入改为纯诊断登记，见 runHook）。本路由保留给 P4 的 GATE 指纹无进展 / 陈旧类接入
- * （那些才是真"不该计 blockCount 也不该立即按不合规阻断"的裁决类）。P4 接入前本函数不可达。
+ * ⚠️ 接线状态（集成 review 更新）：**生产零接线，且本卡不会再接**。初版把必答③重入接在此，
+ * 被 P3 对抗证伪后撤线（重入改为纯诊断登记，见 runHook）；余下的预期入口是 GATE 指纹无进展
+ * （FR-026..029），而 **P4 实际做的是账本接入、从未接 GATE 指纹**，本卡 6 个 Phase 也没有
+ * 任何一个是 GATE ——「随 P4 落」是一条跨 phase 断链的承诺，无人回头兑现。
+ *
+ * 后果如实登记：病根 iii（GATE 暂停被当收口尝试）**原样存活**——实测 GATE 暂停态反复 Stop
+ * 仍 blockCount 0→1→2、第 3 次降级放行，与改动前逐字一致；SC-004「GATE 期间 0 增量」未达成。
+ * 本函数与其两个 LIMIT 常量当前是**为后续卡预留的、经单元测试钉住合同的未接线组件**，
+ * 既不可读作"已实现"，其单元测试也不可读作端到端守护（变异实验：首行 `return 0` 只红 5 个
+ * 直接 import 的用例，零端到端失败）。
  *
  * 语义（delta-2 重写后的解锁计时器主线，spec FR-046 五点）：
  *   1. 不计 `blockCount`（真实不合规的额度不被非不合规态烧掉）；计 `nonBlockStopCount`。
  *   2. 计时器**未耗尽**前照常按裁决类自身语义处理（重入=放行；未来接入的陈旧类若本该阻断仍阻断）。
  *   3. 耗尽后走**终态可见**放行（recordWorkflowRun + 标注触发计时器，SC-014），不走安静通道。
- *   4. 🔴 不可擦 backstop：快路径计数可被 `rm -rf` 状态目录清零；首次 nonBlock 裁决时把
- *      「最早 fix 展开后 assistant entry 数」设为锚（firstNonBlockEntryBaseline），此后
- *      `entryCount - 锚 >= NON_BLOCK_ENTRY_LIMIT` 即视同耗尽——量派生自 transcript、抹不掉。
+ *   4. 🔴 不可擦 backstop：快路径计数可被 `rm -rf` 状态目录清零；故另以 transcript 派生的
+ *      单调量直接比常量——`entryCount >= NON_BLOCK_ENTRY_LIMIT` 即视同耗尽，不存锚、抹不掉。
+ *      （初版存锚比 delta 的写法已被 P3 对抗撤销，理由见函数体注释。）
  *   5. save 失败沿用「存储不可用=已达上限」fail-closed（与 routeBlock:554 同源）：写不进计数
  *      就直接按耗尽走终态可见放行，不给"既不计数又不留痕"的静默通道。
  *
@@ -895,7 +917,12 @@ function runHook(projectRoot, payload) {
 
   // transcript 不可用/超限 → FR-013 fail-open 放行 + loud 诊断落盘（合并配置层诊断）
   if (result.transcriptDiagnostics.length > 0) {
-    tryAppendFailOpenEvent(projectRoot, payload.session_id, cfg.enforcement, result.transcriptDiagnostics, cfg.diagnostics);
+    // 账本诊断并入：本路径亦可由账本补充触发（见 evaluate 的 featureDirUndetermined 早退）
+    tryAppendFailOpenEvent(
+      projectRoot, payload.session_id, cfg.enforcement,
+      [...result.transcriptDiagnostics, ...(result.ledgerDiagnostics || [])],
+      cfg.diagnostics,
+    );
     return 0;
   }
   // 非 fix 会话 → 零接触放行（US5：健康路径不产生任何落盘），不 reset 保持零落盘语义
@@ -916,6 +943,12 @@ function runHook(projectRoot, payload) {
         verdict: result.verdict,
         blockCount: null,
         degraded: false,
+        // 🔴 集成 review CRITICAL-3：账本补充把裁决翻成合规，正是 D-1 下界（账本可写、只防
+        // 疏忽）的**唯一**补偿控制点，必须留痕。此前该早退不传 extraDiagnostics，导致
+        // `ledger-supplemented-role` 恰好在唯一有安全意义的路径上丢失——补充没改变结论时留痕、
+        // 补充翻成放行时反而无痕，可见性与重要性完全反相关；伪造通过与诚实通过在审计流里
+        // 逐字节相同。judge:474-481 声称的「不再零留痕」由这一行兑现。
+        extraDiagnostics: result.ledgerDiagnostics || [],
       }));
     } catch {
       // 审计落盘失败不得让合规放行崩溃
@@ -931,7 +964,11 @@ function runHook(projectRoot, payload) {
   //     惩罚动作（exit 2）本身生成豁免（下一次 Stop 即重入），是最坏形态的 self-inducible；
   //   - 它唯一声称的收益（防阻断死循环）在既有 BLOCK_LIMIT=2 下**本就不存在**——exit 2 已被
   //     有界化为 2 次，第 3 次走 releaseDegraded 放行，循环天然终止。收益为零、净损一格预算。
-  //   （spec 必答③「重入必放行」的前提由此被实现层证据推翻，spec 侧已留痕修订。）
+  //   ⚠️ 诚实登记：spec.md 的必答③ 自初始 docs commit 起、直到本卡六个 Phase 全部落地为止
+  //   **一字未改**，仍写着「`stop_hook_active===true` 时判定器不得再次产生阻断、必须放行」+
+  //   「计入 `nonBlockStopCount`」，与本实现（纯诊断、照常阻断、不计任何计数）**相反**。
+  //   该矛盾已在集成 review 中补记进 spec.md 的 §0-pre 偏离登记（"以实现为准"）。
+  //   FR-029「重入不计 blockCount」同样未实现，属后续卡范围。
   // 终版语义：重入**不改变任何路由**——裁决/预算/终态与非重入逐字一致（=改动前行为），仅把
   // `stop-hook-reentry` 诊断码如实并入本次审计（新增纯可观测性）。非布尔取值同样只影响该码的
   // 缺席，不影响裁决（对上游序列化行为的假设不成立时不做任何判定分支）。
@@ -1003,7 +1040,6 @@ function runHook(projectRoot, payload) {
         degradedRecorded: loaded.degradedRecorded,
         inFlightDeferCount: loaded.inFlightDeferCount + 1,
         nonBlockStopCount: loaded.nonBlockStopCount,             // F270 P3：原样带回，防抹平
-        firstNonBlockEntryBaseline: loaded.firstNonBlockEntryBaseline,
       });
       if (saved.ok) {
         // 审计提档：推迟不再是零终态痕迹的静默通道（F257 缺陷 2）
@@ -1011,7 +1047,9 @@ function runHook(projectRoot, payload) {
         appendAuditEvent(projectRoot, buildAuditEvent({
           sessionId, enforcement: result.enforcement, verdict: result.verdict,
           blockCount: null, degraded: false,
-          extraDiagnostics: ['delegation-in-flight', inFlightVerdict.diagnostic],
+          // 账本诊断并入（对抗 E WARNING-4）：推迟同时写 `paused` 终态，会话若就此结束，
+          // 账本对该次裁决的影响将永不落账——与合规/降级两条路径同一立论。
+          extraDiagnostics: ['delegation-in-flight', inFlightVerdict.diagnostic, ...(result.ledgerDiagnostics || [])],
         }));
         process.stderr.write(`${PREFIX_WARN} ${buildFeedbackText(result.verdict.missing, { diagnostics: ['delegation-in-flight'] })}\n`);
         return 0;
@@ -1049,6 +1087,10 @@ function runReport(projectRoot, transcriptPath, reportSessionId = null) {
     enforcement: result.enforcement,
     configDegraded: result.configDegraded,
     transcriptDiagnostics: result.transcriptDiagnostics,
+    // 账本诊断进 report（对抗 D WARNING-3）：`inFlightDelegations` /
+    // `assistantEntriesSinceEarliestFix` 已按「事实字段透传」先例入 report，账本是否补充过
+    // 委派同属事实，缺它则账本翻转裁决在离线复核路径上完全不可见。
+    ledgerDiagnostics: result.ledgerDiagnostics || [],
     // F256 盲区 2：在途委派事实透传，供 --mode report 端到端复现与事后审计核对
     inFlightDelegations: result.inFlightDelegations || [],
     // F257 缺陷 2：闸门三的计量源透传。与 inFlightDelegations 同为**事实字段**——

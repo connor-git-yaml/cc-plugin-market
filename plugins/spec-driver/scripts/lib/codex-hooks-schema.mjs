@@ -15,7 +15,7 @@
  * |---|---|---|---|
  * | schema | 全文件事件名 | 是否属于 Codex 事件全集（`CODEX_EVENT_SCHEMA_SET`） | 我方条目非法 → fail；第三方未知名 → warning |
  * | product（事件级） | **仅我方 owned 条目**覆盖的事件集合 | 恰等于 4 项 | 越界 / 缺项 → fail（code 可区分） |
- * | product（handler 级，F264） | **每一条 owned handler** | 脚本已登记，且挂在 `OWNED_HOOK_EXPECTED_EVENT` 指定的事件上；5 条一条不缺 | 挂错 / 缺条 → fail |
+ * | product（handler 级，F264） | **每一条 owned handler** | 脚本已登记，且挂在 `OWNED_HOOK_EXPECTED_EVENT` 指定的事件上；6 条一条不缺 | 挂错 / 缺条 → fail |
  *
  * 🔴 handler 级是 F264 新增的**必要补强**，不是事件级的重复：`Stop` 下挂着两条脚本，只丢掉
  * `stop-fix-compliance-check.sh`（依从性判定器）时事件集合毫无变化，事件级判据判 pass。
@@ -101,7 +101,17 @@ export const OWNED_HOOK_SCRIPT_SUFFIXES = Object.freeze([
   Object.freeze(['scripts', 'postinstall.sh']),
   Object.freeze(['hooks', 'pre-tool-use-guard.sh']),
   Object.freeze(['hooks', 'post-tool-use-format.sh']),
-  // F270 P5：会话证据账本采集器（PostToolUse，matcher 空=全工具触发）
+  // F270 P5：会话证据账本采集器（PostToolUse）。
+  // matcher 自集成 review 起收窄为 `Agent|Task`：D-1 方向 X 下账本**只承担委派证据**，
+  // reader 本就只消费 DELEGATION_TOOL_NAMES={Agent,Task}，全量触发是纯开销——实测端到端
+  // 43-63ms/次且 PostToolUse 阻塞后续工具，300 次调用即 13s+ 串行叠加；同时每次工具调用
+  // 都写盘会放大 saveBlockState 一侧本就未解决的并发面（病根 v）。
+  //
+  // ⚠️ 收窄的代价（对抗 D WARNING-2，如实登记而非只写收益）：零委派会话此后**不再产生账本
+  // 文件**，于是「文件不存在＝采集器可能没装/没生效」与「仅哨兵＝采集器活着、本段确实无委派」
+  // 两态坍缩——而零委派会话正是 F208 门禁要抓的坍塌会话本体。当前无判定影响（两态都产出空
+  // delegations、结论一致），但后续实现 FR-043/044 活性自检时**不能**依赖账本文件的存在性做
+  // 判据，需改用 SessionStart 侧哨兵或等价机制。同理 `AskUserQuestion` 也不再进账本。
   Object.freeze(['hooks', 'post-tool-use-ledger.sh']),
   Object.freeze(['hooks', 'stop-task-check.sh']),
   Object.freeze(['hooks', 'stop-fix-compliance-check.sh']),
@@ -468,7 +478,7 @@ export function validateCodexHooksDocument(doc, options = {}) {
     if (expectedEvent === undefined) {
       // 归属判定认得出（在 OWNED_HOOK_SCRIPT_SUFFIXES 里），却没登记期望事件 —— 两张表脱节。
       // 这是我方自己的登记缺口，fail-loud 好过静默放过一条无人校验的 hook。
-      // ⚠️ 诚实标注（F264 / 第二轮 W4.3）：两张表当前 5/5 完全对齐，本分支**结构性不可达**，
+      // ⚠️ 诚实标注（F264 / 第二轮 W4.3）：两张表当前 6/6 完全对齐，本分支**结构性不可达**，
       // 是给"将来只改了一张表"准备的前瞻分支 —— **不要**把它算进"已验证的守护力"。
       fail('product', 'product-handler-unregistered', { event, script: suffixKey });
       continue;

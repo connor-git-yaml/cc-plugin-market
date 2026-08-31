@@ -169,6 +169,17 @@ detectFixSkillExpansion(transcript)  → {isFix存在性, latestFixLineIndex, ea
 
 ## 8. spec 与代码现状矛盾记录
 
+> 🔴 **补登（集成 review，2026-09-01）：本 plan 静默裁剪了 spec 范围而未登记。**
+>
+> 卡面 5 个病根、spec 49 条 FR，而下方 §5 的 6 个 Phase **未为病根 iii（GATE，FR-026..029）、
+> 病根 v（状态竞态，FR-012）、PENDING（FR-030..032）、snapshot-stale（FR-033 / US4）安排任何
+> Phase**。实测命中数（plan / tasks / 生产码）全为 `0 / 0 / 0`。
+>
+> 该裁剪本身可以是合理取舍，但**当时未登记在本节**，导致 tasks 按裁剪后的 plan 写、而 SC 与
+> commit 仍按未裁剪的 spec 口径报「13/15 达成」，三者对不上且无人对账——这是本卡全部 over-claim
+> 的结构性根源。诚实口径与移交清单见 `tasks.md` Phase 7。
+
+
 1. **`anchorLineIndex` 孤儿风险**（reverse-census §6 表末）：5 消费点全切到 `latestFixLineIndex` 后，`anchorLineIndex` 可能无消费者。tasks 须实证核查全仓引用；若确成孤儿，裁决删除 vs 保留（倾向保留——core:1082 的注释链依赖它命名，删除牵动文档）。**非阻塞，P2 收尾时定。**
 2. **AskUserQuestion 是否触发 PostToolUse 未实测**（本会话样本随 scratchpad 清空丢失）：A-4 的 `AskUserQuestion` 权威信号增强的承重前提。**主方案（指纹去重）不依赖它**，故非阻塞；若 implement 期要用该增强，P3 前补测一次即可。
 3. **`npx vitest run` 当前基线值未取**（SC-008 要求）：本阶段未跑全量 vitest。P5（碰 TS 断言面）前须实跑一次取基线数，作"零新增失败"的对照。**非阻塞，P5 前取。**

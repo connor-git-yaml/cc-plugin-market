@@ -58,6 +58,11 @@ function selfdiagPath(projectRoot) {
 /** 自诊断追加：自身任何失败彻底静默（最后一道兜底不能再有兜底） */
 function appendSelfdiag(projectRoot, record) {
   try {
+    // 🔴 自诊断同样受 US5 闸门约束（对抗 E CRITICAL-2 向量①）：本函数自己 mkdirSync，
+    // 而 `main()` 的 payload 解析失败分支直接调它、**不经过** appendLedgerEntry 的闸门 →
+    // 一次畸形 stdin 就在无关项目建出 `.specify/runs/`，把「目录里有别的条目」型判据翻成永真。
+    // 兜底路径不能比主路径宽。
+    if (!isSpecDriverProject(projectRoot)) return;
     const dir = path.join(projectRoot, ...LEDGER_SUBDIR);
     fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(
@@ -97,7 +102,16 @@ export function buildLedgerEntry(payload) {
     hookTs: new Date().toISOString(),
     ok: deriveOk(payload.tool_response),
   };
-  if (typeof payload.agent_id === 'string') entry.agent_id = payload.agent_id;
+  // 🔴 与 reader 的归属判据**必须同为键存在性**（对抗 E CRITICAL-1）。初版这里是值判定
+  // `typeof === 'string'`，于是 `agent_id: null/0/false/{}` 的条目**键被抹掉**，reader 那侧
+  // 再怎么按 `Object.hasOwn` 加固也见不到它们 → 判为主线程 → CRITICAL-1 病灶对这些上游形态
+  // 完整复活，且翻转诊断（挂"命中数==总数"）在一条都没命中时结构性不响。消费侧单独加固
+  // 无效：谓词不对称时，**严的那侧被松的那侧决定**。
+  // `undefined` 归一为 null：JSON.stringify 会丢掉值为 undefined 的键，那会把"键存在"这一
+  // 承重事实在落盘时抹掉。
+  if (Object.hasOwn(payload, 'agent_id')) {
+    entry.agent_id = payload.agent_id === undefined ? null : payload.agent_id;
+  }
   if (typeof payload.agent_type === 'string') entry.agent_type = payload.agent_type;
   if (DELEGATION_TOOL_NAMES.has(payload.tool_name)) {
     const st = payload.tool_input?.subagent_type;
@@ -123,7 +137,68 @@ function isClaudeShape(payload) {
  * @returns {{ok: true} | {ok: false, reason: string}} —— 仅供测试/调用方观察，
  * CLI 形态无论返回什么都 exit 0（C-10）。
  */
+/**
+ * 是否**跑过 spec-driver 流程**的项目（US5 闸门判据）。
+ *
+ * 🔴 判据不能是「`.specify/` 存在」（初版如此，被对抗 D CRITICAL-1 实证击穿）：
+ * `scripts/postinstall.sh:40` 在 SessionStart（`hooks.json` 里 matcher 为空＝**每个项目、
+ * 每次会话**）无条件 `mkdir -p "$PROJECT_DIR/.specify"` 并写入 `.spec-driver-path`。
+ * SessionStart 必然早于任何 PostToolUse，故该判据在装了插件的**任何**项目里恒为真，
+ * 闸门对它要拦的病灶零效力。
+ *
+ * 也不能是「`.specify/` 里除那枚路径指针外还有别的条目」（第二版如此，被对抗 E CRITICAL-2
+ * 实证**自举打开**）：`runs/` 由判定器 fail-open 审计与本采集器自诊断建，`.DS_Store` 由 Finder
+ * 建——任一出现即让判据永真，且**不可逆**（第一次落盘就把闸门焊死在开）。
+ *
+ * 故取**白名单**：只认 `spec-driver init` / 流程本身产出的标志物，运行态目录一律不算。
+ *
+ * 判不出来一律按「否」：采集器宁可不记（判定器退回纯 transcript ＝ F270 之前的基线，
+ * 上界已实证有界），也不在无关项目里落任何东西。
+ */
+/**
+ * `spec-driver init` / 流程本身产出的结构性标志（**白名单**）。
+ * 刻意不含 `runs/`（判定器审计与本采集器自诊断都会建它）、不含 `.spec-driver-path`
+ * （postinstall 每个项目都写）——见下方 why。
+ */
+const SPEC_DRIVER_PROJECT_MARKERS = Object.freeze([
+  'project-context.yaml',
+  'project-context.md',
+  'orchestration-overrides.yaml',
+  'templates',
+  'memory',
+  'scripts',
+]);
+
+function isSpecDriverProject(projectRoot) {
+  try {
+    const entries = new Set(fs.readdirSync(path.join(projectRoot, '.specify')));
+    return SPEC_DRIVER_PROJECT_MARKERS.some((m) => entries.has(m));
+  } catch {
+    return false;
+  }
+}
+
 export function appendLedgerEntry(projectRoot, payload) {
+  // 🔴 US5 闸门（集成 review CRITICAL-2，实跑复现）：非 spec-driver 项目**零落盘**。
+  //
+  // 病灶：hooks.json 的全量 matcher 让本采集器对每一次工具调用触发，而此处原先无任何项目
+  // 判断 → 在一个从未用过 spec-driver 的空目录里跑单次 Read，即凭空创建
+  // `.specify/runs/.fix-compliance-ledger/<sid>.jsonl`。装了插件的用户**每个项目、每次工具
+  // 调用**都被写盘，纯问答会话也不例外。
+  //
+  // F270 spec.md:600 已警告全称落盘义务「会在无关用户项目里创建 .specify/」，但那次收窄只
+  // 应用到了判定器的 FR-024，漏了同一张卡新增的采集器；F240/F208 US5 的既有守卫只跑
+  // fix-compliance-judge.mjs，对本采集器结构性失明。
+  //
+  // 闸门置于**函数最前**（早于 isClaudeShape）：`appendSelfdiag` 自身也 mkdirSync，方言跳过
+  // 与写失败两条兜底路径若在闸门之前就会穿透它。
+  //
+  // ⚠️ 如实登记（对抗 D）：本闸门只管采集器。判定器自身的 fail-open 路径（畸形 payload →
+  // `payload-invalid` 审计）同样会在非 spec-driver 项目建 `.specify/`，那条不在本次范围内。
+  // 采集器侧真正减污染的是本闸门 + matcher 收窄为 `Agent|Task` 两者叠加。
+  if (!isSpecDriverProject(projectRoot)) {
+    return { ok: false, reason: 'not-spec-driver-project' };
+  }
   try {
     if (!isClaudeShape(payload)) {
       appendSelfdiag(projectRoot, { kind: 'dialect-skip' });

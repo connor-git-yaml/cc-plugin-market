@@ -3315,3 +3315,193 @@ describe('F270 P4 · 账本委派接入', () => {
     assert.equal(r.status, 2, 'latestFix 之前的账本委派不算本轮证据（FR-013 归属窗口）');
   });
 });
+
+// ════════════════════════════════════════
+// F270 集成 review · 端到端：审计留痕 + 归属过滤
+// Tests FIRST：两条均为集成 review 实跑复现的缺陷，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 review · 账本补充的审计留痕与归属过滤（e2e）', () => {
+  const LEDGER_DIR = ['.specify', 'runs', '.fix-compliance-ledger'];
+  const T0 = '2026-09-01T10:00:00.000Z';
+  function writeLedger(sessionId, entries) {
+    const dir = path.join(tmp, ...LEDGER_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${sessionId}.jsonl`),
+      entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  }
+  function stage(shortDir) {
+    fs.mkdirSync(path.join(tmp, 'specs', shortDir, 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', shortDir, 'fix-report.md'), REPAIR_FIX_REPORT);
+    fs.writeFileSync(path.join(tmp, 'specs', shortDir, 'verification', 'verification-report.md'), VERIFICATION_DOC);
+  }
+  /** fix 展开（带 timestamp，否则 windowUndetermined → 账本不补充） */
+  const FIX_LINE = { type: 'user', timestamp: T0, message: { role: 'user', content: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix' } };
+
+  it('🔴 账本补充把裁决翻成合规 → 审计事件必须留 ledger-supplemented-role', () => {
+    stage('301-fix-sample-bug');
+    // transcript 只有 implement 委派，缺 verify；账本补上 verify → 翻转合规
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    writeLedger('rv-audit', [
+      { v: 1, tool_use_id: 'a9', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'rv-audit' });
+    assert.equal(r.status, 0, `账本补齐应合规；stderr=${r.stderr.slice(0, 200)}`);
+    const events = readVerdictEvents().filter((e) => e.sessionId === 'rv-audit');
+    assert.equal(events.length, 1, `应有一条合规审计事件，实得 ${events.length}`);
+    assert.equal(events[0].compliant, true);
+    // 承重：账本（会话可写）把 exit 2 变成 exit 0，是 D-1 下界的**唯一**补偿控制点。
+    // 丢了这条码，伪造通过与诚实通过在审计流里逐字节相同。
+    assert.ok(events[0].diagnostics.includes('ledger-supplemented-role'),
+      `合规路径必须留补充痕迹，实得 diagnostics=${JSON.stringify(events[0].diagnostics)}`);
+  });
+
+  it('🔴 子代理内部委派（带 agent_id）不得满足主会话合规', () => {
+    stage('301-fix-sample-bug');
+    // 主线程只派了一次 general-purpose（other 类），从未派 implement/verify
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'general-purpose', description: '查点东西' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    // 账本里那两条 implement/verify 都发生在子代理内部（带 agent_id）——这是真实采集器
+    // 对「子代理再派子代理」写出的形状，不需要伪造任何字节
+    writeLedger('rv-attr', [
+      { v: 1, tool_use_id: 'sub1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:implement', ok: true, agent_id: 'agent_abc', agent_type: 'general-purpose' },
+      { v: 1, tool_use_id: 'sub2', tool_name: 'Agent', hookTs: '2026-09-01T10:06:00.000Z', subagent_type: 'code-reviewer', ok: true, agent_id: 'agent_abc', agent_type: 'general-purpose' },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'rv-attr' });
+    assert.equal(r.status, 2,
+      `子代理内部委派不得满足「主线程必须显式委派」；exit=${r.status} stderr=${r.stderr.slice(0, 200)}`);
+  });
+
+  it('🔴 账本经 feature-dir-unresolvable 路径翻转放行 → 审计同样必须留痕（对抗 D C-2）', () => {
+    // 这是账本把裁决翻成 exit 0 的**第二条**路径：`hasVerifyClassDelegation` 算的是
+    // transcript ＋账本补充，账本一条 verify 即可把该谓词翻成 true，进而走
+    // featureDirUndetermined 降级放行。初版只给「合规」那条补了留痕，本条仍无痕 →
+    // 伪造通过与诚实降级在审计流里逐字节相同。
+    fs.mkdirSync(path.join(tmp, 'specs', '301-fix-sample-bug'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'fix-report.md'), REPAIR_FIX_REPORT);
+    // transcript：零委派 + 把候选目录改名到非规范位置（SC-005b 同源构造）
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Bash', { command: 'git mv specs/301-fix-sample-bug specs/renamed-nonstandard' }),
+      ASSISTANT_TEXT('已改名'),
+    ]);
+    writeLedger('rv-fdu', [
+      { v: 1, tool_use_id: 'v1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'rv-fdu' });
+    assert.equal(r.status, 0, `账本补 verify 应触发降级放行；stderr=${r.stderr.slice(0, 200)}`);
+    const events = readVerdictEvents().filter((e) => e.sessionId === 'rv-fdu');
+    assert.equal(events.length, 1, `应有一条降级审计事件，实得 ${events.length}`);
+    assert.ok(events[0].diagnostics.includes('feature-dir-unresolvable'), JSON.stringify(events[0].diagnostics));
+    assert.ok(events[0].diagnostics.includes('ledger-supplemented-role'),
+      `账本翻转的第二条路径同样必须留痕，实得 ${JSON.stringify(events[0].diagnostics)}`);
+  });
+
+  it('report 模式暴露 ledgerDiagnostics（离线取证入口，对抗 D W-3）', () => {
+    stage('301-fix-sample-bug');
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    writeLedger('rv-report', [
+      { v: 1, tool_use_id: 'r1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: p, sessionId: 'rv-report' }).stdout);
+    assert.ok(Array.isArray(v.ledgerDiagnostics), 'report 须含 ledgerDiagnostics 字段');
+    assert.ok(v.ledgerDiagnostics.includes('ledger-supplemented-role'),
+      `账本补充在 report 上必须可见，实得 ${JSON.stringify(v.ledgerDiagnostics)}`);
+  });
+
+  it('🔴 账本 verify 不得关掉 F216 的 delegation:noop-verify（对抗 E C-3）', () => {
+    // `noopVerify === undefined` 在 core 里是**回退触发条件**而非中立值；账本若"刻意不产"
+    // 该字段，一行 JSONL 就能满足 no-op 合同的委派半边——把 harness 背书的证据降级成会话可写。
+    const NOOP_REPORT = [
+      '# 修复报告', '', '## 判定依据', '',
+      '经复现验证，报告的现象不成立，无需改动代码。', '',
+      '### 复现对账', '', '- 执行 `npm test -- session-timeout` → 全部通过，未复现登出问题。', '',
+    ].join('\n');
+    fs.mkdirSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'verification'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'specs', '301-fix-sample-bug', 'fix-report.md'), NOOP_REPORT);
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: NOOP_REPORT }),
+      TOOL_USE('Bash', { command: 'npm test -- session-timeout' }),
+    ]);
+    writeLedger('rv-noop', [
+      { v: 1, tool_use_id: 'n1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    const v = JSON.parse(runCli({ mode: 'report', transcriptPath: p, sessionId: 'rv-noop' }).stdout);
+    assert.ok(Array.isArray(v.missing), JSON.stringify(v));
+    assert.ok(v.missing.includes('delegation:noop-verify'),
+      `账本委派对 no-op 弃权，不得关掉该要求；实得 missing=${JSON.stringify(v.missing)}`);
+  });
+
+  it('🔴 上游翻转诊断能真的走到审计事件（对抗 E W-5：此前只有单元守护）', () => {
+    stage('301-fix-sample-bug');
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    // 账本全部委派条目都带 agent_id → 归属前提可疑 → 落翻转诊断（行为不变：仍全部剔除）
+    writeLedger('rv-inv', [
+      { v: 1, tool_use_id: 'i1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true, agent_id: 'agent_x' },
+    ]);
+    const r = runCli({ transcriptPath: p, sessionId: 'rv-inv' });
+    assert.equal(r.status, 2, '账本全被剔除 → 仍缺 verify → 阻断');
+    const events = readVerdictEvents().filter((e) => e.sessionId === 'rv-inv');
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('ledger-agent-id-inversion-suspected'),
+      `翻转诊断须抵达审计事件，实得 ${JSON.stringify(events[0].diagnostics)}`);
+  });
+
+  it('🔴 在途推迟成功路径同样并入账本诊断（对抗 E W-4）', () => {
+    stage('301-fix-sample-bug');
+    // 缺 verify（属可推迟缺口）+ 账本补 verify 之外的角色 → 推迟成功时审计须带账本诊断
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    writeLedger('rv-defer', [
+      { v: 1, tool_use_id: 'd1', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:implement', ok: true },
+    ]);
+    const r = runCli({
+      transcriptPath: p, sessionId: 'rv-defer',
+      backgroundTasks: [{ type: 'local_agent', status: 'running', description: 'verify 子代理' }],
+    });
+    assert.equal(r.status, 0, '在途可推迟缺口 → 推迟放行');
+    const events = readVerdictEvents().filter((e) => e.sessionId === 'rv-defer');
+    const deferEvent = events.find((e) => (e.diagnostics || []).includes('delegation-in-flight'));
+    assert.ok(deferEvent, `必须真的走到推迟分支（否则本用例空转）；events=${JSON.stringify(events)}`);
+    assert.ok(deferEvent.diagnostics.includes('ledger-supplemented-role'),
+      `推迟成功审计须带账本诊断，实得 ${JSON.stringify(deferEvent.diagnostics)}`);
+  });
+
+  it('主线程委派（agent_id 键缺席）照常被账本采信（不误伤真实滞后补充）', () => {
+    stage('301-fix-sample-bug');
+    const p = writeTranscript([
+      FIX_LINE,
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/fix-report.md', content: REPAIR_FIX_REPORT }),
+      TOOL_USE('Agent', { subagent_type: 'spec-driver:implement', description: '执行代码修复' }),
+      TOOL_USE('Write', { file_path: 'specs/301-fix-sample-bug/verification/verification-report.md', content: VERIFICATION_DOC }),
+    ]);
+    writeLedger('rv-main', [
+      { v: 1, tool_use_id: 'm9', tool_name: 'Agent', hookTs: '2026-09-01T10:05:00.000Z', subagent_type: 'spec-driver:verify', ok: true },
+    ]);
+    assert.equal(runCli({ transcriptPath: p, sessionId: 'rv-main' }).status, 0);
+  });
+});

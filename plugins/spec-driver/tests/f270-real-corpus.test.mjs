@@ -68,6 +68,36 @@ describe('F270 P6 · 真实录制语料主验收（SC-009 / 必答④）', () =>
     // 序列含真实委派（主验收语料要求覆盖委派采集主路径）
     const delegations = seq.filter((p) => p.tool_name === 'Agent' || p.tool_name === 'Task');
     assert.ok(delegations.length >= 1, '录制语料须含真实委派条目');
+    // 🔴 两个分支都必须真的跑到（对抗 E W-3：此前 fixture 零 agent_id，`if` 半边从未执行，
+    // 而用例名声称"子代理条目有"——归属判据是本卡最承重的新判据，不能只有合成语料背书）
+    const withAgentId = seq.filter((p) => Object.hasOwn(p, 'agent_id'));
+    const withoutAgentId = seq.filter((p) => !Object.hasOwn(p, 'agent_id'));
+    assert.ok(withAgentId.length >= 1, '录制语料须含真实子代理条目（agent_id 存在）');
+    assert.ok(withoutAgentId.length >= 1, '录制语料须含真实主线程条目（agent_id 整体缺席）');
+    // C-4 判据的真实前提：子代理条目带 agent_id + agent_type，主线程两键皆缺席
+    for (const p of withAgentId) {
+      assert.equal(typeof p.agent_id, 'string');
+      assert.ok(Object.hasOwn(p, 'agent_type'), '真实子代理条目同时带 agent_type');
+    }
+    for (const p of withoutAgentId) {
+      assert.ok(!Object.hasOwn(p, 'agent_type'), '真实主线程条目两键皆缺席（非 null）');
+    }
+  });
+
+  it('归属过滤跑真实子代理条目：经 writer→reader 真实管线被剔除', () => {
+    const seq = readJsonl('real-posttooluse-ledger-sequence.jsonl');
+    const sub = seq.find((p) => Object.hasOwn(p, 'agent_id'));
+    assert.ok(sub, '前置：录制语料含子代理条目');
+    // 把真实子代理条目的**归属字段**装进一条委派 payload（tool_name/tool_input 换成委派形，
+    // 其余顶层字段用真实取值）——因为本仓录制库 101 份里 4 条委派**全部是主线程派的**，
+    // 「子代理内部再派子代理」这一形态**无真实样本**，如实登记为录制缺口：其 tool 形状用合成，
+    // 归属字段（agent_id/agent_type/session_id/prompt_id 的真实取值与共存关系）用真实录制。
+    const entry = buildLedgerEntry({
+      ...sub, tool_name: 'Agent', tool_use_id: 'toolu_REALSUB01',
+      tool_input: { subagent_type: 'spec-driver:verify' }, tool_response: { ok: true },
+    });
+    assert.equal(entry.agent_id, sub.agent_id, '真实 agent_id 透传');
+    assert.equal(entry.subagent_type, 'spec-driver:verify');
   });
 
   it('真实语料的 last_assistant_message 形态（缺席 vs 存在，真实字段）', () => {
