@@ -481,9 +481,12 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
 
   async function runWithFakeCli(body: string): Promise<FreshnessVerdict> {
     const bin = writeFakeSpectra(sandbox.root, body);
+    // F273：deadline 显式放宽到 15s（默认 5s）。多 vitest 并发满载时 bash stub 的
+    // spawn→完成延迟实测可达 ~2.5s，5s 只剩 2× 余量；stub 正常完成即返回，放宽零成本。
     return checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
       spectraBin: bin,
+      deadlineMs: 15_000,
     });
   }
 
@@ -592,9 +595,12 @@ describe('Feature 239 — checkFreshness adapter（C3 定案：复用全局 CLI 
       `printf '%s\\n' "$@" > ${JSON.stringify(argvDump)}\ncat <<'JSON'\n{"freshness":{"state":"fresh"}}\nJSON`,
       'fake-spectra-argv',
     );
+    // F273：与 runWithFakeCli 同理放宽 deadline——本用例断言依赖 stub 落盘 argv.txt，
+    // 默认 5s 档在满载下是同形态假红面（复审 WARNING-1）。
     await checkFreshness(sandbox.root, {
       graphJsonPath: path.join(sandbox.root, GRAPH_REL),
       spectraBin: bin,
+      deadlineMs: 15_000,
     });
     const argv = fs.readFileSync(argvDump, 'utf-8').trimEnd().split('\n');
     expect(argv[0]).toBe('graph-quality');
@@ -829,10 +835,14 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
       'stub-spawns-grandchild',
     );
 
+    // F273：deadline 1000 满载实测被击穿（4 路 vitest 并发下 stub 子 shell 在 ~1s 内还没
+    // 写出第一条心跳就被组 KILL，heartbeat 文件不存在 → 断言假红）。放宽到 6s——对实测
+    // 最坏 ~2.5s 的 spawn→写盘延迟约 2.4× 余量；本用例 stub 永不退出，成本 = deadline+grace，
+    // 余量与全量跑批成本在此折中，若尾部延迟再恶化则优先考虑用例并发化而非继续放大。
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 1000,
+      deadlineMs: 6000,
       graceMs: 500,
     });
     expect(outcome.ok).toBe(false);
@@ -849,12 +859,16 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
   //
   // ⚠️ 语义翻转：本用例原先断言 `exit 0 → ok:true`，那正是审查复现的假成功
   // （`/usr/bin/true` 作 spectraBin、图根本不存在，却记 bootstrapSource=local-build）。
+  // F273：以下三个负输出用例（missing/unparsable/not-queryable）的 stub 必须在 deadline 内
+  // **完成退出**，否则会早退成 reason:'timeout' 判假红——满载实测 1500ms 档被击穿（stub
+  // spawn→退出延迟可达 ~2.5s）。放宽到 6s（对实测最坏延迟约 2.4× 余量）；注意负输出路径
+  // 会把 deadline 轮询耗满，deadline 即用例墙钟成本，余量与全量跑批成本在此折中。
   it('C4：子进程 exit 0 但没产出图 → ok:false + graph-missing-after-build（不再是假成功）', async () => {
     const stub = writeFakeSpectra(sandbox.root, 'exit 0', 'stub-ok-no-graph');
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 1500,
+      deadlineMs: 6000,
       graceMs: 300,
     });
     expect(outcome.ok).toBe(false);
@@ -867,10 +881,14 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
       `mkdir -p specs/_meta\nprintf '{"graph":{"sourceCommit":"%s"},"nodes":[]}' "${'c'.repeat(40)}" > specs/_meta/graph.json`,
       'stub-ok-with-graph',
     );
+    // F273：正输出/快退出路径的 deadline 只是上界（stub 完成即返回，不耗满），放宽到
+    // 15s 零成本，覆盖满载下 ~2.5s 级的 spawn→完成延迟。注意：宿主睡眠冻结（如 F272
+    // 基线里 :910 假红叠加的合盖睡眠 ~5min）会击穿任何有限 deadline，不在本放宽的
+    // 治理范围内——那类红须按「跑批窗口对照 pmset 睡眠事件」归因，勿当回归挖。下同。
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 5000,
+      deadlineMs: 15_000,
     });
     expect(outcome).toEqual({ ok: true });
   }, 20000);
@@ -884,7 +902,7 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 1500,
+      deadlineMs: 6000,
       graceMs: 300,
     });
     expect(outcome.ok).toBe(false);
@@ -900,7 +918,7 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 1500,
+      deadlineMs: 6000,
       graceMs: 300,
     });
     expect(outcome.ok).toBe(false);
@@ -920,7 +938,7 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 5000,
+      deadlineMs: 15_000,
       graceMs: 300,
     });
     expect(outcome).toEqual({ ok: true });
@@ -931,7 +949,7 @@ describe('Feature 239 — attemptLocalGraphBuild 进程组 deadline（C2 定案�
     const outcome = await attemptLocalGraphBuild({
       projectRoot: sandbox.root,
       spectraBin: stub,
-      deadlineMs: 5000,
+      deadlineMs: 15_000,
     });
     expect(outcome.ok).toBe(false);
     expect(outcome.reason).toBe('non-zero-exit');
