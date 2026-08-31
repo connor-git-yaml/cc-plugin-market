@@ -556,31 +556,46 @@ export function detectTranscriptDialect(entries) {
 // ────────────────────────────────────────
 
 /**
- * 单趟扫描全部 user 文本块，同时产出**最晚**一次 spec-driver 技能展开（主锚点）与**最早**一次
- * `spec-driver-fix` 展开的 lineIndex（闸门三专用基线）。
+ * 单趟扫描全部 user 文本块，同时产出**三个**基线（F270 P2 锚点三分，reverse-census §6）：
+ *   - `anchorLineIndex`：**最晚**一次任意 spec-driver 展开（历史主锚点，字段与取值逐字保留）；
+ *   - `earliestFixLineIndex`：**最早**一次 fix 展开（闸门三专用基线）；
+ *   - `latestFixLineIndex`：**最晚**一次 fix 展开（F270 起为 5 个证据窗口的下界）。
  *
- * 🔴 主锚点语义（`found` / `mode` / `anchorLineIndex`）**逐字不变**——F216/F227/F224 全链依赖它。
- * `earliestFixLineIndex` 是**纯增量**返回字段，既有调用方逐字不受影响。
+ * 🔴 三量各有服务对象，**绝不可为"统一"互相替代**（F257/F270 两轮教训）：
+ *   - isFix 判定（judge）＝ `earliestFixLineIndex !== null` 的**存在性**——修病根 iv 的
+ *     「尾部展开 sync/doc 即整体跳过 fix 判定」（原判据 `mode==='fix'` 用最晚任意展开的 mode）。
+ *   - 证据窗口下界 ＝ `latestFixLineIndex`。不能用 `anchorLineIndex`：尾部一次 doc 展开会把
+ *     窗口推到 doc 行，5 个消费点（委派/见证/执行记录/在途/目录提名）把 fix 阶段证据整段
+ *     切到窗外 → 大面积误阻断（core.test「T204」有 A/B 实证）。也不能用 earliest：重跑 fix
+ *     流程（合法多轮）时旧轮证据会污染新轮窗口。被判方重展开 fix 把 latestFix 推到末尾只会
+ *     切掉**自己的**证据（fail-closed，自伤无利），与闸门三 earliest 防「重展开续命」方向互补。
+ *   - 闸门三基线 ＝ `earliestFixLineIndex`（单调、被判方不可回退）。改用最晚锚点已被实测证伪
+ *     （攻击组每轮重展开 → 30/30 全 exit 0），见 EARLIEST_FIX_ENTRY_DEFER_LIMIT 注释。
  *
- * why 两个基线要合并在一趟里求（F257 缺陷 2 修复轮）：闸门三原先另跑一遍 `SKILL_EXPANSION_REGEX`
+ * `anchorLineIndex` 在 F270 后**不再承担证据窗口职责**（judge 侧 5 个消费点已切至
+ * `latestFixLineIndex`），字段保留是为不破坏返回形状与 `mode` 的既有语义（"最晚任意展开
+ * 的 mode"仍是诊断输出的一部分）。新消费者选择基线时按上表对号，勿凭名字猜。
+ *
+ * why 基线要合并在一趟里求（F257 缺陷 2 修复轮）：闸门三原先另跑一遍 `SKILL_EXPANSION_REGEX`
  * 求最早展开，把最坏耗时整整翻倍。红队 A/B（诱饵形态 transcript）：改动前 10188ms → 改动后 19785ms。
  * 退化来源是 `SKILL_EXPANSION_REGEX` 里的惰性量词 `([^\n]+?)\/skills\/`——同一**行**内重复出现
  * `Base directory for this skill:` 诱饵前缀且该行不含 `/skills/` 时，每个诱饵起点都要把 `[^\n]+?`
  * 一路扩到行尾才放弃，整体 O(K×N)。诱饵位于真展开**之前**时，任何"找到即 break"的早退都失效。
- * 合并后全链只扫一趟，最坏耗时回到单趟量级（详见 SKILL_EXPANSION_REGEX 上的性能登记）。
+ * 合并后全链只扫一趟（`latestFixLineIndex` 同趟顺带累计，零额外扫描），最坏耗时保持单趟量级。
  *
- * 反伪造：两个基线都只接受 user 角色（harness 注入）的 text 块，排除 assistant / tool_result。
- * 若接受 assistant 侧文本，被判方在会话末尾自述一句展开语即可把最早基线推到末尾 → 闸门三计数归零。
+ * 反伪造：三个基线都只接受 user 角色（harness 注入）的 text 块，排除 assistant / tool_result。
+ * 若接受 assistant 侧文本，被判方在会话末尾自述一句展开语即可操纵基线。
  *
  * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
- * @returns {{ found:boolean, mode:string|null, anchorLineIndex:number|null, earliestFixLineIndex:number|null }}
+ * @returns {{ found:boolean, mode:string|null, anchorLineIndex:number|null, earliestFixLineIndex:number|null, latestFixLineIndex:number|null }}
  */
 export function detectFixSkillExpansion(entries) {
   const list = Array.isArray(entries) ? entries : [];
   let latest = { found: false, mode: null, anchorLineIndex: null };
-  // 最早一次 **fix** 展开：与主锚点取值规则刻意不同（主锚点每块只看最后一次匹配的 mode，
-  // 本基线看该块内**任一**匹配是否为 fix），故必须在同一趟里各自累计，不能互相推导。
+  // 最早/最晚一次 **fix** 展开：与主锚点取值规则刻意不同（主锚点每块只看最后一次匹配的 mode，
+  // 这两个基线看该块内**任一**匹配是否为 fix），故必须在同一趟里各自累计，不能互相推导。
   let earliestFixLineIndex = null;
+  let latestFixLineIndex = null;
   for (const entry of list) {
     if (!entry || entry.role !== 'user') continue;
     for (const text of entry.textBlocks) {
@@ -590,14 +605,17 @@ export function detectFixSkillExpansion(entries) {
       SKILL_EXPANSION_REGEX.lastIndex = 0;
       while ((match = SKILL_EXPANSION_REGEX.exec(text)) !== null) {
         lastMode = match[2];
-        if (earliestFixLineIndex === null && match[2] === 'fix') earliestFixLineIndex = entry.lineIndex;
+        if (match[2] === 'fix') {
+          if (earliestFixLineIndex === null) earliestFixLineIndex = entry.lineIndex;
+          latestFixLineIndex = entry.lineIndex;
+        }
       }
       if (lastMode !== null) {
         latest = { found: true, mode: lastMode, anchorLineIndex: entry.lineIndex };
       }
     }
   }
-  return { ...latest, earliestFixLineIndex };
+  return { ...latest, earliestFixLineIndex, latestFixLineIndex };
 }
 
 // ────────────────────────────────────────

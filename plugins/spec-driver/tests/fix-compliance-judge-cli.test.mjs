@@ -1341,9 +1341,13 @@ describe('F230 伪造改名 fail-open 反向回归（差分矩阵 A/D/E）', () 
 const CLAUDE_BASELINE = Object.freeze({
   'collapsed-zero-delegation.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
   'compliant-full.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
-  'compliant-noop.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
+  // F270 P2b（FR-024 修订版）：合规收口不再零落盘——曾 fix 展开的会话，compliant 裁决
+  // 也留恰一条审计事件（R-2 实证的黑洞收口）。两条合规 fixture 的基线随之更新：
+  // eventCount 0→1、compliant []→[true]、specifyDirCreated false→true。
+  // non-fix-session 不变：从未 fix 展开 = US5 健康路径，仍零落盘。
+  'compliant-noop.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
   'non-fix-session.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
-  'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 0, compliant: [], diagnostics: [], stderrPrefix: '', specifyDirCreated: false },
+  'legacy-repair-no-noop-anchor.jsonl': { status: 0, eventCount: 1, compliant: [true], diagnostics: [[]], stderrPrefix: '', specifyDirCreated: true },
   'role-mismatch.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
   'multi-expansion.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
   'fake-anchor-in-tool-result.jsonl': { status: 2, eventCount: 1, compliant: [false], diagnostics: [[]], stderrPrefix: '[FIX-COMPLIANCE]', specifyDirCreated: true },
@@ -1541,11 +1545,16 @@ describe('F240 SC-025 · Codex rollout 必须落 loud 诊断且与「确实不�
     }
   });
 
-  it('empty transcript → 维持现状零落盘（不产生诊断，避免噪声）', () => {
+  it('empty transcript → transcript-empty 独立诊断码 + loud 落盘（F270 FR-045 取代 F240 的零落盘裁决）', () => {
+    // F240 当年判"零落盘避免噪声"；F257 N1 实证该形态是审计黑洞（事后完全不可见），
+    // F270 FR-045 裁决改为与 transcript-unavailable 同族的 fail-open loud：仍放行、留独立码。
     const p = path.join(tmp, 'empty.jsonl');
     fs.writeFileSync(p, '\n', 'utf8');
-    assert.equal(runCli({ transcriptPath: p }).status, 0);
-    assert.equal(readVerdictEvents().length, 0);
+    assert.equal(runCli({ transcriptPath: p }).status, 0, '仍 fail-open 放行');
+    const events = readVerdictEvents();
+    assert.equal(events.length, 1);
+    assert.ok(events[0].diagnostics.includes('transcript-empty'), JSON.stringify(events[0].diagnostics));
+    assert.equal(events[0].diagnostics.includes('transcript-format-unrecognized'), false, '不得被方言码顶替');
   });
 
   it('第 4 行：transcript 不存在 → 仍是 transcript-unavailable（既有行为不变，不被方言码顶替）', () => {
@@ -1689,10 +1698,13 @@ describe('F256 T006 · 盲区 1 端到端：编号被复合命令重编后不再
     assert.deepEqual(out.missing, [], JSON.stringify(out));
     assert.deepEqual(out.transcriptDiagnostics, []);
 
-    // hook 模式端到端：exit 0 且不产生任何审计事件（合规路径静默放行）
+    // hook 模式端到端：exit 0。F270 P2b（FR-024 修订版）：合规收口不再静默——曾 fix 展开的
+    // 会话合规裁决也留痕（R-2 实证的审计黑洞收口），断言恰一条 compliant 事件。
     const r = runCli({ transcriptPath: p, sessionId: 'f256-blk1' });
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落任何 verdict 事件');
+    const evs1 = readVerdictEvents();
+    assert.equal(evs1.length, 1, '合规收口恰一条留痕事件（FR-024）');
+    assert.equal(evs1[0].compliant, true);
     assert.equal(
       fs.existsSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'f256-blk1.json')),
       false,
@@ -1972,7 +1984,7 @@ describe('F256 T013 · 盲区 2 端到端：未回收的在途委派推迟裁决
     stageDir(FEATURE_DIR);
     const r = runCli({ transcriptPath: p, sessionId: 'f256-ok' });
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(readVerdictEvents(), [], '合规路径零落盘语义不得被在途分支破坏');
+    assert.deepEqual(readVerdictEvents().filter((e) => e.compliant !== true), [], '在途分支不得额外落非合规事件（F270 P2b 后合规本身留痕一条，FR-024）');
   });
 
   it('warn 档：退出码不变（本就 exit 0），但审计事件带上 delegation-in-flight', () => {
@@ -2440,7 +2452,7 @@ describe('F257 · 短名磁盘重锚定必须有本会话对同 short-name 家�
     assert.deepEqual(out.missing, [], JSON.stringify(out));
     const r = runCli({ transcriptPath: p, sessionId: 'f257-b' });
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落 verdict 事件');
+    assert.deepEqual(readVerdictEvents().filter((e) => e.compliant !== true), [], '合规收口只留 compliant 痕迹、无其他 verdict 事件（FR-024 修订版）');
   });
 
   it('T-1c 类 X（预期阻断，勿当回归修回）：家族内任一目录都无成功写入见证 → exit 2', () => {
@@ -2660,7 +2672,7 @@ describe('F257 · 短名磁盘重锚定必须有本会话对同 short-name 家�
     assert.equal(out.diagnostics.includes('feature-dir-witness-absent'), false, JSON.stringify(out.diagnostics));
     const r = runCli({ transcriptPath: p, sessionId: 'f257-n' });
     assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(readVerdictEvents(), [], '合规收口不得落 verdict 事件');
+    assert.deepEqual(readVerdictEvents().filter((e) => e.compliant !== true), [], '合规收口只留 compliant 痕迹、无其他 verdict 事件（FR-024 修订版）');
   });
 });
 
@@ -2907,5 +2919,137 @@ describe('F257 缺陷 2 · 推迟通道的上界不得只寄存在可被删除�
     assert.ok(registered.has('delegation-in-flight-entry-budget-exhausted'), '诊断码未登记进 schema enum');
     const judgeSrc = fs.readFileSync(fileURLToPath(new URL('../scripts/fix-compliance-judge.mjs', import.meta.url)), 'utf8');
     assert.ok(judgeSrc.includes("'delegation-in-flight-entry-budget-exhausted'"), '合同登记了一个从不产出的死码');
+  });
+});
+
+// ════════════════════════════════════════
+// F270 P2 · T201 端到端：病根 iv 修复（isFix 存在性 + 证据窗口切 latestFix）
+// Tests FIRST：当前实现 fixSession=false 且委派被切窗外，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P2 · T201 fix→委派→尾部 doc 端到端（--mode report）', () => {
+  const skillLine = (mode) =>
+    JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content: `Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-${mode}` },
+    });
+  const delegateLine = (id, sub, desc) =>
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Task', id, input: { subagent_type: sub, description: desc } }] },
+    });
+
+  function writeTranscript(lines) {
+    const p = path.join(tmp, 'p2-t201.jsonl');
+    fs.writeFileSync(p, lines.join('\n') + '\n');
+    return p;
+  }
+
+  it('🔴 尾部 doc 展开不再翻转 isFix（report 模式，病根 iv 正面）', () => {
+    const p = writeTranscript([
+      skillLine('fix'),
+      delegateLine('toolu_P2_IMPL', 'spec-driver:implement', '实施修复'),
+      skillLine('doc'),
+    ]);
+    const r = runCli({ mode: 'report', transcriptPath: p });
+    assert.equal(r.status, 0);
+    const report = JSON.parse(r.stdout);
+    assert.equal(report.fixSession, true, '病根 iv：曾 fix 展开即 isFix=true（存在性判据）');
+    assert.equal(report.mode, 'doc', 'mode 如实报最晚任意展开（诊断语义保持）');
+  });
+
+  it('🔴 全合规会话 + 尾部 doc 展开 → hook 仍 exit 0（窗口误伤面检测器）', () => {
+    // 检测的是"只修 isFix、不切窗口"的半吊子修法：isFix=true 后判定照跑，
+    // 但 5 个证据窗口若仍以 anchorLineIndex（=doc 行）为界，fix 阶段的
+    // 委派/见证全被切到窗外 → missing 非空 → exit 2 误阻断。
+    // 正确实现（窗口切 latestFixLineIndex）下本会话与"无尾部 doc"完全同判：合规 exit 0。
+    const p = compliantTranscript();
+    fs.appendFileSync(p, skillLine('doc') + '\n');
+    const r = runCli({ mode: 'hook', transcriptPath: p });
+    assert.equal(
+      r.status, 0,
+      `全合规 + 尾部 doc 必须仍合规；exit=${r.status} stderr=${r.stderr.slice(0, 300)}`
+    );
+  });
+
+  it('仅 doc 无 fix：isFix=false（存在性判据不误伤非 fix 会话）', () => {
+    const p = writeTranscript([skillLine('doc')]);
+    const r = runCli({ mode: 'report', transcriptPath: p });
+    const report = JSON.parse(r.stdout);
+    assert.equal(report.fixSession, false);
+    assert.equal(report.mode, 'doc');
+  });
+
+  it('T203 端到端回归钉：纯 fix 会话行为与改动前一致', () => {
+    const p = writeTranscript([
+      skillLine('fix'),
+      delegateLine('toolu_P2_V', 'spec-driver:verify', '工具链验证'),
+    ]);
+    const r = runCli({ mode: 'report', transcriptPath: p });
+    const report = JSON.parse(r.stdout);
+    assert.equal(report.fixSession, true);
+    assert.equal(report.inFlightDelegations.length, 1);
+  });
+});
+
+// ════════════════════════════════════════
+// F270 P2b · FR-024/045 审计黑洞收口（A-3 / R-2 实证的两条静默路径）
+// Tests FIRST：合规早退当前零落盘、空 transcript 当前静默放行，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P2b · 审计黑洞收口', () => {
+  function readAuditEvents() {
+    const runsDir = path.join(tmp, '.specify', 'runs');
+    if (!fs.existsSync(runsDir)) return [];
+    const events = [];
+    for (const f of fs.readdirSync(runsDir)) {
+      if (!f.endsWith('.jsonl')) continue;
+      for (const line of fs.readFileSync(path.join(runsDir, f), 'utf8').split('\n')) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch { /* 忽略坏行 */ }
+      }
+    }
+    return events;
+  }
+
+  it('🔴 合规早退不再零落盘：compliant verdict 落审计事件（R-2 收口）', () => {
+    const p = compliantTranscript();
+    const r = runCli({ mode: 'hook', transcriptPath: p, sessionId: 'p2b-compliant' });
+    assert.equal(r.status, 0, '合规仍放行');
+    const hits = readAuditEvents().filter(
+      (e) => e.eventType === 'fix-compliance-verdict' && e.sessionId === 'p2b-compliant' && e.compliant === true
+    );
+    assert.equal(hits.length, 1, '曾 fix 展开的会话，合规裁决必须留痕（FR-024 修订版）');
+  });
+
+  it('🔴 空 transcript：独立诊断码 transcript-empty + fail-open 落盘（N1 收口）', () => {
+    const p = path.join(tmp, 'empty.jsonl');
+    fs.writeFileSync(p, '');
+    const r = runCli({ mode: 'report', transcriptPath: p, sessionId: 'p2b-empty' });
+    assert.equal(r.status, 0);
+    const report = JSON.parse(r.stdout);
+    assert.ok(
+      report.transcriptDiagnostics.includes('transcript-empty'),
+      `空 transcript 须落独立诊断码而非静默按"非 fix"放行；实际 ${JSON.stringify(report.transcriptDiagnostics)}`
+    );
+    const rh = runCli({ mode: 'hook', transcriptPath: p, sessionId: 'p2b-empty-hook' });
+    assert.equal(rh.status, 0, '空 transcript 仍 fail-open 放行');
+    const hits = readAuditEvents().filter(
+      (e) => e.sessionId === 'p2b-empty-hook' && (e.diagnostics || []).includes('transcript-empty')
+    );
+    assert.equal(hits.length, 1, 'hook 侧须 loud 落盘（与 transcript-unavailable 同族）');
+  });
+
+  it('US5 回归钉：从未 fix 展开的会话仍零落盘', () => {
+    const p = path.join(tmp, 'healthy.jsonl');
+    fs.writeFileSync(
+      p,
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: '普通会话' }] } }) + '\n'
+    );
+    const specifyDir = path.join(tmp, '.specify');
+    fs.rmSync(specifyDir, { recursive: true, force: true });
+    const r = runCli({ mode: 'hook', transcriptPath: p, sessionId: 'p2b-healthy' });
+    assert.equal(r.status, 0);
+    assert.equal(fs.existsSync(specifyDir), false, '健康路径不得凭空创建 .specify/（US5）');
   });
 });

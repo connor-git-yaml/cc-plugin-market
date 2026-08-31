@@ -33,17 +33,18 @@
 ## Phase 2 · 锚点三分（判定器核心，**最高风险**，plan §4b）
 
 ### 🔴 红先行（病根 iv 真验收，比"isFix 不翻转"深一层）
-- [ ] T201 写窗口下界回归钉：语料 `fix展开 → Write fix-report → Agent(implement) → Agent(verify) → 尾部 spec-driver-doc 展开`。**当前实现**：`extractDelegationsAfter` 窗口从 doc 行起 → 委派空 → 误判缺失（**断言此刻红**）。改后应绿。
-- [ ] T202 写 isFix 存在性测试：`仅 doc 无 fix`→isFix=false；`fix后接doc`→isFix=true；`多次fix`→仍 true（FR-022/023）。
-- [ ] T203 写闸门三基线**不变**回归钉：`earliestFixLineIndex` 语义与取值改动前后逐位一致（复用 `core.test:4625` 家族，防 FR-025 类回退）。
-- [ ] T204 写 5 消费点窗口切换的逐个断言：每个消费点（judge:239/376/401/417/470）在"fix后接doc"语料下，证据窗口以 `latestFixLineIndex` 为界而非 `anchorLineIndex`。
+- [x] T201 窗口下界回归钉——**✅** 端到端「全合规 + 尾部 doc → hook 仍 exit 0」检测器（半吊子修法=只修 isFix 不切窗口会红）+ report 模式 fixSession 正面。
+- [x] T202 isFix 存在性——**✅** 仅 doc→false / fix→doc→true / 多次 fix→true（core + 端到端）。
+- [x] T203 闸门三基线**不变**回归钉——**✅** earliestFix 与 anchor 逐位一致（含 multi-expansion fixture）。
+- [x] T204 5 消费点窗口切换——**✅** core 级 A/B 实证：fix→委派→尾部 doc，latestFix 窗保住委派、anchor 窗切掉（病根 iv 误伤面实证）。
+- [x] **T2b（追加）审计黑洞收口**——合规早退落审计（FR-024）+ 空 transcript 落 `transcript-empty`（FR-045）；schema enum 同步（FR-049）；既有 F240/F256/F257 断言按 spec 裁决更新留痕。
 
 ### 实现
-- [ ] T205 `core:detectFixSkillExpansion`：同趟增产 `latestFixLineIndex`（最晚一次 *fix* 展开）；`earliestFixLineIndex` / `anchorLineIndex` **保持不变**（core:1082 红字）。
-- [ ] T206 `judge:201` isFix 判据：`anchor.mode==='fix'` → `earliestFixLineIndex !== null`（存在性）。
-- [ ] T207 5 消费点入参切换：judge:239/376/401/417/470 从 `anchor.anchorLineIndex` → `anchor.latestFixLineIndex`。
-- [ ] T208 `anchorLineIndex` 孤儿处置（承 T000c 结论）：删除或保留 + 注释说明。
-- [ ] T209 **Phase 收尾 · 异构对抗 ×2**（切入角：① 锚点仍可翻转/绕过面 ② 窗口切换致新误阻断面）。修复所有 CRITICAL，重跑 T201-204。
+- [x] T205 `detectFixSkillExpansion` 同趟增产 `latestFixLineIndex`（earliest/anchor 保持不变）——**✅ core 587/0**。
+- [x] T206 isFix 判据 → `earliestFixLineIndex !== null`（存在性）——**✅**，over-claim 措辞如实化（resume/sidechain/跨会话既有边界不封）+ W-3 新误阻断类按 F256「类 X」登记。
+- [x] T207 5 消费点入参切换 latestFix——**✅** judge 258/395/420/436/489；`anchorLineIndex` 仅剩注释无代码消费（grep 复核）。
+- [x] T208 `anchorLineIndex` 孤儿处置——**保留字段**（返回形状/mode 诊断依赖）；I-1 承重注释漂移（形态 3）已随代码改。
+- [x] T209 **Phase 收尾 · 异构对抗 ×2**——**✅ 两路均 0 CRITICAL、净收窄**（fail-open A：latestFix 单调+空窗自伤BLOCK；fail-closed B：latestFix≤anchor→窗口⊇→不可翻block，实测确认）。留痕 `verification/p2-adversarial.md`。5 次级发现全处置。
 
 ---
 

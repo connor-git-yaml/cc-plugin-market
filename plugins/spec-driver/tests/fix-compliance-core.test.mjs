@@ -4808,3 +4808,85 @@ describe('F257 · SKILL_EXPANSION_REGEX 诱饵前缀形态：全链只允许扫�
     assert.ok(ms < 3000, `疑似扫描趟数回归：全链耗时 ${ms.toFixed(1)}ms（预算 3000ms）`);
   });
 });
+
+// ════════════════════════════════════════
+// F270 P2 · 锚点三分（reverse-census §6 / spec FR-022/023/025）
+// Tests FIRST：latestFixLineIndex 尚不存在，本组先红。
+// ════════════════════════════════════════
+
+describe('F270 P2 · detectFixSkillExpansion 三量：latestFixLineIndex', () => {
+  const mk = (objs) => objs.map((o, i) => normalizeTranscriptEntry(o, i, false));
+  const skill = (mode) => ({
+    type: 'user',
+    message: { role: 'user', content: `Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-${mode}` },
+  });
+  const say = (text) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
+
+  it('只有 fix：三量同行，anchorLineIndex 语义不变', () => {
+    const a = detectFixSkillExpansion(mk([skill('fix'), say('开始')]));
+    assert.equal(a.anchorLineIndex, 0);
+    assert.equal(a.earliestFixLineIndex, 0);
+    assert.equal(a.latestFixLineIndex, 0);
+  });
+
+  it('🔴 病根 iv 核心：fix→尾部 doc，latestFix 停在 fix 行、anchor 仍推到 doc 行', () => {
+    const a = detectFixSkillExpansion(mk([skill('fix'), say('修'), skill('doc')]));
+    assert.equal(a.mode, 'doc', 'anchor.mode 语义保持（最晚任意展开）');
+    assert.equal(a.anchorLineIndex, 2, 'anchorLineIndex 语义保持');
+    assert.equal(a.earliestFixLineIndex, 0);
+    assert.equal(a.latestFixLineIndex, 0, 'latestFix 不被非 fix 展开推走');
+  });
+
+  it('fix→fix→doc：latestFix 取第二次 fix，earliest 取第一次（方向不对称保持）', () => {
+    const a = detectFixSkillExpansion(mk([skill('fix'), say('a'), skill('fix'), say('b'), skill('doc')]));
+    assert.equal(a.earliestFixLineIndex, 0);
+    assert.equal(a.latestFixLineIndex, 2);
+    assert.equal(a.anchorLineIndex, 4);
+  });
+
+  it('无 fix（仅 doc）：latestFix 与 earliestFix 均 null', () => {
+    const a = detectFixSkillExpansion(mk([skill('doc'), say('x')]));
+    assert.equal(a.earliestFixLineIndex, null);
+    assert.equal(a.latestFixLineIndex, null);
+    assert.equal(a.mode, 'doc');
+  });
+
+  it('零展开：三量全 null 且 found=false', () => {
+    const a = detectFixSkillExpansion(mk([say('随便')]));
+    assert.equal(a.found, false);
+    assert.equal(a.latestFixLineIndex, null);
+  });
+
+  it('T203 回归钉：既有 fixture 上 earliestFix/anchor 取值与改动前逐位一致', () => {
+    const a = detectFixSkillExpansion(loadEntries('multi-expansion.jsonl'));
+    assert.equal(a.mode, 'fix');
+    assert.equal(a.anchorLineIndex, 2);
+    assert.equal(a.latestFixLineIndex, 2, '最晚展开本就是 fix 时，latestFix === anchor');
+  });
+});
+
+describe('F270 P2 · T204 五消费点窗口切换（core 级）', () => {
+  const mk = (objs) => objs.map((o, i) => normalizeTranscriptEntry(o, i, false));
+  const skill = (mode) => ({
+    type: 'user',
+    message: { role: 'user', content: `Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-${mode}` },
+  });
+  const delegate = (id, sub, desc) => ({
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Task', id, input: { subagent_type: sub, description: desc } }] },
+  });
+
+  it('🔴 fix→委派→尾部 doc：以 latestFix 为界委派仍在窗内，以 anchor 为界则被切掉', () => {
+    const entries = mk([
+      skill('fix'),
+      delegate('toolu_D1', 'spec-driver:implement', '实施修复'),
+      delegate('toolu_D2', 'spec-driver:verify', '工具链验证'),
+      skill('doc'),
+    ]);
+    const a = detectFixSkillExpansion(entries);
+    const inNewWindow = extractDelegationsAfter(entries, a.latestFixLineIndex);
+    assert.equal(inNewWindow.length, 2, '新窗口（latestFix）保住 fix 阶段委派');
+    const inOldWindow = extractDelegationsAfter(entries, a.anchorLineIndex);
+    assert.equal(inOldWindow.length, 0, '旧窗口（anchor=doc 行）把委派全切掉——病根 iv 的误伤面实证');
+  });
+});

@@ -197,9 +197,36 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
       transcriptDiagnostics, verdict: null,
     };
   }
+  if (entries.length === 0) {
+    // F270 P2b（FR-045 / F257 N1 收口）：文件存在但零条目 ≠ "非 fix 会话"，是"无法判定"。
+    // 原实现走 isFix=false 静默零落盘早退——从这条路径出去的会话事后完全不可见（A-3 审计黑洞）。
+    // 改走既有 fail-open loud 路径：仍放行（无法判定不阻断），但独立诊断码 + hook 侧落盘，
+    // 与 transcript-unavailable 同族。不违反 US5：空文件是异常态，不是健康路径的常规形态。
+    return {
+      enforcement, configDegraded, isFix: false, mode: null,
+      transcriptDiagnostics: ['transcript-empty'], verdict: null,
+    };
+  }
 
   const anchor = detectFixSkillExpansion(entries);
-  const isFix = anchor.found && anchor.mode === 'fix';
+  // F270 P2（病根 iv）：isFix 改**存在性**判据——transcript 内曾出现过 `spec-driver-fix` 字面
+  // 展开即按 fix 判定。原判据 `anchor.mode === 'fix'` 用"最晚任意展开的 mode"，会话尾部展开一次
+  // sync/doc 即整体跳过 fix 判定且零落盘（--mode report 实测复现：R-1，两行文本 fixSession true→false）。
+  // anchor.mode 仍如实报最晚任意展开（诊断语义不变）。
+  //
+  // 🔴 本判据封的是**会话内 fix 展开被后续非 fix 展开顶掉**这一支，**不封**以下既有能力边界
+  // （改动前 `mode==='fix'` 判据同样放行这些，非本卡引入——如实登记，勿读作"病根 iv 全闭合"）：
+  //   - resume 入口：`/spec-driver:spec-driver-resume` 承接 fix 委派链，其 transcript 只含
+  //     `skills/spec-driver-resume` 字面展开、无 `spec-driver-fix` → earliestFix=null → 不判定。
+  //   - fix 展开发生在子代理 sidechain（主 transcript 不可见）/ 跨会话续做（只看当前 transcript）。
+  //   真正收口需把 resume 纳入 fix 家族基线 + 二级信号（窗口内 `specs/NNN-fix-*` 提名，否则
+  //   feature/story 的 resume 会被误判成 fix 合同大面积误阻断）——范围超出本卡 D-1，分流跟进。
+  //
+  // ⚠️ 存在性判据的**对称代价**（本卡新引入的误阻断类，spec FR-023 已承认为已知代价）：同一会话
+  //   先展开一次 fix（哪怕中途放弃、零制品）再跑 feature/story/implement，isFix 恒 true → 按 fix
+  //   合同判 → missing 非空 → 阻断。原 `mode==='fix'` 判据（尾部展开即释放）无此形态。方向 fail-closed、
+  //   可自愈（补齐 fix 制品或 BLOCK_LIMIT=2 兜底降级），但属新增误阻断类，按 F256「类 X」纪律登记。
+  const isFix = anchor.earliestFixLineIndex !== null;
   if (!isFix) {
     // F240 FR-004：区分"确实不是 fix 会话"与"这份 transcript 我根本解析不了"。
     //
@@ -236,7 +263,12 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   const assistantEntriesSinceEarliestFix =
     countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
 
-  const candidate = resolveFeatureDirCandidate(entries, anchor.anchorLineIndex);
+  // F270 P2：证据窗口下界统一切至 latestFixLineIndex（最晚一次 **fix** 展开）。
+  // 不能用 anchorLineIndex（最晚**任意**展开）：尾部一次 doc 展开会把 5 个窗口推到 doc 行，
+  // fix 阶段的委派/见证/执行记录被整段切到窗外 → 大面积误阻断（core.test T204 有 A/B 实证）。
+  // 被判方重展开 fix 推走 latestFix 只会切掉自己的证据（fail-closed 自伤），与闸门三用
+  // earliest 防"重展开续命"方向互补——方向不对称是刻意的（F257/F270）。
+  const candidate = resolveFeatureDirCandidate(entries, anchor.latestFixLineIndex);
 
   // F227 D：主候选磁盘不可用时的只读兜底——状态机（core 层）逐字不变，
   // 磁盘判据完全下沉到这里，且仅在 ambiguous 为假、且 candidate.path 不可用时才介入。
@@ -347,15 +379,17 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     //     把 verification-report.md 收进见证侧则会直接复活第 3 轮红队实证的绕过链（见上方
     //     ANCHORED_ARTIFACT_PATH_REGEX 的承重不变量）。两条放宽都换不回等价的安全下界。
     //     形态 2 的补救与形态 1 相同：对家族内任一目录的 fix-report.md 做一次 Write/Edit 即恢复。
-    //   形态 3 · **会话中途重新展开 fix skill**（第 5 轮审查补登记）：见证窗口的下界用的是
-    //     `anchor.anchorLineIndex`（**最晚**一次展开），与闸门三刻意取**最早**展开作基线的方向相反
-    //     （见 countAssistantEntriesSinceEarliestFixExpansion 的 JSDoc）。于是同一会话中途再次
-    //     `Skill(spec-driver-fix)` 展开时，之前对制品的**合法** Write 会落到新窗口之外 → 见证清空 →
-    //     `feature-dir-witness-absent` 阻断。
-    //     🔴 这个方向不对称是**刻意的、且两侧各自 fail-closed**，不是需要"对齐"的 bug：见证窗口用最晚
-    //     锚点 ⟹ 重展开只会**收窄**见证（更难放行）；闸门三用最早展开 ⟹ 重展开无法把计数清零
-    //     （更难推迟）。两侧都取"重展开不能让被判方获益"的那一端。若把见证窗口也改成最早展开，
-    //     会让锚点前的陈旧写入事件重新计入见证，放宽的是**放行**方向，与本收口相反。
+    //   形态 3 · **会话中途重新展开 fix skill**（第 5 轮审查补登记；F270 P2 更新窗口基线）：
+    //     见证窗口的下界 F270 起用 `anchor.latestFixLineIndex`（**最晚一次 fix 展开**，非「最晚
+    //     任意展开」的 anchorLineIndex——后者会被尾部一次 doc 展开推走，把 fix 阶段见证整段切到
+    //     窗外，即病根 iv 的误伤面）。与闸门三取 `earliestFixLineIndex`（**最早** fix 展开）作基线
+    //     的方向相反（见 countAssistantEntriesSinceEarliestFixExpansion 的 JSDoc）。于是同一会话
+    //     中途再次 `Skill(spec-driver-fix)` 展开时，之前对制品的**合法** Write 会落到新窗口之外 →
+    //     见证清空 → `feature-dir-witness-absent` 阻断。
+    //     🔴 这个方向不对称是**刻意的、且两侧各自 fail-closed**，不是需要"对齐"的 bug：见证窗口用
+    //     最晚 fix 展开 ⟹ 重展开 fix 只会**收窄**见证（更难放行）；闸门三用最早 fix 展开 ⟹ 重展开
+    //     无法把计数清零（更难推迟）。两侧都取"重展开不能让被判方获益"的那一端。若把见证窗口也改成
+    //     最早展开，会让锚点前的陈旧写入事件重新计入见证，放宽的是**放行**方向，与本收口相反。
     //     补救与形态 1/2 相同：重展开后对家族内任一目录的 fix-report.md 再做一次 Write/Edit 即恢复。
     //
     // 本次**不**消除的两条既有面（禁止读成"已消除"）：
@@ -373,7 +407,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
       if (shortName !== null) {
         // 见证集合按 short-name 归约后比较（家族级；理由见上方「为何比较是 short-name 家族级」一段）
         const witnessedShortNames = new Set(
-          [...collectArtifactWriteWitnessDirs(entries, anchor.anchorLineIndex, projectRoot)]
+          [...collectArtifactWriteWitnessDirs(entries, anchor.latestFixLineIndex, projectRoot)]
             .map(extractFixShortName)
             .filter((s) => s !== null),
         );
@@ -398,7 +432,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   // 因此这里只记标记，不早退：委派抽取与 judgeCompliance 必须照常跑完（见下方 FR-004 收窄段）。
   const featureDirUndetermined = resolvedPath === null && candidate.ambiguous === true;
 
-  const delegations = extractDelegationsAfter(entries, anchor.anchorLineIndex);
+  const delegations = extractDelegationsAfter(entries, anchor.latestFixLineIndex);
   const featureDirCheck = checkFeatureDirOnDisk(projectRoot, resolvedPath);
   const fixReport = resolvedPath
     ? readArtifactFile(projectRoot, `${resolvedPath}/fix-report.md`)
@@ -414,7 +448,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
     : { closureForm: 'undetermined', hasRepairAnchor: false, hasNoopAnchor: false };
   // no-op 锚点分支才配对 fix 锚点后窗口的 Bash 执行证据；纯 repair（hasNoopAnchor=false）零介入（FR-007）
   const executionRecords = closure.hasNoopAnchor
-    ? extractExecutionRecordsAfter(entries, anchor.anchorLineIndex)
+    ? extractExecutionRecordsAfter(entries, anchor.latestFixLineIndex)
     : [];
 
   const verdict = judgeCompliance({
@@ -467,7 +501,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null) {
   // F256 盲区 2：复用已解析的 entries/锚点求"在途委派"（零额外磁盘/transcript 读取）。
   // 本字段只描述事实（锚点后是否还有未回收的在途工作），不参与 verdict 本身；
   // 如何使用它（推迟裁决）由 runHook 决定。
-  const inFlightDelegations = extractInFlightDelegationsAfter(entries, anchor.anchorLineIndex);
+  const inFlightDelegations = extractInFlightDelegationsAfter(entries, anchor.latestFixLineIndex);
 
   return {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
@@ -722,6 +756,21 @@ function runHook(projectRoot, payload) {
   // reset 对其为空操作；off 档已在函数入口短路，永不触达此分支。
   if (result.verdict.compliant) {
     resetBlockState(projectRoot, payload.session_id);
+    // F270 P2b（FR-024 修订版 / R-2 收口）：曾 fix 展开的会话，**合规裁决也必须留痕**。
+    // 原实现此处零落盘——与 !isFix 早退共同构成"事后完全不可见"的审计黑洞（F257 遗留，
+    // A-3 点名的两条中真正一直漏的这条）。落盘失败不得影响放行（try 包裹，与 fail-open
+    // 路径同纪律）。US5 不受影响：能走到这里 isFix 必为 true（曾 fix 展开），非健康路径。
+    try {
+      appendAuditEvent(projectRoot, buildAuditEvent({
+        sessionId: payload.session_id,
+        enforcement: cfg.enforcement,
+        verdict: result.verdict,
+        blockCount: null,
+        degraded: false,
+      }));
+    } catch {
+      // 审计落盘失败不得让合规放行崩溃
+    }
     return 0;
   }
 

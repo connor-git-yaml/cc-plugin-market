@@ -35,6 +35,7 @@
         "type": "string",
         "enum": [
           "transcript-unavailable",
+          "transcript-empty",
           "transcript-too-large",
           "parse-timeout",
           "internal-error",
