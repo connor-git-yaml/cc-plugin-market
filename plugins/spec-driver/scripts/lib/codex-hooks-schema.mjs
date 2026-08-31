@@ -101,6 +101,8 @@ export const OWNED_HOOK_SCRIPT_SUFFIXES = Object.freeze([
   Object.freeze(['scripts', 'postinstall.sh']),
   Object.freeze(['hooks', 'pre-tool-use-guard.sh']),
   Object.freeze(['hooks', 'post-tool-use-format.sh']),
+  // F270 P5：会话证据账本采集器（PostToolUse，matcher 空=全工具触发）
+  Object.freeze(['hooks', 'post-tool-use-ledger.sh']),
   Object.freeze(['hooks', 'stop-task-check.sh']),
   Object.freeze(['hooks', 'stop-fix-compliance-check.sh']),
 ]);
@@ -121,6 +123,8 @@ export const OWNED_HOOK_EXPECTED_EVENT = Object.freeze({
   'scripts/postinstall.sh': 'SessionStart',
   'hooks/pre-tool-use-guard.sh': 'PreToolUse',
   'hooks/post-tool-use-format.sh': 'PostToolUse',
+  // F270 P5：账本采集器也挂 PostToolUse（PostToolUse 下现有两条 handler，与 Stop 下两条同构）
+  'hooks/post-tool-use-ledger.sh': 'PostToolUse',
   'hooks/stop-task-check.sh': 'Stop',
   'hooks/stop-fix-compliance-check.sh': 'Stop',
 });

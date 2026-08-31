@@ -57,7 +57,11 @@ function ownedFourEventDoc(): Record<string, unknown> {
     hooks: {
       SessionStart: [ownedGroup('scripts/postinstall.sh')],
       PreToolUse: [ownedGroup('hooks/pre-tool-use-guard.sh')],
-      PostToolUse: [ownedGroup('hooks/post-tool-use-format.sh')],
+      // F270 P5：PostToolUse 下现有两条 handler（prettier + 账本采集器），与 Stop 下两条同构
+      PostToolUse: [
+        ownedGroup('hooks/post-tool-use-format.sh'),
+        ownedGroup('hooks/post-tool-use-ledger.sh'),
+      ],
       Stop: [
         ownedGroup('hooks/stop-task-check.sh'),
         ownedGroup('hooks/stop-fix-compliance-check.sh'),
@@ -396,7 +400,7 @@ describe('F264 — 产品层 handler 级判据', () => {
 
   it('五条 owned 脚本逐条删除，每一条都必须被 handler 级判据抓到（无遗漏登记）', () => {
     const scripts = Object.keys(schema.OWNED_HOOK_EXPECTED_EVENT);
-    expect(scripts).toHaveLength(5);
+    expect(scripts).toHaveLength(6);
     for (const script of scripts) {
       const basename = script.split('/')[1];
       const doc = readCanonical();

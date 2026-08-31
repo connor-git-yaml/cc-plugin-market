@@ -138,7 +138,7 @@ describe('codex-hooks-installer', () => {
       const stopGroups = merged.hooks!['Stop'] as unknown[];
       expect(JSON.stringify(stopGroups[0])).toBe(JSON.stringify(FOREIGN_STOP));
       // 我方 5 个 handler 就位
-      expect(ownedHandlers(merged)).toHaveLength(5);
+      expect(ownedHandlers(merged)).toHaveLength(6);
     });
 
     it('目标文件不存在时创建目录与文件，且只含我方条目', () => {
@@ -149,7 +149,7 @@ describe('codex-hooks-installer', () => {
       });
       expect(result.changed).toBe(true);
       const doc = JSON.parse(fs.readFileSync(path.join(nested, 'hooks.json'), 'utf-8')) as HooksDoc;
-      expect(ownedHandlers(doc)).toHaveLength(5);
+      expect(ownedHandlers(doc)).toHaveLength(6);
       expect(Object.keys(doc.hooks!).sort()).toEqual(
         ['PostToolUse', 'PreToolUse', 'SessionStart', 'Stop'].sort(),
       );
@@ -177,7 +177,7 @@ describe('codex-hooks-installer', () => {
       expect(second.changed).toBe(false);
       expect(second.backupPath).toBeNull();
       expect(fs.readFileSync(target, 'utf-8')).toBe(firstRaw);
-      expect(ownedHandlers(readTarget())).toHaveLength(5);
+      expect(ownedHandlers(readTarget())).toHaveLength(6);
     });
 
     it('幂等语义取「原地更新」：插件根变化时替换旧路径，条目数恒不变、无旧路径残留', () => {
@@ -189,7 +189,7 @@ describe('codex-hooks-installer', () => {
 
       expect(upgraded.changed).toBe(true);
       const doc = readTarget();
-      expect(ownedHandlers(doc)).toHaveLength(5);
+      expect(ownedHandlers(doc)).toHaveLength(6);
       const raw = fs.readFileSync(target, 'utf-8');
       expect(raw).toContain(UPGRADED_PLUGIN_ROOT);
       expect(raw).not.toContain(PLUGIN_ROOT);
@@ -206,7 +206,7 @@ describe('codex-hooks-installer', () => {
         JSON.stringify([FOREIGN_PERMISSION]),
       );
       expect(JSON.stringify((doc.hooks!['Stop'] as unknown[])[0])).toBe(JSON.stringify(FOREIGN_STOP));
-      expect(ownedHandlers(doc)).toHaveLength(5);
+      expect(ownedHandlers(doc)).toHaveLength(6);
     });
   });
 
@@ -220,7 +220,7 @@ describe('codex-hooks-installer', () => {
       const result = installer.removeCodexHooks({ codexHome });
 
       expect(result.ok).toBe(true);
-      expect(result.removedCount).toBe(5);
+      expect(result.removedCount).toBe(6);
       const doc = readTarget();
       expect(ownedHandlers(doc)).toHaveLength(0);
       expect(JSON.stringify(doc.hooks!['PermissionRequest'])).toBe(
@@ -291,7 +291,7 @@ describe('codex-hooks-installer', () => {
       seedForeign();
       for (let i = 0; i < 3; i += 1) {
         installer.installCodexHooks({ codexHome, entries: entriesFor(PLUGIN_ROOT) });
-        expect(ownedHandlers(readTarget())).toHaveLength(5);
+        expect(ownedHandlers(readTarget())).toHaveLength(6);
         installer.removeCodexHooks({ codexHome });
         expect(ownedHandlers(readTarget())).toHaveLength(0);
       }
@@ -426,7 +426,7 @@ describe('codex-hooks-installer', () => {
       expect(result.changed).toBe(true);
       expect((fs.statSync(target).mode & 0o777).toString(8)).toBe((0o600).toString(8));
       // 权限保全不能是"写坏内容换来的"
-      expect(ownedHandlers(readTarget())).toHaveLength(5);
+      expect(ownedHandlers(readTarget())).toHaveLength(6);
     });
 
     it('目标原有 setgid 高位（2640）→ 高位一并保全（`& 0o777` 掩码会静默丢掉 setgid）', () => {
@@ -545,7 +545,7 @@ describe('codex-hooks-installer', () => {
 
         expect(result.ok).toBe(true);
         expect(result.changed).toBe(true);
-        expect(ownedHandlers(readTarget())).toHaveLength(5);
+        expect(ownedHandlers(readTarget())).toHaveLength(6);
         expect(result.diagnostics.map((d: { code: string }) => d.code)).toContain(
           'target-mode-preserve-failed',
         );
@@ -569,12 +569,12 @@ describe('codex-hooks-installer', () => {
       const removed = result.diagnostics.filter(
         (d: { code: string }) => d.code === 'owned-entry-removed',
       );
-      expect(removed).toHaveLength(5);
-      expect(new Set(removed.map((d: { command: string }) => d.command)).size).toBe(5);
+      expect(removed).toHaveLength(6);
+      expect(new Set(removed.map((d: { command: string }) => d.command)).size).toBe(6);
       for (const diagnostic of removed) {
         expect(diagnostic.command).toContain(PLUGIN_ROOT);
       }
-      expect(result.removedCommands).toHaveLength(5);
+      expect(result.removedCommands).toHaveLength(6);
     });
 
     it('版本升级时旧路径条目被登记为已移除；原样写回的条目不登记（不淹没真信号）', () => {
@@ -587,7 +587,7 @@ describe('codex-hooks-installer', () => {
       const removed = upgraded.diagnostics.filter(
         (d: { code: string }) => d.code === 'owned-entry-removed',
       );
-      expect(removed).toHaveLength(5);
+      expect(removed).toHaveLength(6);
       for (const diagnostic of removed) {
         expect(diagnostic.command).toContain(PLUGIN_ROOT);
       }
@@ -725,7 +725,7 @@ describe('codex-hooks-installer', () => {
       expect(result.diagnostics.map((d: { code: string }) => d.code)).toContain(
         'hooks-field-not-object-replaced',
       );
-      expect(ownedHandlers(readTarget())).toHaveLength(5);
+      expect(ownedHandlers(readTarget())).toHaveLength(6);
       expect(readTarget()['description']).toBe('x');
     });
 
@@ -754,7 +754,7 @@ describe('codex-hooks-installer', () => {
       expect(JSON.stringify(stop.slice(0, 4))).toBe(
         JSON.stringify([null, 'string-group', { matcher: 'x', hooks: 'not-an-array' }, { noHooksField: 1 }]),
       );
-      expect(ownedHandlers(readTarget())).toHaveLength(5);
+      expect(ownedHandlers(readTarget())).toHaveLength(6);
     });
 
     it('顶层文档被写成数组 / 标量 → 不崩溃，替换为对象并诊断', () => {
@@ -763,7 +763,7 @@ describe('codex-hooks-installer', () => {
       expect(result.diagnostics.map((d: { code: string }) => d.code)).toContain(
         'document-not-object-replaced',
       );
-      expect(ownedHandlers(readTarget())).toHaveLength(5);
+      expect(ownedHandlers(readTarget())).toHaveLength(6);
     });
 
     it('handler 非对象 / command 非字符串 → 不崩溃且原样保留', () => {
@@ -810,7 +810,7 @@ describe('codex-hooks-installer', () => {
 
         expect(fs.lstatSync(target).isSymbolicLink()).toBe(true);
         const doc = JSON.parse(fs.readFileSync(realFile, 'utf-8')) as HooksDoc;
-        expect(ownedHandlers(doc)).toHaveLength(5);
+        expect(ownedHandlers(doc)).toHaveLength(6);
         expect(JSON.stringify(doc.hooks!['PermissionRequest'])).toBe(
           JSON.stringify([FOREIGN_PERMISSION]),
         );

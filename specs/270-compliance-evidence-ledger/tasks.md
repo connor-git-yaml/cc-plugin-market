@@ -91,11 +91,11 @@
 
 ## Phase 5 · 分发登记 + 清单同步（机械但漏一处即红，plan §4a 裁决五）
 
-- [ ] T501 `hooks/hooks.json` 加 PostToolUse 账本 handler。
-- [ ] T502 `codex-hooks-schema.mjs`：`OWNED_HOOK_SCRIPT_SUFFIXES`(:100-106) + `OWNED_HOOK_EXPECTED_EVENT`(:120-126) 双处登记新 handler；「恒 5 条」口径改 **6 条**（FR-037/C-11）。
-- [ ] T503 `judge-snapshot-core.mjs:16-25` `JUDGE_FILE_SET` 加新判定链模块；**4 处** length 断言同步：`core.test:344`/`:362`、`doctor-cli.test:28`（独立副本）、`doctor.test:60`（注释）（FR-038/C-W2）。
-- [ ] T504 `contracts/fix-compliance-verdict-event.schema.json` 闭合 enum 加新诊断码；合同守卫**不照抄**"只读 judge 单文件"模板（新码由新 lib 发出，FR-049/delta 认定）。
-- [ ] T505 验收：`--codex-home <隔离目录>` 对真实安装跑 → 恒 6 条不重复（SC-010，**不**用 `--target` 对 canonical 跑，那基线本就 fail，§4.1）；`npx vitest run` TS 侧绿（SC-008）。
+- [x] T501 `hooks/hooks.json` 加 PostToolUse 账本 handler——**✅** matcher 空（全工具触发 FR-001）;PostToolUse 下现两条（prettier + 账本），与 Stop 下两条同构。
+- [x] T502 `codex-hooks-schema.mjs` 双处登记——**✅** `OWNED_HOOK_SCRIPT_SUFFIXES`(6) + `OWNED_HOOK_EXPECTED_EVENT`(6) 一致;「恒 5 条」口径改 6（F264/C-11）。
+- [x] T503 `JUDGE_FILE_SET`——**已在 P3/P4 完成**（in-flight-verdict + ledger-reader + ledger-writer，7→10，五处断言 length 派生）。
+- [x] T504 verdict-event schema enum——**已在 P2/P3/P4 增量补**（transcript-empty / 7 在途计时器码 / 3 账本码）;守卫不照抄单文件模板。
+- [x] T505 验收——**✅** codex-hooks 单测 92/92（TS 侧,含 event-gate C4 回归钉与 installer 卸载计数 5→6;fixture ownedFourEventDoc PostToolUse 补账本 handler）;双处登记 6/6 一致;test:plugins 全量 1655/0。
 
 ---
 

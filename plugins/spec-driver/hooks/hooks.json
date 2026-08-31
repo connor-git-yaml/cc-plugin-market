@@ -31,6 +31,15 @@
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-format.sh"
           }
         ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-ledger.sh"
+          }
+        ]
       }
     ],
     "Stop": [
