@@ -1,0 +1,26 @@
+{
+  "session_id": "00000000-0000-4000-8000-f270record01",
+  "transcript_path": "/w/.claude/projects/w-project/00000000-0000-4000-8000-f270record01.jsonl",
+  "cwd": "/w/project",
+  "prompt_id": "ac6ec233-3e55-445d-8e3a-a494037a7336",
+  "permission_mode": "bypassPermissions",
+  "agent_id": "agentRRRRRRRRRRRR",
+  "agent_type": "",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/w/.claude/projects/w-project/00000000-0000-4000-8000-f270record01.jsonl",
+  "last_assistant_message": "[录制样本最终消息]",
+  "background_tasks": [
+    {
+      "id": "agentRRRRRRRRRRRR",
+      "type": "subagent",
+      "status": "running",
+      "description": "录制样本任务",
+      "agent_type": "spec-driver:specify"
+    }
+  ],
+  "session_crons": []
+}

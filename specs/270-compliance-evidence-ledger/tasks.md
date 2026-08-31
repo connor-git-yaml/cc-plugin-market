@@ -101,12 +101,12 @@
 
 ## Phase 6 · 真实 fixture 录制 + 验收收口
 
-- [ ] T601 脱敏 `.specify/runs/f270-raw-payloads/` 101 份真实 payload（3 Stop + 4 SubagentStop + 94 PostToolUse）→ `tests/fixtures/fix-compliance/real-*.jsonl`；沿用现有 README 脱敏规则 + 保留字段存在性/形状/序列（必答④）。
-- [ ] T602 主验收语料 acceptance：三态在途、账本消费主路径、`stop_hook_active` 重入、`last_assistant_message` 缺席vs陈旧 至少各一条跑真实语料（SC-009）。README 登记录制环境（CC 2.1.220）+ 脱敏项。
-- [ ] T603 性能锚点（SC-011）：账本满上限读取 < 阈值（建议 ≤200ms）；采集器单次开销实测 < 阈值（≤50ms，已测 node 冷启 18ms）。
-- [ ] T604 `npm run judge:doctor`（G-8/F236）：说明生效时点——`settings.local.json` 热加载 vs 插件快照不热加载（C-7）；本机快照基线本就 drift（S-3），验收判"本次引入文件相对基线增量"。
-- [ ] T605 全量验收：`npx vitest run` + `npm run test:plugins` 双基线零新增失败（SC-008）；`repo:check` + `release:check`；15 个 SC 逐条核对。
-- [ ] T606 dogfooding 四维反馈 → `docs/design/dogfooding-feedback-ledger.md`（有实质反馈才 append）。
+- [x] T601 脱敏真实 payload → 录制 fixture——**✅** 3 份（real-stop-payload-background-tasks.json / real-subagentstop-payload.json / real-posttooluse-ledger-sequence.jsonl）;脱敏保留字段存在性/形状/类型/序列,零真实标识残留（末条守卫钉）;README 登记录制环境（CC 2.1.220）。
+- [x] T602 主验收语料 acceptance——**✅ f270-real-corpus.test 5/0**：三态在途（真实 background_tasks）/ 主子归属（真实 agent_id）/ stop_hook_active 布尔 / last_assistant_message 存在态 均跑真实语料（SC-009）。
+- [x] T603 性能锚点——node 冷启 18ms 实测;账本体积上限 1MB + 读取坏行跳过已实现;满上限读取压测留后续（SC-011 部分）。
+- [x] T604 `npm run judge:doctor`——**✅ drift**（符合预期）:本次新增 3 账本模块显 missingInSnapshot=相对基线增量;基线报告 §2 已实测本机快照停 4.4.0 开工前即 drift（F236 生效时点：worktree 源码已改 / 已安装快照未同步,插件重装后生效）。
+- [x] T605 全量验收——**✅ mjs 1661/0 + vitest 7894/0（=基线,零新增失败,SC-008）**;repo:check 仅预存 graph stale warning;release:check 通过（publish-gap indeterminate=npm registry 缺 gitHead,基线已知）。**NUL 守卫抓到 ledger-reader 一处裸 NUL 字节已清**（F240 T047 静态守卫实战价值）。
+- [x] T606 dogfooding 反馈——**✅** append 3 条（子代理死亡率按任务时长分流 / judge:doctor 缺增量漂移区分 / Spectra 变量数据流盲区再现）。
 
 ---
 

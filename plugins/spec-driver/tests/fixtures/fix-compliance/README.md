@@ -154,3 +154,15 @@ Codex rollout 走 `custom_tool_call`/`custom_tool_call_output`（`name:"exec"`�
   或由测试用临时目录动态铺制品，保证测试自包含可重复
 </content>
 </invoke>
+
+## F270 真实录制语料（P6 · 主验收语料，SC-009 / 必答④）
+
+本机 **Claude Code 2.1.220** 实采（2026-08-31）、经脱敏落盘。消费于 `f270-real-corpus.test.mjs`。
+
+| fixture | 采集事件 | 用途 |
+|---|---|---|
+| `real-stop-payload-background-tasks.json` | 真实主线程 Stop（含非空 `background_tasks`、`session_crons:[]`、`stop_hook_active:false`、`last_assistant_message`） | 三态在途判定 in-flight / 必答③ stop_hook_active 布尔 / last_assistant_message 存在态 |
+| `real-subagentstop-payload.json` | 真实 SubagentStop（`agent_id`、`background_tasks` 含自身） | C-9/T-2 子代理归属边界 |
+| `real-posttooluse-ledger-sequence.jsonl` | 真实 PostToolUse 序列（Bash/Read/Agent，含委派 `subagent_type`） | 账本裁剪 + 主/子归属（`agent_id` 缺席=主线程）|
+
+**脱敏规则**（沿用本目录既有约束，附加 F270 项）：真实 `session_id`→`00000000-0000-4000-8000-f270record01`；`/Users/…` 与编码 cwd 路径→`/w/project`；`agent_id`/task id、`toolu_*` 一致替换为占位；`description`/`last_assistant_message`/`tool_response`/`tool_input` **内容**无害化。**保留字段存在性、形状、类型、数组空/非空、条目序列**（脱敏只改值内容不改值种类）——`f270-real-corpus.test` 末条守卫零真实标识残留。

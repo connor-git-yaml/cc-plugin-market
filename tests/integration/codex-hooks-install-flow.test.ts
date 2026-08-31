@@ -215,11 +215,11 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
     const removed = installCli(['--remove']);
     expect(removed.exitCode).toBe(0);
-    expect(removed.stdout).toContain('移除 5 个条目');
+    expect(removed.stdout).toContain('移除 6 个条目');
     // 🔴 W1：stdout MUST NOT 声称"第三方条目原样保留" —— 那是本进程无法证实的断言
     //（归属锚点误认时被删的恰恰是第三方条目）。被摘除的 command 改为逐条打印到 stderr。
     expect(removed.stdout).not.toContain('第三方条目原样保留');
-    expect(removed.stderr.match(/owned-entry-removed/g) ?? []).toHaveLength(5);
+    expect(removed.stderr.match(/owned-entry-removed/g) ?? []).toHaveLength(6);
 
     // 卸载后文档结构等价于安装前（缩进可能不同，故比 parse 后的序列化）
     const after = JSON.parse(fs.readFileSync(target, 'utf-8')) as unknown;
@@ -365,7 +365,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
       const result = installCli();
 
       expect(result.exitCode).toBe(4);
-      expect(result.stderr).toContain('5 条历史合并器条目');
+      expect(result.stderr).toContain('6 条历史合并器条目');
       expect(result.stderr).toContain('remove --global');
     });
 
@@ -689,7 +689,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
       expect(exitCode).toBe(1);
       expect(report.findings.map((f) => f.code)).toContain('foreign-command-lost');
-      expect(report.foreignPreservation.lostCommands).toHaveLength(5);
+      expect(report.foreignPreservation.lostCommands).toHaveLength(6);
     });
   });
 
@@ -831,7 +831,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
         (JSON.parse(upgraded.stdout) as { diagnostics: Array<{ code: string }> }).diagnostics.filter(
           (d) => d.code === 'owned-entry-removed',
         ),
-      ).toHaveLength(5);
+      ).toHaveLength(6);
       const desired = writeDesiredFile(upgraded.stdout, 'desired-upgrade.json');
 
       const { exitCode, report } = gateJson(['--desired', desired, '--skip-shape']);
@@ -843,10 +843,10 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
       // 🔴 C1：`removedCommands` 这份减数由归属谓词派生，判据 2 对它只能降级为 warning ——
       // 故豁免 MUST 可见（判据无法区分"真升版"与"归属误认误删"，两者都要人工过目一眼）。
-      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(5);
+      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(6);
       expect(
         report.findings.filter((f) => f.code === 'foreign-command-removed-by-declaration'),
-      ).toHaveLength(5);
+      ).toHaveLength(6);
       expect(report.status).toBe('warning');
       expect(report.ok).toBe(true);
     });
@@ -861,7 +861,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
       expect(exitCode).toBe(1);
       expect(report.findings.map((f) => f.code)).toContain('foreign-command-lost');
-      expect(report.foreignPreservation.lostCommands).toHaveLength(5);
+      expect(report.foreignPreservation.lostCommands).toHaveLength(6);
     });
 
     it('旧两种 --desired 形态继续工作（command 字符串数组 / {hooks:{...}} 生成器文档）', () => {
@@ -962,7 +962,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
       const removed = installCli(['--remove', '--json']);
       expect(removed.exitCode).toBe(0);
-      expect((JSON.parse(removed.stdout) as { removedCommands: string[] }).removedCommands).toHaveLength(5);
+      expect((JSON.parse(removed.stdout) as { removedCommands: string[] }).removedCommands).toHaveLength(6);
       const desired = writeDesiredFile(removed.stdout, 'desired-remove.json');
 
       const { report } = gateJson(['--desired', desired]);
@@ -972,7 +972,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
       expect(report.foreignPreservation.lostCommands).toEqual([]);
       expect(report.findings.filter((f) => f.layer === 'preservation' && f.level === 'fail')).toEqual([]);
       // 豁免全部来自 removedCommands ⇒ 5 条都要可见
-      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(5);
+      expect(report.foreignPreservation.removedByDeclaration).toHaveLength(6);
     });
 
     it('🔴 I-2 形态判定是优先级而非互斥：混合形态走 install-result 分支，hooks 里的命令不进减数', () => {
@@ -999,7 +999,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
       const asMixed = writeDesiredFile(JSON.stringify(mixed), 'desired-mixed.json');
       expect(
         gateJson(['--desired', asMixed]).report.foreignPreservation.lostCommands,
-      ).toHaveLength(5);
+      ).toHaveLength(6);
     });
 
     it('🔴 畸形 --desired（writtenCommands 非数组）→ exit 2 fail-loud，不静默塌成空减数', () => {
@@ -1062,7 +1062,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
       expect(() => JSON.parse(result.stdout)).not.toThrow();
       const parsed = JSON.parse(result.stdout) as { action: string; ownedCount: number };
       expect(parsed.action).toBe('install');
-      expect(parsed.ownedCount).toBe(5);
+      expect(parsed.ownedCount).toBe(6);
       // 提示本身没丢，只是换到了 stderr
       expect(result.stdout).not.toContain('hooks 信任授予');
       expect(result.stderr).toContain('hooks 信任授予');
@@ -1074,7 +1074,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
       const result = installCli(['--remove', '--json']);
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout) as { action: string; removedCount: number };
-      expect(parsed).toMatchObject({ action: 'remove', removedCount: 5 });
+      expect(parsed).toMatchObject({ action: 'remove', removedCount: 6 });
     });
   });
 
@@ -1163,7 +1163,7 @@ describe('Codex hooks 安装 / 校验 / 卸载全链路', () => {
 
       const upgraded = upgradeInstallCli();
 
-      expect(upgraded.stderr.match(/owned-entry-removed/g) ?? []).toHaveLength(5);
+      expect(upgraded.stderr.match(/owned-entry-removed/g) ?? []).toHaveLength(6);
       expect(upgraded.stderr).toContain('核对');
       expect(upgraded.stderr).toContain(`${target}.bak`);
     });
