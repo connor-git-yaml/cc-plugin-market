@@ -404,11 +404,19 @@ tool_response: { isAsync: true, status: "async_launched",
 
 > 📌 **附带一条时序观察**：该 Stop 捕获时 `background_tasks` 里的修订代理 `status:"running"`，而它**随后**死于 API 连接错误。即 `background_tasks` 反映的是 Stop 时刻的注册表快照，**不预知任务最终结局**——判在途的语义是「此刻在跑」，不是「会跑完」（与 P-11 的派发回执结论一致，互为佐证）。
 
+### 3.14 结论 P-13：✅ `AskUserQuestion` **确实触发** PostToolUse（档位：直证，2026-09-01，T000a 回填）
+
+探针捕获 `tool_name: "AskUserQuestion"` 的完整 PostToolUse payload（含 `tool_use_id` 与 `tool_response`）。
+
+> 🟢 **spec 附录 A-4「可选增强」的承重前提成立**：编排器在 GATE 暂停时改用 `AskUserQuestion` 提问，该调用会进入账本，可作**权威**的"正在等用户"信号——且其独有性质不变：伪造它的代价是**真的停下来等人**，与绕过目的自相矛盾。P4 接入时可采纳该增强（仍属可选，主方案指纹去重不依赖它）。
+> ⚠️ 范围提醒：让 GATE 暂停走 `AskUserQuestion` 需要改 spec-driver SKILL 文本，属跨卡面改动——是否本卡做仍按 A-4 原判（评估范围后定）。
+
 ## 3.3 仍未取到的证据（诚实缺席，不得在 spec 中当作已知）
 
 | 项 | 状态 | 原因 / 补齐路径 |
 |---|---|---|
 | ~~真实 **Stop**（非 SubagentStop）payload 落盘样本~~ | ✅ **已回填**（P-12，2026-08-31） | 保留原 PENDING 行痕迹：原风险评估（B-1 外推风险低）被证实 |
+| ~~`AskUserQuestion` 是否触发 PostToolUse~~ | ✅ **已回填**（P-13，2026-09-01） | T000a 直证 |
 | `toolUseContext` 缺席（→ 两字段整体消失）的真实触发条件 | ⏳ PENDING | 本会话未观测到该降级态。设计须按"可能发生"处理（C-2 三态） |
 | 真实 **多轮** `prompt_id` 序列下的指纹去重端到端行为 | ⏳ PENDING | P-12 已直证 `prompt_id` 随用户消息改变（两个值），但完整的「GATE 暂停 → 用户拍板 → 计数恢复」端到端时序须在 implement 阶段用真实 fix 会话验证 |
 | Codex 侧对应字段 | ❌ 不适用 | Codex 无 PostToolUse/Stop 同构 payload；方言保持 `indeterminate` 语义（卡面方向） |

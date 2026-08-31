@@ -6,26 +6,27 @@
 
 ## 前置（implement 开工前必做，plan §8）
 
-- [ ] T000a 实测 `AskUserQuestion` 是否触发 PostToolUse（本会话样本随 scratchpad 清空丢失）——决定 A-4 `AskUserQuestion` 增强可否用；主方案指纹去重不依赖，非阻塞。
-- [ ] T000b 实跑 `npx vitest run` 取当前基线数（SC-008 "零新增失败"对照），记入 verification。
-- [ ] T000c 复核 `anchorLineIndex` 全仓消费者（plan §8 矛盾1）——切窗口后是否成孤儿，裁决删/留。
+- [x] T000a 实测 `AskUserQuestion` 是否触发 PostToolUse——**✅ 直证（2026-09-01）**：探针捕获 `tool_name: AskUserQuestion` 完整 payload（含 tool_response）。A-4 可选增强的承重前提成立。
+- [x] T000b 实跑 `npx vitest run` 取基线——**✅（2026-09-01）**：**7894 passed / 18 skipped / 21 todo (7933)，538 files passed / 4 skipped，exit 0**。SC-008 双基线对照数齐（test:plugins 1585/0/2skip + vitest 7894/0）。
+- [x] T000c 复核 `anchorLineIndex` 全仓消费者（plan §8 矛盾1）——**已复核（2026-09-01）**：judge 中实际消费恰为 5 处（:239/:376/:401/:417/:470），其余全是注释；core 中除返回值构造（:580/:596）外均为通用形参名。**裁决：切换后保留字段（避免破坏返回形状），但 MUST 同步改写注释链**——core:562「主锚点语义逐字不变——F216/F227/F224 全链依赖它」与 core:981/judge:230/:351 等在切换后语义过时，不改则注释变误导（并入 T208）。
 
 ---
 
 ## Phase 1 · 账本采集器（不碰判定器，风险低，可先行）
 
 ### 红先行
-- [ ] T101 [P] 写 `ledger-writer` 并发测试：8 进程 × 各 N 条 `appendFileSync`，断言零撕裂、零丢失（SC-006；对应 P-7 实测）。
-- [ ] T102 [P] 写采集器失败注入测试：目录不可写 / 畸形 payload / Codex 方言 payload → 断言恒 `exit 0` 且无 `hook blocking error` 文本（SC-005；对应 P-4/C-10）。
-- [ ] T103 [P] 写裁剪测试：喂含 102KB `tool_response` 的 payload → 断言账本条目**不含** `tool_response` 全文、含 `subagent_type` 全值（P-8/FR-002）。
-- [ ] T104 [P] 写活性自检测试：采集器致瘫 → 自检报失效；Codex 方言会话账本恒空 → 自检**不**误报（FR-043/SC-012）。
+- [x] T101 [P] 并发测试——**✅ 8 进程 × 150 条,总行数/逐行解析/每写手条数全对**（SC-006）。
+- [x] T102 [P] 失败注入——**✅ 空 stdin/非 JSON/Codex 方言/目录只读 全部恒 exit 0 + 零 stdout/stderr + selfdiag 落账**（SC-005）。
+- [x] T103 [P] 裁剪——**✅ 100KB tool_response.prompt 不入条目（<1KB）、subagent_type 全值、agent_id 缺席即缺席**。
+- [x] T104 [P] 活性——**✅ ledger-open 哨兵首写/幂等、超 1MB 拒写 + selfdiag oversize、路径穿越 session_id 清洗**。
+  （红先行过程：先写测试 → import 红 → 实现 → 14/15 绿 → 1 红为测试自身过滤器误伤（点前缀通配误排除 `.._.._evil.jsonl` 合法产物）→ 修测试过滤为精确 selfdiag 名 → **15/15 绿**）
 
 ### 实现
-- [ ] T105 `lib/ledger-writer.mjs`：抽裁剪字段 `{tool_use_id, tool_name, subagent_type全值, prompt_id, session_id, hookTs}`；`appendFileSync` 单行 JSONL；hook 侧生成时间戳（FR-002/003）。
-- [ ] T106 `hooks/post-tool-use-ledger.sh`：bash 薄壳转 node（与 `stop-fix-compliance-check.sh` 同构）；`set -euo pipefail`；**恒 exit 0**（失败静默写独立自诊断文件，不进 stdout/stderr，FR-004/005）。
-- [ ] T107 账本布局：`.specify/runs/.fix-compliance-ledger/<sanitizeSessionId>.jsonl`（复用 io:280）；体积上限 + 超限诊断（FR-011，超限按证据不完整=回退 transcript，不弱于缺席）。
-- [ ] T108 活性自检实现（FR-043）：按运行时分派（Codex 恒空=正常，Claude 恒空=F245 信号）。
-- [ ] T109 **Phase 收尾**：`npm run test:plugins` 绿；账本采集器不碰判定器故无需异构对抗，但需确认对现有 hook 链零干扰。
+- [x] T105 `lib/ledger-writer.mjs`（206 行）——纯 Node 内置；`buildLedgerEntry` 裁剪 + `appendLedgerEntry` 追加 + CLI 形态（stdin→append→恒 exit 0）；复用 `isInvokedDirectly`（F246 守卫）。
+- [x] T106 `hooks/post-tool-use-ledger.sh`（56 行,755）——与 stop-fix-compliance-check.sh 同构三级探测；**恒 exit 0 且吞 CLI 全部输出**（与阻断型薄壳的关键差异已注释）。
+- [x] T107 账本布局——`.fix-compliance-ledger/<sanitized>.jsonl`；`sanitizeSessionId` **直接 import 复用**（io:280 本就已 export,io.mjs 零改动）；LEDGER_MAX_BYTES=1MB。
+- [x] T108 活性哨兵——首建写 `ledger-open`（并发双哨兵可接受,读取侧幂等已注释）；Codex 运行时分派属 P4 读取侧（P1 只负责 dialect-skip 静默 + selfdiag）。
+- [x] T109 **Phase 收尾**——真实 payload 端到端 ✅（exit 0 + 哨兵 + 裁剪条目正确）；判定器/hooks.json **零接触**（git diff 实证）；test:plugins 全量见 verification。
 
 ---
 
