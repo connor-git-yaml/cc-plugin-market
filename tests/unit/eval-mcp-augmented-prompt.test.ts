@@ -12,7 +12,7 @@
  * 6. errorCode 存在时 success=false
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import * as os from 'node:os';
@@ -92,8 +92,23 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
   // 由于 beforeAll 中模块已被缓存，parseTelemetryJsonl 在 buildGroupCPrompt suite 后即可用
   // 但为保证独立性，此 describe 内再次读取
 
+  // F273 后续：并发 vitest 进程共享 os.tmpdir()，Date.now() 毫秒级撞名会让一方的
+  // 清理删掉另一方刚写的文件（假红 TypeError）；mkdtempSync 独立目录由内核保证唯一。
+  // 注意：tmpDir 是 describe 级共享变量，本修复以用例串行执行为前提，勿给用例加 concurrent
+  let tmpDir = '';
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'telemetry-test-'));
+  });
+
+  afterEach(() => {
+    // beforeEach 抛错（如 tmpdir 不可写）时 tmpDir 为空串，rmSync 空串会二次抛错污染报告
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    tmpDir = '';
+  });
+
   it('应正确读取 errorCode 字段并将 success 设为 false', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     // 模拟 TelemetryEntry：errorCode 存在，无 error 字段
     const entry = {
       ts: '2026-05-15T00:00:00.000Z',
@@ -105,21 +120,17 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       errorCode: 'graph-not-built',
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      expect(result.mcpToolCalls).toHaveLength(1);
-      const call = result.mcpToolCalls[0];
-      expect(call.tool).toBe('mcp__spectra__detect_changes');
-      expect(call.success).toBe(false);
-      expect(call.error).toBe('graph-not-built');
-      expect(call.responseBytes).toBe(0);
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    expect(result.mcpToolCalls).toHaveLength(1);
+    const call = result.mcpToolCalls[0];
+    expect(call.tool).toBe('mcp__spectra__detect_changes');
+    expect(call.success).toBe(false);
+    expect(call.error).toBe('graph-not-built');
+    expect(call.responseBytes).toBe(0);
   });
 
   it('应将无 errorCode 的条目解析为 success=true', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-15T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -129,21 +140,17 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       runId: 'test-run-2',
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      expect(result.mcpToolCalls).toHaveLength(1);
-      const call = result.mcpToolCalls[0];
-      expect(call.success).toBe(true);
-      expect(call.error).toBeNull();
-      expect(call.responseBytes).toBe(256);
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    expect(result.mcpToolCalls).toHaveLength(1);
+    const call = result.mcpToolCalls[0];
+    expect(call.success).toBe(true);
+    expect(call.error).toBeNull();
+    expect(call.responseBytes).toBe(256);
   });
 
   // Feature 165 FR-012 round 2 — responseSummary 解析（detect_changes changedSymbolsCount）
   it('应解析 responseSummary 字段（detect_changes changedSymbolsCount）', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-16T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -154,20 +161,16 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       responseSummary: { changedSymbolsCount: 5 },
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      expect(result.mcpToolCalls).toHaveLength(1);
-      const call = result.mcpToolCalls[0];
-      expect(call.responseSummary).not.toBeNull();
-      expect(call.responseSummary?.['changedSymbolsCount']).toBe(5);
-      expect(call.success).toBe(true);
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    expect(result.mcpToolCalls).toHaveLength(1);
+    const call = result.mcpToolCalls[0];
+    expect(call.responseSummary).not.toBeNull();
+    expect(call.responseSummary?.['changedSymbolsCount']).toBe(5);
+    expect(call.success).toBe(true);
   });
 
   it('无 responseSummary 字段时 → responseSummary=null', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-16T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -177,17 +180,13 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       runId: 'test-run-4',
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      expect(result.mcpToolCalls[0].responseSummary).toBeNull();
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    expect(result.mcpToolCalls[0].responseSummary).toBeNull();
   });
 
   // Codex round 2 类型安全：responseSummary 为 array / 非数字 / 嵌套对象时被拒绝
   it('responseSummary 为数组时 → 拒绝（null）', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-16T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -196,16 +195,12 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       responseSummary: [1, 2, 3] as unknown as Record<string, number>,
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      expect(result.mcpToolCalls[0].responseSummary).toBeNull();
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    expect(result.mcpToolCalls[0].responseSummary).toBeNull();
   });
 
   it('responseSummary 含非数字值时 → 过滤掉非数字键', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-16T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -214,21 +209,17 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       responseSummary: { changedSymbolsCount: 3, weird: 'string', nested: { x: 1 } } as unknown as Record<string, number>,
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      const summary = result.mcpToolCalls[0].responseSummary;
-      expect(summary).not.toBeNull();
-      expect(summary?.['changedSymbolsCount']).toBe(3);
-      expect(summary?.['weird']).toBeUndefined();
-      expect(summary?.['nested']).toBeUndefined();
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    const summary = result.mcpToolCalls[0].responseSummary;
+    expect(summary).not.toBeNull();
+    expect(summary?.['changedSymbolsCount']).toBe(3);
+    expect(summary?.['weird']).toBeUndefined();
+    expect(summary?.['nested']).toBeUndefined();
   });
 
   // Feature 165 round 3 GATE_VERIFY CRITICAL — responseSamples 解析
   it('应解析 responseSamples.{symbols, files}（detect_changes bounded sample）', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-17T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -238,19 +229,15 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       responseSamples: { symbols: ['Foo', 'bar'], files: ['src/a.py'] },
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols: string[]; files: string[] } }).responseSamples;
-      expect(samples).not.toBeNull();
-      expect(samples.symbols).toEqual(['Foo', 'bar']);
-      expect(samples.files).toEqual(['src/a.py']);
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols: string[]; files: string[] } }).responseSamples;
+    expect(samples).not.toBeNull();
+    expect(samples.symbols).toEqual(['Foo', 'bar']);
+    expect(samples.files).toEqual(['src/a.py']);
   });
 
   it('responseSamples 非数组 / 含非字符串值 → 过滤', () => {
-    const tmpFile = path.join(os.tmpdir(), `telemetry-test-${Date.now()}.jsonl`);
+    const tmpFile = path.join(tmpDir, 'telemetry.jsonl');
     const entry = {
       ts: '2026-05-17T00:00:00.000Z',
       toolName: 'detect_changes',
@@ -260,15 +247,11 @@ describe('parseTelemetryJsonl (Feature 164 W-3 fix)', () => {
       responseSamples: { symbols: ['valid', 123, null], files: 'not-array' } as unknown as Record<string, unknown>,
     };
     fs.writeFileSync(tmpFile, JSON.stringify(entry) + '\n', 'utf-8');
-    try {
-      const result = parseTelemetryJsonl(tmpFile);
-      const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols?: string[]; files?: string[] } }).responseSamples;
-      expect(samples).not.toBeNull();
-      expect(samples?.symbols).toEqual(['valid']);
-      expect(samples?.files).toBeUndefined();
-    } finally {
-      fs.unlinkSync(tmpFile);
-    }
+    const result = parseTelemetryJsonl(tmpFile);
+    const samples = (result.mcpToolCalls[0] as unknown as { responseSamples: { symbols?: string[]; files?: string[] } }).responseSamples;
+    expect(samples).not.toBeNull();
+    expect(samples?.symbols).toEqual(['valid']);
+    expect(samples?.files).toBeUndefined();
   });
 });
 
