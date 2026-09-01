@@ -54,4 +54,19 @@ F275（`specs/275-fix-codex-doctor-hook-trust/`）已落地 doctor hook-trust �
 | (c) 0.149+ 指令文件沙箱可读 | PASS（限定）——AGENTS.md 可读、turn setup 无报错；#39653 的 override 形态因缺席未覆盖 |
 | (d) 环境记录 | PASS——桌面客户端版本号仍待用户补填 |
 
-**第二轮（只补第 2 项）前置已就绪**：主仓探针已建（AGENTS.md 副本 + `T063-OVERRIDE-MARKER-20260831` 注释行，24356 字节 ≤ 32768 预算，gitignored 不入库）。步骤：桌面客户端**新建**一个 managed worktree（override 复制发生在创建时，旧 worktree 补测无效）→ 新 worktree 会话观察文件层 + 生效层 marker → 记桌面版本号 → 删探针与 worktree。T039 在第二轮闭合前保持未勾选。
+**第二轮已执行（2026-09-01，worktree `696d`）→ 两层 PASS**：一手记录
+[../239-worktree-local-state/verification/t063-manual-report-round2-2026-09-01.md](../239-worktree-local-state/verification/t063-manual-report-round2-2026-09-01.md)。
+创建时复制 PASS（override 在新 worktree 存在、marker 命中）；同层取代生效 PASS（turn setup 指令块内容含 override 独有 marker）。
+观察备注：指令块标题写 `AGENTS.md` 而内容实为 override——标题是装饰性标签，勿当加载证据。
+**T039 勾选仅剩：桌面客户端版本号补填。**
+
+
+## SC-013 复测（F275 修复后三段，2026-09-01 闭合）
+
+| 段 | 证据 | 结论 |
+|---|---|---|
+| 1 untrusted 识别 | F275 自动化断言（隔离 CODEX_HOME 装插件不授信 → doctor warning + grant-hook-trust） | ✅ |
+| 2 modified 识别 | F275 自动化断言（hooks.json 声明变更 → doctor warning modified） | ✅ |
+| 3 trusted 迁移（PENDING-user 解除） | 用户 2026-09-01 在本机 Codex `/hooks` 对 5 个 hook 逐个授信；主线程实测 `npm run codex:doctor`：`hook-trust: ok — 信任状态为 trusted，与当前脚本内容一致` | ✅ |
+
+**SC-013 达成 → F240 A4 达标条件闭合**（SC-009~015 全过 + FR-010 三断言绿）。remediation 模板已按 T062 实测文案回填（F275）。

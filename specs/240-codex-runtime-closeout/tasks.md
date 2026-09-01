@@ -147,7 +147,7 @@ grounding_basis: specs/240-codex-runtime-closeout/_grounding.md（§8/§9 最高
 
 | 任务号 | 标题 | 轮次/批次 | 依赖 | 对应 SC |
 |---|---|---|---|---|
-| T062 | `[MANUAL-EXECUTED 2026-08-31 · codex 0.151.0]` SC-013 三段人工验证已执行，**判定 FAIL**（缺陷全在我方 doctor/spec 侧：hook-trust 维度对插件主路径假阴性 / 「脚本内容哈希」假设被证伪；Codex 原生三段全 PASS）→ 派生 **F275**，修复后按 verification-report.md §T062 复测条件转绿 | R1 / A4 | T048（代码就绪） | SC-013 |
+| T062 | `[MANUAL-EXECUTED 2026-08-31 · codex 0.151.0]` SC-013 三段人工验证已执行，**判定 FAIL**（缺陷全在我方 doctor/spec 侧：hook-trust 维度对插件主路径假阴性 / 「脚本内容哈希」假设被证伪；Codex 原生三段全 PASS）→ 派生 **F275**，修复后按 verification-report.md §T062 复测条件转绿；**2026-09-01 复测三段全绿，SC-013 达成**（见 verification-report.md §SC-013 复测） | R1 / A4 | T048（代码就绪） | SC-013 |
 | T063 | `[MANUAL-PENDING]` SC-024 F239 T039 Codex 桌面客户端 managed worktree 文件同步人工验证 | 共通 | 无（独立于本 feature 代码） | SC-024 |
 
 ---
