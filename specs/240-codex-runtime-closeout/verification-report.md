@@ -43,4 +43,15 @@ F275（`specs/275-fix-codex-doctor-hook-trust/`）已落地 doctor hook-trust �
 
 ## T063 — F239 T039 Codex 桌面 managed worktree 同步验证
 
-**未完成**（2026-08-31）：交回的报告文件为空，/tmp 原件不存在——测试未产出记录，需按派发 prompt 重做（桌面客户端建 managed worktree + worktree 内会话四项观察 + 桌面版本号）。
+**第一轮已执行（2026-08-31 00:21，codex-cli 0.151.0，managed worktree `1a26`）→ 总体 UNEXPECTED，部分闭合**：
+一手记录 [../239-worktree-local-state/verification/t063-manual-report-round1-2026-08-31.md](../239-worktree-local-state/verification/t063-manual-report-round1-2026-08-31.md)
+（首轮交回文件为空的原因已定位：报告写进了 Codex 沙箱自己的 /tmp，宿主机不可见；第二轮由用户从会话取回全文）。
+
+| 项 | 结论 |
+|---|---|
+| (a) `.worktreeinclude` copy-if-absent | **PASS**——`.env.local` 在 worktree 为常规文件（非 symlink）、与主仓逐字节一致；只读限定下未测"目标已存在不覆盖"生命周期，与语义一致 |
+| (b) `AGENTS.override.md` 同层取代 | **UNEXPECTED = fixture 缺席观察无效**——观测时主仓根本没有探针文件（只有 .gitignore:51 规则），worktree 无从复制；会话加载 AGENTS.md 与"override 缺席时回退"语义一致，**既不能判 PASS 也不能判 FAIL** |
+| (c) 0.149+ 指令文件沙箱可读 | PASS（限定）——AGENTS.md 可读、turn setup 无报错；#39653 的 override 形态因缺席未覆盖 |
+| (d) 环境记录 | PASS——桌面客户端版本号仍待用户补填 |
+
+**第二轮（只补第 2 项）前置已就绪**：主仓探针已建（AGENTS.md 副本 + `T063-OVERRIDE-MARKER-20260831` 注释行，24356 字节 ≤ 32768 预算，gitignored 不入库）。步骤：桌面客户端**新建**一个 managed worktree（override 复制发生在创建时，旧 worktree 补测无效）→ 新 worktree 会话观察文件层 + 生效层 marker → 记桌面版本号 → 删探针与 worktree。T039 在第二轮闭合前保持未勾选。
