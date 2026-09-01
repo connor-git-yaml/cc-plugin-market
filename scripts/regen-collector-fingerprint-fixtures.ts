@@ -130,6 +130,34 @@ export function selectRegenDiagnostic(inputHashChanged: boolean): string {
     : '检测到指纹不可见的行为变更：先 bump behaviorVersion 再跑再生';
 }
 
+/**
+ * 拒绝路径的**维度专属**补充指引：差异含节点 metadata key 集合维度时才打印（F278 项②配套）。
+ *
+ * 为什么必须单列一条：新的 metadata 维度会拒绝一类**按权威清单判定为"不该 bump"**的改动。
+ * `selectRegenDiagnostic` 的两条既有文案统一指向"先 bump behaviorVersion"，但
+ * `collector-fingerprint.ts` 的六类 bump responsibility 全部是"哪些文件被计入采集面"，
+ * 没有一条覆盖节点携带的字段集合（F271 给 symbol 节点加 lineRange 时的留痕明写着
+ * "六类均不适用，故不 bump"）。只给那条文案，维护者就只剩两条路：做一次按清单为错的 bump，
+ * 或 `rm expected-*.json && --init` 全绕过。这里补一条维度专属的处置指引来消掉这个死角。
+ *
+ * 判定用前缀而非关键词包含：三条 metadata 文案都以 `metadata ` 开头，b-track 的差异一律以
+ * `moduleGraph` 开头，前缀判定不会把"某个 module 字段恰好叫 metadata"误算进来。
+ */
+function printMetadataDimensionGuidance(differences: readonly string[]): void {
+  if (!differences.some((difference) => difference.startsWith('metadata '))) return;
+  console.error(
+    '[regen] 上述差异含**节点 metadata key 集合**维度。注意 collector-fingerprint.ts 的六类 bump ' +
+      'responsibility 只覆盖"哪些文件被计入采集面"，不覆盖节点携带的字段集合——F271 给 symbol 节点新增 ' +
+      'lineRange 时的留痕即写明"六类均不适用，故不 bump"。',
+  );
+  console.error(
+    '[regen] 因此若已确认本次只是节点字段增删、采集面未变：正确处置是删除两份 pinned 资产后跑 --init ' +
+      `重建基线（rm ${GRAPH_ONLY_ASSET_FILENAME} ${MODULE_GRAPH_ASSET_FILENAME}），该路径会在 ` +
+      `${REGEN_AUDIT_FILENAME} 留下审计记录；MUST NOT 为了让本脚本放行而做一次按 bump responsibility ` +
+      '清单判定为错的 bump。',
+  );
+}
+
 // ============================================================
 // 两轨比较器（护栏测试与本脚本共用，避免镜像实现）
 // ============================================================
@@ -153,8 +181,151 @@ function countByKey(keys: string[]): Map<string, number> {
   return counts;
 }
 
+type GraphNodeLike = GraphJSON['nodes'][number];
+
 /**
- * a-track 严格结构比较：节点 id **multiset** + 边 **multiset** 完全相等。
+ * 单个节点的 metadata 形态：`signature` 负责**相等性判定**，`keys` 供富诊断分支**直接消费**。
+ *
+ * 为什么两者要一起产出，而不是在诊断时 `JSON.parse(signature)` 反解回 key 数组：反解会让
+ * `missing`/`extra` 的正确性变成"签名恰好是规范 JSON 数组"这个实现细节的下游依赖——签名函数
+ * 一旦改形（换分隔符、加前缀、丢掉 `.sort()`），差异文案就静默退化成
+ * `重建缺失 [] vs 重建新增 []`：护栏变红却说不出为什么红，甚至 `JSON.parse` 直接抛异常把
+ * 一次本该被读懂的差异变成脚本崩溃。分离之后 `.sort()` 只承担签名的规范化职责，
+ * 诊断文案的正确性与签名格式解耦。
+ */
+interface NodeMetadataShape {
+  /** 相等性判定的唯一依据。正常 key 列表以 `[` 开头，两种缺席态以 `<` 开头。 */
+  signature: string;
+  /** 已排序的 key 数组；两种缺席态（`<absent>` / `<non-object:*>`）为 `null`。 */
+  keys: string[] | null;
+}
+
+/**
+ * 提取节点 metadata 的形态描述（只看 key 名，全程不含任何 value）。
+ *
+ * 为什么 `undefined` 与 `{}` 必须是两个不同签名（FR-007）：前者代表"该节点从未产出过
+ * metadata"，是比"产出了但里面没有 key"更强的退化信号；混同会丢掉这一层诊断精度。
+ * 非对象取值（null / 字符串 / 数字）单列一档：图产物里出现这种形状本身就是缺陷，
+ * 把它折叠进 `<absent>` 等于把一个真缺陷说成"这个节点没 metadata"。
+ *
+ * 为什么要 `(node as { metadata?: unknown })` 这一次运行时收窄：类型上 `metadata` 是必填
+ * `Record<string, unknown>`，但本函数的两侧实参一侧来自磁盘上的 pinned JSON、另一侧来自重建
+ * 产物的反序列化结果，历史资产完全可能整字段缺席。这不是绕过类型系统，而是承认类型声明
+ * 覆盖不到磁盘事实——若按"必填"直接读，缺席态会在 `Object.keys(undefined)` 处抛异常，
+ * 把一个本该被诊断出来的退化信号变成脚本崩溃。
+ */
+function describeNodeMetadata(node: GraphNodeLike): NodeMetadataShape {
+  const raw = (node as { metadata?: unknown }).metadata;
+  if (raw === undefined) return { signature: '<absent>', keys: null };
+  if (raw === null || typeof raw !== 'object') {
+    return { signature: `<non-object:${raw === null ? 'null' : typeof raw}>`, keys: null };
+  }
+  const keys = Object.keys(raw as Record<string, unknown>).sort();
+  return { signature: JSON.stringify(keys), keys };
+}
+
+/** 按 node id 分组的形态列表：`Map<nodeId, NodeMetadataShape[]>`（列表长度即该 id 的节点数）。 */
+function groupNodeMetadataShapes(
+  nodes: readonly GraphNodeLike[],
+): Map<string, NodeMetadataShape[]> {
+  const grouped = new Map<string, NodeMetadataShape[]>();
+  for (const node of nodes) {
+    const bucket = grouped.get(node.id) ?? [];
+    bucket.push(describeNodeMetadata(node));
+    grouped.set(node.id, bucket);
+  }
+  return grouped;
+}
+
+/**
+ * a-track 第三比较维度：按 node id 分组比较 metadata 的 **key 集合**（只比 key 名，不比 value）。
+ *
+ * 为什么必须按 node id 分组而不是拍平成全图 key 并集（FR-006）：pinned 基线里 22 个节点的 key
+ * 集合本就逐节点不同（symbol 节点有 `lineRange`/`signature`，module 节点没有），并集档位对
+ * "某一个节点丢了 lineRange、其余节点该字段仍在"零检测力——而 F271 的 lineRange 入库正是这个
+ * 形态，当时既有两个维度全程判绿。
+ *
+ * 为什么只对"两侧 id 计数相等且都 > 0"的 id 求值：id 单侧独有或计数不等，第一维度已经报过了；
+ * 在这里再报一遍会让每个真正的 metadata 差异淹没在同一事实的重复噪声里。
+ *
+ * 为什么不比 value（FR-008）：`confidence` 这类浮点字段的正常波动会把护栏变成噪声源，
+ * 而本维度要抓的是"字段增删"这一类结构性漂移。
+ */
+function compareNodeMetadataKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+  const differences: string[] = [];
+  const rebuiltGroups = groupNodeMetadataShapes(rebuilt.nodes);
+  const pinnedGroups = groupNodeMetadataShapes(pinned.nodes);
+
+  // 遍历 entries 而非 keys：后者拿到 id 之后还得 `.get(id) as NodeMetadataShape[]` 断言非空，
+  // 而那个断言的成立理由（id 就是从同一个 Map 的 keys 来的）只存在于人的脑子里。
+  // 排序比较器与 `[...keys()].sort()` 的默认字符串序等价（默认 sort 就是按 UTF-16 码元比较）。
+  const sortedRebuiltGroups = [...rebuiltGroups.entries()].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+  for (const [id, rebuiltShapes] of sortedRebuiltGroups) {
+    const pinnedShapes = pinnedGroups.get(id);
+    if (pinnedShapes === undefined) continue;
+    if (rebuiltShapes.length !== pinnedShapes.length) continue;
+
+    const rebuiltCounts = countByKey(rebuiltShapes.map((shape) => shape.signature));
+    const pinnedCounts = countByKey(pinnedShapes.map((shape) => shape.signature));
+    const signatures = [...new Set([...rebuiltCounts.keys(), ...pinnedCounts.keys()])].sort();
+    const signatureCountsEqual = signatures.every(
+      (signature) => (rebuiltCounts.get(signature) ?? 0) === (pinnedCounts.get(signature) ?? 0),
+    );
+    if (signatureCountsEqual) continue;
+
+    // 重复 id（任一侧 ≥ 2 个同 id 节点）走通用 multiset 分支：这些节点之间没有可对应的身份，
+    // 强行两两配对去算 key 级 diff 会编造出误导性的"某个 key 丢了"结论。
+    if (rebuiltShapes.length !== 1) {
+      for (const signature of signatures) {
+        const rebuiltCount = rebuiltCounts.get(signature) ?? 0;
+        const pinnedCount = pinnedCounts.get(signature) ?? 0;
+        if (rebuiltCount !== pinnedCount) {
+          differences.push(
+            `metadata key 签名计数不一致（重建 ${rebuiltCount} vs pinned ${pinnedCount}）: ${id} @ ${signature}`,
+          );
+        }
+      }
+      continue;
+    }
+
+    // 单节点富诊断分支：现实中 100% 的场景（pinned 基线全部 id 唯一）。只报"签名计数 1 vs 1
+    // 不一致"读者看不出到底是哪个 key 变了，护栏变红却说不清为什么红。
+    const rebuiltShape = rebuiltShapes[0] as NodeMetadataShape;
+    const pinnedShape = pinnedShapes[0] as NodeMetadataShape;
+    // 提到局部 const 再判空：narrowing 必须在下面两个 `.filter` 闭包里仍然成立
+    const rebuiltKeys = rebuiltShape.keys;
+    const pinnedKeys = pinnedShape.keys;
+    if (rebuiltKeys === null || pinnedKeys === null) {
+      differences.push(
+        `metadata 缺席态不一致（重建 ${rebuiltShape.signature} vs pinned ${pinnedShape.signature}）: ${id}`,
+      );
+      continue;
+    }
+    const missing = pinnedKeys.filter((key) => !rebuiltKeys.includes(key));
+    const extra = rebuiltKeys.filter((key) => !pinnedKeys.includes(key));
+    if (missing.length === 0 && extra.length === 0) {
+      // 当前签名函数下不可达：签名是 key 集合的**规范**函数（排序后 JSON 序列化），
+      // 故"签名不等"必然蕴含"key 集合不等"。保留这一支不是防御性冗余，而是让
+      // "签名函数将来被改成非规范形式"这件事把自己说出来——否则它会静默退化成
+      // `重建缺失 [] vs 重建新增 []` 这句什么都没说的文案（正是 B3 要根除的形态）。
+      differences.push(
+        `metadata key 签名不一致但 key 集合相同（重建签名 ${rebuiltShape.signature} vs pinned 签名 ${pinnedShape.signature}）: ${id}`,
+      );
+      continue;
+    }
+    differences.push(
+      `metadata key 集合不一致（重建缺失 [${missing.join(', ')}] vs 重建新增 [${extra.join(', ')}]）: ${id}`,
+    );
+  }
+
+  return differences;
+}
+
+/**
+ * a-track 严格结构比较：节点 id **multiset** + 边 **multiset** + 按 node id 分组的
+ * 节点 metadata **key 集合**（F278 第三维度，只比 key 名不比 value）三者完全相等。
  *
  * 为什么不复用 `scripts/graph-semantic-diff.mjs`：那是 F214 时代的 allowlist 式 diff，
  * 设计目标是"忽略已知可接受差异"；本护栏的目标正相反——**任何**未预期差异都必须变红。
@@ -196,6 +367,9 @@ export function compareGraphOnlyStructure(
       differences.push(`边计数不一致（重建 ${left} vs pinned ${right}）: ${key}`);
     }
   }
+
+  const metadataDifferences = compareNodeMetadataKeys(rebuilt, pinned);
+  differences.push(...metadataDifferences);
 
   return { mismatch: differences.length > 0, differences };
 }
@@ -446,6 +620,47 @@ function serializeAsset(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/** `--init` 冷启动再生的审计留痕落点（fixture **根目录**，与 README.md 同级）。 */
+const REGEN_AUDIT_FILENAME = 'regen-audit.jsonl';
+
+/**
+ * 向 `<fixtureRoot>/regen-audit.jsonl` **追加**一行 JSON，记录本次 `--init` 冷启动再生。
+ *
+ * 为什么落 fixture 根目录而不是 `<fixtureRoot>/src/`：`computeFixtureInputHash` 只递归 `src/`
+ * 子目录，写进 `src/` 会让审计记录本身改变 `fixtureInputHash` 并污染两轨图产物——一个自指循环，
+ * 且下一次一致性判定会因为"上一次留了痕"而失真。
+ *
+ * 为什么 append 而非覆写：覆写只保留最后一条，"上一次基线是谁在什么时候建的"会被永久抹掉，
+ * 而审计的全部价值就在历史序列。JSONL 也让写入无需先 read→parse→push（文件损坏不会放大成整条链失败）。
+ *
+ * 为什么写盘失败只 warn 且仍返回成功：调用点在 `swapPinnedAssets` 的**提交点之后**，其注释已把
+ * "置 true 之后的任何失败 MUST NOT 触发回滚"定为不变量；升级成非零退出还会造出"脚本报失败但两份
+ * 资产已是新内容"的最坏状态——维护者以为没生成而重跑，重跑必然被 C-002 拒绝，卡死在只能手工删
+ * 资产才能脱身的坑里。这也不是 fail-open：审计记录不参与任何放行/拒绝判定，缺它不会让护栏放行任何东西。
+ *
+ * 本账本的**诚实口径**（记的是事件、不代表磁盘现状）与 `fixtureInputHash` 字段的**自检用法**，
+ * 见 `tests/fixtures/collector-fingerprint-guardrail/README.md` 禁止事项第 4 条——那里是给人看
+ * 处置路径的地方，论证只留一份，避免两处漂移（漂移时没有任何检查会发现）。
+ */
+function appendRegenAudit(
+  fixtureRoot: string,
+  entry: { fixtureInputHash: string; behaviorVersion: number },
+): void {
+  const record = {
+    timestamp: new Date().toISOString(),
+    trigger: '--init',
+    fixtureInputHash: entry.fixtureInputHash,
+    behaviorVersion: entry.behaviorVersion,
+    assets: [GRAPH_ONLY_ASSET_FILENAME, MODULE_GRAPH_ASSET_FILENAME],
+  };
+  const auditPath = path.join(fixtureRoot, REGEN_AUDIT_FILENAME);
+  try {
+    fs.appendFileSync(auditPath, `${JSON.stringify(record)}\n`, 'utf-8');
+  } catch (err) {
+    console.warn(`[regen] warning: 审计留痕写入失败（资产已正确落盘，不影响本次再生结果）：${String(err)}`);
+  }
+}
+
 interface RegenOptions {
   fixtureRoot: string;
   init: boolean;
@@ -573,9 +788,11 @@ export async function runRegen(argv: string[]): Promise<number> {
         .join(' + ');
       console.error(`[regen] 拒绝再生：${rejectedTracks} 重建内容与 pinned 期望不一致，但指纹未变化`);
       console.error(`[regen] ${selectRegenDiagnostic(currentInputHash !== pinned.inputHash)}`);
-      for (const difference of [...aTrack.differences, ...bTrack.differences]) {
+      const allDifferences = [...aTrack.differences, ...bTrack.differences];
+      for (const difference of allDifferences) {
         console.error(`[regen]   - ${difference}`);
       }
+      printMetadataDimensionGuidance(allDifferences);
       console.error('[regen] 两份 pinned 资产均未写盘。');
       return 1;
     }
@@ -618,6 +835,14 @@ export async function runRegen(argv: string[]): Promise<number> {
   // 提交点之后的清理 warning：资产本身已正确写入，因此仍是成功（exit 0），只是提示有残留
   for (const warning of swapOutcome.warnings) {
     console.warn(`[regen] warning: ${warning}`);
+  }
+  // F278 项③：只有 `--init` 冷启动留痕（FR-021 常规再生路径行为不变），且必须在 swap 成功之后——
+  // 写在之前会记录一次可能失败的再生，那正是"虚假留痕"。C-002 拒绝分支早已 return，走不到这里（FR-020）。
+  if (init) {
+    appendRegenAudit(fixtureRoot, {
+      fixtureInputHash: currentInputHash,
+      behaviorVersion: currentFingerprint.behaviorVersion,
+    });
   }
   return 0;
 }

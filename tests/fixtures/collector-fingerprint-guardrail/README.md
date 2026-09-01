@@ -89,6 +89,31 @@ symbol 节点 `lineRange` 剥掉后深等比较，除该字段外无任何差异
 
 重新生成：`npm run fixtures:regen:collector-fingerprint`（首次冷启动加 `--init`）。
 
+### 护栏报 `metadata key 集合不一致` 时的处置路径（不要照文案去 bump）
+
+再生脚本的 a-track 有第三个比较维度：按 node id 分组比较节点 `metadata` 的 **key 集合**
+（只比 key 名，不比 value）。它抓的是"节点还在、id 不变，但携带的字段名集合变了"这一形态 ——
+F271 给 symbol 节点新增 `lineRange` 时，既有的节点 id / 边两个维度对它全程判绿。
+
+拒绝时脚本会打印 `[regen] 检测到指纹不可见的行为变更：先 bump behaviorVersion 再跑再生`。
+**这条通用文案对 metadata 维度不成立**：`src/panoramic/graph/collector-fingerprint.ts` 的六类
+bump responsibility 全部是"哪些文件被计入采集面"，**没有一条覆盖节点携带的字段集合**——F271
+的再生记录（见上文）明写着"六类 responsibility 均不适用，故不 bump"。照着通用文案做一次
+bump，等于按权威清单判定为**错**的版本跳变。
+
+因此差异里出现 `metadata ` 开头的条目时，脚本会**额外**打印一条维度专属指引。处置路径是：
+
+1. 先确认这次改动**只是节点字段增删、采集面未变**（若采集面也变了，那才是六类 responsibility
+   适用的场景，正常 bump）。
+2. 确认之后：`rm expected-graph-only-graph.json expected-module-graph.json` 再跑
+   `npm run fixtures:regen:collector-fingerprint -- --init` 重建基线。该路径会在
+   `regen-audit.jsonl` 留下审计记录，因此不是"悄悄绕过护栏"。
+3. 在本 README 的「再生记录」节补一段人写的论证（为什么这次再生是正当的、做过哪些剥字段深等
+   审计），与机器留痕互补。
+
+**MUST NOT** 为了让脚本放行而 bump `BEHAVIOR_VERSION`；也 **MUST NOT** 在没做第 1 步确认的
+情况下直接走 `rm + --init`。
+
 ### `expected-graph-only-graph.json` 的 `"builder": null` 是**再生路径的产物**（F261）
 
 该资产里 `graph.graph.builder` 为 `null`，**不是**"这个字段无所谓"，而是再生脚本走
@@ -118,3 +143,21 @@ symbol 节点 `lineRange` 剥掉后深等比较，除该字段外无任何差异
 3. **禁止新增 `*.test.ts` / `*.spec.ts` 命名的样本**：虽然本目录不在任何 vitest project 的
    include glob 内，但 `buildModuleGraphForProject` 会按 ts-js adapter 的 test pattern 过滤这类
    文件，导致 registry 已注册 / 未注册两条路径产出不同的图，破坏 b-track 的可对比性。
+4. **禁止手工编辑或删除 `regen-audit.jsonl` 的历史条目。** 该文件是 **`--init` 冷启动建基线
+   这一事件**的审计留痕（append-only JSONL），每行记录一次 `--init` 再生的时间、触发方式、
+   `fixtureInputHash` 与 `behaviorVersion`，由再生脚本在资产落盘成功后自动追加。
+   原因：它的价值全在历史序列——手工补写等于伪造一次并未发生的再生，删改历史条目则会让
+   `--init` 建基线这一事件永久失去可追溯的来源。
+
+   **它记录的是事件，不代表磁盘现状。** 常规（非 `--init`）再生同样会重写两份 pinned 资产，
+   但按设计**不留痕**；而 `--init` 一生只跑一两次、常规再生才是常态路径，因此账本的稳态就是
+   "最后一行未必对应磁盘上这份基线"。把某条记录读成"磁盘上这份资产的来源"是 over-claim。
+
+   **可判定的用法**：拿账本最后一行的 `fixtureInputHash` 与当前
+   `expected-graph-only-graph.json` 顶层的同名字段比对 ——
+   **相符** ⇒ 磁盘上这份基线就是那次 `--init` 建的；
+   **不符** ⇒ 其后至少发生过一次常规再生（常规路径不留痕），账本此时只能回答"最初的基线是谁
+   在什么时候建的"。这条自检正是 `fixtureInputHash` 字段存在的理由：有它，账目从"可能撒谎的
+   断言"变成"可自检的锚"。
+
+   该文件不参与 `fixtureInputHash`（只扫 `src/`），也不参与任何放行 / 拒绝判定。

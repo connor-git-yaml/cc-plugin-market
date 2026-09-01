@@ -24,7 +24,43 @@
 
 ## 待处理
 
-（无——2026-09-01 milestone-next 20 条全部流转，见下）
+### F278 · 2026-09-01
+状态：待处理
+来源：specs/278-honest-tooling-patches/（编排器验证记录 + 三路异构对抗复审）
+
+- [信息完整性][Spectra MCP graph] `.mjs` 文件里的**顶层具名导出函数**在图中查不到 symbol 级节点：
+  返工子代理用 `context`/`impact` 查 `plugins/spec-driver/scripts/judge-snapshot-doctor.mjs` 新增的
+  具名导出 `deriveDelta` 时返回 `symbol-not-found`，`fuzzyMatches` 只能回退到**文件级**候选——
+  而那正是它最需要查影响面的那个符号。同批查 `checkJudgeSnapshotDrift`（同文件、同为具名导出）
+  则命中。疑为 `.mjs` 采集面的 symbol 粒度缺口（F243 补了 `.mjs` 的**文件/模块**覆盖，
+  symbol 层是否同步补齐待查）。改进方向：先确认是采集缺口还是图陈旧导致的（本卡期间图确为 stale），
+  再决定是否进 P1-F 多语言 parity 卡。
+- [结果准确性][Spectra MCP impact] 再现：F274 —— 图 stale 时 `impact` 返回**空集**且 `honesty.freshness`
+  如实报 `stale` + `builderMismatch: true`。诚实返回面**起了作用**（两个子代理都因此没把空集当唯一证据、
+  主动回退 grep 复核），但也直接导致**两个实现子代理明确选择不调用 MCP**（"在一个已过期的图上做影响面判断
+  可信度有限"）。即：诚实标注避免了误判，却把工具排除在了工作流之外。这不是缺陷报告，是一条
+  产品张力的实证——**诚实返回面本身不解决可用性**，配套的"一键重建"引导（本卡项①改的正是这条 hint）
+  才是闭环。建议 M10 P0-C 收官时把这条作为"诚实返回面上线后的实际使用行为"证据记入。
+- [流程顺畅度][Spec Driver 编排] 编排器给返工子代理**钉死了一个环境依赖的验收常量**（`judge:doctor`
+  输出的 sha256），而该常量在会话中途因 `.specify/.spec-driver-path` 由 `4.4.0` 变为 `4.5.0` 而失效；
+  子代理**如实反驳并换用同时刻 A/B**（`git show HEAD:` 取改动前实现，与新实现同一时刻各跑一次对比），
+  编排器复验后确认反驳成立。教训可泛化：**"逐字节不变"类验收判据不得钉死绝对值快照，必须用同时刻 A/B**
+  ——因为被测输出常含本机绝对路径与安装态。改进方向：把这条写进 spec-driver 的 verify 阶段指引
+  （"向后兼容类 SC 的验证手段模板"），归口 P1-K 引擎硬化。
+- [流程顺畅度][Spec Driver spec-review] 再现：M10 §5 P1-K 已登记项 —— `spec-driver:spec-review` 子代理
+  frontmatter 只给 Read/Grep/Glob（无 Bash），本卡首次派发时它开口第一句就是"我没有 Bash，无法跑
+  `git diff`/`node --test`，只能读文件并标注证据受限"，随即 API 断连。**合规审查的核心工作恰恰是
+  核对"声称达成"与"实测证据"的差距，而它拿不到任何实测证据**——只能读代码脑补，这正是它该抓的病。
+  编排器改用**预跑注入**（把 `git diff --stat`、Out of Scope 七文件 diff 行数、fixture `git status`、
+  `BEHAVIOR_VERSION` 现值、新增用例名、门禁结果、SC-004 的 A/B 结论打成证据包文件让它 Read）后可用。
+  → 印证 P1-K 已记的两条方案（只读 git 白名单 / 编排器预跑注入）中**后者可行且成本低**，建议直接采纳
+  为 spec-review 的标准前置，而不是给它开 Bash 白名单。
+
+- [流程顺畅度][Spec Driver 编排] 子代理长 transcript 的 **API 断连死亡率**在本卡再次凸显：
+  plan 阶段的 `spec-driver:plan` 子代理连续两次 `Connection lost mid-response`
+  （第一次死在写盘前、第二次死在 plan.md 与 tasks.md 之间），耗掉约 156k + 一轮 SendMessage 恢复；
+  最终靠"拆成两次 Write、中途禁止再 Read/Grep 调研"才落盘。改进方向：编排器在派发**产出型**
+  子代理时显式要求"先一次性 Write 主制品再做次要制品，中途不插入调研"，归口 P1-K 派发纪律。
 
 ## 已处理
 

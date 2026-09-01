@@ -155,6 +155,38 @@ function loadGraphOrError(projectRoot: string):
   }
 }
 
+/**
+ * `symbol-not-found` 命中"文件在图中、符号不在"时的 hint（F278 FR-002：impact / context 共用同一份文案）。
+ */
+const SYMBOL_NOT_FOUND_STALE_GRAPH_HINT =
+  '该文件已在图中、但其中没有这个 symbol —— 通常意味着它是新增或新导出的符号，当前图尚未收录。' +
+  '请先运行 `spectra batch --mode graph-only` 重建图（纯 AST · 零 LLM · 无需认证 · <2min）后重试；' +
+  '若确认该符号早已存在，再参考 fuzzyMatches 候选核对 id。';
+
+/**
+ * `symbol-not-found` 的 hint 分流（FR-001/FR-002）。
+ *
+ * 为什么要分流：符号找不到有两种成因，指向完全相反的动作。文件本身不在图中 → 多半是 id
+ * 写错了，翻 fuzzyMatches 有用；文件在图中而符号不在 → 多半是图陈旧（符号是新增/新导出的），
+ * 这时让 agent 反复校对 id 拼写是把它推向错误方向，白白烧执行轮次。
+ *
+ * 取 file part 用 `moduleFileFromId` 而非 `split('::')[0]`：后者对旧 panoramic `#` 格式
+ * （`src/a.py#foo`）会返回整串导致判定必然落空，而这类 id 恰恰是"图陈旧"最常见的形态之一。
+ *
+ * fallbackHint 由调用方传入而非在此写死：impact 与 context 的**原**文案本就不同
+ * （'请检查 symbol id 格式…' vs '请检查 id 格式…'），FR-001 要求未命中时逐字保持现状，
+ * 只有**新**文案要求两处一致（FR-002）。
+ */
+function symbolNotFoundHint(
+  graphData: Readonly<GraphJSON>,
+  requestedId: string,
+  fallbackHint: string,
+): string {
+  return findNode(graphData, moduleFileFromId(requestedId)) !== null
+    ? SYMBOL_NOT_FOUND_STALE_GRAPH_HINT
+    : fallbackHint;
+}
+
 // ============================================================
 // impact tool
 // ============================================================
@@ -221,7 +253,7 @@ export async function handleImpact(args: ImpactArgs): Promise<ToolResult> {
         return { result: buildErrorResponse(
           'symbol-not-found',
           `target 在 graph 中未找到: ${args.target}`,
-          '请检查 symbol id 格式或参考 fuzzyMatches 候选',
+          symbolNotFoundHint(graphData, args.target, '请检查 symbol id 格式或参考 fuzzyMatches 候选'),
           { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
         ) };
       }
@@ -372,7 +404,7 @@ export async function handleContext(args: ContextArgs): Promise<ToolResult> {
         return { result: buildErrorResponse(
           'symbol-not-found',
           `symbolId 在 graph 中未找到: ${args.symbolId}`,
-          '请检查 id 格式或参考 fuzzyMatches 候选',
+          symbolNotFoundHint(graphData, args.symbolId, '请检查 id 格式或参考 fuzzyMatches 候选'),
           { fuzzyMatches: fuzzy.candidates.slice(0, 3) },
         ) };
       }

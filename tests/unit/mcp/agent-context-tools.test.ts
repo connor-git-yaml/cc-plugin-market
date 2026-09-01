@@ -871,3 +871,54 @@ describe('F170c SC-003 — 三路径', () => {
     });
   });
 });
+
+// ============================================================
+// F278 项① — symbol-not-found 的 hint 按「文件是否在图中」分流
+// ============================================================
+
+describe('F278 symbol-not-found hint 分流', () => {
+  // mock 图（makeGraph）里 'fixture/engine.py' 是真实存在的 module 节点，
+  // 'fixture/ghost.py' 不存在——两者构成"文件在图中 / 不在图中"的对照。
+  const IN_GRAPH_ID = 'fixture/engine.py::zzzBrandNewSymbol';
+  const NOT_IN_GRAPH_ID = 'fixture/ghost.py::whatever';
+
+  it('F278-1 impact：文件在图中但符号不在 → hint 指向图陈旧而非 id 拼写', async () => {
+    setMockGraph();
+    const r = await handleImpact({ target: IN_GRAPH_ID });
+    const e = parseError(r);
+    // 前置：符号名必须落进 symbol-not-found 分支（未被 fuzzy auto-resolve），否则本用例测不到目标行为
+    expect(e.code).toBe('symbol-not-found');
+    expect(e.hint).toContain('新增或新导出的符号');
+    // FR-003：fuzzyMatches 结构不变
+    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+  });
+
+  it('F278-2 context：同输入 hint 与 impact 逐字相等（FR-002）', async () => {
+    setMockGraph();
+    const impactHint = parseError(await handleImpact({ target: IN_GRAPH_ID })).hint;
+    const r = await handleContext({ symbolId: IN_GRAPH_ID });
+    const e = parseError(r);
+    expect(e.code).toBe('symbol-not-found');
+    expect(e.hint).toContain('新增或新导出的符号');
+    expect(e.hint).toBe(impactHint);
+    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+  });
+
+  it('F278-3 impact 对照组：文件不在图中 → 原 hint 逐字保持（FR-001）', async () => {
+    setMockGraph();
+    const r = await handleImpact({ target: NOT_IN_GRAPH_ID });
+    const e = parseError(r);
+    expect(e.code).toBe('symbol-not-found');
+    expect(e.hint).toBe('请检查 symbol id 格式或参考 fuzzyMatches 候选');
+    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+  });
+
+  it('F278-4 context 对照组：文件不在图中 → 原 hint 逐字保持（FR-001）', async () => {
+    setMockGraph();
+    const r = await handleContext({ symbolId: NOT_IN_GRAPH_ID });
+    const e = parseError(r);
+    expect(e.code).toBe('symbol-not-found');
+    expect(e.hint).toBe('请检查 id 格式或参考 fuzzyMatches 候选');
+    expect(Array.isArray(e.context?.['fuzzyMatches'])).toBe(true);
+  });
+});

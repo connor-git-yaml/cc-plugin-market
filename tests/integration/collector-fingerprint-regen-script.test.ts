@@ -28,6 +28,8 @@ const TSX_BIN = path.join(ROOT, 'node_modules/.bin/tsx');
 
 const GRAPH_ONLY_ASSET = 'expected-graph-only-graph.json';
 const MODULE_GRAPH_ASSET = 'expected-module-graph.json';
+/** F278 项③：`--init` 冷启动再生的审计留痕 sidecar（fixture 根目录，与 README.md 同级）。 */
+const AUDIT_FILE = 'regen-audit.jsonl';
 
 const tmpDirs: string[] = [];
 
@@ -138,6 +140,26 @@ function appendExportedFunctionToFooTs(fixtureRoot: string): void {
   );
 }
 
+/**
+ * 从 pinned a-track 资产里剥掉某个 symbol 节点的 `metadata.lineRange`：构造**仅** metadata
+ * 维度的漂移（节点 id multiset 与边 multiset 两个既有维度全程判绿）。
+ *
+ * 这正是 F271 lineRange 入库时的真实形态——当时既有两个维度对它完全失明。
+ * 返回被剥字段的 node id，供调用方断到具体定位符而非泛化关键词。
+ */
+function stripLineRangeFromGraphOnlyAsset(fixtureRoot: string): string {
+  const assetPath = path.join(fixtureRoot, GRAPH_ONLY_ASSET);
+  const asset = JSON.parse(fs.readFileSync(assetPath, 'utf-8')) as {
+    graph: { nodes: Array<{ id: string; metadata?: Record<string, unknown> }> };
+  };
+  const victim = asset.graph.nodes.find((node) => node.metadata?.lineRange !== undefined);
+  expect(victim).toBeDefined();
+  const target = victim as { id: string; metadata: Record<string, unknown> };
+  delete target.metadata.lineRange;
+  fs.writeFileSync(assetPath, `${JSON.stringify(asset, null, 2)}\n`, 'utf-8');
+  return target.id;
+}
+
 /** 扰动 b-track pinned 期望：删一条 module 边 → 重建产物与 pinned 不一致（指纹不变）。 */
 function perturbModuleGraphAsset(fixtureRoot: string): void {
   const assetPath = path.join(fixtureRoot, MODULE_GRAPH_ASSET);
@@ -192,6 +214,11 @@ describe('再生脚本 — 放行/无变更场景（活性证明）', () => {
     expect(
       fs.readdirSync(fixtureRoot).filter((name) => name.endsWith('.bak') || name.includes('.tmp-')),
     ).toEqual([]);
+    // F278 返工 A6：**常规**再生路径 MUST NOT 留痕（FR-021）。入库 fixture 里没有
+    // `regen-audit.jsonl`，本次跑的是常规路径，跑完也不该造出它。
+    // 鉴别力来源：删掉 `runRegen` 里 `if (init)` 这道守卫后，本次常规再生会写出一条
+    // `trigger:"--init"` 的字面撒谎记录，而在补这条断言之前 16 条集成用例对此全部无感。
+    expect(fs.existsSync(path.join(fixtureRoot, AUDIT_FILE))).toBe(false);
   });
 
   /**
@@ -283,6 +310,42 @@ describe('再生脚本 — 拒绝场景三分（逐轨独立求值，FR-005(e)�
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain('检测到 fixture 基线变更');
     expect(run.stderr).not.toContain('检测到指纹不可见的行为变更');
+    expect(assetDigests(fixtureRoot)).toEqual(before);
+  });
+
+  /**
+   * F278 返工 A7：metadata-only 漂移走**常规再生**的拒绝路径，端到端。
+   *
+   * 为什么单测（`compareGraphOnlyStructure` 的扰动注入组）不够：那只证明"比较器会报差异"，
+   * 不证明这条差异真的接进了脚本的拒绝链路——中间还隔着"第三维度的 differences 被并进
+   * aTrack.differences"、"aTrack.mismatch 传给 shouldRejectRegen"、"拒绝时两份资产不写盘"
+   * 三个环节，任一环断掉单测全绿而护栏实际失效。
+   *
+   * 同时钉住 B2 新增的 metadata 维度专属处置指引：没有它，维护者按既有文案只剩
+   * "做一次按权威清单为错的 bump"或"rm + --init 全绕过"两条路。
+   */
+  it('(e) metadata-only 漂移：pinned 少一个 lineRange → 非零退出 + 指名 metadata 维度 + 资产字节不变', () => {
+    const fixtureRoot = stageFixtureRoot();
+    const victimId = stripLineRangeFromGraphOnlyAsset(fixtureRoot);
+    const before = assetDigests(fixtureRoot);
+
+    const run = runRegenScript(fixtureRoot);
+
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('拒绝再生');
+    // 只有 a 轨该被指名：b 轨资产一字未动，metadata 维度只作用于 a 轨
+    expect(run.stderr).toContain('a-track(graph-only)');
+    expect(run.stderr).not.toContain('b-track');
+    // fixture 源码未动 → inputHash 未变 → 走 producer 行为漂移文案
+    expect(run.stderr).toContain('检测到指纹不可见的行为变更');
+    // 断到含格子与具体 node id 的完整定位文案（pinned 缺 lineRange ⇒ 重建侧"新增"）
+    expect(run.stderr).toContain(
+      `metadata key 集合不一致（重建缺失 [] vs 重建新增 [lineRange]）: ${victimId}`,
+    );
+    // B2：metadata 维度专属处置指引（六类 bump responsibility 不覆盖节点字段集合）
+    expect(run.stderr).toContain('六类 bump responsibility');
+    expect(run.stderr).toContain('rm expected-graph-only-graph.json expected-module-graph.json');
+    expect(run.stderr).toContain('两份 pinned 资产均未写盘');
     expect(assetDigests(fixtureRoot)).toEqual(before);
   });
 });
@@ -401,5 +464,156 @@ describe('再生脚本 — --init 冷启动路径', () => {
     expect(run.stderr).toContain('人工核查');
     // 单份缺失是异常状态，"用 --init 重建基线"会把异常掩盖成新基线
     expect(run.stderr).toContain('MUST NOT 用 --init');
+  });
+
+  // ── F278 项③：`--init` 冷启动再生的审计留痕（FR-018 / FR-019 / FR-020） ──
+
+  /** 只取非空行：`appendFileSync` 每条以 `\n` 结尾，split 后末尾恒有一个空串。 */
+  function readAuditLines(fixtureRoot: string): string[] {
+    const auditPath = path.join(fixtureRoot, AUDIT_FILE);
+    if (!fs.existsSync(auditPath)) return [];
+    return fs
+      .readFileSync(auditPath, 'utf-8')
+      .split('\n')
+      .filter((line) => line.trim() !== '');
+  }
+
+  /**
+   * 预置一行占位审计记录。
+   *
+   * A1 用它证明写入是 **append** 而非覆写（覆写会抹掉"上一次基线是谁建的"，而审计的全部价值
+   * 就在历史序列）；A2 用它避免"文件本就不存在 → 断言不存在"这种恒真的空断言。
+   */
+  function seedAuditPlaceholder(fixtureRoot: string): string {
+    const placeholder = JSON.stringify({ timestamp: '1970-01-01T00:00:00.000Z', trigger: 'seed' });
+    fs.writeFileSync(path.join(fixtureRoot, AUDIT_FILE), `${placeholder}\n`, 'utf-8');
+    return placeholder;
+  }
+
+  it('A1：--init 冷启动成功后写出一条审计记录（append，字段可逐一断言）', () => {
+    const fixtureRoot = stageFixtureRoot();
+    fs.rmSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET));
+    fs.rmSync(path.join(fixtureRoot, MODULE_GRAPH_ASSET));
+    const placeholder = seedAuditPlaceholder(fixtureRoot);
+
+    const startedAt = Date.now();
+    const init = runRegenScript(fixtureRoot, ['--init']);
+    const finishedAt = Date.now();
+    expect(init.status).toBe(0);
+
+    const lines = readAuditLines(fixtureRoot);
+    expect(lines.length).toBe(2);
+    // append 而非覆写：预置的历史条目必须原样保留
+    expect(lines[0]).toBe(placeholder);
+
+    const entry = JSON.parse(lines[1] as string) as {
+      timestamp: string;
+      trigger: string;
+      fixtureInputHash: string;
+      behaviorVersion: number;
+      assets: string[];
+    };
+    expect(entry.trigger).toBe('--init');
+    expect(entry.behaviorVersion).toBe(BEHAVIOR_VERSION);
+    expect(entry.assets.sort()).toEqual([GRAPH_ONLY_ASSET, MODULE_GRAPH_ASSET].sort());
+
+    // 时间戳必须真的来自本次运行：±2s 容差只为吸收时钟微调，仍能抓出写死/陈旧的时间戳
+    const parsed = Date.parse(entry.timestamp);
+    expect(Number.isNaN(parsed)).toBe(false);
+    expect(parsed).toBeGreaterThanOrEqual(startedAt - 2000);
+    expect(parsed).toBeLessThanOrEqual(finishedAt + 2000);
+
+    // fixtureInputHash 是"把磁盘上这份资产对上某条审计条目"的唯一锚点，必须与落盘资产一致
+    expect(entry.fixtureInputHash).toMatch(/^[0-9a-f]{64}$/);
+    const assetHash = (
+      JSON.parse(fs.readFileSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET), 'utf-8')) as {
+        fixtureInputHash: string;
+      }
+    ).fixtureInputHash;
+    expect(entry.fixtureInputHash).toBe(assetHash);
+  });
+
+  it('A2：--init 被 C-002 拒绝时 MUST NOT 写审计记录（未发生再生就不得留痕）', () => {
+    const fixtureRoot = stageFixtureRoot();
+    seedAuditPlaceholder(fixtureRoot);
+    const before = readAuditLines(fixtureRoot);
+    expect(before.length).toBe(1);
+
+    const run = runRegenScript(fixtureRoot, ['--init']);
+
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain('拒绝 --init');
+    expect(readAuditLines(fixtureRoot)).toEqual(before);
+  });
+
+  /**
+   * A3（F278 返工）：审计写盘失败 MUST 只降级为 warning，MUST NOT 让整体非零退出。
+   *
+   * 构造：把 `regen-audit.jsonl` 这个路径**预置成目录**，`appendFileSync` 对目录必抛 EISDIR。
+   *
+   * 为什么这条不是"锦上添花"：去掉 `appendRegenAudit` 的 `try/catch` 后 16 条既有用例全绿，
+   * 而真实后果正是该函数注释里写明要避免的最坏状态——脚本报失败、但两份资产已经是新内容，
+   * 维护者以为没生成而重跑，重跑必然被 C-002 拒绝（资产已存在），卡死在只能手工删资产才能
+   * 脱身的坑里。这里连跑一次常规再生把"资产确实已是新内容"实测出来，而不是只看退出码。
+   */
+  it('A3：审计写盘失败（regen-audit.jsonl 被占为目录）→ 仍 exit 0、两份资产已更新、只出 warning', () => {
+    const fixtureRoot = stageFixtureRoot();
+    fs.rmSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET));
+    fs.rmSync(path.join(fixtureRoot, MODULE_GRAPH_ASSET));
+    fs.mkdirSync(path.join(fixtureRoot, AUDIT_FILE));
+
+    const init = runRegenScript(fixtureRoot, ['--init']);
+
+    expect(init.status).toBe(0);
+    expect(init.stdout).toContain('已更新两份 pinned 资产');
+    expect(init.stderr).toContain('审计留痕写入失败');
+    expect(fs.existsSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET))).toBe(true);
+    expect(fs.existsSync(path.join(fixtureRoot, MODULE_GRAPH_ASSET))).toBe(true);
+
+    // 资产不是半成品：紧接着的常规运行判"无需更新"，即两份资产与当前重建产物自洽
+    const followUp = runRegenScript(fixtureRoot);
+    expect(followUp.status).toBe(0);
+    expect(followUp.stdout).toContain('无需更新');
+  });
+
+  /**
+   * A4（F278 返工）：swap 失败时审计**行数不变**——留痕 MUST 发生在提交点之后。
+   *
+   * 为什么 A2（C-002 拒绝分支）不够：那条在两轨重建之前就 early return，对"审计调用被挪到
+   * `swapPinnedAssets` 之前"这个变异毫无鉴别力（挪过去之后 A1/A2 仍全绿）。而真实后果是给
+   * 一次**零产物**的失败运行留下一条完整留痕，账本从此说假话。
+   *
+   * 构造：把 fixture 根目录的写位摘掉。`swapPinnedAssets` 的 `writeFileSync(<tmp>)` 需要在
+   * 目录里**新建**条目 → EACCES；而向**已存在**的审计文件 append 只需该文件自身的写位，
+   * 不受目录位影响——这正是本用例鉴别力的来源：若留痕被挪到 swap 之前，它会写成功。
+   */
+  it('A4：swap 失败（fixture 根目录只读）→ 非零退出且审计行数不变（留痕 MUST 在提交点之后）', () => {
+    // root 无视权限位，本用例在 root 下无鉴别力，直接标记跳过而不是假绿通过
+    if (process.getuid?.() === 0) {
+      expect.soft(true, 'skipped: running as root').toBe(true);
+      return;
+    }
+    const fixtureRoot = stageFixtureRoot();
+    fs.rmSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET));
+    fs.rmSync(path.join(fixtureRoot, MODULE_GRAPH_ASSET));
+    seedAuditPlaceholder(fixtureRoot);
+    const before = readAuditLines(fixtureRoot);
+    expect(before.length).toBe(1);
+
+    fs.chmodSync(fixtureRoot, 0o555);
+    try {
+      const run = runRegenScript(fixtureRoot, ['--init']);
+
+      expect(run.status).not.toBe(0);
+      expect(run.stderr).toContain('pinned 资产写盘失败');
+      // 零产物：两份资产一份都没落盘
+      expect(fs.existsSync(path.join(fixtureRoot, GRAPH_ONLY_ASSET))).toBe(false);
+      expect(fs.existsSync(path.join(fixtureRoot, MODULE_GRAPH_ASSET))).toBe(false);
+      // 核心断言：这次失败运行 MUST NOT 在账本上留下任何痕迹
+      expect(readAuditLines(fixtureRoot)).toEqual(before);
+    } finally {
+      // 还原写位，否则 afterEach 的 rmSync 删不掉目录内容
+      fs.chmodSync(fixtureRoot, 0o755);
+    }
   });
 });
