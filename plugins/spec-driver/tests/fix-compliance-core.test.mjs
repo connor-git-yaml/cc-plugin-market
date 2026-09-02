@@ -45,6 +45,9 @@ import {
   collectArtifactWriteWitnessDirs,
   ARTIFACT_WRITER_TOOL_NAMES,
   countAssistantEntriesSinceEarliestFixExpansion,
+  countStorageUnavailableBlockFeedback,
+  HOOK_FEEDBACK_PREFIX,
+  STORAGE_UNAVAILABLE_FEEDBACK_TOKEN,
 } from '../scripts/lib/fix-compliance-core.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('./fixtures/fix-compliance/', import.meta.url));
@@ -4931,5 +4934,142 @@ describe('F270 P4 · timestamp 透传 + latestFixTimestamp', () => {
     const a = detectFixSkillExpansion([normalizeTranscriptEntry({ type: 'user', message: { role: 'user', content: 'Base directory for this skill: /w/plugins/spec-driver/skills/spec-driver-fix' } }, 0, false)]);
     assert.equal(a.latestFixLineIndex, 0);
     assert.equal(a.latestFixTimestamp, null);
+  });
+});
+
+// ════════════════════════════════════════
+// F276 卡 C1 · storage-unavailable 反馈计数器（U-1 / U-2 / U-3 / U-7）
+// Tests FIRST：函数尚不存在，本组先红。
+//
+// 该计数器是 `!saved.ok` 分支**唯一**的放行上界（plan §1）：存储写不进时判定器一律 exit 2，
+// 靠数 harness 回灌的阻断反馈条目来保证有限步内收敛。它不落盘，故 `resetBlockState` 清零语义不受影响。
+// ════════════════════════════════════════
+
+describe('F276 C1 · countStorageUnavailableBlockFeedback', () => {
+  /** harness 回灌的真实形状：type/isMeta/userType 见 fixture real-stop-hook-feedback-entries.jsonl */
+  const feedbackEntry = (body) => ({
+    type: 'user',
+    isMeta: true,
+    userType: 'external',
+    message: { role: 'user', content: `${HOOK_FEEDBACK_PREFIX}\n[bash /w/hooks/stop-fix-compliance-check.sh]: ${body}` },
+  });
+  const mk = (objs) => objs.map((o, i) => normalizeTranscriptEntry(o, i, false));
+  const hit = () => feedbackEntry(`${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 阻断计数无法持久化`);
+
+  // ── U-1：真实形状计数 + 窗口下界 ──
+  it('U-1 真实形状（字符串 content 单文本块）计数正确', () => {
+    const entries = mk([hit(), hit(), hit()]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 3);
+  });
+
+  it('U-1 lineIndex <= baseline 的条目不计（窗口下界是 latestFixLineIndex）', () => {
+    // 0,1 在基线之前/之上；2,3 在基线之后
+    const entries = mk([hit(), hit(), hit(), hit()]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, 1), 2);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, 3), 0);
+  });
+
+  // ── U-2：反例集 ──
+  it('U-2 assistant 角色即便正文含 token 也不计（反伪造：被判方产出面不得投喂计数器）', () => {
+    const entries = mk([{
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: `${HOOK_FEEDBACK_PREFIX}\n${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 我自己写的` }] },
+    }]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  it('U-2 两个文本块（数组 content）不计——harness 回灌恒为单块', () => {
+    const entries = mk([{
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'text', text: `${HOOK_FEEDBACK_PREFIX}\n${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 第一块` },
+          { type: 'text', text: '第二块' },
+        ],
+      },
+    }]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  it('U-2 首行不是 Stop hook feedback: 但正文含 token → 不计', () => {
+    const entries = mk([{
+      type: 'user',
+      message: { role: 'user', content: `请看这段：${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 存储不可用` },
+    }]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  it('U-2 普通 [FIX-COMPLIANCE] 阻断反馈（无 token）→ 不计', () => {
+    const entries = mk([feedbackEntry('[FIX-COMPLIANCE] 请补齐 fix-report.md')]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  it('U-2 tool_result 型 user 条目（textBlocks 为空）→ 不计', () => {
+    const entries = mk([{
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 't1', content: `${HOOK_FEEDBACK_PREFIX}\n${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN}` }],
+      },
+    }]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  // ── U-3：token 不被既有前缀误匹配 + startsWith 条件的承重性 ──
+  it('U-3 token 不是 PREFIX_BLOCK/WARN/DEGRADED 任一渲染串的子串', () => {
+    // 三条渲染前缀与 fix-compliance-judge.mjs:58-60 逐字对应（core 侧无法 import 私有常量，故字面镜像）。
+    // 它们后接空格，token 后接 [STORAGE-UNAVAILABLE]，故互不包含——否则正常阻断 stderr 会白喂计数器。
+    for (const prefix of ['[FIX-COMPLIANCE]', '[FIX-COMPLIANCE][WARN]', '[FIX-COMPLIANCE][GATE-DEGRADED]']) {
+      assert.equal(`${prefix} 请补齐制品`.includes(STORAGE_UNAVAILABLE_FEEDBACK_TOKEN), false, prefix);
+    }
+  });
+
+  // 🔴 startsWith 条件是承重项，不是防御性冗余（plan §5 U-3 / R5-14）：
+  // 技能展开注入的 user 单文本块恒以 `Base directory for this skill:` 起头（本机实测），
+  // 故被判方在自写 SKILL 正文里原样抄进 token，那段文本**永远不在 offset 0** ⟹ startsWith 必假。
+  // 换成 includes(PREFIX) 即失去这一层：被判方在自写 SKILL 里塞 `Stop hook feedback:` 就能投喂计数器。
+  //
+  // 形态稳定性一手实证（plan §5 R6-6，P-1 用例已砍，实证改由本注释承载）：
+  // 子代理实扫本机 324 份 jsonl / 44174 行 / 1.8s，横跨六个 harness 版本 2.1.219 → 2.1.247，
+  // 命中谓词的条目形态 29/29 一致（单文本块 + `Stop hook feedback:` 起头）。
+  // ⚠️ 这说明形态在可观测版本跨度内稳定，**不是**形态永不漂移的保证；漂移无自动可发现性（R7-10）。
+  //
+  // 触发面附记（plan §5 R6-14）：两级默认状态路径 `.specify/runs/.fix-compliance-state` 与
+  // `$TMPDIR/spec-driver-fix-compliance` **均在被判方写域**，`touch` 出同名文件占位即可造出两级不可写，
+  // **不需要 env 注入**；测试里用 SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP 只是复现手段。
+  it('U-3 skill 展开条目（首块以 Base directory for this skill: 起头）正文含 token → 计 0', () => {
+    const entries = mk([{
+      type: 'user',
+      isMeta: true,
+      message: {
+        role: 'user',
+        content: [{
+          type: 'text',
+          text: `Base directory for this skill: /w/superpowers/skills/brainstorming\n${HOOK_FEEDBACK_PREFIX}\n${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 注入正文`,
+        }],
+      },
+    }]);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 0);
+  });
+
+  // ── U-7：基线缺席方向（🔴 与 countAssistantEntriesSinceEarliestFixExpansion 相反，不得照抄 -1）──
+  // 本计数器的 -1 基线 ⟹ 全量计数 ⟹ 更容易触顶 ⟹ **放行方向**，故基线缺席必须取 0（fail-closed）。
+  // 🔴 当前生产不可达（isFix ⟺ latestFixLineIndex ≠ null，四个 verdict:null 早退点都在 routeBlock 之前），
+  // 本条是**前瞻钉**：把纯函数的方向合同钉死，防后续卡新增调用点时照抄错方向。不得因"当前不可达"删掉。
+  // 与 P-2 的分工：U-7 只管 null/undefined/非数字 ⟹ 0；数字基线（含 -1）⟹ 计其后条目由 P-2 钉。
+  it('U-7 基线缺席（null/undefined/非数字）→ 一律返回 0，不是 -1 全量计数', () => {
+    const entries = mk(Array.from({ length: 10 }, () => hit()));
+    assert.equal(countStorageUnavailableBlockFeedback(entries, -1), 10, '前置：数字基线下确实有 10 条命中');
+    assert.equal(countStorageUnavailableBlockFeedback(entries, null), 0);
+    assert.equal(countStorageUnavailableBlockFeedback(entries), 0);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, 'x'), 0);
+    assert.equal(countStorageUnavailableBlockFeedback(entries, NaN), 0);
+  });
+
+  it('非数组 entries → 0（与既有计数器同容错口径）', () => {
+    for (const bad of [null, undefined, 'x', 42, {}]) {
+      assert.equal(countStorageUnavailableBlockFeedback(bad, -1), 0, String(bad));
+    }
   });
 });

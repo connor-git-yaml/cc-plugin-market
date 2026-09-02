@@ -1127,6 +1127,90 @@ export function countAssistantEntriesSinceEarliestFixExpansion(entries, earliest
 }
 
 // ────────────────────────────────────────
+// F276 卡 C · storage-unavailable 阻断反馈计数器（`!saved.ok` 分支的唯一放行上界）
+// ────────────────────────────────────────
+
+/**
+ * harness 把 Stop hook 的 stderr 回灌进 transcript 时使用的固定前缀（本机 324 份 jsonl 实扫，
+ * 命中 29 条、形态 29/29 一致，横跨六个 harness 版本 2.1.219 / .221 / .222 / .227 / .237 / .247）。
+ *
+ * ⚠️ **覆盖面缺口（如实登记）**：同一份语料里还有更新的 **2.1.255+**，而这些版本上**一条命中样本都没有**
+ * ——即谓词形态在**当前实际在跑的 harness 版本上从未被观测过**。上述实证说明形态在可观测跨度内稳定，
+ * **不是**形态永不漂移的保证；漂移无自动可发现性（入库 fixture 是冻结快照，只守我方谓词对该快照的回归）。
+ *
+ * 🔴 判据用 `startsWith` 而非 `includes` 是承重设计，见 countStorageUnavailableBlockFeedback。
+ */
+export const HOOK_FEEDBACK_PREFIX = 'Stop hook feedback:';
+
+/**
+ * 存储不可用阻断 stderr 的首行 token。**生产方（judge 的 stderr）与消费方（本计数器）共用同一常量**——
+ * 分开写死会造出「改了 stderr 忘改计数器」的静默失效：计数器再也数不到反馈，`!saved.ok` 分支就没有上界。
+ *
+ * 已核验它不是 `[FIX-COMPLIANCE]` / `[FIX-COMPLIANCE][WARN]` / `[FIX-COMPLIANCE][GATE-DEGRADED]`
+ * 任一渲染串的子串（三者后接空格，本 token 后接 `[STORAGE-UNAVAILABLE]`），故正常阻断/降级 stderr
+ * 不会白喂计数器（回归钉：core.test U-3、judge-cli E-c / E-e / E-n 断言 stderr 全文不含 token）。
+ */
+export const STORAGE_UNAVAILABLE_FEEDBACK_TOKEN = '[FIX-COMPLIANCE][STORAGE-UNAVAILABLE]';
+
+/**
+ * 数「本段 fix 展开之后、harness 回灌的存储不可用阻断反馈」条数。
+ *
+ * why 存在：`saveBlockState` 两级皆败时判定器一律 fail-closed（exit 2），而 fail-closed 必须配一条
+ * 上界，否则诚实的存储故障用户会被永久阻断（护栏 R-6：Stop hook 不可 brick 会话）。上界不能挂在
+ * 任何可写路径上（存储本来就坏了），故改数 transcript 里 harness 回灌的反馈条目——它是 storage-free 的。
+ *
+ * 谓词四条件缺一不可，各自承的重：
+ *   - `role === 'user'`      —— 回灌面只有 harness，assistant 侧文本是被判方产出面，接受即可自写投喂；
+ *   - `textBlocks.length === 1` —— harness 回灌恒为单块，排除 `tool_result` 型 user 条目（被判方可让
+ *                                工具回执里出现同一串）；
+ *   - `startsWith(HOOK_FEEDBACK_PREFIX)` —— 🔴 **承重，但覆盖面有明确边界**：技能展开注入的 user
+ *                                单文本块恒以 `Base directory for this skill:` 起头，故被判方在**自写 SKILL
+ *                                正文**里原样抄进 token，那段文本永远不在 offset 0 ⟹ 必假；换成 `includes` 即失守。
+ *                                ⚠️ **它挡不住 hook 回灌通道**（对抗审查实证，勿把本条读成"不可投喂"）：
+ *                                harness 写的条目正文形如 `Stop hook feedback:\n[<hook command>]: <hook stderr>`
+ *                                ——前缀由 **harness 代写**、`<hook command>` 取自**注册方自选**的命令串，
+ *                                故被判方自注册一条 exit 2 的 Stop hook（token 藏在 command 里即可，
+ *                                stderr 一个字都不用写）就能同时满足全部四个条件。该面属**已登记残余**
+ *                                「自注册 Stop hook 投喂计数器」，本卡按裁决**不追加防线**。
+ *                                🔴 其成本论据「hook 配置是启动快照、会话中途不生效」**已被质疑且未澄清**：
+ *                                对抗审查给出 CLI 二进制里的 settings 文件 watcher 热重载代码路径 + 官方文档
+ *                                两条同向证据，但**未经实跑坐实**；且该论据把「hook 配置」与「hook 进程 env」
+ *                                当成同一事实，而后者（启动快照）为真不蕴含前者为真。须回设计层裁决，
+ *                                **不得**在此当作已澄清；
+ *   - `includes(TOKEN)`      —— 与 judge 的 stderr 首行同源，区分「存储不可用阻断」与普通阻断反馈。
+ *
+ * 🔴 窗口基线取 `latestFixLineIndex`（最晚一次 fix 展开），**不是** earliest——与闸门三方向相反，
+ * 不得照抄（plan §9 第 8 条）：本计数器窗口变窄 ⟹ 数到的更少 ⟹ 更晚放行 ⟹ fail-closed，被判方重新
+ * 展开 fix 只会把自己的计数清零、给自己多招阻断；而闸门三窗口变窄是 fail-open，故必须钉在最早锚上。
+ *
+ * 🔴 基线缺席（null / 未传 / 非数字 / NaN）⟹ 返回 0，**不得照抄** `countAssistantEntriesSinceEarliestFixExpansion`
+ * 的 `-1`：那里 -1 全量计数是 fail-closed，这里 -1 全量计数会更容易触顶 ⟹ **放行方向**，方向相反。
+ *
+ * 复杂度 O(entries)、单趟、零正则（判定器跑在**同步** Stop hook 上）；不落盘，故 `resetBlockState`
+ * 的清零语义不受影响（护栏 R-7）。
+ *
+ * @param {ReturnType<typeof normalizeTranscriptEntry>[]} entries
+ * @param {number|null} [latestFixLineIndex] - 来自 detectFixSkillExpansion 的最晚 fix 展开 lineIndex
+ * @returns {number}
+ */
+export function countStorageUnavailableBlockFeedback(entries, latestFixLineIndex) {
+  if (typeof latestFixLineIndex !== 'number' || Number.isNaN(latestFixLineIndex)) return 0;
+  const list = Array.isArray(entries) ? entries : [];
+  let count = 0;
+  for (const entry of list) {
+    if (!entry || entry.role !== 'user') continue;
+    if (!(entry.lineIndex > latestFixLineIndex)) continue;
+    if (!Array.isArray(entry.textBlocks) || entry.textBlocks.length !== 1) continue;
+    const text = entry.textBlocks[0];
+    if (typeof text !== 'string') continue;
+    if (!text.startsWith(HOOK_FEEDBACK_PREFIX)) continue;
+    if (!text.includes(STORAGE_UNAVAILABLE_FEEDBACK_TOKEN)) continue;
+    count += 1;
+  }
+  return count;
+}
+
+// ────────────────────────────────────────
 // 特性目录提名（D1）
 // ────────────────────────────────────────
 

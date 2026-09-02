@@ -604,3 +604,100 @@ describe('F270 P3 · normalizeState/saveBlockState 新字段', () => {
     assert.equal(loadBlockState(tmp, 'p3-c').nonBlockStopCount, 0);
   });
 });
+
+// ════════════════════════════════════════
+// F276 卡 C1 · saveBlockState 两级失败的 errno 可观测性（U-4）
+// Tests FIRST：errors[] 尚不存在，本组先红。
+//
+// 🔴 errors[] **只为 stderr 渲染与审计可观测性服务，零判定消费**——判定侧不得读它做任何分支
+// （errno 黑名单被换手法击穿、白名单被 `ln -s /` 击穿，plan §9 第 3 条）。
+// 🔴 `path` 一律取 `err.path` 而非传进去的状态文件路径：mkdir 建的是 dirname(filePath)，
+// 此时挡路的是**父目录位置的那个文件**；渲染错对象会诱导消费者对审计与终态所在目录下手。
+// ════════════════════════════════════════
+
+describe('F276 C1 · saveBlockState 两级失败 errors[]', () => {
+  const state = { blockCount: 1, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 0 };
+  const stateFilePath = (root, id) => path.join(root, '.specify', 'runs', '.fix-compliance-state', `${id}.json`);
+
+  it('两级皆败（主路径文件占位 + tmp env 指向文件）→ ok:false + errors 两项，各含 path/stage/code', () => {
+    // 主路径：用文件占据 .fix-compliance-state 目录位置 ⟹ mkdir(dirname) 撞 EEXIST
+    fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), 'blocker');
+    // 回落路径：env 指向一个**文件** ⟹ mkdir 在文件下建子目录撞 ENOTDIR
+    const tmpBlocker = path.join(tmp, 'tmp-blocker');
+    fs.writeFileSync(tmpBlocker, 'x');
+    const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+    process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = tmpBlocker;
+    try {
+      const r = saveBlockState(tmp, 'u4-a', state);
+      assert.equal(r.ok, false);
+      assert.equal(r.path, null);
+      assert.deepEqual(r.diagnostics, ['state-storage-unavailable']);
+      assert.equal(Array.isArray(r.errors), true, 'errors 必须是数组');
+      assert.equal(r.errors.length, 2, '两级各留一条');
+      for (const e of r.errors) {
+        assert.equal(typeof e.path, 'string');
+        assert.ok(['mkdir', 'write'].includes(e.stage), `stage=${e.stage}`);
+        assert.equal(typeof e.code, 'string');
+      }
+      // 主线程实跑值（plan §5 U-4，不写平台猜测）：文件占位 ⟹ mkdir EEXIST；env 指文件 ⟹ mkdir ENOTDIR
+      assert.equal(r.errors[0].stage, 'mkdir');
+      assert.equal(r.errors[0].code, 'EEXIST');
+      assert.equal(r.errors[1].stage, 'mkdir');
+      assert.equal(r.errors[1].code, 'ENOTDIR');
+      // 🔴 守护点：mkdir 阶段的 path 指向**父目录位置的挡路物**，不是状态文件路径本身
+      assert.equal(r.errors[0].path, path.dirname(stateFilePath(tmp, 'u4-a')));
+      assert.notEqual(r.errors[0].path, stateFilePath(tmp, 'u4-a'));
+    } finally {
+      if (prev === undefined) delete process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+      else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
+    }
+  });
+
+  it('主路径目录占位 ⟹ stage:write + EISDIR，且该项 path 指向状态文件路径本身', () => {
+    // 状态文件位置本身是个**目录** ⟹ mkdir(dirname) 成功、writeFileSync 撞 EISDIR
+    const filePath = stateFilePath(tmp, 'u4-b');
+    fs.mkdirSync(filePath, { recursive: true });
+    const tmpBlocker = path.join(tmp, 'tmp-blocker-b');
+    fs.writeFileSync(tmpBlocker, 'x');
+    const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+    process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = tmpBlocker;
+    try {
+      const r = saveBlockState(tmp, 'u4-b', state);
+      assert.equal(r.ok, false);
+      assert.equal(r.errors[0].stage, 'write');
+      assert.equal(r.errors[0].code, 'EISDIR');
+      // write 阶段 err.path 才是状态文件路径本身——与上一条用例的 mkdir 取值不同，正是本组守护点
+      assert.equal(r.errors[0].path, filePath);
+    } finally {
+      if (prev === undefined) delete process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+      else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
+    }
+  });
+
+  it('两级任一成功 → 返回对象不含 errors 键（成功面逐字不变，D7）', () => {
+    const ok = saveBlockState(tmp, 'u4-ok', state);
+    assert.equal(ok.ok, true);
+    assert.equal(Object.hasOwn(ok, 'errors'), false, '成功分支不得多出 errors 键');
+    assert.deepEqual(Object.keys(ok).sort(), ['degraded', 'diagnostics', 'ok', 'path']);
+
+    // 主路径坏、回落可写 ⟹ 仍是成功面，同样不得带 errors
+    // 先清掉上一次成功写出的状态目录，再用文件占位（否则占位写入自己撞 EISDIR）
+    fs.rmSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), { recursive: true, force: true });
+    fs.mkdirSync(path.join(tmp, '.specify', 'runs'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state'), 'blocker');
+    const fallbackTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fix-compliance-u4-'));
+    const prev = process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+    process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = fallbackTmp;
+    try {
+      const degraded = saveBlockState(tmp, 'u4-fallback', state);
+      assert.equal(degraded.ok, true);
+      assert.equal(degraded.degraded, true);
+      assert.equal(Object.hasOwn(degraded, 'errors'), false);
+    } finally {
+      if (prev === undefined) delete process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP;
+      else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
+      fs.rmSync(fallbackTmp, { recursive: true, force: true });
+    }
+  });
+});

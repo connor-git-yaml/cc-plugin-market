@@ -338,15 +338,117 @@ export function loadBlockState(projectRoot, sessionId) {
   return normalizeState(sanitizedId, null);
 }
 
-/** 尝试写单一路径，成功返回 true */
-function tryWriteState(filePath, payload) {
+/**
+ * 写单一路径；失败时**抛出**原始 fs 错误，并在其上标注失败阶段。
+ *
+ * why 抛出而非返回布尔（F276 卡 C）：两级皆败时 stderr 必须告诉用户**哪一级、在哪个阶段、撞了什么错误码、
+ * 挡路的是哪个对象**，否则诚实的存储故障用户读完阻断反馈仍不知道该动哪个文件。原先的布尔版把 errno
+ * 整个吞掉，`saveBlockState` 无从收集。收集点上移到 `saveBlockState` 的两处 try/catch。
+ *
+ * `stage` 用不可枚举属性挂在错误对象上：mkdir 与 write 两阶段的 `err.path` 语义不同（见 saveBlockState），
+ * 不区分阶段就无法解释渲染出来的那条路径到底是什么。不可枚举是为了不污染错误对象的序列化面。
+ *
+ * @param {string} filePath
+ * @param {object} payload
+ * @throws {NodeJS.ErrnoException & { stage:'mkdir'|'write' }}
+ */
+function writeStateOrThrow(filePath, payload) {
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(payload)}\n`, 'utf8');
-    return true;
-  } catch {
-    return false;
+  } catch (err) {
+    throw markWriteStage(err, 'mkdir');
   }
+  try {
+    fs.writeFileSync(filePath, `${JSON.stringify(payload)}\n`, 'utf8');
+  } catch (err) {
+    throw markWriteStage(err, 'write');
+  }
+}
+
+/**
+ * 给 fs 错误打上失败阶段标记（非对象类抛出物包装成 Error，保证下游读取不炸）。
+ * 标记走不可枚举属性，避免污染错误对象的序列化面。
+ *
+ * 🔴 `defineProperty` 在**被冻结**的错误对象上会抛 TypeError；若不兜住，`saveBlockState` 捕到的就是
+ * 那个 TypeError 而非原始 fs 错误 ⟹ `path/stage/code` 三个字段一起变成 `null` ⟹ 把本特性唯一要
+ * 产出的诊断信息静默销毁（诚实故障用户读完 stderr 仍不知道该动哪个文件）。Node 自带 fs 错误不冻结，
+ * 生产不可达，但"打标记失败"绝不该反过来吃掉被打标记的对象——失败时按原对象返回，只丢 stage。
+ */
+function markWriteStage(err, stage) {
+  const target = (err && typeof err === 'object') ? err : new Error(String(err));
+  try {
+    Object.defineProperty(target, 'stage', { value: stage, enumerable: false, configurable: true });
+  } catch {
+    // 冻结/密封对象：保留原始 errno 与 path，只损失 stage 标注
+  }
+  return target;
+}
+
+/**
+ * 把一次写入失败降解成可渲染 / 可审计的描述项。
+ *
+ * 🔴 `path` **一律取 `err.path`**，不得取传进去的状态文件路径：`writeStateOrThrow` 的 mkdir 建的是
+ * `dirname(filePath)`，此时挡路的是**父目录位置的那个对象**（如 `.specify/runs/.fix-compliance-state`
+ * 本身是个文件），而状态文件路径指向的是别的对象——渲染错对象会诱导消费者对**审计与终态所在的目录**下手。
+ * write 阶段的 `err.path` 才是状态文件本身。Node 在两处均填 `err.path`，直接透传即可。
+ *
+ * 🔴 `blocker`（IW-2/IM-1 增补）：`err.path` 是**被尝试创建/写入的目标**，`ENOTDIR` 下它本身并不存在
+ * ——挡路的是它某一级祖先上的那个非目录对象（如 `.specify/runs` 被占成了文件）。只渲染 `err.path`
+ * 会让"删掉挡路物"这条补救口指向一个不存在的路径，与同行的「勿删 .specify/runs 目录」互相矛盾，
+ * 唯一正确动作恰好被禁止。故这里沿祖先链探测出**真正该删的那一个对象**单独成字段。
+ *
+ * 🔴 `blocker` **零判定消费**：与 `code` / `path` 同为解释性字段，只进 stderr 渲染与审计；
+ * 判定侧不得读它做分支（否则又给被判方送回一个可构造的输入）。
+ *
+ * 🔴 已知盲区（登记，不追加防线）：判据用 `existsSync`（跟随软链），故**悬空软链**挡路时探测不到它、
+ * 会继续上溯到父目录 ⟹ `blocker=null` ⟹ 退化为无括注的原措辞（保守方向，不会指错对象）。
+ *
+ * @returns {{ path:string|null, stage:'mkdir'|'write'|null, code:string|null, blocker:string|null }}
+ */
+function describeWriteFailure(err) {
+  const errPath = (err && typeof err.path === 'string') ? err.path : null;
+  return {
+    path: errPath,
+    stage: (err && (err.stage === 'mkdir' || err.stage === 'write')) ? err.stage : null,
+    code: (err && typeof err.code === 'string') ? err.code : null,
+    blocker: findPathBlocker(errPath),
+  };
+}
+
+/**
+ * 沿 `errPath` 祖先链（含自身）向上找**第一个存在**的节点；它若不是目录即为挡路物。
+ *
+ * why 找"第一个存在的节点"而不是"第一个非目录节点"：路径解析在遇到第一个存在节点时就已定死结果，
+ * 再往上必然全是目录（否则更下层不会存在）。第一个存在节点是目录 ⟹ 失败原因不是"被文件占位"
+ * （典型为 EACCES / EISDIR）⟹ 返回 null，让文案退回原措辞而不是指一个无辜目录让人删。
+ *
+ * 尽力而为、非抛出：任何 fs 异常一律降级成 null（本函数只服务文案，绝不能把解释路径变成新的失败源）。
+ * @returns {string|null}
+ */
+function findPathBlocker(errPath) {
+  if (typeof errPath !== 'string' || errPath.length === 0) return null;
+  let cursor = errPath;
+  // 上溯步数有界：dirname 到达根后自返回，正常必然收敛；上限只为杜绝异常路径形态下的死循环
+  for (let step = 0; step < 256; step += 1) {
+    let exists = false;
+    try {
+      exists = fs.existsSync(cursor);
+    } catch {
+      return null;
+    }
+    if (exists) {
+      try {
+        // lstat 不跟随软链：挡路物若本身是软链，该删的就是这条软链而不是它的目标
+        return fs.lstatSync(cursor).isDirectory() ? null : cursor;
+      } catch {
+        return null;
+      }
+    }
+    const parent = path.dirname(cursor);
+    if (parent === cursor) return null;   // 已到根仍无存在节点
+    cursor = parent;
+  }
+  return null;
 }
 
 /**
@@ -358,8 +460,15 @@ function tryWriteState(filePath, payload) {
  * "谁负责保住哪个字段"变得不可审计。
  * @param {string} projectRoot
  * @param {string} sessionId
+ * 🔴 两级皆败时**额外**返回 `errors:[{path,stage,code,blocker},{…}]`（主路径在前、回落在后）。
+ * 该字段**只为 stderr 解释与审计可观测性服务，零判定消费**——判定侧不得读其任何字段做分支：按 errno
+ * 分流的两种形态均已实测被击穿（黑名单可换手法造新 errno 绕过；白名单可用两条 `ln -s /` 让两级同为
+ * `EROFS` 绕过——软链跟随让 errno 变成**被判方可选的输入**）。`!saved.ok` 一律 fail-closed，
+ * 上界只有 transcript 派生的反馈计数（见 fix-compliance-judge.mjs 的 routeStorageUnavailable）。
+ * 成功面（含回落成功）**不带** `errors` 键。
+ *
  * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number, nonBlockStopCount?:number }} state
- * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[] }}
+ * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[], errors?:{path:string|null,stage:'mkdir'|'write'|null,code:string|null}[] }}
  */
 export function saveBlockState(projectRoot, sessionId, state) {
   const sanitizedId = sanitizeSessionId(sessionId);
@@ -379,15 +488,23 @@ export function saveBlockState(projectRoot, sessionId, state) {
     updatedAt: new Date().toISOString(),
   };
 
+  // 两级写入各包一层收集点：成功面的返回对象**逐字不变**（D7），只有两级皆败才多出 errors[]。
+  const errors = [];
   const primary = primaryStatePath(projectRoot, sanitizedId);
-  if (tryWriteState(primary, payload)) {
+  try {
+    writeStateOrThrow(primary, payload);
     return { ok: true, path: primary, degraded: false, diagnostics: [] };
+  } catch (err) {
+    errors.push(describeWriteFailure(err));
   }
   const fallback = tmpStatePath(sanitizedId);
-  if (tryWriteState(fallback, payload)) {
+  try {
+    writeStateOrThrow(fallback, payload);
     return { ok: true, path: fallback, degraded: true, diagnostics: [] };
+  } catch (err) {
+    errors.push(describeWriteFailure(err));
   }
-  return { ok: false, path: null, degraded: true, diagnostics: ['state-storage-unavailable'] };
+  return { ok: false, path: null, degraded: true, diagnostics: ['state-storage-unavailable'], errors };
 }
 
 /**

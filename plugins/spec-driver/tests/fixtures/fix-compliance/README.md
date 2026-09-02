@@ -164,5 +164,34 @@ Codex rollout 走 `custom_tool_call`/`custom_tool_call_output`（`name:"exec"`�
 | `real-stop-payload-background-tasks.json` | 真实主线程 Stop（含非空 `background_tasks`、`session_crons:[]`、`stop_hook_active:false`、`last_assistant_message`） | 三态在途判定 in-flight / 必答③ stop_hook_active 布尔 / last_assistant_message 存在态 |
 | `real-subagentstop-payload.json` | 真实 SubagentStop（`agent_id`、`background_tasks` 含自身） | C-9/T-2 子代理归属边界 |
 | `real-posttooluse-ledger-sequence.jsonl` | 真实 PostToolUse 序列（Bash/Read/Agent，含委派 `subagent_type`） | 账本裁剪 + 主/子归属（`agent_id` 缺席=主线程）|
+| `real-stop-hook-feedback-entries.jsonl` | 真实 harness 回灌条目（Stop hook stderr 被写回 transcript 的 4 种形态） | F276 卡 C · `countStorageUnavailableBlockFeedback` 谓词形态守卫（P-2 / P-3，CI 恒执行）|
 
 **脱敏规则**（沿用本目录既有约束，附加 F270 项）：真实 `session_id`→`00000000-0000-4000-8000-f270record01`；`/Users/…` 与编码 cwd 路径→`/w/project`；`agent_id`/task id、`toolu_*` 一致替换为占位；`description`/`last_assistant_message`/`tool_response`/`tool_input` **内容**无害化。**保留字段存在性、形状、类型、数组空/非空、条目序列**（脱敏只改值内容不改值种类）——`f270-real-corpus.test` 末条守卫零真实标识残留。
+
+### `real-stop-hook-feedback-entries.jsonl` 保留字段清单（F276 卡 C · P-2 / P-3）
+
+4 条条目，逐条角色：① 命中项（`type:'user'` + 字符串 content 单文本块 + 以 `Stop hook feedback:` 起头 +
+含 token）、② `tool_result` 型 user 条目、③ assistant 条目正文含同串、④ **非 `spec-driver-*` 的真实 skill
+展开条目**（首块以 `Base directory for this skill:` 起头，正文含 token）。P-2 断言
+`countStorageUnavailableBlockFeedback(entries, -1)` 对该 fixture **命中 1 / 排除 3**。
+
+| 字段 / 形态 | 处置 | 为什么不许动 |
+|---|---|---|
+| `Stop hook feedback:` 前缀（①） | **保留值** | 计数器谓词 `startsWith(HOOK_FEEDBACK_PREFIX)` 的判定面 |
+| `[FIX-COMPLIANCE][STORAGE-UNAVAILABLE]` token | **保留值** | 谓词 `includes(TOKEN)` 的判定面；与 core 常量必须逐字一致 |
+| `[<cmd>]: ` 段 | **保留段结构、替换其中的路径值** | 该段跟的就是一条绝对路径，与「替换一切绝对路径」冲突；只替换值、保留段形态，P-2 与 P-3 才能同时为真 |
+| `Base directory for this skill:` 前缀（④） | **保留值** | ④ 是 `startsWith` 条件在本探针下的**唯一**守护点（①②③ 都被前置条件先行排除） |
+| `content` 的类型（字符串 vs 数组）、**块数** | **保留值** | 谓词 `textBlocks.length === 1` 的判定面 |
+| harness `version` 字段 | **保留值** | 形态漂移时的录制版本锚（本机实测跨度 `2.1.219 → 2.1.247`）|
+| `sessionId` / `uuid` / `parentUuid` / `promptId` / `cwd` / 绝对路径 / 用户名 / `gitBranch` / 时间戳 | **保留段结构、替换值** | 脱敏；P-3 连带守卫断言零真实标识残留 |
+
+🔴 **④ 是「真实骨架 + 注入正文」，不是原样的真实条目**：envelope 字段与 `Base directory for this skill:`
+前缀取自真实录制，正文里的 token 与 `Stop hook feedback:` 串是**人工注入的对抗构造**——
+**重录时不得当噪声删掉**，删了 ④ 就退化成被前置条件排除的普通条目，P-2 对 `startsWith` 条件零守护力。
+
+🔴 **④ 的骨架必须取「非 `spec-driver-*` 的 skill」**（本份取 `superpowers/skills/brainstorming`）：
+`SKILL_EXPANSION_REGEX` 只匹配 `spec-driver-([a-z]+)`——换成 `spec-driver-fix` 会推走 `latestFixLineIndex`
+（窗口自塌 ⟹ 计数恒 0 ⟹ **假绿**），换成其它 `spec-driver-*` mode 会改 `anchor.mode`（⟹ **假红**）。
+
+⚠️ **本 fixture 是冻结快照**：它只守「我方谓词对该快照的回归」，**不侦测 harness 形态漂移**——
+harness 换了回灌形态它照样绿。漂移无自动可发现性，已作为残余接受；何时该重新录制见 `handoff/README.md`。

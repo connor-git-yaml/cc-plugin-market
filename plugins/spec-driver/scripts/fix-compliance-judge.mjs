@@ -30,6 +30,8 @@ import {
   extractFixShortName,
   collectArtifactWriteWitnessDirs,
   countAssistantEntriesSinceEarliestFixExpansion,
+  countStorageUnavailableBlockFeedback,
+  STORAGE_UNAVAILABLE_FEEDBACK_TOKEN,
   resolveFeatureDirCandidate,
   classifyClosureForm,
   extractExecutionRecordsAfter,
@@ -301,6 +303,14 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
   // 🔴 绝不可为"统一"把两个基线合并成一个，也绝不可在此另起第二遍展开扫描。
   const assistantEntriesSinceEarliestFix =
     countAssistantEntriesSinceEarliestFixExpansion(entries, anchor.earliestFixLineIndex);
+
+  // F276 卡 C · `!saved.ok` 分支的唯一放行上界：数本段 fix 展开之后 harness 回灌的存储不可用阻断反馈。
+  // 🔴 传的是 `latestFixLineIndex`，**不是**同处那个 `earliestFixLineIndex`——两个基线来自
+  // `detectFixSkillExpansion` 的同一次调用，取哪个都不多扫一遍，但**安全方向相反**：
+  // 本计数器窗口变窄 ⟹ 数到的更少 ⟹ 更晚放行 ⟹ fail-closed；闸门三窗口变窄则是 fail-open。
+  // 照抄 earliest 就是把防线搭反（被判方付过 2 次往返后重展开 fix 即可拿到 0 次往返的放行）。
+  const storageUnavailableFeedbackCount =
+    countStorageUnavailableBlockFeedback(entries, anchor.latestFixLineIndex);
 
   // F270 P2：证据窗口下界统一切至 latestFixLineIndex（最晚一次 **fix** 展开）。
   // 不能用 anchorLineIndex（最晚**任意**展开）：尾部一次 doc 展开会把 5 个窗口推到 doc 行，
@@ -575,6 +585,7 @@ function evaluate(projectRoot, transcriptPath, cfg = null, sessionId = null) {
     enforcement, configDegraded, isFix: true, mode: anchor.mode,
     transcriptDiagnostics: [], verdict, inFlightDelegations, assistantEntriesSinceEarliestFix,
     ledgerDiagnostics,   // F270 P4：账本读取诊断（ledger-entry-conflict 等），透传进 runHook 审计
+    storageUnavailableFeedbackCount,   // F276 卡 C：`!saved.ok` 分支的上界计量源（事实字段透传）
   };
 }
 
@@ -632,14 +643,26 @@ function buildAuditEvent({ sessionId, enforcement, verdict, blockCount, degraded
 /**
  * 处理不合规 + block 档：阻断计数路由（FR-006 有界化）。
  * @param {string[]} [extraDiagnostics] - 上游路由追加的诊断码（如在途预算耗尽）
+ * @param {{ storageUnavailableFeedbackCount?:number }} [counts] - F276 卡 C：`!saved.ok` 分支的上界计量源。
+ *
+ *   🔴 why 有默认值、且非有限数字按 **0** 处理（IW-1 修正，与 F238「required 化」纪律的方向相反）：
+ *   本文件的 `main` 顶层 `catch { return 0 }` 是 FR-013 fail-open 兜底——解构无默认值时"忘传"抛出的
+ *   TypeError 会被它**兜成 exit 0 静默放行**（完全绕过），而不是像 F238 场景那样炸给开发者看。
+ *   即"忘传即炸"在本调用链上等价于"忘传即放行"，方向反了。故这里改成 fail-closed 归一：
+ *   忘传 / 传 null / 传非有限数 ⟹ 计数按 0 ⟹ 永不触顶 ⟹ **一律阻断**。
+ *   代价（如实登记）：真出现忘传时存储故障用户会被 brick，但那是 loud 的可被用户报告的故障，
+ *   而静默放行是不可观测的安全失效——两害相权取可观测者。
  * @returns {number} 退出码
  */
-function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
+function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], counts = {}) {
+  const rawFeedbackCount = counts ? counts.storageUnavailableFeedbackCount : undefined;
+  const storageUnavailableFeedbackCount = Number.isFinite(rawFeedbackCount) ? rawFeedbackCount : 0;
   const loaded = loadBlockState(projectRoot, sessionId);
   const count = loaded.blockCount;
 
   if (count < BLOCK_LIMIT) {
-    // 未达上限：尝试持久化 N+1 → 成功则硬阻断，失败（存储不可用）则等同已达上限降级放行
+    // 未达上限：尝试持久化 N+1 → 成功则硬阻断；失败（两级存储不可用）不再等同「已达上限」放行——
+    // F276：该映射被实测为两条 mkdir 即可自诱发的 0 成本绕过，改走 routeStorageUnavailable（fail-closed + 反馈计数上界）
     const nextCount = count + 1;
     const saved = saveBlockState(projectRoot, sessionId, {
       blockCount: nextCount,
@@ -656,13 +679,13 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
       process.stderr.write(`${PREFIX_BLOCK} ${buildFeedbackText(verdict.missing)}\n`);
       return 2;
     }
-    // 存储不可用 → 无法可靠维持计数，按等同"已达上限"降级放行（research.md D2）
-    return releaseDegraded(projectRoot, sessionId, verdict, {
-      alreadyRecorded: false,
-      storageUnavailable: true,
+    // 存储不可用 → 不再无条件降级放行（F276 卡 C 方向反转），改走 fail-closed + 反馈计数上界
+    return routeStorageUnavailable(projectRoot, sessionId, verdict, {
+      feedbackCount: storageUnavailableFeedbackCount,
+      errors: saved.errors,
+      extraDiagnostics,
       inFlightDeferCount: loaded.inFlightDeferCount,
       nonBlockStopCount: loaded.nonBlockStopCount,
-      extraDiagnostics,
     });
   }
 
@@ -674,6 +697,166 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = []) {
     nonBlockStopCount: loaded.nonBlockStopCount,
     extraDiagnostics,
   });
+}
+
+/**
+ * F276 卡 C · 两级状态存储都写不进时的路由（取代原先的无条件 `releaseDegraded`）。
+ *
+ * why 方向反转：原实现在 `!saved.ok` 时直接降级放行，而两级默认状态路径
+ * （`.specify/runs/.fix-compliance-state` 与 `$TMPDIR/spec-driver-fix-compliance`）**都在被判方写域**——
+ * `touch` 出两个同名文件占位即可拿到 **0 次往返**的放行，且不需要任何 env 注入。这是本卡要关的那张口。
+ *
+ * 🔴 **本函数只有两个闸门，且都不看 errno**。按 errno 分流的两种形态均已实测被击穿：
+ *   - 黑名单（"这些码是自诱发的 ⟹ 阻断，其余放行"）：漏一个可诱发码就直接送出 0 次绕过；
+ *   - 白名单（"环境性码 ⟹ 放行"）：`ln -s /` 让 `writeFileSync` 跟随软链写进只读卷，
+ *     两条软链即可让两级同为环境性码 ⟹ 白名单放行 ⟹ 0 成本绕过原样复活。
+ *   「环境性错误码带内不可诱发」这条前提**已被证伪**——软链跟随让错误码变成**被判方可选的输入**。
+ * 故 `saved.errors` 只进 stderr 渲染与审计可观测性，**判定侧不读它的任何字段**（回归钉：E-p 源码守卫）。
+ *
+ * 上界（护栏 R-11：任何不计数的裁决必须同时规定放行路径）：唯一上界是 storage-free 的反馈计数——
+ * 数 harness 回灌进 transcript 的含 token 条目，达 `BLOCK_LIMIT` 即走既有 `releaseDegraded` 终态。
+ * 地板形态：**同段 fix 展开内首次触顶前 2 次 Stop 往返，其后回合 0 次**；会话总代价
+ * = 2 × fix 展开段数（× compaction 次数），不是全局常数 2。
+ *
+ * 残余（如实登记，不追加防线）：
+ *   1. 存储与 transcript 回灌通道**同时**失效时计数器永不累加 ⟹ 上界变成"用户动作"而非计数
+ *      （修好路径 / 改 enforcement / 重启带 env）——三条补救口已按生效即时性写进 stderr。
+ *   2. **同段内该预算不随存储恢复复位**：反馈条目留在窗口里永久有效，故被判方付满 2 次往返后，
+ *      在该 fix 展开段的余下部分对本分支持有可复用的免检权（窗口只由"重展开 fix"这个自伤动作推进）。
+ *   3. **自注册 Stop hook 可投喂计数器**（对抗审查已用真 CLI 端到端跑通）：harness 代写前缀、
+ *      hook 命令串由注册方自选 ⟹ 谓词四条件可被凑齐。成本论据（"hook 配置是启动快照"）已被质疑
+ *      且未澄清，见 countStorageUnavailableBlockFeedback 的 JSDoc。本卡不追加防线，按残余移交设计层。
+ *
+ * @param {{ feedbackCount:number, errors:{path:string|null,stage:string|null,code:string|null}[]|undefined,
+ *           extraDiagnostics:string[], inFlightDeferCount:number, nonBlockStopCount:number }} opts
+ * @returns {number} 退出码（0 = 上界耗尽降级放行；2 = fail-closed 阻断）
+ */
+function routeStorageUnavailable(projectRoot, sessionId, verdict, {
+  feedbackCount, errors, extraDiagnostics, inFlightDeferCount, nonBlockStopCount,
+}) {
+  // 闸门 1（唯一上界）：反馈计数触顶 → 既有降级放行终态，形态不改，只多一个 trigger 码。
+  if (feedbackCount >= BLOCK_LIMIT) {
+    return releaseDegraded(projectRoot, sessionId, verdict, {
+      alreadyRecorded: false,
+      storageUnavailable: true,
+      inFlightDeferCount,
+      nonBlockStopCount,
+      // 🔴 合并须保留上游：硬编码单元素数组会把上游诊断码（如在途预算耗尽）整个丢掉
+      extraDiagnostics: [...new Set([...extraDiagnostics, 'storage-unavailable-block-budget-exhausted'])],
+    });
+  }
+
+  // 闸门 2（否则一律 fail-closed）：按本次裁决自身语义阻断。
+  const mergedDiagnostics = [...new Set([...extraDiagnostics, 'state-storage-unavailable'])];
+  try {
+    appendAuditEvent(projectRoot, buildAuditEvent({
+      sessionId, enforcement: 'block', verdict,
+      // 计数写不进去 ⟹ 本次处在第几次阻断**不可知**，报 null 而不是编一个数字
+      blockCount: null, degraded: false, extraDiagnostics: mergedDiagnostics,
+    }));
+  } catch {
+    // 审计与状态同在 `.specify/runs/` 下、同生共死：诚实故障时它必然一起失效，
+    // 但判定不因审计缺席而改变、进程也不得崩（E-j 实测钉）。
+  }
+  process.stderr.write(buildStorageUnavailableFeedback(projectRoot, verdict, errors, mergedDiagnostics));
+  return 2;
+}
+
+/**
+ * F276 卡 C · 存储不可用阻断的 stderr 文本。
+ *
+ * 🔴 **主消费者是模型，不是人**：若动作行与双路径指引全指向"补制品"，模型会把预算烧光在一个它
+ * 结构上修不了的问题上，而人不知情。故「这不是制品问题、模型无法修复」并进**首行**、与 token 同一行——
+ * 单独成行会被只读首行的消费者漏掉。
+ *
+ * 🔴 补救口按 **生效即时性** 排序：① 修好路径（下一次 Stop 立即生效）→ ② 配置降级门禁（配置每次 Stop
+ * 重读，下一次 Stop 生效）→ ③ 环境变量（**须重启会话**——hook 进程 env 取自 CC 启动快照，
+ * 会话内 `export` 到不了）。把须重启的那条当唯一补救口就是**假补救口**。
+ *
+ * 🔴 ① 的 code 对应表是**纯渲染映射，零判定消费**，且**静态映射只保留两条**：
+ * `EEXIST|ENOTDIR` ⟹ 删除 `@` 后那一个文件、`EACCES` ⟹ `chmod u+w` 父目录；其余码一律
+ * 「请向用户报告该错误码」。不为任何环境性码单列动作行——写进模板的 errno 明文与源码守卫 E-p 互斥，
+ * 会逼着实现期去削弱 E-p、给 errno 白名单留回流口。运行时 `err.code` 照原样渲染（取到什么打什么）。
+ *
+ * 🔴 ① 的删除对象由路径行的「挡路对象:」括注指定（IW-2/IM-1 修正）：`@ <err.path>` 是**被创建的目标**，
+ * `ENOTDIR`（`.specify/runs` 本身被占成文件）下它根本不存在，而旧措辞「删 `@` 后那一个文件、
+ * 且勿删 `.specify/runs`」恰好把**唯一正确的动作**禁掉了——自相矛盾即等于没有补救口。
+ * 现由 io 侧沿祖先链探出真正的挡路物单独渲染；防「`rm -rf` 毁证据」的护栏改为
+ * 「只删它这一个文件、勿删任何目录」+ 明写挡路对象若就是 `.specify/runs`，删该**文件**后目录会自动重建。
+ *
+ * 🔴 ② 措辞取「追加/合并进该文件」而非「写入」（IM-4）：后者在文件已存在时有**整份覆写**歧义，
+ * 会诱导模型把用户既有配置抹掉；故同时明写「已有 `fix_compliance` 段时只改其 `enforcement` 值」。
+ *
+ * 🔴 ② 必须给出**文件名 + 嵌套层级**，且正文是**两行字面量**（第二行缩进两空格）：
+ * 转写成自然语言会丢缩进 ⟹ 模型写出无缩进两行 ⟹ YAML 解析成 `fix_compliance: null` + 顶层
+ * `enforcement` ⟹ 回到 `undefined ⟹ block` 且**零诊断**，正是这条补救口要关的那张口。
+ * 措辞取「**由用户决定是否**」的用户动作式而非对模型的操作指令——⚠️ 这只降低诱导性，
+ * **不构成防线**：该配置开关既有、已公开文档化、落在被判方写域（配置面 1 次往返已登记移交）。
+ */
+/**
+ * 渲染进 stderr 的路径段消毒：把控制字符与不可见/双向控制字符折成可见转义形，并施加长度上限。
+ *
+ * why：`err.path` 是本条 stderr 里**唯一内容形态不受任何守卫约束**的自由段（`sessionId` 已被
+ * `sanitizeSessionId` 收到 `[A-Za-z0-9._-]`，`stage` / `code` 来自 Node 的固定取值域）。它逐字进单行渲染，
+ * 路径里一个换行就能长出一整行伪造文本——对抗审查实测可冒充 `GATE_DEGRADED_PREFIX_LINE` 这类 core
+ * 常量行；而这条 stderr 随后会被 harness 回灌进 transcript，伪造行同时进入人与模型的视野。
+ *
+ * 🔴 **可达性如实登记**：该段当前只来自 `projectRoot` 与启动快照 env（`TMPDIR` /
+ * `SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP`），被判方在会话内够不到 ⟹ 本函数是**把隐含前提显式钉住**，
+ * 不是在关一条已可达的口。折成转义形也顺带让含控制字符的诚实路径可读（否则消息整段错位）。
+ */
+const PATH_SEGMENT_RENDER_LIMIT = 512;
+
+/**
+ * 消毒集（IL-1 扩充）。刻意写成 `\u` 转义而非直接嵌不可见字符：源码里的裸 LS/RLO/BOM 自身就会让
+ * 本文件在编辑器与 diff 里错位显示，改动反而不可见。
+ *
+ * - `\u0000-\u001F`：C0（含 LF/CR/TAB，原有）
+ * - `\u007F-\u009F`：DEL + C1（其中 NEL `\u0085` 被部分终端与文本管线按换行处理，等价换行注入）
+ * - `\u2028\u2029`：LS / PS（JS 与多数日志/JSON 管线视作行分隔）
+ * - `\u200B-\u200F`：零宽空格/连接符 + LRM/RLM（可把 token 掰成"看着像但不是"的形状）
+ * - `\u202A-\u202E`：双向控制（RLO 让渲染顺序与真实字节序相反，误导人眼判断该删哪个对象）
+ * - `\uFEFF`：BOM / 零宽不换行空格
+ */
+const PATH_SEGMENT_UNSAFE_RE =
+  /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u200B-\u200F\u202A-\u202E\uFEFF]/g;
+
+function renderPathSegment(value) {
+  if (typeof value !== 'string' || value.length === 0) return '未知路径';
+  const escaped = value.replace(PATH_SEGMENT_UNSAFE_RE, (ch) => {
+    const code = ch.charCodeAt(0);
+    // 单字节码位保持既有 `\xNN` 形（E-q 的换行钉按此形断言）；多字节码位用 `\uNNNN`
+    return code <= 0xFF
+      ? `\\x${code.toString(16).padStart(2, '0')}`
+      : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+  // 长度上限（当前不可达，钉住隐含前提）：路径本身无长度约束，而这条 stderr 会被回灌进 transcript，
+  // 超长段可把后面的有效补救口挤出模型的注意窗口。截断只损可读性，零判定消费。
+  return escaped.slice(0, PATH_SEGMENT_RENDER_LIMIT);
+}
+
+function buildStorageUnavailableFeedback(projectRoot, verdict, errors, mergedDiagnostics) {
+  const levels = ['主路径', '回落'];
+  const rendered = levels.map((label, i) => {
+    const e = (Array.isArray(errors) && errors[i]) || {};
+    // IW-2/IM-1：`err.path` 是**被创建的目标**，ENOTDIR 下它本身不存在；真正该删的是 io 侧沿祖先链
+    // 探出的 blocker。探不到（如 EACCES：第一个存在节点就是目录）时不加括注，保持原措辞。
+    const blocker = (typeof e.blocker === 'string' && e.blocker.length > 0)
+      ? `（挡路对象: ${renderPathSegment(e.blocker)}）`
+      : '';
+    return `${label}: ${e.stage || '未知阶段'} ${e.code || '未知错误码'} @ ${renderPathSegment(e.path)}${blocker}`;
+  }).join('；');
+
+  return [
+    `${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 阻断计数无法持久化，本次按裁决自身语义阻断（连续 ${BLOCK_LIMIT} 次后降级放行）；⚠️ 这不是制品问题，模型无法修复：请向用户报告下方路径不可写，勿反复重试补制品`,
+    rendered,
+    '补救（按生效快慢）：① 修好上述路径 —— 下一次 Stop 立即生效；按上行的 code 对应处置：EEXIST|ENOTDIR ⟹ 删除上行「挡路对象:」标出的那一个文件（未标出时以 @ 后的路径为准）；⚠️ 只删它这一个文件、勿删任何目录；若挡路对象就是 .specify/runs 本身，说明该路径被占成了文件，删掉这个文件后目录会自动重建；EACCES ⟹ chmod u+w 其父目录；其余 code ⟹ 请向用户报告该错误码',
+    `② 由用户决定是否降级门禁：把下面两行追加/合并进 ${projectRoot}/spec-driver.config.yaml（或 ${projectRoot}/.specify/spec-driver.config.yaml）—— 该文件已有 fix_compliance 段时只改其 enforcement 值、勿整份覆写；配置每次 Stop 重读，下一次 Stop 即生效`,
+    'fix_compliance:',
+    '  enforcement: warn',
+    '③ SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP=<可写目录> claude —— ⚠️ 须重启会话（hook 进程 env 取自启动快照，会话内 export 无效）',
+    buildFeedbackText(verdict.missing, { diagnostics: mergedDiagnostics }),
+  ].join('\n') + '\n';
 }
 
 /**
@@ -1072,7 +1255,11 @@ function runHook(projectRoot, payload) {
   }
 
   // enforcement=block
-  return routeBlock(projectRoot, sessionId, result.verdict, deferExtraDiagnostics);
+  return routeBlock(projectRoot, sessionId, result.verdict, deferExtraDiagnostics, {
+    // F276 卡 C：`!saved.ok` 分支的上界计量源。routeBlock 侧对「缺席 / 非有限数」做 fail-closed 归一
+    // （按 0 记 ⟹ 一律阻断），why 不用「忘传即炸」见其 JSDoc（IW-1：顶层 catch 会把 TypeError 兜成放行）。
+    storageUnavailableFeedbackCount: result.storageUnavailableFeedbackCount,
+  });
 }
 
 // ────────────────────────────────────────
