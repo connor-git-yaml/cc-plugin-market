@@ -27,6 +27,7 @@ import {
   resetBlockState,
   sanitizeSessionId,
   listFeatureDirCandidatesByShortName,
+  findPathBlocker,
 } from '../scripts/lib/fix-compliance-io.mjs';
 
 let tmp;
@@ -699,5 +700,78 @@ describe('F276 C1 · saveBlockState 两级失败 errors[]', () => {
       else process.env.SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP = prev;
       fs.rmSync(fallbackTmp, { recursive: true, force: true });
     }
+  });
+});
+
+// ════════════════════════════════════════
+// F276 卡 C · findPathBlocker 降级分支直调探针（4b W-5）
+//
+// why 直调而非只走 saveBlockState：四条降级分支（悬空软链 / 首个存在节点是目录 / 相对路径 /
+// 不可解析路径）在 CLI 与 saveBlockState 公开面上都构造不出来——`err.path` 恒为绝对路径，
+// 且真实失败面只覆盖 ENOTDIR / EISDIR / EACCES 三形态（E-s a/b/c 端到端保留）。
+// 这四条恰是"解释路径反成新失败源"的风险面：本函数只服务文案，任何输入都必须**有界返回**、不抛。
+//
+// 🔴 首条是**正向对照**：没有它，其余全 null 的断言会被"永远 return null"这种变异整体骗过。
+// ════════════════════════════════════════
+
+describe('F276 C · findPathBlocker 降级分支', () => {
+  let tmp;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fix-compliance-blocker-')); });
+  afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+  it('正向对照：祖先链上第一个存在的节点是**文件** ⟹ 返回该文件（探测确实在工作）', () => {
+    const blocker = path.join(tmp, 'runs');
+    fs.writeFileSync(blocker, 'x');
+    assert.equal(findPathBlocker(path.join(blocker, '.fix-compliance-state', 'a.json')), blocker);
+  });
+
+  it('悬空软链挡路 ⟹ null（已登记盲区：existsSync 跟随软链，探不到它本身）', () => {
+    const link = path.join(tmp, 'dangling');
+    fs.symlinkSync(path.join(tmp, 'no-such-target'), link);
+    // 判据用 existsSync（跟随）⟹ 悬空软链被视作"不存在"，继续上溯到 tmp（目录）⟹ null。
+    // 保守方向：退回无括注的原措辞，而不是指错对象。
+    assert.equal(findPathBlocker(path.join(link, 'a.json')), null);
+  });
+
+  it('祖先链上第一个存在的节点是**目录** ⟹ null（不得指一个无辜目录让人删）', () => {
+    assert.equal(findPathBlocker(path.join(tmp, 'nope', 'deeper', 'a.json')), null);
+  });
+
+  it('相对路径 ⟹ null 且必然收敛（dirname 到 "." 自返回，不死循环）', () => {
+    assert.equal(findPathBlocker('relative/nope/deeper/a.json'), null);
+    // 256 步上限的存在性探针：段数远超上限时同样有界返回（本用例跑完本身即证明未死循环）
+    assert.equal(findPathBlocker(Array(400).fill('seg').join(path.sep) + '/a.json'), null);
+  });
+
+  it('不可解析路径（含 NUL 字节）⟹ 有界返回 null 且不外抛', () => {
+    // 🔴 实测记录：`fs.existsSync` 对含 NUL 的路径**并不抛**（内部吞掉参数校验错误按 false 返回），
+    // 故本用例钉的是「不外抛 + 正常上溯到第一个存在节点」，不是 catch 分支——那条 catch 是纵深冗余。
+    assert.equal(findPathBlocker(path.join(tmp, 'nul\u0000byte', 'a.json')), null);
+  });
+
+  it('祖先是**指向目录的有效软链** ⟹ null（statSync 跟随：它根本没挡路，不得让人删 /tmp 这类目录）', () => {
+    // 可达场景：.specify/runs 是软链、或 SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP 指到 /tmp/x，
+    // 而失败发生在更深一级（如 EACCES）⟹ 第一个存在节点就是那个软链目录。
+    // 若用 lstat（不跟随）会判"非目录"⟹ stderr 说「删除挡路对象 /tmp」，是误导性动作行。
+    const realDir = path.join(tmp, 'real');
+    fs.mkdirSync(realDir);
+    const link = path.join(tmp, 'link-to-dir');
+    fs.symlinkSync(realDir, link);
+    assert.equal(findPathBlocker(path.join(link, 'missing', 'a.json')), null);
+  });
+
+  it('祖先是**指向文件的软链** ⟹ 返回该软链自身路径（跟随后 isDirectory 为 false）', () => {
+    // 跟随软链只改"是否目录"的判断，返回值仍是**软链自身**——该删的就是这条软链，不是它的目标。
+    const realFile = path.join(tmp, 'real-file');
+    fs.writeFileSync(realFile, 'x');
+    const link = path.join(tmp, 'link-to-file');
+    fs.symlinkSync(realFile, link);
+    assert.equal(findPathBlocker(path.join(link, '.fix-compliance-state', 'a.json')), link);
+  });
+
+  it('非字符串 / 空串 ⟹ null（describeWriteFailure 在 err.path 缺席时传 null）', () => {
+    assert.equal(findPathBlocker(null), null);
+    assert.equal(findPathBlocker(''), null);
+    assert.equal(findPathBlocker(undefined), null);
   });
 });

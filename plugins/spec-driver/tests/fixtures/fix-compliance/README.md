@@ -185,6 +185,12 @@ Codex rollout 走 `custom_tool_call`/`custom_tool_call_output`（`name:"exec"`�
 | harness `version` 字段 | **保留值** | 形态漂移时的录制版本锚（本机实测跨度 `2.1.219 → 2.1.247`）|
 | `sessionId` / `uuid` / `parentUuid` / `promptId` / `cwd` / 绝对路径 / 用户名 / `gitBranch` / 时间戳 | **保留段结构、替换值** | 脱敏；P-3 连带守卫断言零真实标识残留 |
 
+🔴 **①③ 同样是「真实骨架 + 构造/旧稿正文」**：两条的 envelope 与两个判定串（`Stop hook feedback:`
+前缀、`[FIX-COMPLIANCE][STORAGE-UNAVAILABLE]` token）取自真实录制，**正文是构造或早期稿**——
+① 的正文「环境故障，非制品问题，模型无法修复；请向用户报告」与当前生产首行（「阻断计数无法持久化…」）
+并不一致。谓词只看两个判定串与 envelope 形态，故不影响判定；**但重录者不要据此误判"生产文案变了"**，
+正文漂移本就不在本 fixture 的守护面内（④ 的同类标注见下）。
+
 🔴 **④ 是「真实骨架 + 注入正文」，不是原样的真实条目**：envelope 字段与 `Base directory for this skill:`
 前缀取自真实录制，正文里的 token 与 `Stop hook feedback:` 串是**人工注入的对抗构造**——
 **重录时不得当噪声删掉**，删了 ④ 就退化成被前置条件排除的普通条目，P-2 对 `startsWith` 条件零守护力。

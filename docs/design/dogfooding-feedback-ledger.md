@@ -424,3 +424,29 @@
 
 
 
+
+### F276 · 2026-09-03
+
+- [结果准确][Spectra impact/context] 图过期（sourceCommit 3871dc04 vs HEAD e01611b2）时对函数级 symbol
+  （`fix-compliance-judge.mjs::routeNonBlock`）直接 `symbol-not-found`，fuzzy 候选给的是**同文件其他函数**
+  （main/parseArgs/buildFeedbackText），对"该函数是否已被删/改名"零区分力，易误导为"函数不存在"；
+  `freshness.state=stale` + builderMismatch 的诚实标注到位（好）。改进方向：stale 时对 symbol 查询返回
+  "图未收录该 symbol（图陈旧）"而非 not-found，或候选按名字相似度而非同文件排序
+- [返回信息不够用][Spectra impact/context] symbol 入参（`io.mjs::saveBlockState`）时 `affected`/callers 坍缩到
+  **文件级**节点（judge.mjs 整体，confidence 0.65），`relation:"calls"` 看起来像精确调用边，拿不到
+  "judge 里 4 个调用点分别在哪几行"——改返回形状的改动恰恰最需要这一层。规划与实现两个代理各自独立
+  报了同一问题，最终都退回 `grep -n`。改进方向：caller 边坍缩到文件级时显式标注粒度，`reason` 里带
+  caller 侧 symbol 名与行号
+- [流程顺畅][spec-driver 编排] 后台异构对抗子代理在**共享工作树**里做变异实验，与主线程/实现代理的
+  `npm run test:plugins` 直接竞态——实现代理第一次全量跑时 `core.mjs` 正处于子代理的变异态，拿到一份
+  不可信的"全绿"，靠 sha256 前后对拍才发现。这是 F261 stash 教训的变体（不是卷走文件，是改了文件）。
+  改进方向：派发"会改工作树"的审查/变异子代理时给显式互斥约定，或 prompt 硬性要求变异实验一律在
+  `/tmp` 副本（本卡后半段已改为此口径，零再现）
+- [流程顺畅][spec-driver 编排 · 子代理可靠性] 同一时间窗内 3 个子代理（对抗 ×2 + plan 修订 ×1）连续死于
+  `Connection lost mid-response`，且都发生在"读完大量上下文后一次性大写入"那一刻；改为"分段 Edit
+  增量修改、禁整文件 Write、回复压到 ≤N 字"后同类失败零再现。目前没有任何机制能把"派出去的代理死了"
+  与"根本没派"区分开——恰是本卡组 4（诚实缺席码）要解决的那类问题的近亲。改进方向：Agent 失败时
+  自动留一条可判读的缺席痕迹（error 码 + 已读/已写文件清单），供门禁与人工审计区分
+- 指针：本卡 GATE_DESIGN 8 轮对抗（拆卡前 3 轮 22C → 拆卡后 5 轮 12C）的方法论收获已落
+  `specs/276-fix-compliance-p0a-residue/verification/gate-design-adversarial-round*.md`；
+  卡 A / 卡 B 的设计资本与待调研项在 `handoff/README.md`，milestone 规划时从该处回收

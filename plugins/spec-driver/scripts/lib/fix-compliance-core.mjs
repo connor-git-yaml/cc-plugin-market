@@ -1172,11 +1172,15 @@ export const STORAGE_UNAVAILABLE_FEEDBACK_TOKEN = '[FIX-COMPLIANCE][STORAGE-UNAV
  *                                故被判方自注册一条 exit 2 的 Stop hook（token 藏在 command 里即可，
  *                                stderr 一个字都不用写）就能同时满足全部四个条件。该面属**已登记残余**
  *                                「自注册 Stop hook 投喂计数器」，本卡按裁决**不追加防线**。
- *                                🔴 其成本论据「hook 配置是启动快照、会话中途不生效」**已被质疑且未澄清**：
- *                                对抗审查给出 CLI 二进制里的 settings 文件 watcher 热重载代码路径 + 官方文档
- *                                两条同向证据，但**未经实跑坐实**；且该论据把「hook 配置」与「hook 进程 env」
- *                                当成同一事实，而后者（启动快照）为真不蕴含前者为真。须回设计层裁决，
- *                                **不得**在此当作已澄清；
+ *                                🔴 **它压不低成本地板**（主编排器 2026-09-03 裁决，见 F276
+ *                                implementation-notes §3）：反馈条目**只在某个 Stop hook 真正 exit 2 时**
+ *                                由 harness 写入（324 份语料 29/29 全来自 exit 2、0 条来自 exit 0），故被判方
+ *                                投喂进来的每一条都**必然伴随一次自己被阻断的 Stop 往返**。settings 文件
+ *                                watcher 热重载与否只改「是否需要重启」这个**准备成本**，不改「每条计数
+ *                                = 一次往返」的**地板**；被判方能做的只是把往返**预付**到合规期（先被自己的
+ *                                hook 拦 2 次再弄坏存储），总往返数仍 ≥ 2，且 `latest` 基线下任何一次新的
+ *                                fix 展开都会把预付作废。真正能把地板压到 1 的只有「harness 对同周期多个
+ *                                阻断 hook 拆成多条条目」这条**无样本**未知，已移交 handoff；
  *   - `includes(TOKEN)`      —— 与 judge 的 stderr 首行同源，区分「存储不可用阻断」与普通阻断反馈。
  *
  * 🔴 窗口基线取 `latestFixLineIndex`（最晚一次 fix 展开），**不是** earliest——与闸门三方向相反，

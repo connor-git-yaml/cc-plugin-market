@@ -426,9 +426,19 @@ function describeWriteFailure(err) {
  * （典型为 EACCES / EISDIR）⟹ 返回 null，让文案退回原措辞而不是指一个无辜目录让人删。
  *
  * 尽力而为、非抛出：任何 fs 异常一律降级成 null（本函数只服务文案，绝不能把解释路径变成新的失败源）。
+ *
+ * 🔴 「是否目录」判定用 **`statSync`（跟随软链）而非 `lstatSync`**（4b 修补期探针实测反转）：
+ * 祖先链上第一个存在节点若是**指向目录的有效软链**（`.specify/runs` 是软链、或
+ * `SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP` 指到 `/tmp/x` 这类路径，而失败发生在更深一级如 EACCES），
+ * `lstat` 会判它"非目录" ⟹ stderr 说「删除挡路对象 /tmp」——**该场景可达且会误导模型删掉正常目录**。
+ * 跟随后：软链→目录 ⟹ `null`（退回原措辞，保守）；软链→文件 ⟹ 返回该软链路径（该删的确实是它）。
+ * 悬空软链仍在上一步被 `existsSync` 判为不存在 ⟹ 继续上溯 ⟹ `null`，保守方向不变。
+ *
+ * 🔴 **导出仅为单测直调探针**（4b W-5：悬空软链 / 首个存在节点是目录 / 相对路径 / 不可解析路径
+ * 四条降级分支经 `saveBlockState` 公开面构造不出来）。生产侧唯一调用点是 `describeWriteFailure`。
  * @returns {string|null}
  */
-function findPathBlocker(errPath) {
+export function findPathBlocker(errPath) {
   if (typeof errPath !== 'string' || errPath.length === 0) return null;
   let cursor = errPath;
   // 上溯步数有界：dirname 到达根后自返回，正常必然收敛；上限只为杜绝异常路径形态下的死循环
@@ -441,8 +451,9 @@ function findPathBlocker(errPath) {
     }
     if (exists) {
       try {
-        // lstat 不跟随软链：挡路物若本身是软链，该删的就是这条软链而不是它的目标
-        return fs.lstatSync(cursor).isDirectory() ? null : cursor;
+        // 🔴 stat **跟随**软链：软链→目录说明它根本没挡路（判 null）；软链→文件才是挡路物，
+        // 且此时返回的是软链自身路径（该删的就是这条软链，不是它的目标）——两个需求同时满足。
+        return fs.statSync(cursor).isDirectory() ? null : cursor;
       } catch {
         return null;
       }
@@ -471,7 +482,8 @@ function findPathBlocker(errPath) {
  * 成功面（含回落成功）**不带** `errors` 键。
  *
  * @param {{ blockCount:number, degradedRecorded:boolean, inFlightDeferCount?:number, nonBlockStopCount?:number }} state
- * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[], errors?:{path:string|null,stage:'mkdir'|'write'|null,code:string|null}[] }}
+ * @returns {{ ok:boolean, path:string|null, degraded:boolean, diagnostics:string[],
+ *             errors?:{path:string|null,stage:'mkdir'|'write'|null,code:string|null,blocker:string|null}[] }}
  */
 export function saveBlockState(projectRoot, sessionId, state) {
   const sanitizedId = sanitizeSessionId(sessionId);

@@ -687,10 +687,19 @@ function routeBlock(projectRoot, sessionId, verdict, extraDiagnostics = [], coun
  *   2. **同段内该预算不随存储恢复复位**：反馈条目留在窗口里永久有效，故被判方付满 2 次往返后，
  *      在该 fix 展开段的余下部分对本分支持有可复用的免检权（窗口只由"重展开 fix"这个自伤动作推进）。
  *   3. **自注册 Stop hook 可投喂计数器**（对抗审查已用真 CLI 端到端跑通）：harness 代写前缀、
- *      hook 命令串由注册方自选 ⟹ 谓词四条件可被凑齐。成本论据（"hook 配置是启动快照"）已被质疑
- *      且未澄清，见 countStorageUnavailableBlockFeedback 的 JSDoc。本卡不追加防线，按残余移交设计层。
+ *      hook 命令串由注册方自选 ⟹ 谓词四条件可被凑齐。**但它压不低成本地板**（主编排器 2026-09-03
+ *      裁决，见 implementation-notes §3）：反馈条目**只在某个 Stop hook 真正 exit 2 时**由 harness 写入，
+ *      故每投喂一条 = 一次自己被阻断的 Stop 往返；settings 热重载与否只改「是否需要重启」这个准备成本、
+ *      不改地板，而预付到合规期的往返会被任何一次新的 fix 展开（`latest` 基线）作废。
+ *      本卡按裁决接受为残余、不追加防线；详见 countStorageUnavailableBlockFeedback 的 JSDoc。
  *
- * @param {{ feedbackCount:number, errors:{path:string|null,stage:string|null,code:string|null}[]|undefined,
+ * 🔴 本函数是 **FR-046 第 5 点（plan §2 口径：`saveBlockState` 失败必须 fail-closed）的唯一认领点**——
+ * F270 的 `解锁计时器路由函数（F276 C3 已删）` 连同其 FR-046 JSDoc 已随卡 C3 删除，源码内不再有别的 FR-046 指针
+ * （FR-046 其余各点属显式移交面，见 handoff/README.md；⚠️ plan 的「第 5 点」编号取自已删的 JSDoc，
+ * 与 `specs/270-…/spec.md` 的 FR-046 点号不同源，卡 B 接手时勿按号对照）。
+ *
+ * @param {{ feedbackCount:number,
+ *           errors:{path:string|null,stage:string|null,code:string|null,blocker:string|null}[]|undefined,
  *           extraDiagnostics:string[], inFlightDeferCount:number, nonBlockStopCount:number }} opts
  * @returns {number} 退出码（0 = 上界耗尽降级放行；2 = fail-closed 阻断）
  */
@@ -725,6 +734,51 @@ function routeStorageUnavailable(projectRoot, sessionId, verdict, {
   return 2;
 }
 
+// 路径段渲染的长度上限（当前不可达，钉住隐含前提）：路径本身无长度约束，而这条 stderr 会被
+// 回灌进 transcript，超长段可把后面的有效补救口挤出模型的注意窗口。截断只损可读性、零判定消费。
+const PATH_SEGMENT_RENDER_LIMIT = 512;
+
+/**
+ * 消毒集（IL-1 扩充）。刻意写成 `\u` 转义而非直接嵌不可见字符：源码里的裸 LS/RLO/BOM 自身就会让
+ * 本文件在编辑器与 diff 里错位显示，改动反而不可见。
+ *
+ * - `\u0000-\u001F`：C0（含 LF/CR/TAB，原有）
+ * - `\u007F-\u009F`：DEL + C1（其中 NEL `\u0085` 被部分终端与文本管线按换行处理，等价换行注入）
+ * - `\u2028\u2029`：LS / PS（JS 与多数日志/JSON 管线视作行分隔）
+ * - `\u200B-\u200F`：零宽空格/连接符 + LRM/RLM（可把 token 掰成"看着像但不是"的形状）
+ * - `\u202A-\u202E`：双向控制（RLO 让渲染顺序与真实字节序相反，误导人眼判断该删哪个对象）
+ * - `\uFEFF`：BOM / 零宽不换行空格
+ */
+const PATH_SEGMENT_UNSAFE_RE =
+  /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u200B-\u200F\u202A-\u202E\uFEFF]/g;
+
+/**
+ * 渲染进 stderr 的路径段消毒：把控制字符与不可见/双向控制字符折成可见转义形，并施加长度上限。
+ *
+ * why：`err.path` 是本条 stderr 里**唯一内容形态不受任何守卫约束**的自由段（`sessionId` 已被
+ * `sanitizeSessionId` 收到 `[A-Za-z0-9._-]`，`stage` / `code` 来自 Node 的固定取值域）。它逐字进单行渲染，
+ * 路径里一个换行就能长出一整行伪造文本——对抗审查实测可冒充 `GATE_DEGRADED_PREFIX_LINE` 这类 core
+ * 常量行；而这条 stderr 随后会被 harness 回灌进 transcript，伪造行同时进入人与模型的视野。
+ *
+ * 🔴 **可达性如实登记**：该段当前只来自 `projectRoot` 与启动快照 env（`TMPDIR` /
+ * `SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP`），被判方在会话内够不到 ⟹ 本函数是**把隐含前提显式钉住**，
+ * 不是在关一条已可达的口。折成转义形也顺带让含控制字符的诚实路径可读（否则消息整段错位）。
+ */
+function renderPathSegment(value) {
+  if (typeof value !== 'string' || value.length === 0) return '未知路径';
+  // 🔴 **先截原串再转义**（4b INFO-6）：反过来（先转义再截）会把 `\u202e` 这类转义序列切成
+  // `\u20` 残片——既不可读，也可能与相邻字符拼出别的形态。代价是渲染结果长度不再恒 ≤ 上限
+  // （每个不安全字符最多扩到 6 字符），但上限本就管的是"多少原始路径进模型的注意窗口"。
+  const truncated = value.slice(0, PATH_SEGMENT_RENDER_LIMIT);
+  return truncated.replace(PATH_SEGMENT_UNSAFE_RE, (ch) => {
+    const code = ch.charCodeAt(0);
+    // 单字节码位保持既有 `\xNN` 形（E-q 的换行钉按此形断言）；多字节码位用 `\uNNNN`
+    return code <= 0xFF
+      ? `\\x${code.toString(16).padStart(2, '0')}`
+      : `\\u${code.toString(16).padStart(4, '0')}`;
+  });
+}
+
 /**
  * F276 卡 C · 存储不可用阻断的 stderr 文本。
  *
@@ -756,48 +810,6 @@ function routeStorageUnavailable(projectRoot, sessionId, verdict, {
  * 措辞取「**由用户决定是否**」的用户动作式而非对模型的操作指令——⚠️ 这只降低诱导性，
  * **不构成防线**：该配置开关既有、已公开文档化、落在被判方写域（配置面 1 次往返已登记移交）。
  */
-/**
- * 渲染进 stderr 的路径段消毒：把控制字符与不可见/双向控制字符折成可见转义形，并施加长度上限。
- *
- * why：`err.path` 是本条 stderr 里**唯一内容形态不受任何守卫约束**的自由段（`sessionId` 已被
- * `sanitizeSessionId` 收到 `[A-Za-z0-9._-]`，`stage` / `code` 来自 Node 的固定取值域）。它逐字进单行渲染，
- * 路径里一个换行就能长出一整行伪造文本——对抗审查实测可冒充 `GATE_DEGRADED_PREFIX_LINE` 这类 core
- * 常量行；而这条 stderr 随后会被 harness 回灌进 transcript，伪造行同时进入人与模型的视野。
- *
- * 🔴 **可达性如实登记**：该段当前只来自 `projectRoot` 与启动快照 env（`TMPDIR` /
- * `SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP`），被判方在会话内够不到 ⟹ 本函数是**把隐含前提显式钉住**，
- * 不是在关一条已可达的口。折成转义形也顺带让含控制字符的诚实路径可读（否则消息整段错位）。
- */
-const PATH_SEGMENT_RENDER_LIMIT = 512;
-
-/**
- * 消毒集（IL-1 扩充）。刻意写成 `\u` 转义而非直接嵌不可见字符：源码里的裸 LS/RLO/BOM 自身就会让
- * 本文件在编辑器与 diff 里错位显示，改动反而不可见。
- *
- * - `\u0000-\u001F`：C0（含 LF/CR/TAB，原有）
- * - `\u007F-\u009F`：DEL + C1（其中 NEL `\u0085` 被部分终端与文本管线按换行处理，等价换行注入）
- * - `\u2028\u2029`：LS / PS（JS 与多数日志/JSON 管线视作行分隔）
- * - `\u200B-\u200F`：零宽空格/连接符 + LRM/RLM（可把 token 掰成"看着像但不是"的形状）
- * - `\u202A-\u202E`：双向控制（RLO 让渲染顺序与真实字节序相反，误导人眼判断该删哪个对象）
- * - `\uFEFF`：BOM / 零宽不换行空格
- */
-const PATH_SEGMENT_UNSAFE_RE =
-  /[\u0000-\u001F\u007F-\u009F\u2028\u2029\u200B-\u200F\u202A-\u202E\uFEFF]/g;
-
-function renderPathSegment(value) {
-  if (typeof value !== 'string' || value.length === 0) return '未知路径';
-  const escaped = value.replace(PATH_SEGMENT_UNSAFE_RE, (ch) => {
-    const code = ch.charCodeAt(0);
-    // 单字节码位保持既有 `\xNN` 形（E-q 的换行钉按此形断言）；多字节码位用 `\uNNNN`
-    return code <= 0xFF
-      ? `\\x${code.toString(16).padStart(2, '0')}`
-      : `\\u${code.toString(16).padStart(4, '0')}`;
-  });
-  // 长度上限（当前不可达，钉住隐含前提）：路径本身无长度约束，而这条 stderr 会被回灌进 transcript，
-  // 超长段可把后面的有效补救口挤出模型的注意窗口。截断只损可读性，零判定消费。
-  return escaped.slice(0, PATH_SEGMENT_RENDER_LIMIT);
-}
-
 function buildStorageUnavailableFeedback(projectRoot, verdict, errors, mergedDiagnostics) {
   const levels = ['主路径', '回落'];
   const rendered = levels.map((label, i) => {
@@ -814,7 +826,7 @@ function buildStorageUnavailableFeedback(projectRoot, verdict, errors, mergedDia
     `${STORAGE_UNAVAILABLE_FEEDBACK_TOKEN} 阻断计数无法持久化，本次按裁决自身语义阻断（连续 ${BLOCK_LIMIT} 次后降级放行）；⚠️ 这不是制品问题，模型无法修复：请向用户报告下方路径不可写，勿反复重试补制品`,
     rendered,
     '补救（按生效快慢）：① 修好上述路径 —— 下一次 Stop 立即生效；按上行的 code 对应处置：EEXIST|ENOTDIR ⟹ 删除上行「挡路对象:」标出的那一个文件（未标出时以 @ 后的路径为准）；⚠️ 只删它这一个文件、勿删任何目录；若挡路对象就是 .specify/runs 本身，说明该路径被占成了文件，删掉这个文件后目录会自动重建；EACCES ⟹ chmod u+w 其父目录；其余 code ⟹ 请向用户报告该错误码',
-    `② 由用户决定是否降级门禁：把下面两行追加/合并进 ${projectRoot}/spec-driver.config.yaml（或 ${projectRoot}/.specify/spec-driver.config.yaml）—— 该文件已有 fix_compliance 段时只改其 enforcement 值、勿整份覆写；配置每次 Stop 重读，下一次 Stop 即生效`,
+    `② 由用户决定是否降级门禁：把下面两行追加/合并进 ${renderPathSegment(projectRoot)}/spec-driver.config.yaml（或 ${renderPathSegment(projectRoot)}/.specify/spec-driver.config.yaml）—— 该文件已有 fix_compliance 段时只改其 enforcement 值、勿整份覆写；配置每次 Stop 重读，下一次 Stop 即生效`,
     'fix_compliance:',
     '  enforcement: warn',
     '③ SPEC_DRIVER_FIX_COMPLIANCE_STATE_TMP=<可写目录> claude —— ⚠️ 须重启会话（hook 进程 env 取自启动快照，会话内 export 无效）',
