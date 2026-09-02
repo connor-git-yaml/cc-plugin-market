@@ -3073,7 +3073,7 @@ describe('F270 P2b · 审计黑洞收口', () => {
 // Tests FIRST：重入/三态/计时器判定路径尚不存在，本组先红。
 // ════════════════════════════════════════
 
-describe('F270 P3 · 重入语义（对抗 CRITICAL-1 修订后：不改路由，仅诊断登记）+ 解锁计时器单元', () => {
+describe('F270 P3 · 重入语义（对抗 CRITICAL-1 修订后：不改路由，仅诊断登记）', () => {
   // 不合规会话（缺 fix-report + 委派）→ 正常路径 exit 2
   function nonCompliantTranscript() {
     return writeTranscript([
@@ -3130,66 +3130,6 @@ describe('F270 P3 · 重入语义（对抗 CRITICAL-1 修订后：不改路由�
     const evs = readVerdictEventsFor('p3-nonbool');
     assert.ok(!evs.some((e) => (e.diagnostics || []).includes('stop-hook-reentry')));
   });
-
-  it('🔴 delta-2 定时雷：NON_BLOCK_LIMIT ≥ BLOCK_LIMIT（阈值不变量）', async () => {
-    const mod = await import('../scripts/fix-compliance-judge.mjs');
-    assert.ok(mod.NON_BLOCK_LIMIT >= mod.BLOCK_LIMIT,
-      `NON_BLOCK_LIMIT(${mod.NON_BLOCK_LIMIT}) 必须 ≥ BLOCK_LIMIT(${mod.BLOCK_LIMIT})`);
-  });
-
-  // routeNonBlock 当前零接线（重入撤线，P4 GATE 指纹接入）——单元级钉死其合同
-  describe('routeNonBlock 单元（零接线期合同）', () => {
-    const fakeVerdict = { closureForm: 'repair', compliant: false, missing: ['verification-report.md'], diagnostics: [] };
-
-    it('未耗尽：exit 0 + 计数 +1 + 审计 + loud stderr（不留最安静通道）', async () => {
-      const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
-      const code = routeNonBlock(tmp, 'rnb-1', fakeVerdict, 'stop-hook-reentry', 10);
-      assert.equal(code, 0);
-      const st = JSON.parse(fs.readFileSync(path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'rnb-1.json'), 'utf8'));
-      assert.equal(st.nonBlockStopCount, 1);
-    });
-
-    it('🔴 快路径耗尽 → 终态可见（recordWorkflowRun paused + 触发标注）', async () => {
-      const { routeNonBlock, NON_BLOCK_LIMIT } = await import('../scripts/fix-compliance-judge.mjs');
-      for (let i = 0; i <= NON_BLOCK_LIMIT; i++) routeNonBlock(tmp, 'rnb-2', fakeVerdict, 'stop-hook-reentry', 10);
-      const evs = readVerdictEventsFor('rnb-2');
-      assert.ok(evs.some((e) => (e.diagnostics || []).includes('nonblock-limit-exhausted')), '耗尽须标触发计时器（SC-014）');
-    });
-
-    it('🔴 对抗 C-2 回归钉：backstop 比常量不存锚——擦库后仍触发（不可擦为真）', async () => {
-      const { routeNonBlock, NON_BLOCK_ENTRY_LIMIT } = await import('../scripts/fix-compliance-judge.mjs');
-      const stateDir = path.join(tmp, '.specify', 'runs', '.fix-compliance-state');
-      // 每次调用前擦库（快路径恒 0），entryCount 超常量 → backstop 必须触发终态
-      fs.rmSync(stateDir, { recursive: true, force: true });
-      routeNonBlock(tmp, 'rnb-3', fakeVerdict, 'stop-hook-reentry', NON_BLOCK_ENTRY_LIMIT + 5);
-      const evs = readVerdictEventsFor('rnb-3');
-      assert.ok(evs.some((e) => (e.diagnostics || []).includes('nonblock-backstop-exhausted')),
-        '初版把锚存可擦文件（delta=单调量−可擦锚=整体可擦，对抗双路命中）；终版单调量比常量，rm -rf 无效');
-    });
-
-    it('主路径被占位 → tmpdir 二级降级仍计数成功（不误触 storage-unavailable）', async () => {
-      // saveBlockState 有两级存储（主路径→tmpdir），仅两级皆失败才 ok:false。
-      // 主路径占位只应触发降级、计数照常——storage-unavailable 分支的 ok:false 语义
-      // 由 io 层测试与 routeNonBlock 代码路径（!saved.ok → 视同耗尽）共同覆盖，
-      // tmpdir 不可注入故不在 CLI 级强造两级全失败。
-      const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
-      const runsDir = path.join(tmp, '.specify', 'runs');
-      fs.mkdirSync(runsDir, { recursive: true });
-      fs.rmSync(path.join(runsDir, '.fix-compliance-state'), { recursive: true, force: true });
-      fs.writeFileSync(path.join(runsDir, '.fix-compliance-state'), 'blocker');
-      try {
-        const code = routeNonBlock(tmp, 'rnb-4', fakeVerdict, 'stop-hook-reentry', 10);
-        assert.equal(code, 0);
-        const evs = readVerdictEventsFor('rnb-4');
-        // 未耗尽、tmpdir 降级成功 → 正常审计（带 reason 码），不误标 storage-unavailable
-        assert.ok(evs.some((e) => (e.diagnostics || []).includes('stop-hook-reentry')));
-        assert.ok(!evs.some((e) => (e.diagnostics || []).includes('nonblock-storage-unavailable')),
-          'tmpdir 降级成功不得误标存储不可用');
-      } finally {
-        fs.rmSync(path.join(runsDir, '.fix-compliance-state'), { force: true });
-      }
-    });
-  });
 });
 
 describe('F270 P3 · background_tasks 在途三态端到端', () => {
@@ -3229,9 +3169,14 @@ describe('F270 P3 · background_tasks 在途三态端到端', () => {
 describe('F270 P3 · saveBlockState 带回合同（漏带即清零回归钉）', () => {
   it('🔴 解锁计时器计数不被后续 routeBlock 写入抹平', async () => {
     const p = writeTranscript([SKILL_EXPANSION_LINE('fix'), ASSISTANT_TEXT('未收口')]);
-    // 1) routeNonBlock 一次 → nonBlockStopCount=1（重入已撤线，直接经零接线通道造数）
-    const { routeNonBlock } = await import('../scripts/fix-compliance-judge.mjs');
-    routeNonBlock(tmp, 'p3-carry', { closureForm: 'repair', compliant: false, missing: [], diagnostics: [] }, 'stop-hook-reentry', 10);
+    // 1) 直接经 io 造数 → nonBlockStopCount=1。
+    //    why 直接造数：本字段当前**没有生产递增方**（解锁计时器路由自始零接线，已随 F276 卡 C 删除），
+    //    递增方留给卡 B 接线。用例守的是**带回**而非递增，故用 saveBlockState 直接摆好初态即可，
+    //    不依赖任何路由函数——这样卡 B 接线与否都不影响本合同钉。
+    const { saveBlockState } = await import('../scripts/lib/fix-compliance-io.mjs');
+    saveBlockState(tmp, 'p3-carry', {
+      blockCount: 0, degradedRecorded: false, inFlightDeferCount: 0, nonBlockStopCount: 1,
+    });
     const statePath = path.join(tmp, '.specify', 'runs', '.fix-compliance-state', 'p3-carry.json');
     assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).nonBlockStopCount, 1);
     // 2) 正常不合规 Stop → routeBlock 写入(blockCount 1) → 计时器必须原样带回

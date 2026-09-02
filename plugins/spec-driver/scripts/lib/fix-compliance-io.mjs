@@ -308,10 +308,13 @@ function normalizeState(sessionId, parsed) {
     inFlightDeferCount: Number.isInteger(src.inFlightDeferCount) && src.inFlightDeferCount >= 0
       ? src.inFlightDeferCount
       : 0,
-    // F270 P3：解锁计时器。为「不计入 blockCount 但也不能立即放行」的裁决（证据陈旧 / 无法交叉
-    // 校验 / 在途 undetermined / 重入 / 指纹无进展）计数——耗尽后走终态可见放行（不锁死），
-    // 阈值 MUST ≥ BLOCK_LIMIT（delta-2 定时雷：被判方控桶权在手，阈值低于诚实地板即更坏绕过）。
-    // 缺省 0（向后兼容）。
+    // F270 P3：解锁计时器，为「不计入 blockCount 但也不能立即放行」的裁决（证据陈旧 / 无法交叉
+    // 校验 / 在途 undetermined / 重入 / 指纹无进展）计数。缺省 0（向后兼容）。
+    // 🔴 当前只有**原样带回方、没有递增方**（F276 卡 C 删掉了零接线的解锁计时器路由）：带回逻辑
+    // 属**不可删面**——routeBlock / releaseDegraded / defer 分支整体覆写时不得抹平，合同钉见
+    // judge-cli 的 `p3-carry`；递增方留给卡 B 接线。
+    // 🔴 该字段**不可单独作为任何放行预算**，除非卡 B 同时定义它的不可伪造性——它落在被判方可写
+    // 的状态文件里，直接当预算即等于送出一条 0 成本绕过。
     nonBlockStopCount: Number.isInteger(src.nonBlockStopCount) && src.nonBlockStopCount >= 0
       ? src.nonBlockStopCount
       : 0,
@@ -480,8 +483,10 @@ export function saveBlockState(projectRoot, sessionId, state) {
       ? state.inFlightDeferCount
       : 0,
     // F270 P3：整体覆写语义不变——调用方须原样带回本字段，否则被抹平（见 normalizeState 注释）。
+    // 🔴 当前只有原样带回方、没有递增方；带回逻辑属不可删面（合同钉 `p3-carry`），递增方留给卡 B。
+    // 🔴 该字段不可单独作为任何放行预算，除非卡 B 同时定义其不可伪造性——状态文件在被判方写域。
     // （初版另有 firstNonBlockEntryBaseline 锚字段，被 P3 对抗双路命中"锚在可擦文件=backstop
-    //   整体可擦"后撤销——backstop 改为单调量比常量，不存锚，见 judge routeNonBlock。）
+    //   整体可擦"后撤销——backstop 改为单调量比常量、不存锚；该路由本身已随 F276 卡 C 删除。）
     nonBlockStopCount: Number.isInteger(state && state.nonBlockStopCount) && state.nonBlockStopCount >= 0
       ? state.nonBlockStopCount
       : 0,

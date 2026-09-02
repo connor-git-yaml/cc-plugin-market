@@ -65,43 +65,6 @@ const PREFIX_DEGRADED = '[FIX-COMPLIANCE][GATE-DEGRADED]';
 export const BLOCK_LIMIT = 2;
 
 /**
- * F270 P3 · 解锁计时器上限（FR-046）。为「不计入 blockCount 但也不能立即放行」的裁决
- * （重入 / 在途 undetermined / 证据陈旧 / 无法交叉校验 / 指纹无进展）计数，耗尽后走终态
- * 可见放行——既不锁死（有计时器保证最终放行）也不早放行（要累积到阈值）。
- *
- * ⚠️ **当前生产零接线**（集成 review 核实）：`routeNonBlock` 在 runHook 里没有任何调用点，
- * 故 `nonBlockStopCount` 恒为 0、本常量与 NON_BLOCK_ENTRY_LIMIT 从不参与生产判定。它原定
- * 的两个入口——重入（P3 对抗后撤销，见 runHook 内说明）与 GATE 指纹去重（FR-026..029，
- * **本卡未实现**）——都不存在。下方测试（judge-cli「routeNonBlock 单元（零接线期合同）」）
- * 是单元级合同钉，**不构成端到端守护**：变异实验证实把本函数首行改成 `return 0` 只会让 5 个
- * 直接 import 它的单元测试变红，零端到端失败。接线属后续卡范围。
- *
- * 🔴 承重不变量（delta-2 定时雷，MUST）：`NON_BLOCK_LIMIT >= BLOCK_LIMIT`。被判方**完全控制
- * 一次裁决落进哪个桶**（触发重入 / `Bash(run_in_background)` 制造在途 / 制造 undetermined 均
- * self-inducible）。若本桶阈值低于诚实 `blockCount` 地板（=BLOCK_LIMIT），被判方就把真实不合规
- * 塞进本桶，使放行地板 `min(阈值)+1` 跌破诚实地板 → 比变更前更坏的绕过。取等号，不给额外额度。
- */
-export const NON_BLOCK_LIMIT = BLOCK_LIMIT;
-
-/**
- * F270 P3 · 解锁计时器的**不可擦 backstop** 阈值（delta-2）。
- *
- * why 需要它：`nonBlockStopCount` 快路径寄存在 gitignore 的状态文件里，被判方每轮 Stop 前
- * `rm -rf` 该目录即可让它永久归零 → 计时器永不耗尽 → 会话被 brick 在放行/阻断循环（视本身
- * 语义）。故真正的放行闸挂 transcript 派生的**单调不可擦量**：直接用「最早 fix 展开后的
- * assistant entry 总数」与本常量比较。与闸门三为 inFlightDeferCount 兜底同构。
- *
- * （初版曾另设 `firstNonBlockEntryBaseline` 锚字段存进状态文件，被 P3 对抗双路独立命中
- * 「锚存在可擦文件里 ⟹ delta = 单调量 − 可擦锚 整体可擦」后撤销，改为与常量直接比较、不存锚。）
- *
- * ⚠️ 与 NON_BLOCK_LIMIT 同：**当前生产零接线**。
- *
- * why 取与闸门三同量级：它是"会话已异常长"的兜底，不是精确计数——擦库场景下快路径失效，
- * 靠这条抹不掉的天花板保证最终放行。取 EARLIEST_FIX_ENTRY_DEFER_LIMIT 同值即可。
- */
-export const NON_BLOCK_ENTRY_LIMIT = 420;
-
-/**
  * 会话内"在途推迟"次数上限（F256 第 2 轮 CRITICAL-1b）：达到后不再推迟，恢复正常裁决。
  *
  * why 必须有界：推迟的安全性原本论证为"每个在途委派最终都会回收通知，届时在途集合已空"，
@@ -916,96 +879,6 @@ function releaseDegraded(projectRoot, sessionId, verdict, {
 }
 
 /**
- * F270 P3 · 解锁计时器路由（FR-046）：处理「不计入 blockCount 但也不能立即放行」的裁决类。
- * ⚠️ 接线状态（集成 review 更新）：**生产零接线，且本卡不会再接**。初版把必答③重入接在此，
- * 被 P3 对抗证伪后撤线（重入改为纯诊断登记，见 runHook）；余下的预期入口是 GATE 指纹无进展
- * （FR-026..029），而 **P4 实际做的是账本接入、从未接 GATE 指纹**，本卡 6 个 Phase 也没有
- * 任何一个是 GATE ——「随 P4 落」是一条跨 phase 断链的承诺，无人回头兑现。
- *
- * 后果如实登记：病根 iii（GATE 暂停被当收口尝试）**原样存活**——实测 GATE 暂停态反复 Stop
- * 仍 blockCount 0→1→2、第 3 次降级放行，与改动前逐字一致；SC-004「GATE 期间 0 增量」未达成。
- * 本函数与其两个 LIMIT 常量当前是**为后续卡预留的、经单元测试钉住合同的未接线组件**，
- * 既不可读作"已实现"，其单元测试也不可读作端到端守护（变异实验：首行 `return 0` 只红 5 个
- * 直接 import 的用例，零端到端失败）。
- *
- * 语义（delta-2 重写后的解锁计时器主线，spec FR-046 五点）：
- *   1. 不计 `blockCount`（真实不合规的额度不被非不合规态烧掉）；计 `nonBlockStopCount`。
- *   2. 计时器**未耗尽**前照常按裁决类自身语义处理（重入=放行；未来接入的陈旧类若本该阻断仍阻断）。
- *   3. 耗尽后走**终态可见**放行（recordWorkflowRun + 标注触发计时器，SC-014），不走安静通道。
- *   4. 🔴 不可擦 backstop：快路径计数可被 `rm -rf` 状态目录清零；故另以 transcript 派生的
- *      单调量直接比常量——`entryCount >= NON_BLOCK_ENTRY_LIMIT` 即视同耗尽，不存锚、抹不掉。
- *      （初版存锚比 delta 的写法已被 P3 对抗撤销，理由见函数体注释。）
- *   5. save 失败沿用「存储不可用=已达上限」fail-closed（与 routeBlock:554 同源）：写不进计数
- *      就直接按耗尽走终态可见放行，不给"既不计数又不留痕"的静默通道。
- *
- * @param {string} reasonDiagnostic - 本次裁决类的诊断码（如 'stop-hook-reentry'）
- * @param {number|null} entryCount - 最早 fix 展开后的 assistant entry 数（backstop 计量源）
- * @returns {number} 恒 0（当前接入的裁决类均为放行语义；阻断语义类接入时由调用方先行 exit 2）
- */
-export function routeNonBlock(projectRoot, sessionId, verdict, reasonDiagnostic, entryCount) {
-  const loaded = loadBlockState(projectRoot, sessionId);
-  // 🔴 backstop 用**单调量直接比常量**（P3 对抗 CRITICAL-2 修订）：初版把首次裁决时的 entryCount
-  // 存进状态文件作锚、比 delta——但锚在可擦文件里，`rm -rf` 状态目录一次即同时打掉快路径与
-  // backstop（delta = 单调量 − 可擦锚，减去可擦量后整体可擦，"不可擦"为假）。正确形态就在
-  // 本文件闸门三（entryCount < EARLIEST_FIX_ENTRY_DEFER_LIMIT）：单调量比常量、不存锚，
-  // rm -rf 无效。代价是上界按"整个 fix 会话长度"而非"首次 nonBlock 起"计——对兜底语义可接受。
-  const fastPathExhausted = loaded.nonBlockStopCount >= NON_BLOCK_LIMIT;
-  const backstopExhausted = typeof entryCount === 'number' && entryCount >= NON_BLOCK_ENTRY_LIMIT;
-
-  const nextState = {
-    blockCount: loaded.blockCount,               // 整体覆写：不动的字段原样带回
-    degradedRecorded: loaded.degradedRecorded,
-    inFlightDeferCount: loaded.inFlightDeferCount,
-    nonBlockStopCount: loaded.nonBlockStopCount + 1,
-  };
-  const saved = saveBlockState(projectRoot, sessionId, nextState);
-
-  if (fastPathExhausted || backstopExhausted || !saved.ok) {
-    // 终态可见放行（SC-014：标注触发计时器，与 blockCount-degraded 可区分）
-    const trigger = !saved.ok
-      ? 'nonblock-storage-unavailable'
-      : (backstopExhausted ? 'nonblock-backstop-exhausted' : 'nonblock-limit-exhausted');
-    try {
-      recordWorkflowRun({
-        projectRoot,
-        workflowId: 'spec-driver-fix',
-        runId: sessionId,
-        result: 'paused',
-        warnings: [`${PREFIX_WARN} 解锁计时器耗尽(${trigger})后放行，缺失: ${verdict ? verdict.missing.join(', ') : '(无判定)'}`],
-        complianceVerdict: verdict ? {
-          closureForm: verdict.closureForm,
-          compliant: verdict.compliant,
-          missing: verdict.missing,
-          degraded: false,
-          blockCount: null,
-        } : undefined,
-      });
-    } catch {
-      // 终态写入失败不得让放行崩溃
-    }
-    try {
-      appendAuditEvent(projectRoot, buildAuditEvent({
-        sessionId, enforcement: 'block', verdict, blockCount: null, degraded: false,
-        extraDiagnostics: [reasonDiagnostic, trigger],
-      }));
-    } catch { /* 同上 */ }
-    process.stderr.write(`${PREFIX_WARN} ${reasonDiagnostic} 计时器耗尽(${trigger})，本次放行且已留终态痕迹\n`);
-    return 0;
-  }
-
-  // 未耗尽：按裁决类自身语义放行 + 如实落审计 + **loud stderr**（P3 对抗 W：不留最安静通道——
-  // F257 缺陷 2 的教训是"两条放行路径可见性不对等，更安静那条成为首选绕过面"）
-  try {
-    appendAuditEvent(projectRoot, buildAuditEvent({
-      sessionId, enforcement: 'block', verdict, blockCount: null, degraded: false,
-      extraDiagnostics: [reasonDiagnostic],
-    }));
-  } catch { /* 审计失败不影响放行 */ }
-  process.stderr.write(`${PREFIX_WARN} ${reasonDiagnostic}：本次放行（解锁计时器 ${loaded.nonBlockStopCount + 1}/${NON_BLOCK_LIMIT}），已落审计\n`);
-  return 0;
-}
-
-/**
  * 推迟成功时的终态记录（F257 缺陷 2 · 审计可见性提档）。
  *
  * why：改造前推迟只 `appendAuditEvent`（`degraded:false`）+ `[WARN]` stderr，**不写** `record-workflow-run`
@@ -1142,7 +1015,8 @@ function runHook(projectRoot, payload) {
   const sessionId = payload.session_id;
 
   // F270 P3 · 必答③重入语义（P3 对抗 CRITICAL-1 修订：**撤销提前放行**）。
-  // 初版把 `stop_hook_active===true` 接成"不得阻断、必放行"（routeNonBlock），对抗实跑证伪：
+  // 初版把 `stop_hook_active===true` 接成"不得阻断、必放行"（走一条独立的解锁计时器路由），
+  // 对抗实跑证伪：
   //   - 它把最短完全绕过从「2 次 exit 2 + failed 终态」砍到「1 次 exit 2 + 零终态零 stderr」——
   //     惩罚动作（exit 2）本身生成豁免（下一次 Stop 即重入），是最坏形态的 self-inducible；
   //   - 它唯一声称的收益（防阻断死循环）在既有 BLOCK_LIMIT=2 下**本就不存在**——exit 2 已被

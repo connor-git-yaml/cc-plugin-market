@@ -31,6 +31,7 @@
     "degraded": { "type": "boolean", "description": "true 表示本次为达到阻断上限后的降级放行" },
     "diagnostics": {
       "type": "array",
+      "description": "F276 卡 C 残余登记：三个 nonblock-* 码当前「已登记但零产出」——其产出方（解锁计时器路由）自始生产零接线，已随卡 C 删除，递增方留给卡 B 接线时重建。刻意保留登记以免卡 B 再加回造成合同 churn；本仓亦刻意不加「enum ⊆ 已产出码」的全局反向守卫（那属卡 A 的 canonical 表范围），否则此三码会立即自伤。",
       "items": {
         "type": "string",
         "enum": [
