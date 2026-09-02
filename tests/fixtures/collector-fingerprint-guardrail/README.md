@@ -91,9 +91,31 @@ symbol 节点 `lineRange` 剥掉后深等比较，除该字段外无任何差异
 
 ### 护栏报 `metadata key 集合不一致` 时的处置路径（不要照文案去 bump）
 
-再生脚本的 a-track 有第三个比较维度：按 node id 分组比较节点 `metadata` 的 **key 集合**
-（只比 key 名，不比 value）。它抓的是"节点还在、id 不变，但携带的字段名集合变了"这一形态 ——
-F271 给 symbol 节点新增 `lineRange` 时，既有的节点 id / 边两个维度对它全程判绿。
+再生脚本的 a-track 第三个比较维度是按 node id 分组比较节点形态：`kind` / `label` 两个标量字段
+（F279 新增，按值比较）+ 节点 `metadata` 的**递归 key 路径集合**（F279 由顶层 key 下沉；只比
+key 名，不比 value；只递归 plain object，数组按叶子处理）。它抓的是"节点还在、id 不变，但它的
+身份字段或携带的字段名集合变了"这一形态 —— F271 给 symbol 节点新增 `lineRange` 时，既有的节点
+id / 边两个维度对它全程判绿；而 F250 改 `label`（`mod.pyi`→`mod`）时，连第三维度也看不见。
+
+递归口径的直接可观察后果：删掉整棵 `metadata.lineRange` 子树会一次报出三条路径
+（`lineRange` / `lineRange.end` / `lineRange.start`），而不是只报顶层的 `lineRange`。
+
+a-track 另有第四个维度（F279 新增）：`graph.graph` 元数据 + 顶层 `directed` / `multigraph`，
+**排除集只有 `builder` 一条**（宿主/dist 构建戳，跨机器必然不同；见下文"`"builder": null`
+是再生路径的产物"一节），与 `tests/integration/graph-quality-pinned-staleness.test.ts:154`
+的 `DEEP_COMPARE_EXCLUDED_PATHS` 逐字同一条。
+
+`fingerprint` **纳入**比较（该字段一度也被排除，理由是"它已有 `fingerprintUnchanged` 这条
+专用通道"——异构对抗审查证伪了这条理由后撤回）：`fingerprintUnchanged` 比的是
+**pinned 记录值**与**现算值**，两个操作数都不是重建产物，而本维度比的是**重建产物**与
+**pinned**，是两个不同的事实。排除它会让"即将被写进 pinned 资产的那个 stamp"在脚本、
+比较器、护栏单测三处**无人读**——坏 stamp 一旦被烤进资产，此后 `fingerprintUnchanged`
+恒为 false ⇒ 拒绝判据恒不成立 ⇒ 整条护栏的拒绝语义永久失效。
+
+**第四维度不是全字段深比较**，以下三面目前零覆盖（已实证，登记为已知缺口）：边属性
+（`edgeKey` 只取 `source|relation|target`，`confidence`/`confidenceScore`/`directional`/
+`evidenceText`/`evidenceSource` 全不比）、节点非 facet 顶层字段、`GraphJSON` 除
+`directed`/`multigraph` 外的顶层字段（如 `hyperedges`）。
 
 拒绝时脚本会打印 `[regen] 检测到指纹不可见的行为变更：先 bump behaviorVersion 再跑再生`。
 **这条通用文案对 metadata 维度不成立**：`src/panoramic/graph/collector-fingerprint.ts` 的六类

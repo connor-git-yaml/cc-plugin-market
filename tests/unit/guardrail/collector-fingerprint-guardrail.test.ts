@@ -378,8 +378,13 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
       // F278 返工 A3：断到**含格子**的完整子串。原断言 `toContain('lineRange')` 对"同一个词
       // 换了个格子"完全无感——把 missing/extra 两个数组算反（重建缺失 [] vs 重建新增 [lineRange]）
       // 时它照样绿，而对护栏来说"是重建丢了字段还是重建多了字段"就是全部的信息量。
+      // F279：metadata 签名下沉为**递归 key 路径**后，删掉整棵 lineRange 子树会同时缺失
+      // `lineRange` / `lineRange.end` / `lineRange.start` 三条路径（默认字符串序：`lineRange`
+      // 是另两条的前缀故排最前，`end` < `start`）。这里如实更新为三路径完整文案，而不是把诊断
+      // 剪枝成"只报最浅路径"——剪枝会在展示层引入一个"依赖判定层完整集合却选择性隐藏"的新
+      // 耦合点，与本文件"诊断正确性不依赖签名格式"的既有哲学方向相反。
       expect(joined).toContain(
-        `metadata key 集合不一致（重建缺失 [lineRange] vs 重建新增 []）: ${String(victim?.id)}`,
+        `metadata key 集合不一致（重建缺失 [lineRange, lineRange.end, lineRange.start] vs 重建新增 []）: ${String(victim?.id)}`,
       );
     });
 
@@ -412,7 +417,8 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
     });
 
     /**
-     * A1/A2（F278 返工）共用构造器：对**同一个 node id** 的两侧分别注入不同的 metadata 形态。
+     * A1/A2（F278 返工）共用构造器：对**同一个 node id** 的两侧分别注入不同的节点形态。
+     * F279 起 mutator 拿到的是**整个节点对象**，故 kind / label / metadata 三个 facet 都可注入。
      *
      * 为什么两侧都要动、且必须锁同一个 id：第三维度只对"两侧该 id 的节点数相等"的 id 求值，
      * 两侧各取 `nodes[0]`（顺序不保证一致）会退化成"改了两个不同节点"，测到的就成了第一维度
@@ -422,7 +428,7 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
      * （`pinnedGraphOnly.graph` 的同 id 节点）恒有 4 个 key，因此它对"`{}` 或 `null` 被折叠进
      * `<absent>`"这类**档位塌缩**变异完全无鉴别力——塌缩后两侧仍不等，用例照样绿。
      */
-    function injectMetadataOnSharedNode(
+    function injectNodeShapeOnSharedNode(
       mutateRebuilt: (node: Record<string, unknown>) => void,
       mutatePinned: (node: Record<string, unknown>) => void,
     ): { rebuilt: GraphJSON; pinned: GraphJSON; id: string } {
@@ -440,7 +446,7 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
     }
 
     it('a-track：一侧 metadata 整字段缺席、另一侧 metadata={} → 报缺席态不一致（两态 MUST NOT 塌缩，FR-007）', () => {
-      const { rebuilt, pinned, id } = injectMetadataOnSharedNode(
+      const { rebuilt, pinned, id } = injectNodeShapeOnSharedNode(
         (node) => {
           delete node.metadata;
         },
@@ -459,7 +465,7 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
     });
 
     it('a-track：一侧 metadata 整字段缺席、另一侧 metadata=null → 报缺席态不一致且 null 单列一档', () => {
-      const { rebuilt, pinned, id } = injectMetadataOnSharedNode(
+      const { rebuilt, pinned, id } = injectNodeShapeOnSharedNode(
         (node) => {
           delete node.metadata;
         },
@@ -536,7 +542,7 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
       };
     }
 
-    it('a-track：同一 node id 两侧各 2 次、key-set multiset 不同 → 报 metadata key 签名计数不一致（重复 id 分支，US2 AS-2）', () => {
+    it('a-track：同一 node id 两侧各 2 次、key-set multiset 不同 → 报节点形态签名计数不一致（重复 id 分支，US2 AS-2）', () => {
       const { rebuilt, pinned, id } = injectDuplicatedNodeMetadata(
         [
           ['A', 'B'],
@@ -551,9 +557,17 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
       // 活性前提：两侧该 id 的节点数都是 2，第一维度不会报差异——断言"没被第一维度抢先报掉"，
       // 否则本用例会在第三维度被整段删掉时依然绿（那正是它要防的退化）
       expect(joined).not.toContain('节点计数不一致');
-      // 断到含计数与签名的完整文案：只断"报了不一致"分不清是重复 id 分支报的、还是别的分支
-      expect(joined).toContain(`metadata key 签名计数不一致（重建 2 vs pinned 1）: ${id} @ ["A","B"]`);
-      expect(joined).toContain(`metadata key 签名计数不一致（重建 0 vs pinned 1）: ${id} @ ["A"]`);
+      // 断到含计数与签名的完整文案：只断"报了不一致"分不清是重复 id 分支报的、还是别的分支。
+      // F279：multiset 计数 key 由 metadata 单签名换成 kind/label/metadata 三 facet 的**复合**
+      // 签名（`JSON.stringify([kindSignature, labelSignature, metadataSignature])`），故文案里的
+      // `@` 部分从 `["A","B"]` 变成三元组，前缀也从 `metadata key` 变成 `节点形态`——本用例仍只
+      // 变异 metadata（kind/label 两侧同值），复合化不削弱它对 metadata 维度的鉴别力。
+      expect(joined).toContain(
+        `节点形态签名计数不一致（重建 2 vs pinned 1）: ${id} @ ["\\"module\\"","\\"main.go\\"","[\\"A\\",\\"B\\"]"]`,
+      );
+      expect(joined).toContain(
+        `节点形态签名计数不一致（重建 0 vs pinned 1）: ${id} @ ["\\"module\\"","\\"main.go\\"","[\\"A\\"]"]`,
+      );
     });
 
     it('a-track：同一 node id 两侧各 2 次、key-set multiset 相同但顺序不同 → 判一致（multiset 语义，不是按下标配对）', () => {
@@ -567,6 +581,459 @@ describe('扰动注入组（T047 / SC-010(a) 三件套）', () => {
       const comparison = compareGraphOnlyStructure(rebuilt, pinned);
       expect(comparison.differences).toEqual([]);
       expect(comparison.mismatch).toBe(false);
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    // F279 US1：node.kind / node.label 维度（此前结构性零检测力，事实清单 §2 盲区 1；
+    // §3 记录了它在 F250 已经导致过一次真实误读——改了 label 却把 contentMismatch=false
+    // 当作"节点结构零变化"的独立佐证引用）。
+    // ────────────────────────────────────────────────────────────────────
+
+    it('a-track：仅变异首个节点的 kind → 报不一致（F279 US1，盲区 1）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes[0];
+      expect(victim).toBeDefined();
+      // 活性前提兼精确文案的取值依据：首个节点当前是 module。写死而非用变量拼，是为了让
+      // 下面那条断言在"实现把新旧值算反"时也会红——用变量拼会跟着实现一起反过来。
+      expect(victim?.kind).toBe('module');
+      // 换成另一个**合法**枚举值：变异必须落在"合法但不同"上，否则测到的是"值非法"
+      // 而不是"这个字段根本没进比较"
+      if (victim) victim.kind = 'component';
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      const joined = comparison.differences.join('\n');
+      // 活性前提：只动 kind ⇒ 节点 id / 边 / metadata 三个既有维度全程判绿，
+      // 报红只可能来自新维度
+      expect(joined).not.toContain('节点仅存在于');
+      expect(comparison.mismatch).toBe(true);
+      // FR-003：必须定位到节点 id + 字段名 + 新旧值。断到含格子的完整子串——
+      // `toContain('kind')` 对"新旧值算反"完全无感，而"是重建变了还是 pinned 变了"
+      // 就是这条诊断的全部信息量
+      expect(joined).toContain(
+        `节点 kind 不一致（重建 "component" vs pinned "module"）: ${String(victim?.id)}`,
+      );
+    });
+
+    it('a-track：仅变异首个节点的 label → 报不一致（F279 US1，盲区 1）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes[0];
+      expect(victim).toBeDefined();
+      expect(victim?.label).toBe('main.go');
+      if (victim) victim.label = 'main.go__RENAMED';
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      const joined = comparison.differences.join('\n');
+      expect(joined).not.toContain('节点仅存在于');
+      expect(comparison.mismatch).toBe(true);
+      // F250 的真实误读形态就是 `label mod.pyi→mod`：这条诊断必须能把"哪个节点、哪个字段、
+      // 从什么变成什么"一次说清
+      expect(joined).toContain(
+        `节点 label 不一致（重建 "main.go__RENAMED" vs pinned "main.go"）: ${String(victim?.id)}`,
+      );
+    });
+
+    it('a-track：首个节点 kind 整字段缺席（undefined）→ 报不一致（F279 US1 缺席档）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes[0];
+      expect(victim).toBeDefined();
+      // 类型上 kind 必填，但两侧实参一侧来自磁盘 pinned JSON、一侧来自重建产物反序列化，
+      // 历史资产完全可能整字段缺席——这正是本用例要钉死的退化态
+      if (victim) delete (victim as { kind?: unknown }).kind;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        `节点 kind 不一致（重建 <absent> vs pinned "module"）: ${String(victim?.id)}`,
+      );
+    });
+
+    it('a-track：首个节点 label 整字段缺席（undefined）→ 报不一致（F279 US1 缺席档）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes[0];
+      expect(victim).toBeDefined();
+      if (victim) delete (victim as { label?: unknown }).label;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        `节点 label 不一致（重建 <absent> vs pinned "main.go"）: ${String(victim?.id)}`,
+      );
+    });
+
+    // 空字符串对照：`<absent>` 与 `""` MUST NOT 塌缩成同一档（spec Edge Case
+    // "缺失与存在但为空字符串视为不同状态"）。必须把两种缺席态**直接对上**，
+    // 而不是各自与正常值比——各自与正常值比时，即使两档塌缩了用例照样绿。
+    it('a-track：一侧 kind 缺席、另一侧 kind="" → 报不一致（两档 MUST NOT 塌缩）', () => {
+      const { rebuilt, pinned, id } = injectNodeShapeOnSharedNode(
+        (node) => {
+          delete node.kind;
+        },
+        (node) => {
+          node.kind = '';
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+      // 两个档位必须同时出现在同一行上：只断"报了不一致"分不清"两档被正确分档"与
+      // "两档塌缩成同一档但恰好与对侧不等"
+      expect(comparison.differences.join('\n')).toContain(
+        `节点 kind 不一致（重建 <absent> vs pinned ""）: ${id}`,
+      );
+    });
+
+    it('a-track：一侧 label 缺席、另一侧 label="" → 报不一致（两档 MUST NOT 塌缩）', () => {
+      const { rebuilt, pinned, id } = injectNodeShapeOnSharedNode(
+        (node) => {
+          delete node.label;
+        },
+        (node) => {
+          node.label = '';
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        `节点 label 不一致（重建 <absent> vs pinned ""）: ${id}`,
+      );
+    });
+
+    /**
+     * F279 T009 共用构造器：让**同一个 node id** 在两侧各出现 2 次，两侧的 metadata 与 label
+     * 逐字相同、**只有 kind 不同**，用于覆盖重复 id 的 multiset 分支在复合签名下的检测力。
+     *
+     * 为什么 metadata / label 要显式钉成同一个字面量而不是沿用模板自带的值：本用例要证明的是
+     * "kind 差异能被 multiset 分支捕获"，若 metadata 恰好也不同，用例即使在只比 metadata 的
+     * 旧实现下也会绿，测到的就不是 kind 维度。
+     *
+     * 为什么两侧份数必须相等：第三维度只对"两侧该 id 节点数相等"的 id 求值，只复制一侧会被
+     * 第一维度（节点 id multiset）抢先报 `节点计数不一致`，第三维度直接跳过。
+     */
+    function injectDuplicatedNodeKinds(
+      rebuiltKinds: readonly GraphJSON['nodes'][number]['kind'][],
+      pinnedKinds: readonly GraphJSON['nodes'][number]['kind'][],
+    ): { rebuilt: GraphJSON; pinned: GraphJSON; id: string } {
+      const buildSide = (
+        source: GraphJSON,
+        id: string,
+        kinds: readonly GraphJSON['nodes'][number]['kind'][],
+      ): GraphJSON => {
+        const graph = deepClone(source);
+        const template = graph.nodes.find((node) => node.id === id);
+        expect(template).toBeDefined();
+        const copyWithKind = (kind: GraphJSON['nodes'][number]['kind']): GraphJSON['nodes'][number] => {
+          const copy = deepClone(template as GraphJSON['nodes'][number]);
+          copy.kind = kind;
+          copy.label = 'shared-label';
+          copy.metadata = { shared: 1 };
+          return copy;
+        };
+        graph.nodes = [...graph.nodes.filter((node) => node.id !== id), ...kinds.map(copyWithKind)];
+        return graph;
+      };
+      const id = rebuiltGraph.nodes[0]?.id as string;
+      expect(id).toBeTruthy();
+      return {
+        rebuilt: buildSide(rebuiltGraph, id, rebuiltKinds),
+        pinned: buildSide(pinnedGraphOnly.graph, id, pinnedKinds),
+        id,
+      };
+    }
+
+    it('a-track：同一 node id 两侧各 2 次、仅 kind 的 multiset 不同 → 报不一致（F279 重复 id 复合签名）', () => {
+      const { rebuilt, pinned } = injectDuplicatedNodeKinds(
+        ['module', 'module'],
+        ['module', 'component'],
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      const joined = comparison.differences.join('\n');
+      // 活性前提：两侧该 id 都是 2 个节点 ⇒ 第一维度不会报，报红只可能来自第三维度
+      expect(joined).not.toContain('节点计数不一致');
+      expect(comparison.mismatch).toBe(true);
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    // F279 US2：metadata **嵌套** key 维度（顶层 key 集合不变时此前零检测力，
+    // 事实清单 §2 盲区 2）。与 F271 的 lineRange 事件同构、只是下沉一层。
+    // ────────────────────────────────────────────────────────────────────
+
+    it('a-track：某节点 metadata.lineRange 内层由 {start,end} 改名为 {from,to} → 报不一致（F279 US2）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes.find((node) => node.metadata?.lineRange !== undefined);
+      expect(victim).toBeDefined();
+      const lineRange = victim?.metadata.lineRange as { start: number; end: number };
+      // 活性前提：内层确实是 {start,end}，且**顶层 key 集合一字不变**——本用例要测的正是
+      // "顶层看不出差异"这一档，顶层若也变了就退化成 F278 已覆盖的维度
+      expect(Object.keys(lineRange).sort()).toEqual(['end', 'start']);
+      if (victim) victim.metadata.lineRange = { from: lineRange.start, to: lineRange.end };
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      // FR-005：必须定位到节点 id + 具体**递归路径**，而不是只报"metadata 不一致"。
+      // 断到含格子的完整子串：missing/extra 两侧算反时 `toContain('lineRange.start')` 照样绿，
+      // 而"是重建丢了内层字段还是重建多了内层字段"就是这条诊断的全部信息量。
+      // 注意 `lineRange` 这条路径本身两侧都在（只是内层变了），故它 MUST NOT 出现在缺失侧。
+      expect(comparison.differences.join('\n')).toContain(
+        `metadata key 集合不一致（重建缺失 [lineRange.end, lineRange.start] vs 重建新增 [lineRange.from, lineRange.to]）: ${String(victim?.id)}`,
+      );
+    });
+
+    it('a-track：某节点 metadata.lineRange 内层删掉 end 子 key → 报不一致（F279 US2）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const victim = perturbed.nodes.find((node) => node.metadata?.lineRange !== undefined);
+      expect(victim).toBeDefined();
+      const lineRange = victim?.metadata.lineRange as Record<string, unknown>;
+      expect(lineRange.end).toBeDefined();
+      delete lineRange.end;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      const joined = comparison.differences.join('\n');
+      expect(joined).toContain(
+        `metadata key 集合不一致（重建缺失 [lineRange.end] vs 重建新增 []）: ${String(victim?.id)}`,
+      );
+      // "只报真正变化的路径"负控：`lineRange` 与 `lineRange.start` 两条路径一字未动，
+      // 递归实现若把整棵子树都算成缺失（或把祖先路径连坐），这两条断言会红
+      expect(joined).not.toContain('lineRange.start');
+      expect(joined).not.toContain('[lineRange,');
+    });
+
+    /**
+     * F279 edge case (b)：**空嵌套对象**不得与"该 key 根本不存在"碰撞。
+     *
+     * 为什么两侧都包一层 `x`：直接用 `{lineRange:{}}` vs `{}`（plan 原文给的形态）在
+     * F279 之前的**顶层 key** 实现下就已经可分辨（`['lineRange']` vs `[]`），拿它做红先行
+     * 探针会直接绿——那不是"盲区被证明"，而是探针没打到目标维度。包一层之后两侧顶层 key
+     * 集合都是 `['x']`，旧实现必然碰撞，探针才真的红。
+     *
+     * 这条同时钉死递归规则里"**先记录 key 自身路径、再判断是否递归**"这一步：若实现只记叶子，
+     * 左侧（`x.lineRange` 是空对象、无叶子）与右侧都会产出 0 条路径，碰撞复发。
+     */
+    it('a-track：{x:{lineRange:{}}} vs {x:{}} → 报不一致（空嵌套对象 MUST NOT 与 key 缺席碰撞）', () => {
+      const { rebuilt, pinned } = injectNodeShapeOnSharedNode(
+        (node) => {
+          node.metadata = { x: { lineRange: {} } };
+        },
+        (node) => {
+          node.metadata = { x: {} };
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+    });
+
+    /**
+     * F279 对抗审查 WARNING-6：**根层与嵌套层的"可展开性"判据必须同源**。
+     *
+     * 根层若只判 `typeof raw !== 'object'`（数组也是 object），数组会被 `Object.keys` 当成
+     * plain object 展开出下标 key；而每个嵌套层都由 `isRecursableMetadataValue` 正确排除数组。
+     * 同一份数据两套规则 ⇒ `metadata: []` 与 `metadata: {}` 静默判一致。
+     *
+     * 下面第二条（数组 vs 同形对象）是更强的形态：不修根层判据时两侧路径集合都是 `['0','1']`。
+     */
+    it('a-track：metadata:[] vs metadata:{} → 报不一致（根层数组 MUST 与空对象分档）', () => {
+      const { rebuilt, pinned } = injectNodeShapeOnSharedNode(
+        (node) => {
+          (node as unknown as Record<string, unknown>).metadata = [];
+        },
+        (node) => {
+          node.metadata = {};
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain('<non-object:array>');
+    });
+
+    it('a-track：metadata:["x","y"] vs metadata:{"0":..,"1":..} → 报不一致（根层数组不得被展开成下标 key）', () => {
+      const { rebuilt, pinned } = injectNodeShapeOnSharedNode(
+        (node) => {
+          (node as unknown as Record<string, unknown>).metadata = ['x', 'y'];
+        },
+        (node) => {
+          node.metadata = { 0: 'x', 1: 'y' };
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain('<non-object:array>');
+    });
+
+    /**
+     * F279 edge case (c)：路径分隔符歧义。key 名里的字面 `.` 必须与"路径分隔用的 `.`"可区分。
+     *
+     * 构造要点（两侧路径数量必须配平，否则测到的是"少了一条路径"而不是"两条路径撞了"）：
+     *   左 `{x:{'a.b':1, a:{}}}` → 未转义时路径集合 {x, x.a, x.a.b}
+     *   右 `{x:{a:{b:1}}}`      → 未转义时路径集合 {x, x.a, x.a.b}   ← 完全相同，碰撞
+     * 转义之后左侧是 `x.a\.b`、右侧是 `x.a.b`，两者可分辨。
+     * 同样包一层 `x` 是为了让旧的顶层 key 实现（两侧都是 `['x']`）真的红。
+     */
+    it('a-track：{x:{"a.b":1,a:{}}} vs {x:{a:{b:1}}} → 报不一致（key 名含字面 . 不得与路径分隔符碰撞）', () => {
+      const { rebuilt, pinned } = injectNodeShapeOnSharedNode(
+        (node) => {
+          node.metadata = { x: { 'a.b': 1, a: {} } };
+        },
+        (node) => {
+          node.metadata = { x: { a: { b: 1 } } };
+        },
+      );
+
+      const comparison = compareGraphOnlyStructure(rebuilt, pinned);
+      expect(comparison.mismatch).toBe(true);
+    });
+
+    // ────────────────────────────────────────────────────────────────────
+    // F279 US3：graph.graph 元数据 + 顶层 directed/multigraph（此前零检测力，
+    // 事实清单 §2 盲区 3 六项实测全 diffs=0）。`compareGraphDeep` 的文件头注释早已逐字
+    // 点名过这一族："这恰恰是 pinned 资产陈旧的核心信号"。
+    // ────────────────────────────────────────────────────────────────────
+
+    it('a-track：graph.graph.nodeCount 被篡改 → 报不一致（F279 US3，盲区 3）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      // 活性前提：pinned 基线是 22 节点（事实清单 §6）。写死而非用变量拼，理由同 kind 用例
+      expect(perturbed.graph.nodeCount).toBe(22);
+      perturbed.graph.nodeCount = 999;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      // FR-008：必须定位到字段名 + 新旧值。断到含格子的完整子串——只断"报了不一致"
+      // 分不清是这个字段报的还是别的字段报的，也分不清新旧值有没有算反
+      expect(comparison.differences.join('\n')).toContain(
+        'graph.graph.nodeCount 不一致（重建 999 vs pinned 22）',
+      );
+    });
+
+    it('a-track：graph.graph.schemaVersion 被降级 → 报不一致（F279 US3，盲区 3）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      expect(perturbed.graph.schemaVersion).toBe('2.0');
+      perturbed.graph.schemaVersion = '1.0';
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        'graph.graph.schemaVersion 不一致（重建 "1.0" vs pinned "2.0"）',
+      );
+    });
+
+    it('a-track：graph.graph.sources 被清空 → 报不一致（F279 US3，盲区 3）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      expect(perturbed.graph.sources).toEqual(['extraction', 'unified-graph']);
+      perturbed.graph.sources = [];
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        'graph.graph.sources 不一致（重建 [] vs pinned ["extraction","unified-graph"]）',
+      );
+    });
+
+    it('a-track：顶层 directed 被翻转 → 报不一致（F279 US3，GraphJSON 顶层字段）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      expect(perturbed.directed).toBe(false);
+      perturbed.directed = true;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      // 文案不带 `graph.graph.` 前缀：directed 是 GraphJSON 顶层字段，加前缀等于说假话
+      expect(comparison.differences.join('\n')).toContain(
+        'directed 不一致（重建 true vs pinned false）',
+      );
+    });
+
+    it('a-track：顶层 multigraph 被翻转 → 报不一致（F279 US3，GraphJSON 顶层字段）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      expect(perturbed.multigraph).toBe(false);
+      // 类型上 multigraph 是字面量 false，但磁盘资产完全可能写着 true——这正是要钉死的退化态
+      (perturbed as unknown as { multigraph: boolean }).multigraph = true;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain(
+        'multigraph 不一致（重建 true vs pinned false）',
+      );
+    });
+
+    /**
+     * F279 US3 负控（FR-009 / SC-004）：`graph.graph.builder` 是 denylist 里**唯一**一条。
+     *
+     * builder 跟踪宿主仓库 / dist 构建戳（commit / dirty / distSha256），跨机器跨 commit 必然
+     * 不同，与"这份 pinned 是否代表当前采集**行为**"无关——即 F261 D1「builder 戳只可见不判定」。
+     * 把它纳入比较会让 fixture 在别人机器上永久红，且红因与被护栏保护的采集面毫无关系。
+     * 与 `tests/integration/graph-quality-pinned-staleness.test.ts:154` 的排除表逐字同一条。
+     *
+     * 这条是"必须保持 GREEN"的负控，不是红先行用例：它防的是 denylist 迭代逻辑意外漏掉 builder。
+     */
+    it('a-track：只改 graph.graph.builder → 判一致（F279 US3 负控，0 例误报）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      // 活性前提：再生路径走 tsx 直跑 src/，builder-stamp 定位不到 .spectra-build-meta.json
+      // ⇒ 诚实降级 null（事实清单 §4.1）。这里注入一个"真实戳"形态来模拟跨机器场景
+      expect(perturbed.graph.builder).toBeNull();
+      (perturbed.graph as unknown as Record<string, unknown>).builder = {
+        formatVersion: 1,
+        commit: '68b5929cb16e4a1b2c3d4e5f60718293a4b5c6d7',
+        dirty: false,
+        sourceDirty: false,
+        distSha256: '40ba0fdb'.repeat(8),
+      };
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.differences).toEqual([]);
+      expect(comparison.mismatch).toBe(false);
+    });
+
+    /**
+     * F279 US3：`graph.graph.fingerprint` **纳入比较**（曾被排除，经异构对抗审查证伪后撤回）。
+     *
+     * 当时的排除理由是"它已有一条独立通道 `runRegen` 的 `fingerprintUnchanged`"。该理由不成立：
+     * `fingerprintUnchanged = fingerprintsEqual(pinned.fingerprint, computeCollectorFingerprint())`
+     * 比的是 **pinned 记录值** vs **现算值**，两个操作数都不是重建产物；而本比较器比的是
+     * **重建产物** vs **pinned**。两者是不同的事实，不是同一事实的双重计数。
+     *
+     * 排除它的实际后果（对抗审查实证）：`rebuilt.graph.graph.fingerprint`——即将被写进 pinned
+     * 资产的那个戳——在脚本、比较器、护栏单测三处**无人读**（上方 `:139-144` 对重建侧只查
+     * "结构合法 + behaviorVersion 相等"，唯一的等值断言 `:153` 用的是 pinned 侧）。写盘链路
+     * 若把坏戳烤进资产，此后 `fingerprintUnchanged` 恒 false ⇒ `shouldRejectRegen` 恒 false
+     * ⇒ 整条护栏的拒绝语义永久失效。
+     *
+     * "裸值比较与 canonical 比较会分歧"的顾虑同样不成立：`toSurfaceEntry`
+     * （`src/panoramic/graph/collector-fingerprint.ts:175-180`）对 extensions 做 `[...].sort()`，
+     * 注释明写是为跨环境 byte-identical，两侧同源同序。
+     */
+    it('a-track：只改 graph.graph.fingerprint → 报不一致（重建侧 stamp 此前无人比较）', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const fingerprint = perturbed.graph.fingerprint as { behaviorVersion: number };
+      expect(fingerprint.behaviorVersion).toBe(BEHAVIOR_VERSION);
+      fingerprint.behaviorVersion = BEHAVIOR_VERSION - 1;
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain('graph.graph.fingerprint 不一致');
+    });
+
+    /**
+     * 上一条的**同族补强**：重建侧 stamp 的 `extensionSurface` 被换成另一套采集面
+     * （`behaviorVersion` 不动）——这正是对抗审查用来证伪"已有专用通道"的那个反例形态，
+     * 单测既有的三条 fingerprint 断言（`:141-153`）对它全部照过。
+     */
+    it('a-track：重建侧 stamp 的 extensionSurface 被削（behaviorVersion 不动）→ 报不一致', () => {
+      const perturbed = deepClone(rebuiltGraph);
+      const fingerprint = perturbed.graph.fingerprint as unknown as {
+        behaviorVersion: number;
+        extensionSurface: { tsjsSkeletonWalk: { extensions: string[] } };
+      };
+      expect(fingerprint.extensionSurface.tsjsSkeletonWalk.extensions.length).toBeGreaterThan(1);
+      fingerprint.extensionSurface.tsjsSkeletonWalk.extensions = ['.ts'];
+      // 该形态确实骗得过既有三条断言：behaviorVersion 一字未动
+      expect(fingerprint.behaviorVersion).toBe(BEHAVIOR_VERSION);
+
+      const comparison = compareGraphOnlyStructure(perturbed, pinnedGraphOnly.graph);
+      expect(comparison.mismatch).toBe(true);
+      expect(comparison.differences.join('\n')).toContain('graph.graph.fingerprint 不一致');
     });
 
     it('b-track：删除一个 module → 深度比较报不一致', () => {

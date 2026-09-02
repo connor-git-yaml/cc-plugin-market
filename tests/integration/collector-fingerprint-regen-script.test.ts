@@ -231,6 +231,40 @@ describe('再生脚本 — 放行/无变更场景（活性证明）', () => {
    * 走的仍是放行分支（`shouldRejectRegen` 只在 contentMismatch ∧ fingerprintUnchanged 时拒绝，
    * fingerprintUnchanged=false ⇒ 不拒绝），从而验证放行分支真的把已算好的 differences 打印出来。
    */
+  /**
+   * F279 T024(b)：钉死"`graph.graph.fingerprint` 不进结构比较"这条裁决的**端到端**行为。
+   *
+   * 构造：只降级两份资产记录的 `behaviorVersion`（fixture 源码一字不动）⇒ 指纹确实变了
+   * （`fingerprintUnchanged=false`），但节点 / 边 / 节点形态 / 其余 graph.graph 字段全部一致。
+   *
+   * 为什么这条断言是**有鉴别力**的（而不是"反正 shouldRejectRegen 都判 false"的同义反复）：
+   * 判定结果（放行）确实两种实现下都一样，但 `contentMismatch` 这个中间量不一样——若未来有人
+   * 把 `graph.graph.fingerprint` 加回 `compareGraphOnlyStructure`，脚本打印的
+   * `contentMismatch=` 会从 false 翻成 true，并多出一条 `graph.graph.fingerprint 不一致` 的
+   * 差异文案。两条断言正是钉这两个可观察量。
+   */
+  /**
+   * F279：`graph.graph.fingerprint` **纳入**结构比较后的端到端行为（该决策曾反向，
+   * 经异构对抗审查证伪后撤回；见 `collector-fingerprint-guardrail.test.ts` 的同族用例注释）。
+   *
+   * 本用例同时钉死一条**闸门语义不变式**：pinned 侧指纹被降级后，`contentMismatch` 变为 true，
+   * 但因 `fingerprintUnchanged=false`，`shouldRejectRegen = contentMismatch ∧ fingerprintUnchanged`
+   * 仍为 false ⇒ 依旧放行。即"把 fingerprint 纳入比较"**不会**把一次合法的 bump 变成拒绝——
+   * 这正是当初排除它时最担心的误拒绝方向，此处正向证否。
+   */
+  it('F279：pinned 指纹降级 → contentMismatch=true 且指名 fingerprint 差异，但仍放行（闸门语义不变）', () => {
+    const fixtureRoot = stageFixtureRoot();
+    downgradeBehaviorVersionInBothAssets(fixtureRoot);
+
+    const run = runRegenScript(fixtureRoot);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('放行');
+    expect(run.stdout).toContain('contentMismatch=true');
+    expect(run.stdout).toContain('fingerprintUnchanged=false');
+    expect(run.stdout).toContain('graph.graph.fingerprint 不一致');
+  });
+
   it('contentMismatch=true 且指纹已变 → exit 0、放行、且打印具体差异文案（非空泛 differences 字样）', () => {
     const fixtureRoot = stageFixtureRoot();
     appendExportedFunctionToFooTs(fixtureRoot);
@@ -339,8 +373,12 @@ describe('再生脚本 — 拒绝场景三分（逐轨独立求值，FR-005(e)�
     // fixture 源码未动 → inputHash 未变 → 走 producer 行为漂移文案
     expect(run.stderr).toContain('检测到指纹不可见的行为变更');
     // 断到含格子与具体 node id 的完整定位文案（pinned 缺 lineRange ⇒ 重建侧"新增"）
+    // F279：pinned 侧被剥掉的是整棵 lineRange 子树 ⇒ 递归路径口径下重建侧"新增"三条
+    // （`lineRange` / `lineRange.end` / `lineRange.start`）。与单测 `:382` 那条方向相反、
+    // 处置一致——两处必须同口径，否则会出现"单测按新格式判绿、集成测试按旧格式判红"的
+    // 自相矛盾状态。
     expect(run.stderr).toContain(
-      `metadata key 集合不一致（重建缺失 [] vs 重建新增 [lineRange]）: ${victimId}`,
+      `metadata key 集合不一致（重建缺失 [] vs 重建新增 [lineRange, lineRange.end, lineRange.start]）: ${victimId}`,
     );
     // B2：metadata 维度专属处置指引（六类 bump responsibility 不覆盖节点字段集合）
     expect(run.stderr).toContain('六类 bump responsibility');

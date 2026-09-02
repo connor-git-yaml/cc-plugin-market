@@ -194,14 +194,39 @@ type GraphNodeLike = GraphJSON['nodes'][number];
  * 诊断文案的正确性与签名格式解耦。
  */
 interface NodeMetadataShape {
-  /** 相等性判定的唯一依据。正常 key 列表以 `[` 开头，两种缺席态以 `<` 开头。 */
+  /** 相等性判定的唯一依据。正常路径列表以 `[` 开头，两种缺席态以 `<` 开头。 */
   signature: string;
-  /** 已排序的 key 数组；两种缺席态（`<absent>` / `<non-object:*>`）为 `null`。 */
-  keys: string[] | null;
+  /**
+   * 已排序的**递归 key 路径**数组（F279 由顶层 key 数组下沉）；两种缺席态
+   * （`<absent>` / `<non-object:*>`）为 `null`。
+   */
+  paths: string[] | null;
 }
 
 /**
- * 提取节点 metadata 的形态描述（只看 key 名，全程不含任何 value）。
+ * F279：单个节点的**完整形态**（kind / label / metadata 三个 facet 合一）。
+ *
+ * 为什么不给 kind/label 各开一个平行的比较维度：`compareNodeShapes` 的"按 id 分组 +
+ * 重复 id 走 multiset + 单节点走富诊断"骨架是本文件复杂度最高的一段逻辑，三份平行骨架未来
+ * 独立演化必然产生行为分歧。三个 facet 共用同一份骨架、只在富诊断分支按 facet 分叉。
+ *
+ * 为什么 metadata 仍保留 `metadataPaths` 与 `metadataSignature` 的分离（沿用 F278 的理由）：
+ * 反解签名会让诊断正确性变成"签名恰好是规范 JSON 数组"这个实现细节的下游依赖。
+ */
+interface NodeShape {
+  /** kind facet 的签名：`<absent>` 或 `JSON.stringify(raw)`。 */
+  kindSignature: string;
+  /** label facet 的签名：同上。 */
+  labelSignature: string;
+  /** metadata facet 的相等性判定依据。正常路径列表以 `[` 开头，两种缺席态以 `<` 开头。 */
+  metadataSignature: string;
+  /** 已排序的**递归 key 路径**数组；两种缺席态（`<absent>` / `<non-object:*>`）为 `null`。 */
+  metadataPaths: string[] | null;
+}
+
+
+/**
+ * 提取节点 metadata 的形态描述（只看 key 名的**递归路径**，全程不含任何 value）。
  *
  * 为什么 `undefined` 与 `{}` 必须是两个不同签名（FR-007）：前者代表"该节点从未产出过
  * metadata"，是比"产出了但里面没有 key"更强的退化信号；混同会丢掉这一层诊断精度。
@@ -216,29 +241,146 @@ interface NodeMetadataShape {
  */
 function describeNodeMetadata(node: GraphNodeLike): NodeMetadataShape {
   const raw = (node as { metadata?: unknown }).metadata;
-  if (raw === undefined) return { signature: '<absent>', keys: null };
-  if (raw === null || typeof raw !== 'object') {
-    return { signature: `<non-object:${raw === null ? 'null' : typeof raw}>`, keys: null };
+  if (raw === undefined) return { signature: '<absent>', paths: null };
+  // 根层的"可展开性"判据 MUST 与嵌套层同源（`isRecursableMetadataValue`）。
+  // 对抗审查实测：根层若只判 `typeof raw !== 'object'`，数组不被排除、会被 `Object.keys`
+  // 当成 plain object 展开出下标 key ⇒ `metadata: []` 与 `metadata: {}`、
+  // `metadata: ["a"]` 与 `metadata: {"0": "b"}` 静默判一致；而每个嵌套层都由
+  // `isRecursableMetadataValue` 正确排除了数组。同一份数据在根层与子层按两套规则处理，
+  // 是本文件自己定下的递归规则（只递归 plain object、数组按叶子）没被贯彻到根。
+  if (!isRecursableMetadataValue(raw)) {
+    const kind = raw === null ? 'null' : Array.isArray(raw) ? 'array' : typeof raw;
+    return { signature: `<non-object:${kind}>`, paths: null };
   }
-  const keys = Object.keys(raw as Record<string, unknown>).sort();
-  return { signature: JSON.stringify(keys), keys };
+  // F279：从"顶层 key 数组"下沉为"递归 key 路径数组"。F271 的 lineRange 事件证明"只看顶层"
+  // 是会被真实踩中的盲区类别，而那个盲区在**任何**深度上都同构——内层 {start,end} 改名成
+  // {from,to} 时顶层 key 集合一字不变，旧签名对它零检测力。
+  const paths = collectMetadataKeyPaths(raw).sort();
+  return { signature: JSON.stringify(paths), paths };
 }
 
-/** 按 node id 分组的形态列表：`Map<nodeId, NodeMetadataShape[]>`（列表长度即该 id 的节点数）。 */
-function groupNodeMetadataShapes(
-  nodes: readonly GraphNodeLike[],
-): Map<string, NodeMetadataShape[]> {
-  const grouped = new Map<string, NodeMetadataShape[]>();
+/**
+ * F279：可缺席值的签名描述——节点标量 facet（`kind`/`label`）与图级字段共用同一口径。
+ *
+ * 为什么只有"缺席"一档而不照搬 metadata 的三档（`<absent>` / `<non-object:*>` / 值）：
+ * 本函数的入参都是**标量位**（`kind`/`label` 在 `graph-types.ts:55-65` 就是字符串；
+ * 图级字段虽可为对象，但整体走 `JSON.stringify` 值比较而非结构比较），不存在 metadata
+ * 那种"是对象还是非对象"的二阶判断需求；`JSON.stringify` 本身已天然区分空字符串（`""`）、
+ * `null`（`null`）与正常值（`"module"`），把"缺失 ≠ 存在但为空字符串"这条分档直接落到签名上。
+ *
+ * 为什么 `undefined` 必须单列 `<absent>` 而不是让 `JSON.stringify` 返回 `undefined`：
+ * `JSON.stringify(undefined)` 的返回值是 `undefined` 而非字符串，直接进签名会让类型说谎、
+ * 且与"字面量字符串 undefined"无法区分。而 `<absent>` 与**字面量字符串** `"<absent>"`
+ * 不会碰撞——后者经 `JSON.stringify` 会带上引号。
+ */
+function describeAbsentableValue(raw: unknown): string {
+  return raw === undefined ? '<absent>' : JSON.stringify(raw);
+}
+
+/** 节点标量 facet 取值 + 签名（`describeAbsentableValue` 的取字段包装）。 */
+function describeScalarField(node: GraphNodeLike, field: 'kind' | 'label'): string {
+  return describeAbsentableValue((node as unknown as Record<string, unknown>)[field]);
+}
+
+/**
+ * F279：metadata 递归路径的 segment 转义（**先**转义 `\` **再**转义 `.`）。
+ *
+ * 为什么顺序不能反：先转 `.` 会把 `a.b` 变成 `a\.b`，紧接着的 `\` 转义又会把刚写进去的
+ * 那个转义符再翻一倍（`a\\.b`），编码不再可逆、也不再单射。标准顺序是先转义转义符本身。
+ *
+ * 为什么必须转义（而不是直接用 `.` 拼）：key 名里出现字面 `.` 时，`{'a.b': 1}`（一个 segment）
+ * 与 `{a:{b:1}}`（两个 segment）会拼成同一个字符串 `a.b`，两个真实不同的结构会碰撞成同一个
+ * 签名——这是一个静默漏检面，不是展示瑕疵。
+ */
+function escapeMetadataPathSegment(segment: string): string {
+  return segment.replace(/\\/g, '\\\\').replace(/\./g, '\\.');
+}
+
+/** 是否可继续递归展开的 plain object（数组 / `null` 一律按叶子，FR-004）。 */
+function isRecursableMetadataValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * F279：递归收集 metadata 的 key 路径集合（只看 key 名，全程不含任何 value）。
+ *
+ * 为什么**先记录 key 自身路径、再判断是否递归**，而不是只记叶子：只记叶子的话
+ * `{lineRange:{}}`（有这个 key、但里面空）会产出 0 条路径，与 `{}`（根本没有这个 key）
+ * 的 0 条路径碰撞成同一签名——一个真实的字段增删就此静默。先记 key 自身即可把两者拉开
+ * （`['lineRange']` vs `[]`）。
+ *
+ * 为什么数组按叶子而不展开下标（FR-004）：展开会引入下标敏感性，`tags:['a','b']` 与
+ * `tags:['b','a']` 会因为 `tags.0`/`tags.1` 的存在性相同而仍判一致，却让"数组长度变了"
+ * 变成一堆 `tags.N` 噪声；本维度要抓的是字段增删，不是数组内容。
+ *
+ * 递归终止性依赖一个调用侧不变量：两侧实参都来自 `JSON.parse`（重建产物读盘 /
+ * pinned 资产读盘），JSON 值不可能含环。
+ */
+function collectMetadataKeyPaths(
+  value: Record<string, unknown>,
+  prefixSegments: readonly string[] = [],
+): string[] {
+  const paths: string[] = [];
+  for (const key of Object.keys(value)) {
+    const segments = [...prefixSegments, key];
+    paths.push(segments.map(escapeMetadataPathSegment).join('.'));
+    const child = value[key];
+    if (isRecursableMetadataValue(child)) {
+      paths.push(...collectMetadataKeyPaths(child, segments));
+    }
+  }
+  return paths;
+}
+
+
+
+/**
+ * F279：把三个 facet 合成一个节点形态。metadata 部分仍走 `describeNodeMetadata` 子过程
+ * （逻辑不变，只是调用关系从"直接被分组函数调用"变成"被本函数调用"）。
+ */
+function describeNodeShape(node: GraphNodeLike): NodeShape {
+  const metadata = describeNodeMetadata(node);
+  return {
+    kindSignature: describeScalarField(node, 'kind'),
+    labelSignature: describeScalarField(node, 'label'),
+    metadataSignature: metadata.signature,
+    metadataPaths: metadata.paths,
+  };
+}
+
+/**
+ * F279：三 facet 的**复合等价签名**，用作重复 id multiset 分支的计数 key。
+ *
+ * 为什么三个 facet 合成一个 key 而不是各开一个 multiset：重复 id 的节点之间本就没有可对应
+ * 的身份（既有实现刻意不做两两配对，见下方 `compareNodeShapes` 的注释），三份平行 multiset
+ * 换来的"精度"在这个场景下没有落点，却要付出三份去重骨架的重复代价。
+ *
+ * 复合不会削弱既有检测力：metadata 部分不等 ⇒ 复合签名必然不等；新增的是 kind/label 在重复
+ * id 场景下此前完全不可见的差异。
+ */
+function nodeShapeSignature(shape: NodeShape): string {
+  return JSON.stringify([shape.kindSignature, shape.labelSignature, shape.metadataSignature]);
+}
+
+/** 按 node id 分组的形态列表：`Map<nodeId, NodeShape[]>`（列表长度即该 id 的节点数）。 */
+function groupNodeShapes(nodes: readonly GraphNodeLike[]): Map<string, NodeShape[]> {
+  const grouped = new Map<string, NodeShape[]>();
   for (const node of nodes) {
     const bucket = grouped.get(node.id) ?? [];
-    bucket.push(describeNodeMetadata(node));
+    bucket.push(describeNodeShape(node));
     grouped.set(node.id, bucket);
   }
   return grouped;
 }
 
 /**
- * a-track 第三比较维度：按 node id 分组比较 metadata 的 **key 集合**（只比 key 名，不比 value）。
+ * a-track 第三比较维度：按 node id 分组比较节点形态——`kind` / `label` 两个标量 facet
+ * （F279 新增）+ metadata 的**递归 key 路径集合**（F278 建立、F279 下沉，只比 key 名不比 value）。
+ *
+ * 为什么 kind/label 落在这个维度而不是折进第一维度（节点 id multiset）的复合 key：折进去以后
+ * "某节点改了 label"会被报成"节点仅存在于重建产物 X" + "节点仅存在于 pinned X"两条互相矛盾
+ * 的文案——读者看到的是一个节点凭空消失又凭空出现，而不是"这个节点的 label 变了"。本维度
+ * 天生就是"同 id 节点的形态比较"，是三个 facet 唯一正确的落点。
  *
  * 为什么必须按 node id 分组而不是拍平成全图 key 并集（FR-006）：pinned 基线里 22 个节点的 key
  * 集合本就逐节点不同（symbol 节点有 `lineRange`/`signature`，module 节点没有），并集档位对
@@ -246,17 +388,19 @@ function groupNodeMetadataShapes(
  * 形态，当时既有两个维度全程判绿。
  *
  * 为什么只对"两侧 id 计数相等且都 > 0"的 id 求值：id 单侧独有或计数不等，第一维度已经报过了；
- * 在这里再报一遍会让每个真正的 metadata 差异淹没在同一事实的重复噪声里。
+ * 在这里再报一遍会让每个真正的形态差异淹没在同一事实的重复噪声里。
  *
- * 为什么不比 value（FR-008）：`confidence` 这类浮点字段的正常波动会把护栏变成噪声源，
- * 而本维度要抓的是"字段增删"这一类结构性漂移。
+ * 为什么不比 value（FR-008 / F279 FR-006）：`confidence` 这类浮点字段的正常波动会把护栏变成
+ * 噪声源，而本维度要抓的是"字段增删"这一类结构性漂移。注意 `kind`/`label` 是**按值比较**的，
+ * 这不是对上述原则的违反——它们不是"节点携带的元数据"，而是节点身份的一部分（F250 的
+ * `label mod.pyi→mod` 正是一次被漏掉的真实身份漂移）。
  */
-function compareNodeMetadataKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+function compareNodeShapes(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
   const differences: string[] = [];
-  const rebuiltGroups = groupNodeMetadataShapes(rebuilt.nodes);
-  const pinnedGroups = groupNodeMetadataShapes(pinned.nodes);
+  const rebuiltGroups = groupNodeShapes(rebuilt.nodes);
+  const pinnedGroups = groupNodeShapes(pinned.nodes);
 
-  // 遍历 entries 而非 keys：后者拿到 id 之后还得 `.get(id) as NodeMetadataShape[]` 断言非空，
+  // 遍历 entries 而非 keys：后者拿到 id 之后还得 `.get(id) as NodeShape[]` 断言非空，
   // 而那个断言的成立理由（id 就是从同一个 Map 的 keys 来的）只存在于人的脑子里。
   // 排序比较器与 `[...keys()].sort()` 的默认字符串序等价（默认 sort 就是按 UTF-16 码元比较）。
   const sortedRebuiltGroups = [...rebuiltGroups.entries()].sort(([left], [right]) =>
@@ -267,8 +411,8 @@ function compareNodeMetadataKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[
     if (pinnedShapes === undefined) continue;
     if (rebuiltShapes.length !== pinnedShapes.length) continue;
 
-    const rebuiltCounts = countByKey(rebuiltShapes.map((shape) => shape.signature));
-    const pinnedCounts = countByKey(pinnedShapes.map((shape) => shape.signature));
+    const rebuiltCounts = countByKey(rebuiltShapes.map(nodeShapeSignature));
+    const pinnedCounts = countByKey(pinnedShapes.map(nodeShapeSignature));
     const signatures = [...new Set([...rebuiltCounts.keys(), ...pinnedCounts.keys()])].sort();
     const signatureCountsEqual = signatures.every(
       (signature) => (rebuiltCounts.get(signature) ?? 0) === (pinnedCounts.get(signature) ?? 0),
@@ -276,47 +420,27 @@ function compareNodeMetadataKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[
     if (signatureCountsEqual) continue;
 
     // 重复 id（任一侧 ≥ 2 个同 id 节点）走通用 multiset 分支：这些节点之间没有可对应的身份，
-    // 强行两两配对去算 key 级 diff 会编造出误导性的"某个 key 丢了"结论。
+    // 强行两两配对去算字段级 diff 会编造出误导性的"某个 key 丢了"结论。
     if (rebuiltShapes.length !== 1) {
       for (const signature of signatures) {
         const rebuiltCount = rebuiltCounts.get(signature) ?? 0;
         const pinnedCount = pinnedCounts.get(signature) ?? 0;
         if (rebuiltCount !== pinnedCount) {
           differences.push(
-            `metadata key 签名计数不一致（重建 ${rebuiltCount} vs pinned ${pinnedCount}）: ${id} @ ${signature}`,
+            `节点形态签名计数不一致（重建 ${rebuiltCount} vs pinned ${pinnedCount}）: ${id} @ ${signature}`,
           );
         }
       }
       continue;
     }
 
-    // 单节点富诊断分支：现实中 100% 的场景（pinned 基线全部 id 唯一）。只报"签名计数 1 vs 1
-    // 不一致"读者看不出到底是哪个 key 变了，护栏变红却说不清为什么红。
-    const rebuiltShape = rebuiltShapes[0] as NodeMetadataShape;
-    const pinnedShape = pinnedShapes[0] as NodeMetadataShape;
-    // 提到局部 const 再判空：narrowing 必须在下面两个 `.filter` 闭包里仍然成立
-    const rebuiltKeys = rebuiltShape.keys;
-    const pinnedKeys = pinnedShape.keys;
-    if (rebuiltKeys === null || pinnedKeys === null) {
-      differences.push(
-        `metadata 缺席态不一致（重建 ${rebuiltShape.signature} vs pinned ${pinnedShape.signature}）: ${id}`,
-      );
-      continue;
-    }
-    const missing = pinnedKeys.filter((key) => !rebuiltKeys.includes(key));
-    const extra = rebuiltKeys.filter((key) => !pinnedKeys.includes(key));
-    if (missing.length === 0 && extra.length === 0) {
-      // 当前签名函数下不可达：签名是 key 集合的**规范**函数（排序后 JSON 序列化），
-      // 故"签名不等"必然蕴含"key 集合不等"。保留这一支不是防御性冗余，而是让
-      // "签名函数将来被改成非规范形式"这件事把自己说出来——否则它会静默退化成
-      // `重建缺失 [] vs 重建新增 []` 这句什么都没说的文案（正是 B3 要根除的形态）。
-      differences.push(
-        `metadata key 签名不一致但 key 集合相同（重建签名 ${rebuiltShape.signature} vs pinned 签名 ${pinnedShape.signature}）: ${id}`,
-      );
-      continue;
-    }
+    // 单节点富诊断分支：现实中 100% 的场景（pinned 基线全部 id 唯一）。
     differences.push(
-      `metadata key 集合不一致（重建缺失 [${missing.join(', ')}] vs 重建新增 [${extra.join(', ')}]）: ${id}`,
+      ...describeNodeShapeDifferences(
+        rebuiltShapes[0] as NodeShape,
+        pinnedShapes[0] as NodeShape,
+        id,
+      ),
     );
   }
 
@@ -324,12 +448,169 @@ function compareNodeMetadataKeys(rebuilt: GraphJSON, pinned: GraphJSON): string[
 }
 
 /**
- * a-track 严格结构比较：节点 id **multiset** + 边 **multiset** + 按 node id 分组的
- * 节点 metadata **key 集合**（F278 第三维度，只比 key 名不比 value）三者完全相等。
+ * 单个 id 上两侧节点形态的**逐 facet** 差异文案（`compareNodeShapes` 单节点分支的实现）。
+ *
+ * 为什么三个 facet 逐一比较、各自产出独立诊断行，而不是报一句"形态不一致"：一次改动同时
+ * 动了 kind 与 metadata 时，只报第一条会让第二条静默——而"还有什么也变了"恰恰是维护者
+ * 最需要的信息。只报"签名计数 1 vs 1 不一致"更差：护栏变红却说不清为什么红。
+ *
+ * 为什么从 `compareNodeShapes` 提出来：那个函数同时承担"分组 / 去重 / 重复 id multiset /
+ * 单节点富诊断"四件事，合起来超出本仓约定的函数长度上限；本分支逻辑内聚、纯函数、
+ * 可独立测试，是唯一的自然切分点。
+ */
+function describeNodeShapeDifferences(
+  rebuiltShape: NodeShape,
+  pinnedShape: NodeShape,
+  id: string,
+): string[] {
+  const differences: string[] = [];
+
+  for (const facet of ['kind', 'label'] as const) {
+    const left = facet === 'kind' ? rebuiltShape.kindSignature : rebuiltShape.labelSignature;
+    const right = facet === 'kind' ? pinnedShape.kindSignature : pinnedShape.labelSignature;
+    if (left !== right) {
+      differences.push(`节点 ${facet} 不一致（重建 ${left} vs pinned ${right}）: ${id}`);
+    }
+  }
+
+  if (rebuiltShape.metadataSignature === pinnedShape.metadataSignature) return differences;
+
+  // 提到局部 const 再判空：narrowing 必须在下面两个 `.filter` 闭包里仍然成立
+  const rebuiltPaths = rebuiltShape.metadataPaths;
+  const pinnedPaths = pinnedShape.metadataPaths;
+  if (rebuiltPaths === null || pinnedPaths === null) {
+    differences.push(
+      `metadata 缺席态不一致（重建 ${rebuiltShape.metadataSignature} vs pinned ${pinnedShape.metadataSignature}）: ${id}`,
+    );
+    return differences;
+  }
+  const missing = pinnedPaths.filter((path) => !rebuiltPaths.includes(path));
+  const extra = rebuiltPaths.filter((path) => !pinnedPaths.includes(path));
+  if (missing.length === 0 && extra.length === 0) {
+    // 当前签名函数下不可达：签名是 key 路径集合的**规范**函数（排序后 JSON 序列化），
+    // 故"签名不等"必然蕴含"key 路径集合不等"。保留这一支不是防御性冗余，而是让
+    // "签名函数将来被改成非规范形式"这件事把自己说出来——否则它会静默退化成
+    // `重建缺失 [] vs 重建新增 []` 这句什么都没说的文案（正是 B3 要根除的形态）。
+    differences.push(
+      `metadata key 签名不一致但 key 集合相同（重建签名 ${rebuiltShape.metadataSignature} vs pinned 签名 ${pinnedShape.metadataSignature}）: ${id}`,
+    );
+    return differences;
+  }
+  differences.push(
+    `metadata key 集合不一致（重建缺失 [${missing.join(', ')}] vs 重建新增 [${extra.join(', ')}]）: ${id}`,
+  );
+  return differences;
+}
+
+/**
+ * F279：`graph.graph` 比较的**排除集**（denylist，不是 allowlist）。
+ *
+ * 为什么是 denylist：allowlist 会重演本卡正在修的那类盲区——`graph.graph` 将来新增字段时
+ * 若没人记得同步白名单，新字段会静默落进"哪个维度都不比"的空洞，这正是 F271 lineRange
+ * 事件在另一个字段族上的翻版。denylist 的默认行为是"全比"，新字段自动进入护栏视野。
+ *
+ * **同一论证在本文件另外两处尚未兑现（诚实登记，不要把这段读成"全文件都是 denylist"）**：
+ * 节点侧 `describeNodeShape` 的三 facet（`kind`/`label`/`metadata`）与
+ * `compareGraphMetadata` 里的顶层 `['directed','multigraph']` 都是**硬编码 allowlist**，
+ * 新增字段同样会静默零覆盖。之所以本卡只把 `graph.graph` 一族改成 denylist，是因为卡的
+ * 授权范围就是这一族；另两处已连同边属性面一并登记为已知缺口移交后续卡。
+ *
+ * **维护纪律（denylist 策略的代价，必须显式化）**：新增环境/机器相关字段（其值随再生者
+ * 的机器、commit、dist 产物变化，而非随采集行为变化）时，**必须**在此登记并写明理由，
+ * 否则护栏会对该字段跨机器误报。反过来，任何"随采集行为变化"的字段（`nodeCount`/
+ * `edgeCount`/`schemaVersion`/`sources`/`skippedSources` 等）**MUST NOT** 被登记进来
+ * （FR-010）——排除它们等于把护栏的目标信号本身关掉。
+ *
+ * 当前**唯一**一条排除：
+ * - `builder`：字段本身与采集行为无关（宿主仓库/dist 构建戳 commit/dirty/distSha256，
+ *   跨机器必然不同），即便能取到也该排除——F261 D1「builder 戳只可见不判定」。
+ *   与 `tests/integration/graph-quality-pinned-staleness.test.ts:154` 的
+ *   `DEEP_COMPARE_EXCLUDED_PATHS` 逐字同一条，非本文件新发明。
+ *
+ * **`fingerprint` 曾被列入本表，经异构对抗审查证伪后撤回**（留痕，防止有人照旧理由加回去）：
+ * 当时的理由是"它已有一条独立通道 `runRegen` 的 `fingerprintUnchanged`"。该理由**不成立**——
+ * `fingerprintUnchanged = fingerprintsEqual(pinned.fingerprint, currentFingerprint)` 比的是
+ * **pinned 资产记录值**与**现算值**，两个操作数都不是重建产物；而本比较器比的是
+ * **重建产物**与 **pinned**。这是两个不同的事实，不是同一事实的双重计数。
+ * 排除它的实际后果是：`rebuilt.graph.graph.fingerprint`（即将被写进 pinned 资产的那个戳）
+ * 在脚本、比较器、护栏单测三处**无人读**——写盘链路若把坏戳烤进资产，此后
+ * `fingerprintUnchanged` 恒为 false ⇒ `shouldRejectRegen` 恒为 false ⇒ 拒绝语义永久失效。
+ * 「裸值比较与 canonical 比较会分歧」的顾虑同样不成立：`toSurfaceEntry`
+ * （`src/panoramic/graph/collector-fingerprint.ts:175-180`）对 `extensions` 做
+ * `[...].sort()`，注释明写是为 FR-017 的跨环境 byte-identical 要求，两侧同源同序。
+ */
+const GRAPH_GRAPH_EXCLUDED_FIELDS = new Set(['builder']);
+
+/**
+ * a-track 第四比较维度（F279）：`graph.graph` 元数据 + `GraphJSON` 顶层 `directed`/`multigraph`。
+ *
+ * 为什么这一族必须进护栏：`compareGraphDeep`（`tests/integration/graph-quality-pinned-staleness.test.ts`）
+ * 的文件头注释早就逐字点名过——`graph.nodeCount`/`graph.edgeCount` 等 `graph.*` 元数据字段
+ * 全部不参与比较"这恰恰是 pinned 资产陈旧的核心信号"。此前对它清空整段都判绿。
+ *
+ * 为什么比较字段集合取**两侧 key 并集**再减排除集，而不是遍历重建侧的 key：只遍历一侧时，
+ * "pinned 有而重建没有"的字段（即某个字段在新版采集里整个消失了）会静默——那正是本维度
+ * 最该抓的退化形态之一。
+ *
+ * 为什么 `directed`/`multigraph` 单独两行而不并进上面的循环：它们是 `GraphJSON` 的**顶层**
+ * 字段（`graph-types.ts:149,151`），不在 `graph.graph` 里，混进同一次迭代会让诊断文案里的
+ * `graph.graph.` 前缀说假话。
+ *
+ * 数组字段（`sources`/`skippedSources`）走 `JSON.stringify` 整体比较、**顺序敏感**：它们由
+ * 生产者按固定构建顺序写入，不是用户可重排的输入（区别于 FR-011 明确要求顺序不敏感的
+ * `nodes[]`/`links[]`），沿用 b-track `collectDeepDifferences` 对数组"顺序即语义"的既定处理。
+ */
+function compareGraphMetadata(rebuilt: GraphJSON, pinned: GraphJSON): string[] {
+  const differences: string[] = [];
+
+  // 一次运行时收窄：类型上 `graph` 必填，但两侧实参一侧来自磁盘 pinned JSON、一侧来自重建
+  // 产物的反序列化结果，历史资产完全可能整段缺席——按"必填"直接读会让退化信号变成崩溃。
+  const rebuiltMeta = ((rebuilt as { graph?: unknown }).graph ?? {}) as Record<string, unknown>;
+  const pinnedMeta = ((pinned as { graph?: unknown }).graph ?? {}) as Record<string, unknown>;
+
+  const fields = [...new Set([...Object.keys(rebuiltMeta), ...Object.keys(pinnedMeta)])]
+    .filter((field) => !GRAPH_GRAPH_EXCLUDED_FIELDS.has(field))
+    .sort();
+  for (const field of fields) {
+    const left = describeAbsentableValue(rebuiltMeta[field]);
+    const right = describeAbsentableValue(pinnedMeta[field]);
+    if (left !== right) {
+      differences.push(`graph.graph.${field} 不一致（重建 ${left} vs pinned ${right}）`);
+    }
+  }
+
+  for (const field of ['directed', 'multigraph'] as const) {
+    const left = describeAbsentableValue((rebuilt as unknown as Record<string, unknown>)[field]);
+    const right = describeAbsentableValue((pinned as unknown as Record<string, unknown>)[field]);
+    if (left !== right) {
+      differences.push(`${field} 不一致（重建 ${left} vs pinned ${right}）`);
+    }
+  }
+
+  return differences;
+}
+
+/**
+ * a-track 严格结构比较，四个维度全部相等才判一致：
+ *   1. 节点 id **multiset**
+ *   2. 边 **multiset**（`source|relation|target`）
+ *   3. 按 node id 分组的节点形态：`kind` / `label`（F279 新增）+ metadata **递归 key 路径集合**
+ *      （F278 第三维度，F279 由顶层 key 下沉；只比 key 名不比 value）
+ *   4. `graph.graph` 元数据 + 顶层 `directed`/`multigraph`（F279 新增，排除 `builder`）
+ *
+ * **覆盖面的诚实边界（MUST NOT 把下面这段删掉换成"任何差异都会变红"）**：上面四个维度
+ * **不是**全字段深比较，以下三面目前**零覆盖**，异构对抗审查已在真实 pinned 资产上逐条
+ * 实证判绿（F279 登记为已知缺口、移交后续卡，不在本卡授权范围内）：
+ *   - **边属性**：`edgeKey` 只取 `source|relation|target`，`GraphEdge` 的
+ *     `confidence`/`confidenceScore`/`directional`/`evidenceText`/`evidenceSource` 全部不参与
+ *     比较。实测：14 条边属性全改、三元组不动 ⇒ 再生脚本判"无需更新"并 exit 0。
+ *   - **节点非 facet 顶层字段**：维度 3 只看 `kind`/`label`/`metadata` 三个 facet，
+ *     给节点新增 `filePath`/`weight` 等顶层字段不报。
+ *   - **`GraphJSON` 非 `directed`/`multigraph` 顶层字段**：如 schema v2.0 的 `hyperedges`。
  *
  * 为什么不复用 `scripts/graph-semantic-diff.mjs`：那是 F214 时代的 allowlist 式 diff，
- * 设计目标是"忽略已知可接受差异"；本护栏的目标正相反——**任何**未预期差异都必须变红。
- * 用宽松比较器守严格护栏，等于把护栏关掉但保留仪式感。
+ * 设计目标是"忽略已知可接受差异"；本护栏的目标正相反——**在其覆盖的维度内**，任何未预期
+ * 差异都必须变红。用宽松比较器守严格护栏，等于把护栏关掉但保留仪式感。
  *
  * 为什么是 multiset 而非集合：重复边（同 source/relation/target 出现两次）是真实的图内容
  * 差异，用集合比较会把"边被复制了一份"判成一致。
@@ -368,8 +649,11 @@ export function compareGraphOnlyStructure(
     }
   }
 
-  const metadataDifferences = compareNodeMetadataKeys(rebuilt, pinned);
-  differences.push(...metadataDifferences);
+  const nodeShapeDifferences = compareNodeShapes(rebuilt, pinned);
+  differences.push(...nodeShapeDifferences);
+
+  const graphMetadataDifferences = compareGraphMetadata(rebuilt, pinned);
+  differences.push(...graphMetadataDifferences);
 
   return { mismatch: differences.length > 0, differences };
 }

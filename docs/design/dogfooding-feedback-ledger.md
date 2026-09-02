@@ -24,6 +24,43 @@
 
 ## 待处理
 
+### F279 · 2026-09-02
+状态：待处理
+来源：specs/279-guardrail-detection-widening/（story 全流程 + 两路异构对抗 + spec/quality 双审查）
+
+- [流程顺畅度][Spec Driver 审查子代理] **`spec-driver:spec-review` 子代理没有 Write/Edit 工具**，
+  但编排器按 SKILL 约定要求它产出 `verification/spec-review-report.md` —— 它只能把整份报告作为
+  chat 回复交付，由编排器手工转录落盘。这是一个**任务契约与工具配置不匹配**的缺口：
+  审查类子代理被要求写文件，却没有写文件的能力。改进方向：给审查类 agent 补受限 Write 权限
+  （仅限 `{feature_dir}/verification/`），或把 SKILL 里"产出报告文件"的措辞改为"返回报告正文，
+  由编排器落盘"。当前状态下若编排器不主动转录，一份完整的合规审查会**直接随会话流失**。
+- [流程顺畅度][Spec Driver 编排] `spec-driver:implement` 子代理在 **63 次工具调用 / 约 19 分钟**后
+  遭遇 `API Error: Connection lost mid-response`。代码改动已完整落盘且通过全部验收，但它**未能写出
+  实现笔记**，导致"红先行是否真的逐条先见 FAIL"的过程证据**永久丢失、无法追认**。
+  再现：F278 的 plan 子代理同轮也断过一次（重试后成功）。
+  改进方向：长任务子代理应**边做边落盘取证**（每完成一个 RED 任务就 append 一段），
+  而不是把全部证据攒到最后一次性写——否则中断即全失。本卡的补救是改用一种**可复现的替代证明**
+  （新测试 × `git show HEAD:` 旧实现 → 观察 FAIL），效果反而更强，可考虑固化为 SOP。
+- [结果准确性][Spec Driver plan 阶段] plan 子代理给出的一条裁决**建立在事实错误的论证上**，
+  且该错误**通过了 spec-review**（同构审查），最终被**异构对抗审查**推翻：它主张排除
+  `graph.graph.fingerprint`，理由是"已有 `fingerprintUnchanged` 这条独立通道"——但那条通道比的是
+  `pinned vs 现算值`，与比较器的 `rebuilt vs pinned` 是**两个不同的事实**。排除的实际后果是
+  重建产物 stamp 三处无人读，构成 fail-open 链。**这是"同构审查对门禁类改动结构性漏判"的第六次实证**
+  （前五次：F229/F262/F264/F266/F272），进一步支持 2026-09-01 把异构对抗升为常设要求的裁决。
+  同轮 plan 还有一处论证机制错误（用"`stageFixture` 不复制 `.git`"推"`sourceCommit` 恒 null"，
+  忽略 git 会向上追溯祖先目录）由编排器实跑反例当场拦下。
+- [信息完整性][仓库门禁] `tsconfig.json` 的 `include` 只有 `["src/**/*.ts"]`、`exclude` 含 `"tests"`，
+  ⇒ `npm run lint` / `npm run build` 对 `scripts/**` 与 `tests/**` **结构性零覆盖**
+  （实测 `tsc --listFilesOnly` 对本卡三个改动文件命中数均为 0）；`typecheck:tests` 也只覆盖
+  `tests/type-tests/` 下 3 个手挑文件。凡改动面全在这两个目录的卡，收尾清单里的 lint/build
+  **跑通不构成任何类型正确性证据**，极易被写成 over-claim。顺带暴露一条既存缺陷：
+  `scripts/lib/collector-fingerprint-regen-predicate.mjs` 无类型声明，从 TS 侧 import 是隐式 any
+  （TS7016，本卡未处置、超范围）。改进方向：单独立卡评估把 `scripts/`/`tests/` 纳入某条类型门禁。
+- [结果准确性][Spectra MCP graph] 再现：F278/F274 —— `repo:check` 全程告警
+  `图产物已 stale（source-commit）`（图记录 `765a9608` vs HEAD `e1105e8b`），
+  本卡因此**全程未使用 MCP `impact`/`context`**，caller 分析改用 grep。
+  与 F278 记录的张力同源：诚实标注避免误判，但也把工具排除在工作流之外。
+
 ### F278 · 2026-09-01
 状态：待处理
 来源：specs/278-honest-tooling-patches/（编排器验证记录 + 三路异构对抗复审）
