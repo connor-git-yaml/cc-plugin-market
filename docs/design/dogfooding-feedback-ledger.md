@@ -450,3 +450,35 @@
 - 指针：本卡 GATE_DESIGN 8 轮对抗（拆卡前 3 轮 22C → 拆卡后 5 轮 12C）的方法论收获已落
   `specs/276-fix-compliance-p0a-residue/verification/gate-design-adversarial-round*.md`；
   卡 A / 卡 B 的设计资本与待调研项在 `handoff/README.md`，milestone 规划时从该处回收
+
+### F277 · 2026-09-07
+状态：待处理
+来源：specs/277-spec-driver-engine-hardening/（交付报告反馈节；暂存草稿 25 条 + Phase E 新增 2 条 = 27 条，单位：反馈条；按四维度分列 流程顺畅度 13 + 信息完整性 7 + 结果准确性 3 + MCP 可用性 2 + 环境 2 = 27）
+
+- [流程顺畅度][spec-driver agents] specify / plan / tasks 三份 agent frontmatter 缺 `Edit` 与 `Bash`，「先落盘骨架再逐节 Edit」与「取计数」在物理上不可执行；本卡 FR-015 已修，此条记录其暴露过程（长文档子代理只能一次性 Write）
+- [流程顺畅度][spec-driver 编排 · 子代理可靠性] 长任务子代理死亡率高：R2 首次三路并发（600 ~ 830 s、27 ~ 55 次工具调用）全部被 API 中断零产出；改「先 Write 骨架 → 边查边 Edit、每路 ≤ 3 方向」后零再现。再现：F276（`Connection lost mid-response`）
+- [流程顺畅度][spec-driver 编排 · 子代理可靠性] 后台长任务子代理 600 s watchdog 停摆（Phase B 两次、D-c、γ、BD fix 共五次），全部停在「读完再写」阶段、盘上零增量；对策已固化：首个动作落盘骨架、单段 ≤ 10 条、验证型任务由编排器亲自跑验收命令后勾选。另：「[Request interrupted by user for tool use]」并不等于子代理已停，工作常继续而回传通道丢失，重派前必须先读盘
+- [流程顺畅度][spec-driver orchestrator-cli] `get-phases` 不输出 `gates_before / gates_after`，无法用它判断门挂载；本卡改用 `get-gate-behavior … --format json` 的 `mounted / mounting_violations` 面，未改 `get-phases` 输出
+- [流程顺畅度][spec-driver plan/tasks] 同 Phase 内后落地的改动使先写死的验证预期失效（A1 D-4 / D-5、A3 T078 vs 裁定 I-1）：plan / tasks 无机制自动发现，只能实现者实跑撞上后手工登记；改进方向：验收命令的期望值写「现取」而非字面量（本卡 SC-002 / SC-014 已按此改）
+- [流程顺畅度][repo:sync] `repo:sync` 是全量再生、无法只再生 wrapper（A3 D-13 / C D-18 / Phase E 三次再现）：改 SKILL 后 wrapper sha 门禁必红 → 跑 `repo:sync` → 顺带重刷 19 份无关产物（specs/products 时间戳 / adoption 计数 / suggestions）→ 每次须 `git show HEAD:` 逐份回退。改进方向：`repo:sync --only wrappers` 或按 source 变更集裁剪
+- [流程顺畅度][spec-driver tasks 模板] 验收文案「`git diff --exit-code` 零输出」在有未提交改动的工作树里恒非零（A3 (c)）；可执行的幂等判据是「快照 → sync → 逐字节 diff 为空」，模板宜给幂等验收标准写法
+- [流程顺畅度][spec-driver tasks 模板] 跨 Phase 乱序执行时「先回 T0xx 补建」指令失效（裁定 I-2 把 C 提前于 B 后，T071 指向的 T054 ~ T056 尚不存在）；模板宜为跨 Phase 依赖增加「前置 Phase 未执行时的处置」栏
+- [流程顺畅度][spec-driver 验收判据] FR-049 的代理判据（`git diff -G'暂停'` 为空）与 FR-060 正文语义结构性对撞：任何描述既有门停下行为的散文都被字面量匹配判红，块 3 整块被迫措辞避让；建议改为「新增门定义数」或「AskUserQuestion 调用点计数」
+- [流程顺畅度][spec-driver 编排 · 对抗修订] 编排器给出的修法本身可能引入不可证伪的守护项：我要求 FR-053 守护项改调 base 锚定谓词，实现方实证「resolver 已整份回退 base ⇒ 相对判据在强制 mode 上恒真」并拒绝照做（正确）。当前流程没有机制强制子代理对收到的修法做可证伪性核对，靠个体自觉
+- [流程顺畅度][spec-driver implementation-notes] 覆盖写约定与偏差账本追加需求冲突：文件已超千行，全量覆盖写的成本与丢失风险都在涨；建议定义「当前状态区（覆盖）+ 偏差账本区（追加）」两段结构
+- [流程顺畅度][spec-driver implement 纪律] 变异体必须能区分两道闸：12 组攻击构造全红时仍漏掉「截断前缀恰等于冻结快照」这条绕过，只有能区分「解析器 fail-loud」与「护栏逐字相等」的变异体才抓到；建议写进 implement 固定纪律
+- [流程顺畅度][git · 显式路径提交] 显式路径 `git add` 整批被 `.gitignore` 目录（`.specify/templates/**` 内已跟踪文件）拒绝且整批零 stage，须对该三份用 `git add -f` 单独加。再现：F253（「被排除父目录内文件只能 `git add -f`」）
+- [信息完整性][spec-driver 编排 scope] `agents-byte-budget` 候选集不含 CLAUDE.md，编排器 scope 阶段误报口径并传入 spec（R2-SC-C03 抓出）；候选集应从守护项源码 `AGENTS_CANDIDATES` 现取
+- [信息完整性][spec-driver 编排 scope] 「既有注入链恰两条且都硬编码」断言无穷举命令即写入 spec，被证伪（`scripts/sync-agent-docs.mjs` 通用表驱动引擎已存在），用户 Q4 裁定据此改判；教训：清单类断言必须附产生它的命令
+- [信息完整性][spec-driver plan] FR-053 守护项对照数写死会陈旧（plan 记「其余 90 / 92」，实测 80）：守护项验收须「以当次实跑为准」而非抄 plan 数字
+- [信息完整性][repo:check] 断言集「缩水」没有输出通道（β-C2）：`evidence.total` 12 → 9 时无字段表明射程比预期小；建议引擎级能力：族声明期望断言条数，聚合层比对下界
+- [信息完整性][spec-driver plan · Constitution Check] plan 可用未认领的 FR 为宪法原则背书（D-1 回放：F270 plan `:37` 以 FR-031 背书原则 XI，而 FR-031 零认领）——可机械检测形态：Constitution Check 引用的 FR 必须 ∈ 矩阵已认领集合。后续卡候选
+- [信息完整性][spec-driver verify · 补登] 事后补登本身会收缩范围（D-1 回放：F270 §8 补登 8 条 vs 机械回放 12 条未认领，其中 FR-021 被 F270 自己的 T701 判 CRITICAL 却不在补登内）——补登须由矩阵差集机械生成而非人工列举；本卡 FR-004 口径已覆盖，此条登记为实证
+- [信息完整性][spec-driver prose 手写副本] `agents/plan.md` (ii) 门禁类升格条款在 4 份 SKILL 内是手写副本而非注入块，本卡两轮白名单扩容都靠 sha 抽检守同步（γ-C5 预警面）；候选后续卡：改为第 6 个共享块
+- [结果准确性][spec-driver orchestrator-cli] `generate-template` 输出过不了自家 schema：phase id `0.5 / 3.5 / 5.5 / 6.5` 吐成数字（期望 string），原样存为 override 即 `schema-fallback`；预存 bug，本卡未修
+- [结果准确性][Spectra impact] `impact` 给 BFS 影响面，对「降级一个函数、确认它不再承重」这类审计不如 `grep` 直接（Phase A 对抗修订）：需要的是调用点 + 调用语境，而非可达集合
+- [结果准确性][Spectra graph-quality] 图 stale 与 reverse-census 主证源不匹配：`graph-quality:freshness` 全程 warn（sourceCommit 64b1d72f ≠ HEAD），plan 3.1 的 impact / context 只能作旁证、普查退回 `grep` 主证。再现：F270 / F275
+- [MCP 可用性][Spectra] 散文与判定器类改动是工具面系统性空档：A1 / A3 / C / B / D / E 各段均未能用 MCP（对象是 md / yaml / prompt），图只覆盖 ts / mjs 符号面。再现：F270 / F275
+- [MCP 可用性][Spectra] 本卡 Spectra MCP 仅 plan 阶段调用过 impact / context 作旁证（图 stale，未能当主证），specify / implement 各段 / verify / Phase E 均未调用（换算式：有效主证调用 0 ÷ 6 Phase = 0%，单位：Phase）——不是连接失败，是改动面（散文引擎 + 门守护脚本）与图覆盖面不相交；诚实登记而非省略
+- [环境][grep] 本机 `grep` 是 `ugrep -G --ignore-files` 的 shell function：遵守 .gitignore、无 `./` 前缀，输入包里 `grep -v "^./…"` 排除管道全空；影响「命令原文可复现」（FR-027）——本卡产物一律写 `command grep`
+- [环境][node --test 取数] `node --test` 汇总行用 `ℹ` 前缀，BSD grep 的 `.` 匹配不到多字节字符，脚本化取数会静默取空（三个变异体结果一度显示为空）；取数脚本须用固定字面前缀
