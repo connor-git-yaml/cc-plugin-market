@@ -1,0 +1,93 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第二轮 · δ-C1）：
+# 在锚点之前插入 base 未定义名字的**产出型** phase。
+# 锚点 phase 逐字保持 base 原样——不改 conditional / skip_if_exists、不删任何 phase、
+# 不改位序；只在序列最前加产出 spec.md / plan.md 的新 phase。
+# 运行时 shouldExecutePhase 会因 skip_if_exists 已被满足而整段跳过 specify / plan，
+# 使挂在它们上面的 GATE_DESIGN / GATE_TASKS 一次都不会被求值。
+version: "1.0"
+
+modes:
+  story:
+    name: "Story 模式（5 阶段：宪法-规范-规划-实现-验证）"
+    description: "基于 product-research 快速迭代小功能"
+    phases:
+      - id: "0.001"
+        name: spec_early
+        display_name: 预处理：提前产出 spec.md
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "0.002"
+        name: plan_early
+        display_name: 预处理：提前产出 plan.md
+        agent: plan
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "1"
+        name: constitution
+        display_name: Constitution 检查
+        agent: null
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      - id: "3"
+        name: plan
+        display_name: 技术规划+任务分解
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after:
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "4"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "5"
+        name: verify
+        display_name: 验证闭环
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

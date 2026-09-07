@@ -1,0 +1,81 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第三轮 · δ-C1 复现构造 S3）：
+# **一个 phase 都不增删、位序一字不改**——只把 base 已有的 `clarify`（idx 0，锚点 plan 的
+# 前驱）的 `agent` 由 `clarify` 改成 `plan`，让它提前产出 plan.md。
+# 名字仍在 base 里，第二轮判据据此豁免；而运行时 plan 会因 skip_if_exists 被跳过，
+# 挂在它上面的 GATE_DESIGN 一次都不会被求值。
+version: "1.0"
+
+modes:
+  implement:
+    name: "Implement 模式（6 阶段实现流程）"
+    description: "基于已有规范和规划进行代码实现"
+    phases:
+      - id: "1"
+        name: clarify
+        display_name: 需求澄清（快速检查）
+        agent: plan
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: false
+
+      - id: "2"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "3"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      - id: "4"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "5"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "6"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

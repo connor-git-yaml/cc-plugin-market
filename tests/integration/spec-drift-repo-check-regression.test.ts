@@ -110,9 +110,44 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
     // 该仓库若日后建锚、或再有新族接入，本断言会红并要求显式更新基线，这是有意为之
     // （F238 与 F239 的接入正是这样被本断言拦下并在此显式落账的；两者 rebase 汇合时
     // 清单按 validateRepository 的族追加顺序取并集）。
+    //
+    // F277（K14）：清单由 8 项更新为**当次提交已落地的集合**。当前 = **13** 项，
+    // 换算式：既有 8 + Phase A 已落地 3 + Phase C 已落地 2 = 13，单位：check id；
+    // Phase A 的 3 = `agent-docs:shared-section:orchestrator-gate-mounting-guard` 1
+    // + `agent-tools:required` 1 + `gate-mounting:effective-config` 1；
+    // Phase C 的 2 = `agent-docs:shared-section:agent-output-discipline`（块 1） 1
+    // + `agent-docs:shared-section:gate-tasks-scope-cut-acceptance`（块 3） 1。
+    // **这是预期变更，不是回归**——本断言的设计意图（见上方 (d)）正是「新族接入必须被
+    // 拦下并显式落账」。
+    //
+    // ⚠️ **本清单的更新口径 = 当次已落地集合，不是终值**（F277 implement 阶段裁定 I-1）。
+    // 早前写法是在 Phase A 就写死终值 14，那会让 `npx vitest run` 从 Phase A 一路红到
+    // Phase D——而仓规要求「提交前全量单测零失败」，任何中间提交都会因此违规。改为逐
+    // Phase 更新后守护力不变：仍是**精确数组相等**，新族接入照样被拦下并显式落账，只是
+    // 落账的时点跟着交付批次走。
+    //
+    // 分阶段值（每完成一个 Phase 就把下方数组更新为当次的落地集合，届时本断言转绿）：
+    //   Phase A 段 A2 收口（新族 2 接线）        → 8 + 2 = 10
+    //   Phase A 段 A3 收口（块 2 的 entry 落地） → 8 + 3 = 11
+    //   Phase C 收口（块 1 / 块 3 两个 entry）   → 8 + 5 = 13 ← **当前值**
+    //   Phase D 收口（块 4 entry，裁定 D-③）    → 8 + 6 = 14 ← 终值
+    //
+    // ⚠️ **族内排序契约**：`agent-docs` 族的各 id 顺序 == `sync-agent-docs.mjs` 的
+    // `sectionConfigs` **数组追加顺序**。下方顺序按各块的落地 Phase 钉死，故后续 Phase
+    // 新增 entry 一律 **append 到数组末尾**，不得插到已落地 entry 之前——插队即让本断言
+    // 以「顺序不符」形式红，而那是排版问题不是接线问题，会污染本断言的信号。
+    //
+    // `tests/fixtures/spec-drift/repo-check/repo-check-baseline.json` **[禁改]**：
+    // 以「同步基线」为名更新它即为把本守护项自身关掉。
     const baselineIds = new Set(baseline.checks.map((c) => c.id));
     const added = allIds.filter((id) => !baselineIds.has(id));
     expect(added).toEqual([
+      // F277：`agent-docs` 是 `validateRepository` 的**第 1 族**，故新增的
+      // `shared-section:*` 按族追加顺序排在全部既有新增项之前。
+      'agent-docs:shared-section:orchestrator-gate-mounting-guard', // 块 2 · Phase A（T026）
+      'agent-docs:shared-section:agent-output-discipline', // 块 1 · Phase C（T069）
+      'agent-docs:shared-section:gate-tasks-scope-cut-acceptance', // 块 3 · Phase C（T069）
+      // Phase D 落地后在此追加：'agent-docs:shared-section:gate-design-convergence-loop'（块 4 · 裁定 D-③）
       // F264：`spec-driver-wrappers` 族内新增的窄门禁——扫 Codex wrapper 是否残留 Claude 专属
       // MCP 命名空间（Codex 下该前缀恒不存在，照抄等于让它去调一个不存在的工具名）。它落在
       // 第 4 族内，故按族追加顺序排在图质量族之前。
@@ -124,6 +159,10 @@ describe('repo:check 接入第 13/14/15 族后的零回归（SC-007）', () => {
       'worktree-local-state:worktreeinclude-entries',
       'worktree-local-state:worktreeinclude-ignored-verified',
       'worktree-local-state:agents-byte-budget',
+      // F277：第 16 / 17 族，位次由 `repo-maintenance-core.mjs` 的
+      // `aggregateValidation` 插入顺序决定（两族均追加在 `worktree-local-state` 之后）。
+      'agent-tools:required', // FR-017：8 条断言收敛为单个 check id
+      'gate-mounting:effective-config', // FR-053：12 条断言收敛为单个 check id
     ]);
   }, 120_000);
 

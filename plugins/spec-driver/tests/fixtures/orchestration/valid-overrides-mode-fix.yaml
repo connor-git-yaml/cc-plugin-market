@@ -1,4 +1,5 @@
-# T1 fixture: fix mode 整段重写（裁剪为 2 个 phase）+ GATE_DESIGN 字段覆盖
+# T1 fixture: fix mode 整段重写（裁剪为 2 个 phase）+ GATE_DESIGN.severity 字段覆盖
+# severity 不在 FR-052 禁改集内（Feature 277），可安全用作字段级合并载体。
 version: "1.0"
 
 modes:
@@ -29,4 +30,4 @@ modes:
 
 gates:
   GATE_DESIGN:
-    default_behavior: auto
+    severity: non_critical

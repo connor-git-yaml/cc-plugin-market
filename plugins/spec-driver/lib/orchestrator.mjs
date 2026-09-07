@@ -10,7 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseYamlDocument } from '../scripts/lib/simple-yaml.mjs';
 import { generateFallbackConfig } from './orchestrator-fallback.mjs';
-import { orchestrationBaseSchema, formatZodIssue, zodAvailable } from '../contracts/orchestration-schema.mjs';
+import { orchestrationBaseSchema, formatZodIssue, evaluateGateMountingAgainstBase, zodAvailable } from '../contracts/orchestration-schema.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +23,9 @@ export class Orchestrator {
    * @param {Object} [options.preloadedConfig] - 预加载好的 merged orchestration config（由 resolveOrchestrationConfig 提供）。
    *   存在时直接使用，跳过 loadAndValidateConfig() 文件读取，防止 CLI 读取两次 YAML 且确保使用合并后的 config。
    *   不传时行为与迁移前完全一致（向后兼容）。
+   * @param {Object} [options.baseConfig] - base（未经项目级 overrides 的）orchestration config，
+   *   门挂载判据的锚点来源。不传时退回 `this.config`——`loadAndValidateConfig()` 与
+   *   `generateFallbackConfig()` 两条路径读到的本来就是 base，自锚定即「无覆盖」，恒无违规。
    */
   constructor(userConfig, mode, context = {}, options = {}) {
     this.userConfig = userConfig || {};
@@ -37,8 +40,10 @@ export class Orchestrator {
     } else {
       this.loadAndValidateConfig();
     }
+    this.baseConfig = options.baseConfig || this.config;
 
     this.buildGateBehaviorMap();
+    this.buildGateMountingMap();
     this.buildPhaseMap();
     this.buildParallelGroupMap();
   }
@@ -147,6 +152,39 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * 构建 Gate 挂载映射表（FR-052 / FR-068）
+   *
+   * `mounted` 回答的是「这道门在本 mode 的 effective phase 序列里会不会被求值」，
+   * 与 `buildGateBehaviorMap` 回答的「它被求值时该怎么表现」是两件事：后者只遍历
+   * `config.gates`、从不查 `modes.<mode>.phases`，因此门被删掉挂载时它仍答
+   * `is_hard_gate: true`。`mounted: false` 时 `is_hard_gate: true` 不构成
+   * 「门在场」的证据。
+   *
+   * 判据是 `evaluateGateMountingAgainstBase`（**base 锚定的可达性**），不是纯结构
+   * 存在性——后者会被「挂到 conditional 恒假 / skip_if_exists 恒真的幽灵 phase」
+   * 与「挂到序列末尾」整类绕过（Phase A 对抗审查 α-C1 / α-C2 / α-C3）。
+   *
+   * 取不到一律按 `false`（判不出⇒从严）。fallback 情形下 `this.config` 与
+   * `this.baseConfig` 同为 `generateFallbackConfig()` 的返回值，本方法照常算得出。
+   *
+   * @private
+   */
+  buildGateMountingMap() {
+    this.gateMountingMap = {};
+    this.gateMountingDetailMap = {};
+    // 并上 base 的 gate id：覆盖删掉某个 gate 定义时，它的挂载事实仍须可查
+    const gateIds = new Set([
+      ...Object.keys(this.config.gates || {}),
+      ...Object.keys(this.baseConfig?.gates || {}),
+    ]);
+    for (const gateId of gateIds) {
+      const detail = evaluateGateMountingAgainstBase(this.config, this.baseConfig, this.mode, gateId);
+      this.gateMountingDetailMap[gateId] = detail;
+      this.gateMountingMap[gateId] = detail.mounted;
+    }
+  }
+
   /** @private */
   buildPhaseMap() {
     this.phaseMap = {};
@@ -184,6 +222,31 @@ export class Orchestrator {
       behavior: 'on_failure', source: 'default',
       severity: 'non_critical', isHardGate: false,
     };
+  }
+
+  /**
+   * 该 gate 是否被本 mode 的 phase 序列挂载（FR-052 的 `mounted` 字段）。
+   * 未知 gate id / 未知 mode / 配置读不出来一律返回 `false`（判不出⇒从严）。
+   * @param {string} gateId
+   * @returns {boolean}
+   */
+  getGateMounting(gateId) {
+    return this.gateMountingMap[gateId] === true;
+  }
+
+  /**
+   * 该 gate 的门挂载判定明细（FR-052 / FR-068 的 `mounted_in_base` 与
+   * `mounting_violations` 两个输出字段的来源）。
+   *
+   * 未预先算过的 gate id（例如 base 与 effective 都没有该 gate 定义）现场算一次，
+   * 而不是返回 `undefined`——`undefined` 会让下游的蕴含式判据空转（F270 教训）。
+   *
+   * @param {string} gateId
+   * @returns {{ mountedInBase: boolean, mounted: boolean, anchors: Array, violations: Array }}
+   */
+  getGateMountingDetail(gateId) {
+    return this.gateMountingDetailMap?.[gateId]
+      ?? evaluateGateMountingAgainstBase(this.config, this.baseConfig, this.mode, gateId);
   }
 
   getParallelGroup(groupId) {

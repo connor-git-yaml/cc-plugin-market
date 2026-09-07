@@ -15,6 +15,11 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { Orchestrator, validateOrchestrationYaml, evaluateCondition } from '../lib/orchestrator.mjs';
 import { generateFallbackConfig } from '../lib/orchestrator-fallback.mjs';
 import { orchestrationBaseSchema } from '../contracts/orchestration-schema.mjs';
@@ -391,5 +396,265 @@ describe('Base Zod Schema 回归（T-025）', () => {
       gates: { GATE_DESIGN: {} },
     });
     assert.equal(r3.valid, true, '含 modes 的合法配置应通过薄壳校验');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// Gate 挂载映射 buildGateMountingMap（FR-052 / FR-068 · Feature 277 T008）
+//
+// 既有缺陷：buildGateBehaviorMap 只遍历 config.gates、从不查 modes.<mode>.phases，
+// 因此门被删掉挂载时 is_hard_gate 仍答 true——「配置上完好、执行上不存在」。
+// mounted 是把「该 gate 在本 mode 的 effective phase 序列里是否真会被求值」
+// 这一既有事实透出来，不引入任何新的编排语义。
+// ═════════════════════════════════════════════════════════════
+
+describe('Gate Mounting Map（FR-052 mounted 字段）', () => {
+  it('feature：GATE_DESIGN / GATE_TASKS 均挂载（gates_before ∪ gates_after）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.equal(orch.getGateMounting('GATE_DESIGN'), true, 'feature 的 phase 3.5/4 挂载 GATE_DESIGN');
+    assert.equal(orch.getGateMounting('GATE_TASKS'), true, 'feature 的 phase 5.5/6 挂载 GATE_TASKS');
+  });
+
+  it('feature：未被任何 phase 挂载的 gate 为 false（GATE_IMPLEMENT_MID 仅 implement 用）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.equal(orch.getGateMounting('GATE_IMPLEMENT_MID'), false);
+  });
+
+  it('resume：base 不挂载 GATE_DESIGN → mounted=false（既有编排事实，本卡不改）', () => {
+    const orch = new Orchestrator({}, 'resume', { logger: silentLogger });
+    assert.equal(orch.getGateMounting('GATE_DESIGN'), false, 'resume 的 phase 序列不挂载 GATE_DESIGN');
+    assert.equal(orch.getGateMounting('GATE_TASKS'), true, 'resume 挂载 GATE_TASKS');
+  });
+
+  it('fix：base 只挂 GATE_DESIGN，GATE_TASKS 命中数为 0', () => {
+    const orch = new Orchestrator({}, 'fix', { logger: silentLogger });
+    assert.equal(orch.getGateMounting('GATE_DESIGN'), true);
+    assert.equal(orch.getGateMounting('GATE_TASKS'), false);
+  });
+
+  it('取不到一律按 false（未知 gate id / 未知 mode，判不出⇒从严）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.equal(orch.getGateMounting('GATE_NOT_EXIST'), false, '未知 gate id 应按 false');
+    assert.equal(orch.getGateMounting(undefined), false, 'undefined gate id 应按 false');
+
+    const bogus = new Orchestrator({}, 'no_such_mode', { logger: silentLogger });
+    assert.equal(bogus.getGateMounting('GATE_DESIGN'), false, '未知 mode 应按 false');
+  });
+
+  it('gateMountingMap 覆盖 config.gates 的全部 gate（不是只有被挂载的那几个）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const gateIds = Object.keys(orch.config.gates || {});
+    assert.ok(gateIds.length > 0, 'base 应有 gate 定义');
+    for (const gateId of gateIds) {
+      assert.equal(
+        typeof orch.gateMountingMap[gateId], 'boolean',
+        `gateMountingMap 应含 ${gateId} 且为 boolean`,
+      );
+    }
+  });
+
+  // 裁定 A-② 第 1 层：fallback 情形下 this.config 就是 generateFallbackConfig() 的
+  // 返回值，mounted 由同一段代码算出，无需额外覆盖代码。
+  it('fallback 路径：mounted 仍可算出（裁定 A-② 第 1 层）', () => {
+    const fallback = generateFallbackConfig();
+    const orch = new Orchestrator({}, 'implement', { logger: silentLogger }, { preloadedConfig: fallback });
+    assert.equal(orch.getGateMounting('GATE_TASKS'), true, 'fallback 的 implement 挂载 GATE_TASKS');
+    // 已登记的既有缺口：fallback 的 implement 段不挂载 GATE_DESIGN，而 base 挂载它。
+    // 本卡不补齐该挂载（属改变既有编排事实），此断言把该缺口钉成可见事实而非默认放行。
+    assert.equal(
+      orch.getGateMounting('GATE_DESIGN'), false,
+      'fallback 的 implement 不挂载 GATE_DESIGN —— 已登记的既有缺口，机械保障仍缺席',
+    );
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// get-gate-behavior 输出面（FR-052 / FR-068 · Feature 277 T010）
+//
+// 新增 mounted（effective 侧）与 mounted_in_base（base 侧同一算法）。
+// mounted_in_base 是裁定 A-③ 判据的另一半：缺它则按 FR-068 字面口径实现
+// 会使 resume / fix 永久 BLOCKED（二者在 base 里就不挂载对应的门）。
+// ═════════════════════════════════════════════════════════════
+
+describe('get-gate-behavior 输出面（mounted / mounted_in_base）', () => {
+  const CLI_PATH = path.join(
+    path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'orchestrator-cli.mjs',
+  );
+
+  /** 跑 CLI 并解析 JSON 输出 */
+  function runGateBehavior(mode, gateId, extraArgs = []) {
+    const r = spawnSync('node', [CLI_PATH, 'get-gate-behavior', mode, gateId, ...extraArgs], {
+      encoding: 'utf-8',
+      timeout: 30000,
+    });
+    assert.equal(r.status, 0, `CLI 应以 0 退出，stderr: ${r.stderr}`);
+    return JSON.parse(r.stdout);
+  }
+
+  it('既有 8 个输出字段一个不少（向后兼容，不得因加字段而挤掉旧字段）', () => {
+    const out = runGateBehavior('feature', 'GATE_DESIGN');
+    for (const field of [
+      'success', 'mode', 'gate_id', 'behavior', 'source', 'is_hard_gate', 'severity', 'description',
+    ]) {
+      assert.ok(field in out, `既有字段 ${field} 应仍在输出中`);
+    }
+    assert.equal(out.success, true);
+    assert.equal(out.is_hard_gate, true, 'feature 下 GATE_DESIGN 仍是硬门禁');
+  });
+
+  it('新增 mounted 与 mounted_in_base 两字段（feature / GATE_DESIGN 均为 true）', () => {
+    const out = runGateBehavior('feature', 'GATE_DESIGN');
+    assert.equal(out.mounted, true, 'feature 的 phase 3.5/4 挂载 GATE_DESIGN');
+    assert.equal(out.mounted_in_base, true, 'base 侧同一算法应同为 true');
+  });
+
+  it('resume / GATE_DESIGN：两字段同为 false —— 按 FR-068 字面口径实现会使 resume 永久 BLOCKED', () => {
+    const out = runGateBehavior('resume', 'GATE_DESIGN');
+    assert.equal(out.mounted, false);
+    assert.equal(out.mounted_in_base, false);
+    // 判据是 mounted_in_base === true ⇒ mounted === true；此处前件为假，蕴含式成立、不 BLOCKED
+  });
+
+  it('fix / GATE_TASKS：两字段同为 false（fix 段 GATE_TASKS 命中数 = 0）', () => {
+    const out = runGateBehavior('fix', 'GATE_TASKS');
+    assert.equal(out.mounted, false);
+    assert.equal(out.mounted_in_base, false);
+  });
+
+  it('两字段类型必须是 boolean（不得是 undefined —— undefined 会让蕴含式判据空转）', () => {
+    for (const [mode, gate] of [['story', 'GATE_TASKS'], ['implement', 'GATE_DESIGN'], ['feature', 'GATE_IMPLEMENT_MID']]) {
+      const out = runGateBehavior(mode, gate);
+      assert.equal(typeof out.mounted, 'boolean', `${mode}/${gate} 的 mounted 应为 boolean`);
+      assert.equal(typeof out.mounted_in_base, 'boolean', `${mode}/${gate} 的 mounted_in_base 应为 boolean`);
+    }
+  });
+
+  it('删门挂载的 override 下：mounted_in_base 仍为 true（base 侧不受 override 影响）', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-mounting-cli-'));
+    try {
+      fs.mkdirSync(path.join(tmpDir, '.specify'), { recursive: true });
+      fs.copyFileSync(
+        path.join(path.dirname(fileURLToPath(import.meta.url)),
+          'fixtures', 'orchestration', 'attack-feature-drops-gate-design.yaml'),
+        path.join(tmpDir, '.specify', 'orchestration-overrides.yaml'),
+      );
+      const out = runGateBehavior('feature', 'GATE_DESIGN', ['--project-root', tmpDir]);
+      // resolver 已拒绝该覆盖并回退 base，故 effective 侧也应重新挂上
+      assert.equal(out.mounted_in_base, true, 'base 侧挂载不受 override 影响');
+      assert.equal(out.mounted, true, '覆盖被拒 + 回退 base 后 effective 侧应重新挂载');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// mounted 的语义升级（Phase A 对抗修订 · α-C1 / α-C2 / α-C3）
+//
+// 修订前 mounted 是纯结构存在性（「gates_* 数组里有没有这个字符串」），
+// 三类构造能在不删任何东西的情况下让门一次都不被求值而 mounted 仍答 true。
+// 现在 mounted = 与 base 锚定且可达：同名同侧仍挂、无新增抑制条件、位序保持。
+// ═════════════════════════════════════════════════════════════
+
+describe('get-gate-behavior · mounting_violations 与 base 锚定语义', () => {
+  const CLI = path.join(
+    path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'orchestrator-cli.mjs',
+  );
+  const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'orchestration');
+
+  /** 跑 CLI，同时返回 stdout 解析结果与 stderr 原文 */
+  function runCli(args) {
+    const r = spawnSync('node', [CLI, ...args], { encoding: 'utf-8', timeout: 30000 });
+    assert.equal(r.status, 0, `CLI 应以 0 退出，stderr: ${r.stderr}`);
+    return { json: JSON.parse(r.stdout), stderr: r.stderr };
+  }
+
+  /** 建一个带指定 overrides fixture 的临时项目根 */
+  function withOverrides(fixtureName, fn) {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gate-mounting-adv-'));
+    try {
+      fs.mkdirSync(path.join(tmpDir, '.specify'), { recursive: true });
+      fs.copyFileSync(path.join(FIXTURES, fixtureName), path.join(tmpDir, '.specify', 'orchestration-overrides.yaml'));
+      return fn(tmpDir);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  it('新增 mounting_violations 字段，干净仓根下为空数组（不是 undefined）', () => {
+    const { json } = runCli(['get-gate-behavior', 'feature', 'GATE_DESIGN']);
+    assert.ok(Array.isArray(json.mounting_violations), 'mounting_violations 必须是数组');
+    assert.deepEqual(json.mounting_violations, [], '无 overrides 时不应有违规');
+  });
+
+  for (const [label, fixture] of [
+    ['α-C1 幽灵 conditional', 'attack-feature-ghost-conditional.yaml'],
+    ['α-C2 幽灵 skip_if_exists', 'attack-feature-ghost-skip-if-exists.yaml'],
+    ['α-C3 挂到序列末尾', 'attack-feature-mount-at-end.yaml'],
+  ]) {
+    it(`${label}：resolver 拒绝并回退 base ⇒ mounted 仍为 true（诚实值），BLOCKED 由 error 级 diagnostic 承担`, () => {
+      withOverrides(fixture, (root) => {
+        const { json, stderr } = runCli(['get-gate-behavior', 'feature', 'GATE_DESIGN', '--project-root', root]);
+        // 覆盖被拒 + 整份回退 base ⇒ effective ≡ base ⇒ mounted: true 是诚实值而非 fail-open
+        assert.equal(json.mounted, true, '回退 base 后 effective 侧重新挂上门');
+        assert.equal(json.mounted_in_base, true);
+        assert.deepEqual(json.mounting_violations, [], '回退后 effective ≡ base，无残留违规');
+        // 三道防线里真正在这一步说话的是 diagnostics
+        assert.match(stderr, /gate-mounting-lost/, `应在 stderr 报出 gate-mounting-lost；实际: ${stderr}`);
+
+        const eff = runCli(['effective-orchestration', 'feature', '--format', 'json', '--project-root', root]);
+        assert.equal(
+          eff.json.diagnostics.filter(d => d.level === 'error' && d.code === 'orchestration-overrides.gate-mounting-lost').length,
+          1,
+          `FR-068 判据 2 必须在此触发；实际: ${JSON.stringify(eff.json.diagnostics)}`,
+        );
+      });
+    });
+  }
+
+  it('非强制 mode（fix）上的幽灵门位：resolver 不拒 ⇒ mounted=false + mounted_in_base=true + 逐条 violations', () => {
+    // 前提核实：base 的 fix 段确实挂载 GATE_DESIGN（否则本用例测的是空集）
+    const baseFix = new Orchestrator({}, 'fix', { logger: silentLogger });
+    assert.equal(baseFix.getGateMounting('GATE_DESIGN'), true);
+
+    withOverrides('attack-fix-ghost-conditional.yaml', (root) => {
+      const { json } = runCli(['get-gate-behavior', 'fix', 'GATE_DESIGN', '--project-root', root]);
+      assert.equal(json.mounted_in_base, true, 'base 的 fix 挂载 GATE_DESIGN');
+      assert.equal(json.mounted, false, '幽灵门位不构成可达挂载');
+      assert.ok(json.mounting_violations.length > 0, '必须给出逐条违规明细');
+      assert.ok(
+        json.mounting_violations.every(v => ['missing-anchor', 'suppressor-added', 'order-broken'].includes(v.kind)),
+        `未知 violation kind: ${JSON.stringify(json.mounting_violations)}`,
+      );
+
+      // fix 不在强制 mode 集内 ⇒ resolver 不拒 ⇒ 幽灵 phase 真的落进了 effective
+      const eff = runCli(['effective-orchestration', 'fix', '--format', 'json', '--project-root', root]);
+      assert.equal(
+        eff.json.diagnostics.filter(d => d.level === 'error').length, 0,
+        `fix 不在 FR-052 丙射程内，不应报 error；实际: ${JSON.stringify(eff.json.diagnostics)}`,
+      );
+      assert.ok(
+        eff.json.config.modes.fix.phases.some(p => p.name === 'ghost_gate'),
+        '幽灵 phase 应真实存在于 effective 配置中（否则本用例没测到东西）',
+      );
+    });
+  });
+
+  it('getGateMountingDetail 对未知 gate id 现场算，返回对象而非 undefined（undefined 会让蕴含式判据空转）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    const detail = orch.getGateMountingDetail('GATE_NOT_EXIST');
+    assert.equal(typeof detail, 'object');
+    assert.equal(detail.mountedInBase, false);
+    assert.equal(detail.mounted, false);
+    assert.deepEqual(detail.violations, []);
+  });
+
+  it('baseConfig 不传时自锚定为 this.config —— 无覆盖场景恒无违规（向后兼容）', () => {
+    const orch = new Orchestrator({}, 'feature', { logger: silentLogger });
+    assert.equal(orch.baseConfig, orch.config, '未注入 baseConfig 时应退回 this.config');
+    for (const gateId of ['GATE_DESIGN', 'GATE_TASKS']) {
+      assert.deepEqual(orch.getGateMountingDetail(gateId).violations, []);
+      assert.equal(orch.getGateMounting(gateId), true);
+    }
   });
 });

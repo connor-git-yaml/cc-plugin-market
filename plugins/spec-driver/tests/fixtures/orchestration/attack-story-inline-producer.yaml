@@ -1,0 +1,95 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第三轮 · δ-C1 复现构造 F1）：
+# 新名字，但 `agent: null` + `agent_mode: inline`——第二轮的 `isProducerPhase`
+# 把「agent 为 null」当作「不产出制品」而豁免。
+# 该前提被 base 自己证伪：`feature.research_synthesis` / `feature.online_research`
+# 都是 `agent: null, agent_mode: inline` 且各自带 `skip_if_exists: research/*.md`，
+# 即 base 正是用 skip_if_exists 声明「这个 inline phase 会写出这个文件」。
+# 两个插队 phase 同时挂了 GATE_VERIFY（门位不在其把守的产出之前，属摆设）。
+version: "1.0"
+
+modes:
+  story:
+    name: "Story 模式（5 阶段：宪法-规范-规划-实现-验证）"
+    description: "基于 product-research 快速迭代小功能"
+    phases:
+      - id: "0.1"
+        name: spec_early_inline
+        display_name: 预处理：inline 提前产出 spec.md
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: false
+
+      - id: "0.2"
+        name: plan_early_inline
+        display_name: 预处理：inline 提前产出 plan.md
+        agent: null
+        agent_mode: inline
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: false
+
+      - id: "1"
+        name: constitution
+        display_name: Constitution 检查
+        agent: null
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      - id: "3"
+        name: plan
+        display_name: 技术规划+任务分解
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after:
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "4"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "5"
+        name: verify
+        display_name: 验证闭环
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

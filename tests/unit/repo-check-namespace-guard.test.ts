@@ -234,3 +234,48 @@ describe('validateNamespaceConsistency — 真实项目集成检查', () => {
     expect(result.checks.every((c) => c.status === 'pass')).toBe(true);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// 重复 tools: 键（Feature 277 Phase A 对抗审查 α-W2）
+//
+// 解析器 fail-loud 之后，本族必须做到两件事：判 fail（不吞成 pass），
+// 且不把整条 repo:check 链炸掉（其余 agent 的结论完整保留）。
+// ═══════════════════════════════════════════════════════════════
+
+describe('validateNamespaceConsistency —— 重复 tools: 键 fail-loud（α-W2）', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'ns-dupkey-'));
+    writePluginJson(tempDir, 'spectra');
+    writeMcpJson(tempDir, 'spectra');
+    for (const agentFile of AGENT_FILES) {
+      writeAgentFile(tempDir, agentFile, ['mcp__plugin_spectra_spectra__impact']);
+    }
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('某一份 agent 出现两个 tools: 键 → 该项判 fail，其余 agent 的 check 完整保留', async () => {
+    const { validateNamespaceConsistency } = await importNamespaceCore();
+    const baseline = validateNamespaceConsistency(tempDir);
+    expect(baseline.status).toBe('pass');
+    const baselineIds = baseline.checks.map((c) => c.id).sort();
+
+    // 诱饵：合法 namespace 的行内数组；真实声明用块状序列
+    writeFileSync(
+      join(tempDir, 'plugins/spec-driver/agents/plan.md'),
+      '---\ntools: [mcp__plugin_spectra_spectra__impact]\ntools:\n'
+        + '  - mcp__WRONG_NAMESPACE__impact\n---\n\n# plan\n',
+    );
+
+    const result = validateNamespaceConsistency(tempDir);
+    expect(result.status).toBe('fail');
+    // 不得因 throw 而丢结论：check id 集合与基线一致
+    expect(result.checks.map((c) => c.id).sort()).toEqual(baselineIds);
+    expect(result.checks.filter((c) => c.status === 'fail')).toHaveLength(1);
+    expect(result.errors.join('\n')).toMatch(/拒绝解析|歧义/);
+  });
+});

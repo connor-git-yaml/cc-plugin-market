@@ -1,0 +1,69 @@
+# 攻击 fixture（Feature 277 · Phase A 对抗修订 · α-C1 的非强制 mode 变体）
+#
+# 与 attack-feature-ghost-conditional.yaml 同构，但打在 fix 上——fix 不在 FR-052 丙的
+# 强制 mode 集内，resolver **不拒**该覆盖，故幽灵门位会真正落进 effective 配置。
+# 这是唯一能在 CLI 输出面上直接观察到 mounted=false + mounting_violations 的路径：
+# 强制 mode 上的同类构造会被 resolver 拒绝并整份回退 base，effective ≡ base 之后
+# mounted 重新变回 true（诚实值，BLOCKED 改由 error 级 diagnostic 承担）。
+#
+# 它同时是「CLI 是否真把 baseConfig 传给了 Orchestrator」的鉴别用例：
+# 若 CLI 漏传、让 effective 自锚定，本 fixture 下 mounted 会错答 true。
+version: "1.0"
+modes:
+  fix:
+    name: "Fix 模式（4 阶段：诊断-规划-修复-验证）"
+    description: "快速处理 bug 和小型修复"
+    phases:
+      - id: "0.01"
+        name: "ghost_gate"
+        display_name: "恒假门位"
+        agent: null
+        agent_mode: "gate"
+        gates_before: null
+        gates_after:
+          - "GATE_DESIGN"
+          - "GATE_TASKS"
+        conditional: "never_true_flag == true"
+        skip_if_exists: null
+        is_critical: false
+      - id: "1"
+        name: "diagnose"
+        display_name: "问题诊断"
+        agent: null
+        agent_mode: "single"
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+      - id: "2"
+        name: "plan"
+        display_name: "修复规划"
+        agent: "plan"
+        agent_mode: "single"
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+      - id: "3"
+        name: "implement"
+        display_name: "代码修复"
+        agent: "implement"
+        agent_mode: "single"
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+      - id: "4"
+        name: "verify"
+        display_name: "验证闭环"
+        agent: "verify"
+        agent_mode: "single"
+        gates_before: null
+        gates_after:
+          - "GATE_VERIFY"
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

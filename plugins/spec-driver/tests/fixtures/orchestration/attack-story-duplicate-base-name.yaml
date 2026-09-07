@@ -1,0 +1,82 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第三轮 · δ-C1 复现构造 S2）：
+# **不引入任何新名字**——只把 base 已有的 `constitution` 复制成两份，分别跑 specify / plan，
+# 提前产出 spec.md / plan.md。四个锚点 phase 逐字照抄 base（不改 conditional /
+# skip_if_exists / 位序 / agent）。
+# 第二轮的「foreign = base 未定义名字」判据只看名字，对这一形态结构性失明：
+# 两份 constitution 的名字都在 base 里，于是三道防线全绿而两道门零求值。
+version: "1.0"
+
+modes:
+  story:
+    name: "Story 模式（5 阶段：宪法-规范-规划-实现-验证）"
+    description: "基于 product-research 快速迭代小功能"
+    phases:
+      - id: "0.1"
+        name: constitution
+        display_name: Constitution 检查（副本一：提前产出 spec.md）
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "0.2"
+        name: constitution
+        display_name: Constitution 检查（副本二：提前产出 plan.md）
+        agent: plan
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      - id: "3"
+        name: plan
+        display_name: 技术规划+任务分解
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after:
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "4"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "5"
+        name: verify
+        display_name: 验证闭环
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

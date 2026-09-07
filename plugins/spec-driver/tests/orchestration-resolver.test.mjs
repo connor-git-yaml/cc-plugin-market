@@ -102,15 +102,15 @@ describe('T1 合并测试', () => {
     }
   });
 
-  it('T1-3: 覆盖 GATE_DESIGN.default_behavior → 字段级合并，其余字段保留 base', async () => {
+  it('T1-3: 覆盖 GATE_DESIGN.severity → 字段级合并，其余字段保留 base', async () => {
     const tmpDir = createTempProjectDir('valid-overrides-gate.yaml');
     try {
       const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
       assert.equal(result.isFallback, false, 'isFallback 应为 false');
-      // 被 overrides 覆盖的字段
-      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.default_behavior, 'auto', 'GATE_DESIGN.default_behavior 应被覆盖为 auto');
+      // 被 overrides 覆盖的字段（载体由 default_behavior 换为 severity：前者已进 FR-052 禁改集）
+      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.severity, 'non_critical', 'GATE_DESIGN.severity 应被覆盖为 non_critical');
       // 未覆盖的字段应保留 base 值
-      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.severity, 'critical', '未覆盖的 severity 应保留 base 值 critical');
+      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.default_behavior, 'always', '未覆盖的 default_behavior 应保留 base 值 always');
       assert.ok(
         Array.isArray(result.mergedConfig.gates?.GATE_DESIGN?.hard_gate_modes),
         'hard_gate_modes 应仍存在（来自 base）',
@@ -141,8 +141,8 @@ describe('T1 合并测试', () => {
       assert.equal(result.fieldSources['modes.fix'], 'overrides', 'modes.fix 应标记为 overrides');
       // modes.feature 应仍标记为 base
       assert.equal(result.fieldSources['modes.feature'], 'base', 'modes.feature 应标记为 base');
-      // GATE_DESIGN.default_behavior 应被标记为 overrides
-      assert.equal(result.fieldSources['gates.GATE_DESIGN.default_behavior'], 'overrides', 'GATE_DESIGN.default_behavior 应标记为 overrides');
+      // GATE_DESIGN.severity 应被标记为 overrides
+      assert.equal(result.fieldSources['gates.GATE_DESIGN.severity'], 'overrides', 'GATE_DESIGN.severity 应标记为 overrides');
     } finally {
       cleanupTempDir(tmpDir);
     }
@@ -320,7 +320,7 @@ describe('T2 降级路径测试', () => {
       assert.ok(unsupportedDiag, 'diagnostics 中应包含 unsupported-field');
       // 合法 gate 覆盖仍然生效（AC-023）
       assert.equal(result.isFallback, false, '仅 parallel_groups 被 strip，其余合法字段应生效');
-      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.default_behavior, 'auto', 'GATE_DESIGN.default_behavior 应仍被覆盖为 auto');
+      assert.equal(result.mergedConfig.gates?.GATE_DESIGN?.severity, 'non_critical', 'GATE_DESIGN.severity 应仍被覆盖为 non_critical');
     } finally {
       cleanupTempDir(tmpDir);
     }
@@ -905,5 +905,583 @@ describe('T-GL goal_loop 声明层（Feature 201）', () => {
       `GATE_VERIFY.default_behavior 应锁定为 always，实际: ${gateVerify.default_behavior}`);
     assert.equal(gateVerify.severity, 'critical',
       `GATE_VERIFY.severity 应锁定为 critical，实际: ${gateVerify.severity}`);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// T5 — FR-052 禁改集丙：门挂载校验（Feature 277 · T006）
+//
+// 攻击路径：只整段替换 modes.<强制 mode>、完全不碰 gates: 块，把挂载
+// GATE_DESIGN 的 phase 删掉。禁改集甲乙对它结构性不可见——gate 定义一个
+// 字节都没改，get-gate-behavior 仍答 is_hard_gate: true / behavior: always，
+// 而 effective phase 序列里门一次都不会被求值。
+// ═════════════════════════════════════════════════════════════
+
+/** 从一份 mode 定义里剥掉所有对 gateId 的挂载（模拟「整段替换删门」） */
+function stripGateMounting(modeDef, gateId) {
+  return {
+    ...modeDef,
+    phases: modeDef.phases
+      // 删掉纯 gate phase（其存在的唯一目的就是挂这道门）
+      .filter(p => !((p.gates_after || []).includes(gateId) && (p.gates_after || []).length === 1
+        && (p.gates_before || []).length === 0))
+      .map(p => ({
+        ...p,
+        gates_before: (p.gates_before || []).filter(g => g !== gateId),
+        gates_after: (p.gates_after || []).filter(g => g !== gateId),
+      }))
+      .map(p => ({
+        ...p,
+        gates_before: p.gates_before.length > 0 ? p.gates_before : null,
+        gates_after: p.gates_after.length > 0 ? p.gates_after : null,
+      })),
+  };
+}
+
+/** 取一次 base 配置（无 overrides 路径） */
+async function loadBaseConfigForTest() {
+  const tmpDir = createTempProjectDir(null);
+  try {
+    const { baseConfig } = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+    return baseConfig;
+  } finally {
+    cleanupTempDir(tmpDir);
+  }
+}
+
+/** 判断 gate 是否在某个 effective mode 的 phase 序列中被挂载 */
+function isGateMounted(config, mode, gateId) {
+  const phases = config?.modes?.[mode]?.phases || [];
+  return phases.some(p =>
+    (p.gates_before || []).includes(gateId) || (p.gates_after || []).includes(gateId));
+}
+
+describe('T5 门挂载校验（FR-052 禁改集丙）', () => {
+  it('T5-1: modes.feature 整段替换删掉 GATE_DESIGN 挂载 → error 级 diagnostic + 回退 base', async () => {
+    const tmpDir = createTempProjectDir('attack-feature-drops-gate-design.yaml');
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+
+      const errorDiags = result.diagnostics.filter(d => d.level === 'error');
+      assert.ok(
+        errorDiags.length > 0,
+        `删门挂载必须发 error 级 diagnostic（不是 warning、不是静默丢弃），实际 diagnostics: ${JSON.stringify(result.diagnostics)}`,
+      );
+      const mountingDiag = errorDiags.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+      assert.ok(mountingDiag, `应有 gate-mounting-lost diagnostic，实际: ${JSON.stringify(result.diagnostics)}`);
+      assert.equal(mountingDiag.level, 'error', 'gate-mounting-lost 的级别必须是 error');
+
+      assert.equal(result.isFallback, true, '门挂载校验失败必须回退 base（isFallback=true）');
+      assert.equal(result.isBaseInvalid, false, 'base 本身没坏，isBaseInvalid 应为 false');
+
+      // 回退后 effective 必须重新挂上门——只发 diagnostic 却让覆盖生效等于没修
+      assert.ok(
+        isGateMounted(result.mergedConfig, 'feature', 'GATE_DESIGN'),
+        '回退 base 后 feature 必须重新挂载 GATE_DESIGN',
+      );
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  it('T5-2: 违规项精确到 gate——GATE_TASKS 仍挂载时不得被误报', async () => {
+    const tmpDir = createTempProjectDir('attack-feature-drops-gate-design.yaml');
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+      assert.ok(diag, '应有 gate-mounting-lost diagnostic');
+      const violations = diag.context?.violations || [];
+      assert.deepEqual(
+        violations.map(v => `${v.mode}.${v.gateId}`).sort(),
+        ['feature.GATE_DESIGN'],
+        `攻击 fixture 只删了 GATE_DESIGN，GATE_TASKS 仍挂载，不得误报；实际: ${JSON.stringify(violations)}`,
+      );
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  it('T5-3: 保留门挂载的 modes.feature 整段替换仍被接受（防守护过宽）', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    // 整段替换 feature，但把两处 GATE_DESIGN / GATE_TASKS 挂载原样保留
+    const overrides = {
+      version: baseConfig.version,
+      modes: { feature: JSON.parse(JSON.stringify(baseConfig.modes.feature)) },
+    };
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => overrides,
+    });
+    assert.equal(
+      result.diagnostics.filter(d => d.level === 'error').length, 0,
+      `保留挂载的整段替换不应报 error，实际: ${JSON.stringify(result.diagnostics)}`,
+    );
+    assert.equal(result.isFallback, false, '合法的整段替换不应回退');
+  });
+
+  it('T5-4: 射程覆盖 story / implement 两个强制 mode', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    for (const mode of ['story', 'implement']) {
+      const overrides = {
+        version: baseConfig.version,
+        modes: { [mode]: stripGateMounting(baseConfig.modes[mode], 'GATE_DESIGN') },
+      };
+      const result = await resolveOrchestrationConfig({
+        projectRoot: '/nonexistent',
+        _loadOverrides: () => overrides,
+      });
+      const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+      assert.ok(diag, `${mode} 删掉 GATE_DESIGN 挂载应被拒绝，实际: ${JSON.stringify(result.diagnostics)}`);
+      assert.equal(diag.level, 'error', `${mode} 的 gate-mounting-lost 级别应为 error`);
+      assert.equal(result.isFallback, true, `${mode} 删门后应回退 base`);
+    }
+  });
+
+  it('T5-5: 射程边界——fix 不在强制 mode 集内，resolver 侧不拒（由 FR-068 运行时守卫承担）', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    // base 的 fix 段确实挂载 GATE_DESIGN，但 FR-052 (丙) 的强制 mode 只含
+    // feature / story / implement；此处如实登记该边界，不擅自扩射程。
+    assert.ok(isGateMounted(baseConfig, 'fix', 'GATE_DESIGN'), 'base 的 fix 应挂载 GATE_DESIGN（前提核实）');
+    const overrides = {
+      version: baseConfig.version,
+      modes: { fix: stripGateMounting(baseConfig.modes.fix, 'GATE_DESIGN') },
+    };
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => overrides,
+    });
+    assert.equal(
+      result.diagnostics.filter(d => d.code === 'orchestration-overrides.gate-mounting-lost').length, 0,
+      'fix 不在 FR-052 (丙) 射程内，resolver 侧不应拒绝（守护由 FR-068 承担）',
+    );
+  });
+
+  it('T5-6: 强制 mode 清单从 base 的 hard_gate_modes 派生，不是写死的字面量', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    // 把 refactor 加进 GATE_DESIGN.hard_gate_modes（模拟 base 演进），
+    // 同时整段替换 modes.refactor 并删掉 GATE_DESIGN 挂载 → 必须被拒。
+    // 判据若写成 ['feature','story','implement'] 字面量，此处必漏（F259 反模式）。
+    const evolvedBase = JSON.parse(JSON.stringify(baseConfig));
+    evolvedBase.gates.GATE_DESIGN.hard_gate_modes = ['feature', 'refactor'];
+    // 给 refactor 挂上 GATE_DESIGN，使「base 有挂载」成立
+    evolvedBase.modes.refactor.phases[0].gates_after = ['GATE_DESIGN'];
+
+    const overrides = {
+      version: evolvedBase.version,
+      modes: { refactor: stripGateMounting(evolvedBase.modes.refactor, 'GATE_DESIGN') },
+    };
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadBase: () => evolvedBase,
+      _loadOverrides: () => overrides,
+    });
+    const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+    assert.ok(
+      diag,
+      `hard_gate_modes 新增 refactor 后，refactor 应自动进入射程；实际: ${JSON.stringify(result.diagnostics)}`,
+    );
+    assert.equal(result.isFallback, true, '应回退 base');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// T6 — Phase A 对抗修订：判据由「结构存在性」升为「base 锚定的可达性」
+//
+// α-C1 / α-C2 / α-C3 三类构造在修订前能让 resolver、FR-068 运行时守卫、
+// FR-053 事后守护**三道防线同时判绿**：它们都不删任何东西，只是把门改挂到
+// 一个不会被执行的 phase（conditional 恒假 / skip_if_exists 恒真）或挂到
+// 序列末尾。修订前实测：get-gate-behavior 答 mounted: true，
+// effective-orchestration 的 diagnostics 只有 info，validate-gate-mounting
+// status = pass（12 条断言全绿）。
+// ═════════════════════════════════════════════════════════════
+
+/** 把 mode 定义里全部 gateId 挂载摘掉（保留 phase 本身，不删 phase） */
+function stripGateRefsOnly(modeDef, gateIds) {
+  const drop = (list) => {
+    const kept = (list || []).filter(g => !gateIds.includes(g));
+    return kept.length > 0 ? kept : null;
+  };
+  return {
+    ...modeDef,
+    phases: modeDef.phases.map(p => ({ ...p, gates_before: drop(p.gates_before), gates_after: drop(p.gates_after) })),
+  };
+}
+
+/** 造一个挂着两道门、但带指定抑制开关的幽灵 phase */
+function ghostGatePhase(suppressors) {
+  return {
+    id: '0.01',
+    name: 'ghost_gate',
+    display_name: '幽灵门位',
+    agent: null,
+    agent_mode: 'gate',
+    gates_before: null,
+    gates_after: ['GATE_DESIGN', 'GATE_TASKS'],
+    conditional: null,
+    skip_if_exists: null,
+    is_critical: false,
+    ...suppressors,
+  };
+}
+
+describe('T6 门挂载可达性（Phase A 对抗修订 · α-C1 / α-C2 / α-C3）', () => {
+  const ATTACK_FIXTURES = [
+    ['α-C1 幽灵 conditional', 'attack-feature-ghost-conditional.yaml'],
+    ['α-C2 幽灵 skip_if_exists', 'attack-feature-ghost-skip-if-exists.yaml'],
+    ['α-C3 挂到序列末尾', 'attack-feature-mount-at-end.yaml'],
+  ];
+
+  for (const [label, fixture] of ATTACK_FIXTURES) {
+    it(`T6-1 ${label}（${fixture}）→ error 级 gate-mounting-lost + 回退 base`, async () => {
+      const tmpDir = createTempProjectDir(fixture);
+      try {
+        const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+        const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+        assert.ok(diag, `${label} 必须被拒；实际 diagnostics: ${JSON.stringify(result.diagnostics)}`);
+        assert.equal(diag.level, 'error', `${label} 的级别必须是 error`);
+        assert.equal(result.isFallback, true, `${label} 必须回退 base`);
+
+        // 回退后 effective 必须重新挂上门，且幽灵 phase 不得残留在 effective 里
+        assert.ok(isGateMounted(result.mergedConfig, 'feature', 'GATE_DESIGN'));
+        assert.equal(
+          result.mergedConfig.modes.feature.phases.some(p => String(p.name || '').startsWith('ghost_gate')),
+          false,
+          '回退 base 后不得残留幽灵 phase',
+        );
+
+        // 违规明细必须逐条可读（不是只给一个布尔）
+        const violations = diag.context?.violations || [];
+        assert.ok(violations.length > 0, '违规清单不得为空');
+        for (const v of violations) {
+          assert.ok(Array.isArray(v.violations) && v.violations.length > 0, `${v.mode}.${v.gateId} 应带逐锚点明细`);
+          for (const item of v.violations) {
+            assert.ok(
+              ['missing-anchor', 'suppressor-added', 'order-broken'].includes(item.kind),
+              `未知 violation kind: ${item.kind}`,
+            );
+            assert.ok(typeof item.detail === 'string' && item.detail.length > 0, 'detail 不得为空');
+          }
+        }
+      } finally {
+        cleanupTempDir(tmpDir);
+      }
+    });
+  }
+
+  it('T6-2 story / implement 上的同构造（幽灵 conditional）同样被拒', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    for (const mode of ['story', 'implement']) {
+      const stripped = stripGateRefsOnly(baseConfig.modes[mode], ['GATE_DESIGN', 'GATE_TASKS']);
+      const overrides = {
+        version: baseConfig.version,
+        modes: { [mode]: { ...stripped, phases: [ghostGatePhase({ conditional: 'never_true_flag == true' }), ...stripped.phases] } },
+      };
+      const result = await resolveOrchestrationConfig({
+        projectRoot: '/nonexistent', _loadOverrides: () => overrides,
+      });
+      const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+      assert.ok(diag, `${mode} 的幽灵门位应被拒；实际: ${JSON.stringify(result.diagnostics)}`);
+      assert.equal(result.isFallback, true, `${mode} 应回退 base`);
+    }
+  });
+
+  it('T6-3 story / implement 上的同构造（幽灵 skip_if_exists）同样被拒', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    for (const mode of ['story', 'implement']) {
+      const stripped = stripGateRefsOnly(baseConfig.modes[mode], ['GATE_DESIGN', 'GATE_TASKS']);
+      const overrides = {
+        version: baseConfig.version,
+        modes: { [mode]: { ...stripped, phases: [ghostGatePhase({ skip_if_exists: 'spec.md' }), ...stripped.phases] } },
+      };
+      const result = await resolveOrchestrationConfig({
+        projectRoot: '/nonexistent', _loadOverrides: () => overrides,
+      });
+      const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+      assert.ok(diag, `${mode} 的幽灵门位应被拒；实际: ${JSON.stringify(result.diagnostics)}`);
+      assert.equal(result.isFallback, true, `${mode} 应回退 base`);
+    }
+  });
+
+  it('T6-4 锚点 phase 被原地加上抑制开关 → suppressor-added（不删任何东西的最小攻击）', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    const feature = JSON.parse(JSON.stringify(baseConfig.modes.feature));
+    // 只给挂着 GATE_DESIGN / GATE_TASKS 的 phase 各加一个恒假 conditional，其余一字未动
+    for (const p of feature.phases) {
+      const mounts = [...(p.gates_before || []), ...(p.gates_after || [])];
+      if (mounts.includes('GATE_DESIGN') || mounts.includes('GATE_TASKS')) {
+        p.conditional = 'never_true_flag == true';
+      }
+    }
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => ({ version: baseConfig.version, modes: { feature } }),
+    });
+    const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+    assert.ok(diag, `原地加抑制开关应被拒；实际: ${JSON.stringify(result.diagnostics)}`);
+    const kinds = (diag.context?.violations || []).flatMap(v => v.violations.map(x => x.kind));
+    assert.ok(kinds.includes('suppressor-added'), `应含 suppressor-added；实际 kinds: ${JSON.stringify(kinds)}`);
+    assert.equal(result.isFallback, true);
+  });
+
+  it('T6-5 位序被破坏（plan 移到 gate_design 之前）→ order-broken', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    const feature = JSON.parse(JSON.stringify(baseConfig.modes.feature));
+    const gateIdx = feature.phases.findIndex(p => p.name === 'gate_design');
+    const planIdx = feature.phases.findIndex(p => p.name === 'plan');
+    assert.ok(gateIdx >= 0 && planIdx > gateIdx, `前提核实：base 的 gate_design(${gateIdx}) 应在 plan(${planIdx}) 之前`);
+    const [planPhase] = feature.phases.splice(planIdx, 1);
+    feature.phases.splice(gateIdx, 0, planPhase);   // plan 前移到 gate_design 之前
+
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => ({ version: baseConfig.version, modes: { feature } }),
+    });
+    const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+    assert.ok(diag, `位序破坏应被拒；实际: ${JSON.stringify(result.diagnostics)}`);
+    const kinds = (diag.context?.violations || []).flatMap(v => v.violations.map(x => x.kind));
+    assert.ok(kinds.includes('order-broken'), `应含 order-broken；实际 kinds: ${JSON.stringify(kinds)}`);
+  });
+
+  it('T6-6 既有合法 fixture 结论不变（防守护过宽：goal-loop 整段替换仍被接受）', async () => {
+    const tmpDir = createTempProjectDir('valid-overrides-goal-loop.yaml');
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(
+        result.diagnostics.filter(d => d.code === 'orchestration-overrides.gate-mounting-lost').length, 0,
+        `goal-loop 逐字段等价的整段替换不得被新判据误伤；实际: ${JSON.stringify(result.diagnostics)}`,
+      );
+      assert.equal(result.isFallback, false, 'goal-loop 覆盖应生效，不得回退');
+      assert.equal(
+        result.mergedConfig.modes.feature.phases.find(p => p.id === '6')?.agent_mode, 'goal_loop',
+        'goal_loop 覆盖的实际效果须仍然生效',
+      );
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  it('T6-7 base 的 plan phase 自带 skip_if_exists 且挂 GATE_DESIGN —— 原样保留不得判红', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    const planPhase = baseConfig.modes.feature.phases.find(p => p.name === 'plan');
+    // 前提核实：这是合法锚点的实况，不是假设
+    assert.equal(planPhase.skip_if_exists, 'plan.md');
+    assert.deepEqual(planPhase.gates_before, ['GATE_DESIGN']);
+
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadOverrides: () => ({
+        version: baseConfig.version,
+        modes: { feature: JSON.parse(JSON.stringify(baseConfig.modes.feature)) },
+      }),
+    });
+    assert.equal(
+      result.diagnostics.filter(d => d.level === 'error').length, 0,
+      `带 skip_if_exists 的合法锚点原样保留时不得报 error；实际: ${JSON.stringify(result.diagnostics)}`,
+    );
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// β-C2 —— base 缺强制 mode 段：射程完整性的 error diagnostic
+//
+// 「effective 相对 base 失去了什么」是相对量；base 里那个 mode 整段没了，
+// 这个量判不出——判不出不是「没失去」。旧实现少转两圈、violations 为空、
+// 一次「一道门都不挂」的 story 运行全程无任何 error 信号（β-C2 的 B6/B7/B8）。
+// ═════════════════════════════════════════════════════════════
+
+describe('β-C2 — base 缺强制 mode 段 → mandatory-mode-missing（error 级）', () => {
+  const CODE = 'orchestration.mandatory-mode-missing';
+
+  async function resolveWithBaseModesRemoved(removed, extra = {}) {
+    const baseConfig = await loadBaseConfigForTest();
+    const damaged = JSON.parse(JSON.stringify(baseConfig));
+    for (const mode of removed) delete damaged.modes[mode];
+    return resolveOrchestrationConfig({
+      projectRoot: '/nonexistent', _loadBase: () => damaged, ...extra,
+    });
+  }
+
+  it('健康 base 不发该 diagnostic（不得对干净配置误报）', async () => {
+    const tmpDir = createTempProjectDir(null);
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(
+        result.diagnostics.filter(d => d.code === CODE).length, 0,
+        `干净仓库不得报射程缺失；实际: ${JSON.stringify(result.diagnostics)}`,
+      );
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  for (const mode of ['implement', 'story', 'feature']) {
+    it(`删掉 base 的 modes.${mode} 整段 → error 级 ${CODE}，且点名该 mode`, async () => {
+      const result = await resolveWithBaseModesRemoved([mode]);
+      const diag = result.diagnostics.find(d => d.code === CODE);
+      assert.ok(diag, `应发 ${CODE}；实际: ${JSON.stringify(result.diagnostics.map(d => d.code))}`);
+      assert.equal(diag.level, 'error', 'level 必须是 error —— warning 过不了 FR-068 判据 2');
+      assert.match(diag.message, new RegExp(mode));
+      assert.deepEqual(diag.context.modes, [mode]);
+    });
+  }
+
+  it('三段全删 → 一条 diagnostic 列出三个 mode', async () => {
+    const result = await resolveWithBaseModesRemoved(['feature', 'story', 'implement']);
+    const diag = result.diagnostics.find(d => d.code === CODE);
+    assert.ok(diag);
+    assert.deepEqual(diag.context.modes, ['feature', 'implement', 'story']);
+  });
+
+  it('缺 mode + overrides 同时写坏（YAML 语法错）→ 该 error 仍在（检查点位置承重）', async () => {
+    // 该检查放在步骤 9.5 会被 overrides 的提前 return 整类绕过：
+    // loadOverridesOrNull 的 parse-error 分支直接回退 base 并 return。
+    const result = await resolveWithBaseModesRemoved(['story'], {
+      _loadOverrides: () => { throw new Error('模拟 YAML 语法错'); },
+    });
+    const codes = result.diagnostics.map(d => `${d.level}:${d.code}`);
+    assert.ok(
+      codes.includes(`error:${CODE}`),
+      `overrides 提前 return 时该 error 不得丢失；实际: ${JSON.stringify(codes)}`,
+    );
+    assert.ok(codes.some(c => c.includes('loader-error')), '同时应保留 overrides 侧的降级信号');
+  });
+
+  it('base 缺 story + overrides 把 story 补回来但零挂门 → 另有 gate-mounting-lost（B8 形态）', async () => {
+    const baseConfig = await loadBaseConfigForTest();
+    const damaged = JSON.parse(JSON.stringify(baseConfig));
+    delete damaged.modes.story;
+    const result = await resolveOrchestrationConfig({
+      projectRoot: '/nonexistent',
+      _loadBase: () => damaged,
+      _loadOverrides: () => ({
+        version: damaged.version,
+        modes: { story: stripGateMounting(baseConfig.modes.story, 'GATE_DESIGN') },
+      }),
+    });
+    const codes = result.diagnostics.map(d => `${d.level}:${d.code}`);
+    assert.ok(codes.includes(`error:${CODE}`), JSON.stringify(codes));
+  });
+});
+
+// ═════════════════════════════════════════════════════════════
+// δ-C1 —— 门被求值之前跑过的东西不得变多、不得换人
+//
+// 第二轮的子句判据是「锚点之前不得出现 base **未定义名字**的**产出型** phase」，
+// 「产出型」由 phase 自身的 `agent` / `agent_mode` 决定。第三轮对抗（N-1）实测出
+// 三个逃逸口，各自都能把两道门打到零求值而三道防线全绿：复用 base 名字换 agent、
+// `agent: null` 的 inline 产出型、`agent_mode: 'gate'` 但 agent 非空。
+// 现判据不再按 phase 自身字段分类，只对照 base：锚点身份逐字相等 +
+// 锚点前是 base 同段的子序列（可删、不可增、不可改）。
+// ═════════════════════════════════════════════════════════════
+
+describe('δ-C1 — 门被求值之前跑过的东西不得变多 / 换人', () => {
+  /** [fixture, mode, 期望归因 kind, 该 fixture 引入的、回退后不得出现在 effective 里的 phase 名] */
+  const cases = [
+    // 第二轮构造：新名字 + 真 agent + 非 gate 模式
+    ['attack-story-prepend-producers.yaml', 'story',
+      'pre-anchor-phase-not-in-base', ['spec_early', 'plan_early']],
+    ['attack-implement-prepend-plan-early.yaml', 'implement',
+      'pre-anchor-phase-not-in-base', ['plan_early']],
+    // 第三轮 S2：不引入任何新名字，只把 base 的 constitution 复制两份并换 agent
+    ['attack-story-duplicate-base-name.yaml', 'story',
+      'pre-anchor-phase-not-in-base', []],
+    // 第三轮 S3：一个 phase 都不增删，只把 base 的 clarify 的 agent 改成 plan
+    ['attack-implement-rebind-base-name.yaml', 'implement',
+      'pre-anchor-phase-not-in-base', []],
+    // 第三轮 F1：agent: null 的 inline 产出型（base 自己就有这种带 skip_if_exists 的 inline phase）
+    ['attack-story-inline-producer.yaml', 'story',
+      'pre-anchor-phase-not-in-base', ['spec_early_inline', 'plan_early_inline']],
+    // 第三轮 F2：agent 非空但 agent_mode: gate（守卫信 agent_mode、执行面读 agent）
+    ['attack-story-gate-mode-producer.yaml', 'story',
+      'pre-anchor-phase-not-in-base', ['spec_early_gate', 'plan_early_gate']],
+    // 第三轮第五组：锚点自身被改成产出型（gate_design 的 agent: null → plan）
+    ['attack-feature-anchor-agent-swap.yaml', 'feature',
+      'anchor-tuple-changed', []],
+  ];
+
+  for (const [fixture, mode, expectedKind, introducedNames] of cases) {
+    it(`${fixture} → gate-mounting-lost（kind 含 ${expectedKind}）并整份回退 base`, async () => {
+      const tmpDir = createTempProjectDir(fixture);
+      try {
+        const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+        const diag = result.diagnostics.find(d => d.code === 'orchestration-overrides.gate-mounting-lost');
+        assert.ok(
+          diag,
+          `该攻击必须被拒；实际: ${JSON.stringify(result.diagnostics.map(d => d.code))}`,
+        );
+        assert.equal(diag.level, 'error');
+        const kinds = diag.context.violations.flatMap(v => v.violations.map(x => x.kind));
+        assert.ok(
+          kinds.includes(expectedKind),
+          `应归因到 ${expectedKind}；实际 kinds: ${JSON.stringify(kinds)}`,
+        );
+        assert.equal(result.isFallback, true, '应整份回退 base');
+        // 回退后 effective ≡ base：该 fixture 引入的 phase 一个都没落进 effective
+        const names = result.mergedConfig.modes[mode].phases.map(p => p.name);
+        for (const introduced of introducedNames) {
+          assert.ok(!names.includes(introduced), `${introduced} 不应出现在回退后的 effective：${JSON.stringify(names)}`);
+        }
+      } finally {
+        cleanupTempDir(tmpDir);
+      }
+    });
+  }
+
+  it('S2 / S3 两组「不引入新名字」的构造，其锚点前那段确实与 base 同名（判据不能只比名字）', async () => {
+    // 反向核实前提：如果只比 phase 名，这两份 fixture 的锚点前那段与 base 无差别。
+    const baseConfig = await loadBaseConfigForTest();
+    for (const [fixture, mode] of [
+      ['attack-story-duplicate-base-name.yaml', 'story'],
+      ['attack-implement-rebind-base-name.yaml', 'implement'],
+    ]) {
+      const tmpDir = createTempProjectDir(fixture);
+      try {
+        const raw = parseYamlDocument(fs.readFileSync(
+          path.join(tmpDir, '.specify', 'orchestration-overrides.yaml'), 'utf-8',
+        ));
+        const baseNames = new Set(baseConfig.modes[mode].phases.map(p => p.name));
+        const overrideNames = raw.modes[mode].phases.map(p => p.name);
+        assert.ok(
+          overrideNames.every(n => baseNames.has(n)),
+          `${fixture} 的 phase 名应全部来自 base（否则这条前提不成立）：${JSON.stringify(overrideNames)}`,
+        );
+      } finally {
+        cleanupTempDir(tmpDir);
+      }
+    }
+  });
+
+  it('不误伤 · valid-overrides-goal-loop（整段替换但 phase 名全部来自 base）仍生效', async () => {
+    const tmpDir = createTempProjectDir('valid-overrides-goal-loop.yaml');
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(
+        result.diagnostics.filter(d => d.code === 'orchestration-overrides.gate-mounting-lost').length, 0,
+        `合法覆盖不得被新判据误伤；实际: ${JSON.stringify(result.diagnostics)}`,
+      );
+      assert.equal(result.isFallback, false);
+      const implPhase = result.mergedConfig.modes.feature.phases.find(p => p.name === 'implement');
+      assert.equal(implPhase.agent_mode, 'goal_loop', 'goal_loop 覆盖仍生效');
+      // 该 phase 正是 GATE_TASKS 的 gates_before 锚点：判据 3 的侧向不对称就是为它留的
+      assert.deepEqual(implPhase.gates_before, ['GATE_TASKS']);
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
+  });
+
+  it('可删不可增 · 删掉锚点之前的 base phase（合法缩减）不判红', async () => {
+    const tmpDir = createTempProjectDir('valid-overrides-story-drop-preanchor.yaml');
+    try {
+      const result = await resolveOrchestrationConfig({ projectRoot: tmpDir });
+      assert.equal(
+        result.diagnostics.filter(d => d.code === 'orchestration-overrides.gate-mounting-lost').length, 0,
+        `锚点前缩减不得判红；实际: ${JSON.stringify(result.diagnostics)}`,
+      );
+      assert.equal(result.isFallback, false, '覆盖必须真的生效，不是被拒后回退');
+      const names = result.mergedConfig.modes.story.phases.map(p => p.name);
+      assert.deepEqual(names, ['specify', 'plan', 'implement', 'verify'], 'constitution 已被删掉');
+    } finally {
+      cleanupTempDir(tmpDir);
+    }
   });
 });

@@ -1,0 +1,94 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第二轮 · δ-C1）：
+# 在锚点之前插入 base 未定义名字的**产出型** phase。
+# 锚点 phase 逐字保持 base 原样——不改 conditional / skip_if_exists、不删任何 phase、
+# 不改位序；只在序列最前加产出 spec.md / plan.md 的新 phase。
+# 运行时 shouldExecutePhase 会因 skip_if_exists 已被满足而整段跳过 specify / plan，
+# 使挂在它们上面的 GATE_DESIGN / GATE_TASKS 一次都不会被求值。
+version: "1.0"
+
+modes:
+  implement:
+    name: "Implement 模式（6 阶段实现流程）"
+    description: "基于已有规范和规划进行代码实现"
+    phases:
+      - id: "0.001"
+        name: plan_early
+        display_name: 预处理：提前产出 plan.md
+        agent: plan
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "1"
+        name: clarify
+        display_name: 需求澄清（快速检查）
+        agent: clarify
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: false
+
+      - id: "2"
+        name: plan
+        display_name: 技术规划
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after: null
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "3"
+        name: tasks
+        display_name: 任务分解
+        agent: tasks
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: "tasks.md"
+        is_critical: true
+
+      - id: "4"
+        name: analyze
+        display_name: 一致性分析
+        agent: analyze
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_ANALYSIS
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: null
+        is_critical: false
+
+      - id: "5"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+        # 特殊：此 Phase 中期触发 GATE_IMPLEMENT_MID（insertion_point: after_task_50_percent）
+
+      - id: "6"
+        name: verify
+        display_name: 验证与交付
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

@@ -74,7 +74,11 @@ async function buildOrchestrator(mode, projectRoot, extra = {}) {
     {},
     mode,
     { logger: silentLogger, ...extra },
-    { preloadedConfig: resolverResult.mergedConfig },
+    {
+      preloadedConfig: resolverResult.mergedConfig,
+      // 门挂载判据的锚点来源：必须是 base，不能让 effective 自锚定（自锚定恒无违规）
+      baseConfig: resolverResult.baseConfig,
+    },
   );
   return { orch, resolverResult };
 }
@@ -114,6 +118,7 @@ async function cmdGetGateBehavior(mode, gateId, args) {
   try {
     const { orch } = await buildOrchestrator(mode, projectRoot);
     const gate = orch.getGateBehavior(gateId);
+    const mounting = orch.getGateMountingDetail(gateId);
     output({
       success: true,
       mode,
@@ -123,6 +128,26 @@ async function cmdGetGateBehavior(mode, gateId, args) {
       is_hard_gate: gate.isHardGate || false,
       severity: gate.severity,
       description: gate.description || null,
+      // FR-052：该 gate 在本 mode 的 **effective** phase 序列中的挂载状态。语义**分两支**
+      // （δ-W1：字段名与本注释早前只描述了第一支）：
+      //   - mounted_in_base === true  ⇒ 「与 base 锚定且可达」：同名同侧仍挂、抑制条件与
+      //     base 相同、锚点身份三元组未变、位序保持（含「锚点之前只能是 base 同段的
+      //     子序列」——按 (name, agent, agent_mode) 多重集比对，可删不可增不可改）。
+      //   - mounted_in_base === false ⇒ 退化为**纯结构存在性**（isGateMountedInMode），
+      //     只诚实透出「结构上挂没挂」。**那一支的 true 不构成「门在场且会被求值」的证据**
+      //     ——它正是 α-C1 之所以成为 CRITICAL 的那种误读，只是换到了另一支上；
+      //     FR-068 判据 1 在该支上前件为假、蕴含式空洞成立，故不构成判据被绕过。
+      // is_hard_gate 只读 config.gates、不查 phases，故 mounted: false 时
+      // is_hard_gate: true 不构成「门在场」的证据。取不到按 false（判不出⇒从严）。
+      mounted: orch.getGateMounting(gateId),
+      // FR-068：base 侧是否存在挂载锚点。它是判据 `mounted_in_base === true ⇒ mounted === true`
+      // 的另一半——缺它则按 FR-068 字面口径实现会使 resume / fix 永久 BLOCKED
+      // （二者在 base 里本来就不挂载对应的门）。
+      mounted_in_base: mounting.mountedInBase,
+      // 供人读：mounted 为 false 时逐条说明是哪个锚点、以哪一种方式失效
+      // （missing-anchor / suppressor-added / anchor-tuple-changed / order-broken /
+      //  pre-anchor-phase-not-in-base / mandatory-mode-missing）。
+      mounting_violations: mounting.violations,
     });
   } catch (err) {
     fail(err.message);

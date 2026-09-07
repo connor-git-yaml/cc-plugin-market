@@ -185,6 +185,8 @@ node plugins/spec-driver/scripts/orchestrator-cli.mjs effective-orchestration <m
 | `orchestration-overrides.version-mismatch` | version 字段与 base 不一致 | 见下方处理步骤 |
 | `orchestration-overrides.unsupported-field` | 使用了 MVP 不支持的字段（如 parallel_groups） | 移除该字段或等待二期 |
 | `orchestration.base-invalid` | base orchestration.yaml 损坏 | 联系 plugin 维护者 |
+| `orchestration-overrides.gate-mounting-lost` | 项目级 overrides 使强制 mode（feature/story/implement）的 `GATE_DESIGN`/`GATE_TASKS` 失去 base 锚定的可达挂载（锚点缺失 / 抑制条件与 base 不符 / 锚点身份改变 / 位序破坏 / 锚点前不是 base 同段的子序列），resolver 拒绝并**整份回退 base** | 恢复 base 的门挂载 phase 与位序；用 `get-gate-behavior <mode> <gate> --format json` 看 `mounting_violations`（F277）
+| `orchestration.mandatory-mode-missing` | base orchestration.yaml 缺少强制 mode 段（feature/story/implement 之一） | 联系 plugin 维护者；该 mode 的 `gate-mounting` 守护断言判 fail 而非消失（F277）
 
 ### version 不一致时的处理步骤
 

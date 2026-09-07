@@ -58,6 +58,57 @@ supported_overrides:
       base 的其余 phase 字段不保留。无法局部 patch 单个 phase，需完整声明 phases 数组。
       ⚠️ 见 runtime_consumption_caveat：仅 feature 模式运行时消费 phase 序列；对
       fix/story/implement/refactor/resume 的 phase 序列覆盖当前不改变其实际执行阶段。
+      门挂载禁改（FR-052 丙，Feature 277）：对强制 mode（feature / story / implement）
+      的整段替换，其 effective phase 序列不得使 GATE_DESIGN 或 GATE_TASKS 的挂载
+      **变得不可达**。判据是 base 锚定的可达性，不是「门的名字还在不在配置里」——
+      base 里每个挂载该门的 (phase 名, gates_before / gates_after 侧) 锚点，在覆盖后
+      必须同时满足四条：
+        1. 同名同侧仍挂（缺失记 missing-anchor）；
+        2. 该 phase 的 conditional / skip_if_exists 与 base **逐字相等**，即抑制条件
+           不得强于 base（变强记 suppressor-added）。base 自身的 plan phase 带
+           skip_if_exists: "plan.md" 且 gates_before 挂 GATE_DESIGN，这是合法锚点，
+           原样保留不会被判红；
+        3. 锚点自身的 agent 与 base **逐字相等**；gates_after 侧的锚点连 agent_mode
+           一并逐字相等（变化记 anchor-tuple-changed）。gates_after 锚点的 phase 体在
+           门求值**之前**执行，把 feature.gate_design 的 agent: null 改成 plan，就是
+           「gates_after 之前先跑一遍 plan」，门退化为对 plan 产出的事后追认。
+           gates_before 锚点的 phase 体在该门求值**之后**才执行，改它的 agent_mode
+           移不动任何产出到门之前，而这正是 F201 goal_loop 唯一的合法激活位
+           （base 的 feature.implement 带 gates_before: [GATE_TASKS]），故该侧不钉
+           agent_mode；agent 在两侧都钉死。
+        4. 锚点前后各一条，任一不成立即记违规：
+           4a. base 中位于该锚点之后的每个 phase，在覆盖后仍在它之后，即门仍在它把守的
+               产出之前（破坏记 order-broken；base 中的后继 phase 在覆盖后缺席也计破坏，
+               那意味着那段产出被换成了别的东西、位序无从核对）；
+           4b. **锚点之前只能是 base 同段的子序列**——覆盖后排在锚点之前的那段 phase，
+               必须是 base 中排在该锚点之前那段的子序列，按 (name, agent, agent_mode)
+               三元组的**多重集**比对，每个三元组的出现次数不得超过 base 同段
+               （破坏记 pre-anchor-phase-not-in-base）。语义是「门被求值之前跑过的东西
+               只可删、不可增、不可改」：story 的三个锚点与 implement 的 GATE_DESIGN
+               锚点在 base 里全部带 skip_if_exists，锚点前多出任何会写出那个文件的
+               phase，运行时就会把整段跳过、两道门零求值。
+               判据**不按 phase 自身的字段去判断它是不是「产出型」**：那三个字段
+               （name / agent / agent_mode）都由被守护的这份 overrides 提供，据此分类
+               等于让攻击者决定要不要检查自己——实测三个逃逸口（复用 base 名字换 agent /
+               agent: null 的 inline 产出 / agent_mode: gate 但 agent 非空）各自都能把
+               两道门打到零求值而三道防线全绿。
+      强制 mode 的射程有**常量下界** {feature, story, implement}，再并上
+      GATE_DESIGN.hard_gate_modes 的派生增量（只扩不缩）。base 里缺任一强制 mode 段时
+      发 error 级 orchestration.mandatory-mode-missing——「相对 base 失去了什么」判不出，
+      不等于「没失去」；该 mode 的 mounted_in_base 一律按 true 代入（判不出⇒从严），
+      而 mounted 恒为 false 并记 mandatory-mode-missing（不回落到「覆盖里结构上挂没挂」，
+      那是另一个量，用它充数会在「门挂到幽灵 phase 上」时给出站不住的肯定性结论）。
+      为什么不是结构存在性：整段替换只写 modes 块、完全不碰 gates 块，就能把两道门
+      改挂到一个 conditional 恒假或 skip_if_exists 恒真的幽灵 phase 上、或挂到序列
+      末尾——不删任何东西，YAML 在人工复核时看上去两道门都还挂着，执行上却一次都不
+      会被求值。gates 块的三项禁改集对此完全看不见。
+      违反时发 error 级 orchestration-overrides.gate-mounting-lost diagnostic 并
+      **整份 overrides 回退 base**（不是只丢弃该 mode）；diagnostic 的 context.violations
+      逐锚点给出 kind 与原因。判据的共用实现在 contracts/orchestration-schema.mjs 的
+      evaluateGateMountingAgainstBase（findLostGateMountings 是它在强制 mode 上的遍历）。
+      正确做法：照抄 base orchestration.yaml 里该 mode 的挂门 phase（连同它的
+      agent / agent_mode / conditional / skip_if_exists 与相对位序），锚点之前的那段
+      只做删减、不新增也不改字段，再改锚点之后的部分。
     reserved_modes:
       - feature
       - story
@@ -70,10 +121,16 @@ supported_overrides:
 
   - path: "gates.<GATE_ID>"
     semantic: "对象字段合并"
-    constraint: "仅 default_behavior / severity / hard_gate_modes 三个字段可覆盖"
+    constraint: "仅 default_behavior / severity / hard_gate_modes 三个字段可覆盖；其中三项属禁改集，覆盖会被拒绝"
     notes: >
       未在 overrides 中声明的 gate 字段继承 base 值。
       hard_gate_modes 数组是整段替换（非追加）。
+      禁改集（FR-052，Feature 277）：gates.GATE_DESIGN.default_behavior 与
+      gates.GATE_DESIGN.hard_gate_modes 整体不可覆盖；gates.GATE_TASKS.default_behavior
+      不可覆盖为 auto / skip（always / on_failure 仍可覆盖，二者都留有暂停路径）。
+      违反时发 error 级 orchestration-overrides.gate-field-forbidden diagnostic
+      并整份 overrides 回退 base；canonical 表在 contracts/orchestration-schema.mjs
+      的 FORBIDDEN_GATE_OVERRIDES。
     valid_values:
       default_behavior:
         - value: always

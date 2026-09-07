@@ -13,11 +13,13 @@ import { validateWrapperSources } from '../../plugins/spec-driver/scripts/valida
 import { validatePreferenceRules, syncPreferenceRules } from '../../plugins/spec-driver/scripts/sync-preference-rules.mjs';
 import { syncDelegationContract, validateDelegationContract } from '../../plugins/spec-driver/scripts/sync-delegation-contract.mjs';
 import { validateOrchestratorModels } from '../../plugins/spec-driver/scripts/validate-orchestrator-models.mjs';
+import { validateGateMounting } from '../../plugins/spec-driver/scripts/validate-gate-mounting.mjs';
 import { generateWorkflowRegistry } from '../../plugins/spec-driver/scripts/generate-workflow-registry.mjs';
 import { syncSharedAgentDocs, validateSharedAgentDocs } from '../sync-agent-docs.mjs';
 import { syncReleaseContract, validateReleaseContract } from './release-contract-core.mjs';
 import { validateRuntimeBoundaries } from './runtime-boundary-core.mjs';
 import { validateNamespaceConsistency } from './namespace-consistency-core.mjs';
+import { validateAgentTools } from './agent-tools-core.mjs';
 import { validateCodexPluginConsistency } from './codex-plugin-consistency-core.mjs';
 import { validateGraphQuality } from './graph-quality-core.mjs';
 import { validateSpecDrift } from './spec-drift-core.mjs';
@@ -212,6 +214,39 @@ async function validateSpecDriftSafely({ projectRoot, strict }) {
   }
 }
 
+/**
+ * F277（R-1）第 1 族的兜底外壳，与上方 `validateSpecDriftSafely` 同型。
+ *
+ * `sync-agent-docs.mjs:66` 在 marker 缺失时 throw、`:104` 的 `readFileSync(sourcePath)`
+ * 在源文件缺失时同样 throw，而本族此前无 try/catch。F277 把 marker 分布面从「仓根 2 个
+ * 必然存在的文件」扩到「4 份 agent + 12 份 SKILL 目标」，且新增 `sourcePath` 全是新建
+ * 文件——任一缺失会让 `npm run repo:check` 以未捕获异常中止，其余全部 check 的结论一并
+ * 丢失。这不是静默放行，是整份报告不可用，同属 C-3 要治的形态。
+ *
+ * 方向必须 fail-loud（FR-045）：记 `fail` 并把异常消息放进 `evidence`，
+ * **禁止**返回空 checks 数组或 `pass`。
+ */
+function validateSharedAgentDocsSafely(projectRoot) {
+  try {
+    return validateSharedAgentDocs(projectRoot);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      status: 'fail',
+      checks: [
+        {
+          id: 'shared-section-status',
+          title: 'shared agent section 全部同步',
+          status: 'fail',
+          evidence: { degraded: true, reason: `shared agent docs 校验内部错误：${message}` },
+        },
+      ],
+      warnings: [],
+      errors: [`shared agent docs 校验内部错误：${message}`],
+    };
+  }
+}
+
 export function syncRepository(projectRoot) {
   const resolvedRoot = path.resolve(projectRoot);
   const steps = [];
@@ -257,9 +292,11 @@ export async function validateRepository(projectRoot, options = {}) {
   const errors = [];
   const checks = [];
 
+  // F277（R-1）：未预期 throw 由 validateSharedAgentDocsSafely 收敛为本族 error，
+  // repo:check 永不因 marker / sourcePath 缺失而吐栈丢掉整份报告。
   aggregateValidation(
     'agent-docs',
-    validateSharedAgentDocs(resolvedRoot),
+    validateSharedAgentDocsSafely(resolvedRoot),
     warnings,
     errors,
     checks,
@@ -380,6 +417,29 @@ export async function validateRepository(projectRoot, options = {}) {
   aggregateValidation(
     'worktree-local-state',
     validateWorktreeLocalState({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  // F277（FR-017）— 第 16 个子检查族：spec-driver 子代理 frontmatter 工具面
+  // （正向 6 + 护栏 1 + 文本 1 = 8 条断言，收敛为单个 check id `agent-tools:required`）。
+  // 独立成族而非扩 namespace-consistency：后者只回收 `mcp__` 前缀项，`Edit` / `Bash`
+  // 在它眼里结构性不可见；且它对在册文件强制「必须含 mcp__ 工具」，把 specify / tasks
+  // 加进其 AGENT_FILES 会凭空造出 2 个必红。
+  aggregateValidation(
+    'agent-tools',
+    validateAgentTools({ projectRoot: resolvedRoot }),
+    warnings,
+    errors,
+    checks,
+  );
+  // F277（FR-053）— 第 17 个子检查族：GATE_DESIGN / GATE_TASKS 在 effective 配置上的
+  // 12 条断言（事后守护，与 FR-068 的运行时第一道闸分工，二者缺一不可）。
+  // ⚠️ `await` MUST 保留：validateGateMounting 是 async，漏掉会让 aggregateValidation
+  // 拿到 Promise，`result.checks ?? []` 退化为空数组造成静默假通过。
+  aggregateValidation(
+    'gate-mounting',
+    await validateGateMounting({ projectRoot: resolvedRoot }),
     warnings,
     errors,
     checks,

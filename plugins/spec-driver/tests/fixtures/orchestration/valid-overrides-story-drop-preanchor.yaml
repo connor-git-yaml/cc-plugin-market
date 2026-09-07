@@ -1,0 +1,60 @@
+# 测试 fixture（Feature 277 Phase A 对抗修订第三轮 · 正向用例「可删不可增」）：
+# story 整段替换，**删掉**锚点 `specify` 之前的 base phase `constitution`，其余四个
+# phase 逐字照抄 base（含 agent / agent_mode / conditional / skip_if_exists / 门挂载）。
+# 锚点前的序列缩减是合法的：更少的东西在门之前跑，门把守的产出没有提前发生。
+# 判据 2（锚点前子序列）必须放行这一形态——否则它就退化成「必须与 base 逐字相等」，
+# 把整段替换这条产品能力一并封死。
+version: "1.0"
+
+modes:
+  story:
+    name: "Story 模式（4 阶段：规范-规划-实现-验证）"
+    description: "去掉 constitution 前置步骤的精简 story"
+    phases:
+      - id: "2"
+        name: specify
+        display_name: 需求规范
+        agent: specify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_DESIGN
+        conditional: null
+        skip_if_exists: "spec.md"
+        is_critical: true
+
+      - id: "3"
+        name: plan
+        display_name: 技术规划+任务分解
+        agent: plan
+        agent_mode: single
+        gates_before:
+          - GATE_DESIGN
+        gates_after:
+          - GATE_TASKS
+        conditional: null
+        skip_if_exists: "plan.md"
+        is_critical: true
+
+      - id: "4"
+        name: implement
+        display_name: 代码实现
+        agent: implement
+        agent_mode: single
+        gates_before: null
+        gates_after: null
+        conditional: null
+        skip_if_exists: null
+        is_critical: true
+
+      - id: "5"
+        name: verify
+        display_name: 验证闭环
+        agent: verify
+        agent_mode: single
+        gates_before: null
+        gates_after:
+          - GATE_VERIFY
+        conditional: null
+        skip_if_exists: null
+        is_critical: true

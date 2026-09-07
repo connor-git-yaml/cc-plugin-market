@@ -1,6 +1,8 @@
-# T1 fixture: 仅覆盖 gate 行为（GATE_DESIGN default_behavior 改为 auto）
+# T1 fixture: 仅覆盖 gate 字段（GATE_DESIGN severity 改为 non_critical）
+# 载体字段刻意用 severity：default_behavior / hard_gate_modes 已进 FR-052 禁改集（Feature 277），
+# 用它们做「字段级合并」的载体会被 error 拒绝，测的就不再是合并语义。
 version: "1.0"
 
 gates:
   GATE_DESIGN:
-    default_behavior: auto
+    severity: non_critical

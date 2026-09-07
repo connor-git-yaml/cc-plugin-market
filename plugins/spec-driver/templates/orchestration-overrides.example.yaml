@@ -13,15 +13,23 @@
 # 警告：YAML anchor（& / <<:）不被 simple-yaml.mjs 支持，请勿使用。
 
 # ─────────────────────────────────────────────────────────────
-# 示例一：Gate behavior 调整（低风险项目允许 GATE_DESIGN 自动通过）
-# 场景：低风险 CLI 工具项目，fix 流程中 GATE_DESIGN 无需人工审批
+# 示例一：Gate behavior 调整（低风险项目允许 GATE_ANALYSIS 自动通过）
+# 场景：低风险 CLI 工具项目，设计一致性分析无需人工审批
+#
+# 禁改集（不可覆盖，覆盖会被 error 拒绝并整份 overrides 回退 base）：
+#   - gates.GATE_DESIGN.default_behavior
+#   - gates.GATE_DESIGN.hard_gate_modes
+#   - gates.GATE_TASKS.default_behavior 覆盖为 auto / skip
+# 这两道门是不可被任何策略或配置绕过的质量闸；确需调整其适用范围，
+# 走 spec 与 base（plugins/spec-driver/config/orchestration.yaml）的评审，
+# 不要在项目级 overrides 里覆盖。其余 gate 的三字段覆盖能力不变。
 # ─────────────────────────────────────────────────────────────
 
 version: "1.0"  # 必填；必须与 plugin 内 orchestration.yaml 的 version 一致，不一致则触发 version-mismatch warning
 
 gates:
-  GATE_DESIGN:
-    default_behavior: auto  # 替换 base 的 always（自动通过，无需人工干预）
+  GATE_ANALYSIS:
+    default_behavior: auto  # 替换 base 的 on_failure（自动通过，无需人工干预）
     # 未声明的字段（severity、hard_gate_modes 等）保持 base 值不变
 
 # ─────────────────────────────────────────────────────────────

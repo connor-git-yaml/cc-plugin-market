@@ -1,8 +1,60 @@
 import { readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 
 const rootDir = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
+
+/**
+ * 块 2 的 per-file 参数守卫（F277 Phase A 对抗审查 β-W2）。
+ *
+ * 该块唯一随文件而变的量是 marker **之外**紧邻上方的一行 `SD_MODE=<mode>`，
+ * 而漂移比对只覆盖 marker **之间**的字节（`syncSection` 按 `indexOf` 切片），
+ * 于是这一行结构性地落在所有守护之外。把 `spec-driver-story/SKILL.md` 的那行写成
+ * `SD_MODE=feature`（复制粘贴最常见的一种错）后，守卫会去查 `feature`——而 `feature`
+ * 永远 `mounted=true`——于是 story 流程带着一个**恒绿**的守卫跑完，输出面上毫无异常。
+ * `$SD_MODE` 为空或拼成非法值时靠第三条命令 `exit=1` 兜住（α-I2），
+ * **拼成另一个合法 mode 时三条命令全部 exit=0**，那条兜底不成立。
+ *
+ * 判据窄到只有一条：取值必须等于该 SKILL 目录名去掉 `spec-driver-` 前缀。
+ *
+ * **覆盖面的诚实口径**（第三轮对抗审查 N-2 更正）：本守卫只覆盖 `targets` 里这 **5 份
+ * `skills/` 源**；`skills-codex/` 5 份与 `.codex/skills/` 5 份两批副本的 `SD_MODE` 行
+ * **当前无守护**。`spec-driver-wrappers` 族比对的是「**源** SKILL 的 body sha256」与
+ * 「wrapper 文本里内嵌的那个 sha 字符串」——它回答「源改了而 wrapper 没重生成吗」，
+ * **不**回答「wrapper 自身的字节被人改过吗」；改副本正文而不动那行内嵌 sha，比对恒过
+ * （实测：把 `skills-codex/spec-driver-story/SKILL.md` 与 `.codex/skills/spec-driver-story/SKILL.md`
+ * 的 `SD_MODE=story` 改成 `feature`，`validateWrapperSources` 仍 `status = pass`）。
+ * `codex-plugin-consistency` 族只比对 id 集合 / 数量 / manifest 引用，也不比对副本内容。
+ * 后果：`.codex/skills/` 正是 Codex 侧实际加载的那一份，它的 `SD_MODE` 被写成另一个
+ * 合法 mode 时，守卫会去查错 mode 并恒绿。扩 `targets` 到 15 份会与 wrapper 生成链
+ * 形成双写方，需单独一卡处置，本轮**只把口径改诚实**，不假称已覆盖。
+ *
+ * @param {string} targetContent 目标文件全文
+ * @param {string} targetRelPath 相对项目根的路径（用于派生期望值）
+ * @param {string} key section key
+ * @returns {string|null} 违规说明；null 表示通过
+ */
+export function checkSdModeDeclaration(targetContent, targetRelPath, key) {
+  const beginMarker = `<!-- BEGIN SHARED SECTION: ${key} -->`;
+  const markerAt = targetContent.indexOf(beginMarker);
+  // marker 缺失由 syncSection 抛错处理，此处不重复报
+  if (markerAt === -1) return null;
+
+  const expected = basename(dirname(targetRelPath)).replace(/^spec-driver-/, '');
+  const prelude = targetContent.slice(0, markerAt);
+  const matches = [...prelude.matchAll(/^SD_MODE=(\S*)\s*$/gm)];
+  if (matches.length === 0) {
+    return `${targetRelPath}：块 "${key}" 的 BEGIN marker 之前没有 SD_MODE=<mode> 声明行`
+      + `（该块的唯一 per-file 参数缺席 ⇒ 守卫会对空 mode 求值）`;
+  }
+  const actual = matches[matches.length - 1][1];
+  if (actual !== expected) {
+    return `${targetRelPath}：SD_MODE 声明为 "${actual}"，期望 "${expected}"`
+      + `（写成另一个合法 mode 会让运行时守卫查错 mode 并恒绿，三条命令全部 exit=0，无异常可见）`;
+  }
+  return null;
+}
+
 export const sectionConfigs = [
   {
     key: 'branch-sync-policy',
@@ -53,6 +105,73 @@ export const sectionConfigs = [
     key: 'dogfooding-policy',
     sourcePath: resolve(rootDir, 'docs/shared/agent-dogfooding-policy.md'),
     targets: ['AGENTS.md', 'CLAUDE.md'],
+  },
+  // F277 · FR-068（块 2）：门禁挂载运行时守卫。
+  //
+  // 与上方 10 个 entry 的两处差异，都是有意为之：
+  //   1. `sourcePath` 放 `plugins/spec-driver/templates/` 而非 `docs/shared/`——该块是
+  //      spec-driver 插件内部的编排约束，只发给插件自己的 SKILL；放 `docs/shared/` 会让它
+  //      混进「仓库级 agent 约定」那一层，并使仓根字节预算（worktree-local-state 族）
+  //      的净增量不再为 0。
+  //   2. `targets` 是 5 份编排器 SKILL 而非仓根两文件——这也是本引擎首次把注入面伸出
+  //      `AGENTS.md` / `CLAUDE.md`。marker 缺失时 `syncSection` 会 `throw`，该 throw 由
+  //      `repo-maintenance-core.mjs` 的 `validateSharedAgentDocsSafely` 收敛为本族 fail
+  //      （fail-loud，不是放行），故新增 target 不会让整份 `repo:check` 报告丢失。
+  //
+  // ⚠️ 排序契约（K14）：本数组的**追加顺序**决定 `agent-docs:shared-section:*` 这批
+  // check id 在 `repo:check` 输出中的先后，而 `tests/integration/spec-drift-repo-check-regression.test.ts`
+  // 的 `expect(added).toEqual([...])` 按该顺序逐位比对。后续 Phase 的新 entry 一律
+  // **append 到数组末尾**，不得插到已落地 entry 之前——插队会让该断言以「顺序不符」
+  // 形式红，而那是排版问题不是接线问题，会污染信号。
+  {
+    key: 'orchestrator-gate-mounting-guard',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/orchestrator-gate-mounting-guard.md'),
+    // per-file 参数守卫（β-W2）：结论并进本 entry 既有的 check id，不新增 check id
+    preludeGuard: checkSdModeDeclaration,
+    targets: [
+      'plugins/spec-driver/skills/spec-driver-feature/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-story/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-implement/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-fix/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-resume/SKILL.md',
+    ],
+  },
+  // F277 · FR-014 / FR-036（块 1）：长文档产出的分节写作协议。
+  //
+  // `targets` 是 4 份**产出型**子代理，`agents/verify.md` **刻意不在其中**——协议对它
+  // 不适用，该「不适用」由块 1 正文自己声明（并附 verify 独立性的诚实口径），
+  // 而不是靠给它也注一份 marker 来表达。`agent-tools-core.mjs` 的第 8 条文本断言
+  // 以本块为事实源逐字比对那段声明，故本 entry 的 `sourcePath` 与该文件的
+  // `PROTOCOL_TEXT_SOURCE` 常量必须指向同一路径。
+  {
+    key: 'agent-output-discipline',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/agent-output-discipline.md'),
+    targets: [
+      'plugins/spec-driver/agents/implement.md',
+      'plugins/spec-driver/agents/specify.md',
+      'plugins/spec-driver/agents/plan.md',
+      'plugins/spec-driver/agents/tasks.md',
+    ],
+  },
+  // F277 · FR-005 / FR-060（块 3）：`GATE_TASKS` 的 MUST 裁剪接受口径。
+  //
+  // `targets` 是**实际挂载** `GATE_TASKS` 的 7 个 mode 的 SKILL（换算式 7 ÷ 8 = 87.5%，
+  // 单位：mode）——`spec-driver-fix` **不在其中**，因为 `fix` 段只挂 `GATE_DESIGN` 与
+  // `GATE_VERIFY`，`GATE_TASKS` 命中数为 0。按 `applicable_modes`（含 8 个 mode）取
+  // targets 会多注一份永不被求值的散文：配置健康 ≠ 执行在场。`fix` 下发生 MUST 裁剪
+  // 时的处置（一律记「未接受」、改走带编号移交卡）写在块 3 正文里，不靠注入表达。
+  {
+    key: 'gate-tasks-scope-cut-acceptance',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/gate-tasks-scope-cut-acceptance.md'),
+    targets: [
+      'plugins/spec-driver/skills/spec-driver-feature/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-story/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-implement/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-resume/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-sync/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-doc/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-refactor/SKILL.md',
+    ],
   },
 ];
 
@@ -106,16 +225,24 @@ export function validateSharedAgentDocs(projectRoot = rootDir) {
 
     for (const targetPath of section.targets.map((target) => resolve(resolvedRoot, target))) {
       const targetContent = readFileSync(targetPath, 'utf8');
+      const relPath = targetPath.slice(resolvedRoot.length + 1);
       const syncedContent = syncSection(targetContent, section.key, sourceContent);
       const inSync = syncedContent === targetContent;
+      // marker 之外的 per-file 参数：漂移比对结构性看不到它，故单列一条窄判据
+      const preludeViolation = section.preludeGuard
+        ? section.preludeGuard(targetContent, relPath, section.key)
+        : null;
 
       targetResults.push({
-        path: targetPath.slice(resolvedRoot.length + 1),
-        status: inSync ? 'pass' : 'fail',
+        path: relPath,
+        status: inSync && preludeViolation === null ? 'pass' : 'fail',
       });
 
       if (!inSync) {
-        errors.push(`${section.key} 在 ${targetPath.slice(resolvedRoot.length + 1)} 中存在漂移，请先运行 npm run docs:sync:agents`);
+        errors.push(`${section.key} 在 ${relPath} 中存在漂移，请先运行 npm run docs:sync:agents`);
+      }
+      if (preludeViolation !== null) {
+        errors.push(`${section.key} 的 per-file 参数校验失败 —— ${preludeViolation}`);
       }
     }
 

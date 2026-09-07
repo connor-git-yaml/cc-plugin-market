@@ -11,4 +11,4 @@ parallel_groups:
 # 合法字段：gate 覆盖仍应生效（AC-023）
 gates:
   GATE_DESIGN:
-    default_behavior: auto
+    severity: non_critical
