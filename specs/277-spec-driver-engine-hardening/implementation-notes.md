@@ -4,48 +4,27 @@
 
 ## 当前 Phase
 
-**Phase A 对抗修订第三轮 · commit ① 前**（Phase 序列：A → C → B → D → E，共 5；A 与 C 均已完成）。
-
-- 第一轮（α）：门挂载判据由**纯结构存在性**升为 **base 锚定的可达性**；`extractFrontmatterTools` 对重复 `tools:` 键 fail-loud。
-- 第二轮（β / δ）：三条 CRITICAL 同根——**「要检查多少」被交给「被检查的那份数据」去决定**。β-C1 解析器返回值三分 + 护栏改逐字相等；β-C2 强制 mode 清单钉为常量下界 + base 缺段发 `error:orchestration.mandatory-mode-missing`；δ-C1 位序新增子句 `foreign-phase-before-gate`。另做 β-W2 的 `SD_MODE` 窄断言与若干口径修订。
-
-**本轮（第三轮）**同样**不新增任务编号**，收口 delta 复验判为「**仅措辞变动**」的 δ-C1 / N-1，外加 N-2 / N-3 与 INFO 逐条处置：
-
-- **N-1（唯一 CRITICAL）**：第二轮新写的子句 3b 把「要不要检查这个 phase」换了来源，**换到的仍是被守护的那份数据里攻击者可写的字段**（`name` / `agent` / `agent_mode`）。三个逃逸口（复用 base 名字换 `agent` / `agent: null` 的 inline 产出 / `agent_mode: gate` 但 `agent` 非空）各自都能把 `story` / `implement` 的两道门打到**零求值**而三道防线全绿。→ **废除 `isProducerPhase` / `collectForeignProducers`，不再按任何 phase 自身字段做语义分类**；判据改为只对照 base 的三条：锚点身份三元组相等（`anchor-tuple-changed`）、锚点前是 base 同段的子序列（`pre-anchor-phase-not-in-base`，可删不可增不可改）、锚点后位序沿用（`order-broken`）。
-- **N-3**：`undecidable` 支的 `mounted` 不再回落到纯结构存在性，恒为 `false`。
-- **N-2**：`SD_MODE` 守卫的覆盖面口径改诚实（只守 5 份 `skills/` 源；两批 codex 副本当前无守护），**不假称已覆盖**。
-
-收口全量四条命令**零失败**（`repo:check` 非 pass 仅 `graph-quality:freshness: warn`，与本卡改动面零交集）。逐条留痕见 **D-32 ~ D-37**。
+**Phase D 完成 · B + D 对抗修订 · commit ② 前**（Phase 序列 A → C → B → D → E；A、C 已入库 commit ① `4255212c`；B（T034–T062）与 D（T079–T101）全部落盘并由编排器收口全绿：check id 94、vitest 8179 passed）。
 
 ## 已完成任务 ID
 
-`T001` ~ `T033`（Phase A 全量 33 条）+ `T063` ~ `T078`（Phase C 全量 16 条）= **49 条**，外加**三轮对抗修订**（均无编号，留痕见 D-20 ~ D-23 / D-24 ~ D-31 / D-32 ~ D-37，以及 tasks.md Phase A 段末的三行追加）。核对命令与输出：
-
-```
-grep -cE '^- \[x\] T0(0[1-9]|1[0-9]|2[0-9]|3[0-3]) ' tasks.md   → 33
-grep -cE '^- \[ \] T0(0[1-9]|1[0-9]|2[0-9]|3[0-3]) ' tasks.md   → 0
-grep -cE '^- \[x\] T0(6[3-9]|7[0-8]) ' tasks.md                 → 16
-grep -cE '^- \[ \] T0(6[3-9]|7[0-8]) ' tasks.md                 → 0
-```
-
-分段：A1 = T001–T013、A2 = T014–T024、A3 = T025–T033；Phase C = T063–T078（本段）。
+`T001–T033`（Phase A，commit ①）、`T063–T078`（Phase C，commit ①）、`T079–T086`（Phase D 段 D-a，见 `verification/phaseD-a-summary.md`）、`T087–T097`（Phase D 段 D-b，见 `verification/phaseD-b-summary.md`）、`T079–T101`（Phase D；D-a/D-b 由前台子代理完成，D-c 的 D-3/D-2/K14 由子代理完成后停摆，T100/T101 由编排器亲自核对与收口，见 `verification/phaseD-{a,b,c}-summary.md`）；`T034–T062`（Phase B；T034–T061 由编排器按验收命令逐条核实后勾选，见 tasks.md Phase B 段末留痕；T062 D-1 回放由独立子代理产出 `verification/d1-f270-matrix-replay.md`，428 行，**通过**：捕获 4 ÷ 4、误报 0 ÷ 5、与 `daf03560` 的「13 达成」口径冲突成立；附带发现 F270 §8 事后补登非全集 12 vs 8、FR-029 属实现态回退非未认领、plan Constitution Check 以未认领 FR-031 背书原则 XI）。
 
 ## 下一步
 
-**Phase B**（矩阵主链 · 散文 + 模板），起点 **T034**——首个动到的文件是 `.specify/templates/plan-template.md` 与 `plugins/spec-driver/templates/specify-base/plan-template.md`（`[CLEANUP] C2` 两对副本的第一对，104 vs 134 行）。其余落点文件：
+**Phase D 段 D-c · T098–T101**（D-3 收敛轨迹回放 + D-2 承诺任务化演示 + FR-034 逐格核对 + 收口全量）。**段 D-a（T079–T086）与段 D-b（T087–T097）均已完成**：块 4 `gate-design-convergence-loop` 已建成并注入 4 份 SKILL；块 1 `## 轻量三纪律` 已填充（FR-030 ~ FR-034）并重注入 4 份 agent，二跑逐字节幂等；`agents/verify.md` 已落 FR-033 / FR-066；`agents/tasks.md` 已落 FR-008 / FR-009 / FR-064；FR-065 三项约束已写入 4 份 SKILL 与 `agents/plan.md`。`repo:check` **94** 项、exit=0，非 pass 仅 `graph-quality:freshness: warn`（既有 stale 图）。
 
-- `[CLEANUP] C2` 两对副本：`.specify/templates/plan-template.md` vs `plugins/spec-driver/templates/specify-base/plan-template.md`（104 vs 134）；`.specify/templates/tasks-template.md` vs canonical（251 vs 266）——T034 / T036
-- `plugins/spec-driver/templates/specify-base/plan-template.md` + `.specify/templates/plan-template.md`（4 个新具名章节，原子组同批改）——T037 / T038
-- `plugins/spec-driver/agents/plan.md`（章节产出口径、FR-003 交叉校验、FR-028 一致性校验）——T035 / T039 ~ T041
-- `plugins/spec-driver/agents/verify.md`（五态 / 三取值、三值并列比对、兼容降级缺席三规则、兜底例外逐行、合并律）——T042 ~ T047
-- `plugins/spec-driver/agents/spec-review.md` + `spec-review.artifact.yaml`（词表统一、严重级映射、`required_sections` 连带）——T048 ~ T050
-- `plugins/spec-driver/agents/tasks.md`（硬不变量改写 `:51` / `:78`）——T051
-- 三份 `verification-report-template.md`（原子组同批）——T052
-- `tasks-template.md` 双份的 FR-005 冻结字段位——T058
-
-**Phase B 起手须先做的两件事**：(1) **T053 裁定**（FR-005 冻结散文的 SKILL 集：矩阵写 5 份含 `fix`，而实测 `GATE_TASKS` 挂载 7 份且 `fix` 零挂载——不得静默择一）；(2) **T054 ~ T057 的小节结构**在本 Phase C 已被**提前落地**（见下方 D-16），Phase B 执行时**不得重复新建**，只需补该三个 mode 的 `GATE_TASKS` 流程散文（若决定补）与 4 份已有段的锚点登记。
+**⚠️ D-c 的 T101 必办（红灯为预期，不是回归）**：`tests/integration/spec-drift-repo-check-regression.test.ts:150` 的 `added` 清单仍是 **13**（该行留有「Phase D 落地后在此追加」注释），块 4 已落地、磁盘侧 check id 已达 **14**，故该断言**当前必红**，须按**裁定 I-1** 更新为 **14**（新项位次在既有 3 个 `shared-section` 之后、`spec-driver-wrappers:*` 之前）后再串行跑 `npm run build` → `npm run test:plugins` → `npx vitest run` → `npm run repo:check`。commit ② = B + D（对抗审查后）。
 
 ## 已知偏差
+
+按发现顺序编号；每条都写「偏差事实 / 依据 / 本段的处置」。
+
+### D-B1 · Phase B 两位实现子代理先后停摆（600 s watchdog），零勾选、无 summary
+
+- **事实**：第一位在 T059 前后停摆，13 个文件的编辑已落盘；第二位（续做）在写 D-1 产物前停摆，盘上零增量。
+- **依据**：`git status` 与 tasks.md 勾选状态对照；两次 task-notification 均为 `Agent stalled: no progress for 600s`。
+- **处置**：编排器按各任务验收命令逐条核实后勾选（证据见 tasks.md Phase B 段末留痕）；D-1 拆为独立小代理、先 Write 骨架；后续 Phase D 派发拆成 ≤ 3 段、每段要求首个动作即落盘。
 
 按发现顺序编号；每条都写「偏差事实 / 依据 / 处置」。**D-1 ~ D-8 为 A1 段登记，原样保留**；**D-9 ~ D-15 为 A2 补录与 A3 新增，原样保留**（其中 D-11 / D-15 已由 Phase C 消账，标注见各条末尾）；**D-16 ~ D-19 为 Phase C 新增**；**D-20 ~ D-23 为第一轮（α）对抗修订新增**；**D-24 ~ D-31 为第二轮（β / δ）对抗修订新增**；**D-32 起为第三轮（delta 复验的 N-1 / N-2 / N-3）新增**。
 
@@ -191,6 +170,84 @@ grep -cE '^- \[ \] T0(6[3-9]|7[0-8]) ' tasks.md                 → 0
 - **依据**：T063 明写该节「留空占位并写明『本节内容由 Phase D 填充』」，plan Phase D 落点表第 1 行明写「Phase C 新建，本阶段填『轻量三纪律』一节」，且该跨 Phase 承诺已由 T087 ~ T090 显式任务化（FR-008）。
 - **处置**：节标题**必须保留在盘**，它是该承诺的可见锚点；删掉标题即让承诺从产物上消失。Phase D 落地后本条消账。
 - **诚实口径**：在 Phase D 完成之前，**不得**把块 1 口径为「输出纪律共享块已完整」——它当前是 5 节有内容、1 节空占位（换算式：5 ÷ 6 = 83.3%，单位：具名节）。
+
+### D-38 · plan 的 `GATE_DESIGN` 锚点命中数快照已陈旧（现取值全部大于快照，`grep -n` 现取纪律实测有效）
+
+- **事实**：plan Phase D 落点表行 6-9 与裁定 D-③ 记的实测快照是 `feature` **2** / `story` **8** / `implement` **1** / `fix` **6**（2026-09-04，单位：命中行）。D-a 段按「锚点以 `grep -n 'GATE_DESIGN'` **现取**」跑出的值为 `feature` **8** / `story` **14** / `implement` **7** / `fix` **12**（同单位）。
+- **归因**：差额全部来自 Phase A 的块 2（`orchestrator-gate-mounting-guard`）与其上方的门禁配置加载散文——该块正文多处提到 `GATE_DESIGN`，注入 4 份 SKILL 后每份各增 6 行命中（换算式：`8 − 2 = 6`、`14 − 8 = 6`、`7 − 1 = 6`、`12 − 6 = 6`，四式同值，单位：命中行）。**不是本卡改动引入的偏差，是快照成文于块 2 注入之前**。
+- **处置**：按 tasks.md T081 的「**不得照抄该快照**」执行，四处 marker 落点全部按现取结果定位（`feature` 走 `## Gate 决策流程（动态）` 段末、`story` / `fix` 走各自 `### Phase 2.5: 设计门禁 [GATE_DESIGN]` 段末、`implement` 走 `### Phase 2: Plan Review` 段末即 `GATE_DESIGN` 作为 `gates_before` 的那个 phase）。**plan 的快照不回改**（plan 只允许追加式修订记录），本条即其陈旧性的登记。
+- **连带的诚实口径**：命中行数**不是**「SKILL 有没有 `GATE_DESIGN` 段」的判据——`feature` 与 `implement` 两份**至今没有**名为「设计门禁」的独立小节，它们的 `GATE_DESIGN` 处理分别由通用的 `## Gate 决策流程（动态）` 与 phase 2 的 `gates_before` 承担。块 4 的落点选的是**该门实际被求值的那一段**，不是名字里带 `GATE_DESIGN` 的任意一行。
+
+### D-39 · `repo:sync` 顺带重刷 19 份无关再生制品（D-13 / D-18 第三次再现，逐份计数仍一致）
+
+- **事实**：4 份 SKILL 注入块 4 marker 后跑 `npm run repo:sync` 再生 Codex wrapper，该命令同时重刷 **19** 份与本卡无关的产物，与 D-13（10 份 wrapper 时）、D-18（16 份 wrapper 时）的份数**逐份一致**：`specs/products/**` **17** 份 + `.specify/project-context.suggestions.{md,yaml}` **2** 份（换算式 `17 + 2 = 19`，单位：文件）。
+- **处置**：用 `git show HEAD:<path> > <path>` **定向回退 19 份**（**未用 `git checkout`**，避免误伤未跟踪文件；实跑计数器输出 `定向回退份数 = 19`），只保留本段 SKILL 对应的 **8** 份 wrapper 再生（换算式：本段射程 4 份 SKILL × 2 条分发链 = **8**，单位：wrapper 文件；`.codex/skills/*` 4 + `plugins/spec-driver/skills-codex/*` 4）。
+- **回退后复核**：`repo:check` **94** 项、退出码 **0**、非 pass 仅 `graph-quality:freshness: warn`（既有 stale 图，与本段无关）。**结论与 D-13 / D-18 一致，本条不新增处置，只作再现计数 +1**（第 3 次）。
+- **wrapper 份数由 D-18 的 16 降为 8 的原因**：D-18 是 Phase A ∪ Phase C 的去重 SKILL 射程 8 份 × 2；本段射程只有块 4 的 4 份 SKILL。**两个数各自独立、不得相减**——commit ② 落盘时 Phase B + D 合并后的 wrapper 面须届时重新按去重射程计。
+
+### D-40 · FR-023 的「必备字段 4 项」与轮次记录「完整字段 7 项」是两个口径，块 4 内已分列
+
+- **事实**：tasks.md T084 给的换算式是 **4** 项（轮次数 1 + 每轮新增 CRITICAL 计数 1 + 承重项清单及其预先声明时点 1 + 是否进入止损 1），而编排器 D-a 简报列的是 **7** 项（另含「与上轮对照」「输入版本指针」「对抗方标识」）。二者**不是同一个量**：4 项是 **FR-023 本体**的必备字段，另 3 项分别由 FR-021（逐条对照）、FR-022（输入版本指针）与编排器 D-a 简报（对抗方标识）产生。
+- **处置**：块 4 的「轮次记录字段」节**两个口径分列写出**，各自带换算式与单位（必备字段 4 / 记录字段 7），并显式写「不得相加、不得互相冒充」。**未在 4 与 7 之间择一**——择一必然让另一份来源的要求落空。
+- **诚实登记**：「对抗方标识」这一项**没有 FR 出处**，来源是编排器 D-a 简报的显式要求。它服务的是「轮 / 路」计数可核对与同构 / 异构档位可追溯，**不得**被引用为某条 FR 的达成证据。
+- **同批登记的一处不实现**：FR-024（每轮 CRITICAL 条目摘要，`SHOULD · [可选]`）已由 plan §裁剪登记判裁剪，块 4 **未写该字段**，本条不重复登记其残余（T084 明令「此处不重复实现、也不重复登记」）。
+
+### D-41 · 推断前提 P-6 的机器注入侧上界**已被 D-a 单段击穿**（手写侧仍在界内），如实登记不回改 plan
+
+- **事实（实测，`git diff --numstat` 现取）**：D-a 段落盘后——
+  - **机器注入侧**：块 4 正文 **87** 行 × 4 个目标位 = **348** 注入行（单位：注入行）。plan 推断前提 **P-6** 给的区间是 **160 ~ 240** 注入行，**348 > 240，上界击穿**，超出 **108** 行（换算式 `348 − 240 = 108`，同单位）。
+  - **手写侧**：本段手写 **139** 行 = 块 4 新建 87 + 4 份 SKILL 的 marker 引导 `4 × 5 = 20` + `fix` 的 T085 例外 7（含被改写的 1 行）+ `sync-agent-docs.mjs` 第 4 个 entry 25（其中注释 18 行）（单位：手写行）。P-6 的手写区间是 **262 ~ 405**，Phase D 尚有 D-b / D-c 未落，**本段单看不构成越界判定**，须在 Phase D 收口时按全 Phase 合计复判。
+- **两处分项估值同时低估的归因（逐项对照，不做事后合理化）**：
+  | 分项 | plan 估值 | 实测 | 差因 |
+  |---|---|---|---|
+  | ★ 块 4 新建 | 40 ~ 60 行 | **87** 行 | 块 4 承载 4 条 MUST（FR-020 ~ FR-023）与 1 条升格后的 MUST 子条款（止损），且 FR-021 / FR-023 各自带「判不出按新增」「预先声明时点」「放行与止损可区分」等**不可压缩的反规避子句**；估值成文时块 4 内容尚未撰写（P-6 出处自注「块 4 的内容尚未撰写」）。 |
+  | 4 份 SKILL marker | 2 行 / 份 = 8 | **5** 行 / 份 = **20** | 估值只数了 marker 对本身，未计与既有 3 个注入点同型的「以下区块由 … 注入，请勿手动编辑区块内容」引导行与其上下空行。 |
+  | `sync-agent-docs.mjs` 第 4 entry | 6 ~ 8 行 | **25** 行 | 数据本体 11 行在界内；另 **14** 行是 `targets` 为何是 4 份而非 8 份的逐 mode 说明注释（`resume` / `refactor` / `sync` / `doc` 各自的排除依据），与既有 3 个 entry 的注释密度同型。 |
+- **处置（三条）**：(1) **不回改 plan**（plan 只允许追加式修订记录），本条即该越界的登记落点；(2) **不为迁就上界压缩块 4 正文**——被删掉的会是反规避子句，那正是 FR-020 ~ FR-023 的承重部分，压缩即把「体量合规」买在「判据可绕过」上；(3) 交 Phase D 收口（T101）时按**两个单位分列**复判 P-6：手写侧按 D-a + D-b + D-c 合计判，注入侧**已可判 FAIL**，须在 verification-report 中如实标注而非合并成一个「大致符合」。
+- **诚实边界**：P-6 是 `[推断]` 前提，越界说明**推断不准**，**不说明实现有缺陷**；反之也不得反过来用「实现没问题」去追认那个区间——两件事各判各的。
+
+---
+
+### D-42 · 推断前提 P-6 的机器注入侧越界**在 D-b 后进一步扩大**（手写侧仍在界内），处置同 D-41
+
+- **事实（实测，`git diff --numstat` 现取 + marker 区间外行数对比）**：
+  - **机器注入侧（Phase D 累计）**：D-a 的块 4 `87 × 4 = 348` + D-b 的块 1 增量 `72 × 4 = 288` = **636** 注入行（单位：注入行）。P-6 上界 **240**，**超出 396 行**（换算式 `636 − 240 = 396`，同单位）。计数集合口径 = Phase D 内经 `sectionConfigs` 注入的全部目标位（块 4 的 4 份 SKILL + 块 1 的 4 份 agent），不含手写侧。
+  - **手写侧（Phase D 累计）**：D-a **139** + D-b **201** = **340** 行（单位：手写行），P-6 区间 **262 ~ 405**，**仍在界内**；D-c 未落，**须在收口时按全 Phase 合计复判**。
+  - D-b 手写侧 **201** 的换算式（单位：手写行）：块 1 §轻量三纪律 **72**（写入 73、删占位 1，净 +72）+ `agents/verify.md` **25**（T091 的 11 + T092 的 14）+ `agents/tasks.md` **22**（marker 区间外净增，重编号 2 行为原地改写、净 0）+ 4 份 SKILL 的 FR-065 块 **60**（`15 × 4`）+ `agents/plan.md` 的 FR-065 块 **22** = `72 + 25 + 22 + 60 + 22 = 201`。
+- **处置**：与 D-41 完全同向——(1) **不回改 plan**；(2) **不为迁就上界压缩正文**；(3) 收口（T101）时按**两个单位分列**复判，注入侧如实标 FAIL，**不得**与手写侧的 PASS 合并成一个「大致符合」。
+- **诚实边界**：P-6 是 `[推断]` 前提，越界只说明**推断不准**，不说明实现有缺陷；反向也不成立。另按 P-6 自带的连带要求复核 **SC-008「手写副本数 0」**：块 1 与块 4 两条注入链上**零手写副本**，该量**不受注入量影响**（注入量大 ≠ 手写量大，二者独立）；但 FR-065 一项**确有 4 份手写副本**，见 D-44——两者是不同的量，不得互相冒充。
+
+---
+
+### D-43 · `repo:sync` 顺带重刷 19 份无关再生制品（D-13 / D-18 / D-39 第 **4** 次再现，逐份计数仍一致）
+
+- **事实**：D-b 收口跑 `npm run repo:sync` 后，除本段应保留的 wrapper 外，另有 **19** 份与本卡无关的再生制品被重刷——`specs/products/**` **17** + `.specify/project-context.suggestions.{md,yaml}` **2**（换算式 `17 + 2 = 19`，单位：文件；计数集合口径 = `repo:sync` 前后 `git status --porcelain` 的差集中，路径前缀不属本卡落点表的全部条目）。**与 D-13 / D-18 / D-39 逐份计数一致**。
+- **处置**：用 `git show HEAD:<path> > <path>` **定向回退 19 份**（**未用 `git checkout`**，遵守硬约束），实跑计数器输出「定向回退份数 = 19」。回退后 `repo:check` **94** 项、exit=0，无一项因此转红。
+- **保留的 wrapper（换算式，单位：wrapper 文件）**：D-b 射程 4 份 SKILL（`fix` / `doc` / `refactor` / `sync`）× 2 条分发链（`.codex/skills/**` 与 `plugins/spec-driver/skills-codex/**`）= **8**；其中 `fix` 的 **2** 份与 D-a 重叠（本段是二次更新），故**本段新进入改动集的是 6 份**。两个数各自独立、**不得相减也不得互相冒充**。
+
+---
+
+### D-44 · FR-065 三项约束在 4 份 SKILL 内是**手写副本 × 4**，**无机器守护**（不能走共享块，理由是硬约束冲突）
+
+- **事实**：T097 把同一段 FR-065 三项约束**逐份手写**进 `spec-driver-{fix,doc,refactor,sync}/SKILL.md`（各 **15** 行，含 1 行分隔空行；换算式 `15 × 4 = 60` 行，单位：手写行），另在 `agents/plan.md` 写入一份**plan 侧变体**（**22** 行，含三问的判定命令示例表，与 SKILL 版**不同文**，单位：手写行——两个数不同单位下的同类量，分列不相加）。
+- **为什么不走共享块（第 5 个 `sectionConfigs` entry）**：新增一个共享块会把 `repo:check` 的 check id 从 **94** 推到 **95**（每个共享块自动派生 1 个 `agent-docs:shared-section:*` check），与**裁定 I-1** 给 T101 定死的「`added` 清单 13 → **14**、check id **94**」直接冲突；且 plan 落点表行 11-14 明写的形态就是「4 份 SKILL 各写入」。故按落点表执行。
+- **残余（如实登记，不得口径为「已覆盖」）**：这 4 份副本**当前逐字节一致**（实测：按块首行定位后取 14 行与源块 `diff`，4 份**全 identical**），但**漂移无任何机械守护**——下一次修订其中一份而漏改其余三份时，`repo:check` 不会转红。这与 FR-036「禁止各 SKILL 手写副本」的方向**相反**，属**由裁定 I-1 的 check id 冻结约束倒逼出的形态**，不是本段的自由选择。**凡把 FR-065 口径为「已有守护」即为 over-claim。**
+
+---
+
+### D-45 · T089 的模板一致性核对：**8 项中 7 项字面一致、1 项靠蕴含成立**，据此判「无需回改模板」
+
+- **事实**：T089 要求核对两份 `plan-template.md`（`.specify/templates/` 与 `plugins/spec-driver/templates/specify-base/`，实测该章节**两份逐字相同**）的「推断前提登记」结构与块 1 纪律三口径**逐条一致**，不一致则**以纪律三为准回改模板**。逐条比对 **8** 项（单位：口径条）：标记复用且禁另造 / 每条附推断理由 / 按命题去重 / 「已核实」须附命令原文与原始输出片段 / 只写命令无输出退回 `[推断]` 并计入分母 / **仅凭静态论证不足以进桶** / 三桶分母口径 / 回填分工。
+- **7 项字面一致**；**第 6 项「仅凭静态论证 / 设计推理 / 『按设计应当如此』不足以进桶」在模板中无逐字对应**，模板写的是进桶门槛「只写复核命令而**无原始输出片段**者一律退回」。判定为**一致**的依据是一次**蕴含推理**：静态论证既无命令也无原始输出，必然被该门槛拦下。
+- **处置**：判「一致，无需回改模板」，**但该判定依赖蕴含而非字面比对**，如实登记于此。若后续认为蕴含不足以支撑「逐条一致」，正确处置是**回改模板补一句字面条款**（成本 1 行），而不是把本条改写成「已字面一致」。
+
+---
+
+### D-46 · T092 的「三处分母核对」在 `agents/verify.md` 内写成**通用形式**，未钉本卡的条目编号
+
+- **事实**：任务卡对 T092 的表述点名了本卡 spec 的具体条目（`V-1 ~ V-3` 未混入分母、`B-1` / `B-2` 两条能力边界声明均未计入分母、`A-3` 的命令与陈述同一命题）。落地时写成的是**桶级通用形式**——「已核实桶的各条」/「能力边界声明桶的各条」/「计入分母的每一条」。
+- **理由**：`agents/verify.md` 是**可复用的子代理 prompt**，对每一个 feature 都生效；钉死本卡的 `V-1` / `B-1` / `A-3` 会在下一个 feature 上**恒假**（那些编号根本不存在），等于把一条判据写成一次性的。且两份 `plan-template.md` 对推断桶用的编号是 `P-n`、本卡 spec 用的是 `A-n`，**两套编号并存**，钉任一套都会与另一套对不上。
+- **处置与边界**：本卡的三处具体核对（`V-1~V-3` / `B-1`、`B-2` / `A-3`）**不在本段射程内**，由 Phase D-c 与 Phase E 的验证产物承担；**本段只落通用判据**。凡以「`agents/verify.md` 里没写 V-1」为由判 FR-066 未落地即为误判，反过来凡以「通用判据已写」声称本卡三处已核对，同样是 over-claim。
 
 ---
 
@@ -1091,3 +1148,12 @@ REAL 块序列规范写法（对照）            | [快照 6 项]             |
 ### D-37 · 本轮收口全量（清净窗口 · **串行**）
 
 见下方「第三轮收口 · 命令与退出码」表。
+
+### D-B2 · delta 复验收尾小修（编排器 inline · 2026-09-07 · commit ② 前）
+
+- **输入**：`verification/adversarial-phaseBD-delta-a.md`（ε-C1 / ε-C2 / γ-C3）与 `delta-b.md`（γ-C1 / γ-C2）——5 ÷ 5 判「实质已修」，另给 N-1 / N-2 / R-1 / R-2 与 6 条白名单缺口。
+- **落地**：56 处旧子串替换（33 + 1 + 21 + 1；每处 `str.count(old) == 预期` 断言，任一不符整体不落盘），涉及 `agents/{verify,plan,spec-review}.md`、plan-template 两副本、块 4 模板、8 份 SKILL 中的 7 份（feature 无显式装配行）。
+- **再生**：`npm run docs:sync:agents` + `npm run repo:sync` 两轮；无关再生产物（`specs/products/**/_generated/**`、`.specify/project-context.suggestions.*`）每轮 19 文件以 `git show HEAD:` 定向回退；二跑 `docs:sync:agents` 0 updated；三侧（模板 / SKILL / 两侧 wrapper）块 4 计数一致。
+- **登记位置**：spec 修订记录 31–35；plan「B + D 对抗修订登记」(6)–(9)；tasks Phase B / D 段末留痕。
+- **偏差**：编排器 inline 执行小修（`[DEGRADED: inline-execution]`），非委派——子代理本阶段五次停摆 / 中断，且落点已由 delta 逐行给定，委派的收益低于其失败面。
+

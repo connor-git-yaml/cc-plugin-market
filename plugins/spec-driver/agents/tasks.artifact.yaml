@@ -7,4 +7,5 @@ required_sections:
   - "## Implementation Strategy"
 optional_sections:
   - "## FR 覆盖映射表"
+  - "## 延期承诺候选池"
   - "## Phase N: Polish & Cross-Cutting Concerns"

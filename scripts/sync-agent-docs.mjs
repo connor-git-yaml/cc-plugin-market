@@ -173,6 +173,64 @@ export const sectionConfigs = [
       'plugins/spec-driver/skills/spec-driver-refactor/SKILL.md',
     ],
   },
+  // F277 · FR-020 ~ FR-023 / FR-036（块 4）：`GATE_DESIGN` 的对抗收敛循环判据。
+  //
+  // 走单一事实源而非「4 份 SKILL 各手写一遍」（裁定 D-③）：4 份同样的分类判据 +
+  // 收敛判据 + 止损条款就是 4 份手写副本，与 FR-036「跨 SKILL 共享内容走 templates/
+  // 单一事实源」正面冲突，且散文一旦漂移无任何守护——本表之外的段落不受漂移比对覆盖。
+  //
+  // `targets` 是**实际挂载** `GATE_DESIGN` 且 SKILL 内有对应段落的 4 份：
+  //   - `resume` 不入——其 phase 序列实测只挂 `GATE_TASKS` / `GATE_VERIFY`；
+  //   - `refactor` 不入——`GATE_DESIGN.applicable_modes` 实测不含它；
+  //   - `sync` / `doc` 不入——二者在 `applicable_modes` 内，但 SKILL 全文无 `GATE_DESIGN`
+  //     段亦无任何引用（实测 `grep -n GATE_DESIGN` 两条命令均零输出、exit=1），注 marker
+  //     会造出一段没有宿主上下文的悬空散文。**「不适用」不等于「已覆盖」**：这两个 mode
+  //     的条件格由编排器在门内按本块的分类判据执行，散文缺席按残余登记，不得口径为已覆盖。
+  //
+  // ⚠️ 本 entry 按上方排序契约（K14）append 到数组末尾，不得插到已落地 entry 之前。
+  {
+    key: 'gate-design-convergence-loop',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/gate-design-convergence-loop.md'),
+    targets: [
+      'plugins/spec-driver/skills/spec-driver-feature/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-story/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-implement/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-fix/SKILL.md',
+    ],
+  },
+  // F277 · FR-005（块 5）：`GATE_VERIFY` 的矩阵冻结值重算（Phase B/D 对抗修订 ε-C1 / γ-C1）。
+  //
+  // 冻结值链的唯一外部锚是「编排器在 GATE_VERIFY 亲自重算」——但那句话此前只写在
+  // `agents/verify.md` 的旁注和块 3 的 `## 冻结值字段格式` 小节里，**编排器一侧两端都没接线**：
+  // 各 SKILL 的 verify 委派清单不注入冻结值，`#### 质量门（GATE_VERIFY）` 的三步里没有重算，
+  // 日志行模板也没有字段位。没有字段位的要求等于没有要求——日志行模板是编排器唯一会照抄的
+  // 东西，而 verify 自读自算自报的三值一致在产物上与「一步没做」完全同形。
+  //
+  // `targets` 是**全部 8 份**编排器 SKILL：`GATE_VERIFY` 在 8 个 mode 上全部挂载
+  // （与块 3 的 `GATE_TASKS` 7 ÷ 8 不同，`fix` 也挂 `GATE_VERIFY`），故射程无例外。
+  // `resume` / `sync` / `doc` 无独立的 `#### 质量门（GATE_VERIFY）` 段，marker 挂在块 3
+  // 的 END 之后（块 3 末句正是「判定权在编排器于 GATE_VERIFY 的亲自重算」，宿主上下文连续）。
+  //
+  // **不挂 `preludeGuard`、不加 `SD_MODE` 行**：本块无任何 per-file 参数（重算命令与日志行
+  // 对全部 mode 同文，mode 差异由块内的 `absent` 三种来源在散文层处理）。块 2 的守卫存在的
+  // 理由是它内嵌 `$SD_MODE` 求值，本块没有该变量；给没有参数的块加 per-file 参数守卫，只会
+  // 要求 `sync` / `doc` / `refactor` 三份 SKILL 补一行无消费方的 `SD_MODE`，否则守卫必红。
+  //
+  // ⚠️ 本 entry 按上方排序契约（K14）append 到数组末尾，不得插到已落地 entry 之前。
+  {
+    key: 'gate-verify-matrix-recompute',
+    sourcePath: resolve(rootDir, 'plugins/spec-driver/templates/gate-verify-matrix-recompute.md'),
+    targets: [
+      'plugins/spec-driver/skills/spec-driver-feature/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-story/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-implement/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-fix/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-resume/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-sync/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-doc/SKILL.md',
+      'plugins/spec-driver/skills/spec-driver-refactor/SKILL.md',
+    ],
+  },
 ];
 
 export function syncSection(targetContent, key, sourceContent) {

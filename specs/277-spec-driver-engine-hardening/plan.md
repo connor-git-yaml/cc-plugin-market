@@ -336,6 +336,52 @@ ls -la .specify/orchestration-overrides.yaml
 grep -nE 'gate_policy|^gates:' spec-driver.config.yaml
 ```
 
+## FR → Phase 覆盖矩阵 · 冻结后修订记录
+
+> **本节刻意置于「FR → Phase 覆盖矩阵」章节之外**（Edge Case 18 / FR-005）：矩阵正文已在 `GATE_TASKS` 时点被规范化哈希冻结（`3c5aa22b941f35327732f3859d4ac38facf2524db0fbb3124b2e63e11cbbf4a8`），**禁止无痕改写正文**；冻结后发现的取值问题一律以带时间戳的追加记录落在本节。**本节的存在不改变冻结哈希**——冻结区间的定义是「`## FR → Phase 覆盖矩阵` 起、至下一个 `## ` 止」，本节自身即那个 `## `，故其内容不入哈希。**追加前后已实测复算，哈希逐字相同。**
+
+| # | 时点 | 发现者 | 条目 | 原取值 | 新取值 | 处置 |
+|---|------|-------|------|-------|-------|------|
+| 1 | 2026-09-07（implement · Phase B · T053） | implement 子代理（编排器授权的裁定任务） | 矩阵 **FR-005** 行「实现落点」列中的 SKILL 集 | `skills/spec-driver-{feature,story,implement,fix,resume}/SKILL.md`（**5 份**，含 `fix`、不含 `sync`/`doc`/`refactor`） | `skills/spec-driver-{feature,story,implement,resume,sync,doc,refactor}/SKILL.md`（**7 份**，即 `GATE_TASKS` 实际挂载的 7 个 mode；**`fix` 移出**） | **正文不改**，以本行追加留痕；裁定全文见 §修订记录 第 4 行 |
+
+**本条的实测依据（命令原文 + 原始输出，FR-062）**：
+
+```bash
+# (1) 挂载事实：orchestration.yaml 中 GATE_TASKS 的挂载行及其归属 mode
+grep -n 'GATE_TASKS' plugins/spec-driver/config/orchestration.yaml
+# (2) 生效面复核：经 CLI 事实源逐 mode 现取（不读 yaml 字面量）
+for m in feature story implement fix resume sync doc refactor; do
+  node plugins/spec-driver/scripts/orchestrator-cli.mjs get-gate-behavior "$m" GATE_TASKS
+done
+```
+
+原始输出（2026-09-07 本 worktree 实跑，HEAD `4255212c`）：
+
+```text
+# (1) 挂载行 9 处（1 处为 gates 定义段 :67，8 处为 phase 挂载）：
+67  GATE_TASKS:            ← gate 定义段，非挂载
+303 / 323  feature
+416        story
+493        implement
+600        resume
+654        sync
+697        doc
+742 / 754  refactor
+（fix 段零命中）
+
+# (2) 逐 mode CLI 现取：
+feature    mounted=True  mounted_in_base=True
+story      mounted=True  mounted_in_base=True
+implement  mounted=True  mounted_in_base=True
+fix        mounted=False mounted_in_base=False   ← 唯一的 false
+resume     mounted=True  mounted_in_base=True
+sync       mounted=True  mounted_in_base=True
+doc        mounted=True  mounted_in_base=True
+refactor   mounted=True  mounted_in_base=True
+```
+
+**换算式**：挂载 mode 数 = 8 个 mode − `fix` 1 = **7**（单位：mode）；挂载行数 = 9 命中行 − gate 定义段 1 行 = **8**（单位：命中行）。**两个单位分列、不得相加**——`refactor` 与 `feature` 各占 2 个挂载行而只算 1 个 mode。
+
 ## 裁剪登记
 
 > **本卡 MUST / `[必须]` 项裁剪 0 条**（换算式：已裁剪的 MUST 项数 ÷ FR-060 的上限 K = **0 ÷ 3 = 0%**，单位：FR 条）。因此 FR-060 的 `GATE_TASKS` 接受点在本卡内**空载**——须在 `GATE_TASKS` 输出中显式记为「本次无 MUST 裁剪，MUST 裁剪接受点未触发」，**不得**写成「已接受」（无待接受项与已接受项是两种状态，不得在返回面上合并）。
@@ -1782,3 +1828,96 @@ exit=1
 | I-2 | **Phase 执行顺序调整为 A → C → B → D → E** | plan 已认定 C（输出纪律共享块）与 B 无依赖；C 的块 1 正是 `agent-tools:required` 第 8 条文本断言的事实源，先落 C 可让首个提交的 `repo:check` 转绿 | tasks.md 的 Phase 依赖表以本裁定为准；映射表 / 认领不变 |
 | I-3 | **提交粒度**：commit ① = Phase A + C（含 `repo:sync` 再生 wrapper）；commit ② = Phase B + D；commit ③ = Phase E。每次 commit 前：build / vitest / test:plugins / repo:check 零失败 + 门禁类改动的异构对抗审查（Codex 暂停，异构档位缺席标注） | 单次提交 126 任务不可审；按可绿点切 | commit message 逐条标注预期变更（K14 清单）与档位缺席 |
 | I-4 | **2026-09-07 两次全量 vitest 判满载假红**：第一次与 A2 子代理后台验证 + 前台 repo:check 并发（3483 s / 28 文件 46 用例 / 15 errors），第二次起跑 load 1.11 但结束 **62.01**（3653 s / 34 文件 46 用例 / 22 条 birpc `Timeout calling "onTaskUpdate"`，一用例 737641 ms）；失败集与本卡改动面**零交集**（仅 K14 与 agent-tools 文本两条预期红），命中 F235 / F269 / F272 签名 | 满载 flake 判定协议三条件：签名命中 + 零交集 + 清净窗口复跑（本卡改动面 3 个插件测试文件隔离 106 ÷ 106 绿）；全量以清净窗口复跑结果为准 | 归因记录含命令、负载戳、失败清单（`scratchpad/phaseA2-*.log`）；FR-050 口径：未完成归因前一律计失败 |
+
+### implement 阶段 · Phase B 裁定（2026-09-07，commit ② 前）
+
+> **本小节为追加，不改本文件任何既有正文。** 依 tasks.md Phase B 的 `⚠️ 待办` 条款，T053 是一条**必须产出裁定文本**的任务（原文：「**不得静默择一**」）。
+
+| # | 裁定 | 依据（实测，命令与原始输出见 §FR → Phase 覆盖矩阵 · 冻结后修订记录） | 连带 | 是否改变矩阵认领 |
+|---|------|------|------|------|
+| B-T053 | **FR-005 冻结散文的 SKILL 集按实测取 7 份 —— `{feature, story, implement, resume, sync, doc, refactor}`；`fix` 移出。** 矩阵 FR-005 行原写 5 份 `{feature, story, implement, fix, resume}`，与实测两处不符：**把 `fix` 计入**而 `fix` 实测零挂载、**把 `sync`/`doc`/`refactor` 排除**而三者实测有挂载。 | **(i) `fix` 移出的理由**：`GATE_TASKS` 在 `fix` 的 phase 序列上**根本不在场**（`orchestration.yaml` 的 `fix` 段零命中；CLI 逐 mode 现取 `fix` 是 8 个 mode 中唯一的 `mounted=false`）。**`GATE_TASKS.applicable_modes` 含 8 个 mode 不构成挂载证据**——配置健康 ≠ 执行在场。故「在 `fix` 的 `GATE_TASKS` 段写冻结散文」这句话在 `fix` 上**无所指**：没有那个门可挂，冻结值在 `fix` 下**没有取值时点**。**(ii) 保留 `fix` 的方案已被否决**，因为保留就必须回答「`fix` 下没有 `GATE_TASKS` 可挂时冻结值写到何处」，而三条候选答案全部不成立——① 另挂一道门 ⇒ 违反「本卡不新增任何门、不改 gate 定义」；② 落到 `GATE_DESIGN`（`fix` 实测有 6 处）⇒ 冻结时点前移到 plan 定稿之前，此时矩阵尚未产出，冻结对象不存在；③ 无门写进散文即完 ⇒ 冻结值失去「由编排器在门时点持有并注入」这一独立性介质，退化为 verify 可写的普通磁盘文本，正是 FR-005 明文要收口的形态。**(iii) `sync`/`doc`/`refactor` 计入的理由**：三者实测有挂载，排除等于让「实际会停下的门」在三个 mode 上没有接受口径与冻结时点——那正是本卡病根 (i)「在 plan 阶段静默收缩范围」的形态。 | **与裁定 B-② 的 7 份 `targets` 完全一致**，故：`sectionConfigs` entry 数**不变**、SC-008 分母 **12 不变**、注入点 **20 不变**、`repo:check` check id 总数**不变**。**`fix` 的处置已由 Phase C 块 3（`templates/gate-tasks-scope-cut-acceptance.md`）承担**——该块正文已写明「`fix` 模式下本条结构性不可达……`fix` 下发生 MUST 裁剪时一律记『未接受』」，且块 2（门挂载守卫）的 `targets` 含 `fix`，故 `fix` **并非无人管**，只是不承载冻结值。**残余（诚实登记）**：`resume` / `sync` / `doc` 三个 mode 的 SKILL 内**仍无 `GATE_TASKS` 的完整处理流程散文**，新建小节只承载裁剪接受口径与冻结字段口径一段；凡口径为「三个 mode 的 `GATE_TASKS` 流程已补齐」即 over-claim。 | **否** —— FR-005 的认领 Phase 仍为 **B**，本裁定只更正其「实现落点」列的 SKILL 集，不改 FR 的内容、强度或认领方；矩阵正文按 FR-005 冻结口径**不作无痕改写**，更正以「冻结后修订记录」追加留痕。 |
+
+### Phase D 段 D-a 追加登记（2026-09-07，T086 · 收敛循环射程之外的 4 个 mode）
+
+> **本小节为追加，不改本文件任何既有正文。** T086 要求把「块 4 的 `targets` 为何是 4 份而不是 8 份」写成显式结论而非沉默；本小节是该结论的落点，四个 mode 逐条登记，命令原文与原始输出按 FR-062 留痕。
+
+**换算式**：8 个 mode − 块 4 的 `targets` 4 份（`feature` / `story` / `implement` / `fix`）= **4** 个射程外 mode（单位：mode），分两类：门未挂载 **2**（`refactor` / `resume`）+ 门有挂载但散文落点缺席 **2**（`sync` / `doc`），核对式 `2 + 2 = 4` ✅。
+
+**第 (i) 类 · 门本身未挂载 —— `refactor` / `resume`（既有编排事实，本卡不改，登记即消账）**
+
+命令原文与原始输出：
+
+```bash
+sed -n '39,55p' plugins/spec-driver/config/orchestration.yaml
+```
+```
+  GATE_DESIGN:
+    type: design_checkpoint
+    applicable_modes:
+      - feature
+      - story
+      - implement
+      - fix
+      - resume
+      - sync
+      - doc
+    description: "需求规范质量门禁（feature 模式下为硬门禁）"
+    default_behavior: always
+    severity: critical
+    hard_gate_modes:
+      - feature
+    insertion_point: null
+```
+
+- **`refactor`**：`applicable_modes` 实测 **7** 项（`feature` / `story` / `implement` / `fix` / `resume` / `sync` / `doc`，单位：mode），**不含 `refactor`**。属 FR-025 区分的第 (i) 类「门本身未挂载」。
+- **`resume`**：虽在 `applicable_modes` 内，但其 phase 序列实测只在 phase `tasks` / `verify` 上挂 `GATE_TASKS` / `GATE_VERIFY`，**`GATE_DESIGN` 零挂载**（原始输出：`resume` 段内 `GATE_` 命中行仅 `- GATE_TASKS` 与 `- GATE_VERIFY` 两条）。**`applicable_modes` 成员资格不是挂载证据**——配置健康 ≠ 执行在场，与块 3 对 `fix` 的处置同一口径。
+
+两者均属既有编排事实、本卡不改动，**登记即消账**。
+
+**第 (ii) 类 · 门有挂载但 SKILL 散文落点缺席 —— `sync` / `doc`（真缺口，按残余登记）**
+
+命令原文与原始输出（三条命令均**零匹配行**）：
+
+```bash
+grep -n 'GATE_DESIGN' plugins/spec-driver/skills/spec-driver-sync/SKILL.md ; echo "exit=$?"
+grep -n 'GATE_DESIGN' plugins/spec-driver/skills/spec-driver-doc/SKILL.md ; echo "exit=$?"
+grep -n 'GATE_DESIGN' plugins/spec-driver/skills/spec-driver-refactor/SKILL.md ; echo "exit=$?"
+```
+```
+--- spec-driver-sync/SKILL.md ---
+exit=1
+--- spec-driver-doc/SKILL.md ---
+exit=1
+--- spec-driver-refactor/SKILL.md ---
+exit=1
+```
+
+（第三条是对照：`refactor` 同样零命中，但它已由第 (i) 类消账，此处只作命令一致性的对照组。）
+
+**登记结论（承接裁定 D-③ 同批的「不适用」登记，本条只登记不重裁）**：`sync` / `doc` 二者在 `GATE_DESIGN.applicable_modes` 之内、mode 分层矩阵第 3 行对这两列是**条件格**，但两份 SKILL 全文无 `GATE_DESIGN` 段亦无任何引用，注入 marker 会造出一段没有宿主上下文的悬空散文，故**不入块 4 的 `targets`**。条件成立（本次改动按 FR-020 白名单判为门禁 / 判定器 / 安全类，或判不出而按门禁类处理）时的收敛循环，由**编排器在 `GATE_DESIGN` 决策中按 FR-020 的分类判据直接执行**，本卡**不为这两个 mode 新增 SKILL 散文承载点**。
+
+**残余风险（不得口径为已覆盖）**：这两个 mode 上没有任何随 SKILL 分发的循环判据文本，执行完全依赖编排器当次是否记得调用 FR-020 —— **与本卡病根 (i) 同型，只是范围更窄**。凡把块 4 口径为「收敛循环已覆盖全部挂载 `GATE_DESIGN` 的 mode」即为 over-claim：实际覆盖 **4 ÷ 6 = 66.7%**（分母 = `applicable_modes` 7 项减去零挂载的 `resume` 1 项 = **6**，单位：mode；分子 = 块 4 `targets` **4**）。
+
+---
+
+### Phase D 段 D-b 追加登记（2026-09-07，T097 · FR-065 的落地形态与其残余）
+
+**本节为追加式登记，不修改上文任何既有正文。**
+
+**(1) 裁定 D-④ 的第 15 个落点已执行。** 落点表行 15 的 `plugins/spec-driver/agents/plan.md` 已写入 FR-065 三项约束的 **plan 子代理侧变体**（**22** 行，单位：手写行），位于共享块 marker **之外**（块 1 marker 区间 `34-181`，新节起于 `318`）。该变体与 4 份 SKILL 版**不同文**：它另带一张「三问 → 判定命令 → 必须一并写出」的表，把「本次有没有 FR 列表 / 有没有关键量 / 有没有代码改动」三问的取数形态就地钉住，并声明**表中命令仅为形态示例、实际须写本次真正跑过的那一条及其真实输出**。同时把本文件既有的两处「不适用」口径（`FR → Phase 覆盖矩阵` 节末、`关键量反向普查` 节末）显式登记为本节 (i) 的**两个具体落点**，本节补的是那两处都没有的 (ii) 门禁类升格与 (iii) 判不出从严。
+
+**(2) FR-065 在 4 份 SKILL 内是手写副本 × 4，与 FR-036「禁止各 SKILL 手写副本」方向相反——原因是硬约束冲突，非自由选择。** 新增第 5 个 `sectionConfigs` entry 会使 `repo:check` 的 check id 由 **94** 变为 **95**（每个共享块自动派生 1 个 `agent-docs:shared-section:*` check），与**裁定 I-1** 给 T101 定死的「`added` 清单 13 → **14**、check id **94**」直接冲突；且落点表行 11-14 明写的形态就是「4 份 SKILL 各写入」。故按落点表执行，**并把「4 份副本漂移无机械守护」如实登记为残余**（详见 `implementation-notes.md` 偏差 **D-44**）。实测 4 份**当前逐字节一致**（各 **14** 行正文，`diff` 全 identical），但下一次修订其中一份而漏改其余三份时 `repo:check` **不会转红**。**凡把 FR-065 口径为「已有守护」即为 over-claim。**
+
+**(3) 两个计数单位分列、不得相加**：本段 SKILL 侧手写 `15 × 4 = 60` 行（单位：手写行，含每份 1 行分隔空行）；`agents/plan.md` 侧手写 **22** 行（同单位，但属**不同落点**，不与前者合并成「FR-065 共 82 行」用于任何体量判定）。
+
+### B + D 对抗修订登记（编排器 2026-09-07，追加式）
+
+- **(1) 块 5 `gate-verify-matrix-recompute`**（新建 `plugins/spec-driver/templates/gate-verify-matrix-recompute.md`；`sync-agent-docs.mjs` 第 5 个 entry；targets = 8 份 SKILL 的 GATE_VERIFY 段）：check id 94 → **95**、K14 清单 14 → **15**、SC-006 27 → **28**、注入点 20 + 8 = **28**（单位：marker 对）；再生 wrapper 8 × 2 = 16 份（全覆盖）。Phase D 落点表与 §Project Structure 的相关计数以本行为准。
+- **(2) 合并律 7 态 → 8 态**（新增「类别存疑」，归不通过侧）；`agents/verify.md` 步骤 8 经合并律路由；既有四套词表 → 态 映射表；三份 verification-report-template `Overall = 合并律 ∧ 工具链`。
+- **(3) 块 4 白名单路径 4 → 7 条**（+ `agents/**` `skills/**` `templates/**`），第 5 条「代码」→「逻辑，不论载体」；`agents/plan.md` (ii) 逐字同步（手写副本对 × 1，无守护残余）。
+- **(4) 触及文件实测 66**（md 28 / yaml 20 / mjs 12 / ts 6），代码面 18；§Project Structure 的 35/36 为预估轨迹，以此为准。
+- **(5) 对抗档位**：ε（约定互相冲突面）2C/4W/4I 完整；γ（静默绕过面）3C 完整、W/I/结论因审查子代理停摆缺席；Codex 审查暂停，异构档位缺席。
+- **(6) delta 复验**（`verification/adversarial-phaseBD-delta-{a,b}.md`，两路只读复验）：ε-C1 / ε-C2 / γ-C1 / γ-C2 / γ-C3 **5 ÷ 5 判「实质已修」**；两路各给的收尾小修（N-1 / N-2 / R-1 / R-2）**同批落地**，见 spec 修订记录 31–34。
+- **(7) 块 4 白名单路径 7 → 13 条**（+ `plugins/spec-driver/lib/**`、`plugins/spec-driver/config/orchestration.yaml`、仓根 `scripts/**`、`.specify/templates/**`、`plugins/spec-driver/skills-codex/**`、`.codex/skills/**`），换算式 14 = 13 + 1；`agents/plan.md` (ii) 与 4 份 SKILL 手写副本逐字同步（白名单段 sha 五载体一致）；块 4 第 39 行自指例「8 条全判未命中」同步为 14。
+- **(8) 残余（登记不修）**：(ii) 条款仍是 4 份 SKILL 的**手写副本**（非注入块），漂移只靠 sha 抽检守——候选后续卡：改为第 6 个共享块；feature mode 无显式 verify 装配行（走通用 phase 循环），冻结值注入只由块 5 (a) 约束。
+- **(9) 执行档位**：本轮小修 **56 处替换 = 33 + 1 + 21 + 1**（单位：旧子串替换处，每处断言精确计数、任一不符整体不落盘）由编排器脚本化 inline 落地 —— `[DEGRADED: inline-execution]`，原因：本阶段子代理五次停摆 / 中断（Phase B ×2、D-c、γ、BD fix），小修落点已由两路 delta 复验逐行给定。
