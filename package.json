@@ -29,6 +29,7 @@
     "test:e2e": "vitest run --project e2e",
     "lint": "tsc --noEmit",
     "typecheck:tests": "tsc -p tests/type-tests/tsconfig.json --noEmit && tsc -p tests/type-tests/f220.tsconfig.json --noEmit && tsc -p tests/type-tests/f222.tsconfig.json --noEmit",
+    "typecheck:tests:full": "tsc -p tsconfig.tests.json --noEmit --pretty false",
     "docs:sync:agents": "node scripts/sync-agent-docs.mjs",
     "fixtures:regen:collector-fingerprint": "npx tsx scripts/regen-collector-fingerprint-fixtures.ts",
     "repo:sync": "node scripts/repo-sync.mjs",
@@ -64,7 +65,7 @@
     "codex:spec-driver:remove:global": "bash plugins/spec-driver/scripts/codex-skills.sh remove --global",
     "release:publish": "npm publish",
     "release:publish:dry": "npm publish --dry-run",
-    "prepublishOnly": "npm run release:check && npm run build && npm run repo:check && npx vitest run --maxWorkers=4",
+    "prepublishOnly": "npm run release:check && npm run build && npm run repo:check && npm run typecheck:tests && npx vitest run --maxWorkers=4 && npm run test:plugins",
     "postinstall": "node scripts/lifecycle-runner.cjs postinstall",
     "preuninstall": "node scripts/lifecycle-runner.cjs preuninstall"
   },

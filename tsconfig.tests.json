@@ -1,0 +1,25 @@
+{
+  "//": "F285：tests/ + scripts/*.ts 的类型门（根 tsconfig 只 include src/，测试与脚本此前零类型覆盖——M10 §12.3 W-1）。沿用根 tsconfig 的严格度；allowJs 让测试里静态 import 的 .mjs 脚本按推断类型参与检查（不 checkJs，不给 .mjs 本体加类型门）；tests/type-tests/ 各自带更严的 exactOptionalPropertyTypes 配置，由 typecheck:tests 单独跑；tests/fixtures/ 含刻意语法坏死的样本（tsc 遇语法错会跳过全部语义检查），必须排除。",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests/type-tests/**",
+    "tests/fixtures/**",
+    "**/*.d.ts"
+  ]
+}

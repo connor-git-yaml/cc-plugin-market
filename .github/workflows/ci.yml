@@ -72,7 +72,9 @@ jobs:
           # found" 兜底都绕过）
           node -e 'const v=process.env.VITEST_MAX_FORKS;const n=Number(v);if(!Number.isInteger(n)||n<1){console.error("[ci-diag] VITEST_MAX_FORKS 必须是 >=1 的整数，得到: "+v);process.exit(1)}'
           echo "[ci-diag] nproc=$(nproc) VITEST_MAX_FORKS=${VITEST_MAX_FORKS}"
-          npm test
+          # F285：此处只跑 vitest。`npm test` = `vitest run && test:plugins`，而下方「Test Plugins (mjs gate)」
+          # 已用 if: always() 独立跑一遍 test:plugins——两处都跑就是 mjs 面二跑（M10 §12.3 INFO）。
+          npx vitest run
 
       # 治理链（Feature 265 G0-2）。位置有两条约束：
       #
@@ -123,6 +125,26 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
         run: npm run typecheck:tests
 
+      # F285（M10 §12.3 W-1）：tests/ + scripts/*.ts 的类型门，**只报不阻断**。根 tsconfig 只 include src/，
+      # 测试与脚本此前零类型覆盖；tsconfig.tests.json 沿用根严格度 + allowJs，本机实跑（2026-09-13）
+      # 1022 处错误 / 147 文件（TS2532 possibly undefined 与 TS2322 为主）——这是燃尽基线，不是当下能阻断的门。
+      # ⚠️ 两条实测教训：tests/fixtures/ 里刻意语法坏死的样本会让 tsc 跳过**全部**语义检查（只报 1 个语法错，
+      # 假绿），故配置必须排除它；只看 `tail` 会把 1022 看成 1。continue-on-error 让步骤红着可见但不连坐。
+      # 排位与上一步同理（Test 之后、不受 Test 连坐、以 build + graph 成功为前提）。
+      - name: Type Check Tests (full, report-only)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.graph.outcome == 'success' }}
+        continue-on-error: true
+        run: |
+          set +e
+          npm run typecheck:tests:full > typecheck-tests-full.log 2>&1
+          status=$?
+          errors=$(grep -c 'error TS' typecheck-tests-full.log || true)
+          files=$(grep 'error TS' typecheck-tests-full.log | sed 's/(.*//' | sort -u | wc -l | tr -d ' ')
+          echo "[typecheck:tests:full] exit=$status errors=$errors files=${files}（只报不阻断；燃尽基线见 specs/285-*/fix-report.md）"
+          if grep -qE 'error TS1[0-9]{3}:' typecheck-tests-full.log; then echo "::warning::typecheck:tests:full 存在语法错（TS1xxx），tsc 已跳过全部语义检查——errors=$errors 不是燃尽数（对抗复审 A-W2）"; fi
+          grep -o 'error TS[0-9]*' typecheck-tests-full.log | sort | uniq -c | sort -rn | head -5
+          exit $status
+
       # 独立门禁：plugin mjs 测试。npm test 内部用 `vitest run && npm run test:plugins`，
       # 若 vitest 因仓库预存 dist-staleness flaky 失败会短路跳过 test:plugins，
       # 导致 162 个 mjs 测试在 CI 实际不跑。此步骤无论上一步成败都独立运行并报告，
@@ -131,3 +153,31 @@ jobs:
         if: ${{ always() }}
         run: npm run test:plugins
 
+
+  # F285（M10 §12.3 W-7）：vitest.config.ts 里的覆盖率阈值（全局 80% + 六个文件 per-file 95%：F150 SC-001 四个
+  # extractor / F171 SC-005 两个 file-nav 模块）此前**无任何门禁执行**——阈值写在配置里但 `--coverage` 从未在
+  # CI 或发布路径上跑过。本机全量实跑（2026-09-13）All files 88.13 / 85.53 / 94.78 / 88.13，阈值全部达标，故接进 CI。
+  # 独立 job 与 test 并行：阈值未达时 vitest 非零退出即红，不影响 test job 的信号；VITEST_MAX_FORKS=1 沿用 F269
+  # 的 4 vCPU runner 争抢结论。图照建：缺图时依赖图的用例静默 skip，会让覆盖率与 test job 不可比。
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install Dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Build Knowledge Graph
+        run: node dist/cli/index.js batch --mode graph-only
+      - name: Coverage (thresholds enforced)
+        env:
+          VITEST_MAX_FORKS: "1"
+        run: npm run test:coverage
